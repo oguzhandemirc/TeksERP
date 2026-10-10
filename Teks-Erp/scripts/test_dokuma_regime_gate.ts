@@ -89,14 +89,16 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/reports/dokuma.report.routes.ts", mount: "/api/reports/dokuma" },
   // B3 (01, 2026-09-14): künye + gölge mod — tasarımın `requireTezgahEnabled`i ekransız doğamaz (§10b), dokuma kapısında.
   { dosya: "routes/machine-spec.routes.ts", mount: "/api/machine-specs" },
+  // Vardiya tanımı yazma yüzeyi (2026-10-10): takvimi doğuran katalog — aynı kapı.
+  { dosya: "routes/shift-definition.routes.ts", mount: "/api/shift-definitions" },
 ];
 
 /** Dokuma-ÖZEL Prisma model erişimcileri ve servisleri — bunlara dokunan router kapılıdır. */
 const DOKUMA_MODELLERI = ["weavingOrder", "machineRun", "doffEvent", "machineStopEvent", "machineShiftStat", "machineSpec"];
-const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service", "machine-shift-stat.service", "machine-shift-seal.service", "machine-spec.service"];
+const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service", "machine-shift-stat.service", "machine-shift-seal.service", "machine-spec.service", "shift-definition.service"];
 
 /** Dokuma uçlarının mount adresleri — istemci kaynağında aranan metinler. */
-const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops", "/api/machine-shift-stats", "/api/reports/dokuma", "/api/machine-specs", "/api/subcontractor-weaving"];
+const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops", "/api/machine-shift-stats", "/api/reports/dokuma", "/api/machine-specs", "/api/shift-definitions", "/api/subcontractor-weaving"];
 
 /**
  * §7 — dokuma uçlarını çağırmasına İZİN VERİLEN istemci dosyaları (repo köküne göre).

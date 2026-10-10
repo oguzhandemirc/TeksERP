@@ -13,11 +13,18 @@
 //   §5 tanım değişince MÜHÜRSÜZ pencere yeniden yazılır (satır silinmez, id korunur);
 //      karnesi MÜHÜRLÜ pencere DEĞİŞMEZ (`updateMany` claim'i, count 0 → sealedSkipped)
 //   §6 iptal edilmiş pencere korunur (isCancelled dokunulmaz, ikinci satır doğmaz)
-//   §7 pasife alınan tanım için yeni pencere doğmaz, mevcut satırlar silinmez
+//   §7 pasife alınan tanım için yeni pencere doğmaz, mevcut satırlar silinmez; başlamamış
+//      pencere takvim sebebiyle İPTAL edilir
+//   §8 YALNIZ İLERİ — başlamış pencere tanım değişince yeniden yazılmaz; yeni tanımın
+//      başlamış (geçmiş) penceresi sonradan doğmaz
+//   §9 haftagünü düşünce gelecek pencere takvim sebebiyle iptal, geri gelince DİRİLİR;
+//      insan iptali (tatil) iki yönde de korunur
 //
 // NEGATİF SONDALAR (kırmızı görülerek, 2026-09-14):
 //   · job'dan `readDokumaEnabled` kapısı kaldırılınca §1a/§1b ❌ (82 satır doğdu)
 //   · `updateMany` yükleminden `machineStats: { none: SEALED }` düşürülünce §5a/§5c ❌
+//   · (2026-10-10) plandan "başlamış" dalı + yüklemden `startsAt: { gt: now }` düşürülünce §8a ❌;
+//     plandaki retire döngüsü kaldırılınca §7c/§9a ❌; diriliş dalı kaldırılınca §9b ❌
 //   ⚠️ ÖLÇÜLDÜ, TUTMADI: test DB'de `shift_instances_shiftDefinitionId_factoryDayKey_key` DROP
 //     edilince bu bekçi 23/0 YEŞİL KALDI — job'un `findUnique` ön kontrolü sıralı koşumda tek
 //     başına yeter, sed yalnız YARIŞ penceresini kapatır ve bu bekçi yarış kurmaz. Sedin varlığı
@@ -29,6 +36,7 @@ import { join } from "node:path";
 import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { runShiftCalendarOnce, SHIFT_CALENDAR_DAYS_AHEAD } from "../src/jobs/shift-calendar.job";
+import { SHIFT_CALENDAR_CANCEL_REASON } from "../src/services/helpers/shift-calendar-plan.helper";
 import { factoryDayKeyUtcMidnight, factoryDayStart, factoryMinuteOfDay, factoryWeekday } from "../src/constants/time";
 
 let pass = 0;
@@ -63,7 +71,7 @@ async function setFlag(value: boolean): Promise<void> {
 }
 
 const ek = Date.now().toString(36);
-const ids = { station: "", machine: "", defHerGun: "", defHaftaIci: "", defGece: "", statIds: [] as string[] };
+const ids = { station: "", machine: "", defHerGun: "", defHaftaIci: "", defGece: "", defYeni: "", statIds: [] as string[] };
 
 async function main(): Promise<void> {
   console.log("\n=== Vardiya takvimi job'u — bayrak kapısı, 30 gün, idempotent, mühür saygısı ===\n");
@@ -110,7 +118,9 @@ async function main(): Promise<void> {
 
   // ── §2 bayrak AÇIK → 30 gün ───────────────────────────────────────────────
   await setFlag(true);
-  const now = new Date();
+  // Fabrika gününün 00:01'i: bugünün pencereleri (08/16/23) henüz BAŞLAMAMIŞ — "yalnız ileri"
+  // kuralı §2–§7'nin sayılarını saate bağlamasın; başlamış pencere §8'de ayrıca ölçülür.
+  const now = new Date(factoryDayStart(new Date()).getTime() + 60_000);
   const r1 = await runShiftCalendarOnce({ ...scope, now });
   if (r1 === "disabled") throw new Error("bayrak açıkken disabled döndü");
   const gunler = Array.from({ length: SHIFT_CALENDAR_DAYS_AHEAD }, (_, i) => new Date(factoryDayStart(now).getTime() + i * 86_400_000 + 12 * 3600_000));
@@ -183,13 +193,57 @@ async function main(): Promise<void> {
 
   // ── §7 pasif tanım ────────────────────────────────────────────────────────
   await prisma.shiftDefinition.update({ where: { id: defHaftaIci.id }, data: { isActive: false } });
-  // Gelecek pencereleri boşalt: job isActive'e bakmasaydı burada yeniden doğururdu.
-  await prisma.shiftInstance.deleteMany({ where: { shiftDefinitionId: defHaftaIci.id, factoryDayKey: { gt: bugunKey } } });
+  // İlk haftadan sonrasını boşalt: job isActive'e bakmasaydı burada yeniden doğururdu (§7a);
+  // ilk haftanın satırları (≥ 4 hafta içi, haftanın gününden bağımsız) §7c'nin iptal ölçüsüdür.
+  await prisma.shiftInstance.deleteMany({ where: { shiftDefinitionId: defHaftaIci.id, factoryDayKey: { gt: new Date(bugunKey.getTime() + 7 * 86_400_000) } } });
   const kalanOnce = await prisma.shiftInstance.count({ where: { shiftDefinitionId: defHaftaIci.id } });
   const r5 = await runShiftCalendarOnce({ ...scope, now });
   if (r5 === "disabled") throw new Error("disabled");
   check("§7a pasif tanım için yeni pencere DOĞMAZ", r5.created === 0 && haftaIciBeklenen > 1, JSON.stringify(r5));
   check("§7b pasif tanımın mevcut satırı SİLİNMEZ", (await prisma.shiftInstance.count({ where: { shiftDefinitionId: defHaftaIci.id } })) === kalanOnce, `${kalanOnce} satır`);
+  const pasifAcik = await prisma.shiftInstance.count({ where: { shiftDefinitionId: defHaftaIci.id, isCancelled: false, startsAt: { gt: now } } });
+  check("§7c pasif tanımın BAŞLAMAMIŞ penceresi takvim sebebiyle iptal (açık kalan 0)", pasifAcik === 0 && kalanOnce >= 4 && r5.retired === kalanOnce,
+    `retired=${r5.retired} kalan=${kalanOnce} açık=${pasifAcik}`);
+
+  // ── §8 yalnız ileri ───────────────────────────────────────────────────────
+  const gece2330 = factoryMinuteOfDay(now, 23 * 60 + 30); // bugünün gece penceresi (23:00) BAŞLAMIŞ
+  const geceBugun = await prisma.shiftInstance.findFirstOrThrow({ where: { shiftDefinitionId: defGece.id, factoryDayKey: bugunKey } });
+  await prisma.shiftDefinition.update({ where: { id: defGece.id }, data: { durationMinutes: 7 * 60 } });
+  const r6 = await runShiftCalendarOnce({ ...scope, now: gece2330 });
+  if (r6 === "disabled") throw new Error("disabled");
+  const geceSonra = await prisma.shiftInstance.findUniqueOrThrow({ where: { id: geceBugun.id } });
+  check("§8a BAŞLAMIŞ pencere tanım değişince yeniden YAZILMAZ (startedSkipped)", r6.startedSkipped >= 1
+    && geceSonra.endsAt.getTime() === geceBugun.endsAt.getTime(), JSON.stringify(r6));
+  const geceYarin = await prisma.shiftInstance.findFirstOrThrow({ where: { shiftDefinitionId: defGece.id, factoryDayKey: { gt: bugunKey } }, orderBy: { factoryDayKey: "asc" } });
+  check("§8b başlamamış pencere yeni süreyle (7 sa)", geceYarin.endsAt.getTime() - geceYarin.startsAt.getTime() === 7 * 3600_000);
+  const defYeni = await prisma.shiftDefinition.create({
+    data: { code: `D${ek}`.toUpperCase().slice(0, 8), name: `TEST-SC yeni ${ek}`, startMinute: 6 * 60, durationMinutes: 8 * 60 },
+  });
+  ids.defYeni = defYeni.id;
+  const saat10 = factoryMinuteOfDay(now, 10 * 60);
+  const r7 = await runShiftCalendarOnce({ onlyDefinitionIds: [defYeni.id], now: saat10 });
+  if (r7 === "disabled") throw new Error("disabled");
+  const gecmis = await prisma.shiftInstance.count({ where: { shiftDefinitionId: defYeni.id, startsAt: { lte: saat10 } } });
+  check("§8c yeni tanımın BAŞLAMIŞ penceresi sonradan doğmaz (bugün 06:00, saat 10:00)", gecmis === 0 && r7.created === SHIFT_CALENDAR_DAYS_AHEAD - 1,
+    JSON.stringify(r7));
+
+  // ── §9 haftagünü düşer → iptal; geri gelir → diriliş; insan iptali korunur ─
+  const yarinGun = factoryWeekday(new Date(now.getTime() + 36 * 3600_000));
+  const kalanGunler = [0, 1, 2, 3, 4, 5, 6].filter((g) => g !== yarinGun);
+  await prisma.shiftDefinition.update({ where: { id: defHerGun.id }, data: { activeWeekdays: kalanGunler } });
+  const r8 = await runShiftCalendarOnce({ ...scope, now });
+  if (r8 === "disabled") throw new Error("disabled");
+  const dusen = await prisma.shiftInstance.findMany({ where: { shiftDefinitionId: defHerGun.id, cancelReason: SHIFT_CALENDAR_CANCEL_REASON } });
+  const beklenenDusen = gunler.filter((g) => factoryWeekday(g) === yarinGun).length - (factoryWeekday(new Date(herGun[2]!.startsAt.getTime() + 60_000)) === yarinGun ? 1 : 0);
+  check("§9a düşen haftagününün gelecek pencereleri takvim sebebiyle İPTAL (satır silinmez)", dusen.length === beklenenDusen && r8.retired >= beklenenDusen
+    && dusen.every((w) => factoryWeekday(new Date(w.startsAt.getTime() + 60_000)) === yarinGun), `${dusen.length}/${beklenenDusen} ${JSON.stringify(r8)}`);
+  await prisma.shiftDefinition.update({ where: { id: defHerGun.id }, data: { activeWeekdays: [] } });
+  const r9 = await runShiftCalendarOnce({ ...scope, now });
+  if (r9 === "disabled") throw new Error("disabled");
+  const dirilen = await prisma.shiftInstance.count({ where: { id: { in: dusen.map((w) => w.id) }, isCancelled: false, cancelReason: null } });
+  check("§9b haftagünü geri gelince takvim iptali DİRİLİR (aynı satır)", dirilen === dusen.length && r9.rewritten >= dusen.length, `${dirilen}/${dusen.length}`);
+  const tatil = await prisma.shiftInstance.findUniqueOrThrow({ where: { id: herGun[2]!.id } });
+  check("§9c insan iptali (tatil) dirilişte KORUNUR", tatil.isCancelled && tatil.cancelReason === "TEST-SC tatil");
 }
 
 main()
@@ -200,7 +254,7 @@ main()
   .finally(async () => {
     try {
       if (ids.statIds.length) await prisma.machineShiftStat.deleteMany({ where: { id: { in: ids.statIds } } });
-      const defIds = [ids.defHerGun, ids.defHaftaIci, ids.defGece].filter(Boolean);
+      const defIds = [ids.defHerGun, ids.defHaftaIci, ids.defGece, ids.defYeni].filter(Boolean);
       if (defIds.length) {
         await prisma.shiftInstance.deleteMany({ where: { shiftDefinitionId: { in: defIds } } });
         await prisma.shiftDefinition.deleteMany({ where: { id: { in: defIds } } });

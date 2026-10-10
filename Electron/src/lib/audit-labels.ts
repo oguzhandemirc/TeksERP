@@ -133,6 +133,7 @@ export const TABLE_LABELS: Record<string, string> = {
   WORK_SESSION: "Çalışma Oturumu",
   MACHINE_RUN: "Tezgah Koşumu",
   MACHINE_SPEC: "Tezgah Künyesi",
+  SHIFT_DEFINITION: "Vardiya Tanımı",
   DOFF_EVENT: "Top İndirme",
   MACHINE_STOP_EVENT: "Tezgah Duruşu",
   MACHINE_SHIFT_STAT: "Vardiya Karnesi",
