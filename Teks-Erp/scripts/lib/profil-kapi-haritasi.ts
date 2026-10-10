@@ -23,6 +23,7 @@ export const MODUL_SONDALARI: readonly ModulSondasi[] = [
   { alan: "iplikEnabled", uclar: ["/api/yarn/stocks"] },
   { alan: "devereEnabled", uclar: ["/api/warp-specs"] },
   { alan: "dokumaEnabled", uclar: ["/api/weaving-orders"] },
+  { alan: "tezgahEnabled", uclar: ["/api/loom-floor"] },
   { alan: "depoMultiEnabled", uclar: ["/api/warehouse-transfers"] },
   { alan: "productionEnabled", uclar: ["/api/routes", "/api/product-recipes", "/api/work-orders", "/api/production-balance"] },
 ];

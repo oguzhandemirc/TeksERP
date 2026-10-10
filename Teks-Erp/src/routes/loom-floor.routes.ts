@@ -12,7 +12,8 @@ import { requireTezgahEnabled } from "../middlewares/module.middleware";
 import { getLoomFloor } from "../services/loom-floor.service";
 
 const router = Router();
-router.use(verifyToken, requireTezgahEnabled, requirePermission("loom:live-view"));
+router.use(verifyToken, requireTezgahEnabled);
+router.use(requirePermission("loom:live-view"));
 
 /**
  * @openapi

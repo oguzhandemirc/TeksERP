@@ -82,7 +82,7 @@ async function ayarlariGeriYaz(): Promise<void> {
 interface YiginSonucu { err: AppError | null; body: unknown; reachedHandler: boolean; firstIsVerify: boolean }
 async function routerKos(permissions: string[]): Promise<YiginSonucu> {
   type Layer = { handle: (req: Request, res: Response, next: (e?: unknown) => void) => unknown; route?: { methods: Record<string, boolean>; stack: Layer[] } };
-  const stack = (loomFloorRouter as unknown as { stack: Layer[] }).stack;
+  const stack = Reflect.get(loomFloorRouter, "stack") as Layer[];
   const req = { method: "GET", url: "/", user: { id: "bekci", permissions } } as unknown as Request;
   let body: unknown = null;
   let reachedHandler = false;

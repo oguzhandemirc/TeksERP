@@ -129,7 +129,9 @@ type ModulAlani =
   // 2026-09-12: zincirin üçüncü halkası (devere → iplik → ticaret).
   | "devereEnabled"
   // 2026-09-13: dokuma işi (dokuma → production; tezgahın kardeşi).
-  | "dokumaEnabled";
+  | "dokumaEnabled"
+  // Tezgah izleme (tezgah → production; dokumanın kardeşi).
+  | "tezgahEnabled";
 
 interface ModulTanimi {
   /** `FeatureFlags` alanı (PATCH gövdesinde kullanılan ad). */
@@ -211,6 +213,17 @@ const MODULLER: ModulTanimi[] = [
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
   },
   {
+    // TEZGAH İZLEME (2026-10-10): üretime bağımlı; dokumanın kardeşi (dokumaya bağlı DEĞİL).
+    alan: "tezgahEnabled",
+    dbAnahtari: "tezgah.enabled",
+    middleware: "requireTezgahEnabled",
+    okuyucu: "readTezgahEnabled",
+    modulKodu: "tezgah",
+    routeDosyalari: ["routes/loom-floor.routes.ts"],
+    sondalar: modulUclari("tezgahEnabled"),
+    onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
+  },
+  {
     alan: "depoMultiEnabled",
     dbAnahtari: "depo.multiEnabled",
     middleware: "requireDepoMultiEnabled",
@@ -287,6 +300,8 @@ const SONDA_IZINLERI = [
   // çarpar; bu izin olmadan "modül AÇIKKEN 2xx" körlük zemini modül yüzünden
   // değil YETKİ yüzünden kırmızı verir ve yanlış hikâye anlatır (ölçüldü).
   "warpspec:read",
+  // Tezgah Salonu sondası (`/api/loom-floor`) — aynı gerekçe.
+  "loom:live-view",
   // Dokuma sondası (`/api/weaving-orders`) — aynı gerekçe.
   "weavingorder:read",
 ];
