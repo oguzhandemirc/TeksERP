@@ -16,11 +16,12 @@ import { factoryDayStart } from "../constants/time";
 import { LOOM_MACHINE_WHERE, MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
 import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahEscalationGraceMinutes } from "./system-setting.service";
 import { mountedBeamViewsTx, type MountedBeamView } from "./helpers/warp-beam-mount.helper";
-import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms } from "./helpers/loom-shift-terms.helper";
+import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms, type SourceBucket } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis } from "./helpers/loom-efficiency.helper";
 import {
   countFloor,
   escalationDueAt,
+  floorStateSourceOf,
   loomStateOf,
   loomStopTier,
   summarizeHalls,
@@ -73,6 +74,8 @@ export interface LoomFloorLoomDto {
   hallName: string;
   monitoringState: MachineMonitoringState;
   state: FloorLoomState;
+  /** Durumun kaynağı (karne kovası): LIVE "olculen" · elle kayıt "elle" · "simule" · kayıt yok "cikarim" (= UNMONITORED). */
+  stateSource: SourceBucket;
   openStop: LoomFloorOpenStopDto | null;
   today: { potSec: number; aptSec: number; availabilityPct: number | null; stopCount: number; breakdown: ShiftBreakdownRow[] };
   /** Açık koşumun hedef devri ?? künye nominali; ölçülmemişse null. */
@@ -209,6 +212,7 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
   const terms = todayTerms(loom, { stops, runs, doffSources: (ctx.byDoff.get(loom.id) ?? []).map((d) => d.counterSource) }, src, ctx);
   const open = stops.find((s) => s.endedAt === null) ?? null;
   const monitoringState = loom.machineSpec?.monitoringState ?? "OFF";
+  const stateSource = floorStateSourceOf(monitoringState, terms.source);
   const openRun = runs.filter((r) => r.endedAt === null).sort((a, b) => a.productionLineNo - b.productionLineNo)[0] ?? null;
   const recent = [...stops].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime()).slice(0, LOOM_FLOOR_RECENT_STOPS);
   return {
@@ -220,7 +224,8 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
       hallId: loom.station.id,
       hallName: loom.station.name,
       monitoringState,
-      state: loomStateOf(monitoringState === "LIVE", open !== null),
+      state: loomStateOf(stateSource, open !== null),
+      stateSource,
       openStop: open ? openStopDto(open, src, ctx.grace, ctx.now) : null,
       today: {
         potSec: terms.potSec, aptSec: terms.aptSec, availabilityPct: computeMachineKpis(terms).availabilityPct,

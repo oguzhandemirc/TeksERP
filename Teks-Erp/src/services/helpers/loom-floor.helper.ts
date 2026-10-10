@@ -3,12 +3,14 @@
 // =============================================================================
 // Ekranın üç yüzdesi karıştırılmaz (DOKUMA-CANLI-EKRAN §2): kart/hol "bugün %" = SÜRE
 // payı (APT/POT, oran `loom-efficiency.helper`ın tek yazarından) · şerit "şu an %" =
-// ADET payı (şu an çalışan izlenen tezgah / izlenen tezgah). İstemci yalnız gösterir.
-// Yalnız İZLENEN (`monitoringState = LIVE`) tezgah çalışıyor/duruyor sayılır; izlenmeyen
-// tezgahın sayacı elle girişten türer ve "kaç dakikadır" sorusuna doğru cevap veremez.
+// ADET payı (şu an çalışan / durumu bilinen tezgah). İstemci yalnız gösterir.
+// Durum iki kaynaktan boyanır ve kaynak cevapta yazılır (`stateSource`, karne kovası):
+// sensörlü (`monitoringState = LIVE`) tezgah "ölçülen"; sensörsüz tezgah günün elle
+// kayıtlarından (duruş · koşum · indirme) "elle". Kaydı olmayan sensörsüz tezgah bilinmez.
 // =============================================================================
-import type { MachineStopLossClass } from "@prisma/client";
+import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass } from "@prisma/client";
 import { aggregateMachineKpis, type LoomKpiTerms } from "./loom-efficiency.helper";
+import { sourceBucketOf, type SourceBucket } from "./loom-shift-terms.helper";
 
 /** Açık duruşun hedef kademesi — patrona İLETİM bu dilimde yok; yalnız süre ölçülür. */
 export type LoomStopTier = "UNTRACKED" | "WITHIN" | "OVERDUE";
@@ -38,8 +40,19 @@ export function escalationDueAt(s: StopClock): Date | null {
 
 export type FloorLoomState = "RUNNING" | "STOPPED" | "UNMONITORED";
 
-export function loomStateOf(monitored: boolean, hasOpenStop: boolean): FloorLoomState {
-  if (!monitored) return "UNMONITORED";
+/**
+ * Kartın durum kaynağı. `daySource` = günün karne kaynağı (`computeShiftTermsPure().source`):
+ * gözlem yoksa INFERRED → "cikarim". Simülasyon beyanı her zaman öne geçer.
+ */
+export function floorStateSourceOf(monitoringState: MachineMonitoringState, daySource: MachineDataSource): SourceBucket {
+  const bucket = sourceBucketOf(daySource);
+  if (bucket === "simule") return bucket;
+  return monitoringState === "LIVE" ? "olculen" : bucket;
+}
+
+/** Durumu bilinmeyen tezgah (sensörsüz ve bugün kaydı yok) gri kalır; açık duruş yoksa çalışıyor. */
+export function loomStateOf(stateSource: SourceBucket, hasOpenStop: boolean): FloorLoomState {
+  if (stateSource === "cikarim") return "UNMONITORED";
   return hasOpenStop ? "STOPPED" : "RUNNING";
 }
 
@@ -56,6 +69,7 @@ export type StoppedClassKey = "UNPLANNED" | "SETUP" | "PLANNED" | "NON_SCHEDULED
 
 export interface FloorCounts {
   total: number;
+  /** Durumu bilinen tezgah (ölçülen ∪ elle ∪ simüle) — `UNMONITORED` olmayan. */
   monitored: number;
   running: number;
   stopped: number;

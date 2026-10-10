@@ -11,9 +11,13 @@
 //   §4 DONMA (`freezeStopEscalation`, tek yer): açılışta pay+hedef · sınıflandırmada hedef (+ eski
 //      satırda pay) · yeniden sınıflandırmada yeni sebebin hedefi, pay DEĞİŞMEZ · katalog ve ayar
 //      değişse açık duruşun hedefi/payı değişmez
-//   §5 cevap: şekil (anahtar kümesi) · LIVE + açık duruş → STOPPED · OFF → UNMONITORED · kademe
+//   §5 cevap: şekil (anahtar kümesi) · LIVE + açık duruş → STOPPED, kaynak "olculen" · kademe
 //      donmuş değerden · hol özeti · fabrika günü SINIRI (önceki günün duruşu yok, günü kesen duruş
 //      gün başından sayılır, `now` sonrası yok)
+//   §7 ELLE KAYITTAN BOYAMA (sensörsüz kurulum): OFF + elle açık duruş → STOPPED, kaynak "elle",
+//      hedef aşımı OVERDUE · OFF + açık koşum → RUNNING "elle" · kayıtsız OFF ve kayıtsız SHADOW →
+//      UNMONITORED "cikarim" · saf `floorStateSourceOf`/`loomStateOf` (LIVE hep "olculen", simüle öne
+//      geçer) · yapısal: karne özeti ve salon AYNI kova eşlemesinden (`sourceBucketOf`)
 //   §6 levent alanı: devere ∧ levent tezgah bağı açıkken `beams` = `GET /warp-beams/mounted` ile AYNI
 //      helper'ın çıktısı (yuva sırası · kalan DEFTERDEN, plan değil) · leventsiz tezgahta [] · bağ
 //      defteri ya da devere kapalıyken her tezgahta null, `beamTracking` false
@@ -27,6 +31,8 @@
 //   yerine o anki ayarı okudu → §5f/§5i ❌ · ③ route'tan `requireTezgahEnabled` çıkarıldı → §2b/§2c/§2d ❌
 //   ④ salonda levent kapısı kaldırıldı (`beamsBy` hep dolu) → §6f/§6g ❌ · ⑤ helper kalanı plan uzunluğundan
 //   verdi → §6c ❌ · ⑥ salona `prisma.warpBeam.findMany` kopyası eklendi → §6h ❌
+//   (elle boyama) ⑦ `loomStateOf` yalnız "olculen"i boyadı (eski LIVE-only) → §7a/§7c/§7f/§5m/§5n ❌ ·
+//   ⑧ `floorStateSourceOf` sensörsüzü hep "elle" saydı → §7d/§7e/§7f/§5m ❌ · ⑨ karne özeti satır içi kopya → §7h ❌
 // =============================================================================
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -43,7 +49,8 @@ import { createWarpBeam } from "../src/services/warp-beam.service";
 import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { listMountedOnMachine, mountBeam } from "../src/services/warp-beam-mount.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
-import { countFloor, escalationDueAt, loomStopTier, type FloorLoomCore } from "../src/services/helpers/loom-floor.helper";
+import { countFloor, escalationDueAt, floorStateSourceOf, loomStateOf, loomStopTier, type FloorLoomCore } from "../src/services/helpers/loom-floor.helper";
+import { openMachineRun } from "../src/services/machine-run.service";
 import { aggregateMachineKpis } from "../src/services/helpers/loom-efficiency.helper";
 import { factoryDayStart } from "../src/constants/time";
 
@@ -187,13 +194,14 @@ async function govde(): Promise<void> {
     data: { name: `TEST-LF-HOL-${ek}`, code: `TEST-LF-H-${ek}`.toUpperCase().slice(0, 32), type: "INTERNAL", kind: "WEAVING", isActive: true },
   });
   ids.station = station.id;
-  const yeniTezgah = async (n: number, live: boolean) => {
+  const yeniTezgah = async (n: number, hal: "LIVE" | "OFF" | "SHADOW") => {
     const m = await prisma.machine.create({ data: { stationId: station.id, name: `TEST-LF-T${n}-${ek}`, code: `TEST-LF-T${n}-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
     ids.looms.push(m.id);
-    await prisma.machineSpec.create({ data: { machineId: m.id, monitoringState: live ? "LIVE" : "OFF", ...(live ? { acceptedAt: new Date() } : {}) } });
+    await prisma.machineSpec.create({ data: { machineId: m.id, monitoringState: hal, ...(hal === "LIVE" ? { acceptedAt: new Date() } : {}) } });
     return m.id;
   };
-  const [duran, sinifli, calisan, izlenmeyen] = [await yeniTezgah(1, true), await yeniTezgah(2, true), await yeniTezgah(3, true), await yeniTezgah(4, false)];
+  const [duran, sinifli, calisan] = [await yeniTezgah(1, "LIVE"), await yeniTezgah(2, "LIVE"), await yeniTezgah(3, "LIVE")];
+  const [elleDuran, kayitsiz, elleKosan, golgeKayitsiz] = [await yeniTezgah(4, "OFF"), await yeniTezgah(5, "OFF"), await yeniTezgah(6, "OFF"), await yeniTezgah(7, "SHADOW")];
   const P = await ReasonPresetService.create({ kind: ReasonPresetKind.MACHINE_STOP, label: `TEST-LF ariza ${ek}`, stopLossClass: "UNPLANNED", targetMinutes: 10 });
   const Q = await ReasonPresetService.create({ kind: ReasonPresetKind.MACHINE_STOP, label: `TEST-LF ayar ${ek}`, stopLossClass: "SETUP", targetMinutes: 20 });
   ids.presets.push(P.id, Q.id);
@@ -232,8 +240,9 @@ async function govde(): Promise<void> {
   const yeniden = await reclassifyStop(sebepsiz.data.id, { fromReasonCode: P.code, toReasonCode: Q.code }, undefined);
   check("§4e yeniden sınıflandırma: yeni sebebin hedefi (20), pay DEĞİŞMEDİ (15)", yeniden.data.targetMinutes === 20 && yeniden.data.escalationGraceMinutes === 15, `${yeniden.data.targetMinutes}/${yeniden.data.escalationGraceMinutes}`);
 
-  // Tezgah 4 (OFF): açık duruş olsa da izlenmiyor.
-  await openManualStop({ machineId: izlenmeyen, startedAt: new Date(simdi.getTime() - 15 * MIN) });
+  // Sensörsüz tezgahlar: 4 elle açılmış arıza (hedef 45, 60 dk önce → aşıldı) · 5 kayıtsız · 6 elle açık koşum · 7 kayıtsız SHADOW.
+  const elleZ = await openManualStop({ machineId: elleDuran, startedAt: new Date(simdi.getTime() - 60 * MIN), reasonCode: P.code });
+  await openMachineRun({ machineId: elleKosan, productionLineNo: 1, startedAt: new Date(simdi.getTime() - 120 * MIN) });
 
   // ── §5 cevap ───────────────────────────────────────────────────────────────
   const r = await getLoomFloor(simdi);
@@ -243,9 +252,9 @@ async function govde(): Promise<void> {
   check("§5b fabrika günü başı = factoryDayStart(now) · üst pay o anki ayar (3)", d.factoryDayStart.getTime() === gunBasi.getTime() && d.graceMinutes === 3);
   const t = (id: string) => d.looms.find((l) => l.id === id)!;
   const l1 = t(duran);
-  check("§5c tezgah şekli", !!l1 && anahtar(l1) === "beams,code,hallId,hallName,id,job,monitoringState,name,openStop,recentStops,source,state,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
+  check("§5c tezgah şekli", !!l1 && anahtar(l1) === "beams,code,hallId,hallName,id,job,monitoringState,name,openStop,recentStops,source,state,stateSource,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
   check("§5d openStop şekli", !!l1?.openStop && anahtar(l1.openStop) === "escalationDueAt,graceMinutes,id,lossClass,reasonCode,reasonLabel,requiresReason,source,startedAt,targetMinutes,tier", l1?.openStop ? anahtar(l1.openStop) : "yok");
-  check("§5e LIVE + açık duruş → STOPPED, açık duruş Z", l1?.state === "STOPPED" && l1.openStop?.id === Z.data.id);
+  check("§5e LIVE + açık duruş → STOPPED, açık duruş Z, kaynak ölçülen", l1?.state === "STOPPED" && l1.openStop?.id === Z.data.id && l1.stateSource === "olculen");
   check("§5f kademe DONMUŞ hedeften: 30 dk ≥ 10 → OVERDUE (katalog 45 olsa WITHIN olurdu) · iletim anı +10+7",
     l1?.openStop?.tier === "OVERDUE" && l1.openStop.graceMinutes === 7 && l1.openStop.escalationDueAt?.getTime() === Z.data.startedAt.getTime() + 17 * MIN,
     `${l1?.openStop?.tier} pay ${l1?.openStop?.graceMinutes}`);
@@ -257,16 +266,40 @@ async function govde(): Promise<void> {
     durusSn === 3000 && l1?.today.stopCount === 2, `${durusSn} sn · ${l1?.today.stopCount}`);
   const l2 = t(sinifli);
   check("§5i reclass edilmiş açık duruş: SETUP, 5 dk < 20 → WITHIN, pay 15", l2?.state === "STOPPED" && l2.openStop?.lossClass === "SETUP" && l2.openStop.tier === "WITHIN" && l2.openStop.graceMinutes === 15);
-  check("§5j duruşsuz LIVE → RUNNING", t(calisan)?.state === "RUNNING" && t(calisan)?.openStop === null);
-  check("§5k OFF tezgah açık duruşla bile UNMONITORED", t(izlenmeyen)?.state === "UNMONITORED");
-  check("§5l koşum yok → iş bloğu boş", [duran, sinifli, calisan, izlenmeyen].every((id) => t(id)?.job === null));
+  check("§5j duruşsuz ve kayıtsız LIVE → RUNNING, kaynak ölçülen (LIVE davranışı aynen)", t(calisan)?.state === "RUNNING" && t(calisan)?.openStop === null && t(calisan)?.stateSource === "olculen");
+  check("§5l iş bağsız koşum / koşum yok → iş bloğu boş", [duran, sinifli, calisan, elleDuran, elleKosan].every((id) => t(id)?.job === null));
+
+  // ── §7 elle kayıttan boyama ────────────────────────────────────────────────
+  const e4 = t(elleDuran);
+  check("§7a OFF + elle açık duruş → STOPPED, kaynak elle, açık duruş taşınır", e4?.state === "STOPPED" && e4.stateSource === "elle" && e4.openStop?.id === elleZ.data.id && e4.monitoringState === "OFF",
+    `${e4?.state}/${e4?.stateSource}`);
+  check("§7b elle duruşta hedef süre işler: 60 dk ≥ 45 → OVERDUE, iletim anı başlangıç+45+3",
+    e4?.openStop?.tier === "OVERDUE" && e4.openStop.escalationDueAt?.getTime() === elleZ.data.startedAt.getTime() + 48 * MIN, `${e4?.openStop?.tier}`);
+  check("§7c OFF + elle açık koşum (duruşsuz) → RUNNING, kaynak elle", t(elleKosan)?.state === "RUNNING" && t(elleKosan)?.stateSource === "elle", `${t(elleKosan)?.state}/${t(elleKosan)?.stateSource}`);
+  check("§7d kayıtsız OFF → UNMONITORED, kaynak çıkarım (veri yok), açık duruş yok",
+    t(kayitsiz)?.state === "UNMONITORED" && t(kayitsiz)?.stateSource === "cikarim" && t(kayitsiz)?.openStop === null, `${t(kayitsiz)?.state}/${t(kayitsiz)?.stateSource}`);
+  check("§7e kayıtsız SHADOW → UNMONITORED (gölge mod LIVE sayılmaz)", t(golgeKayitsiz)?.state === "UNMONITORED" && t(golgeKayitsiz)?.stateSource === "cikarim");
+  check("§7f saf: LIVE hep olculen (kayıtsız gün dahil) · simüle öne geçer · OFF kova = karne kovası · cikarim → UNMONITORED",
+    floorStateSourceOf("LIVE", "INFERRED") === "olculen" && floorStateSourceOf("LIVE", "OPERATOR") === "olculen" && floorStateSourceOf("LIVE", "SIMULATED") === "simule"
+      && floorStateSourceOf("OFF", "SUPERVISOR") === "elle" && floorStateSourceOf("SHADOW", "INFERRED") === "cikarim"
+      && loomStateOf("cikarim", true) === "UNMONITORED" && loomStateOf("elle", true) === "STOPPED" && loomStateOf("simule", false) === "RUNNING");
+
   const hol = d.halls.find((h) => h.hallId === station.id);
-  const izlenenler = [duran, sinifli, calisan].map((id) => sifirTerim(t(id)!.today.potSec, t(id)!.today.aptSec));
-  check("§5m hol özeti: 4 toplam · 3 izlenen · 1 çalışan · 2 duran · 1 izlenmeyen · 1 aşan · UNPLANNED 1 · SETUP 1 · şu an %33",
-    !!hol && hol.total === 4 && hol.monitored === 3 && hol.running === 1 && hol.stopped === 2 && hol.unmonitored === 1 && hol.overdue === 1
-      && hol.stoppedByClass.UNPLANNED === 1 && hol.stoppedByClass.SETUP === 1 && hol.nowPct === 33,
+  const bilinen = [duran, sinifli, calisan, elleDuran, elleKosan].map((id) => sifirTerim(t(id)!.today.potSec, t(id)!.today.aptSec));
+  check("§5m hol özeti: 7 toplam · 5 bilinen · 2 çalışan · 3 duran · 2 bilinmeyen · 2 aşan · UNPLANNED 2 · SETUP 1 · şu an %40",
+    !!hol && hol.total === 7 && hol.monitored === 5 && hol.running === 2 && hol.stopped === 3 && hol.unmonitored === 2 && hol.overdue === 2
+      && hol.stoppedByClass.UNPLANNED === 2 && hol.stoppedByClass.SETUP === 1 && hol.nowPct === 40,
     hol ? JSON.stringify({ ...hol, stoppedByClass: undefined }) : "hol yok");
-  check("§5n hol bugün % = izlenen üç tezgahın ΣAPT/ΣPOT'u", hol?.todayPct === aggregateMachineKpis(izlenenler).availabilityPct, `${hol?.todayPct}`);
+  check("§5n hol bugün % = durumu bilinen beş tezgahın ΣAPT/ΣPOT'u", hol?.todayPct === aggregateMachineKpis(bilinen).availabilityPct, `${hol?.todayPct}`);
+
+  // Yapısal: kova eşlemesi tek yerde; salon ve karne özeti ondan okur.
+  const src = (f: string) => readFileSync(path.join(__dirname, "..", f), "utf8");
+  const salonKod = src("src/services/loom-floor.service.ts");
+  check("§7g salon durumu `floorStateSourceOf` + `loomStateOf`tan; servis LIVE'ı kendi karşılaştırmaz",
+    /floorStateSourceOf\(/.test(salonKod) && /loomStateOf\(stateSource,/.test(salonKod) && !/=== "LIVE"/.test(salonKod));
+  const rapor = src("src/services/reports/dokuma.report.service.ts");
+  check("§7h karne özeti kovaları `countSourceBuckets`ten (satır içi OPERATOR+SUPERVISOR kopyası yok)",
+    /countSourceBuckets\(/.test(rapor) && !/OPERATOR\.satir\s*\+\s*\w+\.SUPERVISOR/.test(rapor) && !/elle:\s*k\./.test(rapor));
 
   await leventAlani(station.id, calisan, duran, simdi);
 }
@@ -345,6 +378,7 @@ async function cleanup(): Promise<void> {
       // BEFORE DELETE seddi insan kararlı satırı korur — fikstür temizliği ÖNCE kararı siler (üretim yolu değil).
       await prisma.machineStopEvent.updateMany({ where: { id: { in: sid } }, data: { classifiedById: null, reasonSource: null } });
       await prisma.machineStopEvent.deleteMany({ where: { id: { in: sid } } });
+      await prisma.machineRun.deleteMany({ where: { machineId: { in: ids.looms } } });
       await prisma.machineSpec.deleteMany({ where: { machineId: { in: ids.looms } } });
       await prisma.machine.deleteMany({ where: { id: { in: ids.looms } } });
     }

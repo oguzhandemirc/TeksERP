@@ -19,6 +19,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { LOOM_HORIZON_DAY, loomHorizonStart } from "../../constants/dokuma-ufku";
 import { aggregateMachineKpis, type LoomKpiAggregate } from "../helpers/loom-efficiency.helper";
+import { countSourceBuckets } from "../helpers/loom-shift-terms.helper";
 import { collectShiftStatRows, factoryDayKeyFromYmd, type ShiftLineRow, type ShiftStatRow, type ShiftStatRowExtra } from "../machine-shift-stat.service";
 import { beamsMountedOnMachinesDuring, mountWindowsForBeams, resolveBeamLotFilter, shiftHasBeam, type BeamLotFilter, type BeamLotFilterInput, type BeamOption } from "../helpers/warp-beam-roll-filter.helper";
 
@@ -240,7 +241,7 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
       durusSec: group.reduce((a, r) => a + downSec(r.terms), 0),
       kaynakKirilimi: k,
       ozet: {
-        olculen: k.MACHINE.satir, elle: k.OPERATOR.satir + k.SUPERVISOR.satir, simule: k.SIMULATED.satir, cikarim: k.INFERRED.satir,
+        ...countSourceBuckets(group.map((r) => r.terms.source)),
         olculemedi: group.filter((r) => r.kpis.performancePct === null).length, toplamSatir: group.length,
       },
       makineler: group.map((r) => ({

@@ -130,6 +130,26 @@ export function resolveShiftSource(a: { anySimulated: boolean; supervisorTouched
   return a.anyObservation ? "OPERATOR" : "INFERRED";
 }
 
+/** Kaynağın GÜVEN SINIFI — karne özeti ile salon kartı aynı sözcüğü bu tek eşlemeden alır. */
+export type SourceBucket = "olculen" | "elle" | "simule" | "cikarim";
+
+export function sourceBucketOf(source: MachineDataSource): SourceBucket {
+  switch (source) {
+    case "MACHINE": return "olculen";
+    case "OPERATOR":
+    case "SUPERVISOR": return "elle";
+    case "SIMULATED": return "simule";
+    case "INFERRED": return "cikarim";
+  }
+}
+
+/** Satırların kova sayımı (sıra: ölçülen · elle · simüle · çıkarım). */
+export function countSourceBuckets(sources: readonly MachineDataSource[]): Record<SourceBucket, number> {
+  const out: Record<SourceBucket, number> = { olculen: 0, elle: 0, simule: 0, cikarim: 0 };
+  for (const s of sources) out[sourceBucketOf(s)] += 1;
+  return out;
+}
+
 interface ClippedStop { s: ShiftStopInput; from: Date; to: Date; sec: number; minor: boolean; cls: MachineStopLossClass | null }
 
 function clipStops(input: ShiftTermsInput): ClippedStop[] {
