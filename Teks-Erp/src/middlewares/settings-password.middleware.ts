@@ -180,7 +180,7 @@ export async function requireSettingsPassword(
     //    ⚠️ Bu satırı yazan istek `blocked:false`tur ve aşağıda doğrulamaya
     //    devam eder (403 INVALID alır); 429'lar bir SONRAKİ istekten başlar.
     if (lock.justLocked) {
-      void AuditService.logEvent({
+      await AuditService.logEvent({
         category: "SYSTEM",
         action: SETTINGS_PASSWORD_EVENTS.LOCKED,
         userId,

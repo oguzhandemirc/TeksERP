@@ -105,14 +105,17 @@ async function rejectUnapprovedDevice(req: Request, next: NextFunction): Promise
   return true;
 }
 
-/** Kilit kurulduğu AN bir kez yazılır (şifre yoluyla aynı kural). Kart/PIN değeri yüke GİRMEZ. */
-function auditLockedOnce(
+/**
+ * Kilit kurulduğu AN bir kez yazılır (şifre yoluyla aynı kural). Kart/PIN değeri yüke GİRMEZ.
+ * Yanıttan ÖNCE beklenir: yanıtı alan istemci izi görebilmeli (logEvent atmaz, tx dışıdır).
+ */
+async function auditLockedOnce(
   lock: { justLocked: boolean; retryAfterSec: number },
   method: "card" | "quick-pin",
   req: Request,
-): void {
+): Promise<void> {
   if (!lock.justLocked) return;
-  void AuditService.logEvent({
+  await AuditService.logEvent({
     category: "AUTH",
     action: "LOGIN_LOCKED",
     recordId: method,
@@ -207,7 +210,7 @@ export class AuthController {
     // satırları vardı, kilidin kurulduğu an ayırt edilemiyordu). `blocked`
     // dalına yazmak ise 429 başına bir satır demekti — sel.
     if (lock.justLocked) {
-      void AuditService.logEvent({
+      await AuditService.logEvent({
         category: "AUTH",
         action: "LOGIN_LOCKED",
         recordId: body.username,
@@ -318,7 +321,7 @@ export class AuthController {
     ];
     // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
     const lock = await reserveLoginAttempt(lockoutKey);
-    auditLockedOnce(lock, "card", req);
+    await auditLockedOnce(lock, "card", req);
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(
@@ -403,7 +406,7 @@ export class AuthController {
     const lockoutKey = resolveLoginLockoutKeys(req, `pin:${resolveLoginDeviceId(req) ?? "-"}`);
     // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
     const lock = await reserveLoginAttempt(lockoutKey);
-    auditLockedOnce(lock, "quick-pin", req);
+    await auditLockedOnce(lock, "quick-pin", req);
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(
