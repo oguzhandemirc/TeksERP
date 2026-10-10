@@ -2,7 +2,8 @@
 // TEZGAH SALONU — uygulama ekranı (gerçek veri; `/operations/weaving-floor`)
 // =============================================================================
 // Kapı: route `loom:live-view` + `ROUTE_MODULE` `tezgahEnabled`; backend aynı iki kapı.
-// Veri `useLoomFloorLive` (5 sn yoklama); görünüm `WeavingFloorView`. Örnek veri
+// Veri `useLoomFloorLive` (5 sn yoklama); görünüm `WeavingFloorView`; `tv` = menüsüz TV
+// bağlantısı (`#/tezgah-tv`, `WeavingFloorTvScreen`). Örnek veri
 // yalnız geliştirme önizlemesinde (`preview/weavingFloorPreview.tsx`).
 // =============================================================================
 import { WifiOff } from "lucide-react";
@@ -11,6 +12,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { formatFactory } from "@/lib/factory-time";
 import { useLoomFloorLive } from "./useLoomFloorLive";
 import { WeavingFloorView } from "./WeavingFloorView";
+import { buildTezgahTvUrl, openTezgahTvHere } from "./tv-entry";
 
 /** Tazeleme koptuğunda eldeki veri gösterilir ama yaşı açıkça yazılır. */
 function StaleNotice({ updatedAt }: { updatedAt: number }) {
@@ -42,7 +44,10 @@ export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
       now={live.now}
       sampleData={false}
       tv={tv}
+      stale={live.stale}
       notice={live.stale ? <StaleNotice updatedAt={live.floor.updatedAt} /> : undefined}
+      onOpenTv={tv ? undefined : openTezgahTvHere}
+      tvUrl={tv ? null : buildTezgahTvUrl()}
     />
   );
 }

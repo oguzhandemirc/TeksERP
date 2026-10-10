@@ -12,6 +12,7 @@ const PREVIEW = "preview/weavingFloorPreview.tsx";
 const ROUTES = "routes/content-routes.tsx";
 const TILES = "pages/Operations/tile-config.ts";
 const TILES_TEST = "pages/Operations/tile-visibility.test.ts";
+const APP = "App.tsx";
 const IMPORT_RE = /(?:from\s+|import\s*\()\s*["'][^"']*WeavingFloor\/?[^"']*["']/;
 const MOCK_IMPORT_RE = /(?:from\s+|import\s*\()\s*["'][^"']*(?:WeavingFloor\/mock|\.\/mock|\.\.\/mock)\/[^"']*["']/;
 
@@ -28,9 +29,9 @@ const files = walk(SRC).map((f) => relative(SRC, f).split("\\").join("/"));
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 describe("Tezgah Salonu — kapılar ve örnek veri sınırı", () => {
-  it("klasör dışından içe aktaranlar yalnız önizleme, route tablosu ve karo yüklemi (+ karo testi)", () => {
+  it("klasör dışından içe aktaranlar yalnız önizleme, route tablosu, karo yüklemi (+ karo testi) ve App (TV bağlantısı)", () => {
     const importers = files.filter((rel) => !rel.startsWith(FOLDER) && IMPORT_RE.test(read(rel)));
-    expect(importers.sort()).toEqual([TILES, TILES_TEST, PREVIEW, ROUTES].sort());
+    expect(importers.sort()).toEqual([APP, TILES, TILES_TEST, PREVIEW, ROUTES].sort());
     expect(read(TILES)).toMatch(/from "\.\/WeavingFloor\/floor-regime"/);
   });
 
@@ -46,6 +47,18 @@ describe("Tezgah Salonu — kapılar ve örnek veri sınırı", () => {
     expect(at).toBeGreaterThan(-1);
     const block = src.slice(at, src.indexOf("},", at));
     expect(block).toMatch(/<ProtectedRoute requirePermission="loom:live-view">\s*<WeavingFloorPage \/>/);
+  });
+
+  it("⭐ TV bağlantısı kabuksuz ve OTURUMLU: App kapısında oturum-dışı dalından SONRA, AppShell'den ÖNCE", () => {
+    const src = read(APP);
+    const out = src.indexOf("if (oturumDisi) {");
+    const tv = src.indexOf("} else if (hashPath === TEZGAH_TV_PATH) {");
+    const shell = src.indexOf("kabuk = <AppShell />;");
+    expect(out).toBeGreaterThan(-1);
+    expect(tv).toBeGreaterThan(out);
+    expect(shell).toBeGreaterThan(tv);
+    expect(src.slice(tv, shell)).toMatch(/kabuk = <WeavingFloorTvScreen \/>;/);
+    expect(read(`${FOLDER}WeavingFloorTvScreen.tsx`)).toMatch(/<WeavingFloorPage tv \/>/);
   });
 
   it("önizleme girişi üretim derlemesinde açılmaz", () => {

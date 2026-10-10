@@ -6,7 +6,8 @@
 // `tv` = salon TV'si kipi: açılışta tam ekran, menü/düğme/çıkış yok, dokunuş detay açmaz.
 // =============================================================================
 import { useCallback, useMemo, useState } from "react";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, Tv } from "lucide-react";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -39,9 +40,39 @@ interface ViewProps {
   tv?: boolean;
   /** Başlıkta veri durumu (örn. "bağlantı koptu") — opsiyonel. */
   notice?: React.ReactNode;
+  /** Veri tazelenemiyor — tam ekran başlığındaki "Canlı" damgası uyarıya döner. */
+  stale?: boolean;
+  /** Verilirse başlıkta "TV kipi" düğmesi (onaylı) — bu pencereyi menüsüz TV kipine geçirir. */
+  onOpenTv?: () => void;
+  /** Onay penceresinde gösterilecek TV adresi (web paneli varsa). */
+  tvUrl?: string | null;
 }
 
-export function WeavingFloorView({ floor, now, sampleData, tv = false, notice }: ViewProps) {
+function TvButton({ onOpenTv, tvUrl }: { onOpenTv: () => void; tvUrl: string | null }) {
+  const [open, setOpen] = useState(false);
+  const where = tvUrl ? ` Salon TV'sinin tarayıcısında bu adresi açın: ${tvUrl}` : "";
+  return (
+    <>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        <Tv className="mr-1.5 h-4 w-4" />
+        TV kipi
+      </Button>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Bu pencere TV kipine geçsin mi?"
+        description={`TV kipinde menü, düğme ve çıkış yoktur; ekran kendini tazeler. Çıkmak için uygulamayı yeniden açın ya da adresi değiştirin.${where}`}
+        confirmLabel="TV kipine geç"
+        onConfirm={() => {
+          setOpen(false);
+          onOpenTv();
+        }}
+      />
+    </>
+  );
+}
+
+export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, stale = false, onOpenTv, tvUrl = null }: ViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ShowFilter>("ALL");
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
@@ -74,6 +105,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice }:
               now={now}
               sampleData={sampleData}
               updatedAt={floor.updatedAt}
+              stale={stale}
               onExit={tv ? undefined : fullscreen.exit}
               legend={<StatusLegend />}
             />
@@ -84,6 +116,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice }:
               actions={
                 <>
                   <ShowFilterPicker value={filter} onChange={setFilter} />
+                  {onOpenTv && <TvButton onOpenTv={onOpenTv} tvUrl={tvUrl} />}
                   <Button variant="outline" onClick={fullscreen.enter}>
                     <Maximize2 className="mr-1.5 h-4 w-4" />
                     Tam ekran
@@ -107,7 +140,6 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice }:
                   highlight={{ starId, bestHall: h.hall === bestHall, onSelect }}
                 />
               ))}
-            {fullscreen.active && notice}
             {empty && (
               <p className="py-10 text-center text-muted-foreground">
                 {floor.looms.length === 0

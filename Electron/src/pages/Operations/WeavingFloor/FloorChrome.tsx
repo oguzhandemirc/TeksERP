@@ -1,5 +1,5 @@
 // Sayfa çatısı parçaları: "Örnek veri" rozeti, renk/şekil anahtarı ve tam ekran başlığı.
-import { FlaskConical, Minimize2 } from "lucide-react";
+import { FlaskConical, Minimize2, WifiOff } from "lucide-react";
 import { formatFactory } from "@/lib/factory-time";
 import { Button } from "@/components/ui/button";
 import { StatusShape } from "./Markers";
@@ -44,12 +44,14 @@ interface FullscreenHeaderProps {
   sampleData: boolean;
   /** Son veri tazelemesinin anı — TV'ye bakan ekranın canlı olduğunu görsün. */
   updatedAt: number;
+  /** Veri tazelenemiyor — "Canlı" damgası bayatlar, uyarı başlıkta (TV'de kaydırma yok). */
+  stale?: boolean;
   /** Yoksa (TV kipi) çıkış düğmesi çizilmez. */
   onExit?: () => void;
   legend?: React.ReactNode;
 }
 
-export function FullscreenHeader({ now, sampleData, updatedAt, onExit, legend }: FullscreenHeaderProps) {
+export function FullscreenHeader({ now, sampleData, updatedAt, stale = false, onExit, legend }: FullscreenHeaderProps) {
   return (
     <div className="flex items-center gap-4 px-6 pt-4">
       <h1 className="whitespace-nowrap text-[1.6em] font-extrabold" style={{ color: hsl("var(--ds-ink)") }}>
@@ -57,13 +59,25 @@ export function FullscreenHeader({ now, sampleData, updatedAt, onExit, legend }:
       </h1>
       {sampleData && <SampleDataBadge />}
       <div className="min-w-0 flex-1">{legend}</div>
-      <span
-        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[0.8em] font-semibold tabular-nums text-muted-foreground"
-        title="Ekran kendini tazeler"
-      >
-        <span className="h-2 w-2 rounded-full" style={{ background: hsl("var(--ds-run)") }} aria-hidden />
-        Canlı · {formatFactory(updatedAt, "HH:mm:ss")}
-      </span>
+      {stale ? (
+        <span
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-destructive px-3 py-1 text-[0.9em] font-bold tabular-nums text-destructive-foreground"
+          role="alert"
+          data-testid="live-stamp"
+        >
+          <WifiOff className="h-[1em] w-[1em]" aria-hidden />
+          Bağlantı yok · son veri {formatFactory(updatedAt, "HH:mm:ss")}
+        </span>
+      ) : (
+        <span
+          className="inline-flex items-center gap-1.5 whitespace-nowrap text-[0.8em] font-semibold tabular-nums text-muted-foreground"
+          title="Ekran kendini tazeler"
+          data-testid="live-stamp"
+        >
+          <span className="h-2 w-2 rounded-full" style={{ background: hsl("var(--ds-run)") }} aria-hidden />
+          Canlı · {formatFactory(updatedAt, "HH:mm:ss")}
+        </span>
+      )}
       <span className="whitespace-nowrap text-[1.1em] font-bold tabular-nums text-muted-foreground">{formatFactory(now, "dd.MM.yyyy")}</span>
       {onExit && (
         <Button variant="outline" size="sm" onClick={onExit}>

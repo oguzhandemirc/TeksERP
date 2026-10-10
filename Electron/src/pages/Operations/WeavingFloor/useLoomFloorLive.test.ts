@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const get = vi.fn();
 vi.mock("./service", () => ({ loomFloorService: { get: () => get() } }));
 
-import { useLoomFloorLive } from "./useLoomFloorLive";
+import { STALE_AFTER_POLLS, isFloorStale, useLoomFloorLive } from "./useLoomFloorLive";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -55,5 +55,17 @@ describe("useLoomFloorLive", () => {
     unmount();
     expect(clear).toHaveBeenCalled();
     clear.mockRestore();
+  });
+});
+
+describe("isFloorStale", () => {
+  it("⭐ askıda kalan yoklama da bayatlatır: son başarıdan 3 yoklama sonra", () => {
+    expect(STALE_AFTER_POLLS).toBe(3);
+    expect(isFloorStale({ hasData: true, failed: false, ageMs: 15_000, pollMs: 5_000 })).toBe(false);
+    expect(isFloorStale({ hasData: true, failed: false, ageMs: 15_001, pollMs: 5_000 })).toBe(true);
+  });
+  it("hata + eldeki veri → bayat; veri hiç yoksa bayat değil (yükleniyor/hata ekranı)", () => {
+    expect(isFloorStale({ hasData: true, failed: true, ageMs: 0, pollMs: 5_000 })).toBe(true);
+    expect(isFloorStale({ hasData: false, failed: true, ageMs: 99_999, pollMs: 5_000 })).toBe(false);
   });
 });

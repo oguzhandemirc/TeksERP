@@ -19,6 +19,18 @@ export interface LoomFloorLiveOptions {
   clockMs?: number;
 }
 
+/** Son başarılı tazelemeden bu kadar yoklama sonra veri bayat sayılır (istek askıda kalsa da). */
+export const STALE_AFTER_POLLS = 3;
+
+/**
+ * Bayat mı: son tazeleme hata verdi ve eldeki eski veri gösteriliyor YA DA son başarılı
+ * tazelemenin üzerinden `STALE_AFTER_POLLS` yoklama geçti (askıda istek hata vermez).
+ */
+export function isFloorStale(i: { hasData: boolean; failed: boolean; ageMs: number; pollMs: number }): boolean {
+  if (!i.hasData) return false;
+  return i.failed || i.ageMs > STALE_AFTER_POLLS * i.pollMs;
+}
+
 export interface LoomFloorLive {
   /** İlk cevap gelene dek null. */
   floor: FloorState | null;
@@ -26,7 +38,7 @@ export interface LoomFloorLive {
   sampleData: false;
   isLoading: boolean;
   error: Error | null;
-  /** Son tazeleme başarısız ama eldeki veri gösteriliyor. */
+  /** Eldeki veri gösteriliyor ama tazelenemiyor (hata ya da askıda kalan yoklama). */
   stale: boolean;
 }
 
@@ -52,6 +64,6 @@ export function useLoomFloorLive(options: LoomFloorLiveOptions = {}): LoomFloorL
     sampleData: false,
     isLoading: q.isPending,
     error: q.error,
-    stale: q.isError && q.data !== undefined,
+    stale: isFloorStale({ hasData: q.data !== undefined, failed: q.isError, ageMs: clientNow - q.dataUpdatedAt, pollMs }),
   };
 }
