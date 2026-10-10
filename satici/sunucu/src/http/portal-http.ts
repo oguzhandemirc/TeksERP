@@ -239,11 +239,18 @@ export interface ScopedOptions {
 
 const isWrite = (req: Request): boolean => req.method !== "GET" && req.method !== "HEAD";
 
+/** İşleyicinin JSON yanıtı: kapsam ayak izini YAZDIKTAN SONRA gönderir (yanıtı alan istemci satırı görür). */
+export interface PortalYanit {
+  readonly status: number;
+  readonly body: unknown;
+}
+
 /**
  * İşleyiciyi istek kapsamında koşar. ERİŞİM'de doğrulanmış Access kimliği yoksa (JWT kapısının arkasında değil) 404.
- * ERİŞİM'de oturumlu, başarılı, tekrar oynatma olmayan ve denetim satırı yazmamış yazma → genel ayak izi satırı.
+ * ERİŞİM'de oturumlu, başarılı, tekrar oynatma olmayan ve denetim satırı yazmamış yazma → genel ayak izi satırı, yanıttan ÖNCE.
+ * Yanıtı kendisi gönderen (void dönen) işleyici yalnız okuma ya da `ayakIziMuaf` yazmadır; aksi halde iz yanıtın ardına kalır.
  */
-export function scopedHandler(listener: PortalListener, key: string, fn: (req: Request, res: Response) => Promise<void>, opts: ScopedOptions = {}): RequestHandler {
+export function scopedHandler(listener: PortalListener, key: string, fn: (req: Request, res: Response) => Promise<PortalYanit | void>, opts: ScopedOptions = {}): RequestHandler {
   return async (req, res) => {
     const raw = listener === "ERISIM" ? (res.locals.erisimKimligi as { email?: unknown } | undefined)?.email : undefined;
     const email = typeof raw === "string" && raw !== "" ? raw : undefined;
@@ -254,11 +261,13 @@ export function scopedHandler(listener: PortalListener, key: string, fn: (req: R
     await runInListenerScope(
       listener,
       async () => {
-        await fn(req, res);
+        const yanit = await fn(req, res);
+        const durum = yanit ? yanit.status : res.statusCode;
         const scope = currentScope();
-        if (listener !== "ERISIM" || !isWrite(req) || opts.ayakIziMuaf || !scope?.actor || scope.audits > 0) return;
-        if (res.statusCode >= 400 || res.get("Idempotent-Replay") === "true") return;
-        await recordAudit({ event: "ERISIM_YAZMA", entity: "PortalRota", actor: scope.actor, summary: { rota: key, yol: `${req.baseUrl}${req.path}`, durum: res.statusCode } });
+        const actor = scope?.actor;
+        const izGerekli = listener === "ERISIM" && isWrite(req) && !opts.ayakIziMuaf && scope?.audits === 0 && durum < 400 && res.get("Idempotent-Replay") !== "true";
+        if (izGerekli && actor) await recordAudit({ event: "ERISIM_YAZMA", entity: "PortalRota", actor, summary: { rota: key, yol: `${req.baseUrl}${req.path}`, durum } });
+        if (yanit) res.status(yanit.status).json(yanit.body);
       },
       email,
     );
@@ -281,7 +290,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
   router.use(express.json({ limit: "64kb", strict: true }));
   // Vekil başlığı yalnız Cloudflare arkasındaki dinleyicilerde (GENEL · ERİŞİM) ve yalnız güvenilen vekilden gelen bağlantıda okunur.
   const trust = proxyTrustFrom(ctx.config);
-  const scoped = (key: string, fn: (req: Request, res: Response) => Promise<void>): RequestHandler => scopedHandler(listener, key, fn);
+  const scoped = (key: string, fn: (req: Request, res: Response) => Promise<PortalYanit>): RequestHandler => scopedHandler(listener, key, fn);
 
   if (bind("POST /oturum/ac")) {
     router.post(
@@ -291,7 +300,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
         const body = parseStrict(LoginSchema, req.body ?? {});
         const { token, session } = await login(ctx, { listener, username: body.kullaniciAdi, password: body.parola, totp: body.totp });
         res.append("Set-Cookie", cookieHeader(listener, token, ctx.config.PORTAL_OTURUM_AZAMI_SAAT * 3600));
-        res.status(200).json({ success: true, data: sessionView(session) });
+        return { status: 200, body: { success: true, data: sessionView(session) } };
       }),
     );
   }
@@ -305,7 +314,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
         const session = await resolveSession(ctx, { listener, token: readCookie(req, SESSION_COOKIE[listener]) });
         if (session) await logout(session);
         res.append("Set-Cookie", cookieHeader(listener, "", 0));
-        res.json({ success: true, data: null });
+        return { status: 200, body: { success: true, data: null } };
       }),
     );
   }
@@ -314,7 +323,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
     router.get(
       "/oturum",
       scoped("GET /oturum", async (req, res) => {
-        res.json({ success: true, data: sessionView(await requireSession(req, res)) });
+        return { status: 200, body: { success: true, data: sessionView(await requireSession(req, res)) } };
       }),
     );
   }
@@ -326,7 +335,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
         const session = await requireSession(req, res);
         const body = parseStrict(PasswordChangeSchema, req.body ?? {});
         await changeOwnPassword(ctx, { userId: session.user.id, sessionId: session.id, currentPassword: body.mevcutParola, newPassword: body.yeniParola, totp: body.totp });
-        res.json({ success: true, data: null });
+        return { status: 200, body: { success: true, data: null } };
       }),
     );
   }
@@ -340,7 +349,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
         if (!roleHas(session.user.rol, def.permission)) throw new VendorError(403, "YETKISIZ", "Bu işlem için yetkiniz yok");
         const result = await def.handler({ ctx, session, req, nowMs: Date.now() });
         if (result.replayed) res.set("Idempotent-Replay", "true");
-        res.status(result.status ?? 200).json({ success: true, data: result.data });
+        return { status: result.status ?? 200, body: { success: true, data: result.data } };
       }),
     );
   }
