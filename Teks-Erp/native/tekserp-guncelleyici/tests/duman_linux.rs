@@ -74,13 +74,14 @@ fn duman_linux_hazirla() {
         son = v.to_string();
     }
 
-    // Kiralar: n'inci kira (n−1) dk sonra verilmiş sayılır; pencere şimdiden 7 gün açık, OTOMATİK.
+    // Kiralar: n'inci kira (n−1) dk sonra verilmiş sayılır; OTOMATİK, mutlak aralık şimdiden açık (şema tavanı 25 sa).
     let kira_sayisi = girdi["kiraSayisi"].as_u64().unwrap_or(8) as i64;
     let son: &'static str = Box::leak(son.into_boxed_str());
+    let politika = policy("OTOMATIK", &[(now - HOUR, now + 23 * HOUR)], None);
     for n in 1..=kira_sayisi {
         let t = now + (n - 1) * 60_000;
         let opts = LeaseOpts {
-            update: Some(policy("OTOMATIK", &[(now - HOUR, now + 7 * DAY)], None)),
+            update: Some(politika.clone()),
             maintenance_end: Some(now + 365 * DAY),
             channel_backend: Some(son),
             ..LeaseOpts::default()
@@ -91,6 +92,16 @@ fn duman_linux_hazirla() {
             yaz(&dir.join("lisans").join("hak.jws"), hak.expect("HAK").as_bytes());
         }
     }
+    // Güncelleyicinin kendi okuyucusuyla ölç: CI'da 10 dk beklemeden önce burada kırmızı.
+    let sina = dir.join("lisans-sina");
+    std::fs::create_dir_all(&sina).unwrap();
+    std::fs::copy(dir.join("lisans").join("hak.jws"), sina.join("hak.jws")).unwrap();
+    for n in 1..=kira_sayisi {
+        std::fs::copy(dir.join("lisans").join(format!("kira-{n}.jws")), sina.join("kira.jws")).unwrap();
+        let g = tekserp_guncelleyici::policy::load(&RealFs, &sina, &anchor);
+        assert!(g.lease.is_some() && g.problem.is_none(), "kira-{n} doğrulanmadı: {:?}", g.problem);
+    }
+    std::fs::remove_dir_all(&sina).unwrap();
     let niyet = json!({ "v": 1, "yazildi": iso(now), "indirme": { "belirtec": TOKEN, "bitis": iso(now + 30 * DAY) }, "onay": null });
     yaz(&dir.join("niyet.json"), niyet.to_string().as_bytes());
 
