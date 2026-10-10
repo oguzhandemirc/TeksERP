@@ -6,6 +6,7 @@ import {
   AUTH_TOKEN_STORE_KEY,
   DOWNLOAD_TOKEN_HEADER,
   downloadTokenUrl,
+  feedHeaders,
   feedOptions,
   fetchDownloadToken,
 } from "@shared/download-token";
@@ -20,6 +21,7 @@ const h = vi.hoisted(() => ({
   store: new Map<string, string>(),
   updater: {
     setFeedURL: vi.fn(),
+    requestHeaders: null as Record<string, string> | null,
     checkForUpdates: vi.fn(async () => null),
     on: vi.fn(),
     quitAndInstall: vi.fn(),
@@ -107,14 +109,15 @@ describe("indirme belirteci (saf)", () => {
   });
 
   it("feed seçenekleri: belirteç varsa başlık, yoksa bugünkü gibi başlıksız", () => {
-    expect(feedOptions(DEFAULT_UPDATE_FEED_URL, TOKEN)).toEqual({ provider: "generic", url: DEFAULT_UPDATE_FEED_URL, requestHeaders: { [DOWNLOAD_TOKEN_HEADER]: TOKEN } });
-    expect(feedOptions(DEFAULT_UPDATE_FEED_URL, null)).toEqual({ provider: "generic", url: DEFAULT_UPDATE_FEED_URL });
+    expect(feedOptions(DEFAULT_UPDATE_FEED_URL)).toEqual({ provider: "generic", url: DEFAULT_UPDATE_FEED_URL });
+    expect(feedHeaders(DEFAULT_UPDATE_FEED_URL, TOKEN)).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
+    expect(feedHeaders(DEFAULT_UPDATE_FEED_URL, null)).toBeNull();
     expect(DOWNLOAD_TOKEN_HEADER).toBe("X-TKL-Indirme");
   });
 
   it("belirteç YALNIZ izinli güncelleme adresine: yabancı ana makine / http / yanlış yol → başlıksız (SIR-5)", () => {
     for (const url of ["https://g/k/electron/", DEFAULT_UPDATE_FEED_URL.replace("https:", "http:"), new URL("/x/", DEFAULT_UPDATE_FEED_URL).toString()]) {
-      expect(feedOptions(url, TOKEN), url).toEqual({ provider: "generic", url });
+      expect(feedHeaders(url, TOKEN), url).toBeNull();
     }
   });
 
@@ -146,8 +149,8 @@ describe("updater.ipc — her denetimde belirteç", () => {
     registerUpdaterIpc();
     const check = () => h.handlers.get("updater:check")!(uygulama);
     await check();
-    const son = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string; requestHeaders?: Record<string, string> };
-    expect(son().requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
+    const son = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string };
+    expect(h.updater.requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
     expect(son().url).toBe(groupFeedUrl("genel"));
     expect(h.fetchMock).toHaveBeenCalledWith("http://10.0.0.5:4000/api/license/indirme-belirteci?urun=electron", expect.anything());
 

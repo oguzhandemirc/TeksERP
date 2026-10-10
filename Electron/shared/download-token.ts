@@ -1,5 +1,6 @@
 // İNDİRME BELİRTECİ (3b) — panel her güncelleme denetiminden önce fabrikanın backend'inden kısa ömürlü
-// belirteç alır ve electron-updater'a `X-TKL-Indirme` başlığı olarak verir (latest.yml + exe + blockmap).
+// belirteç alır ve electron-updater'a `X-TKL-Indirme` başlığı olarak verir (latest.yml + exe + blockmap;
+// `applyFeed` — başlık `requestHeaders` özelliğinden gider, `setFeedURL` seçeneğinden DEĞİL).
 // Belirteç alınamazsa denetim BAŞLIKSIZ yapılır (bugünkü davranış): Worker açılana dek sorunsuz, sonra
 // geçiş listesi. Belirteç loglanmaz, diske yazılmaz, YALNIZ izinli güncelleme adresine gider
 // (`isAllowedUpdateUrl`). Yanıtın `grup` alanı (O3) ortak paketin güncelleme grubudur: biçimsizse null, küme
@@ -81,11 +82,29 @@ export async function fetchDownloadToken(g: DownloadTokenInput): Promise<Downloa
 }
 
 /**
- * electron-updater `setFeedURL` seçenekleri: belirteç varsa başlıkla, yoksa bugünkü gibi başlıksız. Başlık
- * YALNIZ izinli güncelleme adresine eklenir — ezilmiş ya da bozuk bir adres belirteci başka sunucuya taşıyamaz.
+ * electron-updater `setFeedURL` seçenekleri — başlık TAŞIMAZ: `setFeedURL` seçeneklerdeki `requestHeaders`ı
+ * yok sayar (6.x; yalnız kurucu okur), başlık `requestHeaders` ÖZELLİĞİnden gider (`applyFeed`).
  */
-export function feedOptions(url: string, token: string | null): { provider: "generic"; url: string; requestHeaders?: Record<string, string> } {
-  return token && isAllowedUpdateUrl(url)
-    ? { provider: "generic", url, requestHeaders: { [DOWNLOAD_TOKEN_HEADER]: token } }
-    : { provider: "generic", url };
+export function feedOptions(url: string): { provider: "generic"; url: string } {
+  return { provider: "generic", url };
+}
+
+/** Belirteç başlığı YALNIZ izinli güncelleme adresine — ezilmiş ya da bozuk adres belirteci başka sunucuya taşıyamaz. */
+export function feedHeaders(url: string, token: string | null): Record<string, string> | null {
+  return token && isAllowedUpdateUrl(url) ? { [DOWNLOAD_TOKEN_HEADER]: token } : null;
+}
+
+/** electron-updater'ın feed yüzeyi (yalnız kullanılan iki üye; gerçek `AppUpdater` buna uyar). */
+export interface FeedTarget {
+  setFeedURL(options: { provider: "generic"; url: string }): void;
+  requestHeaders: { [header: string]: unknown } | null;
+}
+
+/**
+ * Feed'i ve belirteç başlığını BİRLİKTE uygular; belirteç yoksa önceki başlık temizlenir (bayat belirteç gitmez).
+ * Başlık latest.yml + exe + blockmap isteklerine `AppUpdater.requestHeaders`tan eklenir.
+ */
+export function applyFeed(target: FeedTarget, url: string, token: string | null): void {
+  target.setFeedURL(feedOptions(url));
+  target.requestHeaders = feedHeaders(url, token);
 }

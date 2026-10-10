@@ -40,6 +40,7 @@ const h = vi.hoisted(() => {
     userData: { dir: "" },
     updater: {
       setFeedURL: vi.fn(),
+      requestHeaders: null as Record<string, string> | null,
       checkForUpdates: vi.fn(async () => null),
       downloadUpdate: vi.fn(async () => [] as string[]),
       quitAndInstall: vi.fn(),
@@ -305,9 +306,9 @@ describe("güncelleme adresi ezmesi — ana süreç kuralı (yazarken + okurken)
     h.fetchMock.mockResolvedValue(izin());
     h.store.set(UPDATE_FEED_OVERRIDE_KEY, "http://10.0.0.9/adnansahin/electron/");
     await h.handlers.get("updater:check")!(UYGULAMA);
-    const son = h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string; requestHeaders?: Record<string, string> };
+    const son = h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string };
     expect(son.url).toBe(IZINLI);
-    expect(son.requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
+    expect(h.updater.requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
     expect(durum().feedUrlOverridden).toBe(false);
   });
 });

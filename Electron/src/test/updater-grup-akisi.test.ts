@@ -25,6 +25,7 @@ const h = vi.hoisted(() => {
     anchorFile: { kokler: [] as Array<{ kid: string; x: string; classes: string[] }> },
     updater: {
       setFeedURL: vi.fn(),
+      requestHeaders: null as Record<string, string> | null,
       checkForUpdates: vi.fn(async () => null),
       downloadUpdate: vi.fn(async () => [] as string[]),
       quitAndInstall: vi.fn(),
@@ -104,13 +105,14 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "setInterval"] }));
 afterEach(() => vi.useRealTimers());
 
 describe("⭐ grup akışı (ortak paket) — feed ve künye kanalı kiradaki gruptan", () => {
-  const sonFeed = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string; requestHeaders?: Record<string, string> };
+  const sonFeed = () => h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string };
   const kontrol = () => h.handlers.get("updater:check")!(UYGULAMA) as Promise<UpdateStatus>;
 
   it("feed = kiradaki grubun adresi (dinlenme grubu değil), başlık yalnız indirme ana makinesine", async () => {
     await kur();
     await kontrol();
-    expect(sonFeed()).toEqual({ provider: "generic", url: groupFeedUrl(GRUP), requestHeaders: { [DOWNLOAD_TOKEN_HEADER]: TOKEN } });
+    expect(sonFeed()).toEqual({ provider: "generic", url: groupFeedUrl(GRUP) });
+    expect(h.updater.requestHeaders, "başlık setFeedURL seçeneğinde değil, AppUpdater.requestHeaders'ta").toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
     expect(sonFeed().url).not.toBe(DEFAULT_UPDATE_FEED_URL);
     expect(new URL(sonFeed().url).host).toBe(ALLOWED_UPDATE_HOST);
     expect(durum()).toMatchObject({ grup: GRUP, feedUrl: groupFeedUrl(GRUP), feedUrlOverridden: false });

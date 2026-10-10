@@ -9,7 +9,7 @@ import {
   groupFeedUrl,
   validateFeedOverride,
 } from "@shared/update-feed";
-import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, feedOptions, fetchDownloadToken } from "@shared/download-token";
+import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, applyFeed, fetchDownloadToken } from "@shared/download-token";
 import { createUpdateVerifier, panelAnchor, type UpdateRejection, type UpdateVerifier } from "../guncelleme/guncelleme-dogrulama";
 import { createRevocationStore } from "../guncelleme/iptal-deposu";
 import {
@@ -170,7 +170,7 @@ async function applyFeedUrl(): Promise<boolean> {
     return false;
   }
   expectedChannel = grup;
-  updater().setFeedURL(feedOptions(feed.url, grant?.belirtec ?? null));
+  applyFeed(updater(), feed.url, grant?.belirtec ?? null);
   publish({ feedUrl: feed.url, feedUrlOverridden: feed.overridden, grup });
   return true;
 }
