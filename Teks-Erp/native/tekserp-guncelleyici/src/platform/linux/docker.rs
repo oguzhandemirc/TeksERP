@@ -478,7 +478,11 @@ impl crate::platform::Araclar for DockerAraclar {
             Ok(out) => return Some(Err(describe_failure(&format!("lisans birimi {ad} (docker volume inspect)"), &out))),
             Err(e) => return Some(Err(format!("lisans birimi {ad} okunamadı: {e}"))),
         };
-        Some(if yol.starts_with('/') { Ok(PathBuf::from(yol)) } else { Err(format!("lisans birimi {ad}: konak yolu yok ({yol:?})")) })
+        Some(if Path::new(&yol).is_absolute() {
+            Ok(PathBuf::from(yol))
+        } else {
+            Err(format!("lisans birimi {ad}: konak yolu yok ({yol:?})"))
+        })
     }
     fn db_boyutu(&self, env: &Env, _be: &BackendEnv) -> Option<u64> {
         self.psql(env, crate::package::DB_BOYU_SQL, "veritabanı boyu (psql)").ok()?.trim().parse().ok()
