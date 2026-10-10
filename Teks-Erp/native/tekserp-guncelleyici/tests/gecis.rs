@@ -385,7 +385,7 @@ fn gecis_mutlu_yol_ve_geri_al() {
     assert!(duzen::yerel_compose(&l).is_file(), "override yerel compose oldu");
     assert_eq!(std::fs::read_to_string(duzen::pg_env(&l)).unwrap(), "TEKSERP_PG_IMAJ=postgres:16-bookworm\n");
     let ayar: Value = serde_json::from_slice(&std::fs::read(l.settings_file()).unwrap()).unwrap();
-    assert_eq!(ayar, json!({ "guncellemeSunucusu": "https://guncelleme.etkiliyazilim.com", "composeProje": PROJE }));
+    assert_eq!(ayar, json!({ "guncellemeSunucusu": kurulum::VARSAYILAN_SUNUCU, "composeProje": PROJE }));
     for f in ["docker-compose.yml", ".env", "docker-compose.override.yml"] {
         assert!(!z.kok.join(f).exists(), "{f} kökte kaldı");
         assert!(z.kok.join("gecis").join(D1).join("geri").join(f).is_file(), "{f} geri/'de yok");

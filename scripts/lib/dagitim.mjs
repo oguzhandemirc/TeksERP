@@ -368,6 +368,8 @@ export const TUKETICILER = Object.freeze([
   'Teks-Erp/scripts/test_kurulum_betikleri.ts',
   'deploy/backend-yayinla.mjs', 'scripts/test_backend_yayin.mjs',
   'deploy/satici/uretim-toren.mjs', 'satici/sunucu/scripts/test_uretim_toren.ts',
+  // Linux güncelleyicisinin `kur` varsayılan sunucusu = indirmeKoku aynası; eşliği test_kurulum_betikleri §16 ölçer.
+  'Teks-Erp/native/tekserp-guncelleyici/src/platform/linux/kurulum.rs',
 ]);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */

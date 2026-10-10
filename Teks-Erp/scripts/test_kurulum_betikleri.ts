@@ -49,7 +49,8 @@
 //      HKLM Run kaydı, aşama sonunda · kaldırıcı kaydı + çalışan simgeyi + dizini siler · betik yalnız 127.0.0.1 /health/tepsi'yi
 //      OKUR (ağ dinlemez, dosya/kayıt yazmaz, süreç başlatmaz), ASCII; saf işlevler harness §1'de (`tepsi.*`)
 //   §16 varsayılan güncelleme adresi (O11a) = deploy/dagitim.json indirmeKoku (sonda / yok): sihirbaz, cevap şeması,
-//      örnek cevap, güncelleyici betiği aynı değer; onarımda kayıttaki ESKİ kanal adresi yenisine döner, başka kayıt korunur.
+//      örnek cevap, güncelleyici betiği ve Linux güncelleyicisinin `kur` varsayılanı (kurulum.rs VARSAYILAN_SUNUCU) aynı
+//      değer; onarımda kayıttaki ESKİ kanal adresi yenisine döner, başka kayıt korunur.
 //      Geçiş aracı (deploy/gecis/gecis.ps1) eski adreste kalır ve adresi güncelleyici betiğine açıkça geçirir.
 //   §17 O12 Tailscale (100.64.0.0/10) müşteri kurulumunda yok: sihirbaz kutusu, cevap seçeneği, onarım ön doldurması
 //      (K3 kod yolu) kapalı; kayıttaki eski izin onarımda korunur, özet + karar uyarır.
@@ -105,6 +106,8 @@ const YOL = {
   // §19: API'ye sunucunun içinden bağlanan öteki hizmetler (yalnız OKUNUR)
   yedekle: "deploy/yedekle.ps1",
   saglikRs: "Teks-Erp/native/tekserp-guncelleyici/src/platform/windows/mod.rs",
+  // §16: Linux güncelleyicisinin `kur` varsayılan sunucusu
+  kurulumRs: "Teks-Erp/native/tekserp-guncelleyici/src/platform/linux/kurulum.rs",
 } as const;
 /** Kanal düzeninin güncelleme adresi: ortak kurulumda varsayılan OLAMAZ, yalnız kayıttaki eski izi tanımak için anılır. */
 const ESKI_GUNCELLEME = "https://guncelleme.etkiliyazilim.com";
@@ -600,7 +603,7 @@ function olc(k: Kaynaklar): Bulgular {
   if (!esit(semaIzinli.kayitEski, ["100.64.0.0/10"])) ekle("§17", "şema kayıttaki eski Tailscale iznini tanımıyor (onarım erişimi daraltır)");
   if (!esit(ornekIzinli, ["LocalSubnet"])) ekle("§17", "örnek cevap LocalSubnet dışında izinli adres taşıyor");
   if (!/\$t = AgKayitTanimi \$sema\.alanlar\."api\.\$a"/.test(psGovde(ort, "KayitliAgAyari") ?? "") || !/eski Tailscale izni/.test(psGovde(ort, "AgKarari") ?? "")) ekle("§17", "kayıt okuyucu eski izni tanımıyor ya da karar uyarmıyor");
-  // §16 — varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku, sonda / yok); dört yüz aynı değeri taşır
+  // §16 — varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku, sonda / yok); beş yüz aynı değeri taşır
   let yeni: string | null = null;
   try {
     const koku = (JSON.parse(k.dagitim) as { indirmeKoku?: unknown }).indirmeKoku;
@@ -624,6 +627,8 @@ function olc(k: Kaynaklar): Bulgular {
     if (ornek !== yeni) ekle("§16", `örnek cevabın guncelleme.sunucu'su dağıtım kaydından değil (${String(ornek)})`);
     const gp = psTara(k.guncelleyici).satirlar.find((x) => /\[string\]\$GuncellemeSunucusu\s*=/.test(x.kod))?.kod ?? "";
     if (!gp.includes(`"${yeni}"`)) ekle("§16", `guncelleyici-hizmeti.ps1 -GuncellemeSunucusu varsayılanı dağıtım kaydından değil (${gp.trim() || "satır yok"})`);
+    if (!new RegExp(`^pub const VARSAYILAN_SUNUCU: &str = "${ld(yeni)}";$`, "m").test(k.kurulumRs))
+      ekle("§16", `Linux güncelleyicisinin VARSAYILAN_SUNUCU'su (kurulum.rs) dağıtım kaydından değil (beklenen ${yeni})`);
   }
   // Onarım: kayıttaki ESKİ varsayılan yeni adrese döner; başka (elle girilmiş) kayıt korunur
   const sod14 = pasGovde(k.iss, "SayfalariOlcumleDoldur") ?? "";
@@ -805,7 +810,7 @@ if (eksik.length === 0) {
     ["§9", "CI: tetikler, doğrulayıcı üretim derlemesi, iki derleme, boru öz-sınaması, PS 5.1, kuru koşu"],
     ["§11", "sihirbaz deneyimi: ölçüm görünür + açılış hafif · eski paket iki kapıda · onarım metinleri · ölçülen yapılacaklar"],
     ["§12", "lisans satıcısı kanaldan: tek karar işlevi · boş alan = kanal (ön doldurma + özet) · farklı değer UYARI · .env karardan · Dogrulama ölçer"],
-    ["§16", "varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku): sihirbaz · cevap şeması · örnek cevap · güncelleyici betiği; onarımda kayıttaki eski adres yenisine döner"],
+    ["§16", "varsayılan güncelleme adresi dağıtım kaydından (indirmeKoku): sihirbaz · cevap şeması · örnek cevap · güncelleyici betiği · Linux kurulum.rs; onarımda kayıttaki eski adres yenisine döner"],
     ["§13", "onarım/kurulum güvenliği (D8e-3b): F1 ağ ayarı kayıttan (ön doldurma · özet etkili · OnKosul korur · kural karardan · önceki cevap saklanır) · F2 başka köke bağlı / ölçülemeyen kanal hizmeti engel+DUR · F3 eski paket tek giriş + sayfada engel · F4-B geçişli düzen GECISLI, DUR"],
     ["§14", "saat eşitlemesi: karar PartOfDomain ölçerek · DOKUNMA yazmaz · w32tm yalnız NTP_AC · sonuç yeniden ölçülür · UYARI (DUR değil) · onarım önceki kaydı ezmez · /resync/Set-Date yok · kaldırma dokunmaz · özet söyler"],
     ["§15", "sunucu simgesi: setup içeriğinde · kurulum (Users salt okuma + HKLM Run) · kaldırıcı siler · yalnız 127.0.0.1 /health/tepsi OKUR (dinlemez/yazmaz/başlatmaz) · ASCII"],
@@ -914,6 +919,7 @@ if (eksik.length === 0) {
     { ad: "S87 örnek cevap eski adrese döndü", dosya: "ornek", eski: '"sunucu": "https://indir.etkiliyazilim.com"', yeni: `"sunucu": "${ESKI_GUNCELLEME}"`, bolum: "§16", parca: "örnek cevabın" },
     { ad: "S88 güncelleyici betiği varsayılanı eski adrese döndü", dosya: "guncelleyici", eski: '[string]$GuncellemeSunucusu = "https://indir.etkiliyazilim.com"', yeni: `[string]$GuncellemeSunucusu = "${ESKI_GUNCELLEME}"`, bolum: "§16", parca: "guncelleyici-hizmeti.ps1" },
     { ad: "S89 dağıtım kaydı başka köke taşındı, yüzeyler eskide kaldı", dosya: "dagitim", eski: '"indirmeKoku": "https://indir.etkiliyazilim.com/"', yeni: '"indirmeKoku": "https://dagit.etkiliyazilim.com/"', bolum: "§16", parca: "VARSAYILAN_GUNCELLEME" },
+    { ad: "S115 Linux güncelleyicisinin kur varsayılanı eski adrese döndü", dosya: "kurulumRs", eski: 'pub const VARSAYILAN_SUNUCU: &str = "https://indir.etkiliyazilim.com";', yeni: `pub const VARSAYILAN_SUNUCU: &str = "${ESKI_GUNCELLEME}";`, bolum: "§16", parca: "kurulum.rs" },
     { ad: "S90 sihirbaz onarımda kayıttaki eski adresi koruyor", dosya: "iss", eski: "    if Lowercase(Olc('oncekiGuncellemeSunucusu')) = ESKI_GUNCELLEME then GelismisSayfasi.Values[0] := VARSAYILAN_GUNCELLEME\n    else if", yeni: "    if", bolum: "§16", parca: "eski güncelleme adresini koruyor" },
     { ad: "S21 CI boru sonucunu ölçmüyor", dosya: "is", eski: `if ($r -notmatch "(?m)^BORU=TAMAM\\r?$")`, yeni: `if ($false)`, bolum: "§9", parca: "boru öz-sınaması" },
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },

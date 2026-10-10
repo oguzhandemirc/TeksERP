@@ -22,8 +22,9 @@ use std::time::Duration;
 use tekserp_dogrulama::paket_zinciri::PackageTrust;
 use tekserp_hizmet::contract::path as p;
 
-/// Kurulumun güncelleme sunucusu (`ayar.json` `guncellemeSunucusu`; plan §8.1 madde 2).
-pub const VARSAYILAN_SUNUCU: &str = "https://guncelleme.etkiliyazilim.com";
+/// Kurulumun güncelleme sunucusu (`ayar.json` `guncellemeSunucusu`; plan §8.1 madde 2) — ortak paketin
+/// indirme kökü (`deploy/dagitim.json` `indirmeKoku`, sondaki `/` yok); eşliği `test_kurulum_betikleri` §16 ölçer.
+pub const VARSAYILAN_SUNUCU: &str = "https://indir.etkiliyazilim.com";
 /// Yeni kurulumun PG imajı (`pg.env` yoksa) — şablonun varsayılanıyla aynı (eşliği test ölçer).
 pub const VARSAYILAN_PG_IMAJI: &str = "postgres:16-bookworm";
 /// Geçişin varlığını ölçtüğü birimler (F5 = PG küme kimliği · lisans birimi = kurulum anahtarı; plan §8.2).
