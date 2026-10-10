@@ -92,6 +92,11 @@ pub fn backup_keygen(env: &Env, tools_dir: &Path, dir: &Path, private_out: &Path
     env.arka.araclar.backup_keygen(env, tools_dir, dir, private_out)
 }
 
+/// Kurulumun yedek alıcıları, yedek aracının okuyabildiği yollarla (`Araclar::kurulum_alicilari`).
+pub fn installation_recipients(env: &Env, be: &BackendEnv, stage: &Path) -> Result<Vec<PathBuf>, String> {
+    env.arka.araclar.kurulum_alicilari(env, be, stage)
+}
+
 pub fn backup_encrypt(
     env: &Env,
     tools_dir: &Path,

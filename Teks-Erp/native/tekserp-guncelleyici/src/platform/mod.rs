@@ -40,6 +40,19 @@ pub trait Araclar: Send + Sync {
     fn server_version(&self, env: &Env, be: &BackendEnv, bin: &Path) -> Result<String, String>;
     fn usable_for_backup(&self, env: &Env, tools_dir: &Path) -> bool;
     fn backup_keygen(&self, env: &Env, tools_dir: &Path, dir: &Path, private_out: &Path) -> Result<(), String>;
+    /// Kurulumun yedek alıcıları (`*.tkpub`) — yedek aracının OKUYABİLDİĞİ konak yollarıyla. Varsayılan (Windows):
+    /// `BACKUP_KEY_DIR`deki dosyalar yerinde, dizin yoksa alıcı yok. `ara`: işleme özgü, güncelleyiciye ait dizin —
+    /// kaynağı aracın giremediği yerde olan arka uç (Linux `yedek_anahtar` birimi) alıcıları oraya kopyalar.
+    fn kurulum_alicilari(&self, env: &Env, be: &BackendEnv, _ara: &Path) -> Result<Vec<PathBuf>, String> {
+        Ok(env
+            .fs
+            .list(&be.backup_key_dir)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|n| n.to_ascii_lowercase().ends_with(".tkpub"))
+            .map(|n| be.backup_key_dir.join(n))
+            .collect())
+    }
     fn backup_encrypt(
         &self,
         env: &Env,

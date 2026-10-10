@@ -19,9 +19,10 @@ use tekserp_hizmet::contract;
 pub const BACKEND: &str = "backend";
 /// Araç konteynerlerinin servisi: aynı imaj, PG istemcisi + yedek aracı, PG ortamı compose'tan.
 pub const ARAC_HIZMETI: &str = "yedek";
-/// İmaj içindeki yedek aracı ve kurulumun alıcı birimi (şablondaki bağ).
+/// İmaj içindeki yedek aracı.
 pub const YEDEK_ARACI: &str = "/app/dist/tools/yedek-sifrele.cjs";
-pub const ALICI_BIRIMI: &str = "/var/lib/tekserp/yedek-anahtar";
+/// Tek yedek alıcısı dosyasının üst sınırı (açık anahtar ~120 bayt; birim içeriği güvenilmez okunur).
+pub const ALICI_EN_BUYUK: u64 = 64 * 1024;
 /// Backend imajının deposu (budama yalnız bunun etiketlerine dokunur).
 pub const IMAJ_DEPOSU: &str = "tekserp-korumali";
 /// `docker inspect` tek satır biçimi: durum | çıkış kodu | yeniden başlatma sayısı | sağlık.
@@ -301,7 +302,9 @@ impl Baglar {
 
 /// `platform::Araclar` Linux uygulaması: her araç `compose run --rm --no-deps -T --name tekserp-arac-<proje>-<araç>`
 /// ile KISA ÖMÜRLÜ konteynerde koşar (PG ortamı ve parola compose'tan — argümana/günlüğe girmez). Konak dosyasına
-/// dokunan araç `--user 0:0` alır: özel alan root 0700'dür (yetkisiz kök, `cap_drop: ALL` şablondan).
+/// dokunan araç `--user 0:0` alır: özel alan root 0700'dür (yetkisiz kök, `cap_drop: ALL` şablondan). Yetkisiz kök
+/// backend'in birimlerine (10001, 0700) GİREMEZ ve girmesi gerekmez: birimden gereken (yedek alıcıları) güncelleyici
+/// tarafından konaktan okunup özel alana kopyalanır (`kurulum_alicilari`) — araca yetki eklenmez.
 pub struct DockerAraclar {
     pub komut: Arc<DockerKomut>,
 }
@@ -340,19 +343,21 @@ impl DockerAraclar {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     }
 
-    /// Kurulumun yedek alıcıları (birimdeki `*.tkpub`) — `--anahtar-dizini` ile `--alici` birlikte verilemez.
-    fn birim_alicilari(&self, env: &Env) -> Result<Vec<String>, String> {
-        let k = ["ls", "-1", ALICI_BIRIMI].map(str::to_string);
-        let out = self.arac(env, "alicilar", ARAC_HIZMETI, &Baglar::default(), &k, Duration::from_secs(60))?;
-        if !out.ok() {
-            return Ok(Vec::new());
+    /// Projenin adlı biriminin konak yolu (`docker volume inspect` `Mountpoint`); çözülemezse hata (başka yere düşülmez).
+    fn birim_yolu(&self, env: &Env, birim: &str) -> Result<PathBuf, String> {
+        let ad = duzen::birim_adi(&self.komut.proje, birim);
+        let c =
+            self.komut.docker().args(["volume", "inspect", "--format", BIRIM_YOLU_FORMAT, ad.as_str()]).timeout(Duration::from_secs(60));
+        let yol = match env.procs.run(&c) {
+            Ok(out) if out.ok() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+            Ok(out) => return Err(describe_failure(&format!("{birim} birimi {ad} (docker volume inspect)"), &out)),
+            Err(e) => return Err(format!("{birim} birimi {ad} okunamadı: {e}")),
+        };
+        if Path::new(&yol).is_absolute() {
+            Ok(PathBuf::from(yol))
+        } else {
+            Err(format!("{birim} birimi {ad}: konak yolu yok ({yol:?})"))
         }
-        Ok(String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|n| n.ends_with(".tkpub") && n.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')))
-            .map(|n| format!("{ALICI_BIRIMI}/{n}"))
-            .collect())
     }
 }
 
@@ -433,10 +438,6 @@ impl crate::platform::Araclar for DockerAraclar {
             k.push("--alici".into());
             k.push(b.yol(r, false));
         }
-        for r in self.birim_alicilari(env)? {
-            k.push("--alici".into());
-            k.push(r);
-        }
         self.arac_ok(env, "yedek-sifrele", &b, &k, timeout).map(|_| ())
     }
     fn backup_decrypt(
@@ -470,19 +471,31 @@ impl crate::platform::Araclar for DockerAraclar {
     /// Backend'in yazdığı `<proje>_lisans` biriminin konak yolu (`Mountpoint`): kira/HAK/iptal tek kaynaktan, kopyasız.
     /// İçerik backend'in (10001) yazabildiği yerdir — okuma `read_untrusted`, yazım `write_atomic` (bağ izlemez).
     fn lisans_dizini(&self, env: &Env) -> Option<Result<PathBuf, String>> {
-        let ad = duzen::birim_adi(&self.komut.proje, duzen::LISANS_BIRIMI);
-        let c =
-            self.komut.docker().args(["volume", "inspect", "--format", BIRIM_YOLU_FORMAT, ad.as_str()]).timeout(Duration::from_secs(60));
-        let yol = match env.procs.run(&c) {
-            Ok(out) if out.ok() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
-            Ok(out) => return Some(Err(describe_failure(&format!("lisans birimi {ad} (docker volume inspect)"), &out))),
-            Err(e) => return Some(Err(format!("lisans birimi {ad} okunamadı: {e}"))),
-        };
-        Some(if Path::new(&yol).is_absolute() {
-            Ok(PathBuf::from(yol))
-        } else {
-            Err(format!("lisans birimi {ad}: konak yolu yok ({yol:?})"))
-        })
+        Some(self.birim_yolu(env, duzen::LISANS_BIRIMI))
+    }
+    /// Alıcılar backend'in `yedek_anahtar` biriminde (10001, 0700): bağ taşıyan araç yetkisiz köktür ve oraya giremez.
+    /// Güncelleyici (konakta root) birimi konak yolundan okur (bağ izlemeden) ve `ara`ya (özel alan, root) kopyalar.
+    /// Birim çözülemezse hata: alıcısız yedek sessizce alınmaz. Boş birim = alıcı yok.
+    fn kurulum_alicilari(&self, env: &Env, _be: &BackendEnv, ara: &Path) -> Result<Vec<PathBuf>, String> {
+        let fs = env.fs.as_ref();
+        let kaynak = self.birim_yolu(env, duzen::YEDEK_ANAHTAR_BIRIMI)?;
+        let mut adlar: Vec<String> = fs
+            .list(&kaynak)
+            .map_err(|e| format!("yedek alıcı birimi okunamadı ({}): {e}", kaynak.display()))?
+            .into_iter()
+            .filter(|n| n.ends_with(".tkpub") && n.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')))
+            .collect();
+        adlar.sort();
+        fs.remove_dir_all(ara).map_err(|e| format!("alıcı kopya dizini: {e}"))?;
+        fs.create_dir_all(ara).map_err(|e| format!("alıcı kopya dizini: {e}"))?;
+        let mut out = Vec::with_capacity(adlar.len());
+        for n in adlar {
+            let b = fs.read_untrusted(&kaynak.join(&n), ALICI_EN_BUYUK).map_err(|e| format!("yedek alıcısı {n} okunamadı: {e}"))?;
+            let hedef = ara.join(&n);
+            fs.write_atomic(&hedef, &b).map_err(|e| format!("yedek alıcısı {n} kopyalanamadı: {e}"))?;
+            out.push(hedef);
+        }
+        Ok(out)
     }
     fn db_boyutu(&self, env: &Env, _be: &BackendEnv) -> Option<u64> {
         self.psql(env, crate::package::DB_BOYU_SQL, "veritabanı boyu (psql)").ok()?.trim().parse().ok()
@@ -889,6 +902,61 @@ mod tests {
         let goc = calls.last().unwrap();
         assert_eq!(&goc[goc.len() - 2..], ["backend", "goc"]);
         assert!(!calls.iter().flatten().any(|x| x.contains("x\n") || x == "x"), "parola argümana girmez");
+    }
+
+    /// Saha hatası (2.15.2, deneme sunucusu): bağ taşıyan araç yetkisiz köktür; alıcı birimdeki yoldan verilirse
+    /// `EACCES` ve YEDEK geri döner. Alıcılar konaktan özel alana kopyalanır, araç yalnız o kopyayı görür.
+    #[test]
+    fn yedek_alicilari_birimden_kopyalanir_araca_yetki_eklenmez() {
+        let root = std::env::temp_dir().join(format!("tekserp-dk-alici-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let birim = root.join("volumes/tekserp_l4b_yedek_anahtar/_data");
+        std::fs::create_dir_all(&birim).unwrap();
+        std::fs::write(birim.join("ders.tkpub"), "tkpub1:DERS\n").unwrap();
+        std::fs::write(birim.join("benioku.txt"), "alıcı değil").unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(&birim, std::os::unix::fs::PermissionsExt::from_mode(0o700)).unwrap();
+        let mp = birim.to_string_lossy().into_owned();
+        let (p, komut, env) = kur(move |a| {
+            if a.get(..2) == Some(&["volume".to_string(), "inspect".to_string()][..]) {
+                out(0, &format!("{mp}\n"))
+            } else {
+                out(0, "")
+            }
+        });
+        let a = DockerAraclar { komut };
+        let be = crate::settings::backend_env_from_bytes_in(
+            b"POSTGRES_PASSWORD=x\n",
+            &Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp")),
+            crate::settings::OrtamKipi::Compose,
+        )
+        .unwrap();
+        let op = root.join("is/yedek/op1");
+        let ara = op.join(crate::operation::RECIPIENT_STAGE);
+        let alicilar = a.kurulum_alicilari(&env, &be, &ara).unwrap();
+        assert_eq!(alicilar, vec![ara.join("ders.tkpub")], "yalnız *.tkpub, özel alandaki kopya");
+        assert_eq!(std::fs::read_to_string(&alicilar[0]).unwrap(), "tkpub1:DERS\n");
+        let mut hepsi = alicilar.clone();
+        hepsi.push(root.join("is/anahtar/op1/guncelleme.tkpub"));
+        a.backup_encrypt(&env, Path::new("/yok"), &op.join("db.dump"), &op.join("db.dump.tkenc"), &hepsi, Duration::from_secs(5)).unwrap();
+        let calls: Vec<Vec<String>> = p.calls.lock().unwrap().iter().map(|(a, _)| alt_komut(a)).collect();
+        let sifrele = calls.iter().find(|c| c.contains(&"sifrele".to_string())).unwrap();
+        let alici: Vec<&String> = sifrele.windows(2).filter(|w| w[0] == "--alici").map(|w| &w[1]).collect();
+        assert_eq!(alici.len(), 2, "{sifrele:?}");
+        assert!(alici.iter().all(|x| x.starts_with("/arac/b")), "alıcı yalnız bağlanan kopyadan: {alici:?}");
+        assert!(!sifrele.iter().any(|x| x.contains("yedek-anahtar") || x.contains("_yedek_anahtar")), "birim araca verilmez: {sifrele:?}");
+        let ara_bagi = format!("{}:", ara.display());
+        assert!(sifrele.iter().any(|x| x.starts_with(&ara_bagi) && x.ends_with(":ro")), "kopya dizini salt okunur bağlanır: {sifrele:?}");
+        assert!(
+            sifrele.windows(2).any(|w| w == ["--user", "0:0"]) && !sifrele.iter().any(|x| x.contains("cap-add")),
+            "kimlik/yetki değişmez"
+        );
+        assert!(!calls.iter().any(|c| c.contains(&"ls".to_string())), "alıcı listesi konteynerden okunmaz");
+        // Birim çözülemezse alıcısız yedek SESSİZCE alınmaz.
+        let (_, komut, env) = kur(|_| out(1, ""));
+        let e = DockerAraclar { komut }.kurulum_alicilari(&env, &be, &ara).unwrap_err();
+        assert!(e.contains("yedek_anahtar birimi tekserp_l4b_yedek_anahtar"), "{e}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

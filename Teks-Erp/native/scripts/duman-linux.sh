@@ -15,7 +15,8 @@
 #   araç konteyneri yok · `.tmp` artığı yok · birim etkin):
 #   1. `kur` KURU hiçbir şey yazmaz · `kur --uygula` ilk kurulum (iskelet, paket, imaj, ilk göç, compose, birim) ·
 #      ikinci `kur` "kurulum tam"
-#   2. mutlu yol: yayın + kira yenilenir → OTOMATİK güncelleme BASARILI, veri korunur, göç sayısı artar
+#   2. mutlu yol: yayın + kira yenilenir → OTOMATİK güncelleme BASARILI, veri korunur, göç sayısı artar; yedek alıcısı
+#      KURULU (birim 10001 0700) ve güncelleme öncesi yedeğin alıcısıdır
 #   3. göç düşer → GERI_DONDU + veri geri yüklendi: yarım göç ve tablosu yok, önceki sürüm sağlıklı
 #   4. işlem ortasında güncelleyiciye `kill -9` → systemd yeniden başlatır, günlükten sonuçlanır
 #   5. işlem ortasında `systemctl restart docker` → konteynerler döner, işlem sonuçlanır
@@ -192,6 +193,12 @@ LISANS=$(docker volume inspect -f '{{.Mountpoint}}' "${PROJE}_lisans") || dur "$
 sudo install -o 10001 -g 10001 -m 0600 "$FX/lisans/kira-1.jws" "$LISANS/kira.jws"
 sudo install -o 10001 -g 10001 -m 0600 "$FX/lisans/hak.jws" "$LISANS/hak.jws"
 sudo test ! -e "$KOK/lisans" || dur "konakta $KOK/lisans var — kira birimde olmalı"
+# Yedek alıcısı KURULU (runbook §2 "şifreleme anahtarı"): birim imajdan 10001 0700 doğar, açık anahtar içinde. Bağ
+# taşıyan araç yetkisiz köktür (cap_drop ALL) — alıcıyı birimden okumaya kalkarsa YEDEK geri döner (2.15.2 saha hatası).
+ANAHTAR=$(docker volume inspect -f '{{.Mountpoint}}' "${PROJE}_yedek_anahtar") || dur "${PROJE}_yedek_anahtar birimi yok"
+[ "$(sudo stat -c '%u %a' "$ANAHTAR")" = "10001 700" ] || dur "alıcı birimi 10001 0700 değil: $(sudo stat -c '%u %a' "$ANAHTAR")"
+printf 'tkpub1:DUMAN-kurulum\n' >"$FX/kurulum.tkpub"
+sudo install -o 10001 -g 10001 -m 0644 "$FX/kurulum.tkpub" "$ANAHTAR/kurulum.tkpub"
 [ "$(systemctl is-enabled "$AD.service")" = enabled ] || dur "birim etkin (enabled) değil"
 systemctl show -p DropInPaths --value "$AD.service" | grep -q 50-tekserp.conf || dur "güncelleyicinin ek dosyası yok"
 sudo "$G" kunye | jq -e '.testCapasi == true' >/dev/null || dur "kurulan ikili paketteki test çapalı ikili değil"
@@ -208,6 +215,10 @@ yayinla 0.0.2-duman
 degismez 0.0.2-duman "mutlu yol"
 [ "$(pgc "SELECT count(*) FROM duman_veri")" = 500 ] || dur "veri korunmadı"
 [ "$(pgc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL")" = 3 ] || dur "göç sayısı 3 değil"
+yedek=$(sudo sh -c "ls -t '$IS'/yedek/*/yedek.json | head -1")
+[ "$(sudo jq -r .kurulumAlicisi "$yedek")" = 1 ] || dur "güncelleme öncesi yedeğin kurulum alıcısı 1 değil: $(sudo cat "$yedek")"
+sudo sed -n 2p "$(dirname "$yedek")/db.dump.tkenc" | grep -q 'DUMAN-kurulum' || dur "güncelleme öncesi yedek kurulum alıcısına şifrelenmedi"
+echo "   güncelleme öncesi yedek: kurulum alıcısı + geçici anahtar"
 
 adim "3. göç düşer: 0.0.3-duman → GERI_DONDU + veri geri yüklendi"
 pgc "INSERT INTO duman_veri VALUES (501, 'gocten once')" >/dev/null

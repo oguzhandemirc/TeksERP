@@ -524,6 +524,9 @@ pub fn sweep_plain_secrets(env: &Env, layout: &Layout) {
     }
 }
 
+/// İşlemin yedek dizininde kurulum alıcılarının kopyası (yalnız kaynağı aracın giremediği arka uçta dolar — Linux).
+pub const RECIPIENT_STAGE: &str = "alici";
+
 /// Güncelleme öncesi şifreli yedek (§8.3) — backend DURMUŞKEN; tekrarlanabilir (işaret dosyası varsa
 /// yeniden alınmaz). Alıcılar: kurulumun `*.tkpub`leri + işleme özgü geçici anahtar (DPAPI'yle sarılı).
 pub fn take_backup(ctx: &Ctx, op_id: &str, tools_dir: &Path) -> Result<Value, StepError> {
@@ -555,13 +558,7 @@ pub fn take_backup(ctx: &Ctx, op_id: &str, tools_dir: &Path) -> Result<Value, St
     }
     // Sarıldıktan sonra düz yarı HER koşumda silinir: silmeden önce ölen süreç onu diskte bırakmasın.
     fs.remove_file(&plain).map_err(|x| e(x.to_string()))?;
-    let mut recipients: Vec<PathBuf> = fs
-        .list(&ctx.backend.backup_key_dir)
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|n| n.to_ascii_lowercase().ends_with(".tkpub"))
-        .map(|n| ctx.backend.backup_key_dir.join(n))
-        .collect();
+    let mut recipients = tools::installation_recipients(ctx.env, ctx.backend, &dir.join(RECIPIENT_STAGE)).map_err(e)?;
     let own_recipients = recipients.len();
     recipients.push(public);
     let enc = dir.join("db.dump.tkenc");

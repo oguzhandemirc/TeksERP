@@ -37,6 +37,8 @@ pub fn valid_project(name: &str) -> bool {
 /// Backend'in lisans dizini compose şablonunda ADLI BİRİMDİR (`lisans:/var/lib/tekserp/lisans`; kurulum anahtarı orada):
 /// konakta `<KOK>/lisans` YOKTUR. Kira/HAK/iptal birimin kendisinden okunur (`DockerAraclar::lisans_dizini`).
 pub const LISANS_BIRIMI: &str = "lisans";
+/// Kurulumun yedek alıcılarının birimi (`yedek_anahtar:/var/lib/tekserp/yedek-anahtar:ro`; imajda 10001, 0700).
+pub const YEDEK_ANAHTAR_BIRIMI: &str = "yedek_anahtar";
 
 /// Compose'un adlı birime verdiği Docker adı (`name:` verilmeyen birim): `<proje>_<birim>`.
 pub fn birim_adi(project: &str, birim: &str) -> String {

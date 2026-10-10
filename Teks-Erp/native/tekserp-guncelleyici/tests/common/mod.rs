@@ -945,9 +945,7 @@ impl FakeProcs {
             return self.migrate(migrations_of(&v));
         }
         assert_eq!(svc, "yedek", "araç servisi");
-        if cmd.first() == Some(&"ls") {
-            return ok_out("");
-        }
+        assert!(!cmd.iter().any(|a| a.starts_with("/var/lib/tekserp/")), "araca birim yolu verilmez (yetkisiz kök giremez): {cmd:?}");
         let c = Cmd::new(Path::new(cmd[0])).args(cmd[1..].iter().map(|a| host(a))).env("PGPASSWORD", "gizli-parola");
         self.run(&c).unwrap()
     }
@@ -1129,7 +1127,12 @@ impl Procs for FakeProcs {
                         }
                         Some("sifrele") => {
                             let input = std::fs::read(arg_after(c, "--girdi").unwrap()).unwrap();
-                            let recipients = args.iter().filter(|a| *a == "--alici").count();
+                            // Gerçek araç gibi her alıcıyı OKUR: okunamayan alıcı (izin, yok) şifrelemeyi düşürür.
+                            let alicilar: Vec<&String> = args.windows(2).filter(|w| w[0] == "--alici").map(|w| &w[1]).collect();
+                            if let Some(a) = alicilar.iter().find(|a| std::fs::read_to_string(a.as_str()).is_err()) {
+                                return Ok(fail_out(1, &format!("HATA: EACCES: permission denied, open '{a}'")));
+                            }
+                            let recipients = alicilar.len();
                             let mut enc = format!("ENC{recipients}:").into_bytes();
                             enc.extend(input);
                             std::fs::write(arg_after(c, "--cikti").unwrap(), enc).unwrap();
@@ -1901,6 +1904,11 @@ impl World {
             let birim = w.license_dir();
             std::fs::create_dir_all(birim.parent().unwrap()).unwrap();
             std::fs::rename(w.layout.root.join("lisans"), &birim).unwrap();
+            // Yedek alıcısı da birimde (`yedek_anahtar`), konakta `<KOK>/yedek-anahtar` YOK — güncelleyici onu konaktan
+            // okuyup özel alana kopyalar; araç birime girmez (2.15.2 saha hatası: yetkisiz kök araç EACCES).
+            let alici = docker_volume_dir(&w.layout.root, "tekserp_yedek_anahtar");
+            std::fs::create_dir_all(alici.parent().unwrap()).unwrap();
+            std::fs::rename(w.layout.root.join("yedek-anahtar"), &alici).unwrap();
             w.docker_seed(OLD);
             std::fs::write(w.layout.backend_env(), "POSTGRES_USER=tekserp\nPOSTGRES_PASSWORD=gizli-parola\nPOSTGRES_DB=tekserp\n").unwrap();
             let (legacy, customer, extra, updater) = oci;
