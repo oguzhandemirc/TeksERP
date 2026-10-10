@@ -3,9 +3,9 @@
 **Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (bizim yönettiğimiz Linux deneme sunucusu,
 kullanıcı onayı 2026-10-10); Windows fabrika filosuna çıkış ayrı karar ve `docs/design/GUNCELLEYICI-SAGLAMLIK.md`
 §9.5 kanıt kapısıyla.
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+**Paket:** `tekserp-backend-oci-2.15.2.tar` (213158400 B; imaj config özeti `sha256:45fe396779651bfcf93bfe4056530b1080eceb521766c202f2edb5edae6ed81a`, güncelleyici 0.2.4 `05b8b3008926817a…`, kid `pkt-2026-1`, CI koşusu 38079271752)
+**SHA256:** `ad0e03056de397a51fe11fbc7398f2773ca82e5d183d842d79e137900799f1bc`
+**Commit:** `d567ee666` (etiket `backend-v2.15.2`; `test` grubu `backend-oci/2.15.2`, 2026-10-10)
 **Önceki saha sürümü:** 2.15.1 (son etiket `backend-v2.15.1`; Linux deneme sunucusunda güncelleme programı
 yönetiminde 2.15.1 Docker imajı). Güncellenecek her kurulumda sahadaki sürüm kurulumdan önce sunucunun sağlık
 bilgisinden okunur; tahmin edilmez.
@@ -37,7 +37,8 @@ YOK; `Teks-Erp/src` altında yalnız aşağıdaki dokuma farkı.
 
 - `6b4ad0b77` — `GET /api/loom-floor` yanıtına `beamTracking` ve tezgah başına `beams` (levent no · yuva · çözgü ·
   kalan · plan) eklendi; kaynak `GET /api/warp-beams/mounted` ile aynı yardımcı. `beams` yalnız devere modülü ve
-  levent bağı takibi açıkken dizi, kapalıyken `null` — varsayılan davranış değişmez.
+  levent bağı takibi açıkken dizi, kapalıyken `null` — varsayılan davranış değişmez. Aynı commit
+  `GET /api/warp-beams/mounted` cevabına `plannedLengthM` (planlanan çözgü boyu) ekler — yalnız ekleme.
 
 **Yayın aracı (pakete girmez, yayın tarafı)**
 
@@ -48,7 +49,8 @@ YOK; `Teks-Erp/src` altında yalnız aşağıdaki dokuma farkı.
 
 ## 3. Sözleşme
 
-- **Kırıldı mı:** HAYIR — yalnız ekleme: `/api/loom-floor` yanıtına iki yeni alan.
+- **Kırıldı mı:** HAYIR — yalnız ekleme: `/api/loom-floor` yanıtına iki yeni alan, `/api/warp-beams/mounted`
+  yanıtına `plannedLengthM`.
 - **Eski istemci ne yapar:** yeni alanları okumaz; Tezgah Salonu ekranı levent rozetini yalnız yeni panelde gösterir.
   Tablet bu ucu kullanmaz.
 - **`minVersion` dokunuldu mu:** HAYIR.
