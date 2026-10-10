@@ -4,6 +4,11 @@
 // =============================================================================
 //   node scripts/parola-kaydet.mjs <ad>       parolayı gizli girdiyle İKİ kez sorar, `tekserp/<ad>` olarak kaydeder
 //                                             (varsa eskisini siler, yeniden yazar); yazdıktan sonra geri okuyup doğrular
+//   node scripts/parola-kaydet.mjs <ad> --dogrula=<anahtar dosyası>
+//                                             yazmadan ÖNCE parolanın o şifreli anahtarı gerçekten AÇTIĞINI bellekte dener
+//                                             (açılan anahtar yazılmaz/basılmaz); açmazsa kasaya YAZILMAZ, çıkış 1. Dosyanın
+//                                             kid'i `<ad>` ailesine (kasaAdiKid) düşmüyorsa — eşlemesiz ad (yedek · play-yukleme)
+//                                             dahil — açık hata (çıkış 2). `--dogrula` olmadan davranış aynıdır.
 //   node scripts/parola-kaydet.mjs --liste    hangi adların kayıtlı olduğunu gösterir (DEĞER GÖSTERMEZ)
 // Adlar ve hangi aracın kullandığı: scripts/lib/parola-kasasi.mjs (KASA_KATALOGU). Parola argümandan ve ortamdan
 // ALINMAZ; terminal yoksa kayıt yapılmaz (yalnız bekçinin sahte kasasında stdin satırları). Değer hiçbir çıktıya basılmaz.
@@ -12,16 +17,22 @@
 // Çıkış: 0 tamam · 1 hata · 2 kullanım.
 // =============================================================================
 
+import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
-import { KASA_ADLARI, KASA_KATALOGU, KASA_ORTAM, KasaHatasi, kasaHizmeti, kasaKayitliMi, kasaKomutu, kasayaYaz } from './lib/parola-kasasi.mjs';
+import { fileURLToPath } from 'node:url';
+import { KASA_ADLARI, KASA_KATALOGU, KASA_ORTAM, KasaHatasi, kasaAdiKid, kasaHizmeti, kasaKayitliMi, kasaKomutu, kasayaYaz } from './lib/parola-kasasi.mjs';
 
 const dur = (mesaj, kod = 1) => {
   process.stderr.write(`✖ ${mesaj}\n`);
   process.exit(kod);
 };
 
-const argv = process.argv.slice(2);
+const tumArgv = process.argv.slice(2);
+const dogrulaBayragi = tumArgv.find((a) => a === '--dogrula' || a.startsWith('--dogrula='));
+const argv = tumArgv.filter((a) => a !== dogrulaBayragi);
 if (argv.some((a) => /^--[^=]*(parola|password|sifre|secret)/i.test(a))) dur('Parola argümandan ALINMAZ — terminalde gizli sorulur', 2);
 const kullanim = `Kullanım: node scripts/parola-kaydet.mjs <${KASA_ADLARI.join('|')}>  ·  node scripts/parola-kaydet.mjs --liste`;
 
@@ -50,6 +61,24 @@ if (argv.length === 1 && argv[0] === '--liste') {
 if (argv.length !== 1 || argv[0].startsWith('-') || !KASA_ADLARI.includes(argv[0])) dur(kullanim, 2);
 const ad = argv[0];
 const tanim = KASA_KATALOGU[ad];
+
+// ---------------------------------------------------------------- --dogrula (ön koşullar parola sorulmadan)
+let dogrulaDosya = null;
+if (dogrulaBayragi !== undefined) {
+  const yol = dogrulaBayragi.slice('--dogrula='.length);
+  if (!dogrulaBayragi.includes('=') || yol === '') dur('--dogrula=<anahtar dosyası> ister (ad → dosya eşlemesi yok: dosya yeri aileye göre değişir)', 2);
+  dogrulaDosya = path.resolve(yol);
+  let kid;
+  try {
+    kid = JSON.parse(fs.readFileSync(dogrulaDosya, 'utf8')).kid;
+  } catch {
+    dur(`--dogrula: anahtar dosyası okunamadı ya da JSON değil (${dogrulaDosya})`, 2);
+  }
+  if (typeof kid !== 'string' || kasaAdiKid(kid) !== ad) {
+    dur(`--dogrula: bu dosyanın anahtarı '${ad}' ailesinden değil ya da '${ad}' için doğrulama eşlemesi yok (kid '${String(kid).slice(0, 40)}') — doğrulanamayan ad kaydedilmedi`, 2);
+  }
+}
+const TEKS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'Teks-Erp');
 
 // ---------------------------------------------------------------- gizli girdi
 let stdinSatirlari = null;
@@ -136,6 +165,18 @@ if (!ayni) {
 if ([...ilk.toString('utf8')].length < tanim.min) {
   ilk.fill(0);
   dur(`En az ${tanim.min} karakter olmalı — kayıt yapılmadı`, 2);
+}
+if (dogrulaDosya) {
+  const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/anahtar-parola-dogrula.ts', dogrulaDosya], { cwd: TEKS, input: ilk, stdio: ['pipe', 'pipe', 'pipe'], timeout: 120_000 });
+  const kod = r.error ? 2 : r.status;
+  r.stdout?.fill(0);
+  r.stderr?.fill(0);
+  if (kod !== 0) {
+    ilk.fill(0);
+    if (kod === 1) dur('Bu parola anahtar dosyasını AÇMIYOR — kasaya YAZILMADI (parolayı ya da kenar boşluğunu kontrol et)', 1);
+    dur('Anahtar dosyası doğrulanamadı (biçim/araç hatası) — kasaya YAZILMADI', 2);
+  }
+  process.stdout.write('✓ Parola anahtar dosyasını açtı (yalnız bellekte; anahtar yazılmadı).\n');
 }
 let sonuc;
 try {

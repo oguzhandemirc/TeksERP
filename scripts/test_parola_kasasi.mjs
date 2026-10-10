@@ -257,6 +257,26 @@ console.log(JSON.stringify({ adlar: C.KASA_ADLARI, ortam: C.KASA_ORTAM, komut: C
   const a = panel(['anahtar-ac', `--anahtar=${dosya}`, '--json'], SAHTE_ORTAM);
   check('§4b var olan anahtar kasadaki parolayla açılır (stdin boş)', a.status === 0 && /"acildi":true/.test(a.stdout), `${a.status} ${a.stderr.slice(0, 300)}`);
   check('§4c araç çıktısında değer YOK (düz · hex)', ![u.stdout, u.stderr, a.stdout, a.stderr].some((c) => c.includes(PAROLA) || c.includes(hex(PAROLA))));
+  // §4d–§4h parola-kaydet --dogrula (fixture: yukarıda üretilen istemci anahtarı; dosya = gerçek anahtar değil, geçici)
+  const dg = (ad, d, girdi) => kaydet([ad, `--dogrula=${d}`], girdi);
+  kasaKoy({});
+  const d1 = dg('istemci', dosya, `${PAROLA}\n${PAROLA}\n`);
+  check('§4d --dogrula: doğru parola anahtarı açar → kasaya yazılır, değer basılmaz', d1.status === 0 && kasaHam()['tekserp/istemci|tekserp'] === kodla(PAROLA.normalize('NFC')) && /anahtar dosyasını açtı/.test(d1.stdout) && degerYok(d1, PAROLA), `${d1.status} ${d1.stderr.slice(0, 300)}`);
+  kasaKoy({});
+  const d2 = dg('istemci', dosya, `${PAROLA_IKI}\n${PAROLA_IKI}\n`);
+  check('§4e --dogrula: yanlış parola → çıkış 1, kasaya YAZILMAZ', d2.status === 1 && !('tekserp/istemci|tekserp' in kasaHam()) && /AÇMIYOR/.test(d2.stderr) && degerYok(d2, PAROLA_IKI), `${d2.status} ${d2.stderr.slice(0, 300)}`);
+  kasaKoy({ istemci: kodla(PAROLA) });
+  const d3 = dg('istemci', dosya, `${PAROLA_IKI}\n${PAROLA_IKI}\n`);
+  check('§4f --dogrula: yanlış parola mevcut kaydı BOZMAZ (silme/yazma yok)', d3.status === 1 && kasaHam()['tekserp/istemci|tekserp'] === kodla(PAROLA.normalize('NFC')));
+  kasaKoy({});
+  const d4 = dg('yedek', dosya, `${PAROLA}\n${PAROLA}\n`);
+  const d5 = dg('paket', dosya, `${PAROLA}\n${PAROLA}\n`);
+  const d6 = kaydet(['istemci', '--dogrula'], `${PAROLA}\n${PAROLA}\n`);
+  const d7 = dg('istemci', path.join(GECICI, 'yok.json'), `${PAROLA}\n${PAROLA}\n`);
+  check('§4g --dogrula fail-closed: eşlemesiz ad (yedek) · başka aile dosyası · dosyasız bayrak · dosya yok → çıkış 2, kasaya yazılmaz', [d4, d5, d6, d7].every((r) => r.status === 2) && Object.keys(kasaHam()).length === 0, `${[d4, d5, d6, d7].map((r) => r.status)}`);
+  kasaKoy({});
+  const d8 = kaydet(['istemci'], `${PAROLA_IKI}\n${PAROLA_IKI}\n`);
+  check('§4h --dogrula YOKKEN davranış bugünkü gibi: doğrulanmadan yazılır', d8.status === 0 && kasaHam()['tekserp/istemci|tekserp'] === kodla(PAROLA_IKI.normalize('NFC')));
   defterSifirla();
   const y = panel(['anahtar-ac', `--anahtar=${dosya}`, '--kasa=yok', '--json'], SAHTE_ORTAM);
   check('§4d --kasa=yok → kasaya BAKILMAZ (stdin boş → RED)', y.status !== 0 && defter() === '' && /stdin bitti/.test(y.stderr), y.stderr.slice(0, 200));
