@@ -68,6 +68,7 @@ import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
+import { ShiftDefinitionsPage } from "@/pages/ShiftDefinitions/ShiftDefinitionsPage";
 import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
 import { WeavingFloorPage } from "@/pages/Operations/WeavingFloor/WeavingFloorPage";
 import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
@@ -192,6 +193,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="item:read">
         <ItemsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Vardiya Tanımları — karo izniyle BİREBİR; modül kapısı backend + ROUTE_MODULE.
+    path: "definitions/shift-definitions",
+    element: (
+      <ProtectedRoute requirePermission="loom:spec-manage">
+        <ShiftDefinitionsPage />
       </ProtectedRoute>
     ),
   },

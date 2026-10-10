@@ -173,7 +173,8 @@ function yuklemAlani(dosya: string, fnAdi: string): { alan: string; negatif: boo
   const src = yorumlariSok(fs.readFileSync(dosya, "utf8"));
   const imp = new RegExp(`import\\s*\\{[^}]*\\b${fnAdi}\\b[^}]*\\}\\s*from\\s*"([^"]+)"`).exec(src);
   if (!imp) return null;
-  const hedef = path.join(path.dirname(dosya), `${imp[1]!}.ts`);
+  const yol = imp[1]!;
+  const hedef = yol.startsWith("@/") ? path.join(ELECTRON_SRC, `${yol.slice(2)}.ts`) : path.join(path.dirname(dosya), `${yol}.ts`);
   if (!fs.existsSync(hedef)) return null;
   const govde = yorumlariSok(fs.readFileSync(hedef, "utf8"));
   const fn = new RegExp(

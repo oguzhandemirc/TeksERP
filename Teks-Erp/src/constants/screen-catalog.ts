@@ -289,6 +289,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
   // sebep atama/yeniden sınıflandırma `loom:classify` — İKİSİNDEN BİRİ ekranı açar, eylemler ekran içinde izinle.
   { key: "operations/machine-stops", app: "desktop", modul: "dokumaEnabled", title: "Tezgah Duruşları", requires: ["loom:manual-entry", "loom:classify"], capabilities: [] },
+  // Vardiya Tanımları (2026-10-10): katalog yazma yüzeyi `loom:spec-manage`; Tanımlar karosu.
+  { key: "definitions/shift-definitions", app: "desktop", modul: "dokumaEnabled", title: "Vardiya Tanımları", requires: ["loom:spec-manage"], capabilities: [] },
   // Tezgah Salonu canlı ekranı (2026-10-10): `tezgahEnabled` arkasında — dokuma modülünün değil
   // tezgah izlemenin ekranı (DOKUMA-CANLI-EKRAN §8 karar 6).
   { key: "operations/weaving-floor", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Salonu", requires: ["loom:live-view"], capabilities: [] },
@@ -462,7 +464,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
-  { code: "loom:spec-manage", reason: "Devreye Alma ekranı ayrı dilim (Faz 2 ingest ile doğar); künye/gölge mod uçları API için." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

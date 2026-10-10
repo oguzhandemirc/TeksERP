@@ -21,6 +21,7 @@ import {
   Ruler,
   LayoutTemplate,
   MessageSquareText,
+  Clock3,
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
@@ -35,6 +36,7 @@ import {
   isRoutesVisible,
   isTravelerCardVisible,
 } from "./production-regime";
+import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
 
 export interface DefinitionTile {
   key: string;
@@ -190,6 +192,16 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/stations",
     group: "production",
     permission: "station:read",
+  },
+  {
+    key: "shift-definitions",
+    title: "Vardiya Tanımları",
+    description: "Vardiya kataloğu — başlangıç saati, süre, planlı mola, çalışılan günler; takvim etkisi önizlemeli",
+    icon: Clock3,
+    to: "/definitions/shift-definitions",
+    group: "production",
+    permission: "loom:spec-manage",
+    visibleWhen: isShiftDefinitionsVisible,
   },
   {
     key: "peripherals",
