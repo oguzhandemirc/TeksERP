@@ -383,7 +383,8 @@ fn disk(fs: &dyn Fs, paths: &[(&str, &Path)]) -> Value {
 
 /// Paketin girdileri (zip'e yazılmadan önce; testler doğrudan ölçer). `platform` = platform ölçümleri
 /// (süzgeçten geçer); `kunye` = ikilinin künyesi; `now` = UTC ISO.
-pub fn collect(fs: &dyn Fs, layout: &Layout, kunye: &str, platform: Vec<Olcum>, now: &str) -> Vec<Olcum> {
+/// `license_dir` = backend'in lisans dizininin konaktaki yeri (`settings::license_dir`; Linux'ta birim).
+pub fn collect(fs: &dyn Fs, layout: &Layout, license_dir: &Path, kunye: &str, platform: Vec<Olcum>, now: &str) -> Vec<Olcum> {
     let mut s = Suzgec::default();
     let mut p = Paket { girdiler: Vec::new(), atlananlar: Vec::new() };
 
@@ -397,8 +398,7 @@ pub fn collect(fs: &dyn Fs, layout: &Layout, kunye: &str, platform: Vec<Olcum>, 
             }
         }
     }
-    let license_dir = crate::settings::read_backend_env(fs, layout).map_or_else(|_| layout.default_license_dir(), |be| be.license_dir);
-    let lisans = license_summary(fs, &license_dir, &mut s);
+    let lisans = license_summary(fs, license_dir, &mut s);
     let niyet = intent_summary(fs, layout, &mut s);
 
     p.add(Olcum::new("kunye.json", "güncelleyici ikilisinin künyesi (ad · sürüm · hedef · çapa kipi)", s.json_bytes(kunye.as_bytes())));
@@ -562,7 +562,13 @@ pub fn komut(args: &[String], kunye: &str) -> Result<u32, String> {
     };
     let platform = crate::platform::tani_olcumleri(&hedef);
     let now = tekserp_hizmet::timefmt::iso_millis(tekserp_hizmet::timefmt::now_ms());
-    let entries = collect(&fs, &layout, kunye, platform, &now);
+    let name = tekserp_hizmet::contract::service_name_arg(args, tekserp_hizmet::contract::UPDATER_SERVICE)?;
+    let license_dir = crate::env::real(None, &name)
+        .and_then(|e| crate::platform::baglam(e, &layout, &settings))
+        .ok()
+        .and_then(|e| crate::settings::license_dir(&e, &layout).ok())
+        .unwrap_or_else(|| layout.default_license_dir());
+    let entries = collect(&fs, &layout, &license_dir, kunye, platform, &now);
     let bytes = zip_bytes(&entries)?;
     if let Some(d) = out.parent().filter(|d| !d.as_os_str().is_empty()) {
         fs.create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;

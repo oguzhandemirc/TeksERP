@@ -23,6 +23,23 @@ fn tmp_sibling(p: &Path, tag: &str) -> PathBuf {
     p.with_file_name(name)
 }
 
+/// Atomik yazımın geçici dosyası YENİ yaratılır ve bağ izlenmez (Unix `O_EXCL|O_NOFOLLOW`): root'un backend'in yazabildiği
+/// dizine (Linux lisans birimi) yazışı önceden konmuş bir sembolik bağla konaktaki başka bir dosyaya yönlenmesin.
+fn create_tmp(tmp: &Path) -> io::Result<std::fs::File> {
+    match std::fs::remove_file(tmp) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.custom_flags(libc::O_NOFOLLOW);
+    }
+    o.open(tmp)
+}
+
 impl Fs for RealFs {
     fn read(&self, p: &Path) -> io::Result<Vec<u8>> {
         std::fs::read(p)
@@ -72,7 +89,7 @@ impl Fs for RealFs {
         }
         let tmp = tmp_sibling(p, "tmp");
         let written = (|| {
-            let mut f = std::fs::File::create(&tmp)?;
+            let mut f = create_tmp(&tmp)?;
             f.write_all(data)?;
             f.sync_all()
         })();
@@ -553,6 +570,28 @@ mod tests {
         assert!(tmps().is_empty(), "kopya yarım geçici dosya bıraktı: {:?}", tmps());
         assert!(RealFs.write_atomic(&to, b"x").is_err());
         assert!(tmps().is_empty(), "atomik yazım yarım geçici dosya bıraktı: {:?}", tmps());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Backend'in yazabildiği dizinde (Linux lisans birimi) geçici adda önceden konmuş sembolik bağ root'un yazısını
+    /// konaktaki başka dosyaya yönlendiremez: kurban dosya değişmez, hedef yazılır, bağ kalmaz (sonda: `create_tmp`
+    /// yerine `File::create` → kurban ezilir, test kırmızı).
+    #[cfg(unix)]
+    #[test]
+    fn write_atomic_does_not_follow_planted_tmp_link() {
+        use super::RealFs;
+        use crate::env::Fs;
+        let d = std::env::temp_dir().join(format!("tmp-bag-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("birim")).unwrap();
+        let victim = d.join("kurban");
+        std::fs::write(&victim, b"kurbanin icerigi").unwrap();
+        let target = d.join("birim").join("paket-iptal.jws");
+        std::os::unix::fs::symlink(&victim, d.join("birim").join("paket-iptal.jws.tmp")).unwrap();
+        RealFs.write_atomic(&target, b"imzali belge").unwrap();
+        assert_eq!(std::fs::read(&victim).unwrap(), b"kurbanin icerigi", "yazım sembolik bağı izledi");
+        assert_eq!(std::fs::read(&target).unwrap(), b"imzali belge");
+        assert!(!std::fs::symlink_metadata(&target).unwrap().file_type().is_symlink(), "hedef bağ olarak kaldı");
         let _ = std::fs::remove_dir_all(&d);
     }
 

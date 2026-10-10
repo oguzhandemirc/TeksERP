@@ -69,7 +69,10 @@ fn repair(args: &[String]) -> Result<u32, String> {
     let name = tekserp_hizmet::contract::service_name_arg(args, tekserp_hizmet::contract::UPDATER_SERVICE)?;
     let layout = Layout::new(&root, &data_arg(args, &root)).with_service(&name);
     let own = std::env::current_exe().map_err(|e| format!("kendi yolu okunamadı: {e}"))?;
-    let e = env::real(None, &name)?;
+    // Kuruluma bağlı ortam: Linux'ta HAK (sınıf) backend'in lisans biriminden okunur. Ayar bozuksa bağsız ortamla sürer —
+    // onarım ayara bağımlı olmaz (lisans o zaman yok sayılır, `kendi.json` özetleri yine geçer).
+    let s = settings::read_settings(&env::RealFs, &layout).unwrap_or_default();
+    let e = tekserp_guncelleyici::platform::baglam(env::real(None, &name)?, &layout, &s).or_else(|_| env::real(None, &name))?;
     let trust = TrustAnchor::for_process().ok().map(|a| onarim::installed_trust(&e, &layout, &a));
     let opts = onarim::Options { yalniz_asil_ad: args.iter().any(|a| a == "--yalniz-asil-ad") };
     let out = onarim::onar(&e, &layout, &own, trust.as_ref(), &opts);

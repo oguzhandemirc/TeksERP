@@ -68,7 +68,7 @@ fn scenario(spec: &Value, roots: &[RootKey], channel: &str, n: usize) -> Value {
     let opts =
         LeaseOpts { update: Some(policy("OTOMATIK", &window, target)), maintenance_end: Some(t + 365 * DAY), ..LeaseOpts::default() };
     let (lease, hak) = lease_and_entitlement_in(&w.keys, &opts, t, channel);
-    let lic = w.layout.root.join("lisans");
+    let lic = w.license_dir();
     std::fs::write(lic.join("kira.jws"), lease).unwrap();
     std::fs::write(lic.join("hak.jws"), hak.unwrap()).unwrap();
     w.write_intent(&json!({ "v": 1, "yazildi": iso(t), "indirme": { "belirtec": TOKEN, "bitis": iso(t + 30 * DAY) }, "onay": null }));

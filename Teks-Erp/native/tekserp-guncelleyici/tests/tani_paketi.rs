@@ -155,7 +155,7 @@ fn entry(entries: &[(String, Vec<u8>)], name: &str) -> String {
 #[test]
 fn tani_paketi_sir_tasimaz() {
     let w = world("sir");
-    let entries = tani::collect(&RealFs, &w.layout, KUNYE, platform(), "2026-10-09T00:00:00.000Z");
+    let entries = tani::collect(&RealFs, &w.layout, &w.layout.default_license_dir(), KUNYE, platform(), "2026-10-09T00:00:00.000Z");
     let bytes = tani::zip_bytes(&entries).expect("zip");
     let found = leaks(&bytes, &w.secrets);
     assert!(found.is_empty(), "tanı paketinde sır var:\n{}", found.join("\n"));

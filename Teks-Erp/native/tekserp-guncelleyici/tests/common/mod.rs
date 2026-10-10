@@ -482,6 +482,11 @@ pub struct World {
     pub atomic_layout: AtomicBool,
 }
 
+/// Sahte Docker'ın adlı birimlerinin konak dizini (`docker volume inspect` `Mountpoint`): `<test>/docker-birim/<ad>/_data`.
+pub fn docker_volume_dir(root: &Path, name: &str) -> PathBuf {
+    root.parent().unwrap().join("docker-birim").join(name).join("_data")
+}
+
 /// `hizmet-kur`un kurduğu komut satırı biçimi (tırnaklı ikili + argümanlar).
 pub fn updater_image(exe: &Path, root: &Path) -> String {
     format!("\"{}\" hizmet --kok \"{}\" --ad {UPDATER}", exe.display(), root.display())
@@ -784,6 +789,14 @@ impl FakeProcs {
         match s.as_slice() {
             ["rm", "-f", _] => ok_out(""),
             ["info", ..] => ok_out(&format!("{}\n", self.w.root.display())),
+            ["volume", "inspect", "--format", fmt, name] if *fmt == tekserp_guncelleyici::platform::linux::docker::BIRIM_YOLU_FORMAT => {
+                let d = docker_volume_dir(&self.w.root, name);
+                if d.is_dir() {
+                    ok_out(&format!("{}\n", d.display()))
+                } else {
+                    fail_out(1, &format!("Error response from daemon: get {name}: no such volume"))
+                }
+            }
             ["load", "-i", path] => self.docker_load(Path::new(path)),
             ["image", "inspect", "--format", fmt, r] => {
                 let images = self.w.faults.images.lock().unwrap();
@@ -1000,7 +1013,7 @@ fn docker_salt_okur(args: &[String]) -> bool {
     };
     matches!(
         sub.unwrap_or_default().iter().map(String::as_str).collect::<Vec<_>>().as_slice(),
-        ["ps" | "inspect" | "info" | "config", ..] | ["image", "ls" | "inspect", ..]
+        ["ps" | "inspect" | "info" | "config", ..] | ["image", "ls" | "inspect", ..] | ["volume", "inspect", ..]
     )
 }
 
@@ -1884,6 +1897,10 @@ impl World {
         let w = World::new(tag, s);
         if linux {
             w.faults.docker.store(true, Ordering::SeqCst);
+            // Backend kirayı compose biriminde tutar; konakta `<KOK>/lisans` YOK (deneme sunucusunun gerçeği).
+            let birim = w.license_dir();
+            std::fs::create_dir_all(birim.parent().unwrap()).unwrap();
+            std::fs::rename(w.layout.root.join("lisans"), &birim).unwrap();
             w.docker_seed(OLD);
             std::fs::write(w.layout.backend_env(), "POSTGRES_USER=tekserp\nPOSTGRES_PASSWORD=gizli-parola\nPOSTGRES_DB=tekserp\n").unwrap();
             let (legacy, customer, extra, updater) = oci;
@@ -1943,6 +1960,14 @@ impl World {
         let mut t: Vec<String> = self.faults.images.lock().unwrap().iter().flat_map(|i| i.tags.clone()).collect();
         t.sort();
         t
+    }
+
+    /// Backend'in lisans dizini: Windows `<KOK>\lisans`, Linux `tekserp_lisans` biriminin konak dizini.
+    pub fn license_dir(&self) -> PathBuf {
+        match self.profil() {
+            Profil::Windows => self.layout.root.join("lisans"),
+            Profil::Linux => docker_volume_dir(&self.layout.root, "tekserp_lisans"),
+        }
     }
 
     pub fn profil(&self) -> Profil {

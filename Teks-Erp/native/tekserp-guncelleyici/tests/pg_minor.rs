@@ -279,7 +279,7 @@ fn prepared_pg_is_reverified_at_apply_time() {
     let w = pg_world("pg-yeniden", "kendi", "72");
     let onayli = LeaseOpts { update: Some(policy("ONAYLI", &open_window(), None)), ..LeaseOpts::default() };
     let (lease, _) = lease_and_entitlement(&w.keys, &onayli, T0);
-    std::fs::write(w.layout.root.join("lisans").join("kira.jws"), lease).unwrap();
+    std::fs::write(w.license_dir().join("kira.jws"), lease).unwrap();
     w.run(1).unwrap();
     assert_eq!(w.state(), Some(State::Ready), "{:?}", w.status().map(|s| (s.error_code, s.message)));
     assert!(w.layout.pg_version_dir(NEW_TAG).exists(), "PG hazırlanmalı");

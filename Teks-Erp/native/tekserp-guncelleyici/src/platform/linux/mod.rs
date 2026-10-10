@@ -117,6 +117,10 @@ impl crate::platform::Araclar for IskeletAraclar {
     fn migrate_deploy(&self, _env: &Env, _version_dir: &Path, _be: &BackendEnv, _timeout: Duration) -> Result<CmdOut, String> {
         Err(unsupported("göç"))
     }
+    /// Projeye bağlanmamış iskelet birimi bilmez: `<KOK>/lisans`e düşmek eski hatayı (KIRA_YOK) sessizce geri getirirdi.
+    fn lisans_dizini(&self, _env: &Env) -> Option<Result<PathBuf, String>> {
+        Some(Err(unsupported("lisans birimi (compose projesine bağlı değil)")))
+    }
 }
 
 /// Linux'ta PG küçük sürümü ilk sürümde KAPALI (§1.1 madde 3; KONTEYNER kipi L8).

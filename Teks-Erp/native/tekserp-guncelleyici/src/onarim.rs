@@ -215,9 +215,11 @@ enum Place {
 
 /// Kurulumun PAKET güveni (yerleşik kip — kurulu dizin; backend paketini doğrulayan kümeyle aynı).
 pub fn installed_trust(env: &Env, layout: &Layout, anchor: &crate::trust::TrustAnchor) -> PackageTrust {
-    let license_dir =
-        crate::settings::read_backend_env(env.fs.as_ref(), layout).map_or_else(|_| layout.default_license_dir(), |b| b.license_dir);
-    let lic = crate::policy::load(env.fs.as_ref(), &license_dir, anchor);
+    // Lisans arka ucun yerinden (Linux: birim); çözülemezse lisans YOK sayılır (sınıf bilinmez, zincirli paket kaynak olmaz).
+    let lic = match crate::settings::license_dir(env, layout) {
+        Ok(dir) => crate::policy::load(env.fs.as_ref(), &dir, anchor),
+        Err(_) => crate::policy::LicenseView::default(),
+    };
     crate::policy::package_trust(anchor, &lic, tekserp_dogrulama::paket_zinciri::PackageMode::Yerlesik, env.clock.now_ms() as f64)
 }
 

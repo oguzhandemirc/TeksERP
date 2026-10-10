@@ -101,7 +101,7 @@ fn lease_is_the_authority() {
     );
     assert!(w.status().unwrap().policy.is_none(), "süresi geçen kira politika taşımaz");
     let w = World::new("kira-yok", Setup::default());
-    std::fs::remove_file(w.layout.root.join("lisans").join("kira.jws")).unwrap();
+    std::fs::remove_file(w.license_dir().join("kira.jws")).unwrap();
     w.run(1).unwrap();
     assert_eq!(code(&w).1.as_deref(), Some("KIRA_YOK"));
     untouched(&w, "kira-yok");
@@ -114,7 +114,7 @@ fn lease_is_the_authority() {
         legacy: ed25519_dalek::SigningKey::from_bytes(&[4; 32]),
     };
     let (lease_text, _) = lease_and_entitlement(&fake, &LeaseOpts::default(), T0);
-    std::fs::write(w.layout.root.join("lisans").join("kira.jws"), lease_text).unwrap();
+    std::fs::write(w.license_dir().join("kira.jws"), lease_text).unwrap();
     w.run(1).unwrap();
     assert_eq!(code(&w).1.as_deref(), Some("KIRA_GECERSIZ"));
     untouched(&w, "sahte-kok");
@@ -135,7 +135,7 @@ fn revoked_sub_key_lease_gives_no_authority() {
             "v": 1, "iptalId": "77777777-7777-4777-8777-777777777777", "sira": 1, "verilis": iso(T0 - DAY),
             "iptaller": [{ "kid": kid, "sertifikaId": cert_id, "kullanim": "ALT", "tarih": iso(T0 - DAY), "neden": "sızıntı" }],
         });
-        std::fs::write(w.layout.root.join("lisans").join("iptal.jws"), sign(signer, "tekserp-iptal", "kok-test-1", &doc)).unwrap();
+        std::fs::write(w.license_dir().join("iptal.jws"), sign(signer, "tekserp-iptal", "kok-test-1", &doc)).unwrap();
     };
     let w = World::new("iptal-alt", Setup::default());
     let root = w.keys.root.clone();
@@ -399,7 +399,7 @@ fn locked_staging_dir_is_a_locked_file_not_a_download_error() {
 #[test]
 fn links_in_untrusted_dirs_are_not_followed() {
     let w = World::new("baglanti", Setup::default());
-    let lisans = w.layout.root.join("lisans");
+    let lisans = w.license_dir();
     let real = w.dir.join("baska-kira.jws");
     std::fs::rename(lisans.join("kira.jws"), &real).unwrap();
     std::os::unix::fs::symlink(&real, lisans.join("kira.jws")).unwrap();

@@ -34,6 +34,15 @@ pub fn valid_project(name: &str) -> bool {
         && name.len() <= 63
 }
 
+/// Backend'in lisans dizini compose şablonunda ADLI BİRİMDİR (`lisans:/var/lib/tekserp/lisans`; kurulum anahtarı orada):
+/// konakta `<KOK>/lisans` YOKTUR. Kira/HAK/iptal birimin kendisinden okunur (`DockerAraclar::lisans_dizini`).
+pub const LISANS_BIRIMI: &str = "lisans";
+
+/// Compose'un adlı birime verdiği Docker adı (`name:` verilmeyen birim): `<proje>_<birim>`.
+pub fn birim_adi(project: &str, birim: &str) -> String {
+    format!("{project}_{birim}")
+}
+
 /// Kurulumun yerel ek compose dosyası (`yapilandirma/docker-compose.yerel.yml`): imzalı dosyanın taşımadığı yerel
 /// katman (bulut kenarı, bulut ortamı). Kurallar BİRLEŞİK yapılandırmaya uygulanır (`compose::ihlaller`) ⇒ yerel
 /// dosya sertleştirmeyi gevşetemez; içindeki göreli yollar `<KOK>`e göre çözülür (`--project-directory`).

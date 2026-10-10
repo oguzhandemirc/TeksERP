@@ -57,6 +57,11 @@ pub trait Araclar: Send + Sync {
     fn imaj_deposu(&self, _env: &Env) -> Option<PathBuf> {
         None
     }
+    /// Backend'in lisans dizininin KONAKTAKİ yeri, `.env`den okunmuyorsa (Linux: `lisans` Docker birimi). `None` = `.env`
+    /// (`LICENSE_DIR`) ya da varsayılan; `Some(Err)` = çözülemedi (sessizce başka dizine düşülmez).
+    fn lisans_dizini(&self, _env: &Env) -> Option<Result<PathBuf, String>> {
+        None
+    }
     /// Veritabanının boyu (`package::DB_BOYU_SQL`, bayt) — disk formülünün yedek payı; ölçülemezse `None` (2 GB sayılır).
     fn db_boyutu(&self, _env: &Env, _be: &BackendEnv) -> Option<u64> {
         None

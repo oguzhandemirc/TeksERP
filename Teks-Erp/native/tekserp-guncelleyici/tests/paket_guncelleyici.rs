@@ -131,7 +131,7 @@ fn chained_pointer_is_read_first_and_package_revocation_is_adopted() {
     let st = w.status().unwrap();
     assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
     assert_eq!(w.current().as_deref(), Some(NEW));
-    let adopted = w.dir.join("kok").join("lisans").join(paket_zinciri::PACKAGE_REVOCATION_FILE);
+    let adopted = w.license_dir().join(paket_zinciri::PACKAGE_REVOCATION_FILE);
     let text = std::fs::read_to_string(&adopted).expect("paketteki iptal listesi lisans dizinine yazılmalı");
     assert_eq!(text.trim(), revocation_token(&w, 1, OTHER_CERT_ID));
 }
@@ -327,7 +327,7 @@ fn pinned_world(tag: &str, second_end: i64, extra: Option<&Value>) -> World {
 #[test]
 fn pinned_target_skips_revoked_unkidded_and_installs_kidded() {
     let w = pinned_world("pz-d8-iptal", CERT_END - 20 * DAY, None);
-    std::fs::write(w.layout.root.join("lisans").join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
+    std::fs::write(w.license_dir().join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
     w.run_to_rest(0);
     let st = w.status().unwrap();
     assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
@@ -442,7 +442,7 @@ fn chained_pg_kidded_name_from_manifest_signer() {
 #[test]
 fn chained_pg_revoked_unkidded_skipped_for_kidded() {
     let w = chained_pg_world("pz-d8-pg-iptal", true, true, CERT_END - 20 * DAY);
-    std::fs::write(w.layout.root.join("lisans").join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
+    std::fs::write(w.license_dir().join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
     let log = w.run_logged(9);
     let st = w.status().unwrap();
     assert_eq!(st.state, State::Succeeded, "{:?} {:?}", st.error_code, st.message);
@@ -455,7 +455,7 @@ fn chained_pg_revoked_unkidded_skipped_for_kidded() {
 #[test]
 fn chained_pg_only_revoked_unkidded_fails_closed() {
     let w = chained_pg_world("pz-d8-pg-takili", true, false, CERT_END + 365 * DAY);
-    std::fs::write(w.layout.root.join("lisans").join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
+    std::fs::write(w.license_dir().join(paket_zinciri::PACKAGE_REVOCATION_FILE), revocation_token(&w, 2, CERT_ID)).unwrap();
     let _ = w.run(3);
     let st = w.status().unwrap();
     assert_eq!(st.error_code.as_deref(), Some(code::PAKET_SERTIFIKA_IPTAL), "{:?} {:?}", st.state, st.message);

@@ -40,7 +40,7 @@ impl Sim {
     /// Lisans yoklaması kirayı yeniden yazar (yeni `verilis`).
     fn renew(&self) {
         let (lease, _) = lease_and_entitlement(&self.w.keys, &self.lease, self.now());
-        std::fs::write(self.w.layout.root.join("lisans").join("kira.jws"), lease).unwrap();
+        std::fs::write(self.w.license_dir().join("kira.jws"), lease).unwrap();
     }
 
     /// `minutes` dakika, `step` dakikada bir tur (gerçek tur 60 sn; sayım tur aralığından bağımsızdır, uzun simülasyon

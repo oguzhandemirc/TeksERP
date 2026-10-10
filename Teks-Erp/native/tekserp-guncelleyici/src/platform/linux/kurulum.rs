@@ -27,7 +27,7 @@ pub const VARSAYILAN_SUNUCU: &str = "https://guncelleme.etkiliyazilim.com";
 /// Yeni kurulumun PG imajı (`pg.env` yoksa) — şablonun varsayılanıyla aynı (eşliği test ölçer).
 pub const VARSAYILAN_PG_IMAJI: &str = "postgres:16-bookworm";
 /// Geçişin varlığını ölçtüğü birimler (F5 = PG küme kimliği · lisans birimi = kurulum anahtarı; plan §8.2).
-pub const GEREKLI_BIRIMLER: [&str; 2] = ["pg_data", "lisans"];
+pub const GEREKLI_BIRIMLER: [&str; 2] = ["pg_data", duzen::LISANS_BIRIMI];
 /// Elle kurulumun dosyaları (`LINUX-DOCKER-KURULUM.md` §2 · §10): geçişten sonra `gecis/<damga>/geri/`e taşınır.
 pub const ESKI_COMPOSE: &str = "docker-compose.yml";
 pub const ESKI_OVERRIDE: &str = "docker-compose.override.yml";
@@ -558,7 +558,7 @@ pub fn envanter(b: &Baglam, s: &Secenek) -> Result<Envanter, String> {
         other => return Err(format!("elle kurulumun imajı {other:?}, paket {etiket} — aynı sürümün paketi gerekir")),
     }
     for v in GEREKLI_BIRIMLER {
-        let ad = format!("{proje}_{v}");
+        let ad = duzen::birim_adi(&proje, v);
         calistir(b.env, &docker_cmd().args(["volume", "inspect", "--format", "{{.Name}}", ad.as_str()]), "docker volume inspect")
             .map_err(|_| format!("Docker birimi {ad} yok — proje adı ya da kurulum beklenen değil"))?;
     }

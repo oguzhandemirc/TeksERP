@@ -3,7 +3,7 @@
 //! `tekserp_hizmet::envfile`) okunan değerler. Sırlar (DATABASE_URL parolası) yalnız çocuk sürecin
 //! ORTAMINA gider; günlüğe/duruma yazılmaz.
 use crate::codes;
-use crate::env::Fs;
+use crate::env::{Env, Fs};
 use crate::layout::Layout;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -217,6 +217,28 @@ pub fn read_backend_env_in(fs: &dyn Fs, layout: &Layout, kip: OrtamKipi) -> Resu
         .read_untrusted(&layout.backend_env(), 256 * 1024)
         .map_err(|e| (codes::AYAR_BICIMSIZ, format!("yapilandirma\\.env okunamadı: {e}")))?;
     backend_env_from_bytes_in(&bytes, layout, kip)
+}
+
+/// Turun, `onar`ın ve tanının TEK okuyucusu: `.env` arka ucun kipinde, lisans dizini KONAKTAKİ yeriyle (Linux'ta backend'in
+/// `lisans` birimi — `Araclar::lisans_dizini`). Birim çözülemezse `KIRA_YOK` + neden; `<KOK>/lisans`e düşülmez.
+pub fn backend_env(env: &Env, layout: &Layout) -> Result<BackendEnv, EnvFail> {
+    let mut be = read_backend_env_in(env.fs.as_ref(), layout, env.arka.ortam)?;
+    if let Some(dir) = env.arka.araclar.lisans_dizini(env) {
+        be.license_dir = dir.map_err(|m| (codes::KIRA_YOK, m))?;
+    }
+    Ok(be)
+}
+
+/// Yalnız lisans dizini (`onar` · tanı): birim `.env`den bağımsız çözülür; `.env` okunamazsa hizmet kipi bugünkü gibi
+/// varsayılan dizine (`<KOK>\lisans`) bakar.
+pub fn license_dir(env: &Env, layout: &Layout) -> Result<PathBuf, EnvFail> {
+    match env.arka.araclar.lisans_dizini(env) {
+        Some(dir) => dir.map_err(|m| (codes::KIRA_YOK, m)),
+        None => {
+            Ok(read_backend_env_in(env.fs.as_ref(), layout, env.arka.ortam)
+                .map_or_else(|_| layout.default_license_dir(), |b| b.license_dir))
+        }
+    }
 }
 
 pub fn backend_env_from_bytes_in(bytes: &[u8], layout: &Layout, kip: OrtamKipi) -> Result<BackendEnv, EnvFail> {

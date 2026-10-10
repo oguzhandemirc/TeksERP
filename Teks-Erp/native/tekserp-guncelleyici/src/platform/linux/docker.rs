@@ -31,6 +31,9 @@ pub const INSPECT_FORMAT: &str =
 /// Konteynerin yeniden başlatma politikası (bakım çiti W2: `stop` edilen konteyneri açılışta başlatmayan politika şart).
 pub const RESTART_POLICY_FORMAT: &str = "{{.HostConfig.RestartPolicy.Name}}";
 
+/// `docker volume inspect` tek değer: birimin konaktaki dizini.
+pub const BIRIM_YOLU_FORMAT: &str = "{{.Mountpoint}}";
+
 /// Bir kuruluma (compose projesine) bağlı komut kurucusu.
 #[derive(Debug, Clone)]
 pub struct DockerKomut {
@@ -463,6 +466,19 @@ impl crate::platform::Araclar for DockerAraclar {
         let out = env.procs.run(&c).ok().filter(CmdOut::ok)?;
         let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
         s.starts_with('/').then(|| PathBuf::from(s))
+    }
+    /// Backend'in yazdığı `<proje>_lisans` biriminin konak yolu (`Mountpoint`): kira/HAK/iptal tek kaynaktan, kopyasız.
+    /// İçerik backend'in (10001) yazabildiği yerdir — okuma `read_untrusted`, yazım `write_atomic` (bağ izlemez).
+    fn lisans_dizini(&self, env: &Env) -> Option<Result<PathBuf, String>> {
+        let ad = duzen::birim_adi(&self.komut.proje, duzen::LISANS_BIRIMI);
+        let c =
+            self.komut.docker().args(["volume", "inspect", "--format", BIRIM_YOLU_FORMAT, ad.as_str()]).timeout(Duration::from_secs(60));
+        let yol = match env.procs.run(&c) {
+            Ok(out) if out.ok() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+            Ok(out) => return Some(Err(describe_failure(&format!("lisans birimi {ad} (docker volume inspect)"), &out))),
+            Err(e) => return Some(Err(format!("lisans birimi {ad} okunamadı: {e}"))),
+        };
+        Some(if yol.starts_with('/') { Ok(PathBuf::from(yol)) } else { Err(format!("lisans birimi {ad}: konak yolu yok ({yol:?})")) })
     }
     fn db_boyutu(&self, env: &Env, _be: &BackendEnv) -> Option<u64> {
         self.psql(env, crate::package::DB_BOYU_SQL, "veritabanı boyu (psql)").ok()?.trim().parse().ok()
