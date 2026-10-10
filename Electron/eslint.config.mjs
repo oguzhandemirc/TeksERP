@@ -320,7 +320,8 @@ export default [
     // `e2e/guzergah/*.mjs` (güzergâh sürücüsü) aynı Node bağlamı — kapsam dışı kalsaydı
     // `npx eslint` onu varsayılan yapılandırmayla (node globals YOK) tarardı.
     // `build-identity.ts`: üç derleme yapılandırmasının ortak kimlik çözücüsü — aynı Node bağlamı.
-    files: ["e2e/**/*.{ts,tsx,mjs}", "playwright.config.ts", "vitest.config.ts", "build-identity.ts"],
+    // `onizleme/*.mjs`: geliştirme önizlemesinin sunucu + ekran görüntüsü aracı (Playwright).
+    files: ["e2e/**/*.{ts,tsx,mjs}", "onizleme/**/*.mjs", "playwright.config.ts", "vitest.config.ts", "build-identity.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: { ecmaVersion: "latest", sourceType: "module" },
