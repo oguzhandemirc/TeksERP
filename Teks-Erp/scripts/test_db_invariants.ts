@@ -601,6 +601,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // İki ayak: MACHINE_STOP ise `stopLossClass` NOT NULL ve <> 'MINOR' (MINOR bir
   // SÜRE sınıfıdır, sebep sınıfı değil). Katalog + job + bu CHECK aynı commit'te.
   { table: "reason_presets", name: "reason_presets_machine_class_chk" },
+  // Tezgah Salonu (2026-10-10, migration 20261010130000): hedef süre yalnız MACHINE_STOP ∧
+  // NON_SCHEDULED dışı ∧ 1..1440; duruşa donan hedef 1..1440 · pay 0..1440.
+  { table: "reason_presets", name: "reason_presets_stop_target_chk" },
+  { table: "machine_stop_events", name: "machine_stop_events_escalation_chk" },
   // Patron bulutu gelen kutusu makbuzu (B3) — çift yüklem: ISLENDI ⇔ entityId dolu.
   { table: "cloud_inbox_receipts", name: "cloud_inbox_receipts_outcome_entity_chk" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },

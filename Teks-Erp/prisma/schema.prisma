@@ -2305,6 +2305,15 @@ model MachineStopEvent {
   /// (`CLASSIFICATION_QUEUE_WHERE`), yani borç "sebep geldi mi" ile ödenir, bayrakla değil.
   requiresReason Boolean @default(false)
 
+  /// UYARI ZİNCİRİ ÇIPASI (Tezgah Salonu) — sebebin hedef süresi (dk), sebep KARARI
+  /// verildiği an (açılışta sebep · sınıflandırma · yeniden sınıflandırma) katalogdan
+  /// KOPYALANIP DONAR. NULL = süre izlenmez (sebepsiz ya da hedefsiz sebep).
+  targetMinutes          Int?
+  /// İletim payı (dk) — duruş AÇILDIĞI an fabrika ayarından (`tezgah.escalationGraceMinutes`)
+  /// DONAR; ayar değişse açık duruş başladığı andaki payla değerlendirilir. NULL = özellikten
+  /// önce açılmış satır (okuyucu o an geçerli ayarı kullanır, ilk sebep kararında donar).
+  escalationGraceMinutes Int?
+
   /// BAĞLAM — doğuşta DONDURULUR (raporun group-by eksenleri). Sonradan
   /// eklenen bir bağlam kolonu geçmişi sessizce sınıflandırılamaz yapardı.
   shiftInstanceId String?  @db.Uuid
@@ -5156,6 +5165,12 @@ model ReasonPreset {
   /// ⚠️ Preset'in sınıfı duruş satırına KOPYALANIR ve orada DONAR
   /// (`MachineStopEvent.lossClass`) — katalog değişse geçmiş rapor değişmez.
   stopLossClass MachineStopLossClass?
+  /// HEDEF SÜRE (dk) — [PROFİL] fabrika yöneticisi sebep kataloğunda ayarlar; YALNIZ
+  /// `MACHINE_STOP`ta ve `NON_SCHEDULED` dışı sınıfta dolu olabilir (CHECK
+  /// `reason_presets_stop_target_chk`, 1..1440). NULL = süre izlenmez, kimseye iletilmez
+  /// (varsayılan = bugünkü davranış). Duruş satırına KOPYALANIP DONAR
+  /// (`MachineStopEvent.targetMinutes`) — katalog değişse açık duruşun hedefi değişmez.
+  targetMinutes Int?
 
   createdById String? @db.Uuid
   updatedById String? @db.Uuid
