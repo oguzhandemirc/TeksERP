@@ -345,6 +345,17 @@ describe("lisans v2 — enum ve küme ekran adları (sunucu kaynağı, iki yönl
     twoWay([...reasons![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!), SIGNER_PLAN_REASON_LABEL);
   });
 
+  it("imza planının yetenek kaynağı = SigningCapabilitySource (entitlement-policy.ts) — iki yönde aynı küme", () => {
+    const union = (src: string) => {
+      const m = /export type SigningCapabilitySource = ([^;]+);/.exec(src);
+      expect(m, "SigningCapabilitySource bulunamadı").not.toBeNull();
+      return [...m![1]!.matchAll(/"([A-Z_]+)"/g)].map((x) => x[1]!).sort();
+    };
+    const server = union(read("services/entitlement-policy.ts"));
+    expect(server.length).toBeGreaterThan(0);
+    expect(union(readFileSync(path.join(WEB_SRC, "shared/types.ts"), "utf8"))).toEqual(server);
+  });
+
   it("plan değişikliği 409'u `details.imzaci` taşır (arayüz formu yeni plana göre yeniler)", () => {
     expect(read("services/entitlement-version.service.ts")).toMatch(/new VendorError\(409, "DURUM_CAKISMASI", [^)]*\{ imzaci: plan\.kind \}\)/);
     expect(listStrings(read("lib/errors.ts"), "export const PORTAL_ERROR_CODES")).toContain("DURUM_CAKISMASI");

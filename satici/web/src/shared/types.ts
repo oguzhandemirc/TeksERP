@@ -252,12 +252,17 @@ export interface RootRequest {
   readonly createdAt: string;
 }
 
+/** İmza planının yetenek kaynağı: kurulumun bildirdiği küme · hiç etkinleşmemiş kurulumun beklenen kümesi · yok. */
+export type SigningCapabilitySource = "KURULUM" | "BEKLENEN" | "YOK";
+
 /** HAK imza planı (`GET /haklar/:id/imza-plani`): hangi imzacı, KUYRUK'ta neden, bekleyen kök talebi. */
 export interface SigningPlan {
   readonly imzaci: "ARA" | "KOK" | "KUYRUK";
   readonly kid: string | null;
   readonly neden: string | null;
   readonly bekleyenTalep: string | null;
+  /** Eski sunucu göndermez: alan yoksa bilgi satırı çizilmez. */
+  readonly yetenekKaynagi?: SigningCapabilitySource;
 }
 
 /** HAK sürüm ucunun iki başarılı yanıtı: imzalı sürüm (201) ya da kök kuyruğu talebi (202). */

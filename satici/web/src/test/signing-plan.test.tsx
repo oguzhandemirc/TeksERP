@@ -2,11 +2,13 @@
 // form plana göre parola sorar (ara imzacı / kök) ya da sormaz (kök kuyruğu) ve planı `imzaci` olarak beyan eder (eski
 // `kokParolasi` alanı gitmez). Plan arada değiştiyse (kök VDS'ten kalktı) sunucu 409 der: form yeni planı çeker, açık TR
 // açıklamayla yönlendirir, parolayı siler. Ufuk: 400'ü aşan/süresiz yalnız yöneticiye ve lisans numarası yazılarak;
-// DEMO/TEST ≤ 45. Kuyruk yanıtı (202) kuyruk ekranına yönlendirir.
+// DEMO/TEST ≤ 45. Kuyruk yanıtı (202) kuyruk ekranına yönlendirir. İlk lisans (plan ARA + `yetenekKaynagi: BEKLENEN`) bilgi
+// satırı taşır; alan yoksa (eski sunucu) çizilmez. Negatif sonda (2026-10-10, geri alındı): yüklem kaynağı yok sayınca
+// "çizilmez" testi, hep false olunca "bilgi satırı" testi kırmızı.
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { PLAN_CHANGED_TEXT } from "../portal/installation/EntitlementSigning";
+import { EXPECTED_FIRST_ENTITLEMENT_TEXT, PLAN_CHANGED_TEXT } from "../portal/installation/EntitlementSigning";
 import { PORTAL_ROUTES } from "../portal/routes";
 import type { PortalRole } from "../shared/permissions";
 import type { InstallationDetail, SigningPlan } from "../shared/types";
@@ -67,6 +69,29 @@ describe("imza planı paneli", () => {
     const dialog = await openForm(user);
     await user.type(within(dialog).getByLabelText(/^Sebep/), "bakım uzatma");
     expect(within(dialog).getByRole("button", { name: "Kök kuyruğuna gönder" })).toBeDisabled();
+  });
+});
+
+describe("ilk lisans (hiç etkinleşmemiş kurulum — beklenen yetenek)", () => {
+  it("⭐ plan ARA + yetenekKaynagi BEKLENEN: panel nedeni 'henüz etkinleşmedi', formda bilgi satırı", async () => {
+    const user = userEvent.setup();
+    open({ plans: [{ ...ARA, yetenekKaynagi: "BEKLENEN" }] });
+    expect(await screen.findByText(/İmza planı: Ara imzacı \(ara-2026-1\) — kurulum henüz etkinleşmedi/)).toBeInTheDocument();
+    const dialog = await openForm(user);
+    expect(within(dialog).getByText(EXPECTED_FIRST_ENTITLEMENT_TEXT)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/^Ara imzacı parolası/)).toBeInTheDocument();
+  });
+
+  it("alan yokken (eski sunucu) ve kaynak KURULUM iken bilgi satırı ÇİZİLMEZ", async () => {
+    const user = userEvent.setup();
+    const eski = open({ plans: [ARA] });
+    let dialog = await openForm(user);
+    expect(within(dialog).queryByText(EXPECTED_FIRST_ENTITLEMENT_TEXT)).not.toBeInTheDocument();
+    eski.unmount();
+    open({ plans: [{ ...ARA, yetenekKaynagi: "KURULUM" }] });
+    dialog = await openForm(user);
+    expect(within(dialog).queryByText(EXPECTED_FIRST_ENTITLEMENT_TEXT)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/kurulum ara imzalı HAK'ı tanıyor/).length).toBeGreaterThan(0);
   });
 });
 

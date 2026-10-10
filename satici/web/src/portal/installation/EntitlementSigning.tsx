@@ -77,9 +77,17 @@ export function useSigningPlan(entitlementId: string) {
   return useGet<SigningPlan>(["imza-plani", entitlementId], `/haklar/${entitlementId}/imza-plani`);
 }
 
+/** Hiç etkinleşmemiş kurulumun ilk lisansı: ara imzacı beklenen yetenekle seçildi (kurulum henüz konuşmadı). */
+export function isExpectedFirstEntitlement(plan: SigningPlan): boolean {
+  return plan.imzaci === "ARA" && plan.yetenekKaynagi === "BEKLENEN";
+}
+
+export const EXPECTED_FIRST_ENTITLEMENT_TEXT =
+  "İlk lisans ara imzacıyla imzalanır; kurulum eski bir sürümle etkinleşirse kök imzası otomatik istenir.";
+
 function planSummary(plan: SigningPlan): string {
   if (plan.imzaci === "KUYRUK") return `${SIGNER_PLAN_LABEL.KUYRUK} — ${label(SIGNER_PLAN_REASON_LABEL, plan.neden)}; değişiklik dönem töreninde Mac'te kökle imzalanır`;
-  const why = plan.imzaci === "ARA" ? "kurulum ara imzalı HAK'ı tanıyor" : "kök bu sunucuda yüklü";
+  const why = plan.imzaci === "KOK" ? "kök bu sunucuda yüklü" : isExpectedFirstEntitlement(plan) ? "kurulum henüz etkinleşmedi" : "kurulum ara imzalı HAK'ı tanıyor";
   return `${label(SIGNER_PLAN_LABEL, plan.imzaci)} (${plan.kid ?? "—"}) — ${why}`;
 }
 
@@ -298,6 +306,11 @@ export function VendorEntitlementVersionModal({
       ) : (
         <Loading />
       )}
+      {plan && isExpectedFirstEntitlement(plan) ? (
+        <p className="muted small" role="note">
+          {EXPECTED_FIRST_ENTITLEMENT_TEXT}
+        </p>
+      ) : null}
       {plan?.bekleyenTalep ? <PendingRootRequest /> : null}
       <label className="check field">
         <input type="checkbox" checked={changeModules} onChange={(e) => setChangeModules(e.target.checked)} />
