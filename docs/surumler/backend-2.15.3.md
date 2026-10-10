@@ -3,9 +3,9 @@
 **Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (bizim yönettiğimiz Linux deneme sunucusu,
 kullanıcı onayı 2026-10-11); Windows fabrika filosuna çıkış ayrı karar ve `docs/design/GUNCELLEYICI-SAGLAMLIK.md`
 §9.5 kanıt kapısıyla.
-**Paket:** (imzadan sonra yazılır)
-**SHA256:** (imzadan sonra yazılır)
-**Commit:** (bu belgenin commit'i; etiket `backend-v2.15.3` imza + yayından sonra)
+**Paket:** `tekserp-backend-oci-2.15.3.tar` (213181440 B; imaj config özeti `sha256:59a18a0c5bc07d3af9d21bff5b3cd7830e2ea9bb08c2c580f2cae9e0b38d0c0a`, güncelleyici 0.2.5 `00c8d9e2c22915e2…`, kid `pkt-2026-1`, CI koşusu 38090040089)
+**SHA256:** `38c64c42ae9fc0a0bd40af463eb0979fc32fa3c3e055a614763fcbf68ed87cfe`
+**Commit:** `6df713d32` (etiket `backend-v2.15.3`; `test` grubu `backend-oci/2.15.3`, 2026-10-11)
 **Önceki saha sürümü:** 2.15.2 yayında (`test` grubu); Linux deneme sunucusunda kurulu olan 2.15.1 (2.15.2 kurulumu
 YEDEK adımında geri döndü, güncelleme programı 0.2.4). Güncellenecek her kurulumda sahadaki sürüm kurulumdan önce
 sunucunun sağlık bilgisinden okunur; tahmin edilmez.
