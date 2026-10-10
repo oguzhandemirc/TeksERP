@@ -43,7 +43,7 @@ function labelOf(code: string | null, labels: ReadonlyMap<string, string>, fallb
 
 function openStopOf(l: WireLoom, labels: ReadonlyMap<string, string>): OpenStop | null {
   const s = l.openStop;
-  // İzlenmeyen tezgahın durumu bilinmez — açık duruş da sayılara girmez (sunucu `countFloor`).
+  // Durumu bilinmeyen tezgahın açık duruşu sayılara girmez (sunucu `countFloor`).
   if (!s || l.state === "UNMONITORED") return null;
   return {
     reasonCode: s.reasonCode,
@@ -83,6 +83,7 @@ function loomOf(l: WireLoom): LiveLoom {
     code: l.code,
     hall: l.hallName,
     monitored: l.state !== "UNMONITORED",
+    stateSource: l.stateSource ?? null,
     loomType: null,
     targetRpm: l.targetUnitsPerMin,
     rpm: null,

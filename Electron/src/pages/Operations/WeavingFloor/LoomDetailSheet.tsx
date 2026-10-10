@@ -5,7 +5,7 @@ import { JobAndBeam, ShiftFigures, StopBreakdown } from "./DetailBlocks";
 import { StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
 import { AlertChainTimeline, EscalationDueLine, RecentEvents } from "./Timelines";
-import { LOOM_TYPE_LABEL, STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
+import { LOOM_TYPE_LABEL, STATE_SOURCE_LABEL, STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
 import { reasonIconOf } from "./stopReasons";
 import { escalationTierOf, figureBeamRatio, formatNumber, formatTimer, targetProgress } from "./metrics";
 import type { LiveLoom, OpenStop } from "./types";
@@ -65,7 +65,7 @@ function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
         <div className="min-w-0">
           <SheetTitle className="text-2xl font-extrabold">Tezgah {t.code}</SheetTitle>
           <SheetDescription className="text-sm">
-            {[t.hall, t.loomType ? LOOM_TYPE_LABEL[t.loomType] : null, STATUS_LABEL[status]].filter(Boolean).join(" · ")}
+            {[t.hall, t.loomType ? LOOM_TYPE_LABEL[t.loomType] : null, STATUS_LABEL[status], t.monitored && t.stateSource ? `kaynak: ${STATE_SOURCE_LABEL[t.stateSource].toLowerCase()}` : null].filter(Boolean).join(" · ")}
             {status === "RUN" && t.rpm !== null ? ` · ${formatNumber(t.rpm)} atkı/dk` : ""}
           </SheetDescription>
         </div>

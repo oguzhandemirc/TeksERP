@@ -124,6 +124,7 @@ function createLoom(r: Random, seed: LoomSeed, open: OpenStop | null): LiveLoom 
     code,
     hall: hall.name,
     monitored: true,
+    stateSource: "simule",
     loomType: hall.loomType,
     targetRpm,
     rpm: open ? 0 : Math.round(targetRpm * r.range(0.9, 1)),

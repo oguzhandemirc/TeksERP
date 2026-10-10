@@ -6,10 +6,10 @@ import { Cylinder, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AlertChainMini, StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
-import { STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
+import { STATE_SOURCE_HINT, STATE_SOURCE_LABEL, STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf } from "./palette";
 import { criticalBeamOf, escalationTierOf, figureBeamRatio, formatNumber, formatTimer, isBeamLow, targetProgress, todayAvailabilityPct } from "./metrics";
 import { reasonIconOf } from "./stopReasons";
-import type { BeamState, LiveLoom, OpenStop } from "./types";
+import type { BeamState, LiveLoom, OpenStop, StateSource } from "./types";
 
 interface Props {
   loom: LiveLoom;
@@ -95,7 +95,29 @@ function RunningFooter({ loom }: { loom: LiveLoom }) {
 }
 
 function UnmonitoredFooter() {
-  return <div className="flex h-6 items-center text-xs font-semibold text-muted-foreground">İzlenmiyor</div>;
+  return (
+    <div className="flex h-6 items-center text-xs font-semibold text-muted-foreground" title={STATE_SOURCE_HINT.cikarim}>
+      {STATUS_LABEL.UNMONITORED}
+    </div>
+  );
+}
+
+/** Durumun kaynağı figürün sol üstünde: "Ölçülen" / "Elle" / "Simüle" — elle veri ölçülmüş gibi okunmasın. */
+function SourceTag({ source }: { source: StateSource }) {
+  return (
+    <span
+      data-testid="source-tag"
+      title={STATE_SOURCE_HINT[source]}
+      className="absolute left-0 top-0 rounded-md px-1 text-[0.7em] font-semibold leading-tight text-muted-foreground"
+      style={{ background: hsl("var(--ds-tile)", 0.85) }}
+    >
+      {STATE_SOURCE_LABEL[source]}
+    </span>
+  );
+}
+
+function sourceText(t: LiveLoom): string {
+  return t.stateSource && t.stateSource !== "cikarim" ? ` (${STATE_SOURCE_LABEL[t.stateSource].toLowerCase()})` : "";
 }
 
 function beamText(t: LiveLoom): string {
@@ -104,11 +126,11 @@ function beamText(t: LiveLoom): string {
 }
 
 function ariaLabelOf(t: LiveLoom, now: number): string {
-  if (!t.monitored) return `Tezgah ${t.code}, izlenmiyor${beamText(t)}`;
+  if (!t.monitored) return `Tezgah ${t.code}, veri yok${beamText(t)}`;
   const today = todayAvailabilityPct(t);
   const todayText = today === null ? "" : `, bugün %${today}`;
-  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${todayText}${beamText(t)}`;
-  return `Tezgah ${t.code}, duruyor: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}${beamText(t)}`;
+  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${sourceText(t)}${todayText}${beamText(t)}`;
+  return `Tezgah ${t.code}, duruyor${sourceText(t)}: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}${beamText(t)}`;
 }
 
 function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
@@ -162,6 +184,7 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
             className="absolute left-1/2 top-1/2 h-[3.2em] w-[3.2em] -translate-x-1/2 -translate-y-1/2 drop-shadow"
           />
         )}
+        {t.monitored && t.stateSource && t.stateSource !== "cikarim" && <SourceTag source={t.stateSource} />}
         <BeamBadge beams={t.beams} />
         {stop && (
           <span className="absolute bottom-0 right-0 rounded-md px-1 leading-tight" style={{ background: hsl("var(--ds-tile)", 0.85) }}>

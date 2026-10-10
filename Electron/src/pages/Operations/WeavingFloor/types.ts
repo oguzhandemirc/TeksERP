@@ -110,13 +110,18 @@ export interface StopTotal {
   ms: number;
 }
 
+/** Durumun kaynağı — sunucunun karne kovası (`stateSource`); istemci yalnız etiketler. */
+export type StateSource = "olculen" | "elle" | "simule" | "cikarim";
+
 export interface LiveLoom {
   id: string;
   code: string;
   /** Görünen hol adı (istasyon adı). */
   hall: string;
-  /** İzleme kapalı tezgah (künyede OFF) — durumu bilinmez, sayılara girmez. */
+  /** Durumu bilinen tezgah (sensörden ölçülen ya da bugün elle kaydı olan); değilse sayılara girmez. */
   monitored: boolean;
+  /** Durumun kaynağı; eski sunucu göndermezse null (etiket çizilmez). */
+  stateSource: StateSource | null;
   loomType: LoomType | null;
   /** Hedef devir (atkı/dk) — performansın paydası; ölçülmemişse null. */
   targetRpm: number | null;

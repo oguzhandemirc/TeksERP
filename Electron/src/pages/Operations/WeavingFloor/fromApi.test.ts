@@ -145,3 +145,25 @@ describe("fromApi levent", () => {
     expect(figureBeamRatio({ ...fromApi(dto([loom({})])).looms[0]!, beams: [b] })).toBe(0);
   });
 });
+
+describe("fromApi — durum kaynağı", () => {
+  it("⭐ sensörsüz tezgah elle kayıtla boyanır: açık duruş taşınır, sayılara girer, kaynak 'elle'", () => {
+    const f = fromApi(dto([
+      loom({ id: "a", state: "RUNNING", stateSource: "olculen" }),
+      loom({ id: "b", code: "02", state: "STOPPED", monitoringState: "OFF", stateSource: "elle",
+        openStop: { id: "s", reasonCode: "MEKANIK", reasonLabel: "Mekanik arıza", lossClass: "UNPLANNED", startedAt: T0, targetMinutes: 10, graceMinutes: 0, tier: "OVERDUE", escalationDueAt: null, requiresReason: false, source: "OPERATOR" } }),
+      loom({ id: "c", code: "03", state: "UNMONITORED", monitoringState: "OFF", stateSource: "cikarim" }),
+    ]));
+    const elle = f.looms.find((t) => t.id === "b")!;
+    expect(elle).toMatchObject({ monitored: true, stateSource: "elle" });
+    expect(statusOf(elle)).toBe("UNPLANNED");
+    expect(escalationTierOf(elle.openStop!, Date.parse(AS_OF))).toBe("OVERDUE");
+    expect(f.looms.find((t) => t.id === "c")).toMatchObject({ monitored: false, stateSource: "cikarim" });
+    expect(f.looms.find((t) => t.id === "a")?.stateSource).toBe("olculen");
+    expect(summarizeFloor(f.looms, Date.parse(AS_OF))).toMatchObject({ total: 3, monitored: 2, running: 1, stopped: 1, unmonitored: 1, overdue: 1 });
+  });
+
+  it("eski sunucu `stateSource` göndermez → null (kaynak uydurulmaz)", () => {
+    expect(fromApi(dto([loom({})])).looms[0]!.stateSource).toBeNull();
+  });
+});

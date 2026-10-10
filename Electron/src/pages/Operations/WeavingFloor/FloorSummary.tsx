@@ -57,7 +57,7 @@ export function FloorSummary({ floor, now }: Props) {
             {s.running}
             <span className="text-[0.5em] font-bold text-muted-foreground">/{s.monitored}</span>
           </div>
-          <Caption>Çalışıyor{s.unmonitored > 0 ? ` · ${s.unmonitored} izlenmiyor` : ""}</Caption>
+          <Caption>Çalışıyor{s.unmonitored > 0 ? ` · ${s.unmonitored} veri yok` : ""}</Caption>
         </div>
       </Block>
       <Block>

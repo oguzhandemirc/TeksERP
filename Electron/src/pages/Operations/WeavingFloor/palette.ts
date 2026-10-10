@@ -1,9 +1,10 @@
 // Görsel sözlük — durum → renk değişkeni; kademe → sayaç rengi. Renk tek başına
 // anlam taşımaz: her durumun bir ŞEKLİ (StatusShape) ve simgesi de vardır.
+import { SOURCE_LABELS } from "../../Reports/Dokuma/dokuma-regime";
 import type { EscalationTier } from "./metrics";
-import type { LiveLoom, LossClass, LoomType } from "./types";
+import type { LiveLoom, LossClass, LoomType, StateSource } from "./types";
 
-/** `UNMONITORED` = izleme kapalı tezgah (durumu bilinmez; sayılara girmez). */
+/** `UNMONITORED` = durumu bilinmeyen tezgah (sensör yok, bugün elle kayıt yok; sayılara girmez). */
 export type StatusKey = "RUN" | LossClass | "UNMONITORED";
 
 export const STATUS_COLOR: Record<StatusKey, string> = {
@@ -21,7 +22,22 @@ export const STATUS_LABEL: Record<StatusKey, string> = {
   SETUP: "Ayar / hazırlık",
   PLANNED: "Planlı duruş",
   NON_SCHEDULED: "Plan dışı",
-  UNMONITORED: "İzlenmiyor",
+  UNMONITORED: "Veri yok",
+};
+
+/** Kart kaynak etiketi — sözcükler karne raporlarının kaynak etiketleriyle aynı. */
+export const STATE_SOURCE_LABEL: Record<StateSource, string> = {
+  olculen: SOURCE_LABELS.MACHINE,
+  elle: "Elle",
+  simule: SOURCE_LABELS.SIMULATED,
+  cikarim: SOURCE_LABELS.INFERRED,
+};
+
+export const STATE_SOURCE_HINT: Record<StateSource, string> = {
+  olculen: "Durum tezgah sensöründen ölçülüyor.",
+  elle: "Durum tabletten elle girilen kayıtlardan (duruş · koşum · indirme) — sensör ölçümü değil; süre, kaydın girildiği andan sayılır.",
+  simule: "Simüle veri — gerçek ölçüm değil.",
+  cikarim: "Sensör yok ve bugün elle kayıt yok.",
 };
 
 /** Sebep bekleyen duruş (sınıfı yok) plansız kayıp gibi çizilir — açıklanmamış duruş kayıptır. */

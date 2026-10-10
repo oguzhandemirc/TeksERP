@@ -7,6 +7,7 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { StateSource } from "./types";
 
 export type WireLossClass = "UNPLANNED" | "SETUP" | "PLANNED" | "NON_SCHEDULED" | "MINOR";
 
@@ -63,6 +64,8 @@ export interface WireLoom {
   hallName: string;
   monitoringState: "OFF" | "SHADOW" | "LIVE";
   state: "RUNNING" | "STOPPED" | "UNMONITORED";
+  /** Durumun kaynağı (karne kovası); alanı tanımayan eski sunucuda yok. */
+  stateSource?: StateSource;
   openStop: WireOpenStop | null;
   today: { potSec: number; aptSec: number; availabilityPct: number | null; stopCount: number; breakdown: WireBreakdownRow[] };
   targetUnitsPerMin: number | null;
