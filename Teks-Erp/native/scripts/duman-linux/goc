@@ -1,0 +1,20 @@
+#!/bin/sh
+# Sahte göç aracı: `_prisma_migrations`a imajın göç sayısı kadar BİTMİŞ göç yazar (tekrarlanabilir). Bilerek düşen
+# sürümde (GOC_DUSER=1) önce DB'yi değiştirir (tablo + yarım göç satırı), sonra GOC_BASARISIZ (43) ile çıkar.
+set -eu
+url=${DATABASE_URL%%\?*}
+psql "$url" -X -q -v ON_ERROR_STOP=1 -v n="$TEKSERP_DUMAN_GOC" <<'SQL'
+SET client_min_messages = warning;
+CREATE TABLE IF NOT EXISTS _prisma_migrations (
+  id varchar(36) PRIMARY KEY, checksum varchar(64) NOT NULL, finished_at timestamptz, migration_name varchar(255) NOT NULL,
+  logs text, rolled_back_at timestamptz, started_at timestamptz NOT NULL DEFAULT now(), applied_steps_count integer NOT NULL DEFAULT 0);
+INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
+  SELECT 'duman_' || lpad(g::text, 3, '0'), 'duman', now(), 'duman_' || lpad(g::text, 3, '0'), 1 FROM generate_series(1, :n) g
+  ON CONFLICT (id) DO NOTHING;
+SQL
+if [ "${TEKSERP_DUMAN_GOC_DUSER:-0}" = 1 ]; then
+  psql "$url" -X -q -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS duman_yarim (x int); INSERT INTO _prisma_migrations (id, checksum, migration_name) VALUES ('duman_yarim', 'duman', 'duman_yarim') ON CONFLICT (id) DO NOTHING;"
+  echo "goc: bilerek düşen göç (duman)" >&2
+  exit 43
+fi
+echo "goc: $TEKSERP_DUMAN_GOC göç tamam"

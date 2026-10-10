@@ -486,6 +486,19 @@ fn key(seed: u8) -> SigningKey {
     SigningKey::from_bytes(&[seed; 32])
 }
 
+/// Sahte dünyanın anahtarları (sabit tohumlar) — dumanın fikstürü de aynılarını kullanır.
+pub fn test_keys() -> Keys {
+    Keys { root: key(1), alt: key(2), package: key(3), legacy: key(4) }
+}
+
+/// Test kökü + `paket-2026` PAKET anahtarı (emekli `paket-hazirlik` YOK).
+pub fn test_anchor(k: &Keys) -> TrustAnchor {
+    TrustAnchor {
+        roots: vec![RootKey { kid: "kok-test-1".into(), x: x_of(&k.root), classes: vec!["URETIM".into(), "TEST".into()] }],
+        package_keys: vec![("paket-2026".into(), x_of(&k.package))],
+    }
+}
+
 pub fn x_of(k: &SigningKey) -> String {
     b64::encode(k.verifying_key().as_bytes())
 }
@@ -1482,16 +1495,31 @@ pub fn oci_files_with(
     image: Vec<u8>,
     compose: &Value,
 ) -> Vec<(String, Vec<u8>)> {
+    let updater_kunye = br#"{"ad":"tekserp-guncelleyici","surum":"0.9.0","hedef":"linux","testCapasi":false,"capaKipi":"uretim"}"#.to_vec();
+    oci_files_raw(v, updater, updater_kunye, signer, kid, customer, edit, image, serde_json::to_vec_pretty(compose).unwrap())
+}
+
+/// `oci_files_with`in bayt düzeyi: compose dosyası ve güncelleyici künyesi olduğu gibi (gerçek şablon · gerçek ikilinin
+/// `kunye` çıktısı — T1 Linux dumanının fikstürü).
+#[allow(clippy::too_many_arguments)]
+pub fn oci_files_raw(
+    v: &str,
+    updater: &[u8],
+    updater_kunye: Vec<u8>,
+    signer: &SigningKey,
+    kid: &str,
+    customer: Option<&str>,
+    edit: &dyn Fn(&mut Value),
+    image: Vec<u8>,
+    compose: Vec<u8>,
+) -> Vec<(String, Vec<u8>)> {
     let archive = format!("tekserp-korumali_{v}_linux-amd64.tar.gz");
     let scope: Vec<(String, Vec<u8>)> = vec![
         (archive.clone(), image),
-        ("docker-compose.yml".into(), serde_json::to_vec_pretty(compose).unwrap()),
+        ("docker-compose.yml".into(), compose),
         (".env.ornek".into(), b"POSTGRES_USER=tekserp\n".to_vec()),
         ("tekserp-guncelleyici".into(), updater.to_vec()),
-        (
-            "guncelleyici-kunye.json".into(),
-            br#"{"ad":"tekserp-guncelleyici","surum":"0.9.0","hedef":"linux","testCapasi":false,"capaKipi":"uretim"}"#.to_vec(),
-        ),
+        ("guncelleyici-kunye.json".into(), updater_kunye),
     ];
     let mut sorted: Vec<&(String, Vec<u8>)> = scope.iter().collect();
     sorted.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
@@ -1921,11 +1949,8 @@ impl World {
         let data = dir.join("programdata");
         std::fs::create_dir_all(&root).unwrap();
         let layout = Layout::new(&root, &data);
-        let keys = Keys { root: key(1), alt: key(2), package: key(3), legacy: key(4) };
-        let anchor = TrustAnchor {
-            roots: vec![RootKey { kid: "kok-test-1".into(), x: x_of(&keys.root), classes: vec!["URETIM".into(), "TEST".into()] }],
-            package_keys: vec![("paket-2026".into(), x_of(&keys.package))],
-        };
+        let keys = test_keys();
+        let anchor = test_anchor(&keys);
         // Kurulu sürüm + current
         for (p, c) in version_files(OLD) {
             let f = layout.version_dir(OLD).join(&p);
