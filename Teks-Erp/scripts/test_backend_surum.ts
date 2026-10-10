@@ -11,6 +11,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { git as gitKos } from "./lib/git";
 
 const KOK = path.resolve(__dirname, "..", "..");
 const SCRIPT = path.join(KOK, "scripts", "backend-surum.mjs");
@@ -31,14 +32,33 @@ const pkgSurum = JSON.parse(fs.readFileSync(PKG, "utf8")).version as string;
 check("package.json sürüm okunuyor", /^\d+\.\d+\.\d+$/.test(pkgSurum), pkgSurum);
 
 console.log("\n=== §2 Yama hanesi ARTAR ===");
+// Taban son `backend-v*` etiketidir (yoksa package.json). package.json'ı taban
+// saymak sürüm commit'inde (package.json zaten artmış) ve etiketli HEAD'de
+// (aynı tur, numara korunur) yanlış kırmızı verir.
+const git = (...a: string[]): string => gitKos(a, { cwd: KOK }).trim();
+const sayi = (s: string): number[] => s.split(".").map(Number);
+const etiketler = git("tag", "--list", "backend-v*").split("\n")
+  .map((t) => t.slice("backend-v".length)).filter((s) => /^\d+\.\d+\.\d+$/.test(s))
+  .sort((x, y) => { const [p, q] = [sayi(x), sayi(y)]; return p[0] - q[0] || p[1] - q[1] || p[2] - q[2]; });
+const sonEtiket = etiketler.at(-1) ?? null;
+const etiketteMi = sonEtiket !== null &&
+  git("rev-list", "-n", "1", `backend-v${sonEtiket}`) === git("rev-parse", "HEAD");
+const taban = sonEtiket ?? pkgSurum;
 const sonraki = kos();
 check("çıktı x.y.z biçiminde", /^\d+\.\d+\.\d+$/.test(sonraki), sonraki);
-const [a1, b1, c1] = pkgSurum.split(".").map(Number);
-const [a2, b2, c2] = sonraki.split(".").map(Number);
+const [a1, b1, c1] = sayi(taban);
+const [a2, b2, c2] = sayi(sonraki);
 check(
-  "yalnız YAMA hanesi arttı (küçük/büyük hane KARARDIR, elle verilir)",
-  a2 === a1 && b2 === b1 && c2 === c1 + 1,
-  `${pkgSurum} → ${sonraki}`,
+  etiketteMi
+    ? "HEAD etiketli commit'te — numara KORUNDU (aynı tur)"
+    : "yalnız YAMA hanesi arttı (küçük/büyük hane KARARDIR, elle verilir)",
+  a2 === a1 && b2 === b1 && c2 === c1 + (etiketteMi ? 0 : 1),
+  `taban ${taban}${sonEtiket ? " (etiket)" : " (package.json)"} → ${sonraki}`,
+);
+check(
+  "package.json tabanda ya da bu turun numarasında",
+  pkgSurum === taban || pkgSurum === sonraki,
+  `package.json ${pkgSurum}`,
 );
 
 console.log("\n=== §3 Elle sürüm KAZANIR ===");
