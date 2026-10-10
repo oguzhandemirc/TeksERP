@@ -178,6 +178,10 @@ impl Fs for RealFs {
         free_space_of(p)
     }
 
+    fn volume_id(&self, p: &Path) -> io::Result<String> {
+        volume_id_of(p)
+    }
+
     fn foreign_writers(&self, p: &Path) -> io::Result<Vec<String>> {
         foreign_writers_of(p)
     }
@@ -343,6 +347,16 @@ fn free_space_of(p: &Path) -> io::Result<u64> {
 #[cfg(windows)]
 fn free_space_of(p: &Path) -> io::Result<u64> {
     super::windows::sys::free_space(p)
+}
+
+#[cfg(unix)]
+fn volume_id_of(p: &Path) -> io::Result<String> {
+    super::linux::sys::volume_id(p)
+}
+
+#[cfg(windows)]
+fn volume_id_of(p: &Path) -> io::Result<String> {
+    super::windows::sys::volume_id(p)
 }
 
 /// Sahibi root/güncelleyici değilse ya da grup/herkes yazabiliyorsa yabancı (Windows DACL ölçümünün karşılığı).

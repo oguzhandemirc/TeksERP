@@ -68,6 +68,9 @@ pub trait Fs: Send + Sync {
     /// Bağlantıyı `target`a kurar ya da değiştirir (yarım kalan değişim sonraki çağrıda toparlanır).
     fn set_link(&self, link: &Path, target: &Path) -> io::Result<()>;
     fn free_space(&self, p: &Path) -> io::Result<u64>;
+    /// Yolun dosya sisteminin kimliği (Unix `st_dev`, Windows birim yolu): disk ön kontrolü aynı dosya sistemine
+    /// düşen yazımları toplar.
+    fn volume_id(&self, p: &Path) -> io::Result<String>;
     /// Yola (dizin ya da dosya) SYSTEM · Administrators · TrustedInstaller · güncelleyicinin kendi hesabı
     /// DIŞINDA yazma/silme/izin değiştirme hakkı olan ilkeler (sahip dahil); boş = güvenilir. SYSTEM'in
     /// çalıştıracağı ya da güveneceği dizinler uygulamadan ÖNCE ölçülür (fail-closed).

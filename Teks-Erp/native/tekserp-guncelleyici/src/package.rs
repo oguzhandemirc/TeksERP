@@ -229,11 +229,37 @@ pub fn verify_bound(
     }
 }
 
-/// Disk ön kontrolünün bir satırı: `path`in dosya sisteminde en az `bytes` boş alan.
+/// Disk ön kontrolünün bir satırı: `path` (bir yazım kökü) altına `bytes` yazılacak; o dosya sisteminde ayrıca
+/// en az `pay` boş kalmalı.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiskNeed {
     pub path: std::path::PathBuf,
+    pub what: &'static str,
     pub bytes: u64,
+    pub pay: u64,
+}
+
+/// Aynı dosya sistemine düşen satırlar: yazımlar aynı anda yer kaplar, gereken = toplam + en büyük pay.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DiskGroup {
+    pub needs: Vec<DiskNeed>,
+}
+
+impl DiskGroup {
+    pub fn bytes(&self) -> u64 {
+        let sum = self.needs.iter().fold(0u64, |a, n| a.saturating_add(n.bytes));
+        sum.saturating_add(self.needs.iter().map(|n| n.pay).max().unwrap_or(0))
+    }
+    /// Ölçülen yol: grubun ilk satırı.
+    pub fn path(&self) -> &Path {
+        &self.needs[0].path
+    }
+    /// "/a dosya sistemi (indirme + yedek)" — ileti hangi kökün ne için yer istediğini söyler (ileti 400 imle sınırlı:
+    /// yol bir kez).
+    pub fn describe(&self) -> String {
+        let what: Vec<_> = self.needs.iter().map(|n| n.what).collect();
+        format!("{} dosya sistemi ({})", self.path().display(), what.join(" + "))
+    }
 }
 
 const GB: u64 = 1024 * 1024 * 1024;
@@ -241,17 +267,20 @@ const GB: u64 = 1024 * 1024 * 1024;
 pub const DB_SIZE_UNKNOWN: u64 = 2 * GB;
 /// Disk ön kontrolünün DB payı (§5 madde 4) — iki platformun araçları aynı sorguyu koşar.
 pub const DB_BOYU_SQL: &str = "SELECT pg_database_size(current_database())";
+/// Her dosya sisteminde bırakılan pay (işlem günlüğü, göçün büyüttüğü DB, telafi).
+const PAY: u64 = 2 * GB;
+/// Docker kökünün payı.
+const IMAJ_PAYI: u64 = GB;
 
 /// Güncelleme öncesi yedeğin payı: DB × 1,2 (ölçülemezse 2 GB) — iki platformda aynı.
 fn backup_share(db_bytes: Option<u64>) -> u64 {
     db_bytes.unwrap_or(DB_SIZE_UNKNOWN).saturating_mul(6) / 5
 }
 
-/// Disk formülü (§5 madde 4, indirmeden ÖNCE); iki platform aynı biçimde: paket payı + yedek payı + 2 GB.
-/// Windows: kök ≥ paket × 3 (zip + açılmış kopya) + DB × 1,2 + 2 GB — kök ile veri kökü aynı birimdeyse (varsayılan)
-/// toplam orada; veri kökü (`%ProgramData%`: zip + yedek) ayrı yoldaysa o da ≥ paket + DB × 1,2 + 2 GB. Linux iki
-/// dosya sistemi: veri kökü (`/var/lib/tekserp`: dış tar + açılmış kopya + yedek) ≥ paket × 2 + DB × 1,2 + 2 GB ve
-/// Docker kökü ≥ açılmış imaj (bildirimde boy yok: paket × 3) + 1 GB. Docker kökü ölçülemezse o satır yok.
+/// Disk formülü (§5 madde 4, indirmeden ÖNCE): her YAZIM KÖKÜ kendi payıyla bir satır — indirme (`is/indirme`:
+/// paket), hazırlık (`surumler/.hazirlik-<v>`: açılmış kopya — Windows zip × 2, Linux dış tar × 1), güncelleme
+/// öncesi yedek (`is/yedek`: DB × 1,2, ölçülemezse 2 GB); Linux'ta Docker kökü ölçülebildiyse açılmış imaj (bildirimde
+/// boy yok: paket × 3). Satırlar dosya sistemine göre `disk_groups` ile toplanır.
 pub fn disk_needs(
     platform: UpdatePlatform,
     layout: &crate::layout::Layout,
@@ -259,23 +288,38 @@ pub fn disk_needs(
     db_bytes: Option<u64>,
     image_store: Option<std::path::PathBuf>,
 ) -> Vec<DiskNeed> {
-    match platform {
-        UpdatePlatform::Win32X64 => {
-            let root = package_bytes.saturating_mul(3).saturating_add(backup_share(db_bytes)).saturating_add(2 * GB);
-            let mut out = vec![DiskNeed { path: layout.root.clone(), bytes: root }];
-            if layout.data != layout.root {
-                let data = package_bytes.saturating_add(backup_share(db_bytes)).saturating_add(2 * GB);
-                out.push(DiskNeed { path: layout.data.clone(), bytes: data });
+    let need = |path, what, bytes, pay| DiskNeed { path, what, bytes, pay };
+    let unpacked = match platform {
+        UpdatePlatform::Win32X64 => package_bytes.saturating_mul(2),
+        UpdatePlatform::LinuxX64Oci => package_bytes,
+    };
+    let mut out = vec![
+        need(layout.downloads(), "indirme", package_bytes, PAY),
+        need(layout.versions(), "hazırlık", unpacked, PAY),
+        need(layout.update_backups(), "yedek", backup_share(db_bytes), PAY),
+    ];
+    if platform == UpdatePlatform::LinuxX64Oci {
+        out.extend(image_store.map(|p| need(p, "imaj deposu", package_bytes.saturating_mul(3), IMAJ_PAYI)));
+    }
+    out
+}
+
+/// Satırları dosya sistemine göre gruplar (`volume`: aygıt/birim kimliği — Unix `st_dev`, Windows birim yolu); aynı
+/// dosya sistemindeki gereksinimler TOPLANIR. Kimliği ölçülemeyen satır kendi başına bir grup olur.
+pub fn disk_groups(needs: Vec<DiskNeed>, volume: impl Fn(&Path) -> Option<String>) -> Vec<DiskGroup> {
+    let mut keys: Vec<Option<String>> = Vec::new();
+    let mut groups: Vec<DiskGroup> = Vec::new();
+    for n in needs {
+        let key = volume(&n.path);
+        match key.as_deref().and_then(|k| keys.iter().position(|x| x.as_deref() == Some(k))) {
+            Some(i) => groups[i].needs.push(n),
+            None => {
+                keys.push(key);
+                groups.push(DiskGroup { needs: vec![n] });
             }
-            out
-        }
-        UpdatePlatform::LinuxX64Oci => {
-            let data = package_bytes.saturating_mul(2).saturating_add(backup_share(db_bytes)).saturating_add(2 * GB);
-            let mut out = vec![DiskNeed { path: layout.data.clone(), bytes: data }];
-            out.extend(image_store.map(|p| DiskNeed { path: p, bytes: package_bytes.saturating_mul(3).saturating_add(GB) }));
-            out
         }
     }
+    groups
 }
 
 #[cfg(test)]
@@ -283,38 +327,64 @@ mod tests {
     use super::*;
     use crate::layout::Layout;
 
+    const P: u64 = 100 * 1024 * 1024;
+
+    fn on(map: &'static [(&'static str, &'static str)]) -> impl Fn(&Path) -> Option<String> {
+        move |p| map.iter().filter(|(pre, _)| p.starts_with(pre)).max_by_key(|(pre, _)| pre.len()).map(|(_, v)| v.to_string())
+    }
+
+    fn totals(g: &[DiskGroup]) -> Vec<(std::path::PathBuf, u64)> {
+        g.iter().map(|g| (g.path().to_path_buf(), g.bytes())).collect()
+    }
+
+    /// Windows varsayılanı (kök ve `%ProgramData%` aynı birimde): eski tek satırın aynısı — paket × 3 + DB × 1,2 + 2 GB.
     #[test]
-    fn disk_formula_per_platform() {
-        let l = Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp"));
-        let p = 100 * 1024 * 1024;
+    fn windows_ayni_birim_toplanir() {
         let w = Layout::new(Path::new("C:/TeksERP"), Path::new("C:/ProgramData/TeksERP"));
+        let g = disk_groups(disk_needs(UpdatePlatform::Win32X64, &w, P, Some(5 * GB), Some("/d".into())), on(&[("C:/", "C")]));
+        assert_eq!(totals(&g), vec![(w.downloads(), 3 * P + 6 * GB + 2 * GB)], "imaj deposu Windows'ta yok sayılır");
+        let unknown = disk_groups(disk_needs(UpdatePlatform::Win32X64, &w, P, None, None), on(&[("C:/", "C")]));
+        assert_eq!(totals(&unknown), vec![(w.downloads(), 3 * P + DB_SIZE_UNKNOWN * 6 / 5 + 2 * GB)], "DB ölçülemedi: 2 GB");
+    }
+
+    /// Windows iki birim: kök yalnız açılmış kopyayı, veri kökü zip + yedeği taşır; her biri kendi payıyla.
+    #[test]
+    fn windows_iki_birim_ayri() {
+        let w = Layout::new(Path::new("D:/TeksERP"), Path::new("C:/ProgramData/TeksERP"));
+        let g = disk_groups(disk_needs(UpdatePlatform::Win32X64, &w, P, Some(5 * GB), None), on(&[("C:/", "C"), ("D:/", "D")]));
+        assert_eq!(totals(&g), vec![(w.downloads(), P + 6 * GB + 2 * GB), (w.versions(), 2 * P + 2 * GB)]);
+    }
+
+    /// Linux, kök (`/opt/tekserp`) ile veri kökü (`/var/lib/tekserp`) ayrı dosya sistemlerinde: hazırlık payı kökte
+    /// ölçülür (T1 açığı: eskiden yalnız veri kökü ölçülüyordu).
+    #[test]
+    fn linux_iki_kok_ayri_aygit() {
+        let l = Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp"));
+        let dev = on(&[("/", "kok"), ("/opt", "opt"), ("/var/lib/docker", "docker")]);
+        let g = disk_groups(disk_needs(UpdatePlatform::LinuxX64Oci, &l, P, Some(10 * GB), Some("/var/lib/docker".into())), dev);
         assert_eq!(
-            disk_needs(UpdatePlatform::Win32X64, &w, p, Some(5 * GB), Some("/d".into())),
-            vec![
-                DiskNeed { path: w.root.clone(), bytes: 3 * p + 6 * GB + 2 * GB },
-                DiskNeed { path: w.data.clone(), bytes: p + 6 * GB + 2 * GB },
-            ],
-            "Windows: Linux'la aynı yedek payı; imaj deposu yok sayılır"
+            totals(&g),
+            vec![(l.downloads(), P + 12 * GB + 2 * GB), (l.versions(), P + 2 * GB), ("/var/lib/docker".into(), 3 * P + GB)]
         );
-        let same = Layout::new(Path::new("C:/TeksERP"), Path::new("C:/TeksERP"));
-        assert_eq!(
-            disk_needs(UpdatePlatform::Win32X64, &same, p, None, None),
-            vec![DiskNeed { path: same.root.clone(), bytes: 3 * p + DB_SIZE_UNKNOWN * 6 / 5 + 2 * GB }],
-            "tek kök + DB ölçülemedi: 2 GB"
-        );
-        let linux = disk_needs(UpdatePlatform::LinuxX64Oci, &l, p, Some(10 * GB), Some("/var/lib/docker".into()));
-        assert_eq!(
-            linux,
-            vec![
-                DiskNeed { path: l.data.clone(), bytes: 2 * p + 12 * GB + 2 * GB },
-                DiskNeed { path: "/var/lib/docker".into(), bytes: 3 * p + GB },
-            ]
-        );
-        let unknown = disk_needs(UpdatePlatform::LinuxX64Oci, &l, p, None, None);
-        assert_eq!(
-            unknown,
-            vec![DiskNeed { path: l.data.clone(), bytes: 2 * p + DB_SIZE_UNKNOWN * 6 / 5 + 2 * GB }],
-            "DB ölçülemedi: 2 GB"
-        );
+        assert_eq!(g[0].describe(), format!("{} dosya sistemi (indirme + yedek)", l.downloads().display()));
+    }
+
+    /// Linux tek dosya sistemi (Docker kökü dahil): bütün yazımlar TOPLANIR, pay bir kez (en büyüğü).
+    #[test]
+    fn linux_ayni_aygit_toplanir() {
+        let l = Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp"));
+        let g =
+            disk_groups(disk_needs(UpdatePlatform::LinuxX64Oci, &l, P, Some(10 * GB), Some("/var/lib/docker".into())), on(&[("/", "kok")]));
+        assert_eq!(totals(&g), vec![(l.downloads(), P + P + 12 * GB + 3 * P + 2 * GB)]);
+        let unknown = disk_groups(disk_needs(UpdatePlatform::LinuxX64Oci, &l, P, None, None), on(&[("/", "kok")]));
+        assert_eq!(totals(&unknown), vec![(l.downloads(), 2 * P + DB_SIZE_UNKNOWN * 6 / 5 + 2 * GB)], "DB ölçülemedi: 2 GB");
+    }
+
+    /// Birim kimliği ölçülemeyen satır başka satırla birleşmez (kendi başına ölçülür).
+    #[test]
+    fn olculemeyen_aygit_ayri_grup() {
+        let l = Layout::new(Path::new("/opt/tekserp"), Path::new("/var/lib/tekserp"));
+        let g = disk_groups(disk_needs(UpdatePlatform::LinuxX64Oci, &l, P, Some(GB), None), |_| None);
+        assert_eq!(g.len(), 3);
     }
 }

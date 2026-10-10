@@ -7,7 +7,9 @@ use tekserp_hizmet::logfile::Level;
 use tekserp_hizmet::windows::{eventlog, scm, wide};
 use windows_sys::Win32::Foundation::{CloseHandle, LocalFree, HANDLE};
 use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB};
-use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceExW, MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH};
+use windows_sys::Win32::Storage::FileSystem::{
+    GetDiskFreeSpaceExW, GetVolumePathNameW, MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+};
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject, TerminateJobObject,
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
@@ -37,6 +39,19 @@ pub fn free_space(p: &Path) -> io::Result<u64> {
         return Err(io::Error::last_os_error());
     }
     Ok(free)
+}
+
+/// Birim kimliği: yolun bağlı olduğu birimin kök yolu (`C:\`, bağlı klasör ya da `\\?\Volume{..}\`), büyük harfle.
+pub fn volume_id(p: &Path) -> io::Result<String> {
+    let w = wide_path(p);
+    let mut buf = vec![0u16; 1024];
+    // SAFETY: NUL sonlu geniş dizge; çıktı tamponu boyu verildi.
+    let ok = unsafe { GetVolumePathNameW(w.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let n = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+    Ok(String::from_utf16_lossy(&buf[..n]).to_uppercase())
 }
 
 /// Özel dizin (güncelleyicinin `is\` alanı, güncelleme öncesi yedekler): yalnız SYSTEM + Administrators,
@@ -418,6 +433,15 @@ impl Protect for Dpapi {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Aynı birimdeki iki yol aynı kimliği verir (birimin kök yolu).
+    #[test]
+    fn birim_kimligi_olculur() {
+        let t = std::env::temp_dir();
+        let id = volume_id(&t).unwrap();
+        assert_eq!(id, volume_id(t.parent().unwrap_or(&t)).unwrap());
+        assert!(id.ends_with('\\'), "{id}");
+    }
 
     /// Gerçek DACL ölçümü (yalnız Windows): korumalı SYSTEM+Administrators dizini temiz; Everyone'a
     /// yazma ACE'si eklenince yabancı yazar olarak görünür; salt kalıtım ACE'si nesneye sayılmaz.

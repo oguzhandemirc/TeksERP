@@ -144,6 +144,9 @@ pub struct CrashFs {
     pub inner: RealFs,
     pub crash: Arc<Crash>,
     pub free: AtomicU64,
+    /// Benzetilen bağlama noktaları (önek, aygıt, boş alan): en uzun önek kazanır; eşleşmeyen yol gerçek aygıtı ve
+    /// `free`i görür. Aynı aygıt adını taşıyan önekler aynı boş alanı taşımalı.
+    pub mounts: Mutex<Vec<(PathBuf, String, u64)>>,
     /// Yabancı yazara açık sayılan yollar (izin ölçümü testte BENZETİLİR: Windows CI'nın geçici
     /// dizin ACL'i ölçüme karışmasın; gerçek DACL ölçümünün kendi Windows testi var).
     pub foreign: Mutex<Vec<PathBuf>>,
@@ -170,6 +173,10 @@ fn torn_tmp(crash: &Crash, to: &Path, data: &[u8]) {
 }
 
 impl CrashFs {
+    fn mount(&self, p: &Path) -> Option<(String, u64)> {
+        let m = self.mounts.lock().unwrap();
+        m.iter().filter(|(pre, _, _)| p.starts_with(pre)).max_by_key(|(pre, _, _)| pre.as_os_str().len()).map(|(_, d, f)| (d.clone(), *f))
+    }
     fn check_lock(&self, p: &Path) -> std::io::Result<()> {
         if self.locked.lock().unwrap().iter().any(|n| *n == name(p)) {
             return Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
@@ -255,8 +262,14 @@ impl Fs for CrashFs {
         self.crash.space(n, 0)?;
         self.inner.set_link(link, target)
     }
-    fn free_space(&self, _p: &Path) -> std::io::Result<u64> {
-        Ok(self.free.load(Ordering::SeqCst))
+    fn free_space(&self, p: &Path) -> std::io::Result<u64> {
+        Ok(self.mount(p).map_or_else(|| self.free.load(Ordering::SeqCst), |(_, f)| f))
+    }
+    fn volume_id(&self, p: &Path) -> std::io::Result<String> {
+        match self.mount(p) {
+            Some((d, _)) => Ok(d),
+            None => self.inner.volume_id(p),
+        }
     }
     fn foreign_writers(&self, p: &Path) -> std::io::Result<Vec<String>> {
         if self.unmeasurable.lock().unwrap().iter().any(|f| f == p) {
@@ -2038,6 +2051,7 @@ impl World {
                 inner: RealFs,
                 crash: Arc::clone(&crash),
                 free: AtomicU64::new(u64::MAX),
+                mounts: Mutex::new(vec![]),
                 foreign: Mutex::new(vec![]),
                 unmeasurable: Mutex::new(vec![]),
                 corrupt_copy: AtomicBool::new(false),

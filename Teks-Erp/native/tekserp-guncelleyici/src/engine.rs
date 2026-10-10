@@ -1572,24 +1572,35 @@ impl Engine {
         }
     }
 
-    /// Disk ön kontrolü (§5 madde 4, `package::disk_needs`): her satırın dosya sistemi ölçülür; ölçülemeyen satır
-    /// engellemez (bugünkü davranış). DB boyu iki platformda formüle girer ve saatte bir ölçülür (Linux'ta araç
-    /// konteyneri pahalı).
+    /// Disk ön kontrolü (§5 madde 4, `package::disk_needs`): her yazım kökü kendi gereksinimiyle; aynı dosya sistemine
+    /// düşenler toplanır (`package::disk_groups`). Henüz olmayan kök en yakın var olan üst dizinden ölçülür; boş alanı
+    /// ölçülemeyen grup engellemez (bugünkü davranış). DB boyu saatte bir ölçülür (Linux'ta araç konteyneri pahalı).
     fn disk_check(&self, inputs: &Inputs, m: &ReleaseManifest) -> Result<(), Fail> {
         let platform = self.platform();
         let db = self.db_size(inputs);
         let store = self.env.arka.araclar.imaj_deposu(&self.env);
-        for need in package::disk_needs(platform, &self.layout, m.paket.boyut, db, store) {
-            if let Ok(free) = self.env.fs.free_space(&need.path) {
-                if free < need.bytes {
-                    return Err(fail(
-                        codes::DISK_DOLU,
-                        format!("{} boş alanı {} MB, en az {} MB gerekir", need.path.display(), free / 1_048_576, need.bytes / 1_048_576),
-                    ));
-                }
+        let fs = self.env.fs.as_ref();
+        let existing = |p: &std::path::Path| p.ancestors().find(|a| !a.as_os_str().is_empty() && fs.exists(a)).unwrap_or(p).to_path_buf();
+        let needs = package::disk_needs(platform, &self.layout, m.paket.boyut, db, store);
+        let mut short = Vec::new();
+        for g in package::disk_groups(needs, |p| fs.volume_id(&existing(p)).ok()) {
+            let Ok(free) = fs.free_space(&existing(g.path())) else { continue };
+            let need = g.bytes();
+            if free < need {
+                short.push(format!(
+                    "{}: boş {} MB, en az {} MB gerekir — {} MB eksik",
+                    g.describe(),
+                    free / 1_048_576,
+                    need / 1_048_576,
+                    (need - free).div_ceil(1_048_576)
+                ));
             }
         }
-        Ok(())
+        if short.is_empty() {
+            Ok(())
+        } else {
+            Err(fail(codes::DISK_DOLU, format!("disk yetmiyor — {}", short.join(" · "))))
+        }
     }
 
     /// Yedek alan dosyası (`reserve`) yerinde mi; değilse kurulur. Kurulamazsa yeni işlem BAŞLAMAZ: disk dolunca işlem

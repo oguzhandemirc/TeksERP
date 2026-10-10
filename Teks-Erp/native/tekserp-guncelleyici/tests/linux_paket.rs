@@ -234,6 +234,61 @@ fn linux_disk_dolu_db_boyunu_sayar() {
     assert!(!big.layout.downloads().join(format!("{NEW}.tar.part")).exists(), "yer yokken indirme başlamaz");
 }
 
+/// Yayındaki dış tarın boyu (bildirimin `paket.boyut`u).
+fn package_bytes(w: &World) -> u64 {
+    let files = w.files.lock().unwrap();
+    files.iter().find(|(k, _)| k.ends_with(&oci_package_name(NEW))).map(|(_, v)| v.len() as u64).expect("yayında paket yok")
+}
+
+/// Kök (`surumler/.hazirlik-<v>`) ile veri kökü ayrı dosya sistemlerinde: açılmış kopyanın payı KÖKTE ölçülür (T1
+/// açığı: eskiden yalnız veri kökü ölçülüyor, açılış yarıda diski dolduruyordu). İleti eksik olan kökü söyler.
+#[test]
+fn linux_disk_iki_kok_ayri_aygit() {
+    const GB: u64 = 1024 * 1024 * 1024;
+    let w = linux("lp-disk-iki-kok");
+    std::fs::create_dir_all(w.layout.versions()).unwrap();
+    w.fs.mounts.lock().unwrap().push((w.layout.versions(), "surumler".into(), GB));
+    w.run(1).unwrap();
+    let st = w.status().unwrap();
+    assert_eq!(st.error_code.as_deref(), Some("DISK_DOLU"), "{:?}", st.message);
+    let msg = st.message.unwrap_or_default();
+    assert!(msg.contains(&format!("{} dosya sistemi (hazırlık)", w.layout.versions().display())) && msg.contains("eksik"), "{msg}");
+    assert!(!msg.contains("indirme"), "veri kökünde yer var — iletide yalnız eksik kök: {msg}");
+    untouched(&w, "iki kök");
+    assert!(!w.layout.downloads().join(format!("{NEW}.tar.part")).exists(), "yer yokken indirme başlamaz");
+    w.fs.mounts.lock().unwrap()[0].2 = 3 * GB;
+    w.run(1).unwrap();
+    assert_ne!(code(&w).as_deref(), Some("DISK_DOLU"), "kökte yer açılınca ön kontrol geçer");
+}
+
+/// Kök, veri kökü ve Docker kökü aynı dosya sisteminde: gereksinimler TOPLANIR (indirme + hazırlık + yedek + imaj +
+/// tek pay) — bir bayt eksik `DISK_DOLU`, tam sığan geçer.
+#[test]
+fn linux_disk_ayni_aygit_toplanir() {
+    const GB: u64 = 1024 * 1024 * 1024;
+    for (tag, short) in [("lp-disk-toplam-eksik", 1), ("lp-disk-toplam-tam", 0)] {
+        let w = linux(tag);
+        w.faults.db_bytes.store(GB, Ordering::SeqCst);
+        let p = package_bytes(&w);
+        let need = p + p + GB * 6 / 5 + 3 * p + 2 * GB;
+        {
+            let mut m = w.fs.mounts.lock().unwrap();
+            m.push((w.layout.root.clone(), "ortak".into(), need - short));
+            m.push((w.layout.data.clone(), "ortak".into(), need - short));
+        }
+        w.run(1).unwrap();
+        let st = w.status().unwrap();
+        if short == 1 {
+            assert_eq!(st.error_code.as_deref(), Some("DISK_DOLU"), "{tag}: {:?}", st.message);
+            let msg = st.message.unwrap_or_default();
+            assert!(msg.contains("(indirme + hazırlık + yedek + imaj deposu)"), "{tag}: toplamın her kalemi iletide: {msg}");
+            untouched(&w, tag);
+        } else {
+            assert_ne!(st.error_code.as_deref(), Some("DISK_DOLU"), "{tag}: tam sığan geçer: {:?}", st.message);
+        }
+    }
+}
+
 // ── Aynalar: yayıncı (`oci-paket.ts`) ve paketleyici (`teslim-paketle.sh`) ile aynı biçim ──────────────────
 
 fn repo_file(rel: &str) -> String {

@@ -84,6 +84,11 @@ pub fn free_space(p: &Path) -> io::Result<u64> {
     Ok(u64::from(st.f_bavail).saturating_mul(u64::from(st.f_frsize)))
 }
 
+/// Dosya sistemi kimliği: `st_dev` (sembolik bağ izlenir — `statvfs` gibi).
+pub fn volume_id(p: &Path) -> io::Result<String> {
+    Ok(format!("dev:{}", std::fs::metadata(p)?.dev()))
+}
+
 /// Yabancı yazar (Windows DACL ölçümünün karşılığı): sahibi root ya da güncelleyicinin kendisi değilse sahip
 /// (izinleri değiştirebilir), grup ya da herkes yazabiliyorsa onlar. POSIX ACL'de grup bitleri maskedir —
 /// adlı kullanıcıya yazma veren ACL maskeyi açar, burada "grup yazabilir" olarak görünür (fail-closed).
@@ -406,6 +411,18 @@ mod tests {
         let free = free_space(&std::env::temp_dir()).unwrap();
         assert!(free > 0 && free < u64::MAX, "{free}");
         assert!(free_space(Path::new("/yok/boyle/bir/yol")).is_err());
+    }
+
+    /// Aynı dosya sistemindeki iki yol aynı kimliği verir; olmayan yol ölçülemez.
+    #[test]
+    fn aygit_kimligi_olculur() {
+        let t = std::env::temp_dir();
+        let d = t.join(format!("tekserp-aygit-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let same = volume_id(&t).unwrap() == volume_id(&d).unwrap();
+        let _ = std::fs::remove_dir(&d);
+        assert!(same);
+        assert!(volume_id(Path::new("/yok/boyle/bir/yol")).is_err());
     }
 
     /// Yaratılan her dizin `foreign_writers` ölçümünden geçer; var olanın kipi korunur (gevşek umask:
