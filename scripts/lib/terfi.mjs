@@ -24,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 import { KOK, Olculemedi } from './dagitim.mjs';
 import { ayristir, etiketAdi, karsilastir, manifestGovdesindenSurum, terfiEtiketAdi } from './surum.mjs';
 import { yayinOku } from './yayin-okuma.mjs';
-import { isaretciSurumu } from './backend-yayin.mjs';
+import { isaretciSurumu, zincirAdresi } from './backend-yayin.mjs';
 import { cumleDenetle, istanbulSaati } from './kullanici-cumlesi.mjs';
 
 /** Cümle yüklemi `kullanici-cumlesi.mjs`te (PAKET `--ci-atla` da kullanır); eski tüketiciler buradan alır. */
@@ -77,9 +77,8 @@ export function gitOlgulari({ kod, urun, surum, kok = KOK }) {
   return { bas: bas.cikti, surumEtiketi, terfiEtiketi };
 }
 
-/** Kaynak kanalın `son.json`undaki bildirimin sürümü (imza yayıncıda değil güncelleyicide doğrulanır). */
-function ozetBackend(url, r) {
-  const ne = 'backend son.json';
+/** Kaynak kanalın işaretçisindeki bildirimin sürümü (imza yayıncıda değil güncelleyicide doğrulanır). */
+function ozetBackend(url, r, ne = 'backend son.json') {
   if (r.durum !== 'var') return { ne, url, ...r };
   const surum = isaretciSurumu(r.govde);
   return surum ? { ne, url, durum: 'var', surum } : { ne, url, durum: 'olculemedi', neden: `${url}: bildirim sürümü okunamadı` };
@@ -94,8 +93,11 @@ export function kaynakSurumleri(kaynakKanal, urun, oku) {
   // Adres → VDS yolu yalnız KAYNAK kanalın kaydından çözülür (başka kanalın dosyası okunamaz).
   oku ??= (url) => yayinOku(url, { kayit: { kanallar: { kaynak: kaynakKanal } } });
   const y = kaynakKanal.yayin;
-  // Backend (Dağıtım v2): kaynak kanalın `son.json` işaretçisindeki imzalı bildirimin sürümü.
-  if (urun === 'backend') return [ozetBackend(y.backendManifest, oku(y.backendManifest))];
+  // Backend: iki işaretçi (eski `son.json` · zincir `son-zincir.json`) — zincir-yalnız grupta `son.json` hiç yoktur.
+  if (urun === 'backend') {
+    const z = zincirAdresi(y.backendManifest);
+    return [ozetBackend(y.backendManifest, oku(y.backendManifest)), ozetBackend(z, oku(z), 'backend son-zincir.json')];
+  }
   const ozet = (ne, url, r, cikar) => {
     if (r.durum !== 'var') return { ne, url, ...r };
     const surum = cikar(r.govde);

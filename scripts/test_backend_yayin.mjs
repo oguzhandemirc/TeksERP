@@ -5,9 +5,9 @@
 // DB'siz, AĞSIZ: PATH'in önüne sahte `ssh` · `scp` konur (uzak = geçici dizin), kenar okuması (`fetch`) bir
 // `--import` ön yükleyicisiyle sahte uzaktan cevaplanır, `HOME` geçicidir (geliştiricinin belirteci/ayarı
 // okunmaz), portal bildirimi kapalıdır (`TEKSERP_YAYIN_BILDIRIMI=0`). Paket GERÇEK imza aracıyla, çalışma anında
-// üretilen TEST PAKET anahtarıyla imzalanır. Uçtan uca GERÇEK yükleme (§3) yeni adres kapısı kapalı olduğu için
-// GEÇİCİ bir git ağacında koşar: o ağaçta yalnız iki satır yamalanır (YENI_ADRES_KAPISI.acik ve test çapası reddi;
-// yama tutmazsa bekçi DURUR); gerçek ağacın kapısı kapalı kalır ve §3G onu ölçer.
+// üretilen TEST PAKET anahtarıyla imzalanır. Uçtan uca GERÇEK yükleme (§3) gerçek yayın test çapasını reddettiği için
+// GEÇİCİ bir git ağacında koşar: o ağaçta yalnız test çapası reddi yamalanır (yama tutmazsa bekçi DURUR); yeni adres
+// kapısının KAPALI hâli §3G8'de kapısı kapatılmış ayrı bir geçici ağaçta ölçülür.
 //
 // NE ÖLÇER:
 //   §1 saf yardımcılar (`scripts/lib/backend-yayin.mjs`): sürüm önceliği = protokol `compareVersions` (ortak
@@ -30,7 +30,9 @@
 //      hazırlık kipi · kipsiz · kanallı paket · hazırlık kid'i · PROVA · müşterili künye · kurcalı → DUR
 //   §3G (O11b) GRUP YAYINI (`--grup=`, `deploy/dagitim.json`): ortak paket test grubuna kuru kipte (ağsız, uzağa yazma SIFIR) ·
 //      emekli `--musteri` / bilinmeyen grup / kanallı paket / hazırlık kid'i / PROVA / künye commit'i ≠ HEAD → DUR ·
-//      ⭐ YENİ ADRESE GERÇEK YÜKLEME KAPALI (3.9 D5 + D8): uzağa yazma SIFIR, ssh/scp SIFIR; kapı açılabilir (sonda) ·
+//      ⭐ YENİ ADRES KAPISI açık (3.9 D8); kapatılmış ağaçta gerçek yükleme DURUR, ssh/scp SIFIR · terfi ④ backend paketi
+//      kaynak grupta (aynı platform dizini) bayt-eşit olmalı: eşit → uyumlu · farklı/yok → İHLAL · okunamadı/verilmedi →
+//      ÖLÇÜLEMEDİ · OCI sürümü ve özeti `backend-oci/` dizininden · zincir-yalnız kaynak (`son-zincir.json`) terfiye yeter ·
 //      --dogrula kapıdan etkilenmez, belirteçli ve yeni adresten okur · oncu terfisi: etiket yok → DUR; terfi kaçışıyla
 //      profil matrisi raporu yok → DUR, yeşil rapor → geçer · saf terfi (K-6: genel kendi etiketini ister, oncu etiketi
 //      sayılmaz; kaynak grup geride → DUR; kök grup etiket istemez) · `dogrula --ortak` bildirim aracı kuralları
@@ -52,6 +54,7 @@
 // =============================================================================
 
 import { execFileSync, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -71,9 +74,10 @@ import {
   surumKiyasla,
   takimKarari,
   yayinPlani,
+  zincirAdresi,
 } from './lib/backend-yayin.mjs';
 import { kaynakSurumleri, terfiHukmu } from './lib/terfi.mjs';
-import { YENI_ADRES_KAPISI, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from './lib/grup-yayin.mjs';
+import { ARTEFAKT, YENI_ADRES_KAPISI, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from './lib/grup-yayin.mjs';
 import { PROFIL_DIZINI_REL, profilOzetleri, raporYolu } from './lib/profil-raporu.mjs';
 import { YAYIN_EZME_ORTAMLARI } from './lib/yayin-hedefi.mjs';
 import { OCI_URUN_DIZINI } from './lib/dagitim.mjs';
@@ -175,9 +179,9 @@ function bolum2() {
   console.log('\n§2 — terfi backend kaynağı: kaynak grubun (test) son.json sürümü');
   const kaynak = grupYayinBlogu('test');
   const isaretci = (s) => JSON.stringify({ v: 1, bildirim: `h.${Buffer.from(JSON.stringify({ v: 1, surum: s })).toString('base64url')}.i` });
-  const okuyan = (govde) => (url) => (url === kaynak.yayin.backendManifest ? { durum: 'var', govde } : { durum: 'olculemedi', neden: `beklenmeyen ${url}` });
+  const okuyan = (govde) => (url) => (url === kaynak.yayin.backendManifest ? { durum: 'var', govde } : url === zincirAdresi(kaynak.yayin.backendManifest) ? { durum: 'yok' } : { durum: 'olculemedi', neden: `beklenmeyen ${url}` });
   const k = kaynakSurumleri(kaynak, 'backend', okuyan(isaretci('2.12.1')));
-  ol('§2a kaynak = test grubunun backendManifest\'i, sürüm okunur', k.length === 1 && k[0].durum === 'var' && k[0].surum === '2.12.1', JSON.stringify(k));
+  ol('§2a kaynak = test grubunun backendManifest\'i + yanındaki son-zincir.json, sürüm okunur', k.length === 2 && k[0].durum === 'var' && k[0].surum === '2.12.1' && k[1].durum === 'yok' && /son-zincir\.json$/.test(k[1].url), JSON.stringify(k));
   const git = { bas: 'a'.repeat(40), surumEtiketi: 'a'.repeat(40), terfiEtiketi: { tur: 'tag', commit: 'a'.repeat(40), mesaj: 'test grubunda yeşil, öncü gruba çıkışı onaylıyorum 2026-10-06' } };
   const h = (surum, kaynaklar) => terfiHukmu({ kod: 'oncu', urun: 'backend', surum, kaynak: 'test', git, kaynaklar, atla: undefined });
   ol('§2b kaynak grupta aynı sürüm yayındaysa terfi UYUMLU', h('2.12.1', k).sonuc === 'uyumlu');
@@ -408,14 +412,15 @@ const PG_KAYDI = JSON.parse(fs.readFileSync(path.join(KOK, 'deploy/pg/pg-surumu.
 /* ------------------------------------------------------------------ *
  * Geçici yayın ağacı — gerçek yüklemenin uçtan uca ölçüldüğü yer
  * ------------------------------------------------------------------ *
- * Gerçek ağaçta yeni adrese yükleme KAPALI (3.9 D5 + D8) ve gerçek yayın test çapasını reddeder; ikisi de ürün
- * davranışıdır ve §3G gerçek ağaçta ölçer. Yükleme sırası/monotonluk/PG dizini ise ancak yükleme koşunca ölçülür:
- * betik ve kitaplıklar geçici bir git ağacına kopyalanır, YALNIZ aşağıdaki iki satır yamalanır (her yama TAM BİR
- * kez tutmalı — tutmazsa bekçi durur, sessizce kapalı kapıya karşı "yeşil" vermez). `Teks-Erp/` bağdır (araç). */
+ * Gerçek ağaçta gerçek yayın test çapasını reddeder; bu ürün davranışıdır ve §3G gerçek ağaçta ölçer. Yükleme
+ * sırası/monotonluk/PG dizini ise ancak yükleme koşunca ölçülür: betik ve kitaplıklar geçici bir git ağacına
+ * kopyalanır, YALNIZ aşağıdaki satırlar yamalanır (her yama TAM BİR kez tutmalı — tutmazsa bekçi durur, sessizce
+ * yanlış ağaca karşı "yeşil" vermez). `Teks-Erp/` bağdır (araç). */
 const AGAC = path.join(GECICI, 'agac');
 const GRUP = 'test';
+/** §3G8: kapı kapanırsa yükleme durur mu — kapısı kapatılmış ağaçta ölçülür (gerçek ağaçta kapı açık). */
+const KAPI_KAPAT = ['scripts/lib/grup-yayin.mjs', 'export const YENI_ADRES_KAPISI = Object.freeze({\n  acik: true,', 'export const YENI_ADRES_KAPISI = Object.freeze({\n  acik: false,'];
 const YAMALAR = [
-  ['scripts/lib/grup-yayin.mjs', 'export const YENI_ADRES_KAPISI = Object.freeze({\n  acik: false,', 'export const YENI_ADRES_KAPISI = Object.freeze({\n  acik: true,'],
   ['deploy/backend-yayinla.mjs', '  if (process.env.TEKSERP_TEST_PAKET_CAPASI) dur(', '  if (false) dur('],
   ['deploy/backend-yayinla.mjs', '  if (process.env.TEKSERP_TEST_KOK_CAPASI) dur(', '  if (false) dur('],
 ];
@@ -636,7 +641,7 @@ const grupHedefiOci = () => grupHedefi(GRUP, 'backend-oci');
 function bolum3testCapa() {
   console.log('\n§3T — test çapası ortamdayken gerçek yayın DUR (adres kapısı açık, DUR satırları yamasız)');
   const dAgac = path.join(GECICI, 'agac-capa');
-  const dHead = agacKur(dAgac, YAMALAR.filter(([rel]) => rel === 'scripts/lib/grup-yayin.mjs'));
+  const dHead = agacKur(dAgac, []);
   const pk = ortakPaketKur('t1', { surum: '9.9.11', commit: dHead.slice(0, 8), uretim: URETIM });
   const kos = (ek, ortam) => yayinla(arg3(pk, ek), ortam, dAgac, `${URETIM.parola}\n${URETIM.parola}\n`);
   const kokOrtam = { TEKSERP_TEST_PAKET_CAPASI: '', TEKSERP_TEST_KOK_CAPASI: ZINCIR.capa };
@@ -787,16 +792,21 @@ function bolum3grup() {
   const r7 = yayinla(grup(eskiCommit, 'test', ['--kuru']), ortamCapa(eskiCommit));
   ol('§3G7 künye commit\'i HEAD\'e bağlanmıyorsa → DUR (derleme künyesi kapısı)', r7.kod !== 0 && /KÜNYESİ HEAD'E BAĞLANMIYOR/.test(r7.cikti) && hicYazmadi(r7), r7.cikti.slice(-300));
 
-  // ⭐ Yeni adres kapısı: gerçek yükleme D5 + D8 olmadan hiçbir grupta ve hiçbir koşulda yazmaz.
+  // ⭐ Yeni adres kapısı: kapatılırsa gerçek yükleme hiçbir grupta ve hiçbir koşulda yazmaz (kapatılmış ağaçta).
+  const kAgac = path.join(GECICI, 'agac-kapali');
+  agacKur(kAgac, [KAPI_KAPAT]);
   for (const g of ['test', 'oncu', 'genel']) {
-    const gercek = yayinla(grup(g1, g), { TEKSERP_TEST_PAKET_CAPASI: '' });
-    ol(`§3G8 ⭐ ${g}: GERÇEK yayın (kuru değil) → DUR "YENİ ADRESE GERÇEK YAYIN KAPALI", ssh/scp/fetch SIFIR`,
-      gercek.kod !== 0 && /YENİ ADRESE GERÇEK YAYIN KAPALI/.test(gercek.cikti) && !/D5/.test(gercek.cikti) && /D8/.test(gercek.cikti) && gercek.log.length === 0, gercek.cikti.slice(-500));
+    const gercek = yayinla(grup(g1, g), { TEKSERP_TEST_PAKET_CAPASI: '' }, kAgac);
+    ol(`§3G8 ⭐ kapı kapalı, ${g}: GERÇEK yayın (kuru değil) → DUR "YENİ ADRESE GERÇEK YAYIN KAPALI", ssh/scp/fetch SIFIR`,
+      gercek.kod !== 0 && /YENİ ADRESE GERÇEK YAYIN KAPALI/.test(gercek.cikti) && /D8/.test(gercek.cikti) && gercek.log.length === 0, gercek.cikti.slice(-500));
   }
-  const terfiliGercek = yayinla(grup(g1, 'oncu', ['--terfi-atla=test grubunda yeşil öncü grubuna çıkışı onaylıyorum 2026-10-06']), ortamCapa(g1));
-  ol('§3G8b terfi kaçışı kapıyı AÇMAZ (gerçek oncu yayını yine DUR, yazma SIFIR)', terfiliGercek.kod !== 0 && /GERÇEK YAYIN KAPALI/.test(terfiliGercek.cikti) && terfiliGercek.log.length === 0);
-  ol('§3G8c sonda: kapı açık verilirse satır üretmez (kapı gerçekten açılabilir; sabit yalnız bilinçli bir kararla değişir)',
-    yeniAdresKapisiSatirlari({ acik: true, sart: [] }).length === 0 && yeniAdresKapisiSatirlari().length > 0 && YENI_ADRES_KAPISI.acik === false);
+  const terfiliGercek = yayinla(grup(g1, 'oncu', ['--terfi-atla=test grubunda yeşil öncü grubuna çıkışı onaylıyorum 2026-10-06']), ortamCapa(g1), kAgac);
+  ol('§3G8b terfi kaçışı kapalı kapıyı AÇMAZ (gerçek oncu yayını yine DUR, yazma SIFIR)', terfiliGercek.kod !== 0 && /GERÇEK YAYIN KAPALI/.test(terfiliGercek.cikti) && terfiliGercek.log.length === 0);
+  ol('§3G8c kapı AÇIK (3.9 D8) ve kapatılabilir: kapalı verilirse DUR satırları üretir',
+    yeniAdresKapisiSatirlari({ acik: false, sart: ['x'] }).length > 0 && yeniAdresKapisiSatirlari().length === 0 && YENI_ADRES_KAPISI.acik === true);
+  const acikGercek = yayinla(grup(g1, 'test'), ortamCapa(g1));
+  ol('§3G8e gerçek ağaçta kapı geçilir ama test çapası ortamdayken gerçek yayın yine DUR, ssh/scp/fetch SIFIR',
+    acikGercek.kod !== 0 && !/GERÇEK YAYIN KAPALI/.test(acikGercek.cikti) && /TEST (KÖK )?ÇAPASI ortamda/.test(acikGercek.cikti) && acikGercek.log.length === 0, acikGercek.cikti.slice(-400));
 
   // --dogrula: kapıdan etkilenmez; belirteçli okur ve YENİ adresten (indir.etkiliyazilim.com/<grup>/backend/son.json).
   const dogrula = yayinla(['--grup=test', '--dogrula'], ortamCapa(g1));
@@ -829,13 +839,45 @@ function bolum3grup() {
   // Saf terfi: K-6 + kaynak grup ölçümü.
   const sha = 'a'.repeat(40);
   const isaretci = (s) => JSON.stringify({ v: 1, bildirim: `h.${Buffer.from(JSON.stringify({ v: 1, surum: s })).toString('base64url')}.i` });
-  const okuyan = (surum) => (url) => (url === 'https://indir.etkiliyazilim.com/test/backend/son.json' || url === 'https://indir.etkiliyazilim.com/oncu/backend/son.json'
-    ? { durum: 'var', govde: isaretci(surum) } : { durum: 'olculemedi', neden: `beklenmeyen ${url}` });
+  const okuyan = (surum, dizin = 'backend') => (url) => (new RegExp(`^https://indir\\.etkiliyazilim\\.com/(test|oncu)/${dizin}/son\\.json$`).test(url)
+    ? { durum: 'var', govde: isaretci(surum) } : /\/son-zincir\.json$/.test(url) ? { durum: 'yok' } : { durum: 'olculemedi', neden: `beklenmeyen ${url}` });
+  const pkDosya = path.join(GECICI, 'tekserp-backend-2.14.0.zip');
+  fs.writeFileSync(pkDosya, 'backend artefakt sondası');
+  const pkOzet = crypto.createHash('sha256').update(fs.readFileSync(pkDosya)).digest('hex');
+  const ozetYollari = [];
+  const ozetOkuyan = (sonuc = { durum: 'var', sha256: pkOzet }) => (yol) => (ozetYollari.push(yol), sonuc);
+  const artefakt = { yerel: pkDosya, goreli: ARTEFAKT.backend.goreli('2.14.0', { paketAd: path.basename(pkDosya) }) };
   const etiket = (mesaj = 'oncu grubunda yeşil, genel gruba çıkışı onaylıyorum 2026-10-06') => ({ tur: 'tag', commit: sha, mesaj });
-  const t = (grupAdi, git, surum = '2.14.0', ek = {}) => grupTerfiKapisi({ grup: grupAdi, urun: 'backend', surum, git, oku: okuyan('2.14.0'), ...ek });
-  const acikKapi = t('oncu', { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() }, '2.14.0', { adresKapisi: { acik: true, sart: [] } });
-  ol('§3G8d ⭐ yeni adres kapısı AÇIKKEN backend artefakt özeti tanımsız → terfi ÖLÇÜLEMEDİ (kapalıyken beyanlı ④ satırı)',
-    acikKapi.sonuc === 'olculemedi' && /ARTEFAKT\.backend/.test(acikKapi.satirlar.join(' ')) && t('oncu', { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() }).satirlar.some((x) => /④ backend: .*ÖLÇÜLMEDİ/.test(x)), acikKapi.satirlar.join('|'));
+  const t = (grupAdi, git, surum = '2.14.0', ek = {}) => grupTerfiKapisi({ grup: grupAdi, urun: 'backend', surum, git, oku: okuyan('2.14.0'), artefakt, ozetOku: ozetOkuyan(), ...ek });
+  // ④ backend: kaynak gruptaki paket (aynı platform dizini, `<sürüm>/<paket adı>`) yüklenecek paketle bayt-eşit olmalı.
+  const og = { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() };
+  ozetYollari.length = 0;
+  const d1 = t('oncu', og);
+  ol('§3G8d ⭐ ④ backend: kaynak(test) paketi bayt-eşit → UYUMLU; özet test grubunun backend/2.14.0/<paket> yolundan okunur',
+    d1.sonuc === 'uyumlu' && d1.satirlar.some((x) => /④ test grubundaki artefakt = yüklenecek artefakt/.test(x)) && ozetYollari.length === 1 && /\/test\/backend\/2\.14\.0\/tekserp-backend-2\.14\.0\.zip$/.test(ozetYollari[0]),
+    d1.satirlar.join('|') + JSON.stringify(ozetYollari));
+  const d2 = t('oncu', og, '2.14.0', { ozetOku: ozetOkuyan({ durum: 'var', sha256: 'f'.repeat(64) }) });
+  ol('§3G8f ⭐ ④ backend: kaynak paketin özeti FARKLI → İHLAL', d2.sonuc === 'ihlal' && d2.satirlar.some((x) => /④ .*FARKLI/.test(x)), d2.satirlar.join('|'));
+  const d3 = t('oncu', og, '2.14.0', { ozetOku: ozetOkuyan({ durum: 'yok' }) });
+  ol('§3G8g ④ backend: kaynak grupta paket YOK → İHLAL', d3.sonuc === 'ihlal' && d3.satirlar.some((x) => /④ .*YOK/.test(x)), d3.satirlar.join('|'));
+  const d4 = t('oncu', og, '2.14.0', { ozetOku: ozetOkuyan({ durum: 'olculemedi', neden: 'ssh' }) });
+  const d5 = t('oncu', og, '2.14.0', { artefakt: undefined });
+  ol('§3G8h ④ backend: özet okunamadı ya da artefakt verilmedi → ÖLÇÜLEMEDİ (fail-closed)', d4.sonuc === 'olculemedi' && d5.sonuc === 'olculemedi' && /backend artefaktı verilmedi/.test(d5.satirlar.join(' ')), d4.satirlar.join('|') + d5.satirlar.join('|'));
+  ozetYollari.length = 0;
+  const ociArtefakt = { yerel: pkDosya, goreli: ARTEFAKT.backend.goreli('2.14.0', { paketAd: 'tekserp-backend-oci-2.14.0.tar' }) };
+  const d6 = t('oncu', og, '2.14.0', { platform: 'backend-oci', artefakt: ociArtefakt, oku: okuyan('2.14.0', 'backend-oci') });
+  const d6w = t('oncu', og, '2.14.0', { platform: 'backend-oci', artefakt: ociArtefakt });
+  ol('§3G8i ⭐ OCI terfisi: kaynak sürüm ve özet backend-oci/ dizininden; Windows backend/ sürümü OCI terfisine SAYILMAZ',
+    d6.sonuc === 'uyumlu' && /\/test\/backend-oci\/2\.14\.0\/tekserp-backend-oci-2\.14\.0\.tar$/.test(ozetYollari[0] ?? '') && d6w.sonuc !== 'uyumlu',
+    d6.satirlar.join('|') + d6w.satirlar.join('|') + JSON.stringify(ozetYollari));
+  const d7 = t('oncu', og, '2.14.0', { platform: 'panel' });
+  ol('§3G8j tanınmayan platform dizini → ÖLÇÜLEMEDİ', d7.sonuc === 'olculemedi', d7.satirlar.join('|'));
+  const zincirYalniz = (url) => (/\/test\/backend\/son-zincir\.json$/.test(url) ? { durum: 'var', govde: isaretci('2.14.0') } : /\/son\.json$/.test(url) ? { durum: 'yok' } : { durum: 'olculemedi', neden: url });
+  const d8 = t('oncu', og, '2.14.0', { oku: zincirYalniz });
+  ol('§3G8k ⭐ zincir-yalnız kaynak grup (son.json yok, son-zincir.json ≥ X) terfiye YETER', d8.sonuc === 'uyumlu' && d8.satirlar.some((x) => /son-zincir\.json 2\.14\.0/.test(x)), d8.satirlar.join('|'));
+  let adHatasi = null;
+  try { ARTEFAKT.backend.goreli('2.14.0', { paketAd: '../x.zip' }); } catch (e) { adHatasi = e; }
+  ol('§3G8l ARTEFAKT.backend güvensiz paket adını reddeder', adHatasi !== null && /paket adı tanınmıyor/.test(adHatasi.message));
   ol('§3G15 kök grup (test) terfi/etiket İSTEMEZ', t('test', null).sonuc === 'uyumlu' && t('test', null).gerekmez === true);
   ol('§3G16 oncu: HEAD == etiket + terfi/oncu etiketi + kaynak(test) ≥ X → UYUMLU', t('oncu', { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() }).sonuc === 'uyumlu');
   const g17 = t('genel', { bas: sha, surumEtiketi: sha, terfiEtiketi: null });
@@ -848,9 +890,9 @@ function bolum3grup() {
   ol('§3G18c K-6: iki onayın cümlesi AYNI → İHLAL', g18c.sonuc === 'ihlal' && g18c.satirlar.some((x) => /AYNI/.test(x)), g18c.satirlar.join('|'));
   const g18d = t('genel', { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() });
   ol('§3G18d enjekte git + kaynak git olgusu yok → ÖLÇÜLEMEDİ (gerçek depoya düşmez)', g18d.sonuc === 'olculemedi', g18d.satirlar.join('|'));
-  const g19 = grupTerfiKapisi({ grup: 'genel', urun: 'backend', surum: '2.14.0', git: { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() }, kaynakGit: oncuOnay, oku: okuyan('2.13.0') });
+  const g19 = grupTerfiKapisi({ grup: 'genel', urun: 'backend', surum: '2.14.0', git: { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() }, kaynakGit: oncuOnay, oku: okuyan('2.13.0'), artefakt, ozetOku: ozetOkuyan() });
   ol('§3G19 kaynak grup GERİDE (oncu 2.13.0 < 2.14.0) → İHLAL', g19.sonuc === 'ihlal' && g19.satirlar.some((x) => /GERİDE/.test(x)), g19.satirlar.join('|'));
-  const g20 = grupTerfiKapisi({ grup: 'genel', urun: 'backend', surum: '2.14.0', git: { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() }, kaynakGit: oncuOnay, oku: () => ({ durum: 'olculemedi', neden: 'ağ' }) });
+  const g20 = grupTerfiKapisi({ grup: 'genel', urun: 'backend', surum: '2.14.0', git: { bas: sha, surumEtiketi: sha, terfiEtiketi: etiket() }, kaynakGit: oncuOnay, oku: () => ({ durum: 'olculemedi', neden: 'ağ' }), artefakt, ozetOku: ozetOkuyan() });
   ol('§3G20 kaynak grup ÖLÇÜLEMEDİ → ÖLÇÜLEMEDİ (fail-closed)', g20.sonuc === 'olculemedi');
   ol('§3G21 HEAD ≠ sürüm etiketi → İHLAL', t('oncu', { bas: 'b'.repeat(40), surumEtiketi: sha, terfiEtiketi: etiket() }).sonuc === 'ihlal');
   ol('§3G22 bilinmeyen grup → İHLAL (fail-closed)', grupTerfiKapisi({ grup: 'x', urun: 'backend', surum: '2.14.0' }).sonuc === 'ihlal');

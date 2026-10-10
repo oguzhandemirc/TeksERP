@@ -14,10 +14,9 @@
 //     de HEAD'de olmalı ve iki etiketin cümlesi aynı olamaz.
 // Üç sonuç: uyumlu · ihlal · ÖLÇÜLEMEDİ (ölçülemeyen şart geçmiş şart değildir).
 //
-// ⚠️ YENİ ADRES KAPISI (fail-closed): yeni adrese (indir.etkiliyazilim.com) GERÇEK yükleme, 3.9 D5 (zincirli `pkt-*`
-//    imzalı listenin kökle doğrulanması + üretim imzası araçları) ve D8 (ilk PAKET sertifikası, kullanıcıyla) YAPILMADAN
-//    çıkmaz. `--kuru` (ağsız) ve `--dogrula` (salt okuma) bu kapıdan etkilenmez. Kapıyı AÇMAK = D5 + D8 işini bitiren
-//    dilimin `YENI_ADRES_KAPISI.acik`ı bir kararla `true` yapması; bekçi kapalıyken yüklemenin DURDUĞUNU ölçer.
+// ⚠️ YENİ ADRES KAPISI: yeni adrese (indir.etkiliyazilim.com) GERÇEK yükleme 3.9 D5 + D8 (ilk PAKET sertifikası) ile
+//    AÇILDI; kapı sabiti kalır ki şart yeniden doğarsa tek satırla kapansın (bekçi iki durumu da ölçer). Açıkken her
+//    ürünün ARTEFAKT satırı tanımlı olmalı — tanımsız satır terfiyi ÖLÇÜLEMEDİ yapar.
 // Bekçiler: scripts/test_grup_yayin_kapisi.mjs (panel) · scripts/test_grup_yayin_tablet.mjs · scripts/test_backend_yayin.mjs §3G
 // =============================================================================
 
@@ -25,7 +24,8 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { AYRILMIS_GRUP_KODLARI, ESKI_KAYIT_REL, GRUP_KODU_DESENI, KAYIT_REL, KOK, Olculemedi, grupZinciri, kayitAyristir, terfiKaynagi, turet } from './dagitim.mjs';
+import { AYRILMIS_GRUP_KODLARI, ESKI_KAYIT_REL, GRUP_KODU_DESENI, KAYIT_REL, KOK, Olculemedi, PLATFORM_DIZINLERI, grupZinciri, kayitAyristir, terfiKaynagi, turet } from './dagitim.mjs';
+import { OCI_PAKET_ADI_DESENI, PAKET_ADI_DESENI } from './backend-yayin.mjs';
 import { dosyaOzeti } from './derleme-bagi.mjs';
 import { cumleDenetle } from './kullanici-cumlesi.mjs';
 import { gitOlgulari, kaynakSurumleri, terfiHukmu } from './terfi.mjs';
@@ -53,7 +53,7 @@ export const TABLET_ARTEFAKT_GORELI = Object.freeze({
 });
 
 export const YENI_ADRES_KAPISI = Object.freeze({
-  acik: false,
+  acik: true,
   sart: Object.freeze([
     '3.9 D8: ilk PAKET sertifikası (kullanıcıyla yıllık tören)',
   ]),
@@ -72,14 +72,20 @@ export function yeniAdresKapisiSatirlari(kapi = YENI_ADRES_KAPISI) {
 /**
  * ARTEFAKT tablosu — ürün başına, terfide özet eşitliği (④) ölçülen ANA artefakt. Yol, kaynak grubun ürün dizinine göre.
  *   kaynak: 'dizin'   → yerel dosya ortak paket dizininde (`dizin` + yol) · 'cagiran' → çağıran `artefakt` verir
- *   olculmez          → özet eşitliği beyanlı olarak henüz yok (gerekçeyle); YENI_ADRES_KAPISI açılınca ÖLÇÜLEMEDİ olur
+ *   olculmez          → özet eşitliği beyanlı olarak henüz yok (gerekçeyle); YENI_ADRES_KAPISI açıkken ÖLÇÜLEMEDİ olur
+ * Backend: yayıncı paketi bayt-eşit `<platform dizini>/<sürüm>/<paket adı>`na koyar (Windows zip'i · OCI tar'ı); bildirim
+ * grup başına yeniden imzalanır, artefakt değildir. Platform dizini `grupTerfiKapisi({platform})`ten.
  */
 export const ARTEFAKT = Object.freeze({
   panel: Object.freeze({ kaynak: 'dizin', goreli: (surum) => `TeksERP-${surum}-Setup.exe` }),
   tablet: Object.freeze({ kaynak: 'cagiran', goreli: (surum, ek = {}) => TABLET_ARTEFAKT_GORELI.apk({ surum, vc: ek.vc }) }),
   backend: Object.freeze({
-    kaynak: null,
-    olculmez: 'backend paketinin kaynak grup özeti henüz ölçülmüyor — gerçek yükleme YENI_ADRES_KAPISI ile kapalı; kapıyı açan dilim (D5 + D8) bu satırı tanımlar',
+    kaynak: 'cagiran',
+    goreli: (surum, ek = {}) => {
+      const ad = String(ek.paketAd ?? '');
+      if (!PAKET_ADI_DESENI.test(ad) && !OCI_PAKET_ADI_DESENI.test(ad)) throw new Olculemedi(`backend paket adı tanınmıyor: "${ad}"`);
+      return `${surum}/${ad}`;
+    },
   }),
 });
 
@@ -164,7 +170,14 @@ export function grupYayinBlogu(grup, secenek = {}) {
 
 /** Kaynak grupta yayındaki sürüm(ler) — adresler grup bloğundan, okuma SSH ile VDS diskinden. */
 export function kaynakGrupSurumleri(kaynakGrup, urun, secenek = {}) {
-  return kaynakSurumleri(grupYayinBlogu(kaynakGrup, secenek), urun, secenek.oku);
+  const blok = grupYayinBlogu(kaynakGrup, secenek);
+  const platform = secenek.platform ?? urun;
+  if (platform !== urun) {
+    // Platform dizini (backend-oci) kendi işaretçilerini taşır; Windows `backend/` sürümü OCI terfisine sayılmaz.
+    const h = grupHedefi(kaynakGrup, platform, secenek);
+    blok.yayin = { ...blok.yayin, backendFeed: `${h.feed}/`, vdsBackend: h.vds, backendManifest: `${h.feed}/son.json` };
+  }
+  return kaynakSurumleri(blok, urun, secenek.oku);
 }
 
 /** Uzak dosyanın sha256'sı (ssh; yol stdin betiğine konumsal argümanla gider). */
@@ -238,7 +251,7 @@ export function grupTerfiHukmu({ grup, urun, surum, kaynak, git, kaynaklar, atla
  *   yolu (ARTEFAKT.kaynak='cagiran', tablet: APK ya da OTA bundle) · `git`/`kaynakGit`: bekçi için enjekte git olguları
  *   (`git` verilip K-6 gereken yerde `kaynakGit` verilmezse ⑤ ÖLÇÜLEMEDİ — gerçek depoya düşülmez)
  */
-export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, kok = KOK, kayit, eskiKodlar, oku, ozetOku = uzakSha256, artefakt, git, kaynakGit, adresKapisi = YENI_ADRES_KAPISI }) {
+export function grupTerfiKapisi({ grup, urun, surum, platform = urun, atla, kuru = false, dizin, kok = KOK, kayit, eskiKodlar, oku, ozetOku = uzakSha256, artefakt, git, kaynakGit, adresKapisi = YENI_ADRES_KAPISI }) {
   let zincir;
   let kaynak;
   try {
@@ -250,6 +263,7 @@ export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, 
   }
   const tablo = Object.prototype.hasOwnProperty.call(ARTEFAKT, urun) ? ARTEFAKT[urun] : null;
   if (!tablo) return { sonuc: 'olculemedi', satirlar: [`bilinmeyen ürün "${urun ?? ''}" (${Object.keys(ARTEFAKT).join(' | ')})`] };
+  if (platform !== urun && !(PLATFORM_DIZINLERI[urun] ?? []).includes(platform)) return { sonuc: 'olculemedi', satirlar: [`"${platform}" ${urun} ürününün platform dizini değil`] };
   if (!kaynak || atla !== undefined) return grupTerfiHukmu({ grup, urun, surum, kaynak, git: null, kaynaklar: null, atla });
   if (!zincir.includes(kaynak)) return { sonuc: 'olculemedi', satirlar: [`terfi kaynağı "${kaynak}" kayıtta yok`] };
   if (!ayristir(surum)) return { sonuc: 'olculemedi', satirlar: [`sürüm "${surum ?? ''}" ayrıştırılamadı — terfi şartları hangi sürüm için ölçülecek belirsiz`] };
@@ -271,8 +285,8 @@ export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, 
   let ozet = null;
   if (!kuru) {
     try {
-      kaynaklar = kaynakGrupSurumleri(kaynak, urun, { kok, kayit, eskiKodlar, oku });
-      ozet = artefaktOzeti({ urun, tablo, surum, kaynak, dizin, artefakt, kok, kayit, eskiKodlar, ozetOku, adresKapisi });
+      kaynaklar = kaynakGrupSurumleri(kaynak, urun, { kok, kayit, eskiKodlar, oku, platform });
+      ozet = artefaktOzeti({ urun, platform, tablo, surum, kaynak, dizin, artefakt, kok, kayit, eskiKodlar, ozetOku, adresKapisi });
     } catch (e) {
       if (e instanceof Olculemedi) return { sonuc: 'olculemedi', satirlar: [e.message] };
       throw e;
@@ -282,7 +296,7 @@ export function grupTerfiKapisi({ grup, urun, surum, atla, kuru = false, dizin, 
 }
 
 /** ④'ün olgusu: ARTEFAKT satırına göre yerel dosyanın ve kaynak gruptaki eşinin özeti (ölçülemeyen = Olculemedi atar). */
-function artefaktOzeti({ urun, tablo, surum, kaynak, dizin, artefakt, kok, kayit, eskiKodlar, ozetOku, adresKapisi }) {
+function artefaktOzeti({ urun, platform = urun, tablo, surum, kaynak, dizin, artefakt, kok, kayit, eskiKodlar, ozetOku, adresKapisi }) {
   if (tablo.olculmez) {
     if (adresKapisi.acik === true) throw new Olculemedi(`${urun} artefaktının özet eşitliği tanımlı değil ve yeni adres kapısı AÇIK — ARTEFAKT.${urun} tanımlanmadan terfi ölçülemez`);
     return { olculmez: tablo.olculmez };
@@ -300,7 +314,7 @@ function artefaktOzeti({ urun, tablo, surum, kaynak, dizin, artefakt, kok, kayit
     yerelYol = path.join(dizin, goreli);
   }
   const yerel = dosyaOzeti(yerelYol).sha256;
-  return { yerel, kaynak: ozetOku(`${grupHedefi(kaynak, urun, { kok, kayit, eskiKodlar }).vds}/${goreli}`) };
+  return { yerel, kaynak: ozetOku(`${grupHedefi(kaynak, platform, { kok, kayit, eskiKodlar }).vds}/${goreli}`) };
 }
 
 /** Paketin grup künyesi için ayrı çalışma dizini: paket baytları SEMBOLİK bağ (kopya değil), `latest.yml` kopya. */

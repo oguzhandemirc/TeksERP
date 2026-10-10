@@ -28,8 +28,9 @@
  * ⚠️ GRUP KAPILARI (O11b):
  *    Terfi: test kök (etiket istemez); oncu/genel `terfi/<grup>/backend-vX` açıklamalı etiketi + kaynak grupta yayındaki
  *    sürüm ≥ X (K-6: genel kendi etiketini ister). Ağaç temiz · künye commit'i == HEAD · profil matrisi raporu
- *    (`scripts/profil-matrisi-kapisi.mjs`, kök grup muaf). YENİ ADRESE GERÇEK YÜKLEME 3.9 D5 + D8 olmadan KAPALI
- *    (`YENI_ADRES_KAPISI`, fail-closed): yalnız --kuru ve --dogrula açıktır.
+ *    (`scripts/profil-matrisi-kapisi.mjs`, kök grup muaf). Terfide kaynak gruptaki paket (aynı platform dizini) bu
+ *    paketle bayt-eşit olmalı (`ARTEFAKT.backend`). Yeni adres kapısı (`YENI_ADRES_KAPISI`) 3.9 D8 ile açık; kapanırsa
+ *    yalnız --kuru ve --dogrula çalışır.
  * ⚠️ İKİ TAKIM (3.9 D5): eski takım `son.json` (paket-* imzalı bildirim), zincir takımı `son-zincir.json` (pkt-*, kök
  *    imzalı PAKET sertifikalı). `--zincir-anahtar=<pkt>` ile çift imzalı paket iki işaretçiyi BİRLİKTE-YA-DA-HİÇ yazar
  *    (ikisi geçici adla, tek uzak komutla yerine). Gerçek yayında eski-yalnız paket DURUR; grupta `son.json` varken
@@ -63,7 +64,7 @@ import { BelirtecYok, belirtecOku, belirtecliFetch, yayinOku } from '../scripts/
 import { ezmeSatirlari, yayinEzmeleri } from '../scripts/lib/yayin-hedefi.mjs';
 import { yayinSonrasiBildir } from '../scripts/lib/yayin-bildirim.mjs';
 import { SSH_HEDEF_VARSAYILAN } from '../scripts/lib/yayin-okuma.mjs';
-import { grupCoz, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from '../scripts/lib/grup-yayin.mjs';
+import { ARTEFAKT, grupCoz, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from '../scripts/lib/grup-yayin.mjs';
 import { Olculemedi as PgOlculemedi, SURUM_REL as PG_KAYIT_REL, jsonOku as pgJsonOku, surumKaydiHatalari } from './pg/lib/pg-ornegi.mjs';
 import {
   SURUM_DESENI,
@@ -123,7 +124,7 @@ if (OCI) {
   const pgArg = ['pg-yayinla', 'pg-kunye', 'pg-paket'].filter((a) => arg(a) !== undefined);
   if (pgArg.length) dur(`--${pgArg.join(' --')} Linux/OCI yayınında verilmez — hiçbir şey yüklenmedi`, 'linux-x64-oci bildirimi PG hedefi taşımaz (konteyner PG\'si ayrı yoldan; GUNCELLEYICI-SAGLAMLIK L8).');
 }
-// Yeni adres: gerçek yükleme D5 + D8 olmadan KAPALI (fail-closed); --kuru/--dogrula ağa yazmaz.
+// Yeni adres kapısı kapanırsa gerçek yükleme DURUR; test çapası ortamda iken gerçek yayın her zaman DURUR.
 if (!KURU && !argv.includes('--dogrula')) {
   const kapali = yeniAdresKapisiSatirlari();
   if (kapali.length) dur('YENİ ADRESE GERÇEK YAYIN KAPALI — hiçbir şey yüklenmedi', ...kapali);
@@ -369,7 +370,17 @@ function grupOnKapilari(kunyeNesnesi) {
  * 2) Terfi kapısı (K5) — yüklemeden ÖNCE
  * ------------------------------------------------------------------ */
 
-const terfi = grupTerfiKapisi({ grup: GRUP, urun: 'backend', surum: SURUM, atla: TERFI_ATLA, kuru: KURU });
+// Terfi etiketi sürümündür (iki platform aynı sürüm); kaynak sürüm ve özet eşitliği platform dizininden.
+let artefaktGoreli;
+try {
+  artefaktGoreli = ARTEFAKT.backend.goreli(SURUM, { paketAd: path.basename(PAKET) });
+} catch (e) {
+  dur('PAKET ADI TANINMIYOR — terfi özeti ölçülemez', String(e.message ?? e));
+}
+const terfi = grupTerfiKapisi({
+  grup: GRUP, urun: 'backend', platform: URUN, surum: SURUM, atla: TERFI_ATLA, kuru: KURU,
+  artefakt: { yerel: PAKET, goreli: artefaktGoreli },
+});
 const terfiSatirlari = terfiRaporu(terfi, { kod: GRUP, urun: 'backend', surum: SURUM });
 if (terfi.sonuc !== 'uyumlu') {
   dur(terfiSatirlari[0].replace(/^✖ /, ''), ...terfiSatirlari.slice(1).map((s) => s.trim()),
