@@ -291,8 +291,8 @@ impl Engine {
 
     /// SYSTEM'in ÇALIŞTIRDIĞI ya da güvendiği her yol (DAGK-3/4): kök · `surumler\` · kurulu sürüm dizini ·
     /// `guncelleyici\` · `pgsql\` · bağlantısı çözülmüş `PG_BIN_DIR` ve PG araç ikilileri yabancı yazmaya
-    /// kapalı olmalı; değilse ya da ölçülemezse hiçbir şey yapılmaz. İzni kurulum betiği yazar
-    /// (`backend-hizmeti.ps1 -Uygula`), güncelleyici yalnız ÖLÇER.
+    /// kapalı olmalı; değilse ya da ölçülemezse hiçbir şey yapılmaz. İzni kurulum yazar (Windows
+    /// `backend-hizmeti.ps1 -Uygula`, Linux `kur`/`gecis`), güncelleyici yalnız ÖLÇER.
     fn trusted_paths_ok(&self, inputs: &Inputs) -> Result<(), String> {
         let fs = self.env.fs.as_ref();
         let mut paths = vec![self.layout.root.clone(), self.layout.versions(), self.layout.updater_dir(), self.layout.pgsql()];
@@ -313,11 +313,7 @@ impl Engine {
         for p in paths.into_iter().filter(|p| fs.exists(p)) {
             let foreign = fs.foreign_writers(&p).map_err(|e| format!("{} izinleri ölçülemedi: {e}", p.display()))?;
             if !foreign.is_empty() {
-                return Err(format!(
-                    "{}: güvenilmez izin ({}) — SYSTEM bunu çalıştırmaz; kurulumun izin betiği gerekir (backend-hizmeti.ps1 -Uygula)",
-                    p.display(),
-                    foreign.join(" · ")
-                ));
+                return Err(format!("{}: güvenilmez izin ({}) — {}", p.display(), foreign.join(" · "), crate::platform::izin_caresi(&p)));
             }
         }
         Ok(())

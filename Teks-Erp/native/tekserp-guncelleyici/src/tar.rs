@@ -191,19 +191,20 @@ pub fn check_members(members: &[Member], expected: &[String]) -> Result<(), Stri
 
 /// Gerçek açma (`Fs::extract_tar`): ölç → üye kümesi → yaz. Dosyalar `create_new` ile (var olanı ezmez, bağ izlemez);
 /// ikinci geçişte her başlık yeniden okunur ve ilk ölçümle aynı olmalıdır. `finish` yazılan dosyanın kipini koyar
-/// (platform işi: çalıştırılabilir bit).
+/// (platform işi: çalıştırılabilir bit); `mkdir` hedef dahil her dizini güvenilen kiple yaratır (umask'a bırakılmaz).
 pub fn extract_real(
     archive: &Path,
     dest: &Path,
     expected: &[String],
     limits: &ExtractLimits,
     finish: &dyn Fn(&Path, &Member) -> io::Result<()>,
+    mkdir: &dyn Fn(&Path) -> io::Result<()>,
 ) -> Result<ExtractStats, String> {
     let mut file = std::fs::File::open(archive).map_err(|e| format!("paket açılamadı: {e}"))?;
     let len = file.metadata().map_err(|e| format!("paket ölçülemedi: {e}"))?.len();
     let members = scan(&mut file, len, limits)?;
     check_members(&members, expected)?;
-    std::fs::create_dir_all(dest).map_err(|e| format!("hedef dizin açılamadı: {e}"))?;
+    mkdir(dest).map_err(|e| format!("hedef dizin açılamadı: {e}"))?;
     let mut stats = ExtractStats::default();
     for m in &members {
         let again = parse_header(&read_block(&mut file, m.offset - BLOCK).map_err(|e| corrupt(e.to_string()))?, m.offset - BLOCK)?;
@@ -212,11 +213,11 @@ pub fn extract_real(
         }
         let out: PathBuf = m.name.split('/').fold(dest.to_path_buf(), |p, c| p.join(c));
         if m.kind == Kind::Dir {
-            std::fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", m.name))?;
+            mkdir(&out).map_err(|e| format!("{}: {e}", m.name))?;
             continue;
         }
         if let Some(parent) = out.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", m.name))?;
+            mkdir(parent).map_err(|e| format!("{}: {e}", m.name))?;
         }
         let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&out).map_err(|e| format!("{}: {e}", m.name))?;
         let n = io::copy(&mut (&mut file).take(m.size), &mut f).map_err(|e| format!("{}: {e}", m.name))?;

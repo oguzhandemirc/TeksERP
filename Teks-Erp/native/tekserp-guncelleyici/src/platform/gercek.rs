@@ -228,8 +228,19 @@ impl Fs for RealFs {
         members: &[String],
         limits: &crate::package::ExtractLimits,
     ) -> Result<crate::package::ExtractStats, String> {
-        crate::tar::extract_real(archive, dest, members, limits, &set_extracted_mode)
+        crate::tar::extract_real(archive, dest, members, limits, &set_extracted_mode, &create_trusted_dirs)
     }
+}
+
+/// Açılan paketin dizinleri (sürüm dizini dahil) güncelleyicinin izin ölçümünden geçecek kiple doğar.
+#[cfg(unix)]
+fn create_trusted_dirs(p: &Path) -> io::Result<()> {
+    super::linux::sys::create_trusted_dir_all(p)
+}
+
+#[cfg(windows)]
+fn create_trusted_dirs(p: &Path) -> io::Result<()> {
+    std::fs::create_dir_all(p)
 }
 
 /// Açılan dosyanın kipi başlıktan YALNIZ çalıştırılabilirliği alır: 0755 ya da 0644 (setuid/grup-yazma taşınmaz).

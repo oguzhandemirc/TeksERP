@@ -93,13 +93,36 @@ pub fn foreign_writers(p: &Path) -> io::Result<Vec<String>> {
     if m.uid() != 0 && m.uid() != euid() {
         out.push(format!("sahibi uid {}", m.uid()));
     }
-    if m.mode() & 0o020 != 0 {
+    if m.mode() & GRUP_YAZAR != 0 {
         out.push("grup yazabilir".to_string());
     }
-    if m.mode() & 0o002 != 0 {
+    if m.mode() & HERKES_YAZAR != 0 {
         out.push("herkes yazabilir".to_string());
     }
     Ok(out)
+}
+
+const GRUP_YAZAR: u32 = 0o020;
+const HERKES_YAZAR: u32 = 0o002;
+
+/// Güncelleyicinin yarattığı güvenilen dizinin kipi: `foreign_writers`ın yabancı saydığı bitler düşülmüş 0777.
+pub const GUVENILEN_DIZIN_KIPI: u32 = 0o777 & !(GRUP_YAZAR | HERKES_YAZAR);
+
+/// `create_dir_all`in güvenilen karşılığı: YARATILAN her dizin (ara dizinler dahil) umask'tan bağımsız
+/// `GUVENILEN_DIZIN_KIPI` ile doğar; var olan dizinin kipine dokunulmaz (onu `foreign_writers` ölçer).
+pub fn create_trusted_dir_all(p: &Path) -> io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    if p.is_dir() {
+        return Ok(());
+    }
+    if let Some(parent) = p.parent().filter(|x| !x.as_os_str().is_empty()) {
+        create_trusted_dir_all(parent)?;
+    }
+    match std::fs::DirBuilder::new().mode(GUVENILEN_DIZIN_KIPI).create(p) {
+        Ok(()) => std::fs::set_permissions(p, std::fs::Permissions::from_mode(GUVENILEN_DIZIN_KIPI)),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists && p.is_dir() => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Güncelleyicinin özel alanı (`is/`): bağlantı olamaz; sahibi güncelleyicinin kendisi (root ise başka sahipli
@@ -383,6 +406,23 @@ mod tests {
         let free = free_space(&std::env::temp_dir()).unwrap();
         assert!(free > 0 && free < u64::MAX, "{free}");
         assert!(free_space(Path::new("/yok/boyle/bir/yol")).is_err());
+    }
+
+    /// Yaratılan her dizin `foreign_writers` ölçümünden geçer; var olanın kipi korunur (gevşek umask:
+    /// `tests/izin_umask.rs`, süreç geneli umask ayrı test ikilisinde).
+    #[test]
+    fn guvenilen_dizin_ara_dizinlerle_dogar() {
+        let d = tmp("guvenilen");
+        let var_olan = d.join("var");
+        std::fs::create_dir(&var_olan).unwrap();
+        std::fs::set_permissions(&var_olan, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let hedef = var_olan.join("a").join("b");
+        create_trusted_dir_all(&hedef).unwrap();
+        for p in [var_olan.join("a"), hedef.clone()] {
+            assert!(foreign_writers(&p).unwrap().is_empty(), "{}: {:?}", p.display(), foreign_writers(&p).unwrap());
+        }
+        assert_eq!(std::fs::metadata(&var_olan).unwrap().mode() & 0o7777, 0o700, "var olan dizinin kipi değişti");
+        create_trusted_dir_all(&hedef).unwrap();
     }
 
     #[test]

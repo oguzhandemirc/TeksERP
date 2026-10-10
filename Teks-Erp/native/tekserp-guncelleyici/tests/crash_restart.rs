@@ -659,6 +659,9 @@ fn untrusted_directory_permissions_stop_everything() {
         *w.fs.foreign.lock().unwrap() = vec![dir];
         w.run(1).unwrap();
         izin_guvensiz(&w, needle, "yabancı yazar");
+        let m = w.status().unwrap().message.unwrap_or_default();
+        assert_eq!(m.contains("backend-hizmeti.ps1"), cfg!(windows), "çare konağın aracı olmalı: {m}");
+        assert!(cfg!(windows) || m.contains("chmod go-w"), "Linux çaresi yok: {m}");
     }
     w.fs.foreign.lock().unwrap().clear();
     *w.fs.unmeasurable.lock().unwrap() = vec![w.layout.updater_dir()];

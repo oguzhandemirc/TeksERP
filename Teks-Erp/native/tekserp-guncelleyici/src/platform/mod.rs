@@ -169,6 +169,18 @@ pub fn baglam(env: Env, layout: &crate::layout::Layout, s: &crate::settings::Upd
 
 // ── Konak olguları (derleme hedefinin işletim sistemi) ─────────────────────────────────────────
 
+/// `IZIN_GUVENSIZ` çaresi (izni kurulum yazar, güncelleyici yalnız ölçer) — konağın kendi aracıyla.
+pub fn izin_caresi(p: &Path) -> String {
+    if cfg!(windows) {
+        "SYSTEM bunu çalıştırmaz; kurulumun izin betiği gerekir (backend-hizmeti.ps1 -Uygula)".to_string()
+    } else {
+        format!(
+            "root bunu çalıştırmaz; sahibi root olmalı, grup/herkes yazamamalı (sudo chown root:root '{0}' && sudo chmod go-w '{0}')",
+            p.display()
+        )
+    }
+}
+
 /// Çalıştırılabilir dosya adı (`psql` → Windows'ta `psql.exe`).
 pub fn executable(name: &str) -> String {
     if cfg!(windows) {
