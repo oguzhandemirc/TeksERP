@@ -43,6 +43,7 @@
 ### Kararlar
 
 - **[ÇEKİRDEK]** Yazma yetkisi için YENİ izin kodu üretilmez: `roll:manual-adjust` ∨ `mobile:tambur-duzelt` (create/update/duplicate/reorder aynı kapıdan); `GET /api/reason-presets` yalnız token ister. <sub>(CLAUDE.md:73)</sub>
+- **[ÇEKİRDEK]** `ReasonPreset.targetMinutes` (dk, 1..1440, null = süre izlenmez) yalnız `kind=MACHINE_STOP` ve `stopLossClass ≠ NON_SCHEDULED` sebepte girilir (`STOP_TARGET_NOT_APPLICABLE`/`_NOT_TRACKED`/`_OUT_OF_RANGE`; DB CHECK `reason_presets_stop_target_chk`); değer duruş satırına sebep KARARI anında donar (`freezeStopEscalation`), katalog değişikliği geçmiş duruşu etkilemez. · bekçi: `test_reason_presets`, `test_loom_floor` <sub>(`docs/design/DOKUMA-CANLI-EKRAN.md` §9, 2026-10-10)</sub>
 - **[ÇEKİRDEK]** Sed migration'ı mükerrer bulunan tabloda index'i ATLAR (RAISE NOTICE) ve deploy'u DÜŞÜRMEZ; temizlik sonrası aynı dosya yeniden koşulur. Enforce bekleyen kurulumda `test_db_invariants` §1'in kırmızı kalması BİLİNÇLİDİR — bekçiyi bu yüzden daraltma. · bekçi: `test_db_invariants §1` <sub>(CLAUDE.md:78)</sub>
 
 ## Tablet (mobil)

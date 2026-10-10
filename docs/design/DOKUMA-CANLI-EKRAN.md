@@ -1,6 +1,6 @@
-# Tezgah Salonu — dokuma tezgahlarının canlı ekranı (ÖRNEK VERİ)
+# Tezgah Salonu — dokuma tezgahlarının canlı ekranı
 
-> **Tarih:** 2026-10-09 · **Kararlar:** kullanıcı 2026-10-09 sabah + 2026-10-10 (§8) · **Durum:** MOCK; 2026-10-10 main'e indi ama **uygulamada route ve karo YOK** — yalnız geliştirme önizlemesinde açılır (sahaya örnek veri çıkmaz; bekçi `Electron/src/pages/Operations/WeavingFloor/previewOnly.test.ts`). Veri çekmez, bildirim göndermez, backend'e dokunmaz.
+> **Tarih:** 2026-10-09 · **Kararlar:** kullanıcı 2026-10-09 sabah + 2026-10-10 (§8) · **Durum:** GERÇEK VERİ (2026-10-10) — route `operations/weaving-floor` + karo + `GET /api/loom-floor` (`tezgahEnabled` + `loom:live-view`) canlıdır; örnek veri yalnız geliştirme önizlemesindedir (bekçi `previewOnly.test.ts`). Bildirim GÖNDERMEZ (kademe ESCALATED kullanılmaz). TV bağlantısı ve TV hesabı ayrı sonraki dilimdir (§9 madde 4–5).
 > **Kod:** `Electron/src/pages/Operations/WeavingFloor/` · veri sözleşmesi `Electron/src/pages/Operations/WeavingFloor/types.ts` · tek veri kapısı `Electron/src/pages/Operations/WeavingFloor/useLoomFloorLive.ts` · önizleme `Electron/preview-weaving-floor.html` + araçlar `Electron/onizleme/` · görüntüler `docs/design/dokuma-canli-ekran/`.
 > **Bağlam:** tezgah izlemenin asıl tasarımı `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` (telemetri, duruş defteri, vardiya karnesi); dokuma kuralları `docs/kurallar/dokuma.md`.
 
@@ -9,7 +9,7 @@
 Salona bakan biri (vardiya amiri, patron, salondaki TV) **tek bakışta** üç soruyu cevaplasın:
 
 1. Hangi tezgah duruyor, **neden**?
-2. **Kaç dakikadır** müdahale bekliyor — hedef süreyi aştı mı?
+2. ✓ **Kaç dakikadır** müdahale bekliyor — hedef süreyi aştı mı?
 3. Salon bu vardiya ne üretti, hedefin neresinde?
 
 İlke: az yazı, çok şekil. Her tezgah küçük, canlı bir makine; duran makine donar ve ortasında sebebin simgesi belirir. Yazı yalnız sayılarda, anahtar satırında ve detay panelinde.
@@ -107,9 +107,9 @@ duruş başladı ──► görevliye bildirildi ──► görevli tezgahta ─
 
 ### 5.4 Gerçek veriye geçişte gerekenler
 
-1. **Tezgah telemetrisi** — duruşun başladığı an ve tezgahın tekrar çalıştığı an makineden gelmeli; elle girişle "kaç dakikadır" güvenilmez.
+1. ✓ **Tezgah telemetrisi** — duruşun başladığı an ve tezgahın tekrar çalıştığı an makineden gelmeli; elle girişle "kaç dakikadır" güvenilmez.
 2. **Sorumlu ataması** — hol/vardiya → görevli eşlemesi (bugün yok).
-3. **Bildirim altyapısı** — mobil push (saha) + patron bulutu iletimi (patron); ikisi de bu dilimde YAZILMADI.
+3. ✓ **Bildirim altyapısı** — mobil push (saha) + patron bulutu iletimi (patron); ikisi de bu dilimde YAZILMADI.
 4. **Zincir defteri** — bildirim/müdahale/iletim damgaları "ne oldu" bilgisidir ⇒ duruş olayının kendi hareket satırlarında durur (audit'ten türetilmez).
 
 ## 6 · Mock → gerçek veri eşlemesi
@@ -127,15 +127,17 @@ Bileşenler yalnız `types.ts` şekline bağlıdır; geçişte yalnız `useLoomF
 | dokuma işi, plan/üretilen | uydurma `DK…` | `WeavingOrder` (`plannedM`; ÜRETİLEN ≠ TEZGAHTA — `docs/kurallar/dokuma.md`) |
 | levent, kalan iplik | uydurma `LV-…` | `WarpBeam` + levent defteri |
 | sebep, sınıf, simge | `stopReasons.ts` aynası | `ReasonPreset(MACHINE_STOP)` |
-| hedef süre, iletim payı | `targetMin`, `ESCALATION_SETTINGS` | sebep kataloğu/fabrika ayarı (§5.2) |
-| görevli, patron | uydurma adlar | sorumlu ataması + patron hesabı (yok) |
+| hedef süre, iletim payı | `targetMin`, `ESCALATION_SETTINGS` | **BAĞLANDI:** sebep kataloğu `targetMinutes` + fabrika ayarı `tezgah.escalationGraceMinutes`; ikisi duruş satırına DONAR (`machine_stop_events.targetMinutes`/`escalationGraceMinutes`) |
+| görevli, patron | uydurma adlar | sorumlu ataması + patron hesabı (yok) — gerçek ekranda "—" (ölçülmeyen değer uydurulmaz) |
 | `source` | `"SIMULATED"` | `"MACHINE"` — uydurulmuş değer beyanla gider |
+
+Gerçek ekran `useLoomFloorLive` (react-query, 5 sn yoklama, saat sunucu `asOf`a hizalı) ile `GET /api/loom-floor`u okur; "bugün %"/"şu an %" sunucuda tek helper'dan türer. Mock yalnız `mock/useLoomFloorMock.ts` (önizleme).
 
 Mock deterministiktir (`mulberry32`, tohum dışarıda): aynı tohum + an ⇒ aynı salon; simülasyon adımı saftır (test: `mock/floorMock.test.ts`).
 
 ## 7 · Yer ve izin
 
-- **Bugün (mock, main):** uygulamada **route YOK, karo YOK, `SCREEN_CATALOG` satırı YOK** — örnek veri sahaya çıkmasın. Sayfa yalnız geliştirme önizlemesinden açılır; klasör dışından onu içe aktaran tek dosyanın önizleme girişi olduğunu `previewOnly.test.ts` ölçer. Dal dönemindeki `operations/weaving-orders/salon` yolu + `weavingorder:read` + dokuma kapısı main'e İNMEDİ (§8 karar 6).
+- **Bugün (gerçek veri):** route `operations/weaving-floor` (`ProtectedRoute loom:live-view`) + karo (aynı izin, `visibleWhen` tezgah) + `SCREEN_CATALOG` satırı (`modul: tezgahEnabled`) + `ROUTE_MODULE` aynası vardır; canlı veri ucu `verifyToken` → `requireTezgahEnabled` → `loom:live-view`. Örnek veri (mock) yalnız önizlemeden açılır; `previewOnly.test.ts` mock'u içe aktaranları önizleme + `content-routes.tsx` ile sınırlar. Dal dönemindeki `operations/weaving-orders/salon` yolu + `weavingorder:read` + dokuma kapısı main'e İNMEDİ (§8 karar 6).
 - **Karar (kullanıcı 2026-10-09):** ekran ayrı bir **"dokuma canlı izleme"** izniyle açılır; hangi rolün göreceğini fabrika panelden atar (izin kataloğu kodda, atama panelde — kök `CLAUDE.md`). TV için **salt-okur ayrı hesap** açılır. Geçiş sonraki dilimdir (§9).
 - **Modül (karar 2026-10-10, §8 karar 6):** ekran **`tezgahEnabled`** ("Tezgah izleme") arkasında doğar, `dokumaEnabled` arkasında DEĞİL.
 - `reports/dokuma/*` yolu elendi: backend rapor kataloğu girdisi ister, katalog dışı anahtar kapalı sayılır.
@@ -160,15 +162,15 @@ Kalan iki soru 2026-10-10'da 1e tarafından "yüzlerce farklı fabrikaya satıla
 | 6 | Modül anahtarı `dokumaEnabled` mı `tezgahEnabled` mı? | **`tezgahEnabled`** — ekran, canlı veri ucu ve "dokuma canlı izleme" izninin `SCREEN_CATALOG` satırı (`modul: "tezgahEnabled"`) tezgah izleme modülüne bağlanır; dokuma işi ve levent blokları yalnız `dokumaEnabled` de açıksa çizilir (kapalı modülün verisi görünmez). Ekran yalnız izlenen tezgahları (`MachineSpec.monitoringState = LIVE`) "çalışıyor/duruyor" diye sayar; izlenmeyen tezgah gri "izlenmiyor" kalır. | Ekranın cevapladığı soru ("şu an duruyor mu, kaç dakikadır") yalnız canlı tezgah izlemesiyle doğrudur. Dokuma modülü (dokuma işi, koşum, doff, elle duruş, karne) izlemesiz de satılır ve fabrikaların çoğunda izleme olmayacak; ekran dokumaya bağlansa izlemesiz fabrikada sayaç elle girişten türer ve yanlış söyler. İki modül kardeştir (ikisi de `productionEnabled`a bağlı, biri ötekinin ön koşulu değil). Yeni bayrak yok: `tezgahEnabled` var ve varsayılanı KAPALI = bugünkü davranış (ekran yok). |
 | 7 | İletim payı tek değer mi, sebep başına mı? | **Fabrika genelinde TEK değer** ([PROFİL] sayısal ayar, dakika; varsayılan 0 = hedef dolunca patrona). Sebep satırına ikinci kolon AÇILMAZ. | Sebebin aciliyeti zaten sebep satırındaki hedef sürededir (karar 1); pay "patron ne kadar tolerans tanır" sorusudur, sebebin değil kademenin özelliğidir. İletimi yalnız hedef + pay TOPLAMI belirler, yani sebep başına pay hedef süreyle aynı serbestliği ikinci kez açar ve her fabrikaya 23 sebep × 2 ayar yükler. Varsayılan 0 davranışı değiştirmez: hedef süre boşken (`null`, varsayılan) hiçbir duruş izlenmez ve kimseye iletilmez. Açık duruş başladığı andaki hedef + payla değerlendirilir. Sahada sebep başına istisna gerekirse sebep satırına boş geçilebilir bir pay kolonu (`null` = fabrika payı) geriye uyumlu eklenir; bugün açılmaz. |
 
-**Bugünkü durum:** iki karar mock'a uygulandı. Ekran main'de route'suz ve karosuz; `tezgahEnabled` `EKRANSIZ_MODULLER`de kalır, çünkü örnek veri bir modül yüzeyi sayılmaz. Mock'ta pay tek değerdir (`ESCALATION_SETTINGS.graceMin`).
+**Bugünkü durum (2026-10-10):** karar 1, 4, 5 (izin kısmı), 6 ve 7 gerçek veriyle uygulandı; `tezgahEnabled` `EKRANSIZ_MODULLER`den çıktı. Pay tek fabrika ayarıdır ve duruş açılırken donar; hedef süre sebep KARARI anında donar (açılışta/sınıflandırmada/yeniden sınıflandırmada). Sınır: yeniden sınıflandırmanın ters kaydı "from" sebebin O ANKİ katalog hedefini yazar, orijinal donmuş değeri değil. Karar 2 (menüsüz TV bağlantısı) ve TV hesabı AYRI sonraki dilimdir.
 
-## 9 · Sonraki dilim — gerçek uygulama için gerekenler (bu dalda KOD YOK)
+## 9 · Gerçek uygulama dilimleri
 
-Backend'e bu dalda dokunulmadı; aşağıdakiler ayrı dilim(ler)dir ve `main`e kendi dalından iner.
+Madde 1–3 ve 6 2026-10-10'da indi (✓); madde 4–5 (TV bağlantısı, TV hesabı) AYRI sonraki dilimdir.
 
 1. **Sebep kataloğuna hedef süre kolonu** — `ReasonPreset` + `targetMinutes Int?` (yalnız `MACHINE_STOP`ta anlamlı; başka kind'de dolu → 400, `stopLossClass` deseniyle simetrik servis kapısı + DB CHECK). `null` = süre izlenmez, kimseye iletilmez (bugünkü davranış = varsayılan). Reçeteler: `docs/RECETELER.md` § Yeni migration · § Yeni Prisma modeli (kolon); alan kuralları `docs/kurallar/sebep-katalogu.md`. Yazma yolu yalnız sebep kataloğu ucu; değişiklik audit'e yazılır, açık duruş başladığı andaki hedefle değerlendirilir (duruş satırına donar — geçmiş etkilenmez). Panel: Sebep Kataloğu → Tezgah duruşu sekmesinde satır başına "hedef süre (dk)" alanı.
 2. **İletim payı ayarı** — §8 karar 7: TEK fabrika ayarı (dakika, varsayılan 0; `docs/RECETELER.md` § Yeni feature flag / sistem ayarı — sayısal ayar, davranış bayrağı değil), panelde Tezgah izleme kategorisinde; sebep satırına kolon açılmaz. Değeri açık duruş satırına başladığı anda donar.
 3. **"Dokuma canlı izleme" izni** — `docs/RECETELER.md` § Yeni backend route + izin kodu, 17 adım: kod `PERMISSION_CATALOG`a (tek iki nokta, `mobile:` ön eki DEĞİL — masaüstü/TV ekranı), en az bir dar rol şablonu ya da gerekçeli muaf, `SCREEN_CATALOG` girdisi + `modul: "tezgahEnabled"` (§8 karar 6; aynı commit'te `EKRANSIZ_MODULLER`deki `tezgahEnabled` muafı silinir ve ayar panelindeki Tezgah izleme satırı eklenir — `test_screen_catalog §10b`), Electron `content-routes.tsx` `ProtectedRoute` ile karo `tile-config.ts` AYNI izinle, canlı veri ucu `verifyToken` + izin + adlandırılmış modül kapısı (`requireTezgahEnabled`). `previewOnly.test.ts` bu dilimde route'u tanıyacak biçimde değişir. Atama panelden; migration YAZILMAZ (boot uzlaştırması).
 4. **TV bağlantısı (menüsüz)** — App kökünde kabuk-dışı bir yol (2FA kurulum sayfasının deseni: `App.tsx` `Root` kapısı), sekme/menü kabuğu çizilmeden `WeavingFloorPage tv`; açılışta tam ekran, oturum düşerse kendiliğinden yeniden bağlanır, veri akışı kesilirse "Canlı" damgası bayatlar ve ekranda görünür uyarı verir.
 5. **TV hesabı** — salt-okur ayrı kullanıcı: yalnız "dokuma canlı izleme" izni (yazma izni yok); iki adımlı giriş kararı (kullanıcı 2026-09-30: herkese TOTP) TV cihazında nasıl karşılanır ayrıca ölçülür; parola/PIN sır hijyeni kurallarıyla.
-6. **Canlı veri** — `useLoomFloorLive` gövdesi sorgu + akışa döner (§6 tablosu); "bugün %" ve "şu an %" sunucuda tek helper'dan türer (ayrışan yüzey kuralı), istemci yalnız gösterir.
+6. ✓ **Canlı veri** — `useLoomFloorLive` gövdesi sorgu + akışa döner (§6 tablosu); "bugün %" ve "şu an %" sunucuda tek helper'dan türer (ayrışan yüzey kuralı), istemci yalnız gösterir.
