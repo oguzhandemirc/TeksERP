@@ -270,7 +270,10 @@ fn linux_disk_ayni_aygit_toplanir() {
         let w = linux(tag);
         w.faults.db_bytes.store(GB, Ordering::SeqCst);
         let p = package_bytes(&w);
-        let need = p + p + GB * 6 / 5 + 3 * p + 2 * GB;
+        // Windows konağında sahte `docker info`nun yolu `/` ile başlamaz → Docker kökü satırı yok.
+        let (image, parts) =
+            if cfg!(unix) { (3 * p, "(indirme + hazırlık + yedek + imaj deposu)") } else { (0, "(indirme + hazırlık + yedek)") };
+        let need = p + p + GB * 6 / 5 + image + 2 * GB;
         {
             let mut m = w.fs.mounts.lock().unwrap();
             m.push((w.layout.root.clone(), "ortak".into(), need - short));
@@ -281,7 +284,7 @@ fn linux_disk_ayni_aygit_toplanir() {
         if short == 1 {
             assert_eq!(st.error_code.as_deref(), Some("DISK_DOLU"), "{tag}: {:?}", st.message);
             let msg = st.message.unwrap_or_default();
-            assert!(msg.contains("(indirme + hazırlık + yedek + imaj deposu)"), "{tag}: toplamın her kalemi iletide: {msg}");
+            assert!(msg.contains(parts), "{tag}: toplamın her kalemi iletide: {msg}");
             untouched(&w, tag);
         } else {
             assert_ne!(st.error_code.as_deref(), Some("DISK_DOLU"), "{tag}: tam sığan geçer: {:?}", st.message);
