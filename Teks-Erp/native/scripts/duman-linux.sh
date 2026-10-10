@@ -96,7 +96,7 @@ degismez() {
   local v=$1 s
   s=$(saglik)
   [ "$(calisan_surum)" = "$v" ] || dur "$2: current $(calisan_surum), beklenen $v"
-  [ "$s" = "$v DOWN" ] || dur "$2: sağlık '$s', beklenen '$v UP'"
+  [ "$s" = "$v UP" ] || dur "$2: sağlık '$s', beklenen '$v UP'"
   [ "$(durum .kuruluSurum)" = "$v" ] || dur "$2: durum.kuruluSurum $(durum .kuruluSurum), beklenen $v"
   [ "$(konteyner backend | wc -l)" = 1 ] || dur "$2: backend konteyneri $(konteyner backend | wc -l) adet"
   [ -z "$(docker ps -aq --filter name=tekserp-arac-)" ] || dur "$2: yetim araç konteyneri: $(docker ps -a --filter name=tekserp-arac- --format '{{.Names}}')"
