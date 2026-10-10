@@ -36,6 +36,8 @@ const kindSchema = z.nativeEnum(ReasonPresetKind);
 
 /** Kind'e bağlı zorunluluk (MACHINE_STOP'ta şart, diğerlerinde yasak) serviste — Zod yalnız değeri tanır. */
 const stopLossClassSchema = z.nativeEnum(MachineStopLossClass).optional().nullable();
+/** Hedef süre (dk) — yalnız MACHINE_STOP ve plan dışı olmayan sınıfta (serviste); null = süre izlenmez. */
+const targetMinutesSchema = z.number().int().min(1).max(1440).optional().nullable();
 
 const createSchema = z.object({
   kind: kindSchema,
@@ -43,6 +45,7 @@ const createSchema = z.object({
   fullText: z.string().trim().max(500).optional().nullable(),
   requiresText: z.boolean().optional(),
   stopLossClass: stopLossClassSchema,
+  targetMinutes: targetMinutesSchema,
 });
 
 const updateSchema = z.object({
@@ -51,6 +54,7 @@ const updateSchema = z.object({
   requiresText: z.boolean().optional(),
   isActive: z.boolean().optional(),
   stopLossClass: stopLossClassSchema,
+  targetMinutes: targetMinutesSchema,
 });
 
 const duplicateSchema = z.object({

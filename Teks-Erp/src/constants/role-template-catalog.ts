@@ -349,6 +349,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "loom:shift-unseal",
       // Tezgah künyesi + gölge mod (B3): izleme hâli randımanın güven sınıfıdır — süpervizör.
       "loom:spec-manage",
+      // Tezgah Salonu canlı ekranı (salt okuma) — vardiya amiri salona bakar.
+      "loom:live-view",
       // Tezgah oturumu (⓪, 2026-09-14): ekran doğana kadar süpervizör paketinde;
       // tablet dilimiyle operatör paketine iner (loom:run ile aynı vaat).
       "mobile:dokuma",

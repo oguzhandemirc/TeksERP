@@ -87,6 +87,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereBeamWeavingLinkRequired: A(true),
   dokumaRunWeavingOrderRequired: A(true),
   dokumaOrderLineLinkRequired: A(true),
+  tezgahEscalationGraceMinutes: A(5),
   // ── KK1 ────────────────────────────────────────────────────────────────────
   kk1WeightEntryEnabled: A(true),
   kk1DuplicateGuardEnabled: A(true),

@@ -110,13 +110,10 @@ const PANEL_EXEMPT: Record<string, string> = {
   nativeSendEnabled: "kind:'label' — Etiket section'ı yönetir",
   mobileRasterEnabled: "kind:'label' — Etiket section'ı yönetir",
   scrapGradeLabelEnabled: "kind:'label' — Etiket section'ı yönetir",
-  // YER TUTUCU MODÜL ANAHTARLARI (2026-09-02). Arkalarında henüz TEK BİR yüzey
-  // yok: ne route kapısı, ne ekran, ne kanca. Panele bir toggle koymak,
-  // kullanıcıya açtığında hiçbir şeyin değişmediği bir düğme vermek olurdu.
-  // Dilim 3/4'te yüzeyleri doğduğunda panele girer ve bu iki satır SİLİNİR
-  // (muaf listesi iki yönlü denetlenir — panele girip muafta kalırsa kırmızı).
+  // YER TUTUCU MODÜL ANAHTARI. Arkasında henüz TEK BİR yüzey yok: ne route kapısı,
+  // ne ekran, ne kanca — panelde toggle, açılınca hiçbir şeyi değiştirmeyen düğme olurdu.
+  // Yüzeyi doğunca panele girer ve satır SİLİNİR (muaf listesi iki yönlü denetlenir).
   kumasTeknikEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 3'te panele girer",
-  tezgahEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 4'te panele girer",
 };
 
 const ELECTRON_CONFIG = path.resolve(
@@ -799,8 +796,8 @@ async function main() {
   // panel yorumları (`settings-config.ts`, `tile-config.ts`) da birlikte
   // güncellenir.
   //
-  // ⚠️ YER TUTUCULAR BURAYA GİRMEZ: `kumasTeknikEnabled`/`tezgahEnabled`ın
-  // middleware'i YOK (arkalarında route yok). Satır eklemek, "her REGIME_GATES
+  // ⚠️ YER TUTUCULAR BURAYA GİRMEZ: `kumasTeknikEnabled`ın
+  // middleware'i YOK (arkasında route yok). Satır eklemek, "her REGIME_GATES
   // middleware'i ≥1 route'ta geçer" kontrolüne ÖLÜ bir satır sokardı.
   const SRC_ROOT = path.resolve(__dirname, "../src");
   const REGIME_GATES: Record<string, { middleware: string; selfGate: string }> = {
@@ -815,6 +812,8 @@ async function main() {
     devereEnabled: { middleware: "requireDevereEnabled", selfGate: "readDevereEnabled(" },
     // Z1 (2026-09-18): `dokuma` ayar kategorisi `moduleKey: "dokumaEnabled"` taşır (koşum/sipariş bağı bayrakları).
     dokumaEnabled: { middleware: "requireDokumaEnabled", selfGate: "readDokumaEnabled(" },
+    // Tezgah Salonu: `GET /api/loom-floor` + `tezgah` ayar kategorisi (`tezgahEscalationGraceMinutes`).
+    tezgahEnabled: { middleware: "requireTezgahEnabled", selfGate: "readTezgahEnabled(" },
     depoMultiEnabled: {
       middleware: "requireDepoMultiEnabled",
       selfGate: "readDepoMultiEnabled(",
@@ -1195,8 +1194,8 @@ async function main() {
       aBool.includes(k) ? null : "api",
       B.includes(k) ? null : "şema",
       C.includes(k) ? null : "servis",
-      // ⚠️ Panel ayağı MUAF LİSTESİNE saygılı: yer tutucu anahtarların
-      // (`kumasTeknik`, `tezgah`) arkasında henüz TEK BİR yüzey yok ve panele
+      // ⚠️ Panel ayağı MUAF LİSTESİNE saygılı: yer tutucu anahtarın
+      // (`kumasTeknik`) arkasında henüz TEK BİR yüzey yok ve panele
       // toggle koymak, açtığında hiçbir şeyin değişmediği bir düğme vermek
       // olurdu. Muaf gerekçeleri PANEL_EXEMPT'te yazılı ve §5 onları iki yönlü
       // denetliyor (panele girerlerse muafta kalmaları KIRMIZI verir).

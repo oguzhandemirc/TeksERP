@@ -8,7 +8,8 @@
 //                  Kimlik `stopKey` (istemci token'ı ya da sunucu uuid); replay aynı satırı döner.
 //   • KAPA       — claim `endedAt IS NULL ∧ revokedAt IS NULL`; süre burada hesaplanır.
 //   • SINIFLA    — İLK karar (NULL → değer): claim `reasonCode IS NULL`; kayıp sınıfı
-//                  preset'ten KOPYALANIR ve DONAR (katalog değişse satır değişmez).
+//                  preset'ten KOPYALANIR ve DONAR (katalog değişse satır değişmez); hedef
+//                  süre ve iletim payı da öyle (`freezeStopEscalation`, aç/sınıfla/yeniden sınıfla).
 //   • YENİDEN SINIFLA — değer → değer: kayıtlı KARAR değişir, olgular değişmez;
 //                  değişimin kendisi `MachineStopReclass` satırıdır (from→to), aynı tx.
 //                  Ters yolu KARŞI KAYITTIR: aynı fonksiyon to→from ile — silme/damga yok.
@@ -36,6 +37,7 @@ import {
   type MachineStopDto,
   assertBeamSlotValid,
   assertStopShiftWritableTx,
+  freezeStopEscalation,
   loadStop,
   normalizeNote,
   resolveRunId,
@@ -122,6 +124,7 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
       const shiftInstanceId = await resolveShiftInstanceId(tx, started.value);
       await assertStopShiftWritableTx(tx, { shiftInstanceId, machineId: machine.id });
       const runId = await resolveRunId(tx, machine.id, started.value);
+      const escalation = await freezeStopEscalation(tx, preset, null);
       return tx.machineStopEvent.create({
         data: {
           machineId: machine.id,
@@ -136,6 +139,8 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
           classifiedById: preset ? (userId ?? null) : null,
           classifiedAt: preset ? new Date() : null,
           requiresReason: preset === null,
+          targetMinutes: escalation.targetMinutes,
+          escalationGraceMinutes: escalation.escalationGraceMinutes,
           shiftInstanceId,
           factoryDay: factoryDayKeyUtcMidnight(started.value),
           source,
@@ -158,7 +163,10 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
 
   await AuditService.log({
     userId, action: "CREATE", tableName: TABLE, recordId: created.id,
-    newData: { machineId: created.machineId, startedAt: created.startedAt, reasonCode: created.reasonCode, source: created.source },
+    newData: {
+      machineId: created.machineId, startedAt: created.startedAt, reasonCode: created.reasonCode, source: created.source,
+      targetMinutes: created.targetMinutes, escalationGraceMinutes: created.escalationGraceMinutes,
+    },
   }).catch(() => undefined);
 
   return { success: true, data: created, message: "Duruş açıldı", ...(warnings.length ? { warnings } : {}) };
@@ -217,16 +225,22 @@ export async function closeManualStop(
 // ─────────────────────────────────────────────────────────────────────────────
 export async function classifyStop(stopId: string, input: ClassifyStopInput, userId?: string, source: MachineDataSource = MachineDataSource.SUPERVISOR): Promise<ApiResponse<MachineStopDto>> {
   const classified = await prisma.$transaction(async (tx) => {
-    const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true, machine: { select: { warpBeamSlots: true } } } });
+    const cur = await tx.machineStopEvent.findUnique({
+      where: { id: stopId },
+      select: { shiftInstanceId: true, machineId: true, escalationGraceMinutes: true, machine: { select: { warpBeamSlots: true } } },
+    });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
     await assertStopShiftWritableTx(tx, cur);
     assertBeamSlotValid(cur.machine, input.beamSlot);
     const preset = await resolveStopPreset(tx, input.reasonCode);
+    const escalation = await freezeStopEscalation(tx, preset, cur.escalationGraceMinutes);
     const claim = await tx.machineStopEvent.updateMany({
       where: { id: stopId, reasonCode: null, revokedAt: null },
       data: {
         reasonCode: preset.code,
         lossClass: preset.lossClass,
+        targetMinutes: escalation.targetMinutes,
+        escalationGraceMinutes: escalation.escalationGraceMinutes,
         reasonNote: normalizeNote(input.reasonNote),
         reasonSource: source,
         classifiedById: userId ?? null,
@@ -246,7 +260,11 @@ export async function classifyStop(stopId: string, input: ClassifyStopInput, use
 
   await AuditService.log({
     userId, action: "UPDATE", tableName: TABLE, recordId: classified.id,
-    changes: [{ field: "reasonCode", old: null, new: classified.reasonCode }, { field: "lossClass", old: null, new: classified.lossClass }],
+    changes: [
+      { field: "reasonCode", old: null, new: classified.reasonCode },
+      { field: "lossClass", old: null, new: classified.lossClass },
+      { field: "targetMinutes", old: null, new: classified.targetMinutes },
+    ],
   }).catch(() => undefined);
 
   return { success: true, data: classified, message: "Duruş sınıflandırıldı" };
@@ -260,16 +278,18 @@ export async function reclassifyStop(stopId: string, input: ReclassifyStopInput,
     throw AppError.badRequest("Yeni sebep mevcut sebeple aynı — değişiklik yok.", { code: "STOP_RECLASS_NOOP" });
   }
   const reclassed = await prisma.$transaction(async (tx) => {
-    const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true, lossClass: true, reasonNote: true } });
+    const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true, lossClass: true, reasonNote: true, targetMinutes: true, escalationGraceMinutes: true } });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
     await assertStopShiftWritableTx(tx, cur);
     const to = await resolveStopPreset(tx, input.toReasonCode);
+    const escalation = await freezeStopEscalation(tx, to, cur.escalationGraceMinutes);
     const yeniNot = input.reasonNote === undefined ? undefined : normalizeNote(input.reasonNote);
     // Claim: kayıtlı karar hâlâ beklenen mi (yarışta bayat karar üzerine yazılmaz).
     const claim = await tx.machineStopEvent.updateMany({
       where: { id: stopId, reasonCode: input.fromReasonCode.trim(), revokedAt: null },
       data: {
         reasonCode: to.code, lossClass: to.lossClass, reasonSource: MachineDataSource.SUPERVISOR,
+        targetMinutes: escalation.targetMinutes, escalationGraceMinutes: escalation.escalationGraceMinutes,
         classifiedById: userId ?? null, classifiedAt: new Date(),
         ...(yeniNot !== undefined ? { reasonNote: yeniNot } : {}),
       },
@@ -299,15 +319,18 @@ export async function reclassifyStop(stopId: string, input: ReclassifyStopInput,
         actedById: userId ?? null,
       },
     });
-    return loadStop(tx, stopId);
+    return { stop: await loadStop(tx, stopId), oldTargetMinutes: cur.targetMinutes };
   });
 
   await AuditService.log({
-    userId, action: "UPDATE", tableName: TABLE, recordId: reclassed.id,
-    changes: [{ field: "reasonCode", old: input.fromReasonCode, new: reclassed.reasonCode }],
+    userId, action: "UPDATE", tableName: TABLE, recordId: reclassed.stop.id,
+    changes: [
+      { field: "reasonCode", old: input.fromReasonCode, new: reclassed.stop.reasonCode },
+      { field: "targetMinutes", old: reclassed.oldTargetMinutes, new: reclassed.stop.targetMinutes },
+    ],
   }).catch(() => undefined);
 
-  return { success: true, data: reclassed, message: "Duruş yeniden sınıflandırıldı" };
+  return { success: true, data: reclassed.stop, message: "Duruş yeniden sınıflandırıldı" };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

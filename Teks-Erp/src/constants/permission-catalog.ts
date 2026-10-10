@@ -102,6 +102,9 @@ export const PERMISSION_CATALOG = [
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): künye yazımı, OFF→SHADOW, go-live (üç şart), sebepli demote —
   // izleme hâlini değiştirmek randıman rakamının GÜVEN sınıfını değiştirir; süpervizör işi.
   { code: "loom:spec-manage", module: "PRODUCTION", category: "web", description: "Tezgah künyesi ve izleme hâli (OFF→SHADOW→LIVE go-live kapıları, sebepli demote)" },
+  // Tezgah Salonu canlı ekranı (2026-10-10): salt okuma; yazma izni taşımayan TV/izleme
+  // hesabına tek başına verilebilsin diye ayrı kod (`tezgahEnabled` modülü).
+  { code: "loom:live-view", module: "PRODUCTION", category: "web", description: "Dokuma canlı izleme — Tezgah Salonu ekranı (salt okuma: durum, duruş süresi, bugün %)" },
   { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },

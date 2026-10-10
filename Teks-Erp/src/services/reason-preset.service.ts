@@ -56,6 +56,8 @@ export type ReasonPresetDto = {
   legacyTexts: string[];
   /** Yalnız `MACHINE_STOP`ta dolu (zorunlu, `MINOR` olamaz); diğer kind'lerde NULL. */
   stopLossClass: MachineStopLossClass | null;
+  /** Hedef süre (dk) — yalnız `MACHINE_STOP`ta; NULL = süre izlenmez (Tezgah Salonu). */
+  targetMinutes: number | null;
 };
 
 /** Liste satırı: DTO + türetilmiş `quickPick` (E7) — kolon değil, sıralamadan (`markQuickPicks`). */
@@ -88,6 +90,7 @@ const SELECT = {
   isSystem: true,
   legacyTexts: true,
   stopLossClass: true,
+  targetMinutes: true,
 } satisfies Prisma.ReasonPresetSelect;
 
 /** Eski-ad listesinin üst sınırı — en eskisi düşer (sınırsız dizi = sınırsız satır). */
@@ -394,12 +397,14 @@ export const ReasonPresetService = {
       fullText?: string | null;
       requiresText?: boolean;
       stopLossClass?: MachineStopLossClass | null;
+      targetMinutes?: number | null;
     },
     userId?: string,
   ): Promise<ReasonPresetDto> {
     const label = input.label.trim();
     if (!label) throw new AppError("Etiket boş olamaz", 400);
     const stopLossClass = resolveStopLossClass(input.kind, input.stopLossClass);
+    const targetMinutes = resolveTargetMinutes(input.kind, stopLossClass, input.targetMinutes ?? null);
 
     const code = await nextFreeCode(input.kind, slugifyReasonCode(label));
     const sortOrder = await nextSortOrder(input.kind);
@@ -413,6 +418,7 @@ export const ReasonPresetService = {
         fullText: resolveFullText(input.kind, input.fullText, label),
         requiresText: input.requiresText ?? false,
         stopLossClass,
+        targetMinutes,
         sortOrder,
         isSystem: false,
         createdById: userId ?? null,
@@ -444,6 +450,7 @@ export const ReasonPresetService = {
       requiresText?: boolean;
       isActive?: boolean;
       stopLossClass?: MachineStopLossClass | null;
+      targetMinutes?: number | null;
     },
     userId?: string,
   ): Promise<ReasonPresetDto> {
@@ -454,6 +461,11 @@ export const ReasonPresetService = {
     // Sınıf katalogda düzeltilebilir; açılmış duruşlardaki kopya DONUK kalır (şema notu).
     const stopLossClass =
       input.stopLossClass !== undefined ? resolveStopLossClass(current.kind, input.stopLossClass) : undefined;
+    // Hedef, SONUÇ sınıfla birlikte doğrulanır: plan dışına çevrilen sebebin hedefi kalamaz (CHECK ikizi).
+    const targetChanges = input.targetMinutes !== undefined || stopLossClass !== undefined;
+    const targetMinutes = targetChanges
+      ? resolveTargetMinutes(current.kind, stopLossClass ?? current.stopLossClass, input.targetMinutes !== undefined ? input.targetMinutes : current.targetMinutes)
+      : undefined;
 
     const label = input.label?.trim();
     if (input.label !== undefined && !label) throw new AppError("Etiket boş olamaz", 400);
@@ -479,6 +491,7 @@ export const ReasonPresetService = {
         ...(input.requiresText !== undefined ? { requiresText: input.requiresText } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         ...(stopLossClass !== undefined ? { stopLossClass } : {}),
+        ...(targetMinutes !== undefined ? { targetMinutes } : {}),
         updatedById: userId ?? null,
       },
       select: SELECT,
@@ -523,6 +536,7 @@ export const ReasonPresetService = {
           requiresText: src.requiresText,
           // Sınıf kaynaktan kopyalanır — kopyalanmazsa MACHINE_STOP kopyası DB CHECK'e düşerdi.
           stopLossClass: src.stopLossClass,
+          targetMinutes: src.targetMinutes,
           sortOrder: src.sortOrder + 1,
           isSystem: false,
           createdById: userId ?? null,
@@ -595,6 +609,28 @@ function resolveFullText(
  * (MINOR süre sınıfıdır, sebep sınıfı değil); başka kind'de verilmesi REDDEDİLİR.
  * Birincil doğrulama burada (Türkçe mesaj), `reason_presets_machine_class_chk` ikinci hat.
  */
+/**
+ * HEDEF SÜRE kapısı — DB CHECK `reason_presets_stop_target_chk`ın servis ikizi: yalnız
+ * `MACHINE_STOP`, plan dışı (`NON_SCHEDULED`) olmayan sınıf, 1..1440 dk. NULL her zaman serbest.
+ */
+function resolveTargetMinutes(
+  kind: ReasonPresetKind,
+  lossClass: MachineStopLossClass | null,
+  given: number | null,
+): number | null {
+  if (given === null) return null;
+  if (kind !== ReasonPresetKind.MACHINE_STOP) {
+    throw AppError.badRequest("Hedef süre yalnız tezgah duruşu sebeplerinde girilir", { code: "STOP_TARGET_NOT_APPLICABLE", kind });
+  }
+  if (lossClass === MachineStopLossClass.NON_SCHEDULED) {
+    throw AppError.badRequest("Plan dışı (çalışma dışı) duruşun süresi izlenmez — hedef süre boş kalmalı", { code: "STOP_TARGET_NOT_TRACKED" });
+  }
+  if (!Number.isInteger(given) || given < 1 || given > 1440) {
+    throw AppError.badRequest("Hedef süre 1 ile 1440 dakika arasında tam sayı olmalı", { code: "STOP_TARGET_OUT_OF_RANGE", given });
+  }
+  return given;
+}
+
 function resolveStopLossClass(
   kind: ReasonPresetKind,
   given: MachineStopLossClass | null | undefined,

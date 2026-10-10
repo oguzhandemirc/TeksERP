@@ -289,6 +289,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
   // sebep atama/yeniden sınıflandırma `loom:classify` — İKİSİNDEN BİRİ ekranı açar, eylemler ekran içinde izinle.
   { key: "operations/machine-stops", app: "desktop", modul: "dokumaEnabled", title: "Tezgah Duruşları", requires: ["loom:manual-entry", "loom:classify"], capabilities: [] },
+  // Tezgah Salonu canlı ekranı (2026-10-10): `tezgahEnabled` arkasında — dokuma modülünün değil
+  // tezgah izlemenin ekranı (DOKUMA-CANLI-EKRAN §8 karar 6).
+  { key: "operations/weaving-floor", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Salonu", requires: ["loom:live-view"], capabilities: [] },
   { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
   { key: "reports/production", app: "desktop", modul: "productionEnabled", title: "Üretim", requires: ["report:production"], capabilities: [] },
   { key: "reports/sales", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
@@ -432,12 +435,6 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
     reason:
       "Kumaş teknik kartı = Ürünler ekranının İÇİNDEKİ alanlar (en · gramaj · " +
       "kompozisyon); ayrı bir ekranı yok. Yüzey Dilim 3'te doğacak.",
-  },
-  {
-    modul: "tezgahEnabled",
-    reason:
-      "Dokuma tezgah izleme yer tutucu bir anahtar — arkasında henüz hiçbir " +
-      "yüzey (ne route ne karo) yok. Dilim 4.",
   },
   {
     modul: "emanetEnabled",

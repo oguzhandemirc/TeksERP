@@ -426,6 +426,8 @@ export const updateSchema = z.strictObject({
   shippingSackSeqPrefix: z.string().max(8).regex(SHIPPING_SACK_SEQ_PREFIX_WRITE_RE, "Yalnız harf, rakam, - _ . ve boşluk").optional(),
   shippingSackSeqPrefixLive: z.boolean().optional(),
   shippingSackSeqStart: z.number().int().min(0).max(999).nullable().optional(),
+  // tezgah.escalationGraceMinutes — iletim payı (dk); null = varsayılana (0) dön.
+  tezgahEscalationGraceMinutes: z.number().int().min(0).max(1440).nullable().optional(),
   shippingSackSeqShowTotal: z.boolean().optional(),
   packingPoolPackageNo: z.enum(["sevkte", "acilista"]).optional(),
   sackDumpNameMode: z.enum(["ikisi", "bizdeki", "musterideki"]).optional(),

@@ -8,6 +8,7 @@ import { MachineDataSource, Prisma, ReasonPresetKind, type MachineStopLossClass 
 import { AppError } from "../../utils/app-error";
 import { ENTRY_STAMP_MAX_FUTURE_MS } from "./duplicate-guard.helper";
 import { resolveRunStamp, type StampResolution } from "./machine-run-open.helper";
+import { readTezgahEscalationGraceMinutes } from "../system-setting.service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -29,6 +30,8 @@ export const MACHINE_STOP_SELECT = {
   classifiedById: true,
   classifiedAt: true,
   requiresReason: true,
+  targetMinutes: true,
+  escalationGraceMinutes: true,
   shiftInstanceId: true,
   factoryDay: true,
   source: true,
@@ -94,18 +97,36 @@ export function resolveStopStamp(
   return { value: declared, warning: null };
 }
 
+export interface StopPreset { code: string; lossClass: MachineStopLossClass; targetMinutes: number | null }
+
 /** Katalogdaki AKTİF MACHINE_STOP satırı; kayıp sınıfı zorunlu (CHECK). Yoksa 400. */
-export async function resolveStopPreset(tx: Tx, code: string): Promise<{ code: string; lossClass: MachineStopLossClass }> {
+export async function resolveStopPreset(tx: Tx, code: string): Promise<StopPreset> {
   const trimmed = code.trim();
   const row = await tx.reasonPreset.findFirst({
     where: { kind: ReasonPresetKind.MACHINE_STOP, code: trimmed, isActive: true },
-    select: { code: true, stopLossClass: true },
+    select: { code: true, stopLossClass: true, targetMinutes: true },
   });
   if (!row) throw AppError.badRequest(`Geçersiz duruş sebebi: ${trimmed}`, { code: "REASON_CODE_INVALID" });
   if (!row.stopLossClass) {
     throw AppError.badRequest(`Duruş sebebinin kayıp sınıfı yok: ${trimmed}`, { code: "STOP_LOSS_CLASS_MISSING" });
   }
-  return { code: row.code, lossClass: row.stopLossClass };
+  return { code: row.code, lossClass: row.stopLossClass, targetMinutes: row.targetMinutes };
+}
+
+/**
+ * UYARI ZİNCİRİ DONDURMA — tek yer (aç · sınıfla · yeniden sınıfla). Hedef süre sebep
+ * kararından kopyalanır; iletim payı yalnız satırda YOKSA o anki ayardan yazılır (açılışta
+ * her zaman, eski satırda ilk kararda) — bir kez donan pay bir daha değişmez.
+ */
+export async function freezeStopEscalation(
+  tx: Tx,
+  preset: Pick<StopPreset, "targetMinutes"> | null,
+  currentGraceMinutes: number | null,
+): Promise<{ targetMinutes: number | null; escalationGraceMinutes: number | undefined }> {
+  const targetMinutes = preset?.targetMinutes ?? null;
+  // `undefined` = Prisma'da "dokunma": donmuş pay yerinde kalır.
+  if (currentGraceMinutes !== null) return { targetMinutes, escalationGraceMinutes: undefined };
+  return { targetMinutes, escalationGraceMinutes: await readTezgahEscalationGraceMinutes(tx) };
 }
 
 /**

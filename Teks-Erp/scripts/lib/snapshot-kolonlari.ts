@@ -432,6 +432,21 @@ WHERE s."reasonCode" IS NOT NULL AND s."lossClass" IS NULL`,
       },
     ],
   },
+  // Tezgah Salonu uyarı zinciri çıpası: kademe ve iletim anı satırdaki DONMUŞ değerden okunur.
+  {
+    model: "MachineStopEvent",
+    alan: "targetMinutes",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "machine-stop.service.ts"],
+    neden: "sebebin hedef süresi sebep KARARI anında (açılışta sebepliyse · sınıfla · yeniden sınıfla) katalogdan kopyalanıp donar; katalog değişse açık duruşun kademesi değişmez — tek yazıcı",
+  },
+  {
+    model: "MachineStopEvent",
+    alan: "escalationGraceMinutes",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "machine-stop.service.ts"],
+    neden: "iletim payı duruş açılırken fabrika ayarından donar (özellikten önceki satırda ilk sebep kararında); ayar değişse açık duruş değişmez — tek yazıcı",
+  },
   {
     model: "MachineRun",
     alan: "unitsPerCm",

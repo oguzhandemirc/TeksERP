@@ -231,10 +231,13 @@ export const SETTING_KEYS = {
   /** Kumaş teknik kartı modülü (en · gramaj · kompozisyon · atkı/çözgü).
    *  YER TUTUCU — arkasında henüz yüzey YOK; panele de girmez (bekçi muafı). */
   KUMAS_TEKNIK_ENABLED: "kumasTeknik.enabled",
-  /** Dokuma tezgah izleme modülü. YER TUTUCU — arkasında henüz yüzey YOK.
+  /** Dokuma tezgah izleme modülü — Tezgah Salonu canlı ekranı ve `/api/loom-floor`.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`): üretim kapalıyken izlenecek iş
    *  emri yoktur. */
   TEZGAH_ENABLED: "tezgah.enabled",
+  /** [PROFİL] İletim payı (dk): duruş hedef süreyi bu kadar aşınca patrona iletilir.
+   *  Fabrika genelinde TEK değer (sebep başına değil); duruş açıldığı an satıra donar. */
+  TEZGAH_ESCALATION_GRACE_MINUTES: "tezgah.escalationGraceMinutes",
   /** Devere / levent modülü: çözgü kartı · levent stoğu · levent olay defteri.
    *  ⚠️ İPLİĞE BAĞIMLI (`MODULE_DEPENDENCIES`), o da ticarete: levent doğarken
    *  iplik kg defterine çıkış yazılır (`WARP_ISSUE`). Zincir OKUMA kapısında
@@ -895,6 +898,9 @@ export function sanitizeSackSeqPrefix(v: unknown): string {
 }
 /** Başlangıç numarası: 1 (varsayılan, sektör) — 0 da seçilebilir; üst sınır 999. */
 export const DEFAULT_SHIPPING_SACK_SEQ_START = 1;
+/** İletim payı (dk): 0 = hedef dolunca patrona (varsayılan); üst sınır bir gün. */
+export const DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES = 0;
+export const TEZGAH_ESCALATION_GRACE_MINUTES_MAX = 1440;
 export const SHIPPING_SACK_SEQ_START_MAX = 999;
 
 /**
@@ -1611,9 +1617,11 @@ export interface FeatureFlags {
   depoMultiEnabled: boolean;
   /** Kumaş teknik kartı modülü. YER TUTUCU — arkasında henüz yüzey yok. */
   kumasTeknikEnabled: boolean;
-  /** Dokuma tezgah izleme modülü. YER TUTUCU — arkasında henüz yüzey yok.
+  /** Dokuma tezgah izleme modülü (Tezgah Salonu canlı ekranı). Varsayılan KAPALI.
    *  ÜRETİME BAĞIMLI (üretim kapalıyken açılamaz). */
   tezgahEnabled: boolean;
+  /** İletim payı (dk, default 0; 0–1440) — fabrika genelinde tek değer. */
+  tezgahEscalationGraceMinutes: number;
   /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).
    *  Varsayılan KAPALI. ⚠️ İPLİĞE BAĞIMLI, iplik de ticarete: bu alan HAM
    *  değerdir (panel toggle'ı kendi yazdığını geri okusun diye); etkin değer
@@ -2192,6 +2200,7 @@ export class SystemSettingService {
       shippingSackSeqPrefix: await readShippingSackSeqPrefix(cacheClient),
       shippingSackSeqPrefixLive: await readShippingSackSeqPrefixLive(cacheClient),
       shippingSackSeqStart: await readShippingSackSeqStart(cacheClient),
+      tezgahEscalationGraceMinutes: await readTezgahEscalationGraceMinutes(cacheClient),
       shippingSackSeqShowTotal: await readShippingSackSeqShowTotal(cacheClient),
       packingPoolPackageNo: await readPackingPoolPackageNo(cacheClient),
       sackDumpNameMode: await readSackDumpNameMode(cacheClient),
@@ -2358,10 +2367,12 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "license"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
+      /** null = fabrika varsayılanına dön (0 dk). */
+      tezgahEscalationGraceMinutes?: number | null;
       financeInvoiceQtyTolerancePct?: number | null;
       financeInvoicePriceTolerancePct?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
@@ -3316,6 +3327,16 @@ export class SystemSettingService {
         }
       }
       await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_START, v === null ? DEFAULT_SHIPPING_SACK_SEQ_START : v, "Sevkiyat içi çuval sırası başlangıç numarası", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahEscalationGraceMinutes")) {
+      const v = input.tezgahEscalationGraceMinutes;
+      // `null` = alan temizlendi → varsayılan (0 = hedef dolunca patrona). 0 meşru.
+      if (v !== null) {
+        if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > TEZGAH_ESCALATION_GRACE_MINUTES_MAX) {
+          throw AppError.badRequest(`İletim payı 0 ile ${TEZGAH_ESCALATION_GRACE_MINUTES_MAX} dakika arasında tam sayı olmalı`);
+        }
+      }
+      await this.set(SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES, v === null ? DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES : v, "Tezgah duruşu iletim payı (dk) — hedef süre bu kadar aşılınca patrona iletilir", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqShowTotal")) {
       if (typeof input.shippingSackSeqShowTotal !== "boolean") throw AppError.badRequest("shippingSackSeqShowTotal boolean olmalı");
@@ -5357,6 +5378,12 @@ export async function readShippingSackSeqStart(tx?: Pick<typeof prisma, "systemS
   if (!setting) return DEFAULT_SHIPPING_SACK_SEQ_START;
   const n = asNumber(setting.value);
   return n === null || !Number.isInteger(n) || n < 0 || n > SHIPPING_SACK_SEQ_START_MAX ? DEFAULT_SHIPPING_SACK_SEQ_START : n;
+}
+export async function readTezgahEscalationGraceMinutes(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES }, select: { value: true } });
+  if (!setting) return DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isInteger(n) || n < 0 || n > TEZGAH_ESCALATION_GRACE_MINUTES_MAX ? DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES : n;
 }
 export async function readPackingPoolPackageNo(tx?: Pick<typeof prisma, "systemSetting">): Promise<PackingPoolPackageNo> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.PACKING_POOL_PACKAGE_NO }, select: { value: true } });

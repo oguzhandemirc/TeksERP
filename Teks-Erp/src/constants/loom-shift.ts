@@ -3,6 +3,13 @@
 // Değer karneye DONAR (`MachineShiftStat.stopThresholdSec`): bayrak geldiğinde
 // eski karneler eski eşikle kalır, seri kıyaslanabilir olur.
 // =============================================================================
+import type { Prisma } from "@prisma/client";
+
+/**
+ * TEZGAH KÜMESİ — "tezgah = aktif ∧ WEAVING istasyonundaki makine" (StationKind.WEAVING hükmü).
+ * Karne ve Tezgah Salonu aynı kümeyi bu tek where'den okur; künye/izleme hâli süzmez.
+ */
+export const LOOM_MACHINE_WHERE = { isActive: true, station: { kind: "WEAVING" } } satisfies Prisma.MachineWhereInput;
 
 /**
  * Mikro duruş eşiği (sn) — bu sürenin ALTINDAKİ duruş `MINOR` sayılır: APT'den

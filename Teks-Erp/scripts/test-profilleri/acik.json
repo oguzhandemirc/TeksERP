@@ -53,6 +53,7 @@
     "devereBeamWeavingLinkRequired": true,
     "dokumaRunWeavingOrderRequired": true,
     "dokumaOrderLineLinkRequired": true,
+    "tezgahEscalationGraceMinutes": 5,
     "kk1WeightEntryEnabled": true,
     "kk1DuplicateGuardEnabled": true,
     "kk1OnlineOnlyEnabled": true,

@@ -69,6 +69,7 @@ import {
   readDokumaEnabled,
   readIplikEnabled,
   readProductionEnabled,
+  readTezgahEnabled,
   readTicaretEnabled,
 } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
@@ -234,6 +235,37 @@ export async function requireDokumaEnabled(
     const enabled = await readDokumaEnabled();
     if (!enabled) {
       throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma işi") ?? modulKapali("dokuma", "Dokuma işi");
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Tezgah izleme modülü: Tezgah Salonu canlı ekranı (`/api/loom-floor`).
+ *
+ * ⚠️ ÖN KOŞUL ÖNCE ÖLÇÜLÜR (`MODULE_DEPENDENCIES.tezgahEnabled = productionEnabled`);
+ * dokuma işi modülünün KARDEŞİDİR, çocuğu değil — `dokumaEnabled` burada sorulmaz
+ * (izlemesiz dokuma da satılır; ekranın dokuma blokları ayrıca dokuma bayrağına bakar).
+ */
+export async function requireTezgahEnabled(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const production = await readProductionEnabled();
+    if (!production) {
+      throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim") ?? AppError.forbidden(
+        "Tezgah izleme modülü Üretim modülüne bağlıdır; Üretim modülü bu kurulumda kapalı. " +
+          "Sistem → Modüller bölümünden açılabilir.",
+        { code: "MODULE_DISABLED", modul: "production", dependent: "tezgah" },
+      );
+    }
+    const enabled = await readTezgahEnabled();
+    if (!enabled) {
+      throw licenseModuleError(SETTING_KEYS.TEZGAH_ENABLED, "Tezgah izleme") ?? modulKapali("tezgah", "Tezgah izleme");
     }
     next();
   } catch (e) {

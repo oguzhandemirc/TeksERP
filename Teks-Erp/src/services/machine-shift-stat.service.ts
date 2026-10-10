@@ -13,7 +13,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
-import { MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
+import { LOOM_MACHINE_WHERE, MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
 import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftLineTerms, type ShiftTerms, type ShiftTermsInput } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis, type LoomKpis } from "./helpers/loom-efficiency.helper";
 
@@ -114,7 +114,7 @@ const SHIFT_SELECT = {
 /** Tezgah kümesi: aktif ∧ WEAVING istasyonu (+ süzgeç). Künye süzmez. */
 async function listLooms(machineId?: string): Promise<Array<{ id: string; code: string; name: string }>> {
   return prisma.machine.findMany({
-    where: { isActive: true, station: { kind: "WEAVING" }, ...(machineId ? { id: machineId } : {}) },
+    where: { ...LOOM_MACHINE_WHERE, ...(machineId ? { id: machineId } : {}) },
     select: { id: true, code: true, name: true },
     orderBy: { code: "asc" },
   });
