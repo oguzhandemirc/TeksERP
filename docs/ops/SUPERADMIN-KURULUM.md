@@ -37,7 +37,8 @@ Script sırayla sorar: **kullanıcı adı** (öneri `bakim` — nötr seçin, sa
 çağrıştırmasın) · **parola** (iki kez, ekrana basılmaz) · **6 haneli hızlı giriş
 PIN'i** (boş bırakılırsa üretilir). İki adımlı doğrulama **tohumlanmaz**: 2FA
 kimseye zorunlu değildir (kullanıcı kararı 2026-09-30); isterseniz panelde kendi
-hesabınızın **2FA sekmesinden** kurulum bağlantısı üretip açın — açıksa her
+hesabınızın **2FA sekmesinden** "Kurulumu başlat" → "Bu bilgisayarda kurulumu
+aç" deyin — açıksa her
 parolalı girişte kod sorulur, PIN girişi etkilenmez.
 
 > ⚠️ **Çıktı bir daha gösterilmez.** PIN parola yöneticisinde

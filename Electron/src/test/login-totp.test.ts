@@ -9,7 +9,7 @@ import {
   TOTP_INVALID_CODE,
   TOTP_REQUIRED_CODE,
 } from "@/lib/totp-auth";
-import { buildTotpEnrollUrl, TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
+import { buildTotpEnrollHash, buildTotpEnrollUrl, TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
 
 /**
  * İKİ ADIMLI DOĞRULAMA — istemci tarafı sözleşmesi.
@@ -132,13 +132,23 @@ describe("2FA kurulum bağlantısı", () => {
     expect(buildTotpEnrollUrl("a b&c", "https://x.y")).toContain("token=a%20b%26c");
   });
 
-  it("⚠️ dış adres yoksa mevcut origin'e düşer — ama `file://` ASLA kullanılmaz", () => {
-    // Electron'da konum `file://`dir ve oradan üretilen bir bağlantı patronun
-    // telefonunda AÇILMAZ. Boş origin, yöneticiye eksik bir adres göstererek
-    // sorunu GÖRÜNÜR kılar; `file:///#/...` sessizce yanlış olurdu.
-    const url = buildTotpEnrollUrl("t", undefined);
-    expect(url.startsWith("file:")).toBe(false);
-    expect(url).toContain(`#${TOTP_ENROLL_PATH}?token=t`);
+  it("dış adres yoksa sayfanın http(s) origin'ine düşer", () => {
+    expect(buildTotpEnrollUrl("t", undefined, "http://192.168.1.5:4443/")).toBe(
+      `http://192.168.1.5:4443/#${TOTP_ENROLL_PATH}?token=t`,
+    );
+  });
+
+  it("⚠️ mutlak kök yoksa (Electron file://) bağlantı YOK — göreli `/#/…` üretilmez", () => {
+    // Göreli bağlantı hiçbir tarayıcıda açılmaz; kurulum uygulama içinde açılır (buildTotpEnrollHash).
+    expect(buildTotpEnrollUrl("t", undefined, "")).toBeNull();
+    expect(buildTotpEnrollUrl("t", "", "")).toBeNull();
+    expect(buildTotpEnrollUrl("t", undefined, "null")).toBeNull();
+    expect(buildTotpEnrollUrl("t", "file:///app", "")).toBeNull();
+  });
+
+  it("uygulama içi yol token'ı kodlar ve bağlantıyla aynı yolu taşır", () => {
+    expect(buildTotpEnrollHash("a b")).toBe(`#${TOTP_ENROLL_PATH}?token=a%20b`);
+    expect(buildTotpEnrollUrl("a b", "https://x.y")).toBe(`https://x.y/${buildTotpEnrollHash("a b")}`);
   });
 
   it("yol sabiti tek kaynaktan gelir (router + App kapısı onu okur)", () => {

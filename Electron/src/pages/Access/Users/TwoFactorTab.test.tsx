@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { TWO_FACTOR_HINT } from "@/lib/totp-auth";
 
@@ -19,7 +19,10 @@ vi.mock("@/services/adminUserService", () => ({
         remainingRecoveryCodes: status.enabled ? 10 : 0,
       },
     })),
-    openTotpWindow: vi.fn(),
+    openTotpWindow: vi.fn(async () => ({
+      success: true,
+      data: { token: "tok-w", expiresAt: "2026-10-10T09:15:00.000Z" },
+    })),
     resetTotp: vi.fn(),
   },
 }));
@@ -48,5 +51,16 @@ describe("TwoFactorTab — isteğe bağlı 2FA metni", () => {
     renderWithProviders(<TwoFactorTab userId="u1" username="ayse" />);
     expect(await screen.findByRole("button", { name: /Sıfırla/ })).toBeTruthy();
     expect(screen.getByText(TWO_FACTOR_HINT)).toBeTruthy();
+  });
+
+  it("web (http origin): mutlak bağlantı + Kopyala korunur, uygulama içi yol da var", async () => {
+    status.enabled = false;
+    renderWithProviders(<TwoFactorTab userId="u1" username="ayse" />);
+    fireEvent.click(await screen.findByRole("button", { name: /Kurulumu başlat/ }));
+    const url = `${window.location.origin}/#/2fa-kurulum?token=tok-w`;
+    expect(url.startsWith("http")).toBe(true);
+    expect(await screen.findByText(url)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Kopyala/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bu bilgisayarda kurulumu aç/ })).toBeTruthy();
   });
 });
