@@ -44,6 +44,11 @@ export const MACHINE_STOP_SELECT = {
   machine: { select: { code: true, name: true } },
   shiftInstance: { select: { id: true, startsAt: true, endsAt: true, isCancelled: true, shiftDefinition: { select: { code: true, name: true } } } },
   classifiedBy: { select: { fullName: true } },
+  // Duruşu açan / kapatan (yalnız insan yolu yazar; NULL = bilinmiyor). Kolonlar gövdeden yazılamaz (route `.strict()`).
+  openedById: true,
+  closedById: true,
+  openedBy: { select: { fullName: true } },
+  closedBy: { select: { fullName: true } },
 } satisfies Prisma.MachineStopEventSelect;
 
 export type MachineStopDto = Prisma.MachineStopEventGetPayload<{ select: typeof MACHINE_STOP_SELECT }>;

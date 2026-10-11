@@ -55,6 +55,11 @@ function OpenStopPanel({ stop, now, onOpenAlarm }: { stop: OpenStop; now: number
           </div>
         </div>
       </div>
+      {stop.openedBy !== undefined && (
+        <div className="text-sm text-muted-foreground">
+          Bildiren: <span className="font-semibold text-foreground">{stop.openedBy ?? "bilinmiyor"}</span>
+        </div>
+      )}
       {tier !== "UNTRACKED" && (stop.attendant ? <AlertChainTimeline stop={stop} now={now} /> : <EscalationDueLine stop={stop} />)}
       {stop.alarmId && onOpenAlarm && (
         <Button variant="outline" className="w-full" onClick={() => onOpenAlarm(stop.alarmId!)}>

@@ -410,50 +410,50 @@ enum ClientType {
 // =============================================================================
 
 model User {
-  id            String    @id @default(uuid()) @db.Uuid
-  username      String    @unique @db.VarChar(50)
-  passwordHash  String
-  fullName      String    @db.VarChar(100)
-  isActive      Boolean   @default(true)
+  id                 String    @id @default(uuid()) @db.Uuid
+  username           String    @unique @db.VarChar(50)
+  passwordHash       String
+  fullName           String    @db.VarChar(100)
+  isActive           Boolean   @default(true)
   // JWT iptal sayacı: yetki grant/revoke/set + şifre sıfırlamada artar. verifyToken
   // her istekte token'daki sürümle karşılaştırır → eski oturum anında düşer.
-  tokenVersion  Int       @default(1)
+  tokenVersion       Int       @default(1)
   /// İlk kurulum yöneticisi (seed) bilinen/üretilmiş parolayla doğar: true iken verifyToken
   /// yalnız /auth/me · /auth/logout · /auth/change-password'e izin verir. Kendi parolasını
   /// değiştirince iner. Mevcut kullanıcılar false (kilitlenmez).
-  mustChangePassword Boolean @default(false)
+  mustChangePassword Boolean   @default(false)
   /// ESKİ düz kart sırrı: YENİ DEĞER YAZILMAZ. Başarılı girişte ya da `kisa-kimlik donustur`
   /// ile `cardTokenDigest`e çevrilip NULL'lanır; kolon SİLİNMEZ (geri alma = yedekten restore).
   /// Dönüşüme dek giriş SALT okur. Kart içeriği "TEKSU:<userId>:<sır>".
-  cardToken     String?   @unique @db.VarChar(64)
+  cardToken          String?   @unique @db.VarChar(64)
   /// ESKİ düz hızlı PIN: YENİ DEĞER YAZILMAZ; `quickPinDigest`e dönüştürülüp NULL'lanır,
   /// kolon silinmez. Dönüşüme dek giriş salt okur.
-  quickPin      String?   @unique @db.VarChar(12)
+  quickPin           String?   @unique @db.VarChar(12)
   /// Hızlı PIN ÖZETİ "<kid>:<HMAC-SHA256(anahtar, "pin:"+PIN)>" — anahtar LICENSE_DIR'de, DB kopyası
   /// tek başına PIN vermez; deterministik → @unique "PIN benzersiz" kuralını korur. `kid` öneki
   /// başka makineden gelen DB'deki anahtar uyuşmazlığını ölçülebilir kılar.
-  quickPinDigest  String?   @unique @db.VarChar(96)
+  quickPinDigest     String?   @unique @db.VarChar(96)
   /// Hızlı PIN'in son atandığı an. NULL = dönüşümle gelmiş (atanma anı bilinmiyor) ya da PIN yok.
-  quickPinSetAt   DateTime? @db.Timestamptz
+  quickPinSetAt      DateTime? @db.Timestamptz
   /// Kart sırrı ÖZETİ: "<kid>:<hex>" — HMAC-SHA256(anahtar, "card:"+userId+":"+sır).
-  cardTokenDigest String?   @unique @db.VarChar(96)
+  cardTokenDigest    String?   @unique @db.VarChar(96)
   /// Kartın son basıldığı (sırrın üretildiği) an. NULL = dönüşümle gelmiş ya da kart yok.
-  cardIssuedAt    DateTime? @db.Timestamptz
+  cardIssuedAt       DateTime? @db.Timestamptz
   /// Kart düz metin döneminde basıldı (128 bit, sırrı eski dökümlerde düz durur) —
   /// çalışmaya devam eder, panel "yeniden bas" önerir. Yeni basımda false.
-  cardTokenLegacy Boolean   @default(false)
+  cardTokenLegacy    Boolean   @default(false)
   /// TOTP (RFC 6238) sırrı — base32. NULL = iki adımlı doğrulama KURULU DEĞİL.
   /// ⚠️ Kurulumun TEK yolu `TotpEnrollment` penceresidir; kullanıcı kendi başına
   /// yazamaz (bkz. o modelin notu). Düz saklanır — HMAC anahtarı olduğu için
   /// hash'lenemez; korunması DB/yedek şifrelemesine aittir (`quickPin` emsali).
-  totpSecret    String?   @db.VarChar(64)
+  totpSecret         String?   @db.VarChar(64)
   /// Doğrulamanın tamamlandığı an. NULL ise sır yazılmış olsa bile TOTP KAPALIDIR
   /// (yarım kalan kurulum kimseyi kilitlemesin) — okuma yolları bu alana bakar.
-  totpEnabledAt DateTime? @db.Timestamptz
+  totpEnabledAt      DateTime? @db.Timestamptz
   /// Kabul edilen EN SON TOTP adımı — replay kilidi (RFC 6238 §5.2). Aynı kod
   /// 30 sn boyunca geçerlidir; bu alan olmadan araya giren biri onu ikinci kez
   /// kullanabilirdi.
-  totpLastStep  Int?
+  totpLastStep       Int?
 
   /// KALICI SİLME işareti (geri alınamaz). NULL = normal kayıt (isActive true=aktif,
   /// false=GEÇİCİ pasif, geri alınabilir). Dolu = silinmiş: kayıt yalnız veri
@@ -466,11 +466,11 @@ model User {
   /// (fullName "Sistem Bakımı" doğar, aktör adı yüzeyde nötrlenir). YALNIZ boot
   /// job'ı (`jobs/superadmin.job.ts`) yazar — hiçbir Zod şemasına girmez, yani
   /// panelden ne atanabilir ne kaldırılabilir.
-  isSystemAccount Boolean @default(false)
+  isSystemAccount          Boolean   @default(false)
   /// Sistem hesabı mührü (G1): kurulum anahtarıyla (lisans çekirdeğinde) imzalı `sm1.<kid>.<imza>` —
   /// id + ad + kimlik bilgisi özeti üstüne. `isSystemAccount` tek başına yetki VERMEZ (mandallı kurulumda).
   /// API'den YAZILAMAZ; yazarlar `services/helpers/system-account-seal.ts` ve `scripts/superadmin-olustur.ts`.
-  systemAccountSeal String? @db.VarChar(200)
+  systemAccountSeal        String?   @db.VarChar(200)
   /// Hesap ORTAK varsayılan parolayla doğdu (boot, kurulumda satıcı hesabı yokken). Yalnız sistem
   /// hesabında dolu (CHECK). DURUM kolonu; yazarı `services/helpers/varsayilan-superadmin.ts`.
   defaultPasswordIssuedAt  DateTime? @db.Timestamptz
@@ -552,61 +552,63 @@ model User {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Kayıt künyesi ters ilişkileri (2026-08-19) — createdBy/updatedBy
-  createdColors            Color[]                @relation("ColorCreatedBy")
-  updatedColors            Color[]                @relation("ColorUpdatedBy")
-  createdCustomers         Customer[]             @relation("CustomerCreatedBy")
-  updatedCustomers         Customer[]             @relation("CustomerUpdatedBy")
-  createdCustomerBranchs   CustomerBranch[]       @relation("CustomerBranchCreatedBy")
-  updatedCustomerBranchs   CustomerBranch[]       @relation("CustomerBranchUpdatedBy")
-  createdDefectTypes       DefectType[]           @relation("DefectTypeCreatedBy")
-  updatedDefectTypes       DefectType[]           @relation("DefectTypeUpdatedBy")
-  createdFabricPropertys   FabricProperty[]       @relation("FabricPropertyCreatedBy")
-  updatedFabricPropertys   FabricProperty[]       @relation("FabricPropertyUpdatedBy")
-  createdItems             Item[]                 @relation("ItemCreatedBy")
-  updatedItems             Item[]                 @relation("ItemUpdatedBy")
-  lifecycleChangedItems    Item[]                 @relation("ItemLifecycleChangedBy")
-  createdMachines          Machine[]              @relation("MachineCreatedBy")
-  updatedMachines          Machine[]              @relation("MachineUpdatedBy")
-  createdMachineSpecs      MachineSpec[]          @relation("MachineSpecCreatedBy")
-  updatedMachineSpecs      MachineSpec[]          @relation("MachineSpecUpdatedBy")
-  createdShiftDefinitions  ShiftDefinition[]      @relation("ShiftDefinitionCreatedBy")
-  updatedShiftDefinitions  ShiftDefinition[]      @relation("ShiftDefinitionUpdatedBy")
-  createdMachineCollectors MachineCollector[]     @relation("MachineCollectorCreatedBy")
-  updatedMachineCollectors MachineCollector[]     @relation("MachineCollectorUpdatedBy")
-  machineStopsClassified   MachineStopEvent[]     @relation("MachineStopClassifiedBy")
-  machineStopReclasses     MachineStopReclass[]   @relation("MachineStopReclassBy")
-  loomAlarmsAcked          LoomAlarm[]            @relation("LoomAlarmAckedBy")
-  loomAlarmsSnoozed        LoomAlarm[]            @relation("LoomAlarmSnoozedBy")
-  loomAlarmEvents          LoomAlarmEvent[]       @relation("LoomAlarmEventBy")
+  createdColors            Color[]                 @relation("ColorCreatedBy")
+  updatedColors            Color[]                 @relation("ColorUpdatedBy")
+  createdCustomers         Customer[]              @relation("CustomerCreatedBy")
+  updatedCustomers         Customer[]              @relation("CustomerUpdatedBy")
+  createdCustomerBranchs   CustomerBranch[]        @relation("CustomerBranchCreatedBy")
+  updatedCustomerBranchs   CustomerBranch[]        @relation("CustomerBranchUpdatedBy")
+  createdDefectTypes       DefectType[]            @relation("DefectTypeCreatedBy")
+  updatedDefectTypes       DefectType[]            @relation("DefectTypeUpdatedBy")
+  createdFabricPropertys   FabricProperty[]        @relation("FabricPropertyCreatedBy")
+  updatedFabricPropertys   FabricProperty[]        @relation("FabricPropertyUpdatedBy")
+  createdItems             Item[]                  @relation("ItemCreatedBy")
+  updatedItems             Item[]                  @relation("ItemUpdatedBy")
+  lifecycleChangedItems    Item[]                  @relation("ItemLifecycleChangedBy")
+  createdMachines          Machine[]               @relation("MachineCreatedBy")
+  updatedMachines          Machine[]               @relation("MachineUpdatedBy")
+  createdMachineSpecs      MachineSpec[]           @relation("MachineSpecCreatedBy")
+  updatedMachineSpecs      MachineSpec[]           @relation("MachineSpecUpdatedBy")
+  createdShiftDefinitions  ShiftDefinition[]       @relation("ShiftDefinitionCreatedBy")
+  updatedShiftDefinitions  ShiftDefinition[]       @relation("ShiftDefinitionUpdatedBy")
+  createdMachineCollectors MachineCollector[]      @relation("MachineCollectorCreatedBy")
+  updatedMachineCollectors MachineCollector[]      @relation("MachineCollectorUpdatedBy")
+  machineStopsClassified   MachineStopEvent[]      @relation("MachineStopClassifiedBy")
+  machineStopsOpened       MachineStopEvent[]      @relation("MachineStopOpenedBy")
+  machineStopsClosed       MachineStopEvent[]      @relation("MachineStopClosedBy")
+  machineStopReclasses     MachineStopReclass[]    @relation("MachineStopReclassBy")
+  loomAlarmsAcked          LoomAlarm[]             @relation("LoomAlarmAckedBy")
+  loomAlarmsSnoozed        LoomAlarm[]             @relation("LoomAlarmSnoozedBy")
+  loomAlarmEvents          LoomAlarmEvent[]        @relation("LoomAlarmEventBy")
   loomAlarmRecipients      LoomAlarmRecipient[]
-  hallShiftResponsibles    HallShiftResponsible[] @relation("HallShiftResponsibleUser")
+  hallShiftResponsibles    HallShiftResponsible[]  @relation("HallShiftResponsibleUser")
   hallShiftDutyOverrides   HallShiftDutyOverride[] @relation("HallShiftDutyOverrideUser")
-  loomAlarmTierRules       LoomAlarmTierRule[]    @relation("LoomAlarmTierRuleUser")
-  machineShiftStatsSealed  MachineShiftStat[]     @relation("MachineShiftStatSealedBy")
-  machineShiftSealsActed   MachineShiftStatSeal[] @relation("MachineShiftSealBy")
-  createdPeripheralDevices PeripheralDevice[]     @relation("PeripheralDeviceCreatedBy")
-  updatedPeripheralDevices PeripheralDevice[]     @relation("PeripheralDeviceUpdatedBy")
-  createdProductRecipes    ProductRecipe[]        @relation("ProductRecipeCreatedBy")
-  updatedProductRecipes    ProductRecipe[]        @relation("ProductRecipeUpdatedBy")
-  createdWarpSpecs         WarpSpec[]             @relation("WarpSpecCreatedBy")
-  updatedWarpSpecs         WarpSpec[]             @relation("WarpSpecUpdatedBy")
-  createdQualityGrades     QualityGrade[]         @relation("QualityGradeCreatedBy")
-  updatedQualityGrades     QualityGrade[]         @relation("QualityGradeUpdatedBy")
-  createdReturnReasons     ReturnReason[]         @relation("ReturnReasonCreatedBy")
-  updatedReturnReasons     ReturnReason[]         @relation("ReturnReasonUpdatedBy")
-  createdRoutes            Route[]                @relation("RouteCreatedBy")
-  updatedRoutes            Route[]                @relation("RouteUpdatedBy")
-  createdStations          Station[]              @relation("StationCreatedBy")
-  updatedStations          Station[]              @relation("StationUpdatedBy")
-  createdSubcontractors    Subcontractor[]        @relation("SubcontractorCreatedBy")
-  updatedSubcontractors    Subcontractor[]        @relation("SubcontractorUpdatedBy")
-  createdLabelTemplates    LabelTemplate[]        @relation("LabelTemplateCreatedBy")
-  updatedLabelTemplates    LabelTemplate[]        @relation("LabelTemplateUpdatedBy")
-  createdOrders            Order[]                @relation("OrderCreatedBy")
-  updatedOrders            Order[]                @relation("OrderUpdatedBy")
-  cancelledOrderLines      OrderLine[]            @relation("OrderLineCancelledBy")
-  createdBatchs            Batch[]                @relation("BatchCreatedBy")
-  updatedBatchs            Batch[]                @relation("BatchUpdatedBy")
+  loomAlarmTierRules       LoomAlarmTierRule[]     @relation("LoomAlarmTierRuleUser")
+  machineShiftStatsSealed  MachineShiftStat[]      @relation("MachineShiftStatSealedBy")
+  machineShiftSealsActed   MachineShiftStatSeal[]  @relation("MachineShiftSealBy")
+  createdPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceCreatedBy")
+  updatedPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceUpdatedBy")
+  createdProductRecipes    ProductRecipe[]         @relation("ProductRecipeCreatedBy")
+  updatedProductRecipes    ProductRecipe[]         @relation("ProductRecipeUpdatedBy")
+  createdWarpSpecs         WarpSpec[]              @relation("WarpSpecCreatedBy")
+  updatedWarpSpecs         WarpSpec[]              @relation("WarpSpecUpdatedBy")
+  createdQualityGrades     QualityGrade[]          @relation("QualityGradeCreatedBy")
+  updatedQualityGrades     QualityGrade[]          @relation("QualityGradeUpdatedBy")
+  createdReturnReasons     ReturnReason[]          @relation("ReturnReasonCreatedBy")
+  updatedReturnReasons     ReturnReason[]          @relation("ReturnReasonUpdatedBy")
+  createdRoutes            Route[]                 @relation("RouteCreatedBy")
+  updatedRoutes            Route[]                 @relation("RouteUpdatedBy")
+  createdStations          Station[]               @relation("StationCreatedBy")
+  updatedStations          Station[]               @relation("StationUpdatedBy")
+  createdSubcontractors    Subcontractor[]         @relation("SubcontractorCreatedBy")
+  updatedSubcontractors    Subcontractor[]         @relation("SubcontractorUpdatedBy")
+  createdLabelTemplates    LabelTemplate[]         @relation("LabelTemplateCreatedBy")
+  updatedLabelTemplates    LabelTemplate[]         @relation("LabelTemplateUpdatedBy")
+  createdOrders            Order[]                 @relation("OrderCreatedBy")
+  updatedOrders            Order[]                 @relation("OrderUpdatedBy")
+  cancelledOrderLines      OrderLine[]             @relation("OrderLineCancelledBy")
+  createdBatchs            Batch[]                 @relation("BatchCreatedBy")
+  updatedBatchs            Batch[]                 @relation("BatchUpdatedBy")
 
   // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
   createdById String? @db.Uuid
@@ -716,15 +718,15 @@ model Session {
 /// parolası ya da kâğıt anahtarla geri konur. Yedek şifrelemesi kapalıysa satır doğmaz. DURUM tablosu
 /// (boot ve gece yedeği öncesi senkron yazar; iş kararı/rapor okumaz).
 model ShortCredentialKeyEscrow {
-  id        String   @id @default(uuid()) @db.Uuid
+  id                    String   @id @default(uuid()) @db.Uuid
   /// Anahtar kimliği (16 hex) — özetlerin "<kid>:" önekiyle aynı.
-  kid       String   @unique @db.VarChar(16)
+  kid                   String   @unique @db.VarChar(16)
   /// `.tkenc` mühürlü 32 bayt anahtar, base64url.
-  sealed    String
+  sealed                String
   /// Mühürlendiği alıcıların parmak izleri (sıralı, virgüllü) — alıcı kümesi değişince yeniden mühür.
-  recipientFingerprints String @db.VarChar(400)
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  recipientFingerprints String   @db.VarChar(400)
+  createdAt             DateTime @default(now()) @db.Timestamptz
+  updatedAt             DateTime @updatedAt @db.Timestamptz
 
   @@map("short_credential_key_escrows")
 }
@@ -1006,8 +1008,8 @@ model Station {
 
   hallShiftResponsibles  HallShiftResponsible[]
   hallShiftDutyOverrides HallShiftDutyOverride[]
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  createdAt              DateTime                @default(now()) @db.Timestamptz
+  updatedAt              DateTime                @updatedAt @db.Timestamptz
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -1015,7 +1017,7 @@ model Station {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  nameFold  String?  @default(dbgenerated())
+  nameFold               String?                 @default(dbgenerated())
 
   // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
   // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
@@ -2150,7 +2152,7 @@ model ShiftDefinition {
   /// PG'nin NULLS DISTINCT davranışı yüzünden sınırsız "adsız" satır kabul ederdi.
   nameFold String? @default(dbgenerated())
 
-  instances ShiftInstance[]
+  instances        ShiftInstance[]
   hallResponsibles HallShiftResponsible[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
@@ -2186,7 +2188,7 @@ model ShiftInstance {
   isCancelled  Boolean @default(false)
   cancelReason String? @db.VarChar(300)
 
-  shiftDefinition ShiftDefinition    @relation(fields: [shiftDefinitionId], references: [id], onDelete: Restrict)
+  shiftDefinition ShiftDefinition         @relation(fields: [shiftDefinitionId], references: [id], onDelete: Restrict)
   stops           MachineStopEvent[]
   dutyOverrides   HallShiftDutyOverride[]
   machineStats    MachineShiftStat[]
@@ -2322,6 +2324,11 @@ model MachineStopEvent {
   classifiedById String?               @db.Uuid
   classifiedAt   DateTime?             @db.Timestamptz
 
+  /// KİM AÇTI / KİM KAPATTI — yalnız insan yolu yazar (elle açma/kapama); sinyal ve watchdog NULL bırakır.
+  /// NULL = bilinmiyor (B3 öncesi satır dahil): backfill YOK, audit'ten TÜRETİLMEZ. Gövdeden yazılamaz.
+  openedById String? @db.Uuid
+  closedById String? @db.Uuid
+
   /// SINIFLANDIRMA BORCU — AÇILIŞTA yazılır (sebepsiz açılış = true; ingest de öyle) ve
   /// sınıflandırma onu TEMİZLEMEZ: kuyruk yüklemi `requiresReason ∧ reasonCode IS NULL`
   /// (`CLASSIFICATION_QUEUE_WHERE`), yani borç "sebep geldi mi" ile ödenir, bayrakla değil.
@@ -2356,6 +2363,8 @@ model MachineStopEvent {
   run           MachineRun?          @relation(fields: [runId], references: [id], onDelete: Restrict)
   shiftInstance ShiftInstance?       @relation(fields: [shiftInstanceId], references: [id], onDelete: Restrict)
   classifiedBy  User?                @relation("MachineStopClassifiedBy", fields: [classifiedById], references: [id])
+  openedBy      User?                @relation("MachineStopOpenedBy", fields: [openedById], references: [id], onDelete: SetNull)
+  closedBy      User?                @relation("MachineStopClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   collector     MachineCollector?    @relation(fields: [collectorId], references: [id], onDelete: Restrict)
   reclasses     MachineStopReclass[]
   alarm         LoomAlarm?
@@ -2492,30 +2501,30 @@ model LoomAlarm {
 /// Aynı kademe iki kez doğamaz: partial unique (alarmId, kind, tier) WHERE kind ∈ {RAISED, TIER_SKIPPED}.
 /// Not silinmez/değişmez: geri çekme ayrı NOTE_RETRACT satırıdır (`retractsEventId`, not başına bir kez).
 model LoomAlarmEvent {
-  id           String             @id @default(uuid()) @db.Uuid
-  alarmId      String             @db.Uuid
-  kind         LoomAlarmEventKind
+  id              String                  @id @default(uuid()) @db.Uuid
+  alarmId         String                  @db.Uuid
+  kind            LoomAlarmEventKind
   /// Yalnız RAISED/TIER_SKIPPED: kademe (1..2).
-  tier         Int?
+  tier            Int?
   /// Kişi eylemi (ACK · ACK_RELEASE · SNOOZE · UNSNOOZE · NOTE · NOTE_RETRACT) — motor satırında NULL.
-  userId       String?            @db.Uuid
+  userId          String?                 @db.Uuid
   /// Yalnız SNOOZE: susturmanın bittiği an.
-  snoozedUntil DateTime?          @db.Timestamptz
+  snoozedUntil    DateTime?               @db.Timestamptz
   /// NOTE metni (zorunlu) · SNOOZE gerekçesi (opsiyonel).
-  note         String?            @db.VarChar(500)
+  note            String?                 @db.VarChar(500)
   /// CANCELLED sebebi (`STOP_REVOKED` · `NON_SCHEDULED`).
-  code         String?            @db.VarChar(64)
+  code            String?                 @db.VarChar(64)
   /// Kişi eylemlerinin idempotency anahtarı (`tokenReplay`).
-  clientToken  String?            @unique @db.Uuid
+  clientToken     String?                 @unique @db.Uuid
   /// Yalnız NOTE_RETRACT: geri çekilen NOTE satırı — bir not en çok bir kez geri çekilir.
-  retractsEventId String?         @unique @db.Uuid
+  retractsEventId String?                 @unique @db.Uuid
   /// Yalnız RAISED (A4): alıcı kipi kademe çaldığı an DONAR. NULL = A4 öncesi satır (izne göre).
   recipientMode   LoomAlarmRecipientMode?
 
-  alarm       LoomAlarm       @relation(fields: [alarmId], references: [id], onDelete: Cascade)
-  user        User?           @relation("LoomAlarmEventBy", fields: [userId], references: [id])
-  retracts    LoomAlarmEvent? @relation("LoomAlarmNoteRetract", fields: [retractsEventId], references: [id], onDelete: NoAction)
-  retractedBy LoomAlarmEvent? @relation("LoomAlarmNoteRetract")
+  alarm       LoomAlarm            @relation(fields: [alarmId], references: [id], onDelete: Cascade)
+  user        User?                @relation("LoomAlarmEventBy", fields: [userId], references: [id])
+  retracts    LoomAlarmEvent?      @relation("LoomAlarmNoteRetract", fields: [retractsEventId], references: [id], onDelete: NoAction)
+  retractedBy LoomAlarmEvent?      @relation("LoomAlarmNoteRetract")
   recipients  LoomAlarmRecipient[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -2523,7 +2532,6 @@ model LoomAlarmEvent {
   @@index([alarmId, createdAt])
   @@map("loom_alarm_events")
 }
-
 
 /// Alarm kademesinin alıcı kipi (RAISED'a donar): izne göre herkes (bugünkü davranış) ya da çözülmüş liste.
 enum LoomAlarmRecipientMode {

@@ -139,12 +139,11 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
           reasonSource: preset ? source : null,
           classifiedById: preset ? (userId ?? null) : null,
           classifiedAt: preset ? new Date() : null,
+          openedById: userId ?? null, // açan kişi; kapatan `closeManualStop`ta
           requiresReason: preset === null,
           targetMinutes: escalation.targetMinutes,
           escalationGraceMinutes: escalation.escalationGraceMinutes,
-          shiftInstanceId,
-          factoryDay: factoryDayKeyUtcMidnight(started.value),
-          source,
+          shiftInstanceId, factoryDay: factoryDayKeyUtcMidnight(started.value), source,
         },
         select: MACHINE_STOP_SELECT,
       });
@@ -197,7 +196,7 @@ export async function closeManualStop(
     const simdi = new Date();
     const rows = await tx.$queryRaw<Array<{ id: string }>>`
       UPDATE machine_stop_events
-         SET "endedAt" = ${ended.value}, "endSource" = 'OPERATOR'::"MachineStopEndSource",
+         SET "endedAt" = ${ended.value}, "endSource" = 'OPERATOR'::"MachineStopEndSource", "closedById" = ${userId ?? null}::uuid,
              "durationSec" = GREATEST(0, EXTRACT(EPOCH FROM (${ended.value}::timestamptz - "startedAt")))::int,
              "updatedAt" = ${simdi}::timestamptz
        WHERE id = ${stopId}::uuid AND "endedAt" IS NULL AND "revokedAt" IS NULL AND "startedAt" <= ${ended.value}::timestamptz

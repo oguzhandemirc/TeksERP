@@ -67,6 +67,7 @@ function openStopOf(l: WireLoom, labels: ReadonlyMap<string, string>, asOf: numb
     respondedAt: null,
     escalatedAt: escalatedAtOf(s, asOf),
     alarmId: s.alarmId ?? null,
+    openedBy: s.openedByName,
   };
 }
 

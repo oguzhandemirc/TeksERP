@@ -24,6 +24,15 @@ function TierBadge({ tier, live }: { tier: number; live: boolean }) {
   );
 }
 
+/** Bildiren / Kapatan: alan yoksa (eski sunucu) çizilmez; null → "bilinmiyor", ad uydurulmaz. */
+function StopActors({ stop }: { stop: LoomAlarmItem["stop"] }) {
+  const parts: string[] = [];
+  if (stop.openedBy !== undefined) parts.push(`Bildiren: ${stop.openedBy?.name ?? "bilinmiyor"}`);
+  if (stop.endedAt && stop.closedBy !== undefined) parts.push(`Kapatan: ${stop.closedBy?.name ?? "bilinmiyor"}`);
+  if (parts.length === 0) return null;
+  return <p data-testid="alarm-stop-actors" className="text-xs text-muted-foreground">{parts.join(" · ")}</p>;
+}
+
 export function AlarmHeaderCard({ alarm: a, now }: { alarm: LoomAlarmItem; now: number }) {
   const live = isLiveAlarm(a.state);
   const late = isPastTarget(a, now);
@@ -45,6 +54,7 @@ export function AlarmHeaderCard({ alarm: a, now }: { alarm: LoomAlarmItem; now: 
             <TierBadge tier={a.tier} live={live} />
             <span className="text-xs text-muted-foreground">Kaynak: {sourceLabel(a.stop.source)}</span>
           </div>
+          <StopActors stop={a.stop} />
         </div>
         <div className="text-right">
           <p

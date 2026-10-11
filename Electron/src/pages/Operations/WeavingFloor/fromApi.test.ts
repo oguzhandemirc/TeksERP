@@ -84,6 +84,12 @@ describe("fromApi — alarm kademesi (ESCALATED) ve alarm bağlantısı", () => 
     expect(s.clockStartedAt).toBe(Date.parse(T0));
   });
 
+  it("⭐ bildiren: ad taşınır · null (bilinmiyor) korunur · eski sunucuda alan yok kalır", () => {
+    expect(fromApi(dto([stop({ openedByName: "Ayşe" })])).looms[0]!.openStop!.openedBy).toBe("Ayşe");
+    expect(fromApi(dto([stop({ openedByName: null })])).looms[0]!.openStop!.openedBy).toBeNull();
+    expect(fromApi(dto([stop({})])).looms[0]!.openStop!.openedBy).toBeUndefined();
+  });
+
   it("K2 vadesi asOf'tan ileride görünse de (saat farkı) an asOf'u geçmez", () => {
     const s = fromApi(dto([stop({ tier: "ESCALATED", escalationDueAt: "2026-10-10T09:00:00.000Z" })])).looms[0]!.openStop!;
     expect(s.escalatedAt).toBe(Date.parse(AS_OF));

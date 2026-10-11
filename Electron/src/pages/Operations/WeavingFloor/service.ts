@@ -41,6 +41,8 @@ export interface WireOpenStop {
   alarmId?: string | null;
   requiresReason: boolean;
   source: string;
+  /** Duruşu elle açan kişi; null = bilinmiyor (sinyal ya da eski kayıt); eski sunucuda yok. */
+  openedByName?: string | null;
 }
 
 export interface WireBreakdownRow {

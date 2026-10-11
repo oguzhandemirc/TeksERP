@@ -37,3 +37,20 @@ describe("LoomDetailSheet — alarm bağlantısı", () => {
     expect(screen.queryByRole("button", { name: /Alarm sayfasını aç/ })).toBeNull();
   });
 });
+
+describe("LoomDetailSheet — duruşu bildiren", () => {
+  it("⭐ elle açılmış duruş → \"Bildiren: <ad>\"", () => {
+    render(<LoomDetailSheet loom={loom({ openedBy: "Ayşe Dokumacı" })} now={NOW} onClose={() => undefined} />);
+    expect(screen.getByText(/Bildiren:/).textContent).toBe("Bildiren: Ayşe Dokumacı");
+  });
+
+  it("⭐ açanı bilinmeyen (sinyal / eski kayıt) → \"bilinmiyor\", ad uydurulmaz", () => {
+    render(<LoomDetailSheet loom={loom({ openedBy: null })} now={NOW} onClose={() => undefined} />);
+    expect(screen.getByText(/Bildiren:/).textContent).toBe("Bildiren: bilinmiyor");
+  });
+
+  it("eski sunucu / önizleme (alan yok) → satır çizilmez", () => {
+    render(<LoomDetailSheet loom={loom({})} now={NOW} onClose={() => undefined} />);
+    expect(screen.queryByText(/Bildiren:/)).toBeNull();
+  });
+});

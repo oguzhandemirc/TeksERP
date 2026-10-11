@@ -61,6 +61,8 @@ export interface LoomFloorOpenStopDto {
   /** Sebep bekliyor (sınıflandırma borcu). */
   requiresReason: boolean;
   source: MachineDataSource;
+  /** Duruşu elle açan (B3); null = bilinmiyor (sinyal ya da B3 öncesi satır). */
+  openedByName: string | null;
 }
 
 export interface LoomFloorStopRow {
@@ -141,7 +143,7 @@ const STOP_SELECT = {
   id: true, machineId: true, startedAt: true, endedAt: true, durationSec: true, reasonCode: true, lossClass: true,
   beamSlot: true, source: true, targetMinutes: true, escalationGraceMinutes: true, requiresReason: true,
   alarm: { select: { id: true, state: true, tier: true, k2DueAt: true } },
-  shiftInstance: { select: { isCancelled: true } },
+  shiftInstance: { select: { isCancelled: true } }, openedBy: { select: { fullName: true } },
 } satisfies Prisma.MachineStopEventSelect;
 
 const RUN_SELECT = {
@@ -236,7 +238,7 @@ function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclas
     escalationDueAt: alarm ? alarm.k2DueAt : escalationDueAt(clock),
     alarmId: alarm?.id ?? null,
     requiresReason: s.requiresReason && s.reasonCode === null,
-    source: s.source,
+    source: s.source, openedByName: s.openedBy?.fullName ?? null,
   };
 }
 

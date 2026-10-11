@@ -41,6 +41,8 @@ export interface OpenStop {
   escalatedAt: number | null;
   /** Duruşun canlı alarmı (alarm sayfasına bağlantı); alarm yoksa null/yok. */
   alarmId?: string | null;
+  /** Duruşu bildiren (elle açan) kişi; null = bilinmiyor, yok = eski sunucu / önizleme (satır çizilmez). */
+  openedBy?: string | null;
 }
 
 /** Vardiya içinde kapanmış duruş. */

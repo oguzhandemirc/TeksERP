@@ -75,7 +75,12 @@ const LIST_SELECT = {
   id: true, kind: true, state: true, tier: true, targetMinutes: true, graceMinutes: true, k1DueAt: true, k2DueAt: true,
   ackedAt: true, snoozedUntil: true, closedAt: true, totalSec: true, overdueSec: true, cancelReason: true, createdAt: true,
   machine: { select: { id: true, code: true, name: true, station: { select: { id: true, name: true } } } },
-  stopEvent: { select: { id: true, startedAt: true, endedAt: true, reasonCode: true, lossClass: true, source: true } },
+  stopEvent: {
+    select: {
+      id: true, startedAt: true, endedAt: true, reasonCode: true, lossClass: true, source: true,
+      openedBy: { select: { id: true, fullName: true } }, closedBy: { select: { id: true, fullName: true } },
+    },
+  },
   ackedBy: { select: { id: true, fullName: true } },
   snoozedBy: { select: { id: true, fullName: true } },
 } satisfies Prisma.LoomAlarmSelect;
@@ -89,7 +94,11 @@ export interface LoomAlarmItemDto {
   state: LoomAlarmState;
   tier: number;
   machine: { id: string; code: string; name: string; hallId: string; hallName: string };
-  stop: { id: string; startedAt: Date; endedAt: Date | null; reasonCode: string | null; reasonLabel: string | null; lossClass: MachineStopLossClass | null; source: MachineDataSource };
+  stop: {
+    id: string; startedAt: Date; endedAt: Date | null; reasonCode: string | null; reasonLabel: string | null; lossClass: MachineStopLossClass | null; source: MachineDataSource;
+    /** Duruşu açan / kapatan — yalnız elle açma/kapama yazar; null = bilinmiyor (sinyal, watchdog ya da B3 öncesi). */
+    openedBy: LoomAlarmPersonDto | null; closedBy: LoomAlarmPersonDto | null;
+  };
   targetMinutes: number | null;
   graceMinutes: number;
   k1DueAt: Date;
@@ -131,6 +140,7 @@ function itemDto(r: ListRow, labels: Map<string, string>): LoomAlarmItemDto {
     stop: {
       id: r.stopEvent.id, startedAt: r.stopEvent.startedAt, endedAt: r.stopEvent.endedAt, reasonCode: r.stopEvent.reasonCode,
       reasonLabel: r.stopEvent.reasonCode ? (labels.get(r.stopEvent.reasonCode) ?? null) : null, lossClass: r.stopEvent.lossClass, source: r.stopEvent.source,
+      openedBy: person(r.stopEvent.openedBy), closedBy: person(r.stopEvent.closedBy),
     },
     targetMinutes: r.targetMinutes, graceMinutes: r.graceMinutes, k1DueAt: r.k1DueAt, k2DueAt: r.k2DueAt,
     ackedBy: person(r.ackedBy), ackedAt: r.ackedAt, snoozedBy: person(r.snoozedBy), snoozedUntil: r.snoozedUntil,

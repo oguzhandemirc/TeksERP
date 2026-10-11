@@ -39,6 +39,9 @@ export interface LoomAlarmItem {
     reasonLabel: string | null;
     lossClass: string | null;
     source: string;
+    /** Duruşu elle açan / kapatan; null = bilinmiyor (sinyal ya da eski kayıt); eski sunucuda yok. */
+    openedBy?: LoomAlarmPerson | null;
+    closedBy?: LoomAlarmPerson | null;
   };
   targetMinutes: number | null;
   graceMinutes: number;
