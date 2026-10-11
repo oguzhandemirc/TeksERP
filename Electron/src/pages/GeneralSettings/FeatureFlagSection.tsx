@@ -28,6 +28,7 @@ import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 import { EnumRadioOptions } from "./EnumRadioOptions";
 import { LicenseCeilingBadge } from "@/components/license/LicenseCeilingBadge";
 import { isModuleFlagKey } from "@/lib/module-flags";
+import { unsavedFlagKeys } from "./flag-save";
 
 /**
  * Bir kategorinin özellik anahtarlarını config'ten render eder — TEK kaydetme
@@ -292,72 +293,119 @@ export function FeatureFlagSection({
   });
   useRegisterSettingsDirty(dirty);
 
+  /** Kaydet gövdesi — ekranda çizilen HER anahtar buradan geçer (bekçi: `settings-save-body.test.tsx`). */
+  const buildFlagPatch = (): Partial<FeatureFlags> => {
+    const patch: Partial<FeatureFlags> = {};
+    for (const k of flagKeys) {
+      const v = flagDraft[k] ?? false;
+      if (v !== (server?.[k] ?? false)) (patch as Record<string, boolean>)[k] = v;
+    }
+    // Sayısal alanlar AYNI PATCH'e girer (ayrı istek değil): tek Kaydet, tek
+    // yazım — bayrak yazılıp eşik yazılamazsa "açık ama etkisiz" ara durum
+    // kalıcı olurdu.
+    for (const k of numberKeys) {
+      const v = parseNumberDraft(numberDraft[k]);
+      if (v !== (server?.[k] ?? null)) (patch as Record<string, number | null>)[k] = v;
+    }
+    for (const f of numberFlags) {
+      const v = numDraft[f.key];
+      if (v !== undefined && v !== serverNumFor(f)) {
+        (patch as Record<string, number>)[f.key] = v;
+      }
+    }
+    for (const f of enumFlags) {
+      const v = enumDraft[f.enumKey];
+      if (v !== undefined && v !== serverEnumFor(f)) {
+        (patch as Record<string, string>)[f.enumKey] = v;
+      }
+    }
+    for (const f of textFlags) {
+      const v = textDraft[f.textKey];
+      if (v !== undefined && v !== serverTextFor(f)) {
+        (patch as Record<string, string>)[f.textKey] = v;
+      }
+    }
+    return patch;
+  };
+
+  /** Bayrak/sayı/seçim/metin taslaklarını verilen sunucu fotoğrafından kurar. */
+  const syncDrafts = (src: Partial<FeatureFlags> | undefined) => {
+    const next: Record<string, boolean> = {};
+    for (const k of flagKeys) next[k] = src?.[k] ?? false;
+    setFlagDraft(next);
+    const nextNums: Record<string, string> = {};
+    for (const k of numberKeys) {
+      const v = src?.[k] ?? null;
+      nextNums[k] = v == null ? "" : String(v);
+    }
+    setNumberDraft(nextNums);
+    const nextNum: Record<string, number> = {};
+    for (const f of numberFlags) {
+      const v = src?.[f.key];
+      nextNum[f.key] = typeof v === "number" && Number.isFinite(v) ? v : f.fallback;
+    }
+    setNumDraft(nextNum);
+    const nextEnum: Record<string, string> = {};
+    for (const f of enumFlags) {
+      const v = src?.[f.enumKey];
+      nextEnum[f.enumKey] = typeof v === "string" && f.options.some((o) => o.value === v) ? v : f.defaultValue;
+    }
+    setEnumDraft(nextEnum);
+    const nextText: Record<string, string> = {};
+    for (const f of textFlags) {
+      const v = src?.[f.textKey];
+      nextText[f.textKey] = typeof v === "string" ? v : f.defaultValue;
+    }
+    setTextDraft(nextText);
+  };
+
+  /** Uyarıda anahtar adı değil satır başlığı görünür. */
+  const rowTitle = (key: string): string =>
+    flags.find((f) => f.key === key)?.title ??
+    flags.find((f) => f.numberField?.numberKey === key)?.numberField?.label ??
+    numberFlags.find((f) => f.key === key)?.title ??
+    enumFlags.find((f) => f.enumKey === key)?.title ??
+    textFlags.find((f) => f.textKey === key)?.title ??
+    key;
+
   const mut = useMutation({
     mutationFn: async () => {
-      const patch: Partial<FeatureFlags> = {};
-      for (const k of flagKeys) {
-        const v = flagDraft[k] ?? false;
-        if (v !== (server?.[k] ?? false)) (patch as Record<string, boolean>)[k] = v;
-      }
-      // Sayısal alanlar AYNI PATCH'e girer (ayrı istek değil): tek Kaydet, tek
-      // yazım — bayrak yazılıp eşik yazılamazsa "açık ama etkisiz" ara durum
-      // kalıcı olurdu.
-      for (const k of numberKeys) {
-        const v = parseNumberDraft(numberDraft[k]);
-        if (v !== (server?.[k] ?? null)) (patch as Record<string, number | null>)[k] = v;
-      }
-      for (const f of numberFlags) {
-        const v = numDraft[f.key];
-        if (v !== undefined && v !== serverNumFor(f)) {
-          (patch as Record<string, number>)[f.key] = v;
-        }
-      }
-      for (const f of enumFlags) {
-        const v = enumDraft[f.enumKey];
-        if (v !== undefined && v !== serverEnumFor(f)) {
-          (patch as Record<string, string>)[f.enumKey] = v;
-        }
-      }
-      for (const f of textFlags) {
-        const v = textDraft[f.textKey];
-        if (v !== undefined && v !== serverTextFor(f)) {
-          (patch as Record<string, string>)[f.textKey] = v;
-        }
-      }
-      if (Object.keys(patch).length > 0) await featureFlagService.update(patch);
+      const patch = buildFlagPatch();
+      const res = Object.keys(patch).length > 0 ? await featureFlagService.update(patch) : undefined;
       for (const f of settingFields) {
         const v = fieldDraft[f.key];
         if (v !== undefined && v !== serverFieldFor(f)) {
           await systemSettingService.upsert(f.key, String(v), f.savedDesc);
         }
       }
+      return { patch, saved: res?.data };
     },
-    onSuccess: () => {
-      toast.success("Ayarlar kaydedildi.");
+    onSuccess: ({ patch, saved }) => {
+      // Taslak SUNUCUNUN cevabından yeniden kurulur: sunucu bir anahtarı yazmadıysa anahtar
+      // eski hâline döner — "panel açık gösteriyor, sunucu kapalı" ikiliği kalmaz.
+      if (saved) {
+        qc.setQueryData<{ data?: Record<string, unknown> }>(FEATURE_FLAGS_QUERY_KEY, (old) =>
+          old ? { ...old, data: { ...old.data, ...saved } } : old,
+        );
+        syncDrafts({ ...server, ...saved });
+        const unknown = unsavedFlagKeys(patch, saved);
+        if (unknown.length > 0) {
+          toast.error(
+            `Sunucu şu ayarları tanımıyor, kaydedilmedi: ${unknown.map(rowTitle).join(", ")}. Sunucu sürümü paneli geriden izliyor olabilir.`,
+          );
+        } else {
+          toast.success("Ayarlar kaydedildi.");
+        }
+      } else {
+        toast.success("Ayarlar kaydedildi.");
+      }
       void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
       if (settingFields.length > 0) void qc.invalidateQueries({ queryKey: ["system-settings"] });
     },
   });
 
   const reset = () => {
-    const next: Record<string, boolean> = {};
-    for (const k of flagKeys) next[k] = server?.[k] ?? false;
-    setFlagDraft(next);
-    const nextNums: Record<string, string> = {};
-    for (const k of numberKeys) {
-      const v = server?.[k] ?? null;
-      nextNums[k] = v == null ? "" : String(v);
-    }
-    setNumberDraft(nextNums);
-    const nextNum: Record<string, number> = {};
-    for (const f of numberFlags) nextNum[f.key] = serverNumFor(f);
-    setNumDraft(nextNum);
-    const nextEnum: Record<string, string> = {};
-    for (const f of enumFlags) nextEnum[f.enumKey] = serverEnumFor(f);
-    setEnumDraft(nextEnum);
-    const nextText: Record<string, string> = {};
-    for (const f of textFlags) nextText[f.textKey] = serverTextFor(f);
-    setTextDraft(nextText);
+    syncDrafts(server);
     const nextField: Record<string, number> = {};
     for (const f of settingFields) nextField[f.key] = serverFieldFor(f);
     setFieldDraft(nextField);
@@ -445,6 +493,7 @@ export function FeatureFlagSection({
                   min={flag.numberField.min}
                   max={flag.numberField.max}
                   value={numberDraft[flag.numberField.numberKey] ?? ""}
+                  aria-label={flag.numberField.label}
                   disabled={mut.isPending}
                   onChange={(e) =>
                     setNumberDraft((d) => ({
@@ -600,6 +649,7 @@ export function FeatureFlagSection({
             max={f.max}
             step={"step" in f ? (f.step ?? 1) : 1}
             value={value}
+            aria-label={f.title}
             onChange={(e) => {
               const n = Number(e.target.value);
               if (Number.isFinite(n)) onChange(Math.min(f.max, Math.max(f.min, n)));

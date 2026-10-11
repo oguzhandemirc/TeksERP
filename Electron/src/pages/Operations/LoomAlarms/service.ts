@@ -37,7 +37,7 @@ const post = (path: string, body: object): Action =>
   apiClient.post<ApiResponse<LoomAlarmActionResult>>(path, body, { suppressErrorToast: true }).then((r) => r.data);
 
 export const loomAlarmService = {
-  /** `quiet`: zil yoklaması — kapalı bayrak/izin ve ağ hatası toast basmaz. */
+  /** `quiet`: zil yoklaması ve liste sayfası — kapalı bayrak/izin ve ağ hatası toast basmaz (sayfa kendisi anlatır). */
   list: (p: LoomAlarmListParams, quiet = false): Promise<LoomAlarmListResult> =>
     apiClient
       .get<ApiResponse<LoomAlarmListResult>>(`${BASE}?${loomAlarmListQuery(p)}`, { suppressErrorToast: quiet })

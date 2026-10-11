@@ -15,6 +15,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuthStore } from "@/store/auth";
 import { errorCodeOf, isAlarmClosedError, useLoomAlarmAccess, useServerNow } from "./alarm-access";
 import { AlarmActionBar } from "./AlarmActionBar";
+import { AlarmClosedNotice } from "./AlarmClosedNotice";
 import { AlarmContext } from "./AlarmContext";
 import { AlarmHeaderCard } from "./AlarmHeaderCard";
 import { AlarmTimeline } from "./AlarmTimeline";
@@ -28,7 +29,6 @@ function Notice({ text }: { text: string }) {
 }
 
 function errorText(error: unknown): string {
-  if (isAlarmClosedError(error)) return "Tezgah alarmı bu kurulumda kapalı. Genel Ayarlar → Tezgah bölümünden açılabilir.";
   if (errorCodeOf(error) === "LOOM_ALARM_NOT_FOUND") return "Alarm bulunamadı.";
   return "Alarm okunamadı — bağlantıyı kontrol edip yenileyin.";
 }
@@ -45,7 +45,7 @@ export function LoomAlarmDetailPage() {
     queryKey: [LOOM_ALARMS_QUERY_ROOT, "detail", id],
     queryFn: () => loomAlarmService.detail(id),
     enabled: id !== "",
-    refetchInterval: LOOM_ALARM_DETAIL_POLL_MS,
+    refetchInterval: (query) => (isAlarmClosedError(query.state.error) ? false : LOOM_ALARM_DETAIL_POLL_MS),
     retry: false,
   });
   const d = q.data;
@@ -62,7 +62,11 @@ export function LoomAlarmDetailPage() {
       />
       <PageBody className="space-y-5 p-4">
         {!d ? (
-          <Notice text={q.isError ? errorText(q.error) : "Alarm yükleniyor…"} />
+          q.isError && isAlarmClosedError(q.error) ? (
+            <AlarmClosedNotice error={q.error} />
+          ) : (
+            <Notice text={q.isError ? errorText(q.error) : "Alarm yükleniyor…"} />
+          )
         ) : (
           <>
             <AlarmHeaderCard alarm={d.alarm} now={now} />

@@ -15,6 +15,7 @@ import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { isAlarmClosedError, useServerNow } from "./alarm-access";
+import { AlarmClosedNotice } from "./AlarmClosedNotice";
 import { INITIAL_ALARM_FILTERS, LoomAlarmsFilters, toListParams, type AlarmFilterState } from "./LoomAlarmsFilters";
 import { AlarmSummaryStrip, LoomAlarmsTable } from "./LoomAlarmsTable";
 import { loomAlarmService } from "./service";
@@ -35,9 +36,11 @@ export function LoomAlarmsPage() {
   const q = useInfiniteQuery({
     queryKey: [...LIST_KEY, params],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => loomAlarmService.list({ ...params, cursor: pageParam, limit: PAGE_SIZE }),
+    // Sessiz: kapalı alarm 403'ü yetki sorunu değildir ("yetkiniz yok" toast'ı yanıltır) — sayfa durumu kendisi anlatır.
+    queryFn: ({ pageParam }) => loomAlarmService.list({ ...params, cursor: pageParam, limit: PAGE_SIZE }, true),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
-    refetchInterval: filters.scope === "active" ? 15_000 : false,
+    // Kapalı alarm 403'ü kalıcıdır — 15 sn'de bir aynı 403'ü sormak gürültüdür (ayar açılınca sayfa yenilenir).
+    refetchInterval: (query) => (filters.scope === "active" && !isAlarmClosedError(query.state.error) ? 15_000 : false),
     retry: false,
   });
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.items) ?? [], [q.data]);
@@ -61,11 +64,11 @@ export function LoomAlarmsPage() {
       </div>
       <PageBody ref={rootRef} className="px-4">
         {q.isError ? (
-          <p className="py-16 text-center text-muted-foreground">
-            {isAlarmClosedError(q.error)
-              ? "Tezgah alarmı bu kurulumda kapalı. Genel Ayarlar → Tezgah bölümünden açılabilir."
-              : "Alarmlar okunamadı — bağlantıyı kontrol edip yenileyin."}
-          </p>
+          isAlarmClosedError(q.error) ? (
+            <AlarmClosedNotice error={q.error} />
+          ) : (
+            <p className="py-16 text-center text-muted-foreground">Alarmlar okunamadı — bağlantıyı kontrol edip yenileyin.</p>
+          )
         ) : q.isPending ? (
           <p className="py-16 text-center text-muted-foreground">Yükleniyor…</p>
         ) : items.length === 0 ? (

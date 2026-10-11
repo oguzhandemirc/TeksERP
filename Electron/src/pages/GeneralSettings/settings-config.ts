@@ -672,7 +672,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Tezgah Salonu canlı ekranı açılır: çalışan, duran ve hedef süreyi aşan tezgahlar.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken Tezgah Salonu ekranı (karo ve tam ekran / TV kipi) ve canlı salon ucu açılır; Hazır Sebepler'de duruş sebeplerine hedef süre girilir. Kapalıyken (varsayılan) uç 403 verir, karo çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
+        desc: "Açıkken Tezgah Salonu ekranı (karo ve tam ekran / TV kipi) ve canlı salon ucu açılır; Hazır Sebepler'de duruş sebeplerine hedef süre girilir. Kapalıyken (varsayılan) uç 403 verir, karo çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz. Tezgah alarmı bu anahtarla AÇILMAZ — ayrı bir ayardır: Sistem → Özellik Anahtarları → Tezgah izleme.",
       },
       {
         key: "depoMultiEnabled",
@@ -1935,6 +1935,16 @@ export function categorySurface(cat: SettingsCategory): SettingsSurface {
 export function settingsCategoryPath(cat: SettingsCategory): string {
   const surface = categorySurface(cat);
   return surface === "vendor" ? SURFACE_PATH.vendor : `${SURFACE_PATH[surface]}?tab=${cat.id}`;
+}
+
+/**
+ * Bu kategoriye giden MENÜ YOLU ("Sistem → Özellik Anahtarları → Tezgah izleme") — "şuradan
+ * açılır" metinleri elle yol yazmaz; ekran bölünüp adı değişince eski yol yalan söyler.
+ */
+export function settingsCategoryTrail(cat: SettingsCategory): string {
+  const surface = categorySurface(cat);
+  const base = `Sistem → ${SURFACE_LABEL[surface]}`;
+  return surface === "vendor" ? base : `${base} → ${cat.label}`;
 }
 
 /**

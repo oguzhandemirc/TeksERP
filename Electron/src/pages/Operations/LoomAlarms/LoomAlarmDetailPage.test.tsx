@@ -13,7 +13,12 @@ vi.mock("@/hooks/usePricingEnabled", () => ({
   useTezgahAlarmEnabled: () => true,
   useFeatureFlags: () => ({ data: { data: { devereEnabled: false, devereMountTracking: false } } }),
 }));
-vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => state.perms.includes(p) }) }));
+vi.mock("@/hooks/useRoleAccess", () => ({
+  useRoleAccess: () => ({
+    hasPermission: (p: string) => state.perms.includes(p),
+    hasAnyPermission: (ps: string[]) => ps.some((p) => state.perms.includes(p)),
+  }),
+}));
 vi.mock("@/store/auth", () => ({ useAuthStore: (sel: (s: { user: { userId: string } }) => unknown) => sel({ user: { userId: "u-me" } }) }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: ({ title }: { title: string }) => <h1>{title}</h1> }));
 vi.mock("./service", () => ({ loomAlarmService: { detail: (id: string) => detail(id), mountedBeams: vi.fn() } }));
