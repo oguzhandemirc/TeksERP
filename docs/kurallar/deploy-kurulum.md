@@ -252,3 +252,4 @@ Native (cargo, `cd Teks-Erp/native && npm test`; commit kapısında koşar — `
 - 2026-10-01 · Dağıtım v2 D2b: güncelleyicinin `.env` okuyucusu backend'in okuyucusunun (dotenv 17.4.2) birebir aynası, zorunlu anahtar `AYAR_EKSIK`
 - 2026-10-01 · G22 yayın hijyeni: kök .gitignore sır/döküm kalıpları · Teks-Erp imajı izin listesi bağlam + root olmayan sertleştirilmiş çalışma · üretim PAKET imzası CI kökeni ister, kaçış yalnız kullanıcı cümlesiyle
 - 2026-10-06 · Panel 1.4.3: sunucu güncellemesi onay istemi (K11) + Sunucu Durumu hizmet/güncelleme bölümü + canlı güncelleme ilerleme penceresi (kod; yayın ayrı adım)
+- 2026-10-11 · G0a public repo hijyeni: korumalı artefakt 1 gün, kaynak haritası ayrı artefakt değil (bekçi `test_docker_hijyeni` §5q) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-11 G0a
