@@ -57,6 +57,7 @@ import { yarnMovementSign } from "../src/services/helpers/yarn-sign.helper";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { AppError } from "../src/utils/app-error";
+import { settingRowPath } from "../src/constants/panel-ayar-yolu";
 
 import { ensureIplikModuluAcik } from "./fixture-module-flags";
 
@@ -657,7 +658,7 @@ async function main(): Promise<void> {
     () => yarnService.createMovement({ itemId: gItem.id, warehouseId: wh.id, kind: YarnMovementKind.OUT, qtyKg: 101 }),
     // Mesaj operatöre ÇIKIŞ YOLU göstermeli: ne kadar var, ne istendi, en olası
     // kök neden ve ayarın nereden kapatılacağı. "Yetersiz stok." doğru ama ölü.
-    [gItem.name, "100.000", "101.000", "açılış", "Depo & Satın Alma"],
+    [gItem.name, "100.000", "101.000", "açılış", settingRowPath("yarnBlockNegativeBalanceEnabled")],
   );
   check(
     "10c) Mesaj deponun adını da söylüyor (hangi depoda eksik belli)",
