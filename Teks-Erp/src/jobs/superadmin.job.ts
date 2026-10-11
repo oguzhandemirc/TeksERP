@@ -56,6 +56,7 @@ import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
 import { SYSTEM_ACCOUNT_FULLNAME } from "../constants/system-account";
 import { ensureVarsayilanSuperadmin } from "../services/helpers/varsayilan-superadmin.helper";
+import { SEAL_COMMAND_HINT } from "../services/helpers/system-account-seal.helper";
 
 // installation-identity ile aynı politika: mutlu yolda ~3sn, DB geç gelirse
 // 3 + 4x15 = ~63sn'lik pencere.
@@ -119,7 +120,7 @@ export async function ensureSuperadminAccount(): Promise<SuperadminRegistryResul
   if (dogus.action === "dogdu") {
     uyari("superadmin", "Varsayılan satıcı hesabı ortak parolayla doğdu — ilk girişte parola değişimi zorunlu.");
     if (dogus.muhur !== "MUHURLENDI") {
-      uyari("superadmin", `Varsayılan satıcı hesabı MÜHÜRSÜZ doğdu (${dogus.muhur}) — lisans dizinini denetleyin; sonra: npm run superadmin:kur -- --muhurle`);
+      uyari("superadmin", `Varsayılan satıcı hesabı MÜHÜRSÜZ doğdu (${dogus.muhur}) — lisans dizinini denetleyin; sonra sunucuda: ${SEAL_COMMAND_HINT}`);
     }
   } else if (dogus.action === "ad-dolu") {
     uyari("superadmin", "Varsayılan satıcı hesabının adı başka bir kullanıcıda — hesap DOĞMADI (mevcut kullanıcı yükseltilmez).");

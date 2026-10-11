@@ -30,6 +30,8 @@ interface AuthState {
    * ve kullanıcı/ayar yöneticisine dolu gelir). Varsayılan `false`: eski backend bant çizdirmez.
    */
   defaultSuperadminPasswordPending: boolean;
+  /** Sistem hesabı mührü bandı — `/api/auth/me`den; alan yoksa (eski backend) `ok`, bant çizilmez. */
+  systemAccountSealStatus: "ok" | "pending" | "invalid";
   setUser: (user: JwtPayload | null) => void;
   setHydrated: (hydrated: boolean) => void;
   /** `/api/auth/me`den sistem-hesabı bayraklarını tazeler. ASLA reject etmez
@@ -44,6 +46,7 @@ const SIFIR_HESAP_BAYRAKLARI = {
   systemAccountExists: true,
   factoryAdminExists: true,
   defaultSuperadminPasswordPending: false,
+  systemAccountSealStatus: "ok",
 } as const;
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -53,6 +56,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   systemAccountExists: true,
   factoryAdminExists: true,
   defaultSuperadminPasswordPending: false,
+  systemAccountSealStatus: "ok",
   // ⚠️ `user = null` sistem-hesabı bayraklarını da SIFIRLAR. Tek yer değil iki
   // yol buraya düşüyor (manuel çıkış + apiClient'ın 401 dalı) ve ikisinde de
   // eski kimliğin bayrağı kalsaydı, aynı makinede nöbetleşen bir sonraki
@@ -71,6 +75,10 @@ export const useAuthStore = create<AuthState>((set) => ({
         systemAccountExists: me.data.systemAccountExists !== false,
         factoryAdminExists: me.data.factoryAdminExists !== false,
         defaultSuperadminPasswordPending: me.data.defaultSuperadminPasswordPending === true,
+        systemAccountSealStatus:
+          me.data.systemAccountSealStatus === "pending" || me.data.systemAccountSealStatus === "invalid"
+            ? me.data.systemAccountSealStatus
+            : "ok",
       });
     } catch {
       /* sunucuya ulaşılamadı / oturum düştü — varsayılanlar korunur */

@@ -25,6 +25,7 @@ import { masterDataArchiveHealthSnapshot } from "../services/helpers/master-data
 import { licenseHealthBlock } from "./license/license-health";
 import { compareBackupCryptoIntent, type BackupCryptoIntent } from "./backup-crypto/intent";
 import { factoryTimezoneWarning, getFactoryTimezone } from "../constants/time";
+import { sealHealthSnapshot } from "../services/helpers/system-account-seal.helper";
 
 // Yedek klasörü: BACKUP_DIR üretimde pm2 ortamından gelir (ecosystem.config env
 // veya .env — tipik değer C:\ProgramData\TeksERP\backups). Tanımlıysa durum sayfası
@@ -405,6 +406,8 @@ export async function buildRichHealth(): Promise<Record<string, unknown>> {
     // JWT sırrı: `rotationRequired` true → açılışta bilinen/zayıf sır görüldü (backend açık,
     // sır döndürülmeli — docs/ops/JWT-SIR-ROTASYONU.md). Değer/özet TAŞIMAZ; bellek içi.
     jwtSecret: jwtSecretHealth(),
+    // Sistem hesabı mührü (G1): mandal · durum · mühürlü/mühürsüz/bozuk sayıları; SIR YOK, `null` okunamadı.
+    sistemHesabiMuhru: await sealHealthSnapshot(),
     // Havuzun KENDİ durumu + kümülatif zaman aşımı sayacı. Yukarıdaki
     // `dbConnections` `pg_stat_activity` sayımıdır → SUNUCU tarafını sayar
     // (psql/pgAdmin/pg_dump dahil), idle/busy ayırt etmez ve havuzun kaç bağlantı

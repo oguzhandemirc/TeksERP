@@ -61,7 +61,8 @@ export type SealStatus = SealCheckStatus | "MUHURSUZ" | "SISTEM_DEGIL" | "DIZIN_
 export type LatchState = "VAR" | "YOK";
 
 export const SYSTEM_ACCOUNT_SEAL_INVALID_CODE = "SYSTEM_ACCOUNT_SEAL_INVALID";
-export const SEAL_COMMAND_HINT = "npm run superadmin:kur -- --muhurle";
+/** Kurulu sunucuda (Docker konteyneri / Windows uygulama dizini) tek seferlik komut; ayrıntı belgede. */
+export const SEAL_COMMAND_HINT = "node dist/tools/superadmin-olustur.cjs --muhurle (belge: SUPERADMIN-KURULUM)";
 
 /** Kimlik özeti: sabit sıralı satırlar → sha256 hex. Eski düz PIN/kart kolonları da girer. */
 export function credentialDigest(row: Omit<SealRow, "id" | "username" | "isSystemAccount" | "systemAccountSeal">): string {
@@ -248,7 +249,20 @@ export interface SealSummary {
   readonly mandal: LatchState;
   readonly durum: SealSummaryStatus;
   readonly hesapSayisi: number;
+  /** Geçerli mührü olmayan aktif sistem hesabı (= mühürsüz + bozuk). */
   readonly gecersizSayisi: number;
+  readonly muhurluSayisi: number;
+  readonly muhursuzSayisi: number;
+  /** Mühür var ama doğrulanmıyor (bozuk bayt, başka kurulum, kimlik özeti tutmuyor…). */
+  readonly bozukSayisi: number;
+}
+
+/** Panel bandı: `pending` mühürlenmemiş kurulum · `invalid` mührü geçersiz hesap · `ok` gerisi. */
+export type SealBandStatus = "ok" | "pending" | "invalid";
+export function sealBandStatus(summary: SealSummary): SealBandStatus {
+  if (summary.durum === "MUHURLENMELI") return "pending";
+  if (summary.durum === "GECERSIZ_HESAP") return "invalid";
+  return "ok";
 }
 
 /**
@@ -261,10 +275,29 @@ export async function sealSummary(): Promise<SealSummary> {
     select: SEAL_ROW_SELECT,
   });
   const latch = readLatch();
-  const invalid = rows.filter((r) => sealStatus(r) !== "GECERLI").length;
+  const sealed = rows.filter((r) => sealStatus(r) === "GECERLI").length;
+  const unsealed = rows.filter((r) => r.systemAccountSeal === null).length;
+  const invalid = rows.length - sealed;
   const status: SealSummaryStatus =
     rows.length === 0 ? "HESAP_YOK" : latch === "YOK" ? "MUHURLENMELI" : invalid > 0 ? "GECERSIZ_HESAP" : "TAMAM";
-  return { mandal: latch, durum: status, hesapSayisi: rows.length, gecersizSayisi: invalid };
+  return {
+    mandal: latch,
+    durum: status,
+    hesapSayisi: rows.length,
+    gecersizSayisi: invalid,
+    muhurluSayisi: sealed,
+    muhursuzSayisi: unsealed,
+    bozukSayisi: invalid - unsealed,
+  };
+}
+
+/** Health alanı: özet ya da okunamadıysa `null` ("sorun yok" sanılmasın diye hata boş özete inmez). */
+export async function sealHealthSnapshot(): Promise<SealSummary | null> {
+  try {
+    return await sealSummary();
+  } catch {
+    return null;
+  }
 }
 
 /** Bekçi: önbellekleri sıfırlar (mandal/mühür dosyası test içinde değişir). */

@@ -8,7 +8,7 @@
 // mührünü taşıyamaz); mandalsız kurulum bugünkü gibi çalışır; meşru kimlik değişimi mührü AYNI
 // yazımda yeniler ama bozuk mührü aklamaz; kimlik kolonu yazan her yol yeniden mühürler (AST);
 // `systemAccountSeal`in tek yazarı mühür yardımcısıdır; hedef koruması (panelden düzenleme) yetkiyle aynı
-// yüklemi okur — sahte işaretli hesap korunmaz, pasife alınabilir (§6). Geçici LICENSE_DIR kullanır, DB fikstürlerini
+// yüklemi okur — sahte işaretli hesap korunmaz, pasife alınabilir (§6); health + `/auth/me` bandı (§7). Geçici LICENSE_DIR kullanır, DB fikstürlerini
 // `finally`de siler.
 // =============================================================================
 import fs from "node:fs";
@@ -26,6 +26,7 @@ import {
   isSystemAccountAuthorized,
   resetSystemAccountSealCacheForTest,
   SEAL_ROW_SELECT,
+  sealBandStatus,
   sealStatus,
   sealSummary,
   SYSTEM_ACCOUNT_LATCH_FILE,
@@ -33,6 +34,7 @@ import {
   writeLatch,
   writeSeal,
 } from "../src/services/helpers/system-account-seal.helper";
+import { buildRichHealth } from "../src/lib/health-snapshot";
 import { resolveSystemAccountLock, __resetSystemAccountRegistryForTests } from "../src/services/helpers/system-account.registry";
 import { resetRequestPermissionCacheForTest } from "../src/services/auth.service";
 import { geciciLisansDizini } from "./lib/sistem-hesabi-muhru-fikstur";
@@ -251,6 +253,16 @@ async function calismaZamani(): Promise<void> {
     const yonToken = String(yonGiris.data.token ?? "");
     check("§6 körlük zemini: `admin:users` yöneticisi oturum açtı", !!izin && yonGiris.status === 200 && yonToken.length > 0, String(yonGiris.status));
     const pasifeAl = (hedef: string) => http("POST", `/api/admin/users/${hedef}/deactivate`, yonToken);
+    // Panel girişi web izni ister; `admin:*` dışı bir izin bant kitlesine sokmaz.
+    const duz = await kullanici("duz", false);
+    const webIzin = await prisma.permission.findFirst({
+      where: { category: "web", NOT: { code: { startsWith: "admin:" } } },
+      select: { id: true },
+    });
+    if (webIzin) await prisma.userPermission.create({ data: { userId: duz, permissionId: webIzin.id } });
+    const duzGiris = await http("POST", "/api/auth/login", null, { username: `${ONEK}duz`, password: PAROLA, clientType: "electron" });
+    const duzToken = String(duzGiris.data.token ?? "");
+    const bant = async (token: string): Promise<unknown> => (await http("GET", "/api/auth/me", token)).data.systemAccountSealStatus;
 
     console.log("\n=== §2) MANDALSIZ (geçiş) — mühürsüz hesap bugünkü gibi `[\"*\"]` + bant ===");
     const eski = await kullanici("eski", true);
@@ -258,6 +270,7 @@ async function calismaZamani(): Promise<void> {
     check("§2 mandalsız: mühürsüz sistem hesabı GİRER", (await girisKodu("eski")) === "200");
     const ozet2 = await sealSummary();
     check("§2 özet MUHURLENMELI (bant `pending`)", ozet2.mandal === "YOK" && ozet2.durum === "MUHURLENMELI", JSON.stringify(ozet2));
+    check("§7 ⭐ /auth/me (yönetici): mandalsız + mühürsüz hesap → bant `pending`", (await bant(yonToken)) === "pending", String(await bant(yonToken)));
     const eskiKorunur = await pasifeAl(eski);
     check("§6 mandalsız: mühürsüz (yetkili) sistem hesabı başkasınca pasife ALINAMAZ — bugünkü davranış", eskiKorunur.status === 403, String(eskiKorunur.status));
     await prisma.user.update({ where: { id: eski }, data: { isSystemAccount: false } });
@@ -285,6 +298,19 @@ async function calismaZamani(): Promise<void> {
     __resetSystemAccountRegistryForTests();
     check("§1 supap: mühürsüz satır da 'hesap VAR' sayılır (supap açılmaz)", await resolveSystemAccountLock());
 
+    console.log("\n=== §7) Görünürlük: /api/admin/health + /auth/me bandı (sır yok) ===");
+    check("§7 ⭐ /auth/me (yönetici): mandallı + sahte hesap → bant `invalid`", (await bant(yonToken)) === "invalid", String(await bant(yonToken)));
+    check("§7 /auth/me (yetkisiz kullanıcı): bant bilgisi gitmez → `ok`", duzGiris.status === 200 && (await bant(duzToken)) === "ok", `${duzGiris.status} ${String(await bant(duzToken))}`);
+    const saglik = await buildRichHealth();
+    const hm = saglik.sistemHesabiMuhru as Record<string, unknown> | null;
+    check("§7 ⭐ health `sistemHesabiMuhru`: mandal VAR · GECERSIZ_HESAP · mühürsüz ≥1 · mühürlü ≥1",
+      hm?.mandal === "VAR" && hm?.durum === "GECERSIZ_HESAP" && Number(hm?.muhursuzSayisi) >= 1 && Number(hm?.muhurluSayisi) >= 1 &&
+        Number(hm?.gecersizSayisi) === Number(hm?.muhursuzSayisi) + Number(hm?.bozukSayisi), JSON.stringify(hm));
+    const saMuhur = (await satir(sa)).systemAccountSeal ?? "";
+    const govde = JSON.stringify(saglik);
+    check("§7 ⭐ health SIR taşımaz (mühür · kimlik özeti · kullanıcı adı yok)",
+      saMuhur.length > 20 && !govde.includes(saMuhur) && !govde.includes(credentialDigest(await satir(sa))) && !govde.includes(`${ONEK}sa`));
+
     console.log("\n=== §6) Hedef koruması yetkiyle AYNI yüklemi okur: sahte sistem hesabı korunmaz ===");
     const saKorunur = await pasifeAl(sa);
     check("§6 körlük zemini: mühürlü sistem hesabı başkasınca pasife ALINAMAZ (403)", saKorunur.status === 403, String(saKorunur.status));
@@ -302,6 +328,7 @@ async function calismaZamani(): Promise<void> {
     check("§6 pasife alma audit'e yazıldı (aktör yönetici)", iz >= 1, `${iz} satır`);
     const ozet6 = await sealSummary();
     check("§6 pasif sahte hesap bant özetinden düşer", ozet6.gecersizSayisi === ozet1.gecersizSayisi - 1, `${ozet1.gecersizSayisi} → ${ozet6.gecersizSayisi}`);
+    check("§7 pasife almadan sonra /auth/me bandı özetle aynı", (await bant(yonToken)) === sealBandStatus(ozet6), `${String(await bant(yonToken))} / ${ozet6.durum}`);
     await prisma.user.update({ where: { id: sahte }, data: { isSystemAccount: false } });
 
     const eskiHash = (await satir(sa)).passwordHash;
@@ -312,8 +339,10 @@ async function calismaZamani(): Promise<void> {
     check("§1 özet geri konunca mühür yine geçerli (aynı kimlik)", await yetkili(sa));
 
     const iyi = (await satir(sa)).systemAccountSeal!;
-    const son = iyi.slice(-2) === "AA" ? "AB" : "AA";
-    await prisma.user.update({ where: { id: sa }, data: { systemAccountSeal: `${iyi.slice(0, -2)}${son}` } });
+    // Son karakterler dolgu bitleri taşır (değiştirmek BICIMSIZ üretebilir); imzanın ortasındaki bir harf çevrilir.
+    const k = iyi.length - 10;
+    const bozuk = `${iyi.slice(0, k)}${iyi[k] === "A" ? "B" : "A"}${iyi.slice(k + 1)}`;
+    await prisma.user.update({ where: { id: sa }, data: { systemAccountSeal: bozuk } });
     resetSystemAccountSealCacheForTest();
     check("§1 ⭐ NEGATİF: mühür baytı bozuk → BOZUK, yetki YOK", sealStatus(await satir(sa)) === "BOZUK" && !(await yetkili(sa)), sealStatus(await satir(sa)));
     resetSystemAccountSealCacheForTest();
@@ -352,7 +381,7 @@ async function calismaZamani(): Promise<void> {
       console.log(`   ⏭  ATLANDI: kısa kimlik anahtarı yok (${e instanceof Error ? e.message : e}) — PIN/kart kolları ölçülmedi`);
     }
     if (!pinOlcuruldu) check("§3 PIN/kart kolu ölçülemedi (kısa kimlik halkası yok)", true);
-    await prisma.user.update({ where: { id: sa }, data: { systemAccountSeal: `${iyi.slice(0, -2)}${son}` } });
+    await prisma.user.update({ where: { id: sa }, data: { systemAccountSeal: bozuk } });
     await AuthService.changeOwnPassword(sa, PAROLA, `${PAROLA}-3`);
     resetSystemAccountSealCacheForTest();
     check("§3 ⭐ NEGATİF: bozuk mühürlü hesapta parola değişimi mührü AKLAMAZ", sealStatus(await satir(sa)) !== "GECERLI" && !(await yetkili(sa)),

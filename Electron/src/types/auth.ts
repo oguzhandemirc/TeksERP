@@ -37,6 +37,8 @@ export interface AuthMeResponse {
   factoryAdminExists?: boolean;
   /** Satıcı hesabı hâlâ ortak varsayılan parolayla (yalnız yetkiliye dolu; eski backend göndermez). */
   defaultSuperadminPasswordPending?: boolean;
+  /** Sistem hesabı mührü bandı: `pending` mühürlenmemiş · `invalid` mührü geçersiz hesap (eski backend göndermez). */
+  systemAccountSealStatus?: "ok" | "pending" | "invalid";
 }
 
 /** Giriş yapan istemcinin türü — same-type oturum politikası bununla ayrışır.

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
 import { varsayilanParolaBekliyor } from "../services/helpers/varsayilan-superadmin.helper";
+import { sealBandStatus, sealSummary } from "../services/helpers/system-account-seal.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { factoryAdminExists as factoryAdminExistsCheck } from "../services/helpers/factory-admin.helper";
 import { isSettingsPasswordConfigured } from "../services/settings-password.service";
@@ -581,6 +582,8 @@ export class AuthController {
         matchesPermission(izinler, "admin:users") ||
         matchesPermission(izinler, "admin:settings");
       const defaultSuperadminPasswordPending = bantGorur ? await varsayilanParolaBekliyor() : false;
+      // Sistem hesabı mührü bandı (G1): aynı kitleye; öteki herkese "ok".
+      const systemAccountSealStatus = bantGorur ? sealBandStatus(await sealSummary()) : "ok";
       res.status(200).json({
         success: true,
         data: {
@@ -606,6 +609,7 @@ export class AuthController {
           settingsPasswordRequired,
           factoryAdminExists,
           defaultSuperadminPasswordPending,
+          systemAccountSealStatus,
         },
       });
     } catch (error) {

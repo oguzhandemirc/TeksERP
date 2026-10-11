@@ -3,6 +3,7 @@ import { LicenseBanner } from "./LicenseBanner";
 import { FactoryTimezoneBanner } from "./FactoryTimezoneBanner";
 import { FactoryAdminCard } from "./FactoryAdminCard";
 import { DefaultSuperadminBanner } from "./DefaultSuperadminBanner";
+import { SystemAccountSealBanner } from "./SystemAccountSealBanner";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
 import { UpdateProgressWindow } from "@/pages/System/ServerUpdates/UpdateProgressWindow";
 import { UpdateApprovalPrompt } from "@/pages/System/ServerUpdates/UpdateApprovalPrompt";
@@ -21,6 +22,8 @@ export function ShellBanners() {
       <LicenseBanner />
       {/* Satıcı hesabı hâlâ ortak varsayılan parolayla — kırmızı, kapatılamaz. */}
       <DefaultSuperadminBanner />
+      {/* Sistem hesabı mühürsüz ya da mührü geçersiz — kırmızı, kapatılamaz. */}
+      <SystemAccountSealBanner />
       <FactoryTimezoneBanner />
       {/* Destek hesabında, fabrika yöneticisi yokken — uyarır, engellemez. */}
       <FactoryAdminCard />
