@@ -1,0 +1,758 @@
+{
+  "aciklama": "test_terim_eski_ad §3 tabanı: dosya → eski ad geçiş sayısı. Yalnız DÜŞER; --yaz ile yazılır.",
+  "dosyalar": {
+    "Electron/src/components/layout/command-entries.ts": {
+      "isEmri": 3
+    },
+    "Electron/src/components/layout/tabs/tab-meta.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/lib/audit-field-labels.ts": {
+      "isEmri": 4
+    },
+    "Electron/src/lib/audit-labels.ts": {
+      "dokumaIsi": 3,
+      "isEmri": 11
+    },
+    "Electron/src/lib/item-lifecycle.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/lib/module-flags.ts": {
+      "dokumaIsi": 1
+    },
+    "Electron/src/lib/scanner/scan-resolvers.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/lib/search/search-targets.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Dashboard/KpiCards.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Dashboard/OverdueWorkOrders.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Dashboard/UpcomingWorkOrders.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Dashboard/widgetRegistry.ts": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Definitions/TravelerCardStudio/field-catalog.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Definitions/TravelerCardStudio/types.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Definitions/groups-config.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Definitions/tile-config.ts": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/FabricProperties/FabricPropertyFormDialog.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/FabricProperties/columns.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/GeneralSettings/settings-config.ts": {
+      "dokumaIsi": 16,
+      "isEmri": 26
+    },
+    "Electron/src/pages/GeneralSettings/travelerCardFields.ts": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Items/ItemFormDialog.tsx": {
+      "dokumaIsi": 1
+    },
+    "Electron/src/pages/Operations/KursunDagitim/KursunDagitimCompleteDialog.tsx": {
+      "isEmri": 4
+    },
+    "Electron/src/pages/Operations/KursunDagitim/MachinePanel.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/KursunDagitim/PoolPanel.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/KursunDagitim/useKursunDistribution.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/Orders/BulkCreateWorkOrderAction.tsx": {
+      "isEmri": 5
+    },
+    "Electron/src/pages/Operations/Orders/LinkedWorkOrdersCard.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/Orders/OrderCancelDialog.tsx": {
+      "isEmri": 13
+    },
+    "Electron/src/pages/Operations/Orders/OrderDetailSheet.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/Orders/OrderFormDialog.tsx": {
+      "isEmri": 4
+    },
+    "Electron/src/pages/Operations/Orders/OrderLineCancelDialog.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Operations/Orders/OrderLineWoChips.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/Orders/OrdersPage.tsx": {
+      "isEmri": 4
+    },
+    "Electron/src/pages/Operations/Orders/OrdersStats.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Operations/Orders/columns.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/Orders/deadline-risk.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/ProductBalance/ProductBalancePage.tsx": {
+      "isEmri": 5
+    },
+    "Electron/src/pages/Operations/ProductBalance/ProductBalanceRow.tsx": {
+      "isEmri": 4
+    },
+    "Electron/src/pages/Operations/ProductBalance/ProductBalanceWoDialog.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/Rolls/ReworkRollsDialog.tsx": {
+      "isEmri": 8
+    },
+    "Electron/src/pages/Operations/Rolls/RollDetailSheet.tsx": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/Shipments/DirectShipmentDetailContent.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WarpBeams/WarpBeamsPage.tsx": {
+      "dokumaIsi": 1
+    },
+    "Electron/src/pages/Operations/WarpBeams/WeavingOrderField.tsx": {
+      "dokumaIsi": 5
+    },
+    "Electron/src/pages/Operations/WarpBeams/columns.tsx": {
+      "dokumaIsi": 1
+    },
+    "Electron/src/pages/Operations/WeavingFloor/LoomDetailSheet.tsx": {
+      "dokumaIsi": 2
+    },
+    "Electron/src/pages/Operations/WeavingOrders/OrderLinePickerDialog.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WeavingOrders/WeavingOrderFormDialog.tsx": {
+      "dokumaIsi": 1
+    },
+    "Electron/src/pages/Operations/WeavingOrders/WeavingOrderLinesSection.tsx": {
+      "dokumaIsi": 1
+    },
+    "Electron/src/pages/Operations/WeavingOrders/WeavingOrdersPage.tsx": {
+      "dokumaIsi": 4
+    },
+    "Electron/src/pages/Operations/WeavingOrders/fason/FasonReceiptDialog.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrderEvents/WorkOrderEventsPage.tsx": {
+      "isEmri": 7
+    },
+    "Electron/src/pages/Operations/WorkOrders/AddBatchDialog.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Operations/WorkOrders/BatchDropDialog.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/BranchLanes.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/ChangeTargetDialog.tsx": {
+      "isEmri": 5
+    },
+    "Electron/src/pages/Operations/WorkOrders/CoveragePanel.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/DirectShipModal.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/FasonPlanningDialog.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/FasonQuickReceivePanel.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/FasonReceiveDialog.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/LinkOrderDialog.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/LinkedOrderLinesField.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/ManualMoveModal.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Operations/WorkOrders/OrderPickerDialog.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/RouteDesignerDialog.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/RouteDesignerTemplatePanel.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/RouteEditor.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/RouteStepDetail.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Operations/WorkOrders/TravelerCardPrintDialog.tsx": {
+      "isEmri": 4
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderBulkDocsDialog.tsx": {
+      "isEmri": 5
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderCancelDialog.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderCompleteDialog.tsx": {
+      "isEmri": 9
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderCompleteDispositionList.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderCompleteEffects.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderDetailHeader.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderDetailPage.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderDetailSheet.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderDocumentsDialog.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderEventsPanel.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderFormPage.tsx": {
+      "isEmri": 9
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderFormView.tsx": {
+      "isEmri": 12
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrderLivePreview.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/WorkOrdersPage.tsx": {
+      "isEmri": 9
+    },
+    "Electron/src/pages/Operations/WorkOrders/cancelDecisions.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/columns.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/detail-v3/CoverageAlert.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/schema.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/WorkOrders/tebdil/TebdilSteps.tsx": {
+      "isEmri": 9
+    },
+    "Electron/src/pages/Operations/WorkOrders/tebdil/TebdilWizard.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Operations/groups-config.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Operations/tile-config.ts": {
+      "dokumaIsi": 2,
+      "isEmri": 4
+    },
+    "Electron/src/pages/ProductRecipes/ProductRecipeFormDialog.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/ProductRecipes/ProductRecipesPage.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/ReasonPresets/service.ts": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Reports/Dokuma/ChainBucketsPanel.tsx": {
+      "dokumaIsi": 1
+    },
+    "Electron/src/pages/Reports/Dokuma/ProductionChainPage.tsx": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Electron/src/pages/Reports/Dokuma/productionChain.ts": {
+      "dokumaIsi": 3,
+      "isEmri": 3
+    },
+    "Electron/src/pages/Reports/Dokuma/productionChainColumns.tsx": {
+      "dokumaIsi": 2,
+      "isEmri": 3
+    },
+    "Electron/src/pages/Reports/Dokuma/tile-config.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Electron/src/pages/Reports/Production/BatchTracePage.tsx": {
+      "isEmri": 3
+    },
+    "Electron/src/pages/Reports/Production/WipScorecardPage.tsx": {
+      "isEmri": 7
+    },
+    "Electron/src/pages/Reports/Production/batchTrace.ts": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Reports/Production/tile-config.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Reports/Production/wipScorecard.ts": {
+      "isEmri": 5
+    },
+    "Electron/src/pages/Reports/Quality/PlanDeviationScorecardPage.tsx": {
+      "isEmri": 4
+    },
+    "Electron/src/pages/Reports/Quality/planDeviationExport.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Reports/Sales/OpenOrderCoveragePage.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Reports/Sales/openOrderCoverage.ts": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Reports/Sales/orderCancellation.ts": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Routes/RouteFormDialog.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Routes/RoutesPage.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Settings/SettingsPage.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Stations/StationFormDialog.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/SubcontractorCategories/SubcontractorCategoryFormDialog.tsx": {
+      "isEmri": 2
+    },
+    "Electron/src/pages/Subcontractors/SubcontractorFormDialog.tsx": {
+      "isEmri": 1
+    },
+    "Electron/src/pages/Warehouses/movements.ts": {
+      "isEmri": 1
+    },
+    "Electron/src/services/documentConfig.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/cloud-sync/projections.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/config/label-fields.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/config/traveler-card-fields.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/constants/audit-field-labels.ts": {
+      "isEmri": 4
+    },
+    "Teks-Erp/src/constants/merge-map.color.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Teks-Erp/src/constants/merge-map.item.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Teks-Erp/src/constants/merge-map.subcontractor.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Teks-Erp/src/constants/module-flags.ts": {
+      "dokumaIsi": 1
+    },
+    "Teks-Erp/src/constants/module-profiles.ts": {
+      "dokumaIsi": 4,
+      "isEmri": 2
+    },
+    "Teks-Erp/src/constants/number-series-catalog.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 4
+    },
+    "Teks-Erp/src/constants/permission-catalog.ts": {
+      "dokumaIsi": 2,
+      "isEmri": 8
+    },
+    "Teks-Erp/src/constants/reason-presets.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/constants/role-template-catalog.ts": {
+      "isEmri": 9
+    },
+    "Teks-Erp/src/constants/screen-catalog.ts": {
+      "dokumaIsi": 2,
+      "isEmri": 7
+    },
+    "Teks-Erp/src/constants/search-entities.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/constants/workorder-event-labels.ts": {
+      "isEmri": 3
+    },
+    "Teks-Erp/src/controllers/kursun-bypass.controller.ts": {
+      "isEmri": 4
+    },
+    "Teks-Erp/src/middlewares/module.middleware.ts": {
+      "dokumaIsi": 3
+    },
+    "Teks-Erp/src/routes/machine-run.routes.ts": {
+      "dokumaIsi": 1
+    },
+    "Teks-Erp/src/routes/product-recipe.routes.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/routes/subcontractor-weaving.routes.ts": {
+      "dokumaIsi": 3
+    },
+    "Teks-Erp/src/services/backup-impact.service.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/batch.service.ts": {
+      "isEmri": 9
+    },
+    "Teks-Erp/src/services/document-render/fason-ceki.fields.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/document-render/fason-ceki.html.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/document-render/fason-direct-ship.model.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/document-render/fason-receipt.html.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/document-render/traveler-card.fields.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/document-render/traveler-card.sections.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/fabric-property.service.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/helpers/archive-gate/color-archive.helper.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/archive-gate/fabric-property-archive.helper.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/archive-gate/subcontractor-archive.helper.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/dispatch-header.helper.ts": {
+      "dokumaIsi": 2,
+      "isEmri": 4
+    },
+    "Teks-Erp/src/services/helpers/guarded-hard-remove.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/helpers/item-lifecycle.helper.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/item-usage.helper.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/kursun-bypass-eligibility.helper.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/kursun-bypass-guard.helper.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/machine-doff-open.helper.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/helpers/machine-run-open.helper.ts": {
+      "dokumaIsi": 3
+    },
+    "Teks-Erp/src/services/helpers/production-chain-gates.helper.ts": {
+      "dokumaIsi": 8
+    },
+    "Teks-Erp/src/services/helpers/production-issue-ledger.helper.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/roll-cancel-restore.helper.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/helpers/roll-step.helper.ts": {
+      "isEmri": 3
+    },
+    "Teks-Erp/src/services/helpers/station-routable.helper.ts": {
+      "dokumaIsi": 1
+    },
+    "Teks-Erp/src/services/helpers/tambur-plan-gate.helper.ts": {
+      "isEmri": 3
+    },
+    "Teks-Erp/src/services/helpers/token-replay.helper.ts": {
+      "dokumaIsi": 1,
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/helpers/weaving-order-guards.helper.ts": {
+      "dokumaIsi": 3
+    },
+    "Teks-Erp/src/services/helpers/weaving-order-input.helper.ts": {
+      "dokumaIsi": 2
+    },
+    "Teks-Erp/src/services/helpers/weaving-order-links.helper.ts": {
+      "dokumaIsi": 1
+    },
+    "Teks-Erp/src/services/helpers/weaving-order.helper.ts": {
+      "dokumaIsi": 1
+    },
+    "Teks-Erp/src/services/helpers/workorder-clone.helper.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/helpers/workorder-target-color.helper.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/import/adapters/fabric-property.adapter.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/import/adapters/product-recipe.adapter.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/import/adapters/station.adapter.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/import/adapters/subcontractor-category.adapter.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/import/adapters/subcontractor.adapter.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/inventory.service.ts": {
+      "isEmri": 11
+    },
+    "Teks-Erp/src/services/item.service.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/kursun-bypass.service.ts": {
+      "isEmri": 12
+    },
+    "Teks-Erp/src/services/kursun-qc.service.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/master-data-merge.service.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/order.service.ts": {
+      "isEmri": 22
+    },
+    "Teks-Erp/src/services/reports/wip-scorecard.report.service.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/stock-count.service.ts": {
+      "isEmri": 1
+    },
+    "Teks-Erp/src/services/subcontractor-weaving-receipt.service.ts": {
+      "dokumaIsi": 1
+    },
+    "Teks-Erp/src/services/subcontractor-weaving.service.ts": {
+      "dokumaIsi": 2
+    },
+    "Teks-Erp/src/services/subcontractor.service.ts": {
+      "isEmri": 39
+    },
+    "Teks-Erp/src/services/system-setting.service.ts": {
+      "dokumaIsi": 6,
+      "isEmri": 5
+    },
+    "Teks-Erp/src/services/tambur-manual.service.ts": {
+      "isEmri": 15
+    },
+    "Teks-Erp/src/services/tambur-undo.service.ts": {
+      "isEmri": 18
+    },
+    "Teks-Erp/src/services/tambur.service.ts": {
+      "isEmri": 8
+    },
+    "Teks-Erp/src/services/traveler-card.service.ts": {
+      "isEmri": 4
+    },
+    "Teks-Erp/src/services/weaving-order.service.ts": {
+      "dokumaIsi": 6
+    },
+    "Teks-Erp/src/services/workorder-batch-add.service.ts": {
+      "isEmri": 9
+    },
+    "Teks-Erp/src/services/workorder-batch-drop.service.ts": {
+      "isEmri": 5
+    },
+    "Teks-Erp/src/services/workorder-fason-quick.service.ts": {
+      "isEmri": 2
+    },
+    "Teks-Erp/src/services/workorder-link.service.ts": {
+      "isEmri": 20
+    },
+    "Teks-Erp/src/services/workorder-manual-move.service.ts": {
+      "isEmri": 13
+    },
+    "Teks-Erp/src/services/workorder-roll-detach.service.ts": {
+      "isEmri": 7
+    },
+    "Teks-Erp/src/services/workorder-split.service.ts": {
+      "isEmri": 7
+    },
+    "Teks-Erp/src/services/workorder-timeline.service.ts": {
+      "isEmri": 5
+    },
+    "Teks-Erp/src/services/workorder.service.ts": {
+      "isEmri": 105
+    },
+    "mobil/src/components/RollCancelModal.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/components/dispatch/DispatchDetailPanel.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/components/receipt/ReceiptDetailModal.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/lib/license.ts": {
+      "dokumaIsi": 1
+    },
+    "mobil/src/screens/Common/settings/WorkPreferencesScreen.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/screens/Modules/Devere/PlanModal.tsx": {
+      "dokumaIsi": 4,
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/Devere/beamPayload.ts": {
+      "dokumaIsi": 1
+    },
+    "mobil/src/screens/Modules/Dokuma/DoffEntryView.tsx": {
+      "isEmri": 3
+    },
+    "mobil/src/screens/Modules/Dokuma/RunOpenModal.tsx": {
+      "dokumaIsi": 5,
+      "isEmri": 3
+    },
+    "mobil/src/screens/Modules/Dokuma/RunPanel.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/Dokuma/runPayload.ts": {
+      "dokumaIsi": 1
+    },
+    "mobil/src/screens/Modules/FasonDokuma/FasonDokumaScreen.tsx": {
+      "dokumaIsi": 4
+    },
+    "mobil/src/screens/Modules/FasonKabul/FasonKabulScreen.tsx": {
+      "isEmri": 11
+    },
+    "mobil/src/screens/Modules/FasonSevk/FasonSevkScreen.tsx": {
+      "isEmri": 15
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/HizliIsEmriScreen.tsx": {
+      "isEmri": 3
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/NewWorkOrderView.tsx": {
+      "isEmri": 6
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/OrderLinkPicker.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/RouteStepsModal.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/WorkOrderDetachSheet.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/WorkOrderDetailSheet.tsx": {
+      "isEmri": 6
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/WorkOrderDocumentsSheet.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/WorkOrderListView.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/WorkOrderRecentEvents.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/useQuickWorkOrder.ts": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/wizard/StepProduction.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/wizard/StepRolls.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/HizliIsEmri/workOrderFix.ts": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/KursunDagitim/CompleteConfirmModal.tsx": {
+      "isEmri": 3
+    },
+    "mobil/src/screens/Modules/KursunDagitim/EligibleList.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/screens/Modules/KursunDagitim/KursunDagitimScreen.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/screens/Modules/Tambur/TamburBringRollModal.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/Tambur/TamburFieldFix.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/Tambur/TamburManualRollModal.tsx": {
+      "isEmri": 1
+    },
+    "mobil/src/screens/Modules/Tambur/TamburOrderLinkSheet.tsx": {
+      "isEmri": 12
+    },
+    "mobil/src/screens/Modules/Tambur/TamburScreen.tsx": {
+      "isEmri": 6
+    },
+    "mobil/src/screens/Modules/Tambur/TamburSendToDyeModal.tsx": {
+      "isEmri": 2
+    },
+    "mobil/src/screens/Modules/Tambur/canUnlinkOrderLine.ts": {
+      "isEmri": 1
+    },
+    "mobil/src/services/reasonPreset.service.ts": {
+      "isEmri": 1
+    },
+    "mobil/src/types/permissions.ts": {
+      "isEmri": 3
+    },
+    "patron/uygulama/app/(app)/uretim.tsx": {
+      "isEmri": 2
+    }
+  }
+}

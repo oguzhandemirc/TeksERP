@@ -668,6 +668,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `mobil/src/test/smoke.test.ts` | Altyapı doğrulaması: jest-expo preset + ts transform koşuyor mu (tek assertion). |  |  |  |
 | `mobil/src/utils/queryBuilder.test.ts` | buildQueryString: varsayılanlar yazılmaz, varsayılan-dışı + arama yazılır, filtreler filter[key] ve diziler virgülle, boş filtre atlanır. |  |  |  |
 | `Teks-Erp/scripts/test_identity_ledger.ts` | Bir kimlik kumesi ile gercek kaynagi ayrisamaz: arsiv salt-ekleme, dusen basligin arsivde gerekcesi, bekci adlari harita<->alan kosum listesi hizasi |  |  |  |
+| `Teks-Erp/scripts/test_terim_eski_ad.ts` | Görünen iş emri adı tek kaynak (kullanıcı kararı 2026-10-11): §1 `Teks-Erp/src/constants/terim.ts` → Electron · mobil · patron/uygulama `src/lib/terim.ts` BAYT-EŞİT (sha256; eksik ayna ÖLÇÜLEMEDİ) · §2 `TERIM` iç tutarlılığı (küçük/büyük elle-TR katlama, hâl ekleri yalın + ek) · §3 ESKİ AD CIRCIRI: dizge/şablon/JSX metninde (AST; yorum · import · tanımlayıcı · tip literal'i · test · .json hariç) dosya başına `dokumaIsi` ("Dokuma işi…") + `isEmri` (önünde Terbiye/Dokuma olmayan "iş emri") — taban `scripts/terim-eski-ad-baseline.json` (doğuşta 243 dosya · dokumaIsi 124 · isEmri 853), artış sert, çürüme `curumeKolu`, düşürme `--yaz` |  | ✓K3 (eşleyici: 9 ısırık + 10 susma · AST sentetik kaynak · karşılaştırıcı artış/çürüme) · ✓B2 (bu commit) (status-labels.ts'e "Dokuma işi" → §3 artış ❌ · projections.ts'te bir "iş emri" çevrildi → §3 çürüme ❌ CI / ⏭ commit kipi, `--yaz` sonrası yeşil; `cmp` ile geri alındı) | 2026-10-11 |
 
 ## sevkiyat
 
