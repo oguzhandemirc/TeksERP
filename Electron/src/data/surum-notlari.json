@@ -17,6 +17,41 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-11c",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Tezgah Salonu: açıklama baloncukları ve televizyon için ayrı pencere",
+      "surumler": {
+        "panel": "1.6.2"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah Salonu'nda simgelerin ve kartların üzerine gelince açıklama baloncuğu açılır: duruş sebebi, duruşun başladığı saat, kaç dakikadır durduğu, hedef süre ve ne kadar aşıldığı, duruşun plan dışı olup olmadığı, bilginin ölçülen mi elle girilen mi olduğu ve tezgahta dokunan iş."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Uzun tezgah adları kartın dışına taşmaz: ad önce küçülür, sığmazsa kısaltılır; tam adı baloncukta okunur. Dar ekranda kartlar alt satıra geçer."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "TV kipinden çıkmak artık kolay: fareyi oynatınca köşede “TV kipinden çık” düğmesi belirir, Esc tuşu da çıkarır. İlk açılışta bunu anlatan kısa bir ipucu görünür; programı yeniden açmak gerekmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "TV kipi ayrı bir pencerede açılabilir: “TV kipi” düğmesinden “Ayrı pencerede aç”ı seçin. Bilgisayara birden çok ekran bağlıysa hangi ekranda açılacağını seçersiniz. Ayrı pencerede yeniden giriş yapmak gerekmez; pencere zaten açıksa öne gelir. Pencerenin “Tam ekran” düğmesiyle televizyonu tamamen kaplar, siz ana pencerede çalışmaya devam edersiniz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Program son seçtiğiniz TV kipini ve ekranı hatırlar: program kapanırken TV kipi açıksa, bir sonraki açılışta giriş yapınca televizyon görüntüsü aynı pencerede ya da aynı ekranda kendiliğinden geri gelir."
+        }
+      ]
+    },
+    {
       "id": "2026-10-11b",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Panelin kendini güncellemesi düzeltildi",
