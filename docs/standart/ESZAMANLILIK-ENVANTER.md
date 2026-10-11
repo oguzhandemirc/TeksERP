@@ -12,7 +12,7 @@ Tutum, karar tablosu, bekçi yazımı, istemci tarafı, yanlış refleks listesi
 
 ## 3 · Kilit uzayı envanteri
 
-Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` başlığıdır. Bugünkü fiilî durum **17 sabit / 17 numara** (8021…8037):
+Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` başlığıdır. Bugünkü fiilî durum **18 sabit / 18 numara** (8021…8038):
 
 | Numara | Sabit | Dosya | Amaç |
 |---|---|---|---|
@@ -33,6 +33,7 @@ Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` 
 | 8035 | `POOL_PACKAGE_NO_LOCK_NS` | `helpers/sack-seq.helper.ts` | partisiz çuval ambalaj no (cari başına) |
 | 8036 | `CLIENT_TOKEN_LOCK_NS` | `helpers/token-replay.helper.ts` | `clientToken` replay serileştirme (token başına) — kilitsiz ön-okumada aynı token'lı kaybeden deneme kazananın commit'ini iş kuralında görüp replay yerine yanlış 409 dönüyordu. 8036 alınıyorsa tx'in İLK ifadesidir; K′ yolları 8036 ALMAZ, token okumasını yolun mevcut kilidinin arkasına koyar |
 | 8037 | `FACTORY_TIMEZONE_LOCK_NS` | `services/factory-timezone.service.ts` | fabrika saat dilimi dönem defteri (tek anahtar) — değişiklik planlama ↔ iptal; kilitten sonra defter taze okunur, bekleyen varken ikinci değişiklik 409 (append-only tabloda atomik claim yok) |
+| 8038 | `SYSTEM_ACCOUNT_LOCK_NS` | `services/helpers/varsayilan-superadmin.helper.ts` | satıcı hesabı doğuşu/devri (tek anahtar) — boot'un varsayılan doğuşu ↔ `superadmin-olustur` (kurulum/devir/rotasyon); kilitten sonra hesap taze okunur, dışarıda seçilen dal çürürse karar baştan |
 
 Bu tablo bir ÖZETTİR; kanonik envanter `period-guard.helper.ts` başlığındadır ve `test_advisory_lock_namespaces` ikisini birden ölçer.
 
