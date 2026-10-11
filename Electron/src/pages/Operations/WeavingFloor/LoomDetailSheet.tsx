@@ -1,5 +1,7 @@
 // Tezgah detayı (sağdan açılan panel): figür, açık duruş + uyarı zinciri,
 // vardiya rakamları, sebebe göre duruşlar, son olaylar, dokuma işi ve levent.
+import { Siren } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { JobAndBeam, ShiftFigures, StopBreakdown } from "./DetailBlocks";
 import { StatusShape, TimerRing } from "./Markers";
@@ -14,6 +16,8 @@ interface Props {
   loom: LiveLoom | null;
   now: number;
   onClose: () => void;
+  /** Verilirse canlı alarmı olan duruşta "Alarm sayfasını aç" (izin + alarm bayrağı çağıranda). */
+  onOpenAlarm?: (alarmId: string) => void;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -25,7 +29,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function OpenStopPanel({ stop, now }: { stop: OpenStop; now: number }) {
+function OpenStopPanel({ stop, now, onOpenAlarm }: { stop: OpenStop; now: number; onOpenAlarm?: (alarmId: string) => void }) {
   const status = stop.lossClass ?? "UNPLANNED";
   const tier = escalationTierOf(stop, now);
   const color = TIER_COLOR[tier];
@@ -52,11 +56,17 @@ function OpenStopPanel({ stop, now }: { stop: OpenStop; now: number }) {
         </div>
       </div>
       {tier !== "UNTRACKED" && (stop.attendant ? <AlertChainTimeline stop={stop} now={now} /> : <EscalationDueLine stop={stop} />)}
+      {stop.alarmId && onOpenAlarm && (
+        <Button variant="outline" className="w-full" onClick={() => onOpenAlarm(stop.alarmId!)}>
+          <Siren className="mr-1.5 h-4 w-4" />
+          Alarm sayfasını aç
+        </Button>
+      )}
     </div>
   );
 }
 
-function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
+function DetailBody({ loom: t, now, onOpenAlarm }: { loom: LiveLoom; now: number; onOpenAlarm?: (alarmId: string) => void }) {
   const status = statusOf(t);
   return (
     <div className="space-y-6">
@@ -80,7 +90,7 @@ function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
           className="mx-auto h-36 w-auto"
         />
       </div>
-      {t.openStop && <OpenStopPanel stop={t.openStop} now={now} />}
+      {t.openStop && <OpenStopPanel stop={t.openStop} now={now} onOpenAlarm={onOpenAlarm} />}
       {t.shift && (
         <Section title="Bu vardiya">
           <ShiftFigures loom={t} />
@@ -101,11 +111,11 @@ function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
   );
 }
 
-export function LoomDetailSheet({ loom, now, onClose }: Props) {
+export function LoomDetailSheet({ loom, now, onClose, onOpenAlarm }: Props) {
   return (
     <Sheet open={loom !== null} onOpenChange={(o) => !o && onClose()}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-lg">
-        {loom && <DetailBody loom={loom} now={now} />}
+        {loom && <DetailBody loom={loom} now={now} onOpenAlarm={onOpenAlarm} />}
       </SheetContent>
     </Sheet>
   );

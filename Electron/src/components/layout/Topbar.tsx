@@ -6,6 +6,7 @@ import { ChannelBadge } from "./ChannelBadge";
 import { SupportSessionBadge } from "./SupportSessionBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { NotificationBell } from "./NotificationBell";
+import { LoomAlarmBell } from "@/pages/Operations/LoomAlarms/LoomAlarmBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import {
   DropdownMenu,
@@ -92,6 +93,9 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
             Durum eşlemesi tek kaynaktan (`@/lib/updater-durum`); web panelinde
             hiç çizilmez. */}
         <GuncellemeDugmesi />
+
+        {/* Tezgah alarmı — "Son Aktivite"den AYRI zil; bayrak/izin yoksa hiç çizilmez. */}
+        <LoomAlarmBell />
 
         <NotificationBell />
 

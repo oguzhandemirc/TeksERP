@@ -7,6 +7,8 @@
 // yalnız geliştirme önizlemesinde (`preview/weavingFloorPreview.tsx`).
 // =============================================================================
 import { WifiOff } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLoomAlarmAccess } from "@/pages/Operations/LoomAlarms/alarm-access";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { formatFactory } from "@/lib/factory-time";
@@ -31,8 +33,20 @@ function tvExitOf() {
     : { onExit: exitTezgahTvHere, label: "TV kipinden çık" };
 }
 
+/** `?tezgah=<id>` detayı açar; alarm bağlantısı yalnız alarm bayrağı + `loom:alarm-view` ile. */
+function useFloorDeepLinks(tv: boolean) {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const { canView } = useLoomAlarmAccess();
+  return {
+    initialSelectedId: tv ? null : params.get("tezgah"),
+    onOpenAlarm: !tv && canView ? (id: string) => navigate(`/operations/loom-alarms/${id}`) : undefined,
+  };
+}
+
 export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
   const live = useLoomFloorLive();
+  const links = useFloorDeepLinks(tv);
   if (!live.floor) {
     return (
       <PageShell>
@@ -56,6 +70,8 @@ export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
       onOpenTv={tv ? undefined : openTezgahTvHere}
       tvUrl={tv ? null : buildTezgahTvUrl()}
       tvExit={tv ? tvExitOf() : undefined}
+      initialSelectedId={links.initialSelectedId}
+      onOpenAlarm={links.onOpenAlarm}
     />
   );
 }

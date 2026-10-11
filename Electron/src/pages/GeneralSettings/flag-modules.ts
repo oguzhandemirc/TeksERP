@@ -108,6 +108,12 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   dokumaOrderLineLinkRequired: "dokumaEnabled",
   // Tezgah Salonu (2026-10-10): iletim payı tezgah izleme modülünün sayısal ayarı.
   tezgahEscalationGraceMinutes: "tezgahEnabled",
+  // Dokuma alarmı (A1, 2026-10-11): alarm motoru ve ayarları tezgah izleme modülünün davranış bayrakları
+  // (panel satırları A2b'de iner; tablo bugün yalnız aidiyeti taşır).
+  tezgahAlarmEnabled: "tezgahEnabled",
+  tezgahAlarmUnclassifiedTargetMinutes: "tezgahEnabled",
+  tezgahAlarmRenotifyMinutes: "tezgahEnabled",
+  tezgahAlarmEscalateWhenAcked: "tezgahEnabled",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

@@ -61,6 +61,16 @@ export function useTezgahEnabled(): boolean {
 }
 
 /**
+ * Tezgah alarmı açık mı (`tezgah.alarmEnabled`, ebeveyni tezgah izleme). Yüklenene dek ve
+ * alanı tanımayan sunucuda KAPALI — fail-closed: alarm zili referans profilde hiç belirmez.
+ */
+export function useTezgahAlarmEnabled(): boolean {
+  const q = useFeatureFlags();
+  const d = q.data?.data;
+  return (d?.productionEnabled ?? false) && (d?.tezgahEnabled ?? false) && (d?.tezgahAlarmEnabled ?? false);
+}
+
+/**
  * Dokuma modülü açık mı (`dokuma.enabled`, ebeveyni `production.enabled`). Yüklenene
  * dek KAPALI — fail-closed. İstasyon formunda `WEAVING` türü yalnız bununla çizilir
  * ("kapalı modülün bayrağı çizilmez" kuralının istasyon-türü ayağı, 1e 2026-09-14).

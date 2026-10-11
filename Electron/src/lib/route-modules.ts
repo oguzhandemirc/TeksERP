@@ -76,6 +76,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "operations/warp-beams": "devereEnabled",
   // ── TEZGAH İZLEME ───────────────────────────────────────────────────────
   "operations/weaving-floor": "tezgahEnabled",
+  "operations/loom-alarms": "tezgahEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */

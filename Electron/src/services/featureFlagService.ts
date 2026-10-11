@@ -317,6 +317,15 @@ export interface FeatureFlags {
   /** Hedef süre aşıldıktan sonra patrona iletmeden önceki pay (dk, 0..1440, varsayılan 0).
    *  Duruş AÇILIRKEN satıra donar; değişiklik yalnız yeni duruşları etkiler. */
   tezgahEscalationGraceMinutes: number;
+  /** Dokuma alarm motoru (HAM değer; etkin = `tezgahEnabled ∧ tezgahAlarmEnabled`). Varsayılan KAPALI;
+   *  okuyucu `?? false` ile okur: alanı tanımayan eski sunucuda kapalı sayılır (fail-closed). */
+  tezgahAlarmEnabled: boolean;
+  /** Sebep girilmemiş duruşun hedef süresi (dk); null = izlenmez. */
+  tezgahAlarmUnclassifiedTargetMinutes: number | null;
+  /** Üstlenilmemiş alarmın tekrar çalma aralığı (dk). */
+  tezgahAlarmRenotifyMinutes: number;
+  /** Üstlenilmiş alarm da üst kademeye çıksın mı. */
+  tezgahAlarmEscalateWhenAcked: boolean;
   /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).
    *  Varsayılan KAPALI. ⚠️ İPLİĞE BAĞIMLI, iplik de TİCARETE: bu alan HAM değerdir;
    *  etkin değer `ticaret && iplik && devere`. Faz 1a'da panel satırı YOK (yüzey

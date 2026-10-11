@@ -19,6 +19,7 @@ import {
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 import { isMachineStopsVisible } from "./MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "./WeavingFloor/floor-regime";
+import { isLoomAlarmsVisible } from "./LoomAlarms/alarm-regime";
 import { isWarpBeamsVisible } from "./WarpBeams/warp-beam-regime";
 
 /**
@@ -180,9 +181,11 @@ describe("karo bağlantıları", () => {
     // (Paket D, ticaret paketi); 2026-09-03'te DÖRT karo daha (P5):
     // `goods-receipts` (ticaret — canlı ayrışma düzeltmesi) ve üç üretim karosu.
     // 2026-09-25: `work-order-events` (İş Emri Hareketleri) — iş emirleriyle AYNI üretim kapısı.
+    // 2026-10-11: `loom-alarms` (Tezgah Alarmları) — Tezgah Salonuyla AYNI tezgah izleme kapısı.
     expect(conditional.sort()).toEqual([
       "goods-receipts",
       "kursun-dagitim",
+      "loom-alarms",
       "machine-stops",
       "product-balance",
       "purchase-orders",
@@ -355,6 +358,18 @@ describe("Tezgah Salonu karosu", () => {
     expect(t?.visibleWhen).toBe(isWeavingFloorVisible);
     expect(t?.permission).toBe("loom:live-view");
     expect(t?.to).toBe("/operations/weaving-floor");
+    expect(t?.visibleWhen?.(ctx())).toBe(false);
+    expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(false);
+    expect(t?.visibleWhen?.(ctx({ tezgahEnabled: true }))).toBe(true);
+  });
+});
+
+describe("Tezgah Alarmları karosu", () => {
+  it("⭐ yalnız TEZGAH İZLEME açıkken; izin `loom:alarm-view` (route ile birebir)", () => {
+    const t = operationsTiles.find((x) => x.key === "loom-alarms");
+    expect(t?.visibleWhen).toBe(isLoomAlarmsVisible);
+    expect(t?.permission).toBe("loom:alarm-view");
+    expect(t?.to).toBe("/operations/loom-alarms");
     expect(t?.visibleWhen?.(ctx())).toBe(false);
     expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(false);
     expect(t?.visibleWhen?.(ctx({ tezgahEnabled: true }))).toBe(true);

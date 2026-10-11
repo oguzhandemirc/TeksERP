@@ -37,6 +37,8 @@ export interface OpenStop {
   respondedAt: number | null;
   /** Hedef süre (+ pay) dolunca patrona iletildiği an. */
   escalatedAt: number | null;
+  /** Duruşun canlı alarmı (alarm sayfasına bağlantı); alarm yoksa null/yok. */
+  alarmId?: string | null;
 }
 
 /** Vardiya içinde kapanmış duruş. */

@@ -179,6 +179,8 @@ const CAP_LABEL: Record<string, string> = {
   "finance:payment": "Tahsilat/ödeme girebilir",
   "finance:cheque": "Çek/senet işleyebilir",
   "finance:close": "Dönem kapanışı yapabilir",
+  "loom:alarm-ack": "Tezgah alarmını üstlenip bırakabilir, susturabilir, not düşebilir",
+  "loom:alarm-escalation": "Başkasının üstlendiği alarmı bırakabilir (üst kademe)",
 };
 
 /** Etiketi olmayan kod için kodun kendisi basılır — sessiz boşluk bırakma. */
@@ -295,6 +297,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Tezgah Salonu canlı ekranı (2026-10-10): `tezgahEnabled` arkasında — dokuma modülünün değil
   // tezgah izlemenin ekranı (DOKUMA-CANLI-EKRAN §8 karar 6).
   { key: "operations/weaving-floor", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Salonu", requires: ["loom:live-view"], capabilities: [] },
+  // Tezgah Alarmları (A2a, 2026-10-11): liste + alarm sayfası; eylemler sayfa içinde izinle. Alarm bayrağı
+  // modül değil davranış bayrağıdır — ekranın modülü tezgah izleme.
+  { key: "operations/loom-alarms", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Alarmları", requires: ["loom:alarm-view"], capabilities: ["loom:alarm-ack", "loom:alarm-escalation"] },
   { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
   { key: "reports/production", app: "desktop", modul: "productionEnabled", title: "Üretim", requires: ["report:production"], capabilities: [] },
   { key: "reports/sales", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
@@ -465,10 +470,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
-  // Tezgah alarmı (A1b, 2026-10-11): uçlar doğdu, alarm sayfası/listesi panelde A2, tablette A3 — ekranla ölü muaf olur.
-  { code: "loom:alarm-view", reason: "Alarm listesi/sayfası panel ekranı A2 dilimi; uç bugün API'de." },
-  { code: "loom:alarm-ack", reason: "Üstlen/sustur/not eylemleri alarm sayfasında (A2); uç bugün API'de." },
-  { code: "loom:alarm-escalation", reason: "Üst kademe bildirimi A5 (patron push) ile; bugün yalnız başkasının üstlenmesini bırakma ucunda yetenek." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

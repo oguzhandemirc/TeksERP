@@ -51,6 +51,10 @@ interface ViewProps {
   tvUrl?: string | null;
   /** TV kipinde görünür çıkış (köşe düğmesi + Esc); `windowed` = ayrı TV penceresi (tam ekran düğmeyle). */
   tvExit?: { onExit: () => void; label: string; windowed?: boolean };
+  /** Açılışta detayı açık tezgah (alarm sayfasından "Tezgah Salonunda göster"). */
+  initialSelectedId?: string | null;
+  /** Verilirse detayda canlı alarmın sayfasına bağlantı (TV kipinde verilmez). */
+  onOpenAlarm?: (alarmId: string) => void;
 }
 
 interface AppHeaderProps {
@@ -79,8 +83,8 @@ function AppHeader({ extra, filter, tv, onFullscreen }: AppHeaderProps) {
   );
 }
 
-export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, stale = false, onOpenTv, tvUrl = null, tvExit }: ViewProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, stale = false, onOpenTv, tvUrl = null, tvExit, initialSelectedId = null, onOpenAlarm }: ViewProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(tv ? null : initialSelectedId);
   const [filter, setFilter] = useState<ShowFilter>("ALL");
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const fullscreen = useFullscreen(root, { locked: tv, autoReal: !tvExit?.windowed });
@@ -150,7 +154,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
               )}
               {!fullscreen.active && <StatusLegend />}
             </PageBody>
-            <LoomDetailSheet loom={selected} now={now} onClose={() => setSelectedId(null)} />
+            <LoomDetailSheet loom={selected} now={now} onClose={() => setSelectedId(null)} onOpenAlarm={tv ? undefined : onOpenAlarm} />
           </FloorHintProvider>
         </TabPortalProvider>
       </div>

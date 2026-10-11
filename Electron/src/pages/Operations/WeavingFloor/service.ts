@@ -31,8 +31,12 @@ export interface WireOpenStop {
   startedAt: string;
   targetMinutes: number | null;
   graceMinutes: number;
-  tier: "UNTRACKED" | "WITHIN" | "OVERDUE";
+  /** `ESCALATED` = canlı alarmın üst kademesi çaldı (alarm bayrağı açıkken). Tanınmayan değer yok sayılır. */
+  tier: "UNTRACKED" | "WITHIN" | "OVERDUE" | "ESCALATED";
+  /** Canlı alarmda alarmın donmuş K2 vadesi; değilse hedef + pay. */
   escalationDueAt: string | null;
+  /** Duruşun canlı alarmı (derin bağlantı → alarm sayfası); alarm yoksa / eski sunucuda null. */
+  alarmId?: string | null;
   requiresReason: boolean;
   source: string;
 }

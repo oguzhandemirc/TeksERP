@@ -21,7 +21,7 @@ import {
   Wrench,
   type LucideIcon,
   AlertOctagon,
-  MonitorPlay,
+  MonitorPlay, Siren,
   Layers,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
@@ -41,6 +41,7 @@ import {
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 import { isMachineStopsVisible } from "./MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "./WeavingFloor/floor-regime";
+import { isLoomAlarmsVisible } from "./LoomAlarms/alarm-regime";
 import { isWarpBeamsVisible } from "./WarpBeams/warp-beam-regime";
 import { TERIM } from "@/lib/terim";
 
@@ -296,6 +297,13 @@ export const operationsTiles: OperationsTile[] = [
     group: "production",
     permission: "loom:live-view",
     visibleWhen: isWeavingFloorVisible,
+  },
+  {
+    // TEZGAH ALARMLARI: backend `/api/loom-alarms` `requireTezgahEnabled` + alarm bayrağı +
+    // `loom:alarm-view`; karo modül bayrağı ve izinle (route `ProtectedRoute` ile birebir).
+    key: "loom-alarms", title: "Tezgah Alarmları", icon: Siren, to: "/operations/loom-alarms", group: "production",
+    description: "Hedef süreyi aşan duruşlar: üstlen, sustur, not düş; aktif ve geçmiş alarmlar",
+    permission: "loom:alarm-view", visibleWhen: isLoomAlarmsVisible,
   },
   {
     // LEVENTLER (2026-09-14, devere Faz 1b): backend `warp-beam.routes` `requireDevereEnabled`

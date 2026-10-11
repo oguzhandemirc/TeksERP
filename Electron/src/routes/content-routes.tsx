@@ -71,6 +71,8 @@ import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrder
 import { ShiftDefinitionsPage } from "@/pages/ShiftDefinitions/ShiftDefinitionsPage";
 import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
 import { WeavingFloorPage } from "@/pages/Operations/WeavingFloor/WeavingFloorPage";
+import { LoomAlarmsPage } from "@/pages/Operations/LoomAlarms/LoomAlarmsPage";
+import { LoomAlarmDetailPage } from "@/pages/Operations/LoomAlarms/LoomAlarmDetailPage";
 import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
@@ -477,6 +479,26 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="loom:live-view">
         <WeavingFloorPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Tezgah Alarmları — karo izniyle BİREBİR (`loom:alarm-view`); eylemler sayfa içinde izinle
+    // (`loom:alarm-ack` · `loom:alarm-escalation`). Modül kapısı `ROUTE_MODULE` (`tezgahEnabled`);
+    // alarm bayrağı kapalıyken backend 403 `LOOM_ALARM_DISABLED` → sayfa "kapalı" der.
+    path: "operations/loom-alarms",
+    element: (
+      <ProtectedRoute requirePermission="loom:alarm-view">
+        <LoomAlarmsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Alarm sayfası — zil, liste ve Tezgah Salonu buraya açar (tasarım §A.7).
+    path: "operations/loom-alarms/:id",
+    element: (
+      <ProtectedRoute requirePermission="loom:alarm-view">
+        <LoomAlarmDetailPage />
       </ProtectedRoute>
     ),
   },

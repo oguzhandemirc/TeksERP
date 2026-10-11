@@ -45,6 +45,37 @@ function dto(looms: WireLoom[]): LoomFloorDto {
   };
 }
 
+describe("fromApi — alarm kademesi (ESCALATED) ve alarm bağlantısı", () => {
+  const stop = (over: Record<string, unknown>) => loom({
+    state: "STOPPED",
+    openStop: { id: "s1", reasonCode: "IP_ATLAMA", reasonLabel: "İp atlama", lossClass: "UNPLANNED", startedAt: T0, targetMinutes: 10, graceMinutes: 10, tier: "OVERDUE", escalationDueAt: "2026-10-10T08:20:00.000Z", requiresReason: false, source: "OPERATOR", ...over } as WireLoom["openStop"],
+  });
+
+  it("⭐ sunucu ESCALATED → kart 'patrona iletildi'; an = alarmın K2 vadesi; alarmId taşınır", () => {
+    const s = fromApi(dto([stop({ tier: "ESCALATED", alarmId: "al-1" })])).looms[0]!.openStop!;
+    expect(s.escalatedAt).toBe(Date.parse("2026-10-10T08:20:00.000Z"));
+    expect(s.alarmId).toBe("al-1");
+    expect(escalationTierOf(s, Date.parse(AS_OF))).toBe("ESCALATED");
+  });
+
+  it("⭐ OVERDUE (pay işliyor) → istemci hedef + paydan 'iletildi' TÜRETMEZ", () => {
+    const s = fromApi(dto([stop({ tier: "OVERDUE", alarmId: "al-1" })])).looms[0]!.openStop!;
+    expect(s.escalatedAt).toBeNull();
+    expect(escalationTierOf(s, Date.parse(AS_OF))).toBe("OVERDUE");
+  });
+
+  it("tanınmayan kademe (yeni sunucu) yok sayılır — fail-closed; eski sunucuda alarmId null", () => {
+    const s = fromApi(dto([stop({ tier: "PAGED" })])).looms[0]!.openStop!;
+    expect(s.escalatedAt).toBeNull();
+    expect(s.alarmId).toBeNull();
+  });
+
+  it("K2 vadesi asOf'tan ileride görünse de (saat farkı) an asOf'u geçmez", () => {
+    const s = fromApi(dto([stop({ tier: "ESCALATED", escalationDueAt: "2026-10-10T09:00:00.000Z" })])).looms[0]!.openStop!;
+    expect(s.escalatedAt).toBe(Date.parse(AS_OF));
+  });
+});
+
 describe("fromApi", () => {
   it("⭐ açık duruşun hedef ve payı DONMUŞ değerden; kademe sunucu formülüyle aynı", () => {
     const f = fromApi(dto([loom({

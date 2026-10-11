@@ -41,7 +41,16 @@ function labelOf(code: string | null, labels: ReadonlyMap<string, string>, fallb
   return fallback ?? labels.get(code) ?? code;
 }
 
-function openStopOf(l: WireLoom, labels: ReadonlyMap<string, string>): OpenStop | null {
+/**
+ * Üst kademe yalnız SUNUCUDAN gelir (`tier: ESCALATED`, alarm bayrağı açıkken); istemci hedef + paydan
+ * "iletildi" türetmez. An = alarmın K2 vadesi, `asOf`u geçemez. Tanınmayan kademe yok sayılır (fail-closed).
+ */
+function escalatedAtOf(s: NonNullable<WireLoom["openStop"]>, asOf: number): number | null {
+  if (s.tier !== "ESCALATED") return null;
+  return s.escalationDueAt ? Math.min(ms(s.escalationDueAt), asOf) : asOf;
+}
+
+function openStopOf(l: WireLoom, labels: ReadonlyMap<string, string>, asOf: number): OpenStop | null {
   const s = l.openStop;
   // Durumu bilinmeyen tezgahın açık duruşu sayılara girmez (sunucu `countFloor`).
   if (!s || l.state === "UNMONITORED") return null;
@@ -55,7 +64,8 @@ function openStopOf(l: WireLoom, labels: ReadonlyMap<string, string>): OpenStop 
     attendant: null,
     notifiedAt: null,
     respondedAt: null,
-    escalatedAt: null,
+    escalatedAt: escalatedAtOf(s, asOf),
+    alarmId: s.alarmId ?? null,
   };
 }
 
@@ -74,7 +84,7 @@ function stopsAndEvents(l: WireLoom, labels: ReadonlyMap<string, string>): { sto
   return { stops, events: events.slice(0, MAX_EVENTS) };
 }
 
-function loomOf(l: WireLoom): LiveLoom {
+function loomOf(l: WireLoom, asOf: number): LiveLoom {
   const dayBreakdown = dayBreakdownOf(l);
   const labels = new Map(dayBreakdown.filter((r) => r.reasonCode !== null).map((r) => [r.reasonCode!, r.label]));
   const { stops, events } = stopsAndEvents(l, labels);
@@ -88,7 +98,7 @@ function loomOf(l: WireLoom): LiveLoom {
     targetRpm: l.targetUnitsPerMin,
     rpm: null,
     picksPerCm: null,
-    openStop: openStopOf(l, labels),
+    openStop: openStopOf(l, labels, asOf),
     shift: null,
     today: { runSec: l.today.aptSec, plannedSec: l.today.potSec },
     stops,
@@ -109,7 +119,8 @@ function loomOf(l: WireLoom): LiveLoom {
 }
 
 export function fromApi(dto: LoomFloorDto): FloorState {
-  const looms = dto.looms.map(loomOf);
+  const asOf = ms(dto.asOf);
+  const looms = dto.looms.map((l) => loomOf(l, asOf));
   const halls = dto.halls.map((h) => h.hallName);
   for (const t of looms) if (!halls.includes(t.hall)) halls.push(t.hall);
   return {
