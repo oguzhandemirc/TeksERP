@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useTezgahAlarmEnabled, useTezgahEnabled } from "@/hooks/usePricingEnabled";
 import { useVisibleKindTabs } from "./useVisibleKindTabs";
 import {
   KIND_STORES_TEXT,
@@ -18,6 +19,7 @@ import {
   type ReasonPresetKind,
 } from "./service";
 import { PresetRowSummary } from "./PresetRowSummary";
+import { StopTargetCell, StopTargetGapCallout, missingTargetCount } from "./StopTargetColumn";
 import { ReasonPresetDialog, type ReasonPresetDialogMode } from "./ReasonPresetDialog";
 
 // =============================================================================
@@ -43,6 +45,9 @@ export function ReasonPresetsPage() {
   const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
   const canEdit = hasPermission("roll:manual-adjust");
+  // Hedef süre sütunu yalnız tezgah izleme açıkken (Tezgah Duruşu sekmesinde).
+  const tezgahEnabled = useTezgahEnabled();
+  const alarmOn = useTezgahAlarmEnabled();
   const [tab, setTab] = useState<ReasonPresetKind>("ROLL_SCRAP");
   const [dialog, setDialog] = useState<{
     mode: ReasonPresetDialogMode;
@@ -132,6 +137,10 @@ export function ReasonPresetsPage() {
                 </Callout>
               )}
 
+              {t.kind === "MACHINE_STOP" && tezgahEnabled && !q.isLoading && (
+                <StopTargetGapCallout count={missingTargetCount(q.data ?? [])} alarmOn={alarmOn} />
+              )}
+
               {q.isLoading ? (
                 <div className="space-y-2">
                   {[0, 1, 2].map((i) => (
@@ -140,6 +149,13 @@ export function ReasonPresetsPage() {
                 </div>
               ) : (
                 <div className="rounded-lg border">
+                  {t.kind === "MACHINE_STOP" && tezgahEnabled && rows.length > 0 && (
+                    <div className="flex items-center gap-3 border-b bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                      <span className="flex-1 pl-9">Sebep</span>
+                      <span className="w-28 text-right">Hedef süre</span>
+                      {canEdit && <span className="w-[7.5rem]" aria-hidden />}
+                    </div>
+                  )}
                   {rows.map((row, i) => (
                     <div
                       key={row.id}
@@ -168,7 +184,8 @@ export function ReasonPresetsPage() {
                         </Button>
                       </div>
 
-                      <PresetRowSummary row={row} />
+                      <PresetRowSummary row={row} hideTarget={t.kind === "MACHINE_STOP" && tezgahEnabled} />
+                      {t.kind === "MACHINE_STOP" && tezgahEnabled && <StopTargetCell row={row} canEdit={canEdit} />}
 
                       {canEdit && (
                         <div className="flex shrink-0 items-center gap-1">
