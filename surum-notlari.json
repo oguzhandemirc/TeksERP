@@ -17,6 +17,61 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-11d",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Tezgah alarmı ve iş emirlerinin yeni adları",
+      "surumler": {
+        "panel": "1.6.3"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah alarmı geldi ama KAPALI gelir; açılmadıkça panelde hiçbir şey değişmez. Açmak için Genel Ayarlar → “Tezgah izleme” bölümündeki “Tezgah alarmı” ayarını açın. Açılınca hedef süresini aşan tezgah duruşu alarm olur: önce görevliye (1. kademe) çalar, duruş daha da uzarsa patrona (2. kademe) iletilir. Alarm için sunucunun da 2.15.4 sürümüne güncellenmesi gerekir; eski sunucuda alarm zili hiç görünmez, panelin öteki ekranları aynen çalışır. Açmadan önce alarmı görecek ve üstlenecek kişilerin rollerine Tezgah Alarmları yetkisini verin."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Üst çubukta yeni bir alarm zili var: üzerindeki sayı açık alarm sayısıdır. Zile basınca tezgah, sebep, geçen süre ve hedef süre listelenir; “Tümünü gör” ile “Tezgah Alarmları” listesi açılır. Bu liste Operasyonlar ekranından da açılır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Alarm sayfası duruşun ne zamandan beri sürdüğünü, hedef süreyi, alarmı kimin üstlendiğini ve “Zaman çizgisi”ni gösterir; yanda tezgahtaki kumaş ve “Bu sebeple geçmiş duruşlar” (adet, toplam ve ortalama süre) yer alır. Sayfadaki düğmeler: “Üstlen” (bu duruşla ben ilgileniyorum), “Bırak”, “Sustur” (tekrar çalmayı birkaç dakika durdurur; süre aşılırsa alarm yine patrona gider) ve “Not ekle”. Not silinmez, yalnız yazan geri çekebilir. “Tezgah Salonunda göster” tezgahı salonda açar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yeni alarm gelince üst çubuğun altında kırmızı bir şerit belirir ve kısa bir ses çalar; şeritten alarmı üstlenebilir ya da “Alarmı aç” ile sayfasına gidebilirsiniz. Şeridi kapatırsanız yeni bir alarm ya da kademe gelene kadar geri gelmez. Panel penceresi arkadaysa ya da simge durumundaysa Windows bildirimi de çıkar; bildirime tıklayınca panel öne gelir ve alarm sayfası açılır. Üstlenilmemiş ve susturulmamış alarm 10 dakikada bir yeniden çalar (aralık Genel Ayarlar'daki “Alarm tekrar çalma aralığı” ayarından değişir). Sesi kendiniz için zilin içindeki ses düğmesiyle kapatabilirsiniz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah Salonu'nda patrona iletilmiş duruş artık “Patrona iletildi” olarak görünür. Alarmı olan bir tezgaha tıklayınca açılan bölmede “Alarm sayfasını aç” düğmesi çıkar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "TV kipinde alarm sesi açılabilir: fareyi oynatınca köşede beliren “Alarm sesi kapalı” düğmesine basın. Ses başlangıçta kapalıdır ve bu ayar yalnız o bilgisayar için geçerlidir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Genel Ayarlar → “Tezgah izleme” bölümüne alarm ayarları eklendi: “Tezgah alarmı” (açık/kapalı), “Sebebi girilmemiş duruşun hedef süresi” (boş bırakılırsa sebebi girilmemiş duruş alarm üretmez), “Üstlenilmiş alarm da patrona iletilsin” (başlangıçta açık) ve “Alarm tekrar çalma aralığı” (başlangıçta 10 dakika)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Hazır Sebepler → “Tezgah Duruşu” sekmesinde her sebebin “Hedef süre” sütunu var; yetkili kullanıcı süreyi satırda yazıp kaydeder. Yeni süre yalnız bundan sonraki duruşları etkiler. Hedef süresi girilmemiş sebepler varsa sayfanın üstünde uyarı çıkar: bu sebeplerle kaydedilen duruşlar alarm üretmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İş emirlerinin adı değişti: eskiden Dokuma İşi denen kayıt artık “Dokuma İş Emri”, eskiden İş Emri denen kayıt artık “Terbiye İş Emri” adını taşır. Menülerde, ekranlarda, raporlarda ve Excel başlıklarında yeni ad görünür. Kayıtlar ve numaraları değişmez; yalnız görünen ad değişti."
+        }
+      ]
+    },
+    {
       "id": "2026-10-11c",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Tezgah Salonu: açıklama baloncukları ve televizyon için ayrı pencere",
