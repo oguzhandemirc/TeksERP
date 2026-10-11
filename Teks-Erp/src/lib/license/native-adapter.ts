@@ -50,6 +50,12 @@ import {
 } from "./license-core";
 import { IntegrityReportSchema, type IntegrityReport, type PackageKey } from "./integrity";
 import type { LeaseModuleKeyRequest } from "./module-key";
+import {
+  SEAL_CHECK_STATUSES,
+  type SealCheckResult,
+  type SealResult,
+  type SystemSealDoc,
+} from "./system-seal";
 
 export interface NativeBinding {
   kunye(): string;
@@ -74,6 +80,8 @@ export interface NativeBinding {
   unprotectLocal(request: string): string;
   collectFingerprint(request: string): Promise<string>;
   verifyIntegrity(request: string): Promise<string>;
+  sealSystemAccount(request: string): string;
+  verifySystemAccountSeal(request: string): string;
 }
 
 const BINDING_FUNCTIONS = [
@@ -100,6 +108,9 @@ const BINDING_FUNCTIONS = [
   "unprotectLocal",
   "collectFingerprint",
   "verifyIntegrity",
+  // Sistem hesabı mührü (G1, ABI 3 içinde): taşımayan eski ikili bağlama sayılmaz → açılmaz.
+  "sealSystemAccount",
+  "verifySystemAccountSeal",
 ] as const;
 
 export function isNativeBinding(x: unknown): x is NativeBinding {
@@ -175,6 +186,30 @@ function nativeV2(b: NativeBinding): NativeV2Methods {
   };
 }
 
+const SealResultSchema = resultSchema(
+  z.discriminatedUnion("durum", [
+    z.object({ durum: z.literal("MUHURLENDI"), muhur: z.string().min(1).max(200), kid: z.string().min(1) }),
+    z.object({ durum: z.enum(["BELGE_BICIMSIZ", "ANAHTAR_YOK", "ANAHTAR_BOZUK"]) }),
+  ]),
+);
+const SealCheckSchema = resultSchema(
+  z.object({ durum: z.enum(SEAL_CHECK_STATUSES), kid: z.string().optional() }),
+);
+
+/** Mühür uçları: native istisnası ya da sözleşme dışı yanıt `CEKIRDEK_YOK` — mühür VERİLMEZ, doğrulama GEÇMEZ. */
+function nativeSeal(b: NativeBinding): Pick<LicenseCore, "sealSystemAccount" | "verifySystemAccountSeal"> {
+  return {
+    sealSystemAccount: (dizin: string, belge: SystemSealDoc): SealResult => {
+      const r = guarded(SealResultSchema, () => b.sealSystemAccount(JSON.stringify({ dizin, belge })), "mühür");
+      return r.ok ? r.value : { durum: "CEKIRDEK_YOK" };
+    },
+    verifySystemAccountSeal: (dizin: string, belge: SystemSealDoc, muhur: string): SealCheckResult => {
+      const r = guarded(SealCheckSchema, () => b.verifySystemAccountSeal(JSON.stringify({ dizin, belge, muhur })), "mühür doğrulama");
+      return r.ok ? r.value : { durum: "CEKIRDEK_YOK" };
+    },
+  };
+}
+
 export function nativeCore(b: NativeBinding): LicenseCore {
   const jws = resultSchema(JwsViewSchema);
   const cert = resultSchema(CertificateViewSchema);
@@ -232,6 +267,7 @@ export function nativeCore(b: NativeBinding): LicenseCore {
       ),
     protectLocal: (veri: string): CoreResult<{ veri: string }> => guarded(protectedData, () => b.protectLocal(JSON.stringify({ veri })), "yerel koruma"),
     unprotectLocal: (veri: string): CoreResult<{ veri: string }> => guarded(protectedData, () => b.unprotectLocal(JSON.stringify({ veri })), "yerel koruma"),
+    ...nativeSeal(b),
   });
 }
 
@@ -281,5 +317,7 @@ export function unavailableCore(reason: string): LicenseCore {
     unwrapLeaseModuleKey: () => refuse<{ anahtar: string; surum: number }>(),
     protectLocal: () => refuse<{ veri: string }>(),
     unprotectLocal: () => refuse<{ veri: string }>(),
+    sealSystemAccount: (): SealResult => ({ durum: "CEKIRDEK_YOK" }),
+    verifySystemAccountSeal: (): SealCheckResult => ({ durum: "CEKIRDEK_YOK" }),
   });
 }

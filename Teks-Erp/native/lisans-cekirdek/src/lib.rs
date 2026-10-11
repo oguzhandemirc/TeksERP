@@ -17,6 +17,7 @@ pub mod fingerprint;
 pub mod local_protect;
 pub mod module_key;
 pub mod paths;
+pub mod system_seal;
 
 // Test derlemesinde napi makrosu kayıt kodu üretmez; yapıştırıcı yalnız eklenti derlemesinde.
 #[cfg(all(feature = "napi", not(test)))]

@@ -53,6 +53,7 @@ import {
   type LeaseModuleKeyRequest,
 } from "./module-key";
 import type { KeyObject } from "node:crypto";
+import { verifySealWithTs, sealWithTs, type SealCheckResult, type SealResult, type SystemSealDoc } from "./system-seal";
 
 /** Çekirdeğe özgü kodlar (protokol kümesinde yok). Native aynası `outcome.rs` `code::CORE`. */
 export const CORE_ERROR_CODES = [
@@ -181,6 +182,9 @@ export interface LicenseCore {
   /** Yerel sarma (Windows DPAPI); başka platformda `KORUMA_YOK`. Veri base64url. */
   protectLocal(veri: string): CoreResult<{ readonly veri: string }>;
   unprotectLocal(veri: string): CoreResult<{ readonly veri: string }>;
+  /** Sistem hesabı mührü (G1): çekirdek `dizin`deki kurulum anahtarını KENDİSİ okur; özel yarı çağırana dönmez. */
+  sealSystemAccount(dizin: string, belge: SystemSealDoc): SealResult;
+  verifySystemAccountSeal(dizin: string, belge: SystemSealDoc, muhur: string): SealCheckResult;
 }
 
 export function certificateView(c: VerifiedCertificate): CertificateView {
@@ -301,4 +305,7 @@ export const tsLicenseCore: LicenseCore = Object.freeze({
   // TS'te yerel koruma yok (DPAPI native'dedir): önbellek dosya iznine düşer ya da hiç tutulmaz.
   protectLocal: (): CoreResult<{ veri: string }> => NO_LOCAL_PROTECTION,
   unprotectLocal: (): CoreResult<{ veri: string }> => NO_LOCAL_PROTECTION,
+  sealSystemAccount: (dizin: string, belge: SystemSealDoc): SealResult => sealWithTs(dizin, belge),
+  verifySystemAccountSeal: (dizin: string, belge: SystemSealDoc, muhur: string): SealCheckResult =>
+    verifySealWithTs(dizin, belge, muhur),
 });

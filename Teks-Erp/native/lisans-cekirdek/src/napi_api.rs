@@ -119,6 +119,17 @@ pub fn unprotect_local(request: String) -> Result<String> {
     call(&request, api::unprotect_local)
 }
 
+/// Sistem hesabı mührü (G1) — kurulum anahtarıyla imza; anahtar dosyası çekirdekte okunur.
+#[napi(catch_unwind)]
+pub fn seal_system_account(request: String) -> Result<String> {
+    call(&request, api::seal_system_account)
+}
+
+#[napi(catch_unwind)]
+pub fn verify_system_account_seal(request: String) -> Result<String> {
+    call(&request, api::verify_system_account_seal)
+}
+
 /// İş parçacığı havuzunda koşan istek (süreç başlatma, dosya özetleme) — olay döngüsü bloke olmaz.
 pub struct BlockingCall {
     request: String,

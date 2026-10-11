@@ -467,6 +467,10 @@ model User {
   /// job'ı (`jobs/superadmin.job.ts`) yazar — hiçbir Zod şemasına girmez, yani
   /// panelden ne atanabilir ne kaldırılabilir.
   isSystemAccount Boolean @default(false)
+  /// Sistem hesabı mührü (G1): kurulum anahtarıyla (lisans çekirdeğinde) imzalı `sm1.<kid>.<imza>` —
+  /// id + ad + kimlik bilgisi özeti üstüne. `isSystemAccount` tek başına yetki VERMEZ (mandallı kurulumda).
+  /// API'den YAZILAMAZ; yazarlar `services/helpers/system-account-seal.ts` ve `scripts/superadmin-olustur.ts`.
+  systemAccountSeal String? @db.VarChar(200)
   /// Hesap ORTAK varsayılan parolayla doğdu (boot, kurulumda satıcı hesabı yokken). Yalnız sistem
   /// hesabında dolu (CHECK). DURUM kolonu; yazarı `services/helpers/varsayilan-superadmin.ts`.
   defaultPasswordIssuedAt  DateTime? @db.Timestamptz

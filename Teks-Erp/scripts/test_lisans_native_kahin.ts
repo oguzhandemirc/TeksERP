@@ -56,13 +56,16 @@
 //      seçenekleri çekirdeğe geçirmedi → §10a · §10b ❌ (kaynakta mutasyon, sha eşit geri alındı)
 //   §11 ⭐ YETENEK SONDASI (L2-7 B): `hak-ara` + `iptal` yalnız biçimsiz belgeye KENDİ protokol koduyla cevap veren çekirdekte
 //      bildirilir — TS ve native dört yetenek, kullanılamayan çekirdek iki · L2-7 S17 canlı sonda kalktı → §11a ❌
+//   §12 ⭐ SİSTEM HESABI MÜHRÜ (G1): TS mührü kayıtlı vektörle (`test-vektorleri/sistem-hesabi-muhru.txt`, cargo
+//      `known_vector` de okur) aynı · TS kararları (tur · değişim BOZUK · başka kurulum · anahtarsız · biçimsiz) ·
+//      kullanılamayan çekirdek CEKIRDEK_YOK · native = TS bayt bayt. Yeniden üret: `--vektor-yaz --yalniz-muhur`
 //   L2-1 negatif sondaları (dosya dışı, sha eşit geri alındı): bayi ufuk tavanı · güçlü şartı · iptal denetimi
 //   (protokolde) → §2''b · v2 dosya biçimi → §2''a · v2 dosyasından istek ailesi silindi → §2''c/d/e
 //
 // NEGATİF SONDA — dosya DIŞI mutasyonlar (commit mesajında sayılarla; her biri geri alındı, sha eşit):
 //   bkz. Teks-Erp/docs/BEKCI-HARITASI.md `## lisans` satırı.
 // =============================================================================
-import { randomUUID } from "node:crypto";
+import { createPrivateKey, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -764,11 +767,16 @@ async function bolum1(): Promise<void> {
     const islev = () => "";
     const v1Islevleri = ["kunye", "builtinAnchor", "verifyJws", "verifyCertificate", "verifyEntitlement", "verifyLease", "checkLeaseBinding", "normalizeFactor", "digestFingerprint", "unwrapModuleKey", "unwrapLeaseModuleKey", "protectLocal", "unprotectLocal", "collectFingerprint", "verifyIntegrity"];
     const v2Islevleri = ["verifyRevocation", "pickNewerRevocation", "isRevocationCurrent", "compareFingerprints", "assessIdentification", "canAutoLearnFingerprint", "offlineHorizonCeilingDays"];
+    const g1Islevleri = ["sealSystemAccount", "verifySystemAccountSeal"];
     const bagla = (adlar: readonly string[]) => Object.fromEntries(adlar.map((a) => [a, islev]));
+    const tam = [...v1Islevleri, ...v2Islevleri, ...g1Islevleri];
     check(
-      "§1h ⭐ lisans v2 işlevlerini taşımayan eski ABI-3 ikilisi bağlama sayılmaz (yükleyici YUKLENEMEDI), tam küme sayılır",
-      !isNativeBinding(bagla(v1Islevleri)) && isNativeBinding(bagla([...v1Islevleri, ...v2Islevleri])) && v2Islevleri.every((a) => !isNativeBinding(bagla([...v1Islevleri, ...v2Islevleri.filter((x) => x !== a)]))),
-      `${v2Islevleri.length} v2 işlevi`,
+      "§1h ⭐ lisans v2 / sistem hesabı mührü (G1) işlevlerini taşımayan eski ABI-3 ikilisi bağlama sayılmaz (yükleyici YUKLENEMEDI), tam küme sayılır",
+      !isNativeBinding(bagla(v1Islevleri)) &&
+        !isNativeBinding(bagla([...v1Islevleri, ...v2Islevleri])) &&
+        isNativeBinding(bagla(tam)) &&
+        [...v2Islevleri, ...g1Islevleri].every((a) => !isNativeBinding(bagla(tam.filter((x) => x !== a)))),
+      `${v2Islevleri.length} v2 + ${g1Islevleri.length} G1 işlevi`,
     );
 
     const kunyeTam = {
@@ -1228,7 +1236,77 @@ function bolum11yetenek(): void {
   check("§11b ⭐ native çekirdek biçimsiz belgeyi kendi koduyla reddeder (CEKIRDEK_YOK değil) → dört yetenek, TS ile AYNI", native === ts, native);
 }
 
+// Kurulum anahtarı dosyasının alan adı; dize olarak tutulur (sha atıf bekçisi çıplak hex adı atıf sanar).
+const ANAHTAR_ALANI = "ed25519";
+const MUHUR_VEKTOR_DOSYASI = path.join(TEKS, "native", "lisans-cekirdek", "test-vektorleri", "sistem-hesabi-muhru.txt");
+const MUHUR_BELGE = { id: "0b9a4c1e-5f3d-4e2a-9c7b-1d2e3f4a5b6c", ad: "bakim", kimlik: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" };
+
+/** Sabit tohumlu (n×32) kurulum anahtar dosyası — Rust `system_seal::tests::key_dir` ile aynı biçim. */
+function muhurAnahtarDizini(tohum: number): string {
+  const dizin = mkdtempSync(path.join(tmpdir(), "kahin-muhur-"));
+  const der = Buffer.concat([Buffer.from("302e020100300506032b657004220420", "hex"), Buffer.alloc(32, tohum)]);
+  const x = protokolModulu.publicKeyX(createPrivateKey({ key: der, format: "der", type: "pkcs8" }));
+  writeFileSync(path.join(dizin, "kurulum-anahtari.json"), JSON.stringify({ v: 1, [ANAHTAR_ALANI]: { pkcs8: der.toString("base64url"), x } }));
+  return dizin;
+}
+
+/** Mühür sonuçları: sabit vektör · tur · ad/kimlik değişimi · başka kurulum · anahtarsız dizin. */
+function muhurKararlari(core: LicenseCore): Record<string, string> {
+  const a = muhurAnahtarDizini(7);
+  const b = muhurAnahtarDizini(2);
+  const bos = mkdtempSync(path.join(tmpdir(), "kahin-muhur-bos-"));
+  try {
+    const m = core.sealSystemAccount(a, MUHUR_BELGE);
+    const muhur = m.durum === "MUHURLENDI" ? m.muhur : "";
+    return {
+      muhur,
+      tur: core.verifySystemAccountSeal(a, MUHUR_BELGE, muhur).durum,
+      ad: core.verifySystemAccountSeal(a, { ...MUHUR_BELGE, ad: "bakim2" }, muhur).durum,
+      kimlik: core.verifySystemAccountSeal(a, { ...MUHUR_BELGE, kimlik: "0".repeat(64) }, muhur).durum,
+      baska: core.verifySystemAccountSeal(b, MUHUR_BELGE, muhur).durum,
+      anahtarsiz: core.sealSystemAccount(bos, MUHUR_BELGE).durum,
+      bicimsiz: core.sealSystemAccount(a, { ...MUHUR_BELGE, id: "x" }).durum,
+    };
+  } finally {
+    for (const d of [a, b, bos]) rmSync(d, { recursive: true, force: true });
+  }
+}
+
+/** §12 sistem hesabı mührü (G1): TS = kayıtlı vektör = native; kullanılamayan çekirdek mühür vermez. */
+function bolum12muhur(): void {
+  console.log("\n§12 ⭐ sistem hesabı mührü (G1): TS = vektör = native");
+  const ts = muhurKararlari(tsLicenseCore);
+  const vektor = existsSync(MUHUR_VEKTOR_DOSYASI) ? readFileSync(MUHUR_VEKTOR_DOSYASI, "utf8").trim() : "";
+  check("§12a ⭐ TS mührü kayıtlı vektörle aynı (cargo `known_vector` aynı dosyayı okur) · yeniden üret: --vektor-yaz --yalniz-muhur", ts.muhur !== "" && ts.muhur === vektor, `${ts.muhur.slice(0, 24)}… ↔ ${vektor.slice(0, 24)}…`);
+  check(
+    "§12b ⭐ TS kararları: tur GECERLI · ad/kimlik değişimi BOZUK · başka kurulum BASKA_KURULUM · anahtarsız ANAHTAR_YOK · biçimsiz belge BELGE_BICIMSIZ",
+    ts.tur === "GECERLI" && ts.ad === "BOZUK" && ts.kimlik === "BOZUK" && ts.baska === "BASKA_KURULUM" && ts.anahtarsiz === "ANAHTAR_YOK" && ts.bicimsiz === "BELGE_BICIMSIZ",
+    JSON.stringify({ ...ts, muhur: undefined }),
+  );
+  const yok = unavailableCore("kâhin");
+  const yokDizin = muhurAnahtarDizini(7);
+  try {
+    check("§12c kullanılamayan çekirdek mühür VERMEZ ve geçerli mührü de GEÇİRMEZ (CEKIRDEK_YOK)", yok.sealSystemAccount(yokDizin, MUHUR_BELGE).durum === "CEKIRDEK_YOK" && yok.verifySystemAccountSeal(yokDizin, MUHUR_BELGE, vektor).durum === "CEKIRDEK_YOK");
+  } finally {
+    rmSync(yokDizin, { recursive: true, force: true });
+  }
+  const secenek0: LoaderOptions = { required: false, cwd: TEKS, env: process.env, platform: process.platform, arch: process.arch };
+  const y = loadLicenseCoreFrom({ ...secenek0, anchorMode: adayKipi(secenek0) });
+  if (y.status.kaynak !== "native") {
+    ATLAMA.atla("§12d native mühür kolu", "native yok — derle: cd native/lisans-cekirdek && npm run derle", 1);
+    return;
+  }
+  const native = muhurKararlari(y.core);
+  check("§12d ⭐ native mühür ve kararları TS ile bayt bayt AYNI", jsonEsit(native, ts), JSON.stringify({ ...native, muhur: native.muhur.slice(0, 24) }));
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes("--vektor-yaz") && process.argv.includes("--yalniz-muhur")) {
+    const m = muhurKararlari(tsLicenseCore).muhur;
+    writeFileSync(MUHUR_VEKTOR_DOSYASI, `${m}\n`);
+    console.log(`✍️  ${path.relative(TEKS, MUHUR_VEKTOR_DOSYASI)} yazıldı`);
+    return;
+  }
   if (process.argv.includes("--vektor-yaz")) {
     await vektorYaz();
     return;
@@ -1250,6 +1328,7 @@ async function main(): Promise<void> {
   await bolum9(dosya, dosyaV2);
   bolum10kopru();
   bolum11yetenek();
+  bolum12muhur();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

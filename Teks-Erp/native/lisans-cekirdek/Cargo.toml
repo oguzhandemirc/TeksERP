@@ -25,6 +25,7 @@ test-anchor = []
 tekserp-dogrulama.workspace = true
 napi = { version = "3", default-features = false, features = ["napi4"], optional = true }
 napi-derive = { version = "3", optional = true }
+ed25519-dalek.workspace = true
 x25519-dalek.workspace = true
 sha2.workspace = true
 hmac.workspace = true

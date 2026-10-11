@@ -14,12 +14,14 @@ use crate::module_key;
 use crate::outcome::{code, Fail, Outcome};
 use crate::paths;
 use crate::schema::LICENSE_CLASSES;
+use crate::system_seal;
 use serde_json::{json, Value};
 use tekserp_dogrulama::paket_zinciri::{PackageMode, PackageTrust};
 
 /// Arayüz sürümü: istek/yanıt biçimi kırılınca artar; yükleyici eşit değilse native'i KULLANMAZ (3: künyede çapa
 /// kipi). Lisans v2 (G4 + parmak izi v2) G3 yayınlanmadan indiği için AYNI numarada: yeni uçları taşımayan eski
-/// ABI-3 derlemesini yükleyici işlev listesinden tanır ve açmaz.
+/// ABI-3 derlemesini yükleyici işlev listesinden tanır ve açmaz. Sistem hesabı mührü (G1) aynı yolla eklendi:
+/// ekleme geriye uyumludur (eski JS yeni ikiliyi açar), yeni JS uçsuz eski ikiliyi açmaz.
 pub const ABI: u32 = 3;
 pub const TEST_ANCHOR: bool = cfg!(feature = "test-anchor");
 
@@ -404,4 +406,13 @@ pub fn protect_local(req: &Value) -> Value {
 
 pub fn unprotect_local(req: &Value) -> Value {
     protect_call(req, true)
+}
+
+/// Sistem hesabı mührü (G1): anahtar dosyası `dizin`den burada okunur, özel yarı JS'e çıkmaz.
+pub fn seal_system_account(req: &Value) -> Value {
+    ok(system_seal::seal(req))
+}
+
+pub fn verify_system_account_seal(req: &Value) -> Value {
+    ok(system_seal::verify(req))
 }
