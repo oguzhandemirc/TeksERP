@@ -17,6 +17,36 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-11e",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Tezgah alarmını açma yolu düzeltildi",
+      "surumler": {
+        "panel": "1.6.4"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Tezgah alarmı kapalıyken alarm listesi ve alarm sayfası artık doğru yeri gösterir: Sistem → Özellik Anahtarları → “Tezgah izleme” sekmesindeki “Tezgah alarmı” ayarı. Önceki sürümde gösterilen “Genel Ayarlar → Tezgah” yolu artık yoktu. Bu ayarı açmaya yetkiniz varsa yazının altında “Ayarı aç” bağlantısı çıkar ve sizi doğrudan o sekmeye götürür. Alarm ayarlarının hepsi (hedef süre, patrona iletme, tekrar çalma aralığı) aynı sekmededir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Alarm kapalıyken alarm listesi artık sürekli yenilenmez ve yanıltıcı “yetkiniz yok” uyarısı çıkmaz; sayfa yalnız alarmın kapalı olduğunu ve nereden açılacağını söyler."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Modüller ekranındaki tezgah izleme satırı artık tezgah alarmının bu anahtarla açılmadığını, ayrı bir ayar olduğunu ve nereden açıldığını yazar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Ayarlarda Kaydet'e bastıktan sonra ekrandaki anahtarlar sunucuda gerçekten kaydedilen değerleri gösterir. Sunucu bir ayarı tanımazsa (sunucu paneli geriden izliyorsa) o ayar eski hâline döner ve hangi ayarın kaydedilmediği ekranda yazılır; böylece panel açık gösterirken ayar aslında kapalı kalmaz."
+        }
+      ]
+    },
+    {
       "id": "2026-10-11d",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Tezgah alarmı ve iş emirlerinin yeni adları",
