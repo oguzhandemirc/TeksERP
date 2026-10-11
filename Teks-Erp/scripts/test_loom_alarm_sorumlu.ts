@@ -386,7 +386,7 @@ async function govde(): Promise<void> {
 
 // ── §9 UÇTAN UCA (HTTP) ─────────────────────────────────────────────────────
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4112";
-const HTTP_CHECKS = 13;
+const HTTP_CHECKS = 14;
 
 async function call(token: string | null, method: string, url: string, body?: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
   const r = await fetch(`${BASE}${url}`, {
@@ -444,6 +444,14 @@ async function httpBolumu(f: { def: string; I1: string; ahmet: Kisi; veli: Kisi 
       dataOf<{ id: string }>(c1.json).id === dataOf<{ id: string }>(c2.json).id, `${c1.status} ${c2.status}`);
     const sizinti = await call(t, "POST", "/api/loom-alarm-duty/responsibles", { ...body, clientToken: randomUUID(), createdById: f.veli.id });
     check("§9b gövdeden createdById 400 (strict allowlist)", sizinti.status === 400, `${sizinti.status}`);
+
+    const opt = await call(t, "GET", "/api/loom-alarm-duty/options");
+    const o = dataOf<{ halls: Array<{ id: string }>; shifts: Array<{ id: string }>; permissions: Array<{ code: string }> }>(opt.json);
+    const nonWeaving = await prisma.station.create({ data: { name: `TEST-LAS-KK-${ek}`, code: `TEST-LAS-KK-${ek}`.toUpperCase().slice(0, 32), type: "INTERNAL", kind: "RAW_QC", isActive: true }, select: { id: true } });
+    ids.stations.push(nonWeaving.id);
+    check("§9b2 /options: dokuma holleri (dokuma dışı istasyon yok), aktif vardiya, yetki kataloğu", opt.status === 200 &&
+      o.halls.some((h) => h.id === H9) && !o.halls.some((h) => h.id === nonWeaving.id) && o.shifts.some((x) => x.id === f.def) &&
+      o.permissions.some((p) => p.code === "loom:alarm-view"), `${opt.status}`);
 
     const alarm1 = await durusSimdi(H9);
     const tA = await giris(f.ahmet);

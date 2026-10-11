@@ -17,6 +17,7 @@ import {
   createHallShiftDutyOverride,
   createHallShiftResponsible,
   createLoomAlarmTierRule,
+  getDutyOptions,
   getLoomAlarmDutyOverview,
   listDutyCandidates,
   listDutyShiftInstances,
@@ -86,6 +87,22 @@ router.get("/", async (_req, res, next) => {
 router.get("/candidates", async (_req, res, next) => {
   try {
     res.json({ success: true, data: await listDutyCandidates() });
+  } catch (e) { next(e); }
+});
+
+/**
+ * @openapi
+ * /api/loom-alarm-duty/options:
+ *   get:
+ *     tags: [LoomAlarmDuty]
+ *     summary: Tanım ekranının başvuru verisi — dokuma holleri, aktif vardiya tanımları, yetki kataloğu
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ halls: [{ id, name }], shifts: [{ id, code, name }], permissions: [{ code, description }] }" }
+ */
+router.get("/options", async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await getDutyOptions() });
   } catch (e) { next(e); }
 });
 

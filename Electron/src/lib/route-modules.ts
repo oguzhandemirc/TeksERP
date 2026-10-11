@@ -77,6 +77,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   // ── TEZGAH İZLEME ───────────────────────────────────────────────────────
   "operations/weaving-floor": "tezgahEnabled",
   "operations/loom-alarms": "tezgahEnabled",
+  "definitions/loom-alarm-duty": "tezgahEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */

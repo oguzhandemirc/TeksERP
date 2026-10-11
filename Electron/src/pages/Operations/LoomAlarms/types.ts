@@ -112,6 +112,16 @@ export interface LoomAlarmRecentStop {
   lossClass: string | null;
 }
 
+export type LoomAlarmRecipientSource = "HALL_SHIFT" | "DUTY_OVERRIDE" | "USER" | "PERMISSION";
+
+/** Kademe çaldığı an DONMUŞ alıcılar (RAISED sırasıyla). `BY_PERMISSION` = sorumlu tanımsız, yetkisi olan herkes. */
+export interface LoomAlarmNotification {
+  tier: number;
+  at: string;
+  mode: "BY_PERMISSION" | "LISTED";
+  recipients: { id: string; name: string; source: LoomAlarmRecipientSource }[];
+}
+
 export interface LoomAlarmDetail {
   alarm: LoomAlarmItem;
   /** Canlı alarmda henüz çalmamış üst kademenin vadesi. */
@@ -125,6 +135,8 @@ export interface LoomAlarmDetail {
     floor30d: LoomAlarmStopStat;
   } | null;
   recentStops: LoomAlarmRecentStop[];
+  /** A4 öncesi sunucuda yok. */
+  notifications?: LoomAlarmNotification[];
 }
 
 export interface LoomAlarmActionResult {

@@ -22,6 +22,7 @@ import {
   LayoutTemplate,
   MessageSquareText,
   Clock3,
+  BellRing,
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
@@ -37,6 +38,7 @@ import {
   isTravelerCardVisible,
 } from "./production-regime";
 import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
+import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
 import { TERIM } from "@/lib/terim";
 
 export interface DefinitionTile {
@@ -203,6 +205,16 @@ export const definitionTiles: DefinitionTile[] = [
     group: "production",
     permission: "loom:spec-manage",
     visibleWhen: isShiftDefinitionsVisible,
+  },
+  {
+    key: "loom-alarm-duty",
+    title: "Alarm Sorumluları",
+    description: "Tezgah alarmı kime bildirilir — hol × vardiya sorumlusu, nöbet değişikliği, kademe kuralı",
+    icon: BellRing,
+    to: "/definitions/loom-alarm-duty",
+    group: "production",
+    permission: "loom:spec-manage",
+    visibleWhen: isLoomAlarmDutyVisible,
   },
   {
     key: "peripherals",

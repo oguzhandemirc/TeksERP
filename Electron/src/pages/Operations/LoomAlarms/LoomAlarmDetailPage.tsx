@@ -18,6 +18,7 @@ import { AlarmActionBar } from "./AlarmActionBar";
 import { AlarmClosedNotice } from "./AlarmClosedNotice";
 import { AlarmContext } from "./AlarmContext";
 import { AlarmHeaderCard } from "./AlarmHeaderCard";
+import { AlarmNotifications } from "./AlarmNotifications";
 import { AlarmTimeline } from "./AlarmTimeline";
 import { loomAlarmService } from "./service";
 import { LOOM_ALARMS_QUERY_ROOT, useLoomAlarmActions } from "./useLoomAlarmActions";
@@ -76,7 +77,10 @@ export function LoomAlarmDetailPage() {
                 <h3 className="mb-4 text-sm font-semibold text-muted-foreground">Zaman çizgisi</h3>
                 <AlarmTimeline detail={d} canAct={access.canAct} meId={meId} onRetract={(eid) => void actions.retractNote(eid)} busy={actions.isPending} />
               </section>
-              <AlarmContext detail={d} />
+              <div className="space-y-5">
+                <AlarmNotifications detail={d} />
+                <AlarmContext detail={d} />
+              </div>
             </div>
           </>
         )}

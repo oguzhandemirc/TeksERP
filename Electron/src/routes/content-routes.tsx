@@ -69,6 +69,7 @@ import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
 import { ShiftDefinitionsPage } from "@/pages/ShiftDefinitions/ShiftDefinitionsPage";
+import { LoomAlarmDutyPage } from "@/pages/LoomAlarmDuty/LoomAlarmDutyPage";
 import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
 import { WeavingFloorPage } from "@/pages/Operations/WeavingFloor/WeavingFloorPage";
 import { LoomAlarmsPage } from "@/pages/Operations/LoomAlarms/LoomAlarmsPage";
@@ -204,6 +205,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="loom:spec-manage">
         <ShiftDefinitionsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Alarm Sorumluları — karo izniyle BİREBİR; modül kapısı backend (tezgah + alarm bayrağı) + ROUTE_MODULE.
+    path: "definitions/loom-alarm-duty",
+    element: (
+      <ProtectedRoute requirePermission="loom:spec-manage">
+        <LoomAlarmDutyPage />
       </ProtectedRoute>
     ),
   },

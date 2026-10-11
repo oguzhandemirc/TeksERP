@@ -9,7 +9,7 @@
 //   • Alarmı göremeyen kişiye atama yapılır ama UYARI döner — çözüm o kişiyi düşürür (yetki genişlemez).
 // Audit best-effort, tx dışında.
 // =============================================================================
-import { LoomAlarmRuleRecipientKind, type Prisma } from "@prisma/client";
+import { LoomAlarmRuleRecipientKind, StationKind, type Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { p2002Mentions } from "../utils/p2002";
@@ -125,6 +125,19 @@ export async function getLoomAlarmDutyOverview(): Promise<LoomAlarmDutyOverviewD
     rules: rules.map((r) => ruleDto(r, g)),
     warnings: [...warnings],
   };
+}
+
+export interface DutyOptionsDto {
+  halls: Array<{ id: string; name: string }>;
+  shifts: Array<{ id: string; code: string; name: string }>;
+  permissions: Array<{ code: string; description: string }>;
+}
+
+/** Ekranın başvuru verisi tek uçtan: dokuma holleri, aktif vardiya tanımları, yetki kataloğu (ayrı okuma izni istemez). */
+export async function getDutyOptions(): Promise<DutyOptionsDto> {
+  const halls = await prisma.station.findMany({ where: { kind: StationKind.WEAVING, isActive: true }, select: { id: true, name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] });
+  const shifts = await prisma.shiftDefinition.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true }, orderBy: [{ sortOrder: "asc" }, { code: "asc" }] });
+  return { halls, shifts, permissions: PERMISSION_CATALOG.map((p) => ({ code: p.code, description: p.description })) };
 }
 
 /** Atanabilir kişiler: aktif, sistem dışı kullanıcılar + alarm yetkileri (seçicide uyarı için). */
