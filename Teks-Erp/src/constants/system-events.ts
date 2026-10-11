@@ -118,6 +118,8 @@ const SHORT_CREDENTIAL_EVENTS = {
   SHORT_CREDENTIAL_KEY_RESTORED: "SHORT_CREDENTIAL_KEY_RESTORED",
   /** Yönetici toplu hızlı PIN sıfırladı (kişi başı satır ayrıca `USER_QUICK_PIN`). */
   SHORT_CREDENTIAL_BULK_RESET: "SHORT_CREDENTIAL_BULK_RESET",
+  /** Tezgah Salonu toplu koşum işlemi özeti (koşum başı satırlar ayrıca `MACHINE_RUN`). */
+  MACHINE_RUN_BULK: "MACHINE_RUN_BULK",
 } as const;
 
 /** Kurulum kimliği (servis keşfi). */

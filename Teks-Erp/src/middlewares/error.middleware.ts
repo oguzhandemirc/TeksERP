@@ -359,7 +359,7 @@ const TRANSIENT_SQLSTATES = new Set(["40P01", "40001"]);
  * ("40001" düz sayı olarak meşru bir tutar/metin içinde geçebilir; "deadlock"
  * kelimesi kullanıcı verisinde bile olabilir).
  */
-function extractTransientSqlState(err: unknown): string | null {
+export function extractTransientSqlState(err: unknown): string | null {
   if (!err || typeof err !== "object") return null;
   const e = err as Record<string, unknown>;
 

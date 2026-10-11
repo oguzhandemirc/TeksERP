@@ -127,11 +127,21 @@ export async function assertProductionLineFree(
   machine: { id: string; code: string },
   productionLineNo: number,
   startedAt: Date,
+  /** Değiştir: yerine geçilecek açık koşum — hattı işgal etmiyor sayılır, ama hattın TEK açık koşumu o olmalı. */
+  replaceRunId: string | null = null,
 ): Promise<void> {
   const occupant = await prisma.machineRun.findFirst({
     where: { machineId: machine.id, productionLineNo, ...OPEN_MACHINE_RUN_WHERE },
     select: { id: true, startedAt: true },
   });
+  if (replaceRunId && occupant?.id === replaceRunId) return;
+  if (replaceRunId) {
+    // Önizlemeden sonra hat değişti: değiştirilecek koşum artık açık değil ya da hatta başka koşum var.
+    throw AppError.conflict(
+      `${machine.code} makinesinin ${productionLineNo}. hattı önizlemeden sonra değişti — önizlemeyi yenileyin.`,
+      { code: "RUN_REPLACE_STALE", replaceRunId, openRunId: occupant?.id ?? null },
+    );
+  }
   if (occupant) {
     throw AppError.conflict(
       `${machine.code} makinesinin ${productionLineNo}. hattında açık bir koşum var — önce onu kapatın.`,

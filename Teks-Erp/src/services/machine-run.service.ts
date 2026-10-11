@@ -32,7 +32,8 @@ import { assertProductionLineFree, resolveOpenContext, resolveRunStamp } from ".
 import { runOpenBeamWarning } from "./helpers/warp-beam-mount.helper";
 import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
 import { assertRunWeavingOrderGate } from "./helpers/production-chain-gates.helper";
-import type { ApiResponse } from "../types/api.types";import { assertItemUsableTx } from "./helpers/item-usage.helper";
+import type { ApiResponse } from "../types/api.types";
+import { assertItemUsableTx } from "./helpers/item-usage.helper";
 
 
 const TABLE = "MACHINE_RUN";
@@ -131,31 +132,47 @@ async function auditRunOpened(created: MachineRunDto, userId: string | undefined
   }).catch(() => undefined);
 }
 
+/** "Değiştir": açılacak koşumun yerine aynı tx'te kapatılacak eski koşum (salon toplu iş verme). */
+export interface OpenMachineRunOptions {
+  replaceRunId?: string | null;
+}
+
 /** Koşum aç (R): token her kuraldan önce okunur, açılış hangi hatayla (hat dolu, yarış) düşerse düşsün yeniden okunur. */
-export async function openMachineRun(input: OpenMachineRunInput, userId?: string): Promise<ApiResponse<MachineRunDto>> {
-  return runReplay(input).run(input.clientToken, () => openMachineRunFresh(input, userId));
+export async function openMachineRun(
+  input: OpenMachineRunInput,
+  userId?: string,
+  opts: OpenMachineRunOptions = {},
+): Promise<ApiResponse<MachineRunDto>> {
+  return runReplay(input).run(input.clientToken, () => openMachineRunFresh(input, userId, opts.replaceRunId ?? null));
 }
 
 async function openMachineRunFresh(
   input: OpenMachineRunInput,
-  userId?: string,
+  userId: string | undefined,
+  replaceRunId: string | null,
 ): Promise<ApiResponse<MachineRunDto>> {
 
   const { machine, itemId, colorId, itemUsage } = await resolveOpenContext(input);
   // Z1: `dokuma.runWeavingOrderRequired` açıkken işsiz koşum 400; kapalıyken bağsız koşum bugünkü gibi meşru.
   await assertRunWeavingOrderGate(prisma, input.weavingOrderId ?? null);
-  const started = resolveRunStamp(input.startedAt, "başlangıç zamanı");
+  // Değiştir'de eski koşum yeni koşumun başladığı ANDA kapanır — beyanlı başlangıç yok (örtüşme olmasın).
+  const started = replaceRunId ? { value: new Date(), warning: null } : resolveRunStamp(input.startedAt, "başlangıç zamanı");
   const warnings = started.warning ? [started.warning] : [];
-  await assertProductionLineFree(machine, input.productionLineNo, started.value);
+  await assertProductionLineFree(machine, input.productionLineNo, started.value, replaceRunId);
   const beamWarning = await runOpenBeamWarning(prisma, machine.id);
   if (beamWarning) warnings.push(beamWarning);
 
   let created: MachineRunDto;
+  // Kapanan eski koşum tx kapanışından dışarı taşınır (audit tx DIŞINDA).
+  const replacedBox: { run: MachineRunDto | null } = { run: null };
   let orderTransitioned = false;
   try {
     created = await prisma.$transaction(async (tx) => {
       // İLK ifade: kart kilidi (açık koşum D1 referansıdır) — dokuma işi claim'inden ÖNCE.
       if (itemId) await assertItemUsableTx(tx, itemId, itemUsage);
+      // Değiştir: eski koşumun kapanış claim'i iş claim'inden ve INSERT'ten ÖNCE (tek yazar `closeMachineRunTx`);
+      // eşzamanlı ikinci Değiştir burada RUN_ALREADY_CLOSED alır ve yeni koşum açılmaz.
+      if (replaceRunId) replacedBox.run = await closeReplacedRunTx(tx, { runId: replaceRunId, machineId: machine.id, productionLineNo: input.productionLineNo, endedAt: started.value });
       // İş emri PLANNED → IN_PROGRESS geçişinin TEK yazarı iş emri helper'ıdır;
       // tetikleyici koşumdur. Claim satır kilidi alır ve INSERT'ten ÖNCE koşar ki
       // eşzamanlı kapatma/iptal claim'iyle serileşsin (1e hükmü 2026-09-13).
@@ -189,12 +206,14 @@ async function openMachineRunFresh(
     throw e;
   }
 
+  const replaced = replacedBox.run;
+  if (replaced) await auditRunClosed(replaced, userId);
   await auditRunOpened(created, userId, orderTransitioned ? input.weavingOrderId ?? null : null);
 
   return {
     success: true,
     data: created,
-    message: "Koşum açıldı",
+    message: replaced ? "Eski koşum kapatıldı, yeni koşum açıldı" : "Koşum açıldı",
     ...(warnings.length ? { warnings } : {}),
   };
 }
@@ -250,16 +269,20 @@ export async function closeMachineRunTx(
   return tx.machineRun.findUniqueOrThrow({ where: { id: runId }, select: MACHINE_RUN_SELECT });
 }
 
-export async function closeMachineRun(
-  runId: string,
-  input: CloseMachineRunInput,
-  userId?: string,
-): Promise<ApiResponse<MachineRunDto>> {
-  const ended = resolveRunStamp(input.endedAt, "bitiş zamanı");
-  const warnings = ended.warning ? [ended.warning] : [];
+/** Değiştir'in kapanış ayağı: koşum İSTENEN tezgah/hatta olmalı (başka hattın koşumu kapatılmaz), sonra tek yazar. */
+async function closeReplacedRunTx(
+  tx: Prisma.TransactionClient,
+  { runId, machineId, productionLineNo, endedAt }: { runId: string; machineId: string; productionLineNo: number; endedAt: Date },
+): Promise<MachineRunDto> {
+  const owner = await tx.machineRun.findUnique({ where: { id: runId }, select: { machineId: true, productionLineNo: true } });
+  if (!owner) throw AppError.notFound("Değiştirilecek koşum bulunamadı", { runId });
+  if (owner.machineId !== machineId || owner.productionLineNo !== productionLineNo) {
+    throw AppError.badRequest("Değiştirilecek koşum bu tezgahın bu hattına ait değil.", { code: "RUN_LINE_MISMATCH", runId });
+  }
+  return closeMachineRunTx(tx, runId, {}, endedAt);
+}
 
-  const closed = await prisma.$transaction((tx) => closeMachineRunTx(tx, runId, input, ended.value));
-
+async function auditRunClosed(closed: MachineRunDto, userId: string | undefined): Promise<void> {
   await AuditService.log({
     userId,
     action: "UPDATE",
@@ -272,6 +295,19 @@ export async function closeMachineRun(
       { field: "observedSecAtClose", old: null, new: closed.observedSecAtClose },
     ],
   }).catch(() => undefined);
+}
+
+export async function closeMachineRun(
+  runId: string,
+  input: CloseMachineRunInput,
+  userId?: string,
+): Promise<ApiResponse<MachineRunDto>> {
+  const ended = resolveRunStamp(input.endedAt, "bitiş zamanı");
+  const warnings = ended.warning ? [ended.warning] : [];
+
+  const closed = await prisma.$transaction((tx) => closeMachineRunTx(tx, runId, input, ended.value));
+
+  await auditRunClosed(closed, userId);
 
   return {
     success: true,

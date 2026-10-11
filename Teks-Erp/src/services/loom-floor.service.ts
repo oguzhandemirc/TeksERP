@@ -79,10 +79,21 @@ export interface LoomFloorJobDto {
   plannedM: number | null;
 }
 
+/** Hat başına açık koşum (salon "İş ver / Değiştir / Bitir" eylemlerinin hedefi). */
+export interface LoomFloorOpenRunDto {
+  id: string;
+  productionLineNo: number;
+  weavingOrderId: string | null;
+  weavingOrderNumber: string | null;
+  startedAt: Date;
+}
+
 export interface LoomFloorLoomDto {
   id: string;
   code: string;
   name: string;
+  /** Tezgahın üretim hattı sayısı (çift enli = 2). */
+  productionLineCount: number;
   hallId: string;
   hallName: string;
   monitoringState: MachineMonitoringState;
@@ -95,6 +106,8 @@ export interface LoomFloorLoomDto {
   targetUnitsPerMin: number | null;
   /** Açık koşumun dokuma işi — yalnız `dokumaEnabled` açıkken dolar. */
   job: LoomFloorJobDto | null;
+  /** HER hattın açık koşumu (hat sırasıyla) — yalnız `dokumaEnabled` açıkken dizi; kapalıyken null. `job` ilk hattınkidir. */
+  openRuns: LoomFloorOpenRunDto[] | null;
   /** Takılı leventler (yuva sırasıyla) — yalnız devere + levent tezgah bağı defteri açıkken dizi; kapalıyken null. */
   beams: MountedBeamView[] | null;
   recentStops: LoomFloorStopRow[];
@@ -159,6 +172,7 @@ interface FloorSources {
   doffs: Array<{ machineId: string; counterSource: MachineDataSource }>;
   labelOf: Map<string, string>;
   jobs: Map<string, LoomFloorJobDto>;
+  withJobs: boolean;
 }
 
 /** Pencereyle (gün başı → şimdi) KESİŞEN defter satırları — kırpma terim helper'ında. */
@@ -185,7 +199,7 @@ async function loadSources(dayStart: Date, now: Date, withJobs: boolean): Promis
   const jobs = new Map(orders.map((o) => [o.id, {
     weavingOrderNumber: o.weavingOrderNumber, itemName: o.item.name, colorName: o.color?.name ?? null, colorHex: o.color?.hex ?? null, plannedM: dec(o.plannedM),
   }]));
-  return { looms, stops, runs, doffs, labelOf: new Map(presets.map((p) => [p.code, p.label])), jobs };
+  return { looms, stops, runs, doffs, labelOf: new Map(presets.map((p) => [p.code, p.label])), jobs, withJobs };
 }
 
 interface LoomDayRows { stops: StopRow[]; runs: RunRow[]; doffSources: MachineDataSource[] }
@@ -241,6 +255,7 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
       id: loom.id,
       code: loom.code,
       name: loom.name,
+      productionLineCount: loom.productionLineCount,
       hallId: loom.station.id,
       hallName: loom.station.name,
       monitoringState,
@@ -253,6 +268,18 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
       },
       targetUnitsPerMin: openRun?.targetUnitsPerMin ?? loom.machineSpec?.nominalUnitsPerMin ?? null,
       job: openRun?.weavingOrderId ? (src.jobs.get(openRun.weavingOrderId) ?? null) : null,
+      openRuns: src.withJobs
+        ? runs
+            .filter((r) => r.endedAt === null)
+            .sort((a, b) => a.productionLineNo - b.productionLineNo)
+            .map((r) => ({
+              id: r.id,
+              productionLineNo: r.productionLineNo,
+              weavingOrderId: r.weavingOrderId,
+              weavingOrderNumber: r.weavingOrderId ? (src.jobs.get(r.weavingOrderId)?.weavingOrderNumber ?? null) : null,
+              startedAt: r.startedAt,
+            }))
+        : null,
       beams: ctx.beamsBy ? (ctx.beamsBy.get(loom.id) ?? []) : null,
       recentStops: recent.map((s) => ({ id: s.id, reasonCode: s.reasonCode, lossClass: s.lossClass, startedAt: s.startedAt, endedAt: s.endedAt })),
       source: terms.source,

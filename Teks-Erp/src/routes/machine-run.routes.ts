@@ -22,6 +22,7 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { closeMachineRun, openMachineRun, revokeMachineRun } from "../services/machine-run.service";
 import { listOpenMachineRuns } from "../services/loom-list.service";
 import { machineRunTabletContext } from "../services/helpers/machine-run-suggest.helper";
+import { BULK_RUN_MAX, assignBulkRuns, bulkRunContext, finishBulkRuns, previewBulkRuns } from "../services/machine-run-bulk.service";
 
 const router = Router();
 
@@ -95,6 +96,134 @@ router.get("/", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA),
   try {
     const q = openListSchema.parse(req.query);
     res.json(await listOpenMachineRuns(q.machineId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Tezgah Salonu toplu koşum (panel) — satır başına tek yol; önizleme yazmaz ──────────────
+const lineNo = z.number().int("Üretim hattı numarası tam sayı olmalıdır").min(1, "Hat numarası 1'den küçük olamaz");
+const targetSchema = z.object({ machineId: z.string().uuid("Geçersiz tezgah"), productionLineNo: lineNo.default(1) }).strict();
+const tooMany = `Tek seferde en çok ${BULK_RUN_MAX} tezgah seçilebilir.`;
+
+const bulkPreviewSchema = z
+  .object({
+    action: z.enum(["ASSIGN", "FINISH"], { message: "Geçersiz işlem" }),
+    weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri").nullish(),
+    targets: z.array(targetSchema).min(1, "En az bir tezgah seçin.").max(BULK_RUN_MAX, tooMany),
+  })
+  .strict();
+
+const bulkAssignSchema = z
+  .object({
+    weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri").nullish(),
+    targetUnitsPerMin: z.number().int().positive("Hedef devir pozitif olmalı").max(10_000).nullish(),
+    rows: z
+      .array(
+        targetSchema.extend({
+          clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
+          replaceRunId: z.string().uuid("Geçersiz koşum").nullish(),
+        }),
+      )
+      .min(1, "En az bir tezgah seçin.")
+      .max(BULK_RUN_MAX, tooMany),
+  })
+  .strict();
+
+const bulkFinishSchema = z
+  .object({
+    rows: z
+      .array(
+        z
+          .object({
+            runId: z.string().uuid("Geçersiz koşum"),
+            picksAtClose: z.number().int().nonnegative("Atkı sayısı negatif olamaz").nullish(),
+          })
+          .strict(),
+      )
+      .min(1, "En az bir tezgah seçin.")
+      .max(BULK_RUN_MAX, tooMany),
+  })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-runs/bulk/context:
+ *   get:
+ *     tags: [MachineRuns]
+ *     summary: Salon iş seçicisi — açık içeride Dokuma İş Emirleri + "iş zorunlu" ayarı
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ weavingOrders, weavingOrderRequired }" }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ */
+router.get("/bulk/context", requireAnyPermission("loom:run"), async (_req, res, next) => {
+  try {
+    res.json(await bulkRunContext());
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-runs/bulk/preview:
+ *   post:
+ *     tags: [MachineRuns]
+ *     summary: Toplu iş ver / bitir ÖNİZLEMESİ — her tezgah adıyla, YAZMAZ
+ *     description: >
+ *       Satır sonucu START · REPLACE (dolu hat, varsayılan seçili değil) · SAME_JOB · FINISH · BLOCKED (sebepli).
+ *       Satırlar tezgah kodu + hat sırasında. İş düzeyindeki engel (fason/kapalı iş, iş zorunlu ayarı) 400.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ action, weavingOrder, rows[] }" }
+ *       400: { description: Doğrulama / iş bağlanamaz / iş zorunlu }
+ */
+router.post("/bulk/preview", requireAnyPermission("loom:run"), async (req, res, next) => {
+  try {
+    res.json(await previewBulkRuns(bulkPreviewSchema.parse(req.body ?? {})));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-runs/bulk/assign:
+ *   post:
+ *     tags: [MachineRuns]
+ *     summary: Seçili tezgahlara iş ver (başlat; `replaceRunId` ile Değiştir) — sonuç PARÇALI olabilir
+ *     description: >
+ *       Her satır kendi transaction'ında, tezgah kodu sırasıyla; satır başına `clientToken` (aynı token'la
+ *       yeniden gönderim özgün koşumu döndürür). Dolu hatta `replaceRunId` yoksa satır 409 PRODUCTION_LINE_OCCUPIED
+ *       ile `failed`e düşer. Olmayan her satır kod + Türkçe sebeple döner.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ requested, ok[], failed[] }" }
+ *       400: { description: Doğrulama (boş liste, 100 üstü, geçersiz UUID) }
+ */
+router.post("/bulk/assign", requireAnyPermission("loom:run"), async (req, res, next) => {
+  try {
+    res.json(await assignBulkRuns(bulkAssignSchema.parse(req.body ?? {}), req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-runs/bulk/finish:
+ *   post:
+ *     tags: [MachineRuns]
+ *     summary: Seçili koşumları bitir (kapat) — Dokuma İş Emrini kapatmaz; sonuç PARÇALI olabilir
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ requested, ok[], failed[] }" }
+ *       400: { description: Doğrulama }
+ */
+router.post("/bulk/finish", requireAnyPermission("loom:run"), async (req, res, next) => {
+  try {
+    res.json(await finishBulkRuns(bulkFinishSchema.parse(req.body ?? {}), req.user?.userId));
   } catch (e) {
     next(e);
   }

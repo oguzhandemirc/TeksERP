@@ -50,7 +50,7 @@ import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { listMountedOnMachine, mountBeam } from "../src/services/warp-beam-mount.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { countFloor, escalationDueAt, floorStateSourceOf, loomStateOf, loomStopTier, type FloorLoomCore } from "../src/services/helpers/loom-floor.helper";
-import { openMachineRun } from "../src/services/machine-run.service";
+import { openMachineRun, revokeMachineRun } from "../src/services/machine-run.service";
 import { aggregateMachineKpis } from "../src/services/helpers/loom-efficiency.helper";
 import { factoryDayStart } from "../src/constants/time";
 
@@ -82,7 +82,7 @@ const ids = { station: "", looms: [] as string[], presets: [] as string[], beams
 // ── global ayar: bul → yaz → finally'de geri yaz ─────────────────────────────
 const YONETILEN = [
   SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.TEZGAH_ENABLED, SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES,
-  SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.IPLIK_ENABLED,
+  SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.DOKUMA_ENABLED,
 ];
 const ilk = new Map<string, unknown>();
 async function ayarlariSakla(): Promise<void> {
@@ -252,7 +252,7 @@ async function govde(): Promise<void> {
   check("§5b fabrika günü başı = factoryDayStart(now) · üst pay o anki ayar (3)", d.factoryDayStart.getTime() === gunBasi.getTime() && d.graceMinutes === 3);
   const t = (id: string) => d.looms.find((l) => l.id === id)!;
   const l1 = t(duran);
-  check("§5c tezgah şekli", !!l1 && anahtar(l1) === "beams,code,hallId,hallName,id,job,monitoringState,name,openStop,recentStops,source,state,stateSource,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
+  check("§5c tezgah şekli", !!l1 && anahtar(l1) === "beams,code,hallId,hallName,id,job,monitoringState,name,openRuns,openStop,productionLineCount,recentStops,source,state,stateSource,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
   check("§5d openStop şekli", !!l1?.openStop && anahtar(l1.openStop) === "alarmId,clockStartedAt,escalationDueAt,graceMinutes,id,lossClass,reasonCode,reasonLabel,requiresReason,source,startedAt,targetMinutes,tier", l1?.openStop ? anahtar(l1.openStop) : "yok");
   check("§5e LIVE + açık duruş → STOPPED, açık duruş Z, kaynak ölçülen", l1?.state === "STOPPED" && l1.openStop?.id === Z.data.id && l1.stateSource === "olculen");
   check("§5f kademe DONMUŞ hedeften: 30 dk ≥ 10 → OVERDUE (katalog 45 olsa WITHIN olurdu) · iletim anı +10+7",
@@ -291,6 +291,24 @@ async function govde(): Promise<void> {
       && hol.stoppedByClass.UNPLANNED === 2 && hol.stoppedByClass.SETUP === 1 && hol.nowPct === 40,
     hol ? JSON.stringify({ ...hol, stoppedByClass: undefined }) : "hol yok");
   check("§5n hol bugün % = durumu bilinen beş tezgahın ΣAPT/ΣPOT'u", hol?.todayPct === aggregateMachineKpis(bilinen).availabilityPct, `${hol?.todayPct}`);
+
+  // ── §8 hat sayısı + HAT BAŞINA açık koşum (salon "İş ver / Değiştir / Bitir" hedefi; `job` yalnız ilk hat) ──
+  await prisma.machine.update({ where: { id: elleKosan }, data: { productionLineCount: 2 } });
+  const hat2 = await openMachineRun({ machineId: elleKosan, productionLineNo: 2, startedAt: new Date(simdi.getTime() - 60 * MIN) });
+  await ayarYaz(SETTING_KEYS.DOKUMA_ENABLED, true);
+  const dAcik = (await getLoomFloor(simdi)).data!;
+  const ek8 = dAcik.looms.find((x) => x.id === elleKosan);
+  check("§8a dokuma açık: çift hatlı tezgahta productionLineCount 2 · openRuns İKİ hat, hat sırasıyla, id'leriyle",
+    ek8?.productionLineCount === 2 && ek8.openRuns?.length === 2 && ek8.openRuns[0]!.productionLineNo === 1 && ek8.openRuns[1]!.productionLineNo === 2 && ek8.openRuns[1]!.id === hat2.data.id,
+    JSON.stringify(ek8?.openRuns?.map((r) => [r.productionLineNo, r.id === hat2.data.id])));
+  check("§8b koşumsuz tezgahta openRuns = [] · bağsız koşumda iş alanları null",
+    dAcik.looms.find((x) => x.id === kayitsiz)?.openRuns?.length === 0 && ek8?.openRuns?.[0]?.weavingOrderId === null && ek8.openRuns[0]!.weavingOrderNumber === null);
+  await ayarYaz(SETTING_KEYS.DOKUMA_ENABLED, false);
+  const dKapali = (await getLoomFloor(simdi)).data!;
+  check("§8c dokuma KAPALI → her tezgahta openRuns null (kapalı modülün verisi görünmez), hat sayısı yine var",
+    dKapali.looms.every((x) => x.openRuns === null) && dKapali.looms.find((x) => x.id === elleKosan)?.productionLineCount === 2);
+  await revokeMachineRun(hat2.data.id, "TEST-LF §8 temizlik");
+  await prisma.machine.update({ where: { id: elleKosan }, data: { productionLineCount: 1 } });
 
   // Yapısal: kova eşlemesi tek yerde; salon ve karne özeti ondan okur.
   const src = (f: string) => readFileSync(path.join(__dirname, "..", f), "utf8");
