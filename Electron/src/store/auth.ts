@@ -25,6 +25,11 @@ interface AuthState {
    * yoksa ya da alanı bilmeyen eski backend ise "fabrika yöneticisini aç" kartı çizilmez.
    */
   factoryAdminExists: boolean;
+  /**
+   * Satıcı hesabı hâlâ ORTAK varsayılan parolayla mı — `/api/auth/me`den (yalnız hesabın kendisine
+   * ve kullanıcı/ayar yöneticisine dolu gelir). Varsayılan `false`: eski backend bant çizdirmez.
+   */
+  defaultSuperadminPasswordPending: boolean;
   setUser: (user: JwtPayload | null) => void;
   setHydrated: (hydrated: boolean) => void;
   /** `/api/auth/me`den sistem-hesabı bayraklarını tazeler. ASLA reject etmez
@@ -38,6 +43,7 @@ const SIFIR_HESAP_BAYRAKLARI = {
   isSystemAccount: false,
   systemAccountExists: true,
   factoryAdminExists: true,
+  defaultSuperadminPasswordPending: false,
 } as const;
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -46,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isSystemAccount: false,
   systemAccountExists: true,
   factoryAdminExists: true,
+  defaultSuperadminPasswordPending: false,
   // ⚠️ `user = null` sistem-hesabı bayraklarını da SIFIRLAR. Tek yer değil iki
   // yol buraya düşüyor (manuel çıkış + apiClient'ın 401 dalı) ve ikisinde de
   // eski kimliğin bayrağı kalsaydı, aynı makinede nöbetleşen bir sonraki
@@ -63,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         // Alan taşımayan ESKİ backend → `true` (fail-closed; bkz. tip yorumu).
         systemAccountExists: me.data.systemAccountExists !== false,
         factoryAdminExists: me.data.factoryAdminExists !== false,
+        defaultSuperadminPasswordPending: me.data.defaultSuperadminPasswordPending === true,
       });
     } catch {
       /* sunucuya ulaşılamadı / oturum düştü — varsayılanlar korunur */

@@ -2,6 +2,7 @@ import { UpdateStrips } from "./UpdateSecurityStrip";
 import { LicenseBanner } from "./LicenseBanner";
 import { FactoryTimezoneBanner } from "./FactoryTimezoneBanner";
 import { FactoryAdminCard } from "./FactoryAdminCard";
+import { DefaultSuperadminBanner } from "./DefaultSuperadminBanner";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
 import { UpdateProgressWindow } from "@/pages/System/ServerUpdates/UpdateProgressWindow";
 import { UpdateApprovalPrompt } from "@/pages/System/ServerUpdates/UpdateApprovalPrompt";
@@ -18,6 +19,8 @@ export function ShellBanners() {
       <UpdateStrips />
       {/* Lisans bandı backend'in uyguladığı karardır; gözlemde hiç çizilmez. */}
       <LicenseBanner />
+      {/* Satıcı hesabı hâlâ ortak varsayılan parolayla — kırmızı, kapatılamaz. */}
+      <DefaultSuperadminBanner />
       <FactoryTimezoneBanner />
       {/* Destek hesabında, fabrika yöneticisi yokken — uyarır, engellemez. */}
       <FactoryAdminCard />

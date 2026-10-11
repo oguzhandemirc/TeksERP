@@ -229,6 +229,8 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   MODULE_PROFILE_APPLIED: "Kurulum profili uygulandı",
   SUPERADMIN_PROVISIONED: "Satıcı hesabı kuruldu",
   SUPERADMIN_ROTATED: "Satıcı hesabının parolası/PIN'i yenilendi",
+  SUPERADMIN_DEFAULT_PROVISIONED: "Varsayılan satıcı hesabı doğdu (ortak parola, değişim zorunlu)",
+  SUPERADMIN_DEFAULT_TAKEN_OVER: "Varsayılan satıcı hesabı kurulum aracıyla devralındı",
   SUPERADMIN_ACCOUNT_CREATED: "Satıcı hesabı oluşturuldu",
   SUPERADMIN_ABSENT_MODULE_WRITE: "Satıcı hesabı yokken modül anahtarı yazıldı",
   SYSTEM_ACCOUNT_ACCESS_BLOCKED: "Sistem hesabına erişim engellendi",

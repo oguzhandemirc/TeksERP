@@ -35,6 +35,8 @@ export interface AuthMeResponse {
   mustChangePassword?: boolean;
   /** Fabrikanın kendi yöneticisi var mı — ölçüt sunucuda tek yüklemde (eski backend göndermez). */
   factoryAdminExists?: boolean;
+  /** Satıcı hesabı hâlâ ortak varsayılan parolayla (yalnız yetkiliye dolu; eski backend göndermez). */
+  defaultSuperadminPasswordPending?: boolean;
 }
 
 /** Giriş yapan istemcinin türü — same-type oturum politikası bununla ayrışır.
