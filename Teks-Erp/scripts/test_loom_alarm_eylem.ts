@@ -16,10 +16,13 @@
 //      alarm bayrağı kapalıyken alarm okunmaz
 //   §10 AST: hedef/pay aritmetiği yalnız `helpers/loom-floor.helper`da (motor ve ekran aynı fonksiyon)
 //   §11 uç kapısı: alarm bayrağı kapalı → 403 LOOM_ALARM_DISABLED
+//   §12 yabancı motor: bayrak AÇIKKEN aynı DB'de gerçek saatle koşan sunucu zamanlayıcısı (CI'da beş HTTP
+//      sunucusu) fikstürde iş bulmaz — K1'deki alarmların K2'si uzak gelecekte, her duruşun alarmı var
 //
 // Negatif sondalar (her biri kırmızı görüldü, geri alındı): ack claim'i yüklemsiz → §1c/§6a · replay
 // ACK canlılık dalı yok → §2d · başkasını bırakma kapısı yok → §3a · retract P2002 dalı yok → §5d ·
-// şerit `{}` where → §7a/§7e · salonda bayrak yüklemi yok → §9c · servis içinde `targetMinutes * 60000` → §10a.
+// şerit `{}` where → §7a/§7e · salonda bayrak yüklemi yok → §9c · servis içinde `targetMinutes * 60000` → §10a ·
+// K1 alarmlarının K2'si geçmişte (eski fikstür `at(-5)`) → §12a · §9b (yabancı tur K2 çaldı) · §8c.
 //
 // Global ayar yazar (`production.enabled` · `tezgah.enabled` · `tezgah.alarmEnabled` ·
 // `tezgah.escalationGraceMinutes`); bulduğu değere `finally`de döner. Fikstür kendi tezgahlarını,
@@ -35,7 +38,7 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { ReasonPresetService } from "../src/services/reason-preset.service";
 import { openManualStop } from "../src/services/machine-stop.service";
 import {
-  ackLoomAlarm, noteLoomAlarm, releaseLoomAlarm, retractLoomAlarmNote, snoozeLoomAlarm, unsnoozeLoomAlarm,
+  ackLoomAlarm, noteLoomAlarm, releaseLoomAlarm, retractLoomAlarmNote, runLoomAlarmOnce, snoozeLoomAlarm, unsnoozeLoomAlarm,
 } from "../src/services/loom-alarm.service";
 import { getLoomAlarmDetail, listLoomAlarms } from "../src/services/loom-alarm-read.service";
 import { getLoomFloor } from "../src/services/loom-floor.service";
@@ -111,6 +114,8 @@ async function govde(): Promise<void> {
   const veli = await kisi("veli");
   const mudur = await kisi("mudur");
 
+  // K1'deki alarmın K2'si uzak gelecekte: bayrak açıkken gerçek saatli sunucu turu çaldıramasın (§12).
+  const k2Uzak = at(24 * 60);
   /** Açık duruş + alarm (fikstür: alarm satırı doğrudan — motor `test_loom_alarm`ın konusu). */
   const alarmKur = async (n: number, tier: 1 | 2, state: LoomAlarmState = LoomAlarmState.OPEN): Promise<{ alarmId: string; machineId: string; stopId: string }> => {
     const m = await prisma.machine.create({ data: { stationId: station.id, name: `TEST-LAE-T${n}-${ek}`, code: `TEST-LAE-T${n}-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
@@ -121,7 +126,7 @@ async function govde(): Promise<void> {
     await prisma.loomAlarm.create({
       data: {
         id: alarmId, kind: LoomAlarmKind.STOP_OVERDUE, stopEventId: stop.id, machineId: m.id, state, tier,
-        targetMinutes: 10, graceMinutes: 5, planReasonCode: P.code, k1DueAt: at(-10), k2DueAt: at(-5),
+        targetMinutes: 10, graceMinutes: 5, planReasonCode: P.code, k1DueAt: at(-10), k2DueAt: tier === 1 ? k2Uzak : at(-5),
         ...(closed ? { closedAt: at(0), totalSec: 1200, overdueSec: 600 } : {}),
       },
     });
@@ -259,11 +264,16 @@ async function govde(): Promise<void> {
   check("§8a zaman çizgisi defterin sırası (ACK, ACK_RELEASE, ACK, ACK_RELEASE, SNOOZE, UNSNOOZE, NOTE, NOTE_RETRACT)",
     kinds === "ACK,ACK_RELEASE,ACK,ACK_RELEASE,SNOOZE,UNSNOOZE,NOTE,NOTE_RETRACT", kinds);
   check("§8b geri çekilen not işaretli, metni duruyor", d.timeline.some((e) => e.kind === "NOTE" && e.retracted && e.note === "mekik değişti"));
-  check("§8c canlı K1 alarmında sonraki adım = K2 vadesi; K2 çalmışta yok", d.nextDueAt?.getTime() === at(-5).getTime() && (await getLoomAlarmDetail(E.alarmId)).nextDueAt === null);
+  check("§8c canlı K1 alarmında sonraki adım = K2 vadesi; K2 çalmışta yok", d.nextDueAt?.getTime() === k2Uzak.getTime() && (await getLoomAlarmDetail(E.alarmId)).nextDueAt === null);
   check("§8d başlık: tezgah kodu + hol, sebep etiketi, benzer duruş istatistiği",
     d.alarm.machine.hallId === station.id && d.alarm.stop.reasonLabel === P.label && d.similar?.machine30d.count === 1 && d.recentStops.length === 1);
   const yok = await hataOf(getLoomAlarmDetail(randomUUID()));
   check("§8e olmayan alarm → 404", yok.status === 404 && yok.code === "LOOM_ALARM_NOT_FOUND", JSON.stringify(yok));
+
+  // ── §12 yabancı motor ──────────────────────────────────────────────────────
+  const yabanci = await runLoomAlarmOnce({ onlyMachineIds: ids.looms });
+  check("§12a bayrak açıkken gerçek saatli yabancı tur fikstürde hiçbir şey yazmadı",
+    yabanci !== "disabled" && yabanci.raised + yabanci.skipped + yabanci.replanned + yabanci.resolved + yabanci.cancelled + yabanci.failed === 0, JSON.stringify(yabanci));
 
   // ── §9 Tezgah Salonu ───────────────────────────────────────────────────────
   const salon = (await getLoomFloor(new Date())).data!;

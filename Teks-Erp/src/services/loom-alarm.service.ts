@@ -78,6 +78,11 @@ export interface LoomAlarmRunOptions {
   now?: Date;
   /** Test enjeksiyonu: yalnız bu makineler. */
   onlyMachineIds?: string[];
+  /**
+   * Test enjeksiyonu: bayrak kapısının sonucu; üretimde DB'den. Bekçi global bayrağı KAPALI tutar ki aynı
+   * DB'deki sunucu zamanlayıcıları gerçek saatle fikstüre dokunamasın (`test_loom_alarm` §7).
+   */
+  enabled?: boolean;
 }
 
 /** Defter satırı — damga alarm başına kesin artan (DB saati); kademe satırında çakışma sessizce düşer. */
@@ -172,7 +177,7 @@ async function closeTx(tx: Tx, stop: StopRow, alarm: AlarmRow, ctx: TickCtx): Pr
  * Her duruş kendi tx'inde (biri düşerse ötekiler işlenir).
  */
 export async function runLoomAlarmOnce(opts: LoomAlarmRunOptions = {}): Promise<LoomAlarmTickOutcome> {
-  if (!(await resolveTezgahAlarmEnabled())) return "disabled";
+  if (!(opts.enabled ?? (await resolveTezgahAlarmEnabled()))) return "disabled";
   const ctx: TickCtx = {
     now: opts.now ?? (await readDbNow()),
     grace: await readTezgahEscalationGraceMinutes(),

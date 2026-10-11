@@ -13,6 +13,10 @@
 //   §5 yeniden plan: sebep değişince çalmamış K2 yeni hedeften · plan dışına sınıflama → CANCELLED
 //   §6 kapanış: duruş kapanınca RESOLVED + süreler DONAR · geri alınınca CANCELLED STOP_REVOKED ·
 //      kapanmış alarm bir daha işlenmez
+//   §7 yabancı motor: aynı DB'de gerçek saatle koşan sunucu zamanlayıcısı (CI'da beş HTTP sunucusu) fikstüre
+//      DOKUNAMAZ — global alarm bayrağı §2'den sonra KAPALI kalır, bekçinin turları kapıyı `enabled` ile geçer;
+//      üretim çağıranı `enabled` vermez. Çıpa (`simdi`) duvar saatinden türer ama sonuç ona bağlı değildir:
+//      `TEST_LOOM_ALARM_SIMDI=<ISO>` ile sabitlenir (vardiya/gün sınırı sondaları).
 //
 // Global ayar yazar (`production.enabled` · `tezgah.enabled` · `tezgah.escalationGraceMinutes` ·
 // `tezgah.alarmEnabled` · `tezgah.alarm.unclassifiedTargetMinutes` · `tezgah.alarm.escalateWhenAcked`);
@@ -28,7 +32,12 @@
 //   ⑦ tekrar turu ÜÇ katmanla korunur (rung · claim · kademe partial unique) — üçü birden kaldırılınca
 //      §4b/§4c/§6f/§6g (+4) ❌; yalnız claim + sed kaldırılınca yeşil (rung tek başına yeter, ölçüldü)
 //   ⑧ `dueAlarmTiers` eşit vadeli alttakini de atladı (yalnız en yüksek çaldı) → §1h/§1i/§3i ❌
+//   ⑨ §2 sonrası global bayrak AÇIK bırakıldı (eski fikstür) → yabancı turlar §3b–§6h + §7a (11) ❌; eski bekçiye
+//      classify↔reclassify arasına TEK yabancı tur → §5a/§5b/§5d/§6h (37/4, CI 38110738522 imzasının aynısı)
+//   ⑩ `runLoomAlarmOnce` `opts.enabled`i yok saydı → §3a'dan itibaren tur 'disabled' ❌
 // =============================================================================
+import fs from "node:fs";
+import path from "node:path";
 import { LoomAlarmEventKind, LoomAlarmState, MachineStopLossClass, ReasonPresetKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -75,7 +84,27 @@ function ozet(r: LoomAlarmTickOutcome): LoomAlarmTickSummary {
   if (r === "disabled") throw new Error("tur beklenmedik biçimde 'disabled' döndü");
   return r;
 }
-const tur = (now: Date, only: string[] = ids.looms) => runLoomAlarmOnce({ now, onlyMachineIds: only });
+/** Bekçinin turu: sabit saat + bayrak kapısı enjekte (global bayrak kapalıyken de koşar). */
+const tur = (now: Date, only: string[] = ids.looms) => runLoomAlarmOnce({ now, onlyMachineIds: only, enabled: true });
+/** Bayrak kapısını DB'den okuyan tur (§2). */
+const turDb = (now: Date) => runLoomAlarmOnce({ now, onlyMachineIds: ids.looms });
+/** Sunucu zamanlayıcısı kılığı: DB saati + DB bayrağı (fikstüre sınırlı). Her çağrı 'disabled' dönmeli. */
+const yabanciSonuclar: string[] = [];
+const yabanciTur = async (an: string): Promise<void> => {
+  const r = await runLoomAlarmOnce({ onlyMachineIds: ids.looms });
+  yabanciSonuclar.push(`${an}:${typeof r === "string" ? r : JSON.stringify(r)}`);
+};
+
+/** Üretim kaynağında `runLoomAlarmOnce(...)` çağrısına `enabled` geçen yerler (yalnız bekçi enjekte eder). */
+function enabledEnjeksiyonu(kaynak: string): number {
+  return [...kaynak.matchAll(/runLoomAlarmOnce\s*\(([^)]*)\)/g)].filter((m) => /\benabled\b/.test(m[1] ?? "")).length;
+}
+function tsDosyalari(dizin: string): string[] {
+  return fs.readdirSync(dizin, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(dizin, e.name);
+    return e.isDirectory() ? tsDosyalari(p) : e.name.endsWith(".ts") ? [p] : [];
+  });
+}
 
 async function alarmOf(stopId: string) {
   return prisma.loomAlarm.findUnique({ where: { stopEventId: stopId }, include: { events: { orderBy: { createdAt: "asc" } } } });
@@ -123,8 +152,11 @@ async function govde(): Promise<void> {
   await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES, 15);
   await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_ESCALATE_WHEN_ACKED, true);
 
-  // Ölçüm anı GEÇMİŞTE (damga kapıları geçmişe açık); vardiya [simdi-3sa, simdi+1sa].
-  const simdi = new Date(Math.floor((Date.now() - 2 * 60 * MIN) / MIN) * MIN);
+  // Ölçüm anı GEÇMİŞTE (damga kapıları geçmişe açık); vardiya [simdi-3sa, simdi+1sa]. Sabit çıpa: env.
+  const cipa = process.env.TEST_LOOM_ALARM_SIMDI ? new Date(process.env.TEST_LOOM_ALARM_SIMDI).getTime() : Date.now() - 2 * 60 * MIN;
+  if (Number.isNaN(cipa)) throw new Error("TEST_LOOM_ALARM_SIMDI ISO tarih olmalı");
+  const simdi = new Date(Math.floor(cipa / MIN) * MIN);
+  console.log(`(çıpa ${simdi.toISOString()})`);
   const at = (dk: number) => new Date(simdi.getTime() + dk * MIN);
   const def = await prisma.shiftDefinition.create({
     data: { code: `T${ek}`.slice(-8).toUpperCase(), name: `TEST-LA vardiya ${ek}`, startMinute: 0, durationMinutes: 240, isActive: false },
@@ -169,16 +201,19 @@ async function govde(): Promise<void> {
   // ── §2 bayrak kapalı ───────────────────────────────────────────────────────
   const toplamOnce = await prisma.loomAlarm.count();
   const olayOnce = await prisma.loomAlarmEvent.count();
-  const kapali = await tur(at(30));
+  const kapali = await turDb(at(30));
   check("§2a alarm bayrağı kapalı → tur 'disabled'", kapali === "disabled", JSON.stringify(kapali));
   await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_ENABLED, true);
   await ayarYaz(SETTING_KEYS.TEZGAH_ENABLED, false);
-  const tezgahKapali = await tur(at(30));
+  const tezgahKapali = await turDb(at(30));
   check("§2b tezgah modülü kapalı (alarm açık) → tur 'disabled'", tezgahKapali === "disabled", JSON.stringify(tezgahKapali));
   check("§2c bayrak kapalıyken SIFIR satır (fikstür + tablonun tamamı)",
     (await prisma.loomAlarm.count({ where: { machineId: { in: ids.looms } } })) === 0
       && (await prisma.loomAlarm.count()) === toplamOnce && (await prisma.loomAlarmEvent.count()) === olayOnce);
+  // Global alarm bayrağı bundan sonra KAPALI: sunucu zamanlayıcıları (gerçek saat) fikstürü göremez.
+  await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_ENABLED, false);
   await ayarYaz(SETTING_KEYS.TEZGAH_ENABLED, true);
+  await yabanciTur("§2 sonu");
 
   // ── §3 doğuş ───────────────────────────────────────────────────────────────
   const r1 = ozet(await tur(simdi));
@@ -226,6 +261,8 @@ async function govde(): Promise<void> {
   // ── §5 yeniden plan ────────────────────────────────────────────────────────
   // E: başlangıç -15, ortak hedef 15 (K1 0, K2 +5). Q (hedef 20) → K2 = -15+20+5 = +10.
   await classifyStop(E.id, { reasonCode: Q.code });
+  // Yabancı turun en zararlı aralığı: E yeniden planlanmış, F henüz plan dışına alınmamış.
+  await yabanciTur("§5 classify↔reclassify");
   await reclassifyStop(F.id, { fromReasonCode: P.code, toReasonCode: N.code, reason: "bekçi" });
   const r5 = ozet(await tur(at(5)));
   const e2 = await alarmOf(E.id);
@@ -250,10 +287,19 @@ async function govde(): Promise<void> {
   check("§6e duruş geri alındı → CANCELLED STOP_REVOKED", b2?.state === LoomAlarmState.CANCELLED && b2.cancelReason === "STOP_REVOKED" && olaylar(b2) === "TIER_SKIPPED1,RAISED2,CANCELLED:STOP_REVOKED", olaylar(b2));
   check("§6f kapanış turu hatasız", r6.failed === 0 && r6.resolved === 1 && r6.cancelled === 1, JSON.stringify(r6));
   const kapaliSayi = await prisma.loomAlarmEvent.count({ where: { alarm: { machineId: { in: ids.looms } } } });
+  await yabanciTur("§6 kapanış sonrası");
   const r7 = ozet(await tur(at(30)));
   check("§6g kapanmış alarmlar bir daha işlenmez (tekrar tur: yeni kapanış yok)", r7.resolved === 0 && r7.cancelled === 0 && r7.failed === 0, JSON.stringify(r7));
   check("§6h son tur yalnız canlı alarmlara kademe yazdı (E K2 +10, G zaten 2)",
     (await prisma.loomAlarmEvent.count({ where: { alarm: { machineId: { in: ids.looms } } } })) === kapaliSayi + r7.raised + r7.skipped && r7.raised === 1);
+
+  // ── §7 yabancı motor ───────────────────────────────────────────────────────
+  check("§7a gerçek saatli yabancı tur (sunucu zamanlayıcısı) her noktada 'disabled' — fikstüre dokunamadı",
+    yabanciSonuclar.length === 3 && yabanciSonuclar.every((x) => x.endsWith(":disabled")), yabanciSonuclar.join(" · "));
+  const enjekte = tsDosyalari(path.join(__dirname, "..", "src")).filter((f) => enabledEnjeksiyonu(fs.readFileSync(f, "utf8")) > 0);
+  check("§7b üretim kaynağı `runLoomAlarmOnce`a `enabled` geçmez (kapı yalnız bayraktan)", enjekte.length === 0, enjekte.join(" · "));
+  check("§7c sonda: `enabled` geçen çağrı yakalanır, argümansız çağrı yakalanmaz",
+    enabledEnjeksiyonu("void runLoomAlarmOnce({ enabled: true })") === 1 && enabledEnjeksiyonu("void runLoomAlarmOnce()") === 0);
 }
 
 async function cleanup(): Promise<void> {
