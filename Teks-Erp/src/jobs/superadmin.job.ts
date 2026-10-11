@@ -118,6 +118,9 @@ export async function ensureSuperadminAccount(): Promise<SuperadminRegistryResul
   const dogus = await ensureVarsayilanSuperadmin();
   if (dogus.action === "dogdu") {
     uyari("superadmin", "Varsayılan satıcı hesabı ortak parolayla doğdu — ilk girişte parola değişimi zorunlu.");
+    if (dogus.muhur !== "MUHURLENDI") {
+      uyari("superadmin", `Varsayılan satıcı hesabı MÜHÜRSÜZ doğdu (${dogus.muhur}) — lisans dizinini denetleyin; sonra: npm run superadmin:kur -- --muhurle`);
+    }
   } else if (dogus.action === "ad-dolu") {
     uyari("superadmin", "Varsayılan satıcı hesabının adı başka bir kullanıcıda — hesap DOĞMADI (mevcut kullanıcı yükseltilmez).");
   }

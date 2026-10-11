@@ -101,6 +101,10 @@ const ADMIN_EVENTS = {
   SUPERADMIN_DEFAULT_TAKEN_OVER: "SUPERADMIN_DEFAULT_TAKEN_OVER",
   SUPERADMIN_ABSENT_MODULE_WRITE: "SUPERADMIN_ABSENT_MODULE_WRITE",
   SYSTEM_ACCOUNT_WRITE_BLOCKED: "SYSTEM_ACCOUNT_WRITE_BLOCKED",
+  /** Mandallı kurulumda geçerli mührü olmayan sistem hesabı yetki alamadı (süreç başına hesap başına bir kez). */
+  SYSTEM_ACCOUNT_SEAL_INVALID: "SYSTEM_ACCOUNT_SEAL_INVALID",
+  /** Sistem hesabı kurulum aracıyla mühürlendi (`superadmin:kur -- --muhurle`). */
+  SYSTEM_ACCOUNT_SEALED: "SYSTEM_ACCOUNT_SEALED",
   MODULE_PROFILE_APPLIED: "MODULE_PROFILE_APPLIED",
 } as const;
 

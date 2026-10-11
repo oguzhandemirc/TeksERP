@@ -57,8 +57,17 @@ import { createHash } from "node:crypto";
 import {
   provisionSuperadmin,
   defaultProvisionDeps,
+  sealExistingSystemAccount,
   type ProvisionResult,
 } from "./superadmin-olustur";
+import { geciciLisansDizini } from "./lib/sistem-hesabi-muhru-fikstur";
+import {
+  resetSystemAccountSealCacheForTest,
+  SEAL_ROW_SELECT,
+  sealStatus,
+  SYSTEM_ACCOUNT_LATCH_FILE,
+} from "../src/services/helpers/system-account-seal.helper";
+import { AuthService } from "../src/services/auth.service";
 import { SYSTEM_ACCOUNT_FULLNAME, ensureSuperadminAccount } from "../src/jobs/superadmin.job";
 import {
   setSystemAccountExists,
@@ -100,7 +109,8 @@ const PAROLA_2 = "bekci-p8-parola-2";
 
 /** `finally` için: geri alınacak durum. */
 let fixtureId: string | null = null;
-let pasiflesenler: Array<{ id: string; fullName: string }> = [];
+let lisans: { dizin: string; temizle: () => void } | null = null;
+let pasiflesenler: Array<{ id: string; fullName: string; systemAccountSeal: string | null }> = [];
 /** Sızıntı taramasının arayacağı sırlar (ölçüm sonunda dolar). */
 const sirlar: string[] = [];
 
@@ -214,18 +224,21 @@ async function main(): Promise<void> {
   }
 
   await onarBayatDurum();
+  // G1: mühür + mandal ortak test dizinine değil bu koşumun geçici lisans dizinine yazılır.
+  lisans = geciciLisansDizini("p8");
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n=== 0) Kurulum — mevcut satıcı hesabı GEÇİCİ pasifleştirilir ===");
   const mevcutlar = await prisma.user.findMany({
     where: { isSystemAccount: true },
-    select: { id: true, username: true, fullName: true },
+    select: { id: true, username: true, fullName: true, systemAccountSeal: true },
   });
-  pasiflesenler = mevcutlar.map((m) => ({ id: m.id, fullName: m.fullName }));
+  pasiflesenler = mevcutlar.map((m) => ({ id: m.id, fullName: m.fullName, systemAccountSeal: m.systemAccountSeal }));
   for (const m of mevcutlar) {
     await prisma.user.update({
       where: { id: m.id },
-      data: { isSystemAccount: false, fullName: GECICI_IMZA },
+      // Mühür yalnız sistem hesabında durabilir (CHECK): geçici pasifte düşer, finally'de geri konur.
+      data: { isSystemAccount: false, systemAccountSeal: null, fullName: GECICI_IMZA },
     });
   }
   console.log(
@@ -488,6 +501,37 @@ async function main(): Promise<void> {
       "rotasyon İKİNCİ satır yaratmadı",
       (await prisma.user.count({ where: { isSystemAccount: true } })) === 1,
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n=== 4m) MÜHÜR (G1) — doğuş/rotasyon mühürlü + mandal · `--muhurle` idempotent ===");
+  if (ilk.kind === "created" && lisans) {
+    const satir = async () => prisma.user.findUniqueOrThrow({ where: { id: ilk.id }, select: SEAL_ROW_SELECT });
+    const mandal = path.join(lisans.dizin, SYSTEM_ACCOUNT_LATCH_FILE);
+    check("§4m doğuş mühürlü (`created.muhur`) + rotasyon yeniden mühürledi", ilk.muhur === "MUHURLENDI", ilk.muhur);
+    check("§4m mandal yazıldı (mühür zorunlu)", fs.existsSync(mandal));
+    resetSystemAccountSealCacheForTest();
+    check("§4m rotasyon sonrası mühür GEÇERLİ ve yetki `[\"*\"]`",
+      sealStatus(await satir()) === "GECERLI" && (await AuthService.getEffectivePermissions(ilk.id)).join() === "*");
+    const yanlis = await sealExistingSystemAccount({ username: null, password: "yanlis-parola-xyz" });
+    check("§4m `--muhurle` yanlış parola → PASSWORD_WRONG", yanlis.kind === "error" && yanlis.code === "PASSWORD_WRONG", yanlis.kind);
+    const mOnce = (await satir()).systemAccountSeal;
+    const ayni = await sealExistingSystemAccount({ username: null, password: PAROLA_2 });
+    check("§4m `--muhurle` geçerli mühürde → DEĞİŞMEDİ (idempotent)",
+      ayni.kind === "unchanged" && (await satir()).systemAccountSeal === mOnce, ayni.kind);
+    // NEGATİF: mühür DB'den silinir (mandal VAR) → yetki düşer; yanlış parola onu geri getirmez.
+    await prisma.user.update({ where: { id: ilk.id }, data: { systemAccountSeal: null } });
+    resetSystemAccountSealCacheForTest();
+    check("§4m NEGATİF: mühürsüz sistem hesabı mandallı kurulumda `[\"*\"]` ALMAZ",
+      !(await AuthService.getEffectivePermissions(ilk.id)).includes("*"));
+    const yanlis2 = await sealExistingSystemAccount({ username: null, password: "yanlis-parola-xyz" });
+    check("§4m NEGATİF: yanlış parola mühürlemez", yanlis2.kind === "error" && (await satir()).systemAccountSeal === null);
+    const yeniden = await sealExistingSystemAccount({ username: null, password: PAROLA_2 });
+    resetSystemAccountSealCacheForTest();
+    check("§4m `--muhurle` doğru parolayla yeniden mühürler → `[\"*\"]` geri gelir",
+      yeniden.kind === "sealed" && (await AuthService.getEffectivePermissions(ilk.id)).join() === "*", yeniden.kind);
+    const ikinci = await sealExistingSystemAccount({ username: null, password: PAROLA_2 });
+    check("§4m ikinci `--muhurle` → DEĞİŞMEDİ", ikinci.kind === "unchanged", ikinci.kind);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1007,7 +1051,7 @@ async function main(): Promise<void> {
       check("hesap varken: çıktıda parola/PIN YOK", sirsiz(r1));
 
       // Hesapsız kurulum: fixture'ın işareti düşer (kendi fixture'ımız; finally siler).
-      await prisma.user.update({ where: { id: fixtureId! }, data: { isSystemAccount: false } });
+      await prisma.user.update({ where: { id: fixtureId! }, data: { isSystemAccount: false, systemAccountSeal: null } });
       const r2 = await kos();
       const j2 = satir(r2.out);
       check("hesapsız: çıkış 0 + OLUSTURULDU (istenen ad)", r2.kod === 0 && j2?.sonuc === "OLUSTURULDU" && j2?.kullaniciAdi === KUR_AD, `kod ${r2.kod} · ${JSON.stringify(j2)} · ${r2.err.trim().slice(0, 160)}`);
@@ -1101,7 +1145,7 @@ main()
       for (const p of pasiflesenler) {
         await prisma.user.update({
           where: { id: p.id },
-          data: { isSystemAccount: true, fullName: p.fullName },
+          data: { isSystemAccount: true, systemAccountSeal: p.systemAccountSeal, fullName: p.fullName },
         });
       }
       await onarBayatDurum();
@@ -1110,6 +1154,7 @@ main()
       fail++;
     }
     __resetSystemAccountRegistryForTests();
+    lisans?.temizle();
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end();

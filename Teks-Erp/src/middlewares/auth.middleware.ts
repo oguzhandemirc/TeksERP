@@ -13,6 +13,12 @@ import { readClientVersionHeader } from "../constants/client-info";
 import { touchUser } from "../lib/presence";
 import prisma from "../lib/prisma";
 import { uyari } from "../lib/logger";
+import {
+  isSealRejected,
+  isSystemAccountAuthorized,
+  reportInvalidSeal,
+  SEAL_ROW_SELECT,
+} from "../services/helpers/system-account-seal.helper";
 
 /**
  * Session.lastSeenAt yazımını cihaz başına (jti) kısıtla — her istekte DB update
@@ -134,11 +140,11 @@ async function authenticate(
       // ⚠️ `isSystemAccount` BİLEREK burada okunur (JWT claim'i değil): istek
       // başına ZATEN yapılan bir okuma, yani maliyet sıfır; değer DB-taze; ve
       // guard'lar senkron kalabilir (bkz. types/express-augment.ts).
+      // Mühür kolonları da: sistem hesabının yetkisi bayrak + geçerli mühürdür (G1).
       select: {
+        ...SEAL_ROW_SELECT,
         tokenVersion: true,
         isActive: true,
-        isSystemAccount: true,
-        username: true,
         mustChangePassword: true,
       },
     });
@@ -192,11 +198,9 @@ async function authenticate(
     }
     // Yetki ve kimlik adı DB'den: token'daki `permissions`/`username` claim'leri karar
     // kaynağı değildir (sızan sırla yeniden imzalanmış token yetki kazanmasın).
-    const permissions = await AuthService.resolveRequestPermissions(
-      payload.userId,
-      fresh.tokenVersion,
-      fresh.isSystemAccount === true,
-    );
+    const systemAccount = isSystemAccountAuthorized(fresh);
+    if (isSealRejected(fresh)) void reportInvalidSeal(fresh);
+    const permissions = await AuthService.resolveRequestPermissions(payload.userId, fresh.tokenVersion, systemAccount);
     if (payload.exp === undefined && !warnedExpLessJtis.has(payload.jti)) {
       if (warnedExpLessJtis.size > 5000) warnedExpLessJtis.clear();
       warnedExpLessJtis.add(payload.jti);
@@ -206,7 +210,7 @@ async function authenticate(
       );
     }
     req.user = { ...payload, username: fresh.username, permissions };
-    req.isSystemAccount = fresh.isSystemAccount === true;
+    req.isSystemAccount = systemAccount;
     req.mustChangePassword = fresh.mustChangePassword === true;
     touchUser(payload.userId); // anlık "online" izleme (bellekte, maliyetsiz)
     // ⚠️ Sürüm de burada YAZILIR, yalnız login'de değil: panel künye sürümünü main

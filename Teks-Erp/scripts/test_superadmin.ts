@@ -147,6 +147,7 @@ import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 import { atlamaDefteri } from "./lib/atlama";
+import { fiksturMuhurle } from "./lib/sistem-hesabi-muhru-fikstur";
 
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4104";
 const SRC = path.join(__dirname, "..", "src");
@@ -331,6 +332,8 @@ async function fixtureYarat(): Promise<void> {
   });
   fixtureId = dogrudan.id;
   fixtureTamAdi = dogrudan.fullName;
+  // G1: gerçek doğuş yolları mühürler; mandallı ortamda mühürsüz fikstür yetki almazdı.
+  await fiksturMuhurle(dogrudan.id);
 }
 
 /**
@@ -797,8 +800,9 @@ async function main(): Promise<void> {
     const authMw = fs.readFileSync(path.join(SRC, "middlewares", "auth.middleware.ts"), "utf8");
     check(
       "kimlik JWT claim'i DEĞİL, istek başına TAZE DB okuması",
-      /select:\s*\{[^}]*isSystemAccount:\s*true/.test(authMw) &&
-        /req\.isSystemAccount\s*=\s*fresh\.isSystemAccount === true/.test(authMw),
+      /select:\s*\{[^}]*\.\.\.SEAL_ROW_SELECT/.test(authMw) &&
+        /const systemAccount = isSystemAccountAuthorized\(fresh\);/.test(authMw) &&
+        /req\.isSystemAccount\s*=\s*systemAccount;/.test(authMw),
       "claim olsaydı iptal edilmiş bir satıcı token'ı süresi dolana dek yetkili kalırdı",
     );
     const jwtTip = fs.readFileSync(path.join(SRC, "types", "express-augment.ts"), "utf8");

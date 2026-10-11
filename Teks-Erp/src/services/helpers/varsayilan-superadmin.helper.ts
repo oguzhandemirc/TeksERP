@@ -20,6 +20,7 @@ import prisma from "../../lib/prisma";
 import { AuditService } from "../audit.service";
 import { SYSTEM_ACCOUNT_FULLNAME } from "../../constants/system-account";
 import { malzemeCoz, type VarsayilanMalzeme } from "../../constants/varsayilan-superadmin";
+import { writeLatch, writeSeal, type WriteSealResult } from "./system-account-seal.helper";
 
 /** Derleme anı sabiti; gömülmemiş derlemede tanımsızdır (typeof ile okunur). */
 declare const __TEKSERP_VARSAYILAN_SA__: string | undefined;
@@ -51,7 +52,7 @@ export type DefaultBirthResult =
   | { action: "malzeme-yok" }
   | { action: "var" }
   | { action: "ad-dolu" }
-  | { action: "dogdu"; id: string };
+  | { action: "dogdu"; id: string; muhur: WriteSealResult["durum"]; kid?: string };
 
 /**
  * Hiç sistem hesabı yoksa varsayılan hesabı doğurur (idempotent). Kilit tx'in İLK ifadesi:
@@ -85,9 +86,12 @@ export async function ensureVarsayilanSuperadmin(
       },
       select: { id: true },
     });
-    return { action: "dogdu", id: yeni.id };
+    // Doğuşta mühürlenir (G1): mühürlenemezse hesap yine doğar, mandal yazılmaz (bugünkü davranış + bant).
+    const seal = await writeSeal(tx, yeni.id);
+    return { action: "dogdu", id: yeni.id, muhur: seal.durum, ...(seal.durum === "MUHURLENDI" ? { kid: seal.kid } : {}) };
   });
   if (result.action === "dogdu") {
+    if (result.kid) writeLatch(result.kid);
     // Sır ve kullanıcı adı yük'e girmez (yalnız durum).
     await AuditService.logEvent({
       category: "SYSTEM",

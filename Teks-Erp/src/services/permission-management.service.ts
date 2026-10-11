@@ -14,6 +14,7 @@ import bcrypt from "bcryptjs";
 import { AppError } from "../utils/app-error";
 import { passwordPolicyViolation } from "../constants/password-policy";
 import { AuditService } from "./audit.service";
+import { credentialReseal } from "./helpers/system-account-seal.helper";
 import { AuthService } from "./auth.service";
 import { readLoginMethods } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
@@ -496,10 +497,12 @@ export class PermissionManagementService {
     const passwordHash = await bcrypt.hash(newPassword, 10);
     // Parola + bayrak + tokenVersion TEK yazımda; bayrak kararı okunan hesap türüne bağlı
     // olduğu için tür WHERE'de (arada değiştiyse 409).
+    const reseal = await credentialReseal(prisma, userId, { passwordHash });
     const claimed = await prisma.user.updateMany({
-      where: { id: userId, isSystemAccount: user.isSystemAccount },
+      where: { id: userId, isSystemAccount: user.isSystemAccount, ...reseal.where },
       data: {
         passwordHash,
+        ...reseal.data,
         mustChangePassword: requireChange,
         tokenVersion: { increment: 1 },
         // Satıcı hesabı ortak parolayla duruyorduysa artık durmuyor (panel bandı kalkar).

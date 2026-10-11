@@ -35,6 +35,8 @@ export const LICENSE_FILES = {
   FINGERPRINT_CACHE: "parmak-izi-onbellek.json",
   /** Etkin iptal belgesi (G4, kök imzalı JWS) — DB kopyası `license.revocation`; tembel okunur (`revocation-store.ts`). */
   REVOCATION: "iptal.jws",
+  /** Sistem hesabı mührü zorunluluğu (G1): VAR ⇒ mühürsüz sistem hesabı yetki almaz; imzasız (`system-account-seal.ts`). */
+  SYSTEM_ACCOUNT_LATCH: "sistem-hesabi-mandali.json",
 } as const;
 
 /** Depo kullanılamıyorsa nedeni (kapı/ekran TR metni ayrıca üretir). */

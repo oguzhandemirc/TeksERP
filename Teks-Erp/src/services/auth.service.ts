@@ -37,6 +37,12 @@ import {
 import { countForeignDigests, requireKeyRing, ShortCredentialService } from "./short-credential.service";
 import { varsayilanParolaMi } from "./helpers/varsayilan-superadmin.helper";
 import {
+  assertSealAllowsLogin,
+  credentialReseal,
+  isSystemAccountAuthorized,
+  SEAL_ROW_SELECT,
+} from "./helpers/system-account-seal.helper";
+import {
   forgetIssuedPin,
   readIssued,
   rememberIssuedCard,
@@ -332,10 +338,12 @@ export class AuthService {
     const hadPin = user.quickPin != null || user.quickPinDigest != null;
 
     if (input.clear) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { quickPin: null, quickPinDigest: null, quickPinSetAt: null },
+      const reseal = await credentialReseal(prisma, userId, { quickPin: null, quickPinDigest: null });
+      const cleared = await prisma.user.updateMany({
+        where: { id: userId, ...reseal.where },
+        data: { quickPin: null, quickPinDigest: null, quickPinSetAt: null, ...reseal.data },
       });
+      if (cleared.count === 0) throw AppError.conflict("Hesap bu sırada değişti. Sayfayı yenileyip tekrar deneyin.");
       forgetIssuedPin(userId);
       await AuditService.log({
         userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",
@@ -372,15 +380,19 @@ export class AuthService {
     if (!user || !user.isActive) throw AppError.notFound("Kullanıcı bulunamadı veya pasif");
     const ring = requireKeyRing();
     const secret = randomBytes(CARD_SECRET_BYTES).toString("hex");
-    await prisma.user.update({
-      where: { id: userId },
+    const cardTokenDigest = digestCardSecret(ring.active, user.id, secret);
+    const reseal = await credentialReseal(prisma, userId, { cardTokenDigest, cardToken: null });
+    const written = await prisma.user.updateMany({
+      where: { id: userId, ...reseal.where },
       data: {
-        cardTokenDigest: digestCardSecret(ring.active, user.id, secret),
+        cardTokenDigest,
         cardIssuedAt: new Date(),
         cardTokenLegacy: false,
         cardToken: null,
+        ...reseal.data,
       },
     });
+    if (written.count === 0) throw AppError.conflict("Hesap bu sırada değişti. Sayfayı yenileyip tekrar deneyin.");
     const rotated = user.cardToken != null || user.cardTokenDigest != null;
     const cardCode = `TEKSU:${user.id}:${secret}`;
     rememberIssuedCard(userId, cardCode);
@@ -492,6 +504,7 @@ export class AuthService {
     if (user.id === (await readPatronCloudUserId())) {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
+    await assertSealAllowsLogin(user.id); // G1: parola/PIN/kart ortak boğaz
     const permissions = await this.getEffectivePermissions(user.id);
 
     // Zorunlu parola değişimi: panel ve değişim adımını taşıyan tabletin PAROLALI girişi token
@@ -773,10 +786,12 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
     const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
+    const reseal = await credentialReseal(prisma, userId, { passwordHash });
     const claimed = await prisma.user.updateMany({
-      where: { id: userId, isActive: true, tokenVersion: user.tokenVersion },
+      where: { id: userId, isActive: true, tokenVersion: user.tokenVersion, ...reseal.where },
       data: {
         passwordHash,
+        ...reseal.data,
         mustChangePassword: false,
         tokenVersion: { increment: 1 },
         ...(varsayilanKapaniyor ? { defaultPasswordChangedAt: new Date() } : {}),
@@ -818,11 +833,9 @@ export class AuthService {
     // `matchesPermission` (`rbac.middleware.ts`) `*`i ZATEN ilk satırda tanır →
     // bütün `requirePermission`/`requireAnyPermission` kapıları maliyetsiz geçer.
     // Çağıranlar `issueToken` (giriş) ve `resolveRequestPermissions` (TTL'li istek önbelleği).
-    const owner = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { isSystemAccount: true },
-    });
-    if (owner?.isSystemAccount) return ["*"];
+    // Bayrak tek başına yetmez: mandallı kurulumda geçerli mühür de şarttır (G1, tek yüklem).
+    const owner = await prisma.user.findUnique({ where: { id: userId }, select: SEAL_ROW_SELECT });
+    if (isSystemAccountAuthorized(owner)) return ["*"];
 
     const now = new Date();
     const grants = await prisma.userPermission.findMany({

@@ -11,6 +11,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { credentialReseal } from "./helpers/system-account-seal.helper";
 import { getShortCredentialKeyRing, type KeyRing } from "../lib/short-credential/keyring";
 import { digestCardSecret, digestQuickPin } from "../lib/short-credential/digest";
 import { recipientSetSignature } from "../lib/short-credential/escrow-crypto";
@@ -76,10 +77,13 @@ export class ShortCredentialService {
     const write = async (candidate: string): Promise<"ok" | "taken"> => {
       if (await isQuickPinTaken(ring, candidate, userId)) return "taken";
       try {
-        await prisma.user.update({
-          where: { id: userId },
-          data: { quickPinDigest: digestQuickPin(ring.active, candidate), quickPinSetAt: new Date(), quickPin: null },
+        const quickPinDigest = digestQuickPin(ring.active, candidate);
+        const reseal = await credentialReseal(prisma, userId, { quickPinDigest, quickPin: null });
+        const written = await prisma.user.updateMany({
+          where: { id: userId, ...reseal.where },
+          data: { quickPinDigest, quickPinSetAt: new Date(), quickPin: null, ...reseal.data },
         });
+        if (written.count === 0) throw AppError.conflict("Hesap bu sırada değişti. Sayfayı yenileyip tekrar deneyin.");
         return "ok";
       } catch (e) {
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return "taken";
@@ -160,16 +164,21 @@ export class ShortCredentialService {
     let converted = false;
     try {
       converted = await prisma.$transaction(async (tx) => {
-        const res =
-          kind === "pin"
-            ? await tx.user.updateMany({
-                where: { id: userId, quickPin: plain },
-                data: { quickPinDigest: digestQuickPin(active, plain), quickPin: null },
-              })
-            : await tx.user.updateMany({
-                where: { id: userId, cardToken: plain },
-                data: { cardTokenDigest: digestCardSecret(active, userId, plain), cardTokenLegacy: true, cardToken: null },
-              });
+        if (kind === "pin") {
+          const quickPinDigest = digestQuickPin(active, plain);
+          const reseal = await credentialReseal(tx, userId, { quickPinDigest, quickPin: null });
+          const res = await tx.user.updateMany({
+            where: { id: userId, quickPin: plain, ...reseal.where },
+            data: { quickPinDigest, quickPin: null, ...reseal.data },
+          });
+          return res.count === 1;
+        }
+        const cardTokenDigest = digestCardSecret(active, userId, plain);
+        const reseal = await credentialReseal(tx, userId, { cardTokenDigest, cardToken: null });
+        const res = await tx.user.updateMany({
+          where: { id: userId, cardToken: plain, ...reseal.where },
+          data: { cardTokenDigest, cardTokenLegacy: true, cardToken: null, ...reseal.data },
+        });
         return res.count === 1;
       });
     } catch (e) {

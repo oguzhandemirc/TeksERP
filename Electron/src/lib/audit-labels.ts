@@ -238,6 +238,8 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   SUPERADMIN_ABSENT_MODULE_WRITE: "Satıcı hesabı yokken modül anahtarı yazıldı",
   SYSTEM_ACCOUNT_ACCESS_BLOCKED: "Sistem hesabına erişim engellendi",
   SYSTEM_ACCOUNT_WRITE_BLOCKED: "En yetkili hesabı değiştirme denemesi engellendi",
+  SYSTEM_ACCOUNT_SEAL_INVALID: "En yetkili hesabın mührü geçersiz — yetki verilmedi",
+  SYSTEM_ACCOUNT_SEALED: "En yetkili hesap sunucuda mühürlendi",
   LOGIN_CONFLICT: "Giriş engellendi (oturum açık)",
   LOGOUT: "Çıkış yapıldı",
 

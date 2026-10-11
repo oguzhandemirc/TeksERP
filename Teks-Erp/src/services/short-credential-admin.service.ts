@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { credentialReseal } from "./helpers/system-account-seal.helper";
 import { addKeyToRing, getShortCredentialKeyRing, kidOf } from "../lib/short-credential/keyring";
 import { digestCardSecret, digestQuickPin } from "../lib/short-credential/digest";
 import { openSealedKey, recipientSetSignature, sealKey } from "../lib/short-credential/escrow-crypto";
@@ -50,9 +51,11 @@ export class ShortCredentialAdminService {
     for (const r of rows) {
       if (r.quickPin !== null) {
         try {
+          const quickPinDigest = digestQuickPin(ring.active, r.quickPin);
+          const reseal = await credentialReseal(prisma, r.id, { quickPinDigest, quickPin: null });
           const res = await prisma.user.updateMany({
-            where: { id: r.id, quickPin: r.quickPin },
-            data: { quickPinDigest: digestQuickPin(ring.active, r.quickPin), quickPin: null },
+            where: { id: r.id, quickPin: r.quickPin, ...reseal.where },
+            data: { quickPinDigest, quickPin: null, ...reseal.data },
           });
           if (res.count === 1) pin++;
           else skipped.push({ userId: r.id, reason: "PIN_ARADA_DEGISTI" });
@@ -63,12 +66,15 @@ export class ShortCredentialAdminService {
         }
       }
       if (r.cardToken !== null) {
+        const cardTokenDigest = digestCardSecret(ring.active, r.id, r.cardToken);
+        const reseal = await credentialReseal(prisma, r.id, { cardTokenDigest, cardToken: null });
         const res = await prisma.user.updateMany({
-          where: { id: r.id, cardToken: r.cardToken },
+          where: { id: r.id, cardToken: r.cardToken, ...reseal.where },
           data: {
-            cardTokenDigest: digestCardSecret(ring.active, r.id, r.cardToken),
+            cardTokenDigest,
             cardTokenLegacy: true,
             cardToken: null,
+            ...reseal.data,
           },
         });
         if (res.count === 1) card++;

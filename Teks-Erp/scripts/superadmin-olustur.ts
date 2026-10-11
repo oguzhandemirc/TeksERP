@@ -70,6 +70,17 @@ import { KurulumGirdiHatasi, kurulumGirdisiOku, type KurulumGirdisi } from "./li
 import { getShortCredentialKeyRing } from "../src/lib/short-credential/keyring";
 import { digestQuickPin } from "../src/lib/short-credential/digest";
 import { isQuickPinTaken } from "../src/services/short-credential.service";
+import bcrypt from "bcryptjs";
+import { AuditService } from "../src/services/audit.service";
+import { loadLicenseStoreSync } from "../src/lib/license/store";
+import {
+  readLatch,
+  SEAL_ROW_SELECT,
+  sealStatus,
+  writeLatch,
+  writeSeal,
+  type WriteSealResult,
+} from "../src/services/helpers/system-account-seal.helper";
 
 /** PIN özeti — etkin anahtarla (halka `pinCoz`da doğrulandı; burada yoksa programlama hatası). */
 function pinOzeti(pin: string): string {
@@ -129,6 +140,8 @@ export interface ProvisionSecrets {
   username: string;
   /** Ekrana BİR KEZ basılır; hiçbir yere kaydedilmez. */
   pin: string;
+  /** G1: hesap aynı tx'te mühürlendi mi (mühürlendiyse mandal da yazıldı). */
+  muhur: WriteSealResult["durum"];
 }
 
 export type ProvisionResult =
@@ -327,6 +340,7 @@ async function provisionTuru(
 
     const passwordHash = await deps.hashPassword(input.password);
     let yeniden = false;
+    let muhur: WriteSealResult | null = null;
     try {
       await prisma.$transaction(async (tx) => {
         await kilitAl(tx);
@@ -362,6 +376,8 @@ async function provisionTuru(
           where: { userId: mevcut.id, consumedAt: null },
           data: { expiresAt: deps.now() },
         });
+        // Konsol erişimi + yeni parola = kimlik kanıtı: rotasyon mührü yeniler (bozuk mühürden kurtarma da budur).
+        muhur = await writeSeal(tx, mevcut.id);
       });
     } catch (err) {
       if (p2002Yaris(err)) {
@@ -371,8 +387,9 @@ async function provisionTuru(
     }
     if (yeniden) return YENIDEN;
     setSystemAccountExists(true);
+    const rotasyonMuhru = latchIfSealed(muhur);
     await deps.logLifecycle({ rotated: true, userId: mevcut.id, totp: "cleared" });
-    return { kind: "rotated", id: mevcut.id, username: mevcut.username, pin: pinSonuc.pin };
+    return { kind: "rotated", id: mevcut.id, username: mevcut.username, pin: pinSonuc.pin, muhur: rotasyonMuhru };
   }
 
   // ── İDEMPOTENT DAL ────────────────────────────────────────────────────────
@@ -398,6 +415,7 @@ async function provisionTuru(
 
   const passwordHash = await deps.hashPassword(input.password);
   let id: string | null = null;
+  let muhur: WriteSealResult | null = null;
   try {
     id = await prisma.$transaction(async (tx): Promise<string | null> => {
       await kilitAl(tx);
@@ -432,6 +450,7 @@ async function provisionTuru(
           where: { userId: mevcut.id, consumedAt: null },
           data: { expiresAt: an },
         });
+        muhur = await writeSeal(tx, mevcut.id);
         return mevcut.id;
       }
       const created = await tx.user.create({
@@ -448,6 +467,7 @@ async function provisionTuru(
         },
         select: { id: true },
       });
+      muhur = await writeSeal(tx, created.id);
       return created.id;
     });
   } catch (err) {
@@ -464,12 +484,94 @@ async function provisionTuru(
   if (id === null) return YENIDEN;
 
   setSystemAccountExists(true);
+  const dogusMuhru = latchIfSealed(muhur);
   if (mevcut) {
     await deps.logLifecycle({ rotated: false, devir: true, userId: id, totp: "cleared" });
-    return { kind: "taken-over", id, username, pin: pinSonuc.pin };
+    return { kind: "taken-over", id, username, pin: pinSonuc.pin, muhur: dogusMuhru };
   }
   await deps.logLifecycle({ rotated: false, userId: id, totp: "none" });
-  return { kind: "created", id, username, pin: pinSonuc.pin };
+  return { kind: "created", id, username, pin: pinSonuc.pin, muhur: dogusMuhru };
+}
+
+/** Mühür yazıldıysa mandal da yazılır (zorunluluk ancak geçerli mühürle açılır). */
+function latchIfSealed(muhur: WriteSealResult | null): WriteSealResult["durum"] {
+  if (muhur?.durum === "MUHURLENDI") writeLatch(muhur.kid);
+  return muhur?.durum ?? "MUHURLENEMEDI";
+}
+
+// -----------------------------------------------------------------------------
+// MÜHÜRLEME (`--muhurle`, G1) — mühürsüz eski kurulumun tek seferlik geçişi
+// -----------------------------------------------------------------------------
+
+export type SealExistingResult =
+  /** Mühür yazıldı + mandal açıldı. `unsealedOthers`: yetki ALMAYACAK öteki sistem hesabı sayısı. */
+  | { kind: "sealed"; id: string; username: string; unsealedOthers: number }
+  /** Mühür zaten geçerliydi; mandal yoksa yazıldı (`mandalYazildi`). */
+  | { kind: "unchanged"; id: string; username: string; mandalYazildi: boolean; unsealedOthers: number }
+  | { kind: "error"; code: "NOT_PROVISIONED" | "AMBIGUOUS" | "PASSWORD_WRONG" | "SEAL_FAILED" | "RACE"; message: string };
+
+/**
+ * Mevcut sistem hesabını PAROLA KANITIYLA mühürler ve mandalı yazar (idempotent). Otomatik
+ * mühürleme yok: güncelleme anında DB'de sahte bir `isSystemAccount` satırı varsa onu da aklardı.
+ * Birden çok sistem hesabı varsa ad zorunludur; mühürlenmeyenler mandalla yetkisini yitirir.
+ */
+export async function sealExistingSystemAccount(input: {
+  username: string | null;
+  password: string;
+}): Promise<SealExistingResult> {
+  const hesaplar = await prisma.user.findMany({
+    where: { isSystemAccount: true, deletedAt: null },
+    select: SEAL_ROW_SELECT,
+  });
+  if (hesaplar.length === 0) {
+    return { kind: "error", code: "NOT_PROVISIONED", message: "Kurulu satıcı hesabı yok — önce bayraksız çalıştırın." };
+  }
+  const ad = input.username?.trim().toLowerCase() || null;
+  const adaylar = ad ? hesaplar.filter((h) => h.username.toLowerCase() === ad) : hesaplar;
+  if (adaylar.length !== 1) {
+    return {
+      kind: "error",
+      code: "AMBIGUOUS",
+      message: ad
+        ? "Bu adla bir satıcı hesabı yok."
+        : `${hesaplar.length} satıcı hesabı işaretli — mühürlenecek hesabın kullanıcı adını girin (öteki işaretli hesaplar yetki ALMAZ).`,
+    };
+  }
+  const hedef = adaylar[0]!;
+  if (!(await bcrypt.compare(input.password, hedef.passwordHash))) {
+    return { kind: "error", code: "PASSWORD_WRONG", message: "Parola yanlış — mühür yazılmadı." };
+  }
+  const digerleri = hesaplar.filter((h) => h.id !== hedef.id && sealStatus(h) !== "GECERLI").length;
+  if (sealStatus(hedef) === "GECERLI") {
+    const mandalVardi = readLatch() === "VAR";
+    const kid = hedef.systemAccountSeal?.split(".")[1] ?? "";
+    const yazildi = mandalVardi ? false : writeLatch(kid);
+    return { kind: "unchanged", id: hedef.id, username: hedef.username, mandalYazildi: yazildi, unsealedOthers: digerleri };
+  }
+  const sonuc = await prisma.$transaction(async (tx): Promise<WriteSealResult | "RACE"> => {
+    await kilitAl(tx);
+    // Parola kanıtı okunan özete aittir: arada değiştiyse mühürlenmez.
+    const taze = await tx.user.findUnique({ where: { id: hedef.id }, select: { passwordHash: true, isSystemAccount: true } });
+    if (!taze?.isSystemAccount || taze.passwordHash !== hedef.passwordHash) return "RACE";
+    return writeSeal(tx, hedef.id);
+  });
+  if (sonuc === "RACE") return { kind: "error", code: "RACE", message: "Hesap bu sırada değişti — tekrar deneyin." };
+  if (sonuc.durum !== "MUHURLENDI") {
+    return {
+      kind: "error",
+      code: "SEAL_FAILED",
+      message: `Mühür yazılamadı (${sonuc.durum}${"neden" in sonuc && sonuc.neden ? `: ${sonuc.neden}` : ""}) — lisans dizinini (LICENSE_DIR) ve kurulum anahtarını denetleyin.`,
+    };
+  }
+  writeLatch(sonuc.kid);
+  await AuditService.logEvent({
+    category: "SYSTEM",
+    action: "SYSTEM_ACCOUNT_SEALED",
+    tableName: "users",
+    recordId: hedef.id,
+    payload: { fullName: SYSTEM_ACCOUNT_FULLNAME, unsealedOthers: digerleri },
+  }).catch(() => undefined);
+  return { kind: "sealed", id: hedef.id, username: hedef.username, unsealedOthers: digerleri };
 }
 
 // -----------------------------------------------------------------------------
@@ -566,12 +668,16 @@ async function interaktif(): Promise<number> {
       "Kullanım:\n" +
         "  npm run superadmin:kur              satıcı hesabını kurar (idempotent)\n" +
         "  npm run superadmin:kur -- --rotate  parola + PIN'i yeniler, 2FA'yı kapatır\n" +
+        "  npm run superadmin:kur -- --muhurle mevcut hesabı parolasıyla mühürler, mühür zorunluluğunu açar (tek seferlik)\n" +
         "  --kurulum-stdin                     YALNIZ setup.exe sihirbazı: {kullaniciAdi, parola, pin} JSON'u boruyla\n" +
         "  (hesap hâlâ ortak varsayılan parolayla duruyorsa kurulum onu DEVRALIR)\n" +
         "\n  ⚠️ Gerçek terminal ister (`ssh -t` / `docker exec -it`) — kurulum kipi hariç.\n",
     );
     return 0;
   }
+
+  // Mühür (G1) kurulum anahtarıyla atılır: depo sunucuyla aynı LICENSE_DIR'den yüklenir (anahtar yoksa doğar).
+  loadLicenseStoreSync();
 
   // ── KURULUM KİPİ — soru SORMAZ (readline yok), TTY kapısından önce ayrılır ────
   if (argv.includes(KURULUM_STDIN_BAYRAGI)) return kurulumKipi(argv);
@@ -623,6 +729,8 @@ async function interaktif(): Promise<number> {
   };
 
   try {
+    if (argv.includes("--muhurle")) return await muhurleKipi(sor, sorGizli);
+
     // Hesap zaten kuruluysa SORU SORMA — idempotentlik burada da geçerli
     // (kurulumcuya boşuna parola yazdırmak, "acaba değişti mi?" sorusu bırakır).
     const mevcut = await prisma.user.findFirst({
@@ -709,6 +817,41 @@ async function interaktif(): Promise<number> {
   } finally {
     acik[0]?.close();
   }
+}
+
+/** `--muhurle`: kullanıcı adı (tek hesapsa boş) + parola sorar, `sealExistingSystemAccount` çağırır. */
+async function muhurleKipi(
+  sor: (soru: string, varsayilan?: string) => Promise<string>,
+  sorGizli: (soru: string) => Promise<string>,
+): Promise<number> {
+  console.log(
+    "\n=== Satıcı hesabı MÜHÜRLEME ===\n" +
+      "Hesap bu kurulumun anahtarıyla mühürlenir; bundan sonra mühürsüz bir hesap en yetkili hesap sayılmaz.\n",
+  );
+  const ad = await sor("Kullanıcı adı (tek hesap varsa boş bırakın): ");
+  let password = await sorGizli("Hesabın mevcut parolası (ekrana basılmaz): ");
+  const sonuc = await sealExistingSystemAccount({ username: ad || null, password });
+  password = "";
+  if (sonuc.kind === "error") {
+    console.error(`\n❌ ${sonuc.message}  [${sonuc.code}]\n`);
+    return 1;
+  }
+  if (sonuc.kind === "unchanged") {
+    console.log(
+      `\nMühür zaten geçerli (${sonuc.username}) — DEĞİŞMEDİ.` +
+        (sonuc.mandalYazildi ? " Mühür zorunluluğu açıldı." : "") +
+        "\n",
+    );
+  } else {
+    console.log(`\n✅ Satıcı hesabı MÜHÜRLENDİ (${sonuc.username}); mühür zorunluluğu açıldı.\n`);
+  }
+  if (sonuc.unsealedOthers > 0) {
+    console.log(
+      `  ⚠️ ${sonuc.unsealedOthers} başka hesap satıcı hesabı olarak işaretli ve mühürsüz — en yetkili hesap SAYILMAZ, ` +
+        "giriş yapamaz. Bu işaret panelden konmaz; nasıl oluştuğunu inceleyin.\n",
+    );
+  }
+  return 0;
 }
 
 if (require.main === module) {

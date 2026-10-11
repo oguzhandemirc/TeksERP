@@ -41,6 +41,13 @@ import { provisionSuperadmin } from "./superadmin-olustur";
 import { __resetSystemAccountRegistryForTests } from "../src/services/helpers/system-account.registry";
 import { rotaEnvanteri } from "./lib/rota-envanteri";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { geciciLisansDizini } from "./lib/sistem-hesabi-muhru-fikstur";
+import {
+  resetSystemAccountSealCacheForTest,
+  SEAL_ROW_SELECT,
+  sealStatus,
+  SYSTEM_ACCOUNT_LATCH_FILE,
+} from "../src/services/helpers/system-account-seal.helper";
 
 let pass = 0;
 let fail = 0;
@@ -70,7 +77,8 @@ const malzemeYaz = (m: VarsayilanMalzeme | null): void => {
   else delete (globalThis as G).__TEKSERP_VARSAYILAN_SA__;
 };
 
-let pasiflesenler: Array<{ id: string; fullName: string }> = [];
+let lisans: { dizin: string; temizle: () => void } | null = null;
+let pasiflesenler: Array<{ id: string; fullName: string; systemAccountSeal: string | null }> = [];
 
 async function kullaniciSil(id: string): Promise<void> {
   await prisma.session.deleteMany({ where: { userId: id } });
@@ -238,10 +246,12 @@ async function main(): Promise<void> {
     return;
   }
   await onar();
-  const mevcutlar = await prisma.user.findMany({ where: { isSystemAccount: true }, select: { id: true, fullName: true } });
+  // G1: doğuşun mühür + mandalı bu koşumun geçici lisans dizinine yazılır.
+  lisans = geciciLisansDizini("vsa");
+  const mevcutlar = await prisma.user.findMany({ where: { isSystemAccount: true }, select: { id: true, fullName: true, systemAccountSeal: true } });
   pasiflesenler = mevcutlar;
   for (const m of mevcutlar) {
-    await prisma.user.update({ where: { id: m.id }, data: { isSystemAccount: false, fullName: GECICI_IMZA } });
+    await prisma.user.update({ where: { id: m.id }, data: { isSystemAccount: false, systemAccountSeal: null, fullName: GECICI_IMZA } });
   }
   check("başlangıç: hesapsız kurulum", (await prisma.user.count({ where: { isSystemAccount: true } })) === 0, `${mevcutlar.length} hesap geçici pasif`);
 
@@ -328,6 +338,11 @@ async function main(): Promise<void> {
   const dogus2 = await ensureVarsayilanSuperadmin(malzeme);
   const hesapId = dogus2.action === "dogdu" ? dogus2.id : "";
   check("körlük zemini: §3 için hesap yeniden doğdu", hesapId.length > 0);
+  check(
+    "§G1a ⭐ varsayılan hesap MÜHÜRLÜ doğar + mandal yazılır",
+    dogus2.action === "dogdu" && dogus2.muhur === "MUHURLENDI" && !!lisans && fs.existsSync(`${lisans.dizin}/${SYSTEM_ACCOUNT_LATCH_FILE}`),
+    dogus2.action === "dogdu" ? dogus2.muhur : dogus2.action,
+  );
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", () => r()));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -403,6 +418,13 @@ async function main(): Promise<void> {
     const giris3 = await call("POST", "/api/auth/login", null, { username: AD, password: YENI_PAROLA, clientType: "electron" });
     const me3 = await call("GET", "/api/auth/me", String(giris3.body.data?.token ?? ""));
     check("§4e /auth/me bandı kalktı", me3.status === 200 && me3.body.data?.defaultSuperadminPasswordPending === false);
+    resetSystemAccountSealCacheForTest();
+    check(
+      "§G1b ⭐ zorunlu parola değişimi mührü AYNI yazımda yeniledi → mühür geçerli, `/auth/me` en yetkili hesap",
+      sealStatus(await prisma.user.findUniqueOrThrow({ where: { id: hesapId }, select: SEAL_ROW_SELECT })) === "GECERLI" &&
+        me3.body.data?.isSystemAccount === true,
+      JSON.stringify(me3.body.data?.isSystemAccount),
+    );
     const eski = await call("POST", "/api/auth/login", null, { username: AD, password: PAROLA, clientType: "electron" });
     check("§4f ortak parolayla giriş artık 401", eski.status === 401, `${eski.status}`);
 
@@ -459,7 +481,7 @@ main()
       if (!hedefDbEngeli()) {
         await fiksturleriSil();
         for (const p of pasiflesenler) {
-          await prisma.user.update({ where: { id: p.id }, data: { isSystemAccount: true, fullName: p.fullName } });
+          await prisma.user.update({ where: { id: p.id }, data: { isSystemAccount: true, systemAccountSeal: p.systemAccountSeal, fullName: p.fullName } });
         }
         await onar();
       }
@@ -468,6 +490,7 @@ main()
       fail++;
     }
     __resetSystemAccountRegistryForTests();
+    lisans?.temizle();
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end();
