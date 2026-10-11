@@ -1,4 +1,5 @@
 import apiClient from "@/services/apiClient";
+import { TERIM } from "@/lib/terim";
 
 // =============================================================================
 // HAZIR SEBEP KATALOĞU — SERVİS (2026-08-19)
@@ -161,8 +162,8 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
   },
   {
     kind: "WORK_ORDER_PLAN_CHANGE",
-    title: "İş Emri Plan Düzeltmesi",
-    hint: "Tablette iş emrinin rengi ya da eni değiştirilirken seçilen sebep. Seçilen metin iş emrinin Hareketler listesinde görünür.",
+    title: `${TERIM.terbiyeIsEmri.tekil} Plan Düzeltmesi`,
+    hint: "Tablette terbiye iş emrinin rengi ya da eni değiştirilirken seçilen sebep. Seçilen metin terbiye iş emrinin Hareketler listesinde görünür.",
   },
 ];
 

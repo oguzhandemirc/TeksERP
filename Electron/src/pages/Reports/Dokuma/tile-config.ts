@@ -10,7 +10,7 @@ export const dokumaReportTiles: HubTile[] = [
   {
     key: "zincir",
     title: "Üretim Zinciri",
-    description: "Sipariş satırı → iş emri → dokuma işi → levent: nerede, ne kadar ilerledi, nerede takıldı; bağsız kayıtlar ayrı",
+    description: "Sipariş satırı → terbiye iş emri → dokuma iş emri → levent: nerede, ne kadar ilerledi, nerede takıldı; bağsız kayıtlar ayrı",
     icon: Link2,
     to: "/reports/dokuma/zincir",
   },

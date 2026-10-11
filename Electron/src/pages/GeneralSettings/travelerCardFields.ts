@@ -31,6 +31,7 @@ import type {
   TravelerCardFieldStyle,
   TravelerCardSpecField,
 } from "@/services/featureFlagService";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Panelde sunulan kalınlık kademeleri.
@@ -110,7 +111,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
     key: "identity",
     title: "Kimlik + Karekod",
     rows: [
-      f("woNo", "İŞ EMRİ NO", "Kartın en büyük yazısı."),
+      f("woNo", `${TERIM.terbiyeIsEmri.tekilBuyuk} NO`, "Kartın en büyük yazısı."),
       f("typeText", "Tür · rota satırı"),
       f("productCode", "Ürün kodu rozeti"),
       f("productName", "Ürün adı"),
@@ -168,7 +169,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
   {
     key: "batches",
     title: "Partiler",
-    desc: "Her baskıda GÜNCEL okunur (kart iş emri açılışında donar, parti sonra doğar). İş emrinin partisi yoksa blok hiç basılmaz.",
+    desc: "Her baskıda GÜNCEL okunur (kart terbiye iş emri açılışında donar, parti sonra doğar). Terbiye iş emrinin partisi yoksa blok hiç basılmaz.",
     toggle: "showBatches",
     rows: [
       f("batchHead", "Başlık satırı"),

@@ -7,6 +7,7 @@
 import apiClient from "@/services/apiClient";
 import type { ReportResponse } from "../_services/types";
 import type { ReportExportSpec } from "../_components/reportExport";
+import { TERIM } from "@/lib/terim";
 
 export type ChainStatus = "BEKLEYEN" | "DEVAM" | "GECIKMIS" | "TAMAMLANAN";
 export const CHAIN_STATUS_LABEL: Record<ChainStatus, string> = { BEKLEYEN: "Bekleyen", DEVAM: "Devam eden", GECIKMIS: "Gecikmiş", TAMAMLANAN: "Tamamlanan" };
@@ -76,9 +77,9 @@ export function buildChainExport(c: ChainReport, filterNotes: string[] = []): Re
     orientation: "landscape",
     meta: [
       ...filterNotes,
-      "Satır = açık sipariş satırı → iş emri → dokuma işi" + (c.moduller.devere ? " → levent" : "") + ". Sayılar kendi defterlerinden: karşılanan sevkten, dokunan koşum metresinden, levent kalanı levent defterinden.",
+      "Satır = açık sipariş satırı → terbiye iş emri → dokuma iş emri" + (c.moduller.devere ? " → levent" : "") + ". Sayılar kendi defterlerinden: karşılanan sevkten, dokunan koşum metresinden, levent kalanı levent defterinden.",
       "Dokuma ilerlemesi Σ dokunan ÷ planlanan; plan yoksa boş kalır (yüzde uydurulmaz). %100 işi kapatmaz.",
-      "Gecikme: dokuma işinin plan bitişi (yoksa siparişin teslim tarihi) bugünden önceyse gün sayısı.",
+      "Gecikme: dokuma iş emrinin plan bitişi (yoksa siparişin teslim tarihi) bugünden önceyse gün sayısı.",
       c.satirOmitted > 0 ? `⚠️ ${c.satirOmitted} satır listeye SIĞMADI (tavan 500). Özet rakamları TÜM satırları kapsar.` : "Tüm satırlar listelendi.",
       "Bağsız kayıtlar (işsiz levent · siparişsiz dokuma · dışarıdan gelen top) ayrı tablodadır; ana listeye karışmaz.",
     ],
@@ -92,10 +93,10 @@ export function buildChainExport(c: ChainReport, filterNotes: string[] = []): Re
           { header: "Sipariş", key: "siparisNo", width: 16 },
           { header: "İstenen (m)", key: "siparisM", width: 12, numFmt: "#,##0.#" },
           { header: "Karşılanan (m)", key: "sevkM", width: 14, numFmt: "#,##0.#" },
-          { header: "İş emri", key: "isEmri", width: 16 },
-          { header: "İş emri durumu", key: "isEmriDurum", width: 14 },
+          { header: TERIM.terbiyeIsEmri.tekil, key: "isEmri", width: 16 },
+          { header: `${TERIM.terbiyeIsEmri.tekil} durumu`, key: "isEmriDurum", width: 14 },
           { header: "Adım", key: "adim", width: 16 },
-          { header: "Dokuma işi", key: "dokuma", width: 16 },
+          { header: TERIM.dokumaIsEmri.tekil, key: "dokuma", width: 16 },
           { header: "Dokuma durumu", key: "dokumaDurum", width: 14 },
           { header: "Dokunan (m)", key: "dokunanM", width: 12, numFmt: "#,##0.#" },
           { header: "Plan (m)", key: "planM", width: 12, numFmt: "#,##0.#" },

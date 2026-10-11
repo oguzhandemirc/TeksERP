@@ -35,7 +35,7 @@ export const definitionGroups: DefinitionGroup[] = [
   {
     key: "production",
     title: "Üretim & Kalite",
-    description: "İstasyonlar, donanım, rotalar, iş emri şablonları, hata tipleri ve iade nedenleri",
+    description: "İstasyonlar, donanım, rotalar, terbiye iş emri şablonları, hata tipleri ve iade nedenleri",
     icon: Factory,
   },
   {

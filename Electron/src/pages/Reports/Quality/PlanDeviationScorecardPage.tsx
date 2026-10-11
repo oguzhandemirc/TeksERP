@@ -22,6 +22,7 @@ import {
 } from "./service";
 import { buildPlanDeviationExport } from "./planDeviationExport";
 import { factoryLocaleString } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 
 // =============================================================================
 // PLAN-SAPMA KARNESİ — "plan dışı onayla depoya inen mal"
@@ -77,7 +78,7 @@ const detailColumns: ColumnDef<PlanDeviationDetailRow, unknown>[] = [
       </div>
     ),
   },
-  { accessorKey: "workOrderNumber", header: "İş Emri" },
+  { accessorKey: "workOrderNumber", header: TERIM.terbiyeIsEmri.tekil },
   {
     accessorKey: "field",
     header: "Alan",
@@ -143,7 +144,7 @@ export function PlanDeviationScorecardPage() {
     <ReportPageLayout
       reportKey="quality/plan-deviation-scorecard"
       title="Plan-Sapma Karnesi"
-      description="Tamburda rengi/eni iş emri hedefinden farklı olduğu hâlde operatör onayıyla depoya inen mal. Sayı büyüyorsa sorun çoğu zaman tamburda değil, iş emrinin açılışındadır."
+      description="Tamburda rengi/eni terbiye iş emri hedefinden farklı olduğu hâlde operatör onayıyla depoya inen mal. Sayı büyüyorsa sorun çoğu zaman tamburda değil, terbiye iş emrinin açılışındadır."
       showCompare
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
@@ -219,7 +220,7 @@ export function PlanDeviationScorecardPage() {
           />
           <BreakdownTable
             title="Kumaş + Renk Bazında"
-            description="Hangi mal plan dışı kabul edildi. Aynı kumaş+renk tekrar ediyorsa iş emri açılışındaki hedef gözden geçirilmeli."
+            description="Hangi mal plan dışı kabul edildi. Aynı kumaş+renk tekrar ediyorsa terbiye iş emri açılışındaki hedef gözden geçirilmeli."
             labelHeader="Kumaş · Renk"
             countHeader="Onay"
             qtyHeader="Plan dışı"

@@ -3,6 +3,7 @@
 import { reportsClient } from "../_services/reportsClient";
 import type { ReportExportSpec } from "../_components/reportExport";
 import type { ReportDateParams } from "../_services/types";
+import { TERIM } from "@/lib/terim";
 
 export interface WipStationRow {
   key: string;
@@ -90,16 +91,16 @@ export function buildWipExport(opts: { sc: WipScorecard; periodLabel: string }):
           { header: "Kumaş", key: "itemName", width: 24 },
           { header: "Renk", key: "colorName", width: 16 },
           { header: "İstasyon", key: "stationName", width: 20 },
-          { header: "İş Emri", key: "workOrderNumber", width: 16 },
+          { header: TERIM.terbiyeIsEmri.tekil, key: "workOrderNumber", width: 16 },
           { header: "Metraj (m)", key: "qty", width: 13, numFmt: "#,##0.0", align: "right" },
           { header: "Bekleme (gün)", key: "daysWaiting", width: 14, numFmt: "0.0", align: "right" },
         ],
         rows: sc.oldestWaiting.map((r) => ({ ...r, colorName: r.colorName ?? "—", workOrderNumber: r.workOrderNumber ?? "—" })),
       },
       {
-        name: "Hiç Başlamamış İş Emirleri",
+        name: `Başlamamış ${TERIM.terbiyeIsEmri.cogul}`,
         columns: [
-          { header: "İş Emri", key: "workOrderNumber", width: 18 },
+          { header: TERIM.terbiyeIsEmri.tekil, key: "workOrderNumber", width: 18 },
           { header: "Durum", key: "status", width: 14 },
           { header: "Açık (gün)", key: "daysOpen", width: 12, numFmt: "0.0", align: "right" },
         ],
@@ -107,8 +108,8 @@ export function buildWipExport(opts: { sc: WipScorecard; periodLabel: string }):
         notes: [
           // Liste ilk 25 ile sınırlı; toplam sayıyı yazmazsak "25 tane var"
           // sanılır — sessiz kırpma, kapsamı olduğundan küçük gösterir.
-          `Toplam ${sc.summary.neverStartedWorkOrders} iş emri; liste en eski 25 tanesini gösterir.`,
-          "Açılmış ama hiç malzeme girmemiş canlı iş emirleri. Planlama backlog'u da olabilir, unutulmuş iş de — rapor yorumlamaz, sayar.",
+          `Toplam ${sc.summary.neverStartedWorkOrders} terbiye iş emri; liste en eski 25 tanesini gösterir.`,
+          "Açılmış ama hiç malzeme girmemiş canlı terbiye iş emirleri. Planlama backlog'u da olabilir, unutulmuş iş de — rapor yorumlamaz, sayar.",
         ],
       },
     ],

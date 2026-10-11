@@ -71,7 +71,7 @@ function cancellationMeta(oc: OrderCancellation, filterNotes: string[]): string[
     "Sebebi girilmemiş ve serbest metinle girilmiş iptaller AYRI kovalarda görünür — gizlenmezler.",
     `SEBEP DOLULUĞU %${oc.summary.reasonFillPct}: bu oran düşükken dağılım gerçeği temsil etmez.`,
     "GEÇ İPTAL PAHALIDIR: 'gün' sütunu sipariş alındıktan iptale kadar geçen süredir; sevk başladıktan sonraki iptaller ayrıca sayılır.",
-    "BİLİNEN SINIR: 'iptal anında iş emri açılmış mıydı' ölçülemiyor — iptal akışı iş emri bağlarını koparır, karar anındaki bağ sonradan okunamaz.",
+    "BİLİNEN SINIR: 'iptal anında terbiye iş emri açılmış mıydı' ölçülemiyor — iptal akışı terbiye iş emri bağlarını koparır, karar anındaki bağ sonradan okunamaz.",
     "KAPSAM DIŞI: 'sipariş sonrası ne değişti' bölümü bilinçli olarak YOK — sipariş güncelleme kayıtlarında alan bazlı değişiklik tutulmuyor (audit `changes` boş), plan sapmalarının ise ayrı karnesi var. Eksik değil, ölçülüp vazgeçilmiş bir karardır.",
     oc.summary.undatedCancelCount > 0
       ? `⚠️ ${oc.summary.undatedCancelCount} eski iptalde tarih damgası YOK (alan 2026-08-26'da eklendi) — dönem raporuna girmezler. Geriye dönük damga uydurulmadı.`

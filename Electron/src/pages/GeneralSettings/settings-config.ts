@@ -39,6 +39,7 @@ import {
   PACKING_POOL_PACKAGE_NO_OPTIONS,
 } from "@/lib/shipping-flags";
 import { IS_ELECTRON } from "@/lib/runtime-env";
+import { TERIM } from "@/lib/terim";
 
 /** FeatureFlags'in yalnızca BOOLEAN değerli anahtarları (toggle edilebilenler).
  *  travelerCardConfig gibi nesne ayarları bu listeden hariçtir — kendi paneli var. */
@@ -609,10 +610,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "productionEnabled",
         title: "Üretim modülünü aç",
-        summary: "Kumaş Stoğu'ndaki üretim sekmeleri ve siparişlerdeki iş emri yüzeyleri çizilir.",
+        summary: "Kumaş Stoğu'ndaki üretim sekmeleri ve siparişlerdeki terbiye iş emri yüzeyleri çizilir.",
         defaultOn: true,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "Açıkken (varsayılan) Kumaş Stoğu'nda üretim sekmeleri ve Siparişler'de iş emri kolonu/aksiyonları görünür. Kapatınca yalnız yüzeyler gizlenir; kayıtlar silinmez. Ön muhasebeden bağımsızdır.",
+        desc: "Açıkken (varsayılan) Kumaş Stoğu'nda üretim sekmeleri ve Siparişler'de terbiye iş emri kolonu/aksiyonları görünür. Kapatınca yalnız yüzeyler gizlenir; kayıtlar silinmez. Ön muhasebeden bağımsızdır.",
       },
       {
         key: "financeEnabled",
@@ -657,12 +658,12 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         // ⚠️ SIRA LOAD-BEARING: Dokuma işi, Üretim'in ALTINDA durur (ön koşul
         // `production.enabled`); tezgah izlemenin KARDEŞİDİR, çocuğu değil.
         key: "dokumaEnabled",
-        title: "Dokuma işi modülünü aç",
+        title: "Dokuma iş emri modülünü aç",
         summary:
-          "Dokuma İşleri ekranı (planlama · kapat · iptal) açılır; tezgah koşumu ve top indirme uçları çalışır.",
+          "Dokuma İş Emirleri ekranı (planlama · kapat · iptal) açılır; tezgah koşumu ve top indirme uçları çalışır.",
         defaultOn: false,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "Açıkken Dokuma İşleri ekranı, tezgah koşumu ve top indirme uçları açılır. Kapalıyken (varsayılan) 403 verir, karo çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
+        desc: "Açıkken Dokuma İş Emirleri ekranı, tezgah koşumu ve top indirme uçları açılır. Kapalıyken (varsayılan) 403 verir, karo çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
       },
       {
         // ⚠️ SIRA: Dokuma işinin ALTINDA — ön koşulu o değil Üretim'dir (kardeş modül).
@@ -759,11 +760,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "itemPhaseOutNewPlan",
         title: "Tükenene kadar karta yeni üretim planı",
-        summary: "Tükenene kadar karta topsuz ve siparişsiz iş emri ya da dokuma işi açılabilsin mi.",
+        summary: "Tükenene kadar karta topsuz ve siparişsiz terbiye iş emri ya da dokuma iş emri açılabilsin mi.",
         defaultOn: true,
         audience: ["Planlamacı"],
         group: "Ürün yaşam döngüsü",
-        desc: "Açıkken (varsayılan) Tükenene kadar karta yeni iş emri açılabilir ama yalnız mevcut stok tüketilir — belgesiz yeni stok girişi yine kapalıdır. Kapalıyken yalnız mevcut topları okutarak iş emri açılır. Kartı yeniden doldurmak isteyen fabrika kartı Aktif'e döndürür.",
+        desc: "Açıkken (varsayılan) Tükenene kadar karta yeni terbiye iş emri açılabilir ama yalnız mevcut stok tüketilir — belgesiz yeni stok girişi yine kapalıdır. Kapalıyken yalnız mevcut topları okutarak terbiye iş emri açılır. Kartı yeniden doldurmak isteyen fabrika kartı Aktif'e döndürür.",
       },
     ],
     enumFlags: [
@@ -1137,11 +1138,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   },
   {
     id: "work-orders",
-    label: "İş Emirleri",
+    label: TERIM.terbiyeIsEmri.cogul,
     icon: ClipboardList,
-    description: "İş emri formundaki alanlar, parti kodu davranışı ve varsayılan planlama süresi.",
+    description: "Terbiye iş emri formundaki alanlar, parti kodu davranışı ve varsayılan planlama süresi.",
     keywords:
-      "iş emri hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan parti no kısa dönen 99 plaka numara",
+      "terbiye iş emri hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan parti no kısa dönen 99 plaka numara",
     kind: "flags",
     section: "production",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:work-orders"],
@@ -1154,16 +1155,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     flags: [
       {
         key: "targetQuantityEnabled",
-        title: "İş emri hedef metraj alanını göster",
-        summary: "İş emri formunda 'hedef metraj' alanı çizilir.",
+        title: "Terbiye iş emri hedef metraj alanını göster",
+        summary: "Terbiye iş emri formunda 'hedef metraj' alanı çizilir.",
         defaultOn: false,
         audience: ["Planlamacı"],
-        desc: "Kapalıyken iş emri formunda “hedef metraj” alanı gizlenir; üretim miktarını girilen kumaş belirler. Örgü/üretim eklenirse açılır.",
+        desc: "Kapalıyken terbiye iş emri formunda “hedef metraj” alanı gizlenir; üretim miktarını girilen kumaş belirler. Örgü/üretim eklenirse açılır.",
       },
       {
         key: "partyCodeAuto",
-        title: "İş emri parti kodunu otomatik üret",
-        summary: "İş Emri No elle yazılmak yerine sistem tarafından önerilir.",
+        title: "Terbiye iş emri parti kodunu otomatik üret",
+        summary: "Terbiye İş Emri No elle yazılmak yerine sistem tarafından önerilir.",
         // ⚠️ VARSAYILAN `true` OLDU (D3③): bayrak artık `workOrder.numberSource`tan
         // türetiliyor ve o serinin varsayılanı `FREE` ⇒ türetilmiş değer `true`.
         // Panelin rozeti backend okuyucusuyla BİREBİR olmak zorunda (bekçi
@@ -1172,7 +1173,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: true,
         audience: ["Planlamacı"],
         desc:
-          "Açıkken İş Emri No sistem tarafından üretilir (İE + GGAAYY + sıra), formda yine değiştirilebilir. "
+          "Açıkken Terbiye İş Emri No sistem tarafından üretilir (İE + GGAAYY + sıra), formda yine değiştirilebilir. "
           + "Kapalıyken elle girilir ve zorunludur. "
           + "⚠️ Bu anahtar artık Ayarlar → Numaralandırma ekranındaki “numara kaynağı” ayarının iki değerli "
           + "kısayoludur; oradaki üçüncü seçenek (“yalnız sistem” — elle giriş YASAK) bu anahtarla "
@@ -1189,32 +1190,32 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         key: "batchLastNumberHintEnabled",
-        title: "İş emri formunda 'Son Kullanılan Parti No' rozetini göster",
-        summary: "Yeni iş emri formunda son verilen parti numarası rozet olarak gösterilir.",
+        title: "Terbiye iş emri formunda 'Son Kullanılan Parti No' rozetini göster",
+        summary: "Yeni terbiye iş emri formunda son verilen parti numarası rozet olarak gösterilir.",
         defaultOn: true,
         audience: ["Planlamacı"],
-        desc: "Açıkken (varsayılan) yeni iş emri formunda son verilen parti numarası rozet olarak görünür. Sıradaki numarayı vaat etmez; numara parti doğduğu anda verilir.",
+        desc: "Açıkken (varsayılan) yeni terbiye iş emri formunda son verilen parti numarası rozet olarak görünür. Sıradaki numarayı vaat etmez; numara parti doğduğu anda verilir.",
       },
       {
         key: "batchAutoCreateEnabled",
         title: "Açık parti yokken partiyi sistem kendisi açsın",
         summary:
-          "Tambur'dan elle top eklerken iş emrinde hiç açık parti yoksa sistem yeni bir parti açıp topu ona bağlar.",
+          "Tambur'dan elle top eklerken terbiye iş emrinde hiç açık parti yoksa sistem yeni bir parti açıp topu ona bağlar.",
         defaultOn: false,
         audience: ["Planlamacı", "Operatör"],
-        desc: "Açıkken Tambur'da elle top eklenirken iş emrinde açık parti yoksa sistem yeni parti açar ve topu ona bağlar. Kapalıyken (varsayılan) top partisiz doğar. ⚠️ ÖNKOŞUL: parti numarası üreteci açık olmalı; kapalıysa elle top ekleme parti bulamaz.",
+        desc: "Açıkken Tambur'da elle top eklenirken terbiye iş emrinde açık parti yoksa sistem yeni parti açar ve topu ona bağlar. Kapalıyken (varsayılan) top partisiz doğar. ⚠️ ÖNKOŞUL: parti numarası üreteci açık olmalı; kapalıysa elle top ekleme parti bulamaz.",
       },
     ],
     settingFields: [
       {
         key: RAW_SETTING_KEYS.WORKORDER_DEFAULT_PLAN_DURATION_DAYS,
         title: "Planlama süresi varsayılanı",
-        desc: "İş emri açılırken planlama bitiş tarihi boş bırakılırsa başlangıca bu kadar gün eklenir. Girilen tarihi ETKİLEMEZ, mevcut iş emirlerine dokunmaz.",
+        desc: "Terbiye iş emri açılırken planlama bitiş tarihi boş bırakılırsa başlangıca bu kadar gün eklenir. Girilen tarihi ETKİLEMEZ, mevcut terbiye iş emirlerine dokunmaz.",
         min: 1,
         max: 365,
         fallback: 7,
         unit: "gün",
-        savedDesc: "İş emri planlama süresi varsayılan gün sayısı",
+        savedDesc: "Terbiye iş emri planlama süresi varsayılan gün sayısı",
         audience: ["Planlamacı"],
       },
     ],
@@ -1238,7 +1239,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Ham girişte en alanı çizilir; kapalıyken operatör isterse yine girebilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Kapalıyken tablet KK1 ekranında en alanı gizlenir; operatör isterse yine girebilir. Bitmiş topun eni iş emrinden gelir, ham stok en'e bakmadan sayılır.",
+        desc: "Kapalıyken tablet KK1 ekranında en alanı gizlenir; operatör isterse yine girebilir. Bitmiş topun eni terbiye iş emrinden gelir, ham stok en'e bakmadan sayılır.",
       },
       {
         key: "kk1WeightEntryEnabled",
@@ -1262,10 +1263,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "qualityGradeRequiredEnabled",
         group: "KK1 / Kalite",
         title: "Top kalitesi zorunlu olsun",
-        summary: "Kalite seçilmeden top girilemez, kesilemez ve iş emri kapanışında depoya indirilemez.",
+        summary: "Kalite seçilmeden top girilemez, kesilemez ve terbiye iş emri kapanışında depoya indirilemez.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken kalite dört yerde zorunlu olur: top girişi, Tambur kesimi, iş emri kapanışı ve depo transferi. Kapalıyken (varsayılan) kalite isteğe bağlıdır; seçilmeyen top “Belirsiz” kalitede yaşar. ⚠️ ÖNKOŞUL: kalite kataloğunda aktif kayıt olmalı ve tabletler güncel olmalı, yoksa saha dört yerde de takılır.",
+        desc: "Açıkken kalite dört yerde zorunlu olur: top girişi, Tambur kesimi, terbiye iş emri kapanışı ve depo transferi. Kapalıyken (varsayılan) kalite isteğe bağlıdır; seçilmeyen top “Belirsiz” kalitede yaşar. ⚠️ ÖNKOŞUL: kalite kataloğunda aktif kayıt olmalı ve tabletler güncel olmalı, yoksa saha dört yerde de takılır.",
       },
       {
         key: "kk1OnlineOnlyEnabled",
@@ -1319,7 +1320,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Operatör sevk sırasında fason talimatını telefondan yazabilir/değiştirebilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Açıkken sahadaki operatör mobil Fason Sevk ekranında talimatı yazabilir/değiştirebilir. Kapalıyken (varsayılan) talimat yalnız iş emrindeki fason adımının notundan gelir.",
+        desc: "Açıkken sahadaki operatör mobil Fason Sevk ekranında talimatı yazabilir/değiştirebilir. Kapalıyken (varsayılan) talimat yalnız terbiye iş emrindeki fason adımının notundan gelir.",
       },
       {
         key: "kursunBypassEnabled",
@@ -1447,11 +1448,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         key: "devereBeamWeavingLinkRequired",
-        title: "Levent sarımında dokuma işi zorunlu olsun",
-        summary: "Levent planlanırken/sarılırken hangi dokuma işi için sarıldığı seçilmeden kayıt alınmaz.",
+        title: "Levent sarımında dokuma iş emri zorunlu olsun",
+        summary: "Levent planlanırken/sarılırken hangi dokuma iş emri için sarıldığı seçilmeden kayıt alınmaz.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken levent bir dokuma işine bağlanmadan planlanamaz/sarılamaz. Kapalıyken (varsayılan) stoğa serbest levent sarılır ve raporda “işsiz levent” olarak ayrı görünür.",
+        desc: "Açıkken levent bir dokuma iş emrine bağlanmadan planlanamaz/sarılamaz. Kapalıyken (varsayılan) stoğa serbest levent sarılır ve raporda “işsiz levent” olarak ayrı görünür.",
       },
     ],
   },
@@ -1459,8 +1460,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "dokuma",
     label: "Dokuma",
     icon: Factory,
-    description: "Dokuma işi, tezgah koşumu ve sipariş bağı katılık ayarları.",
-    keywords: "dokuma işi tezgah koşum sipariş satırı bağ zincir levent",
+    description: "Dokuma iş emri, tezgah koşumu ve sipariş bağı katılık ayarları.",
+    keywords: "dokuma iş emri tezgah koşum sipariş satırı bağ zincir levent",
     kind: "flags",
     section: "production",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:dokuma"],
@@ -1468,19 +1469,19 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     flags: [
       {
         key: "dokumaRunWeavingOrderRequired",
-        title: "Tezgah koşumu dokuma işine bağlı açılsın",
-        summary: "Tezgahta koşum açılırken dokuma işi seçilmeden kayıt alınmaz.",
+        title: "Tezgah koşumu dokuma iş emrine bağlı açılsın",
+        summary: "Tezgahta koşum açılırken dokuma iş emri seçilmeden kayıt alınmaz.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken tezgah koşumu bir dokuma işine bağlanmadan açılamaz; tablet takılı leventin işini ön-doldurur. Kapalıyken (varsayılan) işsiz koşum (stoka dokuma) açılır ve raporda ayrı görünür.",
+        desc: "Açıkken tezgah koşumu bir dokuma iş emrine bağlanmadan açılamaz; tablet takılı leventin işini ön-doldurur. Kapalıyken (varsayılan) işsiz koşum (stoka dokuma) açılır ve raporda ayrı görünür.",
       },
       {
         key: "dokumaOrderLineLinkRequired",
-        title: "Dokuma işi sipariş satırına bağlı olsun",
-        summary: "Dokuma işi en az bir sipariş satırına bağlanmadan kaydedilmez.",
+        title: "Dokuma iş emri sipariş satırına bağlı olsun",
+        summary: "Dokuma iş emri en az bir sipariş satırına bağlanmadan kaydedilmez.",
         defaultOn: false,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "Açıkken dokuma işi en az bir sipariş satırına bağlanmadan kaydedilemez. Kapalıyken (varsayılan) stoka dokuma işi açılır ve hub'da ayrı sekmede durur.",
+        desc: "Açıkken dokuma iş emri en az bir sipariş satırına bağlanmadan kaydedilemez. Kapalıyken (varsayılan) stoka dokuma iş emri açılır ve hub'da ayrı sekmede durur.",
       },
     ],
   },

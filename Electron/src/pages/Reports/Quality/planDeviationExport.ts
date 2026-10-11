@@ -8,6 +8,7 @@
 import type { ReportExportSpec, ReportTableSpec } from "../_components/reportExport";
 import type { PlanDeviationBreakdownRow, PlanDeviationScorecard } from "./service";
 import { factoryLocaleString } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 
 function breakdownTable(name: string, labelHeader: string, rows: PlanDeviationBreakdownRow[]): ReportTableSpec {
   return {
@@ -66,7 +67,7 @@ export function buildPlanDeviationExport(opts: {
           { header: "Tarih", key: "date", width: 18 },
           { header: "Top", key: "roll", width: 20 },
           { header: "Çıkan top", key: "child", width: 20 },
-          { header: "İş Emri", key: "wo", width: 18 },
+          { header: TERIM.terbiyeIsEmri.tekil, key: "wo", width: 18 },
           { header: "Alan", key: "field", width: 8 },
           { header: "Top değeri", key: "rollValue", width: 16 },
           { header: "Plan değeri", key: "planValue", width: 16 },

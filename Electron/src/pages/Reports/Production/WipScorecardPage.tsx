@@ -86,7 +86,7 @@ const rollColumns: ColumnDef<WipScorecard["oldestWaiting"][number], unknown>[] =
   { accessorKey: "stationName", header: "İstasyon" },
   {
     accessorKey: "workOrderNumber",
-    header: "İş Emri",
+    header: "Terbiye İş Emri",
     cell: ({ getValue }) => (getValue() as string) ?? "—",
   },
   {
@@ -105,7 +105,7 @@ const rollColumns: ColumnDef<WipScorecard["oldestWaiting"][number], unknown>[] =
 ];
 
 const woColumns: ColumnDef<WipScorecard["neverStarted"][number], unknown>[] = [
-  { accessorKey: "workOrderNumber", header: "İş Emri" },
+  { accessorKey: "workOrderNumber", header: "Terbiye İş Emri" },
   { accessorKey: "status", header: "Durum" },
   {
     accessorKey: "daysOpen",
@@ -135,7 +135,7 @@ export function WipScorecardPage() {
     <ReportPageLayout
       reportKey="production/wip"
       title="Nerede Takıldı (WIP)"
-      description="İstasyonlarda bekleyen mal, en uzun bekleyen işler ve hiç başlamamış iş emirleri."
+      description="İstasyonlarda bekleyen mal, en uzun bekleyen işler ve hiç başlamamış terbiye iş emirleri."
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
       {/* İki bölümün zaman anlayışı farklı — bu satır olmadan kullanıcı bekleyen
@@ -168,7 +168,7 @@ export function WipScorecardPage() {
           isLoading={query.isLoading}
         />
         <MetricCard
-          label="Hiç başlamamış iş emri"
+          label="Hiç başlamamış terbiye iş emri"
           value={fmtInt(sc?.summary.neverStartedWorkOrders)}
           hint={
             sc?.summary.neverStartedOldestDays != null
@@ -200,12 +200,12 @@ export function WipScorecardPage() {
       />
 
       <DetailTable
-        title="Hiç başlamamış iş emirleri"
-        description="Açılmış ama hiç malzeme girmemiş canlı iş emirleri — en eski 25 tanesi. Planlama backlog'u da olabilir, unutulmuş iş de."
+        title="Hiç başlamamış terbiye iş emirleri"
+        description="Açılmış ama hiç malzeme girmemiş canlı terbiye iş emirleri — en eski 25 tanesi. Planlama backlog'u da olabilir, unutulmuş iş de."
         data={sc?.neverStarted ?? []}
         columns={woColumns}
         isLoading={query.isLoading}
-        emptyLabel="Tüm canlı iş emirleri başlamış"
+        emptyLabel="Tüm canlı terbiye iş emirleri başlamış"
       />
     </ReportPageLayout>
   );

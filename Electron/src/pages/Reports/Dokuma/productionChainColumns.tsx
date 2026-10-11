@@ -8,6 +8,7 @@ import { WEAVING_STATUS_META } from "@/pages/Operations/WeavingOrders/types";
 import { WARP_BEAM_STATUS_META } from "@/pages/Operations/WarpBeams/types";
 import { fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { CHAIN_STATUS_LABEL, type ChainRow } from "./productionChain";
+import { TERIM } from "@/lib/terim";
 
 /** Tıklanabilir hücre — sol tık yerinde, orta/ctrl yeni sekme, sağ tık arka plan (hub kartıyla aynı sözleşme). */
 export function DrillCell({ to, title, children }: { to: string; title: string; children: ReactNode }) {
@@ -37,11 +38,11 @@ export function chainColumns(devere: boolean): ColumnDef<ChainRow, unknown>[] {
         <div className="text-xs tabular-nums">{fmtNum(row.original.sevkM)} / {fmtNum(row.original.siparisM)} m</div>
       </DrillCell>
     ) },
-    { id: "isEmri", header: "İş emri", cell: ({ row }) => {
+    { id: "isEmri", header: TERIM.terbiyeIsEmri.tekil, cell: ({ row }) => {
       const w = row.original.isEmri;
-      if (!w) return <Empty hint="İş emri açılmamış" />;
+      if (!w) return <Empty hint="Terbiye iş emri açılmamış" />;
       return (
-        <DrillCell to={`/operations/work-orders/${w.id}`} title="İş emrini aç">
+        <DrillCell to={`/operations/work-orders/${w.id}`} title="Terbiye iş emrini aç">
           <div className="flex items-center gap-1"><span className="font-mono text-xs">{w.no}</span><StatusBadge status={w.durum} labels={workOrderStatusLabels} tones={workOrderStatusTones} /></div>
           {w.adim && <div className="text-xs text-muted-foreground">{w.adim}</div>}
         </DrillCell>
@@ -49,10 +50,10 @@ export function chainColumns(devere: boolean): ColumnDef<ChainRow, unknown>[] {
     } },
     { id: "dokuma", header: "Dokuma", cell: ({ row }) => {
       const d = row.original.dokuma;
-      if (!d) return <Empty hint="Dokuma işi bağlanmamış" />;
+      if (!d) return <Empty hint="Dokuma iş emri bağlanmamış" />;
       const pct = d.ilerlemePct;
       return (
-        <DrillCell to={`/operations/weaving-orders?search=${encodeURIComponent(d.no)}`} title="Dokuma işini aç">
+        <DrillCell to={`/operations/weaving-orders?search=${encodeURIComponent(d.no)}`} title="Dokuma iş emrini aç">
           <div className="flex items-center gap-1"><span className="font-mono text-xs">{d.no}</span><Pill m={meta(WEAVING_STATUS_META[d.durum as keyof typeof WEAVING_STATUS_META], d.durum)} /></div>
           <div className="text-xs tabular-nums">{fmtNum(d.dokunanM)}{d.planM != null ? ` / ${fmtNum(d.planM)} m · ${fmtPercent(pct)}` : " m · plan yok"}</div>
           {pct != null && <div className="mt-0.5 h-1 w-full rounded bg-muted"><div className="h-1 rounded bg-primary" style={{ width: `${Math.min(100, pct)}%` }} /></div>}

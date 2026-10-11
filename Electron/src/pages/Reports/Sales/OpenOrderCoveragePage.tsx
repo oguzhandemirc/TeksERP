@@ -67,14 +67,14 @@ export function OpenOrderCoveragePage() {
         <MetricCard
           label="Üretimde"
           value={`${fmtNum(c?.summary.fromProductionQty)} m`}
-          hint="Canlı iş emirlerindeki mal"
+          hint="Canlı terbiye iş emirlerindeki mal"
           icon={Factory}
           isLoading={query.isLoading}
         />
         <MetricCard
           label="Karşılanamayan"
           value={`${fmtNum(c?.summary.uncoveredQty)} m`}
-          hint={c ? `${fmtInt(c.summary.uncoveredLines)} kalem — iş emri gerekiyor` : undefined}
+          hint={c ? `${fmtInt(c.summary.uncoveredLines)} kalem — terbiye iş emri gerekiyor` : undefined}
           icon={AlertTriangle}
           tone={c === undefined ? "neutral" : c.summary.uncoveredQty > 0 ? "bad" : "ok"}
           isLoading={query.isLoading}

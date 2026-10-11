@@ -91,7 +91,7 @@ describe("Özellik Anahtarları — kapalı modül ekranda çizilmez", () => {
     renderWithProviders(<FeatureFlagsPage />);
     expect(tab(/^İplik$/i)).not.toBeInTheDocument();
     expect(tab(/Mal Kabul & Alış/i)).not.toBeInTheDocument();
-    expect(tab(/^İş Emirleri$/i)).not.toBeInTheDocument();
+    expect(tab(/^Terbiye İş Emirleri$/i)).not.toBeInTheDocument();
     // Çekirdek sekmeler yerinde — gizleme kapsamı kaymadı.
     expect(tab(/^Müşteriler$/i)).toBeInTheDocument();
   });
@@ -122,7 +122,7 @@ describe("Özellik Anahtarları — kapalı modül ekranda çizilmez", () => {
     renderWithProviders(<FeatureFlagsPage />);
     expect(tab(/^İplik$/i)).toBeInTheDocument();
     expect(tab(/Mal Kabul & Alış/i)).toBeInTheDocument();
-    expect(tab(/^İş Emirleri$/i)).toBeInTheDocument();
+    expect(tab(/^Terbiye İş Emirleri$/i)).toBeInTheDocument();
     expect(tab(/^Muhasebe$/i)).toBeInTheDocument();
   });
 });

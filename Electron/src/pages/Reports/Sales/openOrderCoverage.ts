@@ -104,9 +104,9 @@ export function buildCoverageExport(c: OpenOrderCoverage, filterNotes: string[] 
       // Tanımlar rakamla AYNI dosyada dursun — dışa aktarılan tablo bağlamından
       // koparak dolaşır ve "karşılanıyor" herkesin kafasında farklı bir şeydir.
       "AÇIK = istenen − sevk edilen. Rezerv/çuvallanmış düşülmez; düşüş yalnız sevkte olur.",
-      "DEPODAN = elde duran bitmiş mal. ÜRETİMDE = canlı iş emirlerindeki henüz bitmemiş mal.",
+      "DEPODAN = elde duran bitmiş mal. ÜRETİMDE = canlı terbiye iş emirlerindeki henüz bitmemiş mal.",
       "Bir stok havuzu YALNIZ BİR KEZ dağıtılır: aynı kumaş+renk+en'i isteyen siparişler havuzu PAYLAŞIR, her biri tamamını almaz. Dağıtım sırası termini yakın olandan uzağa; termini olmayan en sona.",
-      "KARŞILANAMAYAN = ne depoda ne üretimde — yeni iş emri gerekir.",
+      "KARŞILANAMAYAN = ne depoda ne üretimde — yeni terbiye iş emri gerekir.",
       "MALZEME AÇIĞI = karşılanamayanın ham kumaşı da yok (kumaş tedariki gerekir).",
       "Anlık fotoğraftır: tarih aralığı almaz.",
       c.linesOmitted > 0

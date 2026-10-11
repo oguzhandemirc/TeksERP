@@ -39,7 +39,7 @@ describe("ProductionChainPage", () => {
     const row = (await screen.findByText("SIP-77")).closest("tr")!;
     expect(row).toHaveTextContent("WO-9"); expect(row).toHaveTextContent("KK1"); expect(row).toHaveTextContent("DK-5"); expect(row).toHaveTextContent("40%"); expect(row).toHaveTextContent("LV-3"); expect(row).toHaveTextContent("kalan 120"); expect(row).toHaveTextContent("4 gün");
     expect(screen.getByRole("columnheader", { name: "Levent" })).toBeInTheDocument();
-    await user.click(within(row).getByTitle("İş emrini aç"));
+    await user.click(within(row).getByTitle("Terbiye iş emrini aç"));
     await user.click(within(row).getByTitle("Leventi aç"));
     expect(opened).toEqual(["/operations/work-orders/w1", "/operations/warp-beams?search=LV-3"]);
   });

@@ -10,6 +10,8 @@
 // tıklanır ve BOŞ basar. Bekçi taraması yok; tek koruma bu not.
 // =============================================================================
 
+import { TERIM } from "@/lib/terim";
+
 export interface PaletteField {
   key: string;
   label: string;
@@ -22,7 +24,7 @@ export const FIELD_GROUPS: { title: string; fields: PaletteField[] }[] = [
     fields: [
       { key: "cardNumber", label: "Kart No", sample: "IE0308260007" },
       { key: "barcode", label: "Barkod metni", sample: "IE0308260007" },
-      { key: "workOrderNumber", label: "İş Emri No", sample: "IE0308260007" },
+      { key: "workOrderNumber", label: `${TERIM.terbiyeIsEmri.tekil} No`, sample: "IE0308260007" },
       { key: "version", label: "Versiyon", sample: "1" },
       { key: "printedAt", label: "Basım tarihi", sample: "03.08.2026 09:12" },
       { key: "companyName", label: "Firma adı", sample: "Örnek Tekstil A.Ş." },

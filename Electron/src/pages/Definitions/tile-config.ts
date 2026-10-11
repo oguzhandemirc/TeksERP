@@ -37,6 +37,7 @@ import {
   isTravelerCardVisible,
 } from "./production-regime";
 import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
+import { TERIM } from "@/lib/terim";
 
 export interface DefinitionTile {
   key: string;
@@ -239,8 +240,8 @@ export const definitionTiles: DefinitionTile[] = [
   },
   {
     key: "product-recipes",
-    title: "İş Emri Şablonları",
-    description: "Kumaş + renk + özellik + en + rota — hazır iş emri şablonları",
+    title: `${TERIM.terbiyeIsEmri.tekil} Şablonları`,
+    description: "Kumaş + renk + özellik + en + rota — hazır terbiye iş emri şablonları",
     icon: FlaskConical,
     to: "/definitions/product-recipes",
     group: "production",

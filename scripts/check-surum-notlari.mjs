@@ -453,6 +453,9 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
       // Ad değişikliği 2026-10-11 (Terbiye İş Emri): yayımlanmış notlar donuk; dilim ③/④ yeni uzun alıntıları buraya ekler.
       { alinti: "Açılmış iş emrini düzeltebilir (renk · en · sipariş bağı · kartı yeniden bas)", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; izin açıklaması yeni adla." },
       { alinti: "Tamamlanmış iş emrine top eklenemez — yeni iş emri açın.", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; sunucu mesajı yeni adla." },
+      { alinti: "Levent sarımında dokuma işi zorunlu olsun", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Levent sarımında dokuma iş emri zorunlu olsun\"." },
+      { alinti: "Tezgah koşumu dokuma işine bağlı açılsın", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Tezgah koşumu dokuma iş emrine bağlı açılsın\"." },
+      { alinti: "Dokuma işi sipariş satırına bağlı olsun", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Dokuma iş emri sipariş satırına bağlı olsun\"." },
     ];
     const govdeSade = sadeles(govde);
     const uzunAdaylar = new Map();

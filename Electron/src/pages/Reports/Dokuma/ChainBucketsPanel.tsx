@@ -10,7 +10,7 @@ export function ChainBucketsPanel({ c, isLoading }: { c: ChainReport | undefined
   return (
     <DetailTable<BucketRow>
       title="Bağsız kayıtlar"
-      description="Sipariş satırı olmayan üretim ayrı sorudur: işsiz levent, siparişsiz dokuma işi, dışarıdan gelen top. Satıra tıklamak ilgili listeyi açar."
+      description="Sipariş satırı olmayan üretim ayrı sorudur: işsiz levent, siparişsiz dokuma iş emri, dışarıdan gelen top. Satıra tıklamak ilgili listeyi açar."
       data={c ? bucketRows(c) : []}
       columns={[
         { id: "ad", header: "Kova", cell: ({ row }) => <DrillCell to={row.original.yol} title="Listeyi aç">{row.original.ad}</DrillCell> },

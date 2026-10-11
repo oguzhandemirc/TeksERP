@@ -161,7 +161,7 @@ export function BatchTracePage() {
                 <span className="font-medium">{c.batchNumber}</span>
                 {c.merged ? <Badge variant="outline" className="ml-1.5 text-[10px]">birleştirildi</Badge> : null}
                 <div className="text-[10px] text-muted-foreground">
-                  {c.workOrderNumber ?? "iş emri yok"} · {fmtDate(c.createdAt)} · {fmtInt(c.rollCount)} top
+                  {c.workOrderNumber ?? "terbiye iş emri yok"} · {fmtDate(c.createdAt)} · {fmtInt(c.rollCount)} top
                 </div>
               </button>
             ))}
@@ -177,7 +177,7 @@ export function BatchTracePage() {
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               <strong>{t.batch.batchNumber}</strong> ·{" "}
-              {t.batch.workOrderNumber ? `İş Emri ${t.batch.workOrderNumber}` : "iş emri bağı yok"} ·{" "}
+              {t.batch.workOrderNumber ? `Terbiye İş Emri ${t.batch.workOrderNumber}` : "terbiye iş emri bağı yok"} ·{" "}
               {fmtDate(t.batch.createdAt)}. Parti numarası benzersiz değildir; bu döküm{" "}
               <strong>seçtiğiniz partiye</strong> aittir.
             </span>

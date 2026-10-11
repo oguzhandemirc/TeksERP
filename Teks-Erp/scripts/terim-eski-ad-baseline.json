@@ -8,30 +8,11 @@
     "Electron/src/lib/item-lifecycle.ts": {
       "isEmri": 1
     },
-    "Electron/src/pages/Definitions/TravelerCardStudio/field-catalog.ts": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Definitions/TravelerCardStudio/types.ts": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Definitions/groups-config.ts": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Definitions/tile-config.ts": {
-      "isEmri": 2
-    },
     "Electron/src/pages/FabricProperties/FabricPropertyFormDialog.tsx": {
       "isEmri": 2
     },
     "Electron/src/pages/FabricProperties/columns.tsx": {
       "isEmri": 1
-    },
-    "Electron/src/pages/GeneralSettings/settings-config.ts": {
-      "dokumaIsi": 16,
-      "isEmri": 26
-    },
-    "Electron/src/pages/GeneralSettings/travelerCardFields.ts": {
-      "isEmri": 3
     },
     "Electron/src/pages/Items/ItemFormDialog.tsx": {
       "dokumaIsi": 1
@@ -41,58 +22,6 @@
     },
     "Electron/src/pages/ProductRecipes/ProductRecipesPage.tsx": {
       "isEmri": 3
-    },
-    "Electron/src/pages/ReasonPresets/service.ts": {
-      "isEmri": 3
-    },
-    "Electron/src/pages/Reports/Dokuma/ChainBucketsPanel.tsx": {
-      "dokumaIsi": 1
-    },
-    "Electron/src/pages/Reports/Dokuma/ProductionChainPage.tsx": {
-      "dokumaIsi": 1,
-      "isEmri": 1
-    },
-    "Electron/src/pages/Reports/Dokuma/productionChain.ts": {
-      "dokumaIsi": 3,
-      "isEmri": 3
-    },
-    "Electron/src/pages/Reports/Dokuma/productionChainColumns.tsx": {
-      "dokumaIsi": 2,
-      "isEmri": 3
-    },
-    "Electron/src/pages/Reports/Dokuma/tile-config.ts": {
-      "dokumaIsi": 1,
-      "isEmri": 1
-    },
-    "Electron/src/pages/Reports/Production/BatchTracePage.tsx": {
-      "isEmri": 3
-    },
-    "Electron/src/pages/Reports/Production/WipScorecardPage.tsx": {
-      "isEmri": 7
-    },
-    "Electron/src/pages/Reports/Production/batchTrace.ts": {
-      "isEmri": 2
-    },
-    "Electron/src/pages/Reports/Production/tile-config.ts": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Reports/Production/wipScorecard.ts": {
-      "isEmri": 5
-    },
-    "Electron/src/pages/Reports/Quality/PlanDeviationScorecardPage.tsx": {
-      "isEmri": 4
-    },
-    "Electron/src/pages/Reports/Quality/planDeviationExport.ts": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Reports/Sales/OpenOrderCoveragePage.tsx": {
-      "isEmri": 2
-    },
-    "Electron/src/pages/Reports/Sales/openOrderCoverage.ts": {
-      "isEmri": 2
-    },
-    "Electron/src/pages/Reports/Sales/orderCancellation.ts": {
-      "isEmri": 2
     },
     "Electron/src/pages/Routes/RouteFormDialog.tsx": {
       "isEmri": 2
@@ -113,9 +42,6 @@
       "isEmri": 1
     },
     "Electron/src/pages/Warehouses/movements.ts": {
-      "isEmri": 1
-    },
-    "Electron/src/services/documentConfig.ts": {
       "isEmri": 1
     },
     "Teks-Erp/src/constants/module-profiles.ts": {

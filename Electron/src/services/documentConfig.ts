@@ -749,7 +749,7 @@ export const DOC_DEFS: DocDef[] = [
     defaultMarginMm: 8,
     sections: [
       { key: "subcontractorInfo", label: "Fason firma satırı (SAYIN)" },
-      { key: "workOrderInfo", label: "İş emri / istasyon satırı" },
+      { key: "workOrderInfo", label: "Terbiye iş emri / istasyon satırı" },
       // OPT-IN: saha "hesap no kaldır" dedi. Anahtar taşımayan (2026-08-05 öncesi)
       // donmuş belgeler de bu satırı artık basmaz — bilinçli, bkz. renderer notu.
       { key: "accountNo", label: "Hesap no (fason firma kodu)", defaultHidden: true },

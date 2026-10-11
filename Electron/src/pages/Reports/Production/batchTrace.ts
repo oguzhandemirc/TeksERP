@@ -50,7 +50,7 @@ export const batchTraceApi = {
 export function buildBatchTraceExport(t: BatchTrace): ReportExportSpec {
   return {
     title: `Parti İzleme — ${t.batch.batchNumber}`,
-    subtitle: t.batch.workOrderNumber ? `İş Emri ${t.batch.workOrderNumber}` : "İş emri bağı yok",
+    subtitle: t.batch.workOrderNumber ? `Terbiye İş Emri ${t.batch.workOrderNumber}` : "Terbiye iş emri bağı yok",
     meta: [
       // Numaranın benzersiz olmadığı ÇIKTIDA da yazılı olmalı: kâğıt elden ele
       // dolaşırken "P46" tek bir partiyi işaret ediyor sanılır.

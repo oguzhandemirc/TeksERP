@@ -34,7 +34,7 @@ export const productionReportTiles: HubTile[] = [
   {
     key: "wip",
     title: "Nerede Takıldı (WIP)",
-    description: "İstasyonlarda bekleyen mal, en uzun bekleyen işler, başlamamış iş emirleri",
+    description: "İstasyonlarda bekleyen mal, en uzun bekleyen işler, başlamamış terbiye iş emirleri",
     icon: Gauge,
     to: "/reports/production/wip",
   },
