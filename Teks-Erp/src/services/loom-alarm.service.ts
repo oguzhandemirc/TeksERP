@@ -11,6 +11,9 @@
 //   • YENİDEN PLAN — duruşun sebebi değişince yalnız ÇALMAMIŞ kademenin vadesi.
 //   • KAPANIŞ — duruş kapanınca RESOLVED (süreler DONAR); geri alınınca / plan dışına
 //               sınıflanınca CANCELLED. Vardiyanın bitmesi/iptali canlı alarmı kapatmaz.
+//   • ALICI   — kademe çaldığı an kime bildirildiği çözülür ve RAISED'a DONAR (`helpers/loom-alarm-recipient.helper`,
+//               RAISED satırı + donmuş alıcı `writeRaisedEventTx`);
+//               sorumlu tanımı yoksa kip BY_PERMISSION (izni olan herkes, bugünkü davranış).
 // Vade hesabı TEK kaynaktan: `helpers/loom-floor.helper` (Tezgah Salonu ile aynı fonksiyonlar).
 // Tekillik sedle: alarm `stopEventId` unique, kademe partial unique — iki eşzamanlı tur tek
 // satır bırakır (ON CONFLICT DO NOTHING); advisory kilit YOK (MachineRun emsali).
@@ -24,6 +27,7 @@ import { readDbNow } from "./helpers/machine-run-open.helper";
 import { loomAlarmEventStampTx } from "./helpers/ledger-stamp.helper";
 import { alarmClockStart, alarmScheduleOf, dueAlarmTiers, stopClockOf, stopTargetMinutes, type AlarmTier, type ShiftWindow, type StopClock } from "./helpers/loom-floor.helper";
 import { clockShiftsFrom, loadClockShiftWindows } from "./helpers/loom-alarm-shift.helper";
+import { loadRecipientConfig, resolveAlarmRecipients, type RecipientConfig, type ResolvedRecipients } from "./helpers/loom-alarm-recipient.helper";
 import { readTezgahAlarmEscalateWhenAcked, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled } from "./system-setting.service";
 import { hata } from "../lib/logger";
 import { AuditService } from "./audit.service";
@@ -44,7 +48,7 @@ export const ALARM_CANCEL_NON_SCHEDULED = "NON_SCHEDULED";
 const STOP_SELECT = {
   id: true, machineId: true, startedAt: true, endedAt: true, durationSec: true, revokedAt: true,
   reasonCode: true, lossClass: true, targetMinutes: true, escalationGraceMinutes: true,
-  shiftInstance: { select: { isCancelled: true } },
+  shiftInstance: { select: { isCancelled: true } }, machine: { select: { stationId: true } },
 } satisfies Prisma.MachineStopEventSelect;
 type StopRow = Prisma.MachineStopEventGetPayload<{ select: typeof STOP_SELECT }>;
 
@@ -54,15 +58,7 @@ const ALARM_SELECT = {
 } satisfies Prisma.LoomAlarmSelect;
 type AlarmRow = Prisma.LoomAlarmGetPayload<{ select: typeof ALARM_SELECT }>;
 
-export interface LoomAlarmTickSummary {
-  scanned: number;
-  raised: number;
-  skipped: number;
-  replanned: number;
-  resolved: number;
-  cancelled: number;
-  failed: number;
-}
+export interface LoomAlarmTickSummary { scanned: number; raised: number; skipped: number; replanned: number; resolved: number; cancelled: number; failed: number }
 export type LoomAlarmTickOutcome = "disabled" | LoomAlarmTickSummary;
 
 /** Turun ayarları — tur başında BİR KEZ okunur (tur içi tutarlılık). */
@@ -73,6 +69,8 @@ interface TickCtx {
   escalateWhenAcked: boolean;
   /** Açık duruşların saat başlangıcı için canlı vardiya pencereleri (tur başında bir kez). */
   shifts: ShiftWindow[];
+  /** Alıcı yapılandırması — turda İLK kademe çalarken bir kez okunur (alarmsız turda hiç okunmaz). */
+  recipients: RecipientConfig | null;
   sum: LoomAlarmTickSummary;
 }
 
@@ -95,9 +93,22 @@ async function writeEventTx(tx: Tx, alarmId: string, data: Omit<Prisma.LoomAlarm
   return r.count;
 }
 
-async function writeTierEventsTx(tx: Tx, alarmId: string, due: { raise: AlarmTier[]; skip: AlarmTier[] }, sum: LoomAlarmTickSummary): Promise<void> {
-  for (const t of due.skip) sum.skipped += await writeEventTx(tx, alarmId, { kind: LoomAlarmEventKind.TIER_SKIPPED, tier: t });
-  for (const t of due.raise) sum.raised += await writeEventTx(tx, alarmId, { kind: LoomAlarmEventKind.RAISED, tier: t });
+/** RAISED + donmuş alıcı (kip satıra, liste `LoomAlarmRecipient`e); eşzamanlı turun kaybedeni (sed) alıcı yazmaz. */
+async function writeRaisedEventTx(tx: Tx, alarmId: string, tier: number, r: ResolvedRecipients): Promise<number> {
+  const id = randomUUID();
+  const createdAt = await loomAlarmEventStampTx(tx, alarmId);
+  const n = (await tx.loomAlarmEvent.createMany({ data: [{ id, alarmId, createdAt, kind: LoomAlarmEventKind.RAISED, tier, recipientMode: r.mode }], skipDuplicates: true })).count;
+  if (n === 1 && r.recipients.length > 0) await tx.loomAlarmRecipient.createMany({ data: r.recipients.map((x) => ({ eventId: id, userId: x.userId, source: x.source })) });
+  return n;
+}
+
+/** Kademe satırları. RAISED'da alıcı hol × kademe için çözülür ve satıra DONAR; TIER_SKIPPED alıcı almaz. */
+async function writeTierEventsTx(tx: Tx, target: { alarmId: string; stationId: string }, due: { raise: AlarmTier[]; skip: AlarmTier[] }, ctx: TickCtx): Promise<void> {
+  for (const t of due.skip) ctx.sum.skipped += await writeEventTx(tx, target.alarmId, { kind: LoomAlarmEventKind.TIER_SKIPPED, tier: t });
+  for (const t of due.raise) {
+    ctx.recipients ??= await loadRecipientConfig(tx, ctx.now);
+    ctx.sum.raised += await writeRaisedEventTx(tx, target.alarmId, t, resolveAlarmRecipients(ctx.recipients, target.stationId, t));
+  }
 }
 
 /** Turda çalan en yüksek kademe (`raise` artan sıralı). */
@@ -128,7 +139,7 @@ async function birthTx(tx: Tx, stop: StopRow, ctx: TickCtx): Promise<void> {
     skipDuplicates: true,
   });
   if (born.count === 0) return; // eşzamanlı tur doğurdu — sed
-  await writeTierEventsTx(tx, id, due, ctx.sum);
+  await writeTierEventsTx(tx, { alarmId: id, stationId: stop.machine.stationId }, due, ctx);
 }
 
 /** Canlı alarm: sebep değiştiyse çalmamış kademeyi yeniden planla; vadesi geçen kademeyi çaldır. */
@@ -154,7 +165,7 @@ async function advanceTx(tx: Tx, stop: StopRow, alarm: AlarmRow, ctx: TickCtx): 
     data: { tier: raiseTo },
   });
   if (claim.count === 0) return;
-  await writeTierEventsTx(tx, alarm.id, due, ctx.sum);
+  await writeTierEventsTx(tx, { alarmId: alarm.id, stationId: stop.machine.stationId }, due, ctx);
 }
 
 /** Duruş kapandı / geri alındı / plan dışına sınıflandı → alarm terminal; kapanış süreleri DONAR. */
@@ -189,7 +200,7 @@ export async function runLoomAlarmOnce(opts: LoomAlarmRunOptions = {}): Promise<
     grace: await readTezgahEscalationGraceMinutes(),
     unclassified: await readTezgahAlarmUnclassifiedTargetMinutes(),
     escalateWhenAcked: await readTezgahAlarmEscalateWhenAcked(),
-    shifts: [],
+    shifts: [], recipients: null,
     sum: { scanned: 0, raised: 0, skipped: 0, replanned: 0, resolved: 0, cancelled: 0, failed: 0 },
   };
   const sum = ctx.sum;

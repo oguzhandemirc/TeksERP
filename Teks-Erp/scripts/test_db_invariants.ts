@@ -493,6 +493,28 @@ const PARTIAL_INDEXES: Array<{
     predicate: `(kind = ANY (ARRAY['RAISED'::"LoomAlarmEventKind", 'TIER_SKIPPED'::"LoomAlarmEventKind"]))`,
     why: "alarm başına her kademe en çok bir kez çalar/atlanır — çift bildirim seddi",
   },
+  // Dokuma alarm sorumluları (A4, migration 20261011200000): kaldırılmamış tanım tekildir (kilit gerekmez).
+  {
+    table: "hall_shift_responsibles",
+    index: "hall_shift_responsibles_live_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "hol × vardiya × kademe × kişi için tek canlı sorumlu ataması — çift atama seddi",
+  },
+  {
+    table: "hall_shift_duty_overrides",
+    index: "hall_shift_duty_overrides_live_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "vardiya penceresi × hol × kademe × kişi için tek canlı nöbet değişikliği",
+  },
+  {
+    table: "loom_alarm_tier_rules",
+    index: "loom_alarm_tier_rules_live_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "kademe başına aynı alıcı kuralı tek (NULLS NOT DISTINCT)",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -626,6 +648,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "loom_alarms", name: "loom_alarms_snooze_ck" },
   { table: "loom_alarms", name: "loom_alarms_closed_ck" },
   { table: "loom_alarm_events", name: "loom_alarm_events_shape_ck" },
+  { table: "loom_alarm_events", name: "loom_alarm_events_recipient_mode_ck" },
+  { table: "hall_shift_responsibles", name: "hall_shift_responsibles_ck" },
+  { table: "hall_shift_duty_overrides", name: "hall_shift_duty_overrides_ck" },
+  { table: "loom_alarm_tier_rules", name: "loom_alarm_tier_rules_ck" },
   // Patron bulutu gelen kutusu makbuzu (B3) — çift yüklem: ISLENDI ⇔ entityId dolu.
   { table: "cloud_inbox_receipts", name: "cloud_inbox_receipts_outcome_entity_chk" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
@@ -915,6 +941,12 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "loom_alarm_events_block_tamper",
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
     why: "tezgah alarm defteri append-only — ters yol karşı olaydır (ACK_RELEASE · UNSNOOZE · CANCELLED), satır değişmez/silinmez; alarmın kaskat silmesi geçer",
+  },
+  {
+    table: "loom_alarm_recipients",
+    trigger: "loom_alarm_recipients_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
+    why: "donmuş alarm alıcısı (kime bildirildi) — kademe çaldığı an yazılır, tanım değişikliği onu değiştirmez; alarmın kaskat silmesi geçer",
   },
   {
     table: "work_order_close_snapshots",

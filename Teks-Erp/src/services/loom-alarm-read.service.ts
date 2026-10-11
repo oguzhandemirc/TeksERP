@@ -4,8 +4,11 @@
 // Salt okuma; yazma yolları `loom-alarm.service`te. Liste, cursor ve özet şeridi TEK where'den
 // doğar (`buildLoomAlarmWhere`) — şerit listenin süzgeciyle ayrışamaz. Detay alarm sayfasının
 // (tasarım §A.7) bütün bloklarını tek uçtan verir; zaman çizgisi defterden, audit'ten değil.
+// "Bana gelenler" (`mine`) ve "kime bildirildi" RAISED satırına DONMUŞ alıcıdan okunur (A4).
 // =============================================================================
-import { LoomAlarmState, type LoomAlarmEventKind, type MachineDataSource, type MachineStopLossClass, type Prisma } from "@prisma/client";
+import {
+  LoomAlarmEventKind, LoomAlarmRecipientMode, LoomAlarmRecipientSource, LoomAlarmState, type MachineDataSource, type MachineStopLossClass, type Prisma,
+} from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
@@ -28,6 +31,26 @@ export interface LoomAlarmListFilter {
   tier?: 1 | 2;
   from?: string;
   to?: string;
+  /** Bana gelenler: donmuş listede ben, ya da izne göre kipte K1 (K2 yalnız üst kademe yetkisiyle). */
+  mine?: { userId: string; canEscalate: boolean };
+}
+
+/** "Bana gelenler" yüklemi — alarmın en az bir RAISED satırı beni hedefledi. */
+export function mineAlarmWhere(m: { userId: string; canEscalate: boolean }): Prisma.LoomAlarmWhereInput {
+  return {
+    events: {
+      some: {
+        kind: LoomAlarmEventKind.RAISED,
+        OR: [
+          { recipientMode: LoomAlarmRecipientMode.LISTED, recipients: { some: { userId: m.userId } } },
+          {
+            OR: [{ recipientMode: LoomAlarmRecipientMode.BY_PERMISSION }, { recipientMode: null }],
+            tier: m.canEscalate ? { in: [1, 2] } : 1,
+          },
+        ],
+      },
+    },
+  };
 }
 
 /** Listenin, cursor'un ve özet şeridinin TEK where'i. */
@@ -44,6 +67,7 @@ export function buildLoomAlarmWhere(f: LoomAlarmListFilter): Prisma.LoomAlarmWhe
   if (f.tier !== undefined) and.push({ tier: f.tier });
   if (f.from) and.push({ createdAt: { gte: resolveRangeStart(f.from) } });
   if (f.to) and.push({ createdAt: { lte: resolveRangeEnd(f.to) } });
+  if (f.mine) and.push(mineAlarmWhere(f.mine));
   return and.length > 0 ? { AND: and } : {};
 }
 
@@ -170,6 +194,20 @@ export interface LoomAlarmTimelineEntryDto {
   retractsEventId: string | null;
   /** Yalnız NOTE: sonradan geri çekildi mi (not silinmez; ekran üstünü çizer). */
   retracted: boolean;
+  /** Yalnız RAISED: donmuş alıcı kipi (A4 öncesi satır = BY_PERMISSION); diğer satırlarda null. */
+  recipientMode: LoomAlarmRecipientMode | null;
+  /** Yalnız RAISED: donmuş alıcılar (BY_PERMISSION'da boş); diğer satırlarda null. */
+  recipients: LoomAlarmRecipientDto[] | null;
+}
+
+export interface LoomAlarmRecipientDto { id: string; name: string; source: LoomAlarmRecipientSource }
+
+/** Kime bildirildi — kademe başına bir girdi, RAISED sırasıyla. */
+export interface LoomAlarmNotificationDto {
+  tier: number;
+  at: Date;
+  mode: LoomAlarmRecipientMode;
+  recipients: LoomAlarmRecipientDto[];
 }
 
 export interface LoomAlarmStopStatDto { count: number; closedCount: number; totalSec: number; avgSec: number | null }
@@ -179,10 +217,20 @@ export interface LoomAlarmDetailDto {
   /** Beklenen sonraki adım: canlı alarmda henüz çalmamış üst kademenin vadesi. */
   nextDueAt: Date | null;
   timeline: LoomAlarmTimelineEntryDto[];
+  notifications: LoomAlarmNotificationDto[];
   context: { job: { weavingOrderNumber: string; itemName: string; colorName: string | null } | null };
   /** Bu tezgahta bu sebeple son 7/30 gün + aynı sebebin bütün salondaki 30 günlük sıklığı. Sebepsiz duruşta null. */
   similar: { reasonCode: string; machine7d: LoomAlarmStopStatDto; machine30d: LoomAlarmStopStatDto; floor30d: LoomAlarmStopStatDto } | null;
   recentStops: Array<{ id: string; startedAt: Date; endedAt: Date | null; durationSec: number | null; reasonCode: string | null; reasonLabel: string | null; lossClass: MachineStopLossClass | null }>;
+}
+
+const SOURCE_RANK: Record<LoomAlarmRecipientSource, number> = { DUTY_OVERRIDE: 0, HALL_SHIFT: 1, USER: 2, PERMISSION: 3 };
+
+/** Donmuş alıcılar kaynak sırasıyla (nöbet → sorumlu → kişi → yetki), sonra ada göre. */
+function sortRecipients(rows: Array<{ source: LoomAlarmRecipientSource; user: { id: string; fullName: string } }>): LoomAlarmRecipientDto[] {
+  return rows
+    .map((r) => ({ id: r.user.id, name: r.user.fullName, source: r.source }))
+    .sort((a, b) => SOURCE_RANK[a.source] - SOURCE_RANK[b.source] || a.name.localeCompare(b.name, "tr") || a.id.localeCompare(b.id));
 }
 
 export const LOOM_ALARM_RECENT_STOPS = 5;
@@ -201,7 +249,11 @@ export async function getLoomAlarmDetail(id: string): Promise<LoomAlarmDetailDto
   if (!row) throw AppError.notFound("Alarm bulunamadı", { code: "LOOM_ALARM_NOT_FOUND" });
   const events = await prisma.loomAlarmEvent.findMany({
     where: { alarmId: id },
-    select: { id: true, kind: true, tier: true, createdAt: true, snoozedUntil: true, note: true, code: true, retractsEventId: true, user: { select: { id: true, fullName: true } }, retractedBy: { select: { id: true } } },
+    select: {
+      id: true, kind: true, tier: true, createdAt: true, snoozedUntil: true, note: true, code: true, retractsEventId: true, recipientMode: true,
+      user: { select: { id: true, fullName: true } }, retractedBy: { select: { id: true } },
+      recipients: { select: { source: true, user: { select: { id: true, fullName: true } } } },
+    },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   const now = await readDbNow();
@@ -227,13 +279,22 @@ export async function getLoomAlarmDetail(id: string): Promise<LoomAlarmDetailDto
   const labels = await reasonLabels([reasonCode, ...recent.map((s) => s.reasonCode)]);
   const alarm = itemDto(row, labels);
   const live = ACTIVE_ALARM_STATES.includes(row.state);
+  const timeline: LoomAlarmTimelineEntryDto[] = events.map((e) => {
+    const raised = e.kind === LoomAlarmEventKind.RAISED;
+    return {
+      id: e.id, kind: e.kind, at: e.createdAt, tier: e.tier, user: person(e.user), snoozedUntil: e.snoozedUntil, note: e.note, code: e.code,
+      retractsEventId: e.retractsEventId, retracted: e.retractedBy !== null,
+      recipientMode: raised ? (e.recipientMode ?? LoomAlarmRecipientMode.BY_PERMISSION) : null,
+      recipients: raised ? sortRecipients(e.recipients) : null,
+    };
+  });
   return {
     alarm,
     nextDueAt: live && row.tier < 2 ? row.k2DueAt : null,
-    timeline: events.map((e) => ({
-      id: e.id, kind: e.kind, at: e.createdAt, tier: e.tier, user: person(e.user), snoozedUntil: e.snoozedUntil, note: e.note, code: e.code,
-      retractsEventId: e.retractsEventId, retracted: e.retractedBy !== null,
-    })),
+    timeline,
+    notifications: timeline
+      .filter((t) => t.kind === LoomAlarmEventKind.RAISED)
+      .map((t) => ({ tier: t.tier ?? 0, at: t.at, mode: t.recipientMode!, recipients: t.recipients ?? [] })),
     context: {
       job: run?.weavingOrder
         ? { weavingOrderNumber: run.weavingOrder.weavingOrderNumber, itemName: run.weavingOrder.item.name, colorName: run.weavingOrder.color?.name ?? null }

@@ -574,6 +574,10 @@ model User {
   loomAlarmsAcked          LoomAlarm[]            @relation("LoomAlarmAckedBy")
   loomAlarmsSnoozed        LoomAlarm[]            @relation("LoomAlarmSnoozedBy")
   loomAlarmEvents          LoomAlarmEvent[]       @relation("LoomAlarmEventBy")
+  loomAlarmRecipients      LoomAlarmRecipient[]
+  hallShiftResponsibles    HallShiftResponsible[] @relation("HallShiftResponsibleUser")
+  hallShiftDutyOverrides   HallShiftDutyOverride[] @relation("HallShiftDutyOverrideUser")
+  loomAlarmTierRules       LoomAlarmTierRule[]    @relation("LoomAlarmTierRuleUser")
   machineShiftStatsSealed  MachineShiftStat[]     @relation("MachineShiftStatSealedBy")
   machineShiftSealsActed   MachineShiftStatSeal[] @relation("MachineShiftSealBy")
   createdPeripheralDevices PeripheralDevice[]     @relation("PeripheralDeviceCreatedBy")
@@ -996,6 +1000,8 @@ model Station {
   // (Machine.kursunBypasses) — PROCESS_QC istasyonu tektir, altındaki
   // fiziksel kurşun makineleri N adettir. Bu yüzden Station'da karşı-ilişki YOK.
 
+  hallShiftResponsibles  HallShiftResponsible[]
+  hallShiftDutyOverrides HallShiftDutyOverride[]
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
@@ -2141,6 +2147,7 @@ model ShiftDefinition {
   nameFold String? @default(dbgenerated())
 
   instances ShiftInstance[]
+  hallResponsibles HallShiftResponsible[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -2177,6 +2184,7 @@ model ShiftInstance {
 
   shiftDefinition ShiftDefinition    @relation(fields: [shiftDefinitionId], references: [id], onDelete: Restrict)
   stops           MachineStopEvent[]
+  dutyOverrides   HallShiftDutyOverride[]
   machineStats    MachineShiftStat[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -2497,11 +2505,14 @@ model LoomAlarmEvent {
   clientToken  String?            @unique @db.Uuid
   /// Yalnız NOTE_RETRACT: geri çekilen NOTE satırı — bir not en çok bir kez geri çekilir.
   retractsEventId String?         @unique @db.Uuid
+  /// Yalnız RAISED (A4): alıcı kipi kademe çaldığı an DONAR. NULL = A4 öncesi satır (izne göre).
+  recipientMode   LoomAlarmRecipientMode?
 
   alarm       LoomAlarm       @relation(fields: [alarmId], references: [id], onDelete: Cascade)
   user        User?           @relation("LoomAlarmEventBy", fields: [userId], references: [id])
   retracts    LoomAlarmEvent? @relation("LoomAlarmNoteRetract", fields: [retractsEventId], references: [id], onDelete: NoAction)
   retractedBy LoomAlarmEvent? @relation("LoomAlarmNoteRetract")
+  recipients  LoomAlarmRecipient[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
@@ -2509,6 +2520,123 @@ model LoomAlarmEvent {
   @@map("loom_alarm_events")
 }
 
+
+/// Alarm kademesinin alıcı kipi (RAISED'a donar): izne göre herkes (bugünkü davranış) ya da çözülmüş liste.
+enum LoomAlarmRecipientMode {
+  BY_PERMISSION
+  LISTED
+}
+
+/// Donmuş alıcının nereden geldiği (kime bildirildi + neden).
+enum LoomAlarmRecipientSource {
+  HALL_SHIFT
+  DUTY_OVERRIDE
+  USER
+  PERMISSION
+}
+
+/// Kademe kuralının alıcı türü: holün vardiya sorumlusu · kişi · yetki (rol yerine; roller yok, yetki kişiye atanır).
+enum LoomAlarmRuleRecipientKind {
+  HALL_SHIFT
+  USER
+  PERMISSION
+}
+
+/// DONMUŞ ALICI — RAISED satırının "kime bildirildi" listesi; kademe çaldığı an yazılır, append-only
+/// (`updatedAt` YOK, mühür `defter_block_tamper`). Ters yolu ebeveyn RAISED'ın ters yoludur (CANCELLED).
+model LoomAlarmRecipient {
+  id      String                   @id @default(uuid()) @db.Uuid
+  eventId String                   @db.Uuid
+  userId  String                   @db.Uuid
+  source  LoomAlarmRecipientSource
+
+  event LoomAlarmEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([eventId, userId])
+  @@index([userId, eventId])
+  @@map("loom_alarm_recipients")
+}
+
+/// HOL × VARDİYA SORUMLUSU — yapılandırma; `tier` = kademe (1 usta/bakımcı, 2 amir). Silinmez,
+/// `revokedAt` ile kalkar; geçmiş alarmın alıcısı RAISED'a donduğu için değişiklik geçmişi etkilemez.
+/// ⚠️ BaseController modeli DEĞİL: tek yazar `loom-alarm-duty.service`.
+model HallShiftResponsible {
+  id                String    @id @default(uuid()) @db.Uuid
+  stationId         String    @db.Uuid
+  shiftDefinitionId String    @db.Uuid
+  tier              Int
+  userId            String    @db.Uuid
+  clientToken       String?   @unique @db.Uuid
+  createdById       String?   @db.Uuid
+  revokedAt         DateTime? @db.Timestamptz
+  revokedById       String?   @db.Uuid
+
+  station         Station         @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  shiftDefinition ShiftDefinition @relation(fields: [shiftDefinitionId], references: [id], onDelete: Restrict)
+  user            User            @relation("HallShiftResponsibleUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([stationId, shiftDefinitionId])
+  // ŞEMA-DIŞI: partial unique (stationId, shiftDefinitionId, tier, userId) WHERE revokedAt IS NULL ·
+  // CHECK tier 1..2 · revokedAt⇔revokedById (`test_db_invariants`).
+  @@map("hall_shift_responsibles")
+}
+
+/// NÖBET DEĞİŞİKLİĞİ — tek bir vardiya penceresinde (ShiftInstance = tanım × fabrika günü) hol × kademe
+/// listesinin yerine geçer. Bitmiş vardiyaya yazılmaz/kaldırılmaz (geçmiş değişmez); `revokedAt` ile kalkar.
+model HallShiftDutyOverride {
+  id              String    @id @default(uuid()) @db.Uuid
+  shiftInstanceId String    @db.Uuid
+  stationId       String    @db.Uuid
+  tier            Int
+  userId          String    @db.Uuid
+  note            String?   @db.VarChar(300)
+  clientToken     String?   @unique @db.Uuid
+  createdById     String?   @db.Uuid
+  revokedAt       DateTime? @db.Timestamptz
+  revokedById     String?   @db.Uuid
+
+  shiftInstance ShiftInstance @relation(fields: [shiftInstanceId], references: [id], onDelete: Restrict)
+  station       Station       @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  user          User          @relation("HallShiftDutyOverrideUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([shiftInstanceId, stationId])
+  // ŞEMA-DIŞI: partial unique (shiftInstanceId, stationId, tier, userId) WHERE revokedAt IS NULL ·
+  // CHECK tier 1..2 · revokedAt⇔revokedById.
+  @@map("hall_shift_duty_overrides")
+}
+
+/// KADEME KURALI — kademe k'nın alıcıları. Kademede hiç etkin kural yoksa örtük kural = holün vardiya
+/// sorumlusu; çözüm boş çıkarsa izne göre herkes (bugünkü davranış).
+model LoomAlarmTierRule {
+  id             String                     @id @default(uuid()) @db.Uuid
+  tier           Int
+  kind           LoomAlarmRuleRecipientKind
+  userId         String?                    @db.Uuid
+  permissionCode String?                    @db.VarChar(64)
+  clientToken    String?                    @unique @db.Uuid
+  createdById    String?                    @db.Uuid
+  revokedAt      DateTime?                  @db.Timestamptz
+  revokedById    String?                    @db.Uuid
+
+  user User? @relation("LoomAlarmTierRuleUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([tier])
+  // ŞEMA-DIŞI: CHECK tier 1..2 · kind↔kolon biçimi (USER⇔userId, PERMISSION⇔permissionCode) ·
+  // revokedAt⇔revokedById · partial unique (tier, kind, userId, permissionCode) NULLS NOT DISTINCT WHERE revokedAt IS NULL.
+  @@map("loom_alarm_tier_rules")
+}
 
 /// TOP İNDİRME — tezgahtan kumaş indiği AN (dokuma P3, tasarım
 /// DOKUMA-IS-EMRI-VE-TABLET-TASARIMI §3.8). DEFTER: satır SİLİNMEZ, GÜNCELLENMEZ

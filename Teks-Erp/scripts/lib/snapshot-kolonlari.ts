@@ -456,6 +456,13 @@ WHERE s."reasonCode" IS NOT NULL AND s."lossClass" IS NULL`,
     neden: "kademe planının hedefi alarm doğarken duruşun donmuş hedefinden kopyalanır; ayar değişse açık alarm değişmez, yalnız sebep değişiminde çalmamış kademe için motor yeniden yazar — tek yazıcı",
   },
   {
+    model: "LoomAlarmEvent",
+    alan: "recipientMode",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "loom-alarm.service.ts"],
+    neden: "kademenin alıcı kipi (izne göre / çözülmüş liste) kademe çaldığı an RAISED satırına donar; sorumlu tanımı sonradan değişse geçmiş alarm değişmez — tek yazıcı (motor), satır mühürlü",
+  },
+  {
     model: "LoomAlarm",
     alan: "totalSec",
     sinif: "DONMUS_ILERI",

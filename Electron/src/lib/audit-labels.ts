@@ -137,6 +137,9 @@ export const TABLE_LABELS: Record<string, string> = {
   DOFF_EVENT: "Top İndirme",
   MACHINE_STOP_EVENT: "Tezgah Duruşu",
   LOOM_ALARM_EVENT: "Tezgah Alarmı",
+  LOOM_ALARM_RESPONSIBLE: "Alarm Sorumlusu",
+  LOOM_ALARM_DUTY_OVERRIDE: "Alarm Nöbet Değişikliği",
+  LOOM_ALARM_TIER_RULE: "Alarm Kademe Kuralı",
   MACHINE_SHIFT_STAT: "Vardiya Karnesi",
   MACHINE_SHIFT_SEAL: "Vardiya Karnesi Mührü",
   KURSUN_BYPASS_ASSIGNMENT: "Kurşun Dağıtım Ataması",
@@ -882,6 +885,13 @@ export const ENUM_LABELS: Record<string, string> = {
   UNSNOOZE: "Susturma kaldırıldı",
   NOTE: "Not",
   NOTE_RETRACT: "Not geri çekildi",
+  // ── Alarm sorumluları (A4) — LoomAlarmRecipientMode · LoomAlarmRecipientSource · LoomAlarmRuleRecipientKind.
+  BY_PERMISSION: "Yetkisi olan herkes",
+  LISTED: "Tanımlı alıcılar",
+  HALL_SHIFT: "Hol vardiya sorumlusu",
+  DUTY_OVERRIDE: "Nöbet değişikliği",
+  USER: "Kişi",
+  PERMISSION: "Yetki",
 
   // ── Patron bulutu gelen kutusu makbuzu (B3) — CloudInboxKind · CloudInboxOutcome.
   SIPARIS: "Sipariş",
@@ -1029,6 +1039,10 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "yalnız sistem üretir) — ikisinde de eylemi yapan SİSTEMDİR, insan değil; " +
     "ortak Türkçe doğru",
   CANCELLED: "on beş durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
+  // ── Alarm sorumluları (A4): alıcının KAYNAĞI ile kuralın ALICI TÜRÜ aynı üç olgudur — ortak Türkçe doğru.
+  HALL_SHIFT: "LoomAlarmRecipientSource(alıcı holün vardiya sorumlusu olduğu için) ve LoomAlarmRuleRecipientKind(kural: holün vardiya sorumlusu) — aynı olgu",
+  USER: "LoomAlarmRecipientSource(kişi kuralıyla) ve LoomAlarmRuleRecipientKind(kural: belirli kişi) — ikisi de 'Kişi'",
+  PERMISSION: "LoomAlarmRecipientSource(yetki kuralıyla) ve LoomAlarmRuleRecipientKind(kural: yetki koduna sahip herkes) — ikisi de 'Yetki'",
   RESOLVED:
     "LoomAlarmState(alarm çözüldü) ve LoomAlarmEventKind(çözülme olayı) — aynı olgunun durumu ve olayı; ortak 'Çözüldü' doğru",
   IN_PROGRESS:

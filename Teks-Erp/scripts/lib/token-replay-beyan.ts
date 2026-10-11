@@ -57,6 +57,10 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}loom-alarm.service.ts::unsnoozeLoomAlarm`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
   [`${S}loom-alarm.service.ts::noteLoomAlarm`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
   [`${S}loom-alarm.service.ts::retractLoomAlarmNote`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
+  // Tezgah alarmı sorumluları (A4): üç tanım yaratma ucu, her biri kendi politikasıyla (R).
+  [`${S}loom-alarm-duty.service.ts::createHallShiftResponsible`]: { giris: { [`${S}loom-alarm-duty.service.ts::createHallShiftResponsible`]: "R" } },
+  [`${S}loom-alarm-duty.service.ts::createHallShiftDutyOverride`]: { giris: { [`${S}loom-alarm-duty.service.ts::createHallShiftDutyOverride`]: "R" } },
+  [`${S}loom-alarm-duty.service.ts::createLoomAlarmTierRule`]: { giris: { [`${S}loom-alarm-duty.service.ts::createLoomAlarmTierRule`]: "R" } },
 
   // ── Tek yazar helper'ları ───────────────────────────────────────────────────
   [`${S}helpers/cash-ledger.helper.ts::applyCashTxTx`]: { helper: "kasa/banka satırı + bakiye tek yazarı" },
@@ -191,6 +195,9 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}warehouse-transfer.service.ts::transferReplay`]: ["fromWarehouseId", "toWarehouseId", "toplar"],
   [`${S}warp-beam-consume.service.ts::consumeReplay`]: ["beamId", "kind", "lengthM"],
   [`${S}helpers/loom-alarm-actor.helper.ts::actionReplay`]: ["alarmId", "kind", "userId", "detay"],
+  [`${S}loom-alarm-duty.service.ts::responsibleReplay`]: ["stationId", "shiftDefinitionId", "tier", "userId"],
+  [`${S}loom-alarm-duty.service.ts::overrideReplay`]: ["shiftInstanceId", "stationId", "tier", "userId"],
+  [`${S}loom-alarm-duty.service.ts::ruleReplay`]: ["tier", "kind", "userId", "permissionCode"],
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
   [`${S}license-acceptance.service.ts::replayFor`]: ["adSoyad", "unvan", "metinOzeti"],
   [`${S}update-approval.service.ts::replayFor`]: ["surum", "zamanlama", "onaylayan"],

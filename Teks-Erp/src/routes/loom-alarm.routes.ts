@@ -52,7 +52,7 @@ const userIdOf = (req: Request): string => {
 };
 
 const idList = z.union([z.string(), z.array(z.string())]).optional();
-const listSchema = z
+export const listSchema = z
   .object({
     scope: z.enum(LOOM_ALARM_SCOPES).default("active"),
     machineId: idList,
@@ -63,6 +63,8 @@ const listSchema = z
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}/, "Geçersiz bitiş tarihi").optional(),
     cursor: z.string().max(200).optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
+    /** Yalnız bana gelenler (A4) — yalnız `1|true`; başka değer 400. */
+    mine: z.enum(["1", "true"], { message: "mine yalnız 1 ya da true olabilir" }).optional(),
   })
   .strict();
 
@@ -75,6 +77,8 @@ const listSchema = z
  *     description: >
  *       `scope` active (varsayılan) · history · all; tanınmayan kapsam 400. Süzgeç: machineId · stationId (hol) ·
  *       reasonCode (CSV ya da tekrar) · tier · from/to (oluşma günü, fabrika saati). Özet şeridi cursor hariç aynı where'den.
+ *       `mine=1` yalnız bana gelenler: alarmın bir RAISED satırının donmuş alıcı listesinde ben, ya da izne göre
+ *       kipte (sorumlu tanımsız) K1 — K2 yalnız loom:alarm-escalation sahibine. `mine` başka değer → 400.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: "items · nextCursor · summary (total · open · acked · resolved · cancelled · escalated)" }
@@ -83,7 +87,9 @@ const listSchema = z
  */
 router.get("/", VIEW, async (req, res, next) => {
   try {
-    res.json({ success: true, data: await listLoomAlarms(listSchema.parse(req.query)) });
+    const { mine, ...q } = listSchema.parse(req.query);
+    const me = mine ? { userId: userIdOf(req), canEscalate: matchesPermission(req.user?.permissions ?? [], "loom:alarm-escalation") } : undefined;
+    res.json({ success: true, data: await listLoomAlarms({ ...q, ...(me ? { mine: me } : {}) }) });
   } catch (e) {
     next(e);
   }
@@ -97,7 +103,7 @@ router.get("/", VIEW, async (req, res, next) => {
  *     summary: Alarm sayfası — başlık, zaman çizgisi (defterden), bağlam, benzer duruşlar, son duruşlar
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "alarm · nextDueAt · timeline · context · similar · recentStops" }
+ *       200: { description: "alarm · nextDueAt · timeline (RAISED girdisinde recipientMode + recipients) · notifications [{tier, at, mode BY_PERMISSION|LISTED, recipients [{id, name, source}]}] · context · similar · recentStops" }
  *       404: { description: LOOM_ALARM_NOT_FOUND }
  */
 router.get("/:id", VIEW, async (req, res, next) => {
