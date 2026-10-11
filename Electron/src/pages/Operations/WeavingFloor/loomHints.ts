@@ -2,7 +2,7 @@
 // modeli çizer (`FloorHint`); metin burada bir kez kurulur ki simge ile ekran okuyucu ayrışmasın.
 import { formatFactory } from "@/lib/factory-time";
 import { STATE_SOURCE_HINT, STATE_SOURCE_LABEL, STATUS_LABEL, TIER_LABEL, statusOf } from "./palette";
-import { escalationTierOf, formatNumber, formatShortDuration, todayAvailabilityPct } from "./metrics";
+import { clockStartOf, escalationTierOf, formatNumber, formatShortDuration, todayAvailabilityPct } from "./metrics";
 import type { BeamState, LiveLoom, LossClass, OpenStop } from "./types";
 
 export type HintTone = "warn" | "danger";
@@ -39,7 +39,7 @@ function startText(startedAt: number, now: number): string {
 function targetLine(stop: OpenStop, now: number): HintLine {
   const tier = escalationTierOf(stop, now);
   if (stop.targetMin === null) return { label: "Hedef", value: "Yok — süre izlenmiyor" };
-  const over = now - stop.startedAt - stop.targetMin * MINUTE;
+  const over = now - clockStartOf(stop) - stop.targetMin * MINUTE;
   if (tier === "WITHIN") return { label: "Hedef", value: `${stop.targetMin} dk · ${formatShortDuration(-over)} kaldı` };
   const tone: HintTone = tier === "ESCALATED" ? "danger" : "warn";
   return { label: "Hedef", value: `${stop.targetMin} dk · ${formatShortDuration(over)} aşıldı`, tone };

@@ -70,6 +70,20 @@ describe("fromApi — alarm kademesi (ESCALATED) ve alarm bağlantısı", () => 
     expect(s.alarmId).toBeNull();
   });
 
+  it("⭐ vardiyaya taşan duruş: hedef saati sunucunun `clockStartedAt`inden, süre sayacı duruş başından", () => {
+    const clock = new Date(Date.parse(T0) + 60 * 60_000).toISOString();
+    const s = fromApi(dto([stop({ tier: "WITHIN", clockStartedAt: clock })])).looms[0]!.openStop!;
+    expect(s.startedAt).toBe(Date.parse(T0));
+    expect(s.clockStartedAt).toBe(Date.parse(clock));
+    expect(escalationTierOf(s, Date.parse(clock) + 9 * 60_000)).toBe("WITHIN");
+    expect(escalationTierOf(s, Date.parse(clock) + 10 * 60_000)).toBe("OVERDUE");
+  });
+
+  it("eski sunucu `clockStartedAt` göndermez → hedef saati duruş başından (bugünkü davranış)", () => {
+    const s = fromApi(dto([stop({})])).looms[0]!.openStop!;
+    expect(s.clockStartedAt).toBe(Date.parse(T0));
+  });
+
   it("K2 vadesi asOf'tan ileride görünse de (saat farkı) an asOf'u geçmez", () => {
     const s = fromApi(dto([stop({ tier: "ESCALATED", escalationDueAt: "2026-10-10T09:00:00.000Z" })])).looms[0]!.openStop!;
     expect(s.escalatedAt).toBe(Date.parse(AS_OF));

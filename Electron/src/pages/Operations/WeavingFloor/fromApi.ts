@@ -59,6 +59,7 @@ function openStopOf(l: WireLoom, labels: ReadonlyMap<string, string>, asOf: numb
     label: labelOf(s.reasonCode, labels, s.reasonLabel),
     lossClass: lossClassOf(s.lossClass),
     startedAt: ms(s.startedAt),
+    clockStartedAt: s.clockStartedAt ? ms(s.clockStartedAt) : ms(s.startedAt),
     targetMin: s.targetMinutes,
     graceMin: s.graceMinutes,
     attendant: null,

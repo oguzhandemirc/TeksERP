@@ -18,6 +18,7 @@ export type LoomStopClockTier = "UNTRACKED" | "WITHIN" | "OVERDUE";
 export type LoomStopTier = LoomStopClockTier | "ESCALATED";
 
 export interface StopClock {
+  /** Hedef saatinin başladığı an — duruşun başlangıcı DEĞİL, `alarmClockStart`tan (`stopClockOf`). */
   startedAt: Date;
   /** Etkin hedef (dk; `stopTargetMinutes`); NULL = süre izlenmez. */
   targetMinutes: number | null;
@@ -90,9 +91,56 @@ export function dueAlarmTiers(schedule: AlarmSchedule, rungTier: number, now: Da
   return { raise: due.filter((d) => d.at === latest).map((d) => d.tier), skip: due.filter((d) => d.at < latest).map((d) => d.tier) };
 }
 
-/** Vardiya dışı süzgeci: duruşu kapsayan vardiya yoksa ya da iptal edilmişse alarm doğmaz (tezgah planlı çalışmıyor). */
+/** Duruşun AÇILDIĞI vardiya canlı mı (yok / iptal → hayır). Tek başına alarm kararı değildir — `alarmClockStart`. */
 export function alarmShiftEligible(shift: { isCancelled: boolean } | null): boolean {
   return shift !== null && !shift.isCancelled;
+}
+
+/** Vardiya penceresi (`ShiftInstance`) — saat başlangıcı hesabının girdisi. */
+export interface ShiftWindow {
+  startsAt: Date;
+  endsAt: Date;
+  isCancelled: boolean;
+}
+
+export interface AlarmClockStart {
+  /** Hedef saatinin başladığı an. */
+  at: Date;
+  /** Alarm şu an DOĞABİLİR mi (canlı alarmın sürmesi bundan bağımsızdır). */
+  eligible: boolean;
+}
+
+/**
+ * Hedef saatinin başladığı an ve alarm uygunluğu — motor ile Tezgah Salonu AYNI fonksiyon.
+ * Canlı vardiyada açılan duruş: saat açılıştan, uygun (bugünkü davranış). Vardiya dışında açılıp bir
+ * vardiyaya TAŞAN duruş: saat taştığı ilk canlı vardiyanın başından (vardiya dışı süre hedefe sayılmaz),
+ * yalnız şu an canlı bir vardiya sürerken uygun. Hiç vardiyaya değmemişse saat açılıştan, uygun değil.
+ */
+export function alarmClockStart(
+  stop: { startedAt: Date; shiftInstance: { isCancelled: boolean } | null },
+  shifts: readonly ShiftWindow[],
+  now: Date,
+): AlarmClockStart {
+  if (alarmShiftEligible(stop.shiftInstance)) return { at: stop.startedAt, eligible: true };
+  const start = stop.startedAt.getTime();
+  const nowMs = now.getTime();
+  const live = shifts.filter((s) => !s.isCancelled);
+  const first = live
+    .filter((s) => s.endsAt.getTime() > start && s.startsAt.getTime() <= nowMs)
+    .reduce<ShiftWindow | null>((a, s) => (a === null || s.startsAt.getTime() < a.startsAt.getTime() ? s : a), null);
+  if (first === null) return { at: stop.startedAt, eligible: false };
+  const eligible = live.some((s) => s.startsAt.getTime() <= nowMs && s.endsAt.getTime() > nowMs);
+  return { at: new Date(Math.max(start, first.startsAt.getTime())), eligible };
+}
+
+/** Duruşun hedef saati — StopClock'un TEK kurucusu (saat başlangıcı `alarmClockStart`tan). */
+export function stopClockOf(
+  stop: { lossClass: MachineStopLossClass | null },
+  start: AlarmClockStart,
+  targetMinutes: number | null,
+  graceMinutes: number,
+): StopClock {
+  return { startedAt: start.at, targetMinutes, graceMinutes, lossClass: stop.lossClass };
 }
 
 /** Ekran kademesi: canlı alarm varsa çaldığı kademe saatin önüne geçer (çalmış kademe "ne oldu"dur). */

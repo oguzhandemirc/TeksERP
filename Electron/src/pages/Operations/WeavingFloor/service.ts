@@ -29,6 +29,8 @@ export interface WireOpenStop {
   reasonLabel: string | null;
   lossClass: WireLossClass | null;
   startedAt: string;
+  /** Hedef saatinin başladığı an (alarm motoruyla aynı; vardiyaya taşan duruşta vardiya başı); eski sunucuda yok. */
+  clockStartedAt?: string;
   targetMinutes: number | null;
   graceMinutes: number;
   /** `ESCALATED` = canlı alarmın üst kademesi çaldı (alarm bayrağı açıkken). Tanınmayan değer yok sayılır. */

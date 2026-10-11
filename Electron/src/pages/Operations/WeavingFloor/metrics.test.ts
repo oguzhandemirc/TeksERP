@@ -124,3 +124,14 @@ describe("shouldEscalate — patrona iletim (hedef + pay)", () => {
     expect(shouldEscalate(stop("TEZGAH_KAPALI"), T0 + 600 * MIN)).toBe(false);
   });
 });
+
+describe("hedef saati başlangıcı (clockStartedAt)", () => {
+  it("⭐ hedef/ilerleme/iletim anı saat başlangıcından; yoksa duruş başından", () => {
+    const s = stop("ATKI_KOPUSU", { targetMin: 10, graceMin: 5, clockStartedAt: T0 + 60 * MIN });
+    expect(escalationTierOf(s, T0 + 69 * MIN)).toBe("WITHIN");
+    expect(escalationTierOf(s, T0 + 70 * MIN)).toBe("OVERDUE");
+    expect(targetProgress(s, T0 + 65 * MIN)).toBeCloseTo(0.5);
+    expect(escalationDueAt(s)).toBe(T0 + 75 * MIN);
+    expect(escalationDueAt({ ...s, clockStartedAt: undefined })).toBe(T0 + 15 * MIN);
+  });
+});

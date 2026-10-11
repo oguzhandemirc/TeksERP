@@ -35,11 +35,14 @@ export function formatShortDuration(ms: number): string {
 export type EscalationTier = "UNTRACKED" | "WITHIN" | "OVERDUE" | "ESCALATED";
 
 /** Hedef ve pay DURUŞA DONMUŞ değerlerdir (sunucu açılış/sebep kararında yazar) — katalogdan okunmaz. */
+/** Hedef saatinin başlangıcı — süre (sayaç) değil, hedef/iletim hesabı buradan işler. */
+export const clockStartOf = (stop: OpenStop): number => stop.clockStartedAt ?? stop.startedAt;
+
 export function escalationTierOf(stop: OpenStop, now: number): EscalationTier {
   const target = stop.targetMin;
   if (target === null) return "UNTRACKED";
   if (stop.escalatedAt !== null && stop.escalatedAt <= now) return "ESCALATED";
-  return now - stop.startedAt >= target * MINUTE ? "OVERDUE" : "WITHIN";
+  return now - clockStartOf(stop) >= target * MINUTE ? "OVERDUE" : "WITHIN";
 }
 
 export const isPastTarget = (tier: EscalationTier): boolean => tier === "OVERDUE" || tier === "ESCALATED";
@@ -48,13 +51,13 @@ export const isPastTarget = (tier: EscalationTier): boolean => tier === "OVERDUE
 export function targetProgress(stop: OpenStop, now: number): number {
   const target = stop.targetMin;
   if (!target) return 0;
-  return Math.min(1, Math.max(0, (now - stop.startedAt) / (target * MINUTE)));
+  return Math.min(1, Math.max(0, (now - clockStartOf(stop)) / (target * MINUTE)));
 }
 
 /** Patrona iletimin olması gereken an (hedef + pay); süre izlenmeyen duruşta null. */
 export function escalationDueAt(stop: OpenStop, graceMin = stop.graceMin): number | null {
   const target = stop.targetMin;
-  return target === null ? null : stop.startedAt + (target + graceMin) * MINUTE;
+  return target === null ? null : clockStartOf(stop) + (target + graceMin) * MINUTE;
 }
 
 /** Patrona iletimin zamanı geldi mi (hedef + pay) ve henüz iletilmedi mi. */

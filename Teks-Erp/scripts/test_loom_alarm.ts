@@ -3,16 +3,20 @@
 // =============================================================================
 //   §1 saf: `dueAlarmTiers` (geç kayıt → yalnız vadesi EN GEÇ kademe çalar, daha önce geçmiş alttakiler
 //      atlanır; vadesi EŞİT kademeler — pay 0 — ikisi de çalar) ·
-//      `alarmShiftEligible` (vardiya yok / iptal → doğmaz)
+//      `alarmShiftEligible` (vardiya yok / iptal → doğmaz) · `alarmClockStart` (saat başlangıcı + uygunluk)
 //   §2 bayrak KAPALI (`tezgah.alarmEnabled` ya da `tezgah.enabled`) → tur "disabled", SIFIR satır
 //      (fikstür + tablonun tamamı) · bekçi sürecinde dürtme no-op (motoru yalnız sunucu koşar)
 //   §3 doğuş: K1 vadesinde RAISED(1), plan DONAR · geç kayıt RAISED(2) + TIER_SKIPPED(1), K1 çalmaz ·
-//      vardiya dışı doğmaz · plan dışı doğmaz · sebepsiz duruş ortak hedefle doğar · pay 0 → RAISED(1)+RAISED(2)
+//      vardiya yokken doğmaz · plan dışı doğmaz · sebepsiz duruş ortak hedefle doğar · pay 0 → RAISED(1)+RAISED(2) ·
+//      VARDİYAYA TAŞAN duruş (vardiya dışında açıldı, vardiya başladı, hâlâ açık) DOĞAR — saat vardiya başından,
+//      Tezgah Salonu aynı saati gösterir, duruşun kendi kaydı değişmez · vardiya içinde açılıp sonraki vardiyaya
+//      geçen duruşun saati açılıştan (bugünkü davranış) · vardiya bitince canlı alarm sürer
 //   §4 kademe: K2 vadesinde RAISED(2) · aynı anla ikinci tur ÇİFT KADEME yazmaz ·
 //      `escalateWhenAcked` kapalı → üstlenilmiş alarm K2'de bekler, açılınca çalar
 //   §5 yeniden plan: sebep değişince çalmamış K2 yeni hedeften · plan dışına sınıflama → CANCELLED
 //   §6 kapanış: duruş kapanınca RESOLVED + süreler DONAR · geri alınınca CANCELLED STOP_REVOKED ·
 //      kapanmış alarm bir daha işlenmez
+//   §8 tek saat: StopClock yalnız `stopClockOf`la kurulur, `alarmShiftEligible` yalnız helper'da çağrılır (AST)
 //   §7 yabancı motor: aynı DB'de gerçek saatle koşan sunucu zamanlayıcısı (CI'da beş HTTP sunucusu) fikstüre
 //      DOKUNAMAZ — global alarm bayrağı §2'den sonra KAPALI kalır, bekçinin turları kapıyı `enabled` ile geçer;
 //      üretim çağıranı `enabled` vermez. Çıpa (`simdi`) duvar saatinden türer ama sonuç ona bağlı değildir:
@@ -35,16 +39,22 @@
 //   ⑨ §2 sonrası global bayrak AÇIK bırakıldı (eski fikstür) → yabancı turlar §3b–§6h + §7a (11) ❌; eski bekçiye
 //      classify↔reclassify arasına TEK yabancı tur → §5a/§5b/§5d/§6h (37/4, CI 38110738522 imzasının aynısı)
 //   ⑩ `runLoomAlarmOnce` `opts.enabled`i yok saydı → §3a'dan itibaren tur 'disabled' ❌
+//   VARDİYAYA TAŞMA (2026-10-11): ⑪ `birthTx` eski süzgece döndü (`alarmShiftEligible(stop.shiftInstance)`) →
+//   §3k/§3m/§3p ❌ · ⑫ `alarmClockStart` taşan duruşta saati açılıştan başlattı → §1j/§1n/§1o/§3j/§3k/§3m/§3n ❌ ·
+//   ⑬ Salon kendi saatini kurdu (`startedAt: s.startedAt`) → §3n/§8a ❌ · ⑭ vardiyada açılan duruşun saati de şu
+//   anki vardiyanın başından (max(açılış, vardiya başı)) → §1m ❌
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
+import * as ts from "typescript";
 import { LoomAlarmEventKind, LoomAlarmState, MachineStopLossClass, ReasonPresetKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { ReasonPresetService } from "../src/services/reason-preset.service";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../src/services/machine-stop.service";
 import { runLoomAlarmOnce, type LoomAlarmTickOutcome, type LoomAlarmTickSummary } from "../src/services/loom-alarm.service";
-import { alarmShiftEligible, dueAlarmTiers } from "../src/services/helpers/loom-floor.helper";
+import { alarmClockStart, alarmShiftEligible, dueAlarmTiers } from "../src/services/helpers/loom-floor.helper";
+import { getLoomFloor } from "../src/services/loom-floor.service";
 
 let pass = 0;
 let fail = 0;
@@ -59,7 +69,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 const MIN = 60_000;
 const ek = Date.now().toString(36);
-const ids = { station: "", looms: [] as string[], presets: [] as string[], shiftDef: "", shift: "", user: "" };
+const ids = { station: "", looms: [] as string[], presets: [] as string[], shiftDef: "", shifts: [] as string[], user: "" };
 
 const YONETILEN = [
   SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.TEZGAH_ENABLED, SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES,
@@ -143,6 +153,24 @@ async function govde(): Promise<void> {
   check("§1i pay 0, geç kayıt: yine ikisi de çalar (eşit vade sağanak değil)", e0(40) === JSON.stringify({ raise: [1, 2], skip: [] }), e0(40));
   check("§1g vardiya süzgeci: yok/iptal → doğmaz, canlı → doğar",
     !alarmShiftEligible(null) && !alarmShiftEligible({ isCancelled: true }) && alarmShiftEligible({ isCancelled: false }));
+  // Saat başlangıcı: vardiya [t0, t0+8sa]; duruş t0-10sa'te vardiya dışında açıldı.
+  const v = (bas: number, bit: number, isCancelled = false) => ({ startsAt: new Date(t0.getTime() + bas * MIN), endsAt: new Date(t0.getTime() + bit * MIN), isCancelled });
+  const cs = (bas: number, own: { isCancelled: boolean } | null, shifts: ReturnType<typeof v>[], an: number) => {
+    const r = alarmClockStart({ startedAt: new Date(t0.getTime() + bas * MIN), shiftInstance: own }, shifts, new Date(t0.getTime() + an * MIN));
+    return `${(r.at.getTime() - t0.getTime()) / MIN}/${r.eligible}`;
+  };
+  check("§1j vardiyaya TAŞAN duruş: saat vardiya başından, uygun", cs(-600, null, [v(0, 480)], 30) === "0/true", cs(-600, null, [v(0, 480)], 30));
+  check("§1k vardiyada açılan duruş: saat açılıştan, uygun (bugünkü davranış)", cs(10, { isCancelled: false }, [v(0, 480)], 30) === "10/true", cs(10, { isCancelled: false }, [v(0, 480)], 30));
+  check("§1l hiç vardiyaya değmemiş duruş: saat açılıştan, UYGUN DEĞİL", cs(-600, null, [], 30) === "-600/false" && cs(-600, null, [v(60, 480)], 30) === "-600/false", cs(-600, null, [v(60, 480)], 30));
+  check("§1m vardiyada açılıp sonraki vardiyaya geçen duruş: saat açılıştan (yeni vardiya başından DEĞİL)",
+    cs(470, { isCancelled: false }, [v(0, 480), v(480, 960)], 500) === "470/true", cs(470, { isCancelled: false }, [v(0, 480), v(480, 960)], 500));
+  check("§1n taştığı vardiya bitti, şimdi vardiya yok: saat taştığı vardiyanın başından, doğuşa uygun DEĞİL",
+    cs(-600, null, [v(0, 480)], 500) === "0/false", cs(-600, null, [v(0, 480)], 500));
+  check("§1o iptal edilmiş vardiya sayılmaz: açıldığı vardiya iptal, sonraki canlı vardiyanın başından",
+    cs(-30, { isCancelled: true }, [v(-60, 0, true), v(0, 480)], 30) === "0/true" && cs(-30, { isCancelled: true }, [v(-60, 0, true)], -10) === "-30/false",
+    cs(-30, { isCancelled: true }, [v(-60, 0, true), v(0, 480)], 30));
+  check("§1p vardiya SONRADAN yaratıldı (duruşta vardiya bağı yok, an vardiyanın içinde): saat açılıştan, uygun",
+    cs(30, null, [v(0, 480)], 60) === "30/true", cs(30, null, [v(0, 480)], 60));
 
   // ── fikstür ────────────────────────────────────────────────────────────────
   await ayarYaz(SETTING_KEYS.PRODUCTION_ENABLED, true);
@@ -163,7 +191,12 @@ async function govde(): Promise<void> {
   });
   ids.shiftDef = def.id;
   const shift = await prisma.shiftInstance.create({ data: { shiftDefinitionId: def.id, factoryDayKey: new Date("1999-01-01T00:00:00Z"), startsAt: at(-180), endsAt: at(60) } });
-  ids.shift = shift.id;
+  ids.shifts.push(shift.id);
+  // Ardışık ikinci vardiya: vardiyada açılıp sonrakine geçen duruşun saati açılıştan kalır (J).
+  const shift2 = await prisma.shiftInstance.create({ data: { shiftDefinitionId: def.id, factoryDayKey: new Date("1999-01-02T00:00:00Z"), startsAt: at(60), endsAt: at(300) } });
+  ids.shifts.push(shift2.id);
+  const yabanciVardiya = await prisma.shiftInstance.count({ where: { id: { notIn: ids.shifts }, isCancelled: false, startsAt: { lt: at(320) }, endsAt: { gt: at(-250) } } });
+  check("§0b ortam: fikstür vardiyalarının çevresinde (−250 dk … +320 dk) yabancı canlı vardiya YOK", yabanciVardiya === 0, String(yabanciVardiya));
 
   const station = await prisma.station.create({
     data: { name: `TEST-LA-HOL-${ek}`, code: `TEST-LA-H-${ek}`.toUpperCase().slice(0, 32), type: "INTERNAL", kind: "WEAVING", isActive: true },
@@ -195,8 +228,12 @@ async function govde(): Promise<void> {
   await ayarYaz(SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES, 0);
   const H = await ac(8, 12, P.code);
   await ayarYaz(SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES, 5);
+  // J: vardiya bitmeden 5 dk önce açıldı (hedef 20 → K1 +75), ikinci vardiyaya geçer.
+  const J = (await openManualStop({ machineId: await tezgah(9), startedAt: at(55), reasonCode: Q.code })).data;
   check("§0a fikstür: vardiya içi duruşlar vardiyaya bağlı, C vardiya dışı",
-    [A, B, D, E, F, G, H].every((s) => s.shiftInstanceId === shift.id) && C.shiftInstanceId === null);
+    [A, B, D, E, F, G, H, J].every((s) => s.shiftInstanceId === shift.id) && C.shiftInstanceId === null);
+  const cKayit = async () => JSON.stringify(await prisma.machineStopEvent.findUnique({ where: { id: C.id }, select: { shiftInstanceId: true, factoryDay: true, startedAt: true, targetMinutes: true } }));
+  const cOnce = await cKayit();
 
   // ── §2 bayrak kapalı ───────────────────────────────────────────────────────
   const toplamOnce = await prisma.loomAlarm.count();
@@ -216,6 +253,24 @@ async function govde(): Promise<void> {
   await yabanciTur("§2 sonu");
 
   // ── §3 doğuş ───────────────────────────────────────────────────────────────
+  // C vardiya dışında açıldı (−240), vardiya −180'de başladı, duruş hâlâ açık. Hedef 10, pay 5.
+  const salonC = async (an: Date) => (await getLoomFloor(an)).data?.looms.find((l) => l.id === C.machineId)?.openStop ?? null;
+  ozet(await tur(at(-185), [C.machineId]));
+  check("§3f vardiya yokken (duruş vardiya dışında, şu an vardiya yok) alarm doğmaz", (await alarmOf(C.id)) === null);
+  ozet(await tur(at(-171), [C.machineId]));
+  check("§3j vardiyaya taşan duruş: açılıştan 69 dk geçti ama vardiya başından 9 dk → henüz doğmaz (saat vardiya başından)", (await alarmOf(C.id)) === null);
+  const sc1 = await salonC(at(-171));
+  check("§3n Tezgah Salonu AYNI saat: taşan duruş hedef içinde (WITHIN), saat vardiya başından, iletim anı vardiya başı + 15",
+    sc1?.tier === "WITHIN" && sc1.clockStartedAt.getTime() === at(-180).getTime() && sc1.escalationDueAt?.getTime() === at(-165).getTime() && sc1.startedAt.getTime() === at(-240).getTime(),
+    JSON.stringify(sc1 && { tier: sc1.tier, clock: sc1.clockStartedAt, due: sc1.escalationDueAt }));
+  ozet(await tur(at(-170), [C.machineId]));
+  const c1 = await alarmOf(C.id);
+  check("§3k vardiyaya taşan duruş: K1 vardiya başı + hedefte DOĞDU (RAISED1), plan vardiya başından donar",
+    c1?.state === LoomAlarmState.OPEN && c1.tier === 1 && olaylar(c1) === "RAISED1" && c1.k1DueAt.getTime() === at(-170).getTime() && c1.k2DueAt?.getTime() === at(-165).getTime(),
+    `${olaylar(c1)} k1=${c1?.k1DueAt.toISOString()} beklenen ${at(-170).toISOString()}`);
+  check("§3l duruşun kendi kaydı DEĞİŞMEDİ (vardiya bağı boş · fabrika günü · başlangıç · hedef)", (await cKayit()) === cOnce, await cKayit());
+  const sc2 = await salonC(at(-170));
+  check("§3n2 Tezgah Salonu aynı anda hedef aşıldı (OVERDUE) gösterir", sc2?.tier === "OVERDUE", sc2?.tier ?? "yok");
   const r1 = ozet(await tur(simdi));
   check("§3a ilk tur hatasız", r1.failed === 0, JSON.stringify(r1));
   const a = await alarmOf(A.id);
@@ -225,7 +280,8 @@ async function govde(): Promise<void> {
   const b = await alarmOf(B.id);
   check("§3d B geç kayıt: yalnız EN YÜKSEK kademe çaldı (RAISED2), K1 atlandı", b?.tier === 2 && olaylar(b) === "TIER_SKIPPED1,RAISED2", olaylar(b));
   check("§3e B: K1 için RAISED satırı YOK (sağanak yok)", (b?.events ?? []).filter((e) => e.kind === LoomAlarmEventKind.RAISED).length === 1);
-  check("§3f C vardiya dışı → alarm doğmadı", (await alarmOf(C.id)) === null);
+  const c2 = await alarmOf(C.id);
+  check("§3m taşan duruşun alarmı vardiyada kademe atladı (K2 vadesi geçti → RAISED2)", c2?.tier === 2 && olaylar(c2) === "RAISED1,RAISED2", olaylar(c2));
   const h = await alarmOf(H.id);
   check("§3i H pay 0: K1 ve K2 AYNI anda çaldı — ikisi de RAISED, TIER_SKIPPED YOK, kademe 2",
     h?.tier === 2 && h.graceMinutes === 0 && olaylar(h) === "RAISED1,RAISED2", olaylar(h));
@@ -293,6 +349,27 @@ async function govde(): Promise<void> {
   check("§6h son tur yalnız canlı alarmlara kademe yazdı (E K2 +10, G zaten 2)",
     (await prisma.loomAlarmEvent.count({ where: { alarm: { machineId: { in: ids.looms } } } })) === kapaliSayi + r7.raised + r7.skipped && r7.raised === 1);
 
+  // J: vardiyada açıldı (+55), ikinci vardiya +60'ta başladı. Saat açılıştan: K1 = +75 (yeni vardiya başından olsaydı +80).
+  ozet(await tur(at(76), [J.machineId]));
+  const j = await alarmOf(J.id);
+  check("§3o vardiyada açılıp sonraki vardiyaya geçen duruş: saat AÇILIŞTAN (K1 = açılış + 20), bugünkü davranış",
+    j?.tier === 1 && j.k1DueAt.getTime() === at(75).getTime() && olaylar(j) === "RAISED1", `${olaylar(j)} k1=${j?.k1DueAt.toISOString()}`);
+  // Vardiyalar bitti (+300 sonrası vardiya yok): canlı alarm duruş kapanana dek sürer.
+  ozet(await tur(at(330), [C.machineId, J.machineId]));
+  const cSon = await alarmOf(C.id);
+  const jSon = await alarmOf(J.id);
+  check("§3p vardiya bitince canlı alarm KAPANMAZ (kapanış yalnız duruşun kapanması / geri alınması / plan dışı)",
+    cSon?.state === LoomAlarmState.OPEN && jSon?.state === LoomAlarmState.OPEN && jSon.tier === 2, `${cSon?.state}/${jSon?.state}/${jSon?.tier}`);
+
+  // ── §8 tek saat (AST) ──────────────────────────────────────────────────────
+  const ihlal = tekSaatIhlalleri(path.join(__dirname, "..", "src"));
+  check("§8a StopClock yalnız `stopClockOf`la kurulur, `alarmShiftEligible` yalnız helper'da çağrılır", ihlal.length === 0, ihlal.join(" · "));
+  const sondaSaat = tekSaatKaynak("const clock = { startedAt: s.startedAt, targetMinutes: t, graceMinutes: g, lossClass: s.lossClass };", "sonda.ts");
+  const sondaSuzgec = tekSaatKaynak("if (!alarmShiftEligible(stop.shiftInstance)) return;", "sonda.ts");
+  check("§8b sonda: elle kurulan saat ve doğrudan vardiya süzgeci yakalanır; `stopClockOf` çağrısı yakalanmaz",
+    sondaSaat.length === 1 && sondaSuzgec.length === 1 && tekSaatKaynak("const c = stopClockOf(s, alarmClockStart(s, sh, now), t, g);", "sonda.ts").length === 0,
+    `${sondaSaat.length}/${sondaSuzgec.length}`);
+
   // ── §7 yabancı motor ───────────────────────────────────────────────────────
   check("§7a gerçek saatli yabancı tur (sunucu zamanlayıcısı) her noktada 'disabled' — fikstüre dokunamadı",
     yabanciSonuclar.length === 3 && yabanciSonuclar.every((x) => x.endsWith(":disabled")), yabanciSonuclar.join(" · "));
@@ -300,6 +377,31 @@ async function govde(): Promise<void> {
   check("§7b üretim kaynağı `runLoomAlarmOnce`a `enabled` geçmez (kapı yalnız bayraktan)", enjekte.length === 0, enjekte.join(" · "));
   check("§7c sonda: `enabled` geçen çağrı yakalanır, argümansız çağrı yakalanmaz",
     enabledEnjeksiyonu("void runLoomAlarmOnce({ enabled: true })") === 1 && enabledEnjeksiyonu("void runLoomAlarmOnce()") === 0);
+}
+
+/** Saat helper'larının dışında: StopClock biçimli nesne (anahtarları yalnız saat alanları, startedAt + targetMinutes dahil) ya da doğrudan vardiya süzgeci. */
+const SAAT_HELPERLARI = new Set(["services/helpers/loom-floor.helper.ts", "services/helpers/loom-alarm-shift.helper.ts"]);
+function tekSaatKaynak(kaynak: string, ad: string): string[] {
+  const sf = ts.createSourceFile(ad, kaynak, ts.ScriptTarget.Latest, true);
+  const out: string[] = [];
+  const yer = (n: ts.Node) => `${ad}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`;
+  const visit = (n: ts.Node): void => {
+    if (ts.isObjectLiteralExpression(n)) {
+      const adlar = new Set(n.properties.map((p) => (p.name && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) ? p.name.text : "")));
+      const saatAnahtari = (k: string) => k === "startedAt" || k === "targetMinutes" || k === "graceMinutes" || k === "lossClass";
+      if (adlar.has("startedAt") && adlar.has("targetMinutes") && [...adlar].every(saatAnahtari)) out.push(yer(n));
+    }
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "alarmShiftEligible") out.push(yer(n));
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+function tekSaatIhlalleri(kok: string): string[] {
+  return tsDosyalari(kok)
+    .map((f) => ({ f, rel: path.relative(kok, f).split(path.sep).join("/") }))
+    .filter(({ rel }) => !SAAT_HELPERLARI.has(rel))
+    .flatMap(({ f, rel }) => tekSaatKaynak(fs.readFileSync(f, "utf8"), rel));
 }
 
 async function cleanup(): Promise<void> {
@@ -317,7 +419,7 @@ async function cleanup(): Promise<void> {
     }
     if (ids.presets.length) await prisma.reasonPreset.deleteMany({ where: { id: { in: ids.presets } } });
     if (ids.station) await prisma.station.deleteMany({ where: { id: ids.station } });
-    if (ids.shift) await prisma.shiftInstance.deleteMany({ where: { id: ids.shift } });
+    if (ids.shifts.length) await prisma.shiftInstance.deleteMany({ where: { id: { in: ids.shifts } } });
     if (ids.shiftDef) await prisma.shiftDefinition.deleteMany({ where: { id: ids.shiftDef } });
     if (ids.user) await prisma.user.deleteMany({ where: { id: ids.user } });
   } catch (err) {

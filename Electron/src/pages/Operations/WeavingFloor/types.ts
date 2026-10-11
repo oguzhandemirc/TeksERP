@@ -25,6 +25,8 @@ export interface OpenStop {
   /** null = sebep bekleniyor (ekran plansız duruş gibi çizer). */
   lossClass: LossClass | null;
   startedAt: number;
+  /** Hedef saatinin başladığı an (sunucudan; vardiyaya taşan duruşta vardiya başı). Yoksa `startedAt`. */
+  clockStartedAt?: number;
   /** Duruşa DONMUŞ hedef süre (dk); null = süre izlenmez. */
   targetMin: number | null;
   /** Duruşa DONMUŞ iletim payı (dk) — hedef aşıldıktan sonra patrona iletime kadar. */

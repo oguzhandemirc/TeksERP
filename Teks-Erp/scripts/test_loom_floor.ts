@@ -253,7 +253,7 @@ async function govde(): Promise<void> {
   const t = (id: string) => d.looms.find((l) => l.id === id)!;
   const l1 = t(duran);
   check("§5c tezgah şekli", !!l1 && anahtar(l1) === "beams,code,hallId,hallName,id,job,monitoringState,name,openStop,recentStops,source,state,stateSource,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
-  check("§5d openStop şekli", !!l1?.openStop && anahtar(l1.openStop) === "alarmId,escalationDueAt,graceMinutes,id,lossClass,reasonCode,reasonLabel,requiresReason,source,startedAt,targetMinutes,tier", l1?.openStop ? anahtar(l1.openStop) : "yok");
+  check("§5d openStop şekli", !!l1?.openStop && anahtar(l1.openStop) === "alarmId,clockStartedAt,escalationDueAt,graceMinutes,id,lossClass,reasonCode,reasonLabel,requiresReason,source,startedAt,targetMinutes,tier", l1?.openStop ? anahtar(l1.openStop) : "yok");
   check("§5e LIVE + açık duruş → STOPPED, açık duruş Z, kaynak ölçülen", l1?.state === "STOPPED" && l1.openStop?.id === Z.data.id && l1.stateSource === "olculen");
   check("§5f kademe DONMUŞ hedeften: 30 dk ≥ 10 → OVERDUE (katalog 45 olsa WITHIN olurdu) · iletim anı +10+7",
     l1?.openStop?.tier === "OVERDUE" && l1.openStop.graceMinutes === 7 && l1.openStop.escalationDueAt?.getTime() === Z.data.startedAt.getTime() + 17 * MIN,

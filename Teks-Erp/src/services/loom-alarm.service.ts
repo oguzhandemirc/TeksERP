@@ -10,7 +10,7 @@
 //               `tezgah.alarm.escalateWhenAcked` kapalıysa durdurur (varsayılan AÇIK).
 //   • YENİDEN PLAN — duruşun sebebi değişince yalnız ÇALMAMIŞ kademenin vadesi.
 //   • KAPANIŞ — duruş kapanınca RESOLVED (süreler DONAR); geri alınınca / plan dışına
-//               sınıflanınca CANCELLED.
+//               sınıflanınca CANCELLED. Vardiyanın bitmesi/iptali canlı alarmı kapatmaz.
 // Vade hesabı TEK kaynaktan: `helpers/loom-floor.helper` (Tezgah Salonu ile aynı fonksiyonlar).
 // Tekillik sedle: alarm `stopEventId` unique, kademe partial unique — iki eşzamanlı tur tek
 // satır bırakır (ON CONFLICT DO NOTHING); advisory kilit YOK (MachineRun emsali).
@@ -22,7 +22,8 @@ import prisma from "../lib/prisma";
 import { LOOM_MACHINE_WHERE } from "../constants/loom-shift";
 import { readDbNow } from "./helpers/machine-run-open.helper";
 import { loomAlarmEventStampTx } from "./helpers/ledger-stamp.helper";
-import { alarmScheduleOf, alarmShiftEligible, dueAlarmTiers, stopTargetMinutes, type AlarmTier, type StopClock } from "./helpers/loom-floor.helper";
+import { alarmClockStart, alarmScheduleOf, dueAlarmTiers, stopClockOf, stopTargetMinutes, type AlarmTier, type ShiftWindow, type StopClock } from "./helpers/loom-floor.helper";
+import { clockShiftsFrom, loadClockShiftWindows } from "./helpers/loom-alarm-shift.helper";
 import { readTezgahAlarmEscalateWhenAcked, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled } from "./system-setting.service";
 import { hata } from "../lib/logger";
 import { AuditService } from "./audit.service";
@@ -70,6 +71,8 @@ interface TickCtx {
   grace: number;
   unclassified: number | null;
   escalateWhenAcked: boolean;
+  /** Açık duruşların saat başlangıcı için canlı vardiya pencereleri (tur başında bir kez). */
+  shifts: ShiftWindow[];
   sum: LoomAlarmTickSummary;
 }
 
@@ -100,16 +103,19 @@ async function writeTierEventsTx(tx: Tx, alarmId: string, due: { raise: AlarmTie
 /** Turda çalan en yüksek kademe (`raise` artan sıralı). */
 const topTier = (raise: AlarmTier[]): AlarmTier => raise[raise.length - 1]!;
 
-function clockOf(stop: StopRow, targetMinutes: number | null, graceMinutes: number): StopClock {
-  return { startedAt: stop.startedAt, targetMinutes, graceMinutes, lossClass: stop.lossClass };
+function clockOf(stop: StopRow, targetMinutes: number | null, graceMinutes: number, ctx: TickCtx): StopClock {
+  return stopClockOf(stop, alarmClockStart(stop, ctx.shifts, ctx.now), targetMinutes, graceMinutes);
 }
 
-/** Açık duruş, alarmı yok: K1 vadesi geçtiyse alarm DOĞAR (plan donar), vadesi geçen en yüksek kademe çalar. */
+/**
+ * Açık duruş, alarmı yok: K1 vadesi geçtiyse alarm DOĞAR (plan donar), vadesi geçen en yüksek kademe çalar.
+ * Doğuş yalnız `alarmClockStart().eligible` iken (vardiya dışında açılıp vardiyaya taşan duruş da dahil).
+ */
 async function birthTx(tx: Tx, stop: StopRow, ctx: TickCtx): Promise<void> {
-  if (!alarmShiftEligible(stop.shiftInstance)) return;
+  if (!alarmClockStart(stop, ctx.shifts, ctx.now).eligible) return;
   const targetMinutes = stopTargetMinutes(stop, ctx.unclassified);
   const graceMinutes = stop.escalationGraceMinutes ?? ctx.grace;
-  const schedule = alarmScheduleOf(clockOf(stop, targetMinutes, graceMinutes));
+  const schedule = alarmScheduleOf(clockOf(stop, targetMinutes, graceMinutes, ctx));
   if (schedule === null) return;
   const due = dueAlarmTiers(schedule, 0, ctx.now);
   if (due.raise.length === 0) return;
@@ -130,7 +136,7 @@ async function advanceTx(tx: Tx, stop: StopRow, alarm: AlarmRow, ctx: TickCtx): 
   let k2DueAt = alarm.k2DueAt;
   if (stop.reasonCode !== alarm.planReasonCode) {
     const targetMinutes = stopTargetMinutes(stop, ctx.unclassified);
-    if (alarm.tier < 2) k2DueAt = alarmScheduleOf(clockOf(stop, targetMinutes, alarm.graceMinutes))?.k2DueAt ?? null;
+    if (alarm.tier < 2) k2DueAt = alarmScheduleOf(clockOf(stop, targetMinutes, alarm.graceMinutes, ctx))?.k2DueAt ?? null;
     const re = await tx.loomAlarm.updateMany({
       where: { id: alarm.id, planReasonCode: alarm.planReasonCode, state: { in: ACTIVE_ALARM_STATES } },
       data: { planReasonCode: stop.reasonCode, targetMinutes, k2DueAt },
@@ -183,6 +189,7 @@ export async function runLoomAlarmOnce(opts: LoomAlarmRunOptions = {}): Promise<
     grace: await readTezgahEscalationGraceMinutes(),
     unclassified: await readTezgahAlarmUnclassifiedTargetMinutes(),
     escalateWhenAcked: await readTezgahAlarmEscalateWhenAcked(),
+    shifts: [],
     sum: { scanned: 0, raised: 0, skipped: 0, replanned: 0, resolved: 0, cancelled: 0, failed: 0 },
   };
   const sum = ctx.sum;
@@ -202,6 +209,7 @@ export async function runLoomAlarmOnce(opts: LoomAlarmRunOptions = {}): Promise<
     select: { ...STOP_SELECT, alarm: { select: ALARM_SELECT } },
     orderBy: { startedAt: "asc" },
   });
+  ctx.shifts = await loadClockShiftWindows(prisma, clockShiftsFrom(open), ctx.now);
 
   for (const a of closing) {
     sum.scanned += 1;
