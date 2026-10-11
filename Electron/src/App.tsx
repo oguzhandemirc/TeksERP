@@ -24,6 +24,7 @@ import { loadScanSeries } from "@/lib/scanner/barcode-kind";
 import { DEFAULT_STALE_MS, applyQueryFreshness } from "@/lib/query-freshness";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useFactoryTimezone } from "@/lib/factory-time-react";
+import { isTvWindowHash } from "@shared/tv-window";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -139,6 +140,8 @@ function Root() {
   // fabrikada oturum açıkken) `AppShell` çizilir ve `#/2fa-kurulum` hiçbir
   // içerik rotasına uymadığı için BOŞ SAYFA görünürdü — hata yok, log yok.
   const onEnrollPath = hashPath === TOTP_ENROLL_PATH;
+  // Ayrı salon TV penceresi kurulum tetiği taşımaz: güncellemeyi ana pencere kurar (iki geri sayım olmasın).
+  const tvPenceresi = isTvWindowHash(window.location.hash);
   const oturumDisi = onEnrollPath || !user || !canEnterApp(user.permissions) || licenseSuspended;
   let kabuk;
   if (oturumDisi) {
@@ -158,7 +161,7 @@ function Root() {
       <Fragment key={factoryTimezone}>{kabuk}</Fragment>
       {!oturumDisi && <LicenseLockGate />}
       {!oturumDisi && <FactoryTimezoneLoader />}
-      <UpdateGate girisEkrani={oturumDisi} />
+      {!tvPenceresi && <UpdateGate girisEkrani={oturumDisi} />}
     </>
   );
 }

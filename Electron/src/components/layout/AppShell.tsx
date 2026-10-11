@@ -24,6 +24,7 @@ import { useMachineConfig } from "@/hooks/useMachineConfig";
 import { useHashPath } from "@/lib/use-hash-path";
 import { TEZGAH_TV_PATH } from "@/pages/Operations/WeavingFloor/tv-entry";
 import { WeavingFloorTvScreen } from "@/pages/Operations/WeavingFloor/WeavingFloorTvScreen";
+import { useTvRestore } from "@/pages/Operations/WeavingFloor/useTvRestore";
 
 /**
  * Oturum-içi TEK giriş (App `Root` bunu yalnız oturum-dışı dalı DEĞİLKEN çizer; K5'te bağlanmaz):
@@ -36,6 +37,8 @@ export function AppShell() {
 }
 
 function MenuShell() {
+  // Kapanışta açık kalan salon TV'si (aynı/ayrı pencere) geri gelir — Electron, süreç başına bir kez.
+  useTvRestore();
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem("sidebar.collapsed") === "1";

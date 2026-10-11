@@ -101,6 +101,16 @@ const api: ApiBridge = {
   license: {
     relay: (req: LicenseRelayRequest) => ipcRenderer.invoke("license:relay", req),
   },
+  tvWindow: {
+    displays: () => ipcRenderer.invoke("tv-window:displays"),
+    // Yalnız ekran kimliği geçer — adres ana süreçte kurulur (keyfi URL açılamaz).
+    open: (req) => ipcRenderer.invoke("tv-window:open", { displayId: req.displayId }),
+    onClosed: (cb) => {
+      const listener = (_e: unknown, payload: { byUser: boolean }) => cb({ byUser: payload?.byUser === true });
+      ipcRenderer.on("tv-window:closed", listener);
+      return () => ipcRenderer.removeListener("tv-window:closed", listener);
+    },
+  },
 };
 
 // Köprü YALNIZ uygulamanın kendi belgesine açılır: giriş adresi ana süreçten

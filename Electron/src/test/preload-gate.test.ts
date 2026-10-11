@@ -43,9 +43,17 @@ describe("preload köprüsü yalnız uygulama belgesine", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toBe("api");
     const api = calls[0]?.[1] as Record<string, unknown>;
-    for (const key of ["secureStore", "discovery", "appInfo", "window", "system", "printer", "pdf", "files", "updater", "license"]) {
+    for (const key of ["secureStore", "discovery", "appInfo", "window", "system", "printer", "pdf", "files", "updater", "license", "tvWindow"]) {
       expect(api[key], key).toBeDefined();
     }
+  });
+
+  it("⭐ TV penceresi köprüsü ana sürece yalnız ekran kimliğini geçirir (adres/ek alan düşer)", async () => {
+    const calls = await loadPreloadAt(`${ENTRY}#/giris`, withEntry);
+    const api = calls[0]?.[1] as { tvWindow: { open: (r: unknown) => unknown } };
+    const { ipcRenderer } = await import("electron");
+    api.tvWindow.open({ displayId: 2, url: "https://saldirgan.example/" });
+    expect(vi.mocked(ipcRenderer.invoke)).toHaveBeenLastCalledWith("tv-window:open", { displayId: 2 });
   });
 
   it("⭐ splash, ağ paylaşımı ve başka yerel sayfa köprüyü ALMAZ", async () => {

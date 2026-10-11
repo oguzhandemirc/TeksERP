@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { formatFactory } from "@/lib/factory-time";
 import { useLoomFloorLive } from "./useLoomFloorLive";
 import { WeavingFloorView } from "./WeavingFloorView";
-import { buildTezgahTvUrl, exitTezgahTvHere, openTezgahTvHere } from "./tv-entry";
+import { buildTezgahTvUrl, closeTezgahTvWindow, exitTezgahTvHere, isSeparateTvWindow, openTezgahTvHere } from "./tv-entry";
 
 /** Tazeleme koptuğunda eldeki veri gösterilir ama yaşı açıkça yazılır. */
 function StaleNotice({ updatedAt }: { updatedAt: number }) {
@@ -22,6 +22,13 @@ function StaleNotice({ updatedAt }: { updatedAt: number }) {
       Bağlantı yok — son veri {formatFactory(updatedAt, "HH:mm:ss")}
     </span>
   );
+}
+
+/** Ayrı TV penceresinde çıkış pencereyi kapatır; aynı pencerede kabuğa döner. */
+function tvExitOf() {
+  return isSeparateTvWindow()
+    ? { onExit: closeTezgahTvWindow, label: "Pencereyi kapat", windowed: true }
+    : { onExit: exitTezgahTvHere, label: "TV kipinden çık" };
 }
 
 export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
@@ -48,7 +55,7 @@ export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
       notice={live.stale ? <StaleNotice updatedAt={live.floor.updatedAt} /> : undefined}
       onOpenTv={tv ? undefined : openTezgahTvHere}
       tvUrl={tv ? null : buildTezgahTvUrl()}
-      tvExit={tv ? { onExit: exitTezgahTvHere, label: "TV kipinden çık" } : undefined}
+      tvExit={tv ? tvExitOf() : undefined}
     />
   );
 }

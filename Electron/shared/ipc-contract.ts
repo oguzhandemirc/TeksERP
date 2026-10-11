@@ -11,6 +11,7 @@ import type { DiscoveredServer, ServerGroup, ServerIdentity } from "./discovery"
 import type { TlsAdvert, TlsPin, TlsPinVia } from "./lan-tls";
 import type { LicenseRelayRequest, LicenseRelayResult } from "./license-relay";
 import type { ScreenshotResult } from "./screenshot";
+import type { TvDisplayInfo, TvWindowOpenRequest, TvWindowOpenResult } from "./tv-window";
 
 export type { DiscoveredServer };
 
@@ -34,6 +35,17 @@ export interface WindowApi {
   isMaximized: () => Promise<boolean>;
   /** Destek talebi (3d-2): YALNIZ bu pencerenin görüntüsü, ≤600 KB JPEG; yakalanamazsa null. */
   captureScreenshot: () => Promise<ScreenshotResult | null>;
+}
+
+/**
+ * Salon TV penceresi — dar kanal: yalnız uygulamanın TV yolunu ayrı pencerede açar
+ * (adres ana süreçte kurulur; istek yalnız ekran kimliği taşır, `@shared/tv-window`).
+ */
+export interface TvWindowApi {
+  displays: () => Promise<TvDisplayInfo[]>;
+  open: (req: TvWindowOpenRequest) => Promise<TvWindowOpenResult>;
+  /** TV penceresi kapandı; `byUser` false = uygulamayla birlikte kapandı. Dönüş: aboneliği bırak. */
+  onClosed: (cb: (e: { byUser: boolean }) => void) => () => void;
 }
 
 export interface SystemApi {
@@ -402,6 +414,7 @@ export interface ApiBridge {
   files: FilesApi;
   updater: UpdaterApi;
   license: LicenseApi;
+  tvWindow: TvWindowApi;
 }
 
 declare global {

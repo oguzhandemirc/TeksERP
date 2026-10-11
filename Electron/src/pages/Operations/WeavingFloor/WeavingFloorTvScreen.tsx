@@ -6,7 +6,15 @@ import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { isRouteModuleOpen } from "@/lib/route-modules";
 import { useOperationsVisibilityContext } from "../useOperationsVisibility";
-import { TEZGAH_TV_PERMISSION, TEZGAH_TV_SCREEN, tvGateOf, type TvGate } from "./tv-entry";
+import {
+  TEZGAH_TV_PERMISSION,
+  TEZGAH_TV_SCREEN,
+  closeTezgahTvWindow,
+  exitTezgahTvHere,
+  isSeparateTvWindow,
+  tvGateOf,
+  type TvGate,
+} from "./tv-entry";
 import { WeavingFloorPage } from "./WeavingFloorPage";
 
 const CLOSED_TEXT: Record<Exclude<TvGate, "OPEN" | "WAIT">, string> = {
@@ -18,9 +26,15 @@ function TvClosed({ reason }: { reason: Exclude<TvGate, "OPEN" | "WAIT"> }) {
   return (
     <div className="flex h-screen flex-col items-center justify-center gap-4 p-8 text-center" data-testid="tv-closed">
       <p className="max-w-xl text-lg font-semibold">{CLOSED_TEXT[reason]}</p>
-      <Button variant="outline" onClick={() => (window.location.hash = "#/")}>
-        Uygulamaya dön
-      </Button>
+      {isSeparateTvWindow() ? (
+        <Button variant="outline" onClick={closeTezgahTvWindow}>
+          Pencereyi kapat
+        </Button>
+      ) : (
+        <Button variant="outline" onClick={exitTezgahTvHere}>
+          Uygulamaya dön
+        </Button>
+      )}
     </div>
   );
 }

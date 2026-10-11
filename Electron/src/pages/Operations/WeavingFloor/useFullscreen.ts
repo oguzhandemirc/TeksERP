@@ -4,11 +4,17 @@
 // istediği için gerçek tam ekran ilk dokunuşta/tuşta yeniden denenir.
 import { useCallback, useEffect, useState } from "react";
 
-export function useFullscreen(root: HTMLElement | null, { locked = false }: { locked?: boolean } = {}) {
+interface Options {
+  locked?: boolean;
+  /** Kilitli kipte gerçek tam ekran kendiliğinden istensin mi (ayrı TV penceresi: hayır — önce ekrana sürüklenir). */
+  autoReal?: boolean;
+}
+
+export function useFullscreen(root: HTMLElement | null, { locked = false, autoReal = true }: Options = {}) {
   const [active, setActive] = useState(locked);
 
   useEffect(() => {
-    if (!locked || !root) return;
+    if (!locked || !autoReal || !root) return;
     // Esc TV kipinden çıkış tuşudur — tam ekranı yeniden istemez.
     const tryEnter = (e: Event) => {
       if (e instanceof KeyboardEvent && e.key === "Escape") return;
@@ -21,7 +27,7 @@ export function useFullscreen(root: HTMLElement | null, { locked = false }: { lo
       window.removeEventListener("pointerdown", tryEnter);
       window.removeEventListener("keydown", tryEnter);
     };
-  }, [locked, root]);
+  }, [locked, autoReal, root]);
 
   const enter = useCallback(() => {
     setActive(true);
@@ -51,5 +57,11 @@ export function useFullscreen(root: HTMLElement | null, { locked = false }: { lo
     };
   }, [active, locked]);
 
-  return { active, enter, exit };
+  /** Gerçek tam ekranı aç/kapa (kaplama kipini değiştirmez) — ayrı TV penceresinin düğmesi. */
+  const toggleReal = useCallback(() => {
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => undefined);
+    else root?.requestFullscreen?.().catch(() => undefined);
+  }, [root]);
+
+  return { active, enter, exit, toggleReal };
 }

@@ -43,4 +43,15 @@ describe("TvExitControl", () => {
     expect(box().dataset.visible).toBe("1");
     expect(screen.getByRole("status")).toBeTruthy();
   });
+
+  it("ayrı pencere: 'Tam ekran' düğmesi ve sürükleme ipucu; çıkış 'Pencereyi kapat'", () => {
+    const toggle = vi.fn();
+    const onExit = vi.fn();
+    render(<TvExitControl onExit={onExit} label="Pencereyi kapat" onToggleFullscreen={toggle} />);
+    fireEvent.click(screen.getByRole("button", { name: /Tam ekran/ }));
+    expect(toggle).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("status").textContent).toContain("sürükleyin");
+    fireEvent.click(screen.getByRole("button", { name: /Pencereyi kapat/ }));
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
 });

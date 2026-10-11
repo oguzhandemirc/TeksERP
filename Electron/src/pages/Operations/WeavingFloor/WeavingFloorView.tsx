@@ -7,8 +7,7 @@
 // düğmesi + Esc (`TvExit`). İpuçları (`FloorHint`) TV dışında açık.
 // =============================================================================
 import { useCallback, useMemo, useState } from "react";
-import { Maximize2, Tv } from "lucide-react";
-import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -24,6 +23,7 @@ import { ShowFilterPicker, showFilterPredicate, type ShowFilter } from "./ShowFi
 import { hsl } from "./palette";
 import { shiftStarLoom, summarizeFloor } from "./metrics";
 import { TvExitControl } from "./TvExit";
+import { TvLaunchMenu } from "./TvLaunchMenu";
 import { useFullscreen } from "./useFullscreen";
 import type { FloorState } from "./types";
 import "./weaving-floor.css";
@@ -45,36 +45,12 @@ interface ViewProps {
   notice?: React.ReactNode;
   /** Veri tazelenemiyor — tam ekran başlığındaki "Canlı" damgası uyarıya döner. */
   stale?: boolean;
-  /** Verilirse başlıkta "TV kipi" düğmesi (onaylı) — bu pencereyi menüsüz TV kipine geçirir. */
+  /** Verilirse başlıkta "TV kipi" menüsü: bu pencerede (onaylı) ya da ayrı pencerede (Electron). */
   onOpenTv?: () => void;
   /** Onay penceresinde gösterilecek TV adresi (web paneli varsa). */
   tvUrl?: string | null;
-  /** TV kipinde görünür çıkış (köşe düğmesi + Esc). */
-  tvExit?: { onExit: () => void; label: string };
-}
-
-function TvButton({ onOpenTv, tvUrl }: { onOpenTv: () => void; tvUrl: string | null }) {
-  const [open, setOpen] = useState(false);
-  const where = tvUrl ? ` Salon TV'sinin tarayıcısında bu adresi açın: ${tvUrl}` : "";
-  return (
-    <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        <Tv className="mr-1.5 h-4 w-4" />
-        TV kipi
-      </Button>
-      <ConfirmDialog
-        open={open}
-        onOpenChange={setOpen}
-        title="Bu pencere TV kipine geçsin mi?"
-        description={`TV kipinde menü ve düğme yoktur; ekran kendini tazeler. Çıkmak için Esc'ye basın ya da fareyi oynatınca köşede beliren "TV kipinden çık" düğmesine tıklayın.${where}`}
-        confirmLabel="TV kipine geç"
-        onConfirm={() => {
-          setOpen(false);
-          onOpenTv();
-        }}
-      />
-    </>
-  );
+  /** TV kipinde görünür çıkış (köşe düğmesi + Esc); `windowed` = ayrı TV penceresi (tam ekran düğmeyle). */
+  tvExit?: { onExit: () => void; label: string; windowed?: boolean };
 }
 
 interface AppHeaderProps {
@@ -107,7 +83,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ShowFilter>("ALL");
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
-  const fullscreen = useFullscreen(root, { locked: tv });
+  const fullscreen = useFullscreen(root, { locked: tv, autoReal: !tvExit?.windowed });
   const select = useCallback((id: string) => setSelectedId(id), []);
   const onSelect = tv ? noSelect : select;
 
@@ -132,7 +108,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
       >
         <TabPortalProvider value={root}>
           <FloorHintProvider enabled={!tv}>
-            {tv && tvExit && <TvExitControl onExit={tvExit.onExit} label={tvExit.label} />}
+            {tv && tvExit && <TvExitControl {...tvExit} onToggleFullscreen={tvExit.windowed ? fullscreen.toggleReal : undefined} />}
             {fullscreen.active ? (
               <FullscreenHeader
                 now={now}
@@ -146,7 +122,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
               <AppHeader
                 extra={sampleData ? <SampleDataBadge /> : notice}
                 filter={<ShowFilterPicker value={filter} onChange={setFilter} />}
-                tv={onOpenTv && <TvButton onOpenTv={onOpenTv} tvUrl={tvUrl} />}
+                tv={onOpenTv && <TvLaunchMenu onOpenHere={onOpenTv} tvUrl={tvUrl} />}
                 onFullscreen={fullscreen.enter}
               />
             )}

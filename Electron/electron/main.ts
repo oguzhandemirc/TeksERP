@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import log from "electron-log/main.js";
 import { registerIpcHandlers } from "./ipc/index.js";
+import { closeTvWindowWithApp, registerTvWindowIpc } from "./ipc/tv-window.ipc.js";
 import { startDiscoveryIfNeeded } from "./ipc/discovery.ipc.js";
 import { buildAppMenu } from "./menu.js";
 import { APP_ID, WINDOW_TITLE } from "@shared/channel";
@@ -32,6 +33,7 @@ setTrustedAppEntry(rendererEntryUrl);
 const iconFile = process.platform === "win32" ? "TeksERP-LOGO.ico" : "TeksERP-LOGO.png";
 const iconPath = path.join(resourcesDir, iconFile);
 const splashPath = path.join(resourcesDir, "splash.html");
+const preloadPath = path.join(__dirname, "../preload/preload.cjs");
 
 app.commandLine.appendSwitch("enable-features", "MiddleClickAutoscroll");
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
@@ -76,7 +78,7 @@ async function createMainWindow(): Promise<void> {
     frame: process.platform === "darwin",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     webPreferences: {
-      preload: path.join(__dirname, "../preload/preload.cjs"),
+      preload: preloadPath,
       // Preload köprüyü YALNIZ bu adresteki belgeye açar (splash ve yabancı belge almaz).
       additionalArguments: [appEntryArgument(rendererEntryUrl)],
       sandbox: true,
@@ -87,6 +89,8 @@ async function createMainWindow(): Promise<void> {
   });
 
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+  // Salon TV penceresi ana pencereyle kapanır (sahipsiz pencere süreci ayakta tutmasın).
+  mainWindow.on("close", () => closeTvWindowWithApp());
   // Pencere başlığı yalnız kanaldan gelir: splash'in ve renderer'ın <title>'ı onu ezmesin.
   mainWindow.on("page-title-updated", (event) => event.preventDefault());
 
@@ -133,6 +137,13 @@ app.whenReady().then(async () => {
   // Yalnız şifreli: ağdaki sunucuya http/ws isteği kesilir (döngü adresi serbest).
   installPlainHttpGuard(session.defaultSession);
   registerIpcHandlers();
+  registerTvWindowIpc({
+    preload: preloadPath,
+    icon: iconPath,
+    title: WINDOW_TITLE,
+    entryArgument: appEntryArgument(rendererEntryUrl),
+    mainWindow: () => mainWindow,
+  });
   // Sunucu keşfi — ATEŞLE VE UNUT, splash'i BEKLETMEZ. Splash videosu zaten
   // ~16 sn'ye kadar zaman veriyor (finishSplash'in emniyet supabı) ve keşif
   // onun altında paralel koşuyor; mutlu yolda renderer yüklenmeden biter ve

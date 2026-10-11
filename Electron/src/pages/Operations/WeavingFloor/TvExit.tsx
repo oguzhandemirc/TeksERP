@@ -1,7 +1,7 @@
 // TV kipinden GÖRÜNÜR çıkış: köşe düğmesi fare oynayınca belirir, boşta kalınca söner (TV'de
 // ekranı kirletmesin); ilk açılışta birkaç saniye ipucuyla görünür; Esc her an çıkar.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LogOut } from "lucide-react";
+import { LogOut, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const TV_EXIT_INTRO_MS = 6_000;
@@ -60,9 +60,14 @@ interface Props {
   onExit: () => void;
   /** Düğme metni — ayrı pencerede "Pencereyi kapat". */
   label: string;
+  /** Ayrı pencerede: pencere TV ekranına sürüklendikten sonra tam ekrana geçirir. */
+  onToggleFullscreen?: () => void;
 }
 
-export function TvExitControl({ onExit, label }: Props) {
+const PILL =
+  "inline-flex items-center gap-2 rounded-full border bg-popover px-4 py-2 font-semibold text-popover-foreground shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+export function TvExitControl({ onExit, label, onToggleFullscreen }: Props) {
   const { visible, intro, show } = useTvExit(onExit);
   return (
     <div
@@ -73,19 +78,24 @@ export function TvExitControl({ onExit, label }: Props) {
       data-testid="tv-exit"
       data-visible={visible ? "1" : "0"}
     >
-      <button
-        type="button"
-        onClick={onExit}
-        onFocus={show}
-        className="inline-flex items-center gap-2 rounded-full border bg-popover px-4 py-2 font-semibold text-popover-foreground shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <LogOut className="h-4 w-4" aria-hidden />
-        {label}
-        <kbd className="rounded border px-1.5 text-xs font-medium text-muted-foreground">Esc</kbd>
-      </button>
+      <div className="flex gap-2">
+        {onToggleFullscreen && (
+          <button type="button" onClick={onToggleFullscreen} onFocus={show} className={PILL}>
+            <Maximize2 className="h-4 w-4" aria-hidden />
+            Tam ekran
+          </button>
+        )}
+        <button type="button" onClick={onExit} onFocus={show} className={PILL}>
+          <LogOut className="h-4 w-4" aria-hidden />
+          {label}
+          <kbd className="rounded border px-1.5 text-xs font-medium text-muted-foreground">Esc</kbd>
+        </button>
+      </div>
       {intro && (
         <span className="rounded-md bg-popover/90 px-2.5 py-1 text-sm text-muted-foreground shadow" role="status">
-          Fareyi oynatınca bu düğme yeniden görünür; Esc ile de çıkılır.
+          {onToggleFullscreen
+            ? "Pencereyi başlığından tutup TV ekranına sürükleyin, sonra Tam ekran'a basın; Esc pencereyi kapatır."
+            : "Fareyi oynatınca bu düğme yeniden görünür; Esc ile de çıkılır."}
         </span>
       )}
     </div>

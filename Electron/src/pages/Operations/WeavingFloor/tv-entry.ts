@@ -6,8 +6,11 @@
 // ekranının modülü (`tezgahEnabled`); gerçek kapı yine backend'dir.
 // =============================================================================
 
-/** TV bağlantısının hash yolu — AppShell dalı, panel düğmesi ve bağlantı üreteci aynı sabitten. */
-export const TEZGAH_TV_PATH = "/tezgah-tv";
+import { TEZGAH_TV_HASH_PATH, isTvWindowHash, type TvWindowOpenResult } from "@shared/tv-window";
+import { clearTvOpen, markTvOpen, tvWindowApi, writeTvPref } from "./tv-prefs";
+
+/** TV bağlantısının hash yolu — AppShell dalı, panel düğmesi, bağlantı üreteci ve ayrı pencere aynı sabitten. */
+export const TEZGAH_TV_PATH = TEZGAH_TV_HASH_PATH;
 /** Modül kapısı bu ekran anahtarından okunur (`ROUTE_MODULE`); ayrı modül anahtarı yok. */
 export const TEZGAH_TV_SCREEN = "/operations/weaving-floor";
 export const TEZGAH_TV_PERMISSION = "loom:live-view";
@@ -41,10 +44,35 @@ export function buildTezgahTvUrl(
 
 /** Bu pencereyi TV kipine geçirir (menüsüz; çıkış köşe düğmesi ya da Esc — `TvExit`). */
 export function openTezgahTvHere(): void {
+  writeTvPref({ kip: "ayni", ekranId: null });
+  markTvOpen("ayni");
   window.location.hash = `#${TEZGAH_TV_PATH}`;
 }
 
 /** TV kipinden kabuğa döner; sekme defteri kalıcı olduğu için salon sekmesi yerinde bulunur. */
 export function exitTezgahTvHere(): void {
+  clearTvOpen();
   window.location.hash = "#/";
+}
+
+/** Ayrı TV penceresi (Electron): açılırsa kip/ekran tercihi ve "açık" işareti yazılır. */
+export async function openTezgahTvWindow(displayId: number | null): Promise<TvWindowOpenResult> {
+  const api = tvWindowApi();
+  if (!api) return { ok: false, reason: "Ayrı pencere yalnız masaüstü uygulamasında açılır" };
+  const res = await api.open({ displayId });
+  if (res.ok) {
+    writeTvPref({ kip: "ayri", ekranId: res.displayId });
+    markTvOpen("ayri");
+  }
+  return res;
+}
+
+/** Bu pencere ayrı TV penceresi mi — çıkışı pencereyi kapatmaktır. */
+export function isSeparateTvWindow(): boolean {
+  return typeof window !== "undefined" && isTvWindowHash(window.location.hash);
+}
+
+/** Ayrı TV penceresini kapatır ("açık" işaretini ana pencere kapanış olayıyla temizler). */
+export function closeTezgahTvWindow(): void {
+  window.api?.window?.close?.();
 }
