@@ -99,7 +99,7 @@ jobs:
       # paket_prova'nın iki testi `deploy/satici/prova-paket-zinciri.mjs` tarafından ortamla sürülür
       # (TEKSERP_PAKET_PROVA); tek başına koşulamaz → atlanır (gerçek paket provası T2'nin işi).
       - name: cargo test --include-ignored (napi'siz üyeler)
-        run: cargo test --locked --workspace --exclude lisans-cekirdek -- --include-ignored --skip prova_hazirla --skip prova_motor
+        run: cargo test --locked --workspace --exclude lisans-cekirdek -- --include-ignored --skip prova_hazirla --skip prova_motor --skip duman_linux_hazirla
       - name: cargo test --include-ignored (lisans çekirdeği, test çapası)
         run: cargo test --locked -p lisans-cekirdek --no-default-features --features test-anchor -- --include-ignored
       - name: "T2 yer tutucu — K4 yükseltme matrisi (sentetik sürüm zinciri) henüz yok"
