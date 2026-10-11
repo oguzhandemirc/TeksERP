@@ -156,7 +156,7 @@ describe("ReworkRollsDialog", () => {
   it("farklı kumaş → istek ATILMADAN engellenir", async () => {
     renderDialog([roll(), roll({ id: "R2", barcode: "T2", item: { id: "i2", name: "MAVİ" } })]);
     await selectRoute();
-    await screen.findByText(/tek iş emri tek kumaş/i);
+    await screen.findByText(/tek terbiye iş emri tek kumaş/i);
     expect(quickStart).not.toHaveBeenCalled();
   });
 
@@ -174,7 +174,7 @@ describe("ReworkRollsDialog", () => {
     renderDialog([roll()]);
     await selectRoute();
     await screen.findByText(/Firma seçilmedi — sevk yapılamaz/);
-    fireEvent.click(await screen.findByRole("button", { name: /^İş emri aç$/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Terbiye iş emri aç$/ }));
     await waitFor(() => expect(quickStart).toHaveBeenCalledTimes(1));
     const body = quickStart.mock.calls[0]![0] as Record<string, unknown>;
     expect(body.dispatchFirstStep).toBe(false);
@@ -186,7 +186,7 @@ describe("ReworkRollsDialog", () => {
     await selectRoute();
     const firmSelect = await screen.findByRole("option", { name: "BOYER" });
     fireEvent.change(firmSelect.closest("select")!, { target: { value: "f1" } });
-    fireEvent.click(await screen.findByRole("button", { name: /İş emri aç ve fasona gönder/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Terbiye iş emri aç ve fasona gönder/ }));
     await waitFor(() => expect(quickStart).toHaveBeenCalledTimes(1));
     const body = quickStart.mock.calls[0]![0] as Record<string, unknown>;
     expect(body.rollBarcodes).toEqual(["T240826F0035"]);
@@ -216,9 +216,9 @@ describe("ReworkRollsDialog — deneme anahtarı", () => {
     const { rerender } = render(ui([roll()]));
     await selectRoute();
     const gonder = async (n: number) => {
-      fireEvent.click(await screen.findByRole("button", { name: /İş emri aç/ }));
+      fireEvent.click(await screen.findByRole("button", { name: /Terbiye iş emri aç/ }));
       await waitFor(() => expect(quickStart).toHaveBeenCalledTimes(n));
-      await waitFor(() => expect(screen.getByRole("button", { name: /İş emri aç/ })).not.toBeDisabled());
+      await waitFor(() => expect(screen.getByRole("button", { name: /Terbiye iş emri aç/ })).not.toBeDisabled());
     };
     await gonder(1);
     // Çağıran seçimi her render'da yeni dizi olarak kurar — belirsiz hatadan sonra anahtar düşmemeli.
@@ -262,7 +262,7 @@ describe("ReworkRollsDialog — mod (yeniden ↔ ilk kez)", () => {
       quickStart.mockClear();
       const { unmount } = renderDialog([roll({ labelPrintedAt: null })], mode);
       await selectRoute();
-      fireEvent.click(screen.getByRole("button", { name: /İş emri aç/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Terbiye iş emri aç/ }));
       await waitFor(() => expect(quickStart).toHaveBeenCalledTimes(1));
       const b = { ...(quickStart.mock.calls[0]![0] as Record<string, unknown>) };
       // clientToken oturum başına üretilir — modun işi değil, karşılaştırmadan çıkar.
@@ -287,7 +287,7 @@ describe("ReworkRollsDialog — mod (yeniden ↔ ilk kez)", () => {
     renderDialog([roll({ barcode: null, labelPrintedAt: null })], "start");
     await selectRoute();
     expect(await screen.findByText(/hiçbirinde barkod yok/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /İş emri aç/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Terbiye iş emri aç/ }));
     await waitFor(() => expect(quickStart).not.toHaveBeenCalled());
   });
 });

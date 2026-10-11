@@ -148,7 +148,7 @@ export function PoolPanel({
 
       {rows.length === 0 ? (
         <div className="text-muted-foreground flex h-24 items-center justify-center rounded-md border border-dashed text-sm">
-          Kurşun adımında bekleyen iş emri yok.
+          Kurşun adımında bekleyen terbiye iş emri yok.
         </div>
       ) : (
         <DndContext

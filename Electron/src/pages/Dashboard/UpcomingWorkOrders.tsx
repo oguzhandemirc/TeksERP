@@ -10,6 +10,7 @@ import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
 import { useTabsStore } from "@/store/tabs";
 import { fetchUpcomingWorkOrders } from "./dashboardService";
 import { calendarDaysFromToday, calendarLocaleDateString } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 
 export function UpcomingWorkOrders() {
   // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir — dar
@@ -32,7 +33,7 @@ export function UpcomingWorkOrders() {
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <CalendarPlus className="h-4 w-4 text-muted-foreground" />
-          Yakında Başlayacak İş Emirleri
+          Yakında Başlayacak {TERIM.terbiyeIsEmri.cogul}
         </CardTitle>
         <button
           type="button"
@@ -48,7 +49,7 @@ export function UpcomingWorkOrders() {
         ) : isError ? (
           <EmptyState message="Veri alınamadı." />
         ) : !data || data.length === 0 ? (
-          <EmptyState message="Önümüzdeki 7 gün için planlanan iş emri yok." />
+          <EmptyState message="Önümüzdeki 7 gün için planlanan terbiye iş emri yok." />
         ) : (
           <ul className="divide-y divide-border/40">
             {data.map((wo) => (

@@ -32,13 +32,14 @@ import { BeamActionDialogs } from "./tezgah/BeamActionDialogs";
 import { WARP_BEAMS_QUERY_KEY, useWarpBeamMutations } from "./useWarpBeamMutations";
 import { toPlanPayload, usePageDialog, type BeamActionKind } from "./usePageActions";
 import { WARP_BEAM_ORIGIN_LABEL, WARP_BEAM_STATUSES, WARP_BEAM_STATUS_META, type WarpBeam, type WarpBeamOrigin } from "./types";
+import { TERIM } from "@/lib/terim";
 
 const FILTERS: FilterDef[] = [
   { kind: "multi-select", key: "status", label: "Durum", options: WARP_BEAM_STATUSES.map((s) => ({ value: s, label: WARP_BEAM_STATUS_META[s].label })) },
   { kind: "select", key: "originKind", label: "Köken", options: (Object.keys(WARP_BEAM_ORIGIN_LABEL) as WarpBeamOrigin[]).map((k) => ({ value: k, label: WARP_BEAM_ORIGIN_LABEL[k] })) },
   { kind: "lookup", key: "warpSpecId", label: "Çözgü kartı", service: warpSpecService, queryKey: "warp-specs-beam-filter" },
   // Z2: `filter[weavingOrderId]` (Z1 ucu) — etiket dokuma no.
-  { kind: "lookup", key: "weavingOrderId", label: "Dokuma işi", service: weavingOrderPickerService, queryKey: "weaving-orders-beam-filter", getLabel: (w) => (w as unknown as WeavingOrder).weavingOrderNumber },
+  { kind: "lookup", key: "weavingOrderId", label: TERIM.dokumaIsEmri.tekil, service: weavingOrderPickerService, queryKey: "weaving-orders-beam-filter", getLabel: (w) => (w as unknown as WeavingOrder).weavingOrderNumber },
 ];
 
 const BEAM_ACTION_KINDS = new Set<string>(["mount", "dismount", "consume", "adjust", "exhaust", "scrap", "undo"]);

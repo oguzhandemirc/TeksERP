@@ -23,7 +23,7 @@ export type OrderStatsView = "sade" | "onerilen" | "genis";
 export const ORDER_STATS_VIEWS: Array<{ key: OrderStatsView; label: string; hint: string }> = [
   { key: "sade", label: "Sade", hint: "Adet ve durum rozetleri" },
   { key: "onerilen", label: "Önerilen", hint: "+ metraj ve geciken" },
-  { key: "genis", label: "Geniş", hint: "+ iş emri, termin, tutar" },
+  { key: "genis", label: "Geniş", hint: "+ terbiye iş emri, termin, tutar" },
 ];
 
 // Envanter şeridiyle AYNI biçim: gruplama YOK. tr-TR'de binlik ayracı "."
@@ -210,7 +210,7 @@ export function OrdersStats({
           {data.noWorkOrderCount > 0 && (
             <Chip
               icon={Factory}
-              label="İş emri yok"
+              label="Terbiye iş emri yok"
               count={data.noWorkOrderCount}
               tone="text-muted-foreground"
               onClick={() => onApplyFilter({ "filter[woState]": "NONE" })}

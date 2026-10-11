@@ -103,7 +103,7 @@ export function CoveragePanel({ lineIds, excludeWorkOrderId }: Props) {
                   <th className="text-left">Kumaş</th>
                   <th className="text-right">İstenen</th>
                   <th className="text-right" title="Sevk edilen">Sevk</th>
-                  <th className="text-right" title="Üretimde — canlı iş emirleri">Üretim</th>
+                  <th className="text-right" title="Üretimde — canlı terbiye iş emirleri">Üretim</th>
                   <th className="text-right" title="Depoda hazır — eşleşen serbest stok">Depo</th>
                   <th className="text-right" title="Ham stok — işlenmemiş kumaş (bilgi; net açığa girmez)">Ham</th>
                   <th className="text-right">Net açık</th>

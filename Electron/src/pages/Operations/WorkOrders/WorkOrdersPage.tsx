@@ -27,6 +27,7 @@ import { WorkOrderBulkDocsDialog } from "./WorkOrderBulkDocsDialog";
 import type { BulkWorkOrder } from "./bulkDocs";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import type { WorkOrder } from "./types";
+import { TERIM } from "@/lib/terim";
 
 const FILTERS: FilterDef[] = [
   {
@@ -120,7 +121,7 @@ export function WorkOrdersPage() {
   return (
     <PageShell>
       <PageHeader
-        title="İş Emirleri"
+        title={TERIM.terbiyeIsEmri.cogul}
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
@@ -130,7 +131,7 @@ export function WorkOrdersPage() {
                 onClick={(e: MouseEvent) => openTarget(NEW_PATH, e)}
                 title="Sol tık: bu sekmede · Shift/Ctrl+tık: yeni sekmede"
               >
-                <Plus className="h-4 w-4" /> Yeni İş Emri
+                <Plus className="h-4 w-4" /> Yeni {TERIM.terbiyeIsEmri.tekil}
               </Button>
             </PermissionGate>
           </>
@@ -140,22 +141,22 @@ export function WorkOrdersPage() {
         fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
-        placeholder="İş emri, parti, kumaş, müşteri veya sipariş no ara..."
+        placeholder="Terbiye iş emri, parti, kumaş, müşteri veya sipariş no ara..."
         table={table}
-        exportName="İş Emirleri"
+        exportName={TERIM.terbiyeIsEmri.cogul}
         actions={
           <>
             <ToolbarToggle
               checked={showCompleted}
               onCheckedChange={setShowCompleted}
               label="Tamamlananları göster"
-              title="Tamamlanmış iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
+              title="Tamamlanmış terbiye iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
             />
             <ToolbarToggle
               checked={showCancelled}
               onCheckedChange={setShowCancelled}
               label="İptalleri göster"
-              title="İptal edilmiş iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
+              title="İptal edilmiş terbiye iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
             />
           </>
         }
@@ -165,9 +166,9 @@ export function WorkOrdersPage() {
         table={table}
         isLoading={query.isLoading}
         pagination={pagination}
-        emptyText="İş emri bulunamadı."
+        emptyText="Terbiye iş emri bulunamadı."
         onRowClick={setSelected}
-        exportName="İş Emirleri"
+        exportName={TERIM.terbiyeIsEmri.cogul}
         selectionHint="Toplu belge çıkarmak için satırları seçin (refakat kartı, fason çeki, makbuz…)."
         bulkActions={(rows) => (
           <Button
@@ -207,7 +208,7 @@ export function WorkOrdersPage() {
               )}
             </PermissionGate>
             <ContextMenuSeparator />
-            <CopyMenuItem label="İş Emri No" value={wo.workOrderNumber} />
+            <CopyMenuItem label={`${TERIM.terbiyeIsEmri.tekil} No`} value={wo.workOrderNumber} />
           </>
         )}
       />

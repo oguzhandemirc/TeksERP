@@ -10,6 +10,7 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { BarcodeKind } from "@/lib/scanner/barcode-kind";
+import { TERIM } from "@/lib/terim";
 
 export interface ScanAction {
   label: string;
@@ -77,7 +78,7 @@ async function resolveTravelerCard(code: string): Promise<ScanResolution> {
     title: (card.cardNumber as string) ?? code,
     subtitle: joinDot(["Refakat Kartı", wo?.workOrderNumber, card.status as string]),
     actions: woId
-      ? [{ label: "İş Emrini Aç", to: `/operations/work-orders/${woId}`, primary: true }]
+      ? [{ label: `${TERIM.terbiyeIsEmri.cekim.belirtme} Aç`, to: `/operations/work-orders/${woId}`, primary: true }]
       : [],
   };
 }

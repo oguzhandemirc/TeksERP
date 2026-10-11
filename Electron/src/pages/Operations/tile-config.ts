@@ -42,6 +42,7 @@ import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 import { isMachineStopsVisible } from "./MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "./WeavingFloor/floor-regime";
 import { isWarpBeamsVisible } from "./WarpBeams/warp-beam-regime";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -223,7 +224,7 @@ export const operationsTiles: OperationsTile[] = [
   },
   {
     key: "work-orders",
-    title: "İş Emirleri",
+    title: TERIM.terbiyeIsEmri.cogul,
     description: "Üretim partileri ve rota ilerleyişi",
     icon: Factory,
     to: "/operations/work-orders",
@@ -237,8 +238,8 @@ export const operationsTiles: OperationsTile[] = [
   },
   {
     key: "work-order-events",
-    title: "İş Emri Hareketleri",
-    description: "İş emri no ya da top barkoduyla bütün hareketler",
+    title: `${TERIM.terbiyeIsEmri.tekil} Hareketleri`,
+    description: "Terbiye iş emri no ya da top barkoduyla bütün hareketler",
     icon: History,
     to: "/operations/work-order-events",
     group: "production",
@@ -249,7 +250,7 @@ export const operationsTiles: OperationsTile[] = [
   {
     key: "product-balance",
     title: "Kumaş Dengesi",
-    description: "Talep ↔ depo + üretim; eksik kadar iş emri aç",
+    description: "Talep ↔ depo + üretim; eksik kadar terbiye iş emri aç",
     icon: Scale,
     to: "/operations/product-balance",
     group: "planning",
@@ -263,8 +264,8 @@ export const operationsTiles: OperationsTile[] = [
     // KAPALI, karo çizilmez. Yüklem SAF modülden DOĞRUDAN geçirilir (palet
     // kimlik testi `toBe`).
     key: "weaving-orders",
-    title: "Dokuma İşleri",
-    description: "Ne dokunacak, ne kadar, kimde — dokuma işi planlama; koşum ve top indirme tabletten",
+    title: TERIM.dokumaIsEmri.cogul,
+    description: "Ne dokunacak, ne kadar, kimde — dokuma iş emri planlama; koşum ve top indirme tabletten",
     icon: Spool,
     to: "/operations/weaving-orders",
     group: "production",

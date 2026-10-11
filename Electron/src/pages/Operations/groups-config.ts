@@ -21,7 +21,7 @@ export const operationGroups: OperationGroup[] = [
   {
     key: "production",
     title: "Üretim & Fason",
-    description: "İş emirleri, kurşun sırası ve kartela fason takibi",
+    description: "Terbiye iş emirleri, kurşun sırası ve kartela fason takibi",
     icon: Factory,
   },
   {

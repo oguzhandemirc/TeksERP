@@ -319,7 +319,7 @@ export function OrderDetailSheet({
                   <p>
                     Aynı <span className="font-medium">kumaş · renk · en</span> kombinasyonundaki
                     kalemleri işaretle, ardından{" "}
-                    <span className="font-medium">İş emri oluştur</span>. Uyumsuz kalemler
+                    <span className="font-medium">Terbiye iş emri oluştur</span>. Uyumsuz kalemler
                     otomatik gri olur.
                   </p>
                 </div>
@@ -364,7 +364,7 @@ export function OrderDetailSheet({
                             disabled={dimmed}
                             onCheckedChange={() => toggleLine(line.id)}
                             className="mt-0.5 shrink-0"
-                            aria-label="Kalemi iş emri için seç"
+                            aria-label="Kalemi terbiye iş emri için seç"
                             title={dimmed ? reason ?? undefined : undefined}
                           />
                         )}
@@ -495,7 +495,7 @@ export function OrderDetailSheet({
                         className="gap-1.5 bg-success text-success-foreground shadow-sm transition-all duration-150 hover:bg-success/85 hover:shadow-md hover:shadow-success/40 hover:-translate-y-0.5 active:translate-y-0"
                       >
                         <Factory className="h-3.5 w-3.5" />
-                        İş emri oluştur{selectedCount > 0 ? ` (${selectedCount})` : ""}
+                        Terbiye iş emri oluştur{selectedCount > 0 ? ` (${selectedCount})` : ""}
                       </Button>
                     </PermissionGate>
                   )}

@@ -24,7 +24,7 @@ export const CANCEL_OPTIONS: {
  */
 export const CANCEL_REASON_PRESETS = [
   "Sipariş iptal oldu",
-  "Yanlış iş emri açıldı",
+  "Yanlış terbiye iş emri açıldı",
   "Müşteri vazgeçti",
   "Mükerrer kayıt",
 ] as const;

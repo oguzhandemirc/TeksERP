@@ -27,17 +27,17 @@ import type { TebdilResult } from "./useTebdilWizard";
 const MODE_META: Record<SplitMode, { title: string; desc: string; icon: typeof RefreshCw }> = {
   REDYE_SAME_COLOR: {
     title: "Aynı renk — yeniden boya (tebdil)",
-    desc: "Aynı iş emri, yeni parti. Seçilen toplar boyahaneye geri sarılıp aynı renge yeniden boyanır.",
+    desc: "Aynı terbiye iş emri, yeni parti. Seçilen toplar boyahaneye geri sarılıp aynı renge yeniden boyanır.",
     icon: RefreshCw,
   },
   NEW_COLOR: {
-    title: "Farklı renk — yeni iş emri",
-    desc: "Seçilen toplar yeni bir iş emrine taşınıp yeni renge boyanır.",
+    title: "Farklı renk — yeni terbiye iş emri",
+    desc: "Seçilen toplar yeni bir terbiye iş emrine taşınıp yeni renge boyanır.",
     icon: Palette,
   },
   UNDYED_MOVE: {
-    title: "Boyanmadan yeni iş emrine taşı",
-    desc: "Fasonda bekleyen parti boyanmadan yeni bir iş emrine taşınır.",
+    title: "Boyanmadan yeni terbiye iş emrine taşı",
+    desc: "Fasonda bekleyen parti boyanmadan yeni bir terbiye iş emrine taşınır.",
     icon: ArrowUpRight,
   },
 };
@@ -199,8 +199,8 @@ export function TebdilDispatchStep({
         <div className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 text-xs">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <span>
-            <strong>Yeni iş emri</strong> oluşturulacak ve toplar oraya taşınacak. Fason sevki
-            (hangi boyahane) <strong>yeni iş emrinde</strong> yapılır — bitince aşağıdaki bağlantıdan geçin.
+            <strong>Yeni terbiye iş emri</strong> oluşturulacak ve toplar oraya taşınacak. Fason sevki
+            (hangi boyahane) <strong>yeni terbiye iş emrinde</strong> yapılır — bitince aşağıdaki bağlantıdan geçin.
           </span>
         </div>
         {mode === "NEW_COLOR" && <ReasonField reason={reason} setReason={setReason} />}
@@ -335,7 +335,7 @@ export function TebdilResultView({
             </div>
           ) : newWo ? (
             <div>
-              Yeni iş emri <strong className="font-mono">{result.newWorkOrderNumber}</strong> oluşturuldu.
+              Yeni terbiye iş emri <strong className="font-mono">{result.newWorkOrderNumber}</strong> oluşturuldu.
             </div>
           ) : (
             <div>
@@ -368,7 +368,7 @@ export function TebdilResultView({
         )}
         {newWo && (
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onGoWorkOrder(result.newWorkOrderId!)}>
-            <ArrowUpRight className="h-4 w-4" /> Yeni İş Emrine Git
+            <ArrowUpRight className="h-4 w-4" /> Yeni Terbiye İş Emrine Git
           </Button>
         )}
       </div>

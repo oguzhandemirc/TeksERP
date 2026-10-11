@@ -17,7 +17,7 @@ export function CoverageAlert({ requested, input }: { requested: number; input: 
         <Diamond className="h-4 w-4" fill="currentColor" />
       </span>
       <span className="at">
-        <b>Kapsama açığı.</b> Bağlı siparişler {formatNumber(requested, 0)} m; bu iş emrine giren{" "}
+        <b>Kapsama açığı.</b> Bağlı siparişler {formatNumber(requested, 0)} m; bu terbiye iş emrine giren{" "}
         {formatNumber(input, 0)} m. Kalan <b>{formatNumber(gap, 0)} m</b> için henüz üretim planlanmadı.
       </span>
       <button className="ax" title="Gizle" aria-label="Uyarıyı gizle" onClick={() => setHidden(true)}>

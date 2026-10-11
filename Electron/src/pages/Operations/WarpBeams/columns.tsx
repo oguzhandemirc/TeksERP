@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { WARP_BEAM_ORIGIN_LABEL, WARP_BEAM_STATUS_META, WARP_KG_SOURCE_LABEL, formatKg, formatM, type WarpBeam } from "./types";
+import { TERIM } from "@/lib/terim";
 
 /** Sıralama başlığı YOK: uç en yeni önce sıralar; süzme sunucuda. */
 /** Liste hücresi: sarılmamış levent "—", lotsuz sarım "Lot yok", tek lot adı, N lot sayı. */
@@ -39,7 +40,7 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
   {
     // Z2: "bu levent hangi iş için sarıldı" (Z1 DTO `weavingOrder`); bağsız = serbest levent.
     id: "weavingOrder",
-    header: "Dokuma işi",
+    header: TERIM.dokumaIsEmri.tekil,
     cell: ({ row }) => (row.original.weavingOrder ? <span className="font-mono text-xs">{row.original.weavingOrder.weavingOrderNumber}</span> : <span className="text-muted-foreground">—</span>),
   },
   {

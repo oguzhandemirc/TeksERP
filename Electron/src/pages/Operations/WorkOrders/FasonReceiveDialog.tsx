@@ -109,7 +109,7 @@ export function FasonReceiveDialog({
 
         {!q.isLoading && groups.length === 0 && (
           <div className="rounded-md border p-4 text-sm text-muted-foreground">
-            Bu iş emrinin fasonda bekleyen açık sevki yok.
+            Bu terbiye iş emrinin fasonda bekleyen açık sevki yok.
             {orphans.length > 0 && (
               <div className="mt-2 text-amber-600">
                 ⚠ {orphans.length} top fasonda görünüyor ama açık sevke bağlanamıyor —

@@ -9,6 +9,7 @@ import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
 import { useTabsStore } from "@/store/tabs";
 import { fetchOverdueWorkOrders } from "./dashboardService";
 import { calendarDaysFromToday, calendarLocaleDateString } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 
 export function OverdueWorkOrders() {
   // O8 fix: izin yoksa sorgu HİÇ atılmaz (enabled) ve widget gizlenir.
@@ -30,7 +31,7 @@ export function OverdueWorkOrders() {
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <AlertOctagon className="h-4 w-4 text-destructive" />
-          Geciken İş Emirleri
+          Geciken {TERIM.terbiyeIsEmri.cogul}
         </CardTitle>
         <button
           type="button"
@@ -46,7 +47,7 @@ export function OverdueWorkOrders() {
         ) : isError ? (
           <EmptyState message="Veri alınamadı." />
         ) : !data || data.length === 0 ? (
-          <EmptyState message="Geciken iş emri yok." />
+          <EmptyState message="Geciken terbiye iş emri yok." />
         ) : (
           <ul className="divide-y divide-border/40">
             {data.map((wo) => (

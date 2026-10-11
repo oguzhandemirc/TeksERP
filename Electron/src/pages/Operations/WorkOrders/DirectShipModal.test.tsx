@@ -86,7 +86,7 @@ describe("DirectShipModal (fasondan sevk UI)", () => {
     expect(rollChecks()).toHaveLength(2);
     // tüm toplar default seçili
     rollChecks().forEach((c) => expect(c).toBeChecked());
-    expect(screen.getByText(/Bu iş emrini tamamla/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bu terbiye iş emrini tamamla/i)).toBeInTheDocument();
     // toggle KAPALI iken "açık kalır" mesajı
     expect(screen.getByText(/iş emri AÇIK kalır/i)).toBeInTheDocument();
   });
@@ -128,7 +128,7 @@ describe("DirectShipModal (fasondan sevk UI)", () => {
     render();
     await user.type(await screen.findByPlaceholderText(/Boyahane/i), "fason son durak");
     await pickCustomer(user);
-    await user.click(screen.getByRole("checkbox", { name: /İş emrini tamamla/i }));
+    await user.click(screen.getByRole("checkbox", { name: /Terbiye iş emrini tamamla/i }));
     expect(await screen.findByText(/sonraki adım atlanacak/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Sevk Et \+ WO/i }));
     await waitFor(() => expect(directShip).toHaveBeenCalledTimes(1));

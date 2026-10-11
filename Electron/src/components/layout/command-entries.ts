@@ -19,6 +19,7 @@ import { reportCommandSections } from "./command-entries.reports";
 import { deepCommandSections } from "./command-entries.deep";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { isWorkOrdersVisible } from "@/pages/Operations/production-regime";
+import { TERIM } from "@/lib/terim";
 
 export type { CommandEntry, CommandSection } from "./command-entries.types";
 
@@ -72,12 +73,12 @@ export const commandSections: CommandSection[] = [
         // Karosu yok (hub'da "İş Emirleri"nin içinden açılır) ama en sık
         // yapılan işlerden biri — paletten tek adımda açılabilmeli.
         key: "ops:work-order-new",
-        label: "Yeni İş Emri",
-        description: "Boş iş emri formunu aç",
+        label: `Yeni ${TERIM.terbiyeIsEmri.tekil}`,
+        description: "Boş terbiye iş emri formunu aç",
         icon: FilePlus2,
         to: "/operations/work-orders/new",
         permission: "workorder:write",
-        keywords: "iş emri oluştur ekle yeni üretim aç",
+        keywords: "terbiye iş emri oluştur ekle yeni üretim aç",
         // ⚠️ KARO İLE AYNI YÜKLEM NESNESİ — karosuz girdiler kapıyı ELLE taşır.
         // Yukarıdaki `operationsTiles` döngüsü yüklemi otomatik taşıyor; bu
         // girdi o döngünün DIŞINDA olduğu için üretim modülü kapalıyken

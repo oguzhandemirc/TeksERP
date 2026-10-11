@@ -37,6 +37,7 @@ import { WeavingOrderRowMenu } from "./WeavingOrderRowMenu";
 import { FasonSheet } from "./fason/FasonSheet";
 import { WEAVING_ORDERS_QUERY_KEY, useWeavingOrderMutations } from "./useWeavingOrderMutations";
 import { WEAVING_STATUSES, WEAVING_STATUS_META, type WeavingOrder } from "./types";
+import { TERIM } from "@/lib/terim";
 
 const FILTERS: FilterDef[] = [
   {
@@ -79,14 +80,14 @@ export function WeavingOrdersPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Dokuma İşleri"
+        title={TERIM.dokumaIsEmri.cogul}
         description="Ne dokunacak, ne kadar, kim dokuyacak. Koşum ve top indirme tabletten; 'devam ediyor' tezgahta koşum var demektir."
         actions={
           <div className="flex items-center gap-2">
             <PermissionGate permission="weavingorder:write">
               <Button size="sm" onClick={() => setFormTarget("new")}>
                 <Plus className="mr-1 h-4 w-4" />
-                Yeni Dokuma İşi
+                Yeni {TERIM.dokumaIsEmri.tekil}
               </Button>
             </PermissionGate>
             <RefreshButton queryKey={WEAVING_ORDERS_QUERY_KEY} />
@@ -102,7 +103,7 @@ export function WeavingOrdersPage() {
         onRetry={() => void query.refetch()}
         errorText="Bu bir “kayıt yok” cevabı DEĞİLDİR — istek reddedildi ya da sunucuya ulaşamadı (modül kapalı, yetki yok, ağ)."
         pagination={pagination}
-        emptyText="Dokuma işi yok. Planlamak için “Yeni Dokuma İşi”."
+        emptyText="Dokuma iş emri yok. Planlamak için “Yeni Dokuma İş Emri”."
         onRowClick={openForEdit}
         rowContextMenu={(r) => <WeavingOrderRowMenu row={r} onEdit={setFormTarget} onClose={setClosing} onCancel={setCancelling} onFason={setFason} />}
       />

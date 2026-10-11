@@ -112,7 +112,7 @@ export function WorkOrderCompleteDialog({
           : {}),
       }),
     onSuccess: (res) => {
-      toast.success(res.message ?? "İş emri kapatıldı (tamamlandı).");
+      toast.success(res.message ?? "Terbiye iş emri kapatıldı (tamamlandı).");
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       // WO COMPLETED → sipariş "İş Emri" rollup rozeti "Üretildi"ye dönsün.
       void qc.invalidateQueries({ queryKey: ["orders"] });
@@ -139,10 +139,10 @@ export function WorkOrderCompleteDialog({
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-success" />
-            İş emrini kapat
+            Terbiye iş emrini kapat
           </DialogTitle>
           <DialogDescription>
-            {workOrderNumber ? <span className="font-mono">{workOrderNumber}</span> : "İş emri"}{" "}
+            {workOrderNumber ? <span className="font-mono">{workOrderNumber}</span> : "Terbiye iş emri"}{" "}
             <span className="font-medium text-foreground">Tamamlandı</span> olarak işaretlenecek.
           </DialogDescription>
         </DialogHeader>
@@ -190,7 +190,7 @@ export function WorkOrderCompleteDialog({
                 <div className="flex items-start gap-2 rounded-md border border-warning/50 bg-warning/10 p-3 text-xs text-warning-foreground">
                   <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                   <span>
-                    Bu iş emrinde {dispositionRolls.length} top istasyonda duruyor. Statülerine
+                    Bu terbiye iş emrinde {dispositionRolls.length} top istasyonda duruyor. Statülerine
                     karar vermek için <span className="font-mono">roll:manual-adjust</span> yetkisi
                     gerekiyor — yetkili bir kullanıcı kapatmalı.
                   </span>
@@ -227,9 +227,9 @@ export function WorkOrderCompleteDialog({
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                         <div>
                           <span className="font-semibold">
-                            {transferRolls.length} top YENİ bir iş emrine taşınacak.
+                            {transferRolls.length} top YENİ bir terbiye iş emrine taşınacak.
                           </span>{" "}
-                          Bu toplar depoya GİRMEZ — üretimde kalır ve yeni açılan iş
+                          Bu toplar depoya GİRMEZ — üretimde kalır ve yeni açılan terbiye iş
                           emrinde devam eder.
                           <ul className="mt-1 ml-4 list-disc">
                             {transferRolls.map((r) => (
@@ -247,7 +247,7 @@ export function WorkOrderCompleteDialog({
                           onCheckedChange={(v) => setKeepOrderLinkChoice(v === true)}
                         />
                         <span>
-                          <span className="font-medium">Yeni iş emri siparişe bağlı kalsın</span>
+                          <span className="font-medium">Yeni terbiye iş emri siparişe bağlı kalsın</span>
                           <span className="block text-muted-foreground">
                             Kapalıysa devredilen toplar stok üretimi olarak devam eder.
                           </span>
@@ -259,7 +259,7 @@ export function WorkOrderCompleteDialog({
                           onCheckedChange={(v) => setTransferAck(v === true)}
                         />
                         <span className="font-medium">
-                          Yeni iş emri açılmasını onaylıyorum
+                          Yeni terbiye iş emri açılmasını onaylıyorum
                         </span>
                       </label>
                     </div>
@@ -305,7 +305,7 @@ export function WorkOrderCompleteDialog({
             className="bg-success text-success-foreground hover:bg-success/90"
             onClick={() => completeMut.mutate()}
           >
-            {completeMut.isPending ? "Kapatılıyor..." : "İş emrini kapat"}
+            {completeMut.isPending ? "Kapatılıyor..." : "Terbiye iş emrini kapat"}
           </Button>
         </DialogFooter>
       </DialogContent>

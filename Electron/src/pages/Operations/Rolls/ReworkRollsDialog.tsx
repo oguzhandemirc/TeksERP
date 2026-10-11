@@ -167,7 +167,7 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
   const allBarcodeless = rolls.length > 0 && rolls.every((r) => !r.barcode);
 
   const blocking = multiItem
-    ? "Seçili toplar farklı kumaşlara ait — tek iş emri tek kumaş içindir."
+    ? "Seçili toplar farklı kumaşlara ait — tek terbiye iş emri tek kumaş içindir."
     : allBarcodeless
     ? "Seçili topların hiçbirinde barkod yok — bu yol barkodla çalışır."
     : committed.length > 0
@@ -206,7 +206,7 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
     onSuccess: (res) => {
       attempt.onSuccess();
       const d = res.data;
-      const parts = [`İş emri ${d.workOrder.workOrderNumber}`];
+      const parts = [`Terbiye iş emri ${d.workOrder.workOrderNumber}`];
       if (d.batch) parts.push(`parti ${d.batch.batchNumber}`);
       if (d.dispatch) parts.push(`sevk ${d.dispatch.dispatchNo}`);
       toast.success(`${d.attached} top ${isRework ? "yeniden üretime" : "üretime"} alındı`, {
@@ -246,7 +246,7 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
             {isRework ? "Yeniden Üretime Al" : "Üretime Al"} — {rolls.length} top
           </DialogTitle>
           <DialogDescription>
-            Seçili toplar için <strong>yeni bir iş emri</strong> açılır ve toplar ona bağlanır. Mevcut bir iş
+            Seçili toplar için <strong>yeni bir terbiye iş emri</strong> açılır ve toplar ona bağlanır. Mevcut bir terbiye iş
             emrine sonradan top eklenemez.
           </DialogDescription>
         </DialogHeader>
@@ -359,8 +359,8 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
                   </span>
                   <span className="block text-xs text-muted-foreground">
                     {firmId
-                      ? "İş emri açılınca mal fasona sevk edilir ve çeki listesi oluşur. Kapatırsan yalnız planlanır."
-                      : "Firma seçilmedi — sevk yapılamaz, iş emri yalnız planlanır."}
+                      ? "Terbiye iş emri açılınca mal fasona sevk edilir ve çeki listesi oluşur. Kapatırsan yalnız planlanır."
+                      : "Firma seçilmedi — sevk yapılamaz, terbiye iş emri yalnız planlanır."}
                   </span>
                 </span>
               </label>
@@ -415,10 +415,10 @@ export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, 
               "Açılıyor…"
             ) : willDispatch ? (
               <>
-                <Factory className="h-4 w-4" /> İş emri aç ve fasona gönder
+                <Factory className="h-4 w-4" /> Terbiye iş emri aç ve fasona gönder
               </>
             ) : (
-              "İş emri aç"
+              "Terbiye iş emri aç"
             )}
           </Button>
         </DialogFooter>

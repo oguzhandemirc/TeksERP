@@ -18,6 +18,7 @@ import {
 } from "./work-order-rollup";
 import { deriveDeadlineRisk } from "./deadline-risk";
 import type { Order, OrderLine } from "./types";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Sipariş kalemlerindeki benzersiz kumaş/renk etiketleri — her zaman BİZDEKİ ad.
@@ -149,7 +150,7 @@ function WorkOrderRollupCell({ order }: { order: Order }) {
         <Badge
           variant="outline"
           className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
-          title={`${coverage.total} kalemin ${coverage.linked} tanesi bir iş emrine bağlı`}
+          title={`${coverage.total} kalemin ${coverage.linked} tanesi bir terbiye iş emrine bağlı`}
         >
           {coverage.linked}/{coverage.total} kalem
         </Badge>
@@ -295,9 +296,9 @@ export const orderColumns: ColumnDef<Order>[] = [
   },
   {
     id: "workOrder",
-    header: "İş Emri",
+    header: TERIM.terbiyeIsEmri.tekil,
     meta: {
-      label: "İş Emri",
+      label: TERIM.terbiyeIsEmri.tekil,
       exportValue: (o: Order) => rollupExportText(o),
     },
     cell: ({ row }) => <WorkOrderRollupCell order={row.original} />,

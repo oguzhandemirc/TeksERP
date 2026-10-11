@@ -46,9 +46,9 @@ export function TebdilWizard({ open, onOpenChange, workOrderId, batchId, batchNu
   const submitLabel = dispatchOnly
     ? "Fason Sevk"
     : w.mode === "NEW_COLOR"
-      ? "Yeni İş Emri Oluştur"
+      ? "Yeni Terbiye İş Emri Oluştur"
       : w.mode === "UNDYED_MOVE"
-        ? "Yeni İş Emrine Taşı"
+        ? "Yeni Terbiye İş Emrine Taşı"
         : w.dispatchNow
           ? "Ayır + Fason Sevk"
           : "Ayır (sahada sevk)";
@@ -80,7 +80,7 @@ export function TebdilWizard({ open, onOpenChange, workOrderId, batchId, batchNu
               <span className="font-mono">{batchNumber}</span>
               {dispatchOnly
                 ? " partisini boyahaneye gönder."
-                : " partisini yeniden boyamaya al ya da yeni iş emrine ayır."}
+                : " partisini yeniden boyamaya al ya da yeni terbiye iş emrine ayır."}
             </DialogDescription>
             {w.step !== 4 && stepsShown.length > 1 && (
               <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">

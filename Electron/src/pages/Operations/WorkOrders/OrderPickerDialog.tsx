@@ -103,9 +103,9 @@ function requiredMismatchReason(
   line: LineCompatTarget,
 ): string | null {
   if (!req) return null;
-  if (line.itemId !== req.itemId) return "İş emrinin kumaşıyla uyuşmuyor";
+  if (line.itemId !== req.itemId) return "Terbiye iş emrinin kumaşıyla uyuşmuyor";
   if ((line.width ?? null) !== (req.width ?? null))
-    return "İş emrinin eniyle uyuşmuyor";
+    return "Terbiye iş emrinin eniyle uyuşmuyor";
   return null;
 }
 
@@ -377,7 +377,7 @@ export function OrderPickerDialog({
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Müsait Sipariş Kalemleri</DialogTitle>
           <DialogDescription>
-            Onaylı ve kısmi sevk edilmiş sipariş kalemleri. İş emrine bağlanacakları seç.
+            Onaylı ve kısmi sevk edilmiş sipariş kalemleri. Terbiye iş emrine bağlanacakları seç.
           </DialogDescription>
         </DialogHeader>
 

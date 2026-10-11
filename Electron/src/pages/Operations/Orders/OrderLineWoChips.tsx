@@ -18,7 +18,7 @@ export function OrderLineWoChips({ links }: Props) {
 
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-1">
-      <span className="text-[10px] text-muted-foreground">İş emri:</span>
+      <span className="text-[10px] text-muted-foreground">Terbiye iş emri:</span>
       {active.map((l) => (
         <span key={l.workOrderId} className="inline-flex items-center gap-1">
           <span className="font-mono text-[10px] text-foreground">

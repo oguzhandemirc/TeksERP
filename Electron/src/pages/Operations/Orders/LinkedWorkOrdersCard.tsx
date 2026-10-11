@@ -5,6 +5,7 @@ import { workOrderStatusLabels } from "@/types/enums";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { deriveLineCoverage, collectLinkedWorkOrders } from "./work-order-rollup";
 import type { OrderLine } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   lines: OrderLine[];
@@ -30,7 +31,7 @@ export function LinkedWorkOrdersCard({ lines, onNavigate }: Props) {
     <Card>
       <CardContent className="p-3">
         <div className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Factory className="h-3.5 w-3.5" /> Bağlı İş Emirleri ({workOrders.length})
+          <Factory className="h-3.5 w-3.5" /> Bağlı {TERIM.terbiyeIsEmri.cogul} ({workOrders.length})
           {coverage.total > 0 && (
             <span
               className={

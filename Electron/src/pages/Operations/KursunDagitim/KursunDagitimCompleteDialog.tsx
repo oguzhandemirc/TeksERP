@@ -82,7 +82,7 @@ export function KursunDagitimCompleteDialog({
             İşi bitir — kurşun son adım
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{row?.workOrderNumber ?? "İş emri"}</span> ·{" "}
+            <span className="font-mono">{row?.workOrderNumber ?? "Terbiye iş emri"}</span> ·{" "}
             {preview?.machineName ?? row?.machineName ?? "—"} makinesi
           </DialogDescription>
         </DialogHeader>
@@ -167,8 +167,8 @@ export function KursunDagitimCompleteDialog({
                   )}
                   <li>
                     {preview.workOrderWillComplete
-                      ? "İş emri KAPANACAK (Tamamlandı)."
-                      : "İş emrinde başka açık adım var — iş emri açık kalır."}
+                      ? "Terbiye iş emri KAPANACAK (Tamamlandı)."
+                      : "Terbiye iş emrinde başka açık adım var — terbiye iş emri açık kalır."}
                   </li>
                 </ul>
               </div>

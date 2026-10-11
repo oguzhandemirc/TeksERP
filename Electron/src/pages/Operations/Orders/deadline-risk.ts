@@ -51,6 +51,6 @@ export function deriveDeadlineRisk(
   const overdue = daysLeft < 0;
   const when = overdue ? "Termin geçti" : "Termin yaklaşıyor";
   const why =
-    rule === "NO_WORK_ORDER" ? "iş emri açılmamış" : "üretim tamamlanmamış";
+    rule === "NO_WORK_ORDER" ? "terbiye iş emri açılmamış" : "üretim tamamlanmamış";
   return { daysLeft, overdue, label: `${when} — ${why}` };
 }

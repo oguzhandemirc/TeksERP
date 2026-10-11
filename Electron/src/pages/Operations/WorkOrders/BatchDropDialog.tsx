@@ -131,7 +131,7 @@ export function BatchDropDialog({
             Partiyi düşür
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{preview?.batchNumber ?? "Parti"}</span> · iş emri devam
+            <span className="font-mono">{preview?.batchNumber ?? "Parti"}</span> · terbiye iş emri devam
             eder
           </DialogDescription>
         </DialogHeader>
@@ -157,8 +157,8 @@ export function BatchDropDialog({
               <div className="rounded-md border bg-muted/20 px-3 py-2 text-xs">
                 {preview.rollCount} top · {formatNumber(preview.totalMeters)} m
                 {preview.otherBatches.length > 0
-                  ? ` · iş emrinde ${preview.otherBatches.length} parti daha kalır`
-                  : " · iş emrinde başka parti yok"}
+                  ? ` · terbiye iş emrinde ${preview.otherBatches.length} parti daha kalır`
+                  : " · terbiye iş emrinde başka parti yok"}
               </div>
 
               {!preview.canDrop && (

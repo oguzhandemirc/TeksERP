@@ -15,6 +15,7 @@ import { weavingOrderFormDefaults, weavingOrderFormSchema, type WeavingOrderForm
 import { FabricFields, PartyFields, PlanFields } from "./WeavingOrderFormFields";
 import { WeavingOrderLinesSection } from "./WeavingOrderLinesSection";
 import { isoToDay, type WeavingOrder } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   open: boolean;
@@ -49,7 +50,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
     <EntityFormDialog<WeavingOrderFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? `${initial.weavingOrderNumber} — Düzenle` : "Yeni Dokuma İşi"}
+      title={initial ? `${initial.weavingOrderNumber} — Düzenle` : `Yeni ${TERIM.dokumaIsEmri.tekil}`}
       description="Ne dokunacak, ne kadar, kim dokuyacak. Numara sunucuda üretilir (DK+GGAAYY+NNNN)."
       schema={weavingOrderFormSchema}
       defaultValues={buildDefaults(initial)}

@@ -49,7 +49,7 @@ export function RouteDesignerTemplatePanel({
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium">Bu rotayı şablon olarak kaydet</span>
           <span className="block text-[11px] text-muted-foreground">
-            Sonraki iş emirlerinde "Şablondan başla" ile tek tıkla gelir
+            Sonraki terbiye iş emirlerinde "Şablondan başla" ile tek tıkla gelir
           </span>
         </span>
         {/* Switch göstergesi */}

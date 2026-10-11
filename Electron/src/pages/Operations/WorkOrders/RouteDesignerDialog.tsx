@@ -211,7 +211,7 @@ export function RouteDesignerDialog({
           <DialogHeader>
             <DialogTitle>Özel Rota Tasarla</DialogTitle>
             <DialogDescription>
-              Bu iş emrine özel rota tasarla. İstersen var olan bir şablondan başla,
+              Bu terbiye iş emrine özel rota tasarla. İstersen var olan bir şablondan başla,
               istersen sıfırdan. Sonunda yeni şablon olarak da kaydedebilirsin.
             </DialogDescription>
           </DialogHeader>

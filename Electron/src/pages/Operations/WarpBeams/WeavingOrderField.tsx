@@ -12,6 +12,7 @@ import { FormField } from "@/components/forms/FormField";
 import { weavingOrderPickerService } from "@/pages/Operations/WeavingOrders/service";
 import type { WeavingOrder } from "@/pages/Operations/WeavingOrders/types";
 import type { WarpBeamPlanValues } from "./schema";
+import { TERIM } from "@/lib/terim";
 
 /** Yalnız açık işler; etiket kumaş + çözgü kartı (uyumsuzluk göz önünde). */
 export const WEAVING_ORDER_PICKER_FILTERS = { status: "PLANNED,IN_PROGRESS" } as const;
@@ -20,7 +21,7 @@ export const weavingOrderPickerSubLabel = (w: WeavingOrder) => `${w.item.name}${
 
 export function WeavingOrderPicker({ value, onChange, required = false, error }: { value: string; onChange: (id: string) => void; required?: boolean; error?: FieldError }) {
   return (
-    <FormField label="Dokuma işi" required={required} error={error} hint={required ? "Bu kurulumda levent bir dokuma işine bağlanmalı (ayar açık)." : "İsteğe bağlı — serbest levent meşru. Çözgü kartı işinkinden farklıysa uyarı alırsınız, bağ yine kurulur."}>
+    <FormField label={TERIM.dokumaIsEmri.tekil} required={required} error={error} hint={required ? "Bu kurulumda levent bir dokuma iş emrine bağlanmalı (ayar açık)." : "İsteğe bağlı — serbest levent meşru. Çözgü kartı işinkinden farklıysa uyarı alırsınız, bağ yine kurulur."}>
       <EntityPickerModal<WeavingOrder>
         value={value || null}
         onChange={(id) => onChange(id ?? "")}
@@ -31,9 +32,9 @@ export function WeavingOrderPicker({ value, onChange, required = false, error }:
         getSubLabel={weavingOrderPickerSubLabel}
         icon={Factory}
         nullable
-        noneLabel="Dokuma işi yok (serbest levent)"
-        title="Dokuma işi seç"
-        placeholder="Dokuma işi seç"
+        noneLabel="Dokuma iş emri yok (serbest levent)"
+        title="Dokuma iş emri seç"
+        placeholder="Dokuma iş emri seç"
       />
     </FormField>
   );

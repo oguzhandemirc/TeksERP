@@ -399,7 +399,7 @@ export function RouteEditor({
             </DialogTitle>
             <DialogDescription>
               Bu üretim akışını yeniden kullanılabilir bir rota olarak kaydet — sonraki
-              iş emirlerinde başlıktaki "Rota seç" ile tek tıkla gelir. Seçili hedef
+              terbiye iş emirlerinde başlıktaki "Rota seç" ile tek tıkla gelir. Seçili hedef
               renk/özellikler de adımlarına yazılır; rota uygulanınca hazır gelirler.
             </DialogDescription>
           </DialogHeader>

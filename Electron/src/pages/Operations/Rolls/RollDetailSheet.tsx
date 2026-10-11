@@ -22,6 +22,7 @@ import { RollCancelCard } from "./RollCancelCard";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
 import { type Roll, shipmentScopeLabels, categoryOfDispatch } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   roll: Roll | null;
@@ -403,7 +404,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       TÜRETİLİR; elle yazılmaz, salt-okunur. Dokuma kökenli olmayan topta çizilmez. */}
                   {(r.entrySource === "WEAVING" || detail?.weavingOrder) && (
                     <>
-                      <div className="text-xs text-muted-foreground">Dokuma İşi</div>
+                      <div className="text-xs text-muted-foreground">{TERIM.dokumaIsEmri.tekil}</div>
                       <div className="text-xs" data-testid="roll-weaving-order">
                         {detail?.weavingOrder ? (
                           <span className="font-mono">{detail.weavingOrder.weavingOrderNumber}</span>
@@ -458,7 +459,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   </div>
                   <p className="text-[11px] text-amber-700/80">
                     Bu top bir çuvalın içinde ve bir sevkiyata bağlı — serbest depoda
-                    değildir, başka işe (sevk/kartela/iş emri) ayrılamaz.
+                    değildir, başka işe (sevk/kartela/terbiye iş emri) ayrılamaz.
                   </p>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                     <div className="text-xs text-muted-foreground">Sevkiyat</div>

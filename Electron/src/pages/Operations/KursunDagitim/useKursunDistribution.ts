@@ -52,7 +52,7 @@ export function useKursunDistribution() {
   const assign = useMutation({
     mutationFn: kursunDagitimService.assign,
     onSuccess: (res) => {
-      toast.success(res.message ?? "İş emri makineye dağıtıldı.");
+      toast.success(res.message ?? "Terbiye iş emri makineye dağıtıldı.");
       refresh();
     },
   });

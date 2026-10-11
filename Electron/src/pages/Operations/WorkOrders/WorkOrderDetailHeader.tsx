@@ -21,6 +21,7 @@ import { ChangeTargetDialog } from "./ChangeTargetDialog";
 import { AddBatchButton } from "./AddBatchButton";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import type { WorkOrder } from "./types";
+import { TERIM } from "@/lib/terim";
 
 /**
  * Tam sayfa detayın sticky başlığı: kimlik (parti no + statü + tip/rota) +
@@ -85,7 +86,7 @@ export function WorkOrderDetailHeader({
   return (
     <>
       <PageHeader
-        title={wo?.workOrderNumber ?? "İş Emri"}
+        title={wo?.workOrderNumber ?? TERIM.terbiyeIsEmri.tekil}
         titleExtra={
           wo && (
             <>
@@ -106,7 +107,7 @@ export function WorkOrderDetailHeader({
             ? `${workOrderTypeLabels[wo.type]}${wo.routeTemplate ? ` · Rota: ${wo.routeTemplate.name}` : ""}`
             : undefined
         }
-        parent={{ label: "İş Emirleri", to: "/operations/work-orders" }}
+        parent={{ label: TERIM.terbiyeIsEmri.cogul, to: "/operations/work-orders" }}
         onBack={onBack}
         actions={
           wo ? (
@@ -276,7 +277,7 @@ export function WorkOrderDetailHeader({
         open={inProgressConfirmOpen}
         onOpenChange={setInProgressConfirmOpen}
         title="Üretim devam ediyor"
-        description="Bu iş emri şu an üretimde. Yapacağın değişiklikler bağlı rulolara ve istasyon adımlarına yansıyabilir. Devam edilsin mi?"
+        description="Bu terbiye iş emri şu an üretimde. Yapacağın değişiklikler bağlı rulolara ve istasyon adımlarına yansıyabilir. Devam edilsin mi?"
         confirmLabel="Devam Et"
         cancelLabel="Vazgeç"
         destructive

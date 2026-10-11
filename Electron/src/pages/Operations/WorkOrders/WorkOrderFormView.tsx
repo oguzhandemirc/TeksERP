@@ -302,7 +302,7 @@ export function WorkOrderFormView({
       } as unknown as Partial<ProductRecipe>);
     },
     onSuccess: (_res, name) => {
-      toast.success(`İş emri şablonu kaydedildi: ${name}`);
+      toast.success(`Terbiye iş emri şablonu kaydedildi: ${name}`);
       void qc.invalidateQueries({ queryKey: ["routes"] });
       void qc.invalidateQueries({ queryKey: ["product-recipes"] });
       setSaveRecipeOpen(false);
@@ -460,7 +460,7 @@ export function WorkOrderFormView({
               manualErrors.push("Kat tipi seçilmeli.");
             }
             if (manualErrors.length > 0) {
-              toast.error("İş emri oluşturulamadı — eksik/hatalı alanlar var", {
+              toast.error("Terbiye iş emri oluşturulamadı — eksik/hatalı alanlar var", {
                 description: manualErrors.join(" · "),
                 position: "top-center",
               });
@@ -475,7 +475,7 @@ export function WorkOrderFormView({
           (errors) => {
             // Zod doğrulama hataları: satır içi gösterim duruyor, üstüne özet toast.
             const messages = collectErrorMessages(errors);
-            toast.error("İş emri oluşturulamadı — eksik/hatalı alanlar var", {
+            toast.error("Terbiye iş emri oluşturulamadı — eksik/hatalı alanlar var", {
               description: messages.length
                 ? messages.join(" · ")
                 : "İşaretli alanları kontrol edin.",
@@ -514,7 +514,7 @@ export function WorkOrderFormView({
                 noneLabel="— Şablon kullanma"
                 icon={FlaskConical}
                 iconClassName="text-white"
-                title="İş Emri Şablonu Seç"
+                title="Terbiye İş Emri Şablonu Seç"
                 description="Hazır şablon — kumaş, renk, özellik, en ve rota tek tıkla dolar."
                 placeholder="Şablon seç..."
                 placeholderClassName="text-sm font-medium text-white/90"
@@ -887,9 +887,9 @@ export function WorkOrderFormView({
                 hintTone="muted"
                 hint={
                   partyCodeEditable
-                    ? "Refakat kartına barkod olarak basılır: benzersiz, iş emri no biçiminde (Sistem → Numaralandırma), yalnız büyük harf ve rakam."
+                    ? "Refakat kartına barkod olarak basılır: benzersiz, terbiye iş emri no biçiminde (Sistem → Numaralandırma), yalnız büyük harf ve rakam."
                     : isEdit
-                      ? "İş emri numarası açılışta verilir, sonradan değiştirilemez."
+                      ? "Terbiye iş emri numarası açılışta verilir, sonradan değiştirilemez."
                       : undefined
                 }
               >
@@ -899,7 +899,7 @@ export function WorkOrderFormView({
                     readOnly={!partyCodeEditable}
                     placeholder={
                       partyCodeEditable
-                        ? "İş emri no biçiminde (Sistem → Numaralandırma)"
+                        ? "Terbiye iş emri no biçiminde (Sistem → Numaralandırma)"
                         : "Otomatik oluşturulur — kendiniz girmek için tıklayın."
                     }
                     className={cn(!partyCodeEditable && "cursor-pointer bg-muted/40 pr-9")}
@@ -983,16 +983,16 @@ export function WorkOrderFormView({
                       size="sm"
                       disabled={Boolean(templateBlockReason)}
                       className="gap-1"
-                      title={templateBlockReason ?? "Bu iş emrini şablon olarak kaydet"}
+                      title={templateBlockReason ?? "Bu terbiye iş emrini şablon olarak kaydet"}
                     >
                       <FlaskConical className="h-3.5 w-3.5" /> Şablon Kaydet
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent align="start" className="w-80 space-y-2">
-              <div className="text-xs font-medium">Bu iş emrini şablon olarak kaydet</div>
+              <div className="text-xs font-medium">Bu terbiye iş emrini şablon olarak kaydet</div>
               <p className="text-[11px] text-muted-foreground">
-                Kumaş + renk + özellik + en + akış tek isimle saklanır; sonraki iş
-                emirlerinde "İş emri şablonundan doldur" ile gelir.
+                Kumaş + renk + özellik + en + akış tek isimle saklanır; sonraki terbiye iş
+                emirlerinde "Terbiye iş emri şablonundan doldur" ile gelir.
               </p>
               <Input
                 value={recipeName}
@@ -1035,7 +1035,7 @@ export function WorkOrderFormView({
                   : "Oluşturuluyor..."
                 : isEdit
                   ? "Güncelle"
-                  : "İş Emri Oluştur"}
+                  : "Terbiye İş Emri Oluştur"}
             </Button>
           </div>
         </PageFooter>

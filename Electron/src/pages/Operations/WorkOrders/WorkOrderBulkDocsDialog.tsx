@@ -152,7 +152,7 @@ export function WorkOrderBulkDocsDialog({ open, onOpenChange, workOrders, onDone
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Toplu Belge Çıkar</DialogTitle>
           <DialogDescription>
-            {workOrders.length} iş emri seçildi. Çıkarmak istediğiniz belge türlerini işaretleyin.
+            {workOrders.length} terbiye iş emri seçildi. Çıkarmak istediğiniz belge türlerini işaretleyin.
           </DialogDescription>
         </DialogHeader>
 
@@ -160,7 +160,7 @@ export function WorkOrderBulkDocsDialog({ open, onOpenChange, workOrders, onDone
           {scan.isLoading ? (
             <div className="space-y-2">
               <div className="text-sm text-muted-foreground">
-                Belgeler taranıyor… {scanned}/{workOrders.length} iş emri
+                Belgeler taranıyor… {scanned}/{workOrders.length} terbiye iş emri
               </div>
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
@@ -202,7 +202,7 @@ export function WorkOrderBulkDocsDialog({ open, onOpenChange, workOrders, onDone
 
               {empties.length > 0 && (
                 <Note icon={Info}>
-                  {empties.length} iş emrinin hiç belgesi yok:{" "}
+                  {empties.length} terbiye iş emrinin hiç belgesi yok:{" "}
                   <span className="font-mono">
                     {empties.slice(0, 6).map((w) => w.workOrderNumber).join(", ")}
                     {empties.length > 6 ? ` … (+${empties.length - 6})` : ""}
@@ -211,14 +211,14 @@ export function WorkOrderBulkDocsDialog({ open, onOpenChange, workOrders, onDone
               )}
               {failedScans.length > 0 && (
                 <Note icon={TriangleAlert} tone="warn">
-                  {failedScans.length} iş emrinin belge listesi alınamadı (
+                  {failedScans.length} terbiye iş emrinin belge listesi alınamadı (
                   {failedScans[0]!.wo.workOrderNumber}: {failedScans[0]!.error})
                 </Note>
               )}
               {overLimit && (
                 <Note icon={TriangleAlert} tone="warn">
                   Seçim çok büyük ({selected.length} belge). Tek işte en fazla {BULK_DOC_LIMIT}{" "}
-                  belge çıkarılır — daha az iş emri ya da daha az belge türü seçin.
+                  belge çıkarılır — daha az terbiye iş emri ya da daha az belge türü seçin.
                 </Note>
               )}
             </>

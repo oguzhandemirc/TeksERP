@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import { lookupWorkOrdersForEvents, type LookupHit } from "../WorkOrders/events";
 import { WorkOrderEventsPanel } from "../WorkOrders/WorkOrderEventsPanel";
+import { TERIM } from "@/lib/terim";
 
 export function WorkOrderEventsPage() {
   const [q, setQ] = useState("");
@@ -28,8 +29,8 @@ export function WorkOrderEventsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="İş Emri Hareketleri"
-        description="İş emri numarası ya da top barkodu ile iş emrinin bütün hareketleri"
+        title={`${TERIM.terbiyeIsEmri.tekil} Hareketleri`}
+        description="Terbiye iş emri numarası ya da top barkodu ile terbiye iş emrinin bütün hareketleri"
       />
       <PageBody className="flex flex-col p-6">
         <form
@@ -43,8 +44,8 @@ export function WorkOrderEventsPage() {
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="İş emri no (IE…) ya da top barkodu okutun"
-            aria-label="İş emri no ya da top barkodu"
+            placeholder="Terbiye iş emri no (IE…) ya da top barkodu okutun"
+            aria-label="Terbiye iş emri no ya da top barkodu"
           />
           <Button type="submit" disabled={q.trim().length < 2 || search.isPending}>
             {search.isPending ? "Aranıyor…" : "Ara"}
@@ -54,11 +55,11 @@ export function WorkOrderEventsPage() {
           <p className="mt-3 text-sm text-destructive">Arama yapılamadı — bu “bulunamadı” demek değildir, tekrar deneyin.</p>
         )}
         {search.isSuccess && hits.length === 0 && (
-          <p className="mt-3 text-sm text-muted-foreground">Bu numara ya da barkodla iş emri bulunamadı.</p>
+          <p className="mt-3 text-sm text-muted-foreground">Bu numara ya da barkodla terbiye iş emri bulunamadı.</p>
         )}
         {hits.length > 1 && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Top {hits.length} iş emrinden geçti:</span>
+            <span className="text-muted-foreground">Top {hits.length} terbiye iş emrinden geçti:</span>
             {hits.map((h) => (
               <Button key={h.id} size="sm" variant={selected?.id === h.id ? "default" : "outline"} onClick={() => setSelected(h)}>
                 {h.workOrderNumber} · {workOrderStatusLabels[h.status as WorkOrderStatus] ?? h.status}

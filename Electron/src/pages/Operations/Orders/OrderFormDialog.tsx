@@ -125,8 +125,8 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
               ? partialShipped
                 ? "Sipariş kısmi sevk edilmiş — sadece termin güncellenebilir."
                 : linesEditable
-                  ? "İş emri açılmadığı için kalemler hâlâ düzenlenebilir."
-                  : "İş emri açılmış — sadece üst-düzey alanlar güncellenebilir."
+                  ? "Terbiye iş emri açılmadığı için kalemler hâlâ düzenlenebilir."
+                  : "Terbiye iş emri açılmış — sadece üst-düzey alanlar güncellenebilir."
               : "Müşteri sipariş bilgisi + en az bir kalem. Sipariş numarası otomatik atanır."}
           </DialogDescription>
         </DialogHeader>
@@ -265,7 +265,7 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
           ) : (
             <div className="mx-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Kalemler kilitli</span> · {lineSummary}.
-              İş emri açılmış kalemleri değiştirmek için önce iş emrini iptal et.
+              Terbiye iş emri açılmış kalemleri değiştirmek için önce terbiye iş emrini iptal et.
             </div>
           )}
 

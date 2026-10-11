@@ -37,7 +37,7 @@ export function FasonReceiptDialog({ order, isPending, failed, onClose, onConfir
         <DialogHeader>
           <DialogTitle>{order.weavingOrderNumber} — fasondan dönen topları kabul et</DialogTitle>
           <DialogDescription>
-            Her satır bir TOP olarak doğar (kumaş {order.item.name}, {order.color?.name ?? "renksiz"}; giriş kaynağı “Dokuma”). Ölçüm ve etiket KK1 akışında; makbuz kalemi tutulmaz, parti iş emrine katılırken doğar.
+            Her satır bir TOP olarak doğar (kumaş {order.item.name}, {order.color?.name ?? "renksiz"}; giriş kaynağı “Dokuma”). Ölçüm ve etiket KK1 akışında; makbuz kalemi tutulmaz, parti terbiye iş emrine katılırken doğar.
           </DialogDescription>
         </DialogHeader>
         {failed.length > 0 && (

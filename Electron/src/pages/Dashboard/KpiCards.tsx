@@ -23,6 +23,7 @@ import {
 } from "./dashboardService";
 import { useDashboardLayout } from "./useDashboardLayout";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { TERIM } from "@/lib/terim";
 
 interface KpiDef {
   key: string;
@@ -50,7 +51,7 @@ const KPIS: KpiDef[] = [
   },
   {
     key: "openWorkOrders",
-    label: "Açık İş Emri",
+    label: `Açık ${TERIM.terbiyeIsEmri.tekil}`,
     icon: Factory,
     tone: "text-primary",
     query: fetchOpenWorkOrderCount,

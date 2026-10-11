@@ -90,7 +90,7 @@ function DetailBody({ loom: t, now }: { loom: LiveLoom; now: number }) {
         <StopBreakdown loom={t} now={now} />
       </Section>
       {(t.job || t.beams.length > 0) && (
-        <Section title={t.beams.length === 0 ? "Dokuma işi" : t.job ? "Dokuma işi ve levent" : "Levent"}>
+        <Section title={t.beams.length === 0 ? "Dokuma iş emri" : t.job ? "Dokuma iş emri ve levent" : "Levent"}>
           <JobAndBeam loom={t} />
         </Section>
       )}

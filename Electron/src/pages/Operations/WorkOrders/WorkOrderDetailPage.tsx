@@ -19,6 +19,7 @@ import { RouteStepline } from "./detail-v3/RouteStepline";
 import { ProducedV3 } from "./detail-v3/ProducedV3";
 import { OrderLinksV3 } from "./detail-v3/OrderLinksV3";
 import "./detail-v3/work-order-detail-v3.css";
+import { TERIM } from "@/lib/terim";
 
 const LIST_PATH = "/operations/work-orders";
 
@@ -47,7 +48,7 @@ export function WorkOrderDetailPage() {
 
   useEffect(() => {
     if (!wo?.workOrderNumber || !id) return;
-    const title = `İş Emri · ${wo.workOrderNumber.slice(-6)}`;
+    const title = `${TERIM.terbiyeIsEmri.tekil} · ${wo.workOrderNumber.slice(-6)}`;
     const tab = useTabsStore.getState().tabs.find((t) => t.path === `/operations/work-orders/${id}`);
     if (tab) useTabsStore.getState().updateTabTitle(tab.id, title);
   }, [wo?.workOrderNumber, id]);
@@ -89,7 +90,7 @@ export function WorkOrderDetailPage() {
             </div>
           )}
           {!detail.isLoading && !wo && (
-            <div className="py-16 text-center text-sm text-muted-foreground">İş emri bulunamadı.</div>
+            <div className="py-16 text-center text-sm text-muted-foreground">Terbiye iş emri bulunamadı.</div>
           )}
 
           {wo && (
@@ -100,7 +101,7 @@ export function WorkOrderDetailPage() {
 
               <WorkOrderKpis wo={wo} fulfill={fulfill} hasOrders={hasOrders} />
 
-              <V3Section title="İş Emri Künyesi">
+              <V3Section title={`${TERIM.terbiyeIsEmri.tekil} Künyesi`}>
                 <KunyeCard wo={wo} />
               </V3Section>
 

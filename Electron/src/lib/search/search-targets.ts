@@ -10,6 +10,7 @@ import {
   Layers,
   Truck,
 } from "lucide-react";
+import { TERIM } from "@/lib/terim";
 
 // =============================================================================
 // ARAMA SONUCU → HEDEF (2026-08-19)
@@ -82,7 +83,7 @@ export const SEARCH_TARGETS: Record<string, SearchTarget> = {
     listTo: (t) => `/operations/orders?search=${q(t)}`,
   },
   workOrder: {
-    label: "İş Emirleri",
+    label: TERIM.terbiyeIsEmri.cogul,
     icon: Factory,
     permissions: ["workorder:read"],
     to: (r) => ({ to: `/operations/work-orders/${r.id}` }),

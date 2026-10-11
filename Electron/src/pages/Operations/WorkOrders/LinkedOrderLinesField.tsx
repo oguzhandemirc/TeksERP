@@ -121,7 +121,7 @@ export function LinkedOrderLinesField({
                 Bağlı Sipariş Kalemleri
               </div>
               <div className="text-[11px] leading-tight text-muted-foreground">
-                Bu iş emrinin karşıladığı kalemler
+                Bu terbiye iş emrinin karşıladığı kalemler
               </div>
             </div>
           </div>

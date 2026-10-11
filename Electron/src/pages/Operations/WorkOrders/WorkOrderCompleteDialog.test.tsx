@@ -81,11 +81,11 @@ const render = () =>
     />,
   );
 
-const confirmBtn = () => screen.getByRole("button", { name: /İş emrini kapat/i });
+const confirmBtn = () => screen.getByRole("button", { name: /Terbiye iş emrini kapat/i });
 
 /** Devir açık onayı — devir seçilmeden görünmez. */
 const transferAckBox = () =>
-  screen.getByRole("checkbox", { name: /Yeni iş emri açılmasını onaylıyorum/i });
+  screen.getByRole("checkbox", { name: /Yeni terbiye iş emri açılmasını onaylıyorum/i });
 
 /** i. select (0 = dispozisyon, 1 = kalite) — TEK toplu senaryolar için. */
 const combo = (i: number) => screen.getAllByRole("combobox")[i]!;
@@ -216,7 +216,7 @@ describe("WorkOrderCompleteDialog (kapanış dispozisyonu)", () => {
     getCompletePreview.mockResolvedValue(previewData({ orderLinked: true }));
     render();
     await screen.findByText("BC-1");
-    await chooseDisposition(user, /Yeni iş emrine devret/i);
+    await chooseDisposition(user, /Yeni terbiye iş emrine devret/i);
     const toggle = await screen.findByRole("checkbox", { name: /siparişe bağlı kalsın/i });
     expect(toggle).toBeChecked(); // orderLinked=true → default keep
     await user.type(screen.getByPlaceholderText(/sipariş iptal/i), "üretim yeni emirde sürecek");
@@ -301,11 +301,11 @@ describe("WorkOrderCompleteDialog (kapanış dispozisyonu)", () => {
     render();
     await screen.findByText("BC-700");
     await chooseFor(user, "r700", /Bitmiş depo/i);
-    await chooseFor(user, "r1200", /Yeni iş emrine devret/i);
+    await chooseFor(user, "r1200", /Yeni terbiye iş emrine devret/i);
 
     await user.type(screen.getByPlaceholderText(/sipariş iptal/i), "biri devir");
     // Yalnız devredilen top onay blokunda listelenir.
-    expect(screen.getByText(/1 top YENİ bir iş emrine taşınacak/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 top YENİ bir terbiye iş emrine taşınacak/i)).toBeInTheDocument();
     // Devredilen top hem satırında hem onay blokunda görünür; depoya giden görünmez.
     expect(screen.getAllByText("BC-1200")).toHaveLength(2);
     expect(screen.getAllByText("BC-700")).toHaveLength(1);

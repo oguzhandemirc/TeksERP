@@ -7,6 +7,7 @@ import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { safeFormat } from "@/lib/format";
 import type { WorkOrder } from "./types";
 import { customerCellView } from "./customer-cell";
+import { TERIM } from "@/lib/terim";
 
 // İlerleme = üretimden ÇIKAN ÷ üretime GİREN (detay sağlık şeridiyle birebir aynı).
 // Hedef metraj %99 girilmediğinden hedef-bazlı oran kullanılmaz. Tamamlanan-adım
@@ -25,7 +26,7 @@ const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maxi
 export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "workOrderNumber",
-    header: "İş Emri No",
+    header: `${TERIM.terbiyeIsEmri.tekil} No`,
     cell: ({ row }) => <span className="font-mono text-xs">{row.original.workOrderNumber}</span>,
   },
   {

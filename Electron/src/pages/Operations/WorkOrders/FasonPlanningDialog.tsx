@@ -87,7 +87,7 @@ export function FasonPlanningDialog({
         <DialogHeader>
           <DialogTitle>Fason Adım Planlaması</DialogTitle>
           <DialogDescription>
-            Bu iş emrindeki dış işlem adımları için kategori ve firma tercihi.
+            Bu terbiye iş emrindeki dış işlem adımları için kategori ve firma tercihi.
             Sevkiyat anında değiştirilebilir.
           </DialogDescription>
         </DialogHeader>

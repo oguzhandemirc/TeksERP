@@ -40,6 +40,7 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { OrdersStats, type OrderStatsView } from "./OrdersStats";
 import { useOrderStats } from "./useOrderStats";
+import { TERIM } from "@/lib/terim";
 
 const FILTERS: FilterDef[] = [
   {
@@ -59,9 +60,9 @@ const FILTERS: FilterDef[] = [
     // filter[woState]); rozet kolonuyla aynı semantik (work-order-rollup.ts).
     kind: "multi-select",
     key: "woState",
-    label: "İş Emri",
+    label: TERIM.terbiyeIsEmri.tekil,
     options: [
-      { value: "NONE", label: "İş emri yok" },
+      { value: "NONE", label: "Terbiye iş emri yok" },
       { value: "PLANNED", label: "Planlandı" },
       { value: "IN_PROGRESS", label: "Üretimde" },
       { value: "COMPLETED", label: "Üretildi" },
@@ -428,7 +429,7 @@ export function OrdersPage() {
         fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sipariş no, iş emri no, firma veya kumaş ara..."
+        placeholder="Sipariş no, terbiye iş emri no, firma veya kumaş ara..."
         table={table}
         exportName="Siparişler"
         actions={
@@ -496,7 +497,7 @@ export function OrdersPage() {
         )}
         selectionHint={
           canBulkCreateWorkOrder(productionEnabled)
-            ? "İş emri açmak için bir veya daha fazla sipariş seçin."
+            ? "Terbiye iş emri açmak için bir veya daha fazla sipariş seçin."
             : null
         }
         bulkActions={

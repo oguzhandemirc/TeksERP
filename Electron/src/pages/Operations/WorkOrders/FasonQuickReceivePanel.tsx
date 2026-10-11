@@ -209,7 +209,7 @@ export function FasonQuickReceivePanel({ workOrderId, onReceived }: Props) {
                 ))}
               </select>
               <div className="text-[11px] text-muted-foreground">
-                Bu iş emrinin hedef rengi yok — kabulde beyan edilir.
+                Bu terbiye iş emrinin hedef rengi yok — kabulde beyan edilir.
               </div>
             </div>
           )}

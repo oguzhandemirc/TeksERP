@@ -99,7 +99,7 @@ export function DirectShipmentDetailContent({
                 }
               />
               <Row
-                label="İş Emri"
+                label="Terbiye İş Emri"
                 value={<span className="font-mono">{d.dispatch.workOrder.workOrderNumber}</span>}
               />
               <Row label="Adım" value={d.dispatch.stationName} />

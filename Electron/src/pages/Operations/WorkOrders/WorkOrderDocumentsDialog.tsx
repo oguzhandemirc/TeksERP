@@ -111,7 +111,7 @@ export function WorkOrderDocumentsDialog({
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>Belgeler</DialogTitle>
             <DialogDescription>
-              İş emrinden çıkarılabilecek belgeler — satıra tıklayın, önizleme açılır.
+              Terbiye iş emrinden çıkarılabilecek belgeler — satıra tıklayın, önizleme açılır.
             </DialogDescription>
           </DialogHeader>
 
@@ -128,9 +128,9 @@ export function WorkOrderDocumentsDialog({
             ) : docs.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center">
                 <Inbox className="h-6 w-6 text-muted-foreground" />
-                <div className="text-sm font-medium">Bu iş emrine ait belge yok</div>
+                <div className="text-sm font-medium">Bu terbiye iş emrine ait belge yok</div>
                 <p className="max-w-sm text-xs text-muted-foreground">
-                  Refakat kartı iş emri açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir.
+                  Refakat kartı terbiye iş emri açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir.
                 </p>
               </div>
             ) : (

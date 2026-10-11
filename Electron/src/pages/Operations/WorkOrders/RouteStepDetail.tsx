@@ -180,7 +180,7 @@ export function RouteStepDetail({
             icon={Factory}
             iconClassName="text-primary"
             title="İstasyon Seç"
-            description="İş emri adımının istasyonu. Ada veya koda göre ara."
+            description="Terbiye iş emri adımının istasyonu. Ada veya koda göre ara."
             placeholder="İstasyon seç..."
             triggerClassName="h-8 text-xs"
           />
@@ -225,7 +225,7 @@ export function RouteStepDetail({
               />
               <span>
                 <strong>Fasona renksiz gitsin</strong> — çekide “boyanacak renk”
-                satırı basılmaz. İş emrinin rengi değişmez.
+                satırı basılmaz. Terbiye iş emrinin rengi değişmez.
               </span>
             </label>
           </div>

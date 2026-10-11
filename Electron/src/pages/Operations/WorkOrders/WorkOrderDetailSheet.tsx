@@ -26,6 +26,7 @@ import { OrderLinksV3 } from "./detail-v3/OrderLinksV3";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import "./detail-v3/work-order-detail-v3.css";
 import type { WorkOrder } from "./types";
+import { TERIM } from "@/lib/terim";
 
 interface Props {
   workOrder: WorkOrder | null;
@@ -113,7 +114,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
         {/* A11y için gerçek başlık (Radix Dialog Title/Description) — görünmez;
             görünür kurumsal başlık aşağıda .sheet-head içinde. */}
         <SheetHeader className="sr-only">
-          <SheetTitle>{wo?.workOrderNumber ?? "İş Emri"}</SheetTitle>
+          <SheetTitle>{wo?.workOrderNumber ?? TERIM.terbiyeIsEmri.tekil}</SheetTitle>
           <SheetDescription>{wo ? workOrderTypeLabels[wo.type] : "Yükleniyor"}</SheetDescription>
         </SheetHeader>
 
@@ -239,7 +240,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
                 <SheetKpis wo={wo} fulfill={fulfill} hasOrders={hasOrders} />
 
-                <V3Section title="İş Emri Künyesi">
+                <V3Section title={`${TERIM.terbiyeIsEmri.tekil} Künyesi`}>
                   <KunyeCard wo={wo} />
                 </V3Section>
 
@@ -346,7 +347,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
           open={inProgressConfirmOpen}
           onOpenChange={setInProgressConfirmOpen}
           title="Üretim devam ediyor"
-          description="Bu iş emri şu an üretimde. Yapacağın değişiklikler bağlı rulolara ve istasyon adımlarına yansıyabilir. Devam edilsin mi?"
+          description="Bu terbiye iş emri şu an üretimde. Yapacağın değişiklikler bağlı rulolara ve istasyon adımlarına yansıyabilir. Devam edilsin mi?"
           confirmLabel="Devam Et"
           cancelLabel="Vazgeç"
           destructive

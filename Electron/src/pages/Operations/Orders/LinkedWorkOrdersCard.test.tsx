@@ -41,7 +41,7 @@ describe("LinkedWorkOrdersCard", () => {
       line([{ id: "wo1", status: "IN_PROGRESS" }]), // tekrar → distinct
     ];
     renderWithProviders(<LinkedWorkOrdersCard lines={lines} />);
-    expect(screen.getByText(/Bağlı İş Emirleri \(2\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Bağlı Terbiye İş Emirleri \(2\)/)).toBeInTheDocument();
     expect(screen.getByText("IE-wo1")).toBeInTheDocument();
     expect(screen.getByText("IE-wo2")).toBeInTheDocument();
     expect(screen.getByText("Devam Ediyor")).toBeInTheDocument();

@@ -158,7 +158,7 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
         <DialogHeader>
           <DialogTitle>Refakat Kartı — Önizleme</DialogTitle>
           <DialogDescription>
-            Önizleme baskıyla birebir aynı. İçerik her baskıda iş emrinin güncel
+            Önizleme baskıyla birebir aynı. İçerik her baskıda terbiye iş emrinin güncel
             hâlinden üretilir; plan değiştiyse kart yeni versiyona geçer.
           </DialogDescription>
         </DialogHeader>
@@ -190,8 +190,8 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
               </span>
               <div className="text-sm font-semibold text-foreground">Kart görüntülenemedi</div>
               <p className="max-w-sm text-xs text-muted-foreground">
-                Refakat kartı iş emri açılışında otomatik üretilir (kart = iş emri no,
-                karekod sabit). Bu iş emrinin kartı yüklenemedi — <strong>Yenile</strong>'yi
+                Refakat kartı terbiye iş emri açılışında otomatik üretilir (kart = terbiye iş emri no,
+                karekod sabit). Bu terbiye iş emrinin kartı yüklenemedi — <strong>Yenile</strong>'yi
                 deneyin.
               </p>
             </div>

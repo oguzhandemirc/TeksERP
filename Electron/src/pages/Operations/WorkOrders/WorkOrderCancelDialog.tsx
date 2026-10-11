@@ -96,7 +96,7 @@ export function WorkOrderCancelDialog({
         ...(remainderAck ? { fasonRemainderAction: "CLOSE_AS_SCRAP" as const } : {}),
       }),
     onSuccess: (res) => {
-      toast.success(res.message ?? "İş emri iptal edildi");
+      toast.success(res.message ?? "Terbiye iş emri iptal edildi");
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["orders"] });
       if (workOrderId) {
@@ -136,10 +136,10 @@ export function WorkOrderCancelDialog({
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
-            İş emrini iptal et
+            Terbiye iş emrini iptal et
           </DialogTitle>
           <DialogDescription>
-            <span className="font-mono">{batchNumber ?? "İş emri"}</span> · geri alınamaz
+            <span className="font-mono">{batchNumber ?? "Terbiye iş emri"}</span> · geri alınamaz
           </DialogDescription>
         </DialogHeader>
 

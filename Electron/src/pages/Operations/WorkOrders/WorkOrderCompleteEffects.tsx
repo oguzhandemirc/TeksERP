@@ -30,7 +30,7 @@ export function WorkOrderCompleteEffects({ remainingSteps, dispositionCount }: P
           </li>
         )}
         <li>
-          İş emri durumu{" "}
+          Terbiye iş emri durumu{" "}
           <Badge variant="muted" className="text-[10px]">
             TAMAMLANDI
           </Badge>{" "}

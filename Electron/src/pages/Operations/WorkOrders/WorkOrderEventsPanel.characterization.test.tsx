@@ -66,7 +66,7 @@ describe("İş emri Hareketler — karakterizasyon", () => {
   it("boş durum ve hata durumu metinleri", async () => {
     get.mockResolvedValueOnce(sayfa([], null));
     const { unmount } = renderWithProviders(<WorkOrderEventsPanel workOrder={wo} />);
-    expect(await screen.findByText("Bu iş emrinde henüz kayıtlı hareket yok.")).toBeTruthy();
+    expect(await screen.findByText("Bu terbiye iş emrinde henüz kayıtlı hareket yok.")).toBeTruthy();
     unmount();
     get.mockRejectedValueOnce(new Error("ağ"));
     renderWithProviders(<WorkOrderEventsPanel workOrder={wo} />);

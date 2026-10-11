@@ -12,7 +12,7 @@ export function WorkOrderEventsPanel({ workOrder }: { workOrder: { id: string; w
       columns={EVENT_COLUMNS}
       testId="is-emri-hareketleri"
       fileName={`${workOrder.workOrderNumber}-hareketler`}
-      emptyText="Bu iş emrinde henüz kayıtlı hareket yok."
+      emptyText="Bu terbiye iş emrinde henüz kayıtlı hareket yok."
     />
   );
 }

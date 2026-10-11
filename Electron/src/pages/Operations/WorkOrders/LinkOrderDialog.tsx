@@ -104,7 +104,7 @@ export function LinkOrderDialog({
    */
   const quickMutation = useMutation({
     mutationFn: async () => {
-      if (!targetItemId) throw new Error("İş emrinin hedef kumaşı yok — önce kumaş seçin.");
+      if (!targetItemId) throw new Error("Terbiye iş emrinin hedef kumaşı yok — önce kumaş seçin.");
       if (!quickCustomerId) throw new Error("Müşteri seçin.");
       const qty = Number(quickQty);
       if (!Number.isFinite(qty) || qty <= 0) throw new Error("Metraj girin.");
@@ -156,8 +156,8 @@ export function LinkOrderDialog({
             <Link2 className="h-4 w-4" /> Sipariş Bağla — {workOrderNumber}
           </DialogTitle>
           <DialogDescription>
-            Yalnız bu iş emrinin ürettiği kumaş ve renkle uyumlu sipariş satırları
-            listelenir. Bağlamak iş emrinin hedefini <strong>değiştirmez</strong>.
+            Yalnız bu terbiye iş emrinin ürettiği kumaş ve renkle uyumlu sipariş satırları
+            listelenir. Bağlamak terbiye iş emrinin hedefini <strong>değiştirmez</strong>.
           </DialogDescription>
         </DialogHeader>
 

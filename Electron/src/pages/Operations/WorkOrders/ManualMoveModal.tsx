@@ -398,8 +398,8 @@ export function ManualMoveModal({ open, onOpenChange, workOrderId, source }: Pro
           {bf?.colorBlocked && (
             <div className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-[11px] text-destructive">
               <Ban className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Bu iş emrinin hedef rengi tanımlı değil — renk veren adım (boyahane) atlanamaz.
-              Önce iş emrine hedef rengi tanımlayın.
+              Bu terbiye iş emrinin hedef rengi tanımlı değil — renk veren adım (boyahane) atlanamaz.
+              Önce terbiye iş emrine hedef rengi tanımlayın.
             </div>
           )}
 

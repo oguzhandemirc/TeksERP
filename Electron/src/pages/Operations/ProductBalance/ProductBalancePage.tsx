@@ -18,6 +18,7 @@ import { ProductBalanceRow } from "./ProductBalanceRow";
 import { ProductBalanceWoDialog } from "./ProductBalanceWoDialog";
 import type { BalanceGroup, BalanceSpecRow, WoTarget } from "./types";
 import { foldSearchText } from "@/lib/search-fold";
+import { TERIM } from "@/lib/terim";
 
 const QUERY_KEY = "product-balance";
 
@@ -57,9 +58,9 @@ const BALANCE_EXPORT_COLUMNS: ExportColumn<BalanceExportRow>[] = [
   { label: "Siparişler", value: (r) => uniq(r.spec.lines.map((l) => l.orderNumber)).join(", ") },
   { label: "Müşteriler", value: (r) => uniq(r.spec.lines.map((l) => l.customerName)).join(", ") },
   { label: "En Yakın Termin", value: (r) => earliestDeadline(r.spec) },
-  { label: "Canlı İş Emri Sayısı", value: (r) => r.spec.wos.length, summable: true },
+  { label: "Canlı Terbiye İş Emri Sayısı", value: (r) => r.spec.wos.length, summable: true },
   {
-    label: "İş Emirleri",
+    label: TERIM.terbiyeIsEmri.cogul,
     value: (r) =>
       r.spec.wos
         .map(
@@ -212,7 +213,7 @@ export function ProductBalancePage() {
                 "Bir satır = bir (kumaş, renk, en) alt-satırı. Ekranın ana tablosu grubu özetler; dosya en kırılımını verir, grup sütunları tekrarlanır.",
                 "Üretilecek = Talep − Depo − Üretimde. Talep = İstenen − Sevk Edilen (açık siparişler).",
                 "Ham ve Ham Açığı kumaş+renk düzeyinde ORTAKTIR (en'lere bölünmez) — grubun her satırında aynı sayı yazılıdır ve bu yüzden TOPLAM satırına GİRMEZ.",
-                "Sipariş / iş emri sütunları o en alt-satırına bağlı kayıtlardır; iş emirleri yalnız CANLI (iptal edilmemiş) olanlardır.",
+                "Sipariş / terbiye iş emri sütunları o en alt-satırına bağlı kayıtlardır; terbiye iş emirleri yalnız CANLI (iptal edilmemiş) olanlardır.",
               ]}
             />
             <RefreshButton queryKey={QUERY_KEY} />
@@ -260,7 +261,7 @@ export function ProductBalancePage() {
                     Talep
                   </th>
                   <th className="text-right" title="Depoda hazır (sevksiz)">Depo</th>
-                  <th className="text-right" title="Canlı iş emirlerinde">Üretimde</th>
+                  <th className="text-right" title="Canlı terbiye iş emirlerinde">Üretimde</th>
                   <th
                     className="text-right"
                     title="İşlenecek ham kumaş — kumaş+renk havuzu (eni önemsiz)"

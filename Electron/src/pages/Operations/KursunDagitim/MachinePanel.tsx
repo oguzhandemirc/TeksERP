@@ -211,7 +211,7 @@ export function MachinePanel({
         title="Havuza al"
         description={
           cancelTarget
-            ? `${cancelTarget.workOrderNumber} iş emrinin kurşun dağıtımı "${machineName}" makinesinden kaldırılacak.\n\n` +
+            ? `${cancelTarget.workOrderNumber} terbiye iş emrinin kurşun dağıtımı "${machineName}" makinesinden kaldırılacak.\n\n` +
               `Kapsam: ${cancelTarget.openRollCount} top · ${formatNumber(cancelTarget.totalMeters, 0)} m` +
               (cancelTarget.batchNumbers.length > 0
                 ? `\nParti: ${cancelTarget.batchNumbers.join(", ")}`

@@ -229,7 +229,7 @@ export function BranchLanes({
   if (batches.length === 0 && splitChildren.length === 0 && !splitFrom) {
     return (
       <div className="rounded-md border border-dashed p-4 text-center text-xs italic text-muted-foreground">
-        Bu iş emrinde henüz parti yok.
+        Bu terbiye iş emrinde henüz parti yok.
       </div>
     );
   }
@@ -964,9 +964,9 @@ function WorkOrderSplitFromNote({ splitFrom }: { splitFrom: WorkOrderLineageRef 
     >
       <Split className="h-3.5 w-3.5 shrink-0" />
       <span>
-        Bu iş emri{" "}
+        Bu terbiye iş emri{" "}
         <span className="font-mono font-medium text-foreground">{splitFrom.workOrderNumber}</span>{" "}
-        iş emrinden ayrılan bir partidir.
+        terbiye iş emrinden ayrılan bir partidir.
       </span>
       <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0" />
     </button>

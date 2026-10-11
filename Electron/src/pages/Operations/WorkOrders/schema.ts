@@ -19,7 +19,7 @@ export type WorkOrderStepFormValues = z.infer<typeof workOrderStepSchema>;
 export const workOrderFormSchema = z.object({
   type: z.enum(
     [WorkOrderType.ORDER_PRODUCTION, WorkOrderType.STOCK_PRODUCTION],
-    { message: "İş emri tipi seçilmeli" },
+    { message: "Terbiye iş emri tipi seçilmeli" },
   ),
   // Parti Kodu (backend: batchNumber). Zorunluluk runtime'da (manuel mod / override /
   // düzenleme) form submit'inde uygulanır; boş = otomatik üret (otomatik mod).

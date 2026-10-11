@@ -16,6 +16,7 @@ import type { PickedOrderLine } from "./OrderPickerDialog";
 import type { WorkOrder } from "./types";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { useAttemptToken } from "@/lib/attemptToken";
+import { TERIM } from "@/lib/terim";
 
 const LIST_PATH = "/operations/work-orders";
 
@@ -86,8 +87,8 @@ export function WorkOrderFormPage() {
     const title = isEdit
       ? wo?.workOrderNumber
         ? `Düzenle · ${wo.workOrderNumber.slice(-6)}`
-        : "İş Emrini Düzenle"
-      : "Yeni İş Emri";
+        : `${TERIM.terbiyeIsEmri.cekim.belirtme} Düzenle`
+      : `Yeni ${TERIM.terbiyeIsEmri.tekil}`;
     const path = isEdit
       ? `/operations/work-orders/${id}/edit`
       : "/operations/work-orders/new";
@@ -105,7 +106,7 @@ export function WorkOrderFormPage() {
       // ⚠️ Tercih KAPALIYKEN de yazılır — anahtarı sonra çeviren kullanıcı boş
       // bir hafızayla karşılaşmasın. Okuma tarafı `pickDefaultFirmId`.
       rememberLastSubcontractors(payload);
-      toastServerSuccess(res, "İş emri oluşturuldu.");
+      toastServerSuccess(res, "Terbiye iş emri oluşturuldu.");
       fireConfetti();
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       // Siparişten üretim emri açıldı → sipariş listesindeki "İş Emri" rollup
@@ -121,7 +122,7 @@ export function WorkOrderFormPage() {
     mutationFn: (payload: CreatePayload) =>
       workOrderService.replace(id!, payload as unknown as Partial<WorkOrder>),
     onSuccess: (res) => {
-      toastServerSuccess(res, "İş emri güncellendi.");
+      toastServerSuccess(res, "Terbiye iş emri güncellendi.");
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["work-order-detail", id] });
       // Tebdil/güncelleme bağları değiştirebilir → sipariş rollup rozetini tazele.
@@ -134,7 +135,7 @@ export function WorkOrderFormPage() {
     navigateActive(isEdit ? `/operations/work-orders/${id}` : LIST_PATH);
 
   const backPath = isEdit ? `/operations/work-orders/${id}` : LIST_PATH;
-  const backLabel = isEdit ? "İş Emri" : "İş Emirleri";
+  const backLabel = isEdit ? TERIM.terbiyeIsEmri.tekil : TERIM.terbiyeIsEmri.cogul;
   const backTo = { label: backLabel, to: backPath };
 
   const notFound = isEdit && !detail.isLoading && !wo;
@@ -142,7 +143,7 @@ export function WorkOrderFormPage() {
   return (
     <PageShell>
       <PageHeader
-        title={isEdit ? "İş Emrini Düzenle" : "Yeni İş Emri"}
+        title={isEdit ? `${TERIM.terbiyeIsEmri.cekim.belirtme} Düzenle` : `Yeni ${TERIM.terbiyeIsEmri.tekil}`}
         description={
           isEdit
             ? wo?.workOrderNumber
@@ -164,7 +165,7 @@ export function WorkOrderFormPage() {
         )}
         {notFound && (
           <div className="py-16 text-center text-sm text-muted-foreground">
-            İş emri bulunamadı.
+            Terbiye iş emri bulunamadı.
           </div>
         )}
         {(!isEdit || wo) && (
