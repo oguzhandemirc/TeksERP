@@ -16,6 +16,7 @@
 //      alarm bayrağı kapalıyken alarm okunmaz
 //   §10 AST: hedef/pay aritmetiği yalnız `helpers/loom-floor.helper`da (motor ve ekran aynı fonksiyon)
 //   §11 uç kapısı: alarm bayrağı kapalı → 403 LOOM_ALARM_DISABLED
+//   §13 uç izin matrisi: `mobile:tezgah-uyari` liste+detay+eylem; `mobile:dokuma` YALNIZ liste (tablet şeridi)
 //   §12 yabancı motor: bayrak AÇIKKEN aynı DB'de gerçek saatle koşan sunucu zamanlayıcısı (CI'da beş HTTP
 //      sunucusu) fikstürde iş bulmaz — K1'deki alarmların K2'si uzak gelecekte, her duruşun alarmı var
 //
@@ -42,7 +43,7 @@ import {
 } from "../src/services/loom-alarm.service";
 import { getLoomAlarmDetail, listLoomAlarms } from "../src/services/loom-alarm-read.service";
 import { getLoomFloor } from "../src/services/loom-floor.service";
-import { requireLoomAlarmEnabled } from "../src/routes/loom-alarm.routes";
+import loomAlarmRouter, { requireLoomAlarmEnabled } from "../src/routes/loom-alarm.routes";
 import { walkTs } from "./lib/ts-tarama";
 
 let pass = 0;
@@ -294,6 +295,25 @@ async function govde(): Promise<void> {
   await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_ENABLED, true);
   const acikSonuc = await new Promise<unknown>((resolve) => { void requireLoomAlarmEnabled({} as never, {} as never, (e?: unknown) => resolve(e ?? "next")); });
   check("§11b bayrak açık → kapı geçer", acikSonuc === "next", JSON.stringify(acikSonuc));
+
+  // ── §13 uç izin matrisi (mobil dar ikiz + tablet şeridi) ───────────────────
+  // Yollar bu yönlendiricide yönteme göre tekil — yolla bulunur; guard ilk katmandır (verifyToken router.use'ta).
+  const izinSonucu = (yol: string, permissions: string[]): unknown => {
+    const layer = loomAlarmRouter.stack.find((l) => l.route?.path === yol);
+    const guard = layer?.route?.stack[0]?.handle;
+    if (!guard) return "uç yok";
+    let r: unknown = "çağrılmadı";
+    const next = (e?: unknown) => { r = e instanceof Error && "statusCode" in e ? e.statusCode : e ? "hata" : "next"; };
+    Reflect.apply(guard, undefined, [{ user: { userId: "u", permissions } }, {}, next]);
+    return r;
+  };
+  const matris = (perms: string[]) => ["get /", "get /:id", "post /:id/ack", "post /:id/notes", "post /:id/notes/:eventId/retract"].map((k) => { const y = k.split(" ")[1]; return `${k}=${String(izinSonucu(y, perms))}`; }).join(" · ");
+  const uyari = matris(["mobile:tezgah-uyari"]);
+  check("§13a `mobile:tezgah-uyari` → liste · detay · eylemler geçer", !/=(?!next)/.test(uyari), uyari);
+  const dokuma = matris(["mobile:dokuma"]);
+  check("§13b `mobile:dokuma` → yalnız liste; detay ve eylem 403", dokuma === "get /=next · get /:id=403 · post /:id/ack=403 · post /:id/notes=403 · post /:id/notes/:eventId/retract=403", dokuma);
+  const web = matris(["loom:alarm-view"]);
+  check("§13c `loom:alarm-view` tek başına eylem açmaz (web ayrımı korunur)", web === "get /=next · get /:id=next · post /:id/ack=403 · post /:id/notes=403 · post /:id/notes/:eventId/retract=403", web);
 
   // ── §10 AST: hedef/pay aritmetiği tek yerde ────────────────────────────────
   check("§10a hedef/pay aritmetiği (targetMinutes · graceMinutes ile + / *) yalnız helpers/loom-floor.helper'da", hedefAritmetigi(SRC).length === 0, hedefAritmetigi(SRC).join(" · "));

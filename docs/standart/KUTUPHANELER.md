@@ -99,6 +99,14 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### expo-notifications@0.32.17 · mobil · 2026-10-11
+1. Problem      : tezgah alarmı (Faz A3/A6a) uygulama arka plandayken telefona/tablete ulaşmalı; ölçüm: RN 0.81 Android'de arka planda JS zamanlayıcıları DURUR (`JavaTimerManager.onHostPause`) ⇒ tek araç işletim sisteminin zamanladığı yerel bildirim; §2.3 "Yerel bildirim" satırı
+2. Alternatifler: elle yazılmış native modül (AlarmManager + kanal + izin + dokunma köprüsü — bakım yükü, Expo prebuild dışı) · `notifee` (ön plan servisi verir ama ayrı native paket, Expo eklentisi yok, internet push için yine FCM ister) · `expo-background-task` + `expo-task-manager` (≥15 dk WorkManager — alarm için yavaş, iki paket)
+3. Boyut/biçim  : NATIVE modül (`android/` + `expo-module.config.json`; manifest `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `firebase-messaging` bağımlılığı); JS tarafı yalnız `services/alarmNotify.ts`ten tembel+try/catch `require` (native'i olmayan eski APK'da çökmez)
+4. Bakım        : Expo SDK 54 pinli (`npx expo install`, `~0.32.17`); SDK yükseltmesiyle birlikte gider ([KU-12])
+5. Lisans       : MIT
+6. Dağıtım      : OTA ile GİTMEZ — yeni APK/AAB + `runtimeVersion` artışı; bu iş main'e indikten sonraki İLK tablet sürümü APK turudur (borç: `docs/kurallar/surum-yayin.md`); internet push (FCM/APNs) bu paketle aynı köprüden ayrı dilimde gelir
+
 ### @noble/curves@2.4.0 + @noble/hashes@2.4.0 · mobil · 2026-10-01
 1. Problem      : tablet APK künyesinin Ed25519 imzası + kurulum dosyasının SHA-256 özeti Hermes'te doğrulanmalı (node:crypto YOK); §2.3 "İmza doğrulama · özet" satırı
 2. Alternatifler: elle yazmak (G6'da GEÇİCİ olarak yazıldı — elle imza doğrulaması klasik risk, kullanıcı noble'ı onayladı) · `expo-crypto` (native → APK ister, Ed25519 yok) · `tweetnacl` (S < L denetlemez) · `node-forge` (expo CLI'ın geçişli bağımlılığı, çalışma anı değil)

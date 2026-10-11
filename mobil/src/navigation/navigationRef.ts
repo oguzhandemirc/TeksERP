@@ -11,6 +11,7 @@
 
 import { createNavigationContainerRef } from '@react-navigation/native';
 import type { RootStackParamList } from './types';
+import type { AlarmTarget } from '../lib/loomAlarm/deepLink';
 
 export const rootNavigationRef = createNavigationContainerRef<RootStackParamList>();
 
@@ -32,4 +33,16 @@ export function rootNavigateToModuleSelect(): void {
       { screen: 'ModuleSelect' },
     );
   }
+}
+
+/** Bildirime dokunma (derin bağlantı): Main → Uyarılar / alarm sayfası. Container hazır değilse
+ *  (soğuk açılış) kısa aralıklarla birkaç kez yeniden dener; sonra vazgeçer (uydurulmuş yol yok). */
+export function rootNavigateToAlarm(target: AlarmTarget, tries = 10): void {
+  if (!rootNavigationRef.isReady()) {
+    if (tries > 0) setTimeout(() => rootNavigateToAlarm(target, tries - 1), 300);
+    return;
+  }
+  const nav = rootNavigationRef.navigate as (name: 'Main', params: { screen: string; params?: object }) => void;
+  if (target.screen === 'UyariDetay') nav('Main', { screen: 'UyariDetay', params: { alarmId: target.alarmId } });
+  else nav('Main', { screen: 'Uyarilar' });
 }

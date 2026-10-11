@@ -21,6 +21,7 @@ import DoffFailureModal from './DoffFailureModal';
 import RunPanel from './RunPanel';
 import StopPanel from './StopPanel';
 import BeamPanel from './BeamPanel';
+import LoomAlarmStrip from '../../../components/alarm/LoomAlarmStrip';
 
 export default function DokumaScreen() {
   const compact = useDeviceType() === 'phone';
@@ -30,6 +31,7 @@ export default function DokumaScreen() {
 
   return (
     <ScreenChrome title="Tezgah" subtitle={entry.machine ? `${entry.machine.name} · hat ${entry.lineNo}` : undefined}>
+      <LoomAlarmStrip machineId={entry.machine?.id ?? null} />
       <View style={[styles.root, compact && styles.rootColumn]}>
         <View style={styles.pane}>
           <RunPanel entry={entry} />

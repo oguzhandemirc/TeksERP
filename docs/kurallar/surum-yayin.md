@@ -134,6 +134,7 @@
 
 ## Açık sorular
 
+- **Borç — sonraki tablet sürümü APK turudur (sebep `expo-notifications`, 2026-10-11).** Tezgah alarmı mobil bildirimi (A3+A6a) yeni native modül getirdi; main'e indikten sonraki ilk tablet sürümünde `yayinla:ortak:check` parmak izi ihlali verir, OTA DURUR — `deploy/dagitim.json urun.tablet.runtimeVersion` artırılır ve AAB Play'e çıkar (yayın ajanının işi; özellik dilimi artırmadı). Eski APK'da bildirim yolu korumalı yüklemeyle kapalı kalır, çökmez. <sub>(arşiv 2026-10-11)</sub>
 - `deploy/electron-yayinla.ps1` 2026-09-27'den beri fail-closed saplama (hiçbir şey yüklemez, çıkış 1). Tamamen silinmesi ÖNERİLDİ (1e kararı): silinirse `scripts/check-kanallar.mjs` `YAYIN_YOLLARI` satırı ve ops belgesindeki saplama notu aynı commit'te düşer.
 
 - N5 (mobil okutma bekçileri), N6 (2026-08-19 Tambur paketi), N10 (sipariş görünürlüğü), N11 (süperadmin P8) bu kümeye ait değil — yalnız 'Backend ÖNCE / APK YOK' ibaresiyle düşmüş; dizin/arşiv kararı kendi kümelerinde verilmeli (burada archiveOnly'ye BİLEREK yazılmadı).

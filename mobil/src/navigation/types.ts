@@ -45,6 +45,8 @@ export type MainStackParamList = {
   KartelaKabulGecmisi: undefined;
   FasonSevkGecmisi: undefined;
   IadeGecmisi: undefined;
+  /** Tezgah alarmı sayfası — Uyarılar listesi, Tezgah şeridi ve bildirime dokunma (derin bağlantı) açar. */
+  UyariDetay: { alarmId: string };
   /**
    * Fason Sevk — ModuleSelect'ten parametresiz açılır; Fason Kabul'deki
    * NEEDS_DISPATCH aksiyon kartı ("Fason Sevk'e Git") iş emrini seçili getirir.

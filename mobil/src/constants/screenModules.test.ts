@@ -10,12 +10,14 @@ import { MOBILE_SCREENS } from '../types/permissions';
 describe('screenModules — ekran → modül aynası', () => {
   it('üretim modülünün beş ekranı tabloda; çekirdek/planlanan ekranlar tabloda DEĞİL', () => {
     expect(Object.keys(SCREEN_MODULE).sort()).toEqual(
-      ['Devere', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Tambur'].sort()
+      ['Devere', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Tambur', 'Uyarilar'].sort()
     );
     expect(SCREEN_MODULE.Dokuma).toBe('dokumaEnabled');
     expect(SCREEN_MODULE.Devere).toBe('devereEnabled');
     // G2t: fason dokuma kabulü dokuma modülüne bağlı — üretim kapalıyken ETKİN kapalı (Dokuma ile aynı zincir).
     expect(SCREEN_MODULE.FasonDokuma).toBe('dokumaEnabled');
+    // Uyarılar (tezgah alarmı A3) — tezgah izleme modülü, backend `requireTezgahEnabled` zinciri.
+    expect(SCREEN_MODULE.Uyarilar).toBe('tezgahEnabled');
     for (const k of ['Depo', 'TartiPaket', 'Sevkiyat', 'IadeGirisi', 'Siparis', 'Kumas', 'FasonSevk', 'KartelaSevk']) {
       expect(SCREEN_MODULE[k as keyof typeof SCREEN_MODULE]).toBeUndefined();
     }
@@ -35,8 +37,15 @@ describe('screenModules — ekran → modül aynası', () => {
   });
 
   it('⭐ modül AÇIK → hiçbir ekran false değil (bugünkü liste birebir)', () => {
-    const c = conditionalScreens({ productionEnabled: true, dokumaEnabled: true, devereEnabled: true });
+    const c = conditionalScreens({ productionEnabled: true, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true });
     expect(Object.values(c).every((v) => v === true)).toBe(true);
+  });
+
+  it('⭐ tezgah izleme: satır-yok KAPALI (fail-closed) ve ÜRETİME bağlı', () => {
+    expect(DEFAULT_FEATURE_FLAGS.tezgahEnabled).toBe(false);
+    expect(conditionalScreens(undefined).Uyarilar).toBe(false);
+    expect(conditionalScreens({ productionEnabled: true, tezgahEnabled: true }).Uyarilar).toBe(true);
+    expect(conditionalScreens({ productionEnabled: false, tezgahEnabled: true }).Uyarilar).toBe(false);
   });
 
   it('⭐ dokuma: satır-yok KAPALI (fail-closed) ve ÜRETİME bağlı (zincir tek yerde)', () => {

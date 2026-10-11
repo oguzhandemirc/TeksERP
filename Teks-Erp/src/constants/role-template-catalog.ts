@@ -355,6 +355,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Tezgah alarmı: vardiya amiri görür ve üstlenir; üst kademe (K2) müdür/patron işi — şablonda YOK.
       "loom:alarm-view",
       "loom:alarm-ack",
+      // Mobil Uyarılar ekranı (A3): aynı kişinin telefonu — görme + üstlenme dar ikizi.
+      "mobile:tezgah-uyari",
       // Tezgah oturumu (⓪, 2026-09-14): ekran doğana kadar süpervizör paketinde;
       // tablet dilimiyle operatör paketine iner (loom:run ile aynı vaat).
       "mobile:dokuma",
@@ -589,6 +591,14 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     description: "Telefondan sipariş listesi + yeni müşteri siparişi açma (satış/planlama)",
     mode: "list",
     codes: ["mobile:siparis", "customer:read", "item:read", "property:read", "quality:read"],
+  },
+  {
+    // Tezgah alarmı A3: usta telefonu — Uyarılar ekranı (görme + üstlenme); üst kademe (K2) şablonda YOK.
+    code: "MOBILE_TEZGAH_UYARI",
+    name: "Mobil — Tezgah Uyarıları",
+    description: "Telefondan tezgah alarmlarını görme, üstlenme, susturma ve bildirim alma (tezgah alarmı açıkken)",
+    mode: "list",
+    codes: ["mobile:tezgah-uyari"],
   },
   {
     // Devere tablet ekranı (2026-09-14): sarım iptali yetenek izni bu şablonda YOK — süpervizör.

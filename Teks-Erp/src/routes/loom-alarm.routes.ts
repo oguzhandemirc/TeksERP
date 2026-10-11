@@ -5,12 +5,12 @@
 // (`resolveTezgahAlarmEnabled`; kapalı → 403 `LOOM_ALARM_DISABLED`) → izin. Bayrak kapalı = bugünkü
 // davranış: uçlar da kapalıdır. Görmek `loom:alarm-view`, eylem `loom:alarm-ack`; başkasının
 // üstlenmesini bırakmak ayrıca `loom:alarm-escalation` (üst kademe yetkilisi).
-// Panel/tablet yüzeyi ayrı dilimdir (A2/A3); izinler SCREENLESS gerekçeli.
+// Mobil yüzey (A3): `mobile:tezgah-uyari` görme+eylem ikizi; tablet şeridi `mobile:dokuma` ile yalnız liste.
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { requireTezgahEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { resolveTezgahAlarmEnabled } from "../services/system-setting.service";
@@ -42,8 +42,11 @@ export async function requireLoomAlarmEnabled(_req: Request, _res: Response, nex
 const router = Router();
 router.use(verifyToken, requireTezgahEnabled, requireLoomAlarmEnabled);
 
-const VIEW = requirePermission("loom:alarm-view");
-const ACT = requirePermission("loom:alarm-ack");
+// Mobil "Uyarılar" (`mobile:tezgah-uyari`) görme + üstlenme dar ikizidir; tablet Tezgah şeridi
+// (`mobile:dokuma`) yalnız LİSTEYİ okur — üstlenme düğmesi o izinde çizilmez.
+const LIST = requireAnyPermission("loom:alarm-view", "mobile:tezgah-uyari", "mobile:dokuma");
+const VIEW = requireAnyPermission("loom:alarm-view", "mobile:tezgah-uyari");
+const ACT = requireAnyPermission("loom:alarm-ack", "mobile:tezgah-uyari");
 
 const userIdOf = (req: Request): string => {
   const id = req.user?.userId;
@@ -85,7 +88,7 @@ export const listSchema = z
  *       400: { description: Geçersiz kapsam / süzgeç / imleç }
  *       403: { description: MODULE_DISABLED (tezgah) · LOOM_ALARM_DISABLED · loom:alarm-view yok }
  */
-router.get("/", VIEW, async (req, res, next) => {
+router.get("/", LIST, async (req, res, next) => {
   try {
     const { mine, ...q } = listSchema.parse(req.query);
     const me = mine ? { userId: userIdOf(req), canEscalate: matchesPermission(req.user?.permissions ?? [], "loom:alarm-escalation") } : undefined;

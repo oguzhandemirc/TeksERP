@@ -42,6 +42,8 @@ export type MobilePermission =
   // Devere (2026-09-14, §11): LEVENT SARIM ekranı + sarım iptali yeteneği (ayrı yetki, iplik defterine ters satır).
   | 'mobile:devere'
   | 'mobile:devere-iptal'
+  // Tezgah alarmı A3: Uyarılar ekranı — `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi (bildirim dahil).
+  | 'mobile:tezgah-uyari'
   | 'mobile:*';
 
 /**
@@ -91,7 +93,8 @@ export type MobileScreenKey =
   | 'KursunDagitim'
   | 'Dokuma'
   | 'Devere'
-  | 'FasonDokuma';
+  | 'FasonDokuma'
+  | 'Uyarilar';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -248,6 +251,13 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Fason Dokuma Kabul',
     icon: 'truck-check-outline',
     description: 'Fasonda dokunan iş: levent dönüşü ve dönen topların kabulü',
+  },
+  {
+    key: 'Uyarilar',
+    permission: 'mobile:tezgah-uyari',
+    label: 'Uyarılar',
+    icon: 'bell-alert-outline',
+    description: 'Tezgah alarmları: üstlen, sustur, not; bildirim',
   },
 ];
 

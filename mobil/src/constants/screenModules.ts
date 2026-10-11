@@ -23,7 +23,7 @@ import type { MobileScreenKey } from '../types/permissions';
 import { DEFAULT_FEATURE_FLAGS, type FeatureFlags } from '../services/featureFlag.service';
 
 /** Tablette ekranı olan modül anahtarları (`FeatureFlags` alan adıyla). */
-export type MobileModuleFlag = 'productionEnabled' | 'dokumaEnabled' | 'devereEnabled';
+export type MobileModuleFlag = 'productionEnabled' | 'dokumaEnabled' | 'devereEnabled' | 'tezgahEnabled';
 
 /** Ekran → modül. Satırı olmayan ekran koşulsuzdur (yalnız izin). */
 export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> = {
@@ -38,6 +38,8 @@ export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> =
   Devere: 'devereEnabled',
   // Tablet FASON DOKUMA KABUL ekranı (G2t, 2026-09-14) — dokuma modülü; oturumsuz.
   FasonDokuma: 'dokumaEnabled',
+  // Uyarılar (tezgah alarmı A3) — tezgah izleme modülü; backend `requireTezgahEnabled` ile aynı zincir.
+  Uyarilar: 'tezgahEnabled',
 };
 
 export type MobileModuleState = Record<MobileModuleFlag, boolean>;
@@ -54,6 +56,7 @@ export function resolveMobileModuleState(
     dokumaEnabled: productionEnabled && (flags?.dokumaEnabled ?? DEFAULT_FEATURE_FLAGS.dokumaEnabled),
     // Devere HAM bayrak: hazır levent alan fabrika üretim modülü olmadan da açar (K3 emsali — bağımlılık yok).
     devereEnabled: flags?.devereEnabled ?? DEFAULT_FEATURE_FLAGS.devereEnabled,
+    tezgahEnabled: productionEnabled && (flags?.tezgahEnabled ?? DEFAULT_FEATURE_FLAGS.tezgahEnabled ?? false),
   };
 }
 

@@ -218,6 +218,25 @@ Profil = veri; `if (musteri === …)` yok. Bayrak kapalı kurulumda (adnansahin)
 - **Uçtan uca prova:** `_test` DB'de simüle duruş (`source:'SIMULATED'`) + enjekte saat → panelde zil/ses/şerit → üstlen → K2 → kapan; patron yolu bulutun `sahte` kipiyle (gerçek push yerelde denenmez — `patron-bulutu.md`).
 - Belge çıktısı yok (alarm PDF/Excel üretmez); liste dışa aktarımı eklenirse PDF/Excel birebir kuralı.
 
+### A.12 İnternet push (A6b) — tasarım
+
+**Neden ayrı dilim:** A6a ölçümü — uygulama arka plandayken Android JS'i durdurur; yalnız önceden zamanlanmış yerel hatırlatma çalar. Arka planda YENİ doğan alarmın kilit ekranına/saate ulaşması yalnız işletim sisteminin push kanalıyla (FCM / APNs) olur.
+
+**Yol (kök kurallara uygun):**
+1. Fabrika alarmı hesaplar (bulut hesap yapmaz). Kademe çaldığında motor, alıcı kişileri (A4 `notifications` kaydı) ve kısa yükü hazırlar.
+2. Yük fabrikanın **çıkan imzalı kanalından** buluta gider (patron eşitlemesinin kanalı ya da aynı imzalı yeni uç); **fabrikaya gelen port açılmaz**.
+3. **Röle = patron bulutu bildirim tarayıcısı** (A5 ile aynı makine): bulut yalnız iletir/karşılaştırır, hesap yapmaz; tekrar-önleme anahtarı `alarm:<id>:k<n>`; bayat alarm (kapanmış / X saatten eski) `ATLANDI` doğar.
+4. Bulut → FCM (Android) / APNs (iOS) → cihaz. Yük yalnız insan cümlesi + alarm kimliği: *"Tezgah 3 · 20 dk duruyor"* — iş verisi (müşteri, sipariş, metraj) taşımaz.
+5. Dokunma → mevcut derin bağlantı (`lib/loomAlarm/deepLink.ts`: tanınmayan veri yok sayılır, UUID değilse liste açılır).
+
+**Cihaz kaydı:** uygulama girişte push belirtecini (Expo/FCM token) **fabrika sunucusuna** yazar (kullanıcı + cihaz, `clientToken`'lı; çıkışta `revokedAt`); fabrika belirteci imzalı kanalla buluta taşır — telefon buluta doğrudan kimlik açmaz. Belirteç sır değildir ama kişisel veridir: log/audit yüküne düz yazılmaz.
+
+**Gereken hesaplar (kullanıcı kararı):** Firebase projesi + `google-services.json` (Android push), Apple geliştirici hesabında APNs anahtarı (`.p8`, iOS push), röle olarak patron bulutunun canlıya çıkması (`BILDIRIM_KIPI=gercek`).
+
+**Dağıtım:** `expo-notifications` A6a ile APK'ya girdi; push için `google-services.json` derlemeye girer ⇒ yine APK turu. Bayrak kapalıyken (varsayılan) belirteç toplanmaz, yük gitmez — bugünkü davranış.
+
+**Test:** saf yük kurucu (iş verisi sızmaz — allowlist), tekrar-önleme ve bayatlık bulut tarafında `sahte` kiple; cihazda uçtan uca yalnız gerçek hesaplarla.
+
 ---
 
 ## B · Eksik / geliştirme listesi (satın alma kararını etkileyenler)
@@ -274,10 +293,11 @@ Emek: **S** ≤1 gece tek ajan · **M** 1–2 gece · **L** çok fazlı. "Bugün
 - Genel Ayarlar'da bayrak + iki sayı; sebep kataloğu ekranında hedef süre sütunu görünür ("hedef girilmemiş N sebep" uyarısı).
 - **Bitiriş:** uçtan uca prova (simüle duruş + saat), ekran görüntüleri, kural satırı `docs/kurallar/dokuma.md`, arşiv notu, bekçi haritası.
 
-### Faz A3 — Tablet + telefon (uygulama açıkken, fabrika Wi-Fi) · dış bağımlılık yok
+### Faz A3 — Tablet + telefon (uygulama açıkken, fabrika Wi-Fi) · ✓ 2026-10-11
 - Tezgah ekranında kendi tezgahının alarm şeridi + ses + titreşim; "Üstlendim" düğmesi.
 - Yeni mobil ekran **"Uyarılar"** (usta/amir telefonu, dikey + yatay): aktif alarmlar, üstlen, detay (§A.7'nin mobil sürümü); 10–15 sn yoklama.
-- Mobil ekran reçetesi (`SCREEN_MODULE` aynası, `useVisibleScreens`, izin `mobile:tezgah-uyari`). Tablet OTA turu (`versionCode`a dokunulmaz).
+- Mobil ekran reçetesi (`SCREEN_MODULE` aynası, `useVisibleScreens`, izin `mobile:tezgah-uyari`). ~~Tablet OTA turu~~ → A6a ile aynı teslimde `expo-notifications` girdiği için **APK turu** (`runtimeVersion` artışı yayın işidir).
+- ✓ Yapılan: `mobil/src/screens/Modules/Uyarilar/` (telefon dikey liste → `UyariDetay`; tablet yatay liste + detay), Tezgah ekranı şeridi `components/alarm/LoomAlarmStrip.tsx` (okuma `mobile:dokuma` ile de açık, "Üstlendim" yalnız eylem izninde), uçlar `mobile:tezgah-uyari`yi kabul eder (`routes/loom-alarm.routes.ts`), "Benim alarmlarım" `mine=1` (tanımayan sunucuda 400 → parametresiz geri düşüş, kapsam satırı "İzninize göre tümü" der).
 
 ### Faz A4 — Sorumlu ataması ve kademe kuralları · **Soru 4'e bağlı**
 - `HallShiftResponsible` + nöbet değişikliği; kademe kuralı tablosu (alıcı = rol/kişi/hol sorumlusu); alıcı listesi `RAISED`'a donar; B3 (bildiren/kapatan kolonları) aynı fazda.
@@ -286,8 +306,9 @@ Emek: **S** ≤1 gece tek ajan · **M** 1–2 gece · **L** çok fazlı. "Bugün
 - Fabrika: `alarmlar` projeksiyonu + K2'de anlık eşitleme tetiği. Bulut: `tezgah-alarmi` türü (katalog + izin kapsaması + bayat alarm kuralı), tel tipleri `patron/sunucu/src/wire/api.ts` ↔ uygulama aynası. Uygulama: alarm ekranı (salt-okunur) + `safeRoute`.
 - **Ön koşul:** patron bulutu VDS'te canlı + `BILDIRIM_KIPI=gercek` + mağaza yayını. Bunlar hazır değilse faz kodda biter, `sahte` kiple prova edilir, canlıya açılması bekler.
 
-### Faz A6 — Telefon kilit ekranı / akıllı saat · **Soru 1'e ve yeni paket onayına bağlı**
-- `expo-notifications` mobil uygulamaya (**yeni paket — onay gerekir**). (a) bulut rölesi üzerinden push ya da (b) fabrika Wi-Fi'ında arka planda yoklayan yerel bildirim.
+### Faz A6 — Telefon kilit ekranı / akıllı saat
+- **A6a ✓ 2026-10-11 — yerel bildirim (fabrika Wi-Fi):** `expo-notifications` (onaylı) yalnız YEREL: ön planda 15 sn yoklama → ses + titreşim + uygulama içi uyarı; arka plana geçişte açık-üstlenilmemiş alarm varsa TEK zamanlanmış hatırlatma ("HH:mm itibarıyla N açık alarm"), ön plana dönüşte iptal; dokununca alarm sayfası. Ölçüm: arka planda JS durur (RN 0.81 `JavaTimerManager.onHostPause`) ⇒ arka planda YENİ doğan alarm bu yolla bildirilemez — A6b'nin işi.
+- **A6b — internet push (kilit ekranı, saat):** tasarım §A.12; hesap/karar bekler.
 
 ### Sonraki fazlar (alarm bittikten sonra, önerilen sıra)
 1. **B3 + B4** — kim bildirdi/kapattı + müdahale süresi raporu (alarm defterini okuyan ilk rapor). M.

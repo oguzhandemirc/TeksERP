@@ -11,6 +11,7 @@ import {
   isSessionStationKind,
 } from '../constants/stationScreens';
 import ModuleSelectScreen from '../screens/Common/ModuleSelectScreen';
+import LoomAlarmNotifier from '../components/alarm/LoomAlarmNotifier';
 import type { MobileScreenKey } from '../types/permissions';
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -41,6 +42,8 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => GatedScreen> = {
   Siparis: () => require('../screens/Modules/Siparis/SiparisScreen').default,
   Kumas: () => require('../screens/Modules/Kumas/KumasScreen').default,
   KursunDagitim: () => require('../screens/Modules/KursunDagitim/KursunDagitimScreen').default,
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- tembel yükleyici deseni (dosya başlığı); ekran yalnız navigate edilince parse edilir
+  Uyarilar: () => require('../screens/Modules/Uyarilar/UyarilarScreen').default,
 };
 
 // Oturumlu ekranlar (KK1/KursunQc/Tambur/TartiPaket) SessionGate ile sarılır —
@@ -99,6 +102,9 @@ export default function MainNavigator() {
   }
 
   return (
+    <>
+    {/* Tezgah alarmı bildiricisi — erişimi (izin + bayrak) olmayan kullanıcıda hiçbir şey yapmaz. */}
+    <LoomAlarmNotifier />
     <Stack.Navigator
       initialRouteName={initialRouteName}
       // Modüle girerken sağdan kayar, geri dönerken geri kayar — fade yerine
@@ -157,6 +163,13 @@ export default function MainNavigator() {
         name="IadeGecmisi"
         getComponent={() => require('../screens/Modules/IadeGirisi/IadeGecmisiScreen').default}
       />
+      {/* Tezgah alarmı sayfası — Uyarılar / Tezgah şeridi / bildirim (derin bağlantı); veri kapısı sunucuda (izin). */}
+      <Stack.Screen
+        name="UyariDetay"
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- tembel yükleyici deseni
+        getComponent={() => require('../screens/Modules/Uyarilar/UyariDetayScreen').default}
+      />
     </Stack.Navigator>
+    </>
   );
 }

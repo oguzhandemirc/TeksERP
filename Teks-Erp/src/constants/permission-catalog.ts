@@ -336,5 +336,8 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:devere", module: "MOBILE", category: "mobile", description: "Mobil — Levent Sarım (devere) ekranı: plan · sar · taslak sil" },
   // Sarım iptali AYRI yetenek (§11 D3): defterden NET iplik döndürür (`warpbeam:cancel` tablet eşi).
   { code: "mobile:devere-iptal", module: "MOBILE", category: "mobile", description: "Levent Sarım ekranı — sarımı iptal edebilir (ayrı yetenek; iplik defterine ters satır yazar)" },
+  // Tezgah alarmı mobil "Uyarılar" ekranı (A3): `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi
+  // (`mobile:siparis` emsali); başkasının üstlenmesini bırakmak yine yalnız `loom:alarm-escalation`.
+  { code: "mobile:tezgah-uyari", module: "MOBILE", category: "mobile", description: "Mobil — Uyarılar ekranı: tezgah alarmlarını görme, üstlenme/bırakma, susturma, not; bildirim" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];

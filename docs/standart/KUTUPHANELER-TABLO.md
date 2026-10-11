@@ -68,6 +68,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | Tarih | `dayjs` (27) | tarih SEÇİCİ paketi EKLENMEZ (`docs/kurallar/filtre-liste.md:84`) |
 | Depolama | `expo-secure-store` (sır) · `@react-native-async-storage/async-storage` | — |
 | Kamera · okutma geri bildirimi | `expo-camera` 17 · `expo-haptics` + `expo-audio` | ekranlar `Haptics`i doğrudan değil `scanFeedback.signalScan` üzerinden çağırır |
+| Yerel bildirim (tezgah alarmı) | `expo-notifications` ~0.32 (yalnız `services/alarmNotify.ts`, korumalı tembel `require`) | yalnız YEREL zamanlanmış hatırlatma; internet push (FCM/APNs) ayrı dilim (`DOKUMA-ALARM-VE-YOL-HARITASI.md` §A.12); native modül → OTA ile gitmez, APK turu ister |
 | Bluetooth | `react-native-bluetooth-classic` (3 dosya, lazy `require`) | `react-native-ble-plx` canlı ama sahipsiz — §7 |
 | Yazdırma / dosya | `expo-print` | `expo-sharing` KULLANILMAZ (ölü); `expo-intent-launcher` ve doğrudan `expo-file-system` bağımı çıktı (2026-10-07, K-14: uygulama içi APK kurulumu kalktı; `expo`nun geçişli bağımlılığı olarak kalır) |
 | Animasyon · klavye · sıralama | `react-native-reanimated` 4 + `react-native-worklets` · `react-native-keyboard-controller` · `react-native-sortables` | worklets reanimated 4 peer'ı |

@@ -41,6 +41,13 @@ export interface FeatureFlags {
   /** Devere Faz 3: levent tezgah bağı defteri (`devere.mountTracking`) — default FALSE (satır-yok değeri).
    *  Tezgah ekranı "Levent" paneli ve Levent Sarım "Tezgahta" sekmesi yalnız AÇIKKEN çizilir. */
   devereMountTracking: boolean;
+  /** TEZGAH İZLEME modülü (`tezgah.enabled`, HAM) — Uyarılar ekranının kapısı (`screenModules.ts`; etkin = production ∧ tezgah).
+   *  Backend satır yoksa FALSE; eski sunucu göndermez → kapalı (fail-closed). */
+  tezgahEnabled?: boolean;
+  /** Tezgah alarmı davranış bayrağı (`tezgah.alarmEnabled`) — kapalıyken Uyarılar "kapalı" der, yoklama/bildirim YOK. */
+  tezgahAlarmEnabled?: boolean;
+  /** Üstlenilmemiş alarmın tekrar çalma aralığı (dk, sunucu varsayılanı 10). */
+  tezgahAlarmRenotifyMinutes?: number | null;
   /** Z1 üretim belge zinciri: açıkken tezgah koşumu bir dokuma işine bağlanmalı (`dokuma.runWeavingOrderRequired`) — default FALSE (bugünkü davranış). */
   dokumaRunWeavingOrderRequired: boolean;
   /** Açıkken levent planı/sarımı bir dokuma işine bağlanmalı (`devere.beamWeavingLinkRequired`) — default FALSE. */
@@ -164,6 +171,10 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   dokumaEnabled: false,
   // Backend satır-yok değeri FALSE — bayrak yüklenene dek Levent Sarım kartı ÇİZİLMEZ.
   devereEnabled: false,
+  // Tezgah izleme + alarm: backend satır-yok değeri FALSE (yeni modül/davranış) — fail-closed.
+  tezgahEnabled: false,
+  tezgahAlarmEnabled: false,
+  tezgahAlarmRenotifyMinutes: 10,
   emanetEnabled: false,
   // Backend satır-yok değeri FALSE — kapalıyken Tezgah/Levent ekranları Faz 1b ile birebir.
   devereMountTracking: false,
