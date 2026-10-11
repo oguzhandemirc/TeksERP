@@ -247,7 +247,7 @@ Emek: **S** ≤1 gece tek ajan · **M** 1–2 gece · **L** çok fazlı. "Bugün
 |---|---|---|---|---|---|
 | B1 | **Alarm + eskalasyon** (bu belge §A) | "Tezgah durdu, kimse bilmiyor" kaybını bitirir; satış demosunun en güçlü anı | Hedef/pay/kademe hesabı VAR; bildirim, üstlenme, iletim YOK | L (A1–A6) | — |
 | B2 | **Sorumlu/nöbet ataması** (hol × vardiya → usta, bakımcı) | Alarmı "herkese" değil doğru kişiye; vardiya amirinin hesap verebilirliği | YOK | M | B1 |
-| B3 | **Duruşu kim bildirdi / kim kapattı** kolonları | Müdahale süresi kişiye/ekibe bağlanır; tartışma biter | YOK (yalnız `classifiedById`) | S | — |
+| B3 ✓ 2026-10-12 | **Duruşu kim bildirdi / kim kapattı** kolonları | Müdahale süresi kişiye/ekibe bağlanır; tartışma biter | VAR (`openedById`/`closedById`; yalnız elle açma/kapama yazar, eski satır "bilinmiyor") | S | — |
 | B4 | **Müdahale/çözüm süresi raporu** (sebep · hol · vardiya · usta başına ortalama üstlenme ve çözüm süresi, hedef aşım oranı) | Bakım ekibinin performansı; "hangi arıza bizi en çok bekletiyor" | YOK (Pareto süre/adet VAR) | M | B1, B3 |
 | B5 | **Hol tableti / çok tezgahlı dokumacı ekranı** | Gerçekte bir dokumacı 6–12 tezgaha bakar; tezgah başına tablet satılamaz | Tablet oturumu tek tezgaha kilitli, makine seçtirilmez [ÖLÇÜLDÜ `dokuma.md` Tablet] | M–L | oturum modeli kararı |
 | B6 | **Amir telefonu salon görünümü** | Salonda yürürken tüm tezgahları görmek | YOK (D14) | M | A3 ile birleşebilir |
@@ -299,8 +299,9 @@ Emek: **S** ≤1 gece tek ajan · **M** 1–2 gece · **L** çok fazlı. "Bugün
 - Mobil ekran reçetesi (`SCREEN_MODULE` aynası, `useVisibleScreens`, izin `mobile:tezgah-uyari`). ~~Tablet OTA turu~~ → A6a ile aynı teslimde `expo-notifications` girdiği için **APK turu** (`runtimeVersion` artışı yayın işidir).
 - ✓ Yapılan: `mobil/src/screens/Modules/Uyarilar/` (telefon dikey liste → `UyariDetay`; tablet yatay liste + detay), Tezgah ekranı şeridi `components/alarm/LoomAlarmStrip.tsx` (okuma `mobile:dokuma` ile de açık, "Üstlendim" yalnız eylem izninde), uçlar `mobile:tezgah-uyari`yi kabul eder (`routes/loom-alarm.routes.ts`), "Benim alarmlarım" `mine=1` (tanımayan sunucuda 400 → parametresiz geri düşüş, kapsam satırı "İzninize göre tümü" der).
 
-### Faz A4 — Sorumlu ataması ve kademe kuralları · **Soru 4'e bağlı**
+### Faz A4 — Sorumlu ataması ve kademe kuralları · ✓ 2026-10-12
 - `HallShiftResponsible` + nöbet değişikliği; kademe kuralı tablosu (alıcı = rol/kişi/hol sorumlusu); alıcı listesi `RAISED`'a donar; B3 (bildiren/kapatan kolonları) aynı fazda.
+- ✓ Yapılan: A4-1 backend (`7f937535e`; "rol" alıcısı = izin kodu), A4-2 panel "Alarm Sorumluları" ekranı + alarm sayfasında "Kime bildirildi" (`cb82c8b75`), B3 açan/kapatan kolonları + Tezgah Salonu detayında "Bildiren", alarm sayfasında "Bildiren / Kapatan" (eski kayıt "bilinmiyor").
 
 ### Faz A5 — Patron uygulamasına push · **altyapı durumuna bağlı (karar değil)**
 - Fabrika: `alarmlar` projeksiyonu + K2'de anlık eşitleme tetiği. Bulut: `tezgah-alarmi` türü (katalog + izin kapsaması + bayat alarm kuralı), tel tipleri `patron/sunucu/src/wire/api.ts` ↔ uygulama aynası. Uygulama: alarm ekranı (salt-okunur) + `safeRoute`.
@@ -311,7 +312,7 @@ Emek: **S** ≤1 gece tek ajan · **M** 1–2 gece · **L** çok fazlı. "Bugün
 - **A6b — internet push (kilit ekranı, saat):** tasarım §A.12; hesap/karar bekler.
 
 ### Sonraki fazlar (alarm bittikten sonra, önerilen sıra)
-1. **B3 + B4** — kim bildirdi/kapattı + müdahale süresi raporu (alarm defterini okuyan ilk rapor). M.
+1. **B3 ✓ 2026-10-12 + B4** — kim bildirdi/kapattı (indi) + müdahale süresi raporu (alarm defterini okuyan ilk rapor). M.
 2. **B7** toplu duruş · **B18** künye ekranı · **B19** vardiya devir notu — S'ler, bir gecede ikisi-üçü.
 3. **B9 + B10** — kalite → tezgah karnesi + puanlama. M.
 4. **B5** — hol tableti (oturum modeli tasarımı önce). M–L.
@@ -348,4 +349,4 @@ Emek: **S** ≤1 gece tek ajan · **M** 1–2 gece · **L** çok fazlı. "Bugün
 - **A1 (backend)** — sorulara bağlı değil: Soru 2 için Ekim kararı (a) varsayılan, Soru 3 ve 5 için ayar/varsayılan bugünkü davranış (sebepsiz hedef boş, vardiya dışı alarm yok), Soru 4 için yetkiye göre dağıtım. Hepsi sonradan ayar/faz ile değişebilir; hiçbiri geri dönüşsüz değil.
 - **A2 (panel)** — A1 bittikten sonra ikinci ajan.
 - Paralel küçük dilim: **B7 toplu duruş** ya da **B18 künye ekranı** (alarm dosyalarına dokunmaz).
-- A4 (Soru 4), A6 (Soru 1 + paket onayı) bekler; A5 kodlanabilir ama canlıya açılması patron bulutunun canlı + bildirim kipi `gercek` olmasını bekler.
+- A4 ✓ 2026-10-12; A6b (Soru 1 + paket onayı) bekler; A5 kodlanabilir ama canlıya açılması patron bulutunun canlı + bildirim kipi `gercek` olmasını bekler.
