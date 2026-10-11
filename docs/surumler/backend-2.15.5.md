@@ -86,6 +86,9 @@ uyarı şeridi) ayrı sürümle çıkar. Bekçiler ve belgeler.
   geçilebilir iki tarih alanı + iki kontrol kuralı; var olan satırlar boş kalır, veri dönüşümü YOK).
 - **Toplam migration:** 376 (2.15.4'te 375). 2.15.4'ten gelen kurulum tam 1 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR.
+- **Prova:** en eski canlı ham dump'ta (`tekserp_yeni_20260923_030001`, 238 migration) restore → `migrate deploy`
+  (138 migration, rc=0; 376 bitmiş, sorunlu 0; `users` iki yeni alan var) yapıldı — **dört ayağın ikisi (2/4)**;
+  doğrulama kipinde açılış ve bekçilerin canlı dump'a karşı koşulması YAPILMADI.
 - **Veri yazan adımlar:** güncelleme sırasında YOK. Destek hesabı yalnız hiç destek hesabı olmayan kurulumda,
   açılışta bir kez doğar.
 - **Geri alınabilir mi:** migration geri alınmaz. İmaj 2.15.4'e dönebilir: yeni alanlar eski sürümce okunmaz, iş
