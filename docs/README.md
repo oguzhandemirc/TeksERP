@@ -17,6 +17,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 | Personel ve yönetici kullanım kılavuzu (panel · tablet · sunucu bilgisayarı · sorun giderme) | `docs/kilavuz/README.md` |
 | Alt proje çalışma düzeni | `Teks-Erp/CLAUDE.md` · `Electron/CLAUDE.md` · `mobil/CLAUDE.md` |
 | Karar notlarının TAM metni, gerekçe, ölçüm | `docs/history/arsiv/<YYYY-MM>.md` (dizin: `docs/history/CLAUDE-NOT-ARSIVI.md`; ezilen notlar `⚠️ GEÇERSİZ/KISMEN` bloğu taşır) |
+| Güvenlik tehdit modeli (4 kurulum senaryosu × tehdit; engelle / tespit et / pahalılaştır) ve fazlı koruma planı G0–G10 | `docs/design/GUVENLIK-TEHDIT-MODELI.md` |
 | Derin mimari referans | `Teks-Erp/ARCHITECTURE.md` (§7–§10 canlı; envanter sayıları bayat) |
 
 ## Klasörler
