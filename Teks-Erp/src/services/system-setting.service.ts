@@ -238,6 +238,17 @@ export const SETTING_KEYS = {
   /** [PROFİL] İletim payı (dk): duruş hedef süreyi bu kadar aşınca patrona iletilir.
    *  Fabrika genelinde TEK değer (sebep başına değil); duruş açıldığı an satıra donar. */
   TEZGAH_ESCALATION_GRACE_MINUTES: "tezgah.escalationGraceMinutes",
+  /** [PROFİL] Dokuma ALARM motoru (davranış bayrağı, `tezgah.enabled` arkasında). Varsayılan
+   *  KAPALI = bugünkü davranış: hiçbir alarm satırı doğmaz, kademe yalnız okumada hesaplanır. */
+  TEZGAH_ALARM_ENABLED: "tezgah.alarmEnabled",
+  /** [PROFİL] Sebepsiz bildirilen duruşun ortak hedef süresi (dk). Varsayılan BOŞ (0 yazılır) =
+   *  bugünkü davranış: sebepsiz duruş süre izlemez. Sebep seçilince sebebinkine geçer. */
+  TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES: "tezgah.alarm.unclassifiedTargetMinutes",
+  /** [PROFİL] Üstlenilmemiş alarmın yeniden ses/bildirim aralığı (dk) — yalnız görüntü/push, satır yazmaz. */
+  TEZGAH_ALARM_RENOTIFY_MINUTES: "tezgah.alarm.renotifyMinutes",
+  /** [PROFİL] Üstlenilmiş alarm da üst kademeye (K2) çıksın mı. Varsayılan AÇIK: üstlenmek
+   *  K2'yi durdurmaz (motor bu bayrakla doğar; kapalıyken üstlenilmiş alarm K2'de bekler). */
+  TEZGAH_ALARM_ESCALATE_WHEN_ACKED: "tezgah.alarm.escalateWhenAcked",
   /** Devere / levent modülü: çözgü kartı · levent stoğu · levent olay defteri.
    *  ⚠️ İPLİĞE BAĞIMLI (`MODULE_DEPENDENCIES`), o da ticarete: levent doğarken
    *  iplik kg defterine çıkış yazılır (`WARP_ISSUE`). Zincir OKUMA kapısında
@@ -901,6 +912,11 @@ export const DEFAULT_SHIPPING_SACK_SEQ_START = 1;
 /** İletim payı (dk): 0 = hedef dolunca patrona (varsayılan); üst sınır bir gün. */
 export const DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES = 0;
 export const TEZGAH_ESCALATION_GRACE_MINUTES_MAX = 1440;
+/** Sebepsiz duruş ortak hedefi: boş (null) = izlenmez; doluysa 1..1440 dk. */
+export const TEZGAH_ALARM_UNCLASSIFIED_TARGET_MAX = 1440;
+/** Alarm tekrar aralığı (dk): varsayılan 10, 1..120. */
+export const DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES = 10;
+export const TEZGAH_ALARM_RENOTIFY_MINUTES_MAX = 120;
 export const SHIPPING_SACK_SEQ_START_MAX = 999;
 
 /**
@@ -1622,6 +1638,14 @@ export interface FeatureFlags {
   tezgahEnabled: boolean;
   /** İletim payı (dk, default 0; 0–1440) — fabrika genelinde tek değer. */
   tezgahEscalationGraceMinutes: number;
+  /** Dokuma alarm motoru (HAM değer; etkin = `tezgahEnabled ∧ tezgahAlarmEnabled`). Varsayılan KAPALI. */
+  tezgahAlarmEnabled: boolean;
+  /** Sebepsiz duruşun ortak hedef süresi (dk); null = izlenmez (varsayılan). */
+  tezgahAlarmUnclassifiedTargetMinutes: number | null;
+  /** Alarm tekrar aralığı (dk, varsayılan 10; 1–120). */
+  tezgahAlarmRenotifyMinutes: number;
+  /** Üstlenilmiş alarm da üst kademeye çıkar (varsayılan AÇIK). */
+  tezgahAlarmEscalateWhenAcked: boolean;
   /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).
    *  Varsayılan KAPALI. ⚠️ İPLİĞE BAĞIMLI, iplik de ticarete: bu alan HAM
    *  değerdir (panel toggle'ı kendi yazdığını geri okusun diye); etkin değer
@@ -2201,6 +2225,10 @@ export class SystemSettingService {
       shippingSackSeqPrefixLive: await readShippingSackSeqPrefixLive(cacheClient),
       shippingSackSeqStart: await readShippingSackSeqStart(cacheClient),
       tezgahEscalationGraceMinutes: await readTezgahEscalationGraceMinutes(cacheClient),
+      tezgahAlarmEnabled: await readTezgahAlarmEnabled(cacheClient),
+      tezgahAlarmUnclassifiedTargetMinutes: await readTezgahAlarmUnclassifiedTargetMinutes(cacheClient),
+      tezgahAlarmRenotifyMinutes: await readTezgahAlarmRenotifyMinutes(cacheClient),
+      tezgahAlarmEscalateWhenAcked: await readTezgahAlarmEscalateWhenAcked(cacheClient),
       shippingSackSeqShowTotal: await readShippingSackSeqShowTotal(cacheClient),
       packingPoolPackageNo: await readPackingPoolPackageNo(cacheClient),
       sackDumpNameMode: await readSackDumpNameMode(cacheClient),
@@ -2367,12 +2395,14 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
       /** null = fabrika varsayılanına dön (0 dk). */
       tezgahEscalationGraceMinutes?: number | null;
+      /** null = varsayılana dön (10 dk). */
+      tezgahAlarmRenotifyMinutes?: number | null;
       financeInvoiceQtyTolerancePct?: number | null;
       financeInvoicePriceTolerancePct?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
@@ -3337,6 +3367,29 @@ export class SystemSettingService {
         }
       }
       await this.set(SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES, v === null ? DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES : v, "Tezgah duruşu iletim payı (dk) — hedef süre bu kadar aşılınca patrona iletilir", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmEnabled")) {
+      if (typeof input.tezgahAlarmEnabled !== "boolean") throw AppError.badRequest("tezgahAlarmEnabled boolean olmalı");
+      await this.set(SETTING_KEYS.TEZGAH_ALARM_ENABLED, input.tezgahAlarmEnabled, "Dokuma alarm motoru — hedefi aşan duruş alarmı (Tezgah Salonu)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmUnclassifiedTargetMinutes")) {
+      const v = input.tezgahAlarmUnclassifiedTargetMinutes;
+      // `null` = boş: sebepsiz duruş izlenmez (0 yazılır, okuyucu null çözer).
+      if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > TEZGAH_ALARM_UNCLASSIFIED_TARGET_MAX)) {
+        throw AppError.badRequest(`Sebepsiz duruş hedefi 1 ile ${TEZGAH_ALARM_UNCLASSIFIED_TARGET_MAX} dakika arasında tam sayı olmalı (boş = izlenmez)`);
+      }
+      await this.set(SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES, v ?? 0, "Sebepsiz bildirilen tezgah duruşunun ortak hedef süresi (dk; 0 = izlenmez)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmRenotifyMinutes")) {
+      const v = input.tezgahAlarmRenotifyMinutes;
+      if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > TEZGAH_ALARM_RENOTIFY_MINUTES_MAX)) {
+        throw AppError.badRequest(`Alarm tekrar aralığı 1 ile ${TEZGAH_ALARM_RENOTIFY_MINUTES_MAX} dakika arasında tam sayı olmalı`);
+      }
+      await this.set(SETTING_KEYS.TEZGAH_ALARM_RENOTIFY_MINUTES, v ?? DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES, "Üstlenilmemiş tezgah alarmının yeniden bildirim aralığı (dk)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmEscalateWhenAcked")) {
+      if (typeof input.tezgahAlarmEscalateWhenAcked !== "boolean") throw AppError.badRequest("tezgahAlarmEscalateWhenAcked boolean olmalı");
+      await this.set(SETTING_KEYS.TEZGAH_ALARM_ESCALATE_WHEN_ACKED, input.tezgahAlarmEscalateWhenAcked, "Üstlenilmiş tezgah alarmı da üst kademeye iletilsin", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqShowTotal")) {
       if (typeof input.shippingSackSeqShowTotal !== "boolean") throw AppError.badRequest("shippingSackSeqShowTotal boolean olmalı");
@@ -5384,6 +5437,34 @@ export async function readTezgahEscalationGraceMinutes(tx?: Pick<typeof prisma, 
   if (!setting) return DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES;
   const n = asNumber(setting.value);
   return n === null || !Number.isInteger(n) || n < 0 || n > TEZGAH_ESCALATION_GRACE_MINUTES_MAX ? DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES : n;
+}
+/** Dokuma alarm motoru HAM değeri — panel geri-okuması; enforcement `resolveTezgahAlarmEnabled`. Default FALSE. */
+export async function readTezgahAlarmEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_ENABLED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+/** §3.6 tek resolver: alarm yalnız tezgah modülü (lisans tavanı dahil) ∧ bayrak açıkken çalışır. */
+export async function resolveTezgahAlarmEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return (await readTezgahEnabled(tx)) && (await readTezgahAlarmEnabled(tx));
+}
+/** Sebepsiz duruş ortak hedefi (dk) — satır yok / 0 / bozuk → null (izlenmez). */
+export async function readTezgahAlarmUnclassifiedTargetMinutes(tx?: Pick<typeof prisma, "systemSetting">): Promise<number | null> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES }, select: { value: true } });
+  if (!setting) return null;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isInteger(n) || n < 1 || n > TEZGAH_ALARM_UNCLASSIFIED_TARGET_MAX ? null : n;
+}
+/** Üstlenilmiş alarm da K2'ye çıkar mı — satır yok = AÇIK (tasarım kararı: üstlenmek iletimi durdurmaz). */
+export async function readTezgahAlarmEscalateWhenAcked(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_ESCALATE_WHEN_ACKED }, select: { value: true } });
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+export async function readTezgahAlarmRenotifyMinutes(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_RENOTIFY_MINUTES }, select: { value: true } });
+  if (!setting) return DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isInteger(n) || n < 1 || n > TEZGAH_ALARM_RENOTIFY_MINUTES_MAX ? DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES : n;
 }
 export async function readPackingPoolPackageNo(tx?: Pick<typeof prisma, "systemSetting">): Promise<PackingPoolPackageNo> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.PACKING_POOL_PACKAGE_NO }, select: { value: true } });

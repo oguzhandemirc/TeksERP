@@ -72,4 +72,9 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "eşitleme filigranı (durum tablosu) — yazan eşitleme işidir (bulut onayından sonra), audit'in öznesi olacak bir kullanıcı yoktur; iş kaydı değildir" },
   { model: "ShiftInstance", sinif: "SISTEM_ISI",
     gerekce: "vardiya takvimi `jobs/shift-calendar.job` tarafından üretilir; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
+  // A1b kişi eylemleri (üstlen/sustur/not) audit taşıyınca §3 bu iki satırı "ölü muaf" der → SİLİNİR.
+  { model: "LoomAlarm", sinif: "SISTEM_ISI",
+    gerekce: "tezgah alarmını `jobs/loom-alarm.job` motoru doğurur/kademelendirir/kapatır (duruş saatinden); kullanıcı eylemi yok, iz `LoomAlarmEvent` defterinde" },
+  { model: "LoomAlarmEvent", sinif: "SISTEM_ISI",
+    gerekce: "alarm defterinin bugünkü tek yazarı motor (kademe · kapanış satırı); kişi eylemi yok, satırın kendisi \"ne oldu\"dur" },
 ];

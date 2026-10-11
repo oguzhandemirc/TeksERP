@@ -12,12 +12,14 @@ import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass } 
 import { aggregateMachineKpis, type LoomKpiTerms } from "./loom-efficiency.helper";
 import { sourceBucketOf, type SourceBucket } from "./loom-shift-terms.helper";
 
-/** Açık duruşun hedef kademesi — patrona İLETİM bu dilimde yok; yalnız süre ölçülür. */
-export type LoomStopTier = "UNTRACKED" | "WITHIN" | "OVERDUE";
+/** Okumada hesaplanan kademe — süre saatinden (duruşa donmuş hedef + pay). */
+export type LoomStopClockTier = "UNTRACKED" | "WITHIN" | "OVERDUE";
+/** Ekrana giden kademe: `ESCALATED` yalnız alarm motoru üst kademeyi (K2) ÇALDIRDIYSA — defterden, saatten değil. */
+export type LoomStopTier = LoomStopClockTier | "ESCALATED";
 
 export interface StopClock {
   startedAt: Date;
-  /** Duruşa donmuş hedef (dk); NULL = süre izlenmez. */
+  /** Etkin hedef (dk; `stopTargetMinutes`); NULL = süre izlenmez. */
   targetMinutes: number | null;
   /** Duruşa donmuş pay (dk). */
   graceMinutes: number;
@@ -26,16 +28,74 @@ export interface StopClock {
 
 const MIN_MS = 60_000;
 
-/** Plan dışı duruş ve hedefsiz sebep süre izlemez; hedef dolunca OVERDUE. */
-export function loomStopTier(s: StopClock, now: Date): LoomStopTier {
-  if (s.targetMinutes === null || s.lossClass === "NON_SCHEDULED") return "UNTRACKED";
-  return now.getTime() - s.startedAt.getTime() >= s.targetMinutes * MIN_MS ? "OVERDUE" : "WITHIN";
+/**
+ * Etkin hedef — TEK yer (Tezgah Salonu ve alarm motoru aynı fonksiyon): duruşa donmuş sebep hedefi;
+ * sebep HİÇ seçilmemişse fabrikanın sebepsiz duruş hedefi (`tezgah.alarm.unclassifiedTargetMinutes`,
+ * boş = izlenmez). Sebep seçilmiş ama hedefsizse izlenmez.
+ */
+export function stopTargetMinutes(stop: { targetMinutes: number | null; reasonCode: string | null }, unclassifiedTargetMinutes: number | null): number | null {
+  if (stop.targetMinutes !== null) return stop.targetMinutes;
+  return stop.reasonCode === null ? unclassifiedTargetMinutes : null;
 }
 
-/** Patrona iletimin olması gereken an (başlangıç + hedef + pay); süre izlenmiyorsa null. */
+/** Plan dışı duruş ve hedefsiz sebep süre izlemez. */
+function isTracked(s: StopClock): s is StopClock & { targetMinutes: number } {
+  return s.targetMinutes !== null && s.lossClass !== "NON_SCHEDULED";
+}
+
+/** Hedefin aşıldığı an (K1 = başlangıç + hedef); süre izlenmiyorsa null. */
+export function overdueAt(s: StopClock): Date | null {
+  return isTracked(s) ? new Date(s.startedAt.getTime() + s.targetMinutes * MIN_MS) : null;
+}
+
+/** Üst kademeye iletimin olması gereken an (K2 = başlangıç + hedef + pay); süre izlenmiyorsa null. */
 export function escalationDueAt(s: StopClock): Date | null {
-  if (s.targetMinutes === null || s.lossClass === "NON_SCHEDULED") return null;
-  return new Date(s.startedAt.getTime() + (s.targetMinutes + s.graceMinutes) * MIN_MS);
+  return isTracked(s) ? new Date(s.startedAt.getTime() + (s.targetMinutes + s.graceMinutes) * MIN_MS) : null;
+}
+
+/** Hedef dolunca (sınır dahil) OVERDUE. */
+export function loomStopTier(s: StopClock, now: Date): LoomStopClockTier {
+  const due = overdueAt(s);
+  if (due === null) return "UNTRACKED";
+  return now.getTime() >= due.getTime() ? "OVERDUE" : "WITHIN";
+}
+
+// ── Alarm kademeleri (motor ile ekran AYNI vadeyi okur) ──────────────────────
+export type AlarmTier = 1 | 2;
+
+export interface AlarmSchedule {
+  k1DueAt: Date;
+  /** NULL = üst kademe yok (sebep hedefsiz bir sebebe çevrildi). */
+  k2DueAt: Date | null;
+}
+
+/** Kademe planı — süre izlenmiyorsa alarm doğmaz (null). */
+export function alarmScheduleOf(s: StopClock): AlarmSchedule | null {
+  const k1DueAt = overdueAt(s);
+  return k1DueAt === null ? null : { k1DueAt, k2DueAt: escalationDueAt(s) };
+}
+
+/**
+ * Vadesi geçmiş ama henüz çalmamış kademeler: yalnız EN YÜKSEĞİ çalar, alttakiler ATLANIR (geç girilen
+ * kayıt ve sunucu yeniden başlaması sağanak üretmesin). `rungTier` = çalmış/atlanmış en yüksek kademe (0 = yok).
+ */
+export function dueAlarmTiers(schedule: AlarmSchedule, rungTier: number, now: Date): { raise: AlarmTier | null; skip: AlarmTier[] } {
+  const due: AlarmTier[] = [];
+  if (rungTier < 1 && schedule.k1DueAt.getTime() <= now.getTime()) due.push(1);
+  if (rungTier < 2 && schedule.k2DueAt !== null && schedule.k2DueAt.getTime() <= now.getTime()) due.push(2);
+  if (due.length === 0) return { raise: null, skip: [] };
+  return { raise: due[due.length - 1]!, skip: due.slice(0, -1) };
+}
+
+/** Vardiya dışı süzgeci: duruşu kapsayan vardiya yoksa ya da iptal edilmişse alarm doğmaz (tezgah planlı çalışmıyor). */
+export function alarmShiftEligible(shift: { isCancelled: boolean } | null): boolean {
+  return shift !== null && !shift.isCancelled;
+}
+
+/** Ekran kademesi: canlı alarm varsa çaldığı kademe saatin önüne geçer (çalmış kademe "ne oldu"dur). */
+export function floorStopTier(clockTier: LoomStopClockTier, alarm: { tier: number } | null): LoomStopTier {
+  if (alarm === null) return clockTier;
+  return alarm.tier >= 2 ? "ESCALATED" : "OVERDUE";
 }
 
 export type FloorLoomState = "RUNNING" | "STOPPED" | "UNMONITORED";
@@ -118,7 +178,7 @@ export function countFloor(looms: readonly FloorLoomCore[]): FloorCounts {
     }
     stopped += 1;
     byClass[classKey(l.openStop?.lossClass ?? null)] += 1;
-    if (l.openStop?.tier === "OVERDUE") overdue += 1;
+    if (l.openStop?.tier === "OVERDUE" || l.openStop?.tier === "ESCALATED") overdue += 1;
   }
   const monitored = running + stopped;
   const agg = aggregateMachineKpis(monitoredTerms);

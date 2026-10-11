@@ -428,6 +428,11 @@ export const updateSchema = z.strictObject({
   shippingSackSeqStart: z.number().int().min(0).max(999).nullable().optional(),
   // tezgah.escalationGraceMinutes — iletim payı (dk); null = varsayılana (0) dön.
   tezgahEscalationGraceMinutes: z.number().int().min(0).max(1440).nullable().optional(),
+  // Dokuma alarm motoru — bayrak (varsayılan KAPALI) + iki ayar; null = boş/varsayılan.
+  tezgahAlarmEnabled: z.boolean().optional(),
+  tezgahAlarmUnclassifiedTargetMinutes: z.number().int().min(1).max(1440).nullable().optional(),
+  tezgahAlarmRenotifyMinutes: z.number().int().min(1).max(120).nullable().optional(),
+  tezgahAlarmEscalateWhenAcked: z.boolean().optional(),
   shippingSackSeqShowTotal: z.boolean().optional(),
   packingPoolPackageNo: z.enum(["sevkte", "acilista"]).optional(),
   sackDumpNameMode: z.enum(["ikisi", "bizdeki", "musterideki"]).optional(),

@@ -163,6 +163,8 @@ export const CIFT_DISI_DEGERLER: CiftDisiDeger[] = [
     gerekce: "iş emrinin DOĞUŞ satırı — `fromValue: null` (DB CHECK `work_order_events_birth_has_no_from`; yazan `createWorkOrderTx`); tersi karşı kayıt değil iş emrinin kendi iptali (`STATUS_CHANGED` → CANCELLED)" },
   { enumAdi: "WorkOrderEventType", deger: "BATCH_ADDED", sinif: "DOGUS",
     gerekce: "partinin DOĞUŞ satırı (\"Parti Ekle\", tasarım §6.5) — geri alma partinin toplarına Top Çıkar'dır ve her topun kendi defterine (RollMovement damgası · stok defteri bağlı ters) yazılır; yazıcı D8 diliminde doğar" },
+  { enumAdi: "LoomAlarmEventKind", deger: "RESOLVED", sinif: "TERMINAL",
+    gerekce: "alarm kapanışı — duruş bittiği için `state: RESOLVED` (loom-alarm.service `closeTx`); değerin KENDİSİ terminal, çözülen alarm yeniden açılmaz (yeni duruş yeni alarm)" },
 ];
 
 const D = (
@@ -459,6 +461,16 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     { tur: "ENUM_CIFTI", enumAdi: "MachineSealAction", ciftler: [["SEAL", "UNSEAL"], ["RESEAL", "UNSEAL"]] },
     [{ dosya: "src/services/machine-shift-seal.service.ts", sembol: "unsealShiftStat" }],
     ["src/services/machine-shift-seal.service.ts"]),
+
+  // ── TEZGAH ALARMI (dokuma alarm Faz A1) ──
+  // `LoomAlarm` DURUM'dur (§1c, buraya girmez); geçmişi bu defterde. Motor kademe/kapanış satırını,
+  // kişi eylemleri (A1b) üstlenme/susturma/not satırını yazar — tek yazar dosya.
+  D("LoomAlarmEvent", "alarm DEFTERİ — kademe çalması, üstlenme, susturma, not ve kapanış; append-only (updatedAt YOK, `defter_block_tamper`), kronoloji `createdAt` (alarm başına kesin artan); ters yolu TİPLİ ENUM ÇİFTİ: ACK↔ACK_RELEASE · SNOOZE↔UNSNOOZE · NOTE↔NOTE_RETRACT (not silinmez/değişmez, geri çekme `retractsEventId` bağlı ayrı satır) · RAISED/TIER_SKIPPED↔CANCELLED (duruş geri alındı / plan dışına sınıflandı)",
+    { tur: "ENUM_CIFTI", enumAdi: "LoomAlarmEventKind", ciftler: [
+      ["ACK", "ACK_RELEASE"], ["SNOOZE", "UNSNOOZE"], ["NOTE", "NOTE_RETRACT"], ["RAISED", "CANCELLED"], ["TIER_SKIPPED", "CANCELLED"],
+    ] },
+    [{ dosya: "src/services/loom-alarm.service.ts", sembol: "closeTx" }],
+    ["src/services/loom-alarm.service.ts"]),
 
   // ── SATIRLAR — ters yolu EBEVEYNİNDE ──────────────────────────────────────
   // Kırılım satırı bir MÜHÜR KUŞAĞINA aittir (statId + sealGeneration): yeniden hesapta

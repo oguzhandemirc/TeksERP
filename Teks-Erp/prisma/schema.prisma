@@ -565,6 +565,9 @@ model User {
   updatedMachineCollectors MachineCollector[]     @relation("MachineCollectorUpdatedBy")
   machineStopsClassified   MachineStopEvent[]     @relation("MachineStopClassifiedBy")
   machineStopReclasses     MachineStopReclass[]   @relation("MachineStopReclassBy")
+  loomAlarmsAcked          LoomAlarm[]            @relation("LoomAlarmAckedBy")
+  loomAlarmsSnoozed        LoomAlarm[]            @relation("LoomAlarmSnoozedBy")
+  loomAlarmEvents          LoomAlarmEvent[]       @relation("LoomAlarmEventBy")
   machineShiftStatsSealed  MachineShiftStat[]     @relation("MachineShiftStatSealedBy")
   machineShiftSealsActed   MachineShiftStatSeal[] @relation("MachineShiftSealBy")
   createdPeripheralDevices PeripheralDevice[]     @relation("PeripheralDeviceCreatedBy")
@@ -1069,6 +1072,7 @@ model Machine {
   machineSpec    MachineSpec?
   /// Tezgah duruşları — `Restrict`; guard'ı ingest diliminde (yazan yol orada doğar).
   machineStops   MachineStopEvent[]
+  loomAlarms     LoomAlarm[]
   doffEvents     DoffEvent[]
   /// Vardiya karneleri — `Restrict`, `MACHINE_DELETE_GUARDS`ta sayacı var (`machineShiftStatCount`).
   shiftStats     MachineShiftStat[]
@@ -2336,6 +2340,7 @@ model MachineStopEvent {
   classifiedBy  User?                @relation("MachineStopClassifiedBy", fields: [classifiedById], references: [id])
   collector     MachineCollector?    @relation(fields: [collectorId], references: [id], onDelete: Restrict)
   reclasses     MachineStopReclass[]
+  alarm         LoomAlarm?
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2380,6 +2385,123 @@ model MachineStopReclass {
   @@index([stopEventId, createdAt])
   @@map("machine_stop_reclasses")
 }
+
+/// Tezgah alarmının türü — ilk değer duruş hedef aşımı; yeni tür = yeni nullable FK + XOR CHECK.
+enum LoomAlarmKind {
+  STOP_OVERDUE
+}
+
+/// Alarmın ŞU ANKİ durumu. RESOLVED (duruş kapandı) ve CANCELLED (duruş geri alındı ·
+/// plan dışına sınıflandı) TERMİNAL; geçişin kendisi `LoomAlarmEvent` defterindedir.
+enum LoomAlarmState {
+  OPEN
+  ACKED
+  RESOLVED
+  CANCELLED
+}
+
+/// Alarm DEFTERİNİN olay türü. Ters mekanizma `scripts/lib/defter-beyan.ts`te beyanlı:
+/// ACK↔ACK_RELEASE · SNOOZE↔UNSNOOZE · NOTE↔NOTE_RETRACT (tipli çift) · RAISED/TIER_SKIPPED↔CANCELLED.
+enum LoomAlarmEventKind {
+  RAISED
+  TIER_SKIPPED
+  ACK
+  ACK_RELEASE
+  SNOOZE
+  UNSNOOZE
+  NOTE
+  NOTE_RETRACT
+  RESOLVED
+  CANCELLED
+}
+
+/// TEZGAH ALARMI — DURUM ("şu an ne"); geçmişi `LoomAlarmEvent` defterinde.
+/// Doğuşu motorun işidir (`jobs/loom-alarm.job.ts` → `loom-alarm.service`): duruşun ilk
+/// kademesi (K1, hedef aşıldı) çaldığı an doğar ve KADEME PLANI satıra DONAR (hedef ·
+/// pay · vadeler); ayar değişikliği açık alarmı değiştirmez. Sebep sonradan değişirse
+/// yalnız ÇALMAMIŞ kademenin vadesi yeniden hesaplanır. Silinmez — kapanış durum geçişidir.
+/// ⚠️ Gövdeden yazılan BaseController modeli DEĞİL: yazma yolu yalnız alarm servisidir.
+model LoomAlarm {
+  id          String         @id @default(uuid()) @db.Uuid
+  kind        LoomAlarmKind
+  stopEventId String         @unique @db.Uuid
+  /// Duruşun makinesi — doğuşta kopyalanır (liste süzgeci; duruş makinesi değişmez).
+  machineId   String         @db.Uuid
+  state       LoomAlarmState @default(OPEN)
+  /// Çalmış (ya da atlanmış) EN YÜKSEK kademe: 1 = hedef aşıldı, 2 = üst kademe.
+  tier        Int
+
+  /// DONMUŞ PLAN. `targetMinutes` NULL = sebep hedefsiz bir sebebe çevrildi, çalmamış kademe düştü.
+  targetMinutes  Int?
+  graceMinutes   Int
+  /// Planın hesaplandığı sebep — NULL = sebepsiz duruş (ortak hedef ayarı). Sebep değişimini motor bununla görür.
+  planReasonCode String?   @db.VarChar(64)
+  k1DueAt        DateTime  @db.Timestamptz
+  k2DueAt        DateTime? @db.Timestamptz
+
+  ackedById    String?   @db.Uuid
+  ackedAt      DateTime? @db.Timestamptz
+  snoozedUntil DateTime? @db.Timestamptz
+  snoozedById  String?   @db.Uuid
+
+  /// Kapanışta DONAR (rapor yeniden hesaplamaz): duruşun toplam süresi ve hedefi aşma süresi.
+  closedAt     DateTime? @db.Timestamptz
+  totalSec     Int?
+  overdueSec   Int?
+  /// CANCELLED sebebi: `STOP_REVOKED` · `NON_SCHEDULED`.
+  cancelReason String?   @db.VarChar(64)
+
+  stopEvent MachineStopEvent @relation(fields: [stopEventId], references: [id], onDelete: Restrict)
+  machine   Machine          @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  ackedBy   User?            @relation("LoomAlarmAckedBy", fields: [ackedById], references: [id])
+  snoozedBy User?            @relation("LoomAlarmSnoozedBy", fields: [snoozedById], references: [id])
+  events    LoomAlarmEvent[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([machineId, createdAt])
+  @@index([state, createdAt])
+  // ŞEMA-DIŞI CHECK'ler (migration 20261011090000, `test_db_invariants`): kademe 1..2 ·
+  // üstlenen çifti · OPEN⇒üstlenen yok, ACKED⇒üstlenen var (çift yüklem) · susturma çifti ·
+  // terminal⇔closedAt · CANCELLED⇔cancelReason.
+  @@map("loom_alarms")
+}
+
+/// TEZGAH ALARM DEFTERİ — append-only (`updatedAt` YOK, mühür `defter_block_tamper`).
+/// Kronoloji `createdAt` (DB saati, alarm başına kesin artan — `loomAlarmEventStampTx`).
+/// Aynı kademe iki kez doğamaz: partial unique (alarmId, kind, tier) WHERE kind ∈ {RAISED, TIER_SKIPPED}.
+/// Not silinmez/değişmez: geri çekme ayrı NOTE_RETRACT satırıdır (`retractsEventId`, not başına bir kez).
+model LoomAlarmEvent {
+  id           String             @id @default(uuid()) @db.Uuid
+  alarmId      String             @db.Uuid
+  kind         LoomAlarmEventKind
+  /// Yalnız RAISED/TIER_SKIPPED: kademe (1..2).
+  tier         Int?
+  /// Kişi eylemi (ACK · ACK_RELEASE · SNOOZE · UNSNOOZE · NOTE · NOTE_RETRACT) — motor satırında NULL.
+  userId       String?            @db.Uuid
+  /// Yalnız SNOOZE: susturmanın bittiği an.
+  snoozedUntil DateTime?          @db.Timestamptz
+  /// NOTE metni (zorunlu) · SNOOZE gerekçesi (opsiyonel).
+  note         String?            @db.VarChar(500)
+  /// CANCELLED sebebi (`STOP_REVOKED` · `NON_SCHEDULED`).
+  code         String?            @db.VarChar(64)
+  /// Kişi eylemlerinin idempotency anahtarı (`tokenReplay`).
+  clientToken  String?            @unique @db.Uuid
+  /// Yalnız NOTE_RETRACT: geri çekilen NOTE satırı — bir not en çok bir kez geri çekilir.
+  retractsEventId String?         @unique @db.Uuid
+
+  alarm       LoomAlarm       @relation(fields: [alarmId], references: [id], onDelete: Cascade)
+  user        User?           @relation("LoomAlarmEventBy", fields: [userId], references: [id])
+  retracts    LoomAlarmEvent? @relation("LoomAlarmNoteRetract", fields: [retractsEventId], references: [id], onDelete: NoAction)
+  retractedBy LoomAlarmEvent? @relation("LoomAlarmNoteRetract")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([alarmId, createdAt])
+  @@map("loom_alarm_events")
+}
+
 
 /// TOP İNDİRME — tezgahtan kumaş indiği AN (dokuma P3, tasarım
 /// DOKUMA-IS-EMRI-VE-TABLET-TASARIMI §3.8). DEFTER: satır SİLİNMEZ, GÜNCELLENMEZ

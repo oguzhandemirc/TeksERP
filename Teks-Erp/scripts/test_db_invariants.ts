@@ -484,6 +484,15 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("requiresReason" AND ("reasonCode" IS NULL) AND ("revokedAt" IS NULL))`,
     why: "sınıflandırma kuyruğu — sebebi bekleyen duruşlar taraması",
   },
+  // Dokuma alarm motoru (Faz A1, migration 20261011090000): motorun iki eşzamanlı turu aynı
+  // kademeyi İKİ KEZ çaldıramaz (ON CONFLICT DO NOTHING).
+  {
+    table: "loom_alarm_events",
+    index: "loom_alarm_events_tier_uq",
+    uniq: true,
+    predicate: `(kind = ANY (ARRAY['RAISED'::"LoomAlarmEventKind", 'TIER_SKIPPED'::"LoomAlarmEventKind"]))`,
+    why: "alarm başına her kademe en çok bir kez çalar/atlanır — çift bildirim seddi",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -605,6 +614,15 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // NON_SCHEDULED dışı ∧ 1..1440; duruşa donan hedef 1..1440 · pay 0..1440.
   { table: "reason_presets", name: "reason_presets_stop_target_chk" },
   { table: "machine_stop_events", name: "machine_stop_events_escalation_chk" },
+  // Dokuma alarm motoru (Faz A1, migration 20261011090000): kademe · plan aralıkları ·
+  // üstlenme çift yüklemi (OPEN⇒yok, ACKED⇒var) · susturma çifti · terminal⇔closedAt ·
+  // defter satırının tür↔kolon biçimi.
+  { table: "loom_alarms", name: "loom_alarms_tier_ck" },
+  { table: "loom_alarms", name: "loom_alarms_plan_ck" },
+  { table: "loom_alarms", name: "loom_alarms_ack_ck" },
+  { table: "loom_alarms", name: "loom_alarms_snooze_ck" },
+  { table: "loom_alarms", name: "loom_alarms_closed_ck" },
+  { table: "loom_alarm_events", name: "loom_alarm_events_shape_ck" },
   // Patron bulutu gelen kutusu makbuzu (B3) — çift yüklem: ISLENDI ⇔ entityId dolu.
   { table: "cloud_inbox_receipts", name: "cloud_inbox_receipts_outcome_entity_chk" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
@@ -888,6 +906,12 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "swatch_events_block_tamper",
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
     why: "kartela olay defteri append-only — geri alma eşli ters tiptir, satır değişmez/silinmez; kartelanın kaskat silmesi geçer",
+  },
+  {
+    table: "loom_alarm_events",
+    trigger: "loom_alarm_events_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
+    why: "tezgah alarm defteri append-only — ters yol karşı olaydır (ACK_RELEASE · UNSNOOZE · CANCELLED), satır değişmez/silinmez; alarmın kaskat silmesi geçer",
   },
   {
     table: "work_order_close_snapshots",

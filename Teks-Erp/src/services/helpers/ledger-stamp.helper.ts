@@ -62,3 +62,13 @@ export async function factoryTimezonePeriodStampTx(tx: Tx): Promise<Date> {
     ) AS at`;
   return rows[0]!.at;
 }
+
+/** Tezgah alarm defteri (`loom_alarm_events`) — alarm başına; atlanan + çalan kademe aynı tx'te ardışık iki çağrı. */
+export async function loomAlarmEventStampTx(tx: Tx, alarmId: string): Promise<Date> {
+  const rows = await tx.$queryRaw<Array<{ at: Date }>>`
+    SELECT GREATEST(
+      to_timestamp(ceil(extract(epoch FROM clock_timestamp()) * 1000) / 1000), -- tz-ok: timestamptz, tx başı değil ŞU AN
+      (SELECT max("createdAt") + interval '1 millisecond' FROM loom_alarm_events WHERE "alarmId" = ${alarmId}::uuid)
+    ) AS at`;
+  return rows[0]!.at;
+}

@@ -46,6 +46,7 @@ import {
   resolveStopStamp,
 } from "./helpers/machine-stop-context.helper";
 import type { ApiResponse } from "../types/api.types";
+import { nudgeLoomAlarm } from "../jobs/loom-alarm.job";
 
 const TABLE = "MACHINE_STOP_EVENT";
 
@@ -169,6 +170,7 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
     },
   }).catch(() => undefined);
 
+  nudgeLoomAlarm();
   return { success: true, data: created, message: "Duruş açıldı", ...(warnings.length ? { warnings } : {}) };
 }
 
@@ -217,6 +219,7 @@ export async function closeManualStop(
     changes: [{ field: "endedAt", old: null, new: closed.endedAt }, { field: "durationSec", old: null, new: closed.durationSec }],
   }).catch(() => undefined);
 
+  nudgeLoomAlarm();
   return { success: true, data: closed, message: "Duruş kapatıldı", ...(warnings.length ? { warnings } : {}) };
 }
 
@@ -267,6 +270,7 @@ export async function classifyStop(stopId: string, input: ClassifyStopInput, use
     ],
   }).catch(() => undefined);
 
+  nudgeLoomAlarm();
   return { success: true, data: classified, message: "Duruş sınıflandırıldı" };
 }
 
@@ -330,6 +334,7 @@ export async function reclassifyStop(stopId: string, input: ReclassifyStopInput,
     ],
   }).catch(() => undefined);
 
+  nudgeLoomAlarm();
   return { success: true, data: reclassed.stop, message: "Duruş yeniden sınıflandırıldı" };
 }
 
@@ -360,6 +365,7 @@ export async function revokeStop(stopId: string, reason: string, userId?: string
     changes: [{ field: "revokedAt", old: null, new: revoked.revokedAt }, { field: "revokeReason", old: null, new: revoked.revokeReason }],
   }).catch(() => undefined);
 
+  nudgeLoomAlarm();
   return { success: true, data: revoked, message: "Duruş geri alındı" };
 }
 

@@ -25,6 +25,7 @@ export const VERIFICATION_SKIPPED_JOBS = [
   "startExchangeRateScheduler", // TCMB kuru (dışarı + DB yazar)
   "startShiftCalendarScheduler", // vardiya takvimi (zamanlayıcı, DB yazar)
   "startShiftCloseScheduler", // vardiya karnesi (zamanlayıcı, DB yazar)
+  "startLoomAlarmScheduler", // dokuma alarm motoru (zamanlayıcı, DB yazar)
   "startLicenseDoorbell", // satıcı kapı zili (dışarı)
   "startPatronCloudJobs", // patron bulutu eşitlemesi + gelen kutusu (dışarı + DB yazar)
   "startErrorReportJob", // hata raporu kuyruğu + gönderim (dışarı + DB yazar)

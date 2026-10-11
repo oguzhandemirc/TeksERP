@@ -39,6 +39,7 @@ const YAZAR: Record<string, string> = {
   swatchEventStampTx: "src/services/helpers/swatch-event.helper.ts",
   warpBeamEventStampTx: "src/services/helpers/warp-beam-event.helper.ts",
   factoryTimezonePeriodStampTx: "src/services/factory-timezone.service.ts",
+  loomAlarmEventStampTx: "src/services/loom-alarm.service.ts",
 };
 
 /** Damga biçimi: ms'ye yukarı yuvarlanan DB saati ya da "son satır + 1 ms" zinciri. */

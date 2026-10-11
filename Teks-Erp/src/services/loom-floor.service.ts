@@ -14,7 +14,7 @@ import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass, P
 import prisma from "../lib/prisma";
 import { factoryDayStart } from "../constants/time";
 import { LOOM_MACHINE_WHERE, MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
-import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahEscalationGraceMinutes } from "./system-setting.service";
+import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahEscalationGraceMinutes } from "./system-setting.service";
 import { mountedBeamViewsTx, type MountedBeamView } from "./helpers/warp-beam-mount.helper";
 import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms, type SourceBucket } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis } from "./helpers/loom-efficiency.helper";
@@ -24,6 +24,7 @@ import {
   floorStateSourceOf,
   loomStateOf,
   loomStopTier,
+  stopTargetMinutes,
   summarizeHalls,
   type FloorCounts,
   type FloorHallSummary,
@@ -189,15 +190,18 @@ function todayTerms(loom: LoomRow, { stops, runs, doffSources }: LoomDayRows, sr
   });
 }
 
-function openStopDto(s: StopRow, src: FloorSources, currentGrace: number, now: Date): LoomFloorOpenStopDto {
-  const clock = { startedAt: s.startedAt, targetMinutes: s.targetMinutes, graceMinutes: s.escalationGraceMinutes ?? currentGrace, lossClass: s.lossClass };
+function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclassifiedTarget: number | null }, now: Date): LoomFloorOpenStopDto {
+  const clock = {
+    startedAt: s.startedAt, targetMinutes: stopTargetMinutes(s, ctx.unclassifiedTarget),
+    graceMinutes: s.escalationGraceMinutes ?? ctx.grace, lossClass: s.lossClass,
+  };
   return {
     id: s.id,
     reasonCode: s.reasonCode,
     reasonLabel: s.reasonCode ? (src.labelOf.get(s.reasonCode) ?? null) : null,
     lossClass: s.lossClass,
     startedAt: s.startedAt,
-    targetMinutes: s.targetMinutes,
+    targetMinutes: clock.targetMinutes,
     graceMinutes: clock.graceMinutes,
     tier: loomStopTier(clock, now),
     escalationDueAt: escalationDueAt(clock),
@@ -206,7 +210,7 @@ function openStopDto(s: StopRow, src: FloorSources, currentGrace: number, now: D
   };
 }
 
-function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
+function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; unclassifiedTarget: number | null; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
   const stops = ctx.byStop.get(loom.id) ?? [];
   const runs = ctx.byRun.get(loom.id) ?? [];
   const terms = todayTerms(loom, { stops, runs, doffSources: (ctx.byDoff.get(loom.id) ?? []).map((d) => d.counterSource) }, src, ctx);
@@ -226,7 +230,7 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
       monitoringState,
       state: loomStateOf(stateSource, open !== null),
       stateSource,
-      openStop: open ? openStopDto(open, src, ctx.grace, ctx.now) : null,
+      openStop: open ? openStopDto(open, src, ctx, ctx.now) : null,
       today: {
         potSec: terms.potSec, aptSec: terms.aptSec, availabilityPct: computeMachineKpis(terms).availabilityPct,
         stopCount: terms.stopCount, breakdown: terms.breakdown,
@@ -245,6 +249,7 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
   const dayStart = factoryDayStart(now);
   const dokumaEnabled = await readDokumaEnabled();
   const grace = await readTezgahEscalationGraceMinutes();
+  const unclassifiedTarget = await readTezgahAlarmUnclassifiedTargetMinutes();
   const src = await loadSources(dayStart, now, dokumaEnabled);
   const beamTracking = (await readDevereEnabled()) && (await readDevereMountTracking());
   const beamsBy = beamTracking ? await mountedBeamViewsTx(prisma, src.looms.map((l) => l.id)) : null;
@@ -253,7 +258,7 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
     select: { startsAt: true, endsAt: true, shiftDefinition: { select: { name: true } } },
     orderBy: { startsAt: "desc" },
   });
-  const ctx = { dayStart, now, grace, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
+  const ctx = { dayStart, now, grace, unclassifiedTarget, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
   const built = src.looms.map((l) => loomDto(l, src, ctx));
   const cores = built.map(({ dto, terms }) => ({
     hallId: dto.hallId, hallName: dto.hallName, state: dto.state,

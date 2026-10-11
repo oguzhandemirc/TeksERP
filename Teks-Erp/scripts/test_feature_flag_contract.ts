@@ -108,6 +108,10 @@ const PANEL_EXEMPT: Record<string, string> = {
   mobileLockOnBackground: "kind:'session' — Oturum section'ı yönetir",
   pinLockoutEnabled: "kind:'session' — Oturum section'ı yönetir",
   nativeSendEnabled: "kind:'label' — Etiket section'ı yönetir",
+  // DOKUMA ALARM (Faz A1, backend dilimi): panel satırı A2 diliminde (ayrı ajan) doğar ve
+  // satır o gün SİLİNİR (muaf iki yönlü denetlenir). Varsayılan KAPALI, açan ekran yok.
+  tezgahAlarmEnabled: "PANEL BEKLİYOR — DOKUMA-ALARM §C Faz A2 (ayarlar 'tezgah' kategorisi)",
+  tezgahAlarmEscalateWhenAcked: "PANEL BEKLİYOR — DOKUMA-ALARM §C Faz A2 (ayarlar 'tezgah' kategorisi)",
   mobileRasterEnabled: "kind:'label' — Etiket section'ı yönetir",
   scrapGradeLabelEnabled: "kind:'label' — Etiket section'ı yönetir",
   // YER TUTUCU MODÜL ANAHTARI. Arkasında henüz TEK BİR yüzey yok: ne route kapısı,
@@ -345,6 +349,7 @@ async function main() {
 
   const NUMERIC_PANEL_EXEMPT: Record<string, string> = {
     sessionDurationMinutes: "kind:'session' — Oturum section'ı yönetir",
+    tezgahAlarmRenotifyMinutes: "PANEL BEKLİYOR — DOKUMA-ALARM §C Faz A2 (ayarlar 'tezgah' kategorisi)",
     sessionDurationHours: "GERİYE-UYUM türetilmiş alan — panel dakika alanını yönetir",
     idleTimeoutMinutes: "kind:'session' — Oturum section'ı yönetir",
     workSessionIdleTimeoutMinutes: "kind:'session' — Oturum section'ı yönetir",
