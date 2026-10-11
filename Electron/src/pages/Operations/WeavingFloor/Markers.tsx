@@ -2,6 +2,8 @@
 // Her durum renkten BAĞIMSIZ bir şekil taşır (renk körlüğünde de ayrışsın).
 import { BellRing, Crown, Hand } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FloorHint } from "./FloorHint";
+import { chainStepHintOf } from "./loomHints";
 import type { EscalationTier } from "./metrics";
 import { STATUS_COLOR, hsl, type StatusKey } from "./palette";
 import type { ReasonIcon } from "./stopReasons";
@@ -75,25 +77,27 @@ interface ChainProps {
 export function AlertChainMini({ stop, tier, now, compact = false, className }: ChainProps) {
   const notified = stop.notifiedAt !== null && stop.notifiedAt <= now;
   const steps = [
-    { Icon: BellRing, lit: notified, color: "var(--ds-ink)", label: notified && stop.attendant ? `${stop.attendant.name} bildirim aldı` : "Görevliye bildirim yok" },
-    { Icon: Hand, lit: stop.respondedAt !== null, color: "var(--ds-run)", label: stop.respondedAt ? "Görevli tezgahta" : "Görevli henüz gelmedi" },
-    { Icon: Crown, lit: tier === "ESCALATED", color: "var(--ds-escalated)", label: tier === "ESCALATED" ? "Patrona iletildi" : "Patrona iletilmedi" },
+    { key: "notify" as const, Icon: BellRing, lit: notified, color: "var(--ds-ink)", label: notified && stop.attendant ? `${stop.attendant.name} bildirim aldı` : "Görevliye bildirim yok" },
+    { key: "respond" as const, Icon: Hand, lit: stop.respondedAt !== null, color: "var(--ds-run)", label: stop.respondedAt ? "Görevli tezgahta" : "Görevli henüz gelmedi" },
+    { key: "escalate" as const, Icon: Crown, lit: tier === "ESCALATED", color: "var(--ds-escalated)", label: tier === "ESCALATED" ? "Patrona iletildi" : "Patrona iletilmedi" },
   ];
   return (
     <span className={cn("inline-flex shrink-0 items-center", className)} aria-label={steps.map((s) => s.label).join(", ")} role="img">
-      {steps.map(({ Icon, lit, color, label }, i) => (
-        <span key={label} className="inline-flex items-center" title={label}>
+      {steps.map(({ key, Icon, lit, color }, i) => (
+        <span key={key} className="inline-flex items-center">
           {i > 0 && <span className={cn("h-px", compact ? "w-[3px]" : "w-1.5")} style={{ background: lit ? hsl(color) : hsl("var(--ds-ink)", 0.2) }} />}
-          <span
-            className={cn("grid place-items-center rounded-full", compact ? "h-4 w-4" : "h-5 w-5")}
-            style={{
-              background: lit ? hsl(color, 0.16) : "transparent",
-              color: lit ? hsl(color) : hsl("var(--ds-ink)", 0.28),
-              boxShadow: lit ? undefined : `inset 0 0 0 1px ${hsl("var(--ds-ink)", 0.16)}`,
-            }}
-          >
-            <Icon className={compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5"} strokeWidth={2.6} />
-          </span>
+          <FloorHint hint={chainStepHintOf(key, stop, now)}>
+            <span
+              className={cn("grid place-items-center rounded-full", compact ? "h-4 w-4" : "h-5 w-5")}
+              style={{
+                background: lit ? hsl(color, 0.16) : "transparent",
+                color: lit ? hsl(color) : hsl("var(--ds-ink)", 0.28),
+                boxShadow: lit ? undefined : `inset 0 0 0 1px ${hsl("var(--ds-ink)", 0.16)}`,
+              }}
+            >
+              <Icon className={compact ? "h-2.5 w-2.5" : "h-3.5 w-3.5"} strokeWidth={2.6} />
+            </span>
+          </FloorHint>
         </span>
       ))}
     </span>

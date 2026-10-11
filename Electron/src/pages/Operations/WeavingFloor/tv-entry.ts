@@ -39,7 +39,12 @@ export function buildTezgahTvUrl(
   return `${origin}/#${TEZGAH_TV_PATH}`;
 }
 
-/** Bu pencereyi TV kipine geçirir (menüsüz; çıkış uygulamayı yeniden açmak ya da adresi değiştirmek). */
+/** Bu pencereyi TV kipine geçirir (menüsüz; çıkış köşe düğmesi ya da Esc — `TvExit`). */
 export function openTezgahTvHere(): void {
   window.location.hash = `#${TEZGAH_TV_PATH}`;
+}
+
+/** TV kipinden kabuğa döner; sekme defteri kalıcı olduğu için salon sekmesi yerinde bulunur. */
+export function exitTezgahTvHere(): void {
+  window.location.hash = "#/";
 }

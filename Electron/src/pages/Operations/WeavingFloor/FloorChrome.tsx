@@ -2,19 +2,21 @@
 import { FlaskConical, Minimize2, WifiOff } from "lucide-react";
 import { formatFactory } from "@/lib/factory-time";
 import { Button } from "@/components/ui/button";
+import { FloorHint } from "./FloorHint";
 import { StatusShape } from "./Markers";
 import { STATUS_LABEL, hsl, type StatusKey } from "./palette";
 
 export function SampleDataBadge() {
   return (
-    <span
-      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold"
-      style={{ background: hsl("var(--ds-over)", 0.16), color: hsl("var(--ds-over)") }}
-      title="Bu ekran tezgahlardan veri almıyor; gördüğünüz her şey örnek veridir."
-    >
-      <FlaskConical className="h-3.5 w-3.5" />
-      Örnek veri
-    </span>
+    <FloorHint hint={{ title: "Örnek veri", lines: [], note: "Bu ekran tezgahlardan veri almıyor; gördüğünüz her şey örnek veridir." }}>
+      <span
+        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold"
+        style={{ background: hsl("var(--ds-over)", 0.16), color: hsl("var(--ds-over)") }}
+      >
+        <FlaskConical className="h-3.5 w-3.5" />
+        Örnek veri
+      </span>
+    </FloorHint>
   );
 }
 
@@ -69,14 +71,15 @@ export function FullscreenHeader({ now, sampleData, updatedAt, stale = false, on
           Bağlantı yok · son veri {formatFactory(updatedAt, "HH:mm:ss")}
         </span>
       ) : (
-        <span
-          className="inline-flex items-center gap-1.5 whitespace-nowrap text-[0.8em] font-semibold tabular-nums text-muted-foreground"
-          title="Ekran kendini tazeler"
-          data-testid="live-stamp"
-        >
-          <span className="h-2 w-2 rounded-full" style={{ background: hsl("var(--ds-run)") }} aria-hidden />
-          Canlı · {formatFactory(updatedAt, "HH:mm:ss")}
-        </span>
+        <FloorHint hint={{ title: "Canlı", lines: [{ label: "Son veri", value: formatFactory(updatedAt, "HH:mm:ss") }], note: "Ekran kendini birkaç saniyede bir tazeler." }}>
+          <span
+            className="inline-flex items-center gap-1.5 whitespace-nowrap text-[0.8em] font-semibold tabular-nums text-muted-foreground"
+            data-testid="live-stamp"
+          >
+            <span className="h-2 w-2 rounded-full" style={{ background: hsl("var(--ds-run)") }} aria-hidden />
+            Canlı · {formatFactory(updatedAt, "HH:mm:ss")}
+          </span>
+        </FloorHint>
       )}
       <span className="whitespace-nowrap text-[1.1em] font-bold tabular-nums text-muted-foreground">{formatFactory(now, "dd.MM.yyyy")}</span>
       {onExit && (

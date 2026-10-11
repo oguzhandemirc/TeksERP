@@ -3,7 +3,8 @@
 // =============================================================================
 // Veriyi çağıran verir: uygulamada `WeavingFloorPage` (`useLoomFloorLive`, gerçek
 // veri), geliştirme önizlemesinde mock. Tasarım: docs/design/DOKUMA-CANLI-EKRAN.md.
-// `tv` = salon TV'si kipi: açılışta tam ekran, menü/düğme/çıkış yok, dokunuş detay açmaz.
+// `tv` = salon TV'si kipi: açılışta tam ekran, menü/düğme yok, dokunuş detay açmaz; çıkış köşe
+// düğmesi + Esc (`TvExit`). İpuçları (`FloorHint`) TV dışında açık.
 // =============================================================================
 import { useCallback, useMemo, useState } from "react";
 import { Maximize2, Tv } from "lucide-react";
@@ -15,12 +16,14 @@ import { TabPortalProvider } from "@/components/layout/tabs/tab-portal";
 import { cn } from "@/lib/utils";
 import { FloorSummary } from "./FloorSummary";
 import { FullscreenHeader, SampleDataBadge, StatusLegend } from "./FloorChrome";
+import { FloorHintProvider } from "./FloorHint";
 import { HallSection } from "./HallSection";
 import { LoomDetailSheet } from "./LoomDetailSheet";
 import { OverdueStrip } from "./OverdueStrip";
 import { ShowFilterPicker, showFilterPredicate, type ShowFilter } from "./ShowFilterPicker";
 import { hsl } from "./palette";
 import { shiftStarLoom, summarizeFloor } from "./metrics";
+import { TvExitControl } from "./TvExit";
 import { useFullscreen } from "./useFullscreen";
 import type { FloorState } from "./types";
 import "./weaving-floor.css";
@@ -46,6 +49,8 @@ interface ViewProps {
   onOpenTv?: () => void;
   /** Onay penceresinde gösterilecek TV adresi (web paneli varsa). */
   tvUrl?: string | null;
+  /** TV kipinde görünür çıkış (köşe düğmesi + Esc). */
+  tvExit?: { onExit: () => void; label: string };
 }
 
 function TvButton({ onOpenTv, tvUrl }: { onOpenTv: () => void; tvUrl: string | null }) {
@@ -61,7 +66,7 @@ function TvButton({ onOpenTv, tvUrl }: { onOpenTv: () => void; tvUrl: string | n
         open={open}
         onOpenChange={setOpen}
         title="Bu pencere TV kipine geçsin mi?"
-        description={`TV kipinde menü, düğme ve çıkış yoktur; ekran kendini tazeler. Çıkmak için uygulamayı yeniden açın ya da adresi değiştirin.${where}`}
+        description={`TV kipinde menü ve düğme yoktur; ekran kendini tazeler. Çıkmak için Esc'ye basın ya da fareyi oynatınca köşede beliren "TV kipinden çık" düğmesine tıklayın.${where}`}
         confirmLabel="TV kipine geç"
         onConfirm={() => {
           setOpen(false);
@@ -72,7 +77,33 @@ function TvButton({ onOpenTv, tvUrl }: { onOpenTv: () => void; tvUrl: string | n
   );
 }
 
-export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, stale = false, onOpenTv, tvUrl = null }: ViewProps) {
+interface AppHeaderProps {
+  extra: React.ReactNode;
+  filter: React.ReactNode;
+  tv: React.ReactNode;
+  onFullscreen: () => void;
+}
+
+function AppHeader({ extra, filter, tv, onFullscreen }: AppHeaderProps) {
+  return (
+    <PageHeader
+      title="Tezgah Salonu"
+      titleExtra={extra}
+      actions={
+        <>
+          {filter}
+          {tv}
+          <Button variant="outline" onClick={onFullscreen}>
+            <Maximize2 className="mr-1.5 h-4 w-4" />
+            Tam ekran
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
+export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, stale = false, onOpenTv, tvUrl = null, tvExit }: ViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<ShowFilter>("ALL");
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
@@ -100,56 +131,51 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
         style={{ background: hsl("var(--ds-floor)") }}
       >
         <TabPortalProvider value={root}>
-          {fullscreen.active ? (
-            <FullscreenHeader
-              now={now}
-              sampleData={sampleData}
-              updatedAt={floor.updatedAt}
-              stale={stale}
-              onExit={tv ? undefined : fullscreen.exit}
-              legend={<StatusLegend />}
-            />
-          ) : (
-            <PageHeader
-              title="Tezgah Salonu"
-              titleExtra={sampleData ? <SampleDataBadge /> : notice}
-              actions={
-                <>
-                  <ShowFilterPicker value={filter} onChange={setFilter} />
-                  {onOpenTv && <TvButton onOpenTv={onOpenTv} tvUrl={tvUrl} />}
-                  <Button variant="outline" onClick={fullscreen.enter}>
-                    <Maximize2 className="mr-1.5 h-4 w-4" />
-                    Tam ekran
-                  </Button>
-                </>
-              }
-            />
-          )}
-          <PageBody className={cn("min-h-0 space-y-4 p-4", fullscreen.active && "space-y-3 px-6 pt-3")}>
-            <FloorSummary floor={floor} now={now} />
-            <OverdueStrip looms={floor.looms} now={now} onSelect={onSelect} />
-            {halls
-              .filter((h) => h.visible.length > 0)
-              .map((h) => (
-                <HallSection
-                  key={h.hall}
-                  hall={h.hall}
-                  looms={h.visible}
-                  now={now}
-                  columns={columns}
-                  highlight={{ starId, bestHall: h.hall === bestHall, onSelect }}
-                />
-              ))}
-            {empty && (
-              <p className="py-10 text-center text-muted-foreground">
-                {floor.looms.length === 0
-                  ? "Salonda gösterilecek dokuma tezgahı yok."
-                  : "Bu seçimde tezgah yok — Göster: Tümü ile hepsini açın."}
-              </p>
+          <FloorHintProvider enabled={!tv}>
+            {tv && tvExit && <TvExitControl onExit={tvExit.onExit} label={tvExit.label} />}
+            {fullscreen.active ? (
+              <FullscreenHeader
+                now={now}
+                sampleData={sampleData}
+                updatedAt={floor.updatedAt}
+                stale={stale}
+                onExit={tv ? undefined : fullscreen.exit}
+                legend={<StatusLegend />}
+              />
+            ) : (
+              <AppHeader
+                extra={sampleData ? <SampleDataBadge /> : notice}
+                filter={<ShowFilterPicker value={filter} onChange={setFilter} />}
+                tv={onOpenTv && <TvButton onOpenTv={onOpenTv} tvUrl={tvUrl} />}
+                onFullscreen={fullscreen.enter}
+              />
             )}
-            {!fullscreen.active && <StatusLegend />}
-          </PageBody>
-          <LoomDetailSheet loom={selected} now={now} onClose={() => setSelectedId(null)} />
+            <PageBody className={cn("min-h-0 space-y-4 p-4", fullscreen.active && "space-y-3 px-6 pt-3")}>
+              <FloorSummary floor={floor} now={now} />
+              <OverdueStrip looms={floor.looms} now={now} onSelect={onSelect} />
+              {halls
+                .filter((h) => h.visible.length > 0)
+                .map((h) => (
+                  <HallSection
+                    key={h.hall}
+                    hall={h.hall}
+                    looms={h.visible}
+                    now={now}
+                    columns={columns}
+                    highlight={{ starId, bestHall: h.hall === bestHall, onSelect }}
+                  />
+                ))}
+              {empty && (
+                <p className="py-10 text-center text-muted-foreground">
+                  {floor.looms.length === 0
+                    ? "Salonda gösterilecek dokuma tezgahı yok."
+                    : "Bu seçimde tezgah yok — Göster: Tümü ile hepsini açın."}
+                </p>
+              )}
+              {!fullscreen.active && <StatusLegend />}
+            </PageBody>
+            <LoomDetailSheet loom={selected} now={now} onClose={() => setSelectedId(null)} />
+          </FloorHintProvider>
         </TabPortalProvider>
       </div>
     </PageShell>

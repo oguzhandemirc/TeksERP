@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { formatFactory } from "@/lib/factory-time";
 import { useLoomFloorLive } from "./useLoomFloorLive";
 import { WeavingFloorView } from "./WeavingFloorView";
-import { buildTezgahTvUrl, openTezgahTvHere } from "./tv-entry";
+import { buildTezgahTvUrl, exitTezgahTvHere, openTezgahTvHere } from "./tv-entry";
 
 /** Tazeleme koptuğunda eldeki veri gösterilir ama yaşı açıkça yazılır. */
 function StaleNotice({ updatedAt }: { updatedAt: number }) {
@@ -48,6 +48,7 @@ export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
       notice={live.stale ? <StaleNotice updatedAt={live.floor.updatedAt} /> : undefined}
       onOpenTv={tv ? undefined : openTezgahTvHere}
       tvUrl={tv ? null : buildTezgahTvUrl()}
+      tvExit={tv ? { onExit: exitTezgahTvHere, label: "TV kipinden çık" } : undefined}
     />
   );
 }

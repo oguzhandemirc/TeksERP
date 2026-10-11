@@ -1,6 +1,7 @@
 // Üst özet şeridi — dört büyük cevap: kaç tezgah çalışıyor, kaçı duruyor (sınıf
 // şekilleriyle), "şu an %" (şu an çalışan tezgah oranı), vardiya hedefi; sağda saat.
 import { formatFactory } from "@/lib/factory-time";
+import { FloorHint } from "./FloorHint";
 import { StatusShape, TimerRing } from "./Markers";
 import { STATUS_LABEL, hsl, statusOf, type StatusKey } from "./palette";
 import { formatNumber, formatShortDuration, summarizeFloor } from "./metrics";
@@ -30,11 +31,13 @@ function StoppedBreakdown({ floor }: { floor: FloorState }) {
   return (
     <div className="mt-1 flex flex-wrap gap-2">
       {STOP_CLASSES.filter((s) => counts.get(s)).map((s) => (
-        <span key={s} className="inline-flex items-center gap-1 text-[0.85em] font-semibold tabular-nums" title={STATUS_LABEL[s]}>
-          <StatusShape status={s} className="h-3.5 w-3.5" />
-          {counts.get(s)}
-          <span className="sr-only">{STATUS_LABEL[s]}</span>
-        </span>
+        <FloorHint key={s} hint={{ title: STATUS_LABEL[s], lines: [{ label: "Tezgah", value: String(counts.get(s)) }] }}>
+          <span className="inline-flex items-center gap-1 text-[0.85em] font-semibold tabular-nums">
+            <StatusShape status={s} className="h-3.5 w-3.5" />
+            {counts.get(s)}
+            <span className="sr-only">{STATUS_LABEL[s]}</span>
+          </span>
+        </FloorHint>
       ))}
     </div>
   );
@@ -69,13 +72,15 @@ export function FloorSummary({ floor, now }: Props) {
       </Block>
       <Block>
         <TimerRing progress={(s.runningNowPct ?? 0) / 100} color="var(--ds-run)" className="h-10 w-10" />
-        <div title="Şu an çalışan tezgah adedi / tüm tezgahlar — süreye değil ADEDE bakar (kartlardaki “bugün %” süre payıdır)">
-          <div className="text-[2em] font-extrabold leading-none tabular-nums" style={ink}>
-            <span className="mr-1 text-[0.45em] font-bold uppercase tracking-wide text-muted-foreground">şu an</span>
-            {s.runningNowPct === null ? "—" : `%${s.runningNowPct}`}
+        <FloorHint hint={{ title: "Şu an %", lines: [], note: "Şu an çalışan tezgah adedi / tüm tezgahlar — süreye değil ADEDE bakar (kartlardaki “bugün %” süre payıdır)." }}>
+          <div>
+            <div className="text-[2em] font-extrabold leading-none tabular-nums" style={ink}>
+              <span className="mr-1 text-[0.45em] font-bold uppercase tracking-wide text-muted-foreground">şu an</span>
+              {s.runningNowPct === null ? "—" : `%${s.runningNowPct}`}
+            </div>
+            <Caption>Çalışan tezgah payı (adet)</Caption>
           </div>
-          <Caption>Çalışan tezgah payı (adet)</Caption>
-        </div>
+        </FloorHint>
       </Block>
       <Block className="col-span-2 md:col-span-1">
         <div className="min-w-0 flex-1">

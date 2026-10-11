@@ -1,6 +1,6 @@
 // Salon TV'si için tam ekran kipi: sayfa kökü pencereyi kaplar, tarayıcı/Electron
 // tam ekranı denenir (izin yoksa kip yine çalışır). Esc ya da tam ekrandan çıkış kapatır.
-// TV kipi (`locked`): açılışta tam ekran, çıkış yok; tarayıcı kullanıcı dokunuşu
+// TV kipi (`locked`): açılışta tam ekran, çıkışı `TvExit` taşır; tarayıcı kullanıcı dokunuşu
 // istediği için gerçek tam ekran ilk dokunuşta/tuşta yeniden denenir.
 import { useCallback, useEffect, useState } from "react";
 
@@ -9,10 +9,12 @@ export function useFullscreen(root: HTMLElement | null, { locked = false }: { lo
 
   useEffect(() => {
     if (!locked || !root) return;
-    const tryEnter = () => {
+    // Esc TV kipinden çıkış tuşudur — tam ekranı yeniden istemez.
+    const tryEnter = (e: Event) => {
+      if (e instanceof KeyboardEvent && e.key === "Escape") return;
       if (!document.fullscreenElement) root.requestFullscreen?.().catch(() => undefined);
     };
-    tryEnter();
+    if (!document.fullscreenElement) root.requestFullscreen?.().catch(() => undefined);
     window.addEventListener("pointerdown", tryEnter);
     window.addEventListener("keydown", tryEnter);
     return () => {
