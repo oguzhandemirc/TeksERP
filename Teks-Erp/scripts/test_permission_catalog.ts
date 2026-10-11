@@ -112,7 +112,7 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   "src/routes/printed-document.routes.ts": ["DOC_PERMISSIONS"],
   // matchesPermission(codes, ALARM_*) — alarm yetki soruları + PERMISSION kademe kuralının kodu
   // (`rule.permissionCode`: yazılırken `loom-alarm-duty.service` PERMISSION_CATALOG'a karşı doğrular, 400 DUTY_RULE_INVALID).
-  "src/services/helpers/loom-alarm-recipient.helper.ts": ["ALARM_VIEW_PERMISSION", "ALARM_ESCALATION_PERMISSION"],
+  "src/services/helpers/loom-alarm-recipient.helper.ts": ["ALARM_VIEW_PERMISSIONS", "ALARM_ESCALATION_PERMISSION"],
   // matchesPermission(perms, needM) — needM = STATION_KIND_PERM[station.kind]
   "src/services/work-session.service.ts": ["STATION_KIND_PERM"],
   // matchesPermission(perms, permission) — permission =

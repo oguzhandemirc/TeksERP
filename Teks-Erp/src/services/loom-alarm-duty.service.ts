@@ -16,7 +16,7 @@ import { p2002Mentions } from "../utils/p2002";
 import { AuditService } from "./audit.service";
 import { readDbNow } from "./helpers/machine-run-open.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
-import { ALARM_ESCALATION_PERMISSION, ALARM_VIEW_PERMISSION, hasAlarmEscalation, hasAlarmView, loadEffectiveGrants } from "./helpers/loom-alarm-recipient.helper";
+import { ALARM_ESCALATION_PERMISSION, ALARM_VIEW_PERMISSIONS, hasAlarmEscalation, hasAlarmView, loadEffectiveGrants } from "./helpers/loom-alarm-recipient.helper";
 import { PERMISSION_CATALOG } from "../constants/permission-catalog";
 import { factoryDayStart, resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import type { ApiResponse } from "../types/api.types";
@@ -96,11 +96,11 @@ const ruleDto = (r: RuleRow, g: Grants): TierRuleDto => ({
 });
 
 const noViewWarning = (name: string): string =>
-  `${name} alarm görme yetkisine (loom:alarm-view) sahip değil — bildirim ona GİTMEZ. Kişiye yetkiyi verin ya da başkasını atayın.`;
+  `${name} alarm görme yetkisine (loom:alarm-view ya da mobil Uyarılar) sahip değil — bildirim ona GİTMEZ. Kişiye yetkiyi verin ya da başkasını atayın.`;
 
 async function grantsFor(userIds: readonly string[], now: Date): Promise<Grants> {
   if (userIds.length === 0) return new Map();
-  return loadEffectiveGrants(prisma, [ALARM_VIEW_PERMISSION, ALARM_ESCALATION_PERMISSION], now, [...new Set(userIds)]);
+  return loadEffectiveGrants(prisma, [...ALARM_VIEW_PERMISSIONS, ALARM_ESCALATION_PERMISSION], now, [...new Set(userIds)]);
 }
 
 // ── OKUMA ───────────────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ export async function getDutyOptions(): Promise<DutyOptionsDto> {
 export async function listDutyCandidates(): Promise<DutyCandidateDto[]> {
   const now = await readDbNow();
   const users = await prisma.user.findMany({ where: { isActive: true, isSystemAccount: false }, select: { id: true, fullName: true }, orderBy: [{ fullName: "asc" }, { id: "asc" }] });
-  const g = await loadEffectiveGrants(prisma, [ALARM_VIEW_PERMISSION, ALARM_ESCALATION_PERMISSION], now);
+  const g = await loadEffectiveGrants(prisma, [...ALARM_VIEW_PERMISSIONS, ALARM_ESCALATION_PERMISSION], now);
   return users.map((u) => ({
     id: u.id, name: u.fullName, canViewAlarms: canView(g, u.id), canEscalate: hasAlarmEscalation(g.get(u.id) ?? []),
   }));

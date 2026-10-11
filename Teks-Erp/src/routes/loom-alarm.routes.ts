@@ -24,6 +24,7 @@ import {
   unsnoozeLoomAlarm,
 } from "../services/loom-alarm.service";
 import { LOOM_ALARM_SCOPES, getLoomAlarmDetail, listLoomAlarms } from "../services/loom-alarm-read.service";
+import { ALARM_VIEW_PERMISSIONS } from "../services/helpers/loom-alarm-recipient.helper";
 import { AppError } from "../utils/app-error";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
 
@@ -43,9 +44,10 @@ const router = Router();
 router.use(verifyToken, requireTezgahEnabled, requireLoomAlarmEnabled);
 
 // Mobil "Uyarılar" (`mobile:tezgah-uyari`) görme + üstlenme dar ikizidir; tablet Tezgah şeridi
-// (`mobile:dokuma`) yalnız LİSTEYİ okur — üstlenme düğmesi o izinde çizilmez.
-const LIST = requireAnyPermission("loom:alarm-view", "mobile:tezgah-uyari", "mobile:dokuma");
-const VIEW = requireAnyPermission("loom:alarm-view", "mobile:tezgah-uyari");
+// (`mobile:dokuma`) yalnız LİSTEYİ okur — üstlenme düğmesi o izinde çizilmez. Görme kapısı alıcı
+// uygunluğuyla aynı listeden (görebilen sorumlu alıcı olur, `mine` ona boş gelmez).
+const LIST = requireAnyPermission(...ALARM_VIEW_PERMISSIONS, "mobile:dokuma");
+const VIEW = requireAnyPermission(...ALARM_VIEW_PERMISSIONS);
 const ACT = requireAnyPermission("loom:alarm-ack", "mobile:tezgah-uyari");
 
 const userIdOf = (req: Request): string => {

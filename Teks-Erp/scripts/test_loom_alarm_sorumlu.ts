@@ -8,7 +8,9 @@
 //      RAISED satırına UPDATE / alıcı satırına UPDATE-DELETE → mühür reddeder
 //   §4 nöbet değişikliği: pencerede (hol, K1) değişiklik → yalnız o kişi (DUTY_OVERRIDE); kaldırılınca daimi sorumlu ·
 //      bitmiş vardiyaya yazmak 400 · bitmiş vardiyanın değişikliğini kaldırmak 409 · çözüm turun anındaki vardiyadan
-//   §5 uygunluk: alarmı göremeyen sorumlu düşer; hepsi düşerse BY_PERMISSION · atamada uyarı döner
+//   §5 uygunluk: alarmı göremeyen sorumlu düşer; hepsi düşerse BY_PERMISSION · atamada uyarı döner ·
+//      yalnız mobil Uyarılar izinli sorumlu (`mobile:tezgah-uyari`) alıcı olur ve `mine`da görür · görme kapısı (uç) ile
+//      alıcı uygunluğu TEK listeden (`ALARM_VIEW_PERMISSIONS`, statik)
 //   §6 kural: K2 PERMISSION `loom:alarm-escalation` → efektif sahiplerin tamamı (bağımsız sorguyla) · USER kuralı eklenir ·
 //      geçersiz kural 400 · kural kaldırılınca örtük kural döner
 //   §7 mine: yüklem bağımsız JS hesabıyla birebir · başkası benimkini görmez · üst kademe yetkilisi K2'yi görür ·
@@ -23,6 +25,7 @@
 // ② nöbet değişikliği daimi sorumlunun yerine geçmedi → §4a/§4b ❌ · ③ uygunluk süzgeci yok → §5b/§5c/§6a ❌ ·
 // ④ mine'da izne göre dalı yok → §7a–§7d ❌ · ⑤ mine süzgeci düştü → §7a–§7d ❌ · ⑥ bitmiş vardiya kaldırma claim'inde
 // yüklem yok → §4d ❌ · ⑦ çözüm gerçek saatle (tur anı değil) → §4e ❌ · ⑧ sorumlu gövdesi `.strict()`siz → §9b ❌.
+// (2026-10-12) ⑨ `hasAlarmView` yalnız `loom:alarm-view` → §5e/§5f/§5g ❌ · ⑩ route VIEW'a elle literal kopya → §5h ❌.
 //
 // Global ayar yazar (`production.enabled` · `tezgah.enabled` · `tezgah.alarmEnabled` · `tezgah.escalationGraceMinutes`);
 // bulduğu değere `finally`de döner. Alarm bayrağı §1–§8'de KAPALI (motor `enabled` ile koşar; yabancı sunucu
@@ -41,6 +44,8 @@ import { getLoomAlarmDetail, listLoomAlarms } from "../src/services/loom-alarm-r
 import { listSchema } from "../src/routes/loom-alarm.routes";
 import { pickDutyShifts, resolveAlarmRecipients, type RecipientConfig } from "../src/services/helpers/loom-alarm-recipient.helper";
 import { matchesPermission } from "../src/middlewares/rbac.middleware";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { readDbNow } from "../src/services/helpers/machine-run-open.helper";
 import {
   createHallShiftDutyOverride, createHallShiftResponsible, createLoomAlarmTierRule, getLoomAlarmDutyOverview,
@@ -142,8 +147,8 @@ async function govde(): Promise<void> {
   const P = await ReasonPresetService.create({ kind: ReasonPresetKind.MACHINE_STOP, label: `TEST-LAS ariza ${ek}`, stopLossClass: "UNPLANNED", targetMinutes: 10 });
   ids.presets.push(P.id);
 
-  const perm = new Map((await prisma.permission.findMany({ where: { code: { in: ["loom:alarm-view", "loom:alarm-ack", "loom:alarm-escalation"] } }, select: { id: true, code: true } })).map((p) => [p.code, p.id]));
-  check("§0 ortam: alarm izinleri katalogda", perm.size === 3, String(perm.size));
+  const perm = new Map((await prisma.permission.findMany({ where: { code: { in: ["loom:alarm-view", "loom:alarm-ack", "loom:alarm-escalation", "mobile:tezgah-uyari"] } }, select: { id: true, code: true } })).map((p) => [p.code, p.id]));
+  check("§0 ortam: alarm izinleri katalogda", perm.size === 4, String(perm.size));
   const kisi = async (n: string, codes: string[]): Promise<Kisi> => {
     const password = `Las-${randomUUID()}`;
     const username = `test-las-${n}-${ek}`;
@@ -158,6 +163,7 @@ async function govde(): Promise<void> {
   const amir = await kisi("amir", ["loom:alarm-view", "loom:alarm-escalation"]);
   const yetkisiz = await kisi("yetkisiz", ["loom:alarm-ack"]);
   const yetkisizEsk = await kisi("eskyetkisiz", ["loom:alarm-escalation"]);
+  const mobil = await kisi("mobil", ["mobile:tezgah-uyari"]);
 
   let n = 0;
   /** Holde açık duruş (dk önce, hedef 10 / pay 5 → K1 dk-10, K2 dk-5 sonra) — tezgah yalnız bu duruşa ait. */
@@ -285,6 +291,22 @@ async function govde(): Promise<void> {
   check("§5c göremeyen düşer, gören kalır → [Ahmet]", r7.by.get(1)?.list === tag(ahmet, "HALL_SHIFT"), JSON.stringify(r7.by.get(1)));
   const ozet = await getLoomAlarmDutyOverview();
   check("§5d genel bakış uyarısı göremeyen atanmışı adıyla anar", ozet.warnings.some((x) => x.includes(yetkisiz.name)), JSON.stringify(ozet.warnings));
+  const HM = await hol("M");
+  const resM = await createHallShiftResponsible({ stationId: HM, shiftDefinitionId: def.id, tier: 1, userId: mobil.id, clientToken: randomUUID() }, admin);
+  check("§5e ⭐ yalnız mobil Uyarılar izinli sorumlu alarmı görür: atama uyarısız", resM.success && resM.data.user.canViewAlarms && !resM.warnings, JSON.stringify(resM.warnings));
+  const dM = await durus(HM);
+  await tur([dM.machineId], at(0));
+  const rM = await raised(dM.machineId);
+  check("§5f ⭐ yalnız mobil izinli sorumlu K1 RAISED alıcısı → [Mobil/HALL_SHIFT]", rM.by.get(1)?.mode === "LISTED" && rM.by.get(1)?.list === tag(mobil, "HALL_SHIFT"), JSON.stringify(rM.by.get(1)));
+  const mMob = await listLoomAlarms({ scope: "all", stationId: [HM], mine: { userId: mobil.id, canEscalate: false }, limit: 50 });
+  const mVeliM = await listLoomAlarms({ scope: "all", stationId: [HM], mine: { userId: veli.id, canEscalate: false }, limit: 50 });
+  check("§5g ⭐ yalnız mobil izinli sorumlu `mine`da kendi alarmını görür; alarm ona adreslidir (başkasının `mine`ında yok)",
+    mMob.items.some((i) => i.id === rM.alarmId) && !mVeliM.items.some((i) => i.id === rM.alarmId), `${mMob.items.length} / ${mVeliM.items.length}`);
+  const kodu = (f: string) => readFileSync(join(__dirname, "..", f), "utf8").replace(/^\s*(\/\/|\*).*$/gm, "");
+  const rota = kodu("src/routes/loom-alarm.routes.ts");
+  const ikiz = /requireAnyPermission\([^)]*"loom:alarm-view"/.test(rota); // ACT'in mobil ikizi eylem kapısıdır, görme değil
+  check("§5h görme kapısı (VIEW · LIST) alıcı uygunluğuyla aynı listeden; uçta elle literal kopya yok",
+    /const VIEW = requireAnyPermission\(\.\.\.ALARM_VIEW_PERMISSIONS\)/.test(rota) && /const LIST = requireAnyPermission\(\.\.\.ALARM_VIEW_PERMISSIONS,/.test(rota) && !ikiz);
 
   // ── §6 kademe kuralı ───────────────────────────────────────────────────────
   const kPerm = await createLoomAlarmTierRule({ tier: 2, kind: LoomAlarmRuleRecipientKind.PERMISSION, permissionCode: "loom:alarm-escalation", clientToken: randomUUID() }, admin);
@@ -301,7 +323,7 @@ async function govde(): Promise<void> {
   });
   const kod = new Map<string, string[]>();
   for (const g of grants) kod.set(g.userId, [...(kod.get(g.userId) ?? []), g.permission.code]);
-  const beklenen = [...kod].filter(([, c]) => matchesPermission(c, "loom:alarm-escalation") && matchesPermission(c, "loom:alarm-view")).map(([u]) => `${u}/PERMISSION`).sort().join(",");
+  const beklenen = [...kod].filter(([, c]) => matchesPermission(c, "loom:alarm-escalation") && (matchesPermission(c, "loom:alarm-view") || matchesPermission(c, "mobile:tezgah-uyari"))).map(([u]) => `${u}/PERMISSION`).sort().join(",");
   check("§6a ⭐ K2 PERMISSION kuralı → efektif yetki sahiplerinin TAMAMI (görme yetkisi olmayan düşer)",
     r8.by.get(2)?.mode === "LISTED" && r8.by.get(2)?.list === beklenen && r8.by.get(2)!.list.includes(amir.id) && !r8.by.get(2)!.list.includes(yetkisizEsk.id),
     `${r8.by.get(2)?.count} alıcı`);

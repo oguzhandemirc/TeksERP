@@ -11,12 +11,12 @@ import { matchesPermission } from "../../middlewares/rbac.middleware";
 
 type Db = Pick<Prisma.TransactionClient, "loomAlarmTierRule" | "shiftInstance" | "hallShiftResponsible" | "hallShiftDutyOverride" | "userPermission">;
 
-/** Alıcı olabilmenin şartı: alarmı görebilmek (kural yetkiyi genişletemez). */
-export const ALARM_VIEW_PERMISSION = "loom:alarm-view";
+/** Alarmı GÖRME hakkı veren kodlar (panel + mobil Uyarılar ikizi): uç kapısı ve alıcı uygunluğu bu TEK listeden. */
+export const ALARM_VIEW_PERMISSIONS = ["loom:alarm-view", "mobile:tezgah-uyari"] as const;
 export const ALARM_ESCALATION_PERMISSION = "loom:alarm-escalation";
 
-/** Alarm yetki sorularının tek yeri (izin bekçisi bu dosyanın sabitlerini okur). */
-export const hasAlarmView = (codes: readonly string[]): boolean => matchesPermission([...codes], ALARM_VIEW_PERMISSION);
+/** Alarm yetki sorularının tek yeri (izin bekçisi bu dosyanın sabitlerini okur). Alıcı olabilmenin şartı görmektir. */
+export const hasAlarmView = (codes: readonly string[]): boolean => ALARM_VIEW_PERMISSIONS.some((p) => matchesPermission([...codes], p));
 export const hasAlarmEscalation = (codes: readonly string[]): boolean => matchesPermission([...codes], ALARM_ESCALATION_PERMISSION);
 
 export interface DutyShiftWindow { id: string; shiftDefinitionId: string; startsAt: Date; endsAt: Date; isCancelled: boolean }
@@ -147,7 +147,7 @@ export async function loadRecipientConfig(db: Db, now: Date): Promise<RecipientC
     select: { shiftInstanceId: true, stationId: true, tier: true, userId: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  const codes = [ALARM_VIEW_PERMISSION, ...rules.flatMap((r) => (r.permissionCode ? [r.permissionCode] : []))];
+  const codes = [...ALARM_VIEW_PERMISSIONS, ...rules.flatMap((r) => (r.permissionCode ? [r.permissionCode] : []))];
   const grants = await loadEffectiveGrants(db, codes, now);
   return { rules, shifts, responsibles, overrides, grants };
 }

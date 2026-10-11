@@ -5,7 +5,7 @@ export type DutyRuleKind = "HALL_SHIFT" | "USER" | "PERMISSION";
 export interface DutyPerson {
   id: string;
   name: string;
-  /** `loom:alarm-view` yoksa bildirim gitmez — ekranda uyarı. */
+  /** Alarm görme yetkisi (`loom:alarm-view` ya da mobil Uyarılar; sunucunun tek listesi) yoksa bildirim gitmez — ekranda uyarı. */
   canViewAlarms: boolean;
 }
 
