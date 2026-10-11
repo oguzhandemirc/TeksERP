@@ -64,6 +64,7 @@ import { fasonFieldCss } from "./fason-ceki.fields";
 import { buildDocTable } from "./doc-table";
 import { fmtDate } from "./fmt-date";
 import { docNum, type DocNum } from "./fmt-num";
+import { TERIM } from "../../constants/terim";
 
 interface FasonCekiRoll {
   sequence: number;
@@ -373,7 +374,7 @@ export function renderFasonCekiHtml(
   const showWorkOrderInfo = cfg.sections?.workOrderInfo !== false;
   const showAccountNo = cfg.sections?.accountNo === true;
   const subLine = showWorkOrderInfo
-    ? `<div class="sub">${esc(doc.step.station.name)} · İş Emri ${esc(doc.workOrder.workOrderNumber)}${
+    ? `<div class="sub">${esc(doc.step.station.name)} · ${TERIM.terbiyeIsEmri.tekil} ${esc(doc.workOrder.workOrderNumber)}${
         showAccountNo && doc.subcontractor.code ? ` · Hesap: ${esc(doc.subcontractor.code)}` : ""
       }</div>`
     : "";

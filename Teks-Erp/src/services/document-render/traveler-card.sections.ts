@@ -37,7 +37,7 @@ export interface TravelerSection {
 /** Stüdyo etiketleri + ne olduğu (panelde bölüm listesinde gösterilir). */
 export const TRAVELER_SECTION_LABELS: Record<TravelerSectionKey, { label: string; desc: string }> = {
   header: { label: "Antet", desc: "Firma adı, künye, KART NO ve basım bilgisi." },
-  identity: { label: "Kimlik + Karekod", desc: "İş emri no, tür/rota, ürün ve okutulacak karekod." },
+  identity: { label: "Kimlik + Karekod", desc: "Terbiye iş emri no, tür/rota, ürün ve okutulacak karekod." },
   spec: { label: "Özet Tablo", desc: "Renk / En / Hedef metraj / Kat tipi / tarihler." },
   properties: { label: "Özellikler", desc: "Hedef özellik rozetleri (Su İticilik, Zımparalı…)." },
   batches: { label: "Partiler", desc: "Parti no, top adedi, metraj ve açık fason sevki." },

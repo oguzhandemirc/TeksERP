@@ -300,7 +300,7 @@ export const FASON_FIELD_DEFS: DocFieldDef[] = [
   { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
   { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
   { key: "sayin", label: "Fason firma adı", group: "header" },
-  { key: "subLine", label: "İstasyon · iş emri satırı", group: "header" },
+  { key: "subLine", label: "İstasyon · terbiye iş emri satırı", group: "header" },
   { key: "title", label: "Belge başlığı", group: "header" },
   { key: "docNo", label: "İrsaliye no", group: "header" },
   { key: "docDate", label: "Tarih", group: "header" },

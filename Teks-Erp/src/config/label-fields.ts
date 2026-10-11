@@ -9,6 +9,7 @@
 // =============================================================================
 
 import { LabelKind } from "@prisma/client";
+import { TERIM } from "../constants/terim";
 
 export type FontSize = "sm" | "md" | "lg" | "xl";
 
@@ -79,7 +80,7 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   { key: "customerName",     defaultLabel: "Müşteri",                type: "text" },
   { key: "orderNumber",      defaultLabel: "Sipariş No",             type: "text" },
   { key: "batchNumber",      defaultLabel: "Parti No",               type: "text" },
-  { key: "workOrderNumber",  defaultLabel: "İş Emri No",             type: "text" },
+  { key: "workOrderNumber",  defaultLabel: `${TERIM.terbiyeIsEmri.tekil} No`, type: "text" },
   // Kartelalık damgası — top Tambur'da kartela için işaretlendiyse (markedForKartela)
   // etiketin üstünde belirgin mor şerit basılır. Yalnız işaretli topta görünür;
   // bu alan template'te kapatılırsa işaretli toplarda da basılmaz.

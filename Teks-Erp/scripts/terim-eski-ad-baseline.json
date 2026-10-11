@@ -355,12 +355,6 @@
       "isEmri": 1
     },
     "Electron/src/services/documentConfig.ts": {
-      "isEmri": 2
-    },
-    "Teks-Erp/src/config/label-fields.ts": {
-      "isEmri": 1
-    },
-    "Teks-Erp/src/config/traveler-card-fields.ts": {
       "isEmri": 1
     },
     "Teks-Erp/src/constants/module-profiles.ts": {
@@ -369,27 +363,6 @@
     },
     "Teks-Erp/src/constants/role-template-catalog.ts": {
       "isEmri": 1
-    },
-    "Teks-Erp/src/services/document-render/fason-ceki.fields.ts": {
-      "isEmri": 1
-    },
-    "Teks-Erp/src/services/document-render/fason-ceki.html.ts": {
-      "isEmri": 1
-    },
-    "Teks-Erp/src/services/document-render/fason-direct-ship.model.ts": {
-      "isEmri": 1
-    },
-    "Teks-Erp/src/services/document-render/fason-receipt.html.ts": {
-      "isEmri": 1
-    },
-    "Teks-Erp/src/services/document-render/traveler-card.fields.ts": {
-      "isEmri": 1
-    },
-    "Teks-Erp/src/services/document-render/traveler-card.sections.ts": {
-      "isEmri": 1
-    },
-    "Teks-Erp/src/services/reports/wip-scorecard.report.service.ts": {
-      "isEmri": 2
     },
     "Teks-Erp/src/services/system-setting.service.ts": {
       "dokumaIsi": 2,

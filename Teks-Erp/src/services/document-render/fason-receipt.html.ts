@@ -28,6 +28,7 @@ import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
+import { TERIM } from "../../constants/terim";
 
 interface FasonReceiptRoll {
   sequence: number;
@@ -137,7 +138,7 @@ export function renderFasonReceiptHtml(
     ? `<div class="box"><div class="box-t">FASON FİRMA</div>
         <div class="row"><span>Adı:</span><b>${esc(doc.subcontractor.name)}</b></div>
         ${doc.subcontractor.code ? `<div class="row"><span>Kod:</span><b>${esc(doc.subcontractor.code)}</b></div>` : ""}
-        <div class="row"><span>İş Emri:</span><b>${esc(doc.workOrder.workOrderNumber)}</b></div>
+        <div class="row"><span>${TERIM.terbiyeIsEmri.tekil}:</span><b>${esc(doc.workOrder.workOrderNumber)}</b></div>
         ${showBatch && batchNumbers.length ? `<div class="row"><span>Parti:</span><b>${esc(batchNumbers.join(", "))}</b></div>` : ""}
         <div class="row"><span>İşlem:</span><b>${esc(doc.stationName)}</b></div>
         ${doc.manifestNo ? `<div class="row"><span>Fason İrs.:</span><b>${esc(doc.manifestNo)}</b></div>` : ""}

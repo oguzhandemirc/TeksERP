@@ -21,6 +21,7 @@ import {
 import { fmtDate } from "./fmt-date";
 import { docNum } from "./fmt-num";
 import { docTitle } from "./doc-style";
+import { TERIM } from "../../constants/terim";
 
 interface DirectShipRoll {
   sequence: number;
@@ -192,7 +193,7 @@ function infoBoxes(doc: DirectShipDoc, cfg: DocumentConfig): InfoBox[] {
         rows: [
           item("name", "Adı", doc.subcontractor.name),
           doc.subcontractor.code ? item("code", "Kod", doc.subcontractor.code) : null,
-          item("workOrder", "İş Emri", doc.workOrder.workOrderNumber),
+          item("workOrder", TERIM.terbiyeIsEmri.tekil, doc.workOrder.workOrderNumber),
           item("step", "Adım", doc.step.station.name),
         ].filter((x): x is HeaderItem => x !== null),
       }
