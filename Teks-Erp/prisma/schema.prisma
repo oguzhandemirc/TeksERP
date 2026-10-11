@@ -2444,8 +2444,9 @@ model LoomAlarm {
   snoozedUntil DateTime? @db.Timestamptz
   snoozedById  String?   @db.Uuid
 
-  /// Kapanışta DONAR (rapor yeniden hesaplamaz): duruşun toplam süresi ve hedefi aşma süresi.
+  /// Terminal geçişin anı — durum damgası (terminal⇔closedAt CHECK).
   closedAt     DateTime? @db.Timestamptz
+  /// Kapanışta DONAR (rapor yeniden hesaplamaz): duruşun toplam süresi ve hedefi aşma süresi.
   totalSec     Int?
   overdueSec   Int?
   /// CANCELLED sebebi: `STOP_REVOKED` · `NON_SCHEDULED`.

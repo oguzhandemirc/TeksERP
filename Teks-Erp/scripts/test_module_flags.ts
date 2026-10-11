@@ -439,6 +439,8 @@ function main(): void {
     readGoodsReceiptYarnQualityHoldEnabled: { resolver: "resolveYarnQualityHoldEnabled", ebeveyn: "ticaret+iplik" },
     // İptalde sebep zorunlu (2026-09-18): top iptal kapısı + önizleme yalnız resolver okur.
     readProductionCancelReasonRequired: { resolver: "resolveCancelReasonRequired", ebeveyn: "üretim" },
+    // Dokuma alarm motoru: tezgah modülü (lisans tavanı dahil) ∧ alarm bayrağı.
+    readTezgahAlarmEnabled: { resolver: "resolveTezgahAlarmEnabled", ebeveyn: "tezgah" },
   };
 
   const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));
@@ -490,8 +492,8 @@ function main(): void {
     const govde = middlewareGovdeAnalizi(SERVIS, resolver);
     check(
       `§8b ${resolver} tanımlı ve modül şalterini okuyor`,
-      // Modül şalterleri: üretim · ticaret · muhasebe (`REGIME_GATES` ile aynı küme; finans 2026-09-18'de eklendi).
-      govde.bulundu && govde.okuyucular.some((o) => /^read(Production|Ticaret|Finance)Enabled$/.test(o.ad)),
+      // Modül şalterleri: üretim · ticaret · muhasebe (`REGIME_GATES`) + tezgah (lisans tavanlı modül okuyucusu).
+      govde.bulundu && govde.okuyucular.some((o) => /^read(Production|Ticaret|Finance|Tezgah)Enabled$/.test(o.ad)),
       govde.bulundu
         ? `gövdedeki okuyucular: ${govde.okuyucular.map((o) => o.ad).join(", ") || "(hiç)"}`
         : "fonksiyon bulunamadı",

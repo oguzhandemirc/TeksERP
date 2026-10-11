@@ -5447,7 +5447,8 @@ export async function readTezgahAlarmEnabled(tx?: Pick<typeof prisma, "systemSet
 }
 /** §3.6 tek resolver: alarm yalnız tezgah modülü (lisans tavanı dahil) ∧ bayrak açıkken çalışır. */
 export async function resolveTezgahAlarmEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
-  return (await readTezgahEnabled(tx)) && (await readTezgahAlarmEnabled(tx));
+  if (!(await readTezgahEnabled(tx))) return false;
+  return readTezgahAlarmEnabled(tx);
 }
 /** Sebepsiz duruş ortak hedefi (dk) — satır yok / 0 / bozuk → null (izlenmez). */
 export async function readTezgahAlarmUnclassifiedTargetMinutes(tx?: Pick<typeof prisma, "systemSetting">): Promise<number | null> {

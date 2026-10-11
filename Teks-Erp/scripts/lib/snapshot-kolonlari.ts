@@ -447,6 +447,21 @@ WHERE s."reasonCode" IS NOT NULL AND s."lossClass" IS NULL`,
     yazan: [SVC + "machine-stop.service.ts"],
     neden: "iletim payı duruş açılırken fabrika ayarından donar (özellikten önceki satırda ilk sebep kararında); ayar değişse açık duruş değişmez — tek yazıcı",
   },
+  // Dokuma alarmı: kademe planı doğuşta, süreler kapanışta satıra donar.
+  {
+    model: "LoomAlarm",
+    alan: "targetMinutes",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "loom-alarm.service.ts"],
+    neden: "kademe planının hedefi alarm doğarken duruşun donmuş hedefinden kopyalanır; ayar değişse açık alarm değişmez, yalnız sebep değişiminde çalmamış kademe için motor yeniden yazar — tek yazıcı",
+  },
+  {
+    model: "LoomAlarm",
+    alan: "totalSec",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "loom-alarm.service.ts"],
+    neden: "duruşun toplam süresi alarm kapanırken bir kez yazılır; rapor yeniden hesaplamaz — tek yazıcı (kapanış)",
+  },
   {
     model: "MachineRun",
     alan: "unitsPerCm",

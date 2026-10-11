@@ -865,6 +865,20 @@ export const ENUM_LABELS: Record<string, string> = {
   UNSEAL: "Mühür açıldı",
   RESEAL: "Yeniden mühürlendi",
 
+  // ── Tezgah alarmı (dokuma alarm A1a, 2026-10-11) — LoomAlarmKind · LoomAlarmState · LoomAlarmEventKind.
+  // `OPEN`/`CANCELLED`/`RESOLVED` ÇAKIŞIR (SHARED_ENUM_VALUES); alarm audit'i A1b'de doğar.
+  STOP_OVERDUE: "Duruş hedefi aşıldı",
+  ACKED: "Üstlenildi",
+  RESOLVED: "Çözüldü",
+  RAISED: "Kademe çaldı",
+  TIER_SKIPPED: "Kademe atlandı",
+  ACK: "Üstlenildi",
+  ACK_RELEASE: "Üstlenme bırakıldı",
+  SNOOZE: "Susturuldu",
+  UNSNOOZE: "Susturma kaldırıldı",
+  NOTE: "Not",
+  NOTE_RETRACT: "Not geri çekildi",
+
   // ── Patron bulutu gelen kutusu makbuzu (B3) — CloudInboxKind · CloudInboxOutcome.
   SIPARIS: "Sipariş",
   CARI: "Cari",
@@ -1011,6 +1025,8 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "yalnız sistem üretir) — ikisinde de eylemi yapan SİSTEMDİR, insan değil; " +
     "ortak Türkçe doğru",
   CANCELLED: "on beş durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
+  RESOLVED:
+    "LoomAlarmState(alarm çözüldü) ve LoomAlarmEventKind(çözülme olayı) — aynı olgunun durumu ve olayı; ortak 'Çözüldü' doğru",
   IN_PROGRESS:
     "WorkOrderStatus ve WeavingOrderStatus — ikisi de 'Devam Ediyor'. Dokuma işi " +
     "IN_PROGRESS iken tezgah koşuyordur; iş emrininkiyle aynı cümle doğru (2026-09-13)",
@@ -1042,7 +1058,8 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
   OPEN:
     "PurchaseOrderStatus('Açık (mal bekleniyor)'), MachineSealState(karne mühürsüz) ve PackingGroupStatus(sevk partisi) — ortak cevap karne ve parti için YANLIŞ; " +
-    "MACHINE_SHIFT_STAT.sealState ve packing_groups.status override'ları ile ayrıldı (2026-09-14 · 2026-09-21)",
+    "MACHINE_SHIFT_STAT.sealState ve packing_groups.status override'ları ile ayrıldı (2026-09-14 · 2026-09-21); " +
+    "LoomAlarmState de paylaşır — alarm audit'i (A1b) kendi tableName'iyle override alır",
   CLOSED:
     "PurchaseOrderStatus('Kapandı (tamamlandı)') ve PackingGroupStatus('Sevk edildi') — ortak cevap parti için YANLIŞ (parti 'kapanmaz', sevk edilir); " +
     "packing_groups.status override'ı ile ayrıldı (2026-09-21)",

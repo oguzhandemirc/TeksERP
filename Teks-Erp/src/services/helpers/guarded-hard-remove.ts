@@ -241,6 +241,12 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} levent sarım kaydı var — kalıcı silinemez. Pasife alın.`,
   },
   {
+    key: "loomAlarmCount",
+    // Dokuma alarm A1a: alarm defteriyle birlikte "ne oldu"dur (Restrict) — kapanmışlar DAHİL.
+    count: (id) => prisma.loomAlarm.count({ where: { machineId: id } }),
+    message: (n) => `Bu tezgahta ${n} alarm kaydı var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
     // Devere Faz 3: tezgahta BAĞLI levent ("şu an ne" kolonu, FK RESTRICT) — bağlı levent varken makine
     // silinemez; önce sökülür (söküm defter olayıdır, sessizce koparılmaz).
     key: "mountedWarpBeamCount",
