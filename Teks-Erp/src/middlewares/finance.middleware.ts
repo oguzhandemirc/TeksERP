@@ -18,6 +18,7 @@ import { Request, Response, NextFunction } from "express";
 import { SETTING_KEYS, readFinanceEnabled } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 export async function requireFinanceEnabled(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -32,7 +33,7 @@ export async function requireFinanceEnabled(req: Request, res: Response, next: N
       // basar; `body.code` arayan istemci sessizce hep `undefined` okur.
       // Lisans kapatıyorsa `LICENSE_MODULE` (bayrak DB'de açık olsa da) — kardeş kapılarla aynı.
       throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? AppError.forbidden(
-        "Ön muhasebe modülü bu kurulumda kapalı. Genel Ayarlar → Muhasebe bölümünden açılabilir.",
+        `Ön muhasebe modülü bu kurulumda kapalı. ${settingScreenPath("modules")} ekranından açılabilir.`,
         { code: "MODULE_DISABLED", modul: "finance" },
       );
     }

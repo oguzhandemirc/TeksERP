@@ -25,12 +25,13 @@ import {
 } from "../services/loom-alarm.service";
 import { LOOM_ALARM_SCOPES, getLoomAlarmDetail, listLoomAlarms } from "../services/loom-alarm-read.service";
 import { AppError } from "../utils/app-error";
+import { settingRowPath } from "../constants/panel-ayar-yolu";
 
 /** Alarm bayrağı kapısı — tezgah modülü (lisans tavanı dahil) ∧ `tezgah.alarmEnabled`. */
 export async function requireLoomAlarmEnabled(_req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
     if (!(await resolveTezgahAlarmEnabled())) {
-      throw AppError.forbidden("Tezgah alarmı bu kurulumda kapalı. Genel Ayarlar → Tezgah bölümünden açılabilir.", { code: "LOOM_ALARM_DISABLED" });
+      throw AppError.forbidden(`Tezgah alarmı bu kurulumda kapalı. ${settingRowPath("tezgahAlarmEnabled")} ayarından açılabilir.`, { code: "LOOM_ALARM_DISABLED" });
     }
     next();
   } catch (e) {

@@ -11,6 +11,7 @@ import { SETTING_KEYS, readDevereEnabled, readIplikEnabled } from "../services/s
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 const dispatchSchema = z.object({
   workOrderId: z.string().uuid(),
@@ -257,14 +258,14 @@ export class SubcontractorController {
       // Kapalı modülün YAZMA yolu yoktur: levent kalemi yalnız devere açıkken kabul edilir
       // (E1 emsali `initial-entry doffEventId`; kapı `requireDevereEnabled` ile aynı gövde).
       if ((body.warpBeamIds?.length ?? 0) > 0 && !(await readDevereEnabled())) {
-        throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere / levent") ?? AppError.forbidden("Devere modülü bu kurulumda kapalı; fason sevkine levent kalemi eklenemez. Sistem → Modüller bölümünden açılabilir.", {
+        throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere / levent") ?? AppError.forbidden(`Devere modülü bu kurulumda kapalı; fason sevkine levent kalemi eklenemez. ${settingScreenPath("modules")} ekranından açılabilir.`, {
           code: "MODULE_DISABLED",
           modul: "devere",
         });
       }
       // G1: iplik satırı yalnız iplik açıkken (aynı gövde kapısı; tek yazıcı `applyYarnMovementTx` ikinci hat).
       if ((body.yarnLines?.length ?? 0) > 0 && !(await readIplikEnabled())) {
-        throw licenseModuleError(SETTING_KEYS.IPLIK_ENABLED, "İplik") ?? AppError.forbidden("İplik modülü bu kurulumda kapalı; fason sevkine iplik satırı eklenemez. Sistem → Modüller bölümünden açılabilir.", {
+        throw licenseModuleError(SETTING_KEYS.IPLIK_ENABLED, "İplik") ?? AppError.forbidden(`İplik modülü bu kurulumda kapalı; fason sevkine iplik satırı eklenemez. ${settingScreenPath("modules")} ekranından açılabilir.`, {
           code: "MODULE_DISABLED",
           modul: "iplik",
         });

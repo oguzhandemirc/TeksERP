@@ -24,6 +24,7 @@ import { getWeavingTabletContext } from "../services/subcontractor-weaving-table
 import { SETTING_KEYS, readIplikEnabled } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 const router = Router();
 
@@ -104,7 +105,7 @@ router.post("/dispatches", requireAnyPermission("weavingorder:write", ...MOBILE_
     const b = dispatchSchema.parse(req.body ?? {});
     // Kapalı modülün YAZMA yolu yoktur: iplik satırı yalnız iplik açıkken kabul edilir (tek yazıcı da 403 verir — ikinci hat).
     if ((b.yarnLines?.length ?? 0) > 0 && !(await readIplikEnabled())) {
-      throw licenseModuleError(SETTING_KEYS.IPLIK_ENABLED, "İplik") ?? AppError.forbidden("İplik modülü bu kurulumda kapalı; fason sevkine iplik satırı eklenemez. Sistem → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "iplik" });
+      throw licenseModuleError(SETTING_KEYS.IPLIK_ENABLED, "İplik") ?? AppError.forbidden(`İplik modülü bu kurulumda kapalı; fason sevkine iplik satırı eklenemez. ${settingScreenPath("modules")} ekranından açılabilir.`, { code: "MODULE_DISABLED", modul: "iplik" });
     }
     res.status(201).json(await dispatchForWeaving(b, req.user?.userId));
   } catch (e) {

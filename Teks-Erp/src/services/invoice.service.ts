@@ -93,6 +93,7 @@ import { buildTurkishSearch } from "../utils/query-parser";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 import { unitLabel } from "../constants/item-unit";
+import { settingRowPath } from "../constants/panel-ayar-yolu";
 
 export interface InvoiceLineInput {
   itemId?: string | null;
@@ -1342,7 +1343,7 @@ export class InvoiceService {
       `"${name}" risk limiti aşılıyor: limit ${limit.toFixed(2)} ${ref.currency}, ` +
         `mevcut bakiye ${balance.toFixed(2)}, bu fatura ${ref.amount.toFixed(2)} → toplam ${exposure.toFixed(2)}. ` +
         `Risk limiti engeli açık — limiti Cari Kartından güncelleyebilir, tahsilat girip tekrar deneyebilir ` +
-        `ya da Ayarlar > Muhasebe > "Risk limiti aşımında satış faturası onayını engelle" ayarını kapatabilirsiniz.`,
+        `ya da ${settingRowPath("financeRiskLimitBlockEnabled")} ayarını kapatabilirsiniz.`,
     );
   }
 
@@ -1412,8 +1413,7 @@ export class InvoiceService {
     if (!warehouseId) {
       throw AppError.badRequest(
         `${ref.docNo}: iplik satırları stoktan düşülemedi — sistemde VARSAYILAN depo tanımlı değil. ` +
-          `Tanımlar > Depolar'dan bir depoyu varsayılan yapın ya da Ayarlar > Muhasebe > ` +
-          `"Satış faturası onayında iplik satırlarını stoktan düş" ayarını kapatın.`,
+          `Tanımlar > Depolar'dan bir depoyu varsayılan yapın ya da ${settingRowPath("financeYarnOutOnInvoiceEnabled")} ayarını kapatın.`,
       );
     }
 

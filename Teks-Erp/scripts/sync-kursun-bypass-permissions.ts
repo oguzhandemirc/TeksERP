@@ -31,6 +31,7 @@
 //     Makine yoksa liste BOŞ gelir ve hiçbir iş dağıtılamaz.
 import prisma, { pool } from "../src/lib/prisma";
 import { StationKind } from "@prisma/client";
+import { settingScreenPath } from "../src/constants/panel-ayar-yolu";
 
 const PERMISSIONS = [
   {
@@ -259,7 +260,7 @@ async function main() {
   const flagOn = flag?.value === true;
   console.log(
     `\nℹ️  Bayrak (production.kursunBypassEnabled): ${flagOn ? "AÇIK" : "KAPALI"}` +
-      (flagOn ? "" : " — Panel → Genel Ayarlar'dan açılacak"),
+      (flagOn ? "" : ` — panelde ${settingScreenPath("production")} ekranından açılır`),
   );
 
   console.log(

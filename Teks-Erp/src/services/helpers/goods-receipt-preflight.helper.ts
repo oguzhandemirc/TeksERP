@@ -19,6 +19,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { normalizeLotNo } from "./yarn-lot.helper";
 import { readDevereLotRequired } from "../system-setting.service";import { assertItemUsable } from "./item-usage.helper";
+import { PANEL_SETTING_ROW, settingRowPath } from "../../constants/panel-ayar-yolu";
 
 
 export interface PreflightLine {
@@ -73,8 +74,8 @@ export const qtyText = (v: Prisma.Decimal, unit: string): string => `${v.toStrin
 export function priceRequiredMessage(itemName: string, currency: string): string {
   return (
     `"${itemName}": birim fiyat çözülemedi — satırda fiyat yok ve kalem kartında ${currency} alış fiyatı tanımlı değil. ` +
-    `"Mal kabul satırında birim fiyat zorunlu" ayarı açık — satıra fiyatı girin, kalemin ${currency} alış fiyatını ` +
-    `Tanımlar > Kalem Fiyatları'ndan tanımlayın ya da Ayarlar > Depo & Satın Alma'dan ayarı kapatın.`
+    `"${PANEL_SETTING_ROW.goodsReceiptRequirePriceEnabled.baslik}" ayarı açık — satıra fiyatı girin, kalemin ${currency} alış fiyatını ` +
+    `Tanımlar > Kalem Fiyatları'ndan tanımlayın ya da ${settingRowPath("goodsReceiptRequirePriceEnabled")} ayarını kapatın.`
   );
 }
 
@@ -82,8 +83,8 @@ export function priceRequiredMessage(itemName: string, currency: string): string
 export function overReceiptMessage(p: { orderNo: string; itemName: string; ordered: Prisma.Decimal; already: Prisma.Decimal; qty: Prisma.Decimal; unit: string }): string {
   const after = p.already.plus(p.qty);
   const tail =
-    `"Siparişten fazla mal kabulünü engelle" ayarı açık — fazlayı kaydetmek için siparişe bağlı OLMAYAN ` +
-    `ayrı bir mal kabul fişi açın, siparişi düzeltin ya da Ayarlar > Depo & Satın Alma'dan ayarı kapatın.`;
+    `"${PANEL_SETTING_ROW.purchaseBlockOverReceiptEnabled.baslik}" ayarı açık — fazlayı kaydetmek için siparişe bağlı OLMAYAN ` +
+    `ayrı bir mal kabul fişi açın, siparişi düzeltin ya da ${settingRowPath("purchaseBlockOverReceiptEnabled")} ayarını kapatın.`;
   if (p.ordered.isZero()) {
     return `"${p.itemName}" ${p.orderNo} siparişinde YOK (ısmarlanan 0), bu satırla ${qtyText(p.qty, p.unit)} girilecek. Yanlış sipariş seçilmiş olabilir. ${tail}`;
   }

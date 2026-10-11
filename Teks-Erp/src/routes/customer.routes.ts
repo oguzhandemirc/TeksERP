@@ -18,6 +18,7 @@ import branchRoutes from "./customer-branch.routes";
 import aliasRoutes from "./customer-alias.routes";
 import templateRouteRoutes from "./customer-template-route.routes";
 import standaloneLabelRoutes from "./customer-standalone-label.routes";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 export const customerService = new CustomerService({
   modelName: "customer",
@@ -67,7 +68,7 @@ async function takeFinanceSub(req: { body?: unknown; user?: { permissions: strin
     throw AppError.forbidden("Cari terimleri (vade, para birimi, vergi dairesi, risk limiti) için 'finance:write' yetkisi gerekli.", { code: "PERMISSION_DENIED", required: "finance:write" });
   }
   if (!(await readFinanceEnabled())) {
-    throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? AppError.forbidden("Ön muhasebe modülü bu kurulumda kapalı — cari terimleri yazılamaz. Genel Ayarlar → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "finance" });
+    throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? AppError.forbidden(`Ön muhasebe modülü bu kurulumda kapalı — cari terimleri yazılamaz. ${settingScreenPath("modules")} ekranından açılabilir.`, { code: "MODULE_DISABLED", modul: "finance" });
   }
   return finance;
 }

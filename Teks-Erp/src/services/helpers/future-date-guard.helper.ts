@@ -36,6 +36,7 @@ import type { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { factoryDayEnd, factoryTimezoneAt } from "../../constants/time";
 import { readFinanceFutureDatedDocumentBlockEnabled } from "../system-setting.service";
+import { settingRowPath } from "../../constants/panel-ayar-yolu";
 
 /** Verilen an, FABRİKA takvim gününün İLERİSİNDE mi? (saf — bayrak okumaz) */
 export function isFutureFactoryDay(date: Date, now: Date = new Date()): boolean {
@@ -76,7 +77,7 @@ export async function assertNotFutureDatedTx(
   if (!enabled) return;
   if (!isFutureFactoryDay(ref.date)) return;
 
-  const where = ref.settingPath ?? 'Ayarlar > Muhasebe > "İleri tarihli mali belge tarihini engelle"';
+  const where = ref.settingPath ?? settingRowPath("financeFutureDatedDocumentBlockEnabled");
   throw AppError.badRequest(
     `${ref.label} ileri tarihli olamaz: ${trDay(ref.date)} girilmiş, bugün ${trDay(new Date())}. ` +
       `İleri tarihli belge engeli açık — tarihi bugüne (ya da geçmişe) çekin; ` +

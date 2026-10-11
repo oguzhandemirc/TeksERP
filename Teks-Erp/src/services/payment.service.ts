@@ -37,6 +37,7 @@ import { factoryDateTr, factoryYmd } from "../constants/time";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import type { ApiResponse } from "../types/api.types";
 import { applyCashTxTx, cancelCashTxTx, moveAccountBalanceTx } from "./helpers/cash-ledger.helper";
+import { settingRowPath } from "../constants/panel-ayar-yolu";
 
 export interface CreatePaymentInput {
   direction: PaymentDirection;
@@ -96,7 +97,7 @@ async function autoAllocateNoteAfterPayment(
       : "";
     return (
       ` ${summary.count} faturaya otomatik kapandı (${summary.total.toFixed(2)} ${currency}).${leftover}` +
-      ` Kapamalar Fatura Kapama ekranından çözülebilir; otomasyon: Ayarlar → Muhasebe → Otomasyon.`
+      ` Kapamalar Fatura Kapama ekranından çözülebilir; otomasyon: ${settingRowPath("financeAutoAllocateOnPaymentEnabled")}.`
     );
   } catch (e) {
     void AuditService.log({

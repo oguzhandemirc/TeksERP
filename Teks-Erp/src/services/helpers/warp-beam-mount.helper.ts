@@ -13,6 +13,7 @@ import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled } from ".
 import { WARP_BEAM_STATUS_EVENT_KINDS, type WarpBeamEventKind } from "../../constants/warp-beam";
 import { OPEN_MACHINE_RUN_WHERE } from "./machine-run-open.helper";
 import { remainingByBeam } from "./warp-beam.helper";
+import { settingRowPath } from "../../constants/panel-ayar-yolu";
 
 type Client = Prisma.TransactionClient;
 
@@ -20,7 +21,7 @@ type Client = Prisma.TransactionClient;
 export async function assertMountTrackingOnTx(tx: Pick<Client, "systemSetting">): Promise<void> {
   if (!(await readDevereMountTracking(tx))) {
     throw AppError.conflict(
-      'Levent tezgah bağı defteri bu kurulumda kapalı — levent sarıldıktan sonra "hazır" kalır, takma/sökme/tüketim yazılmaz. Genel Ayarlar › Devere / Levent › "Levent tezgah bağı defteri" ile açılır.',
+      `Levent tezgah bağı defteri bu kurulumda kapalı — levent sarıldıktan sonra "hazır" kalır, takma/sökme/tüketim yazılmaz. ${settingRowPath("devereMountTracking")} ile açılır.`,
       { code: "WARP_MOUNT_TRACKING_OFF" },
     );
   }

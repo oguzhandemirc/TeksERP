@@ -74,6 +74,7 @@ import {
 } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 /**
  * 403 gövdesi: `{ success:false, message, details:{ code, modul } }`.
@@ -86,7 +87,7 @@ function modulKapali(modul: string, ad: string): AppError {
   // 403 (404 değil): kaynak VAR, bu kurulumda kapalı. 404 dönmek destek
   // ekibini "uç deploy edilmemiş" diye yanlış yöne gönderirdi.
   return AppError.forbidden(
-    `${ad} modülü bu kurulumda kapalı. Genel Ayarlar → Modüller bölümünden açılabilir.`,
+    `${ad} modülü bu kurulumda kapalı. ${settingScreenPath("modules")} ekranından açılabilir.`,
     { code: "MODULE_DISABLED", modul },
   );
 }
@@ -127,7 +128,7 @@ export async function requireIplikEnabled(
     if (!ticaret) {
       throw licenseModuleError(SETTING_KEYS.TICARET_ENABLED, "Ticaret") ?? AppError.forbidden(
         "İplik modülü Ticaret modülüne bağlıdır; Ticaret modülü bu kurulumda kapalı. " +
-          "Genel Ayarlar → Modüller bölümünden açılabilir.",
+          `${settingScreenPath("modules")} ekranından açılabilir.`,
         { code: "MODULE_DISABLED", modul: "ticaret", dependent: "iplik" },
       );
     }
@@ -228,7 +229,7 @@ export async function requireDokumaEnabled(
     if (!production) {
       throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim") ?? AppError.forbidden(
         "Dokuma iş emri modülü Üretim modülüne bağlıdır; Üretim modülü bu kurulumda kapalı. " +
-          "Sistem → Modüller bölümünden açılabilir.",
+          `${settingScreenPath("modules")} ekranından açılabilir.`,
         { code: "MODULE_DISABLED", modul: "production", dependent: "dokuma" },
       );
     }
@@ -259,7 +260,7 @@ export async function requireTezgahEnabled(
     if (!production) {
       throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim") ?? AppError.forbidden(
         "Tezgah izleme modülü Üretim modülüne bağlıdır; Üretim modülü bu kurulumda kapalı. " +
-          "Sistem → Modüller bölümünden açılabilir.",
+          `${settingScreenPath("modules")} ekranından açılabilir.`,
         { code: "MODULE_DISABLED", modul: "production", dependent: "tezgah" },
       );
     }

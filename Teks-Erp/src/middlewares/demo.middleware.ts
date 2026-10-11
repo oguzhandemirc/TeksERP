@@ -23,13 +23,14 @@
 import { Request, Response, NextFunction } from "express";
 import { readDemoModeEnabled } from "../services/system-setting.service";
 import { AppError } from "../utils/app-error";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 export async function requireDemoMode(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const enabled = await readDemoModeEnabled();
     if (!enabled) {
       throw AppError.forbidden(
-        "Demo yardımcıları bu kurulumda kapalı. Genel Ayarlar → Demo bölümünden açılabilir.",
+        `Demo yardımcıları bu kurulumda kapalı. ${settingScreenPath("demo")} ekranından açılabilir.`,
       );
     }
     next();

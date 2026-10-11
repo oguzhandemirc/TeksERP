@@ -17,6 +17,7 @@ import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { RollEntrySource, RollStatus } from "@prisma/client";
 import "../types/express-augment";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 // Zod validation schemas
 export const initialEntrySchema = z.object({
@@ -301,7 +302,7 @@ export class InventoryController {
       // Kapalı modülün YAZMA yolu yoktur, tarihsel bağ dahil: `doffEventId` yalnız dokuma
       // açıkken kabul edilir (1e E1 hükmü 2026-09-14; kapı `requireDokumaEnabled` ile aynı gövde).
       if (doffEventId && !(await readDokumaEnabled())) {
-        throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? AppError.forbidden("Dokuma modülü bu kurulumda kapalı; indirme bağı verilemez. Sistem → Modüller bölümünden açılabilir.", {
+        throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? AppError.forbidden(`Dokuma modülü bu kurulumda kapalı; indirme bağı verilemez. ${settingScreenPath("modules")} ekranından açılabilir.`, {
           code: "MODULE_DISABLED",
           modul: "dokuma",
         });

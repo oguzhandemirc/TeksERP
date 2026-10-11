@@ -42,6 +42,7 @@ import {
   rememberIssuedCard,
   rememberIssuedPin,
 } from "./helpers/credential-reveal.helper";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -215,7 +216,7 @@ export class AuthService {
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("card")) {
       throw AppError.forbidden(
-        "Kartla giriş kapalı — Genel Ayarlar'dan giriş yöntemlerine 'QR kart' eklenebilir"
+        `Kartla giriş kapalı — ${settingScreenPath("session")} ekranında giriş yöntemlerine 'QR kart' eklenebilir`
       );
     }
     const parsed = parseCardCode(cardCode);
@@ -264,7 +265,7 @@ export class AuthService {
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("pin")) {
       throw AppError.forbidden(
-        "Hızlı PIN ile giriş kapalı — Genel Ayarlar'dan giriş yöntemlerine 'Hızlı PIN' eklenebilir"
+        `Hızlı PIN ile giriş kapalı — ${settingScreenPath("session")} ekranında giriş yöntemlerine 'Hızlı PIN' eklenebilir`
       );
     }
     const normalized = (pin ?? "").trim();

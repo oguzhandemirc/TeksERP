@@ -16,7 +16,7 @@ hizmet konağı 0.2.0 (değişmedi).
 İki iş: **tezgah alarmı** ve **iş emri adlarının değişmesi**.
 
 - **Tezgah alarmı gelir ama KAPALI gelir.** Açılmadıkça hiçbir şey değişmez, alarm tablolarına tek satır yazılmaz.
-  Açmak için panelde **Genel Ayarlar → Tezgah izleme → "Tezgah alarmı"** (yeni panel gerekir). Açılınca hedef
+  Açmak için panelde **Sistem → Özellik Anahtarları → Tezgah izleme → "Tezgah alarmı"** (yeni panel gerekir). Açılınca hedef
   süresini aşan tezgah duruşu alarm olur; alarm görevliye, süre daha da uzarsa üst kademeye (patron/müdür) çalar.
   Görevli alarmı üstlenebilir, susturabilir, not düşebilir. Yalnız dokuma (tezgah) modülü açık kurulumda anlamlıdır.
 - **Ad değişikliği:** "İş Emri" artık **"Terbiye İş Emri"**, "Dokuma İşi" artık **"Dokuma İş Emri"**. Sunucunun
@@ -41,7 +41,7 @@ bir yeni migration, alarm motoru + uçları, görünen ad değişikliği; günce
   atama panelden). Tezgah Salonu'nda üst kademeye çıkmış alarm `ESCALATED` görünür (yalnız bayrak açıkken).
 - `068fe4055` · `6eccde3f8` — denetim etiketleri, makine silme seddi, bekçi kararlılığı düzeltmeleri.
 - `c17fac11e` — ekran kataloğuna Alarmlar ekranı.
-- `6b5575624` — Genel Ayarlar alarm satırları ayar şifresi kapsamına (`settings:dokuma`): `tezgahAlarmEnabled`,
+- `6b5575624` — panelin alarm ayar satırları ayar şifresi kapsamına (`settings:dokuma`): `tezgahAlarmEnabled`,
   `tezgahAlarmUnclassifiedTargetMinutes` (sebebi girilmemiş duruşun hedef süresi), `tezgahAlarmRenotifyMinutes`
   (tekrar çalma aralığı), `tezgahAlarmEscalateWhenAcked` (üstlenilmiş alarm da üst kademeye iletilsin).
 
@@ -58,7 +58,7 @@ bir yeni migration, alarm motoru + uçları, görünen ad değişikliği; günce
 
 - `9d1d674ee` — hesap kilidi ayak izi yanıttan önce yazılır (davranış aynı; bekçi kararsızlığı).
 
-**Pakete girmeyen:** panel (alarm zili, Alarmlar listesi/sayfası, kırmızı şerit, alarm sesi, Genel Ayarlar alarm
+**Pakete girmeyen:** panel (alarm zili, Alarmlar listesi/sayfası, kırmızı şerit, alarm sesi, panelin alarm ayar
 satırları, panelin yeni adları), tablet ve patron uygulamasının yeni adları — ayrı sürümlerle çıkar. Bekçiler ve
 belgeler.
 
@@ -100,8 +100,8 @@ yok (Docker).
 - **Bu sürüme özel:**
   - Migration var → güncelleme programı güncellemeden önce otomatik yedek alır (ONAYLI kipte panel onayından sonra).
     Yedek adımı geçmeli.
-  - Alarm KAPALI gelir; kurulumdan sonra açılmaz. Açma kararı fabrikanındır (Genel Ayarlar → Tezgah izleme, yeni
-    panel). Açmadan önce `loom:alarm-*` izinleri ilgili rollere panelden atanmalıdır.
+  - Alarm KAPALI gelir; kurulumdan sonra açılmaz. Açma kararı fabrikanındır (Sistem → Özellik Anahtarları → Tezgah
+    izleme, yeni panel). Açmadan önce `loom:alarm-*` izinleri ilgili rollere panelden atanmalıdır.
   - Ad göçü betiği kurulumun parçası DEĞİLDİR; koşulacaksa ayrı adım, önce kuru koşum listesi, sonra kullanıcı onayı.
 - **Bilinen sınırlar (dürüst):** 2.15.0–2.15.3 belgelerindeki güncelleme programı sınırları aynen geçerli. Alarm
   bildirimi yalnız panel içinde (zil, şerit, ses; Electron'da işletim sistemi bildirimi) — tarayıcıdaki web panelinde

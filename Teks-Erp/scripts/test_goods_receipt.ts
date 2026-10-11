@@ -94,6 +94,7 @@ import { printedDocumentService } from "../src/services/printed-document.service
 import { purchaseOrderService } from "../src/services/purchase-order.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
+import { settingRowPath } from "../src/constants/panel-ayar-yolu";
 // §K — fason firma TEST tarafından üretilir; seed'in `BOYER`i pasif olabilir
 // ve `findFirst` onu yine bulur (2026-08-02 saha bulgusu, fixture dosyası başlığı).
 
@@ -751,7 +752,7 @@ async function main(): Promise<void> {
     check(
       "J1e) ⭐ Mesaj YOL GÖSTERİYOR (hangi ayar + hangi ekrandan kapatılır + siparişsiz fiş çıkışı)",
       onReason.includes("Siparişten fazla mal kabulünü engelle") &&
-        onReason.includes("Ayarlar > Depo & Satın Alma") &&
+        onReason.includes(settingRowPath("purchaseBlockOverReceiptEnabled")) &&
         onReason.includes("siparişe bağlı OLMAYAN"),
       onReason.slice(-140),
     );
@@ -849,7 +850,7 @@ async function main(): Promise<void> {
       priceReason.includes(jFab.name) &&
         priceReason.includes("TRY alış fiyatı") &&
         priceReason.includes("Tanımlar > Kalem Fiyatları") &&
-        priceReason.includes("Ayarlar > Depo & Satın Alma"),
+        priceReason.includes(settingRowPath("goodsReceiptRequirePriceEnabled")),
       priceReason.slice(0, 170),
     );
 

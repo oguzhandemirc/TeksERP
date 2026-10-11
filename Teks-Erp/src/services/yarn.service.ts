@@ -50,6 +50,7 @@ import { licenseModuleError } from "../lib/license/module-ceiling";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 
 
@@ -175,7 +176,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
   if (!(await readIplikEnabled(tx))) {
     throw licenseModuleError(SETTING_KEYS.IPLIK_ENABLED, "İplik") ?? AppError.forbidden(
       "İplik modülü bu kurulumda kapalı — iplik hareketi yazılamaz. " +
-        "Genel Ayarlar → Modüller bölümünden açılabilir.",
+        `${settingScreenPath("modules")} ekranından açılabilir.`,
       { code: "MODULE_DISABLED", modul: "iplik" },
     );
   }

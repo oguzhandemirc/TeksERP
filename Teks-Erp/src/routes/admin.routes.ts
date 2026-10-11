@@ -62,6 +62,7 @@ import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
 import { z } from "zod";
 import "../types/express-augment";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
 const router = Router();
 
@@ -1578,7 +1579,7 @@ router.put(
       // dalı buradan dolanılırdı (Raporlar K3/K7).
       if (SUPERADMIN_ONLY_SETTING_KEYS.has(key)) {
         throw AppError.badRequest(
-          "Modül anahtarları ve rapor görünürlük listesi yalnız Genel Ayarlar → Modüller (PATCH /api/feature-flags) üzerinden değiştirilir",
+          `Modül anahtarları ve rapor görünürlük listesi yalnız ${settingScreenPath("modules")} ekranından (PATCH /api/feature-flags) değiştirilir`,
           { code: "MODULE_KEY_RESERVED", key },
         );
       }

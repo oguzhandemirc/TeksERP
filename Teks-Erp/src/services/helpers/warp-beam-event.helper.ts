@@ -19,6 +19,7 @@ import { licenseModuleError } from "../../lib/license/module-ceiling";
 import type { WarpBeamEventKind } from "../../constants/warp-beam";
 import { WARP_BEAM_EVENT_SELECT, type WarpBeamEventRow } from "./warp-beam.helper";
 import { warpBeamEventStampTx } from "./ledger-stamp.helper";
+import { settingScreenPath } from "../../constants/panel-ayar-yolu";
 
 export const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
 
@@ -48,7 +49,7 @@ export async function applyWarpBeamEventTx(
   },
 ): Promise<WarpBeamEventRow> {
   if (!(await readDevereEnabled(tx))) {
-    throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere / levent") ?? AppError.forbidden("Devere modülü bu kurulumda kapalı — levent defterine yazılamaz. Sistem → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "devere" });
+    throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere / levent") ?? AppError.forbidden(`Devere modülü bu kurulumda kapalı — levent defterine yazılamaz. ${settingScreenPath("modules")} ekranından açılabilir.`, { code: "MODULE_DISABLED", modul: "devere" });
   }
   const claim = await tx.warpBeam.updateMany({
     where: { id: input.beamId, status: input.from, ...(input.whereMachineId !== undefined ? { currentMachineId: input.whereMachineId } : {}) },

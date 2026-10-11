@@ -80,6 +80,7 @@ import { Prisma, YarnMovementKind } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { readYarnBlockNegativeBalanceEnabled } from "../system-setting.service";
 import { yarnLotBalanceTx } from "./yarn-lot.helper";
+import { settingRowPath } from "../../constants/panel-ayar-yolu";
 
 export interface YarnOutflowRef {
   itemId: string;
@@ -173,6 +174,6 @@ export async function assertYarnBalanceCoversTx(
       `mevcut ${balance.toFixed(3)} kg, istenen çıkış ${ref.qtyKg.toFixed(3)} kg. ` +
       `Eksi iplik bakiyesi engeli açık — depoda gerçekte mal varsa açılış/sayım kaydı eksik olabilir: ` +
       `İplik Stok Hareketleri'nden giriş (ya da sayım düzeltmesi) yazın, tutarı düzeltin ` +
-      `ya da bu kuralı Genel Ayarlar > Depo & Satın Alma > "İplik stoğu eksi bakiyeye düşemesin" ile kapatın.`,
+      `ya da bu kuralı ${settingRowPath("yarnBlockNegativeBalanceEnabled")} ile kapatın.`,
   );
 }

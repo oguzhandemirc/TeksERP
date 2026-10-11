@@ -262,8 +262,8 @@ function main(): void {
     adminKod.includes('code: "MODULE_KEY_RESERVED"'),
   );
   check(
-    "§5c Ret mesajı doğru yüzeyi gösteriyor (Genel Ayarlar → Modüller)",
-    adminKod.includes("Genel Ayarlar → Modüller"),
+    "§5c Ret mesajı doğru yüzeyi gösteriyor (Modüller ekranı, yol tek kaynaktan)",
+    adminKod.includes('settingScreenPath("modules")'),
   );
 
   // ── §6 ⭐ MIGRATION AÇIKLAMALARI SERVİSLE BİREBİR ─────────────────────────

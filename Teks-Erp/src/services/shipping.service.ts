@@ -176,6 +176,7 @@ import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-o
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
 import { SWATCH_IN_STOCK_WHERE, transitionSwatchesTx } from "./helpers/swatch-event.helper";
+import { settingRowPath } from "../constants/panel-ayar-yolu";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -3186,7 +3187,7 @@ export class ShippingService {
    */
   async setManualSackCount(shipmentId: string, count: number | null, userId?: string): Promise<ApiResponse<unknown>> {
     if (!(await readShipmentManualSackCountEnabled())) {
-      throw AppError.badRequest("Elle çuval adedi girişi kapalı (Ayarlar → Sevkiyat)");
+      throw AppError.badRequest(`Elle çuval adedi girişi kapalı (${settingRowPath("shipmentManualSackCountEnabled")})`);
     }
     const value = count == null ? null : Math.trunc(count);
     if (value != null && (value < 1 || value > 9999)) {
@@ -3844,7 +3845,7 @@ export class ShippingService {
     if (input.sameDayOnly) {
       const dayStart = factoryDayStart();
       if (!input.dispatchedAt || input.dispatchedAt < dayStart) {
-        return "Sevk geri alma aynı günle sınırlı (Genel Ayarlar → Sevkiyat & İade). Bu sevkiyat bugün sevk edilmemiş.";
+        return `Sevk geri alma aynı günle sınırlı (${settingRowPath("shipmentUndoSameDayOnly")}). Bu sevkiyat bugün sevk edilmemiş.`;
       }
     }
     return null;
