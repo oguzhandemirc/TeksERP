@@ -251,10 +251,13 @@ export interface SealSummary {
   readonly gecersizSayisi: number;
 }
 
-/** Health + panel bandı: mandal, sistem hesabı sayısı, geçerli mührü olmayan hesap sayısı. */
+/**
+ * Health + panel bandı: mandal, sistem hesabı sayısı, geçerli mührü olmayan hesap sayısı.
+ * Yalnız AKTİF hesaplar: pasife alınan sahte hesap yetki de giriş de alamaz, bandı sonsuza dek tutmaz.
+ */
 export async function sealSummary(): Promise<SealSummary> {
   const rows = await prisma.user.findMany({
-    where: { isSystemAccount: true, deletedAt: null },
+    where: { isSystemAccount: true, isActive: true, deletedAt: null },
     select: SEAL_ROW_SELECT,
   });
   const latch = readLatch();

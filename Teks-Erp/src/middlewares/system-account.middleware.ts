@@ -37,6 +37,7 @@ import {
   refreshSystemAccountRegistry,
   systemAccountLockActive,
 } from "../services/helpers/system-account.registry";
+import { isSystemAccountAuthorized, SEAL_ROW_SELECT } from "../services/helpers/system-account-seal.helper";
 import "../types/express-augment";
 
 const UUID_RE =
@@ -62,6 +63,9 @@ const UUID_RE =
  *
  * KENDİSİ MUAF: `req.isSystemAccount === true` ise geçer (kendi hesabını yönetir).
  *
+ * HEDEF YÜKLEMİ yetkiyle AYNI (`isSystemAccountAuthorized`): mühürü geçersiz "sistem hesabı"
+ * (SQL ile işaretlenmiş sahte) koruma ALMAZ — yetkili yönetici onu pasife alabilir.
+ *
  * 403, 404 DEĞİL: hesabın varlığı artık açık; yanlış bilgi vermenin anlamı yok.
  */
 export async function protectSystemAccountTarget(
@@ -86,9 +90,9 @@ export async function protectSystemAccountTarget(
     }
     const target = await prisma.user.findUnique({
       where: { id },
-      select: { isSystemAccount: true },
+      select: SEAL_ROW_SELECT,
     });
-    if (!target?.isSystemAccount) {
+    if (!isSystemAccountAuthorized(target)) {
       next();
       return;
     }

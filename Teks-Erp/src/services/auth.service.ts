@@ -415,9 +415,10 @@ export class AuthService {
   static async isSystemAccountUser(userId: string): Promise<boolean> {
     const row = await prisma.user.findUnique({
       where: { id: userId },
-      select: { isSystemAccount: true },
+      select: SEAL_ROW_SELECT,
     });
-    return row?.isSystemAccount === true;
+    // Yetkiyle aynı yüklem: mührü geçersiz işaretli hesap korunmaz (G1).
+    return isSystemAccountAuthorized(row);
   }
 
   /**
