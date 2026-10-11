@@ -121,7 +121,7 @@ function extractStationIds(data: Record<string, unknown>): string[] | undefined 
 async function assertStationsCanApplyProperty(stationIds: string[]): Promise<void> {
   if (stationIds.length === 0) {
     throw AppError.badRequest(
-      "Özelliği uygulayacak en az bir istasyon seçilmeli — istasyonsuz özellik hiçbir iş emrinde seçilemez",
+      "Özelliği uygulayacak en az bir istasyon seçilmeli — istasyonsuz özellik hiçbir terbiye iş emrinde seçilemez",
     );
   }
   const stations = await prisma.station.findMany({
@@ -374,7 +374,7 @@ export class FabricPropertyService extends BaseService {
           prisma.itemAllowedProperty.count({ where: { propertyId: id } }),
         ]);
         const usage: string[] = [];
-        if (woT > 0) usage.push(`${woT} iş emri hedefi`);
+        if (woT > 0) usage.push(`${woT} terbiye iş emri hedefi`);
         if (lineT > 0) usage.push(`${lineT} sipariş kalemi`);
         if (routeT > 0) usage.push(`${routeT} rota adımı`);
         if (itemT > 0) usage.push(`${itemT} ürün izinli listesi`);

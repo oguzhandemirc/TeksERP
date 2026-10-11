@@ -459,7 +459,7 @@ export class MasterDataMergeService {
       sideEffects.push("İlgili topların ve çuvalların etiketleri 'yeniden bas' olarak işaretlenir.");
     }
     if (entity === "item" || entity === "color") {
-      sideEffects.push("Etkilenen iş emirlerinin refakat kartları 'güncel değil' işaretlenir.");
+      sideEffects.push("Etkilenen terbiye iş emirlerinin refakat kartları 'güncel değil' işaretlenir.");
       sideEffects.push("İlgili topların etiketleri 'yeniden bas' olarak işaretlenir.");
     }
     sideEffects.push(

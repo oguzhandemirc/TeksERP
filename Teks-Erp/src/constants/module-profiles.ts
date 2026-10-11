@@ -85,6 +85,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, string>> = {
  * uygulanmış kurulumlarda geçmişi değiştirmez — orada metin dondu).
  */
 export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  // Metin migration damgasıyla BİREBİR kalır (test_module_profile §6b/§6d) — görünen ad değişikliğinin dışında.
   "production.enabled": "Üretim modülü (envanter üretim sekmeleri · iş emri yüzeyleri)",
   "finance.enabled": "Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka)",
   "ticaret.enabled": "Ticaret modülü (alış siparişi · mal kabul · fiyat listeleri · stok sayımı)",
@@ -93,6 +94,7 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "kumasTeknik.enabled": "Kumaş teknik kartı modülü (en · gramaj · kompozisyon · atkı/çözgü)",
   "tezgah.enabled": "Dokuma tezgah izleme modülü",
   "devere.enabled": "Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri)",
+  // Metin migration damgasıyla BİREBİR kalır (test_module_profile §6b/§6d) — görünen ad değişikliğinin dışında.
   "dokuma.enabled": "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
   "emanet.enabled": "Emanet / konsinye mülkiyet modülü (müşterinin malı: top · levent · iplik lotu; sevk sahiplik kapısı)",
 };
@@ -130,7 +132,7 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
   basit: {
     ad: "Basit — İşlemeci",
     aciklama:
-      "Yalnız üretim: iş emri · istasyon · tambur · sevkiyat. Ön muhasebe, " +
+      "Yalnız üretim: terbiye iş emri · istasyon · tambur · sevkiyat. Ön muhasebe, " +
       "alış-satış ve iplik defteri kapalı (bugünkü adnansahin kurulumu).",
     moduller: acik("production.enabled"),
     bayraklar: {},
@@ -164,7 +166,7 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
     ad: "Perde üreticisi — dokuyan",
     aciklama:
       "Üretim + ön muhasebe + ticaret + iplik kg defteri + teknik kart + devere " +
-      "(çözgü hazırlama/levent) + dokuma işi. Tezgah izleme kapalı — Faz 4'te açılır.",
+      "(çözgü hazırlama/levent) + dokuma iş emri. Tezgah izleme kapalı — Faz 4'te açılır.",
     moduller: acik(
       "production.enabled",
       "finance.enabled",
@@ -180,7 +182,7 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
     ad: "Dokuma / örme",
     aciklama:
       "Üretim + ön muhasebe + ticaret + iplik kg defteri + teknik kart + devere + " +
-      "dokuma işi + tezgah izleme. Çoklu depo kapalı (tek depo).",
+      "dokuma iş emri + tezgah izleme. Çoklu depo kapalı (tek depo).",
     moduller: acik(
       "production.enabled",
       "finance.enabled",

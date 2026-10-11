@@ -98,7 +98,7 @@ export async function markWeavingOrderInProgressTx(
     where: { id: weavingOrderId },
     select: { status: true, weavingOrderNumber: true },
   });
-  if (!fresh) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!fresh) throw AppError.notFound("Dokuma iş emri bulunamadı");
   throw AppError.conflict(
     `${fresh.weavingOrderNumber} ${KAPALI_ETIKET[fresh.status] ?? fresh.status} — koşum açılamaz`,
     { code: "WEAVING_ORDER_NOT_OPEN", status: fresh.status },

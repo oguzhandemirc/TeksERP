@@ -104,7 +104,7 @@ const openSchema = z
   .object({
     machineId: z.string().uuid("Geçersiz makine"),
     productionLineNo: z.number().int("Üretim hattı numarası tam sayı olmalıdır").default(1),
-    weavingOrderId: z.string().uuid("Geçersiz dokuma işi").nullish(),
+    weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri").nullish(),
     itemId: z.string().uuid("Geçersiz ürün").nullish(),
     colorId: z.string().uuid("Geçersiz renk").nullish(),
     targetUnitsPerMin: z.number().int().positive("Hedef devir pozitif olmalı").max(10_000).nullish(),

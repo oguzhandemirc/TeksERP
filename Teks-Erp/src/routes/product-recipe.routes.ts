@@ -20,7 +20,7 @@ export const productRecipeService = new ProductRecipeService({
   codeSearchFields: ["code"],
   nestedCreateFields: ["properties"],
   duplicateNameField: "name",
-  entityLabel: "iş emri şablonu",
+  entityLabel: "terbiye iş emri şablonu",
   defaultInclude: {
     item: { select: { id: true, code: true, name: true } },
     color: { select: { id: true, code: true, name: true, hex: true } },

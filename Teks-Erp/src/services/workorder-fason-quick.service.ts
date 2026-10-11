@@ -83,7 +83,7 @@ export class WorkOrderFasonQuickService {
         steps: { select: { id: true, requiredCategory: { select: { appliesColor: true } } } },
       },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
     const stepIds = wo.steps.map((s) => s.id);
     const appliesColorByStep = new Map(
       wo.steps.map((s) => [s.id, Boolean(s.requiredCategory?.appliesColor)]),
@@ -206,7 +206,7 @@ export class WorkOrderFasonQuickService {
 
       if (g.colorRequired && (input.appliedColorId === undefined || input.appliedColorId === null)) {
         throw AppError.badRequest(
-          `${g.dispatchNo}: bu iş emrinin hedef rengi yok — kabulde uygulanan rengi seçin.`,
+          `${g.dispatchNo}: bu terbiye iş emrinin hedef rengi yok — kabulde uygulanan rengi seçin.`,
         );
       }
 

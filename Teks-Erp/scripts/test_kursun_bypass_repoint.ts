@@ -316,7 +316,7 @@ async function main(): Promise<void> {
       md.adminUserId,
     );
     const msg = res.message ?? "";
-    const newWoNumber = /yeni iş emrinde: (\S+)/.exec(msg)?.[1] ?? "";
+    const newWoNumber = /yeni terbiye iş emrinde: (\S+)/.exec(msg)?.[1] ?? "";
     const newWoId = newWoNumber ? await woIdByNumber(newWoNumber) : null;
     if (newWoId) createdWoIds.push(newWoId);
     check("T1-1 ön koşul: devir yeni iş emri doğurdu", !!newWoId, newWoNumber);
@@ -389,7 +389,7 @@ async function main(): Promise<void> {
       { reason: "T3 kısmi devir testi", dispositions: [{ rollId: rt, action: "TRANSFER" }] },
       md.adminUserId,
     );
-    const newWoNumber = /yeni iş emrinde: (\S+)/.exec(res.message ?? "")?.[1] ?? "";
+    const newWoNumber = /yeni terbiye iş emrinde: (\S+)/.exec(res.message ?? "")?.[1] ?? "";
     const newWoId = newWoNumber ? await woIdByNumber(newWoNumber) : null;
     if (newWoId) createdWoIds.push(newWoId);
 

@@ -15,6 +15,7 @@ import { stationService } from "../../../routes/station.routes";
 import { resolveReference } from "../import-lookup";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { importKey } from "../import-key";
+import { TERIM } from "../../../constants/terim";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -69,12 +70,12 @@ const COLUMNS: ImportColumn[] = [
     label: "Varsayılan Fason Kategorisi",
     type: "lookup",
     lookup: { entity: "subcontractorCategory", by: "code" },
-    help: "Fason kategorisinin KODU — yalnız Fason (Dış) istasyonlarda anlamlıdır; iş emri planlamasında önerilir. Temizlemek için NULL yazın.",
+    help: "Fason kategorisinin KODU — yalnız Fason (Dış) istasyonlarda anlamlıdır; terbiye iş emri planlamasında önerilir. Temizlemek için NULL yazın.",
     example: "",
   },
   {
     key: "allowAsWorkOrderStep",
-    label: "İş Emri Adımı Olabilir",
+    label: `${TERIM.terbiyeIsEmri.tekil} Adımı Olabilir`,
     type: "bool",
     help: "Evet / Hayır. Hayır → KK1 gibi giriş noktaları; üretim akışına adım olarak girmez. Boş bırakılırsa Evet.",
     example: "Evet",

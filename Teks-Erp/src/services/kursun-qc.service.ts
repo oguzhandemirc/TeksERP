@@ -798,7 +798,7 @@ export class KursunQcService {
         },
       },
     });
-    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
     if (!stepCanApplyQuality(step.station)) {
       throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
@@ -1559,7 +1559,7 @@ export class KursunQcService {
 
     return {
       reason:
-        "Kurşun dağıtımı açık — bu iş emri Kurşun Planlama ekranından bir kurşun makinesine dağıtılacak. Tablette işlem yapılmaz.",
+        "Kurşun dağıtımı açık — bu terbiye iş emri Kurşun Planlama ekranından bir kurşun makinesine dağıtılacak. Tablette işlem yapılmaz.",
     };
   }
 

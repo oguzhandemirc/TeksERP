@@ -102,8 +102,8 @@ export async function assertRollMatchesPlan(
       mismatches.push({
         field: "color",
         message: roll.colorId
-          ? `Top ${rollName}, iş emri ${planName} istiyor`
-          : `Top RENKSİZ, iş emri ${planName} istiyor`,
+          ? `Top ${rollName}, terbiye iş emri ${planName} istiyor`
+          : `Top RENKSİZ, terbiye iş emri ${planName} istiyor`,
         rollValue: rollName,
         planValue: planName,
       });
@@ -118,7 +118,7 @@ export async function assertRollMatchesPlan(
   ) {
     mismatches.push({
       field: "width",
-      message: `Top ${rollWidth} cm, iş emri ${planWidth} cm istiyor (eşik ±${TAMBUR_PLAN_WIDTH_TOLERANCE_CM} cm)`,
+      message: `Top ${rollWidth} cm, terbiye iş emri ${planWidth} cm istiyor (eşik ±${TAMBUR_PLAN_WIDTH_TOLERANCE_CM} cm)`,
       rollValue: rollWidth,
       planValue: planWidth,
     });

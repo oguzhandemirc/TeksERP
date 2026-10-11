@@ -202,7 +202,7 @@ export class TravelerCardService {
       where: { id: workOrderId },
       select: { workOrderNumber: true },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
 
     const snapshot = await this.buildSnapshot(tx, workOrderId);
     const card = await tx.travelerCard.create({
@@ -292,7 +292,7 @@ export class TravelerCardService {
         }
         if (existing.status !== TravelerCardStatus.ACTIVE) {
           throw AppError.conflict(
-            `Kart aktif değil (${existing.status}) — iptal/tamamlanmış iş emrinin kartı yeniden basılamaz.`,
+            `Kart aktif değil (${existing.status}) — iptal/tamamlanmış terbiye iş emrinin kartı yeniden basılamaz.`,
           );
         }
         const snapshot = await this.buildSnapshot(tx, workOrderId);
@@ -616,7 +616,7 @@ export class TravelerCardService {
       card.workOrder.status === WorkOrderStatus.CANCELLED ||
       card.workOrder.status === WorkOrderStatus.SUPERSEDED
     ) {
-      throw AppError.conflict("Bağlı iş emri iptal/devredilmiş");
+      throw AppError.conflict("Bağlı terbiye iş emri iptal/devredilmiş");
     }
 
     const station = await prisma.station.findUnique({
@@ -797,7 +797,7 @@ export class TravelerCardService {
   ): Promise<ApiResponse<(Omit<TravelerCard, "snapshot"> & { hasOpenDispatch: boolean }) | null>> {
     const normalized = normalizeScanCode(input);
     if (!isCardCode(normalized)) {
-      throw AppError.badRequest("Geçersiz format. Beklenen: İE1207260001 (iş emri kartı)");
+      throw AppError.badRequest("Geçersiz format. Beklenen: İE1207260001 (terbiye iş emri kartı)");
     }
 
     const card = await prisma.travelerCard.findFirst({

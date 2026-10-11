@@ -98,7 +98,7 @@ export async function assertOrderLinesLinkableTx(db: Db, links: NormalizedOrderL
   for (const id of ids) {
     const r = byId.get(id);
     if (!r) throw AppError.badRequest("Sipariş satırı bulunamadı.", { code: "ORDER_LINE_NOT_FOUND", orderLineId: id });
-    if (r.cancelledAt) throw AppError.badRequest("İptal edilmiş sipariş satırına dokuma işi bağlanamaz.", { code: "ORDER_LINE_CANCELLED", orderLineId: id });
+    if (r.cancelledAt) throw AppError.badRequest("İptal edilmiş sipariş satırına dokuma iş emri bağlanamaz.", { code: "ORDER_LINE_CANCELLED", orderLineId: id });
   }
 }
 

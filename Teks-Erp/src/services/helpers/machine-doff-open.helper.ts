@@ -21,8 +21,8 @@ export const DOFF_CODE_PREFIX = "DF";
 /** 8029 uzayında bu tablonun kapsam adı — başka tablonun günlük sırasıyla beklemesin. */
 const DOFF_CODE_SCOPE = "doffEvent";
 
-export const WARN_RUN_MISSING = "Koşum açılmadığı için bu indirme iş emri metresine GİRMİYOR.";
-export const WARN_RUN_WITHOUT_ORDER = "Koşum bir dokuma işine bağlı değil — bu indirme iş emri metresine GİRMİYOR.";
+export const WARN_RUN_MISSING = "Koşum açılmadığı için bu indirme dokuma iş emri metresine GİRMİYOR.";
+export const WARN_RUN_WITHOUT_ORDER = "Koşum bir dokuma iş emrine bağlı değil — bu indirme dokuma iş emri metresine GİRMİYOR.";
 
 /**
  * Koşum bağının kaybını ADIYLA söyler. Koşumsuz → kayıp; koşumlu ama işsiz →

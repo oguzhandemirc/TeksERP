@@ -50,8 +50,8 @@ export const PERMISSION_CATALOG = [
   { code: "order:write", module: "SALES", category: "web", description: "Sipariş oluşturma/düzenleme/iptal" },
   { code: "customer:read", module: "SALES", category: "web", description: "Müşteri listesi/detay görüntüleme" },
   { code: "customer:write", module: "SALES", category: "web", description: "Müşteri oluşturma/düzenleme" },
-  { code: "workorder:read", module: "PRODUCTION", category: "web", description: "İş emri listesi/detay görüntüleme" },
-  { code: "workorder:write", module: "PRODUCTION", category: "web", description: "İş emri oluşturma/düzenleme/finalize etme" },
+  { code: "workorder:read", module: "PRODUCTION", category: "web", description: "Terbiye iş emri listesi/detay görüntüleme" },
+  { code: "workorder:write", module: "PRODUCTION", category: "web", description: "Terbiye iş emri oluşturma/düzenleme/finalize etme" },
   { code: "roll:read", module: "PRODUCTION", category: "web", description: "Top (rulo) listesi/detay görüntüleme" },
   { code: "roll:write", module: "PRODUCTION", category: "web", description: "Top oluşturma/durum güncelleme" },
   { code: "roll:manual-adjust", module: "PRODUCTION", category: "web", description: "Süpervizör — manuel top düzeltme/kurtarma (üretime geri al, nitelik/durum düzeltme)" },
@@ -62,15 +62,15 @@ export const PERMISSION_CATALOG = [
   // ekranını gereksiz yere derinleştirir. İzin YOKSA Electron o bölümü HİÇ
   // ÇİZMEZ — boş bir kutu göstermek "veri yok" yalanı olurdu.
   { code: "roll:history", module: "PRODUCTION", category: "web", description: "Top yaşam döngüsü (işlem geçmişi) zaman çizelgesi — izlenebilirlik" },
-  { code: "workorder:distribute", module: "PRODUCTION", category: "web", description: "Kurşun dağıtım — fason dönüşü iş emrini fiziksel kurşun makinesine atama + son-adım tamamlama" },
+  { code: "workorder:distribute", module: "PRODUCTION", category: "web", description: "Kurşun dağıtım — fason dönüşü terbiye iş emrini fiziksel kurşun makinesine atama + son-adım tamamlama" },
   { code: "station:read", module: "PRODUCTION", category: "web", description: "Üretim istasyonu listesi/detay görüntüleme" },
   { code: "station:write", module: "PRODUCTION", category: "web", description: "Üretim istasyonu tanımlama/düzenleme" },
   // ── Dokuma işi (2026-09-13, yazma yüzeyi) ──────────────────────────────────
   // Dokuma işi bir `WorkOrder` DEĞİLDİR (kendi varlığı, kendi yaşam döngüsü) ve
   // `workorder:*` ile açılmaz: topun rotasını planlayan kişi tezgaha iş dağıtan
   // planlamacı olmak zorunda değil. Ekranı ayrı dilimde iner (SCREENLESS muaf).
-  { code: "weavingorder:read", module: "PRODUCTION", category: "web", description: "Dokuma işi listesi/detay görüntüleme" },
-  { code: "weavingorder:write", module: "PRODUCTION", category: "web", description: "Dokuma işi oluşturma/düzenleme/kapatma/iptal" },
+  { code: "weavingorder:read", module: "PRODUCTION", category: "web", description: "Dokuma iş emri listesi/detay görüntüleme" },
+  { code: "weavingorder:write", module: "PRODUCTION", category: "web", description: "Dokuma iş emri oluşturma/düzenleme/kapatma/iptal" },
   { code: "item:read", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı listesi/detay görüntüleme" },
   { code: "item:write", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı oluşturma/düzenleme" },
   // ── Devere / levent (2026-09-12, Faz 1a) ───────────────────────────────────
@@ -206,7 +206,7 @@ export const PERMISSION_CATALOG = [
   { code: "settings:customers", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Müşteriler (şube, benzer ad eşiği)" },
   { code: "settings:orders", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Siparişler (fiyat, termin, tamamlanma toleransı)" },
   { code: "settings:shipping", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Sevkiyat & İade" },
-  { code: "settings:work-orders", module: "ADMIN", category: "web", description: "Özellik Anahtarları → İş Emirleri (parti no, plan süresi)" },
+  { code: "settings:work-orders", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Terbiye İş Emirleri (parti no, plan süresi)" },
   { code: "settings:production", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Üretim — Saha (KK1, fason, kurşun, tambur)" },
   { code: "settings:kartela", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Kartela" },
   { code: "settings:devere", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Devere / Levent" },
@@ -290,10 +290,10 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:tarti-paket", module: "MOBILE", category: "mobile", description: "Tartı & Paketleme ekranı" },
   { code: "mobile:sevkiyat", module: "MOBILE", category: "mobile", description: "Sevkiyat yönetimi ekranı" },
   { code: "mobile:iade", module: "MOBILE", category: "mobile", description: "İade girişi ekranı" },
-  { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı İş Emri ekranı (stok topu okut → iş emri başlat + iş emri yönetimi)" },
+  { code: "mobile:hizli-is-emri", module: "MOBILE", category: "mobile", description: "Hızlı Terbiye İş Emri ekranı (stok topu okut → terbiye iş emri başlat + terbiye iş emri yönetimi)" },
   // Ekran değil, Hızlı İş Emri içi yetenek (hareket defteri D5): AÇILMIŞ iş emrini değiştirmek
   // (renk · en · sipariş bağla/çöz · refakat kartı yeniden basımı) iş emri açmaktan ayrı sorumluluktur.
-  { code: "mobile:is-emri-duzelt", module: "MOBILE", category: "mobile", description: "İş emri düzeltme — tablet (renk · en · sipariş bağı · refakat kartı yeniden basımı)" },
+  { code: "mobile:is-emri-duzelt", module: "MOBILE", category: "mobile", description: "Terbiye iş emri düzeltme — tablet (renk · en · sipariş bağı · refakat kartı yeniden basımı)" },
   // Telefondan sipariş LİSTELEME + AÇMA (satış/planlama). `order:read` +
   // `order:write`'ın DAR mobil ikizi: yalnız okuma ve yaratma. Düzenleme /
   // iptal / manuel-kapatma / silme uçları hâlâ `order:write` ister — satış

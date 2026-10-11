@@ -550,7 +550,7 @@ function buildBatchMismatchMessage(items: ReceiptBatchMismatchItem[]): string {
   return (
     `Kabul iptal edilemez — topların parti üyeliği kabulden sonra değişmiş ` +
     `(birleştirme/taşıma): ${detail}. ` +
-    `Panelden İş Emri → Partiler → Birleştir ile şu partileri birleştirin: ${pairs}. ` +
+    `Panelden Terbiye İş Emri → Partiler → Birleştir ile şu partileri birleştirin: ${pairs}. ` +
     `Sonra iptali tekrar deneyin.`
   );
 }
@@ -838,13 +838,13 @@ export class SubcontractorService {
     const wo = await prisma.workOrder.findUnique({
       where: { id: data.workOrderId },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
     if (
       wo.status !== WorkOrderStatus.PLANNED &&
       wo.status !== WorkOrderStatus.IN_PROGRESS
     ) {
       throw AppError.conflict(
-        `Bu iş emrinde sevk yapılamaz: ${wo.status}. Sadece PLANNED/IN_PROGRESS.`
+        `Bu terbiye iş emrinde sevk yapılamaz: ${wo.status}. Sadece PLANNED/IN_PROGRESS.`
       );
     }
 
@@ -856,9 +856,9 @@ export class SubcontractorService {
         requiredCategory: { select: { id: true, name: true } },
       },
     });
-    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
     if (step.workOrderId !== data.workOrderId) {
-      throw AppError.badRequest("Adım bu iş emrine ait değil");
+      throw AppError.badRequest("Adım bu terbiye iş emrine ait değil");
     }
     if (step.station.type !== StationType.EXTERNAL) {
       throw AppError.badRequest(
@@ -990,7 +990,7 @@ export class SubcontractorService {
 
         if (!data.allowItemOverride) {
           throw AppError.badRequest(
-            `İş emri ürünü (${expectedLabel}) ile uyuşmayan ${mismatchedRolls.length} top var. "Yine de gönder" seçeneğiyle onaylayın.`,
+            `Terbiye iş emri ürünü (${expectedLabel}) ile uyuşmayan ${mismatchedRolls.length} top var. "Yine de gönder" seçeneğiyle onaylayın.`,
             {
               code: "ITEM_MISMATCH",
               expectedItemId: wo.targetItemId,
@@ -1150,8 +1150,8 @@ export class SubcontractorService {
       if (foreignById.size > 0) {
         const offending = rolls.filter((r) => r.batchId && foreignById.has(r.batchId));
         throw AppError.badRequest(
-          `${offending.length} top başka iş emrinin partisine kayıtlı — bu sevke alınamaz. ` +
-            `Önce topu bu iş emrine bağlayın (yeni parti oluşur) ya da kayıtlı olduğu iş emrinden çıkarın.`,
+          `${offending.length} top başka terbiye iş emrinin partisine kayıtlı — bu sevke alınamaz. ` +
+            `Önce topu bu terbiye iş emrine bağlayın (yeni parti oluşur) ya da kayıtlı olduğu terbiye iş emrinden çıkarın.`,
           {
             code: "FOREIGN_BATCH",
             foreignRolls: offending.map((r) => {
@@ -1226,7 +1226,7 @@ export class SubcontractorService {
           woFresh.status !== WorkOrderStatus.IN_PROGRESS)
       ) {
         throw AppError.conflict(
-          `Bu iş emrinde sevk yapılamaz: ${woFresh?.status ?? "bulunamadı"}. Sayfayı yenileyin.`
+          `Bu terbiye iş emrinde sevk yapılamaz: ${woFresh?.status ?? "bulunamadı"}. Sayfayı yenileyin.`
         );
       }
 
@@ -1238,7 +1238,7 @@ export class SubcontractorService {
         where: { id: step.id },
         select: { status: true, startedAt: true },
       });
-      if (!stepFresh) throw AppError.notFound("İş emri adımı bulunamadı");
+      if (!stepFresh) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
       if (stepFresh.status === StepStatus.SKIPPED) {
         throw AppError.conflict(
           "Adım bu sırada atlandı (SKIPPED). Sevk yapılamaz. Sayfayı yenileyin."
@@ -1741,9 +1741,9 @@ export class SubcontractorService {
       where: { id: data.stepId },
       include: { station: { select: { type: true, name: true } } },
     });
-    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
     if (step.workOrderId !== data.workOrderId) {
-      throw AppError.badRequest("Adım bu iş emrine ait değil");
+      throw AppError.badRequest("Adım bu terbiye iş emrine ait değil");
     }
     if (step.station.type !== StationType.EXTERNAL) {
       throw AppError.badRequest(
@@ -1837,9 +1837,9 @@ export class SubcontractorService {
         },
       },
     });
-    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
     if (step.workOrderId !== data.workOrderId) {
-      throw AppError.badRequest("Adım bu iş emrine ait değil");
+      throw AppError.badRequest("Adım bu terbiye iş emrine ait değil");
     }
     if (step.station.type !== StationType.EXTERNAL) {
       throw AppError.badRequest("Bu adım fason (EXTERNAL) değil.");
@@ -2038,9 +2038,9 @@ export class SubcontractorService {
         },
       },
     });
-    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
     if (step.workOrderId !== workOrderId) {
-      throw AppError.badRequest("Adım bu iş emrine ait değil");
+      throw AppError.badRequest("Adım bu terbiye iş emrine ait değil");
     }
     if (step.station.type !== StationType.EXTERNAL) {
       throw AppError.badRequest("Çeki taslağı yalnızca fason (EXTERNAL) adımlar için.");
@@ -2764,7 +2764,7 @@ export class SubcontractorService {
         targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } },
       },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
 
     // Roll.itemId fason dönüşünde DEĞİŞMEZ. Renk ise BU ADIM "renk veren" bir
     // kategoriye (SubcontractorCategory.appliesColor=true) bağlıysa
@@ -2790,13 +2790,13 @@ export class SubcontractorService {
         },
       },
     });
-    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
     // Çapraz kontrol (dispatch ile simetrik): uyuşmaz çiftte makbuz yanlış
     // WO'ya yazılır, born roll'lar yanlış WO'nun targetItem/width'ini alır ve
     // WO-tamamlama bloğu BAŞKA iş emrini COMPLETED'a çekebilirdi (parti-ayırma
     // akışında istemcinin kart-WO/parti-adım eşleştirmesi tam bu hataya açık).
     if (step.workOrderId !== data.workOrderId) {
-      throw AppError.badRequest("Adım bu iş emrine ait değil");
+      throw AppError.badRequest("Adım bu terbiye iş emrine ait değil");
     }
     if (step.station.type !== StationType.EXTERNAL) {
       throw AppError.badRequest(
@@ -2817,7 +2817,7 @@ export class SubcontractorService {
       // — üstelik yapılabilecek tek şeyi (rengi ekrandan seçmek) hiç anmıyordu.
       // Üç dal da somut: ne oldu · ne yapmalı · ekranda o yüzey yoksa neden yok.
       throw AppError.badRequest(
-        "Bu iş emrinde hedef renk tanımlı değil — kabulde uygulanan rengi seçmeniz gerekiyor. " +
+        "Bu terbiye iş emrinde hedef renk tanımlı değil — kabulde uygulanan rengi seçmeniz gerekiyor. " +
           "Ekranda renk seçimi görünmüyorsa uygulama sürümü eskidir; yöneticinize bildirin.",
       );
     }
@@ -3037,7 +3037,7 @@ export class SubcontractorService {
         (data.expectedTargetColorId ?? null) !== freshTargetColorId
       ) {
         throw AppError.conflict(
-          `İş emrinin hedef rengi bu arada değişti — artık "${freshWo?.targetColor?.name ?? "renksiz"}". ` +
+          `Terbiye iş emrinin hedef rengi bu arada değişti — artık "${freshWo?.targetColor?.name ?? "renksiz"}". ` +
             "Ekranı yenileyip rengi kontrol ederek tekrar kaydedin.",
           {
             code: "TARGET_COLOR_CHANGED",
@@ -3521,8 +3521,8 @@ export class SubcontractorService {
                 {
                   field: "color",
                   message: rollName
-                    ? `Top ${rollName}, iş emri ${planName} istiyor`
-                    : `Top RENKSİZ, iş emri ${planName} istiyor`,
+                    ? `Top ${rollName}, terbiye iş emri ${planName} istiyor`
+                    : `Top RENKSİZ, terbiye iş emri ${planName} istiyor`,
                   rollValue: rollName,
                   planValue: planName,
                 },
@@ -3674,7 +3674,7 @@ export class SubcontractorService {
           { source: "FASON_RECEIPT" },
         );
       } catch (err) {
-        uyari("fason-kabul", `İş emri eni güncellenemedi (WO ${data.workOrderId}):`,
+        uyari("fason-kabul", `Terbiye iş emri eni güncellenemedi (WO ${data.workOrderId}):`,
           err instanceof Error ? err.message : err,
         );
       }
@@ -3702,7 +3702,7 @@ export class SubcontractorService {
         postWarnings.push(...res.data.warnings);
       } catch (err) {
         postWarnings.push(
-          `İş emrinin rengi değiştirilemedi: ${err instanceof Error ? err.message : String(err)}`,
+          `Terbiye iş emrinin rengi değiştirilemedi: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
@@ -3822,7 +3822,7 @@ export class SubcontractorService {
     const woStatus = closedDispatch.workOrder.status;
     if (woStatus === WorkOrderStatus.CANCELLED || woStatus === WorkOrderStatus.SUPERSEDED) {
       throw AppError.conflict(
-        `İş emri ${woStatus === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "yenisiyle değiştirilmiş"} — kalan kapaması geri alınamaz; top yeni bir iş emrine alınmalı.`,
+        `Terbiye iş emri ${woStatus === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "yenisiyle değiştirilmiş"} — kalan kapaması geri alınamaz; top yeni bir terbiye iş emrine alınmalı.`,
         { code: "WORK_ORDER_TERMINAL" },
       );
     }
@@ -3970,7 +3970,7 @@ export class SubcontractorService {
         },
       },
     });
-    if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
+    if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
     if (step.station.type !== StationType.EXTERNAL) {
       throw AppError.badRequest("Kalan kapama yalnızca fason adımlarında yapılabilir");
     }
@@ -4151,7 +4151,7 @@ export class SubcontractorService {
         where: { workOrderId: { in: woIds }, station: { kind: "SUBCONTRACTOR" } },
       });
       if (subStepCount === 0) {
-        throw AppError.notFound("Bu iş emrinde fason adımı tanımlı değil", {
+        throw AppError.notFound("Bu terbiye iş emrinde fason adımı tanımlı değil", {
           code: "NO_SUBCONTRACTOR_STEP",
           workOrderId: woId,
         });
@@ -4232,8 +4232,8 @@ export class SubcontractorService {
         });
         if (openReceipt) {
           throw AppError.badRequest(
-            `Bu iş emrinde ${openReceipt.receiptNo} makbuzuyla kabul yapılmış. ` +
-              `Malı yanlış iş emrine kabul ettiyseniz o makbuzu iptal edin — ` +
+            `Bu terbiye iş emrinde ${openReceipt.receiptNo} makbuzuyla kabul yapılmış. ` +
+              `Malı yanlış terbiye iş emrine kabul ettiyseniz o makbuzu iptal edin — ` +
               `toplar fasona geri döner.`,
             {
               code: "MAYBE_WRONG_RECEIPT",
@@ -4268,7 +4268,7 @@ export class SubcontractorService {
 
         if (currentSteps.length === 0) {
           throw AppError.badRequest(
-            "Bu iş emrinin fason adımında bekleyen rulo yok ve şu an aktif başka adım da yok. (Üretim henüz başlamamış veya tamamlanmış.)",
+            "Bu terbiye iş emrinin fason adımında bekleyen rulo yok ve şu an aktif başka adım da yok. (Üretim henüz başlamamış veya tamamlanmış.)",
             { code: "WO_NOT_AT_SUBCONTRACTOR", currentSteps },
           );
         }
@@ -4277,7 +4277,7 @@ export class SubcontractorService {
           .map((s) => `${s.stationName} (${s.rollCount} rulo)`)
           .join(", ");
         throw AppError.badRequest(
-          `Bu iş emrinin fason adımında bekleyen rulo yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
+          `Bu terbiye iş emrinin fason adımında bekleyen rulo yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
           { code: "WO_NOT_AT_SUBCONTRACTOR", currentSteps },
         );
       }
@@ -5311,7 +5311,7 @@ export class SubcontractorService {
       throw AppError.conflict("Bu mal kabul zaten iptal edilmiş");
     }
     if (receipt.workOrder.status === "COMPLETED") {
-      throw AppError.conflict("Tamamlanmış iş emrinin mal kabulü iptal edilemez");
+      throw AppError.conflict("Tamamlanmış terbiye iş emrinin mal kabulü iptal edilemez");
     }
 
     const bornRolls: BornRollPreviewItem[] = receipt.bornRolls.map((roll) => {
@@ -5436,7 +5436,7 @@ export class SubcontractorService {
       throw AppError.conflict("Bu mal kabul zaten iptal edilmiş");
     }
     if (receipt.step.workOrder.status === "COMPLETED") {
-      throw AppError.conflict("Tamamlanmış iş emrinin mal kabulü iptal edilemez");
+      throw AppError.conflict("Tamamlanmış terbiye iş emrinin mal kabulü iptal edilemez");
     }
 
     const rollIds = receipt.items.map((it) => it.newRollId);
@@ -6806,8 +6806,8 @@ export class SubcontractorService {
         });
         if (otherInFlight > 0) {
           throw AppError.conflict(
-            `İş emri tamamlanamaz: sevk edilenler dışında ${otherInFlight} top hâlâ üretimde veya fasonda. ` +
-              `Tamamlarsan bu toplar sahipsiz kalır — önce onları da sevk/kabul et ya da "iş emrini tamamla"yı kapatıp yalnız sevk et.`,
+            `Terbiye iş emri tamamlanamaz: sevk edilenler dışında ${otherInFlight} top hâlâ üretimde veya fasonda. ` +
+              `Tamamlarsan bu toplar sahipsiz kalır — önce onları da sevk/kabul et ya da "terbiye iş emrini tamamla"yı kapatıp yalnız sevk et.`,
             { code: "WO_HAS_ROLLS_IN_FLIGHT", inFlightCount: otherInFlight },
           );
         }
@@ -6831,7 +6831,7 @@ export class SubcontractorService {
       );
       if (anySplit && completeWorkOrder) {
         throw AppError.badRequest(
-          "Kısmi (bölünmüş) sevkte iş emri tamamlanamaz — kalan parça hâlâ fasonda.",
+          "Kısmi (bölünmüş) sevkte terbiye iş emri tamamlanamaz — kalan parça hâlâ fasonda.",
         );
       }
       // 2) Açık RollMovement'leri kapat (DIRECT_SHIP notu).

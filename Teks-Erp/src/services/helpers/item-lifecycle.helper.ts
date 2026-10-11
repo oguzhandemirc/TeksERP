@@ -47,10 +47,10 @@ export type ItemLiveRefKind =
 
 export const ITEM_LIVE_REF_KINDS: ReadonlyArray<{ kind: ItemLiveRefKind; label: string }> = [
   { kind: "ROLL", label: "Canlı top" },
-  { kind: "WORK_ORDER", label: "Açık iş emri" },
+  { kind: "WORK_ORDER", label: "Açık terbiye iş emri" },
   { kind: "ORDER_LINE", label: "Açık sipariş kalemi" },
   { kind: "PURCHASE_ORDER_LINE", label: "Açık alış siparişi kalemi" },
-  { kind: "WEAVING_ORDER", label: "Açık dokuma işi" },
+  { kind: "WEAVING_ORDER", label: "Açık dokuma iş emri" },
   { kind: "MACHINE_RUN", label: "Açık tezgah koşumu" },
   { kind: "FASON_YARN_DISPATCH", label: "Açık fason iplik sevki" },
   { kind: "YARN_STOCK", label: "İplik bakiyesi" },

@@ -70,6 +70,7 @@ export const LEGACY_TEMPLATE_NAME_TO_CODE: Readonly<Record<string, string>> = {
   "Mobil — Paketleme Operatörü": "MOBILE_PAKETLEME",
   "Mobil — Sevkiyat Operatörü": "MOBILE_SEVKIYAT",
   "Mobil — İade Operatörü": "MOBILE_IADE",
+  // Anahtar ESKİ seed adıdır (kodsuz satırı sahiplenme kimliği) — görünen ad değişse de değişmez.
   "Mobil — Hızlı İş Emri": "MOBILE_HIZLI_IS_EMRI",
   "Mobil — Kurşun Dağıtım": "MOBILE_KURSUN_DAGITIM",
   "Mobil — Tüm Ekranlar": "MOBILE_ALL",
@@ -94,7 +95,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
     code: "WEB_PRODUCTION_PLANNING",
     name: "Üretim Planlama",
     description:
-      "İş emri aç/yönet, rota-istasyon-ürün tanımla, kurşun dağıt, üretim raporları",
+      "Terbiye iş emri aç/yönet, rota-istasyon-ürün tanımla, kurşun dağıt, üretim raporları",
     mode: "list",
     codes: [
       "workorder:read",
@@ -552,8 +553,8 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     // Mobilde masaüstüyle aynı iş emri yetkileri: stok topu okut → WO başlat,
     // eski WO'ları listele/görüntüle/çıktı al/düzenle.
     code: "MOBILE_HIZLI_IS_EMRI",
-    name: "Mobil — Hızlı İş Emri",
-    description: "Stok topu okut → iş emri başlat + iş emri yönetimi",
+    name: "Mobil — Hızlı Terbiye İş Emri",
+    description: "Stok topu okut → terbiye iş emri başlat + terbiye iş emri yönetimi",
     mode: "list",
     codes: [
       "mobile:hizli-is-emri",
@@ -574,7 +575,7 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     // kullanıcısına masaüstü yetkisi taşımasın; planlamacıya panelden verilir.
     code: "MOBILE_KURSUN_DAGITIM",
     name: "Mobil — Kurşun Dağıtım",
-    description: "İş emrini fiziksel kurşun makinesine ata + son adımsa işi bitir",
+    description: "Terbiye iş emrini fiziksel kurşun makinesine ata + son adımsa işi bitir",
     mode: "list",
     codes: ["mobile:kursun-dagitim", "workorder:read", "roll:read", "station:read"],
   },
@@ -652,7 +653,7 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
   "mobile:dokuma-geri-al":
     "Ekran değil, Tezgah-içi yetenek (2026-09-14): top indirmeyi geri alır — defterden satır düşürür (`loom:doff-revoke` tablet eşi, `shipping:undo-dispatch` sınıfı). Varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   "mobile:is-emri-duzelt":
-    "Ekran değil, Hızlı İş Emri içi yetenek (hareket defteri D5): açılmış iş emrinin rengini/enini/sipariş bağını değiştirir ve kartı yeniden basar. İş emri açmaktan ayrı sorumluluk → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
+    "Ekran değil, Hızlı Terbiye İş Emri içi yetenek (hareket defteri D5): açılmış terbiye iş emrinin rengini/enini/sipariş bağını değiştirir ve kartı yeniden basar. Terbiye iş emri açmaktan ayrı sorumluluk → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   "mobile:kk1-yari-mamul":
     "Ekran değil, KK1-içi yetenek (2026-08-17): dışarıdan alınan yarı mamul kabulü. Renkli mal kabulü açar; yanlışlıkla kullanılırsa top ham stoğa 'boyalı' düşer → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
   // 2026-08-14: goods-receipt:* muafları KALDIRILDI — artık dar bir rol

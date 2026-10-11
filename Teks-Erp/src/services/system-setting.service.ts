@@ -2637,6 +2637,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.PRODUCTION_ENABLED,
         input.productionEnabled,
+        // Metin migration damgasıyla BİREBİR kalır (test_module_flags §6d) — görünen ad değişikliğinin dışında.
         "Üretim modülü (envanter üretim sekmeleri · iş emri yüzeyleri)",
         userId
       );
@@ -2770,19 +2771,19 @@ export class SystemSettingService {
       if (typeof input.devereBeamWeavingLinkRequired !== "boolean") {
         throw AppError.badRequest("devereBeamWeavingLinkRequired boolean olmalı");
       }
-      await this.set(SETTING_KEYS.DEVERE_BEAM_WEAVING_LINK_REQUIRED, input.devereBeamWeavingLinkRequired, "Devere: levent sarımında dokuma işi bağı zorunlu", userId);
+      await this.set(SETTING_KEYS.DEVERE_BEAM_WEAVING_LINK_REQUIRED, input.devereBeamWeavingLinkRequired, "Devere: levent sarımında dokuma iş emri bağı zorunlu", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "dokumaRunWeavingOrderRequired")) {
       if (typeof input.dokumaRunWeavingOrderRequired !== "boolean") {
         throw AppError.badRequest("dokumaRunWeavingOrderRequired boolean olmalı");
       }
-      await this.set(SETTING_KEYS.DOKUMA_RUN_WEAVING_ORDER_REQUIRED, input.dokumaRunWeavingOrderRequired, "Dokuma: tezgah koşumu dokuma işine bağlı açılır", userId);
+      await this.set(SETTING_KEYS.DOKUMA_RUN_WEAVING_ORDER_REQUIRED, input.dokumaRunWeavingOrderRequired, "Dokuma: tezgah koşumu dokuma iş emrine bağlı açılır", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "dokumaOrderLineLinkRequired")) {
       if (typeof input.dokumaOrderLineLinkRequired !== "boolean") {
         throw AppError.badRequest("dokumaOrderLineLinkRequired boolean olmalı");
       }
-      await this.set(SETTING_KEYS.DOKUMA_ORDER_LINE_LINK_REQUIRED, input.dokumaOrderLineLinkRequired, "Dokuma: dokuma işi en az bir sipariş satırına bağlı", userId);
+      await this.set(SETTING_KEYS.DOKUMA_ORDER_LINE_LINK_REQUIRED, input.dokumaOrderLineLinkRequired, "Dokuma: dokuma iş emri en az bir sipariş satırına bağlı", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "dokumaEnabled")) {
@@ -2792,6 +2793,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.DOKUMA_ENABLED,
         input.dokumaEnabled,
+        // Metin migration damgasıyla BİREBİR kalır (test_module_flags §6d) — görünen ad değişikliğinin dışında.
         "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
         userId
       );
@@ -2804,7 +2806,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.WORKORDER_TARGET_QUANTITY_ENABLED,
         input.targetQuantityEnabled,
-        "İş emri formunda hedef metraj alanını göster",
+        "Terbiye iş emri formunda hedef metraj alanını göster",
         userId
       );
     }
@@ -3094,7 +3096,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.ITEM_LIFECYCLE_PHASE_OUT_NEW_PLAN,
         input.itemPhaseOutNewPlan,
-        "Tükenene kadar karta yeni üretim planı (topsuz+siparişsiz iş emri, dokuma işi) açılabilsin",
+        "Tükenene kadar karta yeni üretim planı (topsuz+siparişsiz terbiye iş emri, dokuma iş emri) açılabilsin",
         userId
       );
     }
@@ -3434,7 +3436,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.QUALITY_GRADE_REQUIRED_ENABLED,
         input.qualityGradeRequiredEnabled,
-        "Top kalitesi zorunlu — KK1 girişi, Tambur kalan-kuyruk topu, depo kesimi ve iş emri kapanışının depo/2. kalite satırları kalitesiz geçemez",
+        "Top kalitesi zorunlu — KK1 girişi, Tambur kalan-kuyruk topu, depo kesimi ve terbiye iş emri kapanışının depo/2. kalite satırları kalitesiz geçemez",
         userId
       );
     }
@@ -3458,7 +3460,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.BATCH_LAST_NUMBER_HINT_ENABLED,
         input.batchLastNumberHintEnabled,
-        "İş emri formunda 'Son Kullanılan Parti No' rozeti — yalnız gösterim, numara üretimini etkilemez",
+        "Terbiye iş emri formunda 'Son Kullanılan Parti No' rozeti — yalnız gösterim, numara üretimini etkilemez",
         userId
       );
     }

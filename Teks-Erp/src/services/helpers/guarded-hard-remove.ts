@@ -113,7 +113,7 @@ export const stationHardRemove = makeGuardedHardRemove({
       key: "woStepCount",
       count: (id) => prisma.workOrderStep.count({ where: { stationId: id } }),
       message: (n) =>
-        `İstasyona bağlı ${n} iş emri adımı var — kalıcı silinemez. İstasyonu pasife alın.`,
+        `İstasyona bağlı ${n} terbiye iş emri adımı var — kalıcı silinemez. İstasyonu pasife alın.`,
     },
     {
       key: "routeStepCount",
@@ -210,7 +210,7 @@ export const routeHardRemove = makeGuardedHardRemove({
       key: "woCount",
       count: (id) => prisma.workOrder.count({ where: { routeTemplateId: id } }),
       message: (n) =>
-        `Bu rotadan üretilmiş ${n} iş emri var — kalıcı silinemez (soy izi korunur). Rotayı pasife alın.`,
+        `Bu rotadan üretilmiş ${n} terbiye iş emri var — kalıcı silinemez (soy izi korunur). Rotayı pasife alın.`,
     },
     // F211: rotayı kullanan reçete varsa silme — ProductRecipe.routeId SetNull olur
     // (reçete rotasını sessizce kaybeder).

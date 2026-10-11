@@ -131,7 +131,7 @@ export async function generateBatchNumberTx(
     return nextSeriesNoSkipping("batchShort", (_prefix, fmt) => readWrapRowsTx(tx, fmt), date, {
       taken,
       onExhausted: () => AppError.conflict(
-        "Bu iş emrindeki bütün parti numaraları dolu — yeni parti açılamaz. Biten partileri kapatın ya da yeni iş emri açın.",
+        "Bu terbiye iş emrindeki bütün parti numaraları dolu — yeni parti açılamaz. Biten partileri kapatın ya da yeni terbiye iş emri açın.",
         { code: "BATCH_NUMBER_WO_FULL", workOrderId },
       ),
     });
@@ -355,7 +355,7 @@ export async function assertBatchInWorkOrderTx(
   });
   if (!batch) throw AppError.notFound("Parti bulunamadı");
   if (batch.workOrderId !== workOrderId) {
-    throw AppError.badRequest("Parti bu iş emrine ait değil");
+    throw AppError.badRequest("Parti bu terbiye iş emrine ait değil");
   }
 }
 
@@ -456,7 +456,7 @@ export async function moveRolls(
     // iş emrini göstermiyorsa 409.
     if (target.workOrderId !== targetRef.workOrderId) {
       throw AppError.conflict(
-        "Hedef parti bu sırada başka bir iş emrine taşındı — listeyi yenileyin.",
+        "Hedef parti bu sırada başka bir terbiye iş emrine taşındı — listeyi yenileyin.",
       );
     }
     // K17: birleşmiş kaynak parti tarihçe satırıdır — yeni üyelik alamaz.
@@ -497,7 +497,7 @@ export async function moveRolls(
     for (const sb of sourceBatchIds) {
       const src = await tx.batch.findUnique({ where: { id: sb }, select: { workOrderId: true } });
       if (!src || src.workOrderId !== target.workOrderId) {
-        throw AppError.badRequest("Toplar hedef partiyle aynı iş emrinde değil");
+        throw AppError.badRequest("Toplar hedef partiyle aynı terbiye iş emrinde değil");
       }
     }
     // PARTİSİZ (batchId=null) top yukarıdaki kaynak-parti kontrolünden GEÇMİYORDU —
@@ -512,7 +512,7 @@ export async function moveRolls(
     );
     if (foreignLoose.length > 0) {
       throw AppError.badRequest(
-        `Partisiz toplar bu iş emrine ait değil: ${foreignLoose.map((r) => r.barcode ?? r.id).join(", ")}`,
+        `Partisiz toplar bu terbiye iş emrine ait değil: ${foreignLoose.map((r) => r.barcode ?? r.id).join(", ")}`,
       );
     }
 
@@ -645,7 +645,7 @@ export async function mergeBatches(
     if (pre.length !== uniq.length) throw AppError.notFound("Bazı partiler bulunamadı");
     const woId = pre[0].workOrderId;
     if (!pre.every((b) => b.workOrderId === woId)) {
-      throw AppError.badRequest("Yalnız aynı iş emrinin partileri birleştirilebilir");
+      throw AppError.badRequest("Yalnız aynı terbiye iş emrinin partileri birleştirilebilir");
     }
     await touchWorkOrderTx(tx, woId);
 
@@ -666,7 +666,7 @@ export async function mergeBatches(
     });
     if (batches.length !== uniq.length) throw AppError.notFound("Bazı partiler bulunamadı");
     if (!batches.every((b) => b.workOrderId === woId)) {
-      throw AppError.badRequest("Yalnız aynı iş emrinin partileri birleştirilebilir");
+      throw AppError.badRequest("Yalnız aynı terbiye iş emrinin partileri birleştirilebilir");
     }
     // K17: zaten birleşmiş parti tarihçe satırıdır — yeniden birleştirilemez
     // (mergedIntoId ezilir, soy bağı bozulurdu).
@@ -969,7 +969,7 @@ export async function splitBatch(
       // UNDYED_MOVE batch.workOrderId'yi değiştirir — kilit yanlış WO satırında kalır.
       if (src.workOrderId !== srcRef.workOrderId) {
         throw AppError.conflict(
-          "Parti bu sırada başka bir iş emrine taşındı — listeyi yenileyin.",
+          "Parti bu sırada başka bir terbiye iş emrine taşındı — listeyi yenileyin.",
         );
       }
       // K17: birleşmiş parti tarihçe satırıdır — bölünemez (topları survivor'da).

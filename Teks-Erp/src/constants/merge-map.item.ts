@@ -15,7 +15,7 @@ import type { MoveRule } from "./merge-map";
 export const ITEM_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "itemId", label: "Top" },
     { kind: "MOVE", model: "OrderLine", table: "order_lines", column: "itemId", label: "Sipariş kalemi" },
-    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetItemId", label: "İş emri (hedef kumaş)" },
+    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetItemId", label: "Terbiye iş emri (hedef kumaş)" },
     { kind: "MOVE", model: "ProductRecipe", table: "product_recipes", column: "itemId", label: "Reçete" },
     // ⚠️ SIRA LOAD-BEARING (kilit sırası sınıfı, 2026-09-12): düşüm defteri
     // kartelalardan ÖNCE gelir. Kartela stok düşümü/stornosu da ilk önce düşüm
@@ -32,7 +32,7 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "WarpSpec", table: "warp_specs", column: "yarnItemId", label: "Çözgü kartı (iplik)" },
     // 2026-09-13 (dokuma P1) — üç `weaving_orders` bağı da MOVE: referans bağ,
     // tekillik kısıtı yok; taşınmazsa dokuma işi ölü kayda bağlı kalır.
-    { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "itemId", label: "Dokuma işi" },
+    { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "itemId", label: "Dokuma iş emri" },
     // 2026-09-13 (dokuma P2) — koşumun "ne dokunuyor" ekseni. Aynı sınıf: referans
     // bağ, `machine_runs`ta `itemId` üstünde tekillik kısıtı yok. ⚠️ Koşum bir
     // DEFTER satırıdır ve geri alınmışı da taşınır — birleştirme kimliği

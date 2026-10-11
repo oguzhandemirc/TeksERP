@@ -67,10 +67,10 @@ export type PartyMode = "keep" | "new" | "join";
  */
 export function manualMoveWoBlockReason(status: WorkOrderStatus): string | null {
   if (status === WorkOrderStatus.CANCELLED) {
-    return "İptal edilmiş iş emrinde konum düzeltilemez — top canlı kalır ama refakat kartı iptal olduğu için saha personeli okutamaz. Topu yeni bir iş emrine bağlayın.";
+    return "İptal edilmiş terbiye iş emrinde konum düzeltilemez — top canlı kalır ama refakat kartı iptal olduğu için saha personeli okutamaz. Topu yeni bir terbiye iş emrine bağlayın.";
   }
   if (status === WorkOrderStatus.SUPERSEDED) {
-    return "Devredilmiş iş emrinde konum düzeltilemez (malzemesi yeni iş emrine taşındı) — işlemi devam iş emrinde yapın.";
+    return "Devredilmiş terbiye iş emrinde konum düzeltilemez (malzemesi yeni terbiye iş emrine taşındı) — işlemi devam terbiye iş emrinde yapın.";
   }
   return null;
 }
@@ -180,7 +180,7 @@ export class WorkOrderManualMoveService {
         },
       },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
 
     const steps: StepRef[] = wo.steps.map((s) => ({
       id: s.id,
@@ -193,7 +193,7 @@ export class WorkOrderManualMoveService {
       appliesColor: stepCanApplyColor(s.station, s.requiredCategory),
     }));
     const targetStep = steps.find((s) => s.id === input.targetStepId);
-    if (!targetStep) throw AppError.badRequest("Hedef adım bu iş emrinin rotasında değil");
+    if (!targetStep) throw AppError.badRequest("Hedef adım bu terbiye iş emrinin rotasında değil");
     const colorStep = steps.find((s) => s.appliesColor) ?? null;
 
     // Seçili topları çöz: rollIds verildiyse onlar; yoksa batchId'nin canlı topları.
@@ -234,7 +234,7 @@ export class WorkOrderManualMoveService {
     // Cross-WO koruması: her top bu WO'ya ait olmalı.
     for (const r of rolls) {
       if (r.batch && r.batch.workOrderId !== workOrderId) {
-        throw AppError.badRequest("Seçilen toplardan biri başka iş emrine ait");
+        throw AppError.badRequest("Seçilen toplardan biri başka terbiye iş emrine ait");
       }
     }
 
@@ -388,7 +388,7 @@ export class WorkOrderManualMoveService {
       });
       if (openReceipt) {
         warnings.push(
-          `Bu iş emrinde kabul edilmiş bir makbuz var (${openReceipt.receiptNo}). Mal fiziksel olarak fasondaysa (yanlış iş emrine kabul yapıldıysa) "Konumu Düzelt" değil KABUL İPTALİ kullanın.`,
+          `Bu terbiye iş emrinde kabul edilmiş bir makbuz var (${openReceipt.receiptNo}). Mal fiziksel olarak fasondaysa (yanlış terbiye iş emrine kabul yapıldıysa) "Konumu Düzelt" değil KABUL İPTALİ kullanın.`,
         );
       }
     }
@@ -564,7 +564,7 @@ export class WorkOrderManualMoveService {
       ctx.selected.some((r) => r.colorId == null);
     if (colorSynthNeeded && !ctx.woTargetColorId) {
       throw AppError.badRequest(
-        "Bu iş emrinin hedef rengi yok — renk veren adım (boyahane) atlanamaz, renk sentezlenemez.",
+        "Bu terbiye iş emrinin hedef rengi yok — renk veren adım (boyahane) atlanamaz, renk sentezlenemez.",
       );
     }
 
@@ -616,7 +616,7 @@ export class WorkOrderManualMoveService {
           select: { status: true },
         });
         // WO silinmişse (olmamalı) taşımayı durdur — sessiz devam etmez.
-        if (!woFresh) throw AppError.conflict("İş emri bu sırada kayboldu — listeyi yenileyin.");
+        if (!woFresh) throw AppError.conflict("Terbiye iş emri bu sırada kayboldu — listeyi yenileyin.");
         const tazeBlok = manualMoveWoBlockReason(woFresh.status);
         if (tazeBlok) {
           throw AppError.conflict(`${tazeBlok} — listeyi yenileyin.`, {
@@ -785,7 +785,7 @@ export class WorkOrderManualMoveService {
             },
           });
           if (!jb || jb.workOrderId !== workOrderId) {
-            throw AppError.badRequest("Katılacak parti bu iş emrinde bulunamadı");
+            throw AppError.badRequest("Katılacak parti bu terbiye iş emrinde bulunamadı");
           }
           if (jb.mergedIntoId) {
             throw AppError.badRequest(

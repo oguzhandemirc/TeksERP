@@ -184,10 +184,10 @@ export function normalizeWeavingOrderFields(input: WeavingOrderUpdateInput): Nor
  */
 export function assertWeavingParty(kind: WeavingExecutionKind, subcontractorId: string | null): void {
   if (kind === WeavingExecutionKind.SUBCONTRACTED && !subcontractorId) {
-    throw AppError.badRequest("Fasona verilen dokuma işinde fasoncu seçilmeli");
+    throw AppError.badRequest("Fasona verilen dokuma iş emrinde fasoncu seçilmeli");
   }
   if (kind === WeavingExecutionKind.IN_HOUSE && subcontractorId) {
-    throw AppError.badRequest("İç dokuma işinde fasoncu seçilemez");
+    throw AppError.badRequest("İç dokuma iş emrinde fasoncu seçilemez");
   }
 }
 

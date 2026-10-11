@@ -87,7 +87,7 @@ const TYPE_NOUN: Record<ItemType, string> = { FABRIC: "kumaşı", YARN: "ipliği
 const PHASE_OUT_REASON: Record<Exclude<ItemUsage, "DOC_COMPLETION" | "EXISTING_GOODS">, string> = {
   NEW_ORDER: "yeni sipariş açılamaz; mevcut topları okutarak hızlı sipariş açabilir ya da stoktan sevk edebilirsiniz",
   LINE_QTY: "açık satırın miktarı değiştirilemez; mevcut stoktan sevk edebilirsiniz",
-  NEW_PLAN: "yeni üretim planı açılamaz; mevcut topları okutarak iş emri açabilirsiniz",
+  NEW_PLAN: "yeni üretim planı açılamaz; mevcut topları okutarak terbiye iş emri açabilirsiniz",
   NEW_PURCHASE: "yeni alış siparişi açılamaz",
   DEFINITION: "karta yeni tanım (fiyat, reçete, izinli renk/özellik, müşteri adı, çözgü) eklenemez",
   NEW_STOCK: "karta yeni stok girişi yapılamaz; kartı yeniden doldurmak için Aktif'e döndürün",

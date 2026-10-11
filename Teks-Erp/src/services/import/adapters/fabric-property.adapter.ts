@@ -74,7 +74,7 @@ export const fabricPropertyImportAdapter: ImportAdapter = {
   nameGuard: { model: "fabricProperty", field: "name", label: "özellik", codeField: "code" },
   notes: [
     "Özellik kodunu sistem üretir — YENİ özellik eklerken kod sütununu BOŞ bırakın.",
-    "İstasyon listesi YENİ kayıtta zorunludur: hiçbir istasyona bağlı olmayan özellik iş emri ekranlarında GÖRÜNMEZ.",
+    "İstasyon listesi YENİ kayıtta zorunludur: hiçbir istasyona bağlı olmayan özellik terbiye iş emri ekranlarında GÖRÜNMEZ.",
     "Seçim tipli özellik en az bir değer ister; bayrak tipli değer listesi taşıyamaz.",
     "Değer listesi replace'tir — listede olmayan değer SİLİNMEZ, PASİFLEŞİR (geçmiş kayıtlar bozulmasın).",
   ],

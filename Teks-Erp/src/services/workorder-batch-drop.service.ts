@@ -81,7 +81,7 @@ export function resolveBatchDropBlockReason(s: {
     s.workOrderStatus === WorkOrderStatus.CANCELLED ||
     s.workOrderStatus === WorkOrderStatus.SUPERSEDED
   ) {
-    return `Tamamlanmış/iptal edilmiş iş emrinde parti düşürülemez (durum: ${s.workOrderStatus}).`;
+    return `Tamamlanmış/iptal edilmiş terbiye iş emrinde parti düşürülemez (durum: ${s.workOrderStatus}).`;
   }
   if (s.mergedIntoBatchNumber) {
     return `Bu parti ${s.mergedIntoBatchNumber} altına birleştirilmiş — işlem survivor partide yapılmalı.`;
@@ -134,7 +134,7 @@ class WorkOrderBatchDropService {
       where: { id: workOrderId },
       select: { id: true, workOrderNumber: true, status: true, steps: { select: { id: true } } },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
 
     const batch = await prisma.batch.findUnique({
       where: { id: batchId },
@@ -147,7 +147,7 @@ class WorkOrderBatchDropService {
     });
     if (!batch) throw AppError.notFound("Parti bulunamadı");
     if (batch.workOrderId !== workOrderId) {
-      throw AppError.badRequest("Parti bu iş emrine ait değil");
+      throw AppError.badRequest("Parti bu terbiye iş emrine ait değil");
     }
 
     const rolls = await prisma.roll.findMany({
@@ -286,7 +286,7 @@ class WorkOrderBatchDropService {
           where: { id: workOrderId },
           select: { workOrderNumber: true, status: true, steps: { select: { id: true } } },
         });
-        if (!wo) throw AppError.notFound("İş emri bulunamadı");
+        if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
         const stepIds = wo.steps.map((s) => s.id);
 
         await assertBatchInWorkOrderTx(tx, batchId, workOrderId);
@@ -563,7 +563,7 @@ class WorkOrderBatchDropService {
     return {
       success: true,
       data: result,
-      message: `${result.batchNumber} partisi iş emrinden düşürüldü (${result.droppedCount} top)`,
+      message: `${result.batchNumber} partisi terbiye iş emrinden düşürüldü (${result.droppedCount} top)`,
     };
   }
 }

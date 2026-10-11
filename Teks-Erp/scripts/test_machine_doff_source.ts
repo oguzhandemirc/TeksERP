@@ -127,7 +127,7 @@ async function main(): Promise<void> {
     const b3 = await openDoff({ ...taban, machineRunId: issizRun.id, clientToken: b3tok });
     doffIds.push(b3.data!.id);
     const b3r = await openDoff({ ...taban, machineRunId: issizRun.id, clientToken: b3tok });
-    check("§2c koşumlu ama İŞSİZ doff: ilk cevap VE replay 'dokuma işine bağlı değil' uyarır (dördüncü kova)", kayip(b3.warnings) && kayip(b3r.warnings) && (b3r.warnings ?? []).some((w) => w.includes("dokuma işine bağlı değil")), `ilk=${kayip(b3.warnings)} replay=${(b3r.warnings ?? []).join(" | ").slice(0, 80)}`);
+    check("§2c koşumlu ama İŞSİZ doff: ilk cevap VE replay 'dokuma iş emrine bağlı değil' uyarır (dördüncü kova)", kayip(b3.warnings) && kayip(b3r.warnings) && (b3r.warnings ?? []).some((w) => w.includes("dokuma iş emrine bağlı değil")), `ilk=${kayip(b3.warnings)} replay=${(b3r.warnings ?? []).join(" | ").slice(0, 80)}`);
 
     // ── §3 stok defteri — fikstür ürününe daraltılmış sayım ────────────────
     const stokSay = (): Promise<number> => prisma.warehouseMovement.count({ where: { roll: { itemId: item.id } } });

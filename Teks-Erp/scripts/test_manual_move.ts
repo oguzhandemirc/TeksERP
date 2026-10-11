@@ -233,7 +233,7 @@ async function main(): Promise<void> {
 
     const preview = await svc.getManualMovePreview(wo.id, { batchId, targetStepId: s1 });
     check(`${status}: önizleme tamamlanmış iş emrini KIRMIZI blok gösterir`, (preview.data as { woBlocked?: boolean }).woBlocked === true);
-    await expectReject(`${status}: taşıma 409`, () => svc.manualMove(wo.id, { batchId, targetStepId: s1, reason: "depodan üretime" }, c.ADMIN), "Tamamlanmış iş emrine top eklenemez");
+    await expectReject(`${status}: taşıma 409`, () => svc.manualMove(wo.id, { batchId, targetStepId: s1, reason: "depodan üretime" }, c.ADMIN), "Tamamlanmış terbiye iş emrine top eklenemez");
     const roll = await prisma.roll.findUnique({ where: { id: rollIds[0] }, select: { status: true } });
     const woNow = await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { status: true } });
     check(`${status}: top yerinde, iş emri COMPLETED kaldı`, roll?.status === status && woNow?.status === WorkOrderStatus.COMPLETED, `${roll?.status} · ${woNow?.status}`);

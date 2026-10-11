@@ -15,7 +15,7 @@ import type { MoveRule } from "./merge-map";
 export const COLOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "colorId", label: "Top" },
     { kind: "MOVE", model: "OrderLine", table: "order_lines", column: "colorId", label: "Sipariş kalemi" },
-    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetColorId", label: "İş emri (hedef renk)" },
+    { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetColorId", label: "Terbiye iş emri (hedef renk)" },
     { kind: "MOVE", model: "RouteStep", table: "route_steps", column: "plannedColorId", label: "Rota adımı (hedef renk)" },
     { kind: "MOVE", model: "ProductRecipe", table: "product_recipes", column: "colorId", label: "Reçete" },
     { kind: "MOVE", model: "SubcontractorReceipt", table: "subcontractor_receipts", column: "appliedColorId", label: "Fason kabul (uygulanan renk)" },
@@ -23,7 +23,7 @@ export const COLOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "SwatchStockReduction", table: "swatch_stock_reductions", column: "colorId", label: "Kartela stok düşümü" },
     { kind: "MOVE", model: "Swatch", table: "swatches", column: "colorId", label: "Kartela" },
     { kind: "MOVE", model: "RollReturn", table: "roll_returns", column: "colorId", label: "İade" },
-    { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "colorId", label: "Dokuma işi" },
+    { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "colorId", label: "Dokuma iş emri" },
     // 2026-09-13 (dokuma P2) — koşumun renk ekseni; `itemId` bacağıyla aynı sınıf
     // (referans bağ, tekillik kısıtı yok). Geri alınmış koşum da taşınır.
     { kind: "MOVE", model: "MachineRun", table: "machine_runs", column: "colorId", label: "Tezgah koşumu" },

@@ -18,7 +18,7 @@ import "../types/express-augment";
 // opsiyonel alanı boş bırakmaktır. `.nullish()` ikisini de alır; controller
 // zaten `?? null` ile servise normalize ediyor.
 const assignSchema = z.object({
-  workOrderId: z.string().uuid("Geçersiz iş emri ID"),
+  workOrderId: z.string().uuid("Geçersiz terbiye iş emri ID"),
   // ATAMA MAKİNE BAZINDA: PROCESS_QC istasyonu tektir, dağıtımcı o istasyona
   // bağlı fiziksel kurşun MAKİNELERİNDEN birini seçer.
   machineId: z.string().uuid("Geçersiz makine ID"),
@@ -40,9 +40,9 @@ const BULK_MAX = 100;
 
 const assignBulkSchema = z.object({
   workOrderIds: z
-    .array(z.string().uuid("Geçersiz iş emri ID"))
-    .min(1, "En az bir iş emri seçilmelidir")
-    .max(BULK_MAX, `Tek seferde en fazla ${BULK_MAX} iş emri dağıtılabilir`),
+    .array(z.string().uuid("Geçersiz terbiye iş emri ID"))
+    .min(1, "En az bir terbiye iş emri seçilmelidir")
+    .max(BULK_MAX, `Tek seferde en fazla ${BULK_MAX} terbiye iş emri dağıtılabilir`),
   machineId: z.string().uuid("Geçersiz makine ID"),
   notes: z.string().trim().max(500, "Not en fazla 500 karakter olabilir").nullish(),
 });

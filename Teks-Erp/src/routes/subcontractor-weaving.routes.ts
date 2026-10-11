@@ -43,7 +43,7 @@ const yarnLineSchema = z
 
 const dispatchSchema = z
   .object({
-    weavingOrderId: z.string().uuid("Geçersiz dokuma işi"),
+    weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri"),
     // G1: levent-yalnız, iplik-yalnız ya da ikisi — serviste "ikisi de boş" 400 (`WEAVING_DISPATCH_EMPTY`).
     warpBeamIds: z.array(z.string().uuid("Geçersiz levent")).max(50).default([]),
     /** G1: fasoncuya giden iplik satırları; iplik modülü kapalıysa gövde kapısı 403 (levent/devere emsali). */
@@ -58,7 +58,7 @@ const reasonSchema = z.object({ reason: z.string().trim().min(3, "Sebep en az 3 
 
 const receiptSchema = z
   .object({
-    weavingOrderId: z.string().uuid("Geçersiz dokuma işi"),
+    weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri"),
     manifestNo: z.string().trim().max(64).nullish(),
     notes: z.string().trim().max(500).nullish(),
     clientToken: z.string().uuid("Geçersiz istemci anahtarı").nullish(),
@@ -230,7 +230,7 @@ router.get("/tablet-context", requireAnyPermission("weavingorder:read", ...MOBIL
  */
 router.get("/weaving-orders/:id/summary", requirePermission("weavingorder:read"), async (req, res, next) => {
   try {
-    res.json(await getWeavingSubcontractSummary(assertValidUuid(req.params.id, "Dokuma işi")));
+    res.json(await getWeavingSubcontractSummary(assertValidUuid(req.params.id, "Dokuma iş emri")));
   } catch (e) {
     next(e);
   }

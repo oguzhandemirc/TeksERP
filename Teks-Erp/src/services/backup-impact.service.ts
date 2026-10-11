@@ -267,7 +267,7 @@ const COUNT_SPECS: CountSpec[] = [
   },
   {
     key: "workOrder",
-    label: "Yeni iş emri",
+    label: "Yeni terbiye iş emri",
     group: "production",
     timestampField: "createdAt",
     run: (c) =>

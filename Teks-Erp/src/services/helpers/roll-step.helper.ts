@@ -387,7 +387,7 @@ export async function assertWoAtStepKind(
   });
   if (!targetStep) {
     throw AppError.notFound(
-      `Bu iş emrinde ${expectedKind} adımı tanımlı değil`,
+      `Bu terbiye iş emrinde ${expectedKind} adımı tanımlı değil`,
     );
   }
 
@@ -412,7 +412,7 @@ export async function assertWoAtStepKind(
 
   if (stepsWithRolls.length === 0) {
     throw AppError.badRequest(
-      `Bu iş emrinin "${targetStep.station.name}" adımında işlenecek top yok ve şu an aktif başka bir adım da yok. (Üretim henüz başlamamış veya bitmiş.)`,
+      `Bu terbiye iş emrinin "${targetStep.station.name}" adımında işlenecek top yok ve şu an aktif başka bir adım da yok. (Üretim henüz başlamamış veya bitmiş.)`,
     );
   }
 
@@ -420,6 +420,6 @@ export async function assertWoAtStepKind(
     .map((s) => `${s.station.name} (${s._count.currentRolls} rulo)`)
     .join(", ");
   throw AppError.badRequest(
-    `Bu iş emrinin "${targetStep.station.name}" adımında şu an açık top yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
+    `Bu terbiye iş emrinin "${targetStep.station.name}" adımında şu an açık top yok. Mevcut konum: ${stepNames}. Tabletinizi yanlış istasyonda okutmuş olabilirsiniz.`,
   );
 }

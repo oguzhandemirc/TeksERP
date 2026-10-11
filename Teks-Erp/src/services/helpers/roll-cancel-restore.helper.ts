@@ -109,7 +109,7 @@ export function resolveRollRestoreBlockReason(s: RollRestoreSignals): string | n
   // O riski taşıyan tek kural `movementCount > 0` ve o BUNDAN ÖNCE kontrol
   // ediliyor. Geri koymadan önce bu paragrafı çürüt.
   if (s.currentStepId) {
-    return "Bu top bir iş emri adımına bağlı — iptali buradan geri alınamaz.";
+    return "Bu top bir terbiye iş emri adımına bağlı — iptali buradan geri alınamaz.";
   }
   if (s.sackId || s.shipmentId) {
     return "Bu top bir çuvala/sevkiyata bağlı — iptali buradan geri alınamaz.";

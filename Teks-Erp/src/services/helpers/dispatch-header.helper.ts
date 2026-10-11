@@ -34,7 +34,7 @@ export function assertWorkOrderBound<T extends HeaderRow>(
   what = "Fason sevki",
 ): asserts row is WorkOrderBound<T> {
   if (row.workOrderId === null) {
-    throw AppError.conflict(`${what} bir iş emrine değil dokuma işine bağlı — bu işlem iş emri yolundadır`, {
+    throw AppError.conflict(`${what} bir terbiye iş emrine değil dokuma iş emrine bağlı — bu işlem terbiye iş emri yolundadır`, {
       code: "DISPATCH_NOT_WORK_ORDER_BOUND",
     });
   }
@@ -61,7 +61,7 @@ export function assertWeavingBound<T extends { weavingOrderId: string | null }>(
   what = "Fason belgesi",
 ): asserts row is T & { weavingOrderId: string } {
   if (row.weavingOrderId === null) {
-    throw AppError.conflict(`${what} dokuma işine değil iş emrine bağlı — bu işlem iş emri yolundan yapılır`, {
+    throw AppError.conflict(`${what} dokuma iş emrine değil terbiye iş emrine bağlı — bu işlem terbiye iş emri yolundan yapılır`, {
       code: "DISPATCH_NOT_WEAVING_BOUND",
     });
   }

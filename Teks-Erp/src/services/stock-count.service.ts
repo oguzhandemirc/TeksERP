@@ -1124,7 +1124,7 @@ function blockReason(
   if (roll.warehouseId !== countWarehouseId) return "Bu sırada başka depoya taşındı";
   if (roll.shipmentId) return "Bu sırada bir sevkiyata atandı";
   if (roll.sackId) return "Çuvalın içinde — önce çuvaldan çıkarılmalı";
-  if (roll.currentStepId) return "Bu sırada bir iş emrine bağlandı";
+  if (roll.currentStepId) return "Bu sırada bir terbiye iş emrine bağlandı";
   return null;
 }
 

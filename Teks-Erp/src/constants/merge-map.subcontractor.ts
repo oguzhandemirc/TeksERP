@@ -26,7 +26,7 @@ export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "KartelaDispatch", table: "kartela_dispatches", column: "subcontractorId", label: "Kartela sevk" },
     { kind: "MOVE", model: "KartelaReceipt", table: "kartela_receipts", column: "subcontractorId", label: "Kartela kabul" },
     { kind: "MOVE", model: "RouteStep", table: "route_steps", column: "plannedSubcontractorId", label: "Rota adımı (planlanan firma)" },
-    { kind: "MOVE", model: "WorkOrderStep", table: "work_order_steps", column: "plannedSubcontractorId", label: "İş emri adımı (planlanan firma)" },
+    { kind: "MOVE", model: "WorkOrderStep", table: "work_order_steps", column: "plannedSubcontractorId", label: "Terbiye iş emri adımı (planlanan firma)" },
     {
       kind: "CONFLICT",
       model: "SubcontractorToCategory",
@@ -41,7 +41,7 @@ export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
         "`skipDuplicates` bir UPDATE'te yoktur → çakışmayanı taşı, çakışanı SİL.",
     },
     // —— Ticaret / ön muhasebe bacağı (fason firma = tedarikçi bacağı) ————————
-    { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "subcontractorId", label: "Dokuma işi (fason)" },
+    { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "subcontractorId", label: "Dokuma iş emri (fason)" },
     { kind: "MOVE", model: "GoodsReceipt", table: "goods_receipts", column: "subcontractorId", label: "Mal kabul fişi (fason tedarikçi)" },
     { kind: "MOVE", model: "PurchaseOrder", table: "purchase_orders", column: "subcontractorId", label: "Alış siparişi (fason tedarikçi)" },
     {

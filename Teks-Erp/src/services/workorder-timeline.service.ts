@@ -71,7 +71,7 @@ function woEventItem(e: {
   };
   switch (e.type) {
     case WorkOrderEventType.CREATED:
-      return { ...base, group: "DURUM", title: "İş emri açıldı", detail: e.toLabel };
+      return { ...base, group: "DURUM", title: "Terbiye iş emri açıldı", detail: e.toLabel };
     case WorkOrderEventType.STATUS_CHANGED:
       return { ...base, group: "DURUM", title: "Durum değişti", detail: `${from} → ${to}` };
     case WorkOrderEventType.BATCH_ADDED: {
@@ -153,7 +153,7 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
     const total = cancelReturns.reduce((s, d) => s + Number(d.qty), 0);
     out.push({
       ...NO_META, id: `cancel-return:${workOrderId}`, at: cancelReturns[0]!.createdAt.toISOString(), group: "PARTI",
-      title: `İş emri iptali — ${cancelReturns.length} top kaynağına döndü`, detail: m(total), actorId: cancelReturns[0]!.userId,
+      title: `Terbiye iş emri iptali — ${cancelReturns.length} top kaynağına döndü`, detail: m(total), actorId: cancelReturns[0]!.userId,
       rolls: cancelReturns.map((d) => ({ barcode: d.roll?.barcode ?? null, qty: Number(d.qty), to: d.toStatus })),
     });
   }
@@ -162,7 +162,7 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
   for (const x of await listIssueTransfers(prisma, stepIds)) {
     const top = `${x.barcode ?? "—"} · ${m(x.qty)}`;
     if (x.outStepId && stepSet.has(x.outStepId)) {
-      out.push({ ...NO_META, id: `xfer-out:${x.reversalId}`, at: x.outAt.toISOString(), group: "PARTI", title: "İş emrine devredildi", detail: `${top} → ${x.toWorkOrderNumber ?? "—"}`, reason: x.notes, actorId: x.userId });
+      out.push({ ...NO_META, id: `xfer-out:${x.reversalId}`, at: x.outAt.toISOString(), group: "PARTI", title: "Terbiye iş emrine devredildi", detail: `${top} → ${x.toWorkOrderNumber ?? "—"}`, reason: x.notes, actorId: x.userId });
     }
     if (x.inStepId && x.inAt && stepSet.has(x.inStepId)) {
       out.push({ ...NO_META, id: `xfer-in:${x.reversalId}`, at: x.inAt.toISOString(), group: "PARTI", title: "Devirle üretime alındı", detail: `${top} ← ${x.fromWorkOrderNumber ?? "—"}`, reason: x.notes, actorId: x.userId });
@@ -274,7 +274,7 @@ export class WorkOrderTimelineService {
    */
   async lookup(query: string): Promise<TimelineLookupHit[]> {
     const code = normalizeScanCode(query);
-    if (code.length < 2) throw AppError.badRequest("En az 2 karakter girin (iş emri no ya da top barkodu)");
+    if (code.length < 2) throw AppError.badRequest("En az 2 karakter girin (terbiye iş emri no ya da top barkodu)");
     const select = { id: true, workOrderNumber: true, status: true, createdAt: true } as const;
     const byNumber = await prisma.workOrder.findMany({ where: { workOrderNumber: code }, select });
     if (byNumber.length > 0) {
@@ -307,7 +307,7 @@ export class WorkOrderTimelineService {
     opts: { groups?: TimelineGroup[]; cursor?: string; limit: number },
   ): Promise<TimelinePage> {
     const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true, steps: { select: { id: true } } } });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
     const events = await prisma.workOrderEvent.findMany({ where: { workOrderId } });
     const pending: Pending[] = [...events.map(woEventItem), ...(await sourcedItems(workOrderId, wo.steps.map((s) => s.id)))];
     const actorIds = [...new Set(pending.map((p) => p.actorId).filter((x): x is string => !!x))];

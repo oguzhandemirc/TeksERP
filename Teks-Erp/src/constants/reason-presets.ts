@@ -99,7 +99,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_BEAM_ADJUST: "Levent kalan düzeltmesi sebepleri",
   WARP_BEAM_SCRAP: "Levent hurda / artık dispozisyonu",
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebepleri",
-  WORK_ORDER_PLAN_CHANGE: "İş emri plan düzeltme sebepleri",
+  WORK_ORDER_PLAN_CHANGE: "Terbiye iş emri plan düzeltme sebepleri",
 };
 
 /**
@@ -298,7 +298,7 @@ export const YARN_SUBCONTRACT_RETURN_REASONS: readonly ReasonPresetSeed[] = [
 /** İŞ EMRİ PLAN DÜZELTMESİ — tabletteki "Rengi Değiştir" / "Eni Değiştir" (hareket defteri D5). */
 export const WORK_ORDER_PLAN_CHANGE_REASONS: readonly ReasonPresetSeed[] = [
   { code: "MUSTERI_DEGISTIRDI", label: "Müşteri değiştirdi", fullText: "Müşteri isteği değiştirdi" },
-  { code: "YANLIS_GIRILMIS", label: "Yanlış girilmişti", fullText: "İş emri yanlış değerle açılmıştı" },
+  { code: "YANLIS_GIRILMIS", label: "Yanlış girilmişti", fullText: "Terbiye iş emri yanlış değerle açılmıştı" },
   { code: "OLCUMDE_FARKLI", label: "Ölçümde farklı çıktı", fullText: "Mal ölçüldüğünde plandan farklı çıktı" },
   { code: "SIPARIS_DEGISTI", label: "Sipariş değişti", fullText: "Bağlı sipariş kalemi değişti" },
   { code: "DIGER", label: "Diğer", requiresText: true },

@@ -233,7 +233,7 @@ async function main(): Promise<void> {
       await expectThrow(
         "manualMove 409 ile reddediyor",
         () => move.manualMove(fx.woId, { rollIds: [rollId], targetStepId: tambur, reason: "iptal WO denemesi" }, ADMIN),
-        "İptal edilmiş iş emrinde konum düzeltilemez",
+        "İptal edilmiş terbiye iş emrinde konum düzeltilemez",
       );
       const after = await prisma.roll.findUnique({ where: { id: rollId }, select: { currentStepId: true } });
       check("top taşınmadı (kaynak adımda kaldı)", after?.currentStepId === kursunStep);
@@ -243,7 +243,7 @@ async function main(): Promise<void> {
       await expectThrow(
         "devredilmiş (SUPERSEDED) WO da reddediliyor",
         () => move.manualMove(fx.woId, { rollIds: [rollId], targetStepId: tambur, reason: "devredilmiş WO denemesi" }, ADMIN),
-        "Devredilmiş iş emrinde konum düzeltilemez",
+        "Devredilmiş terbiye iş emrinde konum düzeltilemez",
       );
     } finally {
       await fx.teardown();

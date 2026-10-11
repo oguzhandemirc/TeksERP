@@ -91,7 +91,7 @@ async function claimSubcontractedWeavingOrderTx(tx: Tx, weavingOrderId: string, 
     data: { updatedById: userId ?? null },
   });
   const fresh = await tx.weavingOrder.findUnique({ where: { id: weavingOrderId }, select: WO_SELECT });
-  if (!fresh) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!fresh) throw AppError.notFound("Dokuma iş emri bulunamadı");
   if (claim.count === 0) {
     if (fresh.executionKind !== WeavingExecutionKind.SUBCONTRACTED) {
       throw AppError.conflict(`${fresh.weavingOrderNumber} kendi tezgahında dokunuyor — fason belgesi açılamaz`, {
@@ -105,7 +105,7 @@ async function claimSubcontractedWeavingOrderTx(tx: Tx, weavingOrderId: string, 
   }
   if (!fresh.subcontractorId) {
     // CHECK `weaving_orders_party_ck` ikinci hat; buraya düşmek sed ihlalidir.
-    throw AppError.conflict("Fason dokuma işinin fasoncusu yok", { code: "WEAVING_ORDER_NO_SUBCONTRACTOR" });
+    throw AppError.conflict("Fason dokuma iş emrinin fasoncusu yok", { code: "WEAVING_ORDER_NO_SUBCONTRACTOR" });
   }
   await markWeavingOrderInProgressTx(tx, weavingOrderId, userId);
   return fresh as typeof fresh & { subcontractorId: string };

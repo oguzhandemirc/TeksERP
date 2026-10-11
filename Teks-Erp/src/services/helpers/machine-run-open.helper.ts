@@ -90,16 +90,16 @@ export async function resolveOpenContext(input: {
       where: { id: input.weavingOrderId },
       select: { id: true, weavingOrderNumber: true, status: true, executionKind: true, itemId: true, colorId: true },
     });
-    if (!order) throw AppError.notFound("Dokuma işi bulunamadı", { weavingOrderId: input.weavingOrderId });
+    if (!order) throw AppError.notFound("Dokuma iş emri bulunamadı", { weavingOrderId: input.weavingOrderId });
     if (order.executionKind === WeavingExecutionKind.SUBCONTRACTED) {
       throw AppError.badRequest(
-        `Dokuma işi ${order.weavingOrderNumber} fasona verilmiş — fason dokumanın koşumu bizde tutulmaz.`,
+        `Dokuma iş emri ${order.weavingOrderNumber} fasona verilmiş — fason dokumanın koşumu bizde tutulmaz.`,
         { code: "WEAVING_ORDER_SUBCONTRACTED", weavingOrderId: order.id },
       );
     }
     if (!RUN_OPENABLE_ORDER_STATUSES.includes(order.status)) {
       throw AppError.conflict(
-        `Dokuma işi ${order.weavingOrderNumber} ${order.status === "CANCELLED" ? "iptal edilmiş" : "kapatılmış"} — koşum açılamaz.`,
+        `Dokuma iş emri ${order.weavingOrderNumber} ${order.status === "CANCELLED" ? "iptal edilmiş" : "kapatılmış"} — koşum açılamaz.`,
         { code: "WEAVING_ORDER_NOT_OPEN", weavingOrderId: order.id, status: order.status },
       );
     }

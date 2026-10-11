@@ -100,7 +100,7 @@ async function main(): Promise<void> {
 
     const sayfa = await timeline.list(woId, { limit: 50 });
     const basliklar = sayfa.data.map((x) => `${x.group}:${x.title}:${x.detail ?? ""}`);
-    check("§2 doğuş satırı (DURUM · İş emri açıldı)", basliklar.some((b) => b.startsWith("DURUM:İş emri açıldı:")));
+    check("§2 doğuş satırı (DURUM · Terbiye iş emri açıldı)", basliklar.some((b) => b.startsWith("DURUM:Terbiye iş emri açıldı:")));
     check("§2b iki statü geçişi (Planlandı → Devam Ediyor, Devam Ediyor → Tamamlandı)",
       basliklar.some((b) => b.endsWith("Planlandı → Devam Ediyor")) && basliklar.some((b) => b.endsWith("Devam Ediyor → Tamamlandı")));
     check("§2c parti doğuşu (Batch) ve kapanış künyesi kaynaklarından",
@@ -159,7 +159,7 @@ async function main(): Promise<void> {
     const donus = sayfa2.data.filter((x) => x.id.startsWith("cancel-return:"));
     const cikan = sayfa2.data.filter((x) => x.title === "Top çıkarıldı");
     check("§5 iptal dönüşü TEK satır, sayı ve toplam doğru",
-      donus.length === 1 && donus[0]!.title === "İş emri iptali — 2 top kaynağına döndü" && donus[0]!.detail === "200 m",
+      donus.length === 1 && donus[0]!.title === "Terbiye iş emri iptali — 2 top kaynağına döndü" && donus[0]!.detail === "200 m",
       donus.map((x) => `${x.title} · ${x.detail}`).join(" | ") || "satır yok");
     check("§5b satır topları taşıyor (barkod · metre · döndüğü durum)",
       donus[0]?.rolls?.length === 2 && donus[0].rolls.every((r) => r.qty === 100 && r.to === "STOCK") &&

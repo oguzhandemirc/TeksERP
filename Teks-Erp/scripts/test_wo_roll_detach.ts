@@ -187,7 +187,7 @@ async function main(): Promise<void> {
     const devirTersi = await prisma.warehouseMovement.findFirst({ where: { rollId: d, reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE_TRANSFER }, select: { notes: true } });
     const devirDetach = await prisma.warehouseMovement.count({ where: { rollId: d, reasonCode: STOCK_MOVE_REASON.ROLL_DETACH } });
     check("§9 devir: açık üretime alma satırı YENİ iş emrinin ilk adımına bağlandı, eskisi devir tersiyle (ROLL_DETACH değil) kapandı",
-      devirSonrasi.length === 1 && devirSonrasi[0]?.workOrderStepId === wo4.steps[0]?.id && (devirTersi?.notes ?? "").startsWith("İş emri devri") && devirDetach === 0,
+      devirSonrasi.length === 1 && devirSonrasi[0]?.workOrderStepId === wo4.steps[0]?.id && (devirTersi?.notes ?? "").startsWith("Terbiye iş emri devri") && devirDetach === 0,
       `${devirSonrasi.length} açık · ${devirTersi?.notes} · ROLL_DETACH ${devirDetach}`);
     // Net 0: devir miktar yaratmaz — terslenen ileri satır, ters satır ve yeni ileri satır AYNI metraj.
     const devirSatirlari = await prisma.warehouseMovement.findMany({
@@ -209,8 +209,8 @@ async function main(): Promise<void> {
     const cizelge = async (id: string) => (await new WorkOrderTimelineService().list(id, { limit: 200 })).data
       .filter((x) => (x.detail ?? "").startsWith(`${TAG}-D`)).map((x) => `${x.title}|${x.detail}`);
     const [eski, yeni] = [await cizelge(wo3), await cizelge(wo4.id)];
-    check("§9c ⭐ Hareketler: eskide 'İş emrine devredildi → yeni', yenide 'Devirle üretime alındı ← eski'; devir 'Top çıkarıldı' sayılmaz",
-      eski.length === 1 && eski[0]!.startsWith("İş emrine devredildi|") && eski[0]!.endsWith(`→ ${wo4.workOrderNumber}`)
+    check("§9c ⭐ Hareketler: eskide 'Terbiye iş emrine devredildi → yeni', yenide 'Devirle üretime alındı ← eski'; devir 'Top çıkarıldı' sayılmaz",
+      eski.length === 1 && eski[0]!.startsWith("Terbiye iş emrine devredildi|") && eski[0]!.endsWith(`→ ${wo4.workOrderNumber}`)
         && yeni.length === 2 && yeni.some((x) => x.startsWith("Devirle üretime alındı|") && x.endsWith(`← ${wo4.splitFrom?.workOrderNumber}`))
         && yeni.some((x) => x.startsWith("Top çıkarıldı|")),
       `eski ${JSON.stringify(eski)} · yeni ${JSON.stringify(yeni)}`);

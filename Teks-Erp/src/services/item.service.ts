@@ -795,7 +795,7 @@ export class ItemService extends BaseService {
     const woCount = await prisma.workOrder.count({ where: { targetItemId: id } });
     if (woCount > 0) {
       throw AppError.conflict(
-        `Bu kumaşı hedefleyen ${woCount} iş emri var — kalıcı silinemez. Kumaşı pasife alın.`,
+        `Bu kumaşı hedefleyen ${woCount} terbiye iş emri var — kalıcı silinemez. Kumaşı pasife alın.`,
       );
     }
     return super.hardDelete(id, userId);

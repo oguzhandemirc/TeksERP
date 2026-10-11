@@ -185,6 +185,7 @@ import { hata } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
+import { TERIM } from "../constants/terim";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -674,7 +675,7 @@ function assertOrderLinesLinkable(
   ];
   if (cancelled.length > 0) {
     throw AppError.badRequest(
-      `İptal edilmiş siparişe iş emri bağlanamaz: ${cancelled.join(", ")}`,
+      `İptal edilmiş siparişe terbiye iş emri bağlanamaz: ${cancelled.join(", ")}`,
     );
   }
 }
@@ -686,7 +687,7 @@ function assertOrderLinesLinkable(
 function assertWorkOrderNumberUnchanged(current: string, sent: string | null | undefined): void {
   const v = sent?.trim();
   if (v && v !== current) {
-    throw AppError.conflict("İş emri numarası değiştirilemez.", { code: "WORK_ORDER_NUMBER_FROZEN" });
+    throw AppError.conflict("Terbiye iş emri numarası değiştirilemez.", { code: "WORK_ORDER_NUMBER_FROZEN" });
   }
 }
 
@@ -698,16 +699,16 @@ async function assertWorkOrderUntouched(id: string, status: WorkOrderStatus): Pr
   const started = status !== WorkOrderStatus.PLANNED || (await computeWorkOrderLocks(prisma, id)).materialCommitted;
   if (started) {
     throw AppError.conflict(
-      "Bu iş emrinde üretim başladı — tabletten iptal edilemez. Panelden iptal edin (toplar için karar ve sebep sorulur).",
+      "Bu terbiye iş emrinde üretim başladı — tabletten iptal edilemez. Panelden iptal edin (toplar için karar ve sebep sorulur).",
       { code: "WO_CANCEL_PANEL_ONLY" },
     );
   }
 }
 
 const STARTED_EDIT_MESSAGE = {
-  color: "Üretim başlamış iş emrinde renk genel Düzenle'den değişmez — 'Rengi Değiştir' tuşunu kullanın (sebep ve boyanmış top kontrolüyle).",
-  width: "Üretim başlamış iş emrinde en genel Düzenle'den değişmez — 'Eni Değiştir' tuşunu kullanın.",
-  orderLinks: "Üretim başlamış iş emrinde sipariş bağı genel Düzenle'den değişmez — 'Sipariş Bağla' tuşunu ya da bağı kaldır düğmesini kullanın.",
+  color: "Üretim başlamış terbiye iş emrinde renk genel Düzenle'den değişmez — 'Rengi Değiştir' tuşunu kullanın (sebep ve boyanmış top kontrolüyle).",
+  width: "Üretim başlamış terbiye iş emrinde en genel Düzenle'den değişmez — 'Eni Değiştir' tuşunu kullanın.",
+  orderLinks: "Üretim başlamış terbiye iş emrinde sipariş bağı genel Düzenle'den değişmez — 'Sipariş Bağla' tuşunu ya da bağı kaldır düğmesini kullanın.",
 } as const;
 
 /**
@@ -807,7 +808,7 @@ export class WorkOrderService {
       if (!exists) return candidate;
     }
 
-    throw AppError.internal("İş emri numarası üretilemedi, lütfen tekrar deneyin");
+    throw AppError.internal("Terbiye iş emri numarası üretilemedi, lütfen tekrar deneyin");
   }
 
   /**
@@ -825,7 +826,7 @@ export class WorkOrderService {
       select: { id: true },
     });
     if (existing && existing.id !== excludeId) {
-      throw AppError.conflict(`Bu iş emri numarası zaten kullanılıyor: ${workOrderNumber}`);
+      throw AppError.conflict(`Bu terbiye iş emri numarası zaten kullanılıyor: ${workOrderNumber}`);
     }
   }
 
@@ -991,7 +992,7 @@ export class WorkOrderService {
 
     if (type === "ORDER_PRODUCTION" && allocations.length === 0) {
       throw AppError.badRequest(
-        "Siparişe özel üretim iş emri en az bir sipariş kalemine bağlanmalıdır."
+        "Siparişe özel üretim terbiye iş emri en az bir sipariş kalemine bağlanmalıdır."
       );
     }
 
@@ -1002,7 +1003,7 @@ export class WorkOrderService {
 
     if (type === "STOCK_PRODUCTION" && !resolvedTargetItemId) {
       throw AppError.badRequest(
-        "Stoğa üretim iş emri için hedef ürün seçmelisiniz."
+        "Stoğa üretim terbiye iş emri için hedef ürün seçmelisiniz."
       );
     }
 
@@ -1121,7 +1122,7 @@ export class WorkOrderService {
 
         // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty sunucu karşılığı
         // (denetim Q2): değerini istasyonda operatör verir, hedef listesi taşımaz.
-        await assertTargetablePropertyIds(targetPropertyIds, "iş emri hedef özelliği");
+        await assertTargetablePropertyIds(targetPropertyIds, "terbiye iş emri hedef özelliği");
 
         const allowedSet = new Set(
           (targetItemFull?.allowedProperties ?? []).map((p) => p.propertyId),
@@ -1320,7 +1321,7 @@ export class WorkOrderService {
       // F61: workOrderNumber P2002'si MANUEL modda retry EDİLMEZ (hep aynı numarayı
       // yazar) — doğrudan anlaşılır 409. (Auto modda taze numarayla retry edilir.)
       if (manualWorkOrderNumber && p2002Mentions(err, /workOrderNumber/i)) {
-        throw AppError.conflict(`Bu iş emri numarası zaten kullanılıyor: ${manualWorkOrderNumber}`);
+        throw AppError.conflict(`Bu terbiye iş emri numarası zaten kullanılıyor: ${manualWorkOrderNumber}`);
       }
       return true;
     });
@@ -1347,7 +1348,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: workOrder,
-      message: `İş emri oluşturuldu: ${workOrder.workOrderNumber}`,
+      message: `Terbiye iş emri oluşturuldu: ${workOrder.workOrderNumber}`,
       // Engel olmayan planlama notları (örn. "rotada renk veren adım yok").
       // `update` yolu bunu 2026-08-21'den beri döndürüyordu; oluşturma yolu
       // aynı durumu 400 ile reddettiği için hiç ihtiyaç duymamıştı.
@@ -1370,9 +1371,9 @@ export class WorkOrderService {
         ...(data.targetItemId != null ? [{ ad: "targetItemId", mevcut: p.targetItemId, gelen: data.targetItemId }] : []),
         ...(data.type && !lineIds ? [{ ad: "type", mevcut: p.type, gelen: data.type }] : []),
       ],
-      collision: (p) => `Bu form daha önce kaydedilmiş: ${p.workOrderNumber}. Yeni iş emri için formu kapatıp yeniden açın.`,
+      collision: (p) => `Bu form daha önce kaydedilmiş: ${p.workOrderNumber}. Yeni terbiye iş emri için formu kapatıp yeniden açın.`,
       collisionEk: (p) => ({ workOrderNumber: p.workOrderNumber }),
-      respond: (p) => ({ success: true, data: p, message: `İş emri zaten oluşturulmuş (idempotent retry): ${p.workOrderNumber}`, idempotentReplay: true }),
+      respond: (p) => ({ success: true, data: p, message: `Terbiye iş emri zaten oluşturulmuş (idempotent retry): ${p.workOrderNumber}`, idempotentReplay: true }),
     });
   }
 
@@ -1395,7 +1396,7 @@ export class WorkOrderService {
         { ad: "targetItemId", mevcut: p.wo.targetItemId, gelen: data.targetItemId ?? (p.rollItemIds.length === 1 ? p.rollItemIds[0] : null) },
         { ad: "orderLines", mevcut: activeOrderLineIds(p.wo), gelen: inputOrderLineIds(data) },
       ],
-      collision: (p) => `Bu okutma daha önce ${p.wo.workOrderNumber} iş emri olarak başlatılmış — yeni iş emri için ekranı kapatıp yeniden açın.`,
+      collision: (p) => `Bu okutma daha önce ${p.wo.workOrderNumber} terbiye iş emri olarak başlatılmış — yeni terbiye iş emri için ekranı kapatıp yeniden açın.`,
       collisionEk: (p) => ({ workOrderNumber: p.wo.workOrderNumber }),
       respond: async (p) => ({
         success: true,
@@ -1406,7 +1407,7 @@ export class WorkOrderService {
           dispatch: null,
           batch: await resolveQuickStartBatch(p.wo.id),
         },
-        message: `İş emri zaten başlatılmış (idempotent retry): ${p.wo.workOrderNumber}`,
+        message: `Terbiye iş emri zaten başlatılmış (idempotent retry): ${p.wo.workOrderNumber}`,
       }),
     });
   }
@@ -1494,7 +1495,7 @@ export class WorkOrderService {
     const itemIds = [...new Set(rolls.map((r) => r.itemId))];
     if (itemIds.length > 1) {
       throw AppError.badRequest(
-        "Okutulan toplar farklı ürünlere ait. Tek iş emri tek kumaş içindir — aynı üründeki topları okutun.",
+        "Okutulan toplar farklı ürünlere ait. Tek terbiye iş emri tek kumaş içindir — aynı üründeki topları okutun.",
       );
     }
     const rollsItemId = itemIds[0];
@@ -1523,7 +1524,7 @@ export class WorkOrderService {
       propertyIdSets: rolls.map((r) => r.properties.map((p) => p.propertyId)),
     });
     if (!createRes.success || !createRes.data) {
-      throw AppError.badRequest(createRes.message ?? "İş emri oluşturulamadı.");
+      throw AppError.badRequest(createRes.message ?? "Terbiye iş emri oluşturulamadı.");
     }
     const workOrder = createRes.data;
 
@@ -1543,7 +1544,7 @@ export class WorkOrderService {
           dispatch: null,
           batch: await resolveQuickStartBatch(workOrder.id),
         },
-        message: `İş emri zaten başlatılmış (idempotent retry): ${workOrder.workOrderNumber}`,
+        message: `Terbiye iş emri zaten başlatılmış (idempotent retry): ${workOrder.workOrderNumber}`,
       };
     }
 
@@ -1578,7 +1579,7 @@ export class WorkOrderService {
     if (attached === 0) {
       await this.hardDelete(workOrder.id, userId, { releaseToken: true }).catch(logOrphanCleanupFailure);
       throw AppError.conflict(
-        `Hiçbir top bağlanamadı; iş emri oluşturulmadı. ${errors.join("; ")}`.trim(),
+        `Hiçbir top bağlanamadı; terbiye iş emri oluşturulmadı. ${errors.join("; ")}`.trim(),
       );
     }
 
@@ -1635,7 +1636,7 @@ export class WorkOrderService {
               }
             } catch (err) {
               dispatchWarning =
-                "İş emri oluştu ama otomatik fason sevki yapılamadı: " +
+                "Terbiye iş emri oluştu ama otomatik fason sevki yapılamadı: " +
                 (err instanceof Error ? err.message : "bilinmeyen hata") +
                 " — Fason Sevk ekranından gönderebilirsiniz.";
             }
@@ -1648,7 +1649,7 @@ export class WorkOrderService {
       success: true,
       data: { workOrder, attached, errors, dispatch, batch },
       message:
-        `İş emri ${workOrder.workOrderNumber} başlatıldı — ${attached} top bağlandı` +
+        `Terbiye iş emri ${workOrder.workOrderNumber} başlatıldı — ${attached} top bağlandı` +
         (batch ? ` (Parti ${batch.batchNumber})` : "") +
         (errors.length ? `, ${errors.length} top bağlanamadı.` : ".") +
         (dispatch ? ` Fasona sevk edildi: ${dispatch.dispatchNo}.` : "") +
@@ -2152,7 +2153,7 @@ export class WorkOrderService {
     });
 
     if (!wo) {
-      return { success: false, data: null, message: "İş emri bulunamadı" };
+      return { success: false, data: null, message: "Terbiye iş emri bulunamadı" };
     }
 
     // dispatchedTotalQty: iptal edilmemiş fason sevklerinin toplam metrajı
@@ -2553,7 +2554,7 @@ export class WorkOrderService {
       },
     });
     if (!wo) {
-      return { success: false, data: null, message: "İş emri bulunamadı" };
+      return { success: false, data: null, message: "Terbiye iş emri bulunamadı" };
     }
 
     // Kart iş emri başına (tek) — tüm parti lane'leri aynı WO kartını gösterir.
@@ -3019,7 +3020,7 @@ export class WorkOrderService {
       include: { steps: { select: { id: true } } },
     });
     if (!wo) {
-      throw AppError.notFound("İş emri bulunamadı");
+      throw AppError.notFound("Terbiye iş emri bulunamadı");
     }
 
     const stepIds = wo.steps.map((s) => s.id);
@@ -3308,11 +3309,11 @@ export class WorkOrderService {
 
     let blockReason: string | null = null;
     if (wo.status === WorkOrderStatus.CANCELLED) {
-      blockReason = "İş emri zaten iptal edilmiş.";
+      blockReason = "Terbiye iş emri zaten iptal edilmiş.";
     } else if (wo.status === WorkOrderStatus.SUPERSEDED) {
-      blockReason = "Devredilmiş iş emri iptal edilemez (malzemesi yeni iş emrine taşındı).";
+      blockReason = "Devredilmiş terbiye iş emri iptal edilemez (malzemesi yeni terbiye iş emrine taşındı).";
     } else if (wo.status === WorkOrderStatus.COMPLETED) {
-      blockReason = "Tamamlanmış iş emri iptal edilemez.";
+      blockReason = "Tamamlanmış terbiye iş emri iptal edilemez.";
     }
     // ⚠️ FASON ARTIK ENGEL DEĞİL (2026-08-17). Eskiden burada `blockReason`
     // yazılıyordu ve kullanıcının çıkışı yoktu ("iptal etmek çok zor" şikâyeti).
@@ -3446,7 +3447,7 @@ export class WorkOrderService {
           })),
         },
         closeHint: canSwitchToClose
-          ? "Bu iş emri iptal edilemez ama kapatılabilir — istasyondaki toplara depo / 2. kalite / devir kararı verilir."
+          ? "Bu terbiye iş emri iptal edilemez ama kapatılabilir — istasyondaki toplara depo / 2. kalite / devir kararı verilir."
           : null,
       },
     };
@@ -3513,7 +3514,7 @@ export class WorkOrderService {
       // Modal iki seçeneği çizsin diye MAKİNE-OKUR kod. Uzun açıklama metni
       // YOK — saha kullanıcısı paragraf okumuyor, düğme arıyor.
       throw AppError.conflict(
-        `Bu iş emrinin ${fasonRolls.length} topu fasonda. Ne yapılsın?`,
+        `Bu terbiye iş emrinin ${fasonRolls.length} topu fasonda. Ne yapılsın?`,
         { code: "FASON_DECISION_REQUIRED", fasonRollCount: fasonRolls.length },
       );
     }
@@ -3540,7 +3541,7 @@ export class WorkOrderService {
       // `SubcontractorService` bu dosyada zaten üst seviyede import edilmiş
       // (fason sevk yolu onu kullanıyor) — ikinci bir yükleme yolu açmıyoruz.
       const bulk = await new SubcontractorService().cancelBulk(
-        { dispatchIds: openDispatches.map((d) => d.id), reason: `İş emri iptali: ${reason}` },
+        { dispatchIds: openDispatches.map((d) => d.id), reason: `Terbiye iş emri iptali: ${reason}` },
         userId,
       );
       // ⚠️ SONUÇ OKUNUR — `cancelBulk` PARÇALI başarır (BULGU-T1-009).
@@ -3579,7 +3580,7 @@ export class WorkOrderService {
           throw AppError.conflict(
             `${kalanlar.length} top hâlâ fasonda (${kalanlar
               .reduce((t, k) => t + Number(k.roll?.currentQty ?? 0), 0)
-              .toFixed(1)} m). İş emrini iptal etmek için bu malın ne olacağına karar verin.`,
+              .toFixed(1)} m). Terbiye iş emrini iptal etmek için bu malın ne olacağına karar verin.`,
             {
               code: "FASON_REMAINDER_DECISION_REQUIRED",
               remainders: kalanlar.map((k) => ({
@@ -3605,7 +3606,7 @@ export class WorkOrderService {
               stepId: workOrderStepIdOf(k.dispatch),
               rollId: k.rollId,
               reasonCode: input.fasonRemainderReasonCode ?? SHRINK_REASON_CODE,
-              reasonText: `İş emri iptali: ${reason}`,
+              reasonText: `Terbiye iş emri iptali: ${reason}`,
             },
             userId,
           );
@@ -3727,17 +3728,17 @@ export class WorkOrderService {
     });
 
     if (!existing) {
-      throw AppError.notFound("İş emri bulunamadı");
+      throw AppError.notFound("Terbiye iş emri bulunamadı");
     }
 
     if (existing.status === WorkOrderStatus.CANCELLED) {
-      throw AppError.badRequest("İş emri zaten iptal edilmiş");
+      throw AppError.badRequest("Terbiye iş emri zaten iptal edilmiş");
     }
     if (existing.status === WorkOrderStatus.SUPERSEDED) {
-      throw AppError.badRequest("Devredilmiş iş emri iptal edilemez (malzemesi yeni iş emrine taşındı)");
+      throw AppError.badRequest("Devredilmiş terbiye iş emri iptal edilemez (malzemesi yeni terbiye iş emrine taşındı)");
     }
     if (existing.status === WorkOrderStatus.COMPLETED) {
-      throw AppError.conflict("Tamamlanmış iş emri iptal edilemez");
+      throw AppError.conflict("Tamamlanmış terbiye iş emri iptal edilemez");
     }
     if (input.untouchedOnly) await assertWorkOrderUntouched(existing.id, existing.status);
 
@@ -3774,7 +3775,7 @@ export class WorkOrderService {
         seen.add(d.rollId);
       }
       if (stepIds.length === 0) {
-        throw AppError.badRequest("İş emrinin adımı yok — karar verilebilecek top da yok");
+        throw AppError.badRequest("Terbiye iş emrinin adımı yok — karar verilebilecek top da yok");
       }
     }
 
@@ -3837,7 +3838,7 @@ export class WorkOrderService {
           select: { status: true },
         });
         throw AppError.conflict(
-          `İş emri bu sırada ${
+          `Terbiye iş emri bu sırada ${
             fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
           }, iptal edilemez. Listeyi yenileyin.`
         );
@@ -3915,7 +3916,7 @@ export class WorkOrderService {
           // `applyFasonDecisionBeforeCancel`) işlenmiş olur; buraya düşmek,
           // kararın uygulanamadığı (ör. sevk iptali başarısız) anlamına gelir.
           throw AppError.conflict(
-            "Fasondaki toplar için karar verilmeden iş emri iptal edilemez.",
+            "Fasondaki toplar için karar verilmeden terbiye iş emri iptal edilemez.",
             { code: "FASON_DECISION_REQUIRED", fasonRollCount: fasonInFlight },
           );
         }
@@ -4068,8 +4069,8 @@ export class WorkOrderService {
       data: updated,
       message:
         extra.length > 0
-          ? `İş emri iptal edildi (${extra.join(", ")}), kalan ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`
-          : `İş emri iptal edildi, ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`,
+          ? `Terbiye iş emri iptal edildi (${extra.join(", ")}), kalan ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`
+          : `Terbiye iş emri iptal edildi, ham toplar STOCK'a çekildi: ${existing.workOrderNumber}`,
     };
   }
 
@@ -4094,7 +4095,7 @@ export class WorkOrderService {
         },
       },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
 
     const stepIds = wo.steps.map((s) => s.id);
     const stepName = new Map(wo.steps.map((s) => [s.id, s.station?.name ?? "—"]));
@@ -4196,14 +4197,14 @@ export class WorkOrderService {
 
     let blockReason: string | null = null;
     if (wo.status === WorkOrderStatus.COMPLETED) {
-      blockReason = "İş emri zaten tamamlanmış.";
+      blockReason = "Terbiye iş emri zaten tamamlanmış.";
     } else if (wo.status === WorkOrderStatus.SUPERSEDED) {
-      blockReason = "Devredilmiş iş emri kapatılamaz (malzemesi yeni iş emrine taşındı).";
+      blockReason = "Devredilmiş terbiye iş emri kapatılamaz (malzemesi yeni terbiye iş emrine taşındı).";
     } else if (wo.status === WorkOrderStatus.CANCELLED) {
-      blockReason = "İptal edilmiş iş emri kapatılamaz.";
+      blockReason = "İptal edilmiş terbiye iş emri kapatılamaz.";
     } else if (wo.status === WorkOrderStatus.PLANNED) {
       blockReason =
-        "İş emri henüz üretime başlamadı (Planlandı). Başlamamış iş emrini kapatmak yerine iptal edin.";
+        "Terbiye iş emri henüz üretime başlamadı (Planlandı). Başlamamış terbiye iş emrini kapatmak yerine iptal edin.";
     } else if (blockedRolls.length > 0) {
       blockReason =
         `${blockedRolls.length} top fasonda / açık fason sevkinde — mal fiziksel olarak ` +
@@ -4265,18 +4266,18 @@ export class WorkOrderService {
       where: { id },
       include: { steps: { select: { id: true, stepSequence: true } } },
     });
-    if (!existing) throw AppError.notFound("İş emri bulunamadı");
+    if (!existing) throw AppError.notFound("Terbiye iş emri bulunamadı");
     if (existing.status === WorkOrderStatus.COMPLETED) {
-      throw AppError.badRequest("İş emri zaten tamamlanmış");
+      throw AppError.badRequest("Terbiye iş emri zaten tamamlanmış");
     }
     if (existing.status === WorkOrderStatus.SUPERSEDED) {
-      throw AppError.conflict("Devredilmiş iş emri kapatılamaz (malzemesi yeni iş emrine taşındı)");
+      throw AppError.conflict("Devredilmiş terbiye iş emri kapatılamaz (malzemesi yeni terbiye iş emrine taşındı)");
     }
     if (existing.status === WorkOrderStatus.CANCELLED) {
-      throw AppError.conflict("İptal edilmiş iş emri kapatılamaz");
+      throw AppError.conflict("İptal edilmiş terbiye iş emri kapatılamaz");
     }
     if (existing.status === WorkOrderStatus.PLANNED) {
-      throw AppError.badRequest("İş emri henüz üretime başlamadı — kapatmak yerine iptal edin");
+      throw AppError.badRequest("Terbiye iş emri henüz üretime başlamadı — kapatmak yerine iptal edin");
     }
 
     const dispositions = data.dispositions ?? [];
@@ -4330,7 +4331,7 @@ export class WorkOrderService {
     const stepSeqById = new Map(existing.steps.map((s) => [s.id, s.stepSequence]));
     // Adımsız WO'da in-flight top olamaz — gelen dispozisyon sessizce yutulmasın.
     if (stepIds.length === 0 && dispositions.length > 0) {
-      throw AppError.badRequest("İş emrinin adımı yok — dispozisyon verilebilecek top da yok");
+      throw AppError.badRequest("Terbiye iş emrinin adımı yok — dispozisyon verilebilecek top da yok");
     }
 
     const { updated, applied, transferredWorkOrderNumber, bypassRepointed } = await withBarcodeRetry(() =>
@@ -4346,7 +4347,7 @@ export class WorkOrderService {
         if (!claimed) {
           const fresh = await tx.workOrder.findUnique({ where: { id }, select: { status: true } });
           throw AppError.conflict(
-            `İş emri bu sırada ${
+            `Terbiye iş emri bu sırada ${
               fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "değişti"
             }, kapatılamaz. Sayfayı yenileyin.`,
           );
@@ -4382,7 +4383,7 @@ export class WorkOrderService {
           const outside = inFlight.filter((r) => CLOSE_BLOCKED_STATUSES.includes(r.status));
           if (outside.length > 0) {
             throw AppError.conflict(
-              `${outside.length} top fasonda (fiziksel olarak dışarıda) — iş emri ` +
+              `${outside.length} top fasonda (fiziksel olarak dışarıda) — terbiye iş emri ` +
                 "kapatılamaz. Önce fason kabul/iade yapılmalı.",
             );
           }
@@ -4398,7 +4399,7 @@ export class WorkOrderService {
             });
             if (openDispatchCount > 0) {
               throw AppError.conflict(
-                `${openDispatchCount} top açık bir fason sevkine bağlı — iş emri ` +
+                `${openDispatchCount} top açık bir fason sevkine bağlı — terbiye iş emri ` +
                   "kapatılamaz. Önce fason kapatılmalı.",
               );
             }
@@ -4599,10 +4600,10 @@ export class WorkOrderService {
       });
     }
 
-    const messageParts = [`İş emri manuel kapatıldı: ${existing.workOrderNumber}`];
+    const messageParts = [`Terbiye iş emri manuel kapatıldı: ${existing.workOrderNumber}`];
     if (applied.length > 0) messageParts.push(`${applied.length} top için dispozisyon uygulandı`);
     if (transferredWorkOrderNumber) {
-      messageParts.push(`devredilen toplar yeni iş emrinde: ${transferredWorkOrderNumber}`);
+      messageParts.push(`devredilen toplar yeni terbiye iş emrinde: ${transferredWorkOrderNumber}`);
     }
 
     return {
@@ -4646,7 +4647,7 @@ export class WorkOrderService {
 
     const sequences = rolls.map((r) => stepSeqById.get(r.currentStepId as string));
     if (sequences.some((s) => s === undefined)) {
-      throw AppError.conflict("Devredilecek top bu iş emrinin bir adımında değil — listeyi yenileyin");
+      throw AppError.conflict("Devredilecek top bu terbiye iş emrinin bir adımında değil — listeyi yenileyin");
     }
     const reEntryStepSequence = Math.min(...(sequences as number[]));
     const movedTotalQty = rolls.reduce((s, r) => s + Number(r.currentQty ?? 0), 0);
@@ -4669,7 +4670,7 @@ export class WorkOrderService {
     for (const roll of rolls) {
       const newStepId = oldToNew.get(roll.currentStepId as string);
       if (!newStepId) {
-        throw AppError.conflict("Yeni iş emrinde hedef adım bulunamadı (rota kopyası tutarsız)");
+        throw AppError.conflict("Yeni terbiye iş emrinde hedef adım bulunamadı (rota kopyası tutarsız)");
       }
       const claim = await tx.roll.updateMany({
         where: {
@@ -4688,7 +4689,7 @@ export class WorkOrderService {
 
     // Ayak izi (movement/operation/error) yeni WO'nun adımlarına repoint — aksi hâlde
     // kaynak WO'nun adımları "hâlâ bekleyen top var" sanır.
-    await repointRollsTx(tx, rollIds, oldToNew, { note: `İş emri devri → ${newWo.workOrderNumber}`, userId: userId ?? null });
+    await repointRollsTx(tx, rollIds, oldToNew, { note: `Terbiye iş emri devri → ${newWo.workOrderNumber}`, userId: userId ?? null });
 
     // Kurşun bypass ataması da MALLA BİRLİKTE taşınır: mal fiziksel olarak hâlâ
     // aynı kurşun makinesinde, yalnız iş emri değişti. `stepMap` TAŞINAN topların
@@ -4750,17 +4751,17 @@ export class WorkOrderService {
     });
 
     if (!existing) {
-      throw AppError.notFound("İş emri bulunamadı");
+      throw AppError.notFound("Terbiye iş emri bulunamadı");
     }
 
     if (existing.status === WorkOrderStatus.IN_PROGRESS) {
       throw AppError.conflict(
-        "Üretimdeki iş emri arşivlenemez. Önce iptal edin."
+        "Üretimdeki terbiye iş emri arşivlenemez. Önce iptal edin."
       );
     }
 
     if (!existing.isActive) {
-      throw AppError.conflict("Bu iş emri zaten arşivli.");
+      throw AppError.conflict("Bu terbiye iş emri zaten arşivli.");
     }
 
     const stepIds = existing.steps.map((s) => s.id);
@@ -4782,8 +4783,8 @@ export class WorkOrderService {
         });
         throw AppError.conflict(
           fresh && !fresh.isActive
-            ? "İş emri bu sırada arşivlendi."
-            : "İş emri bu sırada üretime geçti, arşivlenemez. Önce iptal edin."
+            ? "Terbiye iş emri bu sırada arşivlendi."
+            : "Terbiye iş emri bu sırada üretime geçti, arşivlenemez. Önce iptal edin."
         );
       }
 
@@ -4866,7 +4867,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: archived,
-      message: `İş emri arşivlendi: ${existing.workOrderNumber}`,
+      message: `Terbiye iş emri arşivlendi: ${existing.workOrderNumber}`,
     };
   }
 
@@ -4887,7 +4888,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: { attached: res.attached.length, errors: res.errors, batch: res.batch },
-      message: `${res.attached.length} top iş emrine bağlandı`,
+      message: `${res.attached.length} top terbiye iş emrine bağlandı`,
     };
   }
 
@@ -4920,14 +4921,14 @@ export class WorkOrderService {
     opts: { confirmPartial?: boolean } = {},
   ): Promise<ApiResponse<unknown>> {
     const wo = await prisma.workOrder.findUnique({ where: { id } });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
     if (
       wo.status === WorkOrderStatus.COMPLETED ||
       wo.status === WorkOrderStatus.CANCELLED ||
       wo.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
-        "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
+        "Tamamlanmış veya iptal edilmiş terbiye iş emri düzenlenemez.",
       );
     }
     assertWorkOrderNumberUnchanged(wo.workOrderNumber, data.batchNumber);
@@ -4989,7 +4990,7 @@ export class WorkOrderService {
     // STOCK_PRODUCTION'da targetItemId zorunlu — null'a çevirme yasak
     if (wo.type === "STOCK_PRODUCTION" && data.targetItemId === null) {
       throw AppError.badRequest(
-        "Stoğa üretim iş emrinde hedef ürün boş bırakılamaz."
+        "Stoğa üretim terbiye iş emrinde hedef ürün boş bırakılamaz."
       );
     }
     // Hedef ürünü bu karta ÇEVİRMEK yeni üretim planıdır (A3); değişmeyen hedef kontrol edilmez.
@@ -5095,7 +5096,7 @@ export class WorkOrderService {
       });
       if (updateClaim.count === 0 || !before) {
         throw AppError.conflict(
-          "İş emri bu sırada tamamlandı veya iptal edildi, düzenlenemez. Sayfayı yenileyin."
+          "Terbiye iş emri bu sırada tamamlandı veya iptal edildi, düzenlenemez. Sayfayı yenileyin."
         );
       }
       await recordWorkOrderFieldDiffTx(tx, id, { before, after: patch }, { trigger: "WO_UPDATE", userId });
@@ -5125,7 +5126,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: updated!,
-      message: "İş emri güncellendi",
+      message: "Terbiye iş emri güncellendi",
       // Engel olmayan notlar (örn. "rotada renk veren adım yok") — istemci toast basar.
       ...(colorWarnings.length > 0 ? { warnings: colorWarnings } : {}),
     };
@@ -5155,14 +5156,14 @@ export class WorkOrderService {
       where: { id },
       include: { targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } } },
     });
-    if (!existing) throw AppError.notFound("İş emri bulunamadı");
+    if (!existing) throw AppError.notFound("Terbiye iş emri bulunamadı");
     if (
       existing.status === WorkOrderStatus.COMPLETED ||
       existing.status === WorkOrderStatus.CANCELLED ||
       existing.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
-        "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
+        "Tamamlanmış veya iptal edilmiş terbiye iş emri düzenlenemez.",
       );
     }
 
@@ -5326,7 +5327,7 @@ export class WorkOrderService {
 
     if (type === "ORDER_PRODUCTION" && allocations.length === 0) {
       throw AppError.badRequest(
-        "Siparişe özel üretim iş emri en az bir sipariş kalemine bağlanmalıdır.",
+        "Siparişe özel üretim terbiye iş emri en az bir sipariş kalemine bağlanmalıdır.",
       );
     }
 
@@ -5335,7 +5336,7 @@ export class WorkOrderService {
 
     if (type === "STOCK_PRODUCTION" && !resolvedTargetItemId) {
       throw AppError.badRequest(
-        "Stoğa üretim iş emri için hedef ürün seçmelisiniz.",
+        "Stoğa üretim terbiye iş emri için hedef ürün seçmelisiniz.",
       );
     }
 
@@ -5445,7 +5446,7 @@ export class WorkOrderService {
 
         // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty sunucu karşılığı
         // (denetim Q2): değerini istasyonda operatör verir, hedef listesi taşımaz.
-        await assertTargetablePropertyIds(targetPropertyIds, "iş emri hedef özelliği");
+        await assertTargetablePropertyIds(targetPropertyIds, "terbiye iş emri hedef özelliği");
         const allowedSet = new Set(
           (targetItemFull?.allowedProperties ?? []).map((p) => p.propertyId),
         );
@@ -5517,7 +5518,7 @@ export class WorkOrderService {
       const before = await tx.workOrder.findUnique({ where: { id } });
       if (replaceClaim.count === 0 || !before) {
         throw AppError.conflict(
-          `İş emri bu sırada ${
+          `Terbiye iş emri bu sırada ${
             before?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
           }, düzenlenemez. Sayfayı yenileyin.`
         );
@@ -5622,12 +5623,12 @@ export class WorkOrderService {
             if (previousLinkIds.has(line.id)) continue;
             if (line.itemId !== existing.targetItemId) {
               throw AppError.conflict(
-                "Sevk yapılmış iş emrine farklı kumaş içeren sipariş bağlanamaz.",
+                "Sevk yapılmış terbiye iş emrine farklı kumaş içeren sipariş bağlanamaz.",
               );
             }
             if (normNum(line.width) !== normNum(existing.width)) {
               throw AppError.conflict(
-                "Sevk yapılmış iş emrine farklı eninde sipariş bağlanamaz.",
+                "Sevk yapılmış terbiye iş emrine farklı eninde sipariş bağlanamaz.",
               );
             }
           }
@@ -5896,7 +5897,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: updated,
-      message: `İş emri güncellendi: ${updated.workOrderNumber}`,
+      message: `Terbiye iş emri güncellendi: ${updated.workOrderNumber}`,
       ...(replaceWarnings.length > 0 ? { warnings: replaceWarnings } : {}),
     };
   }
@@ -5928,7 +5929,7 @@ export class WorkOrderService {
         },
       },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
 
     const dedupedIds = [...new Set(propertyIds)];
 
@@ -5965,7 +5966,7 @@ export class WorkOrderService {
       }
       // SEÇİM tipli özellik HEDEF olamaz — isTargetableProperty'nin sunucu
       // karşılığı (denetim Q2). Buradaki istemci aktif seçim yapıyor → 400 doğru.
-      await assertTargetablePropertyIds(dedupedIds, "iş emri hedef özelliği");
+      await assertTargetablePropertyIds(dedupedIds, "terbiye iş emri hedef özelliği");
 
       const allowedSet = new Set(
         (wo.targetItem?.allowedProperties ?? []).map((p) => p.propertyId),
@@ -6144,14 +6145,14 @@ export class WorkOrderService {
       where: { id: workOrderId },
       select: { id: true, status: true },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
     if (
       wo.status === WorkOrderStatus.COMPLETED ||
       wo.status === WorkOrderStatus.CANCELLED ||
       wo.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict(
-        `Tamamlanmış/iptal edilmiş iş emrinde adım planlaması değiştirilemez (durum: ${wo.status}).`,
+        `Tamamlanmış/iptal edilmiş terbiye iş emrinde adım planlaması değiştirilemez (durum: ${wo.status}).`,
       );
     }
 
@@ -6164,7 +6165,7 @@ export class WorkOrderService {
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
     if (step.workOrderId !== workOrderId) {
-      throw AppError.badRequest("Adım bu iş emrine ait değil");
+      throw AppError.badRequest("Adım bu terbiye iş emrine ait değil");
     }
     if (step.station.type !== "EXTERNAL") {
       throw AppError.badRequest(
@@ -6224,7 +6225,7 @@ export class WorkOrderService {
       });
       if (claim.count === 0) {
         throw AppError.conflict(
-          "İş emri bu sırada tamamlandı/iptal edildi — adım planlaması güncellenemedi. Sayfayı yenileyin.",
+          "Terbiye iş emri bu sırada tamamlandı/iptal edildi — adım planlaması güncellenemedi. Sayfayı yenileyin.",
         );
       }
       // Planlanan fasoncu kartın OPERASYON tablosunda basılı ("Boyahane (Fason) — Yıldız Boyahane").
@@ -6263,10 +6264,10 @@ export class WorkOrderService {
   async lockWorkOrder(workOrderId: string, userId?: string): Promise<ApiResponse<WorkOrder>> {
     const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId } });
     if (!wo) {
-      throw AppError.notFound("İş emri bulunamadı");
+      throw AppError.notFound("Terbiye iş emri bulunamadı");
     }
     if (wo.status !== WorkOrderStatus.PLANNED) {
-      throw AppError.badRequest("Sadece 'Planlandı' durumundaki iş emirleri kilitlenebilir/başlatılabilir.");
+      throw AppError.badRequest("Sadece 'Planlandı' durumundaki terbiye iş emirleri kilitlenebilir/başlatılabilir.");
     }
 
     // ATOMİK CLAIM (check-then-act DEĞİL): PLANNED→IN_PROGRESS geçişini status-koşullu
@@ -6285,7 +6286,7 @@ export class WorkOrderService {
         select: { status: true },
       });
       throw AppError.conflict(
-        `İş emri bu sırada ${fresh?.status} durumuna geçti — kilitlenemedi. Sayfayı yenileyin.`
+        `Terbiye iş emri bu sırada ${fresh?.status} durumuna geçti — kilitlenemedi. Sayfayı yenileyin.`
       );
     }
     const updated = await prisma.workOrder.findUnique({ where: { id: workOrderId } });
@@ -6302,7 +6303,7 @@ export class WorkOrderService {
     return {
       success: true,
       data: updated!,
-      message: "İş emri kilitlendi ve üretime (IN_PROGRESS) alındı.",
+      message: "Terbiye iş emri kilitlendi ve üretime (IN_PROGRESS) alındı.",
     };
   }
 
@@ -6329,7 +6330,7 @@ export class WorkOrderService {
       where: { id: workOrderId },
       select: { id: true, workOrderNumber: true },
     });
-    if (!wo) throw AppError.notFound("İş emri bulunamadı");
+    if (!wo) throw AppError.notFound("Terbiye iş emri bulunamadı");
 
     // Dört kaynak paralel değil SERİ okunur (pg adapter tek connection —
     // `Promise.all([tx.*])` yasağıyla aynı gerekçe; burada tx yok ama havuz
@@ -6399,7 +6400,7 @@ export class WorkOrderService {
         // "bu iş emrinin belgeleri" sorusunu tarih sırasıyla cevaplıyor ve
         // tarihsiz satır sıranın dışına düşerdi.
         date: (card.printedAt ?? card.createdAt).toISOString(),
-        group: "İş Emri Belgeleri",
+        group: `${TERIM.terbiyeIsEmri.tekil} Belgeleri`,
         title: "Refakat Kartı",
         subtitle: `v${card.version} · Üretim sahasında topla birlikte dolaşır`,
         cancelled: card.status === "VOIDED",
@@ -6479,7 +6480,7 @@ export class WorkOrderService {
     });
 
     if (!wo) {
-      throw AppError.notFound("İş emri bulunamadı");
+      throw AppError.notFound("Terbiye iş emri bulunamadı");
     }
 
     const stepIds = wo.steps.map((s) => s.id);
@@ -6543,7 +6544,7 @@ export class WorkOrderService {
     });
 
     if (!wo) {
-      return { success: false, data: null, message: "İş emri bulunamadı" };
+      return { success: false, data: null, message: "Terbiye iş emri bulunamadı" };
     }
 
     const travelCard = {
@@ -6690,7 +6691,7 @@ export class WorkOrderService {
 
     const live = await this.computeLiveManifest(workOrderId);
     if (!live) {
-      return { success: false, data: null, message: "İş emri bulunamadı" };
+      return { success: false, data: null, message: "Terbiye iş emri bulunamadı" };
     }
     return { success: true, data: { ...live, isSnapshot: false } };
   }
@@ -6707,7 +6708,7 @@ export class WorkOrderService {
   ): Promise<ApiResponse<Record<string, unknown> | null>> {
     const live = await this.computeLiveManifest(workOrderId);
     if (!live) {
-      throw AppError.notFound("İş emri bulunamadı");
+      throw AppError.notFound("Terbiye iş emri bulunamadı");
     }
 
     // Çeki listesi numarası biçimi VERİDİR (numara serisi `manifest`); ön ek,

@@ -85,7 +85,7 @@ export async function assertStepNotBypassAssigned(
   const pending = await findPendingBypassAssignmentTx(db, stepId);
   if (pending) {
     throw AppError.conflict(
-      `Bu iş emri kurşun makinesine dağıtılmış (bypass) — ${actionLabel} yapılamaz. Dağıtımı iptal edin ya da Tambur'da kartı okutun.`,
+      `Bu terbiye iş emri kurşun makinesine dağıtılmış (bypass) — ${actionLabel} yapılamaz. Dağıtımı iptal edin ya da Tambur'da kartı okutun.`,
     );
   }
 }

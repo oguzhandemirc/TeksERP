@@ -61,7 +61,7 @@ export async function postProductionIssuesTx(
 
 /** İş emri iptalinde dönüş satırlarının notu — zaman çizelgesi aynı eylemi bu notla gruplar. */
 export function cancelReturnNote(workOrderNumber: string): string {
-  return `İş emri iptali ${workOrderNumber}`;
+  return `Terbiye iş emri iptali ${workOrderNumber}`;
 }
 
 /**

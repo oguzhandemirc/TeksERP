@@ -227,14 +227,14 @@ export async function requireDokumaEnabled(
     const production = await readProductionEnabled();
     if (!production) {
       throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim") ?? AppError.forbidden(
-        "Dokuma işi modülü Üretim modülüne bağlıdır; Üretim modülü bu kurulumda kapalı. " +
+        "Dokuma iş emri modülü Üretim modülüne bağlıdır; Üretim modülü bu kurulumda kapalı. " +
           "Sistem → Modüller bölümünden açılabilir.",
         { code: "MODULE_DISABLED", modul: "production", dependent: "dokuma" },
       );
     }
     const enabled = await readDokumaEnabled();
     if (!enabled) {
-      throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma işi") ?? modulKapali("dokuma", "Dokuma işi");
+      throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma iş emri") ?? modulKapali("dokuma", "Dokuma iş emri");
     }
     next();
   } catch (e) {

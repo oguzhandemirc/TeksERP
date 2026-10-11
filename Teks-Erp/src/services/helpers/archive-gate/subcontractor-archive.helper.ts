@@ -38,7 +38,7 @@ export const SUBCONTRACTOR_ARCHIVE: ArchiveSpec = {
     },
     {
       kind: "WEAVING_ORDER",
-      label: "Açık dokuma işi",
+      label: "Açık dokuma iş emri",
       count: (db, id) => db.weavingOrder.count({ where: { subcontractorId: id, ...OPEN_WEAVING_ORDER } }),
       list: async (db, id, take) =>
         (await db.weavingOrder.findMany({ where: { subcontractorId: id, ...OPEN_WEAVING_ORDER }, take, select: { id: true, weavingOrderNumber: true, status: true } }))
@@ -54,7 +54,7 @@ export const SUBCONTRACTOR_ARCHIVE: ArchiveSpec = {
     },
     {
       kind: "PLANNED_STEP",
-      label: "Açık iş emrinde planlı adım",
+      label: "Açık terbiye iş emrinde planlı adım",
       count: (db, id) => db.workOrderStep.count({ where: { plannedSubcontractorId: id, ...OPEN_STEP } }),
       list: async (db, id, take) =>
         (await db.workOrderStep.findMany({ where: { plannedSubcontractorId: id, ...OPEN_STEP }, take, select: { id: true, stepSequence: true, workOrder: { select: { workOrderNumber: true } } } }))

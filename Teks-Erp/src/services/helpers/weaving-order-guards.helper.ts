@@ -20,7 +20,7 @@ export async function assertRefs(
 ): Promise<void> {
   const item = await prisma.item.findUnique({ where: { id: f.itemId }, select: { itemType: true } });
   if (!item) throw AppError.badRequest("Kumaş kartı bulunamadı");
-  if (item.itemType !== ItemType.FABRIC) throw AppError.badRequest("Dokuma işi yalnız KUMAŞ kartına açılır");
+  if (item.itemType !== ItemType.FABRIC) throw AppError.badRequest("Dokuma iş emri yalnız KUMAŞ kartına açılır");
   if (itemUsage) await assertItemUsable(prisma, f.itemId, itemUsage);
   if (f.colorId) {
     const n = await prisma.color.count({ where: { id: f.colorId, isActive: true } });
@@ -52,7 +52,7 @@ export async function assertNoOpenRunsTx(tx: Prisma.TransactionClient, weavingOr
   }));
   const adlar = [...new Set(machines.map((m) => m.machineName))].join(", ");
   throw AppError.conflict(
-    `Açık koşum varken dokuma işi ${eylem} — önce koşumları kapatın: ${adlar}`,
+    `Açık koşum varken dokuma iş emri ${eylem} — önce koşumları kapatın: ${adlar}`,
     { code: "WEAVING_ORDER_HAS_OPEN_RUNS", machines, runIds: open.map((r) => r.id) },
   );
 }
@@ -60,7 +60,7 @@ export async function assertNoOpenRunsTx(tx: Prisma.TransactionClient, weavingOr
 /** Claim düştü → taze oku: yok → 404, var → 409 (durum adıyla). */
 export async function throwClaimFailureTx(tx: Prisma.TransactionClient, id: string, eylem: string, code: string): Promise<never> {
   const fresh = await tx.weavingOrder.findUnique({ where: { id }, select: { status: true, weavingOrderNumber: true } });
-  if (!fresh) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!fresh) throw AppError.notFound("Dokuma iş emri bulunamadı");
   throw AppError.conflict(
     `${fresh.weavingOrderNumber} ${WEAVING_ORDER_STATUS_LABEL[fresh.status]} — ${eylem}`,
     { code, status: fresh.status },

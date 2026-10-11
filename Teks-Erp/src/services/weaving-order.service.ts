@@ -91,7 +91,7 @@ export interface WeavingOrderListParams {
 
 export async function getWeavingOrder(id: string): Promise<ApiResponse<WeavingOrderDto>> {
   const row = await prisma.weavingOrder.findUnique({ where: { id }, select: WEAVING_ORDER_SELECT });
-  if (!row) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!row) throw AppError.notFound("Dokuma iş emri bulunamadı");
   // Y3 TÜRETİLMİŞ: top → indirme → koşum → iş (kolon yok; zincir TEK dosyada — `weaving-order-of-roll.helper`). Yalnız detayda.
   const producedRollCount = await countRollsOfWeavingOrder(prisma, id);
   return { success: true, data: { ...toWeavingOrderDto(row), producedRollCount } };
@@ -171,9 +171,9 @@ function weavingOrderReplay(input: WeavingOrderCreateInput) {
         ...(input.warpSpecId !== undefined ? [{ ad: "warpSpecId", mevcut: r.warpSpecId, gelen: f.warpSpecId ?? null }] : []),
       ];
     },
-    collision: "Bu istemci anahtarı BAŞKA bir dokuma işiyle kullanılmış — formu yenileyip yeniden deneyin.",
+    collision: "Bu istemci anahtarı BAŞKA bir dokuma iş emriyle kullanılmış — formu yenileyip yeniden deneyin.",
     collisionEk: (r) => ({ weavingOrderId: r.id }),
-    respond: (r) => ({ success: true, data: toWeavingOrderDto(r), message: "Dokuma işi zaten oluşturulmuş" }),
+    respond: (r) => ({ success: true, data: toWeavingOrderDto(r), message: "Dokuma iş emri zaten oluşturulmuş" }),
   });
 }
 
@@ -256,7 +256,7 @@ export async function updateWeavingOrder(
   if (Object.keys(patch).length === 0 && orderLines === null) throw AppError.badRequest("Güncellenecek alan yok");
 
   const before = await prisma.weavingOrder.findUnique({ where: { id }, select: WEAVING_ORDER_SELECT });
-  if (!before) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!before) throw AppError.notFound("Dokuma iş emri bulunamadı");
   if (orderLines !== null) {
     await assertOrderLineLinkGate(prisma, orderLines.length);
     await assertOrderLinesLinkableTx(prisma, orderLines);
@@ -305,7 +305,7 @@ export async function updateWeavingOrder(
  */
 export async function closeWeavingOrder(id: string, userId?: string): Promise<ApiResponse<WeavingOrderDto>> {
   const before = await prisma.weavingOrder.findUnique({ where: { id }, select: { status: true } });
-  if (!before) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!before) throw AppError.notFound("Dokuma iş emri bulunamadı");
 
   const closed = await prisma.$transaction(async (tx) => {
     // CLAIM ÖNCE (satır kilidi), koşum sayımı SONRA — ikiz yüklem.
@@ -347,7 +347,7 @@ export async function cancelWeavingOrder(
   const cancelReason = reason.trim().slice(0, 300);
   if (!cancelReason) throw AppError.badRequest("İptal sebebi zorunlu");
   const before = await prisma.weavingOrder.findUnique({ where: { id }, select: { status: true } });
-  if (!before) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!before) throw AppError.notFound("Dokuma iş emri bulunamadı");
 
   const cancelled = await prisma.$transaction(async (tx) => {
     // CLAIM ÖNCE (satır kilidi), koşum sayımı SONRA — ikiz yüklem.

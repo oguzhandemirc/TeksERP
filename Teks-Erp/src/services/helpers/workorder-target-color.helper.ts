@@ -180,8 +180,8 @@ export async function assertTargetColorChange(
     partial = { dyedCount: mismatchCount, pendingCount };
     if (pendingCount === 0) {
       throw AppError.conflict(
-        `Mal zaten ${dyedLabel} boyandı (${mismatchCount} top) ve boyanacak top kalmadı — bu iş emri ${dyedLabel} olarak biter. ` +
-          `Yeniden boyanacaksa Tebdil, müşteri ${newName} istiyorsa yeni iş emri; kayıt yanlışsa topları da düzeltin.`,
+        `Mal zaten ${dyedLabel} boyandı (${mismatchCount} top) ve boyanacak top kalmadı — bu terbiye iş emri ${dyedLabel} olarak biter. ` +
+          `Yeniden boyanacaksa Tebdil, müşteri ${newName} istiyorsa yeni terbiye iş emri; kayıt yanlışsa topları da düzeltin.`,
         {
           code: COLOR_DYED_BLOCKED_CODE,
           dyedCount: mismatchCount,

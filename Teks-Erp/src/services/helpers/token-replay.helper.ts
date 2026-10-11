@@ -173,7 +173,7 @@ export function assertOrderReplayAlive(existing: {
 export function assertWorkOrderReplayAlive(existing: { workOrderNumber: string; isActive: boolean; status: string }): void {
   if (existing.isActive && existing.status !== "CANCELLED") return;
   throw AppError.conflict(
-    `Bu form daha önce kaydedilmiş ama iş emri (${existing.workOrderNumber}) İPTAL edilmiş ya da arşivlenmiş — aynı gönderim tekrar edilemez. Yeni iş emri için formu kapatıp yeniden açın.`,
+    `Bu form daha önce kaydedilmiş ama terbiye iş emri (${existing.workOrderNumber}) İPTAL edilmiş ya da arşivlenmiş — aynı gönderim tekrar edilemez. Yeni terbiye iş emri için formu kapatıp yeniden açın.`,
     { code: "WORK_ORDER_CANCELLED", workOrderNumber: existing.workOrderNumber },
   );
 }
@@ -192,7 +192,7 @@ export function assertWeavingOrderReplayAlive(existing: {
 }): void {
   if (existing.status !== WeavingOrderStatus.CANCELLED) return;
   throw AppError.conflict(
-    `Bu form daha önce kaydedilmiş ve dokuma işi İPTAL edilmiş (${existing.weavingOrderNumber}) — ` +
+    `Bu form daha önce kaydedilmiş ve dokuma iş emri İPTAL edilmiş (${existing.weavingOrderNumber}) — ` +
       "aynı gönderim tekrar edilemez. Yeni iş için formu kapatıp yeniden açın.",
     { code: "WEAVING_ORDER_CANCELLED", weavingOrderId: existing.id, weavingOrderNumber: existing.weavingOrderNumber },
   );

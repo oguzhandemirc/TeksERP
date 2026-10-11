@@ -83,7 +83,7 @@ export async function cancelWeavingReceipt(receiptId: string, reason: string, us
 /** Dokuma işinin fason özeti: giden levent metresi ↔ dönen levent kalanı ↔ doğan top metresi (çözgü metresi bazında). */
 export async function getWeavingSubcontractSummary(weavingOrderId: string): Promise<ApiResponse<unknown>> {
   const wo = await prisma.weavingOrder.findUnique({ where: { id: weavingOrderId }, select: WO_SELECT });
-  if (!wo) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (!wo) throw AppError.notFound("Dokuma iş emri bulunamadı");
   const [dispatches, receipts] = await Promise.all([
     prisma.subcontractorDispatch.findMany({
       where: { weavingOrderId },

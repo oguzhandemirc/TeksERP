@@ -25,6 +25,7 @@
 // =============================================================================
 
 import { PERMISSION_CATALOG } from "./permission-catalog";
+import { TERIM } from "./terim";
 
 export interface ScreenCapability {
   /** Yetki kodu — PERMISSION_CATALOG'da BULUNMAK ZORUNDA (bekçi doğrular). */
@@ -137,7 +138,7 @@ const CAP_LABEL: Record<string, string> = {
   "label-template:read": "Etiket şablonlarını görebilir",
   "label-template:write": "Etiket şablonu düzenleyebilir",
   "order:write": "Sipariş açıp düzenleyebilir",
-  "workorder:write": "İş emri açıp düzenleyebilir",
+  "workorder:write": "Terbiye iş emri açıp düzenleyebilir",
   "workorder:distribute": "Kurşun dağıtımı yapabilir",
   "roll:write": "Top kaydı düzenleyebilir",
   "roll:manual-adjust": "Top metraj/kalite düzeltmesi (riskli)",
@@ -153,7 +154,7 @@ const CAP_LABEL: Record<string, string> = {
   "admin:settings": "Sistem ayarlarını değiştirebilir",
   "order:read": "Sipariş görebilir",
   "shipping:read": "Sevkiyat görebilir",
-  "workorder:read": "İş emri görebilir",
+  "workorder:read": "Terbiye iş emri görebilir",
   "customer-alias:read": "Müşteri ad eşlemesini görebilir",
   "property:read": "Renk/özellik görebilir",
   "quality:read": "Kalite tanımı görebilir",
@@ -169,7 +170,7 @@ const CAP_LABEL: Record<string, string> = {
   "goods-receipt:write": "Mal kabul fişi açıp düzenleyebilir",
   "warehouse:write": "Depo tanımı ve sayım düzenleyebilir",
   "yarn:write": "İplik stok hareketi girebilir",
-  "weavingorder:write": "Dokuma işi açıp düzenleyebilir, kapatıp iptal edebilir",
+  "weavingorder:write": "Dokuma iş emri açıp düzenleyebilir, kapatıp iptal edebilir",
   "warpbeam:write": "Levent planlayıp sarabilir (iplik çıkışı ve dip iadesi yazar)",
   "warpbeam:cancel": "Sarımı iptal edebilir (iplik net geri döner)",
   "price:write": "Kalem fiyatı tanımlayabilir",
@@ -191,7 +192,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/peripherals", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Donanım", requires: ["station:read"], capabilities: ["station:write"] },
   { key: "definitions/labels", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Etiketler", requires: ["station:read"], capabilities: ["label-template:read", "label-template:write"] },
   { key: "definitions/routes", app: "desktop", modul: "productionEnabled", title: "Üretim Rotaları", requires: ["station:read"], capabilities: ["property:write", "station:write"] },
-  { key: "definitions/product-recipes", app: "desktop", modul: "productionEnabled", title: "İş Emri Şablonları", requires: ["station:read"], capabilities: ["station:write"] },
+  { key: "definitions/product-recipes", app: "desktop", modul: "productionEnabled", title: `${TERIM.terbiyeIsEmri.tekil} Şablonları`, requires: ["station:read"], capabilities: ["station:write"] },
   // TEK EKRAN, DÖRT SEKME (fire · kayıt düzeltmesi · elle ekleme · iptal) —
   // düzenleme `roll:manual-adjust` YETENEĞİdir, ekranı görmek için gerekmez.
   { key: "definitions/reason-presets", app: "desktop", modul: "cekirdek:ana-veri", title: "Hazır Sebepler", requires: ["roll:read"], capabilities: ["roll:manual-adjust"] },
@@ -270,8 +271,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "system/roll-archive", app: "desktop", modul: "cekirdek:stok-giris", title: "Top Arşivi", requires: ["admin:settings", "roll:read"], capabilities: [] },
   { key: "operations/orders", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Siparişler", requires: ["order:read"], capabilities: ["customer-alias:read", "order:write", "shipping:read", "workorder:write"] },
   { key: "operations/allocation-repair", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Siparişe yazılamayan sevkiyatlar", requires: ["shipping:repair-allocation"], capabilities: [] },
-  { key: "operations/work-orders", app: "desktop", modul: "productionEnabled", title: "İş Emirleri", requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
-  { key: "operations/work-order-events", app: "desktop", modul: "productionEnabled", title: "İş Emri Hareketleri", requires: ["workorder:read"], capabilities: [] },
+  { key: "operations/work-orders", app: "desktop", modul: "productionEnabled", title: TERIM.terbiyeIsEmri.cogul, requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
+  { key: "operations/work-order-events", app: "desktop", modul: "productionEnabled", title: `${TERIM.terbiyeIsEmri.tekil} Hareketleri`, requires: ["workorder:read"], capabilities: [] },
   { key: "operations/rolls", app: "desktop", modul: "cekirdek:stok-giris", title: "Kumaş Stoğu", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
   { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: "Kurşun Planlama", requires: ["quality:write", "workorder:distribute"], capabilities: [] },
   { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
@@ -283,7 +284,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/kartela", app: "desktop", modul: "planlanan:kartela", title: "Kartela Takibi", requires: ["kartela:read"], capabilities: ["kartela:write"] },
   // Dokuma işi planlama (2026-09-13, ekran dilimi). Modül `dokumaEnabled` — üretime
   // bağımlı, tezgah izlemenin kardeşi; referans profilde KAPALI.
-  { key: "operations/weaving-orders", app: "desktop", modul: "dokumaEnabled", title: "Dokuma İşleri", requires: ["weavingorder:read"], capabilities: ["weavingorder:write"] },
+  { key: "operations/weaving-orders", app: "desktop", modul: "dokumaEnabled", title: TERIM.dokumaIsEmri.cogul, requires: ["weavingorder:read"], capabilities: ["weavingorder:write"] },
   // Leventler (devere Faz 1b, 2026-09-14): plan → sar → hazır levent; sarım iptali ayrı yetenek.
   { key: "operations/warp-beams", app: "desktop", modul: "devereEnabled", title: "Leventler", requires: ["warpbeam:read"], capabilities: ["warpbeam:write", "warpbeam:cancel"] },
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
@@ -368,7 +369,7 @@ const mobile: ScreenEntry[] = [
   { key: "KartelaSevk", app: "mobile", modul: "planlanan:kartela", title: "Kartela Sevk", requires: ["mobile:kartela-sevk"], capabilities: [] },
   { key: "KartelaKabul", app: "mobile", modul: "planlanan:kartela", title: "Kartela Kabul", requires: ["mobile:kartela-kabul"], capabilities: [] },
   { key: "IadeGirisi", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "İade Girişi", requires: ["mobile:iade"], capabilities: [] },
-  { key: "HizliIsEmri", app: "mobile", modul: "productionEnabled", title: "Hızlı İş Emri", requires: ["mobile:hizli-is-emri"], capabilities: [{ code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }, { code: "mobile:is-emri-duzelt", label: "Açılmış iş emrini düzeltebilir (renk · en · sipariş bağı · kartı yeniden bas)" }] },
+  { key: "HizliIsEmri", app: "mobile", modul: "productionEnabled", title: `Hızlı ${TERIM.terbiyeIsEmri.tekil}`, requires: ["mobile:hizli-is-emri"], capabilities: [{ code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }, { code: "mobile:is-emri-duzelt", label: "Açılmış terbiye iş emrini düzeltebilir (renk · en · sipariş bağı · kartı yeniden bas)" }] },
   { key: "Siparis", app: "mobile", modul: "cekirdek:siparis-musteri", title: "Sipariş", requires: ["mobile:siparis"], capabilities: [] },
   { key: "Kumas", app: "mobile", modul: "cekirdek:ana-veri", title: "Kumaş Ekle", requires: ["mobile:kumas"], capabilities: [] },
   { key: "KursunDagitim", app: "mobile", modul: "productionEnabled", title: "Kurşun Dağıtım", requires: ["mobile:kursun-dagitim"], capabilities: [] },

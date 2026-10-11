@@ -19,6 +19,8 @@
 // Bekçi bu ilişkiyi (kova izni ⊆ liste route izni) mekanik doğrular.
 // =============================================================================
 
+import { TERIM } from "./terim";
+
 /** Kova kimliği — panel `search-targets.ts` bu anahtarla hedefi çözer. */
 export type SearchEntityKey =
   | "customer"
@@ -109,7 +111,7 @@ export const SEARCH_ENTITIES: readonly SearchEntity[] = [
   },
   {
     key: "workOrder",
-    label: "İş Emirleri",
+    label: TERIM.terbiyeIsEmri.cogul,
     modelName: "workOrder",
     permissions: ["workorder:read"],
     searchFields: ["targetItem.name", "targetColor.name"],

@@ -11,6 +11,7 @@ import { resolveReference, resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { importKey } from "../import-key";
+import { TERIM } from "../../../constants/terim";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -70,7 +71,7 @@ const COLUMNS: ImportColumn[] = [
 
 export const productRecipeImportAdapter: ImportAdapter = {
   entity: "productRecipe",
-  label: "İş Emri Şablonları",
+  label: `${TERIM.terbiyeIsEmri.tekil} Şablonları`,
   tableName: "PRODUCT_RECIPE",
   // ⚠️ İZİN, VARLIĞIN GERÇEK CRUD İZNİDİR (bkz. color.adapter.ts notu).
   // `POST /api/product-recipes` → `station:write`; burada `item:*` yazıyordu.
@@ -80,7 +81,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
   columns: COLUMNS,
   // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
   // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
-  nameGuard: { model: "productRecipe", field: "name", label: "iş emri şablonu", codeField: "code" },
+  nameGuard: { model: "productRecipe", field: "name", label: "terbiye iş emri şablonu", codeField: "code" },
   notes: [
     "Şablon kodunu sistem üretir — YENİ şablon eklerken kod sütununu BOŞ bırakın.",
     "Özellik listesi DEĞİŞTİRME (replace) mantığıyla yazılır: dosyadaki liste neyse o kalır.",

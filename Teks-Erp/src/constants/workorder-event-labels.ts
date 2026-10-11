@@ -28,7 +28,7 @@ export const WORK_ORDER_FIELD_LABEL: Record<WorkOrderTrackedField, string> = {
   plannedStartDate: "Planlanan başlangıç",
   plannedEndDate: "Planlanan bitiş",
   routeTemplateId: "Rota",
-  type: "İş emri tipi",
+  type: "Terbiye iş emri tipi",
   isActive: "Arşiv",
 };
 
@@ -49,13 +49,13 @@ export const WORK_ORDER_ROLL_ATTRIBUTE_LABEL: Record<string, string> = {
 
 /** Olayı tetikleyen işlem (`WorkOrderEvent.trigger`) → okunur ad. */
 export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
-  WO_CREATE: "İş emri açılışı",
+  WO_CREATE: "Terbiye iş emri açılışı",
   WO_SPLIT_CLONE: "Parti ayırma / devir",
   WO_LOCK: "Kilitle / başlat",
   AUTO_START: "İlk adım başladı",
   STEP_ACTIVE: "Adım başladı",
   MANUAL_COMPLETE: "Elle kapatma",
-  WO_CANCEL: "İş emri iptali",
+  WO_CANCEL: "Terbiye iş emri iptali",
   ORDER_CANCEL: "Sipariş iptali",
   WO_SPLIT_SUPERSEDE: "Tüm partiler devredildi",
   WO_ARCHIVE: "Arşive kaldırma",

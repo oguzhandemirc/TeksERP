@@ -22,7 +22,7 @@ export const FABRIC_PROPERTY_ARCHIVE: ArchiveSpec = {
     },
     {
       kind: "WORK_ORDER",
-      label: "Açık iş emrinin hedef özelliği",
+      label: "Açık terbiye iş emrinin hedef özelliği",
       count: (db, id) => db.workOrderTargetProperty.count({ where: { propertyId: id, ...ACTIVE_TARGET_PROPERTY, workOrder: OPEN_WORK_ORDER } }),
       list: async (db, id, take) =>
         (await db.workOrderTargetProperty.findMany({ where: { propertyId: id, ...ACTIVE_TARGET_PROPERTY, workOrder: OPEN_WORK_ORDER }, take, select: { id: true, workOrder: { select: { workOrderNumber: true, status: true } } } }))

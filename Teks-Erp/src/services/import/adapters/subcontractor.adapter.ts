@@ -79,7 +79,7 @@ const COLUMNS: ImportColumn[] = [
     key: "isFavorite",
     label: "Favori",
     type: "bool",
-    help: "Evet ise iş emri fason adımında firma seçicide öne çıkar.",
+    help: "Evet ise terbiye iş emri fason adımında firma seçicide öne çıkar.",
     example: "Hayır",
   },
   { key: "isActive", label: "Aktif", type: "bool", help: "Evet / Hayır.", example: "Evet" },

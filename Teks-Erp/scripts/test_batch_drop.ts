@@ -315,7 +315,7 @@ async function main(): Promise<void> {
       await expectThrow(
         "başka iş emrinin partisi → 400",
         () => svc.dropBatch(b.woId, wa.batchId, { reason: "test sebebi" }, ADMIN),
-        "bu iş emrine ait değil",
+        "bu terbiye iş emrine ait değil",
       );
       await expectThrow(
         "gerekçesiz → 400",

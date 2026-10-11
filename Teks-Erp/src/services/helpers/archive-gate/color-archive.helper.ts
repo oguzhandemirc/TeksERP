@@ -38,7 +38,7 @@ export const COLOR_ARCHIVE: ArchiveSpec = {
     },
     {
       kind: "WORK_ORDER",
-      label: "Açık iş emri",
+      label: "Açık terbiye iş emri",
       count: (db, id) => db.workOrder.count({ where: { targetColorId: id, ...OPEN_WORK_ORDER } }),
       list: async (db, id, take) =>
         (await db.workOrder.findMany({ where: { targetColorId: id, ...OPEN_WORK_ORDER }, take, select: { id: true, workOrderNumber: true, status: true } }))
@@ -46,7 +46,7 @@ export const COLOR_ARCHIVE: ArchiveSpec = {
     },
     {
       kind: "WEAVING_ORDER",
-      label: "Açık dokuma işi",
+      label: "Açık dokuma iş emri",
       count: (db, id) => db.weavingOrder.count({ where: { colorId: id, ...OPEN_WEAVING_ORDER } }),
       list: async (db, id, take) =>
         (await db.weavingOrder.findMany({ where: { colorId: id, ...OPEN_WEAVING_ORDER }, take, select: { id: true, weavingOrderNumber: true, status: true } }))

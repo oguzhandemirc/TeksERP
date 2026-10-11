@@ -63,7 +63,7 @@ export const MODULE_LABELS: Readonly<Record<ModuleFlagKey, string>> = {
   kumasTeknikEnabled: "Kumaş teknik kartı",
   tezgahEnabled: "Tezgah izleme",
   devereEnabled: "Devere / levent",
-  dokumaEnabled: "Dokuma işi",
+  dokumaEnabled: "Dokuma iş emri",
   emanetEnabled: "Emanet / konsinye mülkiyet",
 };
 

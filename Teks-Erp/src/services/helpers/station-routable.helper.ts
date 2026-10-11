@@ -37,7 +37,7 @@ export async function assertStationsRoutable(db: Db, stationIds: readonly string
   if (blocked.length === 0) return;
   throw AppError.badRequest(
     `Rotaya giremeyen istasyon türü: ${blocked.map((s) => `${s.name} (${s.kind})`).join(", ")} — ` +
-      "tezgah ve devere topun rotasında bir adım değildir; dokuma işi, koşum ve levent ayrı yaşar.",
+      "tezgah ve devere topun rotasında bir adım değildir; dokuma iş emri, koşum ve levent ayrı yaşar.",
     { code: "STATION_NOT_ROUTABLE", stationIds: blocked.map((s) => s.id), kinds: blocked.map((s) => s.kind) },
   );
 }

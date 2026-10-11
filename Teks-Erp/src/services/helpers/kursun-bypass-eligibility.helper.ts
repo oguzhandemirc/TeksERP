@@ -279,6 +279,6 @@ export async function assertKursunTabletMayWrite(
   if (!eligibility?.eligible) return;
 
   throw AppError.conflict(
-    `Kurşun dağıtımı açık — ${actionLabel} kurşun tabletinden yapılamaz. Bu iş emri Kurşun Planlama ekranından bir kurşun makinesine dağıtılır ve Tambur'da kart okutulduğunda kapanır.`,
+    `Kurşun dağıtımı açık — ${actionLabel} kurşun tabletinden yapılamaz. Bu terbiye iş emri Kurşun Planlama ekranından bir kurşun makinesine dağıtılır ve Tambur'da kart okutulduğunda kapanır.`,
   );
 }

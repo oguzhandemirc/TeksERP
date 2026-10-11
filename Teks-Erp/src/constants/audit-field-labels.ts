@@ -168,8 +168,8 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   reopened: "Yeniden açıldı",
 
   // ── İş emri / adım ─────────────────────────────────────────────────────────
-  workOrderNumber: "İş emri no",
-  workOrderStepId: "İş emri adımı",
+  workOrderNumber: "Terbiye iş emri no",
+  workOrderStepId: "Terbiye iş emri adımı",
   targetQuantity: "Hedef metraj",
   targetWeight: "Hedef ağırlık",
   targetItemId: "Hedef kumaş",
@@ -202,7 +202,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   manualComplete: "Elle tamamlandı",
   completedVia: "Tamamlanma yolu",
   warehouseClosure: "Depoya alınarak kapatıldı",
-  woRevived: "İş emri yeniden açıldı",
+  woRevived: "Terbiye iş emri yeniden açıldı",
   producedInStepId: "Üretildiği adım",
   plannedSubcontractorId: "Planlanan fason firma",
   partyMode: "Parti kuralı",
@@ -381,7 +381,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   defectTypeId: "Hata tipi",
   returnReasonId: "İade sebebi",
   orderId: "Sipariş",
-  workOrderId: "İş emri",
+  workOrderId: "Terbiye iş emri",
   batchId: "Parti",
   rollId: "Top",
   sackId: "Çuval",

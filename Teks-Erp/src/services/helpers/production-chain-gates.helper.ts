@@ -30,21 +30,21 @@ export const CHAIN_GATE_CODES = {
 export async function assertBeamWeavingLinkGate(db: Db, weavingOrderId: string | null): Promise<void> {
   if (weavingOrderId) return;
   if (!(await resolveBeamWeavingLinkRequired(db))) return;
-  throw AppError.badRequest("Levent için dokuma işi seçilmeli (ayar: levent sarımında dokuma işi zorunlu).", { code: CHAIN_GATE_CODES.beam });
+  throw AppError.badRequest("Levent için dokuma iş emri seçilmeli (ayar: levent sarımında dokuma iş emri zorunlu).", { code: CHAIN_GATE_CODES.beam });
 }
 
 /** Koşum açma: bayrak açıkken dokuma işi zorunlu. */
 export async function assertRunWeavingOrderGate(db: Db, weavingOrderId: string | null): Promise<void> {
   if (weavingOrderId) return;
   if (!(await resolveRunWeavingOrderRequired(db))) return;
-  throw AppError.badRequest("Koşum için dokuma işi seçilmeli (ayar: tezgah koşumu dokuma işine bağlı açılır).", { code: CHAIN_GATE_CODES.run });
+  throw AppError.badRequest("Koşum için dokuma iş emri seçilmeli (ayar: tezgah koşumu dokuma iş emrine bağlı açılır).", { code: CHAIN_GATE_CODES.run });
 }
 
 /** Dokuma işi: bayrak açıkken en az bir sipariş satırı bağı zorunlu. */
 export async function assertOrderLineLinkGate(db: Db, linkCount: number): Promise<void> {
   if (linkCount > 0) return;
   if (!(await resolveOrderLineLinkRequired(db))) return;
-  throw AppError.badRequest("Dokuma işi en az bir sipariş satırına bağlanmalı (ayar: dokuma işi sipariş satırına bağlı).", { code: CHAIN_GATE_CODES.orderLine });
+  throw AppError.badRequest("Dokuma iş emri en az bir sipariş satırına bağlanmalı (ayar: dokuma iş emri sipariş satırına bağlı).", { code: CHAIN_GATE_CODES.orderLine });
 }
 
 export interface LinkableWeavingOrder {
@@ -64,9 +64,9 @@ export async function assertWeavingOrderLinkableTx(db: Db, weavingOrderId: strin
     where: { id: weavingOrderId },
     select: { id: true, weavingOrderNumber: true, status: true, executionKind: true, warpSpecId: true },
   });
-  if (!wo) throw AppError.badRequest("Dokuma işi bulunamadı.", { code: CHAIN_GATE_CODES.notLinkable });
+  if (!wo) throw AppError.badRequest("Dokuma iş emri bulunamadı.", { code: CHAIN_GATE_CODES.notLinkable });
   if (wo.status !== WeavingOrderStatus.PLANNED && wo.status !== WeavingOrderStatus.IN_PROGRESS) {
-    throw AppError.badRequest(`${wo.weavingOrderNumber} kapanmış/iptal edilmiş — açık bir dokuma işi seçin.`, { code: CHAIN_GATE_CODES.notLinkable });
+    throw AppError.badRequest(`${wo.weavingOrderNumber} kapanmış/iptal edilmiş — açık bir dokuma iş emri seçin.`, { code: CHAIN_GATE_CODES.notLinkable });
   }
   if (wo.executionKind !== WeavingExecutionKind.IN_HOUSE) {
     throw AppError.badRequest(`${wo.weavingOrderNumber} fasona verilmiş — levent/koşum yalnız içeride dokunan işe bağlanır.`, { code: CHAIN_GATE_CODES.notLinkable });
