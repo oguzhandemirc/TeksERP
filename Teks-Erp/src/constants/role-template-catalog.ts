@@ -352,6 +352,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "loom:spec-manage",
       // Tezgah Salonu canlı ekranı (salt okuma) — vardiya amiri salona bakar.
       "loom:live-view",
+      // Tezgah alarmı: vardiya amiri görür ve üstlenir; üst kademe (K2) müdür/patron işi — şablonda YOK.
+      "loom:alarm-view",
+      "loom:alarm-ack",
       // Tezgah oturumu (⓪, 2026-09-14): ekran doğana kadar süpervizör paketinde;
       // tablet dilimiyle operatör paketine iner (loom:run ile aynı vaat).
       "mobile:dokuma",
@@ -644,6 +647,8 @@ export function resolveRoleTemplateCodes(entry: RoleTemplateEntry): readonly str
  * bir kod, gerçek bir boşluğu sessizce kapsam dışında tutar.
  */
 export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
+  "loom:alarm-escalation":
+    "Tezgah alarmının üst kademesi (K2 bildirimi + başkasının üstlenmesini bırakma) müdür/patron yetkisidir; hazır şablonlarda müdür rolü yok — fabrika panelden SEÇİLİ kişiye atar (dokuma alarm A1b, tasarım §A.9).",
   "admin:*":
     "Global admin wildcard'ı — dar bir role konulsaydı o rolü sessizce süper kullanıcı yapardı. Yalnız 'Admin (Tam Yetki)' taşır.",
   "mobile:tambur-duzelt":

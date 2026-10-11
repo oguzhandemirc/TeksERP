@@ -2,8 +2,10 @@
 // TeksERP — TEZGAH ALARMI (LoomAlarm + LoomAlarmEvent) · MOTOR
 // =============================================================================
 // Alarm DURUM satırıdır ("şu an ne"), geçmişi `LoomAlarmEvent` DEFTERİNDEDİR. Bütün yazma
-// yolları bu serviste yaşar (motor + kişi eylemleri) — ikinci yazar doğmaz.
-//   • DOĞUŞ   — açık duruşun ilk kademesi (K1, hedef aşıldı) vadesini geçince; plan DONAR.
+// yolları bu serviste yaşar (motor + kişi eylemleri) — ikinci yazar doğmaz; kişi eylemlerinin
+// yazmayan parçaları (replay politikası, tanı okuması) `helpers/loom-alarm-actor.helper`da.
+//   • DOĞUŞ   — açık duruşun ilk kademesi (K1, hedef aşıldı) vadesini geçince; plan DONAR. Vadesi eşit
+//               kademeler birlikte çalar (pay 0 → K1 ve K2), daha önce geçmiş alttaki atlanır.
 //   • KADEME  — K2 (üst kademe) vadesi geçince; susturmak K2'yi durdurmaz, üstlenmek
 //               `tezgah.alarm.escalateWhenAcked` kapalıysa durdurur (varsayılan AÇIK).
 //   • YENİDEN PLAN — duruşun sebebi değişince yalnız ÇALMAMIŞ kademenin vadesi.
@@ -20,23 +22,17 @@ import prisma from "../lib/prisma";
 import { LOOM_MACHINE_WHERE } from "../constants/loom-shift";
 import { readDbNow } from "./helpers/machine-run-open.helper";
 import { loomAlarmEventStampTx } from "./helpers/ledger-stamp.helper";
-import {
-  alarmScheduleOf,
-  alarmShiftEligible,
-  dueAlarmTiers,
-  stopTargetMinutes,
-  type AlarmTier,
-  type StopClock,
-} from "./helpers/loom-floor.helper";
-import {
-  readTezgahAlarmEscalateWhenAcked,
-  readTezgahAlarmUnclassifiedTargetMinutes,
-  readTezgahEscalationGraceMinutes,
-  resolveTezgahAlarmEnabled,
-} from "./system-setting.service";
+import { alarmScheduleOf, alarmShiftEligible, dueAlarmTiers, stopTargetMinutes, type AlarmTier, type StopClock } from "./helpers/loom-floor.helper";
+import { readTezgahAlarmEscalateWhenAcked, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled } from "./system-setting.service";
 import { hata } from "../lib/logger";
+import { AuditService } from "./audit.service";
+import { ALARM_SNOOZE_MINUTES, actionReplay, actorName, actorResult, closedConflict, freshAlarmTx, hm, type ActorCall, type AlarmSnoozeMinutes, type LoomAlarmActionResult } from "./helpers/loom-alarm-actor.helper";
+import { AppError } from "../utils/app-error";
+import { p2002Mentions } from "../utils/p2002";
+import type { ApiResponse } from "../types/api.types";
 
 type Tx = Prisma.TransactionClient;
+const MIN_MS = 60_000;
 
 /** Canlı (kapanmamış) alarm durumları — tek tanım. */
 export const ACTIVE_ALARM_STATES: LoomAlarmState[] = [LoomAlarmState.OPEN, LoomAlarmState.ACKED];
@@ -91,10 +87,13 @@ async function writeEventTx(tx: Tx, alarmId: string, data: Omit<Prisma.LoomAlarm
   return r.count;
 }
 
-async function writeTierEventsTx(tx: Tx, alarmId: string, due: { raise: AlarmTier; skip: AlarmTier[] }, sum: LoomAlarmTickSummary): Promise<void> {
+async function writeTierEventsTx(tx: Tx, alarmId: string, due: { raise: AlarmTier[]; skip: AlarmTier[] }, sum: LoomAlarmTickSummary): Promise<void> {
   for (const t of due.skip) sum.skipped += await writeEventTx(tx, alarmId, { kind: LoomAlarmEventKind.TIER_SKIPPED, tier: t });
-  sum.raised += await writeEventTx(tx, alarmId, { kind: LoomAlarmEventKind.RAISED, tier: due.raise });
+  for (const t of due.raise) sum.raised += await writeEventTx(tx, alarmId, { kind: LoomAlarmEventKind.RAISED, tier: t });
 }
+
+/** Turda çalan en yüksek kademe (`raise` artan sıralı). */
+const topTier = (raise: AlarmTier[]): AlarmTier => raise[raise.length - 1]!;
 
 function clockOf(stop: StopRow, targetMinutes: number | null, graceMinutes: number): StopClock {
   return { startedAt: stop.startedAt, targetMinutes, graceMinutes, lossClass: stop.lossClass };
@@ -108,17 +107,17 @@ async function birthTx(tx: Tx, stop: StopRow, ctx: TickCtx): Promise<void> {
   const schedule = alarmScheduleOf(clockOf(stop, targetMinutes, graceMinutes));
   if (schedule === null) return;
   const due = dueAlarmTiers(schedule, 0, ctx.now);
-  if (due.raise === null) return;
+  if (due.raise.length === 0) return;
   const id = randomUUID();
   const born = await tx.loomAlarm.createMany({
     data: [{
       id, kind: LoomAlarmKind.STOP_OVERDUE, stopEventId: stop.id, machineId: stop.machineId, state: LoomAlarmState.OPEN,
-      tier: due.raise, targetMinutes, graceMinutes, planReasonCode: stop.reasonCode, k1DueAt: schedule.k1DueAt, k2DueAt: schedule.k2DueAt,
+      tier: topTier(due.raise), targetMinutes, graceMinutes, planReasonCode: stop.reasonCode, k1DueAt: schedule.k1DueAt, k2DueAt: schedule.k2DueAt,
     }],
     skipDuplicates: true,
   });
   if (born.count === 0) return; // eşzamanlı tur doğurdu — sed
-  await writeTierEventsTx(tx, id, { raise: due.raise, skip: due.skip }, ctx.sum);
+  await writeTierEventsTx(tx, id, due, ctx.sum);
 }
 
 /** Canlı alarm: sebep değiştiyse çalmamış kademeyi yeniden planla; vadesi geçen kademeyi çaldır. */
@@ -135,15 +134,16 @@ async function advanceTx(tx: Tx, stop: StopRow, alarm: AlarmRow, ctx: TickCtx): 
     ctx.sum.replanned += 1;
   }
   const due = dueAlarmTiers({ k1DueAt: alarm.k1DueAt, k2DueAt }, alarm.tier, ctx.now);
-  if (due.raise === null) return;
+  if (due.raise.length === 0) return;
+  const raiseTo = topTier(due.raise);
   // Üstlenilmiş alarm K2'de bekler (ayar kapalıysa) — yüklem claim'in içinde: eşzamanlı üstlenme de görülür.
   const raisable = ctx.escalateWhenAcked ? ACTIVE_ALARM_STATES : [LoomAlarmState.OPEN];
   const claim = await tx.loomAlarm.updateMany({
-    where: { id: alarm.id, tier: { lt: due.raise }, state: { in: raisable } },
-    data: { tier: due.raise },
+    where: { id: alarm.id, tier: { lt: raiseTo }, state: { in: raisable } },
+    data: { tier: raiseTo },
   });
   if (claim.count === 0) return;
-  await writeTierEventsTx(tx, alarm.id, { raise: due.raise, skip: due.skip }, ctx.sum);
+  await writeTierEventsTx(tx, alarm.id, due, ctx.sum);
 }
 
 /** Duruş kapandı / geri alındı / plan dışına sınıflandı → alarm terminal; kapanış süreleri DONAR. */
@@ -217,4 +217,155 @@ async function guarded(sum: LoomAlarmTickSummary, stopId: string, fn: (tx: Tx) =
     sum.failed += 1;
     hata("loom-alarm", `alarm işlenemedi (duruş ${stopId}):`, err);
   }
+}
+
+// =============================================================================
+// KİŞİ EYLEMLERİ (A1b) — üstlen · bırak · sustur · susturmayı kaldır · not · notu geri çek
+// =============================================================================
+// Her eylem: `clientToken` → `actionReplay` boğazı (R kipi) → tx içinde atomik claim (ya da varlık
+// okuması) → defter satırı `writeActorEventTx` → tx DIŞINDA audit. Claim düşerse tanı tx içinde taze
+// okumayla: kim, ne zaman üstlendi; alarm kapandı mı.
+
+export { ALARM_SNOOZE_MINUTES, type AlarmSnoozeMinutes, type LoomAlarmActionResult };
+
+/** Kişi olayının tek yazarı — `create` (skipDuplicates YOK: token çakışması P2002 olarak boğaza döner). */
+async function writeActorEventTx(tx: Tx, alarmId: string, at: Date, data: Omit<Prisma.LoomAlarmEventUncheckedCreateInput, "alarmId" | "createdAt">): Promise<string> {
+  const ev = await tx.loomAlarmEvent.create({ data: { ...data, alarmId, createdAt: at }, select: { id: true } });
+  return ev.id;
+}
+
+async function logActor(c: ActorCall, eventId: string, extra: Record<string, unknown> = {}): Promise<void> {
+  await AuditService.log({ userId: c.userId, action: "CREATE", tableName: "LOOM_ALARM_EVENT", recordId: eventId, newData: { alarmId: c.alarmId, kind: c.kind, ...extra } });
+}
+
+async function runActor(
+  c: ActorCall,
+  clientToken: string | null | undefined,
+  body: (tx: Tx, at: Date) => Promise<{ eventId: string; audit?: Record<string, unknown> }>,
+  message: string,
+): Promise<ApiResponse<LoomAlarmActionResult>> {
+  return actionReplay(c).run(clientToken, async () => {
+    const out = await prisma.$transaction(async (tx) => {
+      const at = await loomAlarmEventStampTx(tx, c.alarmId);
+      const r = await body(tx, at);
+      const a = await freshAlarmTx(tx, c.alarmId);
+      return { ...r, a };
+    });
+    await logActor(c, out.eventId, out.audit);
+    return { success: true, data: actorResult(out.eventId, c.kind, c.alarmId, out.a), message };
+  });
+}
+
+/** Üstlen — tek kişi: claim `{OPEN, üstlenen yok}`; ikinci kişiye 409 "X HH:mm'de üstlendi". */
+export async function ackLoomAlarm(alarmId: string, userId: string, clientToken?: string | null): Promise<ApiResponse<LoomAlarmActionResult>> {
+  const c: ActorCall = { alarmId, kind: LoomAlarmEventKind.ACK, userId, detail: null };
+  return runActor(c, clientToken, async (tx, at) => {
+    const claim = await tx.loomAlarm.updateMany({
+      where: { id: alarmId, state: LoomAlarmState.OPEN, ackedById: null },
+      data: { state: LoomAlarmState.ACKED, ackedById: userId, ackedAt: at },
+    });
+    if (claim.count === 0) {
+      const a = await freshAlarmTx(tx, alarmId);
+      if (a.state === LoomAlarmState.ACKED && a.ackedAt) {
+        const kim = a.ackedById === userId ? "Bu alarmı zaten siz" : actorName(a.ackedBy);
+        throw AppError.conflict(`${kim} ${hm(a.ackedAt)}'de üstlendi.`, { code: "LOOM_ALARM_ALREADY_ACKED", ackedById: a.ackedById, ackedAt: a.ackedAt });
+      }
+      throw closedConflict(a);
+    }
+    return { eventId: await writeActorEventTx(tx, alarmId, at, { kind: LoomAlarmEventKind.ACK, userId, clientToken: clientToken ?? null }) };
+  }, "Alarm üstlenildi");
+}
+
+/**
+ * Bırak — üstlenmenin karşı olayı. Kendi üstlenmesini herkes bırakır; başkasınınkini yalnız üst kademe
+ * yetkilisi (`loom:alarm-escalation`). Claim üstleneni de yükler: arada el değiştirdiyse 409.
+ */
+export async function releaseLoomAlarm(alarmId: string, userId: string, opts: { clientToken?: string | null; canReleaseOthers: boolean }): Promise<ApiResponse<LoomAlarmActionResult>> {
+  const c: ActorCall = { alarmId, kind: LoomAlarmEventKind.ACK_RELEASE, userId, detail: null };
+  return runActor(c, opts.clientToken, async (tx, at) => {
+    const now = await freshAlarmTx(tx, alarmId);
+    if (now.state !== LoomAlarmState.ACKED) {
+      if (now.state === LoomAlarmState.OPEN) throw AppError.conflict("Alarm üstlenilmemiş — bırakılacak üstlenme yok.", { code: "LOOM_ALARM_NOT_ACKED" });
+      throw closedConflict(now);
+    }
+    if (now.ackedById !== userId && !opts.canReleaseOthers) {
+      throw AppError.forbidden(`${actorName(now.ackedBy)} üstlendi — yalnız kendisi ya da üst kademe yetkilisi bırakabilir.`, { code: "LOOM_ALARM_ACKED_BY_OTHER", ackedById: now.ackedById });
+    }
+    const claim = await tx.loomAlarm.updateMany({
+      where: { id: alarmId, state: LoomAlarmState.ACKED, ackedById: now.ackedById },
+      data: { state: LoomAlarmState.OPEN, ackedById: null, ackedAt: null },
+    });
+    if (claim.count === 0) throw AppError.conflict("Alarm bu arada değişti — ekranı yenileyip yeniden deneyin.", { code: "LOOM_ALARM_STALE" });
+    const eventId = await writeActorEventTx(tx, alarmId, at, { kind: LoomAlarmEventKind.ACK_RELEASE, userId, clientToken: opts.clientToken ?? null });
+    return { eventId, audit: { releasedAckOf: now.ackedById } };
+  }, "Üstlenme bırakıldı");
+}
+
+/** Sustur — yalnız tekrar-çalmayı keser, üst kademeyi değil; yeni susturma eskisinin yerine geçer. */
+export async function snoozeLoomAlarm(alarmId: string, userId: string, input: { minutes: AlarmSnoozeMinutes; note?: string | null; clientToken?: string | null }): Promise<ApiResponse<LoomAlarmActionResult>> {
+  if (!ALARM_SNOOZE_MINUTES.includes(input.minutes)) {
+    throw AppError.badRequest(`Susturma süresi ${ALARM_SNOOZE_MINUTES.join(" / ")} dakikadan biri olmalı.`, { code: "LOOM_ALARM_SNOOZE_MINUTES" });
+  }
+  const note = input.note?.trim() || null;
+  const c: ActorCall = { alarmId, kind: LoomAlarmEventKind.SNOOZE, userId, detail: String(input.minutes) };
+  return runActor(c, input.clientToken, async (tx, at) => {
+    const until = new Date(at.getTime() + input.minutes * MIN_MS);
+    const claim = await tx.loomAlarm.updateMany({
+      where: { id: alarmId, state: { in: ACTIVE_ALARM_STATES } },
+      data: { snoozedUntil: until, snoozedById: userId },
+    });
+    if (claim.count === 0) throw closedConflict(await freshAlarmTx(tx, alarmId));
+    const eventId = await writeActorEventTx(tx, alarmId, at, { kind: LoomAlarmEventKind.SNOOZE, userId, snoozedUntil: until, note, clientToken: input.clientToken ?? null });
+    return { eventId, audit: { minutes: input.minutes, snoozedUntil: until } };
+  }, `Alarm ${input.minutes} dk susturuldu`);
+}
+
+/** Susturmayı kaldır — susturmanın karşı olayı; yalnız süresi dolmamış susturmaya. */
+export async function unsnoozeLoomAlarm(alarmId: string, userId: string, clientToken?: string | null): Promise<ApiResponse<LoomAlarmActionResult>> {
+  const c: ActorCall = { alarmId, kind: LoomAlarmEventKind.UNSNOOZE, userId, detail: null };
+  return runActor(c, clientToken, async (tx, at) => {
+    const claim = await tx.loomAlarm.updateMany({
+      where: { id: alarmId, state: { in: ACTIVE_ALARM_STATES }, snoozedUntil: { gt: at } },
+      data: { snoozedUntil: null, snoozedById: null },
+    });
+    if (claim.count === 0) {
+      const a = await freshAlarmTx(tx, alarmId);
+      if (!ACTIVE_ALARM_STATES.includes(a.state)) throw closedConflict(a);
+      throw AppError.conflict("Alarm susturulmuş değil (ya da susturma süresi doldu).", { code: "LOOM_ALARM_NOT_SNOOZED" });
+    }
+    return { eventId: await writeActorEventTx(tx, alarmId, at, { kind: LoomAlarmEventKind.UNSNOOZE, userId, clientToken: clientToken ?? null }) };
+  }, "Susturma kaldırıldı");
+}
+
+/** Not — alarmın her hâlinde (kapanmış alarma da sonradan not düşülür); not silinmez, değişmez. */
+export async function noteLoomAlarm(alarmId: string, userId: string, input: { note: string; clientToken?: string | null }): Promise<ApiResponse<LoomAlarmActionResult>> {
+  const note = input.note.trim();
+  if (note.length === 0) throw AppError.badRequest("Not boş olamaz.", { code: "LOOM_ALARM_NOTE_EMPTY" });
+  const c: ActorCall = { alarmId, kind: LoomAlarmEventKind.NOTE, userId, detail: note };
+  return runActor(c, input.clientToken, async (tx, at) => {
+    await freshAlarmTx(tx, alarmId);
+    return { eventId: await writeActorEventTx(tx, alarmId, at, { kind: LoomAlarmEventKind.NOTE, userId, note, clientToken: input.clientToken ?? null }) };
+  }, "Not eklendi");
+}
+
+/** Notu geri çek — yalnız not sahibi, aynı alarmın NOTE satırına, not başına bir kez (tekliği DB tutar). */
+export async function retractLoomAlarmNote(alarmId: string, userId: string, input: { eventId: string; clientToken?: string | null }): Promise<ApiResponse<LoomAlarmActionResult>> {
+  const c: ActorCall = { alarmId, kind: LoomAlarmEventKind.NOTE_RETRACT, userId, detail: input.eventId };
+  return runActor(c, input.clientToken, async (tx, at) => {
+    await freshAlarmTx(tx, alarmId);
+    const target = await tx.loomAlarmEvent.findUnique({ where: { id: input.eventId }, select: { alarmId: true, kind: true, userId: true, retractedBy: { select: { id: true } } } });
+    if (!target || target.alarmId !== alarmId || target.kind !== LoomAlarmEventKind.NOTE) {
+      throw AppError.badRequest("Geri çekilecek satır bu alarmın bir notu değil.", { code: "LOOM_ALARM_NOTE_INVALID" });
+    }
+    if (target.userId !== userId) throw AppError.forbidden("Notu yalnız yazan geri çekebilir.", { code: "LOOM_ALARM_NOTE_NOT_OWNER" });
+    if (target.retractedBy !== null) throw AppError.conflict("Bu not zaten geri çekilmiş.", { code: "LOOM_ALARM_NOTE_ALREADY_RETRACTED" });
+    try {
+      const eventId = await writeActorEventTx(tx, alarmId, at, { kind: LoomAlarmEventKind.NOTE_RETRACT, userId, retractsEventId: input.eventId, clientToken: input.clientToken ?? null });
+      return { eventId, audit: { retractsEventId: input.eventId } };
+    } catch (e) {
+      // Eşzamanlı ikinci geri çekme tekliği DB'de (retractsEventId unique) kaybeder.
+      if (p2002Mentions(e, /retractsEventId/)) throw AppError.conflict("Bu not zaten geri çekilmiş.", { code: "LOOM_ALARM_NOTE_ALREADY_RETRACTED" });
+      throw e;
+    }
+  }, "Not geri çekildi");
 }

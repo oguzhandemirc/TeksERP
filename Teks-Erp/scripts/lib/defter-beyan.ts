@@ -464,12 +464,17 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
 
   // ── TEZGAH ALARMI (dokuma alarm Faz A1) ──
   // `LoomAlarm` DURUM'dur (§1c, buraya girmez); geçmişi bu defterde. Motor kademe/kapanış satırını,
-  // kişi eylemleri (A1b) üstlenme/susturma/not satırını yazar — tek yazar dosya.
+  // kişi eylemleri (A1b) üstlenme/susturma/not satırını ve karşı olaylarını yazar — tek yazar dosya.
   D("LoomAlarmEvent", "alarm DEFTERİ — kademe çalması, üstlenme, susturma, not ve kapanış; append-only (updatedAt YOK, `defter_block_tamper`), kronoloji `createdAt` (alarm başına kesin artan); ters yolu TİPLİ ENUM ÇİFTİ: ACK↔ACK_RELEASE · SNOOZE↔UNSNOOZE · NOTE↔NOTE_RETRACT (not silinmez/değişmez, geri çekme `retractsEventId` bağlı ayrı satır) · RAISED/TIER_SKIPPED↔CANCELLED (duruş geri alındı / plan dışına sınıflandı)",
     { tur: "ENUM_CIFTI", enumAdi: "LoomAlarmEventKind", ciftler: [
       ["ACK", "ACK_RELEASE"], ["SNOOZE", "UNSNOOZE"], ["NOTE", "NOTE_RETRACT"], ["RAISED", "CANCELLED"], ["TIER_SKIPPED", "CANCELLED"],
     ] },
-    [{ dosya: "src/services/loom-alarm.service.ts", sembol: "closeTx" }],
+    [
+      { dosya: "src/services/loom-alarm.service.ts", sembol: "closeTx" },
+      { dosya: "src/services/loom-alarm.service.ts", sembol: "releaseLoomAlarm" },
+      { dosya: "src/services/loom-alarm.service.ts", sembol: "unsnoozeLoomAlarm" },
+      { dosya: "src/services/loom-alarm.service.ts", sembol: "retractLoomAlarmNote" },
+    ],
     ["src/services/loom-alarm.service.ts"]),
 
   // ── SATIRLAR — ters yolu EBEVEYNİNDE ──────────────────────────────────────

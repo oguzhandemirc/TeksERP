@@ -465,6 +465,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
+  // Tezgah alarmı (A1b, 2026-10-11): uçlar doğdu, alarm sayfası/listesi panelde A2, tablette A3 — ekranla ölü muaf olur.
+  { code: "loom:alarm-view", reason: "Alarm listesi/sayfası panel ekranı A2 dilimi; uç bugün API'de." },
+  { code: "loom:alarm-ack", reason: "Üstlen/sustur/not eylemleri alarm sayfasında (A2); uç bugün API'de." },
+  { code: "loom:alarm-escalation", reason: "Üst kademe bildirimi A5 (patron push) ile; bugün yalnız başkasının üstlenmesini bırakma ucunda yetenek." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

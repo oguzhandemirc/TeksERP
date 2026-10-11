@@ -36,6 +36,7 @@ import machineRunRoutes from "./routes/machine-run.routes";
 import machineStopRoutes from "./routes/machine-stop.routes";
 import machineShiftStatRoutes from "./routes/machine-shift-stat.routes";
 import loomFloorRoutes from "./routes/loom-floor.routes";
+import loomAlarmRoutes from "./routes/loom-alarm.routes";
 import machineSpecRoutes from "./routes/machine-spec.routes";
 import shiftDefinitionRoutes from "./routes/shift-definition.routes";
 import machineDoffRoutes from "./routes/machine-doff.routes";
@@ -491,6 +492,8 @@ app.use("/api/machine-runs", machineRunRoutes);
 app.use("/api/machine-stops", machineStopRoutes);
 app.use("/api/machine-shift-stats", machineShiftStatRoutes);
 app.use("/api/loom-floor", loomFloorRoutes);
+// Tezgah alarmı (dokuma alarm A1b) — tezgah modülü + alarm bayrağı + loom:alarm-view/ack.
+app.use("/api/loom-alarms", loomAlarmRoutes);
 app.use("/api/machine-specs", machineSpecRoutes);
 app.use("/api/shift-definitions", shiftDefinitionRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);

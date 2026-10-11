@@ -1,6 +1,6 @@
 # Dokuma — Alarm/Bildirim Tasarımı, Eksik Listesi ve Yol Haritası
 
-> **Durum: TASARIM; A1 uygulanıyor; sorular 1e varsayılanlarıyla — kullanıcı onayı bekliyor.** 1e varsayılanları (2026-10-11, yetki devri; hepsi ayar/faz ile geri döndürülebilir): Soru 2 = (a) üstlenilse de süre dolunca üst kademeye gider (ayar `tezgah.alarm.escalateWhenAcked`, varsayılan AÇIK; kapatılırsa (b)) · Soru 3 = `tezgah.alarm.unclassifiedTargetMinutes` varsayılan BOŞ (bugünkü davranış; öneri 15 dk) · Soru 4 = (a) yetkiye göre (`loom:alarm-*`) · Soru 5 = (a) vardiya dışı alarm doğmaz · `tezgah.alarmEnabled` varsayılan KAPALI. Görünen adlar: "Dokuma İş Emri" (WeavingOrder), "Terbiye İş Emri" (WorkOrder).
+> **Durum: A1 uygulandı (backend: A1a motor + A1b uçlar/kişi eylemleri/izinler); A2 panel sırada; S2–S5 1e varsayılanları kullanıcı onayı bekliyor.** 1e kararı 2026-10-11: vadesi eşit kademeler birlikte çalar (pay 0 → K1 ve K2), yalnız daha önce geçmiş alttaki atlanır. 1e varsayılanları (2026-10-11, yetki devri; hepsi ayar/faz ile geri döndürülebilir): Soru 2 = (a) üstlenilse de süre dolunca üst kademeye gider (ayar `tezgah.alarm.escalateWhenAcked`, varsayılan AÇIK; kapatılırsa (b)) · Soru 3 = `tezgah.alarm.unclassifiedTargetMinutes` varsayılan BOŞ (bugünkü davranış; öneri 15 dk) · Soru 4 = (a) yetkiye göre (`loom:alarm-*`) · Soru 5 = (a) vardiya dışı alarm doğmaz · `tezgah.alarmEnabled` varsayılan KAPALI. Görünen adlar: "Dokuma İş Emri" (WeavingOrder), "Terbiye İş Emri" (WorkOrder).
 
 > **Tarih:** 2026-10-11 · **Kaynak ağaç:** `origin/main` @ `9d1d674ee` (ana ağaç eski commit'te; bütün ölçümler `git show/grep origin/main` ile)
 > **Okuyucu:** ürünü satan kişi (karar verecek). Kod yok; tasarım + plan.
@@ -262,7 +262,7 @@ Emek: **S** ≤1 gece tek ajan · **M** 1–2 gece · **L** çok fazlı. "Bugün
 ### Faz A1 — Alarm motoru (backend) · **bu gece başlatılabilir**
 - **Şema (migration reçetesi, en eski canlı dump'ta prova):** `LoomAlarm` (durum), `LoomAlarmEvent` (defter), enum'lar (enum değeri kendi dosyasında — 55P04), partial unique'ler, CHECK'ler; `test_db_invariants` envanteri.
 - **Motor:** `jobs/loom-alarm.job.ts` (30 sn + servis dürtmesi), vade hesabı `loom-floor.helper.ts` genişletmesi (tek kaynak), "geç kayıt → yalnız en yüksek kademe", vardiya dışı süzgeci, sebepsiz hedef ayarı.
-- **Uçlar** (`/api/loom-alarms`, kapı `verifyToken → requireTezgahEnabled → bayrak → izin`): liste (aktif/geçmiş, cursor + özet şeridi tek where), detay DTO (§A.7'nin bütün blokları tek uçtan), `ack` · `release` · `snooze` · `unsnooze` · `note` (`clientToken`), `seen`.
+- **Uçlar** (`/api/loom-alarms`, kapı `verifyToken → requireTezgahEnabled → bayrak → izin`): liste (aktif/geçmiş, cursor + özet şeridi tek where), detay DTO (§A.7'nin bütün blokları tek uçtan), `ack` · `release` · `snooze` · `unsnooze` · `notes` · `notes/:eventId/retract` (`clientToken`); `seen` YOK (A1a kararı: "görüldü" defter değil).
 - `GET /api/loom-floor`: `tier` artık `ESCALATED` de döner (K2 çaldıysa) + `alarmId`.
 - Bayrak `tezgah.alarmEnabled` + 2 ayar (route+izin ve bayrak reçeteleri, `docs/RECETELER.md`); izinler `loom:alarm-view/ack/escalation`; rol şablonu satırları.
 - Defter beyanları, audit muafiyeti, bekçiler (§A.11). **Kabul:** bayrak kapalı → sıfır satır ölçüldü; negatif sondalar kırmızı görüldü.

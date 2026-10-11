@@ -14,7 +14,8 @@ import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass, P
 import prisma from "../lib/prisma";
 import { factoryDayStart } from "../constants/time";
 import { LOOM_MACHINE_WHERE, MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
-import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahEscalationGraceMinutes } from "./system-setting.service";
+import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled } from "./system-setting.service";
+import { ACTIVE_ALARM_STATES } from "./loom-alarm.service";
 import { mountedBeamViewsTx, type MountedBeamView } from "./helpers/warp-beam-mount.helper";
 import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms, type SourceBucket } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis } from "./helpers/loom-efficiency.helper";
@@ -22,6 +23,7 @@ import {
   countFloor,
   escalationDueAt,
   floorStateSourceOf,
+  floorStopTier,
   loomStateOf,
   loomStopTier,
   stopTargetMinutes,
@@ -44,8 +46,12 @@ export interface LoomFloorOpenStopDto {
   startedAt: Date;
   targetMinutes: number | null;
   graceMinutes: number;
+  /** Saatten kademe; canlı alarm varsa çaldığı kademe öne geçer (`ESCALATED` yalnız K2 çaldıysa). */
   tier: LoomStopTier;
+  /** Canlı alarmda alarmın DONMUŞ K2 vadesi, yoksa saatten (başlangıç + hedef + pay). */
   escalationDueAt: Date | null;
+  /** Canlı alarm (alarm bayrağı açıkken) — alarm sayfasına derin bağlantı. */
+  alarmId: string | null;
   /** Sebep bekliyor (sınıflandırma borcu). */
   requiresReason: boolean;
   source: MachineDataSource;
@@ -115,6 +121,7 @@ const LOOM_SELECT = {
 const STOP_SELECT = {
   id: true, machineId: true, startedAt: true, endedAt: true, durationSec: true, reasonCode: true, lossClass: true,
   beamSlot: true, source: true, targetMinutes: true, escalationGraceMinutes: true, requiresReason: true,
+  alarm: { select: { id: true, state: true, tier: true, k2DueAt: true } },
 } satisfies Prisma.MachineStopEventSelect;
 
 const RUN_SELECT = {
@@ -190,7 +197,9 @@ function todayTerms(loom: LoomRow, { stops, runs, doffSources }: LoomDayRows, sr
   });
 }
 
-function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclassifiedTarget: number | null }, now: Date): LoomFloorOpenStopDto {
+function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclassifiedTarget: number | null; alarmEnabled: boolean }, now: Date): LoomFloorOpenStopDto {
+  // Alarm bayrağı kapalıyken alarm satırı okunmaz (bugünkü davranış); yalnız CANLI alarm kademeyi taşır.
+  const alarm = ctx.alarmEnabled && s.alarm && ACTIVE_ALARM_STATES.includes(s.alarm.state) ? s.alarm : null;
   const clock = {
     startedAt: s.startedAt, targetMinutes: stopTargetMinutes(s, ctx.unclassifiedTarget),
     graceMinutes: s.escalationGraceMinutes ?? ctx.grace, lossClass: s.lossClass,
@@ -203,14 +212,15 @@ function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclas
     startedAt: s.startedAt,
     targetMinutes: clock.targetMinutes,
     graceMinutes: clock.graceMinutes,
-    tier: loomStopTier(clock, now),
-    escalationDueAt: escalationDueAt(clock),
+    tier: floorStopTier(loomStopTier(clock, now), alarm),
+    escalationDueAt: alarm ? alarm.k2DueAt : escalationDueAt(clock),
+    alarmId: alarm?.id ?? null,
     requiresReason: s.requiresReason && s.reasonCode === null,
     source: s.source,
   };
 }
 
-function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; unclassifiedTarget: number | null; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
+function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; unclassifiedTarget: number | null; alarmEnabled: boolean; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
   const stops = ctx.byStop.get(loom.id) ?? [];
   const runs = ctx.byRun.get(loom.id) ?? [];
   const terms = todayTerms(loom, { stops, runs, doffSources: (ctx.byDoff.get(loom.id) ?? []).map((d) => d.counterSource) }, src, ctx);
@@ -258,7 +268,8 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
     select: { startsAt: true, endsAt: true, shiftDefinition: { select: { name: true } } },
     orderBy: { startsAt: "desc" },
   });
-  const ctx = { dayStart, now, grace, unclassifiedTarget, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
+  const alarmEnabled = await resolveTezgahAlarmEnabled();
+  const ctx = { dayStart, now, grace, unclassifiedTarget, alarmEnabled, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
   const built = src.looms.map((l) => loomDto(l, src, ctx));
   const cores = built.map(({ dto, terms }) => ({
     hallId: dto.hallId, hallName: dto.hallName, state: dto.state,

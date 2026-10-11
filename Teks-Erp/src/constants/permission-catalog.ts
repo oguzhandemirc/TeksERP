@@ -105,6 +105,11 @@ export const PERMISSION_CATALOG = [
   // Tezgah Salonu canlı ekranı (2026-10-10): salt okuma; yazma izni taşımayan TV/izleme
   // hesabına tek başına verilebilsin diye ayrı kod (`tezgahEnabled` modülü).
   { code: "loom:live-view", module: "PRODUCTION", category: "web", description: "Dokuma canlı izleme — Tezgah Salonu ekranı (salt okuma: durum, duruş süresi, bugün %)" },
+  // Tezgah alarmı (dokuma alarm A1b, 2026-10-11): görmek · üstlenmek/susturmak/not · üst kademe — üç ayrı karar.
+  // Üst kademe yalnız görmek değil DUYMAK (K2 bildirimi) ve başkasının üstlenmesini bırakmaktır — müdür/patron işi.
+  { code: "loom:alarm-view", module: "PRODUCTION", category: "web", description: "Tezgah alarmlarını görme — alarm listesi, alarm sayfası, zil (hedefi aşan duruş)" },
+  { code: "loom:alarm-ack", module: "PRODUCTION", category: "web", description: "Tezgah alarmında eylem — üstlen/bırak, sustur, not ekle/geri çek" },
+  { code: "loom:alarm-escalation", module: "PRODUCTION", category: "web", description: "Tezgah alarmı üst kademesi — K2 bildirimini alma, başkasının üstlenmesini bırakma" },
   { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },

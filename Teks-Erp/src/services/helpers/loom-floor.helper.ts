@@ -76,15 +76,18 @@ export function alarmScheduleOf(s: StopClock): AlarmSchedule | null {
 }
 
 /**
- * Vadesi geçmiş ama henüz çalmamış kademeler: yalnız EN YÜKSEĞİ çalar, alttakiler ATLANIR (geç girilen
- * kayıt ve sunucu yeniden başlaması sağanak üretmesin). `rungTier` = çalmış/atlanmış en yüksek kademe (0 = yok).
+ * Vadesi geçmiş ama henüz çalmamış kademeler: vadesi EN GEÇ olan(lar) çalar, vadesi DAHA ÖNCE geçmiş
+ * alttakiler ATLANIR (geç girilen kayıt ve sunucu yeniden başlaması sağanak üretmesin). Vadesi eşit
+ * kademeler sağanak değildir — ikisi de çalar (pay 0 iken K1 = K2). `rungTier` = çalmış/atlanmış en
+ * yüksek kademe (0 = yok). `raise` artan sırada; en yükseği son eleman.
  */
-export function dueAlarmTiers(schedule: AlarmSchedule, rungTier: number, now: Date): { raise: AlarmTier | null; skip: AlarmTier[] } {
-  const due: AlarmTier[] = [];
-  if (rungTier < 1 && schedule.k1DueAt.getTime() <= now.getTime()) due.push(1);
-  if (rungTier < 2 && schedule.k2DueAt !== null && schedule.k2DueAt.getTime() <= now.getTime()) due.push(2);
-  if (due.length === 0) return { raise: null, skip: [] };
-  return { raise: due[due.length - 1]!, skip: due.slice(0, -1) };
+export function dueAlarmTiers(schedule: AlarmSchedule, rungTier: number, now: Date): { raise: AlarmTier[]; skip: AlarmTier[] } {
+  const due: Array<{ tier: AlarmTier; at: number }> = [];
+  if (rungTier < 1 && schedule.k1DueAt.getTime() <= now.getTime()) due.push({ tier: 1, at: schedule.k1DueAt.getTime() });
+  if (rungTier < 2 && schedule.k2DueAt !== null && schedule.k2DueAt.getTime() <= now.getTime()) due.push({ tier: 2, at: schedule.k2DueAt.getTime() });
+  if (due.length === 0) return { raise: [], skip: [] };
+  const latest = Math.max(...due.map((d) => d.at));
+  return { raise: due.filter((d) => d.at === latest).map((d) => d.tier), skip: due.filter((d) => d.at < latest).map((d) => d.tier) };
 }
 
 /** Vardiya dışı süzgeci: duruşu kapsayan vardiya yoksa ya da iptal edilmişse alarm doğmaz (tezgah planlı çalışmıyor). */

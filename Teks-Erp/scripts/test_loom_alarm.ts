@@ -1,12 +1,13 @@
 // =============================================================================
 // BEKÇİ — DOKUMA ALARM MOTORU (`loom-alarm.service.runLoomAlarmOnce`, Faz A1a)
 // =============================================================================
-//   §1 saf: `dueAlarmTiers` (geç kayıt → yalnız EN YÜKSEK kademe çalar, alttakiler atlanır) ·
+//   §1 saf: `dueAlarmTiers` (geç kayıt → yalnız vadesi EN GEÇ kademe çalar, daha önce geçmiş alttakiler
+//      atlanır; vadesi EŞİT kademeler — pay 0 — ikisi de çalar) ·
 //      `alarmShiftEligible` (vardiya yok / iptal → doğmaz)
 //   §2 bayrak KAPALI (`tezgah.alarmEnabled` ya da `tezgah.enabled`) → tur "disabled", SIFIR satır
 //      (fikstür + tablonun tamamı) · bekçi sürecinde dürtme no-op (motoru yalnız sunucu koşar)
 //   §3 doğuş: K1 vadesinde RAISED(1), plan DONAR · geç kayıt RAISED(2) + TIER_SKIPPED(1), K1 çalmaz ·
-//      vardiya dışı doğmaz · plan dışı doğmaz · sebepsiz duruş ortak hedefle doğar
+//      vardiya dışı doğmaz · plan dışı doğmaz · sebepsiz duruş ortak hedefle doğar · pay 0 → RAISED(1)+RAISED(2)
 //   §4 kademe: K2 vadesinde RAISED(2) · aynı anla ikinci tur ÇİFT KADEME yazmaz ·
 //      `escalateWhenAcked` kapalı → üstlenilmiş alarm K2'de bekler, açılınca çalar
 //   §5 yeniden plan: sebep değişince çalmamış K2 yeni hedeften · plan dışına sınıflama → CANCELLED
@@ -26,6 +27,7 @@
 //   ⑥ `escalateWhenAcked` yüklemi claim'den çıkarıldı → §4e ❌
 //   ⑦ tekrar turu ÜÇ katmanla korunur (rung · claim · kademe partial unique) — üçü birden kaldırılınca
 //      §4b/§4c/§6f/§6g (+4) ❌; yalnız claim + sed kaldırılınca yeşil (rung tek başına yeter, ölçüldü)
+//   ⑧ `dueAlarmTiers` eşit vadeli alttakini de atladı (yalnız en yüksek çaldı) → §1h/§1i/§3i ❌
 // =============================================================================
 import { LoomAlarmEventKind, LoomAlarmState, MachineStopLossClass, ReasonPresetKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -99,12 +101,17 @@ async function govde(): Promise<void> {
   const t0 = new Date("2026-10-10T08:00:00Z");
   const plan = { k1DueAt: new Date(t0.getTime() + 10 * MIN), k2DueAt: new Date(t0.getTime() + 15 * MIN) };
   const d = (rung: number, dk: number) => JSON.stringify(dueAlarmTiers(plan, rung, new Date(t0.getTime() + dk * MIN)));
-  check("§1a K1 vadesinden önce hiçbir kademe", d(0, 9) === JSON.stringify({ raise: null, skip: [] }), d(0, 9));
-  check("§1b K1 vadesinde (sınır dahil) yalnız K1", d(0, 10) === JSON.stringify({ raise: 1, skip: [] }), d(0, 10));
-  check("§1c geç kayıt: ikisi de geçmiş → yalnız K2 çalar, K1 ATLANIR", d(0, 40) === JSON.stringify({ raise: 2, skip: [1] }), d(0, 40));
-  check("§1d K1 çalmışken K2 vadesi → yalnız K2", d(1, 15) === JSON.stringify({ raise: 2, skip: [] }), d(1, 15));
-  check("§1e iki kademe de çalmış → yeni kademe yok", d(2, 999) === JSON.stringify({ raise: null, skip: [] }), d(2, 999));
-  check("§1f K2'siz plan → yalnız K1", JSON.stringify(dueAlarmTiers({ ...plan, k2DueAt: null }, 0, new Date(t0.getTime() + 99 * MIN))) === JSON.stringify({ raise: 1, skip: [] }));
+  check("§1a K1 vadesinden önce hiçbir kademe", d(0, 9) === JSON.stringify({ raise: [], skip: [] }), d(0, 9));
+  check("§1b K1 vadesinde (sınır dahil) yalnız K1", d(0, 10) === JSON.stringify({ raise: [1], skip: [] }), d(0, 10));
+  check("§1c geç kayıt: ikisi de geçmiş → yalnız K2 çalar, K1 ATLANIR", d(0, 40) === JSON.stringify({ raise: [2], skip: [1] }), d(0, 40));
+  check("§1d K1 çalmışken K2 vadesi → yalnız K2", d(1, 15) === JSON.stringify({ raise: [2], skip: [] }), d(1, 15));
+  check("§1e iki kademe de çalmış → yeni kademe yok", d(2, 999) === JSON.stringify({ raise: [], skip: [] }), d(2, 999));
+  check("§1f K2'siz plan → yalnız K1", JSON.stringify(dueAlarmTiers({ ...plan, k2DueAt: null }, 0, new Date(t0.getTime() + 99 * MIN))) === JSON.stringify({ raise: [1], skip: [] }));
+  // Pay 0 → K1 = K2: vadesi EŞİT kademeler sağanak değildir, ikisi de çalar (1e kararı 2026-10-11).
+  const esit = { k1DueAt: plan.k1DueAt, k2DueAt: plan.k1DueAt };
+  const e0 = (dk: number) => JSON.stringify(dueAlarmTiers(esit, 0, new Date(t0.getTime() + dk * MIN)));
+  check("§1h pay 0 (K1 = K2): vadede İKİSİ DE çalar, hiçbiri atlanmaz", e0(10) === JSON.stringify({ raise: [1, 2], skip: [] }), e0(10));
+  check("§1i pay 0, geç kayıt: yine ikisi de çalar (eşit vade sağanak değil)", e0(40) === JSON.stringify({ raise: [1, 2], skip: [] }), e0(40));
   check("§1g vardiya süzgeci: yok/iptal → doğmaz, canlı → doğar",
     !alarmShiftEligible(null) && !alarmShiftEligible({ isCancelled: true }) && alarmShiftEligible({ isCancelled: false }));
 
@@ -152,8 +159,12 @@ async function govde(): Promise<void> {
   const E = await ac(5, 15);
   const F = await ac(6, 10, P.code);
   const G = await ac(7, 10, P.code);
+  // H: pay 0 (duruş açılırken ayardan donar) — K1 = K2 = başlangıç+10.
+  await ayarYaz(SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES, 0);
+  const H = await ac(8, 12, P.code);
+  await ayarYaz(SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES, 5);
   check("§0a fikstür: vardiya içi duruşlar vardiyaya bağlı, C vardiya dışı",
-    [A, B, D, E, F, G].every((s) => s.shiftInstanceId === shift.id) && C.shiftInstanceId === null);
+    [A, B, D, E, F, G, H].every((s) => s.shiftInstanceId === shift.id) && C.shiftInstanceId === null);
 
   // ── §2 bayrak kapalı ───────────────────────────────────────────────────────
   const toplamOnce = await prisma.loomAlarm.count();
@@ -180,6 +191,9 @@ async function govde(): Promise<void> {
   check("§3d B geç kayıt: yalnız EN YÜKSEK kademe çaldı (RAISED2), K1 atlandı", b?.tier === 2 && olaylar(b) === "TIER_SKIPPED1,RAISED2", olaylar(b));
   check("§3e B: K1 için RAISED satırı YOK (sağanak yok)", (b?.events ?? []).filter((e) => e.kind === LoomAlarmEventKind.RAISED).length === 1);
   check("§3f C vardiya dışı → alarm doğmadı", (await alarmOf(C.id)) === null);
+  const h = await alarmOf(H.id);
+  check("§3i H pay 0: K1 ve K2 AYNI anda çaldı — ikisi de RAISED, TIER_SKIPPED YOK, kademe 2",
+    h?.tier === 2 && h.graceMinutes === 0 && olaylar(h) === "RAISED1,RAISED2", olaylar(h));
   check("§3g D plan dışı → alarm doğmadı (ortak hedef ayarı dolu olsa da)", (await alarmOf(D.id)) === null);
   const e = await alarmOf(E.id);
   check("§3h E sebepsiz → ortak hedefle (15) doğdu, planReasonCode boş", e?.tier === 1 && e.targetMinutes === 15 && e.planReasonCode === null && olaylar(e) === "RAISED1", olaylar(e));

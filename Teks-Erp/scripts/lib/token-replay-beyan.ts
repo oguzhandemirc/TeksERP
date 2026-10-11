@@ -50,6 +50,13 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}tambur.service.ts::cutOpenFabricInner`]: { giris: { [`${S}tambur.service.ts::cutOpenFabric`]: "R" } },
   [`${S}cash-transaction.service.ts::createFresh`]: { giris: { [`${S}cash-transaction.service.ts::create`]: "R" } },
   [`${S}cash-transaction.service.ts::transferFresh`]: { giris: { [`${S}cash-transaction.service.ts::transfer`]: "R" } },
+  // Tezgah alarmı kişi eylemleri (A1b): altı eylem tek boğazdan (`runActor` → `actionReplay(...).run`).
+  [`${S}loom-alarm.service.ts::ackLoomAlarm`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
+  [`${S}loom-alarm.service.ts::releaseLoomAlarm`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
+  [`${S}loom-alarm.service.ts::snoozeLoomAlarm`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
+  [`${S}loom-alarm.service.ts::unsnoozeLoomAlarm`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
+  [`${S}loom-alarm.service.ts::noteLoomAlarm`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
+  [`${S}loom-alarm.service.ts::retractLoomAlarmNote`]: { giris: { [`${S}loom-alarm.service.ts::runActor`]: "R" } },
 
   // ── Tek yazar helper'ları ───────────────────────────────────────────────────
   [`${S}helpers/cash-ledger.helper.ts::applyCashTxTx`]: { helper: "kasa/banka satırı + bakiye tek yazarı" },
@@ -183,6 +190,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}tambur.service.ts::cutReplay`]: ["parentRollId", "cutLength"],
   [`${S}warehouse-transfer.service.ts::transferReplay`]: ["fromWarehouseId", "toWarehouseId", "toplar"],
   [`${S}warp-beam-consume.service.ts::consumeReplay`]: ["beamId", "kind", "lengthM"],
+  [`${S}helpers/loom-alarm-actor.helper.ts::actionReplay`]: ["alarmId", "kind", "userId", "detay"],
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
   [`${S}license-acceptance.service.ts::replayFor`]: ["adSoyad", "unvan", "metinOzeti"],
   [`${S}update-approval.service.ts::replayFor`]: ["surum", "zamanlama", "onaylayan"],
