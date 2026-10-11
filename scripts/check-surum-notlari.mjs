@@ -364,6 +364,9 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     // --- EMEKLI: yayınlanmış notun andığı ad koddan kalktı (not donuk)
     { etiket: "Patron (Uzaktan Takip)", sinif: "EMEKLI", gerekce: "WEB_BOSS şablonunun adı; tünelle birlikte 2026-09-30'da (B6) katalogdan çıktı." },
     { etiket: "Kodlar birebir aynı", sinif: "EMEKLI", gerekce: "Panel 1.5.0 onay kutusu; 1.6.0'da (A2, panel yalnız şifreli) tek düğme \"Kodlar aynı — bağlan\" oldu." },
+    // Ad değişikliği 2026-10-11 (İş emri → Terbiye İş Emri): yayımlanmış notlar donuk, dilim ③/④ yeni adayları BURAYA ekler.
+    { etiket: "İş emrine devredildi", sinif: "EMEKLI", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; mesaj artık \"Terbiye iş emrine devredildi\"." },
+    { etiket: "İş emrine geri al", sinif: "EMEKLI", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; düğme adı değişti." },
   ];
 
   let dosyaSayisi = 0;
@@ -447,6 +450,9 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
       { alinti: "bu topa kurşun uygulandı mı, KK2'den geçti mi, fasona gitti mi", gerekce: "Refakat kartının cevapladığı soruların anlatımı, ekran metni değil." },
       { alinti: "kapsam sevk irsaliyesi ve muhasebe fişidir", gerekce: "Belge kapsamının anlatımı; ekranda bu cümle yazmaz." },
       { alinti: "kapanışın fire kalanıdır, kapanışı tümden geri alın", gerekce: "Reddin GEREKÇESİNİN özeti; sunucu mesajı farklı kurulur (parça/kapanış adlarıyla)." },
+      // Ad değişikliği 2026-10-11 (Terbiye İş Emri): yayımlanmış notlar donuk; dilim ③/④ yeni uzun alıntıları buraya ekler.
+      { alinti: "Açılmış iş emrini düzeltebilir (renk · en · sipariş bağı · kartı yeniden bas)", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; izin açıklaması yeni adla." },
+      { alinti: "Tamamlanmış iş emrine top eklenemez — yeni iş emri açın.", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; sunucu mesajı yeni adla." },
     ];
     const govdeSade = sadeles(govde);
     const uzunAdaylar = new Map();
