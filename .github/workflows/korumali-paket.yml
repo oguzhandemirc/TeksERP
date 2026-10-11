@@ -107,7 +107,8 @@ jobs:
       # Harita arşivi yapıtın yanına (pakete GİRMEZ: paketleme yalnız dist/ + runtime/ okur); ayrı artefakt yok.
       - name: Kaynak haritası arşivini yapıta ekle
         shell: bash
-        run: node -e "require('fs').cpSync(process.argv[1], 'koruma-cikti/harita-arsivi', { recursive: true })" "${{ runner.temp }}/koruma-arsiv"
+        run: |
+          node -e "require('fs').cpSync(process.argv[1], 'koruma-cikti/harita-arsivi', { recursive: true })" "${{ runner.temp }}/koruma-arsiv"
 
       - name: Yapıtları yükle (.jsc + yükleyici + künye + runtime + harita arşivi)
         uses: actions/upload-artifact@v4

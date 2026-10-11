@@ -954,6 +954,13 @@ function artefaktIhlalleri(dosyalar: Record<string, string>): string[] {
       if ((korumaliAkis || KORUMALI_ICERIK.test(g)) && gun !== "1") ih.push(`${ad}: ${isim} saklaması ${gun ?? "varsayılan (90)"} gün — korumalı içerik 1 gün`);
     }
   }
+  // Düz (tırnaksız, blok olmayan) skalerde ": " YAML eşlemesidir: GitHub iş akışını koşmadan "workflow file issue" ile düşürür.
+  for (const [ad, metin] of Object.entries(dosyalar)) {
+    for (const [i, l] of metin.split("\n").entries()) {
+      const m = /^\s*(?:- )?[A-Za-z][\w-]*: (?![|>'"[{&*!]|\$\{\{[^}]*\}\}\s*$)(.*)$/.exec(l);
+      if (m && !/^\s*#/.test(l) && /: /.test(m[1]!.replace(/\s+#.*$/, ""))) ih.push(`${ad}:${i + 1}: düz skalerde ": " (YAML ayrıştırılamaz)`);
+    }
+  }
   const kp = dosyalar[KORUMALI_IS_AKISI.yol] ?? "";
   if (yuklemeler(kp).length < 4) ih.push(`${KORUMALI_IS_AKISI.yol}: yükleme adımı ${yuklemeler(kp).length} — 4 bekleniyor (ayrıştırma ölçemedi)`);
   const yapit = yuklemeler(kp).find((g) => /name: korumali-\$\{\{ matrix\.hedef \}\}/.test(g)) ?? "";
@@ -976,6 +983,7 @@ function artefaktIhlalleri(dosyalar: Record<string, string>): string[] {
     ["imaj arşivi saklamasız (90)", mut(KP, /(compression-level: 0)\n {10}retention-days: 1/, "$1")],
     ["başka akışta .jsc 7 gün", mut(KW, "path: ${{ env.KURULUM_CIKTI }}", "path: |\n            ${{ env.KURULUM_CIKTI }}\n            dist/server.jsc")],
     ["harita yapıttan düştü", mut(KP, "            koruma-cikti/harita-arsivi/**\n", "")],
+    ["düz run skalerinde \": \" (cfb498cb3 hatası)", mut(KP, /run: \|\n {10}(node -e "require\('fs'\)\.cpSync[^\n]*)/, "run: $1")],
   ];
   for (const [ad, d] of sondalar) {
     const uyg = JSON.stringify(d) !== JSON.stringify(dosyalar);
