@@ -11,6 +11,7 @@ import { registerPdfIpc } from "./pdf.ipc.js";
 import { registerFilesIpc } from "./files.ipc.js";
 import { registerUpdaterIpc } from "./updater.ipc.js";
 import { registerLicenseIpc } from "./license.ipc.js";
+import { registerLoomAlarmNotifyIpc } from "./loom-alarm-notify.ipc.js";
 
 export function registerIpcHandlers(): void {
   registerSecureStoreIpc();
@@ -26,4 +27,5 @@ export function registerIpcHandlers(): void {
   registerFilesIpc();
   registerUpdaterIpc();
   registerLicenseIpc();
+  registerLoomAlarmNotifyIpc();
 }

@@ -22,7 +22,7 @@ import { OverdueStrip } from "./OverdueStrip";
 import { ShowFilterPicker, showFilterPredicate, type ShowFilter } from "./ShowFilterPicker";
 import { hsl } from "./palette";
 import { shiftStarLoom, summarizeFloor } from "./metrics";
-import { TvExitControl } from "./TvExit";
+import { TvExitControl, type TvSoundControl } from "./TvExit";
 import { TvLaunchMenu } from "./TvLaunchMenu";
 import { useFullscreen } from "./useFullscreen";
 import type { FloorState } from "./types";
@@ -50,7 +50,7 @@ interface ViewProps {
   /** Onay penceresinde gösterilecek TV adresi (web paneli varsa). */
   tvUrl?: string | null;
   /** TV kipinde görünür çıkış (köşe düğmesi + Esc); `windowed` = ayrı TV penceresi (tam ekran düğmeyle). */
-  tvExit?: { onExit: () => void; label: string; windowed?: boolean };
+  tvExit?: { onExit: () => void; label: string; windowed?: boolean; sound?: TvSoundControl };
   /** Açılışta detayı açık tezgah (alarm sayfasından "Tezgah Salonunda göster"). */
   initialSelectedId?: string | null;
   /** Verilirse detayda canlı alarmın sayfasına bağlantı (TV kipinde verilmez). */

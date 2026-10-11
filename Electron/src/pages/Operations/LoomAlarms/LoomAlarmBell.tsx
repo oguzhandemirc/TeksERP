@@ -1,23 +1,22 @@
 // =============================================================================
 // ALARM ZİLİ — üst çubukta "Son Aktivite" zilinden AYRI (tasarım §A.6)
 // =============================================================================
-// Aktif alarm sayısı rozeti + açılır kısa liste (tezgah · sebep · süre/hedef · kademe).
-// Yoklama 15 sn. FAIL-CLOSED: bayrak kapalı / izin yok / sunucu "kapalı" derse zil HİÇ
+// Aktif alarm sayısı rozeti + açılır kısa liste (tezgah · sebep · süre/hedef · kademe) + kişisel
+// ses aç/kapa. Yoklama 15 sn, şeritle ortak (`alarm-bell-query`). FAIL-CLOSED: bayrak kapalı / izin yok / sunucu "kapalı" derse zil HİÇ
 // çizilmez ve hata toast'ı basılmaz (yoklama sessizdir).
 // =============================================================================
-import { useQuery } from "@tanstack/react-query";
-import { Siren } from "lucide-react";
+import { Siren, Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
 import { isAlarmClosedError, useLoomAlarmAccess, useServerNow } from "./alarm-access";
 import { durationVsTarget, isPastTarget, reasonText, tierShort } from "./alarm-format";
-import { loomAlarmService } from "./service";
+import { useLoomAlarmBellQuery } from "./alarm-bell-query";
+import { useLoomAlarmSoundPref } from "./useLoomAlarmSoundPref";
 import type { LoomAlarmItem } from "./types";
 
-export const LOOM_ALARM_BELL_QUERY_KEY = ["loom-alarms", "bell"] as const;
-export const LOOM_ALARM_BELL_POLL_MS = 15_000;
+export { LOOM_ALARM_BELL_QUERY_KEY, LOOM_ALARM_BELL_POLL_MS } from "./alarm-bell-query";
 const BELL_LIMIT = 8;
 
 function BellRow({ a, now, onOpen }: { a: LoomAlarmItem; now: number; onOpen: (id: string) => void }) {
@@ -58,18 +57,12 @@ export function LoomAlarmBell() {
   const access = useLoomAlarmAccess();
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const now = useServerNow(15_000);
-  const q = useQuery({
-    queryKey: LOOM_ALARM_BELL_QUERY_KEY,
-    queryFn: () => loomAlarmService.list({ scope: "active", limit: BELL_LIMIT }, true),
-    enabled: access.canView,
-    refetchInterval: LOOM_ALARM_BELL_POLL_MS,
-    staleTime: 5_000,
-    retry: false,
-  });
+  const q = useLoomAlarmBellQuery(access.canView);
+  const sound = useLoomAlarmSoundPref();
 
   if (!access.canView || isAlarmClosedError(q.error)) return null;
 
-  const items = q.data?.items ?? [];
+  const items = (q.data?.items ?? []).slice(0, BELL_LIMIT);
   const summary = q.data?.summary;
   const count = summary?.total ?? 0;
   const urgent = (summary?.open ?? 0) > 0 || (summary?.escalated ?? 0) > 0;
@@ -96,11 +89,24 @@ export function LoomAlarmBell() {
       <PopoverContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between border-b px-3 py-2">
           <p className="text-sm font-medium">Tezgah Alarmları</p>
-          {summary && (
-            <span className="text-xs text-muted-foreground">
-              {summary.open} açık · {summary.acked} üstlenildi
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {summary && (
+              <span className="text-xs text-muted-foreground">
+                {summary.open} açık · {summary.acked} üstlenildi
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              aria-pressed={sound.on}
+              aria-label={sound.on ? "Alarm sesi açık — kapat" : "Alarm sesi kapalı — aç"}
+              title={sound.on ? "Alarm sesi açık (yalnız sizin için) — kapatmak için tıklayın" : "Alarm sesi kapalı (yalnız sizin için) — açmak için tıklayın"}
+              onClick={sound.toggle}
+            >
+              {sound.on ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+            </Button>
+          </div>
         </div>
         <div className="max-h-96 overflow-y-auto">
           {items.length === 0 ? (

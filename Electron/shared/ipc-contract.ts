@@ -12,6 +12,7 @@ import type { TlsAdvert, TlsPin, TlsPinVia } from "./lan-tls";
 import type { LicenseRelayRequest, LicenseRelayResult } from "./license-relay";
 import type { ScreenshotResult } from "./screenshot";
 import type { TvDisplayInfo, TvWindowOpenRequest, TvWindowOpenResult } from "./tv-window";
+import type { LoomAlarmNotifyRequest, LoomAlarmNotifyResult } from "./loom-alarm-notify";
 
 export type { DiscoveredServer };
 
@@ -46,6 +47,13 @@ export interface TvWindowApi {
   open: (req: TvWindowOpenRequest) => Promise<TvWindowOpenResult>;
   /** TV penceresi kapandı; `byUser` false = uygulamayla birlikte kapandı. Dönüş: aboneliği bırak. */
   onClosed: (cb: (e: { byUser: boolean }) => void) => () => void;
+}
+
+/** Tezgah alarmı OS bildirimi — istek alarm kimliği + düz metin; tıklama yalnız kimliği geri yollar. */
+export interface LoomAlarmApi {
+  notify: (req: LoomAlarmNotifyRequest) => Promise<LoomAlarmNotifyResult>;
+  /** Bildirime tıklandı (pencere öne geldi). Dönüş: aboneliği bırak. */
+  onOpen: (cb: (alarmId: string) => void) => () => void;
 }
 
 export interface SystemApi {
@@ -415,6 +423,7 @@ export interface ApiBridge {
   updater: UpdaterApi;
   license: LicenseApi;
   tvWindow: TvWindowApi;
+  loomAlarm: LoomAlarmApi;
 }
 
 declare global {

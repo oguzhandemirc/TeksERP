@@ -75,6 +75,11 @@ export interface AppPreferences {
      */
     statsView?: "sade" | "onerilen" | "genis";
   };
+  /** Tezgah alarmı — kişisel tercih (aynı kişi başka bilgisayarda da aynı ayarı bulur). */
+  loomAlarm?: {
+    /** Yeni alarmda / tekrar çalmada ses (varsayılan AÇIK; şerit ve bildirim sesten bağımsız). */
+    sound?: boolean;
+  };
   /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
   dashboard?: {
     hidden?: string[];

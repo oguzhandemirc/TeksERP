@@ -144,3 +144,8 @@ export function usePreferences(): PreferencesContextValue {
   if (!ctx) throw new Error("usePreferences must be used within PreferencesProvider");
   return ctx;
 }
+
+/** Sağlayıcı yoksa null (kabuk dışı/izole bileşen testleri) — çağıran varsayılana düşer. */
+export function useOptionalPreferences(): PreferencesContextValue | null {
+  return useContext(PreferencesContext);
+}

@@ -43,7 +43,7 @@ describe("preload köprüsü yalnız uygulama belgesine", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toBe("api");
     const api = calls[0]?.[1] as Record<string, unknown>;
-    for (const key of ["secureStore", "discovery", "appInfo", "window", "system", "printer", "pdf", "files", "updater", "license", "tvWindow"]) {
+    for (const key of ["secureStore", "discovery", "appInfo", "window", "system", "printer", "pdf", "files", "updater", "license", "tvWindow", "loomAlarm"]) {
       expect(api[key], key).toBeDefined();
     }
   });
@@ -54,6 +54,28 @@ describe("preload köprüsü yalnız uygulama belgesine", () => {
     const { ipcRenderer } = await import("electron");
     api.tvWindow.open({ displayId: 2, url: "https://saldirgan.example/" });
     expect(vi.mocked(ipcRenderer.invoke)).toHaveBeenLastCalledWith("tv-window:open", { displayId: 2 });
+  });
+
+  it("⭐ alarm bildirimi köprüsü yalnız kimlik + düz metin geçirir (adres/ek alan düşer)", async () => {
+    const calls = await loadPreloadAt(`${ENTRY}#/giris`, withEntry);
+    const api = calls[0]?.[1] as { loomAlarm: { notify: (r: unknown) => unknown; onOpen: (cb: (id: string) => void) => () => void } };
+    const { ipcRenderer } = await import("electron");
+    api.loomAlarm.notify({ alarmId: "a", title: "t", body: "b", url: "https://saldirgan.example/" });
+    expect(vi.mocked(ipcRenderer.invoke)).toHaveBeenLastCalledWith("loom-alarm:notify", { alarmId: "a", title: "t", body: "b" });
+  });
+
+  it("⭐ NEGATİF: ana süreçten gelen açma olayı kimlik değilse çağıran HİÇ tetiklenmez", async () => {
+    const calls = await loadPreloadAt(`${ENTRY}#/giris`, withEntry);
+    const api = calls[0]?.[1] as { loomAlarm: { onOpen: (cb: (id: string) => void) => () => void } };
+    const { ipcRenderer } = await import("electron");
+    const cb = vi.fn();
+    api.loomAlarm.onOpen(cb);
+    const listener = vi.mocked(ipcRenderer.on).mock.calls.filter((c) => c[0] === "loom-alarm:open").at(-1)?.[1] as (e: unknown, p: unknown) => void;
+    listener({}, { alarmId: "https://saldirgan.example/" });
+    listener({}, { alarmId: "3f2b8c1e-9a4d-4e2f-8b6a-1c2d3e4f5a6b", url: "https://x" });
+    expect(cb).not.toHaveBeenCalled();
+    listener({}, { alarmId: "3f2b8c1e-9a4d-4e2f-8b6a-1c2d3e4f5a6b" });
+    expect(cb).toHaveBeenCalledWith("3f2b8c1e-9a4d-4e2f-8b6a-1c2d3e4f5a6b");
   });
 
   it("⭐ splash, ağ paylaşımı ve başka yerel sayfa köprüyü ALMAZ", async () => {

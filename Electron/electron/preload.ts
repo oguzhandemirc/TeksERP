@@ -16,6 +16,7 @@ import type {
 } from "@shared/ipc-contract";
 import type { LicenseRelayRequest } from "@shared/license-relay";
 import { isAppDocumentUrl, readAppEntryArgument } from "@shared/app-origin";
+import { LOOM_ALARM_NOTIFY_CHANNEL, LOOM_ALARM_OPEN_CHANNEL, parseLoomAlarmOpenEvent } from "@shared/loom-alarm-notify";
 
 const api: ApiBridge = {
   secureStore: {
@@ -109,6 +110,18 @@ const api: ApiBridge = {
       const listener = (_e: unknown, payload: { byUser: boolean }) => cb({ byUser: payload?.byUser === true });
       ipcRenderer.on("tv-window:closed", listener);
       return () => ipcRenderer.removeListener("tv-window:closed", listener);
+    },
+  },
+  loomAlarm: {
+    // Yalnız alarm kimliği + düz metin geçer (adres/ek alan düşer); ana süreç yeniden doğrular.
+    notify: (req) => ipcRenderer.invoke(LOOM_ALARM_NOTIFY_CHANNEL, { alarmId: req.alarmId, title: req.title, body: req.body }),
+    onOpen: (cb) => {
+      const listener = (_e: unknown, payload: unknown) => {
+        const alarmId = parseLoomAlarmOpenEvent(payload);
+        if (alarmId) cb(alarmId);
+      };
+      ipcRenderer.on(LOOM_ALARM_OPEN_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(LOOM_ALARM_OPEN_CHANNEL, listener);
     },
   },
 };

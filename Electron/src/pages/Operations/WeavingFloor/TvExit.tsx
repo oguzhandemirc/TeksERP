@@ -1,7 +1,7 @@
 // TV kipinden GÖRÜNÜR çıkış: köşe düğmesi fare oynayınca belirir, boşta kalınca söner (TV'de
 // ekranı kirletmesin); ilk açılışta birkaç saniye ipucuyla görünür; Esc her an çıkar.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LogOut, Maximize2 } from "lucide-react";
+import { LogOut, Maximize2, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const TV_EXIT_INTRO_MS = 6_000;
@@ -56,8 +56,15 @@ export function useTvExit(onExit: () => void): { visible: boolean; intro: boolea
   return { visible, intro, show };
 }
 
+/** TV kipinin alarm sesi düğmesi (yalnız alarm açık kurulumda verilir). */
+export interface TvSoundControl {
+  on: boolean;
+  toggle: () => void;
+}
+
 interface Props {
   onExit: () => void;
+  sound?: TvSoundControl;
   /** Düğme metni — ayrı pencerede "Pencereyi kapat". */
   label: string;
   /** Ayrı pencerede: pencere TV ekranına sürüklendikten sonra tam ekrana geçirir. */
@@ -67,7 +74,7 @@ interface Props {
 const PILL =
   "inline-flex items-center gap-2 rounded-full border bg-popover px-4 py-2 font-semibold text-popover-foreground shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export function TvExitControl({ onExit, label, onToggleFullscreen }: Props) {
+export function TvExitControl({ onExit, label, onToggleFullscreen, sound }: Props) {
   const { visible, intro, show } = useTvExit(onExit);
   return (
     <div
@@ -79,6 +86,19 @@ export function TvExitControl({ onExit, label, onToggleFullscreen }: Props) {
       data-visible={visible ? "1" : "0"}
     >
       <div className="flex gap-2">
+        {sound && (
+          <button
+            type="button"
+            onClick={sound.toggle}
+            onFocus={show}
+            className={PILL}
+            aria-pressed={sound.on}
+            title="Yeni tezgah alarmında bu ekran kısa bir ses çalar (bu bilgisayarın ayarı)"
+          >
+            {sound.on ? <Volume2 className="h-4 w-4" aria-hidden /> : <VolumeX className="h-4 w-4" aria-hidden />}
+            {sound.on ? "Alarm sesi açık" : "Alarm sesi kapalı"}
+          </button>
+        )}
         {onToggleFullscreen && (
           <button type="button" onClick={onToggleFullscreen} onFocus={show} className={PILL}>
             <Maximize2 className="h-4 w-4" aria-hidden />

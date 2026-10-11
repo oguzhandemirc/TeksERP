@@ -5,11 +5,14 @@ import { FactoryAdminCard } from "./FactoryAdminCard";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
 import { UpdateProgressWindow } from "@/pages/System/ServerUpdates/UpdateProgressWindow";
 import { UpdateApprovalPrompt } from "@/pages/System/ServerUpdates/UpdateApprovalPrompt";
+import { LoomAlarmStrip } from "@/pages/Operations/LoomAlarms/LoomAlarmStrip";
 
 /** Üst çubuğun altındaki şerit yığını — sıra görünür sıradır. */
 export function ShellBanners() {
   return (
     <>
+      {/* Tezgah alarmı — en üstte; bayrak/izin yoksa hiç çizilmez. Ses + OS bildirimi de buradan. */}
+      <LoomAlarmStrip />
       {/* Kurulum tetiği (`UpdateGate`) burada DEĞİL, `App.tsx` `Root`ta — giriş
           ekranı ve patron kabuğu da kurabilsin. Burada yalnız şeritler (indirme + imza reddi). */}
       <UpdateStrips />
