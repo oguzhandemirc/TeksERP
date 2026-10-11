@@ -390,7 +390,7 @@ async function seed() {
     ${P}0002  ARDA / Ankara     L2a 600m (300 sevk edildi → PARTIAL_SHIPPED)
     ${P}0003  Moda / İzmir      L3a 800m (4 eşit parça), APPROVED
 
-  İŞ EMRİ
+  TERBİYE İŞ EMRİ
     ${P}B-0001  çoklu sipariş (ARDA L1a 1000 + Moda L3a 800), hedef 2400 (600 stok fazlası)
     → WO picker testi: L1a & L3a tahsisli (Açık 0, gizli), L1b (500) & L2a görünür
 

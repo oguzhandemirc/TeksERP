@@ -50,7 +50,7 @@ async function rotalariHazirla(): Promise<void> {
 }
 
 export async function isEmirleriKur(colorIds: string[]): Promise<void> {
-  adim(`İş emirleri — ${ADET} emir (hepsi hedef renkli, ilk adım fasona gider)`);
+  adim(`Terbiye iş emirleri — ${ADET} emir (hepsi hedef renkli, ilk adım fasona gider)`);
   await rotalariHazirla();
 
   const rotalar = await prisma.route.findMany({
@@ -59,7 +59,7 @@ export async function isEmirleriKur(colorIds: string[]): Promise<void> {
   });
   const kullanilabilir = rotalar.filter((r) => r.steps.length > 0);
   if (kullanilabilir.length === 0) {
-    not("Adımlı aktif rota yok — İş Emirleri ekranı boş kalır.");
+    not("Adımlı aktif rota yok — Terbiye İş Emirleri ekranı boş kalır.");
     return;
   }
   const kumaslar = await prisma.item.findMany({
@@ -68,7 +68,7 @@ export async function isEmirleriKur(colorIds: string[]): Promise<void> {
     take: 40,
   });
   if (kumaslar.length === 0 || colorIds.length === 0) {
-    not("Kumaş ya da renk yok — iş emri açılamaz.");
+    not("Kumaş ya da renk yok — terbiye iş emri açılamaz.");
     return;
   }
 
@@ -100,7 +100,7 @@ export async function isEmirleriKur(colorIds: string[]): Promise<void> {
       orderBy: { createdAt: "asc" },
     });
     if (!aday) {
-      not(`Ham top kalmadı — ${i}. iş emrinde durdu.`);
+      not(`Ham top kalmadı — ${i}. terbiye iş emrinde durdu.`);
       break;
     }
     const toplar = await prisma.roll.findMany({
@@ -117,7 +117,7 @@ export async function isEmirleriKur(colorIds: string[]): Promise<void> {
       take: 2 + Math.floor(r() * 2),
     });
     if (toplar.length === 0) {
-      not(`Ham top kalmadı — ${i}. iş emrinde durdu.`);
+      not(`Ham top kalmadı — ${i}. terbiye iş emrinde durdu.`);
       break;
     }
 
@@ -142,15 +142,15 @@ export async function isEmirleriKur(colorIds: string[]): Promise<void> {
         } as never,
         undefined,
       );
-      say("iş emri");
-      if (fasonaGitsin) say("fasona sevk edilen iş emri");
+      say("terbiye iş emri");
+      if (fasonaGitsin) say("fasona sevk edilen terbiye iş emri");
     } catch (e) {
-      not(`İş emri #${i} kurulamadı: ${(e as Error).message}`);
+      not(`Terbiye iş emri #${i} kurulamadı: ${(e as Error).message}`);
     }
   }
 
   const wo = await prisma.workOrder.count();
   const fason = await prisma.subcontractorDispatch.count();
   const fasonda = await prisma.roll.count({ where: { status: "AT_SUBCONTRACTOR" } });
-  console.log(`   iş emri=${wo} · fason sevki=${fason} · fasondaki top=${fasonda}`);
+  console.log(`   terbiye iş emri=${wo} · fason sevki=${fason} · fasondaki top=${fasonda}`);
 }

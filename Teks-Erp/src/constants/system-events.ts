@@ -190,6 +190,8 @@ const REPAIR_EVENTS = {
   ROLL_STATUS_EVENTS_BACKFILL: "ROLL_STATUS_EVENTS_BACKFILL",
   /** İş emri hareket defteri geçmiş doldurma (D7, 2026-09-25) — `scripts/backfill_workorder_events.ts`. */
   WORK_ORDER_EVENTS_BACKFILL: "WORK_ORDER_EVENTS_BACKFILL",
+  /** Görünen ad değişikliği katalog satırlarına (2026-10-11) — `scripts/terim_katalog_metin_gocu.ts`. */
+  TERM_CATALOG_TEXT_MIGRATED: "TERM_CATALOG_TEXT_MIGRATED",
 } as const;
 
 /**

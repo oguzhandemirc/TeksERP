@@ -75,7 +75,7 @@ export async function dogrula(): Promise<number> {
     ["Envanter — bitmiş depo", await prisma.roll.count({ where: { status: "WAREHOUSE" } })],
     ["Envanter — 2. kalite", await prisma.roll.count({ where: { status: "A1_STOCK" } })],
     ["Top Arşivi (iptal+fire)", await prisma.roll.count({ where: { status: { in: ["CANCELLED", "SCRAP"] } } })],
-    ["İş emirleri", await prisma.workOrder.count()],
+    ["Terbiye iş emirleri", await prisma.workOrder.count()],
     ["Sevkiyatlar", await prisma.shipment.count()],
     ["Çuvallar", await prisma.sack.count()],
     ["Kartela sevkleri", await prisma.kartelaDispatch.count()],
