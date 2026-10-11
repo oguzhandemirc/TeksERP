@@ -22,6 +22,7 @@ import ScannerRollStrip from '../../../components/ScannerRollStrip';
 import CancelledRollSheet from '../../../components/CancelledRollSheet';
 import { useCameraUnusable } from '../../../hooks/useCameraUnusable';
 import { colors, spacing, radius } from '../../../theme';
+import { TERIM } from '../../../lib/terim';
 
 interface NewWorkOrderViewProps {
   /** Aktif adım (0-tabanlı) — kabuk tutar ki Appbar geri tuşu adım geri gidebilsin. */
@@ -136,11 +137,11 @@ export default function NewWorkOrderView({
           <View style={styles.successIcon}>
             <Icon source="check-circle" size={56} color={colors.success} />
           </View>
-          <Text style={styles.successTitle}>İş Emri Başlatıldı</Text>
+          <Text style={styles.successTitle}>{`${TERIM.terbiyeIsEmri.tekil} Başlatıldı`}</Text>
           {/* İki numara AYRI kavram, bu yüzden ETİKETLİ basılır: üstteki büyük
               numara eskiden etiketsizdi ve "parti" sanılıyordu (alan adı da
               `batchNumber`'dı ama içinde iş emri no vardı). */}
-          <Text style={styles.successLabel}>İŞ EMRİ NO</Text>
+          <Text style={styles.successLabel}>{`${TERIM.terbiyeIsEmri.tekilBuyuk} NO`}</Text>
           <Text style={styles.successBatch}>{r.workOrderNumber}</Text>
           {r.batchNumber ? (
             <>
@@ -217,7 +218,7 @@ export default function NewWorkOrderView({
             style={styles.successBtn}
             contentStyle={styles.btnContent}
           >
-            Yeni İş Emri
+            {`Yeni ${TERIM.terbiyeIsEmri.tekil}`}
           </Button>
         </Surface>
       </View>
@@ -237,7 +238,7 @@ export default function NewWorkOrderView({
         <View style={styles.offlineBanner}>
           <Icon source="wifi-off" size={16} color={colors.dangerDark} />
           <Text style={styles.offlineText}>
-            Çevrimdışı — iş emri başlatmak için bağlantı gerekli.
+            Çevrimdışı — terbiye iş emri başlatmak için bağlantı gerekli.
           </Text>
         </View>
       ) : null}
@@ -301,7 +302,7 @@ export default function NewWorkOrderView({
               (primaryDisabled || stepIssues.length > 0) && styles.navBtnDisabled,
             ]}
             rippleColor="rgba(255,255,255,0.25)"
-            accessibilityLabel={isLast ? 'İş emrini başlat' : 'Sonraki adım'}
+            accessibilityLabel={isLast ? 'Terbiye iş emrini başlat' : 'Sonraki adım'}
           >
             <View style={styles.navBtnInner}>
               {isLast && wo.isPending ? (
@@ -310,7 +311,7 @@ export default function NewWorkOrderView({
                 <Icon source={isLast ? 'rocket-launch' : 'chevron-right'} size={24} color="#fff" />
               )}
               <Text style={styles.navBtnPrimaryText}>
-                {isLast ? 'İŞ EMRİNİ BAŞLAT' : 'İLERİ'}
+                {isLast ? 'TERBİYE İŞ EMRİNİ BAŞLAT' : 'İLERİ'}
               </Text>
             </View>
           </TouchableRipple>
@@ -485,9 +486,10 @@ const styles = StyleSheet.create({
   navBtnSide: { flex: 3, borderColor: colors.borderStrong, backgroundColor: colors.surface },
   navBtnPrimary: { flex: 7, backgroundColor: colors.brand, borderColor: colors.brand },
   navBtnDisabled: { opacity: 0.45 },
-  navBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8 },
+  // Uzun düğme yazısı (dar telefonda) kırpılmasın, iki satıra insin — navBtn `overflow: hidden`.
+  navBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, maxWidth: '100%' },
   navBtnSideText: { color: colors.brand, fontSize: 15, fontWeight: '700' },
-  navBtnPrimaryText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  navBtnPrimaryText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3, flexShrink: 1, textAlign: 'center' },
 
   successWrap: { flex: 1, backgroundColor: colors.appBg, justifyContent: 'center', padding: spacing.lg },
   successCard: {

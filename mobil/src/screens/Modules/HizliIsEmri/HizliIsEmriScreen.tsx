@@ -8,6 +8,7 @@ import NewWorkOrderView from './NewWorkOrderView';
 import WorkOrderListView from './WorkOrderListView';
 import WorkOrderDetailSheet from './WorkOrderDetailSheet';
 import { colors, spacing, radius } from '../../../theme';
+import { TERIM } from '../../../lib/terim';
 
 type View2 = 'list' | 'new';
 
@@ -47,7 +48,7 @@ export default function HizliIsEmriScreen() {
 
   return (
     <ScreenChrome
-      title="Hızlı İş Emri"
+      title={`Hızlı ${TERIM.terbiyeIsEmri.tekil}`}
       onStepBack={
         view === 'new'
           ? () => {
@@ -89,11 +90,11 @@ export default function HizliIsEmriScreen() {
                   }}
                   style={styles.newBtn}
                   rippleColor="rgba(255,255,255,0.25)"
-                  accessibilityLabel="Yeni iş emri"
+                  accessibilityLabel="Yeni terbiye iş emri"
                 >
                   <View style={styles.newBtnInner}>
                     <Icon source="plus-circle" size={26} color="#fff" />
-                    <Text style={styles.newBtnText}>Yeni İş Emri</Text>
+                    <Text style={styles.newBtnText}>{`Yeni ${TERIM.terbiyeIsEmri.tekil}`}</Text>
                   </View>
                 </TouchableRipple>
               </View>

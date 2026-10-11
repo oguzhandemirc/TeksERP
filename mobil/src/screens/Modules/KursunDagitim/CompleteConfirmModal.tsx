@@ -157,8 +157,8 @@ export default function CompleteConfirmModal({ row, onDismiss, onDone }: Props) 
               <Icon source="alert" size={18} color={colors.warningDark} />
               <Text style={styles.warnText}>
                 {preview.workOrderWillComplete
-                  ? 'İş emri KAPANIR, toplar depoya alınır (Bitmiş Depo).'
-                  : 'Toplar depoya alınır (Bitmiş Depo). İş emrinde başka açık adım kaldığı için iş emri kapanmaz.'}
+                  ? 'Terbiye iş emri KAPANIR, toplar depoya alınır (Bitmiş Depo).'
+                  : 'Toplar depoya alınır (Bitmiş Depo). Terbiye iş emrinde başka açık adım kaldığı için terbiye iş emri kapanmaz.'}
               </Text>
             </View>
 

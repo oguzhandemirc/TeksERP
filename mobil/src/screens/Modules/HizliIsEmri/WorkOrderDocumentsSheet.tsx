@@ -190,8 +190,8 @@ export default function WorkOrderDocumentsSheet({
       keyExtractor={(r) => r.key}
       renderItem={renderItem}
       emptyIcon="file-document-outline"
-      emptyText="Bu iş emrine ait belge yok"
-      emptyHint="Refakat kartı iş emri açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir."
+      emptyText="Bu terbiye iş emrine ait belge yok"
+      emptyHint="Refakat kartı terbiye iş emri açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir."
       hint={{
         text: 'Satıra dokun → yazdırılır. Kâğıt boyu için sağdaki kutuya dokun (bu cihazda hatırlanır).',
         icon: 'printer',

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { workOrderService } from '../../../services/workOrder.service';
 import { colors, spacing } from '../../../theme';
+import { TERIM } from '../../../lib/terim';
 import { formatFactory } from '../../../lib/factory-time';
 
 /**
@@ -44,7 +45,7 @@ export default function WorkOrderRecentEvents({ workOrderId }: { workOrderId: st
           </View>
         ))
       )}
-      <Text style={styles.hint}>Tam liste ve Excel: panel → İş Emri Hareketleri</Text>
+      <Text style={styles.hint}>{`Tam liste ve Excel: panel → ${TERIM.terbiyeIsEmri.tekil} Hareketleri`}</Text>
     </View>
   );
 }

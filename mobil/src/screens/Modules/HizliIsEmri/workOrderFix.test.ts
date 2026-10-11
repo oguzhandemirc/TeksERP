@@ -64,11 +64,11 @@ describe('tabletCancelAllowed', () => {
 
 describe('detachResultMessage', () => {
   it('hepsi çıktı: başarı; iş emri boşaldıysa söyler', () => {
-    expect(detachResultMessage(2, [], true)).toEqual({ type: 'success', text: "2 top iş emrinden çıkarıldı · iş emrinde top kalmadı, Planlandı'ya döndü" });
+    expect(detachResultMessage(2, [], true)).toEqual({ type: 'success', text: "2 top terbiye iş emrinden çıkarıldı · terbiye iş emrinde top kalmadı, Planlandı'ya döndü" });
   });
   it('kısmi: hata türü, ilk sebep yazılır', () => {
     const m = detachResultMessage(1, ['Bu top işlem gördü (kesildi)', 'x'], false);
     expect(m.type).toBe('error');
-    expect(m.text).toBe('1 top iş emrinden çıkarıldı · 2 top çıkarılamadı: Bu top işlem gördü (kesildi)');
+    expect(m.text).toBe('1 top terbiye iş emrinden çıkarıldı · 2 top çıkarılamadı: Bu top işlem gördü (kesildi)');
   });
 });

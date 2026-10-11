@@ -367,6 +367,7 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     // Ad değişikliği 2026-10-11 (İş emri → Terbiye İş Emri): yayımlanmış notlar donuk, dilim ③/④ yeni adayları BURAYA ekler.
     { etiket: "İş emrine devredildi", sinif: "EMEKLI", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; mesaj artık \"Terbiye iş emrine devredildi\"." },
     { etiket: "İş emrine geri al", sinif: "EMEKLI", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; düğme adı değişti." },
+    { etiket: "İş emri plan düzeltme sebepleri", sinif: "EMEKLI", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; sebep kataloğu adı artık \"Terbiye iş emri plan düzeltme sebepleri\" (backend + tablet)." },
   ];
 
   let dosyaSayisi = 0;
@@ -456,6 +457,7 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
       { alinti: "Levent sarımında dokuma işi zorunlu olsun", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Levent sarımında dokuma iş emri zorunlu olsun\"." },
       { alinti: "Tezgah koşumu dokuma işine bağlı açılsın", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Tezgah koşumu dokuma iş emrine bağlı açılsın\"." },
       { alinti: "Dokuma işi sipariş satırına bağlı olsun", gerekce: "Ad değişikliği 2026-10-11 (Dokuma İş Emri) — eski sürüm notu; ayar başlığı \"Dokuma iş emri sipariş satırına bağlı olsun\"." },
+      { alinti: "Bu iş emrinde üretim başladı — iptal panelden yapılır", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; tablet metni artık \"Bu terbiye iş emrinde üretim başladı\"." },
     ];
     const govdeSade = sadeles(govde);
     const uzunAdaylar = new Map();

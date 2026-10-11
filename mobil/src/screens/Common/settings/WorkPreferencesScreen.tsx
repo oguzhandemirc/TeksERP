@@ -306,7 +306,7 @@ export default function WorkPreferencesScreen() {
 
       {!canPlan ? null : (
       <View style={{ gap: 10 }}>
-        <Text style={settingsStyles.label}>İŞ EMRİNDE FASON FİRMA VARSAYILANI</Text>
+        <Text style={settingsStyles.label}>TERBİYE İŞ EMRİNDE FASON FİRMA VARSAYILANI</Text>
         <Text style={settingsStyles.hint}>
           Rotaya fason adımı eklendiğinde hangi firma hazır gelsin? Bu ayar yalnız
           HAZIR GELEN firmayı değiştirir — listeden her zaman başka firma seçebilirsin

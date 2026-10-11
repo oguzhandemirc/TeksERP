@@ -175,7 +175,7 @@ export default function TamburSendToDyeModal({ visible, onDismiss, rollId, onlin
                   />
                   <EffectRow
                     icon="clipboard-text-outline"
-                    text={`İş emri: ${preview.targetStep.workOrderNumber}`}
+                    text={`Terbiye iş emri: ${preview.targetStep.workOrderNumber}`}
                   />
                   {preview.effects.reopenedStepNames.length > 0 && (
                     <EffectRow
@@ -231,7 +231,7 @@ export default function TamburSendToDyeModal({ visible, onDismiss, rollId, onlin
                     numberOfLines={2}
                     value={reason}
                     onChangeText={setReason}
-                    placeholder="Örn: mal mavi geldi, iş emri gri istiyor"
+                    placeholder="Örn: mal mavi geldi, terbiye iş emri gri istiyor"
                     maxLength={500}
                     disabled={busy}
                     style={styles.reasonInput}

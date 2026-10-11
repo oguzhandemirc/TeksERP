@@ -80,6 +80,7 @@ import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { isWrongTypeForCardField, isWrongTypeForRollField } from './fasonScanGuards';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
+import { TERIM } from '../../../lib/terim';
 
 // Barkod tipi sezgisi — yanlış alana okutmayı backend 404'üne güvenmeden anında,
 // net mesajla yakalar. Tür SUNUCU TABLOSUNDAN gelir (ön ek tablette sabit
@@ -469,7 +470,7 @@ export default function FasonSevkScreen() {
       Toast.show({
         type: 'error',
         text1: 'Bu bir top barkodu',
-        text2: 'Buraya refakat kartı / iş emri barkodu okutun.',
+        text2: 'Buraya refakat kartı / terbiye iş emri barkodu okutun.',
       });
       return;
     }
@@ -494,14 +495,14 @@ export default function FasonSevkScreen() {
       const wo = card.workOrder;
       if (!wo) {
         signalScan('reject');
-        Toast.show({ type: 'error', text1: 'İş emri yüklenemedi' });
+        Toast.show({ type: 'error', text1: 'Terbiye iş emri yüklenemedi' });
         return;
       }
       if (wo.status !== 'PLANNED' && wo.status !== 'IN_PROGRESS') {
         signalScan('reject');
         Toast.show({
           type: 'error',
-          text1: 'Bu iş emri sevke uygun değil',
+          text1: 'Bu terbiye iş emri sevke uygun değil',
           text2: `Durum: ${wo.status}`,
         });
         return;
@@ -536,7 +537,7 @@ export default function FasonSevkScreen() {
       snapTo(SHEET_MIDDLE_H);
       Toast.show({
         type: 'success',
-        text1: 'İş emri seçildi',
+        text1: 'Terbiye iş emri seçildi',
         text2: wo.workOrderNumber,
       });
     } catch (err) {
@@ -1016,7 +1017,7 @@ export default function FasonSevkScreen() {
           style={[styles.recentsTitle, styles.titleFlex]}
           numberOfLines={1}
         >
-          İş Emri Detayları
+          {`${TERIM.terbiyeIsEmri.tekil} Detayları`}
         </Text>
         {selectedWo && (
           <View style={styles.statusChip}>
@@ -1039,7 +1040,7 @@ export default function FasonSevkScreen() {
       </View>
       <View style={styles.metaRow}>
         <Text variant="bodySmall" style={styles.recentsCount} numberOfLines={1}>
-          {selectedWo ? `İş Emri ${selectedWo.workOrderNumber}` : 'İş emri seçildikçe burada görünür'}
+          {selectedWo ? `${TERIM.terbiyeIsEmri.tekil} ${selectedWo.workOrderNumber}` : 'Terbiye iş emri seçildikçe burada görünür'}
         </Text>
         {selectedWo && metaRight.length > 0 && (
           <Text variant="bodySmall" style={styles.metaRight} numberOfLines={1}>
@@ -1057,9 +1058,9 @@ export default function FasonSevkScreen() {
       ) : (
         <View style={styles.empty}>
           <Icon source="clipboard-text-outline" size={56} color="#cbd5e1" />
-          <Text style={styles.emptyText}>İş emri seçilmedi</Text>
+          <Text style={styles.emptyText}>Terbiye iş emri seçilmedi</Text>
           <Text style={styles.emptyHint}>
-            Sol taraftan bir iş emri seçtikten sonra detaylar burada görünecek
+            Sol taraftan bir terbiye iş emri seçtikten sonra detaylar burada görünecek
           </Text>
         </View>
       )}
@@ -1093,7 +1094,7 @@ export default function FasonSevkScreen() {
           <Surface style={styles.card} elevation={1}>
             <View style={styles.fieldHead}>
               <Text style={styles.label}>
-                İş Emri <Text style={styles.required}>*</Text>
+                {TERIM.terbiyeIsEmri.tekil} <Text style={styles.required}>*</Text>
               </Text>
               {workOrderId ? (
                 <Button
@@ -1112,7 +1113,7 @@ export default function FasonSevkScreen() {
               <ScannerEntryBar
                 value={cardInput}
                 onChangeText={setCardInput}
-                placeholder="Refakat kartı / İş Emri (örn IE1407260001)"
+                placeholder={`Refakat kartı / ${TERIM.terbiyeIsEmri.tekil} (örn IE1407260001)`}
                 onResolve={() => handleCardScan(cardInput)}
                 resolving={resolvingCard}
                 onScan={() => setCardScannerOpen(true)}
@@ -1416,14 +1417,14 @@ export default function FasonSevkScreen() {
       {/* ── Picker Modal'lar ── */}
       <PickerModal
         visible={pickerOpen === 'wo'}
-        title="İş Emri Seç"
+        title={`${TERIM.terbiyeIsEmri.tekil} Seç`}
         options={woOptions}
         selectedValue={workOrderId}
         loading={woQuery.isLoading}
         emptyText={
           woSearch
             ? `'${woSearch}' için sonuç bulunamadı`
-            : 'Sevke uygun iş emri yok'
+            : 'Sevke uygun terbiye iş emri yok'
         }
         numColumns={1}
         paginated
@@ -1572,7 +1573,7 @@ export default function FasonSevkScreen() {
           itemMismatch ? (
             <View>
               <Text style={{ fontSize: 14, color: '#475569', lineHeight: 20 }}>
-                İş emri{' '}
+                Terbiye iş emri{' '}
                 <Text style={{ fontWeight: '700' }}>
                   {itemMismatch.details.expectedItemLabel}
                 </Text>{' '}
@@ -1656,7 +1657,7 @@ export default function FasonSevkScreen() {
           pendingMismatch ? (
             <View>
               <Text style={{ fontSize: 14, color: '#475569', lineHeight: 20 }}>
-                İş emri{' '}
+                Terbiye iş emri{' '}
                 <Text style={{ fontWeight: '700' }}>{pendingMismatch.expectedLabel}</Text>{' '}
                 kumaşı istiyor, ama bu top{' '}
                 <Text style={{ fontWeight: '700' }}>{pendingMismatch.rollItemLabel}</Text>:

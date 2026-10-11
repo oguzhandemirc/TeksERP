@@ -198,7 +198,7 @@ export default function RouteStepsModal({
                           <View style={{ flex: 1 }}>
                             <Text style={styles.noColorTitle}>Fasona renksiz gitsin</Text>
                             <Text style={styles.noColorHint}>
-                              Çekide "boyanacak renk" satırı basılmaz. İş emrinin rengi
+                              Çekide "boyanacak renk" satırı basılmaz. Terbiye iş emrinin rengi
                               değişmez.
                             </Text>
                           </View>

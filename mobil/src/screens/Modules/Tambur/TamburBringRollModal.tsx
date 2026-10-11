@@ -271,7 +271,7 @@ export default function TamburBringRollModal({
                     />
                     <EffectRow
                       icon="clipboard-text-outline"
-                      text={`İş emri: ${preview.targetStep.workOrderNumber}`}
+                      text={`Terbiye iş emri: ${preview.targetStep.workOrderNumber}`}
                     />
                     {preview.effects.skippedStepNames.length > 0 && (
                       <EffectRow
@@ -282,7 +282,7 @@ export default function TamburBringRollModal({
                     {preview.effects.colorWillApply && (
                       <EffectRow
                         icon="palette"
-                        text="İş emrinin hedef rengi bu topa uygulanacak."
+                        text="Terbiye iş emrinin hedef rengi bu topa uygulanacak."
                       />
                     )}
                     {preview.effects.qualityStaysUnknown && (

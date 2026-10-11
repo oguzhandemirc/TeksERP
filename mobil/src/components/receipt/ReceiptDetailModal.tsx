@@ -12,6 +12,7 @@ import AppModal from '../AppModal';
 import { subcontractorService } from '../../services/subcontractor.service';
 import type { SubcontractorReceipt } from '../../types/models';
 import { formatFactory } from '../../lib/factory-time';
+import { TERIM } from '../../lib/terim';
 
 interface Props {
   receiptId: string | null;
@@ -92,7 +93,7 @@ export default function ReceiptDetailModal({ receiptId, onDismiss }: Props) {
                 </View>
                 <View style={styles.summaryRow}>
                   <Icon source="clipboard-text-outline" size={16} color="#475569" />
-                  <Text style={styles.summaryLabel}>İş Emri:</Text>
+                  <Text style={styles.summaryLabel}>{`${TERIM.terbiyeIsEmri.tekil}:`}</Text>
                   <Text style={styles.summaryValue}>
                     {receipt.workOrder?.workOrderNumber ?? '—'}
                   </Text>

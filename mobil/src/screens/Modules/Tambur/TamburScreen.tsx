@@ -146,6 +146,7 @@ import type {
 import { upperTr } from '../../../utils/trCase';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
+import { TERIM } from '../../../lib/terim';
 
 // =============================================================================
 // Multi-job state — Tambur'da operatör paralel iş yürütebilir (KursunQc paralel).
@@ -3857,7 +3858,7 @@ export default function TamburScreen() {
                         </View>
                         <Text style={styles.rawDestHint}>
                           {recutRawDestination === 'STOCK'
-                            ? 'Parça ham stoğa döner — boyahane/KK2/tambur için yeni iş emrine bağlanabilir.'
+                            ? 'Parça ham stoğa döner — boyahane/KK2/tambur için yeni terbiye iş emrine bağlanabilir.'
                             : 'Parça ham-bitmiş olarak depoya iner — ham etiketle sevk edilebilir.'}
                         </Text>
                       </View>
@@ -4629,7 +4630,7 @@ export default function TamburScreen() {
           ))}
           <Text style={overCutStyles.body}>
             Mal <Text style={overCutStyles.strong}>olduğu gibi</Text> depoya iner —
-            bu onay topun kaydını DEĞİŞTİRMEZ. Yanlış olan iş emriyse süpervizör
+            bu onay topun kaydını DEĞİŞTİRMEZ. Yanlış olan terbiye iş emriyse süpervizör
             "Sipariş Bağla / Düzelt" ile düzeltir.
           </Text>
           {/* ÜÇÜNCÜ SEÇENEK (2026-08-19): mal yanlış renkteyse gerçek karar
@@ -4949,7 +4950,7 @@ export default function TamburScreen() {
         options={kimeOptions}
         pinnedOptions={kimePinnedOptions}
         pinnedLabel={
-          recutRollMeta ? 'Bu topa uyan açık siparişler' : 'Bu iş emrinde siparişi olan müşteriler'
+          recutRollMeta ? 'Bu topa uyan açık siparişler' : 'Bu terbiye iş emrinde siparişi olan müşteriler'
         }
         selectedValue={
           recutRollMeta
@@ -5368,7 +5369,7 @@ function OrdersDetailModal({
             <Icon source="clipboard-list-outline" size={22} color="#fff" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={ordersModalStyles.title}>İş Emri Siparişleri</Text>
+            <Text style={ordersModalStyles.title}>{`${TERIM.terbiyeIsEmri.tekil} Siparişleri`}</Text>
             <Text style={ordersModalStyles.subtitle}>
               {orders.length} sipariş · {lineCount} kalem
             </Text>
@@ -5394,7 +5395,7 @@ function OrdersDetailModal({
                 color={colors.borderStrong}
               />
               <Text style={ordersModalStyles.empty}>
-                Bu iş emrine bağlı sipariş yok
+                Bu terbiye iş emrine bağlı sipariş yok
               </Text>
               <Text style={ordersModalStyles.emptyHint}>Stok için üretim</Text>
             </View>
@@ -8274,7 +8275,7 @@ function TamburUndoConfirmModal({
             {effectiveMode === 'FULL'
               ? 'Tümden Geri Al'
               : effectiveMode === 'SINGLE_RESTORE'
-                ? 'İş Emrine Geri Al'
+                ? `${TERIM.terbiyeIsEmri.cekim.yonelme} Geri Al`
                 : effectiveMode === 'MANUAL'
                   ? 'Kaydı İptal Et'
                   : choicePending

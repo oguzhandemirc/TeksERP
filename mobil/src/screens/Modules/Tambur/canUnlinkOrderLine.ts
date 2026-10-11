@@ -32,7 +32,7 @@ export function canUnlinkOrderLine(
     return {
       allowed: false,
       reason:
-        'Son sipariş bağı kaldırılınca iş emri stok üretimine döner; bunun için hedef kumaş tanımlı olmalı.',
+        'Son sipariş bağı kaldırılınca terbiye iş emri stok üretimine döner; bunun için hedef kumaş tanımlı olmalı.',
       becomesStock: false,
     };
   }

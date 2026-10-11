@@ -24,6 +24,7 @@ import {
   trLabel,
 } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
+import { TERIM } from '../../../lib/terim';
 import { formatFactory } from '../../../lib/factory-time';
 
 interface Props {
@@ -92,7 +93,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
     mutationFn: () => workOrderService.cancel(workOrderId as string),
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      Toast.show({ type: 'success', text1: 'İş emri iptal edildi' });
+      Toast.show({ type: 'success', text1: 'Terbiye iş emri iptal edildi' });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       onChanged();
       onClose();
@@ -142,7 +143,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerBatch} numberOfLines={1}>
-            {wo?.workOrderNumber ?? 'İş Emri'}
+            {wo?.workOrderNumber ?? TERIM.terbiyeIsEmri.tekil}
           </Text>
           {wo ? (
             <View style={[styles.statusChip, { backgroundColor: statusColor }]}>
@@ -172,7 +173,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                 <Icon source="alert" size={20} color={colors.dangerDark} />
                 <Text style={styles.warnText}>
                   {impact.canCancel
-                    ? `Bu iş emri iptal edilecek. ${impact.rolls.length} top stoğa geri dönecek${
+                    ? `Bu terbiye iş emri iptal edilecek. ${impact.rolls.length} top stoğa geri dönecek${
                         impact.travelerCardCount > 0 ? `, ${impact.travelerCardCount} refakat kartı geçersiz olacak` : ''
                       }.`
                     : impact.blockReason}
@@ -205,7 +206,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
                     disabled={cancelMut.isPending}
                     contentStyle={styles.btnContent}
                   >
-                    İş Emrini İptal Et
+                    {`${TERIM.terbiyeIsEmri.cekim.belirtme} İptal Et`}
                   </Button>
                 ) : null}
                 <Button mode="text" onPress={() => setMode('detail')} disabled={cancelMut.isPending}>
@@ -310,7 +311,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
             </View>
           ) : null}
           {editable && !canCancel ? (
-            <Text style={styles.note}>Bu iş emrinde üretim başladı — iptal panelden yapılır (toplar için karar ve sebep sorulur).</Text>
+            <Text style={styles.note}>Bu terbiye iş emrinde üretim başladı — iptal panelden yapılır (toplar için karar ve sebep sorulur).</Text>
           ) : null}
           {canCancel ? (
             <Button
@@ -321,7 +322,7 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
               style={styles.cancelBtn}
               contentStyle={styles.btnContent}
             >
-              İş Emrini İptal Et
+              {`${TERIM.terbiyeIsEmri.cekim.belirtme} İptal Et`}
             </Button>
           ) : null}
           <View style={{ height: spacing.lg }} />

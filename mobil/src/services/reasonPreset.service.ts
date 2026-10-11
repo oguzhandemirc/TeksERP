@@ -89,7 +89,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_BEAM_ADJUST: 'Levent kalan düzeltmesi sebepleri',
   WARP_BEAM_SCRAP: 'Levent hurda / artık dispozisyonu',
   YARN_SUBCONTRACT_RETURN: 'Fasondan iplik dönüş sebepleri',
-  WORK_ORDER_PLAN_CHANGE: 'İş emri plan düzeltme sebepleri',
+  WORK_ORDER_PLAN_CHANGE: 'Terbiye iş emri plan düzeltme sebepleri',
 };
 
 export const reasonPresetService = {

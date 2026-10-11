@@ -1,3 +1,5 @@
+import { TERIM } from '../lib/terim';
+
 export type MobilePermission =
   | 'mobile:kk1'
   | 'mobile:kk2-kursun'
@@ -184,9 +186,9 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
   {
     key: 'HizliIsEmri',
     permission: 'mobile:hizli-is-emri',
-    label: 'Hızlı İş Emri',
+    label: `Hızlı ${TERIM.terbiyeIsEmri.tekil}`,
     icon: 'rocket-launch-outline',
-    description: 'Topu okutup iş emri başlat/yönet',
+    description: 'Topu okutup terbiye iş emri başlat/yönet',
   },
   {
     // Satış/planlama ekranı — istasyon tableti DEĞİL (oturum/yer onayı istemez).
@@ -217,7 +219,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     permission: 'mobile:kursun-dagitim',
     label: 'Kurşun Dağıtım',
     icon: 'clipboard-flow-outline',
-    description: 'Fason dönüşü iş emirlerini fiziksel kurşun makinelerine dağıt',
+    description: 'Fason dönüşü terbiye iş emirlerini fiziksel kurşun makinelerine dağıt',
   },
   {
     // Tablet TEZGAH ekranı (dokuma dilimi): koşum aç/kapa · duruş bildir/sınıfla ·

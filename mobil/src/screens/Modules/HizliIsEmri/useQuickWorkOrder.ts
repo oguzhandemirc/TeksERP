@@ -788,7 +788,7 @@ export function useQuickWorkOrder() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       const msg = errMessage(err);
       setSubmitError(msg);
-      Toast.show({ type: 'error', text1: 'İş emri başlatılamadı', text2: msg });
+      Toast.show({ type: 'error', text1: 'Terbiye iş emri başlatılamadı', text2: msg });
     },
   });
 
@@ -829,7 +829,7 @@ export function useQuickWorkOrder() {
   const submit = useCallback(() => {
     setSubmitError(null);
     if (!onlineManager.isOnline()) {
-      const msg = 'İş emri başlatmak için bağlantı gerekli.';
+      const msg = 'Terbiye iş emri başlatmak için bağlantı gerekli.';
       setSubmitError(msg);
       Toast.show({ type: 'error', text1: 'Çevrimdışı', text2: msg });
       return;

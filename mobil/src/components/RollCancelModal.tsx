@@ -62,12 +62,12 @@ const KK1_COPY: RollCancelCopy = {
     'Yanlış giriş için kullan. İptal edilen toplar fire sayılmaz, sadece kayıt geri alınır.',
 };
 
-/** "X iş emrinin Y adımında aktif" gibi okunur cümle. */
+/** "X terbiye iş emrinin Y adımında aktif" gibi okunur cümle. */
 function activeAtText(activeAt: RollCancelPreview['activeAt']): string {
-  if (!activeAt) return 'Bu top bir istasyonda/iş emrinde aktif.';
+  if (!activeAt) return 'Bu top bir istasyonda/terbiye iş emrinde aktif.';
   const wo = activeAt.batchNumber ? `"${activeAt.batchNumber}"` : 'bir';
   const station = activeAt.stationName ?? 'bir istasyon';
-  return `Bu top ${wo} iş emrinin "${station}" adımında aktif.`;
+  return `Bu top ${wo} terbiye iş emrinin "${station}" adımında aktif.`;
 }
 
 /** Kimlik satırı: "ürün · renk · 125 mt · 180 cm" — operatörün karşılaştırdığı şey barkod, gerisi teyit. */

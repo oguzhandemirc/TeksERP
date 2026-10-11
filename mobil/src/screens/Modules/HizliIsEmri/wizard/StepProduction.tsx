@@ -226,7 +226,7 @@ export default function StepProduction({ wo, showErrors = false }: Props) {
             <Text style={styles.dispatchToggleTitle}>Fasona Gönder</Text>
             <Text style={styles.dispatchToggleHint}>
               {wo.firstStepDispatch.firmId
-                ? 'İş emri açılınca mal fasona sevk edilir, çeki listesi oluşur. Kapatırsan yalnız planlanır.'
+                ? 'Terbiye iş emri açılınca mal fasona sevk edilir, çeki listesi oluşur. Kapatırsan yalnız planlanır.'
                 : 'Fason firma seçili değil — sevk yapılamaz, yalnız planlanır.'}
             </Text>
           </View>

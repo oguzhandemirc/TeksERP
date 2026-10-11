@@ -273,7 +273,7 @@ export default function KursunDagitimScreen() {
           cancelTarget ? (
             <View style={styles.confirmBody}>
               <Text style={styles.confirmLine}>
-                <Text style={styles.confirmStrong}>{cancelTarget.workOrderNumber}</Text> iş emrinin
+                <Text style={styles.confirmStrong}>{cancelTarget.workOrderNumber}</Text> terbiye iş emrinin
                 kurşun dağıtımı kaldırılacak.
               </Text>
               <Text style={styles.confirmLine}>

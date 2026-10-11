@@ -50,7 +50,7 @@ export default function WorkOrderDetachSheet({ wo, onDismiss, onDone }: { wo: Fi
       footer={<Footer onCancel={onDismiss} onSave={() => save.mutate()} busy={save.isPending} disabled={selected.length === 0 || reason.trim().length < MIN_REASON_LENGTH} label={`Çıkar (${selected.length})`} />}
     >
       {q.isLoading ? <Text style={sheet.hint}>Toplar yükleniyor…</Text> : null}
-      {!q.isLoading && rows.length === 0 ? <Text style={sheet.hint}>Bu iş emrinde top yok.</Text> : null}
+      {!q.isLoading && rows.length === 0 ? <Text style={sheet.hint}>Bu terbiye iş emrinde top yok.</Text> : null}
       {rows.map((r) => (
         <TouchableRipple key={r.id} onPress={() => toggle(r.id)} disabled={!r.detachable} accessibilityRole="checkbox" accessibilityState={{ checked: selected.includes(r.id), disabled: !r.detachable }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', opacity: r.detachable ? 1 : 0.55 }}>
@@ -64,7 +64,7 @@ export default function WorkOrderDetachSheet({ wo, onDismiss, onDone }: { wo: Fi
       ))}
       <Text style={sheet.label}>Sebep</Text>
       <TextInput mode="outlined" value={reason} onChangeText={setReason} style={sheet.input} maxLength={300} />
-      <Text style={sheet.hint}>Top iş emrine girmeden önceki yerine döner; kayıt silinmez, Hareketler'de "Top çıkarıldı" görünür.</Text>
+      <Text style={sheet.hint}>Top terbiye iş emrine girmeden önceki yerine döner; kayıt silinmez, Hareketler'de "Top çıkarıldı" görünür.</Text>
     </ModuleSheet>
   );
 }

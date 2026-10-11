@@ -125,7 +125,7 @@ export default function EligibleList({
         loading ? (
           <ActivityIndicator style={styles.loading} color={colors.brand} />
         ) : (
-          <ListPlaceholder text="Kurşun adımında bekleyen iş emri yok." />
+          <ListPlaceholder text="Kurşun adımında bekleyen terbiye iş emri yok." />
         )
       }
     />

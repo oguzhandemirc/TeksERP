@@ -6,6 +6,7 @@ import type { SubcontractorDispatch } from '../../types/models';
 import { fasonNoteLabel } from '../../utils/labels';
 import { upperTr } from '../../utils/trCase';
 import { formatFactory } from '../../lib/factory-time';
+import { TERIM } from '../../lib/terim';
 
 /**
  * Bir sevkin tüm detayları — toplar, plaka/sürücü, planlanan vs sevk firması,
@@ -47,7 +48,7 @@ export default function DispatchDetailPanel({
 
         <View style={styles.row}>
           <Icon source="briefcase-outline" size={14} color="#64748b" />
-          <Text style={styles.rowLabel}>İş Emri</Text>
+          <Text style={styles.rowLabel}>{TERIM.terbiyeIsEmri.tekil}</Text>
           <Text style={styles.rowValue} numberOfLines={1}>
             {dispatch.workOrder?.workOrderNumber ?? '—'}
           </Text>

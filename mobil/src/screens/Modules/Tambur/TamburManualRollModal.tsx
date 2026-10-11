@@ -373,7 +373,7 @@ export default function TamburManualRollModal({
                     Barkod sunucuda üretilecek, top "elle eklendi" (MANUEL GİRİŞ) olarak
                     işaretlenecek ve doğrudan {stationName} adımına alınacak — hemen
                     kesebilirsin. Sebep, operatör ve makine kalıcı olarak kaydedilir.
-                    Tamamlanmış bir iş emri ise yeniden açılır.
+                    Tamamlanmış bir terbiye iş emri ise yeniden açılır.
                   </Text>
                 </View>
               </>

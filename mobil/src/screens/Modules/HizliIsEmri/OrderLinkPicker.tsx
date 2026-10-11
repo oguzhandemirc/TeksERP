@@ -187,8 +187,8 @@ export default function OrderLinkPicker({
           type: 'info',
           text1: `Bu kalem ${mismatch} — eklenemez`,
           text2: spec
-            ? `Tek iş emri tek spec üretir. Seçili: ${anchorLine?.itemName} · ${spec}`
-            : 'Tek iş emri tek kumaş içindir.',
+            ? `Tek terbiye iş emri tek spec üretir. Seçili: ${anchorLine?.itemName} · ${spec}`
+            : 'Tek terbiye iş emri tek kumaş içindir.',
         });
         return;
       }

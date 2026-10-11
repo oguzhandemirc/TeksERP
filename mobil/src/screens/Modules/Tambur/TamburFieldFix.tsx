@@ -89,8 +89,8 @@ export default function TamburFieldFix({
             <View style={styles.targetBand}>
               <Icon source="clipboard-text-outline" size={18} color={colors.brand} />
               <Text style={styles.targetText}>
-                Hedef iş emri: <Text style={styles.targetStrong}>{workOrderNumber}</Text>
-                {'  ·  eklenen top bu iş emrine yazılır'}
+                Hedef terbiye iş emri: <Text style={styles.targetStrong}>{workOrderNumber}</Text>
+                {'  ·  eklenen top bu terbiye iş emrine yazılır'}
               </Text>
             </View>
           )}

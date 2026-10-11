@@ -93,7 +93,7 @@ export default function StepRolls({
             <Icon source="barcode-scan" size={44} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>Henüz top eklenmedi</Text>
             <Text style={styles.emptyHint}>
-              Aynı üründen stok toplarını okutun. Tek iş emri tek kumaş içindir.
+              Aynı üründen stok toplarını okutun. Tek terbiye iş emri tek kumaş içindir.
             </Text>
           </>
         )}
@@ -106,7 +106,7 @@ export default function StepRolls({
         <View style={styles.warnBanner}>
           <Icon source="alert-outline" size={18} color={colors.warningDark} />
           <Text style={styles.warnText}>
-            {wo.widthWarning} — aynı iş emrinde farklı enler var. Bilerek yapıyorsanız
+            {wo.widthWarning} — aynı terbiye iş emrinde farklı enler var. Bilerek yapıyorsanız
             devam edin.
           </Text>
         </View>
