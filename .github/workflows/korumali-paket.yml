@@ -11,8 +11,10 @@ name: Korumalı paket (.jsc)
 # ikilisi `runtime/tekserp-hizmet.exe` + `runtime/tekserp-guncelleyici.exe`)
 # indirilir ve Mac YALNIZ birleştirir + PAKET anahtarıyla imzalar.
 #
-# ⚠ İMZA ANAHTARI CI'A GİRMEZ. Bu iş akışı hiçbir sır (PAKET imza anahtarı, .env,
-#   DB kimliği) kullanmaz; yalnız açık kaynaktan derler. Nihai imza Mac'te.
+# ⚠ İMZA ANAHTARI CI'A GİRMEZ. Bu iş akışı imza anahtarı, .env ya da DB kimliği kullanmaz;
+#   nihai imza Mac'te. TEK sır `TEKSERP_VARSAYILAN_SA`: varsayılan süperadminin bcrypt ÖZETİ
+#   (düz parola değil) derlemeye gömülür; sır yoksa paket malzemesiz çıkar ve kurulumda
+#   varsayılan hesap doğmaz (uyarı verilir, derleme DURMAZ).
 #
 # workflow_dispatch ile ELLE tetiklenir (otomatik push/PR'da KOŞMAZ: .jsc üretimi
 # yalnız yayın hazırlığında gerekir, her commit'te değil).
@@ -71,7 +73,13 @@ jobs:
         shell: bash
         env:
           KORUMA_ARSIV_DIZINI: ${{ runner.temp }}/koruma-arsiv
+          TEKSERP_VARSAYILAN_SA: ${{ secrets.TEKSERP_VARSAYILAN_SA }}
         run: node scripts/build-korumali.mjs --hedef=${{ matrix.hedef }} --cikti=../koruma-cikti/dist
+
+      - name: Varsayılan süperadmin gömüldü mü (künyeden)
+        shell: bash
+        run: |
+          node -e "const k=require('./koruma-cikti/dist/server-kunye.json'); if(k.varsayilanSuperadmin!==true){console.log('::warning::TEKSERP_VARSAYILAN_SA sırrı yok — paket varsayılan süperadmin malzemesi TAŞIMIYOR (kurulumda varsayılan hesap doğmaz)')} else console.log('varsayılan süperadmin gömülü')"
 
       # .jsc GERÇEKTEN üretildi mi (host==hedef): künyeden ölç, üretilmediyse DUR.
       - name: .jsc üretimini doğrula
@@ -187,7 +195,7 @@ jobs:
   # Native çekirdek üretim çapalı (glibc 2.28 kapısı) → buildx linux/amd64 (revision = koşunun commit'i) →
   # taban imaj bekçisi → `docker save | gzip -n` → künye ARŞİVDEN ölçülür (`scripts/imaj-kunye.ts`, biçim tek kaynak
   # `Teks-Erp/docker/korumali/imaj-kokeni.mjs`). Mac `imaj-imzala.mjs --ci-kosu=<bu koşu>` künyeyi indirir ve
-  # parola sorulmadan önce yerel tabanla kıyaslar. Sır YOK; imza Mac'te.
+  # parola sorulmadan önce yerel tabanla kıyaslar. Anahtar YOK (tek sır varsayılan süperadmin özeti); imza Mac'te.
   # ---------------------------------------------------------------------------
   docker-linux-x64:
     name: "Korumalı imaj — docker linux/amd64"
@@ -238,13 +246,18 @@ jobs:
       - name: Taban imaj (buildx linux/amd64, revision = koşunun commit'i)
         id: imaj
         shell: bash
+        env:
+          TEKSERP_VARSAYILAN_SA: ${{ secrets.TEKSERP_VARSAYILAN_SA }}
         run: |
           set -euo pipefail
           surum=$(node -p "require('./Teks-Erp/package.json').version")
           etiket="tekserp-korumali:${surum}-imzasiz"
+          # Varsayılan süperadmin özeti derleme SIRRI olarak (imaj katmanına girmez); yoksa malzemesiz imaj.
+          sir=()
+          if [ -n "${TEKSERP_VARSAYILAN_SA:-}" ]; then sir=(--secret id=varsayilan_sa,env=TEKSERP_VARSAYILAN_SA); else echo "::warning::TEKSERP_VARSAYILAN_SA sırrı yok — imaj varsayılan süperadmin malzemesi TAŞIMIYOR"; fi
           for deneme in 1 2 3; do
             if docker buildx build --platform linux/amd64 -f Teks-Erp/docker/korumali/Dockerfile \
-              --build-arg TEKSERP_COMMIT=${{ github.sha }} -t "$etiket" --load .
+              "${sir[@]}" --build-arg TEKSERP_COMMIT=${{ github.sha }} -t "$etiket" --load .
             then break; fi
             if [ "$deneme" = 3 ]; then echo "taban imaj 3 denemede derlenemedi"; exit 1; fi
             sleep 60

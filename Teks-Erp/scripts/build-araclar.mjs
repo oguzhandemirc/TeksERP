@@ -23,6 +23,7 @@ import { build } from "esbuild";
 import { existsSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { varsayilanSaDefine, varsayilanSaMalzemesi } from "./lib/varsayilan-superadmin-derleme.mjs";
 
 const kok = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -30,6 +31,8 @@ const kok = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Karartmasiz cikti src'nin onlarca modulunu (lisans protokolu dahil) okunur JS olarak
 // ve `// src/...` yol yorumlariyla pakete tasiyordu; `node dist\tools\x.cjs` sozlesmesi degismez.
 const KORUMALI = process.argv.includes("--korumali");
+// Kurulum araci varsayilan parolayi reddedebilsin diye sunucuyla AYNI malzeme gomulur (yoksa tanimsiz).
+const VARSAYILAN_SA_DEFINE = varsayilanSaDefine(varsayilanSaMalzemesi());
 
 const ARACLAR = [
   { giris: "scripts/superadmin-olustur.ts", cikti: "dist/tools/superadmin-olustur.cjs" },
@@ -72,6 +75,7 @@ for (const arac of ARACLAR) {
     minify: KORUMALI,
     legalComments: "none",
     logLevel: "warning",
+    define: VARSAYILAN_SA_DEFINE,
   });
   const kb = (statSync(path.join(kok, arac.cikti)).size / 1024).toFixed(0);
   console.log(`  + ${arac.cikti}  (${kb} KB${KORUMALI ? ", karartilmis" : ""})`);

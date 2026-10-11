@@ -6,6 +6,8 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
+import { varsayilanParolaBekliyor } from "../services/helpers/varsayilan-superadmin.helper";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 import { factoryAdminExists as factoryAdminExistsCheck } from "../services/helpers/factory-admin.helper";
 import { isSettingsPasswordConfigured } from "../services/settings-password.service";
 import { readClientVersionHeader } from "../constants/client-info";
@@ -571,6 +573,14 @@ export class AuthController {
       const settingsPasswordRequired = await isSettingsPasswordConfigured();
       // Panelin "fabrika yöneticisini aç" kartı bunu okur; ölçüt tek yüklemde.
       const factoryAdminExists = await factoryAdminExistsCheck();
+      // Satıcı hesabı hâlâ ORTAK varsayılan parolayla mı: panel kırmızı bant çizer. Yalnız
+      // hesabın kendisine ve kullanıcı/ayar yöneticisine; öteki herkese `false`.
+      const izinler = req.user?.permissions ?? [];
+      const bantGorur =
+        req.isSystemAccount === true ||
+        matchesPermission(izinler, "admin:users") ||
+        matchesPermission(izinler, "admin:settings");
+      const defaultSuperadminPasswordPending = bantGorur ? await varsayilanParolaBekliyor() : false;
       res.status(200).json({
         success: true,
         data: {
@@ -595,6 +605,7 @@ export class AuthController {
           systemAccountExists,
           settingsPasswordRequired,
           factoryAdminExists,
+          defaultSuperadminPasswordPending,
         },
       });
     } catch (error) {

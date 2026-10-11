@@ -58,7 +58,10 @@ COPY Teks-Erp/assets ./assets
 COPY Teks-Erp/native/lisans-cekirdek/dist-uretim/lisans-cekirdek.linux-x64-gnu.node \
      ./native/lisans-cekirdek/dist-uretim/lisans-cekirdek.linux-x64-gnu.node
 COPY Teks-Erp/docker/korumali/sahne.mjs ./docker/korumali/sahne.mjs
-RUN KORUMA_COMMIT="$TEKSERP_COMMIT" KORUMA_ARSIV_DIZINI=/arsiv \
+# Varsayılan süperadmin malzemesi derleme SIRRI olarak bağlanır (katmana/imaja girmez; yoksa hesap doğmaz):
+#   --secret id=varsayilan_sa,env=TEKSERP_VARSAYILAN_SA
+RUN --mount=type=secret,id=varsayilan_sa,required=false \
+    KORUMA_COMMIT="$TEKSERP_COMMIT" KORUMA_ARSIV_DIZINI=/arsiv TEKSERP_VARSAYILAN_SA_DOSYA=/run/secrets/varsayilan_sa \
     /opt/tekserp/bin/node docker/korumali/sahne.mjs /sahne/app
 # Prod bağımlılıkları + Prisma istemcisi YORUMSUZ şemadan; şema motoru Linux ikilisi (ELF kapısı).
 # `node_modules/.bin` sembolik bağdır: imzalı kapsamda bağ imzalanmaz (Windows paketi de taşımaz); prisma doğrudan çağrılır.

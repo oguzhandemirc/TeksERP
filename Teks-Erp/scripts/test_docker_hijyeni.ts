@@ -800,7 +800,8 @@ function kokenIsAkisiStatik(yol: string, wf: string): string[] {
   if (yol !== KORUMALI_IS_AKISI.yol) ih.push(`iş akışı yolu ${yol} — köken denetimi ${KORUMALI_IS_AKISI.yol} bekliyor`);
   const ad = /^name: (.+)$/m.exec(wf)?.[1]?.trim().replace(/^"(.*)"$/, "$1");
   if (ad !== KORUMALI_IS_AKISI.ad) ih.push(`iş akışı adı "${ad}" — köken denetimi "${KORUMALI_IS_AKISI.ad}" bekliyor`);
-  if (/\bsecrets\./.test(wf)) ih.push("iş akışı sır okuyor (secrets.) — CI'a anahtar girmez");
+  // Tek beyanlı sır: varsayılan süperadminin bcrypt ÖZETİ (anahtar değil); başka her sır kırmızı.
+  if (/\bsecrets\.(?!TEKSERP_VARSAYILAN_SA\b)/.test(wf)) ih.push("iş akışı beyansız sır okuyor (secrets.) — CI'a anahtar girmez");
   if (!/^permissions:\n {2}contents: read\n(?! )/m.test(wf)) ih.push("üst düzey izin yalnız `contents: read` değil");
   if (/:\s*write\b|write-all/.test(wf)) ih.push("iş akışında yazma izni var");
   const is = dockerIsi(wf);

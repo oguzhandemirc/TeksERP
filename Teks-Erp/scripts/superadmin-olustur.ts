@@ -1,7 +1,8 @@
 // =============================================================================
 // SATICI HESABI (süperadmin) KURULUM SCRIPT'İ — `npm run superadmin:kur`
 // =============================================================================
-// Hesabın TEK doğuş yolu budur (2026-09-03, P8 kullanıcı kararı). `.env`
+// Hesabın iki doğuş yolundan biri (öteki: pakete gömülü ortak malzemeyle boot'un varsayılan
+// doğuşu, `src/services/helpers/varsayilan-superadmin.helper.ts`; ikisi de 8038 kilidinin arkasında). `.env`
 // tohumlaması KALDIRILDI: iki doğuş yolu = iki sır yüzeyi. `.env` yolunda parola
 // hash'i, PIN ve TOTP sırrı diskte KALICI duruyordu (yedeğe, `kur.ps1`in taşıdığı
 // dosyaya, ekran paylaşımına giriyordu) ve "FORCE_SYNC satırını sonra kaldırın"
@@ -33,7 +34,8 @@
 //
 // ÜÇ KURAL — üçü de bilinçli:
 //   ① İDEMPOTENT: hesap varsa DOKUNULMAZ ("zaten kurulu", çıkış 0). Yoksa ikinci
-//      koşum sahadaki bir rotasyonu sessizce geri alırdı.
+//      koşum sahadaki bir rotasyonu sessizce geri alırdı. TEK İSTİSNA: hesap hâlâ ortak
+//      varsayılan parolayla duruyorsa (değiştirilmemiş) kurulum onu DEVRALIR.
 //   ② MEVCUT KULLANICI YÜKSELTİLMEZ (S4). Var olan bir `username` verilirse hata
 //      + gerekçe. Gizli hesap görünür bir hesaptan türetilemez: o kullanıcının
 //      geçmişi, oturumları ve audit satırları maskeli hesaba TAŞINAMAZ (audit
@@ -53,6 +55,7 @@
 import { Writable } from "node:stream";
 import { createInterface } from "node:readline/promises";
 
+import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
 import { passwordPolicyViolation } from "../src/constants/password-policy";
@@ -61,6 +64,7 @@ import {
   logSuperadminLifecycleEvent,
 } from "../src/jobs/superadmin.job";
 import { setSystemAccountExists } from "../src/services/helpers/system-account.registry";
+import { lockSystemAccount, varsayilanParolaMi } from "../src/services/helpers/varsayilan-superadmin.helper";
 import { p2002Mentions } from "../src/utils/p2002";
 import { KurulumGirdiHatasi, kurulumGirdisiOku, type KurulumGirdisi } from "./lib/kurulum-girdisi";
 import { getShortCredentialKeyRing } from "../src/lib/short-credential/keyring";
@@ -102,6 +106,7 @@ export interface ProvisionDeps {
   now(): Date;
   logLifecycle(params: {
     rotated: boolean;
+    devir?: boolean;
     userId: string;
     totp: "none" | "cleared";
   }): Promise<void>;
@@ -116,6 +121,7 @@ export type ProvisionErrorCode =
   | "PIN_EXHAUSTED"
   | "NOT_PROVISIONED"
   | "PIN_KEY_UNAVAILABLE"
+  | "PASSWORD_IS_DEFAULT"
   | "RACE";
 
 export interface ProvisionSecrets {
@@ -128,6 +134,8 @@ export interface ProvisionSecrets {
 export type ProvisionResult =
   | ({ kind: "created" } & ProvisionSecrets)
   | ({ kind: "rotated" } & ProvisionSecrets)
+  /** Dokunulmamış varsayılan hesap devralındı: ad/parola/PIN kurulumcununki, ortak parola kapandı. */
+  | ({ kind: "taken-over" } & ProvisionSecrets)
   /** İdempotent dal: hesap zaten kurulu, HİÇBİR ŞEY değişmedi. */
   | { kind: "exists"; id: string; username: string }
   | { kind: "error"; code: ProvisionErrorCode; message: string };
@@ -195,19 +203,113 @@ async function pinCoz(
 }
 
 /**
- * Satıcı hesabını kurar ya da rotasyonlar. SAF KATMAN — hiçbir şey YAZDIRMAZ.
+ * Satıcı hesabını kurar, dokunulmamış varsayılan hesabı devralır ya da rotasyonlar.
+ * SAF KATMAN — hiçbir şey YAZDIRMAZ.
  *
  * ⚠️ Sırlar yalnız DÖNÜŞ değerinde. Çağıran onları bir kez ekrana basar; log'a,
- * dosyaya, audit yüküne GEÇMEZ.
+ * dosyaya, audit yüküne GEÇMEZ. Yazmalar 8038 kilidinin arkasında (boot'un varsayılan
+ * doğuşuyla yarış tek hesap bırakır); kilit altındaki taze okuma dışarıda seçilen dalı
+ * çürütürse karar baştan verilir.
  */
 export async function provisionSuperadmin(
   input: ProvisionInput,
   deps: ProvisionDeps = defaultProvisionDeps,
 ): Promise<ProvisionResult> {
-  const mevcut = await prisma.user.findFirst({
-    where: { isSystemAccount: true },
-    select: { id: true, username: true },
+  for (let tur = 0; tur < 3; tur++) {
+    const sonuc = await provisionTuru(input, deps);
+    if (sonuc !== YENIDEN) return sonuc;
+  }
+  return hata("RACE", "Satıcı hesabı bu sırada değişti — tekrar deneyin.");
+}
+
+const YENIDEN = Symbol("yeniden");
+
+type MevcutHesap = {
+  id: string;
+  username: string;
+  defaultPasswordIssuedAt: Date | null;
+  defaultPasswordChangedAt: Date | null;
+} | null;
+
+const MEVCUT_SELECT = {
+  id: true,
+  username: true,
+  defaultPasswordIssuedAt: true,
+  defaultPasswordChangedAt: true,
+} as const;
+
+/** Hesap hâlâ ortak varsayılan parolayla mı (devralınabilir). */
+export function varsayilanDokunulmamis(m: MevcutHesap): boolean {
+  return m !== null && m.defaultPasswordIssuedAt !== null && m.defaultPasswordChangedAt === null;
+}
+
+/** Kilit altındaki taze okuma dışarıda seçilen dalla aynı mı (aynı hesap, aynı devir durumu). */
+function ayniDurum(a: MevcutHesap, b: MevcutHesap): boolean {
+  if (a === null || b === null) return a === b;
+  return a.id === b.id && varsayilanDokunulmamis(a) === varsayilanDokunulmamis(b);
+}
+
+async function kilitAl(tx: Prisma.TransactionClient): Promise<void> {
+  await lockSystemAccount(tx);
+}
+
+function p2002Yaris(err: unknown): boolean {
+  return p2002Mentions(err, /users_(username_key|username_lower_uq|quickPin_key|quickPinDigest_key)/);
+}
+
+/** Yeni parola sözleşmesi: panel politikası + ortak varsayılan parola OLAMAZ. */
+async function parolaDenetle(password: string): Promise<ProvisionResult | null> {
+  const parolaHata = parolaKusuru(password);
+  if (parolaHata) return hata("PASSWORD_INVALID", parolaHata);
+  if (await varsayilanParolaMi(password)) {
+    return hata("PASSWORD_IS_DEFAULT", "Parola ortak varsayılan parolayla aynı olamaz — kendi parolanızı belirleyin.");
+  }
+  return null;
+}
+
+/** Ad sözleşmesi + S4 (mevcut kullanıcı yükseltilmez); devirde hesabın kendi adı çakışma sayılmaz. */
+async function adDenetle(ham: string, haricUserId: string | null): Promise<{ username: string } | ProvisionResult> {
+  const username = ham.trim();
+  if (!USERNAME_RE.test(username)) {
+    return hata(
+      "USERNAME_INVALID",
+      "Kullanıcı adı 3-50 karakter, boşluksuz ve yalnız `A-Z a-z 0-9 . _ -` olmalı.",
+    );
+  }
+  // ⚠️ S4 — MEVCUT KULLANICI YÜKSELTİLMEZ. Küçük/büyük harf duyarsız bakılır:
+  // DB'de şema-dışı `users_username_lower_uq` var, düz eşitlik "BAKIM" yazılınca
+  // kontrolü geçer ve INSERT ham P2002 ile düşerdi.
+  const cakisan = await prisma.user.findFirst({
+    where: {
+      username: { equals: username, mode: "insensitive" },
+      ...(haricUserId ? { id: { not: haricUserId } } : {}),
+    },
+    select: { id: true },
   });
+  if (cakisan) {
+    return hata(
+      "USERNAME_TAKEN",
+      "Bu kullanıcı adı zaten var — gizli hesap görünür bir hesaptan TÜRETİLEMEZ: " +
+        "o kullanıcının geçmişi, oturumları ve audit satırları maskeli hesaba taşınamaz. " +
+        // ⚠️ ÖRNEK, VARSAYILANDAN FARKLI OLMAK ZORUNDA: soru satırının önerisi
+        // de `bakim` ve hata "bakim dolu" derken yine `bakim` önerirse
+        // kurulumcu döngüye girer (P8-D notu).
+        "Kullanılmamış, nötr bir ad seçin (örn. `satici` ya da `bakim2`).",
+    );
+  }
+  return { username };
+}
+
+async function provisionTuru(
+  input: ProvisionInput,
+  deps: ProvisionDeps,
+): Promise<ProvisionResult | typeof YENIDEN> {
+  const mevcut: MevcutHesap = await prisma.user.findFirst({
+    where: { isSystemAccount: true },
+    select: MEVCUT_SELECT,
+  });
+  const tazeOku = (tx: Prisma.TransactionClient): Promise<MevcutHesap> =>
+    tx.user.findFirst({ where: { isSystemAccount: true }, select: MEVCUT_SELECT });
 
   // ── ROTASYON ──────────────────────────────────────────────────────────────
   if (input.rotate) {
@@ -217,15 +319,21 @@ export async function provisionSuperadmin(
         "Kurulu satıcı hesabı yok — önce `--rotate` olmadan çalıştırın.",
       );
     }
-    const parolaHata = parolaKusuru(input.password);
-    if (parolaHata) return hata("PASSWORD_INVALID", parolaHata);
+    const parolaSonuc = await parolaDenetle(input.password);
+    if (parolaSonuc) return parolaSonuc;
 
     const pinSonuc = await pinCoz(input.pin, deps, mevcut.id);
     if (!("pin" in pinSonuc)) return hata(pinSonuc.code, pinSonuc.message);
 
     const passwordHash = await deps.hashPassword(input.password);
+    let yeniden = false;
     try {
       await prisma.$transaction(async (tx) => {
+        await kilitAl(tx);
+        if (!ayniDurum(mevcut, await tazeOku(tx))) {
+          yeniden = true;
+          return;
+        }
         await tx.user.update({
           where: { id: mevcut.id },
           data: {
@@ -238,6 +346,9 @@ export async function provisionSuperadmin(
             totpEnabledAt: null,
             totpLastStep: null,
             isActive: true,
+            // Konsoldan belirlenen parola geçici değildir; ortak varsayılan parola da böylece kapanır.
+            mustChangePassword: false,
+            ...(varsayilanDokunulmamis(mevcut) ? { defaultPasswordChangedAt: deps.now() } : {}),
             // ⚠️ Eski oturumlar ANINDA düşer (parola/PIN değişiminin her yerdeki
             // sözleşmesi). Aksi halde rotasyon "sızmış oturumu" kapatmazdı.
             tokenVersion: { increment: 1 },
@@ -253,76 +364,96 @@ export async function provisionSuperadmin(
         });
       });
     } catch (err) {
-      if (p2002Mentions(err, /users_(username_key|username_lower_uq|quickPin_key|quickPinDigest_key)/)) {
+      if (p2002Yaris(err)) {
         return hata("RACE", "PIN/kullanıcı adı bu sırada başka bir kullanıcıya yazıldı.");
       }
       throw err;
     }
+    if (yeniden) return YENIDEN;
     setSystemAccountExists(true);
     await deps.logLifecycle({ rotated: true, userId: mevcut.id, totp: "cleared" });
     return { kind: "rotated", id: mevcut.id, username: mevcut.username, pin: pinSonuc.pin };
   }
 
   // ── İDEMPOTENT DAL ────────────────────────────────────────────────────────
-  if (mevcut) {
+  // Kurulumcunun belirlediği (ya da varsayılandan değiştirilmiş) hesaba DOKUNULMAZ.
+  if (mevcut && !varsayilanDokunulmamis(mevcut)) {
     setSystemAccountExists(true);
     return { kind: "exists", id: mevcut.id, username: mevcut.username };
   }
 
-  // ── KURULUM ───────────────────────────────────────────────────────────────
-  const username = input.username.trim();
-  if (!USERNAME_RE.test(username)) {
-    return hata(
-      "USERNAME_INVALID",
-      "Kullanıcı adı 3-50 karakter, boşluksuz ve yalnız `A-Z a-z 0-9 . _ -` olmalı.",
-    );
-  }
-  // ⚠️ S4 — MEVCUT KULLANICI YÜKSELTİLMEZ. Küçük/büyük harf duyarsız bakılır:
-  // DB'de şema-dışı `users_username_lower_uq` var, düz eşitlik "BAKIM" yazılınca
-  // kontrolü geçer ve INSERT ham P2002 ile düşerdi.
-  const cakisan = await prisma.user.findFirst({
-    where: { username: { equals: username, mode: "insensitive" } },
-    select: { id: true },
-  });
-  if (cakisan) {
-    return hata(
-      "USERNAME_TAKEN",
-      "Bu kullanıcı adı zaten var — gizli hesap görünür bir hesaptan TÜRETİLEMEZ: " +
-        "o kullanıcının geçmişi, oturumları ve audit satırları maskeli hesaba taşınamaz. " +
-        // ⚠️ ÖRNEK, VARSAYILANDAN FARKLI OLMAK ZORUNDA: soru satırının önerisi
-        // de `bakim` ve hata "bakim dolu" derken yine `bakim` önerirse
-        // kurulumcu döngüye girer (P8-D notu).
-        "Kullanılmamış, nötr bir ad seçin (örn. `satici` ya da `bakim2`).",
-    );
-  }
+  // ── KURULUM / DEVİR ───────────────────────────────────────────────────────
+  // Devir: boot ortak malzemeyle hesabı kurulum aracından ÖNCE doğurmuş olabilir (Windows
+  // sihirbazı "Sirlar" aşaması hizmet başladıktan sonra koşar); hesap hâlâ ortak parolayla
+  // duruyorsa kurulumcunun ad/parola/PIN'i ona yazılır — yoksa sihirbaz hesabı hiç kuramazdı.
+  const ad = await adDenetle(input.username, mevcut?.id ?? null);
+  if ("kind" in ad) return ad;
+  const username = ad.username;
 
-  const parolaHata = parolaKusuru(input.password);
-  if (parolaHata) return hata("PASSWORD_INVALID", parolaHata);
+  const parolaSonuc = await parolaDenetle(input.password);
+  if (parolaSonuc) return parolaSonuc;
 
-  const pinSonuc = await pinCoz(input.pin, deps, null);
+  const pinSonuc = await pinCoz(input.pin, deps, mevcut?.id ?? null);
   if (!("pin" in pinSonuc)) return hata(pinSonuc.code, pinSonuc.message);
 
   const passwordHash = await deps.hashPassword(input.password);
-  let created: { id: string };
+  let id: string | null = null;
   try {
-    created = await prisma.user.create({
-      data: {
-        username,
-        // Takma ad DOĞUŞTA yazılır: `record-info`/künye yüzeylerinin çoğu
-        // `fullName`i basar, yani gerçek ad hiçbir zaman DB'ye girmez.
-        fullName: SYSTEM_ACCOUNT_FULLNAME,
-        passwordHash,
-        quickPinDigest: pinOzeti(pinSonuc.pin),
-        quickPinSetAt: deps.now(),
-        isSystemAccount: true,
-        isActive: true,
-      },
-      select: { id: true },
+    id = await prisma.$transaction(async (tx): Promise<string | null> => {
+      await kilitAl(tx);
+      if (!ayniDurum(mevcut, await tazeOku(tx))) return null;
+      if (mevcut) {
+        const an = deps.now();
+        const claim = await tx.user.updateMany({
+          where: {
+            id: mevcut.id,
+            isSystemAccount: true,
+            defaultPasswordIssuedAt: { not: null },
+            defaultPasswordChangedAt: null,
+          },
+          data: {
+            username,
+            passwordHash,
+            quickPinDigest: pinOzeti(pinSonuc.pin),
+            quickPinSetAt: an,
+            quickPin: null,
+            totpSecret: null,
+            totpEnabledAt: null,
+            totpLastStep: null,
+            isActive: true,
+            mustChangePassword: false,
+            defaultPasswordChangedAt: an,
+            // Ortak parolayla açılmış her oturum düşer.
+            tokenVersion: { increment: 1 },
+          },
+        });
+        if (claim.count === 0) return null;
+        await tx.totpEnrollment.updateMany({
+          where: { userId: mevcut.id, consumedAt: null },
+          data: { expiresAt: an },
+        });
+        return mevcut.id;
+      }
+      const created = await tx.user.create({
+        data: {
+          username,
+          // Takma ad DOĞUŞTA yazılır: `record-info`/künye yüzeylerinin çoğu
+          // `fullName`i basar, yani gerçek ad hiçbir zaman DB'ye girmez.
+          fullName: SYSTEM_ACCOUNT_FULLNAME,
+          passwordHash,
+          quickPinDigest: pinOzeti(pinSonuc.pin),
+          quickPinSetAt: deps.now(),
+          isSystemAccount: true,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+      return created.id;
     });
   } catch (err) {
     // ÜÇ unique çarpabilir ve üçüncüsü ŞEMA-DIŞIDIR (`users_username_lower_uq`,
     // migration 20260731160000) — regex'e konmazsa yarış "bilinmeyen hata" sayılır.
-    if (p2002Mentions(err, /users_(username_key|username_lower_uq|quickPin_key|quickPinDigest_key)/)) {
+    if (p2002Yaris(err)) {
       return hata(
         "RACE",
         "Kullanıcı adı ya da PIN bu sırada başka bir kullanıcıya yazıldı — tekrar deneyin.",
@@ -330,10 +461,15 @@ export async function provisionSuperadmin(
     }
     throw err;
   }
+  if (id === null) return YENIDEN;
 
   setSystemAccountExists(true);
-  await deps.logLifecycle({ rotated: false, userId: created.id, totp: "none" });
-  return { kind: "created", id: created.id, username, pin: pinSonuc.pin };
+  if (mevcut) {
+    await deps.logLifecycle({ rotated: false, devir: true, userId: id, totp: "cleared" });
+    return { kind: "taken-over", id, username, pin: pinSonuc.pin };
+  }
+  await deps.logLifecycle({ rotated: false, userId: id, totp: "none" });
+  return { kind: "created", id, username, pin: pinSonuc.pin };
 }
 
 // -----------------------------------------------------------------------------
@@ -360,6 +496,7 @@ export const KURULUM_STDIN_BAYRAGI = "--kurulum-stdin";
 export const KURULUM_CIKIS: Readonly<Record<string, number>> = Object.freeze({
   OLUSTURULDU: 0,
   ZATEN_KURULU: 0,
+  DEVRALINDI: 0,
   USERNAME_INVALID: 10,
   USERNAME_TAKEN: 11,
   PASSWORD_INVALID: 12,
@@ -369,6 +506,7 @@ export const KURULUM_CIKIS: Readonly<Record<string, number>> = Object.freeze({
   RACE: 16,
   NOT_PROVISIONED: 17,
   PIN_KEY_UNAVAILABLE: 18,
+  PASSWORD_IS_DEFAULT: 19,
   GIRDI_BICIMSIZ: 20,
   GIRDI_TAVAN: 20,
   GIRDI_YOK: 20,
@@ -408,7 +546,8 @@ async function kurulumKipi(argv: string[]): Promise<number> {
     return KURULUM_CIKIS[sonuc.code] ?? 1;
   }
   // PIN çıktıya GİRMEZ: sihirbaz kullanıcının girdiği PIN'i zaten bilir; mevcut hesap DEĞİŞMEZ.
-  yaz({ sonuc: sonuc.kind === "exists" ? "ZATEN_KURULU" : "OLUSTURULDU", kullaniciAdi: sonuc.username });
+  const etiket = sonuc.kind === "exists" ? "ZATEN_KURULU" : sonuc.kind === "taken-over" ? "DEVRALINDI" : "OLUSTURULDU";
+  yaz({ sonuc: etiket, kullaniciAdi: sonuc.username });
   return 0;
 }
 
@@ -428,6 +567,7 @@ async function interaktif(): Promise<number> {
         "  npm run superadmin:kur              satıcı hesabını kurar (idempotent)\n" +
         "  npm run superadmin:kur -- --rotate  parola + PIN'i yeniler, 2FA'yı kapatır\n" +
         "  --kurulum-stdin                     YALNIZ setup.exe sihirbazı: {kullaniciAdi, parola, pin} JSON'u boruyla\n" +
+        "  (hesap hâlâ ortak varsayılan parolayla duruyorsa kurulum onu DEVRALIR)\n" +
         "\n  ⚠️ Gerçek terminal ister (`ssh -t` / `docker exec -it`) — kurulum kipi hariç.\n",
     );
     return 0;
@@ -487,9 +627,10 @@ async function interaktif(): Promise<number> {
     // (kurulumcuya boşuna parola yazdırmak, "acaba değişti mi?" sorusu bırakır).
     const mevcut = await prisma.user.findFirst({
       where: { isSystemAccount: true },
-      select: { id: true, username: true },
+      select: MEVCUT_SELECT,
     });
-    if (mevcut && !rotate) {
+    const devir = !rotate && varsayilanDokunulmamis(mevcut);
+    if (mevcut && !rotate && !devir) {
       console.log(
         `\nSatıcı hesabı ZATEN KURULU (${mevcut.username}). Hiçbir şey değiştirilmedi.\n` +
           "Parola/PIN yenilemek için: npm run superadmin:kur -- --rotate\n",
@@ -505,6 +646,9 @@ async function interaktif(): Promise<number> {
       rotate
         ? `\n=== Satıcı hesabı ROTASYONU (${mevcut?.username}) ===\n` +
             "Parola, PIN ve iki adımlı doğrulama sırrı YENİLENİR; açık oturumlar düşer.\n"
+        : devir
+          ? "\n=== Varsayılan satıcı hesabı DEVRALINIYOR ===\n" +
+            "Hesap hâlâ ortak varsayılan parolayla duruyor; ad, parola ve PIN sizinkiyle değişir.\n"
         : "\n=== Satıcı (süperadmin) hesabı kurulumu ===\n" +
             "Bu hesap fabrikanın hiçbir yüzeyinde görünmez; audit'e 'Sistem Bakımı' yazılır.\n",
     );
@@ -545,7 +689,7 @@ async function interaktif(): Promise<number> {
     }
 
     console.log(
-      `\n✅ Satıcı hesabı ${sonuc.kind === "created" ? "OLUŞTURULDU" : "ROTASYONLANDI"}.\n`,
+      `\n✅ Satıcı hesabı ${sonuc.kind === "created" ? "OLUŞTURULDU" : sonuc.kind === "taken-over" ? "DEVRALINDI" : "ROTASYONLANDI"}.\n`,
     );
     console.log("  ┌──────────────────────────────────────────────────────────────┐");
     console.log("  │  AŞAĞIDAKİLER BİR DAHA GÖSTERİLMEZ — şimdi kaydedin.        │");

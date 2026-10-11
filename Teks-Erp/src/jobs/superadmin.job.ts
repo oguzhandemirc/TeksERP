@@ -19,6 +19,10 @@
 // `SUPERADMIN_*` satırları YOKTU (kapanış provasında ölçüldü — boot log'u
 // "[superadmin] SUPERADMIN_* tanımlı değil" basıyordu).
 //
+// VARSAYILAN HESAP (2026-10-11 kullanıcı kararı): hiç satıcı hesabı yoksa boot, pakete gömülü
+// ORTAK malzemeyle bir kez hesap doğurur (`services/helpers/varsayilan-superadmin.helper.ts`); `SUPERADMIN_*`
+// ortamı yine OKUNMAZ, malzeme yalnız derleme anı sabitidir.
+//
 // BU DOSYADA KALAN ÜÇ İŞ:
 //   ① BOOT KAYDI — `SystemAccountRegistry`yi tazeler. Guard (`flagWriteGuard`
 //      üçüncü dalı) SENKRON okumak zorunda olduğu için değeri bu job yazar;
@@ -50,6 +54,8 @@ import { AuditService } from "../services/audit.service";
 import { setSystemAccountExists } from "../services/helpers/system-account.registry";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
+import { SYSTEM_ACCOUNT_FULLNAME } from "../constants/system-account";
+import { ensureVarsayilanSuperadmin } from "../services/helpers/varsayilan-superadmin.helper";
 
 // installation-identity ile aynı politika: mutlu yolda ~3sn, DB geç gelirse
 // 3 + 4x15 = ~63sn'lik pencere.
@@ -57,8 +63,7 @@ const STARTUP_DELAY_MS = 3 * 1000;
 const RETRY_DELAY_MS = 15 * 1000;
 const MAX_ATTEMPTS = 5;
 
-/** Doğuşta yazılan tam ad — audit yüzeylerinde görünen takma ad. */
-export const SYSTEM_ACCOUNT_FULLNAME = "Sistem Bakımı";
+export { SYSTEM_ACCOUNT_FULLNAME };
 
 /**
  * P8 ile ölü kalan ortam değişkenlerinin ÖN EKİ.
@@ -101,13 +106,21 @@ export type SuperadminRegistryResult =
 /**
  * Kilit defterini DB'den tazeler (her koşumda).
  *
- * ⚠️ Yazma YAPMAZ (ne `User` satırına ne de `isSystemAccount` alanına). Hesabı
- * yaratan tek yer `scripts/superadmin-olustur.ts`tir;
- * boot yolunun satır yaratması "her restart panelden yapılan rotasyonu geri
- * alır" sınıfı bir sessiz bozulma üretirdi (installation-identity dersi).
+ * Tek yazma: hiç sistem hesabı yokken varsayılan hesabın doğuşu (kilitli, bir kez). Var olan
+ * hesaba DOKUNMAZ — boot'un mevcut hesabı yeniden yazması "her restart rotasyonu geri alır"
+ * sınıfı sessiz bozulma üretirdi (installation-identity dersi).
  */
 export async function ensureSuperadminAccount(): Promise<SuperadminRegistryResult> {
   uyarOluOrtamSatirlari();
+
+  // Hiç satıcı hesabı yoksa pakete gömülü ortak malzemeyle varsayılan hesap doğar (bir kez,
+  // kilitli; gömülmemiş derlemede doğmaz). Kayıt ondan SONRA DB'den tazelenir.
+  const dogus = await ensureVarsayilanSuperadmin();
+  if (dogus.action === "dogdu") {
+    uyari("superadmin", "Varsayılan satıcı hesabı ortak parolayla doğdu — ilk girişte parola değişimi zorunlu.");
+  } else if (dogus.action === "ad-dolu") {
+    uyari("superadmin", "Varsayılan satıcı hesabının adı başka bir kullanıcıda — hesap DOĞMADI (mevcut kullanıcı yükseltilmez).");
+  }
 
   const existing = await prisma.user.findFirst({
     where: { isSystemAccount: true },
@@ -115,6 +128,9 @@ export async function ensureSuperadminAccount(): Promise<SuperadminRegistryResul
   });
   setSystemAccountExists(existing !== null);
 
+  if (!existing && dogus.action === "malzeme-yok") {
+    uyari("superadmin", "Pakette varsayılan satıcı hesabı malzemesi yok — varsayılan hesap DOĞMADI.");
+  }
   if (!existing) {
     bilgi("superadmin", "Satıcı hesabı yok — emniyet supabı devrede " +
         "(modül anahtarları bu kurulumda admin:settings ile yazılır). " +
@@ -139,6 +155,8 @@ export async function ensureSuperadminAccount(): Promise<SuperadminRegistryResul
  */
 export async function logSuperadminLifecycleEvent(params: {
   rotated: boolean;
+  /** Dokunulmamış varsayılan hesap kurulum aracıyla devralındı (ad/parola/PIN yazıldı). */
+  devir?: boolean;
   userId: string;
   /** 2FA durumu (sır DEĞİL): doğuşta "none", rotasyonda "cleared" — tohumlanmaz. */
   totp: "none" | "cleared";
@@ -149,7 +167,9 @@ export async function logSuperadminLifecycleEvent(params: {
     recordId: params.userId,
     payload: { fullName: SYSTEM_ACCOUNT_FULLNAME, totp: params.totp },
   };
-  if (params.rotated) {
+  if (params.devir) {
+    await AuditService.logEvent({ ...ortak, action: "SUPERADMIN_DEFAULT_TAKEN_OVER" }).catch(() => undefined);
+  } else if (params.rotated) {
     await AuditService.logEvent({ ...ortak, action: "SUPERADMIN_ROTATED" }).catch(() => undefined);
   } else {
     await AuditService.logEvent({ ...ortak, action: "SUPERADMIN_PROVISIONED" }).catch(

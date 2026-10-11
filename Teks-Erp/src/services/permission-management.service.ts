@@ -5,6 +5,7 @@
 // Rol yok; her kullanıcının yetkisi UserPermission tablosunda doğrudan tutulur.
 // =============================================================================
 
+import { varsayilanParolaMi } from "./helpers/varsayilan-superadmin.helper";
 import { forgetIssuedCard, forgetIssuedPin } from "./helpers/credential-reveal.helper";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -465,8 +466,8 @@ export class PermissionManagementService {
   /**
    * Yöneticinin verdiği parola GEÇİCİDİR: hedef ilk girişte kendi parolasını belirlemek
    * zorundadır (`mustChangePassword`). İki muafiyet: kendi parolasını sıfırlayan (başka
-   * kimse görmedi) ve satıcı hesabı (parolası yalnız kurulum aracından değişir — bayrak
-   * onu kilitlerdi).
+   * kimse görmedi) ve satıcı hesabı (başkası onu sıfırlayamaz; kendisi sıfırlarsa bayrak
+   * anlamsız). Satıcı hesabı ortak varsayılan parolaya dönemez.
    */
   static async resetUserPassword(
     userId: string,
@@ -475,19 +476,35 @@ export class PermissionManagementService {
   ) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, isSystemAccount: true },
+      select: {
+        id: true,
+        username: true,
+        isSystemAccount: true,
+        defaultPasswordIssuedAt: true,
+        defaultPasswordChangedAt: true,
+      },
     });
     if (!user) throw AppError.notFound("Kullanıcı bulunamadı");
     const violation = passwordPolicyViolation(newPassword);
     if (violation) throw AppError.badRequest(violation, { code: "PASSWORD_POLICY" });
+    if (user.isSystemAccount && (await varsayilanParolaMi(newPassword))) {
+      throw AppError.badRequest("Yeni parola ortak varsayılan parolayla aynı olamaz.", { code: "PASSWORD_IS_DEFAULT" });
+    }
 
     const requireChange = resetRequiresPasswordChange(user, actorUserId);
+    const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
     const passwordHash = await bcrypt.hash(newPassword, 10);
     // Parola + bayrak + tokenVersion TEK yazımda; bayrak kararı okunan hesap türüne bağlı
     // olduğu için tür WHERE'de (arada değiştiyse 409).
     const claimed = await prisma.user.updateMany({
       where: { id: userId, isSystemAccount: user.isSystemAccount },
-      data: { passwordHash, mustChangePassword: requireChange, tokenVersion: { increment: 1 } },
+      data: {
+        passwordHash,
+        mustChangePassword: requireChange,
+        tokenVersion: { increment: 1 },
+        // Satıcı hesabı ortak parolayla duruyorduysa artık durmuyor (panel bandı kalkar).
+        ...(varsayilanKapaniyor ? { defaultPasswordChangedAt: new Date() } : {}),
+      },
     });
     if (claimed.count === 0) {
       throw AppError.conflict("Hesap bu sırada değişti. Sayfayı yenileyip tekrar deneyin.", {
@@ -505,7 +522,8 @@ export class PermissionManagementService {
       action: "UPDATE",
       tableName: "USER_PASSWORD",
       recordId: userId,
-      newData: { username: user.username, resetByAdmin: true, requireChange },
+      // Satıcı hesabının giriş adı audit'e girmez (takma ad maskesini çürütürdü).
+      newData: { ...(user.isSystemAccount ? {} : { username: user.username }), resetByAdmin: true, requireChange },
     });
     return { requireChange };
   }

@@ -8,7 +8,8 @@
 //   §2 POST /auth/change-password: yanlış mevcut 400 CURRENT_PASSWORD_INVALID · politika
 //      (10 karakter) 400 · aynı parola PASSWORD_UNCHANGED · başarı → bayrak iner, tokenVersion
 //      +1, bütün oturumlar PASSWORD_RESET, audit satırı parola taşımaz, eski token 401.
-//   §3 Satıcı (sistem) hesabı kendi parolasını bu uçtan değiştiremez (403).
+//   §3 Satıcı (sistem) hesabı kendi parolasını bu uçtan DEĞİŞTİREBİLİR (varsayılan süperadmin,
+//      2026-10-11: ilk girişte değişim zorunlu); tokenVersion +1, bayrak iner.
 //   §4 İlk yönetici parolası: verilmezse 16 karakter rastgele + zorunlu değişim; politika
 //      dışı değer reddedilir; geçerli değer zorunlu değişimle doğar.
 //   §6 Yönetici sıfırlaması (POST /admin/users/:id/reset-password): başkasının parolası →
@@ -25,6 +26,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { Prisma } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import app from "../src/app";
 import { AuthService, PASSWORD_CHANGE_REQUIRED_CODE } from "../src/services/auth.service";
 import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
@@ -374,13 +376,21 @@ async function dinamik(): Promise<void> {
     check("§6f kendi parolasını sıfırlayan bayrak doğurmaz", !kendi.mustChangePassword);
     await PermissionManagementService.resetUserPassword(sistem.id, geciciParola, user.id);
     const sis6 = await prisma.user.findUniqueOrThrow({ where: { id: sistem.id }, select: { mustChangePassword: true } });
-    check("§6g satıcı hesabının sıfırlanması bayrak doğurmaz (kendi uçtan değiştiremez)", !sis6.mustChangePassword);
+    check("§6g satıcı hesabının sıfırlanması bayrak doğurmaz", !sis6.mustChangePassword);
 
     // ── §3 satıcı hesabı ───────────────────────────────────────────────────────
-    const sis = await hataYakala(() => AuthService.changeOwnPassword(sistem.id, ilkParola, yeniParola));
+    const sisOnce = await prisma.user.findUniqueOrThrow({ where: { id: sistem.id }, select: { tokenVersion: true } });
+    const sis = await hataYakala(() => AuthService.changeOwnPassword(sistem.id, geciciParola, yeniParola));
+    const sisSonra = await prisma.user.findUniqueOrThrow({
+      where: { id: sistem.id },
+      select: { tokenVersion: true, mustChangePassword: true, passwordHash: true },
+    });
     check(
-      "§3 satıcı hesabı kendi parolasını bu uçtan değiştiremez (403)",
-      sis?.statusCode === 403 && sis?.details?.code === "SYSTEM_ACCOUNT_PASSWORD",
+      "§3 satıcı hesabı kendi parolasını bu uçtan değiştirir (tokenVersion +1, yeni parola tutar)",
+      sis === null &&
+        sisSonra.tokenVersion === sisOnce.tokenVersion + 1 &&
+        !sisSonra.mustChangePassword &&
+        (await bcrypt.compare(yeniParola, sisSonra.passwordHash)),
       JSON.stringify(sis?.details ?? null),
     );
   } finally {

@@ -130,22 +130,51 @@ check("§3 muaf listesi bayat değil (ölü muaf gerçek ihlali gizler)", bayatW
 
 // =============================================================================
 console.log("\n=== §4) `isSystemAccount` PANELDEN ATANAMAZ ===");
-// KORUNAN KOL. Alanın tek yazarı sunucuda elle koşulan `scripts/superadmin-olustur.ts`;
-// `src/` altında bir YAZICI belirirse hesabın ikinci bir doğuş yolu açılmış demektir
-// (`admin:users` taşıyan herkes kendini en yetkili yapabilirdi).
+// KORUNAN KOL. `src/` altında TEK beyanlı yazar var: boot'un varsayılan doğuşu
+// (`services/helpers/varsayilan-superadmin.helper.ts`, yalnız `jobs/superadmin.job.ts` çağırır; route/
+// controller/Zod yolu yok). Öteki yazar sunucuda elle koşulan `scripts/superadmin-olustur.ts`.
+// Başka bir `src/` YAZICISI hesabın üçüncü doğuş yolunu açar (`admin:users` taşıyan herkes
+// kendini en yetkili yapabilirdi); beyanlı yazarı başka bir modülün import etmesi de öyle.
+const BEYANLI_YAZAR = "services/helpers/varsayilan-superadmin.helper.ts";
+const BEYANLI_CAGIRAN = "jobs/superadmin.job.ts";
 const yaziciDesen = /isSystemAccount\s*:\s*(true|false|[a-zA-Z_$][\w$]*)\s*[,}]/;
-const yazicilar: string[] = [];
-for (const [r, src] of GOVDE) {
-  // `select`/`where` okumaları eşleşmesin diye yalnız `data:` bloklarına bak.
-  for (const m of src.matchAll(/data\s*:\s*\{[\s\S]{0,400}?\}/g)) {
-    if (yaziciDesen.test(m[0])) yazicilar.push(r);
+function yaziciIhlalleri(govde: ReadonlyMap<string, string>): string[] {
+  const ih = new Set<string>();
+  for (const [r, src] of govde) {
+    // `select`/`where` okumaları eşleşmesin diye yalnız `data:` bloklarına bak.
+    for (const m of src.matchAll(/data\s*:\s*\{[\s\S]{0,400}?\}/g)) {
+      if (yaziciDesen.test(m[0]) && r !== BEYANLI_YAZAR) ih.add(`yazar: ${r}`);
+    }
+    if (r !== BEYANLI_CAGIRAN && r !== BEYANLI_YAZAR && /from\s+["'][./]*(services\/)?helpers\/varsayilan-superadmin(?:\.helper)?["']/.test(src)) {
+      // Okuyucu yardımcılar (parola kıyası, bekleme sorgusu) serbest; doğuş fonksiyonunu çağıran yasak.
+      if (/\bensureVarsayilanSuperadmin\b/.test(src)) ih.add(`doğuşu çağıran: ${r}`);
+    }
   }
+  const yazar = govde.get(BEYANLI_YAZAR) ?? "";
+  // Beyanlı yazar yalnız `create` ile ve yalnız `true` yazar (mevcut kullanıcı yükseltilmez).
+  const yazarBloklari = [...yazar.matchAll(/data\s*:\s*\{[\s\S]{0,400}?\}/g)].map((m) => m[0]).filter((b) => yaziciDesen.test(b));
+  if (yazarBloklari.length !== 1 || !/isSystemAccount\s*:\s*true/.test(yazarBloklari[0]!)) ih.add(`beyanlı yazar ${yazarBloklari.length} blok / true değil`);
+  if (!/tx\.user\.create\(\{\s*data\s*:\s*\{[\s\S]{0,400}?isSystemAccount\s*:\s*true/.test(yazar)) ih.add("beyanlı yazar `create` dışında yazıyor (yükseltme)");
+  if (/user\.(update|updateMany|upsert)\(/.test(yazar)) ih.add("beyanlı yazar mevcut kullanıcıyı güncelliyor");
+  return [...ih];
 }
+const yazIh = yaziciIhlalleri(GOVDE);
 check(
-  "`src/` altında `isSystemAccount` YAZAN kod yok (tek yazar `scripts/superadmin-olustur.ts`)",
-  yazicilar.length === 0,
-  [...new Set(yazicilar)].join(", "),
+  "`src/` altında `isSystemAccount` yazan tek kod beyanlı varsayılan doğuş (yalnız create/true, yalnız superadmin.job çağırır)",
+  yazIh.length === 0,
+  yazIh.join(", "),
 );
+{
+  const sonda = (ad: string, degis: (m: Map<string, string>) => void): void => {
+    const m = new Map(GOVDE);
+    degis(m);
+    check(`§4 sonda: ${ad} → kırmızı`, yaziciIhlalleri(m).length > 0);
+  };
+  sonda("route'ta yazar", (m) => m.set("routes/x.routes.ts", "prisma.user.update({ data: { isSystemAccount: true } })"));
+  sonda("controller doğuşu çağırıyor", (m) => m.set("controllers/x.controller.ts", 'import { ensureVarsayilanSuperadmin } from "../services/helpers/varsayilan-superadmin.helper";\nensureVarsayilanSuperadmin();'));
+  sonda("beyanlı yazar update'e döndü", (m) => m.set(BEYANLI_YAZAR, (m.get(BEYANLI_YAZAR) ?? "").replace("tx.user.create(", "tx.user.update(")));
+  check("§4 beyanlı yazar okundu (körlük zemini)", (GOVDE.get(BEYANLI_YAZAR) ?? "").length > 0);
+}
 check(
   "yazıcı kaynağı `scripts/` altında duruyor (körlük zemini)",
   fs.existsSync(path.resolve(__dirname, "superadmin-olustur.ts")),

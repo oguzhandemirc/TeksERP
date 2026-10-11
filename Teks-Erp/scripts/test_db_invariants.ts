@@ -509,6 +509,9 @@ const PARTIAL_INDEXES: Array<{
 // yalnız burada yazılıdır. Temizlik bitince girdiyi sil, `VALIDATE` et.
 const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string; onarim?: string }> = [
   { table: "rolls", name: "rolls_currentQty_nonneg" },
+  // Varsayılan süperadmin (2026-10-11): ortak parolayla doğuş yalnız sistem hesabında; değişim doğuştan önce olamaz.
+  { table: "users", name: "users_default_password_system_only" },
+  { table: "users", name: "users_default_password_change_order" },
   // K-A3b (2026-09-25): göç satırının kaynağı yalnız preEpoch satırında ve kapalı kümeden.
   { table: "roll_status_events", name: "roll_status_events_pre_epoch_source_check" },
   { table: "rolls", name: "rolls_initialQty_nonneg" },

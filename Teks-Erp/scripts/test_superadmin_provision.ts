@@ -959,6 +959,7 @@ async function main(): Promise<void> {
     const tsxBin = path.join(KOK, "node_modules", ".bin", "tsx");
     const scriptYolu = path.join(__dirname, "superadmin-olustur.ts");
     const KUR_AD = `${FIXTURE_USERNAME}.k`;
+    const KUR_AD2 = `${FIXTURE_USERNAME}.d`;
     const KUR_PAROLA = "bekci-p8-kurulum-Parola-çğ";
     // PIN özetle saklanır: boşluk hem düz kolonda hem etkin anahtarın özetinde aranır.
     const kurHalka = getShortCredentialKeyRing();
@@ -969,8 +970,7 @@ async function main(): Promise<void> {
       if ((await prisma.user.count({ where: { OR: [{ quickPin: aday }, { quickPinDigest: ozet }] } })) === 0) KUR_PIN = aday;
     }
     sirlar.push(KUR_PIN);
-    const girdi = JSON.stringify({ kullaniciAdi: KUR_AD, parola: KUR_PAROLA, pin: KUR_PIN });
-    const kos = (): Promise<{ kod: number | null; out: string; err: string; asti: boolean }> =>
+    const kos = (ad: string = KUR_AD): Promise<{ kod: number | null; out: string; err: string; asti: boolean }> =>
       new Promise((resolve) => {
         const cocuk = spawn(tsxBin, [scriptYolu, "--kurulum-stdin"], { cwd: KOK, stdio: ["pipe", "pipe", "pipe"], env: process.env });
         let out = "";
@@ -985,7 +985,7 @@ async function main(): Promise<void> {
           clearTimeout(zaman);
           resolve({ kod, out, err, asti: false });
         });
-        cocuk.stdin.end(girdi, "utf8");
+        cocuk.stdin.end(JSON.stringify({ kullaniciAdi: ad, parola: KUR_PAROLA, pin: KUR_PIN }), "utf8");
       });
     const satir = (out: string): { sonuc?: string; kullaniciAdi?: string; kod?: string } | null => {
       const l = out.split(/\r?\n/).filter((x) => x.trim().startsWith("{")).pop();
@@ -1022,8 +1022,51 @@ async function main(): Promise<void> {
       const sonra = await prisma.user.findFirst({ where: { username: KUR_AD }, select: { passwordHash: true } });
       check("tekrar koşum: çıkış 0 + ZATEN_KURULU, parola EZİLMEDİ", r3.kod === 0 && j3?.sonuc === "ZATEN_KURULU" && sonra?.passwordHash === yeni?.passwordHash, `kod ${r3.kod} · ${JSON.stringify(j3)}`);
       check("audit'te kurulum kipinin PIN'i YOK", (await sinirliEslesmeSayisi(`(^|[^0-9])${KUR_PIN}([^0-9]|$)`)) === 0);
+
+      // ── §10 DEVİR — boot varsayılan hesabı sihirbazdan ÖNCE doğurmuşsa kurulum onu devralır ──
+      console.log("\n=== 10) DEVİR — dokunulmamış varsayılan hesap kurulum kipiyle devralınır ===");
+      const ORTAK = "bekci-p8-ortak-varsayilan-parola";
+      const ortakOzet = await bcrypt.hash(ORTAK, 12);
+      const hedef = await prisma.user.findFirstOrThrow({ where: { username: KUR_AD }, select: { id: true } });
+      await prisma.user.update({
+        where: { id: hedef.id },
+        data: { passwordHash: ortakOzet, mustChangePassword: true, defaultPasswordIssuedAt: new Date(), defaultPasswordChangedAt: null },
+      });
+      const g = globalThis as typeof globalThis & { __TEKSERP_VARSAYILAN_SA__?: string };
+      g.__TEKSERP_VARSAYILAN_SA__ = JSON.stringify({ v: 1, kullaniciAdi: KUR_AD, ozet: ortakOzet });
+      try {
+        const red = await provisionSuperadmin({ username: KUR_AD2, password: ORTAK, pin: KUR_PIN, rotate: false });
+        const dokunulmadi = await prisma.user.findUniqueOrThrow({ where: { id: hedef.id }, select: { username: true, passwordHash: true } });
+        check("§10a devirde ortak varsayılan parola REDDEDİLİR (PASSWORD_IS_DEFAULT), hesap değişmez", red.kind === "error" && red.code === "PASSWORD_IS_DEFAULT" && dokunulmadi.username === KUR_AD && dokunulmadi.passwordHash === ortakOzet, red.kind === "error" ? red.code : red.kind);
+      } finally {
+        delete g.__TEKSERP_VARSAYILAN_SA__;
+      }
+      const once = await prisma.user.findUniqueOrThrow({ where: { id: hedef.id }, select: { tokenVersion: true } });
+      const r4 = await kos(KUR_AD2);
+      const j4 = satir(r4.out);
+      const devralinan = await prisma.user.findUniqueOrThrow({
+        where: { id: hedef.id },
+        select: { username: true, passwordHash: true, mustChangePassword: true, defaultPasswordChangedAt: true, tokenVersion: true, isSystemAccount: true, quickPinDigest: true },
+      });
+      check("§10b ⭐ çıkış 0 + DEVRALINDI (sihirbazın adı)", r4.kod === 0 && j4?.sonuc === "DEVRALINDI" && j4?.kullaniciAdi === KUR_AD2, `kod ${r4.kod} · ${JSON.stringify(j4)} · ${r4.err.trim().slice(0, 160)}`);
+      check(
+        "§10c aynı hesap: ad + parola + PIN sihirbazınki, değişim bayrağı iner, ChangedAt dolar, oturumlar düşer",
+        devralinan.isSystemAccount && devralinan.username === KUR_AD2 && (await bcrypt.compare(KUR_PAROLA, devralinan.passwordHash)) &&
+          !devralinan.mustChangePassword && devralinan.defaultPasswordChangedAt !== null && devralinan.tokenVersion === once.tokenVersion + 1 &&
+          kurHalka.ok && devralinan.quickPinDigest === digestQuickPin(kurHalka.ring.active, KUR_PIN),
+      );
+      check("§10d tek sistem hesabı (yeni hesap doğmadı)", (await prisma.user.count({ where: { isSystemAccount: true } })) === 1);
+      check("§10e çıktıda parola/PIN YOK", sirsiz(r4));
+      const devirIzi = await prisma.systemLog.findMany({ where: { recordId: hedef.id, action: "SUPERADMIN_DEFAULT_TAKEN_OVER" }, select: { newData: true, oldData: true, changes: true } });
+      const izMetni = JSON.stringify(devirIzi);
+      check("§10f devir audit'e yazıldı, giriş adı/PIN/parola taşımaz", devirIzi.length === 1 && !izMetni.includes(KUR_AD2) && !izMetni.includes(KUR_PAROLA) && !izMetni.includes(KUR_PIN), `${devirIzi.length} satır`);
+      const r5 = await kos(`${KUR_AD2}x`);
+      const j5 = satir(r5.out);
+      const sonra5 = await prisma.user.findUniqueOrThrow({ where: { id: hedef.id }, select: { passwordHash: true, username: true } });
+      check("§10g sonda: devralınmış (değiştirilmiş) hesap yeniden devralınmaz → ZATEN_KURULU, parola ezilmez", r5.kod === 0 && j5?.sonuc === "ZATEN_KURULU" && sonra5.passwordHash === devralinan.passwordHash && sonra5.username === KUR_AD2, `${JSON.stringify(j5)}`);
     } finally {
       await temizleKurulumKipiHesabi(KUR_AD);
+      await temizleKurulumKipiHesabi(KUR_AD2);
     }
   }
 }

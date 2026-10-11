@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 
 import { hedefCoz, v8Taban as v8TabanCoz } from '../../scripts/lib/node-surumu.mjs';
 import { cekirdekEklentisi, katalogOku, modulPaketiDerle } from './lib/sifreli-modul-derle.mjs';
+import { varsayilanSaDefine, varsayilanSaMalzemesi } from './lib/varsayilan-superadmin-derleme.mjs';
 
 const PROJ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(PROJ, '..');
@@ -97,6 +98,9 @@ async function main() {
   // Ortak paket ÜRETİM çapasıyla doğar (hazırlık köküne güvenmez).
   const guvenCapasi = 'uretim';
   console.log(`  güven çapası: ${guvenCapasi} (ortak paket)`);
+  // Varsayılan süperadmin malzemesi (CI sırrı); yoksa sabit tanımsız → hesap doğmaz.
+  const varsayilanSa = varsayilanSaMalzemesi();
+  console.log(`  varsayılan süperadmin: ${varsayilanSa ? `GÖMÜLÜ (kaynak: ${varsayilanSa.kaynak})` : 'YOK — kurulumda varsayılan hesap doğmaz'}`);
 
   // --- 0b. Şifreli modüller (Faz 2d) — YALNIZ --sifrele ile; varsayılan bugünkü şifresiz paket -----
   // Modül kendi dosyalarıyla ayrı pakete bölünür, hazırlık anahtarıyla (0600, REPO DIŞI) AES-256-GCM
@@ -149,6 +153,7 @@ async function main() {
     define: {
       __TEKSERP_NATIVE_REQUIRED__: 'true',
       __TEKSERP_FILIGRAN__: JSON.stringify(JSON.stringify(filigran)),
+      ...varsayilanSaDefine(varsayilanSa),
     },
     plugins: [cekirdekEklentisi({ proj: PROJ, paketler: sifreliPaketler, ev })],
   });
@@ -187,6 +192,7 @@ async function main() {
     nativeZorunlu: true,              // korumalı derlemede native çekirdek her zaman zorunlu (define ile aynı)
     guvenCapasi,                      // çapa kipi (tek değer: uretim); paketleme native künyesini buna karşı ölçer
     sifreliModuller: sifreliKunye,
+    varsayilanSuperadmin: varsayilanSa !== null, // yalnız var/yok; malzeme künyeye GİRMEZ
   };
 
   // --- 3. Arşiv (REPO DIŞI): bytenode öncesi .cjs + .map + kimlik ----------------

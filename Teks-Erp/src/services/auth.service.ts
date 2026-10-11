@@ -35,6 +35,7 @@ import {
   parseCardCode,
 } from "../lib/short-credential/digest";
 import { countForeignDigests, requireKeyRing, ShortCredentialService } from "./short-credential.service";
+import { varsayilanParolaMi } from "./helpers/varsayilan-superadmin.helper";
 import {
   forgetIssuedPin,
   readIssued,
@@ -76,6 +77,8 @@ export type LoginClientType = "electron" | "mobile" | "web";
 export type LoginResult = { token: string; user: JwtPayload; mustChangePassword: boolean };
 
 export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
+/** Satıcı hesabının yeni parolası ortak varsayılan parolayla aynı. */
+export const PASSWORD_IS_DEFAULT_CODE = "PASSWORD_IS_DEFAULT";
 export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
   "Parolanızı değiştirmeniz gerekiyor. Yeni parola belirlemeden devam edilemez.";
 export const CURRENT_PASSWORD_INVALID_CODE = "CURRENT_PASSWORD_INVALID";
@@ -745,15 +748,12 @@ export class AuthService {
         isSystemAccount: true,
         tokenVersion: true,
         mustChangePassword: true,
+        defaultPasswordIssuedAt: true,
+        defaultPasswordChangedAt: true,
       },
     });
     if (!user || !user.isActive) {
       throw AppError.unauthorized("Hesap pasif veya bulunamadı. Tekrar giriş yapın.");
-    }
-    if (user.isSystemAccount) {
-      throw AppError.forbidden("Satıcı hesabının parolası yalnız kurulum aracından değiştirilir.", {
-        code: "SYSTEM_ACCOUNT_PASSWORD",
-      });
     }
     if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
       throw AppError.badRequest("Mevcut parola yanlış.", { code: CURRENT_PASSWORD_INVALID_CODE });
@@ -763,11 +763,23 @@ export class AuthService {
     if (await bcrypt.compare(newPassword, user.passwordHash)) {
       throw AppError.badRequest("Yeni parola mevcut parolayla aynı olamaz.", { code: "PASSWORD_UNCHANGED" });
     }
+    // Satıcı hesabı ortak varsayılan parolaya geri dönemez (her kurulumda aynı parola).
+    if (user.isSystemAccount && (await varsayilanParolaMi(newPassword))) {
+      throw AppError.badRequest("Yeni parola ortak varsayılan parolayla aynı olamaz.", {
+        code: PASSWORD_IS_DEFAULT_CODE,
+      });
+    }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
+    const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
     const claimed = await prisma.user.updateMany({
       where: { id: userId, isActive: true, tokenVersion: user.tokenVersion },
-      data: { passwordHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+        tokenVersion: { increment: 1 },
+        ...(varsayilanKapaniyor ? { defaultPasswordChangedAt: new Date() } : {}),
+      },
     });
     if (claimed.count === 0) {
       throw AppError.conflict("Hesap bu sırada değişti. Tekrar giriş yapıp yeniden deneyin.", {
@@ -780,7 +792,13 @@ export class AuthService {
       action: "UPDATE",
       tableName: "USER_PASSWORD",
       recordId: userId,
-      newData: { username: user.username, selfService: true, requiredChange: user.mustChangePassword },
+      newData: {
+        // Satıcı hesabının giriş adı audit'e girmez (takma ad maskesini çürütürdü).
+        ...(user.isSystemAccount ? {} : { username: user.username }),
+        selfService: true,
+        requiredChange: user.mustChangePassword,
+        ...(varsayilanKapaniyor ? { defaultPasswordCleared: true } : {}),
+      },
     });
   }
 

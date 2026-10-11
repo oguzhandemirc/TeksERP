@@ -467,6 +467,12 @@ model User {
   /// job'ı (`jobs/superadmin.job.ts`) yazar — hiçbir Zod şemasına girmez, yani
   /// panelden ne atanabilir ne kaldırılabilir.
   isSystemAccount Boolean @default(false)
+  /// Hesap ORTAK varsayılan parolayla doğdu (boot, kurulumda satıcı hesabı yokken). Yalnız sistem
+  /// hesabında dolu (CHECK). DURUM kolonu; yazarı `services/helpers/varsayilan-superadmin.ts`.
+  defaultPasswordIssuedAt  DateTime? @db.Timestamptz
+  /// Varsayılan parola ilk kez değiştirildi (kendi değişimi · rotasyon · kurulum devri). NULL ve
+  /// `defaultPasswordIssuedAt` doluyken hesap hâlâ ortak parolayla durur → panel/portal uyarısı.
+  defaultPasswordChangedAt DateTime? @db.Timestamptz
 
   // Relations
   permissions                   UserPermission[]         @relation("UserPermissionUser")
