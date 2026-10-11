@@ -17,6 +17,26 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-11f",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Gece başlayıp sabaha süren tezgah duruşu ve destek hesabı uyarısı",
+      "surumler": {
+        "panel": "1.6.5"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Tezgah Salonu'nda vardiya dışında durup vardiyaya taşan tezgahın kartındaki hedef süre sayacı artık vardiyanın başladığı andan işler; alarmla aynı saati gösterir. Örnek: gece duran ve sabah vardiyası başladığında hâlâ duran tezgahta hedef süre sabah vardiyasının başından sayılır. Vardiya içinde başlayan duruşta sayaç eskisi gibi duruşun başından işler; duruşun toplam süresi de her zaman duruşun başından gösterilir. Bunun için sunucunun 2.15.5 sürümüne güncellenmesi gerekir; eski sunucuda sayaç duruşun başından işler."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Destek hesabı ilk kurulumda gelen ortak parolayla duruyorsa panelin üstünde kırmızı bir uyarı şeridi çıkar. Destek hesabıyla girildiyse şerit kendi parolanızı hemen belirlemenizi, yönetici olarak girildiyse satıcınızdan parolayı değiştirmesini istemenizi söyler. Şerit elle kapatılamaz; parola değişince kendiliğinden kalkar. Bunun için de sunucunun 2.15.5 sürümü gerekir."
+        }
+      ]
+    },
+    {
       "id": "2026-10-11e",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Tezgah alarmını açma yolu düzeltildi",
