@@ -103,7 +103,7 @@ describe('useBeamForms formError', () => {
     act(() => h2.result.current.openPlan());
     act(() => h2.result.current.setPlanForm({ ...h2.result.current.planForm, warpSpecId: 's1', plannedLengthM: '500' }));
     act(() => h2.result.current.submitPlan());
-    expect(h2.result.current.formError).toMatch(/dokuma işine bağlanmalı/);
+    expect(h2.result.current.formError).toMatch(/dokuma iş emrine bağlanmalı/);
     expect(plan.mutate).not.toHaveBeenCalled();
     // İş seçilince geçer.
     act(() => h2.result.current.setPlanForm({ ...h2.result.current.planForm, weavingOrderId: 'wo9' }));

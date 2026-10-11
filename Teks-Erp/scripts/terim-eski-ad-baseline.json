@@ -64,34 +64,8 @@
     "mobil/src/components/receipt/ReceiptDetailModal.tsx": {
       "isEmri": 1
     },
-    "mobil/src/lib/license.ts": {
-      "dokumaIsi": 1
-    },
     "mobil/src/screens/Common/settings/WorkPreferencesScreen.tsx": {
       "isEmri": 1
-    },
-    "mobil/src/screens/Modules/Devere/PlanModal.tsx": {
-      "dokumaIsi": 4,
-      "isEmri": 2
-    },
-    "mobil/src/screens/Modules/Devere/beamPayload.ts": {
-      "dokumaIsi": 1
-    },
-    "mobil/src/screens/Modules/Dokuma/DoffEntryView.tsx": {
-      "isEmri": 3
-    },
-    "mobil/src/screens/Modules/Dokuma/RunOpenModal.tsx": {
-      "dokumaIsi": 5,
-      "isEmri": 3
-    },
-    "mobil/src/screens/Modules/Dokuma/RunPanel.tsx": {
-      "isEmri": 2
-    },
-    "mobil/src/screens/Modules/Dokuma/runPayload.ts": {
-      "dokumaIsi": 1
-    },
-    "mobil/src/screens/Modules/FasonDokuma/FasonDokumaScreen.tsx": {
-      "dokumaIsi": 4
     },
     "mobil/src/screens/Modules/FasonKabul/FasonKabulScreen.tsx": {
       "isEmri": 11

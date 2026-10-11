@@ -13,6 +13,7 @@ import PickerModal from '../../../components/PickerModal';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { colors, spacing, typography } from '../../../theme';
+import { TERIM } from '../../../lib/terim';
 import { useFasonDokuma } from './useFasonDokuma';
 import { ReceiveModal, ReturnModal } from './FasonDokumaModals';
 
@@ -29,7 +30,7 @@ export default function FasonDokumaScreen() {
       <View style={styles.root}>
         <View style={styles.body}>
           <Button mode="outlined" icon="clipboard-text-outline" onPress={() => setPicker(true)} contentStyle={styles.tall}>
-            {o ? `${o.weavingOrderNumber} · ${o.subcontractor?.name ?? '—'}` : 'Dokuma işi seç'}
+            {o ? `${o.weavingOrderNumber} · ${o.subcontractor?.name ?? '—'}` : 'Dokuma iş emri seç'}
           </Button>
           {o ? (
             <View style={styles.card}>
@@ -38,7 +39,7 @@ export default function FasonDokumaScreen() {
               <Text style={styles.line}>Fasondaki levent: {openBeams} ({o.openDispatches.map((d) => d.dispatchNo).join(', ') || 'sevk yok — fasoncu kendi ipliğini kullanıyor olabilir'})</Text>
             </View>
           ) : (
-            <Text style={styles.hint}>Fasonda dokunan açık iş seçin. Sevk açma ve iptaller panelden (Dokuma İşleri › Fason).</Text>
+            <Text style={styles.hint}>{`Fasonda dokunan açık dokuma iş emrini seçin. Sevk açma ve iptaller panelden (${TERIM.dokumaIsEmri.cogul} › Fason).`}</Text>
           )}
           {state.context.isError ? <Text style={styles.offline}>Fason işleri yüklenemedi — dokuma modülü kapalı, yetki yok ya da ağ. Yenileyin.</Text> : null}
         </View>
@@ -61,7 +62,7 @@ export default function FasonDokumaScreen() {
         options={state.orders.map((w) => ({ value: w.id, label: w.weavingOrderNumber, sublabel: `${w.item.name}${w.color ? ` · ${w.color.name}` : ''}`, details: [w.subcontractor?.name ?? '—', `${w.openDispatches.reduce((n, d) => n + d.beams.length, 0)} levent fasonda`] }))}
         selectedValue={o?.id ?? ''}
         loading={state.context.isLoading}
-        emptyText="Açık fason dokuma işi yok — panelden dokuma işi açın (Kim dokuyor: fasonda)."
+        emptyText="Açık fason dokuma iş emri yok — panelden dokuma iş emri açın (Kim dokuyor: fasonda)."
         onDismiss={() => setPicker(false)}
         onSelect={(id) => { state.setOrderId(id); setPicker(false); }}
       />

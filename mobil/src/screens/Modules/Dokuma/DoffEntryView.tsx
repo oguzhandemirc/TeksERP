@@ -52,7 +52,7 @@ function RunChips({ entry }: { entry: DoffEntry }) {
     return (
       <View style={styles.amber}>
         <Icon source="alert-outline" size={18} color={colors.warningText} />
-        <Text style={styles.amberText}>Bu hatta açık koşum yok — indirme iş emri metresine GİRMEZ (yine kaydedilir).</Text>
+        <Text style={styles.amberText}>Bu hatta açık koşum yok — indirme dokuma iş emri metresine GİRMEZ (yine kaydedilir).</Text>
       </View>
     );
   }
@@ -63,7 +63,7 @@ function RunChips({ entry }: { entry: DoffEntry }) {
         <Chip
           key={r.id}
           on={form.machineRunId === r.id}
-          label={`Koşum ${fmtTime(r.startedAt)}${r.weavingOrderId ? '' : ' (iş emrisiz)'}`}
+          label={`Koşum ${fmtTime(r.startedAt)}${r.weavingOrderId ? '' : ' (emirsiz)'}`}
           onPress={() => selectRun(r.id)}
         />
       ))}
@@ -109,7 +109,7 @@ export default function DoffEntryView({ entry }: { entry: DoffEntry }) {
         {counterEmpty ? 'Boş bırakılabilir — "okunmadı" olarak kaydedilir.' : SOURCE_LABEL[form.counterSource]}
       </Text>
 
-      <Text style={styles.label}>Koşum (iş emri bağı)</Text>
+      <Text style={styles.label}>Koşum (dokuma iş emri bağı)</Text>
       <RunChips entry={entry} />
 
       <Text style={styles.label}>Not (isteğe bağlı)</Text>

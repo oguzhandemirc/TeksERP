@@ -29,7 +29,7 @@ export default function RunPanel({ entry }: { entry: DoffEntry }) {
       <View style={styles.row}>
         <View style={styles.grow}>
           <Text style={styles.heading}>{run ? `Koşum açık · ${fmtTime(run.startedAt)}` : 'Bu hatta açık koşum yok'}</Text>
-          <Text style={styles.meta}>{run ? (run.weavingOrderId ? 'İş emrine bağlı' : 'İş emrisiz (numune) — indirmeler metreye girmez') : 'Koşum açmadan indirme kaydedilebilir; metreye girmez.'}</Text>
+          <Text style={styles.meta}>{run ? (run.weavingOrderId ? 'Dokuma iş emrine bağlı' : 'Emirsiz (numune) — indirmeler metreye girmez') : 'Koşum açmadan indirme kaydedilebilir; metreye girmez.'}</Text>
         </View>
         {run ? (
           <Button mode="contained-tonal" icon="stop-circle-outline" onPress={() => state.setCloseTarget(run.id)} disabled={!entry.isOnline}>Kapat</Button>

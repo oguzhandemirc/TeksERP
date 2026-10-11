@@ -48,11 +48,11 @@ async function press(u: ReturnType<typeof renderWithPaper>, id: string) {
 }
 
 describe('RunOpenModal — sayfalı kip', () => {
-  it('§1 ilk sayfa: Dokuma işi · Desen · Renk alanları; Kaydet yok, İleri var', async () => {
+  it('§1 ilk sayfa: Dokuma iş emri · Desen · Renk alanları; Kaydet yok, İleri var', async () => {
     const u = renderWithPaper(<RunOpenModal state={fakeState()} />);
     await act(async () => {});
     expect(u.getByText('Koşum aç')).toBeTruthy();
-    expect(u.getByText(/Dokuma işi/)).toBeTruthy();
+    expect(u.getByText(/Dokuma iş emri/)).toBeTruthy();
     expect(u.getByText('Desen')).toBeTruthy();
     expect(u.getByText('Renk')).toBeTruthy();
     expect(u.queryByTestId('paged-kaydet')).toBeNull();
@@ -79,7 +79,7 @@ describe('RunOpenModal — sayfalı kip', () => {
     expect(u.getByText('PATOS')).toBeTruthy();
     expect(u.getByText('420')).toBeTruthy();
     expect(u.getByText('24.5')).toBeTruthy();
-    expect(u.getByText('İş emrisiz (numune)')).toBeTruthy();
+    expect(u.getByText('Emirsiz (numune)')).toBeTruthy();
     expect(u.queryByTestId('paged-ileri')).toBeNull();
     await press(u, 'paged-kaydet');
     expect(state.submitOpen).toHaveBeenCalledTimes(1);

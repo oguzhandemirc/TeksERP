@@ -91,7 +91,7 @@ function nullable(s: string, max: number): string | null {
 export function validatePlan(f: PlanForm, beamWeavingLinkRequired = false): Validation {
   if (!f.warpSpecId) return { ok: false, message: 'Çözgü kartı seçin.' };
   // `devere.beamWeavingLinkRequired` (sunucudan) açıkken plan bir dokuma işine bağlanmalı (sunucu 400 ikizi).
-  if (beamWeavingLinkRequired && !f.weavingOrderId) return { ok: false, message: 'Bu kurulumda levent bir dokuma işine bağlanmalı — iş seçin.' };
+  if (beamWeavingLinkRequired && !f.weavingOrderId) return { ok: false, message: 'Bu kurulumda levent bir dokuma iş emrine bağlanmalı — listeden seçin.' };
   const m = num(f.plannedLengthM);
   if (m == null || m <= 0) return { ok: false, message: 'Planlanan metre 0’dan büyük olmalı.' };
   if (f.originKind === 'IN_HOUSE' && (f.subcontractorId || f.supplierId)) return { ok: false, message: 'İçeride sarımda fasoncu/tedarikçi seçilmez.' };

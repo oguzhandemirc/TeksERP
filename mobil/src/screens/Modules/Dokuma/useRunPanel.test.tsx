@@ -62,7 +62,7 @@ describe('useRunPanel dokuma işi ön-seçimi', () => {
     expect(result.current.form.weavingOrderId).toBeNull();
   });
 
-  it('§3 ⭐ operatör "İş emrisiz" seçince öneri geri yazmaz (liste tazelense bile); modal kapanınca sıfırlanır', async () => {
+  it('§3 ⭐ operatör "Emirsiz" seçince öneri geri yazmaz (liste tazelense bile); modal kapanınca sıfırlanır', async () => {
     mockSuggestedId = 'wo1';
     const { result } = renderHook(() => useRunPanel({ machineId: 'm1', lineNo: 1, isOnline: true }), { wrapper });
     act(() => result.current.setOpenModal(true));

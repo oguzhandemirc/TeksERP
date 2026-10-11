@@ -25,7 +25,7 @@ function PlanPickers({ picker, setPicker, state, specOptions, subOptions, supOpt
   const f = state.planForm;
   return (
     <>
-      <PickerModal visible={picker === 'weaving'} title="Dokuma işi seç" options={weavingOptions} selectedValue={f.weavingOrderId ?? ''} loading={state.context.isLoading} emptyText="Açık dokuma işi yok — iş emrisiz planlayabilirsiniz." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, weavingOrderId: v }); setPicker(null); }} />
+      <PickerModal visible={picker === 'weaving'} title="Dokuma iş emri seç" options={weavingOptions} selectedValue={f.weavingOrderId ?? ''} loading={state.context.isLoading} emptyText="Açık dokuma iş emri yok — emirsiz planlayabilirsiniz." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, weavingOrderId: v }); setPicker(null); }} />
       <PickerModal visible={picker === 'spec'} title="Çözgü kartı seç" options={specOptions} selectedValue={f.warpSpecId ?? ''} loading={state.context.isLoading} emptyText="Aktif çözgü kartı yok — panelden tanımlanır." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, warpSpecId: v }); setPicker(null); }} />
       <PickerModal visible={picker === 'subcontractor'} title="Fasoncu seç" options={subOptions} selectedValue={f.subcontractorId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, subcontractorId: v, supplierId: null }); setPicker(null); }} />
       <PickerModal visible={picker === 'supplier'} title="Tedarikçi seç" options={supOptions} selectedValue={f.supplierId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, supplierId: v, subcontractorId: null }); setPicker(null); }} />
@@ -81,9 +81,9 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
     >
       {weavingOrders ? (
         <SheetField
-          label={weavingRequired ? 'Dokuma işi (zorunlu)' : 'Dokuma işi (isteğe bağlı)'}
+          label={weavingRequired ? 'Dokuma iş emri (zorunlu)' : 'Dokuma iş emri (isteğe bağlı)'}
           value={weavingLabel}
-          placeholder={weavingRequired ? 'Seçilmedi — bu kurulumda zorunlu' : 'İş emrisiz'}
+          placeholder={weavingRequired ? 'Seçilmedi — bu kurulumda zorunlu' : 'Emirsiz'}
           onPress={() => setPicker('weaving')}
         />
       ) : null}

@@ -101,11 +101,11 @@ function RunOpenPickers({ state, picker, setPicker, orderOptions, itemOptions, c
     <>
       <PickerModal
         visible={picker === 'order'}
-        title="Dokuma işi seç"
+        title="Dokuma iş emri seç"
         options={orderOptions}
         selectedValue={f.weavingOrderId ?? ''}
         loading={state.ordersLoading}
-        emptyText="Açık dokuma işi yok — emirsiz koşum açabilirsiniz."
+        emptyText="Açık dokuma iş emri yok — emirsiz koşum açabilirsiniz."
         onDismiss={() => setPicker(null)}
         onSelect={(v) => {
           state.selectOrder(prefillFromOrder(f, state.orders.find((o) => o.id === v) ?? null));
@@ -150,12 +150,12 @@ function buildRunOpenPages(state: RunPanelState, orderLabel: string, setPicker: 
       render: () => (
         <>
           {state.ordersLoading ? <ActivityIndicator /> : null}
-          {state.ordersError ? <Text style={sheet.error}>İş emri listesi yüklenemedi — emirsiz koşum açılabilir.</Text> : null}
+          {state.ordersError ? <Text style={sheet.error}>Dokuma iş emri listesi yüklenemedi — emirsiz koşum açılabilir.</Text> : null}
           <SheetField
-            label={state.weavingRequired ? 'Dokuma işi (zorunlu)' : 'Dokuma işi (isteğe bağlı — numune koşumu meşru)'}
+            label={state.weavingRequired ? 'Dokuma iş emri (zorunlu)' : 'Dokuma iş emri (isteğe bağlı — numune koşumu meşru)'}
             value={orderLabel}
-            placeholder={state.weavingRequired ? 'Seçilmedi — bu tezgahta zorunlu' : 'İş emrisiz'}
-            hint={state.suggestedFrom === 'MOUNTED_BEAM' && f.weavingOrderId ? 'Takılı leventin işinden ön-seçildi — değiştirilebilir.' : undefined}
+            placeholder={state.weavingRequired ? 'Seçilmedi — bu tezgahta zorunlu' : 'Emirsiz'}
+            hint={state.suggestedFrom === 'MOUNTED_BEAM' && f.weavingOrderId ? 'Takılı leventin dokuma iş emrinden ön-seçildi — değiştirilebilir.' : undefined}
             onPress={() => setPicker('order')}
           />
           <SheetField label="Desen" value={f.itemLabel} placeholder="Seçilmedi" onPress={() => setPicker('item')} />
@@ -184,7 +184,7 @@ function buildRunOpenPages(state: RunPanelState, orderLabel: string, setPicker: 
       title: 'Özet',
       render: () => (
         <>
-          <SummaryRow label="Dokuma işi" value={orderLabel || 'İş emrisiz (numune)'} />
+          <SummaryRow label="Dokuma iş emri" value={orderLabel || 'Emirsiz (numune)'} />
           <SummaryRow label="Desen" value={f.itemLabel} />
           <SummaryRow label="Renk" value={f.colorLabel || 'Renk yok (ham)'} />
           <SummaryRow label="Hedef devir (atkı/dk)" value={f.targetUnitsPerMin || 'makine yedeği'} />
