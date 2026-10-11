@@ -17,7 +17,10 @@ interface Props {
   loom: LiveLoom;
   now: number;
   star: boolean;
-  onSelect: (id: string) => void;
+  /** Tık: Ctrl/Cmd seçime ekler/çıkarır, Shift aralık seçer; düz tık detay + tek seçim. */
+  onSelect: (id: string, mods: { toggle: boolean; range: boolean }) => void;
+  /** Seçim durumu; verilmezse (TV kipi) kart seçilebilir değildir ve `aria-pressed` taşımaz. */
+  selected?: boolean;
 }
 
 const HOUR_MS = 3_600_000;
@@ -190,7 +193,7 @@ function CardHeader({ t, stop, tier, status, star, hint, now }: HeaderProps) {
   );
 }
 
-function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
+function LoomCardImpl({ loom: t, now, star, onSelect, selected }: Props) {
   const status = statusOf(t);
   const color = STATUS_COLOR[status];
   const stop = t.monitored ? t.openStop : null;
@@ -203,8 +206,10 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
     <FocusHint hint={hint}>
       <button
         type="button"
-        onClick={() => onSelect(t.id)}
+        onClick={(e) => onSelect(t.id, { toggle: e.ctrlKey || e.metaKey, range: e.shiftKey })}
         aria-label={ariaLabelOf(t, now)}
+        aria-pressed={selected}
+        data-loom-id={t.id}
         className={cn(
           "group relative flex min-w-0 flex-col gap-1 rounded-2xl p-2.5 text-left outline-none transition-transform",
           "hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring",
@@ -213,7 +218,8 @@ function LoomCardImpl({ loom: t, now, star, onSelect }: Props) {
         )}
         style={{
           background: hsl("var(--ds-tile)"),
-          boxShadow: `inset 0 0 0 ${stop ? 2 : 1}px ${stop ? hsl(ringColor, 0.85) : hsl("var(--ds-ink)", 0.1)}`,
+          // Seçim halkası DIŞTA (kart içeriği ve ad alanı daralmaz, taşma olmaz); durum halkası içte kalır.
+          boxShadow: `inset 0 0 0 ${stop ? 2 : 1}px ${stop ? hsl(ringColor, 0.85) : hsl("var(--ds-ink)", 0.1)}${selected ? ", 0 0 0 3px hsl(var(--primary))" : ""}`,
         }}
       >
         <CardHeader t={t} stop={stop} tier={tier} status={status} star={star} hint={hint} now={now} />

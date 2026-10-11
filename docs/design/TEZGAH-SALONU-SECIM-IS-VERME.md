@@ -64,7 +64,8 @@ Bugün (ÖLÇÜLDÜ): kart bir `<button>`; tıklamak sağdan detay panelini aça
 ## B · Sağ tık menüsü
 
 Kural: menü **görünen** öğe ile **pasif** öğeyi ayırır.
-- Modül kapalı ya da izin yoksa öğe **hiç görünmez** (kapalı modülün yüzeyi olmaz — `test_dokuma_regime_gate §7` ruhu).
+- Modül kapalıysa öğe **hiç görünmez** (kapalı modülün yüzeyi olmaz — `test_dokuma_regime_gate §7` ruhu).
+- İzin yoksa öğe **görünür ama pasiftir ve nedenini söyler** ("Yetkiniz yok — Tezgah Duruşları izni gerekir.") — kullanıcı kararı 2026-10-11 (1e aracılığıyla); eski "izin yoksa hiç görünmez" cümlesi GEÇERSİZ → 2026-10-11.
 - Modül/izin var ama bu tezgah için uygun değilse öğe **pasif + neden** ("Açık duruş yok", "Levent takip kapalı").
 - Çoklu seçimde öğe, seçimin **en az birine** uygunsa aktiftir; pencere uygun olmayanları ADIYLA ayrıca listeler (§C.3).
 - Son kararı her zaman sunucu verir; menü yalnız önden süzer (izin guard'ı fail-closed, `clientType` güvenlik sınırı değil).
@@ -75,7 +76,7 @@ Kural: menü **görünen** öğe ile **pasif** öğeyi ayırır.
 | **İş ver / Şimdi başlat** (koşum aç) | ✓ | ✓ | `loom:run` | dokuma | Boş hatta. §C. |
 | **İşi değiştir** (koşumu kapat + yenisini aç) | ✓ | ✓ | `loom:run` | dokuma | Dolu hatta. Önizlemeli. |
 | **İşi bitir** (koşumu kapat) | ✓ | ✓ | `loom:run` | dokuma | Atkı sayacı sorulur, boş = ölçülmedi. Dokuma İş Emrini KAPATMAZ (iş kapanışı ayrı karar). |
-| **Koşumu geri al** (yanlış açıldı) | ✓ | — | `loom:run-revoke` | dokuma | Sebep zorunlu; tek tezgah (geri alma toplu yapılmaz — §C.10). |
+| **Koşumu geri al** (yanlış açıldı) | ✓ | — | `loom:run-revoke` | dokuma | Sebep zorunlu; tek tezgah (koşum geri alma toplu yapılmaz — §C.10). Toplu DURUŞ geri alması ayrıdır (§E karar 6). |
 | **Sıraya koy** (planla) | ✓ | ✓ | **YENİ izin** önerilir (`loom:plan`) | dokuma | Karar 2 gereği; F5. |
 | **Duruş bildir** | ✓ | ✓ | `loom:manual-entry` | dokuma | Sebep isteğe bağlı; toplu örnek: elektrik kesintisi, holde bakım. |
 | **Duruşu kapat** ("Çalıştı") | ✓ | ✓ | `loom:manual-entry` | dokuma | Yalnız açık duruşu olanlarda aktif. |
@@ -154,7 +155,7 @@ Esin: dokuma izleme/MES salon panoları (Loepfe/Barco tipi salon izleme, Picanol
 
 | Faz | Teslim | Yeni şema? | Not |
 |---|---|---|---|
-| **F1 — Seçim + menü iskeleti** | Tık/Ctrl/Shift/lasso/Ctrl+A/Esc/klavye/uzun bas, seçim çubuğu, sağ tık menüsü; eylemler: Detay, raporlara geçiş, duruş listesine geçiş. TV'de kapalı. | Hayır | Salt istemci. Menü öğelerinin görünürlüğü saf yüklemle (bekçi testli). |
+| **F1 — Seçim + menü iskeleti** ✓ (2026-10-11) | Tık/Ctrl/Shift/lasso/Ctrl+A/Esc/klavye/uzun bas, seçim çubuğu, sağ tık menüsü; eylemler: Detay, raporlara geçiş, duruş listesine geçiş. TV'de kapalı. | Hayır | Salt istemci. Menü öğelerinin görünürlüğü saf yüklemle (bekçi testli). |
 | **F2 — Duruş eylemleri (tek + toplu)** | Duruş bildir / kapat / sebep ata / planlı bakım, önizlemeli toplu ([C.3, C.7, C.11]) | Hayır | Mevcut uçlar satır başına; toplu uç ya da istemci döngüsü (karar tasarım diliminde; toplu uç önerilir — tek önizleme kaynağı). |
 | **F3 — İş ver (A: şimdi başlat)** | `POST /machine-runs/bulk` + `/bulk/preview`; İş ver / Değiştir / Bitir / Geri al (tek); sonuç ekranı; salon ucuna operatör (D5) ve dolu/boş hat bilgisi | Hayır | Panelde koşum yüzeyi doğar → `loom:run` "ekransız"dan çıkar (dört kapı reçetesi; `test_dokuma_regime_gate §7` allowlist'e yeni istemci dosyası). |
 | **F4 — Üretilen metre + kart bilgileri** | İş başına ÜRETİLEN metre (D2), kalan, levent bitiş tahmini (D7, "tahmini" etiketli), D12 TV rotasyonu | Hayır | İki sayı kuralı: ÜRETİLEN (top ölçümü) ile TEZGAHTA (türetilen) toplanmaz. |
@@ -170,6 +171,16 @@ Esin: dokuma izleme/MES salon panoları (Loepfe/Barco tipi salon izleme, Picanol
 3. **Dolu tezgaha iş verilince SORAR** ("eskisini bitirip yenisini başlatayım mı?"), önizlemeli; sessiz üzerine yazma yok.
 4. **Bir işi birden çok tezgaha verince metre BÖLÜNMEZ:** iş tek havuz, toplam ilerleme; tezgah başına pay alanı yok.
 5. **Yetki (1e, yetki devri):** salonda iş verme = mevcut `loom:run`; sıraya koy için yeni izin `loom:plan` (izin reçetesiyle). Salon dizilimi numara sırası kalır (2026-10-09 kararı geçerli).
+
+### Kararlar (1e aracılığıyla kullanıcı, 2026-10-11 — F1 sırasında)
+
+6. **İzin yoksa menü öğesi görünür, pasif ve nedenini söyler** (§B); modül kapalıysa öğe yine hiç yoktur. Menü, seçim çubuğu ve "⋯" aynı saf listeden (`floorActionsOf`).
+7. **Toplu duruşun geri alınması TOPLU olur (F2'de uygulanır):** tek eylem; önizlemede etkilenen HER tezgah adıyla listelenir ve tek tek çıkarılabilir (per-record seçim kök kuralı); sebep BİR KEZ sorulur ve seçilen her satıra yazılır. Koşum geri alması (§C.10) bundan ayrıdır ve tek tezgah kalır.
+
+### F1 teslimi (2026-10-11) — tasarımdan sapmalar
+- Kart seçim durumu `aria-pressed` ile duyurulur (kart zaten `<button>`); `role="grid"` + roving tabindex kurulmadı — ok tuşları geometriden komşuya odak taşır, Boşluk seçer, Enter (düğme tıkı) detayı açar, Shift+F10/Menü tuşu tarayıcının `contextmenu` olayıyla menüyü açar.
+- Dokunmatik seçim kipinde "Seçimi bırak" düğmesi "Bitti" olur; seçim boşalınca kip kendiliğinden kapanır. Dokunmatikte sağ tık menüsü (Radix'in uzun-bas menüsü dahil) açılmaz; karşılığı çubuktaki "⋯".
+- Esc sırası: menü → detay paneli → seçim → tam ekran. Seçim Esc'i detay açıkken kayıt dışıdır (detay kapanınca yığına en üste yeniden girer); tam ekrana seçimle girildiyse tam ekran Esc'i yine seçimden sonra gelir (seçim yığında, tam ekran pencere dinleyicisinde).
 
 ## Ek · Ölçüm kaynakları (dosya)
 - `Teks-Erp/prisma/schema.prisma`: `WeavingOrder`, `MachineRun` (sedler yorumda), `Machine` (`productionLineCount`, `warpBeamSlots`; en/tip yok), `MachineSpec` (`shedType`, `nominalUnitsPerMin`), `WarpSpec` (`reedWidthCm`), `WorkSession`, `KursunBypassAssignment`

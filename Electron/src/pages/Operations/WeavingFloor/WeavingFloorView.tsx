@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { FloorSummary } from "./FloorSummary";
 import { FullscreenHeader, SampleDataBadge, StatusLegend } from "./FloorChrome";
 import { FloorHintProvider } from "./FloorHint";
+import { FloorMenuArea, SelectionBar, useFloorSelection, type FloorSelectionState } from "./FloorSelection";
 import { HallSection } from "./HallSection";
 import { LoomDetailSheet } from "./LoomDetailSheet";
 import { OverdueStrip } from "./OverdueStrip";
@@ -25,7 +26,8 @@ import { shiftStarLoom, summarizeFloor } from "./metrics";
 import { TvExitControl, type TvSoundControl } from "./TvExit";
 import { TvLaunchMenu } from "./TvLaunchMenu";
 import { useFullscreen } from "./useFullscreen";
-import type { FloorState } from "./types";
+import type { ClickMods } from "./selection";
+import type { FloorState, LiveLoom } from "./types";
 import "./weaving-floor.css";
 
 function bestHallOf(halls: readonly { hall: string; pct: number | null }[]): string | null {
@@ -34,6 +36,7 @@ function bestHallOf(halls: readonly { hall: string; pct: number | null }[]): str
 }
 
 const noSelect = () => undefined;
+const noCardSelect = (_id: string, _mods: ClickMods) => undefined;
 
 interface ViewProps {
   floor: FloorState;
@@ -83,25 +86,82 @@ function AppHeader({ extra, filter, tv, onFullscreen }: AppHeaderProps) {
   );
 }
 
+type HallRow = { hall: string; all: LiveLoom[]; visible: LiveLoom[]; pct: number | null };
+
+/** Hol satırları + görünen sıra: Shift aralığı, Ctrl+A ve "bu süzgeçte görünmüyor" sayısı buradan. */
+function useFloorModel(floor: FloorState, now: number, filter: ShowFilter) {
+  const predicate = showFilterPredicate(filter, now);
+  const halls: HallRow[] = floor.halls.map((hall) => {
+    const all = floor.looms.filter((t) => t.hall === hall);
+    return { hall, all, visible: all.filter(predicate), pct: summarizeFloor(all, now).todayPct };
+  });
+  const present = useMemo(() => new Set(floor.looms.map((t) => t.id)), [floor.looms]);
+  const starId = useMemo(() => shiftStarLoom(floor.looms), [floor.looms]);
+  return {
+    halls,
+    present,
+    starId,
+    bestHall: bestHallOf(halls),
+    order: halls.flatMap((h) => h.visible.map((t) => t.id)),
+    hallIds: (name: string) => halls.find((h) => h.hall === name)?.visible.map((t) => t.id) ?? [],
+    empty: halls.every((h) => h.visible.length === 0),
+  };
+}
+
+interface HallsProps {
+  model: ReturnType<typeof useFloorModel>;
+  now: number;
+  columns: number | undefined;
+  /** TV kipinde verilmez: seçim/menü/lasso yok, dokunuş detay açmaz. */
+  selection: FloorSelectionState | null;
+  onCard: (id: string, mods: ClickMods) => void;
+  onDetail: (id: string) => void;
+}
+
+function FloorHalls({ model, now, columns, selection, onCard, onDetail }: HallsProps) {
+  const list = model.halls
+    .filter((h) => h.visible.length > 0)
+    .map((h) => (
+      <HallSection
+        key={h.hall}
+        hall={h.hall}
+        looms={h.visible}
+        now={now}
+        columns={columns}
+        highlight={{ starId: model.starId, bestHall: h.hall === model.bestHall, onSelect: selection ? onCard : noCardSelect }}
+        selected={selection?.sel.ids}
+        onSelectHall={selection ? (name) => selection.many(model.hallIds(name), false) : undefined}
+      />
+    ));
+  if (!selection) return <>{list}</>;
+  return (
+    <FloorMenuArea s={selection} onDetail={onDetail} hallIds={model.hallIds}>
+      <div className="min-h-24 space-y-4 pb-2">{list}</div>
+    </FloorMenuArea>
+  );
+}
+
+function EmptyNote({ total }: { total: number }) {
+  return (
+    <p className="py-10 text-center text-muted-foreground">
+      {total === 0 ? "Salonda gösterilecek dokuma tezgahı yok." : "Bu seçimde tezgah yok — Göster: Tümü ile hepsini açın."}
+    </p>
+  );
+}
+
 export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, stale = false, onOpenTv, tvUrl = null, tvExit, initialSelectedId = null, onOpenAlarm }: ViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(tv ? null : initialSelectedId);
   const [filter, setFilter] = useState<ShowFilter>("ALL");
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const fullscreen = useFullscreen(root, { locked: tv, autoReal: !tvExit?.windowed });
   const select = useCallback((id: string) => setSelectedId(id), []);
-  const onSelect = tv ? noSelect : select;
-
-  const predicate = showFilterPredicate(filter, now);
-  const halls = floor.halls.map((hall) => {
-    const all = floor.looms.filter((t) => t.hall === hall);
-    return { hall, all, visible: all.filter(predicate), pct: summarizeFloor(all, now).todayPct };
-  });
-  const bestHall = bestHallOf(halls);
-  const starId = useMemo(() => shiftStarLoom(floor.looms), [floor.looms]);
+  const model = useFloorModel(floor, now, filter);
+  const selection = useFloorSelection({ order: model.order, present: model.present, root, enabled: !tv, escBlocked: selectedId !== null });
+  const { click } = selection;
+  const onCard = useCallback((id: string, mods: ClickMods) => click(id, mods) && setSelectedId(id), [click]);
   const selected = floor.looms.find((t) => t.id === selectedId) ?? null;
-  const empty = halls.every((h) => h.visible.length === 0);
   // Tam ekranda bütün holler aynı kolon ızgarasında: en kalabalık hol tek satıra sığar.
-  const columns = fullscreen.active ? Math.max(...halls.map((h) => h.all.length)) : undefined;
+  const columns = fullscreen.active ? Math.max(...model.halls.map((h) => h.all.length)) : undefined;
 
   return (
     <PageShell>
@@ -114,14 +174,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
           <FloorHintProvider enabled={!tv}>
             {tv && tvExit && <TvExitControl {...tvExit} onToggleFullscreen={tvExit.windowed ? fullscreen.toggleReal : undefined} />}
             {fullscreen.active ? (
-              <FullscreenHeader
-                now={now}
-                sampleData={sampleData}
-                updatedAt={floor.updatedAt}
-                stale={stale}
-                onExit={tv ? undefined : fullscreen.exit}
-                legend={<StatusLegend />}
-              />
+              <FullscreenHeader now={now} sampleData={sampleData} updatedAt={floor.updatedAt} stale={stale} onExit={tv ? undefined : fullscreen.exit} legend={<StatusLegend />} />
             ) : (
               <AppHeader
                 extra={sampleData ? <SampleDataBadge /> : notice}
@@ -132,28 +185,12 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
             )}
             <PageBody className={cn("min-h-0 space-y-4 p-4", fullscreen.active && "space-y-3 px-6 pt-3")}>
               <FloorSummary floor={floor} now={now} />
-              <OverdueStrip looms={floor.looms} now={now} onSelect={onSelect} />
-              {halls
-                .filter((h) => h.visible.length > 0)
-                .map((h) => (
-                  <HallSection
-                    key={h.hall}
-                    hall={h.hall}
-                    looms={h.visible}
-                    now={now}
-                    columns={columns}
-                    highlight={{ starId, bestHall: h.hall === bestHall, onSelect }}
-                  />
-                ))}
-              {empty && (
-                <p className="py-10 text-center text-muted-foreground">
-                  {floor.looms.length === 0
-                    ? "Salonda gösterilecek dokuma tezgahı yok."
-                    : "Bu seçimde tezgah yok — Göster: Tümü ile hepsini açın."}
-                </p>
-              )}
+              <OverdueStrip looms={floor.looms} now={now} onSelect={tv ? noSelect : select} />
+              <FloorHalls model={model} now={now} columns={columns} selection={tv ? null : selection} onCard={onCard} onDetail={select} />
+              {model.empty && <EmptyNote total={floor.looms.length} />}
               {!fullscreen.active && <StatusLegend />}
             </PageBody>
+            {!tv && <SelectionBar s={selection} onDetail={select} order={model.order} />}
             <LoomDetailSheet loom={selected} now={now} onClose={() => setSelectedId(null)} onOpenAlarm={tv ? undefined : onOpenAlarm} />
           </FloorHintProvider>
         </TabPortalProvider>

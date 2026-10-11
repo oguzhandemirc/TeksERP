@@ -6,6 +6,8 @@ import { MemoryRouter } from "react-router-dom";
 
 // Sayfa başlığı tercih sağlayıcısı ister; burada yalnız eylem düğmeleri gerekir.
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: ({ actions }: { actions?: React.ReactNode }) => <div>{actions}</div> }));
+// Seçim katmanının menüsü dokuma bayrağını react-query'den okur; burada bayrak sabit (kapalı) verilir.
+vi.mock("@/hooks/usePricingEnabled", async (orig) => ({ ...(await orig<object>()), useDokumaEnabled: () => false }));
 
 import { WeavingFloorView } from "./WeavingFloorView";
 import type { FloorState, LiveLoom } from "./types";

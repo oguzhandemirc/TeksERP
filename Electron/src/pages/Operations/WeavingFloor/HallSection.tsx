@@ -11,7 +11,10 @@ interface Props {
   hall: string;
   looms: readonly LiveLoom[];
   now: number;
-  highlight: { starId: string | null; bestHall: boolean; onSelect: (id: string) => void };
+  highlight: { starId: string | null; bestHall: boolean; onSelect: (id: string, mods: { toggle: boolean; range: boolean }) => void };
+  selected?: ReadonlySet<string>;
+  /** Hol başlığına çift tık: holün görünen tezgahlarını seç (TV'de verilmez). */
+  onSelectHall?: (hall: string) => void;
   /** Sabit kolon sayısı (tam ekran: en kalabalık holün tezgah adedi — holler hizalı, kaydırmasız). */
   columns?: number;
 }
@@ -25,12 +28,12 @@ function gridColumnsOf(columns: number | undefined): string {
   return `repeat(auto-fill, minmax(max(6.5em, calc((100% - ${columns - 1} * 0.625rem) / ${columns})), 1fr))`;
 }
 
-export function HallSection({ hall, looms, now, highlight, columns }: Props) {
+export function HallSection({ hall, looms, now, highlight, columns, selected, onSelectHall }: Props) {
   const s = summarizeFloor(looms, now);
   const ratio = (s.todayPct ?? 0) / 100;
   return (
     <section aria-label={hall} className="space-y-2">
-      <header className="flex items-center gap-3">
+      <header className="flex select-none items-center gap-3" data-hall-header={hall} onDoubleClick={onSelectHall && (() => onSelectHall(hall))}>
         <h2 className="text-[1.15em] font-extrabold" style={{ color: hsl("var(--ds-ink)") }}>
           {hall}
         </h2>
@@ -60,7 +63,7 @@ export function HallSection({ hall, looms, now, highlight, columns }: Props) {
         style={{ gridTemplateColumns: gridColumnsOf(columns) }}
       >
         {looms.map((t) => (
-          <LoomCard key={t.id} loom={t} now={t.openStop ? now : 0} star={highlight.starId === t.id} onSelect={highlight.onSelect} />
+          <LoomCard key={t.id} loom={t} now={t.openStop ? now : 0} star={highlight.starId === t.id} onSelect={highlight.onSelect} selected={selected?.has(t.id)} />
         ))}
       </div>
     </section>
