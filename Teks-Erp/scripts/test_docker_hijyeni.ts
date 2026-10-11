@@ -36,6 +36,9 @@
 //      sorulmadan önce yerel tabanla (arşivden) kıyaslar — hüküm `imaj-kokeni.mjs` (imaja girmez) sondalarla ölçülür.
 //      §5p CI'da docker.io çekimi yalnız `mirror.gcr.io/library/` aynasından (Docker Hub anonim 429 sınırı): servis/konteyner
 //      imajı, `docker pull|run`, test imajı değişkeni, `uses: docker://`; imaj derleyen iş daemon'a aynayı kurar.
+//      §5q PUBLIC ARTEFAKT HİJYENİ (G0a): hiçbir iş akışı kaynak haritasını ayrı artefakt yüklemez; korumalı içerik
+//      (.jsc · harita arşivi · .map · .tkmod · imaj arşivi) taşıyan ve `korumali-paket.yml`deki her yükleme 1 gün saklanır;
+//      harita arşivi korumalı yapıtın `harita-arsivi/` alt dizininde Mac'e ulaşır.
 //   §6 satıcı imajı (G2/G3) DURAĞAN: `satici/sunucu/scripts/` altındaki her CLI `dist-cli`'a derlenir ve
 //      `test -f` kapısında; compose'da `/dosyalar` yazılır, `/derlemeler` + `/yayin` salt okunur (⑨'un docker'sız ikizi).
 //   §7 güncelleyicinin yöneteceği düzen (GUNCELLEYICI-SAGLAMLIK L5): §7a–§7e `TEKSERP_GOC_ACILISTA` (yok/boş/1 =
@@ -816,7 +819,7 @@ function kokenIsAkisiStatik(yol: string, wf: string): string[] {
   if (!/npx tsx scripts\/imaj-kunye\.ts yaz --arsiv=/.test(is) || !/--native=native\/lisans-cekirdek\/dist-uretim\/lisans-cekirdek\.linux-x64-gnu\.node/.test(is)) ih.push("künye arşivden + üretim native'den yazılmıyor (imaj-kunye.ts yaz)");
   if (!is.includes(`name: ${KUNYE_YAPITI}\n`) || !is.includes(`imaj-kunye/${KUNYE_DOSYASI}`)) ih.push(`künye yapıtı (${KUNYE_YAPITI}/${KUNYE_DOSYASI}) yüklenmiyor`);
   if (!is.includes(`name: ${IMAJ_YAPITI}\n`)) ih.push(`imaj arşivi yapıtı (${IMAJ_YAPITI}) yüklenmiyor`);
-  if ((is.match(/retention-days: 7\n/g) ?? []).length !== 2) ih.push("iki yapıtın saklaması 7 gün değil");
+  if ((is.match(/retention-days: 1\n/g) ?? []).length !== 2) ih.push("iki yapıtın saklaması 1 gün değil (G0a)");
   // Taban imajlar yalnız Docker Hub'dan ya da beyanlı aynasından (mirror.gcr.io) gelir; başka ayna içerik kaynağını değiştirir.
   const aynalar = [...is.matchAll(/"registry-mirrors": \[([^\]]*)\]/g)].flatMap((m) => m[1]!.split(",").map((x) => x.trim()));
   if (aynalar.some((a) => a !== '"https://mirror.gcr.io"')) ih.push(`beyansız kayıt aynası: ${aynalar.join(", ")}`);
@@ -825,7 +828,7 @@ function kokenIsAkisiStatik(yol: string, wf: string): string[] {
 {
   const wf = oku(KORUMALI_IS_AKISI.yol);
   const g = kokenIsAkisiStatik(KORUMALI_IS_AKISI.yol, wf);
-  check("§5o ⭐ iş akışı: docker-linux-x64 sırsız + salt-okunur, üretim native, revision = github.sha, taban bekçisi, arşivden künye, iki yapıt 7 gün", g.length === 0, g.join(" | ") || "temiz");
+  check("§5o ⭐ iş akışı: docker-linux-x64 sırsız + salt-okunur, üretim native, revision = github.sha, taban bekçisi, arşivden künye, iki yapıt 1 gün", g.length === 0, g.join(" | ") || "temiz");
   const is = dockerIsi(wf) ?? "";
   const sondalar: Array<[string, string, string]> = [
     ["secrets. eklendi", KORUMALI_IS_AKISI.yol, wf.replace("          node-version: ${{ steps.nodesurum.outputs.surum }}\n\n      - name: Bağımlılıklar (Teks-Erp — künye", "          node-version: ${{ steps.nodesurum.outputs.surum }}\n          token: ${{ secrets.PAKET }}\n\n      - name: Bağımlılıklar (Teks-Erp — künye")],
@@ -922,6 +925,64 @@ function aynaIhlalleri(dosyalar: Record<string, string>): string[] {
     check(`§5p sonda: ${ad} → kırmızı`, uyg && g.length === 0 && aynaIhlalleri(d).length > 0, uyg ? aynaIhlalleri(d)[0] ?? "" : "MUTASYON UYGULANMADI");
   }
   check("§5p sonda: yerel etiket (adımın çıktısı) aynasız sayılmaz", aynaIhlalleri({ x: '          docker save "${{ steps.imaj.outputs.etiket }}"\n          docker run --rm "$etiket" true\n' }).length === 0);
+}
+
+// §5q — PUBLIC ARTEFAKT HİJYENİ (G0a): public repoda Actions artefaktı her GitHub hesabına açıktır.
+const KORUMALI_ICERIK = /\.jsc\b|harita-arsivi|koruma-arsiv|\.map\b|\.tkmod\b|korumali-imzasiz/;
+/** Her `actions/upload-artifact` adımının `with:` gövdesi (girintisi `with:`ten derin satırlar). */
+function yuklemeler(metin: string): string[] {
+  const satirlar = metin.split("\n"), sonuc: string[] = [];
+  for (let i = 0; i < satirlar.length; i++) {
+    if (!/^\s*(- )?uses: actions\/upload-artifact@/.test(satirlar[i]!)) continue;
+    const w = satirlar[i + 1] ?? "";
+    const girinti = /^(\s*)with:\s*$/.exec(w)?.[1]?.length;
+    if (girinti === undefined) { sonuc.push(""); continue; }
+    const govde: string[] = [];
+    for (let j = i + 2; j < satirlar.length && (satirlar[j]!.trim() === "" || /^(\s*)/.exec(satirlar[j]!)![1]!.length > girinti); j++) govde.push(satirlar[j]!);
+    sonuc.push(govde.join("\n"));
+  }
+  return sonuc;
+}
+function artefaktIhlalleri(dosyalar: Record<string, string>): string[] {
+  const ih: string[] = [];
+  for (const [ad, metin] of Object.entries(dosyalar)) {
+    if (/name:\s*kaynak-haritasi/.test(metin)) ih.push(`${ad}: kaynak haritası ayrı artefakt olarak yükleniyor`);
+    const korumaliAkis = ad === KORUMALI_IS_AKISI.yol;
+    for (const g of yuklemeler(metin)) {
+      const isim = /^\s*name:\s*(.+?)\s*$/m.exec(g)?.[1] ?? "(adsız)";
+      const gun = /^\s*retention-days:\s*(\d+)\s*$/m.exec(g)?.[1];
+      if ((korumaliAkis || KORUMALI_ICERIK.test(g)) && gun !== "1") ih.push(`${ad}: ${isim} saklaması ${gun ?? "varsayılan (90)"} gün — korumalı içerik 1 gün`);
+    }
+  }
+  const kp = dosyalar[KORUMALI_IS_AKISI.yol] ?? "";
+  if (yuklemeler(kp).length < 4) ih.push(`${KORUMALI_IS_AKISI.yol}: yükleme adımı ${yuklemeler(kp).length} — 4 bekleniyor (ayrıştırma ölçemedi)`);
+  const yapit = yuklemeler(kp).find((g) => /name: korumali-\$\{\{ matrix\.hedef \}\}/.test(g)) ?? "";
+  if (!/koruma-cikti\/harita-arsivi\/\*\*/.test(yapit) || !/cpSync\(process\.argv\[1\], 'koruma-cikti\/harita-arsivi'[^\n]*"\$\{\{ runner\.temp \}\}\/koruma-arsiv"/.test(kp)) ih.push("harita arşivi korumalı yapıta (harita-arsivi/) eklenmiyor — yığın çözümü kaybolur");
+  return ih;
+}
+{
+  const dizin = ".github/workflows";
+  const dosyalar: Record<string, string> = {};
+  for (const f of readdirSync(join(KOK, dizin)).filter((x) => /\.ya?ml$/.test(x))) dosyalar[`${dizin}/${f}`] = oku(`${dizin}/${f}`);
+  const g = artefaktIhlalleri(dosyalar);
+  check(`§5q ⭐ public artefakt: ayrı harita artefaktı yok, korumalı içerik + korumali-paket.yml yüklemeleri 1 gün (${Object.keys(dosyalar).length} iş akışı)`, g.length === 0, g.join(" | ") || "temiz");
+  const KP = KORUMALI_IS_AKISI.yol, KW = `${dizin}/kurulum-windows.yml`;
+  const mut = (f: string, a: string | RegExp, b: string): Record<string, string> => ({ ...dosyalar, [f]: dosyalar[f]!.replace(a, b) });
+  const ayriHarita = "\n      - name: Kaynak haritası arşivi\n        uses: actions/upload-artifact@v4\n        with:\n          name: kaynak-haritasi-${{ matrix.hedef }}\n          path: ${{ runner.temp }}/koruma-arsiv/**\n          retention-days: 1\n";
+  const sondalar: Array<[string, Record<string, string>]> = [
+    ["ayrı harita artefaktı geri", mut(KP, "\n  # ---------------------------------------------------------------------------\n  # LINUX GÜNCELLEYİCİ", `${ayriHarita}\n  # ---------------------------------------------------------------------------\n  # LINUX GÜNCELLEYİCİ`)],
+    ["korumalı yapıt 7 gün", mut(KP, /(koruma-cikti\/harita-arsivi\/\*\*\n {10}if-no-files-found: error\n {10})retention-days: 1/, "$1retention-days: 7")],
+    ["imaj arşivi 7 gün", mut(KP, /(compression-level: 0\n {10})retention-days: 1/, "$1retention-days: 7")],
+    ["imaj arşivi saklamasız (90)", mut(KP, /(compression-level: 0)\n {10}retention-days: 1/, "$1")],
+    ["başka akışta .jsc 7 gün", mut(KW, "path: ${{ env.KURULUM_CIKTI }}", "path: |\n            ${{ env.KURULUM_CIKTI }}\n            dist/server.jsc")],
+    ["harita yapıttan düştü", mut(KP, "            koruma-cikti/harita-arsivi/**\n", "")],
+  ];
+  for (const [ad, d] of sondalar) {
+    const uyg = JSON.stringify(d) !== JSON.stringify(dosyalar);
+    const r = artefaktIhlalleri(d);
+    check(`§5q sonda: ${ad} → kırmızı`, uyg && g.length === 0 && r.length > 0, uyg ? r[0] ?? "" : "MUTASYON UYGULANMADI");
+  }
+  check("§5q zararsız yapıt (kurulum 7 gün, korumalı içeriksiz) serbest", !artefaktIhlalleri({ [KW]: dosyalar[KW] ?? "" }).some((x) => x.startsWith(KW)));
 }
 
 /** `imaj-imzala.mjs`: `--ci-kosu` köken hükmü bekçiden ve imza aracından (parola) ÖNCE, kimlik `docker save` arşivinden. */

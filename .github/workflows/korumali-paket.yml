@@ -16,6 +16,11 @@ name: Korumalı paket (.jsc)
 #
 # workflow_dispatch ile ELLE tetiklenir (otomatik push/PR'da KOŞMAZ: .jsc üretimi
 # yalnız yayın hazırlığında gerekir, her commit'te değil).
+#
+# YAPIT SAKLAMASI 1 GÜN (G0a, docs/design/GUVENLIK-TEHDIT-MODELI.md): repo public iken
+# artefakt her GitHub hesabına açıktır. Yapıtlar aynı yayın oturumunda indirilir;
+# kaynak haritası AYRI artefakt olmaz, korumalı yapıtın `harita-arsivi/` alt dizininde
+# gelir ve Mac'te pakete girmeden `~/.tekserp/kaynak-haritalari`na ayrılır.
 # =============================================================================
 
 # ORTAK PAKET (tek ortak paket O11a): müşteri/kanal girdisi YOK — yapıt müşteri taşımaz, filigran kurulumda.
@@ -59,7 +64,7 @@ jobs:
       - name: Runtime node ikilisi (SHA doğrulamalı)
         run: node scripts/koruma-runtime-indir.mjs ${{ matrix.hedef }} koruma-cikti
 
-      # Kaynak haritası REPO DIŞI — pakete girmez, yığın çözümü için ayrı artefakt.
+      # Kaynak haritası REPO DIŞI — pakete girmez; yapıtın harita-arsivi/ alt dizinine eklenir (aşağıda).
       # Ortak paket: güven çapası kipi ÜRETİM (G3), filigranda müşteri/kurulum null.
       - name: Korumalı derleme (esbuild minify → bytenode .jsc)
         working-directory: Teks-Erp
@@ -99,7 +104,12 @@ jobs:
           Copy-Item target/release/tekserp-hizmet.exe ../../koruma-cikti/runtime/tekserp-hizmet.exe
           Get-FileHash ../../koruma-cikti/runtime/tekserp-*.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" }
 
-      - name: Yapıtları yükle (.jsc + yükleyici + künye + runtime)
+      # Harita arşivi yapıtın yanına (pakete GİRMEZ: paketleme yalnız dist/ + runtime/ okur); ayrı artefakt yok.
+      - name: Kaynak haritası arşivini yapıta ekle
+        shell: bash
+        run: node -e "require('fs').cpSync(process.argv[1], 'koruma-cikti/harita-arsivi', { recursive: true })" "${{ runner.temp }}/koruma-arsiv"
+
+      - name: Yapıtları yükle (.jsc + yükleyici + künye + runtime + harita arşivi)
         uses: actions/upload-artifact@v4
         with:
           name: korumali-${{ matrix.hedef }}
@@ -108,17 +118,9 @@ jobs:
             koruma-cikti/dist/server.js
             koruma-cikti/dist/server-kunye.json
             koruma-cikti/runtime/**
+            koruma-cikti/harita-arsivi/**
           if-no-files-found: error
-          retention-days: 7
-
-      # Kaynak haritası AYRI artefakt (pakete GİRMEZ; yığın izini satırdan kaynağa çevirir).
-      - name: Kaynak haritası arşivi (repo dışı → artefakt)
-        uses: actions/upload-artifact@v4
-        with:
-          name: kaynak-haritasi-${{ matrix.hedef }}
-          path: ${{ runner.temp }}/koruma-arsiv/**
-          if-no-files-found: warn
-          retention-days: 7
+          retention-days: 1
 
   # ---------------------------------------------------------------------------
   # LINUX GÜNCELLEYİCİ (GUNCELLEYICI-SAGLAMLIK L3): `backend-oci` teslim paketine giren linux-x64 ikilisi.
@@ -177,7 +179,7 @@ jobs:
             guncelleyici-cikti/guncelleyici-kunye.json
             guncelleyici-cikti/SHA256SUMS
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
   # ---------------------------------------------------------------------------
   # KORUMALI LINUX İMAJI — RESMÎ DERLEME KÖKENİ (Linux müşterisinin imzalı paketi yalnız buradan doğar)
@@ -267,7 +269,7 @@ jobs:
           name: korumali-imaj-kunye-linux-x64
           path: imaj-kunye/imaj-kunye.json
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
       - name: İmzasız taban imaj arşivi
         uses: actions/upload-artifact@v4
@@ -276,4 +278,4 @@ jobs:
           path: imaj-cikti/tekserp-korumali-imzasiz-linux-x64.tar.gz
           if-no-files-found: error
           compression-level: 0
-          retention-days: 7
+          retention-days: 1
