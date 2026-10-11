@@ -927,7 +927,7 @@ function kurulumOlcumIhlalleri(kur: string): string[] {
   }
 }
 
-// §24 — pm2 yolu DONDURULDU (yönetici kararı 2026-10-01, geçiş dönemi çift yol). adnansahin ve demofabrika
+// §24 — pm2 yolu DONDURULDU (yönetici kararı 2026-10-01, geçiş dönemi çift yol). adnansahin
 //   pm2 düzeninde; geçişe kadar acil düzeltme ESKİ yolla (kur.ps1 -Paket) kurulabilmeli — o yüzden dosyalar
 //   KALIR ve ÇALIŞIR, ama yeni özellik almaz. Özet LF'ye normalize içerikten (checkout CRLF'i fark yaratmaz).
 //   Kaldırma koşulu: filoda pm2 düzeninde kurulum kalmaması (portal filo görünümü) — o gün bu tablo da gider.

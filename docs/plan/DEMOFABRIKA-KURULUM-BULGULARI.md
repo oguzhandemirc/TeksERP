@@ -3,7 +3,7 @@
 > **Ne bu belge:** 2026-10-02/03'te kullanıcı demofabrika'yı "yeni bir müşteri" gibi baştan kurdu: setup.exe, lisans portalı, panel, tablet. Bu belge o kurulumda görülenleri ve ardından yapılacak işleri sıralar. Her madde **ne oldu → ne olmalı** biçimindedir. Her bölüm kendi içinde önem sırasındadır.
 > **Kimlikler:** K1…K11 bulgu numarasıdır. Lisans kademeleri (K0–K5) karışmasın diye metinde "kademe K3" diye yazılır.
 > **Kararlar:** bu turda verilen kullanıcı kararları arşivde: `docs/history/arsiv/2026-10.md` → "2026-10-02 — Müşteri sunucusu Tailscale ağımıza alınmaz" · "2026-10-02 — Sunucu saati kilitlenemez" · "2026-10-03 — Tek ana dal + sürüm başına TEK ortak paket" · "2026-10-03 — adnansahin dondurulur".
-> **Durum:** açık iş listesi. İş bitince belge `docs/history/`e taşınır.
+> **Durum:** açık iş listesi. İş bitince belge `docs/history/`e taşınır. demofabrika kurulumu ve güncelleme kanalı 2026-10-11'de KALDIRILDI (bulgular ürüne dair olduğu için liste geçerli kalır; "demofabrika'da" diyen maddeler geçmiş bağlamıdır).
 
 ## 0. Sıralı iş listesi (kullanıcı onayı 2026-10-04)
 

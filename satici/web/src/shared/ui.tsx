@@ -41,6 +41,17 @@ export function Section({ title, actions, children }: { title: string; actions?:
   );
 }
 
+/** Pasif (emekli) satırları varsayılan gizleyen süzgeç; pasif satır yoksa çizilmez. */
+export function InactiveToggle({ shown, count, onChange }: { shown: boolean; count: number; onChange: (shown: boolean) => void }) {
+  if (count === 0) return null;
+  return (
+    <label className="check">
+      <input type="checkbox" checked={shown} onChange={(e) => onChange(e.target.checked)} />
+      Pasifleri göster ({count})
+    </label>
+  );
+}
+
 export function PageTitle({ title, sub, actions }: { title: string; sub?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="page-title">

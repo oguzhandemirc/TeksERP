@@ -1,5 +1,7 @@
 # Senaryo — sıfırdan yeni müşteriye satış (`demofabrika`, thinkpad-1)
 
+> **KALDIRILDI 2026-10-11 (kullanıcı kararı):** thinkpad-1 kurulumu kaldırıldı, `demofabrika` güncelleme kanalının yayın ağacı güncelleme sunucusundan silindi (yedek Mac `~/.tekserp/arsiv/demofabrika-2026-10-11/`); satıcıdaki kanal satırı pasif kalır. Bu belge yalnız GEÇMİŞ kaydıdır — yeni deneme kurulumu ortak paket + `test` güncelleme grubuyla yapılır. Not: `docs/history/arsiv/2026-10.md` → "2026-10-11 — demofabrika güncelleme kanalı kaldırıldı".
+
 > **Durum (2026-09-30):** TASLAK. Kullanıcı kararı: bu gecenin işleri bitince thinkpad-1'deki testfabrika kurulumu silinir ve yeni bir müşteriye satış baştan sona, lisans **ZORUNLU** kipte koşulur. Kullanıcı adımları kendisi yapar; §0'ı yönetici oturum (1e) ve dilim oturumları hazırlar.
 > **Tek hikâye:** "Demo Fabrika Tekstil" TeksERP satın alıyor. Sunucusu thinkpad-1 (Windows 11, Tailscale `thinkpad-1`), sahadaki tableti Galaxy Tab A9+. Firma adı yalnız kurulumda `company.name` ayarına yazılır; koda, kanal kaydına ve pakete girmez.
 > **Kanal:** `demofabrika` — HAZIRLIK türü, AYNASIZ (demo/test müşterisi: hiçbir üretim kanalının terfi kaynağı değildir, ona yayın terfi istemez), görünür etiket "DEMO FABRİKA" (`deploy/kanallar.json`; reçete `docs/RECETELER.md` § Yeni müşteri kanalı, 2. adım).

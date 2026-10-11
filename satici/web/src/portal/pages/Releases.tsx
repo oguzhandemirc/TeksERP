@@ -1,4 +1,4 @@
-// SÜRÜMLER / GÜNCELLEME GRUPLARI / TERFİ — grup (ve emekli kanal) başına: kiraya akan kayıtlı güncel sürümler · güncelleme sunucusunda
+// SÜRÜMLER / GÜNCELLEME GRUPLARI / TERFİ — grup (ve pasif kanal; varsayılan gizli) başına: kiraya akan kayıtlı güncel sürümler · güncelleme sunucusunda
 // YAYINDA olan (salt-okunur yayın kökü: latest.yml · OTA manifesti · APK künyesi) · yayın defteri TSV ·
 // yayın betiklerinin imzalı bildirimleri. Yayın kökü okunamazsa "ölçülemedi" — boş liste "yayın yok" değildir.
 // Bildirim kayıtlı sürümü DEĞİŞTİRMEZ; ayrışma burada görünür, kayıtlı sürümü Güncelleme grupları ekranı değiştirir.
@@ -10,7 +10,7 @@ import { fmtDateTime } from "../../shared/format";
 import { useGet } from "../../shared/hooks";
 import { label } from "../../shared/labels";
 import { useApi, useCan } from "../../shared/session";
-import { Badge, Button, ErrorText, Field, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
+import { Badge, Button, ErrorText, Field, InactiveToggle, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 import { groupName } from "../../shared/update-groups";
 import { NOTICE_EVENT_LABEL, type ChannelRelease, type LedgerRow, type Publisher, type ReleaseOverview } from "../distribution/types";
 
@@ -33,6 +33,11 @@ function published(c: ChannelRelease): string {
   return parts.length ? parts.join(" · ") : "yayın yok";
 }
 
+/** Kayıtlı ama pasif (emekli) kanal satırı; kayıtsız dizin pasif sayılmaz (kayıt dışı bir yayın ağacıdır, görünür kalır). */
+function isInactive(c: ChannelRelease): boolean {
+  return c.kayitli?.aktif === false;
+}
+
 function registered(c: ChannelRelease): string {
   if (!c.kayitli) return "kanal kayıtlı değil";
   const v = c.kayitli.guncelSurumler;
@@ -48,16 +53,28 @@ function lastNotice(c: ChannelRelease): string {
 export function ReleasesPage() {
   const overview = useGet<ReleaseOverview>(["surumler"], "/surumler");
   const [open, setOpen] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
   const data = overview.data;
-  const selected = data?.kanallar.find((c) => c.kod === open) ?? null;
+  const all = data?.kanallar ?? [];
+  const inactiveCount = all.filter(isInactive).length;
+  const rows = showInactive ? all : all.filter((c) => !isInactive(c));
+  const selected = rows.find((c) => c.kod === open) ?? null;
   return (
     <>
       <PageTitle title="Sürümler" sub="Güncelleme grubu başına kayıtlı güncel sürüm, yayında olan ve yayın/terfi bildirimleri." />
       <QueryState isLoading={overview.isLoading} error={overview.error} />
       {data ? (
-        <Section title="Güncelleme grupları" actions={<Badge tone={data.yayinKoku === "OLCULDU" ? "ok" : "warn"}>{ROOT_STATE_TEXT[data.yayinKoku]}</Badge>}>
+        <Section
+          title="Güncelleme grupları"
+          actions={
+            <>
+              <InactiveToggle shown={showInactive} count={inactiveCount} onChange={setShowInactive} />
+              <Badge tone={data.yayinKoku === "OLCULDU" ? "ok" : "warn"}>{ROOT_STATE_TEXT[data.yayinKoku]}</Badge>
+            </>
+          }
+        >
           <Table
-            rows={data.kanallar}
+            rows={rows}
             rowKey={(c) => c.kod}
             empty="Güncelleme grubu yok"
             columns={[
@@ -65,7 +82,7 @@ export function ReleasesPage() {
                 header: "Grup",
                 render: (c) => (
                   <>
-                    {groupName(c.kod)} {c.grup ? null : <Badge tone="warn">{c.kayitli ? "Emekli kanal" : "Kayıtsız dizin"}</Badge>}
+                    {groupName(c.kod)} {c.grup ? null : <Badge tone="warn">{c.kayitli ? "Pasif kanal" : "Kayıtsız dizin"}</Badge>}
                   </>
                 ),
               },

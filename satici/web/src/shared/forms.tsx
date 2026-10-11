@@ -190,7 +190,7 @@ export function InstallationFormModal({
   const [sync, setSync] = useState(String(installation?.esitlemeAraligiDk ?? SYNC_MINUTES_DEFAULT));
   const [retention, setRetention] = useState(retentionValue(installation ? installation.bulutSaklamaAy : CLOUD_RETENTION_DEFAULT));
   const write = useWrite<Installation>((body) => (installation ? api.patch(`/kurulumlar/${installation.id}`, body) : api.post("/kurulumlar", body)));
-  // Düzenlenen kurulumun bugünkü grubu listede olmasa da (emekli kanal ya da tavandan çıkmış) seçili görünür.
+  // Düzenlenen kurulumun bugünkü grubu listede olmasa da (pasif kanal ya da tavandan çıkmış) seçili görünür.
   const currentRetired = installation !== undefined && !channelOptions.includes(installation.kanalKodu);
   const channelChoices = installation && currentRetired ? [installation.kanalKodu, ...channelOptions] : channelOptions;
   const groupChanged = installation !== undefined && channel !== installation.kanalKodu;
@@ -231,7 +231,7 @@ export function InstallationFormModal({
           {channelChoices.map((c) => (
             <option key={c} value={c}>
               {groupName(c)}
-              {installation && currentRetired && c === installation.kanalKodu ? " — emekli kanal" : ""}
+              {installation && currentRetired && c === installation.kanalKodu ? " — pasif kanal" : ""}
             </option>
           ))}
         </select>

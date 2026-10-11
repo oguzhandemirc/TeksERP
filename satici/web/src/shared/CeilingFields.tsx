@@ -75,7 +75,7 @@ export function CeilingFields({
   channels: readonly Channel[];
 }) {
   const set = (patch: Partial<CeilingDraft>) => onChange({ ...draft, ...patch });
-  // Tavana yalnız aktif grup yazılır (sunucu reddeder); tavanda kalmış emekli kanal kaldırılabilsin diye görünür.
+  // Tavana yalnız aktif grup yazılır (sunucu reddeder); tavanda kalmış pasif kanal kaldırılabilsin diye görünür.
   const groups = selectableGroups(channels);
   const visible = channels.filter((c) => groups.includes(c.kod) || draft.channels.includes(c.kod));
   return (
@@ -112,7 +112,7 @@ export function CeilingFields({
           {visible.map((c) => (
             <label key={c.kod} className="check">
               <input type="checkbox" checked={draft.channels.includes(c.kod)} onChange={() => set({ channels: toggle(draft.channels, c.kod) })} />
-              {c.ad} ({c.kod}){groups.includes(c.kod) ? "" : " — emekli kanal, kaldırın"}
+              {c.ad} ({c.kod}){groups.includes(c.kod) ? "" : " — pasif kanal, kaldırın"}
             </label>
           ))}
         </div>

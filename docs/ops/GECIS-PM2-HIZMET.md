@@ -227,6 +227,8 @@ Geçiş adları ve lisans satıcısını paketin KENDİ kimliğinden çözer (`P
 
 ## 9. demofabrika
 
+> **KALDIRILDI 2026-10-11:** kurulum yok, kanalın yayın ağacı silindi; bu bölüm geçmiş kaydıdır (`docs/history/arsiv/2026-10.md` → "2026-10-11 — demofabrika güncelleme kanalı kaldırıldı").
+
 2026-10-02'de **2.13.0 ile pm2 düzeninde** kurulur (`ilk-kurulum.ps1` + `kur.ps1`). 2.13.0 Dağıtım v2 ÖNCESİDİR (hizmet ikilileri yok) ⇒ önce `kur.ps1 -Paket` ile Dağıtım v2 paketine pm2 düzeninde geçilir, sonra bu runbook aynen.
 
 Farklar:

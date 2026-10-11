@@ -1,7 +1,7 @@
 // GÜNCELLEME GRUPLARI (eski adıyla kanal) — satıcının `kanal` satırı: test · oncu · genel, terfi sırasıyla.
 // Gruplar migration'la doğar, portaldan AÇILMAZ; kod ve tür değişmez. Düzenlenen: ad · sıra · güncel sürümler
-// (kiraya gider; fabrika bir sonraki yoklamada görür). Grup olmayan eski satır EMEKLİdir: yeni kurulum almaz,
-// indirme belirteci basmaz, kirası sürer. Yazma yalnız yönetici (kanal:yonet).
+// (kiraya gider; fabrika bir sonraki yoklamada görür). Grup olmayan eski satır PASİFtir (kodda emekli): yeni kurulum
+// almaz, indirme belirteci basmaz, kirası sürer; listede varsayılan gizlidir. Yazma yalnız yönetici (kanal:yonet).
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useWrite } from "../../shared/attempt";
@@ -10,7 +10,7 @@ import { useChannels } from "../../shared/hooks";
 import { useApi, useCan } from "../../shared/session";
 import type { Channel, ChannelVersions } from "../../shared/types";
 import { groupName } from "../../shared/update-groups";
-import { Badge, Button, ErrorText, Field, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
+import { Badge, Button, ErrorText, Field, InactiveToggle, Modal, ModalActions, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 
 /** Sunucunun `VersionTextSchema`sı (X.Y.Z, isteğe bağlı ön sürüm eki). */
 export const VERSION_PATTERN = /^\d{1,4}\.\d{1,4}\.\d{1,6}([-+][0-9A-Za-z.-]{1,40})?$/;
@@ -34,6 +34,9 @@ export function ChannelsPage() {
   const queryClient = useQueryClient();
   const list = useChannels();
   const [editing, setEditing] = useState<Channel | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  const inactiveCount = list.channels.filter((r) => !r.aktif).length;
+  const rows = showInactive ? list.channels : list.channels.filter((r) => r.aktif);
   const done = () => {
     setEditing(null);
     void queryClient.invalidateQueries({ queryKey: ["kanallar"] });
@@ -42,19 +45,19 @@ export function ChannelsPage() {
     <>
       <PageTitle
         title="Güncelleme grupları"
-        sub="Kurulum bir güncelleme grubuna bağlıdır (test → öncü → genel); grup açılmaz, yalnız adı, sırası ve güncel sürümleri düzenlenir. Emekli kanal yeni kurulum almaz ve indirme bağlantısı vermez."
+        sub="Kurulum bir güncelleme grubuna bağlıdır (test → öncü → genel); grup açılmaz, yalnız adı, sırası ve güncel sürümleri düzenlenir. Pasif kanal yeni kurulum almaz ve indirme bağlantısı vermez."
       />
-      <Section title="Liste">
+      <Section title="Liste" actions={<InactiveToggle shown={showInactive} count={inactiveCount} onChange={setShowInactive} />}>
         <QueryState isLoading={list.isLoading} error={list.error} />
         <Table
-          rows={list.channels}
+          rows={rows}
           rowKey={(r) => r.id}
           empty="Güncelleme grubu yok (satıcı sunucusu migration'ı uygulanmamış)"
           columns={[
             { header: "Sıra", render: (r) => r.sira ?? "—", className: "num-col" },
             { header: "Grup", render: (r) => <code>{r.kod}</code> },
             { header: "Ad", render: (r) => r.ad },
-            { header: "Durum", render: (r) => (r.aktif ? <Badge tone="ok">Aktif</Badge> : <Badge tone="warn">Emekli</Badge>) },
+            { header: "Durum", render: (r) => (r.aktif ? <Badge tone="ok">Aktif</Badge> : <Badge tone="warn">Pasif</Badge>) },
             { header: "Güncel sürümler", render: (r) => versionsSummary(r.guncelSurumler) },
             { header: "Kurulum", render: (r) => r.kurulumSayisi, className: "num-col" },
             { header: "Kayıt", render: (r) => fmtDate(r.createdAt) },
@@ -89,7 +92,7 @@ function ChannelModal({ channel, onClose, onDone }: { channel: Channel; onClose:
   return (
     <Modal title={`Güncelleme grubu: ${groupName(channel.kod)}`} onClose={onClose} busy={write.pending}>
       <p className="muted">
-        Grup kodu ve türü değişmez (indirme yolunun öneki ve kurulumların bağı).{channel.aktif ? "" : " Bu kanal emeklidir: yeni kurulum almaz, indirme bağlantısı vermez."}
+        Grup kodu ve türü değişmez (indirme yolunun öneki ve kurulumların bağı).{channel.aktif ? "" : " Bu kanal pasiftir: yeni kurulum almaz, indirme bağlantısı vermez."}
       </p>
       <Field label="Ad">
         <input value={name} maxLength={200} onChange={(e) => setName(e.target.value)} />

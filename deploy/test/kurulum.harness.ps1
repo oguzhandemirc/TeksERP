@@ -187,14 +187,14 @@ $T = "https://lisans-test.etkiliyazilim.com"; $P = "https://lisans.etkiliyazilim
 function LisOz($r) { return "etkili=$($r.etkili) kaynak=$($r.kaynak) yaz=$($r.yaz) uyari=$(@($r.uyarilar).Count): $(@($r.uyarilar) -join ' || ')" }
 $r = LisansSunucusuKarari $T $P "" $null "testfabrika"
 Olc "lisans.bos-alan-kanaldan" ($r.etkili -ceq $T -and $r.kaynak -ceq "kanal" -and $r.yaz -and @($r.uyarilar).Count -eq 0) (LisOz $r)
-$r = LisansSunucusuKarari $P $P "" $null "demofabrika"
+$r = LisansSunucusuKarari $P $P "" $null "genel"
 Olc "lisans.uretim-kanali-satir-yazmaz" ($r.etkili -ceq $P -and -not $r.yaz -and @($r.uyarilar).Count -eq 0) (LisOz $r)
 $r = LisansSunucusuKarari $T $P "https://LISANS-TEST.etkiliyazilim.com/" $null "testfabrika"
 Olc "lisans.esit-elle-uyarisiz" ($r.etkili -ceq $T -and $r.kaynak -ceq "kanal" -and $r.yaz -and @($r.uyarilar).Count -eq 0) (LisOz $r)
 $r = LisansSunucusuKarari $T $P $P $null "testfabrika"
 $u = "$(@($r.uyarilar) -join ' ')"
 Olc "lisans.farkli-elle-UYARI" ($r.etkili -ceq $P -and $r.kaynak -ceq "cevap" -and -not $r.yaz -and $u.Contains("FARKLI") -and $u.Contains("beklenen $T") -and $u.Contains("girilen $P")) (LisOz $r)
-$r = LisansSunucusuKarari $P $P $X $null "demofabrika"
+$r = LisansSunucusuKarari $P $P $X $null "genel"
 Olc "lisans.farkli-elle-yazilir" ($r.etkili -ceq $X -and $r.yaz -and "$(@($r.uyarilar))".Contains("beklenen $P")) (LisOz $r)
 $r = LisansSunucusuKarari "" "" "" $null ""
 $r2 = LisansSunucusuKarari "" "" $X $null ""

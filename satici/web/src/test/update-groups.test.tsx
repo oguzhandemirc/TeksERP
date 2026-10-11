@@ -1,7 +1,8 @@
 // GÜNCELLEME GRUBU (tek ortak paket O2, arayüz yarısı; karar sunucuda, bekçi `satici/sunucu/scripts/test_guncelleme_grubu.ts`).
 // Grup portaldan AÇILMAZ (açma formu yok, yalnız ad · sıra · sürümler düzenlenir); kurulum formu yalnız AKTİF grupları sunar,
 // boş seçim gövdeye kanalKodu koymaz (sunucu sınıftan seçer, K-3); düzenlemede grup yalnız değişince gider ve "geri sürüm yok"
-// uyarısı görünür; emekli kanaldaki kurulumun grubu seçili görünür ama yeni seçenek olarak sunulmaz.
+// uyarısı görünür; pasif (emekli) kanaldaki kurulumun grubu seçili görünür ama yeni seçenek olarak sunulmaz; liste pasifi
+// varsayılan gizler ("Pasifleri göster").
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
@@ -48,12 +49,38 @@ function withGroup(kanalKodu: string): InstallationDetail {
 }
 
 describe("güncelleme grupları ekranı", () => {
-  it("grup açma düğmesi yok; emekli kanal rozetli; düzenleme ad · sıra · sürümleri PATCH eder (kod/tür yok)", async () => {
+  it("pasif kanal varsayılan gizli; \"Pasifleri göster\" açınca rozetli görünür, kapatınca yine gizlenir", async () => {
+    const user = userEvent.setup();
+    open("/kanallar");
+    const toggle = await screen.findByRole("checkbox", { name: "Pasifleri göster (1)" });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getAllByText("Aktif")).toHaveLength(3);
+    expect(screen.queryByText("demofabrika")).toBeNull();
+    expect(screen.queryByText("Pasif")).toBeNull();
+    await user.click(toggle);
+    expect(screen.getByText("demofabrika", { selector: "code" })).toBeInTheDocument();
+    expect(screen.getByText("Pasif")).toBeInTheDocument();
+    expect(screen.queryByText(/Emekli/)).toBeNull();
+    await user.click(toggle);
+    expect(screen.queryByText("Pasif")).toBeNull();
+  });
+
+  it("pasif kanal yoksa süzgeç çizilmez", async () => {
+    renderApp({
+      base: "/portal/api",
+      routes: PORTAL_ROUTES,
+      path: "/kanallar",
+      handlers: { "GET /oturum": () => ({ data: sessionFor("SATICI_YONETICI") }), "GET /kanallar": () => ({ data: CHANNELS.filter((c) => c.aktif) }) },
+    });
+    expect(await screen.findAllByText("Aktif")).toHaveLength(3);
+    expect(screen.queryByRole("checkbox", { name: /Pasifleri göster/ })).toBeNull();
+  });
+
+  it("grup açma düğmesi yok; düzenleme ad · sıra · sürümleri PATCH eder (kod/tür yok)", async () => {
     const user = userEvent.setup();
     const { calls } = open("/kanallar");
-    await screen.findByText("Emekli");
+    await screen.findByRole("checkbox", { name: /Pasifleri göster/ });
     expect(screen.queryByRole("button", { name: /Yeni kanal|Yeni grup/ })).toBeNull();
-    expect(screen.getByText("Emekli")).toBeInTheDocument();
     expect(screen.getAllByText("Aktif")).toHaveLength(3);
     await user.click(screen.getAllByRole("button", { name: "Düzenle" })[1]!);
     const dialog = await screen.findByRole("dialog", { name: /Güncelleme grubu: Öncü \(oncu\)/ });
@@ -112,7 +139,7 @@ describe("kurulum formu — güncelleme grubu", () => {
     expect(w[1]!.body).toMatchObject({ kanalKodu: "oncu" });
   });
 
-  it("emekli kanaldaki kurulum: bugünkü kanal seçili ve işaretli, diğer emekli kanal sunulmaz, boş seçenek yok", async () => {
+  it("pasif kanaldaki kurulum: bugünkü kanal seçili ve işaretli, diğer pasif kanal sunulmaz, boş seçenek yok", async () => {
     const user = userEvent.setup();
     open(`/kurulumlar/${INSTALLATION_DB_ID}`, withGroup("demofabrika"));
     await user.click(await screen.findByRole("button", { name: "Düzenle" }));
@@ -120,6 +147,6 @@ describe("kurulum formu — güncelleme grubu", () => {
     const group = within(dialog).getByLabelText(/^Güncelleme grubu/) as HTMLSelectElement;
     expect(group.value).toBe("demofabrika");
     const options = within(group).getAllByRole("option").map((o) => o.textContent);
-    expect(options).toEqual(["demofabrika — emekli kanal", "Test (test)", "Öncü (oncu)", "Genel (genel)"]);
+    expect(options).toEqual(["demofabrika — pasif kanal", "Test (test)", "Öncü (oncu)", "Genel (genel)"]);
   });
 });

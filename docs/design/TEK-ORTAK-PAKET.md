@@ -379,7 +379,7 @@ Kapsam yetmezse genişletmek ayrı karardır → KARAR K-9.
 ### 8.2 Emekliler
 
 - **testfabrika:** kanal kaydı donuk dosyada kalır. Yayın ağacı VDS `~/emekli/testfabrika-html-20261005`. Silinmesi ayrı iş (kullanıcı cümlesiyle, yeni test kurulumu çalışınca).
-- **demofabrika:** kaldırıldı. Satıcıdaki kanal satırı `aktif=false` olur (O2 migration'ı). Kurulum kaydına migration dokunmaz (1e-KARAR 2026-10-06, §8.6): etkin kaldıkça kira alır, indirme belirteci almaz; iptal/pasif kullanıcının portal eylemidir. D0 (§8.5): ikisi de bugün etkin; kurulum `ETKIN`, son yoklama 2026-10-05 21:59 UTC.
+- **demofabrika:** kaldırıldı. Satıcıdaki kanal satırı `aktif=false` olur (O2 migration'ı). Kurulum kaydına migration dokunmaz (1e-KARAR 2026-10-06, §8.6): etkin kaldıkça kira alır, indirme belirteci almaz; iptal/pasif kullanıcının portal eylemidir. D0 (§8.5): ikisi de bugün etkin; kurulum `ETKIN`, son yoklama 2026-10-05 21:59 UTC. **2026-10-11:** kurulum `IPTAL` (son yoklama aynı), güncelleme sunucusundaki `html/demofabrika` + `defter/demofabrika-YAYIN-DEFTERI.tsv` yedeklenip silindi; kanal satırı pasif kalır, `deploy/kanallar.json` bloğu donuk dosyada kalır (testfabrika ile aynı).
 - **Hazırlık satıcısı:** emekli (2026-10-05). Kod izleri O14'te kalkar.
 
 ### 8.3 Sıra

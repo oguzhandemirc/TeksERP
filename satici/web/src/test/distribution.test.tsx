@@ -153,6 +153,33 @@ describe("sürümler", () => {
   });
 });
 
+describe("sürümler — pasif kanal süzgeci", () => {
+  const row = (kod: string, grup: boolean, kayitli: { aktif: boolean } | null) => ({
+    kod,
+    grup,
+    kayitli: kayitli ? { ad: kod, tur: "uretim", sira: null, aktif: kayitli.aktif, guncelSurumler: {} } : null,
+    yayinda: { panel: { surum: "1.4.2", degisti: null }, tabletOta: [], tabletApk: null },
+    defter: null,
+    defterTablet: null,
+    defterBackend: null,
+    bildirimler: [],
+  });
+  const overview = { yayinKoku: "OLCULDU", kanallar: [row("test", true, { aktif: true }), row("demofabrika", false, { aktif: false }), row("eski-dizin", false, null)] };
+
+  it("pasif kanal varsayılan gizli, kayıtsız dizin görünür; \"Pasifleri göster\" açınca \"Pasif kanal\" rozetiyle görünür", async () => {
+    const user = userEvent.setup();
+    openReleases("SATICI_OPERATOR", overview);
+    const toggle = await screen.findByRole("checkbox", { name: "Pasifleri göster (1)" });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText("Kayıtsız dizin")).toBeTruthy();
+    expect(screen.queryByText("Pasif kanal")).toBeNull();
+    expect(screen.queryByText(/demofabrika/)).toBeNull();
+    await user.click(toggle);
+    expect(screen.getByText("Pasif kanal")).toBeTruthy();
+    expect(screen.queryByText(/Emekli/)).toBeNull();
+  });
+});
+
 describe("dosyalar", () => {
   it("gövdesi budanan dosyada indirme yok ve rozet var; taze dosya ham uçtan iner", async () => {
     const file = (id: string, budandi: string | null) => ({ id, musteriId: CUSTOMER, yon: "GELEN", ad: `${id}.pdf`, mime: "application/pdf", boyut: 10, sha256: "0".repeat(64), saklamaBitis: "2026-10-30T10:00:00Z", govdeBudandiAt: budandi, yukleyen: "musteri:yukleme/abcd", createdAt: "2026-09-30T10:00:00Z" });

@@ -14,7 +14,7 @@ const { UpdateApprovalPrompt } = await import("./UpdateApprovalPrompt");
 
 const bekleyenDurum = (p: Partial<UpdateStatus> = {}): UpdateStatus => ({
   kuruluSurum: "2.12.0",
-  kanal: "demofabrika",
+  kanal: "test",
   politika: { kip: "ONAYLI", pencere: null, hedefSurum: null, kaynak: "KIRA" },
   donuk: false,
   sonrakiPencere: null,
