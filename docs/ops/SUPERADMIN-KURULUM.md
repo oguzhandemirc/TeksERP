@@ -70,6 +70,46 @@ yolu — isterse panelden yeniden açar) ve `tokenVersion` artar → **açık ot
 > hesaba hiçbir şey yazılmaz (`quickPin` sistem genelinde benzersiz).
 > ⚠️ **Kurulu hesap yokken `--rotate`** hata verir; hesap YARATMAZ.
 
+**MÜHÜRLEME** (`--muhurle`, tek seferlik — G1): satıcı hesabı kurulum anahtarıyla
+mühürlenir; bundan sonra DB'de `isSystemAccount=true` yazmak ya da hesabın parola/PIN
+özetini DB'den değiştirmek en yetkili hesap VERMEZ. Yeni kurulumda hesap mühürlü doğar
+(bu adım gerekmez). Eski kurulumda panel ve `/api/admin/health` (`sistemHesabiMuhru.durum:
+"MUHURLENMELI"`) "Sistem hesabı mühürlenmemiş" der; komut **sunucuda, gerçek terminalde**
+bir kez koşulur, kullanıcı adını (tek hesap varsa boş) ve hesabın **mevcut parolasını** sorar:
+
+```bash
+# Linux Docker — compose dizininde (compose exec TTY verir)
+docker compose exec backend node dist/tools/superadmin-olustur.cjs --muhurle
+# ya da konteyner adıyla
+docker exec -it <konteyner> node dist/tools/superadmin-olustur.cjs --muhurle
+```
+
+```powershell
+# Windows — eski düzen (pm2, C:\TeksERP\app), yönetici konsolu
+cd C:\TeksERP\app
+node dist\tools\superadmin-olustur.cjs --muhurle
+
+# Windows — yeni düzen (hizmet, <kok>\current + yapilandirma\.env), yönetici konsolu
+$env:DOTENV_CONFIG_PATH='<kok>\yapilandirma\.env'; $env:LICENSE_DIR='<kok>\lisans'
+cd <kok>\current
+& "<kok>\current\runtime\node.exe" dist\tools\superadmin-olustur.cjs --muhurle
+```
+
+> ⚠️ **Parola doğruysa** mühür yazılır ve lisans dizinine mühür zorunluluğu dosyası
+> (`sistem-hesabi-mandali.json`) konur: "✅ Satıcı hesabı MÜHÜRLENDİ". **İkinci koşum
+> hiçbir şeye dokunmaz** ("Mühür zaten geçerli — DEĞİŞMEDİ"). Parola yanlışsa hiçbir şey
+> yazılmaz. RESTART GEREKMEZ.
+> ⚠️ **Mühürlenene kadar** davranış bugünkü gibidir (kimse kilitlenmez), yalnız uyarı
+> bandı görünür. Otomatik mühürleme bilerek YOKTUR: güncelleme anında DB'de sahte bir
+> işaretli hesap varsa onu da aklardı — parola kanıtı ancak bu komutla alınır.
+> ⚠️ **Mühürden sonra** başka işaretli (mühürsüz) hesap varsa komut sayısını söyler; o
+> hesaplar en yetkili hesap SAYILMAZ, giriş yapamaz (403 `SYSTEM_ACCOUNT_SEAL_INVALID`)
+> ve `admin:users` yetkili yönetici onları panelden pasife alabilir. Bu işaret panelden
+> konmaz — nasıl oluştuğunu inceleyin.
+> ⚠️ **`sistem-hesabi-mandali.json`yi silmeyin:** silmek mühür zorunluluğunu kaldırır
+> (dosya imzasızdır; tek gevşetme yolu silmektir). Yedekten dönüşte lisans dizini de
+> geri gelmelidir.
+
 > ⚠️ **Hesabı KALDIRMA** (satıcı ilişkisi biterse):
 > `UPDATE users SET "isSystemAccount"=false, "isActive"=false WHERE "isSystemAccount"=true;`
 > + **`pm2 restart tekserp` ŞART**. Kilit defteri TEK YÖNDE tazelenir: yokluktan

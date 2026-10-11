@@ -188,6 +188,10 @@ doğrulama sırrını üretip **QR olarak BİR KEZ** basar.
   olmadığı için** güncellemelerde kaybolmaz — ama yeni kurulumda **atlanırsa
   hesap hiç doğmaz** ve kimse fark etmez.
 
+- ⚠️ **Eski kurulumu güncellediyseniz** panel "Sistem hesabı mühürlenmemiş" der:
+  yönetici konsolunda `cd C:\TeksERP\app` → `node dist\tools\superadmin-olustur.cjs --muhurle`
+  (bir kez, hesabın mevcut parolasıyla; yeni düzen ve Docker komutu ayrıntıda).
+
 Ayrıntı: [`SUPERADMIN-KURULUM.md`](./SUPERADMIN-KURULUM.md).
 
 7. DB-level (migration ile DEĞİL, manuel, önerilir):

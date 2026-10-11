@@ -176,7 +176,7 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 - [ ] **Çatallar:** public dönemde alınmış çatallar ve klonlar private'tan etkilenmez — kod "sızmış" kabulü sürer (plan buna göre: asıl savunma G2/G3/G7).
 - **Kabul:** `gh api repos/{owner}/{repo} --jq .visibility` = `private`; `…/branches/main/protection` 200; ilk private haftanın dakika tüketimi ölçülüp arşive yazılır.
 
-### G1 — Sistem hesabı imzası (karar 7 ardılı) · **M**
+### G1 — Sistem hesabı imzası (karar 7 ardılı) · **M** · ✓ `e2a0eb240`…`e76f5b547` + D5 (2026-10-12; G1-6 kapsam dışı, §8-1 kararı bekliyor)
 
 - **Önkoşul:** `feature/varsayilan-superadmin` `main`e inmiş olmalı.
 - **Kapsam:**
@@ -190,6 +190,7 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 - **Kabul:** `test_superadmin` + `test_superadmin_provision` genişler: (a) DB'den `isSystemAccount=true` yapılan hesap mandallı kurulumda `["*"]` ALMAZ ve bulgu doğar (negatif sonda); (b) mühürlü hesap aynen çalışır; (c) `--muhurle` idempotent; (d) başka kurulum anahtarıyla atılmış mühür reddedilir (döküm başka sunucuya taşınınca süperadmin düşer); (e) mandalsız kurulumda davranış bugünküyle bayt eşit. Çekirdek tarafı `test_lisans_native_kahin` vektörleri.
 - **Mevcut kurulum / eski istemci:** adnansahin mandalsız kalır → davranış değişmez, yalnız bant. Panel `/auth/me` alanları aynı; yeni bant alanı eski panelde görünmez (zararsız). Yayın sırası: backend önce.
 - **Dürüst sınır:** root `LICENSE_DIR`'i okuyup çekirdeği çağırarak mühür üretebilir → **P**; DB-yalnız saldırgan (SQL enjeksiyonu, pgAdmin, başka sunucuya yüklenen döküm) → **E**.
+- **Durum (2026-10-12):** (1)–(5) ✓. Commit'ler: `e2a0eb240` şema + çekirdek işlevleri (`sealSystemAccount` · `verifySystemAccountSeal`) · `5caba6475` yetki/giriş kapısı, mühürlü doğuş, `--muhurle`, kimlik değişiminde yeniden mühür · `2f801abdb` güncelleyici 0.2.6 (ortak `Cargo.lock`) · `8a2886d08` hedef koruması aynı yüklemi okur (sahte işaretli hesap pasife alınabilir) · `e76f5b547` health `sistemHesabiMuhru` + `/auth/me` `systemAccountSealStatus` + panel bandı · D5 uçtan uca bekçi. **Sapmalar:** mühür parola/PIN/kart **kimlik özetlerini kapsar** (alan listesi parola özetini kapsamıyordu — DB'den özet değiştirip mührü bozmadan girilirdi); **`tokenVersion` girmez** (oturum iptal sayacı, her artışta yeniden mühür gerekirdi); mandal imzalı durum kaydı değil **`LICENSE_DIR/sistem-hesabi-mandali.json`** (imzasız; gevşetmenin tek yolu silmek, imza bunu engellemez). Mühür TS ve Rust'ta bayt-eşit (Ed25519 belirlenimci; kâhin vektörleri). **Bekçiler:** `test_sistem_hesabi_muhru` · `test_sistem_hesabi_muhru_uctan_uca` (bekci-http) · `test_lisans_native_kahin` (kabul (a)–(e) bunlarda ölçülür; `test_superadmin`/`test_superadmin_provision` yerine ayrı dosya). Gerekçe: `docs/history/arsiv/2026-10.md` 2026-10-12 G1 notu. **Kapsam dışı:** (6) T11 sertleştirmesi.
 
 ### G2 — Çalıştırma kilidi: yalnız etkinleştirme ekranı + çevrimdışı etkinleştirme (karar 2) · **M**
 
