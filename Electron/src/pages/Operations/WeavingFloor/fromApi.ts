@@ -93,6 +93,11 @@ function loomOf(l: WireLoom, asOf: number): LiveLoom {
   return {
     id: l.id,
     code: l.code,
+    name: l.name,
+    lines: l.productionLineCount ?? 1,
+    openRuns: l.openRuns
+      ? l.openRuns.map((r) => ({ id: r.id, line: r.productionLineNo, jobId: r.weavingOrderId, jobNo: r.weavingOrderNumber, startedAt: ms(r.startedAt) }))
+      : null,
     hall: l.hallName,
     monitored: l.state !== "UNMONITORED",
     stateSource: l.stateSource ?? null,

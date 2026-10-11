@@ -228,4 +228,17 @@ describe("fromApi — durum kaynağı", () => {
     expect(t.beams).toEqual([]);
     expect(criticalBeamOf(t.beams)).toBeFalsy();
   });
+
+  it("⭐ hat sayısı + HER hattın açık koşumu taşınır; dokuma kapalıyken (null) ve eski sunucuda (yok) bilgi yok", () => {
+    const run = { id: "r2", productionLineNo: 2, weavingOrderId: "w1", weavingOrderNumber: "DI-9", startedAt: T0 };
+    const t = fromApi(dto([loom({ productionLineCount: 2, openRuns: [run] })])).looms[0]!;
+    expect(t.lines).toBe(2);
+    expect(t.name).toBe("Tezgah 01");
+    expect(t.openRuns).toEqual([{ id: "r2", line: 2, jobId: "w1", jobNo: "DI-9", startedAt: Date.parse(T0) }]);
+    expect(fromApi(dto([loom({ openRuns: null })])).looms[0]!.openRuns).toBeNull();
+    const eski = fromApi(dto([loom({})])).looms[0]!;
+    expect(eski.openRuns).toBeNull();
+    expect(eski.lines).toBe(1);
+  });
 });
+

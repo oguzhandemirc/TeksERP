@@ -9,21 +9,46 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { FloorHint } from "./FloorHint";
-import { REPORTS_LINK, floorActionsOf, stopsLinkOf, type FloorAction } from "./floorActions";
+import { REPORTS_LINK, RUN_ACTION_KEYS, floorActionsOf, stopsLinkOf, type FloorAction, type FloorActionCtx, type RunActionKey } from "./floorActions";
+import type { LiveLoom } from "./types";
 import type { FloorSelectionState } from "./useFloorSelection";
 
 export { useFloorSelection, type FloorSelectionState } from "./useFloorSelection";
 
-function useActions(count: number): FloorAction[] {
-  const dokumaEnabled = useDokumaEnabled();
-  const { hasPermission } = useRoleAccess();
-  return floorActionsOf({ count, dokumaEnabled, can: hasPermission });
+/** Koşum eylemlerinin bağlamı — yalnız gerçek veride verilir (örnek veri ve TV'de koşum eylemi yok). */
+export interface FloorJobs {
+  /** Salon verisi tazelenebiliyor mu (C.15: değilse yazma eylemleri pasif). */
+  online: boolean;
+  looms: readonly LiveLoom[];
+  /** Seçili tezgahların HEPSİ (süzgeçte görünmeyenler dahil). */
+  onAction: (key: RunActionKey, ids: string[]) => void;
 }
 
-function useRunAction(s: FloorSelectionState, onDetail: (id: string) => void) {
+/** Seçimde açık koşumu olan tezgah sayısı; seçili bir tezgahın koşum bilgisi yoksa `null`. */
+export function openRunLoomsOf(looms: readonly LiveLoom[], ids: ReadonlySet<string>): number | null {
+  let n = 0;
+  for (const l of looms) {
+    if (!ids.has(l.id)) continue;
+    if (l.openRuns == null) return null;
+    if (l.openRuns.length > 0) n++;
+  }
+  return n;
+}
+
+function useActions(s: FloorSelectionState, jobs: FloorJobs | undefined): FloorAction[] {
+  const dokumaEnabled = useDokumaEnabled();
+  const { hasPermission } = useRoleAccess();
+  const runs: FloorActionCtx["runs"] = jobs ? { online: jobs.online, openRunLooms: openRunLoomsOf(jobs.looms, s.sel.ids) } : undefined;
+  return floorActionsOf({ count: s.sel.ids.size, dokumaEnabled, can: hasPermission, runs });
+}
+
+const isRunAction = (k: FloorAction["key"]): k is RunActionKey => (RUN_ACTION_KEYS as readonly string[]).includes(k);
+
+function useRunAction(s: FloorSelectionState, onDetail: (id: string) => void, jobs: FloorJobs | undefined) {
   const navigate = useNavigate();
   return (key: FloorAction["key"]) => {
     const first = [...s.sel.ids][0];
+    if (isRunAction(key)) jobs?.onAction(key, [...s.sel.ids]);
     if (key === "detail" && first) onDetail(first);
     if (key === "stops" && first) void navigate(stopsLinkOf(first));
     if (key === "reports") void navigate(REPORTS_LINK);
@@ -46,14 +71,15 @@ interface AreaProps {
   onDetail: (id: string) => void;
   /** Hol başlığından sağ tıkta "Bu holü seç" için: holün görünen tezgahları. */
   hallIds: (hall: string) => readonly string[];
+  jobs?: FloorJobs;
   children: React.ReactNode;
 }
 
 /** Sağ tık alanı: kart üstünde açılırsa ve kart seçimde değilse seçim o karta iner (masaüstü alışkanlığı). */
-export function FloorMenuArea({ s, onDetail, hallIds, children }: AreaProps) {
+export function FloorMenuArea({ s, onDetail, hallIds, jobs, children }: AreaProps) {
   const [hall, setHall] = useState<string | null>(null);
-  const actions = useActions(s.sel.ids.size);
-  const run = useRunAction(s, onDetail);
+  const actions = useActions(s, jobs);
+  const run = useRunAction(s, onDetail, jobs);
   const lp = s.longPress;
   const onContextMenu = (e: React.MouseEvent) => {
     // Dokunmatikte menü "⋯" düğmesindedir; uzun bas seçim kipidir.
@@ -140,12 +166,13 @@ interface BarProps {
   onDetail: (id: string) => void;
   /** Görünen kartlar — seçili olup bu süzgeçte görünmeyenler sayılır (eylem onlara da uygulanır, gizli kalmaz). */
   order: readonly string[];
+  jobs?: FloorJobs;
 }
 
 /** Seçim ≥1 iken alt yapışık çubuk; düğmeler ve "⋯" menüyle aynı listeden. */
-export function SelectionBar({ s, onDetail, order }: BarProps) {
-  const all = useActions(s.sel.ids.size);
-  const run = useRunAction(s, onDetail);
+export function SelectionBar({ s, onDetail, order, jobs }: BarProps) {
+  const all = useActions(s, jobs);
+  const run = useRunAction(s, onDetail, jobs);
   if (s.sel.ids.size === 0) return null;
   const hidden = [...s.sel.ids].filter((id) => !order.includes(id)).length;
   const notes = [hidden > 0 && `${hidden} tanesi bu süzgeçte görünmüyor`, s.dropped > 0 && `${s.dropped} tezgah artık listede yok`].filter(Boolean);

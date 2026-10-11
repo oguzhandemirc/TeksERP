@@ -181,6 +181,8 @@ const CAP_LABEL: Record<string, string> = {
   "finance:close": "Dönem kapanışı yapabilir",
   "loom:alarm-ack": "Tezgah alarmını üstlenip bırakabilir, susturabilir, not düşebilir",
   "loom:alarm-escalation": "Başkasının üstlendiği alarmı bırakabilir (üst kademe)",
+  "loom:run": "Tezgaha iş verebilir, işi değiştirip bitirebilir",
+  "loom:run-revoke": "Tezgahın açık koşumunu geri alabilir",
 };
 
 /** Etiketi olmayan kod için kodun kendisi basılır — sessiz boşluk bırakma. */
@@ -296,7 +298,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/shift-definitions", app: "desktop", modul: "dokumaEnabled", title: "Vardiya Tanımları", requires: ["loom:spec-manage"], capabilities: [] },
   // Tezgah Salonu canlı ekranı (2026-10-10): `tezgahEnabled` arkasında — dokuma modülünün değil
   // tezgah izlemenin ekranı (DOKUMA-CANLI-EKRAN §8 karar 6).
-  { key: "operations/weaving-floor", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Salonu", requires: ["loom:live-view"], capabilities: [] },
+  // Koşum eylemleri (İş ver · Değiştir · Bitir · Geri al) ekran içinde yalnız dokuma açıkken doğar (`test_dokuma_regime_gate §7f`).
+  { key: "operations/weaving-floor", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Salonu", requires: ["loom:live-view"], capabilities: ["loom:run", "loom:run-revoke"] },
   // Tezgah Alarmları (A2a, 2026-10-11): liste + alarm sayfası; eylemler sayfa içinde izinle. Alarm bayrağı
   // modül değil davranış bayrağıdır — ekranın modülü tezgah izleme.
   { key: "operations/loom-alarms", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Alarmları", requires: ["loom:alarm-view"], capabilities: ["loom:alarm-ack", "loom:alarm-escalation"] },
@@ -464,8 +467,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.
   // Koşumun tablet yüzeyi DOĞDU (2026-09-14): tablet `mobile:dokuma` / `mobile:dokuma-geri-al` ile
   // çağırır; `loom:*` web kodları panelsiz kalır (panel koşum yüzeyi yok, kod API/entegrasyon için).
-  { code: "loom:run", reason: "Panel koşum yüzeyi yok; tablet `mobile:dokuma` ile açar/kapatır — web kodu API/entegrasyon için." },
-  { code: "loom:run-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Dokuma P3b (2026-09-13): doff yazma yüzeyi backend'de doğdu; ekranı tablet tezgah
   // ekranının "İndir" eylemi (DOKUMA-IS-EMRI §3.4) ve henüz yok — ekranla ölü muaf olur.
   // Doff'un tablet yüzeyi DOĞDU (2026-09-14): tablet `mobile:dokuma` / `mobile:dokuma-geri-al` ile

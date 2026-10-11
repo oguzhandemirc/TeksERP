@@ -23,6 +23,9 @@
 //          palet gizli (menüden ulaşılmaz); route yalnız İZNE bakar, elle yazılan
 //          URL boş kabuk + backend 403 görür (`ProtectedRoute` bayrak okumaz —
 //          panel route kapısı ayrı dilim). "İstek atılmaz" demez: ölçmüyor.
+//   §7f ⭐ Dokuma karosu DIŞINDAKİ ekranın (Tezgah Salonu, `tezgahEnabled`) dokuma eylem
+//          dosyası: eylemler yalnız `dokumaEnabled` dalında doğar, dosyayı yalnız beyanlı
+//          pencereler içe aktarır, manifesto koşum izinlerini beyan eder (gevşetme değil ayrı kol).
 //
 // Salt-okunur: DB'ye dokunmaz (§5 satır-yok diyen sahte istemciyle ölçülür),
 // HTTP atmaz. Koşum: npx tsx scripts/run-all-tests.ts dokuma_regime
@@ -39,6 +42,10 @@
 //   ⑤ `MODULE_DEPENDENCIES.dokumaEnabled` silindi → §4a kırmızı (1 ❌).
 //   ⑥ (2026-09-14) `src/routes/reports/` altına `prisma.weavingOrder` okuyan KAPISIZ
 //      router kondu → §6g kırmızı (1 ❌) — özyineli tarama olmasa görünmezdi.
+//   ⑦–⑪ (2026-10-12, Tezgah Salonu F3; dosyalar geri yazıldı): `floorActions.ts`te koşum eylemi
+//      dokuma dalının dışına → §7f1 · `WeavingFloorView` `jobs/runService`i içe aktardı → §7f2 ·
+//      manifestodan `loom:run-revoke` düştü → §7f3 · `runService` uç metinleri değişti → §7f0 ·
+//      §7b'deki eylem dosyası muafı kaldırıldı → §7b (her biri 1 ❌).
 // GEREKLİ Mİ (reçete md. 20): kapı doğduğu gün ağaçta gerçek kusur bulmadı — ölçtüğü
 // sınıf (kapı sızıntısı · listesiz taşıyıcı · kapısız istemci) bugün yok; gerekçesi
 // üç kardeş bekçinin (production/iplik/devere) ölçülmüş tarihidir.
@@ -128,6 +135,48 @@ const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string;
   // Üretim Zinciri hub'ı (Z3, 2026-09-18): aynı Dokuma Raporları karosu; tek okuma ucu `/api/reports/dokuma/zincir`, izin `report:production`.
   { dosya: "Electron/src/pages/Reports/Dokuma/productionChain.ts", ekranKey: "reports/dokuma", izinler: ["report:production"], karo: "reports" },
 ];
+
+/**
+ * §7f — dokuma karosu DIŞINDAKİ bir ekranda (Tezgah Salonu, `tezgahEnabled`) dokuma uçlarını çağıran eylem dosyası.
+ * §7b bu dosyaları izinsiz saymaz ama §7c–§7e yerine §7f'nin üç ölçüsünü taşırlar: eylem listesindeki koşum
+ * eylemleri yalnız `dokumaEnabled` dalında, dosyayı (değer olarak; `import type` sayılmaz) yalnız beyanlı pencereler içe aktarır, manifesto izinleri beyanlı.
+ */
+const TEZGAH_EKRANI_EYLEM_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; eylemListesi: string; iceAktaranlar: readonly string[] }> = [
+  {
+    dosya: "Electron/src/pages/Operations/WeavingFloor/jobs/runService.ts",
+    ekranKey: "operations/weaving-floor",
+    izinler: ["loom:run", "loom:run-revoke"],
+    eylemListesi: "Electron/src/pages/Operations/WeavingFloor/floorActions.ts",
+    iceAktaranlar: [
+      "Electron/src/pages/Operations/WeavingFloor/jobs/AssignJobDialog.tsx",
+      "Electron/src/pages/Operations/WeavingFloor/jobs/FinishJobDialog.tsx",
+      "Electron/src/pages/Operations/WeavingFloor/jobs/RevokeRunDialog.tsx",
+    ],
+  },
+];
+
+/** `RUN_ACTION_KEYS` anahtarlarının her `item("<k>"` doğumu `if (ctx.dokumaEnabled) {` bloğunda mı; değilse sebep. */
+function eylemlerDokumaDalinda(metin: string): string | null {
+  const anahtarlar = /RUN_ACTION_KEYS\s*=\s*\[([^\]]*)\]/.exec(metin)?.[1].match(/"([a-z]+)"/g)?.map((s) => s.slice(1, -1)) ?? [];
+  if (anahtarlar.length === 0) return "RUN_ACTION_KEYS bulunamadı";
+  const bas = metin.indexOf("if (ctx.dokumaEnabled) {");
+  if (bas < 0) return "dokuma dalı yok";
+  let derinlik = 0;
+  let son = -1;
+  for (let i = metin.indexOf("{", bas); i < metin.length; i++) {
+    if (metin[i] === "{") derinlik++;
+    else if (metin[i] === "}" && --derinlik === 0) {
+      son = i;
+      break;
+    }
+  }
+  for (const k of anahtarlar) {
+    const yerler = [...metin.matchAll(new RegExp(`item\\("${k}"`, "g"))].map((m) => m.index ?? -1);
+    if (yerler.length === 0) return `"${k}" hiç doğmuyor`;
+    if (yerler.some((y) => y < bas || y > son)) return `"${k}" dokuma dalı dışında doğuyor`;
+  }
+  return null;
+}
 
 function kapiGovdesi(kod: string): string {
   const bas = kod.indexOf(`export async function ${KAPI}`);
@@ -295,7 +344,8 @@ async function main(): Promise<void> {
     .map((f) => path.relative(KOK, f).split(path.sep).join("/"));
   const izinli = new Set(IZINLI_ISTEMCI_DOSYALARI.map((x) => x.dosya));
   const sabitler = new Set(UC_METNI_TASIYAN_SABITLER);
-  const izinsiz = cagiranlar.filter((f) => !izinli.has(f) && !sabitler.has(f));
+  const eylemDosyalari = new Set(TEZGAH_EKRANI_EYLEM_DOSYALARI.map((x) => x.dosya));
+  const izinsiz = cagiranlar.filter((f) => !izinli.has(f) && !sabitler.has(f) && !eylemDosyalari.has(f));
   const oluIzin = [...izinli].filter((f) => !cagiranlar.includes(f));
   const oluSabit = [...sabitler].filter((f) => !cagiranlar.includes(f));
   check(
@@ -354,6 +404,39 @@ async function main(): Promise<void> {
       `§7e ⭐ ${ekranKey} route'u [${izinler.join(", ")}] ile sarılı (ProtectedRoute)`,
       /require(Any)?Permission/.test(routeBlok) && izinler.every((p) => routeBlok.includes(`"${p}"`)),
       routeBlok ? "" : "content-routes.tsx'te route YOK",
+    );
+  }
+
+  // ── §7f ⭐ TEZGAH EKRANINDAKİ DOKUMA-YÜKLEMLİ EYLEM DOSYASI ────────────────
+  // Tezgah Salonu `tezgahEnabled` arkasındadır (dokuma karosu değil); koşum eylemleri dokuma uçlarını o ekrandan
+  // çağırır. Gevşetme değil ayrı kol: eylemler YALNIZ `dokumaEnabled` dalında doğar, uç dosyasını yalnız beyanlı
+  // pencereler açar, ekranın manifestosu koşum izinlerini beyan eder.
+  for (const e of TEZGAH_EKRANI_EYLEM_DOSYALARI) {
+    check(`§7f0 ${e.dosya} gerçekten dokuma ucu çağırıyor (ölü beyan kırmızı)`, cagiranlar.includes(e.dosya));
+    const eylemMetni = yorumlariSok(fs.readFileSync(path.join(KOK, e.eylemListesi), "utf8"));
+    check(
+      `§7f1 ⭐ ${e.eylemListesi}: her koşum eylemi YALNIZ \`if (ctx.dokumaEnabled) {\` dalında doğar`,
+      eylemlerDokumaDalinda(eylemMetni) === null,
+      eylemlerDokumaDalinda(eylemMetni) ?? "",
+    );
+    const disari = eylemMetni.replace(/(if \(ctx\.dokumaEnabled\) \{)/, 'out.push(item("assign", "x", null));\n  $1');
+    check("§7f1b sonda bellek içi: eylem dalın DIŞINA taşınınca §7f1 kırmızı", eylemlerDokumaDalinda(disari) !== null);
+    const ad = path.basename(e.dosya).replace(/\.tsx?$/, "");
+    const iceAktaranlar = kaynakDosyalari(ELECTRON_SRC)
+      .filter((f) => new RegExp(`import\\s+(?!type\\b)[^;]*?from "[^"]*/${ad}"`).test(yorumlariSok(fs.readFileSync(f, "utf8"))))
+      .map((f) => path.relative(KOK, f).split(path.sep).join("/"));
+    const beyansiz = iceAktaranlar.filter((f) => !e.iceAktaranlar.includes(f));
+    const oluBeyan = e.iceAktaranlar.filter((f) => !iceAktaranlar.includes(f));
+    check(
+      `§7f2 ⭐ ${e.dosya}'yi yalnız beyanlı pencereler içe aktarır`,
+      beyansiz.length === 0 && oluBeyan.length === 0,
+      beyansiz.length ? `beyansız: ${beyansiz.join(", ")}` : oluBeyan.length ? `ölü beyan: ${oluBeyan.join(", ")}` : `${iceAktaranlar.length} dosya`,
+    );
+    const manifesto = SCREEN_CATALOG.find((s) => s.key === e.ekranKey);
+    check(
+      `§7f3 ⭐ ${e.ekranKey} manifestosu [${e.izinler.join(", ")}] yeteneklerini beyan eder`,
+      e.izinler.every((p) => (manifesto?.capabilities ?? []).some((c) => c.code === p)),
+      manifesto ? `capabilities=${manifesto.capabilities.map((c) => c.code).join(",")}` : "manifestoda YOK",
     );
   }
 

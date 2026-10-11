@@ -44,4 +44,49 @@ describe("floorActionsOf", () => {
   it("duruş listesi bağlantısı tezgah süzgeciyle", () => {
     expect(stopsLinkOf("m 1")).toBe("/operations/machine-stops?filter%5BmachineId%5D=m+1");
   });
+
+  describe("koşum eylemleri (F3)", () => {
+    const runs = (online = true, openRunLooms: number | null = 1) => ({ runs: { online, openRunLooms } });
+
+    it("⭐ koşum bağlamı yoksa (örnek veri, TV) eski liste AYNEN", () => {
+      expect(keys(ctx({}))).toEqual(["detail", "stops", "reports", "selectAll", "clear"]);
+    });
+
+    it("⭐ dokuma modülü KAPALI: İş ver / Değiştir / Bitir / Geri al hiç görünmez (izin ve bağlantı olsa da)", () => {
+      expect(keys(ctx({ dokumaEnabled: false, ...runs() }))).toEqual(["detail", "selectAll", "clear"]);
+    });
+
+    it("tek tezgah + tam yetki + açık koşum: dört eylem etkin, sıra sabit", () => {
+      const list = floorActionsOf(ctx(runs()));
+      expect(list.map((a) => a.key)).toEqual(["detail", "assign", "replace", "finish", "revoke", "stops", "reports", "selectAll", "clear"]);
+      expect(list.every((a) => a.enabled)).toBe(true);
+    });
+
+    it("⭐ loom:run yoksa İş ver/Değiştir/Bitir pasif + neden; geri alma ayrı izin (loom:run-revoke)", () => {
+      const c = ctx({ ...runs(), can: (p) => p === "loom:run-revoke" });
+      for (const k of ["assign", "replace", "finish"]) {
+        expect(byKey(c, k)).toMatchObject({ enabled: false });
+        expect(byKey(c, k)?.reason).toContain("Tezgah koşumu");
+      }
+      expect(byKey(c, "revoke")?.enabled).toBe(true);
+      expect(byKey(ctx({ ...runs(), can: (p) => p === "loom:run" }), "revoke")?.reason).toContain("Koşum geri alma");
+    });
+
+    it("⭐ C.15 bağlantı yok: dört eylem pasif + 'Sunucuya ulaşılamıyor'", () => {
+      for (const k of ["assign", "replace", "finish", "revoke"]) {
+        expect(byKey(ctx(runs(false)), k)).toMatchObject({ enabled: false });
+        expect(byKey(ctx(runs(false)), k)?.reason).toContain("Sunucuya ulaşılamıyor");
+      }
+    });
+
+    it("⭐ seçimde açık koşum yoksa Değiştir/Bitir/Geri al pasif; İş ver açık; koşum bilgisi gelmiyorsa (eski sunucu) dördü de pasif", () => {
+      expect(byKey(ctx(runs(true, 0)), "assign")?.enabled).toBe(true);
+      for (const k of ["replace", "finish", "revoke"]) expect(byKey(ctx(runs(true, 0)), k)?.reason).toContain("açık koşum yok");
+      for (const k of ["assign", "replace", "finish", "revoke"]) expect(byKey(ctx(runs(true, null)), k)?.reason).toContain("sunucu güncellenince");
+    });
+
+    it("⭐ Koşumu geri al yalnız TEK seçimde (çoklu seçimde öğe yok)", () => {
+      expect(keys(ctx({ count: 3, ...runs(true, 3) }))).toEqual(["assign", "replace", "finish", "reports", "selectAll", "clear"]);
+    });
+  });
 });

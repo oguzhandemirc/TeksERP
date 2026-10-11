@@ -64,10 +64,22 @@ export interface WireMountedBeam {
   plannedLengthM: number;
 }
 
+export interface WireOpenRun {
+  id: string;
+  productionLineNo: number;
+  weavingOrderId: string | null;
+  weavingOrderNumber: string | null;
+  startedAt: string;
+}
+
 export interface WireLoom {
   id: string;
   code: string;
   name: string;
+  /** Eski sunucuda yok. */
+  productionLineCount?: number;
+  /** HER hattın açık koşumu — yalnız dokuma açıkken dizi; kapalıyken null; eski sunucuda yok. */
+  openRuns?: WireOpenRun[] | null;
   hallId: string;
   hallName: string;
   monitoringState: "OFF" | "SHADOW" | "LIVE";

@@ -19,11 +19,31 @@
     {
       "id": "2026-10-11f",
       "durum": "TASLAK — terfide kullanıcı onayı",
-      "baslik": "Gece başlayıp sabaha süren tezgah duruşu ve destek hesabı uyarısı",
+      "baslik": "Tezgah Salonu'ndan iş verme, gece başlayıp sabaha süren tezgah duruşu ve destek hesabı uyarısı",
       "surumler": {
         "panel": "1.6.5"
       },
       "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah Salonu'nda seçtiğiniz tezgahlara sağ tık menüsünden ya da alttaki seçim çubuğundan iş verebilirsiniz: İş ver, İşi değiştir, İşi bitir ve Koşumu geri al. Önce Dokuma İş Emrini listeden seçersiniz; çift hatlı tezgah seçtiyseniz hangi hatta başlayacağı sorulur. Göndermeden önce etkilenecek her tezgah adıyla listelenir: tezgahın şu anki işi ve ne olacağı yazar, istemediğiniz tezgahın işaretini kaldırırsınız. Bu eylemler yalnız dokuma modülü açıkken ve Tezgah koşumu izniniz varsa çıkar; izniniz yoksa seçenek görünür ama soluktur ve nedenini yazar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Başka bir işte çalışan tezgaha iş verirken eski iş kendiliğinden kapanmaz: İş ver ile açtığınız listede dolu tezgahlar işaretsiz gelir, işaretlerseniz eski iş biter ve yenisi başlar. İşi değiştir ile açtığınızda dolu tezgahlar baştan işaretlidir. Gönderdikten sonra hangi tezgahta başladığı ve hangisinde neden olmadığı ayrı ayrı yazar; Olmayanları yeniden dene düğmesi yalnız olmayan tezgahları yeniden listeler."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İşi bitir, seçili tezgahların açık işlerini listeler; her satıra atkı sayacını yazabilirsiniz, bilmiyorsanız boş bırakın (sıfır yazılmaz). Dokuma İş Emri açık kalır. Koşumu geri al yalnız tek tezgahta ve şu an süren iş için çıkar; sebep yazmadan gönderilemez. Bitmiş bir işi geri almak bu ekrandan yapılmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sunucuya ulaşılamadığında Tezgah Salonu'ndaki iş verme seçenekleri soluklaşır ve Sunucuya ulaşılamıyor yazar; bağlantı gelince kendiliğinden açılır. Bu özellik için sunucunun da güncellenmesi gerekir; eski sunucuda seçenekler soluk kalır ve sunucunun güncellenmesi gerektiğini yazar."
+        },
         {
           "kapsam": "panel",
           "tip": "duzeltme",

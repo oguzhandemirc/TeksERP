@@ -157,7 +157,7 @@ Esin: dokuma izleme/MES salon panoları (Loepfe/Barco tipi salon izleme, Picanol
 |---|---|---|---|
 | **F1 — Seçim + menü iskeleti** ✓ (2026-10-11) | Tık/Ctrl/Shift/lasso/Ctrl+A/Esc/klavye/uzun bas, seçim çubuğu, sağ tık menüsü; eylemler: Detay, raporlara geçiş, duruş listesine geçiş. TV'de kapalı. | Hayır | Salt istemci. Menü öğelerinin görünürlüğü saf yüklemle (bekçi testli). |
 | **F2 — Duruş eylemleri (tek + toplu)** | Duruş bildir / kapat / sebep ata / planlı bakım, önizlemeli toplu ([C.3, C.7, C.11]) | Hayır | Mevcut uçlar satır başına; toplu uç ya da istemci döngüsü (karar tasarım diliminde; toplu uç önerilir — tek önizleme kaynağı). |
-| **F3 — İş ver (A: şimdi başlat)** | `POST /machine-runs/bulk` + `/bulk/preview`; İş ver / Değiştir / Bitir / Geri al (tek); sonuç ekranı; salon ucuna operatör (D5) ve dolu/boş hat bilgisi | Hayır | Panelde koşum yüzeyi doğar → `loom:run` "ekransız"dan çıkar (dört kapı reçetesi; `test_dokuma_regime_gate §7` allowlist'e yeni istemci dosyası). |
+| **F3 — İş ver (A: şimdi başlat)** ✓ (2026-10-12) | `POST /machine-runs/bulk` + `/bulk/preview`; İş ver / Değiştir / Bitir / Geri al (tek); sonuç ekranı; salon ucuna operatör (D5) ve dolu/boş hat bilgisi | Hayır | Panelde koşum yüzeyi doğar → `loom:run` "ekransız"dan çıkar (dört kapı reçetesi; `test_dokuma_regime_gate §7` allowlist'e yeni istemci dosyası). |
 | **F4 — Üretilen metre + kart bilgileri** | İş başına ÜRETİLEN metre (D2), kalan, levent bitiş tahmini (D7, "tahmini" etiketli), D12 TV rotasyonu | Hayır | İki sayı kuralı: ÜRETİLEN (top ölçümü) ile TEZGAHTA (türetilen) toplanmaz. |
 | **F5 — Sıraya koy (karar 2)** | `LoomJobPlan` varlığı + izin `loom:plan` + kart üzerinde "sıradaki: DK…" + tablet ön-dolgu | **Evet** | Migration reçetesi, en eski canlı dump'ta prova. |
 | **F6 — Uyum kontrolleri** | Tezgah künyesine en + tip, kumaş kartına ağızlık; önizlemede uyarı | **Evet** | Varsayılan uyarı; sert red ayrı bayrak (varsayılan kapalı). |
@@ -181,6 +181,14 @@ Esin: dokuma izleme/MES salon panoları (Loepfe/Barco tipi salon izleme, Picanol
 - Kart seçim durumu `aria-pressed` ile duyurulur (kart zaten `<button>`); `role="grid"` + roving tabindex kurulmadı — ok tuşları geometriden komşuya odak taşır, Boşluk seçer, Enter (düğme tıkı) detayı açar, Shift+F10/Menü tuşu tarayıcının `contextmenu` olayıyla menüyü açar.
 - Dokunmatik seçim kipinde "Seçimi bırak" düğmesi "Bitti" olur; seçim boşalınca kip kendiliğinden kapanır. Dokunmatikte sağ tık menüsü (Radix'in uzun-bas menüsü dahil) açılmaz; karşılığı çubuktaki "⋯".
 - Esc sırası: menü → detay paneli → seçim → tam ekran. Seçim Esc'i detay açıkken kayıt dışıdır (detay kapanınca yığına en üste yeniden girer); tam ekrana seçimle girildiyse tam ekran Esc'i yine seçimden sonra gelir (seçim yığında, tam ekran pencere dinleyicisinde).
+
+### F3 teslimi (2026-10-12) — tasarımdan sapmalar
+- Toplu yazım tek tx DEĞİL, SATIR BAŞINA tx (§C.9): sunucu satırları tezgah kodu + hat sırasıyla işler, başarısız satır sebebiyle döner (1e kararı 2026-10-12; gerekçe arşiv `2026-10.md`). Advisory kilit eklenmedi.
+- "İşi değiştir" ayrı uç değil: `bulk/assign` satırı eski koşumun kimliğini (`replaceRunId`) taşır; tx sırası kart kilidi İLK → eski koşumun kapanış claim'i → iş claim'i → yeni koşum. Önizlemeden sonra hat değiştiyse 409 `RUN_REPLACE_STALE`.
+- "İş ver" önizlemesinde dolu hat satırları baştan işaretsiz, "İşi değiştir"de işaretli (1e kararı).
+- "Olmayanları yeniden dene" başarısız satırları körlemesine tekrar göndermez, YENİDEN ÖNİZLER.
+- "Koşumu geri al" salonda yalnız AÇIK koşum + tek tezgah (çok hatlıysa koşum sorulur); bitmiş koşumun geri alınması salon dışı (1e kararı).
+- Salon ucuna operatör (D5) bu fazda eklenmedi — açık.
 
 ## Ek · Ölçüm kaynakları (dosya)
 - `Teks-Erp/prisma/schema.prisma`: `WeavingOrder`, `MachineRun` (sedler yorumda), `Machine` (`productionLineCount`, `warpBeamSlots`; en/tip yok), `MachineSpec` (`shedType`, `nominalUnitsPerMin`), `WarpSpec` (`reedWidthCm`), `WorkSession`, `KursunBypassAssignment`

@@ -119,9 +119,24 @@ export interface StopTotal {
 /** Durumun kaynağı — sunucunun karne kovası (`stateSource`); istemci yalnız etiketler. */
 export type StateSource = "olculen" | "elle" | "simule" | "cikarim";
 
+/** Hattın açık koşumu (salon iş eylemlerinin hedefi). */
+export interface LoomOpenRun {
+  id: string;
+  line: number;
+  jobId: string | null;
+  jobNo: string | null;
+  startedAt: number;
+}
+
 export interface LiveLoom {
   id: string;
   code: string;
+  /** Tezgah adı (önizleme/sonuç listelerinde kodun yanında); eski sunucu/örnek veride yok. */
+  name?: string;
+  /** Üretim hattı sayısı (çift enli = 2); yoksa 1. */
+  lines?: number;
+  /** HER hattın açık koşumu; dokuma kapalıyken, örnek veride ya da eski sunucuda null/yok (eylemler bilgi yok der). */
+  openRuns?: LoomOpenRun[] | null;
   /** Görünen hol adı (istasyon adı). */
   hall: string;
   /** Durumu bilinen tezgah (sensörden ölçülen ya da bugün elle kaydı olan); değilse sayılara girmez. */

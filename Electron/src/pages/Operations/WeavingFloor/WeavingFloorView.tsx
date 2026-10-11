@@ -16,7 +16,9 @@ import { cn } from "@/lib/utils";
 import { FloorSummary } from "./FloorSummary";
 import { FullscreenHeader, SampleDataBadge, StatusLegend } from "./FloorChrome";
 import { FloorHintProvider } from "./FloorHint";
-import { FloorMenuArea, SelectionBar, useFloorSelection, type FloorSelectionState } from "./FloorSelection";
+import { FloorMenuArea, SelectionBar, useFloorSelection, type FloorJobs, type FloorSelectionState } from "./FloorSelection";
+import { JobDialogs, type JobDialogState } from "./jobs/JobDialogs";
+import type { RunActionKey } from "./floorActions";
 import { HallSection } from "./HallSection";
 import { LoomDetailSheet } from "./LoomDetailSheet";
 import { OverdueStrip } from "./OverdueStrip";
@@ -116,9 +118,10 @@ interface HallsProps {
   selection: FloorSelectionState | null;
   onCard: (id: string, mods: ClickMods) => void;
   onDetail: (id: string) => void;
+  jobs: FloorJobs | undefined;
 }
 
-function FloorHalls({ model, now, columns, selection, onCard, onDetail }: HallsProps) {
+function FloorHalls({ model, now, columns, selection, onCard, onDetail, jobs }: HallsProps) {
   const list = model.halls
     .filter((h) => h.visible.length > 0)
     .map((h) => (
@@ -135,7 +138,7 @@ function FloorHalls({ model, now, columns, selection, onCard, onDetail }: HallsP
     ));
   if (!selection) return <>{list}</>;
   return (
-    <FloorMenuArea s={selection} onDetail={onDetail} hallIds={model.hallIds}>
+    <FloorMenuArea s={selection} onDetail={onDetail} hallIds={model.hallIds} jobs={jobs}>
       <div className="min-h-24 space-y-4 pb-2">{list}</div>
     </FloorMenuArea>
   );
@@ -156,7 +159,11 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
   const fullscreen = useFullscreen(root, { locked: tv, autoReal: !tvExit?.windowed });
   const select = useCallback((id: string) => setSelectedId(id), []);
   const model = useFloorModel(floor, now, filter);
+  const [job, setJob] = useState<JobDialogState | null>(null);
   const selection = useFloorSelection({ order: model.order, present: model.present, root, enabled: !tv, escBlocked: selectedId !== null });
+  const openJob = useCallback((kind: RunActionKey, ids: string[]) => setJob({ kind, looms: floor.looms.filter((l) => ids.includes(l.id)) }), [floor.looms]);
+  // Koşum eylemleri yalnız gerçek veride; örnek veri ve TV'de yok.
+  const jobs: FloorJobs | undefined = tv || sampleData ? undefined : { online: !stale, looms: floor.looms, onAction: openJob };
   const { click } = selection;
   const onCard = useCallback((id: string, mods: ClickMods) => click(id, mods) && setSelectedId(id), [click]);
   const selected = floor.looms.find((t) => t.id === selectedId) ?? null;
@@ -186,11 +193,12 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
             <PageBody className={cn("min-h-0 space-y-4 p-4", fullscreen.active && "space-y-3 px-6 pt-3")}>
               <FloorSummary floor={floor} now={now} />
               <OverdueStrip looms={floor.looms} now={now} onSelect={tv ? noSelect : select} />
-              <FloorHalls model={model} now={now} columns={columns} selection={tv ? null : selection} onCard={onCard} onDetail={select} />
+              <FloorHalls model={model} now={now} columns={columns} selection={tv ? null : selection} onCard={onCard} onDetail={select} jobs={jobs} />
               {model.empty && <EmptyNote total={floor.looms.length} />}
               {!fullscreen.active && <StatusLegend />}
             </PageBody>
-            {!tv && <SelectionBar s={selection} onDetail={select} order={model.order} />}
+            {!tv && <SelectionBar s={selection} onDetail={select} order={model.order} jobs={jobs} />}
+            {job && <JobDialogs state={job} online={!stale} onClose={() => setJob(null)} />}
             <LoomDetailSheet loom={selected} now={now} onClose={() => setSelectedId(null)} onOpenAlarm={tv ? undefined : onOpenAlarm} />
           </FloorHintProvider>
         </TabPortalProvider>
