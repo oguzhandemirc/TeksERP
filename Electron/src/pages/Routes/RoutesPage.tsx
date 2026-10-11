@@ -60,7 +60,7 @@ export function RoutesPage() {
   return (
     <CrudPage<ProductionRoute>
       title="Üretim Rotaları"
-      description="İş emri şablonları — sık kullanılan istasyon sıralarını burada tanımla."
+      description="Terbiye iş emri şablonları — sık kullanılan istasyon sıralarını burada tanımla."
       entityName="Rota"
       importEntity="route"
       queryKey="routes"

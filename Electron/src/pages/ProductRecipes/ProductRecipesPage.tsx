@@ -4,6 +4,7 @@ import { productRecipeService } from "./service";
 import { ProductRecipeFormDialog } from "./ProductRecipeFormDialog";
 import type { ProductRecipe } from "./types";
 import { type RecipeFormValues } from "./schema";
+import { TERIM } from "@/lib/terim";
 
 interface RecipePropertyCreate {
   propertyId: string;
@@ -39,9 +40,9 @@ function buildPayload(v: RecipeFormValues): RecipePayload {
 export function ProductRecipesPage() {
   return (
     <CrudPage<ProductRecipe>
-      title="İş Emri Şablonları"
-      description="Kumaş + renk + özellik + en + rota — iş emri açılışını hızlandıran hazır şablonlar."
-      entityName="İş Emri Şablonu"
+      title={`${TERIM.terbiyeIsEmri.tekil} Şablonları`}
+      description="Kumaş + renk + özellik + en + rota — terbiye iş emri açılışını hızlandıran hazır şablonlar."
+      entityName={`${TERIM.terbiyeIsEmri.tekil} Şablonu`}
       importEntity="productRecipe"
       queryKey="product-recipes"
       service={productRecipeService}

@@ -33,6 +33,7 @@ import {
 import type { ProductRecipe } from "./types";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
+import { TERIM } from "@/lib/terim";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -175,10 +176,10 @@ export function ProductRecipeFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "İş Emri Şablonunu Düzenle" : "Yeni İş Emri Şablonu"}</DialogTitle>
+          <DialogTitle>{isEdit ? `${TERIM.terbiyeIsEmri.tekil} Şablonunu Düzenle` : `Yeni ${TERIM.terbiyeIsEmri.tekil} Şablonu`}</DialogTitle>
           <DialogDescription>
             Kumaş + akış (renk/özellik istasyonlarda) + en'i tek isim altında topla.
-            İş emri açılışında şablonu seçince hepsi otomatik dolar.
+            Terbiye iş emri açılışında şablonu seçince hepsi otomatik dolar.
           </DialogDescription>
         </DialogHeader>
 

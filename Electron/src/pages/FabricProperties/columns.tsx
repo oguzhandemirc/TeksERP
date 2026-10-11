@@ -73,7 +73,7 @@ export const fabricPropertyColumns: ColumnDef<FabricProperty>[] = [
           <Badge
             variant="outline"
             className="border-warning/60 text-warning"
-            title="Bu özellik hiçbir istasyona bağlı değil — hiçbir iş emrinde seçilemez. Düzenle'den istasyon ata."
+            title="Bu özellik hiçbir istasyona bağlı değil — hiçbir terbiye iş emrinde seçilemez. Düzenle'den istasyon ata."
           >
             İstasyon atanmamış
           </Badge>

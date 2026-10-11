@@ -69,7 +69,7 @@ const PHASE_OUT_CHOICE: LifecycleChoice = {
   to: "PHASE_OUT",
   label: "Tükenene kadar",
   action: "Tükenene kadar'a al",
-  hint: "Eldeki mal iş emri, fason ve sevkte akmaya devam eder; yeni stok girişi ve alım açılmaz.",
+  hint: "Eldeki mal terbiye iş emri, fason ve sevkte akmaya devam eder; yeni stok girişi ve alım açılmaz.",
   blockedBy: null,
 };
 const ACTIVE_CHOICE: LifecycleChoice = {

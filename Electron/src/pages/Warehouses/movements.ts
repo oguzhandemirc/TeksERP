@@ -126,7 +126,7 @@ export const WAREHOUSE_EVENT_META = {
   // cevaplıyor; bu beş tip malın stok kümesine giriş/çıkışını taşır.
   PRODUCTION: {
     label: "Üretim",
-    hint: "Üretimden depoya indi ya da depodan üretime alındı — iş emri hareketi.",
+    hint: "Üretimden depoya indi ya da depodan üretime alındı — terbiye iş emri hareketi.",
   },
   EXTERNAL: {
     label: "Dış işlem",

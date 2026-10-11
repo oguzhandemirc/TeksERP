@@ -113,7 +113,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
             <FormField
               label="Varsayılan Fason Kategorisi"
               error={form.formState.errors.defaultCategoryId}
-              hint="İş emri oluşturulurken fason planlama modalında otomatik önerilir."
+              hint="Terbiye iş emri oluşturulurken fason planlama modalında otomatik önerilir."
             >
               <Controller
                 control={form.control}

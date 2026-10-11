@@ -182,7 +182,7 @@ export function SubcontractorFormDialog({
               <input type="checkbox" {...form.register("isActive")} /> Aktif
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" {...form.register("isFavorite")} /> Favori — iş
+              <input type="checkbox" {...form.register("isFavorite")} /> Favori — terbiye iş
               emri fason adımında default firma
             </label>
           </div>

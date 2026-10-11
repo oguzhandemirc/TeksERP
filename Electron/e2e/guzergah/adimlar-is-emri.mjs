@@ -36,7 +36,7 @@ const olc = {
 };
 
 async function iseGit({ git, gor, page }, ie, { tamamlanan = false } = {}) {
-  await git("İş Emirleri");
+  await git("Terbiye İş Emirleri");
   if (tamamlanan) {
     // Tamamlanmış iş emirleri varsayılan gizli — insan yolu: araç çubuğundaki "Tamamlananları göster".
     const kutu = page().getByText("Tamamlananları göster", { exact: true }).filter({ visible: true }).first();
@@ -71,7 +71,7 @@ async function hedefDegistir(ctx, dugme, baslik, doldur) {
 export const IS_EMRI_ADIMLARI = [
   {
     id: "IE1", rol: "P",
-    yol: "HAZIRLIK (API): Hızlı İş Emri ile iç rotalı iş emri (2 top) + zımpara fasonlu iş emri (1 top) + Parti Ekle ucuyla ikinci parti", rota: "operations/work-orders",
+    yol: "HAZIRLIK (API): Hızlı Terbiye İş Emri ile iç rotalı terbiye iş emri (2 top) + zımpara fasonlu terbiye iş emri (1 top) + Parti Ekle ucuyla ikinci parti", rota: "operations/work-orders",
     async yap({ api, sql }) {
       const [k] = await sql(`SELECT i.id FROM rolls r JOIN items i ON i.id=r."itemId" WHERE r.status='STOCK' AND r."sackId" IS NULL AND r."shipmentId" IS NULL AND r."currentStepId" IS NULL AND r.barcode IS NOT NULL AND i."lifecycleStatus"='ACTIVE' GROUP BY i.id ORDER BY count(*) DESC LIMIT 1`);
       olc.kumas = k.id;
@@ -90,13 +90,13 @@ export const IS_EMRI_ADIMLARI = [
       if (p2.status >= 300) throw new Error(`parti ekle ${p2.status} ${JSON.stringify(p2.govde).slice(0, 200)}`);
     },
     dogrula: [
-      { ad: "ana iş emri Üretimde, 2 top ilk adımda", sql: `SELECT wo.status::text s, (SELECT count(*)::int FROM rolls r JOIN batches b ON b.id=r."batchId" WHERE b."workOrderId"=wo.id) n FROM work_orders wo WHERE wo.id=$1`, params: () => [olc.anaIe?.id], oku: (r) => `${r[0]?.s}:${r[0]?.n}`, beklenen: "IN_PROGRESS:2" },
-      { ad: "fason iş emrinde 2 parti, ikincisi BATCH_ADDED olayıyla", sql: `SELECT (SELECT count(*)::int FROM batches WHERE "workOrderId"=$1) b, (SELECT count(*)::int FROM work_order_events WHERE "workOrderId"=$1 AND type='BATCH_ADDED') e`, params: () => [olc.fasonIe?.id], oku: (r) => `${r[0].b}:${r[0].e}`, beklenen: "2:1" },
+      { ad: "ana terbiye iş emri Üretimde, 2 top ilk adımda", sql: `SELECT wo.status::text s, (SELECT count(*)::int FROM rolls r JOIN batches b ON b.id=r."batchId" WHERE b."workOrderId"=wo.id) n FROM work_orders wo WHERE wo.id=$1`, params: () => [olc.anaIe?.id], oku: (r) => `${r[0]?.s}:${r[0]?.n}`, beklenen: "IN_PROGRESS:2" },
+      { ad: "fason terbiye iş emrinde 2 parti, ikincisi BATCH_ADDED olayıyla", sql: `SELECT (SELECT count(*)::int FROM batches WHERE "workOrderId"=$1) b, (SELECT count(*)::int FROM work_order_events WHERE "workOrderId"=$1 AND type='BATCH_ADDED') e`, params: () => [olc.fasonIe?.id], oku: (r) => `${r[0].b}:${r[0].e}`, beklenen: "2:1" },
     ],
   },
   {
     id: "IE2", rol: "P", gerektirir: ["IE1"],
-    yol: "İş Emirleri → iş emri → yan panel → Rengi Değiştir → renk seç → sebep → Değiştir", rota: "operations/work-orders",
+    yol: "Terbiye İş Emirleri → terbiye iş emri → yan panel → Rengi Değiştir → renk seç → sebep → Değiştir", rota: "operations/work-orders",
     async yap(ctx) {
       const [c] = await ctx.sql(`SELECT id, name FROM colors WHERE "isActive" ORDER BY name LIMIT 1`);
       olc.renk = c;
@@ -108,7 +108,7 @@ export const IS_EMRI_ADIMLARI = [
   },
   {
     id: "IE3", rol: "P", gerektirir: ["IE1"],
-    yol: "İş Emirleri → iş emri → yan panel → Eni Değiştir → 185 → sebep → Değiştir", rota: "operations/work-orders",
+    yol: "Terbiye İş Emirleri → terbiye iş emri → yan panel → Eni Değiştir → 185 → sebep → Değiştir", rota: "operations/work-orders",
     async yap(ctx) {
       await hedefDegistir(ctx, /Eni Değiştir/, "Eni Değiştir —", async (d) => { await d.locator("#new-width").fill("185"); });
     },
@@ -118,7 +118,7 @@ export const IS_EMRI_ADIMLARI = [
   },
   {
     id: "IE4", rol: "P", gerektirir: ["IE1"],
-    yol: "İş Emirleri → iş emri → yan panel → Parti Ekle → Top Seç → (Ham Stok) → topu işaretle → Ekle (1) → Parti Ekle (1)", rota: "operations/work-orders",
+    yol: "Terbiye İş Emirleri → terbiye iş emri → yan panel → Parti Ekle → Top Seç → (Ham Stok) → topu işaretle → Ekle (1) → Parti Ekle (1)", rota: "operations/work-orders",
     async yap(ctx) {
       const { page, gor } = ctx;
       await iseGit(ctx, olc.anaIe);
@@ -141,12 +141,12 @@ export const IS_EMRI_ADIMLARI = [
       await page().keyboard.press("Escape");
     },
     dogrula: [
-      { ad: "ana iş emrinde 2 parti; eklenen top ilk adımda üretimde; BATCH_ADDED 1", sql: `SELECT (SELECT count(*)::int FROM batches WHERE "workOrderId"=$1) b, (SELECT status::text FROM rolls WHERE barcode=$2) s, (SELECT count(*)::int FROM work_order_events WHERE "workOrderId"=$1 AND type='BATCH_ADDED') e`, params: () => [olc.anaIe?.id, olc.toplar[4]], oku: (r) => `${r[0].b}:${r[0].s}:${r[0].e}`, beklenen: "2:IN_PRODUCTION:1" },
+      { ad: "ana terbiye iş emrinde 2 parti; eklenen top ilk adımda üretimde; BATCH_ADDED 1", sql: `SELECT (SELECT count(*)::int FROM batches WHERE "workOrderId"=$1) b, (SELECT status::text FROM rolls WHERE barcode=$2) s, (SELECT count(*)::int FROM work_order_events WHERE "workOrderId"=$1 AND type='BATCH_ADDED') e`, params: () => [olc.anaIe?.id, olc.toplar[4]], oku: (r) => `${r[0].b}:${r[0].s}:${r[0].e}`, beklenen: "2:IN_PRODUCTION:1" },
     ],
   },
   {
     id: "IE5", rol: "P", gerektirir: ["IE2", "IE3", "IE4"],
-    yol: "İş Emirleri → iş emri → yan panel → Hareketler", rota: "operations/work-orders",
+    yol: "Terbiye İş Emirleri → terbiye iş emri → yan panel → Hareketler", rota: "operations/work-orders",
     async yap(ctx) {
       const { page, gor } = ctx;
       await iseGit(ctx, olc.anaIe);
@@ -159,17 +159,17 @@ export const IS_EMRI_ADIMLARI = [
       await page().keyboard.press("Escape");
     },
     dogrula: [
-      { ad: "çizelgede açılış · renk · en · parti satırları", sql: `SELECT 1`, oku: () => ["İş emri açıldı", "185", "Parti eklendi", "E2E düzeltme"].filter((t) => !olc.hareketMetni.includes(t)).join(",") || "tamam", beklenen: "tamam" },
+      { ad: "çizelgede açılış · renk · en · parti satırları", sql: `SELECT 1`, oku: () => ["Terbiye iş emri açıldı", "185", "Parti eklendi", "E2E düzeltme"].filter((t) => !olc.hareketMetni.includes(t)).join(",") || "tamam", beklenen: "tamam" },
       { ad: "tetikler Türkçe: 'Parti Ekle' var, ham 'BATCH_ADD' yok", sql: `SELECT 1`, oku: () => `${olc.hareketMetni.includes("Parti Ekle")}:${olc.hareketMetni.includes("BATCH_ADD")}`, beklenen: "true:false" },
       { ad: "defterde en az 5 satır (açılış · başlama · renk · en · parti)", sql: `SELECT count(*)::int n FROM work_order_events WHERE "workOrderId"=$1`, params: () => [olc.anaIe?.id], oku: (r) => r[0].n, beklenen: (n) => n >= 5 },
     ],
   },
   {
     id: "IE6", rol: "P", gerektirir: ["IE5"],
-    yol: "Operasyon → İş Emri Hareketleri → top barkodu → Ara → Excel (sütunlar ekrandakiyle aynı)", rota: "operations/work-order-events",
+    yol: "Operasyon → Terbiye İş Emri Hareketleri → top barkodu → Ara → Excel (sütunlar ekrandakiyle aynı)", rota: "operations/work-order-events",
     async yap({ git, gor, page, app }) {
-      await git("İş Emri Hareketleri");
-      const ara = page().getByPlaceholder("İş emri no (IE…) ya da top barkodu okutun");
+      await git("Terbiye İş Emri Hareketleri");
+      const ara = page().getByPlaceholder("Terbiye iş emri no (IE…) ya da top barkodu okutun");
       await ara.fill(olc.toplar[0]);
       await page().getByRole("button", { name: "Ara", exact: true }).click({ timeout: 10_000 });
       await gor(page().getByRole("heading", { name: olc.anaIe.no }).first(), { sure: 20_000 });
@@ -197,7 +197,7 @@ export const IS_EMRI_ADIMLARI = [
   },
   {
     id: "IE7", rol: "P",
-    yol: "D7: geçmiş doldurma kuru koşum → --apply (e2e kopyası) · İş Emirleri → tamamlanmış iş emri → Detayı Aç → Üretilen Nihai Toplar başlığı; Parti Ekle tuşu YOK", rota: "operations/work-orders",
+    yol: "D7: geçmiş doldurma kuru koşum → --apply (e2e kopyası) · Terbiye İş Emirleri → tamamlanmış terbiye iş emri → Detayı Aç → Üretilen Nihai Toplar başlığı; Parti Ekle tuşu YOK", rota: "operations/work-orders",
     async yap(ctx) {
       const { page, gor, sql } = ctx;
       const env = { ...process.env, DATABASE_URL: `postgresql://tekserp:tekserp@localhost:55433/${ctx.ortam.dbName}?schema=public` };
@@ -225,12 +225,12 @@ export const IS_EMRI_ADIMLARI = [
     dogrula: [
       { ad: "geçmiş doldurma uygulandı (BACKFILL satırları) ve ikinci kuru koşum 0 olay", sql: `SELECT count(*)::int n FROM work_order_events WHERE channel='BACKFILL'`, oku: (r) => `${r[0].n} satır · ikinci kuru ${olc.ikinciKuru}`, beklenen: (v) => /^[1-9]\d* satır · ikinci kuru 0$/.test(v) },
       { ad: "künye başlığı 'Kapanışta (yaklaşık · sonradan türetildi)'", sql: `SELECT 1`, oku: () => olc.kunyeMetni, beklenen: (v) => typeof v === "string" && v.startsWith("Kapanışta (yaklaşık") },
-      { ad: "tamamlanmış iş emrinde Parti Ekle tuşu yok (yan panel + detay)", sql: `SELECT 1`, oku: () => olc.partiEkleTusu, beklenen: 0 },
+      { ad: "tamamlanmış terbiye iş emrinde Parti Ekle tuşu yok (yan panel + detay)", sql: `SELECT 1`, oku: () => olc.partiEkleTusu, beklenen: 0 },
     ],
   },
   {
     id: "IE8", rol: "P", gerektirir: ["IE1"],
-    yol: "İş Emirleri → fason iş emri → Detayı Aç → Rota & Dağılım → Zımpara: Sevk Et → Sevk Et (2) → 'Birden çok parti' (Ayrı sevk seçili) → Sevk Et",
+    yol: "Terbiye İş Emirleri → fason terbiye iş emri → Detayı Aç → Rota & Dağılım → Zımpara: Sevk Et → Sevk Et (2) → 'Birden çok parti' (Ayrı sevk seçili) → Sevk Et",
     rota: "operations/work-orders",
     beklenenHatalar: [{ status: 409, url: /\/api\/subcontractor\/dispatch\/bulk/ }],
     async yap(ctx) {

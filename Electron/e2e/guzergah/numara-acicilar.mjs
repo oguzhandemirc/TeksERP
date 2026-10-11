@@ -295,7 +295,7 @@ export function acicilarKur(c) {
         const d = zorunlu(await api("/api/work-orders/quick-start", { method: "POST", body: JSON.stringify({ rollBarcodes: [await stokTop()], steps: [{ stationId: await icIstasyon() }], clientToken: crypto.randomUUID() }) }), "quick-start");
         return { id: d.workOrder.id, numara: await numaraOku("work_orders", "workOrderNumber", d.workOrder.id) };
       },
-      ekran: (dur, k, eski) => listede("İş Emirleri", /İş emri, parti/, [k.numara, eski]),
+      ekran: (dur, k, eski) => listede("Terbiye İş Emirleri", /Terbiye iş emri, parti/, [k.numara, eski]),
       belge: async (dur, k) => {
         const [kart] = await sql(`SELECT id FROM traveler_cards WHERE "workOrderId"=$1 ORDER BY "createdAt" DESC LIMIT 1`, [k.id]);
         return kart ? belgeHtml(null, kart.id, k.numara, `/api/traveler-cards/${kart.id}/html`) : { hata: "refakat kartı doğmadı" };
@@ -306,7 +306,7 @@ export function acicilarKur(c) {
       hazirla: async () => {},
       eskiKayit: () => eskiSec("subcontractor_dispatches", "dispatchNo"),
       ac: async () => { const f = await fasonSevk(); return { id: f.dispatchId, numara: await numaraOku("subcontractor_dispatches", "dispatchNo", f.dispatchId) }; },
-      ekran: async () => ({ uygulanmaz: "fason sevkin genel listesi yok (iş emri şeridinde) — belge ve okutma ölçülür" }),
+      ekran: async () => ({ uygulanmaz: "fason sevkin genel listesi yok (terbiye iş emri şeridinde) — belge ve okutma ölçülür" }),
       belge: (dur, k) => belgeHtml("SUBCONTRACTOR_DISPATCH", k.id, k.numara),
     },
     subcontractorReceipt: {
@@ -448,7 +448,7 @@ export function acicilarKur(c) {
         const d = zorunlu(await api("/api/orders", { method: "POST", body: JSON.stringify({ customerId: dur.sipCari, lines: [{ itemId: await kumas(), quantity: 10 }], clientToken: crypto.randomUUID() }) }), "sipariş");
         return { id: d.id, numara: await numaraOku("orders", "orderNumber", d.id) };
       },
-      ekran: (dur, k, eski) => listede("Siparişler", /Sipariş no, iş emri no/, [k.numara, eski]),
+      ekran: (dur, k, eski) => listede("Siparişler", /Sipariş no, terbiye iş emri no/, [k.numara, eski]),
       belge: belgeYok("siparişin kendi belge türü yok"),
     },
     weavingOrder: {
@@ -456,11 +456,11 @@ export function acicilarKur(c) {
       hazirla: (dur) => uretimModulu(dur, ["productionEnabled", "dokumaEnabled"]),
       eskiKayit: () => eskiSec("weaving_orders", "weavingOrderNumber"),
       ac: async () => {
-        const d = zorunlu(await api("/api/weaving-orders", { method: "POST", body: JSON.stringify({ itemId: await kumas(), executionKind: "IN_HOUSE", clientToken: crypto.randomUUID() }) }), "dokuma işi");
+        const d = zorunlu(await api("/api/weaving-orders", { method: "POST", body: JSON.stringify({ itemId: await kumas(), executionKind: "IN_HOUSE", clientToken: crypto.randomUUID() }) }), "dokuma iş emri");
         return { id: d.id, numara: await numaraOku("weaving_orders", "weavingOrderNumber", d.id) };
       },
-      ekran: (dur, k, eski) => listede("Dokuma İşleri", /Dokuma no, kumaş/, [k.numara, eski]),
-      belge: belgeYok("dokuma işinin belge türü yok"),
+      ekran: (dur, k, eski) => listede("Dokuma İş Emirleri", /Dokuma no, kumaş/, [k.numara, eski]),
+      belge: belgeYok("dokuma iş emrinin belge türü yok"),
     },
     warpBeam: {
       tablo: { tablo: "warp_beams", kolon: "beamNo" }, okutulur: false, yeniOnEk: "LVZ", varyantlar: VAR2,
@@ -603,7 +603,7 @@ export function acicilarKur(c) {
     bankAccount: kod({ tablo: "bank_accounts", uc: "/api/finance/bank-accounts", govde: () => ({ name: `TEST-E5 Banka ${K()}` }), sayfa: "Kasa & Banka", arama: null, hazirla: modulAc, yeniOnEk: "BNZ" }),
     returnReason: kod({ tablo: "return_reasons", uc: "/api/return-reasons", sayfa: "İade Nedenleri", arama: /Kod veya ad ara/, yeniOnEk: "IANZ", panel: { sayfa: "İade Nedenleri" } }),
     productRecipe: kod({
-      tablo: "product_recipes", uc: "/api/product-recipes", sayfa: "İş Emri Şablonları", arama: /Şablon adı veya kodu ara/, hazirla: modulAc, yeniOnEk: "RECZ",
+      tablo: "product_recipes", uc: "/api/product-recipes", sayfa: "Terbiye İş Emri Şablonları", arama: /Şablon adı veya kodu ara/, hazirla: modulAc, yeniOnEk: "RECZ",
       govde: async () => { const [i] = await sql(`SELECT id FROM items WHERE "isActive" AND "itemType"='FABRIC' ORDER BY "createdAt" DESC LIMIT 1`); return { name: `TEST-E5 Şablon ${K()}`, itemId: i?.id }; },
     }),
     defectType: kod({ tablo: "defect_types", uc: "/api/defect-types", sayfa: "Hata Tipleri", arama: /Kod veya ad ara/, yeniOnEk: "HATZ", panel: { sayfa: "Hata Tipleri" } }),

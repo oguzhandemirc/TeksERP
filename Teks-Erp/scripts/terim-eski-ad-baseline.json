@@ -1,49 +1,6 @@
 {
   "aciklama": "test_terim_eski_ad §3 tabanı: dosya → eski ad geçiş sayısı. Yalnız DÜŞER; --yaz ile yazılır.",
   "dosyalar": {
-    "Electron/src/lib/audit-labels.ts": {
-      "dokumaIsi": 3,
-      "isEmri": 11
-    },
-    "Electron/src/lib/item-lifecycle.ts": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/FabricProperties/FabricPropertyFormDialog.tsx": {
-      "isEmri": 2
-    },
-    "Electron/src/pages/FabricProperties/columns.tsx": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Items/ItemFormDialog.tsx": {
-      "dokumaIsi": 1
-    },
-    "Electron/src/pages/ProductRecipes/ProductRecipeFormDialog.tsx": {
-      "isEmri": 3
-    },
-    "Electron/src/pages/ProductRecipes/ProductRecipesPage.tsx": {
-      "isEmri": 3
-    },
-    "Electron/src/pages/Routes/RouteFormDialog.tsx": {
-      "isEmri": 2
-    },
-    "Electron/src/pages/Routes/RoutesPage.tsx": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Settings/SettingsPage.tsx": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Stations/StationFormDialog.tsx": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/SubcontractorCategories/SubcontractorCategoryFormDialog.tsx": {
-      "isEmri": 2
-    },
-    "Electron/src/pages/Subcontractors/SubcontractorFormDialog.tsx": {
-      "isEmri": 1
-    },
-    "Electron/src/pages/Warehouses/movements.ts": {
-      "isEmri": 1
-    },
     "Teks-Erp/src/constants/module-profiles.ts": {
       "dokumaIsi": 2,
       "isEmri": 1

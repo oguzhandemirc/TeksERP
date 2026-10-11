@@ -235,7 +235,7 @@ await madde("K11", "12 seri art arda aç/kapat (okutulan + okutulmayan karışı
 });
 
 // ── K1: iş emri — sayaç ve kaynak kaydedilir, toast yok ──────────────────────
-await madde("K1", "iş emri: açılış + tuş vuruşu toast'sız · sayaç ve kaynak kaydedilir · geri alınır", async (k) => {
+await madde("K1", "terbiye iş emri: açılış + tuş vuruşu toast'sız · sayaç ve kaynak kaydedilir · geri alınır", async (k) => {
   const d = await ac(await seri("workOrder"));
   await page.waitForTimeout(800);
   k.gorsel.push(await gor("workOrder", "k1-acilis"));
@@ -262,7 +262,7 @@ await madde("K1", "iş emri: açılış + tuş vuruşu toast'sız · sayaç ve k
   await d4.locator("#ns-source").click(); await page.getByRole("option", { name: ad[orj] }).click();
   await kaydet("workOrder", d4, "k1-kaynak-geri");
   k.olcum.kaynakGeriDb = (await sql(`SELECT "numberSource"::text s FROM number_series WHERE key='workOrder'`))[0].s;
-  const a = agKayitlari("K1 · iş emri: açılış + tuş vuruşu toast'sız · sayaç ve kaynak kaydedilir · geri alınır");
+  const a = agKayitlari("K1 · terbiye iş emri: açılış + tuş vuruşu toast'sız · sayaç ve kaynak kaydedilir · geri alınır");
   return s1.kapandi && Number(k.olcum.dbMax) === 99999999 && s2.kapandi && k.olcum.dbMaxGeri === null
     && s3.kapandi && k.olcum.kaynakDb === hedef && k.olcum.kaynakGeriDb === orj && a.toast.filter((t) => /\[error\]/.test(t)).length === 0 && a.ag.filter((x) => !/\(beyanlı\)/.test(x)).length === 0;
 });

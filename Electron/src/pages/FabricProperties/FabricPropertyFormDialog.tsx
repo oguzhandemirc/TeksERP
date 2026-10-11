@@ -152,7 +152,7 @@ export function FabricPropertyFormDialog({
             label="Bu özelliği uygulayan istasyonlar"
             error={form.formState.errors.stationIds}
             required
-            hint="İş emri rotasında bu istasyonlardan biri varsa özellik seçilebilir. Boş bırakılamaz — istasyonsuz özellik hiçbir iş emrinde görünmez."
+            hint="Terbiye iş emri rotasında bu istasyonlardan biri varsa özellik seçilebilir. Boş bırakılamaz — istasyonsuz özellik hiçbir terbiye iş emrinde görünmez."
           >
             <Controller
               control={form.control}

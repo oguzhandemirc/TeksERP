@@ -258,7 +258,7 @@ export function ItemFormDialog({
           {/* E4 (2026-09-18): kumaşın varsayılan çözgü kartı — dokuma işi formu ve sunucu ön-dolumu buradan okur;
               yalnız KUMAŞ + devere açıkken çizilir (kapalıyken alan hiç yok = bugünkü form). */}
           {itemType === ItemType.FABRIC && devereEnabled && (
-            <FormField label="Varsayılan çözgü kartı (opsiyonel)" error={form.formState.errors.warpSpecId} hint="Dokuma işi açarken çözgü kartı bundan ön-dolar; boş = her işte elle seçilir">
+            <FormField label="Varsayılan çözgü kartı (opsiyonel)" error={form.formState.errors.warpSpecId} hint="Dokuma iş emri açarken çözgü kartı bundan ön-dolar; boş = her işte elle seçilir">
               <Controller
                 control={form.control}
                 name="warpSpecId"

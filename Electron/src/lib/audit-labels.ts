@@ -52,15 +52,15 @@ export const TABLE_LABELS: Record<string, string> = {
   QUALITY_GRADE: "Kalite Sınıfı",
   DEFECT_TYPE: "Hata Tipi",
   RETURN_REASON: "İade Sebebi",
-  PRODUCT_RECIPE: "İş Emri Şablonu",
+  PRODUCT_RECIPE: "Terbiye İş Emri Şablonu",
   PERIPHERAL_DEVICE: "Saha Cihazı",
 
   // Sipariş & İş Emri
   ORDER: "Sipariş",
   BATCH: "Parti",
   ORDER_LINE: "Sipariş Satırı",
-  WORK_ORDER: "İş Emri",
-  WORK_ORDER_STEP: "İş Emri Adımı",
+  WORK_ORDER: "Terbiye İş Emri",
+  WORK_ORDER_STEP: "Terbiye İş Emri Adımı",
   MANIFEST: "Çeki Listesi",
 
   // Top & Üretim
@@ -186,7 +186,7 @@ export const TABLE_LABELS: Record<string, string> = {
   YARN_MOVEMENT: "İplik Hareketi",
   YARN_LOT: "İplik Lotu",
   WARP_SPEC: "Çözgü Kartı",
-  WEAVING_ORDER: "Dokuma İşi",
+  WEAVING_ORDER: "Dokuma İş Emri",
   WARP_BEAM: "Levent",
   WARP_BEAM_EVENT: "Levent Olayı",
 
@@ -311,7 +311,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   CASH_LEDGER_PAYMENT_BACKFILL: "Kasa defteri geçmiş satırları dolduruldu (betik)",
   ORDER_DESTINATION_BACKFILL: "Sipariş yönü geriye dönük dolduruldu (betik)",
   ROLL_STATUS_EVENTS_BACKFILL: "Top durum defterine eski iptaller dolduruldu (betik)",
-  WORK_ORDER_EVENTS_BACKFILL: "İş emri hareket defterine geçmiş dolduruldu (betik)",
+  WORK_ORDER_EVENTS_BACKFILL: "Terbiye iş emri hareket defterine geçmiş dolduruldu (betik)",
   TERM_CATALOG_TEXT_MIGRATED: "Görünen ad değişikliği katalog satırlarına işlendi (betik)",
 
   // ── SYSTEM · servis keşfi (kurulum kimliği) ──
@@ -437,7 +437,7 @@ export const ENUM_LABELS: Record<string, string> = {
   IN_HOUSE: "Kendi tezgahımızda",
   SUBCONTRACTED: "Fasonda dokunuyor",
   // WorkOrderEventType — iş emri hareket defteri olay tipi (2026-09-25).
-  CREATED: "İş emri açıldı",
+  CREATED: "Terbiye iş emri açıldı",
   STATUS_CHANGED: "Durum değişti",
   FIELD_CHANGED: "Plan alanı değişti",
   STEP_PLAN_CHANGED: "Adım planı değişti",
@@ -464,7 +464,7 @@ export const ENUM_LABELS: Record<string, string> = {
   VOIDED: "İptal",
   SUPERSEDED: "Eski Versiyon",
   // ManifestSourceKind — çeki listesinin kaynağı
-  WORK_ORDER: "İş emri",
+  WORK_ORDER: "Terbiye iş emri",
   SACK_SELECTION: "Çuval seçimi",
   // ScanType
   ARRIVAL: "Varış",
@@ -618,7 +618,7 @@ export const ENUM_LABELS: Record<string, string> = {
   PRODUCED_STEP: "Üretildiği adım",
   CANCEL_RESTORED: "İptal geri alındı",
   // İş emri
-  WO_CLOSE_DISPOSITION: "İş emri kapanış kararı",
+  WO_CLOSE_DISPOSITION: "Terbiye iş emri kapanış kararı",
   ORDER_LINK_ADDED: "Sipariş bağı eklendi",
   TYPE_DERIVED_FROM_LINKS: "Tür bağlardan türetildi",
   TARGET_COLOR_CHANGED: "Hedef renk değişti",
@@ -743,7 +743,7 @@ export const ENUM_LABELS: Record<string, string> = {
   SUBCONTRACT_RETURN: "Fasondan iplik dönüşü",
   SUBCONTRACT_RETURN_CANCEL: "Fasondan iplik dönüşü iptali",
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebebi",
-  WORK_ORDER_PLAN_CHANGE: "İş emri plan düzeltme sebebi",
+  WORK_ORDER_PLAN_CHANGE: "Terbiye iş emri plan düzeltme sebebi",
   // ───────────────────────────────────────────────────────────────────────
   // TİCARET PAKETİ ENUM DEĞERLERİ (merge, 2026-09-01)
   // Bekçi `test_audit_labels` §4 her Prisma enum değerinin Türkçesini ister;
@@ -1030,8 +1030,8 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   RESOLVED:
     "LoomAlarmState(alarm çözüldü) ve LoomAlarmEventKind(çözülme olayı) — aynı olgunun durumu ve olayı; ortak 'Çözüldü' doğru",
   IN_PROGRESS:
-    "WorkOrderStatus ve WeavingOrderStatus — ikisi de 'Devam Ediyor'. Dokuma işi " +
-    "IN_PROGRESS iken tezgah koşuyordur; iş emrininkiyle aynı cümle doğru (2026-09-13)",
+    "WorkOrderStatus ve WeavingOrderStatus — ikisi de 'Devam Ediyor'. Dokuma iş emri " +
+    "IN_PROGRESS iken tezgah koşuyordur; terbiye iş emrininkiyle aynı cümle doğru (2026-09-13)",
   CUSTOMER: "firma türü / mükerrer-varlık / cari — üçü de 'Müşteri'",
   PENDING: "sipariş/adım/cihaz — üçü de 'Bekliyor'",
   APPROVED: "sipariş ve cihaz — ikisi de 'Onaylandı'",
@@ -1041,8 +1041,8 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   // metin sessizce bayatladı. "Planlandı" planlı duruş için de doğru cevaptır
   // (o duruş PLANLANMIŞTIR) ⇒ ortak Türkçe tutuyor, yalnız sayı düzeltildi.
   PLANNED:
-    "iş emri / dokuma işi / sevkiyat / sevkiyat olayı / planlı duruş (MachineStopLossClass) — beşi de 'Planlandı'",
-  SUPERSEDED: "iş emri ve basılı belge — ikisi de 'Eski Versiyon'",
+    "terbiye iş emri / dokuma iş emri / sevkiyat / sevkiyat olayı / planlı duruş (MachineStopLossClass) — beşi de 'Planlandı'",
+  SUPERSEDED: "terbiye iş emri ve basılı belge — ikisi de 'Eski Versiyon'",
   ACTIVE: "sekiz durum enum'u (ürün yaşam döngüsü dahil) — hepsinde 'Aktif'",
   VOIDED: "refakat kartı, basılı belge ve kartela (durum + kabul iptali olayı) — hepsinde 'İptal'",
   SHIPPED: "top durumu, kartela durumu ve kartela olayı — üçü de 'Sevk Edildi'",

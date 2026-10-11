@@ -133,9 +133,9 @@ export function RouteFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Rotayı Düzenle" : "Yeni Üretim Rotası"}</DialogTitle>
           <DialogDescription>
-            İş emrinde kullanılacak istasyon sırasını tanımla. Adımlar sürüklenip yeniden
+            Terbiye iş emrinde kullanılacak istasyon sırasını tanımla. Adımlar sürüklenip yeniden
             sıralanabilir. Her adımda o istasyonun uygulayabildiği renk/özellikler seçilirse
-            iş emri açılışında hedef alanlar hazır gelir.
+            terbiye iş emri açılışında hedef alanlar hazır gelir.
           </DialogDescription>
         </DialogHeader>
 

@@ -65,7 +65,7 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <p className="text-sm font-medium">İş emrinde fason firma varsayılanı</p>
+              <p className="text-sm font-medium">Terbiye iş emrinde fason firma varsayılanı</p>
               <p className="pb-2 text-xs text-muted-foreground">
                 Rotaya fason adımı eklediğinde hangi firma hazır gelsin?
               </p>

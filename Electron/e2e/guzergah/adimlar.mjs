@@ -758,17 +758,17 @@ export const ADIMLAR = [
 
   {
     id: "E2", rol: "P", gerektirir: ["E1"],
-    yol: "Siparişler → TEST-S1 satırı (detay) → kalemi seç → İş emri oluştur (1) → Yeni İş Emri: rota şablonu, hedef 100 → kaydet", rota: "operations/work-orders/new",
+    yol: "Siparişler → TEST-S1 satırı (detay) → kalemi seç → Terbiye iş emri oluştur (1) → Yeni Terbiye İş Emri: rota şablonu, hedef 100 → kaydet", rota: "operations/work-orders/new",
     async yap({ git, gor, page }) {
       await git("Siparişler");
       await page().getByPlaceholder("Sipariş no").filter({ visible: true }).first().fill(AD.siparisNo);
       await page().waitForTimeout(700);
       await page().getByRole("row").filter({ hasText: AD.siparisNo }).first().click({ timeout: 15_000 });
       const sheet = page().getByRole("dialog").last(); await gor(sheet);
-      await sheet.getByLabel("Kalemi iş emri için seç").first().click({ timeout: 15_000 });
-      await sheet.getByRole("button", { name: /İş emri oluştur \(1\)/ }).click({ timeout: 15_000 });
+      await sheet.getByLabel("Kalemi terbiye iş emri için seç").first().click({ timeout: 15_000 });
+      await sheet.getByRole("button", { name: /Terbiye iş emri oluştur \(1\)/ }).click({ timeout: 15_000 });
       // Yeni İş Emri sayfası (kendi sekmesinde): Hedef Kumaş + "Sipariş: 1 kalem" ön-dolu.
-      await gor(page().getByRole("heading", { name: "Yeni İş Emri" }).first());
+      await gor(page().getByRole("heading", { name: "Yeni Terbiye İş Emri" }).first());
       await gor(page().getByText(/Sipariş: 1 kalem/).first());
       // Üretim Rotası ZORUNLU: "Kayıtlı rota seç…" → dokuma/kurşun/tambur içeren şablon (yoksa ilk şablon).
       await page().getByText("Kayıtlı rota seç", { exact: false }).first().click({ timeout: 15_000 });
@@ -783,11 +783,11 @@ export const ADIMLAR = [
       await page().waitForTimeout(800);
       // ⚠️ Belge "Hedef 100 m" der — hedef alanı bayrağa bağlı (`targetQuantityEnabled`), kapalıysa ekranda YOK;
       // "100 m açık" bağlı sipariş kaleminden gelir (sağ önizleme). Belge notu.
-      await page().getByRole("button", { name: "İş Emri Oluştur", exact: true }).click({ timeout: 15_000 });
+      await page().getByRole("button", { name: "Terbiye İş Emri Oluştur", exact: true }).click({ timeout: 15_000 });
       await page().waitForTimeout(1500);
     },
     async bekle({ git, gor, page }) {
-      await git("İş Emirleri");
+      await git("Terbiye İş Emirleri");
       const ara = page().getByPlaceholder(/ara/i).filter({ visible: true }).first();
       await ara.fill(AD.siparisNo);
       await page().waitForTimeout(800);
@@ -798,7 +798,7 @@ export const ADIMLAR = [
       await gor(satir.getByText("Siparişe Özel", { exact: false }));
     },
     dogrula: [
-      { ad: "iş emri doğdu, tipi bağın aynası, siparişe bağlı (work_orders/work_order_to_order_lines)",
+      { ad: "terbiye iş emri doğdu, tipi bağın aynası, siparişe bağlı (work_orders/work_order_to_order_lines)",
         sql: `SELECT wo.type, wo.status, count(l.id)::int n FROM work_orders wo JOIN work_order_to_order_lines l ON l."workOrderId"=wo.id JOIN order_lines ol ON ol.id=l."orderLineId" JOIN orders o ON o.id=ol."orderId" WHERE o."orderNumber"=$1 GROUP BY wo.id, wo.type, wo.status`,
         params: [AD.siparisNo], oku: (r) => r.map((x) => `${x.type}:${x.status}:${x.n}`).join("|"), beklenen: (v) => /^ORDER[A-Z_]*:[A-Z_]+:1$/.test(v) },
       { ad: "rota adımları var (≥1) ve şablon adı", sql: `SELECT count(s.id)::int n FROM work_orders wo JOIN work_order_to_order_lines l ON l."workOrderId"=wo.id JOIN order_lines ol ON ol.id=l."orderLineId" JOIN orders o ON o.id=ol."orderId" JOIN work_order_steps s ON s."workOrderId"=wo.id WHERE o."orderNumber"=$1`,
@@ -808,9 +808,9 @@ export const ADIMLAR = [
 
   {
     id: "E3", rol: "P", gerektirir: ["E2"],
-    yol: "İş Emirleri → iş emri detayı → \"Sipariş Bağla\" → gerçek bir müşterinin açık siparişi → Bağla (1)", rota: "operations/work-orders",
+    yol: "Terbiye İş Emirleri → terbiye iş emri detayı → \"Sipariş Bağla\" → gerçek bir müşterinin açık siparişi → Bağla (1)", rota: "operations/work-orders",
     async yap({ git, gor, page }) {
-      await git("İş Emirleri");
+      await git("Terbiye İş Emirleri");
       await page().getByPlaceholder(/ara/i).filter({ visible: true }).first().fill(AD.siparisNo);
       await page().waitForTimeout(800);
       await page().getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
@@ -843,7 +843,7 @@ export const ADIMLAR = [
       await page().keyboard.press("Escape");
     },
     async bekle({ git, gor, page }) {
-      await git("İş Emirleri");
+      await git("Terbiye İş Emirleri");
       await page().getByPlaceholder(/ara/i).filter({ visible: true }).first().fill(AD.siparisNo);
       await page().waitForTimeout(800);
       // ⚠️ Bağdan sonra Müşteri kolonu "<YENİ bağlanan> +1" gösteriyor — TEST Müşteri rozetin arkasına düşüyor
@@ -854,7 +854,7 @@ export const ADIMLAR = [
       await gor(satir.getByText(/150\s*m/).first()); // 100 + 50 m bağlı toplam
     },
     dogrula: [
-      { ad: "iş emrinde İKİ sipariş bağı, iki farklı müşteri (work_order_to_order_lines)",
+      { ad: "terbiye iş emrinde İKİ sipariş bağı, iki farklı müşteri (work_order_to_order_lines)",
         sql: `SELECT count(DISTINCT l."orderLineId")::int n, count(DISTINCT o."customerId")::int m FROM work_orders wo JOIN work_order_to_order_lines l ON l."workOrderId"=wo.id JOIN order_lines ol ON ol.id=l."orderLineId" JOIN orders o ON o.id=ol."orderId" WHERE wo.id IN (SELECT l2."workOrderId" FROM work_order_to_order_lines l2 JOIN order_lines ol2 ON ol2.id=l2."orderLineId" JOIN orders o2 ON o2.id=ol2."orderId" WHERE o2."orderNumber"=$1)`,
         params: [AD.siparisNo], oku: (r) => `${r[0].n}:${r[0].m}`, beklenen: "2:2" },
       { ad: "listede görünen müşteri (çıkarım: asıl müşteri mi, yeni bağlanan mı?)", sql: `SELECT 1`,
@@ -865,11 +865,11 @@ export const ADIMLAR = [
   // ── F · DOKUMA (panel adımları) ────────────────────────────────────────────
   {
     id: "F1", rol: "P", gerektirir: ["B2", "B3"],
-    yol: "Operasyon → Üretim & Fason → Dokuma İşleri → Yeni Dokuma İşi", rota: "operations/weaving-orders",
+    yol: "Operasyon → Üretim & Fason → Dokuma İş Emirleri → Yeni Dokuma İş Emri", rota: "operations/weaving-orders",
     async yap({ git, tikla, gor, page }) {
-      await git("Dokuma İşleri");
-      await tikla("Yeni Dokuma İşi");
-      const d = page().getByRole("dialog").filter({ hasText: "Yeni Dokuma İşi" }).last(); await gor(d);
+      await git("Dokuma İş Emirleri");
+      await tikla("Yeni Dokuma İş Emri");
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Dokuma İş Emri" }).last(); await gor(d);
       // EntityPicker modalı: başlık her yerde verilmemiş ("Seç") — modal arama kutusuyla tanınır.
       const secModal = async (tetik, _baslik, ara) => {
         await d.getByText(tetik, { exact: false }).first().click({ timeout: 15_000 });
@@ -896,7 +896,7 @@ export const ADIMLAR = [
       await gor(satir.getByText(/100\s*m/).first());
     },
     dogrula: [
-      { ad: "dokuma işi doğdu: kumaş + çözgü kartı + IN_HOUSE + hedef 100 (weaving_orders)",
+      { ad: "dokuma iş emri doğdu: kumaş + çözgü kartı + IN_HOUSE + hedef 100 (weaving_orders)",
         sql: `SELECT wo."executionKind" k, wo.status, wo."plannedM"::text m, ws.code ck FROM weaving_orders wo JOIN items i ON i.id=wo."itemId" LEFT JOIN warp_specs ws ON ws.id=wo."warpSpecId" WHERE i.code=$1 ORDER BY wo."createdAt" DESC LIMIT 1`,
         params: [AD.kumasKod], oku: (r) => r.map((x) => `${x.k}:${x.status}:${x.m}:${x.ck}`).join("|"), beklenen: (v) => new RegExp(`^IN_HOUSE:(PLANNED|READY):100(\\.0+)?:${AD.cozguKod}$`).test(v) },
     ],
@@ -1466,10 +1466,10 @@ export const ADIMLAR = [
   },
   {
     id: "M2", rol: "S",
-    yol: "Sistem → Modüller → 'Dokuma işi modülünü aç' KAPAT → Kaydet → Raporlar bölümünde dokuma satırları kilit bandıyla pasif", rota: "system/module-profile",
+    yol: "Sistem → Modüller → 'Dokuma iş emri modülünü aç' KAPAT → Kaydet → Raporlar bölümünde dokuma satırları kilit bandıyla pasif", rota: "system/module-profile",
     async yap({ git, gor, page }) {
       await git("Modüller");
-      const sw = page().locator("label", { hasText: "Dokuma işi modülünü aç" }).locator('input[type="checkbox"]').filter({ visible: true }).first(); await gor(sw);
+      const sw = page().locator("label", { hasText: "Dokuma iş emri modülünü aç" }).locator('input[type="checkbox"]').filter({ visible: true }).first(); await gor(sw);
       if (await sw.isChecked()) await sw.click();
       const kaydet = page().getByRole("button", { name: "Kaydet", exact: true }).filter({ visible: true }).first();
       if (await kaydet.isEnabled()) { await kaydet.click({ timeout: 15_000 }); await page().waitForTimeout(1500); }
@@ -1484,20 +1484,20 @@ export const ADIMLAR = [
   },
   {
     id: "M2b", rol: "P", gerektirir: ["M2"],
-    yol: "Yönetici: ⌘K 'Dokuma İşleri' → yok · GET /api/weaving-orders → 403 MODULE_DISABLED (tablet Bölüm Seçimi: d5)", rota: "operations/weaving-orders",
+    yol: "Yönetici: ⌘K 'Dokuma İş Emirleri' → yok · GET /api/weaving-orders → 403 MODULE_DISABLED (tablet Bölüm Seçimi: d5)", rota: "operations/weaving-orders",
     async yap({ api, page }) {
       const kutu = page().getByPlaceholder("Sayfa, rapor, ayar ara...");
       const acici = page().getByText("Ara veya komut", { exact: false }).first();
       if (await acici.count()) await acici.click({ timeout: 10_000 }); else await page().keyboard.press("Meta+k");
-      await kutu.waitFor({ timeout: 10_000 }); await kutu.fill("Dokuma İşleri"); await page().waitForTimeout(700);
-      m2Olcum.paletDokuma = await page().locator("[cmdk-item]").filter({ hasText: /^Dokuma İşleri$/ }).count();
+      await kutu.waitFor({ timeout: 10_000 }); await kutu.fill("Dokuma İş Emirleri"); await page().waitForTimeout(700);
+      m2Olcum.paletDokuma = await page().locator("[cmdk-item]").filter({ hasText: /^Dokuma İş Emirleri$/ }).count();
       await page().keyboard.press("Escape");
       const r = await api(`/api/weaving-orders?limit=1`);
       m2Olcum.apiDurum = r.status; m2Olcum.apiKod = r.govde?.details?.code ?? null;
     },
     async bekle() {},
     dogrula: [
-      { ad: "palet 'Dokuma İşleri' listelemez (ekran)", sql: `SELECT 1`, oku: () => m2Olcum.paletDokuma, beklenen: 0 },
+      { ad: "palet 'Dokuma İş Emirleri' listelemez (ekran)", sql: `SELECT 1`, oku: () => m2Olcum.paletDokuma, beklenen: 0 },
       { ad: "GET /api/weaving-orders → 403 MODULE_DISABLED", sql: `SELECT 1`, oku: () => `${m2Olcum.apiDurum}:${m2Olcum.apiKod}`, beklenen: "403:MODULE_DISABLED" },
     ],
   },
@@ -1506,7 +1506,7 @@ export const ADIMLAR = [
     yol: "Sistem → Modüller → Dokuma modülünü tekrar AÇ → uç 200", rota: "system/module-profile",
     async yap({ git, gor, api, page }) {
       await git("Modüller");
-      const sw = page().locator("label", { hasText: "Dokuma işi modülünü aç" }).locator('input[type="checkbox"]').filter({ visible: true }).first(); await gor(sw);
+      const sw = page().locator("label", { hasText: "Dokuma iş emri modülünü aç" }).locator('input[type="checkbox"]').filter({ visible: true }).first(); await gor(sw);
       if (!(await sw.isChecked())) await sw.click();
       const kaydet = page().getByRole("button", { name: "Kaydet", exact: true }).filter({ visible: true }).first();
       if (await kaydet.isEnabled()) { await kaydet.click({ timeout: 15_000 }); await page().waitForTimeout(1500); }
@@ -1576,7 +1576,7 @@ export const ADIMLAR = [
   },
   {
     id: "K1", rol: "P", gerektirir: ["B1", "B3", "C2"],
-    yol: "Cariler → Yeni Cari (Fason iş yapar) · Leventler → Yeni Levent (Hazır alındı) → sağ tık → Sar (WOUND) · Dokuma İşleri → Yeni Dokuma İşi (Fasonda dokunuyor) → sağ tık → Fason (sevk · kabul) → Sevk et (levent + iplik TEST-L1 20 kg)", rota: "operations/weaving-orders",
+    yol: "Cariler → Yeni Cari (Fason iş yapar) · Leventler → Yeni Levent (Hazır alındı) → sağ tık → Sar (WOUND) · Dokuma İş Emirleri → Yeni Dokuma İş Emri (Fasonda dokunuyor) → sağ tık → Fason (sevk · kabul) → Sevk et (levent + iplik TEST-L1 20 kg)", rota: "operations/weaving-orders",
     async yap({ git, tikla, gor, sec, sql, page }) {
       const secModal = async (d, tetik, ara) => {
         await d.getByText(tetik, { exact: false }).first().click({ timeout: 15_000 });
@@ -1613,8 +1613,8 @@ export const ADIMLAR = [
       await wd.getByRole("button", { name: "Sar", exact: true }).click({ timeout: 15_000 });
       await wd.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(600);
       // ③ Fason dokuma işi
-      await git("Dokuma İşleri"); await tikla("Yeni Dokuma İşi");
-      const d = page().getByRole("dialog").filter({ hasText: "Yeni Dokuma İşi" }).last(); await gor(d);
+      await git("Dokuma İş Emirleri"); await tikla("Yeni Dokuma İş Emri");
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Dokuma İş Emri" }).last(); await gor(d);
       await secModal(d, "Kumaş seç", AD.kumas);
       await secModal(d, "Çözgü kartı seç", AD.cozgu);
       await sec(d.getByRole("combobox").filter({ hasText: /tezgah|fason/i }).first(), /Fasonda/);
@@ -1623,7 +1623,7 @@ export const ADIMLAR = [
       await d.getByRole("button", { name: /Kaydet|Oluştur/ }).last().click({ timeout: 15_000 });
       await d.waitFor({ state: "detached", timeout: 15_000 }); await page().waitForTimeout(800);
       const isKaydi = await sql(`SELECT w."weavingOrderNumber" n FROM weaving_orders w JOIN subcontractors s ON s.id=w."subcontractorId" WHERE s.name=$1 ORDER BY w."createdAt" DESC LIMIT 1`, [buyukTr(AD.fasoncu)]);
-      k1Olcum.isNo = isKaydi[0]?.n ?? null; if (!k1Olcum.isNo) throw new Error("fason dokuma işi doğmadı");
+      k1Olcum.isNo = isKaydi[0]?.n ?? null; if (!k1Olcum.isNo) throw new Error("fason dokuma iş emri doğmadı");
       k1Olcum.sevkOnceKg = Number((await sql(`SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`, [AD.lot]))[0].k);
       // ④ Fason sayfası → Sevk et
       const isSatir = page().getByRole("row").filter({ hasText: k1Olcum.isNo }).filter({ visible: true }).first(); await gor(isSatir);
@@ -1661,13 +1661,13 @@ export const ADIMLAR = [
   },
   {
     id: "K3", rol: "P", gerektirir: ["K1"],
-    yol: "Dokuma İşleri → fason işi sağ tık → Fason (sevk · kabul) → iplik satırı 'İplik döndü' (5 kg, sebep) → Dönüşü kaydet → 'Dönüşü geri al' (gerekçe)", rota: "operations/weaving-orders",
+    yol: "Dokuma İş Emirleri → fason işi sağ tık → Fason (sevk · kabul) → iplik satırı 'İplik döndü' (5 kg, sebep) → Dönüşü kaydet → 'Dönüşü geri al' (gerekçe)", rota: "operations/weaving-orders",
     async yap({ git, gor, sec, sql, page }) {
       const kayit = await sql(`SELECT w."weavingOrderNumber" n FROM weaving_orders w JOIN subcontractors s ON s.id=w."subcontractorId" WHERE s.name=$1 ORDER BY w."createdAt" DESC LIMIT 1`, [buyukTr(AD.fasoncu)]);
-      k3Olcum.isNo = k1Olcum.isNo ?? kayit[0]?.n ?? null; if (!k3Olcum.isNo) throw new Error("fason dokuma işi yok (K1 koşmadı mı?)");
+      k3Olcum.isNo = k1Olcum.isNo ?? kayit[0]?.n ?? null; if (!k3Olcum.isNo) throw new Error("fason dokuma iş emri yok (K1 koşmadı mı?)");
       const lotBakiye = async () => Number((await sql(`SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`, [AD.lot]))[0].k);
       k3Olcum.onceKg = await lotBakiye();
-      await git("Dokuma İşleri");
+      await git("Dokuma İş Emirleri");
       const isSatir = page().getByRole("row").filter({ hasText: k3Olcum.isNo }).filter({ visible: true }).first(); await gor(isSatir);
       await isSatir.click({ button: "right", timeout: 15_000 });
       await page().getByRole("menuitem", { name: /Fason \(sevk/ }).click({ timeout: 15_000 });
