@@ -249,7 +249,8 @@ async function govde(): Promise<void> {
   const r = await getLoomFloor(simdi);
   const d: LoomFloorDto = r.data!;
   const anahtar = (o: object) => Object.keys(o).sort().join(",");
-  check("§5a üst şekil", anahtar(d) === "alarmNotice,asOf,beamTracking,dokumaEnabled,factoryDayStart,graceMinutes,halls,looms,shift,summary", anahtar(d));
+  check("§5a üst şekil", anahtar(d) === "alarmNotice,asOf,beamTracking,bulkStopActions,dokumaEnabled,factoryDayStart,graceMinutes,halls,looms,shift,summary", anahtar(d));
+  check("§5a3 salon ucu toplu duruş uçlarını beyan eder (eski sunucu tespiti — panel alanı görmezse eylemi pasif çizer)", d.bulkStopActions === true);
   // Vardiya şeridi: salon ile ayar ekranı ucu AYNI okumadan (kip × durum matrisi test_loom_alarm §9).
   const st = (await getAlarmShiftStatus(simdi)).data!;
   check("§5a2 salonun `shift` ve `alarmNotice`u ayar ekranı durum ucuyla aynı (tek okuma `alarmShiftState`)",

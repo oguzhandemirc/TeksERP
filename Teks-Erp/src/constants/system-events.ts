@@ -120,6 +120,8 @@ const SHORT_CREDENTIAL_EVENTS = {
   SHORT_CREDENTIAL_BULK_RESET: "SHORT_CREDENTIAL_BULK_RESET",
   /** Tezgah Salonu toplu koşum işlemi özeti (koşum başı satırlar ayrıca `MACHINE_RUN`). */
   MACHINE_RUN_BULK: "MACHINE_RUN_BULK",
+  /** Tezgah Salonu toplu duruş işlemi özeti — aç · kapat · geri al (duruş başı satırlar ayrıca `MACHINE_STOP_EVENT`). */
+  MACHINE_STOP_BULK: "MACHINE_STOP_BULK",
 } as const;
 
 /** Kurulum kimliği (servis keşfi). */

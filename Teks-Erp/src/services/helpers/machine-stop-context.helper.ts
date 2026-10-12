@@ -135,6 +135,31 @@ export async function freezeStopEscalation(
 }
 
 /**
+ * ÖRTÜŞME YÜKLEMİ — `at`ten açılacak (ucu açık) duruşla çakışan kayıt: açık duruş ya da `at`ten SONRA biten
+ * kapanmış duruş (geri alınmış hariç). Toplu açılışın tx'i ve önizlemesi AYNI parçayı okur; açık duruşu da
+ * kapsaması tx'teki okuma ile eşzamanlı kapanış arasındaki pencereyi kapatır (açıkken görülen reddedilir).
+ */
+export function stopOverlapWhere(machineId: string, at: Date): Prisma.MachineStopEventWhereInput {
+  return { machineId, revokedAt: null, OR: [{ endedAt: null }, { endedAt: { gt: at } }] };
+}
+
+/** Örtüşen kayıt varsa 409 — açık duruş `STOP_ALREADY_OPEN`, kapanmış duruş `STOP_OVERLAP`. */
+export async function assertNoStopOverlapTx(tx: Tx, machineId: string, at: Date): Promise<void> {
+  const hit = await tx.machineStopEvent.findFirst({
+    where: stopOverlapWhere(machineId, at),
+    orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+    select: { id: true, startedAt: true, endedAt: true },
+  });
+  if (!hit) return;
+  if (hit.endedAt === null) {
+    throw AppError.conflict("Bu makinede zaten açık bir duruş var — önce onu kapatın.", { code: "STOP_ALREADY_OPEN", machineId, stopId: hit.id });
+  }
+  throw AppError.conflict("Seçilen başlangıç bu tezgahın kayıtlı bir duruşuyla çakışıyor — daha geç bir saat seçin.", {
+    code: "STOP_OVERLAP", machineId, stopId: hit.id, startedAt: hit.startedAt, endedAt: hit.endedAt,
+  });
+}
+
+/**
  * MÜHÜR KAPISI — tek yer; aç · kapa · sınıfla · yeniden sınıfla · geri al hepsi buradan geçer.
  * İki ayrı soru, ikisi de burada: iptal edilmiş vardiya → 409 `SHIFT_CANCELLED`; MÜHÜRLÜ karne
  * (`MachineShiftStat.sealState`, makine×vardiya; satır yoksa OPEN sayılır) → 409 `SHIFT_SEALED`

@@ -36,6 +36,7 @@ import {
   MACHINE_STOP_SELECT,
   type MachineStopDto,
   assertBeamSlotValid,
+  assertNoStopOverlapTx,
   assertStopShiftWritableTx,
   freezeStopEscalation,
   loadStop,
@@ -49,6 +50,8 @@ import type { ApiResponse } from "../types/api.types";
 import { nudgeLoomAlarm } from "../jobs/loom-alarm.job";
 
 const TABLE = "MACHINE_STOP_EVENT";
+/** Açılış replay'inin cevap metni — toplu açılış "yeniden gönderim" satırını bununla ayırır. */
+export const STOP_REPLAY_MESSAGE = "Duruş zaten kayıtlı (yeniden gönderim)";
 
 
 export interface OpenManualStopInput {
@@ -84,7 +87,12 @@ export interface ReclassifyStopInput {
 // ─────────────────────────────────────────────────────────────────────────────
 // AÇ
 // ─────────────────────────────────────────────────────────────────────────────
-export async function openManualStop(input: OpenManualStopInput, userId?: string): Promise<ApiResponse<MachineStopDto>> {
+export interface OpenManualStopOptions {
+  /** Geçmiş saatle açılışta kapanmış duruşla örtüşmeyi tx içinde reddet (toplu açılış; tekli uç bugünkü davranışta). */
+  rejectOverlap?: boolean;
+}
+
+export async function openManualStop(input: OpenManualStopInput, userId?: string, opts: OpenManualStopOptions = {}): Promise<ApiResponse<MachineStopDto>> {
   const stopKey = input.clientToken ?? randomUUID();
   const source: MachineDataSource = input.source ?? MachineDataSource.SUPERVISOR;
 
@@ -111,7 +119,7 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
       "Bu form daha önce başka bir duruş için kaydedilmiş — yeni duruş için formu yeniden açın.",
       { stopId: existing.id },
     );
-    return { success: true, data: existing, message: "Duruş zaten kayıtlı (yeniden gönderim)" };
+    return { success: true, data: existing, message: STOP_REPLAY_MESSAGE };
   }
 
   let created: MachineStopDto;
@@ -124,6 +132,7 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
       const preset = input.reasonCode ? await resolveStopPreset(tx, input.reasonCode) : null;
       const shiftInstanceId = await resolveShiftInstanceId(tx, started.value);
       await assertStopShiftWritableTx(tx, { shiftInstanceId, machineId: machine.id });
+      if (opts.rejectOverlap) await assertNoStopOverlapTx(tx, machine.id, started.value);
       const runId = await resolveRunId(tx, machine.id, started.value);
       const escalation = await freezeStopEscalation(tx, preset, null);
       return tx.machineStopEvent.create({
@@ -156,7 +165,7 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
     }
     if (p2002Mentions(e, /machine_stops_key_uq/)) {
       const again = await prisma.machineStopEvent.findFirst({ where: { machineId: input.machineId, stopKey }, select: MACHINE_STOP_SELECT });
-      if (again && !again.revokedAt) return { success: true, data: again, message: "Duruş zaten kayıtlı (yeniden gönderim)" };
+      if (again && !again.revokedAt) return { success: true, data: again, message: STOP_REPLAY_MESSAGE };
     }
     throw e;
   }

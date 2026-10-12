@@ -130,6 +130,8 @@ export interface LoomFloorDto {
   dokumaEnabled: boolean;
   /** Levent tezgah bağı ölçülüyor mu (devere ∧ `devere.mountTracking`) — kapalıyken her tezgahta `beams: null`. */
   beamTracking: boolean;
+  /** Sunucu toplu duruş uçlarını (`/api/machine-stops/bulk/*`) tanıyor — alanı görmeyen panel eski sunucu sayar, eylemi pasif çizer. */
+  bulkStopActions: true;
   summary: FloorCounts;
   halls: FloorHallSummary[];
   looms: LoomFloorLoomDto[];
@@ -304,8 +306,7 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
   const beamTracking = (await readDevereEnabled()) && (await readDevereMountTracking());
   const beamsBy = beamTracking ? await mountedBeamViewsTx(prisma, src.looms.map((l) => l.id)) : null;
   const alarm = await alarmShiftState(now);
-  const alarmEnabled = alarm.alarmEnabled;
-  const noShiftMode = alarm.mode;
+  const { alarmEnabled, mode: noShiftMode } = alarm;
   const shifts = await loadClockShiftWindows(prisma, clockShiftsFrom(src.stops.filter((s) => s.endedAt === null)), now);
   const ctx = { dayStart, now, grace, unclassifiedTarget, alarmEnabled, noShiftMode, shifts, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
   const built = src.looms.map((l) => loomDto(l, src, ctx));
@@ -324,6 +325,7 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
       graceMinutes: grace,
       dokumaEnabled,
       beamTracking,
+      bulkStopActions: true,
       summary: countFloor(cores),
       halls: summarizeHalls(cores),
       looms: built.map((b) => b.dto),

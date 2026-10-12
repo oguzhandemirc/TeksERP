@@ -19,6 +19,12 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   dışında açılan duruş alarm üretmez, ayar ekranı ve Tezgah Salonu bunu bir şeritle söyler), vardiya yoksa da çal
   (7/24) ya da vardiya tanımlanmadan alarm açılamasın. Sebebi girilmemiş duruşun alarmı artık ayrı bir anahtarla
   açılıp kapanır; kapatmak girilen süreyi silmez. Güncellemeden sonra hiçbir şey kendiliğinden değişmez.
+- **Tezgah Salonu'nda toplu duruş.** Elektrik kesintisi gibi birçok tezgahı birden durduran olayda seçili
+  tezgahlara tek seferde duruş açılır: sebep bir kez seçilir, başlangıç "şimdi" ya da geçmiş bir saat (kesinti
+  10 dakika önce olduysa) olabilir. Kesinti bitince "Hepsi çalıştı" ile hepsi birlikte kapanır; yanlış açılan toplu
+  duruş da toplu geri alınır (gerekçe bir kez). Her işlemden önce etkilenen tezgahlar tek tek listelenir ve
+  istenmeyen çıkarılır; olmayan tezgah sebebiyle söylenir (zaten duruşta, seçilen saat başka bir duruşla çakışıyor,
+  vardiya karnesi mühürlü…). Tek tek duruş girişi aynen çalışır (yeni panel gerekir).
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -56,6 +62,15 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   süre girilmişse açık. Açıkken süre zorunlu (400 `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`). Kapılar hiçbir ayarı
   yazmadan önce koşar — reddedilen kayıt yarım yazılmaz.
 
+**Tezgah Salonu toplu duruş (F2)** (commit `feat(tezgah-salonu): F2 backend — toplu duruş aç / kapat / geri al`; kısa kimliği paketlemede yazılır)
+
+- yeni uçlar `POST /api/machine-stops/bulk/preview` · `/bulk/open` · `/bulk/close` · `/bulk/revoke` (izin
+  `loom:manual-entry`, dokuma modülü kapısı). Her tezgah mevcut tekli duruş yolundan, kendi işleminde ve tezgah
+  kodu sırasıyla yazılır; olmayan tezgah sebebiyle döner, toplu işlem başına tek özet denetim kaydı
+  (`MACHINE_STOP_BULK`). Toplu açılışta geçmiş saat, o tezgahın kapanmış bir duruşuyla çakışırsa satır 409
+  `STOP_OVERLAP` ile düşer; tekli açılışın davranışı DEĞİŞMEDİ. Salon cevabına `bulkStopActions` (panelin eski
+  sunucu tespiti). Migration YOK.
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -76,6 +91,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   yeni hata kodları `TEZGAH_ALARM_SHIFT_REQUIRED`, `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`. Eski panel yalnız
   sebepsiz süreyi yollar: anahtar o kayıttan türer (süre dolu = açık), bugünkü anlam korunur; eski panel yeni kipi
   göremez, varsayılan `WARN` bugünkü davranıştır.
+- **Kırıldı mı:** HAYIR (toplu duruş kısmı) — yalnız ekleme: dört yeni uç, salon cevabında `bulkStopActions`,
+  yeni hata/satır kodları `STOP_OVERLAP` (409) ve `STOP_NOT_OPEN`/`TRANSIENT_CONFLICT` (yalnız toplu cevabın satırında),
+  yeni sistem olayı `MACHINE_STOP_BULK`. Eski panel yeni uçları çağırmaz; yeni panel eski sunucuda toplu duruş
+  eylemlerini pasif gösterir ("sunucu güncellenince açılır").
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.

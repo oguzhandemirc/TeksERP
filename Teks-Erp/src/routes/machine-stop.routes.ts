@@ -16,6 +16,7 @@ import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../services/machine-stop.service";
 import { listMachineStops, listStopReclasses } from "../services/loom-list.service";
+import { BULK_STOP_MAX, closeBulkStops, openBulkStops, previewBulkStops, revokeBulkStops } from "../services/machine-stop-bulk.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -83,6 +84,119 @@ router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify", ...MO
 router.get("/:id/reclasses", requireAnyPermission("loom:manual-entry", "loom:classify"), async (req, res, next) => {
   try {
     res.json(await listStopReclasses(assertValidUuid(req.params.id, "id")));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Tezgah Salonu TOPLU duruş — yalnız panel (vardiya amiri `loom:manual-entry`); `/:id/*`ten ÖNCE bağlanır ──
+const tooMany = `Tek seferde en çok ${BULK_STOP_MAX} tezgah seçilebilir.`;
+const stopRowsSchema = z
+  .array(z.object({ stopId: z.string().uuid("Geçersiz duruş") }).strict())
+  .min(1, "En az bir tezgah seçin.")
+  .max(BULK_STOP_MAX, tooMany);
+
+const bulkPreviewSchema = z
+  .object({
+    action: z.enum(["OPEN", "CLOSE", "REVOKE"], { message: "Geçersiz işlem" }),
+    machineIds: z.array(z.string().uuid("Geçersiz tezgah")).min(1, "En az bir tezgah seçin.").max(BULK_STOP_MAX, tooMany),
+    at: z.coerce.date().nullish(),
+  })
+  .strict();
+
+const bulkOpenSchema = z
+  .object({
+    startedAt: z.coerce.date({ message: "Başlangıç zamanı zorunlu" }),
+    reasonCode: z.string().trim().min(1).max(64).nullish(),
+    reasonNote: z.string().trim().max(300).nullish(),
+    rows: z
+      .array(z.object({ machineId: z.string().uuid("Geçersiz tezgah"), clientToken: z.string().uuid("Geçersiz istemci anahtarı") }).strict())
+      .min(1, "En az bir tezgah seçin.")
+      .max(BULK_STOP_MAX, tooMany),
+  })
+  .strict();
+
+const bulkCloseSchema = z.object({ endedAt: z.coerce.date({ message: "Bitiş zamanı zorunlu" }), rows: stopRowsSchema }).strict();
+const bulkRevokeSchema = z.object({ reason: z.string().trim().min(3, "Geri alma gerekçesi en az 3 karakter olmalı.").max(300), rows: stopRowsSchema }).strict();
+
+/**
+ * @openapi
+ * /api/machine-stops/bulk/preview:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Toplu duruş aç / kapat / geri al ÖNİZLEMESİ — her tezgah adıyla, YAZMAZ
+ *     description: >
+ *       Satır sonucu OPEN · CLOSE · REVOKE (varsayılan seçili) ya da BLOCKED (sebepli — zaten duruşta,
+ *       açık duruş yok, geçmiş saat çakışması STOP_OVERLAP, mühürlü/iptal vardiya). Satırlar tezgah kodu sırasında.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ action, at, rows[] }" }
+ *       400: { description: Doğrulama / STOP_STAMP_OUT_OF_RANGE }
+ */
+router.post("/bulk/preview", requirePermission("loom:manual-entry"), async (req, res, next) => {
+  try {
+    res.json(await previewBulkStops(bulkPreviewSchema.parse(req.body ?? {})));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-stops/bulk/open:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Seçili tezgahlarda duruş AÇ (sebep bir kez) — sonuç PARÇALI olabilir
+ *     description: >
+ *       Her satır kendi transaction'ında, tezgah kodu sırasıyla; satır başına `clientToken` (aynı token'la yeniden
+ *       gönderim özgün duruşu döndürür). Geçmiş başlangıç kapanmış bir duruşla örtüşürse satır 409 STOP_OVERLAP.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ requested, ok[], failed[] }" }
+ *       400: { description: Doğrulama / REASON_CODE_INVALID / STOP_STAMP_OUT_OF_RANGE }
+ */
+router.post("/bulk/open", requirePermission("loom:manual-entry"), async (req, res, next) => {
+  try {
+    res.json(await openBulkStops(bulkOpenSchema.parse(req.body ?? {}), req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-stops/bulk/close:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Seçili açık duruşları KAPAT ("Hepsi çalıştı") — sonuç PARÇALI olabilir
+ *     description: Aynı kullanıcının aynı bitişle yeniden gönderimi zaten kapanmış satırı `ok` (replayed) döner.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ requested, ok[], failed[] }" }
+ *       400: { description: Doğrulama / STOP_STAMP_OUT_OF_RANGE }
+ */
+router.post("/bulk/close", requirePermission("loom:manual-entry"), async (req, res, next) => {
+  try {
+    res.json(await closeBulkStops(bulkCloseSchema.parse(req.body ?? {}), req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-stops/bulk/revoke:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Seçili açık duruşları GERİ AL (gerekçe bir kez; satır silinmez) — sonuç PARÇALI olabilir
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ requested, ok[], failed[] }" }
+ *       400: { description: Doğrulama / REVOKE_REASON_REQUIRED }
+ */
+router.post("/bulk/revoke", requirePermission("loom:manual-entry"), async (req, res, next) => {
+  try {
+    res.json(await revokeBulkStops(bulkRevokeSchema.parse(req.body ?? {}), req.user?.userId));
   } catch (e) {
     next(e);
   }
