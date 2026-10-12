@@ -322,6 +322,16 @@ jobs:
             done
             echo "✅ $port hazır"
           done
+          # Boot uzlaştırmaları (izin kataloğu 3 sn · varsayılan depo 5 sn) açılıştan SONRA
+          # koşar; sıralı pakette tip geçidi (~60 sn) bu süreyi örtüyordu, parça ise hemen
+          # başlar (ölçüldü 2026-10-12: `test_allocation_repair` "Varsayılan depo yok").
+          # En geç doğanı (varsayılan depo) ölçerek bekle; doğmazsa sessiz geçme.
+          for i in $(seq 1 60); do
+            n=$(psql "${DATABASE_URL%%\?*}" -tAc 'SELECT count(*) FROM warehouses WHERE "isDefault"' 2>/dev/null || echo 0)
+            if [ "${n:-0}" -ge 1 ]; then echo "✅ boot uzlaştırması: varsayılan depo hazır"; break; fi
+            if [ "$i" = "60" ]; then echo "❌ varsayılan depo 60 sn'de doğmadı"; exit 1; fi
+            sleep 1
+          done
 
       # ⚠️ DIŞLAMA YOK — ve bu bir ÖLÇÜM sonucudur, tercih değil.
       # `TEKSERP_HARIC: test_hook_config` buradaydı; kalem `a8ce49ca`de kapandı ve

@@ -54,10 +54,11 @@ for (const n of [1, 2, 3, 8, 13]) {
     p.length === n && duz.length === dosyalar.length && tekil.size === dosyalar.length && dosyalar.every((f) => tekil.has(f)),
     `${duz.length} yerleşim / ${tekil.size} tekil / ${dosyalar.length} dosya`,
   );
+  const grupsuz = (d: string[]) => d.filter((f) => !SABIT_GRUPLAR.some((g) => g.includes(f)));
   check(
-    `§1 N=${n}: belirlenimli (aynı girdi → aynı çıktı) ve parça içi ada göre sıralı`,
+    `§1 N=${n}: belirlenimli (aynı girdi → aynı çıktı) ve parça içi ada göre sıralı (sabit grup blokları hariç)`,
     JSON.stringify(p) === JSON.stringify(parcalariKur([...dosyalar].reverse(), n, sureler)) &&
-      p.every((d) => d.every((f, k) => k === 0 || d[k - 1]! < f)),
+      p.every((d) => grupsuz(d).every((f, k, a) => k === 0 || a[k - 1]! < f)),
   );
 }
 
@@ -102,10 +103,17 @@ console.log("\n§4 — sabit gruplar (gizli sıra bağımlılığı)\n");
   check("§4 sentetik grupla da birleşim tam", birlesimDenetimi(dosyalar, kayitlariKur(g)).length === 0);
   const olu = SABIT_GRUPLAR.flat().filter((f) => !dosyalar.includes(f));
   check("§4 SABIT_GRUPLAR üyelerinin hepsi diskte (ölü üye yok)", olu.length === 0, olu.join(", ") || `${SABIT_GRUPLAR.length} grup`);
+  const bitisik = (d: string[], grup: readonly string[]) => {
+    const k = d.indexOf(grup[0]!);
+    return k >= 0 && grup.every((f, j) => d[k + j] === f);
+  };
   for (const grup of SABIT_GRUPLAR) {
-    const parcalar = new Set(grup.map(yer));
-    check(`§4 sabit grup tek parçada: ${grup.join(" + ")}`, parcalar.size === 1);
+    check(`§4 sabit grup tek parçada, BİTİŞİK ve yazılı sırada: ${grup.join(" → ")}`, p.some((d) => bitisik(d, grup)));
   }
+  // Sonda: bir blok, ada göre araya düşecek bir bekçiyle bölünmüyor (ters adlı grup).
+  const ters = [dosyalar[dosyalar.length - 1]!, dosyalar[0]!];
+  const tp = parcalariKur(dosyalar, 8, sureler, [ters]);
+  check("§4 sonda: ad sırasına TERS grup da bitişik ve yazılı sırada koşar", tp.some((d) => bitisik(d, ters)), ters.join(" → "));
 }
 
 console.log("\n§5 — birleşim denetimi (işlev) + negatif sondalar\n");

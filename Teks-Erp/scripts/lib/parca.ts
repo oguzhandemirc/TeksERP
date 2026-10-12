@@ -18,11 +18,20 @@ import { join } from "node:path";
 export const SURE_TABLOSU_YOLU = join(__dirname, "..", "ci-parca-sureleri.json");
 
 /**
- * Gizli SIRA BAĞIMLILIĞI ölçülmüş dosyalar: grup tek birim olarak AYNI parçaya düşer
- * (parça içi sıra ada göre olduğu için sıralı koşumdaki göreli sıra da korunur).
- * Üye eklerken gerekçe + ölçüm satırı yazılır; boş liste = bağımlılık ölçülmedi.
+ * Gizli SIRA BAĞIMLILIĞI ölçülmüş dosyalar: grup tek birim olarak AYNI parçaya düşer ve
+ * parça içinde BİTİŞİK, YAZILDIĞI SIRAYLA koşar (blok, son üyesinin adının yerinde).
+ * Bitişiklik şart: araya giren bekçi önkoşulu bozabilir (ölçüldü, aşağıda). Üye eklerken
+ * gerekçe + ölçüm yazılır. Ölçüm 2026-10-12, dal koşusu 38304837817 + `tekserp_ciparca_test`.
  */
-export const SABIT_GRUPLAR: readonly (readonly string[])[] = [];
+export const SABIT_GRUPLAR: readonly (readonly string[])[] = [
+  // `doc_pagesize_override` salt-okunur ve var olan bir SUBCONTRACTOR_DISPATCH belgesi
+  // ister ("hiç SUBCONTRACTOR_DISPATCH yok"); taze DB'de onu `consecutive_fason` bırakır.
+  ["test_consecutive_fason.ts", "test_doc_pagesize_override.ts"],
+  // `rol_modeli_kalinti` ① DB'de bağsız fason profili OLMADIĞINI ister; `migrate_partner_roles`
+  // göçü hepsini bağlar. Araya `fixture-subcontractor` çağıran bir bekçi girerse TEST-FASON-*
+  // bağsız doğar ⇒ bitişik koşmalı (ölçüldü: m → r yeşil, m → fason bekçisi → r kırmızı).
+  ["test_migrate_partner_roles.ts", "test_rol_modeli_kalinti.ts"],
+];
 
 export interface ParcaKaydi {
   parca: number;
@@ -57,7 +66,8 @@ export function ozetParcasi(dosya: string, n: number): number {
 
 /**
  * Dosyaları N parçaya böler. Bilinen süreli birimler en uzun-önce açgözlü (LPT) en az
- * yüklü parçaya; bilinmeyenler `ozetParcasi` ile. Her parça ada göre sıralıdır.
+ * yüklü parçaya; bilinmeyenler `ozetParcasi` ile. Parça içi sıra ada göredir (sıralı
+ * koşumdaki göreli sıra korunur); sabit grup bitişik blok, son üyesinin adının yerinde.
  * Eşitlikler ad ve parça numarasıyla bozulur ⇒ aynı girdi her makinede aynı çıktı.
  */
 export function parcalariKur(
@@ -69,19 +79,26 @@ export function parcalariKur(
   if (!Number.isInteger(n) || n < 1) throw new Error(`parça sayısı geçersiz: ${n}`);
   const kume = new Set(dosyalar);
   const gruptaki = new Set<string>();
-  const birimler: { ad: string; uyeler: string[]; sure: number | null }[] = [];
+  type Birim = { ad: string; anahtar: string; uyeler: string[]; sure: number | null };
+  const birimler: Birim[] = [];
   for (const g of gruplar) {
-    const uyeler = [...new Set(g)].filter((f) => kume.has(f) && !gruptaki.has(f)).sort();
+    const uyeler = [...new Set(g)].filter((f) => kume.has(f) && !gruptaki.has(f));
     if (uyeler.length === 0) continue;
     for (const f of uyeler) gruptaki.add(f);
     const bilinen = uyeler.filter((f) => typeof sureler[f] === "number");
-    birimler.push({ ad: uyeler[0]!, uyeler, sure: bilinen.length ? bilinen.reduce((s, f) => s + sureler[f]!, 0) : null });
+    const sirali = [...uyeler].sort();
+    birimler.push({
+      ad: sirali[0]!,
+      anahtar: sirali[sirali.length - 1]!,
+      uyeler,
+      sure: bilinen.length ? bilinen.reduce((s, f) => s + sureler[f]!, 0) : null,
+    });
   }
   for (const f of [...kume].sort()) {
     if (gruptaki.has(f)) continue;
-    birimler.push({ ad: f, uyeler: [f], sure: typeof sureler[f] === "number" ? sureler[f]! : null });
+    birimler.push({ ad: f, anahtar: f, uyeler: [f], sure: typeof sureler[f] === "number" ? sureler[f]! : null });
   }
-  const parcalar: string[][] = Array.from({ length: n }, () => []);
+  const parcalar: Birim[][] = Array.from({ length: n }, () => []);
   const yuk = new Array<number>(n).fill(0);
   const bilinenler = birimler
     .filter((b) => b.sure !== null)
@@ -90,10 +107,12 @@ export function parcalariKur(
     let hedef = 0;
     for (let k = 1; k < n; k++) if (yuk[k]! < yuk[hedef]!) hedef = k;
     yuk[hedef]! += b.sure!;
-    parcalar[hedef]!.push(...b.uyeler);
+    parcalar[hedef]!.push(b);
   }
-  for (const b of birimler.filter((x) => x.sure === null)) parcalar[ozetParcasi(b.ad, n)]!.push(...b.uyeler);
-  return parcalar.map((p) => p.sort());
+  for (const b of birimler.filter((x) => x.sure === null)) parcalar[ozetParcasi(b.ad, n)]!.push(b);
+  return parcalar.map((p) =>
+    p.sort((a, b) => (a.anahtar < b.anahtar ? -1 : a.anahtar > b.anahtar ? 1 : 0)).flatMap((b) => b.uyeler),
+  );
 }
 
 /** Parça başına tahmini süre (sn); tabloda olmayan dosya 0 sayılır. */
