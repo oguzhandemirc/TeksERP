@@ -109,6 +109,7 @@
     "mobileLockOnBackground": true,
     "pinLockoutEnabled": true,
     "devicePairingRequired": true,
+    "deviceProofRequired": true,
     "shortCredentialApprovedDeviceOnly": true,
     "nativeSendEnabled": true,
     "mobileRasterEnabled": true,

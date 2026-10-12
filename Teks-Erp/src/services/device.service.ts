@@ -14,6 +14,12 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { readDevicePairingRequired } from "./system-setting.service";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
+import { getShortCredentialKeyRing } from "../lib/short-credential/keyring";
+import { deriveDeviceSecret, newProofSalt } from "../lib/device-proof";
+import { uyari } from "../lib/logger";
+
+/** Kanıt tuzu hiçbir yanıta/audit yüküne girmez. */
+const DEVICE_SECRET_OMIT = { proofSalt: true } as const;
 
 /**
  * Eşleşme bekleyen cihaz üst sınırı (F-CORE-GUV-003). Kimlik doğrulamasız
@@ -67,6 +73,11 @@ type DeviceWithMachine = {
  * ayrı ayrı yanlış yapmak zorunda kalıyordu. Artık tek cevap kararı taşır:
  * onay ekranı koşulu = `pairingRequired && status !== "APPROVED"`.
  */
+/** Sır yalnız verildiği cevapta, tek alan olarak eklenir. */
+function withSecret<T extends object>(a: T, secret: string | null): T & { deviceSecret?: string } {
+  return secret ? { ...a, deviceSecret: secret } : a;
+}
+
 function toAssignment(d: DeviceWithMachine, pairingRequired: boolean) {
   const station = d.machine?.station ?? null;
   return {
@@ -108,6 +119,7 @@ export class DeviceService {
     return prisma.device.findMany({
       orderBy: [{ status: "asc" }, { isActive: "desc" }, { createdAt: "desc" }],
       include: DEVICE_INCLUDE,
+      omit: DEVICE_SECRET_OMIT,
       // ⚠️ TAVAN (2026-08-09, F-CORE-GUV-003). Eskiden tavansızdı ve bu, kimlik
       // doğrulamasız `announce` ucuyla birleşince asıl zararı üretiyordu: sahte
       // kayıtlar tek yanıtta dönüp ekranı kullanılamaz hale getiriyordu. Artık
@@ -309,7 +321,7 @@ export class DeviceService {
         },
       }).catch(() => undefined);
     }
-    return toAssignment(device, pairingRequired);
+    return withSecret(toAssignment(device, pairingRequired), await DeviceService.issueProofSecretIfDue(deviceId));
   }
 
   /**
@@ -333,7 +345,48 @@ export class DeviceService {
         stationName: null,
       };
     }
-    return toAssignment(device, pairingRequired);
+    return withSecret(toAssignment(device, pairingRequired), await DeviceService.issueProofSecretIfDue(deviceId));
+  }
+
+  /**
+   * Cihaz sırrı verimi (TOFU, bir kez): ONAYLI + aktif cihazın sırrı henüz TEYİT edilmemişse
+   * (hiç verilmemiş ya da cevabı yolda kaybolmuş) yeni tuz yazılır ve sır YALNIZ bu cevapta döner.
+   * İlk geçerli kanıt `proofConfirmedAt`i doldurur; ondan sonra yeniden verim yalnız revoke ile.
+   */
+  static async issueProofSecretIfDue(deviceId: string): Promise<string | null> {
+    const row = await prisma.device.findUnique({
+      where: { deviceId },
+      select: { id: true, status: true, isActive: true, proofSalt: true, proofConfirmedAt: true },
+    });
+    if (!row || !row.isActive || row.status !== "APPROVED" || row.proofConfirmedAt) return null;
+    const st = getShortCredentialKeyRing();
+    if (!st.ok) {
+      uyari("device.proof", `Cihaz sırrı verilemedi — anahtar halkası kullanılamıyor (${st.problem}).`);
+      return null;
+    }
+    const salt = newProofSalt(st.ring.active);
+    // Atomik claim: tuz okunduğu değerle değişir — eşzamanlı iki çağrıdan yalnız biri sır alır.
+    const claim = await prisma.device.updateMany({
+      where: { deviceId, isActive: true, status: "APPROVED", proofConfirmedAt: null, proofSalt: row.proofSalt },
+      data: { proofSalt: salt, proofIssuedAt: new Date() },
+    });
+    if (claim.count === 0) return null;
+    await AuditService.log({
+      userId: undefined,
+      action: "UPDATE",
+      tableName: "devices",
+      recordId: row.id,
+      newData: { event: "DEVICE_PROOF_SECRET_ISSUED", deviceId, reissue: row.proofSalt !== null },
+    }).catch(() => undefined);
+    return deriveDeviceSecret(st.ring, deviceId, salt);
+  }
+
+  /** İlk geçerli kanıt: sır teyit edildi — artık yeniden verilmez. */
+  static async confirmProof(deviceId: string, salt: string): Promise<void> {
+    await prisma.device.updateMany({
+      where: { deviceId, proofSalt: salt, proofConfirmedAt: null },
+      data: { proofConfirmedAt: new Date() },
+    });
   }
 
   /** Admin: cihazı onayla + (opsiyonel) makineye ata + opsiyonel takma ad. İstasyon makineden türetilir. */
@@ -342,7 +395,7 @@ export class DeviceService {
     input: { machineId?: string | null; kind?: string; name?: string },
     userId?: string,
   ) {
-    const existing = await prisma.device.findUnique({ where: { id } });
+    const existing = await prisma.device.findUnique({ where: { id }, omit: DEVICE_SECRET_OMIT });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     let machineId: string | null = input.machineId ?? null;
     if (machineId) {
@@ -360,6 +413,7 @@ export class DeviceService {
         ...(input.kind ? { kind: normalizeDeviceKind(input.kind) } : {}),
         ...(name ? { name } : {}),
       },
+      omit: DEVICE_SECRET_OMIT,
     });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,
@@ -398,10 +452,13 @@ export class DeviceService {
 
   /** Admin: onayı/atamayı geri al → PENDING (tablet "atama bekleniyor"a düşer). */
   static async revoke(id: string, userId?: string) {
-    const existing = await prisma.device.findUnique({ where: { id } });
+    const existing = await prisma.device.findUnique({ where: { id }, omit: DEVICE_SECRET_OMIT });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     const updated = await prisma.device.update({
-      where: { id }, data: { status: "PENDING", machineId: null },
+      where: { id },
+      // Kanıt sırrı da düşer: yeniden onaylanan cihaz YENİ sır alır (sızmış sır geri çağrılır).
+      data: { status: "PENDING", machineId: null, proofSalt: null, proofIssuedAt: null, proofConfirmedAt: null },
+      omit: DEVICE_SECRET_OMIT,
     });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,
@@ -413,10 +470,10 @@ export class DeviceService {
 
   /** Admin: pasif cihazı tekrar aktifleştir (atama/onay durumu korunur). */
   static async reactivate(id: string, userId?: string) {
-    const existing = await prisma.device.findUnique({ where: { id } });
+    const existing = await prisma.device.findUnique({ where: { id }, omit: DEVICE_SECRET_OMIT });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     if (existing.isActive) throw AppError.badRequest("Cihaz zaten aktif");
-    const updated = await prisma.device.update({ where: { id }, data: { isActive: true } });
+    const updated = await prisma.device.update({ where: { id }, data: { isActive: true }, omit: DEVICE_SECRET_OMIT });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,
       oldData: { isActive: false }, newData: { isActive: true },
@@ -426,9 +483,9 @@ export class DeviceService {
 
   /** Admin: cihazı pasife al (soft delete; onay/atama korunur, middleware 401'ler). */
   static async deactivate(id: string, userId?: string) {
-    const existing = await prisma.device.findUnique({ where: { id } });
+    const existing = await prisma.device.findUnique({ where: { id }, omit: DEVICE_SECRET_OMIT });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
-    const updated = await prisma.device.update({ where: { id }, data: { isActive: false } });
+    const updated = await prisma.device.update({ where: { id }, data: { isActive: false }, omit: DEVICE_SECRET_OMIT });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,
       oldData: { isActive: existing.isActive }, newData: { isActive: false },
@@ -438,7 +495,7 @@ export class DeviceService {
 
   /** Admin: kalıcı sil (yalnız atanmamış — machineId=null — ve oturum geçmişi olmayan). */
   static async hardDelete(id: string, userId?: string) {
-    const existing = await prisma.device.findUnique({ where: { id } });
+    const existing = await prisma.device.findUnique({ where: { id }, omit: DEVICE_SECRET_OMIT });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     if (existing.machineId) {
       throw AppError.badRequest("Cihaz bir makineye atanmış. Önce atamayı geri alın.");
@@ -473,9 +530,9 @@ export class DeviceService {
 
   /** Admin: cihaz adını yeniden adlandır. */
   static async rename(id: string, name: string, userId?: string) {
-    const existing = await prisma.device.findUnique({ where: { id } });
+    const existing = await prisma.device.findUnique({ where: { id }, omit: DEVICE_SECRET_OMIT });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
-    const updated = await prisma.device.update({ where: { id }, data: { name } });
+    const updated = await prisma.device.update({ where: { id }, data: { name }, omit: DEVICE_SECRET_OMIT });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,
       oldData: { name: existing.name }, newData: { name },
@@ -495,7 +552,10 @@ export class DeviceService {
   static async resolveDevice(deviceId: string) {
     const device = await prisma.device.findUnique({
       where: { deviceId },
-      select: { id: true, deviceId: true, name: true, machineId: true, kind: true, isActive: true, status: true },
+      select: {
+        id: true, deviceId: true, name: true, machineId: true, kind: true, isActive: true, status: true,
+        proofSalt: true, proofConfirmedAt: true,
+      },
     });
     if (!device || !device.isActive || device.status !== "APPROVED") return null;
     const now = Date.now();

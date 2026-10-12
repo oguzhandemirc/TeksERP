@@ -28,14 +28,17 @@ export function DevicePairingSection({
   const flagsQ = useFeatureFlags();
   const server = flagsQ.data?.data?.devicePairingRequired ?? false;
   const serverShort = flagsQ.data?.data?.shortCredentialApprovedDeviceOnly ?? false;
+  const serverProof = flagsQ.data?.data?.deviceProofRequired ?? false;
 
   const [draft, setDraft] = useState(server);
   const [draftShort, setDraftShort] = useState(serverShort);
   useEffect(() => setDraft(server), [server]);
   useEffect(() => setDraftShort(serverShort), [serverShort]);
+  const [draftProof, setDraftProof] = useState(serverProof);
+  useEffect(() => setDraftProof(serverProof), [serverProof]);
   // Kısa kimlik kuralı açıkken eşleştirme etkin zorunludur — taslak da onu yansıtsın.
   const effectiveDraft = draft || draftShort;
-  const dirty = effectiveDraft !== server || draftShort !== serverShort;
+  const dirty = effectiveDraft !== server || draftShort !== serverShort || draftProof !== serverProof;
   useRegisterSettingsDirty(dirty);
 
   const mut = useMutation({
@@ -43,6 +46,7 @@ export function DevicePairingSection({
       featureFlagService.update({
         ...(draftShort !== serverShort ? { shortCredentialApprovedDeviceOnly: draftShort } : {}),
         ...(effectiveDraft !== server ? { devicePairingRequired: effectiveDraft } : {}),
+        ...(draftProof !== serverProof ? { deviceProofRequired: draftProof } : {}),
       }),
     onSuccess: () => {
       toast.success("Cihaz ayarları kaydedildi.");
@@ -73,6 +77,14 @@ export function DevicePairingSection({
         onChange={setDraftShort}
       />
 
+      <DeviceProofRow
+        canEdit={canEditShortCredential}
+        draft={draftProof}
+        server={serverProof}
+        disabled={mut.isPending}
+        onChange={setDraftProof}
+      />
+
       <PairingNote />
 
       {(canEdit || canEditShortCredential) && (
@@ -83,6 +95,7 @@ export function DevicePairingSection({
           onReset={() => {
             setDraft(server);
             setDraftShort(serverShort);
+            setDraftProof(serverProof);
           }}
         />
       )}
@@ -123,6 +136,43 @@ function ShortCredentialDeviceRow({
           tablet/telefonlardan kabul edilir; eşleştirme de zorunlu olur. Kullanıcı adı +
           şifre girişi etkilenmez. Kapalıyken (varsayılan) bugünkü gibi her cihaz PIN/kart
           deneyebilir. Bulut (barındırılan) kurulumda bu kural her zaman açıktır.
+        </>
+      }
+      checked={draft}
+      disabled={disabled}
+      onChange={onChange}
+    />
+  );
+}
+
+/** "Cihaz kanıtı zorunlu" satırı — yazma yalnız `admin:settings`. */
+function DeviceProofRow({
+  canEdit,
+  draft,
+  server,
+  disabled,
+  onChange,
+}: {
+  canEdit: boolean;
+  draft: boolean;
+  server: boolean;
+  disabled: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  const title = "Cihaz kanıtı zorunlu (taklit edilemez cihaz kimliği)";
+  if (!canEdit) {
+    return <ReadOnlyRow title={title} enabled={server} onLabel="Açık" offLabel="Kapalı" />;
+  }
+  return (
+    <FlagToggle
+      title={title}
+      desc={
+        <>
+          Açıkken onaylı bir tablet her istekte sunucunun ona verdiği gizli anahtarla imza
+          gönderir; imzasız ya da yanlış imzalı istek onaylı cihaz sayılmaz (hızlı PIN/kart
+          girişi reddedilir). Eski sürüm tabletler imza üretemez — açmadan önce bütün
+          tabletleri güncelleyin. Kapalıyken (varsayılan) bugünkü gibi cihaz kimliği yeter.
+          Bulut (barındırılan) kurulumda bu kural her zaman açıktır.
         </>
       }
       checked={draft}

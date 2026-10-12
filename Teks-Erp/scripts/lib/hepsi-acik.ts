@@ -159,6 +159,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   pinLockoutEscalateAfter: V("güvenlik sayısı"),
   pinLockoutLongPenaltyMin: V("güvenlik sayısı"),
   devicePairingRequired: A(true),
+  deviceProofRequired: A(true),
   shortCredentialApprovedDeviceOnly: A(true),
   backupHour: V("yedek saati; açılacak bir şey değil"),
   // ── etiket ─────────────────────────────────────────────────────────────────

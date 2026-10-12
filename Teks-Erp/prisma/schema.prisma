@@ -1156,6 +1156,12 @@ model Device {
   status     DeviceStatus @default(PENDING)
   /// Cihaz türü: TABLET / PHONE / DESKTOP (yönetici PC'si). Sadece görsel/etiket.
   kind       DeviceKind   @default(TABLET)
+  /// Cihaz kanıtı tuzu "<kid>:<64 hex>"; sır = HMAC(kısa kimlik halkası, tuz) — sır DB'de YOK.
+  /// Yanıtlara/audit'e girmez (servis `omit` eder); yazan yalnız DeviceService.
+  proofSalt        String?   @db.VarChar(100)
+  proofIssuedAt    DateTime? @db.Timestamptz
+  /// İlk geçerli kanıtın anı — doluysa sır bir daha verilmez (yeniden verim yalnız revoke ile).
+  proofConfirmedAt DateTime? @db.Timestamptz
 
   // Relations
   machine       Machine?           @relation(fields: [machineId], references: [id])

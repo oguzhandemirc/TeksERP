@@ -75,7 +75,8 @@ async function main() {
 
     // Audit izi — bayrak sonradan açılırsa "kimse onaylamadı" diyebilmenin tek kaydı.
     const auto = await prisma.systemLog.findFirst({
-      where: { tableName: "devices", recordId: offRow?.id ?? "" },
+      // CREATE süzgeci: aynı announce'ta cihaz sırrı verimi de (UPDATE) yazılır.
+      where: { tableName: "devices", recordId: offRow?.id ?? "", action: "CREATE" },
       orderBy: { createdAt: "desc" },
       select: { action: true, newData: true },
     });

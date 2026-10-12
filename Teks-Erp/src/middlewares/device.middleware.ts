@@ -13,6 +13,11 @@
 // - Onaylı cihaz req.device set edilir (makine atfı korunur).
 // - Onaysız/kayıtsız cihaz da BLOKLANMAZ → next() (req.device boş, makine atfı NULL).
 //
+// Cihaz kanıtı (`x-device-proof`, `lib/device-proof.ts`): `device.proofRequired` açıkken
+// (barındırılan sınıfta DAİMA) onaylı cihaz ancak geçerli kanıtla `req.device` olur; kanıtsız
+// ya da yanlış kanıtlı istek 401 DEVICE_PROOF_INVALID. Kapalıyken (varsayılan) bugünkü davranış;
+// geçerli kanıt yine de sırrı TEYİT eder (yeniden verim kapanır).
+//
 // İstisna: announce/status/pairing-required endpoint'leri bu kontrolden muaftır —
 // onaysız (PENDING) cihaz kendini bildirebilmeli, durumunu poll'layabilmeli ve mobil
 // login öncesi atamanın zorunlu olup olmadığını öğrenebilmeli.
@@ -20,7 +25,12 @@
 
 import { Request, Response, NextFunction } from "express";
 import { DeviceService } from "../services/device.service";
-import { readDevicePairingRequired } from "../services/system-setting.service";
+import { readDevicePairingRequired, readDeviceProofRequiredCached } from "../services/system-setting.service";
+import { getShortCredentialKeyRing } from "../lib/short-credential/keyring";
+import {
+  DEVICE_PROOF_HEADER, deriveDeviceSecret, proofPathOf, verifyDeviceProof, type ProofVerdict,
+} from "../lib/device-proof";
+import { AppError } from "../utils/app-error";
 import { touchDevice } from "../lib/presence";
 import "../types/express-augment";
 import { uyari } from "../lib/logger";
@@ -90,6 +100,22 @@ export const resolveDevice = async (
     return next();
   }
 
+  const verdict = checkProof(req, device.deviceId, device.proofSalt);
+  if (verdict === "OK" && !device.proofConfirmedAt && device.proofSalt) {
+    await DeviceService.confirmProof(device.deviceId, device.proofSalt).catch(() => undefined);
+  }
+  if (verdict !== "OK" && (await readDeviceProofRequiredCached())) {
+    if (verdict === "HALKA") {
+      return next(new AppError("Cihaz doğrulaması geçici olarak yapılamıyor. Lütfen tekrar deneyin.", 503, true, {
+        code: "DEVICE_CHECK_UNAVAILABLE",
+      }));
+    }
+    return next(AppError.unauthorized(
+      "Cihaz kimliği doğrulanamadı. Uygulamayı güncelleyin; sürerse yöneticiden cihazı yeniden onaylatın.",
+      { code: "DEVICE_PROOF_INVALID", reason: verdict },
+    ));
+  }
+
   // Onaylı + aktif cihaz GEÇER — makineye atanmamış olsa bile. Yönetici/atamasız
   // cihaz da çalışır; donanım artık deviceId-join'den çözülür (makineden değil).
   // machineId yalnızca üretim atfı (RollOperation vb.); null olması erişimi engellemez.
@@ -103,3 +129,17 @@ export const resolveDevice = async (
   touchDevice(device.deviceId); // anlık "bağlı cihaz" izleme (bellekte)
   next();
 };
+
+/** Kanıt hükmü; "SIRSIZ" = cihaza henüz sır verilmedi, "HALKA" = anahtar halkası okunamadı. */
+function checkProof(req: Request, deviceId: string, salt: string | null): ProofVerdict | "SIRSIZ" | "HALKA" {
+  if (!salt) return "SIRSIZ";
+  const st = getShortCredentialKeyRing();
+  if (!st.ok) return "HALKA";
+  const secret = deriveDeviceSecret(st.ring, deviceId, salt);
+  if (!secret) return "HALKA";
+  const h = req.headers[DEVICE_PROOF_HEADER];
+  return verifyDeviceProof(secret, Array.isArray(h) ? h[0] : h, {
+    method: req.method,
+    path: proofPathOf(req.originalUrl),
+  });
+}

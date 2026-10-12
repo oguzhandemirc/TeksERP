@@ -371,6 +371,7 @@ export const updateSchema = z.strictObject({
   fasonNoteMobileEntry: z.boolean().optional(),
   // Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
   devicePairingRequired: z.boolean().optional(),
+  deviceProofRequired: z.boolean().optional(),
   // Hızlı PIN / QR kart yalnız onaylı cihazdan (false=default; barındırılan kurulumda kapatılamaz).
   shortCredentialApprovedDeviceOnly: z.boolean().optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).

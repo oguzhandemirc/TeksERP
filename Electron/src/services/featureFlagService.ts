@@ -387,6 +387,8 @@ export interface FeatureFlags {
   /** Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
    *  Pasifken eşleşmemiş tabletler de sisteme girer (makine atfı NULL kalır). ENFORCE edilir. */
   devicePairingRequired: boolean;
+  /** Cihaz kanıtı zorunlu mu (false=default; barındırılan kurulumda backend hep true döner). */
+  deviceProofRequired: boolean;
   /** Hızlı PIN / QR kartla giriş yalnız onaylı cihazdan mı (false=default; barındırılan
    *  kurulumda backend hep true döner ve kapatılamaz). Açıkken eşleştirme de etkin zorunludur. */
   shortCredentialApprovedDeviceOnly: boolean;

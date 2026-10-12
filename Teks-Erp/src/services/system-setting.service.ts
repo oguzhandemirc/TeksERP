@@ -403,6 +403,7 @@ export const SETTING_KEYS = {
    *  tabletler de giriş yapıp çalışabilir (makine atfı NULL kalır). True iken
    *  eşleşmemiş/pasif cihaz device.middleware'de 401 ile kesilir. ENFORCE edilir. */
   DEVICE_PAIRING_REQUIRED: "device.pairingRequired",
+  DEVICE_PROOF_REQUIRED: "device.proofRequired",
   /** Hızlı PIN / QR kartla giriş YALNIZ onaylı cihazdan mı. Default false (bugünkü davranış).
    *  Açıkken eşleştirme de etkin zorunlu olur (otomatik onay kapanır); barındırılan
    *  kurulumda (BARINDIRILAN) her iki kural ZORUNLUDUR ve kapatılamaz. ENFORCE edilir. */
@@ -1738,6 +1739,7 @@ export interface FeatureFlags {
   /** Cihaz eşleştirme zorunlu mu (true=aktif) yoksa pasif mi (false=default).
    *  Diğerlerinden farklı olarak ENFORCE edilir (device.middleware). */
   devicePairingRequired: boolean;
+  deviceProofRequired: boolean;
   /** Hızlı PIN / kart girişi yalnız onaylı cihazdan mı (ETKİN değer: barındırılan kurulumda hep true). */
   shortCredentialApprovedDeviceOnly: boolean;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
@@ -2227,6 +2229,7 @@ export class SystemSettingService {
       partyCodeAuto: await readPartyCodeAuto(cacheClient),
       fasonNoteMobileEntry: await readFasonNoteMobileEntry(cacheClient),
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
+      deviceProofRequired: await readDeviceProofRequired(cacheClient),
       shortCredentialApprovedDeviceOnly: await readShortCredentialApprovedDeviceOnly(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
@@ -3107,6 +3110,24 @@ export class SystemSettingService {
         SETTING_KEYS.DEVICE_PAIRING_REQUIRED,
         input.devicePairingRequired,
         "Mobil cihaz eşleştirmesi zorunlu olsun (kapalıyken eşleşmemiş cihazlar da girer)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "deviceProofRequired")) {
+      if (typeof input.deviceProofRequired !== "boolean") {
+        throw AppError.badRequest("deviceProofRequired boolean olmalı");
+      }
+      if (!input.deviceProofRequired && isHostedInstallation()) {
+        throw AppError.conflict(
+          "Barındırılan (bulut) kurulumda cihaz kanıtı zorunludur — bu kural kapatılamaz.",
+          { code: "HOSTED_CLASS_FORCED" },
+        );
+      }
+      await this.set(
+        SETTING_KEYS.DEVICE_PROOF_REQUIRED,
+        input.deviceProofRequired,
+        "Cihaz kanıtı zorunlu: kanıtsız ya da yanlış kanıtlı tablet onaylı cihaz sayılmaz",
         userId
       );
     }
@@ -5040,6 +5061,43 @@ export async function readDevicePairingRequired(
     select: { value: true },
   });
   return asBoolean(setting?.value) || (await readStoredShortCredentialApprovedDeviceOnly(client));
+}
+
+/**
+ * Cihaz kanıtı (`x-device-proof`) zorunlu mu — ETKİN değer. Default false (bugünkü davranış:
+ * `x-device-id` tek başına cihazı tanır). Barındırılan kurulumda daima true.
+ * ENFORCE: `device.middleware` kanıtsız/yanlış kanıtlı onaylı cihaza 401 `DEVICE_PROOF_INVALID`.
+ */
+export async function readDeviceProofRequired(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (isHostedInstallation()) return true;
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DEVICE_PROOF_REQUIRED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+// Her tablet isteğinde okunur: kısa TTL'li önbellek; bayrak yazımı (invalidateFeatureFlagsCache)
+// kuşağı artırınca anında tazelenir. Okunamazsa bayat değer; hiç dolmadıysa fail-closed (true).
+let deviceProofCache: { value: boolean; at: number; gen: number } | null = null;
+const DEVICE_PROOF_TTL_MS = 10_000;
+
+export async function readDeviceProofRequiredCached(): Promise<boolean> {
+  if (isHostedInstallation()) return true;
+  const now = Date.now();
+  if (deviceProofCache && deviceProofCache.gen === cacheGeneration && now - deviceProofCache.at < DEVICE_PROOF_TTL_MS) {
+    return deviceProofCache.value;
+  }
+  try {
+    const value = await readDeviceProofRequired();
+    deviceProofCache = { value, at: now, gen: cacheGeneration };
+    return value;
+  } catch {
+    return deviceProofCache ? deviceProofCache.value : true;
+  }
 }
 
 /** Kısa kimlik "yalnız onaylı cihaz" kuralının KAYITLI değeri (barındırılan sınıf hariç). */
