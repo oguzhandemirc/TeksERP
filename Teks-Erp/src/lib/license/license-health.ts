@@ -24,6 +24,9 @@ export function licenseHealthBlock(): Record<string, unknown> {
       gecerlilik: snap.state.gecerlilik,
       hesaplananKademe: snap.state.hesaplananKademe,
       uygulananKademe: snap.state.uygulananKademe,
+      // G2: etkinleştirme kilidi ve nedeni (etkin kurulumda YOK/ETKIN).
+      etkinlestirmeKilidi: snap.etkinlestirmeKilidi.sinif,
+      etkinlestirmeKilidiNeden: snap.etkinlestirmeKilidi.neden,
       nedenler: snap.state.nedenler.map((n) => n.kod),
       sonYoklama: iso(pollStatus.lastAttemptAt),
       sonBasariliYoklama: iso(pollStatus.lastSuccessAt),

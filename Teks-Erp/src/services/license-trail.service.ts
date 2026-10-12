@@ -9,6 +9,7 @@ import { uyari } from "../lib/logger";
 import { getLicenseSnapshot, peekObservationCounters } from "../lib/license/runtime";
 import { persistAccumulation } from "../lib/license/record-writer";
 import { acknowledgeTraceWrite, flushLicenseTraceWrites, registerLicenseTraceWriter } from "../lib/license/accumulation";
+import { setPgClusterId } from "../lib/license/pg-cluster";
 import { markLicenseTraceUnknown, setLicenseTraceRow, type TraceRow } from "../lib/license/trace-row";
 import { LICENSE_TRACE_SETTING_KEY } from "../constants/reserved-settings";
 
@@ -20,6 +21,17 @@ export async function refreshLicenseTrace(): Promise<void> {
     setLicenseTraceRow(row ? row.value : null);
   } catch {
     markLicenseTraceUnknown();
+  }
+  await refreshPgClusterId();
+}
+
+/** G2 kayıp ↔ kopya: PG kümesi kimliği (okunamazsa bilinmiyor — kopya kanıtlanamaz, kilit yok, merdiven sürer). */
+async function refreshPgClusterId(): Promise<void> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string | null }>>`SELECT system_identifier::text AS id FROM pg_control_system()`;
+    setPgClusterId(rows[0]?.id ?? null);
+  } catch {
+    setPgClusterId(null);
   }
 }
 

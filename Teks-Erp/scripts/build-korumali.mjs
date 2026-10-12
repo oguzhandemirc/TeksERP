@@ -152,6 +152,8 @@ async function main() {
     // Korumalı derlemede native lisans çekirdeği ZORUNLU (TS'e düşülmez) + filigran bayt kodu sabiti.
     define: {
       __TEKSERP_NATIVE_REQUIRED__: 'true',
+      // G2: hiç etkinleşmemiş kurulum yalnız etkinleştirme ekranını açar (geliştirmede tanımsız → kilit yok).
+      __TEKSERP_ETKINLESTIRME_KILIDI__: 'true',
       __TEKSERP_FILIGRAN__: JSON.stringify(JSON.stringify(filigran)),
       ...varsayilanSaDefine(varsayilanSa),
     },

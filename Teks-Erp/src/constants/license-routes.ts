@@ -137,6 +137,23 @@ export const SUSPENDED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
 ];
 
 /**
+ * G2 etkinleştirme kilidinde (hiç etkinleşmemiş kurulum) her-kademe listesine EK açık uçlar. Kilit yalnız etkinleştirme
+ * ekranını açar: lisans uçları, giriş akışı, sağlık ve keşif zaten `ALWAYS_OPEN_ROUTES`tadır. KOPYA sınıfında ayrıca
+ * "verilerimi al" (`DATA_EXPORT_PATHS`) açıktır — veri müşterinindir.
+ */
+export const ACTIVATION_LOCK_OPEN_ROUTES: readonly LicenseRouteRule[] = [
+  { method: "GET", path: "/api/auth/me", reason: "oturum sahibi ve izinleri — etkinleştirme ekranı lisans yetkisini çözer" },
+];
+
+export type ActivationLockRouteClass = "ETKINLESMEDI" | "KOPYA";
+
+/** Etkinleştirme kilidinde istek açık mı (kilit sınıfına göre). */
+export function isOpenWhenActivationLocked(sinif: ActivationLockRouteClass, method: string, path: string): boolean {
+  if (anyMatch(ALWAYS_OPEN_ROUTES, method, path) || anyMatch(ACTIVATION_LOCK_OPEN_ROUTES, method, path)) return true;
+  return sinif === "KOPYA" && anyMatch(Object.values(DATA_EXPORT_PATHS).map(ruleFromExportPath), method, path);
+}
+
+/**
  * KİMLİK İSTEMEYEN uçlar (`test_route_auth_coverage` muaf listesinin kapıdaki karşılığı).
  * Kapalı bir yolda oturumsuz istek rotaya geçer ve rotanın `verifyToken`ı 401 döner; bu
  * uçlarda geçecek bir kimlik duvarı olmadığından kapı kendisi genel `LICENSE_GATE` döner.

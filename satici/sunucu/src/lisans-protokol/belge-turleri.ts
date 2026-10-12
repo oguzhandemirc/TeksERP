@@ -38,4 +38,6 @@ export const TYP = {
 
   /** Canlı lisans yanıtının istek bağı (ALT imzalı, 6.3c) — kirayı isteğin nonce'una bağlar; doğrulayan fabrika. */
   YANIT_BAGI: "tekserp-yanit",
+  /** Etkinleştirme kilidi muafiyeti (kök ya da HAK ara imzacısı, G2) — doğrulayan fabrika (`lib/license/exemption.ts`). */
+  MUAFIYET: "tekserp-muafiyet",
 } as const;

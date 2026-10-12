@@ -37,6 +37,8 @@ export const LICENSE_FILES = {
   REVOCATION: "iptal.jws",
   /** Sistem hesabı mührü zorunluluğu (G1): VAR ⇒ mühürsüz sistem hesabı yetki almaz; imzasız (`system-account-seal.ts`). */
   SYSTEM_ACCOUNT_LATCH: "sistem-hesabi-mandali.json",
+  /** Etkinleştirme kilidi muafiyeti (G2, satıcı imzalı JWS; kurulum anahtarı + parmak izine bağlı — `exemption.ts`). */
+  EXEMPTION: "muafiyet.jws",
 } as const;
 
 /** Depo kullanılamıyorsa nedeni (kapı/ekran TR metni ayrıca üretir). */
@@ -89,6 +91,8 @@ export interface LicenseStoreSnapshot {
   readonly identity: LicenseIdentity | null;
   readonly entitlementJws: string | null;
   readonly leaseJws: string | null;
+  /** G2 muafiyet belgesi metni (doğrulanmamış); yoksa null. */
+  readonly exemptionJws: string | null;
   readonly stateJws: string | null;
   readonly proxy: ProxyConfig;
   readonly transfer: PendingTransfer | null;
@@ -185,6 +189,7 @@ function emptySnapshot(dir: string, problem: StoreProblem | null, unreadable: re
     identity: null,
     entitlementJws: null,
     leaseJws: null,
+    exemptionJws: null,
     stateJws: null,
     proxy: EMPTY_PROXY,
     transfer: null,
@@ -261,6 +266,7 @@ function loadDocuments(dir: string, unreadable: string[]): StoreDocuments {
     identity: identityParsed.success ? { kurulumId: identityParsed.data.kurulumId, ogrenildi: identityParsed.data.ogrenildi } : null,
     entitlementJws: readDocField(path.join(dir, LICENSE_FILES.ENTITLEMENT), unreadable),
     leaseJws: readDocField(path.join(dir, LICENSE_FILES.LEASE), unreadable),
+    exemptionJws: readDocField(path.join(dir, LICENSE_FILES.EXEMPTION), unreadable),
     // Biçimsiz durum dosyası "var ama bozuk" demektir: imza doğrulaması düşürsün diye metin korunur.
     stateJws: stateParsed.success ? stateParsed.data.jws : stateRaw === undefined ? null : "bozuk",
     proxy: proxyParsed.success
@@ -308,17 +314,18 @@ export function saveLicenseIdentity(kurulumId: string): LicenseIdentity {
   return identity;
 }
 
-export function saveEntitlement(jws: string): void {
-  writeDoc(LICENSE_FILES.ENTITLEMENT, jws);
+/** İmzalı belge alanını (HAK · kira · muafiyet) dosyaya ve belleğe yazar; çağıran önce doğrular. */
+function saveJwsDoc(file: string, field: "entitlementJws" | "leaseJws" | "exemptionJws", jws: string): void {
+  writeDoc(file, jws);
   const s = requireWritable();
-  current = { ...s, entitlementJws: jws, unreadable: withoutUnreadable(s, LICENSE_FILES.ENTITLEMENT) };
+  current = { ...s, [field]: jws, unreadable: withoutUnreadable(s, file) };
 }
 
-export function saveLease(jws: string): void {
-  writeDoc(LICENSE_FILES.LEASE, jws);
-  const s = requireWritable();
-  current = { ...s, leaseJws: jws, unreadable: withoutUnreadable(s, LICENSE_FILES.LEASE) };
-}
+export const saveEntitlement = (jws: string): void => saveJwsDoc(LICENSE_FILES.ENTITLEMENT, "entitlementJws", jws);
+export const saveLease = (jws: string): void => saveJwsDoc(LICENSE_FILES.LEASE, "leaseJws", jws);
+
+/** G2 muafiyet belgesi (`license-activation.service` doğrular). */
+export const saveExemption = (jws: string): void => saveJwsDoc(LICENSE_FILES.EXEMPTION, "exemptionJws", jws);
 
 export function saveStateRecord(jws: string): void {
   writeDoc(LICENSE_FILES.STATE, JSON.stringify({ v: 1, jws }));

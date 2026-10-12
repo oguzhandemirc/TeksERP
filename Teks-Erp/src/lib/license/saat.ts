@@ -226,6 +226,8 @@ export const StateRecordSchema = z.object({
   ekSureCapasi: IsoTimeSchema.nullable().optional(),
   /** Fabrika DB'sindeki lisans izi bu kayıtla en az bir kez yazıldı (izin silinmesi ancak bundan sonra kayıptır). */
   izKurulu: z.boolean().optional(),
+  /** G2: PG kümesi özeti (`pg-cluster.ts`) — LICENSE_DIR kaybında aynı kümeyi kopyadan ayırır; küme okunamazsa yok. */
+  pgOzeti: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
   /** Parmak izi 24 sa önbelleğinin kopyası (yalnız tuzlu özet; K8). */
   parmakIziOnbellegi: z
     .object({ f1: CachedFactorRecordSchema.optional(), f2: CachedFactorRecordSchema.optional(), f3: CachedFactorRecordSchema.optional(), f4: CachedFactorRecordSchema.optional(), f5: CachedFactorRecordSchema.optional() })

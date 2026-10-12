@@ -15,6 +15,8 @@ export const TraceRowSchema = z.object({
   anahtar: PublicKeyXSchema,
   /** Durum kaydının imzalı JWS'i (`tekserp-durum`). */
   durum: JwsTextSchema,
+  /** G2: son kabul edilen kira (satıcı imzalı, bu anahtara bağlı) — LICENSE_DIR kaybında izin gerçek bir etkinleşmeden geldiğinin kanıtı. */
+  kira: JwsTextSchema.optional(),
 });
 export type TraceRow = z.infer<typeof TraceRowSchema>;
 

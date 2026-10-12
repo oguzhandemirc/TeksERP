@@ -71,6 +71,7 @@ import {
  */
 export async function refreshLicenseDbFacts(installationId: string): Promise<void> {
   // Lisans izi (G12 DB kopyası) olgularla birlikte okunur: okunamazsa iz BİLİNMİYOR (kayıp sayılmaz).
+  // İzle birlikte PG küme kimliği de (G2 kayıp ↔ kopya) tazelenir.
   await refreshLicenseTrace();
   // İptal belgesinin DB kopyası da (okunur + eksik/düşük kopya onarılır; okunamazsa BİLİNMİYOR).
   await refreshLicenseRevocation();

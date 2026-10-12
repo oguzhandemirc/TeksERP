@@ -50,6 +50,8 @@ import {
 import { installationKeyId } from "./protocol";
 import { revocationHolding, __resetRevocationStoreForTests, type HeldRevocation, type RevocationHolding } from "./revocation-store";
 import { revocationPin } from "./state-rules-revocation";
+import { configureActivationLockForTests, type ActivationLockDecision } from "./activation-lock";
+import { decideActivationLock, isActivated, lastKnownLeaseOf } from "./snapshot-parts";
 import {
   bumpLicenseSnapshotVersion,
   licenseSnapshotVersion,
@@ -192,7 +194,15 @@ export interface LicenseSnapshot {
   readonly integrityFirstMismatchMs: number | null;
   /** G4 iptal belgesi: elde tutulan etkin belge, durum kaydı pini, kopya okunamadı mı. */
   readonly iptal: { readonly belge: HeldRevocation | null; readonly sira: number | null; readonly pin: number | null; readonly okunamadi: boolean };
+  /** G2 etkinleştirme kilidi (durumun DIŞINDA bir katman; etkin kurulumda daima YOK). */
+  readonly etkinlestirmeKilidi: ActivationLockDecision;
   readonly computedAtMs: number;
+}
+
+/** Test-only: etkinleştirme kilidini süreç içinde aç/kapat (`null` = derleme sabiti). */
+export function setActivationLockForTests(on: boolean | null): void {
+  configureActivationLockForTests(on);
+  invalidateLicenseSnapshot();
 }
 
 let cached: { snap: LicenseSnapshot; version: number } | null = null;
@@ -297,26 +307,6 @@ function buildInput(nowMs: number): BuiltInput {
   return { input, entitlement, lease, decision, view, licenseId, revocation };
 }
 
-function isActivated(store: LicenseStoreSnapshot | null, licenseId: string | null, record: StateRecord | null): boolean {
-  if (!store || (store.problem && store.problem !== "OKUNAMADI")) return false;
-  if (store.transfer && store.transfer.durum !== "ONAYLANDI") return true;
-  if (!licenseId) return false;
-  const docPresent =
-    store.entitlementJws !== null ||
-    store.leaseJws !== null ||
-    store.unreadable.includes(LICENSE_FILES.ENTITLEMENT) ||
-    store.unreadable.includes(LICENSE_FILES.LEASE);
-  return docPresent || record !== null;
-}
-
-function lastKnownLeaseOf(lease: VerifiedLease | null, record: StateRecord | null): LicenseSnapshot["lastKnownLease"] {
-  const fromLease = lease ? { kiraId: lease.document.kiraId, verilisMs: isoToMs(lease.document.verilis) } : null;
-  const fromRecord = record?.sonKira ? { kiraId: record.sonKira.kiraId, verilisMs: isoToMs(record.sonKira.verilis) } : null;
-  if (!fromLease) return fromRecord;
-  if (!fromRecord) return fromLease;
-  return fromRecord.verilisMs > fromLease.verilisMs ? fromRecord : fromLease;
-}
-
 /** Merdiven sayaçlarını durumun söylediği koşula göre akıtır/dondurur (K7: birikim en az 14 gün). */
 function driveLadders(state: LicenseState): void {
   if (state.belirsizlik.ucIzYok) raiseLadder("belirsizlik", LADDER_WARNING_MS);
@@ -336,12 +326,14 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
   const state = computeLicenseState(input);
   const signingReady = Boolean(store && !store.problem && store.key && facts.installationId);
   const stateReady = signingReady || Boolean(store && store.problem === "OKUNAMADI" && input.kurulumAnahtarKimligi && facts.installationId);
+  const activated = isActivated(store, licenseId.id, view.record);
+  const etkinlestirmeKilidi = decideActivationLock({ ready: stateReady, activated, store, fingerprint, roots: config.roots });
   const snap: LicenseSnapshot = {
     imzaHazir: signingReady,
     durumHazir: stateReady,
     licenseId: licenseId.id,
     licenseIdSource: licenseId.source,
-    activated: isActivated(store, licenseId.id, view.record),
+    activated,
     state,
     entitlement,
     lease,
@@ -351,6 +343,7 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
     view,
     integrityFirstMismatchMs: integrityStampMs(view.record),
     iptal: { belge: revocation.effective, sira: input.iptal?.sira ?? null, pin: input.iptalPini ?? null, okunamadi: input.iptal?.okunamadi ?? false },
+    etkinlestirmeKilidi,
     computedAtMs: nowMs,
   };
   if (snap.activated) driveLadders(state);
@@ -368,5 +361,6 @@ export function __resetLicenseRuntimeForTests(): void {
   __resetLadderCountersForTests();
   __resetLicenseTraceRowForTests();
   __resetRevocationStoreForTests();
+  configureActivationLockForTests(null);
   cached = null;
 }

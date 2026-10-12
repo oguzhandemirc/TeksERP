@@ -38,6 +38,7 @@ import { integritySection } from "./helpers/license-integrity-view.helper";
 import { chainSection, type LicenseChainView } from "./helpers/license-chain-view.helper";
 import type { IntegrityStatus } from "../lib/license/state-rules";
 import { bannerFields } from "../lib/license/process-banners";
+import type { ActivationLockClass } from "../lib/license/activation-lock";
 
 // ── Durum özeti (herkes) ────────────────────────────────────────────────────────
 export interface LicenseStatusSummary {
@@ -58,6 +59,8 @@ export interface LicenseStatusSummary {
   readonly lisansNo: string | null;
   readonly lisansSahibi: { readonly musteri: string; readonly tesis: string } | null;
   readonly surum: string;
+  /** G2 etkinleştirme kilidi: YOK · ETKINLESMEDI (yalnız etkinleştirme ekranı) · KOPYA (+ verilerimi al). */
+  readonly etkinlestirmeKilidi: ActivationLockClass;
 }
 export type LicenseStatusResponse = LicenseStatusSummary | { readonly ayrinti: false };
 
@@ -79,6 +82,7 @@ export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse 
     lisansNo: ent?.lisansNo ?? null,
     lisansSahibi: ent ? { musteri: ent.musteri.ad, tesis: ent.tesis.ad } : null,
     surum: APP_VERSION,
+    etkinlestirmeKilidi: snap.etkinlestirmeKilidi.sinif,
   };
 }
 

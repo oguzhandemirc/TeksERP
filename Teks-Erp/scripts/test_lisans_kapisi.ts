@@ -46,6 +46,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import morgan from "morgan";
 import {
+  ACTIVATION_LOCK_OPEN_ROUTES,
   ALWAYS_OPEN_ROUTES,
   DATA_EXPORT_PATHS,
   DECLARED_CLOSED_ROUTES,
@@ -53,6 +54,7 @@ import {
   RESTRICTED_OPEN_ROUTES,
   SUSPENDED_OPEN_ROUTES,
   isOpenInTier,
+  isOpenWhenActivationLocked,
   isPublicRoute,
   routePatternMatches,
   ruleMatches,
@@ -115,6 +117,7 @@ function oluDesenler(): void {
     ["KISITLI ek", RESTRICTED_OPEN_ROUTES],
     ["DURDURULMUŞ ek", SUSPENDED_OPEN_ROUTES],
     ["bilerek kapalı", DECLARED_CLOSED_ROUTES],
+    ["etkinleştirme kilidi ek", ACTIVATION_LOCK_OPEN_ROUTES],
   ];
   for (const [ad, liste] of listeler) {
     const olu = liste.filter((r) => !uclar.some((u) => ruleMatches(r, u.m, u.ornek)));
@@ -157,6 +160,19 @@ function kapsamaVeDisariAktarim(): void {
     const acik = STATE_TIERS.every((t) => isOpenInTier(t, m, ornekYol(desen)));
     check(`§5 ⭐ verilerimi al '${ad}' (${spec}) gerçek uç ve HER kademede açık`, var_ && acik, `var=${var_} açık=${acik}`);
   }
+  // G2: etkinleştirme kilidinde açık küme = beyan (her-kademe ∪ kilit eki; KOPYA'da + "verilerimi al"), envanterde birebir.
+  const verilerimi = (u: (typeof uclar)[number]) =>
+    Object.values(DATA_EXPORT_PATHS).some((spec) => {
+      const [m, yol] = spec.split(" ");
+      return u.m === m && routePatternMatches(yol.replace(/\{([A-Za-z0-9_]+)\}/g, ":$1"), u.ornek);
+    });
+  const beyanEtk = (u: (typeof uclar)[number]) => eslesir(ALWAYS_OPEN_ROUTES, u) || eslesir(ACTIVATION_LOCK_OPEN_ROUTES, u);
+  const etkAyrisan = uclar.filter((u) => isOpenWhenActivationLocked("ETKINLESMEDI", u.m, u.ornek) !== beyanEtk(u));
+  check("§5c ⭐ G2 kilit (ETKINLESMEDI) açık küme = her-kademe ∪ kilit eki, envanterde birebir", etkAyrisan.length === 0, etkAyrisan.slice(0, 5).map((u) => `${u.m} ${u.desen}`).join(" | "));
+  const kopyaAyrisan = uclar.filter((u) => isOpenWhenActivationLocked("KOPYA", u.m, u.ornek) !== (beyanEtk(u) || verilerimi(u)));
+  check("§5d ⭐ G2 kilit (KOPYA) açık küme = ETKINLESMEDI ∪ 'verilerimi al', envanterde birebir", kopyaAyrisan.length === 0, kopyaAyrisan.slice(0, 5).map((u) => `${u.m} ${u.desen}`).join(" | "));
+  const etkAcik = uclar.filter(beyanEtk).length;
+  check("§5e G2 kilit dar: ETKINLESMEDI'de açık uç sayısı her-kademe + kilit eki kadar ve envanterin küçük bir kısmı", etkAcik > 0 && etkAcik < uclar.length / 10, `${etkAcik}/${uclar.length}`);
   // K8: donanım değişikliği bildirimi kurtarma yoludur — kısıtlı kurulum donanımını bildirip lisansını onarabilmeli.
   const donanim = uclar.some((u) => u.m === "POST" && u.desen === "/api/license/donanim-bildir");
   const donanimKapali = STATE_TIERS.filter((t) => !isOpenInTier(t, "POST", "/api/license/donanim-bildir"));

@@ -23,6 +23,7 @@ import {
 import { parseCardCode } from "../lib/short-credential/digest";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { isSuspendedBeforeLogin } from "../services/license-view.service";
+import { isActivationLockedBeforeLogin } from "../services/license-activation.service";
 import { screenCompanyName } from "../lib/license/licensee-name";
 import { AppError } from "../utils/app-error";
 import {
@@ -467,7 +468,7 @@ export class AuthController {
    *     tags: [Auth]
    *     summary: Mobil giriş yöntemleri (public — login ekranı auth'suz okur)
    *     responses:
-   *       200: { description: "{ enabled: (list|pin|card)[], primary, companyName, lisansDurduruldu }" }
+   *       200: { description: "{ enabled: (list|pin|card)[], primary, companyName, lisansDurduruldu, lisansEtkinlesmedi }" }
    */
   static async loginMethods(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -476,7 +477,8 @@ export class AuthController {
       const companyName = screenCompanyName();
       // K5 giriş ekranı sinyali: kimliksize verilen tek lisans bilgisi (yalnız zorla + DURDURULMUŞ).
       const lisansDurduruldu = isSuspendedBeforeLogin();
-      res.status(200).json({ success: true, data: { ...methods, companyName, lisansDurduruldu } });
+      const lisansEtkinlesmedi = isActivationLockedBeforeLogin();
+      res.status(200).json({ success: true, data: { ...methods, companyName, lisansDurduruldu, lisansEtkinlesmedi } });
     } catch (error) {
       next(error);
     }

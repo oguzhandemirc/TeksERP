@@ -7,6 +7,7 @@ import { isoToMs, type LeaseDoc } from "./protocol";
 import { accumulatedRuntime, signStateRecord, verifyStateRecordSignature, type RememberedAnchor, type StateRecord, type TraceKind } from "./saat";
 import { getLicenseStore, saveStateRecord } from "./store";
 import { bumpLicenseSnapshotVersion } from "./license-signals";
+import { pgClusterDigest } from "./pg-cluster";
 import { getLicenseTraceRow, markLicenseTraceUnknown, setLicenseTraceRow, type TraceRow } from "./trace-row";
 
 export interface Accumulation {
@@ -177,9 +178,11 @@ export function flushLicenseTraceWrites(): Promise<void> {
  * Kaydı imzalar, `durum.json`a yazar ve AYNI JWS'i DB izine kuyruklar (yazım sırası korunur: son yazılan en yeni).
  * İz yazımı düşerse dosya yine geçerlidir; kayıt `izKurulu`yu yalnız iz okunup doğrulandıktan sonra taşır.
  */
-export function writeRecord(record: StateRecord): string {
+export function writeRecord(input: StateRecord): string {
   const store = getLicenseStore();
   if (!store?.key) throw new Error("Lisans deposu hazır değil");
+  const clusterDigest = pgClusterDigest(input.kurulumId) ?? input.pgOzeti;
+  const record: StateRecord = clusterDigest ? { ...input, pgOzeti: clusterDigest } : input;
   const jws = signStateRecord(record, store.key.privateKey, store.key.x);
   saveStateRecord(jws);
   const prev = currentAccumulation();
@@ -195,7 +198,7 @@ export function writeRecord(record: StateRecord): string {
   };
   const writer = traceWriter;
   if (writer) {
-    const row: TraceRow = { v: 1, kurulumId: record.kurulumId, anahtar: store.key.x, durum: jws };
+    const row: TraceRow = { v: 1, kurulumId: record.kurulumId, anahtar: store.key.x, durum: jws, ...(store.leaseJws ? { kira: store.leaseJws } : {}) };
     // Bellek hâli yazımla birlikte ilerler (yazım sürerken DB izi "kayıp" görünmesin); yazım düşerse BİLİNMİYOR'a döner.
     setLicenseTraceRow(row);
     traceQueue = traceQueue.then(() => writer(row)).catch(() => undefined);
