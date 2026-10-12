@@ -25,6 +25,8 @@ export interface LoginMethodsInfo {
   companyName?: string;
   /** K5 giriş sinyali: yalnız zorlamada ve lisans durdurulmuşken true (eski backend göndermez). */
   lisansDurduruldu?: boolean;
+  /** G2 giriş sinyali: kurulum etkinleştirme kilidinde (yalnız korumalı derleme; eski backend göndermez). */
+  lisansEtkinlesmedi?: boolean;
 }
 
 export const authService = {

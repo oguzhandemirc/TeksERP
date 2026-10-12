@@ -50,9 +50,9 @@ describe("Tezgah Salonu — kapılar ve örnek veri sınırı", () => {
     expect(block).toMatch(/<ProtectedRoute requirePermission="loom:live-view">\s*<WeavingFloorPage \/>/);
   });
 
-  it("⭐ TV bağlantısı kabuksuz ve OTURUMLU: AppShell'den dallanır, App'te AppShell yalnız oturum-dışı (K5 ⊆) dalından SONRA", () => {
+  it("⭐ TV bağlantısı kabuksuz ve OTURUMLU: AppShell'den dallanır, App'te AppShell yalnız oturum-dışı (K5 ⊆ · G2 kilidi) dalından SONRA", () => {
     const app = read(APP);
-    expect(app).toMatch(/const oturumDisi = [^;]*licenseSuspended;/);
+    expect(app).toMatch(/const oturumDisi = [^;]*licenseSuspended \|\| activationLocked;/);
     const out = app.indexOf("if (oturumDisi) {");
     const shell = app.indexOf("kabuk = <AppShell />;");
     expect(out).toBeGreaterThan(-1);

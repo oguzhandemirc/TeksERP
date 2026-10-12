@@ -35,17 +35,20 @@ export interface LicenseStatusSummary {
 
 export type LicenseStatusResponse = LicenseStatusSummary | { ayrinti: false };
 
-/** Kapı reddinin tablette ayrışan dört anlamı (`details.code` → tür). */
+/** Kapı reddinin tablette ayrışan beş anlamı (`details.code` → tür). */
 export type LicenseBlock =
   | { kind: 'restricted' }
   | { kind: 'module'; moduleKey: string | null }
   | { kind: 'suspended' }
+  | { kind: 'not-activated' }
   | { kind: 'gate' };
 
 const GATE_CODES: Readonly<Record<string, LicenseBlock['kind']>> = {
   LICENSE_RESTRICTED: 'restricted',
   LICENSE_MODULE: 'module',
   LICENSE_SUSPENDED: 'suspended',
+  // G2: hiç etkinleşmemiş sunucu — etkinleştirme panelden yapılır, tablette yalnız bilgi.
+  LICENSE_NOT_ACTIVATED: 'not-activated',
   LICENSE_GATE: 'gate',
 };
 
@@ -129,6 +132,11 @@ export function licenseBlockToast(block: LicenseBlock): { text1: string; text2: 
         text2: 'İşlem yapılmadı — yöneticinize başvurun.',
       };
     }
+    case 'not-activated':
+      return {
+        text1: 'Sunucu lisansı etkinleştirilmedi',
+        text2: 'İşlem yapılmadı — yöneticinize başvurun.',
+      };
     default:
       return null;
   }

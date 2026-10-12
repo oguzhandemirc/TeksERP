@@ -6,6 +6,7 @@ import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { isLicenseScreenVisible } from "@/lib/license/visibility";
 import { onLicenseGate } from "@/lib/license/signal";
 import { useLicenseSuspension } from "@/lib/license/suspension";
+import { useActivationLock } from "@/lib/license/activation-lock";
 import type { LicenseStatusSummary } from "@/types/license";
 
 export const LICENSE_STATUS_KEY = ["license", "durum"] as const;
@@ -41,6 +42,11 @@ export function useLicenseStatus(): LicenseStatusSummary | null {
   useEffect(() => {
     if (tier !== null) useLicenseSuspension.getState().setSuspended(tier === "DURDURULMUS");
   }, [tier]);
+  // G2: kilit sınıfının oturumdaki yetkili kaynağı; etkinleşince kabuk geri gelir. Eski backend alanı göndermez.
+  const lock = summary ? (summary.etkinlestirmeKilidi ?? "YOK") : null;
+  useEffect(() => {
+    if (lock !== null) useActivationLock.getState().setSinif(lock);
+  }, [lock]);
   return summary;
 }
 

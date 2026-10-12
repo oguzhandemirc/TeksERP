@@ -5,6 +5,8 @@ import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { TotpEnrollPage } from "@/pages/TotpEnroll/TotpEnrollPage";
 import { LicenseSuspendedPage } from "@/pages/LicenseSuspended/LicenseSuspendedPage";
 import { LICENSE_SUSPENDED_PATH, useLicenseSuspension } from "@/lib/license/suspension";
+import { LicenseActivationPage } from "@/pages/LicenseActivation/LicenseActivationPage";
+import { LICENSE_ACTIVATION_PATH, useActivationLock } from "@/lib/license/activation-lock";
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp } from "@/types/auth";
 import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
@@ -19,6 +21,7 @@ import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
 function AuthLanding() {
   const user = useAuthStore((s) => s.user);
   const licenseSuspended = useLicenseSuspension((s) => s.suspended);
+  const activationLocked = useActivationLock((s) => s.sinif !== "YOK");
   const location = useLocation();
   if (user && !canEnterApp(user.permissions)) {
     return <Navigate to="/forbidden" replace />;
@@ -26,6 +29,10 @@ function AuthLanding() {
   // K5 (lisans durduruldu): oturum yalnız "verilerimi al" sayfasına gider.
   if (user && licenseSuspended) {
     return <Navigate to={LICENSE_SUSPENDED_PATH} replace />;
+  }
+  // G2 (etkinleştirme kilidi): oturum yalnız etkinleştirme sayfasına gider.
+  if (user && activationLocked) {
+    return <Navigate to={LICENSE_ACTIVATION_PATH} replace />;
   }
   // ⚠️ GİDİLMEK İSTENEN YOL KORUNUR: yer imiyle bir iç yola gelen biri giriş
   // sonrası köke (AppShell) düşmesin.
@@ -42,5 +49,6 @@ export const authRouter = createHashRouter([
   // Yol sabiti `TOTP_ENROLL_PATH` ile paylaşılır; App.tsx kapısı da onu okur.
   { path: TOTP_ENROLL_PATH, element: <TotpEnrollPage />, errorElement: <RouteErrorFallback /> },
   { path: LICENSE_SUSPENDED_PATH, element: <LicenseSuspendedPage />, errorElement: <RouteErrorFallback /> },
+  { path: LICENSE_ACTIVATION_PATH, element: <LicenseActivationPage />, errorElement: <RouteErrorFallback /> },
   { path: "*", element: <AuthLanding />, errorElement: <RouteErrorFallback /> },
 ]);

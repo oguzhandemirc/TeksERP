@@ -15,6 +15,7 @@ import { LiveReferencesDialog } from "@/components/LiveReferencesDialog";
 import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
 import { useLicenseSuspension } from "@/lib/license/suspension";
+import { useActivationLock } from "@/lib/license/activation-lock";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
@@ -88,10 +89,11 @@ function ScanSeriesLoader() {
   const userId = useAuthStore((s) => s.user?.userId ?? null);
   // K5'te yalnız "verilerimi al" sayfası konuşur; uç DURDURULMUŞ izin listesinde değil.
   const suspended = useLicenseSuspension((s) => s.suspended);
+  const activationLocked = useActivationLock((s) => s.sinif !== "YOK");
   useEffect(() => {
-    if (!userId || suspended) return;
+    if (!userId || suspended || activationLocked) return;
     void loadScanSeries();
-  }, [userId, suspended]);
+  }, [userId, suspended, activationLocked]);
   return null;
 }
 
@@ -130,6 +132,8 @@ function Root() {
   const hashPath = useHashPath();
   // K5: kabuk (yüzlerce uç) hiç bağlanmaz; oturum-dışı router "verilerimi al" sayfasını açar.
   const licenseSuspended = useLicenseSuspension((s) => s.suspended);
+  // G2: etkinleştirme kilidinde de kabuk bağlanmaz; oturum-dışı router etkinleştirme sayfasını açar.
+  const activationLocked = useActivationLock((s) => s.sinif !== "YOK");
   // Dilim değişince kabuk YENİDEN KURULUR: çizilmiş her tarih/saat yeni dilimle basılsın (nadir — kurulum değeri).
   const factoryTimezone = useFactoryTimezone();
 
@@ -142,7 +146,7 @@ function Root() {
   const onEnrollPath = hashPath === TOTP_ENROLL_PATH;
   // Ayrı salon TV penceresi kurulum tetiği taşımaz: güncellemeyi ana pencere kurar (iki geri sayım olmasın).
   const tvPenceresi = isTvWindowHash(window.location.hash);
-  const oturumDisi = onEnrollPath || !user || !canEnterApp(user.permissions) || licenseSuspended;
+  const oturumDisi = onEnrollPath || !user || !canEnterApp(user.permissions) || licenseSuspended || activationLocked;
   let kabuk;
   if (oturumDisi) {
     kabuk = <RouterProvider router={authRouter} />;

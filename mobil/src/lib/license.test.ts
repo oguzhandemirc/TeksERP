@@ -38,7 +38,8 @@ function status(over: Partial<LicenseStatusSummary> = {}): LicenseStatusSummary 
 }
 
 describe('§1 classifyLicenseError — yalnız 403 + lisans kapı kodu', () => {
-  it('dört kapı kodu dört türe', () => {
+  it('beş kapı kodu beş türe', () => {
+    expect(classifyLicenseError(403, { code: 'LICENSE_NOT_ACTIVATED', sinif: 'ETKINLESMEDI' })).toEqual({ kind: 'not-activated' });
     expect(classifyLicenseError(403, { code: 'LICENSE_RESTRICTED', kademe: 'KISITLI' })).toEqual({ kind: 'restricted' });
     expect(classifyLicenseError(403, { code: 'LICENSE_SUSPENDED' })).toEqual({ kind: 'suspended' });
     expect(classifyLicenseError(403, { code: 'LICENSE_GATE' })).toEqual({ kind: 'gate' });
@@ -76,6 +77,11 @@ describe('§2 licenseBlockToast — tek uyarı metni', () => {
       'Çoklu depo modülü lisansınızda kapalı',
     );
     expect(licenseBlockToast({ kind: 'module', moduleKey: null })?.text1).toBe('Bu modül lisansınızda kapalı');
+  });
+  it('G2 etkinleşmemiş sunucu → "Sunucu lisansı etkinleştirilmedi", yöneticiye yönlendirir', () => {
+    const t = licenseBlockToast({ kind: 'not-activated' });
+    expect(t?.text1).toBe('Sunucu lisansı etkinleştirilmedi');
+    expect(t?.text2).toContain('yöneticinize başvurun');
   });
   it('K5 (tam ekran) ve kimliksiz kapı (ayrıntısız) toast ÜRETMEZ', () => {
     expect(licenseBlockToast({ kind: 'suspended' })).toBeNull();

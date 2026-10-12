@@ -4,6 +4,7 @@ import { authService } from "@/services/authService";
 import { DEFAULT_COMPANY_NAME } from "@/services/featureFlagService";
 import { getActiveApiBaseUrl } from "@/lib/api-config";
 import { useLicenseSuspension } from "@/lib/license/suspension";
+import { useActivationLock } from "@/lib/license/activation-lock";
 
 /**
  * Bağlanılan sunucunun public login-methods yanıtı — girişten ÖNCE okunur.
@@ -40,4 +41,21 @@ export function useLoginLicenseSuspended(): boolean {
     if (known) useLicenseSuspension.getState().setSuspended(suspended);
   }, [known, suspended]);
   return suspended;
+}
+
+/**
+ * G2 giriş sinyali (`lisansEtkinlesmedi`) — sınıf kimliksize verilmez; giriş yapan doğrudan etkinleştirme
+ * sayfasına gider, oturumdaki durum sorgusu sınıfı (ETKINLESMEDI/KOPYA) netleştirir.
+ */
+export function useLoginActivationLocked(): boolean {
+  const q = useLoginMethods();
+  const known = q.data?.data !== undefined;
+  const locked = q.data?.data?.lisansEtkinlesmedi === true;
+  useEffect(() => {
+    if (!known) return;
+    const store = useActivationLock.getState();
+    if (locked && store.sinif === "YOK") store.setSinif("ETKINLESMEDI");
+    if (!locked) store.setSinif("YOK");
+  }, [known, locked]);
+  return locked;
 }

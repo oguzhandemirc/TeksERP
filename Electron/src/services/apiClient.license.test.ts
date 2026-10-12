@@ -16,6 +16,7 @@ vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a)
 const apiClient = (await import("./apiClient")).default;
 const { onLicenseGate } = await import("@/lib/license/signal");
 const { useLicenseSuspension } = await import("@/lib/license/suspension");
+const { useActivationLock } = await import("@/lib/license/activation-lock");
 
 type Handler = { rejected: (e: unknown) => Promise<unknown> };
 const interceptor = (): Handler =>
@@ -36,6 +37,18 @@ describe("apiClient — lisans kapısı dalları", () => {
     toastError.mockClear();
     authState.user = { userId: "u1" };
     useLicenseSuspension.setState({ suspended: false });
+    useActivationLock.setState({ sinif: "YOK" });
+  });
+
+  it("⭐ G2 403 LICENSE_NOT_ACTIVATED → toast YOK, kilit sinyali sınıfıyla (KOPYA); sınıfsız → ETKINLESMEDI", async () => {
+    const kopya = { message: "Kopya.", details: { code: "LICENSE_NOT_ACTIVATED", sinif: "KOPYA" } };
+    await expect(interceptor().rejected(makeError(403, kopya))).rejects.toBeDefined();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(useActivationLock.getState().sinif).toBe("KOPYA");
+    useActivationLock.setState({ sinif: "YOK" });
+    await expect(interceptor().rejected(makeError(403, { message: "x", details: { code: "LICENSE_NOT_ACTIVATED" } }))).rejects.toBeDefined();
+    expect(useActivationLock.getState().sinif).toBe("ETKINLESMEDI");
+    expect(useLicenseSuspension.getState().suspended).toBe(false);
   });
 
   it("⭐ 403 LICENSE_SUSPENDED → toast YOK, K5 sinyali: kabuk yerine 'verilerimi al' sayfası açılır", async () => {

@@ -20,7 +20,8 @@ import type { DiscoveredServer } from "@shared/ipc-contract";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 import type { ExistingSessionInfo } from "@/types/auth";
 import { LoginHero } from "./LoginHero";
-import { useLoginLicenseSuspended } from "./useServerCompanyName";
+import { Callout } from "@/components/ui/callout";
+import { useLoginActivationLocked, useLoginLicenseSuspended } from "./useServerCompanyName";
 import { LicenseSuspendedLogin } from "./LicenseSuspendedLogin";
 import { factoryLocaleString } from "@/lib/factory-time";
 
@@ -64,6 +65,8 @@ export function LoginPage() {
   const [mismatch, setMismatch] = useState<DiscoveredServer | null>(null);
   // K5: giriş yalnız "verilerimi al" için; giren kabuk yerine o sayfaya gider (`router.tsx`).
   const licenseSuspended = useLoginLicenseSuspended();
+  // G2: etkinleşmemiş sunucu — giren kabuk yerine etkinleştirme sayfasına gider (`router.tsx`).
+  const activationLocked = useLoginActivationLocked();
 
   const onSubmit = (values: LoginFormValues) => performLogin(values, false);
 
@@ -171,6 +174,13 @@ export function LoginPage() {
           />
         ) : licenseSuspended ? (
           <LicenseSuspendedLogin form={form} submitting={submitting} onSubmit={onSubmit} />
+        ) : activationLocked ? (
+          <div className="flex w-full max-w-sm flex-col gap-4">
+            <Callout tone="warning" title="Sunucu lisansı etkinleştirilmedi">
+              Lisans yetkisi olan bir yöneticiyle giriş yapın; etkinleştirme ekranı açılacak.
+            </Callout>
+            <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
+          </div>
         ) : (
           <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
         )}

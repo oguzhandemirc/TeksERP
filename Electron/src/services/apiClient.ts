@@ -9,6 +9,7 @@ import { shouldToastWarnings, showServerWarnings } from "@/lib/serverNotes";
 import { presentLiveReferences } from "@/lib/live-references";
 import { notifyLicenseGate } from "@/lib/license/signal";
 import { useLicenseSuspension } from "@/lib/license/suspension";
+import { activationLockClassOf, useActivationLock } from "@/lib/license/activation-lock";
 import { licenseModuleKey, licenseModuleLabel } from "@/lib/license/ceiling";
 import { PASSWORD_CHANGE_REQUIRED_CODE } from "@/types/auth";
 
@@ -32,6 +33,11 @@ function handleInstallationGate(body: ApiErrorBody | undefined, suppressToast: b
   // K5: kabuk yerine "verilerimi al" sayfası açılır — sayfa durumu kendisi anlatır, toast yok.
   if (code === "LICENSE_SUSPENDED") {
     useLicenseSuspension.getState().setSuspended(true);
+    return true;
+  }
+  // G2: kabuk yerine etkinleştirme sayfası açılır — sayfa durumu kendisi anlatır, toast yok.
+  if (code === "LICENSE_NOT_ACTIVATED") {
+    useActivationLock.getState().setSinif(activationLockClassOf((body?.details as { sinif?: unknown } | undefined)?.sinif));
     return true;
   }
   if (suppressToast) return true;

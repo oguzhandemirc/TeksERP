@@ -8,6 +8,7 @@ import { TabRouter } from "./TabRouter";
 import { TabActiveProvider, TabIdProvider } from "./tab-active";
 import { TabPortalProvider } from "./tab-portal";
 import { LICENSE_SUSPENDED_PATH } from "@/lib/license/suspension";
+import { LICENSE_ACTIVATION_PATH } from "@/lib/license/activation-lock";
 
 /**
  * Sekme barındırıcı. Açık tüm sekmeler aynı anda mount kalır; yalnız aktif olan
@@ -26,7 +27,7 @@ export function TabHost() {
     const hash = window.location.hash.replace(/^#/, "");
     const usable =
       hash && hash !== "/" && !hash.startsWith("/login") && !hash.startsWith("/forbidden") &&
-      !hash.startsWith(LICENSE_SUSPENDED_PATH)
+      !hash.startsWith(LICENSE_SUSPENDED_PATH) && !hash.startsWith(LICENSE_ACTIVATION_PATH)
         ? hash
         : "/";
     openTab(usable);
