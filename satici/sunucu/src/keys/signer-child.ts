@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   CertificateSchema,
   EntitlementSchema,
+  ExemptionSchema,
   PackageRevocationSchema,
   RevocationSchema,
   TYP,
@@ -14,13 +15,14 @@ import {
   signDocument,
   type EntitlementDoc,
   type EntitlementSignerKind,
+  type ExemptionDoc,
   type LicenseClass,
 } from "../lisans-protokol";
 import { KeyFileError, privateKeyFromRaw, readWrappedKeyFile, unwrapPrivateKey, type WrappedKeyFile } from "./key-files";
 
 const SignRequestSchema = z.strictObject({
   anahtarDosyasi: z.string().min(1),
-  typ: z.enum([TYP.HAK, TYP.SERTIFIKA, TYP.IPTAL, TYP.PAKET_IPTAL]),
+  typ: z.enum([TYP.HAK, TYP.SERTIFIKA, TYP.IPTAL, TYP.PAKET_IPTAL, TYP.MUAFIYET]),
   yuk: z.record(z.string(), z.unknown()),
 });
 
@@ -71,6 +73,11 @@ async function sign(requestLine: Buffer, password: Buffer): Promise<SignerOutput
       const doc = request.typ === TYP.IPTAL ? decodeDocument(RevocationSchema, request.yuk) : decodeDocument(PackageRevocationSchema, request.yuk);
       if (!doc.ok) return { ok: false, kod: "BICIM", mesaj: doc.message };
     }
+  } else if (request.typ === TYP.MUAFIYET) {
+    const doc = decodeDocument(ExemptionSchema, request.yuk);
+    if (!doc.ok) return { ok: false, kod: "BICIM", mesaj: doc.message };
+    const refused = exemptionRefusal(file, doc.value);
+    if (refused) return { ok: false, kod: "YETKISIZ", mesaj: refused };
   } else {
     const hak = decodeDocument(EntitlementSchema, request.yuk);
     if (!hak.ok) return { ok: false, kod: "BICIM", mesaj: hak.message };
@@ -90,7 +97,9 @@ async function sign(requestLine: Buffer, password: Buffer): Promise<SignerOutput
           ? signDocument({ typ: TYP.IPTAL, schema: RevocationSchema, payload: request.yuk as never, key })
           : request.typ === TYP.PAKET_IPTAL
             ? signDocument({ typ: TYP.PAKET_IPTAL, schema: PackageRevocationSchema, payload: request.yuk as never, key })
-            : signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: request.yuk as never, key });
+            : request.typ === TYP.MUAFIYET
+              ? signDocument({ typ: TYP.MUAFIYET, schema: ExemptionSchema, payload: request.yuk as never, key })
+              : signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: request.yuk as never, key });
   } finally {
     raw.fill(0);
   }
@@ -115,6 +124,19 @@ function entitlementRefusal(file: WrappedKeyFile, hak: EntitlementDoc): string |
   if (horizon !== undefined && ceiling !== null && (horizon === null || horizon > ceiling)) {
     return `${hak.sinif} HAK'ı (${signer}) en çok ${ceiling} günlük çevrimdışı ufuk taşıyabilir`;
   }
+  return null;
+}
+
+/**
+ * Muafiyeti (G2) yalnız kök ya da HAK ara imzacısı basar; bayi ASLA (kendi müşterisini lisanssız bırakamaz). Ara
+ * imzacı yalnız KENDİ sertifikasını gömülü taşıyan belgeyi, kök yalnız sertifikasız belgeyi imzalar (fabrikanın
+ * doğrulayıcısı imzacıyı gömülü sertifikadan seçer).
+ */
+function exemptionRefusal(file: WrappedKeyFile, doc: ExemptionDoc): string | null {
+  const signer = SIGNER_OF[file.tur];
+  if (signer === "BAYI") return "Muafiyeti bayi anahtarı imzalayamaz";
+  if (signer === "KOK") return doc.imzaciSertifikasi === undefined ? null : "Kök, ara imzacı sertifikalı muafiyeti imzalamaz";
+  if (!file.sertifika || doc.imzaciSertifikasi !== file.sertifika) return `Muafiyetteki ara imzacı sertifikası ${file.kid} anahtarınınki değil`;
   return null;
 }
 

@@ -82,6 +82,8 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "POST /donanim-talepleri/:id/reddet",
   "POST /kopya-uyarilari/:id/kapat",
   "POST /kurulumlar/:id/uzatma-dosyasi",
+  "GET /kurulumlar/:id/muafiyet-plani", // G2 muafiyet imza planı (yalnız yönetici)
+  "POST /kurulumlar/:id/muafiyet", // G2 muafiyet belgesi — imza parolası; yol kararı imza boğazında da
   "POST /kurulumlar/:id/dr-geri-al",
   "POST /kurulumlar/:id/iptal",
   "POST /kurulumlar/:id/iptal-geri-al",

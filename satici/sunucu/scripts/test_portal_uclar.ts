@@ -14,7 +14,7 @@ import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DAY_MS, ENDPOINTS, parseJws } from "../src/lisans-protokol";
+import { DAY_MS, ENDPOINTS, parseJws, signRequest, wrapEnvelope } from "../src/lisans-protokol";
 import { DEALER_PORTAL_ROUTES } from "../src/http/dealer-routes";
 import type { PortalRouteDef } from "../src/http/portal-http";
 import { VENDOR_PORTAL_ROUTES } from "../src/http/portal-routes";
@@ -173,6 +173,16 @@ async function main(): Promise<void> {
     kontrol("§1d2 imza planı KOK (yeteneksiz kurulum, kök VDS'te); toplu ara basımı yeteneksizi ATLAR (sürüm değişmez)", imzaPlani.veri.imzaci === "KOK" && (toplu.veri.sonuclar as { durum: string }[])[0]?.durum === "ATLANDI");
     const kod = await s("post", "/kurulumlar/:id/etkinlestirme-kodu", `/kurulumlar/${kId}/etkinlestirme-kodu`, 201, { gecerlilikGun: 7 });
     const anahtar = kurulumAnahtariUret();
+    // G2 muafiyet (davranış test_muafiyet_belgesi): etkinleşmeden ÖNCE; kimlik fabrikanın imzalı zarfından, kod tüketilmez.
+    const mPlan = await s("get", "/kurulumlar/:id/muafiyet-plani", `/kurulumlar/${kId}/muafiyet-plani`, 200);
+    const mGovde = JSON.stringify(etkinlestirmeGovdesi({ kod: kod.veri.kod as string, kurulumId, anahtar, parmakIzi: f.parmakIzi }));
+    const mZarf = wrapEnvelope(signRequest({ installationId: kurulumId, purpose: "etkinlestir", body: mGovde, key: { privateKey: anahtar.privateKey, nowMs: Date.now() } }), mGovde);
+    const muaf = await s("post", "/kurulumlar/:id/muafiyet", `/kurulumlar/${kId}/muafiyet`, 201, { zarf: mZarf, sebep: "uçlar kapsamı", imzaci: "KOK", imzaParolasi: TEST_KOK_PAROLASI });
+    kontrol(
+      "§1e0 muafiyet: plan KÖK (ara yok), dosya {v:1, muafiyet}",
+      mPlan.veri.imzaci === "KOK" && (muaf.veri.dosya as { v?: number; muafiyet?: string } | undefined)?.v === 1 && typeof (muaf.veri.dosya as { muafiyet?: unknown }).muafiyet === "string",
+      JSON.stringify(mPlan.veri),
+    );
     const et = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
       kurulumId,
       amac: "etkinlestir",

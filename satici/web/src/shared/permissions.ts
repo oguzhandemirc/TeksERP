@@ -14,6 +14,7 @@ export const PORTAL_PERMISSIONS = {
   "yaptirim:yaz": VENDOR,
   "yaptirim:agir": ADMIN,
   "kurulum:yonet": VENDOR,
+  "kurulum:muafiyet": ADMIN,
   "kurulum:iptal": ADMIN,
   "kanal:yonet": ADMIN,
   "bayi:yonet": ADMIN,

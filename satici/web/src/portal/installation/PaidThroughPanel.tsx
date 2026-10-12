@@ -10,7 +10,7 @@ import { installationName, type ExtensionFile, type InstallationDetail } from ".
 import { Badge, Button, KeyValues, Modal, ModalActions, Section } from "../../shared/ui";
 
 /** Tarayıcıda JSON dosyası kaydettirir; ortam desteklemiyorsa false (metin kopyalama yolu kalır). */
-function saveJson(name: string, value: unknown): boolean {
+export function saveJson(name: string, value: unknown): boolean {
   if (typeof URL.createObjectURL !== "function") return false;
   const url = URL.createObjectURL(new Blob([JSON.stringify(value)], { type: "application/json" }));
   const a = document.createElement("a");

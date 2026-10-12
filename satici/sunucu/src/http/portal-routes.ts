@@ -64,6 +64,7 @@ import {
   type EntitlementChanges,
 } from "../services/entitlement.service";
 import { paidThroughView } from "../portal/paid-through-view";
+import { exemptionFile, prepareExemption, previewExemptionSigner, recordExemptionTx } from "../services/exemption.service";
 import { issueExtensionFileTx } from "../services/extension-file.service";
 import { cancelInstallationTx, closeCopyAlertTx, findCopyAlert, reinstateInstallationTx } from "../services/installation-admin.service";
 import {
@@ -227,6 +228,14 @@ const InstallmentPlan = z.strictObject({
   onay: z.string().max(40).optional(),
 });
 const TokenOnly = z.strictObject({ clientToken: Token });
+// G2 muafiyet: `zarf` fabrikanın kilit ekranındaki karekod metni; `imzaci` arayüzün gördüğü plan (uyuşmazsa 409).
+const ExemptionIssue = z.strictObject({
+  clientToken: Token,
+  zarf: z.string().min(1).max(64 * 1024),
+  imzaci: z.enum(["ARA", "KOK"]),
+  imzaParolasi: z.string().min(1).max(200),
+  sebep: Reason,
+});
 /** Kimliksiz (bağsız) talepte hedef kurulumu operatör seçer (satıcı kaydının id'si); bağlı talepte verilirse aynı olmalı. */
 const TransferApprove = z.strictObject({ clientToken: Token, sebep: Reason, kurulumId: z.uuid().optional() });
 const CopyAlertClose = z.strictObject({ clientToken: Token, sebep: Reason, digerParmakIziniKabulEt: z.boolean() });
@@ -1027,6 +1036,42 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         run: (tx) => issueExtensionFileTx(tx, c.ctx, { installationDbId: id, actor: c.session.actor, nowMs: c.nowMs }),
         respond: (file) => ({ data: file }),
         audit: (file) => [{ event: "UZATMA_DOSYASI", entity: "Kurulum", entityId: id, summary: { kiraId: file.kiraId, odenmisTarih: file.odenmisTarih } }],
+      });
+    },
+  },
+  {
+    method: "get",
+    path: "/kurulumlar/:id/muafiyet-plani",
+    permission: "kurulum:muafiyet",
+    kimlik: "OKUMA",
+    handler: async (c) => ({ data: await previewExemptionSigner(c.ctx, { installationDbId: idParam(c.req, "id", "Kurulum"), nowMs: c.nowMs }) }),
+  },
+  {
+    // G2 muafiyet belgesi: imza tx dışında (parola alt sürece), kayıt tx içinde; işlem kimliği tekrarında AYNI dosya döner.
+    method: "post",
+    path: "/kurulumlar/:id/muafiyet",
+    permission: "kurulum:muafiyet",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Kurulum");
+      const b = bodyOf(c, ExemptionIssue);
+      const password = passwordBuffer(b.imzaParolasi);
+      return portalAction(c, {
+        action: "MUAFIYET",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        prepare: () =>
+          withSigningPasswordGuard(c.ctx, { userId: c.session.user.id, actor: c.session.actor, kind: b.imzaci, nowMs: c.nowMs }, () =>
+            prepareExemption(c.ctx, { installationDbId: id, zarf: b.zarf, reason: b.sebep, expectedSigner: b.imzaci, password, nowMs: c.nowMs }),
+          ),
+        run: async (tx, p) => {
+          const row = await recordExemptionTx(tx, p, c.session.actor);
+          const hak = await tx.hak.findFirst({ where: { kurulumId: id, aktif: true }, select: { lisansNo: true } });
+          return { row, ...exemptionFile(p, hak?.lisansNo ?? null) };
+        },
+        respond: (r) => ({ status: 201, data: { ...r.row, dosya: r.dosya, dosyaAdi: r.dosyaAdi } }),
+        audit: (r) => [{ event: "MUAFIYET_VERILDI", entity: "Kurulum", entityId: id, summary: { muafiyetId: r.row.muafiyetId, anahtarKimligi: r.row.anahtarKimligi, imzaci: r.row.imzaci, kid: r.row.kid } }],
+        release: () => password.fill(0),
       });
     },
   },

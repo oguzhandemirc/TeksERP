@@ -27,6 +27,8 @@ export const PORTAL_PERMISSIONS = {
   "yaptirim:agir": ADMIN,
   /** Taşıma onay/ret, kopya uyarısı kapatma, DR geri alma. */
   "kurulum:yonet": VENDOR,
+  /** G2 muafiyet belgesi: etkinleşmemiş eski kurulumu etkinleştirme kilidinden muaf tutar (lisanssız sürer) — yalnız yönetici. */
+  "kurulum:muafiyet": ADMIN,
   /** Backend güncelleme politikası (kip · pencere · sabitleme — Dağıtım v2); kiraya imzalı gider. */
   "guncelleme:yaz": VENDOR,
   /** Güncelleme dalgası (F1a): dalga açma · aşama ilerletme/geri çekme — gerekçeli, elle (AK-2); acil durdurma = aşama 0. */

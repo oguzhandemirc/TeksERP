@@ -6,7 +6,7 @@
 //      signingCapabilities(…)` ya da aynı fonksiyonda bu biçimle başlatılmış bir `const` olabilir (çıplak
 //      `installationCapabilities(…)` ya da literal KIRMIZI)
 //   §2 imza kaynağı adları (`signingCapabilities` · `signingCapabilitySource` · `FIRST_ENTITLEMENT_EXPECTED`) yalnız izinli
-//      FONKSİYONLARDA anılır: politika dosyası (tanım) · issue/önizleme/toplu basım · `prepareChange`; teslim
+//      FONKSİYONLARDA anılır: politika dosyası (tanım) · issue/önizleme/toplu basım · `prepareChange` · muafiyet planı; teslim
 //      (`deliverableEntitlement`), kira, parmak izi, P görünümü, filo, tarama, kapanış, etkinleştirme İÇİNDE anılırsa KIRMIZI
 //   §3 tarayıcı kör değil: plan çağrısı ≥ 4 yerde görüldü, yasak dosyalar var, sentetik sondalar ısırır
 // ⭐ KALICI SONDA ✓K (her koşumda): §3b sentetik kaynakta çıplak `installationCapabilities` plan argümanı ve teslim
@@ -31,6 +31,8 @@ const IZINLI: Readonly<Record<string, readonly string[]>> = {
   "services/entitlement-policy.ts": ["*"],
   "services/entitlement-issue.service.ts": ["issueEntitlementVersion", "previewEntitlementSigner", "prepareIntermediateReissue"],
   "services/entitlement-version.service.ts": ["prepareChange"],
+  // G2 muafiyet belgesi: HAK ile aynı imzacı planı (etkinleşmemiş kurulum → beklenen küme).
+  "services/exemption.service.ts": ["planExemptionSigner"],
 };
 /** Teslim/kira/parmak izi/P yolları: varlıkları ölçülür (liste bayatlarsa tarayıcı kör kalmasın). */
 const TESLIM_DOSYALARI = [
@@ -139,8 +141,8 @@ function main(): void {
 
   console.log("\n§3 tarayıcı kör değil");
   const planDosyalari = [...new Set(toplam.planCagrilari.map((y) => y.split(":")[0]))].sort();
-  kontrol("§3a plan çağrısı ≥ 4 yerde görüldü (issue · önizleme · toplu basım · prepareChange) ve izinli dosyalar var",
-    toplam.planCagrilari.length >= 4 && JSON.stringify(planDosyalari) === JSON.stringify(["services/entitlement-issue.service.ts", "services/entitlement-version.service.ts"]) &&
+  kontrol("§3a plan çağrısı ≥ 4 yerde görüldü (issue · önizleme · toplu basım · prepareChange · muafiyet) ve izinli dosyalar var",
+    toplam.planCagrilari.length >= 4 && JSON.stringify(planDosyalari) === JSON.stringify(["services/entitlement-issue.service.ts", "services/entitlement-version.service.ts", "services/exemption.service.ts"]) &&
       Object.keys(IZINLI).every((f) => existsSync(path.join(SRC, f))),
     `${toplam.planCagrilari.length} çağrı: ${planDosyalari.join(", ")}`);
   const eksik = TESLIM_DOSYALARI.filter((f) => !existsSync(path.join(SRC, f)));
