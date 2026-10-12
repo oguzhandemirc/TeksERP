@@ -1,5 +1,6 @@
 // Lisans anlık görüntüsünün türetilmiş parçaları (runtime.ts'ten ayrı: dosya boyu sınırı) — saf, G/Ç yok.
 import { activationLockEnabled, classifyActivationLock, type ActivationLockDecision } from "./activation-lock";
+import { activeTempOpening, type ActiveTempOpening } from "./temp-opening";
 import { foreignTraceOf } from "./activation-trace";
 import { exemptionHolds } from "./exemption";
 import type { MeasuredFingerprint } from "./fingerprint";
@@ -45,6 +46,7 @@ export function decideActivationLock(g: {
   readonly store: LicenseStoreSnapshot | null;
   readonly fingerprint: MeasuredFingerprint | null;
   readonly roots: readonly RootKey[];
+  readonly temp: boolean;
 }): ActivationLockDecision {
   const on = activationLockEnabled();
   const probe = on && !g.activated;
@@ -54,6 +56,16 @@ export function decideActivationLock(g: {
     ready: g.ready,
     activated: g.activated,
     exempt: probe && exemptionHolds({ store: g.store, fingerprint: g.fingerprint, roots: g.roots }),
+    temp: probe && g.temp,
     trace: probe ? foreignTraceOf({ roots: g.roots }) : "BILINMIYOR",
   });
+}
+
+/**
+ * Yazarak etkinleştirme: etkinleşmemiş kurulumun geçici açılışı (gösterim) ve süre sonu merdiveninin durum girdisi —
+ * merdiven yalnız kilitli derlemede (kilitsiz derlemede etkinleşmemiş kurulum zaten sınırsız gözlemdedir).
+ */
+export function tempOpeningOf(activated: boolean, roots: readonly RootKey[]): { temp: ActiveTempOpening | null; ladder: { bitisMs: number } | null } {
+  const temp = activated ? null : activeTempOpening(roots);
+  return { temp, ladder: temp && activationLockEnabled() ? { bitisMs: temp.endMs } : null };
 }

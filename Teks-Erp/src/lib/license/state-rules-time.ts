@@ -23,6 +23,8 @@ import {
 import type { RememberedAnchor } from "./saat";
 import { LADDER_WARNING_MS } from "./state-rules-trace";
 
+/** Yazarak etkinleştirme: geçici açılışın bitişinden bu kadar gün önce uyarı bandı. */
+export const TEMP_OPENING_WARNING_DAYS = 7;
 /** K3: "internet VAR" = son kabul edilen imzalı kiranın sunucu saati güvenilir saate göre bu süreden yeni. */
 export const ONLINE_WINDOW_MS = DAY_MS;
 /** K1: bilgi bandı internetsiz kurulumda çıkar — son başarılı alışveriş bu süreden eski ya da hiç yok. */
@@ -172,6 +174,9 @@ function timeAnchor(g: LicenseStateInput, ctx: GraceContext, remembered: readonl
   if (ctx.entitlement) {
     return { anchorMs: isoToMs(ctx.entitlement.document.verilis), graceDays: DEFAULT_GRACE_DAYS, code: "KIRASIZ_EK_SURE", text: "Lisans kirası bulunamadı" };
   }
+  if (g.geciciAcilis) {
+    return { anchorMs: g.geciciAcilis.bitisMs, graceDays: DEFAULT_GRACE_DAYS, code: "GECICI_KOD_BITTI", text: "Geçici açılış kodunun süresi doldu" };
+  }
   if (g.yabanciIz?.kip === "zorla") {
     // B6/G3: döküm eski olabilir (ilk açılış yıllar önce) — süre imzalı başlangıçtan, uyarı penceresinden sonra.
     return { anchorMs: g.yabanciIz.baslangicMs + LADDER_WARNING_MS, graceDays: DEFAULT_GRACE_DAYS, code: "ETKINLESTIRME_EK_SURESI", text: "Lisans etkinleştirilmedi" };
@@ -234,4 +239,17 @@ export function evaluateGrace(g: LicenseStateInput, ctx: GraceContext, nowMs: nu
   } else {
     out.push({ code: "EK_SURE_BITTI", tier: "EK_SURE", daysLeft: 0, banner: warnBanner(`${anchor.text}; lisans sunucusuyla bağlantı sürdükçe kısıtlama uygulanmaz.`) });
   }
+}
+
+/** Geçici açılışın bitişine ≤ 7 gün kala uyarı bandı (bitişten sonrası `evaluateGrace`in ek süresidir). */
+export function evaluateTempOpeningWarning(g: LicenseStateInput, nowMs: number, out: Finding[]): void {
+  const end = g.geciciAcilis?.bitisMs;
+  if (end === undefined || nowMs >= end || nowMs < end - TEMP_OPENING_WARNING_DAYS * DAY_MS) return;
+  const left = remainingDays(end, nowMs);
+  out.push({
+    code: "GECICI_KOD_BITIYOR",
+    detail: String(left),
+    tier: "UYARI",
+    banner: warnBanner(`Geçici açılış kodu ${left} gün sonra bitiyor — lisansı karekodla ya da internetle etkinleştirin.`),
+  });
 }

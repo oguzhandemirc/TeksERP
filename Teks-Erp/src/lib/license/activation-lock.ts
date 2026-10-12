@@ -31,6 +31,7 @@ export type ActivationLockReason =
   | "HAZIR_DEGIL"
   | "ETKIN"
   | "MUAFIYET"
+  | "GECICI"
   | "IZ_BILINMIYOR"
   | "IZ_YOK"
   | "IZ_KAYIP"
@@ -53,6 +54,8 @@ export interface ActivationLockInput {
   readonly activated: boolean;
   /** Geçerli (bu anahtara ve makineye bağlı, satıcı imzalı) muafiyet belgesi var. */
   readonly exempt: boolean;
+  /** Kökle imzalı, bu kurulumun istek koduna verilmiş geçici açılış kodu kabul edildi (yazarak etkinleştirme). */
+  readonly temp?: boolean;
   readonly trace: ForeignTrace;
 }
 
@@ -72,6 +75,8 @@ export function classifyActivationLock(i: ActivationLockInput): ActivationLockDe
   if (i.setupError) return { sinif: "KURULUM_HATASI", neden: "DEPO_KULLANILAMAZ" };
   if (i.activated) return { sinif: "YOK", neden: "ETKIN" };
   if (i.exempt) return { sinif: "YOK", neden: "MUAFIYET" };
+  // Sınıf YOK kalır (yeni sınıf açılmaz): eski panel bilinmeyen sınıfı kilit sayardı. Süre sonu merdiveni durumdadır.
+  if (i.temp === true) return { sinif: "YOK", neden: "GECICI" };
   if (!i.ready) return { sinif: "YOK", neden: "HAZIR_DEGIL" };
   if (i.trace === "BILINMIYOR") return { sinif: "YOK", neden: "IZ_BILINMIYOR" };
   if (i.trace === "KAYIP") return { sinif: "YOK", neden: "IZ_KAYIP" };

@@ -22,37 +22,18 @@ import { LICENSE_FILES, getLicenseStore, type LicenseStoreSnapshot } from "./sto
 import { STARTUP_VENDOR } from "./vendor-url";
 import { ROOT_PUBLIC_KEYS } from "./trust-anchor";
 import type { MeasuredFingerprint } from "./fingerprint";
+import { __resetIntegrityStateForTests, buildDateMsForState, integrityAnchorMs, integrityStampMs, integrityStatusForState } from "./integrity-state";
 import {
-  __resetIntegrityStateForTests,
-  buildDateMsForState,
-  integrityAnchorMs,
-  integrityStampMs,
-  integrityStatusForState,
-} from "./integrity-state";
-import {
-  currentAccumulation,
-  downtimeCreditOf,
-  verificationFloorOf,
-  elapsedOf,
-  epochOf,
-  highWaterOf,
-  installationPublicX,
-  lastKnownCeiling,
-  mergedFingerprintMs,
-  mergedTraceLoss,
-  mergedUncertaintyMs,
-  recordView,
-  rememberedAnchorsOf,
-  __resetAccumulationForTests,
-  type Accumulation,
-  type RecordView,
+  currentAccumulation, downtimeCreditOf, verificationFloorOf, elapsedOf, epochOf, highWaterOf, installationPublicX, lastKnownCeiling,
+  mergedFingerprintMs, mergedTraceLoss, mergedUncertaintyMs, recordView, rememberedAnchorsOf, __resetAccumulationForTests, type Accumulation, type RecordView,
 } from "./accumulation";
 import { installationKeyId } from "./protocol";
 import { revocationHolding, __resetRevocationStoreForTests, type HeldRevocation, type RevocationHolding } from "./revocation-store";
 import { revocationPin } from "./state-rules-revocation";
 import { configureActivationLockForTests, type ActivationLockDecision } from "./activation-lock";
-import { decideActivationLock, isActivated, lastKnownLeaseOf, licenseStoreSetupError } from "./snapshot-parts";
+import { decideActivationLock, isActivated, lastKnownLeaseOf, licenseStoreSetupError, tempOpeningOf } from "./snapshot-parts";
 import { __resetForeignTraceEpochForTests, foreignLadderOf, type ForeignLadder } from "./foreign-trace-epoch";
+import type { ActiveTempOpening } from "./temp-opening";
 import {
   bumpLicenseSnapshotVersion,
   licenseSnapshotVersion,
@@ -197,6 +178,8 @@ export interface LicenseSnapshot {
   readonly iptal: { readonly belge: HeldRevocation | null; readonly sira: number | null; readonly pin: number | null; readonly okunamadi: boolean };
   /** G2 etkinleştirme kilidi (durumun DIŞINDA bir katman; etkin kurulumda daima YOK). */
   readonly etkinlestirmeKilidi: ActivationLockDecision;
+  /** Yazarak etkinleştirme: etkinleşmemiş kurulumun kabul edilmiş geçici açılışı (etkin kurulumda null). */
+  readonly gecici: ActiveTempOpening | null;
   readonly computedAtMs: number;
 }
 
@@ -226,6 +209,7 @@ interface BuiltInput {
   readonly revocation: RevocationHolding;
   readonly activated: boolean;
   readonly foreign: ForeignLadder | null;
+  readonly temp: ActiveTempOpening | null;
 }
 
 /** Lisans izlerinin hâli (G12): durum kaydı dosyası, DB izi ve kalıcı iz kaybı bayrağı. */
@@ -254,7 +238,9 @@ function buildInput(nowMs: number): BuiltInput {
   const view = recordView(a, licenseId.id);
   const record = view.record;
   const activated = isActivated(store, licenseId.id, record);
-  const foreign = foreignLadderOf({ activated, roots: config.roots, nowMs, highWaterMs: facts.ledgerHighWaterMs });
+  // Satıcının bu anahtara verdiği geçici açılış yabancı iz merdiveninin yerine geçer.
+  const { temp, ladder: tempLadder } = tempOpeningOf(activated, config.roots);
+  const foreign = foreignLadderOf({ activated: activated || tempLadder !== null, roots: config.roots, nowMs, highWaterMs: facts.ledgerHighWaterMs });
   const base: LicenseStateInput = {
     kurulumId: licenseId.id,
     kurulumAnahtarKimligi: kid,
@@ -293,6 +279,7 @@ function buildInput(nowMs: number): BuiltInput {
     iptal: { sira: revocation.effective?.view.document.sira ?? null, okunamadi: revocation.fileUnreadable || !revocation.dbKnown },
     iptalPini: revocationPin(...view.copies.map((c) => c.iptalSira)),
     yabanciIz: foreign ? { kip: foreign.kip, baslangicMs: foreign.baslangicMs } : null,
+    geciciAcilis: tempLadder,
   };
   // Kullanılabilirlik kararı durumun KENDİ kurallarından (tek kaynak); bulgular burada atılır.
   const scratch: Finding[] = [];
@@ -310,7 +297,7 @@ function buildInput(nowMs: number): BuiltInput {
     parmakIziEslesme: decision?.result ?? "OLCULEMEDI",
     ...(decision ? { parmakIziKurali: decision.rule } : {}),
   };
-  return { input, entitlement, lease, decision, view, licenseId, revocation, activated, foreign };
+  return { input, entitlement, lease, decision, view, licenseId, revocation, activated, foreign, temp };
 }
 
 /** Merdiven sayaçlarını durumun söylediği koşula göre akıtır/dondurur (K7: birikim en az 14 gün). */
@@ -327,13 +314,13 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
   if (cached && cached.version === version && nowMs - cached.snap.computedAtMs < SNAPSHOT_TTL_MS && nowMs >= cached.snap.computedAtMs) {
     return cached.snap;
   }
-  const { input, entitlement, lease, decision, view, licenseId, revocation, activated, foreign } = buildInput(nowMs);
+  const { input, entitlement, lease, decision, view, licenseId, revocation, activated, foreign, temp } = buildInput(nowMs);
   const store = getLicenseStore();
   const state = computeLicenseState(input);
   const signingReady = Boolean(store && !store.problem && store.key && facts.installationId);
   const stateReady = signingReady || Boolean(store && store.problem === "OKUNAMADI" && input.kurulumAnahtarKimligi && facts.installationId);
   const setupError = licenseStoreSetupError(store, input.kurulumAnahtarKimligi, getLicenseTraceRow().durum !== "BILINMIYOR");
-  const etkinlestirmeKilidi = decideActivationLock({ ready: stateReady, setupError, activated, store, fingerprint, roots: config.roots });
+  const etkinlestirmeKilidi = decideActivationLock({ ready: stateReady, setupError, activated, store, fingerprint, roots: config.roots, temp: temp !== null });
   const snap: LicenseSnapshot = {
     imzaHazir: signingReady,
     durumHazir: stateReady,
@@ -350,6 +337,7 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
     integrityFirstMismatchMs: integrityStampMs(view.record),
     iptal: { belge: revocation.effective, sira: input.iptal?.sira ?? null, pin: input.iptalPini ?? null, okunamadi: input.iptal?.okunamadi ?? false },
     etkinlestirmeKilidi,
+    gecici: temp,
     computedAtMs: nowMs,
   };
   if (snap.activated || foreign) driveLadders(state);

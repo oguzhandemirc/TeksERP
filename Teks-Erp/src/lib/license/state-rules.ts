@@ -64,6 +64,10 @@ export const REASON_CODES = [
   "BELIRSIZLIK_SURUYOR",
   /** G4: kira ya da durum kaydı pini bir iptal sırası istiyor, elde o sırada belge yok (iki kopya da) — zincir ölçülemez. */
   "IPTAL_BELGESI_KAYIP",
+  /** Yazarak etkinleştirme: geçici açılış kodunun bitişine ≤ 7 gün (UYARI). */
+  "GECICI_KOD_BITIYOR",
+  /** Geçici açılış kodunun süresi doldu — ek süre bitişten sayılır (30 g EK_SURE → KISITLI). */
+  "GECICI_KOD_BITTI",
 ] as const;
 export type ReasonCode = (typeof REASON_CODES)[number];
 
@@ -110,6 +114,8 @@ export const REASON_VALIDITY: Readonly<Record<ReasonCode, Validity | null>> = {
   BELIRSIZLIK_SURUYOR: null,
   // İptal belgesi olmadan iptal edilmiş anahtar ayırt edilemez: ölçülemedi, merdivene girer.
   IPTAL_BELGESI_KAYIP: "OLCULEMEDI",
+  GECICI_KOD_BITIYOR: null,
+  GECICI_KOD_BITTI: null,
 };
 
 export interface Banner {
@@ -200,6 +206,11 @@ export interface LicenseStateInput {
    * imzalı başlangıçtan (+14 g uyarı) sayılır. Verilmezse/gözlemse bugünkü davranış.
    */
   readonly yabanciIz?: { readonly kip: LicenseMode; readonly baslangicMs: number } | null;
+  /**
+   * Yazarak etkinleştirme: etkinleşmemiş kurulumun kökle imzalı geçici açılışının bitişi. Kip zorla; bitişe 7 gün kala
+   * UYARI, bitişten 30 g EK_SURE, sonra KISITLI (yabancı iz merdiveniyle aynı ek süre yolu). Verilmezse bugünkü davranış.
+   */
+  readonly geciciAcilis?: { readonly bitisMs: number } | null;
 }
 
 /** Kiradan sunucu kararlarının anlık görüntüsü — `durum.json` bunu saklar, durum onu okur. */

@@ -12,6 +12,8 @@ import { acknowledgeTraceWrite, flushLicenseTraceWrites, registerLicenseTraceWri
 import { setPgClusterId } from "../lib/license/pg-cluster";
 import { markLicenseTraceUnknown, setLicenseTraceRow, type TraceRow } from "../lib/license/trace-row";
 import { LICENSE_TRACE_SETTING_KEY } from "../constants/reserved-settings";
+import { closeTempOpening } from "../lib/license/temp-opening";
+import { msToIso } from "../lib/license/protocol";
 
 // ── Lisans izi (DB kopyası) ─────────────────────────────────────────────────────
 /** Satırı okur; DB okunamazsa iz BİLİNMİYOR sayılır (kayıp üretmez). */
@@ -115,6 +117,16 @@ export async function licenseHousekeeping(nowMs: number = Date.now()): Promise<v
 
 export function adminAction(userId: string | null, eylem: string, payload: Record<string, unknown> = {}): void {
   void AuditService.logEvent({ category: "SYSTEM", action: "LICENSE_ADMIN_ACTION", userId, payload: { eylem, ...payload } });
+}
+
+/** Tam etkinleştirme (karekod · internet · dosya · taşıma) geçici kaydı kapatır; açık kayıt yoksa sessiz. */
+export function closeTempOnActivation(userId: string | null): void {
+  try {
+    const closed = closeTempOpening("TAM_ETKINLESTIRME");
+    if (closed) adminAction(userId, "gecici-kod-kapandi", { kodSonu: closed.last4, bitis: msToIso(closed.endMs) });
+  } catch (err) {
+    uyari("lisans", "geçici açılış kaydı kapatılamadı (etkin kurulumda etkisizdir)", err instanceof Error ? err.message : err);
+  }
 }
 
 /** Test-only: ayak izi tabanını sıfırlar. */

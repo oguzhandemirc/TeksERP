@@ -29,7 +29,7 @@ import {
 } from "./state-rules";
 import { entitlementPinBroken, evaluateRollback, evaluateStore, evaluateVendorClock } from "./state-rules-trust";
 import { evaluateIntegrity, evaluateMaintenance } from "./state-rules-package";
-import { evaluateExchange, evaluateGrace, paidThrough, type ExchangeStatus, type PaidThrough } from "./state-rules-time";
+import { evaluateExchange, evaluateGrace, evaluateTempOpeningWarning, paidThrough, type ExchangeStatus, type PaidThrough } from "./state-rules-time";
 import {
   evaluateFingerprint,
   evaluateTraces,
@@ -183,6 +183,7 @@ function computeMode(g: LicenseStateInput, lease: VerifiedLease | null, entitlem
   const floor = entitlement ? entitlement.document.kipAltSiniri : g.sonHak?.kipAltSiniri;
   if (floor === "zorla") return "zorla";
   if (g.yabanciIz?.kip === "zorla") return "zorla";
+  if (g.geciciAcilis) return "zorla";
   if (lease) return lease.document.zorlama ? "zorla" : "gozlem";
   if (g.sonKiraZorlamasi !== null) return g.sonKiraZorlamasi ? "zorla" : "gozlem";
   return g.varsayilanKip;
@@ -250,6 +251,7 @@ export function computeLicenseState(g: LicenseStateInput): LicenseState {
   const fingerprint = evaluateFingerprint(g, lease, exchange.internetVar, findings);
   evaluateIntegrity(keyed, now, findings);
   const ucIzKaybi = traces.ucIzYok || (g.ekSureCapasiMs ?? null) !== null;
+  evaluateTempOpeningWarning(g, now, findings);
   evaluateGrace(g, { entitlement, lease: leaseDoc, paid, exchange, hakGecerli: entitlementUsable, ucIzKaybi }, now, findings);
   const uncertainty = evaluateUncertainty(
     g,

@@ -35,6 +35,7 @@ import {
 import { RecordLicenseAcceptanceSchema, getLicenseAcceptanceView, recordLicenseAcceptance } from "../services/license-acceptance.service";
 import { reportHardwareChange } from "../services/license-hardware.service";
 import { acceptExemption, exemptionTextOf } from "../services/license-activation.service";
+import tempCodeRoutes from "./license-temp-code.routes";
 
 const router = Router();
 
@@ -130,6 +131,7 @@ router.get("/indirme-belirteci", requireApprovedDeviceOrSession, (req: Request, 
 
 // ⚠️ Bu satırdan SONRAKİ her uç kimlik ister.
 router.use(verifyToken);
+router.use("/gecici-kod", tempCodeRoutes);
 
 /**
  * @openapi

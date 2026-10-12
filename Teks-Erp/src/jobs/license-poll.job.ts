@@ -20,6 +20,7 @@ import {
 } from "../services/license-sync.service";
 import { refreshLicenseIntegrity } from "../services/license-integrity.service";
 import { evaluateLicenseTransitions, licenseHousekeeping } from "../services/license-trail.service";
+import { flushTempConsumption } from "../services/license-temp-code.service";
 import { egressTransport, type VendorTransport } from "../services/helpers/license-wire.helper";
 import { getLicenseConfig, getLicenseSnapshot, onDownloadTokenStale, setLicenseEngineStatus, setNextPollAt } from "../lib/license/runtime";
 import { STARTUP_VENDOR } from "../lib/license/vendor-url";
@@ -186,7 +187,11 @@ async function bootstrap(): Promise<void> {
   housekeepingTimer = setInterval(() => {
     void refreshFactsNow()
       .catch(() => undefined)
-      .finally(() => void licenseHousekeeping());
+      .finally(() => {
+        void licenseHousekeeping();
+        // Geçici açılış kodu tüketim bildirimi kuyruğu: internet gelince satıcıya iletilir.
+        void flushTempConsumption().catch(() => undefined);
+      });
   }, HOUSEKEEPING_INTERVAL_MS);
   housekeepingTimer.unref();
   fingerprintTimer = setInterval(() => {

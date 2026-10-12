@@ -36,7 +36,7 @@ import {
   setLicenseDbFacts,
   setMeasuredFingerprint,
 } from "../lib/license/runtime";
-import { evaluateLicenseTransitions, refreshLicenseTrace } from "./license-trail.service";
+import { closeTempOnActivation, evaluateLicenseTransitions, refreshLicenseTrace } from "./license-trail.service";
 import { adoptFromRejected, adoptOffered, refreshLicenseRevocation, revocationOffer, type RevocationOffer } from "./license-revocation.service";
 import { assertLiveResponseBinding, logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpers/license-accept.helper";
 import { syncSupportAfterPoll } from "./support-sync.service";
@@ -254,6 +254,7 @@ function acceptVerifiedResponse(
   refreshUpdaterIntentQuietly();
   logLeaseAccepted({ resp, leaseDoc, ...who, firstActivation, priorSanction });
   evaluateLicenseTransitions();
+  if (firstActivation) closeTempOnActivation(g.userId);
   if (firstActivation) doorbellKick?.();
   return { yeniKira: true, kiraId: leaseDoc.kiraId };
 }
