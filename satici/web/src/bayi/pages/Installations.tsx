@@ -12,6 +12,7 @@ import { installationName, type Installation, type InstallationDetail } from "..
 import { Badge, Button, KeyValues, LoadMore, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 import { useDealerSelf } from "./Home";
 import { BayiTempCodePanel } from "./TempCode";
+import { BayiTransferPanel } from "./Transfers";
 
 export function BayiInstallationsPage() {
   const [params, setParams] = useSearchParams();
@@ -127,6 +128,7 @@ export function BayiInstallationDetailPage() {
         onChanged={refresh}
       />
       <BayiTempCodePanel detail={d} />
+      <BayiTransferPanel detail={d} />
     </>
   );
 }

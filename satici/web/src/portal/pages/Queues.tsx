@@ -77,19 +77,61 @@ export function TransfersPage() {
   const queryClient = useQueryClient();
   const canManage = useCan("kurulum:yonet");
   const [status, setStatus] = useState("BEKLIYOR");
+  // Süzgeç yazarken değil uygulanınca gider; biçimsiz kimliği sunucu 400 ile reddeder (sessizce süzgeçsiz liste yok).
+  const [targetDraft, setTargetDraft] = useState("");
+  const [target, setTarget] = useState("");
   const [decide, setDecide] = useState<{ t: TransferRequest; d: "onayla" | "reddet" } | null>(null);
-  const list = usePaged<TransferRequest>(["tasima-talepleri"], "/tasima-talepleri", { durum: status || undefined });
+  const list = usePaged<TransferRequest>(["tasima-talepleri"], "/tasima-talepleri", { durum: status || undefined, hedefKimlik: target || undefined });
+  const applyTarget = (v: string) => {
+    setTargetDraft(v);
+    setTarget(v.trim());
+  };
   return (
     <>
       <PageTitle title="Taşıma talepleri" sub="Her taşıma satıcı onayıyla: onay tek kullanımlık taşıma kodu üretir; yeni makine kodla etkinleşince eski makinenin kirası biter." />
       <Section title="Liste">
         <StatusFilter value={status} onChange={setStatus} options={TRANSFER_STATUS_LABEL} />
+        <form
+          className="toolbar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            applyTarget(targetDraft);
+          }}
+        >
+          <input
+            value={targetDraft}
+            onChange={(e) => setTargetDraft(e.target.value)}
+            placeholder="Lisans kimliği (hedef) ile süz"
+            aria-label="Hedef lisans kimliği"
+            spellCheck={false}
+            autoComplete="off"
+          />
+          <Button type="submit" variant="ghost">
+            Süz
+          </Button>
+          {target ? (
+            <Button type="button" variant="ghost" onClick={() => applyTarget("")}>
+              Süzgeci kaldır
+            </Button>
+          ) : null}
+        </form>
         <QueryState isLoading={list.isLoading} error={list.error} />
         <Table
           rows={list.rows}
           rowKey={(r) => r.id}
           columns={[
             { header: "Tarih", render: (r) => fmtDateTime(r.createdAt) },
+            {
+              header: "Hedef kimlik",
+              render: (r) =>
+                r.hedefKimlik ? (
+                  <Button variant="ghost" title="Bu hedefin taleplerini süz" onClick={() => applyTarget(r.hedefKimlik!)}>
+                    <code>{r.hedefKimlik}</code>
+                  </Button>
+                ) : (
+                  <span className="muted">—</span>
+                ),
+            },
             {
               header: "Kurulum",
               render: (r) =>

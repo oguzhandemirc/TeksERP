@@ -194,6 +194,8 @@ export interface TransferRequest {
   readonly id: string;
   /** Satıcı kaydının id'si; kimliksiz talepte onaya dek YOK (bağı operatör kurar). */
   readonly kurulumId?: string | null;
+  /** Talebin istediği lisans kimliği (kurulum durumuna bakılmadan); hedef başına TEK bekleyen talep. */
+  readonly hedefKimlik?: string | null;
   readonly onerilenKurulumlar?: readonly SuggestedInstallation[];
   readonly yeniAnahtarKimligi: string;
   readonly ortam: Record<string, unknown>;
@@ -204,6 +206,20 @@ export interface TransferRequest {
   readonly kararSebebi: string | null;
   readonly createdAt: string;
   readonly kurulum?: InstallationRef;
+}
+
+/** Bayinin gördüğü taşıma talebi (`GET /bayi/api/kurulumlar/:id/tasima-talepleri`): açık anahtar, parmak izi, karar veren YOK. */
+export interface DealerTransferRequest {
+  readonly id: string;
+  /** Talep kuruluma bağlı mı (ETKİN kimliğe gelen) yoksa yalnız hedef kimlikle mi duruyor. */
+  readonly bagli: boolean;
+  readonly yeniAnahtarKimligi: string;
+  readonly ortam: { readonly platform: string | null; readonly isletimSistemi: string | null; readonly uygulamaSurum: string | null };
+  readonly gerekce: string | null;
+  readonly durum: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI";
+  readonly kararZamani: string | null;
+  readonly kararSebebi: string | null;
+  readonly createdAt: string;
 }
 
 /** Donanım değişikliği / zayıf tanıma onay talebi (`GET /donanim-talepleri`) — tuzlu özet değil etken etken karşılaştırma. */

@@ -36,6 +36,7 @@ function open(rows: TempCodeRequest[], extra: Record<string, Handler> = {}, deta
       "GET /ben": () => ({ data: { tavan: null, anahtarBagli: true } }),
       [`GET /kurulumlar/${INSTALLATION_DB_ID}`]: () => ({ data: detail }),
       [`GET /kurulumlar/${INSTALLATION_DB_ID}/gecici-kod-talepleri`]: () => ({ data: rows }),
+      [`GET /kurulumlar/${INSTALLATION_DB_ID}/tasima-talepleri`]: () => ({ data: [] }),
       ...extra,
     },
   });
