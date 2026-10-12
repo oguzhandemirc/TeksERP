@@ -282,10 +282,11 @@ export interface RouterKapiOlcumu {
  * taşır). Dosya bazlı ölçüm, miras alan router'ın uçlarını "kapıdan önce
  * tanımlı" diye sayar ve HAKLI bir tasarımı kırmızı yapardı.
  */
-export function routerKapiOlcumu(dosyaYolu: string, kapiAdi: string): RouterKapiOlcumu {
+export function routerKapiOlcumu(dosyaYolu: string, kapiAdi: string, kimlik = "verifyToken"): RouterKapiOlcumu {
   const kod = yorumlariSok(fs.readFileSync(dosyaYolu, "utf8"));
+  // Kimlik İLK argüman; aradaki başka rejim kapıları (ör. tezgah) kapıyı gölgelemez.
   const kapiRe = new RegExp(
-    `([A-Za-z_$][\\w$]*)\\.use\\(\\s*verifyToken\\s*,\\s*${kapiAdi}\\s*\\)`,
+    `([A-Za-z_$][\\w$]*)\\.use\\(\\s*${kimlik}\\s*,(?:[^)]*,)?\\s*${kapiAdi}\\s*\\)`,
   );
   const m = kapiRe.exec(kod);
   if (!m) {
@@ -293,7 +294,7 @@ export function routerKapiOlcumu(dosyaYolu: string, kapiAdi: string): RouterKapi
     const yalinRe = new RegExp(`([A-Za-z_$][\\w$]*)\\.use\\([^)]*\\b${kapiAdi}\\b`);
     const y = yalinRe.exec(kod);
     const ad = y?.[1] ?? null;
-    const authIdx = ad ? kod.indexOf(`${ad}.use(verifyToken`) : -1;
+    const authIdx = ad ? kod.indexOf(`${ad}.use(${kimlik}`) : -1;
     return {
       kapiVar: false,
       routerAdi: ad,

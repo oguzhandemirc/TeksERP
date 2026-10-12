@@ -85,7 +85,7 @@ const ELECTRON_SRC = path.join(KOK, "Electron/src");
 const MOBIL_SRC = path.join(KOK, "mobil/src");
 
 /** Dokuma kapısını TAŞIMASI GEREKEN router'lar (mount adresiyle). */
-const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
+const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string }> = [
   { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
   { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
   { dosya: "routes/machine-doff.routes.ts", mount: "/api/machine-doffs" },
@@ -100,6 +100,8 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/machine-spec.routes.ts", mount: "/api/machine-specs" },
   // Vardiya tanımı yazma yüzeyi (2026-10-10): takvimi doğuran katalog — aynı kapı.
   { dosya: "routes/shift-definition.routes.ts", mount: "/api/shift-definitions" },
+  // Makine kartı duruş uçları (D3b): kimlik oturum değil kart imzası; kapı imzadan SONRA.
+  { dosya: "routes/machine-signal.routes.ts", mount: "/api/machine-signals", kimlik: "verifyCollectorSignature" },
 ];
 
 /** Dokuma-ÖZEL Prisma model erişimcileri ve servisleri — bunlara dokunan router kapılıdır. */
@@ -294,11 +296,11 @@ async function main(): Promise<void> {
 
   // ── §6 ⭐ KAPI VAR · KİMLİKTEN SONRA · TÜM UÇLARDAN ÖNCE · KAPSAM TAM ─────
   for (const k of KAPILI) {
-    const o = routerKapiOlcumu(path.join(SRC, k.dosya), KAPI);
+    const o = routerKapiOlcumu(path.join(SRC, k.dosya), KAPI, k.kimlik);
     check(
-      `§6a ⭐ ${k.mount} → kapı router seviyesinde ve verifyToken'dan SONRA`,
+      `§6a ⭐ ${k.mount} → kapı router seviyesinde ve kimlikten (${k.kimlik ?? "verifyToken"}) SONRA`,
       o.kapiVar,
-      o.kapiVar ? `router=${o.routerAdi}` : `\`router.use(verifyToken, ${KAPI})\` satırı YOK`,
+      o.kapiVar ? `router=${o.routerAdi}` : `\`router.use(${k.kimlik ?? "verifyToken"}, …, ${KAPI})\` satırı YOK`,
     );
     check(`§6b ${k.mount} → körlük zemini: uçlar sayıldı`, o.ucSayisi >= 1, `uç=${o.ucSayisi}`);
     check(

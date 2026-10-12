@@ -32,7 +32,6 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { p2002Mentions } from "../utils/p2002";
-import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { factoryDayKeyUtcMidnight } from "../constants/time";
 import {
   MACHINE_STOP_SELECT,
@@ -40,6 +39,7 @@ import {
   assertBeamSlotValid,
   assertNoStopOverlapTx,
   assertStopShiftWritableTx,
+  findStopReplayTx,
   freezeStopEscalation,
   loadStop,
   normalizeNote,
@@ -94,18 +94,9 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
   let created: MachineStopDto;
   try {
     const out = await prisma.$transaction(async (tx) => {
-      // ① Replay — yaratmadan ÖNCE ve AYNI bağlantıda (ayrı havuz alımı istemesin): aynı anahtar
-      // aynı satırı döner; geri alınmış duruş yeniden açılmaz.
-      const existing = await tx.machineStopEvent.findFirst({ where: { machineId: input.machineId, stopKey }, select: MACHINE_STOP_SELECT });
-      if (existing) {
-        if (existing.revokedAt) {
-          throw AppError.conflict("Bu duruş daha önce girilip geri alınmış — yeni duruş için formu yeniden açın.", {
-            code: "STOP_REVOKED", stopId: existing.id, revokedAt: existing.revokedAt,
-          });
-        }
-        assertReplayPayloadMatches(input.fingerprint(existing), "Bu form daha önce başka bir duruş için kaydedilmiş — yeni duruş için formu yeniden açın.", { stopId: existing.id });
-        return { replay: true as const, row: existing };
-      }
+      // ① Replay — yaratmadan ÖNCE ve AYNI bağlantıda (ayrı havuz alımı istemesin).
+      const existing = await findStopReplayTx(tx, input.machineId, stopKey, input.fingerprint);
+      if (existing) return { replay: true as const, row: existing };
       const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true } });
       if (!machine) throw AppError.notFound("Makine bulunamadı", { machineId: input.machineId });
       if (!machine.isActive) throw AppError.badRequest("Pasif makineye duruş girilemez.", { code: "MACHINE_INACTIVE" });

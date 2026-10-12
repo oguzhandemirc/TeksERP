@@ -7,6 +7,7 @@
 import { MachineDataSource, MachineStopEndSource, Prisma, ReasonPresetKind, type MachineStopLossClass } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ENTRY_STAMP_MAX_FUTURE_MS } from "./duplicate-guard.helper";
+import { assertReplayPayloadMatches, type ReplayAlani } from "./idempotent-replay.helper";
 import { resolveRunStamp, type StampResolution } from "./machine-run-open.helper";
 import { readTezgahEscalationGraceMinutes } from "../system-setting.service";
 
@@ -241,4 +242,19 @@ export function signalCloseConflict(stopId: string, fresh: { endedAt: Date; endS
     throw AppError.conflict("Bu duruşu bir kişi kapatmış — makine sinyali insan kapanışını değiştirmez.", { code: "STOP_CLOSED_BY_OPERATOR", stopId, endedAt: fresh.endedAt });
   }
   throw AppError.conflict("Bu duruş zaten kapatılmış.", { code: "STOP_ALREADY_CLOSED", stopId, endedAt: fresh.endedAt });
+}
+
+/** Duruş AÇ replay'i: aynı anahtar aynı satırı döner; geri alınmış duruş yeniden açılmaz (409 STOP_REVOKED). */
+export async function findStopReplayTx(
+  tx: Tx, machineId: string, stopKey: string, fingerprint: (existing: MachineStopDto) => ReplayAlani[],
+): Promise<MachineStopDto | null> {
+  const existing = await tx.machineStopEvent.findFirst({ where: { machineId, stopKey }, select: MACHINE_STOP_SELECT });
+  if (!existing) return null;
+  if (existing.revokedAt) {
+    throw AppError.conflict("Bu duruş daha önce girilip geri alınmış — yeni duruş için formu yeniden açın.", {
+      code: "STOP_REVOKED", stopId: existing.id, revokedAt: existing.revokedAt,
+    });
+  }
+  assertReplayPayloadMatches(fingerprint(existing), "Bu form daha önce başka bir duruş için kaydedilmiş — yeni duruş için formu yeniden açın.", { stopId: existing.id });
+  return existing;
 }
