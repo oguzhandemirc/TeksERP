@@ -78,6 +78,8 @@ const REASON_LABEL: Record<string, string> = {
   LISANS_IZI_CELISKI: "Lisans izleri birbiriyle çelişiyor (farklı süre)",
   BELIRSIZLIK_SURUYOR: "Lisans durumu uzun süredir ölçülemiyor",
   IPTAL_BELGESI_KAYIP: "İptal belgesi kayıp",
+  GECICI_KOD_BITIYOR: "Geçici açılış kodu bitiyor",
+  GECICI_KOD_BITTI: "Geçici açılış kodunun süresi doldu",
 };
 
 export const reasonLabel = (kod: string): string => REASON_LABEL[kod] ?? kod;

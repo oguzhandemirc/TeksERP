@@ -18,6 +18,7 @@ import { LicenseIntegrityCard } from "./LicenseIntegrityCard";
 import { LicenseActivateCard } from "./LicenseActivateCard";
 import { LicenseOfflineCard } from "./LicenseOfflineCard";
 import { LicenseTransferCard } from "./LicenseTransferCard";
+import { TempCodeCard } from "./TempCodeCard";
 import { LicenseProxyCard } from "./LicenseProxyCard";
 import { LicenseHistoryCard } from "./LicenseHistoryCard";
 
@@ -73,6 +74,7 @@ export function LicensePage() {
             <LicenseIntegrityCard b={d.butunluk} />
             {canManage && <LicenseActivateCard d={d} gate={gate} />}
             {canManage && <LicenseOfflineCard d={d} gate={gate} />}
+            {canManage && !d.kurulum.etkin && <TempCodeCard />}
             {canManage && <LicenseTransferCard d={d} />}
             <LicenseProxyCard proxy={d.proxy} canManage={canManage} />
             {d.kurulum.etkin && acceptanceCard}

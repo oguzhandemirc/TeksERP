@@ -17,12 +17,13 @@ import { LicenseActivateCard } from "@/pages/System/License/LicenseActivateCard"
 import { LicenseOfflineCard } from "@/pages/System/License/LicenseOfflineCard";
 import { LicenseFileUpload } from "@/pages/System/License/LicenseFileUpload";
 import { LicenseTransferCard } from "@/pages/System/License/LicenseTransferCard";
+import { TempCodeCard } from "@/pages/System/License/TempCodeCard";
 import { STORE_PROBLEM } from "@/pages/System/License/labels";
 
 /**
  * G2 — ETKİNLEŞTİRME KİLİDİ: hiç etkinleşmemiş (ya da başka kurulumun kopyası olan) sunucuda oturum açan yalnız bu
  * sayfayı görür (uygulama kabuğu bağlanmaz). Birinci yol karekod (telefonla okut → yanıtı tabletten okut ya da
- * yapıştır), sonra internetle kod, sonra portal dosyası (uzatma ya da muafiyet). KOPYA'da "verilerimi al" ve taşıma
+ * yapıştır), sonra internetle kod, sonra yazarak etkinleştirme (geçici açılış kodu), sonra portal dosyası (uzatma ya da muafiyet). KOPYA'da "verilerimi al" ve taşıma
  * talebi de açık; bekleyen taşıma talebi etkin saymaz, kartı ve durumu burada görünür. Çağırdığı her uç backend'in kilit izin kümesindedir (`isOpenWhenActivationLocked`).
  * Etkinleşince durum sorgusu sinyali kapatır; kabuk kendiliğinden geri gelir.
  */
@@ -95,6 +96,7 @@ export function LicenseActivationPage() {
             <LicenseAcceptanceCard q={acceptance} canManage={canManage} active={d.kurulum.etkin} />
             <LicenseOfflineCard d={d} gate={gate} />
             <LicenseActivateCard d={d} gate={gate} />
+            <TempCodeCard />
             <section className="space-y-2 rounded-xl border bg-card p-4">
               <p className="text-sm text-muted-foreground">Portaldan aldığınız lisans ya da muafiyet dosyası:</p>
               <LicenseFileUpload />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Info, ShieldAlert } from "lucide-react";
 import { useLicenseStatus } from "@/hooks/useLicenseStatus";
+import { tempOpeningBand } from "@/lib/license/temp-code";
 import { cn } from "@/lib/utils";
 import type { Banner } from "@/types/license";
 
@@ -17,13 +18,15 @@ export const BANNER_ROTATE_MS = 6000;
  * Küresel lisans şeridi — backend'in UYGULADIĞI bant(lar) (`GET /durum`.bantlar; yoksa tek `bant`).
  * TEK alan: birden çok mesaj sırayla döner, geçişte metin animasyonla girer; fare üstündeyken durur.
  *
- * Metni panel üretmez; gözlem kipinde backend yalnız beyanlı bilgi bandını (K9 bakım
+ * Metni panel üretmez (tek istisna: backend bandı yokken geçici açılış bilgisi — veri `gecici`den); gözlem kipinde backend yalnız beyanlı bilgi bandını (K9 bakım
  * hatırlatması) döndürür, başka her bant `null`dır — panel kipe bakmadan backend'in dediğini çizer. Şerit, modal değil: yarım
  * kalmış formu kaybettirmez (`ServerOfflineBanner` kalıbı).
  */
 export function LicenseBanner() {
   const status = useLicenseStatus();
-  const list = status?.bantlar?.length ? status.bantlar : status?.bant ? [status.bant] : [];
+  const temp = tempOpeningBand(status);
+  const backend = status?.bantlar?.length ? status.bantlar : status?.bant ? [status.bant] : [];
+  const list: Banner[] = backend.length === 0 && temp ? [{ metin: temp.metin, ton: "bilgi" }] : backend;
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const count = list.length;
@@ -41,7 +44,7 @@ export function LicenseBanner() {
       ? `Ek süre: ${status.ekSureKalanGun} gün`
       : status?.kisitlamaKalanGun !== null && status?.kisitlamaKalanGun !== undefined
         ? `Kısıtlamaya ${status.kisitlamaKalanGun} gün`
-        : null;
+        : (temp?.gun ?? null);
   return (
     <div
       role="status"

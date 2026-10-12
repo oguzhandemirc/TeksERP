@@ -67,4 +67,38 @@ describe("LicenseBanner — tek alanda sıralı dönüş (K6)", () => {
     renderWithProviders(<LicenseBanner />);
     expect(await screen.findByTestId("lisans-bandi")).toHaveTextContent("Bakım süreniz 10 gün sonra bitiyor.");
   });
+
+  it("geçici açılış: backend bandı yokken bilgi bandı + kalan gün rozeti", async () => {
+    login();
+    status.mockResolvedValue({ ...base, gecici: { bitis: "2026-11-10T23:59:59.999Z", kalanGun: 29, kodSonu: "AB12" } });
+    renderWithProviders(<LicenseBanner />);
+    const band = await screen.findByTestId("lisans-bandi");
+    expect(band).toHaveTextContent("geçici açılış koduyla");
+    expect(band).toHaveTextContent("…AB12");
+    expect(band).toHaveTextContent("Geçici kod: 29 gün");
+  });
+
+  it("geçici açılış: backend bandı (≤7 g uyarısı) varken panel ikinci metin üretmez, yalnız gün rozeti", async () => {
+    login();
+    const uyari = { metin: "Geçici açılış kodu 5 gün sonra bitiyor.", ton: "uyari" as const };
+    status.mockResolvedValue({ ...base, kademe: "UYARI", bant: uyari, bantlar: [uyari], gecici: { bitis: "2026-10-17T23:59:59.999Z", kalanGun: 5, kodSonu: "AB12" } });
+    renderWithProviders(<LicenseBanner />);
+    const band = await screen.findByTestId("lisans-bandi");
+    expect(band).toHaveTextContent("5 gün sonra bitiyor");
+    expect(band).not.toHaveTextContent("geçici açılış koduyla");
+    expect(band).toHaveTextContent("Geçici kod: 5 gün");
+    expect(screen.queryByTestId("lisans-bandi-sira")).toBeNull();
+  });
+
+  it("geçici açılış: gözlem kipinde bant çizilmez (sıfır fark)", async () => {
+    login();
+    status.mockResolvedValue({ ...base, kip: "gozlem", gecici: { bitis: "2026-11-10T23:59:59.999Z", kalanGun: 29, kodSonu: "AB12" } });
+    status.mockClear();
+    renderWithProviders(<LicenseBanner />);
+    await vi.waitFor(() => expect(status).toHaveBeenCalled());
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(screen.queryByTestId("lisans-bandi")).toBeNull();
+  });
 });

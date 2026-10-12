@@ -12,6 +12,7 @@ import type {
   OfflinePurpose,
   PollOutcome,
   RecordLicenseAcceptanceInput,
+  TempRequestView,
 } from "@/types/license";
 
 const BASE = "/api/license";
@@ -90,6 +91,10 @@ export const licenseService = {
     data(apiClient.post<ApiResponse<LicenseDetail>>(`${BASE}/dr-devral`, { ...(anaKurulumId ? { anaKurulumId } : {}), gerekce }, QUIET)),
   setProxy: (adres: string | null, atla: string | null) =>
     data(apiClient.put<ApiResponse<LicenseProxySettings>>(`${BASE}/proxy`, { adres, atla }, QUIET)),
+  /** Yazarak etkinleştirme: istek kodu (TI-…), yenileme ve geçici açılış kodu (TG-…); ret 400 `TEMP_CODE_INVALID` (`neden`, `konum`). */
+  tempRequest: () => data(apiClient.get<ApiResponse<TempRequestView>>(`${BASE}/gecici-kod/istek`, QUIET)),
+  renewTempRequest: () => data(apiClient.post<ApiResponse<TempRequestView>>(`${BASE}/gecici-kod/istek/yenile`, {}, QUIET)),
+  submitTempCode: (kod: string) => data(apiClient.post<ApiResponse<TempRequestView>>(`${BASE}/gecici-kod`, { kod }, QUIET)),
   dataExport: () =>
     data(apiClient.get<ApiResponse<LicenseDataExportManifest>>(`${BASE}/veri-disari`, QUIET)),
 };

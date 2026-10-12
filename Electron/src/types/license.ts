@@ -31,8 +31,25 @@ export interface LicenseStatusSummary {
   surum: string;
   /** G2 etkinleştirme kilidi (eski backend göndermez → kilit yok). */
   etkinlestirmeKilidi?: "YOK" | "ETKINLESMEDI" | "KOPYA" | "KURULUM_HATASI";
+  /** Yazarak etkinleştirmeyle (geçici açılış kodu) açık kurulum; eski backend göndermez → yok. */
+  gecici?: TempOpeningView | null;
 }
 export type LicenseStatusResponse = LicenseStatusSummary | { ayrinti: false };
+
+/** Geçici açılış: bitiş kod gününün sonudur (UTC); `kodSonu` kodun son 4 karakteri. */
+export interface TempOpeningView {
+  bitis: string;
+  kalanGun: number;
+  kodSonu: string;
+}
+
+/** `GET/POST /api/license/gecici-kod[/istek|/istek/yenile]` yanıtı. */
+export interface TempRequestView {
+  /** TI-XXXX ×6 — tüketilene ya da yenilenene dek aynı kalır. */
+  istekKodu: string;
+  olusturuldu: string;
+  gecici: TempOpeningView | null;
+}
 
 export type ModuleCeiling =
   | { applies: false }
