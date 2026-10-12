@@ -36,9 +36,12 @@ import {
   ROLE_TEMPLATE_CATALOG,
   LEGACY_TEMPLATE_NAME_TO_CODE,
   ROLE_COVERAGE_EXEMPT,
+  SOD_ALLOWED_TEMPLATES,
+  SOD_PERMISSION_CODES,
   resolveRoleTemplateCodes,
 } from "../src/constants/role-template-catalog";
 import { reconcileRoleTemplates } from "../src/jobs/role-template-catalog.job";
+import { matchesPermission } from "../src/middlewares/rbac.middleware";
 import { foldNameForCompare } from "../src/services/helpers/name-normalize.helper";
 
 let pass = 0;
@@ -131,6 +134,19 @@ async function main(): Promise<void> {
   check("Gereksiz muaf yok (dar rolde olan muaf edilmemiş)", gereksizMuaf.length === 0, gereksizMuaf.join(", "));
   for (const [kod, gerekce] of Object.entries(ROLE_COVERAGE_EXEMPT))
     console.log(`   ℹ️  muaf ${kod} — ${gerekce.split(".")[0]}.`);
+
+  console.log("\n=== §2d SoD DAĞILIMI: üçlü yalnız beyanlı rollerde ===");
+  // Kural "yalnız Muhasebe/Süpervizör" idi ama §2 dağılımı ölçmüyordu: WEB_TRADE `shipping:write`
+  // ile `shipping:invoice`ı birlikte taşıdı. Joker (`shipping:*`) da sayılır — eşleşme tek yüklemden.
+  const sodIhlal = ROLE_TEMPLATE_CATALOG.filter((e) => e.mode !== "all" && !SOD_ALLOWED_TEMPLATES.includes(e.code))
+    .flatMap((e) => SOD_PERMISSION_CODES.filter((c) => matchesPermission(e.codes, c)).map((c) => `${e.code}:${c}`));
+  check("SoD üçlüsü yalnız beyanlı rollerde (Muhasebe · Süpervizör · Tam Yetki)", sodIhlal.length === 0, sodIhlal.join(", ") || "temiz");
+  const faturaYazan = ROLE_TEMPLATE_CATALOG.filter(
+    (e) => e.mode !== "all" && matchesPermission(e.codes, "shipping:invoice") && matchesPermission(e.codes, "shipping:write"),
+  ).map((e) => e.code);
+  check("`shipping:invoice` taşıyan rol `shipping:write` taşımaz (sevk eden faturalamaz)", faturaYazan.length === 0, faturaYazan.join(", ") || "temiz");
+  const olu = SOD_ALLOWED_TEMPLATES.filter((c) => !kodlar.includes(c));
+  check("SoD beyanındaki her rol katalogda var (ölü beyan yok)", olu.length === 0, olu.join(", "));
 
   console.log("\n=== §2b EKRAN BAĞIMLILIKLARI: yazan, okuduğu ucu da görebiliyor mu? ===");
   // ⚠️ §2 "her izin BİR rolde var mı" diye sorar ve bu soru YETMEZ: bir izin

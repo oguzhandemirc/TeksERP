@@ -424,7 +424,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "customer-alias:write",
       "shipping:read",
       "shipping:write",
-      "shipping:invoice",
+      // `shipping:invoice` BİLEREK YOK (SoD): sevk eden fatura işaretini koymaz. Tek kişilik
+      // ekipte aynı kişiye Muhasebe rolü AYRICA uygulanır — karar görünür kalsın.
       "return:read",
       "return:write",
       // Katalog — ticaret firması kendi kumaş/renk kartlarını açar
@@ -656,6 +657,13 @@ export function resolveRoleTemplateCodes(entry: RoleTemplateEntry): readonly str
  * ⚠️ Muaf listesi BAYATLIĞA karşı da denetlenir: burada olup katalogda olmayan
  * bir kod, gerçek bir boşluğu sessizce kapsam dışında tutar.
  */
+/**
+ * Görev ayrılığı (SoD) üçlüsü ve onu taşıyabilen rollerin BEYANI — kök CLAUDE.md "yalnız
+ * Muhasebe/Süpervizör". Bekçi `test_role_template_catalog` §2d dağılımı buradan ölçer.
+ */
+export const SOD_PERMISSION_CODES = ["shipping:invoice", "shipping:undo-dispatch", "roll:manual-adjust"] as const;
+export const SOD_ALLOWED_TEMPLATES: readonly string[] = ["WEB_ACCOUNTING", "WEB_PRODUCTION_SUPERVISOR", "ADMIN_FULL"];
+
 export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
   "loom:alarm-escalation":
     "Tezgah alarmının üst kademesi (K2 bildirimi + başkasının üstlenmesini bırakma) müdür/patron yetkisidir; hazır şablonlarda müdür rolü yok — fabrika panelden SEÇİLİ kişiye atar (dokuma alarm A1b, tasarım §A.9).",

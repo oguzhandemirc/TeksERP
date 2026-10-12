@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { ShippingController } from "../controllers/shipping.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const controller = new ShippingController();
 const router = Router();
@@ -15,10 +15,9 @@ const WRITE = requireAnyPermission("shipping:write", "mobile:tarti-paket", "mobi
 const LOT_MANAGE = requireAnyPermission("shipping:packing-lot");
 // Muhasebe okuma: sevk fişi + Excel export (satış raporu izni de erişebilir).
 const ACCOUNTING_READ = requireAnyPermission("shipping:read", "shipping:write", "report:sales");
-// Fatura işareti: muhasebeciye `shipping:write` VERİLMEZ (o izin sevkiyat iptalini de
-// açardı) → ayrı, dar kapsamlı izin. `shipping:write` de kabul edilir: sevkiyatçının
-// mevcut yetkisi daralmasın.
-const INVOICE_WRITE = requireAnyPermission("shipping:invoice", "shipping:write");
+// Fatura işareti YALNIZ `shipping:invoice` (SoD üçlüsü — Muhasebe/Süpervizör): sevk eden
+// (`shipping:write`) faturalandı işaretini koyamaz; muhasebeciye de `shipping:write` verilmez.
+const INVOICE_WRITE = requirePermission("shipping:invoice");
 // Defter onarımı — `shipping:write` YETMEZ (geçmiş sevkiyatın defterini değiştirir
 // ve irsaliyenin yeni sürümünü doğurur); `shipping:undo-dispatch` ile aynı aile.
 const REPAIR = requireAnyPermission("shipping:repair-allocation");
