@@ -46,7 +46,7 @@ import { fileURLToPath } from 'node:url';
 import { Olculemedi as PgOlculemedi, SURUM_REL, jsonOku, sha256, surumKaydiHatalari } from '../pg/lib/pg-ornegi.mjs';
 import { peImzasi, zipAc } from '../pg/lib/zip-okuyucu.mjs';
 import { isaretciYuku } from '../../scripts/lib/backend-yayin.mjs';
-import { Olculemedi as DepoOlculemedi, derlemeAdiHatasi, derlemeAdiKurali } from '../../scripts/lib/derleme-deposu.mjs';
+import { Olculemedi as DepoOlculemedi, derlemeAdiHatasi, derlemeAdiKurali, kurulumArsiviAdi } from '../../scripts/lib/derleme-deposu.mjs';
 import { KANAL_ADLARI_REL, KAYIT_REL as DAGITIM_REL, Olculemedi as DagitimOlculemedi, VENDOR_URL_REL, backendPaketKimligi, kayitAyristir } from '../../scripts/lib/dagitim.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -532,7 +532,14 @@ async function denetle(arg) {
 
   // 7) Arşiv adı + içerik listesi; her desen TAM BİR üyeyle eşleşmeli (fazla dosya setup'ı şaşırtmaz).
   const surum = paket.uygulamaSurumu;
-  const arsivAd = `TeksERP-Kurulum-${surum}${prova ? '-PROVA-IMZASIZ' : ''}.zip`;
+  // Ad grubu taşır (panelin grubu): portal "test = yalnız deneme kurulumu"nu ve onaylı paketi addan ayırır.
+  let arsivAd;
+  try {
+    arsivAd = kurulumArsiviAdi(pk.yuk.kanal, surum, prova ? '-PROVA-IMZASIZ' : '', adKurali);
+  } catch (e) {
+    if (e instanceof DepoOlculemedi) throw olculemedi(e.message);
+    throw e;
+  }
   const adHata = derlemeAdiHatasi(arsivAd, adKurali);
   if (adHata) throw new Dur(1, `arşiv adı satıcının derleme deposuna uymuyor: ${adHata}`);
   const uyeler = [girdi.setup.ad, girdi.backend.ad, girdi.pg.ad, girdi.pgKunye.ad, girdi.panel.ad, ...(girdi.tkpub ? [girdi.tkpub.ad] : []), ICERIK, OZETLER, BENIOKU];

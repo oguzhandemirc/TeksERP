@@ -1,6 +1,6 @@
 // =============================================================================
 // DAĞITIM — İNDİRME BAĞLANTISI (/d/<belirteç>, Faz 3d). Ölçülen:
-//   §1 ilk kurulum bağlantısı portalda doğar; belirteç YALNIZ ilk yanıtta (tekrar oynatmada ve DB'de YOK)
+//   §1 ilk kurulum bağlantısı portalda doğar (liste arşivin güncelleme grubunu addan çözer); belirteç YALNIZ ilk yanıtta (tekrar oynatmada ve DB'de YOK)
 //   §2 yetkisiz indirme: bilinmeyen/biçimsiz belirteç 404; oturumsuz portal çağrısı 401
 //   §3 GET açılış sayfası ve HEAD hak TÜKETMEZ; POST indirir, gövde derlemeyle birebir, defter INDIRILDI
 //   §4 sayısı dolan bağlantı 410 (sayaç tavanı aşmaz); eşzamanlı indirmede tam `azami` kadar 200
@@ -10,7 +10,7 @@
 // Koşum: npx tsx scripts/test_dagitim_baglanti.ts   (yalnız *_test DB)
 // =============================================================================
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { maskTokenPath } from "../src/distribution/tokens";
 import { dagitimOrtamiKur, genelIstek, sha256 } from "./lib/dagitim-ortam";
@@ -33,6 +33,15 @@ async function main(): Promise<void> {
     console.log("\n§1 bağlantı doğumu");
     const liste = await d.p("GET", "/dagitim/derlemeler");
     kontrol("§1a derleme listesi dizindeki dosyayı gösterir", JSON.stringify(liste.json.data).includes(derleme), `${liste.status}`);
+    for (const ad of ["TeksERP-Kurulum-test-9.9.9.zip", "TeksERP-Kurulum-genel-9.9.9.zip", "TeksERP-Kurulum-yabanci-9.9.9.zip"]) writeFileSync(path.join(d.dizin.derleme, ad), "x");
+    const gl = ((await d.p("GET", "/dagitim/derlemeler")).json.data ?? []) as { ad: string; grup: string | null }[];
+    const grupOf = (ad: string) => gl.find((x) => x.ad === ad)?.grup;
+    kontrol(
+      "§1a' derleme listesi arşivin grubunu addan çözer (test · genel); tanınmayan grup ve arşiv olmayan ad null",
+      grupOf("TeksERP-Kurulum-test-9.9.9.zip") === "test" && grupOf("TeksERP-Kurulum-genel-9.9.9.zip") === "genel" && grupOf("TeksERP-Kurulum-yabanci-9.9.9.zip") === null && grupOf(derleme) === null,
+      JSON.stringify(gl),
+    );
+    for (const ad of ["TeksERP-Kurulum-test-9.9.9.zip", "TeksERP-Kurulum-genel-9.9.9.zip", "TeksERP-Kurulum-yabanci-9.9.9.zip"]) rmSync(path.join(d.dizin.derleme, ad));
     const clientToken = randomUUID();
     const govde = { clientToken, tur: "ILK_KURULUM", musteriId: d.musteriId, kurulumId: d.kurulumDbId, derlemeAdi: derleme, gecerlilikSaat: 24, azamiIndirme: 2 };
     const ilk = await d.p("POST", "/dagitim/baglantilar", govde);

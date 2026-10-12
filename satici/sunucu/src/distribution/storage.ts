@@ -8,6 +8,7 @@ import path from "node:path";
 import { Transform, type Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { VendorError } from "../lib/errors";
+import { isUpdateGroup, type UpdateGroup } from "../services/channel.service";
 
 /** Uzantı → sunulacak MIME. Tek kaynak: yükleme kapısı ve indirme başlığı buradan. */
 export const FILE_TYPES: Readonly<Record<string, string>> = {
@@ -40,6 +41,8 @@ export const BUILD_EXTENSIONS: readonly string[] = ["exe", "msi", "apk", "zip", 
 
 const GENERIC_MIMES = new Set(["", "application/octet-stream", "binary/octet-stream"]);
 const BUILD_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
+/** Ortak ilk kurulum arşivi `TeksERP-Kurulum-<grup>-<sürüm>.zip`: grup adda taşınır (test = yalnız deneme kurulumu). */
+const INSTALL_ARCHIVE = /^TeksERP-Kurulum-([a-z][a-z0-9]*)-[0-9][0-9A-Za-z.+-]*\.zip$/;
 
 export function extensionOf(name: string): string {
   const i = name.lastIndexOf(".");
@@ -95,6 +98,13 @@ export interface BuildFile {
   readonly ad: string;
   readonly boyut: number;
   readonly degisti: string;
+  /** Ortak kurulum arşivinin güncelleme grubu; adı arşiv desenine uymayan ya da grubu tanınmayan dosyada null. */
+  readonly grup: UpdateGroup | null;
+}
+
+export function buildGroupOf(name: string): UpdateGroup | null {
+  const g = INSTALL_ARCHIVE.exec(name)?.[1];
+  return g !== undefined && isUpdateGroup(g) ? g : null;
 }
 
 /** Derleme dizinindeki kurulum dosyaları (dizin yoksa boş liste). */
@@ -109,7 +119,7 @@ export async function listBuilds(dir: string): Promise<BuildFile[]> {
   for (const ad of names.sort()) {
     if (!BUILD_NAME.test(ad) || !BUILD_EXTENSIONS.includes(extensionOf(ad))) continue;
     const s = await stat(path.join(dir, ad)).catch(() => null);
-    if (s?.isFile()) out.push({ ad, boyut: s.size, degisti: s.mtime.toISOString() });
+    if (s?.isFile()) out.push({ ad, boyut: s.size, degisti: s.mtime.toISOString(), grup: buildGroupOf(ad) });
   }
   return out;
 }

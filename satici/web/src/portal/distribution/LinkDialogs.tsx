@@ -8,6 +8,7 @@ import { fmtBytes, fmtDateTime } from "../../shared/format";
 import { useGet } from "../../shared/hooks";
 import { OnceSecretModal } from "../../shared/OnceSecret";
 import { useApi } from "../../shared/session";
+import { buildGroupTag, isApprovedBuild } from "../../shared/update-groups";
 import { Button, ErrorText, Field, Modal, ModalActions } from "../../shared/ui";
 import type { BuildFile, DownloadLink, TokenIssued, UploadRequest } from "./types";
 
@@ -50,6 +51,9 @@ export function CreateLinkModal({
   const [note, setNote] = useState("");
   const write = useWrite<TokenIssued>((body) => api.post("/dagitim/baglantilar", body));
   const valid = (kind === "DOSYA" || build !== "") && Number(max) >= 1 && Number(max) <= 1000;
+  // Onaylı (terfi edilmiş) paketler önce; test grubu paketi yalnız deneme kurulumu için ve öyle etiketlenir.
+  const buildList = [...(builds.data ?? [])].sort((a, b) => Number(isApprovedBuild(b.grup)) - Number(isApprovedBuild(a.grup)));
+  const noApproved = builds.data !== undefined && !buildList.some((b) => isApprovedBuild(b.grup));
   const submit = async () => {
     const r = await write.run({
       tur: kind,
@@ -68,12 +72,13 @@ export function CreateLinkModal({
         <Field label="Derleme" hint="Müşteriye özel (filigranlı) derleme satıcının derleme dizinine konur; özeti bağlantı doğarken donar.">
           <select value={build} onChange={(e) => setBuild(e.target.value)}>
             <option value="">Seçin…</option>
-            {(builds.data ?? []).map((b) => (
+            {buildList.map((b) => (
               <option key={b.ad} value={b.ad}>
-                {b.ad} · {fmtBytes(b.boyut)} · {fmtDateTime(b.degisti)}
+                {buildGroupTag(b.grup)} — {b.ad} · {fmtBytes(b.boyut)} · {fmtDateTime(b.degisti)}
               </option>
             ))}
           </select>
+          {noApproved ? <p role="note">Onaylı paket yok — müşteriye verilecek kurulum paketi sürüm terfisiyle gelir. Test grubu paketleri yalnız deneme kurulumları içindir.</p> : null}
         </Field>
       ) : (
         <p>

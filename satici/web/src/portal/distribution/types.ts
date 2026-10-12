@@ -61,6 +61,8 @@ export interface BuildFile {
   readonly ad: string;
   readonly boyut: number;
   readonly degisti: string;
+  /** Ortak kurulum arşivinin güncelleme grubu (sunucu addan çözer); null = grubu yok/tanınmıyor. */
+  readonly grup: string | null;
 }
 
 /** Oluşturma yanıtı: sır (belirteç) yalnız canlı yanıtta. */

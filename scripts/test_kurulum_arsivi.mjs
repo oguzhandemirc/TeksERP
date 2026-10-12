@@ -211,7 +211,7 @@ function kos(ozel = {}, { senaryo = 'gecerli', panelSenaryo = 'gecerli', cikti =
     if (tsxYok) fs.renameSync(`${tsx}.yok`, tsx);
   }
 }
-const ARSIV = `TeksERP-Kurulum-${SURUM}.zip`;
+const ARSIV = `TeksERP-Kurulum-test-${SURUM}.zip`;
 
 console.log(`test_kurulum_arsivi — kurulum arşivi (gölge kök, sahte PG ${ADLAR.length} dosya, doğrulayıcı koçanı)\n`);
 
@@ -315,7 +315,7 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
 {
   const imzasiz = backendZip(path.join(yol('pr'), path.basename(BACKEND)), { imzali: false, paket: { prova: true } });
   const r = kos({ '--backend': imzasiz }, { prova: true });
-  const ad = `TeksERP-Kurulum-${SURUM}-PROVA-IMZASIZ.zip`;
+  const ad = `TeksERP-Kurulum-test-${SURUM}-PROVA-IMZASIZ.zip`;
   check('§5a --prova + imzasız + PROVA paketi → 0, ad -PROVA-IMZASIZ, iki [PROVA] uyarısı, SONUC: PROVA-ARSIVI', r.kod === 0 && r.dosyalar.includes(ad) && (r.cikti.match(/\[PROVA\]/g) ?? []).length === 2 && /SONUC: PROVA-ARSIVI/.test(r.cikti), `kod ${r.kod} · ${r.dosyalar.join(',')} · ${r.cikti.slice(-300)}`);
   check('§5b imzasız backend\'de pg.json yalnız `pg-dogrula`yla (üretim çapası), test çapası geçmez', r.iz.length === 1 && r.iz[0].komut === 'pg-dogrula' && r.iz[0].f['guven-capasi'] === 'uretim' && r.iz[0].testCapasi === null, JSON.stringify(r.iz).slice(0, 200));
   const g = kos({}, { prova: true, senaryo: 'gecersiz' });
@@ -443,6 +443,10 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
   dur('§9j panel adı Electron artifactName desenine uymuyor → DUR', kos({ '--panel': ad.exe, '--panel-kunye': ad.kunye }), /artifactName desenine/, { tsBos: true });
   const eksik = kos({ '--panel': null, '--panel-kunye': null });
   check('§9k --panel/--panel-kunye verilmezse kullanım hatası (2), arşiv yok', eksik.kod === 2 && /--panel gerekli/.test(eksik.cikti) && eksik.dosyalar.length === 0, `kod ${eksik.kod}`);
+  const genel = panelGirdisi(yol('panel-genel'), { kanal: 'genel' });
+  const gr = kos({ '--panel': genel.exe, '--panel-kunye': genel.kunye });
+  check('§9n ⭐ arşiv adı panelin GRUBUNU taşır: test paneli → TeksERP-Kurulum-test-<v>.zip (§1), genel paneli → TeksERP-Kurulum-genel-<v>.zip (portal grubu addan okur)',
+    gr.kod === 0 && JSON.stringify(gr.dosyalar.filter((d) => d.endsWith('.zip'))) === JSON.stringify([`TeksERP-Kurulum-genel-${SURUM}.zip`]), `kod ${gr.kod} · ${gr.dosyalar.join(',')}`);
 
   const m = await import(BETIK);
   const gecerli = icerik ?? {};

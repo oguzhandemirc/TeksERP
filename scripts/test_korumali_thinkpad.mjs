@@ -11,7 +11,8 @@
 //   §2 sahte uçtan uca (yalnız macOS — betik bsdtar/iconv/shasum ister): uzak paketle komutu kipe göre (-Prova
 //      yalnız provada) · özet kapısı kip ⇔ PAKET.json prova İKİ YÖNLÜ (yanlış kipte künye ve etiket YOK) ·
 //      gerçek koşu künyeye kip/sürüm yazar, `backend-vX` açıklamalı etiketini HEAD'e YEREL atar (origin'e itmez),
-//      ağaç temiz kalır
+//      ağaç temiz kalır · sunucu kurulumu (ISCC) sürümü = paket sürümü, doğrulayıcı = paketin güncelleyicisi, setup
+//      Mac'e iki uçta eşit SHA ile ve PE olarak gelir, künyeye girer; ISCC düşerse / ad ya da güncelleyici tutmazsa DUR
 // Koşum: node scripts/test_korumali_thinkpad.mjs   (çıkış 0 yeşil · 1 kırmızı)
 // =============================================================================
 import { spawnSync } from 'node:child_process';
@@ -59,6 +60,10 @@ printf 'SSH %s\\n=====\\n' "$cmd" >> "$SSH_LOG"
 case "$cmd" in
   *BatteryStatus*) if [ -n "$TP_SAHTE_KIRLI" ]; then printf 'tamam: node v26 \\xb7 C: 100 GB bos\\r\\n'; else echo "tamam: node v26 · C: 100 GB bos"; fi; printf 'TSIP=100.70.47.46\\r\\n' ;;
   *paketle.ps1*) echo "  PAKET HAZIR (sahte)" ;;
+  *KurulumSurumu=*) v=$(printf '%s' "$cmd" | sed -n 's/.*KurulumSurumu=\\([^"]*\\)".*/\\1/p' | head -1)
+    [ -n "$TP_SAHTE_ISCC_DUS" ] && { echo "ISCC hata (sahte)"; exit 2; }
+    ad="TeksERP-Kurulum-\${TP_SAHTE_SETUP_SURUM:-$v}.exe"; mkdir -p "$SSH_LOG.setup"; printf '%s' "\${TP_SAHTE_SETUP_ICERIK:-MZsahte-setup}" > "$SSH_LOG.setup/$ad"
+    printf 'SETUP=%s|%s\\r\\n' "$ad" "$(shasum -a 256 "$SSH_LOG.setup/$ad" | cut -d' ' -f1)" ;;
   *Get-ChildItem*) echo "$(basename "$TP_SAHTE_ZIP")|$(shasum -a 256 "$TP_SAHTE_ZIP" | cut -d' ' -f1)" ;;
 esac
 exit 0
@@ -67,7 +72,7 @@ exit 0
 fs.writeFileSync(path.join(SAHTE, 'scp'), `#!/bin/bash
 printf 'SCP %s\\n' "$*" >> "$SSH_LOG"
 hedef="\${@: -1}"; kaynak="\${@: -2:1}"
-case "$kaynak" in *:tkd/*) cp "$TP_SAHTE_ZIP" "$hedef" ;; esac
+case "$kaynak" in *:tkd/*/setup/*) cp "$SSH_LOG.setup/\${kaynak##*/}" "$hedef" ;; *:tkd/*) cp "$TP_SAHTE_ZIP" "$hedef" ;; esac
 exit 0
 `, { mode: 0o755 });
 // Sahte npm: Rust derlemesi yerine sabit baytlı parçaları beklenen yerlere yazar.
@@ -233,6 +238,24 @@ if (process.platform !== 'darwin') {
 
   const t = kos(['--kip', 'gercek', '--surum', '2.14.1', '--kuru']);
   check('§2h yeniden koşu: etiket zaten HEAD\'de → kapı geçer, "yeniden atılmaz" der', t.kod === 0 && /zaten .*yeniden atılmaz/.test(t.cikti), ozet(t));
+
+  // §2j–§2n sunucu kurulumu (ISCC): sürüm = paket sürümü, doğrulayıcı = paketin güncelleyicisi, iki uçta SHA, PE.
+  const isccSatiri = (r) => (r.ssh.split('=====').find((b) => b.includes('KurulumSurumu=')) ?? '').split('\n').find((x) => x.includes('KurulumSurumu=')) ?? '';
+  const gk = path.join(cikti('g'), 'TeksERP-Kurulum-2.14.1.exe');
+  check('§2j ⭐ gerçek koşu: ISCC /DKurulumSurumu=2.14.1 + paketin güncelleyicisi (rust\\tekserp-guncelleyici.exe); setup Mac\'te, künyede ad+sha',
+    /\/DKurulumSurumu=2\.14\.1" "\/DDogrulayiciExe=\$d\\rust\\tekserp-guncelleyici\.exe"/.test(isccSatiri(g)) && fs.existsSync(gk) &&
+      kg?.setup?.ad === 'TeksERP-Kurulum-2.14.1.exe' && kg?.setup?.sha256 === sha(fs.readFileSync(gk)), isccSatiri(g).slice(0, 200));
+  check('§2j\' kapı ISCC.exe (Inno Setup 6) yokluğunu 97 ile durdurur', /Inno Setup 6.*exit 97/.test(g.ssh.split('=====')[0] ?? ''));
+  const dus = kos(['--kip', 'gercek', '--surum', '2.14.1', '--cikti', cikti('dus')], { TP_SAHTE_ZIP: z.gercek, TP_SAHTE_ISCC_DUS: '1' });
+  check('§2k ⭐ ISCC düştü → DUR, künye YOK', dus.kod !== 0 && /ISCC DÜŞTÜ/.test(dus.cikti + dus.hata) && !fs.existsSync(path.join(cikti('dus'), `${path.basename(z.gercek)}.derleme.json`)), ozet(dus));
+  const ad = kos(['--kip', 'gercek', '--surum', '2.14.1', '--cikti', cikti('ad')], { TP_SAHTE_ZIP: z.gercek, TP_SAHTE_SETUP_SURUM: '0.0.0-git.abc' });
+  check('§2l ⭐ ISCC başka sürümle adlandırdı (0.0.0-git) → SETUP KAPISI, künye YOK', ad.kod === 1 && /SETUP KAPISI: ISCC çıktısı TeksERP-Kurulum-0\.0\.0-git\.abc\.exe/.test(ad.cikti + ad.hata) && !fs.existsSync(path.join(cikti('ad'), `${path.basename(z.gercek)}.derleme.json`)), ozet(ad));
+  const pe = kos(['--kip', 'gercek', '--surum', '2.14.1', '--cikti', cikti('pe')], { TP_SAHTE_ZIP: z.gercek, TP_SAHTE_SETUP_ICERIK: 'PK-zip-degil-exe' });
+  check('§2m ⭐ setup PE değil → SETUP KAPISI, dosya Mac\'te bırakılmaz', pe.kod === 1 && /SETUP KAPISI: .*\(PE\) değil/.test(pe.cikti + pe.hata) && !fs.existsSync(path.join(cikti('pe'), 'TeksERP-Kurulum-2.14.1.exe')), ozet(pe));
+  const zYabanci = zipKur('yabanci', { prova: false, surum: '2.14.1' });
+  spawnSync('bash', ['-c', `d=$(mktemp -d) && mkdir -p "$d/runtime" && printf 'baska-derleme' > "$d/runtime/tekserp-guncelleyici.exe" && cd "$d" && zip -q "${zYabanci}" runtime/tekserp-guncelleyici.exe`]);
+  const yb = kos(['--kip', 'gercek', '--surum', '2.14.1', '--cikti', cikti('yb')], { TP_SAHTE_ZIP: zYabanci });
+  check('§2n ⭐ paketin güncelleyicisi bu koşunun Rust derlemesi değil → SETUP KAPISI, ISCC çağrılmadı', yb.kod === 1 && /paketin güncelleyicisi bu koşunun Rust derlemesi değil/.test(yb.hata) && isccSatiri(yb) === '', ozet(yb));
 }
 
 fs.rmSync(TEMP, { recursive: true, force: true });

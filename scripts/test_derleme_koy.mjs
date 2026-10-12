@@ -92,7 +92,7 @@ fs.writeFileSync(path.join(SAHTE, 'vds'), vdsCikti());
 
 // Yerel dosyalar
 const D = '/opt/stack/apps/tekserp-satici-uretim/derlemeler';
-const AD = 'TeksERP-Kurulum-demofabrika-9.9.9.zip';
+const AD = 'TeksERP-Kurulum-test-9.9.9.zip';
 const VERI = crypto.randomBytes(70_000);
 const DOSYA = yol('girdi', AD);
 fs.mkdirSync(yol('girdi'));
@@ -277,6 +277,17 @@ console.log('test_derleme_koy — satıcının derleme deposuna koyma (sahte ssh
     olc = e instanceof depo.Olculemedi;
   }
   check('§11b BUILD_NAME yeri değişirse ÖLÇÜLEMEDİ (sessiz yedek yok)', olc);
+  check('§11c arşiv grubu portalın INSTALL_ARCHIVE deseninden: test/genel okunur, grupsuz eski ad ve exe null; ad üretimi gidiş-dönüş',
+    depo.arsivGrubu('TeksERP-Kurulum-test-2.15.6.zip', k) === 'test' && depo.arsivGrubu('TeksERP-Kurulum-genel-2.15.6-prova.abc-PROVA-IMZASIZ.zip', k) === 'genel' &&
+      depo.arsivGrubu('TeksERP-Kurulum-2.15.6.zip', k) === null && depo.arsivGrubu('TeksERP-Kurulum-test-2.15.6.exe', k) === null &&
+      depo.kurulumArsiviAdi('oncu', '2.15.6', '', k) === 'TeksERP-Kurulum-oncu-2.15.6.zip', k.arsiv.source);
+  let olc2 = false;
+  try {
+    depo.derlemeAdiKuraliMetinden(gercek.replace('const INSTALL_ARCHIVE =', 'const ARSIV ='));
+  } catch (e) {
+    olc2 = e instanceof depo.Olculemedi;
+  }
+  check('§11d INSTALL_ARCHIVE yeri değişirse ÖLÇÜLEMEDİ', olc2);
 }
 
 // §12 yazım çağrıları yalnız uygula() içinde
@@ -295,14 +306,16 @@ console.log('test_derleme_koy — satıcının derleme deposuna koyma (sahte ssh
 
 // §13 kaldırma (--kaldir) ve yenileme (--yenile): KURU varsayılan · aktif bağlantıda RED · Mac arşivi sha eşitliği
 {
-  const ESKI = 'TeksERP-Kurulum-9.9.8.zip';
+  const ESKI = 'TeksERP-Kurulum-test-9.9.8.zip';
   const ESKI_VERI = crypto.randomBytes(50_000);
   const ESKI_OZ = sha(ESKI_VERI);
   const ESKI_DOSYA = yol('uzak-eski', ESKI);
   fs.mkdirSync(yol('uzak-eski'));
   fs.writeFileSync(ESKI_DOSYA, ESKI_VERI);
-  const AKTIF = 'TeksERP-Kurulum-9.9.7.zip';
-  const lsEski = [[ESKI, ESKI_VERI.length], [AKTIF, 4000]];
+  const AKTIF = 'TeksERP-Kurulum-test-9.9.7.zip';
+  const ONAYLI = 'TeksERP-Kurulum-genel-9.9.6.zip';
+  const GRUPSUZ = 'TeksERP-Kurulum-9.9.5.zip';
+  const lsEski = [[ESKI, ESKI_VERI.length], [AKTIF, 4000], [ONAYLI, 4000], [GRUPSUZ, 4000]];
   const arsivDizini = () => yol('arsiv', String(Math.random()).slice(2));
   const shaEski = `${ESKI_OZ}  ${D}/${ESKI}\n${'c'.repeat(64)}  ${D}/${AKTIF}\n`;
   const temel = { olcum: olcum({ ls: lsEski, baglanti: [`${AKTIF}|1`] }), sha: shaEski };
@@ -347,6 +360,16 @@ console.log('test_derleme_koy — satıcının derleme deposuna koyma (sahte ssh
   const yenile = kos(['--ortam', 'uretim', '--dosya', DOSYA, '--yenile', '--arsiv', arsivDizini()], temel);
   check('§13k --yenile KURU: yeni arşiv yazılacak · AKTİF bağlantılı eski KORUNUR (raporlanır) · bağlantısız eski kaldırılacak · başka tür dosyaya (Setup.exe) dokunulmaz',
     yenile.kod === 0 && /KURU-TEMIZ/.test(yenile.cikti) && new RegExp(`⚠ ${AKTIF.replace(/\./g, '\\.')}: 1 AKTİF`).test(yenile.cikti) && new RegExp(`- ${ESKI.replace(/\./g, '\\.')}: aktif bağlantı yok`).test(yenile.cikti) && !/kaldır \(özet tutarsa rm\):[^\n]*(9\.9\.7|Setup)/.test(yenile.cikti) && yenile.yazma.length === 0, yenile.cikti.slice(-600));
+  check('§13n ⭐ --yenile yalnız YENİ ARŞİVİN GRUBUNU yeniler: test yayını onaylı (genel) paketi ve grupsuz eski adı kaldırmaz',
+    yenile.kod === 0 && !yenile.cikti.includes(ONAYLI) && !yenile.cikti.includes(GRUPSUZ), yenile.cikti.slice(-600));
+  const grupsuzAd = yol('girdi-grupsuz', 'TeksERP-Kurulum-demofabrika-9.9.9.zip');
+  fs.mkdirSync(path.dirname(grupsuzAd), { recursive: true });
+  fs.writeFileSync(grupsuzAd, VERI);
+  const gy = kos(['--ortam', 'uretim', '--dosya', grupsuzAd, '--yenile', '--arsiv', arsivDizini()], temel);
+  check('§13o ⭐ --yenile grup adı taşımayan / dağıtım grubu olmayan arşivle → DUR 1, VDS\'e bağlanılmaz', gy.kod === 1 && /yalnız grup adlı ortak arşivle/.test(gy.cikti) && gy.log.length === 0, `kod ${gy.kod} · ${gy.cikti.slice(-300)}`);
+  const y = await import(path.join(KOK, 'deploy/satici/derleme-koy.mjs'));
+  const ad = y.yenileAdaylari([ESKI, AKTIF, ONAYLI, GRUPSUZ, AD], new Set(['TeksERP-Kurulum-genel-9.9.9.zip']));
+  check('§13p terfi yayını (genel) yalnız genel arşivleri aday sayar; test ve grupsuz dokunulmaz', JSON.stringify(ad) === JSON.stringify([ONAYLI]), JSON.stringify(ad));
 
   // Konteyner kaldırma betiği gerçek kabukta: özet tutarsa siler, tutmazsa dosya KALIR.
   const kd = yol('kaldir-k');

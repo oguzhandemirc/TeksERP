@@ -10,6 +10,8 @@
 #   gercek : --surum ZORUNLU · Mac ağacı temiz · kaynak = HEAD = origin/main'deki commit · sürüm belgesi o
 #            commit'te · `backend-v<surum>` etiketi yoksa son etiketten büyük; etiket derleme SONRASI Mac'te
 #            yerel atılır (push YOK). paketle.ps1 -EtiketAtma ile koşar (thinkpad'deki kopya etiketlemez).
+# SUNUCU KURULUMU: paketle sonrası aynı makinede ISCC `TeksERP-Kurulum-<paket sürümü>.exe` derler (doğrulayıcı = paketin
+# kendi güncelleyicisi; Inno Setup 6 thinkpad'de kurulu olmalı) — ilk kurulum arşivinin `--setup` girdisi.
 # DERLEME KÜNYESİ: zip'in yanına `<zip>.derleme.json` (kip + sürüm · makine + ölçülen Tailscale IP · bu betiğin
 # commit'i ve SHA256'sı · kaynak commit · ağaç temizliği · Rust parça özetleri · iki uçta eşleşen zip SHA256).
 # İmza aracı `--derleme-kunyesi=` ile yapıtla çapraz ölçer (scripts/lib/thinkpad-kokeni.ts; kip ⇔ PAKET.json
@@ -129,6 +131,7 @@ $b = Get-CimInstance -Namespace root/wmi -ClassName BatteryStatus -ErrorAction S
 if ($b -and -not $b.PowerOnline) { if ('"$PIL_KABUL"' -eq 1) { Write-Output "UYARI: thinkpad pilde - kullanici kabul etti" } else { Write-Output "PIL: thinkpad prizde degil - uzun is baslatilmaz (--pilde-kabul)"; exit 98 } }
 $pw = (Get-Command pwsh -ErrorAction SilentlyContinue); if (-not $pw) { Write-Output "pwsh 7 yok"; exit 97 }
 foreach ($a in "node","npm.cmd","git","tar") { if (-not (Get-Command $a -ErrorAction SilentlyContinue)) { Write-Output "arac yok: $a"; exit 97 } }
+if (-not (@((Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"), (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe")) | Where-Object { Test-Path $_ })) { Write-Output "arac yok: Inno Setup 6 (ISCC.exe)"; exit 97 }
 $bos = (Get-PSDrive C).Free / 1GB; if ($bos -lt 10) { Write-Output ("C: bos alan {0:N1} GB < 10" -f $bos); exit 97 }
 Write-Output ("tamam: node {0} · C: {1:N0} GB bos" -f (node -v), $bos)
 Write-Output ("TSIP=" + $ip)') || { kod=$?; echo "$KAPI"; exit "$kod"; }
@@ -187,8 +190,50 @@ scp -q "${SSH_OPT[@]}" "$TP_SSH:tkd/$K/cikti/$ZAD" "$CIKTI/$ZAD"
 MSHA=$(shasum -a 256 "$CIKTI/$ZAD" | cut -d' ' -f1)
 [ "$MSHA" = "$ZSHA" ] || { echo "SHA256 TUTMADI: uzak $ZSHA · Mac $MSHA"; exit 1; }
 
+adim "thinkpad: sunucu kurulumu (ISCC; sürüm = paketin sürümü, doğrulayıcı = paketin güncelleyicisi)"
+# Arşiv zinciri setup sürümü = paket sürümü ister ve setup kendi güncelleyicisini taşır: ikisi de BU paketten.
+PSURUM=$(node - "$CIKTI/$ZAD" "$YEREL/rust/tekserp-guncelleyici.exe" <<'JS'
+const { execFileSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
+const [zip, rustGun] = process.argv.slice(2);
+const liste = execFileSync('unzip', ['-Z1', zip], { maxBuffer: 1 << 28 }).toString().split('\n').filter(Boolean);
+const oku = (g) => execFileSync('unzip', ['-p', zip, g], { maxBuffer: 1 << 28 });
+const pj = liste.find((g) => /(^|\/)PAKET\.json$/.test(g));
+const gun = liste.find((g) => /(^|\/)runtime\/tekserp-guncelleyici\.exe$/.test(g));
+if (!pj || !gun) { console.error('  SETUP KAPISI: pakette PAKET.json / runtime/tekserp-guncelleyici.exe yok'); process.exit(1); }
+const v = String(JSON.parse(oku(pj).toString()).uygulamaSurumu ?? '');
+if (!/^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$/.test(v)) { console.error(`  SETUP KAPISI: paket sürümü biçimsiz: "${v}"`); process.exit(1); }
+const h = (b) => createHash('sha256').update(b).digest('hex');
+if (h(oku(gun)) !== h(require('node:fs').readFileSync(rustGun))) { console.error('  SETUP KAPISI: paketin güncelleyicisi bu koşunun Rust derlemesi değil'); process.exit(1); }
+process.stdout.write(v);
+JS
+) || exit 1
+set +e
+SETUP_SATIR=$(uzak "
+\$d = Join-Path \$env:USERPROFILE '$UZ'
+\$iscc = @((Join-Path \$env:LOCALAPPDATA 'Programs\\Inno Setup 6\\ISCC.exe'), (Join-Path \${env:ProgramFiles(x86)} 'Inno Setup 6\\ISCC.exe')) | Where-Object { Test-Path \$_ } | Select-Object -First 1
+\$cik = Join-Path \$d 'setup'; New-Item -ItemType Directory -Force -Path \$cik | Out-Null
+\$ErrorActionPreference = 'Continue'
+& \$iscc /Q \"/DKurulumSurumu=$PSURUM\" \"/DDogrulayiciExe=\$d\\rust\\tekserp-guncelleyici.exe\" \"/O\$cik\" \"\$d\\src\\deploy\\kurulum\\tekserp-kurulum.iss\" *>&1 | Out-File -FilePath \"\$d\\iscc.log\" -Encoding utf8
+if (\$LASTEXITCODE) { Get-Content \"\$d\\iscc.log\" -Tail 15; exit \$LASTEXITCODE }
+Get-ChildItem \$cik -Filter *.exe | ForEach-Object { 'SETUP=' + \$_.Name + '|' + (Get-FileHash \$_.FullName -Algorithm SHA256).Hash.ToLower() }")
+kod=$?
+set -e
+SETUP_SATIR=$(printf '%s\n' "$SETUP_SATIR" | LC_ALL=C tr -d '\r')
+[ "$kod" -eq 0 ] || { printf '%s\n' "$SETUP_SATIR"; echo "ISCC DÜŞTÜ (çıkış $kod) — uzak günlük: %USERPROFILE%\\$UZ\\iscc.log"; exit "$kod"; }
+SETUP_SATIR=$(printf '%s\n' "$SETUP_SATIR" | LC_ALL=C sed -n 's/^SETUP=//p')
+[ "$(printf '%s\n' "$SETUP_SATIR" | LC_ALL=C grep -c '|')" -eq 1 ] || { echo "uzak setup çıktısında tek exe beklenirdi: $SETUP_SATIR"; exit 1; }
+SAD=${SETUP_SATIR%%|*}; SSHA_UZAK=${SETUP_SATIR##*|}
+[ "$SAD" = "TeksERP-Kurulum-$PSURUM.exe" ] || { echo "SETUP KAPISI: ISCC çıktısı $SAD — beklenen TeksERP-Kurulum-$PSURUM.exe (paket sürümü)"; exit 1; }
+scp -q "${SSH_OPT[@]}" "$TP_SSH:tkd/$K/setup/$SAD" "$CIKTI/$SAD"
+SSHA=$(shasum -a 256 "$CIKTI/$SAD" | cut -d' ' -f1)
+[ "$SSHA" = "$SSHA_UZAK" ] || { rm -f "$CIKTI/$SAD"; echo "setup SHA256 TUTMADI: uzak $SSHA_UZAK · Mac $SSHA"; exit 1; }
+[ "$(head -c 2 "$CIKTI/$SAD")" = "MZ" ] || { rm -f "$CIKTI/$SAD"; echo "SETUP KAPISI: $SAD bir Windows programı (PE) değil"; exit 1; }
+echo "  setup   $CIKTI/$SAD"
+echo "  sha256  $SSHA (iki uçta eşit)"
+
 adim "özet + derleme künyesi"
-KIP="$KIP" SURUM="$SURUM" TP_MAKINE=thinkpad-1 TS_IP_OLCULEN="$TS_IP_OLCULEN" BETIK_SHA="$BETIK_SHA" BETIK_COMMIT="$BETIK_COMMIT" KAYNAK="$SHA" REF="$REF" \
+KIP="$KIP" SURUM="$SURUM" SETUP_AD="$SAD" SETUP_SHA="$SSHA" TP_MAKINE=thinkpad-1 TS_IP_OLCULEN="$TS_IP_OLCULEN" BETIK_SHA="$BETIK_SHA" BETIK_COMMIT="$BETIK_COMMIT" KAYNAK="$SHA" REF="$REF" \
   RUST_SHA="$RUST_SHA" ZSHA="$ZSHA" MSHA="$MSHA" node - "$CIKTI/$ZAD" <<'JS'
 const { execFileSync } = require('node:child_process');
 const zip = process.argv[2];
@@ -217,6 +262,7 @@ const kipTutar = gercek
 if (!kipTutar) { console.error(`  ÖZET KAPISI: kip ${e.KIP} ama paket prova=${satir.prova} sürüm "${surum}"`); process.exit(1); }
 const kotu = satir.korumali !== true || satir.hedef !== 'win-x64' || !satir.jsc || satir.jscUretildi === false || !satir.nodeExe || !satir.hizmet || !satir.guncelleyici || !satir.native || satir.seed > 0 || satir['dist/*.ts|map'] > 0;
 if (kotu) { console.error('  ÖZET KAPISI: beklenen parça eksik / fazla'); process.exit(1); }
+if (e.SETUP_AD !== `TeksERP-Kurulum-${surum}.exe`) { console.error(`  ÖZET KAPISI: setup ${e.SETUP_AD} — paket sürümü ${surum}`); process.exit(1); }
 // Derleme künyesi — imza aracı (`--derleme-kunyesi`) her alanı yapıtla çapraz ölçer; bu dosya imzalı DEĞİLDİR.
 const derleme = {
   v: 1, tur: 'thinkpad-derleme', zaman: new Date().toISOString(),
@@ -227,6 +273,7 @@ const derleme = {
   agac: { macKlonTemiz: true, uzakAgacTemiz: pkt.calismaAgaciTemiz === true },
   rust: Object.fromEntries(e.RUST_SHA.split(',').map((s) => s.split('='))),
   zip: { ad: require('node:path').basename(zip), sha256: e.MSHA, uzakSha256: e.ZSHA },
+  setup: { ad: e.SETUP_AD, sha256: e.SETUP_SHA },
 };
 require('node:fs').writeFileSync(`${zip}.derleme.json`, `${JSON.stringify(derleme, null, 2)}\n`);
 console.log(`  künye          ${zip}.derleme.json`);
@@ -247,4 +294,5 @@ if [ "$KIP" = gercek ]; then
 fi
 echo "  İMZASIZ — kur.ps1/kurulum imzasız korumalı paketi reddeder; imza satıcı Mac'inde ayrı adım:"
 echo "    npx tsx Teks-Erp/scripts/build-korumali-imza.ts zip --zip=$CIKTI/$ZAD --anahtar=<PAKET anahtarı> --derleme-kunyesi=$CIKTI/$ZAD.derleme.json"
+echo "  sunucu kurulumu (ilk kurulum arşivine --setup): $CIKTI/$SAD"
 adim "bitti (uzak dizin %USERPROFILE%\\$UZ yerinde bırakıldı)"

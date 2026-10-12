@@ -779,6 +779,18 @@ function bolum3grup() {
   const eskiAd = yayinla(grup(g1, 'testfabrika', ['--kuru']), ortamCapa(g1));
   ol('§3G3b eski kanal adı grup olarak REDDEDİLİR (ortak kitaplık eski kanal kodunu tanır), ağa çıkılmaz', eskiAd.kod !== 0 && /ESKİ KANAL kodu/.test(eskiAd.cikti) && eskiAd.log.length === 0, eskiAd.cikti.slice(-300));
 
+  // İlk kurulum deposu bağlantısı (Windows yayınının sonu): kısmi girdi DUR; KURU plan komutu ya da yüksek sesli uyarı basar.
+  ol('§3G1c KURU, ilk kurulum girdisi YOK → "İLK KURULUM DEPOSU GÜNCELLENMEYECEK" + elle koşulacak komut (--grup test … --uygula)',
+    k1.kod === 0 && /İLK KURULUM DEPOSU GÜNCELLENMEYECEK/.test(k1.cikti) && /node deploy\/kurulum\/ilk-kurulum-yayinla\.mjs --grup test --backend \S+ --setup '<TeksERP-Kurulum-2\.14\.0\.exe>'.* --uygula/.test(k1.cikti), k1.cikti.slice(-600));
+  const ik = path.join(GECICI, 'ilk-kurulum-girdi');
+  fs.mkdirSync(ik, { recursive: true });
+  for (const f of ['TeksERP-Kurulum-2.14.0.exe', 'postgresql-16.zip', 'pg.json']) fs.writeFileSync(path.join(ik, f), 'x');
+  const kismi = yayinla(grup(g1, 'test', ['--kuru', `--ilk-kurulum-setup=${path.join(ik, 'TeksERP-Kurulum-2.14.0.exe')}`]), ortamCapa(g1));
+  ol('§3G1d ⭐ ilk kurulum girdisi KISMİ (yalnız setup) → DUR, ağa çıkılmaz', kismi.kod !== 0 && /İLK KURULUM GİRDİSİ EKSİK/.test(kismi.cikti) && /--ilk-kurulum-pg /.test(kismi.cikti) && kismi.log.length === 0, kismi.cikti.slice(-300));
+  const tam = yayinla(grup(g1, 'test', ['--kuru', `--ilk-kurulum-setup=${path.join(ik, 'TeksERP-Kurulum-2.14.0.exe')}`, `--ilk-kurulum-pg=${path.join(ik, 'postgresql-16.zip')}`, `--ilk-kurulum-pg-kunye=${path.join(ik, 'pg.json')}`]), ortamCapa(g1));
+  ol('§3G1e KURU, ilk kurulum girdisi TAM → plan: ilk-kurulum-yayinla --grup test … --pg-kunye <pg.json> --uygula',
+    /yayın sonunda ilk kurulum deposu: node deploy\/kurulum\/ilk-kurulum-yayinla\.mjs --grup test --backend \S+ --setup \S+TeksERP-Kurulum-2\.14\.0\.exe --pg \S+postgresql-16\.zip --pg-kunye \S+pg\.json --uygula/.test(tam.cikti) && !/GÜNCELLENMEYECEK/.test(tam.cikti) && tam.kod === 0 && tam.yazma.length === 0, tam.cikti.slice(-600));
+
   const kanalli = ortakPaketKur('g4', { surum: SURUM, kanal: 'testfabrika', commit: head.slice(0, 8) });
   const r4 = yayinla(grup(kanalli, 'test', ['--kuru']), ortamCapa(kanalli));
   ol('§3G4 kanallı paket (backendKanal dolu) gruba çıkmaz → DUR', r4.kod !== 0 && /gruba yalnız ORTAK paket çıkar/.test(r4.cikti) && hicYazmadi(r4), r4.cikti.slice(-300));

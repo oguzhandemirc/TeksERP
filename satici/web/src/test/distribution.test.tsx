@@ -79,7 +79,7 @@ function openInstallation(role: "SATICI_OPERATOR" | "SATICI_YONETICI", extra: Re
       "GET /katalog": () => ({ data: CATALOG }),
       "GET /kanallar": () => ({ data: [] }),
       "GET /dagitim/baglantilar": () => ({ data: [] }),
-      "GET /dagitim/derlemeler": () => ({ data: [{ ad: "TeksERP-Kurulum-ornek.exe", boyut: 1000, degisti: "2026-09-30T10:00:00Z" }] }),
+      "GET /dagitim/derlemeler": () => ({ data: [{ ad: "TeksERP-Kurulum-ornek.exe", boyut: 1000, degisti: "2026-09-30T10:00:00Z", grup: null }] }),
       ...extra,
     },
   });
@@ -99,6 +99,36 @@ describe("ilk kurulum bağlantısı", () => {
     const w = writes(calls)[0]!;
     expect(w.body).toMatchObject({ tur: "ILK_KURULUM", derlemeAdi: "TeksERP-Kurulum-ornek.exe", kurulumId: INSTALLATION_DB_ID, musteriId: CUSTOMER });
     expect(typeof w.body!.clientToken).toBe("string");
+  });
+
+  it("derlemeler grubuyla etiketlenir: onaylı paket önce, test grubu 'yalnız deneme kurulumu'", async () => {
+    const user = userEvent.setup();
+    openInstallation("SATICI_OPERATOR", {
+      "GET /dagitim/derlemeler": () => ({
+        data: [
+          { ad: "TeksERP-Kurulum-test-2.15.7.zip", boyut: 1000, degisti: "2026-10-12T10:00:00Z", grup: "test" },
+          { ad: "TeksERP-Kurulum-genel-2.15.6.zip", boyut: 1000, degisti: "2026-10-11T10:00:00Z", grup: "genel" },
+        ],
+      }),
+    });
+    await user.click(await screen.findByRole("tab", { name: "İlk kurulum" }));
+    await user.click(await screen.findByRole("button", { name: "Bağlantı ver" }));
+    const dialog = await screen.findByRole("dialog", { name: "İlk kurulum bağlantısı ver" });
+    await within(dialog).findAllByRole("option");
+    const options = within(within(dialog).getAllByRole("combobox")[0]!).getAllByRole("option");
+    expect(options.slice(1).map((o) => o.textContent?.split(" — ")[0])).toEqual(["Onaylı · Genel grubu", "Test grubu · yalnız deneme kurulumu"]);
+    expect(within(dialog).queryByText(/Onaylı paket yok/)).toBeNull();
+  });
+
+  it("onaylı (terfi edilmiş) paket yoksa açıkça söyler", async () => {
+    const user = userEvent.setup();
+    openInstallation("SATICI_OPERATOR", {
+      "GET /dagitim/derlemeler": () => ({ data: [{ ad: "TeksERP-Kurulum-test-2.15.7.zip", boyut: 1000, degisti: "2026-10-12T10:00:00Z", grup: "test" }] }),
+    });
+    await user.click(await screen.findByRole("tab", { name: "İlk kurulum" }));
+    await user.click(await screen.findByRole("button", { name: "Bağlantı ver" }));
+    const dialog = await screen.findByRole("dialog", { name: "İlk kurulum bağlantısı ver" });
+    expect(await within(dialog).findByText(/Onaylı paket yok/)).toBeTruthy();
   });
 
   it("tekrar yanıtı adresi taşımaz ve bunu açıkça söyler", async () => {

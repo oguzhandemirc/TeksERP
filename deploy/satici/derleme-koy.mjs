@@ -14,8 +14,9 @@
 // KALDIRMA (`--kaldir <ad>` · `--yenile`): dosya yalnız AKTİF (süresi dolmamış, IPTAL olmayan) indirme bağlantısı ona
 //   işaret etmiyorsa (satıcı DB'si, salt okuma; uygulamada yeniden ölçülür) ve önce Mac arşivine (`--arsiv`, varsayılan
 //   ~/.tekserp/arsiv/derlemeler) uzaktakiyle sha256-EŞİT indirildikten sonra yardımcı konteynerde `sha256sum -c` + `rm`
-//   ile kalkar. `--kaldir`da aktif bağlantı DUR'dur; `--yenile` (yeni arşivi koy + depodaki öteki TeksERP-Kurulum-*.zip'leri
-//   arşivle-kaldır) aktif bağlantılı eskiyi KORUR ve raporlar (bağlantı donmuş sha'yla iner, dosya kalkarsa 410 olur).
+//   ile kalkar. `--kaldir`da aktif bağlantı DUR'dur; `--yenile` (yeni arşivi koy + depodaki AYNI GRUPTAKİ öteki
+//   TeksERP-Kurulum-<grup>-*.zip'leri arşivle-kaldır; test yayını onaylı paketi ASLA kaldırmaz) aktif bağlantılı eskiyi
+//   KORUR ve raporlar (bağlantı donmuş sha'yla iner, dosya kalkarsa 410 olur).
 //
 //   node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <yerel> [--dosya <yerel> …] [--yenile] [--arsiv <dizin>] [--uygula]
 //   node deploy/satici/derleme-koy.mjs --ortam uretim --kaldir <ad> [--kaldir <ad> …] [--arsiv <dizin>] [--uygula]
@@ -32,7 +33,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Ag, SozlesmeIhlali, VDS } from '../lisans-devreye/lib/ag.mjs';
-import { Olculemedi as DepoOlculemedi, derlemeAdiHatasi, derlemeAdiKurali } from '../../scripts/lib/derleme-deposu.mjs';
+import { Olculemedi as DepoOlculemedi, arsivGrubu, derlemeAdiHatasi, derlemeAdiKurali } from '../../scripts/lib/derleme-deposu.mjs';
+import { KAYIT_REL as DAGITIM_REL, kayitAyristir } from '../../scripts/lib/dagitim.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const VDS_DOGRULA = path.join(KOK, 'deploy', 'vds-dogrula.sh');
@@ -42,8 +44,27 @@ export const ORTAMLAR = Object.freeze({
 });
 const PAY = 256 * 1024 * 1024;
 const KULLANIM = 'Kullanım: --ortam uretim (--dosya <yerel> [--dosya …] [--yenile] | --kaldir <ad> [--kaldir …]) [--arsiv <dizin>] [--uygula]';
-/** `--yenile`nin eski sayıp arşivleyeceği adlar: yalnız ortak kurulum arşivi (başka tür dosyaya dokunulmaz). */
-export const ARSIV_ADI = /^TeksERP-Kurulum-[0-9A-Za-z][0-9A-Za-z._-]*\.zip$/;
+/**
+ * `--yenile`nin eski sayıp arşivleyeceği adlar: yalnız yeni arşivlerin GRUBUNDAKİ ortak kurulum arşivleri (başka grup,
+ * başka tür ve grupsuz dosyaya dokunulmaz). Yeni arşiv grup adlı değilse ya da grup dağıtım kaydında yoksa DUR.
+ */
+export function yenileAdaylari(adlar, yeniAdlar, kural = derlemeAdiKurali(), gruplar = dagitimGruplari()) {
+  const yeniGruplar = new Set();
+  for (const ad of yeniAdlar) {
+    const g = arsivGrubu(ad, kural);
+    if (g === null || !gruplar.includes(g)) throw new Dur(1, `--yenile yalnız grup adlı ortak arşivle (TeksERP-Kurulum-<${gruplar.join('|')}>-<sürüm>.zip): "${ad}"`);
+    yeniGruplar.add(g);
+  }
+  return [...adlar].filter((ad) => !yeniAdlar.has(ad) && yeniGruplar.has(arsivGrubu(ad, kural))).sort();
+}
+
+function dagitimGruplari() {
+  try {
+    return (kayitAyristir(fs.readFileSync(path.join(KOK, DAGITIM_REL), 'utf8')).gruplar ?? []).map((g) => g.kod);
+  } catch (e) {
+    throw new Dur(2, `ÖLÇÜLEMEDİ — dağıtım kaydı (${DAGITIM_REL}): ${e.message}`);
+  }
+}
 export const ARSIV_DIZINI_VARSAYILAN = path.join(os.homedir(), '.tekserp', 'arsiv', 'derlemeler');
 
 // Konteyner içinde root olarak koşar (yalnız /g:ro ve /k bağlı): gizli ada yaz, `ln` ile yayınla — hedef varsa ln
@@ -251,7 +272,7 @@ export function karar(ortam, olcum, dosyalar, uzakOzet, { kaldir = [], yenile = 
   for (const ad of olcum.ls.keys()) if (ad.startsWith('.yarim-')) hatalar.push(`yarım kalmış önceki yazım: ${ad} — önce elle incele/kaldır`);
   // Kaldırma: --kaldir açık adlar · --yenile depodaki öteki ortak kurulum arşivleri. Aktif bağlantı ölçülemezse karar YOK.
   const yeniAdlar = new Set(dosyalar.map((d) => d.ad));
-  const adaylar = yenile ? [...olcum.ls.keys()].filter((ad) => ARSIV_ADI.test(ad) && !yeniAdlar.has(ad)).sort() : kaldir;
+  const adaylar = yenile ? yenileAdaylari(olcum.ls.keys(), yeniAdlar) : kaldir;
   const kaldirilacak = [];
   const tutulan = [];
   if (adaylar.length && !olcum.baglanti) throw new Dur(2, 'ÖLÇÜLEMEDİ — satıcı DB\'sinden aktif indirme bağlantıları okunamadı (@@BAGLANTI) — hiçbir şey kaldırılmaz');
@@ -455,6 +476,7 @@ async function main() {
   const o = ORTAMLAR[a.ortam];
   console.log(`== Derleme koy: ${a.ortam} (${o.kok}/derlemeler)${a.uygula ? ' — UYGULA' : ' — KURU (yalnız okuma)'} ==`);
   const dosyalar = a.dosyalar.length ? yerelDenetim(a.ortam, a.dosyalar) : [];
+  if (a.yenile) yenileAdaylari([], new Set(dosyalar.map((d) => d.ad)));
   if (a.kaldir.length) {
     const kural = derlemeAdiKurali();
     const kh = a.kaldir.map((ad) => derlemeAdiHatasi(ad, kural)).filter(Boolean);
@@ -467,7 +489,7 @@ async function main() {
   const olcum = olcumuCoz(a.ortam, vdsOku(ag, olcumKomutu(a.ortam)));
   console.log(`  satıcı bağı    : ${olcum.bag} · yardımcı imaj ${olcum.yardimci} · dizin ${olcum.dizin ? `${olcum.dizin.uid}:${olcum.dizin.gid} ${olcum.dizin.mod}` : '?'} · ${olcum.ls.size} girdi · boş ${olcum.df[0] ? `${(olcum.df[0].bos / 2 ** 30).toFixed(1)} GiB` : '?'}`);
   const yeniAdlar = new Set(dosyalar.map((d) => d.ad));
-  const eskiler = a.yenile ? [...olcum.ls.keys()].filter((ad) => ARSIV_ADI.test(ad) && !yeniAdlar.has(ad)) : a.kaldir.filter((ad) => olcum.ls.has(ad));
+  const eskiler = a.yenile ? yenileAdaylari(olcum.ls.keys(), yeniAdlar) : a.kaldir.filter((ad) => olcum.ls.has(ad));
   const ozetAdlari = [...new Set([...dosyalar.filter((d) => olcum.ls.has(d.ad)).map((d) => d.ad), ...eskiler])];
   const { yazilacak, yerinde, kaldirilacak, tutulan } = karar(a.ortam, olcum, dosyalar, uzakOzetleri(ag, olcum.D, ozetAdlari), { kaldir: a.kaldir, yenile: a.yenile, arsiv: a.arsiv });
   for (const d of yerinde) console.log(`  = ${d.ad}: depoda ZATEN VAR, içerik aynı — dokunulmaz`);

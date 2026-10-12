@@ -41,6 +41,9 @@
  *   node deploy/backend-yayinla.mjs --grup=<grup> --paket=<ortak imzalı zip> --anahtar=<PAKET anahtarı>
  *        [--terfi-atla="<cümle>"] [--profil-matrisi-atla="<cümle>"] [--min-kaynak=<sürüm>] [--zorunlu] [--kuru]
  *        [--pg-kunye=<pg.json>]
+ *        [--ilk-kurulum-setup=<TeksERP-Kurulum-<sürüm>.exe> --ilk-kurulum-pg=<PG zip> [--ilk-kurulum-pg-kunye=<pg.json>] [--ilk-kurulum-tkpub=<f>]]
+ *        # Windows yayını bitince grubun ilk kurulum arşivi `deploy/kurulum/ilk-kurulum-yayinla.mjs --uygula` ile yenilenir
+ *        # (pg künyesi verilmezse --pg-kunye); girdi yoksa yayın sürer, depo güncellenmez ve yüksek sesle söylenir.
  *   node deploy/backend-yayinla.mjs --grup=<grup> --pg-yayinla --pg-paket=<PG sahne zip> --pg-kunye=<pg.json> [--kuru]
  *        # PG paketi (sözleşme sürümü 2): `<grup>/backend/pg/<sürüm>-<derleme>/` DEĞİŞMEZ dizinine; son.json'a dokunmaz
  *   node deploy/backend-yayinla.mjs --grup=<grup> --dogrula        # yükleme YOK: kenardaki son.json'u oku
@@ -66,6 +69,7 @@ import { yayinSonrasiBildir } from '../scripts/lib/yayin-bildirim.mjs';
 import { SSH_HEDEF_VARSAYILAN } from '../scripts/lib/yayin-okuma.mjs';
 import { ARTEFAKT, grupCoz, grupHedefi, grupTerfiKapisi, grupYayinBlogu, yeniAdresKapisiSatirlari } from '../scripts/lib/grup-yayin.mjs';
 import { Olculemedi as PgOlculemedi, SURUM_REL as PG_KAYIT_REL, jsonOku as pgJsonOku, surumKaydiHatalari } from './pg/lib/pg-ornegi.mjs';
+import { ILK_KURULUM_ARGLARI, ilkKurulumArgv, ilkKurulumGirdisi, kabukKomutu } from '../scripts/lib/ilk-kurulum-baglanti.mjs';
 import {
   SURUM_DESENI,
   ZINCIR_ISARETCI,
@@ -123,6 +127,20 @@ const OCI = URUN === 'backend-oci';
 if (OCI) {
   const pgArg = ['pg-yayinla', 'pg-kunye', 'pg-paket'].filter((a) => arg(a) !== undefined);
   if (pgArg.length) dur(`--${pgArg.join(' --')} Linux/OCI yayınında verilmez — hiçbir şey yüklenmedi`, 'linux-x64-oci bildirimi PG hedefi taşımaz (konteyner PG\'si ayrı yoldan; GUNCELLEYICI-SAGLAMLIK L8).');
+}
+// İlk kurulum deposu (Windows yayınının sonunda): girdiler ya hep ya hiç; kısmi girdi yüklemeden ÖNCE durur.
+const ILK = ilkKurulumGirdisi(arg, { pgKunyeYedek: arg('pg-kunye') ? path.resolve(arg('pg-kunye')) : null });
+if (ILK.durum !== 'yok' && (OCI || argv.includes('--pg-yayinla') || argv.includes('--dogrula'))) {
+  dur('--ilk-kurulum-* yalnız Windows paket yayınında verilir — hiçbir şey yüklenmedi', 'İlk kurulum arşivi Windows backend paketini taşır (OCI, --pg-yayinla ve --dogrula onu üretmez).');
+}
+if (ILK.durum === 'eksik') dur('İLK KURULUM GİRDİSİ EKSİK — hiçbir şey yüklenmedi', `Eksik: ${ILK.eksik.join(' ')}`, 'Ya hepsini ver ya hiçbirini (verilmezse yayın sürer, depo güncellenmez ve bu söylenir).');
+if (ILK.durum === 'tam') {
+  for (const [ad, t] of Object.entries(ILK_KURULUM_ARGLARI)) {
+    const v = ILK.girdi[ad];
+    if (v === undefined) continue;
+    if (!fs.statSync(v, { throwIfNoEntry: false })?.isFile()) dur(`--${t.yayin} dosyası yok — hiçbir şey yüklenmedi`, v);
+    ILK.girdi[ad] = path.resolve(v);
+  }
 }
 // Yeni adres kapısı kapanırsa gerçek yükleme DURUR; test çapası ortamda iken gerçek yayın her zaman DURUR.
 if (!KURU && !argv.includes('--dogrula')) {
@@ -540,6 +558,19 @@ const satir = defterSatiri({
 const defter = uzak(defterKomutu(plan.defter, satir), 'yayın defteri');
 if (!KURU && defter.status !== 0) bilgi('⚠ yayın defteri yazılamadı (yayın etkilenmedi)');
 
+/** İlk kurulum deposu adımı: girdiler tamsa komut, değilse yüksek sesli uyarı (yayın sonunda ya da KURU planında). */
+function ilkKurulumKomutu() {
+  const girdi = ILK.durum === 'tam' ? ILK.girdi : { setup: `<TeksERP-Kurulum-${SURUM}.exe>`, pg: '<postgresql-*.zip>', pgKunye: '<pg.json>' };
+  return ilkKurulumArgv({ grup: GRUP, paket: PAKET, girdi, uygula: true });
+}
+function ilkKurulumUyarisi(baslik) {
+  console.log(`\n${BAR}\n  ⚠ ${baslik}\n  Portal "${GRUP}" grubunun ilk kurulum arşivini bu sürümle YENİLEMEZ (yeni kurulum eski arşivi alır). Elle:\n    ${kabukKomutu(ilkKurulumKomutu())}\n${BAR}\n`);
+}
+if (!OCI && KURU) {
+  if (ILK.durum === 'tam') bilgi(`yayın sonunda ilk kurulum deposu: ${kabukKomutu(ilkKurulumKomutu())}`);
+  else ilkKurulumUyarisi('İLK KURULUM DEPOSU GÜNCELLENMEYECEK — --ilk-kurulum-setup / --ilk-kurulum-pg / --ilk-kurulum-pg-kunye verilmedi');
+}
+
 if (KURU) {
   console.log(`\n${BAR}\n  KURU — hiçbir şey yüklenmedi; imzasız bildirim: ${path.join(CIKTI, 'sonuc.json')}\n${BAR}\n`);
   process.exit(0);
@@ -563,3 +594,17 @@ if (terfi.atlandi) {
 }
 fs.rmSync(CIKTI, { recursive: true, force: true });
 console.log(`\n${BAR}\n  ✔ backend ${SURUM} "${GRUP}" kanalında yayında — kurulumlar politikalarına göre alır${CI_ATLA ? `\n  ⚠ CI KAÇIŞLI imza: ${CI_ATLA}` : ''}\n${BAR}\n`);
+
+/* ------------------------------------------------------------------ *
+ * 7) İlk kurulum deposu (yalnız Windows): grubun arşivi bu paketle yenilenir. Terfi kapısı yukarıda geçti
+ *    (test kök grup otomatik; oncu/genel terfi etiketiyle). Yayın geri alınmaz; adım düşerse komut basılır.
+ * ------------------------------------------------------------------ */
+if (!OCI) {
+  if (ILK.durum !== 'tam') ilkKurulumUyarisi('İLK KURULUM DEPOSU GÜNCELLENMEDİ — --ilk-kurulum-setup / --ilk-kurulum-pg / --ilk-kurulum-pg-kunye verilmedi');
+  else {
+    const [betik, ...ilkArg] = ilkKurulumKomutu();
+    console.log(`  ilk kurulum deposu: ${kabukKomutu(ilkKurulumKomutu())}`);
+    const r = spawnSync(process.execPath, [path.join(KOK, betik), ...ilkArg], { stdio: 'inherit', cwd: KOK });
+    if (r.status !== 0) ilkKurulumUyarisi(`İLK KURULUM DEPOSU GÜNCELLENEMEDİ (çıkış ${r.status ?? r.signal}) — backend yayını YERİNDE`);
+  }
+}
