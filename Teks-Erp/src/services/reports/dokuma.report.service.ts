@@ -20,7 +20,7 @@ import { AppError } from "../../utils/app-error";
 import { LOOM_HORIZON_DAY, loomHorizonStart } from "../../constants/dokuma-ufku";
 import { aggregateMachineKpis, type LoomKpiAggregate } from "../helpers/loom-efficiency.helper";
 import { countSourceBuckets } from "../helpers/loom-shift-terms.helper";
-import { collectShiftStatRows, factoryDayKeyFromYmd, type ShiftLineRow, type ShiftStatRow, type ShiftStatRowExtra } from "../machine-shift-stat.service";
+import { collectShiftStatRows, factoryDayKeyFromYmd, pageShiftRows, type ShiftPageParams, type ShiftLineRow, type ShiftStatRow, type ShiftStatRowExtra } from "../machine-shift-stat.service";
 import { beamsMountedOnMachinesDuring, mountWindowsForBeams, resolveBeamLotFilter, shiftHasBeam, type BeamLotFilter, type BeamLotFilterInput, type BeamOption } from "../helpers/warp-beam-roll-filter.helper";
 
 /**
@@ -44,6 +44,9 @@ export interface LoomReportMeta {
   sealed: number;
   /** R5b-b2: pencerede satırların tezgahlarına bağlı geçen leventler — panel seçicisi kaynağı; süzgeçsiz yanıtta da döner, ≤200. */
   leventler: BeamOption[];
+  /** Yalnız sayfalı listede (randıman): sonraki sayfanın imleci; `null` = son sayfa. Toplamlar sayfadan BAĞIMSIZ, tam kümeden. */
+  nextCursor?: string | null;
+  pageSize?: number;
 }
 
 /** Satırların [min startsAt, max endsAt) penceresi + tezgah kümesi. */
@@ -119,14 +122,16 @@ export interface EfficiencyReport extends WithSuzgec {
   meta: LoomReportMeta;
 }
 
-export async function efficiencyReport(p: { from: string; to: string; machineId?: string } & LineOptIn & BeamLotFilterInput): Promise<EfficiencyReport> {
-  const { byLine, warpBeamId, lotNo, ...params } = p;
+/** Toplam · kaynak kırılımı · meta TAM kümeden (seçilen aralığın bütün tezgah × vardiya çiftleri); `satirlar` sayfalı. */
+export async function efficiencyReport(p: { from: string; to: string; machineId?: string } & LineOptIn & BeamLotFilterInput & ShiftPageParams): Promise<EfficiencyReport> {
+  const { byLine, warpBeamId, lotNo, cursor, limit, ...params } = p;
   const filter = await resolveBeamLotFilter(prisma, { warpBeamId, lotNo });
   const collected = await collectShiftStatRows(params, { byLine });
   const { rows, suzgec } = await applyBeamFilter(collected.rows, filter);
   const leventler = await beamOptions(collected.rows);
   const m = collected.meta;
-  const efficiencyRows: EfficiencyRow[] = rows.map((r) => ({
+  const { page, nextCursor, pageSize } = pageShiftRows(rows, { cursor, limit });
+  const efficiencyRows: EfficiencyRow[] = page.map((r) => ({
     machineId: r.machineId, machine: r.machine, shiftInstanceId: r.shiftInstanceId, factoryDayKey: r.shiftInstance.factoryDayKey,
     shift: r.shiftInstance.shiftDefinition, live: r.live, sealState: r.sealState, source: r.terms.source, emptyLoom: r.emptyLoom,
     potSec: r.terms.potSec, aptSec: r.terms.aptSec, unitsActual: r.terms.unitsActual, producedM: r.terms.producedM,
@@ -135,7 +140,8 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
     olculemedi: r.kpis.olculemedi, warnings: [...r.warnings, ...r.kpis.warnings],
     ...hatlar(r),
   }));
-  return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, leventler), ...(suzgec ? { suzgec } : {}) };
+  const meta = { ...buildMeta(rows, { ...m, total: rows.length, truncated: nextCursor !== null }, leventler), nextCursor, pageSize };
+  return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta, ...(suzgec ? { suzgec } : {}) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

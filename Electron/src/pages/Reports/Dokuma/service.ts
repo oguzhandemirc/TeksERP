@@ -26,6 +26,8 @@ export interface SourceBreakdown { satir: number; potSec: number }
 export type SourceBreakdownTable = Record<DataSource, SourceBreakdown>;
 export interface LoomReportMeta {
   ufuk: string; ufukOncesiSatir: number; total: number; truncated: boolean; live: number; sealed: number;
+  /** Sayfalı listede (randıman) sonraki sayfa imleci; ESKİ sunucu göndermez. `truncated` = sonraki sayfa var. */
+  nextCursor?: string | null;
   /** R5b-b2 levent seçicisinin kaynağı; ESKİ sunucu göndermez ⇒ alan opsiyonel, seçici o zaman pasif çizilir. */
   leventler?: BeamOption[];
 }
@@ -95,7 +97,26 @@ export interface ShiftStatRow {
   emptyLoom: boolean;
   warnings: string[];
 }
-export interface ShiftStatListMeta { total: number; truncated: boolean; live: number; sealed: number }
+export interface ShiftStatListMeta { total: number; truncated: boolean; live: number; sealed: number; nextCursor?: string | null }
+
+/** Sayfa boyu = sunucu tavanı: 200 tezgah × 7 gün (4.200 çift) tek istekte gelir; fazlası "Daha fazla" ile. */
+export const DOKUMA_PAGE_LIMIT = 5000;
+export interface PageParams { cursor?: string; limit?: number }
+
+type EfficiencyPage = ApiResponse<EfficiencyReport> & WithSuzgec;
+type ShiftStatsPage = ApiResponse<ShiftStatRow[]> & { meta: ShiftStatListMeta };
+
+/** Sayfaları birleştirir: toplamlar/özet İLK sayfadan (tam kümeden, her sayfada aynı), satırlar uç uca, sayfa durumu SON sayfadan. */
+export function mergeEfficiencyPages(pages: EfficiencyPage[] | undefined): EfficiencyPage | undefined {
+  if (!pages?.length || !pages[0]!.data) return pages?.[0];
+  const last = pages[pages.length - 1]!.data!;
+  return { ...pages[0]!, data: { ...pages[0]!.data, satirlar: pages.flatMap((p) => p.data?.satirlar ?? []), meta: { ...pages[0]!.data.meta, truncated: last.meta.truncated, nextCursor: last.meta.nextCursor } } };
+}
+export function mergeShiftStatPages(pages: ShiftStatsPage[] | undefined): ShiftStatsPage | undefined {
+  if (!pages?.length) return undefined;
+  const last = pages[pages.length - 1]!;
+  return { ...pages[0]!, data: pages.flatMap((p) => p.data ?? []), meta: { ...pages[0]!.meta, truncated: last.meta.truncated, nextCursor: last.meta.nextCursor } };
+}
 
 /** Backend `PUT /:id/terms` gövdesiyle BİREBİR (Zod `.strict()` — fazla anahtar 400). */
 export interface ShiftTermsCorrection {
@@ -116,19 +137,19 @@ export interface RangeParams { from: string; to: string; machineId?: string; war
 
 function qs(p: object): string {
   const s = new URLSearchParams();
-  for (const [k, v] of Object.entries(p) as Array<[string, string | undefined]>) if (v) s.set(k, v);
+  for (const [k, v] of Object.entries(p) as Array<[string, string | number | undefined]>) if (v) s.set(k, String(v));
   const out = s.toString();
   return out ? `?${out}` : "";
 }
 
 export const dokumaReportsApi = {
-  efficiency: async (p: RangeParams) =>
+  efficiency: async (p: RangeParams & PageParams) =>
     (await apiClient.get<ApiResponse<EfficiencyReport> & WithSuzgec>(`/api/reports/dokuma/randiman${qs(p)}`)).data,
   pareto: async (p: RangeParams) =>
     (await apiClient.get<ApiResponse<ParetoReport> & WithSuzgec>(`/api/reports/dokuma/durus-pareto${qs(p)}`)).data,
   shiftScorecard: async (p: { factoryDay: string; shiftDefinitionId?: string; warpBeamId?: string; lotNo?: string }) =>
     (await apiClient.get<ApiResponse<ShiftScorecardReport> & WithSuzgec>(`/api/reports/dokuma/vardiya-karnesi${qs(p)}`)).data,
-  shiftStats: async (p: RangeParams & { sealState?: SealState }) =>
+  shiftStats: async (p: RangeParams & PageParams & { sealState?: SealState }) =>
     (await apiClient.get<ApiResponse<ShiftStatRow[]> & { meta: ShiftStatListMeta }>(`/api/machine-shift-stats${qs(p)}`)).data,
   seals: async (statId: string) =>
     (await apiClient.get<ApiResponse<SealLedgerRow[]>>(`/api/machine-shift-stats/${statId}/seals`)).data,

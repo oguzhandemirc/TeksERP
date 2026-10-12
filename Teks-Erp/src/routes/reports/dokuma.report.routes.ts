@@ -15,6 +15,7 @@ import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireDokumaEnabled } from "../../middlewares/module.middleware";
+import { SHIFT_STAT_PAGE_MAX } from "../../services/machine-shift-stat.service";
 import { durusParetoReport, efficiencyReport, shiftScorecardReport, type WithSuzgec } from "../../services/reports/dokuma.report.service";
 import { reportEnvelope, resolveDateRange, splitOptions } from "../../services/reports/_shared";
 import { filterEcho, musteriEkseni } from "../../services/reports/_filters";
@@ -35,7 +36,9 @@ function yanit(res: Response, rapor: WithSuzgec): void {
   res.json({ success: true, data, ...(suzgec ? { suzgec } : {}) });
 }
 const leventEkseni = { warpBeamId: z.string().uuid("Geçersiz levent").optional(), lotNo: z.string().trim().min(1).max(64).optional() };
-const aralikSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("Geçersiz makine").optional(), byLine: byLineSchema, ...leventEkseni }).strict();
+/** Randıman satır listesi sayfalı (imleç + boy); toplamlar sayfadan bağımsız. */
+const pageParams = { cursor: z.string().min(1).max(200).optional(), limit: z.coerce.number().int().min(1).max(SHIFT_STAT_PAGE_MAX).optional() };
+const aralikSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("Geçersiz makine").optional(), byLine: byLineSchema, ...leventEkseni, ...pageParams }).strict();
 const gunSchema = z.object({ factoryDay: YMD, shiftDefinitionId: z.string().uuid("Geçersiz vardiya tanımı").optional(), byLine: byLineSchema, ...leventEkseni }).strict();
 const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("Geçersiz makine").optional(), ...leventEkseni }).strict();
 
@@ -53,6 +56,8 @@ const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("
  *       - { in: query, name: byLine, schema: { type: string, enum: ["1", "0"] }, description: Hat kırılımı opt-in (çift enli tezgah) }
  *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: "Levent ekseni (R5b-b) — o vardiyada tezgahta bağlı olan leventin satırları (defterden)" }
  *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
+ *       - { in: query, name: cursor, schema: { type: string }, description: "Sonraki sayfa imleci (meta.nextCursor); aralık/süzgeç değişince geçersiz (400 INVALID_CURSOR)" }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 5000 }, description: "Sayfa boyu (varsayılan 500)" }
  *     responses:
  *       200: { description: "Randıman raporu (satırlar · toplam · kaynakKirilimi · meta.ufuk · meta.leventler seçici kaynağı · süzgeçliyse kökte suzgec)" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }

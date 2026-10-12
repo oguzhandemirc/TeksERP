@@ -5,7 +5,7 @@
 // → izin. Okuma `report:production` (üretim raporudur; ayrı `loom:read` AÇILMAZ — 1e
 // hükmü ③). Yazma: M3 terim düzeltme + M4 mühür `loom:manual-entry`; M5 mühür açma
 // `loom:shift-unseal` (geçmiş rakamı değiştirir, ayrı kod, gerekçe ≥ 3).
-// Tarih parametreleri fabrika günü `YYYY-MM-DD`; süzme SUNUCUDA, cursor yok.
+// Tarih parametreleri fabrika günü `YYYY-MM-DD`; süzme SUNUCUDA; liste imleçle sayfalı, sayılar tam kümeden.
 // =============================================================================
 import { Router } from "express";
 import { z } from "zod";
@@ -13,7 +13,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
-import { listShiftStats } from "../services/machine-shift-stat.service";
+import { listShiftStats, SHIFT_STAT_PAGE_MAX } from "../services/machine-shift-stat.service";
 import { correctShiftTerms, listShiftSeals, sealShiftStat, unsealShiftStat } from "../services/machine-shift-seal.service";
 
 const router = Router();
@@ -28,6 +28,9 @@ const listSchema = z
     sealState: z.enum(["OPEN", "SEALED"]).optional(),
     /** Hat kırılımı opt-in (çift enli tezgah): yalnız `1` açar; yokluk = eski gövde bayt bayt. */
     byLine: z.enum(["1", "0"], { message: "byLine yalnız 1 ya da 0 olabilir" }).optional(),
+    /** Liste sayfalı: imleç = önceki sayfanın `meta.nextCursor`u; sayılar (`meta.total/live/sealed`) tam kümeden. */
+    cursor: z.string().min(1).max(200).optional(),
+    limit: z.coerce.number().int().min(1).max(SHIFT_STAT_PAGE_MAX).optional(),
   })
   .strict();
 
@@ -44,6 +47,8 @@ const listSchema = z
  *       - { in: query, name: machineId, schema: { type: string, format: uuid } }
  *       - { in: query, name: sealState, schema: { type: string, enum: [OPEN, SEALED] } }
  *       - { in: query, name: byLine, schema: { type: string, enum: ["1", "0"] }, description: Hat kırılımı opt-in }
+ *       - { in: query, name: cursor, schema: { type: string }, description: "Sonraki sayfa imleci (meta.nextCursor)" }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 5000 }, description: "Sayfa boyu (varsayılan 500)" }
  *     responses:
  *       200: { description: Karne satırları (terimler + oranlar + source + sealState + warnings) }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }

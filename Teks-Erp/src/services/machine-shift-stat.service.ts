@@ -19,9 +19,6 @@ import { computeMachineKpis, type LoomKpis } from "./helpers/loom-efficiency.hel
 
 type Tx = Prisma.TransactionClient | typeof prisma;
 
-/** Liste tavanı — vardiya×makine; 30 gün × 3 vardiya × 5 tezgah = 450. Sayı kırpılmaz. */
-export const SHIFT_STAT_LIST_TAKE = 500;
-
 const dec = (d: Prisma.Decimal | null): number | null => (d === null ? null : Number(d));
 
 /** `YYYY-MM-DD` → `factoryDayKey`/`factoryDay`nin sakladığı UTC gece yarısı. */
@@ -30,56 +27,121 @@ export function factoryDayKeyFromYmd(ymd: string): Date {
   return new Date(Date.UTC(y, m - 1, d));
 }
 
-/** Terim girdisini DB'den toplar — pencereyle KESİŞEN kayıtlar (kırpma helper'da). */
-export async function loadShiftTermsInput(tx: Tx, machineId: string, shiftInstanceId: string, now = new Date()): Promise<ShiftTermsInput> {
-  const shift = await tx.shiftInstance.findUnique({
-    where: { id: shiftInstanceId },
-    select: { startsAt: true, endsAt: true, isCancelled: true, shiftDefinition: { select: { plannedBreakMinutes: true } } },
+/** Toplu terim yükleyicisine verilen vardiya penceresi. */
+export interface ShiftWindowForTerms { id: string; startsAt: Date; endsAt: Date; isCancelled: boolean; plannedBreakMinutes: number }
+
+/** Bir yükleme turunda en çok bu kadar vardiya (≈ 7 gün × 3) — bellek sınırı; tur başına sabit 6–7 SQL. */
+export const SHIFT_TERMS_BATCH_SHIFTS = 21;
+
+const pairKey = (machineId: string, shiftInstanceId: string): string => `${machineId}|${shiftInstanceId}`;
+const overlaps = (r: { startedAt: Date; endedAt: Date | null }, w: { startsAt: Date; endsAt: Date }): boolean =>
+  r.startedAt < w.endsAt && (r.endedAt === null || r.endedAt > w.startsAt);
+
+/**
+ * Terim girdilerini TOPLU yükler — (makine × vardiya) çiftleri için TEK tur: duruş · koşum · doff · künye ·
+ * makine · sebep etiketi birer SQL, pencereyle kesişen kayıtlar bellekte çiftlere bölünür (kırpma helper'da).
+ * Tekil yol da buradan geçer (tek yükleyici): toplu ile tekil aynı girdiyi üretir.
+ */
+export async function loadShiftTermsInputs(tx: Tx, machineIds: string[], shifts: ShiftWindowForTerms[], now = new Date()): Promise<Map<string, ShiftTermsInput>> {
+  const out = new Map<string, ShiftTermsInput>();
+  if (machineIds.length === 0 || shifts.length === 0) return out;
+  const gFrom = new Date(Math.min(...shifts.map((s) => s.startsAt.getTime())));
+  const gTo = new Date(Math.max(...shifts.map((s) => s.endsAt.getTime())));
+  const intersects = { startedAt: { lt: gTo }, OR: [{ endedAt: null }, { endedAt: { gt: gFrom } }] };
+  const machineIn = { in: machineIds };
+  const stops = await tx.machineStopEvent.findMany({
+    where: { machineId: machineIn, revokedAt: null, ...intersects },
+    select: { id: true, machineId: true, startedAt: true, endedAt: true, durationSec: true, reasonCode: true, lossClass: true, beamSlot: true, source: true },
+    orderBy: [{ startedAt: "asc" }, { id: "asc" }],
   });
-  if (!shift) throw AppError.notFound("Vardiya bulunamadı", { shiftInstanceId });
-  const w = { startsAt: shift.startsAt, endsAt: shift.endsAt };
-  const intersects = { startedAt: { lt: w.endsAt }, OR: [{ endedAt: null }, { endedAt: { gt: w.startsAt } }] };
-  const [stops, runs, doffs, spec, machine] = [
-    await tx.machineStopEvent.findMany({
-      where: { machineId, revokedAt: null, ...intersects },
-      select: { id: true, startedAt: true, endedAt: true, durationSec: true, reasonCode: true, lossClass: true, beamSlot: true, source: true },
-      orderBy: { startedAt: "asc" },
-    }),
-    await tx.machineRun.findMany({
-      where: { machineId, revokedAt: null, ...intersects },
-      select: { id: true, startedAt: true, endedAt: true, picksAtClose: true, producedM: true, targetUnitsPerMin: true, unitsPerCm: true, productionLineNo: true },
-      orderBy: { startedAt: "asc" },
-    }),
-    await tx.doffEvent.findMany({
-      where: { machineId, revokedAt: null, doffedAt: { gte: w.startsAt, lt: w.endsAt } },
-      select: { counterSource: true },
-    }),
-    await tx.machineSpec.findUnique({ where: { machineId }, select: { nominalUnitsPerMin: true, monitoringState: true } }),
-    // Hat kırılımının tetiği VERİDİR: `productionLineCount > 1` değilse `lines` boş doğar (bayrak yok).
-    await tx.machine.findUniqueOrThrow({ where: { id: machineId }, select: { productionLineCount: true } }),
-  ];
+  const runs = await tx.machineRun.findMany({
+    where: { machineId: machineIn, revokedAt: null, ...intersects },
+    select: { id: true, machineId: true, startedAt: true, endedAt: true, picksAtClose: true, producedM: true, targetUnitsPerMin: true, unitsPerCm: true, productionLineNo: true },
+    orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+  });
+  const doffs = await tx.doffEvent.findMany({
+    where: { machineId: machineIn, revokedAt: null, doffedAt: { gte: gFrom, lt: gTo } },
+    select: { machineId: true, doffedAt: true, counterSource: true },
+    orderBy: [{ doffedAt: "asc" }, { id: "asc" }],
+  });
+  const specs = await tx.machineSpec.findMany({ where: { machineId: machineIn }, select: { machineId: true, nominalUnitsPerMin: true, monitoringState: true } });
+  // Hat kırılımının tetiği VERİDİR: `productionLineCount > 1` değilse `lines` boş doğar (bayrak yok).
+  const machines = await tx.machine.findMany({ where: { id: machineIn }, select: { id: true, productionLineCount: true } });
   // Sebep etiketi katalogdan KOPYALANIR (breakdown `reasonLabel` DONAR — katalog değişse rapor değişmez).
   const codes = [...new Set(stops.map((s) => s.reasonCode).filter((c): c is string => c !== null))];
   const presets = codes.length
     ? await tx.reasonPreset.findMany({ where: { kind: "MACHINE_STOP", code: { in: codes } }, select: { code: true, label: true } })
     : [];
   const labelOf = new Map(presets.map((p) => [p.code, p.label]));
-  return {
-    window: { ...w, isCancelled: shift.isCancelled, plannedBreakMinutes: shift.shiftDefinition.plannedBreakMinutes },
-    stops: stops.map((s) => ({ ...s, reasonLabel: s.reasonCode ? (labelOf.get(s.reasonCode) ?? null) : null })),
-    runs: runs.map((r) => ({ ...r, producedM: dec(r.producedM), unitsPerCm: dec(r.unitsPerCm) })),
-    doffSources: doffs.map((d) => d.counterSource),
-    spec,
-    productionLineCount: machine.productionLineCount,
-    now,
-    stopThresholdSec: MINOR_STOP_THRESHOLD_SEC,
+  const group = <T extends { machineId: string }>(rows: T[]): Map<string, T[]> => {
+    const m = new Map<string, T[]>();
+    for (const r of rows) { const a = m.get(r.machineId); if (a) a.push(r); else m.set(r.machineId, [r]); }
+    return m;
   };
+  const stopsBy = group(stops);
+  const runsBy = group(runs);
+  const doffsBy = group(doffs);
+  const specBy = new Map(specs.map(({ machineId, ...s }) => [machineId, s]));
+  const lineCountBy = new Map(machines.map((m) => [m.id, m.productionLineCount]));
+  for (const machineId of machineIds) {
+    const lineCount = lineCountBy.get(machineId);
+    if (lineCount === undefined) continue;
+    for (const sh of shifts) {
+      const w = { startsAt: sh.startsAt, endsAt: sh.endsAt };
+      out.set(pairKey(machineId, sh.id), {
+        window: { ...w, isCancelled: sh.isCancelled, plannedBreakMinutes: sh.plannedBreakMinutes },
+        stops: (stopsBy.get(machineId) ?? []).filter((s) => overlaps(s, w)).map(({ machineId: _m, ...s }) => ({ ...s, reasonLabel: s.reasonCode ? (labelOf.get(s.reasonCode) ?? null) : null })),
+        runs: (runsBy.get(machineId) ?? []).filter((r) => overlaps(r, w)).map(({ machineId: _m, ...r }) => ({ ...r, producedM: dec(r.producedM), unitsPerCm: dec(r.unitsPerCm) })),
+        doffSources: (doffsBy.get(machineId) ?? []).filter((d) => d.doffedAt >= w.startsAt && d.doffedAt < w.endsAt).map((d) => d.counterSource),
+        spec: specBy.get(machineId) ?? null,
+        productionLineCount: lineCount,
+        now,
+        stopThresholdSec: MINOR_STOP_THRESHOLD_SEC,
+      });
+    }
+  }
+  return out;
+}
+
+/** Terim girdisini DB'den toplar — tek çift; toplu yükleyicinin bir elemanı (tek yükleyici). */
+export async function loadShiftTermsInput(tx: Tx, machineId: string, shiftInstanceId: string, now = new Date()): Promise<ShiftTermsInput> {
+  const shift = await tx.shiftInstance.findUnique({
+    where: { id: shiftInstanceId },
+    select: { startsAt: true, endsAt: true, isCancelled: true, shiftDefinition: { select: { plannedBreakMinutes: true } } },
+  });
+  if (!shift) throw AppError.notFound("Vardiya bulunamadı", { shiftInstanceId });
+  const inputs = await loadShiftTermsInputs(tx, [machineId], [{ id: shiftInstanceId, startsAt: shift.startsAt, endsAt: shift.endsAt, isCancelled: shift.isCancelled, plannedBreakMinutes: shift.shiftDefinition.plannedBreakMinutes }], now);
+  const input = inputs.get(pairKey(machineId, shiftInstanceId));
+  if (!input) throw AppError.notFound("Makine bulunamadı", { machineId });
+  return input;
 }
 
 /** Bir (makine × vardiya) için ANLIK terimler — okuyucu ve (Dilim 3) materyalizasyon aynı kapıdan geçer. */
 export async function computeShiftTerms(tx: Tx, machineId: string, shiftInstanceId: string, opts: { now?: Date; supervisorTouched?: boolean } = {}): Promise<ShiftTerms> {
   const input = await loadShiftTermsInput(tx, machineId, shiftInstanceId, opts.now);
   return computeShiftTermsPure({ ...input, supervisorTouched: opts.supervisorTouched });
+}
+
+/** Çok çiftin ANLIK terimleri — vardiyalar `SHIFT_TERMS_BATCH_SHIFTS`lik turlarla; anahtar `makine|vardiya`. */
+export async function computeShiftTermsMany(tx: Tx, pairs: Array<{ machineId: string; shift: ShiftWindowForTerms }>, now = new Date()): Promise<Map<string, ShiftTerms>> {
+  const out = new Map<string, ShiftTerms>();
+  const machinesByShift = new Map<string, { shift: ShiftWindowForTerms; machineIds: Set<string> }>();
+  for (const p of pairs) {
+    const e = machinesByShift.get(p.shift.id) ?? { shift: p.shift, machineIds: new Set<string>() };
+    e.machineIds.add(p.machineId);
+    machinesByShift.set(p.shift.id, e);
+  }
+  const entries = [...machinesByShift.values()].sort((a, b) => a.shift.startsAt.getTime() - b.shift.startsAt.getTime());
+  for (let i = 0; i < entries.length; i += SHIFT_TERMS_BATCH_SHIFTS) {
+    const chunk = entries.slice(i, i + SHIFT_TERMS_BATCH_SHIFTS);
+    const machineIds = [...new Set(chunk.flatMap((e) => [...e.machineIds]))];
+    const inputs = await loadShiftTermsInputs(tx, machineIds, chunk.map((e) => e.shift), now);
+    for (const e of chunk) for (const machineId of e.machineIds) {
+      const input = inputs.get(pairKey(machineId, e.shift.id));
+      if (input) out.set(pairKey(machineId, e.shift.id), computeShiftTermsPure(input));
+    }
+  }
+  return out;
 }
 
 export interface ShiftStatRow {
@@ -171,9 +233,8 @@ function lineRows(lines: ShiftLineTerms[], parent: Pick<ShiftTerms, "potSec" | "
   }));
 }
 
-/** Mühürlü karnenin hat satırları çocuk tablodan (DURUM; mühürle birlikte donmuş). */
-async function storedLineRows(statId: string, parent: Pick<ShiftTerms, "potSec" | "aptSec">): Promise<ShiftLineRow[]> {
-  const rows = await prisma.machineShiftLineStat.findMany({ where: { statId }, select: LINE_SELECT, orderBy: { productionLineNo: "asc" } });
+/** Mühürlü karnenin hat satırları çocuk tablodan (DURUM; mühürle birlikte donmuş) — toplu okunmuş satırlardan. */
+function storedLineRows(rows: Array<Prisma.MachineShiftLineStatGetPayload<{ select: typeof LINE_SELECT }>>, parent: Pick<ShiftTerms, "potSec" | "aptSec">): ShiftLineRow[] {
   return lineRows(rows.map((r) => ({ ...r, unitsPerCmAtClose: dec(r.unitsPerCmAtClose), producedM: dec(r.producedM) })), parent);
 }
 
@@ -184,60 +245,126 @@ function lineSumWarning(lines: ShiftLineRow[], parent: Pick<ShiftTerms, "unitsAc
   return sum === parent.unitsActual ? [] : [`Hat kırılımı koşumdan hesaplanır; karne ${parent.source === "SUPERVISOR" ? "elle düzeltildi" : "farklı"} — Σhat atkı ${sum} ≠ karne ${parent.unitsActual}.`];
 }
 
+/** IN listesi parça boyu — bağ parametresi tavanının çok altında. */
+const IN_CHUNK = 5000;
+function chunks<T>(xs: T[], n = IN_CHUNK): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n));
+  return out;
+}
+
+export interface ShiftStatCollectMeta { total: number; truncated: boolean; live: number; sealed: number }
+
 /**
- * Karne satırlarını toplar — vardiya × tezgah. Süzme SUNUCUDA, liste tavanda kırpılır sayı kırpılmaz.
- * Mühürlü satır DB'den (`live:false`), diğerleri anlık. Rapor uçları da BURADAN okur (tek toplayıcı).
+ * Karne satırlarını toplar — vardiya × tezgah, seçilen aralığın TAMAMI (kesme yok; toplam/Pareto bu kümeden).
+ * Süzme SUNUCUDA; mühürlü satır DB'den (`live:false`), diğerleri anlık ve TOPLU (tur başına sabit SQL).
+ * Rapor uçları da BURADAN okur (tek toplayıcı); listeyi sayfalayan `pageShiftRows`tır, toplayıcı değil.
  */
-export async function collectShiftStatRows(p: ShiftStatListParams, opts: ShiftStatCollectOptions = {}): Promise<{ rows: Array<ShiftStatRow & ShiftStatRowExtra>; meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
+export async function collectShiftStatRows(p: ShiftStatListParams, opts: ShiftStatCollectOptions = {}): Promise<{ rows: Array<ShiftStatRow & ShiftStatRowExtra>; meta: ShiftStatCollectMeta }> {
   const now = opts.now ?? new Date();
   const fromKey = factoryDayKeyFromYmd(p.from);
   const toKey = factoryDayKeyFromYmd(p.to);
   if (toKey < fromKey) throw AppError.badRequest("Bitiş günü başlangıçtan önce olamaz");
-  const shifts = await prisma.shiftInstance.findMany({
+  const shiftRows = await prisma.shiftInstance.findMany({
     where: { factoryDayKey: { gte: fromKey, lte: toKey } },
-    select: SHIFT_SELECT,
-    orderBy: [{ startsAt: "asc" }],
+    select: { ...SHIFT_SELECT, shiftDefinition: { select: { code: true, name: true, plannedBreakMinutes: true } } },
+    orderBy: [{ startsAt: "asc" }, { id: "asc" }],
   });
+  const shifts = shiftRows.map(({ shiftDefinition: { plannedBreakMinutes, ...def }, ...s }) => ({ shift: { ...s, shiftDefinition: def }, plannedBreakMinutes }));
   const looms = await listLooms(p.machineId);
   const stored = await prisma.machineShiftStat.findMany({
-    where: { shiftInstanceId: { in: shifts.map((s) => s.id) }, ...(p.machineId ? { machineId: p.machineId } : {}) },
+    where: { shiftInstanceId: { in: shifts.map((s) => s.shift.id) }, ...(p.machineId ? { machineId: p.machineId } : {}) },
     select: STAT_SELECT,
   });
   const storedBy = new Map(stored.map((s) => [`${s.machineId}|${s.shiftInstanceId}`, s]));
 
-  const pairs: Array<{ shift: (typeof shifts)[number]; loom: (typeof looms)[number] }> = [];
-  for (const shift of shifts) for (const loom of looms) pairs.push({ shift, loom });
-  const total = pairs.length;
+  type Pair = { shift: (typeof shifts)[number]; loom: (typeof looms)[number]; s: (typeof stored)[number] | undefined };
+  const pairs: Pair[] = [];
+  for (const shift of shifts) for (const loom of looms) pairs.push({ shift, loom, s: storedBy.get(`${loom.id}|${shift.shift.id}`) });
+  const isSealed = (x: Pair): boolean => x.s?.sealState === "SEALED";
+  const kept = pairs.filter((x) => (p.sealState === "OPEN" ? !isSealed(x) : p.sealState === "SEALED" ? isSealed(x) : true));
+
+  // Mühürlü kırılım = SON KUŞAK (defter; katalog değişse etiket değişmez); hat satırları çocuk tablodan — ikisi de toplu.
+  const sealedStats = kept.filter(isSealed).map((x) => x.s!);
+  const breakdownBy = new Map<string, ShiftBreakdownRow[]>();
+  if (opts.includeBreakdown) {
+    const genOf = new Map(sealedStats.map((s) => [s.id, s.sealGeneration]));
+    for (const ids of chunks(sealedStats.map((s) => s.id))) {
+      const bs = await prisma.machineShiftStopBreakdown.findMany({ where: { statId: { in: ids } }, select: { statId: true, sealGeneration: true, reasonCode: true, reasonLabel: true, lossClass: true, beamSlotNull: true, stopCount: true, stopSec: true } });
+      for (const { statId, sealGeneration, ...b } of bs) {
+        if (genOf.get(statId) !== sealGeneration) continue;
+        breakdownBy.set(statId, [...(breakdownBy.get(statId) ?? []), b]);
+      }
+    }
+  }
+  const linesBy = new Map<string, Array<Prisma.MachineShiftLineStatGetPayload<{ select: typeof LINE_SELECT }>>>();
+  if (opts.byLine) {
+    for (const ids of chunks(sealedStats.map((s) => s.id))) {
+      const ls = await prisma.machineShiftLineStat.findMany({ where: { statId: { in: ids } }, select: { statId: true, ...LINE_SELECT }, orderBy: [{ statId: "asc" }, { productionLineNo: "asc" }] });
+      for (const { statId, ...l } of ls) linesBy.set(statId, [...(linesBy.get(statId) ?? []), l]);
+    }
+  }
+  const liveTerms = await computeShiftTermsMany(
+    prisma,
+    kept.filter((x) => !isSealed(x)).map((x) => ({ machineId: x.loom.id, shift: { id: x.shift.shift.id, startsAt: x.shift.shift.startsAt, endsAt: x.shift.shift.endsAt, isCancelled: x.shift.shift.isCancelled, plannedBreakMinutes: x.shift.plannedBreakMinutes } })),
+    now,
+  );
+
   const rows: Array<ShiftStatRow & ShiftStatRowExtra> = [];
   let live = 0;
   let sealed = 0;
-  for (const { shift, loom } of pairs.slice(0, SHIFT_STAT_LIST_TAKE)) {
-    const s = storedBy.get(`${loom.id}|${shift.id}`);
+  for (const x of kept) {
+    const { shift: { shift }, loom, s } = x;
     const base = { machineId: loom.id, machine: { code: loom.code, name: loom.name }, shiftInstanceId: shift.id, shiftInstance: shift, statId: s?.id ?? null };
-    if (s && s.sealState === "SEALED") {
-      if (p.sealState === "OPEN") continue;
+    if (s && isSealed(x)) {
       sealed += 1;
       const terms = storedTerms(s);
-      // Mühürlü kırılım = SON KUŞAK (defter; katalog değişse etiket değişmez).
-      const breakdown = opts.includeBreakdown
-        ? await prisma.machineShiftStopBreakdown.findMany({ where: { statId: s.id, sealGeneration: s.sealGeneration }, select: { reasonCode: true, reasonLabel: true, lossClass: true, beamSlotNull: true, stopCount: true, stopSec: true } })
-        : [];
-      const lines = opts.byLine ? await storedLineRows(s.id, terms) : undefined;
-      rows.push({ ...base, live: false, sealState: "SEALED", sealGeneration: s.sealGeneration, sealedAt: s.sealedAt, terms, kpis: computeMachineKpis(terms), emptyLoom: false, warnings: lines ? lineSumWarning(lines, terms) : [], breakdown, ...(lines ? { lines } : {}) });
+      const lines = opts.byLine ? storedLineRows(linesBy.get(s.id) ?? [], terms) : undefined;
+      rows.push({ ...base, live: false, sealState: "SEALED", sealGeneration: s.sealGeneration, sealedAt: s.sealedAt, terms, kpis: computeMachineKpis(terms), emptyLoom: false, warnings: lines ? lineSumWarning(lines, terms) : [], breakdown: breakdownBy.get(s.id) ?? [], ...(lines ? { lines } : {}) });
       continue;
     }
-    if (p.sealState === "SEALED") continue;
+    const t = liveTerms.get(`${loom.id}|${shift.id}`);
+    if (!t) continue;
     live += 1;
-    const { breakdown, warnings, emptyLoom, runCount: _r, lines: liveLines, ...terms } = await computeShiftTerms(prisma, loom.id, shift.id, { now });
+    const { breakdown, warnings, emptyLoom, runCount: _r, lines: liveLines, ...terms } = t;
     const lines = opts.byLine ? lineRows(liveLines, terms) : undefined;
     rows.push({ ...base, live: true, sealState: "OPEN", sealGeneration: s?.sealGeneration ?? 0, sealedAt: s?.sealedAt ?? null, terms, kpis: computeMachineKpis(terms), emptyLoom, warnings, breakdown: opts.includeBreakdown ? breakdown : [], ...(lines ? { lines } : {}) });
   }
-  return { rows, meta: { total, truncated: total > SHIFT_STAT_LIST_TAKE, live, sealed } };
+  return { rows, meta: { total: rows.length, truncated: false, live, sealed } };
+}
+
+/** Sayfa boyu varsayılanı ve tavanı — liste sayfalanır, toplam/özet sayfalanmaz. */
+export const SHIFT_STAT_PAGE_SIZE = 500;
+export const SHIFT_STAT_PAGE_MAX = 5000;
+
+export interface ShiftPageParams { cursor?: string; limit?: number }
+export interface ShiftPageMeta { nextCursor: string | null; pageSize: number }
+
+/** Satır anahtarı → opak imleç (sıra: vardiya başlangıcı, tezgah kodu — toplayıcının sırası). */
+const encodeCursor = (r: { machineId: string; shiftInstanceId: string }): string => Buffer.from(`${r.shiftInstanceId}|${r.machineId}`, "utf8").toString("base64url");
+
+/**
+ * Tam kümeyi sayfalar: `cursor` = önceki sayfanın son satırı (dışlanır). Tanınmayan imleç 400 (fail-closed —
+ * aralık/süzgeç değişince eski imleç geçersizdir, sessizce baştan başlamaz). `truncated` = sonraki sayfa VAR.
+ */
+export function pageShiftRows<R extends { machineId: string; shiftInstanceId: string }>(rows: R[], q: ShiftPageParams): { page: R[]; nextCursor: string | null; pageSize: number } {
+  const pageSize = Math.min(Math.max(q.limit ?? SHIFT_STAT_PAGE_SIZE, 1), SHIFT_STAT_PAGE_MAX);
+  let start = 0;
+  if (q.cursor) {
+    const at = rows.findIndex((r) => encodeCursor(r) === q.cursor);
+    if (at < 0) throw AppError.badRequest("Sayfa imleci geçersiz — aralık ya da süzgeç değişti, listeyi baştan yükleyin", { code: "INVALID_CURSOR" });
+    start = at + 1;
+  }
+  const page = rows.slice(start, start + pageSize);
+  const last = page[page.length - 1];
+  const nextCursor = start + pageSize < rows.length && last ? encodeCursor(last) : null;
+  return { page, nextCursor, pageSize };
 }
 
 /** M1 — karne listesi ucu (kırılımsız; `statId` DÖNER — panel mühür eylemleri onunla, `null` = satır henüz yazılmadı; `byLine` hat satırlarını ekler). */
-export async function listShiftStats(p: ShiftStatListParams & { byLine?: boolean }, now = new Date()): Promise<ApiResponse<Array<ShiftStatRow & Pick<ShiftStatRowExtra, "statId" | "lines">>> & { meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
-  const { byLine, ...params } = p;
+export async function listShiftStats(p: ShiftStatListParams & ShiftPageParams & { byLine?: boolean }, now = new Date()): Promise<ApiResponse<Array<ShiftStatRow & Pick<ShiftStatRowExtra, "statId" | "lines">>> & { meta: ShiftStatCollectMeta & ShiftPageMeta }> {
+  const { byLine, cursor, limit, ...params } = p;
   const { rows, meta } = await collectShiftStatRows(params, { now, byLine });
-  return { success: true, data: rows.map(({ breakdown: _b, ...row }) => row), meta };
+  const { page, nextCursor, pageSize } = pageShiftRows(rows, { cursor, limit });
+  return { success: true, data: page.map(({ breakdown: _b, ...row }) => row), meta: { ...meta, truncated: nextCursor !== null, nextCursor, pageSize } };
 }

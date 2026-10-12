@@ -41,7 +41,7 @@ function sourceBreakdownNote(k: SourceBreakdownTable | undefined, unit: string):
 function horizonNotes(meta: LoomReportMeta | undefined): string[] {
   if (!meta) return [];
   const n = [`Ölçüm ufku: ${meta.ufuk} sonrası ölçülüdür` + (meta.ufukOncesiSatir > 0 ? ` · ufuk öncesi ${meta.ufukOncesiSatir} satır (eksik olabilir)` : "")];
-  if (meta.truncated) n.push(`Liste ${meta.total} satırdan kırpıldı — aralığı daraltın.`);
+  if (meta.truncated) n.push(`Liste ${meta.total} satırın yalnız yüklenen sayfalarını içerir; toplamlar tam kümeden.`);
   n.push(`Anlık ${meta.live} · mühürlü ${meta.sealed} satır. Mühürsüz satır anlık hesaplanır, mühürlü satır resmî rakamdır.`);
   return n;
 }

@@ -156,9 +156,10 @@ export async function assertSlotFreeTx(tx: Pick<Client, "warpBeam">, machineId: 
   if (busy) throw AppError.conflict(`${machineCode} makinesinin ${position}. yuvasında ${busy.beamNo} bağlı — önce onu sökün.`, { code: "WARP_SLOT_BUSY", busyBeamNo: busy.beamNo });
 }
 
-/** Koşum penceresine düşen leventler — TEK KAYNAK SQL; tezgah raporları yalnız bunu çağırır (AST tripwire). */
-export const BEAMS_MOUNTED_DURING_SQL = `
-  SELECT m."beamId", b."beamNo", m."mountPosition", COALESCE(m."setupStartedAt", m."createdAt") AS "mountedAt", d."createdAt" AS "dismountedAt"
+/** Koşum penceresi SQL'inin tek gövdesi; makine yüklemi tekil (`= $1`) ya da toplu (`= ANY($1)`) — iki uç aynı metinden doğar. */
+function beamsMountedDuringSql(machinePredicate: string, extraSelect: string): string {
+  return `
+  SELECT ${extraSelect}m."beamId", b."beamNo", m."mountPosition", COALESCE(m."setupStartedAt", m."createdAt") AS "mountedAt", d."createdAt" AS "dismountedAt"
   FROM warp_beam_events m
   JOIN warp_beams b ON b.id = m."beamId"
   LEFT JOIN LATERAL (
@@ -168,11 +169,17 @@ export const BEAMS_MOUNTED_DURING_SQL = `
       AND NOT EXISTS (SELECT 1 FROM warp_beam_events r WHERE r."reversesEventId" = x.id)
     ORDER BY x."createdAt" ASC LIMIT 1
   ) d ON true
-  WHERE m.kind = 'MOUNTED' AND m."machineId" = $1::uuid
+  WHERE m.kind = 'MOUNTED' AND ${machinePredicate}
     AND NOT EXISTS (SELECT 1 FROM warp_beam_events r WHERE r."reversesEventId" = m.id)
     AND COALESCE(m."setupStartedAt", m."createdAt") < $3::timestamptz
     AND COALESCE(d."createdAt", now()) > $2::timestamptz
   ORDER BY "mountedAt"`;
+}
+
+/** Koşum penceresine düşen leventler — TEK KAYNAK SQL; tezgah raporları yalnız bunu çağırır (AST tripwire). */
+export const BEAMS_MOUNTED_DURING_SQL = beamsMountedDuringSql(`m."machineId" = $1::uuid`, "");
+/** Aynı SQL, makine kümesi için tek sorgu (rapor: tezgah başına sorgu yerine). */
+export const BEAMS_MOUNTED_DURING_MANY_SQL = beamsMountedDuringSql(`m."machineId" = ANY($1::uuid[])`, `m."machineId", `);
 
 export interface BeamMountedDuringRow {
   beamId: string;
@@ -185,6 +192,15 @@ export interface BeamMountedDuringRow {
 /** `[from, to)` penceresinde makineye bağlı olan leventler — pencere `setupStartedAt ?? createdAt` ∩ koşum. */
 export async function beamsMountedDuring(client: { $queryRawUnsafe: Client["$queryRawUnsafe"] }, machineId: string, from: Date, to: Date): Promise<BeamMountedDuringRow[]> {
   return client.$queryRawUnsafe<BeamMountedDuringRow[]>(BEAMS_MOUNTED_DURING_SQL, machineId, from, to);
+}
+
+/** `beamsMountedDuring`in makine kümesi hâli — tek sorgu, makine başına satırlar (pencere tanımı aynı SQL gövdesinden). */
+export async function beamsMountedDuringMany(client: { $queryRawUnsafe: Client["$queryRawUnsafe"] }, machineIds: string[], from: Date, to: Date): Promise<Map<string, BeamMountedDuringRow[]>> {
+  const out = new Map<string, BeamMountedDuringRow[]>(machineIds.map((id) => [id, []]));
+  if (machineIds.length === 0) return out;
+  const rows = await client.$queryRawUnsafe<Array<BeamMountedDuringRow & { machineId: string }>>(BEAMS_MOUNTED_DURING_MANY_SQL, machineIds, from, to);
+  for (const { machineId, ...r } of rows) out.get(machineId)?.push(r);
+  return out;
 }
 
 /** Tartıdan metre (#13/#14): (brüt − dara) ÷ (tel × denye ÷ 9.000.000). Dara yoksa null — metre ESTIMATED'a düşer. */

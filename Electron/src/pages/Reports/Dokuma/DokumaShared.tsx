@@ -8,6 +8,7 @@
 // =============================================================================
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { ReportKey } from "@/lib/report-catalog";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { rangeDayParams } from "../_lib/report-date";
@@ -42,7 +43,7 @@ export function HorizonNote({ meta }: { meta: LoomReportMeta | undefined }) {
     <p className="text-xs text-muted-foreground">
       Ölçüm ufku: <span className="font-mono">{meta.ufuk}</span> sonrası ölçülüdür
       {meta.ufukOncesiSatir > 0 ? ` · ufuk öncesi ${meta.ufukOncesiSatir} satır (eksik olabilir)` : ""}
-      {meta.truncated ? ` · liste ${meta.total} satırdan kırpıldı — aralığı daraltın` : ""}
+      {meta.truncated ? ` · toplamlar ${meta.total} satırın tamamından; liste sayfalı` : ""}
       {` · anlık ${meta.live} · mühürlü ${meta.sealed}`}
     </p>
   );
@@ -81,5 +82,16 @@ export function SealBadge({ sealState, live }: { sealState: "OPEN" | "SEALED"; l
     <Badge variant="secondary">Mühürlü</Badge>
   ) : (
     <Badge variant="outline">{live ? "Anlık" : "Açık"}</Badge>
+  );
+}
+
+/** Sayfalı liste: toplamlar tam kümeden gelir, satırlar sayfa sayfa yüklenir. */
+export function LoadMoreRows({ loaded, total, hasMore, loading, onMore }: { loaded: number; total: number | undefined; hasMore: boolean; loading: boolean; onMore: () => void }) {
+  if (!hasMore) return null;
+  return (
+    <div className="flex items-center justify-center gap-3 py-2 text-xs text-muted-foreground">
+      <span>{loaded} / {total ?? "?"} satır yüklendi</span>
+      <Button size="sm" variant="outline" disabled={loading} onClick={onMore}>{loading ? "Yükleniyor…" : "Daha fazla yükle"}</Button>
+    </div>
   );
 }

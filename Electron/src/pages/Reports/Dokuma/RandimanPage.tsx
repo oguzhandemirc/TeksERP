@@ -3,7 +3,7 @@
 // =============================================================================
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DetailTable, MetricCard, ReportExportBar, ReportDateFilter, ReportFilterNotes, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
@@ -13,9 +13,9 @@ import { LotInput } from "../_components/LotInput";
 import { useBeamLot } from "../_hooks/useBeamLot";
 import { beamLotNotes } from "../_hooks/reportAxisFilters";
 import { beamOptionsFrom, machineOptionsFrom, optionLabel, pickReportData } from "./dokumaFilters";
-import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec, useFactoryRange } from "./DokumaShared";
+import { HorizonNote, LoadMoreRows, SealBadge, SourceBreakdownStrip, fmtSec, useFactoryRange } from "./DokumaShared";
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
-import { dokumaReportsApi, type EfficiencyRow } from "./service";
+import { DOKUMA_PAGE_LIMIT, dokumaReportsApi, mergeEfficiencyPages, type EfficiencyRow, type RangeParams } from "./service";
 
 const columns: ColumnDef<EfficiencyRow>[] = [
   { accessorKey: "machine.code", header: "Tezgah", cell: ({ row }) => `${row.original.machine.code} · ${row.original.machine.name}` },
@@ -32,6 +32,14 @@ const columns: ColumnDef<EfficiencyRow>[] = [
   { accessorKey: "warnings", header: "Uyarı", cell: ({ row }) => (row.original.warnings.length ? `${row.original.warnings.length}` : "") },
 ];
 
+/** Satır listesi SUNUCUDA sayfalı (toplamlar tam kümeden); sonraki sayfa "Daha fazla" ile. */
+const pagedEfficiencyQuery = (p: RangeParams) => ({
+  initialPageParam: undefined as string | undefined,
+  queryFn: ({ pageParam }: { pageParam: string | undefined }) => dokumaReportsApi.efficiency({ ...p, limit: DOKUMA_PAGE_LIMIT, ...(pageParam ? { cursor: pageParam } : {}) }),
+  getNextPageParam: (last: Awaited<ReturnType<typeof dokumaReportsApi.efficiency>>) => last.data?.meta.nextCursor ?? undefined,
+  staleTime: 30_000,
+});
+
 export function RandimanPage() {
   const range = useFactoryRange("dokuma/randiman");
   const [sp, setSp] = useSearchParams();
@@ -39,28 +47,29 @@ export function RandimanPage() {
   // PENCERE sorgusu: süzgeçsiz. Seçenek listesi HER ZAMAN buradan doğar —
   // süzgeçli yanıttan doğsaydı seçim sonrası liste tek öğeye daralırdı.
   const beamLot = useBeamLot();
-  const pencere = useQuery({
+  const pencereQ = useInfiniteQuery({
     queryKey: ["reports", "dokuma", "randiman", range.from, range.to],
-    queryFn: () => dokumaReportsApi.efficiency({ from: range.from, to: range.to }),
+    ...pagedEfficiencyQuery({ from: range.from, to: range.to }),
     enabled: range.ready,
-    staleTime: 30_000,
   });
   // TEK süzgeçli sorgu: tezgah · levent · lot aynı istekte birleşir (kesişim).
-  const suzgecli = useQuery({
+  const suzgecliQ = useInfiniteQuery({
     queryKey: ["reports", "dokuma", "randiman", range.from, range.to, machineId, beamLot.params],
-    queryFn: () => dokumaReportsApi.efficiency({ from: range.from, to: range.to, machineId, ...beamLot.params }),
+    ...pagedEfficiencyQuery({ from: range.from, to: range.to, machineId, ...beamLot.params }),
     enabled: range.ready && (machineId !== "" || beamLot.any),
-    staleTime: 30_000,
   });
+  const pencereData = useMemo(() => mergeEfficiencyPages(pencereQ.data?.pages), [pencereQ.data]);
+  const suzgecliData = useMemo(() => mergeEfficiencyPages(suzgecliQ.data?.pages), [suzgecliQ.data]);
   const suzgecVar = machineId !== "" || beamLot.any;
-  const isLoading = pencere.isLoading || (suzgecVar && suzgecli.isLoading);
-  const data = pickReportData({ windowData: pencere.data, filteredData: suzgecli.data, filterId: suzgecVar ? "1" : "" });
+  const aktif = suzgecVar ? suzgecliQ : pencereQ;
+  const isLoading = pencereQ.isLoading || (suzgecVar && suzgecliQ.isLoading);
+  const data = pickReportData({ windowData: pencereData, filteredData: suzgecliData, filterId: suzgecVar ? "1" : "" });
   const rapor = data?.data;
-  const machineOptions = useMemo(() => machineOptionsFrom(pencere.data?.data.satirlar), [pencere.data]);
+  const machineOptions = useMemo(() => machineOptionsFrom(pencereData?.data.satirlar), [pencereData]);
   const machineLabel = optionLabel(machineOptions, machineId);
   // Levent seçenekleri de SÜZGEÇSİZ yanıttan: süzgeçli yanıt da tam liste döner
   // ama pencere yanıtı her zaman var, tek kaynak karışıklığı olmasın.
-  const beamOptions = useMemo(() => beamOptionsFrom(pencere.data?.data.meta.leventler), [pencere.data]);
+  const beamOptions = useMemo(() => beamOptionsFrom(pencereData?.data.meta.leventler), [pencereData]);
   const suzgecNotlari = useMemo(
     () => beamLotNotes({ beamLabel: optionLabel(beamOptions, beamLot.beamId), lotNo: beamLot.lotNo, suzgec: data?.suzgec }),
     [beamOptions, beamLot.beamId, beamLot.lotNo, data],
@@ -112,6 +121,7 @@ export function RandimanPage() {
       </div>
       <SourceBreakdownStrip kirilim={rapor?.kaynakKirilimi} />
       <DetailTable<EfficiencyRow> title="Tezgah × vardiya" data={rapor?.satirlar ?? []} columns={columns} isLoading={isLoading} />
+      <LoadMoreRows loaded={rapor?.satirlar.length ?? 0} total={rapor?.meta.total} hasMore={!!aktif.hasNextPage} loading={aktif.isFetchingNextPage} onMore={() => void aktif.fetchNextPage()} />
       <HorizonNote meta={rapor?.meta} />
     </ReportPageLayout>
   );

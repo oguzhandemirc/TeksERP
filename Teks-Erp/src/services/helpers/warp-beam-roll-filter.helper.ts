@@ -10,7 +10,7 @@
 // (liste semantiği her eksende aynı — 1e hükmü 2026-09-15; bayat bağlantıdaki müşteri ve levent aynı cevabı alır).
 // =============================================================================
 import { Prisma } from "@prisma/client";
-import { beamsMountedDuring, type BeamMountedDuringRow } from "./warp-beam-mount.helper";
+import { beamsMountedDuringMany, type BeamMountedDuringRow } from "./warp-beam-mount.helper";
 
 type Client = Prisma.TransactionClient;
 
@@ -60,10 +60,8 @@ export type MountWindows = Map<string, BeamMountedDuringRow[]>;
 export async function mountWindowsForBeams(client: { $queryRawUnsafe: Client["$queryRawUnsafe"] }, f: BeamLotFilter, machineIds: string[], window: { from: Date; to: Date }): Promise<MountWindows> {
   const out: MountWindows = new Map();
   const wanted = new Set(f.beamIds);
-  for (const machineId of machineIds) {
-    const rows = await beamsMountedDuring(client, machineId, window.from, window.to);
-    out.set(machineId, rows.filter((r) => wanted.has(r.beamId)));
-  }
+  const byMachine = await beamsMountedDuringMany(client, machineIds, window.from, window.to);
+  for (const machineId of machineIds) out.set(machineId, (byMachine.get(machineId) ?? []).filter((r) => wanted.has(r.beamId)));
   return out;
 }
 
@@ -79,8 +77,7 @@ export const BEAM_OPTIONS_MAX = 200;
 /** R5b-b2: pencerede verilen tezgahlara bağlı geçen leventler (panel seçicisi kaynağı; süzgeçten BAĞIMSIZ). En çok 200, levent no sıralı. */
 export async function beamsMountedOnMachinesDuring(client: { $queryRawUnsafe: Client["$queryRawUnsafe"] }, machineIds: string[], from: Date, to: Date): Promise<BeamOption[]> {
   const seen = new Map<string, string>();
-  for (const machineId of machineIds) {
-    for (const r of await beamsMountedDuring(client, machineId, from, to)) seen.set(r.beamId, r.beamNo);
-  }
+  const byMachine = await beamsMountedDuringMany(client, machineIds, from, to);
+  for (const machineId of machineIds) for (const r of byMachine.get(machineId) ?? []) seen.set(r.beamId, r.beamNo);
   return [...seen.entries()].map(([id, leventNo]) => ({ id, leventNo })).sort((a, b) => a.leventNo.localeCompare(b.leventNo, "tr")).slice(0, BEAM_OPTIONS_MAX);
 }

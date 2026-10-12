@@ -52,7 +52,7 @@ function statik(): void {
   console.log("── §0 Statik ──");
   const helper = readFileSync(path.join(ROOT, "src/services/helpers/warp-beam-roll-filter.helper.ts"), "utf8");
   check("§0a top bağı yalnız AKTİF CONSUMED satırından (ters bağı olan satır sayılmaz)", /e\.kind = 'CONSUMED' AND e\."rollId" IS NOT NULL/.test(helper) && /NOT EXISTS \(SELECT 1 FROM warp_beam_events x WHERE x\."reversesEventId" = e\.id\)/.test(helper));
-  check("§0b tezgah bağı DEFTERDEN (`beamsMountedDuring`), durum kolonundan değil", /beamsMountedDuring\(client, machineId, window\.from, window\.to\)/.test(helper) && !/currentMachineId|mountedBeamsOnMachineTx/.test(helper));
+  check("§0b tezgah bağı DEFTERDEN (`beamsMountedDuringMany` — aynı SQL gövdesi, tek sorgu), durum kolonundan değil", /beamsMountedDuringMany\(client, machineIds, window\.from, window\.to\)/.test(helper) && !/currentMachineId|mountedBeamsOnMachineTx/.test(helper));
   const rotalar = readFileSync(path.join(ROOT, "src/routes/reports/dokuma.report.routes.ts"), "utf8") + readFileSync(path.join(ROOT, "src/routes/reports/quality.routes.ts"), "utf8");
   check("§0c rotalar prisma import ETMEZ (süzgeç çözümü serviste)", !/from "\.\.\/\.\.\/lib\/prisma"/.test(rotalar));
   const dokuma = readFileSync(path.join(ROOT, "src/services/reports/dokuma.report.service.ts"), "utf8");

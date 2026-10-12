@@ -2,14 +2,14 @@
 // KARNE LİSTESİ VE MÜHÜR — vardiya × tezgah; anlık/mühürlü; düzelt · mühürle · mühür aç
 // =============================================================================
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
-import { WarningsBlock, useFactoryRange } from "./DokumaShared";
+import { LoadMoreRows, WarningsBlock, useFactoryRange } from "./DokumaShared";
 import { buildKarneExport } from "./dokumaExport";
 import { KarneDialogs } from "./KarneDialogHost";
 import { buildKarneColumns } from "./KarneTable";
-import { dokumaReportsApi, type SealLedgerRow, type ShiftStatRow } from "./service";
+import { DOKUMA_PAGE_LIMIT, dokumaReportsApi, mergeShiftStatPages, type SealLedgerRow, type ShiftStatRow } from "./service";
 import { factoryLocaleString } from "@/lib/factory-time";
 
 export type KarneDialogState =
@@ -47,12 +47,17 @@ function LedgerDialog({ target, onClose }: { target: ShiftStatRow; onClose: () =
 export function KarnePage() {
   const range = useFactoryRange("dokuma/karne");
   const [dialog, setDialog] = useState<KarneDialogState>(null);
-  const { data, isLoading } = useQuery({
+  // Liste SUNUCUDA sayfalı; sayılar (`meta.total/live/sealed`) tam kümeden, ilk sayfada.
+  const q = useInfiniteQuery({
     queryKey: ["reports", "dokuma", "karne", range.from, range.to],
-    queryFn: () => dokumaReportsApi.shiftStats({ from: range.from, to: range.to }),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => dokumaReportsApi.shiftStats({ from: range.from, to: range.to, limit: DOKUMA_PAGE_LIMIT, ...(pageParam ? { cursor: pageParam } : {}) }),
+    getNextPageParam: (last) => last.meta?.nextCursor ?? undefined,
     enabled: range.ready,
     staleTime: 15_000,
   });
+  const { isLoading } = q;
+  const data = useMemo(() => mergeShiftStatPages(q.data?.pages), [q.data]);
   const rows = useMemo(() => data?.data ?? [], [data]);
   const columns = useMemo(
     () => buildKarneColumns({
@@ -89,6 +94,7 @@ export function KarnePage() {
       </div>
       <WarningsBlock warnings={allWarnings} />
       <DetailTable<ShiftStatRow> title={`Vardiya × tezgah${data ? ` (${data.meta.total}; anlık ${data.meta.live}, mühürlü ${data.meta.sealed})` : ""}`} data={rows} columns={columns} isLoading={isLoading} />
+      <LoadMoreRows loaded={rows.length} total={listMeta?.total} hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} onMore={() => void q.fetchNextPage()} />
       {dialog?.kind === "ledger" && <LedgerDialog target={dialog.target} onClose={() => setDialog(null)} />}
       {dialog && dialog.kind !== "ledger" && <KarneDialogs dialog={dialog} onClose={() => setDialog(null)} />}
     </ReportPageLayout>
