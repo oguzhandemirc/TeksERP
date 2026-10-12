@@ -91,21 +91,21 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
   const { stopKey, started, source } = input;
   const warnings = started.warning ? [started.warning] : [];
 
-  // ① Replay — yaratmadan ÖNCE: aynı anahtar aynı satırı döner; geri alınmış duruş yeniden açılmaz.
-  const existing = await prisma.machineStopEvent.findFirst({ where: { machineId: input.machineId, stopKey }, select: MACHINE_STOP_SELECT });
-  if (existing) {
-    if (existing.revokedAt) {
-      throw AppError.conflict("Bu duruş daha önce girilip geri alınmış — yeni duruş için formu yeniden açın.", {
-        code: "STOP_REVOKED", stopId: existing.id, revokedAt: existing.revokedAt,
-      });
-    }
-    assertReplayPayloadMatches(input.fingerprint(existing), "Bu form daha önce başka bir duruş için kaydedilmiş — yeni duruş için formu yeniden açın.", { stopId: existing.id });
-    return { success: true, data: existing, message: STOP_REPLAY_MESSAGE };
-  }
-
   let created: MachineStopDto;
   try {
-    created = await prisma.$transaction(async (tx) => {
+    const out = await prisma.$transaction(async (tx) => {
+      // ① Replay — yaratmadan ÖNCE ve AYNI bağlantıda (ayrı havuz alımı istemesin): aynı anahtar
+      // aynı satırı döner; geri alınmış duruş yeniden açılmaz.
+      const existing = await tx.machineStopEvent.findFirst({ where: { machineId: input.machineId, stopKey }, select: MACHINE_STOP_SELECT });
+      if (existing) {
+        if (existing.revokedAt) {
+          throw AppError.conflict("Bu duruş daha önce girilip geri alınmış — yeni duruş için formu yeniden açın.", {
+            code: "STOP_REVOKED", stopId: existing.id, revokedAt: existing.revokedAt,
+          });
+        }
+        assertReplayPayloadMatches(input.fingerprint(existing), "Bu form daha önce başka bir duruş için kaydedilmiş — yeni duruş için formu yeniden açın.", { stopId: existing.id });
+        return { replay: true as const, row: existing };
+      }
       const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true } });
       if (!machine) throw AppError.notFound("Makine bulunamadı", { machineId: input.machineId });
       if (!machine.isActive) throw AppError.badRequest("Pasif makineye duruş girilemez.", { code: "MACHINE_INACTIVE" });
@@ -116,7 +116,7 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
       if (opts.rejectOverlap) await assertNoStopOverlapTx(tx, machine.id, started.value);
       const runId = await resolveRunId(tx, machine.id, started.value);
       const escalation = await freezeStopEscalation(tx, preset, null);
-      return tx.machineStopEvent.create({
+      const row = await tx.machineStopEvent.create({
         data: {
           machineId: machine.id,
           runId,
@@ -138,7 +138,10 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
         },
         select: MACHINE_STOP_SELECT,
       });
+      return { replay: false as const, row };
     });
+    if (out.replay) return { success: true, data: out.row, message: STOP_REPLAY_MESSAGE };
+    created = out.row;
   } catch (e) {
     if (p2002Mentions(e, /machine_stops_one_open_per_machine_uq/)) {
       throw AppError.conflict("Bu makinede zaten açık bir duruş var — önce onu kapatın.", {
