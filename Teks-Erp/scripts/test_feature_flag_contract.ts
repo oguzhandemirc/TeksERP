@@ -578,6 +578,11 @@ async function main() {
       file: "Teks-Erp/src/routes/admin.routes.ts",
       needle: "SETTING_KEYS.BACKUP_OFFSITE_REMOTE",
     },
+    AUDIT_ARCHIVE_RETENTION_YEARS: {
+      why: "Bakım ayarı (yıl, 0 = budama yok) — davranış bayrağı değil; ham anahtar PUT /api/admin/settings/:key ile yazılır, tek okuyucusu gece bakım işi",
+      file: "Teks-Erp/src/jobs/maintenance.job.ts",
+      needle: "readAuditArchiveRetentionYears",
+    },
     BACKUP_OFFSITE_DIR: {
       why: "Panel: Sistem → Yedekler → Offsite Yedek kartı (PATCH /api/admin/backups/offsite)",
       file: "Teks-Erp/src/routes/admin.routes.ts",

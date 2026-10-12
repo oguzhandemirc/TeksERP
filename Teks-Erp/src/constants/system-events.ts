@@ -44,6 +44,8 @@ const RUNTIME_EVENTS = {
   UNCAUGHT_EXCEPTION: "UNCAUGHT_EXCEPTION",
   /** 6 ayda bir koşan arşivleme işi — "DB'de yok" normaldir. */
   AUDIT_ARCHIVE: "AUDIT_ARCHIVE",
+  /** Gece bakımı: saklama süresi dolan audit ARŞİVİ satırları budandı (sayı + kesim yükte). */
+  AUDIT_ARCHIVE_PURGE: "AUDIT_ARCHIVE_PURGE",
   /** Bir kullanıcının hızlı PIN'i / kart kodu OKUNDU — güvenlik olayı. */
   USER_CREDENTIAL_READ: "USER_CREDENTIAL_READ",
   PERIPHERAL_TEST: "PERIPHERAL_TEST",

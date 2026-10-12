@@ -273,6 +273,20 @@ export class AuditService {
   }
 
   /**
+   * `before`dan eski ARŞİV satırlarının budaması — tek dilim (çağıran dilimleri aylık ilerletir).
+   * Arşivi OKUMAZ (audit iş kaynağı değil): yalnız yaş yüklemli silme. Audit ayak izidir,
+   * defter değil; arşiv satırı silinince raporlanan sayı değişmez. Tamper guard'ın tek
+   * meşru kapısı burada da tx'in İLK ifadesi `SET LOCAL`.
+   */
+  static async purgeArchiveBefore(before: Date): Promise<{ deleted: number }> {
+    const res = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SET LOCAL teks.audit_purge = 'on'`;
+      return tx.systemLogArchive.deleteMany({ where: { createdAt: { lt: before } } });
+    });
+    return { deleted: res.count };
+  }
+
+  /**
    * GET /api/admin/system-logs/stats için tablo boyutu istatistikleri.
    * K4: prisma erişimi admin.routes'tan servise taşındı (katman kuralı).
    * Global pool client'la Promise.all serbest (tx değil).

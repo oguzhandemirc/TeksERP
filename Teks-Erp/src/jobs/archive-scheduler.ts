@@ -7,7 +7,9 @@
 //
 // Davranış:
 //   - Server start'tan 60sn sonra ilk kontrol (DB hazır olsun)
-//   - Sonra her CHECK_INTERVAL_MS'de bir kontrol
+//   - Sonra her CHECK_INTERVAL_MS'de bir kontrol; YALNIZ gece bakım penceresinde
+//     (fabrika saati 02:00–05:00) koşar, pencere kapanırsa partiler arasında durur
+//     ve damga yazılmaz — kalan sonraki turda (pencere içinde) ya da ertesi gece sürer
 //   - Son çalışma SystemSetting'te (`audit.lastArchiveAt`); INTERVAL_DAYS dolmadan
 //     tekrar koşmaz — server restart spam'ini engeller
 //   - Eski log varsa ARCHIVE_BATCH_SIZE'lık batch döngüsü; safety cap 200 batch
@@ -17,11 +19,12 @@ import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, hata } from "../lib/logger";
+import { isInMaintenanceWindow } from "../services/helpers/maintenance-window.helper";
 
 const SETTING_KEY = "audit.lastArchiveAt";
 const MONTHS_TO_KEEP = 6;
 const INTERVAL_DAYS = 30; // iki çalışma arasında min gün
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24sa
+const CHECK_INTERVAL_MS = 15 * 60 * 1000; // pencere 3 saat; 24 saatlik tur onu ıskalardı
 const STARTUP_DELAY_MS = 60 * 1000; // server start'tan sonra ilk kontrole kadar
 const MAX_BATCHES_PER_RUN = 200; // sonsuz döngü guard'ı
 
@@ -63,6 +66,7 @@ async function runIfDue(): Promise<void> {
       return;
     }
   }
+  if (!isInMaintenanceWindow(new Date())) return;
   running = true;
   runningSince = Date.now();
   try {
@@ -74,14 +78,17 @@ async function runIfDue(): Promise<void> {
 
     let totalArchived = 0;
     let batches = 0;
+    let finished = false;
     for (let i = 0; i < MAX_BATCHES_PER_RUN; i++) {
+      if (!isInMaintenanceWindow(new Date())) break;
       const result = await AuditService.archiveOlderThan(MONTHS_TO_KEEP);
       batches += 1;
       totalArchived += result.archived;
-      if (result.archived === 0) break;
+      if (result.archived === 0) { finished = true; break; }
     }
 
-    await setLastRun(new Date());
+    // Birikim bitmeden (pencere kapandı / parti tavanı) damga YOK: sonraki turda sürer.
+    if (finished) await setLastRun(new Date());
 
     if (totalArchived > 0) {
       bilgi("audit-archive", `${totalArchived} kayıt arşivlendi (${batches} batch, monthsToKeep=${MONTHS_TO_KEEP})`,
@@ -102,6 +109,6 @@ export function startArchiveScheduler(): void {
     void runIfDue();
     timer = setInterval(() => void runIfDue(), CHECK_INTERVAL_MS);
   }, STARTUP_DELAY_MS);
-  bilgi("audit-archive", `scheduler aktif — her ${INTERVAL_DAYS} günde bir ${MONTHS_TO_KEEP} aydan eski log'ları arşivleyecek`,
+  bilgi("audit-archive", `scheduler aktif — her ${INTERVAL_DAYS} günde bir, gece bakım penceresinde ${MONTHS_TO_KEEP} aydan eski log'ları arşivleyecek`,
   );
 }

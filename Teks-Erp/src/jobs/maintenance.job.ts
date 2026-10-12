@@ -9,6 +9,9 @@
 import prisma from "../lib/prisma";
 import { rotateRollbackBackups } from "../services/backup.service";
 import { AuditService } from "../services/audit.service";
+import { SessionRegistryService } from "../services/session-registry.service";
+import { readAuditArchiveRetentionYears } from "../services/system-setting.service";
+import { auditArchivePurgeCutoff, nextAuditPurgeSliceEnd } from "../services/helpers/audit-retention.helper";
 import { isInMaintenanceWindow } from "../services/helpers/maintenance-window.helper";
 import { factoryYmd } from "../constants/time";
 import { reportJobFailure } from "./job-failure";
@@ -16,9 +19,14 @@ import { startArchiveScheduler } from "./archive-scheduler";
 import { bilgi, hata } from "../lib/logger";
 
 const SETTING_KEY = "maintenance.lastRunDay";
+const PURGE_WATERMARK_KEY = "audit.archivePurgedThrough";
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const STARTUP_DELAY_MS = 60 * 1000;
 const WATCHDOG_MS = 3 * 60 * 60 * 1000;
+/** Ölü oturum satırı bu yaştan sonra silinir (POST /admin/sessions/purge varsayılanıyla aynı). */
+export const SESSION_PURGE_OLDER_THAN_DAYS = 90;
+/** Bir gecede en fazla bu kadar aylık dilim budanır; kalan ertesi geceye kalır. */
+const MAX_PURGE_SLICES = 200;
 
 let timer: NodeJS.Timeout | null = null;
 let running = false;
@@ -29,12 +37,14 @@ async function getLastRunDay(): Promise<string | null> {
   return typeof row?.value === "string" ? row.value : null;
 }
 
-async function setLastRunDay(day: string): Promise<void> {
-  await prisma.systemSetting.upsert({
-    where: { key: SETTING_KEY },
-    create: { key: SETTING_KEY, value: day, description: "Günlük bakım işinin son koştuğu fabrika günü" },
-    update: { value: day },
-  });
+async function writeSetting(key: string, value: string, description: string): Promise<void> {
+  await prisma.systemSetting.upsert({ where: { key }, create: { key, value, description }, update: { value } });
+}
+
+async function readPurgeWatermark(): Promise<Date | null> {
+  const row = await prisma.systemSetting.findUnique({ where: { key: PURGE_WATERMARK_KEY } });
+  const d = typeof row?.value === "string" ? new Date(row.value) : null;
+  return d && !Number.isNaN(d.getTime()) ? d : null;
 }
 
 /** Görev listesi — sıra önemsiz, her biri kendi hatasını raporlar. */
@@ -50,6 +60,37 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
         payload: { deleted: r.deleted, failed: r.failed },
       });
       return `geri dönüş yedeği: ${r.deleted.length} silindi, ${r.failed.length} silinemedi`;
+    },
+  },
+  {
+    name: "audit-archive-purge",
+    run: async () => {
+      const years = await readAuditArchiveRetentionYears();
+      const cutoff = auditArchivePurgeCutoff(years, new Date());
+      if (!cutoff) return null;
+      let deleted = 0;
+      let watermark = await readPurgeWatermark();
+      for (let i = 0; i < MAX_PURGE_SLICES && isInMaintenanceWindow(new Date()); i++) {
+        const end = nextAuditPurgeSliceEnd(watermark, cutoff);
+        if (!end) break;
+        deleted += (await AuditService.purgeArchiveBefore(end)).deleted;
+        await writeSetting(PURGE_WATERMARK_KEY, end.toISOString(), "Audit arşivi budamasının ulaştığı an");
+        watermark = end;
+      }
+      if (deleted === 0) return null;
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "AUDIT_ARCHIVE_PURGE",
+        payload: { retentionYears: years, cutoff: cutoff.toISOString(), deleted },
+      });
+      return `audit arşivi: ${deleted} satır budandı (${years} yıldan eski)`;
+    },
+  },
+  {
+    name: "session-purge",
+    run: async () => {
+      const r = await SessionRegistryService.purgeDeadSessions(SESSION_PURGE_OLDER_THAN_DAYS);
+      return r.deleted > 0 ? `oturum: ${r.deleted} ölü satır silindi` : null;
     },
   },
 ];
@@ -71,7 +112,7 @@ export async function runMaintenanceIfDue(now: Date = new Date()): Promise<boole
     const day = factoryYmd(now);
     if ((await getLastRunDay()) === day) return false;
     // Damga ÖNCE: düşen görev 15 dk'da bir yeniden denenip log'u doldurmasın.
-    await setLastRunDay(day);
+    await writeSetting(SETTING_KEY, day, "Günlük bakım işinin son koştuğu fabrika günü");
     for (const task of MAINTENANCE_TASKS) {
       try {
         const summary = await task.run();

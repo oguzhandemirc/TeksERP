@@ -265,6 +265,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   UNHANDLED_REJECTION: "Yakalanmayan hata (async)",
   UNCAUGHT_EXCEPTION: "Yakalanmayan istisna",
   AUDIT_ARCHIVE: "Log arşivlendi",
+  AUDIT_ARCHIVE_PURGE: "Saklama süresi dolan log arşivi budandı",
   // BULGU-T1-013: bir kullanıcının hızlı PIN'i / kart kodu OKUNDU. Okuyan kişi
   // hedefin kimliğine bürünebileceği için bu satır bir "yetki kullanımı" değil
   // bir GÜVENLİK OLAYIDIR; metin de öyle okunmalı.

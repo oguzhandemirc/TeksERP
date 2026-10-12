@@ -4,6 +4,10 @@
 // Runtime'da güncellenebilir konfigürasyon (key-value).
 // =============================================================================
 
+import {
+  DEFAULT_AUDIT_ARCHIVE_RETENTION_YEARS,
+  isValidAuditArchiveRetentionYears,
+} from "./helpers/audit-retention.helper";
 import { createHash } from "crypto";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -777,6 +781,9 @@ export const SETTING_KEYS = {
    *  `BACKUP_OFFSITE_DIR` env'i. Uzak hedeften BAĞIMSIZ — ikisi birlikte
    *  kullanılabilir (3-2-1 kuralı: iki ortam + bir offsite). */
   BACKUP_OFFSITE_DIR: "backup.offsiteDir",
+  /** Audit ARŞİVİNİN saklama süresi, YIL (0..50; 0 = budama yok). Default 3. Gece
+   *  bakım işi okur; bu yaştan eski `system_log_archives` satırları budanır. */
+  AUDIT_ARCHIVE_RETENTION_YEARS: "audit.archiveRetentionYears",
   /** Bu KURULUMUN kalıcı kimliği (uuid v4). İlk açılışta bir kez üretilir
    *  (`jobs/installation-identity.job.ts`) ve bir daha ASLA değişmez.
    *
@@ -6755,6 +6762,22 @@ export async function readBackupHour(
     return fromEnv;
   }
   return DEFAULT_BACKUP_HOUR;
+}
+
+/**
+ * Audit arşivi saklama süresi (yıl). Kayıt yoksa ya da geçersizse varsayılan 3;
+ * 0 açıkça yazılırsa budama yok.
+ */
+export async function readAuditArchiveRetentionYears(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUDIT_ARCHIVE_RETENTION_YEARS },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return isValidAuditArchiveRetentionYears(v) ? v : DEFAULT_AUDIT_ARCHIVE_RETENTION_YEARS;
 }
 
 /**
