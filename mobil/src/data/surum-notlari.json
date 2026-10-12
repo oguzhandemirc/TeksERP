@@ -72,7 +72,27 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Tanımlar → Üretim & Kalite altında yeni “Alarm Sorumluları” ekranı: tezgah alarmı çaldığında bildirimin kime gideceğini hol ve vardiya başına seçersiniz. Belirli bir vardiyada holün sorumlusu yerine başka birine bildirilsin diye “Nöbet değişikliği” eklenir; her kademe için “Kademe kuralı” ile holün vardiya sorumlusu, belirli bir kişi ya da belirli yetkiye sahip herkes seçilir. Sorumlu tanımlı değilse bildirim alarm yetkisi olan herkese gider. Ekran tezgah modülü açıkken görünür ve onu tezgah künyesini yönetme izni olanlar açar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Alarm sayfasında yeni “Kime bildirildi” bölümü: her kademe çaldığında bildirimin kimlere gittiği ve neden o kişiye gittiği (vardiya sorumlusu, nöbet değişikliği ya da kural) listelenir. Sorumluları sonradan değiştirmek bu listeyi değiştirmez; liste bildirimin gittiği anı gösterir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Duruşu kimin bildirdiği artık görünür: Tezgah Salonu'nda tezgahın ayrıntısında açık duruşun yanında Bildiren yazar, alarm sayfasında duruşu bildiren ve kapatan kişi yazar. Kimin girdiği bilinmeyen eski duruşlarda “bilinmiyor” yazar. Bu bilgi için sunucunun da güncellenmesi gerekir; eski sunucuda satır hiç görünmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Destek hesabı ilk kurulumda gelen ortak parolayla duruyorsa panelin üstünde kırmızı bir uyarı şeridi çıkar. Destek hesabıyla girildiyse şerit kendi parolanızı hemen belirlemenizi, yönetici olarak girildiyse satıcınızdan parolayı değiştirmesini istemenizi söyler. Şerit elle kapatılamaz; parola değişince kendiliğinden kalkar. Bunun için de sunucunun 2.15.5 sürümü gerekir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sunucudaki destek hesabı henüz mühürlenmemişse panelin üstünde kırmızı bir şerit çıkar ve sunucuda bir kez koşulacak mühürleme komutunu gösterir; komutu destek hesabının sahibi koşar, ayrıntısı kurulum belgesindedir. Mührü geçersiz bir sistem hesabı varsa şerit bunu söyler: o hesaba yetki verilmez, tanımadığınız hesabı Kullanıcılar ekranından pasife alırsınız. Şeridi yalnız destek hesabı ile kullanıcı ya da ayar yönetme izni olanlar görür; kapatılamaz, durum düzelince kendiliğinden kalkar."
         },
         {
           "kapsam": "panel",
