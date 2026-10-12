@@ -135,13 +135,85 @@ jobs:
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test
   # ===========================================================================
-  backend:
-    name: Backend (tsc + test)
+  # PARÇALI (2026-10-12): sıralı paket ~40 dk sürüyordu. Üç iş:
+  #   backend-lint  — lint + lint tavanı + iki tsc (DB'siz, parçaları beklemez)
+  #   backend-test  — bekçiler 8 parçada; HER parça kendi runner'ında kendi
+  #                   Postgres'i + migrate + seed + seed:fixtures + HTTP sunucularıyla
+  #                   koşar (ortak ayar yazan bekçiler parçalar arası karışmaz)
+  #   backend       — ÖZET, ad "Backend (tsc + test)" korunur: iki iş de başarılı ∧
+  #                   parçaların GERÇEKTE koştuğu dosyaların birleşimi = diskteki bütün
+  #                   bekçiler, kesişim boş (sessiz atlanan bekçi = kırmızı).
+  # Dağıtım + birleşim tek kaynak: `Teks-Erp/scripts/lib/parca.ts`; parça sayısı
+  # yalnız aşağıdaki matrix listesi ile `--shard …/8`de yazılı ve `test_ci_parca`
+  # ikisinin hizasını ölçer.
+  backend-lint:
+    name: Backend lint + tsc
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: Teks-Erp
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: Teks-Erp/package-lock.json
+      - run: npm ci
+      - name: Prisma generate
+        run: npx prisma generate
+      - name: Lint
+        run: set -o pipefail; npm run lint 2>&1 | tee -a /tmp/ci-backend.log
+        shell: bash
+      # Lint UYARILARI kapı değildir (eslint uyarıyla 0 döner) — tavan onları sayar
+      # ve yalnız DÜŞMESİNE izin verir; yoksa `warn` kuralları sessizce birikir.
+      - name: Lint tavanı (baseline)
+        run: set -o pipefail; node scripts/check-lint-baseline.mjs --proje=backend 2>&1 | tee -a /tmp/ci-backend.log
+        shell: bash
+        working-directory: .
+      - name: Type-check (yalnız src)
+        run: set -o pipefail; npx tsc --noEmit 2>&1 | tee -a /tmp/ci-backend.log
+        shell: bash
+      # scripts/ + prisma/ AYRI adım: kök tsconfig `include: ["src/**/*"]` ile sınırlı
+      # olduğu için 222 test dosyası uzun süre HİÇ derlenmedi → bir servisin imzası ya
+      # da bir enum değişince src yeşil kalıyor, testler de yeşil kalıyor, ama testin
+      # doğruladığı ŞEY sessizce boşa düşüyordu (2026-08-01 denetimi: 87 tip hatası).
+      # Parçalar `SKIP_TYPECHECK=1` ile koşar: koşucunun tip geçidi BURADA bir kez
+      # koşar (8 kez değil) ve özet iş bu işin yeşilini şart koşar.
+      - name: Type-check (scripts + prisma)
+        run: set -o pipefail; npm run typecheck:scripts 2>&1 | tee -a /tmp/ci-backend.log
+        shell: bash
+      # TEŞHİS: iş başarısız olursa logun sonunu PR'a yorum olarak yaz
+      # (GitHub MCP'de Actions log erişimi yok → gerçek hatayı buradan okuruz).
+      - name: Hata logunu PR'a yaz
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "## ❌ Backend CI hata logu — lint + tsc (otomatik teşhis)"
+            echo '```'
+            tail -150 /tmp/ci-backend.log || echo "(log yok)"
+            echo '```'
+          } > /tmp/ci-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/ci-comment.md --repo "${{ github.repository }}"
+        shell: bash
+
+  backend-test:
+    name: Backend test ${{ matrix.parca }}/8
     runs-on: ubuntu-latest
     # İş düzeyi izin üst düzeyin YERİNE geçer: contents:read burada da yazılı.
     permissions:
       contents: read
       pull-requests: write
+    strategy:
+      # Bir parça düşse de ötekiler sonuna kadar koşar: kırmızıların HEPSİ tek koşumda görünür.
+      fail-fast: false
+      matrix:
+        parca: [1, 2, 3, 4, 5, 6, 7, 8]
     defaults:
       run:
         working-directory: Teks-Erp
@@ -170,6 +242,9 @@ jobs:
       CI_BEFORE_SHA: ${{ github.event.before }}
       JWT_SECRET: ci-test-secret-not-for-production
       PORT: "4000"
+      # Tip geçidi `backend-lint`te koşar; koşucu atlamayı "GEÇİT ATLANDI" diye beyan eder.
+      SKIP_TYPECHECK: "1"
+      TEKSERP_PARCA_KAYIT: /tmp/parca/parca-${{ matrix.parca }}.json
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         # TAM KLON (2026-09-14): `test_harita_sonda_atfi §1b` `(bu commit)` satırının sha'sını
@@ -190,16 +265,8 @@ jobs:
       # `PG_BIN_DIR` yoksa PATH'ten okur ve HİÇBİR YERDE uyum ölçülmüyor; istemci
       # sunucudan yeniyse alınan dump o sunucuya GERİ YÜKLENEMEZ (ölçüldü
       # 2026-09-13: istemci 18.6 ↔ sunucu 16.15 → `SET transaction_timeout` PG17+).
-      # Bu satır CI'ın çiftini GÖRÜNÜR kılar; yerel 100 ↔ CI 97 farkının atfı da
-      # buradan okunacak. Çıkış kodunu etkilemez.
-      # ⚠️ `|| true` KAPIYI korur, ÖLÇÜMÜ korumaz — ilk yazımda üçüncü satır
-      # sessizce düştü (`psql: invalid URI query parameter: "schema"`; Prisma
-      # biçimindeki `?schema=public` psql'e geçmiyor) ve sunucu sürümü HİÇ
-      # basılmadı. Yeşil kaldığı için fark edilmedi. ⇒ Her satır artık
-      # başarısızlığını ADIYLA basar: üç etiket bekleniyor, üçü de görünmeli.
-      # ⚠️ VE BORUYA SOKMA: `psql … | sed … || echo` içinde `||` BORUNUN (yani
-      #    sed'in) çıkışını görür, psql'inkini DEĞİL — hata yine yutulur.
-      #    Ölçüldü: `false | sed … || echo X` hiçbir şey basmıyor. Değişkene al.
+      # ⚠️ Her satır başarısızlığını ADIYLA basar (üç etiket beklenir) ve boruya
+      #    sokulmaz: `psql … | sed … || echo` içinde `||` sed'in çıkışını görür.
       - name: PostgreSQL istemci/sunucu sürümü (ölçüm)
         run: |
           pg_dump --version || echo "ISTEMCI-DUMP: pg_dump YOK"
@@ -223,37 +290,14 @@ jobs:
       - name: Seed fixtures (test iş verisi — PATOS/MAVI/MUS-001)
         run: set -o pipefail; npm run seed:fixtures 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
-      - name: Lint
-        run: set -o pipefail; npm run lint 2>&1 | tee -a /tmp/ci-backend.log
-        shell: bash
-      # Lint UYARILARI kapı değildir (eslint uyarıyla 0 döner) — tavan onları sayar
-      # ve yalnız DÜŞMESİNE izin verir; yoksa `warn` kuralları sessizce birikir.
-      - name: Lint tavanı (baseline)
-        run: set -o pipefail; node scripts/check-lint-baseline.mjs --proje=backend 2>&1 | tee -a /tmp/ci-backend.log
-        shell: bash
-        working-directory: .
-      - name: Type-check (yalnız src)
-        run: set -o pipefail; npx tsc --noEmit 2>&1 | tee -a /tmp/ci-backend.log
-        shell: bash
-      # scripts/ + prisma/ AYRI adım: kök tsconfig `include: ["src/**/*"]` ile sınırlı
-      # olduğu için 222 test dosyası uzun süre HİÇ derlenmedi → bir servisin imzası ya
-      # da bir enum değişince src yeşil kalıyor, testler de yeşil kalıyor, ama testin
-      # doğruladığı ŞEY sessizce boşa düşüyordu (2026-08-01 denetimi: 87 tip hatası).
-      # `npm test` bunu zaten geçit olarak koşar; burada AYRI adım olmasının sebebi
-      # teşhis: kırmızı olan şeyin "tip driftı" mi "gerçek test regresyonu" mu olduğu
-      # adım adından okunsun.
-      - name: Type-check (scripts + prisma)
-        run: set -o pipefail; npm run typecheck:scripts 2>&1 | tee -a /tmp/ci-backend.log
-        shell: bash
       # HTTP AYAKLI BEKÇİLER (2026-09-06) — beş bekçi kendi portunda bir sunucu
       # bekler; yoksa o bölümleri SESSİZCE atlar. Ölçüldü: CI'da 53 kontrol hiç
-      # koşmuyordu ve içlerinde İKİ GERÇEK ARIZA saklıydı (`test_superadmin`in
-      # HTTP bölümü geri alınmış bir davranışı ölçüyordu ve kendi fixture'ıyla
-      # çelişen bir yüklem taşıyordu — iki gün görülmedi).
+      # koşmuyordu ve içlerinde İKİ GERÇEK ARIZA saklıydı.
       #
       # ⚠️ YALNIZ CI'DA. Yerel koşucuya süreç yönetimi SOKULMAZ: kök CLAUDE.md
       # "ikinci Node süreci yasak" ve `pkill -f tsx` yasağı orada geçerli. Burada
       # ortam zaten sıfırdan kuruluyor ve job bitince kendi kendine gidiyor.
+      # Her parça KENDİ sunucularını açar: HTTP bekçisi hangi parçaya düşerse düşsün ölçer.
       #
       # ⚠️ Portlar bekçilerin VARSAYILANLARIDIR (`TEST_API_URL` verilmezse bunlar
       # kullanılır): finance 4100 · module_flag_off 4101 · superadmin 4104 ·
@@ -280,17 +324,25 @@ jobs:
           done
 
       # ⚠️ DIŞLAMA YOK — ve bu bir ÖLÇÜM sonucudur, tercih değil.
-      # `TEKSERP_HARIC: test_hook_config` buradaydı: kanca yolu göreliydi,
-      # düzeltmesi kullanıcının denetim yüzeyindeydi (`.claude/`) ve duran kırmızı
-      # iş-düzeyi sinyali doyuruyordu (36/36 `failure`). Kanca `a8ce49ca`de
-      # mutlaklaştı ⇒ kalem KAPANDI ⇒ bekçi ana pakete DÖNDÜ (temiz `git archive
-      # HEAD` export'unda, `CLAUDE_PROJECT_DIR` ve `DATABASE_URL` unset: 9/0).
-      # ⚠️ *Bir muafiyet, gerekçesi bittiği gün kaldırılmazsa KALICI olur* —
-      #   dışlanan bekçi yeşil paketin İÇİNDE DEĞİLDİR ve kimse fark etmez.
+      # `TEKSERP_HARIC: test_hook_config` buradaydı; kalem `a8ce49ca`de kapandı ve
+      # bekçi ana pakete DÖNDÜ. ⚠️ *Bir muafiyet, gerekçesi bittiği gün kaldırılmazsa
+      # KALICI olur.* Dışlama özet işin birleşim denetimini de KIRMIZIYA çevirir.
       # ⭐ Yeniden dışlama gerekirse reçete: `scripts/run-all-tests.ts` içinde
       #   `TEKSERP_HARIC` başlığı (giriş ölçütü + ayrı job'ın tuzağı).
       - name: Test suite (scripts/test_*.ts runner)
-        run: set -o pipefail; npm test 2>&1 | tee -a /tmp/ci-backend.log
+        run: set -o pipefail; npm test -- --shard ${{ matrix.parca }}/8 2>&1 | tee -a /tmp/ci-backend.log
+        shell: bash
+
+      # Parça kaydı: birleşim denetimi GERÇEKTE koşan dosyaları buradan okur.
+      # Kayıt yoksa (koşucu sona ulaşmadı) yükleme sessiz geçer, eksiği özet iş yakalar.
+      - name: Parça kaydını yükle
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: parca-${{ matrix.parca }}
+          path: /tmp/parca/parca-${{ matrix.parca }}.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       # Kendi başlattığımız PID'ler — `pkill` YOK (kök CLAUDE.md yasağı).
       - name: Sunucuları durdur
@@ -300,7 +352,7 @@ jobs:
             while read -r pid; do kill "$pid" 2>/dev/null || true; done < /tmp/ci-srv-pids.txt
           fi
         shell: bash
-      # TEŞHİS: backend job'ı başarısız olursa logun sonunu PR'a yorum olarak yaz
+      # TEŞHİS: parça başarısız olursa logun sonunu PR'a yorum olarak yaz
       # (GitHub MCP'de Actions log erişimi yok → gerçek hatayı buradan okuruz).
       - name: Hata logunu PR'a yaz
         if: failure() && github.event_name == 'pull_request'
@@ -308,12 +360,54 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           {
-            echo "## ❌ Backend CI hata logu (otomatik teşhis)"
+            echo "## ❌ Backend CI hata logu — parça ${{ matrix.parca }}/8 (otomatik teşhis)"
             echo '```'
             tail -150 /tmp/ci-backend.log || echo "(log yok)"
             echo '```'
           } > /tmp/ci-comment.md
           gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/ci-comment.md --repo "${{ github.repository }}"
+        shell: bash
+
+  backend:
+    name: Backend (tsc + test)
+    runs-on: ubuntu-latest
+    needs: [backend-lint, backend-test]
+    # `always()`: bir parça düşse de birleşim denetimi koşar ve kırmızının ADRESİNİ basar.
+    if: always()
+    defaults:
+      run:
+        working-directory: Teks-Erp
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: Teks-Erp/package-lock.json
+      - run: npm ci
+      - name: Parça kayıtlarını indir
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: parca-*
+          path: /tmp/parca
+          merge-multiple: true
+      - name: Parça birleşimi (her bekçi TAM bir parçada koştu mu)
+        run: npx tsx scripts/run-all-tests.ts --birlesim /tmp/parca
+      # Ölçülen sürelerle tazelenmiş süre tablosu: dengesi bozulunca bu dosya
+      # `Teks-Erp/scripts/ci-parca-sureleri.json` üstüne konur.
+      - name: Tazelenmiş süre tablosunu yükle
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ci-parca-sureleri
+          path: /tmp/parca/ci-parca-sureleri.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Lint + tsc ve bütün parçalar başarılı mı
+        if: always()
+        run: |
+          echo "backend-lint: ${{ needs.backend-lint.result }} · backend-test: ${{ needs.backend-test.result }}"
+          [ "${{ needs.backend-lint.result }}" = "success" ] && [ "${{ needs.backend-test.result }}" = "success" ]
         shell: bash
 
   # ===========================================================================

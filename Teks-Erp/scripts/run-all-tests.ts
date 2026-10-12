@@ -17,8 +17,9 @@
 import "dotenv/config";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { birlesimDenetimi, parcaArgumaniCoz, parcalariKur, parcaYukleri, sureTablosuOku, type ParcaKaydi } from "./lib/parca";
 import { agacAdi, dbAdi, defteYaz, rejimAdi } from "./lib/siklik-defteri";
 import {
   FABRIKA_HACIM_ESIGI,
@@ -382,10 +383,75 @@ async function semaHizasiBeyani(): Promise<void> {
   );
 }
 
+/**
+ * BİRLEŞİM DENETİMİ — CI özet işi koşar: parça kayıtlarının (`TEKSERP_PARCA_KAYIT`)
+ * birleşimi = diskteki bütün `test_*.ts`, kesişim boş, 1..N her parça bir kez.
+ * Ayrıca kayıtların ölçtüğü sürelerle tazelenmiş süre tablosunu dizine yazar
+ * (artifact; tabloyu yenilemek = onu `scripts/ci-parca-sureleri.json` üstüne koymak).
+ */
+function birlesimKos(dizin: string): number {
+  if (!dizin) {
+    console.error("❌ --birlesim <dizin> — dizin verilmedi");
+    return 1;
+  }
+  const jsonlar: string[] = [];
+  const gez = (d: string): void => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      const yol = join(d, e.name);
+      if (e.isDirectory()) gez(yol);
+      else if (/^parca-\d+\.json$/.test(e.name)) jsonlar.push(yol);
+    }
+  };
+  try {
+    gez(dizin);
+  } catch (e) {
+    console.error(`❌ parça kayıt dizini okunamadı: ${dizin} (${(e as Error).message})`);
+    return 1;
+  }
+  const kayitlar = jsonlar.map((y) => JSON.parse(readFileSync(y, "utf8")) as ParcaKaydi);
+  const tum = readdirSync(SCRIPTS_DIR).filter((f) => /^test_.*\.ts$/.test(f)).sort();
+  const hatalar = birlesimDenetimi(tum, kayitlar);
+  const kosan = kayitlar.reduce((s, k) => s + k.dosyalar.length, 0);
+  console.log(`=== Parça birleşimi: ${kayitlar.length} kayıt · ${kosan} koşum · diskte ${tum.length} bekçi ===`);
+  for (const k of [...kayitlar].sort((a, b) => a.parca - b.parca)) {
+    const sn = Object.values(k.sureler ?? {}).reduce((s, x) => s + x, 0);
+    console.log(`  parça ${k.parca}/${k.toplam}: ${k.dosyalar.length} dosya · ${sn.toFixed(0)}s · başarısız ${k.basarisiz.length} · ${k.sha}`);
+  }
+  const yeni: Record<string, number> = {};
+  for (const k of kayitlar) for (const [f, sn] of Object.entries(k.sureler ?? {})) if (tum.includes(f)) yeni[f] = sn;
+  const sirali = Object.fromEntries(Object.keys(yeni).sort().map((f) => [f, yeni[f]!]));
+  writeFileSync(
+    join(dizin, "ci-parca-sureleri.json"),
+    `${JSON.stringify({ _kaynak: `CI parça kayıtları, ${kayitlar[0]?.sha ?? "?"}`, sureler: sirali }, null, 1)}\n`,
+  );
+  if (hatalar.length > 0) {
+    console.log(`❌ BİRLEŞİM BOZUK — ${hatalar.length} sorun (sessiz atlanan bekçi kabul edilmez):`);
+    for (const h of hatalar) console.log(`  ❌ ${h}`);
+    return 1;
+  }
+  console.log(`✅ Birleşim tam: ${tum.length} bekçinin her biri TAM bir parçada koştu`);
+  return 0;
+}
+
 async function main() {
   // Opsiyonel filtre: `npx tsx scripts/run-all-tests.ts <substring>` → yalnız
   // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
-  const filter = process.argv[2];
+  // CI parçalı koşum (`scripts/lib/parca.ts`): `--shard i/N` yalnız i. parçayı koşar;
+  // `--birlesim <dizin>` parça kayıtlarının birleşimini denetler (DB'ye dokunmaz).
+  const argv = process.argv.slice(2);
+  const bayrakDegeri = (ad: string): string | undefined => {
+    const k = argv.indexOf(ad);
+    return k >= 0 ? argv[k + 1] : undefined;
+  };
+  const filter = argv.find((a, k) => !a.startsWith("--") && !(k > 0 && ["--shard", "--birlesim"].includes(argv[k - 1]!)));
+  const shardArg = argv.includes("--shard") ? bayrakDegeri("--shard") ?? "" : undefined;
+  const birlesimDizini = argv.includes("--birlesim") ? bayrakDegeri("--birlesim") ?? "" : undefined;
+  if (birlesimDizini !== undefined) process.exit(birlesimKos(birlesimDizini));
+  const shard = shardArg === undefined ? null : parcaArgumaniCoz(shardArg);
+  if (shardArg !== undefined && (!shard || filter)) {
+    console.error(`❌ --shard geçersiz: "${shardArg}"${filter ? ` (filtreyle birlikte verilemez: ${filter})` : ""} — biçim i/N, 1 ≤ i ≤ N`);
+    process.exit(1);
+  }
   const haricListesi = (process.env.TEKSERP_HARIC ?? "")
     .split(",")
     .map((x) => x.trim())
@@ -483,6 +549,18 @@ async function main() {
     // ne aldığını söylemiyorsa DOLAR.
     .filter((f) => !haricListesi.some((h) => f.includes(h)))
     .sort();
+  const tumDosyaSayisi = files.length;
+  if (shard) {
+    const sureler = sureTablosuOku();
+    const parcalar = parcalariKur(files, shard.n, sureler);
+    const benim = new Set(parcalar[shard.i - 1]);
+    files.splice(0, files.length, ...files.filter((f) => benim.has(f)));
+    const tahmin = parcaYukleri(parcalar, sureler);
+    console.log(
+      `→ Parça ${shard.i}/${shard.n}: ${files.length}/${tumDosyaSayisi} dosya · tahmini ${tahmin[shard.i - 1]!.toFixed(0)}s ` +
+        `(parçalar ${tahmin.map((t) => t.toFixed(0)).join("/")}s) · tabloda olmayan ${files.filter((f) => sureler[f] === undefined).length}`,
+    );
+  }
 
   // ⚠️ DIŞLANAN BEKÇİLER ADIYLA BASILIR — bu koşum onları ÖLÇMEDİ ve bunu
   // söylemek zorunda. Sessiz bir dışlama, muafiyet kabını çöp kutusuna çevirir.
@@ -728,6 +806,22 @@ async function main() {
   const failed = results.filter((r) => !r.ok);
   const flakes = results.filter((r) => r.flaky);
   const totalMs = results.reduce((s, r) => s + r.ms, 0);
+  // PARÇA KAYDI — birleşim denetimi GERÇEKTE koşanı okur, planı değil. Kayıt yalnız
+  // koşum sonuna ulaşan parçada doğar ⇒ yarıda ölen parça birleşimde EKSİK görünür.
+  const kayitYolu = process.env.TEKSERP_PARCA_KAYIT;
+  if (shard && kayitYolu) {
+    const kayit: ParcaKaydi = {
+      parca: shard.i,
+      toplam: shard.n,
+      sha: HEAD_SHA,
+      dosyalar: results.map((r) => r.file),
+      basarisiz: failed.map((r) => r.file),
+      sureler: Object.fromEntries(results.map((r) => [r.file, Math.round(r.ms / 100) / 10])),
+    };
+    mkdirSync(dirname(kayitYolu), { recursive: true });
+    writeFileSync(kayitYolu, `${JSON.stringify(kayit, null, 1)}\n`);
+    console.log(`→ Parça kaydı: ${kayitYolu} (${kayit.dosyalar.length} dosya)`);
+  }
   console.log(`\n=== ÖZET: ${results.length - failed.length}/${results.length} dosya geçti · ${(totalMs / 1000).toFixed(0)}s ===`);
   if (failed.length > 0) {
     console.log("Başarısız:");
