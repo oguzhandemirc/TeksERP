@@ -1,5 +1,5 @@
 // =============================================================================
-// TeksERP — TEZGAH DURUŞU (MachineStopEvent) Servisi · ELLE GİRİŞ (Faz 1b)
+// TeksERP — TEZGAH DURUŞU (MachineStopEvent) Servisi · elle giriş + makine sinyalinin çekirdeği
 // =============================================================================
 // Duruş bir SPAN DEFTERİDİR (koşum emsali): açık duruş DURUM, kapanmış duruş
 // KAYIT. Beş yazma yolu vardır ve beşi de burada yaşar — İKİNCİ YAZAR DOĞMAZ:
@@ -21,10 +21,11 @@
 // `{ shiftInstanceId, machineId }` alır) ve bugün yalnız iptal edilmiş vardiyayı reddeder;
 // karne inince aynı fonksiyon `sealState === SEALED` → 409 `SHIFT_SEALED` verir, çağıranlar değişmez.
 //
-// Elle girişte makine kaynaklı alanlar (`signalKind` · `rawStopCode` · `collectorId` ·
-// `provisionalEndedAt`) YAZILMAZ — onların yazıcısı Faz 2 ingest'idir.
+// AÇ ve KAPA TEK BOĞAZDIR (`openStopCore` · `closeStopCore`): insan girişi (`openManualStop` ·
+// `closeManualStop`) ve makine sinyali (`machine-stop-signal.service`) aynı çekirdekten geçer;
+// makine kaynaklı alanları (`signalKind` · `rawStopCode` · `collectorId`) yalnız sinyal yolu yazar.
 // =============================================================================
-import { MachineDataSource } from "@prisma/client";
+import { MachineDataSource, MachineStopEndSource } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -45,61 +46,51 @@ import {
   resolveShiftInstanceId,
   resolveStopPreset,
   resolveStopStamp,
+  signalCloseConflict,
 } from "./helpers/machine-stop-context.helper";
+import type {
+  ClassifyStopInput, OpenManualStopInput, OpenManualStopOptions, OpenStopCoreInput, ReclassifyStopInput, StopCloser,
+} from "../types/machine-stop-input.types";
 import type { ApiResponse } from "../types/api.types";
+import type { StampResolution } from "./helpers/machine-run-open.helper";
 import { nudgeLoomAlarm } from "../jobs/loom-alarm.job";
 
 const TABLE = "MACHINE_STOP_EVENT";
 /** Açılış replay'inin cevap metni — toplu açılış "yeniden gönderim" satırını bununla ayırır. */
 export const STOP_REPLAY_MESSAGE = "Duruş zaten kayıtlı (yeniden gönderim)";
+/** Makine kapanış sinyalinin tekrarı (aynı bitiş) — satır değişmez. */
+export const STOP_CLOSE_REPLAY_MESSAGE = "Duruş zaten bu bitişle kapatılmış (yeniden gönderim)";
 
-
-export interface OpenManualStopInput {
-  machineId: string;
-  /** İstemci damgası; yoksa sunucu saati. Aralık dışı: OPERATÖR → sunucu saati + uyarı, AMİR → 400 (`resolveStopStamp`). */
-  startedAt?: Date | null;
-  /** Açılışta sebep verilebilir; verilmezse sınıflandırma borcu (`requiresReason`) doğar. */
-  reasonCode?: string | null;
-  reasonNote?: string | null;
-  beamSlot?: number | null;
-  /** Elle girişte KİMLİK: replay aynı anahtarla aynı satırı döner. Yoksa sunucu üretir. */
-  clientToken?: string | null;
-  /** Kim giriyor — operatör (tablet) mı, vardiya amiri (panel) mi. */
-  source?: Extract<MachineDataSource, "OPERATOR" | "SUPERVISOR">;
-}
-
-export interface ClassifyStopInput {
-  reasonCode: string;
-  reasonNote?: string | null;
-  beamSlot?: number | null;
-}
-
-export interface ReclassifyStopInput {
-  /** Beklenen mevcut kod — claim'in çıpası (yarışta bayat karar üzerine yazılmasın). */
-  fromReasonCode: string;
-  toReasonCode: string;
-  /** Değişikliğin gerekçesi — reclass satırına yazılır. */
-  reason?: string | null;
-  /** Olayın YENİ notu (verilirse). Eski not yerinde ezilmez: reclass satırında saklanır (F3). */
-  reasonNote?: string | null;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AÇ
 // ─────────────────────────────────────────────────────────────────────────────
-export interface OpenManualStopOptions {
-  /** Geçmiş saatle açılışta kapanmış duruşla örtüşmeyi tx içinde reddet (toplu açılış; tekli uç bugünkü davranışta). */
-  rejectOverlap?: boolean;
-}
-
 export async function openManualStop(input: OpenManualStopInput, userId?: string, opts: OpenManualStopOptions = {}): Promise<ApiResponse<MachineStopDto>> {
   const stopKey = input.clientToken ?? randomUUID();
   const source: MachineDataSource = input.source ?? MachineDataSource.SUPERVISOR;
-
-  // ① Replay — yaratmadan ÖNCE: aynı anahtar aynı satırı döner; geri alınmış duruş yeniden açılmaz.
   const started = resolveStopStamp(input.startedAt, "duruş başlangıcı", source);
+  const reasonCode = input.reasonCode?.trim() ?? null;
+  return openStopCore({
+    machineId: input.machineId, stopKey, started, source, reasonCode: input.reasonCode, reasonNote: input.reasonNote,
+    beamSlot: input.beamSlot, actorId: userId ?? null,
+    // Replay PARMAK İZİ (F2, koşum/doff emsali): başlangıç sunucu çözümü üzerinden.
+    fingerprint: (e) => [
+      { ad: "machineId", mevcut: e.machineId, gelen: input.machineId },
+      { ad: "startedAt", mevcut: e.startedAt.getTime(), gelen: started.value.getTime() },
+      { ad: "reasonCode", mevcut: e.reasonCode, gelen: reasonCode },
+    ],
+  }, opts);
+}
+
+/**
+ * DURUŞ AÇILIŞININ TEK BOĞAZI — insan (`openManualStop`) ve makine (`openMachineStop`) aynı
+ * replay · mühür · sed · audit · alarm dürtmesi yolundan geçer; `machineStopEvent.create` yalnız burada.
+ */
+export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualStopOptions = {}): Promise<ApiResponse<MachineStopDto>> {
+  const { stopKey, started, source } = input;
   const warnings = started.warning ? [started.warning] : [];
 
+  // ① Replay — yaratmadan ÖNCE: aynı anahtar aynı satırı döner; geri alınmış duruş yeniden açılmaz.
   const existing = await prisma.machineStopEvent.findFirst({ where: { machineId: input.machineId, stopKey }, select: MACHINE_STOP_SELECT });
   if (existing) {
     if (existing.revokedAt) {
@@ -107,18 +98,7 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
         code: "STOP_REVOKED", stopId: existing.id, revokedAt: existing.revokedAt,
       });
     }
-    // Replay PARMAK İZİ (F2, koşum/doff emsali): aynı anahtar BAŞKA yükle gelirse 409 —
-    // aynı formun ikinci gönderimi değil, başka bir duruş demektir. Başlangıç sunucu
-    // çözümü üzerinden (istemci beyanı makul aralık dışında düştüyse ikisi de düşer).
-    assertReplayPayloadMatches(
-      [
-        { ad: "machineId", mevcut: existing.machineId, gelen: input.machineId },
-        { ad: "startedAt", mevcut: existing.startedAt.getTime(), gelen: started.value.getTime() },
-        { ad: "reasonCode", mevcut: existing.reasonCode, gelen: input.reasonCode?.trim() ?? null },
-      ],
-      "Bu form daha önce başka bir duruş için kaydedilmiş — yeni duruş için formu yeniden açın.",
-      { stopId: existing.id },
-    );
+    assertReplayPayloadMatches(input.fingerprint(existing), "Bu form daha önce başka bir duruş için kaydedilmiş — yeni duruş için formu yeniden açın.", { stopId: existing.id });
     return { success: true, data: existing, message: STOP_REPLAY_MESSAGE };
   }
 
@@ -146,13 +126,14 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
           lossClass: preset?.lossClass ?? null,
           reasonNote: normalizeNote(input.reasonNote),
           reasonSource: preset ? source : null,
-          classifiedById: preset ? (userId ?? null) : null,
+          classifiedById: preset ? input.actorId : null,
           classifiedAt: preset ? new Date() : null,
-          openedById: userId ?? null, // açan kişi; kapatan `closeManualStop`ta
+          openedById: input.actorId, // açan kişi; kapatan `closeStopCore`da
           requiresReason: preset === null,
           targetMinutes: escalation.targetMinutes,
           escalationGraceMinutes: escalation.escalationGraceMinutes,
           shiftInstanceId, factoryDay: factoryDayKeyUtcMidnight(started.value), source,
+          ...(input.signal ?? {}),
         },
         select: MACHINE_STOP_SELECT,
       });
@@ -171,10 +152,11 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
   }
 
   await AuditService.log({
-    userId, action: "CREATE", tableName: TABLE, recordId: created.id,
+    userId: input.actorId ?? undefined, action: "CREATE", tableName: TABLE, recordId: created.id,
     newData: {
       machineId: created.machineId, startedAt: created.startedAt, reasonCode: created.reasonCode, source: created.source,
       targetMinutes: created.targetMinutes, escalationGraceMinutes: created.escalationGraceMinutes,
+      ...(input.signal ? { rawStopCode: created.rawStopCode, collectorId: created.collectorId } : {}),
     },
   }).catch(() => undefined);
 
@@ -192,38 +174,49 @@ export async function closeManualStop(
   source: MachineDataSource = MachineDataSource.SUPERVISOR,
 ): Promise<ApiResponse<MachineStopDto>> {
   const ended = resolveStopStamp(endedAtIn, "duruş bitişi", source);
-  const warnings = ended.warning ? [ended.warning] : [];
+  // `endSource` sabit OPERATOR (F6): insan kapanışının tek değeri; amir/operatör ayrımı `source`ta yaşar.
+  return closeStopCore(stopId, ended, { endSource: MachineStopEndSource.OPERATOR, actorId: userId ?? null });
+}
 
-  const closed = await prisma.$transaction(async (tx) => {
+/**
+ * DURUŞ KAPANIŞININ TEK BOĞAZI — insanın "Çalıştı"sı ile makinenin "bitti" sinyali aynı claim'den geçer
+ * (`endedAt IS NULL ∧ revokedAt IS NULL ∧ startedAt ≤ bitiş`); kim önce kapattıysa o kalır.
+ */
+export async function closeStopCore(stopId: string, ended: StampResolution, closer: StopCloser): Promise<ApiResponse<MachineStopDto>> {
+  const warnings = ended.warning ? [ended.warning] : [];
+  const out = await prisma.$transaction(async (tx) => {
     const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true } });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
     await assertStopShiftWritableTx(tx, cur);
     // Süre startedAt'ten; claim WHERE'i başlangıcı da pinler (bitiş < başlangıç 400'e düşer).
-    // `endSource` sabit OPERATOR (F6): enum SIGNAL|OPERATOR|WATCHDOG — insan kapanışının tek değeri;
-    // amir/operatör ayrımı `source`/`reasonSource`ta yaşar, kapanış kaynağı "insan" der.
     // Uygulama saati parametreyle (kök yasak: ham SQL'de çıplak `now()`; sunucu saati tek kaynak `new Date()`).
     const simdi = new Date();
     const rows = await tx.$queryRaw<Array<{ id: string }>>`
       UPDATE machine_stop_events
-         SET "endedAt" = ${ended.value}, "endSource" = 'OPERATOR'::"MachineStopEndSource", "closedById" = ${userId ?? null}::uuid,
+         SET "endedAt" = ${ended.value}, "endSource" = ${closer.endSource}::"MachineStopEndSource", "closedById" = ${closer.actorId}::uuid,
              "durationSec" = GREATEST(0, EXTRACT(EPOCH FROM (${ended.value}::timestamptz - "startedAt")))::int,
              "updatedAt" = ${simdi}::timestamptz
        WHERE id = ${stopId}::uuid AND "endedAt" IS NULL AND "revokedAt" IS NULL AND "startedAt" <= ${ended.value}::timestamptz
        RETURNING id`;
     if (rows.length === 0) {
-      const fresh = await tx.machineStopEvent.findUniqueOrThrow({ where: { id: stopId }, select: { startedAt: true, endedAt: true, revokedAt: true } });
+      const fresh = await tx.machineStopEvent.findUniqueOrThrow({ where: { id: stopId }, select: { startedAt: true, endedAt: true, revokedAt: true, endSource: true } });
       if (fresh.revokedAt) throw AppError.conflict("Bu duruş geri alınmış — kapatılamaz.", { code: "STOP_REVOKED", stopId, revokedAt: fresh.revokedAt });
+      if (fresh.endedAt && closer.endSource === MachineStopEndSource.SIGNAL) {
+        return { stop: await loadStop(tx, stopId), replay: signalCloseConflict(stopId, { endedAt: fresh.endedAt, endSource: fresh.endSource }, ended.value) === "replay" };
+      }
       if (fresh.endedAt) throw AppError.conflict("Bu duruş zaten kapatılmış.", { code: "STOP_ALREADY_CLOSED", stopId, endedAt: fresh.endedAt });
       if (fresh.startedAt > ended.value) {
         throw AppError.badRequest("Bitiş zamanı başlangıçtan önce olamaz.", { code: "STOP_END_BEFORE_START", startedAt: fresh.startedAt, endedAt: ended.value });
       }
       throw AppError.conflict("Duruş az önce değişti — tekrar deneyin.", { code: "MACHINE_STOP_RACE", stopId });
     }
-    return loadStop(tx, stopId);
+    return { stop: await loadStop(tx, stopId), replay: false };
   });
+  if (out.replay) return { success: true, data: out.stop, message: STOP_CLOSE_REPLAY_MESSAGE };
 
+  const closed = out.stop;
   await AuditService.log({
-    userId, action: "UPDATE", tableName: TABLE, recordId: closed.id,
+    userId: closer.actorId ?? undefined, action: "UPDATE", tableName: TABLE, recordId: closed.id,
     changes: [{ field: "endedAt", old: null, new: closed.endedAt }, { field: "durationSec", old: null, new: closed.durationSec }],
   }).catch(() => undefined);
 

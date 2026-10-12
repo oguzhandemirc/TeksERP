@@ -4,7 +4,7 @@
 // Servis dosyası beş yazma yolunu taşır (boyut tavanı); "duruş hangi vardiyaya/koşuma
 // düşer, sebep katalogda var mı, vardiya yazılabilir mi" soruları burada tek yerde.
 // =============================================================================
-import { MachineDataSource, Prisma, ReasonPresetKind, type MachineStopLossClass } from "@prisma/client";
+import { MachineDataSource, MachineStopEndSource, Prisma, ReasonPresetKind, type MachineStopLossClass } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ENTRY_STAMP_MAX_FUTURE_MS } from "./duplicate-guard.helper";
 import { resolveRunStamp, type StampResolution } from "./machine-run-open.helper";
@@ -35,6 +35,10 @@ export const MACHINE_STOP_SELECT = {
   shiftInstanceId: true,
   factoryDay: true,
   source: true,
+  // Makine kaynaklı alanlar (yalnız sinyal yolu yazar; elle duruşta NULL) — kaynak rozeti ve ham kod gösterimi için.
+  signalKind: true,
+  rawStopCode: true,
+  collectorId: true,
   revokedAt: true,
   revokedById: true,
   revokeReason: true,
@@ -78,19 +82,27 @@ export function assertBeamSlotValid(machine: { warpBeamSlots: number }, beamSlot
  */
 export const STOP_DECLARED_MAX_PAST_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** Damgası BEYAN olan kaynaklar: amir (panel) ve makine sinyali — aralık dışı 400, sessiz sunucu saati yok. */
+const DECLARED_STAMP_SOURCES: ReadonlySet<MachineDataSource> = new Set([MachineDataSource.SUPERVISOR, MachineDataSource.MACHINE, MachineDataSource.SIMULATED]);
+
 /**
  * DAMGA ÇÖZÜMÜ iki yolda iki sözleşme: OPERATÖR (tablet) "basılan an"ı gönderir → aralık
  * dışı sunucu saatine düşer + `warnings` (bozuk RTC üretimi durdurmaz). AMİR (panel)
  * BİR ZAMAN BEYAN EDER → aralık dışı 400: beyan sessizce değiştirilmez, deftere
  * uydurulmuş an yazılmaz (panel `warnings` okumaz; sessiz kırpma yanlış vardiya + yanlış süre demekti).
+ * MAKİNE sinyali de beyandır (amir sözleşmesi) ve damgası zorunludur.
  */
 export function resolveStopStamp(
   declared: Date | null | undefined,
   label: string,
   source: MachineDataSource,
 ): StampResolution {
-  if (source !== MachineDataSource.SUPERVISOR) return resolveRunStamp(declared, label);
-  if (!declared) return { value: new Date(), warning: null };
+  if (!DECLARED_STAMP_SOURCES.has(source)) return resolveRunStamp(declared, label);
+  if (!declared) {
+    // Makine sinyali anı her zaman taşır — damgasız sinyal sunucu saatine düşürülmez (uydurulmuş an).
+    if (source !== MachineDataSource.SUPERVISOR) throw AppError.badRequest(`Makine sinyalinde ${label} zorunlu.`, { code: "STOP_STAMP_REQUIRED" });
+    return { value: new Date(), warning: null };
+  }
   const nowMs = Date.now();
   const d = declared.getTime();
   if (Number.isNaN(d) || d < nowMs - STOP_DECLARED_MAX_PAST_MS || d > nowMs + ENTRY_STAMP_MAX_FUTURE_MS) {
@@ -218,3 +230,14 @@ export async function loadStop(tx: Tx, stopId: string): Promise<MachineStopDto> 
   return tx.machineStopEvent.findUniqueOrThrow({ where: { id: stopId }, select: MACHINE_STOP_SELECT });
 }
 
+/** Makine sinyalinin count-0 tanısı: aynı bitişin tekrarı replay'dir; insanın kapanışı EZİLMEZ. */
+export function signalCloseConflict(stopId: string, fresh: { endedAt: Date; endSource: MachineStopEndSource | null }, ended: Date): "replay" {
+  if (fresh.endSource === MachineStopEndSource.SIGNAL) {
+    if (fresh.endedAt.getTime() === ended.getTime()) return "replay";
+    throw AppError.conflict("Bu duruş makine sinyaliyle başka bir bitişle kapatılmış.", { code: "STOP_END_CONFLICT", stopId, endedAt: fresh.endedAt, incoming: ended });
+  }
+  if (fresh.endSource === MachineStopEndSource.OPERATOR) {
+    throw AppError.conflict("Bu duruşu bir kişi kapatmış — makine sinyali insan kapanışını değiştirmez.", { code: "STOP_CLOSED_BY_OPERATOR", stopId, endedAt: fresh.endedAt });
+  }
+  throw AppError.conflict("Bu duruş zaten kapatılmış.", { code: "STOP_ALREADY_CLOSED", stopId, endedAt: fresh.endedAt });
+}

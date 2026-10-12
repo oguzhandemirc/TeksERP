@@ -230,7 +230,9 @@ export async function runLoomAlarmOnce(opts: LoomAlarmRunOptions = {}): Promise<
   }
   for (const s of open) {
     sum.scanned += 1;
-    if (s.alarm && !ACTIVE_ALARM_STATES.includes(s.alarm.state)) continue;
+    // Kapanmış alarm atlanır; alarmsız duruşta ön-süzgeç (saf yüklem, DB yok): doğamayacak duruşa tx açılmaz,
+    // karar yine `birthTx`te aynı yüklemle verilir.
+    if (s.alarm ? !ACTIVE_ALARM_STATES.includes(s.alarm.state) : !alarmClockStart(s, ctx.shifts, ctx.now, ctx.noShiftMode).eligible) continue;
     await guarded(sum, s.id, (tx) => (s.alarm ? advanceTx(tx, s, s.alarm, ctx) : birthTx(tx, s, ctx)));
   }
   return sum;
