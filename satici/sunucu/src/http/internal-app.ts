@@ -21,6 +21,7 @@ import { blockListOf, inList, stripMapped } from "./client-address";
 import { accessLog, errorHandler, notFound } from "./error-handler";
 import { FixedWindowLimiter, rateLimited } from "./rate-limit";
 import { LOOPBACK_NETWORKS } from "./listener-socket";
+import { securityEvent } from "../lib/security-events";
 
 export const INTERNAL_PREFIX = "/ic/v1";
 
@@ -51,6 +52,7 @@ export function requireInternalSocket(listener: () => AddressInfo | string | nul
 export function requireBearer(bearer: InternalBearer) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     if (!bearer.matches(req.headers.authorization)) {
+      securityEvent("IC_API_401");
       next(new VendorError(401, "IC_KIMLIK_GECERSIZ", "İç API kimliği geçersiz"));
       return;
     }

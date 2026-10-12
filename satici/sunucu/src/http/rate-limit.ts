@@ -3,6 +3,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { VendorError } from "../lib/errors";
 import { clientAddress, type ProxyTrust } from "./client-address";
+import { securityEvent } from "../lib/security-events";
 
 const WINDOW_MS = 60_000;
 const MAX_KEYS = 10_000;
@@ -26,6 +27,7 @@ export class FixedWindowLimiter {
       return null;
     }
     w.count++;
+    if (w.count === this.perMinute + 1) securityEvent("HIZ_SINIRI");
     return w.count > this.perMinute ? Math.max(1, Math.ceil((w.start + WINDOW_MS - nowMs) / 1000)) : null;
   }
 

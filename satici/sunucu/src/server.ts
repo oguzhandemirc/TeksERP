@@ -20,6 +20,8 @@ import { DoorbellHub } from "./services/doorbell";
 import { InternalApiCounters } from "./services/internal-api.service";
 import { MaintenanceScheduler, syncKeyRegistry } from "./services/maintenance";
 import { webAppAvailable } from "./http/web-static";
+import { SecretFileModeError } from "./keys/secret-file-mode";
+import { outboxDelivery, startSecurityAlerts } from "./lib/security-events";
 
 function listen(server: http.Server, port: number, host: string): Promise<AddressInfo> {
   return new Promise((resolve, reject) => {
@@ -81,6 +83,7 @@ async function main(): Promise<void> {
     `SATICI_DINLIYOR genel=${publicAddress.port} ic=${internalAddress ? internalAddress.port : "kapali"} erisim=${accessAddress ? accessAddress.port : "kapali"}`,
   );
 
+  const stopSecurityAlerts = startSecurityAlerts(prisma);
   const maintenance = new MaintenanceScheduler(ctx);
   maintenance.start();
   void maintenance.runOnce();
@@ -91,6 +94,7 @@ async function main(): Promise<void> {
     closing = true;
     console.log(`[satici] ${signal}: kapanıyor`);
     maintenance.stop();
+    stopSecurityAlerts();
     clearInterval(counterTimer);
     await hub.stop();
     await Promise.all([
@@ -107,7 +111,15 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
-main().catch((err: Error) => {
+/** Sır izni reddi süreci açmaz; yine de güvenlik kanalına yazılmayı dener (saat kovası: yeniden başlatma döngüsü sel doğurmaz). */
+async function reportSecretFileRejection(): Promise<void> {
+  const hour = Math.floor(Date.now() / 3_600_000) * 3_600_000;
+  const write = outboxDelivery(prisma)({ kind: "alarm", alarm: { sinif: "SIR_DOSYASI_RED", tur: "ILK", adet: 1, pencereBasi: hour, ornek: null } });
+  await Promise.race([write, new Promise((r) => setTimeout(r, 5_000).unref())]).catch(() => undefined);
+}
+
+main().catch(async (err: Error) => {
   console.error(`[satici] açılış başarısız: ${err.message}`);
+  if (err instanceof SecretFileModeError) await reportSecretFileRejection();
   process.exit(1);
 });

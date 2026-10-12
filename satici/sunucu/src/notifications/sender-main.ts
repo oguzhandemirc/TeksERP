@@ -7,7 +7,7 @@
 import { writeFileSync } from "node:fs";
 import type { BildirimKanali } from "@prisma/client";
 import { runSenderCycle, type CycleTotals } from "./sender";
-import { channelSummary, loadSenderConfig, type SenderConfig } from "./sender-config";
+import { channelSummary, loadSenderConfig, securityChannelSummary, type SenderConfig } from "./sender-config";
 import { assertLeastPrivilege, openSenderDb } from "./sender-db";
 import { ResendTransport, TelegramTransport, type NotificationTransport } from "./transports";
 
@@ -18,9 +18,16 @@ function transportsOf(cfg: SenderConfig): Partial<Record<BildirimKanali, Notific
   };
 }
 
+function securityTransportsOf(cfg: SenderConfig): Partial<Record<BildirimKanali, NotificationTransport>> {
+  return {
+    ...(cfg.security.email.ok ? { EPOSTA: new ResendTransport(cfg.security.email.settings) } : {}),
+    ...(cfg.security.telegram.ok ? { TELEGRAM: new TelegramTransport(cfg.security.telegram.settings) } : {}),
+  };
+}
+
 function heartbeat(cfg: SenderConfig, totals: CycleTotals, telegram: TelegramTransport | undefined): void {
   const runtime = telegram?.migration ? { telegramMigratedTo: telegram.migration.chatId } : {};
-  const body = { zaman: new Date().toISOString(), kanallar: channelSummary(cfg, runtime), son: totals };
+  const body = { zaman: new Date().toISOString(), kanallar: channelSummary(cfg, runtime), guvenlik: securityChannelSummary(cfg), son: totals };
   writeFileSync(cfg.heartbeatFile, `${JSON.stringify(body)}\n`, { mode: 0o600 });
 }
 
@@ -36,12 +43,14 @@ async function main(): Promise<void> {
   const deps = {
     db: db.prisma,
     transports,
+    securityTransports: securityTransportsOf(cfg),
     settings: { maxAttempts: cfg.maxAttempts, maxAgeHours: cfg.maxAgeHours, portalBase: cfg.portalBase, timeZone: cfg.timeZone },
     pausedUntil: new Map<BildirimKanali, number>(),
   };
   let warnedMigration: number | null = null;
   for (const [kanal, durum] of Object.entries(channelSummary(cfg))) console.log(`[bildirim] ${kanal}: ${durum}`);
-  console.log(`BILDIRIM_GONDERICI_HAZIR eposta=${cfg.email.ok ? "acik" : "kapali"} telegram=${cfg.telegram.ok ? "acik" : "kapali"}`);
+  for (const [kanal, durum] of Object.entries(securityChannelSummary(cfg))) console.log(`[bildirim] GUVENLIK ${kanal}: ${durum}`);
+  console.log(`BILDIRIM_GONDERICI_HAZIR eposta=${cfg.email.ok ? "acik" : "kapali"} telegram=${cfg.telegram.ok ? "acik" : "kapali"} guvenlik_telegram=${cfg.security.telegram.ok ? "acik" : "kapali"} guvenlik_eposta=${cfg.security.email.ok ? "acik" : "kapali"}`);
 
   let stopping = false;
   let wake: (() => void) | null = null;

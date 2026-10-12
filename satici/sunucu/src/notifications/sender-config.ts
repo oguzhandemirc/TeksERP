@@ -34,6 +34,11 @@ const EnvSchema = z.object({
   /** Sohbet (grup) kimliği — dağıtımda DOSYADAN (`…_DOSYASI`, docker secret); doğrudan değer yalnız yerel/bekçi. */
   TELEGRAM_CHAT_ID: z.string().optional(),
   TELEGRAM_CHAT_ID_DOSYASI: z.string().min(1).optional(),
+  /** Güvenlik olayları AYRI sohbete (aynı bot); yoksa güvenlik Telegram'ı KAPALI — işletme sohbetine DÜŞMEZ. */
+  GUVENLIK_TELEGRAM_CHAT_ID: z.string().optional(),
+  GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI: z.string().min(1).optional(),
+  /** Güvenlik e-postası (ikincil; aynı Resend anahtarı + gönderen); yoksa güvenlik e-postası KAPALI. */
+  GUVENLIK_EPOSTA_ALICI: emailList.optional(),
   RESEND_API_KEY: z.string().optional(),
   RESEND_API_KEY_DOSYASI: z.string().min(1).optional(),
   BILDIRIM_EPOSTA_ALICI: emailList.optional(),
@@ -67,6 +72,8 @@ export interface SenderConfig {
   readonly databaseUrl: string;
   readonly telegram: ChannelState<TelegramSettings>;
   readonly email: ChannelState<ResendSettings>;
+  /** Güvenlik sınıfının hedefleri (`SECURITY_EVENTS`); işletme kanallarından bağımsız açılır/kapanır. */
+  readonly security: { readonly telegram: ChannelState<TelegramSettings>; readonly email: ChannelState<ResendSettings> };
   readonly portalBase: string | null;
   readonly loopSeconds: number;
   readonly maxAttempts: number;
@@ -82,7 +89,7 @@ const RESEND_KEY = /^re_[A-Za-z0-9_]{16,128}$/;
  * Sır: ortamdan ya da dosyadan (ikisi birden → belirsiz, kanal kapalı). Dosya okunamaz ya da HERKESE açıksa (o+r)
  * kanal kapalı; boş dosya = kanal bilerek kapalı. Dönen gerekçe yalnız değişken adını taşır.
  */
-function secret(env: Env, name: "TELEGRAM_BOT_TOKEN" | "TELEGRAM_CHAT_ID" | "RESEND_API_KEY"): { value: string } | { reason: string } {
+function secret(env: Env, name: "TELEGRAM_BOT_TOKEN" | "TELEGRAM_CHAT_ID" | "GUVENLIK_TELEGRAM_CHAT_ID" | "RESEND_API_KEY"): { value: string } | { reason: string } {
   const direct = env[name]?.trim() || undefined;
   const file = env[`${name}_DOSYASI`];
   if (direct && file) return { reason: `${name} ve ${name}_DOSYASI birlikte verilmiş (belirsiz)` };
@@ -97,26 +104,27 @@ function secret(env: Env, name: "TELEGRAM_BOT_TOKEN" | "TELEGRAM_CHAT_ID" | "RES
   }
 }
 
-function telegramState(env: Env): ChannelState<TelegramSettings> {
+function telegramState(env: Env, chatName: "TELEGRAM_CHAT_ID" | "GUVENLIK_TELEGRAM_CHAT_ID" = "TELEGRAM_CHAT_ID"): ChannelState<TelegramSettings> {
   const token = secret(env, "TELEGRAM_BOT_TOKEN");
-  const chat = secret(env, "TELEGRAM_CHAT_ID");
+  const chat = secret(env, chatName);
   const missing = [...("reason" in token ? [token.reason] : []), ...("reason" in chat ? [chat.reason] : [])];
   if (missing.length > 0 || !("value" in token) || !("value" in chat)) return { ok: false, reason: missing.join("; ") };
   if (!TELEGRAM_TOKEN.test(token.value)) return { ok: false, reason: "TELEGRAM_BOT_TOKEN biçimsiz" };
-  if (!CHAT_ID_PATTERN.test(chat.value)) return { ok: false, reason: "TELEGRAM_CHAT_ID biçimsiz (işaretli tam sayı: grup -<sayı>, süper grup -100<sayı>)" };
+  if (!CHAT_ID_PATTERN.test(chat.value)) return { ok: false, reason: `${chatName} biçimsiz (işaretli tam sayı: grup -<sayı>, süper grup -100<sayı>)` };
   return { ok: true, settings: { apiRoot: env.TELEGRAM_API_KOKU, token: token.value, chatId: chat.value } };
 }
 
-function emailState(env: Env): ChannelState<ResendSettings> {
+function emailState(env: Env, recipients: "BILDIRIM_EPOSTA_ALICI" | "GUVENLIK_EPOSTA_ALICI" = "BILDIRIM_EPOSTA_ALICI"): ChannelState<ResendSettings> {
   const key = secret(env, "RESEND_API_KEY");
+  const to = env[recipients];
   const missing = [
     ...("reason" in key ? [key.reason] : []),
-    ...(env.BILDIRIM_EPOSTA_ALICI ? [] : ["BILDIRIM_EPOSTA_ALICI yok"]),
+    ...(to ? [] : [`${recipients} yok`]),
     ...(env.BILDIRIM_EPOSTA_GONDEREN ? [] : ["BILDIRIM_EPOSTA_GONDEREN yok"]),
   ];
   if (missing.length > 0 || !("value" in key)) return { ok: false, reason: missing.join("; ") };
   if (!RESEND_KEY.test(key.value)) return { ok: false, reason: "RESEND_API_KEY biçimsiz" };
-  return { ok: true, settings: { apiRoot: env.RESEND_API_KOKU, apiKey: key.value, from: env.BILDIRIM_EPOSTA_GONDEREN!, to: env.BILDIRIM_EPOSTA_ALICI! } };
+  return { ok: true, settings: { apiRoot: env.RESEND_API_KOKU, apiKey: key.value, from: env.BILDIRIM_EPOSTA_GONDEREN!, to: to! } };
 }
 
 export function loadSenderConfig(raw: NodeJS.ProcessEnv): SenderConfig {
@@ -132,6 +140,7 @@ export function loadSenderConfig(raw: NodeJS.ProcessEnv): SenderConfig {
     databaseUrl: env.DATABASE_URL,
     telegram: telegramState(env),
     email: emailState(env),
+    security: { telegram: telegramState(env, "GUVENLIK_TELEGRAM_CHAT_ID"), email: emailState(env, "GUVENLIK_EPOSTA_ALICI") },
     portalBase: env.BILDIRIM_PORTAL_ADRESI ?? null,
     loopSeconds: env.BILDIRIM_DONGU_SN,
     maxAttempts: env.BILDIRIM_DENEME_TAVANI,
@@ -149,4 +158,10 @@ export function channelSummary(cfg: SenderConfig, runtime: { telegramMigratedTo?
       ? null
       : `sohbet süper gruba taşındı — yeni sohbet kimliği ${runtime.telegramMigratedTo ?? "(okunamadı)"}: sohbet kimliği dosyasını güncelleyip göndericiyi yeniden başlatın (gönderim HATA)`;
   return { EPOSTA: s(cfg.email), TELEGRAM: moved ?? s(cfg.telegram) };
+}
+
+/** Güvenlik hedefleri → nabız/günlük metni (sır YOK); kapalıysa açıkça "güvenlik bildirimi: KAPALI". */
+export function securityChannelSummary(cfg: SenderConfig): Record<BildirimKanali, string> {
+  const s = (st: ChannelState<unknown>) => (st.ok ? "hazır" : `güvenlik bildirimi: KAPALI (${st.reason})`);
+  return { EPOSTA: s(cfg.security.email), TELEGRAM: s(cfg.security.telegram) };
 }

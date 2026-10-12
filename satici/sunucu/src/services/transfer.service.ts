@@ -16,6 +16,7 @@ import type { VendorContext } from "./context";
 import { issueActivationCodeUnderLock, type IssuedActivationCode } from "./entitlement.service";
 import { installationCancelled, recordRequestNonce, requestScope, verifySignedRequest } from "./installation-auth";
 import { requireReason } from "./sanction.service";
+import { securityEvent } from "../lib/security-events";
 
 type TransferRequest = z.infer<typeof TransferRequestSchema>;
 type TransferResponse = z.infer<typeof TransferResponseSchema>;
@@ -122,6 +123,7 @@ export async function handleTransferRequest(
   await recordRequestNonce({ ...scope, request: verified.request, nowMs: g.nowMs });
   const r = await prisma.$transaction((tx) => openOrReturn(tx, { installationDbId: inst?.id ?? null, kid: verified.kid, body: g.body }));
   if (r.created) {
+    if (inst === null) securityEvent("KIMLIKSIZ_TASIMA");
     await recordAudit({
       event: "TASIMA_TALEBI",
       entity: "TasimaTalebi",

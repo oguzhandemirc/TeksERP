@@ -1,7 +1,7 @@
 // Advisory kilit ENVANTERİ — satıcı DB'sinin kendi uzayı (backend'in 80xx uzayından bağımsız).
 // Kural: kilit tx'in İLK ifadesidir; birden çok kilit deterministik sırada alınır:
 //   PORTAL_TOKEN → DEALER (kimlik sırasıyla) → CUSTOMER → TRANSFER_KEY → INSTALLATION (kimlik sırasıyla) → LICENSE_NUMBER
-//   → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK → KEY_SET → UPDATE_WAVE.
+//   → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK → KEY_SET → UPDATE_WAVE → SECURITY_ALERT.
 // Envanter CLAUDE.md tablosuyla birebir; bekçi: scripts/test_satici_kapilari.ts.
 import type { Tx } from "./prisma";
 
@@ -30,6 +30,8 @@ export const LOCK_NAMESPACES = {
   KEY_SET: 9111,
   /** Güncelleme grubu başına (kanal kodu): dalga açma ↔ aşama ilerletme/geri çekme ↔ eşik uyarısı değerlendirmesi. */
   UPDATE_WAVE: 9112,
+  /** Güvenlik olayı sınıfı başına: giden kutusu yazımı (süreç içi alarm ↔ açılış reddi raporu) sıraya girer. */
+  SECURITY_ALERT: 9113,
 } as const;
 
 export async function lockInstallation(tx: Tx, installationDbId: string): Promise<void> {
@@ -100,4 +102,8 @@ export async function lockUploadScope(tx: Tx, requestId: string | null, sessionI
 /** Güncelleme grubunun dalgaları (kanal kodu başına): açılış · aşama değişimi · uyarı değerlendirmesi sıraya girer. */
 export async function lockUpdateWave(tx: Tx, channelCode: string): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.UPDATE_WAVE}::int4, hashtext(${channelCode}))`;
+}
+
+export async function lockSecurityAlert(tx: Tx, securityClass: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${LOCK_NAMESPACES.SECURITY_ALERT}::int4, hashtext(${securityClass}))`;
 }

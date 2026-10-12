@@ -47,6 +47,7 @@ const LOCK_RANK: Readonly<Record<string, number>> = {
   lockDownloadLink: 9,
   lockKeySet: 10,
   lockUpdateWave: 11,
+  lockSecurityAlert: 12,
 };
 const LOCK_FUNCS = new Set(Object.keys(LOCK_RANK));
 const DB_CLIENTS = new Set(["prisma", "tx", "db"]);

@@ -47,11 +47,14 @@ services:
       TELEGRAM_BOT_TOKEN_DOSYASI: /run/secrets/telegram_bot_token
       TELEGRAM_CHAT_ID_DOSYASI: /run/secrets/telegram_chat_id
       RESEND_API_KEY_DOSYASI: /run/secrets/resend_api_key
+      # Güvenlik olayları (B3) AYRI sohbete, aynı bot; e-posta ikincil (aynı Resend anahtarı, ayrı alıcı). Boş = KAPALI.
+      GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI: /run/secrets/guvenlik_telegram_chat_id
+      GUVENLIK_EPOSTA_ALICI: ${GUVENLIK_EPOSTA_ALICI:-}
       BILDIRIM_EPOSTA_ALICI: ${BILDIRIM_EPOSTA_ALICI:-}
       BILDIRIM_EPOSTA_GONDEREN: ${BILDIRIM_EPOSTA_GONDEREN:-}
       BILDIRIM_PORTAL_ADRESI: ${BILDIRIM_PORTAL_ADRESI:-}
       BILDIRIM_NABIZ_DOSYASI: /tmp/satici-bildirim.nabiz
-    secrets: [bildirim_db_parolasi, telegram_bot_token, telegram_chat_id, resend_api_key]
+    secrets: [bildirim_db_parolasi, telegram_bot_token, telegram_chat_id, resend_api_key, guvenlik_telegram_chat_id]
     tmpfs:
       - /tmp:mode=1777
     networks: [ic, bildirim-cikis]
@@ -78,6 +81,8 @@ secrets:
     file: ${TELEGRAM_CHAT_ID_DOSYASI_HOST:?TELEGRAM_CHAT_ID_DOSYASI_HOST gerekli (grup kimliği; boş dosya = Telegram kapalı)}
   resend_api_key:
     file: ${RESEND_API_KEY_DOSYASI_HOST:?RESEND_API_KEY_DOSYASI_HOST gerekli (boş dosya = e-posta kapalı)}
+  guvenlik_telegram_chat_id:
+    file: ${GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST:?GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST gerekli (güvenlik grubu kimliği; boş dosya = güvenlik bildirimi KAPALI)}
 
 networks:
   bildirim-cikis:

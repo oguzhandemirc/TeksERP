@@ -4,6 +4,7 @@
 import { auditFailureCount } from "../lib/audit";
 import type { AccessVerifier } from "../http/access-jwt";
 import type { VendorContext } from "./context";
+import { securityHealth } from "../lib/security-events";
 
 /** ERİŞİM kipinin özeti: JWKS dosyasının yaşı ve tavana göre durumu (UYARI: yarısı geçti · ASILDI: RED). */
 function accessStatus(access: AccessVerifier | null) {
@@ -27,5 +28,6 @@ export function systemHealth(ctx: VendorContext, nowMs: number) {
     },
     denetimYazmaHatasi: auditFailureCount(),
     erisim: accessStatus(ctx.runtime?.access ?? null),
+    guvenlik: securityHealth(nowMs),
   };
 }

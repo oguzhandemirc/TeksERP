@@ -16,6 +16,7 @@ import { createPortalRouter } from "./portal-http";
 import { VENDOR_PORTAL_ROUTES } from "./portal-routes";
 import { arrivedOn } from "./listener-socket";
 import { createWebAppRouter } from "./web-static";
+import { securityEvent } from "../lib/security-events";
 
 type ListenerOf = () => AddressInfo | string | null;
 
@@ -63,6 +64,7 @@ export function requireAccessJwt(verifier: AccessVerifier | null, log = rejectio
     verifier.verify(req.headers[ACCESS_HEADER]).then(
       (result) => {
         if (!result.ok) {
+          securityEvent("ERISIM_RED", result.reason);
           log(result.reason, result.detail);
           notFound(req, res);
           return;

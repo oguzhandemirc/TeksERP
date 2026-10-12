@@ -8,6 +8,7 @@ import { recordAudit } from "../lib/audit";
 import { VendorError } from "../lib/errors";
 import { prisma } from "../lib/prisma";
 import type { VendorContext } from "../services/context";
+import { securityEvent } from "../lib/security-events";
 
 export type { SigningKeyKind };
 
@@ -26,6 +27,7 @@ async function registerFailure(ctx: VendorContext, who: SigningActor, kind: Sign
     data: { imzaKilitBitis: until, imzaBasarisiz: 0 },
   });
   if (locked.count > 0) {
+    securityEvent("IMZA_KILIDI", kind);
     await recordAudit({ event: "IMZA_PAROLASI_KILITLENDI", entity: "PortalKullanici", entityId: who.userId, actor: who.actor, summary: { anahtar: kind, kilitBitis: until.toISOString() } });
   }
 }

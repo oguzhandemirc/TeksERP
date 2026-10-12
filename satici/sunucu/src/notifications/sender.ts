@@ -10,7 +10,7 @@
 //      KANAL beklemesi, deneme hakkı yanmaz · KALICI → HATA (Telegram sohbeti taşındıysa yeni kimlik satırda).
 // Hata kaydı yalnız kısa KODdur (DB seddi); gövde okunurken allowlist şemasından geçmeyen satır gönderilmez.
 import type { BildirimDurumu, BildirimKanali, BildirimOlayi, Prisma, PrismaClient } from "@prisma/client";
-import { NOTIFICATION_CHANNELS, NotificationBodySchema } from "./catalog";
+import { NOTIFICATION_CHANNELS, NotificationBodySchema, SECURITY_EVENTS, isSecurityEvent } from "./catalog";
 import { renderMessage } from "./message";
 import type { NotificationTransport, SendOutcome } from "./transports";
 
@@ -36,6 +36,8 @@ export interface SenderDeps {
   readonly db: PrismaClient;
   /** YALNIZ yapılandırılmış kanallar; olmayan kanal KAPALI sayılır. */
   readonly transports: Partial<Record<BildirimKanali, NotificationTransport>>;
+  /** Güvenlik sınıfının (`SECURITY_EVENTS`) taşıyıcıları — ayrı sohbet/alıcı; yoksa o sınıf KAPALI (işletmeye düşmez). */
+  readonly securityTransports?: Partial<Record<BildirimKanali, NotificationTransport>>;
   readonly settings: SenderSettings;
   /** Kanal beklemesi (sağlayıcı 429 `retry_after`): bu ana dek o kanala İSTEK ATILMAZ. Turlar arası taşınır. */
   readonly pausedUntil?: Map<BildirimKanali, number>;
@@ -70,11 +72,30 @@ interface Claimed extends Candidate {
 /** Bekleyen ya da kilidi dolmuş satır (yalnız bu kanallardan). */
 const openRows = (now: Date): Prisma.BildirimWhereInput[] => [{ durum: "BEKLIYOR" }, { durum: "GONDERILIYOR", kilitBitis: { lt: now } }];
 
+const SECURITY = { in: [...SECURITY_EVENTS] };
+const BUSINESS = { notIn: [...SECURITY_EVENTS] };
+
+/** Satırın sınıfına göre taşıyıcı: güvenlik olayı YALNIZ güvenlik taşıyıcısına gider. */
+function transportFor(deps: SenderDeps, olay: BildirimOlayi, kanal: BildirimKanali): NotificationTransport | undefined {
+  return isSecurityEvent(olay) ? deps.securityTransports?.[kanal] : deps.transports[kanal];
+}
+
+/** Sınıf × kanal: canlı (taşıyıcısı olan) satır kapsamı. Boş kapsam yok → OR'a girmez. */
+function scopes(deps: SenderDeps, live: boolean): Prisma.BildirimWhereInput[] {
+  const pick = (m: Partial<Record<BildirimKanali, NotificationTransport>> | undefined) => NOTIFICATION_CHANNELS.filter((k) => Boolean(m?.[k]) === live);
+  const business = pick(deps.transports);
+  const security = pick(deps.securityTransports);
+  return [
+    ...(business.length > 0 ? [{ kanal: { in: business }, olay: BUSINESS }] : []),
+    ...(security.length > 0 ? [{ kanal: { in: security }, olay: SECURITY }] : []),
+  ];
+}
+
 async function closeUnconfigured(deps: SenderDeps, now: Date): Promise<number> {
-  const off = NOTIFICATION_CHANNELS.filter((k) => !deps.transports[k]);
+  const off = scopes(deps, false);
   if (off.length === 0) return 0;
   const r = await deps.db.bildirim.updateMany({
-    where: { kanal: { in: off }, OR: openRows(now) },
+    where: { AND: [{ OR: off }, { OR: openRows(now) }] },
     data: { durum: "KAPALI", kilitBitis: null, sonHata: "KANAL_YAPILANDIRILMAMIS" },
   });
   return r.count;
@@ -107,7 +128,7 @@ async function finish(db: PrismaClient, c: Claimed, data: Prisma.BildirimUpdateM
 }
 
 async function attempt(deps: SenderDeps, c: Claimed): Promise<SendOutcome> {
-  const transport = deps.transports[c.kanal];
+  const transport = transportFor(deps, c.olay, c.kanal);
   if (!transport) return { kind: "KALICI", code: "KANAL_YAPILANDIRILMAMIS" };
   const body = NotificationBodySchema.safeParse(c.govde);
   if (!body.success) return { kind: "KALICI", code: "GOVDE_GECERSIZ" };
@@ -161,10 +182,10 @@ export async function runSenderCycle(deps: SenderDeps, nowMs: number): Promise<C
   const paused = deps.pausedUntil ?? new Map<BildirimKanali, number>();
   t.closed = await closeUnconfigured(deps, now);
   t.expired = await expireStale(deps, nowMs);
-  const live = NOTIFICATION_CHANNELS.filter((k) => deps.transports[k]);
+  const live = scopes(deps, true);
   if (live.length === 0) return t;
   const candidates = await deps.db.bildirim.findMany({
-    where: { kanal: { in: live }, OR: [{ durum: "BEKLIYOR", sonrakiDeneme: { lte: now } }, { durum: "GONDERILIYOR", kilitBitis: { lt: now } }] },
+    where: { AND: [{ OR: live }, { OR: [{ durum: "BEKLIYOR", sonrakiDeneme: { lte: now } }, { durum: "GONDERILIYOR", kilitBitis: { lt: now } }] }] },
     orderBy: [{ sonrakiDeneme: "asc" }, { id: "asc" }],
     take: BATCH,
     select: { id: true, olay: true, kanal: true, govde: true, durum: true, deneme: true, createdAt: true },

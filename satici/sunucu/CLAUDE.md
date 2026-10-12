@@ -27,7 +27,7 @@ Fabrikaların lisansını verir ve yönetir: etkinleştirme (kod → HAK + KİRA
 
 ## Advisory kilit envanteri (satıcı DB'si — backend'in 80xx uzayından bağımsız)
 
-Kilit tx'in İLK ifadesidir; birden çok kilit bu SIRADA alınır: `PORTAL_TOKEN → DEALER → CUSTOMER → TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK → KEY_SET → UPDATE_WAVE` (çoklular kimlik sırasıyla: `lockDealers`, `lockInstallations`, `lockUploadScope`). Tek tanım `src/lib/locks.ts` `LOCK_NAMESPACES`; tablo onunla birebir (bekçi `scripts/test_satici_kapilari.ts` §1, §7).
+Kilit tx'in İLK ifadesidir; birden çok kilit bu SIRADA alınır: `PORTAL_TOKEN → DEALER → CUSTOMER → TRANSFER_KEY → INSTALLATION → LICENSE_NUMBER → UPLOAD_REQUEST → UPLOAD_SESSION → SHARED_FILE → DOWNLOAD_LINK → KEY_SET → UPDATE_WAVE → SECURITY_ALERT` (çoklular kimlik sırasıyla: `lockDealers`, `lockInstallations`, `lockUploadScope`). Tek tanım `src/lib/locks.ts` `LOCK_NAMESPACES`; tablo onunla birebir (bekçi `scripts/test_satici_kapilari.ts` §1, §7).
 
 | Uzay | Ad | Kapsam |
 |---|---|---|
@@ -43,6 +43,7 @@ Kilit tx'in İLK ifadesidir; birden çok kilit bu SIRADA alınır: `PORTAL_TOKEN
 | 9110 | `DOWNLOAD_LINK` | indirme bağlantısı başına: sayaç ↔ iptal |
 | 9111 | `KEY_SET` | imza anahtarı kümesi: iptal belgesi içe aktarma ↔ süre bildirimi |
 | 9112 | `UPDATE_WAVE` | güncelleme grubu başına: dalga açma ↔ ilerletme/geri çekme ↔ eşik |
+| 9113 | `SECURITY_ALERT` | güvenlik olayı sınıfı başına: giden kutusu yazımı (B3) |
 
 ## Budama beyanı (telemetri + ayak izi)
 

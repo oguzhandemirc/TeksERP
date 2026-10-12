@@ -28,7 +28,13 @@ export const NOTIFICATION_EVENTS = [
   "DONANIM_ONAYI_BEKLIYOR",
   "BAKIM_BITISI_YAKLASIYOR",
   "GUNCELLEME_DALGA_UYARI",
+  "GUVENLIK_OLAYI",
+  "GUVENLIK_OZETI",
 ] as const satisfies readonly BildirimOlayi[];
+
+/** Güvenlik sınıfı: gönderici bunları işletme sohbetine ASLA yollamaz, yalnız güvenlik hedeflerine (yoksa KAPALI). */
+export const SECURITY_EVENTS = ["GUVENLIK_OLAYI", "GUVENLIK_OZETI"] as const satisfies readonly BildirimOlayi[];
+export const isSecurityEvent = (e: BildirimOlayi): boolean => (SECURITY_EVENTS as readonly BildirimOlayi[]).includes(e);
 
 export const NOTIFICATION_CHANNELS = ["EPOSTA", "TELEGRAM"] as const satisfies readonly BildirimKanali[];
 
@@ -58,6 +64,8 @@ export const NOTIFICATION_TITLES: Readonly<Record<BildirimOlayi, string>> = {
   DONANIM_ONAYI_BEKLIYOR: "Donanım değişikliği / zayıf tanıma onay bekliyor",
   BAKIM_BITISI_YAKLASIYOR: "Bakım bitişi yaklaşıyor — yenileme zamanı",
   GUNCELLEME_DALGA_UYARI: "Güncelleme dalgasında sorun eşiği aşıldı — yayılım sürüyor, karar sizin",
+  GUVENLIK_OLAYI: "GÜVENLİK — şüpheli olay",
+  GUVENLIK_OZETI: "Günlük güvenlik özeti",
 };
 
 /** Gövde ALLOWLIST'i — göçteki `bildirim_govde_gecerli` dizisiyle BİREBİR (sıra dahil). */

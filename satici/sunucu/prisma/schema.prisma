@@ -1425,6 +1425,11 @@ enum BildirimOlayi {
   /// F1a: bir backend sürümünün dalgasında GERI_DONDU + BASARISIZ eşiği aştı (≥ 2 kurulum ya da ≥ %10) — UYARI,
   /// yayılımı DURDURMAZ (AK-2); dalga × aşama başına bir kez.
   GUNCELLEME_DALGA_UYARI
+  /// B3: güvenlik olayı (Access reddi · iç API 401 · kilit · sel · hız sınırı) — işletme bildirimlerinden AYRI sohbete
+  /// gider (gönderici `GUVENLIK_TELEGRAM_CHAT_ID`); sınıf × birleştirme penceresi başına bir satır.
+  GUVENLIK_OLAYI
+  /// B3: günlük güvenlik özeti (sınıf başına son 24 saat; olay yoksa da gider — kanalın canlılık sinyali); UTC günü başına bir.
+  GUVENLIK_OZETI
 }
 
 enum BildirimKanali {

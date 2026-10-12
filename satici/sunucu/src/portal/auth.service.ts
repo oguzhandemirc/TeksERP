@@ -16,6 +16,7 @@ import { loginThrottleFor } from "./login-throttle";
 import { burnPasswordCheck, verifyPortalPassword } from "./password";
 import { actorOf, roleAllowedOn, type PortalListener, type PortalRole } from "./roles";
 import { verifyTotp } from "./totp";
+import { securityEvent } from "../lib/security-events";
 
 // Oturumu ayıran DB'deki dinleyicidir: emekli TAILNET satırı hiçbir dinleyiciye eşit olmadığından çözülmez.
 export const SESSION_COOKIE: Readonly<Record<PortalListener, string>> = { GENEL: "bayi_oturum", ERISIM: "satici_oturum" };
@@ -60,6 +61,7 @@ async function registerFailure(ctx: VendorContext, user: PortalKullanici, nowMs:
   await recordAudit({ event: "PORTAL_GIRIS_BASARISIZ", entity: "PortalKullanici", entityId: user.id, actor: "portal", summary: { dinleyici: from.listener, ardisik: bumped.basarisizGiris } });
   const until = loginThrottleFor(ctx).registerFailure(user.id, from.source, nowMs);
   if (until) {
+    securityEvent("PORTAL_KILIT", from.listener);
     await recordAudit({ event: "PORTAL_HESAP_KILITLENDI", entity: "PortalKullanici", entityId: user.id, actor: "portal", summary: { kilitBitis: until.toISOString(), kapsam: "KAYNAK" } });
   }
 }
