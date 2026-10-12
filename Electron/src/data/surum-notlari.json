@@ -88,6 +88,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Panel güncellemesi artık yarım kalan işinizi bozmaz: açık bir form penceresi varken ya da bir forma yazmaya başladıysanız güncelleme kurulmaz, üst şeritte açık formunuz kapanınca kurulacağı yazar; formu kaydedip kapatınca iki dakikalık geri sayım başlar. Geri sayım penceresinde Sonra derseniz güncelleme program kapanırken kurulur. Güncellemeler sayfasındaki Yeniden başlat ve şeritteki Şimdi kur düğmeleri açık form varken önce uyarır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sunucu güncellenecekse panelin üstünde 5 dakika önceden bir şerit çıkar: kaç dakika kaldığını yazar ve kaydedilmemiş işinizi kaydetmenizi ister. Sunucu güncellemesini onayladığınızda kurulum hemen değil 5 dakika sonra başlar; onay kartı bunu yazar. Güncelleme sırasında yaklaşık bir dakika sunucuya ulaşılamaz; şerit Sunucu güncelleniyor, yeniden bağlanıyor yazar ve Sunucuya ulaşılamıyor uyarısı çıkmaz. Bu sırada kaydettiğiniz iş kaybolmaz: panel bağlantı gelene dek bekler ve kaydı kendiliğinden gönderir, aynı kayıt iki kez oluşmaz. Sunucu 2.15.6 sürümüne geçmeden şerit çıkmaz, panel bugünkü gibi çalışır."
         }
       ]
     },

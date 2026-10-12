@@ -31,6 +31,9 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   portaldan indirilen dosya. Veritabanı başka bir kurulumdan kopyalanmış görünüyorsa da aynı ekran açılır; bu
   durumda yedek alma ve verileri dışa aktarma açık kalır. **Etkinleştirilmiş kurulumlar etkilenmez.** Daha önce
   kurulmuş ama hiç etkinleştirilmemiş bir sunucu bu sürüme geçmeden önce portaldan muafiyet dosyası almalıdır.
+- **Sunucu güncellemesi 5 dakika önceden duyurulur.** Panelden onaylanan sunucu güncellemesi hemen değil onaydan
+  5 dk sonra başlar; bu sürede panel ve tabletlerde kalan süreyi gösteren bir şerit çıkar (yeni panel/tablet gerekir).
+  Kurulum sırasındaki yaklaşık 1 dk kesintide yeni panel/tablet kaydı bekletir ve bağlantı gelince gönderir.
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -88,6 +91,15 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   `STOP_OVERLAP` ile düşer; tekli açılışın davranışı DEĞİŞMEDİ. Salon cevabına `bulkStopActions` (panelin eski
   sunucu tespiti). Migration YOK.
 
+**Sunucu güncellemesi ön duyurusu** (commitler `feat(guncelleme): B backend — …` ve `feat(guncelleme): B istemciler — …`; kısa kimlikleri paketlemede yazılır)
+
+- Onay (HEMEN/PENCERE) güncelleyici niyetine kayıttan 5 dk sonra yazılır (geri alma anında); yürürlük anını süreç
+  içi tek zamanlayıcı yakalar, açılışta yeniden kurulur. Güncelleme programına dokunulmadı.
+- `GET /api/guncelleme/durum` cevabına `kesinti {planlanan, kalanSn, suruyor}` ve `onay.yururluk`; dar özet ucu
+  `/api/guncelleme/ozet`e aynı `kesinti` (panel ve tablet şeridi bunu okur).
+- Bilinen sınır: OTOMATİK kipte (onaysız) pencere İÇİNDE hazırlanan paket ön duyurusuz kurulur (güncelleme
+  programı sürümü ister; `GUNCELLEYICI-SAGLAMLIK.md` §12 R23).
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -116,6 +128,8 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   yeni hata/satır kodları `STOP_OVERLAP` (409) ve `STOP_NOT_OPEN`/`TRANSIENT_CONFLICT` (yalnız toplu cevabın satırında),
   yeni sistem olayı `MACHINE_STOP_BULK`. Eski panel yeni uçları çağırmaz; yeni panel eski sunucuda toplu duruş
   eylemlerini pasif gösterir ("sunucu güncellenince açılır").
+- **Kırıldı mı:** HAYIR (ön duyuru kısmı) — yalnız ekleme: durum cevabında `kesinti`, `onay.yururluk`; özet
+  cevabında `kesinti`. Davranış farkı: onaydan sonra kurulum 5 dk gecikir (eski panelde de).
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.
