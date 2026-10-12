@@ -138,6 +138,9 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // gelir (`...RAW_SETTING_SCOPE_PERMISSIONS`, anahtar → izin). Tablodaki her
   // kodun katalogda olduğunu `test_settings_scopes.ts` §1b MEKANİK doğrular.
   "src/routes/admin.routes.ts": [`${DELEGE}scripts/test_settings_scopes.ts`],
+  // Tezgah alarmı vardiya durumu ucu: `flagKeyWriters("tezgahAlarmEnabled")` — ayarı yazabilen okur;
+  // kodlar aynı settings-scopes tablosundan, kapsam `test_settings_scopes.ts` §1b'de.
+  "src/routes/feature-flag.routes.ts": [`${DELEGE}scripts/test_settings_scopes.ts`],
   // GERİ SARMA (2026-09-12): `assertEntityPermission` ikinci kapıyı yine
   // `adapter.writePermission`den çözüyor — varlık KOŞUMUN KENDİSİNDEN
   // (`ImportRun.entity`) bulunuyor, `:entity` parametresinden değil. Desen ve
