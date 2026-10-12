@@ -20,12 +20,14 @@
 # Kaynak haritası (REPO DIŞI arşiv):  aynı komut + --target kaynak-haritasi \
 #   --output type=local,dest=$HOME/.tekserp/kaynak-haritalari/<ad>
 # Runbook: docs/ops/LINUX-DOCKER-KURULUM.md
+# Taban imajlar `etiket@sha256` ile sabitlenir: etiket yeniden işaretlense de imzalı teslimin
+# tabanı değişmez. Yenilemek: `docker buildx imagetools inspect <imaj:etiket>` → Digest.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
 # 1) RUNTIME NODE — tek kaynak deploy/node-surumu.json, SHA256 doğrulamalı indirme
 # ---------------------------------------------------------------------------
-FROM --platform=linux/amd64 node:24-bookworm-slim AS runtime-node
+FROM --platform=linux/amd64 node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS runtime-node
 RUN apt-get update && apt-get install -y --no-install-recommends xz-utils ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /w
@@ -38,7 +40,7 @@ RUN node scripts/koruma-runtime-indir.mjs linux-x64 /w/sahne \
 # ---------------------------------------------------------------------------
 # 2) DERLE — esbuild + bytenode (.jsc) + karartılmış araçlar + prod node_modules
 # ---------------------------------------------------------------------------
-FROM --platform=linux/amd64 node:24-bookworm-slim AS derle
+FROM --platform=linux/amd64 node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS derle
 ARG TEKSERP_COMMIT=""
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -84,7 +86,7 @@ COPY --from=derle /arsiv /
 # ---------------------------------------------------------------------------
 # 3) ÇALIŞMA İMAJI
 # ---------------------------------------------------------------------------
-FROM --platform=linux/amd64 debian:bookworm-slim AS korumali
+FROM --platform=linux/amd64 debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS korumali
 ARG TEKSERP_COMMIT=""
 # pg_dump/pg_restore/psql 16 PGDG'den (bookworm'unki 15: "server version mismatch" → gece
 # yedeği sessizce düşer). tini: PID 1 sinyal/zombi. /etc/machine-id imaja GİRMEZ (parmak izi
