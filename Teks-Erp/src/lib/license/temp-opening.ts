@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { getLicenseCore } from "./native";
 import type { JwsKey, LicenseCore } from "./license-core";
 import {
+  DAY_MS,
   TYP_GECICI,
   b64uDecode,
   b64uEncode,
@@ -50,6 +51,18 @@ export interface ActiveTempOpening {
   readonly kodId: number;
   readonly acceptedMs: number;
   readonly last4: string;
+}
+
+/** Ekrana giden görünüm — durum özeti ve yazarak etkinleştirme uçları AYNI hesabı okur. */
+export interface TempOpeningView {
+  readonly bitis: string;
+  readonly kalanGun: number;
+  readonly kodSonu: string;
+}
+
+export function tempOpeningView(t: ActiveTempOpening | null, nowMs: number): TempOpeningView | null {
+  if (!t) return null;
+  return { bitis: msToIso(t.endMs), kalanGun: Math.max(0, Math.ceil((t.endMs - nowMs) / DAY_MS)), kodSonu: t.last4 };
 }
 
 function currentKid(): string | null {

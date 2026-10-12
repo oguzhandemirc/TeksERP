@@ -6,7 +6,7 @@
 //
 //   §1 istek kodu: TI-… biçimi, tekrar okumada AYNI, yenileyince farklı, LICENSE_DIR'de
 //   §2 ⭐ geçerli kod → kilit YOK (neden GECICI, sınıf YOK — eski panel "YOK" görür), kip zorla, iş ucu açık;
-//      istek kodu yenilendi
+//      istek kodu yenilendi; durum özeti `gecici` alanı uçla aynı
 //   §3 ⭐ retler (400 TEMP_CODE_INVALID): yanlış imza · başka kurulum · süresi geçmiş · tekrar · sağlama · karakter
 //      (konum) · dar kök (IMZACI); etkin kurulumda 409
 //   §4 ⭐ süre sonu merdiveni (sahte saat): bitişe >7 g uyarısız · ≤7 g UYARI bandı · bitiş+1 g EK_SURE ·
@@ -57,6 +57,7 @@ import {
   type RootKey,
 } from "../src/lib/license/protocol";
 import { acceptTempCode, flushTempConsumption, getTempRequest, renewTempRequestCode } from "../src/services/license-temp-code.service";
+import { getLicenseStatus } from "../src/services/license-view.service";
 import { closeTempOnActivation } from "../src/services/license-trail.service";
 import type { VendorTransport } from "../src/services/helpers/license-wire.helper";
 import { anahtarUret, fiksturKur, type TestAnahtari } from "./lib/lisans-fikstur";
@@ -162,6 +163,9 @@ async function gecerliKod(token: string): Promise<void> {
   check("§2d ⭐ iş ucu açık (POST /api/orders rotaya)", (await kapi("POST", "/api/orders", token)).rotaya);
   check("§2e istek kodu tüketildi → yenilendi", v.istekKodu !== istek);
   check("§2f geçici etkin kurulum etkin SAYILMAZ (tam etkinleştirme açık kalır)", !s.activated && s.licenseId === null);
+  // Panelin geçici bandı durum özetinden okur: istek kodu ucuyla AYNI görünüm.
+  const durum = getLicenseStatus(true);
+  check("§2g ⭐ GET /durum `gecici` = uçtaki görünüm (bitiş, kalan gün, son 4)", durum.ayrinti && JSON.stringify(durum.gecici) === JSON.stringify(v.gecici), JSON.stringify(durum.ayrinti ? durum.gecici : null));
 }
 
 // ── §3 ─────────────────────────────────────────────────────────────────────────────────────────────────────

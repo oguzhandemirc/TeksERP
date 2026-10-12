@@ -423,6 +423,9 @@ Yanıt zarfı backend'in genel biçimidir: başarı `{ success: true, data: T }`
 | `POST /aktarma-yaniti` | `license:manage` | `{ yanit: object }` — satıcının yanıt gövdesi AYNEN | `LicenseDetail` |
 | `POST /tasima-talebi` | `license:manage` | `{ gerekce?: string \| null }` | `LicenseTransferResult` |
 | `POST /dr-devral` | `license:manage` | `{ anaKurulumId?: uuid, gerekce: string }` (kimlik yoksa satıcı çıkarır — 2d) | `LicenseDetail` |
+| `GET /gecici-kod/istek` | `license:manage` | — (etkin kurulumda 409 `LICENSE_ALREADY_ACTIVE`) | `{ istekKodu: "TI-…" (6×4; tüketilene/yenilenene dek aynı), olusturuldu, gecici: TempOpeningView \| null }` |
+| `POST /gecici-kod/istek/yenile` | `license:manage` | — | aynı (eski isteğe verilen kod artık geçmez) |
+| `POST /gecici-kod` | `license:manage` | `{ kod }` (TG- + 23×5; elle yazım normalleşir: büyük harf, O→0, I/L→1, tire/boşluk) — ret 400 `TEMP_CODE_INVALID` (`neden` BICIM · KARAKTER + `konum` · SAGLAMA · SURUM · IMZACI · IMZA · SURESI_GECMIS · TEKRAR) | aynı (istek kodu yenilendi) |
 | `GET /veri-disari` | `admin:settings` ∨ `system:backups`, VE `admin:users` (yedek zinciriyle aynı) | — | `LicenseDataExportManifest` |
 
 ```ts
@@ -445,7 +448,10 @@ interface LicenseStatusSummary {
   lisansNo: string | null;        // TKS-YYYY-NNNN (görünür filigran)
   lisansSahibi: { musteri: string; tesis: string } | null;
   surum: string;                  // backend sürümü
+  etkinlestirmeKilidi: "YOK" | "ETKINLESMEDI" | "KOPYA" | "KURULUM_HATASI"; // G2
+  gecici: TempOpeningView | null; // yazarak etkinleştirmeyle açık kurulum; eski panel yok sayar
 }
+interface TempOpeningView { bitis: string; kalanGun: number; kodSonu: string } // bitiş = kod gününün sonu (UTC)
 type LicenseStatusResponse = LicenseStatusSummary | { ayrinti: false };
 
 // GET /detay — Lisans ekranı (yönetici).

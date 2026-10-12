@@ -1,6 +1,6 @@
 // YAZARAK ETKİNLEŞTİRME servis yüzü: istek kodu, geçici açılış kodunun kabulü, tam etkinleştirmede kapanış ve satıcıya
 // tüketim bildirimi (kuyruk). Ayak izinde düz kod YOKTUR — yalnız son 4 karakter ve bitiş.
-import { DAY_MS, ENDPOINTS, TempConsumedRequestSchema, TempConsumedResponseSchema, msToIso } from "../lib/license/protocol";
+import { ENDPOINTS, TempConsumedRequestSchema, TempConsumedResponseSchema, msToIso } from "../lib/license/protocol";
 import { getLicenseConfig, getLicenseSnapshot, invalidateLicenseSnapshot } from "../lib/license/runtime";
 import { getLicenseStore } from "../lib/license/store";
 import {
@@ -10,7 +10,9 @@ import {
   pendingTempConsumed,
   renewTempRequest,
   storeTempOpening,
+  tempOpeningView,
   type TempCodeReason,
+  type TempOpeningView,
 } from "../lib/license/temp-opening";
 import { egressTransport, licenseError, vendorPost, type VendorTransport } from "./helpers/license-wire.helper";
 import { adminAction } from "./license-trail.service";
@@ -29,7 +31,7 @@ const REJECTION_TEXT: Readonly<Record<TempCodeReason, string>> = {
 export interface TempRequestView {
   readonly istekKodu: string;
   readonly olusturuldu: string;
-  readonly gecici: { readonly bitis: string; readonly kalanGun: number; readonly kodSonu: string } | null;
+  readonly gecici: TempOpeningView | null;
 }
 
 function requireUsableStore(): void {
@@ -41,19 +43,13 @@ function requireNotActivated(): void {
   if (getLicenseSnapshot().activated) throw licenseError(409, "LICENSE_ALREADY_ACTIVE", "Kurulum zaten etkin; geçici açılış kodu gerekmez.");
 }
 
-function tempView(nowMs: number): TempRequestView["gecici"] {
-  const t = getLicenseSnapshot(nowMs).gecici;
-  if (!t) return null;
-  return { bitis: msToIso(t.endMs), kalanGun: Math.max(0, Math.ceil((t.endMs - nowMs) / DAY_MS)), kodSonu: t.last4 };
-}
-
 /** Ekrandaki istek kodu (TI-…): tüketilene ya da yenilenene dek aynı kalır. */
 export function getTempRequest(nowMs: number = Date.now()): TempRequestView {
   requireUsableStore();
   requireNotActivated();
   const r = currentTempRequest(nowMs);
   if (!r) throw licenseError(409, "LICENSE_STORE_UNAVAILABLE", "Lisans deposu kullanılamıyor.");
-  return { istekKodu: r.gosterim, olusturuldu: r.olusturuldu, gecici: tempView(nowMs) };
+  return { istekKodu: r.gosterim, olusturuldu: r.olusturuldu, gecici: tempOpeningView(getLicenseSnapshot(nowMs).gecici, nowMs) };
 }
 
 export function renewTempRequestCode(userId: string | null, nowMs: number = Date.now()): TempRequestView {

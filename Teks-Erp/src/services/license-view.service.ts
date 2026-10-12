@@ -19,17 +19,8 @@ import {
 } from "../lib/license/protocol";
 import { getLicenseStore, type PendingTransfer, type StoreProblem } from "../lib/license/store";
 import { updateGroupOf, type UpdateGroup } from "../lib/license/update-group";
-import {
-  getDoorbellStatus,
-  getDownloadTokens,
-  getLicenseConfig,
-  getLicenseDbFacts,
-  getLicenseSnapshot,
-  getPollStatus,
-  peekObservationCounters,
-  requestDownloadTokenRefresh,
-  type LicenseSnapshot,
-} from "../lib/license/runtime";
+import { getDoorbellStatus, getDownloadTokens, getLicenseConfig, getLicenseDbFacts, getLicenseSnapshot, getPollStatus } from "../lib/license/runtime";
+import { peekObservationCounters, requestDownloadTokenRefresh, type LicenseSnapshot } from "../lib/license/runtime";
 import type { Banner, LicenseEffect, PaidThrough, StateReason } from "../lib/license/state";
 import { licenseError } from "./helpers/license-wire.helper";
 import { fingerprintSection } from "./helpers/license-fingerprint-view.helper";
@@ -39,6 +30,7 @@ import { chainSection, type LicenseChainView } from "./helpers/license-chain-vie
 import type { IntegrityStatus } from "../lib/license/state-rules";
 import { bannerFields } from "../lib/license/process-banners";
 import type { ActivationLockClass } from "../lib/license/activation-lock";
+import { tempOpeningView, type TempOpeningView } from "../lib/license/temp-opening";
 
 // ── Durum özeti (herkes) ────────────────────────────────────────────────────────
 export interface LicenseStatusSummary {
@@ -61,13 +53,15 @@ export interface LicenseStatusSummary {
   readonly surum: string;
   /** G2 etkinleştirme kilidi: YOK · ETKINLESMEDI (yalnız etkinleştirme ekranı) · KOPYA (+ verilerimi al). */
   readonly etkinlestirmeKilidi: ActivationLockClass;
+  /** Yazarak etkinleştirmeyle açık kurulum (geçici açılış kodu); yoksa null. Eski panel alanı yok sayar. */
+  readonly gecici: TempOpeningView | null;
 }
 export type LicenseStatusResponse = LicenseStatusSummary | { readonly ayrinti: false };
 
 /** Kimliksiz çağırana ayrıntı YOK: kademe/gün/modül sinyali sızmaz. */
-export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse {
+export function getLicenseStatus(authenticated: boolean, nowMs: number = Date.now()): LicenseStatusResponse {
   if (!authenticated) return { ayrinti: false };
-  const snap = getLicenseSnapshot();
+  const snap = getLicenseSnapshot(nowMs);
   const s = snap.state;
   const ent = snap.entitlement?.document ?? null;
   return {
@@ -83,6 +77,7 @@ export function getLicenseStatus(authenticated: boolean): LicenseStatusResponse 
     lisansSahibi: ent ? { musteri: ent.musteri.ad, tesis: ent.tesis.ad } : null,
     surum: APP_VERSION,
     etkinlestirmeKilidi: snap.etkinlestirmeKilidi.sinif,
+    gecici: tempOpeningView(snap.gecici, nowMs),
   };
 }
 
