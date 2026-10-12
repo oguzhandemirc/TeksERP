@@ -153,6 +153,8 @@
 
 ### Ölçümler
 
+- **[ÇEKİRDEK]** Backend bağlantı havuzunun boyutu `pg.Pool max`tır (`src/lib/prisma.ts`, 30); `DATABASE_URL`deki `connection_limit` bu yolu BELİRLEMEZ. PG `max_connections` (şablon `deploy/pg/postgresql.tekserp.conf.sablon` 100, `superuser_reserved_connections` 3) ≥ havuz + bakım payı (yedek · göç · psql) tutulur; havuzu büyüten değişiklik bu eşitsizliği ve `work_mem × aktif bağlantı` belleğini birlikte sınar. Havuz 30'da KALIR (1e kararı 2026-10-12) — ölçüm: 50 tablet + 10 panel yükünde kuyruk tepesi (`waitingMax`) duruş AÇ düzeltmesinden sonra 150–171 → 20. · arşiv 2026-10
+- **[ÇEKİRDEK]** İndeks göçünün kilit süresi ölçülerek söylenir: `20261012200000_perf_indeksler` 300k satırlık duruş tablosunda ~0,16 sn (o süre yazmalar bekler); büyük tabloda `CREATE INDEX` yazma kilidi alır, vardiya dışı kuralı (Yasaklar) geçerlidir. · arşiv 2026-10
 - **[PROFİL]** [PROFİL] `statement_timeout=50s` DB-level `ALTER DATABASE` ile kurulur — migration ile DEĞİL; yeni kurulumda `ilk-kurulum.ps1` kurar (var olan farklı değeri ezmez), elle kurulumda aynı komut. DB adı ortama göre: dev `tekserp_demo` (.env, port 55433), sahadaki Windows sunucu `tekserp` — adı dokümana sabitleme, `.env`'den doğrula. <sub>(CLAUDE.md:274, CLAUDE.md:96)</sub>
 - **[ÇEKİRDEK]** Commands listesi BAYAT: `npm run build` = `tsc && node scripts/build-araclar.mjs` (ikinci adım yazılı değil); `npm run seed` 'test verisi' DEĞİL 'temiz fabrika kurulumu seed'i (tek kullanıcı admin + master data); listede yok: `test`, `superadmin:kur`, `seed:fixtures`, `check:migrations`. <sub>(CLAUDE.md:56)</sub>
 

@@ -36,6 +36,7 @@
 - **[ÇEKİRDEK]** Rol (yetki şablonu) kataloğu üç parçalıdır: tek kaynak `constants/role-template-catalog.ts` + boot uzlaştırması (izin uzlaştırmasından SONRA, FK sırası) + mekanik bekçi. Rol SAYISINI koda/nota sabitleme — kanonik sayı dosyadadır. · bekçi: `Teks-Erp/scripts/test_role_template_catalog.ts` <sub>(CLAUDE.md:225)</sub>
 
 - **[ÇEKİRDEK]** İlk girişte kalite ÇİFT kolondur ve birlikte dolar/boşalır: verilen kod `qualityGrade` + `qualityGradeId` (katalog id'si, `resolveQualityGradeIdStrict`) olarak KOPYALANIR; alan yok · "" · whitespace üçü de NULL/NULL kalır ("Belirsiz" — sabit "1.KALITE" varsayılanı yazılmaz); bilinmeyen ve PASİF kod 400 ve top DOĞMAZ. Panel "Manuel Top Ekle" boş seçimi payload'dan düşürür (`"" → undefined`). · bekçi: `test_initial_entry_quality` (§1–§4, iki sonda) <sub>(d9 C2 bulgusu, 0c ölçtü 2026-09-14: kusur yok)</sub>
+- **[ÇEKİRDEK]** Top barkodu (`generateRollBarcodeTx` · `reserveRollBarcodes*Tx`) yazma tx'i AÇILMADAN ÖNCE havuz client'ıyla alınır; sayaç satır kilidi tx COMMIT edene kadar tutulduğundan tx içindeki artış bütün top girişlerini o satırda kuyruğa sokar. Başarısız tx'in yaktığı numara boşluk olarak kabul edilir. · bekçi: `test_perf_sayac_tx_disi` + `test_barcode_reservation`
 
 ### Tuzaklar
 

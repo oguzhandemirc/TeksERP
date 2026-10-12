@@ -63,6 +63,10 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   kapsar; eski sürüm ilk 500 çifti sayıyordu** — çok tezgahlı fabrikada aynı aralığın rakamı bu yüzden değişir
   (200 tezgahta 7 gün = 4.200 çift; eskiden ilk 2,5 vardiya sayılıyordu). Satır listesi sayfa sayfa döner
   (toplamlar sayfadan bağımsız). 200 tezgah × 7 günlük randıman 4–6 sn'den 0,5–0,9 sn'ye indi.
+- **Yoğun anda top girişi ve duruş açma hızlandı.** Aynı anda çok tabletten top girildiğinde girişler artık barkod
+  sayacında birbirini beklemiyor; tezgah duruşu açmak veritabanı bağlantısını daha az meşgul ediyor; Tezgah Salonu
+  duruş penceresi ve depo hareket listesi yeni indekslerle hızlandı. Başarısız bir girişin ayırdığı barkod numarası
+  boş kalabilir (numaralar yine tekil).
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -221,6 +225,14 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   `HOSTED_CLASS_FORCED`). Zorlanırken kanıtsız/yanlış kanıtlı istek 401 `DEVICE_PROOF_INVALID`; anahtar halkası
   okunamazsa 503. Audit olayı `DEVICE_PROOF_SECRET_ISSUED`.
 
+**Performans dilimi 1**
+
+- `8a4d99a11` — KK1 ilk giriş ve takılı top kurtarma top barkodunu yazma tx'i açılmadan önce alıyor; sayaç satır
+  kilidi tx boyunca tutulmuyor. Başarısız tx'in numarası boşluk kalır. Bekçi `test_perf_sayac_tx_disi` (`9ee23ff3c`).
+- `3007ca16e` — Migration `20261012200000_perf_indeksler`: duruş penceresi, tezgah çalışması, depo defteri sırası
+  indeksleri (yalnız indeks).
+- `6179b0119` + `0518b363d` — duruş açmada replay okuması tx içinde; istek başına havuz alımı 9 → 2. Sözleşme aynı.
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -291,14 +303,15 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 4. Migration
 
-- **Var mı:** EVET — 8 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
+- **Var mı:** EVET — 9 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
   `users` tablosuna boş geçilebilir bir alan + bir kontrol kuralı; var olan satırlar boş kalır, veri dönüşümü YOK),
   `20261012010000_durus_acan_kapatan`, `20261012120000_kimlik_sifirlama_onayi` (yalnız EKLEME: yeni tablo),
   `20261012140000_makine_durus_kod_esleme` (yalnız EKLEME: boş yeni tablo + toplayıcıya boş geçilebilir alan),
   `20261012180000_makine_kart_kimligi` (yalnız EKLEME: toplayıcıya iki boş geçilebilir alan),
   `20261012190000_makine_kart_sahiplenme` (yalnız EKLEME: duruşa boş geçilebilir alan + kısmi tekil indeks),
-  `20261012150000_cihaz_kaniti` (yalnız EKLEME: `devices`e üç boş geçilebilir alan).
-- **Toplam migration:** 384 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 8 migration uygulamalıdır. Farklı sayı =
+  `20261012150000_cihaz_kaniti` (yalnız EKLEME: `devices`e üç boş geçilebilir alan),
+  `20261012200000_perf_indeksler` (yalnız indeks, veri dönüşümü yok; 300k satırlık duruş tablosunda ~0,16 sn).
+- **Toplam migration:** 385 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 9 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -310,7 +323,7 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 8 migration); süre kurulumda ölçülür.
+- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 9 migration); süre kurulumda ölçülür.
 - **Sıra:** sunucu önce; uyarı şeridini gösteren panel sonra.
 - **Bu sürüme özel:**
   - Migration var → güncelleme programı güncellemeden önce otomatik yedek alır. Yedek adımı geçmeli.
@@ -357,7 +370,7 @@ Veriyi güncelleme öncesine döndürmek gerekirse otomatik yedekten geri yükle
 - Güncelleme programı hizmeti çalışıyor; `durum` kurulu sürüm 2.15.6, güncelleme programı 0.2.6, kira geçerli
   (DONDURULDU / KIRA_YOK yok).
 - Yedek: güncelleme öncesi yedek alındı; günlükte `SEMA_OLCULEMEDI` yok.
-- Veritabanı: 384 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
+- Veritabanı: 385 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
   kurulumda hepsi boş.
 - `/api/admin/health` `sistemHesabiMuhru`: var olan (mühürlenmemiş) kurulumda `MUHURLENMELI`, mühürlemeden sonra
   `TAMAM`. Destek hesabı girişi mühürlemeden önce de sonra da çalışıyor.
