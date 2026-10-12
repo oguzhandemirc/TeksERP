@@ -1,10 +1,13 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
 import { storage } from '../utils/storage';
 import { API_URL } from '../constants/api';
 import { getCurrentBaseUrl } from '../store/baseUrlStore';
 import { getOrCreateDeviceId } from '../utils/deviceId';
+import {
+  DEVICE_PROOF_HEADER, deviceProofFor, isProofRejection, noteServerDate, rememberDeviceSecret,
+} from './deviceProof';
 // Import yönü güvenli: authStore yalnız utils/storage'a bağımlı (api'yi import etmez).
 import { useAuthStore } from '../store/authStore';
 import { useLicenseStore } from '../store/licenseStore';
@@ -156,6 +159,9 @@ apiClient.interceptors.request.use(async (config) => {
   try {
     const deviceId = await getOrCreateDeviceId();
     if (deviceId) config.headers['x-device-id'] = deviceId;
+    // Cihaz kanıtı: kimliğin sahibi olduğumuzu sunucunun verdiği sırla imzalar (B3).
+    const proof = deviceId ? await deviceProofFor(config.method, apiClient.getUri(config)) : null;
+    if (proof) config.headers[DEVICE_PROOF_HEADER] = proof;
     // İSTEMCİ KÜNYESİ — Sistem → Bağlı İstemciler ekranını besler (hangi tablet,
     // hangi sürüm, en son ne zaman). ⚠️ BİLGİLENDİRME, kimlik kanıtı DEĞİL:
     // sunucuda hiçbir kapı bu başlıklara bakmaz (backend `constants/client-info.ts`).
@@ -177,9 +183,22 @@ apiClient.interceptors.response.use(
     sampleFromConfig(res.config, res.status, (res.config as TimedConfig).__startedAt);
     // B6 kanıtı: sunucu cevap verdi → erişilebilir.
     reportServerReachable();
+    noteServerDate(res.headers?.date);
+    if (res.config.url?.includes('/devices/')) void rememberDeviceSecret(res.data);
     return res;
   },
   (error) => {
+    // Kanıt reddi (sır yok/bayat ya da saat kayık): saat hizalanır, sır status'tan tazelenir,
+    // istek BİR kez yeniden denenir; ikinci ret normal 401 akışına düşer.
+    const cfg = error.config as (InternalAxiosRequestConfig & { __proofRetried?: boolean }) | undefined;
+    if (cfg && !cfg.__proofRetried && isProofRejection(error.response?.status, error.response?.data)) {
+      cfg.__proofRetried = true;
+      noteServerDate(error.response?.headers?.date);
+      return apiClient
+        .get('/devices/status')
+        .catch(() => undefined)
+        .then(() => apiClient.request(cfg));
+    }
     const status = error.response?.status;
     // B6 kanıtı: YANIT YOKSA sunucuya ulaşılamıyor demektir (ağ hatası / zaman
     // aşımı). Yanıt VARSA — 500 bile olsa — sunucu ayaktadır; tek bir hatalı uç
