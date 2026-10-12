@@ -11,6 +11,7 @@ import { CLASS_LABEL, INSTALLATION_STATUS_LABEL, PRODUCTION_MODULE_KEY, label } 
 import { installationName, type Installation, type InstallationDetail } from "../../shared/types";
 import { Badge, Button, KeyValues, LoadMore, PageTitle, QueryState, Section, Table } from "../../shared/ui";
 import { useDealerSelf } from "./Home";
+import { BayiTempCodePanel } from "./TempCode";
 
 export function BayiInstallationsPage() {
   const [params, setParams] = useSearchParams();
@@ -125,6 +126,7 @@ export function BayiInstallationDetailPage() {
         }}
         onChanged={refresh}
       />
+      <BayiTempCodePanel detail={d} />
     </>
   );
 }

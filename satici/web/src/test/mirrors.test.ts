@@ -50,8 +50,7 @@ import { ORDER_MAX, ORDER_MIN, VERSION_PATTERN } from "../portal/pages/Channels"
 import { UPDATE_GROUP_LABEL, defaultGroupFor } from "../shared/update-groups";
 import { CLOUD_RETENTION_DEFAULT, CLOUD_RETENTION_MONTHS, SYNC_MINUTES_DEFAULT, SYNC_MINUTES_MAX, SYNC_MINUTES_MIN } from "../shared/cloud-settings";
 import { ACCEPTANCE_EVENT } from "../portal/installation/AcceptancePanel";
-import { TEMP_REQUEST_STATUS_LABEL } from "../portal/installation/TempCodePanel";
-import { TEMP_ALPHABET, TEMP_CODE_DAYS, TEMP_REQUEST_LENGTH, TEMP_REQUEST_PREFIX } from "../shared/temp-code";
+import { TEMP_ALPHABET, TEMP_CODE_DAYS, TEMP_REQUEST_LENGTH, TEMP_REQUEST_PREFIX, TEMP_REQUEST_STATUS_LABEL } from "../shared/temp-code";
 import { CEREMONY_LEAD_DAYS, CEREMONY_USAGES, KEY_EXPIRY_WARNING_DAYS } from "../portal/pages/Guide";
 import {
   RELEASE_VERSION_PATTERN,

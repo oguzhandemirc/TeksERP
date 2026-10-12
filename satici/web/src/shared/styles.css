@@ -118,3 +118,5 @@ th { font-weight: 600; font-size: 12px; color: var(--muted); }
 
 /* Geçici açılış kodu: 23 grup, okunurken satır kaymasın. */
 .temp-code code { display: inline-block; margin: 2px 6px; }
+.plain-list { list-style: none; padding: 0; margin: 0; }
+.temp-request { border-top: 1px solid var(--line); padding: 8px 0; }

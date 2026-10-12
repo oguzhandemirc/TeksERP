@@ -11,8 +11,6 @@ import { DaysInput, RequestCodeInput, TEMP_CODE_DAYS, TempCodeView, checkRequest
 import type { InstallationDetail, TempCodeIssued, TempCodeRequest, TempCodeRow } from "../../shared/types";
 import { Badge, Button, ErrorText, Field, Modal, ModalActions, QueryState, Section, Table } from "../../shared/ui";
 
-export const TEMP_REQUEST_STATUS_LABEL: Record<TempCodeRequest["durum"], string> = { BEKLIYOR: "Bekliyor", URETILDI: "Üretildi", REDDEDILDI: "Reddedildi" };
-
 export function tempCodeState(r: { tuketildiAt: string | null; bitis: string }, nowMs = Date.now()): { text: string; tone: "ok" | "warn" | "neutral" } {
   if (r.tuketildiAt) return { text: `Tüketildi (${fmtDateTime(r.tuketildiAt)})`, tone: "neutral" };
   if (Date.parse(r.bitis) < nowMs) return { text: "Süresi doldu", tone: "warn" };

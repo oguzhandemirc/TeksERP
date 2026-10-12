@@ -2,6 +2,7 @@
 // (TG-… 23 grup) kopyalanabilir gösterimi. Biçim denetimi yalnız yazım yardımıdır; sağlamayı ve imzayı sunucu denetler.
 // Sabitler sunucu protokolünün aynasıdır (satici/sunucu src/lisans-protokol/gecici-kod.ts; bekçi mirrors.test.ts).
 import { useState } from "react";
+import type { TempCodeRequest } from "./types";
 import { Button } from "./ui";
 
 export const TEMP_CODE_DAYS = { varsayilan: 30, enAz: 7, enCok: 90 } as const;
@@ -9,6 +10,8 @@ export const TEMP_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const TEMP_REQUEST_PREFIX = "TI";
 export const TEMP_REQUEST_LENGTH = 24;
 const REQUEST_GROUP = 4;
+
+export const TEMP_REQUEST_STATUS_LABEL: Record<TempCodeRequest["durum"], string> = { BEKLIYOR: "Bekliyor", URETILDI: "Üretildi", REDDEDILDI: "Reddedildi" };
 
 /** Sunucunun `normalizeTempText` aynası: ön ek, tire, boşluk atılır; büyük harf; O→0, I/L→1. */
 export function normalizeRequestCode(raw: string): string {
