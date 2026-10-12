@@ -111,7 +111,7 @@ Hücre: **bugün → hedef (sınıf, faz)**. "✗" = korumasız.
 | T8 | Docker'da süper kullanıcı | Uygulama rolü `NOSUPERUSER`, nesne sahibi değil (**E** komut çalıştırmaya) — G4 |
 | T9 | Windows yeni kurulumda şifreli; Docker'da alıcı yoksa düz | Şifreli yedek her kurulumda varsayılan (**E** yedek sızıntısına) — G8 |
 | T10 | eski kurulum LAN'da düz HTTP | TLS `required` (yeni kurulumda var) (**E**) |
-| T11 | (inmekte) ilk girişte zorunlu değişim | Değişene dek yalnız döngü adresinden giriş önerisi (**E** LAN'a) — G1 |
+| T11 | (inmekte) ilk girişte zorunlu değişim | ~~Değişene dek yalnız döngü adresinden giriş~~ — KAPANDI: kullanıcı 2026-10-11 "sınır koyma" (G1-6 uygulanmaz) |
 | T12 | bizde sunucu erişimi yok | aynı (**E**); emanet anahtarı yalnız Ek-4 §7 hallerinde (**S**+bildirim) — G8 |
 | T13 | panel dışa aktarma her kademede açık | + yalnız-okuma DB rolü (**meşru**) — G5 |
 
@@ -146,7 +146,7 @@ S2'nin tamamı + internete açık yüzey:
 |---|---|
 | T8 | S3 gibi kritik: G4 satıştan önce |
 | T10 | Sertleştirmeyi müşteri yapar; kurulumda denetim listesi + sonucun yoklamada bilgi olarak raporu (**T**) — G10 |
-| T11 | **En riskli senaryo:** ortak parolalı varsayılan hesap internete açık API'de. Hedef: değişene dek yalnız döngü adresinden giriş (**E**) ya da bu kurulum tipinde varsayılan doğmaz — G1, karar sorusu §8-1 |
+| T11 | **En riskli senaryo:** ortak parolalı varsayılan hesap internete açık API'de. Döngü adresi sınırı kullanıcı kararıyla (2026-10-11 "sınır koyma") uygulanmaz; bu kurulum tipinde varsayılan doğmaz (**E**) — G1, §8-1 kapandı |
 | T3, T6 | VDS anlık görüntüsü/klonu: S1 ile aynı sınır (**P**+**T**) |
 
 ---
@@ -176,7 +176,7 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 - [ ] **Çatallar:** public dönemde alınmış çatallar ve klonlar private'tan etkilenmez — kod "sızmış" kabulü sürer (plan buna göre: asıl savunma G2/G3/G7).
 - **Kabul:** `gh api repos/{owner}/{repo} --jq .visibility` = `private`; `…/branches/main/protection` 200; ilk private haftanın dakika tüketimi ölçülüp arşive yazılır.
 
-### G1 — Sistem hesabı imzası (karar 7 ardılı) · **M** · ✓ `e2a0eb240`…`e76f5b547` + D5 (2026-10-12; G1-6 kapsam dışı, §8-1 kararı bekliyor)
+### G1 — Sistem hesabı imzası (karar 7 ardılı) · **M** · ✓ `e2a0eb240`…`e76f5b547` + D5 (2026-10-12; G1-6 kapandı — kullanıcı kararı 2026-10-11 "sınır koyma")
 
 - **Önkoşul:** `feature/varsayilan-superadmin` `main`e inmiş olmalı.
 - **Kapsam:**
@@ -190,9 +190,9 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 - **Kabul:** `test_superadmin` + `test_superadmin_provision` genişler: (a) DB'den `isSystemAccount=true` yapılan hesap mandallı kurulumda `["*"]` ALMAZ ve bulgu doğar (negatif sonda); (b) mühürlü hesap aynen çalışır; (c) `--muhurle` idempotent; (d) başka kurulum anahtarıyla atılmış mühür reddedilir (döküm başka sunucuya taşınınca süperadmin düşer); (e) mandalsız kurulumda davranış bugünküyle bayt eşit. Çekirdek tarafı `test_lisans_native_kahin` vektörleri.
 - **Mevcut kurulum / eski istemci:** adnansahin mandalsız kalır → davranış değişmez, yalnız bant. Panel `/auth/me` alanları aynı; yeni bant alanı eski panelde görünmez (zararsız). Yayın sırası: backend önce.
 - **Dürüst sınır:** root `LICENSE_DIR`'i okuyup çekirdeği çağırarak mühür üretebilir → **P**; DB-yalnız saldırgan (SQL enjeksiyonu, pgAdmin, başka sunucuya yüklenen döküm) → **E**.
-- **Durum (2026-10-12):** (1)–(5) ✓. Commit'ler: `e2a0eb240` şema + çekirdek işlevleri (`sealSystemAccount` · `verifySystemAccountSeal`) · `5caba6475` yetki/giriş kapısı, mühürlü doğuş, `--muhurle`, kimlik değişiminde yeniden mühür · `2f801abdb` güncelleyici 0.2.6 (ortak `Cargo.lock`) · `8a2886d08` hedef koruması aynı yüklemi okur (sahte işaretli hesap pasife alınabilir) · `e76f5b547` health `sistemHesabiMuhru` + `/auth/me` `systemAccountSealStatus` + panel bandı · D5 uçtan uca bekçi. **Sapmalar:** mühür parola/PIN/kart **kimlik özetlerini kapsar** (alan listesi parola özetini kapsamıyordu — DB'den özet değiştirip mührü bozmadan girilirdi); **`tokenVersion` girmez** (oturum iptal sayacı, her artışta yeniden mühür gerekirdi); mandal imzalı durum kaydı değil **`LICENSE_DIR/sistem-hesabi-mandali.json`** (imzasız; gevşetmenin tek yolu silmek, imza bunu engellemez). Mühür TS ve Rust'ta bayt-eşit (Ed25519 belirlenimci; kâhin vektörleri). **Bekçiler:** `test_sistem_hesabi_muhru` · `test_sistem_hesabi_muhru_uctan_uca` (bekci-http) · `test_lisans_native_kahin` (kabul (a)–(e) bunlarda ölçülür; `test_superadmin`/`test_superadmin_provision` yerine ayrı dosya). Gerekçe: `docs/history/arsiv/2026-10.md` 2026-10-12 G1 notu. **Kapsam dışı:** (6) T11 sertleştirmesi.
+- **Durum (2026-10-12):** (1)–(5) ✓. Commit'ler: `e2a0eb240` şema + çekirdek işlevleri (`sealSystemAccount` · `verifySystemAccountSeal`) · `5caba6475` yetki/giriş kapısı, mühürlü doğuş, `--muhurle`, kimlik değişiminde yeniden mühür · `2f801abdb` güncelleyici 0.2.6 (ortak `Cargo.lock`) · `8a2886d08` hedef koruması aynı yüklemi okur (sahte işaretli hesap pasife alınabilir) · `e76f5b547` health `sistemHesabiMuhru` + `/auth/me` `systemAccountSealStatus` + panel bandı · D5 uçtan uca bekçi. **Sapmalar:** mühür parola/PIN/kart **kimlik özetlerini kapsar** (alan listesi parola özetini kapsamıyordu — DB'den özet değiştirip mührü bozmadan girilirdi); **`tokenVersion` girmez** (oturum iptal sayacı, her artışta yeniden mühür gerekirdi); mandal imzalı durum kaydı değil **`LICENSE_DIR/sistem-hesabi-mandali.json`** (imzasız; gevşetmenin tek yolu silmek, imza bunu engellemez). Mühür TS ve Rust'ta bayt-eşit (Ed25519 belirlenimci; kâhin vektörleri). **Bekçiler:** `test_sistem_hesabi_muhru` · `test_sistem_hesabi_muhru_uctan_uca` (bekci-http) · `test_lisans_native_kahin` (kabul (a)–(e) bunlarda ölçülür; `test_superadmin`/`test_superadmin_provision` yerine ayrı dosya). Gerekçe: `docs/history/arsiv/2026-10.md` 2026-10-12 G1 notu. **(6) KAPANMIŞ KARAR (kullanıcı 2026-10-11, "sınır koyma"):** ortak parolalı varsayılan hesaba döngü adresi sınırı konmaz; T11 riski ilk girişte zorunlu parola değişimi ve panel uyarı şeridiyle taşınır (bilinçli kabul).
 
-### G2 — Çalıştırma kilidi: yalnız etkinleştirme ekranı + çevrimdışı etkinleştirme (karar 2) · **M**
+### G2 — Çalıştırma kilidi: yalnız etkinleştirme ekranı + çevrimdışı etkinleştirme (karar 2) · **M** · ✓ (2026-10-12)
 
 - **Kapsam:**
   1. `licenseGate`e yeni durum **`ETKINLESMEDI`**: kurulumun geçerli lisans kimliği yoksa izinli küme dışındaki her `/api` isteği 403 `details.code = LICENSE_NOT_ACTIVATED`. İzinli küme tek kaynakta (`Teks-Erp/src/constants/license-routes.ts`, gerekçeli satırlar): kimlik (giriş, `/auth/me`, çıkış, zorunlu parola değişimi, TOTP), `/api/license/*` (durum, detay, kabul, etkinleştir, çevrimdışı istek/yanıt, aktarma), sağlık, sürüm/keşif uçları, "yedekten kur".
@@ -204,6 +204,7 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 - **Dokunulan:** `Teks-Erp/src/middlewares/license.middleware.ts`, `Teks-Erp/src/constants/license-routes.ts`, `Teks-Erp/src/lib/license/runtime.ts`, `state.ts`, `state-rules-time.ts`, protokol (muafiyet belgesi türü — satıcı + fabrika ikizi, `test_lisans_protokol_aynasi`), `satici/sunucu` (muafiyet imzalama ucu, portal düğmesi), Electron lisans sayfası + kabuk yönlendirmesi, mobil hata metni.
 - **Kabul:** `test_lisans_kapisi` (izinli küme rota envanteriyle birebir; kilitte iş ucu 403, izinli uç 200) · `test_lisans_durumu` (a/b/c ayrımı; b'de bugünkü merdiven bayt eşit) · uçtan uca: temiz DB + temiz `LICENSE_DIR` ile korumalı imaj → iş ucu 403, çevrimdışı istek → test satıcısı → yanıt yükle → 200 · muafiyet belgeli kurulumda davranış bugünküyle eşit · yanlış anahtara bağlı muafiyet reddedilir.
 - **Mevcut kurulum / eski istemci:** adnansahin muafiyetsiz bu sürümü almaz (yayın kapısı); etkin kurulumlar etkilenmez. Eski panel yeni kodu tanımaz → genel hata gösterir; setup.exe yeni kurulumda eşleşen paneli kurar, `minVersion` değişmez (kırılma yalnız etkinleşmemiş yeni kurulumda).
+- **Durum (2026-10-12):** ✓. Commit'ler: `56cc360f3` backend kilit (`ETKINLESMEDI`, izinli küme, K3 küme kimliği) · `cb54ab35c` muafiyet kabulü yükleme yolundan + uçtan uca bekçi · `5b7d54152` panel etkinleştirme ekranı (karekod birinci yol) + tablet hata yüzeyi · `9a580f39c` satıcı muafiyet belgesi (portal, yalnız yönetici) · `31c3fe911` K5 giriş bekçisi `lisansEtkinlesmedi` beyanı. **Sapmalar:** (K1) kilit yalnız **korumalı derlemede** işler (`__TEKSERP_ETKINLESTIRME_KILIDI__`, `build-korumali.mjs`); geliştirme/bekçi sunucusunda kapalı, ortamdan/dosyadan/DB'den açılıp kapanmaz. (K3) kayıp ↔ kopya ayrımı parmak izi değil **PG küme kimliği + satıcı kirası**yla: aynı küme → KAYIP (kilit yok) · küme kimliği şimdi ya da kayıtta okunamadı → BELIRSIZ (kilit yok) · iki kimlik okundu ve farklı → KOPYA; satıcı kirası taşımayan / başka anahtara bağlı kiralı iz → KOPYA (DB'ye elle yazılan sahte iz kilidi açmasın). Windows uygulama hesabının `pg_control_system()` okuyabildiği ÖLÇÜLMEDİ — okunamazsa BELIRSIZ (kilitsiz). (K5) kapsam (6) uygulanmadı: `ETKINLESTIRME_EK_SURESI` çapası KALIR (muafiyetli kurulumun kademesi bayt-eşit kalsın; kilitli kurulumda etkisiz). **KAYIP/BELIRSIZ kurulumun davranışı lisansın kipine göredir (1e kararı 2026-10-12):** `zorla` kipte uyarı → ek süre → kısıtlı merdiveni; gözlem kipindeki eski kurulum (adnansahin) bugünkü gibi sınırsız — yeni kurulumlar G3 ile `zorla` kipte doğunca merdiven uygulanır. Muafiyet portalda **yalnız yönetici**, fabrikanın imzalı karekod metninden (etkinleştirme/taşıma isteği; imza zarftaki anahtarla doğrulanır, tazelik penceresi yok) basar; plan ara imzacı (varsa) ya da kök, kuyruk yok. Yazarak (karekodsuz) etkinleştirme yapılmadı — kullanıcı kararı bekliyor (arşiv notu). **Bekçiler:** `test_etkinlestirme_kilidi` · `test_lisans_kapisi` §5c–§5e · satici `test_muafiyet_belgesi` · `test_portal_uclar` §1e0 · panel `LicenseActivationPage.test.tsx` · `apiClient.license.test.ts` · tablet `license.test.ts`. Gerekçe: `docs/history/arsiv/2026-10.md` 2026-10-12 G2 notu.
 
 ### G3 — Yeni kurulum `zorla` kipinde doğar (karar 3) · **S**
 
@@ -278,7 +279,7 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 |---|---|---|
 | G0a/G0b | hayır | etkisiz |
 | G1 | hayır (yeni alan + bant) | mandalsız: bugünkü davranış + bant |
-| G2 | yeni hata kodu yalnız etkinleşmemiş kurulumda | muafiyet belgesi olmadan bu sürüm gönderilmez |
+| G2 | yeni hata kodu yalnız etkinleşmemiş kurulumda | muafiyet belgesi olmadan bu sürüm gönderilmez; KAYIP/BELIRSIZ iz gözlem kipinde bugünkü gibi |
 | G3 | hayır (satıcı varsayılanı) | eski HAK aynen |
 | G4 | hayır (istemci) · geri alınamaz göç (sunucu) | yeni kurulumunda |
 | G5 | hayır (yeni uç) | isteğe bağlı |
@@ -291,6 +292,6 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 
 ## 8. Kullanıcıdan gereken ek karar (sade dil)
 
-1. **Ortak parolalı varsayılan süperadmin internete açık sunucuda.** Müşterinin kendi VDS'ine (S4) kurulumda süperadmin belirtilmezse ortak parolalı hesap, parola değişene kadar internetten giriş alabilir. Öneri: parola değişene dek bu hesap yalnız sunucunun kendisinden giriş yapsın (G1-6).
+1. ✓ KAPANDI (kullanıcı 2026-10-11: "sınır koyma" — G1-6 uygulanmaz, bilinçli kabul) **Ortak parolalı varsayılan süperadmin internete açık sunucuda.** Müşterinin kendi VDS'ine (S4) kurulumda süperadmin belirtilmezse ortak parolalı hesap, parola değişene kadar internetten giriş alabilir. Öneri: parola değişene dek bu hesap yalnız sunucunun kendisinden giriş yapsın (G1-6).
 2. **Private olunca otomatik testler nerede koşsun?** Bugünkü test sıklığıyla aylık ücretsiz dakika birkaç günde biter. Öneri: satıştan önce testleri kendi bilgisayarlarımızda koşan GitHub koşucusuna taşıyalım (ücretsiz); yalnız gerekirse ücretli dakika.
 3. ✓ (2026-10-11, 1e ölçtü: sızan parola artık geçmiyor) **Eski `.env` dosyasındaki veritabanı parolası.** Repo geçmişinde 2026 Mayıs–Ağustos arası duran bir dosyada uzak bir veritabanı sunucusunun kullanıcı adı ve kısa parolası var. O sunucu hâlâ açıksa parolası değişmeli ya da sunucu kapatılmalı (G0a-2) — sunucunun bugün ne olduğunu siz biliyorsunuz.

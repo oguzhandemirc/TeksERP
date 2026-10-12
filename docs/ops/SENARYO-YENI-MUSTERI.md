@@ -89,8 +89,11 @@
 
 ## 8. Panel — etkinleştirme (Zorla kip)
 
-- **Nerede:** "Sistem" → "Yapılandırma" → "Lisans" karosu → "Lisans" sayfası → etkinleştirme kartı.
-- **Yap:** kod alanı ("TKS-XXXX-XXXX-XXXX-XXXX") → §2'nin kodu → "Etkinleştir". (Sunucu internete çıkamıyor ama panel bilgisayarı çıkabiliyorsa: "Bu bilgisayar üzerinden etkinleştir".)
+- **Nerede:** korumalı (satışa giden) derlemede hiç etkinleşmemiş kurulumda ilk girişten sonra YALNIZ "Sunucu lisansı etkinleştirilmedi" ekranı açılır ("Program etkinleştirilene kadar yalnız bu ekran açıktır."); öteki her ekran ve tablet 403 `LICENSE_NOT_ACTIVATED` alır (G2). Korumasız derlemede: "Sistem" → "Yapılandırma" → "Lisans" karosu → "Lisans" sayfası → etkinleştirme kartı.
+- **Yap — birinci yol karekod:** "Çevrimdışı (QR)" kartı → §2'nin kodu → istek karekodunu üret → telefonla okut → satıcının sayfasındaki yanıtı tabletle okut ya da yanıt metnini yapıştır → gönder.
+- **Yap — ikinci yol kod (sunucu internete çıkabiliyorsa):** kod alanı ("TKS-XXXX-XXXX-XXXX-XXXX") → §2'nin kodu → "Etkinleştir". (Sunucu internete çıkamıyor ama panel bilgisayarı çıkabiliyorsa: "Bu bilgisayar üzerinden etkinleştir".)
+- **Yap — üçüncü yol dosya:** "Portaldan aldığınız lisans ya da muafiyet dosyası:" → portaldan indirilen dosyayı yükle.
+- **Eski (etkinleşmemiş) kurulum korumalı sürüme geçiyorsa:** önce portal → kurulum künyesi → "Lisans" sekmesi → "Etkinleştirme muafiyeti" (yalnız yönetici; fabrikanın lisans ekranındaki karekod metni + sebep + imza parolası) → dosyayı indir → fabrikada üçüncü yolla yükle.
 - **Beklenen:** "Durum" kartı: "Kip" = "Zorlama" · "Uygulanan kademe" = "Normal" · satıcı yaptırımı "Geçerli"; "Kira ve yoklama" kartı: "Kira" veriliş → bitiş · "Son yoklama" dolu. Portalda kurulum **ETKİN**, ilk yoklama satırı.
 - **Kanıt:** iki kartın görüntüsü + portal kurulum sayfası.
 

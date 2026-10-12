@@ -66,6 +66,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Lisansı hiç etkinleştirilmemiş bir sunucuya bağlandığınızda panel girişten sonra yalnız etkinleştirme ekranını açar; etkinleştirene kadar öteki ekranlar kapalıdır. En kolay yol karekod: Çevrimdışı (QR) kartında etkinleştirme kodunu yazıp istek karekodunu üretin, telefonla okutun, telefonda çıkan yanıtı tabletle okutun ya da yanıt metnini yapıştırın. Sunucu internete çıkabiliyorsa kodu yazıp Etkinleştir'e basmanız da yeter; portaldan aldığınız lisans ya da muafiyet dosyasını da bu ekrandan yükleyebilirsiniz. Veritabanı başka bir kurulumdan kopyalanmış görünüyorsa ekran bunu söyler; o durumda da yedek alma ve verilerinizi dışa aktarma açık kalır. Lisans yetkiniz yoksa ekran yöneticinize başvurmanızı söyler. Etkinleştirilmiş kurulumlarda hiçbir şey değişmez. Bu ekran için sunucunun da güncellenmesi gerekir."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Güncellemeler artık tek sayfada: Sistem → Güncellemeler ya da üst çubuktaki güncelleme düğmesi. Sunucu ve bu bilgisayar için kurulu sürüm, durum ve yapılacak iş tek satırda görünür; teknik bilgiler kapalı gelen Ayrıntılar bölümündedir. Sayfayı herkes açabilir; sunucu güncellemesini yalnız lisans yönetme yetkisi olan kişi onaylar, diğerleri onayın yöneticide olduğunu görür. Eski Güncelleme ve Sunucu Güncellemeleri ekranları bu sayfada birleşti; Neler yeni? bağlantısı bu sürümün notlarını açar."
         },

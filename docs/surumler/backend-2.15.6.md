@@ -25,6 +25,12 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   duruş da toplu geri alınır (gerekçe bir kez). Her işlemden önce etkilenen tezgahlar tek tek listelenir ve
   istenmeyen çıkarılır; olmayan tezgah sebebiyle söylenir (zaten duruşta, seçilen saat başka bir duruşla çakışıyor,
   vardiya karnesi mühürlü…). Tek tek duruş girişi aynen çalışır (yeni panel gerekir).
+- **Hiç etkinleştirilmemiş sunucu yalnız lisans ekranını açar.** Lisansı etkinleştirilmemiş yeni bir kurulumda
+  panel ilk girişten sonra yalnız etkinleştirme ekranını gösterir; tablet "Sunucu lisansı etkinleştirilmedi" der.
+  Etkinleştirmenin birinci yolu karekod (telefonla okut, yanıtı tabletle okut ya da yapıştır), sonra kod, sonra
+  portaldan indirilen dosya. Veritabanı başka bir kurulumdan kopyalanmış görünüyorsa da aynı ekran açılır; bu
+  durumda yedek alma ve verileri dışa aktarma açık kalır. **Etkinleştirilmiş kurulumlar etkilenmez.** Daha önce
+  kurulmuş ama hiç etkinleştirilmemiş bir sunucu bu sürüme geçmeden önce portaldan muafiyet dosyası almalıdır.
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -45,6 +51,17 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   (mühürlü) hesap başkasınca pasife alınamaz (bugünkü gibi).
 - `e76f5b547` — `/api/admin/health` cevabına `sistemHesabiMuhru` (durum ve sayılar; mühür, parola özeti, kullanıcı
   adı taşımaz), `/api/auth/me` cevabına `systemAccountSealStatus`.
+
+**Etkinleştirme kilidi (güvenlik G2)**
+
+- `56cc360f3` — yeni lisans durumu `ETKINLESMEDI`: korumalı derlemede geçerli lisans kimliği olmayan kurulumda izinli
+  küme (giriş/kimlik, `/api/license/*`, sağlık, keşif) dışındaki her `/api` isteği 403 `LICENSE_NOT_ACTIVATED`
+  (`details.sinif`). Kilit derleme sabitidir; ortamdan, dosyadan ya da veritabanından açılıp kapanmaz. Veritabanı
+  lisans izi bu PostgreSQL kümesine aitse ya da küme kimliği okunamıyorsa kilit yok, lisansın kendi kipi geçerli;
+  iz başka kümeye aitse ya da satıcı kirası taşımıyorsa kopya sayılır (kilit + veri dışa aktarma açık).
+  `/api/license/durum` ve sağlık cevabına `etkinlestirmeKilidi` alanı.
+- `cb54ab35c` — satıcı imzalı muafiyet belgesi (kurulum anahtarına ve parmak izine bağlı) mevcut çevrimdışı yanıt
+  yükleme ucundan kabul edilir; muafiyetli kurulum kilide girmez.
 
 **Güncelleme programı**
 
@@ -86,6 +103,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 - **Kırıldı mı:** HAYIR (G1 kısmı) — yalnız ekleme: `/api/auth/me` `systemAccountSealStatus`, health
   `sistemHesabiMuhru`, yeni hata kodu `SYSTEM_ACCOUNT_SEAL_INVALID` (yalnız mühür zorunlu kurulumda, mühürsüz
   işaretli hesaba). Öteki işlerin sözleşme cevabı maddeleriyle eklenecek.
+- **Kırıldı mı:** HAYIR (G2 kısmı, etkin kurulum için) — yeni hata kodu `LICENSE_NOT_ACTIVATED` yalnız korumalı
+  derlemede hiç etkinleşmemiş (ya da kopya) kurulumda döner; `/api/license/durum` ve sağlık cevabına
+  `etkinlestirmeKilidi` eklendi. Eski panel bu kodu tanımaz, genel hata gösterir — yeni kurulum eşleşen paneli
+  (1.6.5) alır. Eski tablet 403'ü genel hata olarak gösterir.
 - **Kırıldı mı:** HAYIR (tezgah alarmı kısmı) — yalnız ekleme: ayar cevabında `tezgahAlarmNoShiftMode`,
   `tezgahAlarmUnclassifiedEnabled`; salon cevabında `alarmNotice`; yeni uç `GET /api/feature-flags/tezgah-alarm-shift-status`;
   yeni hata kodları `TEZGAH_ALARM_SHIFT_REQUIRED`, `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`. Eski panel yalnız
@@ -124,8 +145,15 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
     `docs/ops/SUPERADMIN-KURULUM.md` § MÜHÜRLEME). Hesabın parolası sorulur; parola sohbete, belgeye, günlüğe
     YAZILMAZ — komutu destek hesabının sahibi koşar. adnansahin bu sürümde mühürlenmez.
   - Mühürlemeden sonra lisans dizinindeki `sistem-hesabi-mandali.json` silinmez (silmek korumayı kaldırır).
+  - Hiç etkinleştirilmemiş bir kurulum bu sürüme geçecekse ÖNCE portal → kurulum künyesi → "Lisans" sekmesi →
+    "Etkinleştirme muafiyeti" (yalnız yönetici; fabrikanın lisans ekranındaki karekod metni) → dosya fabrikada
+    "Portaldan aldığınız lisans ya da muafiyet dosyası" alanından yüklenir. Yoksa güncellemeden sonra yalnız lisans
+    ekranı açılır (veri kaybı yok; etkinleştirince ya da muafiyet yüklenince açılır).
 - **Bilinen sınırlar (dürüst):** sunucunun lisans dizinini okuyabilen biri (yönetici yetkili işletim sistemi
   kullanıcısı) mühür üretebilir — koruma veritabanına yazabilen ama sunucu dosyalarına erişemeyen kişiye karşıdır.
+  Etkinleştirme kilidi: veritabanı kümesinin kimliği okunamayan kurulum kilide girmez, lisansının kendi kipiyle
+  çalışır — gözlem kipindeki lisansta bu fiilen sınırsız demektir (yeni kurulumların zorla kipte doğduğu sonraki
+  adıma dek). Windows'ta küme kimliğinin okunabildiği henüz ölçülmedi.
   Ortak parolalı hazır destek hesabının yalnız sunucunun kendisinden girişi (tehdit modeli G1-6) bu sürümde YOK.
   2.15.0–2.15.5 belgelerindeki güncelleme programı sınırları aynen geçerli.
 - **Sınırlar (her sürümde geçerli):** veritabanı sıfırlanmaz, yeniden doldurulmaz, silinmez · uygulanmış
