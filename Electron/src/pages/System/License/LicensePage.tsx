@@ -10,6 +10,7 @@ import { acceptanceGate } from "@/lib/license/acceptance";
 import { useLicenseAcceptance, useLicenseDetail } from "./hooks";
 import { LicenseAcceptanceCard } from "./LicenseAcceptanceCard";
 import { LicenseStatusCard } from "./LicenseStatusCard";
+import { LicenseModeBand } from "./LicenseModeBand";
 import { LicenseEntitlementCard } from "./LicenseEntitlementCard";
 import { LicenseLeaseCard } from "./LicenseLeaseCard";
 import { LicenseMachineCard } from "./LicenseMachineCard";
@@ -60,6 +61,7 @@ export function LicensePage() {
             Kurulum kimliği ya da lisans klasörü henüz hazır değil; birkaç saniye sonra yenileyin.
           </Callout>
         )}
+        {d && <LicenseModeBand d={d} />}
         {d && (
           <div className="grid gap-4 xl:grid-cols-2">
             {/* Etkinleşmemiş kurulumda sözleşme kabulü İLK adımdır (Ek-7 §5): kod girişinden önce, tam genişlik. */}
