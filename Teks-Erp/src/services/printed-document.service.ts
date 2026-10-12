@@ -798,7 +798,8 @@ export class PrintedDocumentService {
     const snapshot: PrintedDocSnapshot = {
       ...envelopeHead(),
       company: { name: companyName, letterhead, logoHash: logo.current },
-      docConfigOverride: configOverride,
+      // Önizleme = baskı: taslak, kayıt yolunun aynı süzgecinden geçer (başlık 80, not 500…).
+      docConfigOverride: configOverride ? (sanitizeDocumentsConfig({ d: configOverride }).d ?? null) : null,
       doc,
     };
     const extras = await buildRenderExtras(snapshot, {});

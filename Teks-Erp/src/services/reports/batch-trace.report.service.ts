@@ -23,6 +23,7 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { round1 } from "./_breakdown";
 import { normalizeScanCode } from "../../utils/code-format";
+import { escapeLikeTerm } from "../../utils/search-fold";
 
 export interface BatchCandidate {
   batchId: string;
@@ -98,7 +99,7 @@ export async function searchBatches(q: string, limit = 20): Promise<BatchCandida
     FROM batches b
     LEFT JOIN work_orders wo ON wo.id = b."workOrderId"
     LEFT JOIN rolls r        ON r."batchId" = b.id
-    WHERE b."batchNumber" ILIKE ${"%" + term + "%"}
+    WHERE b."batchNumber" ILIKE ${"%" + escapeLikeTerm(term) + "%"}
        -- Barkodla da bulunur: operatörün elinde parti no değil TOP olur.
        -- DİKKAT: normalizeScanCode zorunlu — el tarayıcısı barkodu KÜÇÜK harfle
        -- gönderebiliyor (2026-08-17 saha vakası); kagida BÜYÜK basilan kodla

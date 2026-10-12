@@ -1,6 +1,8 @@
 // =============================================================================
-// TeksERP — İnternete açma sertleştirmesi (HEPSİ ortam değişkeni ARKASINDA)
+// TeksERP — İnternete açma sertleştirmesi (ortam değişkeni ARKASINDA; tek istisna giriş kovası)
 // =============================================================================
+// İSTİSNA: giriş/kimlik/lisans kovası değişken YOKKEN de cömert eşikle açıktır (kimliksiz kaba kuvvete
+// karşı taban); yazma kovası yalnız `RATE_LIMIT_ENABLED=true` ile, `=false` her şeyi kapatır.
 // Bu uygulama LAN varsayımıyla yazıldı — `app.ts`in kendi başlığı "HTTP-only LAN
 // sunucusu" diyor: HTTPS yok, ters vekil yok, CORS kısıtsız, Swagger dev'de açık.
 // Demo/SaaS kurulumu aynı kodu internete açmak zorunda; fabrika kurulumu ise
@@ -51,6 +53,10 @@ export type WebHardeningConfig = {
   httpsEnabled: boolean;
   rateLimit: {
     enabled: boolean;
+    /** Yazma kovası sayılır mı — yalnız açık beyanla (`RATE_LIMIT_ENABLED=true`). */
+    writeEnabled: boolean;
+    /** `true` = değişken verilmedi, yalnız örtük giriş kovası (cömert eşik). */
+    implicit: boolean;
     windowMs: number;
     /** Pencere başına izinli YAZMA isteği (POST/PUT/PATCH/DELETE). */
     writeMax: number;
@@ -87,6 +93,9 @@ const WINDOW_SEC_MIN = 1;
 const WINDOW_SEC_MAX = 3600;
 const WRITE_MAX_DEFAULT = 120;
 const LOGIN_MAX_DEFAULT = 10;
+/** Örtük (değişkensiz) giriş kovası: IP başına dakikada 60 — vardiya değişiminde tek cihazdan
+ *  ardışık PIN girişini sınırlamaz, kaba kuvveti dakikada 60 denemeye indirir. */
+const LOGIN_MAX_IMPLICIT = 60;
 const COUNT_MIN = 1;
 const COUNT_MAX = 100_000;
 
@@ -201,7 +210,8 @@ export function readWebHardeningConfig(
   const swaggerEnabled = parseBoolEnv(env.SWAGGER_ENABLED, onWarn, "SWAGGER_ENABLED")
     ?? env.NODE_ENV !== "production";
 
-  const rateLimitEnabled = parseBoolEnv(env.RATE_LIMIT_ENABLED, onWarn, "RATE_LIMIT_ENABLED") ?? false;
+  const rateLimitDeclared = parseBoolEnv(env.RATE_LIMIT_ENABLED, onWarn, "RATE_LIMIT_ENABLED");
+  const rateLimitImplicit = rateLimitDeclared === null;
   const windowSec = readCount(
     env.RATE_LIMIT_WINDOW_SEC, WINDOW_SEC_DEFAULT, WINDOW_SEC_MIN, WINDOW_SEC_MAX, onWarn,
     "RATE_LIMIT_WINDOW_SEC",
@@ -247,14 +257,16 @@ export function readWebHardeningConfig(
     swaggerEnabled,
     httpsEnabled: parseBoolEnv(env.HTTPS_ENABLED, onWarn, "HTTPS_ENABLED") ?? false,
     rateLimit: {
-      enabled: rateLimitEnabled,
+      enabled: rateLimitDeclared !== false,
+      writeEnabled: rateLimitDeclared === true,
+      implicit: rateLimitImplicit,
       windowMs: windowSec * 1000,
       writeMax: readCount(
         env.RATE_LIMIT_WRITE_MAX, WRITE_MAX_DEFAULT, COUNT_MIN, COUNT_MAX, onWarn,
         "RATE_LIMIT_WRITE_MAX",
       ),
       loginMax: readCount(
-        env.RATE_LIMIT_LOGIN_MAX, LOGIN_MAX_DEFAULT, COUNT_MIN, COUNT_MAX, onWarn,
+        env.RATE_LIMIT_LOGIN_MAX, rateLimitImplicit ? LOGIN_MAX_IMPLICIT : LOGIN_MAX_DEFAULT, COUNT_MIN, COUNT_MAX, onWarn,
         "RATE_LIMIT_LOGIN_MAX",
       ),
     },
@@ -263,6 +275,20 @@ export function readWebHardeningConfig(
     // saklar, "CF-Connecting-IP" yazan bir .env sessizce eşleşmezdi.
     clientIpHeader: legacyTunnel ? null : headerRaw,
   };
+}
+
+/**
+ * Barındırılan (internete açık) kurulumda `TRUST_PROXY=true` açılışı DURDURUR: koşulsuz XFF güveni giriş
+ * kilidini ve hız sınırını sahte IP ile tamamen atlatır. Fabrikada yalnız uyarı kalır (`parseTrustProxy`).
+ * Dönüş: red gerekçesi (Türkçe) ya da `null`.
+ */
+export function trustProxyHostedRefusal(trustProxy: WebHardeningConfig["trustProxy"], hosted: boolean): string | null {
+  if (!hosted || trustProxy !== true) return null;
+  return (
+    'TRUST_PROXY="true" barındırılan kurulumda kabul edilmez — istemcinin yazdığı X-Forwarded-For ' +
+    "başlığına koşulsuz güvenilir, giriş kilidi ve hız sınırı sahte IP ile atlanır. Ters vekil " +
+    "sıçrama SAYISINI yazın (tek vekil: TRUST_PROXY=1) ve sunucuyu yeniden başlatın."
+  );
 }
 
 /** Sertleştirme değişkenlerinden en az biri verilmiş mi (boot banner'ı için). */
@@ -288,6 +314,10 @@ const LOGIN_PATHS = new Set([
   "/api/auth/login-card",
   "/api/auth/login-quick-pin",
 ]);
+/** Kimliksiz tek kullanımlık belirteç tüketimi (TOTP kurulumu) — yalnız yazma metodu giriş kovasında. */
+const CREDENTIAL_WRITE_PATHS = new Set(["/api/auth/totp/enroll"]);
+/** Lisans yazma uçları (etkinleştir/yokla/yanıt…): dışarı konuşan ya da sır taşıyan işlemler — giriş kovasında. */
+const LICENSE_WRITE_PREFIX = "/api/license/";
 
 /** Sayılmayan metodlar. OPTIONS bilinçli: preflight'ı bloklamak CORS'u bozar
  *  ve tarayıcı bunu "sunucu kapalı" gibi gösterir (teşhisi zor bir arıza). */
@@ -314,6 +344,7 @@ export function classifyRateLimitRequest(method: string, originalUrl: string): R
   const path = normalizeRequestPath(originalUrl);
   if (LOGIN_PATHS.has(path)) return "login";
   if (READ_METHODS.has(method.toUpperCase())) return null;
+  if (CREDENTIAL_WRITE_PATHS.has(path) || path.startsWith(LICENSE_WRITE_PREFIX)) return "login";
   return path === "/api" || path.startsWith("/api/") ? "write" : null;
 }
 
@@ -363,7 +394,8 @@ export function resolveRateLimitKey(
 
 export type RateLimiterOptions = {
   windowMs: number;
-  limits: Record<RateLimitBucket, number>;
+  /** `null` = kova sayılmaz (örtük kipte yazma kovası). */
+  limits: Record<RateLimitBucket, number | null>;
   /** Saat kaynağı — bekçi pencereyi uyumadan kaydırabilsin diye enjekte edilir. */
   now?: () => number;
   /** Bellek tavanı: bu sayının üstünde bayat anahtarlar budanır. */
@@ -428,6 +460,7 @@ export function createRateLimiter(opts: RateLimiterOptions): RateLimiter {
     if (!bucket) return next();
 
     const limit = opts.limits[bucket];
+    if (limit === null) return next();
     const key = resolveRateLimitKey(req, bucket, opts.clientIpHeader ?? null);
     const t = now();
     const windowStart = t - opts.windowMs;

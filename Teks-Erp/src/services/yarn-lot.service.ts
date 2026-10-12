@@ -15,6 +15,7 @@ import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { ensureYarnLotTx, normalizeLotNo, yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";import { assertItemUsable } from "./helpers/item-usage.helper";
+import { escapeLikeTerm } from "../utils/search-fold";
 
 
 export interface YarnLotDto {
@@ -58,7 +59,7 @@ export class YarnLotService {
     if (params.qualityStatus && params.qualityStatus.length > 0) where.qualityStatus = { in: params.qualityStatus };
     if (params.search) {
       const q = params.search.trim();
-      if (q) where.OR = [{ lotNo: { contains: q, mode: "insensitive" } }, { item: { OR: buildTurkishSearch(q, ["name", "code"]) } }];
+      if (q) where.OR = [{ lotNo: { contains: escapeLikeTerm(q), mode: "insensitive" } }, { item: { OR: buildTurkishSearch(q, ["name", "code"]) } }];
     }
     const cur = decodeCursor(params.cursor);
     const rows = await prisma.yarnLot.findMany({

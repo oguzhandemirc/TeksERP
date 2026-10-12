@@ -19,7 +19,7 @@
 // sert öldürülmüşse (SIGKILL) asılı kalmış olabileceği için başta kendini onarır.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
-import { extractCheckConstraint } from "../src/middlewares/error.middleware";
+import { checkViolationResponse, extractCheckConstraint } from "../src/middlewares/error.middleware";
 
 let pass = 0,
   fail = 0;
@@ -150,11 +150,10 @@ async function run(): Promise<void> {
   );
   check("PG `detail` gerçekten satır değerlerini taşıyor (sızarsa tehlikeli)", detail.includes("Failing row"));
   // Middleware yanıtı yalnız constraint adını kullanır; `detail` hiç okunmaz.
-  const responseMessage =
-    `Veri bütünlüğü kuralı engelledi (${extractCheckConstraint(ormErr)}) — işlem tamamlanmadı. ` +
-    "Kayıt beklenmeyen bir durumda; yöneticinize bu kuralın adını iletin.";
+  const { message: responseMessage, ref } = checkViolationResponse(extractCheckConstraint(ormErr) ?? "");
   check("⭐ yanıt metni satır değerleri İÇERMİYOR", !responseMessage.includes("Failing row"));
-  check("yanıt metni Türkçe + constraint adını veriyor", responseMessage.includes(PROBE));
+  check("yanıt metni Türkçe + kısıt ADINI vermez, başvuru kodunu verir (şema keşfi kapalı)",
+    !responseMessage.includes(PROBE) && /^[0-9A-F]{8}$/.test(ref) && responseMessage.includes(ref));
 }
 
 run()

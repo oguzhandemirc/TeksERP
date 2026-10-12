@@ -2,6 +2,7 @@
 // TeksERP - Global Error Handler Middleware
 // =============================================================================
 
+import { createHash } from "node:crypto";
 import { Request, Response, NextFunction } from "express";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
@@ -329,6 +330,20 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
 };
 
 /** Kısıt adı → Türkçe mesaj (bekçiler eşlemeyi ÜRÜNDEN okur, kopya tutmaz). */
+/**
+ * 23514 gövdesi: dostça mesajı olmayan kısıtın ADI istemciye gitmez (şema keşfi), yerine adın kısa
+ * özeti başvuru kodu olur; ad + kod log'da ve audit yükünde eşleşir.
+ */
+export function checkViolationResponse(name: string): { message: string; ref: string } {
+  const ref = createHash("sha256").update(name || "?").digest("hex").slice(0, 8).toUpperCase();
+  const friendly = CHECK_CONSTRAINT_MESSAGES[name];
+  const message = friendly
+    ? `${friendly} İşlem tamamlanmadı.`
+    : "Veri bütünlüğü kuralı engelledi — işlem tamamlanmadı. Kayıt beklenmeyen bir durumda; " +
+      `yöneticinize bu başvuru kodunu iletin: ${ref}.`;
+  return { message, ref };
+}
+
 export function checkConstraintMessage(name: string): string | undefined {
   return CHECK_CONSTRAINT_MESSAGES[name];
 }
@@ -556,12 +571,8 @@ export const errorHandler = (
   // audit'e yazılır ki canlıda kaç kez tetiklendiği ÖLÇÜLEBİLSİN.
   const checkConstraint = extractCheckConstraint(err);
   if (checkConstraint !== null) {
-    const friendly = CHECK_CONSTRAINT_MESSAGES[checkConstraint];
-    const message = friendly
-      ? `${friendly} İşlem tamamlanmadı.`
-      : `Veri bütünlüğü kuralı engelledi (${checkConstraint || "bilinmeyen kural"}) — işlem tamamlanmadı. ` +
-        "Kayıt beklenmeyen bir durumda; yöneticinize bu kuralın adını iletin.";
-    hata("error.middleware", `CHECK ihlali (23514): ${checkConstraint} — ${err.message}`);
+    const { message, ref } = checkViolationResponse(checkConstraint);
+    hata("error.middleware", `CHECK ihlali (23514): ${checkConstraint} [başvuru ${ref}] — ${err.message}`);
     void AuditService.logEvent({
       category: "SYSTEM",
       action: "ERROR",
@@ -570,6 +581,7 @@ export const errorHandler = (
       ipAddress: req.ip ?? null,
       payload: {
         constraint: checkConstraint,
+        ref,
         method: req.method,
         path: req.originalUrl,
         // `detail` (ihlal eden satırın TÜM kolon değerleri) BİLEREK alınmıyor —
@@ -578,7 +590,7 @@ export const errorHandler = (
         message: err.message?.slice(0, 300),
       },
     });
-    res.status(409).json({ success: false, message });
+    res.status(409).json({ success: false, message, details: { code: "INTEGRITY_RULE", ref } });
     return;
   }
 

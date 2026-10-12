@@ -1,5 +1,6 @@
 // Fabrika ağında TLS — panelin sertifika sabiti (docs/design/LAN-TLS.md §6). Chromium'un doğrulama kancası
-// sabitli parmak izini kabul eder, gerisini Chromium'a bırakır; sabit yalnız ana süreçte yazılır.
+// sabitli parmak izini kabul eder, sabit varken yerel adreste sabit dışını reddeder, gerisini Chromium'a
+// bırakır; sabit yalnız ana süreçte yazılır.
 import { X509Certificate, createHash } from "node:crypto";
 import type { Session } from "electron";
 import { certVerifyDecision, parseTlsPins, TLS_PIN_KEY, withPin, type TlsPin } from "../../shared/lan-tls.js";
@@ -42,6 +43,6 @@ function fingerprintOf(cert: { data: string; fingerprint: string }): string {
 
 export function installLanTlsVerifier(ses: Session): void {
   ses.setCertificateVerifyProc((request, callback) => {
-    callback(certVerifyDecision(readTlsPins(), fingerprintOf(request.certificate)));
+    callback(certVerifyDecision(readTlsPins(), fingerprintOf(request.certificate), request.hostname));
   });
 }

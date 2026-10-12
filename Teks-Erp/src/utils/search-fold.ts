@@ -106,6 +106,15 @@ export function foldSearchTerm(value: string): string {
 }
 
 /**
+ * Katlamasız LIKE/ILIKE/Prisma `contains` terimi: `% _ \` jokerleri `\` ile KAÇIRILIR (PG varsayılan
+ * ESCAPE karakteri; Prisma `contains` değeri `%…%` içine aynen koyar). Silmek yerine kaçırmak: adında
+ * gerçekten `%`/`_` geçen kayıt da bulunur. Katlamalı yol `foldSearchTerm`dir.
+ */
+export function escapeLikeTerm(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
+/**
  * `needle` katlanmış hâliyle `haystack` içinde geçiyor mu? (istemci içi süzme)
  * Boş/whitespace arama TÜM kayıtları eşleştirir (süzgeç yok sayılır).
  *

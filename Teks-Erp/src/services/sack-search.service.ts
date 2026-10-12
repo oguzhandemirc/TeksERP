@@ -22,7 +22,7 @@ import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor, encode
 import { normalizeScanCode } from "../utils/code-format";
 import { matchesSeries, resolveSeriesFormat } from "./number-series.service";
 import { applyDateRange, buildTextSearch, isCodeLikeTerm, readFilterList, readIdCondition } from "../utils/query-parser";
-import { foldSearchTokens } from "../utils/search-fold";
+import { foldSearchTokens, escapeLikeTerm } from "../utils/search-fold";
 import { foldCodeForCompare } from "../utils/code-format";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 import { PRESENT_ROLL_WHERE, loadSackContentTotals } from "./helpers/sack-content-totals.helper";
@@ -442,7 +442,7 @@ export async function buildSackSearchWhere(params: SackSearchParams): Promise<{
   // çalışır ve not alanı bir KİMLİK değildir (kimlik alanına sed konmaz kuralı
   // buraya UZANMAZ — burada aranan şey serbest metin).
   if (params.noteText?.trim())
-    andClauses.push({ notes: { contains: params.noteText.trim(), mode: "insensitive" } });
+    andClauses.push({ notes: { contains: escapeLikeTerm(params.noteText.trim()), mode: "insensitive" } });
 
   if (params.hasNote != null)
     andClauses.push(params.hasNote ? { notes: { not: null } } : { notes: null });

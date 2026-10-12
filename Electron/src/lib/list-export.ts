@@ -70,12 +70,25 @@ export function cellNumber(v: unknown): number {
 
 // --- CSV ---------------------------------------------------------------------
 
-/** Bir hücreyi CSV alanına çevirir (tırnak/ayraç/satır sonu/baş-son boşluk → tırnaklanır). */
-export function csvCell(value: string): string {
-  const v = value ?? "";
+/** Excel/LibreOffice'in tırnak içinde de formül saydığı baş karakterler (CSV formül enjeksiyonu). */
+const CSV_FORMULA_LEAD = /^[=+\-@\t\r]/;
+
+/** Tırnaklama (ayraç/tırnak/satır sonu/baş-son boşluk). İKİZ: backend `src/utils/csv-safe.ts`. */
+function csvQuote(v: string): string {
   const needsQuote =
     v.includes(CSV_SEP) || v.includes('"') || v.includes("\n") || v.includes("\r") || v !== v.trim();
   return needsQuote ? `"${v.replace(/"/g, '""')}"` : v;
+}
+
+/** METİN hücresi: `= + - @ TAB CR` ile başlıyorsa `'` öneki (Excel metin sayar), sonra tırnaklama. */
+export function csvCell(value: string): string {
+  const v = value ?? "";
+  return csvQuote(CSV_FORMULA_LEAD.test(v) ? `'${v}` : v);
+}
+
+/** SAYI hücresi (`csvNumber` çıktısı): önek ALMAZ — `-12,5` sayı kalır. */
+export function csvNumberCell(value: string): string {
+  return csvQuote(value ?? "");
 }
 
 /** Sayı → TR ondalık (virgül), binlik ayraç YOK. */
@@ -97,7 +110,7 @@ export function buildCsvContent<T>(cols: ExportColumn<T>[], rows: T[]): string {
     lines.push(
       cols
         .map((c) =>
-          c.summable ? csvCell(csvNumber(cellNumber(c.value(row)))) : csvCell(cellText(c.value(row))),
+          c.summable ? csvNumberCell(csvNumber(cellNumber(c.value(row)))) : textOrNumberCell(c.value(row)),
         )
         .join(CSV_SEP),
     );
@@ -108,12 +121,17 @@ export function buildCsvContent<T>(cols: ExportColumn<T>[], rows: T[]): string {
       cols
         .map((c, i) => {
           const v = totals[i];
-          return v === undefined ? "" : csvCell(typeof v === "number" ? csvNumber(v) : v);
+          return v === undefined ? "" : typeof v === "number" ? csvNumberCell(csvNumber(v)) : csvCell(v);
         })
         .join(CSV_SEP),
     );
   }
   return CSV_BOM + lines.join("\r\n") + "\r\n";
+}
+
+/** Toplanmayan kolonda gerçek SAYI değeri sayı hücresi kalır; geri kalan her şey metin seddinden geçer. */
+function textOrNumberCell(v: unknown): string {
+  return typeof v === "number" ? csvNumberCell(String(v)) : csvCell(cellText(v));
 }
 
 /** summable kolon varsa TOPLAM satırı (kolon sırasına göre; etiket ilk metin kolonunda). */

@@ -72,6 +72,7 @@ import type { PrintedDocDb } from "./printed-document.service";
 import type { ApiResponse } from "../types/api.types";
 import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
+import { escapeLikeTerm } from "../utils/search-fold";
 
 type Tx = Prisma.TransactionClient;
 
@@ -926,7 +927,7 @@ export class StockCountService {
       };
     }
     if (params.search?.trim()) {
-      where.countNo = { contains: params.search.trim(), mode: "insensitive" };
+      where.countNo = { contains: escapeLikeTerm(params.search.trim()), mode: "insensitive" };
     }
 
     const [data, total] = await Promise.all([

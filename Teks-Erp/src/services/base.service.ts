@@ -86,6 +86,7 @@ import {
   type CodeCandidate,
   type CodeUniquenessTexts,
 } from "./helpers/code-unique.helper";
+import { escapeLikeTerm } from "../utils/search-fold";
 
 // Model adı → sıralanabilir (scalar/enum) alan adları. Prisma dmmf'ten lazy build
 // + cache. İstemciden gelen sortBy bu kümede (veya relationSortMap'te) değilse
@@ -939,7 +940,7 @@ export class BaseService {
          FROM ${q(table)} t${lineageJoin}
          WHERE (${tf} = $1 OR ${tf} LIKE $${params.length + 1})${scopeSql}
          ORDER BY score DESC, t.${q(field)} LIMIT ${limit}`;
-    if (!hasTrgm) params.push(`%${target.split(" ")[0]}%`);
+    if (!hasTrgm) params.push(`%${escapeLikeTerm(target.split(" ")[0])}%`);
     // (yedek yolda eşik parametresi kullanılmaz ama sırayı bozmamak için durur)
 
     const rows = await prisma.$queryRawUnsafe<

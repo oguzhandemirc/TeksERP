@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildCsvContent, csvCell, csvNumber, cellText, type ExportColumn } from "./list-export";
+import { buildCsvContent, csvCell, csvNumber, csvNumberCell, cellText, type ExportColumn } from "./list-export";
+import { parseCsv } from "./import/parse";
 
 // =============================================================================
 // CSV SÖZLEŞMESİ — "Türk Excel'i" paketi
@@ -52,6 +53,33 @@ describe("CSV — Türk Excel'i sözleşmesi", () => {
     expect(csvCell("iki\nsatır")).toBe('"iki\nsatır"');
     expect(csvCell(" boşluk ")).toBe('" boşluk "');
     expect(csvCell("düz")).toBe("düz");
+  });
+
+  it("formül enjeksiyonu: = + - @ TAB CR ile başlayan METİN hücre ' öneki alır (denetim G4-B1)", () => {
+    for (const v of ["=1+1", "+1", "-1", "@SUM(A1)", "\t=1", "\r=1"]) {
+      expect(csvCell(v).replace(/^"/, "").startsWith("'")).toBe(true);
+    }
+    // Tırnak tek başına yetmez: Excel "=…" hücresini tırnak içinde de formül sayar.
+    expect(csvCell('=HYPERLINK("http://x";"a")')).toBe(`"'=HYPERLINK(""http://x"";""a"")"`);
+  });
+
+  it("sayı hücresi önek ALMAZ: negatif toplam ve negatif değer sayı kalır", () => {
+    expect(csvNumberCell(csvNumber(-12.5))).toBe("-12,5");
+    const cols: ExportColumn<Row>[] = [
+      { label: "Ad", value: (r) => r.ad },
+      { label: "Metraj", value: (r) => r.metraj, summable: true },
+      { label: "Bakiye", value: (r) => r.metraj },
+    ];
+    const csv = buildCsvContent(cols, [{ ad: "=X", metraj: -12.5, not: "" }]);
+    expect(csv).toContain("'=X;-12,5;-12.5");
+    expect(csv).toContain("TOPLAM (1 kayıt);-12,5;");
+  });
+
+  it("içe aktarım öneki geri alır — round-trip değeri aynen döner", () => {
+    const csv = buildCsvContent(COLS, [{ ad: "=ŞAHİN", metraj: 1, not: "-not" }]);
+    const parsed = parseCsv(csv);
+    expect(parsed.rows[0]?.cells[0]).toBe("=ŞAHİN");
+    expect(parsed.rows[0]?.cells[2]).toBe("-not");
   });
 
   it("summable kolon varsa TOPLAM satırı basılır", () => {

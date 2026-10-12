@@ -29,6 +29,7 @@ import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-le
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import type { ApiResponse } from "../types/api.types";
+import { escapeLikeTerm } from "../utils/search-fold";
 
 const TRANSFER_PREFIX = "DT";
 
@@ -420,7 +421,7 @@ export class WarehouseTransferService {
       where: {
         warehouseId: params.warehouseId,
         shipmentId: null,
-        ...(params.search ? { sackNo: { contains: params.search.toUpperCase() } } : {}),
+        ...(params.search ? { sackNo: { contains: escapeLikeTerm(params.search.toUpperCase()) } } : {}),
         // ⚠️ YÜKLEM `some` DEĞİL, "boş değil VE hiçbir üyesi uygunsuz değil".
         // `create` çuvalı BÜTÜN taşır ve TEK bir uygunsuz üye (iptal/fire/
         // fasonda) çuvalın TAMAMINI reddeder — `some` ile listelemek, sevkin

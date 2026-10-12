@@ -5,9 +5,10 @@
 // ⭐ ASIL İDDİA — FABRİKA SIFIR-FARK. Sertleştirme ortam değişkenlerinden HİÇBİRİ
 // verilmediğinde uygulama bugünkü LAN davranışını birebir üretir: `trust proxy`
 // set EDİLMEZ, CORS kısıtsızdır, Swagger dev'de açıktır, HSTS başlığı YOKTUR,
-// CSP `upgrade-insecure-requests` taşımaz ve hız sınırı middleware'i zincire
-// MOUNT BİLE EDİLMEZ. Bu iddia bir yorum değil; aşağıda gerçek bir HTTP sunucusu
-// ayağa kaldırılıp ölçülür.
+// CSP `upgrade-insecure-requests` taşımaz ve YAZMA kovası sayılmaz. Tek bilinçli
+// fark (denetim G4-B6/G5-B2): giriş/lisans kovası cömert eşikle (60/dk/IP) AÇIK;
+// `RATE_LIMIT_ENABLED=false` middleware'i hiç mount etmez. Bu iddia bir yorum
+// değil; aşağıda gerçek bir HTTP sunucusu ayağa kaldırılıp ölçülür.
 //
 // İkinci iddia: her sertleştirme AÇIKKEN gerçekten çalışır. Bunu doğrulamanın
 // tek dürüst yolu app.ts'i FARKLI bir ortamla yeniden yüklemektir — modül
@@ -36,6 +37,7 @@ import {
   readWebHardeningConfig,
   isWebHardeningDeclared,
   parseTrustProxy,
+  trustProxyHostedRefusal,
   parseOriginList,
   classifyRateLimitRequest,
   createRateLimiter,
@@ -100,7 +102,12 @@ function sectionResolverDefaults(): void {
   check("corsOrigins null (kısıt yok)", cfg.corsOrigins === null);
   check("swaggerEnabled = NODE_ENV!=='production'", cfg.swaggerEnabled === true);
   check("httpsEnabled false (HSTS kapalı)", cfg.httpsEnabled === false);
-  check("rateLimit.enabled false (mount edilmez)", cfg.rateLimit.enabled === false);
+  check("hız sınırı örtük açık: yalnız giriş kovası, 60/dk (denetim G4-B6)",
+    cfg.rateLimit.enabled === true && cfg.rateLimit.implicit === true && cfg.rateLimit.writeEnabled === false && cfg.rateLimit.loginMax === 60,
+    JSON.stringify(cfg.rateLimit));
+  const off = readWebHardeningConfig(cleanEnv({ RATE_LIMIT_ENABLED: "false" }), silent);
+  check("RATE_LIMIT_ENABLED=false → tamamen kapalı (mount edilmez; eski davranış kaçışı)",
+    off.rateLimit.enabled === false && off.rateLimit.writeEnabled === false);
   check("loginLockoutScope 'ip' (bugünkü tek anahtar)", cfg.loginLockoutScope === "ip");
 
   // Üretimde de değişkensiz davranış korunmalı — Swagger kapısı bugünküyle aynı.
@@ -108,8 +115,8 @@ function sectionResolverDefaults(): void {
   check("NODE_ENV=production → swagger kapalı (mevcut kapının aynısı)", prod.swaggerEnabled === false);
   check("NODE_ENV=production → HSTS yine kapalı (ortam tahmini YOK)", prod.httpsEnabled === false);
   check(
-    "NODE_ENV=production → hız sınırı yine kapalı",
-    prod.rateLimit.enabled === false,
+    "NODE_ENV=production → yazma kovası yine sayılmaz (ortam tahmini YOK)",
+    prod.rateLimit.writeEnabled === false && prod.rateLimit.implicit === true,
   );
 
   // APP_ENV Swagger kapısını ETKİLEMEMELİ — bugünkü kapı yalnız NODE_ENV'e bakıyor.
@@ -137,6 +144,12 @@ function sectionResolverEnabled(): void {
   check("TRUST_PROXY verilmemiş → null", parseTrustProxy(undefined, w) === null);
   const beforeTrue = warns.length;
   check("TRUST_PROXY=true kabul edilir", parseTrustProxy("true", w) === true);
+  // Barındırılan sınıfta koşulsuz XFF güveni açılışı durdurur (denetim G5-B2); fabrikada yalnız uyarı.
+  check("BARINDIRILAN + TRUST_PROXY=true → açılış REDDİ (Türkçe neden + '1' önerisi)",
+    /TRUST_PROXY=1/.test(trustProxyHostedRefusal(true, true) ?? ""));
+  check("fabrika + TRUST_PROXY=true → red YOK (uyarı kalır)", trustProxyHostedRefusal(true, false) === null);
+  check("BARINDIRILAN + TRUST_PROXY=1 / yok → red YOK",
+    trustProxyHostedRefusal(1, true) === null && trustProxyHostedRefusal(null, true) === null);
   check(
     "TRUST_PROXY=true UYARI basar (sahte XFF ile kilit atlanabilir)",
     warns.length > beforeTrue,
@@ -159,7 +172,8 @@ function sectionResolverEnabled(): void {
     (m) => void w2.push(m),
   );
   check("tanınmayan HTTPS_ENABLED → HSTS kapalı (fail-safe)", bogus.httpsEnabled === false);
-  check("tanınmayan RATE_LIMIT_ENABLED → kapalı (fail-safe)", bogus.rateLimit.enabled === false);
+  check("tanınmayan RATE_LIMIT_ENABLED → verilmemiş sayılır (yazma kovası kapalı, örtük giriş kovası)",
+    bogus.rateLimit.writeEnabled === false && bogus.rateLimit.implicit === true);
   check("tanınmayan değerler UYARI basar (sessiz değil)", w2.length >= 2, `${w2.length} uyarı`);
 
   // --- Sayısal kırpma: hatalı değer sunucuyu düşürmez, sınırsız da bırakmaz ---
@@ -270,6 +284,10 @@ function sectionRateLimiter(): void {
   check("POST /api/rolls → write", classifyRateLimitRequest("POST", "/api/rolls") === "write");
   check("DELETE /api/rolls/1 → write", classifyRateLimitRequest("DELETE", "/api/rolls/1") === "write");
   check("POST /api/auth/login → login", classifyRateLimitRequest("POST", "/api/auth/login") === "login");
+  check("POST /api/license/etkinlestir → login kovası (lisans yazma uçları)", classifyRateLimitRequest("POST", "/api/license/etkinlestir") === "login");
+  check("GET /api/license/durum sayılmaz (okuma)", classifyRateLimitRequest("GET", "/api/license/durum") === null);
+  check("POST /api/auth/totp/enroll → login kovası; GET sayılmaz",
+    classifyRateLimitRequest("POST", "/api/auth/totp/enroll") === "login" && classifyRateLimitRequest("GET", "/api/auth/totp/enroll") === null);
   check(
     "GET /api/auth/login de login kovasında (metod değil YOL belirler)",
     classifyRateLimitRequest("GET", "/api/auth/login") === "login",
@@ -527,15 +545,26 @@ async function sectionLiveDefault(): Promise<void> {
     const docs = await req(base, "/api-docs/");
     check("Swagger AÇIK (dev)", docs.status === 200, `status=${docs.status}`);
 
-    // Hız sınırı MOUNT EDİLMEMİŞ olmalı: varsayılan yazma sınırının (120) üstüne
-    // çıkmadan da anlamlı bir sonda kurulamaz; bunun yerine 429'un HİÇ görünmediğini
-    // ve aynı anahtarla 30 ardışık yazmanın geçtiğini ölçeriz.
+    // Yazma kovası SAYILMAZ: açık kipin varsayılan eşiğinin (120) üstünde 150 ardışık yazma
+    // 429 görmez — fabrikadaki çevrimdışı kuyruk boşaltması bugünkü gibi sınırsız.
     let saw429 = false;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 150; i++) {
       const r = await req(base, PROBE_PATH, { method: "POST" });
       if (r.status === 429) saw429 = true;
     }
-    check("hız sınırı YOK (30 ardışık yazma, 429 görülmedi)", !saw429);
+    check("yazma kovası YOK (150 ardışık yazma, 429 görülmedi)", !saw429);
+
+    // Örtük giriş/lisans kovası: kimliksiz 60 lisans yazması geçer (401), 61. → 429 RATE_LIMITED.
+    let first429 = -1;
+    let code = "";
+    for (let i = 0; i < 61; i++) {
+      const r = await req(base, "/api/license/yokla", { method: "POST" });
+      if (r.status === 429 && first429 < 0) {
+        first429 = i + 1;
+        try { code = String((JSON.parse(r.text) as { details?: { code?: string } }).details?.code ?? ""); } catch { /* */ }
+      }
+    }
+    check("örtük giriş/lisans kovası 61. denemede 429 RATE_LIMITED (60/dk)", first429 === 61 && code === "RATE_LIMITED", `ilk429=${first429} kod=${code}`);
   });
 }
 
@@ -703,6 +732,7 @@ function sectionWiring(): void {
     ["app.ts HSTS'i bir BAYRAKTAN sürüyor (sabit değil)", /httpsMode[\s\S]{0,300}strictTransportSecurity/],
     ["app.ts helmet'i hardening.httpsEnabled ile kuruyor", /buildHelmet\(\s*hardening\.httpsEnabled\s*\)/],
     ["app.ts rateLimit.enabled ile limiter'ı mount ediyor", /if\s*\(\s*hardening\.rateLimit\.enabled\s*\)/],
+    ["app.ts yazma kovasını yalnız writeEnabled ile sayıyor", /write:\s*hardening\.rateLimit\.writeEnabled\s*\?/],
     ["app.ts limiter'ı /api altına bağlıyor", /app\.use\(\s*\n?\s*["']\/api["'],\s*\n?\s*createRateLimiter/],
     // Fabrika dalının LİTERALLERİ duruyor — `test_middleware_order` bunlara bakıyor;
     // koşullu hale getirirken literali kaybetmek O bekçiyi sahte kırmızıya çevirirdi.

@@ -16,6 +16,7 @@
 // =============================================================================
 import { DuplicateReviewDecision } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { csvNumberCell, csvTextCell } from "../utils/csv-safe";
 import { MERGE_ENTITIES, type MergeEntity } from "../constants/merge-map";
 import {
   DUPLICATE_RULE_LABEL,
@@ -584,10 +585,8 @@ export const DuplicateDetectionService = {
 
   /** Aday raporu CSV (`;` + BOM, tr-TR Excel — içe aktarım sözleşmesiyle aynı). */
   toCsv(result: DuplicateScanResult): string {
-    const esc = (v: unknown): string => {
-      const s = v === null || v === undefined ? "" : String(v);
-      return /[;"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
+    // Ad/not kullanıcı yazımıdır: metin hücresi formül seddinden geçer, sayı hücresi önek almaz.
+    const esc = (v: unknown): string => (typeof v === "number" ? csvNumberCell(v) : csvTextCell(v));
     const header = [
       "grup", "kural", "skor", "aId", "aKod", "aAd", "aAktif", "aRef", "bId", "bKod", "bAd", "bAktif", "bRef", "karar", "not",
     ];

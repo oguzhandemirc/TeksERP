@@ -64,6 +64,11 @@ function detectDelimiter(firstLine: string): string {
   return best;
 }
 
+/** Dışa aktarımın formül seddi (`'=…`, `list-export.ts` csvCell) geri alınır — round-trip değeri aynen döner. */
+export function unguardCsvCell(v: string): string {
+  return /^'[=+\-@\t\r]/.test(v) ? v.slice(1) : v;
+}
+
 /** RFC4180 uyumlu CSV ayrıştırma (tırnak içinde ayraç/satır sonu güvenli). */
 export function parseCsv(text: string): ParsedFile {
   // BOM'u at (Excel'in yazdığı UTF-8 dosyalarda ilk karakter).
@@ -112,11 +117,11 @@ export function parseCsv(text: string): ParsedFile {
     rows.push(row);
   }
 
-  const headers = (rows.shift() ?? []).map((h) => h.trim());
+  const headers = (rows.shift() ?? []).map((h) => unguardCsvCell(h).trim());
   return {
     headers,
     rows: rows
-      .map((cells, i) => ({ rowNo: i + 2, cells }))
+      .map((cells, i) => ({ rowNo: i + 2, cells: cells.map(unguardCsvCell) }))
       // Tamamen boş satırlar atlanır (Excel dosyalarının sonunda tipik).
       .filter((r) => r.cells.some((c) => c.trim() !== "")),
   };

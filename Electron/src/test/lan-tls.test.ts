@@ -8,6 +8,7 @@ import {
   TLS_PIN_KEY,
   buildTlsQr,
   certVerifyDecision,
+  isLanOnlyHost,
   checkPinRequest,
   formatFingerprintGroups,
   isLoopbackHost,
@@ -56,6 +57,24 @@ describe("Chromium doğrulama kancası", () => {
     expect(certVerifyDecision([pin()], OTHER)).toBe(-3);
     expect(certVerifyDecision([], FP)).toBe(-3);
     expect(certVerifyDecision([pin()], "çöp")).toBe(-3);
+  });
+  it("sabit varken yerel adreste sabit dışı (CA-geçerli olsa da) sertifika REDDEDİLİR (-2) — tablet ile aynı", () => {
+    for (const host of ["192.168.1.50", "10.0.0.5", "[fe80::1]", "sunucu", "fabrika.local", "srv.lan"]) {
+      expect(certVerifyDecision([pin()], OTHER, host)).toBe(-2);
+      expect(certVerifyDecision([pin()], "çöp", host)).toBe(-2);
+      expect(certVerifyDecision([pin()], FP, host)).toBe(0);
+    }
+  });
+  it("yerel-yalnız adres sınıfı", () => {
+    expect(isLanOnlyHost("192.168.1.50")).toBe(true);
+    expect(isLanOnlyHost("fabrika.etkiliyazilim.com")).toBe(false);
+    expect(isLanOnlyHost("")).toBe(false);
+  });
+  it("internet adı ve sabitsiz panel Chromium'a kalır (-3)", () => {
+    expect(certVerifyDecision([pin()], OTHER, "fabrika.etkiliyazilim.com")).toBe(-3);
+    expect(certVerifyDecision([pin()], OTHER, "github.com")).toBe(-3);
+    expect(certVerifyDecision([], OTHER, "192.168.1.50")).toBe(-3);
+    expect(certVerifyDecision([pin()], OTHER)).toBe(-3);
   });
 });
 

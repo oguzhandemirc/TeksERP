@@ -69,9 +69,10 @@ describe("⛔ ağdaki http:// kabul edilmez", () => {
 });
 
 describe("⛔ iz tutmazsa bağlanılmaz", () => {
-  it("sertifika kancası yalnız sabitli izi kabul eder, gerisi Chromium'a (-3: kendinden imzalı red)", () => {
+  it("sertifika kancası yalnız sabitli izi kabul eder; sabitli LAN adresinde yabancı iz -2 RED, gerisi Chromium'a (-3)", () => {
     expect(certVerifyDecision([PIN], FP)).toBe(0);
     expect(certVerifyDecision([PIN], OTHER)).toBe(-3);
+    expect(certVerifyDecision([PIN], OTHER, "192.168.1.50")).toBe(-2);
     expect(certVerifyDecision([], FP)).toBe(-3);
   });
   it("sabitsiz ağ https'i kaydedilmez (eşleşme ister); sabitli port kabul", () => {

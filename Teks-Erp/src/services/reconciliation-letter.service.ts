@@ -66,6 +66,7 @@ import {
 } from "./document-render/finance-doc.html";
 import type { PrintedDocDb } from "./printed-document.service";
 import type { ApiResponse } from "../types/api.types";
+import { escapeLikeTerm } from "../utils/search-fold";
 
 /** Mutabakat mektubu ön eki — MBT + GGAAYY + NNNN. */
 const DOC_PREFIX = "MBT";
@@ -302,7 +303,7 @@ export class ReconciliationLetterService {
       };
     }
     if (params.search?.trim()) {
-      where.docNo = { contains: params.search.trim(), mode: "insensitive" };
+      where.docNo = { contains: escapeLikeTerm(params.search.trim()), mode: "insensitive" };
     }
 
     const [data, total] = await Promise.all([

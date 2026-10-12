@@ -85,14 +85,27 @@ export function parseTlsPins(raw: string | null | undefined): TlsPin[] {
 }
 
 /**
- * Chromium sertifika doğrulama kancasının kararı: sabitli parmak izi → 0 (kabul); başka her şey → -3
- * (Chromium'un kendi kararı — dış https adresleri normal CA ile doğrulanır, kendinden imzalı yabancı
- * sertifika reddedilir). Kanca adrese bakmaz: kimlik parmak izindedir.
+ * Chromium sertifika doğrulama kancasının kararı: sabitli parmak izi → 0 (kabul). Sabit varken YALNIZ yerel
+ * ağda olabilen adreste (IP, tek etiket, .local/.lan…) sabit dışı sertifika → -2 (RED; CA-geçerli olsa da —
+ * tablet `LanTlsPolicy` ile aynı: sabitli uçta yabancı kök kabul edilmez). Geri kalanı → -3 (Chromium'un
+ * kendi kararı: internet adı genel CA ile doğrulanır, kendinden imzalı yabancı sertifika reddedilir).
  */
-export function certVerifyDecision(pins: readonly TlsPin[], certFingerprint: unknown): 0 | -3 {
+export function certVerifyDecision(pins: readonly TlsPin[], certFingerprint: unknown, hostname?: string): 0 | -2 | -3 {
   const fp = normalizeFingerprint(certFingerprint);
-  if (!fp) return -3;
-  return pins.some((p) => p.fingerprint === fp) ? 0 : -3;
+  if (fp && pins.some((p) => p.fingerprint === fp)) return 0;
+  if (pins.length > 0 && typeof hostname === "string" && isLanOnlyHost(hostname)) return -2;
+  return -3;
+}
+
+const LAN_ONLY_SUFFIXES = [".local", ".lan", ".internal", ".home.arpa"];
+
+/** Genel internette ad olamayan adres: IPv4/IPv6 sabit adres, tek etiketli ad ya da yerel son ek. Döngü dahil. */
+export function isLanOnlyHost(host: string): boolean {
+  const h = (host ?? "").trim().toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (!h) return false;
+  if (h.includes(":") || /^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return true;
+  if (!h.includes(".")) return true;
+  return LAN_ONLY_SUFFIXES.some((x) => h.endsWith(x)) || h.endsWith(".localhost");
 }
 
 export function isLoopbackHost(host: string): boolean {

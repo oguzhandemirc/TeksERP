@@ -33,7 +33,8 @@ import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
 import { logProcessWarnings } from './lib/process-warnings';
-import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/web-hardening';
+import { readWebHardeningConfig, isWebHardeningDeclared, trustProxyHostedRefusal } from './middlewares/web-hardening';
+import { isHostedInstallation } from './services/helpers/install-class.helper';
 import { hata, uyari, bilgi, satir } from "./lib/logger";
 import type { Server } from "node:http";
 import { bootFactoryTimezone } from "./services/factory-timezone.service";
@@ -76,6 +77,21 @@ try {
     preloadEncryptedModules();
 } catch (err) {
     uyari("lisans", "lisans deposu yüklenemedi — motor ölçülemedi durumunda", err);
+}
+
+// Barındırılan kurulumda koşulsuz XFF güveni (TRUST_PROXY=true) açılışı durdurur — sınıf lisanstan da
+// okunduğu için lisans deposundan SONRA; vekilsiz (null) barındırılan kurulum yalnız uyarılır.
+{
+    const tp = readWebHardeningConfig(process.env, () => {}).trustProxy;
+    const hosted = isHostedInstallation();
+    const red = trustProxyHostedRefusal(tp, hosted);
+    if (red) {
+        hata("boot", red);
+        process.exit(1);
+    }
+    if (hosted && tp === null) {
+        uyari("web-hardening", "barındırılan kurulumda TRUST_PROXY yok — ters vekil arkasındaysa bütün ziyaretçiler tek giriş-kilidi kovasına düşer (doğru değer genelde TRUST_PROXY=1).");
+    }
 }
 
 // Node süreç uyarıları YIĞIN İZİYLE log'a düşsün — Node'un kendi çıktısı
@@ -186,7 +202,7 @@ function startLanListener(): Server {
             + ` · hsts=${hardening.httpsEnabled ? "açık" : "kapalı"}`
             + ` · girişKilidiKapsamı=${hardening.loginLockoutScope}`);
         satir(`                hızSınırı=${rl.enabled
-            ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeMax} · giriş ${rl.loginMax})`
+            ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeEnabled ? rl.writeMax : "sayılmaz"} · giriş ${rl.loginMax})`
             : "kapalı"}`);
     }
     lanTlsBanner();

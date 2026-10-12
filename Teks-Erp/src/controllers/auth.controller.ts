@@ -53,8 +53,9 @@ const clientTypeSchema = z.enum(["electron", "mobile", "web"]).optional();
 
 // Zod schemas for validation
 const loginSchema = z.object({
-  username: z.string().min(1, "Kullanıcı adı gerekli"),
-  password: z.string().min(1, "Şifre gerekli"),
+  // Tavan kimliksiz uçta gövde işini sınırlar (bcrypt zaten 72 baytta keser; 256 bol).
+  username: z.string().min(1, "Kullanıcı adı gerekli").max(256, "Kullanıcı adı çok uzun"),
+  password: z.string().min(1, "Şifre gerekli").max(256, "Şifre çok uzun"),
   clientType: clientTypeSchema,
   confirmKick: z.boolean().optional(),
   // İkinci faktör — yalnız hesabında TOTP açık kullanıcıdan istenir. Üst sınır:

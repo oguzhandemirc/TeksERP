@@ -138,7 +138,8 @@ const app: Express = express();
 // kural: değişken YOKKEN çözülen değerler bugünkü davranışı birebir üretir
 // (trustProxy=null → set edilmez · corsOrigins=null → kısıt yok ·
 // swaggerEnabled=NODE_ENV!=="production" → mevcut kapı · httpsEnabled=false →
-// HSTS kapalı · rateLimit.enabled=false → middleware hiç MOUNT EDİLMEZ).
+// HSTS kapalı). Tek istisna hız sınırı: değişken yokken yalnız giriş/lisans kovası cömert eşikle açık,
+// yazma kovası sayılmaz; `RATE_LIMIT_ENABLED=false` → middleware hiç MOUNT EDİLMEZ.
 const hardening = readWebHardeningConfig();
 
 // ⚠️⚠️ EN KRİTİK SATIR. Ters vekil (nginx/Cloudflare) arkasında `trust proxy`
@@ -457,7 +458,10 @@ if (hardening.rateLimit.enabled) {
     "/api",
     createRateLimiter({
       windowMs: hardening.rateLimit.windowMs,
-      limits: { login: hardening.rateLimit.loginMax, write: hardening.rateLimit.writeMax },
+      limits: {
+        login: hardening.rateLimit.loginMax,
+        write: hardening.rateLimit.writeEnabled ? hardening.rateLimit.writeMax : null,
+      },
       // ⚠️ Giriş kilidiyle AYNI istemci kaynağı: biri kenar IP'sini, diğeri
       // gerçek ziyaretçiyi sayarsa iki koruma farklı kişileri sınırlar.
       clientIpHeader: hardening.clientIpHeader,
