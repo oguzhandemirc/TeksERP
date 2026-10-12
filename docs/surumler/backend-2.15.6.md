@@ -74,6 +74,13 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   sayacında birbirini beklemiyor; tezgah duruşu açmak veritabanı bağlantısını daha az meşgul ediyor; Tezgah Salonu
   duruş penceresi ve depo hareket listesi yeni indekslerle hızlandı. Başarısız bir girişin ayırdığı barkod numarası
   boş kalabilir (numaralar yine tekil).
+- **Gece bakımı (davranış değişir — dört madde).** ① Denetim kaydı arşivi artık **3 yıl** saklanır, daha eskisi
+  gece silinir (bugüne dek sonsuz saklanıyordu; ayar `audit.archiveRetentionYears`, `0` = hiç silme). Denetim
+  kaydı yalnız ayak izidir — rapor ve sayılar ondan türemez. ② Güncelleme öncesi alınan geri dönüş yedekleri
+  (`premigrate_`) döner: en yeni 3 her zaman kalır, kalanlardan 90 günden eskiler silinir. ③ Denetim kaydı
+  arşivleyicisi yalnız gece 02:00–05:00 arasında (fabrika saati) çalışır, mesai saatinde yük bindirmez. ④ 90 günden
+  eski kapanmış oturum kayıtları her gece kendiliğinden temizlenir. Ayrıca yoğun tablolarda veritabanı bakımı daha
+  sık tetiklenir; Linux (Docker) kurulumunda veritabanı paylaşımlı belleği 256 MB ve konteyner günlükleri sınırlı.
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -245,6 +252,18 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   indeksleri (yalnız indeks).
 - `6179b0119` + `0518b363d` — duruş açmada replay okuması tx içinde; istek başına havuz alımı 9 → 2. Sözleşme aynı.
 
+**Performans dilimi 4 (bakım)**
+
+- `5828ac5ec` — Migration `20261012210000_autovacuum_tablo_ayarlari`: altı yoğun tabloda (`rolls` ·
+  `machine_stop_events` · `machine_runs` · `system_logs` · `system_log_archives` · `sessions`) autovacuum eşiği
+  0.02 / analyze 0.01 (yalnız tablo ayarı, veri yazmaz).
+- `e9631a4ad` — korumalı compose: postgres `shm_size: 256m`, üç serviste json-file günlük sınırı (20m × 5).
+- `226e47cf3` — günlük bakım işi (fabrika saati 02:00–05:00): `premigrate_` yedek rotasyonu (en yeni 3 + 90 gün),
+  sistem olayı `BACKUP_ROTATED`. Güncelleyici işlem yedekleri bu sürümde dönmez (güncelleyici 0.2.7).
+- `30f8a1f98` — yeni ayar `audit.archiveRetentionYears` (varsayılan 3, `0` = budama yok): arşiv budaması aylık
+  dilimle, sistem olayı `AUDIT_ARCHIVE_PURGE`; ölü oturum budaması 90 gün otomatik; arşivleyici yalnız gece
+  penceresinde. **Varsayılan bugünkü davranışı değiştirir** (sonsuz → 3 yıl). Bekçi `test_bakim_isleri` (`79a67f2f6`).
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -317,15 +336,16 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 4. Migration
 
-- **Var mı:** EVET — 9 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
+- **Var mı:** EVET — 10 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
   `users` tablosuna boş geçilebilir bir alan + bir kontrol kuralı; var olan satırlar boş kalır, veri dönüşümü YOK),
   `20261012010000_durus_acan_kapatan`, `20261012120000_kimlik_sifirlama_onayi` (yalnız EKLEME: yeni tablo),
   `20261012140000_makine_durus_kod_esleme` (yalnız EKLEME: boş yeni tablo + toplayıcıya boş geçilebilir alan),
   `20261012180000_makine_kart_kimligi` (yalnız EKLEME: toplayıcıya iki boş geçilebilir alan),
   `20261012190000_makine_kart_sahiplenme` (yalnız EKLEME: duruşa boş geçilebilir alan + kısmi tekil indeks),
   `20261012150000_cihaz_kaniti` (yalnız EKLEME: `devices`e üç boş geçilebilir alan),
-  `20261012200000_perf_indeksler` (yalnız indeks, veri dönüşümü yok; 300k satırlık duruş tablosunda ~0,16 sn).
-- **Toplam migration:** 385 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 9 migration uygulamalıdır. Farklı sayı =
+  `20261012200000_perf_indeksler` (yalnız indeks, veri dönüşümü yok; 300k satırlık duruş tablosunda ~0,16 sn),
+  `20261012210000_autovacuum_tablo_ayarlari` (yalnız tablo ayarı, veri yazmaz, tabloyu yeniden yazmaz).
+- **Toplam migration:** 386 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 10 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -337,7 +357,7 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 9 migration); süre kurulumda ölçülür.
+- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 10 migration); süre kurulumda ölçülür.
 - **Sıra:** sunucu önce; uyarı şeridini gösteren panel sonra.
 - **Bu sürüme özel:**
   - Migration var → güncelleme programı güncellemeden önce otomatik yedek alır. Yedek adımı geçmeli.
@@ -384,10 +404,12 @@ Veriyi güncelleme öncesine döndürmek gerekirse otomatik yedekten geri yükle
 - Güncelleme programı hizmeti çalışıyor; `durum` kurulu sürüm 2.15.6, güncelleme programı 0.2.6, kira geçerli
   (DONDURULDU / KIRA_YOK yok).
 - Yedek: güncelleme öncesi yedek alındı; günlükte `SEMA_OLCULEMEDI` yok.
-- Veritabanı: 385 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
+- Veritabanı: 386 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
   kurulumda hepsi boş.
 - `/api/admin/health` `sistemHesabiMuhru`: var olan (mühürlenmemiş) kurulumda `MUHURLENMELI`, mühürlemeden sonra
   `TAMAM`. Destek hesabı girişi mühürlemeden önce de sonra da çalışıyor.
 - `/api/admin/health` lisans bölümünde `etkinlestirmeKilidi` etkin kurulumda `YOK` (`KURULUM_HATASI` görünürse
   lisans klasörü yanlış yerde — DUR, insana rapor et).
+- Denetim arşivinin en eski kaydı (`SELECT min("createdAt") FROM system_log_archives`): 3 yıldan eskiyse ilk gece
+  budanacağı bilinerek rapor edilir.
 - Hata günlüğünün son satırları — yeni hata var mı.
