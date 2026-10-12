@@ -13,6 +13,7 @@ import { withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
 import { safeKeyId, type InstallationRecord } from "./installation-directory";
 import { CLOUD_MODULE_KEY, facilityServiceState } from "./service-lifecycle";
+import { securityEvent } from "../lib/security-events";
 
 export { CLOUD_MODULE_KEY };
 
@@ -49,7 +50,17 @@ async function recordNonce(ctx: CloudContext, inst: InstallationRecord, request:
 }
 
 /** `path`: isteği alan uç (`SYNC_PATHS` sabiti) — imzalı `yol` taşıyan istek yalnız o uca geçer (amaç hep `esitle`). */
+/** Güvenlik olayı sayacı: kimlik/imza reddi (401) ve hak reddi (403) sınıf başına sayılır (B3). */
 export async function authenticateFactory(ctx: CloudContext, g: { header: unknown; rawBody: Buffer; nowMs: number; path: string }): Promise<FactoryCaller> {
+  try {
+    return await authenticate(ctx, g);
+  } catch (err) {
+    if (err instanceof CloudError && (err.status === 401 || err.status === 403)) securityEvent(err.status === 401 ? "IMZA_RED" : "HAK_RED", err.code);
+    throw err;
+  }
+}
+
+async function authenticate(ctx: CloudContext, g: { header: unknown; rawBody: Buffer; nowMs: number; path: string }): Promise<FactoryCaller> {
   if (typeof g.header !== "string" || g.header.length === 0) {
     throw new CloudError(401, "ISTEK_GECERSIZ", "İmzalı istek başlığı (X-TKL-Istek) yok");
   }

@@ -2,6 +2,7 @@
 // süreli durdurur, başka kaynaktan doğru üçlü girer — hesap düzeyi kilit, e-postayı bilen herkesin elinde süresiz
 // hizmet engeline dönüşüyordu. Bellek içi (tek süreç; yeniden başlatmada sıfırlanır), kaynak adresi düz saklanmaz.
 import { createHmac, randomBytes } from "node:crypto";
+import { securityEvent } from "../lib/security-events";
 
 interface Entry {
   fails: number;
@@ -58,6 +59,7 @@ export class LoginThrottle {
       e.lockedUntil = nowMs + this.lockMs;
       e.fails = 0;
       locked = new Date(e.lockedUntil);
+      securityEvent("GIRIS_KILIT");
     }
     this.entries.delete(slot);
     this.entries.set(slot, e);

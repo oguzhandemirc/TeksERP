@@ -14,7 +14,7 @@ DB="${DB_HOST:-patron-db}:5432/${DB_ADI:-patron}?schema=public"
 
 rol_sirlari() {
   case "$1" in
-    sunucu) echo "uygulama_parolasi esitleme_parolasi tesis_rol_anahtari ic_api_belirteci" ;;
+    sunucu) echo "uygulama_parolasi esitleme_parolasi tesis_rol_anahtari ic_api_belirteci guvenlik_telegram_bot_token guvenlik_telegram_chat_id" ;;
     goc) echo "goc_parolasi uygulama_parolasi esitleme_parolasi tesis_rol_anahtari" ;;
     hazirla) echo "goc_parolasi tesis_rol_anahtari" ;;
     *) return 1 ;;
@@ -72,6 +72,19 @@ for sir in $SIRLAR; do
           SATICI_IC_API_BELIRTECI="$(tr -d '\r\n' < "$S/ic_api_belirteci")"
           export SATICI_IC_API_BELIRTECI
         fi
+      fi ;;
+    guvenlik_telegram_bot_token)
+      # Güvenlik bildirimi (B3): yolu verilir; boş dosya = KAPALI (sunucu açılış günlüğünde söyler).
+      if [ -z "${GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI:-}" ]; then
+        sir_var guvenlik_telegram_bot_token
+        GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI="$S/guvenlik_telegram_bot_token"
+        export GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI
+      fi ;;
+    guvenlik_telegram_chat_id)
+      if [ -z "${GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI:-}" ]; then
+        sir_var guvenlik_telegram_chat_id
+        GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI="$S/guvenlik_telegram_chat_id"
+        export GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI
       fi ;;
     *) echo "[patron] rol tablosunda tanınmayan sır: $sir" >&2; exit 1 ;;
   esac

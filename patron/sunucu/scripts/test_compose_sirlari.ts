@@ -42,10 +42,10 @@ function baslat(rol: string | null, sirlar: readonly string[], betik = BASLAT): 
 }
 
 kontrol("§1 betik `S=/run/secrets` satırını taşır (sonda onu geçici dizine çevirir)", /^S=\/run\/secrets$/m.test(BASLAT));
-const DORT = ["uygulama_parolasi", "esitleme_parolasi", "tesis_rol_anahtari", "ic_api_belirteci"];
+const DORT = ["uygulama_parolasi", "esitleme_parolasi", "tesis_rol_anahtari", "ic_api_belirteci", "guvenlik_telegram_bot_token", "guvenlik_telegram_chat_id"];
 {
   const r = baslat(null, DORT);
-  kontrol("§1 rol verilmezse sunucu: dört sırla açılır, DB + eşitleme URL'i + tesis anahtarı yolu kurulur, göç URL'i YOK", r.status === 0 && !!r.env.DATABASE_URL && !!r.env.ESITLEME_DATABASE_URL && !!r.env.TESIS_ROL_ANAHTARI_DOSYASI && !r.env.GOC_DATABASE_URL, r.hata.trim());
+  kontrol("§1 rol verilmezse sunucu: altı sırla açılır, DB + eşitleme URL'i + tesis anahtarı + güvenlik bildirimi yolları kurulur, göç URL'i YOK", r.status === 0 && !!r.env.DATABASE_URL && !!r.env.ESITLEME_DATABASE_URL && !!r.env.TESIS_ROL_ANAHTARI_DOSYASI && !!r.env.GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI && !!r.env.GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI && !r.env.GOC_DATABASE_URL, r.hata.trim());
 }
 {
   const r = baslat("hazirla", ["goc_parolasi", "tesis_rol_anahtari"]);

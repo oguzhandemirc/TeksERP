@@ -5,6 +5,7 @@
 import { BlockList, isIP, isIPv4, isIPv6 } from "node:net";
 import type { NextFunction, Request, Response } from "express";
 import type { CloudConfig } from "../config";
+import { securityEvent } from "../lib/security-events";
 
 /** Cloudflare'in yayımladığı kenar aralıkları (cloudflare.com/ips); değişirse GUVENILIR_VEKIL_AGLARI ile ezilir. */
 export const CLOUDFLARE_NETWORKS: readonly string[] = [
@@ -111,6 +112,7 @@ export function rateLimit(g: { perMinute: number; config: TrustConfig }) {
       return;
     }
     w.count++;
+    if (w.count === g.perMinute + 1) securityEvent("HIZ_SINIRI");
     if (w.count > g.perMinute) {
       res.set("Retry-After", String(Math.ceil((w.start + 60_000 - now) / 1000)));
       res.status(429).json({ success: false, message: "Çok fazla istek; biraz sonra deneyin", details: { code: "HIZ_SINIRI" } });

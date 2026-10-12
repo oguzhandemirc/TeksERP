@@ -91,7 +91,7 @@ services:
       # anahtar biriminde ÖNCEDEN üretilmiş olmalı (birim salt okunur — runbook §2.1).
       BILDIRIM_KIPI: ${BILDIRIM_KIPI:-kapali}
       BILDIRIM_VAPID_KONU: ${BILDIRIM_VAPID_KONU:-}
-    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci, tesis_rol_anahtari]
+    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci, tesis_rol_anahtari, guvenlik_telegram_bot_token, guvenlik_telegram_chat_id]
     volumes:
       # Anahtar birimi SALT OKUNUR: patron-totp.key önceden üretilir (runbook §2.1); yoksa açılış DURUR.
       - ${ANAHTAR_DIZINI_HOST:?ANAHTAR_DIZINI_HOST gerekli}:/anahtarlar:ro
@@ -217,6 +217,11 @@ secrets:
   # Yedek konteyneri ALMAZ: parolalar türetilir, anahtar kaybı veri kaybı değil (`tesis-db goc` yeniden yazar).
   tesis_rol_anahtari:
     file: ${TESIS_ROL_ANAHTARI_DOSYASI_HOST:?TESIS_ROL_ANAHTARI_DOSYASI_HOST gerekli}
+  # Güvenlik bildirimi (B3) — boş dosya = KAPALI; dosya YOKSA compose açılmaz (runbook § Güvenlik bildirimi).
+  guvenlik_telegram_bot_token:
+    file: ${GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI_HOST:?GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI_HOST gerekli (boş dosya = güvenlik bildirimi KAPALI)}
+  guvenlik_telegram_chat_id:
+    file: ${GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST:?GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST gerekli (boş dosya = güvenlik bildirimi KAPALI)}
 
 volumes:
   patron-pg:

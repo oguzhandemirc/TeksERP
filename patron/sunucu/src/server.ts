@@ -2,7 +2,7 @@
 // Açılış (fail-closed): yapılandırma → iki merkez rolü RLS'i ATLAYAMAZ (süper kullanıcı ya da BYPASSRLS
 // ise sunucu KALKMAZ) → tesis DB anahtarı → iki yönlendirici (uygulama · eşitleme; tesis DB'leri istek anında)
 // → TOTP sır anahtarı → web çıktısı (verildiyse yoksa KALKMAZ) → dinleyici → bakım işi.
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { FacilityDbKey, facilityDbKeyPath } from "./auth/facility-db-key";
@@ -18,6 +18,10 @@ import { createDoorbell } from "./services/doorbell";
 import { InstallationDirectory } from "./services/installation-directory";
 import { MaintenanceScheduler } from "./services/maintenance";
 import { createNotificationRuntime, NotificationScheduler } from "./services/notification-scheduler";
+import os from "node:os";
+import path from "node:path";
+import { SecretFileModeError } from "./lib/secret-file-mode";
+import { renderSecurityMessage, securityChannelFrom, securityChannelSummary, startSecurityAlerts } from "./lib/security-events";
 
 function listen(server: http.Server, port: number, host: string): Promise<AddressInfo> {
   return new Promise((resolve, reject) => {
@@ -62,6 +66,9 @@ async function main(): Promise<void> {
   const notifier = ctx.notifications ? new NotificationScheduler(ctx, ctx.notifications) : null;
   notifier?.start();
   console.log(`PATRON_BILDIRIM kip=${config.BILDIRIM_KIPI}`);
+  const security = securityChannelFrom(process.env);
+  const stopSecurityAlerts = startSecurityAlerts(security);
+  (security.ok ? console.log : console.warn)(`[patron] ${securityChannelSummary(security)}`);
 
   let closing = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -70,6 +77,7 @@ async function main(): Promise<void> {
     console.log(`[patron] ${signal}: kapanıyor`);
     maintenance.stop();
     notifier?.stop();
+    stopSecurityAlerts();
     await new Promise<void>((r) => server.close(() => r()));
     await app.close();
     await sync.close();
@@ -79,7 +87,19 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
-main().catch((err: Error) => {
+/** Sır izni reddi süreci açmaz; güvenlik sohbetine saatte en çok bir kez yazmayı dener (yeniden başlatma döngüsü sel doğurmaz). */
+async function reportSecretFileRejection(): Promise<void> {
+  const st = securityChannelFrom(process.env);
+  if (!st.ok) return;
+  const hour = Math.floor(Date.now() / 3_600_000) * 3_600_000;
+  const marker = path.join(os.tmpdir(), `patron-sir-red-${hour}`);
+  if (existsSync(marker)) return;
+  writeFileSync(marker, "", { mode: 0o600 });
+  await st.send(renderSecurityMessage({ kind: "alarm", alarm: { sinif: "SIR_DOSYASI_RED", tur: "ILK", adet: 1, pencereBasi: hour, ornek: null } }));
+}
+
+main().catch(async (err: Error) => {
   console.error(`[patron] açılış başarısız: ${err.message}`);
+  if (err instanceof SecretFileModeError) await reportSecretFileRejection().catch(() => undefined);
   process.exit(1);
 });
