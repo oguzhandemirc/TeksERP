@@ -5,7 +5,8 @@
 //   §2 teslim: olay giden kutusuna sınıf × pencere başına kanal başına TEK satır (kurulumsuz, gövde allowlist)
 //   §3 yönlendirme: güvenlik satırı YALNIZ güvenlik taşıyıcısına gider, işletme taşıyıcısı görmez; işletme satırı tersine
 //   §4 kanal kapalı: güvenlik taşıyıcısı yoksa satır KAPALI, hiçbir taşıyıcı çağrılmaz; sağlık "güvenlik bildirimi: KAPALI"
-//   §5 yapılandırma: güvenlik sohbeti yalnız `GUVENLIK_TELEGRAM_CHAT_ID`den (işletme sohbetine düşmez); e-posta ikincil
+//   §5 yapılandırma: güvenlik sohbeti yalnız `GUVENLIK_TELEGRAM_CHAT_ID`den (işletme sohbetine düşmez); sır dosyası İSTEĞE
+//      BAĞLI (/dev/null → KAPALI 'boş', dolu → AÇIK); e-posta ikincil
 //      yalnız `GUVENLIK_EPOSTA_ALICI` ile; nabız metni "güvenlik bildirimi: KAPALI" der
 //   §6 olay yerleri: her sınıfın üretim kodunda en az bir `securityEvent` çağrısı var (sınıf sessizce düşmez)
 // NEGATİF SONDA (dosya DIŞI, geri alındı): N1 güvenlik kapsamı + `transportFor` işletme taşıyıcısına düşer → §3a/§3b/§4a/§4b
@@ -14,7 +15,8 @@
 //   `TELEGRAM_CHAT_ID`e düşer → §5a ❌.
 // Koşum: npx tsx scripts/test_guvenlik_bildirimi.ts   (yalnız *_test DB)
 // =============================================================================
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { BildirimKanali } from "@prisma/client";
 import { GuvenlikAlarmi } from "../src/lib/guvenlik-alarm";
@@ -127,6 +129,18 @@ function yapilandirma(): void {
     var_.security.telegram.ok && var_.security.telegram.settings.chatId === "-1002" && var_.security.email.ok && var_.security.email.settings.to.join() === "guvenlik@ornek.com",
   );
   kontrol("§5d biçimsiz güvenlik sohbeti KAPALI", !loadSenderConfig({ ...ortak, GUVENLIK_TELEGRAM_CHAT_ID: "abc" }).security.telegram.ok);
+  // Sır dosyası İSTEĞE BAĞLI: compose değişken yoksa /dev/null bağlar → KAPALI ("boş"), gönderici açılır; dolu dosya → AÇIK.
+  const bos = loadSenderConfig({ ...ortak, GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI: "/dev/null" });
+  kontrol("§5e /dev/null bağı → işletme kanalı açık, güvenlik KAPALI 'boş' ('herkese okunur' DEĞİL)", bos.telegram.ok && !bos.security.telegram.ok && /_DOSYASI boş/.test(securityChannelSummary(bos).TELEGRAM) && !/herkese/.test(securityChannelSummary(bos).TELEGRAM), securityChannelSummary(bos).TELEGRAM);
+  const d = mkdtempSync(path.join(os.tmpdir(), "satici-guvenlik-"));
+  try {
+    writeFileSync(path.join(d, "c"), "-1003\n");
+    chmodSync(path.join(d, "c"), 0o440);
+    const dolu = loadSenderConfig({ ...ortak, GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI: path.join(d, "c") });
+    kontrol("§5f dolu sır dosyası (0440) → güvenlik sohbeti AÇIK", dolu.security.telegram.ok && dolu.security.telegram.settings.chatId === "-1003", securityChannelSummary(dolu).TELEGRAM);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
 }
 
 function olayYerleri(): void {

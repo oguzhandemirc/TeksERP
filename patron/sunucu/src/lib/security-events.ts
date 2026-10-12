@@ -75,7 +75,10 @@ function secret(env: NodeJS.ProcessEnv, name: string): { value: string } | { rea
   if (direct) return { value: direct };
   if (!file) return { reason: `${name} yok` };
   try {
-    if ((statSync(file).mode & 0o004) !== 0) return { reason: `${name}_DOSYASI herkese okunur (0440/0400 olmalı)` };
+    // Boş dosya (compose'un isteğe bağlı sırda bağladığı /dev/null dahil) içerik taşımaz: izinden önce "boş" denir.
+    const st = statSync(file);
+    if (st.size === 0 && !st.isDirectory()) return { reason: `${name}_DOSYASI boş` };
+    if ((st.mode & 0o004) !== 0) return { reason: `${name}_DOSYASI herkese okunur (0440/0400 olmalı)` };
     const value = readFileSync(file, "utf8").trim();
     return value ? { value } : { reason: `${name}_DOSYASI boş` };
   } catch {

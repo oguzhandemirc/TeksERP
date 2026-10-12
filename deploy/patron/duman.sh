@@ -37,7 +37,6 @@ umask 077
 mkdir -p "$D/sirlar" "$D/anahtarlar" "$D/yedek-alici" "$D/yedek"
 for s in goc uygulama esitleme; do openssl rand -hex 32 > "$D/sirlar/$s-parolasi"; done
 : > "$D/sirlar/ic-api-belirteci"   # boş = iç API kapalı (kayıt kipi)
-: > "$D/sirlar/guvenlik-telegram-belirteci"; : > "$D/sirlar/guvenlik-telegram-grup"   # boş = güvenlik bildirimi KAPALI
 node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url")+"\n")' > "$D/anahtarlar/patron-totp.key"
 node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url")+"\n")' > "$D/sirlar/tesis-rol-anahtari"
 chmod 755 "$D" "$D/sirlar" "$D/anahtarlar" "$D/yedek-alici" "$D/yedek"; chmod 644 "$D"/sirlar/*
@@ -64,8 +63,6 @@ UYGULAMA_PAROLA_DOSYASI=$D/sirlar/uygulama-parolasi
 ESITLEME_PAROLA_DOSYASI=$D/sirlar/esitleme-parolasi
 IC_API_BELIRTEC_DOSYASI_HOST=$D/sirlar/ic-api-belirteci
 TESIS_ROL_ANAHTARI_DOSYASI_HOST=$D/sirlar/tesis-rol-anahtari
-GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI_HOST=$D/sirlar/guvenlik-telegram-belirteci
-GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST=$D/sirlar/guvenlik-telegram-grup
 ANAHTAR_DIZINI_HOST=$D/anahtarlar
 YEDEK_ALICI_DIZINI_HOST=$D/yedek-alici
 YEDEK_DIZINI_HOST=$D/yedek

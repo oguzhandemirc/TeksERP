@@ -81,8 +81,9 @@ secrets:
     file: ${TELEGRAM_CHAT_ID_DOSYASI_HOST:?TELEGRAM_CHAT_ID_DOSYASI_HOST gerekli (grup kimliği; boş dosya = Telegram kapalı)}
   resend_api_key:
     file: ${RESEND_API_KEY_DOSYASI_HOST:?RESEND_API_KEY_DOSYASI_HOST gerekli (boş dosya = e-posta kapalı)}
+  # Güvenlik bildirimi İSTEĞE BAĞLI: değişken yoksa /dev/null (boş) bağlanır → kanal KAPALI, gönderici yine açılır.
   guvenlik_telegram_chat_id:
-    file: ${GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST:?GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST gerekli (güvenlik grubu kimliği; boş dosya = güvenlik bildirimi KAPALI)}
+    file: ${GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST:-/dev/null}
 
 networks:
   bildirim-cikis:

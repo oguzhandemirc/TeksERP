@@ -149,6 +149,13 @@ function main(): void {
     const denetleU = denetleP;
     const bKurgular: [string, Kosum, number, RegExp][] = [
       ["§3b üretim + portal-genel + bildirim (--patron-env)", denetleP(uretimPB), 0, /\d+ geçti, 0 ihlal$/],
+      // Güvenlik sohbeti sırrı İSTEĞE BAĞLI: değişken yokken compose açılır (/dev/null bağlanır → kanal KAPALI).
+      [
+        "§3b' güvenlik sohbeti sır değişkeni YOK (isteğe bağlı)",
+        denetleP(yaz("uretim-pb-guvenliksiz.env", ekle(uretimBildirimMetni.replace(/^GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST=.*\n/m, ""), "docker-compose.yml:docker-compose.portal-genel.yml:docker-compose.bildirim.yml"))),
+        0,
+        /\d+ geçti, 0 ihlal$/,
+      ],
     ];
     const B_SATIRLARI = ["Ⓑ0", "Ⓑ1", "Ⓑ2", "Ⓑ3", "Ⓑ4", "Ⓑ5", "Ⓑ6", "Ⓑ7", "Ⓑ7b", "Ⓑ8"];
     for (const [ad, k, cikis, desen] of bKurgular) {

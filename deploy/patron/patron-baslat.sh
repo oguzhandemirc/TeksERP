@@ -1,7 +1,8 @@
 #!/bin/sh
 # Patron konteyner girişi: DB URL'lerini ve satıcı iç API belirtecini docker SECRET dosyalarından kurar,
 # komutu çalıştırır — sırlar imaj yapılandırmasına ve `docker inspect`e girmez. Rol (PATRON_ROL) hangi sırların
-# okunacağını belirler; her rol YALNIZ kendi sırlarını okur ve hepsini ZORUNLU sayar (en az yetki):
+# okunacağını belirler; her rol YALNIZ kendi sırlarını okur ve hepsini ZORUNLU sayar (en az yetki) — tek istisna
+# güvenlik bildirimi sırları (guvenlik_telegram_*): İSTEĞE BAĞLI, okunamazsa kanal KAPALI:
 #   sunucu  → uygulama + eşitleme parolası · tesis rol anahtarı · iç API belirteci (boş = kapalı)
 #   goc     → göç + uygulama + eşitleme parolası · tesis rol anahtarı (migrate deploy · db-rolleri · tesis CLI'leri)
 #   hazirla → göç parolası · tesis rol anahtarı (tesis-db izle; uygulama parolasını ALMAZ)
@@ -26,6 +27,13 @@ sir_var() {
     echo "[patron] sır okunamıyor: $S/$1 (rol $ROL; compose secrets listesi, SIR_GID grubu ve 0440 izni?)" >&2
     exit 1
   fi
+}
+
+# İsteğe bağlı sır: okunamazsa uyarı basar ve 1 döner (açılış sürer).
+istege_bagli_sir() {
+  [ -r "$S/$1" ] && return 0
+  echo "[patron] uyarı: $S/$1 okunamıyor — bu kanal KAPALI" >&2
+  return 1
 }
 
 parola() {
@@ -74,17 +82,19 @@ for sir in $SIRLAR; do
         fi
       fi ;;
     guvenlik_telegram_bot_token)
-      # Güvenlik bildirimi (B3): yolu verilir; boş dosya = KAPALI (sunucu açılış günlüğünde söyler).
+      # Güvenlik bildirimi (B3) İSTEĞE BAĞLI: sır okunamazsa yol verilmez → kanal KAPALI, sunucu yine açılır.
       if [ -z "${GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI:-}" ]; then
-        sir_var guvenlik_telegram_bot_token
-        GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI="$S/guvenlik_telegram_bot_token"
-        export GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI
+        if istege_bagli_sir guvenlik_telegram_bot_token; then
+          GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI="$S/guvenlik_telegram_bot_token"
+          export GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI
+        fi
       fi ;;
     guvenlik_telegram_chat_id)
       if [ -z "${GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI:-}" ]; then
-        sir_var guvenlik_telegram_chat_id
-        GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI="$S/guvenlik_telegram_chat_id"
-        export GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI
+        if istege_bagli_sir guvenlik_telegram_chat_id; then
+          GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI="$S/guvenlik_telegram_chat_id"
+          export GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI
+        fi
       fi ;;
     *) echo "[patron] rol tablosunda tanınmayan sır: $sir" >&2; exit 1 ;;
   esac

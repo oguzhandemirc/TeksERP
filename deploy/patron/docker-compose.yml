@@ -217,11 +217,11 @@ secrets:
   # Yedek konteyneri ALMAZ: parolalar türetilir, anahtar kaybı veri kaybı değil (`tesis-db goc` yeniden yazar).
   tesis_rol_anahtari:
     file: ${TESIS_ROL_ANAHTARI_DOSYASI_HOST:?TESIS_ROL_ANAHTARI_DOSYASI_HOST gerekli}
-  # Güvenlik bildirimi (B3) — boş dosya = KAPALI; dosya YOKSA compose açılmaz (runbook § Güvenlik bildirimi).
+  # Güvenlik bildirimi (B3) İSTEĞE BAĞLI: değişken yoksa /dev/null (boş) bağlanır → kanal KAPALI, sunucu yine açılır.
   guvenlik_telegram_bot_token:
-    file: ${GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI_HOST:?GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI_HOST gerekli (boş dosya = güvenlik bildirimi KAPALI)}
+    file: ${GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI_HOST:-/dev/null}
   guvenlik_telegram_chat_id:
-    file: ${GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST:?GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST gerekli (boş dosya = güvenlik bildirimi KAPALI)}
+    file: ${GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST:-/dev/null}
 
 volumes:
   patron-pg:

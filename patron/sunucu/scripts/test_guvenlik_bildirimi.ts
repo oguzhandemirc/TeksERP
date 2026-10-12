@@ -3,13 +3,15 @@
 //   §1 ayna: alarm çekirdeği satıcınınkiyle BAYT-EŞİT (eşik · birleştirme · günlük özet tek kaynak davranır)
 //   §2 teslim: eşikte TEK ileti, pencere içi olaylar pencere sonunda TEK iletide sayaçla; ileti sır/adres taşımaz
 //   §3 kanal kapalı: belirteç ya da sohbet kimliği yoksa gönderim YOK (sessiz), özet "güvenlik bildirimi: KAPALI"
-//   §4 yapılandırma: aynı belirteçle ayrı sohbet; biçimsiz değer / düz http (geri döngü dışı) KAPALI
+//   §4 yapılandırma: aynı belirteçle ayrı sohbet; biçimsiz değer / düz http (geri döngü dışı) KAPALI; sır dosyası
+//      İSTEĞE BAĞLI: yok ya da /dev/null → KAPALI ('boş'), dolu dosya → AÇIK
 //   §5 olay yerleri: her sınıfın üretim kodunda en az bir `securityEvent` çağrısı (ya da açılış raporu) var
 // NEGATİF SONDA (dosya DIŞI, geri alındı): N1 çekirdekte açık pencere yok sayılır → §1a/§2b ❌ · N2 sohbet kimliği yokken
 //   varsayılan sohbete düşer → §3a/§3b ❌.
 // Koşum: npx tsx scripts/test_guvenlik_bildirimi.ts   (DB'ye dokunmaz)
 // =============================================================================
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   SECURITY_CLASSES,
@@ -76,6 +78,22 @@ function yapilandirma(): void {
   kontrol("§4a biçimsiz sohbet kimliği KAPALI", !securityChannelFrom({ GUVENLIK_TELEGRAM_BOT_TOKEN: TOKEN, GUVENLIK_TELEGRAM_CHAT_ID: "abc" }).ok);
   kontrol("§4b biçimsiz belirteç KAPALI", !securityChannelFrom({ GUVENLIK_TELEGRAM_BOT_TOKEN: "x", GUVENLIK_TELEGRAM_CHAT_ID: "-1" }).ok);
   kontrol("§4c düz http yalnız geri döngü", !securityChannelFrom({ GUVENLIK_TELEGRAM_BOT_TOKEN: TOKEN, GUVENLIK_TELEGRAM_CHAT_ID: "-1", GUVENLIK_TELEGRAM_API_KOKU: "http://ornek.com" }).ok);
+  // Sır dosyaları İSTEĞE BAĞLI: compose değişken yoksa /dev/null bağlar → KAPALI ("boş"), açılış sürer; dosya doluysa AÇIK.
+  const yok = securityChannelFrom({});
+  kontrol("§4d değişken/dosya hiç yok → KAPALI (yok)", !yok.ok && /GUVENLIK_TELEGRAM_BOT_TOKEN yok/.test(securityChannelSummary(yok)), securityChannelSummary(yok));
+  const bos = securityChannelFrom({ GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI: "/dev/null", GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI: "/dev/null" });
+  kontrol("§4e /dev/null bağı → KAPALI, gerekçe 'boş' ('herkese okunur' DEĞİL)", !bos.ok && /_DOSYASI boş/.test(securityChannelSummary(bos)) && !/herkese/.test(securityChannelSummary(bos)), securityChannelSummary(bos));
+  const d = mkdtempSync(path.join(os.tmpdir(), "patron-guvenlik-"));
+  try {
+    writeFileSync(path.join(d, "t"), `${TOKEN}\n`);
+    writeFileSync(path.join(d, "c"), "-1009\n");
+    chmodSync(path.join(d, "t"), 0o440);
+    chmodSync(path.join(d, "c"), 0o440);
+    const acik = securityChannelFrom({ GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI: path.join(d, "t"), GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI: path.join(d, "c") });
+    kontrol("§4f dolu sır dosyaları (0440) → AÇIK", acik.ok, securityChannelSummary(acik));
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
 }
 
 function olayYerleri(): void {

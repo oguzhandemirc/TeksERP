@@ -3,8 +3,10 @@
 // Sınıf: compose bir servise sırrı vermez ama giriş betiği o sırrı ister → servis yeniden başlama döngüsü
 // (`patron-hazirla`, yerel duman 2026-10-09). Tersi (verilen ama okunmayan sır) en az yetkiyi bozar.
 //   §1 patron-baslat.sh GERÇEKTEN koşulur (sır dizini geçici kopyada): her rol yalnız kendi sırlarıyla açılır ve
-//      tablo dışı sırrı okumaz; hazırlayıcı uygulama parolasız açılır; eksik sır / tanınmayan rol → çıkış 1
-//   §2 compose-denetle ⑩ gerçek compose + ornek.env ile beş servis ✅
+//      tablo dışı sırrı okumaz; hazırlayıcı uygulama parolasız açılır; eksik sır / tanınmayan rol → çıkış 1; güvenlik
+//      bildirimi sırları İSTEĞE BAĞLI (yoksa açılır, yol kurulmaz — eski betikle sonda ❌)
+//   §2 compose-denetle ⑩ gerçek compose + ornek.env ile beş servis ✅ (örnekte güvenlik bildirimi satırları yorumlu:
+//      isteğe bağlı sır yolu ölçülür — compose `:?`a dönerse §2 ÖLÇÜLEMEDİ ❌; 2026-10-12 sondası 12/24)
 //   §3 ⑩ negatif sondalar: hazırlayıcı rolü uygulama parolası ister (ilk arızanın aynısı) → EKSİK ❌ · compose
 //      hazırlayıcıdan tesis anahtarını düşürür → EKSİK ❌ · göç rolü eşitleme parolasını okumaz → FAZLA ❌ · tanınmayan
 //      PATRON_ROL ❌ · betik tablo dışı sır okur ❌ · yedek sırsız ❌
@@ -59,6 +61,11 @@ const DORT = ["uygulama_parolasi", "esitleme_parolasi", "tesis_rol_anahtari", "i
 {
   const r = baslat("goc", ["goc_parolasi", "uygulama_parolasi", "esitleme_parolasi", "tesis_rol_anahtari"]);
   kontrol("§1 göç dört sırla açılır (göç + iki çalışma URL'i + anahtar)", r.status === 0 && !!r.env.GOC_DATABASE_URL && !!r.env.DATABASE_URL && !!r.env.ESITLEME_DATABASE_URL && !!r.env.TESIS_ROL_ANAHTARI_DOSYASI, r.hata.trim());
+}
+{
+  // Güvenlik bildirimi sırları İSTEĞE BAĞLI: yoksa sunucu açılır, yol verilmez (kanal KAPALI), uyarı stderr'e.
+  const r = baslat("sunucu", DORT.slice(0, 4));
+  kontrol("§1 güvenlik bildirimi sırları YOKKEN sunucu açılır, güvenlik yolları kurulmaz, uyarı basılır", r.status === 0 && !!r.env.DATABASE_URL && !r.env.GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI && !r.env.GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI && /guvenlik_telegram_bot_token okunamıyor[^\n]*KAPALI/.test(r.hata), `${r.status} · ${r.hata.trim()}`);
 }
 kontrol("§1 sunucu iç API belirteci sırrı yoksa çıkış 1 (zorunlu, boş = kapalı)", baslat("sunucu", DORT.slice(0, 3)).status === 1);
 kontrol("§1 hazırlayıcı tesis anahtarı yoksa çıkış 1", baslat("hazirla", ["goc_parolasi"]).status === 1);
