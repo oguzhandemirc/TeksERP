@@ -1,13 +1,16 @@
 ---
 paths:
-  - "Teks-Erp/scripts/test_*.ts"
-  - "Teks-Erp/scripts/fixture-*.ts"
-  - "Electron/src/**/*.test.ts"
-  - "Electron/src/**/*.test.tsx"
-  - "mobil/**/*.test.ts"
-  - "mobil/**/*.test.tsx"
+  - "Teks-Erp/scripts/{test_,fixture-}*.ts"
+  - "{Electron,mobil}/src/**/*.test.{ts,tsx}"
 ---
 
-Dokunduğun dosya bir **bekçi (test)**. Yazmadan/değiştirmeden ÖNCE oku: kadans ve kapılar `docs/standart/TEST-VE-DERLEME.md`, bekçinin güvence + yazım kuralları `docs/standart/TEST-VE-DERLEME-BEKCI.md` (§4–§5); backend bekçisi yazıyorsan ayrıca `Teks-Erp/CLAUDE.md` § "Bekçi (test) yazma sözleşmesi" ve prosedür `docs/RECETELER.md` § "Yeni bekçi"; Electron için `docs/standart/ELECTRON.md` §11, mobil için `docs/standart/MOBIL.md` § test.
+**Bekçi (test)** — öz. Yalnız ilgili bölümü oku:
+- `docs/standart/TEST-VE-DERLEME-BEKCI.md § 5` yazım kuralları
+- `docs/RECETELER.md § "Yeni bekçi"` prosedür
+- `docs/standart/ELECTRON.md § 11` · `docs/standart/MOBIL.md § 13` istemci testleri
 
-Değişmezler: **negatif sonda zorunlu** — korunan davranışı bilerek boz, KIRMIZI verdiğini gör, geri al; sonda yapılmamış bekçi bir NİYETTİR. Bekçi kendi fixture'ını `TEST-`/`TST-` damgasıyla kurar (ad alanları da damgalanır — canlı `nameFold` sedleri var) ve `finally`de FK sırasına göre siler. Özet satırı koşucunun tanıdığı formatta basılır (`=== Sonuç: N geçti, M başarısız ===`); kontrol atlanıyorsa sayısı AYNI satırda beyan edilir, yoksa kapsam kaybı görünmez. Ortamdaki "herhangi bir kayıt"a (`findFirst`) ve ham `username: "admin"`e yaslanma — fixture'dan çöz. Bitince o alanın bekçilerini koş (`/bekci-kos`).
+- Negatif sonda zorunlu: korunan davranışı boz, KIRMIZI gör, geri al; cırcır İKİ sondayla.
+- Fixture `TEST-`/`TST-` damgalı, `finally`de FK sırasıyla silinir.
+- Özet satırı `=== Sonuç: N geçti, M başarısız ===`; atlanan kontrol aynı satırda.
+- `findFirst` "herhangi bir kayıt"a ve ham `username: "admin"`e yaslanma.
+- Yalnız `_test` DB'ye karşı koş.

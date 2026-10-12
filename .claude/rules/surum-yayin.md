@@ -1,19 +1,25 @@
 ---
 paths:
-  - "deploy/**"
-  - "scripts/surum*"
+  - "deploy/kanallar.json"
+  - "scripts/{surum,check-surum,check-kanallar}*"
   - "scripts/lib/surum*"
-  - "scripts/check-surum*"
   - "surum-notlari.json"
   - "mobil/scripts/**"
   - "mobil/app.json"
   - "Electron/shared/**"
-  - "Electron/electron/updater*"
-  - "Electron/electron/**/update*"
+  - "Electron/electron/**/*update*"
   - "Electron/package.json"
-  - "**/*client-version-policy*"
-  - "**/*client-policy*"
-  - "**/*mobile-update*"
+  - "{Teks-Erp,Electron,mobil}/src/**/*{client-version-policy,client-policy,mobile-update}*"
 ---
 
-Dokunduğun dosya **Sürüm · Yayın (panel/tablet)** alanına giriyor. Kod yazmadan/değiştirmeden ÖNCE `docs/kurallar/surum-yayin.md` dosyasını oku (bugün geçerli kurallar, geçersiz kılınanlar, çözülmüş çelişkiler, koşulacak bekçiler). Bitince o alanın bekçilerini koş (`/bekci-kos`). Yeni karar çıktıysa `/karar-notu` ile yaz.
+**Sürüm · yayın** — öz. Tam metni baştan okuma; yalnız ilgili bölümü oku:
+- `docs/kurallar/surum-yayin.md § "Ortak"`
+- `docs/kurallar/surum-yayin.md § "Panel"`
+- `docs/kurallar/surum-yayin.md § "Tablet"`
+
+- Sürüm notu yazılmadan sürüm çıkmaz: taslağı Claude yazar, onay terfi etiketidir.
+- Not maddesini kaynağına (`dosya:satır`) geri okut.
+- Müşteri kodu argümandan; ham `npm run build:win` yasak; kanal kimliği `deploy/kanallar.json`.
+- Paket önce, manifest EN SON; Cloudflare proxy açık; OTA'da `versionCode`a dokunma.
+- `minVersion` yalnız gerçek kırılmada ve sahadakinden büyük olamaz.
+- Bitince alan bekçilerini koş (`/bekci-kos surum-yayin`; liste `docs/kurallar/surum-yayin.md § "Bekçiler"`); yeni karar → `/karar-notu`.

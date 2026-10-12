@@ -1,13 +1,15 @@
 ---
 paths:
-  - "**/*duplicate*"
-  - "**/*Duplicate*"
-  - "**/*merge*"
-  - "**/*Merge*"
-  - "**/*nameFold*"
-  - "**/*fold*"
-  - "**/*mukerrer*"
-  - "**/*Mukerrer*"
+  - "{Teks-Erp,Electron,mobil}/src/**/*{duplicate,Duplicate,merge,Merge,unmerge,fold,mukerrer,Mukerrer}*"
 ---
 
-Dokunduğun dosya **Mükerrer · nameFold seddi** alanına giriyor. Kod yazmadan/değiştirmeden ÖNCE `docs/kurallar/mukerrer.md` dosyasını oku (bugün geçerli kurallar, geçersiz kılınanlar, çözülmüş çelişkiler, koşulacak bekçiler). Bitince o alanın bekçilerini koş (`/bekci-kos`). Yeni karar çıktıysa `/karar-notu` ile yaz.
+**Mükerrer · nameFold · ana veri arşivi** — öz. Tam metni baştan okuma; yalnız ilgili bölümü oku:
+- `docs/kurallar/mukerrer.md § "Ortak"`
+- `docs/kurallar/mukerrer.md § "Backend"`
+
+- Türkçe katlamayı yalnız `utils/tr-case.ts`ten yap; `toLocaleUpperCase("tr")` yazma, SQL fold'da `\s` kullanma.
+- Tekilliği tablolar arası sor; kimlik alanına `nameFold` seddi koyma.
+- Birleştirme defterlidir ve geri alınabilir (`MergeOperation`); çakışma yüklemi tek kaynak `conflictPredicateSql`.
+- `assertNameNotDuplicate` kalır (Türkçe 409), sed ise DB'de.
+- Top birleştirilmez, iptal edilir; canlı referanslı ana veri pasife alınamaz (MV-06).
+- Bitince alan bekçilerini koş (`/bekci-kos mukerrer`; liste `docs/kurallar/mukerrer.md § "Bekçiler"`); yeni karar → `/karar-notu`.

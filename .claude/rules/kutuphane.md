@@ -3,4 +3,12 @@ paths:
   - "**/package.json"
 ---
 
-`package.json`a dokunuyorsun — bağımlılık eklemek/kaldırmak/yükseltmek bir KARARDIR. Önce `docs/standart/KUTUPHANELER.md` dosyasını oku: yeni paket kullanıcı onayı + altı satırlık karar kaydı ister (`docs/RECETELER.md` § Yeni bağımlılık), `importFiles: 0` ölü paket kanıtı DEĞİLDİR (üç kanal: dinamik import · `createRequire` · config referansı), ana sürüm yükseltmesi sözleşme değişikliğidir. Mobilde native/config-plugin paket OTA ile gitmez, APK turu ister.
+**Bağımlılık değişikliği bir karardır** — yalnız ilgili bölümü oku:
+- `docs/standart/KUTUPHANELER.md § 3` karar kaydı
+- `docs/standart/KUTUPHANELER.md § 6` ölü paket teşhisi
+- `docs/RECETELER.md § "Yeni bağımlılık"`
+
+- Yeni paket eklemeden önce kullanıcı onayı al.
+- `importFiles: 0` ölü paket kanıtı değildir (dinamik import · `createRequire` · config).
+- Ana sürüm yükseltmesi sözleşme değişikliğidir.
+- Mobilde native paket OTA ile gitmez, APK turu ister.
