@@ -1225,12 +1225,12 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         key: "workOrderQuickOwnOnlyEnabled",
-        title: "Tablet hızlı iş emri: yalnız kendi başlattıklarını düzenler",
+        title: "Tablet hızlı terbiye iş emri: yalnız kendi başlattıklarını düzenler",
         summary:
-          "Hızlı iş emri yetkisi olan saha operatörü yalnız kendi başlattığı iş emrini düzenler, iptal eder ya da siler.",
+          "Hızlı terbiye iş emri yetkisi olan saha operatörü yalnız kendi başlattığı terbiye iş emrini düzenler, iptal eder ya da siler.",
         defaultOn: false,
         audience: ["Yönetim", "Planlamacı"],
-        desc: "Açıkken yalnız 'Hızlı iş emri' yetkisi olan kullanıcı, planlamanın ya da başkasının açtığı iş emrini düzenleyemez, iptal edemez, silemez (yetki hatası alır); kendi başlattıkları serbesttir. İş emri yazma yetkisi olanlar etkilenmez. Kapalıyken (varsayılan) hızlı iş emri yetkisi bütün iş emirlerinde geçerlidir.",
+        desc: "Açıkken yalnız 'Hızlı terbiye iş emri' yetkisi olan kullanıcı, planlamanın ya da başkasının açtığı terbiye iş emrini düzenleyemez, iptal edemez, silemez (yetki hatası alır); kendi başlattıkları serbesttir. Terbiye iş emri yazma yetkisi olanlar etkilenmez. Kapalıyken (varsayılan) hızlı terbiye iş emri yetkisi bütün terbiye iş emirlerinde geçerlidir.",
       },
     ],
     settingFields: [

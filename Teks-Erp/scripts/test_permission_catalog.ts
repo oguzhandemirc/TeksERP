@@ -134,6 +134,9 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // katalogla karşılaştırır ve registry boşalırsa körlük zemini düşer.
   // Bu yüzden burada delegasyon beyan ediyoruz — muafiyet DEĞİL, devir.
   "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
+  // uncoveredCodes(actor, codes) — codes = verilmek istenen kodlar (gövdeden); katalog
+  // doğrulaması verme yolunda (`permission-management`), kademe kapsamı yetki denetiminde.
+  "src/services/helpers/permission-cover.helper.ts": [`${DELEGE}scripts/test_yetki_denetimi.ts`],
   // Ekran başına ayar izinleri `constants/settings-scopes.ts` tablosundan
   // gelir (`...RAW_SETTING_SCOPE_PERMISSIONS`, anahtar → izin). Tablodaki her
   // kodun katalogda olduğunu `test_settings_scopes.ts` §1b MEKANİK doğrular.

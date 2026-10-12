@@ -199,6 +199,20 @@ function sortableFieldsFor(modelName: string): Set<string> | null {
   return result;
 }
 
+/**
+ * Genel CRUD gövdesinden yazılabilen kolonlar (DMMF skaler/enum − *Fold − sistem −
+ * `BASE_WRITE_CLOSED_FIELDS`); `sanitizeWriteData` ve `test_yazilabilir_alan_beyani` ortak kaynağı.
+ */
+export function baseScalarFields(modelName: string): ReadonlySet<string> | null {
+  return sortableFieldsFor(modelName);
+}
+export function baseWritableFields(modelName: string): Set<string> | null {
+  const all = sortableFieldsFor(modelName);
+  if (!all) return null;
+  const closed = baseWriteClosedFields(modelName);
+  return new Set([...all].filter((f) => f !== "id" && f !== "createdAt" && f !== "updatedAt" && !closed.includes(f)));
+}
+
 // F29: Boot-time guard — sanitizeWriteData/safeSortBy/safeFilters süzgeçleri
 // Prisma.dmmf'e (runtime, deprecated yüzey) bağlı. Bir Prisma major upgrade'inde
 // bu yüzey kalkarsa TÜM modeller null döner ve üç guard da SESSİZCE fail-open olur
@@ -684,13 +698,10 @@ export class BaseService {
     if (!data || typeof data !== "object" || Array.isArray(data)) {
       throw AppError.badRequest("Geçersiz istek gövdesi");
     }
-    const allowed = sortableFieldsFor(this.config.modelName);
+    const allowed = baseWritableFields(this.config.modelName);
     if (!allowed) return data;
-    const closed = baseWriteClosedFields(this.config.modelName);
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {
-      if (key === "id" || key === "createdAt" || key === "updatedAt") continue;
-      if (closed.includes(key)) continue;
       if (allowed.has(key) || this.config.nestedCreateFields?.includes(key)) {
         out[key] = value;
       }

@@ -198,6 +198,7 @@ export const TABLE_LABELS: Record<string, string> = {
   // Patron bulutu gelen kutusu makbuzu (B3) · destek talebi (3d-2) · lisans sözleşmesi kabulü (Ek-7).
   CLOUD_INBOX_RECEIPT: "Bulut Gelen Kutusu Makbuzu",
   SUPPORT_TICKET: "Destek Talebi",
+  CREDENTIAL_RESET_REQUEST: "Kimlik Sıfırlama Onay Talebi",
   LICENSE_ACCEPTANCE: "Lisans Sözleşmesi Kabulü",
   // Dağıtım v2 (D7): sunucu güncellemesi onayı (Sistem → Güncellemeler).
   UPDATE_APPROVAL: "Sunucu Güncellemesi Onayı",

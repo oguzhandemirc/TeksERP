@@ -2,16 +2,16 @@
 // test_yazilabilir_alan_beyani — genel CRUD'da yeni skaler kolon = yeni yazılabilir alan
 // =============================================================================
 // BaseService konfigü taşıyan her modelin genel gövdeden YAZILABİLEN kolonları
-// (DMMF skaler/enum − sistem − *Fold − BASE_WRITE_CLOSED_FIELDS) beyan anlık
+// (`baseWritableFields`: DMMF skaler/enum − sistem − *Fold − BASE_WRITE_CLOSED_FIELDS) beyan anlık
 // görüntüsüne EŞİT olmalı. Yeni kolon kırmızı verir: "bu alan o uçtan yazılabilir
 // olmalı mı?" — evetse beyana ekle (doğrulaması aynı dilimde), hayırsa
 // `src/constants/write-guard.ts`te kapat. Beyanı yeniden üretmek: `--beyan-yaz`.
-// Statik; DB gerekmez.
+// Statik; DB sorgusu yok (base.service import edilir).
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
-import { Prisma } from "@prisma/client";
 import { BASE_WRITE_CLOSED_FIELDS } from "../src/constants/write-guard";
+import { baseScalarFields, baseWritableFields } from "../src/services/base.service";
 import { YAZILABILIR_ALAN_BEYANI } from "./lib/yazilabilir-alan-beyan";
 
 let pass = 0;
@@ -22,10 +22,6 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const KOK = path.resolve(__dirname, "..");
-type DmmfField = { name: string; kind: string };
-const MODELS = (Prisma as unknown as { dmmf: { datamodel: { models: Array<{ name: string; fields: DmmfField[] }> } } })
-  .dmmf.datamodel.models;
-const byName = new Map(MODELS.map((m) => [m.name.toLowerCase(), m]));
 
 function dosyalar(dir: string): string[] {
   const out: string[] = [];
@@ -48,14 +44,8 @@ function konfigModelleri(): Set<string> {
 }
 
 function yazilabilir(model: string): string[] | null {
-  const m = byName.get(model.toLowerCase());
-  if (!m) return null;
-  const kapali = new Set(BASE_WRITE_CLOSED_FIELDS[model] ?? []);
-  return m.fields
-    .filter((f) => (f.kind === "scalar" || f.kind === "enum") && !f.name.endsWith("Fold"))
-    .map((f) => f.name)
-    .filter((n) => n !== "id" && n !== "createdAt" && n !== "updatedAt" && !kapali.has(n))
-    .sort();
+  const set = baseWritableFields(model);
+  return set ? [...set].sort() : null;
 }
 
 const modeller = [...konfigModelleri()].sort();
@@ -75,15 +65,17 @@ console.log("§1 boğaz: sanitizeWriteData kapalı kolonları düşürür");
   const src = fs.readFileSync(path.join(KOK, "src/services/base.service.ts"), "utf8");
   const i = src.indexOf("protected sanitizeWriteData(");
   const govde = i >= 0 ? src.slice(i, src.indexOf("\n  }\n", i)) : "";
-  check("sanitizeWriteData baseWriteClosedFields(this.config.modelName) okur ve atlar",
-    /baseWriteClosedFields\(this\.config\.modelName\)/.test(govde) && /closed\.includes\(key\)\)\s*continue/.test(govde));
+  check("sanitizeWriteData süzgeci baseWritableFields(this.config.modelName) (kapalı kolonlar dahil tek kaynak)",
+    /baseWritableFields\(this\.config\.modelName\)/.test(govde));
+  const f = src.slice(src.indexOf("export function baseWritableFields("), src.indexOf("\n}\n", src.indexOf("export function baseWritableFields(")));
+  check("baseWritableFields kapalı kolonları düşürür", /baseWriteClosedFields\(modelName\)/.test(f) && /!closed\.includes\(f\)/.test(f));
 }
 
 console.log("§2 kapalı kolon beyanı canlı");
 for (const [model, alanlar] of Object.entries(BASE_WRITE_CLOSED_FIELDS)) {
-  const m = byName.get(model.toLowerCase());
-  check(`${model} DMMF'te var ve BaseService konfigü taşıyor`, Boolean(m) && modeller.includes(model));
-  for (const a of alanlar) check(`${model}.${a} DMMF skaleri (bayat kapatma yok)`, Boolean(m?.fields.some((f) => f.name === a && (f.kind === "scalar" || f.kind === "enum"))));
+  const skaler = baseScalarFields(model);
+  check(`${model} DMMF'te var ve BaseService konfigü taşıyor`, Boolean(skaler) && modeller.includes(model));
+  for (const a of alanlar) check(`${model}.${a} DMMF skaleri (bayat kapatma yok)`, Boolean(skaler?.has(a)));
 }
 
 console.log("§3 yazılabilir alan = beyan (yeni kolon kararsız geçmez)");

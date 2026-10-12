@@ -2956,7 +2956,7 @@ export class SystemSettingService {
       await this.set(
         SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED,
         input.workOrderQuickOwnOnlyEnabled,
-        "Hızlı iş emri: yalnız kendi başlattıklarını düzenler",
+        "Hızlı terbiye iş emri: yalnız kendi başlattıklarını düzenler",
         userId
       );
     }

@@ -138,16 +138,21 @@ async function main(): Promise<void> {
   const halaYok = await prisma.userPermission.count({ where: { userId: aktor.id, permissionId: wildcard.id } });
   check("§2: üç denemenin hiçbiri yetkiyi YAZAMADI", halaYok === 0, `${halaYok} satır`);
 
-  // REGRESYON: BAŞKASINA yetki vermek serbest (ucun asıl işi)
+  // REGRESYON: BAŞKASINA KENDİNDE OLAN yetkiyi vermek serbest (ucun asıl işi); kendinde
+  // olmayanı vermek yetki kademesine takılır (GRANT_EXCEEDS_ACTOR — test_yetki_denetimi §B1).
   const hedef = await prisma.user.create({
     data: { username: `tst-esc-h-${ts}`, passwordHash: "x", fullName: "Sonda Hedef" },
     select: { id: true },
   });
   userIds.push(hedef.id);
   const e4 = await hataOf(() =>
+    PermissionManagementService.grantPermission(hedef.id, { permissionId: usersPerm.id }, aktor.id),
+  );
+  check("§2 REGRESYON: BAŞKASINA kendinde olan yetkiyi vermek hâlâ serbest", e4 === null, e4?.message?.slice(0, 45) ?? "");
+  const e4b = await hataOf(() =>
     PermissionManagementService.grantPermission(hedef.id, { permissionId: wildcard.id }, aktor.id),
   );
-  check("§2 REGRESYON: BAŞKASINA yetki vermek hâlâ serbest", e4 === null, e4?.message?.slice(0, 45) ?? "");
+  check("§2 kademe: BAŞKASINA kendinde olmayan admin:* verilemez (409 GRANT_EXCEEDS_ACTOR)", e4b?.code === "GRANT_EXCEEDS_ACTOR", e4b?.code ?? "SESSİZ BAŞARI!");
   // REGRESYON: kendi yetkisini DÜŞÜRMEK serbest
   const e5 = await hataOf(() =>
     PermissionManagementService.setUserPermissions(aktor.id, [usersPerm.id], aktor.id),
