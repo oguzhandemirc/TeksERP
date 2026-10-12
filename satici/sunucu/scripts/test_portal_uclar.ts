@@ -10,11 +10,11 @@
 // ⭐ KALICI SONDA ✓K1 (her koşumda): kapsam karşılaştırıcısı sentetik eksik ve fazla kümede ısırır.
 // Koşum: npx tsx scripts/test_portal_uclar.ts
 // =============================================================================
-import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { DAY_MS, ENDPOINTS, parseJws, signRequest, wrapEnvelope } from "../src/lisans-protokol";
+import { DAY_MS, ENDPOINTS, buildTempRequestCode, formatTempRequestCode, parseJws, signRequest, wrapEnvelope } from "../src/lisans-protokol";
 import { DEALER_PORTAL_ROUTES } from "../src/http/dealer-routes";
 import type { PortalRouteDef } from "../src/http/portal-http";
 import { VENDOR_PORTAL_ROUTES } from "../src/http/portal-routes";
@@ -424,6 +424,15 @@ async function main(): Promise<void> {
     kontrol("§3b1 G3: bayi gövdesi kipAltSiniriZorla taşıyamaz → 400", bGozlem.status === 400, `${bGozlem.status} ${bGozlem.kod}`);
     await b("get", "/haklar/:id", `/haklar/${bh.veri.id as string}`, 200);
     const bKod = await b("post", "/kurulumlar/:id/etkinlestirme-kodu", `/kurulumlar/${bk.veri.id as string}/etkinlestirme-kodu`, 201, {});
+    // Geçici açılış kodu (davranış test_gecici_kod_uretimi): fikstür kökü koda sığmaz → üretim 409; talep ve ret uçtan.
+    const gIstek = formatTempRequestCode(buildTempRequestCode(kurulumAnahtariUret().kid, randomBytes(5)));
+    const gTalep = await b("post", "/kurulumlar/:id/gecici-kod-talep", `/kurulumlar/${bk.veri.id as string}/gecici-kod-talep`, 201, { istekKodu: gIstek, gun: 30, sebep: "uçlar kapsamı" });
+    await b("get", "/kurulumlar/:id/gecici-kod-talepleri", `/kurulumlar/${bk.veri.id as string}/gecici-kod-talepleri`, 200);
+    await s("get", "/gecici-kod-talepleri", "/gecici-kod-talepleri", 200);
+    await s("get", "/kurulumlar/:id/gecici-kodlar", `/kurulumlar/${bk.veri.id as string}/gecici-kodlar`, 200);
+    await s("post", "/kurulumlar/:id/gecici-kod", `/kurulumlar/${bk.veri.id as string}/gecici-kod`, 409, { istekKodu: gIstek, gun: 30, imzaParolasi: TEST_KOK_PAROLASI, sebep: "uçlar kapsamı" });
+    await s("post", "/gecici-kod-talepleri/:id/uret", `/gecici-kod-talepleri/${gTalep.veri.id as string}/uret`, 409, { imzaParolasi: TEST_KOK_PAROLASI, sebep: "uçlar kapsamı" });
+    await s("post", "/gecici-kod-talepleri/:id/reddet", `/gecici-kod-talepleri/${gTalep.veri.id as string}/reddet`, 200, { sebep: "uçlar kapsamı" });
     const bSaklanan = await prisma.portalIslemi.findMany({ where: { eylem: "BAYI_KOD_URET", createdAt: { gte: akisBaslangici } } });
     const bSaklananMetin = JSON.stringify(bSaklanan.map((r) => r.yanit));
     kontrol(

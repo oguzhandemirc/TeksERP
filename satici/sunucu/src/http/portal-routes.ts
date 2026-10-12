@@ -8,7 +8,7 @@ import { HARDWARE_PORTAL_ROUTES } from "./hardware-routes";
 import { UPDATE_WAVE_PORTAL_ROUTES } from "./update-wave-routes";
 import { KEY_PORTAL_ROUTES } from "./key-routes";
 import { z } from "zod";
-import { ChannelCodeSchema, LICENSE_CLASSES, SANCTION_LEVELS } from "../lisans-protokol";
+import { ChannelCodeSchema, LICENSE_CLASSES, SANCTION_LEVELS, TEMP_CODE_DAYS } from "../lisans-protokol";
 import { passwordBuffer } from "../keys/key-files";
 import { VendorError } from "../lib/errors";
 import { prisma, type Tx } from "../lib/prisma";
@@ -66,6 +66,15 @@ import {
 import { paidThroughView } from "../portal/paid-through-view";
 import { exemptionFile, prepareExemption, previewExemptionSigner, recordExemptionTx } from "../services/exemption.service";
 import { issueExtensionFileTx } from "../services/extension-file.service";
+import {
+  findTempCodeRequest,
+  listInstallationTempCodes,
+  listPendingTempCodeRequests,
+  prepareTempCode,
+  recordTempCodeTx,
+  rejectTempCodeRequestTx,
+  tempCodeAuditSummary,
+} from "../services/temp-code.service";
 import { cancelInstallationTx, closeCopyAlertTx, findCopyAlert, reinstateInstallationTx } from "../services/installation-admin.service";
 import {
   changesDealer,
@@ -238,6 +247,16 @@ const ExemptionIssue = z.strictObject({
   imzaParolasi: z.string().min(1).max(200),
   sebep: Reason,
 });
+// Geçici açılış kodu: istek kodu fabrikanın ekranından; gün protokolün aralığında (servis de denetler); yalnız kök imzalar.
+const TempCodeIssue = z.strictObject({
+  clientToken: Token,
+  istekKodu: z.string().min(1).max(80),
+  gun: z.number().int().optional(),
+  imzaParolasi: z.string().min(1).max(200),
+  sebep: Reason,
+});
+const TempCodeApprove = z.strictObject({ clientToken: Token, imzaParolasi: z.string().min(1).max(200), sebep: Reason });
+const TempCodeReject = z.strictObject({ clientToken: Token, sebep: Reason });
 /** Kimliksiz (bağsız) talepte hedef kurulumu operatör seçer (satıcı kaydının id'si); bağlı talepte verilirse aynı olmalı. */
 const TransferApprove = z.strictObject({ clientToken: Token, sebep: Reason, kurulumId: z.uuid().optional() });
 const CopyAlertClose = z.strictObject({ clientToken: Token, sebep: Reason, digerParmakIziniKabulEt: z.boolean() });
@@ -1078,6 +1097,95 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
         respond: (r) => ({ status: 201, data: { ...r.row, dosya: r.dosya, dosyaAdi: r.dosyaAdi } }),
         audit: (r) => [{ event: "MUAFIYET_VERILDI", entity: "Kurulum", entityId: id, summary: { muafiyetId: r.row.muafiyetId, anahtarKimligi: r.row.anahtarKimligi, imzaci: r.row.imzaci, kid: r.row.kid } }],
         release: () => password.fill(0),
+      });
+    },
+  },
+  {
+    method: "get",
+    path: "/kurulumlar/:id/gecici-kodlar",
+    permission: "portal:oku",
+    kimlik: "OKUMA",
+    handler: async (c) => ({ data: await listInstallationTempCodes(prisma, idParam(c.req, "id", "Kurulum")) }),
+  },
+  { method: "get", path: "/gecici-kod-talepleri", permission: "portal:oku", kimlik: "OKUMA", handler: async () => ({ data: await listPendingTempCodeRequests(prisma) }) },
+  {
+    // Geçici açılış kodu: imza tx dışında (kök parolası alt sürece), kayıt tx içinde; kod yalnız canlı yanıtta.
+    method: "post",
+    path: "/kurulumlar/:id/gecici-kod",
+    permission: "kurulum:gecici-kod",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Kurulum");
+      const b = bodyOf(c, TempCodeIssue);
+      const password = passwordBuffer(b.imzaParolasi);
+      return portalAction(c, {
+        action: "GECICI_KOD",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        prepare: () =>
+          withSigningPasswordGuard(c.ctx, { userId: c.session.user.id, actor: c.session.actor, kind: "KOK", nowMs: c.nowMs }, () =>
+            prepareTempCode(c.ctx, { installationDbId: id, requestCode: b.istekKodu, days: b.gun ?? TEMP_CODE_DAYS.varsayilan, reason: b.sebep, password, nowMs: c.nowMs }),
+          ),
+        run: async (tx, p) => ({ row: await recordTempCodeTx(tx, { secrets: c.ctx.portalSecrets, prepared: p, actor: c.session.actor, nowMs: c.nowMs }), code: p.code }),
+        respond: ({ row, code }) => ({
+          status: 201,
+          data: { id: row.id, kodNo: row.kodNo, kod: code, bitis: row.bitis, gun: row.gun },
+          stored: { id: row.id, kodNo: row.kodNo, kod: null, bitis: row.bitis, gun: row.gun, kodGosterilemez: true },
+        }),
+        audit: ({ row }) => [{ event: "GECICI_KOD_URETILDI", entity: "Kurulum", entityId: id, summary: tempCodeAuditSummary(row) }],
+        release: () => password.fill(0),
+      });
+    },
+  },
+  {
+    // Bayi talebini üretir: istek kodu ve gün TALEPTEN; bayi kodu kendi talebinde okur.
+    method: "post",
+    path: "/gecici-kod-talepleri/:id/uret",
+    permission: "kurulum:gecici-kod",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Geçici kod talebi");
+      const b = bodyOf(c, TempCodeApprove);
+      const request = await findTempCodeRequest(prisma, id);
+      const password = passwordBuffer(b.imzaParolasi);
+      return portalAction(c, {
+        action: "GECICI_KOD_TALEP_URET",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        prepare: () =>
+          withSigningPasswordGuard(c.ctx, { userId: c.session.user.id, actor: c.session.actor, kind: "KOK", nowMs: c.nowMs }, () =>
+            prepareTempCode(c.ctx, { installationDbId: request.kurulumId, requestCode: request.istekKodu, days: request.gun, reason: b.sebep, password, nowMs: c.nowMs, requestId: id }),
+          ),
+        run: async (tx, p) => ({ row: await recordTempCodeTx(tx, { secrets: c.ctx.portalSecrets, prepared: p, actor: c.session.actor, nowMs: c.nowMs }), code: p.code }),
+        respond: ({ row, code }) => ({
+          status: 201,
+          data: { id: row.id, talepId: id, kodNo: row.kodNo, kod: code, bitis: row.bitis, gun: row.gun },
+          stored: { id: row.id, talepId: id, kodNo: row.kodNo, kod: null, bitis: row.bitis, gun: row.gun, kodGosterilemez: true },
+        }),
+        audit: ({ row }) => [
+          { event: "GECICI_KOD_URETILDI", entity: "Kurulum", entityId: request.kurulumId, summary: tempCodeAuditSummary(row) },
+          { event: "GECICI_KOD_TALEBI_URETILDI", entity: "GeciciKodTalebi", entityId: id, summary: { geciciKodId: row.id } },
+        ],
+        release: () => password.fill(0),
+      });
+    },
+  },
+  {
+    method: "post",
+    path: "/gecici-kod-talepleri/:id/reddet",
+    permission: "kurulum:gecici-kod",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const id = idParam(c.req, "id", "Geçici kod talebi");
+      const b = bodyOf(c, TempCodeReject);
+      const request = await findTempCodeRequest(prisma, id);
+      return portalAction(c, {
+        action: "GECICI_KOD_TALEP_RED",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        run: (tx) => rejectTempCodeRequestTx(tx, { request, reason: b.sebep, actor: c.session.actor, nowMs: c.nowMs }),
+        respond: (row) => ({ data: { id: row.id, durum: row.durum } }),
+        audit: (row) => [{ event: "GECICI_KOD_TALEBI_REDDEDILDI", entity: "GeciciKodTalebi", entityId: row.id, summary: { kurulumId: row.kurulumId } }],
       });
     },
   },

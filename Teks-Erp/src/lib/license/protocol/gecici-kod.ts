@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { b64uDecode, b64uEncode } from "./ortak";
 import { JWS_ALG } from "./jws";
+import { PublicKeyXSchema } from "./belgeler";
 
 /** Crockford base32 (I/L/O/U yok); okunurken O→0, I/L→1 düzeltilir. */
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -150,6 +151,9 @@ function rootKidByte(kid: string): number | null {
 }
 const rootKidOf = (b: number): string => `kok-${2026 + (b >> 4)}-${(b & 15) + 1}`;
 
+/** Kök kimliği koda sığar mı (satıcı imzacı seçiminde: sığmayan kök geçici kod imzalayamaz). */
+export const tempCodeRootKidFits = (kid: string): boolean => rootKidByte(kid) !== null;
+
 export const dayOfMs = (ms: number): number => Math.floor((ms - DAY_EPOCH_MS) / DAY_MS);
 /** Kodun geçerliliğinin bittiği an: `bitisGunu` gününün SONU (UTC). */
 export const tempCodeEndMs = (bitisGunu: number): number => DAY_EPOCH_MS + (bitisGunu + 1) * DAY_MS;
@@ -214,3 +218,19 @@ export function decodeTempOpeningCode(
 
 /** Tüketim özeti — fabrika LICENSE_DIR'de, satıcı bildirimde aynı değeri kullanır (düz kod saklanmaz). */
 export const tempCodeDigest = (normalized: string): string => createHash("sha256").update(`tekserp-gecici:${normalized}`, "ascii").digest("hex");
+
+const DIGEST_RE = /^[0-9a-f]{64}$/;
+/** Tüketim bildirimi (fabrika → satıcı, gövde anahtarlı imzalı istek): tüketilen kodların özetleri; tekrar zararsızdır. */
+export const TempConsumedRequestSchema = z.strictObject({
+  v: z.literal(1),
+  acikAnahtar: PublicKeyXSchema,
+  ozetler: z.array(z.string().regex(DIGEST_RE)).min(1).max(20),
+});
+export type TempConsumedRequest = z.infer<typeof TempConsumedRequestSchema>;
+/** Satıcının cevabı: tanınan özet sayısı ve bu bildirimle ilk kez işaretlenen. */
+export const TempConsumedResponseSchema = z.object({
+  v: z.literal(1),
+  tanindi: z.number().int().min(0),
+  yeni: z.number().int().min(0),
+});
+export type TempConsumedResponse = z.infer<typeof TempConsumedResponseSchema>;

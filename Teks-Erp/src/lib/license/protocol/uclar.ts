@@ -31,6 +31,8 @@ export const ENDPOINTS = {
   HARDWARE: "/v1/donanim",
   /** Müşteri onaylı hata raporu — gövde `hata-raporu.ts`. */
   ERROR_REPORT: "/v1/hata-raporu",
+  /** Geçici açılış kodunun tüketildiği bildirimi — gövde `gecici-kod.ts` (`TempConsumedRequestSchema`). */
+  TEMP_CODE_CONSUMED: "/v1/gecici-kod/tuketildi",
 } as const;
 
 export const VALIDITY_VALUES = ["GECERLI", "GECERSIZ", "OLCULEMEDI"] as const;

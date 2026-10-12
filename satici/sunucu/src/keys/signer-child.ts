@@ -10,6 +10,8 @@ import {
   PackageRevocationSchema,
   RevocationSchema,
   TYP,
+  TYP_GECICI,
+  TempOpeningSchema,
   decodeDocument,
   offlineHorizonCeilingDays,
   signDocument,
@@ -22,7 +24,7 @@ import { KeyFileError, privateKeyFromRaw, readWrappedKeyFile, unwrapPrivateKey, 
 
 const SignRequestSchema = z.strictObject({
   anahtarDosyasi: z.string().min(1),
-  typ: z.enum([TYP.HAK, TYP.SERTIFIKA, TYP.IPTAL, TYP.PAKET_IPTAL, TYP.MUAFIYET]),
+  typ: z.enum([TYP.HAK, TYP.SERTIFIKA, TYP.IPTAL, TYP.PAKET_IPTAL, TYP.MUAFIYET, TYP_GECICI]),
   yuk: z.record(z.string(), z.unknown()),
 });
 
@@ -60,7 +62,12 @@ async function sign(requestLine: Buffer, password: Buffer): Promise<SignerOutput
   if (!parsed.success) return { ok: false, kod: "BICIM", mesaj: "İmza isteği tanınmıyor" };
   const request = parsed.data;
   const file = readWrappedKeyFile(request.anahtarDosyasi);
-  if (request.typ === TYP.SERTIFIKA || request.typ === TYP.IPTAL || request.typ === TYP.PAKET_IPTAL) {
+  if (request.typ === TYP_GECICI) {
+    // Geçici açılış kodu sertifika taşıyamaz: fabrika yalnız gömülü kökü tanır — ara ve bayi anahtarı ASLA.
+    if (file.tur !== "tekserp-kok-anahtar") return { ok: false, kod: "YETKISIZ", mesaj: "Geçici açılış kodunu yalnız kök imzalar" };
+    const doc = decodeDocument(TempOpeningSchema, request.yuk);
+    if (!doc.ok) return { ok: false, kod: "BICIM", mesaj: doc.message };
+  } else if (request.typ === TYP.SERTIFIKA || request.typ === TYP.IPTAL || request.typ === TYP.PAKET_IPTAL) {
     // Sertifika, iptal ve dağıtım iptali YALNIZ kökün işidir: ara/bayi anahtarı kendi kuşağını basamaz, iptal edemez.
     if (file.tur !== "tekserp-kok-anahtar") return { ok: false, kod: "YETKISIZ", mesaj: "Sertifikayı ve iptal belgesini yalnız kök imzalar" };
     if (request.typ === TYP.SERTIFIKA) {
@@ -99,7 +106,9 @@ async function sign(requestLine: Buffer, password: Buffer): Promise<SignerOutput
             ? signDocument({ typ: TYP.PAKET_IPTAL, schema: PackageRevocationSchema, payload: request.yuk as never, key })
             : request.typ === TYP.MUAFIYET
               ? signDocument({ typ: TYP.MUAFIYET, schema: ExemptionSchema, payload: request.yuk as never, key })
-              : signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: request.yuk as never, key });
+              : request.typ === TYP_GECICI
+                ? signDocument({ typ: TYP_GECICI, schema: TempOpeningSchema, payload: request.yuk as never, key })
+                : signDocument({ typ: TYP.HAK, schema: EntitlementSchema, payload: request.yuk as never, key });
   } finally {
     raw.fill(0);
   }

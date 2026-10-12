@@ -13,6 +13,7 @@ import {
   PollRequestSchema,
   REQUEST_HEADER,
   SupportRequestSchema,
+  TempConsumedRequestSchema,
   TransferRequestSchema,
   isPlainObject,
   openEnvelope,
@@ -26,7 +27,8 @@ import type { DoorbellHub } from "../services/doorbell";
 import { drTakeoverPrecheck, processDrTakeover } from "../services/dr.service";
 import { acceptErrorReport } from "../services/error-report.service";
 import { handleHardwareReport } from "../services/hardware.service";
-import { authenticateRequest } from "../services/installation-auth";
+import { authenticateRequest, recordRequestNonce, requestScope, verifySignedRequest } from "../services/installation-auth";
+import { markTempCodesConsumed } from "../services/temp-code.service";
 import { processPoll } from "../services/poll.service";
 import { bindLiveHardwareResponse, bindLiveResponse } from "../services/response-binding";
 import { openSupportTicket } from "../services/support.service";
@@ -51,6 +53,17 @@ function scopeLimiter(perMinute: number): ScopeLimit {
     const retry = limiter.hit(scope);
     if (retry !== null) throw rateLimited(retry);
   };
+}
+
+/** Anahtar gövdeden, kurulum kimliği isteğe bağlı (etkinleşmemiş fabrika da tüketir); sıra şema → imza → hız → nonce. */
+async function tempCodeConsumed(body: Buffer, header: unknown, limit: ScopeLimit) {
+  const nowMs = Date.now();
+  const parsed = parseStrict(TempConsumedRequestSchema, parseJsonBody(body));
+  const path = ENDPOINTS.TEMP_CODE_CONSUMED;
+  const v = await verifySignedRequest({ header, rawBody: body, purposes: ["gecici-tuketim"], nowMs, path, keyFromBody: parsed.acikAnahtar, unknownInstallationAsNull: true });
+  limit(requestScope({ installationDbId: v.installation?.id ?? null, kid: v.kid }));
+  await recordRequestNonce({ installationDbId: v.installation?.id ?? null, kid: v.kid, request: v.request, nowMs });
+  return markTempCodesConsumed({ kid: v.kid, digests: parsed.ozetler, nowMs });
 }
 
 // Her uçta sıra: ham gövde → KATI şema (ucuz) → imza → uca özgü ön denetim → kurulum hız sınırı → nonce → kilit/tx.
@@ -196,6 +209,11 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
     const parsed = parseStrict(ErrorReportRequestSchema, parseJsonBody(body));
     const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["hata-raporu"], nowMs, limit, path: ENDPOINTS.ERROR_REPORT });
     res.json(await acceptErrorReport(auth, parsed, ctx.config.HATA_RAPORU_KURULUM_AZAMI_GRUP));
+  });
+
+  // GEÇİCİ KOD TÜKETİMİ: etkinleşmemiş kurulum da gönderir; tekrar zararsız.
+  app.post(ENDPOINTS.TEMP_CODE_CONSUMED, raw, async (req: Request, res: Response) => {
+    res.json(await tempCodeConsumed(rawBodyOf(req.body), req.get(REQUEST_HEADER), limit));
   });
 
   // KAPI ZİLİ (SSE): kurulum imzalı abonelik; içerik taşımaz, yalnız "şimdi yokla". Kurulum başına ≤ ZIL_AZAMI_ABONE.

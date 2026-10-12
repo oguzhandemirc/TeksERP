@@ -41,13 +41,15 @@ export const REQUEST_PURPOSES = [
   "donanim",
   /** Müşteri onaylı hata raporu — `POST /v1/hata-raporu`; yoklamaya karışmaz. */
   "hata-raporu",
+  /** Geçici açılış kodunun tüketim bildirimi — `POST /v1/gecici-kod/tuketildi`; etkinleşmemiş kurulum da gönderir. */
+  "gecici-tuketim",
 ] as const;
 export type RequestPurpose = (typeof REQUEST_PURPOSES)[number];
 /**
  * Kurulum kimliği (portalda doğan UUID, fabrikada LICENSE_DIR'de) henüz bilinmeyebilen amaçlar: anahtar
  * gövdeden gelir; etkinleştirmede kurulumu kod belirler, kimliksiz taşıma talebini onaylayan operatör eşler.
  */
-export const INSTALLATION_ID_OPTIONAL_PURPOSES = ["etkinlestir", "tasima"] as const satisfies readonly RequestPurpose[];
+export const INSTALLATION_ID_OPTIONAL_PURPOSES = ["etkinlestir", "tasima", "gecici-tuketim"] as const satisfies readonly RequestPurpose[];
 
 export function isInstallationIdOptional(purpose: RequestPurpose): boolean {
   return (INSTALLATION_ID_OPTIONAL_PURPOSES as readonly RequestPurpose[]).includes(purpose);

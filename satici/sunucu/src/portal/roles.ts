@@ -29,6 +29,8 @@ export const PORTAL_PERMISSIONS = {
   "kurulum:yonet": VENDOR,
   /** G2 muafiyet belgesi: etkinleşmemiş eski kurulumu etkinleştirme kilidinden muaf tutar (lisanssız sürer) — yalnız yönetici. */
   "kurulum:muafiyet": ADMIN,
+  /** Geçici açılış kodu (yazarak etkinleştirme): kök parolasıyla üretim + bayi talebini üretme/reddetme — yalnız yönetici. */
+  "kurulum:gecici-kod": ADMIN,
   /** Backend güncelleme politikası (kip · pencere · sabitleme — Dağıtım v2); kiraya imzalı gider. */
   "guncelleme:yaz": VENDOR,
   /** Güncelleme dalgası (F1a): dalga açma · aşama ilerletme/geri çekme — gerekçeli, elle (AK-2); acil durdurma = aşama 0. */

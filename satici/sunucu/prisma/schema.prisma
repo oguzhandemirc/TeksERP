@@ -152,6 +152,14 @@ enum AnahtarTuru {
 /// Kök imzası bekleyen HAK sürümü (G4 §2.6): yetenek bildirmeyen (eski) derlemenin HAK değişikliği kök
 /// VDS'te olmadığı için burada bekler ve dönem töreninde Mac'te imzalanır. Durum tablosu — "ne oldu"su
 /// `hak_surumu` (imzalandığında) ve denetimdir.
+enum GeciciKodTalebiDurumu {
+  BEKLIYOR
+  /// Yönetici kök parolasıyla imzaladı; kod `gecici_acilis_kodlari`nda (talepId).
+  URETILDI
+  /// Yönetici reddetti (gerekçeli).
+  REDDEDILDI
+}
+
 enum HakKokTalebiDurumu {
   BEKLIYOR
   /// Törende imzalandı, `hak_surumu`na yazıldı.
@@ -391,6 +399,8 @@ model Kurulum {
   destekTalepleri        DestekTalebi[]
   bildirimler            Bildirim[]
   hakKokTalepleri        HakKokTalebi[]
+  geciciKodlar           GeciciAcilisKodu[]
+  geciciKodTalepleri     GeciciKodTalebi[]
   donanimTalepleri       DonanimTalebi[]
   hataRaporuGruplari     HataRaporuGrubu[]
   hataRaporuPartileri    HataRaporuPartisi[]
@@ -1054,6 +1064,7 @@ model Bayi {
   tavanlar     BayiTavani[]
   musteriler   Musteri[]
   kullanicilar PortalKullanici[]
+  geciciKodTalepleri GeciciKodTalebi[]
 
   @@map("bayi")
 }
@@ -1486,4 +1497,64 @@ model Bildirim {
   @@index([createdAt])
   @@index([kurulumId])
   @@map("bildirim")
+}
+
+/// GEÇİCİ AÇILIŞ KODU (yazarak etkinleştirme) — kökle imzalanmış her kodun doğum kaydı; satır silinmez (tetikleyici).
+/// Düz kod saklanmaz: özet (`tempCodeDigest`) + son 4; bayi talebinden doğan kodun metni portal sır kutusunda SARILI
+/// (bayi kendi talebinde okur). `tuketildiAt` DURUM kolonudur: fabrikanın imzalı tüketim bildirimiyle bir kez dolar.
+model GeciciAcilisKodu {
+  id           String    @id @default(uuid()) @db.Uuid
+  kurulumId    String    @db.Uuid
+  /// Koda gömülen 24 bitlik kod kimliği (dizi `gecici_acilis_kodu_no_seq`).
+  kodNo        Int       @unique
+  istekKodu    String    @db.VarChar(24)
+  /// İstek kodundaki kurulum anahtarı özeti (kid'in sha256 ilk 8 baytı, hex) — tüketim bildirimi bununla eşleşir.
+  anahtarOzeti String    @db.VarChar(16)
+  gun          Int
+  bitisGunu    Int
+  bitis        DateTime  @db.Timestamptz
+  imzalayanKid String    @db.VarChar(64)
+  ozet         String    @unique @db.VarChar(64)
+  kodSonu      String    @db.VarChar(4)
+  sariliKod    String?   @db.VarChar(400)
+  talepId      String?   @unique @db.Uuid
+  sebep        String    @db.VarChar(500)
+  ureten       String    @db.VarChar(120)
+  tuketildiAt  DateTime? @db.Timestamptz
+  createdAt    DateTime  @default(now()) @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @db.Timestamptz
+
+  kurulum Kurulum          @relation(fields: [kurulumId], references: [id])
+  talep   GeciciKodTalebi? @relation(fields: [talepId], references: [id], onDelete: Restrict)
+
+  @@index([kurulumId, createdAt])
+  @@index([anahtarOzeti])
+  @@map("gecici_acilis_kodlari")
+}
+
+/// Bayinin geçici açılış kodu talebi (kendi müşterisinin kurulumu): bayi imzalayamaz — yönetici kök parolasıyla üretir.
+model GeciciKodTalebi {
+  id            String                @id @default(uuid()) @db.Uuid
+  kurulumId     String                @db.Uuid
+  bayiId        String                @db.Uuid
+  istekKodu     String                @db.VarChar(24)
+  anahtarOzeti  String                @db.VarChar(16)
+  gun           Int
+  sebep         String                @db.VarChar(500)
+  yapan         String                @db.VarChar(120)
+  durum         GeciciKodTalebiDurumu @default(BEKLIYOR)
+  kapanisZamani DateTime?             @db.Timestamptz
+  kapatan       String?               @db.VarChar(120)
+  kapanisSebebi String?               @db.VarChar(500)
+  createdAt     DateTime              @default(now()) @db.Timestamptz
+  updatedAt     DateTime              @updatedAt @db.Timestamptz
+
+  kurulum Kurulum           @relation(fields: [kurulumId], references: [id])
+  bayi    Bayi              @relation(fields: [bayiId], references: [id])
+  kod     GeciciAcilisKodu?
+
+  @@index([durum, createdAt])
+  @@index([kurulumId])
+  @@index([bayiId])
+  @@map("gecici_kod_talebi")
 }

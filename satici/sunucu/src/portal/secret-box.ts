@@ -26,21 +26,22 @@ export class PortalSecretBox {
     return new PortalSecretBox(key);
   }
 
-  seal(plain: string, userId: string): string {
+  /** `purpose` AAD'nin alan ayıracıdır: TOTP sırrı ile başka sır birbirinin yerine açılamaz. */
+  seal(plain: string, userId: string, purpose = "portal-totp"): string {
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv("aes-256-gcm", this.key, iv);
-    cipher.setAAD(Buffer.from(`tekserp/portal-totp|${userId}`, "utf8"));
+    cipher.setAAD(Buffer.from(`tekserp/${purpose}|${userId}`, "utf8"));
     const body = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
     return [PREFIX, iv.toString("base64url"), body.toString("base64url"), cipher.getAuthTag().toString("base64url")].join(".");
   }
 
   /** Çözülemezse null (yanlış anahtar, kurcalanmış ya da başka kullanıcının sırrı). */
-  open(sealed: string, userId: string): string | null {
+  open(sealed: string, userId: string, purpose = "portal-totp"): string | null {
     const parts = sealed.split(".");
     if (parts.length !== 4 || parts[0] !== PREFIX) return null;
     try {
       const decipher = crypto.createDecipheriv("aes-256-gcm", this.key, Buffer.from(parts[1]!, "base64url"));
-      decipher.setAAD(Buffer.from(`tekserp/portal-totp|${userId}`, "utf8"));
+      decipher.setAAD(Buffer.from(`tekserp/${purpose}|${userId}`, "utf8"));
       decipher.setAuthTag(Buffer.from(parts[3]!, "base64url"));
       return Buffer.concat([decipher.update(Buffer.from(parts[2]!, "base64url")), decipher.final()]).toString("utf8");
     } catch {

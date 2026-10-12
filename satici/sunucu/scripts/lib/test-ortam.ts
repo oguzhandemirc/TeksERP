@@ -489,6 +489,10 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     await tx.yaptirimEylemi.deleteMany({ where: w });
     await tx.planliEylem.deleteMany({ where: w });
     await tx.etkinlestirmeKodu.deleteMany({ where: w });
+    // Geçici açılış kodları (talebe FK'lı) talepten ÖNCE; denetim ayak izi talep id'siyle de.
+    for (const t of await tx.geciciKodTalebi.findMany({ where: w, select: { id: true } })) denetimIdleri.add(t.id);
+    await tx.geciciAcilisKodu.deleteMany({ where: w });
+    await tx.geciciKodTalebi.deleteMany({ where: w });
     await tx.nonceDefteri.deleteMany({ where: w });
     // Kurulumsuz taşıma talebinin nonce'u anahtar kapsamında (`kid:…`) — o anahtarlar kurulumların talep/kayıtlarından.
     const talepAnahtarlari = (await tx.tasimaTalebi.findMany({ where: w, select: { yeniAnahtarKimligi: true } })).map((t) => `kid:${t.yeniAnahtarKimligi}`);

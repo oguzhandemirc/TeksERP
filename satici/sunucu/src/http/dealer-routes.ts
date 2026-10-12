@@ -7,7 +7,7 @@
 // müşteri o arada başka bayiye geçtiyse eylem "bulunamadı" ile düşer.
 import type { Hak, Kurulum, Musteri, Tesis } from "@prisma/client";
 import { z } from "zod";
-import { LICENSE_CLASSES } from "../lisans-protokol";
+import { LICENSE_CLASSES, TEMP_CODE_DAYS } from "../lisans-protokol";
 import { passwordBuffer } from "../keys/key-files";
 import { notFoundError } from "../lib/errors";
 import { withSigningPasswordGuard } from "../portal/signing-guard";
@@ -22,6 +22,7 @@ import {
   installationCustomerId,
   recordDealerEntitlementVersionTx,
 } from "../services/dealer-ownership.service";
+import { createTempCodeRequestTx, listDealerTempCodeRequests } from "../services/temp-code.service";
 import { entitlementVersionAudit, type EntitlementChanges } from "../services/entitlement.service";
 import { createCustomerTx, createSiteTx } from "../services/master-data.service";
 import { ClientTokenSchema, IsoSchema, ReasonSchema, bodyOf, idParam, pageQuery, portalAction, queryText, type PortalRequestContext, type PortalRouteDef } from "./portal-http";
@@ -58,6 +59,8 @@ const EntitlementVersion = z.strictObject({
   bakimBitis: IsoSchema.optional(),
   uretimModuluCikarilsin: z.boolean().optional(),
 });
+// Bayi geçici açılış kodunu İMZALAYAMAZ (yalnız kök): talep açar, yönetici üretir.
+const TempCodeRequest = z.strictObject({ clientToken: Token, istekKodu: z.string().min(1).max(80), gun: z.number().int().optional(), sebep: ReasonSchema });
 const CodeCreate = z.strictObject({ clientToken: Token, gecerlilikGun: z.number().int().min(1).max(365).optional() });
 
 function dealerOf(c: PortalRequestContext): string {
@@ -266,6 +269,40 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
           stored: { id: r.id, kod: null, gecerlilikBitis: r.expiresAt, kodGosterilemez: true },
         }),
         audit: (r) => [{ event: "ETKINLESTIRME_KODU", entity: "Kurulum", entityId: id, summary: { kodId: r.id, tur: r.kind, bayiId: dealerId } }],
+      });
+    },
+  },
+  {
+    method: "get",
+    path: "/kurulumlar/:id/gecici-kod-talepleri",
+    permission: "bayi:portal",
+    kimlik: "OKUMA",
+    handler: async (c) => {
+      const dealerId = dealerOf(c);
+      const id = idParam(c.req, "id", "Kurulum");
+      await ownedInstallation(prisma, dealerId, id);
+      return { data: await listDealerTempCodeRequests(prisma, c.ctx.portalSecrets, { dealerId, installationDbId: id }) };
+    },
+  },
+  {
+    method: "post",
+    path: "/kurulumlar/:id/gecici-kod-talep",
+    permission: "bayi:portal",
+    kimlik: "ISLEM_KIMLIGI",
+    handler: async (c) => {
+      const dealerId = dealerOf(c);
+      const id = idParam(c.req, "id", "Kurulum");
+      const b = bodyOf(c, TempCodeRequest);
+      await ownedInstallation(prisma, dealerId, id);
+      const customerId = await installationCustomerId(prisma, id);
+      return portalAction(c, {
+        action: "BAYI_GECICI_KOD_TALEP",
+        clientToken: b.clientToken,
+        body: withPath(b, id),
+        run: (tx) =>
+          createTempCodeRequestTx(tx, { dealerId, customerId, installationDbId: id, requestCode: b.istekKodu, days: b.gun ?? TEMP_CODE_DAYS.varsayilan, reason: b.sebep, actor: c.session.actor }),
+        respond: (row) => ({ status: 201, data: { id: row.id, durum: row.durum, gun: row.gun } }),
+        audit: (row) => [{ event: "GECICI_KOD_TALEBI", entity: "GeciciKodTalebi", entityId: row.id, summary: { kurulumId: id, gun: row.gun, bayiId: dealerId } }],
       });
     },
   },

@@ -19,6 +19,7 @@ import {
   isoToMs,
   prepareTrustAnchor,
   rootPublicKeysFor,
+  tempCodeRootKidFits,
   verifyCertificate,
   type CertificateDoc,
   type CertUsage,
@@ -224,6 +225,11 @@ export class KeyStore {
   rootFileFor(cls: LicenseClass): WrappedKeyInfo | null {
     const usable = this.wrapped.filter((w) => w.kind !== "BAYI" && w.inAnchor && w.classes.includes(cls));
     return usable.find((w) => w.kind === "KOK") ?? null;
+  }
+
+  /** Geçici açılış kodunu imzalayacak kök: çapada, sınıfa yetkili ve kimliği koda sığan (`kok-<yıl>-<n>`). */
+  tempCodeRootFor(cls: LicenseClass): WrappedKeyInfo | null {
+    return this.wrapped.find((w) => w.kind === "KOK" && w.inAnchor && w.classes.includes(cls) && tempCodeRootKidFits(w.kid)) ?? null;
   }
 
   publicRecords(): PublicKeyRecord[] {
