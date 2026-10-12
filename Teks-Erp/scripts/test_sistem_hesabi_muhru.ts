@@ -21,6 +21,7 @@ import { AuthService } from "../src/services/auth.service";
 import { AppError } from "../src/utils/app-error";
 import { loadLicenseStoreSync } from "../src/lib/license/store";
 import { getLicenseCore } from "../src/lib/license/native";
+import { formatSeal, parseSeal } from "../src/lib/license/system-seal";
 import {
   credentialDigest,
   isSystemAccountAuthorized,
@@ -339,9 +340,13 @@ async function calismaZamani(): Promise<void> {
     check("§1 özet geri konunca mühür yine geçerli (aynı kimlik)", await yetkili(sa));
 
     const iyi = (await satir(sa)).systemAccountSeal!;
-    // Son karakterler dolgu bitleri taşır (değiştirmek BICIMSIZ üretebilir); imzanın ortasındaki bir harf çevrilir.
-    const k = iyi.length - 10;
-    const bozuk = `${iyi.slice(0, k)}${iyi[k] === "A" ? "B" : "A"}${iyi.slice(k + 1)}`;
+    // Metin değil BAYT bozulur: çözülmüş imzanın bir baytı XOR'lanıp yeniden kodlanır — biçim her
+    // koşumda geçerli kalır (BICIMSIZ değil), imza her koşumda geçersizdir (BOZUK).
+    const parca = parseSeal(iyi)!;
+    const bozukImza = Buffer.from(parca.signature);
+    bozukImza[10] ^= 0x01;
+    const bozuk = formatSeal(parca.kid, bozukImza);
+    check("§1 bozma sondası biçimi korur (BICIMSIZ'e kaymaz)", parseSeal(bozuk) !== null && bozuk !== iyi);
     await prisma.user.update({ where: { id: sa }, data: { systemAccountSeal: bozuk } });
     resetSystemAccountSealCacheForTest();
     check("§1 ⭐ NEGATİF: mühür baytı bozuk → BOZUK, yetki YOK", sealStatus(await satir(sa)) === "BOZUK" && !(await yetkili(sa)), sealStatus(await satir(sa)));
