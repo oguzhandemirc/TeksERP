@@ -36,6 +36,10 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   eski sunucu bu sürede çalışmaya devam eder. (Eskiden talep gönderilir gönderilmez yeni sunucu tam açılıyordu;
   bu, lisanssız kopyanın da açık kapısıydı.) Lisans ekranı talebin durumunu gösterir. **Etkinleştirilmiş
   kurulumlar etkilenmez.**
+- **Lisans dosyaları kaybolan yeni sürüm kurulumda süre sınırı.** Lisans klasörü silinmiş ya da kaybolmuş ama
+  veritabanı daha önce zorlama kipinde etkinleştirilmiş bir lisansın izini taşıyan sunucu artık süresiz çalışmaz:
+  14 gün uyarı, sonra 30 gün ek süre, sonra kısıtlı kip (okuma, rapor, yedek ve dışa aktarma açık). Yeniden
+  etkinleştirince kalkar. Gözlem kipindeki eski kurulumlar ve etkinleştirilmiş kurulumlar etkilenmez.
 - **Lisans klasörü yanlış yerdeyse sunucu yalnız lisans ekranını açar.** Lisans klasörü program ya da yedek
   klasörünün içine ayarlanmışsa, yazılamıyorsa ya da okunamıyorsa (ve veritabanındaki lisans izi bunu
   karşılayamıyorsa) bu bir kurulum hatası sayılır: panel kırmızı uyarıyla yalnız lisans ekranını açar; yedek alma
@@ -181,6 +185,11 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   sırrını değiştirmek, 2FA'yı kapatmak ya da kurtarma kodu eklemek mührü bozar (giriş 403); panelden 2FA kurma ve
   sıfırlama mührü aynı işlemde yeniler. Eski mühür ilk açılışta bir kez kendiliğinden yenilenir (lisans dizinine
   `sistem-hesabi-muhru-v2.json`), kimse kilitlenmez. Migration YOK.
+- `d9572aa77` — B6/G3: etkinleşmemiş (korumalı derleme) kurulumda veritabanında `zorla` kipli başka bir kurulumun
+  izi (aynı PG kümesi ya da küme kimliği okunamadı) varsa kip zorla olur ve merdiven akar: 14 g uyarı → 30 g ek
+  süre → kısıtlı. Başlangıç lisans dizinindeki kurulum anahtarıyla imzalı `yabanci-iz-baslangic.json`dan sayılır
+  (veritabanını silmek/geri yüklemek sıfırlamaz); etkinleştirme ek süresi bu kurulumda ilk açılıştan sayılmaz.
+  Gözlem kipli iz ve korumasız derleme bugünkü gibi. Sözleşme değişmez (yeni alan/uç/kod yok).
 
 **Yetki denetimi düzeltmeleri (güvenlik Bölge 2)** (commitler `fix(yetki): B1 …`, `B2 …`, `B3+B4 …`, `B5+B6 …`; kısa kimlikleri paketlemede yazılır)
 

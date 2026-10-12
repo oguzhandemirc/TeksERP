@@ -138,6 +138,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Dokuma raporlarında (Randıman, Duruş Pareto, Vardiya Karnesi, Karne Listesi) toplamlar artık seçtiğiniz tarih aralığının TAMAMINI kapsar. Eski sürüm çok tezgahlı fabrikada yalnız ilk 500 tezgah × vardiya satırını sayıyordu; aynı aralığın rakamları bu yüzden önceki sürümden farklı (daha büyük) görünebilir. Uzun listeler sayfa sayfa gelir: tablonun altındaki \"Daha fazla yükle\" ile devamı açılır, üstteki toplamlar baştan tam kümedir. Raporlar da belirgin şekilde daha hızlı açılır (yeni sunucu sürümü gerekir)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Lisans ekranının üstünde küçük bir şerit lisansın hangi kipte olduğunu (Gözlem ya da Zorlama) ve hangi basamakta bulunduğunu (Uyarı, Ek süre, Kısıtlı kip) gösterir; ek süre sürüyorsa kalan gün yazar. Gözlem kipinde basamak yalnız bilgi içindir ve “gözlemde uygulanmaz” yazar."
         }
       ]
     },
