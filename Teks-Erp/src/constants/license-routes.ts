@@ -138,19 +138,19 @@ export const SUSPENDED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
 
 /**
  * G2 etkinleştirme kilidinde (hiç etkinleşmemiş kurulum) her-kademe listesine EK açık uçlar. Kilit yalnız etkinleştirme
- * ekranını açar: lisans uçları, giriş akışı, sağlık ve keşif zaten `ALWAYS_OPEN_ROUTES`tadır. KOPYA sınıfında ayrıca
- * "verilerimi al" (`DATA_EXPORT_PATHS`) açıktır — veri müşterinindir.
+ * ekranını açar: lisans uçları, giriş akışı, sağlık ve keşif zaten `ALWAYS_OPEN_ROUTES`tadır. KOPYA ve KURULUM_HATASI
+ * sınıflarında ayrıca "verilerimi al" (`DATA_EXPORT_PATHS`) açıktır — veri müşterinindir.
  */
 export const ACTIVATION_LOCK_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "GET", path: "/api/auth/me", reason: "oturum sahibi ve izinleri — etkinleştirme ekranı lisans yetkisini çözer" },
 ];
 
-export type ActivationLockRouteClass = "ETKINLESMEDI" | "KOPYA";
+export type ActivationLockRouteClass = "ETKINLESMEDI" | "KOPYA" | "KURULUM_HATASI";
 
 /** Etkinleştirme kilidinde istek açık mı (kilit sınıfına göre). */
 export function isOpenWhenActivationLocked(sinif: ActivationLockRouteClass, method: string, path: string): boolean {
   if (anyMatch(ALWAYS_OPEN_ROUTES, method, path) || anyMatch(ACTIVATION_LOCK_OPEN_ROUTES, method, path)) return true;
-  return sinif === "KOPYA" && anyMatch(Object.values(DATA_EXPORT_PATHS).map(ruleFromExportPath), method, path);
+  return (sinif === "KOPYA" || sinif === "KURULUM_HATASI") && anyMatch(Object.values(DATA_EXPORT_PATHS).map(ruleFromExportPath), method, path);
 }
 
 /**

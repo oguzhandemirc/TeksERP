@@ -4,17 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { copyText } from "@/lib/clipboard";
 import type { FingerprintFactor, LicenseDetail } from "@/types/license";
 import { InfoRow, LicenseCard, when } from "./LicenseParts";
-import { FACTOR_LABEL } from "./labels";
+import { FACTOR_LABEL, STORE_PROBLEM } from "./labels";
 import { LicenseHardwareReport } from "./LicenseHardwareReport";
 
 const FACTORS: FingerprintFactor[] = ["f1", "f2", "f3", "f4", "f5"];
 const DECISION: Record<string, string> = { ESLESTI: "Eşleşti", ESLESMEDI: "Eşleşmedi", OLCULEMEDI: "Ölçülemedi" };
-const STORE_PROBLEM: Record<string, string> = {
-  APP_ICINDE: "Lisans klasörü program klasörünün içinde",
-  YEDEK_ICINDE: "Lisans klasörü yedek klasörünün içinde",
-  OKUNAMADI: "Lisans klasörü okunamadı",
-  YAZILAMADI: "Lisans klasörüne yazılamadı",
-};
 
 /** Kimlik + kopyala düğmesi (portal/destek ile yazışırken elle yazılmasın). */
 function CopyableId({ value, label, testId }: { value: string | null; label: string; testId: string }) {

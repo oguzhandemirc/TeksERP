@@ -108,3 +108,11 @@ export function moduleSettingLabel(key: string): string {
   if (field) return MODULE_LABELS[field];
   return key === "patron-bulut" ? "Patron bulutu" : key;
 }
+
+/** Lisans deposu sorunu (`detay.depo.sorun`) — makine kartı ve kurulum hatası kilidi aynı metni gösterir. */
+export const STORE_PROBLEM: Record<string, string> = {
+  APP_ICINDE: "Lisans klasörü program klasörünün içinde",
+  YEDEK_ICINDE: "Lisans klasörü yedek klasörünün içinde",
+  OKUNAMADI: "Lisans klasörü okunamadı",
+  YAZILAMADI: "Lisans klasörüne yazılamadı",
+};

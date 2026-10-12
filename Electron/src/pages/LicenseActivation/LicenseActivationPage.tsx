@@ -17,6 +17,7 @@ import { LicenseActivateCard } from "@/pages/System/License/LicenseActivateCard"
 import { LicenseOfflineCard } from "@/pages/System/License/LicenseOfflineCard";
 import { LicenseFileUpload } from "@/pages/System/License/LicenseFileUpload";
 import { LicenseTransferCard } from "@/pages/System/License/LicenseTransferCard";
+import { STORE_PROBLEM } from "@/pages/System/License/labels";
 
 /**
  * G2 — ETKİNLEŞTİRME KİLİDİ: hiç etkinleşmemiş (ya da başka kurulumun kopyası olan) sunucuda oturum açan yalnız bu
@@ -38,6 +39,10 @@ export function LicenseActivationPage() {
   const d = q.data;
   const gate = acceptanceGate(acceptance);
   const kopya = sinif === "KOPYA";
+  // Kurulum hatası: etkinleştirme bu sunucuda işe yaramaz (depo kullanılamıyor) — yalnız uyarı + "verilerimi al".
+  const setupError = sinif === "KURULUM_HATASI";
+  const showDataExport = kopya || setupError;
+  const heading = setupError ? "Lisans klasörü kullanılamıyor — kurulum hatası" : kopya ? "Bu kurulumun lisansı doğrulanamadı" : "Sunucu lisansı etkinleştirilmedi";
   return (
     <div className="flex h-screen w-screen flex-col overflow-y-auto bg-background" data-testid="lisans-etkinlestirme-sayfasi">
       <div className="flex justify-end p-3">
@@ -49,8 +54,10 @@ export function LicenseActivationPage() {
             <KeyRound className="h-5 w-5 text-primary" />
           </span>
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold leading-tight">{kopya ? "Bu kurulumun lisansı doğrulanamadı" : "Sunucu lisansı etkinleştirilmedi"}</h1>
-            <p className="text-xs text-muted-foreground">Program etkinleştirilene kadar yalnız bu ekran açıktır.</p>
+            <h1 className="text-lg font-semibold leading-tight">{heading}</h1>
+            <p className="text-xs text-muted-foreground">
+              {setupError ? "Kurulum düzeltilene kadar yalnız bu ekran açıktır." : "Program etkinleştirilene kadar yalnız bu ekran açıktır."}
+            </p>
           </div>
         </div>
         {kopya && (
@@ -59,7 +66,14 @@ export function LicenseActivationPage() {
             alabilir ve dışa aktarabilirsiniz.
           </Callout>
         )}
-        {!canManage && (
+        {setupError && (
+          <Callout tone="danger" title="Lisans klasörü kullanılamıyor — kurulum hatası">
+            {d?.depo.sorun ? `${STORE_PROBLEM[d.depo.sorun] ?? d.depo.sorun}. ` : ""}
+            Lisans klasörü program ya da yedek klasörünün dışında, yazılabilir bir yerde olmalı; kurulumu yapan yöneticiye
+            başvurun. Verilerinize erişiminiz açıktır: aşağıdan yedek alabilir ve dışa aktarabilirsiniz.
+          </Callout>
+        )}
+        {!canManage && !setupError && (
           <Callout tone="info" title="Yöneticinize başvurun">
             Etkinleştirmeyi lisans yetkisi olan bir yönetici yapar. Etkinleştirildikten sonra yeniden giriş yapmanız yeter.
           </Callout>
@@ -70,7 +84,7 @@ export function LicenseActivationPage() {
             {apiErrorText(q.error, "Sunucu lisans bilgisini döndürmedi.")}
           </Callout>
         )}
-        {canManage && d && (
+        {canManage && d && !setupError && (
           <div className="space-y-4">
             {d.tasima && (
               <Callout tone="info" title={d.tasima.durum === "ONAYLANDI" ? "Taşıma talebiniz onaylandı" : "Taşıma talebiniz onay bekliyor"}>
@@ -88,7 +102,7 @@ export function LicenseActivationPage() {
             {(kopya || d.tasima) && <LicenseTransferCard d={d} />}
           </div>
         )}
-        {kopya && (
+        {showDataExport && (
           <section className="rounded-xl border bg-card p-4">
             <DataExportPanel />
           </section>

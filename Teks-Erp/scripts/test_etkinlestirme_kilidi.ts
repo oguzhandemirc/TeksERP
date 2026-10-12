@@ -129,7 +129,7 @@ const muafiyetBas = (yuk: ExemptionDoc, key: TestAnahtari): string => signDocume
 // ── §1 ──────────────────────────────────────────────────────────────────────────────────────────────────────
 function siniflayici(): void {
   console.log("\n§1 — sınıflayıcı tablosu");
-  const b: ActivationLockInput = { enabled: true, ready: true, activated: false, exempt: false, trace: "YOK" };
+  const b: ActivationLockInput = { enabled: true, setupError: false, ready: true, activated: false, exempt: false, trace: "YOK" };
   const t = (ek: Partial<ActivationLockInput>) => classifyActivationLock({ ...b, ...ek });
   check("§1a kilit kapalı → YOK/KAPALI", t({ enabled: false }).neden === "KAPALI");
   check("§1b etkin → YOK/ETKIN (iz YABANCI olsa da)", t({ activated: true, trace: "YABANCI" }).neden === "ETKIN");
@@ -140,6 +140,8 @@ function siniflayici(): void {
   check("§1f2 iz BELIRSIZ (küme okunamadı) → YOK/IZ_OLCULEMEDI (merdiven)", t({ trace: "BELIRSIZ" }).neden === "IZ_OLCULEMEDI");
   check("§1g iz YABANCI → KOPYA", t({ trace: "YABANCI" }).sinif === "KOPYA");
   check("§1h iz YOK → ETKINLESMEDI", t({}).sinif === "ETKINLESMEDI");
+  check("§1i ⭐ kurulum hatası (kullanılamayan lisans deposu) etkin/muafiyet/hazır-değil'den ÖNCE → KURULUM_HATASI",
+    t({ setupError: true, activated: true, exempt: true, ready: false }).sinif === "KURULUM_HATASI" && t({ setupError: true, enabled: false }).neden === "KAPALI");
 }
 
 // ── §2 / §3 ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -435,7 +437,7 @@ function kolSondalari(eski: Fikstur): void {
 function negatifSonda(): void {
   console.log("\n§9 — negatif sonda");
   const bozuk = (i: ActivationLockInput) => (i.enabled && i.activated ? { sinif: "ETKINLESMEDI" } : classifyActivationLock(i));
-  const r = bozuk({ enabled: true, ready: true, activated: true, exempt: false, trace: "YOK" });
+  const r = bozuk({ enabled: true, setupError: false, ready: true, activated: true, exempt: false, trace: "YOK" });
   check("§9a ⭐ 'etkin kurulum kilitlenir' bozuk kopyası §4 ölçütüne (YOK/ETKIN) takılır", r.sinif !== "YOK");
 }
 

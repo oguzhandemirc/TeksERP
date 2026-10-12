@@ -18,8 +18,11 @@ export function activationLockEnabled(): boolean {
   return testOverride ?? BUILD_ACTIVATION_LOCK;
 }
 
-/** YOK: kilit yok · ETKINLESMEDI: hiç lisans izi yok · KOPYA: iz başka kurulumun (veri dışarı alınabilir). */
-export const ACTIVATION_LOCK_CLASSES = ["YOK", "ETKINLESMEDI", "KOPYA"] as const;
+/**
+ * YOK: kilit yok · ETKINLESMEDI: hiç lisans izi yok · KOPYA: iz başka kurulumun (veri dışarı alınabilir) ·
+ * KURULUM_HATASI: lisans deposu kullanılamıyor (yanlış/okunamaz `LICENSE_DIR`; veri dışarı alınabilir).
+ */
+export const ACTIVATION_LOCK_CLASSES = ["YOK", "ETKINLESMEDI", "KOPYA", "KURULUM_HATASI"] as const;
 export type ActivationLockClass = (typeof ACTIVATION_LOCK_CLASSES)[number];
 
 /** Kilidin nedeni — tanı ve test içindir; kapı yalnız sınıfa bakar. */
@@ -32,7 +35,8 @@ export type ActivationLockReason =
   | "IZ_YOK"
   | "IZ_KAYIP"
   | "IZ_OLCULEMEDI"
-  | "IZ_YABANCI";
+  | "IZ_YABANCI"
+  | "DEPO_KULLANILAMAZ";
 
 /**
  * DB izinin bu kurulum açısından hâli: okunmadı · yok · bu kurulumun değil — aynı PG kümesi (KAYIP) · küme kimliği
@@ -42,6 +46,8 @@ export type ForeignTrace = "BILINMIYOR" | "YOK" | "KAYIP" | "BELIRSIZ" | "YABANC
 
 export interface ActivationLockInput {
   readonly enabled: boolean;
+  /** Lisans deposu kullanılamıyor (program/yedek dizini içinde, yazılamaz ya da DB izi olmadan okunamaz) — kurulum hatası. */
+  readonly setupError: boolean;
   /** Lisans durumu hesaplanabiliyor (`durumHazir`); değilse belirsizlik fabrikayı durdurmaz. */
   readonly ready: boolean;
   readonly activated: boolean;
@@ -56,12 +62,14 @@ export interface ActivationLockDecision {
 }
 
 /**
- * Sıra önemlidir: etkin kurulum ve muafiyet her zaman kilitsizdir; ölçülemeyen durum kilit üretmez; yalnız "hiç iz
+ * Sıra önemlidir: kullanılamayan lisans deposu her şeyden önce kilitlenir (fail-closed: yanlış dizin kapıyı açmasın);
+ * etkin kurulum ve muafiyet her zaman kilitsizdir; ölçülemeyen durum kilit üretmez; yalnız "hiç iz
  * yok" ve KESİN "iz başka kurulumun" kilitlenir. KAYIP (aynı PG kümesi) ve BELIRSIZ (küme kimliği okunamadı) bugünkü
  * merdivenden gider: etkinleşmiş gerçek müşteriyi yanlışlıkla kilitlemek, bir kopyanın merdivene düşmesinden kötüdür.
  */
 export function classifyActivationLock(i: ActivationLockInput): ActivationLockDecision {
   if (!i.enabled) return { sinif: "YOK", neden: "KAPALI" };
+  if (i.setupError) return { sinif: "KURULUM_HATASI", neden: "DEPO_KULLANILAMAZ" };
   if (i.activated) return { sinif: "YOK", neden: "ETKIN" };
   if (i.exempt) return { sinif: "YOK", neden: "MUAFIYET" };
   if (!i.ready) return { sinif: "YOK", neden: "HAZIR_DEGIL" };

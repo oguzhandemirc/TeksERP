@@ -171,6 +171,8 @@ function kapsamaVeDisariAktarim(): void {
   check("§5c ⭐ G2 kilit (ETKINLESMEDI) açık küme = her-kademe ∪ kilit eki, envanterde birebir", etkAyrisan.length === 0, etkAyrisan.slice(0, 5).map((u) => `${u.m} ${u.desen}`).join(" | "));
   const kopyaAyrisan = uclar.filter((u) => isOpenWhenActivationLocked("KOPYA", u.m, u.ornek) !== (beyanEtk(u) || verilerimi(u)));
   check("§5d ⭐ G2 kilit (KOPYA) açık küme = ETKINLESMEDI ∪ 'verilerimi al', envanterde birebir", kopyaAyrisan.length === 0, kopyaAyrisan.slice(0, 5).map((u) => `${u.m} ${u.desen}`).join(" | "));
+  const hataAyrisan = uclar.filter((u) => isOpenWhenActivationLocked("KURULUM_HATASI", u.m, u.ornek) !== (beyanEtk(u) || verilerimi(u)));
+  check("§5d2 ⭐ G2 kilit (KURULUM_HATASI) açık küme = ETKINLESMEDI ∪ 'verilerimi al', envanterde birebir", hataAyrisan.length === 0, hataAyrisan.slice(0, 5).map((u) => `${u.m} ${u.desen}`).join(" | "));
   const etkAcik = uclar.filter(beyanEtk).length;
   check("§5e G2 kilit dar: ETKINLESMEDI'de açık uç sayısı her-kademe + kilit eki kadar ve envanterin küçük bir kısmı", etkAcik > 0 && etkAcik < uclar.length / 10, `${etkAcik}/${uclar.length}`);
   // K8: donanım değişikliği bildirimi kurtarma yoludur — kısıtlı kurulum donanımını bildirip lisansını onarabilmeli.

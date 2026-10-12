@@ -11,7 +11,8 @@
 // yalnız "reddederdim" sayacını artırır (sıfır fark). Motor hazır değilse ya da durum
 // hesaplanamıyorsa geçirir — lisans belirsizliği fabrikayı durdurmaz.
 // G2 etkinleştirme kilidi kademeden ÖNCE gelir: hiç etkinleşmemiş kurulum yalnız etkinleştirme ekranını açar
-// (`LICENSE_NOT_ACTIVATED`); etkin kurulumda kilit daima YOK, kademe kuralı aynen işler.
+// (`LICENSE_NOT_ACTIVATED`); kullanılamayan lisans deposu (KURULUM_HATASI) durum hazır olmasa da kilitler; etkin
+// kurulumda kilit daima YOK, kademe kuralı aynen işler.
 // 503 kullanılmaz (SERVER_BUSY'ye ayrılmış).
 // =============================================================================
 import type { NextFunction, Request, Response } from "express";
@@ -22,10 +23,9 @@ import { isOpenInTier, isOpenWhenActivationLocked, isPublicRoute, type Activatio
 import { AuthService } from "../services/auth.service";
 import { verifyToken } from "./auth.middleware";
 
-function readySnapshot(): LicenseSnapshot | null {
+function currentSnapshot(): LicenseSnapshot | null {
   try {
-    const snap = getLicenseSnapshot();
-    return snap.durumHazir ? snap : null;
+    return getLicenseSnapshot();
   } catch {
     return null;
   }
@@ -76,7 +76,9 @@ function activationRejection(sinif: ActivationLockRouteClass): AppError {
   const text =
     sinif === "KOPYA"
       ? "Bu kurulumun lisans izi başka bir kuruluma ait. Lisans ekranından etkinleştirin ya da taşıma talebi açın; 'verilerimi al' (yedek + dışa aktarma) açık."
-      : "Sunucu lisansı etkinleştirilmedi. Yalnız lisans etkinleştirme ekranı açık; yöneticinize başvurun.";
+      : sinif === "KURULUM_HATASI"
+        ? "Lisans klasörü kullanılamıyor (kurulum hatası). Yalnız lisans ekranı ve 'verilerimi al' (yedek + dışa aktarma) açık; kurulumu yapan yöneticiye başvurun."
+        : "Sunucu lisansı etkinleştirilmedi. Yalnız lisans etkinleştirme ekranı açık; yöneticinize başvurun.";
   return AppError.forbidden(text, { code: "LICENSE_NOT_ACTIVATED", sinif });
 }
 
@@ -94,16 +96,21 @@ function publicRouteRejection(): AppError {
 }
 
 export function licenseGate(req: Request, res: Response, next: NextFunction): void {
-  const snap = readySnapshot();
+  const snap = currentSnapshot();
   if (!snap) {
     next();
     return;
   }
   const path = `${req.baseUrl}${req.path}`;
+  // Kilit durum hazır olmadan da işler: kurulum hatası (kullanılamayan lisans deposu) tam da durumu hazırlamaz.
   const lock = snap.etkinlestirmeKilidi.sinif;
   if (lock !== "YOK") {
     if (isOpenWhenActivationLocked(lock, req.method, path)) next();
     else rejectAfterIdentity(req, res, next, () => activationRejection(lock));
+    return;
+  }
+  if (!snap.durumHazir) {
+    next();
     return;
   }
   const { uygulananKademe, hesaplananKademe } = snap.state;

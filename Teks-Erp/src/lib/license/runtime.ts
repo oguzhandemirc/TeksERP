@@ -51,7 +51,7 @@ import { installationKeyId } from "./protocol";
 import { revocationHolding, __resetRevocationStoreForTests, type HeldRevocation, type RevocationHolding } from "./revocation-store";
 import { revocationPin } from "./state-rules-revocation";
 import { configureActivationLockForTests, type ActivationLockDecision } from "./activation-lock";
-import { decideActivationLock, isActivated, lastKnownLeaseOf } from "./snapshot-parts";
+import { decideActivationLock, isActivated, lastKnownLeaseOf, licenseStoreSetupError } from "./snapshot-parts";
 import {
   bumpLicenseSnapshotVersion,
   licenseSnapshotVersion,
@@ -327,7 +327,8 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
   const signingReady = Boolean(store && !store.problem && store.key && facts.installationId);
   const stateReady = signingReady || Boolean(store && store.problem === "OKUNAMADI" && input.kurulumAnahtarKimligi && facts.installationId);
   const activated = isActivated(store, licenseId.id, view.record);
-  const etkinlestirmeKilidi = decideActivationLock({ ready: stateReady, activated, store, fingerprint, roots: config.roots });
+  const setupError = licenseStoreSetupError(store, input.kurulumAnahtarKimligi, getLicenseTraceRow().durum !== "BILINMIYOR");
+  const etkinlestirmeKilidi = decideActivationLock({ ready: stateReady, setupError, activated, store, fingerprint, roots: config.roots });
   const snap: LicenseSnapshot = {
     imzaHazir: signingReady,
     durumHazir: stateReady,

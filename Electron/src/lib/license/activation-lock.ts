@@ -3,8 +3,11 @@ import { create } from "zustand";
 /** Etkinleştirme kilidi sayfasının oturum-dışı router'daki yolu — `router.tsx` ve yönlendirme aynı sabitten. */
 export const LICENSE_ACTIVATION_PATH = "/lisans-etkinlestir";
 
-/** YOK: kilit yok · ETKINLESMEDI: yalnız etkinleştirme · KOPYA: + "verilerimi al" (backend `ActivationLockClass`). */
-export type ActivationLockClass = "YOK" | "ETKINLESMEDI" | "KOPYA";
+/**
+ * YOK: kilit yok · ETKINLESMEDI: yalnız etkinleştirme · KOPYA: + "verilerimi al" · KURULUM_HATASI: lisans klasörü
+ * kullanılamıyor, yalnız lisans ekranı + "verilerimi al" (backend `ActivationLockClass`).
+ */
+export type ActivationLockClass = "YOK" | "ETKINLESMEDI" | "KOPYA" | "KURULUM_HATASI";
 
 /**
  * G2 etkinleştirme kilidi sinyali — kabuk seçimi buna bakar: kilitli kurulumda uygulama kabuğu HİÇ bağlanmaz,
@@ -24,5 +27,5 @@ export const useActivationLock = create<ActivationLockState>((set) => ({
 
 /** Kapı/durum yanıtındaki sınıf (bilinmeyen değer → ETKINLESMEDI: kilit sinyali geldi, tür okunamadı). */
 export function activationLockClassOf(value: unknown): ActivationLockClass {
-  return value === "YOK" || value === "KOPYA" ? value : "ETKINLESMEDI";
+  return value === "YOK" || value === "KOPYA" || value === "KURULUM_HATASI" ? value : "ETKINLESMEDI";
 }

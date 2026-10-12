@@ -9,9 +9,14 @@
 //   §1 ⭐ B1 bekleyen taşıma etkin SAYMAZ: elle yazılmış imzasız `tasima.json` (BEKLIYOR ya da ONAYLANDI) kilidi
 //      kaldırmaz (ETKINLESMEDI, iş ucu 403); meşru API yolu (`POST /api/license/tasima-talebi`, satıcı BEKLIYOR) da
 //      kaldırmaz; bekleyen talebin durumu etkin olmayan kurulumda da yoklanır (TASIMA_ONAYI_BEKLIYOR · RED → dosya düşer)
+//   §2 ⭐ B2 kullanılamayan lisans deposu (APP_ICINDE · YEDEK_ICINDE · YAZILAMADI · DB izsiz OKUNAMADI) → KURULUM_HATASI:
+//      iş ucu 403, lisans ekranı + "verilerimi al" açık; etkin K4 kurulumda dizin hilesi kademe kapısını düşürmez;
+//      kilit kapalı derlemede sıfır fark; G12 (anahtar okunamaz + DB izi) aynen
 //
 // NEGATİF SONDA (elle, ölçüldü): `isActivated`e bekleyen taşıma dalı geri konunca §1b/§1c/§1f kırmızı;
 //   `pollOnce`ta taşıma yoklaması `activated` kapısının ARKASINA alınınca §1g/§1h kırmızı.
+//   Sınıflayıcıdan `setupError` dalı silinince ya da kapı `durumHazir` değilken kilide bakmadan geçirince §2b×4 + §2e
+//   kırmızı; KURULUM_HATASI'nda "verilerimi al" kapatılınca §2c×4 kırmızı.
 // =============================================================================
 import fs from "node:fs";
 import os from "node:os";
@@ -38,6 +43,7 @@ import {
 } from "../src/lib/license/runtime";
 import { requestTransfer } from "../src/services/license.service";
 import { pollLicenseOnce } from "../src/services/license-sync.service";
+import { licenseStoreSetupError } from "../src/lib/license/snapshot-parts";
 import { egressTransport } from "../src/services/helpers/license-wire.helper";
 import { DAY_MS, ExemptionSchema, TYP, installationKeyId, msToIso, signDocument } from "../src/lib/license/protocol";
 import { signStateRecord, verifyStateRecordSignature } from "../src/lib/license/saat";
@@ -161,6 +167,87 @@ async function b1(token: string): Promise<void> {
   }
 }
 
+// ── §2 B2 ──────────────────────────────────────────────────────────────────────────────────────────────────
+const VERI_UCLARI: ReadonlyArray<readonly [string, string]> = [
+  ["POST", "/api/admin/backup"],
+  ["GET", "/api/admin/backups"],
+  ["GET", "/api/import/customers/export"],
+  ["GET", "/api/license/detay"],
+  ["POST", "/api/license/etkinlestir"],
+];
+
+function ortamGeriYukle(): void {
+  if (ENV_YEDEK.LICENSE_DIR === undefined) delete process.env.LICENSE_DIR;
+  else process.env.LICENSE_DIR = ENV_YEDEK.LICENSE_DIR;
+  if (ENV_YEDEK.BACKUP_DIR === undefined) delete process.env.BACKUP_DIR;
+  else process.env.BACKUP_DIR = ENV_YEDEK.BACKUP_DIR;
+}
+
+async function b2(token: string): Promise<void> {
+  console.log("\n§2 — B2 kullanılamayan lisans deposu = KURULUM_HATASI (fail-closed, yalnız korumalı derlemede)");
+  check("§2a yüklem: OKUNAMADI + DB izinden anahtar (G12) hata DEĞİL · iz henüz okunmadıysa hata DEĞİL · izsiz hata · sorunsuz depo hata değil",
+    !licenseStoreSetupError({ problem: "OKUNAMADI" } as never, "kid", true) &&
+    !licenseStoreSetupError({ problem: "OKUNAMADI" } as never, null, false) &&
+    licenseStoreSetupError({ problem: "OKUNAMADI" } as never, null, true) &&
+    licenseStoreSetupError({ problem: "APP_ICINDE" } as never, "kid", false) &&
+    !licenseStoreSetupError({ problem: null } as never, null, true) &&
+    !licenseStoreSetupError(null, null, true));
+  const f = fiksturKur(Date.now());
+  const yedek = geciciDizin("yedek");
+  const dosya = path.join(geciciDizin("dosya"), "duz-dosya");
+  fs.writeFileSync(dosya, "x");
+  const buyuk = geciciDizin("buyuk");
+  fs.writeFileSync(path.join(buyuk, LICENSE_FILES.KEY), "x".repeat(9 * 1024));
+  const vakalar: Array<[string, () => void]> = [
+    ["APP_ICINDE (program dizini altı)", () => { process.env.LICENSE_DIR = path.join(process.cwd(), "kilit-kacak-yok-dizin"); }],
+    ["YEDEK_ICINDE (BACKUP_DIR altı)", () => { process.env.BACKUP_DIR = yedek; process.env.LICENSE_DIR = path.join(yedek, "lisans"); }],
+    ["YAZILAMADI (yol bir dosyanın altında)", () => { process.env.LICENSE_DIR = path.join(dosya, "lisans"); }],
+    ["OKUNAMADI (anahtar dosyası > 8 KB, DB izi yok)", () => { process.env.LICENSE_DIR = buyuk; }],
+  ];
+  try {
+    for (const [ad, kur] of vakalar) {
+      delete process.env.BACKUP_DIR;
+      kur();
+      const s0 = loadLicenseStoreSync();
+      await taze(f, s0.dir);
+      const k = await kapi(token);
+      check(`§2b ⭐ ${ad}: problem=${s0.problem} → kilit KURULUM_HATASI, iş ucu 403`,
+        kilit() === "KURULUM_HATASI/DEPO_KULLANILAMAZ" && k === "403:LICENSE_NOT_ACTIVATED/KURULUM_HATASI", `kilit=${kilit()} kapı=${k} durumHazir=${getLicenseSnapshot().durumHazir}`);
+      const kapali: string[] = [];
+      for (const [m, yol] of VERI_UCLARI) if ((await kapi(token, m, yol)) !== "ROTAYA") kapali.push(`${m} ${yol}`);
+      check(`§2c ${ad}: lisans ekranı + 'verilerimi al' (yedek · dışa aktarma) açık`, kapali.length === 0, kapali.join(" | "));
+    }
+    // Kilit kapalı (geliştirme/gözlem derlemesi): davranış değişmez.
+    delete process.env.BACKUP_DIR;
+    process.env.LICENSE_DIR = path.join(process.cwd(), "kilit-kacak-yok-dizin");
+    await taze(f, loadLicenseStoreSync().dir);
+    setActivationLockForTests(false);
+    check("§2d kilit kapalı derlemede kötü dizin → YOK/KAPALI, iş ucu rotaya (sıfır fark)", kilit() === "YOK/KAPALI" && (await kapi(token)) === "ROTAYA", `${kilit()} ${await kapi(token)}`);
+    // Etkin + zorlanan (K4) kurulum: dizin hilesi kademe kapısını da düşürmez.
+    const kip = lisansKipKur({ zorlama: true, kademe: "K4" });
+    setActivationLockForTests(true);
+    const once = await kapi(token);
+    process.env.LICENSE_DIR = path.join(process.cwd(), "kilit-kacak-yok-dizin");
+    loadLicenseStoreSync();
+    invalidateLicenseSnapshot();
+    const sonra = await kapi(token);
+    check("§2e ⭐ etkin kurulum zorla K4: doğru dizinde 403 LICENSE_RESTRICTED; LICENSE_DIR program dizinine → yine 403 (KURULUM_HATASI)",
+      once.startsWith("403:LICENSE_RESTRICTED") && sonra === "403:LICENSE_NOT_ACTIVATED/KURULUM_HATASI", `önce=${once} (uygulanan=${kip.snap.state.uygulananKademe}) sonra=${sonra}`);
+    temizleLisansKipDizini();
+    if (process.platform !== "win32" && process.getuid?.() !== 0) {
+      lisansKipKur({ zorlama: true, kademe: "K4", anahtarOkunamaz: true });
+      setActivationLockForTests(true);
+      const g12 = await kapi(token);
+      check("§2f G12 aynen: anahtar okunamaz + DB izi → kurulum hatası DEĞİL, kilit YOK, kademe kararı sürer (LICENSE_RESTRICTED)",
+        kilit() === "YOK/ETKIN" && g12.startsWith("403:LICENSE_RESTRICTED"), `${kilit()} ${g12}`);
+      temizleLisansKipDizini();
+    }
+    check("§2g APP_ICINDE vakası program dizininde dosya yaratmadı", !fs.existsSync(path.join(process.cwd(), "kilit-kacak-yok-dizin")));
+  } finally {
+    ortamGeriYukle();
+  }
+}
+
 async function main(): Promise<void> {
   console.log("=== Lisans kilit kaçakları (denetim B1 · B2 · B4) ===");
   const engel = hedefDbEngeli();
@@ -173,6 +260,7 @@ async function main(): Promise<void> {
   try {
     const { token } = await AuthService.login(ad, "Deneme-12345");
     await b1(token);
+    await b2(token);
   } finally {
     for (const s of saticilar) await s.kapat().catch(() => undefined);
     await temizleKabuller().catch(() => undefined);

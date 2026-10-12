@@ -30,7 +30,7 @@ export interface LicenseStatusSummary {
   lisansSahibi: { musteri: string; tesis: string } | null;
   surum: string;
   /** G2 etkinleştirme kilidi (eski backend göndermez → kilit yok). */
-  etkinlestirmeKilidi?: "YOK" | "ETKINLESMEDI" | "KOPYA";
+  etkinlestirmeKilidi?: "YOK" | "ETKINLESMEDI" | "KOPYA" | "KURULUM_HATASI";
 }
 export type LicenseStatusResponse = LicenseStatusSummary | { ayrinti: false };
 

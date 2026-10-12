@@ -48,6 +48,8 @@ describe("apiClient — lisans kapısı dalları", () => {
     useActivationLock.setState({ sinif: "YOK" });
     await expect(interceptor().rejected(makeError(403, { message: "x", details: { code: "LICENSE_NOT_ACTIVATED" } }))).rejects.toBeDefined();
     expect(useActivationLock.getState().sinif).toBe("ETKINLESMEDI");
+    await expect(interceptor().rejected(makeError(403, { message: "x", details: { code: "LICENSE_NOT_ACTIVATED", sinif: "KURULUM_HATASI" } }))).rejects.toBeDefined();
+    expect(useActivationLock.getState().sinif).toBe("KURULUM_HATASI");
     expect(useLicenseSuspension.getState().suspended).toBe(false);
   });
 

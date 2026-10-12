@@ -6,12 +6,15 @@ import type { JwtPayload } from "@/types/auth";
 import type { LicenseStatusSummary } from "@/types/license";
 
 const status = vi.fn();
-const detay = { tasima: null as null | { talepId: string; istendi: string; gerekce: string | null; durum?: "BEKLIYOR" | "ONAYLANDI" } };
+const detay = {
+  tasima: null as null | { talepId: string; istendi: string; gerekce: string | null; durum?: "BEKLIYOR" | "ONAYLANDI" },
+  sorun: null as null | string,
+};
 const perms = { manage: true };
 vi.mock("@/services/licenseService", () => ({
   licenseService: {
     status: () => status(),
-    detail: () => Promise.resolve({ kurulum: { etkin: false }, hazir: true, tasima: detay.tasima }),
+    detail: () => Promise.resolve({ kurulum: { etkin: false }, hazir: true, tasima: detay.tasima, depo: { dizin: null, sorun: detay.sorun } }),
     acceptance: () => Promise.resolve({ kabul: null }),
   },
 }));
@@ -58,6 +61,7 @@ describe("G2 etkinleştirme sayfası", () => {
     status.mockReset();
     perms.manage = true;
     detay.tasima = null;
+    detay.sorun = null;
     useActivationLock.setState({ sinif: "ETKINLESMEDI" });
     useAuthStore.setState({ user: { userId: "u1", username: "yonetici", permissions: ["license:manage"] } as unknown as JwtPayload });
   });
@@ -92,6 +96,17 @@ describe("G2 etkinleştirme sayfası", () => {
     expect(screen.getByText("Taşıma talebiniz onay bekliyor")).toBeInTheDocument();
     expect(screen.getByText(/taşıma kodunu aşağıdaki internetle kod alanına girin/)).toBeInTheDocument();
     expect(screen.queryByTestId("verilerimi-al")).toBeNull();
+  });
+
+  it("⭐ KURULUM_HATASI: kırmızı uyarı + depo sorunu, etkinleştirme kartları GİZLİ, 'verilerimi al' AÇIK", async () => {
+    useActivationLock.setState({ sinif: "KURULUM_HATASI" });
+    detay.sorun = "APP_ICINDE";
+    status.mockResolvedValue({ ...base, etkinlestirmeKilidi: "KURULUM_HATASI" });
+    renderWithProviders(<LicenseActivationPage />);
+    expect(await screen.findByText(/Lisans klasörü program klasörünün içinde/)).toBeInTheDocument();
+    expect(screen.getAllByText("Lisans klasörü kullanılamıyor — kurulum hatası").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("verilerimi-al")).toBeInTheDocument();
+    for (const id of ["kart-kabul", "kart-karekod", "kart-kod", "kart-dosya", "kart-tasima"]) expect(screen.queryByTestId(id)).toBeNull();
   });
 
   it("lisans yetkisi olmayan kullanıcı: 'Yöneticinize başvurun', eylem kartı yok", async () => {
