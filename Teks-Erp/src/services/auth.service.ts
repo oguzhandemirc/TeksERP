@@ -17,7 +17,7 @@ import {
   readLoginMethods,
   readSameTypeSessionPolicy,
   readAbsoluteSessionCapDays,
-  MAX_ABSOLUTE_SESSION_CAP_DAYS,
+  effectiveAbsoluteSessionCapDays,
 } from "./system-setting.service";
 import { loadJwtSecretAtBoot } from "../lib/jwt-secret";
 import { uyari } from "../lib/logger";
@@ -548,8 +548,8 @@ export class AuthService {
     //    süre bitince client otomatik çıkar, sunucu da 401 verir.
     //  • Kapalı: token yine de MUTLAK oturum tavanına (auth.absoluteSessionCapDays,
     //    default 30 gün) kadar geçerlidir — sızan token sonsuza kadar yaşamasın.
-    //    Tavan 0 ise en uzun tavan (MAX_ABSOLUTE_SESSION_CAP_DAYS) uygulanır; exp'siz
-    //    token üretilmez.
+    //    Tavan 0 ise kapatılamaz sert tavan (UNSET_ABSOLUTE_SESSION_CAP_DAYS, 30 gün)
+    //    uygulanır; exp'siz token üretilmez.
     // (Dakika ayarı yoksa reader eski saat ayarına ×60 düşer — geriye-uyum.)
     const timeoutEnabled = await readAutoLogoutOnExpiry();
     const sessionMinutes = await readSessionDurationMinutes();
@@ -558,10 +558,10 @@ export class AuthService {
     // jti = Session satırı anahtarı. Taban (mutlak) son-kullanma:
     //   • zaman aşımı açık → now + oturum süresi (dakika)
     //   • kapalı + cap>0 → now + cap gün (arka plan tavanı)
-    //   • kapalı + cap=0 → now + en uzun tavan (gün)
+    //   • kapalı + cap=0 → now + sert tavan (gün)
     const jti = randomUUID();
     const nowMs = Date.now();
-    const effectiveCapDays = capDays > 0 ? capDays : MAX_ABSOLUTE_SESSION_CAP_DAYS;
+    const effectiveCapDays = effectiveAbsoluteSessionCapDays(capDays);
     let effectiveExpiresAt: Date = timeoutEnabled
       ? new Date(nowMs + sessionMinutes * 60 * 1000)
       : new Date(nowMs + effectiveCapDays * 24 * 60 * 60 * 1000);

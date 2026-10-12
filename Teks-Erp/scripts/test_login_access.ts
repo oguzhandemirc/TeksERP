@@ -202,7 +202,7 @@ async function main() {
     );
 
     // Zaman aşımı kapalıyken artık Part A "mutlak oturum tavanı" devreye girer:
-    // cap>0 (default 30) → exp yine VAR (≈cap gün); cap=0 → en uzun tavan (365 gün, G20 FAB-9).
+    // cap>0 (default 30) → exp yine VAR (≈cap gün); cap=0 → sert tavan (30 gün; G20 FAB-9 + Y1).
     await systemSettingService.setFeatureFlags(
       { autoLogoutOnExpiry: false, absoluteSessionCapDays: 30 },
       admin.id,
@@ -221,8 +221,8 @@ async function main() {
     const decOff = need(decodeJwt(expOff.token), "decode(expOff)");
     const offSpan = (decOff.exp ?? 0) - (decOff.iat ?? 0);
     check(
-      "4d cap=0 → JWT exp VAR (≈365 gün; exp'siz token üretilmez)",
-      typeof decOff.exp === "number" && Math.abs(offSpan - 365 * 24 * 60 * 60) < 120,
+      "4d cap=0 → JWT exp VAR (≈30 gün sert tavan; exp'siz token üretilmez)",
+      typeof decOff.exp === "number" && Math.abs(offSpan - 30 * 24 * 60 * 60) < 120,
       `exp-iat=${offSpan}sn`,
     );
     // Cap'i default'a döndür (sonraki bölümler + hijyen).

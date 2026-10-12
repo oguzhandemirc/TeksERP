@@ -1,6 +1,6 @@
 // =============================================================================
 // BEKÇİ — KİMLİK DİLİM 2: kilit kapatılamaz · oturum bitişi sunucuda (güvenlik denetimi)
-// Çalıştır: npx tsx scripts/test_kimlik_oturum_tavani.ts [--sonda=kapanir|--sonda=bitis|--sonda=tavan|--sonda=budama]
+// Çalıştır: npx tsx scripts/test_kimlik_oturum_tavani.ts [--sonda=kapanir|--sonda=bitis|--sonda=tavan|--sonda=budama|--sonda=y1]
 // =============================================================================
 // NEDEN: denetim O-04 — `settings:session` sahibi giriş deneme kilidini tek PATCH ile
 // kapatıp PIN/şifre uzayını sınırsız deneyebiliyordu. Artık kilit kapatılamaz: `false`
@@ -17,10 +17,13 @@
 // §4 süresi geçmiş kimlik kayıtlarının budaması (defter DEĞİL): gece bakımında ölü oturum
 //    (90 gün) ve TÜKETİLMEDEN süresi dolan 2FA kurulum penceresi (30 gün, aday sır taşır);
 //    tüketilmiş pencere (kurulum kanıtı, G1 mührü onu okur) ve taze pencere kalır
+// §5 (Y1) tavan 0 + zaman aşımı kapalı → token 365 gün DEĞİL, kapatılamaz sert tavan (30 gün);
+//    açık gün sayısı (45) ve zaman aşımı açık yolu değişmez; panel aynası aynı sayıyı söyler
 // SONDA (kalıcı): --sonda=kapanir → §1 statik metne eski kapalı dalını ekler (KIRMIZI olmalı)
 //                 --sonda=bitis   → §2 statik metinden süre denetimini siler (KIRMIZI olmalı)
 //                 --sonda=tavan   → §3 statik metinden tavan çağrısını siler (KIRMIZI olmalı)
 //                 --sonda=budama  → §4 statik metinde budama yüklemi `consumedAt: null`ı kaybeder (KIRMIZI olmalı)
+//                 --sonda=y1      → §5 issueToken'da tavan 0 eski "en uzun tavan"a (365) döner (KIRMIZI olmalı)
 // =============================================================================
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,6 +48,13 @@ import { generateTotpSecret } from "../src/services/totp.service";
 import { setShortCredentialKeyDirForTests } from "../src/lib/short-credential/keyring";
 import { MAINTENANCE_TASKS, TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS } from "../src/jobs/maintenance.job";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { AuthService } from "../src/services/auth.service";
+import {
+  DEFAULT_ABSOLUTE_SESSION_CAP_DAYS,
+  UNSET_ABSOLUTE_SESSION_CAP_DAYS,
+  effectiveAbsoluteSessionCapDays,
+  readSessionDurationMinutes,
+} from "../src/services/system-setting.service";
 
 const SONDA = process.argv.find((a) => a.startsWith("--sonda="))?.slice("--sonda=".length) ?? null;
 const KOK = resolve(__dirname, "..");
@@ -274,6 +284,51 @@ async function budama() {
     svc.includes("where: { consumedAt: null, expiresAt: { lt: cutoff } },"));
 }
 
+async function sertTavan() {
+  console.log("\n=== §5 (Y1) tavan 0 + zaman aşımı kapalı → sert tavan ===");
+  const U = UNSET_ABSOLUTE_SESSION_CAP_DAYS;
+  check("§5a sert tavan makul: ≥1 gün (vardiya boyu oturum kırılmaz) ve ≤ varsayılan tavan",
+    U >= 1 && U <= DEFAULT_ABSOLUTE_SESSION_CAP_DAYS, `sert=${U} varsayılan=${DEFAULT_ABSOLUTE_SESSION_CAP_DAYS}`);
+  check("§5b effectiveAbsoluteSessionCapDays: 0 → sert tavan, 45 → 45, 365 → 365",
+    effectiveAbsoluteSessionCapDays(0) === U && effectiveAbsoluteSessionCapDays(45) === 45 && effectiveAbsoluteSessionCapDays(365) === 365);
+
+  const parola = `Tk-${randomUUID()}`;
+  const u = await prisma.user.create({
+    data: { username: `TEST-kimliky1-${Date.now()}`, passwordHash: await AuthService.hashPassword(parola), fullName: "TEST Kimlik Y1" },
+    select: { id: true, username: true },
+  });
+  olusanKullanicilar.push(u.id);
+  const omur = async () => {
+    const g = await AuthService.login(u.username, parola);
+    const d = jwt.decode(g.token) as { iat: number; exp?: number; jti?: string };
+    const s = await prisma.session.findUnique({ where: { jti: d.jti! }, select: { expiresAt: true } });
+    return { span: typeof d.exp === "number" ? d.exp - d.iat : NaN, sessSpan: s ? (s.expiresAt.getTime() - Date.now()) / 1000 : NaN };
+  };
+  const gun = 86_400;
+  await hamYaz(SETTING_KEYS.AUTH_AUTO_LOGOUT_ON_EXPIRY, false);
+  await hamYaz(SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS, 0);
+  const o0 = await omur();
+  check("§5c cap=0 + kapalı → JWT exp-iat ≈ sert tavan (365 gün DEĞİL)", Math.abs(o0.span - U * gun) < 120, `span=${o0.span}s`);
+  check("§5d cap=0 + kapalı → Session.expiresAt ≈ sert tavan (sunucu kararı hizalı)", Math.abs(o0.sessSpan - U * gun) < 300, `sess=${Math.round(o0.sessSpan)}s`);
+  await hamYaz(SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS, 45);
+  const o45 = await omur();
+  check("§5e açık gün sayısı (45) DEĞİŞMEZ — ayarlı kurulum etkilenmez", Math.abs(o45.span - 45 * gun) < 120, `span=${o45.span}s`);
+  await hamYaz(SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS, 0);
+  await hamYaz(SETTING_KEYS.AUTH_AUTO_LOGOUT_ON_EXPIRY, true);
+  const dk = await readSessionDurationMinutes();
+  const oAcik = await omur();
+  check("§5f zaman aşımı AÇIK yolu değişmez (oturum süresi dakika)", Math.abs(oAcik.span - dk * 60) < 120, `span=${oAcik.span}s dk=${dk}`);
+
+  let auth = oku(resolve(KOK, "src/services/auth.service.ts"));
+  if (SONDA === "y1") auth = auth.replace("effectiveAbsoluteSessionCapDays(capDays)", "capDays > 0 ? capDays : MAX_ABSOLUTE_SESSION_CAP_DAYS");
+  check("§5g statik: issueToken tavanı TEK kaynaktan çözer, en uzun tavana (365) düşmez",
+    auth.includes("const effectiveCapDays = effectiveAbsoluteSessionCapDays(capDays);") && !auth.includes("MAX_ABSOLUTE_SESSION_CAP_DAYS"));
+  const form = oku(resolve(MONO, "Electron/src/pages/GeneralSettings/useSessionSettingsForm.ts"));
+  const bolum = oku(resolve(MONO, "Electron/src/pages/GeneralSettings/SessionSettingsSection.tsx"));
+  check("§5h panel aynası: UNSET_ABSOLUTE_CAP_DAYS backend'le eşit, etiket 0'ı 'en fazla 365' diye anlatmaz",
+    form.includes(`export const UNSET_ABSOLUTE_CAP_DAYS = ${U};`) && !bolum.includes("0 = en fazla"));
+}
+
 async function main() {
   const engel = hedefDbEngeli();
   if (engel) { check("§0 hedef DB yazılabilir", false, engel); process.exit(1); }
@@ -288,6 +343,7 @@ async function main() {
     await oturumBitisiSunucuda();
     await oturumTavani();
     await budama();
+    await sertTavan();
   } finally {
     await prisma.session.deleteMany({ where: { userId: { in: olusanKullanicilar } } }).catch(() => undefined);
     await prisma.user.updateMany({ where: { id: { in: olusanKullanicilar } }, data: { isActive: false } }).catch(() => undefined);

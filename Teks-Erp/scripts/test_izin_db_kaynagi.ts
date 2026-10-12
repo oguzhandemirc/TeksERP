@@ -9,7 +9,7 @@
 //      önbellek sıfırlanınca ya da yeni girişte taze kümeden okunur.
 //   §3 İzin yazıcısı (PermissionManagementService.grantPermission) tokenVersion'ı artırır →
 //      eski token 401; yeni giriş yeni izni taşır.
-//   §4 Mutlak tavan 0 + zaman aşımı kapalı → yeni token EXP'Lİ (en uzun tavan, 365 gün).
+//   §4 Mutlak tavan 0 + zaman aşımı kapalı → yeni token EXP'Lİ (sert tavan, 30 gün — Y1).
 //   §5 Geçiş: exp'siz eski token (canlı Session'lı) KABUL edilir, oturum başına TEK uyarı.
 // İzolasyon: TEST kullanıcısı + iki oturum ayarı anlık görüntüsü; `temizle()` hepsini
 // geri yükler/siler. DB GEREKİR (`tekserp_<oturum>_test`).
@@ -23,7 +23,7 @@ import { PermissionManagementService } from "../src/services/permission-manageme
 import { resetSessionTouchCacheForTest, verifyToken } from "../src/middlewares/auth.middleware";
 import { RBAC_DENIED_CODE, requirePermission } from "../src/middlewares/rbac.middleware";
 import {
-  MAX_ABSOLUTE_SESSION_CAP_DAYS,
+  UNSET_ABSOLUTE_SESSION_CAP_DAYS,
   SETTING_KEYS,
   invalidateFeatureFlagsCache,
 } from "../src/services/system-setting.service";
@@ -214,10 +214,10 @@ async function main(): Promise<void> {
     await rawSet(CAP_KEY, 0, userId);
     const giris4 = await AuthService.login(username, password);
     const d4 = jwt.verify(giris4.token, secret) as { iat: number; exp?: number };
-    const beklenen = MAX_ABSOLUTE_SESSION_CAP_DAYS * 86_400;
+    const beklenen = UNSET_ABSOLUTE_SESSION_CAP_DAYS * 86_400;
     check("§4a token exp claim'i TAŞIR", typeof d4.exp === "number", `exp=${String(d4.exp)}`);
     check(
-      `§4b exp - iat ≈ ${MAX_ABSOLUTE_SESSION_CAP_DAYS} gün`,
+      `§4b exp - iat ≈ ${UNSET_ABSOLUTE_SESSION_CAP_DAYS} gün (sert tavan)`,
       typeof d4.exp === "number" && Math.abs(d4.exp - d4.iat - beklenen) <= 5,
       `fark=${typeof d4.exp === "number" ? d4.exp - d4.iat : "yok"}s`,
     );

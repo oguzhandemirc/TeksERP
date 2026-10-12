@@ -756,7 +756,7 @@ export const SETTING_KEYS = {
   AUTH_MOBILE_LOCK_ON_BACKGROUND: "auth.mobileLockOnBackground",
   /** Mutlak oturum tavanı, GÜN. Default 30 (0..365). Zaman aşımı KAPALI iken bile
    *  token en fazla bu kadar gün geçerli olur (sızan token sonsuza kadar yaşamasın).
-   *  0 = en uzun tavan (365 gün) — exp'siz token üretilmez. Backend ENFORCE eder (issueToken). */
+   *  0 = sert tavan (30 gün, kapatılamaz) — exp'siz token üretilmez. Backend ENFORCE eder (issueToken). */
   AUTH_ABSOLUTE_SESSION_CAP_DAYS: "auth.absoluteSessionCapDays",
   /** Hızlı-PIN + kart giriş deneme kilidi açık mı. Default true. Kapalıyken deneme
    *  kilidi hiç uygulanmaz. Backend ENFORCE eder (login-lockout middleware). */
@@ -1103,9 +1103,16 @@ const MAX_MOBILE_IDLE_LOCK_MINUTES = 120;
 /** Mobil arka-plan kilidi varsayılanı — açık (eski davranış: idle kilit açıkken
  *  arka plana geçince de kilitlenirdi; artık bağımsız bayrak, default korunur). */
 export const DEFAULT_MOBILE_LOCK_ON_BACKGROUND = true;
-/** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = en uzun tavan (MAX gün) — exp'siz token yok. */
+/** Mutlak oturum tavanı (gün) varsayılanı + aralık. 0 = sert tavan (UNSET_…) — exp'siz token yok. */
 export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 export const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
+/** Tavan 0 ("sınır koyma") kapatılamaz sert tavana düşer (Y1): 365 günlük token fiilen süresizdi.
+ *  30 = varsayılan tavan = dakika ayarının üst sınırı (43200) — sahada kanıtlı en uzun ömür. */
+export const UNSET_ABSOLUTE_SESSION_CAP_DAYS = 30;
+/** Okunan tavanı gün olarak ETKİN tavana çevirir — issueToken'ın TEK kaynağı. */
+export function effectiveAbsoluteSessionCapDays(capDays: number): number {
+  return capDays > 0 ? capDays : UNSET_ABSOLUTE_SESSION_CAP_DAYS;
+}
 /** Hızlı-PIN/kart deneme kilidi varsayılanları + aralıkları. */
 export const DEFAULT_PIN_LOCKOUT_ENABLED = true;
 /** Kilidi kapatma isteğinin reddi (O-04) — eski panelin anahtarı da bu iletiyi görür. */
@@ -1893,7 +1900,7 @@ export interface FeatureFlags {
   /** Mobil "uygulama arka plana geçince anında kilitle" açık mı (default true).
    *  Idle kilitten bağımsız. Client (mobil) ENFORCE. */
   mobileLockOnBackground: boolean;
-  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = en fazla 365 gün). Zaman aşımı kapalı
+  /** Mutlak oturum tavanı — gün (default 30, 0..365; 0 = 30 gün sert tavan). Zaman aşımı kapalı
    *  olsa bile token en fazla bu kadar gün yaşar. Backend ENFORCE (issueToken). */
   absoluteSessionCapDays: number;
   /** Hızlı-PIN + kart giriş deneme kilidi açık mı (default true). Backend ENFORCE. */
@@ -3983,13 +3990,13 @@ export class SystemSettingService {
         v > MAX_ABSOLUTE_SESSION_CAP_DAYS
       ) {
         throw AppError.badRequest(
-          `Mutlak oturum tavanı 0–${MAX_ABSOLUTE_SESSION_CAP_DAYS} gün aralığında olmalı (0 = en fazla ${MAX_ABSOLUTE_SESSION_CAP_DAYS} gün)`
+          `Mutlak oturum tavanı 0–${MAX_ABSOLUTE_SESSION_CAP_DAYS} gün aralığında olmalı (0 = ${UNSET_ABSOLUTE_SESSION_CAP_DAYS} gün sert tavan)`
         );
       }
       await this.set(
         SETTING_KEYS.AUTH_ABSOLUTE_SESSION_CAP_DAYS,
         Math.floor(v),
-        "Mutlak oturum tavanı, gün — zaman aşımı kapalı olsa bile token en fazla bu kadar gün yaşar (0 = en fazla 365 gün)",
+        `Mutlak oturum tavanı, gün — zaman aşımı kapalı olsa bile token en fazla bu kadar gün yaşar (0 = ${UNSET_ABSOLUTE_SESSION_CAP_DAYS} gün sert tavan)`,
         userId
       );
     }
@@ -6693,10 +6700,10 @@ export async function readMobileIdleLockMinutes(
 }
 
 /**
- * Mutlak oturum tavanını GÜN olarak okur. Yoksa/geçersizse 30. 0 = en uzun tavan (KABUL
- * edilir — reader 0 döner); negatif → default. Tavan 365'e kırpılır. AuthService
- * .issueToken bunu okur: zaman aşımı kapalıyken bile token en fazla bu kadar gün
- * yaşar (capDays>0 → now+capDays gün exp; capDays=0 → now+365 gün exp).
+ * Mutlak oturum tavanını GÜN olarak okur. Yoksa/geçersizse 30. 0 KABUL edilir (reader 0
+ * döner, panel "sert tavan" gösterir); negatif → default. Tavan 365'e kırpılır. AuthService
+ * .issueToken bunu `effectiveAbsoluteSessionCapDays` ile okur: zaman aşımı kapalıyken bile
+ * token en fazla bu kadar gün yaşar (capDays>0 → capDays gün; 0 → UNSET_… sert tavan).
  */
 export async function readAbsoluteSessionCapDays(
   tx?: Pick<typeof prisma, "systemSetting">,

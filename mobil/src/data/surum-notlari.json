@@ -162,7 +162,7 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Oturum ayarlarında giriş deneme kilidi artık kapatılamaz; yalnız deneme sayısı ve ceza süreleri ayarlanır. Bir hesap aynı anda en çok 20 oturum açık tutabilir; sınır aşılınca en eski oturum kapanır."
+          "metin": "Oturum ayarlarında giriş deneme kilidi artık kapatılamaz; yalnız deneme sayısı ve ceza süreleri ayarlanır. Bir hesap aynı anda en çok 20 oturum açık tutabilir; sınır aşılınca en eski oturum kapanır. Mutlak oturum tavanına 0 yazmak artık “sınırsız” değildir: oturum en çok 30 gün açık kalır; daha uzun oturum isteniyorsa gün sayısını açıkça yazın (en çok 365)."
         }
       ]
     },

@@ -15,6 +15,7 @@ import {
   MIN_MOBILE_IDLE_LOCK_MIN,
   MAX_MOBILE_IDLE_LOCK_MIN,
   MAX_ABSOLUTE_CAP_DAYS,
+  UNSET_ABSOLUTE_CAP_DAYS,
   MIN_PIN_LOCKOUT_ATTEMPTS,
   MAX_PIN_LOCKOUT_ATTEMPTS,
   MIN_PIN_LOCKOUT_PENALTY_SEC,
@@ -101,14 +102,14 @@ export function SessionSettingsSection({
         />
 
         {/* 2) Mutlak oturum tavanı — birim GÜN (dakika değil → NumberField). Zaman
-            aşımı kapalı olsa bile token en fazla bu kadar gün yaşar; 0 = en fazla 365 gün
-            (exp'siz token üretilmez). */}
+            aşımı kapalı olsa bile token en fazla bu kadar gün yaşar; 0 = sunucunun sert
+            tavanı (30 gün, kapatılamaz; exp'siz token üretilmez). */}
         <div className="border-t pt-4">
           <NumberField
             hint={hint}
             id="absolute-session-cap-days"
-            label={`Mutlak oturum tavanı (gün, 0 = en fazla ${MAX_ABSOLUTE_CAP_DAYS} gün)`}
-            desc={`Oturum zaman aşımı kapalı olsa bile bir token en fazla bu kadar gün geçerli kalır — çalınan/sızan bir token sonsuza kadar kullanılamasın diye. 0 girilirse en uzun tavan uygulanır: token en fazla ${MAX_ABSOLUTE_CAP_DAYS} gün geçerli kalır (süresiz token üretilmez). Değişiklik yalnızca sonraki girişlere uygulanır.`}
+            label={`Mutlak oturum tavanı (gün, 0 = ${UNSET_ABSOLUTE_CAP_DAYS} gün)`}
+            desc={`Oturum zaman aşımı kapalı olsa bile bir token en fazla bu kadar gün geçerli kalır — çalınan/sızan bir token sonsuza kadar kullanılamasın diye. 0 "sınırsız" DEĞİLDİR: 0 girilirse kapatılamaz sert tavan uygulanır ve token en fazla ${UNSET_ABSOLUTE_CAP_DAYS} gün geçerli kalır; daha uzun oturum isteniyorsa gün sayısını açıkça yazın (en çok ${MAX_ABSOLUTE_CAP_DAYS}). Değişiklik yalnızca sonraki girişlere uygulanır.`}
             value={s.capDays}
             min={0}
             max={MAX_ABSOLUTE_CAP_DAYS}

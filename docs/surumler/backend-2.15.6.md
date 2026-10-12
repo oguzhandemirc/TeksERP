@@ -310,6 +310,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   kapanır. Varsayılan ayarda (aynı türde tek oturum) bu sınıra hiç varılmaz; ⚠️ "çoklu oturuma izin ver" ayarıyla
   tek hesabı 20'den fazla cihazda kullanan kurulum en eski cihazın oturumunu kaybeder.
 - Kullanılmadan süresi dolan iki adımlı doğrulama kurulum bağlantıları gece bakımında 30 gün sonra silinir.
+- Oturum ayarlarında "mutlak oturum tavanı" 0 iken ve otomatik çıkış kapalıyken giriş artık 365 gün değil en çok
+  30 gün geçerlidir (kapatılamaz sert tavan; varsayılan tavanla aynı). Gün sayısı açıkça yazılmış kurulum (1–365)
+  ve otomatik çıkışı açık kurulum etkilenmez. ⚠️ Tavanı 0 olan kurulumda tabletler/paneller güncellemeden sonraki
+  ilk girişten 30 gün sonra bir kez yeniden giriş ister; daha önce açılmış oturumlar kendi bitiş tarihini korur.
 
 ## 3. Sözleşme
 
@@ -352,6 +356,9 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   `PIN_LOCKOUT_REQUIRED` (eski panel anahtarı kapatırsa iletiyi görür, başka etkisi yok); `pinLockoutEnabled` cevapta
   hep `true`. Süresi dolan oturum JWT süre dolumuyla aynı 401'i alır. Tavanla düşen oturum 401 `SESSION_REVOKED`
   `reason:SESSION_LIMIT` — eski panel/tablet bilinmeyen sebepte sunucunun iletisini gösterip girişe döner.
+  `absoluteSessionCapDays:0` hâlâ kabul edilir (aralık 0–365 aynı); anlamı 365 gün → 30 gün sert tavan. Dolan token
+  bugünkü süre dolumuyla aynı 401'i alır; eski panel 0'ın yanında "en fazla 365 gün" yazmaya devam eder (yeni panel
+  1.6.5 doğru metni gösterir).
 - **Kırıldı mı:** HAYIR (hızlı PIN kısmı) — `POST /api/admin/users/:id/quick-pin` ve kimlik sıfırlama onayı gövdesindeki
   `pin` alanı kaldırıldı; eski panel gönderirse yok sayılır, cevap yine `{ pin }` (rastgele) döner. 409 "PIN
   kullanımda" artık dönmez.

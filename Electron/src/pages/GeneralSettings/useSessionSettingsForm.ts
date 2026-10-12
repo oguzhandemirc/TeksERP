@@ -14,9 +14,11 @@ export const DEFAULT_WORK_SESSION_IDLE = 20; // saha idle açılınca makul vars
 export const DEFAULT_MOBILE_IDLE_LOCK_MIN = 10;
 export const MIN_MOBILE_IDLE_LOCK_MIN = 1;
 export const MAX_MOBILE_IDLE_LOCK_MIN = 120; // 2 saat
-// Mutlak oturum tavanı — gün (0 = en fazla 365 gün; süresiz token üretilmez).
+// Mutlak oturum tavanı — gün (0 = sunucunun sert tavanı; süresiz token üretilmez).
 export const DEFAULT_ABSOLUTE_CAP_DAYS = 30;
 export const MAX_ABSOLUTE_CAP_DAYS = 365;
+/** 0 girilince sunucunun uyguladığı kapatılamaz tavan (backend UNSET_ABSOLUTE_SESSION_CAP_DAYS aynası). */
+export const UNSET_ABSOLUTE_CAP_DAYS = 30;
 // Hızlı PIN/kart deneme kilidi — aralıklar (backend ile birebir).
 export const DEFAULT_PIN_LOCKOUT_ATTEMPTS = 5;
 export const MIN_PIN_LOCKOUT_ATTEMPTS = 1;
