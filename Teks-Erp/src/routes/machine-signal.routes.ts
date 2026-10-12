@@ -27,7 +27,8 @@ async function collectorSeen(req: Request, _res: Response, next: NextFunction): 
     next(e);
   }
 }
-router.use(verifyCollectorSignature, requireTezgahEnabled, requireDokumaEnabled, collectorSeen);
+router.use(verifyCollectorSignature, requireTezgahEnabled, requireDokumaEnabled);
+router.use(collectorSeen);
 
 const stamp = z.string().datetime({ offset: true, message: "Zaman ISO 8601 biçiminde olmalı (örn. 2026-10-12T08:15:00Z)." });
 

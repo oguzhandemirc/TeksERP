@@ -26,6 +26,7 @@ export const VERIFICATION_SKIPPED_JOBS = [
   "startShiftCalendarScheduler", // vardiya takvimi (zamanlayıcı, DB yazar)
   "startShiftCloseScheduler", // vardiya karnesi (zamanlayıcı, DB yazar)
   "startLoomAlarmScheduler", // dokuma alarm motoru (zamanlayıcı, DB yazar)
+  "startMachineWatchdogScheduler", // kart watchdog'u D4 (zamanlayıcı, DB yazar: sessizlik + geçici kapanış)
   "startLicenseDoorbell", // satıcı kapı zili (dışarı)
   "startPatronCloudJobs", // patron bulutu eşitlemesi + gelen kutusu (dışarı + DB yazar)
   "startErrorReportJob", // hata raporu kuyruğu + gönderim (dışarı + DB yazar)

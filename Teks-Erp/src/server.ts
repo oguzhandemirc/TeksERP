@@ -270,8 +270,10 @@ function startLanListener(): Server {
     if (!VERIFYING) startShiftCalendarScheduler();
     // Kapanan vardiya × tezgah karnesi (M2) — aynı bayrak, aynı sıfır fark.
     if (!VERIFYING) startShiftCloseScheduler();
-    // Alarm motoru `tezgah.alarmEnabled` KAPALIYKEN, kart watchdog'u (D4) tezgah ∨ dokuma kapalıyken tur no-op.
-    if (!VERIFYING) { startLoomAlarmScheduler(); startMachineWatchdogScheduler(); }
+    // Dokuma alarm motoru: `tezgah.alarmEnabled` KAPALIYKEN tur no-op — alarm satırı doğmaz.
+    if (!VERIFYING) startLoomAlarmScheduler();
+    // Kart watchdog'u (D4): tezgah ∨ dokuma kapalıyken tur no-op; sessizlik duruş açmaz.
+    if (!VERIFYING) startMachineWatchdogScheduler();
     // Lisans yoklaması + kapı zili: kurulum etkinleşmemişse ya da satıcı adresi kapalıysa
     // (`LICENSE_SERVER_URL=kapali`) DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
     // Doğrulama kipinde motor yalnız YEREL ölçümü koşar (bütünlük dahil — `/health/yerel`in `lisans`ı), yoklamaz.
