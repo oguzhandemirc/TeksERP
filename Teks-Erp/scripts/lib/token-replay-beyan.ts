@@ -37,6 +37,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warp-beam-consume.service.ts::consumeBeam`]: { giris: { [`${S}warp-beam-consume.service.ts::consumeBeam`]: "R" } },
   // Destek talebi (3d-2): talep kaydı panelden clientToken ile doğar; satıcıya giden kimlik talebin id'sidir.
   [`${S}support.service.ts::createSupportTicket`]: { giris: { [`${S}support.service.ts::createSupportTicket`]: "R" } },
+  [`${S}credential-reset.service.ts::create`]: { giris: { [`${S}credential-reset.service.ts::create`]: "R" } },
   // Lisans sözleşmesi kabulü (Ek-7): kabul satırı panelden clientToken ile doğar; kimliği (kabulId) imzalı belgeye girer.
   [`${S}license-acceptance.service.ts::recordLicenseAcceptance`]: { giris: { [`${S}license-acceptance.service.ts::recordLicenseAcceptance`]: "R" } },
   // Backend güncelleme onayı (Dağıtım v2): karar satırı panelden clientToken ile doğar; kimliği (onayId) niyet dosyasına girer.
@@ -199,6 +200,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}loom-alarm-duty.service.ts::overrideReplay`]: ["shiftInstanceId", "stationId", "tier", "userId"],
   [`${S}loom-alarm-duty.service.ts::ruleReplay`]: ["tier", "kind", "userId", "permissionCode"],
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
+  [`${S}credential-reset.service.ts::replayFor`]: ["hedef", "tur"],
   [`${S}license-acceptance.service.ts::replayFor`]: ["adSoyad", "unvan", "metinOzeti"],
   [`${S}update-approval.service.ts::replayFor`]: ["surum", "zamanlama", "onaylayan"],
   [`${S}warp-beam-mount.service.ts::mountReplay`]: ["beamId", "kind", "machineId", "mountPosition"],

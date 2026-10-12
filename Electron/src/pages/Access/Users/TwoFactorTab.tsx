@@ -9,6 +9,7 @@ import { adminUserService } from "@/services/adminUserService";
 import { buildTotpEnrollHash, buildTotpEnrollUrl } from "@/lib/totp-enroll-url";
 import { useAuthStore } from "@/store/auth";
 import { factoryLocaleDateString, factoryLocaleTimeString } from "@/lib/factory-time";
+import { CredentialApprovalRequest } from "./CredentialApprovalRequest";
 import { TWO_FACTOR_HINT } from "@/lib/totp-auth";
 
 interface Props {
@@ -77,6 +78,7 @@ export function TwoFactorTab({ userId, username }: Props) {
 
   return (
     <div className="space-y-4">
+      <CredentialApprovalRequest error={resetMut.error} userId={userId} kind="TOTP" />
       <div className="flex gap-3 rounded-md border bg-card p-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
           {status?.enabled ? (

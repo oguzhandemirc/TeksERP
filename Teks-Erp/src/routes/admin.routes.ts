@@ -15,6 +15,7 @@ import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { TotpAccountService } from "../services/totp-account.service";
+import { assertDirectCredentialResetAllowed } from "../services/credential-reset.service";
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { MODULE_SETTING_KEYS, SUPERADMIN_ONLY_SETTING_KEYS } from "../constants/module-flags";
 import {
@@ -529,6 +530,7 @@ router.post(
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      await assertDirectCredentialResetAllowed(req.user?.userId, req.params.id as string, "TOTP");
       await TotpAccountService.reset({
         userId: req.params.id as string,
         byId: req.user?.userId as string,
@@ -764,6 +766,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { password } = resetPasswordSchema.parse(req.body);
+      await assertDirectCredentialResetAllowed(req.user?.userId, req.params.id as string, "PASSWORD");
       await PermissionManagementService.resetUserPassword(
         req.params.id as string,
         password,
@@ -791,6 +794,7 @@ router.post(
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      await assertDirectCredentialResetAllowed(req.user?.userId, req.params.id as string, "CARD");
       const result = await AuthService.rotateCardToken(
         req.params.id as string,
         req.user?.userId
@@ -883,6 +887,8 @@ router.post(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = quickPinSchema.parse(req.body ?? {});
+      // PIN'i KALDIRMAK kimlik teslim etmez — kapı yalnız yeni PIN doğuran dalda.
+      if (!body.clear) await assertDirectCredentialResetAllowed(req.user?.userId, req.params.id as string, "QUICK_PIN");
       const result = await AuthService.setQuickPin(
         req.params.id as string,
         body,

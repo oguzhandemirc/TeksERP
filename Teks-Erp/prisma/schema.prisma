@@ -653,6 +653,10 @@ model User {
   /// İlk kurulum sözleşme kabulleri (kim kabul etti — Ek-7).
   licenseAcceptances              LicenseAcceptance[]       @relation("LicenseAcceptanceAcceptedBy")
   updateApprovals                 UpdateApproval[]          @relation("UpdateApprovalApprovedBy")
+  /// İki kişilik kimlik sıfırlama: hedef · talep eden · karar veren.
+  credentialResetTargets          CredentialResetRequest[]  @relation("CredentialResetTarget")
+  credentialResetsRequested       CredentialResetRequest[]  @relation("CredentialResetRequestedBy")
+  credentialResetsDecided         CredentialResetRequest[]  @relation("CredentialResetDecidedBy")
 
   @@map("users")
 }
@@ -11232,4 +11236,31 @@ model UpdateApproval {
 
   @@index([createdAt])
   @@map("update_approvals")
+}
+
+/// Daha yetkili bir hesabın kimlik sıfırlaması için İKİ KİŞİLİK onay talebi (parola · iki adımlı doğrulama ·
+/// hızlı PIN · kart). Talep (`requestedById`+`createdAt`) ve karar (`decidedById`+`decidedAt`) bu satırda kalır;
+/// durum yalnız PENDING'den bir kez çıkar (atomik claim). İşlemi ONAYLAYAN uygular — sır yalnız ona döner.
+model CredentialResetRequest {
+  id            String    @id @default(uuid()) @db.Uuid
+  clientToken   String?   @unique @db.Uuid
+  targetUserId  String    @db.Uuid
+  /// PASSWORD · TOTP · QUICK_PIN · CARD — CHECK `credential_reset_requests_kind_check`.
+  kind          String    @db.VarChar(12)
+  reason        String?   @db.VarChar(500)
+  /// PENDING · APPLIED · REJECTED · CANCELLED — CHECK `credential_reset_requests_status_check`.
+  status        String    @default("PENDING") @db.VarChar(12)
+  requestedById String    @db.Uuid
+  decidedById   String?   @db.Uuid
+  decidedAt     DateTime? @db.Timestamptz
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
+
+  targetUser  User  @relation("CredentialResetTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  requestedBy User  @relation("CredentialResetRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  decidedBy   User? @relation("CredentialResetDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([targetUserId])
+  @@map("credential_reset_requests")
 }

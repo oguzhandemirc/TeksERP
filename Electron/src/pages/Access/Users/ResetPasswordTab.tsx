@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { adminUserService } from "@/services/adminUserService";
+import { CredentialApprovalRequest } from "./CredentialApprovalRequest";
 import { newPasswordSchema, PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 
 interface Props {
@@ -56,6 +57,7 @@ export function ResetPasswordTab({ userId, username }: Props) {
       onSubmit={form.handleSubmit((v) => mutation.mutate(v.password))}
       className="space-y-4"
     >
+      <CredentialApprovalRequest error={mutation.error} userId={userId} kind="PASSWORD" />
       <div className="flex gap-3 rounded-md border bg-card p-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
           <KeyRound className="h-4 w-4" />

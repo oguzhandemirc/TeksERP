@@ -16,6 +16,7 @@ import { passwordPolicyViolation } from "../constants/password-policy";
 import { AuditService } from "./audit.service";
 import { credentialReseal } from "./helpers/system-account-seal.helper";
 import { AuthService } from "./auth.service";
+import { uncoveredCodes } from "./helpers/permission-cover.helper";
 import { readLoginMethods } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
@@ -237,6 +238,11 @@ export class PermissionManagementService {
       userId,
       zatenVar ? [] : [input.permissionId],
     );
+    await PermissionManagementService.assertGrantWithinActor(
+      actorUserId,
+      userId,
+      zatenVar ? [] : [input.permissionId],
+    );
 
     const created = await prisma.$transaction(async (tx) => {
       const before = await tx.userPermission.findUnique({
@@ -354,6 +360,11 @@ export class PermissionManagementService {
 
     // Yükseltme kapısı — mutasyondan ÖNCE (T2-013).
     await PermissionManagementService.assertNoSelfEscalation(
+      actorUserId,
+      userId,
+      toAdd.map((i) => i.permissionId),
+    );
+    await PermissionManagementService.assertGrantWithinActor(
       actorUserId,
       userId,
       toAdd.map((i) => i.permissionId),
@@ -794,6 +805,33 @@ export class PermissionManagementService {
     );
   }
 
+  /**
+   * Yetki kademesi — BAŞKASINA verilen izin aktörün kendi efektif kümesini AŞAMAZ (güvenlik denetimi
+   * Bölge 2 B1a): aksi hâlde `admin:users` taşıyan biri kendinde olmayan yetkiyi (ör. `admin:*`, SoD
+   * üçlüsü) yeni ya da mevcut bir hesaba verip o hesapla çalışabiliyordu. Kendi hesabı yukarıdaki
+   * `SELF_ESCALATION` kapısındadır; kapsama yüklemi tek kaynak `uncoveredCodes`.
+   */
+  private static async assertGrantWithinActor(
+    actorUserId: string | undefined,
+    userId: string,
+    addedPermissionIds: string[],
+  ): Promise<void> {
+    if (!actorUserId || actorUserId === userId) return;
+    if (addedPermissionIds.length === 0) return;
+    const eklenen = await prisma.permission.findMany({
+      where: { id: { in: addedPermissionIds } },
+      select: { code: true },
+    });
+    const actorPerms = await AuthService.getEffectivePermissions(actorUserId);
+    const asan = uncoveredCodes(actorPerms, eklenen.map((p) => p.code));
+    if (asan.length === 0) return;
+    throw AppError.conflict(
+      "Kendinizde olmayan yetkiyi başkasına veremezsiniz — bu değişikliği o yetkiyi taşıyan bir yönetici yapmalı. " +
+        `Sizde olmayan: ${asan.join(", ")}`,
+      { code: "GRANT_EXCEEDS_ACTOR", requestedCodes: asan },
+    );
+  }
+
   /** Kullanıcı-yöneticisi izin kodları — tek kaynak `factory-admin.helper`. */
   private static readonly ADMIN_CODES = USER_ADMIN_CODES;
 
@@ -1222,6 +1260,7 @@ export class PermissionManagementService {
 
     // Yükseltme kapısı: şablon uygulamak da bir yetki yazımıdır (T2-013).
     await PermissionManagementService.assertNoSelfEscalation(actorUserId, userId, toAdd);
+    await PermissionManagementService.assertGrantWithinActor(actorUserId, userId, toAdd);
 
     if (toAdd.length) {
       // İzin EKLENDİ → uçuştaki token'ı geçersiz kıl (grant/revoke/set ile AYNI

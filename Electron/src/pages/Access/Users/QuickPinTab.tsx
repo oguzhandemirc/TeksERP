@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 import { formatFactory } from "@/lib/factory-time";
 import { adminUserService } from "@/services/adminUserService";
+import { CredentialApprovalRequest } from "./CredentialApprovalRequest";
 import { MethodDisabledNotice } from "./MethodDisabledNotice";
 
 interface Props {
@@ -66,6 +67,7 @@ export function QuickPinTab({ userId, username }: Props) {
   return (
     <div className="space-y-4">
       {!methodEnabled && <MethodDisabledNotice label="Hızlı PIN" />}
+      <CredentialApprovalRequest error={mutation.error} userId={userId} kind="QUICK_PIN" />
       <div className="flex gap-3 rounded-md border bg-card p-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
           <KeySquare className="h-4 w-4" />

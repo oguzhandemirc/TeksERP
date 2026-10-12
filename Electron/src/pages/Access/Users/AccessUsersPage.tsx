@@ -27,6 +27,7 @@ import { UserFormDialog, type UserFormValues } from "./UserFormDialog";
 import { UserDetailDialog } from "./UserDetailDialog";
 import { NewUserCredentialsDialog } from "./NewUserCredentialsDialog";
 import { ShortCredentialsDialog } from "./ShortCredentialsDialog";
+import { PendingCredentialResets } from "./PendingCredentialResets";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 
@@ -221,6 +222,8 @@ export function AccessUsersPage() {
           Pasifleri göster
         </label>
       </div>
+
+      {hasPermission("admin:users") && <PendingCredentialResets />}
 
       <PageBody>
         <Table containerClassName="overflow-visible">
