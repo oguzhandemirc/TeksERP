@@ -189,6 +189,9 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   kartı + durum notu.
 - `d0cc71059` — B1 satıcı kolu (satıcı sunucusu ayrı yayın; bu pakete girmez): ≤2.15.5 fabrikadan gelen taşıma
   talebi açılmaz (409 `TASIMA_SURUM_ESKI`); protokol hata kataloğuna kod (fabrika aynası + TR mesajı).
+- `dcd25fc67` · `acc88f1b5` — taşıma talebi iptal yüzeyi (satıcı sunucusu + portal web, ayrı yayın; bu pakete
+  girmez): bayi kendi kurulumunu hedefleyen bekleyen taşıma talebini portalda görür ve gerekçeyle reddeder,
+  onay yalnız satıcıda; satıcı taşıma listesinde hedef kimlik kolonu ve süzgeci.
 - `7e4137228` — B2: kullanılamayan lisans deposu (program/yedek dizini içinde, yazılamaz, DB izsiz okunamaz) =
   `KURULUM_HATASI` kilit sınıfı (yalnız korumalı derlemede); lisans ekranı + "verilerimi al" açık.
 - `6fd3d8ae9` — B4: destek hesabının mührü iki adımlı doğrulamayı (TOTP) da kapsar — DB'den TOTP
