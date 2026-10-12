@@ -11,12 +11,14 @@
 //   §3 ⭐ niyet + zamanlayıcı (DB): yürürlükten önce niyette onay YOK · boot yolu (`scheduleApprovalActivation`)
 //      zamanlayıcıyı kalan süreyle kurar ve yürürlükte niyet KENDİLİĞİNDEN onaylı yazılır · GERI_AL zamanlayıcı bırakmaz ·
 //      boot (`startLicensePoll`) ve onay kaydı zamanlayıcıyı çağırır (kaynak taraması) · doğrulama kipinde kurulmaz
+//   §4 ⭐ ayna: panel ve tablet `src/lib/sunucu-kesintisi.ts` BAYT-EŞİT (sha256) · istemcinin eşikleri backend'in ön
+//      duyuru ve bayatlık sabitleriyle aynı · iki istemcinin API istemcisi bekleticiyi çağırır
 // NEGATİF SONDA (elle, geri alındı; commit mesajında).
 // =============================================================================
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { DAY_MS, msToIso, windowIntervals, type LeaseUpdatePolicy } from "../src/lib/license/protocol";
 import { UPDATER_DIR_ENV, UPDATER_INTENT_FILE, type UpdaterIntent } from "../src/lib/license/updater-ipc";
@@ -159,6 +161,23 @@ async function zamanlayici(): Promise<void> {
   check("§3g onay kaydı (ve tekrar oynatma) cevabı zamanlayıcıyı kurar", /async function respondFor[\s\S]{0,200}scheduleApprovalActivationQuietly\(\)/.test(servis));
 }
 
+function ayna(): void {
+  console.log("\n§4 istemci aynası (panel + tablet)");
+  const kok = path.join(__dirname, "..", "..");
+  const oku = (rel: string): string => (fs.existsSync(path.join(kok, rel)) ? fs.readFileSync(path.join(kok, rel), "utf8") : "");
+  const panel = oku("Electron/src/lib/sunucu-kesintisi.ts");
+  const tablet = oku("mobil/src/lib/sunucu-kesintisi.ts");
+  const sha = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 12);
+  check("§4a ⭐ iki kopya var ve BAYT-EŞİT", panel.length > 0 && panel === tablet, `${sha(panel)} / ${sha(tablet)}`);
+  const sabit = (ad: string): number => Number(panel.match(new RegExp(`export const ${ad} = ([0-9_]+);`))?.[1]?.replace(/_/g, ""));
+  check("§4b ⭐ istemci eşikleri backend'le aynı (ön duyuru 300 sn · bayatlık 900 sn)",
+    sabit("OUTAGE_NOTICE_SECONDS") * 1000 === UPDATE_APPROVAL_NOTICE_MS && sabit("OUTAGE_STALE_SECONDS") * 1000 === UPDATE_OUTAGE_STALE_MS,
+    `${sabit("OUTAGE_NOTICE_SECONDS")} / ${sabit("OUTAGE_STALE_SECONDS")}`);
+  check("§4c panel apiClient + tablet api.ts istek interceptor'ında bekletici",
+    /interceptors\.request\.use\(async \(config\) => \{\s*await holdForOutage\(config\.url\);/.test(oku("Electron/src/services/apiClient.ts")) &&
+      /interceptors\.request\.use\(async \(config\) => \{\s*await holdForOutage\(config\.url\);/.test(oku("mobil/src/services/api.ts")));
+}
+
 async function temizlik(): Promise<void> {
   const eski = await prisma.user.findMany({ where: { username: { startsWith: ON_EK } }, select: { id: true } });
   const ids = [...new Set([...olusan, ...eski.map((x) => x.id)])];
@@ -177,6 +196,7 @@ async function main(): Promise<void> {
   fs.mkdirSync(KOK, { recursive: true });
   turetim();
   gorunum();
+  ayna();
   await zamanlayici();
 }
 

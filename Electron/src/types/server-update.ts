@@ -1,5 +1,6 @@
 // Sunucu (backend) güncellemesi — `GET /api/guncelleme/durum` görünümü (backend `src/services/update-status.service.ts`
 // `UpdateStatus`, sözleşme `docs/design/GUNCELLEYICI.md` §3.2 sürüm 4). Panel yalnız GÖSTERİR; karar güncelleyicinindir.
+import type { OutageNotice } from "@/lib/sunucu-kesintisi";
 
 export type UpdatePolicyMode = "OTOMATIK" | "ONAYLI" | "DONDUR";
 export type UpdateDecisionKind = "GUNCEL" | "DONDURULDU" | "UYGUN_DEGIL" | "ONAY_BEKLIYOR" | "PENCERE_BEKLIYOR" | "KUR";
@@ -44,6 +45,8 @@ export interface UpdateApprovalView {
   zamanlama: ApprovalTiming;
   onaylayan: { id: string; ad: string };
   zaman: string;
+  /** Onayın güncelleyiciye ulaştığı an (kayıt + 5 dk ön duyuru); eski backend göndermez. */
+  yururluk?: string;
   kullanildi: boolean;
 }
 
@@ -93,6 +96,7 @@ export interface UpdateStatus {
   canlilik: { sonCanlilik: string | null; esikSn: number | null; gecikmeSn: number | null; yanitVermiyor: boolean } | null;
   onay: UpdateApprovalView | null;
   eylemler: UpdateActions;
+  kesinti?: OutageNotice | null;
 }
 
 /**
@@ -107,6 +111,8 @@ export interface UpdateSummary {
   karar: { karar: UpdateDecisionKind; neden: string | null } | null;
   yerel: { durum: string; hataKodu: string | null; ilerleme: { indirilen: number; toplam: number } | null } | null;
   son: { sonuc: UpdateResultKind; hedefSurum: string; bitis: string } | null;
+  /** Sunucunun planlı ~1 dk kesintisi (eski backend göndermez → yok sayılır). */
+  kesinti?: OutageNotice | null;
 }
 
 export interface RecordUpdateApprovalInput {

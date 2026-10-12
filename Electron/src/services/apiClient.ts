@@ -12,6 +12,7 @@ import { useLicenseSuspension } from "@/lib/license/suspension";
 import { activationLockClassOf, useActivationLock } from "@/lib/license/activation-lock";
 import { licenseModuleKey, licenseModuleLabel } from "@/lib/license/ceiling";
 import { PASSWORD_CHANGE_REQUIRED_CODE } from "@/types/auth";
+import { createRequestHold } from "@/lib/sunucu-kesintisi";
 
 /**
  * KURULUM KARARI olan 403'ler yetki sorunu değildir — "yetkiniz yok" kullanıcıyı rolünü
@@ -93,7 +94,24 @@ const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+/**
+ * Duyurulu sunucu güncellemesinde (şerit) sunucu yanıtsızsa yeni istek GÖNDERİLMEDEN bağlantıyı bekler (en çok 3 dk):
+ * yazılan formun "Kaydet"i bağlantı gelince çalışır. Sağlık yoklaması `/health` bekletilmez.
+ */
+const holdForOutage = createRequestHold({
+  unreachable: () => useServerStatusStore.getState().status === "offline",
+  probeHealth: async () => {
+    try {
+      await apiClient.get("/health", { suppressErrorToast: true, timeout: 3000 });
+      return true;
+    } catch (e) {
+      return axios.isAxiosError(e) && Boolean(e.response);
+    }
+  },
+});
+
 apiClient.interceptors.request.use(async (config) => {
+  await holdForOutage(config.url);
   (config as TimedConfig).__startedAt = Date.now();
   const token = await tokenStore.get();
   // Per-istek açık Authorization (ör. logout revoke'unun YAKALANMIŞ token'ı)

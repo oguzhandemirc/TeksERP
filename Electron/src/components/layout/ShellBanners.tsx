@@ -5,6 +5,7 @@ import { FactoryAdminCard } from "./FactoryAdminCard";
 import { DefaultSuperadminBanner } from "./DefaultSuperadminBanner";
 import { SystemAccountSealBanner } from "./SystemAccountSealBanner";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
+import { ServerOutageStrip } from "./ServerOutageStrip";
 import { UpdateProgressWindow } from "@/pages/System/ServerUpdates/UpdateProgressWindow";
 import { UpdateApprovalPrompt } from "@/pages/System/ServerUpdates/UpdateApprovalPrompt";
 import { LoomAlarmStrip } from "@/pages/Operations/LoomAlarms/LoomAlarmStrip";
@@ -27,6 +28,8 @@ export function ShellBanners() {
       <FactoryTimezoneBanner />
       {/* Destek hesabında, fabrika yöneticisi yokken — uyarır, engellemez. */}
       <FactoryAdminCard />
+      {/* Sunucu güncellemesi: 5 dk önce uyarı, kesintide "yeniden bağlanıyor" (o sırada çevrimdışı şeridi susar). */}
+      <ServerOutageStrip />
       <ServerOfflineBanner />
       {/* Backend güncellemesi onay istemi (yalnız license:manage; Sonra = bu oturumda sus). */}
       <UpdateApprovalPrompt />

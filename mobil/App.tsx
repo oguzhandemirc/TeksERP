@@ -36,6 +36,7 @@ import UpdateGate from './src/components/UpdateGate';
 import { SurumNotuGate } from './src/components/SurumNotuGate';
 import ChannelStrip from './src/components/ChannelStrip';
 import LicenseBanner from './src/components/LicenseBanner';
+import ServerOutageStrip from './src/components/ServerOutageStrip';
 import LicenseSuspendedGate from './src/components/lock/LicenseSuspendedGate';
 import { LICENSE_STATUS_KEY } from './src/hooks/useLicenseStatus';
 import { startLanTlsNativeSync } from './src/services/lanTlsPins';
@@ -216,6 +217,8 @@ export default function App() {
             <ChannelStrip />
             {/* Lisans bandı — ChannelStrip kalıbı; gözlem kipinde / normal kademede hiç çizilmez. */}
             <LicenseBanner />
+            {/* Sunucu güncellemesi: 5 dk önce "kaydedin", kesintide "yeniden bağlanıyor" — lisans bandının altında. */}
+            <ServerOutageStrip />
           </View>
         </PersistQueryClientProvider>
       </SafeAreaProvider>

@@ -21,9 +21,9 @@ export function actionText(kind: UpdateApprovalChoice, surum: string, mode: Upda
       button: "Şimdi kur",
       title: `${surum} şimdi kurulsun mu?`,
       description:
-        "Güncelleyici önce yedek alır, yeni sürümü kurar ve sağlığını denetler; sorun olursa eski sürüme kendiliğinden döner. " +
-        "Kurulum sürerken panel ve tabletler sunucuya birkaç dakika bağlanamaz.",
-      done: `Onay verildi: ${surum} bir dakika içinde kurulmaya başlar.`,
+        "Kurulum 5 dk sonra başlar; bütün panel ve tablet ekranlarında uyarı çıkar. Bağlantı ~1 dk kesilir, yazılan formlar kaybolmaz. " +
+        "Güncelleyici önce yedek alır, yeni sürümü kurar ve sağlığını denetler; sorun olursa eski sürüme kendiliğinden döner.",
+      done: `Onay verildi: ${surum} 5 dk sonra kurulmaya başlar; bütün ekranlar uyarılır.`,
     };
   }
   if (kind === "PENCERE") {
@@ -31,7 +31,7 @@ export function actionText(kind: UpdateApprovalChoice, surum: string, mode: Upda
     return {
       button: "Bu gece kur",
       title: `${surum} güncelleme penceresinde kurulsun mu?`,
-      description: `Kurulum ${at} arasında kendiliğinden başlar; sorun olursa eski sürüme döner.`,
+      description: `Kurulum ${at} arasında kendiliğinden başlar (en erken 5 dk sonra; öncesinde bütün ekranlarda uyarı çıkar, bağlantı ~1 dk kesilir); sorun olursa eski sürüme döner.`,
       done: `Onay verildi: ${surum} güncelleme penceresinde kurulacak.`,
     };
   }

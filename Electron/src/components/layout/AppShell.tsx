@@ -12,6 +12,7 @@ import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
 import { useServerHeartbeat } from "@/hooks/useServerClock";
+import { useOutagePolling } from "@/hooks/useServerOutage";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import { useExpiryAutoLogout } from "@/hooks/useExpiryAutoLogout";
 import { useLicenseRelay } from "@/hooks/useLicenseRelay";
@@ -80,6 +81,8 @@ function MenuShell() {
   });
   useTabShortcuts();
   useServerHeartbeat();
+  // Sunucu güncellemesinin planlı kesintisi (şerit + istek bekletme) — oturumdaki her kullanıcı.
+  useOutagePolling(true);
   // Güncelleme sonrası "neler değişti" penceresi — kararı açılışta verir.
   const { kuruluSurum } = useSurumNotuAcilis();
   // Her oturum açılışında güncelleme kontrolü (açılış + 15 dk'lık ritme ek).

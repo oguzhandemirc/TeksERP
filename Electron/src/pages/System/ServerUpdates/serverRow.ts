@@ -50,6 +50,12 @@ export function serverRowState(s: UpdateSummary): ServerRowState {
   }
   const newer = s.bekleyen && s.bekleyen.surum !== s.kuruluSurum ? s.bekleyen : null;
   if (y?.durum === "UYGULANIYOR" || newer?.karar === "KUR") return { ...base, label: "Kuruluyor", tone: "info" };
+  // Onaylanmış (5 dk ön duyuru) ya da pencereyi bekleyen kurulumun anı: bekleyen onay/yeni sürüm satırından önce gelir.
+  const planned = newer && s.kesinti && !s.kesinti.suruyor ? s.kesinti.planlanan : null;
+  if (newer && planned) {
+    const hint = `${when(planned)} — 5 dk önce bütün ekranlarda uyarı çıkar; bağlantı ~1 dk kesilir.`;
+    return { ...base, label: `Kurulum planlandı — ${newer.surum}`, tone: "info", hint };
+  }
   if (newer?.karar === "ONAY_BEKLIYOR") return { ...base, label: `Onay bekliyor — ${newer.surum}`, tone: "warning", awaitingApproval: true };
   if (newer) return { ...base, label: `Yeni sürüm ${newer.surum}`, tone: "info", hint: decisionText(newer.karar, newer.neden) };
   return { ...base, label: "✓ Güncel", tone: "success" };

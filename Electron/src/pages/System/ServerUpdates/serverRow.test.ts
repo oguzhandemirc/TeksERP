@@ -62,6 +62,16 @@ describe("serverRowState — öncelik sırası", () => {
     expect(p.hint).toBeTruthy();
   });
 
+  it("planlı kurulum (onay ön duyurusu / pencere anı): 'Kurulum planlandı — sürüm' + an + 5 dk uyarı; onay beklemez, kuruluyor'un ARDINDA", () => {
+    const kesinti = { planlanan: "2026-10-12T10:05:00.000Z", kalanSn: 300, suruyor: false };
+    const s = serverRowState(ozet({ bekleyen: onayBekleyen, kesinti }));
+    expect(s.label).toBe("Kurulum planlandı — 2.13.0");
+    expect(s.awaitingApproval).toBe(false);
+    expect(s.hint).toMatch(/5 dk önce bütün ekranlarda uyarı çıkar; bağlantı ~1 dk kesilir/);
+    expect(serverRowState(ozet({ bekleyen: onayBekleyen, kesinti, yerel: { durum: "UYGULANIYOR", hataKodu: null, ilerleme: null } })).label).toBe("Kuruluyor");
+    expect(serverRowState(ozet({ bekleyen: onayBekleyen, kesinti: { ...kesinti, suruyor: true } })).label).toBe("Onay bekliyor — 2.13.0");
+  });
+
   it("aday zaten kurulu sürümse 'yeni sürüm' yok → ✓ Güncel", () => {
     expect(serverRowState(ozet({ bekleyen: { ...onayBekleyen, surum: "2.12.0" } }))).toMatchObject({ label: "✓ Güncel", tone: "success", awaitingApproval: false });
     expect(serverRowState(ozet()).label).toBe("✓ Güncel");

@@ -8,6 +8,8 @@ import { connectToDiscoveredServer } from "@/lib/server-identity";
 import { Button } from "@/components/ui/button";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { IS_ELECTRON } from "@/lib/runtime-env";
+import { noticeActive } from "@/lib/sunucu-kesintisi";
+import { useOutageClock, useOutageTarget } from "@/hooks/useServerOutage";
 
 /**
  * "Sunucuya ulaşılamıyor" şeridi + KENDİ KENDİNİ ONARMA.
@@ -34,6 +36,8 @@ export function ServerOfflineBanner() {
   const [searching, setSearching] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const discovery = useServerDiscovery();
+  const outage = useOutageTarget();
+  const now = useOutageClock(outage);
 
   useEffect(() => {
     if (status !== "offline") {
@@ -44,7 +48,8 @@ export function ServerOfflineBanner() {
     return () => clearTimeout(t);
   }, [status]);
 
-  if (!visible) return null;
+  // Duyurulu güncelleme kesintisini `ServerOutageStrip` anlatır; "adres değişti" araması burada yanlış ipucudur.
+  if (!visible || noticeActive(outage, now)) return null;
 
   const handleSearch = async (): Promise<void> => {
     setSearching(true);

@@ -11,9 +11,12 @@ import { useLicenseStore } from '../store/licenseStore';
 import { classifyLicenseError, licenseBlockToast } from '../lib/license';
 import { recordNetSample } from './netStats';
 import {
+  offlineReason,
   reportServerReachable,
   reportServerUnreachable,
+  revalidateServer,
 } from '../offline/serverReachability';
+import { createRequestHold } from '../lib/sunucu-kesintisi';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -133,7 +136,15 @@ export function handleLicenseRejection(details: unknown): void {
   Toast.show({ type: 'error', text1: toast.text1, text2: toast.text2, visibilityTime: 6000 });
 }
 
+// Duyurulu sunucu güncellemesinde (şerit) sunucu yanıtsızsa yeni istek GÖNDERİLMEDEN bağlantıyı bekler (en çok 3 dk):
+// yazılan formun kaydı bağlantı gelince gider. Yoklama `revalidateServer` ham fetch'tir, bu interceptor'dan geçmez.
+const holdForOutage = createRequestHold({
+  unreachable: () => offlineReason() === 'server',
+  probeHealth: revalidateServer,
+});
+
 apiClient.interceptors.request.use(async (config) => {
+  await holdForOutage(config.url);
   (config as TimedConfig).__startedAt = Date.now();
   // baseURL'i her istekte store'dan oku — kullanıcı Settings'ten değiştirdiğinde
   // restart gerekmeden anında geçer.

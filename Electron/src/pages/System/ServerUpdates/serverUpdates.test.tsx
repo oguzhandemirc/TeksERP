@@ -147,6 +147,18 @@ describe("sunucu güncellemesi — ekran", () => {
     expect(c.clientToken).not.toBe(b.clientToken);
   });
 
+  it("B7: 'Şimdi kur' onay penceresi 5 dk uyarı + sonra kurulumu açıkça yazar; pencere metni en erken 5 dk der", async () => {
+    perms.push("license:manage");
+    status.mockResolvedValue(durum());
+    renderWithProviders(<ServerUpdatesPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Şimdi kur" }));
+    const dlg = await screen.findByRole("dialog");
+    expect(dlg.textContent).toMatch(/Kurulum 5 dk sonra başlar; bütün panel ve tablet ekranlarında uyarı çıkar/);
+    expect(dlg.textContent).toMatch(/Bağlantı ~1 dk kesilir, yazılan formlar kaybolmaz/);
+    expect(actionText("HEMEN", "2.13.0", "ONAYLI", null).done).toBe("Onay verildi: 2.13.0 5 dk sonra kurulmaya başlar; bütün ekranlar uyarılır.");
+    expect(actionText("PENCERE", "2.13.0", "ONAYLI", null).description).toMatch(/en erken 5 dk sonra; öncesinde bütün ekranlarda uyarı çıkar/);
+  });
+
 });
 
 describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
