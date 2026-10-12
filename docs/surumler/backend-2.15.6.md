@@ -128,6 +128,10 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   talebi açılmaz (409 `TASIMA_SURUM_ESKI`); protokol hata kataloğuna kod (fabrika aynası + TR mesajı).
 - `7e4137228` — B2: kullanılamayan lisans deposu (program/yedek dizini içinde, yazılamaz, DB izsiz okunamaz) =
   `KURULUM_HATASI` kilit sınıfı (yalnız korumalı derlemede); lisans ekranı + "verilerimi al" açık.
+- B4 (`fix(lisans): B4` commit'i): destek hesabının mührü iki adımlı doğrulamayı (TOTP) da kapsar — DB'den TOTP
+  sırrını değiştirmek, 2FA'yı kapatmak ya da kurtarma kodu eklemek mührü bozar (giriş 403); panelden 2FA kurma ve
+  sıfırlama mührü aynı işlemde yeniler. Eski mühür ilk açılışta bir kez kendiliğinden yenilenir (lisans dizinine
+  `sistem-hesabi-muhru-v2.json`), kimse kilitlenmez. Migration YOK.
 
 **Yetki denetimi düzeltmeleri (güvenlik Bölge 2)** (commitler `fix(yetki): B1 …`, `B2 …`, `B3+B4 …`, `B5+B6 …`; kısa kimlikleri paketlemede yazılır)
 
@@ -172,7 +176,9 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   yeni değer `KURULUM_HATASI` (403 `LICENSE_NOT_ACTIVATED` + `details.sinif`); eski panel bilinmeyen sınıfı
   `ETKINLESMEDI` sayar ve etkinleştirme sayfasını açar (yedek/dışa aktarma kartını göstermez — yeni panel 1.6.5
   gösterir). Satıcı hata kataloğuna `TASIMA_SURUM_ESKI` eklendi (fabrika yalnız mesajını tanır). Bekleyen taşıma
-  talebi olan ve henüz kodla etkinleşmemiş yeni makine bu sürümle kilitte kalır (bilerek).
+  talebi olan ve henüz kodla etkinleşmemiş yeni makine bu sürümle kilitte kalır (bilerek). B4 sözleşme
+  değiştirmez (yeni alan/uç yok); TOTP sıfırlama ucu eşzamanlı kimlik değişiminde 409 `TOTP_RESET_CONFLICT`,
+  kurulum penceresi tüketimi 409 `TOTP_ENROLL_CONFLICT` dönebilir.
 - **Kırıldı mı:** HAYIR (tezgah alarmı kısmı) — yalnız ekleme: ayar cevabında `tezgahAlarmNoShiftMode`,
   `tezgahAlarmUnclassifiedEnabled`; salon cevabında `alarmNotice`; yeni uç `GET /api/feature-flags/tezgah-alarm-shift-status`;
   yeni hata kodları `TEZGAH_ALARM_SHIFT_REQUIRED`, `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`. Eski panel yalnız
@@ -204,8 +210,9 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
-- **Veri yazan adımlar:** güncelleme sırasında YOK. Mühür yalnız elle koşulan `--muhurle` komutuyla ya da yeni
-  hesabın doğuşunda yazılır.
+- **Veri yazan adımlar:** güncelleme sırasında YOK. Mühür elle koşulan `--muhurle` komutuyla ya da yeni hesabın
+  doğuşunda atılır; açılış işi yalnız ZATEN GEÇERLİ mührü TOTP'yi kapsayan biçime bir kez yeniler (mühürsüz ya da
+  bozuk mühürlü hesaba dokunmaz) ve lisans dizinine `sistem-hesabi-muhru-v2.json` koyar.
 - **Geri alınabilir mi:** migration geri alınmaz. İmaj 2.15.5'e dönebilir: eski sürüm mühür alanını okumaz, destek
   hesabı bugünkü gibi çalışır (mühür koruması o sürede yoktur). Tam dönüş = güncelleme öncesi yedekten geri yükleme.
 
@@ -219,7 +226,8 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
     terminalde `node dist/tools/superadmin-olustur.cjs --muhurle` (Docker ve Windows yazımı
     `docs/ops/SUPERADMIN-KURULUM.md` § MÜHÜRLEME). Hesabın parolası sorulur; parola sohbete, belgeye, günlüğe
     YAZILMAZ — komutu destek hesabının sahibi koşar. adnansahin bu sürümde mühürlenmez.
-  - Mühürlemeden sonra lisans dizinindeki `sistem-hesabi-mandali.json` silinmez (silmek korumayı kaldırır).
+  - Mühürlemeden sonra lisans dizinindeki `sistem-hesabi-mandali.json` silinmez (silmek korumayı kaldırır);
+    `sistem-hesabi-muhru-v2.json` de silinmez (silinirse TOTP'yi kapsamayan eski mühür yeniden geçer).
   - **Lisans klasörünün yerini güncellemeden ÖNCE ölç:** panel Sistem → Lisans → makine kartında "Lisans klasörü"
     satırı bir sorun (program/yedek klasörünün içinde, okunamadı, yazılamadı) gösteriyorsa güncellemeden önce
     düzeltilir; yoksa güncellemeden sonra yalnız lisans ekranı açılır (veri kaybı yok; yedek ve dışa aktarma açık).

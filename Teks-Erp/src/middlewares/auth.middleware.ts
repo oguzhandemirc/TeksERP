@@ -17,7 +17,8 @@ import {
   isSealRejected,
   isSystemAccountAuthorized,
   reportInvalidSeal,
-  SEAL_ROW_SELECT,
+  completeSealRow,
+  SEAL_SCALAR_SELECT,
 } from "../services/helpers/system-account-seal.helper";
 
 /**
@@ -135,19 +136,21 @@ async function authenticate(
 
   try {
     const payload = AuthService.verifyToken(token);
-    const fresh = await prisma.user.findUnique({
+    const freshRow = await prisma.user.findUnique({
       where: { id: payload.userId },
       // ⚠️ `isSystemAccount` BİLEREK burada okunur (JWT claim'i değil): istek
       // başına ZATEN yapılan bir okuma, yani maliyet sıfır; değer DB-taze; ve
       // guard'lar senkron kalabilir (bkz. types/express-augment.ts).
       // Mühür kolonları da: sistem hesabının yetkisi bayrak + geçerli mühürdür (G1).
+      // TOTP ilişkileri (mühür özeti) yalnız sistem hesabında ikinci okumayla gelir.
       select: {
-        ...SEAL_ROW_SELECT,
+        ...SEAL_SCALAR_SELECT,
         tokenVersion: true,
         isActive: true,
         mustChangePassword: true,
       },
     });
+    const fresh = freshRow ? await completeSealRow(freshRow) : null;
     if (!fresh || !fresh.isActive) {
       throw AppError.unauthorized("Hesap pasif veya bulunamadı. Tekrar giriş yapın.");
     }

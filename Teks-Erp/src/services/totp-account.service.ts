@@ -15,6 +15,8 @@ import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { credentialReseal } from "./helpers/system-account-seal.helper";
+import { openStoredTotpSecret } from "./helpers/totp-state.helper";
 import {
   buildOtpauthUri,
   generateRecoveryCodes,
@@ -61,7 +63,9 @@ export class TotpAccountService {
       select: { id: true },
     });
     if (!proven) return null;
-    return { secret: user.totpSecret, enabledAt: user.totpEnabledAt, lastStep: user.totpLastStep };
+    const secret = openStoredTotpSecret(user.totpSecret);
+    if (secret === null) return null;
+    return { secret, enabledAt: user.totpEnabledAt, lastStep: user.totpLastStep };
   }
 
   /** Kullanıcının TOTP durumu (panel + giriş akışı ortak kullanır). */
@@ -213,17 +217,33 @@ export class TotpAccountService {
           code: "ENROLLMENT_CONSUMED",
         });
       }
-      await tx.user.update({
-        where: { id: row.userId },
+      // Sistem hesabı mührü TOTP'yi kapsar: yeni sır + kod seti aynı tx'te yeniden mühürlenir
+      // (pencere tüketildikten SONRA okunur — kanıt satırı artık tüketilmiş).
+      const enabledAt = new Date();
+      const usedCodes = await tx.userRecoveryCode.findMany({
+        where: { userId: row.userId, usedAt: { not: null } },
+        select: { codeHash: true },
+      });
+      const reseal = await credentialReseal(tx, row.userId, {
+        totpSecret: row.secret,
+        totpEnabledAt: enabledAt,
+        recoveryCodes: [...usedCodes, ...hashed.map((codeHash) => ({ codeHash }))],
+      });
+      const updated = await tx.user.updateMany({
+        where: { id: row.userId, ...reseal.where },
         data: {
           totpSecret: row.secret,
-          totpEnabledAt: new Date(),
+          totpEnabledAt: enabledAt,
           totpLastStep: check.step,
+          ...reseal.data,
           // ⚠️ tokenVersion BUMP EDİLMEZ: 2FA kurmak yetkiyi değiştirmez ve
           // kullanıcıyı açık oturumlarından atmak için bir sebep yok. (Sıfırlama
           // farklıdır — orada bumplanır.)
         },
       });
+      if (updated.count === 0) {
+        throw AppError.conflict("Hesap bu sırada değişti. Kurulumu yeniden başlatın.", { code: "TOTP_ENROLL_CONFLICT" });
+      }
       // Eski kullanılmamış kodlar geçersiz — yeni set tek geçerli settir.
       await tx.userRecoveryCode.deleteMany({ where: { userId: row.userId, usedAt: null } });
       await tx.userRecoveryCode.createMany({
@@ -305,15 +325,30 @@ export class TotpAccountService {
    */
   static async reset(params: { userId: string; byId: string }): Promise<void> {
     await prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: params.userId },
+      const usedCodes = await tx.userRecoveryCode.findMany({
+        where: { userId: params.userId, usedAt: { not: null } },
+        select: { codeHash: true },
+      });
+      const reseal = await credentialReseal(tx, params.userId, {
+        totpSecret: null,
+        totpEnabledAt: null,
+        recoveryCodes: usedCodes,
+      });
+      const updated = await tx.user.updateMany({
+        where: { id: params.userId, ...reseal.where },
         data: {
           totpSecret: null,
           totpEnabledAt: null,
           totpLastStep: null,
           tokenVersion: { increment: 1 },
+          ...reseal.data,
         },
       });
+      if (updated.count === 0) {
+        const exists = await tx.user.findUnique({ where: { id: params.userId }, select: { id: true } });
+        if (!exists) throw AppError.notFound("Kullanıcı bulunamadı.");
+        throw AppError.conflict("Hesap bu sırada değişti. Sıfırlamayı yeniden deneyin.", { code: "TOTP_RESET_CONFLICT" });
+      }
       await tx.userRecoveryCode.deleteMany({ where: { userId: params.userId, usedAt: null } });
       await tx.totpEnrollment.updateMany({
         where: { userId: params.userId, consumedAt: null },

@@ -7,7 +7,9 @@
 // yazan biri bayrağı kendine koyamaz, süperadminin parola özetini değiştiremez, başka kurulumun
 // mührünü taşıyamaz); mandalsız kurulum bugünkü gibi çalışır; meşru kimlik değişimi mührü AYNI
 // yazımda yeniler ama bozuk mührü aklamaz; kimlik kolonu yazan her yol yeniden mühürler (AST);
-// `systemAccountSeal`in tek yazarı mühür yardımcısıdır; hedef koruması (panelden düzenleme) yetkiyle aynı
+// `systemAccountSeal`in tek yazarı mühür yardımcısıdır; TOTP (açık sır, açılış, kanıt, kurtarma kodları) mühre
+// girer ve DB'den kurcalanması mührü bozar, özet saklama biçiminden bağımsızdır (§8); v1→v2 geçişi bir kez,
+// işaretten sonra v1 mühür geri konamaz (§9); hedef koruması (panelden düzenleme) yetkiyle aynı
 // yüklemi okur — sahte işaretli hesap korunmaz, pasife alınabilir (§6); health + `/auth/me` bandı (§7). Geçici LICENSE_DIR kullanır, DB fikstürlerini
 // `finally`de siler.
 // =============================================================================
@@ -23,8 +25,11 @@ import { loadLicenseStoreSync } from "../src/lib/license/store";
 import { getLicenseCore } from "../src/lib/license/native";
 import { formatSeal, parseSeal } from "../src/lib/license/system-seal";
 import {
+  assertSealAllowsLogin,
   credentialDigest,
+  credentialDigestV1,
   isSystemAccountAuthorized,
+  migrateSealsToV2,
   resetSystemAccountSealCacheForTest,
   SEAL_ROW_SELECT,
   sealBandStatus,
@@ -32,10 +37,14 @@ import {
   sealSummary,
   SYSTEM_ACCOUNT_LATCH_FILE,
   SYSTEM_ACCOUNT_SEAL_INVALID_CODE,
+  SYSTEM_SEAL_V2_MARKER_FILE,
   writeLatch,
   writeSeal,
 } from "../src/services/helpers/system-account-seal.helper";
 import { buildRichHealth } from "../src/lib/health-snapshot";
+import { TotpAccountService } from "../src/services/totp-account.service";
+import { totpCodeForStep, totpStep } from "../src/services/totp.service";
+import { setTotpSecretOpenerForTest } from "../src/services/helpers/totp-state.helper";
 import { resolveSystemAccountLock, __resetSystemAccountRegistryForTests } from "../src/services/helpers/system-account.registry";
 import { resetRequestPermissionCacheForTest } from "../src/services/auth.service";
 import { geciciLisansDizini } from "./lib/sistem-hesabi-muhru-fikstur";
@@ -56,7 +65,9 @@ const fiksturler: string[] = [];
 // ─────────────────────────────────────────────────────────────────────────────
 // §4/§5 — STATİK (AST) — DB'siz; sondalar bellek içi dosya kümesine yazar
 // ─────────────────────────────────────────────────────────────────────────────
-const KIMLIK_KOLONLARI = new Set(["passwordHash", "quickPinDigest", "quickPin", "cardTokenDigest", "cardToken"]);
+const KIMLIK_KOLONLARI = new Set(["passwordHash", "quickPinDigest", "quickPin", "cardTokenDigest", "cardToken", "totpSecret", "totpEnabledAt"]);
+/** Kurtarma kodu KÜMESİNİ değiştiren çağrılar (`usedAt` damgası kümeyi değiştirmez, mühre girmez). */
+const KOD_KUMESI_YAZAN = new Set(["create", "createMany", "delete", "deleteMany", "upsert"]);
 const YENIDEN_MUHUR = /\b(credentialReseal|writeSeal)\s*\(/;
 const MUHUR_YARDIMCISI = "src/services/helpers/system-account-seal.helper.ts";
 
@@ -110,14 +121,18 @@ function islevAdi(n: ts.Node): string | null {
 function kimlikYazarlari(dosyalar: ReadonlyMap<string, string>): Array<{ anahtar: string; muhurlu: boolean }> {
   const out: Array<{ anahtar: string; muhurlu: boolean }> = [];
   for (const [rel, metin] of dosyalar) {
-    if (!/passwordHash|quickPin|cardToken/.test(metin)) continue;
+    if (!/passwordHash|quickPin|cardToken|totpSecret|totpEnabledAt|userRecoveryCode/.test(metin)) continue;
     const sf = ts.createSourceFile(rel, metin, ts.ScriptTarget.Latest, true);
     const gez = (n: ts.Node): void => {
-      if (
+      const kimlikVerisi =
         ts.isPropertyAssignment(n) && ts.isIdentifier(n.name) && n.name.text === "data" &&
         ts.isObjectLiteralExpression(n.initializer) &&
-        n.initializer.properties.some((p) => KIMLIK_KOLONLARI.has(propAdi(p) ?? ""))
-      ) {
+        n.initializer.properties.some((p) => KIMLIK_KOLONLARI.has(propAdi(p) ?? ""));
+      const kodKumesi =
+        ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) &&
+        KOD_KUMESI_YAZAN.has(n.expression.name.text) &&
+        ts.isPropertyAccessExpression(n.expression.expression) && n.expression.expression.name.text === "userRecoveryCode";
+      if (kimlikVerisi || kodKumesi) {
         let ad: string | null = null;
         let muhurlu = false;
         for (let a: ts.Node | undefined = n.parent; a; a = a.parent) {
@@ -178,6 +193,16 @@ function statik(): void {
   const duzeltilmis = new Map(DOSYALAR);
   duzeltilmis.set(sondaYol, "export async function setX(id: string) { const r = await credentialReseal(prisma, id, {}); await prisma.user.update({ where: { id, ...r.where }, data: { passwordHash: 'x', ...r.data } }); }");
   check("§4 sonda ②: aynı yazar `credentialReseal` ile → YEŞİL", kimlikIhlalleri(duzeltilmis).length === 0);
+  const totpSonda = new Map(DOSYALAR);
+  totpSonda.set(sondaYol, "export async function setT(id: string) { await prisma.user.update({ where: { id }, data: { totpSecret: 'X' } }); }\n" +
+    "export async function kodEkle(id: string) { await tx.userRecoveryCode.createMany({ data: [{ userId: id, codeHash: 'h' }] }); }\n" +
+    "export async function kodHarca(id: string) { await prisma.userRecoveryCode.updateMany({ where: { userId: id }, data: { usedAt: new Date() } }); }");
+  const totpIh = kimlikIhlalleri(totpSonda);
+  check("§4 sonda ③: yeniden mühürlemeyen TOTP sırrı / kurtarma kodu kümesi yazarı → KIRMIZI; `usedAt` damgası serbest",
+    totpIh.includes(`${sondaYol}::setT`) && totpIh.includes(`${sondaYol}::kodEkle`) && !totpIh.includes(`${sondaYol}::kodHarca`), totpIh.join(", "));
+  check("§4 ⭐ TOTP yazarları tarandı (kurulum tüketimi + sıfırlama + konsol rotasyonu)",
+    ["src/services/totp-account.service.ts::consumeWindow", "src/services/totp-account.service.ts::reset"].every((k) => yazarlar.some((y) => y.anahtar === k && y.muhurlu)),
+    yazarlar.filter((y) => y.anahtar.includes("totp")).map((y) => y.anahtar).join(", "));
 
   console.log("\n=== §5) `systemAccountSeal`in tek yazarı mühür yardımcısı ===");
   const my = muhurYazarlari(DOSYALAR);
@@ -391,11 +416,129 @@ async function calismaZamani(): Promise<void> {
     resetSystemAccountSealCacheForTest();
     check("§3 ⭐ NEGATİF: bozuk mühürlü hesapta parola değişimi mührü AKLAMAZ", sealStatus(await satir(sa)) !== "GECERLI" && !(await yetkili(sa)),
       sealStatus(await satir(sa)));
+
+    await gecisV2(lisans.dizin);
+    await totpMuhru(sa);
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
     lisans.temizle();
     fs.rmSync(baska, { recursive: true, force: true });
   }
+}
+
+const girisKapisi = async (id: string): Promise<string> => {
+  resetSystemAccountSealCacheForTest();
+  try {
+    await assertSealAllowsLogin(id);
+    return "200";
+  } catch (e) {
+    if (e instanceof AppError) return `${e.statusCode}:${String((e.details as { code?: string } | undefined)?.code ?? "")}`;
+    throw e;
+  }
+};
+const durum = async (id: string): Promise<string> => {
+  resetSystemAccountSealCacheForTest();
+  return sealStatus(await satir(id));
+};
+
+/** §9 — v1 (TOTP'suz) mühür işaret yokken kabul; açılış işi v2'ye yeniler + işaret; sonra v1 asla. */
+async function gecisV2(dizin: string): Promise<void> {
+  console.log("\n=== §9) Mühür v1 → v2 geçişi (bir kez, işaretle) ===");
+  const isaret = path.join(dizin, SYSTEM_SEAL_V2_MARKER_FILE);
+  const g = await kullanici("gecis", true);
+  const r = await satir(g);
+  const v1 = getLicenseCore().sealSystemAccount(dizin, { id: r.id, ad: r.username, kimlik: credentialDigestV1(r) });
+  if (v1.durum !== "MUHURLENDI") { check("§9 körlük zemini: v1 mühür üretildi", false, v1.durum); return; }
+  await prisma.user.update({ where: { id: g }, data: { systemAccountSeal: v1.muhur } });
+  check("§9 körlük zemini: işaret YOK, v1 özet ≠ v2 özet", !fs.existsSync(isaret) && credentialDigestV1(r) !== credentialDigest(r));
+  check("§9 ⭐ işaret yokken v1 mühür GEÇERLİ (güncellemeyle hiçbir hesap kilitlenmez) + giriş kapısı 200",
+    (await durum(g)) === "GECERLI" && (await girisKodu("gecis")) === "200", await durum(g));
+  const sonuc = await migrateSealsToV2();
+  const yeni = (await satir(g)).systemAccountSeal;
+  check("§9 ⭐ açılış işi: v1 mühür v2'ye yenilendi + işaret yazıldı",
+    sonuc.durum === "TAMAM" && sonuc.yenilenen >= 1 && yeni !== v1.muhur && fs.existsSync(isaret) && (await durum(g)) === "GECERLI",
+    JSON.stringify(sonuc));
+  check("§9 ikinci çağrı iş yapmaz (ISARET_VAR)", (await migrateSealsToV2()).durum === "ISARET_VAR");
+  await prisma.user.update({ where: { id: g }, data: { systemAccountSeal: v1.muhur } });
+  check("§9 ⭐ NEGATİF: işaret varken DB'ye geri konan v1 mühür BOZUK, giriş 403",
+    (await durum(g)) === "BOZUK" && (await girisKapisi(g)) === `403:${SYSTEM_ACCOUNT_SEAL_INVALID_CODE}`, await durum(g));
+  await prisma.user.update({ where: { id: g }, data: { isSystemAccount: false, systemAccountSeal: null } });
+}
+
+/** §8 — TOTP mühre girer (denetim B4): meşru yollar yeniden mühürler, DB kurcalaması bozar. */
+async function totpMuhru(acan: string): Promise<void> {
+  console.log("\n=== §8) TOTP mühre girer (B4) ===");
+  const t = await kullanici("totp", true);
+  const yaz = await writeSeal(prisma, t);
+  check("§8 körlük zemini: mühürlü, işaret VAR (v1 kabulü kapalı)", yaz.durum === "MUHURLENDI" && (await durum(t)) === "GECERLI");
+  const kur = async (): Promise<{ secret: string; kodlar: string[] }> => {
+    const w = await TotpAccountService.openWindow({ userId: t, openedById: acan });
+    const { recoveryCodes } = await TotpAccountService.consumeWindow(w.token, totpCodeForStep(w.secret, totpStep()));
+    return { secret: w.secret, kodlar: recoveryCodes };
+  };
+  const ilk = await kur();
+  check("§8 ⭐ meşru TOTP kurulumu (sır + kod seti) aynı tx'te yeniden mühürler", (await durum(t)) === "GECERLI" && (await yetkili(t)), await durum(t));
+
+  const kurcala = async (ad: string, boz: () => Promise<unknown>, onar: () => Promise<unknown>): Promise<void> => {
+    await boz();
+    const st = await durum(t);
+    const giris = await girisKapisi(t);
+    const yet = await yetkili(t);
+    await onar();
+    check(`§8 ⭐ NEGATİF: DB'den ${ad} → mühür BOZUK, yetki yok, giriş 403`,
+      st === "BOZUK" && !yet && giris === `403:${SYSTEM_ACCOUNT_SEAL_INVALID_CODE}`, `${st} ${giris}`);
+  };
+  const once = await prisma.user.findUniqueOrThrow({ where: { id: t }, select: { totpSecret: true, totpEnabledAt: true } });
+  await kurcala("totpEnabledAt=null (2FA sessizce kapatma)",
+    () => prisma.user.update({ where: { id: t }, data: { totpEnabledAt: null } }),
+    () => prisma.user.update({ where: { id: t }, data: { totpEnabledAt: once.totpEnabledAt } }));
+  await kurcala("TOTP sırrı değişimi",
+    () => prisma.user.update({ where: { id: t }, data: { totpSecret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP" } }),
+    () => prisma.user.update({ where: { id: t }, data: { totpSecret: once.totpSecret } }));
+  const kanit = await prisma.totpEnrollment.findFirstOrThrow({ where: { userId: t, consumedAt: { not: null } }, select: { id: true, consumedAt: true } });
+  await kurcala("kurulum kanıtının düşürülmesi (tüketilmiş pencere)",
+    () => prisma.totpEnrollment.update({ where: { id: kanit.id }, data: { consumedAt: null } }),
+    () => prisma.totpEnrollment.update({ where: { id: kanit.id }, data: { consumedAt: kanit.consumedAt } }));
+  let ekKod = "";
+  await kurcala("kurtarma kodu eklenmesi",
+    async () => { ekKod = (await prisma.userRecoveryCode.create({ data: { userId: t, codeHash: "$2a$10$sahtesahtesahtesahtesahtesahtesahtesahtesahtesahtesa" }, select: { id: true } })).id; },
+    () => prisma.userRecoveryCode.delete({ where: { id: ekKod } }));
+  check("§8 onarım sonrası mühür yine GEÇERLİ (ölçüm kendi kurcalamasını geri aldı)", (await durum(t)) === "GECERLI");
+
+  const harcandi = await TotpAccountService.verifySecondFactor(t, ilk.kodlar[0]!);
+  check("§8 kurtarma kodu harcamak (`usedAt`) mührü BOZMAZ", harcandi && (await durum(t)) === "GECERLI", `${harcandi} ${await durum(t)}`);
+
+  // Saklama biçimi değişse de (ör. şifreli sarma) özet AÇIK sırdan doğar.
+  const ozetDuz = credentialDigest(await satir(t));
+  const sar = (v: string): string => `enc:${Buffer.from(v, "utf8").toString("base64")}`;
+  const ac = (v: string): string => (v.startsWith("enc:") ? Buffer.from(v.slice(4), "base64").toString("utf8") : v);
+  const kanitSir = await prisma.totpEnrollment.findUniqueOrThrow({ where: { id: kanit.id }, select: { secret: true } });
+  await prisma.user.update({ where: { id: t }, data: { totpSecret: sar(once.totpSecret!) } });
+  await prisma.totpEnrollment.update({ where: { id: kanit.id }, data: { secret: sar(kanitSir.secret) } });
+  const ozetHam = credentialDigest(await satir(t));
+  setTotpSecretOpenerForTest(ac);
+  let ozetSarili = "";
+  let sariliDurum = "";
+  try {
+    ozetSarili = credentialDigest(await satir(t));
+    sariliDurum = await durum(t);
+  } finally {
+    setTotpSecretOpenerForTest(null);
+    await prisma.user.update({ where: { id: t }, data: { totpSecret: once.totpSecret } });
+    await prisma.totpEnrollment.update({ where: { id: kanit.id }, data: { secret: kanitSir.secret } });
+  }
+  check("§8 ⭐ sır sarılı saklansa da (tek okuyucu açar) özet AYNI, mühür GEÇERLİ", ozetSarili === ozetDuz && sariliDurum === "GECERLI", sariliDurum);
+  check("§8 sonda: açıcı olmadan sarılı değer farklı özet verir (ölçüm saklanan değere kör değil)", ozetHam !== ozetDuz);
+
+  await kur();
+  check("§8 ⭐ TOTP yeniden kurulumu (eski kodlar silinir, yeni set) mührü yeniler", (await durum(t)) === "GECERLI", await durum(t));
+  await TotpAccountService.reset({ userId: t, byId: acan });
+  const sonra = await prisma.user.findUniqueOrThrow({ where: { id: t }, select: { totpSecret: true } });
+  check("§8 ⭐ yönetici sıfırlaması mührü yeniler", sonra.totpSecret === null && (await durum(t)) === "GECERLI", await durum(t));
+  await prisma.user.update({ where: { id: t }, data: { systemAccountSeal: (await satir(acan)).systemAccountSeal } });
+  await TotpAccountService.reset({ userId: t, byId: acan });
+  check("§8 NEGATİF: bozuk mühürlü hesapta TOTP sıfırlaması mührü AKLAMAZ", (await durum(t)) !== "GECERLI", await durum(t));
+  await prisma.user.update({ where: { id: t }, data: { isSystemAccount: false, systemAccountSeal: null } });
 }
 
 async function main(): Promise<void> {
@@ -420,6 +563,7 @@ main()
       if (fiksturler.length) {
         await prisma.session.deleteMany({ where: { userId: { in: fiksturler } } });
         await prisma.workSession.deleteMany({ where: { userId: { in: fiksturler } } });
+        await prisma.totpEnrollment.deleteMany({ where: { OR: [{ userId: { in: fiksturler } }, { openedById: { in: fiksturler } }] } });
         await prisma.systemLog.deleteMany({ where: { OR: [{ userId: { in: fiksturler } }, { recordId: { in: fiksturler } }] } });
         await prisma.user.updateMany({ where: { id: { in: fiksturler } }, data: { isSystemAccount: false, systemAccountSeal: null } });
         await prisma.user.deleteMany({ where: { id: { in: fiksturler } } });

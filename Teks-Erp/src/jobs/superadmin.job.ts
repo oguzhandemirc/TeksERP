@@ -56,7 +56,7 @@ import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
 import { SYSTEM_ACCOUNT_FULLNAME } from "../constants/system-account";
 import { ensureVarsayilanSuperadmin } from "../services/helpers/varsayilan-superadmin.helper";
-import { SEAL_COMMAND_HINT } from "../services/helpers/system-account-seal.helper";
+import { migrateSealsToV2, SEAL_COMMAND_HINT } from "../services/helpers/system-account-seal.helper";
 
 // installation-identity ile aynı politika: mutlu yolda ~3sn, DB geç gelirse
 // 3 + 4x15 = ~63sn'lik pencere.
@@ -124,6 +124,15 @@ export async function ensureSuperadminAccount(): Promise<SuperadminRegistryResul
     }
   } else if (dogus.action === "ad-dolu") {
     uyari("superadmin", "Varsayılan satıcı hesabının adı başka bir kullanıcıda — hesap DOĞMADI (mevcut kullanıcı yükseltilmez).");
+  }
+
+  // Mühür özeti v2'ye (TOTP dahil) bir kez geçiş; hata kaydı durdurmaz, sonraki açılış yeniden dener.
+  try {
+    const gecis = await migrateSealsToV2();
+    if (gecis.durum === "TAMAM" && gecis.yenilenen > 0) bilgi("superadmin", `${gecis.yenilenen} sistem hesabı mührü TOTP'yi kapsayacak biçimde yenilendi.`);
+    if (gecis.durum === "EKSIK") uyari("superadmin", `mühür v2 geçişi tamamlanamadı (${gecis.kalan} hesap) — sonraki açılışta yeniden denenir.`);
+  } catch (err) {
+    uyari("superadmin", "mühür v2 geçişi hata verdi — sonraki açılışta yeniden denenir:", err instanceof Error ? err.message : err);
   }
 
   const existing = await prisma.user.findFirst({

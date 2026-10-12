@@ -99,6 +99,12 @@ cd <kok>\current
 > (`sistem-hesabi-mandali.json`) konur: "✅ Satıcı hesabı MÜHÜRLENDİ". **İkinci koşum
 > hiçbir şeye dokunmaz** ("Mühür zaten geçerli — DEĞİŞMEDİ"). Parola yanlışsa hiçbir şey
 > yazılmaz. RESTART GEREKMEZ.
+> ⚠️ **Mühür 2FA'yı (TOTP) da kapsar** (2.15.6+): DB'den TOTP sırrını değiştirmek, iki adımlı
+> doğrulamayı kapatmak (`totpEnabledAt`) ya da kurtarma kodu eklemek mührü bozar → giriş 403. Panelden 2FA
+> kurmak/sıfırlamak mührü kendiliğinden yeniler. 2.15.6'ya güncellenen kurulumda eski (TOTP'suz) mühür ilk
+> açılışta bir kez kendiliğinden yenilenir ve lisans dizinine `sistem-hesabi-muhru-v2.json` konur; bu
+> dosyadan sonra eski mühür geçmez. **2.15.6 öncesi bir yedeği bu kuruluma geri yüklediyseniz** satıcı
+> hesabı "mühür geçersiz" der → bu komutu bir kez daha koşun (parola sorulur).
 > ⚠️ **Mühürlenene kadar** davranış bugünkü gibidir (kimse kilitlenmez), yalnız uyarı
 > bandı görünür. Otomatik mühürleme bilerek YOKTUR: güncelleme anında DB'de sahte bir
 > işaretli hesap varsa onu da aklardı — parola kanıtı ancak bu komutla alınır.

@@ -800,7 +800,8 @@ async function main(): Promise<void> {
     const authMw = fs.readFileSync(path.join(SRC, "middlewares", "auth.middleware.ts"), "utf8");
     check(
       "kimlik JWT claim'i DEĞİL, istek başına TAZE DB okuması",
-      /select:\s*\{[^}]*\.\.\.SEAL_ROW_SELECT/.test(authMw) &&
+      /select:\s*\{[^}]*\.\.\.SEAL_SCALAR_SELECT/.test(authMw) &&
+        /const fresh = freshRow \? await completeSealRow\(freshRow\) : null;/.test(authMw) &&
         /const systemAccount = isSystemAccountAuthorized\(fresh\);/.test(authMw) &&
         /req\.isSystemAccount\s*=\s*systemAccount;/.test(authMw),
       "claim olsaydı iptal edilmiş bir satıcı token'ı süresi dolana dek yetkili kalırdı",

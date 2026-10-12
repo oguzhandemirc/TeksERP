@@ -37,6 +37,8 @@ export const LICENSE_FILES = {
   REVOCATION: "iptal.jws",
   /** Sistem hesabı mührü zorunluluğu (G1): VAR ⇒ mühürsüz sistem hesabı yetki almaz; imzasız (`system-account-seal.ts`). */
   SYSTEM_ACCOUNT_LATCH: "sistem-hesabi-mandali.json",
+  /** Mühür özeti v2 (TOTP dahil) geçişi bitti: VAR ⇒ v1 (TOTP'suz) mühür artık kabul edilmez; imzasız. */
+  SYSTEM_SEAL_V2: "sistem-hesabi-muhru-v2.json",
   /** Etkinleştirme kilidi muafiyeti (G2, satıcı imzalı JWS; kurulum anahtarı + parmak izine bağlı — `exemption.ts`). */
   EXEMPTION: "muafiyet.jws",
 } as const;

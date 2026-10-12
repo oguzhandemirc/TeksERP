@@ -12,11 +12,14 @@
 //   §2 ⭐ B2 kullanılamayan lisans deposu (APP_ICINDE · YEDEK_ICINDE · YAZILAMADI · DB izsiz OKUNAMADI) → KURULUM_HATASI:
 //      iş ucu 403, lisans ekranı + "verilerimi al" açık; etkin K4 kurulumda dizin hilesi kademe kapısını düşürmez;
 //      kilit kapalı derlemede sıfır fark; G12 (anahtar okunamaz + DB izi) aynen
+//   §3 ⭐ B4 G1 mührü TOTP'yi kapsar (denetim ölçüsünün TERSİ): mühürlü + mandallı + geçişi bitmiş kurulumda DB'den
+//      TOTP sırrı yazmak ya da gerçek 2FA'nın `totpEnabledAt`ini boşaltmak mührü bozar → yetki yok, giriş 403
 //
 // NEGATİF SONDA (elle, ölçüldü): `isActivated`e bekleyen taşıma dalı geri konunca §1b/§1c/§1f kırmızı;
 //   `pollOnce`ta taşıma yoklaması `activated` kapısının ARKASINA alınınca §1g/§1h kırmızı.
 //   Sınıflayıcıdan `setupError` dalı silinince ya da kapı `durumHazir` değilken kilide bakmadan geçirince §2b×4 + §2e
-//   kırmızı; KURULUM_HATASI'nda "verilerimi al" kapatılınca §2c×4 kırmızı.
+//   kırmızı; KURULUM_HATASI'nda "verilerimi al" kapatılınca §2c×4 kırmızı. `credentialDigest`ten TOTP satırları
+//   çıkarılınca §3b/§3c kırmızı (denetimdeki açık geri döner).
 // =============================================================================
 import fs from "node:fs";
 import os from "node:os";
@@ -53,8 +56,10 @@ import { kabulEt, temizleKabuller } from "./lib/lisans-kabul-fikstur";
 import { kapidanGecir } from "./lib/lisans-kapi-surucu";
 import { lisansKipKur, temizleLisansKipDizini } from "./lib/lisans-kip-fikstur";
 import { totpCodeForStep, totpStep, generateTotpSecret } from "../src/services/totp.service";
+import { TotpAccountService } from "../src/services/totp-account.service";
 import {
   isSystemAccountAuthorized,
+  migrateSealsToV2,
   resetSystemAccountSealCacheForTest,
   SEAL_ROW_SELECT,
   sealStatus,
@@ -248,6 +253,56 @@ async function b2(token: string): Promise<void> {
   }
 }
 
+// ── §3 B4 ──────────────────────────────────────────────────────────────────────────────────────────────────
+async function b4(): Promise<void> {
+  console.log("\n§3 — B4 G1 mührü TOTP'yi kapsar");
+  const dir = geciciDizin("b4");
+  loadLicenseStoreSync({ dir });
+  process.env.LICENSE_DIR = dir;
+  resetSystemAccountSealCacheForTest();
+  const ad = `TEST-kilit-b4-${Date.now()}`;
+  const parola = "Deneme-b4-12345";
+  const sa = (await prisma.user.create({
+    data: { username: ad, passwordHash: await AuthService.hashPassword(parola), fullName: "TEST b4", isSystemAccount: true },
+    select: { id: true },
+  })).id;
+  fiksturler.push(sa);
+  const yaz = await writeSeal(prisma, sa);
+  if (yaz.durum === "MUHURLENDI") writeLatch(yaz.kid);
+  const gecis = await migrateSealsToV2();
+  const row = async (): Promise<SealRow> => {
+    resetSystemAccountSealCacheForTest();
+    return prisma.user.findUniqueOrThrow({ where: { id: sa }, select: SEAL_ROW_SELECT });
+  };
+  const giris = async (): Promise<string> => {
+    try {
+      await AuthService.login(ad, parola, { clientType: "electron" } as never);
+      return "200";
+    } catch (e) {
+      return e instanceof AppError ? `${e.statusCode}:${String((e.details as { code?: string } | undefined)?.code ?? "")}` : String(e);
+    }
+  };
+  check("§3a zemin: mühürlü + mandal VAR + geçiş işareti; giriş 200",
+    yaz.durum === "MUHURLENDI" && fs.existsSync(path.join(dir, SYSTEM_ACCOUNT_LATCH_FILE)) && gecis.durum === "TAMAM" &&
+      sealStatus(await row()) === "GECERLI" && (await giris()) === "200",
+    `${yaz.durum} ${gecis.durum}`);
+
+  await prisma.user.update({ where: { id: sa }, data: { totpSecret: generateTotpSecret(), totpEnabledAt: new Date() } });
+  const r1 = await row();
+  check("§3b ⭐ DB'den TOTP sırrı yazılınca mühür BOZUK, yetki yok, giriş 403 SYSTEM_ACCOUNT_SEAL_INVALID",
+    sealStatus(r1) === "BOZUK" && !isSystemAccountAuthorized(r1) && (await giris()) === "403:SYSTEM_ACCOUNT_SEAL_INVALID", `${sealStatus(r1)} ${await giris()}`);
+  await prisma.user.update({ where: { id: sa }, data: { totpSecret: null, totpEnabledAt: null } });
+
+  const w = await TotpAccountService.openWindow({ userId: sa, openedById: sa });
+  await TotpAccountService.consumeWindow(w.token, totpCodeForStep(w.secret, totpStep()));
+  const r2 = await row();
+  check("§3c zemin: meşru 2FA kurulumu sonrası mühür GECERLI", sealStatus(r2) === "GECERLI" && isSystemAccountAuthorized(r2), sealStatus(r2));
+  await prisma.user.update({ where: { id: sa }, data: { totpEnabledAt: null } });
+  const r3 = await row();
+  check("§3c ⭐ DB'den `totpEnabledAt` boşaltılınca (2FA'yı sessizce kapatma) mühür BOZUK, giriş 403",
+    sealStatus(r3) === "BOZUK" && !isSystemAccountAuthorized(r3) && (await giris()) === "403:SYSTEM_ACCOUNT_SEAL_INVALID", `${sealStatus(r3)} ${await giris()}`);
+}
+
 async function main(): Promise<void> {
   console.log("=== Lisans kilit kaçakları (denetim B1 · B2 · B4) ===");
   const engel = hedefDbEngeli();
@@ -261,6 +316,7 @@ async function main(): Promise<void> {
     const { token } = await AuthService.login(ad, "Deneme-12345");
     await b1(token);
     await b2(token);
+    await b4();
   } finally {
     for (const s of saticilar) await s.kapat().catch(() => undefined);
     await temizleKabuller().catch(() => undefined);
