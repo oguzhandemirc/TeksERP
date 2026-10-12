@@ -592,36 +592,56 @@ Portal yalnız bu kurulumdadır (tek portal `portal.etkiliyazilim.com`; bugün h
 
 ## 14. İlk kurulum dağıtımı — tek arşiv, derleme deposu, tek bağlantı
 
-Portalda bir bağlantı BİR derleme dosyası verir ([`links.service.ts`](../../satici/sunucu/src/distribution/links.service.ts) `createLinkTx`); setup ise yanında backend zip + PG zip + `pg.json` (+ `etkili.tkpub`) ister. Müşteriye bu yüzden TEK arşiv gider (yönetici kararı 2026-10-02): setup + imzalı korumalı backend + PG paketi + `pg.json` (+ tkpub) + `SHA256SUMS` + `BENIOKU.txt`, kök düz.
+Portalda bir bağlantı BİR derleme dosyası verir ([`links.service.ts`](../../satici/sunucu/src/distribution/links.service.ts) `createLinkTx`); setup ise yanında backend zip + PG zip + `pg.json` (+ `etkili.tkpub`) ister. Müşteriye bu yüzden TEK arşiv gider (yönetici kararı 2026-10-02): setup + imzalı korumalı backend + PG paketi + `pg.json` + grubun paneli (+ tkpub) + `ICERIK.json` + `SHA256SUMS` + `BENIOKU.txt`, kök düz. Arşiv GRUP başınadır (1e kararı 2026-10-12): `test` grubunun arşivi grubun Windows yayınıyla OTOMATİK yenilenir ve yalnız deneme/test kurulumları içindir; müşteriye verilecek arşiv (`oncu`/`genel`) yalnız TERFİ ile (açıklamalı `terfi/<grup>/backend-v<s>` etiketi) yenilenir.
 
-### 14.1 Arşiv (Mac)
+### 14.1 Sürüm başına üretim (thinkpad-1 → imza → yayın → depo)
+
+```bash
+git checkout --detach <sürüm commit'i>                                   # backend-v<s> belgesi main'de
+deploy/korumali-thinkpad.sh --kip gercek --surum <s> --cikti <dizin>      # zip + TeksERP-Kurulum-<s>.exe + derleme künyesi
+npx tsx Teks-Erp/scripts/build-korumali-imza.ts zip --zip=<zip> --anahtar=<PAKET> --derleme-kunyesi=<zip>.derleme.json
+node deploy/backend-yayinla.mjs --grup=test --paket=<imzalı zip> --anahtar=<PAKET> \
+  --ilk-kurulum-setup=<dizin>/TeksERP-Kurulum-<s>.exe --ilk-kurulum-pg=<postgresql-*.zip> --ilk-kurulum-pg-kunye=<imzalı pg.json>
+```
+
+`korumali-thinkpad.sh` paketlemeden sonra AYNI makinede Inno Setup 6 ile (`%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`, kapı yoksa 97) sunucu kurulumunu derler: sürüm = paketin sürümü, doğrulayıcı = paketin kendi `runtime\tekserp-guncelleyici.exe`si (bu koşunun Rust derlemesi değilse DUR), setup Mac'e iki uçta eşit SHA ve PE olarak gelir, derleme künyesine (`setup.ad/sha256`) girer. CI'nın `TeksERP-Kurulum-0.0.0-git.<sha>.exe`si yalnız sınamadır, arşive girmez (zincir setup sürümü = paket sürümü ister). CI'da sürüm setup'ı derlemesi açık iş (Dalga 3, test altyapısı).
+
+`backend-yayinla` Windows yayını bitince `--ilk-kurulum-*` verildiyse `deploy/kurulum/ilk-kurulum-yayinla.mjs --uygula` çağırır; verilmediyse yayın sürer, kutulu uyarıyla elle koşulacak komutu basar; kısmi girdi yüklemeden ÖNCE durur; adım düşerse yayın yerinde kalır ve komut basılır. `oncu`/`genel` yayını terfi kapısından geçtiği için aynı bağlantı terfide müşteri arşivini yeniler. Elle:
+
+```bash
+node deploy/kurulum/ilk-kurulum-yayinla.mjs --grup <grup> --backend <imzalı zip> --setup TeksERP-Kurulum-<s>.exe \
+  --pg <postgresql-*.zip> --pg-kunye <pg.json> [--tkpub <etkili.tkpub>] [--uygula]     # --uygula yoksa depo KURU
+```
+
+Sıra: grup (dağıtım kaydı; eski kanal kodu RED) → paket sürümü (PROVA RED) + setup adı = `TeksERP-Kurulum-<s>.exe` → terfi kapısı (`test` kök grup otomatik; `oncu`/`genel` açıklamalı terfi etiketi `backend-v<s>` commit'inde) → grupta yayındaki Windows backend = `<s>` (VDS, salt okuma) → grubun paneli `latest.yml` + exe güncelleme sunucusundan (salt okuma) → §14.2 → §14.3 `--yenile`. Bekçi `node scripts/test_ilk_kurulum_yayinla.mjs`.
+
+### 14.2 Arşiv (Mac)
 
 ```bash
 node deploy/kurulum/kurulum-arsivi.mjs --setup <dizin>/TeksERP-Kurulum-<sürüm>.exe \
   --backend <imzalı tekserp-backend-*.zip> --pg <postgresql-*.zip> --pg-kunye <imzalı pg.json> \
-  [--tkpub <etkili.tkpub>] --cikti <depo dışı dizin>
+  --panel <TeksERP-<v>-Setup.exe> --panel-kunye <grubun latest.yml> [--tkpub <etkili.tkpub>] --cikti <depo dışı dizin>
 ```
 
-Arşiv ORTAKTIR: sürüm başına tek, müşteri/kanal/grup argümanı yok (`--musteri` kalktı; firma adı lisanstan, grup kiradan). Çıktı `TeksERP-Kurulum-<backend sürümü>.zip` + `.sha256`. Çıkış 0 hazır · 1 kapı DUR (arşiv bırakılmaz) · 2 ÖLÇÜLEMEDİ. Setup'ın kararı arşivden ÖNCE verilir: adlar `kurulum.ps1 GirdiCoz` desenlerinden (metinden okunur), ortak paket (`PAKET.json backendKanal` null, künye müşterisiz), KORUMALI win-x64, hizmet adı (dağıtım kaydından) + hizmet ikilileri, derlemenin çapa kipi üretim, PROVA değil, imza `backend-bildirim.ts ortak-dogrula` ile üretim çapasından (test çapası geçirilmez) + `--pg-kunye`, PG zip `pg-paketle.mjs --dogrula`, `pg.json` yükü bu zip'i ve kaydı gösterir, tkpub yalnız açık anahtar. Arşiv yeniden açılıp her girdi SHA256SUMS'a ve kaynağa karşı ölçülür (+ `unzip -t`). `--prova` imza kapılarını UYARIYA düşürür ve adı `-PROVA-IMZASIZ` yapar (yapı denemesi; müşteriye verilmez, `derleme-koy` üretime koymaz). Bekçi `node scripts/test_kurulum_arsivi.mjs`.
+Arşiv ORTAKTIR: müşteri/kanal argümanı yok (firma adı lisanstan, grup kiradan); grup ADDA taşınır, panelin künyesinden: `TeksERP-Kurulum-<grup>-<backend sürümü>.zip` + `.sha256` (desen tek kaynak `storage.ts` `INSTALL_ARCHIVE`). Çıkış 0 hazır · 1 kapı DUR (arşiv bırakılmaz) · 2 ÖLÇÜLEMEDİ. Setup'ın kararı arşivden ÖNCE verilir: adlar `kurulum.ps1 GirdiCoz` desenlerinden (metinden okunur), ortak paket (`PAKET.json backendKanal` null, künye müşterisiz), KORUMALI win-x64, hizmet adı (dağıtım kaydından) + hizmet ikilileri, derlemenin çapa kipi üretim, PROVA değil, imza `backend-bildirim.ts ortak-dogrula` ile üretim çapasından (test çapası geçirilmez) + `--pg-kunye`, PG zip `pg-paketle.mjs --dogrula`, `pg.json` yükü bu zip'i ve kaydı gösterir, tkpub yalnız açık anahtar. Panel: ad Electron `build.win.artifactName`den, PE, `latest.yml` ↔ exe (ad/boy/sha512), imzalı bildirim zorunlu ve `panel-imza.ts dogrula` ile gerçek çapadan, künye kanalı bir dağıtım GRUBU (eski kanal kimlikli panel RED); `latest.yml` arşive GİRMEZ. `ICERIK.json` opt-in anahtarlı içerik künyesidir (sürüm/rol/boy/sha256; kanal/grup/müşteri YOK). Arşiv yeniden açılıp her girdi SHA256SUMS'a ve kaynağa karşı ölçülür (+ `unzip -t`). `--prova` imza kapılarını UYARIYA düşürür ve adı `-PROVA-IMZASIZ` yapar (yapı denemesi; müşteriye verilmez, `derleme-koy` üretime koymaz). Bekçi `node scripts/test_kurulum_arsivi.mjs`.
 
-### 14.2 Satıcının derleme deposuna koy (KURU → kullanıcının "uygula" cümlesiyle)
+### 14.3 Satıcının derleme deposuna koy / kaldır (KURU → kullanıcının "uygula" cümlesiyle)
 
 ```bash
-node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <cikti>/TeksERP-Kurulum-<sürüm>.zip            # KURU: yalnız okuma + plan
-node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <cikti>/TeksERP-Kurulum-<sürüm>.zip --uygula   # yazar
+node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <cikti>/TeksERP-Kurulum-<grup>-<s>.zip [--yenile]          # KURU: yalnız okuma + plan
+node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <cikti>/TeksERP-Kurulum-<grup>-<s>.zip --yenile --uygula   # koyar + aynı grubun eskisini kaldırır
+node deploy/satici/derleme-koy.mjs --ortam uretim --kaldir <ad> [--kaldir <ad> …] [--uygula]                        # yalnız kaldırır
 ```
 
-KURU: yerel denetim (sha256 · yanındaki `.sha256` · satıcının ad kuralı `storage.ts` `BUILD_NAME`/`BUILD_EXTENSIONS`ten · PROVA adı üretime RED) + VDS'te tek ssh ile YALNIZ OKUMA (`lisans-devreye/lib/ag.mjs` sözleşmesi): satıcının `/derlemeler` bağı (`<K>/derlemeler false` olmalı), yardımcı imaj (`<ortam>-yedek` konteynerinin imajı), dizin sahibi/izni (bugün `0:0 755`, §13.4-2), aynı adlı dosya, disk; sonra `--uygula`nın koşacağı komutların TAM listesi. `--uygula`: `deploy/vds-dogrula.sh` (önce, AYNI) → `~/derleme-koy-<damga>` → scp → `sha256sum -c` → yardımcı konteyner (`--network none --user 0`, yalnız `/g:ro` + depo) gizli ada `install -m 0644 -o <dizin sahibi>` + `ln` ile yayın (var olan dosya EZİLMEZ) → geçici dizin silinir → ölçüm (0644, özet, satıcı konteyneri görüyor mu) → `vds-dogrula.sh` (sonra, çıktısı öncekiyle birebir). Aynı adlı dosya: içerik aynıysa dokunulmaz, farklıysa DUR. Bekçi `node scripts/test_derleme_koy.mjs`. İlk KURU ölçüm (2026-10-02, üretim): bağ `/opt/stack/apps/tekserp-satici-uretim/derlemeler false` · yardımcı imaj `tekserp-satici-yedek:4467956b3db8` · dizin `0:0 755` · 3 dosya; `vds-dogrula` önce/sonra AYNI.
+KURU: yerel denetim (sha256 · yanındaki `.sha256` · satıcının ad kuralı `storage.ts` `BUILD_NAME`/`BUILD_EXTENSIONS`ten · PROVA adı üretime RED) + VDS'te tek ssh ile YALNIZ OKUMA (`lisans-devreye/lib/ag.mjs` sözleşmesi): satıcının `/derlemeler` bağı (`<K>/derlemeler false` olmalı), yardımcı imaj (`<ortam>-yedek` konteynerinin imajı), dizin sahibi/izni (bugün `0:0 755`, §13.4-2), aynı adlı dosya, disk, AKTİF indirme bağlantıları (satıcı DB'si, `durum='AKTIF' AND now() < bitis`); sonra `--uygula`nın koşacağı komutların TAM listesi. Koyma (`--uygula`): `deploy/vds-dogrula.sh` (önce, AYNI) → `~/derleme-koy-<damga>` → scp → `sha256sum -c` → yardımcı konteyner (`--network none --user 0`, yalnız `/g:ro` + depo) gizli ada `install -m 0644 -o <dizin sahibi>` + `ln` ile yayın (var olan dosya EZİLMEZ) → geçici dizin silinir → ölçüm (0644, özet, satıcı konteyneri görüyor mu) → `vds-dogrula.sh` (sonra, çıktısı öncekiyle birebir). Aynı adlı dosya: içerik aynıysa dokunulmaz, farklıysa DUR. Kaldırma: AKTİF bağlantı yeniden ölçülür → dosya Mac arşivine (`--arsiv`, varsayılan `~/.tekserp/arsiv/derlemeler`) indirilip uzak özetle eşitlenir (aynı adlı farklı dosya varsa DUR) → konteynerde `sha256sum -c` + `rm` → ölçüm. `--kaldir`da AKTİF bağlantılı dosya DUR'dur; `--yenile` yalnız yeni arşivin GRUBUNDAKİ öteki `TeksERP-Kurulum-<grup>-*.zip`leri kaldırır (test yayını onaylı arşive, grupsuz eski ada ve başka tür dosyaya DOKUNMAZ), AKTİF bağlantılı eskiyi KORUR ve raporlar; grup adı taşımayan arşivle `--yenile` DUR. Bekçi `node scripts/test_derleme_koy.mjs`. İlk KURU ölçüm (2026-10-02, üretim): bağ `/opt/stack/apps/tekserp-satici-uretim/derlemeler false` · yardımcı imaj `tekserp-satici-yedek:4467956b3db8` · dizin `0:0 755` · 3 dosya; `vds-dogrula` önce/sonra AYNI.
 
-### 14.3 Portal: tek bağlantı
+### 14.4 Portal: tek bağlantı
 
-Kurulumlar → kurulum → **İlk kurulum → Bağlantı ver** → derleme listesinden arşiv (`GET /dagitim/derlemeler`) → `/d/<belirteç>`. Bağlantı doğarken sunucu dosyanın sha256'sını ve boyunu DONDURUR; dosya sonradan değişirse indirme 410 (`openVerified`) — bu yüzden depoya konan dosya ezilmez, yeni sürüm yeni addır. Müşteri: indir → arşive sağ tık **Tümünü ayıkla** → çıkan klasörde `TeksERP-Kurulum-<sürüm>.exe`.
+Kurulumlar → kurulum → **İlk kurulum → Bağlantı ver** → derleme listesinden arşiv (`GET /dagitim/derlemeler`, her satır `grup` taşır) → `/d/<belirteç>`. Liste grubu yazar: onaylı arşivler önce (`Onaylı · Öncü/Genel grubu`), sonra `Test grubu · yalnız deneme kurulumu`; onaylı arşiv yoksa pencere "Onaylı paket yok — müşteriye verilecek kurulum paketi sürüm terfisiyle gelir" der. Bağlantı doğarken sunucu dosyanın sha256'sını ve boyunu DONDURUR; dosya sonradan değişirse indirme 410 (`openVerified`) — bu yüzden depoya konan dosya ezilmez, yeni sürüm yeni addır. Müşteri: indir → arşive sağ tık **Tümünü ayıkla** → çıkan klasörde önce `TeksERP-Kurulum-<sürüm>.exe` (sunucu), sonra `TeksERP-<v>-Setup.exe` (yönetim paneli).
 
-Depoya yalnız ortak kurulum arşivi girer. Tablet APK'sı bu depoya KONMAZ (ortak tablet yalnız Google Play'den kurulur, `TEK-ORTAK-PAKET.md` §2.2, K-14). Panelin GÜNCELLEMESİ grubun belirteçli indirme yolundan (`<grup>/electron/`) gelir; İLK panel kurulum dosyasının yeni müşteriye hangi yoldan gideceği tanımsızdır (arşiv panel taşımaz, depoya panel konmaz) — açık, arşiv notu.
+Depoya yalnız ortak kurulum arşivi girer. Tablet APK'sı bu depoya KONMAZ (ortak tablet yalnız Google Play'den kurulur, `TEK-ORTAK-PAKET.md` §2.2, K-14). Panelin GÜNCELLEMESİ grubun belirteçli indirme yolundan (`<grup>/electron/`) gelir; İLK panel kurulumu arşivin içindedir. Depo 2026-10-11'den beri BOŞ (dört demofabrika kimlikli dosya tek seferlik kaldırıldı; `docs/history/arsiv/2026-10.md` §2026-10-11); ilk otomatik dolum test grubunun ilk Windows yayınında (2.15.6) olur — o zamana dek portal ilk kurulum bağlantısı veremez (liste boş), yanlış paket vermekten iyidir.
 
-**Eski derlemeyi kaldırma — araç YOK.** `derleme-koy` yalnız ekler. 2026-10-11'de depodaki dört demofabrika kimlikli dosya tek seferlik kaldırıldı (önce Mac'e arşiv + sha256 eşitliği, AKTİF bağlantı sıfır, `vds-dogrula` önce = sonra; kayıt `docs/history/arsiv/2026-10.md` §2026-10-11 Derleme deposu temizliği). O günden beri depo BOŞ: ortak Windows backend paketi imzalanıp arşiv §14.1–14.2 ile konana dek portal ilk kurulum bağlantısı verilemez (liste boş) — yanlış paket vermekten iyidir.
-
-### 14.4 Ölçülen sınırlar (tek dosya modeli)
+### 14.5 Ölçülen sınırlar (tek dosya modeli)
 
 | Konu | Ölçüm | Kaynak |
 |---|---|---|
