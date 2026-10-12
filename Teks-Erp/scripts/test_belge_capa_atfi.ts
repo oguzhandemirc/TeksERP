@@ -131,7 +131,8 @@ function main(): void {
   const adIndeksi = new Map<string, string>();
   for (const p of tum) if (!adIndeksi.has(basename(p))) adIndeksi.set(basename(p), p);
 
-  const kaynak = tum.filter((p) => p.startsWith("docs/") && !ARSIV.some((a) => p.startsWith(a)));
+  // `.claude/rules/` öz + § çapası taşır; çapası bayatlarsa ajan yanlış bölüme gider.
+  const kaynak = tum.filter((p) => (p.startsWith("docs/") || p.startsWith(".claude/rules/")) && !ARSIV.some((a) => p.startsWith(a)));
   check("kaynak belge kümesi okunabildi", kaynak.length >= 40, `${kaynak.length} canlı .md · ${tum.length} hedef .md`);
 
   let numarali = 0;
