@@ -9,6 +9,7 @@
 //   §4 ucuz ön denetimler nonce'tan ÖNCE: şemaya uymayan imzalı gövde · DR olmayan kurulumun devralma isteği
 //      nonce defterine yazılmaz; geçerli istek tam bir satır yazar
 //   §5 yarışı kaybeden tekillik ihlali (P2002) 409 TEKRAR_DENEYIN'dir, 500 değil
+//   §1j B9 sınırlayıcı haritası SERT tavanlı (pencere içinde taze anahtar seli belleği büyütmez; en eski düşer)
 // ⭐ KALICI SONDA ✓K4 (her koşumda): sahte başlık güvenilmeyen soketten YOK SAYILIR · çöp istekler kota
 //    tüketmez (sınır imzadan sonra) · sınırın altındaki istekler geçer (kör ret yok) · geçerli istek nonce yazar.
 // Koşum: npx tsx scripts/test_genel_dinleyici.ts   (kendi _test DB'si)
@@ -19,6 +20,7 @@ import { ENDPOINTS } from "../src/lisans-protokol";
 import { loadConfig } from "../src/config";
 import { clientAddress, proxyTrustFrom } from "../src/http/client-address";
 import { errorHandler } from "../src/http/error-handler";
+import { FixedWindowLimiter } from "../src/http/rate-limit";
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   anahtarOrtamiKur,
@@ -76,6 +78,12 @@ async function main(): Promise<void> {
     bicimsizRed = true;
   }
   kontrol("§1i biçimsiz CIDR açılışı durdurur (fail-closed)", bicimsizRed);
+  const sinir = new FixedWindowLimiter(3, 100);
+  const t0 = Date.now();
+  for (let i = 0; i < 3_000; i++) sinir.hit(`k${i}`, t0 + i);
+  kontrol("§1j B9 pencere içinde 3 000 taze anahtar → harita tavanda (100)", sinir.size <= 100, `${sinir.size}`);
+  for (let i = 0; i < 3; i++) sinir.hit("sicak", t0 + 3_000);
+  kontrol("§1j2 ✓K tavan sayımı bozmaz: sıcak anahtar 4. istekte 429", sinir.hit("sicak", t0 + 3_001) !== null);
 
   const ortam = await anahtarOrtamiKur(Date.now(), { V1_HIZ_IP_DK: "5" });
   const { f, ctx } = ortam;

@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { assertSecretFileMode } from "../keys/secret-file-mode";
 
 export const PORTAL_SECRET_KEY_FILE = "portal-totp.key";
 const PREFIX = "v1";
@@ -19,6 +20,7 @@ export class PortalSecretBox {
       writeFileSync(file, `${crypto.randomBytes(32).toString("base64url")}\n`, { mode: 0o600, flag: "wx" });
       chmodSync(file, 0o600);
     }
+    assertSecretFileMode(file);
     const key = Buffer.from(readFileSync(file, "utf8").trim(), "base64url");
     if (key.length !== 32) throw new Error(`Portal sır anahtarı biçimsiz (32 bayt değil): ${file}`);
     return new PortalSecretBox(key);

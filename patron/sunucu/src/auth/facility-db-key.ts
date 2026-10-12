@@ -4,6 +4,7 @@
 import crypto from "node:crypto";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { assertSecretFileMode } from "../lib/secret-file-mode";
 
 export const FACILITY_DB_KEY_FILE = "patron-tesis-db.key";
 
@@ -28,6 +29,7 @@ export class FacilityDbKey {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
       }
     }
+    assertSecretFileMode(file);
     const key = Buffer.from(readFileSync(file, "utf8").trim(), "base64url");
     if (key.length !== 32) throw new Error(`Tesis DB anahtarı biçimsiz (32 bayt değil): ${file}`);
     return new FacilityDbKey(key);

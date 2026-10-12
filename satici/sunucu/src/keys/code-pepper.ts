@@ -4,6 +4,7 @@
 import crypto from "node:crypto";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { assertSecretFileMode } from "./secret-file-mode";
 
 export const ACTIVATION_CODE_PEPPER_FILE = "etkinlestirme-kodu.pepper";
 
@@ -17,6 +18,7 @@ export class ActivationCodeHasher {
       writeFileSync(file, `${crypto.randomBytes(32).toString("base64url")}\n`, { mode: 0o600, flag: "wx" });
       chmodSync(file, 0o600);
     }
+    assertSecretFileMode(file);
     const pepper = Buffer.from(readFileSync(file, "utf8").trim(), "base64url");
     if (pepper.length !== 32) throw new Error(`Etkinleştirme kodu sırrı biçimsiz (32 bayt değil): ${file}`);
     return new ActivationCodeHasher(pepper);

@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { assertSecretFileMode } from "./secret-file-mode";
 
 export const MODULE_VAULT_KEY_FILE = "modul-kasasi.key";
 const PREFIX = "v1";
@@ -20,6 +21,7 @@ export class ModuleKeyVault {
       writeFileSync(file, `${crypto.randomBytes(32).toString("base64url")}\n`, { mode: 0o600, flag: "wx" });
       chmodSync(file, 0o600);
     }
+    assertSecretFileMode(file);
     const key = Buffer.from(readFileSync(file, "utf8").trim(), "base64url");
     if (key.length !== 32) throw new Error(`Modül kasası anahtarı biçimsiz (32 bayt değil): ${file}`);
     return new ModuleKeyVault(key);

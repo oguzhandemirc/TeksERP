@@ -39,7 +39,10 @@ for s in goc uygulama esitleme; do openssl rand -hex 32 > "$D/sirlar/$s-parolasi
 : > "$D/sirlar/ic-api-belirteci"   # boş = iç API kapalı (kayıt kipi)
 node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url")+"\n")' > "$D/anahtarlar/patron-totp.key"
 node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url")+"\n")' > "$D/sirlar/tesis-rol-anahtari"
-chmod 755 "$D" "$D/sirlar" "$D/anahtarlar" "$D/yedek-alici" "$D/yedek"; chmod 644 "$D"/sirlar/* "$D/anahtarlar/patron-totp.key"
+chmod 755 "$D" "$D/sirlar" "$D/anahtarlar" "$D/yedek-alici" "$D/yedek"; chmod 644 "$D"/sirlar/*
+# Parolasız sırlar diğerlerine açıksa patron AÇILMAZ (secret-file-mode.ts): konteyner kullanıcısına (10001) ait 0600.
+docker run --rm -u 0 --network none -v "$D:/d" --entrypoint node "$YIMAJ" -e \
+  'const fs=require("fs");for(const f of ["/d/anahtarlar/patron-totp.key","/d/sirlar/tesis-rol-anahtari"]){fs.chownSync(f,10001,10001);fs.chmodSync(f,0o600)}'
 docker run --rm --network none -v "$D:/d" --entrypoint node "$YIMAJ" /arac/yedek-sifrele.cjs \
   anahtar-uret --ad patron --dizin /d/yedek-alici --ozel-cikti /d/yedek-ozel.txt >/dev/null 2>&1
 cat > "$D/.env" <<EOF

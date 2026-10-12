@@ -7,6 +7,7 @@
 //   §3 gerçek süreç: pepper + kasa anahtarı eksik salt okunur dizinde açılış çıkış 1, açık hata, dosya yaratılmaz
 //   §4 `sirlar-uret` eksik ikisini 0600 üretir, var olanı ezmez; ikinci koşum üçünü de korur (baytlar aynı)
 //   §5 pozitif: sırlar tamken salt okunur dizinde gerçek sunucu dinlemeye başlar
+//   §6 B6 parolasız sır dosyası diğerlerine açık (0644) → açılış RED (TR ileti); 0640 serbest; geliştirme beyanı yalnız NODE_ENV≠production
 // Koşum: npx tsx scripts/test_sunucu_sirlari.ts   (kendi `_test` DB'si; yalnız §5 bağlanır, satır yazmaz)
 // =============================================================================
 import { spawn, spawnSync } from "node:child_process";
@@ -45,16 +46,19 @@ function statikIhlaller(oku: (f: string) => string): string[] {
 const oku = (f: string): string => readFileSync(path.join(SATICI_KOKU, f), "utf8");
 const ozet = (f: string): string => crypto.createHash("sha256").update(readFileSync(f)).digest("hex");
 
-function sunucuCikisi(dizin: string, capa: string): Promise<{ kod: number | null; log: string }> {
+function sunucuCikisi(dizin: string, capa: string, ek: Record<string, string> = {}): Promise<{ kod: number | null; log: string }> {
   return new Promise((resolve) => {
     const surec = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
       cwd: SATICI_KOKU,
-      env: { ...process.env, ...BEKCI_ORTAMI, PORT_GENEL: "0", PORT_IC: "0", GENEL_BIND: "127.0.0.1", IC_BIND: "127.0.0.1", ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: capa },
+      env: { ...process.env, ...BEKCI_ORTAMI, PORT_GENEL: "0", PORT_IC: "0", GENEL_BIND: "127.0.0.1", IC_BIND: "127.0.0.1", ANAHTAR_DIZINI: dizin, GUVEN_CAPASI_DOSYASI: capa, ...ek },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let log = "";
     const zaman = setTimeout(() => surec.kill("SIGKILL"), 30_000);
-    surec.stdout.on("data", (c: Buffer) => (log += c.toString("utf8")));
+    surec.stdout.on("data", (c: Buffer) => {
+      log += c.toString("utf8");
+      if (log.includes("SATICI_DINLIYOR")) surec.kill("SIGTERM");
+    });
     surec.stderr.on("data", (c: Buffer) => (log += c.toString("utf8")));
     surec.once("exit", (kod) => {
       clearTimeout(zaman);
@@ -124,6 +128,27 @@ async function main(): Promise<void> {
     const sunucu = await sunucuBaslat(ortam);
     kontrol("§5 salt okunur anahtar dizininde SATICI_DINLIYOR", /SATICI_DINLIYOR/.test(sunucu.cikti()));
     await sunucu.durdur();
+
+    console.log("\n§6 B6 — parolasız sır dosyası izni (iç API sırrıyla aynı: diğerlerine açık = RED)");
+    chmodSync(ortam.dizin, 0o700);
+    const alt = path.join(ortam.dizin, `${ortam.f.alt.kid}.anahtar.json`);
+    const totp = path.join(ortam.dizin, PORTAL_SECRET_KEY_FILE);
+    chmodSync(alt, 0o644);
+    const r6a = await sunucuCikisi(ortam.dizin, ortam.capaDosyasi);
+    kontrol("§6a ALT anahtarı 0644 → açılış çıkış 1, dinleyici yok, TR ileti dosya adını söyler", r6a.kod === 1 && !r6a.log.includes("SATICI_DINLIYOR") && r6a.log.includes("Sır dosyası izni güvensiz") && r6a.log.includes(`${ortam.f.alt.kid}.anahtar.json`), `çıkış ${r6a.kod}`);
+    const r6b = await sunucuCikisi(ortam.dizin, ortam.capaDosyasi, { NODE_ENV: "production", ANAHTAR_IZIN_UYARI: "1" });
+    kontrol("§6b üretimde geliştirme beyanı kaçış DEĞİL (NODE_ENV=production + ANAHTAR_IZIN_UYARI=1 → yine RED)", r6b.kod === 1 && !r6b.log.includes("SATICI_DINLIYOR"), `çıkış ${r6b.kod}`);
+    const r6c = await sunucuCikisi(ortam.dizin, ortam.capaDosyasi, { NODE_ENV: "development", ANAHTAR_IZIN_UYARI: "1" });
+    kontrol("§6c geliştirme beyanıyla yalnız UYARI, sunucu açılır", r6c.log.includes("SATICI_DINLIYOR") && r6c.log.includes("ANAHTAR_IZIN_UYARI=1"), `çıkış ${r6c.kod}`);
+    chmodSync(alt, 0o640);
+    chmodSync(totp, 0o604);
+    const r6d = await sunucuCikisi(ortam.dizin, ortam.capaDosyasi);
+    kontrol("§6d portal TOTP anahtarı diğerlerine okunur → RED", r6d.kod === 1 && r6d.log.includes(PORTAL_SECRET_KEY_FILE), `çıkış ${r6d.kod}`);
+    chmodSync(totp, 0o640);
+    const r6e = await sunucuCikisi(ortam.dizin, ortam.capaDosyasi);
+    kontrol("§6e ✓K grup okuması (0640, konteyner grubu) serbest → sunucu açılır", r6e.log.includes("SATICI_DINLIYOR"), `çıkış ${r6e.kod}`);
+    chmodSync(alt, 0o600);
+    chmodSync(totp, 0o600);
   } finally {
     chmodSync(ortam.dizin, 0o700);
     await temizleKurulumlar([], ortam.kidler);

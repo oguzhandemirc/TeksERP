@@ -7,13 +7,16 @@
 //   §5 hata yolu: claim bırakılır, deneme + kısa hata + bekleme; yarım göç defteri DB'yi kilitler (P3009).
 //   §6 ad çakışması reddedilir · merkez adı tavanı · merkez işareti.
 //   §7 sunucu hazırlayıcıyı import ETMEZ (import grafiği; negatif sonda: CLI grafiği bulur).
+//   §8 B6 parolasız sır (tesis DB anahtarı · TOTP anahtarı) diğerlerine açıksa yüklenmez; 0640 serbest; geliştirme beyanı yalnız NODE_ENV≠production.
 // =============================================================================
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Client } from "pg";
 import { FacilityDbKey } from "../src/auth/facility-db-key";
+import { SecretBox } from "../src/auth/secret-box";
+import { SecretFileModeError } from "../src/lib/secret-file-mode";
 import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 import { CENTRAL_MARK, assertCentralName, databaseOf, facilityDbName, facilityRoles, withDatabase } from "../src/lib/tesis-db-ad";
 import { prepareFacilityDb, type PrepareDeps } from "../src/lib/tesis-db-hazirlik";
@@ -207,7 +210,54 @@ function sunucuGrafigi(): void {
   kontrol("§7b negatif sonda: CLI grafiği hazırlayıcıyı BULUR (tarayıcı çalışıyor)", cli.has(hedef));
 }
 
+function sirIzni(): void {
+  console.log("\n§8 B6 parolasız sır dosyası izni");
+  const d = mkdtempSync(path.join(os.tmpdir(), "patron-sir-izni-"));
+  try {
+    const anahtar = path.join(d, "patron-tesis-db.key");
+    FacilityDbKey.load(anahtar, { create: true });
+    SecretBox.load(d, { create: true });
+    const totp = readdirOne(d, "totp");
+    const dene = (f: () => unknown): unknown => {
+      try {
+        f();
+        return null;
+      } catch (e) {
+        return e;
+      }
+    };
+    chmodSync(anahtar, 0o644);
+    const e1 = dene(() => FacilityDbKey.load(anahtar, { create: false }));
+    kontrol("§8a tesis DB anahtarı 0644 → SecretFileModeError (TR ileti, dosya adı)", e1 instanceof SecretFileModeError && e1.message.includes("patron-tesis-db.key"), String(e1));
+    const onceki = { n: process.env.NODE_ENV, u: process.env.ANAHTAR_IZIN_UYARI };
+    process.env.ANAHTAR_IZIN_UYARI = "1";
+    process.env.NODE_ENV = "production";
+    const e2 = dene(() => FacilityDbKey.load(anahtar, { create: false }));
+    process.env.NODE_ENV = "development";
+    const e3 = dene(() => FacilityDbKey.load(anahtar, { create: false }));
+    process.env.NODE_ENV = onceki.n;
+    process.env.ANAHTAR_IZIN_UYARI = onceki.u;
+    if (onceki.n === undefined) delete process.env.NODE_ENV;
+    if (onceki.u === undefined) delete process.env.ANAHTAR_IZIN_UYARI;
+    kontrol("§8b üretimde geliştirme beyanı kaçış DEĞİL; geliştirmede yalnız uyarı", e2 instanceof SecretFileModeError && e3 === null, `${String(e2)} / ${String(e3)}`);
+    chmodSync(anahtar, 0o640);
+    chmodSync(totp, 0o604);
+    const e4 = dene(() => SecretBox.load(d, { create: false }));
+    const e5 = dene(() => FacilityDbKey.load(anahtar, { create: false }));
+    kontrol("§8c TOTP anahtarı diğerlerine okunur → RED; ✓K 0640 tesis anahtarı yüklenir", e4 instanceof SecretFileModeError && e5 === null, `${String(e4)} / ${String(e5)}`);
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+}
+
+function readdirOne(d: string, parca: string): string {
+  const ad = readdirSync(d).find((f) => f.includes(parca));
+  if (!ad) throw new Error(`${parca} dosyası yok`);
+  return path.join(d, ad);
+}
+
 async function main(): Promise<void> {
+  sirIzni();
   await applyRoles(process.env);
   const goc = await baglan(GOC);
   try {

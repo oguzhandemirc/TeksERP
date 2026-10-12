@@ -9,8 +9,9 @@
 // Çapa: gömülü üretim kökleri (GUVEN_CAPASI=uretim; fabrika derlemesinin güvendiği küme — ayna); yalnız bekçiler için
 // GUVEN_CAPASI_DOSYASI.
 // Çapada olmayan kökle imza yapılmaz (fabrika reddederdi); kip yok ya da çapa geçersizse yükleme DURUR (fail-closed).
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import { assertSecretFileMode } from "./secret-file-mode";
 import type { KeyObject } from "node:crypto";
 import { z } from "zod";
 import {
@@ -171,9 +172,9 @@ export class KeyStore {
 
     const subKeys: LoadedSubKey[] = [];
     for (const file of listFiles(dir, ".anahtar.json")) {
+      // Parolasız özel yarı: izin sapması uyarı değil açılış reddi (B6).
+      assertSecretFileMode(file);
       try {
-        const mode = statSync(file).mode & 0o077;
-        if (mode !== 0 && process.platform !== "win32") warnings.push(`${path.basename(file)} başkalarına açık (0600 olmalı)`);
         const k = readSubKeyFile(file);
         const meta = USAGE_OF[k.tur];
         const cert = verifyCertificate(k.sertifika, { roots: anchor, usage: meta.usage, atMs: nowMs });

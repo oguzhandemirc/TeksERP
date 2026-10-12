@@ -8,20 +8,37 @@ const WINDOW_MS = 60_000;
 const MAX_KEYS = 10_000;
 
 export class FixedWindowLimiter {
+  /** Ekleme sırası = pencere başlangıç sırası (yeni pencere sona taşınır): en eski hep baştadır. */
   private readonly windows = new Map<string, { start: number; count: number }>();
 
-  constructor(private readonly perMinute: number) {}
+  constructor(
+    private readonly perMinute: number,
+    private readonly maxKeys: number = MAX_KEYS,
+  ) {}
 
   /** Sayar; sınır aşıldıysa kalan saniyeyi (Retry-After), aşılmadıysa null döner. */
   hit(key: string, nowMs: number = Date.now()): number | null {
-    if (this.windows.size > MAX_KEYS) for (const [k, w] of this.windows) if (nowMs - w.start >= WINDOW_MS) this.windows.delete(k);
     const w = this.windows.get(key);
     if (!w || nowMs - w.start >= WINDOW_MS) {
+      this.windows.delete(key);
       this.windows.set(key, { start: nowMs, count: 1 });
+      this.prune(nowMs);
       return null;
     }
     w.count++;
     return w.count > this.perMinute ? Math.max(1, Math.ceil((w.start + WINDOW_MS - nowMs) / 1000)) : null;
+  }
+
+  /** Baştan budar: süresi dolanlar ve tavan aşımında en eski pencere (sert tavan; hit başına amortize O(1)). */
+  private prune(nowMs: number): void {
+    for (const [k, w] of this.windows) {
+      if (this.windows.size <= this.maxKeys && nowMs - w.start < WINDOW_MS) break;
+      this.windows.delete(k);
+    }
+  }
+
+  get size(): number {
+    return this.windows.size;
   }
 }
 
