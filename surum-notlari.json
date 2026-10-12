@@ -148,6 +148,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Lisans ekranının üstünde küçük bir şerit lisansın hangi kipte olduğunu (Gözlem ya da Zorlama) ve hangi basamakta bulunduğunu (Uyarı, Ek süre, Kısıtlı kip) gösterir; ek süre sürüyorsa kalan gün yazar. Gözlem kipinde basamak yalnız bilgi içindir ve “gözlemde uygulanmaz” yazar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İnternet ve karekod yolu yokken program lisans ekranından “Yazarak etkinleştir” ile geçici olarak açılabilir: ekrandaki istek kodu satıcınıza okunur, verdiği 23 gruplu kod yazılır ya da yapıştırılır. Yanlış yazılan grup kırmızı görünür. Geçici açıklıkta üst şerit bitiş tarihini ve kalan günü gösterir; tam etkinleştirme yine karekod ya da internetle yapılır."
         }
       ]
     },

@@ -36,6 +36,10 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   eski sunucu bu sürede çalışmaya devam eder. (Eskiden talep gönderilir gönderilmez yeni sunucu tam açılıyordu;
   bu, lisanssız kopyanın da açık kapısıydı.) Lisans ekranı talebin durumunu gösterir. **Etkinleştirilmiş
   kurulumlar etkilenmez.**
+- **Yazarak etkinleştirme (internet ve karekod yoksa, geçici).** Etkinleştirilmemiş sunucunun lisans ekranında bir
+  istek kodu görünür; satıcıya okunur, satıcının verdiği 23 gruplu geçici açılış kodu yazılınca program kodun süresi
+  boyunca açılır. Bitişe 7 gün kala uyarı, bitişten sonra 30 gün ek süre, sonra kısıtlı kip. Tam etkinleştirme yine
+  karekod ya da internetle yapılır.
 - **Lisans dosyaları kaybolan yeni sürüm kurulumda süre sınırı.** Lisans klasörü silinmiş ya da kaybolmuş ama
   veritabanı daha önce zorlama kipinde etkinleştirilmiş bir lisansın izini taşıyan sunucu artık süresiz çalışmaz:
   14 gün uyarı, sonra 30 gün ek süre, sonra kısıtlı kip (okuma, rapor, yedek ve dışa aktarma açık). Yeniden
@@ -203,6 +207,11 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   süre → kısıtlı. Başlangıç lisans dizinindeki kurulum anahtarıyla imzalı `yabanci-iz-baslangic.json`dan sayılır
   (veritabanını silmek/geri yüklemek sıfırlamaz); etkinleştirme ek süresi bu kurulumda ilk açılıştan sayılmaz.
   Gözlem kipli iz ve korumasız derleme bugünkü gibi. Sözleşme değişmez (yeni alan/uç/kod yok).
+- `e61fa7cc0` — yazarak etkinleştirme (G2 yazma yolu): istek kodu `TI-…` LICENSE_DIR'de bekler; `TG-…` 23×5 açılış
+  kodu yalnız ÜRETİM sınıflı gömülü kökle, istek koduna bağlı imzayla, tek kullanımlık doğrulanır; geçici etkinlik
+  kilit sınıfı açmaz (neden `GECICI`), merdiven ≤ 7 g uyarı → 30 g ek süre → kısıtlı, yalnız korumalı derlemede;
+  tam etkinleştirme geçici kaydı kapatır, tüketim satıcıya kuyrukla bildirilir.
+- `40ea5684f` — `GET /api/license/durum` cevabına `gecici: {bitis, kalanGun, kodSonu} | null` (panel bandı).
 
 **Yetki denetimi düzeltmeleri (güvenlik Bölge 2)** (commitler `fix(yetki): B1 …`, `B2 …`, `B3+B4 …`, `B5+B6 …`; kısa kimlikleri paketlemede yazılır)
 
@@ -331,6 +340,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   döner; bozuk imleç 400 `INVALID_CURSOR`. **Anlam değişimi:** toplam/Pareto/kırılım ve `meta.total` tam kümeden;
   `meta.truncated` artık "sonraki sayfa var" demektir. Eski panel ilk 500 satırı + "kırpıldı" şeridini görür,
   üstteki toplamlar yine tam kümedir.
+- **Kırıldı mı:** HAYIR (yazarak etkinleştirme kısmı) — yalnız ekleme: `GET /api/license/gecici-kod/istek`,
+  `POST /api/license/gecici-kod/istek/yenile`, `POST /api/license/gecici-kod` (400 `TEMP_CODE_INVALID` +
+  `details.neden`/`konum`), durum cevabında `gecici`. Eski panel kartı göstermez, yeni alanı okumaz; geçici açık
+  kurulumda eski panel kilit sınıfını "YOK" görür ve normal çalışır.
 - **Kırıldı mı:** HAYIR (toplu etiket kısmı) — uçlar ve yanıt biçimi aynı; etiket HTML'indeki barkod SVG'sinin
   metni değişti (bwip yol çizimi yerine dikdörtgenler), viewBox ve görüntü aynı.
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
