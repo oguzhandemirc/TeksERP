@@ -12,11 +12,10 @@ import { buildSackDumpHtml } from "./dumpHtml";
 import { buildSackDumpSheets } from "./dumpSheets";
 import { dumpRowCount, type SackDump, type SackDumpOptions } from "./types";
 import { factoryDayKey } from "@/lib/factory-time";
+import { PDF_MAX_ROWS } from "@shared/pdf-limits";
 
-// Yazdır/PDF üst sınırı — `table-export.ts` PDF_MAX_ROWS ile aynı gerekçe: bu kadar
-// satırın üstünde tek belge hem üretilemez (offscreen render çökme riski) hem
-// okunmaz. 200 çuval × onlarca top bu sınıra ulaşabilir → Excel'e yönlendir.
-const PDF_MAX_ROWS = 10000;
+// Yazdır/PDF üst sınırı ortak PDF kapısının satır aynasıdır: 200 çuval × onlarca top
+// bu sınıra ulaşabilir → Excel'e yönlendir.
 
 /** yyyy-MM-dd — dosya adına eklenen sıralanabilir tarih damgası. */
 function dateStamp(): string {

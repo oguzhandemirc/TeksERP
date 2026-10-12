@@ -2,6 +2,7 @@ import { BrowserWindow, session } from "electron";
 import type { BrowserWindowConstructorOptions, Session, WebContents } from "electron";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { showSaveDialogFor, showOpenDialogFor } from "./dialog-window.js";
 import { applyPdfLicenseMeta, sanitizePdfLicenseMeta, type PdfLicenseMeta } from "./pdf-metadata.js";
 import { handleTrusted } from "../security/trusted-ipc.js";
@@ -11,6 +12,12 @@ import type {
   PdfSaveBatchOpts,
   SaveBatchResult,
 } from "../../shared/ipc-contract.js";
+import {
+  PDF_MAX_HTML_BYTES,
+  PDF_TIMEOUT_MESSAGE,
+  PDF_TIMEOUT_MS,
+  pdfTooLargeMessage,
+} from "../../shared/pdf-limits.js";
 
 /** Dosya adını güvenli hale getir (yasak karakterler → _), max 100. */
 function safeFileName(name: string): string {
@@ -55,9 +62,36 @@ export const PDF_WINDOW_OPTIONS = {
   },
 } satisfies BrowserWindowConstructorOptions;
 
-/** Belgenin kendi gömülü içeriği dışında (data:/blob:/about:) hiçbir istek çıkmaz — dosya/UNC/ağ dahil. */
+/**
+ * Belge HTML'i bu şemadan, BELLEKTEN servis edilir: `data:` URL Chromium'un 2 MB URL
+ * sınırına takılıyordu ve geçici dosya belge verisini diske yazardı.
+ */
+export const PDF_DOC_SCHEME = "tekserp-pdf";
+const PDF_DOC_PREFIX = `${PDF_DOC_SCHEME}://doc/`;
+const pendingDocs = new Map<string, string>();
+
+/** Belgenin kendi gömülü içeriği ve bellekteki belge dışında hiçbir istek çıkmaz — dosya/UNC/ağ dahil. */
 export function isPdfResourceAllowed(url: string): boolean {
-  return url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:");
+  return (
+    url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:") || url.startsWith(PDF_DOC_PREFIX)
+  );
+}
+
+/** Kullanıcıya OLDUĞU GİBİ gösterilebilen hata (sabit Türkçe metin; URL/HTML taşımaz). */
+export class PdfUserError extends Error {}
+
+/** Hata metni IPC'ye ve toast'a gider: ham Chromium mesajı (içinde tüm URL olabilir) asla. */
+export function pdfErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof PdfUserError) return err.message;
+  const raw = err instanceof Error ? err.message.slice(0, 200) : "";
+  const code = /\bERR_[A-Z0-9_]+\b/.exec(raw)?.[0];
+  return code ? `${fallback} (${code})` : fallback;
+}
+
+/** Bayt kapısı — çizimden ve kaydet diyaloğundan ÖNCE. */
+export function assertPdfSize(html: string): void {
+  const bytes = Buffer.byteLength(html, "utf8");
+  if (bytes > PDF_MAX_HTML_BYTES) throw new PdfUserError(pdfTooLargeMessage(bytes));
 }
 
 let pdfSessionHardened: Session | null = null;
@@ -68,6 +102,11 @@ function hardenedPdfSession(): Session {
   ses.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   ses.setPermissionCheckHandler(() => false);
   ses.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !isPdfResourceAllowed(details.url) }));
+  ses.protocol.handle(PDF_DOC_SCHEME, (req) => {
+    const html = req.url.startsWith(PDF_DOC_PREFIX) ? pendingDocs.get(req.url.slice(PDF_DOC_PREFIX.length)) : undefined;
+    if (html === undefined) return new Response(null, { status: 404 });
+    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  });
   pdfSessionHardened = ses;
   return ses;
 }
@@ -82,23 +121,53 @@ export function hardenPdfContents(contents: WebContents): void {
   contents.setWindowOpenHandler(() => ({ action: "deny" }));
 }
 
-export async function htmlToPdf(html: string): Promise<Uint8Array> {
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new PdfUserError(PDF_TIMEOUT_MESSAGE)), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+
+async function renderPdf(html: string): Promise<Uint8Array> {
   hardenedPdfSession();
+  const token = randomUUID();
+  pendingDocs.set(token, html);
   const win = new BrowserWindow(PDF_WINDOW_OPTIONS);
   hardenPdfContents(win.webContents);
   try {
-    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-    // Görsellerin (logo/QR data-uri) yerleşmesi için kısa bekleme.
-    await new Promise((r) => setTimeout(r, 250));
-    const pdf = await win.webContents.printToPDF({
-      printBackground: true,
-      // Kenar boşluğu belgenin kendi @page kuralından gelsin (0 = belge yönetir).
-      margins: { top: 0, bottom: 0, left: 0, right: 0 },
-    });
+    const pdf = await withTimeout(
+      (async () => {
+        await win.loadURL(PDF_DOC_PREFIX + token);
+        // Görsellerin (logo/QR data-uri) yerleşmesi için kısa bekleme.
+        await new Promise((r) => setTimeout(r, 250));
+        return win.webContents.printToPDF({
+          printBackground: true,
+          // Kenar boşluğu belgenin kendi @page kuralından gelsin (0 = belge yönetir).
+          margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        });
+      })(),
+      PDF_TIMEOUT_MS,
+    );
     return await applyPdfLicenseMeta(pdf, licenseMeta);
   } finally {
+    pendingDocs.delete(token);
     win.destroy();
   }
+}
+
+// Tek kuyruk: büyük belge render süreci GB mertebesinde bellek ister, iki paralel PDF bunu ikiye katlar.
+let pdfQueue: Promise<unknown> = Promise.resolve();
+
+export function htmlToPdf(html: string): Promise<Uint8Array> {
+  try {
+    assertPdfSize(html);
+  } catch (err) {
+    return Promise.reject(err);
+  }
+  const run = pdfQueue.then(() => renderPdf(html));
+  pdfQueue = run.catch(() => undefined);
+  return run;
 }
 
 export function registerPdfIpc(): void {
@@ -108,6 +177,7 @@ export function registerPdfIpc(): void {
 
   handleTrusted("pdf:save", async (e, opts: PdfSaveOpts): Promise<PdfSaveResult> => {
     try {
+      assertPdfSize(opts.html);
       const { canceled, filePath } = await showSaveDialogFor(e, {
         title: "PDF Kaydet",
         defaultPath: `${safeFileName(opts.suggestedName)}.pdf`,
@@ -118,7 +188,7 @@ export function registerPdfIpc(): void {
       await writeFile(filePath, pdf);
       return { saved: true, path: filePath };
     } catch (err) {
-      return { saved: false, error: err instanceof Error ? err.message : "PDF oluşturulamadı" };
+      return { saved: false, error: pdfErrorMessage(err, "PDF oluşturulamadı") };
     }
   });
 
@@ -127,6 +197,7 @@ export function registerPdfIpc(): void {
   handleTrusted("pdf:saveBatch", async (e, opts: PdfSaveBatchOpts): Promise<SaveBatchResult> => {
     try {
       if (!opts.items?.length) return { saved: false, error: "Belge yok" };
+      for (const item of opts.items) assertPdfSize(item.html);
       const { canceled, filePaths } = await showOpenDialogFor(e, {
         title: "Belgeleri kaydetmek için klasör seçin",
         properties: ["openDirectory", "createDirectory"],
@@ -147,7 +218,7 @@ export function registerPdfIpc(): void {
       }
       return { saved: true, dir, count };
     } catch (err) {
-      return { saved: false, error: err instanceof Error ? err.message : "PDF'ler oluşturulamadı" };
+      return { saved: false, error: pdfErrorMessage(err, "PDF'ler oluşturulamadı") };
     }
   });
 }

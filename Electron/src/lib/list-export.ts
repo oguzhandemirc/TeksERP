@@ -9,6 +9,7 @@ import { buildWorkbook, saveWorkbook, type SheetSpec } from "./xlsx-export";
 import { upTo3ExcelNumFmt, upTo3Text } from "./number-format";
 import { saveTextAs } from "./file-save";
 import { factoryLocaleString } from "./factory-time";
+import { PDF_MAX_ROWS, pdfTooManyRowsMessage } from "@shared/pdf-limits";
 
 /** Tek sütun tarifi: başlık + satırdan değer çıkaran fonksiyon. */
 export interface ExportColumn<T> {
@@ -18,9 +19,6 @@ export interface ExportColumn<T> {
   summable?: boolean;
 }
 
-// PDF üst sınırı: bunun üstünde tek PDF pratik değil (offscreen render çökme riski +
-// yüzlerce sayfa) → kullanıcı Excel'e yönlendirilir.
-const PDF_MAX_ROWS = 10000;
 
 const CSV_SEP = ";";
 // ⚠️ Kaçış dizisiyle yazılır: HAM BOM karakteri kaynak dosyada görünmez bir
@@ -278,14 +276,12 @@ export async function exportRowsToPdf<T>(
 ): Promise<boolean> {
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
   if (!pdfApi) return false;
+  // Ana süreç bayt kapısının erken aynası: dev HTML'i kurmadan Excel'e yönlendir.
   if (rows.length > PDF_MAX_ROWS) {
-    toast.error(
-      `Liste çok büyük (${rows.length.toLocaleString("tr-TR")} kayıt, ~${Math.ceil(
-        rows.length / 35,
-      ).toLocaleString("tr-TR")} sayfa) — PDF yerine Excel indirin.`,
-    );
+    toast.error(pdfTooManyRowsMessage(rows.length));
     return false;
   }
   const res = await pdfApi.save({ html: buildListHtml(cols, rows, filename, notes), suggestedName: filename });
+  if (!res.saved && res.error) toast.error(res.error);
   return res.saved;
 }

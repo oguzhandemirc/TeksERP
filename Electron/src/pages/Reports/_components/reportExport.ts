@@ -53,6 +53,11 @@ export interface ReportExportSpec {
   tables: ReportTableSpec[];
 }
 
+/** PDF satır kapısı için: bütün tabloların gövde satırları (toplam satırı dahil). */
+export function reportRowCount(spec: ReportExportSpec): number {
+  return spec.tables.reduce((n, t) => n + t.rows.length + (t.totalRow ? 1 : 0), 0);
+}
+
 // ---------- Excel ------------------------------------------------------------
 
 /**

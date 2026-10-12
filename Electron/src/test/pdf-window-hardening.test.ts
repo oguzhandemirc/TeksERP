@@ -16,12 +16,14 @@ interface WindowRecord {
   listeners: Map<string, Listener[]>;
   openHandler: Listener | null;
   loaded: string | null;
+  served: string | null;
   destroyed: boolean;
 }
 interface SessionRecord {
   request: Listener | null;
   check: Listener | null;
   beforeRequest: Listener | null;
+  protocol: { scheme: string; fn: Listener } | null;
 }
 
 const h = vi.hoisted(() => ({
@@ -30,6 +32,10 @@ const h = vi.hoisted(() => ({
   handlers: new Map<string, Listener>(),
   openExternal: vi.fn(),
   printFails: false,
+  printHangs: false,
+  printLog: [] as string[],
+  aliveAtPrint: [] as number[],
+  dialogSave: null as null | ((opts: unknown) => unknown),
 }));
 
 vi.mock("electron", () => {
@@ -38,7 +44,7 @@ vi.mock("electron", () => {
     readonly webContents: Record<string, unknown>;
     private readonly rec: WindowRecord;
     constructor(options: WindowRecord["options"]) {
-      const rec: WindowRecord = { options, listeners: new Map(), openHandler: null, loaded: null, destroyed: false };
+      const rec: WindowRecord = { options, listeners: new Map(), openHandler: null, loaded: null, served: null, destroyed: false };
       h.windows.push(rec);
       this.rec = rec;
       this.webContents = {
@@ -48,31 +54,40 @@ vi.mock("electron", () => {
         },
         printToPDF: async () => {
           if (h.printFails) throw new Error("yazdırılamadı");
+          if (h.printHangs) return new Promise(() => undefined);
+          h.printLog.push(rec.served ?? "");
+          h.aliveAtPrint.push(h.windows.filter((w) => !w.destroyed).length);
           return new Uint8Array([1, 2, 3]);
         },
       };
     }
     async loadURL(url: string): Promise<void> {
       this.rec.loaded = url;
+      const proto = h.sessions.get("tekserp-pdf")?.protocol;
+      if (proto && url.startsWith(`${proto.scheme}:`)) {
+        const res = (await proto.fn({ url })) as Response;
+        this.rec.served = res.status === 200 ? await res.text() : null;
+      }
     }
     destroy(): void {
       this.rec.destroyed = true;
     }
   }
   const fromPartition = (name: string) => {
-    const rec: SessionRecord = h.sessions.get(name) ?? { request: null, check: null, beforeRequest: null };
+    const rec: SessionRecord = h.sessions.get(name) ?? { request: null, check: null, beforeRequest: null, protocol: null };
     h.sessions.set(name, rec);
     return {
       setPermissionRequestHandler: (fn: Listener) => (rec.request = fn),
       setPermissionCheckHandler: (fn: Listener) => (rec.check = fn),
       webRequest: { onBeforeRequest: (fn: Listener) => (rec.beforeRequest = fn) },
+      protocol: { handle: (scheme: string, fn: Listener) => (rec.protocol = { scheme, fn }) },
     };
   };
   return {
     BrowserWindow: FakeBrowserWindow,
     session: { fromPartition },
     ipcMain: { handle: (ch: string, fn: Listener) => h.handlers.set(ch, fn), on: vi.fn() },
-    dialog: { showSaveDialog: vi.fn(async () => ({ canceled: true })), showOpenDialog: vi.fn(async () => ({ canceled: true })) },
+    dialog: { showSaveDialog: vi.fn(async (...args: unknown[]) => h.dialogSave?.(args.at(-1)) ?? { canceled: true }), showOpenDialog: vi.fn(async () => ({ canceled: true })) },
     shell: { openExternal: h.openExternal },
   };
 });
@@ -113,9 +128,13 @@ describe("PDF penceresinin seçenekleri", () => {
     expect(String(pdf.PDF_PARTITION).startsWith("persist:")).toBe(false);
   });
 
-  it("belge data: URL olarak yüklenir ve pencere her durumda yok edilir", async () => {
+  it("⭐ belge data: URL DEĞİL bellekteki şemadan yüklenir, iş bitince bellekten düşer, pencere her durumda yok edilir", async () => {
     const ok = await renderOnce();
-    expect(ok.loaded?.startsWith("data:text/html;charset=utf-8,")).toBe(true);
+    expect(ok.loaded?.startsWith(`${pdf.PDF_DOC_SCHEME}://doc/`)).toBe(true);
+    expect(ok.loaded).not.toContain("<");
+    expect(ok.served).toBe(EVIL_HTML);
+    const proto = h.sessions.get(pdf.PDF_PARTITION)?.protocol;
+    expect(((await proto?.fn({ url: ok.loaded })) as Response).status).toBe(404);
     expect(ok.destroyed).toBe(true);
     h.printFails = true;
     await expect(pdf.htmlToPdf("<p>x</p>")).rejects.toThrow("yazdırılamadı");
@@ -152,6 +171,7 @@ describe("PDF penceresinin kapıları", () => {
       return answer;
     };
     expect(decide("data:image/png;base64,AAAA")).toEqual({ cancel: false });
+    expect(decide(`${pdf.PDF_DOC_SCHEME}://doc/0f0e`)).toEqual({ cancel: false });
     for (const url of ["file://saldirgan/pay/a.png", "file:///C:/Windows/win.ini", "http://10.0.0.5/logo.png", "https://saldirgan.com/p.gif", "ws://x/"]) {
       expect(decide(url), url).toEqual({ cancel: true });
     }
@@ -177,5 +197,80 @@ describe("PDF IPC uçları gönderen denetimli", () => {
     expect(() => save?.(fromShare, opts)).toThrow(trusted.UNTRUSTED_SENDER_ERROR);
     const fromApp = { senderFrame: { url: `${ENTRY}#/belge`, parent: null }, sender: {} };
     await expect(Promise.resolve(save?.(fromApp, opts))).resolves.toEqual({ saved: false });
+  });
+});
+
+// =============================================================================
+// PERF-2 B2: bayt kapısı diyalogdan ÖNCE, hata metni URL/HTML taşımaz, tek kuyruk,
+// 60 s zaman aşımı. Negatif sonda: eski htmlToPdf (data: URL, kapısız) → kırmızı.
+// =============================================================================
+const limits = await import("../../shared/pdf-limits");
+const fromApp = () => ({ senderFrame: { url: `${ENTRY}#/rapor`, parent: null }, sender: {} });
+
+describe("PDF boyut kapısı, hata metni, kuyruk ve zaman aşımı", () => {
+  it("⭐ 6 MB üstü HTML: kaydet diyaloğu AÇILMAZ, pencere açılmaz, sabit Türkçe metin döner", async () => {
+    pdf.registerPdfIpc();
+    trusted.setTrustedAppEntry(ENTRY);
+    const asked = vi.fn(() => ({ canceled: false, filePath: "/tmp/x.pdf" }));
+    h.dialogSave = asked;
+    const before = h.windows.length;
+    const big = "<p>" + "ğ".repeat(limits.PDF_MAX_HTML_BYTES / 2 + 10) + "</p>";
+    const res = (await h.handlers.get("pdf:save")?.(fromApp(), { html: big, suggestedName: "r" })) as { saved: boolean; error: string };
+    h.dialogSave = null;
+    expect(res.saved).toBe(false);
+    expect(res.error).toMatch(/^Belge PDF için çok büyük \(\d[\d.]* KB\) — PDF yerine Excel indirin\.$/);
+    expect(asked).not.toHaveBeenCalled();
+    expect(h.windows.length).toBe(before);
+    await expect(pdf.htmlToPdf(big)).rejects.toBeInstanceOf(pdf.PdfUserError);
+  });
+
+  it("⭐ toplu kayıtta tek büyük belge: klasör sorulmadan reddedilir", async () => {
+    pdf.registerPdfIpc();
+    trusted.setTrustedAppEntry(ENTRY);
+    const big = "x".repeat(limits.PDF_MAX_HTML_BYTES + 1);
+    const res = (await h.handlers.get("pdf:saveBatch")?.(fromApp(), { items: [{ name: "a", html: "<p>a</p>" }, { name: "b", html: big }] })) as { saved: boolean; error: string };
+    expect(res).toEqual({ saved: false, error: limits.pdfTooLargeMessage(limits.PDF_MAX_HTML_BYTES + 1) });
+  });
+
+  it("⭐ Chromium hatası (URL'li) kullanıcıya YALNIZ sabit metin + kod olarak gider", () => {
+    const raw = new Error(`ERR_INVALID_URL (-300) loading 'data:text/html;charset=utf-8,${"%3Ctd%3E".repeat(5000)}'`);
+    const msg = pdf.pdfErrorMessage(raw, "PDF oluşturulamadı");
+    expect(msg).toBe("PDF oluşturulamadı (ERR_INVALID_URL)");
+    expect(pdf.pdfErrorMessage(new Error("<table> içinde bir şey"), "PDF oluşturulamadı")).toBe("PDF oluşturulamadı");
+    expect(pdf.pdfErrorMessage(new pdf.PdfUserError("Belge çok büyük"), "x")).toBe("Belge çok büyük");
+  });
+
+  it("⭐ tek kuyruk: eşzamanlı istekler SIRAYLA çizilir, bir hata kuyruğu kilitlemez", async () => {
+    h.printLog.length = 0;
+    h.aliveAtPrint.length = 0;
+    const a = pdf.htmlToPdf("<p>A</p>");
+    const b = pdf.htmlToPdf("x".repeat(limits.PDF_MAX_HTML_BYTES + 1));
+    const c = pdf.htmlToPdf("<p>C</p>");
+    await expect(b).rejects.toBeInstanceOf(pdf.PdfUserError);
+    await Promise.all([a, c]);
+    expect(h.printLog).toEqual(["<p>A</p>", "<p>C</p>"]);
+    // Sıranın kanıtı: her çizim anında yalnız KENDİ penceresi açık.
+    expect(h.aliveAtPrint).toEqual([1, 1]);
+  });
+
+  it("⭐ 60 s zaman aşımı: takılan çizim pencereyi yok eder, sabit metin, sonraki iş yürür", async () => {
+    vi.useFakeTimers();
+    try {
+      h.printHangs = true;
+      const stuck = pdf.htmlToPdf("<p>takılır</p>");
+      const next = pdf.htmlToPdf("<p>sonra</p>");
+      const caught = stuck.catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(300);
+      h.printHangs = false;
+      await vi.advanceTimersByTimeAsync(limits.PDF_TIMEOUT_MS);
+      const err = await caught;
+      expect(err).toBeInstanceOf(pdf.PdfUserError);
+      expect((err as Error).message).toBe(limits.PDF_TIMEOUT_MESSAGE);
+      expect(h.windows.find((w) => w.served === "<p>takılır</p>")?.destroyed).toBe(true);
+      await vi.advanceTimersByTimeAsync(300);
+      await expect(next).resolves.toBeInstanceOf(Uint8Array);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

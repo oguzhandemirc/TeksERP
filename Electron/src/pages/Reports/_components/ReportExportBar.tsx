@@ -4,7 +4,8 @@ import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { printHtmlString } from "@/lib/print";
-import { buildReportHtml, slugifyFileName, toSheets, type ReportExportSpec } from "./reportExport";
+import { PDF_MAX_ROWS, pdfTooManyRowsMessage } from "@shared/pdf-limits";
+import { buildReportHtml, reportRowCount, slugifyFileName, toSheets, type ReportExportSpec } from "./reportExport";
 
 interface Props {
   /** Spec bir FONKSİYON — veri yüklendiğinde değil, TIKLANDIĞINDA üretilir. */
@@ -43,6 +44,12 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
   const onPdf = async () => {
     const spec = buildSpec();
     if (!spec || !pdfApi) return;
+    // Ana süreç bayt kapısının erken aynası: dev rapor HTML'i hiç kurulmaz.
+    const rows = reportRowCount(spec);
+    if (rows > PDF_MAX_ROWS) {
+      toast.error(pdfTooManyRowsMessage(rows, "Rapor"));
+      return;
+    }
     setBusy("pdf");
     try {
       const res = await pdfApi.save({
