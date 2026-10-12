@@ -27,6 +27,7 @@
 // buradan geçmeli.
 // =============================================================================
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { OrderStatus, Prisma, RollStatus, WeavingOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -75,7 +76,7 @@ export interface TokenReplayPolicy<P, R> {
  * `resolve`dan (4. durum → gövde kapısı → respond) çıkar — "kapısız replay" tipte yazılamaz.
  */
 export interface TokenReplay<R> {
-  /** R: ön-okuma → iş → iş HANGİ hatayla düşerse düşsün token yeniden okunur; kayıt varsa cevap ondan. */
+  /** R: aynı token uçuştaysa onu bekler → ön-okuma → iş → iş HANGİ hatayla düşerse düşsün token yeniden okunur; kayıt varsa cevap ondan. */
   run(clientToken: string | null | undefined, work: () => Promise<R>): Promise<R>;
   /** K: 8036 kilidi + taze okuma + resolve; tx geri çağrısının İLK await'i olmalı. `null` = ilk deneme. */
   inTx(tx: Prisma.TransactionClient, clientToken: string): Promise<R | null>;
@@ -83,6 +84,23 @@ export interface TokenReplay<R> {
   behindLock(tx: Prisma.TransactionClient, clientToken: string): Promise<R | null>;
   /** Kilitsiz okuma + resolve — HIZ YOLU ya da savunma dalı, kapı değil. */
   replayIfAny(clientToken: string): Promise<R | null>;
+}
+
+/**
+ * R kipinde uçuştaki denemeler (token → kazananın sözü). Backend TEK süreç olduğu için süreç-içi kuyruk yeter;
+ * yalnız HIZ YOLUDUR — doğruluk yine `@unique` + hata sonrası yeniden okumadadır.
+ */
+const inFlightRuns = new Map<string, Promise<unknown>>();
+const queueBypass = new AsyncLocalStorage<true>();
+
+/** Bekçi aracı: kuyruğu atlayan deneme — iki ayrı isteğin DB'deki yarışını (P2002 → yeniden okuma) zorlanmış sırayla ölçer. */
+export function bypassReplayQueue<T>(fn: () => Promise<T>): Promise<T> {
+  return queueBypass.run(true, fn);
+}
+
+/** Bekçi sondası için: şu an uçuşta olan R denemesi sayısı. */
+export function inFlightReplayCount(): number {
+  return inFlightRuns.size;
 }
 
 export function tokenReplay<P, R>(policy: TokenReplayPolicy<P, R>): TokenReplay<R> {
@@ -96,14 +114,30 @@ export function tokenReplay<P, R>(policy: TokenReplayPolicy<P, R>): TokenReplay<
   return {
     async run(clientToken, work) {
       if (!clientToken) return work();
-      const once = await policy.find(prisma, clientToken);
-      if (once) return resolve(once);
+      const attemptOnce = async (): Promise<R> => {
+        const once = await policy.find(prisma, clientToken);
+        if (once) return resolve(once);
+        try {
+          return await work();
+        } catch (err) {
+          const prior = await policy.find(prisma, clientToken).catch(() => null);
+          if (!prior) throw err;
+          return resolve(prior);
+        }
+      };
+      if (queueBypass.getStore()) return attemptOnce();
+      // Uçuştaki aynı token'ın kaybedeni işi koşturmaz: kazanan bitince cevabı token'dan alır.
+      for (let ahead = inFlightRuns.get(clientToken); ahead; ahead = inFlightRuns.get(clientToken)) {
+        await ahead.catch(() => undefined);
+        const settled = await policy.find(prisma, clientToken);
+        if (settled) return resolve(settled);
+      }
+      const attempt = attemptOnce();
+      inFlightRuns.set(clientToken, attempt);
       try {
-        return await work();
-      } catch (err) {
-        const prior = await policy.find(prisma, clientToken).catch(() => null);
-        if (!prior) throw err;
-        return resolve(prior);
+        return await attempt;
+      } finally {
+        if (inFlightRuns.get(clientToken) === attempt) inFlightRuns.delete(clientToken);
       }
     },
     async inTx(tx, clientToken) {

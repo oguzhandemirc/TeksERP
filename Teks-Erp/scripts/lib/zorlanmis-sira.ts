@@ -9,6 +9,7 @@
 // =============================================================================
 import { AsyncLocalStorage } from "node:async_hooks";
 import prisma from "../../src/lib/prisma";
+import { bypassReplayQueue } from "../../src/services/helpers/token-replay.helper";
 
 /** B'nin bekletilecek ilk delegate çağrısı (ör. `{ model: "cheque", metod: "findMany" }`). */
 export interface KapiNoktasi {
@@ -112,7 +113,8 @@ export async function zorlanmisSira(
   try {
     const bSoz = kapiDeposu.run(kapi, b);
     await Promise.race([kapida, bSoz.catch(() => undefined)]);
-    const aSoz = a().finally(() => (aBitti = true));
+    // A ayrı bir istek gibi koşar: süreç-içi replay kuyruğu B'yi beklemesin, DB seddi ölçülsün.
+    const aSoz = bypassReplayQueue(a).finally(() => (aBitti = true));
     const [bs, as] = await Promise.allSettled([bSoz, aSoz]);
     return { sonuclar: [bs, as], kapi: acilis ? await acilis : "B kapıya varmadı" };
   } finally {
