@@ -15,6 +15,10 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   olmayan ya da başka sunucunun mührünü taşıyan hesap giriş yapamaz. Yeni kurulumda hesap mühürlü doğar.
   **Var olan kurulumlarda hiçbir şey kilitlenmez:** sunucuda bir kez mühürleme komutu koşulana dek her şey bugünkü
   gibi çalışır, panel yalnız bir uyarı şeridi gösterir (yeni panel gerekir).
+- **Tezgah alarmında vardiya yokken ne olacağını fabrika seçer.** Üç seçenek: uyar (bugünkü gibi; vardiya
+  dışında açılan duruş alarm üretmez, ayar ekranı ve Tezgah Salonu bunu bir şeritle söyler), vardiya yoksa da çal
+  (7/24) ya da vardiya tanımlanmadan alarm açılamasın. Sebebi girilmemiş duruşun alarmı artık ayrı bir anahtarla
+  açılıp kapanır; kapatmak girilen süreyi silmez. Güncellemeden sonra hiçbir şey kendiliğinden değişmez.
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -41,6 +45,17 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 - `2f801abdb` — `tekserp-guncelleyici` 0.2.5 → 0.2.6: lisans çekirdeğine eklenen bağımlılık ortak `Cargo.lock`u
   değiştirdi; kod davranışı aynı.
 
+**Tezgah alarmı: vardiya yokken + sebepsiz duruş anahtarı** (commit `feat(dokuma-alarm): vardiyasız kip ayarı + sebepsiz duruşta alarm anahtarı`; kısa kimliği paketlemede yazılır)
+
+- yeni ayar `tezgah.alarm.noShiftMode`: `WARN` (varsayılan, bugünkü davranış) · `ALWAYS` (vardiyaya
+  bakılmaz, hedef süre duruşun açılışından sayılır) · `REQUIRE_SHIFT` (etkin vardiya tanımı yokken alarm açılamaz;
+  yalnız açarken ya da kipi buna çevirirken 400 `TEZGAH_ALARM_SHIFT_REQUIRED`, kapatma engellenmez). Tezgah Salonu
+  cevabına `alarmNotice` (vardiya tanımlı değil / şu an vardiya yok), yeni salt okuma uç
+  `GET /api/feature-flags/tezgah-alarm-shift-status` (ayar ekranının şeridi; tezgah modülü + alarm ayarı yazma izni).
+- yeni anahtar `tezgah.alarm.unclassifiedEnabled` (sebepsiz duruşta alarm). Kayıt yoksa bugünkü anlam:
+  süre girilmişse açık. Açıkken süre zorunlu (400 `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`). Kapılar hiçbir ayarı
+  yazmadan önce koşar — reddedilen kayıt yarım yazılmaz.
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -56,6 +71,11 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 - **Kırıldı mı:** HAYIR (G1 kısmı) — yalnız ekleme: `/api/auth/me` `systemAccountSealStatus`, health
   `sistemHesabiMuhru`, yeni hata kodu `SYSTEM_ACCOUNT_SEAL_INVALID` (yalnız mühür zorunlu kurulumda, mühürsüz
   işaretli hesaba). Öteki işlerin sözleşme cevabı maddeleriyle eklenecek.
+- **Kırıldı mı:** HAYIR (tezgah alarmı kısmı) — yalnız ekleme: ayar cevabında `tezgahAlarmNoShiftMode`,
+  `tezgahAlarmUnclassifiedEnabled`; salon cevabında `alarmNotice`; yeni uç `GET /api/feature-flags/tezgah-alarm-shift-status`;
+  yeni hata kodları `TEZGAH_ALARM_SHIFT_REQUIRED`, `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`. Eski panel yalnız
+  sebepsiz süreyi yollar: anahtar o kayıttan türer (süre dolu = açık), bugünkü anlam korunur; eski panel yeni kipi
+  göremez, varsayılan `WARN` bugünkü davranıştır.
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.

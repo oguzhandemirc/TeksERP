@@ -46,6 +46,16 @@
         },
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Ayarlar → “Tezgah izleme” bölümünde yeni “Vardiya yokken alarm” satırı: vardiya dışında açılan duruşta tezgah alarmının ne yapacağını seçersiniz. Uyar (varsayılan, bugünkü gibi): vardiya dışında açılan duruş alarm üretmez; vardiya tanımlı değilse ya da şu an vardiya yoksa ayar ekranında ve Tezgah Salonu'nun üstünde bunu söyleyen bir şerit çıkar. Vardiya yoksa da çal: vardiyaya bakılmaz, her duruş açıldığı andan sayılır. Vardiya olmadan açılamasın: Vardiya Tanımları'nda vardiya yokken tezgah alarmı açılamaz; anahtar soluk durur ve nedenini yazar. Bunun için sunucunun 2.15.6 sürümü gerekir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sebebi girilmemiş duruşun alarmı artık ayrı bir anahtarla açılıp kapanır (Ayarlar → “Tezgah izleme” → “Sebepsiz duruşta alarm”). Açarken hedef süreyi girmeniz gerekir, süre boşken Kaydet çalışmaz. Kapatmak süreyi silmez; yeniden açınca aynı süre kullanılır. Bugün süre girilmiş kurulumda anahtar açık gelir, değişen bir şey olmaz. Bu satır da sunucu 2.15.6 ister."
+        },
+        {
+          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Tezgah Salonu'nda vardiya dışında durup vardiyaya taşan tezgahın kartındaki hedef süre sayacı artık vardiyanın başladığı andan işler; alarmla aynı saati gösterir. Örnek: gece duran ve sabah vardiyası başladığında hâlâ duran tezgahta hedef süre sabah vardiyasının başından sayılır. Vardiya içinde başlayan duruşta sayaç eskisi gibi duruşun başından işler; duruşun toplam süresi de her zaman duruşun başından gösterilir. Bunun için sunucunun 2.15.5 sürümüne güncellenmesi gerekir; eski sunucuda sayaç duruşun başından işler."
         },
