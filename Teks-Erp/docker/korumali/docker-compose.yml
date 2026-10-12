@@ -22,10 +22,18 @@ x-guvenlik: &guvenlik
   security_opt: ["no-new-privileges:true"]
   user: "10001:10001"
 
+# Konteyner günlüğü sınırlı (json-file varsayılanı sınırsız büyür; satıcı/patron compose'uyla aynı).
+x-gunluk: &gunluk
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
 services:
   postgres:
     image: ${TEKSERP_PG_IMAJ:-postgres:16-bookworm}
     restart: unless-stopped
+    # Paralel bakım/sorgu işçileri /dev/shm ister; Docker varsayılanı 64 MB "could not resize shared memory segment" verir.
+    shm_size: 256m
+    logging: *gunluk
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tekserp}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD .env'de tanımlı olmalı}
@@ -48,6 +56,7 @@ services:
     platform: linux/amd64
     <<: *guvenlik
     restart: unless-stopped
+    logging: *gunluk
     depends_on:
       postgres:
         condition: service_healthy
@@ -93,6 +102,7 @@ services:
     platform: linux/amd64
     <<: *guvenlik
     restart: unless-stopped
+    logging: *gunluk
     depends_on:
       postgres:
         condition: service_healthy

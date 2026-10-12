@@ -47,6 +47,7 @@
 //      §7h güncelleyicili compose kuralları · §7i elle compose ile ayrışma yok · §7j anahtar yalnız güncelleyicili compose'da,
 //      teslim paketi elle compose'u DEĞİL güncelleyicili şablonu taşır ·
 //      §7k kurulum sınıfı (`TEKSERP_KURULUM_SINIFI`) compose'dan backend'e geçer, şablon boş, bulut örneği BARINDIRILAN.
+//      §7l PG servisi `shm_size: 256m`, her servis `logging: *gunluk` (json-file 20m × 5) — iki compose da.
 // =============================================================================
 import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -1437,6 +1438,37 @@ function kurulumSinifiStatik(d: { helper: string; compose: string; guncelleyici:
   for (const [ad, s] of sondalar) {
     const uygulandi = JSON.stringify(s) !== JSON.stringify(d);
     check(`§7k sonda: ${ad} → kırmızı`, uygulandi && kurulumSinifiStatik(s).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §7l konteyner bakımı (perf-6 B3): PG servisi `shm_size` taşır (varsayılan 64 MB paralel bakımda düşer) ve
+// her servisin json-file günlüğü sınırlıdır (sınırsız günlük konak diskini doldurur). İki compose da.
+function konteynerBakimStatik(c: string): string[] {
+  const ih: string[] = [];
+  const m = /^x-gunluk: &gunluk\n([\s\S]*?)\n(?=\S|\n)/m.exec(c);
+  if (!m || !/driver: json-file/.test(m[1]!) || !/max-size: "20m"/.test(m[1]!) || !/max-file: "5"/.test(m[1]!)) ih.push("x-gunluk çapası json-file 20m × 5 değil");
+  const bloklar = servisBloklari(c);
+  if (bloklar.size === 0) ih.push("servis bulunamadı (ÖLÇÜLEMEDİ)");
+  for (const [ad, b] of bloklar) if (!/^ {4}logging: \*gunluk$/m.test(b)) ih.push(`${ad} günlüğü sınırsız`);
+  if (!/^ {4}shm_size: 256m$/m.test(bloklar.get("postgres") ?? "")) ih.push("postgres shm_size 256m değil");
+  return ih;
+}
+{
+  const dosyalar = ["Teks-Erp/docker/korumali/docker-compose.yml", GUNCELLEYICI_COMPOSE];
+  for (const y of dosyalar) {
+    const c = oku(y);
+    const g = konteynerBakimStatik(c);
+    check(`§7l ⭐ ${y.split("/").pop()}: postgres shm_size 256m + her serviste sınırlı json-file günlüğü`, g.length === 0, g.join(" | "));
+  }
+  const c = oku(dosyalar[0]!);
+  const sondalar: Array<[string, string]> = [
+    ["shm_size silindi", c.replace("    shm_size: 256m\n", "")],
+    ["yedek servisinin günlüğü sınırsız", c.replace(/(\n  yedek:[\s\S]*?)    logging: \*gunluk\n/, "$1")],
+    ["çapa sınırsız", c.replace('max-size: "20m", ', "")],
+  ];
+  for (const [ad, s] of sondalar) {
+    const uygulandi = s !== c;
+    check(`§7l sonda: ${ad} → kırmızı`, uygulandi && konteynerBakimStatik(s).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
   }
 }
 
