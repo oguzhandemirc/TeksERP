@@ -12,6 +12,7 @@ import { canRetractNote } from '../../../lib/loomAlarm/policy';
 import { fmtFactoryDateTime, fmtFactoryTime } from '../../../lib/factory-time';
 import type { LoomAlarmDetail, LoomAlarmNotificationRecord, LoomAlarmStopStat } from '../../../types/loomAlarm';
 import { colors, radius, spacing, typography } from '../../../theme';
+import TruncatedText from '../../../components/TruncatedText';
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -75,7 +76,7 @@ export function ContextSections({ detail }: { detail: LoomAlarmDetail }) {
     <>
       {job && (
         <Section title="Tezgahtaki iş">
-          <Text style={styles.body}>{`${job.weavingOrderNumber} · ${job.itemName}${job.colorName ? ` · ${job.colorName}` : ''}`}</Text>
+          <TruncatedText style={styles.body} revealOnTap testID="alarm-tezgah-isi">{`${job.weavingOrderNumber} · ${job.itemName}${job.colorName ? ` · ${job.colorName}` : ''}`}</TruncatedText>
         </Section>
       )}
       {detail.similar && (

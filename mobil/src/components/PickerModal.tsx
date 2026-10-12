@@ -26,6 +26,7 @@ import * as Haptics from 'expo-haptics';
 import Pager from './Pager';
 import { colors } from '../theme';
 import { upperTr } from '../utils/trCase';
+import TruncatedText from './TruncatedText';
 
 /** Türkçe harmanlama — MODÜL SABİTİ (comparator içinde kurmak pahalıdır). */
 const TR_COLLATOR = new Intl.Collator('tr', { numeric: true });
@@ -682,9 +683,9 @@ const PickerCard = React.memo(function PickerCard({
       >
         <View style={styles.cardContent}>
           <View style={styles.cardHeader}>
-            <Text variant="titleMedium" style={styles.cardLabel} numberOfLines={2}>
+            <TruncatedText variant="titleMedium" style={styles.cardLabel} testID={`secici-secenek-${option.value}`}>
               {option.label}
-            </Text>
+            </TruncatedText>
             {option.badge ? (
               <View style={[styles.cardBadge, { backgroundColor: option.badge.color }]}>
                 <Text style={styles.cardBadgeText}>{option.badge.text}</Text>

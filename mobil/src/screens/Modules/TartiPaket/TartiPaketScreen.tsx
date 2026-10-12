@@ -28,6 +28,8 @@ import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { useSessionStore } from '../../../store/sessionStore';
 import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
+import TruncatedText from '../../../components/TruncatedText';
+import { colors, spacing } from '../../../theme';
 
 // Koyu header'a uygun translucent etiketli aksiyon pill'i — KK1/Kurşun/Tambur
 // ile aynı stil. Telefonda header'ın 2. katında (secondRow) kullanılır.
@@ -221,18 +223,18 @@ export default function TartiPaketScreen() {
               {isSel ? '✓ ' : ''}
               {o.order.orderNumber}
             </Text>
-            <Text style={styles.covMeta}>
+            <TruncatedText style={styles.covMetaName} testID={`tarti-siparis-musteri-${o.order.id}`}>
               {o.order.customer.name}
               {o.order.branch ? ` · ${o.order.branch.name}` : ''}
-            </Text>
+            </TruncatedText>
           </View>
           {o.lines.map((l) => (
             <View key={l.lineId} style={styles.covRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.covSpec} numberOfLines={2}>
+                <TruncatedText style={styles.covSpec} testID={`tarti-satir-urun-${l.lineId}`}>
                   {dualName(l.item.name, l.customerItemName)}
                   {l.color ? ` · ${dualName(l.color.name, l.customerColorName)}` : ''}
-                </Text>
+                </TruncatedText>
                 <Text style={styles.covMeta}>
                   {l.width ? `${l.width}cm · ` : ''}
                   {Math.round(l.openQty)}m
@@ -379,7 +381,7 @@ export default function TartiPaketScreen() {
                   >
                     <View style={styles.bridgeInner}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.rollBarcode}>{g.customer?.name ?? 'Müşterisiz'}</Text>
+                        <TruncatedText style={styles.rollBarcode}>{g.customer?.name ?? 'Müşterisiz'}</TruncatedText>
                         <Text style={styles.covMeta}>
                           {g.sackCount} çuval · {g.rollCount} top
                           {g.totalKg > 0 ? ` · ${g.totalKg.toLocaleString('tr-TR')} kg` : ''}
@@ -478,6 +480,7 @@ const styles = StyleSheet.create({
   covRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, gap: 8 },
   covSpec: { flex: 1, fontSize: 13, color: '#334155' },
   covMeta: { fontSize: 12, color: '#64748b' },
+  covMetaName: { flexShrink: 1, marginLeft: spacing.sm, fontSize: 12, color: colors.textMuted },
   covTag: { fontSize: 12, fontWeight: '700' },
   covOk: { color: '#059669' },
   covShort: { color: '#b45309' },

@@ -18,6 +18,7 @@ import type {
 import { subcontractorService } from '../../services/subcontractor.service';
 import DispatchDetailPanel from './DispatchDetailPanel';
 import { formatFactory } from '../../lib/factory-time';
+import TruncatedText from '../TruncatedText';
 
 interface Props {
   dispatch: SubcontractorDispatchListItem;
@@ -90,9 +91,9 @@ function DispatchRow({
           <View style={styles.col2}>
             <View style={styles.companyRow}>
               <Icon source="factory" size={13} color="#475569" />
-              <Text style={styles.company} numberOfLines={1}>
+              <TruncatedText style={styles.company} testID={`fason-firma-${dispatch.id}`}>
                 {dispatch.subcontractor?.name ?? '—'}
-              </Text>
+              </TruncatedText>
               {cancelled && (
                 <View style={styles.cancelTag}>
                   <Icon source="close-circle" size={11} color="#dc2626" />

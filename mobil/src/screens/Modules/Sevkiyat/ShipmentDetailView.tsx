@@ -11,6 +11,7 @@ import {
 } from '../../../services/packing.service';
 import { getShipmentDispatchHtml } from '../../../services/shipmentDispatchPrint';
 import { formatFactory } from '../../../lib/factory-time';
+import TruncatedText from '../../../components/TruncatedText';
 
 const n = (v: number): string => Math.round(Number(v) || 0).toLocaleString('tr-TR');
 
@@ -55,10 +56,10 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
   return (
     <ScrollView contentContainerStyle={styles.body}>
       <View style={styles.headRow}>
-        <Text style={styles.bigCustomer}>
+        <TruncatedText style={styles.bigCustomer} revealOnTap>
           {d.customer.name}
           {d.branch ? ` · ${d.branch.name}` : ''}
-        </Text>
+        </TruncatedText>
         <Chip
           compact
           textStyle={styles.chipText}
@@ -105,7 +106,7 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
               <View key={l.lineId} style={styles.lineRow}>
                 {/* Bizdeki ad esas; müşteri adı yalnız etiketli ek (Electron
                     ShipmentDetailSheet ile aynı kural). */}
-                <Text style={styles.lineText} numberOfLines={1}>
+                <TruncatedText style={styles.lineText}>
                   {l.item.name}
                   {l.color ? ` · ${l.color.name}` : ''}
                   {l.width ? ` · ${l.width}cm` : ''}
@@ -114,7 +115,7 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
                         .filter(Boolean)
                         .join(' · ')})`
                     : ''}
-                </Text>
+                </TruncatedText>
                 <Text style={styles.meta}>{n(l.thisShipment)} m</Text>
               </View>
             ))}
@@ -125,10 +126,10 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
       {d.rolls.map((r) => (
         <View key={r.id} style={styles.row}>
           <Text style={styles.rowMono}>{r.barcode ?? '—'}</Text>
-          <Text style={styles.meta} numberOfLines={1}>
+          <TruncatedText style={styles.meta}>
             {r.item.name}
             {r.color ? ` · ${r.color.name}` : ''} · {n(r.currentQty)} m
-          </Text>
+          </TruncatedText>
         </View>
       ))}
 
@@ -156,11 +157,11 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
             <>
               {s.productSummary.map((p, i) => (
                 <View key={`p${i}`} style={styles.lineRow}>
-                  <Text style={styles.lineText} numberOfLines={1}>
+                  <TruncatedText style={styles.lineText}>
                     {p.itemName}
                     {p.colorName ? ` · ${p.colorName}` : ''}
                     {p.width != null ? ` · ${p.width}cm` : ''}
-                  </Text>
+                  </TruncatedText>
                   <Text style={styles.meta}>
                     {n(p.totalQty)} m · {p.rollCount} top
                   </Text>
@@ -168,10 +169,10 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
               ))}
               {s.swatches.map((sw) => (
                 <View key={sw.id} style={styles.lineRow}>
-                  <Text style={styles.lineText} numberOfLines={1}>
+                  <TruncatedText style={styles.lineText}>
                     Kartela · {sw.item?.name ?? '—'}
                     {sw.color ? ` · ${sw.color.name}` : ''}
-                  </Text>
+                  </TruncatedText>
                   <Text style={styles.meta}>
                     {sw.length != null ? `${n(sw.length)} cm` : ''}
                   </Text>
@@ -188,11 +189,11 @@ export default function ShipmentDetailView({ shipmentId }: { shipmentId: string 
           {d.returnedRolls.map((r) => (
             <View key={r.id} style={styles.row}>
               <Text style={styles.rowMono}>{r.barcode ?? '—'}</Text>
-              <Text style={styles.meta} numberOfLines={1}>
+              <TruncatedText style={styles.meta}>
                 {r.item?.name ?? '—'}
                 {r.color ? ` · ${r.color.name}` : ''}
                 {r.reasonName ? ` · ${r.reasonName}` : ''} · {n(r.qty)} m
-              </Text>
+              </TruncatedText>
             </View>
           ))}
           {/* ⚠️ ELLE TOPLAMA YOK (2026-08-03): backend `rollCount`/`totalMeters`

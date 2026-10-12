@@ -12,6 +12,7 @@ import { ORDER_STATUS_LABEL, ORDER_STATUS_COLOR, trLabel } from '../../../utils/
 import { queryProblem, QUERY_PROBLEM_TEXT } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
 import { formatCalendarDay } from '../../../lib/factory-time';
+import TruncatedText from '../../../components/TruncatedText';
 
 // =============================================================================
 // Sipariş listesi — cursor + infinite scroll (mobil sayfalama standardı).
@@ -111,10 +112,10 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
                 <Text style={styles.statusChipText}>{trLabel(ORDER_STATUS_LABEL, item.status)}</Text>
               </View>
             </View>
-            <Text style={styles.customer} numberOfLines={1}>
+            <TruncatedText style={styles.customer} testID={`siparis-musteri-${item.id}`}>
               {item.customer?.name ?? '—'}
               {item.branch?.name ? ` · ${item.branch.name}` : ''}
-            </Text>
+            </TruncatedText>
             <Text style={styles.spec} numberOfLines={1}>
               {specText}
             </Text>

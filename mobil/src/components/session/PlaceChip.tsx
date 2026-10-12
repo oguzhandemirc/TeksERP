@@ -3,18 +3,19 @@
 // =============================================================================
 // ScreenChrome her ekranda render eder; çip yalnız OTURUMLU ekranlarda (route
 // adı STATION_KIND_BY_SCREEN'de) ve aktif oturum ekranla eşleşince görünür.
-// SALT GÖSTERGE — dokunmak bir şey yapmaz. Makine değiştirme profil (👤)
+// SALT GÖSTERGE — dokunmak yalnız kısalmış adın tamamını balonda gösterir. Makine değiştirme profil (👤)
 // menüsündedir (PlaceActions). Not: KK1 telefonda makine adını başlık
 // subtitle'ında gösterir → bu çipi `hidePlaceChip` ile gizler.
 // =============================================================================
 
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text } from 'react-native-paper';
+import { Icon } from 'react-native-paper';
 import { useRoute } from '@react-navigation/native';
 import { useSessionStore } from '../../store/sessionStore';
 import { STATION_KIND_BY_SCREEN } from '../../constants/stationScreens';
 import type { MobileScreenKey } from '../../types/permissions';
+import TruncatedText from '../TruncatedText';
 
 export default function PlaceChip() {
   const route = useRoute();
@@ -31,9 +32,9 @@ export default function PlaceChip() {
     <View style={styles.chip}>
       <View style={styles.chipInner}>
         <Icon source="cog" size={16} color="#a5b4fc" />
-        <Text style={styles.chipText} numberOfLines={1}>
+        <TruncatedText style={styles.chipText} revealOnTap testID="yer-cipi">
           {label}
-        </Text>
+        </TruncatedText>
       </View>
     </View>
   );
@@ -58,5 +59,5 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     maxWidth: 220,
   },
-  chipText: { color: '#c7d2fe', fontSize: 13, fontWeight: '700' },
+  chipText: { flexShrink: 1, color: '#c7d2fe', fontSize: 13, fontWeight: '700' },
 });

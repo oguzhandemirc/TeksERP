@@ -19,6 +19,7 @@ import { signalLoomAlarm } from '../../services/alarmFeedback';
 import type { MainStackParamList } from '../../navigation/types';
 import type { LoomAlarmItem } from '../../types/loomAlarm';
 import { colors, radius, spacing, typography } from '../../theme';
+import TruncatedText from '../TruncatedText';
 
 export default function LoomAlarmStrip({ machineId }: { machineId: string | null }) {
   const access = useLoomAlarmAccess();
@@ -46,7 +47,7 @@ function StripBody({ alarm: a, canAct, canOpen, onDismiss }: { alarm: LoomAlarmI
     <View style={[styles.root, a.tier >= 2 && styles.rootK2]} accessibilityRole="alert">
       <Icon source="alarm-light" size={28} color={colors.textOnDark} />
       <View style={styles.text}>
-        <Text style={styles.title} numberOfLines={1}>{`${a.machine.code} · ${reasonText(a)} · ${tierShort(a.tier)}`}</Text>
+        <TruncatedText style={styles.title} revealOnTap testID="alarm-serit-baslik">{`${a.machine.code} · ${reasonText(a)} · ${tierShort(a.tier)}`}</TruncatedText>
         <Text style={styles.sub} numberOfLines={1}>{`${durationVsTarget(a, now)} duruyor`}</Text>
       </View>
       {canAct && (

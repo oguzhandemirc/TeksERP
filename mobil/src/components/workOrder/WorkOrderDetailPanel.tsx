@@ -12,6 +12,7 @@ import {
   trLabel,
 } from '../../utils/labels';
 import { formatFactory } from '../../lib/factory-time';
+import TruncatedText from '../TruncatedText';
 
 /**
  * Seçili iş emrinin sevkiyat odaklı özet paneli.
@@ -162,10 +163,10 @@ export default function WorkOrderDetailPanel({
             <Text style={styles.targetTitle}>Üretilen Kumaş</Text>
           </View>
           {wo.targetItem && (
-            <Text style={styles.targetItemName} numberOfLines={2}>
+            <TruncatedText style={styles.targetItemName} revealOnTap>
               {wo.targetItem.name}
               {wo.targetItem.code ? ` · ${wo.targetItem.code}` : ''}
-            </Text>
+            </TruncatedText>
           )}
           {wo.targetColor && (
             <View style={styles.row}>
@@ -175,7 +176,7 @@ export default function WorkOrderDetailPanel({
                   { backgroundColor: wo.targetColor.hex ?? '#cbd5e1' },
                 ]}
               />
-              <Text style={styles.rowText}>{wo.targetColor.name}</Text>
+              <TruncatedText style={styles.rowText} revealOnTap>{wo.targetColor.name}</TruncatedText>
             </View>
           )}
         </View>

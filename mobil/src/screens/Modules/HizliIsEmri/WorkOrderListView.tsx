@@ -15,6 +15,7 @@ import {
 } from '../../../utils/labels';
 import { colors, spacing, radius } from '../../../theme';
 import { formatFactory } from '../../../lib/factory-time';
+import TruncatedText from '../../../components/TruncatedText';
 
 const PAGE_SIZE = 20;
 
@@ -91,11 +92,11 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
                 <Text style={styles.statusChipText}>{trLabel(WORK_ORDER_STATUS_LABEL, item.status)}</Text>
               </View>
             </View>
-            <Text style={styles.rowSub} numberOfLines={1}>
+            <TruncatedText style={styles.rowSub} testID={`is-emri-urun-${item.id}`}>
               {itemName}
               {colorName ? ` · ${colorName}` : ''}
               {item.width != null ? ` · ${item.width}cm` : ''}
-            </Text>
+            </TruncatedText>
             <Text style={styles.rowMeta} numberOfLines={1}>
               {trLabel(WORK_ORDER_TYPE_LABEL, item.type)}
               {item.createdAt ? ` · ${formatFactory(item.createdAt, 'dd.MM.yyyy')}` : ''}

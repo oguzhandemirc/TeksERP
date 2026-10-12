@@ -17,6 +17,7 @@ import PlaceChip from './session/PlaceChip';
 import { usePlaceActions, MachinePickerModal } from './session/PlaceActions';
 import HeaderSecondRow from './HeaderSecondRow';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
+import TruncatedText from './TruncatedText';
 
 interface Props {
   title: string;
@@ -148,9 +149,9 @@ export default function ScreenChrome({
             {titleRowExtras}
           </View>
           {subtitle && (
-            <Text variant="labelMedium" style={styles.subtitle} numberOfLines={1}>
+            <TruncatedText variant="labelMedium" style={styles.subtitle} revealOnTap testID="ekran-alt-baslik">
               {subtitle}
-            </Text>
+            </TruncatedText>
           )}
         </View>
 

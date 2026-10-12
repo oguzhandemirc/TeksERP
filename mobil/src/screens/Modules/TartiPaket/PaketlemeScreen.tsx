@@ -58,6 +58,7 @@ import { useScanClassifier } from '../../../hooks/useScanSeries';
 import { resolvePoolScan } from './resolvePoolScan';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
+import TruncatedText from '../../../components/TruncatedText';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -578,9 +579,9 @@ export default function PaketlemeScreen() {
                     <Icon source="package-variant-closed" size={22} color={colors.brand} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.heroCustomer} numberOfLines={1}>
+                    <TruncatedText style={styles.heroCustomer} revealOnTap testID="paket-musteri">
                       {customer?.name ?? '—'}
-                    </Text>
+                    </TruncatedText>
                     <Text style={styles.heroBranch} numberOfLines={1}>
                       Çuval Havuzu · {sacks.length} çuval · {shippableSacks.length} dolu
                     </Text>
@@ -767,10 +768,10 @@ export default function PaketlemeScreen() {
                               <View key={r.id} style={styles.sackRollRow}>
                                 <View style={{ flex: 1 }}>
                                   <MarqueeText text={r.barcode ?? '—'} style={styles.sackRollBarcode} />
-                                  <Text style={styles.covMeta}>
+                                  <TruncatedText style={styles.covMeta}>
                                     {r.item.name}
                                     {r.color ? ` · ${r.color.name}` : ''} · {mText(r.currentQty)}m
-                                  </Text>
+                                  </TruncatedText>
                                 </View>
                                 {sacks.length > 1 && (
                                   <IconButton
@@ -794,10 +795,10 @@ export default function PaketlemeScreen() {
                             {s.swatches.map((sw) => (
                               <View key={sw.id} style={styles.sackRollRow}>
                                 <View style={{ flex: 1 }}>
-                                  <Text style={styles.covMeta}>
+                                  <TruncatedText style={styles.covMeta}>
                                     Kartela · {sw.item?.name ?? '—'}
                                     {sw.color ? ` · ${sw.color.name}` : ''}
-                                  </Text>
+                                  </TruncatedText>
                                 </View>
                               </View>
                             ))}
@@ -988,10 +989,10 @@ export default function PaketlemeScreen() {
           </Text>
           <ScrollView style={{ maxHeight: 240, marginTop: spacing.sm }}>
             {(removeSackTarget?.rolls ?? []).map((r) => (
-              <Text key={r.id} style={styles.covMeta}>
+              <TruncatedText key={r.id} style={styles.covMeta}>
                 • {r.barcode ?? '—'} · {r.item.name}
                 {r.color ? ` · ${r.color.name}` : ''} · {mText(r.currentQty)}m
-              </Text>
+              </TruncatedText>
             ))}
             {(removeSackTarget?.swatchCount ?? 0) > 0 && (
               <Text style={styles.covMeta}>• +{removeSackTarget?.swatchCount} kartela depoya dönecek</Text>

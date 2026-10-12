@@ -28,6 +28,7 @@ import { FLAGS_KEY } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
 import { showScreenError } from '../../../lib/screenToast';
+import TruncatedText from '../../../components/TruncatedText';
 
 // =============================================================================
 // Sevk Kapısı — havuzdan kurulmuş, sevk bekleyen PLANNED sevkiyatlar. Sevk onayı
@@ -160,10 +161,10 @@ export default function SevkiyatScreen() {
           </Text>
         </View>
         <View style={styles.customerRow}>
-          <Text style={[styles.customer, styles.customerFlex]} numberOfLines={1}>
+          <TruncatedText style={[styles.customer, styles.customerFlex]} testID={`sevk-musteri-${sh.id}`}>
             {sh.customer.name}
             {sh.branch ? ` · ${sh.branch.name}` : ''}
-          </Text>
+          </TruncatedText>
           {wait ? <Text style={styles.waitText}>⏳ {wait}</Text> : null}
         </View>
 
@@ -283,10 +284,10 @@ export default function SevkiyatScreen() {
           <Text variant="titleMedium" style={styles.sheetTitle}>
             {dispatchShip?.shipmentNo} — Sevk Et
           </Text>
-          <Text style={styles.customer}>
+          <TruncatedText style={styles.customer} revealOnTap>
             {dispatchShip?.customer.name} · {dispatchShip?.sackCount} çuval ·{' '}
             {dispatchShip ? fmtM(dispatchShip.totalQty) : '0'}m
-          </Text>
+          </TruncatedText>
           <TextInput mode="outlined" label="Plaka" value={plate} onChangeText={setPlate} autoCapitalize="characters" style={{ marginTop: 12 }} />
           <TextInput mode="outlined" label="Şoför" value={driver} onChangeText={setDriver} style={{ marginTop: 8 }} />
           <TextInput mode="outlined" label="Taşıyıcı (opsiyonel)" value={carrier} onChangeText={setCarrier} style={{ marginTop: 8 }} />

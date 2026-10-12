@@ -11,6 +11,7 @@ import { FlashList } from '@shopify/flash-list';
 import { ALARM_STATE_LABEL, durationVsTarget, isPastTarget, isSnoozed, reasonText, tierShort } from '../../../lib/loomAlarm/format';
 import type { LoomAlarmAudience, LoomAlarmItem } from '../../../types/loomAlarm';
 import { colors, radius, spacing, typography } from '../../../theme';
+import TruncatedText from '../../../components/TruncatedText';
 
 interface Props {
   items: LoomAlarmItem[];
@@ -60,16 +61,16 @@ function AlarmRow({ alarm: a, now, selected, onPress }: { alarm: LoomAlarmItem; 
     <TouchableRipple onPress={onPress} style={[styles.row, selected && styles.rowSelected]} accessibilityLabel={`${a.machine.code} alarmı`}>
       <View style={styles.rowInner}>
         <View style={styles.rowHead}>
-          <Text style={styles.code}>{`${a.machine.code} · ${a.machine.hallName}`}</Text>
+          <TruncatedText style={styles.code} testID={`alarm-tezgah-${a.id}`}>{`${a.machine.code} · ${a.machine.hallName}`}</TruncatedText>
           <Text style={[styles.badge, a.tier >= 2 ? styles.badgeK2 : styles.badgeK1]}>{tierShort(a.tier)}</Text>
         </View>
         <Text style={styles.reason} numberOfLines={1}>{reasonText(a)}</Text>
         <View style={styles.rowHead}>
           <Text style={[styles.duration, late && styles.durationLate]}>{durationVsTarget(a, now)}</Text>
-          <Text style={styles.state}>
+          <TruncatedText style={styles.state} testID={`alarm-durum-${a.id}`}>
             {a.state === 'ACKED' && a.ackedBy ? `${a.ackedBy.name} üstlendi` : (ALARM_STATE_LABEL[a.state] ?? a.state)}
             {isSnoozed(a, now) ? ' · susturuldu' : ''}
-          </Text>
+          </TruncatedText>
         </View>
       </View>
     </TouchableRipple>
@@ -96,5 +97,5 @@ const styles = StyleSheet.create({
   reason: { fontSize: typography.size.base, color: colors.textSecondary },
   duration: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
   durationLate: { color: colors.dangerDark },
-  state: { fontSize: typography.size.sm, color: colors.textMuted },
+  state: { flexShrink: 1, fontSize: typography.size.sm, color: colors.textMuted },
 });

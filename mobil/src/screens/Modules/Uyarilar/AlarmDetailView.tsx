@@ -27,6 +27,7 @@ import type { LoomAlarmItem } from '../../../types/loomAlarm';
 import AlarmActionBar from './AlarmActionBar';
 import { ContextSections, NotifiedSection, TimelineSection } from './AlarmDetailSections';
 import { colors, radius, spacing, typography } from '../../../theme';
+import TruncatedText from '../../../components/TruncatedText';
 
 interface Props {
   alarmId: string;
@@ -64,14 +65,14 @@ function AlarmHeader({ alarm: a, now, nextDueAt }: { alarm: LoomAlarmItem; now: 
   const late = live && isPastTarget(a, now);
   return (
     <View style={[styles.header, a.tier >= 2 && live && styles.headerK2]}>
-      <Text style={styles.title}>{`${a.machine.code} · ${a.machine.hallName}`}</Text>
+      <TruncatedText style={styles.title} revealOnTap testID="alarm-detay-tezgah">{`${a.machine.code} · ${a.machine.hallName}`}</TruncatedText>
       <Text style={styles.reason}>{reasonText(a)}</Text>
       <Text style={[styles.clock, late && styles.clockLate]}>{formatClock(alarmElapsedMs(a, now))}</Text>
       <Text style={styles.meta}>
         {`${a.targetMinutes === null ? 'Hedef süre yok' : `Hedef ${a.targetMinutes} dk`} · ${sourceLabel(a.stop.source)} · başlangıç ${fmtFactoryTime(a.stop.startedAt)}`}
       </Text>
       <Text style={styles.meta}>{`${ALARM_STATE_LABEL[a.state] ?? a.state} · ${tierLabel(a.tier)}`}</Text>
-      {a.ackedBy && a.ackedAt && <Text style={styles.meta}>{`${a.ackedBy.name} ${fmtFactoryTime(a.ackedAt)}'de üstlendi`}</Text>}
+      {a.ackedBy && a.ackedAt && <TruncatedText style={styles.meta} revealOnTap>{`${a.ackedBy.name} ${fmtFactoryTime(a.ackedAt)}'de üstlendi`}</TruncatedText>}
       {isSnoozed(a, now) && <Text style={styles.meta}>{`Susturuldu — ${fmtFactoryTime(a.snoozedUntil)}'e kadar`}</Text>}
       {live && nextDueAt && <Text style={styles.meta}>{`Üst kademeye iletim: ${fmtFactoryTime(nextDueAt)}`}</Text>}
     </View>

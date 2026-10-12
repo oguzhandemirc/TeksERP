@@ -150,6 +150,7 @@ import { colors, radius, spacing } from '../../../theme';
 import type { Item, QualityGrade, Roll } from '../../../types/models';
 import { showScreenError } from '../../../lib/screenToast';
 import { formatFactory } from '../../../lib/factory-time';
+import TruncatedText from '../../../components/TruncatedText';
 
 const RECENT_PAGE_SIZE = 6;
 const HISTORY_PAGE_SIZE = 20;
@@ -3418,7 +3419,7 @@ const conflictStyles = StyleSheet.create({
 });
 
 // ── Liste satırı: Roll + kim girdi + ne zaman ──
-function RollListItem({
+export function RollListItem({
   roll,
   onPrint,
   onScrap,
@@ -3527,16 +3528,16 @@ function RollListItem({
         elevation={0}
       >
         <View style={styles.recentSingleRow}>
-          {/* Sol blok: AD tam genişlik (uzun isim 2 satıra sarar, okunur kalır);
+          {/* Sol blok: AD tam genişlik (uzun ad tek satırda kısalır, basılı tutunca tam ad);
               barkod adın ALTINDA küçük — tek satırda adla yer kavgası yapmasın. */}
           <View style={styles.recentSingleLeft}>
-            <Text
+            <TruncatedText
               style={[styles.recentItemName, isInactive && styles.recentBarcodeScrapped]}
-              numberOfLines={2}
+              testID={`kk1-son-ad-${roll.id}`}
             >
               {roll.item?.name ?? '—'}
               {roll.color?.name ? ` · ${roll.color.name}` : ''}
-            </Text>
+            </TruncatedText>
             <Text
               style={[styles.recentBarcodeSub, isInactive && styles.recentBarcodeScrapped]}
               numberOfLines={1}
@@ -3572,9 +3573,9 @@ function RollListItem({
                   {operator}
                 </Text>
                 {roll.entryStation?.name ? (
-                  <Text style={styles.recentOperatorSub} numberOfLines={1}>
+                  <TruncatedText style={styles.recentOperatorSub}>
                     {roll.entryStation.name}
-                  </Text>
+                  </TruncatedText>
                 ) : null}
               </View>
             </View>
@@ -3598,22 +3599,22 @@ function RollListItem({
       ]}
       elevation={0}
     >
-      {/* Satır 1: SOL blok = ad (tam genişlik, kırpılmaz) + ALTINDA küçük barkod;
+      {/* Satır 1: SOL blok = ad (tam genişlik, tek satır; basılı tutunca tam ad) + ALTINDA küçük barkod;
           sağda aksiyonlar. Adla barkod aynı satırı paylaşmıyor → ikisi de okunur.
           İki ince metin, buton yüksekliğine sığar — satır YÜKSELMEZ. */}
       <View style={[styles.recentItemHeader, compactLayout && { gap: 4 }]}>
         <View style={styles.recentHeadLeft}>
-          <Text
+          <TruncatedText
             style={[
               styles.recentItemName,
               isInactive && styles.recentBarcodeScrapped,
               compactLayout && { fontSize: 12 },
             ]}
-            numberOfLines={1}
+            testID={`kk1-son-ad-${roll.id}`}
           >
             {roll.item?.name ?? '—'}
             {roll.color?.name ? ` · ${roll.color.name}` : ''}
-          </Text>
+          </TruncatedText>
           <Text
             style={[
               styles.recentBarcodeSub,
@@ -3660,9 +3661,9 @@ function RollListItem({
                 {operator}
               </Text>
               {roll.entryStation?.name ? (
-                <Text style={styles.recentOperatorSub} numberOfLines={1}>
+                <TruncatedText style={styles.recentOperatorSub}>
                   {roll.entryStation.name}
-                </Text>
+                </TruncatedText>
               ) : null}
             </View>
           </View>
