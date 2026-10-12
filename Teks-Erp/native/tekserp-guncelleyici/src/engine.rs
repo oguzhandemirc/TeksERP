@@ -129,6 +129,8 @@ struct Frame {
     /// HATA'dan çıkış onayı bu turda henüz uygulanmadı: yazılan durum HATA kalır (yalnız onaylanan
     /// adayın indirilmesi/hazır olması gösterilir).
     hold_failed: bool,
+    /// R23: bu turun ön duyuru anı — her durum yazımında `planlanan` olarak kalır (hata turu duyuruyu silmesin).
+    notice: Option<String>,
 }
 
 /// Son tamamlanan işlem (işlem günlüğü tek doğru kaynaktır: `durum.json` yazılmadan ölünse bile sonuç
@@ -255,6 +257,7 @@ impl Engine {
         d.last_detail = f.last_detail.clone();
         d.error_code = code.map(str::to_string);
         d.message = (!message.is_empty()).then(|| message.to_string());
+        d.planned = f.notice.clone();
         // Son 24 saatteki onarım (W1b, `onar`) başka bilgi yoksa görünür kalır.
         d.notice = self.notice.borrow().clone().or_else(|| crate::onarim::recent_notice(&self.env, &self.layout));
         d
@@ -330,6 +333,7 @@ impl Engine {
             last_detail: prev.and_then(|p| p.last_detail),
             tick_s,
             hold_failed: false,
+            notice: None,
         }
     }
 
@@ -804,6 +808,25 @@ impl Engine {
                 let state = self.resting_state(last.as_ref(), &installed, Some(&m.doc.surum));
                 self.write_status(self.doc(&f, state, l.detail.error_code.as_deref(), &msg));
                 return idle;
+            }
+        }
+        // R23: onaysız pencere kurulumu önce duyurulur. Duyurulmuş an = önceki durum.json'ın bu sürüme yazdığı
+        // `planlanan` (yeniden başlatmada da kalır); kapı KUR'u PENCERE_BEKLIYOR'a çevirebilir, başka kararı değil.
+        if let Some((p, _)) = pol.as_ref() {
+            let announced = self
+                .previous_status()
+                .filter(|s| s.version.as_deref() == Some(m.doc.surum.as_str()))
+                .and_then(|s| s.planned)
+                .map(|t| tekserp_dogrulama::iso::date_parse_ms(&t))
+                .filter(|t| t.is_finite());
+            let (gated, notice) = decision::announce_gate(d, p, used_approval.is_some(), announced, now as f64);
+            d = gated;
+            f.notice = notice.map(|t| timefmt::iso_millis(t as i64));
+            f.decision = Some(d.clone());
+            if let Some(pending) = f.pending.as_mut() {
+                pending.karar = d.karar.label().into();
+                pending.neden = d.neden.clone();
+                pending.aralik = d.aralik.clone();
             }
         }
         // ── Hazırlık (onay/pencere beklenirken de: uygulama anında iş kısa sürsün) ─────────

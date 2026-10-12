@@ -2100,7 +2100,7 @@ impl World {
             },
         );
         let crash = Arc::new(Crash::default());
-        World {
+        let w = World {
             fs: Arc::new(CrashFs {
                 inner: RealFs,
                 crash: Arc::clone(&crash),
@@ -2124,7 +2124,25 @@ impl World {
             keys,
             anchor,
             atomic_layout: AtomicBool::new(false),
-        }
+        };
+        // R23: varsayılan dünyada NEW pencere başlamadan duyurulmuştur (T0'da kurulur); ön duyuruyu ölçen test
+        // `unannounce` ile siler.
+        w.announce(NEW, T0);
+        w
+    }
+
+    /// Önceki turun durum.json'ı: `version` için `planlanan = at` duyurulmuş (HAZIR · PENCERE_BEKLIYOR).
+    pub fn announce(&self, version: &str, at: i64) {
+        let mut doc = ipc::StatusDoc::new(State::Ready);
+        doc.version = Some(version.to_string());
+        doc.planned = Some(iso(at));
+        std::fs::create_dir_all(self.layout.status_dir()).unwrap();
+        ipc::write_status(&RealFs, &self.layout, &doc).unwrap();
+    }
+
+    /// Önceki durum.json yok (ilk açılış): pencere içinde hazırlanan paket önce duyurulur (R23).
+    pub fn unannounce(&self) {
+        let _ = std::fs::remove_file(self.layout.status_file());
     }
 
     /// Backend hizmetini başka adla yeniden kaydeder ve güncelleyiciye `ayar.json` `backendHizmeti`yle söyler
@@ -2252,19 +2270,41 @@ impl World {
         std::fs::read_to_string(log.path()).unwrap_or_default()
     }
 
-    /// Terminal duruma (BAŞARILI/GERİ DÖNDÜ/HATA, yarım işlem yok) varana dek yeniden başlatarak koşar.
+    /// R23 ön duyurusu bekleniyorsa (HAZIR, `planlanan` ≤ 5 dk ileride) saat o ana ilerler — "zaman geçer".
+    pub fn wait_for_notice(&self) -> bool {
+        let Some(s) = self.status().filter(|s| s.state == State::Ready) else { return false };
+        let Some(at) = s.planned.as_deref().map(tekserp_dogrulama::iso::date_parse_ms).filter(|t| t.is_finite()) else { return false };
+        let now = self.clock.load(Ordering::SeqCst);
+        let due = at as i64 > now && at as i64 - now <= 5 * 60_000;
+        if due {
+            self.clock.store(at as i64, Ordering::SeqCst);
+        }
+        due
+    }
+
+    /// Terminal duruma (BAŞARILI/GERİ DÖNDÜ/HATA, yarım işlem yok) varana dek yeniden başlatarak koşar; ön duyuru
+    /// beklemesi yeniden başlatma sayılmaz.
     pub fn run_to_rest(&self, max_restarts: usize) -> usize {
-        for restarts in 0..=max_restarts {
+        let (mut restarts, mut waits) = (0, 0);
+        loop {
             match self.run(3) {
                 Ok(_) => {
                     if !self.unfinished() && matches!(self.state(), Some(State::Succeeded | State::RolledBack | State::Failed)) {
                         return restarts;
+                    }
+                    if waits < 4 && self.wait_for_notice() {
+                        waits += 1;
+                        continue;
                     }
                 }
                 Err(Killed) => {
                     self.crash.disarm();
                 }
             }
+            if restarts == max_restarts {
+                break;
+            }
+            restarts += 1;
         }
         let st = self.status();
         panic!(

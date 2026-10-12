@@ -262,6 +262,38 @@ pub fn decide(g: &Input) -> Decision {
     timing(p, onay, g.now_ms, pg_update)
 }
 
+/// R23: onaysız pencere kurulumunun ön duyuru süresi (backend `UPDATE_APPROVAL_NOTICE_MS` ile aynı sayı).
+pub const NOTICE_MS: f64 = 5.0 * 60_000.0;
+/// Duyurulan an bundan çok geçtiyse duyuru bayattır (backend `UPDATE_OUTAGE_STALE_MS`): yeniden duyurulur.
+pub const NOTICE_STALE_MS: f64 = 15.0 * 60_000.0;
+
+/// R23 (Rust'a özgü, TS `decideUpdate` sözleşmesi DEĞİŞMEZ): OTOMATİK kipte onaysız pencere kurulumu ancak
+/// duyurulmuş (`announced` = önceki `planlanan`) ve gelmiş bir anda olur; yoksa `planlanan = şimdi + 5 dk` ile
+/// PENCERE_BEKLIYOR (aralık = [planlanan, pencere sonu]; yeni neden kodu YOK). Saat geri giderse bekleme 5 dk'yı aşmaz; süre pencere kapanmadan dolmuyorsa sıradaki aralık.
+///
+/// İkinci değer: kapı devredeyken duyurulan an (geçtiyse duyurulmuş an, bekliyorsa `planlanan`); kapı dışı `None`.
+pub fn announce_gate(d: Decision, p: &UpdatePolicy, approved: bool, announced: Option<f64>, now: f64) -> (Decision, Option<f64>) {
+    if d.karar != Kind::Install || d.neden.as_deref() != Some("PENCERE") || p.kip != Mode::Automatic || approved {
+        return (d, None);
+    }
+    let Some(current) = d.aralik.clone() else { return (d, None) };
+    if let Some(a) = announced.filter(|a| *a <= now && now - *a <= NOTICE_STALE_MS) {
+        return (d, Some(a));
+    }
+    let due = announced.filter(|a| *a > now && *a <= now + NOTICE_MS).unwrap_or(now + NOTICE_MS);
+    let (neden, aralik, notice) = if due < current.end_ms() {
+        (None, Some(Interval { baslangic: iso_ms(due), bitis: current.bitis }), Some(due))
+    } else {
+        let next = p.araliklar.iter().find(|a| a.start_ms() >= current.end_ms()).cloned();
+        (if next.is_some() { None } else { Some("PENCERE_YOK") }, next, None)
+    };
+    (Decision { karar: Kind::AwaitingWindow, neden: neden.map(str::to_string), aralik, pg_update: d.pg_update }, notice)
+}
+
+fn iso_ms(ms: f64) -> String {
+    tekserp_hizmet::timefmt::iso_millis(ms as i64)
+}
+
 /// Karar girdisi olmadan bilinebilen sonuç (aday gerekmeden): `ADAY_YOK` dönerse aday aranmalıdır.
 pub fn needs_candidate(d: &Decision) -> bool {
     d.karar == Kind::UpToDate && d.neden.as_deref() == Some("ADAY_YOK")

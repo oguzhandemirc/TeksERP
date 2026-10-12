@@ -82,6 +82,7 @@ fn run_both(w: &World) {
                 if !w.unfinished() && matches!(s.state, State::Succeeded | State::RolledBack | State::Failed) {
                     return;
                 }
+                w.wait_for_notice();
             }
             Err(Killed) => w.crash.disarm(),
         }
