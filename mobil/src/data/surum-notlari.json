@@ -118,6 +118,16 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Sistem → Özellik Anahtarları → Terbiye İş Emirleri altında “Tablet hızlı terbiye iş emri: yalnız kendi başlattıklarını düzenler” ayarı; Şirket & Güvenlik altında yeni “Destek Talepleri” bölümünde “Destek talepleri: herkes yalnız kendininkini görür (yönetici hepsini)” ayarı. İkisi de kapalı gelir; kapalıyken bugünkü gibi çalışır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Liste ve rapor dışa aktarımında (CSV) =, +, - ya da @ ile başlayan metinlerin başına ' konur; dosya Excel'de açılınca bu hücreler formül olarak çalışmaz. Sayılar eskisi gibi yazılır; aynı dosyayı içe aktarırken ' kendiliğinden kaldırılır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Doğrulama koduyla eşlediğiniz fabrika sunucusu adresinde, eşlediğiniz sertifikadan başka bir sertifika görülürse panel artık bağlanmaz (tablet ile aynı); bilgisayarda kurulu bir kök sertifika bunu aşamaz. Sunucunun sertifikası gerçekten değiştiyse adresi yeniden doğrulama koduyla eşleyin."
         }
       ]
     },

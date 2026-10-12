@@ -275,6 +275,8 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 
 > **Bölge 7 düzeltmesi (2026-10-12):** satıcı/patron B2 · B5 · B5s · B6 · B9 kapandı (`docs/history/arsiv/2026-10.md` "Güvenlik denetimi Bölge 7 düzeltmesi"); B1/B1k · B3 · B4 · B7 · B8 açık.
 
+> **Bölge 4+5 düzeltmesi (2026-10-12):** S4/T10 için HTTP katmanı varsayılanları sertleşti — değişkensiz kurulumda giriş/PIN/kart/TOTP/lisans uçları IP başına 60/dk, barındırılanda `TRUST_PROXY=true` açılışı durdurur; panel sabitli LAN adresinde yabancı sertifikayı reddeder; geçiş LAN TLS'i `dual` açar (`docs/history/arsiv/2026-10.md` "Bölge 4+5 düzeltmesi"). Açık: B3 cihaz kimliği kanıtı, B5, B6, B8, B9.
+
 ## 7. Eski istemci ve mevcut kurulum — özet
 
 | Faz | Sözleşme kırar mı | Mevcut kurulum (adnansahin) |

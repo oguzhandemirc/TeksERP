@@ -43,6 +43,16 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 - **Sunucu güncellemesi 5 dakika önceden duyurulur.** Panelden onaylanan sunucu güncellemesi hemen değil onaydan
   5 dk sonra başlar; bu sürede panel ve tabletlerde kalan süreyi gösteren bir şerit çıkar (yeni panel/tablet gerekir).
   Kurulum sırasındaki yaklaşık 1 dk kesintide yeni panel/tablet kaydı bekletir ve bağlantı gelince gönderir.
+- **Giriş ve lisans işlemlerine dakika sınırı (güvenlik).** Giriş (parola · PIN · kart), iki adımlı doğrulama
+  kurulumu ve lisans işlemleri artık aynı adresten dakikada en çok 60 kez denenebilir; aşılırsa kısa bir bekleme
+  istenir ("çok fazla istek", 429). Normal kullanımda fark edilmez. Kapatmak için sunucu ayarında
+  `RATE_LIMIT_ENABLED=false`.
+- **İnternete açık kurulumda yanlış vekil ayarı sunucuyu açmaz.** Bizim yönettiğimiz/barındırılan kurulumda
+  `TRUST_PROXY=true` yazılıysa sunucu başlamaz ve doğru değeri (`TRUST_PROXY=1`) söyler. Fabrika kurulumları etkilenmez.
+- **Küçük güvenlik düzeltmeleri.** Excel/CSV dışa aktarımında `=`, `+`, `-`, `@` ile başlayan metin hücrelerinin
+  başına `'` konur (Excel formül sanmasın); kullanıcı adı/parola 256 karakterle sınırlı; tanımsız bir veri kuralı
+  ihlalinde hata mesajı iç kural adını değil bir başvuru kodunu gösterir; cihaz tanıma deseni olarak tableti
+  kilitleyebilecek desenler kaydedilmez.
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -163,6 +173,19 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 - İki yeni ayar (varsayılan KAPALI = bugünkü davranış): hızlı iş emri yalnız kendi başlattıklarını düzenler;
   destek talepleri yalnız sahibine görünür (yönetici hepsini).
 
+**Girdi ve ağ denetimi düzeltmeleri (güvenlik Bölge 4+5)** (`1694bbf10`, `2341c80e0`, `6fe734733`, `e3b19ba01`)
+
+- Değişkensiz kurulumda giriş/PIN/kart, `/api/auth/totp/enroll` ve `/api/license/*` yazma uçları IP başına 60/dk
+  (429 `RATE_LIMITED` + `Retry-After`); genel yazma kovası yalnız `RATE_LIMIT_ENABLED=true`de; `=false` hepsini kapatır.
+- Barındırılan kurulumda `TRUST_PROXY=true` → açılış durur (`process.exit(1)`, Türkçe gerekçe); `TRUST_PROXY` yoksa uyarı.
+- Tanımsız CHECK ihlali 409: mesajda kısıt adı yok, `details: {code: "INTEGRITY_RULE", ref}` (8 hex başvuru kodu; ad log'da).
+- Mükerrer kayıt CSV'si metin hücresine `'` öneki; LIKE aramalarında `%` `_` `\` kaçışı (7 yer); giriş gövdesi
+  `username`/`password` 256 üstü 400; belge önizlemesinde taslak ayar temizleyiciden geçer.
+- Cihaz tanıma deseni (`Peripheral.identifyPattern`) iç içe niceleyici · tekrarlanan seçenek · geri başvuru ·
+  255 üstü → 400.
+- pm2→hizmet geçiş betiği LAN TLS satırı olmayan kurulumda `LAN_TLS_MODE=dual` yazar + HTTPS 4443 duvar kuralı
+  (geçiş paketinde; güncellemeyle gelmez).
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -210,6 +233,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   `GRANT_EXCEEDS_ACTOR`, `CREDENTIAL_RESET_NEEDS_APPROVAL`, `STATION_KIND_IN_USE`; ayar cevabına iki alan. Davranış
   daralması: `shipping:write`-yalnız aktör fatura işaretinde 403; eski panel onay talebi akışını bilmez, 403'ü
   genel hata olarak gösterir (eşleşen panel 1.6.5).
+- **Kırıldı mı:** HAYIR (girdi/ağ denetimi kısmı) — davranış daralması: giriş/lisans uçlarında dakikada 60 üstü
+  429 `RATE_LIMITED` (eski panel/tablet bunu genel hata olarak gösterir; normal kullanımda oluşmaz); tanımsız CHECK
+  409'unun mesajı değişti, `details.code` `INTEGRITY_RULE` + `details.ref` eklendi (eski istemci yalnız mesajı
+  gösterir); 256 üstü kullanıcı adı/parola 400; tehlikeli cihaz deseni 400. Uç/izin eklenmedi.
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.
@@ -258,6 +285,9 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   adıma dek). Windows'ta küme kimliğinin okunabildiği henüz ölçülmedi.
   Ortak parolalı hazır destek hesabının yalnız sunucunun kendisinden girişi (tehdit modeli G1-6) bu sürümde YOK.
   2.15.0–2.15.5 belgelerindeki güncelleme programı sınırları aynen geçerli.
+  Hız sınırı ve `TRUST_PROXY` reddi: güncellemeden ÖNCE barındırılan kurulumun `.env`inde `TRUST_PROXY` değeri
+  ölçülür — `true` ise `1` yapılır, yoksa sunucu açılmaz. Cihaz kimliğinin kanıtsız taşınması (denetim B3)
+  bu sürümde kapanmadı.
 - **Sınırlar (her sürümde geçerli):** veritabanı sıfırlanmaz, yeniden doldurulmaz, silinmez · uygulanmış
   migration'lara dokunulmaz · `docker compose down -v` verilmez · başarısız kurulum tekrar denenmez ·
   **migration adımından sonra herhangi bir hata → DUR, düzeltme yapma, insana rapor et**.
