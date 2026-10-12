@@ -1,0 +1,22 @@
+# Yalnız GitHub Actions: `uses:` satırları commit SHA'ya sabitli (G5-B7); Dependabot yeni sürümün
+# SHA'sını ve `# vX.Y.Z` yorumunu birlikte günceller, böylece sabitleme elle takip edilmez.
+# npm/cargo ekosistemleri bilinçli dışarıda: yeni paket/sürüm kullanıcı onayı ister (CLAUDE.md).
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Istanbul"
+    open-pull-requests-limit: 5
+    labels:
+      - "ci"
+      - "dependabot"
+    commit-message:
+      prefix: "ci(actions)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
