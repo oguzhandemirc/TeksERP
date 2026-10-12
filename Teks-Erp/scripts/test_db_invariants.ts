@@ -491,6 +491,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("requiresReason" AND ("reasonCode" IS NULL) AND ("revokedAt" IS NULL))`,
     why: "sınıflandırma kuyruğu — sebebi bekleyen duruşlar taraması",
   },
+  // Perf-1 B1 (migration 20261012200000): şemada düz @@index, DB'de partial (drift-free desen).
+  {
+    table: "machine_stop_events",
+    index: "machine_stop_events_open_window_idx",
+    uniq: false,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "salon canlı duruş penceresi (endedAt IS NULL OR > gün başı) — 5 sn'lik yoklama tabloyu taramasın",
+  },
   // Dokuma alarm motoru (Faz A1, migration 20261011090000): motorun iki eşzamanlı turu aynı
   // kademeyi İKİ KEZ çaldıramaz (ON CONFLICT DO NOTHING).
   {

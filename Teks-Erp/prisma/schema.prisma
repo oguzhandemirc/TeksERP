@@ -2079,6 +2079,7 @@ model MachineRun {
   @@index([weavingOrderId])
   @@index([itemId])
   @@index([colorId])
+  @@index([machineId, endedAt])
   // ŞEMA-DIŞI İKİ PARTIAL UNIQUE (migration 20260913220000, `test_db_invariants` §1):
   //   machine_runs_one_open_per_prod_line_uq (machineId, productionLineNo)
   //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL
@@ -2438,6 +2439,8 @@ model MachineStopEvent {
   @@index([shiftInstanceId])
   @@index([runId])
   @@index([collectorId])
+  // Salon canlı penceresi (`endedAt IS NULL OR > gün başı`); migration'da WHERE "revokedAt" IS NULL (partial).
+  @@index([endedAt], map: "machine_stop_events_open_window_idx")
   // ŞEMA-DIŞI DÖRT PARTIAL INDEX (migration 20260913240000 + 20261012190000, `test_db_invariants` §1):
   //   machine_stops_one_open_per_machine_uq (machineId)
   //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL        ← tek açık duruş seddi
@@ -9102,6 +9105,8 @@ model WarehouseMovement {
   @@index([transformGroupId])
   @@index([rollVarianceId])
   @@index([workOrderStepId])
+  // Defter listesinin varsayılan sırası (createdAt desc, id desc) — filtresiz açılış top-N sort yapmasın.
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
   @@map("warehouse_movements")
 }
 
