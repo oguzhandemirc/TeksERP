@@ -21,6 +21,7 @@ import {
   backendDownloadPrefix,
   effectiveUpdatePolicy,
   isoToMs,
+  msToIso,
   type LeaseDoc,
   type LeaseUpdatePolicy,
   type UpdateDecisionKind,
@@ -47,7 +48,15 @@ import {
   type UpdaterStatusDoc,
 } from "../lib/license/updater-ipc";
 import { decideDownloadToken } from "./license-view.service";
-import { approvalActions, type UpdateActions, type UpdateApprovalView } from "./helpers/update-approval-rules.helper";
+import {
+  approvalActions,
+  approvalEffectiveAtMs,
+  plannedOutage,
+  type PlannedOutage,
+  type UpdateActions,
+  type UpdateApprovalRecord,
+  type UpdateApprovalView,
+} from "./helpers/update-approval-rules.helper";
 
 type UpdaterState = (typeof UPDATER_STATES)[number];
 
@@ -247,6 +256,8 @@ export interface UpdateStatus {
   /** Yürürlükteki panel onayı (son kayıt geri alma değilse). */
   readonly onay: UpdateApprovalView | null;
   readonly eylemler: UpdateActions;
+  /** Ekranlara duyurulacak sunucu kesintisi (planlanan an · kalan saniye · sürüyor) — yoksa null. */
+  readonly kesinti: PlannedOutage | null;
 }
 
 /** Saf: kira (imzalı, doğrulanmış) + indirme belirteçleri + güncelleyici dosyaları + panel onayı → panel görünümü. */
@@ -256,7 +267,7 @@ export function updateStatusFrom(g: {
   readonly read: UpdaterRead;
   readonly kuruluSurum: string;
   readonly nowMs: number;
-  readonly approval?: Omit<UpdateApprovalView, "kullanildi"> | null;
+  readonly approval?: UpdateApprovalRecord | null;
   /** Bu backend'in paket platformu (belirteç öneki); verilmezse Windows. */
   readonly platform?: UpdatePlatform;
 }): UpdateStatus {
@@ -268,13 +279,16 @@ export function updateStatusFrom(g: {
   const token = decideDownloadToken({ updatesAllowed: true, prefix, tokens: g.tokens, nowMs });
   const d = read.status.kind === "ok" ? read.status.doc : null;
   const attempts = read.history.map(historyItem).filter((a): a is UpdateHistoryItem => a !== null).reverse().slice(0, UPDATER_HISTORY_LIMIT);
-  const approval = g.approval ? { ...g.approval, kullanildi: read.history.some((h) => h.onayId === g.approval!.onayId) } : null;
+  const approval: UpdateApprovalView | null = g.approval
+    ? { ...g.approval, yururluk: msToIso(approvalEffectiveAtMs(g.approval.zaman)), kullanildi: read.history.some((h) => h.onayId === g.approval!.onayId) }
+    : null;
   const updater = updaterProcess(read, nowMs);
   const policy = eff ? { kip: eff.politika.kip, pencere: eff.politika.pencere, hedefSurum: eff.politika.hedefSurum, kaynak: eff.kaynak } : null;
   const frozen = lease?.yaptirim.guncellemeDonuk === true;
   const pending = d ? pendingUpdate(d) : null;
   const last = d ? lastResult(d) : null;
   const nextWindow = next ? { baslangic: next.baslangic, bitis: next.bitis } : null;
+  const local = d ? { durum: d.durum, planlanan: valid(IsoTimeSchema, d.planlanan), zaman: valid(IsoTimeSchema, d.zaman) } : null;
   return {
     kuruluSurum: g.kuruluSurum,
     kanal,
@@ -296,7 +310,7 @@ export function updateStatusFrom(g: {
           hataKodu: code(d.hataKodu),
           mesaj: d.mesaj ?? null,
           ilerleme: d.ilerleme ?? null,
-          planlanan: valid(IsoTimeSchema, d.planlanan),
+          planlanan: local!.planlanan,
           zaman: d.zaman ?? null,
           sonAyrinti: lastDetail(d),
           bilgi: updaterNotice(d),
@@ -317,11 +331,12 @@ export function updateStatusFrom(g: {
       sonrakiPencere: nextWindow,
       onay: approval,
     }),
+    kesinti: plannedOutage({ onay: approval, bekleyen: pending, yerel: local, sonrakiPencere: nextWindow, nowMs }),
   };
 }
 
 /** Yürürlükteki panel onayı: EN SON kayıt; o bir geri almaysa onay yok. */
-export async function activeUpdateApproval(): Promise<Omit<UpdateApprovalView, "kullanildi"> | null> {
+export async function activeUpdateApproval(): Promise<UpdateApprovalRecord | null> {
   const row = await prisma.updateApproval.findFirst({
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { id: true, version: true, choice: true, approverName: true, createdAt: true, approvedById: true },

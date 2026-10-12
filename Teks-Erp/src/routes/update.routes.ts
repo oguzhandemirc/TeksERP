@@ -23,7 +23,7 @@ const router = Router();
  *     summary: Sunucu güncelleme özeti — oturumlu her panel kullanıcısı için (kurulu sürüm, durum, son sonuç; belirteç/politika/onaylayan yok)
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "UpdateSummary — { kuruluSurum, donuk, guncelleyici{durum}, bekleyen{surum,karar,neden,zorunlu}, karar, yerel{durum,hataKodu,ilerleme}, son{sonuc,hedefSurum,bitis} }" }
+ *       200: { description: "UpdateSummary — { kuruluSurum, donuk, guncelleyici{durum}, bekleyen{surum,karar,neden,zorunlu}, karar, yerel{durum,hataKodu,ilerleme}, son{sonuc,hedefSurum,bitis}, kesinti{planlanan,kalanSn,suruyor} }" }
  *       401: { description: Token geçersiz }
  */
 // ⚠️ Bilerek `router.use`dan ÖNCE: izin kapısı bu ucu görmez (yalnız kimlik). Alan kümesi `updateSummaryOf`ta kilitli.
@@ -45,7 +45,7 @@ router.use(verifyToken, requireAnyPermission("license:view", "license:manage"));
  *     summary: Backend güncelleme durumu (kurulu sürüm, kiradaki politika, güncelleyici canlılığı, bekleyen sürüm, onay, son deneme, geçmiş)
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "UpdateStatus — { kuruluSurum, kanal, grup, politika, donuk, sonrakiPencere, indirmeBelirteci, guncelleyici, bekleyen, son, yerel, gecmis, karar, canlilik, onay, eylemler }" }
+ *       200: { description: "UpdateStatus — { kuruluSurum, kanal, grup, politika, donuk, sonrakiPencere, indirmeBelirteci, guncelleyici, bekleyen, son, yerel, gecmis, karar, canlilik, onay, eylemler, kesinti }" }
  *       401: { description: Token geçersiz }
  *       403: { description: license:view ya da license:manage yok }
  */

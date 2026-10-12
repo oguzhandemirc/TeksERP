@@ -11,7 +11,7 @@
 //      bilinmeyen zamanlama RED
 //   §2 ⭐ niyet belgesi: KATI şema enjeksiyonu reddeder · yazıcı atomik (geçici dosya kalmaz) · dizin yok / dizin ya da
 //      hedef bağlantı → YAZMAZ · biçimsiz niyet diske gitmez
-//   §3 servis: HEMEN → satır + niyet (onayId = satır, AYNEN sözleşme anahtarları, hiçbir değerde yol/adres yok) +
+//   §3 servis: HEMEN → satır + (5 dk ön duyurudan sonra) niyet (onayId = satır, AYNEN sözleşme anahtarları, hiçbir değerde yol/adres yok) +
 //      audit ayak izi · tekrar oynatma aynı sonuç, ikinci satır yok · aynı token başka yük → 409 · sürüm değişti →
 //      409 · PENCERE yalnız pencere varsa · GERI_AL → niyette onay yok · DONDUR → 409 · güncelleyici yok → 409
 //   §4 belirteç: yoklamanın backend/ belirteci niyete · yeniden başlatmada niyetteki taze belirteç korunur, süresi
@@ -153,8 +153,15 @@ async function servis(adminId: string): Promise<void> {
   const r = await recordUpdateApproval({ userId: adminId, input: hemen });
   const satir = await prisma.updateApproval.findUnique({ where: { id: r.kayitId } });
   check("§3a HEMEN → satır (sürüm · karar · kip · onaylayan)", satir?.version === ADAY && satir.choice === "HEMEN" && satir.policyMode === "ONAYLI" && satir.approvedById === adminId);
+  const yururluk = Date.parse(r.durum.onay?.yururluk ?? "");
+  check("§3a2 ⭐ ön duyuru: onay 5 dk niyete YAZILMAZ (yürürlük = kayıt + 5 dk), ekranlara kesinti duyurulur",
+    niyetOku()?.onay === null && yururluk - satir!.createdAt.getTime() === 5 * 60 * 1000 && r.durum.kesinti?.planlanan === r.durum.onay?.yururluk && r.durum.kesinti?.suruyor === false,
+    JSON.stringify(r.durum.kesinti));
+  await refreshUpdaterIntent(yururluk - 1);
+  check("§3a3 yürürlükten 1 ms önce tazeleme de onayı YAZMAZ", niyetOku()?.onay === null);
+  await refreshUpdaterIntent(yururluk);
   const n = niyetOku();
-  check("§3b ⭐ niyet yazıldı: onayId = satır, sürüm, zamanlama, onaylayan (ad TEK satır)",
+  check("§3b ⭐ yürürlükte niyet yazıldı: onayId = satır, sürüm, zamanlama, onaylayan (ad TEK satır)",
     r.niyet.yazildi && n?.onay?.onayId === r.kayitId && n.onay.surum === ADAY && n.onay.zamanlama === "HEMEN" && n.onay.kullaniciId === adminId && n.onay.ad === "Ayşe Yılmaz", n?.onay?.ad);
   const metin = fs.readFileSync(NIYET, "utf8");
   check("§3c ⭐ niyet YALNIZ sözleşme anahtarlarını taşır",
@@ -180,7 +187,10 @@ async function servis(adminId: string): Promise<void> {
   check("§3i ekrandaki sürüm eski → 409 UPDATE_APPROVAL_VERSION_CHANGED, satır yok", surum?.statusCode === 409 && surum.details?.code === "UPDATE_APPROVAL_VERSION_CHANGED" && (await prisma.updateApproval.count()) === say);
 
   const pencere = await recordUpdateApproval({ userId: adminId, input: { clientToken: randomUUID(), surum: ADAY, zamanlama: "PENCERE" } });
-  check("§3j PENCERE (sıradaki aralık var) → yeni satır yürürlükte, niyet PENCERE", niyetOku()?.onay?.zamanlama === "PENCERE" && pencere.durum.onay?.onayId === pencere.kayitId);
+  const pencereOnce = niyetOku()?.onay ?? null;
+  await refreshUpdaterIntent(Date.parse(pencere.durum.onay?.yururluk ?? "") + 1);
+  check("§3j PENCERE (sıradaki aralık var) → yeni satır; ön duyuruda niyette onay yok, yürürlükte PENCERE",
+    pencereOnce === null && niyetOku()?.onay?.zamanlama === "PENCERE" && pencere.durum.onay?.onayId === pencere.kayitId, JSON.stringify(pencereOnce));
   const geri = await recordUpdateApproval({ userId: adminId, input: { clientToken: randomUUID(), surum: ADAY, zamanlama: "GERI_AL" } });
   check("§3k ⭐ GERI_AL → yeni satır, niyette onay YOK, yürürlükte onay yok", niyetOku()?.onay === null && geri.durum.onay === null && (await prisma.updateApproval.findUnique({ where: { id: geri.kayitId } }))?.choice === "GERI_AL");
   const bosGeri = await hataOf(() => recordUpdateApproval({ userId: adminId, input: { clientToken: randomUUID(), surum: ADAY, zamanlama: "GERI_AL" } }));
@@ -285,7 +295,7 @@ async function http(): Promise<void> {
   const tam = await fetch(`${base}/api/guncelleme/durum`, { headers: { Authorization: `Bearer ${siradan}` } });
   const anonim = await fetch(`${base}/api/guncelleme/ozet`);
   check("§5k ⭐ lisans izni yok → /ozet 200 (yalnız izdüşüm alanları) · /durum 403 · oturumsuz /ozet 401",
-    siradan.length > 0 && ozet.status === 200 && Object.keys(ozetGovde).sort().join(",") === "bekleyen,donuk,guncelleyici,karar,kuruluSurum,son,yerel" &&
+    siradan.length > 0 && ozet.status === 200 && Object.keys(ozetGovde).sort().join(",") === "bekleyen,donuk,guncelleyici,karar,kesinti,kuruluSurum,son,yerel" &&
       tam.status === 403 && anonim.status === 401,
     `ozet=${ozet.status} durum=${tam.status} anonim=${anonim.status} alanlar=${Object.keys(ozetGovde).sort().join(",")}`);
 

@@ -25,6 +25,7 @@ import { getLicenseConfig, getLicenseSnapshot, onDownloadTokenStale, setLicenseE
 import { STARTUP_VENDOR } from "../lib/license/vendor-url";
 import { POLL_DEFAULT_MINUTES } from "../lib/license/protocol";
 import { isVerificationMode } from "../lib/dogrulama-kipi";
+import { scheduleApprovalActivationQuietly } from "../services/update-intent.service";
 
 const STARTUP_DELAY_MS = 60 * 1000;
 const HOUSEKEEPING_INTERVAL_MS = 60 * 60 * 1000;
@@ -231,6 +232,8 @@ export function startLicensePoll(): void {
   onDownloadTokenStale(requestImmediateLicensePoll);
   // Zil `destek` (3d-2): satıcı yanıt yazdı/kapattı → beklemeden yokla; yanıt yoklama yanıtıyla gelir.
   offSupportBell = onDoorbellTopic("destek", requestImmediateLicensePoll);
+  // Güncelleme onayının yürürlük zamanlayıcısı bellektedir: açılışta kalan süreyle yeniden kurulur (doğrulama kipinde kurulmaz).
+  scheduleApprovalActivationQuietly();
   void bootstrap();
 }
 

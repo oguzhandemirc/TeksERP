@@ -7,6 +7,8 @@
 // yazım tek yerden, süreç içinde SIRALI ve her seferinde iki girdinin BUGÜNKÜ hâlinden kurulur (iki yazım birbirini
 // ezemez). Niyet yetki DEĞİLDİR: yalnız sürüm + kimlik seçer; yol, komut, adres, dosya adı taşımaz
 // (`UpdaterIntentSchema` KATI). K1'de (güncelleme donuk) belirteç yazılmaz, eskisi de korunmaz.
+// Onay yürürlüğe girmeden (`createdAt` + ön duyuru) niyete YAZILMAZ: ekranlar bu sürede uyarılır; süreç içi tek
+// zamanlayıcı yürürlük anında niyeti tazeler ve boot'ta yeniden kurulur (saatlik yoklama yedektir).
 // =============================================================================
 import { isVerificationMode } from "../lib/dogrulama-kipi";
 import { getDownloadTokens, getLicenseSnapshot } from "../lib/license/runtime";
@@ -21,7 +23,7 @@ import {
 } from "../lib/license/updater-ipc";
 import { decideDownloadToken } from "./license-view.service";
 import { activeUpdateApproval } from "./update-status.service";
-import type { UpdateApprovalView } from "./helpers/update-approval-rules.helper";
+import { approvalEffectiveAtMs, type UpdateApprovalRecord } from "./helpers/update-approval-rules.helper";
 import { uyari } from "../lib/logger";
 
 export type IntentRefreshResult = IntentWriteResult | { readonly kind: "skipped"; readonly reason: string };
@@ -30,7 +32,7 @@ type IntentToken = NonNullable<UpdaterIntent["indirme"]>;
 /** Saf: iki girdiden niyet belgesi. */
 export function composeIntent(g: {
   readonly token: IntentToken | null;
-  readonly approval: Omit<UpdateApprovalView, "kullanildi"> | null;
+  readonly approval: UpdateApprovalRecord | null;
   readonly nowMs: number;
 }): UpdaterIntent {
   const a = g.approval;
@@ -75,7 +77,8 @@ async function refreshOnce(nowMs: number): Promise<IntentRefreshResult> {
     nowMs,
     platform: ownUpdatePlatform(),
   });
-  const approval = await activeUpdateApproval();
+  const active = await activeUpdateApproval();
+  const approval = active && approvalEffectiveAtMs(active.zaman) <= nowMs ? active : null;
   return writeUpdaterIntent(dir, composeIntent({ token, approval, nowMs }));
 }
 
@@ -102,4 +105,40 @@ export function refreshUpdaterIntent(nowMs?: number): Promise<IntentRefreshResul
   );
   tail = run.catch(() => undefined);
   return run;
+}
+
+let activationTimer: NodeJS.Timeout | null = null;
+let activationDueMs: number | null = null;
+
+/** Kurulu yürürlük zamanlayıcısının hedef anı (yoksa null) — bekçi ölçer. */
+export function pendingApprovalActivationMs(): number | null {
+  return activationDueMs;
+}
+
+/**
+ * Henüz yürürlükte olmayan onay için TEK zamanlayıcı kurar (öncekini söker): yürürlük anında niyet tazelenir.
+ * Onay kaydından sonra ve boot'ta çağrılır; yürürlükteki/olmayan onayda zamanlayıcı kalmaz.
+ */
+export async function scheduleApprovalActivation(nowMs: number = Date.now()): Promise<number | null> {
+  if (activationTimer) clearTimeout(activationTimer);
+  activationTimer = null;
+  activationDueMs = null;
+  if (isVerificationMode()) return null;
+  const active = await activeUpdateApproval();
+  const due = active ? approvalEffectiveAtMs(active.zaman) : null;
+  if (due === null || due <= nowMs) return null;
+  activationDueMs = due;
+  activationTimer = setTimeout(() => {
+    activationTimer = null;
+    activationDueMs = null;
+    refreshUpdaterIntentQuietly();
+    void scheduleApprovalActivation().catch(() => undefined);
+  }, due - nowMs + 250);
+  activationTimer.unref();
+  return due;
+}
+
+/** Best-effort sarmalayıcı: zamanlayıcı kurulamazsa onay saatlik yoklamada niyete girer. */
+export function scheduleApprovalActivationQuietly(): void {
+  void scheduleApprovalActivation().catch((err: unknown) => uyari("guncelleme", "onay zamanlayıcısı kurulamadı", err instanceof Error ? err.message : err));
 }

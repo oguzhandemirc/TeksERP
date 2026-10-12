@@ -23,7 +23,7 @@
 //      (§7l şema ileride: daha yeni sürüm gerekir, "kendiliğinden" denmez) · §7m güncelleyicinin kendisi çalışmıyorken
 //      (`onar`: ONARIM_TAVANI · ONARIM_KAYNAK_YOK · GUNCELLEYICI_KAPALI) onay sunulmaz; ONARILDI bilgidir
 //   §8 bağlantı (statik): uçlar izinli ve bağlı · yoklama gövdesi raporu yayar · yoklama niyeti tazeler
-//   §10 izinsiz özet (`updateSummaryOf`, GET /ozet): alan kümesi OPT-IN ve birebir; belirteç/onaylayan/ileti sızmaz
+//   §10 izinsiz özet (`updateSummaryOf`, GET /ozet): alan kümesi OPT-IN ve birebir (kesinti dahil); belirteç/onaylayan/ileti sızmaz
 //   §9 platform öneki (sözleşme 5, L2b): backend kendi platformunu satıcının kuralıyla çözer (yalnız Linux +
 //      konteyner OCI) · niyet ve panel YALNIZ kendi platformunun belirtecini görür (Windows backend/ · Linux backend-oci/)
 //      · niyet yazıcısı ve panel gerçek platformu geçirir (statik)
@@ -56,7 +56,7 @@ import {
 } from "../src/services/update-status.service";
 import { updateSummaryOf } from "../src/services/update-summary";
 import { intentToken } from "../src/services/update-intent.service";
-import { approvalActions, updaterDownReason, type ApprovalActionInput, type UpdateApprovalView } from "../src/services/helpers/update-approval-rules.helper";
+import { approvalActions, updaterDownReason, type ApprovalActionInput, type UpdateApprovalRecord, type UpdateApprovalView } from "../src/services/helpers/update-approval-rules.helper";
 import { DEFAULT_FACTORY_TIMEZONE } from "../src/constants/time";
 import { anahtarUret } from "./lib/lisans-fikstur";
 
@@ -290,7 +290,7 @@ function panel(): void {
     historyItem(satir({ sonuc: "HATA", hataKodu: "GOC_HATASI", ayrintiKodu: "GOC_ZAMAN_ASIMI" }) as never)?.sonuc === "BASARISIZ" &&
       historyItem(satir({ sonuc: "HATA", hataKodu: "GOC_HATASI", ayrintiKodu: "GOC_ZAMAN_ASIMI" }) as never)?.ayrintiKodu === "GOC_ZAMAN_ASIMI" &&
       historyItem(satir({ sonuc: "GERI_DONDU", hataKodu: null }) as never)?.kod === "BILINMEYEN");
-  const onay = (id: string): Omit<UpdateApprovalView, "kullanildi"> => ({ onayId: id, surum: "2.14.0", zamanlama: "HEMEN", onaylayan: { id: randomUUID(), ad: "Ayşe" }, zaman: msToIso(SIMDI) });
+  const onay = (id: string): UpdateApprovalRecord => ({ onayId: id, surum: "2.14.0", zamanlama: "HEMEN", onaylayan: { id: randomUUID(), ad: "Ayşe" }, zaman: msToIso(SIMDI) });
   check("§6h onayın kullanıldığı geçmişteki onayId'den (kullanılmayan onay yürürlükte)",
     updateStatusFrom({ lease: null, tokens: [], read, kuruluSurum: "2.14.0", nowMs: SIMDI, approval: onay(kullanilan) }).onay?.kullanildi === true &&
       updateStatusFrom({ lease: null, tokens: [], read, kuruluSurum: "2.14.0", nowMs: SIMDI, approval: onay(randomUUID()) }).onay?.kullanildi === false);
@@ -301,7 +301,7 @@ function panel(): void {
   const oz = updateSummaryOf(onayli);
   const anahtarlar = (o: object | null) => (o ? Object.keys(o).sort().join(",") : "null");
   check("§10a ⭐ özetin üst düzey alanları BİREBİR (belirteç · politika · kanal · onay · eylemler · geçmiş · canlılık YOK)",
-    anahtarlar(oz) === "bekleyen,donuk,guncelleyici,karar,kuruluSurum,son,yerel", anahtarlar(oz));
+    anahtarlar(oz) === "bekleyen,donuk,guncelleyici,karar,kesinti,kuruluSurum,son,yerel", anahtarlar(oz));
   check("§10b ⭐ iç içe alanlar BİREBİR (bekleyen özeti/aralığı · yerel ileti/ayrıntı · son kodu YOK)",
     anahtarlar(oz.bekleyen) === "karar,neden,surum,zorunlu" && anahtarlar(oz.yerel) === "durum,hataKodu,ilerleme" &&
       anahtarlar(oz.son) === "bitis,hedefSurum,sonuc" && anahtarlar(oz.guncelleyici) === "durum",
@@ -309,6 +309,9 @@ function panel(): void {
   check("§10c değerler tam görünümle aynı (sürüm · karar · donuk · yerel durum · son sonuç)",
     oz.kuruluSurum === "2.14.0" && oz.bekleyen?.surum === "2.15.0" && oz.bekleyen.karar === onayli.bekleyen?.karar && oz.donuk === onayli.donuk &&
       oz.yerel?.durum === "GERI_DONDU" && oz.son?.sonuc === onayli.son?.sonuc && oz.son?.hedefSurum === "2.15.0" && oz.karar?.karar === "KUR");
+  const sizinti = updateSummaryOf({ ...onayli, kesinti: { planlanan: msToIso(SIMDI + 60_000), kalanSn: 60, suruyor: false, onaylayan: "Ayşe" } } as never);
+  check("§10e ⭐ kesinti alanı OPT-IN kopya: yalnız planlanan · kalanSn · suruyor (fazladan alan geçmez)",
+    anahtarlar(sizinti.kesinti) === "kalanSn,planlanan,suruyor" && sizinti.kesinti?.kalanSn === 60 && oz.kesinti === onayli.kesinti, anahtarlar(sizinti.kesinti));
   check("§10d ⭐ gövdede sır/kimlik yok (belirteç · onaylayan adı · iç ileti)",
     !JSON.stringify(oz).includes(belirtec) && !JSON.stringify(oz).includes("Ayşe") && !JSON.stringify(oz).includes("status UP olmadı") && !JSON.stringify(oz).includes("geri dönmüştü"));
 }
@@ -331,7 +334,7 @@ function eylemler(): void {
   check("§7b pencere yok → yalnız Şimdi kur", e({ sonrakiPencere: null }).hemen && !e({ sonrakiPencere: null }).pencere);
   const otomatik = e({ politika: { kip: "OTOMATIK" }, bekleyen: { surum: "2.15.0", karar: "PENCERE_BEKLIYOR", neden: null } });
   check("§7c OTOMATIK + pencere bekliyor → yalnız Şimdi kur (pencere zaten kuracak)", otomatik.hemen && !otomatik.pencere && otomatik.hedefSurum === "2.15.0");
-  const verildi: UpdateApprovalView = { onayId: randomUUID(), surum: "2.15.0", zamanlama: "PENCERE", onaylayan: { id: randomUUID(), ad: "Ayşe" }, zaman: msToIso(SIMDI), kullanildi: false };
+  const verildi: UpdateApprovalView = { onayId: randomUUID(), surum: "2.15.0", zamanlama: "PENCERE", onaylayan: { id: randomUUID(), ad: "Ayşe" }, zaman: msToIso(SIMDI), yururluk: msToIso(SIMDI + 5 * 60_000), kullanildi: false };
   const b = e({ onay: verildi });
   check("§7d aynı sürüme PENCERE onayı yürürlükte → Bu gece kur yok, Şimdi kur + Geri al var", b.hemen && !b.pencere && b.geriAl);
   const kullanildi = e({ onay: { ...verildi, kullanildi: true } });

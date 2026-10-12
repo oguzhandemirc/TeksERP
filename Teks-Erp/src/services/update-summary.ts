@@ -18,6 +18,8 @@ export interface UpdateSummary {
   readonly karar: { readonly karar: Decision["karar"]; readonly neden: string | null } | null;
   readonly yerel: { readonly durum: string; readonly hataKodu: string | null; readonly ilerleme: { readonly indirilen: number; readonly toplam: number } | null } | null;
   readonly son: { readonly sonuc: LastResult["sonuc"]; readonly hedefSurum: string; readonly bitis: string } | null;
+  /** Panel ve tablet şeridi: sunucu ne zaman ~1 dk kesilecek (sır yok — yalnız an ve süre). */
+  readonly kesinti: { readonly planlanan: string | null; readonly kalanSn: number; readonly suruyor: boolean } | null;
 }
 
 /** Saf izdüşüm: tam görünüm → özet (alan alan kopya; yayma YOK ki yeni alan sızmasın). */
@@ -32,5 +34,6 @@ export function updateSummaryOf(s: UpdateStatus): UpdateSummary {
     karar: s.karar ? { karar: s.karar.karar, neden: s.karar.neden } : null,
     yerel: y ? { durum: y.durum, hataKodu: y.hataKodu, ilerleme: y.ilerleme ? { indirilen: y.ilerleme.indirilen, toplam: y.ilerleme.toplam } : null } : null,
     son: s.son ? { sonuc: s.son.sonuc, hedefSurum: s.son.hedefSurum, bitis: s.son.bitis } : null,
+    kesinti: s.kesinti ? { planlanan: s.kesinti.planlanan, kalanSn: s.kesinti.kalanSn, suruyor: s.kesinti.suruyor } : null,
   };
 }

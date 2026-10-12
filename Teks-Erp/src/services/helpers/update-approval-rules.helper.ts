@@ -5,7 +5,7 @@
 // `POST /api/guncelleme/onay`ın kapısı aynı fonksiyondan okur. Onay yetki değildir: DONDUR · K1 · kira yok
 // hâlinde verilmez; güncelleyici onu yalnız AYNI sürümün imzalı adayına sayar.
 // =============================================================================
-import type { ApprovalTiming, LeaseUpdatePolicy, UpdateResult } from "../../lib/license/protocol";
+import { msToIso, type ApprovalTiming, type LeaseUpdatePolicy, type UpdateResult } from "../../lib/license/protocol";
 import type { PendingUpdateView, UpdaterProcessView } from "../update-status.service";
 
 export const UPDATE_APPROVAL_CHOICES = ["HEMEN", "PENCERE", "GERI_AL"] as const;
@@ -17,8 +17,62 @@ export interface UpdateApprovalView {
   readonly zamanlama: ApprovalTiming;
   readonly onaylayan: { readonly id: string; readonly ad: string };
   readonly zaman: string;
+  /** Onayın güncelleyiciye ulaştığı an (`zaman` + ön duyuru): o ana dek niyete yazılmaz, ekranlar uyarılır. */
+  readonly yururluk: string;
   /** Bu onayla başlamış bir işlem sonuçlandı mı — sonuçlandıysa aynı onay bir daha sayılmaz. */
   readonly kullanildi: boolean;
+}
+
+/** Satırdan okunan onay (türetilen alanlar — `kullanildi`, `yururluk` — yok). */
+export type UpdateApprovalRecord = Omit<UpdateApprovalView, "kullanildi" | "yururluk">;
+
+/** Onaydan kuruluma dek ön duyuru: panel ve tablet ekranları kaydedilmemiş işi bu sürede kaydeder. */
+export const UPDATE_APPROVAL_NOTICE_MS = 5 * 60 * 1000;
+/** Planlanan an bu kadar geçtiyse ve kurulum başlamadıysa duyuru bayattır (güncelleyici beklemede/arızada). */
+export const UPDATE_OUTAGE_STALE_MS = 15 * 60 * 1000;
+
+/** Onayın yürürlüğe girdiği an (ms) — şemasız, satırın `createdAt`inden türer. */
+export function approvalEffectiveAtMs(zaman: string): number {
+  return Date.parse(zaman) + UPDATE_APPROVAL_NOTICE_MS;
+}
+
+/** Ekranlara duyurulan kesinti: `planlanan` mutlak an, `kalanSn` istemcinin yerel saatine çevirdiği süre (saat sapmasından bağımsız). */
+export interface PlannedOutage {
+  readonly planlanan: string | null;
+  readonly kalanSn: number;
+  readonly suruyor: boolean;
+}
+
+export interface PlannedOutageInput {
+  readonly onay: UpdateApprovalView | null;
+  readonly bekleyen: PendingUpdateView | null;
+  readonly yerel: { readonly durum: string; readonly planlanan: string | null; readonly zaman: string | null } | null;
+  readonly sonrakiPencere: { readonly baslangic: string } | null;
+  readonly nowMs: number;
+}
+
+function outageStartMs(g: PlannedOutageInput): number | null {
+  const o = g.onay && !g.onay.kullanildi && (g.bekleyen === null || g.bekleyen.surum === g.onay.surum) ? g.onay : null;
+  const effective = o ? Date.parse(o.yururluk) : null;
+  const windowStart = g.yerel?.planlanan ?? g.sonrakiPencere?.baslangic ?? null;
+  if (o && o.zamanlama === "HEMEN") return effective;
+  if (o && o.zamanlama === "PENCERE") return windowStart === null ? null : Math.max(effective!, Date.parse(windowStart));
+  if (g.bekleyen?.karar === "PENCERE_BEKLIYOR" && g.yerel?.planlanan) return Date.parse(g.yerel.planlanan);
+  return null;
+}
+
+/**
+ * Sunucunun ne zaman kesileceği (SAF): HEMEN → yürürlük; PENCERE → max(yürürlük, pencere başı); onaysız pencere →
+ * güncelleyicinin `planlanan`ı; uygulanıyor → sürüyor. Kullanılmış onay, başka sürüme ait onay ve bayat an → yok.
+ */
+export function plannedOutage(g: PlannedOutageInput): PlannedOutage | null {
+  if (g.yerel?.durum === "UYGULANIYOR") {
+    const at = g.yerel.zaman ? Date.parse(g.yerel.zaman) : NaN;
+    return Number.isFinite(at) && g.nowMs - at > UPDATE_OUTAGE_STALE_MS ? null : { planlanan: null, kalanSn: 0, suruyor: true };
+  }
+  const start = outageStartMs(g);
+  if (start === null || !Number.isFinite(start) || g.nowMs - start > UPDATE_OUTAGE_STALE_MS) return null;
+  return { planlanan: msToIso(start), kalanSn: Math.max(0, Math.ceil((start - g.nowMs) / 1000)), suruyor: false };
 }
 
 export interface UpdateActions {

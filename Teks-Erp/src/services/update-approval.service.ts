@@ -15,7 +15,7 @@ import { requestDownloadTokenRefresh } from "../lib/license/runtime";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
-import { refreshUpdaterIntent, type IntentRefreshResult } from "./update-intent.service";
+import { refreshUpdaterIntent, scheduleApprovalActivationQuietly, type IntentRefreshResult } from "./update-intent.service";
 import { getUpdateStatus, type UpdateStatus } from "./update-status.service";
 import { UPDATE_APPROVAL_CHOICES, type UpdateApprovalChoice } from "./helpers/update-approval-rules.helper";
 
@@ -85,6 +85,7 @@ export function assertApprovalAllowed(status: UpdateStatus, input: Pick<RecordUp
 
 async function respondFor(kayitId: string): Promise<UpdateApprovalResult> {
   const r = await refreshUpdaterIntent();
+  scheduleApprovalActivationQuietly();
   return { kayitId, niyet: intentOutcome(r), durum: await getUpdateStatus() };
 }
 
