@@ -36,6 +36,7 @@
 
 - **[ÇEKİRDEK]** `admin:settings` DOCUMENT_DESIGN_READ/WRITE kümelerinden DÜŞÜRÜLMEZ: uzlaştırma yeni izni getirir ama atamaz, sıkı ayrım deploy anında admin dahil herkesi dışarıda bırakır — o kod geriye uyum değil, kilitlenmeye karşı tek emniyet supabıdır. · bekçi: `scripts/test_document_template_permission.ts (43; READ kümesi admin:settings İÇERİR — kilitlenmeye karşı emniyet supabı; her senaryoda ayrıca admin:settings GEÇER kontrolü, OR'dan düşerse saha kilitlenir)` <sub>(CLAUDE.md:130, CLAUDE.md:117)</sub>
 - **[ÇEKİRDEK]** Şifre YALNIZ `X-Settings-Password` başlığında — gövde/query/cookie fallback YASAK (ölçülmüş sızıntı: erişim logu URL'i, audit yükü yolu basar). ASCII `^[\x21-\x7E]+$`, 8–72 (HTTP başlığı non-ASCII taşımaz; bcrypt 72 baytta sessiz kırpar); `.trim()` yerine RED; backend↔Electron ayna bekçili. · bekçi: `scripts/test_settings_password.ts §C (18; gövde/query/cookie/benzer başlık → 403 davranışı) + §B (13; şema reddi — ASCII dışı, 8 altı, 73 karakter)` <sub>(arşiv:2096)</sub>
+- **[ÇEKİRDEK]** Güncellemeler sayfası (`/system/updates`) KAPISIZDIR; izinsiz kullanıcının "Sunucu" satırı yalnız `GET /api/guncelleme/ozet`ten (yalnız `verifyToken`, `router.use` izin kapısından ÖNCE) çizilir ve o uç OPT-IN izdüşüm (`updateSummaryOf`) döner — indirme belirteci, politika, onaylayan adı taşımaz; tam durum `license:view ∨ license:manage`te, onay düğmeleri `license:manage`te kalır, yeni izin kodu açılmaz. · bekçi: `scripts/test_guncelleme_durumu.ts §10` · `scripts/test_guncelleme_onay.ts §5k` · `Electron/src/pages/System/Updates/updatesPage.test.tsx` <sub>(arşiv:2026-10-12 Güncellemeler tek sayfa)</sub>
 
 ## Backend
 
@@ -143,6 +144,7 @@ Backend: `test_jwt_sir_kapisi`, `test_izin_db_kaynagi`, `test_parola_degisimi_zo
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- 2026-10-12 · 2026-10-12 — Güncellemeler tek sayfa: sunucu + bu bilgisayar, izinsize dar özet ucu `/ozet` [ÇEKİRDEK]/[PROFİL] — `arsiv/2026-10.md` §2026-10-12
 - 2026-10-06 · 2026-10-06 — "Şifre Sıfırla" geçici parola verir: hedef ilk girişte kendi parolasını belirler; tablet de değiştirebilir [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-06
 - 2026-10-01 · 2026-10-01 — Güvenlik dilimi G20: fabrika JWT sırrı ret listesi (uyarır, durdurmaz), istek yetkisi DB'den, token daima süreli, ilk kurulum parolası ve zorunlu parola değişimi [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-01 G20
 - 2026-10-01 · 2026-10-01 — Kısa kimlikler (hızlı PIN + QR kart) özetli saklanır: anahtar halkası LICENSE_DIR'de, yedeğe mühürlü emanet, tembel + betikli dönüşüm, kalıcı giriş kilidi, yalnız onaylı cihaz bayrağı (G21-K) [ÇEKİRDEK] + [PROFİL] — `arsiv/2026-10.md` §2026-10-01 G21-K

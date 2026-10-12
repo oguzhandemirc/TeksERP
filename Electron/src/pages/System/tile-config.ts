@@ -1,4 +1,4 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, ServerCog, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
 import {
   LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
@@ -273,24 +273,15 @@ export const systemTiles: SystemTile[] = [
     permissionAny: SETTINGS_FLAGS_ACCESS,
   },
   {
-    // Eskiden Genel Ayarlar → Bu Bilgisayar → Güncelleme alt-sekmesiydi.
-    // ⚠️ İZİN GENİŞ ve bu bilinçli: yazıcısını/kantarını kendisi kuran personel
-    // `settings:workstation` taşır ve `admin:settings` taşımaz — güncelleme
-    // durumuna bakması gereken kişi çoğu zaman odur. Hub'ın kendisi
-    // `admin:settings` arkasında olduğu için o personel buraya PALETTEN gelir.
-    //
-    // ⚠️ WEB'DE DE ÇİZİLİR ve bu bilinçli: sayfa tarayıcıda kendi "yalnız
-    // masaüstünde çalışır" metnini basıyor, yani başlığın gövdesi VAR. Karoyu
-    // kabuğa göre gizlemek "her statik route'un bir palet girişi var"
-    // invariantını da (`command-entries.test`) muafiyet listesine zorlardı.
-    // Emsal: yazıcı/kantar/tabanca sekmeleri de web'de duruyor.
-    key: "update",
-    title: "Güncelleme",
-    description: "Bu bilgisayardaki sürüm, güncelleme durumu ve yayın adresi",
+    // Sunucu + bu bilgisayar güncellemesi TEK sayfada (2026-10-12; eski "Güncelleme" ve "Sunucu Güncellemeleri"
+    // karoları burada birleşti). KAPISIZ: herkes açar, onay düğmeleri sayfa içinde `license:manage`e.
+    key: "updates",
+    title: "Güncellemeler",
+    description: "Sunucu ve bu bilgisayar: kurulu sürüm, yeni sürüm, onay",
     icon: Download,
-    to: "/system/update",
+    to: "/system/updates",
     group: "config",
-    permissionAny: ["admin:settings", "settings:workstation"],
+    public: true,
   },
   {
     key: "license",
@@ -302,18 +293,6 @@ export const systemTiles: SystemTile[] = [
     // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI küme.
     permissionAny: LICENSE_ACCESS,
     licenseObservationGate: true,
-  },
-  {
-    // Sunucu (backend) güncellemesi — "Güncelleme" karosu BU BİLGİSAYARIN panelidir, bu karo sunucunun.
-    // Gözlem kipinde de görünür: ONAYLI politikada onayı fabrikanın yetkilisi verir.
-    key: "server-updates",
-    title: "Sunucu Güncellemeleri",
-    description: "Sunucu sürümü, güncelleme politikası ve onayı, güncelleyici durumu, geçmiş",
-    icon: ServerCog,
-    to: "/system/server-updates",
-    group: "config",
-    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI küme.
-    permissionAny: LICENSE_ACCESS,
   },
   {
     key: "support",

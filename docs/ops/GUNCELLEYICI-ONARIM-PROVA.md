@@ -8,7 +8,7 @@ Her adımın sonunda **kanıt satırı** yazılır (tarih-saat · adım · gözl
 
 ## Panelde nereye bakılır
 
-Yönetim paneli → **Sistem** → **Sunucu Güncellemeleri** karosu → "Güncelleyici durumu" bölümü. Beklenen satırlar:
+Yönetim paneli → **Sistem** → **Güncellemeler** karosu → **Ayrıntılar** → "Güncelleyici durumu" bölümü (lisans görme yetkisiyle). Beklenen satırlar:
 
 | Kod | Panelde görünen metin | Tür |
 |---|---|---|

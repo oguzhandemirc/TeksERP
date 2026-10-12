@@ -44,7 +44,7 @@ Düzeltme adımları:
 
 ## 4. Güncelleme geri alındı
 
-Sunucu güncellemesi sorun çıkarsa kendiliğinden eski sürüme döner. Sistem → **Sunucu Güncellemeleri** → "Son güncelleme" kartı sonucu söyler:
+Sunucu güncellemesi sorun çıkarsa kendiliğinden eski sürüme döner. Sistem → **Güncellemeler** sayfasında "Son güncelleme" satırı (ayrıntısı **Ayrıntılar** → "Son güncelleme" kartında) sonucu söyler:
 - **Başarılı** — yeni sürüm çalışıyor.
 - **Geri dönüldü** — güncelleme yarıda kesildi ve eski sürüme dönüldü; veri korunur, program çalışmaya devam eder. "Sorun" satırı sebebi yazar (ör. "Yeni sürüm sağlık denetiminden geçemedi", "Dosya kilitli — başka bir program kullanıyor", "Disk dolu", "Güncelleme öncesi yedek alınamadı"). Sebebi giderin (disk boşaltmak, kilitleyen programı kapatmak gibi); "Geçmiş" kartında kayıtlar durur. Sebep belli değilse Destek talebi açın.
 - **Başarısız — müdahale gerekiyor** ve "Son güncelleme geri alınamadı — müdahale gerekiyor" başlığı: güncelleyici yeni onay gelene dek işlem yapmaz. Yeniden denemeyin; Sistem → **Destek**ten talep açıp satıcıya bildirin. Veri, güncelleme öncesi alınan yedekle korunur.

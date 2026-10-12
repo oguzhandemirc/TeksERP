@@ -16,7 +16,7 @@
 //      409 · PENCERE yalnız pencere varsa · GERI_AL → niyette onay yok · DONDUR → 409 · güncelleyici yok → 409
 //   §4 belirteç: yoklamanın backend/ belirteci niyete · yeniden başlatmada niyetteki taze belirteç korunur, süresi
 //      geçen korunmaz · doğrulama kipinde niyet yazılmaz
-//   §5 HTTP (süreç içi uygulama, 127.0.0.1): izinsiz 403 · enjeksiyonlu gövde 400 · license:manage 201 + durum ·
+//   §5 HTTP (süreç içi uygulama, 127.0.0.1): izinsiz 403 · §5k lisans izinsiz yalnız özet (200) · enjeksiyonlu gövde 400 · license:manage 201 + durum ·
 //      `/health/yerel` döngü adresine 200 (lisans motor ölçünce) · vekil başlıklı istek 404 · public /health'te lisans YOK
 // NEGATİF SONDA (elle, geri alındı; commit mesajında).
 // =============================================================================
@@ -278,6 +278,16 @@ async function http(): Promise<void> {
   check("§5e license:manage → 201 + güncel durum (onay yürürlükte)", ok.status === 201 && ok.body.data?.durum?.onay?.onayId === ok.body.data?.kayitId);
   const tekrar = await cagir(yonetici, { clientToken: token, surum: ADAY, zamanlama: "HEMEN" });
   check("§5f ⭐ tekrar oynatma HTTP'de de aynı kayıt", tekrar.status === 201 && tekrar.body.data?.kayitId === ok.body.data?.kayitId);
+  // Güncellemeler sayfası herkese açık: lisans izni olmayan kullanıcı tam durumu DEĞİL, yalnız özeti okur.
+  const siradan = await kullanici("siradan", ["roll:read"]);
+  const ozet = await fetch(`${base}/api/guncelleme/ozet`, { headers: { Authorization: `Bearer ${siradan}` } });
+  const ozetGovde = ((await ozet.json().catch(() => ({}))) as { data?: Record<string, unknown> }).data ?? {};
+  const tam = await fetch(`${base}/api/guncelleme/durum`, { headers: { Authorization: `Bearer ${siradan}` } });
+  const anonim = await fetch(`${base}/api/guncelleme/ozet`);
+  check("§5k ⭐ lisans izni yok → /ozet 200 (yalnız izdüşüm alanları) · /durum 403 · oturumsuz /ozet 401",
+    siradan.length > 0 && ozet.status === 200 && Object.keys(ozetGovde).sort().join(",") === "bekleyen,donuk,guncelleyici,karar,kuruluSurum,son,yerel" &&
+      tam.status === 403 && anonim.status === 401,
+    `ozet=${ozet.status} durum=${tam.status} anonim=${anonim.status} alanlar=${Object.keys(ozetGovde).sort().join(",")}`);
 
   const yerel = await fetch(`${base}/health/yerel`);
   const yb = (await yerel.json()) as Record<string, unknown>;

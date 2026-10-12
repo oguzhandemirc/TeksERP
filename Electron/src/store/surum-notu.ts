@@ -7,12 +7,15 @@ import { create } from "zustand";
  */
 interface SurumNotuStore {
   acik: boolean;
-  ac: () => void;
+  /** Kullanıcı kendisi istedi ("Neler yeni?"): görülmüş not da gösterilir, pencere boş açılmaz. */
+  elle: boolean;
+  ac: (elle?: boolean) => void;
   kapat: () => void;
 }
 
 export const useSurumNotuStore = create<SurumNotuStore>((set) => ({
   acik: false,
-  ac: () => set({ acik: true }),
-  kapat: () => set({ acik: false }),
+  elle: false,
+  ac: (elle = false) => set({ acik: true, elle }),
+  kapat: () => set({ acik: false, elle: false }),
 }));

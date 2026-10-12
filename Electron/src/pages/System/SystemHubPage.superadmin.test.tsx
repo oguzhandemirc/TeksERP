@@ -75,7 +75,7 @@ describe("Modüller karosu (satıcı yüzeyi)", () => {
     // Regresyon: fabrikanın KENDİ ekranları yerinde.
     expect(screen.getByText("Baskı & Cihazlar")).toBeTruthy();
     expect(screen.getByText("Özellik Anahtarları")).toBeTruthy();
-    expect(screen.getByText("Güncelleme")).toBeTruthy();
+    expect(screen.getByText("Güncellemeler")).toBeTruthy();
   });
 
   it("① satıcı hesabında çizilir", () => {

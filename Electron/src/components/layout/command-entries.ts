@@ -1,4 +1,4 @@
-import { Settings as SettingsIcon, FilePlus2, ScrollText } from "lucide-react";
+import { Settings as SettingsIcon, Download, FilePlus2, ScrollText } from "lucide-react";
 import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
@@ -192,6 +192,15 @@ export const commandSections: CommandSection[] = [
         icon: SettingsIcon,
         to: "/settings",
         keywords: "ayar tercih tema koyu açık renk yoğunluk favori kayıtlı görünüm sıfırla kişisel profil",
+      },
+      {
+        // Güncellemeler kapısız bir sistem sayfası; kapısız karolar palete Sistem bölümünden girmez.
+        key: "personal:updates",
+        label: "Güncellemeler",
+        description: "Sunucu ve bu bilgisayar — kurulu sürüm, yeni sürüm, onay",
+        icon: Download,
+        to: "/system/updates",
+        keywords: "güncelleme güncelle sürüm versiyon yeni sürüm onay kur yeniden başlat sunucu panel denetle",
       },
       {
         key: "personal:release-notes",

@@ -196,7 +196,12 @@ const EXEMPT: Record<string, string> = {
  * susturur. Uç iş verisi okumaz/yazmaz: KATI gövde (mesaj alanı yok), onay yoksa hiçbir şey almaz, kullanıcı
  * başına hız sınırlı — `scripts/test_hata_raporu_fabrika.ts` ölçer.
  */
-const BARE_CHAIN_BASELINE = 16;
+/**
+ * ⚠️ 16 → 17 (2026-10-12, BİLİNÇLİ): `GET /api/guncelleme/ozet` yalnız `verifyToken` taşır — Güncellemeler sayfasını
+ * her panel kullanıcısı açar ve "Sunucu" satırının durumunu görür (kullanıcı kararı). Gövde OPT-IN izdüşümdür
+ * (`updateSummaryOf`; belirteç/politika/onaylayan yok) — `scripts/test_guncelleme_durumu.ts` §8g · §10 ölçer.
+ */
+const BARE_CHAIN_BASELINE = 17;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

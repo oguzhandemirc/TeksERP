@@ -19,7 +19,7 @@
     {
       "id": "2026-10-11f",
       "durum": "TASLAK — terfide kullanıcı onayı",
-      "baslik": "Tezgah Salonu'ndan iş verme, gece başlayıp sabaha süren tezgah duruşu ve destek hesabı uyarısı",
+      "baslik": "Tezgah Salonu'ndan iş verme, güncellemeler tek sayfada, gece başlayıp sabaha süren tezgah duruşu ve destek hesabı uyarısı",
       "surumler": {
         "panel": "1.6.5"
       },
@@ -53,6 +53,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Destek hesabı ilk kurulumda gelen ortak parolayla duruyorsa panelin üstünde kırmızı bir uyarı şeridi çıkar. Destek hesabıyla girildiyse şerit kendi parolanızı hemen belirlemenizi, yönetici olarak girildiyse satıcınızdan parolayı değiştirmesini istemenizi söyler. Şerit elle kapatılamaz; parola değişince kendiliğinden kalkar. Bunun için de sunucunun 2.15.5 sürümü gerekir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Güncellemeler artık tek sayfada: Sistem → Güncellemeler ya da üst çubuktaki güncelleme düğmesi. Sunucu ve bu bilgisayar için kurulu sürüm, durum ve yapılacak iş tek satırda görünür; teknik bilgiler kapalı gelen Ayrıntılar bölümündedir. Sayfayı herkes açabilir; sunucu güncellemesini yalnız lisans yönetme yetkisi olan kişi onaylar, diğerleri onayın yöneticide olduğunu görür. Eski Güncelleme ve Sunucu Güncellemeleri ekranları bu sayfada birleşti; Neler yeni? bağlantısı bu sürümün notlarını açar."
         }
       ]
     },

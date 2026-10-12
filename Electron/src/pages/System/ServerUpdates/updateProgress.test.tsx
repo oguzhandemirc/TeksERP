@@ -134,7 +134,9 @@ describe("sunucu durumu — hizmet ve güncelleme bölümü", () => {
     expect(await screen.findByText("Çalışıyor · 2.12.0")).toBeTruthy();
     expect(screen.getByText("Bağlı")).toBeTruthy();
     expect(screen.getByText("Normal · L-1")).toBeTruthy();
-    expect(screen.getByText("Not metni")).toBeTruthy();
+    // Sürüm/onay/geçmiş Güncellemeler sayfasında (tek yer); burada yalnız oraya bağlantı.
+    expect(screen.queryByText("Not metni")).toBeNull();
+    expect(screen.getByRole("button", { name: "Sürüm ve güncellemeler →" })).toBeTruthy();
   });
   it("negatif: izin yok → bölüm yok; uç 404 → bölüm yok", async () => {
     renderWithProviders(<ServerUpdateSection db="UP" />);

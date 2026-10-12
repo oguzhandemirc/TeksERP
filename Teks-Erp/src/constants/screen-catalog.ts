@@ -232,8 +232,6 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Lisans + Hakkında (panel yüzeyi Faz 1d). Hakkında'nın verisi herkese açık `GET /api/license/durum`.
   { key: "system/license", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Lisans", requires: ["license:view", "license:manage"], capabilities: ["license:manage"] },
   { key: "system/about", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Hakkında", requires: ["license:view"], capabilities: [] },
-  // Sunucu güncellemeleri (Dağıtım v2): okuma `license:view`, onay ("Şimdi kur" · "Bu gece kur") `license:manage`.
-  { key: "system/server-updates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Güncellemeleri", requires: ["license:view", "license:manage"], capabilities: ["license:manage"] },
   { key: "system/support", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Destek", requires: ["support:create"], capabilities: ["support:create"] },
   // Veri Aktarımı — `admin:settings` DEĞİL: toplu yükleme sistem yönetimi değil
   // VERİ yönetimidir ve ayrı atanır. Ekranın kendisi `data:import` ile açılır;
@@ -265,10 +263,6 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Numaralandırma — numara BİÇİMİ veri olduğundan panelden yönetilir (Faz C).
   // Çekirdek: her kurulumda numara üretilir, kapatılabilir bir modüle ait değil.
   { key: "system/numbering", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Numaralandırma", requires: ["settings:numbering"], capabilities: [] },
-  // Güncelleme — bu bilgisayardaki sürüm/güncelleme durumu. `settings:workstation`
-  // DE yeter (yerel donanımını kuran personel); route çoklu kapılı olduğu için
-  // bekçinin route çözücüsü bu satırı zaten göremez, giriş TAMLIK için var.
-  { key: "system/update", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Güncelleme", requires: ["admin:settings", "settings:workstation"], capabilities: [] },
   { key: "system/logs", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem Kayıtları", requires: ["admin:settings", "system:activity"], capabilities: [] },
   // Arşive TAŞIMA süperadmin ekranıdır (karo `superadminOnly`); alt yol Arşiv Tarama okuma iznini de kabul eder.
   { key: "system/archive", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Arşivi", requires: ["admin:settings", "system:activity"], capabilities: [] },

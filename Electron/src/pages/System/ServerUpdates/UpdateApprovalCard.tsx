@@ -45,7 +45,7 @@ export function actionText(kind: UpdateApprovalChoice, surum: string, mode: Upda
 }
 
 /** Tek karar düğmesi — kendi deneme token'ıyla (aynı karar ağ hatasından sonra yinelenirse aynı token). */
-function ApprovalAction({ kind, surum, mode, window }: { kind: UpdateApprovalChoice; surum: string; mode: UpdatePolicyMode | null; window: UpdateInterval | null }) {
+export function ApprovalAction({ kind, surum, mode, window }: { kind: UpdateApprovalChoice; surum: string; mode: UpdatePolicyMode | null; window: UpdateInterval | null }) {
   const [open, setOpen] = useState(false);
   const t = actionText(kind, surum, mode, window);
   const submit = useApprovalSubmit(kind, surum, t.done, () => setOpen(false));
@@ -59,11 +59,13 @@ function ApprovalAction({ kind, surum, mode, window }: { kind: UpdateApprovalCho
   );
 }
 
-/** Panel onayı (yalnız `license:manage`): ONAYLI kipte "Şimdi kur" / "Bu gece kur"; verilen onay geri alınabilir. */
+/**
+ * Ayrıntılar'daki onay kartı (yalnız `license:manage`): verilen onay + geri alma. "Şimdi kur"/"Bu gece kur"
+ * Güncellemeler sayfasının "Sunucu" satırındadır — iki yerde aynı düğme çizilmez.
+ */
 export function UpdateApprovalCard({ s }: { s: UpdateStatus }) {
   const e = s.eylemler;
   const mode = s.politika?.kip ?? null;
-  const any = e.hemen || e.pencere || e.geriAl;
   return (
     <UpdateCard title="Onay">
       {s.onay && (
@@ -72,14 +74,18 @@ export function UpdateApprovalCard({ s }: { s: UpdateStatus }) {
         </InfoRow>
       )}
       {e.neden && <p className="text-sm text-muted-foreground">{e.neden}</p>}
-      {any && (
+      {e.geriAl && s.onay && (
         <div className="flex flex-wrap gap-2 pt-1">
-          {e.hemen && e.hedefSurum && <ApprovalAction kind="HEMEN" surum={e.hedefSurum} mode={mode} window={s.sonrakiPencere} />}
-          {e.pencere && e.hedefSurum && <ApprovalAction kind="PENCERE" surum={e.hedefSurum} mode={mode} window={s.sonrakiPencere} />}
-          {e.geriAl && s.onay && <ApprovalAction kind="GERI_AL" surum={s.onay.surum} mode={mode} window={s.sonrakiPencere} />}
+          <ApprovalAction kind="GERI_AL" surum={s.onay.surum} mode={mode} window={s.sonrakiPencere} />
         </div>
       )}
-      {!any && !e.neden && <p className="text-sm text-muted-foreground">Şu an verilecek bir onay yok.</p>}
+      {!s.onay && !e.neden && <p className="text-sm text-muted-foreground">Verilmiş bir onay yok.</p>}
     </UpdateCard>
   );
+}
+
+/** Ayrıntılar'da onay kartı: verilmiş onay ya da geri alma varsa; kira yok · yaptırım · DONDUR'u Politika kartı zaten söyler. */
+export function showsApprovalDetails(s: UpdateStatus): boolean {
+  const p = s.politika;
+  return s.onay !== null || s.eylemler.geriAl || (s.eylemler.neden !== null && p !== null && !s.donuk && p.kip !== "DONDUR");
 }

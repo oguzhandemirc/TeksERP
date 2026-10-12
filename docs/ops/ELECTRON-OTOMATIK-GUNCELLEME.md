@@ -384,7 +384,7 @@ Script bunu kendi yapar. Elle (salt denetim, yükleme yok — belirteç ister):
 
 Fabrikadaki paneller en geç **15 dakika** içinde görür; beklemek istemezsen
 herhangi bir makinede **topbar'daki güncelleme düğmesi** (zilin solunda) ya da
-Sistem → Güncelleme → **Şimdi kontrol et**.
+Sistem → Güncellemeler → "Bu bilgisayar" satırında **Denetle**.
 
 ---
 
@@ -546,9 +546,9 @@ paket panelde kurulmaz. Setup **elle** çalıştırıldığında Windows SmartSc
 bilgi → Yine de çalıştır"); bu yalnız sertifikayla kalkar.
 
 **③ Yayın adresi pakete derleme anında gömülür.** Adres sonradan değişirse kurulu
-paneller eski adrese bakmaya devam eder. Kaçış kapısı var: **Sistem → Güncelleme →
-Değiştir** ile o makineye özel adres yazılabilir — YALNIZ `admin:settings` (ekranı
-gören `settings:workstation` değiştiremez) ve YALNIZ `https://<kanal kaydının güncelleme
+paneller eski adrese bakmaya devam eder. Kaçış kapısı var: **Sistem → Güncellemeler →
+Ayrıntılar → Adresi değiştir** ile o makineye özel adres yazılabilir — YALNIZ `admin:settings` (Ayrıntıları
+gören başka kullanıcı değiştiremez) ve YALNIZ `https://<kanal kaydının güncelleme
 sunucusu>/<kanal>/electron/` biçiminde: düz http, başka ana makine, port, sorgu
 reddedilir; kural ana süreçte hem yazarken hem okurken uygulanır, indirme belirteci
 yalnız bu adrese gider. Başka kanalın yolu yazılsa bile oradan gelen sürüm kurulmaz
@@ -598,7 +598,7 @@ tek dosya, aynı ad/boy/sha512 · kurulu sürümden YENİ); geçerse indirme KEN
 indiriliyor…" → geri sayım → kur), geçmezse indirme hiç başlamaz. ② `update-downloaded`: inen dosyanın boyu +
 sha512'si künyeyle aynı değilse dosya silinir, `ready` olmaz. ③ kurulumdan hemen önce aynı dosya yeniden
 ölçülür ve electron-updater'ın çalıştıracağı yol doğrulanan yol olmalı. Red: Türkçe uyarı (kabukta kırmızı
-şerit `UpdateSecurityStrip` + Sistem → Güncelleme), `main.log`a `[updater] güncelleme REDDEDİLDİ kod=… surum=…`;
+şerit `UpdateSecurityStrip` + Sistem → Güncellemeler "Bu bilgisayar" satırı), `main.log`a `[updater] güncelleme REDDEDİLDİ kod=… surum=…`;
 panel eski sürümle çalışmaya devam eder.
 
 **Çapa:** `Electron/electron/guncelleme/imza-capasi.json` `{kokler: [...]}` — derlemede ana sürece GÖMÜLÜR; satırlar ÜRETİM KÖKLERİDİR (`kok-<yıl>-<n>`, x ve sınıflar kök kaynağından). Satır yalnız
@@ -728,7 +728,7 @@ Farklıysa önbellek, ikisi de 404 ise dosya gerçekten yok.
 | `Electron/src/components/layout/SurumNotlariDialog.tsx` | "Neler değişti" penceresi |
 | `Electron/src/lib/surum-notlari.ts` | Gösterim kararı (saf, test edilir) |
 | `surum-notlari.json` + `scripts/check-surum-notlari.mjs` | Not kaynağı + bekçi |
-| `Electron/src/pages/GeneralSettings/UpdateSection.tsx` | Bu Bilgisayar → Güncelleme |
+| `Electron/src/pages/System/Updates/PanelRow.tsx` + `PanelUpdateDetails.tsx` | Sistem → Güncellemeler: "Bu bilgisayar" satırı + Ayrıntılar (adres ezmesi) |
 | `Electron/src/test/update-feed-url.test.ts` | Adres + dosya adı bekçisi |
 | `deploy/electron-yayinla.ps1` | EMEKLİ saplama — hiçbir şey yüklemez, sıfır-dışı çıkar |
 | `deploy/electron-yayinla.sh` | Yayınlama — tek yol (Windows'ta Git Bash/WSL) |

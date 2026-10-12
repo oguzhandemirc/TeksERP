@@ -95,6 +95,20 @@ export interface UpdateStatus {
   eylemler: UpdateActions;
 }
 
+/**
+ * `GET /api/guncelleme/ozet` — oturumlu her kullanıcı (backend `updateSummaryOf`, OPT-IN alanlar). Tam
+ * `UpdateStatus` bunun üst kümesidir: "Sunucu" satırı ikisinden de AYNI fonksiyonla (`serverRowState`) çizilir.
+ */
+export interface UpdateSummary {
+  kuruluSurum: string;
+  donuk: boolean;
+  guncelleyici: { durum: UpdaterState };
+  bekleyen: { surum: string; karar: UpdateDecisionKind; neden: string | null; zorunlu: boolean } | null;
+  karar: { karar: UpdateDecisionKind; neden: string | null } | null;
+  yerel: { durum: string; hataKodu: string | null; ilerleme: { indirilen: number; toplam: number } | null } | null;
+  son: { sonuc: UpdateResultKind; hedefSurum: string; bitis: string } | null;
+}
+
 export interface RecordUpdateApprovalInput {
   clientToken: string;
   surum: string;

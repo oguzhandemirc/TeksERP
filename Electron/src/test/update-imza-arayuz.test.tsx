@@ -7,14 +7,16 @@ import { DEFAULT_UPDATE_FEED_URL, GROUP_UNKNOWN_TEXT } from "@shared/update-feed
 import { elleDenetimBildirimi } from "@/lib/updater-bildirim";
 import { useAuthStore } from "@/store/auth";
 import type { JwtPayload } from "@/types/auth";
-import { UpdateSection } from "@/pages/GeneralSettings/UpdateSection";
+import { PanelRow } from "@/pages/System/Updates/PanelRow";
+import { PanelUpdateDetails } from "@/pages/System/Updates/PanelUpdateDetails";
 import { UpdateSecurityStrip } from "@/components/layout/UpdateSecurityStrip";
 
 /**
  * GÜNCELLEME GÜVENLİĞİ — ARAYÜZ.
- * ⭐ İmza reddi (kurulmayan güncelleme) KABUKTA şeritle ve Güncelleme ekranında tehlike tonuyla görünür;
+ * ⭐ İmza reddi (kurulmayan güncelleme) KABUKTA şeritle ve Güncellemeler sayfasının "Bu bilgisayar" satırında
+ *   tehlike tonuyla görünür;
  *   ağ hatası gibi gizlenmez (indirme şeridinin "hata gösterme" kuralının bilinçli istisnası).
- * ⭐ Güncelleme adresi ezmesi YALNIZ `admin:settings`: ekran `settings:workstation`a da açıktır ama o kişi
+ * ⭐ Güncelleme adresi ezmesi YALNIZ `admin:settings`: Ayrıntılar herkese açıktır ama izinsiz kişi
  *   adresi DEĞİŞTİREMEZ. Girilen adres ana süreçle AYNI kuraldan (`validateFeedOverride`) geçer; http RED.
  */
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), info: vi.fn(), error: vi.fn() }) }));
@@ -71,10 +73,11 @@ describe("imza reddi görünür", () => {
     expect(serit).toHaveTextContent("JWS_IMZA");
   });
 
-  it("Güncelleme ekranı: red metni + kod", async () => {
-    kur({ state: "error", error: "Sunulan güncellemenin imzası doğrulanamadı; güvenlik nedeniyle kurulmadı.", imzaReddi: RED }, ["settings:workstation"]);
-    render(<UpdateSection />);
-    expect(await screen.findByText(/imzası doğrulanamadı.*\(JWS_IMZA\)/)).toBeInTheDocument();
+  it("Güncellemeler sayfası 'Bu bilgisayar' satırı: red metni + kod, tek eylem 'Yeniden dene'", async () => {
+    kur({ state: "error", error: "Sunulan güncellemenin imzası doğrulanamadı; güvenlik nedeniyle kurulmadı.", imzaReddi: RED }, ["roll:read"]);
+    render(<PanelRow />);
+    expect(await screen.findByTestId("guncelleme-sorunu-panel")).toHaveTextContent(/imzası doğrulanamadı.*\(JWS_IMZA\)/);
+    expect(screen.getByRole("button", { name: /Yeniden dene/ })).toBeInTheDocument();
   });
 
   it("künye v:2 zincir kodları (SERTIFIKA_*) şeritte ve ekranda aynı kontratla: ana sürecin TR metni + kod", async () => {
@@ -87,8 +90,8 @@ describe("imza reddi görünür", () => {
       expect(alert).toHaveTextContent("KURULMADI");
       expect(alert).toHaveTextContent(kod);
       serit.unmount();
-      const ekran = render(<UpdateSection />);
-      expect(await screen.findByText(new RegExp(`kurulmadı.*\\(${kod}\\)`))).toBeInTheDocument();
+      const ekran = render(<PanelRow />);
+      expect(await screen.findByTestId("guncelleme-sorunu-panel")).toHaveTextContent(new RegExp(`kurulmadı.*\\(${kod}\\)`));
       ekran.unmount();
     }
   });
@@ -97,16 +100,16 @@ describe("imza reddi görünür", () => {
 describe("güncelleme adresi ezmesi — yalnız admin:settings", () => {
   it("settings:workstation adresi GÖRÜR ama değiştiremez", async () => {
     kur({}, ["settings:workstation"]);
-    render(<UpdateSection />);
+    render(<PanelUpdateDetails />);
     expect(await screen.findByText(DEFAULT_UPDATE_FEED_URL)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Değiştir" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Adresi değiştir" })).toBeNull();
   });
 
   it("admin: http adresi RED (ana süreçle aynı kural), izinli adres normalize edilip gönderilir", async () => {
     kur({}, ["admin:settings"]);
     const user = userEvent.setup();
-    render(<UpdateSection />);
-    await user.click(await screen.findByRole("button", { name: "Değiştir" }));
+    render(<PanelUpdateDetails />);
+    await user.click(await screen.findByRole("button", { name: "Adresi değiştir" }));
     const kutu = screen.getByPlaceholderText(/electron/);
     await user.type(kutu, DEFAULT_UPDATE_FEED_URL.replace("https:", "http:"));
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
@@ -120,15 +123,16 @@ describe("güncelleme adresi ezmesi — yalnız admin:settings", () => {
 });
 
 describe("grup akışı (ortak paket) — grup bilinmiyorsa denetim yok, durum metni", () => {
-  it("⭐ Ayarlar: grup null + idle → grup metni (hata tonu değil), adres '—'; grup biliniyorsa gösterilir", async () => {
+  it("⭐ Güncellemeler: grup null + idle → grup metni (sorun değil), adres '—'; grup biliniyorsa gösterilir", async () => {
     kur({ state: "idle", grup: null, feedUrl: "" }, ["settings:workstation"]);
-    const { unmount } = render(<UpdateSection />);
-    expect(await screen.findByText(GROUP_UNKNOWN_TEXT)).toBeInTheDocument();
+    const { unmount } = render(<><PanelRow /><PanelUpdateDetails /></>);
+    expect(await screen.findByTestId("guncelleme-durumu-panel")).toHaveTextContent(GROUP_UNKNOWN_TEXT);
+    expect(screen.queryByTestId("guncelleme-sorunu-panel")).toBeNull();
     expect(screen.getByText("—")).toBeInTheDocument();
     unmount();
     kur({ state: "up-to-date", grup: "oncu" }, ["settings:workstation"]);
-    render(<UpdateSection />);
-    expect(await screen.findByText("En güncel sürüm kurulu.")).toBeInTheDocument();
+    render(<><PanelRow /><PanelUpdateDetails /></>);
+    expect(await screen.findByTestId("guncelleme-durumu-panel")).toHaveTextContent("✓ Güncel");
     expect(screen.getByText("oncu")).toBeInTheDocument();
   });
 

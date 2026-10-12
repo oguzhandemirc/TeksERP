@@ -94,7 +94,7 @@ function YayinKarti({ yayin }: { yayin: SurumNotuYayini }) {
  * AppShell onu açıkken bu pencereyi zaten render etmiyor — bu sınıf ikinci hat.
  */
 export function SurumNotlariDialog({ kuruluSurum }: { kuruluSurum: string | null }) {
-  const { acik, kapat } = useSurumNotuStore();
+  const { acik, elle, kapat } = useSurumNotuStore();
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const [gosterilen, setGosterilen] = useState<{ liste: SurumNotuYayini[]; gizlenen: number }>({
     liste: [],
@@ -103,8 +103,10 @@ export function SurumNotlariDialog({ kuruluSurum }: { kuruluSurum: string | null
 
   useEffect(() => {
     if (!acik) return;
-    setGosterilen(gosterilecekYayinlar(SURUM_NOTLARI, sonGorulenOku(), kuruluSurum, "panel"));
-  }, [acik, kuruluSurum]);
+    const yeni = gosterilecekYayinlar(SURUM_NOTLARI, sonGorulenOku(), kuruluSurum, "panel");
+    // Elle açılışta hepsi görülmüşse kurulu sürümün son notu gösterilir (boş pencere "bozuk" okunur).
+    setGosterilen(elle && yeni.liste.length === 0 ? gosterilecekYayinlar(SURUM_NOTLARI, null, kuruluSurum, "panel") : yeni);
+  }, [acik, elle, kuruluSurum]);
 
   // Damga KAPANIŞTA yazılır, açılışta değil: açıkken çöken uygulama notu
   // tekrar göstersin (sessizce yutulmasındansa iki kez görünmesi iyidir).

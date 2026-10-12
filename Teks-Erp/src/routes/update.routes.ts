@@ -2,16 +2,38 @@
 // TeksERP — Güncelleme uçları (`/api/guncelleme/*`, Dağıtım v2 — docs/design/GUNCELLEYICI.md §3.2 · §5.1)
 // =============================================================================
 // Panelin "Sistem → Güncellemeler" ekranı: kiradaki politika + güncelleyicinin durum/geçmişi (okuma) ve panel
-// onayı (yazma — güncelleyicinin niyet dosyasına giden TETİK; yetki kirada ve imzalı bildirimde).
+// onayı (yazma — güncelleyicinin niyet dosyasına giden TETİK; yetki kirada ve imzalı bildirimde). Ekranı herkes
+// açar: izinsiz kullanıcı yalnız `/ozet`i (kurulu sürüm + durum, OPT-IN alanlar) okur.
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
 import { getUpdateStatus } from "../services/update-status.service";
+import { updateSummaryOf } from "../services/update-summary";
 import { RecordUpdateApprovalSchema, recordUpdateApproval } from "../services/update-approval.service";
 
 const router = Router();
+
+/**
+ * @openapi
+ * /api/guncelleme/ozet:
+ *   get:
+ *     tags: [Lisans]
+ *     summary: Sunucu güncelleme özeti — oturumlu her panel kullanıcısı için (kurulu sürüm, durum, son sonuç; belirteç/politika/onaylayan yok)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "UpdateSummary — { kuruluSurum, donuk, guncelleyici{durum}, bekleyen{surum,karar,neden,zorunlu}, karar, yerel{durum,hataKodu,ilerleme}, son{sonuc,hedefSurum,bitis} }" }
+ *       401: { description: Token geçersiz }
+ */
+// ⚠️ Bilerek `router.use`dan ÖNCE: izin kapısı bu ucu görmez (yalnız kimlik). Alan kümesi `updateSummaryOf`ta kilitli.
+router.get("/ozet", verifyToken, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(200).json({ success: true, data: updateSummaryOf(await getUpdateStatus()) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.use(verifyToken, requireAnyPermission("license:view", "license:manage"));
 

@@ -94,15 +94,10 @@ import { SettingsSurfacePage } from "@/pages/GeneralSettings/SettingsSurfacePage
 import { LegacySettingsRedirect } from "@/pages/GeneralSettings/LegacySettingsRedirect";
 import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
 import { NumberingPage } from "@/pages/GeneralSettings/Numbering/NumberingPage";
-import { UpdatePage } from "@/pages/System/UpdatePage";
+import { UpdatesPage } from "@/pages/System/Updates/UpdatesPage";
 import { LicensePage } from "@/pages/System/License/LicensePage";
-import { ServerUpdatesPage } from "@/pages/System/ServerUpdates/ServerUpdatesPage";
 import { SupportPage } from "@/pages/System/Support/SupportPage";
 import { AboutPage } from "@/pages/System/About/AboutPage";
-import {
-  SETTINGS_ADMIN_PERMISSION,
-  WORKSTATION_PERMISSION,
-} from "@/pages/GeneralSettings/settings-config";
 import { SystemEventsPage } from "@/pages/System/Events/SystemEventsPage";
 import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage";
 import { ArchiveSearchPage } from "@/pages/System/Archive/ArchiveSearchPage";
@@ -872,16 +867,14 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    // Güncelleme denetleme — kendi ekranı (2026-09-04). Kapı KARO ile aynı ve
-    // GENİŞ: yerel donanımını kuran personel (`settings:workstation`) sürüm
-    // durumuna bakabilmeli — o kişi hub'ı göremez, buraya paletten gelir.
-    path: "system/update",
-    element: (
-      <ProtectedRoute requireAnyPermission={[SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION]}>
-        <UpdatePage />
-      </ProtectedRoute>
-    ),
+    // Güncellemeler — sunucu + bu bilgisayar TEK sayfada (kullanıcı kararı 2026-10-12). KAPISIZ: her panel
+    // kullanıcısı açar (karo `public`); onay düğmeleri sayfa içinde `license:manage`e, sunucu satırı izinsize `/ozet`ten.
+    path: "system/updates",
+    element: <UpdatesPage />,
   },
+  // Eski iki adres (panel güncellemesi · sunucu güncellemeleri) — kayıtlı sekme/favori/bağlantı yeni sayfaya düşer.
+  { path: "system/update", element: <Navigate to="/system/updates" replace /> },
+  { path: "system/server-updates", element: <Navigate to="/system/updates" replace /> },
   {
     // Lisans — karo ile AYNI küme (`LICENSE_ACCESS`). Gözlem kipinde satıcıya
     // özeldir: karo/palet gizler, sayfa da aynı yüklemle kendi notunu basar.
@@ -889,15 +882,6 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={LICENSE_ACCESS}>
         <LicensePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    // Sunucu güncellemeleri (Dağıtım v2) — karo ile AYNI küme (`LICENSE_ACCESS`); `system/server-updates` manifestosu.
-    path: "system/server-updates",
-    element: (
-      <ProtectedRoute requireAnyPermission={LICENSE_ACCESS}>
-        <ServerUpdatesPage />
       </ProtectedRoute>
     ),
   },

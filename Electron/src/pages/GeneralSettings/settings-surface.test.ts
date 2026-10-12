@@ -189,23 +189,32 @@ describe("§4 karolar — her yüzey ayrı yer", () => {
     expect(t?.permissionAny).toEqual(SETTINGS_FLAGS_ACCESS);
   });
 
-  it("⭐ Güncelleme kendi karosunda ve `settings:workstation` da yetiyor", () => {
-    const t = systemTiles.find((x) => x.to === "/system/update");
-    expect(t?.title).toBe("Güncelleme");
-    expect(t?.permissionAny).toEqual(["admin:settings", "settings:workstation"]);
-    // Route AYNI çoklu kapıyı taşımalı — ayrışırsa yazıcısını kuran personel
-    // karoyu/palet girişini görür ve /forbidden'a düşer.
-    const idx = ROUTES_SRC.indexOf('path: "system/update"');
+  it("⭐ Güncellemeler TEK karoda ve KAPISIZ; karo ile rota aynı (kapı yok)", () => {
+    const t = systemTiles.find((x) => x.to === "/system/updates");
+    expect(t?.title).toBe("Güncellemeler");
+    expect(t?.public).toBe(true);
+    expect(t?.permissionAny).toBeUndefined();
+    expect(t?.permission).toBeUndefined();
+    // Eski iki karo yok (iki yer = iki gerçek).
+    expect(systemTiles.some((x) => x.to === "/system/update" || x.to === "/system/server-updates")).toBe(false);
+    // Rota da kapısız — karo herkese görünüp rota kapı koysaydı izinsiz kişi /forbidden'a düşerdi.
+    const idx = ROUTES_SRC.indexOf('path: "system/updates"');
     const block = ROUTES_SRC.slice(idx, ROUTES_SRC.indexOf('path: "', idx + 10));
-    expect(block).toContain("requireAnyPermission");
-    expect(block).toContain("SETTINGS_ADMIN_PERMISSION");
-    expect(block).toContain("WORKSTATION_PERMISSION");
+    expect(block).toContain("<UpdatesPage />");
+    expect(block).not.toContain("ProtectedRoute");
+  });
+
+  it("⭐ eski iki adres (panel · sunucu güncellemesi) yeni sayfaya yönlenir", () => {
+    for (const eski of ["system/update", "system/server-updates"]) {
+      const re = new RegExp(`\\{ path: "${eski}", element: <Navigate to="/system/updates" replace /> \\}`);
+      expect(ROUTES_SRC, eski).toMatch(re);
+    }
   });
 
   it("Güncelleme artık ayar kategorilerinde DEĞİL (iki yer = iki gerçek)", () => {
     // ⚠️ Ölçüm dosyası DEĞİŞTİ: `WorkstationTabs.tsx` 2026-09-04'te silindi (dört
     // cihaz kategorisi raya taşındı). Kural aynı: güncelleme denetimi TEK yerde
-    // (Sistem → Güncelleme) yaşar; ayar kabuğu `UpdateSection`ı çizmez.
+    // (Sistem → Güncellemeler) yaşar; ayar kabuğu eski `UpdateSection`ı çizmez.
     const shell = readFileSync(resolve(__dirname, "SettingsSurfacePage.tsx"), "utf8");
     expect(shell).not.toContain("UpdateSection");
     expect(SETTINGS_CATEGORIES.map((c) => c.id)).not.toContain("update");

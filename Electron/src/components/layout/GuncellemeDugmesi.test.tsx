@@ -5,9 +5,14 @@ import { toast } from "sonner";
 import type { UpdateStatus } from "@shared/ipc-contract";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { ELLE_DENETIM_ASGARI_MS, GuncellemeDugmesi } from "./GuncellemeDugmesi";
+import { ELLE_DENETIM_ASGARI_MS, UPDATES_PATH, GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import { guncellemeRozeti } from "@/lib/updater-durum";
 import { elleDenetimBildirimi } from "@/lib/updater-bildirim";
+
+const navigateActive = vi.fn();
+vi.mock("@/store/tabs", () => ({
+  useTabsStore: (sel: (s: { navigateActive: unknown }) => unknown) => sel({ navigateActive }),
+}));
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), info: vi.fn(), error: vi.fn() }),
@@ -25,13 +30,14 @@ const baloncukSayisi = () =>
   toastSpy.error.mock.calls.length;
 
 /**
- * TOPBAR "GÜNCELLEME DENETLE" DÜĞMESİ — bekçi (2026-09-04).
+ * TOPBAR GÜNCELLEME DÜĞMESİ — bekçi.
  *
  * ⭐ İDDİA ①: düğme durumu GÖSTERİR (kontrol ediliyor / güncel / iniyor /
  *   hazır — birazdan kurulur) ve metin tek kaynaktan (`@/lib/updater-durum`) gelir.
  * ⭐ İDDİA ②: hata KIRMIZI BASMAZ — `error` durumunda düğme nötr görünür ve
  *   hiçbir "destructive" sınıf taşımaz. Sürekli kırmızı bir gösterge körleşir.
- * ⭐ İDDİA ③: tık `updater:check`i ÇAĞIRIR (ikinci bir zamanlayıcı değil).
+ * ⭐ İDDİA ③: tık Güncellemeler sayfasını HER durumda açar; elverişliyse `updater:check`i de çağırır
+ *   (ikinci bir zamanlayıcı değil). İnerken / geliştirme modunda düğme kilitlenmez, yalnız denetlemez.
  * ⭐ İDDİA ④ (2026-09-04): elle basışta dönüş animasyonu TAM koşar — sunucu
  *   anında cevap verse bile asgari süre dolmadan ne dönüş durur ne baloncuk
  *   çıkar; bitince yumuşak bir bildirim ("Uygulama güncel") gelir.
@@ -72,10 +78,11 @@ function kur(patch: Partial<UpdateStatus>) {
 }
 
 /** Düğmeyi (varsa) bul — aria-label durum ekiyle değiştiği için ön ekten ara. */
-const dugme = () => screen.queryByRole("button", { name: /Güncellemeyi denetle/ });
+const dugme = () => screen.queryByRole("button", { name: /^Güncellemeler/ });
 
 beforeEach(() => {
   check.mockReset();
+  navigateActive.mockClear();
   toastSpy.mockClear();
   toastSpy.success.mockClear();
   toastSpy.info.mockClear();
@@ -106,32 +113,40 @@ describe("topbar güncelleme düğmesi", () => {
     kur({ state: "error", error: "Güncelleme sunucusuna ulaşılamadı." });
     render(<GuncellemeDugmesi />);
     await waitFor(() => expect(dugme()).toBeInTheDocument());
-    expect(dugme()).toHaveAttribute("aria-label", "Güncellemeyi denetle");
+    expect(dugme()).toHaveAttribute("aria-label", "Güncellemeler");
     expect(dugme()!.innerHTML).not.toMatch(/destructive|text-red|text-warning/);
-    // Hata metni düğmeye SIZMAZ (o bilgi Sistem → Güncelleme ekranında).
+    // Hata metni düğmeye SIZMAZ (o bilgi Sistem → Güncellemeler sayfasında).
     expect(dugme()!.getAttribute("title")).not.toContain("ulaşılamadı");
   });
 
-  it("tıklanınca kontrolü tetikler", async () => {
+  it("⭐ tıklanınca Güncellemeler sayfasını açar VE kontrolü tetikler", async () => {
     kur({ state: "up-to-date" });
     render(<GuncellemeDugmesi />);
     await waitFor(() => expect(dugme()).toBeEnabled());
     await userEvent.click(dugme()!);
+    expect(UPDATES_PATH).toBe("/system/updates");
+    expect(navigateActive).toHaveBeenCalledWith("/system/updates");
     expect(check).toHaveBeenCalledTimes(1);
   });
 
-  it("inerken kilitli (aynı paketi ikinci kez sormanın anlamı yok)", async () => {
+  it("inerken kilitlenmez: sayfayı açar ama aynı paketi ikinci kez SORMAZ", async () => {
     kur({ state: "downloading", percent: 42 });
     render(<GuncellemeDugmesi />);
-    await waitFor(() => expect(dugme()).toBeDisabled());
+    await waitFor(() => expect(dugme()).toBeEnabled());
     expect(dugme()).toHaveAttribute("aria-label", expect.stringContaining("%42"));
+    await userEvent.click(dugme()!);
+    expect(navigateActive).toHaveBeenCalledWith("/system/updates");
+    expect(check).not.toHaveBeenCalled();
   });
 
-  it("geliştirme modunda (enabled:false) kilitli ve sebebi yazılı", async () => {
+  it("geliştirme modunda (enabled:false) sebebi yazılı; tık sayfayı açar, denetlemez", async () => {
     kur({ state: "idle", enabled: false });
     render(<GuncellemeDugmesi />);
-    await waitFor(() => expect(dugme()).toBeDisabled());
+    await waitFor(() => expect(dugme()).toBeEnabled());
     expect(dugme()).toHaveAttribute("title", expect.stringContaining("geliştirme modunda"));
+    await userEvent.click(dugme()!);
+    expect(navigateActive).toHaveBeenCalledWith("/system/updates");
+    expect(check).not.toHaveBeenCalled();
   });
 
   it("web panelinde HİÇ çizilmez (window.api.updater yok)", () => {
@@ -209,16 +224,20 @@ describe("elle denetleme: tam koşan animasyon + yumuşak bildirim (2026-09-04)"
         await vi.advanceTimersByTimeAsync(0);
       });
 
-      // Sunucu cevabı geldi; animasyon hâlâ dönüyor ve düğme kilitli.
+      // Sunucu cevabı geldi; animasyon hâlâ dönüyor — ikinci basış sayfayı açar ama yeniden denetlemez.
       expect(check).toHaveBeenCalledTimes(1);
-      expect(dugme()).toBeDisabled();
       expect(dugme()!.querySelector(".animate-spin"), "ikon dönüyor olmalı").not.toBeNull();
+      await act(async () => {
+        fireEvent.click(dugme()!);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(check, "dönerken ikinci denetim yok").toHaveBeenCalledTimes(1);
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(ELLE_DENETIM_ASGARI_MS - 1);
       });
       expect(baloncukSayisi(), "asgari süre dolmadan baloncuk çıkmamalı").toBe(0);
-      expect(dugme(), "asgari süre dolmadan dönüş durmamalı").toBeDisabled();
+      expect(dugme()!.querySelector(".animate-spin"), "asgari süre dolmadan dönüş durmamalı").not.toBeNull();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2);
@@ -226,7 +245,6 @@ describe("elle denetleme: tam koşan animasyon + yumuşak bildirim (2026-09-04)"
       expect(toastSpy.success).toHaveBeenCalledTimes(1);
       expect(toastSpy.success.mock.calls[0]![0]).toBe("Uygulama güncel");
       expect(toastSpy.success.mock.calls[0]![1]?.description).toContain("2.9.0");
-      expect(dugme()).toBeEnabled();
       expect(dugme()!.querySelector(".animate-spin")).toBeNull();
     } finally {
       vi.useRealTimers();

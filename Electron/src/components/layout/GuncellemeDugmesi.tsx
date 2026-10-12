@@ -7,6 +7,10 @@ import { guncellemeRozeti } from "@/lib/updater-durum";
 import { gosterElleDenetimBildirimi } from "@/lib/updater-bildirim";
 import { UPDATE_CHECK_INTERVAL_LABEL } from "@shared/update-schedule";
 import { cn } from "@/lib/utils";
+import { useTabsStore } from "@/store/tabs";
+
+/** Düğmenin götürdüğü TEK güncelleme sayfası (sunucu + bu bilgisayar). */
+export const UPDATES_PATH = "/system/updates";
 
 /**
  * ELLE DENETLEMEDE DÖNÜŞ ANİMASYONUNUN ASGARİ SÜRESİ.
@@ -22,11 +26,9 @@ import { cn } from "@/lib/utils";
 export const ELLE_DENETIM_ASGARI_MS = 1000;
 
 /**
- * TOPBAR — "güncelleme denetle" düğmesi (2026-09-04 kullanıcı isteği).
- *
- * Neden burada: sürüm çıkıldığında sahadaki soru *"bende var mı?"*dır ve
- * cevabına giden yol üç tıklama derindeydi (Sistem → Güncelleme). Zil/yenile
- * düğmelerinin yanında tek tık; ritmi beklemek istemeyen kişi kendisi sorar.
+ * TOPBAR — güncelleme düğmesi: Güncellemeler sayfasını açar ve (elverişliyse) bu
+ * bilgisayarı denetler. Sürüm çıkıldığında sahadaki soru *"bende var mı?"*dır;
+ * cevabı ve sunucunun durumu o sayfadadır.
  *
  * ⚠️ DURUM EŞLEMESİ BURADA YAZILMAZ: `@/lib/updater-durum` tek kaynaktır
  * (giriş rozeti + sidebar footer'ı da onu okur). İkinci bir eşleme, aynı
@@ -35,7 +37,7 @@ export const ELLE_DENETIM_ASGARI_MS = 1000;
  * ⚠️ HATA KIRMIZI BASMAZ: tek kaynak `error`/`idle` için `null` döner, yani
  * düğme nötr görünür. İnternete çıkamayan makinede her denetlemede kırmızı
  * yanan bir düğme, gerçek güncelleme geldiğinde de görmezden gelinir. Hata
- * metni Sistem → Güncelleme ekranındadır. Aynı kural baloncuk için de geçerli
+ * metni Sistem → Güncellemeler sayfasındadır. Aynı kural baloncuk için de geçerli
  * (`updater-bildirim.ts`).
  *
  * ⚠️ BALONCUK YALNIZ ELLE BASIŞTA. Otomatik kontrol (main process, 15 dk) ve
@@ -51,6 +53,7 @@ export const ELLE_DENETIM_ASGARI_MS = 1000;
  */
 export function GuncellemeDugmesi() {
   const { status, check } = useUpdater();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const [kontrolEdiliyor, setKontrolEdiliyor] = useState(false);
   // Sökülmüş bileşende durum yazmayı ve baloncuk basmayı engeller: asgari süre
   // dolmadan sekme kapanabilir (baloncuk kapanmış bir ekranın işidir).
@@ -75,10 +78,13 @@ export function GuncellemeDugmesi() {
     ? ` · ${rozet.metin}${iniyor && status.percent != null ? ` %${status.percent}` : ""}`
     : "";
   const baslik = status.enabled
-    ? `Güncellemeyi denetle${durumEki} — ${UPDATE_CHECK_INTERVAL_LABEL} kendiliğinden denetlenir`
-    : "Güncelleme denetimi geliştirme modunda kapalı";
+    ? `Güncellemeler${durumEki} — ${UPDATE_CHECK_INTERVAL_LABEL} kendiliğinden denetlenir`
+    : "Güncellemeler — denetim geliştirme modunda kapalı";
 
   const handleClick = async () => {
+    navigateActive(UPDATES_PATH);
+    // Sayfa her durumda açılır; denetim yalnız elverişliyken (inerken aynı paketi ikinci kez sormanın anlamı yok).
+    if (!status.enabled || mesgul || iniyor) return;
     setKontrolEdiliyor(true);
     // Animasyon ile denetleme PARALEL koşar; ikisi de bitmeden ne dönüş durur
     // ne baloncuk çıkar. `Promise.all` bilinçli — sıralı beklemek asgari süreyi
@@ -103,9 +109,8 @@ export function GuncellemeDugmesi() {
     <Button
       variant="ghost"
       size="icon"
-      aria-label={`Güncellemeyi denetle${durumEki}`}
+      aria-label={`Güncellemeler${durumEki}`}
       title={baslik}
-      disabled={!status.enabled || mesgul || iniyor}
       onClick={() => void handleClick()}
     >
       <Ikon className={cn("h-4 w-4", rozet?.sinif, mesgul && "animate-spin")} />

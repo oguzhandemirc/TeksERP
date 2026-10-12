@@ -18,7 +18,7 @@ import { GROUP_UNKNOWN_TEXT } from "@shared/update-feed";
  * ⚠️ **HATA KIRMIZI BASMAZ** (`updater-durum.ts` ile aynı kural). Başarısız
  * denetleme "nötr" tonda ve suçlamadan yazılır; internete çıkamayan makinede
  * her denemede kırmızı yanan bir bildirim, gerçek güncelleme geldiğinde de
- * görmezden gelinir. Hata METNİ Sistem → Güncelleme ekranındadır.
+ * görmezden gelinir. Hata METNİ Sistem → Güncellemeler sayfasındadır.
  */
 export type GuncellemeBildirimTuru = "basari" | "bilgi" | "notr";
 

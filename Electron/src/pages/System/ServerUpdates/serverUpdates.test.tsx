@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { AxiosError, AxiosHeaders } from "axios";
 import { renderWithProviders } from "@/test/render";
-import { LICENSE_ACCESS } from "@/lib/permissions";
 import type { UpdateStatus } from "@/types/server-update";
 import { systemTiles } from "../tile-config";
 import { decisionText, noticeLabel, progressPercent, resultCodeLabel, windowRuleText } from "./labels";
@@ -11,13 +10,19 @@ import { refetchIntervalFor } from "./hooks";
 
 const status = vi.fn();
 const approve = vi.fn();
-vi.mock("@/services/serverUpdateService", () => ({ serverUpdateService: { status: () => status(), approve: (b: unknown) => approve(b) } }));
+const summary = vi.fn();
+vi.mock("@/services/serverUpdateService", () => ({ serverUpdateService: { status: () => status(), summary: () => summary(), approve: (b: unknown) => approve(b) } }));
 const perms: string[] = [];
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.includes(p), hasAnyPermission: (ps: string[]) => ps.some((p) => perms.includes(p)) }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 // PageHeader chrome'u (favoriler → PreferencesProvider) bu testin konusu değil.
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: ({ title }: { title: string }) => <h1>{title}</h1> }));
-const { ServerUpdatesPage } = await import("./ServerUpdatesPage");
+const { UpdatesPage: ServerUpdatesPage } = await import("../Updates/UpdatesPage");
+
+/** Kartlar (politika · güncelleyici · son sonuç · onay · geçmiş) Güncellemeler sayfasında kapalı "Ayrıntılar"dadır. */
+async function ayrintilariAc(): Promise<void> {
+  fireEvent.click(await screen.findByRole("button", { name: "Ayrıntılar" }));
+}
 
 const PENCERE = { baslangic: "2026-10-01T23:00:00.000Z", bitis: "2026-10-02T02:00:00.000Z" };
 const durum = (p: Partial<UpdateStatus> = {}): UpdateStatus => ({
@@ -79,13 +84,15 @@ describe("sunucu güncellemesi — sözlük (saf)", () => {
     expect(refetchIntervalFor(durum({ yerel: { ...durum().yerel!, durum: "UYGULANIYOR" } }))).toBe(5_000);
     expect(refetchIntervalFor(durum())).toBe(30_000);
   });
-  it("karo izni route ile AYNI küme (license:view ∨ license:manage)", () => {
-    expect(systemTiles.find((t) => t.key === "server-updates")?.permissionAny).toEqual(LICENSE_ACCESS);
+  it("tek karo: 'Güncellemeler' kapısız; eski iki karo yok", () => {
+    expect(systemTiles.find((t) => t.key === "updates")).toMatchObject({ to: "/system/updates", public: true });
+    expect(systemTiles.find((t) => t.key === "server-updates" || t.key === "update")).toBeUndefined();
   });
 });
 
 function sifirla(): void {
   status.mockReset();
+  summary.mockReset();
   approve.mockReset();
   perms.length = 0;
 }
@@ -97,7 +104,8 @@ describe("sunucu güncellemesi — ekran", () => {
     perms.push("license:manage");
     status.mockResolvedValue(durum());
     renderWithProviders(<ServerUpdatesPage />);
-    expect(await screen.findByText("2.13.0")).toBeTruthy();
+    expect((await screen.findByTestId("guncelleme-durumu-sunucu")).textContent).toBe("Onay bekliyor — 2.13.0");
+    await ayrintilariAc();
     expect(screen.getByText("Onay bekliyor")).toBeTruthy();
     expect(screen.getByText("Onaylı (yetkili kişi onaylar)")).toBeTruthy();
     expect(screen.getByText("Her gün 02:00–05:00")).toBeTruthy();
@@ -109,7 +117,8 @@ describe("sunucu güncellemesi — ekran", () => {
     perms.push("license:view");
     status.mockResolvedValue(durum());
     renderWithProviders(<ServerUpdatesPage />);
-    expect(await screen.findByText("Onay bekliyor")).toBeTruthy();
+    expect((await screen.findByTestId("guncelleme-durumu-sunucu")).textContent).toBe("Onay bekliyor — 2.13.0");
+    expect(screen.getByText("Yöneticiniz onaylayacak")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Şimdi kur" })).toBeNull();
   });
 
@@ -155,7 +164,9 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
       }),
     );
     renderWithProviders(<ServerUpdatesPage />);
-    expect(await screen.findByText("Güncel")).toBeTruthy();
+    expect((await screen.findByTestId("guncelleme-durumu-sunucu")).textContent).toBe("✓ Güncel");
+    await ayrintilariAc();
+    expect(screen.getByText("Güncel")).toBeTruthy();
     expect(screen.getByText("Yok")).toBeTruthy();
     expect(screen.queryByText("Kritik güncelleme")).toBeNull();
     expect(screen.queryByText("Onay")).toBeNull();
@@ -170,7 +181,9 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
       }),
     );
     renderWithProviders(<ServerUpdatesPage />);
-    expect(await screen.findByText("Geri dönüldü")).toBeTruthy();
+    expect((await screen.findByTestId("son-guncelleme")).textContent).toMatch(/^Son güncelleme: 01\.10\.2026 02:33 · Sunucu 2\.13\.0 ✗$/);
+    await ayrintilariAc();
+    expect(screen.getByText("Geri dönüldü")).toBeTruthy();
     expect(screen.getByText("Yeni sürüm sağlık denetiminden geçemedi")).toBeTruthy();
     expect(screen.getByText("Güncelleme öncesi yedekten geri yüklendi")).toBeTruthy();
     expect(screen.getByTestId("geri-donus-ayrinti").textContent).toBe("SAGLIK_ZAMAN_ASIMI: status UP olmadı");
@@ -185,6 +198,7 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
       }),
     );
     renderWithProviders(<ServerUpdatesPage />);
+    await ayrintilariAc();
     expect(await screen.findByText("Dosya kilitli — başka bir program kullanıyor (kilit kalkınca kendiliğinden sürer)")).toBeTruthy();
     expect(screen.queryByText("Paket indirilemedi")).toBeNull();
     expect(screen.getByText("Bekliyor")).toBeTruthy();
@@ -199,19 +213,26 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
       }),
     );
     renderWithProviders(<ServerUpdatesPage />);
+    await ayrintilariAc();
     expect(await screen.findByText("Şema ileride — veritabanında bu paketin tanımadığı göçler var; geri indirme yapılmaz (daha yeni sürüm gerekir)")).toBeTruthy();
     expect(screen.getByText("Bekliyor")).toBeTruthy();
   });
+});
 
-  it("güncelleyici yanıt vermiyor → uyarı + son sinyal; kurulu değil → sade not", async () => {
+describe("sunucu güncellemesi — güncelleyici sorunları ve geri alma", () => {
+  beforeEach(sifirla);
+
+  it("güncelleyici yanıt vermiyor → tek cümle + 'Yeniden dene'; kurulu değil → sade not, eylem yok", async () => {
     perms.push("license:view");
     status.mockResolvedValueOnce(durum({ guncelleyici: { durum: "OLCULEMEDI", surum: null }, canlilik: { sonCanlilik: "2026-10-01T09:00:00.000Z", esikSn: 180, gecikmeSn: 3600, yanitVermiyor: true } }));
     const { unmount } = renderWithProviders(<ServerUpdatesPage />);
-    expect(await screen.findByText("Güncelleyici yanıt vermiyor")).toBeTruthy();
+    expect((await screen.findByTestId("guncelleme-sorunu-sunucu")).textContent).toMatch(/^Güncelleyici yanıt vermiyor/);
+    expect(screen.getByRole("button", { name: "Yeniden dene" })).toBeTruthy();
     unmount();
     status.mockResolvedValueOnce(durum({ guncelleyici: { durum: "YOK", surum: null }, yerel: null, bekleyen: null, karar: null, canlilik: null }));
     renderWithProviders(<ServerUpdatesPage />);
-    expect(await screen.findByText("Bu sunucuda güncelleyici kurulu değil")).toBeTruthy();
+    expect((await screen.findByTestId("guncelleme-sorunu-sunucu")).textContent).toMatch(/^Bu sunucuda güncelleyici kurulu değil/);
+    expect(screen.queryByRole("button", { name: "Yeniden dene" })).toBeNull();
   });
 
   it("OTOMATİK kipte verilmiş onay 'Pencereye bırak' ile geri alınır (GERI_AL, onaylanan sürüm)", async () => {
@@ -220,6 +241,7 @@ describe("sunucu güncellemesi — sonuç ve uyarılar", () => {
     status.mockResolvedValue(durum({ politika: { ...durum().politika!, kip: "OTOMATIK" }, onay, eylemler: { hemen: false, pencere: false, geriAl: true, hedefSurum: "2.13.0", neden: null } }));
     approve.mockResolvedValue({ kayitId: "k2", niyet: { yazildi: true, kod: null }, durum: durum() });
     renderWithProviders(<ServerUpdatesPage />);
+    await ayrintilariAc();
     expect(await screen.findByText(/2\.13\.0 · Şimdi kur · Ayşe Y\./)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Pencereye bırak" }));
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Pencereye bırak" }));
@@ -242,6 +264,9 @@ describe("sunucu güncellemesi — güncelleyicinin kendisi çalışmıyor (onar
       }),
     );
     renderWithProviders(<ServerUpdatesPage />);
+    expect((await screen.findByTestId("guncelleme-sorunu-sunucu")).textContent).toMatch(/^Son güncelleme geri alınamadı/);
+    expect(screen.queryByRole("button", { name: "Şimdi kur" })).toBeNull();
+    await ayrintilariAc();
     expect(await screen.findByText("Güncelleme programı hizmeti kapatılmış ya da kaldırılmış — yeniden açılmadıkça güncelleme yapılmaz")).toBeTruthy();
     expect(screen.getByText("Durdu — müdahale gerekiyor")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Şimdi kur" })).toBeNull();
@@ -259,6 +284,7 @@ describe("sunucu güncellemesi — bilgi (sorun değil)", () => {
       }),
     );
     renderWithProviders(<ServerUpdatesPage />);
+    await ayrintilariAc();
     const bilgi = await screen.findByTestId("guncelleyici-bilgi");
     expect(bilgi.textContent).toBe("Şema hizası ölçülemedi — güncelleme bu yüzden durdurulmadı (göç adımı veritabanını ayrıca denetler)");
     expect(bilgi.getAttribute("title")).toContain("psql");
@@ -270,6 +296,7 @@ describe("sunucu güncellemesi — bilgi (sorun değil)", () => {
     perms.push("license:view");
     status.mockResolvedValue(durum({ yerel: { ...durum().yerel!, bilgi: { kod: "ONARILDI", mesaj: "ikili silinmişti — .lkg'den geri kondu" } } }));
     renderWithProviders(<ServerUpdatesPage />);
+    await ayrintilariAc();
     const bilgi = await screen.findByTestId("guncelleyici-bilgi");
     expect(bilgi.textContent).toBe("Güncelleme programı kendini onardı — bozulan ya da silinen dosyası doğrulanmış kopyadan geri kondu");
     expect(screen.queryByText("Sorun")).toBeNull();
