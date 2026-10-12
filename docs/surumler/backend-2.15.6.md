@@ -119,6 +119,16 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   kapanması ekranda ≤ 2 sn gecikebilir (30 sn'lik tur aynen).
 - Duruş cevabına üç ekleme: `signalKind`, `rawStopCode`, `collectorId` (elle duruşta `null`). Migration YOK.
 
+**Makine kaynaklı duruş: ham kod → sebep eşlemesi (D2)** (commitler `feat(dokuma): makine duruşu D2 — …` ×2; kısa kimlikleri paketlemede yazılır)
+
+- Yeni tablo `machine_stop_code_maps`: kart tipi + kartın ham duruş kodu → tezgah duruş sebebi; isteğe bağlı tezgah
+  satırı o tezgah için genel eşlemeyi ezer. Kart duruş bildirdiğinde eşleşme varsa sebep makine kararı olarak
+  açılışta yazılır (hedef süre dahil donar), yoksa duruş bugünkü gibi sebepsiz açılır. Toplayıcıya boş geçilebilir
+  `collectorType` alanı (yazarı kart onay dilimi). Migration `20261012140000_makine_durus_kod_esleme` (yalnız EKLEME).
+- Yeni uçlar `GET/POST /api/machine-stop-code-maps`, `GET/PATCH/DELETE /api/machine-stop-code-maps/:id` (tezgah
+  modülü, izin `loom:spec-manage` — yeni izin kodu yok). Silme pasife almadır; eşlemeyi değiştirmek geçmiş duruşu
+  değiştirmez. Panel ekranı ayrı dilim; kart bugün sahada olmadığından eşlemenin etkisi yok.
+
 **Lisans güvenlik denetimi düzeltmeleri (Bölge 3)**
 
 - `78542d264` — B1: bekleyen taşıma talebi (imzasız `tasima.json`) kurulumu etkin SAYMAZ; etkinleştirme kilidi
@@ -193,6 +203,9 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 - **Kırıldı mı:** HAYIR (makine kaynaklı duruş kısmı) — yalnız ekleme: duruş DTO'sunda `signalKind`, `rawStopCode`,
   `collectorId`; uç, izin, hata kodu eklenmedi (makine girişinin kodları — `STOP_CLOSED_BY_OPERATOR`,
   `STOP_END_CONFLICT`, `STOP_STAMP_REQUIRED`, `STOP_SOURCE_INVALID`, `STOP_KEY_INVALID` — henüz hiçbir uçtan dönmez).
+- **Kırıldı mı:** HAYIR (ham kod eşlemesi kısmı) — yalnız ekleme: beş yeni uç, yeni hata kodları
+  `STOP_CODE_MAP_DUPLICATE` (409), `STOP_REASON_INVALID` (400); var olan uçlar değişmedi. Eski istemci yeni uçları
+  çağırmaz.
 - **Kırıldı mı:** HAYIR (yetki kısmı) — yeni uçlar `/api/admin/credential-reset-requests`, yeni hata kodları
   `GRANT_EXCEEDS_ACTOR`, `CREDENTIAL_RESET_NEEDS_APPROVAL`, `STATION_KIND_IN_USE`; ayar cevabına iki alan. Davranış
   daralması: `shipping:write`-yalnız aktör fatura işaretinde 403; eski panel onay talebi akışını bilmez, 403'ü
@@ -203,10 +216,11 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 4. Migration
 
-- **Var mı:** EVET — 4 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
+- **Var mı:** EVET — 5 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
   `users` tablosuna boş geçilebilir bir alan + bir kontrol kuralı; var olan satırlar boş kalır, veri dönüşümü YOK),
-  `20261012010000_durus_acan_kapatan`, `20261012120000_kimlik_sifirlama_onayi` (yalnız EKLEME: yeni tablo).
-- **Toplam migration:** 380 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 4 migration uygulamalıdır. Farklı sayı =
+  `20261012010000_durus_acan_kapatan`, `20261012120000_kimlik_sifirlama_onayi` (yalnız EKLEME: yeni tablo),
+  `20261012140000_makine_durus_kod_esleme` (yalnız EKLEME: boş yeni tablo + toplayıcıya boş geçilebilir alan).
+- **Toplam migration:** 381 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 5 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -260,7 +274,7 @@ Veriyi güncelleme öncesine döndürmek gerekirse otomatik yedekten geri yükle
 - Güncelleme programı hizmeti çalışıyor; `durum` kurulu sürüm 2.15.6, güncelleme programı 0.2.6, kira geçerli
   (DONDURULDU / KIRA_YOK yok).
 - Yedek: güncelleme öncesi yedek alındı; günlükte `SEMA_OLCULEMEDI` yok.
-- Veritabanı: 380 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
+- Veritabanı: 381 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
   kurulumda hepsi boş.
 - `/api/admin/health` `sistemHesabiMuhru`: var olan (mühürlenmemiş) kurulumda `MUHURLENMELI`, mühürlemeden sonra
   `TAMAM`. Destek hesabı girişi mühürlemeden önce de sonra da çalışıyor.
