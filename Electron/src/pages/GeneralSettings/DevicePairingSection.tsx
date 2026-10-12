@@ -76,6 +76,7 @@ export function DevicePairingSection({
         disabled={mut.isPending}
         onChange={setDraftShort}
       />
+      {draftShort && !draftProof && <ShortCredentialProofWarning />}
 
       <DeviceProofRow
         canEdit={canEditShortCredential}
@@ -142,6 +143,15 @@ function ShortCredentialDeviceRow({
       disabled={disabled}
       onChange={onChange}
     />
+  );
+}
+
+/** Fabrikada kısa kimlik kuralı kanıtı zorlamaz; kanıtsız cihaz kimliği yalnız bir başlıktır. */
+function ShortCredentialProofWarning() {
+  return (
+    <p className="-mt-2 px-1 text-xs text-amber-600 dark:text-amber-400" data-testid="short-credential-proof-warning">
+      Cihaz kanıtı kapalıyken bu kapı başlıkla aşılabilir — Cihaz kanıtı ayarını açın.
+    </p>
   );
 }
 
