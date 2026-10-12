@@ -227,7 +227,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 **Cihaz kanıtı (güvenlik Bölge 5 B3)** (`1afaf3b57` backend · `aa72ab54b` tablet · `4b114fd30` panel)
 
 - Onaylı cihaza announce/status cevabında `deviceSecret` (bir kez; teyit edilene dek yeniden, sonra yalnız revoke
-  ile). İstek başlığı `x-device-proof` = `v1.<ms>.HMAC(sır, v1\n<ms>\n<YÖNTEM>\n<yol>)`, ±5 dk.
+  ile). İstek başlığı `x-device-proof` = sürüm + milisaniye damgası + sırla HMAC (ileti: sürüm, damga, HTTP yöntemi ve yol), ±5 dk.
 - DB'de sır yok: `devices.proofSalt` (yalnız tuz) · `proofIssuedAt` · `proofConfirmedAt`; sır kısa kimlik
   halkasından türetilir. Migration `20261012150000_cihaz_kaniti` (yalnız EKLEME).
 - Yeni ayar `device.proofRequired` (varsayılan KAPALI = bugünkü davranış; barındırılanda daima açık, kapatma 409
