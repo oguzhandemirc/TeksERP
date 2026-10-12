@@ -6,7 +6,7 @@
 //   2. Başarılı giriş sayacı SIFIRLAR (reset) — sonraki yanlışlar baştan sayılır.
 //   3. Escalate: ceza turu escalateAfter'a varınca KISA ceza yerine UZUN ceza uygulanır.
 //   4. Kart girişi de aynı kilide tabi (N yanlış kart → 429).
-//   5. pinLockoutEnabled=false → reserveLoginAttempt hep {blocked:false} (kilit uygulanmaz).
+//   5. pinLockoutEnabled=false satırı yok sayılır → kilit KAPATILAMAZ (O-04).
 // İzolasyon: dedicated TEST kullanıcısı; ayarlar test içinde set + finally'de restore;
 // her senaryo AYRI anahtar (IP) kullanır + finally resetLoginLockout ile bellek temizlenir.
 // =============================================================================
@@ -196,20 +196,18 @@ async function main() {
     check("4.4 kart eşik aşıldı → 429 LOGIN_LOCKED", is429Locked(cardBlocked.nextError).ok);
 
     // =====================================================================
-    // 5) pinLockoutEnabled=false → checkLoginLockout hep blocked:false
+    // 5) Kilit KAPATILAMAZ (O-04): DB'de eski `false` satırı olsa da bloklar
     // =====================================================================
     const ipDis = `disabled-${ts}`; usedKeys.push(ipDis);
-    // Önce (açıkken) bloke et: 3 reserve eşiği kurar, 4. reserve bloklu döner.
     for (let i = 0; i < 3; i++) await reserveLoginAttempt(ipDis);
     const disBefore = await reserveLoginAttempt(ipDis);
     check("5a kilit AÇIK → anahtar bloklu", disBefore.blocked);
-    // Kapat → aynı anahtar artık bloklu değil.
+    // Eski kurulumdan kalan `false` satırı (panelden artık yazılamaz) yok sayılır.
     await rawSet(SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED, false);
     const disAfter = await reserveLoginAttempt(ipDis);
-    check("5b kilit KAPALI → blocked:false (bellek dolu olsa da)", !disAfter.blocked);
-    // reserveLoginAttempt de kapalıyken no-op → controller da bloklamaz.
+    check("5b eski false satırı → yine blocked:true (kilit kapatılamaz)", disAfter.blocked);
     const disLogin = await invoke(AuthController.loginQuickPin, { body: { pin: wrongPin }, ip: ipDis });
-    check("5c kilit KAPALI → controller 429 vermez (401)", is401(disLogin.nextError));
+    check("5c eski false satırı → controller yine 429 LOGIN_LOCKED", is429Locked(disLogin.nextError).ok);
 
     // =====================================================================
     // 6) GÜVENLİK KİLİDİ: pinLockoutEnabled satırı YOKKEN kilit AÇIK olmalı

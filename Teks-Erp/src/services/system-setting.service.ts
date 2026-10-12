@@ -1108,6 +1108,9 @@ export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 export const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
 /** Hızlı-PIN/kart deneme kilidi varsayılanları + aralıkları. */
 export const DEFAULT_PIN_LOCKOUT_ENABLED = true;
+/** Kilidi kapatma isteğinin reddi (O-04) — eski panelin anahtarı da bu iletiyi görür. */
+export const PIN_LOCKOUT_REQUIRED_MESSAGE =
+  "Giriş deneme kilidi kapatılamaz; yalnız deneme eşiği ve ceza süreleri ayarlanabilir.";
 /** Fatura satırı varsayılan KDV oranı (%). 20 = bugünkü hardcode'un birebir
  *  karşılığı — ayar satırı yoksa davranış bayt-bayt aynı kalır. Tam sayı
  *  DAYATILMAZ (kolon Decimal(5,2); küsuratlı oran temsil edilebilir). */
@@ -3995,10 +3998,13 @@ export class SystemSettingService {
       if (typeof input.pinLockoutEnabled !== "boolean") {
         throw AppError.badRequest("pinLockoutEnabled boolean olmalı");
       }
+      if (!input.pinLockoutEnabled) {
+        throw AppError.badRequest(PIN_LOCKOUT_REQUIRED_MESSAGE, { code: "PIN_LOCKOUT_REQUIRED" });
+      }
       await this.set(
         SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED,
         input.pinLockoutEnabled,
-        "Hızlı PIN + kart giriş deneme kilidi açık olsun (brute-force koruması)",
+        "Giriş deneme kilidi (kapatılamaz; yalnız true yazılır)",
         userId
       );
     }
@@ -6707,19 +6713,15 @@ export async function readAbsoluteSessionCapDays(
 }
 
 /**
- * Hızlı-PIN/kart deneme kilidi açık mı? Default TRUE (kayıt yoksa). Kapalıyken
- * login-lockout middleware hiç bloklamaz. Backend ENFORCE eder.
+ * Giriş deneme kilidi KAPATILAMAZ (denetim O-04, 2026-10-12): eski kurulumda kalan
+ * `false` satırı da yok sayılır — ayardan yalnız eşik ve ceza süreleri değişir.
+ * Okuyucu imzası API sözleşmesi için durur; cevap her zaman açıktır.
  */
 export async function readPinLockoutEnabled(
-  tx?: Pick<typeof prisma, "systemSetting">,
+  _tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
-  const client = tx ?? prisma;
-  const setting = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED },
-    select: { value: true },
-  });
-  if (!setting) return DEFAULT_PIN_LOCKOUT_ENABLED;
-  return asBoolean(setting.value);
+  // Yüzey `pinLockoutEnabled`; `SETTING_KEYS.AUTH_PIN_LOCKOUT_ENABLED` yalnız `true` yazılır, okunmaz.
+  return DEFAULT_PIN_LOCKOUT_ENABLED;
 }
 
 /** Kilit tetiklenene kadar izin verilen yanlış deneme (default 5, 1..20). */

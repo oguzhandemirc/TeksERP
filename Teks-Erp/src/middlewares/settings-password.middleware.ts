@@ -106,9 +106,8 @@ function readHeaderPassword(req: Request): string | null {
  * Bu yüzden ayrım anahtarın KENDİSİNDE yapılır — her iki kapsam rejiminde de
  * (`ip` ve `ip|kimlik`) çalışır ve iki-kova davranışı korunur.
  *
- * ⚠️ AYNI ŞALTER, AYRI KOVA: kilit yine `auth.pinLockoutEnabled` ile açılıp
- * kapanır (ayrı bir bayrak İCAT EDİLMEDİ — bir kurulumda deneme sınırı
- * kapatıldıysa o karar burada da geçerlidir); ayrılan yalnız SAYAÇTIR.
+ * ⚠️ AYNI EŞİKLER, AYRI KOVA: kilit login'in eşik/ceza ayarlarını paylaşır ve
+ * KAPATILAMAZ (O-04, 2026-10-12); ayrılan yalnız SAYAÇTIR.
  */
 function resolveSettingsLockoutKeys(req: Request, userId: string | null): LockoutKeySpec[] {
   return resolveLoginLockoutKeys(req, `sp:${userId ?? "-"}`).map((spec) => ({
@@ -167,10 +166,7 @@ export async function requireSettingsPassword(
     //    Ters sırada kilitli bir anahtar da bcrypt (maliyet 10) hesabı
     //    koşturmaya devam eder: hem deneme sınırı hem CPU/DoS ayağı açık kalır.
     //    Birebir emsal: `auth.controller.ts` login yolu.
-    //    ⚠️ AYNI ŞALTER: kilit `auth.pinLockoutEnabled` ile açılır/kapanır.
-    //    Ayrı bir şalter İCAT EDİLMEDİ — bir kurulumda deneme sınırı kapatılmışsa
-    //    o karar burada da geçerlidir; ikinci bir bayrak, panelde "kapattım ama
-    //    hâlâ kilitleniyor" ayrışması üretirdi.
+    //    ⚠️ Kilit KAPATILAMAZ (O-04); eşikleri login ile ortaktır.
     const lock = await reserveLoginAttempt(lockKeys);
     // ⚠️ DENETİM SATIRI KİLİDİN KURULDUĞU ANDA YAZILIR, HER 429'DA DEĞİL.
     //    Eskiden `blocked` dalında yazılıyordu; ÖLÇÜLDÜ (D2): kilitliyken gelen

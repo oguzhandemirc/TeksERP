@@ -223,17 +223,15 @@ export function SessionSettingsSection({
           </select>
         </div>
 
-        {/* 7) Hızlı PIN + kart deneme kilidi — mobil hızlı giriş (PIN/kart) brute-force
-            koruması. Toggle + 4 sayı alanı (adet/sn/tur/dk → NumberField). */}
+        {/* 7) Giriş deneme kilidi — KAPATILAMAZ (denetim O-04); yalnız 4 sayı alanı. */}
         <div className="space-y-3 border-t pt-4">
-          <FlagToggle
-            hint={hint}
-            title="Hızlı PIN / kart deneme kilidi"
-            desc="Açıkken (varsayılan) sahadaki hızlı PIN veya QR kart girişinde arka arkaya çok sayıda yanlış deneme yapılırsa o cihaz/IP geçici olarak bloklanır — 6 haneli PIN'in denenerek kırılmasını önler. Klasik kullanıcı adı + şifre girişini etkilemez. Kapalıyken deneme kilidi hiç uygulanmaz."
-            checked={s.pinEnabled}
-            disabled={s.isSaving}
-            onChange={s.setPinEnabled}
-          />
+          <div>
+            <p className="text-sm font-medium">Giriş deneme kilidi (her zaman açık)</p>
+            <p className="text-xs text-muted-foreground">
+              Şifre, hızlı PIN ve QR kart girişinde arka arkaya çok sayıda yanlış deneme yapılırsa o
+              cihaz/IP geçici olarak bloklanır. Kilit kapatılamaz; yalnız eşik ve ceza süreleri ayarlanır.
+            </p>
+          </div>
           {s.pinEnabled && (
             <div className="grid gap-4 pl-1 sm:grid-cols-2">
               <NumberField

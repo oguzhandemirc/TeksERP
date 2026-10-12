@@ -202,10 +202,8 @@ export class AuthController {
     //    kişi herkesi kilitlerdi.
     // Kimlik olarak kullanıcı adı verilir — SIR DEĞİLDİR (şifre asla anahtara girmez).
     //
-    // ⚠️ AYAR PAYLAŞIMI: kilit `auth.pinLockoutEnabled` ile açılıp kapanır
-    // (varsayılan TRUE, canlıda ezen kayıt yok → şu an AÇIK). Adı "pin" olsa da
-    // artık ŞİFRE girişini de kapsıyor — panelden kapatılırsa üç yol da korumasız
-    // kalır. Ayarın etiketi bunu söylemeli.
+    // ⚠️ Kilit KAPATILAMAZ (O-04, 2026-10-12): adı "pin" olsa da ŞİFRE girişini de
+    // kapsar; `auth.pinLockout*` yalnız eşik/ceza süresini ayarlar.
     const lockoutKey = resolveLoginLockoutKeys(req, `u:${body.username}`);
     const lock = await reserveLoginAttempt(lockoutKey);
     // ⚠️ DENETİM: kilit YALNIZ KURULDUĞU ANDA yazılır (ayar şifresi kapısıyla

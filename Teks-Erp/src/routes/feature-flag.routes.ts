@@ -524,7 +524,7 @@ export const updateSchema = z.strictObject({
   scrapGradeLabelEnabled: z.boolean().optional(),
   // auth.absoluteSessionCapDays — mutlak oturum tavanı, gün (0=en fazla 365 gün, 0–365). Backend ENFORCE (issueToken).
   absoluteSessionCapDays: z.number().int().min(0).max(365).optional(),
-  // auth.pinLockoutEnabled — hızlı PIN/kart deneme kilidi (default true). Backend ENFORCE.
+  // auth.pinLockoutEnabled — giriş deneme kilidi KAPATILAMAZ (O-04): false → 400 PIN_LOCKOUT_REQUIRED.
   pinLockoutEnabled: z.boolean().optional(),
   // auth.pinLockoutAttempts — izin verilen yanlış deneme (default 5, 1–20).
   pinLockoutAttempts: z.number().int().min(1).max(20).optional(),

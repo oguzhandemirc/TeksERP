@@ -69,7 +69,7 @@ export function SessionSettingsReadOnly({
         value={absoluteCapDays > 0 ? `${absoluteCapDays} gün` : `En fazla ${MAX_ABSOLUTE_CAP_DAYS} gün`}
       />
       <ReadOnlyLine
-        label="Hızlı PIN / kart deneme kilidi"
+        label="Giriş deneme kilidi"
         value={
           pinLockoutEnabled
             ? `${pinLockoutAttempts} deneme · ${pinLockoutPenaltySec} sn ceza · ${pinLockoutEscalateAfter} turda ${pinLockoutLongPenaltyMin} dk`

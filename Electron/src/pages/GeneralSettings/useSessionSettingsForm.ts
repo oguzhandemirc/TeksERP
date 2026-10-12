@@ -59,7 +59,8 @@ export function useSessionSettingsForm() {
     ? f!.sameTypeSessionPolicy
     : DEFAULT_SAME_TYPE_SESSION_POLICY;
   const currentCapDays = f?.absoluteSessionCapDays ?? DEFAULT_ABSOLUTE_CAP_DAYS;
-  const currentPinEnabled = f?.pinLockoutEnabled ?? true;
+  // Kilit kapatılamaz (O-04): eski backend `false` dönse de form açık sayar, kaydı `true` yazar.
+  const currentPinEnabled = true;
   const currentPinAttempts = f?.pinLockoutAttempts ?? DEFAULT_PIN_LOCKOUT_ATTEMPTS;
   const currentPinPenaltySec = f?.pinLockoutPenaltySec ?? DEFAULT_PIN_LOCKOUT_PENALTY_SEC;
   const currentPinEscalate = f?.pinLockoutEscalateAfter ?? DEFAULT_PIN_LOCKOUT_ESCALATE_AFTER;

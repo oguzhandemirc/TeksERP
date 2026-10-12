@@ -216,7 +216,7 @@ function toSpecs(key: string | LockoutKeySpec[]): Array<LockoutKeySpec & { hash:
  * Deneme başarısız VARSAYIMIYLA sayılır; başarılı giriş `resetLoginLockout` ile
  * geri alır (net sıfır). Eşiği kuran deneme yine doğrulamaya geçer, SONRAKİ
  * denemeler bloklanır (orijinal "N deneme sonra kilit" semantiği korunur). Kilit
- * kapalıysa (pinLockoutEnabled=false) her zaman {blocked:false}.
+ * kapatılamaz: `pinLockoutEnabled` yalnız `true` olabilir (O-04).
  *
  * ⚠️ `justLocked` = "kilit TAM BU DENEMEDE kuruldu" (bir kova ilk kez
  * `blockedUntil` aldı). Çağıranlar denetim satırını YALNIZ bu anda yazar.
@@ -238,8 +238,8 @@ export async function reserveLoginAttempt(
   // round-trip 5→1 iner. Ayrıca bu, aşağıdaki SENKRON BÖLGE invariant'ını
   // GÜÇLENDİRİR: iki await aşaması (enabled, sonra Promise.all) yerine tek
   // interleaving noktası kalır.
-  const { enabled, attempts, penaltySec, escalateAfter, longPenaltyMin } = await readPinLockoutConfig();
-  if (!enabled) return { blocked: false, retryAfterSec: 0, justLocked: false };
+  // Kilit KAPATILAMAZ (O-04): `enabled` okunmaz, kapalı dalı yoktur.
+  const { attempts, penaltySec, escalateAfter, longPenaltyMin } = await readPinLockoutConfig();
   await ensureHydrated();
 
   // --- SENKRON BÖLGE: buradan sonra await YOK → paralel N istek seri işlenir. ---
