@@ -374,6 +374,8 @@ export const updateSchema = z.strictObject({
   deviceProofRequired: z.boolean().optional(),
   // Hızlı PIN / QR kart yalnız onaylı cihazdan (false=default; barındırılan kurulumda kapatılamaz).
   shortCredentialApprovedDeviceOnly: z.boolean().optional(),
+  // 2FA'sı açık hesabın PIN/kart girişinde de kod sorulsun (false=default; süperadminde hep sorulur).
+  shortCredentialTotpRequired: z.boolean().optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
   shipmentConfirmationEnabled: z.boolean().optional(),
   // shipping.manualSackCountEnabled — "araca yüklenen gerçek çuval adedi" alanı

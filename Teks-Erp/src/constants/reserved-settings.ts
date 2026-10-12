@@ -38,7 +38,7 @@
  */
 export const SECURITY_SETTING_PREFIX = "security.";
 
-/** Ayar şifresinin bcrypt hash'i (cost 10). Tek yazıcısı: settings-password servisi. */
+/** Ayar şifresinin bcrypt hash'i (cost `PASSWORD_BCRYPT_COST`). Tek yazıcısı: settings-password servisi. */
 export const SETTINGS_PASSWORD_HASH_KEY = "security.settingsPasswordHash";
 
 /**

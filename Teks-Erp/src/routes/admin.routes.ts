@@ -11,6 +11,7 @@ import {
   requirePermissionForEachKey,
 } from "../middlewares/rbac.middleware";
 import { RAW_SETTING_SCOPE_PERMISSIONS, settingKeyWriters } from "../constants/settings-scopes";
+import { isEncryptedBackupName } from "../services/helpers/backup-naming.helper";
 import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
@@ -1841,12 +1842,15 @@ router.get(
       }
       // F235: hassas DB dump'ının indirilmesini izle (kim/ne zaman) — BACKUP_TRIGGER
       // ile aynı best-effort desen.
+      // B1: düz (şifresiz) döküm parola özetlerini ve kimlik kayıtlarını taşır — iz ve başlıkta söylenir.
+      const plain = !isEncryptedBackupName(name);
       await AuditService.logEvent({
         category: "SYSTEM",
         action: "BACKUP_DOWNLOAD",
         userId: req.user?.userId ?? null,
-        payload: { name },
+        payload: { name, plain },
       });
+      if (plain) res.setHeader("X-Backup-Plain", "1");
       res.download(abs, name);
     } catch (error) {
       next(error);

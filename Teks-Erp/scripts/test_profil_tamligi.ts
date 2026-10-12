@@ -38,7 +38,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 
 /** Boolean bayrakta `true` dışı değer yalnız burada beyanlıdır (gerekçe tabloda yazılı). */
-const BOOLEAN_ISTISNALARI: ReadonlySet<string> = new Set(["demoModeEnabled"]);
+// shortCredentialTotpRequired: adı sır desenine (totp) düşer, profil doğrulayıcısı reddeder.
+const BOOLEAN_ISTISNALARI: ReadonlySet<string> = new Set(["demoModeEnabled", "shortCredentialTotpRequired"]);
 
 async function main(): Promise<void> {
   process.env.JWT_SECRET ??= "profil-tamligi-test-sirri-0123456789abcdef";

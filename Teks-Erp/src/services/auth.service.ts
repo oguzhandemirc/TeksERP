@@ -18,10 +18,11 @@ import {
   readSameTypeSessionPolicy,
   readAbsoluteSessionCapDays,
   effectiveAbsoluteSessionCapDays,
+  readShortCredentialTotpRequired,
 } from "./system-setting.service";
 import { loadJwtSecretAtBoot } from "../lib/jwt-secret";
 import { uyari } from "../lib/logger";
-import { passwordPolicyViolation } from "../constants/password-policy";
+import { PASSWORD_BCRYPT_COST, passwordPolicyViolation } from "../constants/password-policy";
 import { SessionRegistryService } from "./session-registry.service";
 import { TotpAccountService } from "./totp-account.service";
 import { getShortCredentialKeyRing, ringKeyByKid } from "../lib/short-credential/keyring";
@@ -72,6 +73,11 @@ export interface LoginContext {
    * Güvenlik sınırı DEĞİLDİR — token'ı daraltan `verifyToken`dur.
    */
   passwordChangeCapable?: boolean;
+  /**
+   * Tablet PIN/kart/parola girişinde 409 TOTP_REQUIRED gelince kod sorabiliyor mu (tablet 1.4.0+).
+   * Yalnız İLETİYİ seçer (eski tablet "güncelleyin" duyar); kapı kararına girmez.
+   */
+  totpCapable?: boolean;
 }
 
 /** Token'ı hangi kimlik bilgisi açtı — zorunlu değişim dalı yönteme göre ayrışır. */
@@ -200,13 +206,36 @@ export class AuthService {
     // ⚠️ SIRA: ikinci faktör `issueToken`den ÖNCE — `issueToken` oturum açar ve
     // `kick` politikasında diğer oturumları düşürür; yalnız parolayı bilen biri
     // meşru kullanıcıyı oturumundan atamamalı.
-    await this.assertSecondFactor(user.id, ctx);
+    await this.assertSecondFactor(user.id, ctx, "password");
 
-    return this.issueToken(
+    const result = await this.issueToken(
       { id: user.id, username: user.username, tokenVersion: user.tokenVersion },
       ctx,
       "password",
     );
+    await this.upgradePasswordHash(user.id, password, user.passwordHash);
+    return result;
+  }
+
+  /**
+   * Eski turlu (< PASSWORD_BCRYPT_COST) özeti, düz parolanın elde olduğu TEK an olan başarılı girişte
+   * yeniden yazar. Best-effort: hata girişi bozmaz. Atomik: WHERE eski özet (arada değişen parolayı
+   * ezmez); sistem hesabında mühür aynı yazımda yenilenir (G1 parola özetini kapsar).
+   */
+  static async upgradePasswordHash(userId: string, password: string, oldHash: string): Promise<boolean> {
+    try {
+      if (bcrypt.getRounds(oldHash) >= PASSWORD_BCRYPT_COST) return false;
+      const passwordHash = await bcrypt.hash(password, PASSWORD_BCRYPT_COST);
+      const reseal = await credentialReseal(prisma, userId, { passwordHash });
+      const updated = await prisma.user.updateMany({
+        where: { id: userId, passwordHash: oldHash, ...reseal.where },
+        data: { passwordHash, ...reseal.data },
+      });
+      return updated.count === 1;
+    } catch (error) {
+      uyari("auth", `parola özeti yükseltilemedi (giriş etkilenmedi): ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
   }
 
   /**
@@ -250,6 +279,8 @@ export class AuthService {
     if (!ok || !user) {
       throw AppError.unauthorized("Kart geçersiz veya iptal edilmiş — yöneticiden yeni kart isteyin");
     }
+    // İkinci faktör `issueToken`den ÖNCE (oturum açmadan/kick etmeden) — parolalı girişle aynı boğaz.
+    await this.assertSecondFactor(user.id, ctx, "card");
     const legacyCard = row?.cardToken ?? null;
     if (legacyCard) {
       const result = await this.issueToken(user, ctx, "card");
@@ -300,6 +331,8 @@ export class AuthService {
         { code: "QUICK_PIN_AMBIGUOUS" },
       );
     }
+    const target = digestHit ?? legacy;
+    if (target) await this.assertSecondFactor(target.id, ctx, "quick-pin");
     if (digestHit) {
       return this.issueToken({ id: digestHit.id, username: digestHit.username, tokenVersion: digestHit.tokenVersion }, ctx, "quick-pin");
     }
@@ -465,27 +498,57 @@ export class AuthService {
    *  olarak token'a gömer → middleware anlık iptal kontrolü yapabilir. 'notify'
    *  politikası + onaysız çakışma → openLoginSession 409 SESSION_EXISTS fırlatır. */
   /**
-   * İKİNCİ FAKTÖR KAPISI — yalnız PAROLALI giriş, yalnız kullanıcı TOTP'yi AÇTIYSA
-   * (ağdan bağımsız; açmayana hiç sorulmaz). Kart/PIN/cihaz girişleri buradan geçmez.
+   * İKİNCİ FAKTÖR KAPISI — TEK BOĞAZ, üç giriş yolu da buradan geçer (Y-02, 2026-10-13).
+   *   • Parola: kullanıcı TOTP'yi AÇTIYSA sorulur (açmayana hiç sorulmaz).
+   *   • PIN/kart, süperadmin (`isSystemAccount`): HER ZAMAN sorulur; 2FA kurulmamışsa giriş
+   *     403 TOTP_ENROLLMENT_REQUIRED — PIN tek başına kimlik olduğu için ikinci faktörsüz kısa yol yok.
+   *   • PIN/kart, diğerleri: TOTP açık ∧ `auth.shortCredentialTotpRequired` (varsayılan kapalı).
    * Kodlar giriş kilidine göre seçildi (yalnız 401 kaba kuvvet sayılır):
    *   • 409 TOTP_REQUIRED → kod istendi; kimlik denemesi DEĞİL (istemci kodu ekleyip tekrar POST eder).
    *   • 401 TOTP_INVALID  → yanlış kod; SAYILIR (TOTP uzayı 10^6, kilitsiz tahmin edilirdi).
    */
-  private static async assertSecondFactor(userId: string, ctx?: LoginContext): Promise<void> {
+  private static async assertSecondFactor(userId: string, ctx: LoginContext | undefined, via: LoginVia): Promise<void> {
     const status = await TotpAccountService.getStatus(userId);
-    if (!status.enabled) return;
+    const shortPath = via !== "password";
+    let isSystemAccount = false;
+    if (shortPath) {
+      const row = await prisma.user.findUnique({ where: { id: userId }, select: { isSystemAccount: true } });
+      isSystemAccount = row?.isSystemAccount === true;
+      if (isSystemAccount && !status.enabled) {
+        throw AppError.forbidden(
+          "Bu hesapta PIN ve kartla giriş için iki adımlı doğrulama kurulmalı. Kullanıcı adı ve parolayla giriş yapın.",
+          { code: "TOTP_ENROLLMENT_REQUIRED" },
+        );
+      }
+      if (!isSystemAccount && (!status.enabled || !(await readShortCredentialTotpRequired()))) return;
+    } else if (!status.enabled) {
+      return;
+    }
 
     const code = (ctx?.totpCode ?? "").trim();
     if (!code) {
-      // Tablet uygulamasında kod adımı yok: kullanıcıyı PIN/kart yoluna yönlendir.
-      const message = isDesktopClient(ctx?.clientType)
-        ? "Doğrulama kodu gerekli."
-        : "Bu hesapta iki adımlı doğrulama açık — tablette PIN ya da kartla giriş yapın.";
-      throw AppError.conflict(message, { code: "TOTP_REQUIRED" });
+      throw AppError.conflict(await this.totpRequiredMessage(userId, ctx, shortPath), { code: "TOTP_REQUIRED" });
     }
     if (!(await TotpAccountService.verifySecondFactor(userId, code))) {
       throw AppError.unauthorized("Doğrulama kodu geçersiz.", { code: "TOTP_INVALID" });
     }
+  }
+
+  /** 409 TOTP_REQUIRED iletisi: kod adımı olan istemciye kısa; eski tablete çıkış yolu. */
+  private static async totpRequiredMessage(
+    userId: string,
+    ctx: LoginContext | undefined,
+    shortPath: boolean,
+  ): Promise<string> {
+    if (isDesktopClient(ctx?.clientType) || ctx?.totpCapable) return "Doğrulama kodu gerekli.";
+    // Eski tablet kod soramıyor. PIN/kart yolu kodsuz açıksa (parolalı giriş) oraya yönlendir.
+    const shortOpen =
+      !shortPath &&
+      (await prisma.user.findUnique({ where: { id: userId }, select: { isSystemAccount: true } }))?.isSystemAccount !== true &&
+      !(await readShortCredentialTotpRequired());
+    return shortOpen
+      ? "Bu hesapta iki adımlı doğrulama açık — tablette PIN ya da kartla giriş yapın."
+      : "Bu hesapta iki adımlı doğrulama açık ve bu tablet sürümü kodu soramıyor — tableti güncelleyin ya da yönetim panelinden giriş yapın.";
   }
 
   private static async issueToken(
@@ -658,7 +721,7 @@ export class AuthService {
    * Hash a plain-text password.
    */
   static async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, 10);
+    return bcrypt.hash(password, PASSWORD_BCRYPT_COST);
   }
 
   /**
@@ -782,7 +845,7 @@ export class AuthService {
       });
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_BCRYPT_COST);
     const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
     const reseal = await credentialReseal(prisma, userId, { passwordHash });
     const claimed = await prisma.user.updateMany({

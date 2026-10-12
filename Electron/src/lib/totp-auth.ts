@@ -13,13 +13,15 @@ import type { AxiosError } from "axios";
 //   • 401 TOTP_INVALID             → yanlış kod. SAYILIR ve sayılmalı (TOTP uzayı
 //                                    yalnız 10^6; kilitsiz çevrimiçi tahmin edilebilir).
 //
-// 2FA'sı kapalı hesap bu kodları hiç görmez; PIN/kart girişleri de sorulmaz.
+// 2FA'sı kapalı hesap bu kodları hiç görmez. PIN/kart girişinde (yalnız tablet) süperadminde
+// hep, diğerlerinde "PIN ve kart girişinde doğrulama kodu iste" ayarı açıksa sorulur (Y-02).
 // -----------------------------------------------------------------------------
 
 /** 2FA sekmesinin açıklaması — isteğe bağlı 2FA sözleşmesi (kullanıcı kararı 2026-09-30). */
 export const TWO_FACTOR_HINT =
   "İki adımlı doğrulama isteğe bağlıdır: açarsanız bu hesabın her parolalı girişinde " +
-  "telefondaki kod sorulur. Kapalıyken sorulmaz. Tabletteki PIN ve kart girişleri etkilenmez.";
+  "telefondaki kod sorulur. Kapalıyken sorulmaz. Tabletteki PIN ve kart girişinde kod, Oturum ayarlarındaki " +
+  "\"PIN ve kart girişinde doğrulama kodu iste\" açıksa sorulur.";
 
 export const TOTP_REQUIRED_CODE = "TOTP_REQUIRED";
 export const TOTP_ENROLLMENT_REQUIRED_CODE = "TOTP_ENROLLMENT_REQUIRED";

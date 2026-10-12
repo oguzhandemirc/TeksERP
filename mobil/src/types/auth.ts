@@ -17,6 +17,8 @@ export interface LoginRequest {
   clientType?: ClientType;
   /** 'notify' politikasında çakışma onaylandığında true → ikisi de açık kalır. */
   confirmKick?: boolean;
+  /** İkinci faktör (409 TOTP_REQUIRED sonrası): TOTP ya da kurtarma kodu. */
+  totpCode?: string;
 }
 
 export interface LoginResponse {

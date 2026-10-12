@@ -416,6 +416,9 @@ export const SETTING_KEYS = {
    *  Açıkken eşleştirme de etkin zorunlu olur (otomatik onay kapanır); barındırılan
    *  kurulumda (BARINDIRILAN) her iki kural ZORUNLUDUR ve kapatılamaz. ENFORCE edilir. */
   AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY: "auth.shortCredentialApprovedDeviceOnly",
+  /** 2FA'sı açık (süperadmin OLMAYAN) hesabın hızlı PIN / kart girişinde de kod sorulsun mu.
+   *  Default false (bugünkü davranış). Süperadminde ayardan bağımsız HER ZAMAN sorulur (Y-02). */
+  AUTH_SHORT_CREDENTIAL_TOTP_REQUIRED: "auth.shortCredentialTotpRequired",
   /** Sevk için ayrı onay adımı zorunlu mu. Default false (KAPALI): çuvalları seç → Sevk Et
    *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
@@ -1773,6 +1776,8 @@ export interface FeatureFlags {
   deviceProofRequired: boolean;
   /** Hızlı PIN / kart girişi yalnız onaylı cihazdan mı (ETKİN değer: barındırılan kurulumda hep true). */
   shortCredentialApprovedDeviceOnly: boolean;
+  /** 2FA'sı açık hesabın PIN/kart girişinde kod sorulur mu (default false; süperadminde hep sorulur). */
+  shortCredentialTotpRequired: boolean;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
   shipmentManualSackCountEnabled: boolean;
@@ -2262,6 +2267,7 @@ export class SystemSettingService {
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
       deviceProofRequired: await readDeviceProofRequired(cacheClient),
       shortCredentialApprovedDeviceOnly: await readShortCredentialApprovedDeviceOnly(cacheClient),
+      shortCredentialTotpRequired: await readShortCredentialTotpRequired(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
@@ -3127,6 +3133,18 @@ export class SystemSettingService {
         SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY,
         input.shortCredentialApprovedDeviceOnly,
         "Hızlı PIN ve QR kartla giriş yalnız onaylı cihazdan (eşleştirmeyi de zorunlu kılar)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shortCredentialTotpRequired")) {
+      if (typeof input.shortCredentialTotpRequired !== "boolean") {
+        throw AppError.badRequest("shortCredentialTotpRequired boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.AUTH_SHORT_CREDENTIAL_TOTP_REQUIRED,
+        input.shortCredentialTotpRequired,
+        "İki adımlı doğrulaması açık hesabın hızlı PIN ve QR kart girişinde de kod sorulsun",
         userId
       );
     }
@@ -5178,6 +5196,22 @@ export async function readShortCredentialApprovedDeviceOnly(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * 2FA'sı açık hesabın hızlı PIN / QR kart girişinde de TOTP kodu sorulsun mu. Default false
+ * (bugünkü davranış). Süperadmin bu ayara BAKMAZ — onda PIN/kart girişinde kod hep sorulur.
+ * ENFORCE: `AuthService.assertSecondFactor` (tek boğaz).
+ */
+export async function readShortCredentialTotpRequired(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.AUTH_SHORT_CREDENTIAL_TOTP_REQUIRED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

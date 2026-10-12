@@ -34,7 +34,8 @@ ENV NODE_ENV=production \
     PRISMA_BIN="node /app/node_modules/prisma/build/index.js"
 RUN apk add --no-cache tini openssl libc6-compat tzdata postgresql16-client && \
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    install -d -o node -g node -m 0750 /app/data /lisans /mobil-guncelleme
+    install -d -o node -g node -m 0750 /app/data /lisans /mobil-guncelleme && \
+    install -d -o root -g node -m 0750 /yedek-anahtar
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package*.json prisma.config.ts tsconfig.json ./

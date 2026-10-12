@@ -32,15 +32,12 @@ export interface FieldChange {
  *   · GÜRÜLTÜ (`updatedAt`, künye kolonları): her update'te değişir, hiçbir şey
  *     anlatmaz ve gerçek değişikliği gözden kaçırtır.
  *
- * ⚠️⚠️ MASKELEME KAPSAMI YANILTICIDIR: bu küme YALNIZ `changes` kolonuna
- * uygulanır. `AuditService.log`un `oldData`/`newData`sı ve `logEvent`in
- * `payload`ı SystemLog'a HAM yazılır (`audit.service.ts`) — yani bir alanı bu
- * listeye eklemek "artık sır sızmaz" DEMEK DEĞİLDİR. Sır taşıyan her çağıranın
- * kendi yükü temiz olmak ZORUNDA (emsal: `setQuickPin` audit'e ham PIN değil
- * `rotated: boolean` yazar).
- *
- * ⚠️ EŞLEŞME TAM ADDIR (`Set.has`) — "…Hash"/"…Secret" son ekleri otomatik
- * yakalanmaz; yeni sır alanı ADIYLA eklenir.
+ * KAPSAM (B2, 2026-10-13): `changes` kolonu VE `oldData`/`newData`/`payload` ağacının
+ * TAMAMI (iç içe nesne/dizi) `maskAuditPayload` ile `AuditService` içinde maskelenir.
+ * Eşleşme `isSecretAuditKey`: bu küme + sır son ekleri (`…Secret`, `…Password`,
+ * `…Parola`, `…pinHash`/`…tokenDigest`/`…codeHash`…). Boolean değer maskelenmez
+ * (`mustChangePassword`, `hadPin` sır değil, bilgi). Çağıranın yükü yine temiz olmalı —
+ * maske ikinci hattır.
  */
 const SECRET_FIELDS = new Set([
   "passwordHash", "password", "pin", "pinHash", "quickPin",
@@ -54,6 +51,52 @@ const SECRET_FIELDS = new Set([
   // Makine kartı sır tohumu — halkayla birlikte sırrı verir.
   "secretSeed",
 ]);
+/** Sır son ekleri — yeni sır alanı adıyla eklenmeyi unutsa da yakalanır. `logoHash` gibi
+ *  içerik özetleri BİLEREK dışarıda (sır değil; belge kimliği). */
+const SECRET_SUFFIX = /(?:secret|password|parola|(?:password|pin|token|card|code|key|seed)(?:hash|digest))$/i;
+
+/** Audit yükünde değeri yazılmayacak anahtar mı? */
+export function isSecretAuditKey(key: string): boolean {
+  return SECRET_FIELDS.has(key) || SECRET_SUFFIX.test(key);
+}
+
+/** Maskelenecek değer mi: boş/boolean bilgi taşır, sır değildir. */
+function maskableValue(v: unknown): boolean {
+  return v !== null && v !== undefined && typeof v !== "boolean";
+}
+
+/**
+ * Audit yükünü DERİN maskeler (B2): sır anahtarlı her değer `***`. Düz nesne ve diziye
+ * iner; Date/Decimal/Buffer gibi sınıf örneklerine dokunmaz (JSON'a kendi yazılır).
+ * Sır yoksa girdiyi AYNEN döner (yük bayt-eşit kalır).
+ */
+export function maskAuditPayload<T>(value: T): T {
+  return maskNode(value, 0) as T;
+}
+function maskNode(v: unknown, depth: number): unknown {
+  if (depth > 32 || v === null || typeof v !== "object") return v;
+  if (Array.isArray(v)) {
+    let changed = false;
+    const out = v.map((x) => {
+      const m = maskNode(x, depth + 1);
+      if (m !== x) changed = true;
+      return m;
+    });
+    return changed ? out : v;
+  }
+  const proto = Object.getPrototypeOf(v);
+  if (proto !== Object.prototype && proto !== null) return v;
+  let out: Record<string, unknown> | null = null;
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    const m = isSecretAuditKey(k) && maskableValue(x) ? MASK : maskNode(x, depth + 1);
+    if (m !== x) {
+      out ??= { ...(v as Record<string, unknown>) };
+      out[k] = m;
+    }
+  }
+  return out ?? v;
+}
+
 const NOISE_FIELDS = new Set([
   "updatedAt", "createdAt", "updatedById", "createdById", "id",
 ]);
@@ -126,7 +169,7 @@ export function diffFields(
     const prev = (before as Record<string, unknown>)[field];
     if (sameValue(prev, next)) continue;
 
-    if (SECRET_FIELDS.has(field)) {
+    if (isSecretAuditKey(field) && (maskableValue(prev) || maskableValue(next))) {
       out.push({ field, old: MASK, new: MASK });
       continue;
     }

@@ -67,6 +67,7 @@ export function useSessionSettingsForm() {
   const currentPinPenaltySec = f?.pinLockoutPenaltySec ?? DEFAULT_PIN_LOCKOUT_PENALTY_SEC;
   const currentPinEscalate = f?.pinLockoutEscalateAfter ?? DEFAULT_PIN_LOCKOUT_ESCALATE_AFTER;
   const currentPinLongMin = f?.pinLockoutLongPenaltyMin ?? DEFAULT_PIN_LOCKOUT_LONG_PENALTY_MIN;
+  const currentShortTotp = f?.shortCredentialTotpRequired ?? false;
 
   const [sessionMin, setSessionMin] = useState(currentSessionMin);
   const [autoLogout, setAutoLogout] = useState(currentAutoLogout);
@@ -89,6 +90,7 @@ export function useSessionSettingsForm() {
   const [pinPenaltySec, setPinPenaltySec] = useState(String(currentPinPenaltySec));
   const [pinEscalate, setPinEscalate] = useState(String(currentPinEscalate));
   const [pinLongMin, setPinLongMin] = useState(String(currentPinLongMin));
+  const [shortTotp, setShortTotp] = useState(currentShortTotp);
   const methodsKey = JSON.stringify(currentMethods);
   useEffect(() => {
     setSessionMin(currentSessionMin);
@@ -109,6 +111,7 @@ export function useSessionSettingsForm() {
     setPinPenaltySec(String(currentPinPenaltySec));
     setPinEscalate(String(currentPinEscalate));
     setPinLongMin(String(currentPinLongMin));
+    setShortTotp(currentShortTotp);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     currentSessionMin,
@@ -126,6 +129,7 @@ export function useSessionSettingsForm() {
     currentPinPenaltySec,
     currentPinEscalate,
     currentPinLongMin,
+    currentShortTotp,
   ]);
 
   const mut = useMutation({
@@ -145,6 +149,7 @@ export function useSessionSettingsForm() {
       pinLockoutPenaltySec: number;
       pinLockoutEscalateAfter: number;
       pinLockoutLongPenaltyMin: number;
+      shortCredentialTotpRequired?: boolean;
     }) => featureFlagService.update(payload),
     onSuccess: () => {
       toast.success("Oturum ayarları kaydedildi.");
@@ -227,7 +232,8 @@ export function useSessionSettingsForm() {
     Number(pinAttempts) !== currentPinAttempts ||
     Number(pinPenaltySec) !== currentPinPenaltySec ||
     Number(pinEscalate) !== currentPinEscalate ||
-    Number(pinLongMin) !== currentPinLongMin;
+    Number(pinLongMin) !== currentPinLongMin ||
+    shortTotp !== currentShortTotp;
 
   const toggleIdle = (on: boolean) => {
     setIdleEnabled(on);
@@ -273,6 +279,7 @@ export function useSessionSettingsForm() {
     setPinPenaltySec(String(currentPinPenaltySec));
     setPinEscalate(String(currentPinEscalate));
     setPinLongMin(String(currentPinLongMin));
+    setShortTotp(currentShortTotp);
   };
 
   const save = () =>
@@ -292,6 +299,8 @@ export function useSessionSettingsForm() {
       pinLockoutPenaltySec: safeInt(pinPenaltySec, currentPinPenaltySec),
       pinLockoutEscalateAfter: safeInt(pinEscalate, currentPinEscalate),
       pinLockoutLongPenaltyMin: safeInt(pinLongMin, currentPinLongMin),
+      // Yalnız değiştiyse gönderilir: anahtarı tanımayan eski backend'in katı şeması formu 400'e düşürmesin.
+      ...(shortTotp !== currentShortTotp ? { shortCredentialTotpRequired: shortTotp } : {}),
     });
 
   return {
@@ -311,6 +320,7 @@ export function useSessionSettingsForm() {
     pinPenaltySec, setPinPenaltySec,
     pinEscalate, setPinEscalate,
     pinLongMin, setPinLongMin,
+    shortTotp, setShortTotp,
     // doğrulama
     sessionValid, idleValid, workValid, mobileLockMinValid, methodsValid, allValid, dirty,
     capDaysValid, pinAttemptsValid, pinPenaltyValid, pinEscalateValid, pinLongValid,
@@ -333,6 +343,7 @@ export function useSessionSettingsForm() {
       pinPenaltySec: currentPinPenaltySec,
       pinEscalate: currentPinEscalate,
       pinLongMin: currentPinLongMin,
+      shortTotp: currentShortTotp,
     },
   };
 }

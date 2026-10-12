@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { safeFormat } from "@/lib/format";
 import { BackupButton } from "../ServerStatus/BackupButton";
-import { downloadBackup } from "./service";
+import { downloadBackup, plainBackupWarning, PLAIN_BACKUP_DOWNLOAD_TOAST } from "./service";
 import { useBackups } from "./hooks";
 import { BackupScheduleCard } from "./BackupScheduleCard";
 import { OffsiteBackupCard } from "./OffsiteBackupCard";
@@ -22,10 +22,15 @@ export function BackupsPage() {
   const files = data?.files ?? [];
   const noDir = !!data && data.backupDir === null;
 
+  const plainNotice = plainBackupWarning(data);
+
   async function handleDownload(name: string) {
     try {
       await downloadBackup(name);
-      toast.success("Yedek indiriliyor.");
+      const file = files.find((f) => f.name === name);
+      // B1: düz döküm sır taşır — indirene ayrıca söylenir (eski sunucu `encrypted` göndermez → sessiz).
+      if (file?.encrypted === false) toast.warning(PLAIN_BACKUP_DOWNLOAD_TOAST, { duration: 10000 });
+      else toast.success("Yedek indiriliyor.");
     } catch {
       toast.error("Yedek indirilemedi.");
     }
@@ -56,6 +61,12 @@ export function BackupsPage() {
           <b>yönetici PowerShell</b>'de çalıştırın. Blok önce <b>doğrulanmış bir güvenlik
           yedeği</b> alır; alamazsa geri yükleme çalışmaz.
         </Callout>
+
+        {plainNotice && (
+          <Callout tone="warning" title={plainNotice.title}>
+            {plainNotice.body}
+          </Callout>
+        )}
 
         {noDir && (
           <Callout tone="danger" title="Yedekleme kapalı">

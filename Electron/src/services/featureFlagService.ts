@@ -396,6 +396,8 @@ export interface FeatureFlags {
   /** Hızlı PIN / QR kartla giriş yalnız onaylı cihazdan mı (false=default; barındırılan
    *  kurulumda backend hep true döner ve kapatılamaz). Açıkken eşleştirme de etkin zorunludur. */
   shortCredentialApprovedDeviceOnly: boolean;
+  /** 2FA'sı açık hesabın PIN/kart girişinde de kod sorulur mu (varsayılan false; süperadminde hep). */
+  shortCredentialTotpRequired: boolean;
   /** Sevk onayı adımı zorunlu mu (false=default). Kapalıyken çuvallar seçilir seçilmez
    *  DOĞRUDAN sevk edilir (createShipment → DISPATCHED, stok o an düşer); açıkken önce
    *  PLANNED sevkiyat kurulur, çıkış ayrıca "Sevk Kapısı" ekranından onaylanır. */

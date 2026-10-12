@@ -68,6 +68,35 @@ export interface BackupListing {
   encryption?: BackupEncryptionSummary;
 }
 
+/** İndirilen düz yedek için uyarı (B1). */
+export const PLAIN_BACKUP_DOWNLOAD_TOAST =
+  "Şifresiz yedek indiriliyor: içinde parola özetleri ve kimlik kayıtları var. Dosyayı paylaşmayın, güvenli yerde saklayın.";
+
+/**
+ * Şifresiz yedek uyarısı (güvenlik denetimi B1): şifreleme kapalı ya da geçersizken yedekler düz
+ * `.dump`tır ve parola özetlerini, kimlik kayıtlarını taşır. Eski sunucu `encryption` göndermez → null.
+ */
+export function plainBackupWarning(
+  listing: Pick<BackupListing, "encryption" | "backupDir"> | undefined,
+): { title: string; body: string } | null {
+  const enc = listing?.encryption;
+  if (!enc || listing?.backupDir === null || enc.state === "acik") return null;
+  if (enc.state === "gecersiz") {
+    return {
+      title: "Yedek şifrelemesi çalışmıyor — yedekler şifresiz",
+      body:
+        "Şifreleme açılmak istenmiş ama anahtar dizini kullanılamıyor; yedekler düz alınıyor ve sunucu dışına kopyalanmıyor. " +
+        `Sorun: ${enc.problems[0] ?? "bilinmiyor"}`,
+    };
+  }
+  return {
+    title: "Yedekler şifresiz",
+    body:
+      "Yedek dosyaları düz alınıyor: içlerinde parola özetleri ve kimlik kayıtları var. Dosyayı ele geçiren biri bunları " +
+      "çevrimdışı deneyebilir. Yedek şifrelemesini açmak için kurulum belgesindeki yedek anahtarı adımını uygulayın.",
+  };
+}
+
 /** Saf veri erişimi (React'e bağlı değil) — hook'lar `hooks.ts`te. */
 export async function fetchBackups(): Promise<BackupListing> {
   const res = await apiClient.get<BackupListing>("/api/admin/backups", {

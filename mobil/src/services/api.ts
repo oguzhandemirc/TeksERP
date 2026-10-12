@@ -114,11 +114,23 @@ export function isPasswordChangeRequired(err: unknown): boolean {
   return e?.status === 403 && e?.details?.code === 'PASSWORD_CHANGE_REQUIRED';
 }
 
+/** Süperadmin PIN/kart girişi: 2FA kurulmamış (403 TOTP_ENROLLMENT_REQUIRED, Y-02). Yöntem kapalı
+ *  DEĞİLDİR — sunucunun cümlesi (kullanıcı adı + parolayla gir) gösterilir, seçim korunur. */
+export function isTotpEnrollmentRequired(err: unknown): boolean {
+  const e = err as { status?: number; details?: { code?: string } } | null;
+  return e?.status === 403 && e?.details?.code === 'TOTP_ENROLLMENT_REQUIRED';
+}
+
 /** PIN/kart girişindeki 403 "bu yöntem panelden kapatıldı" mı? Kodlu 403'ler (onaysız cihaz,
  *  zorunlu parola değişimi) yöntem kapanması değildir; giriş ekranı yalnız bunda seçimi sıfırlar. */
 export function isLoginMethodDisabled(err: unknown): boolean {
   const e = err as { status?: number } | null;
-  return e?.status === 403 && !isDeviceNotApproved(err) && !isPasswordChangeRequired(err);
+  return (
+    e?.status === 403 &&
+    !isDeviceNotApproved(err) &&
+    !isPasswordChangeRequired(err) &&
+    !isTotpEnrollmentRequired(err)
+  );
 }
 
 // 403 LICENSE_* → kısıtlı kip / kapalı modül uyarısı (aynı metin 10 sn'de bir) ve

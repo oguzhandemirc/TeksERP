@@ -10,6 +10,13 @@ export const PASSWORD_MIN_LENGTH = 10;
 /** bcrypt 72 BAYT'tan sonrasını sessizce kırpar → üst sınır bayt cinsinden. */
 export const PASSWORD_MAX_BYTES = 72;
 
+/**
+ * Parola özetinin bcrypt tur sayısı — TEK KAYNAK (parola, ayar şifresi, kurulum aracı, seed).
+ * 10 → 12 (güvenlik denetimi B4, 2026-10-13): döküm sızarsa çevrimdışı kırma 4× pahalı.
+ * Eski özet başarılı parolalı girişte bu değere yükseltilir (`AuthService.login`).
+ */
+export const PASSWORD_BCRYPT_COST = 12;
+
 /** Politikaya uymayan parola için Türkçe gerekçe; uyuyorsa null. */
 export function passwordPolicyViolation(password: string): string | null {
   if (password.length < PASSWORD_MIN_LENGTH) {

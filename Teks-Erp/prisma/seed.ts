@@ -34,6 +34,7 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as bcrypt from "bcryptjs";
+import { PASSWORD_BCRYPT_COST } from "../src/constants/password-policy";
 import { ilkYoneticiParolasi, type IlkYoneticiParolasi } from "../src/lib/ilk-yonetici-parolasi";
 import { checkJwtSecret } from "../src/lib/jwt-secret";
 import "dotenv/config";
@@ -51,7 +52,7 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function hashPassword(plain: string): Promise<string> {
-  return bcrypt.hash(plain, 10);
+  return bcrypt.hash(plain, PASSWORD_BCRYPT_COST);
 }
 
 async function main() {

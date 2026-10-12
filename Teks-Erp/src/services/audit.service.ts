@@ -9,7 +9,7 @@ import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 
 import { currentOrigin } from "../lib/request-context";
-import { diffCommonFields } from "./helpers/audit-diff.helper";
+import { diffCommonFields, maskAuditPayload } from "./helpers/audit-diff.helper";
 import type { SystemEventName } from "../constants/system-events";
 import { hata } from "../lib/logger";
 type JsonValue = Prisma.InputJsonValue | typeof Prisma.JsonNull;
@@ -101,12 +101,13 @@ export class AuditService {
           // bir başlık kaydıyla yapar; bizde tek kolon yetiyor çünkü gruplama
           // sorgusu index'li tek eşitlik.
           requestId: origin.requestId,
-          oldData: (params.oldData ?? Prisma.JsonNull) as JsonValue,
-          newData: (params.newData ?? Prisma.JsonNull) as JsonValue,
+          // B2: yükün tamamı derin maskelenir (sır anahtarlı değer `***`) — tek boğaz.
+          oldData: (maskAuditPayload(params.oldData) ?? Prisma.JsonNull) as JsonValue,
+          newData: (maskAuditPayload(params.newData) ?? Prisma.JsonNull) as JsonValue,
           // Faz B2 — alan-bazlı değişiklik. Boş dizi de `JsonNull` yazılır:
           // "değişiklik yok" ile "diff hesaplanmadı" ayrımı BURADA değil,
           // çağıranda yapılır (boş diffte satır hiç yazılmaz).
-          changes: (changes?.length ? changes : Prisma.JsonNull) as JsonValue,
+          changes: (changes?.length ? maskAuditPayload(changes) : Prisma.JsonNull) as JsonValue,
         },
       });
     } catch (error) {
@@ -148,8 +149,8 @@ export class AuditService {
           // Toplu yazımın TAMAMI tek istekten çıktığı için hepsi AYNI id'yi
           // taşır — gruplamanın tanımı zaten budur.
           requestId: origin.requestId,
-          oldData: (e.oldData ?? Prisma.JsonNull) as JsonValue,
-          newData: (e.newData ?? Prisma.JsonNull) as JsonValue,
+          oldData: (maskAuditPayload(e.oldData) ?? Prisma.JsonNull) as JsonValue,
+          newData: (maskAuditPayload(e.newData) ?? Prisma.JsonNull) as JsonValue,
         })),
       });
     } catch (error) {
@@ -195,7 +196,7 @@ export class AuditService {
           // Giriş olayı da bir isteğin parçasıdır; STARTUP/ERROR gibi bağlamsız
           // olaylarda null kalır.
           requestId: origin.requestId,
-          newData: (params.payload ?? Prisma.JsonNull) as JsonValue,
+          newData: (maskAuditPayload(params.payload) ?? Prisma.JsonNull) as JsonValue,
         },
       });
     } catch (error) {

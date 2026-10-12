@@ -108,6 +108,7 @@ const PANEL_EXEMPT: Record<string, string> = {
   mobileIdleLockEnabled: "kind:'session' — Oturum section'ı yönetir",
   mobileLockOnBackground: "kind:'session' — Oturum section'ı yönetir",
   pinLockoutEnabled: "kind:'session' — Oturum section'ı yönetir",
+  shortCredentialTotpRequired: "kind:'session' — Oturum section'ı yönetir (giriş yöntemlerinin yanında)",
   nativeSendEnabled: "kind:'label' — Etiket section'ı yönetir",
   mobileRasterEnabled: "kind:'label' — Etiket section'ı yönetir",
   scrapGradeLabelEnabled: "kind:'label' — Etiket section'ı yönetir",

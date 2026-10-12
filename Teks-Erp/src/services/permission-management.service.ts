@@ -12,7 +12,7 @@ import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { AppError } from "../utils/app-error";
-import { passwordPolicyViolation } from "../constants/password-policy";
+import { PASSWORD_BCRYPT_COST, passwordPolicyViolation } from "../constants/password-policy";
 import { AuditService } from "./audit.service";
 import { credentialReseal } from "./helpers/system-account-seal.helper";
 import { AuthService } from "./auth.service";
@@ -22,6 +22,19 @@ import { SessionRegistryService } from "./session-registry.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { USER_ADMIN_CODES, effectiveUserAdminGrantWhere, factoryAdminExists } from "./helpers/factory-admin.helper";
 import { geciciParolaUret } from "../lib/ilk-yonetici-parolasi";
+
+/**
+ * Silinen kullanıcının sır kolonları (B5). `passwordHash` NOT NULL olduğu için geçersiz özet
+ * "!" yazılır — bcrypt.compare onu hiçbir parolayla eşleştirmez (ölçüldü: false, hata yok).
+ */
+export const DELETED_USER_SECRET_CLEAR = {
+  passwordHash: "!",
+  totpSecret: null,
+  quickPin: null,
+  quickPinDigest: null,
+  cardToken: null,
+  cardTokenDigest: null,
+} as const;
 
 /** Yetki (son-admin) guard'ı advisory lock namespace'i (F-KIM-GUV-003). Tek anahtar:
  *  guard sistem geneli tek bir seri kapıdır, kullanıcı başına DEĞİL. */
@@ -505,7 +518,7 @@ export class PermissionManagementService {
 
     const requireChange = resetRequiresPasswordChange(user, actorUserId);
     const varsayilanKapaniyor = user.defaultPasswordIssuedAt !== null && user.defaultPasswordChangedAt === null;
-    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const passwordHash = await bcrypt.hash(newPassword, PASSWORD_BCRYPT_COST);
     // Parola + bayrak + tokenVersion TEK yazımda; bayrak kararı okunan hesap türüne bağlı
     // olduğu için tür WHERE'de (arada değiştiyse 409).
     const reseal = await credentialReseal(prisma, userId, { passwordHash });
@@ -581,7 +594,7 @@ export class PermissionManagementService {
         })
       : [];
 
-    const passwordHash = await bcrypt.hash(input.password, 10);
+    const passwordHash = await bcrypt.hash(input.password, PASSWORD_BCRYPT_COST);
     const user = await prisma.user.create({
       data: {
         // ⚠️ SELF-RELATION: "bu hesabı KİM açtı" — ISO 27001 açısından anlamlı.
@@ -648,7 +661,7 @@ export class PermissionManagementService {
     actorUserId: string | undefined,
   ) {
     const temporaryPassword = geciciParolaUret();
-    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    const passwordHash = await bcrypt.hash(temporaryPassword, PASSWORD_BCRYPT_COST);
     const { user, permissionCount } = await prisma.$transaction(async (tx) => {
       await PermissionManagementService.acquireAdminGuardLock(tx);
       if (await factoryAdminExists(tx)) {
@@ -976,7 +989,7 @@ export class PermissionManagementService {
    * KALICI SİLME — GERİ ALINAMAZ. Kayıt fiziksel DURUR (veri bütünlüğü/geçmiş:
    * eski loglar/atıflar bozulmasın) ama: deletedAt damgalanır (listeden gizlenir,
    * aktifleştirilemez), username SERBEST bırakılır (del_ ön-ek → aynı isim tekrar
-   * açılabilir), kimlikler (quickPin/cardToken) temizlenir, oturumlar düşürülür.
+   * açılabilir), bütün sırlar (parola özeti, TOTP, PIN, kart, kurtarma kodu) temizlenir, oturumlar düşürülür.
    */
   static async deleteUser(id: string, actorUserId: string | undefined) {
     const existing = await prisma.user.findUnique({
@@ -994,23 +1007,43 @@ export class PermissionManagementService {
     const user = await prisma.$transaction(async (tx) => {
       await PermissionManagementService.acquireAdminGuardLock(tx);
       await PermissionManagementService.assertNotLastActiveAdmin(tx, id);
-      return tx.user.update({
-        where: { id },
+      // B5 (2026-10-13): satır KALIR (defter/atıf) ama hiçbir sır taşımaz — döküm sızarsa
+      // silinmiş hesabın parola özeti/TOTP sırrı çevrimdışı denenemez. Tek beyan: DELETED_USER_SECRET_CLEAR.
+      const usedCodes = await tx.userRecoveryCode.findMany({
+        where: { userId: id, usedAt: { not: null } },
+        select: { codeHash: true },
+      });
+      const reseal = await credentialReseal(tx, id, {
+        ...DELETED_USER_SECRET_CLEAR,
+        totpEnabledAt: null,
+        recoveryCodes: usedCodes,
+      });
+      const claimed = await tx.user.updateMany({
+        where: { id, deletedAt: null, ...reseal.where },
         data: {
           isActive: false,
           deletedAt: new Date(),
           username: freedUsername,
-          quickPin: null,
-          cardToken: null,
-          quickPinDigest: null,
+          ...DELETED_USER_SECRET_CLEAR,
+          totpEnabledAt: null,
+          totpLastStep: null,
           quickPinSetAt: null,
-          cardTokenDigest: null,
           cardIssuedAt: null,
           cardTokenLegacy: false,
           tokenVersion: { increment: 1 },
+          ...reseal.data,
         },
-        select: USER_SELECT,
       });
+      if (claimed.count === 0) {
+        throw AppError.conflict("Kullanıcı bu sırada değişti. Yeniden deneyin.", { code: "USER_DELETE_CONFLICT" });
+      }
+      // Kullanılmamış kurtarma kodu = hâlâ geçerli ikinci faktör; TOTP sıfırlamasıyla aynı temizlik.
+      await tx.userRecoveryCode.deleteMany({ where: { userId: id, usedAt: null } });
+      await tx.totpEnrollment.updateMany({
+        where: { userId: id, consumedAt: null },
+        data: { expiresAt: new Date() },
+      });
+      return tx.user.findUniqueOrThrow({ where: { id }, select: USER_SELECT });
     });
     await SessionRegistryService.revokeAllForUser(id, "DELETED").catch(
       () => undefined,

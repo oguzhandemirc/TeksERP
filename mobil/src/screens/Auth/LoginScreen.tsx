@@ -23,6 +23,7 @@ import {
 import { authActions } from '../../services/authActions';
 import { pinServerIdentityAfterLogin } from '../../services/serverIdentity';
 import { useSessionConflict } from '../../hooks/useSessionConflict';
+import { useTotpPrompt } from '../../hooks/useTotpPrompt';
 import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
 import PickerModal, { type PickerOption } from '../../components/PickerModal';
 import ServerAddressSheet from '../../components/ServerAddressSheet';
@@ -93,6 +94,8 @@ export interface LoginLockContext {
 export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) {
   const setAuth = useAuthStore((s) => s.setAuth);
   const { requestConfirm, modal: conflictModal } = useSessionConflict();
+  // İkinci faktör adımı (Y-02): 409 TOTP_REQUIRED / 401 TOTP_INVALID'de kod sorar.
+  const { requestCode, modal: totpModal } = useTotpPrompt();
   const device = useDeviceType();
   const portrait = useIsPortrait();
   const isCompact = device === 'phone' || portrait;
@@ -249,7 +252,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       setSubmitting(true);
       setError('');
       try {
-        const res = await authActions.password(user.username, rawPin, requestConfirm);
+        const res = await authActions.password(user.username, rawPin, requestConfirm, requestCode);
         if (res.data.mustChangePassword === true) {
           // Kısıtlı token: uygulamaya girilmez, önce yeni parola; sonra yeni parolayla gerçek giriş.
           setPin('');
@@ -258,7 +261,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
             currentPassword: rawPin,
             token: res.data.token,
             resume: async (newPassword) => {
-              const again = await authActions.password(user.username, newPassword, requestConfirm);
+              const again = await authActions.password(user.username, newPassword, requestConfirm, requestCode);
               if (!lock) Toast.show({ type: 'success', text1: 'Parolanız değiştirildi', text2: user.fullName });
               await handleAuthed(again, user.fullName);
             },
@@ -279,7 +282,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         setSubmitting(false);
       }
     },
-    [handleAuthed, lock, requestConfirm, openPasswordStep],
+    [handleAuthed, lock, requestConfirm, requestCode, openPasswordStep],
   );
 
   // Yöntem 403'ü (panelden kapatılmış) → yerel seçimi bırak + ayarı ANINDA tazele;
@@ -304,7 +307,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       setSubmitting(true);
       setError('');
       try {
-        const res = await authActions.quickPin(rawPin, requestConfirm);
+        const res = await authActions.quickPin(rawPin, requestConfirm, requestCode);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         if (!lock)
           Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
@@ -321,7 +324,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
           openPasswordStep({
             username: pendingUser,
             resume: async () => {
-              const again = await authActions.quickPin(rawPin, requestConfirm);
+              const again = await authActions.quickPin(rawPin, requestConfirm, requestCode);
               await handleAuthed(again, again.data.user.fullName);
             },
           });
@@ -335,7 +338,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         setSubmitting(false);
       }
     },
-    [handleAuthed, lock, handleMethodDisabled, requestConfirm, openPasswordStep],
+    [handleAuthed, lock, handleMethodDisabled, requestConfirm, requestCode, openPasswordStep],
   );
 
   // QR personel kartıyla giriş — okutma başarılıysa PIN'siz doğrudan token alınır.
@@ -344,7 +347,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       setSubmitting(true);
       setError('');
       try {
-        const res = await authActions.card(cardCode.trim(), requestConfirm);
+        const res = await authActions.card(cardCode.trim(), requestConfirm, requestCode);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         if (!lock)
           Toast.show({ type: 'success', text1: 'Hoş geldin', text2: res.data.user.username });
@@ -359,7 +362,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
           openPasswordStep({
             username: pendingUser,
             resume: async () => {
-              const again = await authActions.card(cardCode.trim(), requestConfirm);
+              const again = await authActions.card(cardCode.trim(), requestConfirm, requestCode);
               await handleAuthed(again, again.data.user.fullName);
             },
           });
@@ -373,7 +376,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         setSubmitting(false);
       }
     },
-    [handleAuthed, lock, handleMethodDisabled, requestConfirm, openPasswordStep],
+    [handleAuthed, lock, handleMethodDisabled, requestConfirm, requestCode, openPasswordStep],
   );
 
   // 6 hane dolunca yönteme göre gönder: 'pin' = salt hızlı-PIN (kullanıcı yok);
@@ -1023,6 +1026,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
 
       {/* 'notify' politikasında SESSION_EXISTS onayı — kick modda hiç görünmez. */}
       {conflictModal}
+      {totpModal}
 
       {/* Yönetici parolayı sıfırladı → kendi parolasını belirlemeden girilmez. */}
       <PasswordChangeModal

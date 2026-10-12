@@ -63,18 +63,25 @@ const loginSchema = z.object({
   totpCode: z.string().trim().min(1).max(64).optional(),
   // Tablet zorunlu parola değişimi adımını taşıyor — değişim bekleyen hesap kısıtlı token alır.
   passwordChangeCapable: z.boolean().optional(),
+  // Tablet 409 TOTP_REQUIRED'da kod sorabiliyor (yalnız iletiyi seçer).
+  totpCapable: z.boolean().optional(),
 });
 
+// PIN/kart girişinde de ikinci faktör (Y-02): süperadminde hep, diğerlerinde ayarla istenir.
 const loginCardSchema = z.object({
   cardCode: z.string().min(1, "Kart kodu gerekli").max(120),
   clientType: clientTypeSchema,
   confirmKick: z.boolean().optional(),
+  totpCode: z.string().trim().min(1).max(64).optional(),
+  totpCapable: z.boolean().optional(),
 });
 
 const loginQuickPinSchema = z.object({
   pin: z.string().regex(/^\d{6}$/, "PIN 6 haneli rakam olmalı"),
   clientType: clientTypeSchema,
   confirmKick: z.boolean().optional(),
+  totpCode: z.string().trim().min(1).max(64).optional(),
+  totpCapable: z.boolean().optional(),
 });
 
 /** Login isteğinden İSTEMCİ SÜRÜMÜNÜ çöz — `Session.clientVersion`e yazılır.
@@ -235,6 +242,7 @@ export class AuthController {
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
       totpCode: body.totpCode,
+      totpCapable: body.totpCapable,
       clientVersion: resolveClientVersion(req),
       passwordChangeCapable: body.passwordChangeCapable,
     };
@@ -292,8 +300,9 @@ export class AuthController {
    *     description: Body { cardCode } — "TEKSU:<userId>:<token>". Yöntem kapalıysa 403.
    *     responses:
    *       200: { description: Başarılı giriş }
-   *       401: { description: Kart geçersiz/iptal ya da SHORT_CREDENTIAL_KEY_MISMATCH }
-   *       403: { description: Kartla giriş kapalı ya da DEVICE_NOT_APPROVED }
+   *       401: { description: Kart geçersiz/iptal ya da SHORT_CREDENTIAL_KEY_MISMATCH ya da TOTP_INVALID }
+   *       403: { description: Kartla giriş kapalı ya da DEVICE_NOT_APPROVED ya da TOTP_ENROLLMENT_REQUIRED (süperadminde 2FA kurulmamış) }
+   *       409: { description: TOTP_REQUIRED — totpCode ile yeniden gönderilir (süperadminde hep; diğerlerinde auth.shortCredentialTotpRequired) }
    */
   static async loginCard(req: Request, res: Response, next: NextFunction): Promise<void> {
     const body = (() => {
@@ -338,6 +347,8 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
+      totpCode: body.totpCode,
+      totpCapable: body.totpCapable,
       clientVersion: resolveClientVersion(req),
     };
     try {
@@ -386,8 +397,9 @@ export class AuthController {
    *     description: Body { pin } — kullanıcı seçme yok; PIN benzersiz olduğundan kimliği tek başına belirler.
    *     responses:
    *       200: { description: Başarılı giriş }
-   *       401: { description: PIN tanınmadı ya da SHORT_CREDENTIAL_KEY_MISMATCH }
-   *       403: { description: Hızlı PIN girişi kapalı ya da DEVICE_NOT_APPROVED }
+   *       401: { description: PIN tanınmadı ya da SHORT_CREDENTIAL_KEY_MISMATCH ya da TOTP_INVALID }
+   *       403: { description: Hızlı PIN girişi kapalı ya da DEVICE_NOT_APPROVED ya da TOTP_ENROLLMENT_REQUIRED (süperadminde 2FA kurulmamış) }
+   *       409: { description: TOTP_REQUIRED — totpCode ile yeniden gönderilir (süperadminde hep; diğerlerinde auth.shortCredentialTotpRequired) }
    */
   static async loginQuickPin(req: Request, res: Response, next: NextFunction): Promise<void> {
     const body = (() => {
@@ -423,6 +435,8 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
+      totpCode: body.totpCode,
+      totpCapable: body.totpCapable,
       clientVersion: resolveClientVersion(req),
     };
     try {

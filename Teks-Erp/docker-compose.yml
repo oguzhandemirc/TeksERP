@@ -54,6 +54,10 @@ services:
       # İlk yöneticinin parolası (yalnız ilk `up`ta, .env.docker'a YAZILMAZ). Boşsa seed rastgele
       # üretip loga bir kez basar; iki durumda da ilk girişte parola değişimi zorunlu.
       ILK_YONETICI_PAROLASI: ${ILK_YONETICI_PAROLASI:-}
+      # Yedek şifreleme anahtar dizini (B1): alıcı `.tkpub` dosyaları `yedek_anahtar` biriminde kalıcı durur.
+      # Boşsa şifreleme KAPALI (bugünkü davranış, panel "Yedekler şifresiz" uyarır); açmak için anahtarı birime
+      # koyup .env.docker'a BACKUP_KEY_DIR=/yedek-anahtar yazın. Dizin yedek klasörünün DIŞINDA olmalı.
+      BACKUP_KEY_DIR: ${BACKUP_KEY_DIR:-}
     ports:
       # Fabrika ağındaki tüm makineler 4000 portundan erişebilir.
       - "4000:4000"
@@ -64,9 +68,11 @@ services:
       - lisans:/lisans
       - mobil_guncelleme:/mobil-guncelleme
       - ./backups:/backups
+      - yedek_anahtar:/yedek-anahtar:ro
 
 volumes:
   pg_data:
   app_data:
   lisans:
   mobil_guncelleme:
+  yedek_anahtar:

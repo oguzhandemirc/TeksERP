@@ -186,6 +186,9 @@ export function buildOtpauthUri(params: {
 
 /** Kurtarma kodu sayısı — telefon kaybında hesabın tek çıkışı. */
 export const RECOVERY_CODE_COUNT = 10;
+/** Kurtarma kodu özetinin bcrypt turu — parola sabitinden (12) BİLEREK ayrı: kod sunucu üretimi
+ *  rastgele (~40 bit, sözlükle kırılmaz) ve girişte 10 özete kadar denenir; 12 turla ~2,5 sn olurdu. */
+export const RECOVERY_CODE_BCRYPT_COST = 10;
 
 /**
  * Kurtarma kodları üret. Biçim `XXXX-XXXX` (Crockford benzeri, karışan

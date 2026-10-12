@@ -31,6 +31,7 @@
 // -----------------------------------------------------------------------------
 import { randomUUID } from "node:crypto";
 import * as bcrypt from "bcryptjs";
+import { PASSWORD_BCRYPT_COST } from "../src/constants/password-policy";
 import prisma from "../src/lib/prisma";
 
 /** Sabit kimlik — üç HTTP testi de bunu kullanır. */
@@ -91,7 +92,7 @@ export async function ensureTestAdmin(opts?: {
   password?: string;
 }): Promise<{ id: string; username: string; password: string }> {
   const password = opts?.password ?? TEST_ADMIN_PASSWORD;
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password, PASSWORD_BCRYPT_COST);
 
   const user = await prisma.user.upsert({
     where: { username: TEST_ADMIN_USERNAME },

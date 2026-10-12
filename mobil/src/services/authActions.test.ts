@@ -100,3 +100,56 @@ describe('authActions.card', () => {
     expect(svc.loginWithCard).toHaveBeenCalledWith('TEKSU:1:tok', undefined);
   });
 });
+
+// Y-02: PIN/kart girişinde ikinci faktör — 409 TOTP_REQUIRED → kod sorulur, totpCode ile tekrar.
+const totpRequired = () =>
+  Object.assign(new Error('Doğrulama kodu gerekli.'), { status: 409, details: { code: 'TOTP_REQUIRED' } });
+const totpInvalid = () =>
+  Object.assign(new Error('Doğrulama kodu geçersiz.'), { status: 401, details: { code: 'TOTP_INVALID' } });
+
+describe('authActions — ikinci faktör (TOTP) adımı', () => {
+  it('quickPin: TOTP_REQUIRED → kod sorulur, totpCode ile tekrar', async () => {
+    svc.loginWithQuickPin.mockRejectedValueOnce(totpRequired()).mockResolvedValueOnce(okRes('sa'));
+    const onTotp = jest.fn(async () => '123456');
+    const res = await authActions.quickPin('654321', undefined, onTotp);
+    expect(res.data.user.username).toBe('sa');
+    expect(onTotp).toHaveBeenCalledWith(false);
+    expect(svc.loginWithQuickPin).toHaveBeenNthCalledWith(2, '654321', undefined, '123456');
+  });
+
+  it('card: yanlış kod (TOTP_INVALID) → kod yeniden sorulur (invalid=true)', async () => {
+    svc.loginWithCard
+      .mockRejectedValueOnce(totpRequired())
+      .mockRejectedValueOnce(totpInvalid())
+      .mockResolvedValueOnce(okRes('sa'));
+    const onTotp = jest.fn().mockResolvedValueOnce('111111').mockResolvedValueOnce('222222');
+    await authActions.card('TEKSU:1:tok', undefined, onTotp);
+    expect(onTotp).toHaveBeenNthCalledWith(1, false);
+    expect(onTotp).toHaveBeenNthCalledWith(2, true);
+    expect(svc.loginWithCard).toHaveBeenNthCalledWith(3, 'TEKSU:1:tok', undefined, '222222');
+  });
+
+  it('vazgeçilirse giriş yapılmaz, tekrar yok', async () => {
+    svc.loginWithQuickPin.mockRejectedValueOnce(totpRequired());
+    await expect(authActions.quickPin('654321', undefined, async () => null)).rejects.toThrow(
+      'Doğrulama kodu girilmedi',
+    );
+    expect(svc.loginWithQuickPin).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolver yoksa TOTP_REQUIRED aynen fırlar (eski çağıran)', async () => {
+    svc.loginWithQuickPin.mockRejectedValueOnce(totpRequired());
+    await expect(authActions.quickPin('654321')).rejects.toThrow('Doğrulama kodu gerekli.');
+  });
+
+  it('password: kod login gövdesine totpCode olarak girer', async () => {
+    svc.login.mockRejectedValueOnce(totpRequired()).mockResolvedValueOnce(okRes('op'));
+    await authActions.password('op', 'pass', undefined, async () => '123456');
+    expect(svc.login).toHaveBeenNthCalledWith(2, {
+      username: 'op',
+      password: 'pass',
+      confirmKick: undefined,
+      totpCode: '123456',
+    });
+  });
+});

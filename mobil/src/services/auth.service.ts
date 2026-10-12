@@ -34,6 +34,8 @@ export const authService = {
       .post<LoginResponse>('/auth/login', {
         clientType: 'mobile',
         passwordChangeCapable: true,
+        // Bu sürüm 409 TOTP_REQUIRED'da kod sorar (eski tablet "güncelleyin" iletisi alır).
+        totpCapable: true,
         ...credentials,
       })
       .then((r) => r.data),
@@ -56,15 +58,27 @@ export const authService = {
       .then(() => undefined),
 
   /** QR personel kartıyla giriş — yalnız "card" yöntemi etkinken (aksi 403). */
-  loginWithCard: (cardCode: string, confirmKick?: boolean): Promise<LoginResponse> =>
+  loginWithCard: (cardCode: string, confirmKick?: boolean, totpCode?: string): Promise<LoginResponse> =>
     apiClient
-      .post<LoginResponse>('/auth/login-card', { cardCode, clientType: 'mobile', confirmKick })
+      .post<LoginResponse>('/auth/login-card', {
+        cardCode,
+        clientType: 'mobile',
+        confirmKick,
+        totpCapable: true,
+        ...(totpCode ? { totpCode } : {}),
+      })
       .then((r) => r.data),
 
   /** SALT hızlı-PIN ile giriş — kullanıcı seçme yok (PIN benzersiz, kimliği belirler). */
-  loginWithQuickPin: (pin: string, confirmKick?: boolean): Promise<LoginResponse> =>
+  loginWithQuickPin: (pin: string, confirmKick?: boolean, totpCode?: string): Promise<LoginResponse> =>
     apiClient
-      .post<LoginResponse>('/auth/login-quick-pin', { pin, clientType: 'mobile', confirmKick })
+      .post<LoginResponse>('/auth/login-quick-pin', {
+        pin,
+        clientType: 'mobile',
+        confirmKick,
+        totpCapable: true,
+        ...(totpCode ? { totpCode } : {}),
+      })
       .then((r) => r.data),
 
   /** Giriş yöntemleri (public — login ekranı auth'suz okur). Kısa timeout:

@@ -31,9 +31,7 @@ import { AuditService } from "../services/audit.service";
 import { SETTINGS_PASSWORD_HASH_KEY } from "../constants/reserved-settings";
 import type { SystemEventName } from "../constants/system-events";
 import { AppError } from "../utils/app-error";
-
-/** bcrypt maliyeti — kullanıcı parolalarıyla AYNI (auth.service `hash(p, 10)`). */
-const BCRYPT_COST = 10;
+import { PASSWORD_BCRYPT_COST } from "../constants/password-policy";
 
 /**
  * Kabul edilen şifre uzunluğu.
@@ -132,7 +130,7 @@ export async function setSettingsPassword(
 ): Promise<{ rotated: boolean }> {
   assertSettingsPasswordUsable(password);
   const rotated = (await readSettingsPasswordHash()) !== null;
-  const hash = await bcrypt.hash(password, BCRYPT_COST);
+  const hash = await bcrypt.hash(password, PASSWORD_BCRYPT_COST);
   await prisma.systemSetting.upsert({
     where: { key: SETTINGS_PASSWORD_HASH_KEY },
     // `description` yalnız ilk oluşturmada yazılır (systemSettingService.set

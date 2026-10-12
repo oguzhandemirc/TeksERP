@@ -160,6 +160,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "mobileLockOnBackground",
       "sameTypeSessionPolicy",
       "loginMethods",
+      "shortCredentialTotpRequired",
       "absoluteSessionCapDays",
       "pinLockoutEnabled",
       "pinLockoutAttempts",

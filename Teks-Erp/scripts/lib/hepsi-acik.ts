@@ -163,6 +163,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devicePairingRequired: A(true),
   deviceProofRequired: A(true),
   shortCredentialApprovedDeviceOnly: A(true),
+  shortCredentialTotpRequired: V("adı sır desenine (totp) düşer, profil doğrulayıcısı reddeder; davranışı test_kimlik_kisa_yol_totp ölçer"),
   backupHour: V("yedek saati; açılacak bir şey değil"),
   // ── etiket ─────────────────────────────────────────────────────────────────
   labelCopies: V("kopya adedi; açılacak bir şey değil"),

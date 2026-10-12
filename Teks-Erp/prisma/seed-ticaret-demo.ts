@@ -39,6 +39,7 @@
 import { randomBytes } from "node:crypto";
 import { v5 as uuidv5 } from "uuid";
 import * as bcrypt from "bcryptjs";
+import { PASSWORD_BCRYPT_COST } from "../src/constants/password-policy";
 import {
   CariTxnSource,
   CashTxnKind,
@@ -376,7 +377,7 @@ async function ensureDemoUser(): Promise<{ id: string; announcedPassword: string
       // tokenVersion artırılır: eski oturum şifre değişince ölmeli.
       await prisma.user.update({
         where: { id: userId },
-        data: { passwordHash: await bcrypt.hash(envPassword, 10), tokenVersion: { increment: 1 } },
+        data: { passwordHash: await bcrypt.hash(envPassword, PASSWORD_BCRYPT_COST), tokenVersion: { increment: 1 } },
       });
       announced = envPassword;
     }
@@ -387,7 +388,7 @@ async function ensureDemoUser(): Promise<{ id: string; announcedPassword: string
       await prisma.user.create({
         data: {
           username: "demo",
-          passwordHash: await bcrypt.hash(password, 10),
+          passwordHash: await bcrypt.hash(password, PASSWORD_BCRYPT_COST),
           fullName: "Demo Kullanıcı",
         },
         select: { id: true },

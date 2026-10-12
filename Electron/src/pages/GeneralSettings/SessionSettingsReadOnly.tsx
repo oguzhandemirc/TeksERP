@@ -23,6 +23,7 @@ export function SessionSettingsReadOnly({
   pinLockoutPenaltySec,
   pinLockoutEscalateAfter,
   pinLockoutLongPenaltyMin,
+  shortCredentialTotpRequired = false,
 }: {
   sessionMinutes: number;
   idleMinutes: number;
@@ -39,6 +40,7 @@ export function SessionSettingsReadOnly({
   pinLockoutPenaltySec: number;
   pinLockoutEscalateAfter: number;
   pinLockoutLongPenaltyMin: number;
+  shortCredentialTotpRequired?: boolean;
 }) {
   return (
     <div className="space-y-1 text-sm">
@@ -56,14 +58,8 @@ export function SessionSettingsReadOnly({
         label="Çalışma oturumu zaman aşımı (saha)"
         value={workIdleMinutes > 0 ? `${workIdleMinutes} dakika` : "Kapalı"}
       />
-      <ReadOnlyLine
-        label="Mobil hareketsizlik kilidi"
-        value={mobileLock ? `${mobileLockMinutes} dakika` : "Kapalı"}
-      />
-      <ReadOnlyLine
-        label="Uygulamadan çıkınca kilitle (mobil)"
-        value={mobileLockBg ? "Açık" : "Kapalı"}
-      />
+      <ReadOnlyLine label="Mobil hareketsizlik kilidi" value={mobileLock ? `${mobileLockMinutes} dakika` : "Kapalı"} />
+      <ReadOnlyLine label="Uygulamadan çıkınca kilitle (mobil)" value={mobileLockBg ? "Açık" : "Kapalı"} />
       <ReadOnlyLine
         label="Mutlak oturum tavanı"
         value={absoluteCapDays > 0 ? `${absoluteCapDays} gün` : `${UNSET_ABSOLUTE_CAP_DAYS} gün (sert tavan)`}
@@ -79,6 +75,10 @@ export function SessionSettingsReadOnly({
       <ReadOnlyLine
         label="Mobil giriş yöntemleri"
         value={`${methods.enabled.map((m) => METHOD_LABELS[m]).join(" · ")} (öncelik: ${METHOD_LABELS[methods.primary]})`}
+      />
+      <ReadOnlyLine
+        label="PIN ve kart girişinde doğrulama kodu"
+        value={shortCredentialTotpRequired ? "Açık (2FA'lı hesaplarda)" : "Kapalı (süperadminde her zaman)"}
       />
       <p className="pt-2 text-xs text-muted-foreground">
         Bu ayarları değiştirmek için <code>admin:settings</code> yetkisi gerekir.

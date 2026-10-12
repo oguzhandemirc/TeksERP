@@ -38,6 +38,11 @@
           "kapsam": "tablet",
           "tip": "iyilestirme",
           "metin": "Uzun adlar tek satırda kısalır, basılı tutunca tam görünür. İş emri artık Terbiye iş emri, Dokuma işi artık Dokuma iş emri diye geçer."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "PIN ya da kartla girişte hesap doğrulama kodu isterse tablet kodu sorar: telefondaki doğrulama uygulamasındaki 6 haneli kodu yazıp devam edersiniz, yanlış kodda yeniden sorar. Destek hesabı tablette PIN/kartla her zaman bu kodla girer; hesapta iki adımlı doğrulama kurulu değilse kullanıcı adı ve parolayla girmeniz istenir. Bunun için sunucunun 2.15.7 sürümü gerekir; eski sunucuda giriş bugünkü gibi çalışır."
         }
       ]
     },
@@ -213,6 +218,16 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Oturum ayarlarında giriş deneme kilidi artık kapatılamaz; yalnız deneme sayısı ve ceza süreleri ayarlanır. Bir hesap aynı anda en çok 20 oturum açık tutabilir; sınır aşılınca en eski oturum kapanır. Mutlak oturum tavanına 0 yazmak artık “sınırsız” değildir: oturum en çok 30 gün açık kalır; daha uzun oturum isteniyorsa gün sayısını açıkça yazın (en çok 365)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Ayarlar → Oturum'da yeni “PIN ve kart girişinde doğrulama kodu iste” anahtarı: açıkken iki adımlı doğrulaması açık kullanıcılar tablette PIN ya da kartla girerken de telefondaki kodu girer. Varsayılan kapalıdır, açmadığınız sürece değişen bir şey olmaz. Destek hesabında bu kod ayardan bağımsız her zaman sorulur. Bunun için sunucunun 2.15.7 sürümü gerekir; açmadan önce tabletlerin 1.4.0 sürümüne güncellendiğini Cihazlar sayfasından kontrol edin (eski tablet kodu soramaz)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sistem → Yedekler'de yedek anahtarı kurulu değilse şifresiz yedek uyarısı görünür ve şifresiz bir yedek indirirken ayrıca uyarı çıkar: bu dosyayı güvenli bir yerde saklayın, içinde fabrikanın bütün verisi açık durur."
         }
       ]
     },

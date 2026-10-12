@@ -9,6 +9,7 @@ import { NumberField, FlagToggle } from "./SettingRow";
 import { HintIcon, HintBody, type HintVariant } from "./SettingHint";
 import { LoginMethodsField } from "./LoginMethodsField";
 import { SessionSettingsReadOnly } from "./SessionSettingsReadOnly";
+import { ShortCredentialTotpToggle } from "./ShortCredentialTotpToggle";
 import {
   MAX_SESSION_MINUTES,
   MAX_IDLE_MINUTES,
@@ -74,6 +75,7 @@ export function SessionSettingsSection({
           pinLockoutPenaltySec={s.current.pinPenaltySec}
           pinLockoutEscalateAfter={s.current.pinEscalate}
           pinLockoutLongPenaltyMin={s.current.pinLongMin}
+          shortCredentialTotpRequired={s.current.shortTotp}
         />
       }
     >
@@ -307,6 +309,9 @@ export function SessionSettingsSection({
           onToggle={s.toggleMethod}
           onPrimaryChange={s.setPrimaryMethod}
         />
+
+        {/* 8b) PIN/kart girişinde ikinci faktör (Y-02) */}
+        <ShortCredentialTotpToggle hint={hint} checked={s.shortTotp} disabled={s.isSaving} onChange={s.setShortTotp} />
 
         <SettingsSaveBar
           dirty={s.dirty}

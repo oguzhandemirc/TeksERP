@@ -23,6 +23,7 @@ import {
   generateTotpSecret,
   normalizeRecoveryCode,
   verifyTotp,
+  RECOVERY_CODE_BCRYPT_COST,
 } from "./totp.service";
 
 /** Kurulum penceresinin ömrü. Kısa: bağlantı bir sohbet/telefon görüşmesi
@@ -218,7 +219,7 @@ export class TotpAccountService {
     }
 
     const plainCodes = generateRecoveryCodes();
-    const hashed = await Promise.all(plainCodes.map((c) => bcrypt.hash(c, 10)));
+    const hashed = await Promise.all(plainCodes.map((c) => bcrypt.hash(c, RECOVERY_CODE_BCRYPT_COST)));
 
     await prisma.$transaction(async (tx) => {
       const claimed = await tx.totpEnrollment.updateMany({
