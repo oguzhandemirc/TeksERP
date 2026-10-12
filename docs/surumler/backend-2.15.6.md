@@ -31,6 +31,15 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   portaldan indirilen dosya. Veritabanı başka bir kurulumdan kopyalanmış görünüyorsa da aynı ekran açılır; bu
   durumda yedek alma ve verileri dışa aktarma açık kalır. **Etkinleştirilmiş kurulumlar etkilenmez.** Daha önce
   kurulmuş ama hiç etkinleştirilmemiş bir sunucu bu sürüme geçmeden önce portaldan muafiyet dosyası almalıdır.
+- **Taşıma talebi bekleyen yeni sunucu artık yalnız lisans ekranını açar.** Lisansı başka bir sunucuya taşırken
+  yeni sunucu, talep onaylanıp portaldan iletilen taşıma kodu girilene kadar yalnız lisans ekranını gösterir;
+  eski sunucu bu sürede çalışmaya devam eder. (Eskiden talep gönderilir gönderilmez yeni sunucu tam açılıyordu;
+  bu, lisanssız kopyanın da açık kapısıydı.) Lisans ekranı talebin durumunu gösterir. **Etkinleştirilmiş
+  kurulumlar etkilenmez.**
+- **Lisans klasörü yanlış yerdeyse sunucu yalnız lisans ekranını açar.** Lisans klasörü program ya da yedek
+  klasörünün içine ayarlanmışsa, yazılamıyorsa ya da okunamıyorsa (ve veritabanındaki lisans izi bunu
+  karşılayamıyorsa) bu bir kurulum hatası sayılır: panel kırmızı uyarıyla yalnız lisans ekranını açar; yedek alma
+  ve verileri dışa aktarma açık kalır. Eskiden bu durumda lisans denetimi tümden devre dışı kalıyordu.
 - **Sunucu güncellemesi 5 dakika önceden duyurulur.** Panelden onaylanan sunucu güncellemesi hemen değil onaydan
   5 dk sonra başlar; bu sürede panel ve tabletlerde kalan süreyi gösteren bir şerit çıkar (yeni panel/tablet gerekir).
   Kurulum sırasındaki yaklaşık 1 dk kesintide yeni panel/tablet kaydı bekletir ve bağlantı gelince gönderir.
@@ -110,6 +119,16 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   kapanması ekranda ≤ 2 sn gecikebilir (30 sn'lik tur aynen).
 - Duruş cevabına üç ekleme: `signalKind`, `rawStopCode`, `collectorId` (elle duruşta `null`). Migration YOK.
 
+**Lisans güvenlik denetimi düzeltmeleri (Bölge 3)**
+
+- `78542d264` — B1: bekleyen taşıma talebi (imzasız `tasima.json`) kurulumu etkin SAYMAZ; etkinleştirme kilidi
+  yeni makinede sürer, bekleyen talebin durumu etkin olmayan kurulumda da yoklanır; panel kilit sayfasında taşıma
+  kartı + durum notu.
+- `d0cc71059` — B1 satıcı kolu (satıcı sunucusu ayrı yayın; bu pakete girmez): ≤2.15.5 fabrikadan gelen taşıma
+  talebi açılmaz (409 `TASIMA_SURUM_ESKI`); protokol hata kataloğuna kod (fabrika aynası + TR mesajı).
+- `7e4137228` — B2: kullanılamayan lisans deposu (program/yedek dizini içinde, yazılamaz, DB izsiz okunamaz) =
+  `KURULUM_HATASI` kilit sınıfı (yalnız korumalı derlemede); lisans ekranı + "verilerimi al" açık.
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -129,6 +148,11 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   derlemede hiç etkinleşmemiş (ya da kopya) kurulumda döner; `/api/license/durum` ve sağlık cevabına
   `etkinlestirmeKilidi` eklendi. Eski panel bu kodu tanımaz, genel hata gösterir — yeni kurulum eşleşen paneli
   (1.6.5) alır. Eski tablet 403'ü genel hata olarak gösterir.
+- **Kırıldı mı:** HAYIR (lisans denetimi B1/B2, etkin ve doğru kurulmuş kurulum için) — `etkinlestirmeKilidi`ne
+  yeni değer `KURULUM_HATASI` (403 `LICENSE_NOT_ACTIVATED` + `details.sinif`); eski panel bilinmeyen sınıfı
+  `ETKINLESMEDI` sayar ve etkinleştirme sayfasını açar (yedek/dışa aktarma kartını göstermez — yeni panel 1.6.5
+  gösterir). Satıcı hata kataloğuna `TASIMA_SURUM_ESKI` eklendi (fabrika yalnız mesajını tanır). Bekleyen taşıma
+  talebi olan ve henüz kodla etkinleşmemiş yeni makine bu sürümle kilitte kalır (bilerek).
 - **Kırıldı mı:** HAYIR (tezgah alarmı kısmı) — yalnız ekleme: ayar cevabında `tezgahAlarmNoShiftMode`,
   `tezgahAlarmUnclassifiedEnabled`; salon cevabında `alarmNotice`; yeni uç `GET /api/feature-flags/tezgah-alarm-shift-status`;
   yeni hata kodları `TEZGAH_ALARM_SHIFT_REQUIRED`, `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`. Eski panel yalnız
@@ -172,6 +196,11 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
     `docs/ops/SUPERADMIN-KURULUM.md` § MÜHÜRLEME). Hesabın parolası sorulur; parola sohbete, belgeye, günlüğe
     YAZILMAZ — komutu destek hesabının sahibi koşar. adnansahin bu sürümde mühürlenmez.
   - Mühürlemeden sonra lisans dizinindeki `sistem-hesabi-mandali.json` silinmez (silmek korumayı kaldırır).
+  - **Lisans klasörünün yerini güncellemeden ÖNCE ölç:** panel Sistem → Lisans → makine kartında "Lisans klasörü"
+    satırı bir sorun (program/yedek klasörünün içinde, okunamadı, yazılamadı) gösteriyorsa güncellemeden önce
+    düzeltilir; yoksa güncellemeden sonra yalnız lisans ekranı açılır (veri kaybı yok; yedek ve dışa aktarma açık).
+  - Taşıma talebi açık ama henüz taşıma koduyla etkinleşmemiş bir yeni sunucu bu sürümde lisans ekranında kalır:
+    talep portaldan onaylanır, iletilen taşıma kodu "internetle kod" alanına girilir.
   - Hiç etkinleştirilmemiş bir kurulum bu sürüme geçecekse ÖNCE portal → kurulum künyesi → "Lisans" sekmesi →
     "Etkinleştirme muafiyeti" (yalnız yönetici; fabrikanın lisans ekranındaki karekod metni) → dosya fabrikada
     "Portaldan aldığınız lisans ya da muafiyet dosyası" alanından yüklenir. Yoksa güncellemeden sonra yalnız lisans
@@ -203,4 +232,6 @@ Veriyi güncelleme öncesine döndürmek gerekirse otomatik yedekten geri yükle
   kurulumda hepsi boş.
 - `/api/admin/health` `sistemHesabiMuhru`: var olan (mühürlenmemiş) kurulumda `MUHURLENMELI`, mühürlemeden sonra
   `TAMAM`. Destek hesabı girişi mühürlemeden önce de sonra da çalışıyor.
+- `/api/admin/health` lisans bölümünde `etkinlestirmeKilidi` etkin kurulumda `YOK` (`KURULUM_HATASI` görünürse
+  lisans klasörü yanlış yerde — DUR, insana rapor et).
 - Hata günlüğünün son satırları — yeni hata var mı.

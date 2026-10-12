@@ -93,6 +93,16 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Sunucu güncellenecekse panelin üstünde 5 dakika önceden bir şerit çıkar: kaç dakika kaldığını yazar ve kaydedilmemiş işinizi kaydetmenizi ister. Sunucu güncellemesini onayladığınızda kurulum hemen değil 5 dakika sonra başlar; onay kartı bunu yazar. Güncelleme sırasında yaklaşık bir dakika sunucuya ulaşılamaz; şerit Sunucu güncelleniyor, yeniden bağlanıyor yazar ve Sunucuya ulaşılamıyor uyarısı çıkmaz. Bu sırada kaydettiğiniz iş kaybolmaz: panel bağlantı gelene dek bekler ve kaydı kendiliğinden gönderir, aynı kayıt iki kez oluşmaz. Sunucu 2.15.6 sürümüne geçmeden şerit çıkmaz, panel bugünkü gibi çalışır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Lisansı başka bir sunucuya taşırken yeni sunucunun lisans ekranında taşıma talebinin durumu görünür: talep onay bekliyorsa ya da onaylandıysa bunu söyler ve portaldan iletilen taşıma kodunun internetle kod alanına girileceğini hatırlatır. Yeni sunucu bu kod girilene kadar yalnız lisans ekranını açar; eski sunucu bu sürede çalışmaya devam eder."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sunucunun lisans klasörü yanlış yerdeyse (program ya da yedek klasörünün içinde) ya da okunamıyorsa panel girişten sonra kırmızı bir uyarıyla “Lisans klasörü kullanılamıyor — kurulum hatası” der ve sorunu yazar; bu durumda etkinleştirme seçenekleri gizlenir, yedek alma ve verileri dışa aktarma açık kalır. Kurulumu yapan yöneticinin lisans klasörünü düzeltmesi gerekir."
         }
       ]
     },

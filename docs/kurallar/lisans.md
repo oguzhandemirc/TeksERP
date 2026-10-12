@@ -371,3 +371,4 @@ Uçtan uca senaryolar (bekçi değil; dalga sonunda entegrasyon dalında, yalnı
 - 2026-10-11 · Güvenlik tehdit modeli: etkinleştirilmemiş kurulum yalnız etkinleştirme ekranı, yeni kurulum `kipAltSiniri` ile zorla, yalnız-okuma DB girişi, yedek emanet anahtarı kapatılabilir, TPM yok, repo satış öncesi private — `arsiv/2026-10.md`
 - 2026-10-12 · G1 sistem hesabı mührü: çekirdekte imzala/doğrula işlevleri, TS/Rust bayt-eşit mühür, güncelleyici 0.2.6 (ortak Cargo.lock) — `arsiv/2026-10.md`
 - 2026-10-12 · G2 etkinleştirme kilidi: korumalı derlemede etkinleşmemiş kurulum yalnız lisans ekranı, K1/K3/K5 sapmaları, kip kararı (BELIRSIZ gözlemde G3'e dek sınırsız), portal muafiyeti — `arsiv/2026-10.md`
+- 2026-10-12 · Lisans denetimi (Bölge 3): B1 bekleyen taşıma etkin saymaz + satıcı eski sürümden talep açmaz, B2 kullanılamayan depo = KURULUM_HATASI kilidi (G1 değişmedi), §10d/e iz kuyruğu yarışı; B3/B5/B6/B7 açık — `arsiv/2026-10.md`
