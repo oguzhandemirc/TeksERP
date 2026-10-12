@@ -102,6 +102,7 @@ export interface LoomFloorLoomDto {
   hallId: string;
   hallName: string;
   monitoringState: MachineMonitoringState;
+  collectorSilentSince: Date | null; // kart SESSİZ (D4) — dolu: son görülme; NULL = kart yok ya da canlı
   state: FloorLoomState;
   /** Durumun kaynağı (karne kovası): LIVE "olculen" · elle kayıt "elle" · "simule" · kayıt yok "cikarim" (= UNMONITORED). */
   stateSource: SourceBucket;
@@ -138,12 +139,10 @@ export interface LoomFloorDto {
 }
 
 const LOOM_SELECT = {
-  id: true,
-  code: true,
-  name: true,
-  productionLineCount: true,
+  id: true, code: true, name: true, productionLineCount: true,
   station: { select: { id: true, name: true } },
   machineSpec: { select: { monitoringState: true, nominalUnitsPerMin: true } },
+  collectorLinks: { select: { collector: { select: { silentSince: true, revokedAt: true } } } },
 } satisfies Prisma.MachineSelect;
 
 const STOP_SELECT = {
@@ -268,6 +267,7 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
       hallId: loom.station.id,
       hallName: loom.station.name,
       monitoringState,
+      collectorSilentSince: loom.collectorLinks.find((l) => l.collector.revokedAt === null)?.collector.silentSince ?? null,
       state: loomStateOf(stateSource, open !== null),
       stateSource,
       openStop: open ? openStopDto(open, src, ctx, ctx.now) : null,

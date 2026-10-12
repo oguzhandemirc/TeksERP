@@ -81,6 +81,20 @@ POST
   korunur (kart bunu bilgi olarak alır, yeniden denemez) · `409 STOP_END_CONFLICT` başka bir bitişle kapanmış ·
   `404 STOP_NOT_FOUND` bu anahtarla açılış yok · `400 STOP_END_BEFORE_START`.
 
+### `POST /api/machine-signals/heartbeat` — nabız
+
+Gövde `{}` (alan taşımaz). Kart duruş olmasa da en çok birkaç dakikada bir gönderir; sunucu `tezgah.collectorSilenceMinutes`
+(varsayılan 10 dk) boyunca hiçbir geçerli istek görmezse kartı "sessiz" sayar (uyarı — duruş açılmaz). Her geçerli imzalı
+istek (duruş, bitiş, nabız) kartı canlı sayar. Cevap `200 { data: { serverTime } }` (Unix sn).
+
+### Uzun açık duruş (watchdog)
+
+Kartın açtığı duruş `tezgah.maxOpenStopHours` (varsayılan 12 sa) içinde kapanmazsa sunucu onu GEÇİCİ kapatır
+(`endSource: WATCHDOG`, bitiş = başlangıç + eşik). Kartın sonradan gönderdiği `end` bunu BİR KEZ düzeltir (`200`); aynı
+bitişin tekrarı `200`, başka bitiş `409 STOP_END_CONFLICT`. Vardiya karnesi mühürlüyse `409 SHIFT_SEALED`
+(`details.lateEndQueued: true`): bitiş sunucuda bekletilir, mühür açılınca uygulanır — kart yeniden göndermez. Gerçek
+bitiş tezgahta sonradan açılmış başka bir duruşa taşıyorsa `409 STOP_OVERLAP`.
+
 ### Ortak hata cevapları
 
 | Kod | Anlam | Kart ne yapar |
@@ -122,6 +136,6 @@ x-collector-signature: d11b7c7c3f59095453c9eb76d06e93c4e1e545830d31a6fe09dae535f
 
 ## 6. Kapsam dışı (sonraki dilimler)
 
-- Uzun süre açık kalan duruşun geçici kapanışı (watchdog, D4) · panel ekranları: kart kaydı, kod eşleme, kaynak
+- Panel ekranları: kart kaydı, kod eşleme, kaynak
   rozeti, "Sebepsiz duruşta alarm" kapalıysa devreye alma uyarısı (D5) · toplu (çok kalemli) gönderim · sayaç
   telemetrisi. Backend'e seri port / donanım kodu girmez; kartın donanım tarafı bu belgenin dışındadır.

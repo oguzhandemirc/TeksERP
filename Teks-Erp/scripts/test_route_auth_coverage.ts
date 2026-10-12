@@ -125,6 +125,7 @@ const EXEMPT: Record<string, string> = {
   // ±5 dk damga, nonce tekrarı yok, HMAC sabit zamanlı), ardından tezgah kapsamı (403). Bekçi: test_makine_durus_kart.
   "POST /api/machine-signals/stop": "makine kartı duruş açılışı; kimlik kart imzası (verifyCollectorSignature), oturum değil",
   "POST /api/machine-signals/end": "makine kartı duruş kapanışı; kimlik kart imzası (verifyCollectorSignature), oturum değil",
+  "POST /api/machine-signals/heartbeat": "makine kartı nabzı (canlılık, D4 watchdog); kimlik kart imzası (verifyCollectorSignature), oturum değil",
 };
 
 /**

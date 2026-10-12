@@ -55,6 +55,7 @@ import type {
 import type { ApiResponse } from "../types/api.types";
 import type { StampResolution } from "./helpers/machine-run-open.helper";
 import { nudgeLoomAlarm } from "../jobs/loom-alarm.job";
+import { STOP_CORRECTED_MESSAGE, auditWatchdogCorrection, correctWatchdogCloseTx, rethrowSealedSignalEnd } from "./helpers/machine-stop-watchdog.helper";
 
 const TABLE = "MACHINE_STOP_EVENT";
 /** Açılış replay'inin cevap metni — toplu açılış "yeniden gönderim" satırını bununla ayırır. */
@@ -193,8 +194,9 @@ export async function closeManualStop(
 }
 
 /**
- * DURUŞ KAPANIŞININ TEK BOĞAZI — insanın "Çalıştı"sı ile makinenin "bitti" sinyali aynı claim'den geçer
- * (`endedAt IS NULL ∧ revokedAt IS NULL ∧ startedAt ≤ bitiş`); kim önce kapattıysa o kalır.
+ * DURUŞ KAPANIŞININ TEK BOĞAZI — insanın "Çalıştı"sı, makinenin "bitti" sinyali ve watchdog'un geçici kapanışı
+ * aynı claim'den geçer (`endedAt IS NULL ∧ revokedAt IS NULL ∧ startedAt ≤ bitiş`); kim önce kapattıysa o kalır.
+ * Tek istisna: WATCHDOG kapanışına gelen gerçek sinyal bitişi onu BİR KEZ düzeltir (`correctWatchdogCloseTx`).
  */
 export async function closeStopCore(stopId: string, ended: StampResolution, closer: StopCloser): Promise<ApiResponse<MachineStopDto>> {
   const warnings = ended.warning ? [ended.warning] : [];
@@ -208,13 +210,15 @@ export async function closeStopCore(stopId: string, ended: StampResolution, clos
     const rows = await tx.$queryRaw<Array<{ id: string }>>`
       UPDATE machine_stop_events
          SET "endedAt" = ${ended.value}, "endSource" = ${closer.endSource}::"MachineStopEndSource", "closedById" = ${closer.actorId}::uuid,
+             "provisionalEndedAt" = ${closer.endSource === MachineStopEndSource.WATCHDOG ? ended.value : null}::timestamptz,
              "durationSec" = GREATEST(0, EXTRACT(EPOCH FROM (${ended.value}::timestamptz - "startedAt")))::int,
              "updatedAt" = ${simdi}::timestamptz
        WHERE id = ${stopId}::uuid AND "endedAt" IS NULL AND "revokedAt" IS NULL AND "startedAt" <= ${ended.value}::timestamptz
        RETURNING id`;
     if (rows.length === 0) {
-      const fresh = await tx.machineStopEvent.findUniqueOrThrow({ where: { id: stopId }, select: { startedAt: true, endedAt: true, revokedAt: true, endSource: true } });
+      const fresh = await tx.machineStopEvent.findUniqueOrThrow({ where: { id: stopId }, select: { machineId: true, startedAt: true, endedAt: true, revokedAt: true, endSource: true, endCorrectedAt: true } });
       if (fresh.revokedAt) throw AppError.conflict("Bu duruş geri alınmış — kapatılamaz.", { code: "STOP_REVOKED", stopId, revokedAt: fresh.revokedAt });
+      if (await correctWatchdogCloseTx({ tx, stopId, fresh, closer, endedAt: ended.value, simdi })) return { stop: await loadStop(tx, stopId), replay: false, corrected: fresh.endedAt };
       if (fresh.endedAt && closer.endSource === MachineStopEndSource.SIGNAL) {
         return { stop: await loadStop(tx, stopId), replay: signalCloseConflict(stopId, { endedAt: fresh.endedAt, endSource: fresh.endSource }, ended.value) === "replay" };
       }
@@ -225,17 +229,19 @@ export async function closeStopCore(stopId: string, ended: StampResolution, clos
       throw AppError.conflict("Duruş az önce değişti — tekrar deneyin.", { code: "MACHINE_STOP_RACE", stopId });
     }
     return { stop: await loadStop(tx, stopId), replay: false };
-  });
+    // Mühürlü vardiyada kartın gerçek bitişi kaybolmaz: geciken kapanış kuyruğuna yazılır, 409 korunur.
+  }).catch((e: unknown) => rethrowSealedSignalEnd(e, stopId, ended.value, closer.endSource));
   if (out.replay) return { success: true, data: out.stop, message: STOP_CLOSE_REPLAY_MESSAGE };
 
   const closed = out.stop;
-  await AuditService.log({
+  if ("corrected" in out) await auditWatchdogCorrection(closed, out.corrected);
+  else await AuditService.log({
     userId: closer.actorId ?? undefined, action: "UPDATE", tableName: TABLE, recordId: closed.id,
     changes: [{ field: "endedAt", old: null, new: closed.endedAt }, { field: "durationSec", old: null, new: closed.durationSec }],
   }).catch(() => undefined);
 
   nudgeLoomAlarm();
-  return { success: true, data: closed, message: "Duruş kapatıldı", ...(warnings.length ? { warnings } : {}) };
+  return { success: true, data: closed, message: "corrected" in out ? STOP_CORRECTED_MESSAGE : "Duruş kapatıldı", ...(warnings.length ? { warnings } : {}) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

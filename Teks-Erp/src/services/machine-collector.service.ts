@@ -28,6 +28,8 @@ export const COLLECTOR_PUBLIC_SELECT = {
   status: true,
   isActive: true,
   secretIssuedAt: true,
+  lastSeenAt: true,
+  silentSince: true,
   revokedAt: true,
   revokedById: true,
   createdAt: true,

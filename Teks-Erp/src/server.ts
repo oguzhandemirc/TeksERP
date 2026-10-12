@@ -22,6 +22,7 @@ import { startExchangeRateScheduler } from './jobs/exchange-rate.job';
 import { startShiftCalendarScheduler } from './jobs/shift-calendar.job';
 import { startShiftCloseScheduler } from './jobs/machine-shift-close.job';
 import { startLoomAlarmScheduler } from './jobs/loom-alarm.job';
+import { startMachineWatchdogScheduler } from './jobs/machine-watchdog.job';
 import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
@@ -186,9 +187,7 @@ function startLanListener(): Server {
     // kapatılan bir kurulumda banner var olmayan bir adresi duyururdu — küçük ama
     // teşhisi zaman yiyen bir yalan. Değişken yokken ifade birebir aynı sonucu verir.
     const hardening = readWebHardeningConfig();
-    if (hardening.swaggerEnabled) {
-        satir(`  Swagger: http://localhost:${PORT}/api-docs`);
-    }
+    if (hardening.swaggerEnabled) satir(`  Swagger: http://localhost:${PORT}/api-docs`);
     // Sertleştirme yalnız BEYAN EDİLDİĞİNDE basılır — fabrika konsolu birebir
     // bugünkü gibi kalsın diye. Basıldığında da sessiz varsayım bırakmaz:
     // operatör hangi korumanın açık olduğunu tek bakışta görür (özellikle
@@ -271,8 +270,8 @@ function startLanListener(): Server {
     if (!VERIFYING) startShiftCalendarScheduler();
     // Kapanan vardiya × tezgah karnesi (M2) — aynı bayrak, aynı sıfır fark.
     if (!VERIFYING) startShiftCloseScheduler();
-    // Dokuma alarm motoru: `tezgah.alarmEnabled` KAPALIYKEN tur no-op — alarm satırı doğmaz.
-    if (!VERIFYING) startLoomAlarmScheduler();
+    // Alarm motoru `tezgah.alarmEnabled` KAPALIYKEN, kart watchdog'u (D4) tezgah ∨ dokuma kapalıyken tur no-op.
+    if (!VERIFYING) { startLoomAlarmScheduler(); startMachineWatchdogScheduler(); }
     // Lisans yoklaması + kapı zili: kurulum etkinleşmemişse ya da satıcı adresi kapalıysa
     // (`LICENSE_SERVER_URL=kapali`) DIŞARI HİÇ İSTEK ATILMAZ; motor gözlem kipinde (hiçbir istek engellenmez).
     // Doğrulama kipinde motor yalnız YEREL ölçümü koşar (bütünlük dahil — `/health/yerel`in `lisans`ı), yoklamaz.

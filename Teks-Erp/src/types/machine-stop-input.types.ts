@@ -66,6 +66,7 @@ export interface OpenStopCoreInput {
 
 /** Kapanışı kim yaptı — insan (`OPERATOR`, kişi zorunlu değil) ya da makine sinyali (`SIGNAL`, kişi yok). */
 export interface StopCloser {
-  endSource: Extract<MachineStopEndSource, "OPERATOR" | "SIGNAL">;
+  /** WATCHDOG yalnız watchdog job'u (geçici kapanış, `provisionalEndedAt` aynı değerle damgalanır). */
+  endSource: Extract<MachineStopEndSource, "OPERATOR" | "SIGNAL" | "WATCHDOG">;
   actorId: string | null;
 }

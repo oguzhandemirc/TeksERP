@@ -21,6 +21,7 @@ import { AuditService } from "../services/audit.service";
 import { getOffsiteHealth } from "../services/helpers/offsite-backup.helper";
 import { isBackupFileName, NIGHTLY_PREFIX } from "../services/helpers/backup-naming.helper";
 import { seriesExhaustionWarnings } from "../services/helpers/series-exhaustion.helper";
+import { readMachineWatchdogCounters } from "../services/machine-watchdog.service";
 import { masterDataArchiveHealthSnapshot } from "../services/helpers/master-data-health.helper";
 import { licenseHealthBlock } from "./license/license-health";
 import { compareBackupCryptoIntent, type BackupCryptoIntent } from "./backup-crypto/intent";
@@ -373,6 +374,8 @@ export async function buildRichHealth(): Promise<Record<string, unknown>> {
     message: "TeksERP API is running.",
     api: "UP",
     db,
+    // Kart watchdog'u (D4): sessiz kart · geciken kapanış kuyruğu — `null` = okunamadı (sıfır DEĞİL).
+    machineWatchdog: await readMachineWatchdogCounters().catch(() => null),
     version: APP_VERSION,
     time: new Date().toISOString(),
     uptimeSec: Math.floor(process.uptime()),

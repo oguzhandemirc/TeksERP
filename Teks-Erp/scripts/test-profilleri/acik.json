@@ -57,6 +57,8 @@
     "tezgahAlarmEnabled": true,
     "tezgahAlarmUnclassifiedTargetMinutes": 15,
     "tezgahAlarmRenotifyMinutes": 10,
+    "tezgahMaxOpenStopHours": 12,
+    "tezgahCollectorSilenceMinutes": 10,
     "tezgahAlarmUnclassifiedEnabled": true,
     "tezgahAlarmEscalateWhenAcked": true,
     "tezgahAlarmNoShiftMode": "ALWAYS",

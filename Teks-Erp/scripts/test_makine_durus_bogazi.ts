@@ -143,14 +143,25 @@ function statikBolum(): void {
   const yorumsuz = (f: string) => readFileSync(f, "utf8").replace(/^\s*(\/\/|\*).*$/gm, "");
   const create: string[] = [];
   const kapanis: string[] = [];
+  const duzeltme: string[] = [];
   for (const f of tsFiles(join(kok, "src"))) {
     const s = yorumsuz(f);
     for (const _ of s.matchAll(/machineStopEvent\s*\.\s*(create|createMany|upsert)\s*\(/g)) create.push(relative(kok, f));
-    for (const t of s.matchAll(/`[^`]*`/g)) if (/UPDATE\s+"?machine_stop_events"?/i.test(t[0]) && /"endedAt"\s*=/.test(t[0])) kapanis.push(relative(kok, f));
+    for (const t of s.matchAll(/`[^`]*`/g)) {
+      if (!(/UPDATE\s+"?machine_stop_events"?/i.test(t[0]) && /"endedAt"\s*=/.test(t[0]))) continue;
+      // İki meşru biçim: kapanış claim'i (`"endedAt" IS NULL`) ve WATCHDOG düzeltmesi (D4, `'WATCHDOG'` yüklemi).
+      if (/'WATCHDOG'/.test(t[0]) && !/"endedAt"\s+IS\s+NULL/i.test(t[0])) duzeltme.push(relative(kok, f));
+      else kapanis.push(relative(kok, f));
+    }
   }
   const sahip = "src/services/machine-stop.service.ts";
   check("§7a duruş satırını yaratan tek yer çekirdek (machine-stop.service, bir kez)", create.length === 1 && create[0] === sahip, create.join(", ") || "yok");
   check("§7b kapanış UPDATE'i tek yer (machine-stop.service, bir kez)", kapanis.length === 1 && kapanis[0] === sahip, kapanis.join(", ") || "yok");
+  // Düzeltme UPDATE'i servisin satır tavanı yüzünden yardımcıda; yardımcıyı yalnız çekirdek çağırır (§7b3).
+  const duzeltmeSahibi = "src/services/helpers/machine-stop-watchdog.helper.ts";
+  check("§7b2 WATCHDOG düzeltme UPDATE'i tek yer (machine-stop-watchdog.helper, bir kez)", duzeltme.length === 1 && duzeltme[0] === duzeltmeSahibi, duzeltme.join(", ") || "yok");
+  const cagiran = tsFiles(join(kok, "src")).filter((f) => /correctWatchdogCloseTx\(/.test(yorumsuz(f))).map((f) => relative(kok, f)).filter((f) => f !== duzeltmeSahibi);
+  check("§7b3 düzeltme yardımcısını yalnız çekirdek çağırır (machine-stop.service)", cagiran.length === 1 && cagiran[0] === sahip, cagiran.join(", ") || "yok");
   const sinyal = yorumsuz(join(kok, "src/services/machine-stop-signal.service.ts"));
   const yazar = /machineStopEvent\s*\.\s*(create|createMany|update|updateMany|upsert|delete|deleteMany)\s*\(|\$executeRaw|\$queryRaw/.test(sinyal);
   check("§7c sinyal servisi DB'ye yazmaz, çekirdeği çağırır", !yazar && /openStopCore\(/.test(sinyal) && /closeStopCore\(/.test(sinyal));

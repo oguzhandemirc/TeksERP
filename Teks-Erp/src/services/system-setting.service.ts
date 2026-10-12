@@ -256,6 +256,10 @@ export const SETTING_KEYS = {
   TEZGAH_ALARM_UNCLASSIFIED_ENABLED: "tezgah.alarm.unclassifiedEnabled",
   /** [PROFİL] Üstlenilmemiş alarmın yeniden ses/bildirim aralığı (dk) — yalnız görüntü/push, satır yazmaz. */
   TEZGAH_ALARM_RENOTIFY_MINUTES: "tezgah.alarm.renotifyMinutes",
+  /** [PROFİL] Kart duruşu bu kadar saat açık kalırsa watchdog GEÇİCİ kapatır (`endSource = WATCHDOG`). */
+  TEZGAH_MAX_OPEN_STOP_HOURS: "tezgah.maxOpenStopHours",
+  /** [PROFİL] Kart bu kadar dakika imzalı istek göndermezse "sessiz" sayılır (uyarı; duruş açmaz). */
+  TEZGAH_COLLECTOR_SILENCE_MINUTES: "tezgah.collectorSilenceMinutes",
   /** [PROFİL] Üstlenilmiş alarm da üst kademeye (K2) çıksın mı. Varsayılan AÇIK: üstlenmek
    *  K2'yi durdurmaz (motor bu bayrakla doğar; kapalıyken üstlenilmiş alarm K2'de bekler). */
   TEZGAH_ALARM_ESCALATE_WHEN_ACKED: "tezgah.alarm.escalateWhenAcked",
@@ -947,6 +951,12 @@ export const TEZGAH_ALARM_UNCLASSIFIED_TARGET_MAX = 1440;
 /** Alarm tekrar aralığı (dk): varsayılan 10, 1..120. */
 export const DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES = 10;
 export const TEZGAH_ALARM_RENOTIFY_MINUTES_MAX = 120;
+/** Kart duruşu watchdog eşiği (sa): varsayılan 12, 1..168. Yalnız kart duruşuna dokunur (insan duruşu hiç). */
+export const DEFAULT_TEZGAH_MAX_OPEN_STOP_HOURS = 12;
+export const TEZGAH_MAX_OPEN_STOP_HOURS_MAX = 168;
+/** Kart sessizlik eşiği (dk): varsayılan 10, 1..1440. Yalnız onaylı karta bakar. */
+export const DEFAULT_TEZGAH_COLLECTOR_SILENCE_MINUTES = 10;
+export const TEZGAH_COLLECTOR_SILENCE_MINUTES_MAX = 1440;
 export const SHIPPING_SACK_SEQ_START_MAX = 999;
 
 /**
@@ -1686,6 +1696,10 @@ export interface FeatureFlags {
   tezgahAlarmUnclassifiedEnabled: boolean;
   /** Alarm tekrar aralığı (dk, varsayılan 10; 1–120). */
   tezgahAlarmRenotifyMinutes: number;
+  /** Kart duruşu geçici kapanış eşiği (sa, varsayılan 12; 1–168). */
+  tezgahMaxOpenStopHours: number;
+  /** Kart sessizlik eşiği (dk, varsayılan 10; 1–1440). */
+  tezgahCollectorSilenceMinutes: number;
   /** Üstlenilmiş alarm da üst kademeye çıkar (varsayılan AÇIK). */
   tezgahAlarmEscalateWhenAcked: boolean;
   /** Vardiyasız zamanda alarm: WARN (varsayılan) · ALWAYS · REQUIRE_SHIFT. */
@@ -2281,6 +2295,8 @@ export class SystemSettingService {
       tezgahAlarmUnclassifiedTargetMinutes: await readTezgahAlarmUnclassifiedTargetMinutes(cacheClient),
       tezgahAlarmUnclassifiedEnabled: await readTezgahAlarmUnclassifiedEnabled(cacheClient),
       tezgahAlarmRenotifyMinutes: await readTezgahAlarmRenotifyMinutes(cacheClient),
+      tezgahMaxOpenStopHours: await readTezgahMaxOpenStopHours(cacheClient),
+      tezgahCollectorSilenceMinutes: await readTezgahCollectorSilenceMinutes(cacheClient),
       tezgahAlarmEscalateWhenAcked: await readTezgahAlarmEscalateWhenAcked(cacheClient),
       tezgahAlarmNoShiftMode: await readTezgahAlarmNoShiftMode(cacheClient),
       shippingSackSeqShowTotal: await readShippingSackSeqShowTotal(cacheClient),
@@ -2486,7 +2502,7 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "license"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -2494,6 +2510,10 @@ export class SystemSettingService {
       tezgahEscalationGraceMinutes?: number | null;
       /** null = varsayılana dön (10 dk). */
       tezgahAlarmRenotifyMinutes?: number | null;
+      /** null = varsayılana dön (12 sa). */
+      tezgahMaxOpenStopHours?: number | null;
+      /** null = varsayılana dön (10 dk). */
+      tezgahCollectorSilenceMinutes?: number | null;
       financeInvoiceQtyTolerancePct?: number | null;
       financeInvoicePriceTolerancePct?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
@@ -3530,6 +3550,20 @@ export class SystemSettingService {
         throw AppError.badRequest(`Alarm tekrar aralığı 1 ile ${TEZGAH_ALARM_RENOTIFY_MINUTES_MAX} dakika arasında tam sayı olmalı`);
       }
       await this.set(SETTING_KEYS.TEZGAH_ALARM_RENOTIFY_MINUTES, v ?? DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES, "Üstlenilmemiş tezgah alarmının yeniden bildirim aralığı (dk)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahMaxOpenStopHours")) {
+      const v = input.tezgahMaxOpenStopHours;
+      if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > TEZGAH_MAX_OPEN_STOP_HOURS_MAX)) {
+        throw AppError.badRequest(`Açık kart duruşu sınırı 1 ile ${TEZGAH_MAX_OPEN_STOP_HOURS_MAX} saat arasında tam sayı olmalı`);
+      }
+      await this.set(SETTING_KEYS.TEZGAH_MAX_OPEN_STOP_HOURS, v ?? DEFAULT_TEZGAH_MAX_OPEN_STOP_HOURS, "Kart duruşu bu kadar saat açık kalırsa geçici kapatılır (sa)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahCollectorSilenceMinutes")) {
+      const v = input.tezgahCollectorSilenceMinutes;
+      if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > TEZGAH_COLLECTOR_SILENCE_MINUTES_MAX)) {
+        throw AppError.badRequest(`Kart sessizlik eşiği 1 ile ${TEZGAH_COLLECTOR_SILENCE_MINUTES_MAX} dakika arasında tam sayı olmalı`);
+      }
+      await this.set(SETTING_KEYS.TEZGAH_COLLECTOR_SILENCE_MINUTES, v ?? DEFAULT_TEZGAH_COLLECTOR_SILENCE_MINUTES, "Kart bu kadar dakika istek göndermezse sessiz sayılır (dk)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmNoShiftMode")) {
       const v = input.tezgahAlarmNoShiftMode;
@@ -5699,6 +5733,18 @@ export async function readTezgahAlarmRenotifyMinutes(tx?: Pick<typeof prisma, "s
   if (!setting) return DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES;
   const n = asNumber(setting.value);
   return n === null || !Number.isInteger(n) || n < 1 || n > TEZGAH_ALARM_RENOTIFY_MINUTES_MAX ? DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES : n;
+}
+export async function readTezgahMaxOpenStopHours(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_MAX_OPEN_STOP_HOURS }, select: { value: true } });
+  if (!setting) return DEFAULT_TEZGAH_MAX_OPEN_STOP_HOURS;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isInteger(n) || n < 1 || n > TEZGAH_MAX_OPEN_STOP_HOURS_MAX ? DEFAULT_TEZGAH_MAX_OPEN_STOP_HOURS : n;
+}
+export async function readTezgahCollectorSilenceMinutes(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_COLLECTOR_SILENCE_MINUTES }, select: { value: true } });
+  if (!setting) return DEFAULT_TEZGAH_COLLECTOR_SILENCE_MINUTES;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isInteger(n) || n < 1 || n > TEZGAH_COLLECTOR_SILENCE_MINUTES_MAX ? DEFAULT_TEZGAH_COLLECTOR_SILENCE_MINUTES : n;
 }
 export async function readPackingPoolPackageNo(tx?: Pick<typeof prisma, "systemSetting">): Promise<PackingPoolPackageNo> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.PACKING_POOL_PACKAGE_NO }, select: { value: true } });

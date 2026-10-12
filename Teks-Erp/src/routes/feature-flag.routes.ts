@@ -440,6 +440,8 @@ export const updateSchema = z.strictObject({
   tezgahAlarmUnclassifiedTargetMinutes: z.number().int().min(1).max(1440).nullable().optional(),
   tezgahAlarmUnclassifiedEnabled: z.boolean().optional(),
   tezgahAlarmRenotifyMinutes: z.number().int().min(1).max(120).nullable().optional(),
+  tezgahMaxOpenStopHours: z.number().int().min(1).max(168).nullable().optional(),
+  tezgahCollectorSilenceMinutes: z.number().int().min(1).max(1440).nullable().optional(),
   tezgahAlarmEscalateWhenAcked: z.boolean().optional(),
   // Vardiyasız zamanda alarm: WARN (varsayılan, uyar) · ALWAYS (7/24) · REQUIRE_SHIFT (vardiyasız açılmasın).
   tezgahAlarmNoShiftMode: z.enum(["WARN", "ALWAYS", "REQUIRE_SHIFT"]).optional(),

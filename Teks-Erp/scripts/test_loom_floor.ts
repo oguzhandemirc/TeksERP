@@ -258,7 +258,7 @@ async function govde(): Promise<void> {
   check("§5b fabrika günü başı = factoryDayStart(now) · üst pay o anki ayar (3)", d.factoryDayStart.getTime() === gunBasi.getTime() && d.graceMinutes === 3);
   const t = (id: string) => d.looms.find((l) => l.id === id)!;
   const l1 = t(duran);
-  check("§5c tezgah şekli", !!l1 && anahtar(l1) === "beams,code,hallId,hallName,id,job,monitoringState,name,openRuns,openStop,productionLineCount,recentStops,source,state,stateSource,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
+  check("§5c tezgah şekli", !!l1 && anahtar(l1) === "beams,code,collectorSilentSince,hallId,hallName,id,job,monitoringState,name,openRuns,openStop,productionLineCount,recentStops,source,state,stateSource,targetUnitsPerMin,today", l1 ? anahtar(l1) : "yok");
   check("§5d openStop şekli", !!l1?.openStop && anahtar(l1.openStop) === "alarmId,clockStartedAt,escalationDueAt,graceMinutes,id,lossClass,openedByName,reasonCode,reasonLabel,requiresReason,source,startedAt,targetMinutes,tier", l1?.openStop ? anahtar(l1.openStop) : "yok");
   check("§5e LIVE + açık duruş → STOPPED, açık duruş Z, kaynak ölçülen", l1?.state === "STOPPED" && l1.openStop?.id === Z.data.id && l1.stateSource === "olculen");
   check("§5f kademe DONMUŞ hedeften: 30 dk ≥ 10 → OVERDUE (katalog 45 olsa WITHIN olurdu) · iletim anı +10+7",

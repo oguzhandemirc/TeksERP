@@ -7,16 +7,27 @@
 // Protokol (donanım ekibi): docs/design/MAKINE-KART-PROTOKOLU.md.
 // =============================================================================
 import { MachineDataSource, MachineSignalKind } from "@prisma/client";
-import { Router, type Request } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { AppError } from "../utils/app-error";
 import { verifyCollectorSignature } from "../middlewares/collector-auth.middleware";
 import { requireDokumaEnabled, requireTezgahEnabled } from "../middlewares/module.middleware";
 import { STOP_REPLAY_MESSAGE } from "../services/machine-stop.service";
 import { STOP_CLAIM_MESSAGE, closeMachineStop, openMachineStop } from "../services/machine-stop-signal.service";
+import { touchCollectorLiveness } from "../services/machine-watchdog.service";
 
 const router = Router();
-router.use(verifyCollectorSignature, requireTezgahEnabled, requireDokumaEnabled);
+
+/** Canlılık (D4) — yalnız imza VE modül kapıları geçtikten sonra; kapalı modülde kart "görülmüş" sayılmaz. */
+async function collectorSeen(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (req.collector) await touchCollectorLiveness(req.collector.id);
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+router.use(verifyCollectorSignature, requireTezgahEnabled, requireDokumaEnabled, collectorSeen);
 
 const stamp = z.string().datetime({ offset: true, message: "Zaman ISO 8601 biçiminde olmalı (örn. 2026-10-12T08:15:00Z)." });
 
@@ -80,18 +91,41 @@ router.post("/stop", async (req, res, next) => {
 
 /**
  * @openapi
+ * /api/machine-signals/heartbeat:
+ *   post:
+ *     tags: [MachineSignals]
+ *     summary: Kart nabzı — duruş yokken de kartın canlı olduğunu bildirir (gövde `{}`)
+ *     security: [{ collectorSignature: [] }]
+ *     responses:
+ *       200: { description: Kart görüldü; sunucu saati döner }
+ *       400: { description: Gövdede alan var }
+ *       401: { description: Kart imzası doğrulanamadı }
+ *       403: { description: MODULE_DISABLED (tezgah ya da dokuma kapalı) }
+ *       429: { description: COLLECTOR_RATE_LIMITED }
+ */
+router.post("/heartbeat", (req, res, next) => {
+  try {
+    z.object({}).strict().parse(req.body ?? {});
+    res.json({ success: true, data: { serverTime: Math.floor(Date.now() / 1000) } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
  * /api/machine-signals/end:
  *   post:
  *     tags: [MachineSignals]
  *     summary: Kart duruşun bittiğini gördü — duruşu KAPAT (endSource SIGNAL)
  *     security: [{ collectorSignature: [] }]
  *     responses:
- *       200: { description: Kapatıldı ya da aynı bitişin tekrarı }
+ *       200: { description: Kapatıldı · aynı bitişin tekrarı · watchdog'un geçici kapanışı gerçek bitişle düzeltildi (bir kez) }
  *       400: { description: Tanınmayan alan · biçim · STOP_END_BEFORE_START }
  *       401: { description: Kart imzası doğrulanamadı }
  *       403: { description: MACHINE_NOT_IN_SCOPE · MODULE_DISABLED (tezgah ya da dokuma kapalı) }
  *       404: { description: STOP_NOT_FOUND }
- *       409: { description: STOP_CLOSED_BY_OPERATOR · STOP_END_CONFLICT · STOP_REVOKED }
+ *       409: { description: STOP_CLOSED_BY_OPERATOR · STOP_END_CONFLICT · STOP_REVOKED · STOP_OVERLAP · SHIFT_SEALED (geçici kapanışın düzeltmesi mühürlü vardiyada — lateEndQueued, mühür açılınca uygulanır) }
  *       429: { description: COLLECTOR_RATE_LIMITED }
  */
 router.post("/end", async (req, res, next) => {

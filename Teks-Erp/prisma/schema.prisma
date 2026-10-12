@@ -2254,6 +2254,11 @@ model MachineCollector {
   installationId String? @db.VarChar(64)
   clockSkewMs    Int?
 
+  /// CANLILIK (D4) — son geçerli imzalı istek; 30 sn kısıtlı yazılır, watchdog'un sessizlik kararına girer.
+  lastSeenAt  DateTime? @db.Timestamptz
+  /// SESSİZLİK DURUMU — dolu = kart sessiz (değer: son görülme anı). Yazarı watchdog claim'i, temizleyeni kartın ilk geçerli isteği.
+  silentSince DateTime? @db.Timestamptz
+
   /// GERİ ALMA — toplayıcı hard delete EDİLMEZ, damgalanır; bu yüzden ona
   /// bakan FK'lar `Restrict` olsa da ölçümü kilitlemez.
   revokedAt   DateTime? @db.Timestamptz
@@ -2361,6 +2366,9 @@ model MachineStopEvent {
   endSource          MachineStopEndSource?
   /// İleri damga null'lanmaz; düzeltme YENİ damga ekler.
   endCorrectedAt     DateTime?             @db.Timestamptz
+  /// GECİKEN KAPANIŞ — WATCHDOG kapanışına gelen gerçek bitiş vardiya mühürlü olduğu için uygulanamadı;
+  /// mühür açılınca watchdog uygular. Kuyruk: `endSource = WATCHDOG ∧ lateEndedAt ∧ endCorrectedAt IS NULL`.
+  lateEndedAt        DateTime?             @db.Timestamptz
 
   /// BU DURUŞ HANGİ LEVENT YUVASINDA DOĞDU? NULL = bilinmiyor ve Pareto onu
   /// "atanmamış" kovasında AYRI gösterir — tahminle bir levende YAZILMAZ.
