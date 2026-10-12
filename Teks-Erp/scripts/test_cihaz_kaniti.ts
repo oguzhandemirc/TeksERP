@@ -7,7 +7,8 @@
  */
 import prisma from "../src/lib/prisma"; // İLK import: dotenv → DATABASE_URL
 import http from "node:http";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AuthService } from "../src/services/auth.service";
 import { ShortCredentialService } from "../src/services/short-credential.service";
@@ -19,7 +20,8 @@ import { resetLoginLockout, flushLoginLockoutPersistence } from "../src/middlewa
 import {
   buildDeviceProof, verifyDeviceProof, deriveDeviceSecret, newProofSalt, DEVICE_PROOF_SKEW_MS,
 } from "../src/lib/device-proof";
-import { getShortCredentialKeyRing } from "../src/lib/short-credential/keyring";
+import { getShortCredentialKeyRing, setShortCredentialKeyDirForTests } from "../src/lib/short-credential/keyring";
+import { fixtureHedefEngeli } from "./lib/hedef-db-kapisi";
 import { INSTALL_CLASS_ENV } from "../src/services/helpers/install-class.helper";
 
 let gecti = 0;
@@ -89,12 +91,13 @@ function sStatik(): void {
 }
 
 async function main(): Promise<void> {
-  const url = process.env.DATABASE_URL ?? "";
-  const db = url.split("/").pop()?.split("?")[0] ?? "";
-  if (!db.endsWith("_test")) {
-    console.error(`HEDEF RED: DB adı _test ile bitmiyor (${db})`);
+  const engel = fixtureHedefEngeli();
+  if (engel) {
+    console.error(`HEDEF RED: ${engel}`);
     process.exit(2);
   }
+  // CI'da LICENSE_DIR yok: halka geçici dizinde doğar (fabrikanın halkasına dokunulmaz).
+  setShortCredentialKeyDirForTests(mkdtempSync(join(tmpdir(), "cihaz-kaniti-halka-")));
   delete process.env[INSTALL_CLASS_ENV];
   delete process.env.RATE_LIMIT_ENABLED;
 

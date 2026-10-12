@@ -33,7 +33,7 @@ if (-not $parmakIzi) {
   Write-Output "KODIMZA: UYARI kod imzası sertifikası yok — $ad imzasız kalır (SmartScreen 'bilinmeyen yayıncı')"
   exit 0
 }
-$parmakIzi = ($parmakIzi -replace '[^0-9A-Fa-f]', '').ToUpperInvariant()
+$parmakIzi = ($parmakIzi -creplace '[^0-9A-Fa-f]', '').ToUpperInvariant()
 if ($parmakIzi.Length -ne 40) { Write-Output "KODIMZA: HATA parmak izi 40 onaltılık hane değil"; exit 1 }
 if (-not $zaman) { $zaman = $VarsayilanZamanDamgasi }
 

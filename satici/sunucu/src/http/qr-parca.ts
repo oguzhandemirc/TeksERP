@@ -53,7 +53,7 @@ const SHA256_K = [
 ];
 
 /** UTF-8 baytları; eşsiz vekil U+FFFD olur (TextEncoder ve Node ile aynı). Hermes'te TextEncoder'a dayanmaz. */
-function utf8Bytes(text: string): number[] {
+export function utf8Bytes(text: string): number[] {
   const out: number[] = [];
   for (let i = 0; i < text.length; i++) {
     let c = text.charCodeAt(i);
@@ -77,7 +77,17 @@ const rotr = (x: number, n: number): number => (x >>> n) | (x << (32 - n));
 
 /** Saf SHA-256 (onaltılık) — tablette WebCrypto yok; üç istemcide aynı sonuç için tek uygulama. */
 export function sha256Hex(text: string): string {
-  const bytes = utf8Bytes(text);
+  return sha256Words(utf8Bytes(text)).map((x) => x.toString(16).padStart(8, "0")).join("");
+}
+
+/** Bayt dizisinin SHA-256'sı (32 bayt) — HMAC'in iç/dış özetleri bunu kullanır. */
+export function sha256Bytes(input: readonly number[]): number[] {
+  const out: number[] = [];
+  for (const x of sha256Words([...input])) out.push((x >>> 24) & 255, (x >>> 16) & 255, (x >>> 8) & 255, x & 255);
+  return out;
+}
+
+function sha256Words(bytes: number[]): number[] {
   const bitLen = bytes.length * 8;
   bytes.push(0x80);
   while (bytes.length % 64 !== 56) bytes.push(0);
@@ -113,7 +123,7 @@ export function sha256Hex(text: string): string {
     const next = [a, b, c, d, e, f, g, hh];
     for (let i = 0; i < 8; i++) h[i] = ((h[i] ?? 0) + (next[i] ?? 0)) >>> 0;
   }
-  return h.map((x) => x.toString(16).padStart(8, "0")).join("");
+  return h;
 }
 
 const shortHash = (text: string): string => sha256Hex(text).slice(0, HASH_PREFIX_LEN);
