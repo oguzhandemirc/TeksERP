@@ -92,5 +92,15 @@ check(
   /\[string\]\$Surum/.test(paketle),
 );
 
+console.log("\n=== §5 Sürüm commit'inde --uygula (gerçek kip derlemesi) ===");
+// Sürüm commit'i package.json'ı zaten hedef sürüme taşır; paketle.ps1 aynı sürümle `--uygula` çağırır. Eşitlik
+// "yazılamadı" sayılırsa gerçek Windows derlemesi (korumali-thinkpad --kip gercek) sürüm commit'inde DÜŞER.
+{
+  const once = fs.readFileSync(PKG, "utf8");
+  let cikis = 0;
+  try { kos("--uygula", "--surum", pkgSurum); } catch (e) { cikis = (e as { status?: number }).status ?? 1; }
+  check("aynı sürümle --uygula → çıkış 0, package.json bayt-eşit kalır", cikis === 0 && fs.readFileSync(PKG, "utf8") === once, `çıkış ${cikis}`);
+}
+
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
 process.exit(kaldi > 0 ? 1 : 0);

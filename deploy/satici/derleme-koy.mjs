@@ -11,8 +11,14 @@
 //     yardımcı konteynerde `install -m 0644 -o <dizin sahibi>` gizli ada + `ln` (var olanı EZMEZ, atomik yayın) →
 //     özet ölçümü → geçici dizin silinir → yeniden ölçüm (satıcı konteyneri görüyor mu) → vds-dogrula (sonra, öncekiyle AYNI).
 // Aynı adlı dosya: içerik AYNIYSA dokunulmaz (iş yok), FARKLIYSA DUR — hiçbir dosya yazılmaz, üstüne yazılmaz.
+// KALDIRMA (`--kaldir <ad>` · `--yenile`): dosya yalnız AKTİF (süresi dolmamış, IPTAL olmayan) indirme bağlantısı ona
+//   işaret etmiyorsa (satıcı DB'si, salt okuma; uygulamada yeniden ölçülür) ve önce Mac arşivine (`--arsiv`, varsayılan
+//   ~/.tekserp/arsiv/derlemeler) uzaktakiyle sha256-EŞİT indirildikten sonra yardımcı konteynerde `sha256sum -c` + `rm`
+//   ile kalkar. `--kaldir`da aktif bağlantı DUR'dur; `--yenile` (yeni arşivi koy + depodaki öteki TeksERP-Kurulum-*.zip'leri
+//   arşivle-kaldır) aktif bağlantılı eskiyi KORUR ve raporlar (bağlantı donmuş sha'yla iner, dosya kalkarsa 410 olur).
 //
-//   node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <yerel> [--dosya <yerel> …] [--uygula]
+//   node deploy/satici/derleme-koy.mjs --ortam uretim --dosya <yerel> [--dosya <yerel> …] [--yenile] [--arsiv <dizin>] [--uygula]
+//   node deploy/satici/derleme-koy.mjs --ortam uretim --kaldir <ad> [--kaldir <ad> …] [--arsiv <dizin>] [--uygula]
 //
 // ÇIKIŞ: 0 tamam (KURU: denetim temiz + plan · UYGULA: yazıldı ve ölçüldü) · 1 DUR · 2 ÖLÇÜLEMEDİ / kullanım.
 // Belge: docs/ops/SATICI-KURULUM.md §14 · bekçi: node scripts/test_derleme_koy.mjs
@@ -32,10 +38,13 @@ const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..
 const VDS_DOGRULA = path.join(KOK, 'deploy', 'vds-dogrula.sh');
 // Yerleşim: SATICI-KURULUM.md §13 (`K=`) + ornek*.env DERLEME_DIZINI_HOST; gerçek bağ her koşumda ölçülür.
 export const ORTAMLAR = Object.freeze({
-  uretim: Object.freeze({ kok: '/opt/stack/apps/tekserp-satici-uretim', satici: 'tekserp-satici-uretim', yedek: 'tekserp-satici-uretim-yedek' }),
+  uretim: Object.freeze({ kok: '/opt/stack/apps/tekserp-satici-uretim', satici: 'tekserp-satici-uretim', yedek: 'tekserp-satici-uretim-yedek', db: 'tekserp-satici-uretim-db' }),
 });
 const PAY = 256 * 1024 * 1024;
-const KULLANIM = 'Kullanım: --ortam uretim --dosya <yerel> [--dosya <yerel> …] [--uygula]';
+const KULLANIM = 'Kullanım: --ortam uretim (--dosya <yerel> [--dosya …] [--yenile] | --kaldir <ad> [--kaldir …]) [--arsiv <dizin>] [--uygula]';
+/** `--yenile`nin eski sayıp arşivleyeceği adlar: yalnız ortak kurulum arşivi (başka tür dosyaya dokunulmaz). */
+export const ARSIV_ADI = /^TeksERP-Kurulum-[0-9A-Za-z][0-9A-Za-z._-]*\.zip$/;
+export const ARSIV_DIZINI_VARSAYILAN = path.join(os.homedir(), '.tekserp', 'arsiv', 'derlemeler');
 
 // Konteyner içinde root olarak koşar (yalnız /g:ro ve /k bağlı): gizli ada yaz, `ln` ile yayınla — hedef varsa ln
 // düşer, hiçbir dosya ezilmez; portal noktayla başlayan adı listelemez (BUILD_NAME).
@@ -63,23 +72,31 @@ class Dur extends Error {
 
 // ---------------------------------------------------------------- argümanlar
 export function argAyristir(argv) {
-  const a = { dosyalar: [], uygula: false, ortam: null };
+  const a = { dosyalar: [], kaldir: [], uygula: false, yenile: false, ortam: null, arsiv: null };
   const hatalar = [];
   for (let i = 0; i < argv.length; i += 1) {
     const x = argv[i];
     const esit = x.indexOf('=');
     const ad = esit > 0 ? x.slice(0, esit) : x;
     if (ad === '--uygula' && esit < 0) { a.uygula = true; continue; }
-    if (ad !== '--ortam' && ad !== '--dosya') { hatalar.push(`bilinmeyen argüman: ${x}`); continue; }
+    if (ad === '--yenile' && esit < 0) { a.yenile = true; continue; }
+    if (!['--ortam', '--dosya', '--kaldir', '--arsiv'].includes(ad)) { hatalar.push(`bilinmeyen argüman: ${x}`); continue; }
     const v = esit > 0 ? x.slice(esit + 1) : argv[(i += 1)];
     if (v === undefined || v === '' || v.startsWith('--')) { hatalar.push(`${ad} bir değer ister`); continue; }
     if (ad === '--dosya') a.dosyalar.push(v);
+    else if (ad === '--kaldir') a.kaldir.push(v);
+    else if (ad === '--arsiv') { if (a.arsiv !== null) hatalar.push('--arsiv TEK verilir'); else a.arsiv = v; }
     else if (a.ortam !== null) hatalar.push('--ortam TEK verilir');
     else a.ortam = v;
   }
   if (!a.ortam) hatalar.push('--ortam gerekli');
   else if (!Object.hasOwn(ORTAMLAR, a.ortam)) hatalar.push(`--ortam uretim (gelen: ${a.ortam})`);
-  if (!a.dosyalar.length) hatalar.push('en az bir --dosya gerekli');
+  if (!a.dosyalar.length && !a.kaldir.length) hatalar.push('en az bir --dosya ya da --kaldir gerekli');
+  if (a.yenile && !a.dosyalar.length) hatalar.push('--yenile yeni arşivi (--dosya) ister');
+  if (a.yenile && a.kaldir.length) hatalar.push('--yenile ile --kaldir birlikte verilmez (yenile eskileri kendisi seçer)');
+  if (a.kaldir.length && a.dosyalar.length) hatalar.push('--kaldir ile --dosya birlikte verilmez (yeni + eski birlikte: --yenile)');
+  if (new Set(a.kaldir).size !== a.kaldir.length) hatalar.push('aynı --kaldir adı iki kez');
+  a.arsiv = path.resolve(a.arsiv ?? ARSIV_DIZINI_VARSAYILAN);
   return { a, hatalar };
 }
 
@@ -134,6 +151,11 @@ export function yerelDenetim(ortam, yollar) {
 }
 
 // ---------------------------------------------------------------- VDS ölçümü (salt okuma, ag.mjs sözleşmesi)
+/** Derleme adına göre AKTİF (IPTAL değil, süresi dolmamış) indirme bağlantısı sayısı — salt okuma (`ag.mjs`). */
+export function baglantiSorgusu(ortam) {
+  return `docker exec ${ORTAMLAR[ortam].db} psql -U satici -d satici -At -c "SELECT \\"derlemeAdi\\", count(*) FROM indirme_baglantisi WHERE durum = 'AKTIF' AND now() < bitis AND \\"derlemeAdi\\" IS NOT NULL GROUP BY 1"`;
+}
+
 export function olcumKomutu(ortam) {
   const o = ORTAMLAR[ortam];
   const D = `${o.kok}/derlemeler`;
@@ -145,6 +167,7 @@ export function olcumKomutu(ortam) {
     'echo @@LS', `ls -lna ${D}`,
     'echo @@DF', `df -Pk ${D} $HOME`,
     'echo @@KAP', `docker exec ${o.satici} ls -la /derlemeler`,
+    'echo @@BAGLANTI', baglantiSorgusu(ortam),
     'echo @@SON',
   ].join('; ');
 }
@@ -183,7 +206,16 @@ export function olcumuCoz(ortam, cikti) {
   const imajlar = new Set((b.IMAJLAR ?? []).map((s) => s.trim()));
   const dz = /^(\d+):(\d+) ([0-7]{3,4})$/.exec(((b.DIZIN ?? [])[0] ?? '').trim());
   const df = (b.DF ?? []).slice(1).map((s) => s.split(/\s+/)).filter((p) => p.length >= 6).map((p) => ({ bos: Number(p[3]) * 1024, nokta: p[5] }));
-  return { D, bag: bag.trim(), yardimci, imajVar: imajlar.has(yardimci), dizin: dz ? { uid: dz[1], gid: dz[2], mod: dz[3] } : null, ls: lsCoz(b.LS ?? []), df, kap: lsCoz(b.KAP ?? []) };
+  let baglanti = null;
+  if (b.BAGLANTI) {
+    baglanti = new Map();
+    for (const s of b.BAGLANTI) {
+      const m = /^([^|]+)\|(\d+)$/.exec(s.trim());
+      if (!m) { baglanti = null; break; }
+      baglanti.set(m[1], Number(m[2]));
+    }
+  }
+  return { D, bag: bag.trim(), yardimci, imajVar: imajlar.has(yardimci), dizin: dz ? { uid: dz[1], gid: dz[2], mod: dz[3] } : null, ls: lsCoz(b.LS ?? []), df, kap: lsCoz(b.KAP ?? []), baglanti };
 }
 
 function vdsOku(ag, komut) {
@@ -199,7 +231,7 @@ function vdsOku(ag, komut) {
 }
 
 /** Ölçümü kararlara çevirir: hangi dosya yazılacak, hangisi zaten yerinde; engel varsa DUR. */
-export function karar(ortam, olcum, dosyalar, uzakOzet) {
+export function karar(ortam, olcum, dosyalar, uzakOzet, { kaldir = [], yenile = false, arsiv = ARSIV_DIZINI_VARSAYILAN } = {}) {
   const hatalar = [];
   if (!olcum.bag) throw new Dur(2, `ÖLÇÜLEMEDİ — ${ORTAMLAR[ortam].satici} konteynerinde /derlemeler bağı okunamadı (konteyner yok mu?)`);
   if (olcum.bag !== `${olcum.D} false`) hatalar.push(`satıcı /derlemeler'i "${olcum.bag}" olarak bağlamış — beklenen "${olcum.D} false" (salt okunur); dosya oraya konursa portal GÖRMEZ`);
@@ -217,6 +249,32 @@ export function karar(ortam, olcum, dosyalar, uzakOzet) {
     else hatalar.push(`${d.ad} depoda ZATEN VAR ve içeriği FARKLI (uzak ${u ? `${u.slice(0, 16)}…` : 'ölçülemedi'} · yerel ${d.sha256.slice(0, 16)}…) — üstüne YAZILMAZ; yeni ad ver`);
   }
   for (const ad of olcum.ls.keys()) if (ad.startsWith('.yarim-')) hatalar.push(`yarım kalmış önceki yazım: ${ad} — önce elle incele/kaldır`);
+  // Kaldırma: --kaldir açık adlar · --yenile depodaki öteki ortak kurulum arşivleri. Aktif bağlantı ölçülemezse karar YOK.
+  const yeniAdlar = new Set(dosyalar.map((d) => d.ad));
+  const adaylar = yenile ? [...olcum.ls.keys()].filter((ad) => ARSIV_ADI.test(ad) && !yeniAdlar.has(ad)).sort() : kaldir;
+  const kaldirilacak = [];
+  const tutulan = [];
+  if (adaylar.length && !olcum.baglanti) throw new Dur(2, 'ÖLÇÜLEMEDİ — satıcı DB\'sinden aktif indirme bağlantıları okunamadı (@@BAGLANTI) — hiçbir şey kaldırılmaz');
+  for (const ad of adaylar) {
+    const l = olcum.ls.get(ad);
+    if (!l) { hatalar.push(`${ad} depoda YOK — kaldırılacak bir şey yok`); continue; }
+    if (!l.mod.startsWith('-')) { hatalar.push(`${ad} düzenli dosya değil (${l.mod}) — elle incele`); continue; }
+    const aktif = olcum.baglanti.get(ad) ?? 0;
+    if (aktif > 0) {
+      if (yenile) tutulan.push({ ad, aktif });
+      else hatalar.push(`${ad}: ${aktif} AKTİF indirme bağlantısı bu dosyayı gösteriyor — kaldırılırsa müşteri indiremez; önce portalda bağlantıyı iptal et ya da süresinin dolmasını bekle`);
+      continue;
+    }
+    const u = uzakOzet.get(ad);
+    if (!u) throw new Dur(2, `ÖLÇÜLEMEDİ — ${ad} uzak özeti okunamadı`);
+    const yerel = path.join(arsiv, ad);
+    let arsivde = false;
+    if (fs.existsSync(yerel)) {
+      if (akisOzeti(yerel).sha256 !== u) { hatalar.push(`${ad}: Mac arşivinde (${yerel}) AYNI ADLI ama FARKLI içerikli dosya var — üstüne yazılmaz, kaldırma yok`); continue; }
+      arsivde = true;
+    }
+    kaldirilacak.push({ ad, sha256: u, boyut: l.boyut, yerel, arsivde });
+  }
   const toplam = yazilacak.reduce((t, d) => t + d.boyut, 0);
   if (toplam && olcum.df.length >= 2) {
     const [depo, ev] = olcum.df;
@@ -225,25 +283,42 @@ export function karar(ortam, olcum, dosyalar, uzakOzet) {
     if (!ayniFs && (depo.bos < toplam + PAY || ev.bos < toplam + PAY)) hatalar.push(`disk: depo ${Math.floor(depo.bos / 2 ** 20)} MiB · ev ${Math.floor(ev.bos / 2 ** 20)} MiB boş — her biri ≥ ${Math.ceil((toplam + PAY) / 2 ** 20)} MiB olmalı`);
   } else if (toplam) throw new Dur(2, 'ÖLÇÜLEMEDİ — df çıktısı okunamadı');
   if (hatalar.length) throw new Dur(1, `VDS DENETİMİ (${hatalar.length}) — hiçbir şey yazılmadı`, hatalar);
-  return { yazilacak, yerinde };
+  return { yazilacak, yerinde, kaldirilacak, tutulan };
 }
 
 // ---------------------------------------------------------------- plan (KURU'nun bastığı = --uygula'nın koştuğu)
 const sshTemel = () => ['-n', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-p', VDS.port, VDS.hedef];
 
-export function planKur(ortam, olcum, yazilacak, damga) {
+// Konteynerde (yalnız depo bağlı, ağ yok): her çift için önce özet tutmalı, sonra sil; tutmayan ilk çiftte durur.
+export const KALDIR_BETIK = 'set -eu; cd /k; while [ $# -gt 1 ]; do case "$2" in ""|.*|*/*) echo "ad gecersiz: $2" >&2; exit 2;; esac; printf "%s  %s\\n" "$1" "$2" | sha256sum -c -; rm -- "$2"; shift 2; done';
+
+export function kaldirKomutu(olcum, kaldirilacak) {
+  return `docker run --rm --network none --user 0 -v ${olcum.D}:/k --entrypoint sh ${olcum.yardimci} -c '${KALDIR_BETIK}' sh ${kaldirilacak.map((k) => `${k.sha256} ${k.ad}`).join(' ')}`;
+}
+
+export function planKur(ortam, olcum, yazilacak, damga, kaldirilacak = [], arsiv = ARSIV_DIZINI_VARSAYILAN) {
   const G = `derleme-koy-${damga}`;
   const adlar = yazilacak.map((d) => d.ad);
   const yazim = `docker run --rm --network none --user 0 -v "$HOME/${G}:/g:ro" -v ${olcum.D}:/k --entrypoint sh ${olcum.yardimci} /g/derleme-koy-ic.sh ${olcum.dizin.uid} ${olcum.dizin.gid} ${adlar.join(' ')}`;
-  return {
-    G,
-    adimlar: [
-      { ad: 'vds-dogrula (önce)', tur: 'yerel', komut: VDS_DOGRULA, args: [] },
+  const ekle = yazilacak.length ? [
       { ad: 'geçici dizin', tur: 'ssh', uzak: `install -d -m 700 "$HOME/${G}"` },
       { ad: 'gönder', tur: 'scp', args: ['-P', VDS.port, '-o', 'BatchMode=yes', ...yazilacak.map((d) => d.yol), '<yerel>/derleme-koy.sha256', '<yerel>/derleme-koy-ic.sh', `${VDS.hedef}:${G}/`] },
       { ad: 'uzakta özet', tur: 'ssh', uzak: `cd "$HOME/${G}" && sha256sum -c derleme-koy.sha256` },
       { ad: `yaz (0644 ${olcum.dizin.uid}:${olcum.dizin.gid}, ezmez)`, tur: 'ssh', uzak: yazim },
       { ad: 'geçici dizini sil', tur: 'ssh', uzak: `rm -rf "$HOME/${G}"` },
+  ] : [];
+  const cikar = kaldirilacak.length ? [
+      { ad: 'aktif bağlantıyı yeniden ölç (salt okuma)', tur: 'olc' },
+      ...kaldirilacak.filter((k) => !k.arsivde).map((k) => ({ ad: `Mac arşivine indir (${k.ad})`, tur: 'scp', args: ['-P', VDS.port, '-o', 'BatchMode=yes', `${VDS.hedef}:${olcum.D}/${k.ad}`, `${arsiv}/.${k.ad}.yarim`] })),
+      { ad: `Mac arşivi = uzak özet (${kaldirilacak.length} dosya, ${arsiv})`, tur: 'yerelOlc' },
+      { ad: `kaldır (özet tutarsa rm): ${kaldirilacak.map((k) => k.ad).join(', ')}`, tur: 'ssh', uzak: kaldirKomutu(olcum, kaldirilacak) },
+  ] : [];
+  return {
+    G,
+    adimlar: [
+      { ad: 'vds-dogrula (önce)', tur: 'yerel', komut: VDS_DOGRULA, args: [] },
+      ...ekle,
+      ...cikar,
       { ad: 'ölç (salt okuma)', tur: 'olc' },
       { ad: 'vds-dogrula (sonra, öncekiyle AYNI)', tur: 'yerel', komut: VDS_DOGRULA, args: [] },
     ],
@@ -258,10 +333,13 @@ function planBas(plan, ortam) {
     if (a.tur === 'yerel') console.log(`  ${n}. ${a.ad}: ${a.komut}`);
     else if (a.tur === 'ssh') console.log(`  ${n}. ${a.ad}: ssh ${sshTemel().map(kabuk).join(' ')} ${kabuk(a.uzak)}`);
     else if (a.tur === 'scp') console.log(`  ${n}. ${a.ad}: scp ${a.args.map(kabuk).join(' ')}`);
+    else if (a.tur === 'yerelOlc') console.log(`  ${n}. ${a.ad}`);
     else console.log(`  ${n}. ${a.ad}: ssh … '${olcumKomutu(ortam).slice(0, 60)}…' + sha256sum <yeni dosyalar>`);
   });
-  console.log('      derleme-koy-ic.sh (konteynerde, root):');
-  for (const s of IC_BETIK.trimEnd().split('\n')) console.log(`        ${s}`);
+  if (plan.adimlar.some((a) => a.ad === 'gönder')) {
+    console.log('      derleme-koy-ic.sh (konteynerde, root):');
+    for (const s of IC_BETIK.trimEnd().split('\n')) console.log(`        ${s}`);
+  }
 }
 
 // ---------------------------------------------------------------- yazım (yalnız --uygula)
@@ -290,39 +368,69 @@ function uzakOzetleri(ag, D, adlar) {
   return m;
 }
 
-async function uygula(ag, ortam, olcum, yazilacak) {
+async function uygula(ag, ortam, olcum, yazilacak, kaldirilacak = [], arsiv = ARSIV_DIZINI_VARSAYILAN) {
   const damga = `${new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '').replace('T', '-')}-${randomBytes(3).toString('hex')}`;
-  const plan = planKur(ortam, olcum, yazilacak, damga);
+  const plan = planKur(ortam, olcum, yazilacak, damga, kaldirilacak, arsiv);
+  const no = (a) => plan.adimlar.indexOf(a) + 1;
+  const bul = (ad) => plan.adimlar.find((a) => a.ad === ad || a.ad.startsWith(ad));
+  const adim = (a, r) => {
+    if (r.kod !== 0) throw new Dur(1, `adım ${no(a)} (${a.ad}) çıkış ${r.kod}`, `${r.cikti}${r.hata}`.trim().split('\n').slice(-6));
+    console.log(`  ✓ ${no(a)}. ${a.ad}`);
+    return r;
+  };
   const once = vdsDogrula(ag, 'önce');
   console.log('  ✓ vds-dogrula (önce): AYNI');
-  const yerel = fs.mkdtempSync(path.join(os.tmpdir(), 'derleme-koy-'));
-  let uzakDizin = false;
-  try {
-    fs.writeFileSync(path.join(yerel, 'derleme-koy-ic.sh'), IC_BETIK);
-    const icOzet = createHash('sha256').update(IC_BETIK).digest('hex');
-    fs.writeFileSync(path.join(yerel, 'derleme-koy.sha256'), `${[...yazilacak.map((d) => `${d.sha256}  ${d.ad}`), `${icOzet}  derleme-koy-ic.sh`].join('\n')}\n`);
-    const adim = (no, r) => {
-      if (r.kod !== 0) throw new Dur(1, `adım ${no} (${plan.adimlar[no - 1].ad}) çıkış ${r.kod}`, `${r.cikti}${r.hata}`.trim().split('\n').slice(-6));
-      console.log(`  ✓ ${no}. ${plan.adimlar[no - 1].ad}`);
-      return r;
-    };
-    adim(2, sshYaz(plan.adimlar[1].uzak));
-    uzakDizin = true;
-    const scpArgs = plan.adimlar[2].args.map((x) => x.replace('<yerel>', yerel));
-    adim(3, yaz('scp', scpArgs, { girdiAkisi: true }));
-    adim(4, sshYaz(plan.adimlar[3].uzak));
-    const r5 = adim(5, sshYaz(plan.adimlar[4].uzak));
-    const yazildi = new Map(r5.cikti.split('\n').map((s) => /^([0-9a-f]{64}) {2}(\S+)$/.exec(s.trim())).filter(Boolean).map((m) => [m[2], m[1]]));
-    const tutmayan = yazilacak.filter((d) => yazildi.get(d.ad) !== d.sha256);
-    if (tutmayan.length) throw new Dur(1, `depoya yazılan bayt yerelle TUTMUYOR: ${tutmayan.map((d) => d.ad).join(', ')} — portal bağlantısı VERME, elle incele`);
-  } finally {
-    if (uzakDizin) {
-      const r = sshYaz(plan.adimlar[5].uzak);
-      console.log(r.kod === 0 ? '  ✓ 6. geçici dizini sil' : `  ⚠ 6. geçici dizin silinemedi (~/${plan.G}) — elle: ssh … 'rm -rf "$HOME/${plan.G}"'`);
+  if (yazilacak.length) {
+    const yerel = fs.mkdtempSync(path.join(os.tmpdir(), 'derleme-koy-'));
+    const sil = bul('geçici dizini sil');
+    let uzakDizin = false;
+    try {
+      fs.writeFileSync(path.join(yerel, 'derleme-koy-ic.sh'), IC_BETIK);
+      const icOzet = createHash('sha256').update(IC_BETIK).digest('hex');
+      fs.writeFileSync(path.join(yerel, 'derleme-koy.sha256'), `${[...yazilacak.map((d) => `${d.sha256}  ${d.ad}`), `${icOzet}  derleme-koy-ic.sh`].join('\n')}\n`);
+      const gd = bul('geçici dizin');
+      adim(gd, sshYaz(gd.uzak));
+      uzakDizin = true;
+      const gn = bul('gönder');
+      adim(gn, yaz('scp', gn.args.map((x) => x.replace('<yerel>', yerel)), { girdiAkisi: true }));
+      const uo = bul('uzakta özet');
+      adim(uo, sshYaz(uo.uzak));
+      const yz = bul('yaz (');
+      const r5 = adim(yz, sshYaz(yz.uzak));
+      const yazildi = new Map(r5.cikti.split('\n').map((s) => /^([0-9a-f]{64}) {2}(\S+)$/.exec(s.trim())).filter(Boolean).map((m) => [m[2], m[1]]));
+      const tutmayan = yazilacak.filter((d) => yazildi.get(d.ad) !== d.sha256);
+      if (tutmayan.length) throw new Dur(1, `depoya yazılan bayt yerelle TUTMUYOR: ${tutmayan.map((d) => d.ad).join(', ')} — portal bağlantısı VERME, elle incele`);
+    } finally {
+      if (uzakDizin) {
+        const r = sshYaz(sil.uzak);
+        console.log(r.kod === 0 ? `  ✓ ${no(sil)}. geçici dizini sil` : `  ⚠ ${no(sil)}. geçici dizin silinemedi (~/${plan.G}) — elle: ssh … 'rm -rf "$HOME/${plan.G}"'`);
+      }
+      fs.rmSync(yerel, { recursive: true, force: true });
     }
-    fs.rmSync(yerel, { recursive: true, force: true });
   }
-  // 7) Ölç: depo + satıcının konteyneri dosyayı görüyor, sahip/izin/boyut/özet.
+  if (kaldirilacak.length) {
+    // Bağlantı ölçümü ile rm arasındaki pencere kısa tutulur: yeniden ölç, sonra arşivle, sonra kaldır.
+    const taze = olcumuCoz(ortam, vdsOku(ag, olcumKomutu(ortam)));
+    if (!taze.baglanti) throw new Dur(2, 'ÖLÇÜLEMEDİ — aktif bağlantılar yeniden okunamadı — hiçbir şey kaldırılmadı');
+    const aktif = kaldirilacak.filter((k) => (taze.baglanti.get(k.ad) ?? 0) > 0);
+    if (aktif.length) throw new Dur(1, `bu arada AKTİF bağlantı doğdu: ${aktif.map((k) => k.ad).join(', ')} — hiçbir şey kaldırılmadı`);
+    console.log(`  ✓ ${no(bul('aktif bağlantıyı'))}. aktif bağlantı yok (yeniden ölçüldü)`);
+    fs.mkdirSync(arsiv, { recursive: true });
+    for (const k of kaldirilacak.filter((x) => !x.arsivde)) {
+      const a = bul(`Mac arşivine indir (${k.ad})`);
+      adim(a, yaz('scp', a.args, { girdiAkisi: true }));
+      const yarim = a.args[a.args.length - 1];
+      if (akisOzeti(yarim).sha256 !== k.sha256) { fs.rmSync(yarim, { force: true }); throw new Dur(1, `${k.ad}: Mac'e inen kopya uzak özetle TUTMUYOR — hiçbir şey kaldırılmadı`); }
+      if (fs.existsSync(k.yerel)) throw new Dur(1, `${k.yerel} bu arada doğdu — ezilmez, hiçbir şey kaldırılmadı`);
+      fs.renameSync(yarim, k.yerel);
+    }
+    const tutmayan = kaldirilacak.filter((k) => !fs.existsSync(k.yerel) || akisOzeti(k.yerel).sha256 !== k.sha256);
+    if (tutmayan.length) throw new Dur(1, `Mac arşivi uzak özetle TUTMUYOR: ${tutmayan.map((k) => k.ad).join(', ')} — hiçbir şey kaldırılmadı`);
+    console.log(`  ✓ ${no(bul('Mac arşivi'))}. Mac arşivi = uzak özet (${arsiv})`);
+    const kd = bul('kaldır (');
+    adim(kd, sshYaz(kd.uzak));
+  }
+  // Ölç: yazılanlar depoda ve satıcının konteynerinde; kaldırılanlar hiçbirinde.
   const sonra = olcumuCoz(ortam, vdsOku(ag, olcumKomutu(ortam)));
   const ozet = uzakOzetleri(ag, sonra.D, yazilacak.map((d) => d.ad));
   const sorun = [];
@@ -332,11 +440,12 @@ async function uygula(ag, ortam, olcum, yazilacak) {
     if (ozet.get(d.ad) !== d.sha256) sorun.push(`${d.ad}: özet tutmuyor`);
     if (!sonra.kap.has(d.ad)) sorun.push(`${d.ad}: satıcı konteyneri /derlemeler'de GÖRMÜYOR`);
   }
+  for (const k of kaldirilacak) if (sonra.ls.has(k.ad) || sonra.kap.has(k.ad)) sorun.push(`${k.ad}: kaldırıldı denmişti ama depoda/konteynerde hâlâ görünüyor`);
   if (sorun.length) throw new Dur(1, 'YAZIM SONRASI ÖLÇÜM', sorun);
-  console.log('  ✓ 7. ölçüm: depoda 0644, sahibi dizinle aynı, özet yerelle aynı, satıcı konteyneri görüyor');
+  console.log(`  ✓ ${no(bul('ölç (salt okuma)'))}. ölçüm: ${yazilacak.length ? 'yeni dosya depoda 0644, sahibi dizinle aynı, özet yerelle aynı, satıcı konteyneri görüyor' : ''}${yazilacak.length && kaldirilacak.length ? ' · ' : ''}${kaldirilacak.length ? 'kaldırılanlar depoda ve konteynerde yok' : ''}`);
   const sonraVds = vdsDogrula(ag, 'sonra');
   if (sonraVds !== once) throw new Dur(1, 'vds-dogrula (sonra) çıktısı öncekinden FARKLI — adnansahin tarafında değişiklik var, incele', ['önce:', ...once.trim().split('\n'), 'sonra:', ...sonraVds.trim().split('\n')]);
-  console.log('  ✓ 8. vds-dogrula (sonra): AYNI, çıktı öncekiyle birebir');
+  console.log(`  ✓ ${plan.adimlar.length}. vds-dogrula (sonra): AYNI, çıktı öncekiyle birebir`);
 }
 
 // ---------------------------------------------------------------- ana akış
@@ -345,29 +454,39 @@ async function main() {
   if (hatalar.length) throw new Dur(2, KULLANIM, hatalar);
   const o = ORTAMLAR[a.ortam];
   console.log(`== Derleme koy: ${a.ortam} (${o.kok}/derlemeler)${a.uygula ? ' — UYGULA' : ' — KURU (yalnız okuma)'} ==`);
-  const dosyalar = yerelDenetim(a.ortam, a.dosyalar);
+  const dosyalar = a.dosyalar.length ? yerelDenetim(a.ortam, a.dosyalar) : [];
+  if (a.kaldir.length) {
+    const kural = derlemeAdiKurali();
+    const kh = a.kaldir.map((ad) => derlemeAdiHatasi(ad, kural)).filter(Boolean);
+    if (kh.length) throw new Dur(1, `KALDIRILACAK AD (${kh.length})`, kh);
+  }
   for (const d of dosyalar) console.log(`  yerel          : ${d.ad} · ${d.boyut} B · ${d.sha256}${d.yanOzet ? ' (= yanındaki .sha256)' : ''}`);
 
   // Okuma her iki kipte de gerçek bağlantıdır; Ag sözleşmesi yazma komutunu bağlantıdan ÖNCE reddeder.
   const ag = new Ag({ olc: true, zamanAsimiMs: 30_000 });
   const olcum = olcumuCoz(a.ortam, vdsOku(ag, olcumKomutu(a.ortam)));
   console.log(`  satıcı bağı    : ${olcum.bag} · yardımcı imaj ${olcum.yardimci} · dizin ${olcum.dizin ? `${olcum.dizin.uid}:${olcum.dizin.gid} ${olcum.dizin.mod}` : '?'} · ${olcum.ls.size} girdi · boş ${olcum.df[0] ? `${(olcum.df[0].bos / 2 ** 30).toFixed(1)} GiB` : '?'}`);
-  const ayniAd = dosyalar.filter((d) => olcum.ls.has(d.ad)).map((d) => d.ad);
-  const { yazilacak, yerinde } = karar(a.ortam, olcum, dosyalar, uzakOzetleri(ag, olcum.D, ayniAd));
+  const yeniAdlar = new Set(dosyalar.map((d) => d.ad));
+  const eskiler = a.yenile ? [...olcum.ls.keys()].filter((ad) => ARSIV_ADI.test(ad) && !yeniAdlar.has(ad)) : a.kaldir.filter((ad) => olcum.ls.has(ad));
+  const ozetAdlari = [...new Set([...dosyalar.filter((d) => olcum.ls.has(d.ad)).map((d) => d.ad), ...eskiler])];
+  const { yazilacak, yerinde, kaldirilacak, tutulan } = karar(a.ortam, olcum, dosyalar, uzakOzetleri(ag, olcum.D, ozetAdlari), { kaldir: a.kaldir, yenile: a.yenile, arsiv: a.arsiv });
   for (const d of yerinde) console.log(`  = ${d.ad}: depoda ZATEN VAR, içerik aynı — dokunulmaz`);
-  if (!yazilacak.length) {
+  for (const t of tutulan) console.log(`  ⚠ ${t.ad}: ${t.aktif} AKTİF bağlantı gösteriyor — KORUNUR (bağlantı bitince yeniden --yenile/--kaldir)`);
+  for (const k of kaldirilacak) console.log(`  - ${k.ad}: aktif bağlantı yok · ${k.boyut} B · ${k.sha256} · Mac arşivi ${k.arsivde ? 'VAR (özet eşit)' : `yok → ${k.yerel}`}`);
+  if (!yazilacak.length && !kaldirilacak.length) {
     console.log('SONUC: YAPILACAK-IS-YOK');
     return;
   }
   if (!a.uygula) {
-    planBas(planKur(a.ortam, olcum, yazilacak, '<damga>'), a.ortam);
-    console.log(`\n  Bu KURU koşumdu: VDS'e yalnız okuma gitti. Yazmak için aynı komuta --uygula ekle.`);
+    planBas(planKur(a.ortam, olcum, yazilacak, '<damga>', kaldirilacak, a.arsiv), a.ortam);
+    console.log(`\n  Bu KURU koşumdu: VDS'e yalnız okuma gitti. Yazmak/kaldırmak için aynı komuta --uygula ekle.`);
     console.log('SONUC: KURU-TEMIZ');
     return;
   }
-  await uygula(ag, a.ortam, olcum, yazilacak);
-  console.log(`  portal: Kurulum → İlk kurulum → Bağlantı ver → derleme ${yazilacak.map((d) => d.ad).join(', ')}`);
-  console.log('SONUC: YAZILDI');
+  await uygula(ag, a.ortam, olcum, yazilacak, kaldirilacak, a.arsiv);
+  if (yazilacak.length) console.log(`  portal: Kurulum → İlk kurulum → Bağlantı ver → derleme ${yazilacak.map((d) => d.ad).join(', ')}`);
+  if (kaldirilacak.length) console.log(`  kaldırıldı (Mac arşivinde): ${kaldirilacak.map((k) => k.yerel).join(', ')}`);
+  console.log(yazilacak.length ? 'SONUC: YAZILDI' : 'SONUC: KALDIRILDI');
 }
 
 const anaModul = (() => {

@@ -78,7 +78,7 @@ function zipYap(hedef, dosyalar) {
 // ---------------------------------------------------------------- gölge kök
 const G = yol('kok');
 for (const rel of ['deploy/kurulum', 'deploy/pg', 'scripts/lib']) fs.cpSync(path.join(KOK, rel), path.join(G, rel), { recursive: true });
-for (const rel of ['deploy/dagitim.json', 'deploy/hizmet/kanal-adlari.ps1', 'Teks-Erp/src/lib/license/vendor-url.ts', 'satici/sunucu/src/distribution/storage.ts']) yaz(path.join(G, rel), fs.readFileSync(path.join(KOK, rel)));
+for (const rel of ['Electron/package.json', 'deploy/dagitim.json', 'deploy/hizmet/kanal-adlari.ps1', 'Teks-Erp/src/lib/license/vendor-url.ts', 'satici/sunucu/src/distribution/storage.ts']) yaz(path.join(G, rel), fs.readFileSync(path.join(KOK, rel)));
 const BETIK = path.join(G, 'deploy/kurulum/kurulum-arsivi.mjs');
 // tsx koçanı: .ts'yi düz ES modülü olarak yükler (koçan tipsiz JS'tir); gerçek tsx gölgeye girmez.
 yaz(path.join(G, 'Teks-Erp/node_modules/tsx/package.json'), '{"name":"tsx","version":"0.0.0-bekci","type":"module","exports":{".":"./index.mjs"}}\n');
@@ -97,6 +97,16 @@ fs.writeFileSync(f.cikti + '/sonuc.json', JSON.stringify(komut === 'ortak-dogrul
   ? { v: 1, kip: komut, surum: process.env.BEKCI_TS_SURUM, paketImzaKid: 'paket-sahte', pg: { hedef: { paket } }, uyarilar: [] }
   : { v: 1, kip: komut, kunye: pg }));
 console.error('✓ ' + komut + ' (koçan)');
+`);
+
+// Panel doğrulayıcı koçanı: çağrıyı (argüman + test çapası ortamı) izler; senaryoya göre geçer/düşer.
+yaz(path.join(G, 'Teks-Erp/scripts/panel-imza.ts'), `import fs from 'node:fs';
+const argv = process.argv.slice(2);
+const f = Object.fromEntries(argv.slice(1).map((a) => { const i = a.indexOf('='); return i > 0 ? [a.slice(2, i), a.slice(i + 1)] : [a.slice(2), '']; }));
+const dizin = f['dizin-paket'];
+fs.appendFileSync(process.env.BEKCI_PANEL_IZ, JSON.stringify({ komut: argv[0], f, testAnahtarlari: Object.keys(process.env).filter((k) => k.startsWith('TEKSERP_TEST_')), dosyalar: fs.readdirSync(dizin).sort() }) + '\\n');
+if (process.env.BEKCI_PANEL_SENARYO === 'gecersiz') { console.error('✖ künye GEÇERSİZ (IMZA): koçan'); process.exit(1); }
+console.log('✓ künye geçerli (koçan)');
 `);
 
 // Sahte PG paketi + ona göre kayıt.
@@ -154,6 +164,23 @@ function backendZip(hedef, { paket = {}, kunye = {}, imzali = true, ek = {}, cik
 
 const GIRDI = yol('girdi');
 fs.mkdirSync(GIRDI);
+const PANEL_SURUM = '1.2.3';
+const PANEL_AD = `TeksERP-${PANEL_SURUM}-Setup.exe`;
+function panelGirdisi(dizin, { kanal = 'test', bozukSha = false, bildirimsiz = false, ad = PANEL_AD, surum = PANEL_SURUM } = {}) {
+  fs.mkdirSync(dizin, { recursive: true });
+  const exe = path.join(dizin, ad);
+  const b = pe(`panel-${kanal}-${Math.random()}`);
+  fs.writeFileSync(exe, b);
+  const s512 = crypto.createHash('sha512').update(bozukSha ? Buffer.from('baska') : b);
+  const hex = s512.copy().digest('hex');
+  const yuk = { v: 2, urun: 'panel', platform: 'win32-x64', kanal, surum, commit: 'b'.repeat(40), paket: { ad, boyut: b.length, sha512: hex } };
+  const yml = [`version: ${surum}`, 'files:', `  - url: ${ad}`, `    sha512: ${s512.digest('base64')}`, `    size: ${b.length}`, `path: ${ad}`, `sha512: ${Buffer.from(hex, 'hex').toString('base64')}`, "releaseDate: '2026-10-11T10:57:06.288Z'",
+    ...(bildirimsiz ? [] : ['tekserp:', '  v: 2', `  bildirim: ${b64({ alg: 'EdDSA', typ: 'tekserp-panel', kid: 'ist-sahte' })}.${b64(yuk)}.c2FodGU`]), ''].join('\n');
+  const kunye = path.join(dizin, 'latest.yml');
+  fs.writeFileSync(kunye, yml);
+  return { exe, kunye };
+}
+const PANEL = panelGirdisi(path.join(GIRDI, 'panel'));
 const SETUP = path.join(GIRDI, 'TeksERP-Kurulum-9.9.9.exe');
 fs.writeFileSync(SETUP, pe('setup'));
 const BACKEND = backendZip(path.join(GIRDI, 'tekserp-backend-20261002_000000-aaaaaaa.zip'));
@@ -165,14 +192,18 @@ const TKPUB = path.join(GIRDI, 'etkili.tkpub');
 fs.writeFileSync(TKPUB, tkpub());
 
 const IZ = yol('ts-iz.jsonl');
-function kos(ozel = {}, { senaryo = 'gecerli', cikti = yol('cikti', String(Math.random()).slice(2)), prova = false, tsxYok = false, args = null } = {}) {
-  const g = { '--setup': SETUP, '--backend': BACKEND, '--pg': PG, '--pg-kunye': PGJSON, '--tkpub': TKPUB, '--cikti': cikti, ...ozel };
+const PANEL_IZ = yol('panel-iz.jsonl');
+let SON_PANEL_IZ = [];
+function kos(ozel = {}, { senaryo = 'gecerli', panelSenaryo = 'gecerli', cikti = yol('cikti', String(Math.random()).slice(2)), prova = false, tsxYok = false, args = null, betik = BETIK } = {}) {
+  const g = { '--setup': SETUP, '--backend': BACKEND, '--pg': PG, '--pg-kunye': PGJSON, '--panel': PANEL.exe, '--panel-kunye': PANEL.kunye, '--tkpub': TKPUB, '--cikti': cikti, ...ozel };
   const argv = args ?? [...Object.entries(g).filter(([, v]) => v !== null).flatMap(([k, v]) => [k, v]), ...(prova ? ['--prova'] : [])];
   fs.rmSync(IZ, { force: true });
+  fs.rmSync(PANEL_IZ, { force: true });
   const tsx = path.join(G, 'Teks-Erp/node_modules/tsx');
   if (tsxYok) fs.renameSync(tsx, `${tsx}.yok`);
   try {
-    const r = spawnSync(process.execPath, [BETIK, ...argv], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, BEKCI_TS_IZ: IZ, BEKCI_TS_SENARYO: senaryo, BEKCI_TS_SURUM: SURUM, TEKSERP_TEST_PAKET_CAPASI: yol('sahte-capa.json'), TEKSERP_TEST_KOK_CAPASI: yol('sahte-kok.json') } });
+    const r = spawnSync(process.execPath, [betik, ...argv], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, BEKCI_PANEL_IZ: PANEL_IZ, BEKCI_PANEL_SENARYO: panelSenaryo, BEKCI_TS_IZ: IZ, BEKCI_TS_SENARYO: senaryo, BEKCI_TS_SURUM: SURUM, TEKSERP_TEST_PAKET_CAPASI: yol('sahte-capa.json'), TEKSERP_TEST_KOK_CAPASI: yol('sahte-kok.json') } });
+    SON_PANEL_IZ = fs.existsSync(PANEL_IZ) ? fs.readFileSync(PANEL_IZ, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
     const iz = fs.existsSync(IZ) ? fs.readFileSync(IZ, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
     const dosyalar = fs.existsSync(cikti) ? fs.readdirSync(cikti) : [];
     return { kod: r.status, cikti: `${r.stdout ?? ''}${r.stderr ?? ''}`, iz, dizin: cikti, dosyalar };
@@ -194,10 +225,10 @@ let ILK_SHA = null;
     ILK_SHA = sha(fs.readFileSync(a));
     const zi = arac('zipinfo', [a]).stdout.split('\n').filter((l) => /^[-d]r/.test(l));
     const ad = (l) => l.trim().split(/\s+/).slice(8).join(' ');
-    const beklenen = ['BENIOKU.txt', 'SHA256SUMS', 'TeksERP-Kurulum-9.9.9.exe', 'etkili.tkpub', 'pg.json', PG_AD, path.basename(BACKEND)].sort(bayt);
-    check('§1b bağımsız araç (zipinfo): DÜZ kök, tam 7 girdi, dizin girdisi yok', JSON.stringify(zi.map(ad).sort(bayt)) === JSON.stringify(beklenen) && zi.every((l) => !ad(l).includes('/')), zi.map(ad).join(','));
+    const beklenen = ['BENIOKU.txt', 'ICERIK.json', 'SHA256SUMS', 'TeksERP-Kurulum-9.9.9.exe', PANEL_AD, 'etkili.tkpub', 'pg.json', PG_AD, path.basename(BACKEND)].sort(bayt);
+    check('§1b bağımsız araç (zipinfo): DÜZ kök, tam 9 girdi (panel + ICERIK.json dahil, latest.yml YOK), dizin girdisi yok', JSON.stringify(zi.map(ad).sort(bayt)) === JSON.stringify(beklenen) && zi.every((l) => !ad(l).includes('/')), zi.map(ad).join(','));
     const stor = zi.filter((l) => /\.(zip|exe)$/.test(ad(l)));
-    check('§1c zip/exe girdileri "stor" (yeniden sıkıştırılmaz)', stor.length === 3 && stor.every((l) => /\sstor\s/.test(l)), stor.join(' | '));
+    check('§1c zip/exe girdileri "stor" (yeniden sıkıştırılmaz)', stor.length === 4 && stor.every((l) => /\sstor\s/.test(l)), stor.join(' | '));
     const ac = yol('ac', String(Math.random()).slice(2));
     fs.mkdirSync(ac, { recursive: true });
     arac('unzip', ['-q', a, '-d', ac]);
@@ -206,8 +237,8 @@ let ILK_SHA = null;
       const [h, n] = s.split('  ');
       return fs.existsSync(path.join(ac, n)) && sha(fs.readFileSync(path.join(ac, n))) === h;
     });
-    const kaynakEsit = [SETUP, BACKEND, PG, PGJSON, TKPUB].every((y) => sha(fs.readFileSync(y)) === sha(fs.readFileSync(path.join(ac, path.basename(y)))));
-    check('§1d SHA256SUMS (sha256sum biçimi, bayt sıralı) her dosyayı tutar · girdiler kaynakla birebir', sums.length === 6 && tutan && kaynakEsit && JSON.stringify(sums.map((s) => s.split('  ')[1])) === JSON.stringify([...sums.map((s) => s.split('  ')[1])].sort(bayt)), `${sums.length} satır · tutan ${tutan} · kaynak ${kaynakEsit}`);
+    const kaynakEsit = [SETUP, BACKEND, PG, PGJSON, TKPUB, PANEL.exe].every((y) => sha(fs.readFileSync(y)) === sha(fs.readFileSync(path.join(ac, path.basename(y)))));
+    check('§1d SHA256SUMS (sha256sum biçimi, bayt sıralı) her dosyayı tutar · girdiler kaynakla birebir', sums.length === 8 && tutan && kaynakEsit && JSON.stringify(sums.map((s) => s.split('  ')[1])) === JSON.stringify([...sums.map((s) => s.split('  ')[1])].sort(bayt)), `${sums.length} satır · tutan ${tutan} · kaynak ${kaynakEsit}`);
     const yan = fs.readFileSync(`${a}.sha256`, 'utf8');
     check('§1e yan dosya `<sha256>  <arşiv>` arşivi tutar', yan === `${ILK_SHA}  ${ARSIV}\n`, yan);
     const ben = fs.readFileSync(path.join(ac, 'BENIOKU.txt'));
@@ -313,7 +344,7 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
   const s2 = bozuk('onOlcum', (x) => x.replaceAll('"etkili.tkpub"', '"etkili.anahtar"'));
   const s3 = bozuk('iss', (x) => x.replace('OutputBaseFilename=TeksERP-Kurulum-{#KurulumSurumu}\n', 'OutputBaseFilename=Kurulum\n'));
   check('§6b setup metninde desenin yeri değişirse ÖLÇÜLEMEDİ (sessiz yedek yok)', s1 === 'olculemedi' && s2 === 'olculemedi' && s3 === 'olculemedi', `${s1} · ${s2} · ${s3}`);
-  const uyeler = ['BENIOKU.txt', 'SHA256SUMS', 'TeksERP-Kurulum-9.9.9.exe', 'etkili.tkpub', 'pg.json', PG_AD, path.basename(BACKEND)];
+  const uyeler = ['BENIOKU.txt', 'ICERIK.json', 'SHA256SUMS', 'TeksERP-Kurulum-9.9.9.exe', PANEL_AD, 'etkili.tkpub', 'pg.json', PG_AD, path.basename(BACKEND)];
   const say = (x) => uyeler.filter((u) => x.desen.test(u)).length;
   check('§6c üretilen arşivin üyelerinde her setup deseni TAM bir dosya (SHA256SUMS/BENIOKU.txt çakışmaz)', say(d.backend) === 1 && say(d.pg) === 1 && say(d.pgKunye) === 1 && say(d.tkpub) === 1, `${say(d.backend)}/${say(d.pg)}/${say(d.pgKunye)}/${say(d.tkpub)}`);
 }
@@ -375,6 +406,61 @@ function dur(ad, r, desen, { tsBos = true, kod = 1 } = {}) {
     dur('§8b dağıtım kaydında hizmet adı son ekli', kos(), /dağıtım kaydı: .*soneksiz taban/);
   } finally {
     fs.writeFileSync(k, asil);
+  }
+}
+
+// §9 panel arşive girer; kanal kimliği gömülmez (ICERIK.json opt-in, eski kanal paneli RED)
+{
+  const r = kos();
+  const a = path.join(r.dizin, ARSIV);
+  const ac = yol('ac9', String(Math.random()).slice(2));
+  fs.mkdirSync(ac, { recursive: true });
+  if (fs.existsSync(a)) arac('unzip', ['-q', a, '-d', ac]);
+  const icerikYol = path.join(ac, 'ICERIK.json');
+  const icerik = fs.existsSync(icerikYol) ? JSON.parse(fs.readFileSync(icerikYol, 'utf8')) : null;
+  const panelSatir = icerik?.dosyalar?.find((d) => d.rol === 'panel');
+  check('§9a panel exe arşivde ve kaynakla bayt-eşit · ICERIK.json panel satırı (sürüm + sha256) taşır',
+    r.kod === 0 && fs.existsSync(path.join(ac, PANEL_AD)) && sha(fs.readFileSync(path.join(ac, PANEL_AD))) === sha(fs.readFileSync(PANEL.exe)) && panelSatir?.surum === PANEL_SURUM && panelSatir?.sha256 === sha(fs.readFileSync(PANEL.exe)), `kod ${r.kod} · ${JSON.stringify(panelSatir)}`);
+  const metin = fs.existsSync(icerikYol) ? fs.readFileSync(icerikYol, 'utf8') : '';
+  check('§9b ICERIK.json kanal/grup/müşteri anahtarı TAŞIMAZ, grup adı ("test") değer olarak da yok · latest.yml arşive girmez',
+    icerik !== null && !/"(kanal|grup|musteri|backendKanal|kurulumId)"/.test(metin) && !metin.includes('"test"') && !fs.existsSync(path.join(ac, 'latest.yml')), metin.slice(0, 200));
+  const p = SON_PANEL_IZ;
+  check('§9c panel künyesi panelin doğrulayıcısıyla (dogrula --musteri=<künye grubu>) TEK kez, TEKSERP_TEST_* ortamı GEÇMEZ, dizinde yalnız exe + latest.yml',
+    p.length === 1 && p[0].komut === 'dogrula' && p[0].f.musteri === 'test' && p[0].testAnahtarlari.length === 0 && JSON.stringify(p[0].dosyalar) === JSON.stringify([PANEL_AD, 'latest.yml'].sort()), JSON.stringify(p));
+  const ben = fs.existsSync(path.join(ac, 'BENIOKU.txt')) ? fs.readFileSync(path.join(ac, 'BENIOKU.txt'), 'utf8') : '';
+  check('§9d BENIOKU panel kurulum adımını ve panel dosya adını söyler', ben.includes('Yönetim paneli') && ben.includes(PANEL_AD), ben.slice(-300));
+
+  const eski = panelGirdisi(yol('panel-eski'), { kanal: 'demofabrika' });
+  dur('§9e eski KANAL künyeli panel (grup değil) → DUR', kos({ '--panel': eski.exe, '--panel-kunye': eski.kunye }), /KANAL KİMLİKLİ panel/, { tsBos: true });
+  const bozuk = panelGirdisi(yol('panel-bozuk'), { bozukSha: true });
+  dur('§9f künye sha512 exe ile tutmuyor → DUR', kos({ '--panel': bozuk.exe, '--panel-kunye': bozuk.kunye }), /TUTMUYOR|göstermiyor/, { tsBos: true });
+  const imzasiz = panelGirdisi(yol('panel-imzasiz'), { bildirimsiz: true });
+  dur('§9g imzalı bildirimi olmayan latest.yml → DUR', kos({ '--panel': imzasiz.exe, '--panel-kunye': imzasiz.kunye }), /imzasız latest\.yml/, { tsBos: true });
+  dur('§9h panel doğrulayıcısı GEÇERSİZ der → DUR', kos({}, { panelSenaryo: 'gecersiz' }), /PANEL KÜNYESİ DOĞRULANAMADI/, { tsBos: false });
+  const pr = kos({}, { panelSenaryo: 'gecersiz', prova: true });
+  check('§9i --prova: panel imzası UYARIYA düşer (arşiv -PROVA-IMZASIZ)', pr.kod === 0 && /\[PROVA\] PANEL KÜNYESİ DOĞRULANAMADI/.test(pr.cikti), `kod ${pr.kod}`);
+  const ad = panelGirdisi(yol('panel-ad'), { ad: 'TeksERP-Panel-1.2.3.exe' });
+  dur('§9j panel adı Electron artifactName desenine uymuyor → DUR', kos({ '--panel': ad.exe, '--panel-kunye': ad.kunye }), /artifactName desenine/, { tsBos: true });
+  const eksik = kos({ '--panel': null, '--panel-kunye': null });
+  check('§9k --panel/--panel-kunye verilmezse kullanım hatası (2), arşiv yok', eksik.kod === 2 && /--panel gerekli/.test(eksik.cikti) && eksik.dosyalar.length === 0, `kod ${eksik.kod}`);
+
+  const m = await import(BETIK);
+  const gecerli = icerik ?? {};
+  const ihlal = { ...gecerli, kanal: 'demofabrika' };
+  const ihlal2 = { ...gecerli, dosyalar: [...(gecerli.dosyalar ?? []).map((d) => (d.rol === 'panel' ? { ...d, grup: 'test' } : d))] };
+  check('§9l icerikKunyesiHatalari: üretilen künye temiz · kökte "kanal" ve dosyada "grup" anahtarı ihlal',
+    m.icerikKunyesiHatalari(gecerli).length === 0 && m.icerikKunyesiHatalari(ihlal).some((h) => /kanal/.test(h)) && m.icerikKunyesiHatalari(ihlal2).some((h) => /grup/.test(h)), JSON.stringify(m.icerikKunyesiHatalari(gecerli)));
+
+  // Negatif sonda: grup kapısı sökülmüş kopya eski kanal panelini GEÇİRİR → §9e'nin ölçtüğü şey gerçekten o kapıdır.
+  const sonda = path.join(path.dirname(BETIK), 'kurulum-arsivi.sonda.mjs');
+  const kaynak = fs.readFileSync(BETIK, 'utf8');
+  const sokuk = kaynak.replace(/if \(!gruplar\.includes\(pk\.yuk\.kanal\)\) hatalar\.push\(/, 'if (false) hatalar.push(');
+  fs.writeFileSync(sonda, sokuk);
+  try {
+    const s = kos({ '--panel': eski.exe, '--panel-kunye': eski.kunye }, { betik: sonda });
+    check('§9m SONDA: grup kapısı sökülünce eski kanal paneli arşive girer (kapı gerçekten bu satırdır)', sokuk !== kaynak && s.kod === 0, `değişti ${sokuk !== kaynak} · kod ${s.kod}`);
+  } finally {
+    fs.rmSync(sonda, { force: true });
   }
 }
 

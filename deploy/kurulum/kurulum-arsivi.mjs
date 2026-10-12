@@ -15,6 +15,10 @@
 //   PG         `pg-paketle.mjs --dogrula` (paket kayıtla eşit) · pg.json yükü kayıt + PG zip'in ad/boyut/sha256'sı ·
 //              imzası aynı çapayla (dogrula --pg-kunye)
 //   tkpub      yalnız `tkpub1:` açık anahtar, sağlaması tutar; özel anahtar (`tksec1:`) RED
+//   panel      ORTAK panel kurulumu (`TeksERP-<sürüm>-Setup.exe`, Electron `artifactName`den) + grubun `latest.yml`i:
+//              ad/boy/sha512 künyeyle eşit · künye kanalı bir DAĞITIM GRUBU (eski kanal kodu = kanal kimlikli panel → RED) ·
+//              imza `panel-imza.ts dogrula` (gerçek çapa); `latest.yml` arşive GİRMEZ (grup adı taşır)
+//   künye      arşive `ICERIK.json` (rol · ad · sürüm · boy · sha256; yalnız izinli anahtarlar — kanal/grup/müşteri YOK)
 // Arşiv: kök düz (alt dizin yok), zip/exe "store", içinde SHA256SUMS (sha256sum biçimi) + BENIOKU.txt; yeniden
 // açılıp her girdi SHA256SUMS'a ve kaynağa karşı ölçülür + `unzip -t`; yanında `<arşiv>.sha256`.
 // `--prova`: imza kapıları UYARIYA düşer, ad `-PROVA-IMZASIZ` taşır (yapı denemesi; müşteriye verilmez).
@@ -25,7 +29,8 @@
 // Arşiv sürüm başına TEKTİR (müşteri/kanal/grup argümanı YOK): firma adı lisanstan, grup kiradan gelir.
 //
 //   node deploy/kurulum/kurulum-arsivi.mjs --setup <TeksERP-Kurulum-<sürüm>.exe> --backend <tekserp-backend-*.zip> \
-//     --pg <postgresql-*.zip> --pg-kunye <pg.json> [--tkpub <etkili.tkpub>] --cikti <dizin> [--prova]
+//     --pg <postgresql-*.zip> --pg-kunye <pg.json> --panel <TeksERP-<v>-Setup.exe> --panel-kunye <latest.yml> \
+//     [--tkpub <etkili.tkpub>] --cikti <dizin> [--prova]
 //
 // ÇIKIŞ: 0 arşiv hazır · 1 kapı DUR (arşiv bırakılmaz) · 2 ÖLÇÜLEMEDİ / kullanım.
 // Belge: docs/ops/SATICI-KURULUM.md §14 · bekçi: node scripts/test_kurulum_arsivi.mjs
@@ -52,11 +57,15 @@ const ON_OLCUM_PS1 = 'deploy/kurulum/on-olcum.ps1';
 const ISS = 'deploy/kurulum/tekserp-kurulum.iss';
 const OZETLER = 'SHA256SUMS';
 const BENIOKU = 'BENIOKU.txt';
+const ICERIK = 'ICERIK.json';
+const ELECTRON_PKG = 'Electron/package.json';
+const PANEL_IMZA = 'scripts/panel-imza.ts';
 // kurulum.ps1 AsamaPaket'in sürüm dizini kuralı: arşiv adı ve SHA256SUMS bu sürümle doğar.
 const SURUM_DESENI = /^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}(-[0-9A-Za-z.]{1,40})?$/;
 const GUVENLI_AD = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
-const DEGERLI = ['--setup', '--backend', '--pg', '--pg-kunye', '--tkpub', '--cikti'];
-const KULLANIM = 'Kullanım: --setup <exe> --backend <zip> --pg <zip> --pg-kunye <pg.json> [--tkpub <etkili.tkpub>] --cikti <dizin> [--prova]';
+const DEGERLI = ['--setup', '--backend', '--pg', '--pg-kunye', '--panel', '--panel-kunye', '--tkpub', '--cikti'];
+const ZORUNLU = ['--setup', '--backend', '--pg', '--pg-kunye', '--panel', '--panel-kunye', '--cikti'];
+const KULLANIM = 'Kullanım: --setup <exe> --backend <zip> --pg <zip> --pg-kunye <pg.json> --panel <TeksERP-<v>-Setup.exe> --panel-kunye <latest.yml> [--tkpub <etkili.tkpub>] --cikti <dizin> [--prova]';
 /** Ortak paket ÜRETİM çapasıyla doğar (build-korumali: müşterisiz → üretim); başka kip arşive girmez. */
 const ORTAK_CAPA = 'uretim';
 const ZINCIR_IMZA = 'butunluk-zincir.jws';
@@ -155,7 +164,7 @@ export function argAyristir(argv) {
     else if (Object.hasOwn(deger, ad)) hatalar.push(`${ad} TEK verilir (iki kez verildi)`);
     else deger[ad] = v;
   }
-  for (const z of ['--setup', '--backend', '--pg', '--pg-kunye', '--cikti']) if (!deger[z] && !hatalar.some((h) => h.startsWith(z))) hatalar.push(`${z} gerekli`);
+  for (const z of ZORUNLU) if (!deger[z] && !hatalar.some((h) => h.startsWith(z))) hatalar.push(`${z} gerekli`);
   return { deger, hatalar };
 }
 
@@ -220,8 +229,83 @@ export function tkpubHatasi(metin) {
   return null;
 }
 
+// ---------------------------------------------------------------- panel
+/** Panel kurulum adının deseni Electron paketinin `artifactName`inden (kopyalanmaz); sürüm yakalanır. */
+export function panelAdDeseni(pkgMetni) {
+  let p;
+  try {
+    p = JSON.parse(pkgMetni);
+  } catch (e) {
+    throw olculemedi(`${ELECTRON_PKG} JSON değil: ${e.message}`);
+  }
+  const ad = p?.build?.nsis?.artifactName ?? p?.build?.win?.artifactName;
+  if (typeof ad !== 'string' || !ad.includes('${version}') || !ad.endsWith('.${ext}')) throw olculemedi(`${ELECTRON_PKG}: build.win/nsis artifactName "\${version}…\${ext}" biçiminde değil (${ad})`);
+  const [on, son] = ad.slice(0, -'.${ext}'.length).split('${version}');
+  const kac = (x) => x.replace(/[.+^${}()|[\]\\-]/g, '\\$&');
+  return new RegExp(`^${kac(on)}([0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,6}(?:-[0-9A-Za-z.]{1,40})?)${kac(son)}\\.exe$`);
+}
+
+/** electron-builder `latest.yml`inin arşiv kararına giren alanları (tam ayrıştırıcı panelin doğrulayıcısındadır). */
+export function latestYmlCoz(metin) {
+  const al = (re) => re.exec(metin)?.[1]?.trim().replace(/^'(.*)'$/, '$1') ?? null;
+  const yol = al(/^path: (.+)$/m);
+  const sha512 = al(/^sha512: (.+)$/m);
+  const boyut = Number(al(/^ {4}size: (\d+)$/m));
+  const surum = al(/^version: (.+)$/m);
+  const bildirim = al(/^ {2}bildirim: (\S+)$/m);
+  let yuk = null;
+  try {
+    yuk = bildirim ? JSON.parse(Buffer.from(bildirim.split('.')[1], 'base64url').toString('utf8')) : null;
+  } catch {
+    yuk = null;
+  }
+  return { yol, sha512, boyut, surum, yuk };
+}
+
+/** Panel künyesini panelin KENDİ doğrulayıcısıyla (gerçek çapa) ölçer; test çapası geçirilmez. */
+function panelDogrula({ exe, kunye, kanal }) {
+  const dizin = fs.mkdtempSync(path.join(os.tmpdir(), 'tekserp-arsiv-panel-'));
+  try {
+    fs.symlinkSync(exe.yol, path.join(dizin, exe.ad));
+    fs.symlinkSync(kunye.yol, path.join(dizin, 'latest.yml'));
+    const env = { ...process.env };
+    for (const k of Object.keys(env)) if (k.startsWith('TEKSERP_TEST_')) delete env[k];
+    const r = spawnSync(process.execPath, ['--import', 'tsx', PANEL_IMZA, 'dogrula', `--musteri=${kanal}`, `--dizin-paket=${dizin}`], { cwd: TEKS, encoding: 'utf8', env, maxBuffer: 16 * 1024 * 1024 });
+    const metin = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
+    if (r.error) throw olculemedi(`${PANEL_IMZA} dogrula çalıştırılamadı: ${r.error.message}`);
+    if (r.status !== 0 && /ERR_MODULE_NOT_FOUND[\s\S]*['"]tsx['"]|Cannot find package 'tsx'/.test(metin)) throw olculemedi(`tsx bulunamadı (${TEKS}/node_modules) — panel doğrulayıcısı koşamadı`);
+    return r.status === 0 ? { ok: true, metin } : { ok: false, neden: metin.split('\n').slice(-2).join(' · ') || `çıkış ${r.status}` };
+  } finally {
+    fs.rmSync(dizin, { recursive: true, force: true });
+  }
+}
+
+// ---------------------------------------------------------------- içerik künyesi
+/** Arşivin içerik künyesinde izinli anahtarlar (OPT-IN): kanal/grup/müşteri kimliği yeni bir anahtarla SIZAMAZ. */
+export const ICERIK_ANAHTARLARI = Object.freeze({ kok: Object.freeze(['v', 'tur', 'surum', 'zaman', 'dosyalar']), dosya: Object.freeze(['rol', 'ad', 'surum', 'boyut', 'sha256']) });
+export const ICERIK_ROLLERI = Object.freeze(['setup', 'backend', 'pg', 'pgKunye', 'panel', 'tkpub']);
+
+/** İçerik künyesi kapısı: yalnız izinli anahtarlar, bilinen roller, sürüm/ad/özet biçimli; ihlal listesi döner. */
+export function icerikKunyesiHatalari(k) {
+  const h = [];
+  if (!k || typeof k !== 'object' || Array.isArray(k)) return ['künye nesne değil'];
+  for (const a of Object.keys(k)) if (!ICERIK_ANAHTARLARI.kok.includes(a)) h.push(`izinsiz kök anahtarı: ${a}`);
+  if (k.v !== 1 || k.tur !== 'tekserp-ilk-kurulum') h.push('v/tur beklenen değil');
+  if (typeof k.surum !== 'string' || !SURUM_DESENI.test(k.surum)) h.push(`sürüm biçimsiz: ${k.surum}`);
+  if (!Array.isArray(k.dosyalar) || !k.dosyalar.length) return [...h, 'dosyalar boş'];
+  for (const d of k.dosyalar) {
+    for (const a of Object.keys(d ?? {})) if (!ICERIK_ANAHTARLARI.dosya.includes(a)) h.push(`izinsiz dosya anahtarı: ${a}`);
+    if (!ICERIK_ROLLERI.includes(d?.rol)) h.push(`bilinmeyen rol: ${d?.rol}`);
+    if (typeof d?.ad !== 'string' || !GUVENLI_AD.test(d.ad)) h.push(`ad biçimsiz: ${d?.ad}`);
+    if (d?.surum !== null && !(typeof d?.surum === 'string' && SURUM_DESENI.test(d.surum))) h.push(`${d?.ad}: sürüm biçimsiz`);
+    if (!Number.isInteger(d?.boyut) || !/^[0-9a-f]{64}$/.test(String(d?.sha256))) h.push(`${d?.ad}: boy/özet biçimsiz`);
+  }
+  for (const r of ['setup', 'backend', 'pg', 'pgKunye', 'panel']) if (k.dosyalar.filter((d) => d?.rol === r).length !== 1) h.push(`rol ${r} TEK olmalı`);
+  return h;
+}
+
 /** Müşterinin göreceği kısa yönerge (UTF-8 BOM + CRLF: eski Not Defteri de Türkçe harfleri doğru gösterir). */
-function beniOku({ surum, setupAd, setupImzali, prova }) {
+function beniOku({ surum, setupAd, setupImzali, prova, panelAd }) {
   const s = [
     `TeksERP sunucu kurulumu — backend ${surum}${prova ? ' — PROVA (müşteriye verilmez)' : ''}`,
     '',
@@ -233,7 +317,9 @@ function beniOku({ surum, setupAd, setupImzali, prova }) {
   if (!setupImzali) s.push('   Windows "Bilgisayarınız korundu" derse: "Ek bilgi" → "Yine de çalıştır".');
   s.push(
     '3. Klasördeki diğer dosyaları silmeyin, adlarını değiştirmeyin; hepsi aynı klasörde kalmalı.',
-    `4. Bütünlük (isteğe bağlı): ${OZETLER} dosyasındaki SHA-256 özetleri.`,
+    `4. Yönetim paneli: ${panelAd} dosyasını paneli kullanacak her Windows bilgisayarında çalıştırın`,
+    '   (sunucu kurulumu bittikten sonra; panel sunucuyu ağda kendisi bulur).',
+    `5. Bütünlük (isteğe bağlı): ${OZETLER} dosyasındaki SHA-256 özetleri; içerik listesi ${ICERIK}.`,
     '',
   );
   return s.join('\r\n');
@@ -248,8 +334,11 @@ async function denetle(arg) {
 
   // Ortak paketin kimliği paketleyiciyle AYNI yüklemden (dağıtım kaydı); kanal kaydı okunmaz.
   let hizmetAdi;
+  let gruplar = [];
   try {
-    hizmetAdi = backendPaketKimligi(kayitAyristir(metinOku(DAGITIM_REL)), metinOku(VENDOR_URL_REL), metinOku(KANAL_ADLARI_REL)).TEKSERP_HIZMET_ADI;
+    const dagitim = kayitAyristir(metinOku(DAGITIM_REL));
+    gruplar = (dagitim.gruplar ?? []).map((g) => g.kod);
+    hizmetAdi = backendPaketKimligi(dagitim, metinOku(VENDOR_URL_REL), metinOku(KANAL_ADLARI_REL)).TEKSERP_HIZMET_ADI;
   } catch (e) {
     if (e instanceof Dur) throw e;
     if (e instanceof DagitimOlculemedi) throw olculemedi(e.message);
@@ -277,7 +366,7 @@ async function denetle(arg) {
   // 1) Girdiler: TEK, VAR, düzenli dosya, boş değil, adları setup desenlerine uyar.
   const girdi = {};
   const gercek = new Map();
-  for (const [anahtar, ad] of [['--setup', 'setup'], ['--backend', 'backend'], ['--pg', 'pg'], ['--pg-kunye', 'pgKunye'], ['--tkpub', 'tkpub']]) {
+  for (const [anahtar, ad] of [['--setup', 'setup'], ['--backend', 'backend'], ['--pg', 'pg'], ['--pg-kunye', 'pgKunye'], ['--panel', 'panel'], ['--panel-kunye', 'panelKunye'], ['--tkpub', 'tkpub']]) {
     if (!arg[anahtar]) continue;
     const yol = path.resolve(arg[anahtar]);
     const st = fs.statSync(yol, { throwIfNoEntry: false });
@@ -300,6 +389,9 @@ async function denetle(arg) {
     if (girdi.setup.ad.endsWith(`${desen.setup.sonek}.exe`)) hatalar.push(`"${girdi.setup.ad}" CI boru öz-sınaması (${desen.setup.sonek}) — müşteriye VERİLMEZ, asıl TeksERP-Kurulum-<sürüm>.exe gerekir`);
     else if (!desen.setup.desen.test(girdi.setup.ad)) hatalar.push(`setup adı "${girdi.setup.ad}" sihirbazın çıktı adına (${desen.setup.onek}<sürüm>.exe) uymuyor`);
   }
+  const panelDeseni = panelAdDeseni(metinOku(ELECTRON_PKG));
+  if (girdi.panel && !panelDeseni.test(girdi.panel.ad)) hatalar.push(`panel adı "${girdi.panel.ad}" Electron artifactName desenine (${panelDeseni.source}) uymuyor`);
+  if (girdi.panel && desen.setup.desen.test(girdi.panel.ad)) hatalar.push(`panel adı "${girdi.panel.ad}" sunucu setup deseniyle çakışıyor`);
   if (hatalar.length) throw new Dur(1, `GİRDİLER (${hatalar.length})`, hatalar);
 
   // 2) setup.exe: Windows PE mi, Authenticode var mı (geçerliliğini Windows ölçer).
@@ -397,7 +489,24 @@ async function denetle(arg) {
     }
   } else uyarilar.push(`${desen.tkpub.joker} yok — setup sonunda "Etkili Yazılım yedek alıcısı yok" YAPILACAK maddesi çıkar`);
 
+  // 5b) Panel: PE · künye (latest.yml) ↔ exe (ad/boy/sha512) · künye kanalı bir dağıtım GRUBU (ortak panel).
+  const panelSurum = panelDeseni.exec(girdi.panel.ad)[1];
+  const panelBayt = fs.readFileSync(girdi.panel.yol);
+  if (!peImzasi(panelBayt).pe) hatalar.push(`panel kurulumu bir Windows programı (PE) değil: ${girdi.panel.ad}`);
+  const pk = latestYmlCoz(fs.readFileSync(girdi.panelKunye.yol, 'utf8'));
+  const sha512 = createHash('sha512').update(panelBayt).digest();
+  const panelOzet = { sha256: sha256(panelBayt), boyut: panelBayt.length };
+  if (pk.yol !== girdi.panel.ad || pk.surum !== panelSurum) hatalar.push(`panel künyesi (latest.yml) ${pk.yol ?? '?'} / ${pk.surum ?? '?'} gösteriyor — verilen ${girdi.panel.ad}`);
+  if (pk.boyut !== panelBayt.length || pk.sha512 !== sha512.toString('base64')) hatalar.push(`panel künyesinin boy/sha512'si exe'yle TUTMUYOR (${pk.boyut} B · exe ${panelBayt.length} B)`);
+  if (!pk.yuk) hatalar.push('panel künyesi imzalı bildirim (tekserp.bildirim) taşımıyor — imzasız latest.yml arşive girmez');
+  else {
+    if (pk.yuk.urun !== 'panel' || pk.yuk.surum !== panelSurum || pk.yuk.paket?.ad !== girdi.panel.ad || pk.yuk.paket?.sha512 !== sha512.toString('hex') || pk.yuk.paket?.boyut !== panelBayt.length) hatalar.push('panel bildirimi bu exe\'yi göstermiyor (ürün/sürüm/ad/boy/sha512)');
+    if (!gruplar.includes(pk.yuk.kanal)) hatalar.push(`panel künyesinin kanalı "${pk.yuk.kanal}" bir dağıtım grubu (${gruplar.join('/')}) değil — KANAL KİMLİKLİ panel ortak arşive girmez`);
+  }
   if (hatalar.length) throw new Dur(1, `KAPI (${hatalar.length})`, hatalar);
+  console.log(`  panel imzası   : panel-imza.ts dogrula (grup ${pk.yuk.kanal}, gerçek çapa) …`);
+  const pd = panelDogrula({ exe: girdi.panel, kunye: girdi.panelKunye, kanal: pk.yuk.kanal });
+  if (!pd.ok) imzaKapisi(`PANEL KÜNYESİ DOĞRULANAMADI (panel-imza.ts dogrula): ${pd.neden}`);
 
   // 6) İmza: üretim çapasıyla TAM doğrulama (ortak paketin bütünlüğü + müşterisiz künye + pg.json imzası).
   let imzaKid = null;
@@ -426,7 +535,8 @@ async function denetle(arg) {
   const arsivAd = `TeksERP-Kurulum-${surum}${prova ? '-PROVA-IMZASIZ' : ''}.zip`;
   const adHata = derlemeAdiHatasi(arsivAd, adKurali);
   if (adHata) throw new Dur(1, `arşiv adı satıcının derleme deposuna uymuyor: ${adHata}`);
-  const uyeler = [girdi.setup.ad, girdi.backend.ad, girdi.pg.ad, girdi.pgKunye.ad, ...(girdi.tkpub ? [girdi.tkpub.ad] : []), OZETLER, BENIOKU];
+  const uyeler = [girdi.setup.ad, girdi.backend.ad, girdi.pg.ad, girdi.pgKunye.ad, girdi.panel.ad, ...(girdi.tkpub ? [girdi.tkpub.ad] : []), ICERIK, OZETLER, BENIOKU];
+  if (uyeler.filter((u) => desen.setup.desen.test(u)).length !== 1) throw new Dur(1, `desen çakışması: sunucu setup deseni için TEK dosya beklenir (${uyeler.join(', ')})`);
   const kucuk = uyeler.map((u) => u.toLowerCase());
   if (new Set(kucuk).size !== kucuk.length) throw new Dur(1, `arşivde büyük/küçük harf farkıyla aynı ad (Windows'ta çakışır): ${uyeler.join(', ')}`);
   for (const [ad, beklenen, zorunlu] of [['backend', girdi.backend.ad, true], ['pg', girdi.pg.ad, true], ['pgKunye', girdi.pgKunye.ad, true], ['tkpub', girdi.tkpub?.ad, false]]) {
@@ -434,7 +544,7 @@ async function denetle(arg) {
     if ((zorunlu || beklenen) && (es.length !== 1 || es[0] !== beklenen)) throw new Dur(1, `desen çakışması: setup ${desen[ad].joker} için ${es.length} dosya görür (${es.join(', ') || 'hiç'})`);
     if (!zorunlu && !beklenen && es.length) throw new Dur(1, `desen çakışması: ${desen[ad].joker} beklenmeyen dosyayla eşleşiyor (${es.join(', ')})`);
   }
-  return { girdi, paket, sKunye, hizmetAdi, capa, prova, surum, arsivAd, uyarilar, imzaKid, setupImzali: Boolean(pe.imzali), pgOzet };
+  return { girdi, paket, sKunye, hizmetAdi, capa, prova, surum, arsivAd, uyarilar, imzaKid, setupImzali: Boolean(pe.imzali), pgOzet, panelSurum, panelOzet, panelGrup: pk.yuk.kanal };
 }
 
 // ---------------------------------------------------------------- üretim + yeniden ölçüm
@@ -450,6 +560,27 @@ function zipAraci() {
 
 const baytSirasi = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
+/** İçerik künyesi: yalnız sürüm + dosya listesi (ad · rol · sürüm · boy · sha256); kimlik taşımaz. */
+function icerikKunyesi(d, ozet) {
+  const boy = (g) => fs.statSync(g.yol).size;
+  const satir = (rol, g, surum) => ({ rol, ad: g.ad, surum, boyut: boy(g), sha256: ozet.get(g.ad) });
+  const z = new Date(d.sKunye?.zaman ?? '');
+  return {
+    v: 1,
+    tur: 'tekserp-ilk-kurulum',
+    surum: d.surum,
+    zaman: Number.isNaN(z.getTime()) ? null : z.toISOString(),
+    dosyalar: [
+      satir('setup', d.girdi.setup, d.girdi.setup.ad.slice('TeksERP-Kurulum-'.length, -'.exe'.length)),
+      satir('backend', d.girdi.backend, d.surum),
+      satir('pg', d.girdi.pg, null),
+      satir('pgKunye', d.girdi.pgKunye, null),
+      satir('panel', d.girdi.panel, d.panelSurum),
+      ...(d.girdi.tkpub ? [satir('tkpub', d.girdi.tkpub, null)] : []),
+    ],
+  };
+}
+
 async function uret(d, cikti) {
   const arac = zipAraci();
   const hedef = path.join(cikti, d.arsivAd);
@@ -460,7 +591,7 @@ async function uret(d, cikti) {
     fs.rmSync(yarim, { force: true });
   };
   try {
-    const kaynak = [d.girdi.setup, d.girdi.backend, d.girdi.pg, d.girdi.pgKunye, ...(d.girdi.tkpub ? [d.girdi.tkpub] : [])];
+    const kaynak = [d.girdi.setup, d.girdi.backend, d.girdi.pg, d.girdi.pgKunye, d.girdi.panel, ...(d.girdi.tkpub ? [d.girdi.tkpub] : [])];
     const ozet = new Map();
     for (const g of kaynak) {
       const s = path.join(sahne, g.ad);
@@ -470,8 +601,13 @@ async function uret(d, cikti) {
       if (o.sha256 !== k.sha256) throw new Dur(1, `kopya kaynakla aynı değil (${g.ad}) — girdi koşum sırasında değişti`);
       ozet.set(g.ad, o.sha256);
     }
-    fs.writeFileSync(path.join(sahne, BENIOKU), `﻿${beniOku({ surum: d.surum, setupAd: d.girdi.setup.ad, setupImzali: d.setupImzali, prova: d.prova })}`);
+    fs.writeFileSync(path.join(sahne, BENIOKU), `﻿${beniOku({ surum: d.surum, setupAd: d.girdi.setup.ad, setupImzali: d.setupImzali, prova: d.prova, panelAd: d.girdi.panel.ad })}`);
     ozet.set(BENIOKU, sha256(fs.readFileSync(path.join(sahne, BENIOKU))));
+    const icerik = icerikKunyesi(d, ozet);
+    const ih = icerikKunyesiHatalari(icerik);
+    if (ih.length) throw new Dur(1, 'İÇERİK KÜNYESİ KAPISI', ih);
+    fs.writeFileSync(path.join(sahne, ICERIK), `${JSON.stringify(icerik, null, 2)}\n`);
+    ozet.set(ICERIK, sha256(fs.readFileSync(path.join(sahne, ICERIK))));
     const ozetMetni = `${[...ozet.keys()].sort(baytSirasi).map((a) => `${ozet.get(a)}  ${a}`).join('\n')}\n`;
     fs.writeFileSync(path.join(sahne, OZETLER), ozetMetni);
     ozet.set(OZETLER, sha256(Buffer.from(ozetMetni)));
@@ -552,6 +688,7 @@ async function main() {
   console.log(`  boyut / sha256 : ${u.son.boyut} B · ${u.son.sha256}  (yanında ${d.arsivAd}.sha256)`);
   console.log(`  içerik (düz)   : ${u.adlar.map((a) => `${a}`).join(' · ')}`);
   console.log(`  backend        : ${d.girdi.backend.ad} · ${d.surum} · ortak · hizmet ${d.hizmetAdi} · çapa ${d.capa}${d.imzaKid ? ` · imza ${d.imzaKid} GEÇERLİ` : ' · İMZA DOĞRULANMADI'}`);
+  console.log(`  panel          : ${d.girdi.panel.ad} · ${d.panelSurum} · sha256 ${d.panelOzet.sha256.slice(0, 16)}… (künye grubu ${d.panelGrup}; grup adı arşive GİRMEZ)`);
   console.log(`  PG             : ${d.girdi.pg.ad} · ${d.pgOzet.sha256.slice(0, 16)}… = pg.json`);
   console.log(`  damga / araç   : ${u.damga.toISOString()} · ${u.arac}`);
   for (const w of d.uyarilar) console.log(`  ⚠ ${w}`);

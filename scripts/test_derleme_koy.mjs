@@ -73,7 +73,7 @@ case "$cmd" in
 esac
 exit 0
 `, { mode: 0o755 });
-fs.writeFileSync(path.join(BIN, 'scp'), '#!/usr/bin/env bash\nprintf \'scp\\t%s\\n\' "$*" >> "$SAHTE_LOG"\nexit 0\n', { mode: 0o755 });
+fs.writeFileSync(path.join(BIN, 'scp'), '#!/usr/bin/env bash\nprintf \'scp\\t%s\\n\' "$*" >> "$SAHTE_LOG"\ndst="${@: -1}"\ncase "$dst" in *.yarim) [ -n "${SAHTE_INDIR:-}" ] && cp "$SAHTE_INDIR" "$dst" ;; esac\nexit 0\n', { mode: 0o755 });
 
 // vds-dogrula tabanı: sahte ssh çıktısından (gerçek betik --taban-yaz ile).
 function vdsCikti(bozuk = false) {
@@ -101,12 +101,12 @@ fs.writeFileSync(`${DOSYA}.sha256`, `${sha(VERI)}  ${AD}\n`);
 const OZ = sha(VERI);
 const YEDEK = 'tekserp-satici-yedek:abc123def456';
 
-function olcum({ d = D, bag = `${d} false`, yardimci = YEDEK, imajlar = ['tekserp-satici:abc123def456', YEDEK], dizin = '0:0 755', ls = [], bos = 50_000_000, kap = ls } = {}) {
+function olcum({ d = D, bag = `${d} false`, yardimci = YEDEK, imajlar = ['tekserp-satici:abc123def456', YEDEK], dizin = '0:0 755', ls = [], bos = 50_000_000, kap = ls, baglanti = [] } = {}) {
   const lsSatir = (x) => `-rw-r--r-- 1 0 0 ${x[1]} Oct  1 00:47 ${x[0]}`;
   return ['@@BAG', bag, '@@YARDIMCI', yardimci, '@@IMAJLAR', ...imajlar, '@@DIZIN', dizin,
     '@@LS', 'total 8', 'drwxr-xr-x 2 0 0 4096 Oct  1 00:47 .', 'drwxr-xr-x 9 0 0 4096 Oct  1 00:47 ..', '-rw-r--r-- 1 0 0 1234 Oct  1 00:47 TeksERP-1.4.2-Setup.exe', ...ls.map(lsSatir),
     '@@DF', 'Filesystem 1024-blocks Used Available Capacity Mounted on', `/dev/sda1 100000000 1 ${bos} 50% /`, `/dev/sda1 100000000 1 ${bos} 50% /`,
-    '@@KAP', 'total 8', '-rw-r--r-- 1 root root 1234 Oct  1 00:47 TeksERP-1.4.2-Setup.exe', ...kap.map((x) => `-rw-r--r-- 1 root root ${x[1]} Oct  1 00:47 ${x[0]}`), '@@SON', ''].join('\n');
+    '@@KAP', 'total 8', '-rw-r--r-- 1 root root 1234 Oct  1 00:47 TeksERP-1.4.2-Setup.exe', ...kap.map((x) => `-rw-r--r-- 1 root root ${x[1]} Oct  1 00:47 ${x[0]}`), ...(baglanti === null ? [] : ['@@BAGLANTI', ...baglanti]), '@@SON', ''].join('\n');
 }
 
 function kos(args, s = {}) {
@@ -120,7 +120,8 @@ function kos(args, s = {}) {
   if (s.vdsSonra) fs.writeFileSync(path.join(SAHTE, 'vds-sonra'), s.vdsSonra);
   const env = { ...process.env, PATH: `${BIN}${path.delimiter}${process.env.PATH}`, HOME: yol('ev'), TEKSERP_VDS_TABAN: TABAN, SAHTE_LOG: LOG, SAHTE_DIR: SAHTE, LC_ALL: 'C' };
   if (s.kopuk) env.SAHTE_KOPUK = '1';
-  const r = spawnSync(process.execPath, [BETIK, ...args], { encoding: 'utf8', env, timeout: 60_000 });
+  if (s.indir) env.SAHTE_INDIR = s.indir;
+  const r = spawnSync(process.execPath, [s.betik ?? BETIK, ...args], { encoding: 'utf8', env, timeout: 60_000 });
   const log = fs.existsSync(LOG) ? fs.readFileSync(LOG, 'utf8').split('\n').filter(Boolean).map((l) => {
     const [arac, ...rest] = l.split('\t');
     const cmd = rest.join('\t');
@@ -290,6 +291,86 @@ console.log('test_derleme_koy — satıcının derleme deposuna koyma (sahte ssh
     .map((x) => metin.slice(x.index, x.index + 30));
   const icerde = [...metin.slice(bas, son).matchAll(/\b(sshYaz|yaz)\(/g)].length;
   check('§12 yazan çağrılar (yaz/sshYaz) yalnız uygula() gövdesinde', bas > 0 && son > bas && icerde >= 5 && disari.length === 0, `içeride ${icerde} · dışarıda: ${disari.join(' | ')}`);
+}
+
+// §13 kaldırma (--kaldir) ve yenileme (--yenile): KURU varsayılan · aktif bağlantıda RED · Mac arşivi sha eşitliği
+{
+  const ESKI = 'TeksERP-Kurulum-9.9.8.zip';
+  const ESKI_VERI = crypto.randomBytes(50_000);
+  const ESKI_OZ = sha(ESKI_VERI);
+  const ESKI_DOSYA = yol('uzak-eski', ESKI);
+  fs.mkdirSync(yol('uzak-eski'));
+  fs.writeFileSync(ESKI_DOSYA, ESKI_VERI);
+  const AKTIF = 'TeksERP-Kurulum-9.9.7.zip';
+  const lsEski = [[ESKI, ESKI_VERI.length], [AKTIF, 4000]];
+  const arsivDizini = () => yol('arsiv', String(Math.random()).slice(2));
+  const shaEski = `${ESKI_OZ}  ${D}/${ESKI}\n${'c'.repeat(64)}  ${D}/${AKTIF}\n`;
+  const temel = { olcum: olcum({ ls: lsEski, baglanti: [`${AKTIF}|1`] }), sha: shaEski };
+
+  const ar = arsivDizini();
+  const k = kos(['--ortam', 'uretim', '--kaldir', ESKI, '--arsiv', ar], temel);
+  check('§13a --kaldir varsayılan KURU: 0 · KURU-TEMIZ · yalnız OKUMA (ölçüm + özet, sözleşmeden geçer) · scp YOK · Mac arşivi yazılmadı',
+    k.kod === 0 && /SONUC: KURU-TEMIZ/.test(k.cikti) && k.log.length === 2 && k.yazma.length === 0 && !k.log.some((x) => x.arac === 'scp') && !fs.existsSync(ar), `kod ${k.kod} · ${k.log.map((x) => x.arac).join(',')} · ${k.cikti.slice(-300)}`);
+  check('§13b KURU plan: Mac arşivine indir · özet eşitliği · konteynerde `sha256sum -c` sonra `rm` (--network none, yalnız depo bağlı) · aktif bağlantı yeniden ölçülür',
+    /Mac arşivine indir/.test(k.cikti) && /sha256sum -c -; rm --/.test(k.cikti) && /--network none --user 0 -v \/opt\/stack\/apps\/tekserp-satici-uretim\/derlemeler:\/k --entrypoint/.test(k.cikti) && /aktif bağlantıyı yeniden ölç/.test(k.cikti) && k.cikti.includes(`${ESKI_OZ} ${ESKI}`), k.cikti.slice(-500));
+  const ag = await import(path.join(KOK, 'deploy/lisans-devreye/lib/ag.mjs'));
+  let sozlesme = 'geçti';
+  try { ag.sshDenetle(m.olcumKomutu('uretim')); } catch (e) { sozlesme = e.message; }
+  check('§13c aktif bağlantı sorgusu ölçüm komutunda ve salt-okuma sözleşmesinden geçer (psql SELECT, `>` yok)', sozlesme === 'geçti' && m.olcumKomutu('uretim').includes("durum = 'AKTIF' AND now() < bitis"), sozlesme);
+
+  const a = kos(['--ortam', 'uretim', '--kaldir', AKTIF, '--arsiv', arsivDizini(), '--uygula'], temel);
+  check('§13d --kaldir AKTİF bağlantılı dosya (--uygula) → DUR 1, scp/yazma/vds YOK', a.kod === 1 && /AKTİF indirme bağlantısı/.test(a.cikti) && a.yazma.length === 0 && !a.log.some((x) => x.arac === 'scp' || x.vds), `kod ${a.kod} · ${a.cikti.slice(-300)}`);
+
+  const yok = kos(['--ortam', 'uretim', '--kaldir', ESKI, '--arsiv', arsivDizini()], { ...temel, olcum: olcum({ ls: lsEski, baglanti: null }) });
+  check('§13e bağlantı tablosu okunamadı → ÖLÇÜLEMEDİ 2, hiçbir şey kaldırılmaz', yok.kod === 2 && /aktif indirme bağlantıları okunamadı/.test(yok.cikti) && yok.yazma.length === 0, `kod ${yok.kod}`);
+
+  const farkli = arsivDizini();
+  fs.mkdirSync(farkli, { recursive: true });
+  fs.writeFileSync(path.join(farkli, ESKI), 'BASKA');
+  const f = kos(['--ortam', 'uretim', '--kaldir', ESKI, '--arsiv', farkli, '--uygula'], temel);
+  check('§13f Mac arşivinde aynı adlı FARKLI dosya → DUR 1, üzerine yazılmaz, kaldırma yok', f.kod === 1 && /FARKLI içerikli/.test(f.cikti) && f.yazma.length === 0 && fs.readFileSync(path.join(farkli, ESKI), 'utf8') === 'BASKA', `kod ${f.kod}`);
+
+  const g = kos(['--ortam', 'uretim', '--kaldir', '../x.zip'], temel);
+  check('§13g yol taşıyan ad → DUR 1, ssh YOK', g.kod === 1 && g.log.length === 0, `kod ${g.kod}`);
+  const h = kos(['--ortam', 'uretim', '--kaldir', ESKI, '--dosya', DOSYA], temel);
+  check('§13h --kaldir + --dosya birlikte → kullanım 2 (yeni + eski birlikte: --yenile)', h.kod === 2 && /--yenile/.test(h.cikti) && h.log.length === 0, `kod ${h.kod}`);
+
+  const uyg = arsivDizini();
+  const u = kos(['--ortam', 'uretim', '--kaldir', ESKI, '--arsiv', uyg, '--uygula'], { ...temel, olcumSonra: olcum({ ls: [[AKTIF, 4000]], baglanti: [`${AKTIF}|1`] }), indir: ESKI_DOSYA, koy: '' });
+  const tur = u.log.map((x) => (x.vds ? 'vds' : x.arac === 'scp' ? 'scp' : x.cmd.includes('docker run') ? 'kaldir' : x.cmd.includes('@@BAG') ? 'olc' : x.cmd.startsWith('sha256sum') ? 'ozet' : '?'));
+  const kaldirCmd = u.log.find((x) => x.cmd.includes('docker run'))?.cmd ?? '';
+  check('§13i --kaldir --uygula: 0 · KALDIRILDI · sıra ölç → özet → vds(önce) → ölç(taze) → scp(Mac) → kaldır → ölç → vds(sonra)',
+    u.kod === 0 && /SONUC: KALDIRILDI/.test(u.cikti) && JSON.stringify(tur) === JSON.stringify(['olc', 'ozet', 'vds', 'olc', 'scp', 'kaldir', 'olc', 'vds']), `kod ${u.kod} · ${tur.join(',')} · ${u.cikti.slice(-300)}`);
+  check('§13j Mac arşivinde dosya uzak özetle aynı · konteyner komutu özet+ad çifti taşır, $HOME bağı yok',
+    fs.existsSync(path.join(uyg, ESKI)) && sha(fs.readFileSync(path.join(uyg, ESKI))) === ESKI_OZ && kaldirCmd.includes(`${ESKI_OZ} ${ESKI}`) && !kaldirCmd.includes('$HOME') && /--network none/.test(kaldirCmd), kaldirCmd.slice(0, 200));
+
+  const yenile = kos(['--ortam', 'uretim', '--dosya', DOSYA, '--yenile', '--arsiv', arsivDizini()], temel);
+  check('§13k --yenile KURU: yeni arşiv yazılacak · AKTİF bağlantılı eski KORUNUR (raporlanır) · bağlantısız eski kaldırılacak · başka tür dosyaya (Setup.exe) dokunulmaz',
+    yenile.kod === 0 && /KURU-TEMIZ/.test(yenile.cikti) && new RegExp(`⚠ ${AKTIF.replace(/\./g, '\\.')}: 1 AKTİF`).test(yenile.cikti) && new RegExp(`- ${ESKI.replace(/\./g, '\\.')}: aktif bağlantı yok`).test(yenile.cikti) && !/kaldır \(özet tutarsa rm\):[^\n]*(9\.9\.7|Setup)/.test(yenile.cikti) && yenile.yazma.length === 0, yenile.cikti.slice(-600));
+
+  // Konteyner kaldırma betiği gerçek kabukta: özet tutarsa siler, tutmazsa dosya KALIR.
+  const kd = yol('kaldir-k');
+  fs.mkdirSync(kd);
+  fs.writeFileSync(path.join(kd, 'a.zip'), 'AAA');
+  fs.writeFileSync(path.join(kd, 'b.zip'), 'BBB');
+  const betik = m.KALDIR_BETIK.replaceAll('cd /k', `cd ${kd}`);
+  const t1 = spawnSync('sh', ['-c', betik, 'sh', sha(Buffer.from('AAA')), 'a.zip'], { encoding: 'utf8' });
+  const t2 = spawnSync('sh', ['-c', betik, 'sh', sha(Buffer.from('XXX')), 'b.zip'], { encoding: 'utf8' });
+  const t3 = spawnSync('sh', ['-c', betik, 'sh', 'x', '../a.zip'], { encoding: 'utf8' });
+  const sha256sumVar = !spawnSync('sha256sum', ['--version']).error;
+  check('§13l kaldırma betiği: özet tutan dosya silinir · tutmayan KALIR (çıkış ≠ 0) · yol taşıyan ad 2', !sha256sumVar || (t1.status === 0 && !fs.existsSync(path.join(kd, 'a.zip')) && t2.status !== 0 && fs.existsSync(path.join(kd, 'b.zip')) && t3.status === 2), `${t1.status}/${t2.status}/${t3.status} ${t2.stderr}`);
+
+  // Negatif sonda: aktif bağlantı kapısı sökülmüş kopya §13d'yi geçirir → bekçi o kapıyı ölçüyor.
+  const sonda = path.join(path.dirname(BETIK), 'derleme-koy.sonda.mjs');
+  const kaynak = fs.readFileSync(BETIK, 'utf8');
+  const sokuk = kaynak.replace('const aktif = olcum.baglanti.get(ad) ?? 0;', 'const aktif = 0;');
+  fs.writeFileSync(sonda, sokuk);
+  try {
+    const sk = kos(['--ortam', 'uretim', '--kaldir', AKTIF, '--arsiv', arsivDizini()], { ...temel, betik: sonda });
+    check('§13m SONDA: aktif bağlantı kapısı sökülünce AKTİF dosya kaldırma planına girer (kapı gerçekten bu satır)', sokuk !== kaynak && sk.kod === 0 && /KURU-TEMIZ/.test(sk.cikti), `değişti ${sokuk !== kaynak} · kod ${sk.kod}`);
+  } finally {
+    fs.rmSync(sonda, { force: true });
+  }
 }
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
