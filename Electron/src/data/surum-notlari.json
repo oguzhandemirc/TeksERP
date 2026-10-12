@@ -153,6 +153,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "İnternet ve karekod yolu yokken program lisans ekranından “Yazarak etkinleştir” ile geçici olarak açılabilir: ekrandaki istek kodu satıcınıza okunur, verdiği 23 gruplu kod yazılır ya da yapıştırılır. Yanlış yazılan grup kırmızı görünür. Geçici açıklıkta üst şerit bitiş tarihini ve kalan günü gösterir; tam etkinleştirme yine karekod ya da internetle yapılır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Kullanıcının hızlı PIN'i artık elle seçilmez: “PIN Üret” düğmesi her seferinde rastgele ve kişiye özel bir PIN verir. Böylece kimse başka birinin PIN'ini tahmin edemez."
         }
       ]
     },

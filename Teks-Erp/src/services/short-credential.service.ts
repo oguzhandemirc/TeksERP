@@ -69,10 +69,11 @@ export type ShortCredentialStatus = Awaited<ReturnType<typeof ShortCredentialSer
 
 export class ShortCredentialService {
   /**
-   * Kullanıcıya hızlı PIN YAZ (özet, etkin anahtarla). `pin` verilmezse çakışmayan rastgele
-   * üretilir. Düz kolon aynı ifadede NULL'lanır. Döner: atanan düz PIN (yalnız çağırana).
+   * Kullanıcıya hızlı PIN YAZ (özet, etkin anahtarla) — HER ZAMAN çakışmayan rastgele (Y-01: seçilen PIN
+   * "başkasında var" cevabıyla başkasının PIN'ini sızdırırdı). Düz kolon aynı ifadede NULL'lanır.
+   * Döner: atanan düz PIN (yalnız çağırana).
    */
-  static async assignQuickPin(userId: string, pin: string | null): Promise<string> {
+  static async assignQuickPin(userId: string): Promise<string> {
     const ring = requireKeyRing();
     const write = async (candidate: string): Promise<"ok" | "taken"> => {
       if (await isQuickPinTaken(ring, candidate, userId)) return "taken";
@@ -90,15 +91,6 @@ export class ShortCredentialService {
         throw e;
       }
     };
-    if (pin !== null) {
-      if (!PIN_RE.test(pin)) throw AppError.badRequest("Hızlı PIN 6 haneli rakam olmalı");
-      if ((await write(pin)) === "taken") {
-        throw AppError.conflict(
-          "Bu PIN başka bir kullanıcıda tanımlı — hızlı PIN benzersiz olmalı (farklı bir PIN girin veya rastgele üretin)",
-        );
-      }
-      return pin;
-    }
     for (let attempt = 0; attempt < 20; attempt++) {
       const candidate = String(randomInt(0, 1_000_000)).padStart(6, "0");
       if ((await write(candidate)) === "ok") return candidate;

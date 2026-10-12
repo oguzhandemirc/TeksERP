@@ -866,8 +866,7 @@ router.get(
 );
 
 const quickPinSchema = z.object({
-  // pin verilmezse rastgele üretilir; clear=true PIN'i kaldırır.
-  pin: z.string().regex(/^\d{6}$/, "Hızlı PIN 6 haneli rakam olmalı").optional(),
+  // PIN her zaman rastgele üretilir (Y-01); eski panelin gönderdiği `pin` Zod'da düşer. clear=true kaldırır.
   clear: z.boolean().optional(),
 });
 

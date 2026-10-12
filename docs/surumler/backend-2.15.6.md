@@ -296,6 +296,11 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   kapalı kalır, 2FA sessizce düşmez — anahtar halkası emanetten geri konunca açılır). Migration
   `20261012220000_totp_sirri_sarili_saklama` (yalnız iki kolonu genişletir).
 
+**Hızlı PIN artık seçilemez, her zaman rastgele (güvenlik denetimi Y-01)**
+
+- Yönetici ekranında, iki kişilik onayda ve toplu sıfırlamada PIN sunucuda rastgele üretilir; elle PIN girilemez ve
+  "bu PIN başka kullanıcıda" uyarısı artık hiç verilmez (başkasının PIN'ini tahmin etmeye yarıyordu).
+
 ## 3. Sözleşme
 
 - **Kırıldı mı:** HAYIR (G1 kısmı) — yalnız ekleme: `/api/auth/me` `systemAccountSealStatus`, health
@@ -333,6 +338,9 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   `signalStopKey`, yeni hata kodları `MACHINE_ALREADY_LINKED`, `COLLECTOR_NAME_TAKEN`, `COLLECTOR_REVOKED`,
   `COLLECTOR_*` (401/429), `MACHINE_NOT_IN_SCOPE` (403). Var olan uçların davranışı değişmedi; eski istemci yeni
   uçları çağırmaz.
+- **Kırıldı mı:** HAYIR (hızlı PIN kısmı) — `POST /api/admin/users/:id/quick-pin` ve kimlik sıfırlama onayı gövdesindeki
+  `pin` alanı kaldırıldı; eski panel gönderirse yok sayılır, cevap yine `{ pin }` (rastgele) döner. 409 "PIN
+  kullanımda" artık dönmez.
 - **Kırıldı mı:** HAYIR (yetki kısmı) — yeni uçlar `/api/admin/credential-reset-requests`, yeni hata kodları
   `GRANT_EXCEEDS_ACTOR`, `CREDENTIAL_RESET_NEEDS_APPROVAL`, `STATION_KIND_IN_USE`; ayar cevabına iki alan. Davranış
   daralması: `shipping:write`-yalnız aktör fatura işaretinde 403; eski panel onay talebi akışını bilmez, 403'ü

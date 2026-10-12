@@ -327,7 +327,7 @@ export class AuthService {
    */
   static async setQuickPin(
     userId: string,
-    input: { pin?: string; clear?: boolean },
+    input: { clear?: boolean },
     actorUserId?: string
   ): Promise<{ pin: string | null }> {
     const user = await prisma.user.findUnique({
@@ -352,10 +352,7 @@ export class AuthService {
       return { pin: null };
     }
 
-    const pin = await ShortCredentialService.assignQuickPin(
-      userId,
-      input.pin !== undefined ? input.pin.trim() : null,
-    );
+    const pin = await ShortCredentialService.assignQuickPin(userId);
     rememberIssuedPin(userId, pin);
     await AuditService.log({
       userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",

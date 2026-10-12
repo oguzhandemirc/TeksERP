@@ -33,7 +33,7 @@ const approveSchema = z.object({
       if (violation) ctx.addIssue({ code: "custom", message: violation });
     })
     .optional(),
-  pin: z.string().regex(/^\d{6}$/, "Hızlı PIN 6 haneli rakam olmalı").optional(),
+  // PIN onayda seçilmez, rastgele üretilir (Y-01); eski panelin `pin`i düşer.
 });
 
 const idParam = z.string().uuid("Geçersiz talep kimliği");

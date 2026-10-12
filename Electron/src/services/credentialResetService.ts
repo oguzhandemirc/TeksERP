@@ -59,7 +59,7 @@ export const credentialResetService = {
 
   approve: (
     id: string,
-    payload: { password?: string; pin?: string },
+    payload: { password?: string },
   ): Promise<{ request: CredentialResetRequestItem; result: { pin?: string | null; cardCode?: string } | null }> =>
     apiClient
       .post<ApiResponse<{ request: CredentialResetRequestItem; result: { pin?: string | null; cardCode?: string } | null }>>(

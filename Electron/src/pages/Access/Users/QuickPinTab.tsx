@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, Dices, KeySquare, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
@@ -25,9 +24,8 @@ interface Props {
 export function QuickPinTab({ userId, username }: Props) {
   const qc = useQueryClient();
   const methodEnabled = useEnabledLoginMethods().includes("pin");
-  const [manualPin, setManualPin] = useState("");
   const [issuedPin, setIssuedPin] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<null | { kind: "random" | "manual" | "clear" }>(null);
+  const [confirm, setConfirm] = useState<null | { kind: "random" | "clear" }>(null);
 
   const credQ = useQuery({
     queryKey: ["admin-user-credentials", userId],
@@ -39,10 +37,9 @@ export function QuickPinTab({ userId, username }: Props) {
   const visiblePin = issuedPin ?? (cred?.quickPinRevealed ? cred.quickPin : null);
 
   const mutation = useMutation({
-    mutationFn: (input: { pin?: string; clear?: boolean }) => adminUserService.setQuickPin(userId, input),
+    mutationFn: (input: { clear?: boolean }) => adminUserService.setQuickPin(userId, input),
     onSuccess: (res, vars) => {
       setConfirm(null);
-      setManualPin("");
       setIssuedPin(vars.clear ? null : res.data.pin);
       toast.success(
         vars.clear
@@ -55,12 +52,9 @@ export function QuickPinTab({ userId, username }: Props) {
 
   if (credQ.isLoading) return <Skeleton className="h-56 w-full" />;
 
-  const manualValid = /^\d{6}$/.test(manualPin);
-
   const runConfirmed = () => {
     if (!confirm) return;
     if (confirm.kind === "random") mutation.mutate({});
-    else if (confirm.kind === "manual") mutation.mutate({ pin: manualPin });
     else mutation.mutate({ clear: true });
   };
 
@@ -114,25 +108,7 @@ export function QuickPinTab({ userId, username }: Props) {
         )}
       </div>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-xs">
-          <span className="mb-1 block font-medium">Elle PIN (6 hane)</span>
-          <Input
-            value={manualPin}
-            onChange={(e) => setManualPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-            placeholder="424242"
-            inputMode="numeric"
-            className="h-9 w-32 font-mono"
-          />
-        </label>
-        <Button
-          type="button"
-          size="sm"
-          disabled={!manualValid || mutation.isPending}
-          onClick={() => setConfirm({ kind: "manual" })}
-        >
-          Ata
-        </Button>
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
@@ -140,7 +116,7 @@ export function QuickPinTab({ userId, username }: Props) {
           disabled={mutation.isPending}
           onClick={() => setConfirm({ kind: "random" })}
         >
-          <Dices className="h-3.5 w-3.5" /> Rastgele Üret
+          <Dices className="h-3.5 w-3.5" /> {pinSet ? "Yeni PIN Üret" : "PIN Üret"}
         </Button>
         {pinSet && (
           <Button

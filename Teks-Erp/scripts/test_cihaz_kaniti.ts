@@ -148,7 +148,7 @@ async function main(): Promise<void> {
     await set(SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY, true);
     await set(SETTING_KEYS.DEVICE_PROOF_REQUIRED, false);
     await kilitTemizle();
-    const pin = await ShortCredentialService.assignQuickPin(pinSahibi.id, null); // değer basılmaz
+    const pin = await ShortCredentialService.assignQuickPin(pinSahibi.id); // değer basılmaz
     const cihaz = await prisma.device.create({
       data: { deviceId: cihazId, name: "Kanıt bekçisi tableti", status: "APPROVED", isActive: true },
       select: { id: true },

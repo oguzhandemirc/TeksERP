@@ -232,7 +232,7 @@ export class ShortCredentialAdminService {
     });
     const results: Array<{ userId: string; username: string; fullName: string; pin: string }> = [];
     for (const u of users) {
-      const pin = await ShortCredentialService.assignQuickPin(u.id, null);
+      const pin = await ShortCredentialService.assignQuickPin(u.id);
       rememberIssuedPin(u.id, pin);
       await AuditService.log({
         userId: actorUserId, action: "UPDATE", tableName: "USER_QUICK_PIN",

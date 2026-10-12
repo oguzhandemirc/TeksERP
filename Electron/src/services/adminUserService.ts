@@ -171,11 +171,11 @@ export const adminUserService = {
       .post<ApiResponse<BulkResetResult>>("/api/admin/short-credentials/bulk-reset", { userIds })
       .then((r) => r.data),
 
-  /** Hızlı PIN ata/üret/kaldır (salt-PIN girişi — benzersiz 6 hane). pin verilmezse
-   *  rastgele üretilir; başkasında varsa backend 409 döner; clear=true kaldırır. */
+  /** Hızlı PIN üret/kaldır (salt-PIN girişi — benzersiz 6 hane). PIN her zaman sunucuda rastgele
+   *  üretilir (seçilemez); clear=true kaldırır. */
   setQuickPin: (
     userId: string,
-    input: { pin?: string; clear?: boolean },
+    input: { clear?: boolean },
   ): Promise<ApiResponse<{ pin: string | null }>> =>
     apiClient
       .post<ApiResponse<{ pin: string | null }>>(`/api/admin/users/${userId}/quick-pin`, input)

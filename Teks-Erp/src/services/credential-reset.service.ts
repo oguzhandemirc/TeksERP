@@ -167,7 +167,7 @@ export class CredentialResetService {
   static async approve(
     id: string,
     approverId: string,
-    payload: { password?: string; pin?: string },
+    payload: { password?: string },
   ): Promise<{ request: CredentialResetRequestView; result: unknown }> {
     const req = await prisma.credentialResetRequest.findUnique({
       where: { id },
@@ -204,7 +204,7 @@ export class CredentialResetService {
     try {
       if (kind === "PASSWORD") await PermissionManagementService.resetUserPassword(req.targetUserId, payload.password!, approverId);
       else if (kind === "TOTP") await TotpAccountService.reset({ userId: req.targetUserId, byId: approverId });
-      else if (kind === "QUICK_PIN") result = await AuthService.setQuickPin(req.targetUserId, { pin: payload.pin }, approverId);
+      else if (kind === "QUICK_PIN") result = await AuthService.setQuickPin(req.targetUserId, {}, approverId);
       else result = await AuthService.rotateCardToken(req.targetUserId, approverId);
     } catch (e) {
       await prisma.credentialResetRequest.updateMany({

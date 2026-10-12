@@ -6,7 +6,7 @@
 //   2.  GERİYE-UYUM: eski auth.loginMode="card" → { enabled:[card,list], primary:card }
 //   3.  setFeatureFlags geçersiz konfigürasyonları reddeder (boş enabled / primary ∉ enabled)
 //   4.  pin etkin değilken login-quick-pin 403
-//   5.  setQuickPin: elle 6 hane atama + BAŞKASINDA aynı PIN → 409 (benzersizlik)
+//   5.  setQuickPin: PIN seçilemez (Y-01) — istenen `pin` yok sayılır, rastgele ve benzersiz döner
 //   6.  rastgele üretim 6 hane döner
 //   7.  pin etkinken doğru PIN → JWT + doğru kullanıcı; yanlış PIN → 401
 //   8.  clear=true → PIN kaldırılır, girişi 401
@@ -84,35 +84,35 @@ async function main() {
     await expectErr("pin etkin değilken 403", "Hızlı PIN ile giriş kapalı", () =>
       AuthService.loginWithQuickPin("123456"));
 
-    // 5) elle atama + benzersizlik
-    const setRes = await AuthService.setQuickPin(u1.id, { pin: "424242" }, admin.id);
-    check("elle PIN atandı", setRes.pin === "424242");
-    await expectErr("aynı PIN başka kullanıcıya 409", "benzersiz", () =>
-      AuthService.setQuickPin(u2.id, { pin: "424242" }, admin.id));
+    // 5) PIN seçilemez: istenen değer (eski panel gövdesi) yok sayılır, rastgele döner
+    const setRes = await AuthService.setQuickPin(u1.id, { pin: "424242" } as { clear?: boolean }, admin.id);
+    const pin1 = setRes.pin ?? "";
+    check("PIN atandı (6 hane, istenen değer yok sayıldı)", /^\d{6}$/.test(pin1) && pin1 !== "424242", pin1);
 
-    // 6) rastgele üretim
+    // 6) ikinci kullanıcı — rastgele ve benzersiz
     const rnd = await AuthService.setQuickPin(u2.id, {}, admin.id);
-    check("rastgele PIN 6 hane", /^\d{6}$/.test(rnd.pin ?? ""), rnd.pin ?? "");
+    check("rastgele PIN 6 hane, ilkinden farklı", /^\d{6}$/.test(rnd.pin ?? "") && rnd.pin !== pin1, rnd.pin ?? "");
 
     // 7) pin etkinken giriş
     await systemSettingService.setFeatureFlags(
       { loginMethods: { enabled: ["list", "pin"], primary: "pin" } }, admin.id);
-    const login = await AuthService.loginWithQuickPin("424242");
+    const login = await AuthService.loginWithQuickPin(pin1);
     check("doğru PIN → doğru kullanıcı", login.user.username === u1.username);
-    await expectErr("yanlış PIN 401", "tanınmadı", () => AuthService.loginWithQuickPin("000001"));
+    const yanlis = ["000001", "000002"].find((x) => x !== pin1 && x !== rnd.pin)!;
+    await expectErr("yanlış PIN 401", "tanınmadı", () => AuthService.loginWithQuickPin(yanlis));
 
     // 8) clear → giriş kapanır
     await AuthService.setQuickPin(u1.id, { clear: true }, admin.id);
-    await expectErr("PIN kaldırılınca 401", "tanınmadı", () => AuthService.loginWithQuickPin("424242"));
+    await expectErr("PIN kaldırılınca 401", "tanınmadı", () => AuthService.loginWithQuickPin(pin1));
 
     // 9) pasif kullanıcının PIN'i çalışmaz
-    await AuthService.setQuickPin(u1.id, { pin: "515151" }, admin.id);
+    const pin3 = (await AuthService.setQuickPin(u1.id, {}, admin.id)).pin!;
     await prisma.user.update({ where: { id: u1.id }, data: { isActive: false } });
-    await expectErr("pasif kullanıcı PIN'i 401", "tanınmadı", () => AuthService.loginWithQuickPin("515151"));
+    await expectErr("pasif kullanıcı PIN'i 401", "tanınmadı", () => AuthService.loginWithQuickPin(pin3));
 
     // 10) getUserCredentials — panel okuması: düz PIN YALNIZ basım penceresinde (bellek), DB'de özet
     const cred = await AuthService.getUserCredentials(u1.id);
-    check("getUserCredentials → yeni verilen PIN basım penceresinde okunur", cred.quickPin === "515151" && cred.quickPinRevealed);
+    check("getUserCredentials → yeni verilen PIN basım penceresinde okunur", cred.quickPin === pin3 && cred.quickPinRevealed);
     check("getUserCredentials → PIN özetli saklanıyor (OZET)", cred.quickPinSet && cred.quickPinStorage === "OZET");
     check("getUserCredentials → kart kodu (kart yoksa null)", cred.cardCode === null && !cred.cardSet);
 

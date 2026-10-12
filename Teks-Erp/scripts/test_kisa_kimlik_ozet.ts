@@ -352,10 +352,9 @@ async function main(): Promise<void> {
 
     // ═══ §6 YALNIZ ONAYLI CİHAZ ═══
     console.log("\n=== §6 yalnız onaylı cihaz ===");
-    const cpin = await bosPin(new Set(verilenDegerler));
-    verilenDegerler.push(cpin);
     const cu = await yeniKullanici("cihaz");
-    await AuthService.setQuickPin(cu.id, { pin: cpin }, aktor.id);
+    const cpin = (await AuthService.setQuickPin(cu.id, {}, aktor.id)).pin!;
+    verilenDegerler.push(cpin);
     await systemSettingService.setFeatureFlags({ shortCredentialApprovedDeviceOnly: true }, aktor.id);
     check("§6a kural açıkken eşleştirme ETKİN zorunlu", (await readDevicePairingRequired()) === true);
     const ipC = `198.19.${stamp % 200}.7`;
