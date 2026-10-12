@@ -22,7 +22,7 @@ import { LicenseTransferCard } from "@/pages/System/License/LicenseTransferCard"
  * G2 — ETKİNLEŞTİRME KİLİDİ: hiç etkinleşmemiş (ya da başka kurulumun kopyası olan) sunucuda oturum açan yalnız bu
  * sayfayı görür (uygulama kabuğu bağlanmaz). Birinci yol karekod (telefonla okut → yanıtı tabletten okut ya da
  * yapıştır), sonra internetle kod, sonra portal dosyası (uzatma ya da muafiyet). KOPYA'da "verilerimi al" ve taşıma
- * talebi de açık. Çağırdığı her uç backend'in kilit izin kümesindedir (`isOpenWhenActivationLocked`).
+ * talebi de açık; bekleyen taşıma talebi etkin saymaz, kartı ve durumu burada görünür. Çağırdığı her uç backend'in kilit izin kümesindedir (`isOpenWhenActivationLocked`).
  * Etkinleşince durum sorgusu sinyali kapatır; kabuk kendiliğinden geri gelir.
  */
 export function LicenseActivationPage() {
@@ -72,6 +72,12 @@ export function LicenseActivationPage() {
         )}
         {canManage && d && (
           <div className="space-y-4">
+            {d.tasima && (
+              <Callout tone="info" title={d.tasima.durum === "ONAYLANDI" ? "Taşıma talebiniz onaylandı" : "Taşıma talebiniz onay bekliyor"}>
+                Bu sunucu taşıma kodu girilene kadar yalnız bu ekranı açar; eski sunucu bu sürede çalışmaya devam eder.
+                Onaylanınca portaldan iletilen taşıma kodunu aşağıdaki internetle kod alanına girin.
+              </Callout>
+            )}
             <LicenseAcceptanceCard q={acceptance} canManage={canManage} active={d.kurulum.etkin} />
             <LicenseOfflineCard d={d} gate={gate} />
             <LicenseActivateCard d={d} gate={gate} />
@@ -79,7 +85,7 @@ export function LicenseActivationPage() {
               <p className="text-sm text-muted-foreground">Portaldan aldığınız lisans ya da muafiyet dosyası:</p>
               <LicenseFileUpload />
             </section>
-            {kopya && <LicenseTransferCard d={d} />}
+            {(kopya || d.tasima) && <LicenseTransferCard d={d} />}
           </div>
         )}
         {kopya && (

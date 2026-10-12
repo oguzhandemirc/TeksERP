@@ -286,8 +286,9 @@ async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutc
     if (snap.activated) recordPollOutcome({ ok: false, code: "YAPILANDIRILMAMIS" });
     return { outcome: "YAPILANDIRILMAMIS" };
   }
-  if (!snap.activated) return { outcome: "ETKIN_DEGIL" };
+  // Bekleyen taşıma etkin saymaz; etkin olmayan yeni makine de talebinin sonucunu (ret/onay) yoklar.
   if (store.transfer && store.transfer.durum !== "ONAYLANDI") return pollTransfer(transport);
+  if (!snap.activated) return { outcome: "ETKIN_DEGIL" };
   if (!snap.licenseId) return { outcome: "ETKIN_DEGIL" };
 
   let result: VendorResult;

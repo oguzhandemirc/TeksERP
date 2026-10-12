@@ -6,11 +6,12 @@ import type { JwtPayload } from "@/types/auth";
 import type { LicenseStatusSummary } from "@/types/license";
 
 const status = vi.fn();
+const detay = { tasima: null as null | { talepId: string; istendi: string; gerekce: string | null; durum?: "BEKLIYOR" | "ONAYLANDI" } };
 const perms = { manage: true };
 vi.mock("@/services/licenseService", () => ({
   licenseService: {
     status: () => status(),
-    detail: () => Promise.resolve({ kurulum: { etkin: false }, hazir: true }),
+    detail: () => Promise.resolve({ kurulum: { etkin: false }, hazir: true, tasima: detay.tasima }),
     acceptance: () => Promise.resolve({ kabul: null }),
   },
 }));
@@ -56,6 +57,7 @@ describe("G2 etkinleştirme sayfası", () => {
   beforeEach(() => {
     status.mockReset();
     perms.manage = true;
+    detay.tasima = null;
     useActivationLock.setState({ sinif: "ETKINLESMEDI" });
     useAuthStore.setState({ user: { userId: "u1", username: "yonetici", permissions: ["license:manage"] } as unknown as JwtPayload });
   });
@@ -80,6 +82,16 @@ describe("G2 etkinleştirme sayfası", () => {
     expect(await screen.findByTestId("kart-tasima")).toBeInTheDocument();
     expect(screen.getByTestId("verilerimi-al")).toBeInTheDocument();
     expect(screen.getByText(/başka bir kurulumdan taşınmış/)).toBeInTheDocument();
+  });
+
+  it("⭐ bekleyen taşıma talebi (ETKINLESMEDI): bilgi + taşıma kartı görünür, 'verilerimi al' YOK", async () => {
+    detay.tasima = { talepId: "t1", istendi: "2026-10-12T08:00:00.000Z", gerekce: null, durum: "BEKLIYOR" };
+    status.mockResolvedValue(base);
+    renderWithProviders(<LicenseActivationPage />);
+    expect(await screen.findByTestId("kart-tasima")).toBeInTheDocument();
+    expect(screen.getByText("Taşıma talebiniz onay bekliyor")).toBeInTheDocument();
+    expect(screen.getByText(/taşıma kodunu aşağıdaki internetle kod alanına girin/)).toBeInTheDocument();
+    expect(screen.queryByTestId("verilerimi-al")).toBeNull();
   });
 
   it("lisans yetkisi olmayan kullanıcı: 'Yöneticinize başvurun', eylem kartı yok", async () => {

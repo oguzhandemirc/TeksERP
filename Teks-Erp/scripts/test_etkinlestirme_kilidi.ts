@@ -47,6 +47,7 @@ import { LICENSE_FILES, loadLicenseStoreSync } from "../src/lib/license/store";
 import { setLicenseTraceRow, TraceRowSchema, type TraceRow } from "../src/lib/license/trace-row";
 import { classifyForeignTrace } from "../src/lib/license/activation-trace";
 import { signStateRecord } from "../src/lib/license/saat";
+import { flushLicenseTraceWrites } from "../src/lib/license/accumulation";
 import {
   __resetLicenseRuntimeForTests,
   configureLicenseRuntimeForTests,
@@ -341,6 +342,8 @@ async function hataKodu(p: Promise<unknown> | (() => unknown)): Promise<string> 
 
 /** Temiz lisans dizini + DB izi yok + kilit açık; fikstürün kurulum anahtarı deponun anahtarıdır, satıcı yerel HTTPS. */
 async function canliKurulum(): Promise<{ f: Fikstur; satici: SahteSatici; dir: string }> {
+  // Önceki kurulumun kuyruktaki iz yazımı sıfırlamadan SONRA onaylanıp yeni kurulumun belleğine dönmesin (§10d/§10e yarışı).
+  await flushLicenseTraceWrites();
   __resetLicenseRuntimeForTests();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g2-uctan-"));
   dizinler.push(dir);

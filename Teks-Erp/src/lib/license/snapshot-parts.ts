@@ -7,9 +7,9 @@ import { isoToMs, type RootKey, type VerifiedLease } from "./protocol";
 import type { StateRecord } from "./saat";
 import { LICENSE_FILES, type LicenseStoreSnapshot } from "./store";
 
+/** Bekleyen taşıma talebi (imzasız yerel dosya) etkin SAYMAZ: yeni makine onay + taşıma koduyla etkinleşir. */
 export function isActivated(store: LicenseStoreSnapshot | null, licenseId: string | null, record: StateRecord | null): boolean {
   if (!store || (store.problem && store.problem !== "OKUNAMADI")) return false;
-  if (store.transfer && store.transfer.durum !== "ONAYLANDI") return true;
   if (!licenseId) return false;
   const docPresent =
     store.entitlementJws !== null ||

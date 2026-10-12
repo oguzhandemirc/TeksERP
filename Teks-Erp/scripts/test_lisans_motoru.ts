@@ -2040,7 +2040,12 @@ async function tasimaBolumu(x: Hazir): Promise<void> {
     t.durum === "BEKLIYOR" && son?.kimlik === null && son?.govdeKimligi === null,
     `${t.durum} ${JSON.stringify(son)}`,
   );
-  check("§20b bekleyen talep etkin sayılır (onay yoklanır)", getLicenseSnapshot().activated);
+  const bekleyen = await pollLicenseOnce();
+  check(
+    "§20b ⭐ bekleyen talep etkin SAYMAZ (imzasız yerel dosya) ama durumu yoklanır: onay bekliyor",
+    !getLicenseSnapshot().activated && bekleyen.outcome === "BASARISIZ" && bekleyen.code === "TASIMA_ONAYI_BEKLIYOR",
+    `${getLicenseSnapshot().activated} ${bekleyen.outcome} ${bekleyen.code ?? ""}`,
+  );
   x.satici.tasimaDurumu = "ONAYLANDI";
   const r = await pollLicenseOnce();
   const d = getLicenseDetail();
