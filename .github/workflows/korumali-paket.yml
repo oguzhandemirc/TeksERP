@@ -45,7 +45,7 @@ jobs:
     name: "Korumalı .jsc — ${{ matrix.hedef }}"
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Node sürümü TEK KAYNAK deploy/node-surumu.json — .jsc paketi ÜRETEN Node'un
       # V8'ine kilitlidir, o yüzden çalışma zamanıyla AYNI sürüm kurulur.
@@ -54,7 +54,7 @@ jobs:
         shell: bash
         run: echo "surum=$(node -e "process.stdout.write(require('./deploy/node-surumu.json').surum)")" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ steps.nodesurum.outputs.surum }}
 
@@ -119,7 +119,7 @@ jobs:
           node -e "require('fs').cpSync(process.argv[1], 'koruma-cikti/harita-arsivi', { recursive: true })" "${{ runner.temp }}/koruma-arsiv"
 
       - name: Yapıtları yükle (.jsc + yükleyici + künye + runtime + harita arşivi)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: korumali-${{ matrix.hedef }}
           path: |
@@ -147,7 +147,7 @@ jobs:
       run:
         working-directory: Teks-Erp/native
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Rust araç zinciri (stable)
@@ -180,7 +180,7 @@ jobs:
           ldd "$ikili"
           ldd "$ikili" | grep -q 'libssl\.so\.3 => /' || { echo "ikili sistem OpenSSL 3'e (libssl.so.3) bağlı değil — hedef konak beyanı (libssl3) tutmaz"; exit 1; }
       - name: Yapıtı yükle (tekserp-guncelleyici + künye)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: guncelleyici-linux-x64
           path: |
@@ -202,7 +202,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -211,7 +211,7 @@ jobs:
         shell: bash
         run: echo "surum=$(node -e "process.stdout.write(require('./deploy/node-surumu.json').surum)")" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ steps.nodesurum.outputs.surum }}
 
@@ -278,7 +278,7 @@ jobs:
             --native=native/lisans-cekirdek/dist-uretim/lisans-cekirdek.linux-x64-gnu.node --cikti=../imaj-kunye/imaj-kunye.json
 
       - name: Künye yapıtı (küçük; Mac köken denetimi bunu indirir)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: korumali-imaj-kunye-linux-x64
           path: imaj-kunye/imaj-kunye.json
@@ -286,7 +286,7 @@ jobs:
           retention-days: 1
 
       - name: İmzasız taban imaj arşivi
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: korumali-imaj-linux-x64
           path: imaj-cikti/tekserp-korumali-imzasiz-linux-x64.tar.gz
