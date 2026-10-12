@@ -91,11 +91,15 @@ export interface TokenReplay<R> {
  * yalnız HIZ YOLUDUR — doğruluk yine `@unique` + hata sonrası yeniden okumadadır.
  */
 const inFlightRuns = new Map<string, Promise<unknown>>();
-const queueBypass = new AsyncLocalStorage<true>();
+/**
+ * Bu async bağlamın uçurduğu token'lar: aynı token İÇ İÇE gelirse (quickStart → create) kuyruğa girmez —
+ * girse kendi ebeveyninin sözünü bekler ve kilitlenirdi. `bypass` bekçi aracınındır.
+ */
+const flightContext = new AsyncLocalStorage<{ bypass: boolean; tokens: ReadonlySet<string> }>();
 
 /** Bekçi aracı: kuyruğu atlayan deneme — iki ayrı isteğin DB'deki yarışını (P2002 → yeniden okuma) zorlanmış sırayla ölçer. */
 export function bypassReplayQueue<T>(fn: () => Promise<T>): Promise<T> {
-  return queueBypass.run(true, fn);
+  return flightContext.run({ bypass: true, tokens: flightContext.getStore()?.tokens ?? new Set() }, fn);
 }
 
 /** Bekçi sondası için: şu an uçuşta olan R denemesi sayısı. */
@@ -125,14 +129,15 @@ export function tokenReplay<P, R>(policy: TokenReplayPolicy<P, R>): TokenReplay<
           return resolve(prior);
         }
       };
-      if (queueBypass.getStore()) return attemptOnce();
+      const ctx = flightContext.getStore();
+      if (ctx?.bypass || ctx?.tokens.has(clientToken)) return attemptOnce();
       // Uçuştaki aynı token'ın kaybedeni işi koşturmaz: kazanan bitince cevabı token'dan alır.
       for (let ahead = inFlightRuns.get(clientToken); ahead; ahead = inFlightRuns.get(clientToken)) {
         await ahead.catch(() => undefined);
         const settled = await policy.find(prisma, clientToken);
         if (settled) return resolve(settled);
       }
-      const attempt = attemptOnce();
+      const attempt = flightContext.run({ bypass: false, tokens: new Set([...(ctx?.tokens ?? []), clientToken]) }, attemptOnce);
       inFlightRuns.set(clientToken, attempt);
       try {
         return await attempt;

@@ -97,6 +97,30 @@ async function main(): Promise<void> {
     check("§4 farklı token ×50 → iş 50 kez, paralel", is === N && ms < 1000, `iş=${is} · ${ms} ms`);
   }
 
+  // §6 aynı token İÇ İÇE (quickStart → create gibi): iç çağrı kuyruğa girmez, ebeveynini beklemez.
+  // Negatif sonda: `run`daki bağlam ataması kaldırılınca iç çağrı dıştaki sözü bekler → zaman aşımı ❌.
+  {
+    const defter = new Map<string, Kayit>();
+    let icIs = 0;
+    const ic = async () => {
+      icIs += 1;
+      await sleep(20);
+      defter.set("N1", { id: "n1", qty: 5 });
+      return { id: "n1", replay: false };
+    };
+    const dis = () => kur(defter, 5).run("N1", async () => {
+      await sleep(10);
+      return kur(defter, 5).run("N1", ic);
+    });
+    const zaman = sleep(1500).then(() => "ZAMAN AŞIMI" as const);
+    const sonuc = await Promise.race([Promise.all([dis(), ...Array.from({ length: 5 }, () => kur(defter, 5).run("N1", ic))]), zaman]);
+    const ok = sonuc !== "ZAMAN AŞIMI";
+    check("§6 ⭐ iç içe aynı token kilitlenmez (dış + iç + 5 bekleyen biter)", ok, ok ? `iç iş=${icIs}` : "1.5 s içinde bitmedi");
+    check("§6 iç iş yalnız 1 kez, bekleyenler replay", ok && icIs === 1 && (sonuc as Array<{ replay: boolean }>).filter((s) => s.replay).length === 5, `iç iş=${icIs}`);
+    const tekBasina = await Promise.race([kur(defter, 5).run("N2", () => kur(defter, 5).run("N2", async () => { defter.set("N2", { id: "n2", qty: 5 }); return { id: "n2", replay: false }; })), zaman]);
+    check("§6 yalnız iç içe (bekleyensiz) de biter", tekBasina !== "ZAMAN AŞIMI" && (tekBasina as { id: string }).id === "n2");
+  }
+
   check("§5 uçuş kuyruğu boşaldı (sızıntı yok)", inFlightReplayCount() === 0, `${inFlightReplayCount()}`);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
