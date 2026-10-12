@@ -15,7 +15,7 @@ import { requireTezgahEnabled } from "../middlewares/module.middleware";
 export const machineStopCodeMapService = new MachineStopCodeMapService({
   modelName: "machineStopCodeMap",
   tableName: "MACHINE_STOP_CODE_MAP",
-  searchFields: ["collectorType", "rawStopCode"],
+  codeSearchFields: ["collectorType", "rawStopCode"],
   defaultInclude: {
     machine: { select: { id: true, code: true, name: true } },
     stopReason: { select: { id: true, code: true, label: true, isActive: true } },

@@ -136,6 +136,7 @@ export const TABLE_LABELS: Record<string, string> = {
   SHIFT_DEFINITION: "Vardiya Tanımı",
   DOFF_EVENT: "Top İndirme",
   MACHINE_STOP_EVENT: "Tezgah Duruşu",
+  MACHINE_STOP_CODE_MAP: "Duruş Kodu Eşlemesi",
   LOOM_ALARM_EVENT: "Tezgah Alarmı",
   LOOM_ALARM_RESPONSIBLE: "Alarm Sorumlusu",
   LOOM_ALARM_DUTY_OVERRIDE: "Alarm Nöbet Değişikliği",
