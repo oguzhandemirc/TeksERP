@@ -11,6 +11,9 @@ vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: ({ actions }: { a
 vi.mock("@/hooks/usePricingEnabled", async (orig) => ({ ...(await orig<object>()), useDokumaEnabled: () => true }));
 const api = vi.hoisted(() => ({ context: vi.fn(), preview: vi.fn(), assign: vi.fn(), finish: vi.fn(), revoke: vi.fn() }));
 vi.mock("./jobs/runService", () => ({ runService: api }));
+const stopApi = vi.hoisted(() => ({ preview: vi.fn(), open: vi.fn(), close: vi.fn(), revoke: vi.fn() }));
+vi.mock("./stops/stopService", () => ({ stopService: stopApi }));
+vi.mock("@/pages/Operations/MachineStops/useStopReasonPresets", () => ({ useStopReasonPresets: () => ({ active: [], labelOf: (c: string | null) => c ?? "—", isLoading: false }) }));
 
 import { WeavingFloorView } from "./WeavingFloorView";
 import type { FloorState, LiveLoom } from "./types";
@@ -20,14 +23,14 @@ const mk = (id: string, openRuns: LiveLoom["openRuns"] = []): LiveLoom => ({
   id, code: `T-${id}`, hall: "Hol A", monitored: false, stateSource: "elle", loomType: null, targetRpm: null, rpm: null, picksPerCm: null, shift: null,
   today: { runSec: 0, plannedSec: 0 }, stops: [], dayBreakdown: [], events: [], job: null, beams: [], source: "OPERATOR", openStop: null, lines: 1, openRuns,
 });
-const floorOf = (looms: LiveLoom[]): FloorState => ({ shift: null, halls: ["Hol A"], looms, updatedAt: NOW, rng: 1 });
+const floorOf = (looms: LiveLoom[], bulkStops = true): FloorState => ({ shift: null, halls: ["Hol A"], looms, updatedAt: NOW, rng: 1, bulkStops });
 const LOOMS = [mk("a"), mk("b", [{ id: "r1", line: 1, jobId: "w", jobNo: "DI-1", startedAt: NOW }])];
 
 const card = (id: string) => document.querySelector<HTMLElement>(`[data-loom-id="${id}"]`)!;
 const bar = () => screen.getByRole("toolbar", { name: "Seçim çubuğu" });
 
-function view(p: { sampleData?: boolean; stale?: boolean } = {}) {
-  return renderWithProviders(<WeavingFloorView floor={floorOf(LOOMS)} now={NOW} sampleData={p.sampleData ?? false} stale={p.stale} />);
+function view(p: { sampleData?: boolean; stale?: boolean; bulkStops?: boolean } = {}) {
+  return renderWithProviders(<WeavingFloorView floor={floorOf(LOOMS, p.bulkStops)} now={NOW} sampleData={p.sampleData ?? false} stale={p.stale} />);
 }
 
 beforeEach(() => {
@@ -80,5 +83,36 @@ describe("Tezgah Salonu — koşum eylemleri", () => {
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("heading", { name: /İş ver —/ })).toBeNull());
     expect(bar().textContent).toContain("1 tezgah seçili");
+  });
+});
+
+describe("Tezgah Salonu — toplu duruş eylemleri (F2)", () => {
+  it("⭐ çubuktan 'Duruş bildir…' pencereyi seçili tezgahların HEPSİYLE açar", async () => {
+    stopApi.preview.mockResolvedValue({ action: "OPEN", at: null, rows: [] });
+    view();
+    fireEvent.click(card("a"), { ctrlKey: true });
+    fireEvent.click(card("b"), { ctrlKey: true });
+    fireEvent.click(within(bar()).getByRole("button", { name: "Duruş bildir…" }));
+    expect(await screen.findByRole("heading", { name: "Duruş bildir — 2 tezgah" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Önizle" }));
+    await waitFor(() => expect(stopApi.preview).toHaveBeenCalledWith({ action: "OPEN", machineIds: ["a", "b"], at: null }));
+  });
+
+  it("⭐ C.15 veri tazelenemiyorsa Duruş bildir pasif ve nedenini söyler", () => {
+    view({ stale: true });
+    fireEvent.click(card("a"), { ctrlKey: true });
+    expect(within(bar()).getByLabelText(/Duruş bildir… — Sunucuya ulaşılamıyor/)).toBeTruthy();
+  });
+
+  it("⭐ eski sunucu (bulkStopActions yok) → Duruş bildir pasif, 'sunucu güncellenince'", () => {
+    view({ bulkStops: false });
+    fireEvent.click(card("a"), { ctrlKey: true });
+    expect(within(bar()).getByLabelText(/Duruş bildir… — .*sunucu güncellenince/)).toBeTruthy();
+  });
+
+  it("⭐ örnek veride duruş eylemi YOK", () => {
+    view({ sampleData: true });
+    fireEvent.click(card("a"), { ctrlKey: true });
+    expect(within(bar()).queryByText("Duruş bildir…")).toBeNull();
   });
 });

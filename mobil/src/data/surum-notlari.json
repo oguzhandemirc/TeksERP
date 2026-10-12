@@ -19,7 +19,7 @@
     {
       "id": "2026-10-11f",
       "durum": "TASLAK — terfide kullanıcı onayı",
-      "baslik": "Tezgah Salonu'ndan iş verme, güncellemeler tek sayfada, gece başlayıp sabaha süren tezgah duruşu ve destek hesabı uyarısı",
+      "baslik": "Tezgah Salonu'ndan iş verme ve toplu duruş, güncellemeler tek sayfada, gece başlayıp sabaha süren tezgah duruşu ve destek hesabı uyarısı",
       "surumler": {
         "panel": "1.6.5"
       },
@@ -43,6 +43,16 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Sunucuya ulaşılamadığında Tezgah Salonu'ndaki iş verme seçenekleri soluklaşır ve Sunucuya ulaşılamıyor yazar; bağlantı gelince kendiliğinden açılır. Bu özellik için sunucunun da güncellenmesi gerekir; eski sunucuda seçenekler soluk kalır ve sunucunun güncellenmesi gerektiğini yazar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah Salonu'nda seçtiğiniz tezgahlara topluca duruş bildirebilirsiniz (sağ tık menüsü ya da seçim çubuğu → Duruş bildir). Başlangıç olarak Şimdi gelir; elektrik kesintisi gibi daha önce başlamış bir duruş için Daha önce'yi seçip saati girersiniz. Sebebi listeden bir kez seçersiniz ve her tezgaha aynı sebep yazılır; sebebi sonra da girebilirsiniz. Göndermeden önce etkilenecek her tezgah adıyla listelenir, istemediğinizin işaretini kaldırırsınız; zaten duruşta olan ya da seçtiğiniz saatte başka bir duruşu bulunan tezgah işaretsiz gelir ve nedenini yazar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Kesinti bitince Hepsi çalıştı ile seçili tezgahların açık duruşları birlikte kapanır. Yanlış açılan duruşları Duruşu geri al ile topluca geri alırsınız; gerekçeyi bir kez yazarsınız. Salondan yalnız şu an süren duruşlar geri alınır; bitmiş bir duruşu Tezgah Duruşları ekranından geri alırsınız. Gönderdikten sonra hangi tezgahta olduğu, hangisinde olmadığı nedeniyle listelenir; olmayanları yeniden deneyebilirsiniz. Bu seçenekler için Tezgah Duruşları izni ve sunucunun güncellenmesi gerekir; eski sunucuda soluk kalır."
         },
         {
           "kapsam": "panel",

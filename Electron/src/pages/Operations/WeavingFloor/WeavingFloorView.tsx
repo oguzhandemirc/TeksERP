@@ -19,7 +19,8 @@ import { FullscreenHeader, SampleDataBadge, StatusLegend } from "./FloorChrome";
 import { FloorHintProvider } from "./FloorHint";
 import { FloorMenuArea, SelectionBar, useFloorSelection, type FloorJobs, type FloorSelectionState } from "./FloorSelection";
 import { JobDialogs, type JobDialogState } from "./jobs/JobDialogs";
-import type { RunActionKey } from "./floorActions";
+import { STOP_ACTION_KEYS, type RunActionKey, type StopActionKey } from "./floorActions";
+import { StopBulkDialog, type StopDialogMode } from "./stops/StopBulkDialog";
 import { HallSection } from "./HallSection";
 import { LoomDetailSheet } from "./LoomDetailSheet";
 import { OverdueStrip } from "./OverdueStrip";
@@ -32,6 +33,9 @@ import { useFullscreen } from "./useFullscreen";
 import type { ClickMods } from "./selection";
 import type { FloorState, LiveLoom } from "./types";
 import "./weaving-floor.css";
+
+const STOP_MODE: Record<StopActionKey, StopDialogMode> = { stopOpen: "open", stopClose: "close", stopRevoke: "revoke" };
+const isStopKey = (k: string): k is StopActionKey => (STOP_ACTION_KEYS as readonly string[]).includes(k);
 
 function bestHallOf(halls: readonly { hall: string; pct: number | null }[]): string | null {
   const ranked = halls.filter((h) => h.pct !== null).sort((a, b) => b.pct! - a.pct!);
@@ -161,10 +165,19 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
   const select = useCallback((id: string) => setSelectedId(id), []);
   const model = useFloorModel(floor, now, filter);
   const [job, setJob] = useState<JobDialogState | null>(null);
+  const [stop, setStop] = useState<{ mode: StopDialogMode; looms: readonly LiveLoom[] } | null>(null);
   const selection = useFloorSelection({ order: model.order, present: model.present, root, enabled: !tv, escBlocked: selectedId !== null });
-  const openJob = useCallback((kind: RunActionKey, ids: string[]) => setJob({ kind, looms: floor.looms.filter((l) => ids.includes(l.id)) }), [floor.looms]);
-  // Koşum eylemleri yalnız gerçek veride; örnek veri ve TV'de yok.
-  const jobs: FloorJobs | undefined = tv || sampleData ? undefined : { online: !stale, looms: floor.looms, onAction: openJob };
+  // Pencere açıldığı anın kopyasını alır: canlı tazeleme önizlemeyi ve satır işaretlerini sıfırlamasın.
+  const openAction = useCallback(
+    (kind: RunActionKey | StopActionKey, ids: string[]) => {
+      const looms = floor.looms.filter((l) => ids.includes(l.id));
+      if (isStopKey(kind)) setStop({ mode: STOP_MODE[kind], looms });
+      else setJob({ kind, looms });
+    },
+    [floor.looms],
+  );
+  // Koşum ve duruş eylemleri yalnız gerçek veride; örnek veri ve TV'de yok.
+  const jobs: FloorJobs | undefined = tv || sampleData ? undefined : { online: !stale, looms: floor.looms, bulkStops: floor.bulkStops === true, onAction: openAction };
   const { click } = selection;
   const onCard = useCallback((id: string, mods: ClickMods) => click(id, mods) && setSelectedId(id), [click]);
   const selected = floor.looms.find((t) => t.id === selectedId) ?? null;
@@ -201,6 +214,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
             </PageBody>
             {!tv && <SelectionBar s={selection} onDetail={select} order={model.order} jobs={jobs} />}
             {job && <JobDialogs state={job} online={!stale} onClose={() => setJob(null)} />}
+            {stop && <StopBulkDialog open mode={stop.mode} looms={stop.looms} online={!stale} onOpenChange={(o) => !o && setStop(null)} />}
             <LoomDetailSheet loom={selected} now={now} onClose={() => setSelectedId(null)} onOpenAlarm={tv ? undefined : onOpenAlarm} />
           </FloorHintProvider>
         </TabPortalProvider>

@@ -9,7 +9,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { FloorHint } from "./FloorHint";
-import { REPORTS_LINK, RUN_ACTION_KEYS, floorActionsOf, stopsLinkOf, type FloorAction, type FloorActionCtx, type RunActionKey } from "./floorActions";
+import {
+  REPORTS_LINK,
+  RUN_ACTION_KEYS,
+  STOP_ACTION_KEYS,
+  floorActionsOf,
+  stopsLinkOf,
+  type FloorAction,
+  type FloorActionCtx,
+  type RunActionKey,
+  type StopActionKey,
+} from "./floorActions";
 import type { LiveLoom } from "./types";
 import type { FloorSelectionState } from "./useFloorSelection";
 
@@ -20,8 +30,10 @@ export interface FloorJobs {
   /** Salon verisi tazelenebiliyor mu (C.15: değilse yazma eylemleri pasif). */
   online: boolean;
   looms: readonly LiveLoom[];
+  /** Sunucu toplu duruş uçlarını tanıyor mu (değilse duruş eylemleri pasif — eski sunucu). */
+  bulkStops: boolean;
   /** Seçili tezgahların HEPSİ (süzgeçte görünmeyenler dahil). */
-  onAction: (key: RunActionKey, ids: string[]) => void;
+  onAction: (key: RunActionKey | StopActionKey, ids: string[]) => void;
 }
 
 /** Seçimde açık koşumu olan tezgah sayısı; seçili bir tezgahın koşum bilgisi yoksa `null`. */
@@ -35,20 +47,27 @@ export function openRunLoomsOf(looms: readonly LiveLoom[], ids: ReadonlySet<stri
   return n;
 }
 
+/** Seçimde açık duruşu olan tezgah sayısı. */
+export function openStopLoomsOf(looms: readonly LiveLoom[], ids: ReadonlySet<string>): number {
+  return looms.filter((l) => ids.has(l.id) && l.openStop != null).length;
+}
+
 function useActions(s: FloorSelectionState, jobs: FloorJobs | undefined): FloorAction[] {
   const dokumaEnabled = useDokumaEnabled();
   const { hasPermission } = useRoleAccess();
   const runs: FloorActionCtx["runs"] = jobs ? { online: jobs.online, openRunLooms: openRunLoomsOf(jobs.looms, s.sel.ids) } : undefined;
-  return floorActionsOf({ count: s.sel.ids.size, dokumaEnabled, can: hasPermission, runs });
+  const stops: FloorActionCtx["stops"] = jobs ? { online: jobs.online, bulk: jobs.bulkStops, openStopLooms: openStopLoomsOf(jobs.looms, s.sel.ids) } : undefined;
+  return floorActionsOf({ count: s.sel.ids.size, dokumaEnabled, can: hasPermission, runs, stops });
 }
 
-const isRunAction = (k: FloorAction["key"]): k is RunActionKey => (RUN_ACTION_KEYS as readonly string[]).includes(k);
+const PANEL_ACTIONS: readonly string[] = [...RUN_ACTION_KEYS, ...STOP_ACTION_KEYS];
+const isPanelAction = (k: FloorAction["key"]): k is RunActionKey | StopActionKey => PANEL_ACTIONS.includes(k);
 
 function useRunAction(s: FloorSelectionState, onDetail: (id: string) => void, jobs: FloorJobs | undefined) {
   const navigate = useNavigate();
   return (key: FloorAction["key"]) => {
     const first = [...s.sel.ids][0];
-    if (isRunAction(key)) jobs?.onAction(key, [...s.sel.ids]);
+    if (isPanelAction(key)) jobs?.onAction(key, [...s.sel.ids]);
     if (key === "detail" && first) onDetail(first);
     if (key === "stops" && first) void navigate(stopsLinkOf(first));
     if (key === "reports") void navigate(REPORTS_LINK);

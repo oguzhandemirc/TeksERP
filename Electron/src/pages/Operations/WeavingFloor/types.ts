@@ -176,6 +176,8 @@ export interface FloorState {
   shift: Shift | null;
   /** Alarm vardiya şeridi kodu (sunucu kararı); yoksa şerit çizilmez. */
   alarmNotice?: string | null;
+  /** Sunucu toplu duruş uçlarını tanıyor mu (örnek veride yok). */
+  bulkStops?: boolean;
   halls: string[];
   looms: LiveLoom[];
   /** Son simülasyon adımının anı. */

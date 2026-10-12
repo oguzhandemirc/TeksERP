@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { OUTCOME_TEXT, rowKey, selectable } from "./plan";
-import type { BulkPreviewRow, BulkResult } from "./runService";
+import type { BulkPreviewRow } from "./runService";
 
 interface PreviewProps {
   rows: readonly BulkPreviewRow[];
@@ -67,8 +67,21 @@ export function PreviewTable({ rows, picked, onToggle, extra }: PreviewProps) {
   );
 }
 
+interface ResultRow {
+  machineId: string;
+  machineCode: string;
+  /** Koşum sonucunda hat; duruş sonucunda yok (tezgah düzeyi). */
+  productionLineNo?: number;
+}
+
+/** Koşum ve duruş toplu sonuçlarının ortak biçimi. */
+export interface BulkResultLike {
+  ok: ReadonlyArray<ResultRow & { warnings?: string[] }>;
+  failed: ReadonlyArray<ResultRow & { message: string }>;
+}
+
 interface ResultProps {
-  result: BulkResult;
+  result: BulkResultLike;
   okTitle: string;
   onRetryFailed: (() => void) | null;
 }
@@ -84,7 +97,7 @@ export function ResultView({ result, okTitle, onRetryFailed }: ResultProps) {
         </h3>
         <ul>
           {result.ok.map((o) => (
-            <li key={`${o.machineId}:${o.productionLineNo}`}>{o.machineCode}{o.productionLineNo > 1 ? ` · ${o.productionLineNo}. hat` : ""}</li>
+            <li key={`${o.machineId}:${o.productionLineNo ?? 1}`}>{o.machineCode}{(o.productionLineNo ?? 1) > 1 ? ` · ${o.productionLineNo}. hat` : ""}</li>
           ))}
         </ul>
       </section>
@@ -93,7 +106,7 @@ export function ResultView({ result, okTitle, onRetryFailed }: ResultProps) {
           <h3 className="font-semibold text-destructive">Olmadı ({result.failed.length})</h3>
           <ul>
             {result.failed.map((f) => (
-              <li key={`${f.machineId}:${f.productionLineNo}`}>
+              <li key={`${f.machineId}:${f.productionLineNo ?? 1}`}>
                 <span className="font-medium">{f.machineCode}</span> — {f.message}
               </li>
             ))}

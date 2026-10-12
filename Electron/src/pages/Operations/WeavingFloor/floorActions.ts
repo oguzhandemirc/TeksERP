@@ -2,11 +2,27 @@
 // Kural (tasarım §B + kullanıcı 2026-10-11): modül KAPALI → öğe hiç görünmez (kapalı modülün yüzeyi
 // olmaz); izin YOK → öğe görünür ama pasif ve NEDENİNİ söyler. Son kararı her zaman sunucu verir.
 
-export type FloorActionKey = "detail" | "assign" | "replace" | "finish" | "revoke" | "stops" | "reports" | "selectAll" | "clear";
+export type FloorActionKey =
+  | "detail"
+  | "assign"
+  | "replace"
+  | "finish"
+  | "revoke"
+  | "stopOpen"
+  | "stopClose"
+  | "stopRevoke"
+  | "stops"
+  | "reports"
+  | "selectAll"
+  | "clear";
 
 /** Koşum (iş) eylemleri — `/api/machine-runs` yalnız bunlardan açılır; YALNIZ `dokumaEnabled` dalında doğarlar (bekçi §7f). */
 export const RUN_ACTION_KEYS = ["assign", "replace", "finish", "revoke"] as const satisfies readonly FloorActionKey[];
 export type RunActionKey = (typeof RUN_ACTION_KEYS)[number];
+
+/** Toplu duruş eylemleri — `/api/machine-stops/bulk/*` yalnız bunlardan açılır; YALNIZ `dokumaEnabled` dalında doğarlar (bekçi §7f). */
+export const STOP_ACTION_KEYS = ["stopOpen", "stopClose", "stopRevoke"] as const satisfies readonly FloorActionKey[];
+export type StopActionKey = (typeof STOP_ACTION_KEYS)[number];
 
 export interface FloorAction {
   key: FloorActionKey;
@@ -28,6 +44,14 @@ export interface FloorActionCtx {
     /** Seçimde açık koşumu olan tezgah sayısı; `null` = bilgi yok (eski sunucu → dört eylem pasif). */
     openRunLooms: number | null;
   };
+  /** Toplu duruş eylemlerinin durumu; yoksa (örnek veri, TV) duruş eylemleri hiç çizilmez. */
+  stops?: {
+    online: boolean;
+    /** Sunucu toplu duruş uçlarını tanıyor mu (salon ucunun `bulkStopActions` alanı); değilse eski sunucu → pasif. */
+    bulk: boolean;
+    /** Seçimde açık duruşu olan tezgah sayısı. */
+    openStopLooms: number;
+  };
 }
 
 const OFFLINE = "Sunucuya ulaşılamıyor — bağlantı gelince açılır.";
@@ -45,6 +69,15 @@ function runReason(ctx: FloorActionCtx, perm: string, what: string, needsOpenRun
 
 const NO_PERM = (what: string) => `Yetkiniz yok — ${what} izni gerekir.`;
 
+/** Duruş eylemi pasif mi — sıra: izin → bağlantı → sunucu sürümü → seçimde açık duruş. */
+function stopReason(ctx: FloorActionCtx, needsOpenStop: boolean): string | null {
+  if (!ctx.can("loom:manual-entry")) return NO_PERM("Tezgah Duruşları");
+  if (!ctx.stops?.online) return OFFLINE;
+  if (!ctx.stops.bulk) return OLD_SERVER;
+  if (!needsOpenStop) return null;
+  return ctx.stops.openStopLooms > 0 ? null : "Seçili tezgahta açık duruş yok.";
+}
+
 function item(key: FloorActionKey, label: string, reason: string | null): FloorAction {
   return { key, label, enabled: reason === null, reason };
 }
@@ -58,6 +91,11 @@ export function floorActionsOf(ctx: FloorActionCtx): FloorAction[] {
       out.push(item("replace", "İşi değiştir…", runReason(ctx, "loom:run", "Tezgah koşumu", true)));
       out.push(item("finish", "İşi bitir…", runReason(ctx, "loom:run", "Tezgah koşumu", true)));
       if (ctx.count === 1) out.push(item("revoke", "Koşumu geri al…", runReason(ctx, "loom:run-revoke", "Koşum geri alma", true)));
+    }
+    if (ctx.stops && ctx.count > 0) {
+      out.push(item("stopOpen", "Duruş bildir…", stopReason(ctx, false)));
+      out.push(item("stopClose", "Hepsi çalıştı…", stopReason(ctx, true)));
+      out.push(item("stopRevoke", "Duruşu geri al…", stopReason(ctx, true)));
     }
     const stopsOk = ctx.can("loom:manual-entry") || ctx.can("loom:classify");
     if (ctx.count === 1) out.push(item("stops", "Duruş listesi", stopsOk ? null : NO_PERM("Tezgah Duruşları")));

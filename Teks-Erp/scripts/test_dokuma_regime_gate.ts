@@ -46,6 +46,8 @@
 //      dokuma dalının dışına → §7f1 · `WeavingFloorView` `jobs/runService`i içe aktardı → §7f2 ·
 //      manifestodan `loom:run-revoke` düştü → §7f3 · `runService` uç metinleri değişti → §7f0 ·
 //      §7b'deki eylem dosyası muafı kaldırıldı → §7b (her biri 1 ❌).
+//   ⑫–⑭ (2026-10-12, Tezgah Salonu F2): duruş eylemleri dokuma dalının dışına → §7f1 (STOP_ACTION_KEYS) ·
+//      `WeavingFloorView` `stops/stopService`i içe aktardı → §7f2 · manifestodan `loom:manual-entry` düştü → §7f3.
 // GEREKLİ Mİ (reçete md. 20): kapı doğduğu gün ağaçta gerçek kusur bulmadı — ölçtüğü
 // sınıf (kapı sızıntısı · listesiz taşıyıcı · kapısız istemci) bugün yok; gerekçesi
 // üç kardeş bekçinin (production/iplik/devere) ölçülmüş tarihidir.
@@ -141,24 +143,45 @@ const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string;
  * §7b bu dosyaları izinsiz saymaz ama §7c–§7e yerine §7f'nin üç ölçüsünü taşırlar: eylem listesindeki koşum
  * eylemleri yalnız `dokumaEnabled` dalında, dosyayı (değer olarak; `import type` sayılmaz) yalnız beyanlı pencereler içe aktarır, manifesto izinleri beyanlı.
  */
-const TEZGAH_EKRANI_EYLEM_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; eylemListesi: string; iceAktaranlar: readonly string[] }> = [
+const TEZGAH_EKRANI_EYLEM_DOSYALARI: ReadonlyArray<{
+  dosya: string;
+  ekranKey: string;
+  izinler: readonly string[];
+  eylemListesi: string;
+  /** Eylem listesinde bu dosyayı açan anahtarların sabiti (`<AD> = ["k", …]`). */
+  anahtarSabiti: string;
+  iceAktaranlar: readonly string[];
+}> = [
   {
     dosya: "Electron/src/pages/Operations/WeavingFloor/jobs/runService.ts",
     ekranKey: "operations/weaving-floor",
     izinler: ["loom:run", "loom:run-revoke"],
     eylemListesi: "Electron/src/pages/Operations/WeavingFloor/floorActions.ts",
+    anahtarSabiti: "RUN_ACTION_KEYS",
     iceAktaranlar: [
       "Electron/src/pages/Operations/WeavingFloor/jobs/AssignJobDialog.tsx",
       "Electron/src/pages/Operations/WeavingFloor/jobs/FinishJobDialog.tsx",
       "Electron/src/pages/Operations/WeavingFloor/jobs/RevokeRunDialog.tsx",
     ],
   },
+  {
+    dosya: "Electron/src/pages/Operations/WeavingFloor/stops/stopService.ts",
+    ekranKey: "operations/weaving-floor",
+    izinler: ["loom:manual-entry"],
+    eylemListesi: "Electron/src/pages/Operations/WeavingFloor/floorActions.ts",
+    anahtarSabiti: "STOP_ACTION_KEYS",
+    iceAktaranlar: ["Electron/src/pages/Operations/WeavingFloor/stops/StopBulkDialog.tsx"],
+  },
 ];
 
-/** `RUN_ACTION_KEYS` anahtarlarının her `item("<k>"` doğumu `if (ctx.dokumaEnabled) {` bloğunda mı; değilse sebep. */
-function eylemlerDokumaDalinda(metin: string): string | null {
-  const anahtarlar = /RUN_ACTION_KEYS\s*=\s*\[([^\]]*)\]/.exec(metin)?.[1].match(/"([a-z]+)"/g)?.map((s) => s.slice(1, -1)) ?? [];
-  if (anahtarlar.length === 0) return "RUN_ACTION_KEYS bulunamadı";
+/** `sabit` anahtarlarının (ör. `RUN_ACTION_KEYS`) her `item("<k>"` doğumu `if (ctx.dokumaEnabled) {` bloğunda mı; değilse sebep. */
+function eylemAnahtarlari(metin: string, sabit: string): string[] {
+  return new RegExp(`${sabit}\\s*=\\s*\\[([^\\]]*)\\]`).exec(metin)?.[1].match(/"([A-Za-z]+)"/g)?.map((s) => s.slice(1, -1)) ?? [];
+}
+
+function eylemlerDokumaDalinda(metin: string, sabit: string): string | null {
+  const anahtarlar = eylemAnahtarlari(metin, sabit);
+  if (anahtarlar.length === 0) return `${sabit} bulunamadı`;
   const bas = metin.indexOf("if (ctx.dokumaEnabled) {");
   if (bas < 0) return "dokuma dalı yok";
   let derinlik = 0;
@@ -415,12 +438,13 @@ async function main(): Promise<void> {
     check(`§7f0 ${e.dosya} gerçekten dokuma ucu çağırıyor (ölü beyan kırmızı)`, cagiranlar.includes(e.dosya));
     const eylemMetni = yorumlariSok(fs.readFileSync(path.join(KOK, e.eylemListesi), "utf8"));
     check(
-      `§7f1 ⭐ ${e.eylemListesi}: her koşum eylemi YALNIZ \`if (ctx.dokumaEnabled) {\` dalında doğar`,
-      eylemlerDokumaDalinda(eylemMetni) === null,
-      eylemlerDokumaDalinda(eylemMetni) ?? "",
+      `§7f1 ⭐ ${e.eylemListesi}: her ${e.anahtarSabiti} eylemi YALNIZ \`if (ctx.dokumaEnabled) {\` dalında doğar`,
+      eylemlerDokumaDalinda(eylemMetni, e.anahtarSabiti) === null,
+      eylemlerDokumaDalinda(eylemMetni, e.anahtarSabiti) ?? "",
     );
-    const disari = eylemMetni.replace(/(if \(ctx\.dokumaEnabled\) \{)/, 'out.push(item("assign", "x", null));\n  $1');
-    check("§7f1b sonda bellek içi: eylem dalın DIŞINA taşınınca §7f1 kırmızı", eylemlerDokumaDalinda(disari) !== null);
+    const ilk = eylemAnahtarlari(eylemMetni, e.anahtarSabiti)[0] ?? "?";
+    const disari = eylemMetni.replace(/(if \(ctx\.dokumaEnabled\) \{)/, `out.push(item("${ilk}", "x", null));\n  $1`);
+    check(`§7f1b sonda bellek içi: ${e.anahtarSabiti} eylemi dalın DIŞINA taşınınca §7f1 kırmızı`, eylemlerDokumaDalinda(disari, e.anahtarSabiti) !== null);
     const ad = path.basename(e.dosya).replace(/\.tsx?$/, "");
     const iceAktaranlar = kaynakDosyalari(ELECTRON_SRC)
       .filter((f) => new RegExp(`import\\s+(?!type\\b)[^;]*?from "[^"]*/${ad}"`).test(yorumlariSok(fs.readFileSync(f, "utf8"))))

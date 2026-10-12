@@ -229,6 +229,11 @@ describe("fromApi — durum kaynağı", () => {
     expect(criticalBeamOf(t.beams)).toBeFalsy();
   });
 
+  it("⭐ toplu duruş uçları: sunucu `bulkStopActions: true` → bulkStops; eski sunucu (alan yok) → false", () => {
+    expect(fromApi({ ...dto([loom({})]), bulkStopActions: true }).bulkStops).toBe(true);
+    expect(fromApi(dto([loom({})])).bulkStops).toBe(false);
+  });
+
   it("⭐ hat sayısı + HER hattın açık koşumu taşınır; dokuma kapalıyken (null) ve eski sunucuda (yok) bilgi yok", () => {
     const run = { id: "r2", productionLineNo: 2, weavingOrderId: "w1", weavingOrderNumber: "DI-9", startedAt: T0 };
     const t = fromApi(dto([loom({ productionLineCount: 2, openRuns: [run] })])).looms[0]!;

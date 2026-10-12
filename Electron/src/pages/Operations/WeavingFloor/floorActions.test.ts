@@ -90,3 +90,43 @@ describe("floorActionsOf", () => {
     });
   });
 });
+
+describe("floorActionsOf — toplu duruş eylemleri (F2)", () => {
+  const stops = (online = true, bulk = true, openStopLooms = 1) => ({ stops: { online, bulk, openStopLooms } });
+  const STOP_KEYS = ["stopOpen", "stopClose", "stopRevoke"];
+
+  it("⭐ duruş bağlamı yoksa (örnek veri, TV) duruş eylemi YOK", () => {
+    for (const k of STOP_KEYS) expect(byKey(ctx({}), k)).toBeUndefined();
+  });
+
+  it("⭐ dokuma modülü KAPALI: Duruş bildir / Hepsi çalıştı / Duruşu geri al hiç görünmez", () => {
+    expect(keys(ctx({ dokumaEnabled: false, ...stops() }))).toEqual(["detail", "selectAll", "clear"]);
+  });
+
+  it("tam yetki + açık duruş: üç eylem etkin, çoklu seçimde de var, sıra sabit", () => {
+    const list = floorActionsOf(ctx({ count: 3, ...stops(true, true, 2) }));
+    expect(list.map((a) => a.key)).toEqual(["stopOpen", "stopClose", "stopRevoke", "reports", "selectAll", "clear"]);
+    expect(list.map((a) => a.label).slice(0, 3)).toEqual(["Duruş bildir…", "Hepsi çalıştı…", "Duruşu geri al…"]);
+    expect(list.every((a) => a.enabled)).toBe(true);
+  });
+
+  it("⭐ loom:manual-entry yoksa üçü de pasif + 'Tezgah Duruşları' nedeni (loom:classify yetmez)", () => {
+    for (const k of STOP_KEYS) {
+      const a = byKey(ctx({ ...stops(), can: (p) => p === "loom:classify" }), k);
+      expect(a).toMatchObject({ enabled: false });
+      expect(a?.reason).toContain("Tezgah Duruşları");
+    }
+  });
+
+  it("⭐ bağlantı yok → pasif 'Sunucuya ulaşılamıyor'; eski sunucu (bulk yok) → pasif 'sunucu güncellenince'", () => {
+    for (const k of STOP_KEYS) {
+      expect(byKey(ctx(stops(false)), k)?.reason).toContain("Sunucuya ulaşılamıyor");
+      expect(byKey(ctx(stops(true, false)), k)?.reason).toContain("sunucu güncellenince");
+    }
+  });
+
+  it("⭐ seçimde açık duruş yoksa Hepsi çalıştı / Duruşu geri al pasif; Duruş bildir açık", () => {
+    expect(byKey(ctx(stops(true, true, 0)), "stopOpen")?.enabled).toBe(true);
+    for (const k of ["stopClose", "stopRevoke"]) expect(byKey(ctx(stops(true, true, 0)), k)?.reason).toBe("Seçili tezgahta açık duruş yok.");
+  });
+});

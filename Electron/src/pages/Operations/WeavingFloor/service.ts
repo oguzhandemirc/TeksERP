@@ -105,6 +105,8 @@ export interface LoomFloorDto {
   graceMinutes: number;
   dokumaEnabled: boolean;
   beamTracking: boolean;
+  /** Sunucu toplu duruş uçlarını tanıyor (backend 2.15.6+); eski sunucuda alan yok → duruş eylemleri pasif. */
+  bulkStopActions?: boolean;
   summary: WireFloorCounts;
   halls: (WireFloorCounts & { hallId: string; hallName: string })[];
   looms: WireLoom[];

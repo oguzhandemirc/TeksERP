@@ -156,7 +156,7 @@ Esin: dokuma izleme/MES salon panoları (Loepfe/Barco tipi salon izleme, Picanol
 | Faz | Teslim | Yeni şema? | Not |
 |---|---|---|---|
 | **F1 — Seçim + menü iskeleti** ✓ (2026-10-11) | Tık/Ctrl/Shift/lasso/Ctrl+A/Esc/klavye/uzun bas, seçim çubuğu, sağ tık menüsü; eylemler: Detay, raporlara geçiş, duruş listesine geçiş. TV'de kapalı. | Hayır | Salt istemci. Menü öğelerinin görünürlüğü saf yüklemle (bekçi testli). |
-| **F2 — Duruş eylemleri (tek + toplu)** | Duruş bildir / kapat / sebep ata / planlı bakım, önizlemeli toplu ([C.3, C.7, C.11]) | Hayır | Mevcut uçlar satır başına; toplu uç ya da istemci döngüsü (karar tasarım diliminde; toplu uç önerilir — tek önizleme kaynağı). |
+| **F2 — Duruş eylemleri (tek + toplu)** ✓ (2026-10-12) | Duruş bildir / kapat / sebep ata / planlı bakım, önizlemeli toplu ([C.3, C.7, C.11]) | Hayır | Toplu uç (`/api/machine-stops/bulk/*`, tek önizleme kaynağı); satır başına mevcut tekli yol. Sebep ata ayrı eylem olarak inmedi (aşağıda). |
 | **F3 — İş ver (A: şimdi başlat)** ✓ (2026-10-12) | `POST /machine-runs/bulk` + `/bulk/preview`; İş ver / Değiştir / Bitir / Geri al (tek); sonuç ekranı; salon ucuna operatör (D5) ve dolu/boş hat bilgisi | Hayır | Panelde koşum yüzeyi doğar → `loom:run` "ekransız"dan çıkar (dört kapı reçetesi; `test_dokuma_regime_gate §7` allowlist'e yeni istemci dosyası). |
 | **F4 — Üretilen metre + kart bilgileri** | İş başına ÜRETİLEN metre (D2), kalan, levent bitiş tahmini (D7, "tahmini" etiketli), D12 TV rotasyonu | Hayır | İki sayı kuralı: ÜRETİLEN (top ölçümü) ile TEZGAHTA (türetilen) toplanmaz. |
 | **F5 — Sıraya koy (karar 2)** | `LoomJobPlan` varlığı + izin `loom:plan` + kart üzerinde "sıradaki: DK…" + tablet ön-dolgu | **Evet** | Migration reçetesi, en eski canlı dump'ta prova. |
@@ -189,6 +189,13 @@ Esin: dokuma izleme/MES salon panoları (Loepfe/Barco tipi salon izleme, Picanol
 - "Olmayanları yeniden dene" başarısız satırları körlemesine tekrar göndermez, YENİDEN ÖNİZLER.
 - "Koşumu geri al" salonda yalnız AÇIK koşum + tek tezgah (çok hatlıysa koşum sorulur); bitmiş koşumun geri alınması salon dışı (1e kararı).
 - Salon ucuna operatör (D5) bu fazda eklenmedi — açık.
+
+### F2 teslimi (2026-10-12) — tasarımdan sapmalar
+- Üç eylem: "Duruş bildir…" (başlangıç Şimdi/Daha önce, sebep pencere içinde listeden BİR KEZ ya da "Sebep sonra girilecek"), "Hepsi çalıştı…" (seçimin açık duruşlarını kapatır, bitiş Şimdi/Daha önce), "Duruşu geri al…" (gerekçe bir kez, karar 7). Hepsi önizlemeli; satır başına işaret; sonuç Oldu/Olmadı + yalnız başarısızları yeniden önizle.
+- **Sebep ata ayrı eylem olarak İNMEDİ** (1e kararı) — sebebi sonra girilen duruşlar Tezgah Duruşları ekranında sınıflanır; salondan toplu sebep atama açık kalır. **Planlı bakım ayrı eylem değildir:** sebebi planlı bakım olan duruş bildirilir.
+- Salonda toplu geri alma yalnız AÇIK duruşları hedefler; kapanmış duruşun geri alınması Tezgah Duruşları ekranında tek tek (1e kararı, F3 koşum geri alma kararıyla simetrik).
+- Başlangıç/bitiş saatini istemci gönderir ve saat denemeye yapışıktır; kapat/geri alda token yoktur — aynı kullanıcının aynı değerle yeniden gönderimi başarılı, farklı değer reddedilir. Tavan tek seferde 300 tezgah (1e kararları; gerekçe arşiv `2026-10.md`).
+- Geçmiş saatle açılışta kapanmış bir duruşla örtüşen satır `STOP_OVERLAP` ile reddedilir — yalnız toplu yolda (opt-in); tekli uç bugünkü davranışta.
 
 ## Ek · Ölçüm kaynakları (dosya)
 - `Teks-Erp/prisma/schema.prisma`: `WeavingOrder`, `MachineRun` (sedler yorumda), `Machine` (`productionLineCount`, `warpBeamSlots`; en/tip yok), `MachineSpec` (`shedType`, `nominalUnitsPerMin`), `WarpSpec` (`reedWidthCm`), `WorkSession`, `KursunBypassAssignment`
