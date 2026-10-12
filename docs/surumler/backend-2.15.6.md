@@ -129,6 +129,26 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 - `7e4137228` — B2: kullanılamayan lisans deposu (program/yedek dizini içinde, yazılamaz, DB izsiz okunamaz) =
   `KURULUM_HATASI` kilit sınıfı (yalnız korumalı derlemede); lisans ekranı + "verilerimi al" açık.
 
+**Yetki denetimi düzeltmeleri (güvenlik Bölge 2)** (commitler `fix(yetki): B1 …`, `B2 …`, `B3+B4 …`, `B5+B6 …`; kısa kimlikleri paketlemede yazılır)
+
+- Yönetici başkasına kendisinde olmayan yetkiyi veremez (409 `GRANT_EXCEEDS_ACTOR`); tam yetkili yönetici
+  etkilenmez. ⚠️ Yan etki: Sistem Yöneticisi rolü iş yetkilerini (sipariş, tablet…) taşımadığı için bunları artık
+  başkasına veremez.
+- Daha yetkili hesabın parola / iki adımlı doğrulama / hızlı PIN / kart sıfırlaması iki kişilik onay ister (403
+  `CREDENTIAL_RESET_NEEDS_APPROVAL` → talep → hedefi kapsayan ikinci yönetici onaylar, işlem onun adına yapılır).
+  ⚠️ Yan etki: tam yetkili olmayan yöneticinin operatör PIN/kart sıfırlaması da (operatör kendisinde olmayan tablet
+  yetkisi taşıyorsa) ikinci onay ister. Migration `20261012120000_kimlik_sifirlama_onayi` (yeni tablo).
+- Fatura işareti yalnız `shipping:invoice` ile (sevkiyat yazma yetkisi artık yetmez); Ticaret rol şablonundan
+  `shipping:invoice` çıktı. ⚠️ Var olan kurulumlarda veritabanındaki Ticaret şablonu ve ona atanmış kullanıcıların
+  izinleri DEĞİŞMEZ (uzlaştırma yalnız ekler) — fatura işaretini Muhasebe/Süpervizör dışında taşıyanlar elle
+  gözden geçirilmeli.
+- Genel kayıt formlarından varsayılan depo işareti ve donanımın son görülme/silinme damgası yazılamaz (sessiz
+  düşer); kullanımdaki istasyonun türü değiştirilemez (409 `STATION_KIND_IN_USE`).
+- Üretim modülü kapalıyken açık kumaş girişi ve kurşun bitirme uçları 403 `MODULE_DISABLED`; KK1 girişi ve takılı
+  top kurtarma açık kalır.
+- İki yeni ayar (varsayılan KAPALI = bugünkü davranış): hızlı iş emri yalnız kendi başlattıklarını düzenler;
+  destek talepleri yalnız sahibine görünür (yönetici hepsini).
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -167,16 +187,20 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 - **Kırıldı mı:** HAYIR (makine kaynaklı duruş kısmı) — yalnız ekleme: duruş DTO'sunda `signalKind`, `rawStopCode`,
   `collectorId`; uç, izin, hata kodu eklenmedi (makine girişinin kodları — `STOP_CLOSED_BY_OPERATOR`,
   `STOP_END_CONFLICT`, `STOP_STAMP_REQUIRED`, `STOP_SOURCE_INVALID`, `STOP_KEY_INVALID` — henüz hiçbir uçtan dönmez).
+- **Kırıldı mı:** HAYIR (yetki kısmı) — yeni uçlar `/api/admin/credential-reset-requests`, yeni hata kodları
+  `GRANT_EXCEEDS_ACTOR`, `CREDENTIAL_RESET_NEEDS_APPROVAL`, `STATION_KIND_IN_USE`; ayar cevabına iki alan. Davranış
+  daralması: `shipping:write`-yalnız aktör fatura işaretinde 403; eski panel onay talebi akışını bilmez, 403'ü
+  genel hata olarak gösterir (eşleşen panel 1.6.5).
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.
 
 ## 4. Migration
 
-- **Var mı:** EVET — 3 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
+- **Var mı:** EVET — 4 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
   `users` tablosuna boş geçilebilir bir alan + bir kontrol kuralı; var olan satırlar boş kalır, veri dönüşümü YOK),
-  `20261012010000_durus_acan_kapatan`.
-- **Toplam migration:** 379 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 3 migration uygulamalıdır. Farklı sayı =
+  `20261012010000_durus_acan_kapatan`, `20261012120000_kimlik_sifirlama_onayi` (yalnız EKLEME: yeni tablo).
+- **Toplam migration:** 380 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 4 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -228,7 +252,7 @@ Veriyi güncelleme öncesine döndürmek gerekirse otomatik yedekten geri yükle
 - Güncelleme programı hizmeti çalışıyor; `durum` kurulu sürüm 2.15.6, güncelleme programı 0.2.6, kira geçerli
   (DONDURULDU / KIRA_YOK yok).
 - Yedek: güncelleme öncesi yedek alındı; günlükte `SEMA_OLCULEMEDI` yok.
-- Veritabanı: 379 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
+- Veritabanı: 380 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
   kurulumda hepsi boş.
 - `/api/admin/health` `sistemHesabiMuhru`: var olan (mühürlenmemiş) kurulumda `MUHURLENMELI`, mühürlemeden sonra
   `TAMAM`. Destek hesabı girişi mühürlemeden önce de sonra da çalışıyor.

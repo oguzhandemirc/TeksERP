@@ -103,6 +103,21 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Sunucunun lisans klasörü yanlış yerdeyse (program ya da yedek klasörünün içinde) ya da okunamıyorsa panel girişten sonra kırmızı bir uyarıyla “Lisans klasörü kullanılamıyor — kurulum hatası” der ve sorunu yazar; bu durumda etkinleştirme seçenekleri gizlenir, yedek alma ve verileri dışa aktarma açık kalır. Kurulumu yapan yöneticinin lisans klasörünü düzeltmesi gerekir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Kendinizden daha yetkili bir hesabın parolasını, iki adımlı doğrulamasını, hızlı PIN'ini ya da kartını sıfırlarken artık ikinci bir yöneticinin onayı istenir: Kullanıcılar ekranında “Onay talebi oluştur” düğmesi çıkar, talep “Onay bekleyen kimlik sıfırlamaları” kartına düşer; o hesabın yetkilerini kapsayan başka bir yönetici onaylayınca işlem onun adına yapılır. Kendi açtığınız talebi siz onaylayamazsınız."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Bir yönetici, kendisinde olmayan bir yetkiyi başkasına veremez; denediğinde hangi yetkilerin kendisinde olmadığı yazılır. Tam yetkili yönetici etkilenmez. Örneğin Sistem Yöneticisi rolü sipariş ya da tablet yetkilerini taşımadığı için bunları artık başkasına veremez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem → Özellik Anahtarları → İş Emirleri altında “Tablet hızlı iş emri: yalnız kendi başlattıklarını düzenler” ayarı; Şirket & Güvenlik altında yeni “Destek Talepleri” bölümünde “Destek talepleri: herkes yalnız kendininkini görür (yönetici hepsini)” ayarı. İkisi de kapalı gelir; kapalıyken bugünkü gibi çalışır."
         }
       ]
     },
