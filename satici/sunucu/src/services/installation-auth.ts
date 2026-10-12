@@ -50,6 +50,8 @@ export interface VerifyInput {
   readonly path: string;
   /** Etkinleştirme ve taşımada anahtar kayıtlı değildir: gövdedeki açık anahtar. */
   readonly keyFromBody?: string;
+  /** Yalnız gövde anahtarlı taşıma: kayıtsız/pasif kimlik hata değil `installation: null` (durum sızmasın — B1k). */
+  readonly unknownInstallationAsNull?: boolean;
 }
 
 /** Nonce ve kurulum hız sınırının kapsamı: kurulumun satıcı kimliği; kurulumsuz talepte anahtar kimliği. */
@@ -92,6 +94,11 @@ async function installationByLicenseId(licenseId: string): Promise<Kurulum> {
   return installation;
 }
 
+async function activeInstallationOrNull(licenseId: string): Promise<Kurulum | null> {
+  const installation = await prisma.kurulum.findUnique({ where: { kurulumId: licenseId } });
+  return installation?.aktif ? installation : null;
+}
+
 /** ①② — yan etkisiz: kimlik + anahtar + imza. Nonce yazılmaz, hız sınırı sayılmaz. */
 export async function verifySignedRequest(g: VerifyInput): Promise<VerifiedRequest> {
   if (typeof g.header !== "string" || g.header.length === 0) {
@@ -129,7 +136,7 @@ export async function verifySignedRequest(g: VerifyInput): Promise<VerifiedReque
   }
   if (bodyKid !== kid) throw new VendorError(401, "ISTEK_KID", "İstek gövdedeki anahtarla imzalanmamış");
   const request = verify(g.keyFromBody);
-  const installation = claimedId === null ? null : await installationByLicenseId(claimedId);
+  const installation = claimedId === null ? null : g.unknownInstallationAsNull ? await activeInstallationOrNull(claimedId) : await installationByLicenseId(claimedId);
   const role = installation ? await bodyKeyRole(installation, kid) : "BODY";
   return { installation, request, kid, publicKeyX: g.keyFromBody, role };
 }

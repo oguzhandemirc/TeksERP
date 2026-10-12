@@ -30,9 +30,10 @@ import { authenticateRequest } from "../services/installation-auth";
 import { processPoll } from "../services/poll.service";
 import { bindLiveHardwareResponse, bindLiveResponse } from "../services/response-binding";
 import { openSupportTicket } from "../services/support.service";
+import { createTransferFloodGuard } from "../services/transfer-flood";
 import { handleTransferRequest } from "../services/transfer.service";
 import { parseJsonBody, parseStrict, rawBodyOf } from "./body";
-import { proxyTrustFrom } from "./client-address";
+import { clientAddress, proxyTrustFrom } from "./client-address";
 import { DEALER_PORTAL_ROUTES } from "./dealer-routes";
 import { accessLog, errorHandler, notFound } from "./error-handler";
 import { createPortalRouter } from "./portal-http";
@@ -134,6 +135,7 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   const raw = express.raw({ type: () => true, limit: "96kb" });
   const trust = proxyTrustFrom(ctx.config);
   const limit = scopeLimiter(ctx.config.V1_HIZ_KURULUM_DK);
+  const transferFlood = createTransferFloodGuard(ctx.config);
 
   app.get("/saglik", (_req, res) => {
     res.set("Cache-Control", "no-store").json({ success: true });
@@ -168,7 +170,8 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
   app.post(ENDPOINTS.TRANSFER, raw, async (req: Request, res: Response) => {
     const body = rawBodyOf(req.body);
     const parsed = parseStrict(TransferRequestSchema, parseJsonBody(body));
-    res.json(await handleTransferRequest(ctx, { header: req.get(REQUEST_HEADER), rawBody: body, body: parsed, nowMs: Date.now(), limit, path: ENDPOINTS.TRANSFER }));
+    const call = { header: req.get(REQUEST_HEADER), rawBody: body, body: parsed, nowMs: Date.now(), limit, path: ENDPOINTS.TRANSFER };
+    res.json(await handleTransferRequest(ctx, { ...call, ip: clientAddress(req, trust), flood: transferFlood }));
   });
 
   app.post(ENDPOINTS.DR_TAKEOVER, raw, async (req: Request, res: Response) => {

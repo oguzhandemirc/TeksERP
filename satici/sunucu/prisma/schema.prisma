@@ -798,6 +798,9 @@ model DonanimTalebi {
 model TasimaTalebi {
   id                 String       @id @default(uuid()) @db.Uuid
   kurulumId          String?      @db.Uuid
+  /// İsteğin taşıdığı lisans kimliği (kurulum var/etkin mi bakılmadan); hedef başına TEK bekleyen — kısmi UNIQUE
+  /// `tasima_talebi_hedef_bekleyen_tekil` (göçte). Bağ yine yalnız etkin kurulumda/operatör onayında kurulur.
+  hedefKimlik        String?      @db.Uuid
   yeniAcikAnahtar    String       @db.VarChar(64)
   yeniAnahtarKimligi String       @db.VarChar(64)
   yeniParmakIzi      Json

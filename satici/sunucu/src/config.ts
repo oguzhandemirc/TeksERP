@@ -85,6 +85,11 @@ const EnvSchema = z.object({
   /** /v1/* hız sınırı (dakikalık, sabit pencere): istemci IP'si başına ve kurulum (ya da kurulumsuz anahtar) başına. */
   V1_HIZ_IP_DK: positiveInt(1, 100_000).default(120),
   V1_HIZ_KURULUM_DK: positiveInt(1, 100_000).default(30),
+  /** Taşıma talebi DOĞUMU tavanları (B1): lisans kimliği (hedef) başına dakikada/günde, istemci adresi başına günde, bağsız bekleyen toplamı. */
+  TASIMA_HEDEF_DK: positiveInt(1, 1000).default(3),
+  TASIMA_HEDEF_GUN: positiveInt(1, 10_000).default(10),
+  TASIMA_IP_GUN: positiveInt(1, 100_000).default(20),
+  TASIMA_BAGSIZ_AZAMI: positiveInt(1, 100_000).default(50),
   /** Kapı zili: kurulum başına eşzamanlı SSE aboneliği tavanı (aşan yeni abonelik en eskisini kapatır). */
   ZIL_AZAMI_ABONE: positiveInt(1, 10).default(3),
   /** Vekil arkasında istemci IP'sini taşıyan başlık (ör. cf-connecting-ip); boşsa soket adresi. */

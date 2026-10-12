@@ -1,6 +1,7 @@
 // TAŞIMA (D8) — yeni makine YALNIZ TALEP açar: yanıt kod ya da lisans taşımaz (`lisans: null`). Talep
-// kimlik taşıyorsa o kuruluma bağlı, kimliksizse (yeni makine lisans kimliğini bilmiyor, D14) BAĞSIZ doğar —
-// `ortam.installationId` yalnız ipucudur, bağı onaylayan operatör kurar. Onay (BEKLIYOR → ONAYLANDI, atomik)
+// kimlik ETKİN bir kurulumu gösteriyorsa ona bağlı, değilse (kimliksiz · kayıtsız · etkinleşmemiş · iptal) BAĞSIZ doğar
+// ve yanıt AYNIDIR (durum sızmaz — B1k); `ortam.installationId` yalnız ipucudur, bağı onaylayan operatör kurar.
+// İstenen lisans kimliği (`hedefKimlik`) başına TEK bekleyen talep (DB seddi); doğum tavanları `transfer-flood.ts`. Onay (BEKLIYOR → ONAYLANDI, atomik)
 // tek kullanımlık `tasima` kodu üretir; kod müşteriye portaldan iletilir, yeni makine onu normal etkinleştirme
 // yolundan kullanır ve anahtar ANCAK o anda değişir (eski anahtar emekli). Onaya kadar eski makine çalışır.
 import type { TasimaTalebi } from "@prisma/client";
@@ -17,12 +18,21 @@ import { issueActivationCodeUnderLock, type IssuedActivationCode } from "./entit
 import { installationCancelled, recordRequestNonce, requestScope, verifySignedRequest } from "./installation-auth";
 import { requireReason } from "./sanction.service";
 import { securityEvent } from "../lib/security-events";
+import type { TransferFloodGuard } from "./transfer-flood";
 
 type TransferRequest = z.infer<typeof TransferRequestSchema>;
 type TransferResponse = z.infer<typeof TransferResponseSchema>;
 
-const pendingElsewhere = (): VendorError =>
-  new VendorError(409, "TASIMA_ONAYI_BEKLIYOR", "Bu kurulum için başka bir taşıma talebi onay bekliyor");
+/** Hedef başına tek bekleyen: gerçek yeni makine sahte talebe takılırsa yol portaldan iptaldir (talep künyesi cevapta). */
+const pendingElsewhere = (other?: Pick<TasimaTalebi, "id" | "createdAt">): VendorError =>
+  new VendorError(
+    409,
+    "TASIMA_ONAYI_BEKLIYOR",
+    "Bu lisans için onay bekleyen başka bir taşıma talebi var — satıcıdan o talebi portalda iptal etmesini isteyin, sonra yeniden deneyin",
+    other ? { bekleyenTalepId: other.id, bekleyenTalepZamani: other.createdAt.toISOString() } : undefined,
+  );
+
+const HOUR_MS = 3_600_000;
 
 const response = (talep: Pick<TasimaTalebi, "id" | "durum">): TransferResponse =>
   TransferResponseSchema.parse({ v: 1, talepId: talep.id, durum: talep.durum, lisans: null });
@@ -30,7 +40,7 @@ const response = (talep: Pick<TasimaTalebi, "id" | "durum">): TransferResponse =
 /** Talebi aç ya da var olanı döndür (kilit ALTINDA; ilk ifade anahtar kilidi). */
 async function openOrReturn(
   tx: Tx,
-  g: { installationDbId: string | null; kid: string; body: TransferRequest },
+  g: { installationDbId: string | null; hedef: string | null; kid: string; body: TransferRequest; ip: string | null; nowMs: number; flood?: TransferFloodGuard },
 ): Promise<{ talep: TasimaTalebi; created: boolean }> {
   await lockTransferKey(tx, g.kid);
   if (g.installationDbId) await lockInstallation(tx, g.installationDbId);
@@ -39,14 +49,19 @@ async function openOrReturn(
     : // Kimliksiz: bu anahtarın en son talebi (onayda kuruluma bağlanmış olabilir) — fabrika aynı talebi yoklar.
       await tx.tasimaTalebi.findFirst({ where: { yeniAnahtarKimligi: g.kid }, orderBy: [{ createdAt: "desc" }, { id: "desc" }] });
   if (existing) return { talep: existing, created: false };
-  if (g.installationDbId) {
-    const other = await tx.tasimaTalebi.findFirst({ where: { kurulumId: g.installationDbId, durum: "BEKLIYOR" } });
-    if (other) throw pendingElsewhere();
+  if (g.hedef || g.installationDbId) {
+    const other = await tx.tasimaTalebi.findFirst({
+      where: { durum: "BEKLIYOR", OR: [...(g.hedef ? [{ hedefKimlik: g.hedef }] : []), ...(g.installationDbId ? [{ kurulumId: g.installationDbId }] : [])] },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (other) throw pendingElsewhere(other);
   }
+  await g.flood?.admit(tx, { hedef: g.hedef, bound: g.installationDbId !== null, ip: g.ip, nowMs: g.nowMs });
   try {
     const created = await tx.tasimaTalebi.create({
       data: {
         kurulumId: g.installationDbId,
+        hedefKimlik: g.hedef,
         yeniAcikAnahtar: g.body.acikAnahtar,
         yeniAnahtarKimligi: g.kid,
         yeniParmakIzi: g.body.parmakIzi,
@@ -54,14 +69,14 @@ async function openOrReturn(
         gerekce: g.body.gerekce,
       },
     });
-    // Bildirim AYNI tx'te; gerekçe ve ortam GİTMEZ. Kimliksiz talepte kurulum bilinmez (etiketler boş).
+    // Bildirim AYNI tx'te; gerekçe ve ortam GİTMEZ. Tekillik talep değil hedef × saat (sel tek satırda birleşir).
     await enqueueNotificationTx(tx, {
       event: "TASIMA_TALEBI",
-      keyParts: [created.id],
+      keyParts: [g.installationDbId ?? g.hedef ?? "kimliksiz", Math.floor(g.nowMs / HOUR_MS)],
       installationDbId: g.installationDbId,
       relatedId: created.id,
       portalPath: "/tasima-talepleri",
-      referans: g.installationDbId ? null : "Kimliksiz talep — hedef kurulumu onaylarken seçin",
+      referans: g.installationDbId ? null : "Bağsız talep — hedef kurulumu onaylarken seçin",
     });
     return { talep: created, created: true };
   } catch (err) {
@@ -90,7 +105,16 @@ export function transferClientTooOld(uygulamaSurum: string): boolean {
 
 export async function handleTransferRequest(
   _ctx: VendorContext,
-  g: { header: unknown; rawBody: Buffer; body: TransferRequest; nowMs: number; limit?: (scope: string) => void; path?: string },
+  g: {
+    header: unknown;
+    rawBody: Buffer;
+    body: TransferRequest;
+    nowMs: number;
+    limit?: (scope: string) => void;
+    path?: string;
+    ip?: string | null;
+    flood?: TransferFloodGuard;
+  },
 ): Promise<TransferResponse> {
   const verified = await verifySignedRequest({
     header: g.header,
@@ -99,20 +123,19 @@ export async function handleTransferRequest(
     nowMs: g.nowMs,
     keyFromBody: g.body.acikAnahtar,
     path: g.path ?? ENDPOINTS.TRANSFER,
+    unknownInstallationAsNull: true,
   });
   if ((g.body.kurulumId ?? null) !== (verified.request.kurulumId ?? null)) {
     throw new VendorError(401, "ISTEK_KURULUM", "Gövdedeki kurulum kimliği imzalı istekle uyuşmuyor");
   }
-  const inst = verified.installation;
-  if (inst) {
-    if (verified.role === "RETIRED" || inst.durum === "IPTAL") throw installationCancelled();
-    if (verified.role === "CURRENT") throw new VendorError(400, "GOVDE_GECERSIZ", "Bu kurulum anahtarı zaten lisanslı; taşıma gerekmiyor");
-    if (inst.durum === "ETKINLESMEDI") {
-      throw new VendorError(400, "GOVDE_GECERSIZ", "Kurulum henüz etkinleşmedi; taşıma yerine etkinleştirme kodu kullanın");
-    }
-    if (inst.durum !== "ETKIN") throw new VendorError(403, "KURULUM_IPTAL", "Bu kurulum taşınamaz (devredildi ya da iptal)");
-  } else if ((await prisma.kurulumKaydi.count({ where: { eskiAnahtarKimligi: verified.kid } })) > 0) {
-    // Kimliksiz talepte de emekli anahtar yeni talep açamaz (taşınmış makine kendini yeniden taşıyamasın).
+  const hedef = verified.request.kurulumId ?? null;
+  // Anahtarın KENDİSİNE ait roller (güncel · emekli) sızıntı değildir: yalnız o anahtarın sahibi görür.
+  if (verified.installation && verified.role === "RETIRED") throw installationCancelled();
+  if (verified.installation && verified.role === "CURRENT") throw new VendorError(400, "GOVDE_GECERSIZ", "Bu kurulum anahtarı zaten lisanslı; taşıma gerekmiyor");
+  // Yabancı anahtara kurulumun durumu söylenmez: yalnız ETKİN kurulum talebi bağlar, gerisi bağsız ve aynı yanıt.
+  const inst = verified.installation?.durum === "ETKIN" ? verified.installation : null;
+  if (!inst && (await prisma.kurulumKaydi.count({ where: { eskiAnahtarKimligi: verified.kid } })) > 0) {
+    // Bağsız talepte de emekli anahtar yeni talep açamaz (taşınmış makine kendini yeniden taşıyamasın).
     throw installationCancelled();
   }
   const scope = { installationDbId: inst?.id ?? null, kid: verified.kid };
@@ -121,7 +144,9 @@ export async function handleTransferRequest(
     throw new VendorError(409, "TASIMA_SURUM_ESKI", "Taşıma için bu makineye güncel sürümü kurun");
   }
   await recordRequestNonce({ ...scope, request: verified.request, nowMs: g.nowMs });
-  const r = await prisma.$transaction((tx) => openOrReturn(tx, { installationDbId: inst?.id ?? null, kid: verified.kid, body: g.body }));
+  const r = await prisma.$transaction((tx) =>
+    openOrReturn(tx, { installationDbId: inst?.id ?? null, hedef, kid: verified.kid, body: g.body, ip: g.ip ?? null, nowMs: g.nowMs, flood: g.flood }),
+  );
   if (r.created) {
     if (inst === null) securityEvent("KIMLIKSIZ_TASIMA");
     await recordAudit({
@@ -129,7 +154,7 @@ export async function handleTransferRequest(
       entity: "TasimaTalebi",
       entityId: r.talep.id,
       actor: "kurulum",
-      summary: { kurulumId: inst?.id ?? null, yeniAnahtarKimligi: verified.kid, kimliksiz: inst === null },
+      summary: { kurulumId: inst?.id ?? null, hedefKimlik: hedef, yeniAnahtarKimligi: verified.kid, kimliksiz: inst === null },
     });
   }
   return response(r.talep);

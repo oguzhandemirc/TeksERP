@@ -70,7 +70,8 @@ const VENDOR_MESSAGES = {
   ISTEK_TEKRAR: "Aynı istek ikinci kez gönderildi; biraz sonra tekrar deneyin.",
   ETKINLESTIRME_KODU_GECERSIZ: "Etkinleştirme kodu geçersiz.",
   ETKINLESTIRME_KODU_KULLANILMIS: "Bu etkinleştirme kodu daha önce kullanılmış.",
-  TASIMA_ONAYI_BEKLIYOR: "Taşıma onayı bekleniyor; onaylanınca portaldan iletilen taşıma koduyla etkinleştirin.",
+  TASIMA_ONAYI_BEKLIYOR:
+    "Bu lisans için onay bekleyen bir taşıma talebi var. Talep bu makinenin ise onaylanınca portaldan iletilen taşıma koduyla etkinleştirin; değilse satıcıdan o talebi portalda iptal etmesini isteyin, sonra yeniden deneyin.",
   TASIMA_KODU_GEREKLI: "Bu kurulum başka bir makinede etkin; taşıma talebi açın ve onaylanınca verilen taşıma koduyla etkinleştirin.",
   TASIMA_SURUM_ESKI: "Lisans sunucusu bu sürümden taşıma talebi kabul etmiyor; bu makineye güncel sürümü kurun.",
   KURULUM_BILINMIYOR: "Bu kurulum lisans sunucusunda kayıtlı değil (taşıma talebi gerekebilir).",
