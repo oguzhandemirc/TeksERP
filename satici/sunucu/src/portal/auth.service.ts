@@ -3,7 +3,8 @@
 // GENEL; uymayan hesap BİLİNMEYEN hesap gibi davranır — sayaç değişmez, eşdeğer iş harcanır) →
 // kilit (kilitli hesap da BİLİNMEYEN hesap gibi: aynı yanıt, aynı scrypt işi — kilit hesabın varlığını
 // sızdırmasın) → parola + TOTP (tekrar oynatma kilidi) → oturum. Hata iletisi tek: hangi faktörün
-// tutmadığı ya da kilit söylenmez. Ardışık başarısızlık eşiği hesabı süreli kilitler.
+// tutmadığı ya da kilit söylenmez. Ardışık başarısızlık eşiği yalnız o KAYNAĞI süreli kilitler (`login-throttle.ts`):
+// başka kaynaktan doğru üçlü girer. DB'deki `kilitBitis` yalnız elle/eski kilittir, girişte yazılmaz.
 // Oturum belirteci düz saklanmaz (sha256); oturum doğduğu dinleyiciye bağlıdır.
 import { createHash, randomBytes } from "node:crypto";
 import type { PortalKullanici } from "@prisma/client";
@@ -11,6 +12,7 @@ import { recordAudit } from "../lib/audit";
 import { VendorError } from "../lib/errors";
 import { prisma } from "../lib/prisma";
 import type { VendorContext } from "../services/context";
+import { loginThrottleFor } from "./login-throttle";
 import { burnPasswordCheck, verifyPortalPassword } from "./password";
 import { actorOf, roleAllowedOn, type PortalListener, type PortalRole } from "./roles";
 import { verifyTotp } from "./totp";
@@ -53,17 +55,12 @@ function publicUser(u: Pick<PortalKullanici, "id" | "kullaniciAdi" | "adSoyad" |
   return { id: u.id, kullaniciAdi: u.kullaniciAdi, adSoyad: u.adSoyad, rol: u.rol, bayiId: u.bayiId };
 }
 
-async function registerFailure(ctx: VendorContext, user: PortalKullanici, nowMs: number, listener: PortalListener): Promise<void> {
+async function registerFailure(ctx: VendorContext, user: PortalKullanici, nowMs: number, from: { listener: PortalListener; source: string | null }): Promise<void> {
   const bumped = await prisma.portalKullanici.update({ where: { id: user.id }, data: { basarisizGiris: { increment: 1 } }, select: { basarisizGiris: true } });
-  await recordAudit({ event: "PORTAL_GIRIS_BASARISIZ", entity: "PortalKullanici", entityId: user.id, actor: "portal", summary: { dinleyici: listener, ardisik: bumped.basarisizGiris } });
-  if (bumped.basarisizGiris < ctx.config.PORTAL_GIRIS_ESIGI) return;
-  const until = new Date(nowMs + ctx.config.PORTAL_KILIT_DK * 60_000);
-  const locked = await prisma.portalKullanici.updateMany({
-    where: { id: user.id, basarisizGiris: { gte: ctx.config.PORTAL_GIRIS_ESIGI } },
-    data: { kilitBitis: until, basarisizGiris: 0 },
-  });
-  if (locked.count > 0) {
-    await recordAudit({ event: "PORTAL_HESAP_KILITLENDI", entity: "PortalKullanici", entityId: user.id, actor: "portal", summary: { kilitBitis: until.toISOString() } });
+  await recordAudit({ event: "PORTAL_GIRIS_BASARISIZ", entity: "PortalKullanici", entityId: user.id, actor: "portal", summary: { dinleyici: from.listener, ardisik: bumped.basarisizGiris } });
+  const until = loginThrottleFor(ctx).registerFailure(user.id, from.source, nowMs);
+  if (until) {
+    await recordAudit({ event: "PORTAL_HESAP_KILITLENDI", entity: "PortalKullanici", entityId: user.id, actor: "portal", summary: { kilitBitis: until.toISOString(), kapsam: "KAYNAK" } });
   }
 }
 
@@ -72,6 +69,8 @@ export interface LoginInput {
   readonly username: string;
   readonly password: string;
   readonly totp: string;
+  /** İstemci adresi (`clientAddress`); kilit hesap + bu kaynağa bağlıdır. Bilinmiyorsa null (tek ortak kova). */
+  readonly source: string | null;
   readonly nowMs?: number;
 }
 
@@ -88,7 +87,8 @@ export async function login(ctx: VendorContext, g: LoginInput): Promise<{ token:
     }
     throw loginFailed();
   }
-  if (user.kilitBitis && user.kilitBitis.getTime() > nowMs) {
+  const throttle = loginThrottleFor(ctx);
+  if ((user.kilitBitis && user.kilitBitis.getTime() > nowMs) || throttle.isLocked(user.id, g.source, nowMs)) {
     await burnPasswordCheck(g.password);
     await recordAudit({ event: "PORTAL_GIRIS_REDDEDILDI", entity: "PortalKullanici", entityId: user.id, actor: "portal", summary: { dinleyici: g.listener, neden: "KILITLI" } });
     throw loginFailed();
@@ -101,7 +101,7 @@ export async function login(ctx: VendorContext, g: LoginInput): Promise<{ token:
   }
   const totp = verifyTotp(secret, g.totp, { atMs: nowMs, lastUsedStep: user.totpSonAdim });
   if (!passwordOk || !totp.ok) {
-    await registerFailure(ctx, user, nowMs, g.listener);
+    await registerFailure(ctx, user, nowMs, g);
     throw loginFailed();
   }
   // Adım iddiası atomik: aynı kodla eşzamanlı iki giriş ikisi de geçemez.
@@ -110,9 +110,10 @@ export async function login(ctx: VendorContext, g: LoginInput): Promise<{ token:
     data: { totpSonAdim: totp.step, basarisizGiris: 0, kilitBitis: null, sonGiris: new Date(nowMs) },
   });
   if (claim.count === 0) {
-    await registerFailure(ctx, user, nowMs, g.listener);
+    await registerFailure(ctx, user, nowMs, g);
     throw loginFailed();
   }
+  throttle.clear(user.id, g.source);
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(nowMs + ctx.config.PORTAL_OTURUM_AZAMI_SAAT * 3_600_000);
   const row = await prisma.portalOturumu.create({

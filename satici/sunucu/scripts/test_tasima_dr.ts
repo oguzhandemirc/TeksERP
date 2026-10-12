@@ -176,7 +176,14 @@ async function main(): Promise<void> {
     const redSonra = await tasi(k.kurulumId, redAnahtar, fpYeni);
     kontrol("§3a reddedilen talep → REDDEDILDI, lisans yok", redSonra.status === 200 && redSonra.json.durum === "REDDEDILDI" && redSonra.json.lisans === null);
     const redYoklama = await yokla(k.kurulumId, redAnahtar, null, fpYeni);
-    kontrol("§3b reddedilen anahtarın yoklaması → 401 ISTEK_KID", redYoklama.status === 401 && redYoklama.kod === "ISTEK_KID", `${redYoklama.status} ${redYoklama.kod}`);
+    kontrol("§3b reddedilen anahtarın yoklaması → 401 KURULUM_BILINMIYOR", redYoklama.status === 401 && redYoklama.kod === "KURULUM_BILINMIYOR", `${redYoklama.status} ${redYoklama.kod}`);
+    // B5: kayıtsız kurulum ile kayıtlı kurulumun yabancı anahtarı imzadan önce AYIRT EDİLMEZ (kod + ileti aynı).
+    const yokYoklama = await yokla(randomUUID(), redAnahtar, null, fpYeni);
+    kontrol(
+      "§3b2 var/yok kâhini yok: kayıtsız kurulum = kayıtlı kurulumun yabancı anahtarı (aynı 401 kodu + ileti)",
+      yokYoklama.status === redYoklama.status && yokYoklama.kod === redYoklama.kod && yokYoklama.json.message === redYoklama.json.message,
+      `yok ${yokYoklama.status} ${yokYoklama.kod} · var ${redYoklama.status} ${redYoklama.kod}`,
+    );
 
     console.log("\n§3c kimliksiz taşıma talebi (yeni makine lisans kimliğini bilmiyor, D14)");
     const hedef = await kurulumFiksturu(ctx);

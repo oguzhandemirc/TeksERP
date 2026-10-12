@@ -71,7 +71,7 @@ export async function bodyKeyRole(installation: Kurulum, kid: string): Promise<K
   return (await isRetiredKey(installation.id, kid)) ? "RETIRED" : "BODY";
 }
 
-async function registeredKey(installation: Kurulum, kid: string): Promise<{ x: string; role: KeyRole }> {
+async function registeredKey(installation: Kurulum, kid: string): Promise<{ x: string; role: KeyRole } | null> {
   if (installation.anahtarKimligi === kid && installation.acikAnahtar) return { x: installation.acikAnahtar, role: "CURRENT" };
   const pending = await prisma.tasimaTalebi.findFirst({
     where: { kurulumId: installation.id, yeniAnahtarKimligi: kid, durum: "BEKLIYOR" },
@@ -79,12 +79,16 @@ async function registeredKey(installation: Kurulum, kid: string): Promise<{ x: s
   if (pending) return { x: pending.yeniAcikAnahtar, role: "PENDING_TRANSFER" };
   const retired = await isRetiredKey(installation.id, kid);
   if (retired) return { x: retired.x, role: "RETIRED" };
-  throw new VendorError(401, "ISTEK_KID", "İstek bu kurulumun kayıtlı anahtarıyla imzalanmamış");
+  return null;
 }
+
+/** Var/yok kâhini yok (B5): kayıtsız/pasif kurulum ile kayıtlı kurulumun yabancı anahtarı imzadan önce AYNI cevabı alır. */
+export const unknownInstallationOrKey = (): VendorError =>
+  new VendorError(401, "KURULUM_BILINMIYOR", "Bu kurulum bu anahtarla satıcıda kayıtlı değil");
 
 async function installationByLicenseId(licenseId: string): Promise<Kurulum> {
   const installation = await prisma.kurulum.findUnique({ where: { kurulumId: licenseId } });
-  if (!installation || !installation.aktif) throw new VendorError(401, "KURULUM_BILINMIYOR", "Bu kurulum satıcıda kayıtlı değil");
+  if (!installation || !installation.aktif) throw unknownInstallationOrKey();
   return installation;
 }
 
@@ -110,6 +114,10 @@ export async function verifySignedRequest(g: VerifyInput): Promise<VerifiedReque
     if (claimedId === null) throw new VendorError(401, "ISTEK_GECERSIZ", "İstek kurulum kimliği taşımıyor (yalnız etkinleştirme ve taşıma kimliksiz olabilir)");
     const installation = await installationByLicenseId(claimedId);
     const key = await registeredKey(installation, kid);
+    if (!key) {
+      console.warn(`[satici] imzalı istek reddi: kurulum ${claimedId.slice(0, 8)}… bilinen anahtarlarında kid yok`);
+      throw unknownInstallationOrKey();
+    }
     return { installation, request: verify(key.x), kid, publicKeyX: key.x, role: key.role };
   }
 
@@ -151,7 +159,7 @@ export const installationCancelled = (): VendorError =>
 /**
  * Kayıtlı anahtarlı istek (yoklama · zil · çevrimdışı · DR): doğrula → ucuz ön denetimler (iptal/emekli 403,
  * bekleyen taşıma anahtarı 409, güncel olmayan anahtar 401) → kurulum hız sınırı (`limit`) → nonce.
- * Kurulum durumu imza doğrulanmadan açıklanmaz; reddedilecek istek nonce defterine yazılmaz.
+ * Kurulum durumu imza doğrulanmadan açıklanmaz (kayıtsız kurulum = yabancı anahtar: tek 401); reddedilecek istek nonce defterine yazılmaz.
  */
 export async function authenticateRequest(
   g: VerifyInput & {

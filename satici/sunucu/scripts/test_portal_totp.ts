@@ -35,7 +35,7 @@ import {
 
 async function main(): Promise<void> {
   hedefDbKapisi();
-  const ortam = await anahtarOrtamiKur(Date.now(), { PORTAL_GIRIS_ESIGI: "3", PORTAL_KILIT_DK: "15", PORTAL_GIRIS_HIZ_DK: "1000" });
+  const ortam = await anahtarOrtamiKur(Date.now(), { PORTAL_GIRIS_ESIGI: "3", PORTAL_KILIT_DK: "15", PORTAL_GIRIS_HIZ_DK: "1000", VEKIL_IP_BASLIGI: "cf-connecting-ip", GUVENILIR_VEKIL_AGLARI: "127.0.0.1/32,::1/128" });
   const { ctx } = ortam;
   const { prisma } = await import("../src/lib/prisma");
   const { base32Encode, hotp, verifyTotp } = await import("../src/portal/totp");
@@ -102,26 +102,36 @@ async function main(): Promise<void> {
     const safTekrar = saf.ok ? verifyTotp(k2.sir, safKod, { atMs: an, lastUsedStep: saf.step }) : saf;
     kontrol("§3c saf doğrulayıcı: ilk kabul, aynı adım TEKRAR", saf.ok && !safTekrar.ok && safTekrar.reason === "TEKRAR");
 
-    console.log("\n§4 ardışık başarısızlık kilidi (eşik 3)");
+    console.log("\n§4 ardışık başarısızlık kilidi (eşik 3) — hesap + KAYNAK ikilisine bağlı (B2)");
     const k3 = await ac("SATICI_OPERATOR");
-    for (let i = 0; i < 3; i++) await portalGiris(sunucu.portal, "/portal/api", k3, { totp: "000000" });
-    const kilitli = await portalGiris(sunucu.portal, "/portal/api", k3);
-    const hayalet = await portalGiris(sunucu.portal, "/portal/api", { ...k3, kullaniciAdi: `yok-${randomUUID().slice(0, 12)}` });
+    const kaynakA = { basliklar: { "cf-connecting-ip": "203.0.113.7" } };
+    const kaynakB = { basliklar: { "cf-connecting-ip": "198.51.100.9" } };
+    for (let i = 0; i < 3; i++) await portalGiris(sunucu.portal, "/portal/api", k3, { totp: "000000", ...kaynakA });
+    const kilitli = await portalGiris(sunucu.portal, "/portal/api", k3, kaynakA);
+    const hayalet = await portalGiris(sunucu.portal, "/portal/api", { ...k3, kullaniciAdi: `yok-${randomUUID().slice(0, 12)}` }, kaynakA);
     kontrol(
-      "§4a 3 hatadan sonra DOĞRU üçlü bile giremez ve yanıt BİLİNMEYEN hesapla aynı (401 GIRIS_BASARISIZ, aynı ileti)",
+      "§4a 3 hatadan sonra AYNI kaynaktan doğru üçlü bile giremez ve yanıt BİLİNMEYEN hesapla aynı (401 GIRIS_BASARISIZ, aynı ileti)",
       kilitli.status === 401 && kilitli.kod === "GIRIS_BASARISIZ" && kilitli.status === hayalet.status && kilitli.kod === hayalet.kod && kilitli.json.message === hayalet.json.message && kilitli.cerez === null,
       `${kilitli.status} ${kilitli.kod} / ${hayalet.status} ${hayalet.kod}`,
     );
     const kilitliRed = await prisma.denetim.count({ where: { varlikId: k3.id, olay: "PORTAL_GIRIS_REDDEDILDI" } });
     kontrol("§4a2 kilitli girişin reddi denetimde (PORTAL_GIRIS_REDDEDILDI · KILITLI)", kilitliRed === 1, `${kilitliRed}`);
     const satir = await prisma.portalKullanici.findUniqueOrThrow({ where: { id: k3.id } });
-    const kilitDk = satir.kilitBitis ? (satir.kilitBitis.getTime() - Date.now()) / 60_000 : 0;
-    kontrol("§4b kilitBitis ~15 dk sonra, sayaç sıfırlandı", kilitDk > 14 && kilitDk <= 15 && satir.basarisizGiris === 0, kilitDk.toFixed(1));
-    const kilitDenetim = await prisma.denetim.count({ where: { varlikId: k3.id, olay: "PORTAL_HESAP_KILITLENDI" } });
-    kontrol("§4c kilit denetimde (PORTAL_HESAP_KILITLENDI)", kilitDenetim === 1);
-    await prisma.portalKullanici.update({ where: { id: k3.id }, data: { kilitBitis: new Date(Date.now() - 1000) } });
-    const acildi = await portalGiris(sunucu.portal, "/portal/api", k3);
-    kontrol("§4d kilit süresi dolunca doğru üçlü → 200", acildi.status === 200, `${acildi.status}`);
+    kontrol("§4b kaynak kilidi DB'ye hesap kilidi YAZMAZ (kilitBitis boş)", satir.kilitBitis === null, String(satir.kilitBitis));
+    const kilitDenetim = await prisma.denetim.findMany({ where: { varlikId: k3.id, olay: "PORTAL_HESAP_KILITLENDI" } });
+    const kilitOzeti = (kilitDenetim[0]?.ozet ?? {}) as { kilitBitis?: string; kapsam?: string };
+    const kilitDk = kilitOzeti.kilitBitis ? (Date.parse(kilitOzeti.kilitBitis) - Date.now()) / 60_000 : 0;
+    kontrol("§4c kilit denetimde (PORTAL_HESAP_KILITLENDI · kapsam KAYNAK · ~15 dk)", kilitDenetim.length === 1 && kilitOzeti.kapsam === "KAYNAK" && kilitDk > 14 && kilitDk <= 15, `${kilitDenetim.length} ${kilitOzeti.kapsam} ${kilitDk.toFixed(1)}`);
+    const baskaKaynak = await portalGiris(sunucu.portal, "/portal/api", k3, kaynakB);
+    kontrol("§4d BAŞKA kaynaktan doğru üçlü → 200 (kilit hesabı değil kaynağı durdurur — B2)", baskaKaynak.status === 200, `${baskaKaynak.status} ${baskaKaynak.kod ?? ""}`);
+    const halaKilitli = await portalGiris(sunucu.portal, "/portal/api", k3, { adimKaydir: 1, ...kaynakA });
+    kontrol("§4e başka kaynağın başarısı saldıran kaynağın kilidini AÇMAZ", halaKilitli.status === 401, `${halaKilitli.status}`);
+    await prisma.portalKullanici.update({ where: { id: k3.id }, data: { kilitBitis: new Date(Date.now() + 600_000) } });
+    const elle = await portalGiris(sunucu.portal, "/portal/api", k3, { adimKaydir: 1, ...kaynakB });
+    kontrol("§4f elle konan hesap kilidi (kilitBitis) her kaynağa uyulur", elle.status === 401 && elle.kod === "GIRIS_BASARISIZ", `${elle.status}`);
+    const kilitAc = await portalIstek(sunucu.portal, `/portal/api/kullanicilar/${k3.id}/kilit-ac`, { cerez: giris.cerez!, govde: { clientToken: randomUUID() } });
+    const acildi = await portalGiris(sunucu.portal, "/portal/api", k3, { adimKaydir: 1, ...kaynakA });
+    kontrol("§4g yöneticinin kilit açması (portal ucu) elle kilidi ve kaynak kilitlerini düşürür → 200", kilitAc.status === 200 && acildi.status === 200, `${kilitAc.status}/${acildi.status}`);
 
     console.log("\n§5 sır saklama ve kurulum yanıtı");
     const ham = await prisma.portalKullanici.findUniqueOrThrow({ where: { id: k2.id } });

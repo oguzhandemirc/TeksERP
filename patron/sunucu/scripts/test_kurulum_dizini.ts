@@ -6,6 +6,8 @@
 //   §5 satıcı yanıtı sözleşme dışı → bayat kayıt (yanıt kaydı EZMEZ) · §6 satıcı 404 → kayıt pasif, RED
 //   §7 satıcı sınıfı TEST derse 403 SINIF_GONDEREMEZ (hak satıcıdan)
 //   §8 zil: gelen kutusu yazımı satıcı iç API'sine {tesisId, konu} bildirir (içerik TAŞIMAZ)
+//   §9 B5s sıra imza → hak → DB: yabancı imza ya da hakkı olmayan kurulum yönlendirme bağı / tesis DB isteği DOĞURMAZ;
+//      satıcının "yok"u hatırlanır (aynı kimlik ikinci kez sorulmaz); önbellekte olmayan kimliğe soru dakikalık bütçeyle sınırlı
 // Koşum: npx tsx scripts/test_kurulum_dizini.ts
 // =============================================================================
 import { generateKeyPairSync, randomUUID } from "node:crypto";
@@ -14,12 +16,15 @@ import type { AddressInfo } from "node:net";
 import { publicKeyX } from "../src/lisans-protokol";
 import { withCentral, withTesis } from "../src/lib/tenant";
 import { VendorDoorbell } from "../src/services/doorbell";
+import { InstallationDirectory } from "../src/services/installation-directory";
 import { api, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisDbHazirla } from "./lib/test-ortam";
 
 const BELIRTEC = "bekci-ic-api-belirteci-" + "x".repeat(24);
 
 interface Sahte {
-  mod: "kapali" | "acik" | "yok" | "bozuk";
+  mod: "kapali" | "acik" | "yok" | "bozuk" | "yansit";
+  /** `yansit` kipi: istenen kimliği bu tesis/anahtar/modüllerle tanır. */
+  yansit: { tesisId: string; x: string; moduller: string[] };
   sinif: string;
   cagri: number;
   zil: { tesisId?: string; konu?: string; yetki?: string }[];
@@ -31,7 +36,8 @@ async function main(): Promise<void> {
   const kurulumId = randomUUID();
   const { privateKey } = generateKeyPairSync("ed25519");
   const x = publicKeyX(privateKey);
-  const s: Sahte = { mod: "kapali", sinif: "URETIM", cagri: 0, zil: [], yetkiler: [] };
+  const ikinci = generateKeyPairSync("ed25519").privateKey;
+  const s: Sahte = { mod: "kapali", yansit: { tesisId: randomUUID(), x: publicKeyX(ikinci), moduller: [] }, sinif: "URETIM", cagri: 0, zil: [], yetkiler: [] };
   const sunucu = http.createServer((req, res) => {
     let govde = "";
     req.on("data", (d: Buffer) => (govde += d.toString()));
@@ -45,6 +51,11 @@ async function main(): Promise<void> {
       s.yetkiler.push(req.headers.authorization ?? "");
       if (s.mod === "kapali") return void res.writeHead(502).end();
       if (s.mod === "yok") return void res.writeHead(404).end();
+      if (s.mod === "yansit") {
+        const id = decodeURIComponent((req.url ?? "").split("/").at(-1) ?? "");
+        const y = { v: 1, kurulumId: id, tesis: { id: s.yansit.tesisId, ad: "Yansıtılan Tesis" }, acikAnahtar: s.yansit.x, sinif: "URETIM", moduller: s.yansit.moduller, patronBulutBitis: new Date(Date.now() + 86_400_000).toISOString(), devredildi: false, aktif: true };
+        return void res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(y));
+      }
       if (s.mod === "bozuk") return void res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ v: 1, kurulumId }));
       res.writeHead(200, { "Content-Type": "application/json" }).end(
         JSON.stringify({
@@ -132,6 +143,43 @@ async function main(): Promise<void> {
     const r6 = await gonder();
     const pasif = await withTesis(o.goc, { tesisId }, (tx) => tx.installation.findUnique({ where: { installationId: kurulumId } }));
     kontrol("§6a satıcı kurulumu tanımıyor → 401 ve kayıt pasif", r6.status === 401 && pasif?.active === false);
+
+    console.log("\n§9 B5s sıra imza → hak → DB");
+    const izler = async (id: string) => ({
+      istek: await withCentral(o.goc, {}, (tx) => tx.facilityDatabase.findUnique({ where: { tesisId: s.yansit.tesisId } })),
+      bag: await withCentral(o.goc, {}, (tx) => tx.installationRoute.findUnique({ where: { installationId: id } })),
+    });
+    const yeniGonder = (id: string, anahtar: typeof privateKey) => imzali(o, { kurulumId: id, privateKey: anahtar }, "/v1/esitle", { govde: paket({ kurulumId: id }, { ufuk: new Date(o.saat.simdi() - 5_000) }) });
+    s.mod = "yansit";
+    s.yansit.moduller = ["production.enabled", "patron-bulut"];
+    const hakli = randomUUID();
+    const yabanciImza = await yeniGonder(hakli, privateKey);
+    const i1 = await izler(hakli);
+    kontrol("§9a yabancı imza (hakkı OLAN kurulum) → 401, yönlendirme bağı ve tesis DB isteği YOK", yabanciImza.status === 401 && i1.istek === null && i1.bag === null, `${yabanciImza.status} ${yabanciImza.json.details?.code} · istek ${i1.istek?.status ?? "yok"} · bağ ${i1.bag ? "VAR" : "yok"}`);
+    s.yansit.moduller = ["production.enabled"];
+    const haksiz = randomUUID();
+    const dogruImzaHaksiz = await yeniGonder(haksiz, ikinci);
+    const i2 = await izler(haksiz);
+    kontrol("§9b doğru imza ama patron-bulut hakkı YOK → 403, yönlendirme bağı ve tesis DB isteği YOK", dogruImzaHaksiz.status === 403 && dogruImzaHaksiz.json.details?.code === "PATRON_BULUT_KAPALI" && i2.istek === null && i2.bag === null, `${dogruImzaHaksiz.status} ${dogruImzaHaksiz.json.details?.code} · istek ${i2.istek?.status ?? "yok"} · bağ ${i2.bag ? "VAR" : "yok"}`);
+    s.yansit.moduller = ["production.enabled", "patron-bulut"];
+    const dogruImzaHakli = await yeniGonder(hakli, ikinci);
+    const i3 = await izler(hakli);
+    kontrol("§9c ✓K doğru imza + hak → tesis DB isteği ISTENDI + bağ (503, hazırlık bekleniyor)", dogruImzaHakli.status === 503 && i3.istek?.status === "ISTENDI" && i3.bag !== null, `${dogruImzaHakli.status} · ${i3.istek?.status ?? "yok"}`);
+    await temizleTesis(o, s.yansit.tesisId);
+    s.mod = "yok";
+    const hayalet = randomUUID();
+    const onceY = s.cagri;
+    const yokCevap = await yeniGonder(hayalet, privateKey);
+    kontrol("§9g B5 var/yok kâhini yok: bilinmeyen kurulum = bilinen kurulumun yabancı anahtarı (aynı 401 kodu + ileti)", yokCevap.status === 401 && yokCevap.json.details?.code === yabanciImza.json.details?.code && yokCevap.json.message === yabanciImza.json.message, `${yokCevap.json.details?.code} / ${yabanciImza.json.details?.code}`);
+    await yeniGonder(hayalet, privateKey);
+    kontrol("§9d satıcının \"yok\"u hatırlanır: aynı bilinmeyen kimlik ikinci kez SORULMAZ", s.cagri - onceY === 1, `${s.cagri - onceY} çağrı`);
+    const butceli = new InstallationDirectory(o.sync, { ...o.ctx.config, KURULUM_SORGU_BUTCE_DK: 5 });
+    const sabit = Date.UTC(2026, 0, 1, 12, 0, 30);
+    const onceB = s.cagri;
+    for (let i = 0; i < 25; i++) await butceli.lookup(randomUUID(), sabit);
+    kontrol("§9e rastgele kimlik seli: önbellekte olmayan kimliğe soru dakikalık bütçeyle sınırlı (25 kimlik → 5 çağrı)", s.cagri - onceB === 5, `${s.cagri - onceB} çağrı`);
+    await butceli.lookup(randomUUID(), sabit + 60_000);
+    kontrol("§9f ✓K bütçe dakika penceresinde yenilenir", s.cagri - onceB === 6, `${s.cagri - onceB}`);
   } finally {
     await temizleTesis(o, tesisId);
     await o.kapat();

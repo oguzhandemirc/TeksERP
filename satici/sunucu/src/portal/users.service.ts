@@ -11,6 +11,7 @@ import { uniqueViolationOn } from "../lib/prisma-errors";
 import type { VendorContext } from "../services/context";
 import { requireReason } from "../services/sanction.service";
 import { normalizeUsername } from "./auth.service";
+import { clearAccountEverywhere } from "./login-throttle";
 import { hashPortalPassword, verifyPortalPassword } from "./password";
 import { actorOf } from "./roles";
 import { generateTotpSecret, otpauthUri, verifyTotp } from "./totp";
@@ -128,6 +129,7 @@ export async function resetPortalUserTotpTx(db: Db, ctx: VendorContext, g: { use
 
 export async function unlockPortalUserTx(db: Db, g: { userId: string }): Promise<PortalKullanici> {
   await findPortalUser(db, g.userId);
+  clearAccountEverywhere(g.userId);
   return db.portalKullanici.update({ where: { id: g.userId }, data: { kilitBitis: null, basarisizGiris: 0 } });
 }
 

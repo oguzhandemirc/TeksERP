@@ -17,7 +17,7 @@ import { roleHas, type PortalListener, type PortalPermission } from "../portal/r
 import { changeOwnPassword } from "../portal/users.service";
 import type { VendorContext } from "../services/context";
 import { parseStrict } from "./body";
-import { proxyTrustFrom } from "./client-address";
+import { clientAddress, proxyTrustFrom } from "./client-address";
 import { ERISIM_PORTAL_ROTALARI } from "./erisim-rotalari";
 import { notFound } from "./error-handler";
 import { rateLimit } from "./rate-limit";
@@ -298,7 +298,7 @@ export function createPortalRouter(ctx: VendorContext, listener: PortalListener,
       rateLimit({ perMinute: ctx.config.PORTAL_GIRIS_HIZ_DK, trust }),
       scoped("POST /oturum/ac", async (req, res) => {
         const body = parseStrict(LoginSchema, req.body ?? {});
-        const { token, session } = await login(ctx, { listener, username: body.kullaniciAdi, password: body.parola, totp: body.totp });
+        const { token, session } = await login(ctx, { listener, username: body.kullaniciAdi, password: body.parola, totp: body.totp, source: clientAddress(req, trust) });
         res.append("Set-Cookie", cookieHeader(listener, token, ctx.config.PORTAL_OTURUM_AZAMI_SAAT * 3600));
         return { status: 200, body: { success: true, data: sessionView(session) } };
       }),
