@@ -100,6 +100,16 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 - Bilinen sınır: OTOMATİK kipte (onaysız) pencere İÇİNDE hazırlanan paket ön duyurusuz kurulur (güncelleme
   programı sürümü ister; `GUNCELLEYICI-SAGLAMLIK.md` §12 R23).
 
+**Makine kaynaklı duruş hazırlığı (D1)** (commit `feat(dokuma-alarm): makine kaynaklı duruş — tek yazma boğazı, sinyal kapanışı, dürtme birleştirme`; kısa kimliği paketlemede yazılır)
+
+- Duruş açılışı ve kapanışı tek çekirdekten geçer (`openStopCore` · `closeStopCore`); elle giriş (tablet, panel,
+  Tezgah Salonu toplu) aynı çekirdeği çağırır, davranışı ve cevapları DEĞİŞMEDİ. Toplayıcı kart için servis düzeyinde
+  makine girişi (`openMachineStop` · `closeMachineStop`) hazır; HTTP ucu YOK (kart kimliği ve ingest ucu ayrı dilim).
+- Alarm dürtmesi birleşir: duruş yazımından sonra motor en geç ~2 sn sonra (sürekli olay akışında en geç 5 sn'de bir)
+  koşar; alarmı doğamayacak açık duruş için motor işlem açmaz. Kullanıcıya görünen etki: duruş kapanınca alarmın
+  kapanması ekranda ≤ 2 sn gecikebilir (30 sn'lik tur aynen).
+- Duruş cevabına üç ekleme: `signalKind`, `rawStopCode`, `collectorId` (elle duruşta `null`). Migration YOK.
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -130,6 +140,9 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   eylemlerini pasif gösterir ("sunucu güncellenince açılır").
 - **Kırıldı mı:** HAYIR (ön duyuru kısmı) — yalnız ekleme: durum cevabında `kesinti`, `onay.yururluk`; özet
   cevabında `kesinti`. Davranış farkı: onaydan sonra kurulum 5 dk gecikir (eski panelde de).
+- **Kırıldı mı:** HAYIR (makine kaynaklı duruş kısmı) — yalnız ekleme: duruş DTO'sunda `signalKind`, `rawStopCode`,
+  `collectorId`; uç, izin, hata kodu eklenmedi (makine girişinin kodları — `STOP_CLOSED_BY_OPERATOR`,
+  `STOP_END_CONFLICT`, `STOP_STAMP_REQUIRED`, `STOP_SOURCE_INVALID`, `STOP_KEY_INVALID` — henüz hiçbir uçtan dönmez).
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.

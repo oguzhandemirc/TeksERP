@@ -322,6 +322,17 @@ Emek: **S** ≤1 gece tek ajan · **M** 1–2 gece · **L** çok fazlı. "Bugün
 6. **B15** bakım → **B16** yedek parça. 
 7. **B8** sensör Faz 2 (donanım kararıyla), **B11/B13/B21** maliyet zinciri, **B17** prim.
 
+### Makine kaynaklı duruş (kart) — alarm hazırlığı · D1 ✓ 2026-10-12
+
+Kullanıcı kararı 2026-10-12: duruşu ve sebebini ileride tezgaha takılan kart OTOMATİK bildirir, insan yalnız müdahale eder. ⇒ makine yolu BİRİNCİL, insan bildirimi ikincil; ikisi aynı yazma boğazından ve aynı alarm motorundan geçer. Ölçüm: `source` (`MachineDataSource`), `rawStopCode`, `signalKind`, `collectorId`, `endSource` kolonları P2b-1'den beri VAR (yazarsız); panelde "Üstlenilmiş alarm da patrona iletilsin" ve "Sebepsiz duruşta alarm" + süre satırları VAR (A2b-2 ve vardiyasız dilim) — yeni enum, kolon ve panel işi gerekmedi.
+
+- **D1 ✓** tek boğaz (`openStopCore` · `closeStopCore`), servis düzeyinde makine girişi (`machine-stop-signal.service`), kapanışta önce gelen kalır (makine insanın kapanışını ezmez), alarm dürtmesi birleşir (2 sn / 5 sn tavan) + tx dışı uygunluk ön-süzgeci (perf B-02 madde 1 ve 3). Migration ve uç YOK. Bekçiler `test_makine_durus_bogazi`, `test_loom_alarm_durtme`.
+- **D2** ham kod → sebep eşlemesi [PROFİL]: `MachineStopCodeMap` (`collectorId?` + `rawStopCode` → `reasonCode`, NULL = fabrika geneli, toplayıcıya özel satır geneli ezer; `revokedAt` ile emekli). Eşleşmede sebep MAKİNE kararı olarak donar (`reasonSource = MACHINE`, `classifiedById` NULL — telemetri sınıfı), eşleşmezse sebepsiz yol → sebepsiz alarm. Yazma ucu + izin + audit.
+- **D3a** toplayıcı kimliği: token kolonları sır kurallarıyla aynı dilimde (bcrypt hash, düz değer bir kez, log/audit'e girmez), announce/onay/rotate/revoke, `verifyCollectorToken`, uzak erişim reddi, `test_route_auth_coverage` EXEMPT gerekçesi.
+- **D3b** duruş ingest ucu (`POST /api/tezgah/ingest/stops`, kalem bazlı cevap, kapsam helper'ı `monitoringState ∈ {SHADOW, LIVE}`, `SIMULATED` iki sinyalli çapraz kontrol). Backend'e donanım/seri port kodu girmez.
+- **D4** watchdog (`tezgah.maxOpenStopHours`, geçici kapanış `WATCHDOG` + `provisionalEndedAt`, gerçek kapanış tek kez düzeltir). **D5** panel: toplayıcı onayı, kod eşleme ekranı, duruş listesinde kaynak rozeti.
+- Açık kararlar: (K1) insan açık duruş bildirmişken kart da duruş görürse kart o duruşu sahiplensin mi (öneri: evet, D3b) — bugün sed reddeder; (K2) eşleme kapsamı toplayıcı mı tezgah markası mı; (K3) eşleme izni mevcut `loom:spec-manage` mi yeni kod mu; (K4) kart kurulunca "Sebepsiz duruşta alarm" varsayılanı.
+
 ### Kullanıcı kararı isteyen sorular (sade dil, önerili)
 
 1. **Ustanın telefonuna bildirim hangi yoldan gitsin?**
