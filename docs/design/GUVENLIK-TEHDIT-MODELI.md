@@ -277,6 +277,8 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 
 > **Bölge 4+5 düzeltmesi (2026-10-12):** S4/T10 için HTTP katmanı varsayılanları sertleşti — değişkensiz kurulumda giriş/PIN/kart/TOTP/lisans uçları IP başına 60/dk, barındırılanda `TRUST_PROXY=true` açılışı durdurur; panel sabitli LAN adresinde yabancı sertifikayı reddeder; geçiş LAN TLS'i `dual` açar (`docs/history/arsiv/2026-10.md` "Bölge 4+5 düzeltmesi"). Açık: B3 cihaz kimliği kanıtı, B5, B6, B8, B9.
 
+> **Bölge 5 B3/B9 (2026-10-12):** S4 için onaylı cihazın kimliği sırla kanıtlanır (`x-device-proof`; DB'de yalnız tuz) — barındırılanda zorunlu, fabrikada `device.proofRequired` bayrağıyla; Windows yapıtı için kod imzası adımı hazır, sertifika bekleniyor (`docs/history/arsiv/2026-10.md` "Cihaz kanıtı").
+
 ## 7. Eski istemci ve mevcut kurulum — özet
 
 | Faz | Sözleşme kırar mı | Mevcut kurulum (adnansahin) |

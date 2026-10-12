@@ -53,6 +53,11 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   başına `'` konur (Excel formül sanmasın); kullanıcı adı/parola 256 karakterle sınırlı; tanımsız bir veri kuralı
   ihlalinde hata mesajı iç kural adını değil bir başvuru kodunu gösterir; cihaz tanıma deseni olarak tableti
   kilitleyebilecek desenler kaydedilmez.
+- **Tablet kimliği taklit edilemez (cihaz kanıtı).** Onaylı tablet sunucudan bir kez gizli bir anahtar alır ve
+  her isteğini onunla imzalar; başka bir cihaz yalnız tabletin numarasını yazarak onun yerine geçemez. Bulut
+  (barındırılan) kurulumda bu kural her zaman açıktır — **barındırılan kurulumda tabletler önce OTA ile
+  güncellenir**, sonra sunucu; eski tablet orada her istekte reddedilir. Fabrika kurulumunda yeni bir ayar
+  ("Cihaz kanıtı zorunlu") kapalı gelir ve hiçbir şey değişmez; bütün tabletler güncellendikten sonra açılabilir.
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -201,6 +206,16 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 - pm2→hizmet geçiş betiği LAN TLS satırı olmayan kurulumda `LAN_TLS_MODE=dual` yazar + HTTPS 4443 duvar kuralı
   (geçiş paketinde; güncellemeyle gelmez).
 
+**Cihaz kanıtı (güvenlik Bölge 5 B3)** (`1afaf3b57` backend · `aa72ab54b` tablet · `4b114fd30` panel)
+
+- Onaylı cihaza announce/status cevabında `deviceSecret` (bir kez; teyit edilene dek yeniden, sonra yalnız revoke
+  ile). İstek başlığı `x-device-proof` = `v1.<ms>.HMAC(sır, v1\n<ms>\n<YÖNTEM>\n<yol>)`, ±5 dk.
+- DB'de sır yok: `devices.proofSalt` (yalnız tuz) · `proofIssuedAt` · `proofConfirmedAt`; sır kısa kimlik
+  halkasından türetilir. Migration `20261012150000_cihaz_kaniti` (yalnız EKLEME).
+- Yeni ayar `device.proofRequired` (varsayılan KAPALI = bugünkü davranış; barındırılanda daima açık, kapatma 409
+  `HOSTED_CLASS_FORCED`). Zorlanırken kanıtsız/yanlış kanıtlı istek 401 `DEVICE_PROOF_INVALID`; anahtar halkası
+  okunamazsa 503. Audit olayı `DEVICE_PROOF_SECRET_ISSUED`.
+
 **Bu sürüme giren öteki işler (maddeleri sahipleri yazacak):** tezgah alarmı sorumluları ve "Kime bildirildi"
 (`7f937535e`, `cb82c8b75`, migration `20261011200000_alarm_sorumlu`), duruşu açan/kapatan (`32d78acce`, migration
 `20261012010000_durus_acan_kapatan`), alarm görme yetkisi tek liste (`c736606c6`), Tezgah Salonu toplu iş ver /
@@ -256,19 +271,24 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   429 `RATE_LIMITED` (eski panel/tablet bunu genel hata olarak gösterir; normal kullanımda oluşmaz); tanımsız CHECK
   409'unun mesajı değişti, `details.code` `INTEGRITY_RULE` + `details.ref` eklendi (eski istemci yalnız mesajı
   gösterir); 256 üstü kullanıcı adı/parola 400; tehlikeli cihaz deseni 400. Uç/izin eklenmedi.
+- **Kırıldı mı:** HAYIR (cihaz kanıtı kısmı, fabrika kurulumu) — yalnız ekleme: cihaz cevabına `deviceSecret`,
+  ayar cevabına `deviceProofRequired`, yeni başlık `x-device-proof`, yeni hata kodu `DEVICE_PROOF_INVALID`.
+  **Barındırılan kurulumda EVET (bilerek):** kanıt üretemeyen eski tablet her istekte 401 alır — tabletler önce OTA
+  ile güncellenir; `minVersion` yükseltilmedi. Eski panel yeni ayarı göstermez.
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.
 
 ## 4. Migration
 
-- **Var mı:** EVET — 7 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
+- **Var mı:** EVET — 8 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
   `users` tablosuna boş geçilebilir bir alan + bir kontrol kuralı; var olan satırlar boş kalır, veri dönüşümü YOK),
   `20261012010000_durus_acan_kapatan`, `20261012120000_kimlik_sifirlama_onayi` (yalnız EKLEME: yeni tablo),
   `20261012140000_makine_durus_kod_esleme` (yalnız EKLEME: boş yeni tablo + toplayıcıya boş geçilebilir alan),
   `20261012180000_makine_kart_kimligi` (yalnız EKLEME: toplayıcıya iki boş geçilebilir alan),
-  `20261012190000_makine_kart_sahiplenme` (yalnız EKLEME: duruşa boş geçilebilir alan + kısmi tekil indeks).
-- **Toplam migration:** 383 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 7 migration uygulamalıdır. Farklı sayı =
+  `20261012190000_makine_kart_sahiplenme` (yalnız EKLEME: duruşa boş geçilebilir alan + kısmi tekil indeks),
+  `20261012150000_cihaz_kaniti` (yalnız EKLEME: `devices`e üç boş geçilebilir alan).
+- **Toplam migration:** 384 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 8 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -280,7 +300,7 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 3 migration); süre kurulumda ölçülür.
+- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 8 migration); süre kurulumda ölçülür.
 - **Sıra:** sunucu önce; uyarı şeridini gösteren panel sonra.
 - **Bu sürüme özel:**
   - Migration var → güncelleme programı güncellemeden önce otomatik yedek alır. Yedek adımı geçmeli.
@@ -307,8 +327,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   Ortak parolalı hazır destek hesabının yalnız sunucunun kendisinden girişi (tehdit modeli G1-6) bu sürümde YOK.
   2.15.0–2.15.5 belgelerindeki güncelleme programı sınırları aynen geçerli.
   Hız sınırı ve `TRUST_PROXY` reddi: güncellemeden ÖNCE barındırılan kurulumun `.env`inde `TRUST_PROXY` değeri
-  ölçülür — `true` ise `1` yapılır, yoksa sunucu açılmaz. Cihaz kimliğinin kanıtsız taşınması (denetim B3)
-  bu sürümde kapanmadı.
+  ölçülür — `true` ise `1` yapılır, yoksa sunucu açılmaz. Cihaz kanıtı: barındırılan kurulumda tabletler sunucudan
+  ÖNCE OTA ile güncellenir (eski tablet orada 401 alır); fabrikada ayar kapalı gelir, açmadan önce bütün
+  tabletlerin güncellendiği panelin Cihazlar sayfasından ölçülür. Windows kod imzası adımı hazır ama sertifika
+  henüz yok: paket bu sürümde de imzasız çıkar (Windows SmartScreen uyarısı sürer).
 - **Sınırlar (her sürümde geçerli):** veritabanı sıfırlanmaz, yeniden doldurulmaz, silinmez · uygulanmış
   migration'lara dokunulmaz · `docker compose down -v` verilmez · başarısız kurulum tekrar denenmez ·
   **migration adımından sonra herhangi bir hata → DUR, düzeltme yapma, insana rapor et**.
@@ -325,7 +347,7 @@ Veriyi güncelleme öncesine döndürmek gerekirse otomatik yedekten geri yükle
 - Güncelleme programı hizmeti çalışıyor; `durum` kurulu sürüm 2.15.6, güncelleme programı 0.2.6, kira geçerli
   (DONDURULDU / KIRA_YOK yok).
 - Yedek: güncelleme öncesi yedek alındı; günlükte `SEMA_OLCULEMEDI` yok.
-- Veritabanı: 383 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
+- Veritabanı: 384 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
   kurulumda hepsi boş.
 - `/api/admin/health` `sistemHesabiMuhru`: var olan (mühürlenmemiş) kurulumda `MUHURLENMELI`, mühürlemeden sonra
   `TAMAM`. Destek hesabı girişi mühürlemeden önce de sonra da çalışıyor.

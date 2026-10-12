@@ -128,6 +128,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Doğrulama koduyla eşlediğiniz fabrika sunucusu adresinde, eşlediğiniz sertifikadan başka bir sertifika görülürse panel artık bağlanmaz (tablet ile aynı); bilgisayarda kurulu bir kök sertifika bunu aşamaz. Sunucunun sertifikası gerçekten değiştiyse adresi yeniden doğrulama koduyla eşleyin."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Ayarlar → Cihazlar altında “Cihaz kanıtı zorunlu (taklit edilemez cihaz kimliği)” ayarı: açıkken onaylı tablet her isteğini sunucunun ona verdiği gizli anahtarla imzalar, başka bir cihaz onun yerine geçemez. Kapalı gelir; açmadan önce bütün tabletleri güncelleyin. “Hızlı PIN ve personel kartı yalnız onaylı cihazdan” açıkken bu ayar kapalıysa yanında uyarı görünür. Bulut (barındırılan) kurulumda her zaman açıktır."
         }
       ]
     },
