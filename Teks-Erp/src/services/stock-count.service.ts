@@ -72,7 +72,7 @@ import type { PrintedDocDb } from "./printed-document.service";
 import type { ApiResponse } from "../types/api.types";
 import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
-import { escapeLikeTerm } from "../utils/search-fold";
+import { escapeLikeTerm } from "../utils/like-escape";
 
 type Tx = Prisma.TransactionClient;
 

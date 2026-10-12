@@ -86,7 +86,7 @@ import {
   type CodeCandidate,
   type CodeUniquenessTexts,
 } from "./helpers/code-unique.helper";
-import { escapeLikeTerm } from "../utils/search-fold";
+import { escapeLikeTerm } from "../utils/like-escape";
 
 // Model adı → sıralanabilir (scalar/enum) alan adları. Prisma dmmf'ten lazy build
 // + cache. İstemciden gelen sortBy bu kümede (veya relationSortMap'te) değilse

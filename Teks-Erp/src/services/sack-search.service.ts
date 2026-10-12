@@ -22,7 +22,8 @@ import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor, encode
 import { normalizeScanCode } from "../utils/code-format";
 import { matchesSeries, resolveSeriesFormat } from "./number-series.service";
 import { applyDateRange, buildTextSearch, isCodeLikeTerm, readFilterList, readIdCondition } from "../utils/query-parser";
-import { foldSearchTokens, escapeLikeTerm } from "../utils/search-fold";
+import { foldSearchTokens } from "../utils/search-fold";
+import { escapeLikeTerm } from "../utils/like-escape";
 import { foldCodeForCompare } from "../utils/code-format";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 import { PRESENT_ROLL_WHERE, loadSackContentTotals } from "./helpers/sack-content-totals.helper";

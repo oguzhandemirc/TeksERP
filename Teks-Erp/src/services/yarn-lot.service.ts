@@ -15,7 +15,7 @@ import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { ensureYarnLotTx, normalizeLotNo, yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";import { assertItemUsable } from "./helpers/item-usage.helper";
-import { escapeLikeTerm } from "../utils/search-fold";
+import { escapeLikeTerm } from "../utils/like-escape";
 
 
 export interface YarnLotDto {

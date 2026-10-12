@@ -23,7 +23,7 @@ import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { atlamaDefteri } from "./lib/atlama";
 import { DuplicateDetectionService, type DuplicateScanResult } from "../src/services/duplicate-detection.service";
 import { checkViolationResponse, errorHandler } from "../src/middlewares/error.middleware";
-import { escapeLikeTerm } from "../src/utils/search-fold";
+import { escapeLikeTerm } from "../src/utils/like-escape";
 import { sanitizeDocumentsConfig } from "../src/services/system-setting.service";
 import { SAMPLE_PRINTED_DOCS } from "../src/services/document-render/sample-data";
 import { printedDocumentService } from "../src/services/printed-document.service";

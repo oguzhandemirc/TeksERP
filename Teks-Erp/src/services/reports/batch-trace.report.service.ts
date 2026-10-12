@@ -23,7 +23,7 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { round1 } from "./_breakdown";
 import { normalizeScanCode } from "../../utils/code-format";
-import { escapeLikeTerm } from "../../utils/search-fold";
+import { escapeLikeTerm } from "../../utils/like-escape";
 
 export interface BatchCandidate {
   batchId: string;

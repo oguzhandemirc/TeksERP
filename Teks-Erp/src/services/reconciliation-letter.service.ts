@@ -66,7 +66,7 @@ import {
 } from "./document-render/finance-doc.html";
 import type { PrintedDocDb } from "./printed-document.service";
 import type { ApiResponse } from "../types/api.types";
-import { escapeLikeTerm } from "../utils/search-fold";
+import { escapeLikeTerm } from "../utils/like-escape";
 
 /** Mutabakat mektubu ön eki — MBT + GGAAYY + NNNN. */
 const DOC_PREFIX = "MBT";

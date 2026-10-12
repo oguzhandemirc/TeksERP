@@ -29,7 +29,7 @@ import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-le
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import type { ApiResponse } from "../types/api.types";
-import { escapeLikeTerm } from "../utils/search-fold";
+import { escapeLikeTerm } from "../utils/like-escape";
 
 const TRANSFER_PREFIX = "DT";
 
