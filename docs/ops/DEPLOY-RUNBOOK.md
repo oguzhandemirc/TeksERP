@@ -482,6 +482,30 @@ Bayt kodu (`.jsc`) OS + mimari + V8'e kilitli olduğundan korumalı paket **hede
 
 ---
 
+## 3d) Windows kod imzası (Authenticode) — sertifika gelince yapılacaklar (B9)
+
+Bugün setup (`TeksERP-Kurulum-<sürüm>.exe`) ve panel kurulumu **imzasızdır**: müşteride SmartScreen "bilinmeyen yayıncı" uyarısı çıkar ve ilk kurulum dosyasının bütünlüğü yalnız aynı kanaldan gelen SHA256'ya dayanır. Adım KODDA HAZIR, sertifika yokken tek satır `KODIMZA: UYARI …` basıp imzasız devam eder (bugünkü davranış). Yardımcı: `deploy/kurulum/kod-imzala.ps1` (sertifika varsa `signtool sign` + `signtool verify /pa` + `Get-AuthenticodeSignature` — biri düşerse derleme DURUR). Çağıranlar: `deploy/korumali-thinkpad.sh` (ISCC'den sonra, SHA256 özetinden önce) ve `deploy/electron-paketle.sh` (Windows makinesinde, parmak izi ortamdaysa electron-builder `win.signtoolOptions`). Bekçi `node scripts/test_kod_imzasi.mjs`.
+
+**Öneri (1e):** OV kod imzası sertifikası — **Certum "Code Signing in the Cloud"** (SimplySign; anahtar Certum'un HSM'inde, USB token kargosu yok, thinkpad-1'de SimplySign Desktop sanal kartı oturum açıkken sertifikayı Windows deposuna bağlar). EV gerekmez: Microsoft 2024'ten beri EV'ye anında SmartScreen itibarı vermiyor; itibar OV'de de imzalı indirmeler biriktikçe oluşur.
+
+**Kullanıcının adımları (satın alma):**
+1. Certum mağazasından "Open Source/Standard Code Signing in the Cloud" değil, **"Standard Code Signing in the Cloud" (OV, şirket adına)** seç; 1 yıl yeterli.
+2. Şirket doğrulaması: ticaret sicil/vergi levhası + yetkili kimliği + şirket telefonu (Certum arayıp doğrular); doğrulama birkaç iş günü.
+3. SimplySign mobil uygulamasını kur, sertifikayı etkinleştir (tek kullanımlık kodlar telefondan gelir).
+
+**Sertifika gelince (thinkpad-1, bir kez):**
+1. Windows SDK'nın "Signing Tools for Desktop Apps" bileşenini kur (`signtool.exe` → `C:\Program Files (x86)\Windows Kits\10\bin\<sürüm>\x64\`).
+2. SimplySign Desktop'u kur, oturum aç; `certmgr.msc` → Kişisel → Sertifikalar'da şirket sertifikası görünmeli.
+3. Parmak izini al: `Get-ChildItem Cert:\CurrentUser\My | Format-List Subject,Thumbprint`.
+4. `%USERPROFILE%\.tekserp\sirlar\kod-imza.json` yaz (repoya GİRMEZ): `{ "parmakIzi": "<40 hane>", "zamanDamgasi": "http://time.certum.pl" }` — ya da derleme oturumunda `TEKSERP_KOD_IMZA_PARMAKIZI` ortam değişkeni.
+5. Prova: `deploy/korumali-thinkpad.sh` (prova kipi) — çıktıda `KODIMZA: imzalandı + doğrulandı — TeksERP-Kurulum-….exe` satırı; Mac'te `node deploy/kurulum/kurulum-arsivi.mjs` "setup Authenticode imzasız" uyarısını artık basmamalı.
+6. Panel: imzalı panel yalnız Windows makinesinde derlenir (Mac çapraz derlemesi imzalayamaz; betik uyarır). İlk imzalı panelde `win-unpacked/resources/app-update.yml` içinde `publisherName` doğup doğmadığını **ölç**: doğduysa sonraki her panel sürümü AYNI yayıncıyla imzalı çıkmak zorundadır (imzasız güncelleme sahada reddedilir) — o durumda imzasız panel yayını kapatılır.
+7. Kaldırıcı (`unins000.exe`) bu adımla imzalanmaz; tam kapsama için Inno `SignTool=` yönergesine geçiş ayrı iştir.
+8. Sertifika yenilemesinde yalnız parmak izi değişir (4. adım); süresi geçen sertifikayla atılmış imzalar zaman damgası sayesinde geçerli kalır.
+9. Sertifika kalıcılaşınca gerçek yayın kipinde `kod-imzala.ps1 -Zorunlu` (sertifikasız derleme DURUR) ayrı karar.
+
+---
+
 ## 4) Sağlık kontrolü
 
 ```bash

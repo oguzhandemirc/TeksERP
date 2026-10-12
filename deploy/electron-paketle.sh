@@ -91,6 +91,15 @@ done <<< "$derleme_satirlari"
 [ "${#derleme_argumanlari[@]}" -gt 0 ] || hata "Ortak kimlik boş çıktı — derleme yapılmadı."
 # Derleme commit'i paketin İÇİNE (asar package.json) — yayıncı künyeyle ve HEAD'le kıyaslar.
 derleme_argumanlari+=("-c.extraMetadata.gitCommit=$derleme_commit")
+# Kod imzası (B9): parmak izi ortamda VE Windows derleme makinesindeyse electron-builder signtool ile
+# imzalar (düşerse derleme durur); değilse tek satır uyarı, imzasız devam (bugünkü davranış).
+# Mac çapraz derlemesi imzalayamaz (sertifika Windows deposunda). Ayrıntı: docs/ops/DEPLOY-RUNBOOK.md §3d.
+if [ -n "${TEKSERP_KOD_IMZA_PARMAKIZI:-}" ] && [ "$(uname)" != "Darwin" ]; then
+  derleme_argumanlari+=("-c.win.signtoolOptions.certificateSha1=$TEKSERP_KOD_IMZA_PARMAKIZI")
+  derleme_argumanlari+=("-c.win.signtoolOptions.rfc3161TimeStampServer=${TEKSERP_KOD_IMZA_ZAMAN_DAMGASI:-http://time.certum.pl}")
+else
+  echo "UYARI: kod imzası yok — panel kurulumu imzasız çıkar (sertifika ya da Windows derleme makinesi yok)."
+fi
 
 echo "ORTAK PAKET · Sürüm: $surum"
 echo "Gömülü güncelleme adresi (dinlenme grubu): $beklenen_url"

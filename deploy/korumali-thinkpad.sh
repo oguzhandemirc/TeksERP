@@ -12,6 +12,8 @@
 #            yerel atılır (push YOK). paketle.ps1 -EtiketAtma ile koşar (thinkpad'deki kopya etiketlemez).
 # SUNUCU KURULUMU: paketle sonrası aynı makinede ISCC `TeksERP-Kurulum-<paket sürümü>.exe` derler (doğrulayıcı = paketin
 # kendi güncelleyicisi; Inno Setup 6 thinkpad'de kurulu olmalı) — ilk kurulum arşivinin `--setup` girdisi.
+# KOD İMZASI: setup derlenince deploy/kurulum/kod-imzala.ps1 — sertifika varsa imzalar + doğrular (düşerse durur),
+# yoksa tek satır uyarı ve imzasız devam (bugünkü davranış). Sertifika: docs/ops/DEPLOY-RUNBOOK.md §3d.
 # DERLEME KÜNYESİ: zip'in yanına `<zip>.derleme.json` (kip + sürüm · makine + ölçülen Tailscale IP · bu betiğin
 # commit'i ve SHA256'sı · kaynak commit · ağaç temizliği · Rust parça özetleri · iki uçta eşleşen zip SHA256).
 # İmza aracı `--derleme-kunyesi=` ile yapıtla çapraz ölçer (scripts/lib/thinkpad-kokeni.ts; kip ⇔ PAKET.json
@@ -216,10 +218,12 @@ SETUP_SATIR=$(uzak "
 \$ErrorActionPreference = 'Continue'
 & \$iscc /Q \"/DKurulumSurumu=$PSURUM\" \"/DDogrulayiciExe=\$d\\rust\\tekserp-guncelleyici.exe\" \"/O\$cik\" \"\$d\\src\\deploy\\kurulum\\tekserp-kurulum.iss\" *>&1 | Out-File -FilePath \"\$d\\iscc.log\" -Encoding utf8
 if (\$LASTEXITCODE) { Get-Content \"\$d\\iscc.log\" -Tail 15; exit \$LASTEXITCODE }
+Get-ChildItem \$cik -Filter *.exe | ForEach-Object { pwsh -NoProfile -ExecutionPolicy Bypass -File \"\$d\\src\\deploy\\kurulum\\kod-imzala.ps1\" -Dosya \$_.FullName; if (\$LASTEXITCODE) { exit \$LASTEXITCODE } }
 Get-ChildItem \$cik -Filter *.exe | ForEach-Object { 'SETUP=' + \$_.Name + '|' + (Get-FileHash \$_.FullName -Algorithm SHA256).Hash.ToLower() }")
 kod=$?
 set -e
 SETUP_SATIR=$(printf '%s\n' "$SETUP_SATIR" | LC_ALL=C tr -d '\r')
+printf '%s\n' "$SETUP_SATIR" | LC_ALL=C grep '^KODIMZA:' | sed 's/^/  /' || true
 [ "$kod" -eq 0 ] || { printf '%s\n' "$SETUP_SATIR"; echo "ISCC DÜŞTÜ (çıkış $kod) — uzak günlük: %USERPROFILE%\\$UZ\\iscc.log"; exit "$kod"; }
 SETUP_SATIR=$(printf '%s\n' "$SETUP_SATIR" | LC_ALL=C sed -n 's/^SETUP=//p')
 [ "$(printf '%s\n' "$SETUP_SATIR" | LC_ALL=C grep -c '|')" -eq 1 ] || { echo "uzak setup çıktısında tek exe beklenirdi: $SETUP_SATIR"; exit 1; }

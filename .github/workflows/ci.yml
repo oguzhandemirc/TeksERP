@@ -101,6 +101,10 @@ jobs:
       # derleme ezilmez, --uygula sırası vds-dogrula arasında. Zero-dep, ağsız.
       - name: Derleme deposuna koyma (derleme-koy)
         run: node scripts/test_derleme_koy.mjs
+      # Windows kod imzası hazırlığı (B9): sertifika yokken uyarı + çıkış 0 (bugünkü davranış), varken imza +
+      # doğrulama düşerse durur; setup ve panel yolu adımı taşır. Zero-dep, ağsız; pwsh varsa gerçek koşum.
+      - name: Kod imzası adımı (B9)
+        run: node scripts/test_kod_imzasi.mjs
       # İlk kurulum deposu yayını (deploy/kurulum/ilk-kurulum-yayinla.mjs): grup + terfi kapısı (test otomatik,
       # oncu/genel açıklamalı terfi etiketi), setup sürümü = paket, backend-yayinla girdi sözleşmesi. Zero-dep, ağsız.
       - name: İlk kurulum deposu yayını (grup + terfi)
