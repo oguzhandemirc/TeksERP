@@ -309,6 +309,8 @@ export const VENDOR_ERROR_CODES = [
   "TASIMA_ONAYI_BEKLIYOR",
   /** 409: kurulum başka bir anahtarla ETKİN — yeni makine yalnız onaylı taşıma koduyla etkinleşir (ilk kod yetmez). */
   "TASIMA_KODU_GEREKLI",
+  /** 409: taşıma talebi bekleyen talebi etkin sayan eski fabrika sürümünden — yeni makineye güncel sürüm kurulmalı. */
+  "TASIMA_SURUM_ESKI",
   "KIRA_VERILMEDI",
   /** 409: DR devralımında ana kurulum verilmedi ve tesiste tek etkin ÜRETİM kurulumu yok (0 ya da birden çok). */
   "DR_ANA_BELIRSIZ",

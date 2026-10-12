@@ -340,6 +340,8 @@ export const ORTAM = {
   derlemeTarihi: null,
   konteyner: false,
 };
+/** Taşıma talebi bekleyen talebi etkin SAYMAYAN fabrika sürümünden gelmeli (`TASIMA_ASGARI_FABRIKA_SURUMU`). */
+export const ORTAM_TASIMA = { ...ORTAM, uygulamaSurum: "2.15.6" };
 
 export function yoklamaGovdesi(g: {
   sonKiraId: string | null;

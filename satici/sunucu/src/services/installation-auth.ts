@@ -168,7 +168,7 @@ export async function authenticateRequest(
   const ended: EndedKeyReason | null = installation.durum === "IPTAL" ? "IPTAL" : v.role === "RETIRED" ? "TASIMA" : null;
   if (ended && !g.allowEnded) throw installationCancelled();
   if (!ended && v.role === "PENDING_TRANSFER") {
-    throw new VendorError(409, "TASIMA_ONAYI_BEKLIYOR", "Bu makinenin taşıma talebi onay bekliyor; kurulum ek sürede çalışır");
+    throw new VendorError(409, "TASIMA_ONAYI_BEKLIYOR", "Bu makinenin taşıma talebi onay bekliyor; onaylanınca portaldan iletilen taşıma koduyla etkinleştirin");
   }
   if (!ended && v.role !== "CURRENT") throw new VendorError(401, "ISTEK_KID", "İstek bu kurulumun kayıtlı anahtarıyla imzalanmamış");
   const auth: AuthenticatedRequest = { ...v, installation, ...(ended ? { ended } : {}) };

@@ -4,7 +4,7 @@
 // tek kullanımlık `tasima` kodu üretir; kod müşteriye portaldan iletilir, yeni makine onu normal etkinleştirme
 // yolundan kullanır ve anahtar ANCAK o anda değişir (eski anahtar emekli). Onaya kadar eski makine çalışır.
 import type { TasimaTalebi } from "@prisma/client";
-import { ENDPOINTS, TransferResponseSchema, type TransferRequestSchema } from "../lisans-protokol";
+import { ENDPOINTS, TransferResponseSchema, parseVersion, type TransferRequestSchema } from "../lisans-protokol";
 import type { z } from "zod";
 import { recordAudit } from "../lib/audit";
 import { VendorError, notFoundError, stateConflict } from "../lib/errors";
@@ -73,6 +73,20 @@ async function openOrReturn(
  * Uç (gövde KATI şemadan geçmiş): imza (gövdedeki anahtar) → ucuz ön denetimler → hız sınırı → nonce
  * (kurulumsuz talepte kapsam anahtar kimliği) → kilitli tx.
  */
+/**
+ * Bekleyen taşıma talebini etkin SAYMAYAN ilk fabrika sürümü: eski paket imzasız `BEKLIYOR` dosyasıyla etkinleştirme
+ * kilidini kaldırırdı, o yüzden talebi hiç açılmaz. Yalnız çekirdek (x.y.z) karşılaştırılır; biçimsiz sürüm eski sayılır.
+ */
+export const TASIMA_ASGARI_FABRIKA_SURUMU = "2.15.6";
+
+export function transferClientTooOld(uygulamaSurum: string): boolean {
+  const v = parseVersion(uygulamaSurum.split("+")[0]);
+  const min = parseVersion(TASIMA_ASGARI_FABRIKA_SURUMU)!;
+  if (!v) return true;
+  for (let i = 0; i < 3; i++) if (v.core[i] !== min.core[i]) return v.core[i] < min.core[i];
+  return false;
+}
+
 export async function handleTransferRequest(
   _ctx: VendorContext,
   g: { header: unknown; rawBody: Buffer; body: TransferRequest; nowMs: number; limit?: (scope: string) => void; path?: string },
@@ -102,6 +116,9 @@ export async function handleTransferRequest(
   }
   const scope = { installationDbId: inst?.id ?? null, kid: verified.kid };
   g.limit?.(requestScope(scope));
+  if (transferClientTooOld(g.body.ortam.uygulamaSurum)) {
+    throw new VendorError(409, "TASIMA_SURUM_ESKI", "Taşıma için bu makineye güncel sürümü kurun");
+  }
   await recordRequestNonce({ ...scope, request: verified.request, nowMs: g.nowMs });
   const r = await prisma.$transaction((tx) => openOrReturn(tx, { installationDbId: inst?.id ?? null, kid: verified.kid, body: g.body }));
   if (r.created) {

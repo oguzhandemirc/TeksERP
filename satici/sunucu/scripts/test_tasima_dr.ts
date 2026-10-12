@@ -20,6 +20,7 @@ import { ENDPOINTS, LicenseResponseSchema, digestFingerprint, parseJws, verifyLe
 import { HAM_PARMAK_IZI, kurulumAnahtariUret, type TestAnahtari } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
   ORTAM,
+  ORTAM_TASIMA,
   anahtarOrtamiKur,
   etkinlestirmeGovdesi,
   hedefDbKapisi,
@@ -74,7 +75,7 @@ async function main(): Promise<void> {
   const yokla = (kurulumId: string, anahtar: TestAnahtari, sonKiraId: string | null, parmakIzi: Fingerprint = f.parmakIzi) =>
     imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId, amac: "yokla", anahtar, govde: yoklamaGovdesi({ sonKiraId, parmakIzi }) });
   /** `kurulumId: null` → kimliksiz talep; `dbIpucu` fabrikanın DB kimliği (ortam.installationId, yalnız bilgi). */
-  const tasi = (kurulumId: string | null, anahtar: TestAnahtari, parmakIzi: Fingerprint, dbIpucu?: string) =>
+  const tasi = (kurulumId: string | null, anahtar: TestAnahtari, parmakIzi: Fingerprint, dbIpucu?: string, surum = ORTAM_TASIMA.uygulamaSurum) =>
     imzaliPost(sunucu.genel, ENDPOINTS.TRANSFER, {
       kurulumId,
       amac: "tasima",
@@ -84,7 +85,7 @@ async function main(): Promise<void> {
         ...(kurulumId === null ? {} : { kurulumId }),
         acikAnahtar: anahtar.x,
         parmakIzi,
-        ortam: dbIpucu ? { ...ORTAM, installationId: dbIpucu } : ORTAM,
+        ortam: dbIpucu ? { ...ORTAM_TASIMA, uygulamaSurum: surum, installationId: dbIpucu } : { ...ORTAM_TASIMA, uygulamaSurum: surum },
         gerekce: "sunucu değişti",
       },
     });
@@ -105,6 +106,10 @@ async function main(): Promise<void> {
     const t0 = await etkinlestir(k, eski);
     const yeni = kurulumAnahtariUret();
     tasiyanAnahtarlar.push(yeni.kid);
+    const satirSayisi = (kid: string) => prisma.tasimaTalebi.count({ where: { yeniAnahtarKimligi: kid } });
+    const eskiSurum = await tasi(k.kurulumId, yeni, fpYeni, undefined, "2.15.5");
+    kontrol("§1z ⭐ bekleyen talebi etkin sayan eski fabrika sürümü (2.15.5) → 409 TASIMA_SURUM_ESKI, talep DOĞMAZ",
+      eskiSurum.status === 409 && eskiSurum.kod === "TASIMA_SURUM_ESKI" && (await satirSayisi(yeni.kid)) === 0, `${eskiSurum.status} ${eskiSurum.kod ?? ""}`);
     const talep1 = await tasi(k.kurulumId, yeni, fpYeni);
     kontrol("§1a yeni anahtar talep açar → 200 BEKLIYOR, lisans YOK (D8)", talep1.status === 200 && talep1.json.durum === "BEKLIYOR" && talep1.json.lisans === null, `${talep1.status} ${talep1.kod ?? ""}`);
     const talep2 = await tasi(k.kurulumId, yeni, fpYeni);
@@ -187,7 +192,10 @@ async function main(): Promise<void> {
     if (hedefEt.status !== 200) throw new Error(`hedef etkinleştirme ${hedefEt.status} ${hedefEt.kod}`);
     const kimliksizAnahtar = kurulumAnahtariUret();
     tasiyanAnahtarlar.push(kimliksizAnahtar.kid);
-    const bagsiz = await tasi(null, kimliksizAnahtar, fpYeni, DB_KIMLIGI);
+    const bagsizEski = await tasi(null, kimliksizAnahtar, fpYeni, DB_KIMLIGI, "2.15.5-rc.1");
+    kontrol("§3c0 ⭐ kimliksiz talep de eski sürümden (2.15.5-rc.1) → 409 TASIMA_SURUM_ESKI, talep DOĞMAZ",
+      bagsizEski.status === 409 && bagsizEski.kod === "TASIMA_SURUM_ESKI" && (await prisma.tasimaTalebi.count({ where: { yeniAnahtarKimligi: kimliksizAnahtar.kid } })) === 0, `${bagsizEski.status} ${bagsizEski.kod ?? ""}`);
+    const bagsiz = await tasi(null, kimliksizAnahtar, fpYeni, DB_KIMLIGI, "2.15.6-rc.1");
     const bagsizSatir = bagsiz.json.talepId ? await prisma.tasimaTalebi.findUnique({ where: { id: String(bagsiz.json.talepId) } }) : null;
     kontrol("§3c1 kimliksiz talep → 200 BEKLIYOR, kuruluma BAĞSIZ (ortam ipucu kimlik değil)", bagsiz.status === 200 && bagsiz.json.durum === "BEKLIYOR" && bagsizSatir?.kurulumId === null, `${bagsiz.status} ${bagsiz.kod ?? ""}`);
     const bagsizTekrar = await tasi(null, kimliksizAnahtar, fpYeni);

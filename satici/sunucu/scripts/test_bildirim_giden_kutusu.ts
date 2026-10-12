@@ -32,6 +32,7 @@ import { HAM_PARMAK_IZI, kurulumAnahtariUret, type TestAnahtari } from "../../..
 import { BODY_TOTAL_MAX_BYTES, BODY_VALUE_MAX, NOTIFICATION_BODY_KEYS, NOTIFICATION_CHANNELS, NOTIFICATION_EVENTS, NOTIFICATION_STATES, notificationBody, pgJsonbTextBytes, type NotificationBody } from "../src/notifications/catalog";
 import {
   ORTAM,
+  ORTAM_TASIMA,
   SATICI_KOKU,
   anahtarOrtamiKur,
   etkinlestirmeGovdesi,
@@ -212,7 +213,7 @@ const tasi = (o: Ortam, anahtar: TestAnahtari) =>
     kurulumId: o.a.kurulumId,
     amac: "tasima",
     anahtar,
-    govde: { v: 1, kurulumId: o.a.kurulumId, acikAnahtar: anahtar.x, parmakIzi: o.fpYabanci, ortam: ORTAM, gerekce: `${KANARYA}-GEREKCE` },
+    govde: { v: 1, kurulumId: o.a.kurulumId, acikAnahtar: anahtar.x, parmakIzi: o.fpYabanci, ortam: ORTAM_TASIMA, gerekce: `${KANARYA}-GEREKCE` },
   });
 
 const devral = (o: Ortam) =>

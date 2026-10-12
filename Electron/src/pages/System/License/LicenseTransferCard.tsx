@@ -11,7 +11,7 @@ import { useLicenseAction } from "./hooks";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TRANSFER_TEXT = {
-  BEKLIYOR: "Taşıma talebi iletildi; satıcı onaylayınca lisans kendiliğinden gelir.",
+  BEKLIYOR: "Taşıma talebi iletildi; onaylanınca portaldan iletilen taşıma kodunu internetle kod alanına girin.",
   ONAYLANDI: "Taşıma onaylandı; lisans bu sunucuya geçti.",
   REDDEDILDI: "Taşıma talebi reddedildi.",
 } as const;

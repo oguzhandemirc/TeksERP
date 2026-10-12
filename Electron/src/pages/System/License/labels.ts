@@ -90,6 +90,7 @@ const FAILURE_LABEL: Record<string, string> = {
   TASIMA_REDDEDILDI: "Taşıma reddedildi",
   TASIMA_KODU_BEKLENIYOR: "Taşıma onaylandı — taşıma kodu bekleniyor",
   TASIMA_HATASI: "Taşıma talebi sorgulanamadı",
+  TASIMA_SURUM_ESKI: "Taşıma için bu makineye güncel sürümü kurun",
   ISTEK_YOL: "İstek başka bir lisans sunucusu ucu için imzalanmış (adres ya da vekil yönlendirmesi)",
   EGRESS_NETWORK: "Ağ hatası (internet/proxy)",
   EGRESS_TIMEOUT: "Zaman aşımı",

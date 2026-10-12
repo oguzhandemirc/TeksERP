@@ -22,7 +22,7 @@ import { passwordBuffer, wrapPrivateKey, writeKeyFileExclusive } from "../src/ke
 import { kurulumAnahtariUret } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { sertifikaBas, sertifikaYuku } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import {
-  ORTAM,
+  ORTAM_TASIMA,
   TEST_KOK_PAROLASI,
   anahtarOrtamiKur,
   bayiKurulumlari,
@@ -248,7 +248,7 @@ async function main(): Promise<void> {
         kurulumId,
         amac: "tasima",
         anahtar: yeni,
-        govde: { v: 1, kurulumId, acikAnahtar: yeni.x, parmakIzi: f.parmakIzi, ortam: ORTAM, gerekce: "yeni sunucu" },
+        govde: { v: 1, kurulumId, acikAnahtar: yeni.x, parmakIzi: f.parmakIzi, ortam: ORTAM_TASIMA, gerekce: "yeni sunucu" },
       });
       return r.json.talepId as string;
     };
