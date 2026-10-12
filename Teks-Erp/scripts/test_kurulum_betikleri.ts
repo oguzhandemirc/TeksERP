@@ -654,7 +654,9 @@ function olc(k: Kaynaklar): Bulgular {
     const ortYaz = ort.satirlar.filter((x) => /LAN_TLS_MODE=|LAN_TLS_PORT=/.test(x.kod));
     const ltF = ort.fonksiyonlar.find((f) => f.ad === "LanTlsYeniKurulum");
     if (!ltF || ortYaz.some((x) => x.no < ltF.bas || x.no > ltF.son)) ekle("§18", "kurulum-ortak.ps1 LAN_TLS satırını LanTlsYeniKurulum dışında kuruyor");
-    for (const ad of ["gecis", "kur", "ilkKurulum", "backendHizmeti", "bakimRolu", "guncelleyici"] as const) {
+    // Geçiş satırsız kurulumda yalnız `dual` yazar (karar gecis-yardimci.cjs'te, test_gecis §1d); required/off/port yazamaz.
+    if (/LAN_TLS_MODE=(?!dual\b)|LAN_TLS_PORT=/.test(k.gecis)) ekle("§18", `${YOL.gecis} LAN_TLS'e dual dışında dokunuyor (geçiş yalnız satırsız kurulumda yan yana açar)`);
+    for (const ad of ["kur", "ilkKurulum", "backendHizmeti", "bakimRolu", "guncelleyici"] as const) {
       if (/LAN_TLS/.test(k[ad])) ekle("§18", `${YOL[ad]} LAN_TLS'e dokunuyor (var olan kurulumun kipi yalnız kullanıcının .env düzenlemesiyle değişir)`);
     }
     const onk18 = psGovde(kur, "AsamaOnKosul") ?? "";
@@ -815,7 +817,7 @@ if (eksik.length === 0) {
     ["§14", "saat eşitlemesi: karar PartOfDomain ölçerek · DOKUNMA yazmaz · w32tm yalnız NTP_AC · sonuç yeniden ölçülür · UYARI (DUR değil) · onarım önceki kaydı ezmez · /resync/Set-Date yok · kaldırma dokunmaz · özet söyler"],
     ["§15", "sunucu simgesi: setup içeriğinde · kurulum (Users salt okuma + HKLM Run) · kaldırıcı siler · yalnız 127.0.0.1 /health/tepsi OKUR (dinlemez/yazmaz/başlatmaz) · ASCII"],
     ["§19", "yalnız şifreli: yeni .env required · API portuna kural yok (kaldırıcı listesinde de yok) · HTTPS meşgulse/ölçülemezse DUR · iç hizmetler yalnız http://127.0.0.1 · son sayfa https adresi"],
-    ["§18", "LAN TLS: yeni .env LAN_TLS satırı (tek karar) · onarım .env'e satır eklemez/değiştirmez · öteki yollar LAN_TLS yazmaz · HTTPS kuralı ölçümden, kaldırıcı listesinde · kod + durum sayfası sonuçta, ekranda ve son sayfada"],
+    ["§18", "LAN TLS: yeni .env LAN_TLS satırı (tek karar) · onarım .env'e satır eklemez/değiştirmez · öteki yollar LAN_TLS yazmaz (geçiş yalnız dual) · HTTPS kuralı ölçümden, kaldırıcı listesinde · kod + durum sayfası sonuçta, ekranda ve son sayfada"],
     ["§17", "O12 Tailscale müşteri kurulumunda yok: sihirbazda kutu yok · onarım ön doldurması kayıttan kutu kurmaz (K3) · cevap/örnek yalnız LocalSubnet · şema eski izni yalnız kayıtta tanır · özet + karar uyarır"],
   ];
   console.log("");
@@ -925,7 +927,7 @@ if (eksik.length === 0) {
     { ad: "S22 CI test çapalı doğrulayıcıyı kabul ediyor", dosya: "is", eski: `$k.testCapasi -ne $false`, yeni: `$false`, bolum: "§9", parca: "doğrulayıcı üretim derlemesi" },
     { ad: "S96 LAN TLS: yeni .env LAN_TLS satırını almıyor", dosya: "kurulum", eski: "    $satirlar += @($lt.satirlar)\n", yeni: "", bolum: "§18", parca: "yeni .env LAN_TLS_MODE almıyor" },
     { ad: "S97 LAN TLS: onarım var olan .env'e dual ekliyor", dosya: "kurulum", eski: "$yeni = EnvDatabaseUrlYenile ([IO.File]::ReadAllLines($envYolu)) $dbUrl", yeni: '$yeni = @(EnvDatabaseUrlYenile ([IO.File]::ReadAllLines($envYolu)) $dbUrl) + @("LAN_TLS_MODE=dual")', bolum: "§18", parca: "onarım dalı .env'e" },
-    { ad: "S98 LAN TLS: geçiş aracı var olan kurulumun kipini değiştiriyor", dosya: "gecis", eski: "\n", yeni: '\n$null = "LAN_TLS_MODE=dual"\n', bolum: "§18", parca: "deploy/gecis/gecis.ps1 LAN_TLS'e dokunuyor" },
+    { ad: "S98 LAN TLS: geçiş aracı var olan kurulumu required'a çeviriyor", dosya: "gecis", eski: "\n", yeni: '\n$null = "LAN_TLS_MODE=required"\n', bolum: "§18", parca: "deploy/gecis/gecis.ps1 LAN_TLS'e dual dışında dokunuyor" },
     { ad: "S99 LAN TLS: HTTPS kuralı her adrese açık", dosya: "kurulum", eski: "-LocalPort $lo.tls.port -Action Allow -Profile @($ag.agProfilleri) -RemoteAddress @($ag.izinliAdresler)", yeni: "-LocalPort $lo.tls.port -Action Allow -Profile Any", bolum: "§18", parca: "HTTPS kuralı ölçümden" },
     { ad: "S100 LAN TLS: son sayfa kodu göstermiyor", dosya: "iss", eski: "SonucOku(SonIni, 'kurulum.tlsParmakIzi') <> ''", yeni: "False", bolum: "§18", parca: "son sayfası şifreli bağlantı kodunu" },
     { ad: "S102 yalnız şifreli: yeni kurulum dual yazıyor", dosya: "ortak", eski: 'satirlar = @("LAN_TLS_MODE=required")', yeni: 'satirlar = @("LAN_TLS_MODE=dual")', bolum: "§19", parca: "kipini required yazmıyor" },
