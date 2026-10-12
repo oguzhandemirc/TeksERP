@@ -1,7 +1,10 @@
 # Backend `2.15.6`
 
-**Durum:** TASLAK — terfide kullanıcı onayı. Paket henüz ÜRETİLMEDİ (paket adı, SHA256, commit ve CI koşusu
-paketlemede yazılır). Bu taslağa başka işlerin maddeleri de eklenecek; çakışmada birleştirilir.
+**Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (Linux deneme sunucusu `backend-oci` +
+Windows `backend`); öncü/genel gruba çıkış ayrı karar.
+**Paket:** _(paketleme doldurur)_
+**SHA256:** _(paketleme doldurur)_
+**Commit:** _(paketleme doldurur)_
 **Önceki saha sürümü:** 2.15.5 (`test` grubu). Güncellenecek her kurulumda sahadaki sürüm kurulumdan önce
 sunucunun sağlık bilgisinden okunur; tahmin edilmez.
 
@@ -122,7 +125,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 - `2f801abdb` — `tekserp-guncelleyici` 0.2.5 → 0.2.6: lisans çekirdeğine eklenen bağımlılık ortak `Cargo.lock`u
   değiştirdi; kod davranışı aynı.
 
-**Tezgah alarmı: vardiya yokken + sebepsiz duruş anahtarı** (commit `feat(dokuma-alarm): vardiyasız kip ayarı + sebepsiz duruşta alarm anahtarı`; kısa kimliği paketlemede yazılır)
+**Tezgah alarmı: vardiya yokken + sebepsiz duruş anahtarı** (commit `0f7f2afc6`)
 
 - yeni ayar `tezgah.alarm.noShiftMode`: `WARN` (varsayılan, bugünkü davranış) · `ALWAYS` (vardiyaya
   bakılmaz, hedef süre duruşun açılışından sayılır) · `REQUIRE_SHIFT` (etkin vardiya tanımı yokken alarm açılamaz;
@@ -133,7 +136,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   süre girilmişse açık. Açıkken süre zorunlu (400 `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`). Kapılar hiçbir ayarı
   yazmadan önce koşar — reddedilen kayıt yarım yazılmaz.
 
-**Tezgah Salonu toplu duruş (F2)** (commit `feat(tezgah-salonu): F2 backend — toplu duruş aç / kapat / geri al`; kısa kimliği paketlemede yazılır)
+**Tezgah Salonu toplu duruş (F2)** (commit `64e22111a`)
 
 - yeni uçlar `POST /api/machine-stops/bulk/preview` · `/bulk/open` · `/bulk/close` · `/bulk/revoke` (izin
   `loom:manual-entry`, dokuma modülü kapısı). Her tezgah mevcut tekli duruş yolundan, kendi işleminde ve tezgah
@@ -142,7 +145,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   `STOP_OVERLAP` ile düşer; tekli açılışın davranışı DEĞİŞMEDİ. Salon cevabına `bulkStopActions` (panelin eski
   sunucu tespiti). Migration YOK.
 
-**Sunucu güncellemesi ön duyurusu** (commitler `feat(guncelleme): B backend — …` ve `feat(guncelleme): B istemciler — …`; kısa kimlikleri paketlemede yazılır)
+**Sunucu güncellemesi ön duyurusu** (commitler `dbea5a6db` backend · `2814debcc` istemciler)
 
 - Onay (HEMEN/PENCERE) güncelleyici niyetine kayıttan 5 dk sonra yazılır (geri alma anında); yürürlük anını süreç
   içi tek zamanlayıcı yakalar, açılışta yeniden kurulur. Güncelleme programına dokunulmadı.
@@ -151,7 +154,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
 - Bilinen sınır: OTOMATİK kipte (onaysız) pencere İÇİNDE hazırlanan paket ön duyurusuz kurulur (güncelleme
   programı sürümü ister; `GUNCELLEYICI-SAGLAMLIK.md` §12 R23).
 
-**Makine kaynaklı duruş hazırlığı (D1)** (commit `feat(dokuma-alarm): makine kaynaklı duruş — tek yazma boğazı, sinyal kapanışı, dürtme birleştirme`; kısa kimliği paketlemede yazılır)
+**Makine kaynaklı duruş hazırlığı (D1)** (commit `9f70a0143`)
 
 - Duruş açılışı ve kapanışı tek çekirdekten geçer (`openStopCore` · `closeStopCore`); elle giriş (tablet, panel,
   Tezgah Salonu toplu) aynı çekirdeği çağırır, davranışı ve cevapları DEĞİŞMEDİ. Toplayıcı kart için servis düzeyinde
@@ -161,7 +164,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   kapanması ekranda ≤ 2 sn gecikebilir (30 sn'lik tur aynen).
 - Duruş cevabına üç ekleme: `signalKind`, `rawStopCode`, `collectorId` (elle duruşta `null`). Migration YOK.
 
-**Makine kaynaklı duruş: ham kod → sebep eşlemesi (D2)** (commitler `feat(dokuma): makine duruşu D2 — …` ×2; kısa kimlikleri paketlemede yazılır)
+**Makine kaynaklı duruş: ham kod → sebep eşlemesi (D2)** (commitler `7dea6872b` · `29043809f` + CI düzeltmesi `04ad580f4`)
 
 - Yeni tablo `machine_stop_code_maps`: kart tipi + kartın ham duruş kodu → tezgah duruş sebebi; isteğe bağlı tezgah
   satırı o tezgah için genel eşlemeyi ezer. Kart duruş bildirdiğinde eşleşme varsa sebep makine kararı olarak
@@ -171,7 +174,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   modülü, izin `loom:spec-manage` — yeni izin kodu yok). Silme pasife almadır; eşlemeyi değiştirmek geçmiş duruşu
   değiştirmez. Panel ekranı ayrı dilim; kart bugün sahada olmadığından eşlemenin etkisi yok.
 
-**Makine kartı: kimlik ve imzalı duruş ucu (D3)** (commitler `feat(tezgah): makine kartı …` ×2 + bekçi; kısa kimlikleri paketlemede yazılır)
+**Makine kartı: kimlik ve imzalı duruş ucu (D3)** (commitler `95611b9be` · `8e65258f5` + bekçi `14538eb6d`)
 
 - Makine kartı (tezgaha takılan toplayıcı) panel/API'den kaydedilir: ad, kart tipi, bağlı tezgahlar (bir tezgah
   tek karta). Kart sırrı yalnız kayıtta ve yenilemede bir kez gösterilir; veritabanında sır yoktur (yalnız tohum,
@@ -213,7 +216,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   tam etkinleştirme geçici kaydı kapatır, tüketim satıcıya kuyrukla bildirilir.
 - `40ea5684f` — `GET /api/license/durum` cevabına `gecici: {bitis, kalanGun, kodSonu} | null` (panel bandı).
 
-**Yetki denetimi düzeltmeleri (güvenlik Bölge 2)** (commitler `fix(yetki): B1 …`, `B2 …`, `B3+B4 …`, `B5+B6 …`; kısa kimlikleri paketlemede yazılır)
+**Yetki denetimi düzeltmeleri (güvenlik Bölge 2)** (commitler `2bb0f30a0` B1 · `aaafd4fee` B2 · `5813756a8` B3+B4 · `2e086cbe1` B5+B6)
 
 - Yönetici başkasına kendisinde olmayan yetkiyi veremez (409 `GRANT_EXCEEDS_ACTOR`); tam yetkili yönetici
   etkilenmez. ⚠️ Yan etki: Sistem Yöneticisi rolü iş yetkilerini (sipariş, tablet…) taşımadığı için bunları artık
@@ -404,8 +407,9 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   sırları açılış işi şifreler).
 - **Toplam migration:** 387 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 11 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
-- **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
-  profil açılışı.
+- **Prova:** en eski canlı ham dump'ta (`tekserp_yeni_20260923_030001`, 238 migration) restore → `migrate deploy`
+  (149 migration, rc=0; 387 bitmiş, sorunlu 0; `users`ta `systemAccountSeal` var, 11 satırın hepsi boş) yapıldı —
+  **dört ayağın ikisi (2/4)**; doğrulama kipinde açılış ve bekçilerin canlı dump'a karşı koşulması YAPILMADI.
 - **Veri yazan adımlar:** güncelleme sırasında YOK. Mühür elle koşulan `--muhurle` komutuyla ya da yeni hesabın
   doğuşunda atılır; açılış işi yalnız ZATEN GEÇERLİ mührü TOTP'yi kapsayan biçime bir kez yeniler (mühürsüz ya da
   bozuk mühürlü hesaba dokunmaz) ve lisans dizinine `sistem-hesabi-muhru-v2.json` koyar.
@@ -414,7 +418,7 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 10 migration); süre kurulumda ölçülür.
+- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 11 migration); süre kurulumda ölçülür.
 - **Sıra:** sunucu önce; uyarı şeridini gösteren panel sonra.
 - **Bu sürüme özel:**
   - Migration var → güncelleme programı güncellemeden önce otomatik yedek alır. Yedek adımı geçmeli.
@@ -465,7 +469,7 @@ düşen güncelleme zaten yedekten geri yüklenir.
 - Güncelleme programı hizmeti çalışıyor; `durum` kurulu sürüm 2.15.6, güncelleme programı 0.2.6, kira geçerli
   (DONDURULDU / KIRA_YOK yok).
 - Yedek: güncelleme öncesi yedek alındı; günlükte `SEMA_OLCULEMEDI` yok.
-- Veritabanı: 386 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
+- Veritabanı: 387 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
   kurulumda hepsi boş.
 - `/api/admin/health` `sistemHesabiMuhru`: var olan (mühürlenmemiş) kurulumda `MUHURLENMELI`, mühürlemeden sonra
   `TAMAM`. Destek hesabı girişi mühürlemeden önce de sonra da çalışıyor.
