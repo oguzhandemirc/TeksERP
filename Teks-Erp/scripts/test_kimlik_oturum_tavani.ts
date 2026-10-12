@@ -1,6 +1,6 @@
 // =============================================================================
 // BEKÇİ — KİMLİK DİLİM 2: kilit kapatılamaz · oturum bitişi sunucuda (güvenlik denetimi)
-// Çalıştır: npx tsx scripts/test_kimlik_oturum_tavani.ts [--sonda=kapanir]
+// Çalıştır: npx tsx scripts/test_kimlik_oturum_tavani.ts [--sonda=kapanir|--sonda=bitis]
 // =============================================================================
 // NEDEN: denetim O-04 — `settings:session` sahibi giriş deneme kilidini tek PATCH ile
 // kapatıp PIN/şifre uzayını sınırsız deneyebiliyordu. Artık kilit kapatılamaz: `false`
@@ -9,11 +9,20 @@
 // §1 kilit kapatılamaz: false → 400 (DB değişmez) · eski false satırı → okuyucu true,
 //    rezervasyon eşikte bloklar · sıfır eşik/süre 400 · statik: kapalı dalı ve panel
 //    anahtarı yok
+// §2 oturum bitişi SUNUCUDA (denetim §B3e): DB `expiresAt` geçmişse JWT `exp`i +10 yıl
+//    olsa da, exp'siz olsa da 401; geçerli zemin 200; `isSessionValid` aynı yüklem
 // SONDA (kalıcı): --sonda=kapanir → §1 statik metne eski kapalı dalını ekler (KIRMIZI olmalı)
+//                 --sonda=bitis   → §2 statik metinden süre denetimini siler (KIRMIZI olmalı)
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import prisma from "../src/lib/prisma";
+import { randomUUID } from "node:crypto";
+import jwt from "jsonwebtoken";
+import { ClientType } from "@prisma/client";
+import type { NextFunction, Request, Response } from "express";
+import { verifyToken } from "../src/middlewares/auth.middleware";
+import { SessionRegistryService } from "../src/services/session-registry.service";
 import { reserveLoginAttempt } from "../src/middlewares/login-lockout";
 import {
   SETTING_KEYS,
@@ -119,6 +128,57 @@ async function kilitKapatilamaz() {
   check("§1j panelde kilit için aç/kapa anahtarı yok", !panel.includes("onChange={s.setPinEnabled}"));
 }
 
+const olusanKullanicilar: string[] = [];
+async function testKullanicisi(etiket: string) {
+  const u = await prisma.user.create({
+    data: { username: `TEST-kimlik2-${etiket}-${Date.now()}`, passwordHash: "x", fullName: `TEST Kimlik2 ${etiket}` },
+    select: { id: true, username: true, tokenVersion: true },
+  });
+  olusanKullanicilar.push(u.id);
+  return u;
+}
+async function oturumAc(userId: string, expiresAt: Date, deviceType: ClientType = ClientType.MOBILE) {
+  const jti = randomUUID();
+  await SessionRegistryService.openLoginSession({ userId, deviceType, deviceId: null, jti, expiresAt, policy: "off" });
+  return jti;
+}
+/** auth.middleware'i sahte req/res/next ile koştur. */
+async function arakatman(token: string): Promise<{ err: unknown; gecti: boolean }> {
+  let err: unknown = null;
+  let gecti = false;
+  const req = { headers: { authorization: `Bearer ${token}` } } as unknown as Request;
+  await verifyToken(req, {} as Response, ((e?: unknown) => {
+    if (e) err = e;
+    else gecti = !!req.user;
+  }) as unknown as NextFunction);
+  return { err, gecti };
+}
+
+async function oturumBitisiSunucuda() {
+  console.log("\n=== §2 oturum bitişi sunucuda (denetim §B3e) ===");
+  const sir = process.env.JWT_SECRET;
+  if (!sir) { check("§2 ön koşul JWT_SECRET", false); return; }
+  const u = await testKullanicisi("bitis");
+  const govde = { userId: u.id, username: u.username, permissions: [], tokenVersion: u.tokenVersion };
+  const jti = await oturumAc(u.id, new Date(Date.now() + 3_600_000));
+  const onYil = jwt.sign(govde, sir, { jwtid: jti, algorithm: "HS256", expiresIn: 10 * 365 * 86_400 });
+  const expsiz = jwt.sign(govde, sir, { jwtid: jti, algorithm: "HS256" });
+  const zemin = await arakatman(onYil);
+  check("§2a zemin: expiresAt ileride → middleware geçer", zemin.err === null && zemin.gecti);
+  check("§2b zemin: isSessionValid true", await SessionRegistryService.isSessionValid(jti));
+  await prisma.session.update({ where: { jti }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+  const r1 = await arakatman(onYil);
+  check("§2c expiresAt geçmiş + JWT exp +10 yıl → 401", durumu(r1.err) === 401 && !r1.gecti, `status=${durumu(r1.err)}`);
+  const r2 = await arakatman(expsiz);
+  check("§2d expiresAt geçmiş + exp'siz token → 401", durumu(r2.err) === 401 && !r2.gecti, `status=${durumu(r2.err)}`);
+  check("§2e isSessionValid süresi dolmuş oturumda false", !(await SessionRegistryService.isSessionValid(jti)));
+
+  let mw = oku(resolve(KOK, "src/middlewares/auth.middleware.ts"));
+  if (SONDA === "bitis") mw = mw.replace(/session\.expiresAt\.getTime\(\) <= Date\.now\(\)/, "false");
+  check("§2f statik: middleware oturum satırının expiresAt'ini okur ve şimdiyle karşılaştırır",
+    /select: \{[^}]*expiresAt: true[^}]*\}/.test(mw) && /session\.expiresAt\.getTime\(\) <= Date\.now\(\)/.test(mw));
+}
+
 async function main() {
   const engel = hedefDbEngeli();
   if (engel) { check("§0 hedef DB yazılabilir", false, engel); process.exit(1); }
@@ -130,7 +190,10 @@ async function main() {
   })).id;
   try {
     await kilitKapatilamaz();
+    await oturumBitisiSunucuda();
   } finally {
+    await prisma.session.deleteMany({ where: { userId: { in: olusanKullanicilar } } }).catch(() => undefined);
+    await prisma.user.updateMany({ where: { id: { in: olusanKullanicilar } }, data: { isActive: false } }).catch(() => undefined);
     await geriYukle().catch((e) => check("geri yükleme", false, String(e)));
     await prisma.user.update({ where: { id: aktorId }, data: { isActive: false } }).catch(() => undefined);
   }

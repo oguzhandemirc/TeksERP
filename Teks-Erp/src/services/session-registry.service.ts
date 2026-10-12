@@ -150,14 +150,14 @@ export class SessionRegistryService {
     return { count: res.count };
   }
 
-  /** jti hâlâ geçerli mi (kayıt var + iptal edilmemiş). Middleware fail-closed okur. */
+  /** jti hâlâ geçerli mi (kayıt var + iptal edilmemiş + süresi dolmamış). */
   static async isSessionValid(jti: string | undefined | null): Promise<boolean> {
     if (!jti) return false;
     const s = await prisma.session.findUnique({
       where: { jti },
-      select: { revokedAt: true },
+      select: { revokedAt: true, expiresAt: true },
     });
-    return !!s && s.revokedAt === null;
+    return !!s && s.revokedAt === null && s.expiresAt.getTime() > Date.now();
   }
 
   /**

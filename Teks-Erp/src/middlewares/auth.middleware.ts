@@ -113,7 +113,7 @@ export function resetSessionTouchCacheForTest(): void {
  * İmza/expiry doğrulamasının ardından ANINDA-İPTAL kontrolü:
  *  1. User.tokenVersion + isActive taze okunur (yetki/şifre değişince bump → 401);
  *     yetki kümesi ve kullanıcı adı da DB'den (token claim'i karar kaynağı değil).
- *  2. Session (jti) taze okunur; kayıt yoksa veya revokedAt set ise → 401 (oturum
+ *  2. Session (jti) taze okunur; kayıt yoksa, revokedAt set ya da expiresAt geçmişse → 401 (oturum
  *     iptal edildi / logout / başka cihazdan kick). Fail-closed: jti'siz eski token
  *     (deploy öncesi üretilmiş) da 401 alır → bir kez re-login (kabul edilen davranış).
  */
@@ -173,7 +173,7 @@ async function authenticate(
       // zaten ağır bir olay; ama `Session.userId` kolonu ELDEYKEN kontrol
       // etmemek bedava bir katmanı boşa bırakmaktı. Ek maliyet: sıfır (aynı
       // sorguda bir kolon).
-      select: { revokedAt: true, revokeReason: true, userId: true },
+      select: { revokedAt: true, revokeReason: true, userId: true, expiresAt: true },
     });
     if (!session) {
       throw AppError.unauthorized("Oturum kaydı bulunamadı. Tekrar giriş yapın.", {
@@ -193,6 +193,11 @@ async function authenticate(
       const reason = session.revokeReason ?? "";
       const msg = SESSION_REVOKE_MESSAGES[reason] ?? "Oturumunuz sonlandırıldı. Tekrar giriş yapın.";
       throw AppError.unauthorized(msg, { code: "SESSION_REVOKED", reason });
+    }
+    // Oturum bitişi SUNUCUDA (denetim §B3e): JWT `exp`i sızan sırla uzatılabilir ya da
+    // hiç olmayabilir (eski token); karar DB'deki `expiresAt`tedir. İleti JWT süre dolumuyla aynı.
+    if (session.expiresAt.getTime() <= Date.now()) {
+      throw AppError.unauthorized("Geçersiz veya süresi dolmuş token");
     }
     // Zorunlu parola değişimi bekleyen hesap yalnız beyanlı uçlara geçer (oturum denetimlerinden
     // SONRA: iptal edilmiş oturum önce 401 alır).
