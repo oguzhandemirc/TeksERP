@@ -11,13 +11,14 @@
 //    yeni satır oluştur (tek tx — atomik). Eski cihaz bir sonraki istekte 401.
 //  - 'notify': aktif same-type varsa ve confirmKick!=true → 409 SESSION_EXISTS
 //    (mevcut oturum bilgisiyle). confirmKick=true → ikisi de açık kalır.
-//  - 'off': sessizce yeni satır (çoklu same-type serbest).
+//  - 'off': sessizce yeni satır (çoklu same-type serbest) — ama kullanıcı başına aktif
+//    oturum MAX_ACTIVE_SESSIONS_PER_USER'ı aşmaz (en eskisi SESSION_LIMIT ile düşer).
 //  - Teklik ('kick') UYGULAMA katmanında sağlanır — (userId,deviceType) partial-unique
 //    YOK (off/notify çoklu aktif gerektirir). Bkz. schema.prisma Session model yorumu.
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { ClientType } from "@prisma/client";
+import { ClientType, type Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import type { SameTypeSessionPolicy } from "./system-setting.service";
 
@@ -29,6 +30,13 @@ import type { SameTypeSessionPolicy } from "./system-setting.service";
  * 1-argümanlı uzay AYRI bir uzaydır ve paylaşımı sessiz serileşme üretir.
  */
 export const SESSION_REGISTRY_LOCK_NS: number = 8024;
+
+/**
+ * Kullanıcı başına eşzamanlı AKTİF oturum tavanı (denetim B3 / kimlik dilim 2). Politika
+ * `off` olsa da aşılmaz: yeni giriş en eski aktif oturumları `SESSION_LIMIT` ile düşürür.
+ * Varsayılan `kick`te kullanıcı başına en çok istemci tipi sayısı (3) oturum açık kalır.
+ */
+export const MAX_ACTIVE_SESSIONS_PER_USER = 20;
 
 export interface OpenLoginSessionInput {
   userId: string;
@@ -56,6 +64,22 @@ export interface ExistingSessionInfo {
   deviceId: string | null;
 }
 
+/** Tavanı aşacak en eski aktif oturumları düşürür (yeni satıra yer açar); atomik claim. */
+async function revokeOverCap(tx: Prisma.TransactionClient, userId: string): Promise<void> {
+  const now = new Date();
+  const active = await tx.session.findMany({
+    where: { userId, revokedAt: null, expiresAt: { gt: now } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true },
+  });
+  const excess = active.length - (MAX_ACTIVE_SESSIONS_PER_USER - 1);
+  if (excess <= 0) return;
+  await tx.session.updateMany({
+    where: { id: { in: active.slice(0, excess).map((s) => s.id) }, revokedAt: null },
+    data: { revokedAt: now, revokeReason: "SESSION_LIMIT" },
+  });
+}
+
 export class SessionRegistryService {
   /**
    * Login sırasında yeni oturum kaydı aç — aynı-tip politikasını uygular.
@@ -69,7 +93,7 @@ export class SessionRegistryService {
     // veri nesnesidir (bkz. `constants/client-info.ts`: künye kapı değildir).
     const clientVersion = input.clientVersion ?? null;
 
-    // F50: notify ön-kontrolü + kick, tek tx İÇİNDE ve (userId,deviceType) başına
+    // F50: notify ön-kontrolü + kick, tek tx İÇİNDE ve kullanıcı başına
     // pg advisory xact-lock ile serileştirilir. Eskiden notify findFirst tx DIŞINDA
     // (check-then-act) idi → iki eşzamanlı login birbirinin commit edilmemiş satırını
     // görmeyip notify'ı sessizce deliyordu / kick'te iki aktif oturum kalabiliyordu.
@@ -82,7 +106,10 @@ export class SessionRegistryService {
       // bu ikisi ayırmamıştı. Çakışmanın sonucu yanlış veri değil GECİKMEdir: bir
       // kullanıcının oturum kaydı, alakasız bir yetki mutasyonuyla serileşir ve sebebi
       // hiçbir yerde yazmaz. Taşıma davranışsal NO-OP'tur (aynı serileştirme, ayrı uzay).
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SESSION_REGISTRY_LOCK_NS}::int, hashtext(${`${userId}|${deviceType}`}))`;
+      // Anahtar KULLANICI (2026-10-12): oturum tavanı tipler arası sayar; (kullanıcı,tip)
+      // anahtarıyla iki tipten eşzamanlı giriş tavanı birlikte aşabilirdi. Kaba anahtar
+      // kick/notify teklik garantisini de kapsar.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SESSION_REGISTRY_LOCK_NS}::int, hashtext(${userId}))`;
 
       // notify: onay verilmediyse ve aynı tipte AKTİF (revoke edilmemiş, süresi dolmamış)
       // oturum varsa 409 döner; client confirmKick=true ile tekrar çağırıp ikisini açar.
@@ -118,6 +145,7 @@ export class SessionRegistryService {
           data: { revokedAt: new Date(), revokeReason: "NEW_LOGIN" },
         });
       }
+      await revokeOverCap(tx, userId);
       return tx.session.create({
         data: { userId, deviceType, jti, deviceId, expiresAt, clientVersion },
         select: { id: true },

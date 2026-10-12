@@ -1,6 +1,6 @@
 // =============================================================================
 // BEKÇİ — KİMLİK DİLİM 2: kilit kapatılamaz · oturum bitişi sunucuda (güvenlik denetimi)
-// Çalıştır: npx tsx scripts/test_kimlik_oturum_tavani.ts [--sonda=kapanir|--sonda=bitis]
+// Çalıştır: npx tsx scripts/test_kimlik_oturum_tavani.ts [--sonda=kapanir|--sonda=bitis|--sonda=tavan]
 // =============================================================================
 // NEDEN: denetim O-04 — `settings:session` sahibi giriş deneme kilidini tek PATCH ile
 // kapatıp PIN/şifre uzayını sınırsız deneyebiliyordu. Artık kilit kapatılamaz: `false`
@@ -11,8 +11,12 @@
 //    anahtarı yok
 // §2 oturum bitişi SUNUCUDA (denetim §B3e): DB `expiresAt` geçmişse JWT `exp`i +10 yıl
 //    olsa da, exp'siz olsa da 401; geçerli zemin 200; `isSessionValid` aynı yüklem
+// §3 eşzamanlı oturum tavanı: politika `off`ta 21. giriş en eskiyi `SESSION_LIMIT` ile düşürür,
+//    düşen token 401 SESSION_REVOKED; üç tipten 30 paralel giriş tavanı aşmaz (kilit kullanıcı
+//    başına); varsayılan `kick`te üç tip açıkken hiçbir oturum SESSION_LIMIT ile düşmez
 // SONDA (kalıcı): --sonda=kapanir → §1 statik metne eski kapalı dalını ekler (KIRMIZI olmalı)
 //                 --sonda=bitis   → §2 statik metinden süre denetimini siler (KIRMIZI olmalı)
+//                 --sonda=tavan   → §3 statik metinden tavan çağrısını siler (KIRMIZI olmalı)
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -22,7 +26,7 @@ import jwt from "jsonwebtoken";
 import { ClientType } from "@prisma/client";
 import type { NextFunction, Request, Response } from "express";
 import { verifyToken } from "../src/middlewares/auth.middleware";
-import { SessionRegistryService } from "../src/services/session-registry.service";
+import { MAX_ACTIVE_SESSIONS_PER_USER, SessionRegistryService } from "../src/services/session-registry.service";
 import { reserveLoginAttempt } from "../src/middlewares/login-lockout";
 import {
   SETTING_KEYS,
@@ -137,10 +141,60 @@ async function testKullanicisi(etiket: string) {
   olusanKullanicilar.push(u.id);
   return u;
 }
-async function oturumAc(userId: string, expiresAt: Date, deviceType: ClientType = ClientType.MOBILE) {
+async function oturumAc(
+  userId: string,
+  expiresAt: Date,
+  deviceType: ClientType = ClientType.MOBILE,
+  policy: "off" | "kick" = "off",
+) {
   const jti = randomUUID();
-  await SessionRegistryService.openLoginSession({ userId, deviceType, deviceId: null, jti, expiresAt, policy: "off" });
+  await SessionRegistryService.openLoginSession({ userId, deviceType, deviceId: null, jti, expiresAt, policy });
   return jti;
+}
+const aktifSay = (userId: string) =>
+  prisma.session.count({ where: { userId, revokedAt: null, expiresAt: { gt: new Date() } } });
+
+async function oturumTavani() {
+  console.log("\n=== §3 kullanıcı başına eşzamanlı oturum tavanı ===");
+  const sir = process.env.JWT_SECRET ?? "";
+  const T = MAX_ACTIVE_SESSIONS_PER_USER;
+  check("§3a tavan anlamlı bir sabit (3 < tavan ≤ 50)", T > 3 && T <= 50, `tavan=${T}`);
+  const ileri = () => new Date(Date.now() + 3_600_000);
+  const u = await testKullanicisi("tavan");
+  const jtiler: string[] = [];
+  for (let i = 0; i < T; i++) jtiler.push(await oturumAc(u.id, ileri()));
+  check("§3b tavana kadar (off) hiçbiri düşmez", (await aktifSay(u.id)) === T);
+  const yeni = await oturumAc(u.id, ileri());
+  const enEski = await prisma.session.findUnique({ where: { jti: jtiler[0]! }, select: { revokedAt: true, revokeReason: true } });
+  check("§3c tavan+1. giriş → en eski oturum SESSION_LIMIT ile düştü", enEski?.revokedAt !== null && enEski?.revokeReason === "SESSION_LIMIT",
+    JSON.stringify(enEski));
+  check("§3d aktif oturum sayısı tavanda kaldı, yeni oturum açık", (await aktifSay(u.id)) === T && (await SessionRegistryService.isSessionValid(yeni)));
+  const ikinci = await prisma.session.findUnique({ where: { jti: jtiler[1]! }, select: { revokedAt: true } });
+  check("§3e yalnız EN ESKİ düştü (ikinci açık)", ikinci?.revokedAt === null);
+  const tok = jwt.sign({ userId: u.id, username: u.username, permissions: [], tokenVersion: u.tokenVersion }, sir,
+    { jwtid: jtiler[0]!, algorithm: "HS256", expiresIn: 3600 });
+  const r = await arakatman(tok);
+  const det = (r.err as { details?: { code?: string; reason?: string } })?.details;
+  check("§3f düşen oturumun token'ı 401 SESSION_REVOKED / SESSION_LIMIT", durumu(r.err) === 401 && det?.code === "SESSION_REVOKED" && det?.reason === "SESSION_LIMIT",
+    JSON.stringify(det));
+
+  const p = await testKullanicisi("paralel");
+  const tipler = [ClientType.ELECTRON, ClientType.MOBILE, ClientType.WEB];
+  await Promise.all(Array.from({ length: T + 10 }, (_, i) => oturumAc(p.id, ileri(), tipler[i % 3])));
+  const pAktif = await aktifSay(p.id);
+  check("§3g üç tipten tavan+10 paralel giriş → aktif oturum tam tavan (yarış aşmaz)", pAktif === T, `aktif=${pAktif}`);
+
+  const k = await testKullanicisi("kick");
+  for (let tur = 0; tur < 3; tur++) for (const t of tipler) await oturumAc(k.id, ileri(), t, "kick");
+  const limitli = await prisma.session.count({ where: { userId: k.id, revokeReason: "SESSION_LIMIT" } });
+  check("§3h varsayılan kick: üç tip açık, SESSION_LIMIT ile düşen yok (bugünkü davranış)", (await aktifSay(k.id)) === 3 && limitli === 0,
+    `aktif=${await aktifSay(k.id)} limitli=${limitli}`);
+
+  let reg = oku(resolve(KOK, "src/services/session-registry.service.ts"));
+  if (SONDA === "tavan") reg = reg.replace("await revokeOverCap(tx, userId);", "");
+  const ac = reg.slice(reg.indexOf("static async openLoginSession("), reg.indexOf("static async revokeSession("));
+  check("§3i statik: openLoginSession tavanı create'ten önce uygular, kilit kullanıcı başına",
+    /await revokeOverCap\(tx, userId\);\s*return tx\.session\.create/.test(ac) && ac.includes("hashtext(${userId})"));
 }
 /** auth.middleware'i sahte req/res/next ile koştur. */
 async function arakatman(token: string): Promise<{ err: unknown; gecti: boolean }> {
@@ -191,6 +245,7 @@ async function main() {
   try {
     await kilitKapatilamaz();
     await oturumBitisiSunucuda();
+    await oturumTavani();
   } finally {
     await prisma.session.deleteMany({ where: { userId: { in: olusanKullanicilar } } }).catch(() => undefined);
     await prisma.user.updateMany({ where: { id: { in: olusanKullanicilar } }, data: { isActive: false } }).catch(() => undefined);

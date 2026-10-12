@@ -53,6 +53,7 @@ const SESSION_REVOKE_MESSAGES: Record<string, string> = {
   DEACTIVATED: "Hesabınız pasife alındığı için oturumunuz kapatıldı.",
   DELETED: "Hesabınız kaldırıldığı için oturumunuz kapatıldı.",
   LOGOUT: "Oturumunuz kapatıldı. Tekrar giriş yapın.",
+  SESSION_LIMIT: "Bu hesapta açık oturum sınırı aşıldığı için en eski oturum kapatıldı. Tekrar giriş yapın.",
 };
 
 function touchSessionLastSeen(jti: string, clientVersion: string | null): void {
