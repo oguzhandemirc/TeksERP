@@ -39,7 +39,7 @@ import {
 const SRC = resolve(__dirname, "../src");
 
 /**
- * Barkodu HÂLÂ TX İÇİNDE alan yollar. Üçü BİLİNÇLİ olarak taşınmadı ve gerekçe
+ * Barkodu HÂLÂ TX İÇİNDE alan yollar (KK1 ve kurtarma tx öncesine taşındı, Perf-4 B-01); kalanlar BİLİNÇLİ, gerekçe
  * her satırda yazılı; liste **iki yönlü** denetlenir (yeni tx-içi çağrı eklense
  * de, listedeki biri düzeltilip listeden düşürülmese de kırmızı).
  *
@@ -50,7 +50,6 @@ const SRC = resolve(__dirname, "../src");
  * bir kazancı da var: geri sarmada sayaç artışı da geri sarılır, boşluk doğmaz.
  */
 const KNOWN_TX_INTERNAL: Record<string, number> = {
-  "services/inventory.service.ts": 2, // KK1 ham giriş (48 satır) + 3954 (9 satır)
   "services/subcontractor.service.ts": 2, // fason çıkış (tekil) + fason kabul (toplu)
   "services/workorder-batch-drop.service.ts": 1, // parti düşürme (100 satır)
   "services/helpers/roll-finalize.helper.ts": 1,
@@ -65,12 +64,11 @@ const KNOWN_TX_INTERNAL: Record<string, number> = {
  *
  * ⚠️ TEKİL ÇAĞRI DÖNGÜ İÇİNDEYSE ZARARLIDIR: sayaç satırının kilidi İLK turdan
  * itibaren zaten tutuluyor, dolayısıyla araya giren her ek tur kilidi o kadar
- * uzatır. Aşağıdaki iki dosyada tekil çağrı **döngüsüzdür** (tek top üretilir),
+ * uzatır. Aşağıdaki dosyada tekil çağrı **döngüsüzdür** (tek top üretilir),
  * o yüzden meşru. Buraya yeni bir satır eklemeden önce sor: çağrı bir döngünün
  * içinde mi?
  */
 const KNOWN_TX_INTERNAL_SINGULAR: Record<string, number> = {
-  "services/inventory.service.ts": 2, // KK1 tek top · 3954 tek top — ikisi de döngüsüz
   "services/subcontractor.service.ts": 1, // fason çıkış: sevk başına tek çocuk
 };
 
@@ -82,11 +80,11 @@ const MUST_BE_CLEAN = "services/tambur.service.ts";
  * gereksiz görünür — ama asıl koruduğu şey `MUST_BE_CLEAN` kontrolüdür: regex
  * bozulursa (dosya taşınır, çağrı biçimi değişir) `found[tambur]` `undefined`
  * olur ve "tx-içi çağrı YOK" kontrolü **vakumen yeşil** kalır. Zemin sıfırdan
- * uzak, bugünkü gerçek sayıdan (7) rahatça aşağıda tutulur ki meşru bir taşıma
+ * uzak, bugünkü gerçek sayıdan (5) rahatça aşağıda tutulur ki meşru bir taşıma
  * turu bekçiyi sebepsiz kırmızıya çevirmesin.
  */
 const MIN_FILES_SCANNED = 100;
-const MIN_CALLSITES = 5;
+const MIN_CALLSITES = 4;
 
 /** Testin kendi sayaç satırları — gerçek "bugün"den uzak, `finally`'de silinir. */
 const TEST_DATE = new Date(Date.UTC(2031, 10, 17, 12, 0, 0));

@@ -1066,7 +1066,7 @@ export class InventoryService {
     const initialStatus =
       opts?.forcedStatus ?? (data.colorId != null ? RollStatus.WAREHOUSE : RollStatus.STOCK);
 
-    // Barkod SUNUCU'da sıralı atanır (tx içinde generateRollBarcodeTx) — offline istemci
+    // Barkod SUNUCU'da sıralı atanır (tx öncesi generateRollBarcodeTx) — offline istemci
     // sırayı bilemez. Tip damgası STATÜDEN türer ("F" = final/depoya inen, "H" = ham):
     // `finalBarcodeType` zaten bu eşlemenin tek kaynağı ve KK1 yolunda eski
     // renk-sezgisiyle BİREBİR aynı sonucu verir (renkli→WAREHOUSE→"F", renksiz→
@@ -1102,6 +1102,10 @@ export class InventoryService {
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     // Devere Faz 4: bağlı leventten otomatik tüketim uyarıları (bayrak kapalıyken dizi boş kalır, yanıta girmez).
     const autoConsumeWarnings: string[] = [];
+    // Barkod tx AÇILMADAN ÖNCE ve ayrı bağlantıda rezerve edilir: sayaç satır kilidi
+    // tx içinde commit'e kadar tutulup bütün top girişlerini serileştiriyordu. Tx geri
+    // sararsa (ikiz 409, ana veri 409, token P2002) numara boşluğu kalır — barkod kimliktir.
+    const barcode = await generateRollBarcodeTx(prisma, rollType);
     // Token P2002'si boğaza düşer (`run` yeniden okur).
     {
       roll = await prisma.$transaction(async (tx) => {
@@ -1110,7 +1114,7 @@ export class InventoryService {
         // verilmemişse (fabrika yolları) tek ifade bile eklenmez.
         if (opts?.txGate) await opts.txGate(tx);
         if (guardActive) {
-          // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE, `generateRollBarcodeTx`'dan da ÖNCE.
+          // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE (barkod sayacı tx dışında, kilitsiz).
           //
           //  · Kilit SONRA alınırsa guard hiçbir şey kazanmaz: READ COMMITTED'da her
           //    ifade taze snapshot alır, yani kilidi bekleyen tx uyandığında öndekinin
@@ -1118,9 +1122,8 @@ export class InventoryService {
           //    aynısı, sadece tx içinde). Eski kod `prisma.roll.findFirst`'ü tx DIŞINDA
           //    koşturuyordu: 2026-08-04'te 5 eşzamanlı giriş 46 ms içinde hiçbirinin
           //    commit'ini görmeden geçti (klasik TOCTOU).
-          //  · Kilit barkod sayacından SONRA alınırsa ABBA deadlock riski doğar
-          //    (sayaç satır kilidini tutup advisory bekleyen tx ↔ tersi) ve global
-          //    sayaç kilidi guard sorgusunun tüm süresi boyunca tutulurdu.
+          //  · Barkod sayacı tx DIŞINDA kendi ifadesiyle commit eder; bu tx sayaç
+          //    satırını hiç tutmaz → advisory ↔ sayaç ABBA'sı doğamaz.
           //
           // `$executeRaw` parametreli → injection yok. `$queryRaw` yolu ise pg driver
           // adapter'ında `void` kolonunu deserialize edemediği için alt-sorgu
@@ -1174,7 +1177,7 @@ export class InventoryService {
           if (twin) {
             // tx İÇİNDE throw: Prisma callback'i rollback eder ve hatayı DEĞİŞTİRMEDEN
             // yeniden fırlatır (emsal: session-registry.service). Rollback yan etkisiz —
-            // bu noktaya kadar tek yazma yok, barkod sayacı hiç artmadı (boşluk oluşmaz).
+            // tek iz, tx öncesi rezerve edilen barkodun bıraktığı numara boşluğudur.
             throw AppError.conflict(
               `Bu top az önce girilmiş olabilir (barkod ${twin.barcode}). Gerçekten ayrı bir topsa onaylayın.`,
               {
@@ -1210,12 +1213,10 @@ export class InventoryService {
         await assertMasterDataLiveTx(tx, { colorId: data.colorId ?? null });
 
         // DOFF BAĞI — satır kilidi (FOR UPDATE) ile; düz okuma eşzamanlı DOFF_CANCEL'e
-        // pencere açar. Sıra: advisory kilit (yukarıda) → doff satırı → barkod sayacı;
-        // iptal yolu yalnız doff satırını tutar, ABBA yok.
+        // pencere açar. Sıra: advisory kilit (yukarıda) → doff satırı; barkod sayacı
+        // tx dışında. İptal yolu yalnız doff satırını tutar, ABBA yok.
         await claimDoffForRollTx(tx, { doffEventId: opts?.doffEventId, entrySource, createdMachineId: machineId ?? null });
 
-        // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
-        const barcode = await generateRollBarcodeTx(tx, rollType);
         // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
         // Fabrika yolları parametre vermez → varsayılan depo → davranış aynı.
         const targetWarehouseId = await resolveTargetWarehouseId(tx, opts?.warehouseId ?? null);
@@ -5205,6 +5206,9 @@ export class InventoryService {
       throw AppError.conflict("Top açık bir fason sevkine bağlı — önce fasonu kapatın");
     }
 
+    // Barkod tx öncesi ayrı bağlantıda (sayaç kilidi kurtarma tx'i boyunca tutulmaz).
+    const rescueBarcode =
+      roll.barcode == null ? await generateRollBarcodeTx(prisma, finalBarcodeType(RollStatus.WAREHOUSE)) : null;
     const rescued = await prisma.$transaction(async (tx) => {
       // Açık hareketler + bağlı adımlar (+ currentStep) — recompute hedefleri.
       const openMoves = await tx.rollMovement.findMany({
@@ -5280,9 +5284,8 @@ export class InventoryService {
       await postRescueEntryTx(tx, { rollId, stepId: roll.currentStepId, userId, reason });
 
       // "her kumaşa etiket" (F4) — barkodsuzsa final (WAREHOUSE) barkod üret.
-      if (roll.barcode == null) {
-        const bc = await generateRollBarcodeTx(tx, finalBarcodeType(RollStatus.WAREHOUSE));
-        await tx.roll.update({ where: { id: rollId }, data: { barcode: bc } });
+      if (rescueBarcode) {
+        await tx.roll.updateMany({ where: { id: rollId, barcode: null }, data: { barcode: rescueBarcode } });
       }
 
       // Kapanan movement "geçti" → adım/WO oto-COMPLETE olabilir.
