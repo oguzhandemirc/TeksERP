@@ -182,6 +182,7 @@ function computeMode(g: LicenseStateInput, lease: VerifiedLease | null, entitlem
   // Kip alt sınırı HAK'tadır: kira, durum kaydı, DB izi ve derleme varsayılanı bunun altına inemez (HAK yoksa pin).
   const floor = entitlement ? entitlement.document.kipAltSiniri : g.sonHak?.kipAltSiniri;
   if (floor === "zorla") return "zorla";
+  if (g.yabanciIz?.kip === "zorla") return "zorla";
   if (lease) return lease.document.zorlama ? "zorla" : "gozlem";
   if (g.sonKiraZorlamasi !== null) return g.sonKiraZorlamasi ? "zorla" : "gozlem";
   return g.varsayilanKip;

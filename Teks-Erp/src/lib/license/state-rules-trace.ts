@@ -60,8 +60,18 @@ const TRACE_ORDER: readonly TraceKind[] = ["KIRA", "DURUM", "IZ"];
  * iz kaybı da sayılır ve bayrak yeni kiraya dek kalıcıdır (dosyayı geri koymak merdiveni durdurmaz). Üçü birden yoksa
  * (K7) uyarı atlanır. Kalan izlerin çapası `timeAnchor`da geçerlidir (silmek süreyi uzatmaz).
  */
+/** B6/G3: etkinleşmemiş kurulumda zorla kipli yabancı iz merdiveni (etkin kurulumda motor `yabanciIz` vermez). */
+function foreignLadder(g: LicenseStateInput): boolean {
+  return g.yabanciIz?.kip === "zorla" && !(g.izler?.etkin ?? false);
+}
+
 export function evaluateTraces(g: LicenseStateInput, lease: VerifiedLease | null, out: Finding[]): TraceResult {
   const t = g.izler;
+  if (foreignLadder(g)) {
+    // Etkinleşmemiş kurulum + zorla kipli başka kurulumun izi: o kurulumun kirası ve durum kaydı burada yok.
+    out.push({ code: "LISANS_IZI_KAYIP", detail: "KIRA,DURUM", tier: "UYARI", banner: UNMEASURED_BANNER });
+    return { izKaybi: ["KIRA", "DURUM"], ucIzYok: false };
+  }
   if (!t || !t.etkin) return { izKaybi: [], ucIzYok: false };
   const leaseGone = leaseLost(g, lease, out);
   // Etkin kurulumda durum kaydı kira ve HAK'tan ÖNCE yazılır: kira ya da DB kopyası varken dosyanın yokluğu kayıptır.
@@ -125,7 +135,7 @@ export function evaluateUncertainty(
   x: { readonly suruyor: boolean; readonly ucIzYok: boolean; readonly internetVar: boolean },
   out: Finding[],
 ): UncertaintyResult {
-  const etkin = g.izler ? g.izler.etkin : g.kurulumId !== null;
+  const etkin = (g.izler ? g.izler.etkin : g.kurulumId !== null) || foreignLadder(g);
   const birikenMs = Math.max(0, g.belirsizlikMs ?? 0, x.ucIzYok ? LADDER_WARNING_MS : 0);
   const suruyor = etkin && x.suruyor;
   if (birikenMs >= LADDER_WARNING_MS || (suruyor && birikenMs > 0)) {

@@ -194,6 +194,12 @@ export interface LicenseStateInput {
   readonly iptal?: { readonly sira: number | null; readonly okunamadi: boolean };
   /** Durum kaydı kopyalarının iptal pini (en büyüğü): bir kez görülen sıra geri inmez. */
   readonly iptalPini?: number | null;
+  /**
+   * B6/G3: etkinleşmemiş kurulumda başka kurulumun KAYIP/BELIRSIZ izi ve o izin kipi (`classifyForeignTraceDetail`).
+   * Yalnız `zorla` kip alt sınırı olur ve merdiveni akıtır; etkinleştirme ek süresi ilk açılıştan değil LICENSE_DIR'deki
+   * imzalı başlangıçtan (+14 g uyarı) sayılır. Verilmezse/gözlemse bugünkü davranış.
+   */
+  readonly yabanciIz?: { readonly kip: LicenseMode; readonly baslangicMs: number } | null;
 }
 
 /** Kiradan sunucu kararlarının anlık görüntüsü — `durum.json` bunu saklar, durum onu okur. */

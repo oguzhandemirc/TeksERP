@@ -21,6 +21,7 @@ import {
   type ReasonCode,
 } from "./state-rules";
 import type { RememberedAnchor } from "./saat";
+import { LADDER_WARNING_MS } from "./state-rules-trace";
 
 /** K3: "internet VAR" = son kabul edilen imzalı kiranın sunucu saati güvenilir saate göre bu süreden yeni. */
 export const ONLINE_WINDOW_MS = DAY_MS;
@@ -170,6 +171,10 @@ function timeAnchor(g: LicenseStateInput, ctx: GraceContext, remembered: readonl
   if (ctx.ucIzKaybi) return null;
   if (ctx.entitlement) {
     return { anchorMs: isoToMs(ctx.entitlement.document.verilis), graceDays: DEFAULT_GRACE_DAYS, code: "KIRASIZ_EK_SURE", text: "Lisans kirası bulunamadı" };
+  }
+  if (g.yabanciIz?.kip === "zorla") {
+    // B6/G3: döküm eski olabilir (ilk açılış yıllar önce) — süre imzalı başlangıçtan, uyarı penceresinden sonra.
+    return { anchorMs: g.yabanciIz.baslangicMs + LADDER_WARNING_MS, graceDays: DEFAULT_GRACE_DAYS, code: "ETKINLESTIRME_EK_SURESI", text: "Lisans etkinleştirilmedi" };
   }
   if (g.ilkAcilisMs === null) return null;
   return { anchorMs: g.ilkAcilisMs, graceDays: DEFAULT_GRACE_DAYS, code: "ETKINLESTIRME_EK_SURESI", text: "Lisans etkinleştirilmedi" };

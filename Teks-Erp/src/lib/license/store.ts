@@ -41,6 +41,8 @@ export const LICENSE_FILES = {
   SYSTEM_SEAL_V2: "sistem-hesabi-muhru-v2.json",
   /** Etkinleştirme kilidi muafiyeti (G2, satıcı imzalı JWS; kurulum anahtarı + parmak izine bağlı — `exemption.ts`). */
   EXEMPTION: "muafiyet.jws",
+  /** Etkinleşmemiş kurulumda `zorla` kipli başka kurulum izinin merdiven başlangıcı (B6; kurulum anahtarıyla imzalı satırlar). */
+  FOREIGN_TRACE_EPOCH: "yabanci-iz-baslangic.json",
 } as const;
 
 /** Depo kullanılamıyorsa nedeni (kapı/ekran TR metni ayrıca üretir). */

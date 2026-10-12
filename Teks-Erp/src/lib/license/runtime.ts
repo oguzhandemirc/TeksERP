@@ -52,6 +52,7 @@ import { revocationHolding, __resetRevocationStoreForTests, type HeldRevocation,
 import { revocationPin } from "./state-rules-revocation";
 import { configureActivationLockForTests, type ActivationLockDecision } from "./activation-lock";
 import { decideActivationLock, isActivated, lastKnownLeaseOf, licenseStoreSetupError } from "./snapshot-parts";
+import { __resetForeignTraceEpochForTests, foreignLadderOf, type ForeignLadder } from "./foreign-trace-epoch";
 import {
   bumpLicenseSnapshotVersion,
   licenseSnapshotVersion,
@@ -223,6 +224,8 @@ interface BuiltInput {
   readonly view: RecordView;
   readonly licenseId: { id: string | null; source: LicenseIdSource | null };
   readonly revocation: RevocationHolding;
+  readonly activated: boolean;
+  readonly foreign: ForeignLadder | null;
 }
 
 /** Lisans izlerinin hâli (G12): durum kaydı dosyası, DB izi ve kalıcı iz kaybı bayrağı. */
@@ -250,6 +253,8 @@ function buildInput(nowMs: number): BuiltInput {
   const licenseId = resolveLicenseId(store, kira, a, kid);
   const view = recordView(a, licenseId.id);
   const record = view.record;
+  const activated = isActivated(store, licenseId.id, record);
+  const foreign = foreignLadderOf({ activated, roots: config.roots, nowMs, highWaterMs: facts.ledgerHighWaterMs });
   const base: LicenseStateInput = {
     kurulumId: licenseId.id,
     kurulumAnahtarKimligi: kid,
@@ -278,7 +283,7 @@ function buildInput(nowMs: number): BuiltInput {
     saticiSapmaMs: getVendorClockSkewMs(),
     depoOkunamadi: store?.unreadable ?? [],
     izler: traceInput(store, licenseId.id, view),
-    belirsizlikMs: syncLadder("belirsizlik", epochOf(view), mergedUncertaintyMs(view)),
+    belirsizlikMs: foreign ? syncLadder("belirsizlik", foreign.epoch, foreign.storedMs) : syncLadder("belirsizlik", epochOf(view), mergedUncertaintyMs(view)),
     parmakIziUyusmazMs: syncLadder("parmakIzi", epochOf(view), mergedFingerprintMs(view)),
     sonCapalar: rememberedAnchorsOf(view),
     sonBilinenTavan: lastKnownCeiling(view),
@@ -287,6 +292,7 @@ function buildInput(nowMs: number): BuiltInput {
     // DB kopyası bilinmiyorsa (okunamadı) eksik belge "kayıp" değil "okunamadı"dır.
     iptal: { sira: revocation.effective?.view.document.sira ?? null, okunamadi: revocation.fileUnreadable || !revocation.dbKnown },
     iptalPini: revocationPin(...view.copies.map((c) => c.iptalSira)),
+    yabanciIz: foreign ? { kip: foreign.kip, baslangicMs: foreign.baslangicMs } : null,
   };
   // Kullanılabilirlik kararı durumun KENDİ kurallarından (tek kaynak); bulgular burada atılır.
   const scratch: Finding[] = [];
@@ -304,7 +310,7 @@ function buildInput(nowMs: number): BuiltInput {
     parmakIziEslesme: decision?.result ?? "OLCULEMEDI",
     ...(decision ? { parmakIziKurali: decision.rule } : {}),
   };
-  return { input, entitlement, lease, decision, view, licenseId, revocation };
+  return { input, entitlement, lease, decision, view, licenseId, revocation, activated, foreign };
 }
 
 /** Merdiven sayaçlarını durumun söylediği koşula göre akıtır/dondurur (K7: birikim en az 14 gün). */
@@ -321,12 +327,11 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
   if (cached && cached.version === version && nowMs - cached.snap.computedAtMs < SNAPSHOT_TTL_MS && nowMs >= cached.snap.computedAtMs) {
     return cached.snap;
   }
-  const { input, entitlement, lease, decision, view, licenseId, revocation } = buildInput(nowMs);
+  const { input, entitlement, lease, decision, view, licenseId, revocation, activated, foreign } = buildInput(nowMs);
   const store = getLicenseStore();
   const state = computeLicenseState(input);
   const signingReady = Boolean(store && !store.problem && store.key && facts.installationId);
   const stateReady = signingReady || Boolean(store && store.problem === "OKUNAMADI" && input.kurulumAnahtarKimligi && facts.installationId);
-  const activated = isActivated(store, licenseId.id, view.record);
   const setupError = licenseStoreSetupError(store, input.kurulumAnahtarKimligi, getLicenseTraceRow().durum !== "BILINMIYOR");
   const etkinlestirmeKilidi = decideActivationLock({ ready: stateReady, setupError, activated, store, fingerprint, roots: config.roots });
   const snap: LicenseSnapshot = {
@@ -347,7 +352,7 @@ export function getLicenseSnapshot(nowMs: number = Date.now()): LicenseSnapshot 
     etkinlestirmeKilidi,
     computedAtMs: nowMs,
   };
-  if (snap.activated) driveLadders(state);
+  if (snap.activated || foreign) driveLadders(state);
   cached = { snap, version: licenseSnapshotVersion() };
   return snap;
 }
@@ -362,6 +367,7 @@ export function __resetLicenseRuntimeForTests(): void {
   __resetLadderCountersForTests();
   __resetLicenseTraceRowForTests();
   __resetRevocationStoreForTests();
+  __resetForeignTraceEpochForTests();
   configureActivationLockForTests(null);
   cached = null;
 }
