@@ -140,3 +140,19 @@ describe("evaluateAlerts — bağlantı havuzu", () => {
     expect(all[0]?.level).toBe("crit"); // kritikler başta
   });
 });
+
+describe("evaluateAlerts — makine kartı watchdog'u (D4)", () => {
+  const wdMsgs = (over: Partial<HealthResponse>) => evaluateAlerts(base(over)).map((a) => a.message);
+  it("⭐ sessiz kart ve bekleyen gerçek bitiş → iki UYARI (kritik değil); sayılar metinde", () => {
+    const alerts = evaluateAlerts(base({ machineWatchdog: { silentCollectors: 2, lateStopEnds: 1 } }));
+    const wd = alerts.filter((a) => /makine kartı sessiz|vardiya mührü/.test(a.message));
+    expect(wd.map((a) => a.level)).toEqual(["warn", "warn"]);
+    expect(wd[0]!.message).toMatch(/^2 makine kartı sessiz/);
+    expect(wd[1]!.message).toMatch(/^1 kart duruşunun gerçek bitişi/);
+  });
+  it("sıfır, okunamadı (null) ya da eski backend (alan yok) → uyarı YOK", () => {
+    for (const over of [{ machineWatchdog: { silentCollectors: 0, lateStopEnds: 0 } }, { machineWatchdog: null }, {}]) {
+      expect(wdMsgs(over).some((m) => /makine kartı sessiz|vardiya mührü/.test(m))).toBe(false);
+    }
+  });
+});

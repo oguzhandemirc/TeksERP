@@ -92,6 +92,15 @@ export function loomHintOf(t: LiveLoom, now: number): HintModel {
   return { title: t.code, subtitle: STATUS_LABEL.RUN, lines };
 }
 
+/** Makine kartı sessiz (D4): son görülme + duruşun elle bildirileceği — sessizlik duruş AÇMAZ. */
+export function silentCollectorHintOf(since: number): HintModel {
+  return {
+    title: "Makine kartı sessiz",
+    lines: [{ label: "Son görülme", value: formatFactory(since, "dd.MM HH:mm"), tone: "warn" }],
+    note: "Kart sunucuya ulaşmıyor; bu sürede tezgahın duruşunu elle bildirin. Kart yeniden ulaşınca uyarı kendiliğinden kalkar.",
+  };
+}
+
 export function sourceHintOf(source: keyof typeof STATE_SOURCE_LABEL): HintModel {
   return { title: `Kaynak: ${STATE_SOURCE_LABEL[source]}`, lines: [], note: STATE_SOURCE_HINT[source] };
 }

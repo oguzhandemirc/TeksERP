@@ -1598,6 +1598,27 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         unit: "dk",
         audience: ["Operatör", "Yönetim"],
       },
+      // Makine kartı watchdog'u (D4) — sınırlar backend Zod'uyla aynı (feature-flag.routes).
+      {
+        key: "tezgahCollectorSilenceMinutes",
+        title: "Makine kartı sessizlik süresi",
+        desc: "Tezgaha bağlı makine kartı bu süre boyunca sunucuya hiç ulaşmazsa “sessiz” sayılır: Tezgah Salonu'nda tezgahın üstünde “Kart sessiz” yazar, Sunucu Durumu uyarı verir (varsayılan 10 dk). Sessizlik duruş AÇMAZ — kart susarken duruşu elle bildirin. Makine kartı olmayan tezgahları etkilemez.",
+        min: 1,
+        max: 1440,
+        fallback: 10,
+        unit: "dk",
+        audience: ["Yönetim"],
+      },
+      {
+        key: "tezgahMaxOpenStopHours",
+        title: "Kart duruşunu geçici kapatma süresi",
+        desc: "Makine kartının açtığı duruş bu süreyi aşıp hâlâ kapanmadıysa sunucu onu geçici olarak kapatır (varsayılan 12 sa); Tezgah Duruşları'nda “geçici kapanış” yazar. Kartın gerçek “bitti” bildirimi gelince bitiş bir kez düzeltilir. Elle açılan duruşlara dokunulmaz.",
+        min: 1,
+        max: 168,
+        fallback: 12,
+        unit: "saat",
+        audience: ["Yönetim"],
+      },
     ],
   },
   // Depo/satın alma bayrakları bilinçli olarak Muhasebe sekmesinde DEĞİL: bu

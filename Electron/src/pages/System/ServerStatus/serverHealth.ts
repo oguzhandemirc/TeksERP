@@ -54,6 +54,8 @@ export interface HealthResponse {
   factoryTimezone?: { active: string; warning: { code: string; message: string } | null };
   /** JWT sırrı: `rotationRequired` → sunucu bilinen/zayıf sırla açıldı. Değer taşımaz; eski backend göndermez. */
   jwtSecret?: { status: "OK" | "BILINEN" | "ZAYIF"; rotationRequired: boolean };
+  /** Makine kartı watchdog'u (D4): sessiz kart · mühür yüzünden bekleyen gerçek bitiş. `null` = okunamadı (0 DEĞİL); eski backend göndermez. */
+  machineWatchdog?: { silentCollectors: number; lateStopEnds: number } | null;
 }
 
 const MASTER_DATA_LABEL: Record<string, string> = {
@@ -240,6 +242,13 @@ export function evaluateAlerts(d: HealthResponse | undefined): Alert[] {
   // Metin sunucunundur (FACTORY_TIMEZONE_INVALID_STORED): sunucu varsayılan dilimle açıldı, düzeltme panelden.
   const tzWarn = d.factoryTimezone?.warning;
   if (tzWarn) out.push({ level: "warn", message: tzWarn.message });
+
+  // Kart sessizliği duruş açmaz — insan bildirmeli; geciken kapanış mühür açılınca kendiliğinden uygulanır.
+  const wd = d.machineWatchdog;
+  if (wd && wd.silentCollectors > 0)
+    out.push({ level: "warn", message: `${wd.silentCollectors} makine kartı sessiz — o tezgahların duruşunu elle bildirin (Tezgah Salonu “Kart sessiz”).` });
+  if (wd && wd.lateStopEnds > 0)
+    out.push({ level: "warn", message: `${wd.lateStopEnds} kart duruşunun gerçek bitişi vardiya mührü yüzünden bekliyor — mühür açılınca uygulanır.` });
 
   // Bilinen/zayıf sırla imzalanan token taklit edilebilir → kritik; rotasyon vardiya dışında.
   if (d.jwtSecret?.rotationRequired === true)

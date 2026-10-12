@@ -28,6 +28,8 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   mühürlüyse düzeltme bekletilir ve mühür açılınca uygulanır. Elle bildirilen duruşlara dokunulmaz.
 - Watchdog işi 60 sn'de bir koşar (tek süreç); tezgah ya da dokuma modülü kapalıyken iş yapmaz. İki ayarın panel
   satırı sonraki panel sürümünde.
+- İki eşik `settings:dokuma` izin kapsamında (öteki tezgah ayarlarıyla aynı): bu izinle Genel Ayarlar › Tezgah
+  izleme'den yazılır (panel 1.6.5 satırları — D5 dilim 1).
 - `dist-web`: bu madde panel kaynağını değiştirmez.
 
 ## 3. Sözleşme

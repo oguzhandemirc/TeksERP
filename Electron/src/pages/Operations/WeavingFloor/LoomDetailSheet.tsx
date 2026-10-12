@@ -2,6 +2,7 @@
 // vardiya rakamları, sebebe göre duruşlar, son olaylar, dokuma işi ve levent.
 import { Siren } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { formatFactory } from "@/lib/factory-time";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { JobAndBeam, ShiftFigures, StopBreakdown } from "./DetailBlocks";
 import { StatusShape, TimerRing } from "./Markers";
@@ -83,6 +84,11 @@ function DetailBody({ loom: t, now, onOpenAlarm }: { loom: LiveLoom; now: number
             {[t.hall, t.loomType ? LOOM_TYPE_LABEL[t.loomType] : null, STATUS_LABEL[status], t.monitored && t.stateSource ? `kaynak: ${STATE_SOURCE_LABEL[t.stateSource].toLowerCase()}` : null].filter(Boolean).join(" · ")}
             {status === "RUN" && t.rpm !== null ? ` · ${formatNumber(t.rpm)} atkı/dk` : ""}
           </SheetDescription>
+          {t.collectorSilentSince ? (
+            <div data-testid="silent-collector-line" className="mt-1 text-sm font-semibold text-amber-700 dark:text-amber-300">
+              Makine kartı sessiz — son görülme {formatFactory(t.collectorSilentSince, "dd.MM HH:mm")}; duruşu elle bildirin.
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="rounded-2xl p-4" style={{ background: hsl("var(--ds-floor)") }}>

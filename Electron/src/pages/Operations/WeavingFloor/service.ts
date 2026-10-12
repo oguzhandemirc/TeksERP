@@ -86,6 +86,8 @@ export interface WireLoom {
   state: "RUNNING" | "STOPPED" | "UNMONITORED";
   /** Durumun kaynağı (karne kovası); alanı tanımayan eski sunucuda yok. */
   stateSource?: StateSource;
+  /** Tezgahın makine kartı SESSİZ (D4 watchdog): kartın son görülmesi; null = kart yok ya da canlı; eski sunucuda yok. */
+  collectorSilentSince?: string | null;
   openStop: WireOpenStop | null;
   today: { potSec: number; aptSec: number; availabilityPct: number | null; stopCount: number; breakdown: WireBreakdownRow[] };
   targetUnitsPerMin: number | null;

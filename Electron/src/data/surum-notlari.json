@@ -112,6 +112,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Tezgaha makine kartı bağlıysa kartın durumu artık görünür: kart bir süre sunucuya ulaşmazsa Tezgah Salonu'nda tezgahın üstünde “Kart sessiz” yazar ve Sunucu Durumu uyarı verir — bu sürede duruşu elle bildirin. Kartın açtığı duruş çok uzun süre kapanmazsa sunucu onu geçici olarak kapatır; Tezgah Duruşları'nda süre hücresinin altında “geçici kapanış” yazar, kartın gerçek bitişi gelince süre düzeltilir. İki süre Ayarlar → “Tezgah izleme” bölümündedir (kart sessizlik süresi varsayılan 10 dakika, geçici kapatma süresi 12 saat). Makine kartı olmayan tezgahlarda hiçbir şey değişmez; bu bilgiler yeni sunucu sürümüyle gelir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Destek hesabı ilk kurulumda gelen ortak parolayla duruyorsa panelin üstünde kırmızı bir uyarı şeridi çıkar. Destek hesabıyla girildiyse şerit kendi parolanızı hemen belirlemenizi, yönetici olarak girildiyse satıcınızdan parolayı değiştirmesini istemenizi söyler. Şerit elle kapatılamaz; parola değişince kendiliğinden kalkar. Bunun için de sunucunun 2.15.5 sürümü gerekir."
         },
         {

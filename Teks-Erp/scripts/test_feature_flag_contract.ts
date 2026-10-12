@@ -357,8 +357,6 @@ async function main() {
     pinLockoutLongPenaltyMin: "kind:'session' — Oturum section'ı yönetir",
     labelCopies: "kind:'label' — Etiket section'ı yönetir",
     backupHour: "Sistem > Yedekler (BackupScheduleCard) yönetir",
-    tezgahMaxOpenStopHours: "makine duruşu D5 — kart devreye alma ekranıyla panele iner; o güne kadar PATCH /feature-flags",
-    tezgahCollectorSilenceMinutes: "makine duruşu D5 — kart devreye alma ekranıyla panele iner; o güne kadar PATCH /feature-flags",
   };
 
   const numMissingInSchema = aNum.filter((k) => !B.includes(k));

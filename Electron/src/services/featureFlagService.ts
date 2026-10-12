@@ -328,6 +328,10 @@ export interface FeatureFlags {
   tezgahAlarmEscalateWhenAcked: boolean;
   /** Sebepsiz duruşta alarm (sunucu satır yoksa süreden türetir). Alanı tanımayan eski sunucuda yok → kapalı sayılır. */
   tezgahAlarmUnclassifiedEnabled: boolean;
+  /** Makine kartı sessizlik eşiği (dk, 1..1440, varsayılan 10) — D4 watchdog. */
+  tezgahCollectorSilenceMinutes: number;
+  /** Kart duruşunun geçici kapanış eşiği (saat, 1..168, varsayılan 12) — D4 watchdog. */
+  tezgahMaxOpenStopHours: number;
   /** Vardiyasız zamanda alarm: WARN (varsayılan) · ALWAYS · REQUIRE_SHIFT. */
   tezgahAlarmNoShiftMode: TezgahAlarmNoShiftMode;
   /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).

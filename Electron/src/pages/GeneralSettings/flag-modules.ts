@@ -115,6 +115,9 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tezgahAlarmEscalateWhenAcked: "tezgahEnabled",
   tezgahAlarmUnclassifiedEnabled: "tezgahEnabled",
   tezgahAlarmNoShiftMode: "tezgahEnabled",
+  // Makine kartı watchdog'u (D4): tezgah izleme modülünün sayısal ayarları.
+  tezgahCollectorSilenceMinutes: "tezgahEnabled",
+  tezgahMaxOpenStopHours: "tezgahEnabled",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

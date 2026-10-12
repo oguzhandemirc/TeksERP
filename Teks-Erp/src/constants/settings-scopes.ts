@@ -117,7 +117,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereBeamWeavingLinkRequired",
     ],
   },
-  { permission: "settings:dokuma", flagKeys: ["dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired", "tezgahEscalationGraceMinutes", "tezgahAlarmEnabled", "tezgahAlarmUnclassifiedTargetMinutes", "tezgahAlarmUnclassifiedEnabled", "tezgahAlarmRenotifyMinutes", "tezgahAlarmEscalateWhenAcked", "tezgahAlarmNoShiftMode"] },
+  { permission: "settings:dokuma", flagKeys: ["dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired", "tezgahEscalationGraceMinutes", "tezgahAlarmEnabled", "tezgahAlarmUnclassifiedTargetMinutes", "tezgahAlarmUnclassifiedEnabled", "tezgahAlarmRenotifyMinutes", "tezgahAlarmEscalateWhenAcked", "tezgahAlarmNoShiftMode", "tezgahCollectorSilenceMinutes", "tezgahMaxOpenStopHours"] },
   {
     permission: "settings:warehouse",
     flagKeys: ["purchaseBlockOverReceiptEnabled", "goodsReceiptRequirePriceEnabled"],

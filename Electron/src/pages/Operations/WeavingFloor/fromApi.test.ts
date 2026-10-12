@@ -255,3 +255,12 @@ describe("fromApi — alarm vardiya şeridi", () => {
     expect(fromApi(dto([])).alarmNotice).toBeNull();
   });
 });
+
+describe("fromApi — makine kartı sessiz (D4 watchdog)", () => {
+  it("⭐ `collectorSilentSince` → son görülme (ms); null (kart yok/canlı) ve eski sunucu (alan yok) → null", () => {
+    const [sessiz, canli, eski] = fromApi(dto([loom({ id: "a", collectorSilentSince: T0 }), loom({ id: "b", collectorSilentSince: null }), loom({ id: "c" })])).looms;
+    expect(sessiz!.collectorSilentSince).toBe(Date.parse(T0));
+    expect(canli!.collectorSilentSince).toBeNull();
+    expect(eski!.collectorSilentSince).toBeNull();
+  });
+});

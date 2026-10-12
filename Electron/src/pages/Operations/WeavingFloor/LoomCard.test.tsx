@@ -121,3 +121,20 @@ describe("LoomCard ipucu (FloorHint)", () => {
     expect(document.querySelector("[title]")).toBeNull();
   });
 });
+
+describe("LoomCard makine kartı sessiz (D4 watchdog)", () => {
+  it("⭐ sessiz kart: 'Kart sessiz' etiketi + ekran okuyucu metni; ipucu son görülmeyi ve elle bildirmeyi söyler", () => {
+    render(<LoomCard loom={loom({ collectorSilentSince: NOW - 15 * 60_000 })} now={NOW} star={false} onSelect={() => undefined} />);
+    expect(screen.getByTestId("silent-collector-tag").textContent).toContain("Kart sessiz");
+    expect(screen.getByRole("button").getAttribute("aria-label")).toContain("makine kartı sessiz");
+  });
+
+  it("kart yok / canlı (null) ya da eski sunucu (alan yok): etiket çizilmez", () => {
+    const { unmount } = render(<LoomCard loom={loom({ collectorSilentSince: null })} now={NOW} star={false} onSelect={() => undefined} />);
+    expect(screen.queryByTestId("silent-collector-tag")).toBeNull();
+    unmount();
+    render(<LoomCard loom={loom({})} now={NOW} star={false} onSelect={() => undefined} />);
+    expect(screen.queryByTestId("silent-collector-tag")).toBeNull();
+    expect(screen.getByRole("button").getAttribute("aria-label")).not.toContain("sessiz");
+  });
+});

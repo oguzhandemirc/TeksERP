@@ -2,12 +2,30 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { LOSS_CLASS_META, SOURCE_LABEL, formatDateTime, formatDuration, type MachineStop } from "./types";
+import { LOSS_CLASS_META, SOURCE_LABEL, formatDateTime, formatDuration, watchdogCloseNote, type MachineStop } from "./types";
 
 interface Deps {
   labelOf: (code: string | null) => string;
   nowMs: number;
   actions: (row: MachineStop) => ReactNode;
+}
+
+/** Süre + watchdog notu (D4): geçici kapanış tahmindir, satırda öyle söylenir. */
+function DurationCell({ r, nowMs }: { r: MachineStop; nowMs: number }) {
+  const wd = watchdogCloseNote(r);
+  return (
+    <span className="flex flex-col">
+      <span className={cn("font-mono text-xs", !r.endedAt && "text-amber-700 dark:text-amber-300")}>
+        {formatDuration(r.durationSec, r.startedAt, r.endedAt, nowMs)}
+        {r.endedAt ? "" : " · sürüyor"}
+      </span>
+      {wd && (
+        <span data-testid="watchdog-note" title={wd.hint} className={cn("text-xs", r.endCorrectedAt ? "text-muted-foreground" : "text-amber-700 dark:text-amber-300")}>
+          {wd.label}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /** Sıralama başlığı YOK: uç en yeni önce sıralar; süzme sunucuda. */
@@ -41,15 +59,7 @@ export function stopColumns({ labelOf, nowMs, actions }: Deps): ColumnDef<Machin
     {
       id: "duration",
       header: "Süre",
-      cell: ({ row }) => {
-        const r = row.original;
-        return (
-          <span className={cn("font-mono text-xs", !r.endedAt && "text-amber-700 dark:text-amber-300")}>
-            {formatDuration(r.durationSec, r.startedAt, r.endedAt, nowMs)}
-            {r.endedAt ? "" : " · sürüyor"}
-          </span>
-        );
-      },
+      cell: ({ row }) => <DurationCell r={row.original} nowMs={nowMs} />,
     },
     {
       id: "reason",

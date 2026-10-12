@@ -2,12 +2,12 @@
 // dururken halka + büyük sayaç ("bugün %" figürün köşesinde — sayaç ezilmesin); uyarı
 // zinciri sağ üstte; takılı levent figürün sol altında (ilk bitecek olanın kalanı). Tıklanınca detay.
 import { memo } from "react";
-import { Cylinder, Star } from "lucide-react";
+import { Cylinder, Star, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FloorHint, FocusHint } from "./FloorHint";
 import { AlertChainMini, StatusShape, TimerRing } from "./Markers";
 import { LoomFigure } from "./LoomFigure";
-import { STAR_HINT, TODAY_PCT_HINT, beamHintOf, loomHintOf, sourceHintOf, type HintModel } from "./loomHints";
+import { STAR_HINT, TODAY_PCT_HINT, beamHintOf, loomHintOf, silentCollectorHintOf, sourceHintOf, type HintModel } from "./loomHints";
 import { STATE_SOURCE_LABEL, STATUS_COLOR, STATUS_LABEL, TIER_COLOR, TIER_LABEL, hsl, statusOf, type StatusKey } from "./palette";
 import { criticalBeamOf, escalationTierOf, figureBeamRatio, formatNumber, formatTimer, isBeamLow, targetProgress, todayAvailabilityPct, type EscalationTier } from "./metrics";
 import { reasonIconOf } from "./stopReasons";
@@ -126,6 +126,26 @@ function SourceTag({ source }: { source: StateSource }) {
   );
 }
 
+/** Makine kartı sessiz (D4) figürün sağ üstünde — duruş açılmadı, insan bildirmeli. */
+function SilentCollectorTag({ since }: { since: number }) {
+  return (
+    <FloorHint hint={silentCollectorHintOf(since)}>
+      <span
+        data-testid="silent-collector-tag"
+        className="absolute right-0 top-0 flex items-center gap-0.5 rounded-md px-1 text-[0.7em] font-semibold leading-tight text-amber-700 dark:text-amber-300"
+        style={{ background: hsl("var(--ds-tile)", 0.85) }}
+      >
+        <WifiOff className="h-3 w-3 shrink-0" aria-hidden />
+        Kart sessiz
+      </span>
+    </FloorHint>
+  );
+}
+
+function silentText(t: LiveLoom): string {
+  return t.collectorSilentSince ? ", makine kartı sessiz" : "";
+}
+
 function sourceText(t: LiveLoom): string {
   return t.stateSource && t.stateSource !== "cikarim" ? ` (${STATE_SOURCE_LABEL[t.stateSource].toLowerCase()})` : "";
 }
@@ -139,8 +159,8 @@ function ariaLabelOf(t: LiveLoom, now: number): string {
   if (!t.monitored) return `Tezgah ${t.code}, veri yok${beamText(t)}`;
   const today = todayAvailabilityPct(t);
   const todayText = today === null ? "" : `, bugün %${today}`;
-  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${sourceText(t)}${todayText}${beamText(t)}`;
-  return `Tezgah ${t.code}, duruyor${sourceText(t)}: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}${beamText(t)}`;
+  if (!t.openStop) return `Tezgah ${t.code}, çalışıyor${sourceText(t)}${silentText(t)}${todayText}${beamText(t)}`;
+  return `Tezgah ${t.code}, duruyor${sourceText(t)}${silentText(t)}: ${t.openStop.label}, ${formatTimer(now - t.openStop.startedAt)}, ${TIER_LABEL[escalationTierOf(t.openStop, now)]}${todayText}${beamText(t)}`;
 }
 
 /** Ad sığmazsa önce küçülür (boyut kabı), yine sığmazsa kırpılır; tam ad ipucunda. */
@@ -240,6 +260,7 @@ function LoomCardImpl({ loom: t, now, star, onSelect, selected }: Props) {
             </FloorHint>
           )}
           {t.monitored && t.stateSource && t.stateSource !== "cikarim" && <SourceTag source={t.stateSource} />}
+          {t.collectorSilentSince ? <SilentCollectorTag since={t.collectorSilentSince} /> : null}
           <BeamBadge beams={t.beams} />
           {stop && (
             <span className="absolute bottom-0 right-0 rounded-md px-1 leading-tight" style={{ background: hsl("var(--ds-tile)", 0.85) }}>

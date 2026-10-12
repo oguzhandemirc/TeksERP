@@ -28,6 +28,12 @@ export interface MachineStop {
   endedAt: string | null;
   durationSec: number | null;
   endSource: string | null;
+  /** D4 watchdog: geçici kapanışın tahmini bitişi (iz olarak kalır); eski sunucuda yok. */
+  provisionalEndedAt?: string | null;
+  /** Geçici kapanış kartın gerçek bitişiyle düzeltildiyse damga; eski sunucuda yok. */
+  endCorrectedAt?: string | null;
+  /** Mühürlü vardiya yüzünden bekleyen gerçek bitiş ("geciken kapanış"); eski sunucuda yok. */
+  lateEndedAt?: string | null;
   beamSlot: number | null;
   reasonCode: string | null;
   lossClass: StopLossClass | null;
@@ -106,4 +112,16 @@ export function nowLocalInput(at: Date = new Date()): string {
 /** Bugünün fabrika günü anahtarı (`YYYY-MM-DD`, yerel takvim). */
 export function todayKey(at: Date = new Date()): string {
   return nowLocalInput(at).slice(0, 10);
+}
+
+/** Watchdog kapanışının satır notu (D4) — null = olağan kapanış. Düzeltme `endCorrectedAt`le, bekleyen bitiş `lateEndedAt`le söylenir. */
+export function watchdogCloseNote(s: Pick<MachineStop, "endSource" | "endCorrectedAt" | "lateEndedAt" | "provisionalEndedAt">): { label: string; hint: string } | null {
+  if (s.endCorrectedAt) {
+    return { label: "kart bitişiyle düzeltildi", hint: `Sunucu duruşu geçici kapatmıştı (${formatDateTime(s.provisionalEndedAt)}); kartın gerçek bitişi gelince süre düzeltildi.` };
+  }
+  if (s.endSource !== "WATCHDOG") return null;
+  if (s.lateEndedAt) {
+    return { label: "geçici kapanış · düzeltme bekliyor", hint: `Kartın gerçek bitişi (${formatDateTime(s.lateEndedAt)}) geldi ama vardiya karnesi mühürlü; mühür açılınca süre kendiliğinden düzeltilir.` };
+  }
+  return { label: "geçici kapanış", hint: "Makine kartı duruşu uzun süre kapatmadığı için sunucu geçici olarak kapattı; kartın gerçek bitişi gelince süre bir kez düzeltilir." };
 }
