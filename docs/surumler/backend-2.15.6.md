@@ -301,6 +301,16 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 - Yönetici ekranında, iki kişilik onayda ve toplu sıfırlamada PIN sunucuda rastgele üretilir; elle PIN girilemez ve
   "bu PIN başka kullanıcıda" uyarısı artık hiç verilmez (başkasının PIN'ini tahmin etmeye yarıyordu).
 
+**Giriş güvenliği sıkılaştı (güvenlik denetimi kimlik dilim 2)**
+
+- Giriş deneme kilidi artık kapatılamaz; Oturum ayarlarından yalnız deneme eşiği ve ceza süreleri değişir. Kilidi
+  daha önce kapatmış kurulumda güncellemeyle kilit yeniden devreye girer (varsayılan zaten açıktı).
+- Oturumun bitişine sunucu karar verir: süresi dolmuş oturum, token ne derse desin kapanır.
+- Bir hesap aynı anda en çok 20 oturum açık tutabilir; 21. girişte en eski oturum "açık oturum sınırı" iletisiyle
+  kapanır. Varsayılan ayarda (aynı türde tek oturum) bu sınıra hiç varılmaz; ⚠️ "çoklu oturuma izin ver" ayarıyla
+  tek hesabı 20'den fazla cihazda kullanan kurulum en eski cihazın oturumunu kaybeder.
+- Kullanılmadan süresi dolan iki adımlı doğrulama kurulum bağlantıları gece bakımında 30 gün sonra silinir.
+
 ## 3. Sözleşme
 
 - **Kırıldı mı:** HAYIR (G1 kısmı) — yalnız ekleme: `/api/auth/me` `systemAccountSealStatus`, health
@@ -338,6 +348,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   `signalStopKey`, yeni hata kodları `MACHINE_ALREADY_LINKED`, `COLLECTOR_NAME_TAKEN`, `COLLECTOR_REVOKED`,
   `COLLECTOR_*` (401/429), `MACHINE_NOT_IN_SCOPE` (403). Var olan uçların davranışı değişmedi; eski istemci yeni
   uçları çağırmaz.
+- **Kırıldı mı:** HAYIR (kimlik dilim 2) — `PATCH /api/feature-flags {pinLockoutEnabled:false}` artık 400
+  `PIN_LOCKOUT_REQUIRED` (eski panel anahtarı kapatırsa iletiyi görür, başka etkisi yok); `pinLockoutEnabled` cevapta
+  hep `true`. Süresi dolan oturum JWT süre dolumuyla aynı 401'i alır. Tavanla düşen oturum 401 `SESSION_REVOKED`
+  `reason:SESSION_LIMIT` — eski panel/tablet bilinmeyen sebepte sunucunun iletisini gösterip girişe döner.
 - **Kırıldı mı:** HAYIR (hızlı PIN kısmı) — `POST /api/admin/users/:id/quick-pin` ve kimlik sıfırlama onayı gövdesindeki
   `pin` alanı kaldırıldı; eski panel gönderirse yok sayılır, cevap yine `{ pin }` (rastgele) döner. 409 "PIN
   kullanımda" artık dönmez.

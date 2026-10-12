@@ -158,6 +158,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Kullanıcının hızlı PIN'i artık elle seçilmez: “PIN Üret” düğmesi her seferinde rastgele ve kişiye özel bir PIN verir. Böylece kimse başka birinin PIN'ini tahmin edemez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Oturum ayarlarında giriş deneme kilidi artık kapatılamaz; yalnız deneme sayısı ve ceza süreleri ayarlanır. Bir hesap aynı anda en çok 20 oturum açık tutabilir; sınır aşılınca en eski oturum kapanır."
         }
       ]
     },
