@@ -67,6 +67,9 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   kapsar; eski sürüm ilk 500 çifti sayıyordu** — çok tezgahlı fabrikada aynı aralığın rakamı bu yüzden değişir
   (200 tezgahta 7 gün = 4.200 çift; eskiden ilk 2,5 vardiya sayılıyordu). Satır listesi sayfa sayfa döner
   (toplamlar sayfadan bağımsız). 200 tezgah × 7 günlük randıman 4–6 sn'den 0,5–0,9 sn'ye indi.
+- **Toplu etiket hızlandı.** 2.000 topluk toplu etiket ilk basımda ~8 sn'den ~5,6 sn'ye, aynı topların
+  yeniden basımında ~2 sn'ye indi; barkod ve karekod görüntüsü değişmedi (aynı çizgiler, aynı boyut). Uzun
+  baskı sırasında diğer istasyonlar takılmaz.
 - **Yoğun anda top girişi ve duruş açma hızlandı.** Aynı anda çok tabletten top girildiğinde girişler artık barkod
   sayacında birbirini beklemiyor; tezgah duruşu açmak veritabanı bağlantısını daha az meşgul ediyor; Tezgah Salonu
   duruş penceresi ve depo hareket listesi yeni indekslerle hızlandı. Başarısız bir girişin ayırdığı barkod numarası
@@ -306,6 +309,8 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   döner; bozuk imleç 400 `INVALID_CURSOR`. **Anlam değişimi:** toplam/Pareto/kırılım ve `meta.total` tam kümeden;
   `meta.truncated` artık "sonraki sayfa var" demektir. Eski panel ilk 500 satırı + "kırpıldı" şeridini görür,
   üstteki toplamlar yine tam kümedir.
+- **Kırıldı mı:** HAYIR (toplu etiket kısmı) — uçlar ve yanıt biçimi aynı; etiket HTML'indeki barkod SVG'sinin
+  metni değişti (bwip yol çizimi yerine dikdörtgenler), viewBox ve görüntü aynı.
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.
