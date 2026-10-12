@@ -42,7 +42,8 @@ function check(label: string, ok: boolean, detay = ""): void {
 }
 
 /** Kimliksize açık login-methods yanıtının BEYANLI anahtarları; yeni anahtar bilinçli karar ister. */
-const LOGIN_METHODS_KEYS = new Set(["enabled", "primary", "companyName", "lisansDurduruldu"]);
+// `lisansEtkinlesmedi` (G2): yalnız boolean; sınıf (KOPYA/ETKINLESMEDI) kimliksize verilmez. Korumasız derlemede kilit kapalı ⇒ false.
+const LOGIN_METHODS_KEYS = new Set(["enabled", "primary", "companyName", "lisansDurduruldu", "lisansEtkinlesmedi"]);
 
 function yanitDenetle(data: Record<string, unknown>, beklenen: boolean): string[] {
   const hata: string[] = [];
@@ -50,6 +51,7 @@ function yanitDenetle(data: Record<string, unknown>, beklenen: boolean): string[
   if (fazla.length) hata.push(`beyansız anahtar: ${fazla.join(",")}`);
   if (typeof data.lisansDurduruldu !== "boolean") hata.push("lisansDurduruldu boolean değil");
   else if (data.lisansDurduruldu !== beklenen) hata.push(`lisansDurduruldu=${String(data.lisansDurduruldu)} (beklenen ${beklenen})`);
+  if (data.lisansEtkinlesmedi !== false) hata.push(`lisansEtkinlesmedi=${JSON.stringify(data.lisansEtkinlesmedi)} (korumasız derlemede beklenen false)`);
   return hata;
 }
 
@@ -95,10 +97,10 @@ async function girisSinyali(): Promise<void> {
 const GIRISLER: K5Giris[] = [{ dosya: "Electron/src/App.tsx", ad: "App" }];
 const APP = "Electron/src/App.tsx";
 const DISLAMALAR: K5Dislama[] = [
-  { dosya: "Electron/src/components/layout/AppShell.tsx", ad: "AppShell", gerekce: "K5'te kabuk bağlanmaz (Root: oturum-dışı ⊇ K5)", kanit: { dosya: APP, desen: /const oturumDisi = [^;]*licenseSuspended;/ } },
+  { dosya: "Electron/src/components/layout/AppShell.tsx", ad: "AppShell", gerekce: "K5'te kabuk bağlanmaz (Root: oturum-dışı ⊇ K5)", kanit: { dosya: APP, desen: /const oturumDisi = [^;]*licenseSuspended \|\| activationLocked;/ } },
   { dosya: "Electron/src/components/layout/LicenseLockGate.tsx", ad: "LicenseLockGate", gerekce: "kısıtlı kip kilidi oturum-dışında çizilmez", kanit: { dosya: APP, desen: /\{!oturumDisi && <LicenseLockGate \/>\}/ } },
   { dosya: APP, ad: "FactoryTimezoneLoader", gerekce: "fabrika saat dilimi bayrak ucundan yalnız oturum-içi dalda yüklenir (K5'te varsayılan dilim)", kanit: { dosya: APP, desen: /\{!oturumDisi && <FactoryTimezoneLoader \/>\}/ } },
-  { dosya: APP, ad: "ScanSeriesLoader", gerekce: "okutma seri tablosu K5'te yüklenmez", kanit: { dosya: APP, desen: /if \(!userId \|\| suspended\) return;/ } },
+  { dosya: APP, ad: "ScanSeriesLoader", gerekce: "okutma seri tablosu K5'te yüklenmez", kanit: { dosya: APP, desen: /if \(!userId \|\| suspended \|\| activationLocked\) return;/ } },
   { dosya: "Electron/src/providers/PreferencesProvider.tsx", ad: "PreferencesProvider", gerekce: "tercih sorgusu K5'te kapalı; kayıt yalnız ayar ekranlarından (kabuk)", kanit: { dosya: "Electron/src/providers/PreferencesProvider.tsx", desen: /const enabled = hydrated && !!user && !licenseSuspended;/ } },
 ];
 
@@ -131,9 +133,10 @@ function panelYuzeyi(): void {
 
 function sondalar(): void {
   console.log("\n§4 — kalıcı sondalar (✓K)");
-  check("✓K1 sızan anahtar yakalanır", yanitDenetle({ enabled: [], primary: "list", lisansDurduruldu: true, kademe: "DURDURULMUS" }, true).length > 0);
+  check("✓K1 sızan anahtar yakalanır", yanitDenetle({ enabled: [], primary: "list", lisansDurduruldu: true, lisansEtkinlesmedi: false, kademe: "DURDURULMUS" }, true).length > 0);
   check("✓K2 eksik/yanlış tip sinyal yakalanır", yanitDenetle({ enabled: [], primary: "list" }, false).length > 0 && yanitDenetle({ lisansDurduruldu: "true" }, true).length > 0);
-  check("✓K3 doğru yanıtta susar", yanitDenetle({ enabled: [], primary: "list", companyName: "X", lisansDurduruldu: false }, false).length === 0);
+  check("✓K5 G2 sinyali boolean değilse (sınıf sızarsa) yakalanır", yanitDenetle({ enabled: [], primary: "list", lisansDurduruldu: false, lisansEtkinlesmedi: "KOPYA" }, false).length > 0);
+  check("✓K3 doğru yanıtta susar", yanitDenetle({ enabled: [], primary: "list", companyName: "X", lisansDurduruldu: false, lisansEtkinlesmedi: false }, false).length === 0);
   if (!existsSync(path.join(REPO, APP))) return;
   const kabuk = k5CagrilariniTara([{ dosya: "Electron/src/components/layout/AppShell.tsx", ad: "AppShell" }], []);
   check("✓K4 dışlanan kabuk taranınca K5'te KAPALI uç bulunur (dışlama gerçekten bir şey dışlıyor)", kapali(kabuk.cagrilar).length > 0, `${kapali(kabuk.cagrilar).length} kapalı uç`);
