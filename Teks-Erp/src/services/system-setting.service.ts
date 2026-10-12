@@ -313,6 +313,12 @@ export const SETTING_KEYS = {
    *  arka arkaya gelir). ⚠️ Bunu açmadan ÖNCE sahadaki tabletler 409'u tanıyan
    *  APK'ya güncellenmeli; eski APK hatayı çıkışsız gösterir. */
   KK1_DUPLICATE_GUARD_ENABLED: "kk1.duplicateGuardEnabled",
+  /** Tablet hızlı iş emri izni (`mobile:hizli-is-emri`) yalnız KENDİ başlattığı iş
+   *  emrini düzenler/iptal eder mi. Default FALSE (bugünkü davranış: hepsini). */
+  WORKORDER_QUICK_OWN_ONLY_ENABLED: "workorder.quickOwnOnlyEnabled",
+  /** Destek talepleri yalnız sahibine görünür mü (`admin:settings` hepsini görür).
+   *  Default FALSE (bugünkü davranış: `support:create` taşıyan herkes hepsini). */
+  SUPPORT_OWN_TICKETS_ONLY_ENABLED: "support.ownTicketsOnlyEnabled",
   /** KK1 ham giriş ÇEVRİMDIŞI KUYRUKSUZ (online-only) rejimde mi. Default FALSE.
    *  Açıkken mobil KK1 çevrimdışıyken kayıt ALMAZ (form kilitli, sebep yazılır)
    *  ve kayıt+etiket tek nefeste yürür — "Sırada/Başarısız/Gitmedi" liste
@@ -1705,6 +1711,10 @@ export interface FeatureFlags {
    *  eder: 90 sn içinde birebir aynı giriş 409 POSSIBLE_DUPLICATE alır ve ancak
    *  açık onayla (`confirmDuplicate`) geçer. */
   kk1DuplicateGuardEnabled: boolean;
+  /** Hızlı iş emri izni yalnız kendi başlattığı iş emrini düzenler (default false). Backend ENFORCE. */
+  workOrderQuickOwnOnlyEnabled: boolean;
+  /** Destek talepleri yalnız sahibine görünür, yönetici hepsini (default false). Backend ENFORCE. */
+  supportOwnTicketsOnlyEnabled: boolean;
   /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi (default false).
    *  Client (mobil) ENFORCE — açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket
    *  tek nefeste yürür. */
@@ -2206,6 +2216,8 @@ export class SystemSettingService {
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
       kk1DuplicateGuardEnabled: await readKk1DuplicateGuardEnabled(cacheClient),
+      workOrderQuickOwnOnlyEnabled: await readWorkOrderQuickOwnOnlyEnabled(cacheClient),
+      supportOwnTicketsOnlyEnabled: await readSupportOwnTicketsOnlyEnabled(cacheClient),
       kk1OnlineOnlyEnabled: await readKk1OnlineOnlyEnabled(cacheClient),
       kk1LabelScanVerifyEnabled: await readKk1LabelScanVerifyEnabled(cacheClient),
       kk1HistoryAllEntriesEnabled: await readKk1HistoryAllEntriesEnabled(cacheClient),
@@ -2933,6 +2945,30 @@ export class SystemSettingService {
         SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED,
         input.kk1DuplicateGuardEnabled,
         "Ham girişte mükerrer top uyarısı",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "workOrderQuickOwnOnlyEnabled")) {
+      if (typeof input.workOrderQuickOwnOnlyEnabled !== "boolean") {
+        throw AppError.badRequest("workOrderQuickOwnOnlyEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED,
+        input.workOrderQuickOwnOnlyEnabled,
+        "Hızlı iş emri: yalnız kendi başlattıklarını düzenler",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "supportOwnTicketsOnlyEnabled")) {
+      if (typeof input.supportOwnTicketsOnlyEnabled !== "boolean") {
+        throw AppError.badRequest("supportOwnTicketsOnlyEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED,
+        input.supportOwnTicketsOnlyEnabled,
+        "Destek talepleri: herkes yalnız kendininkini görür",
         userId
       );
     }
@@ -4798,6 +4834,30 @@ export async function readKk1WeightEntryEnabled(
  * mantıksal denemeye bağlı) — bu bayrak İSTEMCİYE GÜVENMEYEN ikinci hattır:
  * farklı cihaz, yeniden kurulum, doğrudan API çağrısı da yakalanır.
  */
+/** Hızlı iş emri kapsamı yalnız kendi başlattıkları mı? Default false (bugün: hepsi). */
+export async function readWorkOrderQuickOwnOnlyEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Destek talepleri yalnız sahibine mi görünür? Default false (bugün: herkese). */
+export async function readSupportOwnTicketsOnlyEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
 export async function readKk1DuplicateGuardEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

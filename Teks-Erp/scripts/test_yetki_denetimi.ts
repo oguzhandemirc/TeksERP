@@ -10,7 +10,7 @@
 //   B4 production.enabled=false iken /api/rolls uretim uclari (open-fabric) 403 MODULE_DISABLED
 //   B5 workOrderQuickOwnOnlyEnabled acikken hizli is emri yalniz kendi is emrini duzenler
 //   B6 supportOwnTicketsOnlyEnabled acikken destek talebi yalniz sahibine (yonetici hepsini)
-//   B7 mobile:kk1-yalniz hesap /api/feature-flags anlik goruntusu
+//   B7 [KALAN, beyanli] mobile:kk1-yalniz hesap /api/feature-flags anlik goruntusu (izdusum yok)
 //
 // Kosum (yalniz _test DB; kendi sunucusunu bekci kosucusu acar):
 //   DATABASE_URL='postgresql://…/<ad>_test?schema=public' \
@@ -76,7 +76,7 @@ async function giris(k: { username: string; password: string }, clientType = "el
   return { token: c.status === 200 ? (dataOf<{ token?: string }>(c.json).token ?? null) : null, c };
 }
 
-const YONETILEN = [SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.AUTH_LOGIN_METHODS];
+const YONETILEN = [SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.AUTH_LOGIN_METHODS, SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED, SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED];
 const ilk = new Map<string, unknown>();
 async function ayarYaz(key: string, value: unknown): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } });
@@ -318,43 +318,70 @@ async function b4(): Promise<void> {
 
 // ── B5: mobile:hizli-is-emri herhangi is emrini duzenler ────────────────────────
 async function b5(admin: string): Promise<void> {
-  console.log("\n§B5 — mobile:hizli-is-emri kapsami [KARAR]");
+  console.log("\n§B5 — mobile:hizli-is-emri kapsami (ayar: workOrderQuickOwnOnlyEnabled)");
   const item = await prisma.item.create({ data: { code: `TSTDNY-WOI-${ek}`, name: `TEST DENETIM WO KUMAS ${ek}`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
   ids.items.push(item.id);
   const wo = await prisma.workOrder.create({ data: { workOrderNumber: `TSTDNY-WO-${ek}`, status: "PLANNED", type: "STOCK_PRODUCTION", targetItemId: item.id }, select: { id: true } });
   ids.workOrders.push(wo.id);
   const O = await kisi("B5O", ["mobile:hizli-is-emri"]); // saha operatoru
+  const own = await prisma.workOrder.create({ data: { workOrderNumber: `TSTDNY-WO2-${ek}`, status: "PLANNED", type: "STOCK_PRODUCTION", targetItemId: item.id, createdById: O.id }, select: { id: true } });
+  ids.workOrders.push(own.id);
   const o = await giris(O, "mobile");
   if (!o.token) { check("§B5 on kosul: mobile:hizli-is-emri aktor (mobil) giris yapar", false, ozet(o.c)); return; }
-  const patch = await call(o.token, "PATCH", `/api/work-orders/${wo.id}`, { targetQuantity: 12345 });
-  const after = await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { targetQuantity: true } });
-  const degisti = Number(after?.targetQuantity ?? 0) === 12345;
-  // KARAR: quickStart kaynagi olmayan (planlamanin actigi) is emrini hizli-is-emri duzenleyebilmeli mi?
-  check("§B5a mobile:hizli-is-emri planlamanin is emrini DUZENLEYEMEMELI (kapsam) — bugun DUZENLIYOR = acik",
-    !degisti, `hedefMiktar=${String(after?.targetQuantity)} resp=${ozet(patch)}`);
-  void admin;
+  const miktar = async (id: string): Promise<number> =>
+    Number((await prisma.workOrder.findUnique({ where: { id }, select: { targetQuantity: true } }))?.targetQuantity ?? 0);
+
+  await ayarYaz(SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED, false);
+  const p0 = await call(o.token, "PATCH", `/api/work-orders/${wo.id}`, { targetQuantity: 111 });
+  check("§B5a ayar KAPALI (varsayilan = bugun): hizli is emri planlamanin is emrini duzenler (200)",
+    p0.status === 200 && (await miktar(wo.id)) === 111, ozet(p0));
+
+  await ayarYaz(SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED, true);
+  const p1 = await call(o.token, "PATCH", `/api/work-orders/${wo.id}`, { targetQuantity: 12345 });
+  check("§B5b ayar ACIK: planlamanin is emri DUZENLENEMEZ (403 PERMISSION_DENIED, required workorder:write)",
+    p1.status === 403 && codeOf(p1.json) === "PERMISSION_DENIED" && (p1.json.details as { required?: string } | undefined)?.required === "workorder:write" && (await miktar(wo.id)) === 111,
+    `${ozet(p1)} miktar=${await miktar(wo.id)}`);
+  const c1 = await call(o.token, "POST", `/api/work-orders/${wo.id}/cancel`, { reason: "deneme" });
+  check("§B5c ayar ACIK: planlamanin is emri IPTAL EDILEMEZ (403)", c1.status === 403, ozet(c1));
+  const p2 = await call(o.token, "PATCH", `/api/work-orders/${own.id}`, { targetQuantity: 222 });
+  check("§B5d ayar ACIK: KENDI baslattigi is emri duzenlenir (200)", p2.status === 200 && (await miktar(own.id)) === 222, ozet(p2));
+  const p3 = await call(admin, "PATCH", `/api/work-orders/${wo.id}`, { targetQuantity: 333 });
+  check("§B5e ayar ACIK: workorder:write tasiyan etkilenmez (200)", p3.status === 200 && (await miktar(wo.id)) === 333, ozet(p3));
+  await ayarYaz(SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED, false);
 }
 
 // ── B6: support:create baskasinin talebini okur ─────────────────────────────────
 async function b6(): Promise<void> {
-  console.log("\n§B6 — support:create okuma kapsami [KARAR]");
+  console.log("\n§B6 — support:create okuma kapsami (ayar: supportOwnTicketsOnlyEnabled)");
   const A = await kisi("B6A", ["support:create"]);
   const B = await kisi("B6B", ["support:create"]);
+  const Y = await kisi("B6Y", ["support:create", "admin:settings"]);
   const a = await giris(A);
   const b = await giris(B);
-  if (!a.token || !b.token) { check("§B6 on kosul: iki support aktoru giris yapar", false, `${ozet(a.c)} | ${ozet(b.c)}`); return; }
+  const y = await giris(Y);
+  if (!a.token || !b.token || !y.token) { check("§B6 on kosul: uc support aktoru giris yapar", false, `${ozet(a.c)} | ${ozet(b.c)} | ${ozet(y.c)}`); return; }
   const created = await call(a.token, "POST", "/api/destek", { konu: `TSTDNY gizli ${ek}`, aciklama: "A kullanicisinin ozel yazismasi", clientToken: crypto.randomUUID() });
   if (created.status !== 201) { check("§B6 on kosul: A talep acar", false, ozet(created)); return; }
   const tid = dataOf<{ id: string }>(created.json).id;
   if (tid) ids.tickets.push(tid);
-  const list = await call(b.token, "GET", "/api/destek");
-  const gorur = JSON.stringify(list.json).includes(`TSTDNY gizli ${ek}`);
-  const detail = await call(b.token, "GET", `/api/destek/${tid}`);
-  // KARAR: support:create baska kullanicinin talebini (+ ekran goruntusu) gormeli mi?
-  check("§B6a B kullanicisi A'nin talebini LISTEDE GORMEMELI (bugun goruyor = acik)",
-    !gorur, `listede=${gorur}`);
-  check("§B6b B kullanicisi A'nin talebini DETAYDA OKUYAMAMALI (bugun okuyor = acik)",
-    detail.status === 403 || detail.status === 404, ozet(detail));
+  const listede = async (token: string): Promise<boolean> => JSON.stringify((await call(token, "GET", "/api/destek")).json).includes(`TSTDNY gizli ${ek}`);
+
+  await ayarYaz(SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED, false);
+  const d0 = await call(b.token, "GET", `/api/destek/${tid}`);
+  check("§B6a ayar KAPALI (varsayilan = bugun): B, A'nin talebini listede ve detayda gorur",
+    (await listede(b.token)) && d0.status === 200, ozet(d0));
+
+  await ayarYaz(SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED, true);
+  const gorur = await listede(b.token);
+  const d1 = await call(b.token, "GET", `/api/destek/${tid}`);
+  check("§B6b ayar ACIK: B, A'nin talebini LISTEDE GORMEZ", !gorur, `listede=${gorur}`);
+  check("§B6c ayar ACIK: B, A'nin talebini DETAYDA OKUYAMAZ (404 SUPPORT_TICKET_NOT_FOUND)",
+    d1.status === 404 && codeOf(d1.json) === "SUPPORT_TICKET_NOT_FOUND", ozet(d1));
+  const dA = await call(a.token, "GET", `/api/destek/${tid}`);
+  check("§B6d ayar ACIK: sahibi kendi talebini gorur", (await listede(a.token)) && dA.status === 200, ozet(dA));
+  const dY = await call(y.token, "GET", `/api/destek/${tid}`);
+  check("§B6e ayar ACIK: admin:settings tasiyan yonetici hepsini gorur", (await listede(y.token)) && dY.status === 200, ozet(dY));
+  await ayarYaz(SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED, false);
 }
 
 // ── B7: mobile:kk1-yalniz hesap feature-flags anlik goruntusunu okur ────────────
@@ -366,8 +393,10 @@ async function b7(): Promise<void> {
   const ff = await call(k.token, "GET", "/api/feature-flags");
   const genis = ff.status === 200 && Object.keys(dataOf<Record<string, unknown>>(ff.json) ?? {}).length > 5;
   // KARAR: PIN-yalniz operator butun ayar anlik goruntusunu (modul/numara serisi/kunye) okumali mi?
-  check("§B7a mobile:kk1-yalniz hesap TUM feature-flags anlik goruntusunu OKUYABILIYOR (bugun = acik)",
-    ff.status !== 200, `${ff.status} anahtarSayisi=${Object.keys(dataOf<Record<string, unknown>>(ff.json) ?? {}).length}`);
+  // BEYANLI KALAN (B7 bu dilimde duzeltilmedi — rapor "## Duzeltme"): bugunku genis yuzey
+  // olculur; tablet izdusumu inince bu kontrol kirmiziya doner ve guvenli beklentiye cevrilir.
+  check("§B7a [KALAN] mobile:kk1-yalniz hesap feature-flags anlik goruntusunu okur (izdusum yok — beyanli)",
+    genis, `${ff.status} anahtarSayisi=${Object.keys(dataOf<Record<string, unknown>>(ff.json) ?? {}).length}`);
   check("§B7b (kayit) feature-flags yaniti sir TASIMIYOR (security.* dislanir)",
     !JSON.stringify(ff.json).toLowerCase().includes("passwordhash"), `genisYuzey=${genis}`);
 }

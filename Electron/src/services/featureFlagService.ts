@@ -361,6 +361,10 @@ export interface FeatureFlags {
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */
   kk1WeightEntryEnabled: boolean;
   kk1DuplicateGuardEnabled: boolean;
+  /** Hızlı iş emri izni yalnız kendi başlattığı iş emrini düzenler — default false; backend ENFORCE. */
+  workOrderQuickOwnOnlyEnabled: boolean;
+  /** Destek talepleri yalnız sahibine görünür (yönetici hepsini) — default false; backend ENFORCE. */
+  supportOwnTicketsOnlyEnabled: boolean;
   /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi — default false;
    *  mobil ENFORCE eder (açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket tek nefeste). */
   kk1OnlineOnlyEnabled: boolean;

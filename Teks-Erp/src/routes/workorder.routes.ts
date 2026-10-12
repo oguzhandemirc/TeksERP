@@ -8,6 +8,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
+import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -293,7 +294,7 @@ router.get("/:id/manifest", verifyToken, requireAnyPermission("workorder:read", 
  *     responses:
  *       201: { description: Manifest oluşturuldu }
  */
-router.post("/:id/manifest", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.createManifest);
+router.post("/:id/manifest", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), requireQuickWorkOrderOwnership, controller.createManifest);
 
 /**
  * @openapi
@@ -459,7 +460,7 @@ router.post(
  *       200: { description: Güncellendi }
  *       409: { description: WO tamamlandı/iptal edildi VEYA fiziksel taahhüt kilitli alan değiştirildi (locks) }
  */
-router.patch("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.update);
+router.patch("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), requireQuickWorkOrderOwnership, controller.update);
 
 /**
  * @openapi
@@ -483,7 +484,7 @@ router.patch("/:id", verifyToken, requireAnyPermission("workorder:write", "mobil
  *       200: { description: Güncellendi }
  *       409: { description: WO tamamlandı/iptal edildi VEYA fiziksel taahhüt kilitli alan değiştirildi (locks) }
  */
-router.put("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.replace);
+router.put("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), requireQuickWorkOrderOwnership, controller.replace);
 
 /**
  * @openapi
@@ -599,6 +600,7 @@ router.post(
   "/:id/order-links",
   verifyToken,
   requireAnyPermission("workorder:write", "mobile:hizli-is-emri"),
+  requireQuickWorkOrderOwnership,
   controller.linkOrderLines,
 );
 
@@ -961,7 +963,7 @@ router.get(
  *       200:
  *         description: İptal etkisi
  */
-router.get("/:id/cancel-impact", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.cancelImpact);
+router.get("/:id/cancel-impact", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), requireQuickWorkOrderOwnership, controller.cancelImpact);
 
 /**
  * @openapi
@@ -1121,7 +1123,7 @@ router.post("/:id/complete", verifyToken, requirePermission("workorder:write"), 
  *       403: { description: Fire-hatalı kayıt için roll:manual-adjust gerekli }
  *       409: { description: Fasonda top var ya da kayıt bu sırada değişti }
  */
-router.post("/:id/cancel", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.cancelWorkOrder);
+router.post("/:id/cancel", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), requireQuickWorkOrderOwnership, controller.cancelWorkOrder);
 
 /**
  * @openapi
@@ -1184,7 +1186,7 @@ router.post(
 // ⚠️ AYNEN KALIR — sahadaki eski mobil APK'lar bu ucu gövdesiz çağırır ve gövdesiz
 // çağrı bugünkü davranışın birebir aynısını üretir (bkz. softDelete). Yeni karar
 // veren yüzey POST /:id/cancel'dır; bu satırı ona yönlendirme.
-router.delete("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), controller.softDelete);
+router.delete("/:id", verifyToken, requireAnyPermission("workorder:write", "mobile:hizli-is-emri"), requireQuickWorkOrderOwnership, controller.softDelete);
 
 /**
  * @openapi

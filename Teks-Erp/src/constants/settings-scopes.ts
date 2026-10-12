@@ -81,6 +81,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "batchShortNumberEnabled",
       "batchLastNumberHintEnabled",
       "batchAutoCreateEnabled",
+      "workOrderQuickOwnOnlyEnabled",
     ],
     settingKeys: ["workorder.defaultPlanDurationDays"],
   },
@@ -149,6 +150,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
   {
     permission: "settings:session",
     flagKeys: [
+      "supportOwnTicketsOnlyEnabled",
       "sessionDurationMinutes",
       "idleTimeoutMinutes",
       "workSessionIdleTimeoutMinutes",

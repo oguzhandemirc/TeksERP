@@ -122,6 +122,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   batchShortNumberEnabled: "productionEnabled",
   batchLastNumberHintEnabled: "productionEnabled",
   batchAutoCreateEnabled: "productionEnabled",
+  workOrderQuickOwnOnlyEnabled: "productionEnabled",
   rawWidthEnabled: "productionEnabled",
   kk1WeightEntryEnabled: "productionEnabled",
   kk1DuplicateGuardEnabled: "productionEnabled",
@@ -226,6 +227,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // --- ÇEKİRDEK: kimlik · oturum · cihaz · baskı · sistem --------------------
   companyName: "cekirdek",
   demoModeEnabled: "cekirdek",
+  supportOwnTicketsOnlyEnabled: "cekirdek",
   devicePairingRequired: "cekirdek",
   shortCredentialApprovedDeviceOnly: "cekirdek",
   sessionDurationMinutes: "cekirdek",

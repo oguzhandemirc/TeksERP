@@ -62,6 +62,8 @@
     "tezgahAlarmNoShiftMode": "ALWAYS",
     "kk1WeightEntryEnabled": true,
     "kk1DuplicateGuardEnabled": true,
+    "workOrderQuickOwnOnlyEnabled": true,
+    "supportOwnTicketsOnlyEnabled": true,
     "kk1OnlineOnlyEnabled": true,
     "kk1LabelScanVerifyEnabled": true,
     "kk1HistoryAllEntriesEnabled": true,

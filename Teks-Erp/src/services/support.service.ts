@@ -49,9 +49,9 @@ const TICKET_VIEW = {
   createdBy: { select: { id: true, fullName: true } },
 } as const;
 
-async function ticketView(id: string) {
+async function ticketView(id: string, ownerId?: string) {
   const row = await prisma.supportTicket.findUnique({
-    where: { id },
+    where: ownerId ? { id, createdById: ownerId } : { id },
     select: { ...TICKET_VIEW, replies: { orderBy: [{ repliedAt: "asc" }, { id: "asc" }], select: { id: true, body: true, repliedAt: true } } },
   });
   if (!row) throw AppError.notFound("Destek talebi bulunamadı.", { code: "SUPPORT_TICKET_NOT_FOUND" });
@@ -97,15 +97,16 @@ export async function createSupportTicket(g: {
   });
 }
 
-export async function listSupportTickets(g: { status?: (typeof SUPPORT_LOCAL_STATES)[number]; limit: number }) {
+export async function listSupportTickets(g: { status?: (typeof SUPPORT_LOCAL_STATES)[number]; limit: number; ownerId?: string }) {
   return prisma.supportTicket.findMany({
-    where: g.status ? { status: g.status } : {},
+    where: { ...(g.status ? { status: g.status } : {}), ...(g.ownerId ? { createdById: g.ownerId } : {}) },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: g.limit,
     select: { ...TICKET_VIEW, _count: { select: { replies: true } } },
   });
 }
 
-export async function getSupportTicket(id: string): Promise<SupportTicketView> {
-  return ticketView(id);
+/** `ownerId` verilirse başkasının talebi 404 (varlığı da sızmaz). */
+export async function getSupportTicket(id: string, ownerId?: string): Promise<SupportTicketView> {
+  return ticketView(id, ownerId);
 }

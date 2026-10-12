@@ -97,6 +97,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   // ── KK1 ────────────────────────────────────────────────────────────────────
   kk1WeightEntryEnabled: A(true),
   kk1DuplicateGuardEnabled: A(true),
+  workOrderQuickOwnOnlyEnabled: A(true),
+  supportOwnTicketsOnlyEnabled: A(true),
   kk1OnlineOnlyEnabled: A(true),
   kk1LabelScanVerifyEnabled: A(true),
   kk1HistoryAllEntriesEnabled: A(true),

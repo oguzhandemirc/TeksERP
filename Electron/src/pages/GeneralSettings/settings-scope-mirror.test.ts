@@ -92,10 +92,13 @@ describe("ayar kategorisi ↔ backend kapsam tablosu", () => {
       acc.settings.push(...settings);
       byPerm.set(perm, acc);
     }
+    // İzin bir özel bölümü de açıyorsa (ör. `settings:session` → Oturum bölümü + Destek
+    // satırları) satır listesinde olmayan anahtar o bölümündür — ters yön orada ölçülemez.
+    const specialPerms = new Set(narrow.filter(({ cat, perm }) => cat.kind !== "flags" && perm).map(({ perm }) => perm));
     const extra: string[] = [];
     for (const [perm, { flags, settings }] of byPerm) {
       const scope = SCOPES.get(perm);
-      if (!scope) continue;
+      if (!scope || specialPerms.has(perm)) continue;
       for (const k of scope.flagKeys) if (!flags.includes(k)) extra.push(`${perm}: ${k}`);
       for (const k of scope.settingKeys) if (!settings.includes(k)) extra.push(`${perm}: ${k} (ham)`);
     }

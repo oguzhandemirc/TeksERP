@@ -12,6 +12,7 @@ import { readClientVersionHeader } from "../constants/client-info";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
+import { supportTicketOwnerScope } from "../services/helpers/scope-narrowing.helper";
 import { CreateSupportTicketSchema, SUPPORT_LOCAL_STATES, createSupportTicket, getSupportTicket, listSupportTickets } from "../services/support.service";
 
 const router = Router();
@@ -38,7 +39,8 @@ const ListQuery = z.object({
 router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = ListQuery.parse(req.query);
-    res.status(200).json({ success: true, data: await listSupportTickets({ status: q.durum, limit: q.limit }) });
+    const ownerId = await supportTicketOwnerScope(req.user!);
+    res.status(200).json({ success: true, data: await listSupportTickets({ status: q.durum, limit: q.limit, ownerId }) });
   } catch (err) {
     next(err);
   }
@@ -61,7 +63,7 @@ router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const id = z.uuid().safeParse(req.params.id);
     if (!id.success) throw AppError.notFound("Destek talebi bulunamadı.", { code: "SUPPORT_TICKET_NOT_FOUND" });
-    res.status(200).json({ success: true, data: await getSupportTicket(id.data) });
+    res.status(200).json({ success: true, data: await getSupportTicket(id.data, await supportTicketOwnerScope(req.user!)) });
   } catch (err) {
     next(err);
   }

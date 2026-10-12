@@ -342,6 +342,10 @@ export const updateSchema = z.strictObject({
   // ⚠️ Bu satır aynı zamanda ACİL KAPATMA anahtarıdır — tuzak sahada yanlış pozitif
   // üretirse tek geri dönüş yolu budur (enforcement okuması kasten cache'siz).
   kk1DuplicateGuardEnabled: z.boolean().optional(),
+  // workorder.quickOwnOnlyEnabled / support.ownTicketsOnlyEnabled — yetki kapsamı
+  // daraltma anahtarları (default FALSE = bugünkü geniş kapsam). Backend ENFORCE.
+  workOrderQuickOwnOnlyEnabled: z.boolean().optional(),
+  supportOwnTicketsOnlyEnabled: z.boolean().optional(),
   // kk1.onlineOnlyEnabled — KK1 ham giriş çevrimdışı kuyruksuz rejim (default FALSE).
   // Client (mobil) ENFORCE: açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket tek
   // nefeste. ⚠️ Bu satır aynı zamanda ACİL KAPATMA anahtarıdır — rejim sahada

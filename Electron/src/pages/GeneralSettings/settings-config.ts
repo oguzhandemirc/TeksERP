@@ -18,6 +18,7 @@ import {
   MonitorPlay,
   UsersRound,
   Warehouse,
+  LifeBuoy,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -1222,6 +1223,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Planlamacı", "Operatör"],
         desc: "Açıkken Tambur'da elle top eklenirken terbiye iş emrinde açık parti yoksa sistem yeni parti açar ve topu ona bağlar. Kapalıyken (varsayılan) top partisiz doğar. ⚠️ ÖNKOŞUL: parti numarası üreteci açık olmalı; kapalıysa elle top ekleme parti bulamaz.",
       },
+      {
+        key: "workOrderQuickOwnOnlyEnabled",
+        title: "Tablet hızlı iş emri: yalnız kendi başlattıklarını düzenler",
+        summary:
+          "Hızlı iş emri yetkisi olan saha operatörü yalnız kendi başlattığı iş emrini düzenler, iptal eder ya da siler.",
+        defaultOn: false,
+        audience: ["Yönetim", "Planlamacı"],
+        desc: "Açıkken yalnız 'Hızlı iş emri' yetkisi olan kullanıcı, planlamanın ya da başkasının açtığı iş emrini düzenleyemez, iptal edemez, silemez (yetki hatası alır); kendi başlattıkları serbesttir. İş emri yazma yetkisi olanlar etkilenmez. Kapalıyken (varsayılan) hızlı iş emri yetkisi bütün iş emirlerinde geçerlidir.",
+      },
     ],
     settingFields: [
       {
@@ -1928,6 +1938,26 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     kind: "session",
     section: "system",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
+  },
+  {
+    id: "support",
+    label: "Destek Talepleri",
+    icon: LifeBuoy,
+    description: "Satıcıya açılan destek taleplerinin kimlere görüneceği.",
+    keywords: "destek talep satıcı yardım ekran görüntüsü gizlilik görünürlük kendi talebim",
+    kind: "flags",
+    section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
+    flags: [
+      {
+        key: "supportOwnTicketsOnlyEnabled",
+        title: "Destek talepleri: herkes yalnız kendininkini görür (yönetici hepsini)",
+        summary: "Destek talebi açabilen kullanıcı yalnız kendi taleplerini ve yanıtlarını görür; ayar yöneticisi hepsini görür.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken destek talebi açabilen kullanıcı listede ve ayrıntıda yalnız kendi taleplerini görür (başkasınınki 'bulunamadı' döner); ayar yönetme yetkisi olan yönetici hepsini görür. Kapalıyken (varsayılan) destek talebi açabilen herkes bütün talepleri ve ekran görüntülerini görür.",
+      },
+    ],
   },
   {
     // ═══════════════════════════════════════════════════════════════════════
