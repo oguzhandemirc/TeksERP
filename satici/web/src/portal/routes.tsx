@@ -25,6 +25,7 @@ import { CopyAlertsPage, DrPage, PlannedActionsPage, TransfersPage } from "./pag
 import { ReleasesPage } from "./pages/Releases";
 import { RevocationsPage } from "./pages/Revocations";
 import { RootQueuePage } from "./pages/RootQueue";
+import { TempCodeQueuePage } from "./pages/TempCodeQueue";
 import { UsersPage } from "./pages/Users";
 import { WaveDetailPage } from "./update/WaveDetailPage";
 import { WavesPage } from "./update/WavesPage";
@@ -40,6 +41,7 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/kopya-uyarilari", label: "Kopya uyarıları", permission: "portal:oku" },
   { to: "/donanim-talepleri", label: "Donanım onayları", permission: "portal:oku" },
   { to: "/kok-kuyrugu", label: "Kök imzası kuyruğu", permission: "portal:oku" },
+  { to: "/gecici-kod-talepleri", label: "Geçici kod talepleri", permission: "portal:oku" },
   { to: "/dr", label: "DR", permission: "portal:oku" },
   { to: "/destek", label: "Destek kutusu", permission: "portal:oku" },
   { to: "/hata-raporlari", label: "Hata raporları", permission: "portal:oku" },
@@ -73,6 +75,7 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "kopya-uyarilari", element: <CopyAlertsPage /> },
       { path: "donanim-talepleri", element: <HardwareRequestsPage /> },
       { path: "kok-kuyrugu", element: <RootQueuePage /> },
+      { path: "gecici-kod-talepleri", element: <TempCodeQueuePage /> },
       { path: "dr", element: <DrPage /> },
       { path: "destek", element: <SupportPage /> },
       { path: "destek/:id", element: <SupportDetailPage /> },

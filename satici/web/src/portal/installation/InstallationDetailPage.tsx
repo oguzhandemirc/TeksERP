@@ -20,6 +20,7 @@ import { AcceptancePanel } from "./AcceptancePanel";
 import { SigningPlanNote, VendorEntitlementVersionModal, installedBuildOf } from "./EntitlementSigning";
 import { InstallHistoryPanel } from "./InstallHistoryPanel";
 import { ExemptionPanel } from "./ExemptionPanel";
+import { TempCodePanel } from "./TempCodePanel";
 import { PaidThroughPanel } from "./PaidThroughPanel";
 import { InstallmentPanel, PlannedPanel } from "./PlanPanels";
 import { SanctionPanel } from "./SanctionPanel";
@@ -116,6 +117,7 @@ export function InstallationDetailPage() {
       </div>
       {tab === "lisans" ? <PaidThroughPanel detail={d} onChanged={refresh} /> : null}
       {tab === "lisans" ? <ExemptionPanel detail={d} onChanged={refresh} /> : null}
+      {tab === "lisans" ? <TempCodePanel detail={d} /> : null}
       {tab === "lisans" ? (
         <EntitlementPanel
           detail={d}

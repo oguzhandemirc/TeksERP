@@ -810,3 +810,49 @@ export interface WaveStageChange {
   /** Tavanı değişip hemen haber verilen kurulum sayısı. */
   readonly zil: number;
 }
+
+/** Geçici açılış kodu talebi (`GET /kurulumlar/:id/gecici-kodlar` · `/gecici-kod-talepleri`; bayide `kod` metniyle). */
+export interface TempCodeRequest {
+  readonly id: string;
+  readonly kurulumId: string;
+  readonly istekKodu: string;
+  readonly gun: number;
+  readonly sebep: string;
+  readonly yapan: string;
+  readonly durum: "BEKLIYOR" | "URETILDI" | "REDDEDILDI";
+  readonly kapanisZamani: string | null;
+  readonly kapatan: string | null;
+  readonly kapanisSebebi: string | null;
+  readonly createdAt: string;
+  /** Yalnız satıcı kuyruğunda. */
+  readonly kurulum?: { readonly kurulumId: string; readonly ad: string | null; readonly sinif: string };
+  readonly bayi?: string;
+  /** Yalnız bayi listesinde: üretilen kodun metni (sarılı kolondan). */
+  readonly kod?: { readonly kod: string | null; readonly bitis: string; readonly tuketildiAt: string | null } | null;
+}
+
+/** Üretilmiş geçici kodun metinsiz satırı (yalnız son 4 karakter). */
+export interface TempCodeRow {
+  readonly id: string;
+  readonly kodNo: number;
+  readonly istekKodu: string;
+  readonly gun: number;
+  readonly bitis: string;
+  readonly imzalayanKid: string;
+  readonly kodSonu: string;
+  readonly talepId: string | null;
+  readonly ureten: string;
+  readonly tuketildiAt: string | null;
+  readonly createdAt: string;
+}
+
+/** Üretim yanıtı: kod yalnız canlı yanıtta; tekrar yanıtında `kod: null, kodGosterilemez: true`. */
+export interface TempCodeIssued {
+  readonly id: string;
+  readonly talepId?: string;
+  readonly kodNo: number;
+  readonly kod: string | null;
+  readonly bitis: string;
+  readonly gun: number;
+  readonly kodGosterilemez?: boolean;
+}
