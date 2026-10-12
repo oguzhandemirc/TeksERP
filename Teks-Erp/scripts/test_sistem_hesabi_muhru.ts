@@ -499,10 +499,11 @@ async function totpMuhru(acan: string): Promise<void> {
   await kurcala("kurulum kanıtının düşürülmesi (tüketilmiş pencere)",
     () => prisma.totpEnrollment.update({ where: { id: kanit.id }, data: { consumedAt: null } }),
     () => prisma.totpEnrollment.update({ where: { id: kanit.id }, data: { consumedAt: kanit.consumedAt } }));
-  let ekKod = "";
-  await kurcala("kurtarma kodu eklenmesi",
-    async () => { ekKod = (await prisma.userRecoveryCode.create({ data: { userId: t, codeHash: "$2a$10$sahtesahtesahtesahtesahtesahtesahtesahtesahtesahtesa" }, select: { id: true } })).id; },
-    () => prisma.userRecoveryCode.delete({ where: { id: ekKod } }));
+  // Kod satırı silinmez (append-only defter); özeti değiştirilip geri konur.
+  const kod = await prisma.userRecoveryCode.findFirstOrThrow({ where: { userId: t }, select: { id: true, codeHash: true } });
+  await kurcala("kurtarma kodunun saldırganın koduyla değiştirilmesi",
+    () => prisma.userRecoveryCode.update({ where: { id: kod.id }, data: { codeHash: "$2a$10$sahtesahtesahtesahtesahtesahtesahtesahtesahtesahtesa" } }),
+    () => prisma.userRecoveryCode.update({ where: { id: kod.id }, data: { codeHash: kod.codeHash } }));
   check("§8 onarım sonrası mühür yine GEÇERLİ (ölçüm kendi kurcalamasını geri aldı)", (await durum(t)) === "GECERLI");
 
   const harcandi = await TotpAccountService.verifySecondFactor(t, ilk.kodlar[0]!);

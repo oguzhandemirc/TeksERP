@@ -138,7 +138,7 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   talebi açılmaz (409 `TASIMA_SURUM_ESKI`); protokol hata kataloğuna kod (fabrika aynası + TR mesajı).
 - `7e4137228` — B2: kullanılamayan lisans deposu (program/yedek dizini içinde, yazılamaz, DB izsiz okunamaz) =
   `KURULUM_HATASI` kilit sınıfı (yalnız korumalı derlemede); lisans ekranı + "verilerimi al" açık.
-- B4 (`fix(lisans): B4` commit'i): destek hesabının mührü iki adımlı doğrulamayı (TOTP) da kapsar — DB'den TOTP
+- `6fd3d8ae9` — B4: destek hesabının mührü iki adımlı doğrulamayı (TOTP) da kapsar — DB'den TOTP
   sırrını değiştirmek, 2FA'yı kapatmak ya da kurtarma kodu eklemek mührü bozar (giriş 403); panelden 2FA kurma ve
   sıfırlama mührü aynı işlemde yeniler. Eski mühür ilk açılışta bir kez kendiliğinden yenilenir (lisans dizinine
   `sistem-hesabi-muhru-v2.json`), kimse kilitlenmez. Migration YOK.
