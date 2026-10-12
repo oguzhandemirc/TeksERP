@@ -515,6 +515,13 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "kademe başına aynı alıcı kuralı tek (NULLS NOT DISTINCT)",
   },
+  {
+    table: "machine_stop_code_maps",
+    index: "machine_stop_code_maps_live_uq",
+    uniq: true,
+    predicate: `"isActive"`,
+    why: "kart tipi × ham kod × tezgah (NULL = genel) için tek canlı eşleme (NULLS NOT DISTINCT); pasif satır yer işgal etmez",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.

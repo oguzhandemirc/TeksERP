@@ -14,6 +14,7 @@ import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { closeStopCore, openStopCore } from "./machine-stop.service";
 import { resolveStopStamp, type MachineStopDto } from "./helpers/machine-stop-context.helper";
+import { resolveMachineStopCode } from "./helpers/machine-stop-code.helper";
 
 /** Makine yolunun kabul ettiği kaynaklar — insan kaynakları (OPERATOR/SUPERVISOR) bu yoldan yazılamaz. */
 export const MACHINE_STOP_SOURCES = [MachineDataSource.MACHINE, MachineDataSource.SIMULATED] as const;
@@ -60,14 +61,28 @@ function normalizeRawStopCode(raw: string | null | undefined): string | null {
   return v;
 }
 
-/** Kart duruş gördü — sebepsiz açılır (sınıflandırma borcu); sebep kararı insanın ya da eşleme diliminin. */
+/** Toplayıcının kart tipi — kodun anlamı ona bağlı; toplayıcısız sinyalde eşleme aranmaz. */
+async function collectorTypeOf(collectorId: string | null | undefined): Promise<string | null> {
+  if (!collectorId) return null;
+  const row = await prisma.machineCollector.findUnique({ where: { id: collectorId }, select: { collectorType: true } });
+  return row?.collectorType ?? null;
+}
+
+/**
+ * Kart duruş gördü — ham kod eşlemesi (`resolveMachineStopCode`) sebep bulursa sebep MAKİNE
+ * kararıyla açılışta donar; bulamazsa sebepsiz açılır (sınıflandırma borcu).
+ */
 export async function openMachineStop(input: OpenMachineStopInput): Promise<ApiResponse<MachineStopDto>> {
   assertMachineSource(input.source);
   assertStopKey(input.stopKey);
   const rawStopCode = normalizeRawStopCode(input.rawStopCode);
   const started = resolveStopStamp(input.startedAt, "duruş başlangıcı", input.source);
+  const mapped = await resolveMachineStopCode(prisma, {
+    collectorType: await collectorTypeOf(input.collectorId), rawStopCode, machineId: input.machineId,
+  });
   return openStopCore({
     machineId: input.machineId, stopKey: input.stopKey, started, source: input.source, actorId: null,
+    reasonCode: mapped?.reasonCode ?? null,
     signal: { signalKind: input.signalKind ?? null, rawStopCode, collectorId: input.collectorId ?? null },
     // Aynı anahtar + başka kimlik yükü (kaynak · başlangıç · ham kod) bir çelişkidir, tekrar değil.
     fingerprint: (e) => [

@@ -214,6 +214,7 @@ const EXPECTED: Record<string, string> = {
   // YAPILANDIRMADIR, bir defter satırı değil. Makine silinirse o yapılandırma
   // da konusuz kalır. ⚠️ Duruş DEFTERİ ayrı ve `Restrict` — o silinmez.
   "Machine <- MachineCollectorLink.machine : Cascade": "cascade-intended — toplayıcı kapsamı makinesiz anlamsız (yapılandırma, defter değil)",
+  "Machine <- MachineStopCodeMap.machine : Cascade": "cascade-intended — ham duruş kodu tezgah üst-yazımı makinesiz konusuz (yapılandırma; sebep duruş satırına açılışta kopyalanıp donar)",
   "Machine <- MachineSpec.machine : Cascade": "cascade-intended — künye makinesiz anlamsız; bakiyesi dolu künye `machineSpecBaselineCount` guard'ıyla silmeyi durdurur (B3, 2026-09-14)",
   "Station <- PeripheralDevice.station : SetNull": "guarded (peripheralCount — stationId VEYA machine.stationId)",
   "Station <- Roll.entryStation : SetNull": "guarded (rollEntryStationCount, 2026-08-05) — makine damgası olmayan girişleri de kapsar",
@@ -288,6 +289,8 @@ function machineGuardTargets(): string[] {
 
 /** Machine'e gelen ama BİLEREK sayılmayan FK kolonları — iki yönlü denetlenir. */
 const MACHINE_GUARD_EXEMPT: Record<string, string> = {
+  "machineStopCodeMap.machineId":
+    "yapılandırma BLOKLAMAZ: tezgah üst-yazımı makineyle Cascade gider; duruş satırı sebebi kopyasıyla taşır (D2)",
   "peripheralDevice.machineId":
     "donanım BLOKLAMAZ: silmede machineId=null'a çekilir (kayıt + ayar korunur, atamasız boşa çıkar)",
   // Dokuma P2b-1 (2026-09-13) — ikisi de YAZMA YÜZEYİ olmadan indi.

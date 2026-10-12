@@ -573,6 +573,8 @@ model User {
   updatedShiftDefinitions  ShiftDefinition[]       @relation("ShiftDefinitionUpdatedBy")
   createdMachineCollectors MachineCollector[]      @relation("MachineCollectorCreatedBy")
   updatedMachineCollectors MachineCollector[]      @relation("MachineCollectorUpdatedBy")
+  createdStopCodeMaps      MachineStopCodeMap[]    @relation("MachineStopCodeMapCreatedBy")
+  updatedStopCodeMaps      MachineStopCodeMap[]    @relation("MachineStopCodeMapUpdatedBy")
   machineStopsClassified   MachineStopEvent[]      @relation("MachineStopClassifiedBy")
   machineStopsOpened       MachineStopEvent[]      @relation("MachineStopOpenedBy")
   machineStopsClosed       MachineStopEvent[]      @relation("MachineStopClosedBy")
@@ -1100,6 +1102,8 @@ model Machine {
   shiftStats     MachineShiftStat[]
   /// Toplayıcı kapsamı — `Cascade` (kapsam satırı makinesiz anlamsız).
   collectorLinks MachineCollectorLink[]
+  /// Ham duruş kodu eşlemesinin tezgah üst-yazımı — `Cascade` (yapılandırma, makinesiz konusuz).
+  stopCodeMaps   MachineStopCodeMap[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2217,16 +2221,19 @@ model ShiftInstance {
 /// ⇒ Bir sırrı taşıyan kolon, onu koruyan KURALLARLA aynı dilimde iner;
 /// tablo daha erken inebilir, sır inemez. **Eksiklik değil, SIRA.**
 model MachineCollector {
-  id           String       @id @default(uuid()) @db.Uuid
+  id            String       @id @default(uuid()) @db.Uuid
   /// Ajanın ilk açılışta üretip diskte tuttuğu yerel UUID (`Device.deviceId`
   /// emsali) — KİMLİKTİR, sır değildir.
-  collectorKey String       @unique @db.VarChar(64)
-  name         String       @db.VarChar(100)
+  collectorKey  String       @unique @db.VarChar(64)
+  name          String       @db.VarChar(100)
   /// DB üretir, uygulama yazmaz; ham SQL'de NOT NULL (bkz. `ShiftDefinition`).
-  nameFold     String?      @default(dbgenerated())
-  hostname     String?      @db.VarChar(128)
-  agentVersion String?      @db.VarChar(32)
-  status       DeviceStatus @default(PENDING)
+  nameFold      String?      @default(dbgenerated())
+  hostname      String?      @db.VarChar(128)
+  agentVersion  String?      @db.VarChar(32)
+  /// KART TİPİ (örn. `TEKS-ESP32-V1`) — ham duruş kodunun ANLAMI buna bağlıdır
+  /// (`MachineStopCodeMap` anahtarı). Yazarı toplayıcı onay dilimi; NULL = eşleme aranmaz.
+  collectorType String?      @db.VarChar(32)
+  status        DeviceStatus @default(PENDING)
 
   /// Bu toplayıcı YALNIZ bu kuruluma basar — yedekten dönmüş bir kopyaya canlı
   /// veri basma sınıfını kapatır.
@@ -2270,6 +2277,40 @@ model MachineCollectorLink {
 
   @@id([collectorId, machineId])
   @@map("machine_collector_machines")
+}
+
+/// HAM DURUŞ KODU → SEBEP EŞLEMESİ [PROFİL] — KATALOG (yapılandırma). Kartın bildirdiği ham kodun
+/// anlamı KART TİPİNE bağlıdır (`MachineCollector.collectorType`); `machineId` dolu satır o tezgah
+/// için kart tipi genelini EZER. Çözücü tek helper: `resolveMachineStopCode`. Sebep duruş satırına
+/// açılışta KOPYALANIP DONAR — eşlemeyi değiştirmek geçmiş duruşu değiştirmez.
+/// Silme yok: pasife alma `isActive:false` (genel CRUD `softDelete`).
+model MachineStopCodeMap {
+  id            String  @id @default(uuid()) @db.Uuid
+  /// Kart tipi — `MachineCollector.collectorType` ile BİREBİR (büyük harf kimlik, `[A-Z0-9._-]`).
+  collectorType String  @db.VarChar(32)
+  /// Kontrolcünün ham kodu — duruş satırındaki `rawStopCode` ile BİREBİR (kırpılmış, harf duyarlı).
+  rawStopCode   String  @db.VarChar(32)
+  /// NULL = kart tipi geneli; dolu = bu tezgahın üst-yazımı.
+  machineId     String? @db.Uuid
+  /// `ReasonPreset` (`kind = MACHINE_STOP`) — tür kapısı yazma yolunda (`machine-stop-code-map.service`).
+  stopReasonId  String  @db.Uuid
+  isActive      Boolean @default(true)
+
+  machine    Machine?     @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  stopReason ReasonPreset @relation(fields: [stopReasonId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+  createdBy   User?    @relation("MachineStopCodeMapCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?    @relation("MachineStopCodeMapUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([machineId])
+  @@index([stopReasonId])
+  // ŞEMA-DIŞI: partial unique (collectorType, rawStopCode, machineId) NULLS NOT DISTINCT WHERE isActive
+  // (`machine_stop_code_maps_live_uq`) — canlı satırda anahtar başına tek eşleme.
+  @@map("machine_stop_code_maps")
 }
 
 /// TEZGAH DURUŞU — SPAN (açılır/kapanır), bu yüzden `updatedAt` TAŞIR.
@@ -5450,6 +5491,9 @@ model ReasonPreset {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+
+  /// Ham duruş kodu eşlemeleri (`MACHINE_STOP`) — `Restrict`: eşlemesi duran sebep silinemez.
+  stopCodeMaps MachineStopCodeMap[]
 
   @@unique([kind, code])
   // Ekran sorgusu: "şu listenin aktif satırları, sırasıyla" (eşitlik önce).
