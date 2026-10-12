@@ -186,7 +186,7 @@ async function main() {
   setShortCredentialKeyDirForTests(mkdtempSync(join(tmpdir(), "bekci-y02-halka-")));
   if (SONDA === "y02") {
     // Kapıyı atlayan eski kısa yol: PIN/kart doğrudan token alırdı.
-    (AuthService as unknown as { assertSecondFactor: () => Promise<void> }).assertSecondFactor = async () => undefined;
+    Object.defineProperty(AuthService, "assertSecondFactor", { value: async () => undefined });
   }
   adminId = await kullanici("aktor");
   await ayarYaz(SETTING_KEYS.AUTH_LOGIN_METHODS, { enabled: ["list", "pin", "card"], primary: "list" });

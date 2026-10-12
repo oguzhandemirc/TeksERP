@@ -204,8 +204,8 @@ async function auditMaske(kayitId: string) {
 
   await AuditService.log({ userId: aktorId, action: "UPDATE", tableName: "users", recordId: kayitId,
     oldData: { nested: { passwordHash: OZET } }, newData: { cardTokenDigest: "abc", list: [{ settingsPassword: "Gizli-123456" }] } });
-  await AuditService.logEvent({ userId: aktorId, action: "TEST_SIRHIJ", tableName: "AUTH", recordId: kayitId,
-    payload: { deep: { recoveryCodeHash: OZET } } } as never);
+  await AuditService.logEvent({ category: "SYSTEM", userId: aktorId, action: "TOTP_SECRET_WRAPPED", tableName: "AUTH", recordId: kayitId,
+    payload: { deep: { recoveryCodeHash: OZET } } });
   if (SONDA === "b2") {
     await prisma.systemLog.create({ data: { userId: aktorId, action: "TEST_SONDA", tableName: "users", recordId: kayitId, newData: { passwordHash: OZET } } });
   }
