@@ -93,14 +93,16 @@ async function main(): Promise<void> {
     JSON.stringify(afterReset),
   );
 
-  // Kilit KAPALI iken her zaman blocked:false (rezervasyon no-op).
+  // Kilit kapatılamaz (O-04): eski kurulumdan kalan enabled=false satırı yok
+  // sayılır, eşik yine işler.
   await upsertSetting(SETTING_KEYS.enabled, false);
   const disabled = await Promise.all(
     Array.from({ length: 50 }, () => reserveLoginAttempt("disabled-key")),
   );
   check(
-    "F20: kilit kapalıyken tüm denemeler serbest",
-    disabled.every((r) => !r.blocked),
+    "F20: eski enabled=false satırı kilidi kapatmaz",
+    disabled.filter((r) => !r.blocked).length === ATTEMPTS,
+    `allowed=${disabled.filter((r) => !r.blocked).length}`,
   );
 
   // --- F29: assertBaseServiceGuards DMMF çözülünce fırlatmamalı (mutlu yol). ---
