@@ -205,9 +205,9 @@ if (advisories.length) {
 
 
 // --- GATE: belge boyut tavanı (2026-09-05 — kök 42k token'dan ~6k'ya indi; geri şişmesin) ---
-// Ölçü BAYT (token ≈ bayt/3). 2026-10-03 kısaltmasında kök 26 KB'a, satıcı 16 KB'a, patron 13 KB'a sıkıldı
-// (alan kuralları docs/kurallar/'a iner, köke geri şişmez); diğer alt dosyalar 24 KB.
-const CLAUDE_MD_SIZE_CAPS = { "CLAUDE.md": 12 * 1024, "Teks-Erp/CLAUDE.md": 24 * 1024, "Electron/CLAUDE.md": 24 * 1024, "mobil/CLAUDE.md": 24 * 1024, "satici/sunucu/CLAUDE.md": 16 * 1024, "patron/sunucu/CLAUDE.md": 13 * 1024 };
+// Ölçü BAYT (token ≈ bayt/3). Kök 12 KB, alt proje dosyaları 10 KB (cırcır: kısaltma turlarından sonra
+// yalnız düşer; alan kuralları docs/kurallar/'a iner, CLAUDE.md'ye geri şişmez).
+const CLAUDE_MD_SIZE_CAPS = { "CLAUDE.md": 12 * 1024, "Teks-Erp/CLAUDE.md": 10 * 1024, "Electron/CLAUDE.md": 10 * 1024, "mobil/CLAUDE.md": 10 * 1024, "satici/sunucu/CLAUDE.md": 16 * 1024, "patron/sunucu/CLAUDE.md": 13 * 1024 };
 
 // `docs/standart/*.md` aynı tavana bağlanır: standart dosyaları da "her yeni
 // bulguyu buraya da yazayım" baskısı altındadır ve şişince okunmaz olurlar.
