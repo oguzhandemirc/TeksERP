@@ -139,6 +139,21 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   modülü, izin `loom:spec-manage` — yeni izin kodu yok). Silme pasife almadır; eşlemeyi değiştirmek geçmiş duruşu
   değiştirmez. Panel ekranı ayrı dilim; kart bugün sahada olmadığından eşlemenin etkisi yok.
 
+**Makine kartı: kimlik ve imzalı duruş ucu (D3)** (commitler `feat(tezgah): makine kartı …` ×2 + bekçi; kısa kimlikleri paketlemede yazılır)
+
+- Makine kartı (tezgaha takılan toplayıcı) panel/API'den kaydedilir: ad, kart tipi, bağlı tezgahlar (bir tezgah
+  tek karta). Kart sırrı yalnız kayıtta ve yenilemede bir kez gösterilir; veritabanında sır yoktur (yalnız tohum,
+  sır sunucunun anahtar halkasından türer). Yeni uçlar `GET/POST /api/machine-collectors`,
+  `GET/PATCH /api/machine-collectors/:id`, `POST …/:id/rotate-secret`, `POST …/:id/revoke` (tezgah modülü, izin
+  `loom:spec-manage` — yeni izin kodu yok). Migration `20261012180000_makine_kart_kimligi` (yalnız EKLEME).
+- Kartın kendi uçları `POST /api/machine-signals/stop` (duruş başladı) ve `/end` (bitti): oturum yok, her istek
+  kart imzalı (kimlik + zaman damgası ±5 dk + tek kullanımlık nonce + HMAC-SHA256); bağlı olmayan tezgaha 403;
+  kart başına hız sınırı. Protokol: `docs/design/MAKINE-KART-PROTOKOLU.md`.
+- Operatör bir duruşu önce bildirmişse kart onu sahiplenir: başlangıç operatörünki kalır, kart kodu (ve eşleşirse
+  sebep — operatör sebep girmemişse) yazılır, kapanışı kart yapar; operatör önce "Çalıştı" dediyse kartın "bitti"si
+  kapanışı değiştirmez. Duruş cevabına `signalStopKey` eklendi. Migration `20261012190000_makine_kart_sahiplenme`
+  (yalnız EKLEME). Kart bugün sahada olmadığından kurulumda görünen değişiklik yok.
+
 **Lisans güvenlik denetimi düzeltmeleri (Bölge 3)**
 
 - `78542d264` — B1: bekleyen taşıma talebi (imzasız `tasima.json`) kurulumu etkin SAYMAZ; etkinleştirme kilidi
@@ -229,6 +244,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 - **Kırıldı mı:** HAYIR (ham kod eşlemesi kısmı) — yalnız ekleme: beş yeni uç, yeni hata kodları
   `STOP_CODE_MAP_DUPLICATE` (409), `STOP_REASON_INVALID` (400); var olan uçlar değişmedi. Eski istemci yeni uçları
   çağırmaz.
+- **Kırıldı mı:** HAYIR (makine kartı kısmı) — yalnız ekleme: altı yönetim ucu, iki kart ucu, duruş DTO'sunda
+  `signalStopKey`, yeni hata kodları `MACHINE_ALREADY_LINKED`, `COLLECTOR_NAME_TAKEN`, `COLLECTOR_REVOKED`,
+  `COLLECTOR_*` (401/429), `MACHINE_NOT_IN_SCOPE` (403). Var olan uçların davranışı değişmedi; eski istemci yeni
+  uçları çağırmaz.
 - **Kırıldı mı:** HAYIR (yetki kısmı) — yeni uçlar `/api/admin/credential-reset-requests`, yeni hata kodları
   `GRANT_EXCEEDS_ACTOR`, `CREDENTIAL_RESET_NEEDS_APPROVAL`, `STATION_KIND_IN_USE`; ayar cevabına iki alan. Davranış
   daralması: `shipping:write`-yalnız aktör fatura işaretinde 403; eski panel onay talebi akışını bilmez, 403'ü
@@ -243,11 +262,13 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 4. Migration
 
-- **Var mı:** EVET — 5 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
+- **Var mı:** EVET — 7 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
   `users` tablosuna boş geçilebilir bir alan + bir kontrol kuralı; var olan satırlar boş kalır, veri dönüşümü YOK),
   `20261012010000_durus_acan_kapatan`, `20261012120000_kimlik_sifirlama_onayi` (yalnız EKLEME: yeni tablo),
-  `20261012140000_makine_durus_kod_esleme` (yalnız EKLEME: boş yeni tablo + toplayıcıya boş geçilebilir alan).
-- **Toplam migration:** 381 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 5 migration uygulamalıdır. Farklı sayı =
+  `20261012140000_makine_durus_kod_esleme` (yalnız EKLEME: boş yeni tablo + toplayıcıya boş geçilebilir alan),
+  `20261012180000_makine_kart_kimligi` (yalnız EKLEME: toplayıcıya iki boş geçilebilir alan),
+  `20261012190000_makine_kart_sahiplenme` (yalnız EKLEME: duruşa boş geçilebilir alan + kısmi tekil indeks).
+- **Toplam migration:** 383 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 7 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -304,7 +325,7 @@ Veriyi güncelleme öncesine döndürmek gerekirse otomatik yedekten geri yükle
 - Güncelleme programı hizmeti çalışıyor; `durum` kurulu sürüm 2.15.6, güncelleme programı 0.2.6, kira geçerli
   (DONDURULDU / KIRA_YOK yok).
 - Yedek: güncelleme öncesi yedek alındı; günlükte `SEMA_OLCULEMEDI` yok.
-- Veritabanı: 381 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
+- Veritabanı: 383 migration bitmiş, sorunlu migration yok; `users` tablosunda `systemAccountSeal` var, var olan
   kurulumda hepsi boş.
 - `/api/admin/health` `sistemHesabiMuhru`: var olan (mühürlenmemiş) kurulumda `MUHURLENMELI`, mühürlemeden sonra
   `TAMAM`. Destek hesabı girişi mühürlemeden önce de sonra da çalışıyor.
