@@ -5,6 +5,7 @@
 import { Router } from "express";
 import { InventoryController } from "../controllers/inventory.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
+import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 
@@ -926,6 +927,8 @@ router.get(
  *       404: { description: Top bulunamadı }
  *       409: { description: Top üretimde değil / açık fason sevki / yarış }
  */
+// Üretim kapısı BİLEREK yok (rescue-preview ile birlikte): üretim kapatıldıktan
+// sonra istasyonda takılı kalan topu depoya kurtarmanın tek yolu bu uçlardır.
 router.post(
   "/:id/rescue-stuck",
   verifyToken,
@@ -971,6 +974,7 @@ router.post(
 router.post(
   "/open-fabric",
   verifyToken,
+  requireProductionEnabled,
   requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KURSUN),
   controller.createOpenFabric,
 );
@@ -1030,6 +1034,7 @@ router.post(
 router.post(
   "/:id/kursun-finish",
   verifyToken,
+  requireProductionEnabled,
   requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KURSUN),
   controller.kursunFinish,
 );

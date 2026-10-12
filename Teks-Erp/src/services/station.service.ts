@@ -24,6 +24,30 @@
 import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
+import { AppError } from "../utils/app-error";
+
+/**
+ * `kind` API davranış dispatch'inin anahtarıdır: rota/iş emri adımı, top girişi,
+ * makine ya da oturum bağlı istasyonda değişimi geçmişin anlamını kaydırır → 409.
+ * Kullanılmamış istasyonda (yeni tanım düzeltmesi) serbest.
+ */
+async function assertKindChangeAllowed(id: string, data: Record<string, unknown>): Promise<void> {
+  if (data.kind === undefined) return;
+  const cur = await prisma.station.findUnique({ where: { id }, select: { kind: true } });
+  if (!cur || cur.kind === data.kind) return;
+  const [routeSteps, workOrderSteps, rolls, machines, sessions] = [
+    await prisma.routeStep.count({ where: { stationId: id } }),
+    await prisma.workOrderStep.count({ where: { stationId: id } }),
+    await prisma.roll.count({ where: { entryStationId: id } }),
+    await prisma.machine.count({ where: { stationId: id } }),
+    await prisma.workSession.count({ where: { stationId: id } }),
+  ];
+  if (routeSteps + workOrderSteps + rolls + machines + sessions === 0) return;
+  throw AppError.conflict(
+    "Bu istasyon kullanımda — türü değiştirilemez. Yeni türde ayrı bir istasyon tanımlayın.",
+    { code: "STATION_KIND_IN_USE", routeSteps, workOrderSteps, rolls, machines, sessions },
+  );
+}
 
 /** Kategori seçildiyse ve bayrak gönderilmediyse kategoriden tohumla. */
 async function seedCapabilityFromCategory(data: Record<string, unknown>): Promise<void> {
@@ -56,6 +80,7 @@ export class StationService extends BaseService {
     data: Record<string, unknown>,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
+    await assertKindChangeAllowed(id, data);
     await seedCapabilityFromCategory(data);
     return super.update(id, data, userId);
   }

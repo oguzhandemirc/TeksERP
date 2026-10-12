@@ -31,6 +31,7 @@ import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 
 import { diffFields } from "./helpers/audit-diff.helper";
+import { baseWriteClosedFields } from "../constants/write-guard";
 // =============================================================================
 // KAYIT KÜNYESİ — kim oluşturdu / kim son değiştirdi (2026-08-19)
 // =============================================================================
@@ -671,6 +672,7 @@ export class BaseService {
    *   CRUD üzerinden fiziksel silme / ilişki manipülasyonu / audit'siz çocuk
    *   mutasyonu kapanır (13 bare-BaseController route'u tek noktadan korunur);
    * - `id`/`createdAt`/`updatedAt` sistem alanları atılır;
+   * - `BASE_WRITE_CLOSED_FIELDS` (kendi boğazı olan kolonlar) sessiz düşer;
    * - `config.nestedCreateFields` anahtarları (bilinçli nested create) korunur.
    * Model dmmf'te bulunamazsa süzme yapılmaz (geri uyum — safeSortBy ile aynı).
    */
@@ -683,9 +685,11 @@ export class BaseService {
     }
     const allowed = sortableFieldsFor(this.config.modelName);
     if (!allowed) return data;
+    const closed = baseWriteClosedFields(this.config.modelName);
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data)) {
       if (key === "id" || key === "createdAt" || key === "updatedAt") continue;
+      if (closed.includes(key)) continue;
       if (allowed.has(key) || this.config.nestedCreateFields?.includes(key)) {
         out[key] = value;
       }

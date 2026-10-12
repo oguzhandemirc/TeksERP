@@ -51,7 +51,7 @@ const dataOf = <T>(j: Record<string, unknown>): T => j.data as T;
 const ozet = (c: Cevap): string => `${c.status} ${String(codeOf(c.json) ?? "")} ${String(c.json.message ?? "")}`.trim().slice(0, 160);
 
 interface Kisi { id: string; username: string; password: string }
-const ids = { users: [] as string[], shipments: [] as string[], customers: [] as string[], items: [] as string[], stations: [] as string[], workOrders: [] as string[], tickets: [] as string[], requests: [] as string[] };
+const ids = { users: [] as string[], shipments: [] as string[], customers: [] as string[], items: [] as string[], stations: [] as string[], machines: [] as string[], workOrders: [] as string[], tickets: [] as string[], requests: [] as string[] };
 const parola = (): string => `Dny-${randomBytes(8).toString("hex")}-Aa9!`;
 
 async function kisi(etiket: string, codes: string[]): Promise<Kisi> {
@@ -273,12 +273,21 @@ async function b3(): Promise<void> {
 
   const st = await prisma.station.create({ data: { name: `TSTDNY-ST-${ek}`, code: `TSTDNYST${ek}`.toUpperCase().slice(0, 32), type: "INTERNAL", kind: "OTHER", isActive: true }, select: { id: true } });
   ids.stations.push(st.id);
-  const patchSt = await call(w.token, "PATCH", `/api/stations/${st.id}`, { kind: "WEAVING", appliesQuality: true });
-  const stAfter = await prisma.station.findUnique({ where: { id: st.id }, select: { kind: true, appliesQuality: true } });
-  const kindDegisti = stAfter?.kind === "WEAVING";
-  // Bu bir KARAR noktasi: kind/appliesQuality bu uctan yazilabilir olmali mi? Bugun yaziliyor.
-  check("§B3b PATCH /stations/:id kind yazilabilirligi olculdu (bugun YAZILIYOR = acik)",
-    !kindDegisti, `kindWEAVING=${kindDegisti} resp=${ozet(patchSt)}`);
+  // Kullanilmamis istasyonda kind duzeltmesi serbest (yeni tanim duzeltmesi — panel formu kind'i duzenler).
+  const patchSt = await call(w.token, "PATCH", `/api/stations/${st.id}`, { kind: "WEAVING" });
+  const stAfter = await prisma.station.findUnique({ where: { id: st.id }, select: { kind: true } });
+  check("§B3b karsi kanit: KULLANILMAMIS istasyonda kind duzeltilebilir (200)",
+    patchSt.status === 200 && stAfter?.kind === "WEAVING", `${ozet(patchSt)} kind=${String(stAfter?.kind)}`);
+  // Kullanimdaki istasyon (makine bagli): kind degisimi gecmisin anlamini kaydirir → 409.
+  const mk = await prisma.machine.create({ data: { stationId: st.id, code: `TSTDNYMK${ek}`.toUpperCase().slice(0, 32), name: `TSTDNY-MK-${ek}` }, select: { id: true } });
+  ids.machines.push(mk.id);
+  const patchSt2 = await call(w.token, "PATCH", `/api/stations/${st.id}`, { kind: "OTHER", appliesQuality: true });
+  const stAfter2 = await prisma.station.findUnique({ where: { id: st.id }, select: { kind: true, appliesQuality: true } });
+  check("§B3c KULLANIMDAKI istasyonda kind DEGISTIRILEMEZ (409 STATION_KIND_IN_USE)",
+    patchSt2.status === 409 && codeOf(patchSt2.json) === "STATION_KIND_IN_USE" && stAfter2?.kind === "WEAVING",
+    `${ozet(patchSt2)} kind=${String(stAfter2?.kind)}`);
+  const patchSt3 = await call(w.token, "PATCH", `/api/stations/${st.id}`, { kind: "WEAVING", name: `TSTDNY-ST2-${ek}` });
+  check("§B3d kullanimdaki istasyonda AYNI kind'i tasiyan tam form gecer (eski panel)", patchSt3.status === 200, ozet(patchSt3));
 }
 
 // ── B4: /api/rolls uretim rejim kapisi yok ──────────────────────────────────────
@@ -294,6 +303,15 @@ async function b4(): Promise<void> {
   // servis katmanina ULASTI = kapi YOK. Bu yuzden MODULE_DISABLED disi her cevap "acik" kanitidir.
   check("§B4a production.enabled=false iken /api/rolls/open-fabric 403 MODULE_DISABLED vermeli (kapi yok = acik)",
     of.status === 403 && codeOf(of.json) === "MODULE_DISABLED", `${ozet(of)} (403/MODULE_DISABLED disi = kapi yok)`);
+  const kf = await call(r.token, "POST", "/api/rolls/00000000-0000-0000-0000-000000000000/kursun-finish", {});
+  check("§B4b production.enabled=false iken /api/rolls/:id/kursun-finish 403 MODULE_DISABLED",
+    kf.status === 403 && codeOf(kf.json) === "MODULE_DISABLED", ozet(kf));
+  // Kurtarma ucu BILEREK kapisiz: uretim kapandiktan sonra takili topu depoya almanin tek yolu.
+  const M = await kisi("B4M", ["roll:manual-adjust"]);
+  const m = await giris(M);
+  const rs = m.token ? await call(m.token, "POST", "/api/rolls/00000000-0000-0000-0000-000000000000/rescue-stuck", { reason: "deneme kurtarma" }) : null;
+  check("§B4c karsi kanit: kurtarma ucu (rescue-stuck) uretim kapaliyken de servise ulasir (MODULE_DISABLED degil)",
+    rs !== null && codeOf(rs.json) !== "MODULE_DISABLED", rs ? ozet(rs) : ozet(m.c));
   // initial-entry CEKIRDEK (KK1) — bilincli kapisiz; yalniz kayit, beklenti degil.
   await ayarYaz(SETTING_KEYS.PRODUCTION_ENABLED, true);
 }
@@ -360,6 +378,7 @@ async function temizle(): Promise<void> {
   await prisma.workOrder.deleteMany({ where: { id: { in: ids.workOrders } } }).catch(() => {});
   await prisma.sack.deleteMany({ where: { shipmentId: { in: ids.shipments } } }).catch(() => {});
   await prisma.shipment.deleteMany({ where: { id: { in: ids.shipments } } }).catch(() => {});
+  await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } }).catch(() => {});
   await prisma.station.deleteMany({ where: { id: { in: ids.stations } } }).catch(() => {});
   await prisma.item.deleteMany({ where: { id: { in: ids.items } } }).catch(() => {});
   await prisma.customer.deleteMany({ where: { id: { in: ids.customers } } }).catch(() => {});

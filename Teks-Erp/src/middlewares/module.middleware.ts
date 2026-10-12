@@ -24,19 +24,14 @@
 // -----------------------------------------------------------------------------
 // BİLİNÇLİ KAPISIZ (P1) — üretim kapısı bu yüzeylere TAKILMADI:
 //   • /api/rolls              KARMA router: KK1 ham giriş motoru (`initial-entry`)
-//                             ÇEKİRDEKTİR, aynı dosyada kurşun uçları da var.
-//                             Router seviyesinde kapı KK1'i öldürür → uç bazlı
-//                             karar sonraki pakete bırakıldı.
-//                             ⚠️ SONUCU AÇIKÇA YAZIYORUZ (ölçüldü 2026-09-02):
-//                             üretim KAPALIYKEN de `GET /api/rolls`,
-//                             `POST /api/rolls/initial-entry`,
-//                             `/rolls/open-fabric`, `/rolls/:id/kursun-finish`,
-//                             `/rolls/production-flow` ve
-//                             `/rolls/subcontractor-summary` AÇIK kalır; yani
-//                             "üretim modülü kapalı" bugün bu router için
-//                             GEÇERLİ DEĞİLDİR. "Karma router" demek eksik bir
-//                             cümleydi — okuyan kişi kapının orada da işlediğini
-//                             sanabilirdi.
+//                             ÇEKİRDEKTİR → router seviyesinde kapı YOK; kapı
+//                             UÇ BAZLI: `/rolls/open-fabric` ve
+//                             `/rolls/:id/kursun-finish` kapılı. Üretim
+//                             KAPALIYKEN de `GET /api/rolls`, `initial-entry`,
+//                             okuma uçları (`production-flow`,
+//                             `subcontractor-summary`) ve kurtarma uçları
+//                             (`rescue-stuck` — takılı topu depoya almanın tek
+//                             yolu) AÇIK kalır.
 //   • /api/stations · /api/machines · /api/work-sessions
 //                             KK1 ve sevk istasyonu da kullanıyor (istasyon/
 //                             makine damgası, vardiya oturumu) — çekirdek.

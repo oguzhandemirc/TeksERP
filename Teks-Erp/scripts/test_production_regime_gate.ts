@@ -29,12 +29,14 @@
 //   ② kapı UÇLARDAN SONRAYA kayarsa (sıra sızıntısı, en sessiz hata):
 //      kapı satırını dosyanın SONUNA taşı                            → SONDA-8
 //   ③ bilinçli kapısız bir yüzey kapılanırsa (§3):
-//      inventory.routes.ts'e kapı ekle                               → SONDA-9
+//      inventory.routes.ts'e ROUTER seviyesi kapı ekle               → SONDA-9
+//   ④ uç bazlı kapı (§5): open-fabric kapısı silinir → SONDA-10 · rescue-stuck kapılanır → SONDA-11
 // SONDA TABLOSU (ölçüldü — md5 ile birebir geri alındı):
 //   SONDA-7 → çıkış 1 · 3 ❌ · §2 + §2b + §2c (/api/tambur kapısı silindi)
 //   SONDA-8 → çıkış 1 · 1 ❌ · §2c (kapı dosyanın SONUNA taşındı — uçlar kapıyı görmez;
 //             §2 ve §2b YEŞİL kaldı, yani sıra kontrolü olmasa sızıntı sessiz geçerdi)
 //   SONDA-9 → çıkış 1 · 1 ❌ · §3 "KAPILANMIŞ: /api/rolls"
+//   SONDA-10 → çıkış 1 · 1 ❌ · §5 · SONDA-11 → çıkış 1 · 1 ❌ · §5b
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -84,7 +86,7 @@ const BILINCLI_KAPISIZ: ReadonlyArray<{ dosya: string; mount: string; neden: str
     mount: "/api/rolls",
     neden:
       "KARMA router: KK1 ham giriş motoru (`initial-entry`) ÇEKİRDEKTİR — router seviyesinde " +
-      "kapı KK1'i öldürür. Uç bazlı karar sonraki pakete bırakıldı.",
+      "kapı KK1'i öldürür. Kapı UÇ BAZLI (`UC_BAZLI` listesi, §5); kurtarma uçları bilerek açık.",
   },
   {
     dosya: "routes/station.routes.ts",
@@ -161,6 +163,25 @@ const BILINCLI_KAPISIZ: ReadonlyArray<{ dosya: string; mount: string; neden: str
     neden: "Karma pano — aynı gerekçe.",
   },
 ];
+
+/**
+ * Router seviyesinde kapısız (BILINCLI_KAPISIZ) ama tek tek uçları kapılı yüzeyler.
+ * `kapili` uçlar kapıyı taşır; `acik` uçlar BİLEREK taşımaz (gerekçe yorumda).
+ */
+const UC_BAZLI: ReadonlyArray<{ dosya: string; kapili: readonly string[]; acik: readonly string[] }> = [
+  {
+    dosya: "routes/inventory.routes.ts",
+    kapili: ["/open-fabric", "/:id/kursun-finish"],
+    acik: ["/initial-entry", "/:id/rescue-preview", "/:id/rescue-stuck"],
+  },
+];
+
+/** `router.<verb>("<yol>", ...)` kaydının argüman metni (ilk eşleşme); yoksa null. */
+function ucArgumanlari(src: string, yol: string): string | null {
+  const esc = yol.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+  const m = new RegExp(`router\\.(?:get|post|patch|put|delete)\\(\\s*"${esc}"([\\s\\S]*?)\\);`).exec(src);
+  return m ? m[1]! : null;
+}
 
 function main(): void {
   console.log("=== ÜRETİM REJİM KAPISI BEKÇİSİ (production.enabled) ===\n");
@@ -253,9 +274,12 @@ function main(): void {
   }
 
   // ── §3 ⭐ BİLİNÇLİ KAPISIZ GERÇEKTEN KAPISIZ ──────────────────────────────
-  const yanlislikla = BILINCLI_KAPISIZ.filter((b) =>
-    new RegExp(`\\b${KAPI}\\b`).test(yorumlariSok(fs.readFileSync(path.join(SRC, b.dosya), "utf8"))),
-  );
+  const yanlislikla = BILINCLI_KAPISIZ.filter((b) => {
+    const src = yorumlariSok(fs.readFileSync(path.join(SRC, b.dosya), "utf8"));
+    // Uç bazlı kapılı dosyada yalnız ROUTER seviyesi kapı yasak (§5 uçları ayrıca ölçer).
+    if (UC_BAZLI.some((u) => u.dosya === b.dosya)) return new RegExp(`router\\.use\\([^)]*\\b${KAPI}\\b`).test(src);
+    return new RegExp(`\\b${KAPI}\\b`).test(src);
+  });
   check(
     "§3 ⭐ 'Bilinçli kapısız' yüzeylerin hiçbiri kapı taşımıyor",
     yanlislikla.length === 0,
@@ -286,6 +310,23 @@ function main(): void {
     mwSrc.includes("BİLİNÇLİ KAPISIZ"),
     "blok silinirse liste tek yerde kalır ve gerekçeler kaybolur",
   );
+
+  // ── §5 ⭐ UÇ BAZLI KAPI ────────────────────────────────────────────────────
+  for (const u of UC_BAZLI) {
+    const src = yorumlariSok(fs.readFileSync(path.join(SRC, u.dosya), "utf8"));
+    for (const yol of u.kapili) {
+      const args = ucArgumanlari(src, yol);
+      const ok = args !== null && new RegExp(`\\b${KAPI}\\b`).test(args);
+      check(`§5 ⭐ ${u.dosya} ${yol} üretim kapısını taşır`, ok,
+        ok ? "" : args === null ? "uç bulunamadı" : "kapı yok — üretim kapalıyken API'den delinir");
+    }
+    for (const yol of u.acik) {
+      const args = ucArgumanlari(src, yol);
+      const ok = args !== null && !new RegExp(`\\b${KAPI}\\b`).test(args);
+      check(`§5b ${u.dosya} ${yol} bilerek kapısız (çekirdek/kurtarma)`, ok,
+        ok ? "" : args === null ? "uç bulunamadı" : "kapılanmış — bu bir KARARDI; önce UC_BAZLI listesini güncelle");
+    }
+  }
 
   for (const b of BILINCLI_KAPISIZ) console.log(`   ℹ️  bilinçli kapısız: ${b.mount} — ${b.neden}`);
 
