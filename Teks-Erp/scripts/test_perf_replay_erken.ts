@@ -5,7 +5,8 @@
 // `tokenReplay(...).run` aynı token uçuştayken gelen denemeyi kazananın bitişine
 // bağlar ve cevabı token'dan (`resolve`) verir; iş (tx) yalnız bir kez koşar.
 // DB'siz: politika bellek içi bir "defter" okur. Ölçülen: iş çağrı sayısı.
-// Negatif sonda (elle, harita satırında): `run`daki uçuş kuyruğu kaldırılınca §1 ❌ (iş 50 kez).
+// Negatif sonda (elle, harita satırında): `run`daki uçuş kuyruğu kaldırılınca §1 ❌ (iş 50 kez);
+// bağlam (`flightContext.tokens`) kontrolü kaldırılınca §6 ❌ (iç içe aynı token ebeveynini bekler, kilit).
 // =============================================================================
 import { AppError } from "../src/utils/app-error";
 import { inFlightReplayCount, tokenReplay } from "../src/services/helpers/token-replay.helper";
