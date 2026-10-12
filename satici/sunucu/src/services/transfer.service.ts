@@ -9,14 +9,15 @@ import { ENDPOINTS, TransferResponseSchema, parseVersion, type TransferRequestSc
 import type { z } from "zod";
 import { recordAudit } from "../lib/audit";
 import { VendorError, notFoundError, stateConflict } from "../lib/errors";
-import { lockInstallation, lockTransferKey } from "../lib/locks";
-import { prisma, type Tx } from "../lib/prisma";
+import { lockCustomer, lockInstallation, lockTransferKey } from "../lib/locks";
+import { prisma, type Db, type Tx } from "../lib/prisma";
 import { isUniqueViolation } from "../lib/prisma-errors";
 import { enqueueNotificationTx } from "../notifications/outbox";
 import type { VendorContext } from "./context";
 import { issueActivationCodeUnderLock, type IssuedActivationCode } from "./entitlement.service";
 import { installationCancelled, recordRequestNonce, requestScope, verifySignedRequest } from "./installation-auth";
 import { requireReason } from "./sanction.service";
+import { assertDealerOwnsCustomer } from "./dealer-ownership.service";
 import { securityEvent } from "../lib/security-events";
 import type { TransferFloodGuard } from "./transfer-flood";
 
@@ -223,6 +224,33 @@ export async function decideTransferTx(
     });
   }
   return { talep: await tx.tasimaTalebi.findUniqueOrThrow({ where: { id: talep.id } }), code };
+}
+
+/** Talebin hedeflediği kurulum: bağlıysa bağı, değilse istenen lisans kimliği; ikisi de yoksa (kimliksiz) null. */
+export async function transferTargetInstallation(
+  db: Db,
+  talep: Pick<TasimaTalebi, "kurulumId" | "hedefKimlik">,
+): Promise<{ id: string; musteriId: string; bayiId: string | null } | null> {
+  const where = talep.kurulumId ? { id: talep.kurulumId } : talep.hedefKimlik ? { kurulumId: talep.hedefKimlik } : null;
+  if (!where) return null;
+  const inst = await db.kurulum.findUnique({ where, select: { id: true, tesis: { select: { musteriId: true, musteri: { select: { bayiId: true } } } } } });
+  return inst ? { id: inst.id, musteriId: inst.tesis.musteriId, bayiId: inst.tesis.musteri.bayiId } : null;
+}
+
+/**
+ * Bayi reddi (B1k çıkışı): yalnız kendi müşterisinin kurulumunu hedefleyen talep. Sahiplik müşteri kilidi ALTINDA yeniden
+ * ölçülür (D10); kilit sırası CUSTOMER → TRANSFER_KEY → INSTALLATION. Bayi onaylayamaz — kod üretimi satıcıda kalır.
+ */
+export async function rejectTransferAsDealerTx(
+  tx: Tx,
+  ctx: VendorContext,
+  g: { dealerId: string; customerId: string; talep: TasimaTalebi; actor: string; reason: string },
+): Promise<TransferDecision> {
+  await lockCustomer(tx, g.customerId);
+  await assertDealerOwnsCustomer(tx, g.dealerId, g.customerId, "Taşıma talebi");
+  const target = await transferTargetInstallation(tx, g.talep);
+  if (!target || target.musteriId !== g.customerId) throw notFoundError("Taşıma talebi");
+  return decideTransferTx(tx, ctx, { talep: g.talep, decision: "REDDEDILDI", actor: g.actor, reason: g.reason });
 }
 
 async function decide(ctx: VendorContext, g: { talepId: string; decision: "ONAYLANDI" | "REDDEDILDI"; actor: string; reason: string; installationDbId?: string }): Promise<TransferDecision> {

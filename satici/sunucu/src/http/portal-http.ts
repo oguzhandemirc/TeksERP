@@ -74,6 +74,14 @@ export function queryEnum<T extends string>(req: Request, name: string, values: 
   return v as T;
 }
 
+/** Süzgeç kimliği: biçimsiz değer 400 (sessizce "süzgeçsiz" listeye düşmez). */
+export function queryUuid(req: Request, name: string): string | undefined {
+  const v = queryText(req, name);
+  if (v === undefined) return undefined;
+  if (!z.uuid().safeParse(v).success) throw new VendorError(400, "GOVDE_GECERSIZ", `${name} biçimsiz (UUID olmalı)`);
+  return v.toLowerCase();
+}
+
 export function queryBool(req: Request, name: string): boolean | undefined {
   const v = queryText(req, name);
   if (v === undefined) return undefined;

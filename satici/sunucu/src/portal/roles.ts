@@ -59,6 +59,8 @@ export const PORTAL_PERMISSIONS = {
   "bildirim:yonet": ADMIN,
   /** Bayi alt-portalı (yalnız kendi müşterileri). */
   "bayi:portal": ["BAYI"],
+  /** Bayi kendi kurulumunu hedefleyen BEKLEYEN taşıma talebini reddeder (onay ve kod üretimi satıcıda kalır). */
+  "bayi:tasima-reddet": ["BAYI"],
 } as const satisfies Record<string, readonly PortalRole[]>;
 export type PortalPermission = keyof typeof PORTAL_PERMISSIONS;
 

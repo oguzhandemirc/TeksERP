@@ -32,6 +32,7 @@ export const PORTAL_PERMISSIONS = {
   "guncelleme:yaz": VENDOR,
   "guncelleme:dalga": VENDOR,
   "bayi:portal": ["BAYI"],
+  "bayi:tasima-reddet": ["BAYI"],
 } as const satisfies Record<string, readonly PortalRole[]>;
 
 export type PortalPermission = keyof typeof PORTAL_PERMISSIONS;

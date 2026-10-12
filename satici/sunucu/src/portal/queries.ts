@@ -237,12 +237,13 @@ async function suggestedInstallations(db: Db, ortam: unknown) {
   });
 }
 
-export async function listTransfers(db: Db, g: { status?: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI"; cursor?: string; limit: number }) {
+export async function listTransfers(db: Db, g: { status?: "BEKLIYOR" | "ONAYLANDI" | "REDDEDILDI"; targetId?: string; cursor?: string; limit: number }) {
   const rows = await db.tasimaTalebi.findMany({
-    where: g.status ? { durum: g.status } : {},
+    where: { ...(g.status ? { durum: g.status } : {}), ...(g.targetId ? { hedefKimlik: g.targetId } : {}) },
     select: {
       id: true,
       kurulumId: true,
+      hedefKimlik: true,
       yeniAnahtarKimligi: true,
       ortam: true,
       gerekce: true,
@@ -258,6 +259,23 @@ export async function listTransfers(db: Db, g: { status?: "BEKLIYOR" | "ONAYLAND
   const out = [];
   for (const r of rows) out.push({ ...r, onerilenKurulumlar: r.kurulumId === null && r.durum === "BEKLIYOR" ? await suggestedInstallations(db, r.ortam) : [] });
   return page(out, g.limit);
+}
+
+/**
+ * Bayinin kurulumunu hedefleyen talepler (bağlı ya da yalnız hedef kimliğiyle bağsız). Yeni anahtarın açığı, parmak izi
+ * ve satıcı kullanıcısının adı bayiye gitmez; ortamdan yalnız makineyi tanıtan üç alan.
+ */
+export async function listDealerTransfers(db: Db, inst: { id: string; kurulumId: string }) {
+  const rows = await db.tasimaTalebi.findMany({
+    where: { OR: [{ kurulumId: inst.id }, { hedefKimlik: inst.kurulumId }] },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 50,
+    select: { id: true, kurulumId: true, yeniAnahtarKimligi: true, ortam: true, gerekce: true, durum: true, kararZamani: true, kararSebebi: true, createdAt: true },
+  });
+  return rows.map(({ ortam, kurulumId, ...r }) => {
+    const o = (ortam ?? {}) as { platform?: unknown; isletimSistemi?: unknown; uygulamaSurum?: unknown };
+    return { ...r, bagli: kurulumId !== null, ortam: { platform: o.platform ?? null, isletimSistemi: o.isletimSistemi ?? null, uygulamaSurum: o.uygulamaSurum ?? null } };
+  });
 }
 
 export async function listCopyAlerts(db: Db, g: { status?: "ACIK" | "KAPANDI"; cursor?: string; limit: number }) {

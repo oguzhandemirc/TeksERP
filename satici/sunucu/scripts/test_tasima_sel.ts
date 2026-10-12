@@ -8,6 +8,9 @@
 // §5 bağsız bekleyen tavanı → 429 HIZ_SINIRI + TASIMA_SELI denetimi; ✓K sel sırasında ETKİN kurulumun gerçek
 //    taşıması açılır; var olan talebin yoklaması tavana takılmaz; hedef dakikalık tavanı 429.
 // §6 bellek içi sayaçlar (hedef günlük · adres günlük) doğrudan.
+// §7 portal iptal YÜZEYİ (A): bayi kendi kurulumunu hedefleyen (bağlı ya da bağsız) bekleyen talebi görür ve reddeder;
+//    başka bayi · kimliksiz talep · bayi onay ucu → 404; ikinci red 409 (atomik claim); red sonrası fabrika yeni talep
+//    açar ve cevap biçimi §1'le aynı; satıcı listesinde `hedefKimlik` süzgeci (biçimsiz 400).
 // Koşum: npx tsx scripts/test_tasima_sel.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -22,10 +25,15 @@ import {
   kapat,
   kontrol,
   kurulumFiksturu,
+  portalGiris,
+  portalIstek,
+  portalKullaniciAc,
+  portalSunuculariKur,
   sonuc,
   sunucuBaslat,
   temizleBagsizTalepler,
   temizleKurulumlar,
+  temizlePortal,
   type Yanit,
 } from "./lib/test-ortam";
 
@@ -47,6 +55,9 @@ async function main(): Promise<void> {
   const kurulumlar: string[] = [];
   const anahtarlar: string[] = [];
   const etkinKidler: string[] = [];
+  const kullanicilar: string[] = [];
+  const bayiler: string[] = [];
+  const portal = await portalSunuculariKur(ctx);
 
   const yeniAnahtar = (): TestAnahtari => {
     const a = kurulumAnahtariUret();
@@ -148,7 +159,94 @@ async function main(): Promise<void> {
     kontrol("§6a hedef günlük tavanı (dakika aralıklı) → üçüncü 429", gunluk.join(",") === "200,200,429", gunluk.join(","));
     const ipGun = [await dene(null, "x", t0), await dene(null, "x", t0 + 1), await dene(null, "x", t0 + 2), await dene(null, "x", t0 + 3)];
     kontrol("§6b adres günlük tavanı → dördüncü 429; ertesi gün sıfırlanır", ipGun.join(",") === "200,200,200,429" && (await dene(null, "x", t0 + 86_400_001)) === 200, ipGun.join(","));
+
+    console.log("\n§7 portal iptal yüzeyi — bayi reddi + hedef süzgeci");
+    // Bağsız tavanı §5'te doldu: bu bekçinin bekleyen bağsız taleplerini satıcı reddeder (kuyruk boşalır).
+    const kalan = await prisma.tasimaTalebi.findMany({ where: { durum: "BEKLIYOR", kurulumId: null, yeniAnahtarKimligi: { in: anahtarlar } }, select: { id: true } });
+    for (const t of kalan) await rejectTransfer(ctx, { talepId: t.id, actor: "bekci", reason: "§7 öncesi kuyruk boşaltma" });
+    const bayiA = await prisma.bayi.create({ data: { ad: `Bekçi Bayi A ${randomUUID().slice(0, 6)}` } });
+    const bayiB = await prisma.bayi.create({ data: { ad: `Bekçi Bayi B ${randomUUID().slice(0, 6)}` } });
+    bayiler.push(bayiA.id, bayiB.id);
+    const yonetici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
+    const kulA = await portalKullaniciAc(ctx, "BAYI", bayiA.id);
+    const kulB = await portalKullaniciAc(ctx, "BAYI", bayiB.id);
+    kullanicilar.push(yonetici.id, kulA.id, kulB.id);
+    const yCerez = (await portalGiris(portal.portal, "/portal/api", yonetici)).cerez!;
+    const aCerez = (await portalGiris(portal.genel, "/bayi/api", kulA)).cerez!;
+    const bCerez = (await portalGiris(portal.genel, "/bayi/api", kulB)).cerez!;
+    const satici = (yol: string) => portalIstek(portal.portal, `/portal/api${yol}`, { cerez: yCerez });
+    const bayi = (yol: string, govde?: unknown, cerez = aCerez) => portalIstek(portal.genel, `/bayi/api${yol}`, { govde, cerez });
+    const reddet = (id: string, cerez = aCerez, clientToken: string = randomUUID(), sebep = "tanımadığımız makine") => bayi(`/tasima-talepleri/${id}/reddet`, { clientToken, sebep }, cerez);
+
+    const etkinA = await etkinFikstur();
+    const bosA = await kurulumFiksturu(ctx);
+    kurulumlar.push(bosA.kurulumDbId);
+    await prisma.musteri.updateMany({ where: { id: { in: [etkinA.musteriId, bosA.musteriId] } }, data: { bayiId: bayiA.id } });
+    const bagli = await tasi(etkinA.kurulumId, yeniAnahtar());
+    const bagsiz = await tasi(bosA.kurulumId, yeniAnahtar());
+    const kimliksizT = await tasi(null, yeniAnahtar());
+    kontrol("§7a fikstür: bağlı · bağsız (hedefli) · kimliksiz talep 200 BEKLIYOR", [bagli, bagsiz, kimliksizT].every((y) => y.status === 200 && y.json.durum === "BEKLIYOR"), [bagli, bagsiz, kimliksizT].map((y) => `${y.status} ${y.kod ?? ""}`).join(" "));
+    const bagliId = String(bagli.json.talepId);
+    const bagsizId = String(bagsiz.json.talepId);
+
+    const listeA = await bayi(`/kurulumlar/${etkinA.kurulumDbId}/tasima-talepleri`);
+    const listeBos = await bayi(`/kurulumlar/${bosA.kurulumDbId}/tasima-talepleri`);
+    const satirlarA = (listeA.json.data ?? []) as Array<Record<string, unknown>>;
+    const satirlarBos = (listeBos.json.data ?? []) as Array<Record<string, unknown>>;
+    kontrol(
+      "§7b bayi kendi kurulumunun talebini görür (bağlı + bağsız hedefli); açık anahtar · parmak izi · karar veren GİTMEZ",
+      listeA.status === 200 && satirlarA.some((r) => r.id === bagliId && r.bagli === true) && satirlarBos.some((r) => r.id === bagsizId && r.bagli === false) &&
+        ![...satirlarA, ...satirlarBos].some((r) => "yeniAcikAnahtar" in r || "yeniParmakIzi" in r || "kararVeren" in r),
+      `${listeA.status} ${satirlarA.length}/${satirlarBos.length}`,
+    );
+    const listeB = await bayi(`/kurulumlar/${etkinA.kurulumDbId}/tasima-talepleri`, undefined, bCerez);
+    kontrol("§7c başka bayi listeyi göremez → 404", listeB.status === 404, `${listeB.status}`);
+
+    const yabanci = await reddet(bagliId, bCerez);
+    const kimliksizRed = await reddet(String(kimliksizT.json.talepId));
+    const onayYok = await bayi(`/tasima-talepleri/${bagliId}/onayla`, { clientToken: randomUUID(), sebep: "x" });
+    const bosSebep = await reddet(bagliId, aCerez, randomUUID(), "  ");
+    kontrol(
+      "§7d başka bayi 404 · kimliksiz talep bayiye 404 · bayi onay ucu yok (404) · boş sebep 400",
+      yabanci.status === 404 && kimliksizRed.status === 404 && onayYok.status === 404 && bosSebep.status === 400,
+      `${yabanci.status} ${kimliksizRed.status} ${onayYok.status} ${bosSebep.status}`,
+    );
+    kontrol("§7d2 reddedilemeyen talep BEKLIYOR kaldı", (await prisma.tasimaTalebi.findUnique({ where: { id: bagliId } }))?.durum === "BEKLIYOR");
+
+    const jeton = randomUUID();
+    const red = await reddet(bagliId, aCerez, jeton);
+    const tekrar2 = await reddet(bagliId, aCerez, jeton);
+    const ikinciRed = await reddet(bagliId);
+    const satirRed = await prisma.tasimaTalebi.findUnique({ where: { id: bagliId } });
+    kontrol(
+      "§7e bayi reddeder (200 REDDEDILDI, yapan bayi) · aynı jeton aynı cevap · ikinci red 409 (atomik claim)",
+      red.status === 200 && red.veri.durum === "REDDEDILDI" && tekrar2.status === 200 && tekrar2.veri.id === bagliId && ikinciRed.status === 409 &&
+        satirRed?.durum === "REDDEDILDI" && satirRed.kararVeren === `bayi:${kulA.kullaniciAdi}` && satirRed.kararSebebi === "tanımadığımız makine",
+      `${red.status} ${tekrar2.status} ${ikinciRed.status} ${ikinciRed.kod ?? ""} ${satirRed?.kararVeren ?? ""}`,
+    );
+    await new Promise((r) => setTimeout(r, 300));
+    const iz = await prisma.denetim.findMany({ where: { olay: "TASIMA_REDDEDILDI", varlikId: bagliId } });
+    kontrol("§7f denetim: TEK TASIMA_REDDEDILDI satırı, bayi kimliğiyle", iz.length === 1 && (iz[0]!.ozet as { bayiId?: string }).bayiId === bayiA.id, `${iz.length}`);
+
+    const yeniBagli = await tasi(etkinA.kurulumId, yeniAnahtar());
+    const bagsizRed = await reddet(bagsizId);
+    const yeniBagsiz = await tasi(bosA.kurulumId, yeniAnahtar());
+    kontrol(
+      "§7g red sonrası fabrika yeni talep açar (bağlı + bağsız; bayi bağsız hedefli talebi de reddeder); cevap biçimi §1'le AYNI",
+      bagsizRed.status === 200 && yeniBagli.status === 200 && yeniBagsiz.status === 200 && sekil(yeniBagli) === sekil(ilk.etkin!) && sekil(yeniBagsiz) === sekil(ilk.etkin!),
+      `${bagsizRed.status} ${yeniBagli.status} ${yeniBagli.kod ?? ""} ${yeniBagsiz.status} ${yeniBagsiz.kod ?? ""}`,
+    );
+
+    const suzulu = await satici(`/tasima-talepleri?hedefKimlik=${bosA.kurulumId}`);
+    const suzuluSatir = ((suzulu.veri.items ?? []) as Array<{ id: string; hedefKimlik: string | null }>);
+    const bicimsiz = await satici("/tasima-talepleri?hedefKimlik=bozuk");
+    kontrol(
+      "§7h satıcı listesi hedefKimlik süzgeci yalnız o hedefi döner (bağsız 2 talep) · biçimsiz süzgeç 400",
+      suzulu.status === 200 && suzuluSatir.length === 2 && suzuluSatir.every((r) => r.hedefKimlik === bosA.kurulumId) && bicimsiz.status === 400,
+      `${suzulu.status} ${suzuluSatir.length} ${bicimsiz.status}`,
+    );
   } finally {
+    await portal.kapat();
     await sunucu.durdur();
     await temizleKurulumlar([...new Set(kurulumlar)], [...ortam.kidler, ...etkinKidler]);
     await temizleBagsizTalepler(anahtarlar);
@@ -156,6 +254,7 @@ async function main(): Promise<void> {
       await tx.$executeRawUnsafe(`SET LOCAL satici.defter_temizlik = 'test'`);
       await tx.denetim.deleteMany({ where: { olay: "TASIMA_SELI", createdAt: { gte: baslangic } } });
     });
+    await temizlePortal({ kullanicilar, bayiler });
     ortam.temizle();
     await kapat();
   }

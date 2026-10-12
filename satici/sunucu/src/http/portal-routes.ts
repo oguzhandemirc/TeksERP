@@ -124,6 +124,7 @@ import {
   queryBool,
   queryEnum,
   queryText,
+  queryUuid,
   type PortalRequestContext,
   type PortalRouteDef,
 } from "./portal-http";
@@ -416,7 +417,9 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
     path: "/tasima-talepleri",
     permission: "portal:oku",
     kimlik: "OKUMA",
-    handler: async (c) => ({ data: await q.listTransfers(prisma, { status: queryEnum(c.req, "durum", ["BEKLIYOR", "ONAYLANDI", "REDDEDILDI"] as const), ...pageQuery(c.req) }) }),
+    handler: async (c) => ({
+      data: await q.listTransfers(prisma, { status: queryEnum(c.req, "durum", ["BEKLIYOR", "ONAYLANDI", "REDDEDILDI"] as const), targetId: queryUuid(c.req, "hedefKimlik"), ...pageQuery(c.req) }),
+    }),
   },
   {
     method: "get",

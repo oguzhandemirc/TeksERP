@@ -1,17 +1,15 @@
 // BAYİ ALT-PORTALI JSON API'si — GENEL dinleyicide (CF arkası), /bayi/api altında. Yalnız BAYI rolü
 // girer (satıcı rolleri buradan giriş yapamaz; oturum GENEL dinleyiciye bağlı). Bayi yalnız KENDİ
-// müşterilerini görür/yönetir; başkasınınki "bulunamadı"dır. Yaptırım, taşıma, anahtar, kullanıcı
-// yönetimi YOK. Bayi imzalı HAK: bayi parolası imza alt sürecinin stdin'ine; sunucu protokolün
+// müşterilerini görür/yönetir; başkasınınki "bulunamadı"dır. Yaptırım, taşıma ONAYI, anahtar, kullanıcı
+// yönetimi YOK (kendi kurulumunu hedefleyen bekleyen taşıma talebini yalnız REDDEDER — B1k çıkışı). Bayi imzalı HAK: bayi parolası imza alt sürecinin stdin'ine; sunucu protokolün
 // sertifika kısıtına EK olarak bayinin GÜNCEL tavanını uygular (dealer.service.ts).
 // Sahiplik iki kez: kilitsiz ön okuma (hızlı "yok") + eylemin tx'inde müşteri kilidi ALTINDA (D10) —
 // müşteri o arada başka bayiye geçtiyse eylem "bulunamadı" ile düşer.
-import type { Hak, Kurulum, Musteri, Tesis } from "@prisma/client";
 import { z } from "zod";
 import { LICENSE_CLASSES, TEMP_CODE_DAYS } from "../lisans-protokol";
 import { passwordBuffer } from "../keys/key-files";
-import { notFoundError } from "../lib/errors";
 import { withSigningPasswordGuard } from "../portal/signing-guard";
-import { prisma, type Db } from "../lib/prisma";
+import { prisma } from "../lib/prisma";
 import { DEFAULT_ENTITLEMENT_MODULES, assertKnownModules, assertProductionKept } from "../portal/module-catalog";
 import * as q from "../portal/queries";
 import { assertWithinCeiling, ceilingViolations, currentCeiling, signedFieldsOf, findDealer, prepareDealerEntitlementVersion } from "../services/dealer.service";
@@ -25,7 +23,9 @@ import {
 import { createTempCodeRequestTx, listDealerTempCodeRequests } from "../services/temp-code.service";
 import { entitlementVersionAudit, type EntitlementChanges } from "../services/entitlement.service";
 import { createCustomerTx, createSiteTx } from "../services/master-data.service";
-import { ClientTokenSchema, IsoSchema, ReasonSchema, bodyOf, idParam, pageQuery, portalAction, queryText, type PortalRequestContext, type PortalRouteDef } from "./portal-http";
+import { ClientTokenSchema, IsoSchema, ReasonSchema, bodyOf, idParam, pageQuery, portalAction, queryText, type PortalRouteDef } from "./portal-http";
+import { dealerOf, ownedCustomer, ownedEntitlement, ownedInstallation, ownedSite, withPath } from "./dealer-scope";
+import { DEALER_TRANSFER_ROUTES } from "./dealer-transfer-routes";
 
 const Token = ClientTokenSchema;
 const ModuleList = z.array(z.string().min(1).max(64)).max(64);
@@ -63,38 +63,6 @@ const EntitlementVersion = z.strictObject({
 const TempCodeRequest = z.strictObject({ clientToken: Token, istekKodu: z.string().min(1).max(80), gun: z.number().int().optional(), sebep: ReasonSchema });
 const CodeCreate = z.strictObject({ clientToken: Token, gecerlilikGun: z.number().int().min(1).max(365).optional() });
 
-function dealerOf(c: PortalRequestContext): string {
-  const id = c.session.user.bayiId;
-  // Oturum kapısı BAYI rolünü bayisiz geçirmez (DB CHECK de); savunma: bayisiz oturum hiçbir şey görmez.
-  if (!id) throw notFoundError("Bayi");
-  return id;
-}
-
-async function ownedCustomer(db: Db, dealerId: string, id: string): Promise<Musteri> {
-  const row = await db.musteri.findFirst({ where: { id, bayiId: dealerId } });
-  if (!row) throw notFoundError("Müşteri");
-  return row;
-}
-
-async function ownedSite(db: Db, dealerId: string, id: string): Promise<Tesis> {
-  const row = await db.tesis.findFirst({ where: { id, musteri: { bayiId: dealerId } } });
-  if (!row) throw notFoundError("Tesis");
-  return row;
-}
-
-async function ownedInstallation(db: Db, dealerId: string, id: string): Promise<Kurulum> {
-  const row = await db.kurulum.findFirst({ where: { id, tesis: { musteri: { bayiId: dealerId } } } });
-  if (!row) throw notFoundError("Kurulum");
-  return row;
-}
-
-async function ownedEntitlement(db: Db, dealerId: string, id: string): Promise<Hak> {
-  const row = await db.hak.findFirst({ where: { id, kurulum: { tesis: { musteri: { bayiId: dealerId } } } } });
-  if (!row) throw notFoundError("Hak");
-  return row;
-}
-
-const withPath = (body: object, id: string) => ({ ...body, _yol: id });
 
 export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
   { method: "get", path: "/ben", permission: "bayi:portal", kimlik: "OKUMA", handler: async (c) => ({ data: await q.dealerSelf(prisma, dealerOf(c)) }) },
@@ -306,4 +274,5 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       });
     },
   },
+  ...DEALER_TRANSFER_ROUTES,
 ];

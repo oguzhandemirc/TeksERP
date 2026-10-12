@@ -38,6 +38,7 @@ import {
   portalKullaniciAc,
   portalSunuculariKur,
   sonuc,
+  temizleBagsizTalepler,
   temizleKurulumlar,
   temizleDagitim,
   temizlePortal,
@@ -59,6 +60,7 @@ async function main(): Promise<void> {
   const { ctx, f } = ortam;
   const { prisma } = await import("../src/lib/prisma");
   const kullanicilar: string[] = [];
+  const bagsizKidler: string[] = [];
   const bayiler: string[] = [];
   const kurulumlar: string[] = [];
   const musteriler: string[] = [];
@@ -433,6 +435,18 @@ async function main(): Promise<void> {
     await s("post", "/kurulumlar/:id/gecici-kod", `/kurulumlar/${bk.veri.id as string}/gecici-kod`, 409, { istekKodu: gIstek, gun: 30, imzaParolasi: TEST_KOK_PAROLASI, sebep: "uçlar kapsamı" });
     await s("post", "/gecici-kod-talepleri/:id/uret", `/gecici-kod-talepleri/${gTalep.veri.id as string}/uret`, 409, { imzaParolasi: TEST_KOK_PAROLASI, sebep: "uçlar kapsamı" });
     await s("post", "/gecici-kod-talepleri/:id/reddet", `/gecici-kod-talepleri/${gTalep.veri.id as string}/reddet`, 200, { sebep: "uçlar kapsamı" });
+    // Taşıma talebi bayi reddi (davranış test_tasima_sel §7): etkinleşmemiş bayi kurulumunu hedefleyen bağsız talep.
+    const bTasimaAnahtari = kurulumAnahtariUret();
+    bagsizKidler.push(bTasimaAnahtari.kid);
+    const bHedef = bk.veri.kurulumId as string;
+    const bTasima = await imzaliPost(sunucu.genel, ENDPOINTS.TRANSFER, {
+      kurulumId: bHedef,
+      amac: "tasima",
+      anahtar: bTasimaAnahtari,
+      govde: { v: 1, kurulumId: bHedef, acikAnahtar: bTasimaAnahtari.x, parmakIzi: f.parmakIzi, ortam: ORTAM_TASIMA, gerekce: "uçlar kapsamı" },
+    });
+    await b("get", "/kurulumlar/:id/tasima-talepleri", `/kurulumlar/${bk.veri.id as string}/tasima-talepleri`, 200);
+    await b("post", "/tasima-talepleri/:id/reddet", `/tasima-talepleri/${bTasima.json.talepId as string}/reddet`, 200, { sebep: "uçlar kapsamı" });
     const bSaklanan = await prisma.portalIslemi.findMany({ where: { eylem: "BAYI_KOD_URET", createdAt: { gte: akisBaslangici } } });
     const bSaklananMetin = JSON.stringify(bSaklanan.map((r) => r.yanit));
     kontrol(
@@ -482,6 +496,7 @@ async function main(): Promise<void> {
     await prisma.kanal.update({ where: { id: grupOnce.id }, data: { ad: grupOnce.ad, sira: grupOnce.sira, guncelSurumler: grupOnce.guncelSurumler as object } });
     rmSync(dagitimKoku, { recursive: true, force: true });
     await temizleKurulumlar([...kurulumlar, ...(await bayiKurulumlari(bayiler))], ortam.kidler);
+    await temizleBagsizTalepler(bagsizKidler);
     await temizlePortal({ kullanicilar, bayiler, tesisler, musteriler, kanallar: [kanal, emekliKanal] });
     ortam.temizle();
     await kapat();
