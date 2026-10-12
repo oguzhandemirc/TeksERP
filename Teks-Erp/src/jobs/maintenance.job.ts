@@ -10,6 +10,7 @@ import prisma from "../lib/prisma";
 import { rotateRollbackBackups } from "../services/backup.service";
 import { AuditService } from "../services/audit.service";
 import { SessionRegistryService } from "../services/session-registry.service";
+import { TotpAccountService } from "../services/totp-account.service";
 import { readAuditArchiveRetentionYears } from "../services/system-setting.service";
 import { auditArchivePurgeCutoff, nextAuditPurgeSliceEnd } from "../services/helpers/audit-retention.helper";
 import { isInMaintenanceWindow } from "../services/helpers/maintenance-window.helper";
@@ -25,6 +26,8 @@ const STARTUP_DELAY_MS = 60 * 1000;
 const WATCHDOG_MS = 3 * 60 * 60 * 1000;
 /** Ölü oturum satırı bu yaştan sonra silinir (POST /admin/sessions/purge varsayılanıyla aynı). */
 export const SESSION_PURGE_OLDER_THAN_DAYS = 90;
+/** Tüketilmemiş 2FA kurulum penceresi süresi dolduktan bu kadar gün sonra silinir. */
+export const TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS = 30;
 /** Bir gecede en fazla bu kadar aylık dilim budanır; kalan ertesi geceye kalır. */
 const MAX_PURGE_SLICES = 200;
 
@@ -91,6 +94,19 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
     run: async () => {
       const r = await SessionRegistryService.purgeDeadSessions(SESSION_PURGE_OLDER_THAN_DAYS);
       return r.deleted > 0 ? `oturum: ${r.deleted} ölü satır silindi` : null;
+    },
+  },
+  {
+    name: "totp-enrollment-purge",
+    run: async () => {
+      const r = await TotpAccountService.purgeExpiredEnrollments(TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS);
+      if (r.deleted === 0) return null;
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "TOTP_ENROLLMENT_PURGE",
+        payload: { olderThanDays: TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS, deleted: r.deleted },
+      });
+      return `2FA kurulum penceresi: ${r.deleted} süresi dolmuş satır silindi`;
     },
   },
 ];

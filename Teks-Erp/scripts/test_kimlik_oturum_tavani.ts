@@ -1,6 +1,6 @@
 // =============================================================================
 // BEKÇİ — KİMLİK DİLİM 2: kilit kapatılamaz · oturum bitişi sunucuda (güvenlik denetimi)
-// Çalıştır: npx tsx scripts/test_kimlik_oturum_tavani.ts [--sonda=kapanir|--sonda=bitis|--sonda=tavan]
+// Çalıştır: npx tsx scripts/test_kimlik_oturum_tavani.ts [--sonda=kapanir|--sonda=bitis|--sonda=tavan|--sonda=budama]
 // =============================================================================
 // NEDEN: denetim O-04 — `settings:session` sahibi giriş deneme kilidini tek PATCH ile
 // kapatıp PIN/şifre uzayını sınırsız deneyebiliyordu. Artık kilit kapatılamaz: `false`
@@ -14,12 +14,17 @@
 // §3 eşzamanlı oturum tavanı: politika `off`ta 21. giriş en eskiyi `SESSION_LIMIT` ile düşürür,
 //    düşen token 401 SESSION_REVOKED; üç tipten 30 paralel giriş tavanı aşmaz (kilit kullanıcı
 //    başına); varsayılan `kick`te üç tip açıkken hiçbir oturum SESSION_LIMIT ile düşmez
+// §4 süresi geçmiş kimlik kayıtlarının budaması (defter DEĞİL): gece bakımında ölü oturum
+//    (90 gün) ve TÜKETİLMEDEN süresi dolan 2FA kurulum penceresi (30 gün, aday sır taşır);
+//    tüketilmiş pencere (kurulum kanıtı, G1 mührü onu okur) ve taze pencere kalır
 // SONDA (kalıcı): --sonda=kapanir → §1 statik metne eski kapalı dalını ekler (KIRMIZI olmalı)
 //                 --sonda=bitis   → §2 statik metinden süre denetimini siler (KIRMIZI olmalı)
 //                 --sonda=tavan   → §3 statik metinden tavan çağrısını siler (KIRMIZI olmalı)
+//                 --sonda=budama  → §4 statik metinde budama yüklemi `consumedAt: null`ı kaybeder (KIRMIZI olmalı)
 // =============================================================================
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import prisma from "../src/lib/prisma";
 import { randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
@@ -34,6 +39,11 @@ import {
   readPinLockoutConfig,
   systemSettingService,
 } from "../src/services/system-setting.service";
+import { TotpAccountService } from "../src/services/totp-account.service";
+import { storeTotpSecret } from "../src/services/helpers/totp-state.helper";
+import { generateTotpSecret } from "../src/services/totp.service";
+import { setShortCredentialKeyDirForTests } from "../src/lib/short-credential/keyring";
+import { MAINTENANCE_TASKS, TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS } from "../src/jobs/maintenance.job";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 const SONDA = process.argv.find((a) => a.startsWith("--sonda="))?.slice("--sonda=".length) ?? null;
@@ -233,6 +243,37 @@ async function oturumBitisiSunucuda() {
     /select: \{[^}]*expiresAt: true[^}]*\}/.test(mw) && /session\.expiresAt\.getTime\(\) <= Date\.now\(\)/.test(mw));
 }
 
+async function budama() {
+  console.log("\n=== §4 süresi geçmiş kimlik kayıtlarının budaması ===");
+  const gorevler = MAINTENANCE_TASKS.map((t) => t.name);
+  check("§4a gece bakımında oturum ve 2FA penceresi budaması kayıtlı", gorevler.includes("session-purge") && gorevler.includes("totp-enrollment-purge"),
+    gorevler.join(","));
+  check("§4b pencere saklama süresi 7–90 gün arası", TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS >= 7 && TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS <= 90);
+  setShortCredentialKeyDirForTests(mkdtempSync(join(tmpdir(), "bekci-kimlik2-halka-")));
+  const u = await testKullanicisi("totp");
+  const gun = 86_400_000;
+  const pencere = (expiresAt: Date, consumedAt: Date | null) =>
+    prisma.totpEnrollment.create({
+      data: { userId: u.id, openedById: aktorId!, token: randomUUID(), secret: storeTotpSecret(generateTotpSecret()), expiresAt, consumedAt },
+      select: { id: true },
+    });
+  const eski = await pencere(new Date(Date.now() - 40 * gun), null);
+  const taze = await pencere(new Date(Date.now() - 5 * gun), null);
+  const kanit = await pencere(new Date(Date.now() - 40 * gun), new Date(Date.now() - 41 * gun));
+  const r = await TotpAccountService.purgeExpiredEnrollments(TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS);
+  const kalan = new Set((await prisma.totpEnrollment.findMany({ where: { userId: u.id }, select: { id: true } })).map((x) => x.id));
+  check("§4c tüketilmeden 40 gün önce dolmuş pencere silindi", !kalan.has(eski.id) && r.deleted >= 1, `silinen=${r.deleted}`);
+  check("§4d 5 gün önce dolmuş pencere kaldı (saklama süresi içinde)", kalan.has(taze.id));
+  check("§4e tüketilmiş pencere (kurulum kanıtı) kaldı", kalan.has(kanit.id));
+  await prisma.totpEnrollment.deleteMany({ where: { userId: u.id } });
+  setShortCredentialKeyDirForTests(null);
+
+  let svc = oku(resolve(KOK, "src/services/totp-account.service.ts"));
+  if (SONDA === "budama") svc = svc.replace("where: { consumedAt: null, expiresAt: { lt: cutoff } },", "where: { expiresAt: { lt: cutoff } },");
+  check("§4f statik: pencere budaması yalnız tüketilmemiş ve süresi eşikten eski satırı seçer",
+    svc.includes("where: { consumedAt: null, expiresAt: { lt: cutoff } },"));
+}
+
 async function main() {
   const engel = hedefDbEngeli();
   if (engel) { check("§0 hedef DB yazılabilir", false, engel); process.exit(1); }
@@ -246,6 +287,7 @@ async function main() {
     await kilitKapatilamaz();
     await oturumBitisiSunucuda();
     await oturumTavani();
+    await budama();
   } finally {
     await prisma.session.deleteMany({ where: { userId: { in: olusanKullanicilar } } }).catch(() => undefined);
     await prisma.user.updateMany({ where: { id: { in: olusanKullanicilar } }, data: { isActive: false } }).catch(() => undefined);

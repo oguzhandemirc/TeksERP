@@ -46,6 +46,8 @@ const RUNTIME_EVENTS = {
   AUDIT_ARCHIVE: "AUDIT_ARCHIVE",
   /** Gece bakımı: saklama süresi dolan audit ARŞİVİ satırları budandı (sayı + kesim yükte). */
   AUDIT_ARCHIVE_PURGE: "AUDIT_ARCHIVE_PURGE",
+  /** Gece bakımı: tüketilmeden süresi dolan 2FA kurulum pencereleri (aday sır taşır) budandı. */
+  TOTP_ENROLLMENT_PURGE: "TOTP_ENROLLMENT_PURGE",
   /** Bir kullanıcının hızlı PIN'i / kart kodu OKUNDU — güvenlik olayı. */
   USER_CREDENTIAL_READ: "USER_CREDENTIAL_READ",
   PERIPHERAL_TEST: "PERIPHERAL_TEST",

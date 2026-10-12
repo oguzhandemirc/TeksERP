@@ -41,6 +41,18 @@ export type TotpStatus = {
 
 export class TotpAccountService {
   /**
+   * Tüketilmeden süresi dolan kurulum pencerelerini budar (gece bakımı): aday sırrı taşırlar
+   * ve hiçbir okuyucu onlara bakmaz. Tüketilmiş pencere kurulum KANITIDIR, dokunulmaz.
+   */
+  static async purgeExpiredEnrollments(olderThanDays: number): Promise<{ deleted: number }> {
+    const cutoff = new Date(Date.now() - olderThanDays * 86_400_000);
+    const res = await prisma.totpEnrollment.deleteMany({
+      where: { consumedAt: null, expiresAt: { lt: cutoff } },
+    });
+    return { deleted: res.count };
+  }
+
+  /**
    * TOTP AÇIK MI — tek kaynak (panel sekmesi, giriş kapısı, ikinci faktör doğrulaması).
    *
    * Açık = kullanıcının ŞU ANKİ sırrı bir kurulum penceresinde ilk kodla KANITLANMIŞ
