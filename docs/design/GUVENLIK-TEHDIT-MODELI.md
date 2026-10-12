@@ -273,6 +273,8 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 
 ---
 
+> **Bölge 7 düzeltmesi (2026-10-12):** satıcı/patron B2 · B5 · B5s · B6 · B9 kapandı (`docs/history/arsiv/2026-10.md` "Güvenlik denetimi Bölge 7 düzeltmesi"); B1/B1k · B3 · B4 · B7 · B8 açık.
+
 ## 7. Eski istemci ve mevcut kurulum — özet
 
 | Faz | Sözleşme kırar mı | Mevcut kurulum (adnansahin) |

@@ -127,6 +127,7 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
    for s in goc uygulama esitleme; do openssl rand -hex 32 | sudo tee $K/sirlar/$s-parolasi >/dev/null; done   # ekrana BASILMAZ
    sudo cp /opt/stack/apps/tekserp-satici-hazirlik/sirlar/ic-api-belirteci $K/sirlar/ic-api-belirteci          # satıcıyla AYNI değer, AYRI dosya
    sudo chown root:61062 $K/sirlar/* && sudo chmod 440 $K/sirlar/*
+   ⚠️ (2026-10-12, B6) `patron-tesis-db.key`/`tesis-rol-anahtari` ve `anahtarlar/patron-totp.key` diğerlerine açıksa patron **AÇILMAZ**; yükseltmeden önce `sudo stat -c '%a %U:%G %n'` ile bakın, gerekirse `chmod o-rwx`.
    ```
 
 2. **Dosyalar (Mac'ten):** `docker-compose.yml`, doldurulmuş `.env` (0600), `patron.tkpub` (`$K/yedek-alici/`, 644).

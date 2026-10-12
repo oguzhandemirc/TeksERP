@@ -100,6 +100,8 @@
 
 `KURULUM_KAYNAGI=kayit` (varsayılan): satıcı CLI'si (`scripts/tesis.ts kurulum-kaydet`) açık anahtarı, sınıfı, modülleri, patron bulutu bitişini yazar. `KURULUM_KAYNAGI=satici`: satıcı İÇ API'si (`GET <SATICI_IC_API_URL>/ic/v1/kurulum/:id`, Bearer, iç ağ) + `installations` önbelleği — önbellek TAZELİKTİR: süre (`KURULUM_ONBELLEK_DK`) dolunca sorulur, ulaşılamazsa bayat kayıt, HİÇ dolmadıysa RED; satıcının 404'ü kaydı pasife çeker. Zil (`POST /ic/v1/zil {tesisId, konu}`) yalnız bu kipte gider, içerik taşımaz. Satıcı tarafı iç API'si AYRI dilimdir (sözleşme §17).
 
+**Sıra imza → hak → DB [ÇEKİRDEK]:** satıcıdan YENİ gelen kurulum yalnız imza ve hak doğrulandıktan SONRA yazılır (yönlendirme bağı + tesis DB isteği + önbellek); yabancı imzalı istek ya da patron-bulut hakkı olmayan kurulum tesis DB'si istetemez; satıcının "yok"u önbellek süresince hatırlanır, önbellekte olmayan kimliğe soru `KURULUM_SORGU_BUTCE_DK`/dk ile sınırlı; kayıtsız kurulum ile yabancı anahtar AYNI 401 `KURULUM_BILINMIYOR`. Parolasız sır (`patron-tesis-db.key` · `patron-totp.key`) diğerlerine açıksa açılış DURUR. · bekçi: `test_kurulum_dizini (§9)` · `test_tesis_db_hazirlik (§8)` <sub>(arşiv:2026-10-12)</sub>
+
 Eşitleme hakkı (bulut İKİNCİ kapıdır; fabrika zaten göndermez): `sinif = URETIM` ∧ `patron-bulut ∈ modüller` ∧ `patronBulutBitis > şimdi` ∧ devredilmemiş ∧ tesisin hizmet aşaması ACIK — yoksa 403 `SINIF_GONDEREMEZ` / `PATRON_BULUT_KAPALI`. Hesap yazmaları (gelen kutusu, rapor isteği) da tesisin açık aboneliğini ister.
 
 ### Hizmet aşaması (Ek-6/A §4 — tek kaynak `src/services/service-lifecycle.ts`)
