@@ -286,6 +286,16 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 **Değişmeyen:** var olan uçların sözleşmesi; mandalsız (mühürlenmemiş) kurulumda yetki davranışı.
 
+**İki adımlı doğrulama sırrı şifreli saklanır (güvenlik denetimi B1c)**
+
+- TOTP sırrı veritabanında artık şifreli durur (anahtar lisans klasöründeki kısa kimlik anahtar halkasından türer;
+  halka zaten şifreli yedeğin emanetindedir, ek anahtar dosyası yoktur). Düz yedek dosyası (`.dump`) açık sırrı
+  taşımaz. Açılışta var olan düz sırlar BİR KEZ şifrelenir; ikinci açılış dokunmaz. Destek hesabının mührü
+  değişmez (özet açık sırdan hesaplanır). Lisans klasörü/anahtar halkası yoksa iki adımlı kurulum 503
+  `TOTP_KEY_UNAVAILABLE`; başka sunucudan gelen yedekte sır çözülemezse 503 `TOTP_SECRET_UNREADABLE` (giriş
+  kapalı kalır, 2FA sessizce düşmez — anahtar halkası emanetten geri konunca açılır). Migration
+  `20261012220000_totp_sirri_sarili_saklama` (yalnız iki kolonu genişletir).
+
 ## 3. Sözleşme
 
 - **Kırıldı mı:** HAYIR (G1 kısmı) — yalnız ekleme: `/api/auth/me` `systemAccountSealStatus`, health
@@ -352,7 +362,7 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 
 ## 4. Migration
 
-- **Var mı:** EVET — 10 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
+- **Var mı:** EVET — 11 adet: `20261011200000_alarm_sorumlu`, `20261011210000_sistem_hesabi_muhru` (yalnız EKLEME:
   `users` tablosuna boş geçilebilir bir alan + bir kontrol kuralı; var olan satırlar boş kalır, veri dönüşümü YOK),
   `20261012010000_durus_acan_kapatan`, `20261012120000_kimlik_sifirlama_onayi` (yalnız EKLEME: yeni tablo),
   `20261012140000_makine_durus_kod_esleme` (yalnız EKLEME: boş yeni tablo + toplayıcıya boş geçilebilir alan),
@@ -360,8 +370,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   `20261012190000_makine_kart_sahiplenme` (yalnız EKLEME: duruşa boş geçilebilir alan + kısmi tekil indeks),
   `20261012150000_cihaz_kaniti` (yalnız EKLEME: `devices`e üç boş geçilebilir alan),
   `20261012200000_perf_indeksler` (yalnız indeks, veri dönüşümü yok; 300k satırlık duruş tablosunda ~0,16 sn),
-  `20261012210000_autovacuum_tablo_ayarlari` (yalnız tablo ayarı, veri yazmaz, tabloyu yeniden yazmaz).
-- **Toplam migration:** 386 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 10 migration uygulamalıdır. Farklı sayı =
+  `20261012210000_autovacuum_tablo_ayarlari` (yalnız tablo ayarı, veri yazmaz, tabloyu yeniden yazmaz),
+  `20261012220000_totp_sirri_sarili_saklama` (yalnız iki kolonun genişliği; veri dönüşümü migration'da YOK, düz
+  sırları açılış işi şifreler).
+- **Toplam migration:** 387 (2.15.5'te 376). 2.15.5'ten gelen kurulum tam 11 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -413,6 +425,10 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
 Güncelleme programıyla yapılan güncellemede yeni sürüm açılmazsa önceki imaja kendiliğinden dönülür; geri dönülen
 sürüm kendiliğinden yeniden denenmez. Migration geri alınmaz; 2.15.5 imajı yeni alanlarla açılır (onları okumaz).
 Veriyi güncelleme öncesine döndürmek gerekirse otomatik yedekten geri yüklenir.
+**Dikkat (TOTP):** yeni sürüm ilk açılışta iki adımlı doğrulama sırlarını şifreler; 2.15.5 şifreli sırrı okuyamaz.
+Açılıştan SONRA yalnız imajı 2.15.5'e döndürmek, iki adımlı doğrulaması açık hesapların (destek hesabı dahil)
+girişini bozar — bu sürümden geri dönüş güncelleme öncesi yedekten geri yüklemeyle yapılır. Doğrulama kipinde
+düşen güncelleme zaten yedekten geri yüklenir.
 
 ## 7. Doğrulama — kurulumdan sonra rapor edilecekler
 

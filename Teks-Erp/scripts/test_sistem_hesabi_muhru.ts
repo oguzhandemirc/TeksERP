@@ -45,6 +45,8 @@ import { buildRichHealth } from "../src/lib/health-snapshot";
 import { TotpAccountService } from "../src/services/totp-account.service";
 import { totpCodeForStep, totpStep } from "../src/services/totp.service";
 import { setTotpSecretOpenerForTest } from "../src/services/helpers/totp-state.helper";
+import { getShortCredentialKeyRing } from "../src/lib/short-credential/keyring";
+import { isSealedTotpSecret, openTotpSecret } from "../src/lib/short-credential/totp-crypto";
 import { resolveSystemAccountLock, __resetSystemAccountRegistryForTests } from "../src/services/helpers/system-account.registry";
 import { resetRequestPermissionCacheForTest } from "../src/services/auth.service";
 import { geciciLisansDizini } from "./lib/sistem-hesabi-muhru-fikstur";
@@ -80,6 +82,8 @@ const MUAF: Readonly<Record<string, string>> = {
     "panelden açılan hesap sıradan kullanıcı doğar (bayrak yazılmaz) — mühürlenecek sistem kimliği yok",
   "src/services/permission-management.service.ts::createFactoryAdmin":
     "fabrika yöneticisi sıradan kullanıcı doğar (isSystemAccount:false) — mühürlenecek sistem kimliği yok",
+  "src/jobs/totp-secret.job.ts::wrapPlainTotpSecrets":
+    "düz TOTP sırrını sarar; açık sır ve özet DEĞİŞMEZ (mühür açık sırdan doğar) — yeniden mühürlenecek kimlik değişimi yok",
   "src/services/permission-management.service.ts::deleteUser":
     "silinen hesabın kimliği boşaltılır; sistem hesabı panelden silinemez ve silinmişin mührünün bozulması istenen sonuçtur",
 };
@@ -509,10 +513,15 @@ async function totpMuhru(acan: string): Promise<void> {
   const harcandi = await TotpAccountService.verifySecondFactor(t, ilk.kodlar[0]!);
   check("§8 kurtarma kodu harcamak (`usedAt`) mührü BOZMAZ", harcandi && (await durum(t)) === "GECERLI", `${harcandi} ${await durum(t)}`);
 
-  // Saklama biçimi değişse de (ör. şifreli sarma) özet AÇIK sırdan doğar.
+  // Saklama biçimi değişse de (halkanın `enc1:` sarmalı üstüne ikinci bir katman) özet AÇIK sırdan doğar.
   const ozetDuz = credentialDigest(await satir(t));
+  const halka = getShortCredentialKeyRing();
+  if (!halka.ok) throw new Error("anahtar halkası yok");
   const sar = (v: string): string => `enc:${Buffer.from(v, "utf8").toString("base64")}`;
-  const ac = (v: string): string => (v.startsWith("enc:") ? Buffer.from(v.slice(4), "base64").toString("utf8") : v);
+  const ac = (v: string): string | null => {
+    const ic = v.startsWith("enc:") ? Buffer.from(v.slice(4), "base64").toString("utf8") : v;
+    return isSealedTotpSecret(ic) ? openTotpSecret(halka.ring, ic) : ic;
+  };
   const kanitSir = await prisma.totpEnrollment.findUniqueOrThrow({ where: { id: kanit.id }, select: { secret: true } });
   await prisma.user.update({ where: { id: t }, data: { totpSecret: sar(once.totpSecret!) } });
   await prisma.totpEnrollment.update({ where: { id: kanit.id }, data: { secret: sar(kanitSir.secret) } });

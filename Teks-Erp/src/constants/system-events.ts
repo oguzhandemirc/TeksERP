@@ -122,6 +122,8 @@ const SHORT_CREDENTIAL_EVENTS = {
   SHORT_CREDENTIAL_KEY_RESTORED: "SHORT_CREDENTIAL_KEY_RESTORED",
   /** Yönetici toplu hızlı PIN sıfırladı (kişi başı satır ayrıca `USER_QUICK_PIN`). */
   SHORT_CREDENTIAL_BULK_RESET: "SHORT_CREDENTIAL_BULK_RESET",
+  /** Düz saklanan TOTP sırları açılışta halka anahtarıyla sarıldı (sayılar; sır yüke girmez). */
+  TOTP_SECRET_WRAPPED: "TOTP_SECRET_WRAPPED",
   /** Tezgah Salonu toplu koşum işlemi özeti (koşum başı satırlar ayrıca `MACHINE_RUN`). */
   MACHINE_RUN_BULK: "MACHINE_RUN_BULK",
   /** Tezgah Salonu toplu duruş işlemi özeti — aç · kapat · geri al (duruş başı satırlar ayrıca `MACHINE_STOP_EVENT`). */

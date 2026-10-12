@@ -16,7 +16,7 @@ import { randomUUID } from "crypto";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { credentialReseal } from "./helpers/system-account-seal.helper";
-import { openStoredTotpSecret } from "./helpers/totp-state.helper";
+import { openStoredTotpSecret, openStoredTotpSecretOrThrow, storeTotpSecret } from "./helpers/totp-state.helper";
 import {
   buildOtpauthUri,
   generateRecoveryCodes,
@@ -58,13 +58,13 @@ export class TotpAccountService {
     });
     // Sır yazılı ama `totpEnabledAt` boşsa kurulum YARIM kalmıştır → kapalı.
     if (!user?.totpSecret || !user.totpEnabledAt) return null;
-    const proven = await prisma.totpEnrollment.findFirst({
-      where: { userId, consumedAt: { not: null }, secret: user.totpSecret },
-      select: { id: true },
+    // Sır sarılı saklanır; kanıt eşleşmesi AÇIK değer üzerinden (her sarma ayrı bayt verir).
+    const secret = openStoredTotpSecretOrThrow(user.totpSecret);
+    const consumed = await prisma.totpEnrollment.findMany({
+      where: { userId, consumedAt: { not: null } },
+      select: { secret: true },
     });
-    if (!proven) return null;
-    const secret = openStoredTotpSecret(user.totpSecret);
-    if (secret === null) return null;
+    if (!consumed.some((e) => openStoredTotpSecret(e.secret) === secret)) return null;
     return { secret, enabledAt: user.totpEnabledAt, lastStep: user.totpLastStep };
   }
 
@@ -110,7 +110,7 @@ export class TotpAccountService {
         data: { expiresAt: new Date() },
       });
       await tx.totpEnrollment.create({
-        data: { userId: params.userId, openedById: params.openedById, token, secret, expiresAt },
+        data: { userId: params.userId, openedById: params.openedById, token, secret: storeTotpSecret(secret), expiresAt },
       });
     });
 
@@ -154,13 +154,14 @@ export class TotpAccountService {
     if (!row || row.consumedAt || row.expiresAt <= new Date() || !row.user.isActive) {
       throw AppError.notFound("Kurulum bağlantısı geçersiz veya süresi dolmuş.");
     }
+    const secret = openStoredTotpSecretOrThrow(row.secret);
     return {
       username: row.user.username,
-      secret: row.secret,
+      secret,
       expiresAt: row.expiresAt,
       otpauthUri: buildOtpauthUri({
         username: row.user.username,
-        secretBase32: row.secret,
+        secretBase32: secret,
         issuer: TOTP_ISSUER,
       }),
     };
@@ -194,7 +195,7 @@ export class TotpAccountService {
 
     // Kurulumda replay kilidi YOK (`lastUsedStep` verilmez): kullanıcının henüz
     // kabul edilmiş bir adımı yoktur ve ilk kod tanım gereği ilktir.
-    const check = verifyTotp(row.secret, code);
+    const check = verifyTotp(openStoredTotpSecretOrThrow(row.secret), code);
     if (!check.ok) {
       throw AppError.badRequest(
         check.reason === "format"

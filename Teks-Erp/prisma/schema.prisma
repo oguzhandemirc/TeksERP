@@ -442,11 +442,12 @@ model User {
   /// Kart düz metin döneminde basıldı (128 bit, sırrı eski dökümlerde düz durur) —
   /// çalışmaya devam eder, panel "yeniden bas" önerir. Yeni basımda false.
   cardTokenLegacy    Boolean   @default(false)
-  /// TOTP (RFC 6238) sırrı — base32. NULL = iki adımlı doğrulama KURULU DEĞİL.
+  /// TOTP (RFC 6238) sırrı. NULL = iki adımlı doğrulama KURULU DEĞİL.
   /// ⚠️ Kurulumun TEK yolu `TotpEnrollment` penceresidir; kullanıcı kendi başına
-  /// yazamaz (bkz. o modelin notu). Düz saklanır — HMAC anahtarı olduğu için
-  /// hash'lenemez; korunması DB/yedek şifrelemesine aittir (`quickPin` emsali).
-  totpSecret         String?   @db.VarChar(64)
+  /// yazamaz (bkz. o modelin notu). HMAC anahtarı olduğu için hash'lenemez; `enc1:` sarmalıyla
+  /// saklanır (anahtar LICENSE_DIR halkasından, `totp-state.helper` tek okuyucu/yazıcı) —
+  /// düz .dump sırrı vermez. Geçişten kalan düz base32 açılış işinde sarılır.
+  totpSecret         String?   @db.VarChar(200)
   /// Doğrulamanın tamamlandığı an. NULL ise sır yazılmış olsa bile TOTP KAPALIDIR
   /// (yarım kalan kurulum kimseyi kilitlemesin) — okuma yolları bu alana bakar.
   totpEnabledAt      DateTime? @db.Timestamptz
@@ -777,8 +778,8 @@ model TotpEnrollment {
   openedById String @db.Uuid
   /// Kurulum bağlantısının tek kullanımlık anahtarı (URL'de taşınır).
   token      String @unique @db.Uuid
-  /// Aday TOTP sırrı (base32). Doğrulanana kadar User'a yazılmaz.
-  secret     String @db.VarChar(64)
+  /// Aday TOTP sırrı — `User.totpSecret` ile aynı `enc1:` sarmalı. Doğrulanana kadar User'a yazılmaz.
+  secret     String @db.VarChar(200)
 
   expiresAt  DateTime  @db.Timestamptz
   consumedAt DateTime? @db.Timestamptz

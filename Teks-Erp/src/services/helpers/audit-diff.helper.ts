@@ -45,7 +45,7 @@ export interface FieldChange {
 const SECRET_FIELDS = new Set([
   "passwordHash", "password", "pin", "pinHash", "quickPin",
   "cardToken", "token", "refreshToken", "secret",
-  // TOTP sırrı HMAC anahtarıdır — düz saklanır, diff'e girmemeli.
+  // TOTP sırrı HMAC anahtarıdır — sarılı da olsa diff'e girmemeli.
   "totpSecret",
   // P3 (ayar şifresi) önden eklendi: alan doğduğu gün maskeli doğsun.
   "settingsPasswordHash",

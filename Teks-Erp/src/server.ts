@@ -238,7 +238,7 @@ function startLanListener(): Server {
     // anahtarı kapısı devre dışı kalır (emniyet supabı), yani bu satır olmadan
     // yeni bir kurulumda modülleri KİMSE açamazdı.
     startSuperadminAccount();
-    // Kısa kimlik (PIN/kart) anahtar halkası + yedek emaneti + düz/uyuşmayan uyarısı. Veri DÖNÜŞTÜRMEZ.
+    // Kısa kimlik (PIN/kart) anahtar halkası + yedek emaneti + düz/uyuşmayan uyarısı; aynı halkayla düz TOTP sırlarını bir kez sarar.
     startShortCredentialJob();
     // KURULUM PROFİLİ — taze kurulumda modül anahtarlarını `.env`deki
     // `TEKSERP_PROFIL` profilinden yazar. Mevcut kurulumda grandfathering

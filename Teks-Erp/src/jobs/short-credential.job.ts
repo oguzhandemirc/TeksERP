@@ -5,6 +5,7 @@ import { ShortCredentialService, type ShortCredentialStatus } from "../services/
 import { ShortCredentialAdminService } from "../services/short-credential-admin.service";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
+import { startTotpSecretJob } from "./totp-secret.job";
 
 const STARTUP_DELAY_MS = 4 * 1000;
 const RETRY_DELAY_MS = 15 * 1000;
@@ -54,4 +55,6 @@ export function startShortCredentialJob(): void {
     });
   };
   setTimeout(() => attempt(1), STARTUP_DELAY_MS).unref();
+  // Aynı halkanın ikinci tüketicisi: düz saklanmış TOTP sırlarını BİR KEZ sarar (idempotent, kendi zamanlayıcısı).
+  startTotpSecretJob();
 }
