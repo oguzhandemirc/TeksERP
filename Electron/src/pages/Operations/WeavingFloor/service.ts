@@ -100,6 +100,8 @@ export interface LoomFloorDto {
   asOf: string;
   factoryDayStart: string;
   shift: { name: string; startsAt: string; endsAt: string } | null;
+  /** Alarm vardiya şeridi (`NO_SHIFT_DEFINED` · `NO_SHIFT_NOW`); şerit yoksa null. Eski sunucuda alan yok. */
+  alarmNotice?: string | null;
   graceMinutes: number;
   dokumaEnabled: boolean;
   beamTracking: boolean;

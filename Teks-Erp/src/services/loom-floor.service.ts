@@ -14,14 +14,16 @@ import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass, P
 import prisma from "../lib/prisma";
 import { factoryDayStart } from "../constants/time";
 import { LOOM_MACHINE_WHERE, MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
-import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled } from "./system-setting.service";
+import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahAlarmNoShiftMode, resolveTezgahAlarmUnclassifiedTarget, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled, TEZGAH_ALARM_NO_SHIFT_MODES, type TezgahAlarmNoShiftMode } from "./system-setting.service";
 import { ACTIVE_ALARM_STATES } from "./loom-alarm.service";
 import { mountedBeamViewsTx, type MountedBeamView } from "./helpers/warp-beam-mount.helper";
 import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms, type SourceBucket } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis } from "./helpers/loom-efficiency.helper";
-import { clockShiftsFrom, loadClockShiftWindows } from "./helpers/loom-alarm-shift.helper";
+import { clockShiftsFrom, loadAlarmShiftFacts, loadClockShiftWindows, type CurrentShift } from "./helpers/loom-alarm-shift.helper";
 import {
   alarmClockStart,
+  alarmEnableBlocked,
+  alarmShiftNotice,
   countFloor,
   escalationDueAt,
   floorStateSourceOf,
@@ -34,6 +36,7 @@ import {
   type FloorCounts,
   type FloorHallSummary,
   type FloorLoomState,
+  type AlarmShiftNotice,
   type LoomStopTier,
   type ShiftWindow,
 } from "./helpers/loom-floor.helper";
@@ -120,6 +123,8 @@ export interface LoomFloorDto {
   asOf: Date;
   factoryDayStart: Date;
   shift: { name: string; startsAt: Date; endsAt: Date } | null;
+  /** Alarm açıkken vardiyasızlık uyarısı (`alarmShiftNotice`, ayar ekranıyla aynı karar); yoksa null. */
+  alarmNotice: AlarmShiftNotice | null;
   /** Fabrikanın şu anki iletim payı (dk) — yeni açılan duruşa donacak değer. */
   graceMinutes: number;
   dokumaEnabled: boolean;
@@ -220,11 +225,11 @@ function todayTerms(loom: LoomRow, { stops, runs, doffSources }: LoomDayRows, sr
   });
 }
 
-function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclassifiedTarget: number | null; alarmEnabled: boolean; shifts: ShiftWindow[] }, now: Date): LoomFloorOpenStopDto {
+function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclassifiedTarget: number | null; alarmEnabled: boolean; noShiftMode: TezgahAlarmNoShiftMode; shifts: ShiftWindow[] }, now: Date): LoomFloorOpenStopDto {
   // Alarm bayrağı kapalıyken alarm satırı okunmaz (bugünkü davranış); yalnız CANLI alarm kademeyi taşır.
   const alarm = ctx.alarmEnabled && s.alarm && ACTIVE_ALARM_STATES.includes(s.alarm.state) ? s.alarm : null;
   // Saat alarm motoruyla aynı başlangıçtan: vardiyaya taşan duruşta vardiya başı.
-  const clock = stopClockOf(s, alarmClockStart(s, ctx.shifts, now), stopTargetMinutes(s, ctx.unclassifiedTarget), s.escalationGraceMinutes ?? ctx.grace);
+  const clock = stopClockOf(s, alarmClockStart(s, ctx.shifts, now, ctx.noShiftMode), stopTargetMinutes(s, ctx.unclassifiedTarget), s.escalationGraceMinutes ?? ctx.grace);
   return {
     id: s.id,
     reasonCode: s.reasonCode,
@@ -242,7 +247,7 @@ function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclas
   };
 }
 
-function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; unclassifiedTarget: number | null; alarmEnabled: boolean; shifts: ShiftWindow[]; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
+function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; unclassifiedTarget: number | null; alarmEnabled: boolean; noShiftMode: TezgahAlarmNoShiftMode; shifts: ShiftWindow[]; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
   const stops = ctx.byStop.get(loom.id) ?? [];
   const runs = ctx.byRun.get(loom.id) ?? [];
   const terms = todayTerms(loom, { stops, runs, doffSources: (ctx.byDoff.get(loom.id) ?? []).map((d) => d.counterSource) }, src, ctx);
@@ -294,18 +299,15 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
   const dayStart = factoryDayStart(now);
   const dokumaEnabled = await readDokumaEnabled();
   const grace = await readTezgahEscalationGraceMinutes();
-  const unclassifiedTarget = await readTezgahAlarmUnclassifiedTargetMinutes();
+  const unclassifiedTarget = await resolveTezgahAlarmUnclassifiedTarget();
   const src = await loadSources(dayStart, now, dokumaEnabled);
   const beamTracking = (await readDevereEnabled()) && (await readDevereMountTracking());
   const beamsBy = beamTracking ? await mountedBeamViewsTx(prisma, src.looms.map((l) => l.id)) : null;
-  const shift = await prisma.shiftInstance.findFirst({
-    where: { startsAt: { lte: now }, endsAt: { gt: now }, isCancelled: false },
-    select: { startsAt: true, endsAt: true, shiftDefinition: { select: { name: true } } },
-    orderBy: { startsAt: "desc" },
-  });
-  const alarmEnabled = await resolveTezgahAlarmEnabled();
+  const alarm = await alarmShiftState(now);
+  const alarmEnabled = alarm.alarmEnabled;
+  const noShiftMode = alarm.mode;
   const shifts = await loadClockShiftWindows(prisma, clockShiftsFrom(src.stops.filter((s) => s.endedAt === null)), now);
-  const ctx = { dayStart, now, grace, unclassifiedTarget, alarmEnabled, shifts, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
+  const ctx = { dayStart, now, grace, unclassifiedTarget, alarmEnabled, noShiftMode, shifts, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
   const built = src.looms.map((l) => loomDto(l, src, ctx));
   const cores = built.map(({ dto, terms }) => ({
     hallId: dto.hallId, hallName: dto.hallName, state: dto.state,
@@ -317,7 +319,8 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
     data: {
       asOf: now,
       factoryDayStart: dayStart,
-      shift: shift ? { name: shift.shiftDefinition.name, startsAt: shift.startsAt, endsAt: shift.endsAt } : null,
+      shift: alarm.currentShift,
+      alarmNotice: alarm.notice,
       graceMinutes: grace,
       dokumaEnabled,
       beamTracking,
@@ -326,4 +329,35 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
       looms: built.map((b) => b.dto),
     },
   };
+}
+
+export interface AlarmShiftStatusDto {
+  /** Etkin alarm (tezgah modülü ∧ `tezgah.alarmEnabled`). */
+  alarmEnabled: boolean;
+  mode: TezgahAlarmNoShiftMode;
+  /** En az bir aktif vardiya tanımı var. */
+  shiftDefined: boolean;
+  /** Şu an süren canlı vardiya; yoksa null. */
+  currentShift: CurrentShift | null;
+  /** KAYITLI duruma göre uyarı (salon şeridiyle aynı karar). */
+  notice: AlarmShiftNotice | null;
+  /** Alarmı AÇMANIN engelli olduğu kipler (şu anki vardiya tanımına göre) — panel taslak kipi buna bakar. */
+  enableBlockedModes: TezgahAlarmNoShiftMode[];
+}
+
+/** Ayar ekranı ve Tezgah Salonu'nun ortak okuması: kip + vardiya gerçekleri + şerit kararı. */
+async function alarmShiftState(now: Date): Promise<AlarmShiftStatusDto> {
+  const alarmEnabled = await resolveTezgahAlarmEnabled();
+  const mode = await readTezgahAlarmNoShiftMode();
+  const { shiftDefined, currentShift } = await loadAlarmShiftFacts(prisma, now);
+  return {
+    alarmEnabled, mode, shiftDefined, currentShift,
+    notice: alarmShiftNotice({ alarmEnabled, mode, shiftDefined, shiftNow: currentShift !== null }),
+    enableBlockedModes: TEZGAH_ALARM_NO_SHIFT_MODES.filter((m) => alarmEnableBlocked(m, shiftDefined)),
+  };
+}
+
+/** Ayar ekranının vardiya durumu (`GET /api/feature-flags/tezgah-alarm-shift-status`). */
+export async function getAlarmShiftStatus(now: Date = new Date()): Promise<ApiResponse<AlarmShiftStatusDto>> {
+  return { success: true, data: await alarmShiftState(now) };
 }

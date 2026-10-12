@@ -132,6 +132,7 @@ export function fromApi(dto: LoomFloorDto): FloorState {
   for (const t of looms) if (!halls.includes(t.hall)) halls.push(t.hall);
   return {
     shift: dto.shift ? { name: dto.shift.name, startsAt: ms(dto.shift.startsAt), endsAt: ms(dto.shift.endsAt) } : null,
+    alarmNotice: dto.alarmNotice ?? null,
     halls,
     looms,
     updatedAt: ms(dto.asOf),

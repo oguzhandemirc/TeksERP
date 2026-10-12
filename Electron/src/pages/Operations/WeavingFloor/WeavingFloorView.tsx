@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { TabPortalProvider } from "@/components/layout/tabs/tab-portal";
 import { cn } from "@/lib/utils";
 import { FloorSummary } from "./FloorSummary";
+import { AlarmShiftStrip, LinkedAlarmShiftStrip } from "@/components/AlarmShiftStrip";
 import { FullscreenHeader, SampleDataBadge, StatusLegend } from "./FloorChrome";
 import { FloorHintProvider } from "./FloorHint";
 import { FloorMenuArea, SelectionBar, useFloorSelection, type FloorJobs, type FloorSelectionState } from "./FloorSelection";
@@ -191,6 +192,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
               />
             )}
             <PageBody className={cn("min-h-0 space-y-4 p-4", fullscreen.active && "space-y-3 px-6 pt-3")}>
+              {floor.alarmNotice && (tv ? <AlarmShiftStrip notice={floor.alarmNotice} linkVisible={false} /> : <LinkedAlarmShiftStrip notice={floor.alarmNotice} />)}
               <FloorSummary floor={floor} now={now} />
               <OverdueStrip looms={floor.looms} now={now} onSelect={tv ? noSelect : select} />
               <FloorHalls model={model} now={now} columns={columns} selection={tv ? null : selection} onCard={onCard} onDetail={select} jobs={jobs} />

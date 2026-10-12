@@ -242,3 +242,11 @@ describe("fromApi — durum kaynağı", () => {
   });
 });
 
+
+describe("fromApi — alarm vardiya şeridi", () => {
+  it("⭐ sunucunun `alarmNotice` kodu taşınır; eski sunucuda alan yok → null (şerit çizilmez)", () => {
+    expect(fromApi({ ...dto([]), alarmNotice: "NO_SHIFT_NOW" }).alarmNotice).toBe("NO_SHIFT_NOW");
+    expect(fromApi({ ...dto([]), alarmNotice: null }).alarmNotice).toBeNull();
+    expect(fromApi(dto([])).alarmNotice).toBeNull();
+  });
+});

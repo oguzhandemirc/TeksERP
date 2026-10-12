@@ -174,6 +174,8 @@ export interface Shift {
 export interface FloorState {
   /** Vardiya takvimi yoksa null. */
   shift: Shift | null;
+  /** Alarm vardiya şeridi kodu (sunucu kararı); yoksa şerit çizilmez. */
+  alarmNotice?: string | null;
   halls: string[];
   looms: LiveLoom[];
   /** Son simülasyon adımının anı. */

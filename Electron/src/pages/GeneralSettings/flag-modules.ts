@@ -113,6 +113,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tezgahAlarmUnclassifiedTargetMinutes: "tezgahEnabled",
   tezgahAlarmRenotifyMinutes: "tezgahEnabled",
   tezgahAlarmEscalateWhenAcked: "tezgahEnabled",
+  tezgahAlarmUnclassifiedEnabled: "tezgahEnabled",
+  tezgahAlarmNoShiftMode: "tezgahEnabled",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

@@ -48,6 +48,9 @@ import {
 import { resolveSectionOrder, type TravelerSection } from "./document-render/traveler-card.sections";
 import { resolveSeriesFormat } from "./number-series.service";
 import { updateSeriesNumberSource } from "./helpers/series-write.helper";
+import { alarmEnableBlocked } from "./helpers/loom-floor.helper";
+import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
+import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import {
   DEFAULT_PHASE_OUT_LINE_QTY,
   DEFAULT_PHASE_OUT_NEW_ORDER,
@@ -244,11 +247,18 @@ export const SETTING_KEYS = {
   /** [PROFİL] Sebepsiz bildirilen duruşun ortak hedef süresi (dk). Varsayılan BOŞ (0 yazılır) =
    *  bugünkü davranış: sebepsiz duruş süre izlemez. Sebep seçilince sebebinkine geçer. */
   TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES: "tezgah.alarm.unclassifiedTargetMinutes",
+  /** [PROFİL] Sebepsiz duruşta alarm anahtarı. Satır YOKSA süreden türer (boş = kapalı, sayı = açık) —
+   *  bugünkü davranış; açıkken süre zorunlu, kapatmak süreyi silmez. */
+  TEZGAH_ALARM_UNCLASSIFIED_ENABLED: "tezgah.alarm.unclassifiedEnabled",
   /** [PROFİL] Üstlenilmemiş alarmın yeniden ses/bildirim aralığı (dk) — yalnız görüntü/push, satır yazmaz. */
   TEZGAH_ALARM_RENOTIFY_MINUTES: "tezgah.alarm.renotifyMinutes",
   /** [PROFİL] Üstlenilmiş alarm da üst kademeye (K2) çıksın mı. Varsayılan AÇIK: üstlenmek
    *  K2'yi durdurmaz (motor bu bayrakla doğar; kapalıyken üstlenilmiş alarm K2'de bekler). */
   TEZGAH_ALARM_ESCALATE_WHEN_ACKED: "tezgah.alarm.escalateWhenAcked",
+  /** [PROFİL] Vardiyasız zamanda alarm (`TezgahAlarmNoShiftMode`). Varsayılan `WARN` = bugünkü davranış:
+   *  vardiya dışında açılan duruş alarm üretmez, yüzeyler uyarır. `ALWAYS` vardiyaya bakmaz; `REQUIRE_SHIFT`
+   *  vardiya tanımı yokken alarmın açılmasını engeller (motor WARN gibi). */
+  TEZGAH_ALARM_NO_SHIFT_MODE: "tezgah.alarm.noShiftMode",
   /** Devere / levent modülü: çözgü kartı · levent stoğu · levent olay defteri.
    *  ⚠️ İPLİĞE BAĞIMLI (`MODULE_DEPENDENCIES`), o da ticarete: levent doğarken
    *  iplik kg defterine çıkış yazılır (`WARP_ISSUE`). Zincir OKUMA kapısında
@@ -819,6 +829,12 @@ export type ShipmentOrderRequirement = "off" | "warn" | "block";
 export const SHIPMENT_ORDER_REQUIREMENTS: ShipmentOrderRequirement[] = ["off", "warn", "block"];
 /** Varsayılan `warn` — BUGÜNKÜ davranış (siparişsiz sevk kurulur, uyarı döner). */
 export const DEFAULT_SHIPMENT_ORDER_REQUIREMENT: ShipmentOrderRequirement = "warn";
+
+/** Vardiyasız zamanda tezgah alarmı. `WARN` = bugünkü davranış (motor vardiya dışında doğurmaz, yüzey uyarır). */
+export type TezgahAlarmNoShiftMode = "WARN" | "ALWAYS" | "REQUIRE_SHIFT";
+export const TEZGAH_ALARM_NO_SHIFT_MODES: TezgahAlarmNoShiftMode[] = ["WARN", "ALWAYS", "REQUIRE_SHIFT"];
+/** Varsayılan `WARN` — BUGÜNKÜ davranış (alarm açılabilir, vardiya dışında açılan duruş alarm üretmez). */
+export const DEFAULT_TEZGAH_ALARM_NO_SHIFT_MODE: TezgahAlarmNoShiftMode = "WARN";
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -1640,12 +1656,16 @@ export interface FeatureFlags {
   tezgahEscalationGraceMinutes: number;
   /** Dokuma alarm motoru (HAM değer; etkin = `tezgahEnabled ∧ tezgahAlarmEnabled`). Varsayılan KAPALI. */
   tezgahAlarmEnabled: boolean;
-  /** Sebepsiz duruşun ortak hedef süresi (dk); null = izlenmez (varsayılan). */
+  /** Sebepsiz duruşun ortak hedef süresi (dk, HAM); etkin hedef `resolveTezgahAlarmUnclassifiedTarget`. */
   tezgahAlarmUnclassifiedTargetMinutes: number | null;
+  /** Sebepsiz duruşta alarm (satır yoksa süreden türer: boş = kapalı). */
+  tezgahAlarmUnclassifiedEnabled: boolean;
   /** Alarm tekrar aralığı (dk, varsayılan 10; 1–120). */
   tezgahAlarmRenotifyMinutes: number;
   /** Üstlenilmiş alarm da üst kademeye çıkar (varsayılan AÇIK). */
   tezgahAlarmEscalateWhenAcked: boolean;
+  /** Vardiyasız zamanda alarm: WARN (varsayılan) · ALWAYS · REQUIRE_SHIFT. */
+  tezgahAlarmNoShiftMode: TezgahAlarmNoShiftMode;
   /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).
    *  Varsayılan KAPALI. ⚠️ İPLİĞE BAĞIMLI, iplik de ticarete: bu alan HAM
    *  değerdir (panel toggle'ı kendi yazdığını geri okusun diye); etkin değer
@@ -2227,8 +2247,10 @@ export class SystemSettingService {
       tezgahEscalationGraceMinutes: await readTezgahEscalationGraceMinutes(cacheClient),
       tezgahAlarmEnabled: await readTezgahAlarmEnabled(cacheClient),
       tezgahAlarmUnclassifiedTargetMinutes: await readTezgahAlarmUnclassifiedTargetMinutes(cacheClient),
+      tezgahAlarmUnclassifiedEnabled: await readTezgahAlarmUnclassifiedEnabled(cacheClient),
       tezgahAlarmRenotifyMinutes: await readTezgahAlarmRenotifyMinutes(cacheClient),
       tezgahAlarmEscalateWhenAcked: await readTezgahAlarmEscalateWhenAcked(cacheClient),
+      tezgahAlarmNoShiftMode: await readTezgahAlarmNoShiftMode(cacheClient),
       shippingSackSeqShowTotal: await readShippingSackSeqShowTotal(cacheClient),
       packingPoolPackageNo: await readPackingPoolPackageNo(cacheClient),
       sackDumpNameMode: await readSackDumpNameMode(cacheClient),
@@ -2344,6 +2366,43 @@ export class SystemSettingService {
    * ⚠️ TÜM yazmalardan ÖNCE koşar (setFeatureFlags'in ilk ifadesi): dallar tek
    * tx değildir, araya girseydi yarım gövde yazılırdı.
    */
+  /**
+   * `REQUIRE_SHIFT` kapısı — HER YAZMADAN ÖNCE (yarım gövde yazılmasın). Yalnız GEÇİŞ durdurulur: alarm
+   * kapalıdan açığa geçerken ya da açık alarmın kipi REQUIRE_SHIFT'e dönerken vardiya tanımı yoksa 400.
+   * Değişmeden gelen değer ve kapatma engellenmez (tanımlar sonradan arşivlenirse yüzeyler uyarır).
+   */
+  private async assertTezgahAlarmShiftRequirement(input: Record<string, unknown>): Promise<void> {
+    const has = (k: string) => Object.prototype.hasOwnProperty.call(input, k);
+    if (!has("tezgahAlarmEnabled") && !has("tezgahAlarmNoShiftMode")) return;
+    const curEnabled = await readTezgahAlarmEnabled();
+    const curMode = await readTezgahAlarmNoShiftMode();
+    const nextEnabled = has("tezgahAlarmEnabled") ? input.tezgahAlarmEnabled === true : curEnabled;
+    const m = input.tezgahAlarmNoShiftMode;
+    const nextMode = has("tezgahAlarmNoShiftMode") && TEZGAH_ALARM_NO_SHIFT_MODES.includes(m as TezgahAlarmNoShiftMode) ? (m as TezgahAlarmNoShiftMode) : curMode;
+    const entering = nextEnabled && nextMode === "REQUIRE_SHIFT" && (!curEnabled || curMode !== "REQUIRE_SHIFT");
+    if (!entering || !alarmEnableBlocked(nextMode, await isShiftDefined(prisma))) return;
+    throw AppError.badRequest(
+      `Vardiya tanımlı değil — "Vardiya olmadan açılamasın" kipinde tezgah alarmı açılamaz. Önce Tanımlar → Vardiya Tanımları'ndan vardiya tanımlayın ya da kipi değiştirin (${settingScreenPath("tezgah")}).`,
+      { code: "TEZGAH_ALARM_SHIFT_REQUIRED" },
+    );
+  }
+
+  /**
+   * Sebepsiz anahtar açıkken süre zorunlu — HER YAZMADAN ÖNCE. Eski istemci yalnız süreyi yollar: anahtar
+   * süreden türer (boş = kapalı), bu yüzden eski gövde bu kapıya hiç takılmaz.
+   */
+  private async assertTezgahAlarmUnclassifiedRequirement(input: Record<string, unknown>): Promise<void> {
+    const has = (k: string) => Object.prototype.hasOwnProperty.call(input, k);
+    if (!has("tezgahAlarmUnclassifiedEnabled")) return;
+    const v = input.tezgahAlarmUnclassifiedTargetMinutes;
+    const nextMinutes = has("tezgahAlarmUnclassifiedTargetMinutes") ? (typeof v === "number" ? v : null) : await readTezgahAlarmUnclassifiedTargetMinutes();
+    if (input.tezgahAlarmUnclassifiedEnabled !== true || nextMinutes !== null) return;
+    throw AppError.badRequest(
+      `Sebepsiz duruşta alarm açıkken hedef süre (dk) boş bırakılamaz (${settingScreenPath("tezgah")}).`,
+      { code: "TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED" },
+    );
+  }
+
   private async assertModuleDependencies(input: Record<string, unknown>): Promise<void> {
     for (const [dependent, prerequisite] of Object.entries(MODULE_DEPENDENCIES)) {
       // Gövde bu çiftin HİÇBİR ucuna dokunmuyorsa ölçmeye gerek yok (iki
@@ -2420,6 +2479,8 @@ export class SystemSettingService {
     // kaldı" gibi YARIM bir gövde yazılır ve geri alınamazdı.
     await this.assertModuleDependencies(input as Record<string, unknown>);
     this.assertModuleWritesLicensed(input as Record<string, unknown>);
+    await this.assertTezgahAlarmShiftRequirement(input as Record<string, unknown>);
+    await this.assertTezgahAlarmUnclassifiedRequirement(input as Record<string, unknown>);
 
     if (Object.prototype.hasOwnProperty.call(input, "pricingEnabled")) {
       if (typeof input.pricingEnabled !== "boolean") {
@@ -3382,12 +3443,26 @@ export class SystemSettingService {
       }
       await this.set(SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES, v ?? 0, "Sebepsiz bildirilen tezgah duruşunun ortak hedef süresi (dk; 0 = izlenmez)", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmUnclassifiedEnabled")) {
+      if (typeof input.tezgahAlarmUnclassifiedEnabled !== "boolean") throw AppError.badRequest("tezgahAlarmUnclassifiedEnabled boolean olmalı");
+      await this.set(SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_ENABLED, input.tezgahAlarmUnclassifiedEnabled, "Sebepsiz bildirilen tezgah duruşunda alarm", userId);
+    } else if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmUnclassifiedTargetMinutes")) {
+      // Eski istemci yalnız süreyi yollar: süre = anahtar (boş = kapalı), bugünkü anlamı korunur.
+      await this.set(SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_ENABLED, input.tezgahAlarmUnclassifiedTargetMinutes !== null, "Sebepsiz bildirilen tezgah duruşunda alarm", userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmRenotifyMinutes")) {
       const v = input.tezgahAlarmRenotifyMinutes;
       if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > TEZGAH_ALARM_RENOTIFY_MINUTES_MAX)) {
         throw AppError.badRequest(`Alarm tekrar aralığı 1 ile ${TEZGAH_ALARM_RENOTIFY_MINUTES_MAX} dakika arasında tam sayı olmalı`);
       }
       await this.set(SETTING_KEYS.TEZGAH_ALARM_RENOTIFY_MINUTES, v ?? DEFAULT_TEZGAH_ALARM_RENOTIFY_MINUTES, "Üstlenilmemiş tezgah alarmının yeniden bildirim aralığı (dk)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmNoShiftMode")) {
+      const v = input.tezgahAlarmNoShiftMode;
+      if (typeof v !== "string" || !TEZGAH_ALARM_NO_SHIFT_MODES.includes(v as TezgahAlarmNoShiftMode)) {
+        throw AppError.badRequest("Vardiyasız alarm kipi 'WARN', 'ALWAYS' veya 'REQUIRE_SHIFT' olmalı");
+      }
+      await this.set(SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE, v, "Vardiyasız zamanda tezgah alarmı: WARN (uyar) / ALWAYS (7/24 çal) / REQUIRE_SHIFT (vardiyasız açılmasın)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "tezgahAlarmEscalateWhenAcked")) {
       if (typeof input.tezgahAlarmEscalateWhenAcked !== "boolean") throw AppError.badRequest("tezgahAlarmEscalateWhenAcked boolean olmalı");
@@ -5457,11 +5532,29 @@ export async function readTezgahAlarmUnclassifiedTargetMinutes(tx?: Pick<typeof 
   const n = asNumber(setting.value);
   return n === null || !Number.isInteger(n) || n < 1 || n > TEZGAH_ALARM_UNCLASSIFIED_TARGET_MAX ? null : n;
 }
+/** Sebepsiz duruşta alarm — satır yok → süreden türer (boş = kapalı, sayı = açık; bugünkü davranış). */
+export async function readTezgahAlarmUnclassifiedEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_ENABLED }, select: { value: true } });
+  if (!setting) return (await readTezgahAlarmUnclassifiedTargetMinutes(tx)) !== null;
+  return asBoolean(setting.value);
+}
+/** Motor ve salonun okuduğu TEK etkin sebepsiz hedef: tezgah modülü ya da sebepsiz anahtar kapalıysa null (izlenmez). */
+export async function resolveTezgahAlarmUnclassifiedTarget(tx?: Pick<typeof prisma, "systemSetting">): Promise<number | null> {
+  if (!(await readTezgahEnabled(tx))) return null;
+  if (!(await readTezgahAlarmUnclassifiedEnabled(tx))) return null;
+  return readTezgahAlarmUnclassifiedTargetMinutes(tx);
+}
 /** Üstlenilmiş alarm da K2'ye çıkar mı — satır yok = AÇIK (tasarım kararı: üstlenmek iletimi durdurmaz). */
 export async function readTezgahAlarmEscalateWhenAcked(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_ESCALATE_WHEN_ACKED }, select: { value: true } });
   if (!setting) return true;
   return asBoolean(setting.value);
+}
+/** Vardiyasız zamanda alarm kipi — satır yok / çöp → `WARN` (bugünkü davranış). */
+export async function readTezgahAlarmNoShiftMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<TezgahAlarmNoShiftMode> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && TEZGAH_ALARM_NO_SHIFT_MODES.includes(v as TezgahAlarmNoShiftMode) ? (v as TezgahAlarmNoShiftMode) : DEFAULT_TEZGAH_ALARM_NO_SHIFT_MODE;
 }
 export async function readTezgahAlarmRenotifyMinutes(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_RENOTIFY_MINUTES }, select: { value: true } });

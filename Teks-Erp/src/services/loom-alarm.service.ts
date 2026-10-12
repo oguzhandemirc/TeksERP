@@ -28,7 +28,7 @@ import { loomAlarmEventStampTx } from "./helpers/ledger-stamp.helper";
 import { alarmClockStart, alarmScheduleOf, dueAlarmTiers, stopClockOf, stopTargetMinutes, type AlarmTier, type ShiftWindow, type StopClock } from "./helpers/loom-floor.helper";
 import { clockShiftsFrom, loadClockShiftWindows } from "./helpers/loom-alarm-shift.helper";
 import { loadRecipientConfig, resolveAlarmRecipients, type RecipientConfig, type ResolvedRecipients } from "./helpers/loom-alarm-recipient.helper";
-import { readTezgahAlarmEscalateWhenAcked, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled } from "./system-setting.service";
+import { readTezgahAlarmEscalateWhenAcked, readTezgahAlarmNoShiftMode, resolveTezgahAlarmUnclassifiedTarget, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled, type TezgahAlarmNoShiftMode } from "./system-setting.service";
 import { hata } from "../lib/logger";
 import { AuditService } from "./audit.service";
 import { ALARM_SNOOZE_MINUTES, actionReplay, actorName, actorResult, closedConflict, freshAlarmTx, hm, type ActorCall, type AlarmSnoozeMinutes, type LoomAlarmActionResult } from "./helpers/loom-alarm-actor.helper";
@@ -67,6 +67,8 @@ interface TickCtx {
   grace: number;
   unclassified: number | null;
   escalateWhenAcked: boolean;
+  /** Vardiyasız zamanda alarm kipi (`ALWAYS` vardiyaya bakmaz; öteki kipler vardiya süzgecinden geçer). */
+  noShiftMode: TezgahAlarmNoShiftMode;
   /** Açık duruşların saat başlangıcı için canlı vardiya pencereleri (tur başında bir kez). */
   shifts: ShiftWindow[];
   /** Alıcı yapılandırması — turda İLK kademe çalarken bir kez okunur (alarmsız turda hiç okunmaz). */
@@ -115,15 +117,15 @@ async function writeTierEventsTx(tx: Tx, target: { alarmId: string; stationId: s
 const topTier = (raise: AlarmTier[]): AlarmTier => raise[raise.length - 1]!;
 
 function clockOf(stop: StopRow, targetMinutes: number | null, graceMinutes: number, ctx: TickCtx): StopClock {
-  return stopClockOf(stop, alarmClockStart(stop, ctx.shifts, ctx.now), targetMinutes, graceMinutes);
+  return stopClockOf(stop, alarmClockStart(stop, ctx.shifts, ctx.now, ctx.noShiftMode), targetMinutes, graceMinutes);
 }
 
 /**
  * Açık duruş, alarmı yok: K1 vadesi geçtiyse alarm DOĞAR (plan donar), vadesi geçen en yüksek kademe çalar.
- * Doğuş yalnız `alarmClockStart().eligible` iken (vardiya dışında açılıp vardiyaya taşan duruş da dahil).
+ * Doğuş yalnız `alarmClockStart().eligible` iken (vardiyaya taşan duruş dahil; `ALWAYS` kipinde vardiyaya bakılmaz).
  */
 async function birthTx(tx: Tx, stop: StopRow, ctx: TickCtx): Promise<void> {
-  if (!alarmClockStart(stop, ctx.shifts, ctx.now).eligible) return;
+  if (!alarmClockStart(stop, ctx.shifts, ctx.now, ctx.noShiftMode).eligible) return;
   const targetMinutes = stopTargetMinutes(stop, ctx.unclassified);
   const graceMinutes = stop.escalationGraceMinutes ?? ctx.grace;
   const schedule = alarmScheduleOf(clockOf(stop, targetMinutes, graceMinutes, ctx));
@@ -198,8 +200,8 @@ export async function runLoomAlarmOnce(opts: LoomAlarmRunOptions = {}): Promise<
   const ctx: TickCtx = {
     now: opts.now ?? (await readDbNow()),
     grace: await readTezgahEscalationGraceMinutes(),
-    unclassified: await readTezgahAlarmUnclassifiedTargetMinutes(),
-    escalateWhenAcked: await readTezgahAlarmEscalateWhenAcked(),
+    unclassified: await resolveTezgahAlarmUnclassifiedTarget(),
+    escalateWhenAcked: await readTezgahAlarmEscalateWhenAcked(), noShiftMode: await readTezgahAlarmNoShiftMode(),
     shifts: [], recipients: null,
     sum: { scanned: 0, raised: 0, skipped: 0, replanned: 0, resolved: 0, cancelled: 0, failed: 0 },
   };

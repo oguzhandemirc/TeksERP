@@ -16,6 +16,14 @@
 //   §5 yeniden plan: sebep değişince çalmamış K2 yeni hedeften · plan dışına sınıflama → CANCELLED
 //   §6 kapanış: duruş kapanınca RESOLVED + süreler DONAR · geri alınınca CANCELLED STOP_REVOKED ·
 //      kapanmış alarm bir daha işlenmez
+//   §9 VARDİYASIZ KİP (`tezgah.alarm.noShiftMode`): okuyucu varsayılanı WARN (satır yok / çöp) · saf matris
+//      3 kip × (vardiya tanımsız · tanımlı ama şu an dışı · içi) `alarmClockStart` + şerit (`alarmShiftNotice`) +
+//      açma kilidi (`alarmEnableBlocked`) · DB matrisi: aynı üç durum × üç kip motor turu (doğdu mu, saat nereden) ·
+//      Tezgah Salonu AYNI saat (her kipte `clockStartedAt` = K1 − hedef) · REQUIRE_SHIFT sunucu kapısı (yalnız
+//      geçişte 400 `TEZGAH_ALARM_SHIFT_REQUIRED`, yazmadan önce) · durum ucu servisi · şerit kararı tek çağrı yerinde (AST)
+//   §10 SEBEPSİZ ANAHTAR (`tezgah.alarm.unclassifiedEnabled`): satır yoksa süreden türer · kapalıyken motor doğurmaz,
+//      salon hedef göstermez · açıkken süre zorunlu (400 `TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED`) · kapatmak süreyi
+//      silmez · eski istemci (yalnız süre) bugünkü anlamda · etkin hedef tek resolver'dan (AST)
 //   §8 tek saat: StopClock yalnız `stopClockOf`la kurulur, `alarmShiftEligible` yalnız helper'da çağrılır (AST)
 //   §7 yabancı motor: aynı DB'de gerçek saatle koşan sunucu zamanlayıcısı (CI'da beş HTTP sunucusu) fikstüre
 //      DOKUNAMAZ — global alarm bayrağı §2'den sonra KAPALI kalır, bekçinin turları kapıyı `enabled` ile geçer;
@@ -23,7 +31,8 @@
 //      `TEST_LOOM_ALARM_SIMDI=<ISO>` ile sabitlenir (vardiya/gün sınırı sondaları).
 //
 // Global ayar yazar (`production.enabled` · `tezgah.enabled` · `tezgah.escalationGraceMinutes` ·
-// `tezgah.alarmEnabled` · `tezgah.alarm.unclassifiedTargetMinutes` · `tezgah.alarm.escalateWhenAcked`);
+// `tezgah.alarmEnabled` · `tezgah.alarm.unclassifiedTargetMinutes` · `tezgah.alarm.unclassifiedEnabled` ·
+// `tezgah.alarm.escalateWhenAcked` · `tezgah.alarm.noShiftMode`);
 // bulduğu değere `finally`de döner. Fikstür kendi vardiyasını kurar, temizlikte siler.
 // Motor her turda `onlyMachineIds` ile fikstüre sınırlanır (başka veriye dokunmaz).
 //
@@ -43,18 +52,24 @@
 //   §3k/§3m/§3p ❌ · ⑫ `alarmClockStart` taşan duruşta saati açılıştan başlattı → §1j/§1n/§1o/§3j/§3k/§3m/§3n ❌ ·
 //   ⑬ Salon kendi saatini kurdu (`startedAt: s.startedAt`) → §3n/§8a ❌ · ⑭ vardiyada açılan duruşun saati de şu
 //   anki vardiyanın başından (max(açılış, vardiya başı)) → §1m ❌
+//   VARDİYASIZ KİP + SEBEPSİZ ANAHTAR (2026-10-12): ⑮a `alarmClockStart` ALWAYS dalı silindi → §9b/§9d/§9d2/§9e ❌ ·
+//   ⑮b salon kipi okumadı (WARN sabit) → §9e ❌ · ⑮c REQUIRE_SHIFT kapı çağrısı silindi → §9f/§9f2/§9f5 ❌ · ⑮d kip
+//   okuyucusunun `includes` sigortası silindi → §9a ❌ · ⑮e ikinci `alarmShiftNotice` çağrısı → §9g ❌ · ⑯ motor ham
+//   sebepsiz süreyi okudu → §10b/§10d ❌ · ⑰ sebepsiz süre kapısı silindi → §10c ❌ · ⑱ eski istemci dalı silindi → §10c2 ❌
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
 import * as ts from "typescript";
 import { LoomAlarmEventKind, LoomAlarmState, MachineStopLossClass, ReasonPresetKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { invalidateFeatureFlagsCache, readTezgahAlarmNoShiftMode, readTezgahAlarmUnclassifiedEnabled, readTezgahAlarmUnclassifiedTargetMinutes, resolveTezgahAlarmUnclassifiedTarget, SETTING_KEYS, systemSettingService, TEZGAH_ALARM_NO_SHIFT_MODES, type TezgahAlarmNoShiftMode } from "../src/services/system-setting.service";
 import { ReasonPresetService } from "../src/services/reason-preset.service";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../src/services/machine-stop.service";
 import { runLoomAlarmOnce, type LoomAlarmTickOutcome, type LoomAlarmTickSummary } from "../src/services/loom-alarm.service";
-import { alarmClockStart, alarmShiftEligible, dueAlarmTiers } from "../src/services/helpers/loom-floor.helper";
-import { getLoomFloor } from "../src/services/loom-floor.service";
+import { alarmClockStart, alarmEnableBlocked, alarmShiftEligible, alarmShiftNotice, dueAlarmTiers } from "../src/services/helpers/loom-floor.helper";
+import { getAlarmShiftStatus, getLoomFloor } from "../src/services/loom-floor.service";
+import { AppError } from "../src/utils/app-error";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -69,18 +84,19 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 const MIN = 60_000;
 const ek = Date.now().toString(36);
-const ids = { station: "", looms: [] as string[], presets: [] as string[], shiftDef: "", shifts: [] as string[], user: "" };
+const ids = { station: "", looms: [] as string[], presets: [] as string[], shiftDef: "", shifts: [] as string[], user: "", extraDefs: [] as string[] };
 
 const YONETILEN = [
   SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.TEZGAH_ENABLED, SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES,
   SETTING_KEYS.TEZGAH_ALARM_ENABLED, SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES, SETTING_KEYS.TEZGAH_ALARM_ESCALATE_WHEN_ACKED,
+  SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE, SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_ENABLED,
 ];
 const ilk = new Map<string, unknown>();
 async function ayarlariSakla(): Promise<void> {
   const rows = await prisma.systemSetting.findMany({ where: { key: { in: YONETILEN } }, select: { key: true, value: true } });
   for (const k of YONETILEN) ilk.set(k, rows.find((r) => r.key === k)?.value ?? undefined);
 }
-async function ayarYaz(key: string, value: boolean | number): Promise<void> {
+async function ayarYaz(key: string, value: boolean | number | string): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
 }
 async function ayarlariGeriYaz(): Promise<void> {
@@ -155,8 +171,9 @@ async function govde(): Promise<void> {
     !alarmShiftEligible(null) && !alarmShiftEligible({ isCancelled: true }) && alarmShiftEligible({ isCancelled: false }));
   // Saat başlangıcı: vardiya [t0, t0+8sa]; duruş t0-10sa'te vardiya dışında açıldı.
   const v = (bas: number, bit: number, isCancelled = false) => ({ startsAt: new Date(t0.getTime() + bas * MIN), endsAt: new Date(t0.getTime() + bit * MIN), isCancelled });
-  const cs = (bas: number, own: { isCancelled: boolean } | null, shifts: ReturnType<typeof v>[], an: number) => {
-    const r = alarmClockStart({ startedAt: new Date(t0.getTime() + bas * MIN), shiftInstance: own }, shifts, new Date(t0.getTime() + an * MIN));
+  // §1j–§1p varsayılan kipte (WARN = bugünkü davranış); kip matrisi §9.
+  const cs = (bas: number, own: { isCancelled: boolean } | null, shifts: ReturnType<typeof v>[], an: number, mode: TezgahAlarmNoShiftMode = "WARN") => {
+    const r = alarmClockStart({ startedAt: new Date(t0.getTime() + bas * MIN), shiftInstance: own }, shifts, new Date(t0.getTime() + an * MIN), mode);
     return `${(r.at.getTime() - t0.getTime()) / MIN}/${r.eligible}`;
   };
   check("§1j vardiyaya TAŞAN duruş: saat vardiya başından, uygun", cs(-600, null, [v(0, 480)], 30) === "0/true", cs(-600, null, [v(0, 480)], 30));
@@ -178,6 +195,8 @@ async function govde(): Promise<void> {
   await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_ENABLED, false);
   await ayarYaz(SETTING_KEYS.TEZGAH_ESCALATION_GRACE_MINUTES, 5);
   await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES, 15);
+  // Sebepsiz anahtar satırsız: süreden türer (açık) — §3h bugünkü davranışı ölçer; anahtar matrisi §10.
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_ENABLED } });
   await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_ESCALATE_WHEN_ACKED, true);
 
   // Ölçüm anı GEÇMİŞTE (damga kapıları geçmişe açık); vardiya [simdi-3sa, simdi+1sa]. Sabit çıpa: env.
@@ -195,8 +214,8 @@ async function govde(): Promise<void> {
   // Ardışık ikinci vardiya: vardiyada açılıp sonrakine geçen duruşun saati açılıştan kalır (J).
   const shift2 = await prisma.shiftInstance.create({ data: { shiftDefinitionId: def.id, factoryDayKey: new Date("1999-01-02T00:00:00Z"), startsAt: at(60), endsAt: at(300) } });
   ids.shifts.push(shift2.id);
-  const yabanciVardiya = await prisma.shiftInstance.count({ where: { id: { notIn: ids.shifts }, isCancelled: false, startsAt: { lt: at(320) }, endsAt: { gt: at(-250) } } });
-  check("§0b ortam: fikstür vardiyalarının çevresinde (−250 dk … +320 dk) yabancı canlı vardiya YOK", yabanciVardiya === 0, String(yabanciVardiya));
+  const yabanciVardiya = await prisma.shiftInstance.count({ where: { id: { notIn: ids.shifts }, isCancelled: false, startsAt: { lt: at(340) }, endsAt: { gt: at(-320) } } });
+  check("§0b ortam: fikstür vardiyalarının çevresinde (−320 dk … +340 dk) yabancı canlı vardiya YOK", yabanciVardiya === 0, String(yabanciVardiya));
 
   const station = await prisma.station.create({
     data: { name: `TEST-LA-HOL-${ek}`, code: `TEST-LA-H-${ek}`.toUpperCase().slice(0, 32), type: "INTERNAL", kind: "WEAVING", isActive: true },
@@ -361,13 +380,16 @@ async function govde(): Promise<void> {
   check("§3p vardiya bitince canlı alarm KAPANMAZ (kapanış yalnız duruşun kapanması / geri alınması / plan dışı)",
     cSon?.state === LoomAlarmState.OPEN && jSon?.state === LoomAlarmState.OPEN && jSon.tier === 2, `${cSon?.state}/${jSon?.state}/${jSon?.tier}`);
 
+  await vardiyasizKip({ at, simdi, tezgah, P });
+  await sebepsizAnahtar({ at, simdi, tezgah, P });
+
   // ── §8 tek saat (AST) ──────────────────────────────────────────────────────
   const ihlal = tekSaatIhlalleri(path.join(__dirname, "..", "src"));
   check("§8a StopClock yalnız `stopClockOf`la kurulur, `alarmShiftEligible` yalnız helper'da çağrılır", ihlal.length === 0, ihlal.join(" · "));
   const sondaSaat = tekSaatKaynak("const clock = { startedAt: s.startedAt, targetMinutes: t, graceMinutes: g, lossClass: s.lossClass };", "sonda.ts");
   const sondaSuzgec = tekSaatKaynak("if (!alarmShiftEligible(stop.shiftInstance)) return;", "sonda.ts");
   check("§8b sonda: elle kurulan saat ve doğrudan vardiya süzgeci yakalanır; `stopClockOf` çağrısı yakalanmaz",
-    sondaSaat.length === 1 && sondaSuzgec.length === 1 && tekSaatKaynak("const c = stopClockOf(s, alarmClockStart(s, sh, now), t, g);", "sonda.ts").length === 0,
+    sondaSaat.length === 1 && sondaSuzgec.length === 1 && tekSaatKaynak("const c = stopClockOf(s, alarmClockStart(s, sh, now, mode), t, g);", "sonda.ts").length === 0,
     `${sondaSaat.length}/${sondaSuzgec.length}`);
 
   // ── §7 yabancı motor ───────────────────────────────────────────────────────
@@ -377,6 +399,229 @@ async function govde(): Promise<void> {
   check("§7b üretim kaynağı `runLoomAlarmOnce`a `enabled` geçmez (kapı yalnız bayraktan)", enjekte.length === 0, enjekte.join(" · "));
   check("§7c sonda: `enabled` geçen çağrı yakalanır, argümansız çağrı yakalanmaz",
     enabledEnjeksiyonu("void runLoomAlarmOnce({ enabled: true })") === 1 && enabledEnjeksiyonu("void runLoomAlarmOnce()") === 0);
+}
+
+// ── §9 vardiyasız kip ─────────────────────────────────────────────────────────
+interface KipCtx { at: (dk: number) => Date; simdi: Date; tezgah: (n: number) => Promise<string>; P: { code: string } }
+
+async function vardiyasizKip({ at, simdi, tezgah, P: preset }: KipCtx): Promise<void> {
+  const KIPLER = TEZGAH_ALARM_NO_SHIFT_MODES;
+  // §9a okuyucu: satır yok / çöp → WARN (varsayılan = bugünkü davranış; §1–§6 satırsız koştu).
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE } });
+  const satirsiz = await readTezgahAlarmNoShiftMode();
+  await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE, "HER_ZAMAN");
+  const cop = await readTezgahAlarmNoShiftMode();
+  const gecerli: string[] = [];
+  for (const k of KIPLER) {
+    await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE, k);
+    gecerli.push(await readTezgahAlarmNoShiftMode());
+  }
+  check("§9a okuyucu: satır yok → WARN · çöp → WARN · üç geçerli kip kendisi", satirsiz === "WARN" && cop === "WARN" && gecerli.join(",") === KIPLER.join(","), `${satirsiz}/${cop}/${gecerli.join(",")}`);
+
+  // §9b saf matris — t0 göreli dakika. Duruş −30'da açıldı, an +30.
+  const t0 = new Date("2026-10-10T08:00:00Z");
+  const v = (bas: number, bit: number) => ({ startsAt: new Date(t0.getTime() + bas * MIN), endsAt: new Date(t0.getTime() + bit * MIN), isCancelled: false });
+  const hucre = (mode: TezgahAlarmNoShiftMode, bas: number, own: { isCancelled: boolean } | null, shifts: ReturnType<typeof v>[], an: number) => {
+    const r = alarmClockStart({ startedAt: new Date(t0.getTime() + bas * MIN), shiftInstance: own }, shifts, new Date(t0.getTime() + an * MIN), mode);
+    return `${(r.at.getTime() - t0.getTime()) / MIN}/${r.eligible}`;
+  };
+  const DURUMLAR = {
+    tanimsiz: (m: TezgahAlarmNoShiftMode) => hucre(m, -30, null, [], 30),
+    disi: (m: TezgahAlarmNoShiftMode) => hucre(m, -30, null, [v(60, 480)], 30),
+    ici: (m: TezgahAlarmNoShiftMode) => hucre(m, -30, { isCancelled: false }, [v(-60, 480)], 30),
+    tasan: (m: TezgahAlarmNoShiftMode) => hucre(m, -600, null, [v(0, 480)], 30),
+  };
+  const BEKLENEN: Record<TezgahAlarmNoShiftMode, Record<keyof typeof DURUMLAR, string>> = {
+    WARN: { tanimsiz: "-30/false", disi: "-30/false", ici: "-30/true", tasan: "0/true" },
+    REQUIRE_SHIFT: { tanimsiz: "-30/false", disi: "-30/false", ici: "-30/true", tasan: "0/true" },
+    ALWAYS: { tanimsiz: "-30/true", disi: "-30/true", ici: "-30/true", tasan: "-600/true" },
+  };
+  const durumAdlari = Object.keys(DURUMLAR) as (keyof typeof DURUMLAR)[];
+  for (const m of KIPLER) {
+    const olcum = durumAdlari.map((d) => `${d}=${DURUMLAR[d](m)}`).join(" ");
+    const beklenen = durumAdlari.map((d) => `${d}=${BEKLENEN[m][d]}`).join(" ");
+    check(`§9b ${m}: saat başlangıcı + uygunluk (tanımsız · dışı · içi · taşan)`, olcum === beklenen, olcum);
+  }
+  // §9c şerit + açma kilidi.
+  const N = (alarmEnabled: boolean, mode: TezgahAlarmNoShiftMode, shiftDefined: boolean, shiftNow: boolean) => String(alarmShiftNotice({ alarmEnabled, mode, shiftDefined, shiftNow }));
+  for (const m of KIPLER) {
+    const olcum = [N(true, m, false, false), N(true, m, true, false), N(true, m, true, true), N(false, m, false, false)].join(",");
+    const beklenen = m === "ALWAYS" ? "null,null,null,null" : "NO_SHIFT_DEFINED,NO_SHIFT_NOW,null,null";
+    check(`§9c ${m}: şerit (tanımsız · tanımlı ama dışı · içi · alarm kapalı)`, olcum === beklenen, olcum);
+  }
+  check("§9c2 şu an canlı vardiya varsa (tanım sonradan arşivlense de) şerit yok — alarm şu an doğabilir", N(true, "WARN", false, true) === "null");
+  const kilit = KIPLER.map((m) => `${m}:${alarmEnableBlocked(m, false)}/${alarmEnableBlocked(m, true)}`).join(" ");
+  check("§9c3 açma kilidi yalnız REQUIRE_SHIFT ∧ tanımsız", kilit === "WARN:false/false ALWAYS:false/false REQUIRE_SHIFT:true/false", kilit);
+
+  // §9d DB matrisi — fikstür vardiyaları [−180, 60] + [60, 300]; çevrede yabancı vardiya yok (§0b). Hedef 10, pay 5.
+  //   tanımsız: −300'de açıldı, an −260 (hiç vardiya penceresi yok) · dışı: −240'ta açıldı, vardiyalardan geçti, an
+  //   +330 (vardiya bitti) · içi: −12'de açıldı (kip başına ayrı tezgah — doğuş bir kez olur).
+  const ac = async (n: number, dk: number) => (await openManualStop({ machineId: await tezgah(n), startedAt: at(-dk), reasonCode: preset.code })).data;
+  const T = await ac(20, 300);
+  const D = await ac(21, 240);
+  const I: Record<TezgahAlarmNoShiftMode, Awaited<ReturnType<typeof ac>>> = { WARN: await ac(22, 12), REQUIRE_SHIFT: await ac(23, 12), ALWAYS: await ac(24, 12) };
+  const ANLAR = { T: at(-260), D: at(330), I: simdi };
+  const kd = async (stopId: string) => {
+    const a = await alarmOf(stopId);
+    return a ? `k1=${(a.k1DueAt.getTime() - simdi.getTime()) / MIN}` : "yok";
+  };
+  const satir: string[] = [];
+  // ALWAYS en son koşar: tanımsız/dışı duruşlar önceki kiplerde doğmamış olmalı.
+  for (const m of ["WARN", "REQUIRE_SHIFT", "ALWAYS"] as const) {
+    await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE, m);
+    ozet(await tur(ANLAR.T, [T.machineId]));
+    ozet(await tur(ANLAR.D, [D.machineId]));
+    ozet(await tur(ANLAR.I, [I[m].machineId]));
+    satir.push(`${m}[${await kd(T.id)} ${await kd(D.id)} ${await kd(I[m].id)}]`);
+  }
+  check("§9d motor: WARN/REQUIRE_SHIFT tanımsız ve vardiya dışında doğurmaz, içinde doğurur; ALWAYS üçünde de doğurur, saat duruş başından",
+    satir.join(" ") === "WARN[yok yok k1=-2] REQUIRE_SHIFT[yok yok k1=-2] ALWAYS[k1=-290 k1=-230 k1=-2]", satir.join(" "));
+  const dA = await alarmOf(D.id);
+  check("§9d2 ALWAYS vardiya dışı geç kayıt: kademe atlama kuralı aynı (TIER_SKIPPED1, RAISED2)", olaylar(dA) === "TIER_SKIPPED1,RAISED2", olaylar(dA));
+
+  // §9e Tezgah Salonu AYNI saat — ALWAYS'te K1 − hedef = salonun clockStartedAt'i; WARN'da taşan duruş vardiya başından.
+  const salon = async (an: Date, machineId: string) => (await getLoomFloor(an)).data?.looms.find((l) => l.id === machineId)?.openStop ?? null;
+  const ayni: string[] = [];
+  for (const [stop, an] of [[T, ANLAR.T], [D, ANLAR.D], [I.ALWAYS, ANLAR.I]] as const) {
+    const a = await alarmOf(stop.id);
+    const o = await salon(an, stop.machineId);
+    ayni.push(String(!!a && !!o && a.targetMinutes !== null && o.clockStartedAt.getTime() === a.k1DueAt.getTime() - a.targetMinutes * MIN));
+  }
+  await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE, "WARN");
+  const oW = await salon(ANLAR.D, D.machineId);
+  check("§9e Tezgah Salonu motorla AYNI saat: ALWAYS üç durumda clockStartedAt = K1 − hedef; WARN'da taşan duruş vardiya başından (−180)",
+    ayni.join(",") === "true,true,true" && oW?.clockStartedAt.getTime() === at(-180).getTime(), `${ayni.join(",")} warn=${oW?.clockStartedAt.toISOString()}`);
+
+  // §9f REQUIRE_SHIFT sunucu kapısı — tezgah modülü KAPALI tutulur: ham alarm bayrağı açılsa da ETKİN alarm
+  // kapalı kalır, yabancı motor turu fikstüre dokunamaz (§7). Kapı ham bayrağa bakar.
+  await ayarYaz(SETTING_KEYS.TEZGAH_ENABLED, false);
+  await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_ENABLED, false);
+  const kullanici = { id: await testActorId() };
+  const yaz = async (input: Record<string, unknown>): Promise<string> => {
+    try {
+      await systemSettingService.setFeatureFlags(input as never, kullanici.id);
+      return "ok";
+    } catch (e) {
+      return e instanceof AppError ? `${e.statusCode}:${String((e.details as { code?: string } | undefined)?.code)}` : `hata:${(e as Error).message}`;
+    }
+  };
+  const durum = async () => `${JSON.stringify((await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.TEZGAH_ALARM_ENABLED } }))?.value)}/${await readTezgahAlarmNoShiftMode()}`;
+  const yabanciTanim = await prisma.shiftDefinition.count({ where: { isActive: true } });
+  if (yabanciTanim === 0) {
+    const r1 = await yaz({ tezgahAlarmNoShiftMode: "REQUIRE_SHIFT", tezgahAlarmEnabled: true });
+    const d1 = await durum();
+    check("§9f tanım yokken REQUIRE_SHIFT + aç → 400 TEZGAH_ALARM_SHIFT_REQUIRED ve HİÇBİR ŞEY yazılmadı", r1 === "400:TEZGAH_ALARM_SHIFT_REQUIRED" && d1 === "false/WARN", `${r1} ${d1}`);
+    const r2 = await yaz({ tezgahAlarmNoShiftMode: "REQUIRE_SHIFT" });
+    const r3 = await yaz({ tezgahAlarmEnabled: true });
+    const d3 = await durum();
+    check("§9f2 alarm kapalıyken kip seçilebilir; tanım yokken açmak 400", r2 === "ok" && r3 === "400:TEZGAH_ALARM_SHIFT_REQUIRED" && d3 === "false/REQUIRE_SHIFT", `${r2} ${r3} ${d3}`);
+    const st = (await getAlarmShiftStatus(simdi)).data!;
+    check("§9f3 durum ucu: tanım yok, engelli kip yalnız REQUIRE_SHIFT, etkin alarm kapalı → şerit yok",
+      st.shiftDefined === false && st.enableBlockedModes.join(",") === "REQUIRE_SHIFT" && st.notice === null && st.mode === "REQUIRE_SHIFT", JSON.stringify(st));
+  } else {
+    console.log(`⚠ §9f tanımsız ayağı daraltıldı: ortamda ${yabanciTanim} yabancı aktif vardiya tanımı var (saf kilit §9c3 ölçüyor)`);
+    await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE, "REQUIRE_SHIFT");
+  }
+  const def = await prisma.shiftDefinition.create({ data: { code: `Y${ek.slice(-7)}`.toUpperCase(), name: `TEST-LA aktif ${ek}`, startMinute: 0, durationMinutes: 60, isActive: true } });
+  ids.extraDefs.push(def.id);
+  const r4 = await yaz({ tezgahAlarmEnabled: true });
+  const st2 = (await getAlarmShiftStatus(simdi)).data!;
+  const d4 = await durum();
+  check("§9f4 aktif tanım varken REQUIRE_SHIFT'te açılır; durum ucu engelli kip yok", r4 === "ok" && d4 === "true/REQUIRE_SHIFT" && st2.shiftDefined && st2.enableBlockedModes.length === 0, `${r4} ${d4} ${JSON.stringify(st2)}`);
+  await prisma.shiftDefinition.update({ where: { id: def.id }, data: { isActive: false } });
+  if ((await prisma.shiftDefinition.count({ where: { isActive: true } })) === 0) {
+    const r5 = await yaz({ tezgahAlarmEnabled: true, tezgahAlarmNoShiftMode: "REQUIRE_SHIFT" });
+    const r6 = await yaz({ tezgahAlarmNoShiftMode: "WARN" });
+    const r7 = await yaz({ tezgahAlarmNoShiftMode: "REQUIRE_SHIFT" });
+    const r8 = await yaz({ tezgahAlarmEnabled: false });
+    const d8 = await durum();
+    check("§9f5 tanım sonradan kalktı: değişmeyen değer engellenmez · WARN'a geçilir · açıkken REQUIRE_SHIFT'e dönmek 400 · kapatmak serbest",
+      [r5, r6, r7, r8].join(",") === "ok,ok,400:TEZGAH_ALARM_SHIFT_REQUIRED,ok" && d8 === "false/WARN", `${[r5, r6, r7, r8].join(",")} ${d8}`);
+  }
+  await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_ENABLED, false);
+  await ayarYaz(SETTING_KEYS.TEZGAH_ENABLED, true);
+
+  // §9g şerit kararı TEK çağrı yerinde: salon ucu ve ayar ekranı ucu aynı fonksiyondan (`alarmShiftState`).
+  const cagri = tsDosyalari(path.join(__dirname, "..", "src")).flatMap((f) => {
+    if (f.endsWith("loom-floor.helper.ts")) return [];
+    const n = [...fs.readFileSync(f, "utf8").matchAll(/\balarmShiftNotice\s*\(/g)].length;
+    return n > 0 ? [`${path.basename(f)}:${n}`] : [];
+  });
+  check("§9g `alarmShiftNotice` üretim kaynağında (tanım dışında) yalnız loom-floor.service'te BİR kez çağrılır (salon + ayar ucu ortak)",
+    cagri.join(",") === "loom-floor.service.ts:1", cagri.join(","));
+}
+
+// ── §10 sebepsiz duruş anahtarı ──────────────────────────────────────────────
+async function sebepsizAnahtar({ at, simdi, tezgah }: KipCtx): Promise<void> {
+  const EN = SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_ENABLED;
+  const DK = SETTING_KEYS.TEZGAH_ALARM_UNCLASSIFIED_TARGET_MINUTES;
+  await ayarYaz(SETTING_KEYS.TEZGAH_ALARM_NO_SHIFT_MODE, "WARN");
+  const etkin = async () => `${await readTezgahAlarmUnclassifiedEnabled()}/${await resolveTezgahAlarmUnclassifiedTarget()}`;
+  // §10a okuyucu: satır yoksa süreden türer (bugünkü davranış); anahtar kapalıyken ham süre korunur.
+  await prisma.systemSetting.deleteMany({ where: { key: EN } });
+  await ayarYaz(DK, 15);
+  const a1 = await etkin();
+  await ayarYaz(DK, 0);
+  const a2 = await etkin();
+  await ayarYaz(DK, 15);
+  await ayarYaz(EN, false);
+  const a3 = await etkin();
+  const ham = await readTezgahAlarmUnclassifiedTargetMinutes();
+  check("§10a okuyucu: satır yok + süre 15 → açık/15 · satır yok + boş → kapalı/null · anahtar kapalı → etkin null, ham süre 15 korunur",
+    a1 === "true/15" && a2 === "false/null" && a3 === "false/null" && ham === 15, `${a1} ${a2} ${a3} ham=${ham}`);
+
+  // §10b motor + salon: anahtar kapalıyken sebepsiz duruş alarm doğurmaz, salon hedef göstermez; açılınca doğar.
+  const E = (await openManualStop({ machineId: await tezgah(30), startedAt: at(-20) })).data;
+  const salonHedef = async () => (await getLoomFloor(simdi)).data?.looms.find((l) => l.id === E.machineId)?.openStop?.targetMinutes ?? null;
+  ozet(await tur(simdi, [E.machineId]));
+  const kapaliAlarm = await alarmOf(E.id);
+  const kapaliSalon = await salonHedef();
+  await ayarYaz(EN, true);
+  ozet(await tur(simdi, [E.machineId]));
+  const acikAlarm = await alarmOf(E.id);
+  const acikSalon = await salonHedef();
+  check("§10b anahtar KAPALI: sebepsiz duruş alarm doğurmaz, salon hedef göstermez · AÇIK: ortak hedefle (15) doğar, K1 = açılış + 15",
+    kapaliAlarm === null && kapaliSalon === null && acikAlarm?.targetMinutes === 15 && acikAlarm.k1DueAt.getTime() === at(-5).getTime() && acikSalon === 15,
+    `kapalı=${kapaliAlarm?.id ?? "yok"}/${kapaliSalon} açık=${acikAlarm?.targetMinutes}/${acikSalon}`);
+
+  // §10c yazma kapısı + eski istemci. Kapı her yazmadan ÖNCE: 400'de hiçbir şey yazılmaz.
+  const kullanici = { id: await testActorId() };
+  const yaz = async (input: Record<string, unknown>): Promise<string> => {
+    try {
+      await systemSettingService.setFeatureFlags(input as never, kullanici.id);
+      return "ok";
+    } catch (e) {
+      return e instanceof AppError ? `${e.statusCode}:${String((e.details as { code?: string } | undefined)?.code)}` : `hata:${(e as Error).message}`;
+    }
+  };
+  const durum = async () => `${await readTezgahAlarmUnclassifiedEnabled()}/${await readTezgahAlarmUnclassifiedTargetMinutes()}`;
+  const KOD = "400:TEZGAH_ALARM_UNCLASSIFIED_MINUTES_REQUIRED";
+  await ayarYaz(EN, false);
+  await ayarYaz(DK, 15);
+  const adimlar: string[] = [];
+  const adim = async (input: Record<string, unknown>) => adimlar.push(`${await yaz(input)}→${await durum()}`);
+  await adim({ tezgahAlarmUnclassifiedEnabled: true, tezgahAlarmUnclassifiedTargetMinutes: null });
+  await ayarYaz(DK, 0);
+  await adim({ tezgahAlarmUnclassifiedEnabled: true });
+  await adim({ tezgahAlarmUnclassifiedEnabled: true, tezgahAlarmUnclassifiedTargetMinutes: 20 });
+  await adim({ tezgahAlarmUnclassifiedEnabled: false });
+  invalidateFeatureFlagsCache();
+  const ff = (await systemSettingService.getFeatureFlags()).data!;
+  check("§10c açıkken süre zorunlu (gövdede boş ya da kayıtlı boş → 400, HİÇBİR ŞEY yazılmadı) · süreyle açılır · kapatmak süreyi SİLMEZ",
+    adimlar.join(" ") === `${KOD}→false/15 ${KOD}→false/null ok→true/20 ok→false/20` && ff.tezgahAlarmUnclassifiedEnabled === false && ff.tezgahAlarmUnclassifiedTargetMinutes === 20,
+    `${adimlar.join(" ")} ff=${ff.tezgahAlarmUnclassifiedEnabled}/${ff.tezgahAlarmUnclassifiedTargetMinutes}`);
+  adimlar.length = 0;
+  await adim({ tezgahAlarmUnclassifiedTargetMinutes: 25 });
+  await adim({ tezgahAlarmUnclassifiedTargetMinutes: null });
+  check("§10c2 eski istemci (yalnız süre): sayı → açık, boş → kapalı — bugünkü anlamı korunur, 400'e takılmaz",
+    adimlar.join(" ") === "ok→true/25 ok→false/null", adimlar.join(" "));
+
+  // §10d etkin hedef TEK resolver'dan: ham süre okuyucusu üretim kaynağında yalnız ayar servisinde çağrılır.
+  const ham2 = tsDosyalari(path.join(__dirname, "..", "src")).flatMap((f) => {
+    if (f.endsWith("system-setting.service.ts")) return [];
+    return /\breadTezgahAlarmUnclassifiedTargetMinutes\s*\(/.test(fs.readFileSync(f, "utf8")) ? [path.basename(f)] : [];
+  });
+  check("§10d motor ve salon sebepsiz hedefi `resolveTezgahAlarmUnclassifiedTarget`ten okur (ham süre okuyucusu yalnız ayar servisinde)", ham2.length === 0, ham2.join(","));
 }
 
 /** Saat helper'larının dışında: StopClock biçimli nesne (anahtarları yalnız saat alanları, startedAt + targetMinutes dahil) ya da doğrudan vardiya süzgeci. */
@@ -421,6 +666,7 @@ async function cleanup(): Promise<void> {
     if (ids.station) await prisma.station.deleteMany({ where: { id: ids.station } });
     if (ids.shifts.length) await prisma.shiftInstance.deleteMany({ where: { id: { in: ids.shifts } } });
     if (ids.shiftDef) await prisma.shiftDefinition.deleteMany({ where: { id: ids.shiftDef } });
+    if (ids.extraDefs.length) await prisma.shiftDefinition.deleteMany({ where: { id: { in: ids.extraDefs } } });
     if (ids.user) await prisma.user.deleteMany({ where: { id: ids.user } });
   } catch (err) {
     fail++;

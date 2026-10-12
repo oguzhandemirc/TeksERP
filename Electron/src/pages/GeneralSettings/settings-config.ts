@@ -20,10 +20,11 @@ import {
   Warehouse,
   type LucideIcon,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { FeatureFlags } from "@/services/featureFlagService";
 import { SETTING_KEYS as RAW_SETTING_KEYS } from "@/services/systemSettingService";
 import { BatchNumberHint } from "./BatchNumberHint";
+import { TezgahAlarmShiftGate } from "./TezgahAlarmShiftGate";
 import { PHASE_OUT_LINE_QTY_OPTIONS, PHASE_OUT_NEW_ORDER_OPTIONS } from "@/lib/item-lifecycle-flags";
 import {
   SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
@@ -119,7 +120,23 @@ export interface FlagDef {
     max: number;
     /** Alan boş bırakıldığında (null) gösterilecek uyarı — kural etkisiz kalır. */
     emptyWarning: string;
+    /** Anahtar açıkken boş bırakılamaz: boşsa kırmızı ipucu + Kaydet kapalı (sunucu da 400 verir). */
+    required?: boolean;
+    /** Anahtar kapalıyken de çizilir (pasif) — kapatmak değeri silmez, kullanıcı görsün. */
+    showWhenOff?: boolean;
   };
+  /**
+   * Satırı saran KAPI bileşeni (opsiyonel): taslak/sunucu değerlerine bakıp anahtarı AÇMAYI kilitler
+   * (`blockOn` = neden) ve satırın altına kendi uyarısını çizer. Kapalı anahtarı kapatmak hiç kilitlenmez.
+   */
+  gate?: ComponentType<FlagGateProps>;
+}
+
+/** `FlagDef.gate` sözleşmesi — taslak (kaydedilmemiş) ve sunucu değerini anahtar adıyla okur. */
+export interface FlagGateProps {
+  draftOf: (key: keyof FeatureFlags) => unknown;
+  serverOf: (key: keyof FeatureFlags) => unknown;
+  children: (lock: { blockOn: string | null }) => ReactNode;
 }
 
 /**
@@ -1504,14 +1521,25 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Hedef süresini aşan duruş alarm olur: panelde zil, kırmızı şerit, ses ve Windows bildirimi.",
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
-        desc: "Açıkken bir duruş, sebebinin hedef süresini aşınca alarm olur: önce görevliye (1. kademe), iletim payı da dolunca patrona (2. kademe) gider. Panelde zil, kırmızı şerit, ses ve pencere arkadayken Windows bildirimi çıkar; alarm üstlenilip not düşülebilir. Hedef süre Hazır Sebepler'de, tezgah duruşu sebebinin satırındadır — hedefi girilmemiş sebepler alarm üretmez. Kapalıyken (varsayılan) hiçbir alarm doğmaz, zil görünmez; Tezgah Salonu bugünkü gibi çalışır.",
+        desc: "Açıkken bir duruş, sebebinin hedef süresini aşınca alarm olur: önce görevliye (1. kademe), iletim payı da dolunca patrona (2. kademe) gider. Panelde zil, kırmızı şerit, ses ve pencere arkadayken Windows bildirimi çıkar; alarm üstlenilip not düşülebilir. Hedef süre Hazır Sebepler'de, tezgah duruşu sebebinin satırındadır — hedefi girilmemiş sebepler alarm üretmez. Vardiya yokken ne olacağı “Vardiya yokken alarm” satırındadır. Kapalıyken (varsayılan) hiçbir alarm doğmaz, zil görünmez; Tezgah Salonu bugünkü gibi çalışır.",
+        gate: TezgahAlarmShiftGate,
+      },
+      {
+        key: "tezgahAlarmUnclassifiedEnabled",
+        title: "Sebepsiz duruşta alarm",
+        summary: "Sebebi henüz girilmemiş duruş da aşağıdaki süreyi aşınca alarm olur.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken sebebi girilmemiş bir duruş bu hedef süreyi aşınca alarm olur; sebep girilince o sebebin hedefi işler. Açıkken süre zorunludur. Kapatmak süreyi silmez — yeniden açınca aynı süre kullanılır. Kapalıyken (süre girilmemiş kurulumlarda varsayılan) sebepsiz duruş alarm üretmez. Yalnız tezgah alarmı açıkken etkilidir.",
         numberField: {
           numberKey: "tezgahAlarmUnclassifiedTargetMinutes",
           label: "Sebebi girilmemiş duruşun hedef süresi",
           unit: "dk",
           min: 1,
           max: 1440,
-          emptyWarning: "Boş (varsayılan): sebebi henüz girilmemiş duruş alarm üretmez — sebep girilince o sebebin hedefi işler.",
+          emptyWarning: "Süre girilmeden sebepsiz duruş alarmı açılamaz.",
+          required: true,
+          showWhenOff: true,
         },
       },
       {
@@ -1521,6 +1549,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: true,
         audience: ["Yönetim"],
         desc: "Açıkken (varsayılan) alarmı üstlenmek patrona iletimi durdurmaz: duruş hedef + iletim payını aşarsa alarm yine 2. kademeye çıkar. Kapalıyken üstlenilmiş alarm görevlide kalır, patrona gitmez. Yalnız tezgah alarmı açıkken etkilidir.",
+      },
+    ],
+    enumFlags: [
+      {
+        enumKey: "tezgahAlarmNoShiftMode",
+        title: "Vardiya yokken alarm",
+        summary: "Vardiya tanımlı değilken ya da vardiya dışında açılan duruşta alarmın ne yapacağı.",
+        desc: "Alarm vardiya takvimine bakar: varsayılan kipte vardiya dışında açılan duruş alarm üretmez, vardiyaya taşarsa vardiya başından sayılır. Vardiyası olmayan fabrika 7/24 çalmayı seçebilir; vardiyaya göre çalışan fabrika vardiya tanımlanmadan alarmın açılmasını engelleyebilir. “Vardiya tanımlı” = Vardiya Tanımları'nda en az bir etkin tanım var; “şu an vardiya var” = takvimde şu anı kapsayan vardiya var.",
+        defaultValue: "WARN",
+        display: "radio",
+        audience: ["Yönetim"],
+        options: [
+          { value: "WARN", label: "Uyar (vardiyada çal)", hint: "Vardiya dışında açılan duruş alarm üretmez; vardiya yoksa ayar ekranı ve Tezgah Salonu uyarır." },
+          { value: "ALWAYS", label: "Vardiya yoksa da çal (7/24)", hint: "Vardiyaya bakılmaz: her duruş açıldığı andan sayılır." },
+          { value: "REQUIRE_SHIFT", label: "Vardiya olmadan açılamasın", hint: "Vardiya tanımı yokken tezgah alarmı açılamaz; alarm vardiyada çalar." },
+        ],
       },
     ],
     numberFlags: [

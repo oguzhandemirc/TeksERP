@@ -273,7 +273,9 @@ export function FeatureFlagSection({
   const numbersValid = flags.every((f) => {
     if (!f.numberField) return true;
     const v = parseNumberDraft(numberDraft[f.numberField.numberKey]);
-    return v === null || (v >= f.numberField.min && v <= f.numberField.max);
+    // Zorunlu alan: anahtar (taslak) açıkken boş bırakılamaz.
+    if (v === null) return !(f.numberField.required && (flagDraft[f.key] ?? server?.[f.key] ?? false));
+    return v >= f.numberField.min && v <= f.numberField.max;
   });
   const numDirty = numberFlags.some((f) => (numDraft[f.key] ?? serverNumFor(f)) !== serverNumFor(f));
   const fieldDirty = settingFields.some(
@@ -447,8 +449,23 @@ export function FeatureFlagSection({
       ? "Bu anahtarı yalnız sistem yöneticisi değiştirir."
       : undefined;
 
-  const renderRow = (flag: FlagDef) => {
+  /** `FlagDef.gate` için taslak okuyucu: kaydedilmemiş toggle/seçim, yoksa sunucu değeri. */
+  const draftOf = (k: keyof FeatureFlags): unknown =>
+    (flagDraft as Record<string, unknown>)[k] ?? (enumDraft as Record<string, unknown>)[k] ?? server?.[k];
+  const serverOf = (k: keyof FeatureFlags): unknown => server?.[k];
+
+  const renderRow = (flag: FlagDef) =>
+    flag.gate ? (
+      <flag.gate key={flag.key} draftOf={draftOf} serverOf={serverOf}>
+        {(lock) => renderRowBody(flag, lock.blockOn)}
+      </flag.gate>
+    ) : (
+      renderRowBody(flag, null)
+    );
+
+  const renderRowBody = (flag: FlagDef, blockOn: string | null) => {
     const checked = flagDraft[flag.key] ?? server?.[flag.key] ?? false;
+    const numberEmpty = flag.numberField ? parseNumberDraft(numberDraft[flag.numberField.numberKey]) === null : false;
     return (
       <div key={flag.key} className="py-3 first:pt-0 last:pb-0">
         {canEdit ? (
@@ -460,7 +477,8 @@ export function FeatureFlagSection({
             defaultOn={flag.defaultOn}
             audience={flag.audience}
             checked={checked}
-            disabled={mut.isPending}
+            // Kapı yalnız AÇMAYI kilitler; açık anahtar her zaman kapatılabilir.
+            disabled={mut.isPending || (blockOn !== null && !checked)}
             onChange={(v) => setFlagDraft((d) => ({ ...d, [flag.key]: v }))}
             compact
           />
@@ -483,7 +501,7 @@ export function FeatureFlagSection({
         {/* Sayısal eşik — TASLAK toggle'a bakar (sunucuya değil): kullanıcı
             anahtarı açar açmaz eşiği girebilmeli, önce kaydetmek zorunda
             kalmamalı. Kapalıyken çizilmez (kullanılmayan alan gürültüdür). */}
-        {flag.numberField && checked ? (
+        {flag.numberField && (checked || flag.numberField.showWhenOff) ? (
           canEdit ? (
             <div className="mt-3 space-y-1.5 pl-1">
               <label className="text-xs font-medium">{flag.numberField.label}</label>
@@ -494,7 +512,7 @@ export function FeatureFlagSection({
                   max={flag.numberField.max}
                   value={numberDraft[flag.numberField.numberKey] ?? ""}
                   aria-label={flag.numberField.label}
-                  disabled={mut.isPending}
+                  disabled={mut.isPending || !checked}
                   onChange={(e) =>
                     setNumberDraft((d) => ({
                       ...d,
@@ -505,7 +523,11 @@ export function FeatureFlagSection({
                 />
                 <span className="text-xs text-muted-foreground">{flag.numberField.unit}</span>
               </div>
-              {parseNumberDraft(numberDraft[flag.numberField.numberKey]) === null ? (
+              {numberEmpty && flag.numberField.required && checked ? (
+                <p className="text-xs text-destructive" role="alert">
+                  {flag.numberField.emptyWarning}
+                </p>
+              ) : numberEmpty && !flag.numberField.required ? (
                 <p className="text-xs text-amber-600 dark:text-amber-500">
                   {flag.numberField.emptyWarning}
                 </p>

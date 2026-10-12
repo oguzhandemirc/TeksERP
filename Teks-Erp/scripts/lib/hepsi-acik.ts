@@ -91,7 +91,9 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   tezgahAlarmEnabled: A(true),
   tezgahAlarmUnclassifiedTargetMinutes: A(15),
   tezgahAlarmRenotifyMinutes: A(10),
+  tezgahAlarmUnclassifiedEnabled: A(true),
   tezgahAlarmEscalateWhenAcked: A(true),
+  tezgahAlarmNoShiftMode: A("ALWAYS"), // REQUIRE_SHIFT vardiyasız matris DB'sinde alarmı açtırmaz
   // ── KK1 ────────────────────────────────────────────────────────────────────
   kk1WeightEntryEnabled: A(true),
   kk1DuplicateGuardEnabled: A(true),

@@ -42,7 +42,16 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 }));
 vi.mock("@/services/featureFlagService", async () => {
   const actual = await vi.importActual<typeof import("@/services/featureFlagService")>("@/services/featureFlagService");
-  return { ...actual, featureFlagService: { ...actual.featureFlagService, update: (p: unknown) => update(p) } };
+  // Tezgah alarmı kapısının durum ucu: ağa gitmesin (hata tostu bu testin saydığı tostlara karışır).
+  const shiftStatus = { alarmEnabled: false, mode: "WARN", shiftDefined: true, currentShift: null, notice: null, enableBlockedModes: [] };
+  return {
+    ...actual,
+    featureFlagService: {
+      ...actual.featureFlagService,
+      update: (p: unknown) => update(p),
+      getTezgahAlarmShiftStatus: async () => ({ success: true, data: shiftStatus }),
+    },
+  };
 });
 vi.mock("@/services/systemSettingService", async () => {
   const actual = await vi.importActual<typeof import("@/services/systemSettingService")>("@/services/systemSettingService");

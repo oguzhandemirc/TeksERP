@@ -441,6 +441,8 @@ function main(): void {
     readProductionCancelReasonRequired: { resolver: "resolveCancelReasonRequired", ebeveyn: "üretim" },
     // Dokuma alarm motoru: tezgah modülü (lisans tavanı dahil) ∧ alarm bayrağı.
     readTezgahAlarmEnabled: { resolver: "resolveTezgahAlarmEnabled", ebeveyn: "tezgah" },
+    // Sebepsiz duruş hedefi: tezgah modülü ∧ sebepsiz anahtar (`tezgah.alarm.unclassifiedEnabled`) ∧ süre.
+    readTezgahAlarmUnclassifiedTargetMinutes: { resolver: "resolveTezgahAlarmUnclassifiedTarget", ebeveyn: "tezgah" },
   };
 
   const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));

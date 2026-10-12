@@ -326,6 +326,10 @@ export interface FeatureFlags {
   tezgahAlarmRenotifyMinutes: number;
   /** Üstlenilmiş alarm da üst kademeye çıksın mı. */
   tezgahAlarmEscalateWhenAcked: boolean;
+  /** Sebepsiz duruşta alarm (sunucu satır yoksa süreden türetir). Alanı tanımayan eski sunucuda yok → kapalı sayılır. */
+  tezgahAlarmUnclassifiedEnabled: boolean;
+  /** Vardiyasız zamanda alarm: WARN (varsayılan) · ALWAYS · REQUIRE_SHIFT. */
+  tezgahAlarmNoShiftMode: TezgahAlarmNoShiftMode;
   /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).
    *  Varsayılan KAPALI. ⚠️ İPLİĞE BAĞIMLI, iplik de TİCARETE: bu alan HAM değerdir;
    *  etkin değer `ticaret && iplik && devere`. Faz 1a'da panel satırı YOK (yüzey
@@ -706,7 +710,22 @@ export type FeatureFlagsView = FeatureFlags & {
   factoryTimezoneWarning?: { code: string; message: string } | null;
 };
 
+export type TezgahAlarmNoShiftMode = "WARN" | "ALWAYS" | "REQUIRE_SHIFT";
+export type AlarmShiftNotice = "NO_SHIFT_DEFINED" | "NO_SHIFT_NOW";
+/** `GET /api/feature-flags/tezgah-alarm-shift-status` — ayar ekranının KAYITLI durum şeridi + açma kilidi. */
+export interface TezgahAlarmShiftStatus {
+  alarmEnabled: boolean;
+  mode: TezgahAlarmNoShiftMode;
+  shiftDefined: boolean;
+  currentShift: unknown;
+  notice: AlarmShiftNotice | null;
+  /** Vardiya tanımı yokken alarmın AÇILAMAYACAĞI kipler. */
+  enableBlockedModes: TezgahAlarmNoShiftMode[];
+}
+
 export const featureFlagService = {
+  getTezgahAlarmShiftStatus: () =>
+    apiClient.get<ApiResponse<TezgahAlarmShiftStatus>>("/api/feature-flags/tezgah-alarm-shift-status").then((r) => r.data),
   get: (): Promise<ApiResponse<FeatureFlagsView>> =>
     apiClient.get<ApiResponse<FeatureFlagsView>>("/api/feature-flags").then((r) => {
       applyServerFactoryTimezone(r.data?.data);

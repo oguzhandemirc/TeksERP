@@ -18,6 +18,7 @@
 //      hedef aşımı OVERDUE · OFF + açık koşum → RUNNING "elle" · kayıtsız OFF ve kayıtsız SHADOW →
 //      UNMONITORED "cikarim" · saf `floorStateSourceOf`/`loomStateOf` (LIVE hep "olculen", simüle öne
 //      geçer) · yapısal: karne özeti ve salon AYNI kova eşlemesinden (`sourceBucketOf`)
+//      · `alarmNotice` + `shift` ayar ekranının durum ucuyla aynı okumadan (§5a2)
 //   §6 levent alanı: devere ∧ levent tezgah bağı açıkken `beams` = `GET /warp-beams/mounted` ile AYNI
 //      helper'ın çıktısı (yuva sırası · kalan DEFTERDEN, plan değil) · leventsiz tezgahta [] · bağ
 //      defteri ya da devere kapalıyken her tezgahta null, `beamTracking` false
@@ -42,7 +43,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { verifyToken } from "../src/middlewares/auth.middleware";
 import loomFloorRouter from "../src/routes/loom-floor.routes";
-import { getLoomFloor, type LoomFloorDto } from "../src/services/loom-floor.service";
+import { getAlarmShiftStatus, getLoomFloor, type LoomFloorDto } from "../src/services/loom-floor.service";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop } from "../src/services/machine-stop.service";
 import { ReasonPresetService } from "../src/services/reason-preset.service";
 import { createWarpBeam } from "../src/services/warp-beam.service";
@@ -248,7 +249,11 @@ async function govde(): Promise<void> {
   const r = await getLoomFloor(simdi);
   const d: LoomFloorDto = r.data!;
   const anahtar = (o: object) => Object.keys(o).sort().join(",");
-  check("§5a üst şekil", anahtar(d) === "asOf,beamTracking,dokumaEnabled,factoryDayStart,graceMinutes,halls,looms,shift,summary", anahtar(d));
+  check("§5a üst şekil", anahtar(d) === "alarmNotice,asOf,beamTracking,dokumaEnabled,factoryDayStart,graceMinutes,halls,looms,shift,summary", anahtar(d));
+  // Vardiya şeridi: salon ile ayar ekranı ucu AYNI okumadan (kip × durum matrisi test_loom_alarm §9).
+  const st = (await getAlarmShiftStatus(simdi)).data!;
+  check("§5a2 salonun `shift` ve `alarmNotice`u ayar ekranı durum ucuyla aynı (tek okuma `alarmShiftState`)",
+    JSON.stringify(d.shift) === JSON.stringify(st.currentShift) && d.alarmNotice === st.notice, `${JSON.stringify(d.shift)} / ${d.alarmNotice} ↔ ${JSON.stringify(st.currentShift)} / ${st.notice}`);
   check("§5b fabrika günü başı = factoryDayStart(now) · üst pay o anki ayar (3)", d.factoryDayStart.getTime() === gunBasi.getTime() && d.graceMinutes === 3);
   const t = (id: string) => d.looms.find((l) => l.id === id)!;
   const l1 = t(duran);

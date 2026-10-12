@@ -40,6 +40,8 @@ import { publicFactoryTimezone } from "../services/helpers/factory-timezone-stat
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 import { manualNumberModes } from "../services/helpers/manual-number.helper";
+import { requireTezgahEnabled } from "../middlewares/module.middleware";
+import { getAlarmShiftStatus } from "../services/loom-floor.service";
 
 const router = Router();
 
@@ -431,8 +433,11 @@ export const updateSchema = z.strictObject({
   // Dokuma alarm motoru — bayrak (varsayılan KAPALI) + iki ayar; null = boş/varsayılan.
   tezgahAlarmEnabled: z.boolean().optional(),
   tezgahAlarmUnclassifiedTargetMinutes: z.number().int().min(1).max(1440).nullable().optional(),
+  tezgahAlarmUnclassifiedEnabled: z.boolean().optional(),
   tezgahAlarmRenotifyMinutes: z.number().int().min(1).max(120).nullable().optional(),
   tezgahAlarmEscalateWhenAcked: z.boolean().optional(),
+  // Vardiyasız zamanda alarm: WARN (varsayılan, uyar) · ALWAYS (7/24) · REQUIRE_SHIFT (vardiyasız açılmasın).
+  tezgahAlarmNoShiftMode: z.enum(["WARN", "ALWAYS", "REQUIRE_SHIFT"]).optional(),
   shippingSackSeqShowTotal: z.boolean().optional(),
   packingPoolPackageNo: z.enum(["sevkte", "acilista"]).optional(),
   sackDumpNameMode: z.enum(["ikisi", "bizdeki", "musterideki"]).optional(),
@@ -819,6 +824,34 @@ router.get(
     try {
       const result = await systemSettingService.getDocumentsLogo();
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/feature-flags/tezgah-alarm-shift-status:
+ *   get:
+ *     tags: [Feature Flags]
+ *     summary: Tezgah alarmının vardiya durumu — vardiya tanımlı mı, şu an vardiya var mı, uyarı şeridi, açmanın engelli olduğu kipler
+ *     description: |
+ *       Salt okuma; ayar ekranının şeridi ve "Vardiya olmadan açılamasın" kipinde pasif anahtar buradan çizilir.
+ *       Uyarı kararı Tezgah Salonu'yla aynıdır (`alarmShiftNotice`).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ alarmEnabled, mode, shiftDefined, currentShift, notice, enableBlockedModes }" }
+ *       403: { description: Tezgah izleme modülü kapalı (MODULE_DISABLED) ya da ayar yazma izni yok }
+ */
+router.get(
+  "/tezgah-alarm-shift-status",
+  verifyToken,
+  requireTezgahEnabled,
+  requireAnyPermission(...flagKeyWriters("tezgahAlarmEnabled")),
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.status(200).json(await getAlarmShiftStatus());
     } catch (error) {
       next(error);
     }

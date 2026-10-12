@@ -11,6 +11,7 @@
 import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass } from "@prisma/client";
 import { aggregateMachineKpis, type LoomKpiTerms } from "./loom-efficiency.helper";
 import { sourceBucketOf, type SourceBucket } from "./loom-shift-terms.helper";
+import type { TezgahAlarmNoShiftMode } from "../system-setting.service";
 
 /** Okumada hesaplanan kademe — süre saatinden (duruşa donmuş hedef + pay). */
 export type LoomStopClockTier = "UNTRACKED" | "WITHIN" | "OVERDUE";
@@ -112,16 +113,18 @@ export interface AlarmClockStart {
 
 /**
  * Hedef saatinin başladığı an ve alarm uygunluğu — motor ile Tezgah Salonu AYNI fonksiyon.
- * Canlı vardiyada açılan duruş: saat açılıştan, uygun (bugünkü davranış). Vardiya dışında açılıp bir
- * vardiyaya TAŞAN duruş: saat taştığı ilk canlı vardiyanın başından (vardiya dışı süre hedefe sayılmaz),
- * yalnız şu an canlı bir vardiya sürerken uygun. Hiç vardiyaya değmemişse saat açılıştan, uygun değil.
+ * `ALWAYS` kipi vardiyaya bakmaz: saat açılıştan, her zaman uygun. Öteki kipler (WARN · REQUIRE_SHIFT):
+ * canlı vardiyada açılan duruş saat açılıştan, uygun; vardiya dışında açılıp bir vardiyaya TAŞAN duruş
+ * saat taştığı ilk canlı vardiyanın başından, yalnız şu an canlı vardiya sürerken uygun; hiç vardiyaya
+ * değmemişse saat açılıştan, uygun değil.
  */
 export function alarmClockStart(
   stop: { startedAt: Date; shiftInstance: { isCancelled: boolean } | null },
   shifts: readonly ShiftWindow[],
   now: Date,
+  mode: TezgahAlarmNoShiftMode,
 ): AlarmClockStart {
-  if (alarmShiftEligible(stop.shiftInstance)) return { at: stop.startedAt, eligible: true };
+  if (mode === "ALWAYS" || alarmShiftEligible(stop.shiftInstance)) return { at: stop.startedAt, eligible: true };
   const start = stop.startedAt.getTime();
   const nowMs = now.getTime();
   const live = shifts.filter((s) => !s.isCancelled);
@@ -131,6 +134,23 @@ export function alarmClockStart(
   if (first === null) return { at: stop.startedAt, eligible: false };
   const eligible = live.some((s) => s.startsAt.getTime() <= nowMs && s.endsAt.getTime() > nowMs);
   return { at: new Date(Math.max(start, first.startsAt.getTime())), eligible };
+}
+
+/** Alarm açıkken vardiyasızlık uyarısı: tanım hiç yok · tanım var ama şu an canlı vardiya yok. */
+export type AlarmShiftNotice = "NO_SHIFT_DEFINED" | "NO_SHIFT_NOW";
+
+/**
+ * Ayar ekranı ve Tezgah Salonu şeridinin TEK kararı. Alarm kapalıysa, kip `ALWAYS` ise ya da şu an canlı
+ * vardiya sürüyorsa (alarm şu an doğabilir) şerit yok; değilse tanım yoksa NO_SHIFT_DEFINED, varsa NO_SHIFT_NOW.
+ */
+export function alarmShiftNotice(s: { alarmEnabled: boolean; mode: TezgahAlarmNoShiftMode; shiftDefined: boolean; shiftNow: boolean }): AlarmShiftNotice | null {
+  if (!s.alarmEnabled || s.mode === "ALWAYS" || s.shiftNow) return null;
+  return s.shiftDefined ? "NO_SHIFT_NOW" : "NO_SHIFT_DEFINED";
+}
+
+/** Alarmı AÇMAK bu kipte engelli mi — yalnız `REQUIRE_SHIFT` ∧ vardiya tanımı yok (sunucu kapısı + panel pasif anahtarı). */
+export function alarmEnableBlocked(mode: TezgahAlarmNoShiftMode, shiftDefined: boolean): boolean {
+  return mode === "REQUIRE_SHIFT" && !shiftDefined;
 }
 
 /** Duruşun hedef saati — StopClock'un TEK kurucusu (saat başlangıcı `alarmClockStart`tan). */
