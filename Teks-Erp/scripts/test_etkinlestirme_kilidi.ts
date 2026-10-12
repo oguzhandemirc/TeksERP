@@ -19,13 +19,23 @@
 //      açık); kirasız ya da başka anahtara bağlı kira (satıcı kanıtsız iz) → KOPYA
 //   §7 biçimsiz iz satırı → YOK sayılır → ETKINLESMEDI (DB'ye yazılan çöp kilidi açmaz)
 //   §8 korumalı derleme sabiti tanımlı (statik)
+//   §10 ⭐ uçtan uca (sahte satıcı, yerel HTTPS; kilit açık): çevrimiçi kod → kilit kalkar, iş ucu açılır · çevrimdışı
+//      etkinleştirme zarfı → satıcı `/v1/cevrimdisi` → yanıt kabulü → kilit kalkar; kurcalı yanıt ve başka kuruluma bağlı
+//      yanıt 400 `LICENSE_RESPONSE_INVALID`, kilit sürer · portalın muafiyet dosyası (`{v,muafiyet}`) yükleme yolundan
+//      kabul → kilit kalkar, dosya lisans dizinine yazılır; başka kurulumun muafiyeti 400, lisans yanıtı muafiyet sanılmaz
 //   ⭐ NEGATİF SONDA §9: sınıflayıcı "etkin" dalı ters çevrilmiş kopyası §4'ün ölçüsünü kırmızıya düşürür; üç kolun her
 //      biri ters çevrilmiş yabancı-iz sınıflayıcısı §6 kol ölçüsünü kırmızıya düşürür
 // =============================================================================
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createPublicKey, randomUUID } from "node:crypto";
+import { setEgressTrustForTests } from "../src/lib/http-egress";
+import { activateLicense, acceptOfflineResponse, buildOfflineRequest } from "../src/services/license.service";
+import { acceptExemption, exemptionTextOf } from "../src/services/license-activation.service";
+import { egressTransport } from "../src/services/helpers/license-wire.helper";
+import { sahteSaticiBaslat, type SahteSatici } from "./lib/lisans-sahte-satici";
+import { kabulEt, temizleKabuller } from "./lib/lisans-kabul-fikstur";
 import prisma from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 import { AuthService } from "../src/services/auth.service";
@@ -47,8 +57,8 @@ import {
   setMeasuredFingerprint,
   type LicenseSnapshot,
 } from "../src/lib/license/runtime";
-import { DAY_MS, ExemptionSchema, TYP, installationKeyId, msToIso, signDocument, type ExemptionDoc, type Fingerprint } from "../src/lib/license/protocol";
-import { araSertifikasi, fiksturKur, kiraBas, type Fikstur, type TestAnahtari } from "./lib/lisans-fikstur";
+import { DAY_MS, ENDPOINTS, ExemptionSchema, TYP, installationKeyId, msToIso, signDocument, type ExemptionDoc, type Fingerprint } from "../src/lib/license/protocol";
+import { araSertifikasi, fiksturKur, hakBas, kiraBas, type Fikstur, type TestAnahtari } from "./lib/lisans-fikstur";
 import { lisansKipKur, temizleLisansKipDizini } from "./lib/lisans-kip-fikstur";
 import { kapidanGecir, type Uc } from "./lib/lisans-kapi-surucu";
 
@@ -318,6 +328,83 @@ async function kayipKopya(token: string): Promise<void> {
   check("§7a ⭐ şemaya uymayan iz YOK sayılır → ETKINLESMEDI", cop.etkinlestirmeKilidi.sinif === "ETKINLESMEDI");
 }
 
+// ── §10 uçtan uca ───────────────────────────────────────────────────────────────────────────────────────────
+const saticilar: SahteSatici[] = [];
+async function hataKodu(p: Promise<unknown> | (() => unknown)): Promise<string> {
+  try {
+    await (typeof p === "function" ? p() : p);
+    return "HATA_YOK";
+  } catch (e) {
+    return String((e as { details?: { code?: string } }).details?.code ?? e);
+  }
+}
+
+/** Temiz lisans dizini + DB izi yok + kilit açık; fikstürün kurulum anahtarı deponun anahtarıdır, satıcı yerel HTTPS. */
+async function canliKurulum(): Promise<{ f: Fikstur; satici: SahteSatici; dir: string }> {
+  __resetLicenseRuntimeForTests();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "g2-uctan-"));
+  dizinler.push(dir);
+  const key = loadLicenseStoreSync({ dir }).key;
+  if (!key) throw new Error("kurulum anahtarı üretilemedi");
+  const f0 = fiksturKur(Date.now());
+  const f: Fikstur = { ...f0, kurulum: { kid: key.kid, x: key.x, privateKey: key.privateKey, acik: createPublicKey(key.privateKey) } };
+  const satici = await sahteSaticiBaslat(f);
+  saticilar.push(satici);
+  satici.kod = "TKS-7K3M-9QRT-2XWZ-4HJN";
+  configureLicenseRuntimeForTests({ roots: f.kokler, vendorUrl: satici.url });
+  setEgressTrustForTests(satici.ca);
+  setLicenseDbFacts({ installationId: randomUUID(), firstOpenMs: Date.now() - 3 * DAY_MS, ledgerHighWaterMs: null });
+  const tum = { f1: true, f2: true, f3: true, f4: true, f5: true };
+  setMeasuredFingerprint({ digest: f.parmakIzi, measured: tum, measuredAt: new Date().toISOString() });
+  setLicenseTraceRow(null);
+  setActivationLockForTests(true);
+  invalidateLicenseSnapshot();
+  return { f, satici, dir };
+}
+
+const kilitNedeni = (): string => `${getLicenseSnapshot().etkinlestirmeKilidi.sinif}/${getLicenseSnapshot().etkinlestirmeKilidi.neden}`;
+
+async function uctanUca(token: string): Promise<void> {
+  console.log("\n§10 — uçtan uca etkinleştirme (sahte satıcı, yerel HTTPS, kilit açık)");
+  const x = await canliKurulum();
+  const once = await karar("POST", "/api/orders", token);
+  check("§10a taze kurulum kilitli, iş ucu 403", kilitNedeni() === "ETKINLESMEDI/IZ_YOK" && once.kod === "LICENSE_NOT_ACTIVATED", kilitNedeni());
+  await kabulEt();
+  await activateLicense(x.satici.kod, null);
+  check("§10b ⭐ S3 çevrimiçi kod → kilit kalkar (YOK/ETKIN), iş ucu kapıdan geçer", kilitNedeni() === "YOK/ETKIN" && (await karar("POST", "/api/orders", token)).rotaya, kilitNedeni());
+
+  const y = await canliKurulum();
+  await kabulEt();
+  const cv = await buildOfflineRequest({ amac: "etkinlestir", kod: y.satici.kod });
+  const yanit = await egressTransport({ url: `${y.satici.url}${ENDPOINTS.OFFLINE}`, method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cv.istekGovdesi) });
+  check("§10c çevrimdışı etkinleştirme zarfı satıcıdan imzalı yanıt alır", yanit.status === 200 && y.satici.sayac.etkinlestir === 1, `${yanit.status}`);
+  const govde = JSON.parse(yanit.body) as { kira?: string };
+  const kurcali = JSON.stringify({ ...govde, kira: `${govde.kira?.slice(0, -4)}AAAA` });
+  check("§10d ⭐ S5 kurcalı yanıt → 400 LICENSE_RESPONSE_INVALID, kilit sürer", (await hataKodu(acceptOfflineResponse(kurcali, "cevrimdisi", null))) === "LICENSE_RESPONSE_INVALID" && kilitNedeni() === "ETKINLESMEDI/IZ_YOK", kilitNedeni());
+  const baskasi = { v: 1, hak: hakBas(y.f), kira: kiraBas(y.f, { kurulumAnahtarKimligi: `kur-${"Q".repeat(43)}`, zorlama: false }), indirmeBelirtecleri: [], sunucuSaati: new Date().toISOString() };
+  check("§10e ⭐ S5 başka kuruluma bağlı yanıt → 400, kilit sürer", (await hataKodu(acceptOfflineResponse(baskasi, "cevrimdisi", null))) === "LICENSE_RESPONSE_INVALID" && kilitNedeni() === "ETKINLESMEDI/IZ_YOK", kilitNedeni());
+  check("§10f lisans yanıtı muafiyet sanılmaz (yükleme yolu ayrımı)", exemptionTextOf(yanit.body) === null && exemptionTextOf(govde) === null);
+  await acceptOfflineResponse(Buffer.from(yanit.body, "utf8").toString("base64url"), "cevrimdisi", null);
+  check("§10g ⭐ S4 çevrimdışı yanıt (karekod metni) kabul → kilit kalkar, iş ucu açık", kilitNedeni() === "YOK/ETKIN" && (await karar("POST", "/api/orders", token)).rotaya, kilitNedeni());
+
+  const z = await canliKurulum();
+  const zKur: Kurulum = { f: z.f, keyX: z.f.kurulum.x, dir: z.dir };
+  const yabanci = JSON.stringify({ v: 1, muafiyet: muafiyetBas(muafiyetYuku(zKur, { kurulumAnahtarKimligi: `kur-${"Q".repeat(43)}` }), z.f.kok) });
+  const yabanciMetin = exemptionTextOf(yabanci);
+  check("§10h ⭐ başka kurulumun muafiyeti → 400, kilit sürer", yabanciMetin !== null && (await hataKodu(() => acceptExemption(yabanciMetin, null))) === "LICENSE_RESPONSE_INVALID" && kilitNedeni() === "ETKINLESMEDI/IZ_YOK", kilitNedeni());
+  const dosya = `\uFEFF${JSON.stringify({ v: 1, muafiyet: muafiyetBas(muafiyetYuku(zKur), z.f.kok) })}`;
+  const metin = exemptionTextOf(dosya);
+  if (metin) acceptExemption(metin, null);
+  check(
+    "§10i ⭐ portal muafiyet dosyası yükleme yolundan → kilit kalkar (YOK/MUAFIYET), dosya lisans dizininde, iş ucu açık",
+    metin !== null && kilitNedeni() === "YOK/MUAFIYET" && fs.existsSync(path.join(z.dir, LICENSE_FILES.EXEMPTION)) && (await karar("POST", "/api/orders", token)).rotaya,
+    kilitNedeni(),
+  );
+  loadLicenseStoreSync({ dir: z.dir });
+  invalidateLicenseSnapshot();
+  check("§10j muafiyet yeniden açılışta dosyadan okunur (YOK/MUAFIYET)", kilitNedeni() === "YOK/MUAFIYET", kilitNedeni());
+}
+
 // ── §8 / §9 ─────────────────────────────────────────────────────────────────────────────────────────────────
 function statik(): void {
   console.log("\n§8 — korumalı derleme");
@@ -366,7 +453,10 @@ async function main(): Promise<void> {
     await etkinlesmemisKurulum(token);
     await muafiyet(token);
     await kayipKopya(token);
+    await uctanUca(token);
   } finally {
+    for (const s of saticilar) await s.kapat().catch(() => undefined);
+    await temizleKabuller().catch(() => undefined);
     await prisma.session.deleteMany({ where: { userId: u.id } }).catch(() => undefined);
     await prisma.user.deleteMany({ where: { id: u.id } }).catch(() => undefined);
     setActivationLockForTests(null);

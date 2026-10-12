@@ -34,6 +34,7 @@ import {
 } from "../services/license.service";
 import { RecordLicenseAcceptanceSchema, getLicenseAcceptanceView, recordLicenseAcceptance } from "../services/license-acceptance.service";
 import { reportHardwareChange } from "../services/license-hardware.service";
+import { acceptExemption, exemptionTextOf } from "../services/license-activation.service";
 
 const router = Router();
 
@@ -291,7 +292,7 @@ router.get("/cevrimdisi-istek", canManage, offlineRequestHandler("query"));
  *   post:
  *     tags: [Lisans]
  *     summary: Çevrimdışı yanıtı (QR metni, JSON ya da portalın uzatma dosyası) doğrula ve kabul et
- *     description: Bekleyen istek aranmaz; yanıt satıcı imzasıyla doğrulanır. Kurulumdakinden eski kira 409 LICENSE_LEASE_STALE.
+ *     description: Bekleyen istek aranmaz; yanıt satıcı imzasıyla doğrulanır. Kurulumdakinden eski kira 409 LICENSE_LEASE_STALE. Portalın muafiyet dosyası ({v,muafiyet}) da buradan kabul edilir (G2).
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -311,8 +312,16 @@ router.get("/cevrimdisi-istek", canManage, offlineRequestHandler("query"));
 router.post("/cevrimdisi-yanit", canManage, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { yanit, kaynak } = OfflineResponseBody.parse(req.body);
+    const userId = req.user?.userId ?? null;
+    // G2: portalın muafiyet dosyası aynı yükleme yolundan gelir; kabulden sonra güncel ayrıntı döner.
+    const muafiyet = exemptionTextOf(yanit);
+    if (muafiyet) {
+      acceptExemption(muafiyet, userId);
+      res.status(200).json({ success: true, data: getLicenseDetail() });
+      return;
+    }
     const source = kaynak === "dosya" ? "dosya" : "cevrimdisi";
-    res.status(200).json({ success: true, data: await acceptOfflineResponse(yanit, source, req.user?.userId ?? null) });
+    res.status(200).json({ success: true, data: await acceptOfflineResponse(yanit, source, userId) });
   } catch (err) {
     next(err);
   }
