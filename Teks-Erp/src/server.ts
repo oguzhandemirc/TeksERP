@@ -13,7 +13,7 @@ import { startModuleProfileJob } from './jobs/module-profile.job';
 import { warnStaleReportKeys } from './jobs/report-catalog.job';
 import { refreshDiscoveryCache } from './services/discovery.service';
 import { startMdnsAdvertiser, stopMdnsAdvertiser } from './jobs/mdns-advertiser.job';
-import { startArchiveScheduler } from './jobs/archive-scheduler';
+import { startMaintenanceScheduler } from './jobs/maintenance.job';
 import { startBackupScheduler } from './jobs/backup-scheduler';
 import { startOffsiteSweeper } from './jobs/offsite-sweeper';
 import { startPermissionCatalogReconciler } from './jobs/permission-catalog.job';
@@ -214,7 +214,7 @@ function startLanListener(): Server {
     satir("");
 
     // ⚠️ Doğrulama kipinde zamanlayıcıyla tekrarlayan ya da dışarı konuşan işler BAŞLAMAZ (`lib/dogrulama-kipi.ts`).
-    if (!VERIFYING) startArchiveScheduler();
+    if (!VERIFYING) startMaintenanceScheduler(); // gece bakımı: audit arşivi + günlük budama/rotasyon
     if (!VERIFYING) startBackupScheduler();
     // ⚠️ AYRI ÇAĞRI — `startBackupScheduler` sahada erken döner
     // (BACKUP_SCHEDULE_ENABLED=false: gece yedeğini harici görev alıyor).

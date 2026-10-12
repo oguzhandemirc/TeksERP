@@ -37,6 +37,12 @@ import {
   type BackupKind,
 } from "./helpers/backup-naming.helper";
 import {
+  ROLLBACK_KEEP_NEWEST,
+  ROLLBACK_MAX_AGE_DAYS,
+  selectExpiredRollbackBackups,
+  type RotationCandidate,
+} from "./helpers/backup-rotation.helper";
+import {
   decryptFile,
   encryptFile,
   inspectEncrypted,
@@ -61,7 +67,7 @@ import {
   measureVersionCompat,
 } from "./helpers/pg-tool.helper";
 import prisma from "../lib/prisma";
-import { uyari } from "../lib/logger";
+import { bilgi, uyari } from "../lib/logger";
 import { processControlInfo } from "../lib/hizmet-duzeni";
 import { ShortCredentialAdminService } from "./short-credential-admin.service";
 
@@ -456,9 +462,8 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     }
 
     // --- 3) Saklama rotasyonu (GÜN bazlı)
-    // Yalnız günlük (tekserp_*) yedekler rotasyona girer; migration öncesi
-    // (premigrate_*) ve geri yükleme öncesi (pre-restore_) yedekler geri dönüş
-    // noktasıdır, otomatik silinmez.
+    // Yalnız günlük (tekserp_*) yedekler bu rotasyona girer; premigrate_ kendi
+    // rotasyonundadır (`rotateRollbackBackups`, bakım işi), pre-restore_ silinmez.
     const warnings: string[] = [];
     try {
       const names = (await fs.promises.readdir(BACKUP_DIR)).filter(
@@ -553,6 +558,44 @@ async function sweepStaleParts(): Promise<void> {
   } catch {
     // Budama başarısızlığı yedeği geçersiz kılmaz — sessizce geç.
   }
+}
+
+export interface RollbackRotationResult {
+  deleted: string[];
+  failed: string[];
+}
+
+/**
+ * premigrate_ geri dönüş yedeklerinin rotasyonu (günlük bakım işi çağırır): en yeni
+ * ROLLBACK_KEEP_NEWEST korunur, kalanlardan ROLLBACK_MAX_AGE_DAYS'ten eskiler silinir.
+ * Silinecek liste SİLMEDEN ÖNCE log'a basılır (kuru koşum izi). pre-restore_ kapsam dışı.
+ */
+export async function rotateRollbackBackups(nowMs: number = Date.now()): Promise<RollbackRotationResult> {
+  if (!BACKUP_DIR) return { deleted: [], failed: [] };
+  const names = (await fs.promises.readdir(BACKUP_DIR)).filter(
+    (f) => f.startsWith(PREMIGRATE_PREFIX) && isBackupFileName(f),
+  );
+  const candidates: RotationCandidate[] = [];
+  for (const name of names) {
+    const st = await fs.promises.stat(path.join(BACKUP_DIR, name)).catch(() => null);
+    if (st) candidates.push({ name, mtimeMs: st.mtimeMs });
+  }
+  const doomed = selectExpiredRollbackBackups(candidates, nowMs);
+  if (doomed.length === 0) return { deleted: [], failed: [] };
+  bilgi("backup", `geri dönüş yedeği rotasyonu — silinecek ${doomed.length} dosya ` +
+    `(en yeni ${ROLLBACK_KEEP_NEWEST} korunur, ${ROLLBACK_MAX_AGE_DAYS} günden eski): ${doomed.join(", ")}`);
+  const deleted: string[] = [];
+  const failed: string[] = [];
+  for (const name of doomed) {
+    try {
+      await fs.promises.rm(path.join(BACKUP_DIR, name));
+      deleted.push(name);
+    } catch (err) {
+      failed.push(name);
+      uyari("backup", `geri dönüş yedeği silinemedi: ${name} (${err instanceof Error ? err.message : String(err)})`);
+    }
+  }
+  return { deleted, failed };
 }
 
 // =============================================================================

@@ -285,6 +285,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   BACKUP_RESTORE_PREVIEW: "Geri yükleme önizlemesi",
   BACKUP_PASSWORD_FAILED: "Hatalı yedek parolası",
   OFFSITE_REMOTE_AUTHORIZED: "Dış kopya yetkilendirildi",
+  BACKUP_ROTATED: "Süresi dolan geri dönüş yedekleri silindi",
 
   // ── SYSTEM · kopyaya geri yükleme ──
   DB_COPY_STARTED: "Kopya oluşturma başladı",

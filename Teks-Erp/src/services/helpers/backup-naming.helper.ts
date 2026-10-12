@@ -7,12 +7,13 @@
 // veritabanı ve pg_dump olmadan test edilebiliyor.
 //
 // Üç dosya ön eki, üç farklı yaşam döngüsü:
-//   tekserp_      → otomatik/manuel yedek. 14'lük ROTASYONA GİRER (silinebilir).
-//   premigrate_   → migration öncesi geri dönüş noktası. Rotasyon DIŞI.
-//   pre-restore_  → geri yükleme öncesi güvenlik yedeği. Rotasyon DIŞI.
-// Rotasyon (backup.service.ts) yalnız `tekserp_` ile başlayanlara dokunur; diğer
-// iki ön ek bu sayede otomatik silinmez. Bu, geri yükleme güvenlik ağının
-// dayandığı invariant'tır — değiştirilirse güvenlik yedeği bir gün yok olur.
+//   tekserp_      → otomatik/manuel yedek. Gece ROTASYONUNA GİRER (silinebilir).
+//   premigrate_   → migration öncesi geri dönüş noktası. Gece rotasyonu DIŞI; kendi
+//                   rotasyonu var (en yeni 3 HER ZAMAN kalır + 90 günden eskiler —
+//                   backup-rotation.helper.ts, günlük bakım işi).
+//   pre-restore_  → geri yükleme öncesi güvenlik yedeği. Hiçbir rotasyona girmez.
+// Gece rotasyonu (backup.service.ts) yalnız `tekserp_` ile başlayanlara dokunur.
+// Bu, geri yükleme güvenlik ağının dayandığı invariant'tır.
 // =============================================================================
 
 import { ENCRYPTED_SUFFIX } from "../../lib/backup-crypto/format";

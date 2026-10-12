@@ -59,6 +59,8 @@ const BACKUP_EVENTS = {
   /** Şifreli yedeği açmak için verilen yedek parolası yanlış (parola yüke GİRMEZ). */
   BACKUP_PASSWORD_FAILED: "BACKUP_PASSWORD_FAILED",
   OFFSITE_REMOTE_AUTHORIZED: "OFFSITE_REMOTE_AUTHORIZED",
+  /** Günlük bakım: süresi dolan geri dönüş (premigrate_) yedekleri silindi — ad listesi yükte. */
+  BACKUP_ROTATED: "BACKUP_ROTATED",
 } as const;
 
 /** Kopyaya geri yükleme turu (elle tetiklenir — DB'de olmaması normal). */

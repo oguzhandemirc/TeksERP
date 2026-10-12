@@ -18,7 +18,7 @@ export function isVerificationMode(env: NodeJS.ProcessEnv = process.env): boolea
 
 /** Doğrulama kipinde BAŞLAMAYAN açılış işleri (zamanlayıcı ya da dış bağlantı) — `server.ts`teki çağrı adı. */
 export const VERIFICATION_SKIPPED_JOBS = [
-  "startArchiveScheduler", // denetim kaydı arşivi (zamanlayıcı, DB yazar)
+  "startMaintenanceScheduler", // gece bakımı: audit arşivi + budama + yedek rotasyonu (zamanlayıcı, DB/dosya yazar)
   "startBackupScheduler", // gece yedeği (zamanlayıcı)
   "startOffsiteSweeper", // makine dışı yedek kopyası (dışarı)
   "startMdnsAdvertiser", // servis ilanı (istemci bu sürümü bulmasın)
