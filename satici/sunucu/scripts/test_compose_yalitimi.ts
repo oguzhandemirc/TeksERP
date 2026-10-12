@@ -136,7 +136,7 @@ function main(): void {
     const BILDIRIM = path.join(D, "docker-compose.bildirim.yml");
     const ekle = (metin: string, dosyalar: string) => `${metin}\nCOMPOSE_FILE=${dosyalar}\n`;
     // Üretimin bildirim satırları örnekte YER AYRILMIŞ (yorumlu) — örnek tek kaynak kalsın diye açılarak kullanılır.
-    const uretimBildirimMetni = uretimMetni.replace(/^# ((?:BILDIRIM|TELEGRAM|RESEND)_[A-Z0-9_]+=)/gm, "$1");
+    const uretimBildirimMetni = uretimMetni.replace(/^# ((?:BILDIRIM|TELEGRAM|RESEND|GUVENLIK)_[A-Z0-9_]+=)/gm, "$1");
     const uretimPB = yaz("uretim-pb.env", ekle(uretimBildirimMetni, "docker-compose.yml:docker-compose.portal-genel.yml:docker-compose.bildirim.yml"));
     const denetleP = (env: string, g: { dosyalar?: readonly string[]; patron?: boolean } = {}): Kosum => {
       const r = spawnSync(

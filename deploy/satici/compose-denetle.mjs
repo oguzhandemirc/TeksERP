@@ -54,7 +54,7 @@
 //   Ⓑ BİLDİRİM (`docker-compose.bildirim.yml`: dosya COMPOSE_FILE'da ya da `satici-bildirim` servisi) — satıcı dış
 //      bağlantısız kalır, dışarı YALNIZ en az yetkili gönderici çıkar: Ⓑ0 dosya ↔ servis · Ⓑ1 internal olmayan ağlar
 //      tam olarak örtü çıkış ağları, bildirim-cikis tek üyeli · Ⓑ2 gönderici ağları tam ic +
-//      bildirim-cikis, çekirdek servisler bildirim-cikis'e katılmaz · Ⓑ3 port/birim/Traefik etiketi/soket yok · Ⓑ4 tam dört
+//      bildirim-cikis, çekirdek servisler bildirim-cikis'e katılmaz · Ⓑ3 port/birim/Traefik etiketi/soket yok · Ⓑ4 tam beş
 //      kanal sırrı, başka serviste yok · Ⓑ5 ortam ALLOWLIST: satici_bildirim rolü, sır yolları /run/secrets/, DB adresi ve
 //      sağlayıcı kökleri yalnız beklenen değer, tanınmayan anahtar (NODE_OPTIONS, düz sır, DATABASE_URL…) yok · Ⓑ6 satıcı
 //      imajı + gönderici komutu · Ⓑ7 çıkış alt ağı 100.64/10 · 127/8 · satıcı ağları · patron ağlarıyla (--patron-env;
@@ -186,9 +186,10 @@ const BILDIRIM_SIR_ORTAMI = {
   TELEGRAM_BOT_TOKEN_DOSYASI: "telegram_bot_token",
   TELEGRAM_CHAT_ID_DOSYASI: "telegram_chat_id",
   RESEND_API_KEY_DOSYASI: "resend_api_key",
+  GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI: "guvenlik_telegram_chat_id",
 };
 const BILDIRIM_SIRLARI = Object.values(BILDIRIM_SIR_ORTAMI).sort();
-const BILDIRIM_DUZ_SIRLAR = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "RESEND_API_KEY", "DATABASE_URL"];
+const BILDIRIM_DUZ_SIRLAR = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "GUVENLIK_TELEGRAM_CHAT_ID", "RESEND_API_KEY", "DATABASE_URL"];
 const sabit = (deger) => ({ gecerli: (v) => v === deger, aciklama: `≠ ${deger}` });
 const tamsayi = { gecerli: (v) => /^\d{1,6}$/.test(v), aciklama: "tamsayı değil" };
 const serbest = { gecerli: () => true, aciklama: "" };
@@ -202,6 +203,7 @@ const BILDIRIM_ORTAMI = {
   BILDIRIM_NABIZ_DOSYASI: { gecerli: (v) => /^\/tmp\/[A-Za-z0-9._-]+$/.test(v), aciklama: "/tmp/ altında değil" },
   BILDIRIM_EPOSTA_ALICI: serbest,
   BILDIRIM_EPOSTA_GONDEREN: serbest,
+  GUVENLIK_EPOSTA_ALICI: serbest,
   BILDIRIM_PORTAL_ADRESI: { gecerli: (v) => v === "" || /^https?:\/\/[^\s]+$/.test(v), aciklama: "http(s) adresi değil" },
   TELEGRAM_API_KOKU: sabit("https://api.telegram.org"),
   RESEND_API_KOKU: sabit("https://api.resend.com"),
@@ -680,7 +682,7 @@ function bildirimDenetle(c) {
     .filter(([a]) => a !== "satici-bildirim")
     .flatMap(([a, sv]) => (sv.secrets ?? []).map(sirAdi).filter((x) => BILDIRIM_SIRLARI.includes(x)).map((x) => `${a}:${x}`));
   kontrol(
-    `Ⓑ4 satici-bildirim sırları tam olarak dört (${BILDIRIM_SIRLARI.join(" · ")}) — db_parolasi/ic_api_belirteci YOK; bu dördü başka serviste YOK`,
+    `Ⓑ4 satici-bildirim sırları tam olarak beş (${BILDIRIM_SIRLARI.join(" · ")}) — db_parolasi/ic_api_belirteci YOK; bu beşi başka serviste YOK`,
     JSON.stringify(bSirlar) === JSON.stringify(BILDIRIM_SIRLARI) && hedefKotu.length === 0 && baskasinda.length === 0,
     [`gönderici: ${bSirlar.join(", ") || "yok"}`, ...hedefKotu, ...(baskasinda.length ? [`başka serviste: ${baskasinda.join(", ")}`] : [])].join(" · "),
   );
