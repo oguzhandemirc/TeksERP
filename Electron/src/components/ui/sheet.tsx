@@ -3,6 +3,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOpenPaneRef } from "@/lib/acik-form";
 import { useTabPortalContainer } from "@/components/layout/tabs/tab-portal";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { EscapeRegistrar, EscCloseContext } from "@/components/ui/escape-stack";
@@ -70,6 +71,8 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
     // Y5 fix: karartma sahipliği — dialog.tsx ile aynı; "herhangi bir overlay"
     // kontrolü başka sekmedeki/kardeş modalın karartmasıyla bu sheet'i kapatıyordu.
     const ownOverlayRef = React.useRef<HTMLDivElement>(null);
+    // Açık form kaydı (güncelleme kurulumu açık formu bekler) — içerik ömrüne bağlı, ekran başına tel yok.
+    const pencereRef = useOpenPaneRef(ref);
     // O5 fix: Esc yönetimi escape-stack'te (bkz. dialog.tsx). Kayıt CONTENT'İN
     // İÇİNDE yapılır — burada olursa sheet KAPALIYKEN de yığına girer.
     const requestClose = React.useContext(EscCloseContext);
@@ -89,7 +92,7 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
           <SheetOverlay />
         )}
         <SheetPrimitive.Content
-          ref={ref}
+          ref={pencereRef}
           data-ui-sheet=""
           data-side={side}
           {...(!scoped ? { "data-global-modal": "" } : {})}

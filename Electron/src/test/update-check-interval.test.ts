@@ -47,7 +47,13 @@ describe("güncelleme kontrol ritmi", () => {
 
   it("⚠️ zamanlayıcı TEK: yalnız main process, yalnız bir setInterval", () => {
     expect(ipc.match(/setInterval\(/g) ?? []).toHaveLength(1);
-    expect(ipc.match(/setTimeout\(/g) ?? []).toHaveLength(1);
+    // Denetim takvimi: tek ilk-denetim gecikmesi. Öteki `setTimeout`lar kurulum bekçileridir (denetim kurmaz) ve
+    // süreleri adlandırılmış sabittir.
+    expect(ipc.match(/setTimeout\([^;]*check\s*\(/g) ?? []).toHaveLength(1);
+    expect(ipc.match(/setTimeout\(/g) ?? []).toHaveLength(3);
+    expect(ipc).toMatch(/setTimeout\(\(\) => void check\(\), UPDATE_FIRST_CHECK_DELAY_MS\)/);
+    expect(ipc).toMatch(/\}, INSTALL_START_WATCH_MS\)/);
+    expect(ipc).toMatch(/setTimeout\(\(\) => app\.quit\(\), QUIT_INSTALL_FALLBACK_MS\)/);
     // Arayüz tarafı: düğme de, giriş tetiği de, hook da kendi takvimini kurmaz.
     for (const [ad, kod] of [
       ["GuncellemeDugmesi", dugme],

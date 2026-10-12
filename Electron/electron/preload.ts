@@ -92,6 +92,7 @@ const api: ApiBridge = {
     status: () => ipcRenderer.invoke("updater:status"),
     check: () => ipcRenderer.invoke("updater:check"),
     install: () => ipcRenderer.send("updater:install"),
+    defer: () => ipcRenderer.send("updater:defer"),
     setFeedUrl: (url: string | null) => ipcRenderer.invoke("updater:set-feed-url", url),
     onStatus: (cb: (status: UpdateStatus) => void) => {
       const listener = (_e: unknown, status: UpdateStatus) => cb(status);

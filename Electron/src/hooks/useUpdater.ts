@@ -42,6 +42,11 @@ export function useUpdater() {
     window.api?.updater?.install();
   }, []);
 
+  /** "Sonra": kurulum programın kapanışına kalır (ana süreç `ertelendi` yayımlar). */
+  const defer = useCallback(() => {
+    window.api?.updater?.defer?.();
+  }, []);
+
   const setFeedUrl = useCallback(async (url: string | null) => {
     const api = window.api?.updater;
     if (!api) return;
@@ -49,5 +54,5 @@ export function useUpdater() {
     setStatus(s);
   }, []);
 
-  return { status, check, install, setFeedUrl };
+  return { status, check, install, defer, setFeedUrl };
 }

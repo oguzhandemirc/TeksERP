@@ -258,7 +258,7 @@ async function onUpdateDownloaded(info: { version?: string; downloadedFile?: str
     rejectUpdate(v?.rejection ?? { kod: "KUNYE_YOK", mesaj: "Güncelleme doğrulanmadı; kurulmadı.", surum: info?.version ?? null });
     return;
   }
-  publish({ state: "ready", newVersion: info?.version, percent: 100, error: undefined, imzaReddi: null });
+  publish({ state: "ready", newVersion: info?.version, percent: 100, error: undefined, imzaReddi: null, ertelendi: false });
 }
 
 /** electron-updater'ın ÇALIŞTIRACAĞI dosya (NSIS: indirme önbelleğindeki kurulum) — doğrulanan dosya olmalı. */
@@ -266,8 +266,14 @@ function installerPath(): unknown {
   return (updater() as unknown as { installerPath?: unknown }).installerPath;
 }
 
+/** `quitAndInstall` sonrası uygulama bu süre içinde kapanmadıysa kurulum başlamamıştır (arayüz bekçisiyle aynı). */
+const INSTALL_START_WATCH_MS = 20_000;
+
+/** Kurulum (elle/geri sayım ya da kapanış) başladı: kapanış yolu ikinci kez kurmaz, `before-quit` kapanışı tutmaz. */
+let installStarted = false;
+
 async function installVerified(): Promise<void> {
-  if (!status.enabled || status.state !== "ready" || installing || !verifier) return;
+  if (!status.enabled || status.state !== "ready" || installing || installStarted || !verifier) return;
   installing = true;
   try {
     const v = await verifier.checkBeforeInstall(installerPath());
@@ -280,10 +286,52 @@ async function installVerified(): Promise<void> {
     // olduğu için Windows yine de bir kez yönetici izni sorar; kullanıcı "Evet"
     // dedikten sonrası sessizdir. isForceRunAfter=true → kurulumdan sonra
     // uygulama kendiliğinden geri açılır (operatör boş ekranla kalmasın).
+    installStarted = true;
     setImmediate(() => updater().quitAndInstall(true, true));
+    // Uygulama hâlâ ayaktaysa kurulum başlamadı (izin penceresine "Hayır"): yeniden denenebilsin.
+    setTimeout(() => {
+      installStarted = false;
+    }, INSTALL_START_WATCH_MS);
   } finally {
     installing = false;
   }
+}
+
+/** "Sonra": kurulum programın kapanışına kalır; tüm pencereler aynı durumu görür. */
+function deferInstall(): void {
+  if (!status.enabled || status.state !== "ready" || installStarted) return;
+  log.info("[updater] kurulum kapanışa ertelendi", status.newVersion);
+  publish({ ertelendi: true });
+}
+
+/** Kurulum başlamadıysa kapanış en geç bu sürede sürer (kurulum programı düşerse panel açık kalmasın). */
+const QUIT_INSTALL_FALLBACK_MS = 10_000;
+
+/**
+ * Hazır paket programın kapanışında kurulur (kullanıcı "Sonra" dedi ya da açık formu yüzünden kurulum bekliyordu).
+ * Kapanış bir kez tutulur: künye `checkBeforeInstall` ile yeniden ölçülür (dosya indirmeden beri değişmiş olabilir),
+ * geçerse sessiz kurulum, uygulama yeniden AÇILMAZ (kullanıcı kapatıyordu); geçmezse ret duyurulur ve kapanış sürer.
+ */
+function onBeforeQuit(e: { preventDefault: () => void }): void {
+  if (installStarted || !status.enabled || status.state !== "ready" || !verifier) return;
+  installStarted = true;
+  e.preventDefault();
+  const v = verifier;
+  void (async () => {
+    try {
+      const r = await v.checkBeforeInstall(installerPath());
+      if (r.ok) {
+        log.info("[updater] kapanışta kurulum başlatılıyor", status.newVersion);
+        updater().quitAndInstall(true, false);
+        setTimeout(() => app.quit(), QUIT_INSTALL_FALLBACK_MS);
+        return;
+      }
+      rejectUpdate(r.rejection);
+    } catch (err) {
+      log.warn("[updater] kapanışta kurulum başlatılamadı", err);
+    }
+    app.quit();
+  })();
 }
 
 /** Ezme YAZIMI: kural (`validateFeedOverride`) burada da uygulanır; geçersiz adres yazılmaz, çağırana hata döner. */
@@ -310,6 +358,7 @@ export function registerUpdaterIpc(): void {
   handleTrusted("updater:check", () => check());
   handleTrusted("updater:set-feed-url", (_e, next: string | null) => setFeedOverride(next));
   onTrusted("updater:install", () => void installVerified());
+  onTrusted("updater:defer", () => deferInstall());
 
   if (!packaged) {
     // Dev'de electron-updater "application is not packed" ile hata fırlatır;
@@ -331,11 +380,10 @@ export function registerUpdaterIpc(): void {
   updater().logger = log;
   // İndirme künye doğrulandıktan SONRA `onUpdateAvailable` başlatır (yukarıda); görünen akış değişmez.
   updater().autoDownload = false;
-  // Kapanışta sessizce kurma KAPALI: uygulama "Program Files"a kurulu olduğu
-  // için kurulum yönetici izni ister. Kapanışta tetiklenirse operatör gittikten
-  // sonra ekranda cevapsız bir izin penceresi asılı kalır. Kurulum yalnız
-  // kullanıcı bandan "Yeniden Başlat" dediğinde, yani başındayken yapılır.
+  // electron-updater'ın kendi kapanış kurulumu KAPALI: künyeyi yeniden ölçmeden kurardı. Kapanışta kurulum
+  // `onBeforeQuit`tedir (kullanıcı kararı 2026-10-12: "Sonra" ya da açık form → program kapanırken kurulur).
   updater().autoInstallOnAppQuit = false;
+  app.on("before-quit", onBeforeQuit);
   void applyFeedUrl();
 
   updater().on("checking-for-update", () => publish({ state: "checking", error: undefined }));

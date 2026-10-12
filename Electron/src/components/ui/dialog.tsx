@@ -2,6 +2,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOpenPaneRef } from "@/lib/acik-form";
 import { useTabPortalContainer } from "@/components/layout/tabs/tab-portal";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { EscapeRegistrar, EscCloseContext } from "@/components/ui/escape-stack";
@@ -56,6 +57,8 @@ const DialogContent = React.forwardRef<
   // kabul edip BU modalı sessizce kapatıyordu (formdaki veri reopen'da
   // reset'leniyordu). Artık yalnız KENDİ karartmamıza tıklanınca kapanırız.
   const ownOverlayRef = React.useRef<HTMLDivElement>(null);
+  // Açık form kaydı (güncelleme kurulumu açık formu bekler) — içerik ömrüne bağlı, ekran başına tel yok.
+  const pencereRef = useOpenPaneRef(ref);
   // O5 fix: scoped dialog'da Esc Radix'e bırakılmaz (Radix yalnız global en-üst
   // layer'a verir — arka plan sekmesindeki dialog aktif sekmenin Esc'ini
   // öldürüyordu). Esc yığını aktif sekmedeki en üst dialog'u kapatır.
@@ -80,7 +83,7 @@ const DialogContent = React.forwardRef<
         <DialogOverlay />
       )}
       <DialogPrimitive.Content
-        ref={ref}
+        ref={pencereRef}
         data-ui-dialog=""
         {...(!scoped ? { "data-global-modal": "" } : {})}
         onEscapeKeyDown={(e) => {

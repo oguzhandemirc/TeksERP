@@ -31,7 +31,7 @@ const h = vi.hoisted(() => ({
   },
 }));
 vi.mock("electron", () => ({
-  app: { isPackaged: true, getVersion: () => "9.9.9" },
+  app: { isPackaged: true, getVersion: () => "9.9.9", on: () => {} },
   BrowserWindow: { getAllWindows: () => [] },
   ipcMain: { handle: (ch: string, fn: (...a: unknown[]) => unknown) => h.handlers.set(ch, fn), on: vi.fn() },
   net: { fetch: (...a: unknown[]) => h.fetchMock(...a) },

@@ -1,16 +1,33 @@
-import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, it, vi } from "vitest";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { parseUpdateInfo } from "electron-updater/out/providers/Provider";
 import type { UpdateStatus } from "@shared/ipc-contract";
-import { UPDATE_FEED_OVERRIDE_KEY, groupFeedUrl } from "@shared/update-feed";
+import { UPDATE_FEED_OVERRIDE_KEY } from "@shared/update-feed";
 import { API_BASE_URL_STORE_KEY, AUTH_TOKEN_STORE_KEY, DOWNLOAD_TOKEN_HEADER } from "@shared/download-token";
-import { buildReleaseDoc } from "../../electron/guncelleme/panel-kunye.mjs";
-import { withReleaseBlock } from "../../electron/guncelleme/latest-yml.mjs";
-import { REVOCATION_FILE_NAME } from "../../electron/guncelleme/iptal-deposu";
-import { anahtarUret, zincirKur } from "./helpers/istemci-zinciri-fikstur";
+import {
+  DIZIN,
+  INSTALLER_FILE,
+  INSTALLER_BODY,
+  REVOCATION_FILE,
+  IZINLI,
+  TOKEN,
+  UYGULAMA,
+  YABANCI,
+  YABANCI_SERTIFIKA,
+  YENI,
+  Z,
+  akis,
+  bilgi,
+  getStatus,
+  h,
+  hazirla,
+  izin,
+  kur,
+  latestYml,
+  tik,
+  updaterFiksturKancalari,
+} from "./helpers/updater-ipc-fikstur";
+
 
 /**
  * GÜNCELLEME AKIŞI — İMZALI KÜNYE (gerçek `registerUpdaterIpc`, sahte electron/electron-updater).
@@ -25,142 +42,9 @@ import { anahtarUret, zincirKur } from "./helpers/istemci-zinciri-fikstur";
  * ⭐ İDDİA 5 (künye v:2): dağıtım iptali belirteç yanıtından gelir, `userData/lisans-iptal.jws`e yazılır ve geri
  * alınamaz — sonraki yanıt iptalsiz olsa da iptal edilmiş anahtarın sürümü KURULMAZ; bozuk yerel dosya yok sayılır.
  * İDDİA 4: kanallar gönderen denetimli tek geçitten (`handleTrusted`/`onTrusted`); yabancı belge işleyiciye ulaşamaz.
- * Grup akışının kendi iddiaları: `updater-grup-akisi.test.ts`.
+ * Grup akışının kendi iddiaları: `updater-grup-akisi.test.ts`; kapanışta kurulum: `updater-kapanista-kur.test.ts`.
  */
-const h = vi.hoisted(() => {
-  const listeners = new Map<string, Array<(...a: unknown[]) => unknown>>();
-  return {
-    listeners,
-    handlers: new Map<string, (...a: unknown[]) => unknown>(),
-    onHandlers: new Map<string, (...a: unknown[]) => unknown>(),
-    sent: [] as UpdateStatus[],
-    store: new Map<string, string>(),
-    fetchMock: vi.fn(),
-    anchorFile: { kokler: [] as Array<{ kid: string; x: string; classes: string[] }> },
-    userData: { dir: "" },
-    updater: {
-      setFeedURL: vi.fn(),
-      requestHeaders: null as Record<string, string> | null,
-      checkForUpdates: vi.fn(async () => null),
-      downloadUpdate: vi.fn(async () => [] as string[]),
-      quitAndInstall: vi.fn(),
-      on: (ev: string, fn: (...a: unknown[]) => unknown) => listeners.set(ev, [...(listeners.get(ev) ?? []), fn]),
-      logger: null as unknown,
-      autoDownload: true,
-      autoInstallOnAppQuit: true,
-      installerPath: null as string | null,
-    },
-    emit(ev: string, ...a: unknown[]) {
-      for (const fn of listeners.get(ev) ?? []) fn(...a);
-    },
-  };
-});
-vi.mock("electron", () => ({
-  app: { isPackaged: true, getVersion: () => "9.9.9", getPath: () => h.userData.dir },
-  BrowserWindow: {
-    getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: (_c: string, s: UpdateStatus) => h.sent.push(s) } }],
-  },
-  ipcMain: {
-    handle: (ch: string, fn: (...a: unknown[]) => unknown) => h.handlers.set(ch, fn),
-    on: (ch: string, fn: (...a: unknown[]) => unknown) => h.onHandlers.set(ch, fn),
-  },
-  net: { fetch: (...a: unknown[]) => h.fetchMock(...a) },
-}));
-vi.mock("electron-updater", () => ({ default: { autoUpdater: h.updater } }));
-vi.mock("electron-log/main.js", () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-vi.mock("../../electron/ipc/secure-store.ipc.js", () => ({
-  readSecureValue: (k: string) => h.store.get(k) ?? null,
-  writeSecureValue: (k: string, v: string) => h.store.set(k, v),
-  deleteSecureValue: (k: string) => h.store.delete(k),
-}));
-vi.mock("../../electron/guncelleme/imza-capasi.json", () => ({ default: h.anchorFile }));
-
-const Z = zincirKur();
-const YABANCI_SERTIFIKA = Z.sertifikaBas(Z.ist, {}, anahtarUret("kok-yabanci-1")).token;
-const YENI = "10.0.0";
-const AD = `TeksERP-${YENI}-Setup.exe`;
-const GOVDE = Buffer.from("imzali kurulum ".repeat(4096));
-const DIZIN = mkdtempSync(join(tmpdir(), "updater-imza-"));
-const DOSYA = join(DIZIN, AD);
-h.userData.dir = mkdtempSync(join(tmpdir(), "updater-userdata-"));
-const IPTAL_DOSYASI = join(h.userData.dir, REVOCATION_FILE_NAME);
-/** Ortak pakette kiranın grubu (dinlenme grubu DEĞİL olsun diye `oncu`: gömülü adresle karışmasın). */
-const GRUP = "oncu";
-const IZINLI = groupFeedUrl(GRUP)!;
-/** Künyenin taşıması gereken kanal: kiradaki grup. */
-const BEKLENEN = GRUP;
-const TOKEN = "eyJhbGciOiJFZERTQSJ9.eyJ2IjoxfQ.c2lnbmF0dXJl";
-const izin = (grup: string | null = GRUP, iptal: string | null = null) =>
-  ({ ok: true, status: 200, json: async () => ({ success: true, data: { belirtec: TOKEN, grup, iptal } }) });
-const GIRIS = "file:///C:/Program%20Files/TeksERP/resources/app.asar/out/renderer/index.html";
-/** Uygulama belgesinin ana çerçevesinden gelen IPC olayı (gönderen denetimi geçer). */
-const UYGULAMA = { senderFrame: { url: `${GIRIS}#/ayarlar`, parent: null } };
-const YABANCI = { senderFrame: { url: "file://saldirgan/pay/index.html", parent: null } };
-
-function latestYml({ imza = true, kanal = BEKLENEN, sertifika = Z.sertifika } = {}): string {
-  const sha = createHash("sha512").update(GOVDE).digest();
-  const yml = `version: ${YENI}\nfiles:\n  - url: ${AD}\n    sha512: ${sha.toString("base64")}\n    size: ${GOVDE.length}\npath: ${AD}\nsha512: ${sha.toString("base64")}\nreleaseDate: '2026-10-01T01:00:00.000Z'\n`;
-  if (!imza) return yml;
-  const doc = buildReleaseDoc({
-    kanal,
-    surum: YENI,
-    commit: "0efe882d",
-    yayinZamani: "2026-10-01T01:00:00.000Z",
-    paket: { ad: AD, boyut: GOVDE.length, sha512: sha.toString("hex") },
-    capa: [Z.kok.kid],
-  });
-  return withReleaseBlock(yml, Z.imzala(doc, { sertifika }));
-}
-/** electron-updater'ın `update-available`a verdiği nesne — kendi ayrıştırıcısından. */
-const bilgi = (yml = latestYml()) => parseUpdateInfo(yml, "latest.yml", new URL(`${IZINLI}latest.yml`)) as unknown as Record<string, unknown>;
-
-const durum = () => h.handlers.get("updater:status")!(UYGULAMA) as UpdateStatus;
-/** Yayınlanan durumların sırası (ardışık tekrarlar tek) — kullanıcının gördüğü akış. */
-const akis = () => h.sent.map((s) => s.state).filter((s, i, a) => i === 0 || a[i - 1] !== s);
-const tik = () => new Promise<void>((r) => setImmediate(r));
-
-/**
- * Gerçek `registerUpdaterIpc`. Oturum + belirteç kiradaki grubu (`GRUP`) taşır; açılıştaki feed kurulumu bitene dek beklenir (künyenin kanalı oradan gelir).
- */
-async function kur({ grup = GRUP as string | null, iptal = null as string | null } = {}) {
-  vi.resetModules();
-  for (const m of [h.handlers, h.onHandlers, h.listeners, h.store]) m.clear();
-  h.sent.length = 0;
-  h.updater.installerPath = null;
-  h.updater.autoDownload = true;
-  h.fetchMock.mockReset().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) });
-  h.store.set(API_BASE_URL_STORE_KEY, "http://10.0.0.5:4000");
-  h.store.set(AUTH_TOKEN_STORE_KEY, "jwt");
-  h.fetchMock.mockResolvedValue(izin(grup, iptal));
-  for (const f of [h.updater.setFeedURL, h.updater.checkForUpdates, h.updater.downloadUpdate, h.updater.quitAndInstall]) f.mockClear();
-  const m = await import("../../electron/ipc/updater.ipc");
-  const guvenilir = await import("../../electron/security/trusted-ipc");
-  guvenilir.setTrustedAppEntry(GIRIS);
-  m.registerUpdaterIpc();
-  // Açılıştaki `applyFeedUrl` (belirteç isteği + feed) mikro görevlerde biter.
-  await tik();
-  await tik();
-  return guvenilir;
-}
-
-/** Geçerli künye → indirildi → ready. */
-async function hazirla() {
-  writeFileSync(DOSYA, GOVDE);
-  h.emit("checking-for-update");
-  h.emit("update-available", bilgi());
-  h.emit("download-progress", { percent: 42.4 });
-  h.updater.installerPath = DOSYA;
-  h.emit("update-downloaded", { ...bilgi(), downloadedFile: DOSYA });
-  await vi.waitFor(() => expect(durum().state).toBe("ready"));
-}
-
-beforeAll(() => {
-  h.anchorFile.kokler.push(...Z.roots.map((r) => ({ ...r, classes: [...r.classes] })));
-});
-beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "setInterval"] }));
-afterEach(() => vi.useRealTimers());
-afterEach(() => rmSync(IPTAL_DOSYASI, { force: true }));
-afterAll(() => [DIZIN, h.userData.dir].forEach((d) => rmSync(d, { recursive: true, force: true })));
+updaterFiksturKancalari();
 
 describe("imzalı künye — görünen akış bugünküyle aynı", () => {
   it("künye doğrulanınca indirme KENDİLİĞİNDEN başlar: checking → available → downloading → ready → kur", async () => {
@@ -169,7 +53,7 @@ describe("imzalı künye — görünen akış bugünküyle aynı", () => {
     await hazirla();
     expect(h.updater.downloadUpdate).toHaveBeenCalledTimes(1);
     expect(akis()).toEqual(["idle", "checking", "available", "downloading", "ready"]);
-    expect(durum()).toMatchObject({ newVersion: YENI, percent: 100, imzaReddi: null });
+    expect(getStatus()).toMatchObject({ newVersion: YENI, percent: 100, imzaReddi: null });
     h.onHandlers.get("updater:install")!(UYGULAMA);
     await vi.waitFor(() => expect(h.updater.quitAndInstall).toHaveBeenCalledWith(true, true));
   });
@@ -183,16 +67,16 @@ describe("imzalı künye — görünen akış bugünküyle aynı", () => {
     });
     await h.handlers.get("updater:check")!(UYGULAMA);
     expect(h.updater.downloadUpdate).toHaveBeenCalledTimes(1);
-    expect(durum().state).toBe("available");
+    expect(getStatus().state).toBe("available");
   });
 });
 
 /** Red: indirme başlamaz, durum `error` + TR metin + kod. */
 const reddedildi = (kod: string) => {
   expect(h.updater.downloadUpdate).not.toHaveBeenCalled();
-  expect(durum().state).toBe("error");
-  expect(durum().imzaReddi?.kod).toBe(kod);
-  expect(durum().error).toMatch(/kurulmadı/);
+  expect(getStatus().state).toBe("error");
+  expect(getStatus().imzaReddi?.kod).toBe(kod);
+  expect(getStatus().error).toMatch(/kurulmadı/);
 };
 
 describe("imzalı künye — doğrulama düşerse TR uyarı + kurulum YOK", () => {
@@ -201,11 +85,11 @@ describe("imzalı künye — doğrulama düşerse TR uyarı + kurulum YOK", () =
     await kur();
     h.emit("update-available", bilgi(latestYml({ imza: false })));
     reddedildi("KUNYE_YOK");
-    writeFileSync(DOSYA, GOVDE);
-    h.updater.installerPath = DOSYA;
-    h.emit("update-downloaded", { ...bilgi(latestYml({ imza: false })), downloadedFile: DOSYA });
+    writeFileSync(INSTALLER_FILE, INSTALLER_BODY);
+    h.updater.installerPath = INSTALLER_FILE;
+    h.emit("update-downloaded", { ...bilgi(latestYml({ imza: false })), downloadedFile: INSTALLER_FILE });
     await tik();
-    expect(durum().state).toBe("error");
+    expect(getStatus().state).toBe("error");
     h.onHandlers.get("updater:install")!(UYGULAMA);
     await tik();
     expect(h.updater.quitAndInstall).not.toHaveBeenCalled();
@@ -224,12 +108,12 @@ describe("imzalı künye — doğrulama düşerse TR uyarı + kurulum YOK", () =
   it("inen dosya künyeyle eşleşmiyor → ready OLMAZ, dosya silinir, DOSYA_OZETI", async () => {
     await kur();
     h.emit("update-available", bilgi());
-    writeFileSync(DOSYA, Buffer.concat([GOVDE, Buffer.from("x")]));
-    h.updater.installerPath = DOSYA;
-    h.emit("update-downloaded", { ...bilgi(), downloadedFile: DOSYA });
-    await vi.waitFor(() => expect(durum().imzaReddi?.kod).toBe("DOSYA_OZETI"));
-    expect(durum().state).toBe("error");
-    expect(existsSync(DOSYA)).toBe(false);
+    writeFileSync(INSTALLER_FILE, Buffer.concat([INSTALLER_BODY, Buffer.from("x")]));
+    h.updater.installerPath = INSTALLER_FILE;
+    h.emit("update-downloaded", { ...bilgi(), downloadedFile: INSTALLER_FILE });
+    await vi.waitFor(() => expect(getStatus().imzaReddi?.kod).toBe("DOSYA_OZETI"));
+    expect(getStatus().state).toBe("error");
+    expect(existsSync(INSTALLER_FILE)).toBe(false);
     h.onHandlers.get("updater:install")!(UYGULAMA);
     await tik();
     expect(h.updater.quitAndInstall).not.toHaveBeenCalled();
@@ -238,9 +122,9 @@ describe("imzalı künye — doğrulama düşerse TR uyarı + kurulum YOK", () =
   it("kurulum anında dosya değiştirilmiş (indirme ile kurulum arası) → quitAndInstall YOK", async () => {
     await kur();
     await hazirla();
-    writeFileSync(DOSYA, Buffer.from("başka exe"));
+    writeFileSync(INSTALLER_FILE, Buffer.from("başka exe"));
     h.onHandlers.get("updater:install")!(UYGULAMA);
-    await vi.waitFor(() => expect(durum().imzaReddi?.kod).toBe("DOSYA_OZETI"));
+    await vi.waitFor(() => expect(getStatus().imzaReddi?.kod).toBe("DOSYA_OZETI"));
     await tik();
     expect(h.updater.quitAndInstall).not.toHaveBeenCalled();
   });
@@ -250,7 +134,7 @@ describe("imzalı künye — doğrulama düşerse TR uyarı + kurulum YOK", () =
     await hazirla();
     h.updater.installerPath = join(DIZIN, "baska.exe");
     h.onHandlers.get("updater:install")!(UYGULAMA);
-    await vi.waitFor(() => expect(durum().imzaReddi?.kod).toBe("KUNYE_YOK"));
+    await vi.waitFor(() => expect(getStatus().imzaReddi?.kod).toBe("KUNYE_YOK"));
     expect(h.updater.quitAndInstall).not.toHaveBeenCalled();
   });
 
@@ -258,9 +142,9 @@ describe("imzalı künye — doğrulama düşerse TR uyarı + kurulum YOK", () =
     await kur();
     h.emit("update-available", bilgi(latestYml({ imza: false })));
     h.emit("checking-for-update");
-    expect(durum().imzaReddi?.kod).toBe("KUNYE_YOK");
+    expect(getStatus().imzaReddi?.kod).toBe("KUNYE_YOK");
     h.emit("update-not-available", {});
-    expect(durum().imzaReddi).toBeNull();
+    expect(getStatus().imzaReddi).toBeNull();
   });
 });
 
@@ -309,7 +193,7 @@ describe("güncelleme adresi ezmesi — ana süreç kuralı (yazarken + okurken)
     const son = h.updater.setFeedURL.mock.calls.at(-1)?.[0] as { url: string };
     expect(son.url).toBe(IZINLI);
     expect(h.updater.requestHeaders).toEqual({ [DOWNLOAD_TOKEN_HEADER]: TOKEN });
-    expect(durum().feedUrlOverridden).toBe(false);
+    expect(getStatus().feedUrlOverridden).toBe(false);
   });
 });
 
@@ -321,11 +205,11 @@ describe("dağıtım iptali — belirteç yanıtı → yerel depo → geri alın
     await kur({ iptal: t });
     h.emit("update-available", bilgi());
     reddedildi("SERTIFIKA_IPTAL");
-    expect(readFileSync(IPTAL_DOSYASI, "utf8")).toBe(t);
+    expect(readFileSync(REVOCATION_FILE, "utf8")).toBe(t);
   });
 
   it("⭐ sonraki denetimde yanıt iptalsiz olsa da yerel iptal uygulanır (geri alınamaz)", async () => {
-    writeFileSync(IPTAL_DOSYASI, iptal(3));
+    writeFileSync(REVOCATION_FILE, iptal(3));
     await kur({ iptal: null });
     h.emit("update-available", bilgi());
     reddedildi("SERTIFIKA_IPTAL");
@@ -333,18 +217,18 @@ describe("dağıtım iptali — belirteç yanıtı → yerel depo → geri alın
 
   it("yereldeki iptal yanıttakinden yüksek sıralıysa dosya DEĞİŞMEZ", async () => {
     const yuksek = iptal(7);
-    writeFileSync(IPTAL_DOSYASI, yuksek);
+    writeFileSync(REVOCATION_FILE, yuksek);
     await kur({ iptal: iptal(4) });
     h.emit("update-available", bilgi());
     reddedildi("SERTIFIKA_IPTAL");
-    expect(readFileSync(IPTAL_DOSYASI, "utf8")).toBe(yuksek);
+    expect(readFileSync(REVOCATION_FILE, "utf8")).toBe(yuksek);
   });
 
   it("bozuk yerel dosya yok sayılır: iptalsiz yanıtla geçerli künye KABUL, indirme başlar", async () => {
-    writeFileSync(IPTAL_DOSYASI, "bozuk.iptal.dosyasi");
+    writeFileSync(REVOCATION_FILE, "bozuk.iptal.dosyasi");
     await kur({ iptal: null });
     h.emit("update-available", bilgi());
     expect(h.updater.downloadUpdate).toHaveBeenCalledTimes(1);
-    expect(durum().imzaReddi ?? null).toBeNull();
+    expect(getStatus().imzaReddi ?? null).toBeNull();
   });
 });

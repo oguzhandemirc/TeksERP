@@ -306,6 +306,11 @@ export interface UpdateStatus {
    * Güncelleme grubu (kiradan, indirme belirteci yanıtı). `null` = bilinmiyor → denetlenmez.
    */
   grup?: string | null;
+  /**
+   * Kullanıcı hazır paketin kurulumunu "Sonra" ile programın kapanışına bıraktı (bu oturum). Geri sayım açılmaz;
+   * kapanışta künye yeniden ölçülüp sessiz kurulur (ana süreç `before-quit`).
+   */
+  ertelendi?: boolean;
 }
 
 export interface UpdateSignatureRejection {
@@ -323,6 +328,8 @@ export interface UpdaterApi {
   check: () => Promise<UpdateStatus>;
   /** İndirilen sürümü kurup uygulamayı yeniden başlatır (yalnız state=ready). */
   install: () => void;
+  /** "Sonra": hazır paketin kurulumu programın kapanışına bırakılır (`ertelendi`). */
+  defer: () => void;
   /** Bu makinenin yayın adresini ez / varsayılana döndür (null = varsayılan). */
   setFeedUrl: (url: string | null) => Promise<UpdateStatus>;
   /** Durum değiştikçe haber verir. Unsubscribe fonksiyonu döner. */

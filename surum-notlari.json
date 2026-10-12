@@ -68,6 +68,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Güncellemeler artık tek sayfada: Sistem → Güncellemeler ya da üst çubuktaki güncelleme düğmesi. Sunucu ve bu bilgisayar için kurulu sürüm, durum ve yapılacak iş tek satırda görünür; teknik bilgiler kapalı gelen Ayrıntılar bölümündedir. Sayfayı herkes açabilir; sunucu güncellemesini yalnız lisans yönetme yetkisi olan kişi onaylar, diğerleri onayın yöneticide olduğunu görür. Eski Güncelleme ve Sunucu Güncellemeleri ekranları bu sayfada birleşti; Neler yeni? bağlantısı bu sürümün notlarını açar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Panel güncellemesi artık yarım kalan işinizi bozmaz: açık bir form penceresi varken ya da bir forma yazmaya başladıysanız güncelleme kurulmaz, üst şeritte açık formunuz kapanınca kurulacağı yazar; formu kaydedip kapatınca iki dakikalık geri sayım başlar. Geri sayım penceresinde Sonra derseniz güncelleme program kapanırken kurulur. Güncellemeler sayfasındaki Yeniden başlat ve şeritteki Şimdi kur düğmeleri açık form varken önce uyarır."
         }
       ]
     },

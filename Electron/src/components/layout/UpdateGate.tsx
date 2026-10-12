@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useState as useReactState } from "react";
-import { AlertTriangle, Download, RefreshCw, Server } from "lucide-react";
+import { AlertTriangle, Clock, Download, RefreshCw, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUpdater } from "@/hooks/useUpdater";
 import { useClientPolicy } from "@/hooks/useClientPolicy";
 import { isBelowMinimum } from "@/lib/version-compare";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { IS_ELECTRON } from "@/lib/runtime-env";
+import { useHasOpenForm } from "@/lib/acik-form";
+import { useGuardedInstall } from "@/hooks/useGuardedInstall";
 
 /**
- * Kapı açıldıktan sonra kurulumun kendiliğinden başlamasına kalan süre.
- * Güncelleme ZORUNLUDUR (kullanıcı kararı) — ama anında kesmek, vardiya
- * ortasındaki operatörün yarım kalan formunu götürürdü. Geri sayım kararı
- * yumuşatmaz, yalnız "işini kaydet" penceresi açar.
+ * Kapı açıldıktan sonra kurulumun kendiliğinden başlamasına kalan süre. Açık/yazılmış form varken kapı hiç
+ * açılmaz (form kapanınca sayım baştan başlar); bu süre formsuz ekranda "Sonra" ya da "Şimdi kur" şansıdır.
  */
 const GERI_SAYIM_SN = 120;
 
@@ -55,7 +55,35 @@ function sureMetni(sn: number): string {
  * Bu Bilgisayar → Güncelleme'de yazılıdır.
  */
 export function UpdateDownloadStrip() {
-  const { status } = useUpdater();
+  const { status, install } = useUpdater();
+  const policy = useClientPolicy();
+  // Kapının bekleme kararının aynası: politika kilidinde kapı kurar, şerit "bekliyor" demez.
+  const hazir =
+    status?.state === "ready" &&
+    Boolean(status.enabled) &&
+    !isBelowMinimum(status.currentVersion, policy?.minVersion);
+  const deferred = hazir && Boolean(status?.ertelendi);
+  const hasForm = useHasOpenForm(hazir && !deferred);
+  const { request: requestInstall, confirmDialog } = useGuardedInstall(install);
+  if (hazir && (deferred || hasForm)) {
+    return (
+      <div className="flex shrink-0 items-center gap-3 border-b border-info/30 bg-info/10 px-4 py-1.5 text-xs">
+        <Clock className="h-3.5 w-3.5 shrink-0 text-info" />
+        <span className="min-w-0 flex-1 truncate">
+          <strong className="font-semibold">
+            {deferred
+              ? "Güncelleme hazır — program kapanırken kurulacak"
+              : "Güncelleme hazır — açık formunuz kapanınca kurulacak"}
+          </strong>
+          {status?.newVersion ? <span className="text-muted-foreground"> ({status.newVersion})</span> : null}
+        </span>
+        <Button type="button" size="sm" variant="outline" className="h-6 shrink-0 px-2 text-xs" onClick={requestInstall}>
+          Şimdi kur
+        </Button>
+        {confirmDialog}
+      </div>
+    );
+  }
   const iniyor = status?.state === "downloading" || status?.state === "available";
   if (!status || !iniyor) return null;
   const yuzde = status.percent ?? 0;
@@ -65,7 +93,7 @@ export function UpdateDownloadStrip() {
       <span className="min-w-0 flex-1 truncate">
         <strong className="font-semibold">Yeni sürüm indiriliyor…</strong>{" "}
         <span className="text-muted-foreground">
-          İndirme bitince uygulama yeniden başlatılacak — işinizi kaydedin.
+          İndirme bitince uygulama yeniden başlatılacak; açık formunuz varsa kapanmasını bekler.
         </span>
       </span>
       {status.state === "downloading" && (
@@ -91,12 +119,14 @@ export function UpdateDownloadStrip() {
  * Politika kilidi yalnız oturum açıkken uygulanır (giriş ekranı sunucu adresini
  * kendi yüzeyinden değiştirebilir); indirilmiş paket her ekranda kurulur.
  * Giriş ekranında kaydedilmemiş iş olmadığından geri sayım kısadır.
+ * Oturumda açık/yazılmış form varken (`acik-form` kaydı) ya da kullanıcı "Sonra" dediyse kapı açılmaz;
+ * şerit (`UpdateDownloadStrip`) bekleyişi söyler, "Sonra"daki paket program kapanırken kurulur.
  *
  * Hata kapı AÇIKKEN gösterilir — orada operatör beklemek zorunda ve neden
  * beklediğini bilmeli.
  */
 export function UpdateGate({ girisEkrani }: { girisEkrani: boolean }) {
-  const { status, check, install } = useUpdater();
+  const { status, check, install, defer } = useUpdater();
   const policy = useClientPolicy();
   /**
    * ⚠️ ÇIKMAZ KAPISI (2026-09-02, sahada yaşandı).
@@ -126,16 +156,22 @@ export function UpdateGate({ girisEkrani }: { girisEkrani: boolean }) {
   const hazir = status?.state === "ready";
   const politikaKilidi =
     !girisEkrani && isBelowMinimum(status?.currentVersion, policy?.minVersion);
-  const kapiAcik = Boolean(status?.enabled) && (hazir || politikaKilidi);
+  // Oturumda açık/yazılmış form ya da "Sonra" kurulumu bekletir (kapı açılmaz, sayım yok; şerit söyler).
+  // Politika kilidi bekletmez: eski sürüm sunucuyla konuşamaz. Giriş ekranında yarım iş yoktur.
+  const canWait = hazir && !girisEkrani && !politikaKilidi;
+  const hasForm = useHasOpenForm(canWait);
+  const waiting = canWait && (hasForm || Boolean(status?.ertelendi));
+  const countdownRunning = hazir && !waiting;
+  const kapiAcik = Boolean(status?.enabled) && (countdownRunning || politikaKilidi);
 
-  // Geri sayım YALNIZ kurulacak paket hazırken işler. Politika kilidi varken
-  // paket henüz inmediyse sayacak bir şey yok — orada beklenen şey indirmedir.
+  // Geri sayım YALNIZ kurulacak paket hazır ve beklemiyorken işler; bekleme bitince baştan başlar. Politika
+  // kilidi varken paket henüz inmediyse sayacak bir şey yok — orada beklenen şey indirmedir.
   useEffect(() => {
-    if (!hazir || kuruluyor) return;
+    if (!countdownRunning || kuruluyor) return;
     setKalan(kurulumHatasi ? YENIDEN_DENEME_SN : geriSayim);
     const t = setInterval(() => setKalan((k) => (k > 0 ? k - 1 : 0)), 1000);
     return () => clearInterval(t);
-  }, [hazir, kuruluyor, kurulumHatasi, geriSayim]);
+  }, [countdownRunning, kuruluyor, kurulumHatasi, geriSayim]);
 
   const kur = () => {
     if (kuruldu.current) return;
@@ -147,9 +183,9 @@ export function UpdateGate({ girisEkrani }: { girisEkrani: boolean }) {
 
   // Süre dolunca kendiliğinden kur.
   useEffect(() => {
-    if (hazir && !kuruluyor && kalan <= 0 && !kuruldu.current) kur();
+    if (countdownRunning && !kuruluyor && kalan <= 0 && !kuruldu.current) kur();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hazir, kuruluyor, kalan]);
+  }, [countdownRunning, kuruluyor, kalan]);
 
   // Kurulum başlamadıysa kilidi aç — yoksa kapı kalıcı olarak kilitlenir.
   useEffect(() => {
@@ -272,17 +308,29 @@ export function UpdateGate({ girisEkrani }: { girisEkrani: boolean }) {
               </p>
             ) : (
               <p className="mb-4 text-sm text-muted-foreground">
-                Kaydedilmemiş bir işiniz varsa şimdi tamamlayın —{" "}
                 <strong className="font-mono tabular-nums text-foreground">
                   {sureMetni(kalan)}
                 </strong>{" "}
-                sonra kurulum kendiliğinden başlayacak.
+                sonra kurulum kendiliğinden başlayacak. Şimdi çalışıyorsanız <strong>Sonra</strong> deyin —
+                program kapanırken kurulur.
               </p>
             )}
             <Button type="button" className="w-full gap-2" onClick={kur} disabled={kuruluyor}>
               <RefreshCw className={`h-4 w-4 ${kuruluyor ? "animate-spin" : ""}`} />
               {kuruluyor ? "Kuruluyor…" : "Şimdi kur ve yeniden başlat"}
             </Button>
+            {canWait && (
+              <Button
+                type="button"
+                variant="ghost"
+                className="mt-2 w-full gap-2 text-muted-foreground"
+                onClick={defer}
+                disabled={kuruluyor}
+              >
+                <Clock className="h-4 w-4" />
+                Sonra — program kapanırken kur
+              </Button>
+            )}
           </>
         )}
       </div>

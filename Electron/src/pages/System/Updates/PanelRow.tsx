@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Monitor, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUpdater } from "@/hooks/useUpdater";
+import { useGuardedInstall } from "@/hooks/useGuardedInstall";
 import { panelRowState } from "@/lib/updater-durum";
 import { RELEASE_NOTES_PATH } from "@/pages/ReleaseNotes/release-notes-path";
 import { useSurumNotuStore } from "@/store/surum-notu";
@@ -23,6 +24,8 @@ function WhatsNew({ desktop }: { desktop: boolean }) {
 export function PanelRow() {
   const { status, check, install } = useUpdater();
   const [checking, setChecking] = useState(false);
+  // Açık form varsa önce uyarır — güncelleme kapısıyla aynı kayıt.
+  const { request: requestInstall, confirmDialog } = useGuardedInstall(install);
   if (!status) {
     return (
       <UpdateRow
@@ -60,9 +63,12 @@ export function PanelRow() {
       status={{ label: row.sorun ? "Sorun" : row.metin, tone: row.ton }}
       actions={
         row.kurulabilir ? (
-          <Button size="sm" title="Yeni sürümü kurar ve paneli yeniden başlatır" onClick={install}>
-            Yeniden başlat
-          </Button>
+          <>
+            <Button size="sm" title="Yeni sürümü kurar ve paneli yeniden başlatır" onClick={requestInstall}>
+              Yeniden başlat
+            </Button>
+            {confirmDialog}
+          </>
         ) : row.sorun ? undefined : (
           checkButton
         )
