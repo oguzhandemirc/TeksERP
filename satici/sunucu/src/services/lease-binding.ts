@@ -4,6 +4,7 @@
 // DR devri · donanım öğrenmesi · etkinleştirme) güncel şartların kök imzasını kuyruğa alır; bağlanamıyorsa talep ACİL +
 // `KOK_IMZASI_ACIL`; fabrika elindeki kirayla P'ye dek sürer (imzasız 403 hiçbir süreyi kısaltmaz). Kapanış kirası (K6)
 // kuyruk açmaz — alan taraf zincir sahibi değil — ve bağlanamıyorsa eski 403'e düşer.
+import { parseJws } from "../lisans-protokol";
 import { VendorError } from "../lib/errors";
 import { lockInstallation } from "../lib/locks";
 import { prisma, type Tx } from "../lib/prisma";
@@ -56,4 +57,12 @@ export async function assertBindableBeforeLease(g: {
     await holdForRootSignatureTx(tx, { entitlementId: hak.id, delivered, nowMs: g.nowMs });
   });
   throw (g.refusal ?? capabilityDowngradeRefusal)();
+}
+
+/** Fabrikanın elindeki HAK sürümünün kip alt sınırı `zorla` mı (yalnız uyarı girdisi; belge bizim DB'mizden). */
+export async function heldFloorEnforces(tx: Tx, held: { readonly hakId: string; readonly surum: number } | null): Promise<boolean> {
+  if (!held) return false;
+  const row = await tx.hakSurumu.findFirst({ where: { hakId: held.hakId, surum: held.surum }, select: { belge: true } });
+  const parsed = row ? parseJws(row.belge) : null;
+  return parsed?.ok === true && (parsed.value.payload as { kipAltSiniri?: unknown }).kipAltSiniri === "zorla";
 }

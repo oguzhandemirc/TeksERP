@@ -201,6 +201,8 @@ export const DEALER_PORTAL_ROUTES: readonly PortalRouteDef[] = [
             perpetual: b.kalici,
             maintenanceUntil: new Date(b.bakimBitis),
             validUntil: b.gecerlilikBitis ? new Date(b.gecerlilikBitis) : null,
+            // Bayi kip alt sınırını seçemez: yeni kurulum daima `zorla` doğar (G3).
+            modeFloorEnforce: true,
             nowMs: c.nowMs,
             actor: c.session.actor,
           }),

@@ -28,6 +28,8 @@ export interface CreateEntitlementInput {
   readonly maintenanceUntil: Date;
   /** Geçerlilik bitişi (vadeli/demo); DEMO'da zorunlu. Verilirse GECERLILIK defter satırı aynı tx'te yazılır. */
   readonly validUntil?: Date | null;
+  /** HAK kip alt sınırı `zorla` (G3). Portal ve bayi oluşturma akışı `true` verir; servis varsayılanı eski davranıştır. */
+  readonly modeFloorEnforce?: boolean;
   /** Numaranın yılı bu andan (İstanbul) — kilit ve numara aynı yılı görsün. */
   readonly nowMs: number;
   readonly actor: string;
@@ -58,6 +60,7 @@ export async function createEntitlementTx(tx: Tx, g: CreateEntitlementInput): Pr
       kalici: g.perpetual,
       bakimBitis: g.maintenanceUntil,
       gecerlilikBitis: g.validUntil ?? null,
+      kipAltSiniriZorla: g.modeFloorEnforce ?? false,
     },
   });
   if (g.validUntil) await recordValidityAtBirthTx(tx, { installationDbId: inst.id, validUntil: g.validUntil, actor: g.actor });

@@ -161,6 +161,8 @@ const EntitlementCreate = z.strictObject({
   /** Geçerlilik bitişi (vadeli); DEMO'da zorunlu (K5 — sunucu reddeder). Yoksa süresiz doğar. */
   gecerlilikBitis: IsoSchema.optional(),
   uretimModuluCikarilsin: z.boolean().optional(),
+  /** Yeni kurulum `zorla` kipinde doğar (G3): verilmezse true; yalnız yönetici portalı kapatabilir. */
+  kipAltSiniriZorla: z.boolean().optional(),
 });
 // Geçerlilik bitişi doğuşta verilebilir (DEMO'da zorunlu); her bitiş — doğuştaki dahil — GECERLILIK defter satırıdır (/gecerlilik · /uzat · taksit).
 // İmzacı plandan (yetenek kapısı): `imzaci` arayüzün gördüğü plandır (GET /haklar/:id/imza-plani) — uyuşmazsa 409,
@@ -584,6 +586,9 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
       const id = idParam(c.req, "id", "Kurulum");
       const b = bodyOf(c, EntitlementCreate);
       const modules = moduleChanges(b.moduller ?? [...DEFAULT_ENTITLEMENT_MODULES], b.uretimModuluCikarilsin)!;
+      if (b.kipAltSiniriZorla === false && !roleHas(c.session.user.rol, "yaptirim:agir")) {
+        throw new VendorError(403, "YETKISIZ", "Gözlem kipinde doğan kurulum ağır yaptırımdır: yalnız yönetici");
+      }
       return portalAction(c, {
         action: "HAK_EKLE",
         clientToken: b.clientToken,
@@ -595,11 +600,12 @@ export const VENDOR_PORTAL_ROUTES: readonly PortalRouteDef[] = [
             perpetual: b.kalici,
             maintenanceUntil: new Date(b.bakimBitis),
             validUntil: b.gecerlilikBitis ? new Date(b.gecerlilikBitis) : null,
+            modeFloorEnforce: b.kipAltSiniriZorla ?? true,
             nowMs: c.nowMs,
             actor: c.session.actor,
           }),
         respond: (hak) => ({ status: 201, data: hak }),
-        audit: (hak) => [{ event: "HAK_EKLENDI", entity: "Hak", entityId: hak.id, summary: { lisansNo: hak.lisansNo, moduller: hak.moduller } }],
+        audit: (hak) => [{ event: "HAK_EKLENDI", entity: "Hak", entityId: hak.id, summary: { lisansNo: hak.lisansNo, moduller: hak.moduller, kipAltSiniriZorla: hak.kipAltSiniriZorla } }],
       });
     },
   },

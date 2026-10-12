@@ -127,6 +127,7 @@ export function InstallationDetailPage() {
             passwordField: "kokParolasi",
             passwordLabel: "Kök anahtar parolası",
             allowPerpetual: true,
+            modeFloorChoice: true,
             signerPlan: d.hak ? <SigningPlanNote entitlementId={d.hak.id} /> : undefined,
             versionModal: d.hak
               ? (p) => <VendorEntitlementVersionModal entitlement={d.hak!} installationClass={inst.sinif} modules={catalog.data?.moduller ?? d.hak!.moduller} installedBuild={installedBuildOf(inst.sonOrtam)} {...p} />

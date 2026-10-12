@@ -23,6 +23,8 @@ export interface EntitlementPolicy {
   readonly maxMaintenanceMonths?: number;
   /** Kod yalnız hiç etkinleşmemiş kuruluma (bayi — D8; etkin kurulumun makine değişimi satıcı onaylı taşımadır). */
   readonly codeOnlyUnactivated?: boolean;
+  /** Satıcı: yeni hakkın kip alt sınırı seçilir (varsayılan `zorla`); bayide yok. */
+  readonly modeFloorChoice?: boolean;
   /** Satıcı: hakkın imza planı satırı (ara imzacı · kök · kök kuyruğu); bayide yok. */
   readonly signerPlan?: ReactNode;
   /** Satıcı: plana göre parola soran sürüm formu; yoksa ortak form (bayi parolası). */
@@ -122,6 +124,7 @@ export function EntitlementPanel({ detail, policy, onChanged }: { detail: Instal
           defaultModules={policy.defaultModules}
           allowPerpetual={policy.allowPerpetual}
           maxMaintenanceMonths={policy.maxMaintenanceMonths}
+          modeFloorChoice={policy.modeFloorChoice}
           onClose={() => setDialog(null)}
           onSaved={done}
         />

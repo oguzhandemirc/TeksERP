@@ -157,6 +157,13 @@ async function main(): Promise<void> {
     const yanlisKok = await portalIstek(sunucu.portal, `/portal/api/haklar/${hakId}/surum`, { cerez, govde: { clientToken: randomUUID(), kokParolasi: "yanlis-kok-parolasi-x", sebep: "ilk imza" } });
     kontrol("§1b yanlış kök parolası → 400 IMZA_PAROLASI_HATALI", yanlisKok.status === 400 && yanlisKok.kod === "IMZA_PAROLASI_HATALI", `${yanlisKok.status} ${yanlisKok.kod}`);
     await s("post", "/haklar/:id/surum", `/haklar/${hakId}/surum`, 201, { kokParolasi: TEST_KOK_PAROLASI, sebep: "ilk imza", moduller: ["production.enabled", "finance.enabled"] });
+    const kipBelgesi = async (id: string): Promise<unknown> => {
+      const row = await prisma.hakSurumu.findFirst({ where: { hakId: id, surum: 1 } });
+      const j = row ? parseJws(row.belge) : null;
+      return j?.ok ? (j.value.payload as { kipAltSiniri?: unknown }).kipAltSiniri : undefined;
+    };
+    const vKip = await kipBelgesi(hakId);
+    kontrol("§1c0 G3: portalda yeni kurulumun ilk HAK'ı (alan verilmedi) imzalı belgede kipAltSiniri=zorla", vKip === "zorla", String(vKip));
     const sinifImzali = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${kId}`, { cerez, yontem: "PATCH", govde: { clientToken: randomUUID(), sinif: "TEST" } });
     kontrol("§1c imzalı hakkı olan kurulumun sınıfı değişmez → 409", sinifImzali.status === 409, `${sinifImzali.status}`);
     const hakAyrinti = await s("get", "/haklar/:id", `/haklar/${hakId}`, 200);
@@ -411,6 +418,10 @@ async function main(): Promise<void> {
     await b("get", "/kurulumlar", "/kurulumlar", 200);
     const bh = await b("post", "/kurulumlar/:id/hak", `/kurulumlar/${bk.veri.id as string}/hak`, 201, { kalici: true, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString() });
     await b("post", "/haklar/:id/surum", `/haklar/${bh.veri.id as string}/surum`, 201, { bayiParolasi: "uclar-bayi-parolasi", sebep: "ilk imza" });
+    const bKip = await kipBelgesi(bh.veri.id as string);
+    kontrol("§3b0 G3: bayinin yeni kurulum HAK'ı imzalı belgede kipAltSiniri=zorla (bayi seçemez)", bKip === "zorla", String(bKip));
+    const bGozlem = await portalIstek(sunucu.genel, `/bayi/api/kurulumlar/${bk.veri.id as string}/hak`, { cerez: bCerez, govde: { clientToken: randomUUID(), kalici: false, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString(), kipAltSiniriZorla: false } });
+    kontrol("§3b1 G3: bayi gövdesi kipAltSiniriZorla taşıyamaz → 400", bGozlem.status === 400, `${bGozlem.status} ${bGozlem.kod}`);
     await b("get", "/haklar/:id", `/haklar/${bh.veri.id as string}`, 200);
     const bKod = await b("post", "/kurulumlar/:id/etkinlestirme-kodu", `/kurulumlar/${bk.veri.id as string}/etkinlestirme-kodu`, 201, {});
     const bSaklanan = await prisma.portalIslemi.findMany({ where: { eylem: "BAYI_KOD_URET", createdAt: { gte: akisBaslangici } } });
@@ -427,6 +438,8 @@ async function main(): Promise<void> {
     const opK = await portalKullaniciAc(ctx, "SATICI_OPERATOR");
     kullanicilar.push(opK.id);
     const opCerez = (await portalGiris(sunucu.portal, "/portal/api", opK)).cerez!;
+    const opGozlem = await portalIstek(sunucu.portal, `/portal/api/kurulumlar/${kId}/hak`, { cerez: opCerez, govde: { clientToken: randomUUID(), kalici: false, bakimBitis: new Date(Date.now() + 365 * DAY_MS).toISOString(), kipAltSiniriZorla: false } });
+    kontrol("§1c1 G3: operatör gözlem kipinde HAK açamaz → 403 YETKISIZ (yalnız yönetici)", opGozlem.status === 403 && opGozlem.kod === "YETKISIZ", `${opGozlem.status} ${opGozlem.kod}`);
     const degis = await portalIstek(sunucu.portal, "/portal/api/oturum/parola", { cerez: opCerez, govde: { mevcutParola: opK.parola, yeniParola: `yeni-${opK.parola}`, totp: await totpKodu(opK.sir, 1) } });
     const sonra = await portalIstek(sunucu.portal, "/portal/api/oturum", { cerez: opCerez });
     kontrol("§4a kendi parola değişimi (mevcut parola + TOTP) → 200, bu oturum sürer", degis.status === 200 && sonra.status === 200, `${degis.status}/${sonra.status}`);

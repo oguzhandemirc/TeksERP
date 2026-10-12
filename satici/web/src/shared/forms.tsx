@@ -286,6 +286,7 @@ export function EntitlementCreateModal({
   defaultModules,
   allowPerpetual = true,
   maxMaintenanceMonths,
+  modeFloorChoice = false,
   onClose,
   onSaved,
 }: {
@@ -294,10 +295,14 @@ export function EntitlementCreateModal({
   defaultModules: readonly string[];
   allowPerpetual?: boolean;
   maxMaintenanceMonths?: number;
+  /** Kip alt sınırı seçimi (yalnız satıcı portalı; bayi formunda yok — sunucu bayide daima `zorla` yazar). */
+  modeFloorChoice?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const api = useApi();
+  const canObserve = useCan("yaptirim:agir");
+  const [enforce, setEnforce] = useState(true);
   const [selected, setSelected] = useState<string[]>(defaultModules.filter((m) => modules.includes(m)));
   const [confirmed, setConfirmed] = useState(false);
   const [perpetual, setPerpetual] = useState(allowPerpetual);
@@ -315,6 +320,7 @@ export function EntitlementCreateModal({
       bakimBitis: iso,
       ...(validityIso ? { gecerlilikBitis: validityIso } : {}),
       ...(selected.includes(PRODUCTION_MODULE_KEY) ? {} : { uretimModuluCikarilsin: confirmed }),
+      ...(modeFloorChoice ? { kipAltSiniriZorla: enforce } : {}),
     });
     if (r.ok) onSaved();
   };
@@ -327,6 +333,12 @@ export function EntitlementCreateModal({
         Kalıcı lisans (süre sınırı yok; bakım biterse program durmaz, son hak edilen sürümde kalır)
       </label>
       {!allowPerpetual ? <p className="muted small">Tavanınız kalıcı lisansa izin vermiyor: lisans vadeli doğar.</p> : null}
+      {modeFloorChoice ? (
+        <label className="check field">
+          <input type="checkbox" checked={enforce} disabled={!canObserve} onChange={(e) => setEnforce(e.target.checked)} />
+          Lisans kurallarını uygula (zorla kip: geçersiz lisansta uyarı → ek süre → kısıtlı kip; kapatmak yalnız yönetici)
+        </label>
+      ) : null}
       <Field label="Bakım bitişi" hint={maxMaintenanceMonths ? `En geç bugünden ${maxMaintenanceMonths} ay sonra.` : undefined}>
         <input type="date" value={maintenance} onChange={(e) => setMaintenance(e.target.value)} />
       </Field>
