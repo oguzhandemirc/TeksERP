@@ -2235,6 +2235,12 @@ model MachineCollector {
   collectorType String?      @db.VarChar(32)
   status        DeviceStatus @default(PENDING)
 
+  /// KART SIRRI — DB'de SIR YOKTUR: kayıtta/yenilemede üretilen 32 bayt rastgele tohum
+  /// `<kid>:<64hex>`; sır = HMAC(kısa kimlik halkası[kid], kimlik+tohum), yalnız üretildiği an döner.
+  /// Tohum halkasız işe yaramaz (PIN/kart özetiyle aynı anahtar zinciri). Okuma yüzeyine ÇIKMAZ.
+  secretSeed     String?   @db.VarChar(96)
+  secretIssuedAt DateTime? @db.Timestamptz
+
   /// Bu toplayıcı YALNIZ bu kuruluma basar — yedekten dönmüş bir kopyaya canlı
   /// veri basma sınıfını kapatır.
   installationId String? @db.VarChar(64)

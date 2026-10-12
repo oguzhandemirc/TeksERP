@@ -40,6 +40,7 @@ import loomAlarmRoutes from "./routes/loom-alarm.routes";
 import loomAlarmDutyRoutes from "./routes/loom-alarm-duty.routes";
 import machineSpecRoutes from "./routes/machine-spec.routes";
 import machineStopCodeMapRoutes from "./routes/machine-stop-code-map.routes";
+import machineCollectorRoutes from "./routes/machine-collector.routes";
 import shiftDefinitionRoutes from "./routes/shift-definition.routes";
 import machineDoffRoutes from "./routes/machine-doff.routes";
 import subcontractorWeavingRoutes from "./routes/subcontractor-weaving.routes";
@@ -505,6 +506,8 @@ app.use("/api/loom-alarm-duty", loomAlarmDutyRoutes);
 app.use("/api/machine-specs", machineSpecRoutes);
 // Ham duruş kodu → sebep eşlemesi (makine duruşu D2) — tezgah modülü + loom:spec-manage.
 app.use("/api/machine-stop-code-maps", machineStopCodeMapRoutes);
+// Makine kartı kimliği (makine duruşu D3a) — tezgah modülü + loom:spec-manage; sır yalnız kayıt/yenileme cevabında.
+app.use("/api/machine-collectors", machineCollectorRoutes);
 app.use("/api/shift-definitions", shiftDefinitionRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);
 app.use("/api/subcontractor-weaving", subcontractorWeavingRoutes);

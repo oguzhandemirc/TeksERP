@@ -51,6 +51,8 @@ const SECRET_FIELDS = new Set([
   "settingsPasswordHash",
   // Süperadmin PIN'inin herhangi bir yüke sızması durumunda ikinci hat.
   "superadminPin",
+  // Makine kartı sır tohumu — halkayla birlikte sırrı verir.
+  "secretSeed",
 ]);
 const NOISE_FIELDS = new Set([
   "updatedAt", "createdAt", "updatedById", "createdById", "id",
