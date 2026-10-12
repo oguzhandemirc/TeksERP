@@ -18,11 +18,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Teşhis adımının PR'a yorum yazabilmesi için (yeni repolarda varsayılan token
-# salt-okunur). Tüm job'lar yalnız checkout (contents:read) + PR yorum (pull-requests:write).
+# En az yetki: bütün işler salt-okunur; PR'a yorum yazma izni yalnız teşhis adımı olan `backend` işinde.
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   # ===========================================================================
@@ -34,8 +32,8 @@ jobs:
     name: Doküman bekçisi (link + bayatlık)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -136,6 +134,10 @@ jobs:
   backend:
     name: Backend (tsc + test)
     runs-on: ubuntu-latest
+    # İş düzeyi izin üst düzeyin YERİNE geçer: contents:read burada da yazılı.
+    permissions:
+      contents: read
+      pull-requests: write
     defaults:
       run:
         working-directory: Teks-Erp
@@ -165,7 +167,7 @@ jobs:
       JWT_SECRET: ci-test-secret-not-for-production
       PORT: "4000"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         # TAM KLON (2026-09-14): `test_harita_sonda_atfi §1b` `(bu commit)` satırının sha'sını
         # `git blame`den türetir; sığ klonda (varsayılan depth 1) blame sınır (^) döner ve satır
         # 'havada' kalır — CI c2635fc1 bunu 12/1 ile gösterdi. Bekçi sığ klonda ⏭ beyan eder;
@@ -174,7 +176,7 @@ jobs:
           fetch-depth: 0
       # Backend'in ÇALIŞMA ZAMANI Node 24'tür (korumalı paket runtime, deploy/node-surumu.json).
       # CI de o çizgide ölçer ki "kod bu Node'da koşar" sinyali gerçek olsun (Faz 2b).
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: npm
@@ -349,8 +351,8 @@ jobs:
       JWT_SECRET: ci-test-secret-not-for-production
       PORT: "4000"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -382,8 +384,8 @@ jobs:
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1" # renderer testleri binary istemez → hızlı/güvenli kurulum
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -422,8 +424,8 @@ jobs:
       run:
         working-directory: mobil
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -483,8 +485,8 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tekserp_satici_ci_test?schema=public
       SATICI_ERISIM_GUNLUGU: "0"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -530,8 +532,8 @@ jobs:
     env:
       TEKSERP_PAROLA_KASASI: kapali
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -559,8 +561,8 @@ jobs:
       run:
         working-directory: satici/web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -594,8 +596,8 @@ jobs:
       run:
         working-directory: Teks-Erp/native/lisans-cekirdek
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -655,8 +657,8 @@ jobs:
       ESITLEME_DATABASE_URL: postgresql://tekserp_patron_ci_test_sync:ci-esitleme-rolu-parolasi@localhost:5432/tekserp_patron_ci_test?schema=public
       PATRON_ERISIM_GUNLUGU: "0"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -694,8 +696,8 @@ jobs:
       run:
         working-directory: Electron
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -719,8 +721,8 @@ jobs:
       run:
         working-directory: patron/uygulama
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
