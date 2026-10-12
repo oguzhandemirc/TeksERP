@@ -58,6 +58,11 @@ sunucu hizmet konağı 0.2.0 (değişmedi).
   (barındırılan) kurulumda bu kural her zaman açıktır — **barındırılan kurulumda tabletler önce OTA ile
   güncellenir**, sonra sunucu; eski tablet orada her istekte reddedilir. Fabrika kurulumunda yeni bir ayar
   ("Cihaz kanıtı zorunlu") kapalı gelir ve hiçbir şey değişmez; bütün tabletler güncellendikten sonra açılabilir.
+- **Dokuma karneleri tam aralığı sayar ve hızlandı.** Randıman, Duruş Pareto, Vardiya Karnesi ve Karne Listesi
+  artık seçilen tarih aralığının BÜTÜN tezgah × vardiya satırlarını toplar. **Karne toplamları artık tam aralığı
+  kapsar; eski sürüm ilk 500 çifti sayıyordu** — çok tezgahlı fabrikada aynı aralığın rakamı bu yüzden değişir
+  (200 tezgahta 7 gün = 4.200 çift; eskiden ilk 2,5 vardiya sayılıyordu). Satır listesi sayfa sayfa döner
+  (toplamlar sayfadan bağımsız). 200 tezgah × 7 günlük randıman 4–6 sn'den 0,5–0,9 sn'ye indi.
 - **Güncelleme programı 0.2.6.** Davranışı değişmedi; ortak bağımlılık kilidi değiştiği için sürümü artırıldı.
 - **Veritabanında değişiklik var** → güncelleme programı güncellemeden ÖNCE otomatik yedek alır; yedek alınamazsa
   güncelleme yapılmaz.
@@ -275,6 +280,11 @@ değiştir / bitir (`4616c45b8`), mobil uyarılar (`da832d60b`, sunucu tarafı).
   ayar cevabına `deviceProofRequired`, yeni başlık `x-device-proof`, yeni hata kodu `DEVICE_PROOF_INVALID`.
   **Barındırılan kurulumda EVET (bilerek):** kanıt üretemeyen eski tablet her istekte 401 alır — tabletler önce OTA
   ile güncellenir; `minVersion` yükseltilmedi. Eski panel yeni ayarı göstermez.
+- **Kırıldı mı:** HAYIR (dokuma karnesi kısmı) — ekleme: `GET /api/reports/dokuma/randiman` ve
+  `GET /api/machine-shift-stats` `cursor` + `limit` (≤ 5000, varsayılan 500) kabul eder, `meta.nextCursor`
+  döner; bozuk imleç 400 `INVALID_CURSOR`. **Anlam değişimi:** toplam/Pareto/kırılım ve `meta.total` tam kümeden;
+  `meta.truncated` artık "sonraki sayfa var" demektir. Eski panel ilk 500 satırı + "kırpıldı" şeridini görür,
+  üstteki toplamlar yine tam kümedir.
 - **Eski istemci ne yapar:** eski panel yeni alanları okumaz, uyarı şeridini göstermez; kapı sunucuda olduğu için
   güvenlik etkisi aynıdır. Tablet etkilenmez.
 - **`minVersion` dokunuldu mu:** HAYIR.

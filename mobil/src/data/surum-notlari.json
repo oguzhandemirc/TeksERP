@@ -133,6 +133,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Ayarlar → Cihazlar altında “Cihaz kanıtı zorunlu (taklit edilemez cihaz kimliği)” ayarı: açıkken onaylı tablet her isteğini sunucunun ona verdiği gizli anahtarla imzalar, başka bir cihaz onun yerine geçemez. Kapalı gelir; açmadan önce bütün tabletleri güncelleyin. “Hızlı PIN ve personel kartı yalnız onaylı cihazdan” açıkken bu ayar kapalıysa yanında uyarı görünür. Bulut (barındırılan) kurulumda her zaman açıktır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Dokuma raporlarında (Randıman, Duruş Pareto, Vardiya Karnesi, Karne Listesi) toplamlar artık seçtiğiniz tarih aralığının TAMAMINI kapsar. Eski sürüm çok tezgahlı fabrikada yalnız ilk 500 tezgah × vardiya satırını sayıyordu; aynı aralığın rakamları bu yüzden önceki sürümden farklı (daha büyük) görünebilir. Uzun listeler sayfa sayfa gelir: tablonun altındaki \"Daha fazla yükle\" ile devamı açılır, üstteki toplamlar baştan tam kümedir. Raporlar da belirgin şekilde daha hızlı açılır (yeni sunucu sürümü gerekir)."
         }
       ]
     },
