@@ -2,9 +2,9 @@
 
 **Durum:** TASLAK — terfide kullanıcı onayı. İlk hedef yalnız `test` grubu (Linux deneme sunucusu `backend-oci` +
 Windows `backend`); öncü/genel gruba çıkış ayrı karar.
-**Paket:** _(paketleme doldurur)_
-**SHA256:** _(paketleme doldurur)_
-**Commit:** _(paketleme doldurur)_
+**Paket:** `tekserp-backend-oci-2.15.6.tar` (213704192 B; imaj config özeti `sha256:5da90c3230be7dc6c7032d4656e3088035d3b6f0cd00333f279c1017b8f08231`, güncelleyici 0.2.6 `d58a949726916e8e…`, kid `pkt-2026-1`, CI koşusu 38314827883). Windows `backend/` paketi: üretilmedi (thinkpad-1 çevrimdışı, 2026-10-13)
+**SHA256:** `d0cf9f3520a93d8e51a9df3218a836dbd108f907454c4cc78dc301ca29be8765`
+**Commit:** `1cdce653c` (etiket `backend-v2.15.6`; `test` grubu `backend-oci/2.15.6`, 2026-10-13)
 **Önceki saha sürümü:** 2.15.5 (`test` grubu). Güncellenecek her kurulumda sahadaki sürüm kurulumdan önce
 sunucunun sağlık bilgisinden okunur; tahmin edilmez.
 
