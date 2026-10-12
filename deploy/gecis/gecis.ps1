@@ -551,6 +551,7 @@ function OrtamEnvanteri($E) {
   foreach ($u in @($r.uyarilar)) { Uyar "yapilandirma: $u" }
   foreach ($x in @($r.engeller)) { Engel "yapilandirma: $x" }
   LisansDegerlendir $E $r.lisans
+  TlsDuvarEnvanteri $E $r.lanTls
   $E.Rclone = $null
   if ($r.rclone) {
     $eski = [string]$r.rclone.eskiYol -creplace '/', '\'
@@ -560,6 +561,20 @@ function OrtamEnvanteri($E) {
       else { $E.Rclone = [pscustomobject]@{ Kaynak = $eski; Hedef = $yeni }; Ok "rclone.conf: $eski -> $yeni (kopya; eskisi yerinde kalir)" }
     } else { Bilgi "rclone.conf yok ($eski) - makine disi supurucu yapilandirilmamis" }
   }
+}
+
+# Sifreli dinleyici (LAN TLS) portu icin gelen kural: kurulum.ps1 ile ayni ad/profil ("TeksERP HTTPS <port>").
+# Kip off ise HTTPS dinlenmez, kural aranmaz.
+function TlsDuvarEnvanteri($E, $t) {
+  $E.TlsDuvarGerekli = $false
+  $E.LanTlsYaz = [bool]($t -and $t.yazilacak)
+  if (-not $t -or "$($t.kip)" -cmatch '^(?i:off|kapali)$') { return }
+  $E.TlsPort = [int]$t.port
+  if ($E.LanTlsYaz) { Ok "sifreli baglanti: yapilandirma\.env'e LAN_TLS_MODE=dual (HTTPS $($E.TlsPort) yan yana; HTTP portu $($E.Port) acik kalir)" }
+  try { $kural = OsGuvenlikDuvari $E.TlsPort } catch { $kural = $null }
+  if ($null -eq $kural) { Uyar "guvenlik duvari (HTTPS $($E.TlsPort)) olculemedi" }
+  elseif ($kural.Count) { Ok "guvenlik duvari: HTTPS $($E.TlsPort) izinli ($(@($kural | ForEach-Object { $_.Ad + ' [' + $_.Profil + ']' }) -join ', '))" }
+  else { $E.TlsDuvarGerekli = $true; Bilgi "HTTPS $($E.TlsPort) icin etkin PORT kurali yok - 'TeksERP HTTPS $($E.TlsPort)' eklenecek (Domain+Private, LocalSubnet)" }
 }
 
 # Yardimciya giden ortam girdisi (envanter ve YAPILANDIRMA kalemi AYNI girdiyle): kanal satirlari dahil.
@@ -772,11 +787,12 @@ function PlanKur($E) {
   & $ekle "PAKET_AC" "paketi ac + dogrula: $([System.IO.Path]::GetFileName($E.Zip)) -> $($E.Kok)\surumler\$($E.Surum) ($($E.ZipDosyaSayisi) dosya)"
   & $ekle "CURRENT" "baglanti: $($E.Kok)\current -> surumler\$($E.Surum)"
   & $ekle "ISKELET" "dizin iskeleti + korumali izin (SYSTEM + Administrators): backend-hizmeti.ps1 -YalnizIskelet"
-  & $ekle "YAPILANDIRMA" "yapilandirma\.env: app\.env + ecosystem env blogu ($(@($E.Ortam.anahtarlar).Count) anahtar karari)$(if ($E.Adlar.sonek) { ' + TEKSERP_GUNCELLEME_DIZINI=' + $E.GuncellemeDizini })$(if ($E.LisansYaz) { ' + LICENSE_SERVER_URL=' + $E.LisansBeklenen + ' (kanal kaydi)' })$(if ($E.Rclone) { ' + rclone.conf -> veri\' })"
+  & $ekle "YAPILANDIRMA" "yapilandirma\.env: app\.env + ecosystem env blogu ($(@($E.Ortam.anahtarlar).Count) anahtar karari)$(if ($E.Adlar.sonek) { ' + TEKSERP_GUNCELLEME_DIZINI=' + $E.GuncellemeDizini })$(if ($E.LisansYaz) { ' + LICENSE_SERVER_URL=' + $E.LisansBeklenen + ' (kanal kaydi)' })$(if ($E.LanTlsYaz) { ' + LAN_TLS_MODE=dual (HTTPS ' + $E.TlsPort + ' yan yana)' })$(if ($E.Rclone) { ' + rclone.conf -> veri\' })"
   if ($E.Pm2 -and $E.Pm2.bizim -and [string]$E.Pm2.bizim.durum -ceq "online") { & $ekle "PM2_DURDUR" "KESINTI BASLAR - pm2 durdur: $($E.Pm2.bizim.ad) (PID $($E.Pm2.bizim.pid))" }
   & $ekle "YEDEK" "veritabani yedegi (dogrulanmis$(if ($E.Alicilar) { ', sifreli' } else { ', duz' })): $($E.Db.Ad) -> gecis\<damga>\"
   if ($E.Boot -and [string]$E.Boot.Durum -cne "Disabled") { & $ekle "ACILIS_KAPAT" "acilis gorevi kapat: $($E.Boot.Klasor)$($E.Boot.Ad) (pm2 resurrect)" }
   if ($E.DuvarGerekli) { & $ekle "DUVAR" "guvenlik duvari kurali ekle: TeksERP API $($E.Port) (TCP, Domain+Private, LocalSubnet)" }
+  if ($E.TlsDuvarGerekli) { & $ekle "DUVAR_TLS" "guvenlik duvari kurali ekle: TeksERP HTTPS $($E.TlsPort) (TCP, Domain+Private, LocalSubnet)" }
   & $ekle "HIZMET_KAYIT" "hizmet kaydi + izinler: $($E.HizmetAdi) (NT SERVICE\$($E.HizmetAdi))$(if ($E.PgHizmeti) { ', bagimlilik ' + $E.PgHizmeti })"
   & $ekle "DOGRULAMA" "dogrulama baslatmasi (yalniz 127.0.0.1) + saglik: surum $($E.Surum) + DB$(if ($E.Kimlik) { ' + kimlik' })"
   & $ekle "BASLAT" "normal baslatma + saglik + LAN kimligi - KESINTI BITER"
@@ -983,6 +999,13 @@ function Is_DUVAR($E) {
 }
 function Telafi_DUVAR($bas, $bit) { OsGuvenlikDuvariSil "TeksERP API $($bas.port)"; Bilgi "guvenlik duvari kurali kaldirildi: TeksERP API $($bas.port)" }
 
+function Is_DUVAR_TLS($E) {
+  OsGuvenlikDuvariEkle "TeksERP HTTPS $($E.TlsPort)" $E.TlsPort
+  Ok "guvenlik duvari kurali eklendi: TeksERP HTTPS $($E.TlsPort)"
+  return @{ ad = "TeksERP HTTPS $($E.TlsPort)" }
+}
+function Telafi_DUVAR_TLS($bas, $bit) { OsGuvenlikDuvariSil "TeksERP HTTPS $($bas.port)"; Bilgi "guvenlik duvari kurali kaldirildi: TeksERP HTTPS $($bas.port)" }
+
 function Is_HIZMET_KAYIT($E) {
   $arg = @{ Kok = $E.Kok; HizmetAdi = $E.HizmetAdi; Uygula = $true; GuncellemeDizini = $E.GuncellemeDizini }
   if ($E.PgHizmeti) { $arg.PgHizmeti = $E.PgHizmeti } else { $arg.PgYok = $true }
@@ -1060,6 +1083,12 @@ function Is_BASLAT($E) {
     }
     if (-not $iyi.Count) { HizmetTanisi $E; throw "backend LAN adreslerinden ($($ipler -join ', ')) cevap vermiyor - istemciler baglanamaz (HOST?)" }
     Ok "LAN: $($iyi -join ', '):$($E.Port) kimlik ayni - panel/tablet ayni sunucuyu bulur"
+  }
+  # Sifreli dinleyici OLCULUR (kimlik ucunun tls alani yalniz HTTPS dinlerken dolar); dual'da HTTP acik oldugundan eksik = uyari.
+  if ($E.TlsPort) {
+    $k = KimlikOku "127.0.0.1" $E.Port 5
+    if ($k -and $k.PSObject.Properties["tls"] -and $k.tls -and "$($k.tls.port)" -ceq "$($E.TlsPort)") { Ok "sifreli baglanti: HTTPS $($E.TlsPort) dinliyor (parmak izi panel/tablet sabitlemesi icin durum sayfasinda)" }
+    else { Uyar "sifreli baglanti: HTTPS $($E.TlsPort) olculemedi - HTTP calisiyor; logs\backend-err.log (port mesgul ya da lisans\lan-tls okunamiyor)" }
   }
   return @{}
 }
@@ -1154,6 +1183,7 @@ function BaslangicVerisi($adim, $E) {
     "PM2_DURDUR"     { return @{ ad = [string]$E.Pm2.bizim.ad; port = $E.Port; boot = $(if ($E.Boot) { @{ Ad = $E.Boot.Ad; Klasor = $E.Boot.Klasor } } else { $null }) } }
     "ACILIS_KAPAT"   { return @{ ad = [string]$E.Boot.Ad; klasor = [string]$E.Boot.Klasor; etkinIdi = ([string]$E.Boot.Durum -cne "Disabled") } }
     "DUVAR"          { return @{ port = $E.Port } }
+    "DUVAR_TLS"      { return @{ port = $E.TlsPort } }
     "HIZMET_KAYIT"   { return @{ hizmet = $E.HizmetAdi; surum = $E.Surum } }
     "DOGRULAMA"      { return @{ hizmet = $E.HizmetAdi } }
     "BASLAT"         { return @{ hizmet = $E.HizmetAdi } }
@@ -1163,7 +1193,7 @@ function BaslangicVerisi($adim, $E) {
   }
 }
 # Backend saglikli olana dek kalemler KRITIK: hata = otomatik geri alma. Sonrakiler uyarili devam.
-$script:KRITIK = @("PAKET_AC", "CURRENT", "ISKELET", "YAPILANDIRMA", "PM2_DURDUR", "YEDEK", "ACILIS_KAPAT", "DUVAR", "HIZMET_KAYIT", "DOGRULAMA", "BASLAT")
+$script:KRITIK = @("PAKET_AC", "CURRENT", "ISKELET", "YAPILANDIRMA", "PM2_DURDUR", "YEDEK", "ACILIS_KAPAT", "DUVAR", "DUVAR_TLS", "HIZMET_KAYIT", "DOGRULAMA", "BASLAT")
 
 $script:TELAFI_METNI = @{
   PAKET_AC = "surumler\<surum> karantinaya (gecis\<damga>\geri\)"; CURRENT = "current baglantisini kaldir (hedefe dokunmadan)"
@@ -1171,6 +1201,7 @@ $script:TELAFI_METNI = @{
   YAPILANDIRMA = "yapilandirma\.env (+ veri\rclone.conf) karantinaya; yenilenmis Drive belirteci eski yerine"
   PM2_DURDUR = "pm2 backend'ini yeniden baslat + saglik"; YEDEK = "(gecis yedegi gecis dizininde kalir)"
   ACILIS_KAPAT = "acilis gorevini yeniden ac"; DUVAR = "eklenen guvenlik duvari kuralini kaldir"
+  DUVAR_TLS = "eklenen HTTPS guvenlik duvari kuralini kaldir"
   HIZMET_KAYIT = "backend hizmetini durdur + kaldir (hizmet-kaldir)"; DOGRULAMA = "backend hizmetini durdur"; BASLAT = "backend hizmetini durdur"
   PM2_SOKUM = "pm2 dump.pm2'yi gecis oncesine dondur"; YEDEKLE_BETIGI = "<kok>\yedekle.ps1'i gecis oncesine dondur"
   GUNCELLEYICI = "guncelleyiciyi durdur + kaldir"; PG_KAYDI = "pgsql\ornek.json karantinaya"

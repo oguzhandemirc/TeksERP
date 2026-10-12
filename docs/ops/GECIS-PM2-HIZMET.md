@@ -18,7 +18,7 @@
 | Veritabanı | — | **DOKUNULMAZ** (aynı derleme, göç yok; geçiş yalnız yedek alır) |
 | Lisans · yedek anahtarı · kurulum geçmişi | `lisans\` · `yedek-anahtar\` · `kurulum-gecmisi.jsonl` | **Yerinde**; yalnız hizmet hesabına izin verilir |
 | Makine dışı yedek | rclone `gdrive`, `C:\TeksERP\rclone.conf` | `veri\rclone.conf` (KOPYA; eskisi Tamamla'ya dek yerinde) |
-| Port · güvenlik duvarı · istemciler | 4000 | **Aynı**; kurulum kimliği aynı — panel ve tabletler yeniden yapılandırılmaz |
+| Port · güvenlik duvarı · istemciler | 4000 | **Aynı**; kurulum kimliği aynı — panel ve tabletler yeniden yapılandırılmaz. `LAN_TLS_MODE` satırı yoksa geçiş `LAN_TLS_MODE=dual` yazar: HTTPS 4443 **yan yana** açılır, HTTP 4000 açık kalır (§7 şifreli bağlantı) |
 
 Kesinti: yalnız kalem 5–10 (pm2 durdur → normal başlatma). **Ölçüm 24–29 sn** (thinkpad-1, D8c): üç başarılı geçişte 27–29 sn; 9. kalemde otomatik geri alınan geçişte 24 sn; `-GeriAl` 5 sn. Kesinti kalem 6'daki veritabanı yedeğini de içerir, bu yüzden veri boyuyla uzar.
 
@@ -107,12 +107,13 @@ KURU çıktısı saklanır. ENGEL varsa pencere açılmaz; engel çözülür (ç
 | Görevler | `TeksERP-Backend-Boot` KAPATILACAK · `TeksERP-DB-Backup-Yeni` KORUNUR | TeksERP adlı olmayan bir görev pm2/app\ çağırıyorsa ENGEL (elle kapatılır) |
 | `C:\TeksERP\pm2-boot.cmd` | **setlocal YOK** (elle düzenlenmiş; yönetici salt okuma ölçümü 2026-10-01) → etkilenmez | Ölçüm: `Select-String C:\TeksERP\pm2-boot.cmd -Pattern 'setlocal','pm2.cmd'`. `setlocal` VAR ve `pm2.cmd` `call`sız çağrılıyorsa pencereden ÖNCE paketteki `pm2-boot.cmd` (`call`lı) kök dosyanın üstüne konur. `kur.ps1` kök dosyayı EZMEZ. Neden: `-GeriAl` (pm2 daemon'u yokken) ve §5 elle adım 2 açılış görevine dayanır. Bozuk dosyada pm2 SYSTEM profilinde (`systemprofile\.pm2`) boş doğar, backend kalkmaz; thinkpad-1'de telafi `PM2_DURDUR` çıkış 4 verdi. |
 | Güvenlik duvarı | port 4000'e PORT kuralı | yoksa plan "TeksERP API 4000" kuralı ekler (Domain+Private, LocalSubnet) — program kuralı node'un eski yolunu tutar |
+| Güvenlik duvarı (HTTPS) | port 4443'e PORT kuralı (kip `off` değilse) | yoksa plan "TeksERP HTTPS 4443" kuralı ekler (kurulumla aynı ad; Domain+Private, LocalSubnet); başlatmada HTTPS dinleyicisi ölçülür, yoksa UYARI (HTTP çalışır) |
 | rclone.conf | `C:\TeksERP\rclone.conf` → `veri\rclone.conf` | kopya |
 | Yedek şifreleme | `yedek-anahtar\*.tkpub` varsa geçiş yedeği şifreli | yoksa düz, korumalı geçiş dizininde |
 | Kira | kanal `adnansahin`, politika ONAYLI/DONDUR | OTOMATİK ise önce portaldan değiştir |
 | Dokunulmayanlar | `D:\tekserp-build\tekserp`, `C:\Etkili-Yazilim.SILINECEK-*`, Tailscale | geçiş yalnız ölçer |
 
-Beklenen plan **13 kalem** (güvenlik duvarı kuralı gerekiyorsa 14, `-PgKaydiYaz` ile +1):
+Beklenen plan **13 kalem** (API ve HTTPS güvenlik duvarı kuralı gerekiyorsa her biri +1, `-PgKaydiYaz` ile +1):
 
 | # | Kalem | Kesinti | Hata olursa |
 |---|---|---|---|
@@ -193,6 +194,8 @@ gecis.ps1 -Kok C:\TeksERP -Tamamla -Uygula -Onay <N> -PlanOzeti <özet>
 Açılış görevi silinir (XML geçiş dizininde); `app\` · `app.eski-*` · `pm2\` · `pm2-home\` · `pm2-boot.cmd` · kökteki `kur.ps1` · eski `rclone.conf` → `gecis\<damga>\pm2-duzeni\` (**silinmez**); düz (şifresiz) geçiş yedeği silinir (`-DokumuKoru` ile kalır). Önkoşul: backend hizmeti çalışıyor ve sağlıklı. Arşiv haftalar sonra elle silinebilir. Sonra `docs/ops/SUNUCU-ENVANTERI.md` fabrika satırları güncellenir.
 
 ## 7. Geçişten sonra — hizmet düzeninde elle yapılmayanlar ve yapılanlar
+
+- **Şifreli bağlantı iki adımda kapanır (denetim G5-B1, 1e kararı 2026-10-12).** ① Geçiş: `LAN_TLS_MODE` satırı olmayan kurulumda `yapilandirma\.env`e `LAN_TLS_MODE=dual` yazılır — HTTPS 4443 açılır, HTTP 4000 açık kalır; sahadaki sabitsiz tablet/panel kopmaz. Açık satır (`off` dahil) korunur. ② Ayrı pencere: her tablet ve panel durum sayfasındaki parmak iziyle HTTPS'e sabitlendikten SONRA `LAN_TLS_MODE=required` yazılır ve backend hizmeti yeniden başlatılır (API portu yalnız 127.0.0.1'i dinler; "TeksERP API 4000" kuralı artık gereksizdir). ② sabitlenmemiş tek istemci varken yapılmaz: o istemci bağlantıyı kaybeder.
 
 - **Onarım setup.exe ile YAPILMAZ.** Geçişle kurulmuş düzende `kurulum.json` yoktur; setup bu kurulumu tanır ve durur. Geçişli kurulum iki yoldan onarılır: güncelleyici (yeni sürüm) ya da `gecis.ps1 -GeriAl`. Yönetici kararı F4-B, 2026-10-02.
   İleride: geçişin setup-uyumlu kurulum kaydı yazması (F4-A) açık borçtur.

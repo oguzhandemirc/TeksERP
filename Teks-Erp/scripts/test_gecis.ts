@@ -68,6 +68,7 @@ interface OrtamSonuc {
   yazildi: boolean;
   port: number | null;
   rclone: { eskiYol: string; yeniYol: string } | null;
+  lanTls?: { kip: string; port: number; yazilacak: boolean };
 }
 /** Yardımcıyı METİNDEN yükler: sondalar bozulmuş kopyayı aynı yolla ölçer. */
 function yukle(kaynak: string): Yardimci {
@@ -227,9 +228,26 @@ function ortamIhlalleri(y: Yardimci): string[] {
       if (karar(g.sonuc, "BACKUP_RCLONE_CONFIG") !== "VARSAYILAN_VERI" || !g.sonuc.rclone || !/\/rclone\.conf$/.test(g.sonuc.rclone.eskiYol) || !/\/veri\/rclone\.conf$/.test(g.sonuc.rclone.yeniYol)) ih.push("gerçekçi: rclone.conf veri\\'ye taşınmıyor");
       if (!/\r\n/.test(g.cikti) || /[^\r]\n/.test(g.cikti)) ih.push("gerçekçi: CRLF korunmadı");
       if (g.sonuc.port !== 4000) ih.push("gerçekçi: port");
+      // G5-B1: satırı olmayan (şifresiz) kurulum YAN YANA geçer — required değil (sabitsiz istemci kopardı).
+      if (d.LAN_TLS_MODE !== "dual" || karar(g.sonuc, "LAN_TLS_MODE") !== "LAN_TLS_YAN_YANA" || !g.sonuc.lanTls?.yazilacak || g.sonuc.lanTls?.port !== 4443) ih.push(`gerçekçi: LAN_TLS_MODE=dual yazılmadı (${d.LAN_TLS_MODE})`);
+      if (!g.sonuc.uyarilar.some((u) => /LAN_TLS_MODE: .*dual/.test(u))) ih.push("gerçekçi: dual geçiş uyarısı yok");
     }
     const json = JSON.stringify(g.sonuc);
     for (const s of SIRLAR) if (json.includes(s)) ih.push(`gerçekçi: çıktı sır taşıyor (${s})`);
+    // G5-B1: açık LAN_TLS_MODE satırı (off dahil) KORUNUR, eklenmez; HTTPS portu = API portu ENGEL.
+    for (const kip of ["required", "off"]) {
+      const t = ortamKos(y, GERCEKCI + `LAN_TLS_MODE=${kip}\r\n`);
+      temizle.push(t.dizin);
+      const td = t.cikti ? y.dotenvCozumle(t.cikti) : {};
+      if (td.LAN_TLS_MODE !== kip || t.sonuc.lanTls?.yazilacak || (t.cikti ?? "").split("LAN_TLS_MODE=").length !== 2) ih.push(`açık LAN_TLS_MODE=${kip} korunmadı`);
+    }
+    const pY = /const LAN_TLS_VARSAYILAN_PORT = (\d+);/.exec(readFileSync(YARDIMCI, "utf8"))?.[1];
+    const pB = /export const LAN_TLS_DEFAULT_PORT = (\d+);/.exec(readFileSync(join(TEKS, "src/lib/lan-tls/config.ts"), "utf8"))?.[1];
+    const pK = /\$script:LAN_TLS_VARSAYILAN_PORT = (\d+)/.exec(readFileSync(join(KOK, "deploy/kurulum/kurulum-ortak.ps1"), "utf8"))?.[1];
+    if (!pY || pY !== pB || pY !== pK) ih.push(`HTTPS varsayılan portu üç yerde aynı değil (yardımcı ${pY} · backend ${pB} · kurulum ${pK})`);
+    const ap = ortamKos(y, GERCEKCI.replace("PORT=4000", "PORT=4443"), {}, null);
+    temizle.push(ap.dizin);
+    if (ap.sonuc.karar !== "ENGEL" || !ap.sonuc.engeller.some((x) => /HTTPS 4443/.test(x))) ih.push("API portu = HTTPS portu engellenmedi");
     // (2) ecosystem .env'i EZER (pm2 env'i dotenv'den önce) → yeni dosyada ecosystem'in değeri
     const e = ortamKos(y, 'PG_BIN_DIR="C:\\TeksERP\\pgsql\\bin"\nHOST=127.0.0.1\nBACKUP_KEY_DIR=../yedek-anahtar\n');
     temizle.push(e.dizin);
@@ -241,7 +259,9 @@ function ortamIhlalleri(y: Yardimci): string[] {
     const ham3 = '\uFEFFQ="C:\\x\\y"\nZ=abc#123\nK: iki nokta\nbozuk satir\n1ABC=3\n';
     const b = ortamKos(y, ham3, {}, null);
     temizle.push(b.dizin);
-    if (b.sonuc.karar !== "TAMAM" || b.cikti !== ham3) ih.push(`değişmeyen satırlar bayt bayt korunmadı (${b.sonuc.karar})`);
+    // Tek ek: kanal bloğundaki LAN_TLS_MODE=dual (G5-B1); önceki baytlar aynen.
+    const ek3 = b.cikti?.startsWith(ham3) ? b.cikti.slice(ham3.length) : null;
+    if (b.sonuc.karar !== "TAMAM" || ek3 === null || !/^# --- gecis\.ps1 [^\n]*\nLAN_TLS_MODE=dual\n$/.test(ek3)) ih.push(`değişmeyen satırlar bayt bayt korunmadı (${b.sonuc.karar})`);
     // (6) ecosystem'den YAZILAN değer okuyucuda aynen: ters bölü + `\n` dizisi + '#' + boşluk
     const w = ortamKos(y, "X=1\n", {}, 'module.exports = { apps: [{ name: "x", env: { WIN_YOL: "C:\\\\veri\\\\nobet", KARE: "abc#1", BOSLUK: "a b" } }] };');
     temizle.push(w.dizin);
@@ -341,7 +361,7 @@ function yardimci(): void {
 }
 
 // --- §2 gecis.ps1 statik ----------------------------------------------------------------------------
-const PLAN_SIRASI = ["PAKET_AC", "CURRENT", "ISKELET", "YAPILANDIRMA", "PM2_DURDUR", "YEDEK", "ACILIS_KAPAT", "DUVAR", "HIZMET_KAYIT", "DOGRULAMA", "BASLAT", "PM2_SOKUM", "YEDEKLE_BETIGI", "GUNCELLEYICI", "PG_KAYDI"];
+const PLAN_SIRASI = ["PAKET_AC", "CURRENT", "ISKELET", "YAPILANDIRMA", "PM2_DURDUR", "YEDEK", "ACILIS_KAPAT", "DUVAR", "DUVAR_TLS", "HIZMET_KAYIT", "DOGRULAMA", "BASLAT", "PM2_SOKUM", "YEDEKLE_BETIGI", "GUNCELLEYICI", "PG_KAYDI"];
 const KRITIK_BEKLENEN = PLAN_SIRASI.slice(0, PLAN_SIRASI.indexOf("BASLAT") + 1);
 function gecisIhlalleri(metin: string): string[] {
   const ih: string[] = [];
@@ -721,7 +741,7 @@ function senaryolar(): void {
     const eklendi = sahte(d).duvar;
     const pdg = /GERI ALMA PLANI \((\d+) kalem/.exec(harness(d, "gerial-kuru").cikti);
     harness(d, "gerial", ["-Onay", pdg?.[1] ?? "0"]);
-    check("§3h güvenlik duvarı: port kuralı yoksa plana girer (14 kalem), eklenir, geri almada kalkar", pd?.n === 14 && (kd.kod === 0 || kd.kod === 3) && eklendi && !sahte(d).duvar, `plan ${pd?.n} · kod ${kd.kod}`);
+    check("§3h güvenlik duvarı: API + HTTPS port kuralı yoksa plana girer (15 kalem), eklenir, geri almada kalkar", pd?.n === 15 && (kd.kod === 0 || kd.kod === 3) && eklendi && !sahte(d).duvar, `plan ${pd?.n} · kod ${kd.kod}`);
     // E — tamamla: pm2 kalıntıları arşive, açılış görevi silinir, sonra geri alma reddedilir
     const e = yeni("tamamla");
     const pe = planOku(harness(e, "kuru").cikti);

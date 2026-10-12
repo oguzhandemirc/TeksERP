@@ -59,6 +59,8 @@ function hizmetVarsayilanlari(kok) {
 }
 // Konak (tekserp-hizmet) node'a dotenv'DEN ONCE verir: .env bunlari EZEMEZ (dotenv var olani degistirmez).
 const KONAK_SABIT = Object.freeze({ NODE_ENV: "production", NODE_USE_SYSTEM_CA: "1" });
+// Sifreli dinleyici varsayilan portu: backend src/lib/lan-tls/config.ts ve kurulum-ortak.ps1 LAN_TLS_VARSAYILAN_PORT ile ayni (test_gecis olcer).
+const LAN_TLS_VARSAYILAN_PORT = 4443;
 function konakAnahtariMi(k) {
   return Object.prototype.hasOwnProperty.call(KONAK_SABIT, k) || /^TEKSERP_/.test(k);
 }
@@ -281,6 +283,21 @@ function ortam(g) {
     lisans = { durum, beklenen, bulunan: bulunan || "(bicimsiz - deger basilmaz)", kaynak, yazilacak };
   }
 
+  // LAN TLS: satiri olmayan (sifresiz) kurulum hizmet duzenine YAN YANA (dual) gecer - HTTP portu acik kalir, HTTPS eklenir;
+  // istemciler sabitlenince required AYRI adimdir (required burada yazilsa sabitsiz tablet/panel baglanti kaybeder). Acik satir korunur.
+  const tlsHam = Object.prototype.hasOwnProperty.call(eskiEtkin, "LAN_TLS_MODE") ? String(eskiEtkin.LAN_TLS_MODE).trim() : "";
+  const tlsPortHam = String(eskiEtkin.LAN_TLS_PORT || "").trim();
+  const tlsPort = /^\d{1,5}$/.test(tlsPortHam) ? Number(tlsPortHam) : LAN_TLS_VARSAYILAN_PORT;
+  let lanTls = { kip: tlsHam, port: tlsPort, yazilacak: false };
+  if (tlsHam === "") {
+    kanalEkler.push("LAN_TLS_MODE=dual");
+    istenen.LAN_TLS_MODE = "dual";
+    izinliFark.add("LAN_TLS_MODE");
+    not("LAN_TLS_MODE", "LAN_TLS_YAN_YANA", "sifreli baglanti yan yana");
+    uyarilar.push("LAN_TLS_MODE: satir yoktu (sifresiz) - dual yazilir: HTTPS " + tlsPort + " acilir, HTTP portu acik kalir; tablet/paneller sabitlenince required AYRI adim (docs/ops)");
+    lanTls = { kip: "dual", port: tlsPort, yazilacak: true };
+  }
+
   // Uygulama dizinini (app\) gosteren yollar: app\ gecisten sonra emekli.
   const appOnek = eskiApp.toLowerCase() + "/";
   for (const [k, v] of Object.entries(istenen)) {
@@ -341,6 +358,7 @@ function ortam(g) {
   const portHam = (yeniEtkin.PORT || "").trim();
   const port = /^\d{1,5}$/.test(portHam) ? Number(portHam) : (portHam === "" ? 4000 : null);
   if (port === null) engeller.push("PORT sayi degil");
+  if (port !== null && port === lanTls.port && lanTls.kip.toLowerCase() !== "off") engeller.push("PORT " + port + " sifreli baglanti portuyla (HTTPS " + lanTls.port + ") ayni - LAN_TLS_PORT ile baska port verin");
 
   // pm2 baslatma ortamindan gelen (dosyada olmayan) uygulama ayarlari: hizmette OLMAYACAK.
   const pm2OrtamFarki = [];
@@ -364,7 +382,7 @@ function ortam(g) {
   }
   return {
     karar: engeller.length ? "ENGEL" : "TAMAM",
-    anahtarlar, engeller, uyarilar, yazildi, rclone, port, lisans,
+    anahtarlar, engeller, uyarilar, yazildi, rclone, port, lisans, lanTls,
     ecoAd: eco.ad, ecoAnahtarSayisi: Object.keys(eco.env).length, envAnahtarSayisi: Object.keys(dot).length,
     ozet: anahtarlar.reduce((o, a) => { o[a.islem] = (o[a.islem] || 0) + 1; return o; }, {}),
   };
