@@ -33,7 +33,6 @@ import { closeManualStop, openManualStop } from "../src/services/machine-stop.se
 import { closeBulkStops, openBulkStops, previewBulkStops, revokeBulkStops } from "../src/services/machine-stop-bulk.service";
 import { factoryDayKeyUtcMidnight } from "../src/constants/time";
 import { AppError } from "../src/utils/app-error";
-import router from "../src/routes/machine-stop.routes";
 
 let pass = 0;
 let fail = 0;
@@ -229,9 +228,9 @@ async function main(): Promise<void> {
   check("§11a toplu servis duruş tablosuna KENDİ yazmaz — openManualStop/closeManualStop/revokeStop çağırır",
     !/machineStopEvent\.(create|update|updateMany|upsert|delete)/.test(kod) && /openManualStop\(/.test(kod) && /closeManualStop\(/.test(kod) && /revokeStop\(/.test(kod));
   check("§11b satırlar sırayla (Promise.all yok)", !/Promise\.all/.test(kod));
-  const yollar = (router as unknown as { stack: Array<{ route?: { path: string; methods: Record<string, boolean> } }> }).stack
-    .filter((l) => l.route?.methods.post)
-    .map((l) => l.route!.path);
+  // Bağlanma sırası kaynak metinden: Express rotaları tanım sırasıyla eşler.
+  const rota = yorumlariSok(fs.readFileSync(path.join(__dirname, "../src/routes/machine-stop.routes.ts"), "utf8"));
+  const yollar = [...rota.matchAll(/router\.post\("([^"]+)"/g)].map((m) => m[1]!);
   const sira = (p: string) => yollar.indexOf(p);
   check("§11c bulk rotaları `/:id/close` · `/:id/revoke`tan ÖNCE bağlı (yoksa \"bulk\" duruş id'si sanılır)",
     sira("/bulk/close") >= 0 && sira("/bulk/revoke") >= 0 && sira("/bulk/close") < sira("/:id/close") && sira("/bulk/revoke") < sira("/:id/revoke"), yollar.join(" "));
