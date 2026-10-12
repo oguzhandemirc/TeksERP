@@ -80,6 +80,7 @@
 
 ## Bildirimler (B5)
 
+- **[ÇEKİRDEK]** Patronun güvenlik olayları (fabrika kanalı 401 · hak reddi 403 · giriş kilidi · hız sınırı · sır izni reddi) `securityEvent` ile sayılır ve satıcıyla bayt-eşit alarm çekirdeğinden (eşik · 5 dk birleştirme · günlük özet) geçip YALNIZ ayrı güvenlik Telegram grubuna (`GUVENLIK_TELEGRAM_BOT_TOKEN` + `GUVENLIK_TELEGRAM_CHAT_ID`, dağıtımda dosyadan) gider; ikisinden biri yoksa kanal KAPALI, olay yalnız sayılır, açılış günlüğü "güvenlik bildirimi: KAPALI" der; genel `/saglik` bunu taşımaz. · bekçi: `patron/sunucu/scripts/test_guvenlik_bildirimi.ts` <sub>(arşiv:2026-10-12 güvenlik bildirimi)</sub>
 - **[ÇEKİRDEK]** Bildirim türünün kuralı tek kaynaktır (`patron/sunucu/src/catalog/notifications.ts`): tür, kaynak projeksiyonun okuma iznini KAPSAR ve finans içerikli tür finans izni ister — okunamayan veri bildirimle sızmaz (açılışta ölçülür).
 - **[ÇEKİRDEK]** Eşik bulutta HESAPLANMAZ, yalnız fabrikanın özet sayısıyla karşılaştırılır; karşılaştırmanın ihtiyaç duyduğu toplam (bugün tamamlanan, gece yedeği hükmü) fabrikanın anlık projeksiyonuna girer.
 - **[ÇEKİRDEK]** Aynı olay aynı hesaba ikinci kez doğmaz: bildirim kimliği (`dedup_key`, gün ya da olay kimliği) `UNIQUE(tesis, hesap, dedup_key)` ile seddedilir; kural düşüren olay da ATLANDI olarak doğar.

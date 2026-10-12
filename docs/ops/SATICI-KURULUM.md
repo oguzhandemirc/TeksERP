@@ -269,6 +269,19 @@ VDS YAZIMIDIR (kullanıcının "uygula" cümlesiyle); `lisans/bildirim` dilimi y
 
 9. **Geri alma:** `sudo docker compose rm -sf satici-bildirim` · `.env`den örtü eki çıkar · `sudo systemctl disable --now tekserp-satici-bildirim-cikis@hazirlik` (kuralları kaldırır) · girişi kapat: `sudo docker compose exec satici-db psql -U satici -d satici -c 'ALTER ROLE satici_bildirim NOLOGIN'`. Satıcı giden kutusuna yazmayı SÜRDÜRÜR (satırlar bekler; portal kanal kartı "Gönderici yanıt vermiyor"); göç geri alınmaz.
 
+## 5d. Güvenlik bildirimi (B3) — AYRI Telegram grubu, e-posta ikincil
+
+Güvenlik olayları (Access reddi seli · iç API 401 · portal/imza kilidi · kimliksiz taşıma seli · sır dosyası izni reddi · hız sınırı) işletme bildirimlerinden AYRI sınıftır: gönderici bunları YALNIZ güvenlik grubuna yollar, grup tanımlı değilse satır `KAPALI` olur (işletme grubuna DÜŞMEZ). Gürültü: sınıf başına dakikalık eşik, ilk ileti hemen, sonraki 5 dk tek iletide sayaçla; günde bir özet (olay yoksa da gelir — kanalın canlılık sinyali). Portal "Sistem sağlığı" kartı `guvenlik.uyari`da "güvenlik bildirimi: KAPALI" der; göndericinin nabzı `guvenlik` alanında aynısını.
+
+Kullanıcının adımları (değerleri Claude'a VERMEYİN; dosyaya siz yazın):
+
+1. **Bot oluştur (bir kez; satıcı bildirimleri için bot zaten varsa onu kullanın):** Telegram'da `@BotFather` → `/newbot` → ad ve `..._bot` ile biten kullanıcı adı → verilen **bot belirtecini** (biçim `123456789:AA…`) kopyalayın. Belirteç SIRDIR: sohbete, e-postaya, repoya yazmayın.
+2. **Güvenlik grubunu aç:** Telegram'da YENİ bir grup (ör. "TeksERP Güvenlik") — işletme bildirim grubundan AYRI; yalnız güvenlikten sorumlu kişileri ekleyin; botu gruba üye olarak ekleyin.
+3. **Sohbet kimliğini al:** gruba herhangi bir ileti yazın (ör. `/start`), sonra tarayıcıda `https://api.telegram.org/bot<BELİRTEÇ>/getUpdates` açın → `"chat":{"id":-100…}` değerini alın (eksi işaretiyle, yalnız sayı). Grup sonradan süper gruba yükselirse kimlik değişir — gönderici günlüğü yeni kimliği söyler, dosyayı güncelleyin.
+4. **Değişkeni yaz (VDS, `sirlar/` dizini, root:SIR_GID 0440):** `printf '%s' '-100…' > sirlar/guvenlik-telegram-grup-kimligi` → `chmod 0440` · `.env`e `GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST=<o dosyanın yolu>` (dosya YOKSA bildirim compose'u açılmaz; boş dosya = güvenlik bildirimi KAPALI). Bot belirteci §5c'deki `telegram_bot_token` dosyasıyla AYNI (aynı bot).
+5. **E-posta (ikincil, isteğe bağlı):** `.env`e `GUVENLIK_EPOSTA_ALICI=adres1,adres2` (Resend anahtarı ve gönderen §5c'dekiyle aynı); verilmezse güvenlik e-postası KAPALI.
+6. **Yeniden başlat ve sına:** `docker compose -f docker-compose.bildirim.yml up -d satici-bildirim` → günlükte `BILDIRIM_GONDERICI_HAZIR … guvenlik_telegram=acik` · ilk turda günlük özet gruba düşer · portal sağlık kartında uyarı kalkar.
+
 ## 6. DNS (kullanıcı — Cloudflare)
 
 

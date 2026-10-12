@@ -161,6 +161,18 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
 9. **İlk yedek:** `sudo docker compose exec patron-yedek /arac/yedek-dongusu.sh tek` → `patron_<damga>.dump.tkenc` + `anahtarlar_<damga>.tar.tkenc` ("Yerel anahtar (yerel.tkkey) yok" uyarısı BEKLENİR — VDS kendi yedeğini açamaz).
 10. **Sonra:** `deploy/vds-dogrula.sh` → ✅ adnansahin AYNI.
 
+### 4b. Güvenlik bildirimi (B3) — AYRI Telegram grubu
+
+Patron sunucusu güvenlik olaylarını (fabrika kanalı imza/kurulum reddi 401 · hak reddi 403 · hesap girişi kilidi · hız sınırı · sır dosyası izni reddi) kendisi, doğrudan güvenlik grubuna yollar (giden kutusu yok; e-posta yok). Gürültü: sınıf başına dakikalık eşik, ilk ileti hemen, sonraki 5 dk tek iletide sayaçla, günde bir özet. Belirteç ya da grup kimliği boşsa kanal KAPALI: olaylar yalnız sayılır, açılış günlüğü `[patron] güvenlik bildirimi: KAPALI (…)` der (genel `/saglik` bunu BİLEREK taşımaz — internete açıktır).
+
+Kullanıcının adımları (değerleri Claude'a VERMEYİN):
+
+1. **Bot oluştur (bir kez; satıcı bildirimleri için bot zaten varsa onu kullanın):** Telegram'da `@BotFather` → `/newbot` → ad ve `..._bot` ile biten kullanıcı adı → verilen **bot belirtecini** (biçim `123456789:AA…`) kopyalayın. Belirteç SIRDIR: sohbete, e-postaya, repoya yazmayın.
+2. **Güvenlik grubunu aç:** Telegram'da YENİ bir grup (ör. "TeksERP Güvenlik") — işletme bildirim grubundan AYRI; yalnız güvenlikten sorumlu kişileri ekleyin; botu gruba üye olarak ekleyin.
+3. **Sohbet kimliğini al:** gruba herhangi bir ileti yazın (ör. `/start`), sonra tarayıcıda `https://api.telegram.org/bot<BELİRTEÇ>/getUpdates` açın → `"chat":{"id":-100…}` değerini alın (eksi işaretiyle, yalnız sayı). Grup sonradan süper gruba yükselirse kimlik değişir — gönderici günlüğü yeni kimliği söyler, dosyayı güncelleyin.
+4. **Dosyaları yaz (VDS, `sirlar/`, root:SIR_GID 0440):** `sirlar/guvenlik-telegram-belirteci` (bot belirteci) ve `sirlar/guvenlik-telegram-grup` (sohbet kimliği); `.env`e `GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI_HOST` · `GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST`. ⚠️ Bu sürümle iki dosya ZORUNLU: yoksa compose açılmaz — kanalı kapalı tutmak için BOŞ dosya oluşturun (`: > dosya`).
+5. **Yeniden başlat ve sına:** `docker compose up -d patron` → günlükte `[patron] güvenlik bildirimi: AÇIK` · ilk turda günlük özet gruba düşer.
+
 ## 5. DNS (kullanıcı — Cloudflare)
 
 `patron` A → `80.253.255.188`, **proxy AÇIK (turuncu bulut)** — sertifika Origin CA `*.etkiliyazilim.com`, ona yalnız CF Edge güvenir. Kayıt kurulumdan ÖNCE açılırsa `/saglik` 404 döner (Traefik'te yönlendirici yok, zararsız); sonra 200. Önbellek kuralı gerekmez: giriş HTML'i `no-store`, özetli varlıklar `immutable` (CF köken başlığına uyar), API `no-store`. Fabrikanın varsayılan bulut adresi zaten `https://patron.etkiliyazilim.com`'dur (`Teks-Erp/src/cloud-sync/cloud-url.ts`, `PATRON_CLOUD_URL`).
