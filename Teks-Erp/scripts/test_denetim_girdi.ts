@@ -4,7 +4,7 @@
 // Kaynak: Teks-Erp-wt/denetim/guvenlik-4-girdi.md (B1–B11 + §3 + doğrulama). Her `check` GÜVENLİ
 // davranışı ister; "KARSI-KANIT" kontrolleri tasarımı korur; `OLCU` yalnız sayı basar.
 //   §1 (DB'siz) CSV formül öneki (Electron csvCell + backend toCsv; negatif sayı bozulmaz) · ReDoS
-//               ölçüsü (G4-B2 kalan, OLCU) · belge ayarı kırpma · CHECK adı 409 gövdesinde YOK ·
+//               kayıt kapısı (G4-B2) · belge ayarı kırpma · CHECK adı 409 gövdesinde YOK ·
 //               renderer XSS probu · statik karşı-kanıtlar
 //   §2 (DB)     LIKE joker kaçışı (`escapeLikeTerm`) Prisma `contains` üstünde
 //   §3 (HTTP)   mükerrer CSV ucu · batch-search q=% / '_' · fieldPicks · önizleme başlık tavanı ·
@@ -24,6 +24,7 @@ import { atlamaDefteri } from "./lib/atlama";
 import { DuplicateDetectionService, type DuplicateScanResult } from "../src/services/duplicate-detection.service";
 import { checkViolationResponse, errorHandler } from "../src/middlewares/error.middleware";
 import { escapeLikeTerm } from "../src/utils/like-escape";
+import { unsafePatternReason } from "../src/utils/regex-safety";
 import { sanitizeDocumentsConfig } from "../src/services/system-setting.service";
 import { SAMPLE_PRINTED_DOCS } from "../src/services/document-render/sample-data";
 import { printedDocumentService } from "../src/services/printed-document.service";
@@ -140,7 +141,10 @@ function s1Redos(): void {
   const olc: string[] = [];
   for (const n of [20, 22, 24, 26]) olc.push(`n=${n}:${Math.round(sure(() => re.test("a".repeat(n) + "!")))}ms`);
   olcum("§1c `(a+)+$` 'a'*n+'!'", `${olc.join(" ")} (her +2 karakter ~x4; n=30 kestirimi ${olc.length ? "dakikalar" : "?"})`);
-  // Mobil codec ölçümü G4-B2 dilimine kalır (scripts tsconfig rootDir mobil/ dosyasını almaz).
+  for (const pat of ["(a+)+$", "^(.|.|.)*X$", "(a)\\1"]) {
+    check(`§1c kayit kapisi \`${pat}\` desenini REDDETMELI`, unsafePatternReason(pat) !== null, unsafePatternReason(pat) ?? "kabul edildi");
+  }
+  check("§1c KARSI-KANIT sahadaki tartı deseni kabul", unsafePatternReason("ST,GS,([+-]?\\d+\\.\\d+)") === null);
 }
 
 // ── §1d belge ayari kirpma (§3-9 kayit yolu) ───────────────────────────────────
@@ -338,7 +342,7 @@ async function h2Peripheral(admin: string): Promise<void> {
   const govde = (pat: string, n: number) => ({ code: `TSTGRD${ek}${n}`, name: `TSTGRD cihaz ${ek} ${n}`, kind: "SCALE", connectionType: "BLUETOOTH_SPP", identifyPattern: pat });
   const a = await call(admin, "POST", "/api/peripherals", govde("(a+)+$", 1));
   const aid = dataOf<{ id?: string }>(a.json).id; if (aid) ids.peripherals.push(aid);
-  olcum("§3b (G4-B2 KALAN) `(a+)+$` deseni", ozet(a));
+  check("§3b `(a+)+$` deseni 400 (ReDoS kapisi)", a.status === 400, ozet(a));
   const uzun = "(?:\\d)".repeat(800).slice(0, 5000);
   const b = await call(admin, "POST", "/api/peripherals", govde(uzun, 2));
   const bid = dataOf<{ id?: string }>(b.json).id; if (bid) ids.peripherals.push(bid);

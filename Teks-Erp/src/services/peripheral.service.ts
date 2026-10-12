@@ -10,6 +10,7 @@
 import prisma from "../lib/prisma";
 import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
+import { unsafePatternReason } from "../utils/regex-safety";
 import { AuditService } from "./audit.service";
 import { dispatchNativeSend } from "./helpers/printer-transport";
 import { readLabelNativeSendEnabled } from "./system-setting.service";
@@ -100,14 +101,11 @@ export class PeripheralDeviceService extends BaseService {
         throw AppError.badRequest("Okuma modu POLL (sor-cevap) veya STREAM (yayın) olmalı");
       }
     }
-    // Veri deseni mobilde regex olarak derlenir — geçersiz regex sessizce okuma
-    // bozar; kayıtta erken reddet.
+    // Veri deseni tablette her çerçevede regex olarak koşar — geçersiz ya da üstel
+    // geri izlemeli desen okuma ekranını kilitler; kayıtta erken reddet.
     if (typeof data.identifyPattern === "string" && data.identifyPattern.trim()) {
-      try {
-        new RegExp(data.identifyPattern);
-      } catch {
-        throw AppError.badRequest("Veri deseni (regex) geçersiz");
-      }
+      const reason = unsafePatternReason(data.identifyPattern);
+      if (reason) throw AppError.badRequest(reason);
     }
     // Yazıcı MEDYASI (Etiket Stüdyosu v2 — cihazda) — additive, opsiyonel.
     for (const dim of ["labelWidthMm", "labelHeightMm"] as const) {

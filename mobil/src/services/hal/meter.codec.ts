@@ -1,4 +1,5 @@
 import type { DeviceCodec } from './transport.types';
+import { compileDevicePattern, matchDevicePattern } from './devicePattern';
 
 // =============================================================================
 // Metre/kantar codec — cihazın ASCII yanıtından sayısal değeri ayıklar.
@@ -36,16 +37,14 @@ export function parseMeterReading(raw: string, opts: MeterCodecOptions = {}): nu
   const text = raw.replace(/,/g, '.');
 
   // 1) Cihaza özel regex — varsa önce onu dene (kesin ayıklama).
-  if (opts.pattern && opts.pattern.trim()) {
-    try {
-      const m = text.match(new RegExp(opts.pattern));
-      if (m) {
-        const token = m[1] ?? m[0];
-        const v = parseFloat(token) * scale;
-        if (Number.isFinite(v) && v > 0) return round(v, decimals);
-      }
-    } catch {
-      // Geçersiz regex → sezgisele düş (backend kayıtta doğruluyor ama savunma).
+  //    Derlenemeyen/çok uzun desen ya da tavanı aşan girdi → sezgisele düş.
+  const re = compileDevicePattern(opts.pattern);
+  if (re) {
+    const m = matchDevicePattern(re, text);
+    if (m) {
+      const token = m[1] ?? m[0];
+      const v = parseFloat(token) * scale;
+      if (Number.isFinite(v) && v > 0) return round(v, decimals);
     }
   }
 

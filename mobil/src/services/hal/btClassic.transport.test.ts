@@ -210,6 +210,22 @@ describe('btClassic.transport', () => {
     expect(raw).toBe('25.85B0');
   });
 
+  it('readResponse: girdi tavanını (256) aşan çerçeve desene sokulmaz', async () => {
+    mod.isDeviceConnected.mockResolvedValue(true);
+    mod.availableFromDevice.mockResolvedValueOnce(400);
+    mod.readFromDevice.mockResolvedValueOnce('7.0B\r\n' + 'a'.repeat(300) + 'B\r\n');
+    const raw = await readResponse('AA:11', { readMode: 'POLL', framePattern: 'B', timeoutMs: 400 });
+    expect(raw).toBe('7.0B');
+  });
+
+  it('readResponse: derlenemeyen framePattern → desensiz (son tam çerçeve)', async () => {
+    mod.isDeviceConnected.mockResolvedValue(true);
+    mod.availableFromDevice.mockResolvedValueOnce(20);
+    mod.readFromDevice.mockResolvedValueOnce('1.0\r\n2.0\r\n');
+    const raw = await readResponse('AA:11', { readMode: 'POLL', framePattern: '([0-9]', timeoutMs: 400 });
+    expect(raw).toBe('2.0');
+  });
+
   it('decodeCommand: düz metin aynen, escape çözülür', () => {
     expect(decodeCommand('TTTTTT')).toBe('TTTTTT');
     expect(decodeCommand('R\\r\\n')).toBe('R\r\n');

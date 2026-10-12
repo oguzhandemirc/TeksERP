@@ -1,6 +1,7 @@
 import { PermissionsAndroid, Platform } from 'react-native';
 import { withSystemDialog } from '../../store/lockStore';
 import type { DeviceTransport, ReadOptions } from './transport.types';
+import { compileDevicePattern, matchDevicePattern } from './devicePattern';
 
 // =============================================================================
 // Bluetooth Classic / SPP (RFCOMM) transport — HC-05/06 köprülü cihazlar:
@@ -542,14 +543,8 @@ async function readResponseUnlocked(address: string, opts: ReadResponseOptions =
     await mod.writeToDevice(address, decodeCommand(opts.pollCommand), 'ascii');
   }
 
-  let pattern: RegExp | null = null;
-  if (opts.framePattern && opts.framePattern.trim()) {
-    try {
-      pattern = new RegExp(opts.framePattern);
-    } catch {
-      pattern = null; // geçersiz regex → desensiz davran (backend zaten reddeder)
-    }
-  }
+  // Geçersiz/çok uzun desen → desensiz davran (backend kayıtta reddeder).
+  const pattern = compileDevicePattern(opts.framePattern);
 
   const timeoutMs = opts.timeoutMs ?? 2500;
   const QUIET_MS = 250; // elde geçerli değer varken akış durursa dönme süresi (POLL tek satır)
@@ -578,7 +573,7 @@ async function readResponseUnlocked(address: string, opts: ReadResponseOptions =
         if (!isCandidate) continue;
         const frame = f.trim();
         if (!frame) continue;
-        if (!pattern || pattern.test(frame)) {
+        if (!pattern || matchDevicePattern(pattern, frame)) {
           best = frame;
           matchCount++;
         }
