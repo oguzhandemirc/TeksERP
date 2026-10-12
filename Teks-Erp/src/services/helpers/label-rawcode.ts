@@ -6,7 +6,7 @@
 // değeriyle doldurulur (anahtarlar label-fields kataloğu: barcode/itemName/customerName…).
 // Ek: {{barcodeSvg}}/{{qrSvg}} (HTML için ham SVG). Bilinmeyen anahtar → boş string.
 // =============================================================================
-import bwipjs from "bwip-js";
+import { renderCode128Svg, renderQrSvg } from "./barcode-svg.helper";
 import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
 import { PrinterLanguage, type LabelKind } from "@prisma/client";
 import type { LabelPayload } from "../../types/label.types";
@@ -95,8 +95,8 @@ export function buildRawCodePreview(
   const opts =
     language === PrinterLanguage.RASTER_HTML
       ? {
-          barcodeSvg: bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" }),
-          qrSvg: bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" }),
+          barcodeSvg: renderCode128Svg(payload.barcode),
+          qrSvg: renderQrSvg(payload.barcode),
         }
       : undefined;
   const filled = applyRawCode(code, payload, language, opts);

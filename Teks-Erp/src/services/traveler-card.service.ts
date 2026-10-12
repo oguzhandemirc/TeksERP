@@ -41,7 +41,7 @@ import { matchesSeries, previewSeriesCode, resolveSeriesFormat } from "./number-
 // şablon çözümünden gelir (`travelerTemplateService.resolveForPrint`, şablon
 // yoksa o zaten sistem ayarına düşer). Tip hâlâ gerekli.
 import { type TravelerCardConfig, readCompanyName } from "./system-setting.service";
-import bwipjs from "bwip-js";
+import { renderQrSvg } from "./helpers/barcode-svg.helper";
 import {
   renderTravelerCard,
   type TravelerCardSnapshot,
@@ -1096,7 +1096,7 @@ export class TravelerCardService {
 
     let qrSvg: string | null = null;
     try {
-      qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: card.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+      qrSvg = renderQrSvg(card.barcode);
     } catch {
       qrSvg = null;
     }
@@ -1138,7 +1138,7 @@ export class TravelerCardService {
     const snapshot: TravelerCardSnapshot = { ...SAMPLE_TRAVELER_SNAPSHOT, config, template };
     let qrSvg: string | null = null;
     try {
-      qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: sampleTravelerBarcode(), scale: 3, backgroundcolor: "FFFFFF" });
+      qrSvg = renderQrSvg(sampleTravelerBarcode());
     } catch {
       qrSvg = null;
     }

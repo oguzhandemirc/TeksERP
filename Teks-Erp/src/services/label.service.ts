@@ -17,7 +17,7 @@
 // yazıldığında bu cascade order context'inden beslenecek.
 // =============================================================================
 
-import bwipjs from "bwip-js";
+import { createSliceYielder, renderCode128Svg, renderQrSvg } from "./helpers/barcode-svg.helper";
 import {
   readLabelCopies,
   readLabelNativeSendEnabled,
@@ -661,20 +661,8 @@ export class LabelService {
       updatedAt: new Date(),
     } as unknown as Parameters<typeof buildRollLabelHtml>[0]["template"];
 
-    const barcodeSvg = bwipjs.toSVG({
-      bcid: "code128",
-      text: mockPayload.barcode,
-      scale: 3,
-      height: 10,
-      includetext: false,
-      backgroundcolor: "FFFFFF",
-    });
-    const qrSvg = bwipjs.toSVG({
-      bcid: "qrcode",
-      text: mockPayload.barcode,
-      scale: 3,
-      backgroundcolor: "FFFFFF",
-    });
+    const barcodeSvg = renderCode128Svg(mockPayload.barcode);
+    const qrSvg = renderQrSvg(mockPayload.barcode);
 
     // Önizleme sistem-default formatını (reseed sonrası 100×60 yatay) kullanır —
     // editör yeni boyutu/düzeni canlı göstersin (yoksa kod fallback 100×148 dikey).
@@ -836,10 +824,10 @@ export class LabelService {
       };
     }
     const barcodeSvg = payload.barcode
-      ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
+      ? renderCode128Svg(payload.barcode)
       : "";
     const qrSvg = payload.barcode
-      ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
+      ? renderQrSvg(payload.barcode)
       : "";
     // Saha #6: kopya adedi — istek override > bulk-sabit > ayar (default 2).
     // Akış tavanı 1-5 (clampRollCopies) — emit clampCopies artık 100 (stüdyo).
@@ -1104,8 +1092,8 @@ export class LabelService {
       printedAt: new Date().toISOString(),
     };
     const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);
-    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: sampleBarcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
-    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: sampleBarcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const barcodeSvg = renderCode128Svg(sampleBarcode);
+    const qrSvg = renderQrSvg(sampleBarcode);
     // Örnek baskı: peripheralId verilirse o cihazın medyası, yoksa sistem varsayılan medyası.
     const format = await resolveLabelFormat({ peripheralId });
     // Örnek baskı = gerçek baskı: şablonun medyaya uyan varyantı da seçilir (WYSIWYG).
@@ -1144,10 +1132,9 @@ export class LabelService {
     const bodyRe = /<body[^>]*>([\s\S]*?)<\/body>/i;
     let head = "";
     const bodies: string[] = [];
-    // F178: her top buildRollRenderInput içinde bwipjs.toSVG'yi (Code128+QR) 2 SENKRON
-    // çağırır → çok sayıda topta event-loop starvation (istasyon donması). ~25 topta bir
-    // setImmediate ile check fazına dön → LAN'daki diğer operatörlerin bekleyen soketleri servis edilir.
-    let yielded = 0;
+    // Her top senkron barkod + şablon işi taşır: zaman dilimi dolunca event-loop'a dön ki
+    // LAN'daki diğer istasyonların bekleyen soketleri servis edilsin.
+    const breathe = createSliceYielder();
     for (const id of ids) {
       const res = await this.getRollLabelHtml(id, undefined, { copies, customerId: opts?.customerId ?? undefined }, ctx);
       const full = res.data.html;
@@ -1158,7 +1145,7 @@ export class LabelService {
       }
       const m = full.match(bodyRe);
       if (m) bodies.push(m[1]);
-      if (++yielded % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
+      await breathe();
     }
     // Her topu kendi sayfasında tut (etiket .label zaten A6; topu ayır).
     const combinedBody = bodies
@@ -1196,8 +1183,8 @@ export class LabelService {
     const textBlocks: string[] = [];
     const buffers: Buffer[] = [];
     let anyBinary = false;
-    // F178: getBulkRollLabelsHtml ile aynı — ~25 topta bir event-loop'a nefes aldır.
-    let yieldedN = 0;
+    // getBulkRollLabelsHtml ile aynı zaman dilimli nefes.
+    const breathe = createSliceYielder();
     for (const id of ids) {
       const { input } = await this.buildRollRenderInput(
         id,
@@ -1216,7 +1203,7 @@ export class LabelService {
       buffers.push(renderedBytes(r));
       if (r.encoding === "binary") anyBinary = true;
       else if (r.content) textBlocks.push(r.content);
-      if (++yieldedN % 25 === 0) await new Promise<void>((resolve) => setImmediate(resolve));
+      await breathe();
     }
     return {
       success: true,
@@ -1528,10 +1515,10 @@ export class LabelService {
       deviceId: opts?.deviceId,
     });
     const barcodeSvg = payload.barcode
-      ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
+      ? renderCode128Svg(payload.barcode)
       : "";
     const qrSvg = payload.barcode
-      ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
+      ? renderQrSvg(payload.barcode)
       : "";
     const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
     // KARTELA v1 KAPSAM DIŞI (Etiket Stüdyosu): variant BİLEREK geçilmez — kartela
@@ -1700,8 +1687,8 @@ export class LabelService {
     // hiç basılmayan yarı boş etiket çıkıyordu. Sessiz çöp yerine Türkçe 400.
     assertContextRenderable(routing.template, LabelKind.SACK);
 
-    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
-    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const barcodeSvg = renderCode128Svg(payload.barcode);
+    const qrSvg = renderQrSvg(payload.barcode);
     const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
     return {
       // variant GEÇİLİR (swatch aksine) — çuval etiketi kanvas modelinde yaşar.
@@ -1907,10 +1894,10 @@ export class LabelService {
     };
 
     const barcodeSvg = payload.barcode
-      ? bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" })
+      ? renderCode128Svg(payload.barcode)
       : "";
     const qrSvg = payload.barcode
-      ? bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" })
+      ? renderQrSvg(payload.barcode)
       : "";
     // Serbest baskı çok kopya isteyebilir → 1–100 (akış clampRollCopies 1–5 DEĞİL).
     const copies = Math.max(1, Math.min(100, Math.floor(opts.copies ?? 1) || 1));

@@ -21,7 +21,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { sanitizeUserHtml } from "./document-render/template-html.sanitize";
-import bwipjs from "bwip-js";
+import { renderCode128Svg, renderQrSvg } from "./helpers/barcode-svg.helper";
 import {
   LabelTemplate,
   LabelKind,
@@ -1045,8 +1045,8 @@ export class LabelTemplateService {
     // formatında çıkar → aşağıdaki geri-çevirme birebir eşleşir.
     const template = tpl ? ({ ...tpl, rawCode: null } as LabelTemplate) : null;
     const format = await resolveLabelFormat({ kind });
-    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
-    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const barcodeSvg = renderCode128Svg(payload.barcode);
+    const qrSvg = renderQrSvg(payload.barcode);
     let code = (await renderLabel(language, { payload, template, barcodeSvg, qrSvg, copies: 1, format })).content;
     // Görünen değer → {{key}} (uzun değer önce ki alt-dize çakışması olmasın).
     const pairs = [...getAllowedKeys(kind)]
@@ -1109,8 +1109,8 @@ export class LabelTemplateService {
       lengthBanner: layout?.lengthBanner ?? null,
     } as unknown as LabelTemplate;
     const format = await resolveLabelFormat({ kind });
-    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
-    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const barcodeSvg = renderCode128Svg(payload.barcode);
+    const qrSvg = renderQrSvg(payload.barcode);
     const input = { payload, template, barcodeSvg, qrSvg, copies: 1, format };
     const language = format.language;
     if (language === PrinterLanguage.RASTER_HTML) {
@@ -1200,8 +1200,8 @@ export class LabelTemplateService {
       widthMm: opts.widthMm,
       heightMm: opts.heightMm,
     } as unknown as LabelTemplateVariant;
-    const barcodeSvg = bwipjs.toSVG({ bcid: "code128", text: payload.barcode, scale: 3, height: 10, includetext: false, backgroundcolor: "FFFFFF" });
-    const qrSvg = bwipjs.toSVG({ bcid: "qrcode", text: payload.barcode, scale: 3, backgroundcolor: "FFFFFF" });
+    const barcodeSvg = renderCode128Svg(payload.barcode);
+    const qrSvg = renderQrSvg(payload.barcode);
     const copies = Math.max(1, Math.min(100, Math.floor(opts.copies ?? 1)));
     // iconGraphicsOk: editör Test Baskısı ikon içeren kanvası da bassın. `native` latin1
     // olarak dönüp Electron main'de Buffer.from(...,"latin1") ile seri/USB'ye yazılır →
