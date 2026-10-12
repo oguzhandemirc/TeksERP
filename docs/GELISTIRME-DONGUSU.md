@@ -72,6 +72,18 @@ Kök `CLAUDE.md` § Çalışma düzeni yalnız emirleri taşır; durum, sayı ve
 - ⚠️ **Kapı bekçilerin yalnız o hızlı mandallarını koşar** (kök metinde "33", yukarıdaki sayımda 34) ⇒ diğer her dosya yalnız ELLE koşturulduğu kadar ölçülür. İki yönlü zorunluluk (ölçüldü 2026-09-13, iki oturum aynı gün CI'da bedelini ödedi): ① yeni bir **mandal** indirdikten sonra onu KENDİ yeni dosyalarına karşı koştur · ② yeni bir **dosya** yazdıktan sonra onu o dizini tarayan BÜTÜN tarayıcılara koştur — yalnız seni yakalayana değil · ③ bir **sabiti** yeniden adlandıran ya da genişleten commit, o sabiti OKUYAN bütün bekçileri koşturur — tek terimle ölçen bekçi terim gidince kırmızı vermeden kör kalır (ölçüldü 2026-09-15: `MODULE_FLAG_KEYS` yanına ikinci küme gelince iki bekçi sessizce ölçmeyi bıraktı). ⇒ ***Kendine uygulanmayan kural için tek çare kapıdır; "bunu biliyorum" bir kapı değildir.***
 - **Bekçi koşumu:** tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` ([TD-10]); tam paket `npm test` **~6,5 dakika** sürer (455 dosya, sıralı; ölçüldü 2026-09-05 — kadans tablosu `docs/standart/TEST-VE-DERLEME.md` § 1, [TD-02], [TD-08]) ve PR/push öncesi koşulur; alan → bekçi haritası `Teks-Erp/docs/BEKCI-HARITASI.md`; cırcırın iki sondası `docs/RECETELER.md` § Yeni bekçi md. 23.
 
+## Alt ajan istem şablonu (kullanıcı kararları 2026-10-12)
+
+Ajan işi **tek dilim ≤ ~120K tahmini bağlam, tek alan, ≤ 10–15 dosya**; sığmayan dilim rapora "kalan" yazılır, devir zinciri BAŞLATILMAZ (1e sıradaki dilimi yeni ajana rapor + çapa ile verir). Her istem şu alanları taşır:
+
+- **AMAÇ** (1 cümle) · **KAPSAM** (dosya/dizin listesi, "dışına çıkma") · **ALAN** (`docs/kurallar/<alan>.md` yalnız ilgili §).
+- **PLAN**: ≤ 5 dosya ya da tek cümlelik diff → plan yok; aksi hâlde ≤ 40 satır, kabul testi yazılı.
+- **DAL/WT**: `git worktree add Teks-Erp-wt/<ad> -b <dal> origin/main`; ana ağaçta git yasak.
+- **DB**: `Test DB'si: node scripts/test-db.mjs ac tekserp_<kısa-ad>_test ile aç; bitince worktree'yi kaldırmadan önce node scripts/test-db.mjs sil tekserp_<kısa-ad>_test.`
+- **KABUL**: yalnız alanın bekçileri (`/bekci-kos <alan>`, hangi dosyalar) + yeni bekçi için NEGATİF SONDA (kırmızı verdiği gösterilir); kırmızı düzeltilince o dosya + bağımlı bekçi yeniden koşulur. **Tam set ajanda KOŞMAZ**, CI koşar: push → `gh run list` yeşil → iniş.
+- **MODEL**: Opus/Fable; Sonnet yok (mekanik işte de).
+- **ÇIKTI**: ≤ 1.500 token TEK rapor (ne yapıldı · SHA · koşulan test ve sonucu · kalan); ara bildirim yok, bildirim bir kez; rapor/özet `.md` dosyası yazılmaz.
+
 ## ⚠️ Belgesizdi
 
 - Dev DB'nin nasıl ayağa kalktığı hiçbir yerde YAZILI DEĞİL: `tekserp-local-db` konteynerini kuran/başlatan komut yok; ad yalnız bayatlık şerhi içinde geçiyor (Teks-Erp/CLAUDE.md:138). Yeni makinede döngü ilk adımda durur.

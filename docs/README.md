@@ -20,6 +20,17 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 | Güvenlik tehdit modeli (4 kurulum senaryosu × tehdit; engelle / tespit et / pahalılaştır) ve fazlı koruma planı G0–G10 | `docs/design/GUVENLIK-TEHDIT-MODELI.md` |
 | Derin mimari referans | `Teks-Erp/ARCHITECTURE.md` (§7–§10 canlı; envanter sayıları bayat) |
 
+## Üretim akışı — referans profil (adnansahin), sistemin kısıtı DEĞİL
+
+Kök `CLAUDE.md`'den taşındı (2026-10-12 kısaltma turu); kural satırları `kurallar/kalite.md`, `kurallar/tambur.md`, `kurallar/rota-renk.md`, `kurallar/modul-bayrak.md`.
+
+```
+Stok (Roll) → İş Emri → KK1 (RAW_QC) → [opsiyonel Fason] → Kurşun + KK2 (PROCESS_QC) → Tambur →
+  Depo (RollStatus.WAREHOUSE) → Çuval (Sack; müşteri opsiyonel, rezerv YOK) → Sevkiyat (PLANNED → DISPATCHED)
+```
+
+Her adım istasyon kataloğu + rota şablonundan kurulur (devere/çözgü/haşıl = yeni istasyon/adım); her rotanın SON adımı topu finalize eder, depo istasyon değil bekleme statüsüdür, `PRODUCED` limbosu yok. ⚠️ Rota mimarisi TOPA aittir, fabrikanın tamamına değil: ölçüt *nesne topun rotasında bir ADIM mı, yoksa kendi kimliği ve defteri olan ayrı bir VARLIK mı?* — VARLIK (levent, tezgah telemetrisi) kendi tablolarını, tx sınırlarını ve mimarisini taşıyabilir; çekirdek kurallar orada da aynen geçerlidir.
+
 ## Klasörler
 
 | Klasör | İçerik | Güncellik |
