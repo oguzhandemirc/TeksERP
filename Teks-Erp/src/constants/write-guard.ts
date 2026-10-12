@@ -7,6 +7,8 @@
 export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]>> = {
   warehouse: ["isDefault"],
   peripheralDevice: ["lastSeenAt", "deletedAt"],
+  // Künye yalnız oturumdan (`withActor`); gövde ayrıca Zod `.strict()` allowlist'inden geçer.
+  machineStopCodeMap: ["createdById", "updatedById"],
 };
 
 export function baseWriteClosedFields(modelName: string): readonly string[] {

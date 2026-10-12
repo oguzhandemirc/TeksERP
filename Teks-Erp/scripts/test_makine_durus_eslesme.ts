@@ -8,10 +8,13 @@
 //   §2 çözücü (DB): genel · üst-yazım · pasif eşleme · kullanılamaz sebep · eksik anahtar → null
 //   §3 tekillik: canlı satırda anahtar başına tek eşleme (tezgahsız satır dahil, NULLS NOT DISTINCT); pasif yer işgal etmez
 //   §4 makine açılışı: eşleşen kod sebebi MAKİNE kararıyla dondurur (hedef süre dahil); eşleşmeyen sebepsiz
+//   §5 yazma yolu (`MachineStopCodeMapService`): gövde allowlist · anahtar değişmez · sebep türü/pasif · biçim ·
+//      mükerrer 409 · pasife alma · yeniden etkinleştirmede ikiz 409 · künye oturumdan · her yazım audit'te
 //   §6 statik: eşleme tablosunu okuyan tek çözücü; sinyal servisi onu çağırır
 // Negatif sondalar (kırmızı görüldü, geri alındı): `pickStopCodeMapping`te `general ?? own` → §1a+§2b+§4c ·
 // `stopCodeCandidateWhere`ten eşlemenin `isActive: true`su kaldırıldı → §2c+§2d · `openMachineStop`ta
-// eşleme sonucu `openStopCore`a geçirilmedi → §4a+§4b+§4c+§6b.
+// eşleme sonucu `openStopCore`a geçirilmedi → §4a+§4b+§4c+§6b · `createSchema`dan `.strict()` kaldırıldı → §5c.
+// Ön kontrol (`assertNoLiveTwin`) kaldırılınca §5f YEŞİL kalır: mükerreri DB seddi + P2002 eşlemesi de 409'a çevirir.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -20,6 +23,8 @@ import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { pickStopCodeMapping, resolveMachineStopCode } from "../src/services/helpers/machine-stop-code.helper";
 import { closeMachineStop, openMachineStop } from "../src/services/machine-stop-signal.service";
+import { machineStopCodeMapService as svc } from "../src/routes/machine-stop-code-map.routes";
+import { testActorId } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -123,6 +128,48 @@ async function dbBolumu(): Promise<void> {
   check("§4d eşleşmeyen kod sebepsiz açılır (sınıflandırma borcu)", o3.data.reasonCode === null && o3.data.requiresReason === true && o3.data.reasonSource === null);
 }
 
+/** Hata kodu (`details.code`; Zod doğrulaması "ZOD") ve durum; hata yoksa "ok". */
+async function kod(p: Promise<unknown>): Promise<string> {
+  try { await p; return "ok"; } catch (e) {
+    if ((e as Error).constructor?.name === "ZodError") return "400:ZOD";
+    const err = e as { statusCode?: number; details?: { code?: string } };
+    return `${err.statusCode ?? "?"}:${err.details?.code ?? (e as Error).message}`;
+  }
+}
+
+async function auditVar(recordId: string, action: string): Promise<boolean> {
+  return (await prisma.systemLog.count({ where: { tableName: "MACHINE_STOP_CODE_MAP", recordId, action } })) > 0;
+}
+
+async function yazmaBolumu(): Promise<void> {
+  console.log("\n§5 — yazma yolu");
+  const actor = await testActorId();
+  const m = ids.machines[0]!;
+  const pA = await preset("WA", null);
+  const pB = await preset("WB", null);
+  const pRoll = await preset("WR", null, "ROLL_SCRAP");
+  const created = await svc.create({ collectorType: TYPE, rawStopCode: " W-1 ", stopReasonId: pA.id }, actor);
+  const row = created.data as { id: string; rawStopCode: string; machineId: string | null; isActive: boolean; createdById: string | null };
+  check("§5a geçerli eşleme doğar (ham kod kırpılır, genel, etkin, künye oturumdan)", row.rawStopCode === "W-1" && row.machineId === null && row.isActive && row.createdById === actor);
+  check("§5b doğuş audit'te (CREATE)", await auditVar(row.id, "CREATE"));
+  check("§5c tanınmayan alan (künye dahil) gövdeden yazılamaz → 400", (await kod(svc.create({ collectorType: TYPE, rawStopCode: "W-2", stopReasonId: pA.id, createdById: randomUUID() }, actor))) === "400:ZOD");
+  check("§5d kart tipi biçimi (küçük harf) → 400", (await kod(svc.create({ collectorType: "teks-esp32", rawStopCode: "W-2", stopReasonId: pA.id }, actor))) === "400:ZOD");
+  check("§5e sebep MACHINE_STOP değil → 400 STOP_REASON_INVALID", (await kod(svc.create({ collectorType: TYPE, rawStopCode: "W-2", stopReasonId: pRoll.id }, actor))) === "400:STOP_REASON_INVALID");
+  check("§5f aynı kapsamda etkin eşleme → 409 STOP_CODE_MAP_DUPLICATE", (await kod(svc.create({ collectorType: TYPE, rawStopCode: "W-1", stopReasonId: pB.id }, actor))) === "409:STOP_CODE_MAP_DUPLICATE");
+  const ust = await svc.create({ collectorType: TYPE, rawStopCode: "W-1", machineId: m, stopReasonId: pB.id }, actor);
+  check("§5g aynı kod için tezgah üst-yazımı ayrı kapsamdır", (ust.data as { machineId: string }).machineId === m);
+  check("§5h anahtar alanı PATCH ile değişmez → 400", (await kod(svc.update(row.id, { rawStopCode: "W-9" }, actor))) === "400:ZOD");
+  await svc.update(row.id, { stopReasonId: pB.id }, actor);
+  check("§5i sebep değişimi yazılır ve audit'te (UPDATE)", (await prisma.machineStopCodeMap.findUnique({ where: { id: row.id } }))?.stopReasonId === pB.id && (await auditVar(row.id, "UPDATE")));
+  await svc.softDelete(row.id, actor);
+  check("§5j silme = pasife alma (satır durur) ve audit'te (DELETE)", (await prisma.machineStopCodeMap.findUnique({ where: { id: row.id } }))?.isActive === false && (await auditVar(row.id, "DELETE")));
+  const yeni = await svc.create({ collectorType: TYPE, rawStopCode: "W-1", stopReasonId: pA.id }, actor);
+  check("§5k pasif satır yerine yenisi açılır", (yeni.data as { isActive: boolean }).isActive === true);
+  check("§5l etkin ikizi varken pasif satır etkinleştirilemez → 409", (await kod(svc.update(row.id, { isActive: true }, actor))) === "409:STOP_CODE_MAP_DUPLICATE");
+  await prisma.reasonPreset.update({ where: { id: pA.id }, data: { isActive: false } });
+  check("§5m pasif sebebe eşleme yazılamaz → 400", (await kod(svc.update((yeni.data as { id: string }).id, { stopReasonId: pA.id }, actor))) === "400:STOP_REASON_INVALID");
+}
+
 function tsFiles(dir: string): string[] {
   const out: string[] = [];
   for (const n of readdirSync(dir)) {
@@ -170,6 +217,7 @@ async function main(): Promise<void> {
   })).id;
   try {
     await dbBolumu();
+    await yazmaBolumu();
   } catch (e) {
     fail++;
     console.error("❌ beklenmeyen hata:", e);

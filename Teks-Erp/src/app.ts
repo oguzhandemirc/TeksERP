@@ -39,6 +39,7 @@ import loomFloorRoutes from "./routes/loom-floor.routes";
 import loomAlarmRoutes from "./routes/loom-alarm.routes";
 import loomAlarmDutyRoutes from "./routes/loom-alarm-duty.routes";
 import machineSpecRoutes from "./routes/machine-spec.routes";
+import machineStopCodeMapRoutes from "./routes/machine-stop-code-map.routes";
 import shiftDefinitionRoutes from "./routes/shift-definition.routes";
 import machineDoffRoutes from "./routes/machine-doff.routes";
 import subcontractorWeavingRoutes from "./routes/subcontractor-weaving.routes";
@@ -502,6 +503,8 @@ app.use("/api/loom-floor", loomFloorRoutes);
 app.use("/api/loom-alarms", loomAlarmRoutes);
 app.use("/api/loom-alarm-duty", loomAlarmDutyRoutes);
 app.use("/api/machine-specs", machineSpecRoutes);
+// Ham duruş kodu → sebep eşlemesi (makine duruşu D2) — tezgah modülü + loom:spec-manage.
+app.use("/api/machine-stop-code-maps", machineStopCodeMapRoutes);
 app.use("/api/shift-definitions", shiftDefinitionRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);
 app.use("/api/subcontractor-weaving", subcontractorWeavingRoutes);

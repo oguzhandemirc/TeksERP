@@ -11,6 +11,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "sortOrder", "updatedById", "valueType"],
   item: ["code", "createdById", "isActive", "itemType", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason", "lifecycleStatus", "linearDensityDen", "mergedAt", "mergedById", "mergedIntoId", "name", "pendingReview", "unit", "updatedById", "warpSpecId"],
   machine: ["code", "createdById", "isActive", "name", "productionLineCount", "stationId", "updatedById", "warpBeamSlots"],
+  machineStopCodeMap: ["collectorType", "isActive", "machineId", "rawStopCode", "stopReasonId"],
   order: ["branchId", "cancelReason", "cancelReasonCode", "cancelledAt", "clientToken", "completedAt", "createdById", "currency", "customerId", "deadline", "destination", "manualCloseReason", "manualClosedById", "orderDate", "orderNumber", "shippedQty", "status", "totalAmount", "updatedById"],
   peripheralDevice: ["address", "code", "connectionType", "createdById", "decimals", "deviceId", "identifyPattern", "isActive", "kind", "labelDpi", "labelGapMm", "labelHeightMm", "labelWidthMm", "languageOverride", "machineId", "mediaType", "name", "notes", "pollCommand", "port", "rasterMode", "readMode", "role", "scale", "simulate", "stationId", "terminator", "timeoutMs", "updatedById"],
   productRecipe: ["code", "colorId", "createdById", "foldType", "isActive", "itemId", "name", "routeId", "updatedById", "width"],
