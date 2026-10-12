@@ -190,7 +190,7 @@ function statikBolum(): void {
   }
   check("§6a eşleme adayını okuyan tek yer çözücü helper", okuyan.length === 1 && okuyan[0] === "src/services/helpers/machine-stop-code.helper.ts", okuyan.join(", ") || "yok");
   const sinyal = yorumsuz(join(kok, "src/services/machine-stop-signal.service.ts"));
-  check("§6b sinyal servisi çözücüyü çağırır ve sonucu çekirdeğe geçirir", /resolveMachineStopCode\(/.test(sinyal) && /reasonCode:\s*mapped\?\.reasonCode/.test(sinyal));
+  check("§6b sinyal servisi çözücüyü çağırır ve sonucu çekirdeğe geçirir", /resolveMachineStopCode\(/.test(sinyal) && /reasonCode:\s*mapped\?\.reasonCode|openStopCoreFor\([^)]*mapped\?\.reasonCode/.test(sinyal));
 }
 
 async function cleanup(): Promise<void> {

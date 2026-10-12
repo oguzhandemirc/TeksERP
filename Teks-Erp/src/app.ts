@@ -41,6 +41,8 @@ import loomAlarmDutyRoutes from "./routes/loom-alarm-duty.routes";
 import machineSpecRoutes from "./routes/machine-spec.routes";
 import machineStopCodeMapRoutes from "./routes/machine-stop-code-map.routes";
 import machineCollectorRoutes from "./routes/machine-collector.routes";
+import machineSignalRoutes from "./routes/machine-signal.routes";
+import { captureCollectorRawBody } from "./middlewares/collector-auth.middleware";
 import shiftDefinitionRoutes from "./routes/shift-definition.routes";
 import machineDoffRoutes from "./routes/machine-doff.routes";
 import subcontractorWeavingRoutes from "./routes/subcontractor-weaving.routes";
@@ -281,6 +283,8 @@ app.use(clientInfoMiddleware);
 app.use(
   express.json({
     limit: VARSAYILAN_GOVDE_LIMITI,
+    // Makine kartı imzası ham bayta atılır — ham gövde yalnız `/api/machine-signals` yolunda saklanır.
+    verify: captureCollectorRawBody,
     type: (req) => {
       if (buyukGovdeYolu(req.url)) return false;
       return /[/+]json($|[^\w])/i.test(req.headers["content-type"] ?? "");
@@ -508,6 +512,8 @@ app.use("/api/machine-specs", machineSpecRoutes);
 app.use("/api/machine-stop-code-maps", machineStopCodeMapRoutes);
 // Makine kartı kimliği (makine duruşu D3a) — tezgah modülü + loom:spec-manage; sır yalnız kayıt/yenileme cevabında.
 app.use("/api/machine-collectors", machineCollectorRoutes);
+// Makine kartının duruş uçları (D3b) — kimlik verifyToken DEĞİL, kart imzası (collector-auth.middleware).
+app.use("/api/machine-signals", machineSignalRoutes);
 app.use("/api/shift-definitions", shiftDefinitionRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);
 app.use("/api/subcontractor-weaving", subcontractorWeavingRoutes);

@@ -479,6 +479,13 @@ const PARTIAL_INDEXES: Array<{
   },
   {
     table: "machine_stop_events",
+    index: "machine_stops_signal_key_uq",
+    uniq: true,
+    predicate: `(("signalStopKey" IS NOT NULL) AND ("revokedAt" IS NULL))`,
+    why: "sahiplenme replay seddi (K1): kartın anahtarı makine başına tek canlı satırı gösterir",
+  },
+  {
+    table: "machine_stop_events",
     index: "machine_stops_duty_idx",
     uniq: false,
     predicate: `("requiresReason" AND ("reasonCode" IS NULL) AND ("revokedAt" IS NULL))`,

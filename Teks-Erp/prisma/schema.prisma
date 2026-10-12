@@ -2404,6 +2404,9 @@ model MachineStopEvent {
 
   source      MachineDataSource
   collectorId String?           @db.Uuid
+  /// Kart, İNSANIN açtığı açık duruşu SAHİPLENDİYSE kartın kendi duruş anahtarı (K1) — `stopKey`
+  /// insanın kimliği olarak KALIR (tablet replay'i bozulmasın); kartın tekrarı ve kapanışı bununla bulunur.
+  signalStopKey String?         @db.Uuid
 
   /// GERİ ALMA — hayalet duruş SİLİNMEZ, damgalanır.
   revokedAt    DateTime? @db.Timestamptz
@@ -2429,13 +2432,15 @@ model MachineStopEvent {
   @@index([shiftInstanceId])
   @@index([runId])
   @@index([collectorId])
-  // ŞEMA-DIŞI ÜÇ PARTIAL INDEX (migration 20260913240000, `test_db_invariants` §1):
+  // ŞEMA-DIŞI DÖRT PARTIAL INDEX (migration 20260913240000 + 20261012190000, `test_db_invariants` §1):
   //   machine_stops_one_open_per_machine_uq (machineId)
   //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL        ← tek açık duruş seddi
   //   machine_stops_key_uq (machineId, stopKey) WHERE "revokedAt" IS NULL
   //     ← replay seddi. `revokedAt` yüklemi ŞART: geri alınmış duruş yer işgal etmez.
   //   machine_stops_duty_idx (startedAt)
   //     WHERE "requiresReason" AND "reasonCode" IS NULL AND "revokedAt" IS NULL
+  //   machine_stops_signal_key_uq (machineId, signalStopKey)  (migration 20261012190000)
+  //     WHERE "signalStopKey" IS NOT NULL AND "revokedAt" IS NULL  ← sahiplenme replay seddi
   @@map("machine_stop_events")
 }
 

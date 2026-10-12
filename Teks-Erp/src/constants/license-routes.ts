@@ -172,6 +172,8 @@ export const PUBLIC_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/devices/announce", reason: "cihaz el sıkışması; eşleşmeden token yok" },
   { method: "GET", path: "/api/devices/status", reason: "cihaz atama durumu yoklaması" },
   { method: "GET", path: "/api/devices/pairing-required", reason: "eşleşme zorunluluğu (giriş öncesi)" },
+  { method: "POST", path: "/api/machine-signals/stop", reason: "makine kartı duruş açılışı; kimlik kart imzası (oturum yok) — kısıtlı kipte yazma gibi kapanır" },
+  { method: "POST", path: "/api/machine-signals/end", reason: "makine kartı duruş kapanışı; kimlik kart imzası (oturum yok) — kısıtlı kipte yazma gibi kapanır" },
   { method: "GET", path: "/api/mobile/updates/*", reason: "tablet OTA (giriş öncesi)" },
   { method: "GET", path: "/api/client-policy/*", reason: "panel sürüm politikası (giriş öncesi)" },
   { method: "GET", path: "/api/license/durum", reason: "lisans bandı; kimliksize ayrıntı yok" },

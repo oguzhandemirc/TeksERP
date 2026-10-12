@@ -38,6 +38,10 @@ declare module "express-serve-static-core" {
     isSystemAccount?: boolean;
     /** Hesap zorunlu parola değişimi bekliyor mu — `verifyToken` ailesi DB'den doldurur. */
     mustChangePassword?: boolean;
+    /** İmzası doğrulanmış makine kartı — yalnız `verifyCollectorSignature` doldurur (kart yolunda `user` YOKTUR). */
+    collector?: { id: string; name: string; machineIds: string[] };
+    /** Kart yolunda ham istek gövdesi (imza ham bayta atılır) — `captureCollectorRawBody` doldurur. */
+    collectorRawBody?: Buffer;
   }
 }
 

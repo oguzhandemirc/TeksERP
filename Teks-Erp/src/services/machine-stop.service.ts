@@ -2,10 +2,11 @@
 // TeksERP — TEZGAH DURUŞU (MachineStopEvent) Servisi · elle giriş + makine sinyalinin çekirdeği
 // =============================================================================
 // Duruş bir SPAN DEFTERİDİR (koşum emsali): açık duruş DURUM, kapanmış duruş
-// KAYIT. Beş yazma yolu vardır ve beşi de burada yaşar — İKİNCİ YAZAR DOĞMAZ:
+// KAYIT. Altı yazma yolu vardır ve altısı da burada yaşar — İKİNCİ YAZAR DOĞMAZ:
 //   • AÇ         — makine başına tek açık duruş; sed DB'de (`machine_stops_one_open_
 //                  per_machine_uq`), yarışın kaybedeni P2002 → 409 `STOP_ALREADY_OPEN`.
 //                  Kimlik `stopKey` (istemci token'ı ya da sunucu uuid); replay aynı satırı döner.
+//   • SAHİPLEN   — kart insanın açık duruşunu üstlenir (K1): yalnız kart alanları null → değer.
 //   • KAPA       — claim `endedAt IS NULL ∧ revokedAt IS NULL`; süre burada hesaplanır.
 //   • SINIFLA    — İLK karar (NULL → değer): claim `reasonCode IS NULL`; kayıp sınıfı
 //                  preset'ten KOPYALANIR ve DONAR (katalog değişse satır değişmez); hedef
@@ -49,7 +50,7 @@ import {
   signalCloseConflict,
 } from "./helpers/machine-stop-context.helper";
 import type {
-  ClassifyStopInput, OpenManualStopInput, OpenManualStopOptions, OpenStopCoreInput, ReclassifyStopInput, StopCloser,
+  ClassifyStopInput, OpenManualStopInput, OpenManualStopOptions, OpenStopCoreInput, ReclassifyStopInput, StopCloser, StopSignalFields,
 } from "../types/machine-stop-input.types";
 import type { ApiResponse } from "../types/api.types";
 import type { StampResolution } from "./helpers/machine-run-open.helper";
@@ -162,6 +163,25 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
 
   nudgeLoomAlarm();
   return { success: true, data: created, message: "Duruş açıldı", ...(warnings.length ? { warnings } : {}) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAHİPLEN (K1) — kart, insanın açtığı açık duruşu üstlenir; açılış insanınki kalır
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Claim `endedAt ∧ revokedAt IS NULL ∧ collectorId IS NULL ∧ kaynak insan`: yalnız kart alanları
+ * (null → değer) yazılır, olgular (`startedAt` · `stopKey` · açan) değişmez. Sahiplenilecek duruş
+ * yoksa ya da yarışta kaybedilirse `null` — çağıran açılışın sed hatasını aynen döner.
+ */
+export async function claimOpenStopForSignal(machineId: string, signal: StopSignalFields & { signalStopKey: string }): Promise<MachineStopDto | null> {
+  const open = await prisma.machineStopEvent.findFirst({ where: { machineId, endedAt: null, revokedAt: null }, select: { id: true } });
+  if (!open) return null;
+  const human = { in: [MachineDataSource.OPERATOR, MachineDataSource.SUPERVISOR] };
+  const claim = await prisma.machineStopEvent.updateMany({ where: { id: open.id, endedAt: null, revokedAt: null, collectorId: null, signalStopKey: null, source: human }, data: signal });
+  if (claim.count === 0) return null;
+  const changes = [["collectorId", signal.collectorId], ["rawStopCode", signal.rawStopCode], ["signalClaim", "sahiplenildi"]].map(([field, v]) => ({ field: field!, old: null, new: v }));
+  await AuditService.log({ userId: undefined, action: "UPDATE", tableName: TABLE, recordId: open.id, changes }).catch(() => undefined);
+  return prisma.machineStopEvent.findUniqueOrThrow({ where: { id: open.id }, select: MACHINE_STOP_SELECT });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

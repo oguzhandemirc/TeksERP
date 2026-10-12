@@ -120,6 +120,11 @@ const EXEMPT: Record<string, string> = {
   // aynı gerekçe). Kimlik yerine ONAYLI CİHAZ (`req.device` yalnız onaylı+aktif cihazda dolar)
   // ya da tam doğrulanan oturum; ikisi de yoksa 401 DEVICE_OR_SESSION_REQUIRED.
   "GET /api/license/indirme-belirteci": "tablet giriş öncesi güncelleme; onaylı cihaz ya da oturum şart",
+  // Makine kartı (D3b): kart OTURUM AÇMAZ — kişi değil cihazdır, JWT taşıyamaz. Kimlik `verifyToken`
+  // yerine KART İMZASI (`verifyCollectorSignature`, fail-closed 401: kayıtlı+onaylı+iptalsiz kart,
+  // ±5 dk damga, nonce tekrarı yok, HMAC sabit zamanlı), ardından tezgah kapsamı (403). Bekçi: test_makine_durus_kart.
+  "POST /api/machine-signals/stop": "makine kartı duruş açılışı; kimlik kart imzası (verifyCollectorSignature), oturum değil",
+  "POST /api/machine-signals/end": "makine kartı duruş kapanışı; kimlik kart imzası (verifyCollectorSignature), oturum değil",
 };
 
 /**

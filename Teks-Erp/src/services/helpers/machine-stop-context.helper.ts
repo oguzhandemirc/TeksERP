@@ -39,6 +39,7 @@ export const MACHINE_STOP_SELECT = {
   signalKind: true,
   rawStopCode: true,
   collectorId: true,
+  signalStopKey: true,
   revokedAt: true,
   revokedById: true,
   revokeReason: true,

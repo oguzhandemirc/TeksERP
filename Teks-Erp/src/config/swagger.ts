@@ -36,6 +36,13 @@ export const swaggerOptions: swaggerJSDoc.Options = {
                     scheme: 'bearer',
                     bearerFormat: 'JWT',
                 },
+                // Makine kartı: oturum yok, her istek imzalı (docs/design/MAKINE-KART-PROTOKOLU.md).
+                collectorSignature: {
+                    type: 'apiKey',
+                    in: 'header',
+                    name: 'x-collector-signature',
+                    description: 'HMAC-SHA256(kart sırrı, YÖNTEM\\nYOL\\nZAMAN\\nNONCE\\nsha256(gövde)) + x-collector-id · x-collector-timestamp · x-collector-nonce',
+                },
             },
             schemas: {
                 // 403 gövdesi — hata kodu `details.code` altındadır (`body.code` hep undefined; kural).
