@@ -1346,6 +1346,23 @@ function pid1Ihlalleri(k: Kosum7, uygBekle: boolean): string[] {
   }
 }
 
+// §7n kaynak haritası imaja girmez (G6): `tsc` koşan her RUN aynı adımda haritayı üretmez/siler. Haritayı
+// node okumaz (--enable-source-maps yok), yığın izleri dist/*.js satırını gösterir — yalnız kaynak sızdırır.
+function haritaIhlalleri(dockerfile: string): string[] {
+  const runlar = dockerfile.replace(/\\\n/g, " ").split("\n").filter((l) => /^RUN .*\bnpx tsc\b/.test(l));
+  if (runlar.length === 0) return ["`npx tsc` koşan RUN bulunamadı (ölçülemedi)"];
+  return runlar
+    .filter((l) => !/\bfind dist -name "\*\.(js\.)?map"( -type f)? -delete\b/.test(l))
+    .map((l) => `harita silinmiyor: ${l.slice(0, 80)}`);
+}
+for (const yol of ["Teks-Erp/Dockerfile", "Dockerfile"]) {
+  const df = oku(yol);
+  const ih = haritaIhlalleri(df);
+  check(`§7n ⭐ ${yol}: tsc adımı .map'i siler (imajda kaynak haritası yok)`, ih.length === 0, ih.join(" | "));
+  const sonda = df.replace(/ && find dist -name "\*\.(js\.)?map"( -type f)? -delete/g, "");
+  check(`§7n sonda: ${yol} silme kalktı → kırmızı`, sonda !== df && haritaIhlalleri(sonda).length > 0, sonda !== df ? "" : "MUTASYON UYGULANMADI");
+}
+
 // §7h güncelleyicili compose şablonu kuralları (GUNCELLEYICI-SAGLAMLIK §1.2).
 const ISARET = /\s+# GUNCELLEYICI$/;
 const IPC_KOK = "/var/lib/tekserp/guncelleme";
