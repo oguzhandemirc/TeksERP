@@ -304,7 +304,7 @@ Genel: UTF-8 (BOM'suz) JSON; yazan taraf `<ad>.tmp`e yazar, diske boşaltır (`F
 |---|---|
 | `BEKLIYOR` | İş yok ya da karar engelliyor (`karar`), ya da bir sorun var (`hataKodu`) |
 | `INDIRILIYOR` | Aday doğrulandı, paket iniyor (`ilerleme`) ya da ağ hatasıyla sürdürülecek |
-| `HAZIR` | Paket(ler) doğrulandı ve açıldı; karar `ONAY_BEKLIYOR` ya da `PENCERE_BEKLIYOR` (`planlanan` = sıradaki aralığın başı) |
+| `HAZIR` | Paket(ler) doğrulandı ve açıldı; karar `ONAY_BEKLIYOR` ya da `PENCERE_BEKLIYOR` (`planlanan` = sıradaki aralığın başı; OTOMATİK kipte onaysız pencere kurulumu önce duyurulur — pencere İÇİNDE ilk görülen pakette `planlanan` = ilk görülme + 5 dk, aralık = [`planlanan`, pencere sonu], süre pencere kapanmadan dolmuyorsa sıradaki aralığın başı; duyurulmuş an önceki `durum.json`ın bu sürüme yazdığı `planlanan`dır, 15 dk'dan bayatsa ya da saat geri gidip 5 dk'dan uzağa düştüyse yeniden duyurulur — R23, 0.2.7, `decision::announce_gate`; TS `decideUpdate` sözleşmesi değişmez) |
 | `UYGULANIYOR` | İşlem sürüyor (`urun` · `islemId` · `adim`) |
 | `BASARILI` | Son deneme bu kurulumun sürümüne başarıyla geçti ve yeni iş yok |
 | `GERI_DONDU` | Aday, geri dönmüş sürümdür ve yeni onay bekler (`son`) |
