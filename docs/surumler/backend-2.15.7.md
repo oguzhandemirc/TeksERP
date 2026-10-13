@@ -166,9 +166,9 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 - Windows kurulumunda DEĞİŞEN YOK: hiçbir kurulum/güncelleme betiği aracı çağırmaz, `.env` `DATABASE_URL` sahip
   rolünde kalır, `auditProtection` "kismi" kalır. Araç (`dist\tools\db-rol-gocu.cjs`) yalnız elle/test için koşulabilir.
-- `--sahip <ad>`: bağlantı süper kullanıcı (`postgres`), URL'i yalnız `TEKSERP_PG_SUPER_URL` ortam değişkeninden;
+- `--sahip` (sahip rol adı): bağlantı süper kullanıcı (`postgres`), URL'i yalnız `TEKSERP_PG_SUPER_URL` ortam değişkeninden;
   sahip açık parametre ve audit tablolarının sahibiyle eşleşmeli; sahip parolası `TEKSERP_SAHIP_PAROLASI` ya da
-  `--kimlik <pg-setup\db-credentials.json>` (argv'de parola/URL yok). Uyuşmazlık, süper olmayan bağlantı, yanlış sahip
+  `--kimlik` ile `pg-setup\db-credentials.json` (argv'de parola/URL yok). Uyuşmazlık, süper olmayan bağlantı, yanlış sahip
   parolası → çıkış 2, değişiklik yok. Docker kipi aynen.
 
 **Ekran yolu tek kaynağı** (commit `chore(ekran-yolu): …`; kısa kimliği paketlemede yazılır)
