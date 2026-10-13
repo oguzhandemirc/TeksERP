@@ -113,6 +113,7 @@ import { DataImportPage } from "@/pages/System/DataImport/DataImportPage";
 import { DuplicatesPage } from "@/pages/System/Duplicates/DuplicatesPage";
 import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { DbRestorePage } from "@/pages/System/DbRestore/DbRestorePage";
+import { ReadOnlyDbPage } from "@/pages/System/ReadOnlyDb/ReadOnlyDbPage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelStudioPage } from "@/pages/LabelTemplates/editor/LabelStudioPage";
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
@@ -829,6 +830,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings" requireSystemAccount>
         <DbRestorePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "system/read-only-db",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings" requireSystemAccount>
+        <ReadOnlyDbPage />
       </ProtectedRoute>
     ),
   },

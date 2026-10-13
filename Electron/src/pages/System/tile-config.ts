@@ -1,4 +1,4 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
 import {
   LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
@@ -225,6 +225,17 @@ export const systemTiles: SystemTile[] = [
     description: "Yedeği yeni bir veritabanına geri yükle, doğrula, geçiş yap (canlıya dokunmaz)",
     icon: DatabaseZap,
     to: "/system/db-restore",
+    group: "config",
+    permission: "admin:settings",
+    superadminOnly: true,
+  },
+  {
+    // G5 — müşterinin BI aracı için yalnız-okuma DB girişi; backend YALNIZ sistem hesabına açar (supapsız 403).
+    key: "read-only-db",
+    title: "Veritabanı Okuma Erişimi",
+    description: "Raporlama aracınız için yalnız-okuma veritabanı kullanıcısı — bağlantı bilgisi, parola yenile",
+    icon: DatabaseSearch,
+    to: "/system/read-only-db",
     group: "config",
     permission: "admin:settings",
     superadminOnly: true,
