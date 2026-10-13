@@ -38,7 +38,7 @@
 2. **Etkinleştirilmemiş kurulum YALNIZ ETKİNLEŞTİRME EKRANINI açar** (bugün gözlem kipinde süresiz çalışıyor — bu açık kapanır). İnternetsiz fabrikada: kurulum istek kodu/karekod üretir → portal imzalı etkinleştirme kodu/dosyası (USB) verir. **Mevcut kurulumlar (adnansahin) etkilenmez.** → G2.
 3. **Yeni kurulumlar `zorla` kipinde doğar** — portalın HAK'ında `kipAltSiniri` ile; adnansahin olduğu gibi kalır. → G3.
 4. **Müşteriye ayrı YALNIZ-OKUMA DB girişi verilir** (satış avantajı); DB'ye elle yazma garanti dışıdır. → G5.
-5. **Bizim yedek (emanet) anahtarımız KALIR**; sözleşme + KVKK ekinde yazılır; müşteri kurulumda kapatabilir. → G8.
+5. **Bizim yedek (emanet) anahtarımız KALIR**; sözleşme + KVKK ekinde yazılır. ~~müşteri kurulumda kapatabilir~~ → **GEÇERSİZ 2026-10-13:** kullanıcı kararı — HER ZAMAN AÇIK, müşteri kapatamaz, kapatma seçeneği yapılmaz; yalnız sözleşme metni. → G8.
 6. **TPM YOK;** donanım parmak izi (bugünkü F1–F5 bulanık eşleşme) yeter. Önceki taslaktaki TPM fazı kapsam dışıdır.
 7. **Varsayılan süperadmin (inmekte, `feature/varsayilan-superadmin`):** kurulumda süperadmin belirtilmediyse ORTAK kullanıcı adı + parolalı varsayılan süperadmin doğar, ilk girişte zorunlu değişim. **Ardından gelen dilim:** sistem hesabı kaydı kurulum anahtarıyla İMZALI — DB'de `isSystemAccount=true` yazmak yetki vermez; mevcut kurulum için tek seferlik imzalama yolu. → G1.
 
@@ -226,6 +226,7 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 - **Kabul:** yeni bekçi: Docker ve Windows kurulum provasında `select rolsuper` uygulama rolü için `f`, uygulama rolü hiçbir tablonun sahibi değil, `COPY … TO PROGRAM` 42501; `system_logs` UPDATE 42501; bütün backend bekçileri yeşil (uygulama hiçbir DDL'e muhtaç değil — ölç: çalışma anında `CREATE`/`ALTER` yapan kod yolu var mı). `test_docker_hijyeni` genişler. Göç provası en eski canlı dökümde.
 - **Durum (2026-10-13):** Docker kolu ✓ (G4-A, arşiv 2026-10-13) — sahip = `POSTGRES_USER`, uygulama rolü `<sahip>_uygulama` açılışta idempotent kurulur (kapsam 1'den beyanlı sapma: sahiplik devri / NOSUPERUSER indirme yok, ayrı `MIGRATE_DATABASE_URL` yok); kapsam 3 rol tabanlı sed Docker'da var. Açık: Windows (kapsam 2), defter tabloları (kapsam 4), PID 1 ortamındaki sahip URL'i kalıntısı.
 - **Mevcut kurulum / eski istemci:** istemci etkisiz. Mevcut kurulumda göç geri alınamaz → bakım penceresi + önce yedek; adnansahin dondurulmuş, bu fazı yeni kurulumunda alır.
+- **Durum (2026-10-13):** Docker kolu G4-A ile indi (uygulama rolü, audit'te yalnız SELECT+INSERT). Kalıntı PID 1 ortamı KAPANDI: PID 1 açılış betiği, sunucu `exec tini -s -- node` ile yalnız uygulama URL'iyle açılır; `/proc/1/environ`da sahip parolası yok (gerçek konteynerde ölçüldü; bekçi `test_docker_hijyeni` §7g/§7m · `test_korumali_imaj` K11). Rol ayrımı yapılamazsa beyanlı geri düşüş sahip URL'iyle açılır. Açık: Windows kolu, audit dışı defter REVOKE'u, `tekserp_okur` (G5).
 
 ### G5 — Yalnız-okuma DB rolü (karar 4) · **M**
 
@@ -241,6 +242,7 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 - **Dokunulan:** `Teks-Erp/scripts/build-araclar.mjs`, `Teks-Erp/docker/korumali/sahne.mjs`, `deploy/paketle.ps1`, `Teks-Erp/scripts/build-korumali.mjs`.
 - **Kabul:** `scripts/test_korumali_imaj.mjs` genişler: `docker save` katman taraması, `dist/tools`'ta okunur `.cjs` 0 (ya da boyut tavanı), `.jsc` `strings` taramasında yasak ad listesi 0 (negatif sonda: listeye bilinen bir ad koyup kırmızı gör). Windows paket kapısı aynı kuralı.
 - **Mevcut kurulum:** `npm run superadmin:kur` ve `kurulum-stdin` aynı arayüzle çalışmalı (`test_kurulum_girdisi` §4 gerçek süreç).
+- **Durum (2026-10-13):** (1) Docker kolu ✓ — korumalı imajda her araç `.jsc` + küçük yükleyici (`docker/korumali/arac-jsc.mjs`; `node dist/tools/<ad>.cjs` aynı; `test_korumali_imaj` K12). Korumasız imajda `dist/**/*.map` yok (`test_docker_hijyeni` §7n). AÇIK: Windows `-Korumali` paketinde araçlar karartılmış JS (bayt kodu hedef runtime'da üretilmeli — `korumali-paket.yml` erteleme yolu), (2) `-Korumali` varsayılanı, (3) hedefli ad karartma + `.jsc` `strings` yasak ad taraması, (4) `superadmin.md` bayat cümlesi.
 
 ### G7 — Docker'da şifreli modül eşitliği + vazgeçilmez çekirdek modül · **L**
 
@@ -251,11 +253,12 @@ Her faz kendi bekçisiyle iner (negatif sonda dahil, `docs/RECETELER.md` § Yeni
 
 ### G8 — Yedek emanet anahtarı (karar 5) · **S**
 
-- **Kapsam:** Etkili alıcısı (`etkili.tkpub`) kurulum paketine gömülür ve **varsayılan dahil**; kurulum sihirbazında görünür seçenek "Etkili Yazılım kurtarma anahtarı (önerilir)" — kaldırılırsa kurulum açık maddeyi bir kez yazar, sonra sessiz. Docker: imaj `etkili.tkpub`yi taşır, `.env`de kapatma anahtarı. Panel Sistem → Yedek kartında alıcı listesi görünür (bugün `/api/admin/health` sayar).
+- **Kapsam (2026-10-13 kararıyla daraldı):** Etkili alıcısı (`etkili.tkpub`) kurulum paketine gömülür ve HER ZAMAN dahildir; kapatma seçeneği, sihirbaz kutusu ya da `.env` anahtarı YAPILMAZ. Docker: imaj `etkili.tkpub`yi taşır. Panel Sistem → Yedek kartında alıcı listesi görünür (bugün `/api/admin/health` sayar).
 - **Sözleşme maddesi taslağı notu (hukuk turu):** `docs/hukuk/VERI-ISLEME-EKI.md` B.3'e "Lisans Alan kurulumda ya da sonradan Lisans Veren yedek alıcısını kaldırabilir; kaldırırsa sunucu kaybında Lisans Veren yedekleri açamaz ve kurtarma Lisans Alan'ın kendi anahtarına bağlıdır" cümlesi; SKLS'ye "DB'ye doğrudan yazma garanti/destek dışı; yalnız-okuma erişimi verilir" maddesi. Avukat incelemesi (hukuk klasörü TASLAK).
 - **Dokunulan:** `deploy/kurulum/cevap-semasi.json` (`yedek.etkiliAcikAnahtar` → paket içi varsayılan + açık kapatma), `deploy/kurulum/kurulum.ps1`, `deploy/kurulum/kurulum-arsivi.mjs`, Docker imajı, `docs/hukuk/*` (taslak).
 - **Kabul:** `test_yedek_sifreleme` + `test_sunucu_betikleri`: varsayılan kurulumda yedek başlığında Etkili alıcısı var; kapatma seçeneğiyle yok; ikisinde de müşteri anahtarı çözebiliyor.
 - **Mevcut kurulum:** alıcı dizinine dokunulmaz (kurulum EZMEZ kuralı).
+- **Durum (2026-10-13):** sözleşme metni ✓ — Bakım ve Destek Sözleşmesi (Ek-4) §7.5 "Kurtarma (emanet) anahtarı" (ne · her zaman açık · kimde · ne zaman · kayıt/bildirim) + Ek-3 B.3 cümlesi; yukarıdaki "kaldırabilir" taslak cümlesi GEÇERSİZ. Kod kolu AÇIK: Windows'ta alıcı bugün isteğe bağlı parametre, Docker imajı taşımıyor, tören yapılmadı (`docs/hukuk/UYGULAMA-NOTLARI.md`).
 
 ### G9 — İz kanalı: yetki defteri zinciri + kurcalama özeti · **M**
 

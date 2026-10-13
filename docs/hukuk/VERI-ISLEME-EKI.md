@@ -102,7 +102,7 @@ B.2. Lisans Veren bu verileri:
 - (d) Bölüm C'deki alt işleyenler dışında kimseyle paylaşmaz;
 - (e) her uzaktan erişimi kayda geçirir (Bakım ve Destek Sözleşmesi, Ek-4, §6).
 
-B.3. **Yedek anahtarları.** Lisans Veren'in kasasında tutulan yedek parolası ve Lisans Veren yedek anahtarı, Lisans Alan'ın bütün geçmiş yedeklerini açabilir. Bunlar yalnız Bakım ve Destek Sözleşmesi (Ek-4) §7'deki hallerde kullanılır ve her kullanım Lisans Alan'a bildirilir.
+B.3. **Yedek anahtarları.** Lisans Veren'in kasasında tutulan yedek parolası ve Lisans Veren yedek anahtarı, Lisans Alan'ın bütün geçmiş yedeklerini açabilir. Bunlar yalnız Bakım ve Destek Sözleşmesi (Ek-4) §7'deki hallerde kullanılır ve her kullanım Lisans Alan'a bildirilir. Lisans Veren yedek (kurtarma) anahtarı her kurulumda bulunur ve Lisans Alan tarafından kapatılamaz; anahtarın ne olduğu, kimde durduğu ve hangi hallerde kullanılacağı Ek-4 §7.5'tedir.
 
 B.4. **İhlal bildirimi.** Lisans Veren, Lisans Alan verisini etkileyen bir güvenlik ihlalini öğrendiğinde Lisans Alan'a gecikmeden, en geç 24 saat içinde bildirir. Kurul'a bildirim (72 saat) veri sorumlusu olan Lisans Alan'ındır; Lisans Veren bunun için gereken bilgiyi verir. Adımlar ve içerik: Veri İhlali Bildirim Prosedürü (Ek-8).
 

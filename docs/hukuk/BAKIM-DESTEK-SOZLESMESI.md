@@ -11,7 +11,7 @@
 > - **TBK md. 470 vd. (eser) ve md. 502 vd. (vekâlet):** bakım sözleşmesi hangi tipe girer (karma sözleşme)? Yanıt süreleri (§4) taahhüt mü, özen borcu mu? İhlal hâlinde yaptırım (bedel indirimi) konacak mı?
 > - **TBK md. 115:** §9'daki sorumluluk sınırı, yedek kaybı gibi ağır sonuçlarda ağır kusuru dışlıyor mu?
 > - **FSEK:** bakım süresinde verilen güncellemeler, Lisans Sözleşmesi'ndeki kalıcı hakka dahil mi? §3.3 bunu "dahil" diye yazdı.
-> - **Kasada tutulan anahtarlar:** Lisans Veren'in müşteri yedeklerini açabilen anahtar ve parolayı saklaması (§7.3) sır saklama ve veri güvenliği açısından nasıl düzenlenmeli?
+> - **Kasada tutulan anahtarlar:** Lisans Veren'in müşteri yedeklerini açabilen anahtar ve parolayı saklaması (§7.3) sır saklama ve veri güvenliği açısından nasıl düzenlenmeli? §7.5'teki kurtarma anahtarı Lisans Alan tarafından kapatılamaz: bu zorunluluk KVKK md. 12 (veri güvenliği) ve veri işleyen sözleşmesi açısından yeterince açık ve ölçülü mü?
 
 ---
 
@@ -104,6 +104,13 @@ Her bağlantı başlangıç ve bitiş saatiyle, yapılan işin özetiyle kayda g
 - (c) kendi kasasında tuttuğu Lisans Veren anahtarını ve yedek parolasını gizli tutmak. Bunları yalnız Lisans Alan'ın yazılı talebiyle ya da §6.2(b)'deki acil durumda Lisans Alan'ın veri kurtarması için kullanır. Her kullanım kayda geçer ve Lisans Alan'a bildirilir.
 
 7.4. Yedeğin alınmaması, saklanmaması ya da parolanın kaybından doğan veri kaybında sorumluluk, kusuru olan taraftadır. Lisans Veren'in sorumluluğu §9 ile sınırlıdır.
+
+7.5. **Kurtarma (emanet) anahtarı.**
+- (a) **Nedir:** Yazılım her şifreli yedeği, Lisans Alan'ın kendi anahtarlarına ek olarak Lisans Veren'e ait bir kurtarma anahtarıyla da açılabilir biçimde şifreler (§7.1'deki "Lisans Veren anahtarı"). Amaç, sunucunun kaybı ya da Lisans Alan anahtarı ile yedek parolasının birlikte kaybı gibi hallerde Lisans Alan'ın verisinin geri alınabilmesidir.
+- (b) **Her zaman açıktır:** Kurtarma anahtarı her kurulumda bulunur ve kalıcıdır; Lisans Alan onu kurulumda ya da sonradan kapatamaz, yedeklerin bu anahtar olmadan şifrelenmesini isteyemez. Lisans Alan bu Sözleşme'yi imzalamakla bu düzeni kabul eder.
+- (c) **Kimde durur:** Lisans Alan'ın sunucusunda yalnız anahtarın açık yarısı bulunur; açık yarı yedeği şifreler ama açamaz. Yedeği açan özel yarı yalnız Lisans Veren'dedir; parola korumalı olarak, internete bağlı olmayan ortamda saklanır ve Lisans Alan'ın sunucusuna, Yazılım'ın içine ya da Lisans Veren'in internete açık sunucularına konmaz.
+- (d) **Ne zaman kullanılır:** Yalnız (i) Lisans Alan'ın yazılı talebiyle ya da (ii) §6.2(b)'deki acil durumda Lisans Alan'ın veri kurtarması için. Lisans Veren bu anahtarla Lisans Alan'ın yedeklerini başka hiçbir amaçla açmaz; Lisans Veren'in uzak yedek hizmeti seçilmişse oradaki şifreli dosyalar da yalnız bu hallerde açılır.
+- (e) **Kayıt ve bildirim:** Her kullanım tarih, talep eden, amaç ve açılan yedeklerle kayda geçer ve Lisans Alan'a yazılı bildirilir. Açılan veri yalnız kurtarma için kullanılır ve iş bitince Lisans Veren'den silinir (§6.5; Veri İşleme Eki, Ek-3, B.3).
 
 ## 8. Bakımın sona ermesi ve yeniden başlatılması
 
