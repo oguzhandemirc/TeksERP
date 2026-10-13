@@ -299,7 +299,7 @@ govde()
   .catch((err) => { fail++; console.error("❌ Bekçi hata ile durdu:", err); })
   .finally(async () => {
     await cleanup();
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exit(fail > 0 ? 1 : 0);

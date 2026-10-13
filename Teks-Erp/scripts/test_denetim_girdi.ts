@@ -467,5 +467,5 @@ async function main(): Promise<void> {
 }
 
 main()
-  .then(() => { console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`); process.exit(fail > 0 ? 1 : 0); })
+  .then(() => { console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`); process.exit(fail > 0 ? 1 : 0); })
   .catch((e) => { console.error("Beklenmeyen hata:", e); process.exit(1); });
