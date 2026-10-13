@@ -248,6 +248,16 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Panel daha hızlı açılır: uygulama paketi yarı boyuta indi. Arka planda açık bıraktığınız Tezgah Salonu, tezgah alarmları, destek, yedek ve lisans sekmeleri artık kendini tazelemez; sekmeye döndüğünüzde hemen güncellenir. Bu sunucunun yükünü de azaltır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Ağır raporlar 15 saniyede yarıda kalmaz: rapor ekranları sonucu 60 saniyeye kadar bekler. Kalite, fire ve stok karnesinde bir kırılım listesi kesilirse uyarı çıkar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "“Tüm listeyi indir” 500.000 kaydı aşan listede artık uyarır: indirilen dosyanın listenin tamamı olmadığını söyler, süzgeçle daraltıp yeniden indirebilirsiniz."
         }
       ]
     },

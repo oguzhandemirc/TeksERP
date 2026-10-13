@@ -33,6 +33,11 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - **Etkinlik kaydı kurcalamaya karşı zincirlenir (güvenlik).** Her yeni kayıt bir öncekinin özetini taşır; araya
   kayıt silinir ya da değiştirilirse gece doğrulaması bunu yakalar ve sağlık bilgisinde "audit koruması: kısmi" görünür.
 - **Şifresiz yedek indirilirken uyarı.** Yedek anahtarı kurulu değilse panel indirme sırasında uyarır (yeni panel).
+- **Sevk karneleri uzun aralıkta daha hızlı açılır.** Sevk & Termin, Müşteri ve İade karneleri ile yön dağılımı
+  aynı rakamı daha az okumayla hesaplar (yerel ölçüm, 1 M sevk edilmiş top: 90 gün 263 → 47 ms, 1 yıl 418 → 171 ms).
+  Rakamlar aynı (brüt sevk).
+- **Kalite, fire ve stok karnesinde çok uzun kırılım listesi kesilir ve söylenir.** Bir kırılım listesi 5.000 satırı
+  aşarsa ilk 5.000 satır gösterilir, özet yine tüm kayıtları kapsar ve uyarı çıkar. Bugünkü veride tetiklenmez.
 
 ## 2. Ne değişti
 
@@ -92,8 +97,17 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - Düz yedek indirmesi `X-Backup-Plain: 1` başlığı + audit `plain`; Docker kaynak kurulumunda `BACKUP_KEY_DIR`
   birimi (boş = kapalı).
 
+**Performans denetimi rapor/belge (Perf-2 B5 · B6)** (commit `perf(rapor): …` ×2; kısa kimliği paketlemede yazılır)
+
+- `reports/_shipped.collectShipped`: top yarısı aynı sevkiyat süzgecini `IN` yarı-birleşimi + `shipmentId IS NOT NULL`
+  olarak da taşır; sonuç kümesi değişmez (`test_shipped_esitlik`, dondurulmuş eski sorguyla). İndeks/migration yok.
+- `reports/_shared.capReportLists` + `REPORT_MAX_ROWS = 5000`: kalite · fire · stok karnesi kırılım listeleri;
+  kesilirse yanıtta `warnings` (ApiResponse sözleşmesi), yoksa anahtar yok.
+
 ## 3. Sözleşme
 
+- **Kırıldı mı:** HAYIR (Perf-2 B5/B6) — rapor zarfına isteğe bağlı `warnings` (yalnız tavan aşılınca); eski panel
+  alanı okumaz, listeyi kesik görür (uyarısız). Sevk karnesi rakamları değişmez.
 - **Kırıldı mı:** HAYIR (D5) — yalnız ekleme: salon cevabında tezgah başına `operator`.
 - **Kırıldı mı:** HAYIR (Sebep ata) — yalnız ekleme: iki uç, salon cevabında bir alan. Eski panel alanı okumaz.
 - **Kırıldı mı:** HAYIR (C.6) — yalnız ekleme: iki gövdede isteğe bağlı satır alanı, iki cevap alanı. 1.6.4 paneli

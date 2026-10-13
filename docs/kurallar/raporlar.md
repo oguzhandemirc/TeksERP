@@ -32,6 +32,7 @@
 - **[ÇEKİRDEK]** Raporlarda yurtiçi/yurtdışı ekseni İKİ kaynaktan okunur ve ikisi de `reports/_destination.ts`te beyanlıdır: SEVK raporları sevkiyatın DONMUŞ yönünü (`Shipment.destination`; doğrudan sevk "yön kaydı yok", yön süzgecinde hiçbir kümede) · SİPARİŞ raporları siparişin AÇILIŞTA DONMUŞ yönünü (`Order.destination`; ekranda "Sipariş yönü (açılışta)"; NULL = yön belirsiz, hiçbir kümede — cari kartı sonradan değişse de geçmiş rapor değişmez; canlı kart zinciri raporda OKUNMAZ); sevk kg'ı `collectShippedWeight`ten (brüt, tartısız çuval "ölçülmedi", kapsam "tartılı N / M"); sevk ve iade karnesinin yön süzgeci sevkiyatın donmuş yönüdür (panelde "Sevkiyat yönü (sevk anında)"), sevk karnesinin termin kısmı siparişin donmuş yönünü okur. · bekçi: `test_rapor_yon_ekseni` (§2c kart değişimi → rapor kıpırdamaz; negatif sonda ⑩) <sub>(arşiv:2026-09-23)</sub>
 
 - **[ÇEKİRDEK]** Raporun toplamı/özeti, listeyi sınırlayan tavandan ÖNCE ve tam kümeden hesaplanır; tavan yalnız satır listesine uygulanır ve liste sayfalanırsa imleç tanınmadığında 400 döner (sessizce baştan başlamaz). · bekçi: `test_dokuma_karne_tam_kume` <sub>(arşiv 2026-10-12 Perf-2 B1)</sub>
+- **[ÇEKİRDEK]** Katalogla büyüyen rapor kırılım listesi `capReportLists` (`REPORT_MAX_ROWS`) tavanından geçer ve kesme yanıtta `warnings` ile söylenir; rapora yeni dizi alanı ekleyen onu rotanın liste beyanına ya da bekçinin muaf listesine yazar. · bekçi: `test_rapor_satir_tavani` <sub>(arşiv 2026-10-13 Perf-2 B5)</sub>
 
 ### Yasaklar
 
