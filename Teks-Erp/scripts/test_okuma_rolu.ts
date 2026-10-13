@@ -7,7 +7,7 @@
 // parola audit yüküne girmez.
 // §1 statik (uç zinciri + mount) · §2 ⭐ sır adı taşıyan HER kolon sınıflandırılmış, liste bayat değil ·
 // §3 göç + ihlal ölçümü boş · §4 ⭐ okuma rolüyle NEGATİF sondalar (sır SELECT · DML · definer ·
-// CREATE → reddedilir; iş tabloları okunur; eski parola geçersiz; bozuk doğrulayıcı 22023) ·
+// CREATE · advisory kilit (DoS) → reddedilir; iş tabloları okunur; eski parola geçersiz; bozuk doğrulayıcı 22023) ·
 // §5 ⭐ sonda: yetki kaçağı ölçümde kırmızı, yeniden koşum onarır · §6 ⭐ servis: yenile-ve-göster,
 // audit yükünde parola/doğrulayıcı YOK, fonksiyon yoksa KURULUMDA_YOK + 409 · §7 ⭐ uç: fabrika
 // yöneticisi (admin:settings, sistem hesabı değil) 403, sistem hesabı geçer.
@@ -21,7 +21,7 @@ import { Client } from "pg";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { EXIT_OK, readRoleViolations, runRoleMigration, scramVerifier } from "../src/lib/db-rol-gocu";
 import {
-  READ_ONLY_HIDDEN_COLUMNS, READ_ONLY_HIDDEN_TABLES, READ_ONLY_NOT_SECRET_COLUMNS, SECRET_NAME_PATTERN,
+  ADVISORY_FUNCTION_SQL, READ_ONLY_HIDDEN_COLUMNS, READ_ONLY_HIDDEN_TABLES, READ_ONLY_NOT_SECRET_COLUMNS, SECRET_NAME_PATTERN,
 } from "../src/lib/okuma-rolu";
 import readOnlyDbRouter from "../src/routes/read-only-db.routes";
 import { AppError } from "../src/utils/app-error";
@@ -158,6 +158,13 @@ async function main(): Promise<void> {
           ["definer audit_arsiv_buda", `SELECT audit_arsiv_buda(now() - interval '100 years')`], // tz-ok: bekçi
           ["definer okuma_rolu_parola (kendi parolası)", `SELECT okuma_rolu_parola('x')`],
           ["CREATE TABLE", `CREATE TABLE g5_okuma_sonda (x int)`],
+          // Kilit DoS: fabrika uzayını (8039 audit zinciri, 8023 sevkiyat kapsamı) oturum boyu tutamaz.
+          ["pg_advisory_lock(8039, 0)", `SELECT pg_advisory_lock(8039, 0)`],
+          ["pg_advisory_lock(bigint)", `SELECT pg_advisory_lock(8023::bigint)`],
+          ["pg_advisory_lock_shared(8039, 0)", `SELECT pg_advisory_lock_shared(8039, 0)`],
+          ["pg_try_advisory_lock(8039, 0)", `SELECT pg_try_advisory_lock(8039, 0)`],
+          ["pg_advisory_xact_lock(8039, 0)", `SELECT pg_advisory_xact_lock(8039, 0)`],
+          ["pg_advisory_unlock_all()", `SELECT pg_advisory_unlock_all()`],
         ] as const) {
           const k = await hataKodu(o, sql);
           check(`§4b ⭐ okuma rolü: ${ad} → reddedilir (42501)`, k === "42501", k);
@@ -170,6 +177,10 @@ async function main(): Promise<void> {
         const ro = (await o.query("SHOW default_transaction_read_only")).rows[0].default_transaction_read_only;
         check("§4d savunma katmanı: varsayılan işlem salt-okur", ro === "on", ro);
       } finally { await o.end(); }
+      await u.query("BEGIN");
+      const ak = await hataKodu(u, `SELECT pg_advisory_xact_lock(8039, 0), pg_try_advisory_lock(8039::bigint), pg_advisory_unlock(8039::bigint)`);
+      await u.query("ROLLBACK");
+      check("§4f ⭐ uygulama rolü advisory kilit alır/bırakır (açık GRANT)", ak === "ok", ak);
       p2 = "Bekci-G5-" + process.pid + "-ikinci";
       await u.query("SELECT okuma_rolu_parola($1)", [scramVerifier(p2)]);
       check("§4e ⭐ yenileme eski parolayı geçersiz kılar (28P01), yenisi girer",
@@ -180,9 +191,11 @@ async function main(): Promise<void> {
     await sahip.query(`GRANT SELECT ("passwordHash") ON users TO "${okr}"`);
     await sahip.query(`GRANT INSERT ON rolls TO "${okr}"`);
     await sahip.query(`GRANT EXECUTE ON FUNCTION audit_arsivle(timestamptz, integer) TO PUBLIC`);
+    await sahip.query(`GRANT EXECUTE ON FUNCTION pg_catalog.pg_advisory_lock(bigint) TO PUBLIC`);
     const ih = await readRoleViolations(sahip, okr);
-    check("§5a ⭐ sonda: sır kolonu · DML · PUBLIC definer kaçağı ölçümde görünür",
-      ih.includes("sir-kolon:users.passwordHash") && ih.includes("yazma:rolls") && ih.some((x) => x.startsWith("definer:audit_arsivle")), ih.join(", "));
+    check("§5a ⭐ sonda: sır kolonu · DML · PUBLIC definer · PUBLIC advisory kaçağı ölçümde görünür",
+      ih.includes("sir-kolon:users.passwordHash") && ih.includes("yazma:rolls") && ih.some((x) => x.startsWith("definer:audit_arsivle"))
+      && ih.includes("advisory:pg_advisory_lock(bigint)"), ih.join(", "));
     const g2 = await runRoleMigration({ ownerUrl, rol: uyg, readRole: okr, uygula: true, log: () => undefined });
     check("§5b ⭐ yeniden koşum onarır (ihlal 0) ve parolaya dokunmaz",
       g2.readResult === "ready" && (await readRoleViolations(sahip, okr)).length === 0 && await baglanKodu(rolUrl(ownerUrl, okr, p2)) === "ok");
@@ -209,6 +222,10 @@ async function main(): Promise<void> {
       JSON.stringify({ d: (yok.out as { state?: string } | null)?.state, e: yok2.err }));
   } finally {
     await sahip.query(`DROP FUNCTION IF EXISTS public.okuma_rolu_parola(text)`).catch(() => undefined);
+    // Test DB'yi bulunduğu gibi bırak: aynı DB'de sonraki bekçilerin rolleri advisory kilidi PUBLIC'ten alır.
+    for (const r of (await sahip.query(ADVISORY_FUNCTION_SQL)).rows) {
+      await sahip.query(`GRANT EXECUTE ON FUNCTION pg_catalog.${String(r.f)} TO PUBLIC`).catch(() => undefined);
+    }
     for (const r of [okr, uyg]) {
       if (await roleExists(r)) {
         await sahip.query(`DROP OWNED BY "${r}"`).catch(() => undefined);

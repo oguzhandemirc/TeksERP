@@ -60,7 +60,14 @@ export interface ReadOnlyCatalog {
   tables: ReadonlyMap<string, readonly string[]>;
   /** public şemadaki SECURITY DEFINER fonksiyonlar (`ad(arg tipleri)`). */
   definerFunctions: readonly string[];
+  /** pg_catalog advisory kilit fonksiyonları (`ad(arg tipleri)`, kilit + try_ + unlock türevleri). */
+  advisoryFunctions: readonly string[];
 }
+
+/** pg_catalog'daki advisory kilit/çözme fonksiyonlarının ad deseni (tüm imzalar). */
+export const ADVISORY_FUNCTION_SQL = `SELECT p.oid::regprocedure::text AS f FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'pg_catalog' AND p.proname ~ '^pg_(try_)?advisory_' ORDER BY 1`;
 
 const id = (s: string) => `"${s.replace(/"/g, '""')}"`;
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
@@ -83,7 +90,8 @@ export async function readOnlyCatalog(
   const f = await q(`
     SELECT p.oid::regprocedure::text AS f FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.prosecdef ORDER BY 1`);
-  return { tables, definerFunctions: f.rows.map((r) => String(r.f)) };
+  const a = await q(ADVISORY_FUNCTION_SQL);
+  return { tables, definerFunctions: f.rows.map((r) => String(r.f)), advisoryFunctions: a.rows.map((r) => String(r.f)) };
 }
 
 /**
@@ -129,6 +137,14 @@ export function readOnlyPlan(o: {
     if (f.startsWith(`${READ_ONLY_PASSWORD_FUNCTION}(`)) continue;
     out.push(`REVOKE EXECUTE ON FUNCTION ${f} FROM PUBLIC`);
   }
+  // Advisory kilitler PUBLIC'e açıkken okuma rolü fabrika uzayını (period-guard envanteri) oturum
+  // boyu tutup yazımı kilitleyebilirdi. ÖNCE sahip + uygulama rolüne açık GRANT, SONRA PUBLIC'ten
+  // REVOKE (aynı kayıt noktası: biri düşerse ikisi birden geri alınır). Sahip süper değilse REVOKE
+  // uyarıyla etkisiz kalır; `readRoleViolations` bunu ölçer ve okuma girişini kapatır (fail-closed).
+  for (const f of o.catalog.advisoryFunctions) {
+    out.push(`GRANT EXECUTE ON FUNCTION pg_catalog.${f} TO ${id(o.owner)}, ${id(o.appRole)}`);
+  }
+  for (const f of o.catalog.advisoryFunctions) out.push(`REVOKE EXECUTE ON FUNCTION pg_catalog.${f} FROM PUBLIC, ${R}`);
   out.push(...passwordFunction(o.role, o.appRole));
   return out;
 }

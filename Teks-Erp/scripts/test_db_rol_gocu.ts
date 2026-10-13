@@ -19,6 +19,7 @@ import { Client } from "pg";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AUDIT_TAMPER_SQL } from "../src/lib/audit-koruma-sql";
 import { EXIT_OK, EXIT_NOT_APPLICABLE, runRoleMigration, measureRoleState } from "../src/lib/db-rol-gocu";
+import { ADVISORY_FUNCTION_SQL } from "../src/lib/okuma-rolu";
 
 let pass = 0;
 let fail = 0;
@@ -178,6 +179,10 @@ async function main(): Promise<void> {
   } finally {
     await sahip.query(`DROP TABLE IF EXISTS "${tmpTablo}"`).catch(() => undefined);
     await sahip.query(`DROP FUNCTION IF EXISTS public.okuma_rolu_parola(text)`).catch(() => undefined);
+    // Göç advisory kilitlerini PUBLIC'ten aldı; test DB'si sonraki bekçiler için eski hâline döner.
+    for (const r of (await sahip.query(ADVISORY_FUNCTION_SQL)).rows) {
+      await sahip.query(`GRANT EXECUTE ON FUNCTION pg_catalog.${String(r.f)} TO PUBLIC`).catch(() => undefined);
+    }
     for (const r of [okr, rol, yabanci]) {
       if (await roleExists(r)) {
         await sahip.query(`DROP OWNED BY "${r}"`).catch(() => undefined);

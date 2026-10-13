@@ -149,7 +149,7 @@ async function readRoleState(c: Client, readRoleName: string): Promise<{ exists:
   return { exists: true, memberships: u.rows.map((x: { rolname: string }) => x.rolname) };
 }
 
-/** G5 — okuma rolü yazamaz, sır okuyamaz, definer fonksiyon çağıramaz (sahip bağlantısıyla ölçülür). */
+/** G5 — okuma rolü yazamaz, sır okuyamaz, definer/advisory fonksiyon çağıramaz (sahip bağlantısıyla ölçülür). */
 export async function readRoleViolations(c: Client, readRoleName: string): Promise<string[]> {
   const r = await c.query(`
     SELECT 'yazma:' || c.relname AS i FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -159,6 +159,9 @@ export async function readRoleViolations(c: Client, readRoleName: string): Promi
     UNION ALL
     SELECT 'definer:' || p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
      WHERE n.nspname = 'public' AND p.prosecdef AND has_function_privilege($1, p.oid, 'EXECUTE')
+    UNION ALL
+    SELECT 'advisory:' || p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'pg_catalog' AND p.proname ~ '^pg_(try_)?advisory_' AND has_function_privilege($1, p.oid, 'EXECUTE')
     UNION ALL
     SELECT 'ozellik' FROM pg_roles a WHERE a.rolname = $1
      AND (a.rolsuper OR a.rolcreatedb OR a.rolcreaterole OR a.rolreplication OR a.rolbypassrls
