@@ -293,6 +293,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "20.000 satırı aşan listeler Excel'e daha hızlı ve çok daha az bellekle indirilir; büyük indirmede panel yavaşlamaz. 100.000 kaydı aşan \"Tümünü indir\" başlamadan önce yaklaşık kayıt sayısını gösterip onay ister."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem altında yeni “Veritabanı Okuma Erişimi” ekranı (yalnız sistem yöneticisi hesabı): Power BI, Metabase, Excel gibi kendi raporlama aracınız için yalnız okuyabilen bir veritabanı kullanıcısının bağlantı bilgisini gösterir. Parola saklanmaz; “Parolayı yenile ve göster” yeni parolayı bir kez gösterir, eskisi hemen geçersiz olur ve her yenileme kayda geçer. Bu kullanıcı kayıt ekleyemez, değiştiremez, silemez; parola, PIN/kart özetleri, iki adımlı giriş sırları ve sistem ayarları ona kapalıdır. Kapalı kolon taşıyan tablolarda (ör. kullanıcılar) “SELECT *” reddedilir; raporlama aracınızda kolonları tek tek seçin. Şimdilik yalnız Docker kurulumunda ve 2.15.7 sunucusuyla kullanılabilir; ekran port açmaz."
         }
       ]
     },

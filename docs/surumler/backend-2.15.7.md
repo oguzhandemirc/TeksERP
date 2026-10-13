@@ -36,6 +36,9 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   uygulama rolü kendiliğinden kurulur; sunucu bu rolle bağlanır ve etkinlik kaydını yalnız ekleyebilir, silemez ya da
   değiştiremez. Ek ayar ya da parola gerekmez. Rol kurulamazsa sunucu bugünkü gibi açılır, sağlık bilgisinde
   "audit koruması: kısmi" görünür. Windows kurulumunda değişen yok (sonraki sürüm).
+- **Linux (Docker) kurulumunda kendi raporlama aracınız için yalnız-okuma veritabanı kullanıcısı (G5).** Açılışta
+  kendiliğinden kurulur; parolası yoktur, sistem yöneticisi hesabı panelden ilk parolayı üretene kadar girilemez. Yazamaz;
+  parola/PIN/kart özetleri, doğrulama sırları ve sistem ayarları ona kapalıdır. Port açılmaz. Windows'ta yok.
 - **Şifresiz yedek indirilirken uyarı.** Yedek anahtarı kurulu değilse panel indirme sırasında uyarır (yeni panel).
 - **Sevk karneleri uzun aralıkta daha hızlı açılır.** Sevk & Termin, Müşteri ve İade karneleri ile yön dağılımı
   aynı rakamı daha az okumayla hesaplar (yerel ölçüm, 1 M sevk edilmiş top: 90 gün 263 → 47 ms, 1 yıl 418 → 171 ms).
@@ -144,6 +147,21 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   yoklaması bunu söyler); Docker geri yüklemesinin belgeli yolu runbook §6 (`yedek` servisi) değişmez. Gece yedeği
   (`yedek` servisi) sahip rolüyle sürer.
 
+**Yalnız-okuma DB rolü (G5)** (commit `feat(guvenlik): G5 …` + `fix(guvenlik): G5 okuma rolü advisory …`; kısa kimliği paketlemede yazılır)
+
+- Rol göçü (`db-rol-gocu.cjs`, açılış §2b) aynı transaction'da ayrı kayıt noktasıyla `<POSTGRES_USER>_okuma` rolünü
+  kurar/onarır: LOGIN, CONNECTION LIMIT 5, salt-okur varsayılan işlem, `statement_timeout`/`idle_in_transaction` 300 sn;
+  tablolarda yalnız SELECT, sır tablo/kolonlarında kolon düzeyi GRANT ile hariç (liste `src/lib/okuma-rolu.ts`).
+  Public şemadaki SECURITY DEFINER fonksiyonlardan (`audit_arsivle`/`audit_arsiv_buda` dahil) ve pg_catalog advisory
+  kilit fonksiyonlarından PUBLIC EXECUTE alınır; sahip ve uygulama rolüne açık GRANT verilir (okuma rolü fabrika
+  kilitlerini tutamaz). Kurulumdan sonra yetkiler ölçülür; ihlal varsa okuma rolü NOLOGIN olur, uygulama rolü etkilenmez.
+- Yeni `GET /api/admin/read-only-db` (durum, bağlantı bilgisi, gizli tablo/kolon listesi) ve
+  `POST /api/admin/read-only-db/password` (yenile-ve-göster; parola yalnız yanıtta, PG'ye SCRAM gider, audit
+  `READ_ONLY_DB_PASSWORD_ROTATED` parolasız). İkisi de `admin:settings` + YALNIZ sistem hesabı (supapsız 403).
+  Rol yoksa durum `KURULUMDA_YOK`; rol yoksa ya da girişe kapalıysa yenileme 409 `READ_ONLY_DB_UNAVAILABLE`.
+- Kapalı kolon taşıyan tabloda (`users`) `SELECT *` 42501 verir — BI aracında kolonlar seçilir (bilinçli).
+- `dist-web`: panel 1.6.5 kaynağı değişir (Sistem → Veritabanı Okuma Erişimi).
+
 **Ekran yolu tek kaynağı** (commit `chore(ekran-yolu): …`; kısa kimliği paketlemede yazılır)
 
 - Kullanıcıya dönen "şu ekrandan yapın" cümleleri panelin gerçek menüsünü gösterir; yedi bayat yol düzeldi:
@@ -176,6 +194,8 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - **Kırıldı mı:** HAYIR (B4 müdahale raporu) — yalnız ekleme: bir rapor ucu + katalog anahtarı; 1.6.4 paneli karoyu
   çizmez, uç yalnız yeni panelden çağrılır.
 - **Kırıldı mı:** HAYIR (D5) — yalnız ekleme: salon cevabında tezgah başına `operator`.
+- **Kırıldı mı:** HAYIR (G5) — yalnız ekleme: iki yönetim ucu; 1.6.4 paneli karoyu çizmez. Rol göç kodu açılışta
+  koşar, migration getirmez.
 - **Kırıldı mı:** HAYIR (Sebep ata) — yalnız ekleme: iki uç, salon cevabında bir alan. Eski panel alanı okumaz.
 - **Kırıldı mı:** HAYIR (C.6) — yalnız ekleme: iki gövdede isteğe bağlı satır alanı, iki cevap alanı. 1.6.4 paneli
   alanı göndermez, davranışı değişmez; 1.6.5 paneli `rowJobs` yoksa (2.15.6 sunucusu) tezgah başına seçiciyi çizmez.
