@@ -35,6 +35,9 @@ import { fileURLToPath } from "node:url";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BACKEND = join(REPO, "Teks-Erp");
 const ESZAMANLI = 4;
+// Mandal başına tavan (2026-10-13): adım tavanı 600 sn ADSIZ ölürdü ("hızlı mandallar ❌ 600,0" yedi kez
+// defterde, kök `harita_sonda_atfi` 143 sn'ydi). Tek mandal normalde ≤ 25 sn; 180 sn aşan mandal adıyla kırmızıdır.
+const MANDAL_TAVAN_MS = 180_000;
 
 /** Ad · okuduğu · kaynak (ağaç/INDEX) — sıra pahalıdan ucuza (uzun iş önce başlar). */
 const MANDALLAR = [
@@ -58,7 +61,7 @@ const MANDALLAR = [
   "test_gun_anahtari_kaynagi", // src+scripts gün anahtarı tek kaynak (ANAHTAR sert · gösterim cırcır) · ağaç+others · 0,6 sn (14., 2026-09-14)
   "test_yerel_ayar_bagimliligi", // src+scripts toLocale*/Intl yerel bağımlılığı (§1 sert + iki cırcır) · ağaç+others · 0,7 sn (15., 2026-09-14)
 
-  "test_harita_sonda_atfi", // BEKCI-HARITASI "Negatif sonda" hücresi: ✓B sha atfı sert · düz ✓ cırcır · INDEX · 0,5 sn (16., 2026-09-14)
+  "test_harita_sonda_atfi", // BEKCI-HARITASI "Negatif sonda" hücresi: ✓B sha atfı sert · düz ✓ cırcır · INDEX · ~2 sn (16., 2026-09-14; 143 sn → 2 sn 2026-10-13: tek blame)
 
   "test_fikstur_sabit_ad", // scripts/test_* fikstürlerinde SABİT ad/kod (P2002 maskesi) · ağaç+others · ~1,5 sn · taban 0 sert (17., d9 yazdı, 2026-09-14)
   "test_lookup_beyan_aynasi", // import LOOKUP_SOURCES beyanı ↔ resolveReference çağrıları · src (import-lookup + tüm src taraması) · ağaç+others · 0,4–1,2 sn · taban 0 sert (18., d9 yazdı, 2026-09-14)
@@ -99,11 +102,18 @@ function kos(ad) {
         // sabiti yalnız entegratör yazar; borcu ödeyenin commit'i düşmesin (scripts/lib/circir-kolu.ts).
         TEKSERP_KAPI_ADIMI: "commit",
       },
+      detached: true, // npx → tsx → node ağacı: zaman aşımında GRUP öldürülür
     });
     let out = "";
+    let zamanAsimi = false;
+    const zamanlayici = setTimeout(() => {
+      zamanAsimi = true;
+      out += `❌ ZAMAN AŞIMI — ${MANDAL_TAVAN_MS / 1000} sn tavanı aşıldı (mandal takıldı ya da yavaşladı)\n`;
+      try { process.kill(-cp.pid, "SIGKILL"); } catch { /* süreç zaten bitti */ }
+    }, MANDAL_TAVAN_MS);
     cp.stdout.on("data", (d) => (out += d));
     cp.stderr.on("data", (d) => (out += d));
-    cp.on("close", (code) => resolve({ ad, code, out, sn: ((Date.now() - t0) / 1000).toFixed(1) }));
+    cp.on("close", (code) => { clearTimeout(zamanlayici); resolve({ ad, code: zamanAsimi ? -2 : code, out, sn: ((Date.now() - t0) / 1000).toFixed(1) }); });
     cp.on("error", (e) => resolve({ ad, code: -1, out: String(e), sn: ((Date.now() - t0) / 1000).toFixed(1) }));
   });
 }
