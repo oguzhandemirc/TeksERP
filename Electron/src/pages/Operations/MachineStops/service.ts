@@ -19,6 +19,8 @@ export interface StopListParams {
   shiftInstanceId?: string;
   queue?: boolean;
   open?: boolean;
+  /** Watchdog'un geçici kapattığı, gerçek bitiş bekleyen duruşlar (eski sunucu bilinmeyen parametreyi 400'ler). */
+  pendingEnd?: boolean;
 }
 
 export interface OpenStopPayload {
@@ -39,6 +41,7 @@ export const machineStopService = {
     if (p.shiftInstanceId) sp.set("shiftInstanceId", p.shiftInstanceId);
     if (p.queue) sp.set("queue", "true");
     if (p.open) sp.set("open", "true");
+    if (p.pendingEnd) sp.set("pendingEnd", "true");
     return apiClient.get<ApiResponse<MachineStop[]>>(`${BASE}?${sp.toString()}`).then((r) => r.data);
   },
   reclasses: (id: string) => apiClient.get<ApiResponse<StopReclass[]>>(`${BASE}/${id}/reclasses`).then((r) => r.data),

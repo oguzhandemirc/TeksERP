@@ -19,6 +19,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { MACHINE_STOP_SELECT, type MachineStopDto } from "./helpers/machine-stop-context.helper";
+import { WATCHDOG_PENDING_END_WHERE } from "./helpers/machine-stop-watchdog.helper";
 import { AppError } from "../utils/app-error";
 import { factoryDayEnd, factoryDayStart, resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import { MACHINE_RUN_SELECT, type MachineRunDto } from "./machine-run.service";
@@ -112,6 +113,8 @@ export interface MachineStopListParams {
   machineId?: string;
   openOnly?: boolean;
   queueOnly?: boolean;
+  /** Watchdog'un geçici kapattığı, gerçek bitiş bekleyen duruşlar (`WATCHDOG_PENDING_END_WHERE`). */
+  pendingEndOnly?: boolean;
   /** Fabrika günü anahtarı `YYYY-MM-DD` — `factoryDay` @db.Date kolonu UTC gece yarısı taşır (`factoryDayKeyUtcMidnight`). */
   factoryDay?: string;
   shiftInstanceId?: string;
@@ -130,6 +133,7 @@ export async function listMachineStops(params: MachineStopListParams): Promise<A
     ...(params.machineId ? { machineId: params.machineId } : {}),
     ...(params.openOnly ? { endedAt: null } : {}),
     ...(params.queueOnly ? CLASSIFICATION_QUEUE_WHERE : {}),
+    ...(params.pendingEndOnly ? WATCHDOG_PENDING_END_WHERE : {}),
     ...(params.factoryDay ? { factoryDay: factoryDayKeyFromYmd(params.factoryDay) } : {}),
     ...(params.shiftInstanceId ? { shiftInstanceId: params.shiftInstanceId } : {}),
   };

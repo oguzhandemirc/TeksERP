@@ -3,7 +3,7 @@
 // =============================================================================
 // Sınıflandırma kuyruğu (`requiresReason ∧ reasonCode null`), sebep atama /
 // yeniden sınıflandırma (web-only; reclass DEFTERİ görünür), elle duruş girişi /
-// kapatma / geri alma. Süzme SUNUCUDA: gün · tezgah · vardiya · kuyruk.
+// kapatma / geri alma; watchdog'un geçici kapattığı duruşlar ayrı kapsam. Süzme SUNUCUDA: gün · tezgah · vardiya · kuyruk.
 // ⚠️ REJİM: karo `isMachineStopsVisible` (`stop-regime.ts`); asıl sed backend
 // `requireDokumaEnabled`. Ekranı `loom:manual-entry` | `loom:classify` açar,
 // eylemler ekran içinde izinle (`StopRowMenu`).
@@ -35,7 +35,7 @@ export function MachineStopsPage() {
   const [day, setDay] = useState(todayKey());
   const [dialog, setDialog] = useState<DialogState>(null);
   const nowMs = useMinuteTick();
-  const { params, queueScope } = useStopListParams(day);
+  const { params, dayFree } = useStopListParams(day);
   const query = useQuery({ queryKey: [MACHINE_STOPS_QUERY_KEY, params], queryFn: () => machineStopService.list(params) });
   const rows = useMemo(() => query.data?.data ?? [], [query.data]);
   const filters = useStopFilters(rows);
@@ -67,7 +67,7 @@ export function MachineStopsPage() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="stops-day">Fabrika günü</Label>
-          <DatePickerInput id="stops-day" value={day} onChange={setDay} disabled={queueScope} className="w-44" />
+          <DatePickerInput id="stops-day" value={day} onChange={setDay} disabled={dayFree} className="w-44" />
         </div>
         <FilterBar filters={filters} />
       </div>

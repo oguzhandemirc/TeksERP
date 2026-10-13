@@ -12,7 +12,23 @@ import type { MachineStop } from "./types";
 const SCOPE_OPTIONS = [
   { value: "queue", label: "Sınıflandırma kuyruğu (sebep bekleyen)" },
   { value: "open", label: "Yalnız açık duruşlar" },
+  { value: "pendingEnd", label: "Geçici kapanışlar (gerçek bitiş bekleyen)" },
 ];
+
+/** Gün süzgecinden muaf kapsamlar: borç/bekleyen bitiş hangi günden olursa olsun görünmeli. */
+const DAY_FREE_SCOPES = new Set(["queue", "pendingEnd"]);
+
+/** URL süzgeçleri → liste parametreleri (saf; süzme sunucuda). */
+export function stopListParamsOf(f: { machineId: string; scope: string; shiftInstanceId: string; day: string }): StopListParams {
+  return {
+    machineId: f.machineId || undefined,
+    factoryDay: DAY_FREE_SCOPES.has(f.scope) ? undefined : f.day,
+    shiftInstanceId: f.shiftInstanceId || undefined,
+    queue: f.scope === "queue",
+    open: f.scope === "open",
+    pendingEnd: f.scope === "pendingEnd",
+  };
+}
 
 export function useMinuteTick(): number {
   const [now, setNow] = useState(() => Date.now());
@@ -23,23 +39,14 @@ export function useMinuteTick(): number {
   return now;
 }
 
-/** Kuyruk GÜN süzgecinin dışındadır: borç hangi günden olursa olsun görünmeli. */
-export function useStopListParams(day: string): { params: StopListParams; queueScope: boolean } {
+/** Kuyruk ve geçici kapanışlar GÜN süzgecinin dışındadır (`DAY_FREE_SCOPES`). */
+export function useStopListParams(day: string): { params: StopListParams; dayFree: boolean } {
   const [sp] = useSearchParams();
   const machineId = sp.get("filter[machineId]") ?? "";
   const scope = sp.get("filter[scope]") ?? "";
   const shiftInstanceId = sp.get("filter[shiftInstanceId]") ?? "";
-  const params = useMemo<StopListParams>(
-    () => ({
-      machineId: machineId || undefined,
-      factoryDay: scope === "queue" ? undefined : day,
-      shiftInstanceId: shiftInstanceId || undefined,
-      queue: scope === "queue",
-      open: scope === "open",
-    }),
-    [machineId, scope, shiftInstanceId, day],
-  );
-  return { params, queueScope: scope === "queue" };
+  const params = useMemo(() => stopListParamsOf({ machineId, scope, shiftInstanceId, day }), [machineId, scope, shiftInstanceId, day]);
+  return { params, dayFree: DAY_FREE_SCOPES.has(scope) };
 }
 
 /** Vardiya seçenekleri o günün satırlarından türer (vardiya listesi ucu yok; süzme yine sunucuda). */

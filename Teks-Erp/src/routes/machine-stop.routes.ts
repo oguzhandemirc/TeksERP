@@ -35,6 +35,7 @@ const listSchema = z
     machineId: z.string().uuid("Geçersiz makine").optional(),
     open: z.literal("true").optional(),
     queue: z.literal("true").optional(),
+    pendingEnd: z.literal("true").optional(),
     factoryDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Geçersiz gün (YYYY-MM-DD)").optional(),
     shiftInstanceId: z.string().uuid("Geçersiz vardiya").optional(),
     limit: z.coerce.number().int().min(1).max(500).optional(),
@@ -46,7 +47,7 @@ const listSchema = z
  * /api/machine-stops:
  *   get:
  *     tags: [MachineStops]
- *     summary: Duruş listesi — açık duruşlar (`open=true`) ya da sınıflandırma kuyruğu (`queue=true`)
+ *     summary: Duruş listesi — açık duruşlar (`open=true`), sınıflandırma kuyruğu (`queue=true`) ya da geçici (watchdog) kapanışı gerçek bitiş bekleyenler (`pendingEnd=true`)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Duruş listesi (geri alınmışlar hariç) }
@@ -60,6 +61,7 @@ router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify", ...MO
         machineId: q.machineId,
         openOnly: q.open === "true",
         queueOnly: q.queue === "true",
+        pendingEndOnly: q.pendingEnd === "true",
         factoryDay: q.factoryDay,
         shiftInstanceId: q.shiftInstanceId,
         limit: q.limit,

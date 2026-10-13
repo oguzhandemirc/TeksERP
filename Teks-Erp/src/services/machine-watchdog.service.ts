@@ -15,6 +15,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { closeStopCore } from "./machine-stop.service";
+import { LATE_STOP_END_WHERE } from "./helpers/machine-stop-watchdog.helper";
 import {
   readDokumaEnabled, readTezgahCollectorSilenceMinutes, readTezgahEnabled, readTezgahMaxOpenStopHours,
 } from "./system-setting.service";
@@ -97,7 +98,7 @@ async function closeOverdueCardStops(now: Date, maxHours: number, sum: WatchdogS
 async function applyLateEnds(sum: WatchdogSummary, only?: string[]): Promise<void> {
   const late = await prisma.machineStopEvent.findMany({
     where: {
-      endSource: MachineStopEndSource.WATCHDOG, lateEndedAt: { not: null }, endCorrectedAt: null, revokedAt: null,
+      ...LATE_STOP_END_WHERE,
       ...(only ? { machineId: { in: only } } : {}),
     },
     orderBy: [{ startedAt: "asc" }, { id: "asc" }], take: BATCH, select: { id: true, lateEndedAt: true },
@@ -133,8 +134,6 @@ export async function runMachineWatchdogOnce(opts: WatchdogRunOptions = {}): Pro
 /** Sağlık sayaçları — sessiz kart ve geciken kapanış kuyruğu (panel D5 bunları gösterir). */
 export async function readMachineWatchdogCounters(): Promise<{ silentCollectors: number; lateStopEnds: number }> {
   const silentCollectors = await prisma.machineCollector.count({ where: { silentSince: { not: null }, revokedAt: null, isActive: true } });
-  const lateStopEnds = await prisma.machineStopEvent.count({
-    where: { endSource: MachineStopEndSource.WATCHDOG, lateEndedAt: { not: null }, endCorrectedAt: null, revokedAt: null },
-  });
+  const lateStopEnds = await prisma.machineStopEvent.count({ where: LATE_STOP_END_WHERE });
   return { silentCollectors, lateStopEnds };
 }

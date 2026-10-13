@@ -11,6 +11,11 @@ import { AuditService } from "../audit.service";
 
 const TABLE = "MACHINE_STOP_EVENT";
 
+/** Watchdog'un geçici kapattığı, gerçek bitişi henüz uygulanmamış duruş — panel listesi (`pendingEnd`) bu yüklemdir. */
+export const WATCHDOG_PENDING_END_WHERE = { endSource: MachineStopEndSource.WATCHDOG, endCorrectedAt: null, revokedAt: null } satisfies Prisma.MachineStopEventWhereInput;
+/** Geciken kapanış kuyruğu: gerçek bitiş geldi ama mühür yüzünden bekliyor (tur uygular, sağlık sayacı sayar). */
+export const LATE_STOP_END_WHERE = { ...WATCHDOG_PENDING_END_WHERE, lateEndedAt: { not: null } } satisfies Prisma.MachineStopEventWhereInput;
+
 export const STOP_CORRECTED_MESSAGE = "Geçici (watchdog) kapanış gerçek bitişle düzeltildi";
 
 export interface WatchdogCorrection {

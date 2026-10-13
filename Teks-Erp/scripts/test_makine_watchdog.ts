@@ -11,7 +11,9 @@
 //   §6 düzeltme: gerçek bitiş BİR KEZ düzeltir (`endCorrectedAt`, `provisionalEndedAt` KALIR); tekrar replay,
 //      başka bitiş 409 STOP_END_CONFLICT
 //   §7 mühür: düzeltme 409 SHIFT_SEALED + `lateEndedAt` kuyruğu (sağlık sayacı); mühür açılınca tur uygular
-//   §8 statik: watchdog duruş açmaz, kapanışı yalnız tek boğazdan yazar
+//   §8 statik: watchdog duruş açmaz, kapanışı yalnız tek boğazdan yazar; liste/kuyruk yüklemi tek kaynaktan
+//   §5e/§6f/§7f-g panel listesi `GET /machine-stops?pendingEnd=true`: geçici kapanış (bitiş gelmedi ya da mühür
+//      bekliyor) listede; düzeltilen ve insan duruşu listede değil
 // Negatif sondalar (kırmızı görüldü, geri alındı): bkz. docs/history/arsiv/2026-10.md (makine duruşu D4).
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -75,6 +77,11 @@ async function kart(path: string, body: unknown, c: Kart): Promise<Yanit> {
 
 const det = (r: Yanit): { code?: string; lateEndQueued?: boolean } => r.body.error?.details ?? r.body.details ?? {};
 const kod = (r: Yanit): string => `${r.status}:${det(r).code ?? ""}`;
+/** Panelin "geçici kapanışlar" kapsamı — tezgah başına id kümesi. */
+async function bekleyen(machineId: string): Promise<string[]> {
+  const r = await api("GET", `/api/machine-stops?pendingEnd=true&limit=500&machineId=${machineId}`);
+  return Array.isArray(r.body.data) ? (r.body.data as unknown as Array<{ id: string }>).map((x) => x.id) : [`HTTP ${r.status}`];
+}
 const sayi = (r: Awaited<ReturnType<typeof runMachineWatchdogOnce>>): WatchdogSummary | null => (r === "disabled" ? null : r);
 
 async function setting(key: string, value: unknown): Promise<void> {
@@ -174,6 +181,9 @@ async function kapanisBolumu(card: Kart, m: string[]): Promise<{ key: string; st
   const h = await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: (insan.data as { id: string }).id }, select: { endedAt: true } });
   check("§5c insan duruşuna dokunulmaz (açık kalır)", h.endedAt === null);
   check("§5d ikinci tur no-op", sayi(await runMachineWatchdogOnce({ onlyCollectorIds: [], onlyMachineIds: m }))?.provisional === 0);
+  const l0 = await bekleyen(m[0]);
+  const l1 = await bekleyen(m[1]);
+  check("§5e panel listesi (pendingEnd): geçici kapanış listede, insanın açık duruşu yok", l0.length === 1 && l0[0] === stopId && l1.length === 0, `${l0} | ${l1}`);
   return { key, stopId };
 }
 
@@ -191,6 +201,8 @@ async function duzeltmeBolumu(card: Kart, m: string[], k: { key: string; stopId:
   const tekrar = await kart("/api/machine-signals/end", { machineId: m[0], stopKey: k.key, endedAt: endedAt.toISOString() }, card);
   check("§6d aynı bitiş tekrar → 200 replay", tekrar.status === 200 && tekrar.body.message === STOP_CLOSE_REPLAY_MESSAGE, `${tekrar.status}`);
   const baska = await kart("/api/machine-signals/end", { machineId: m[0], stopKey: k.key, endedAt: new Date(endedAt.getTime() - MIN).toISOString() }, card);
+  const l = await bekleyen(m[0]);
+  check("§6f düzeltilen duruş panel listesinden düşer", l.length === 0, String(l));
   check("§6e düzeltme TEK KEZ: başka bitiş → 409 STOP_END_CONFLICT", kod(baska) === "409:STOP_END_CONFLICT", kod(baska));
 }
 
@@ -218,6 +230,8 @@ async function muhurBolumu(card: Kart, m: string[]): Promise<void> {
   const s = await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: stopId } });
   check("§7a mühürlü vardiyada düzeltme → 409 SHIFT_SEALED (kuyruğa alındı)", kod(r) === "409:SHIFT_SEALED" && det(r).lateEndQueued === true, kod(r));
   check("§7b `lateEndedAt` yazılır, kapanış değişmez (hâlâ WATCHDOG)", s.lateEndedAt?.getTime() === endedAt.getTime() && s.endSource === "WATCHDOG" && s.endCorrectedAt === null);
+  const lq = await bekleyen(m[2]);
+  check("§7f mühür bekleyen geçici kapanış panel listesinde", lq.length === 1 && lq[0] === stopId, String(lq));
   check("§7c sağlık sayacı geciken kapanışı sayar", (await readMachineWatchdogCounters()).lateStopEnds >= 1);
   const bekle = sayi(await runMachineWatchdogOnce({ onlyCollectorIds: [], onlyMachineIds: [m[2]] }));
   check("§7d mühür sürerken tur uygulamaz (sealed sayılır)", bekle?.corrected === 0 && (bekle?.sealed ?? 0) >= 1, JSON.stringify(bekle));
@@ -227,12 +241,17 @@ async function muhurBolumu(card: Kart, m: string[]): Promise<void> {
   check("§7e mühür açılınca tur geciken kapanışı uygular (SIGNAL, endCorrectedAt, provisional izi kalır)",
     uygula?.corrected === 1 && s2.endSource === "SIGNAL" && s2.endedAt?.getTime() === endedAt.getTime() && s2.endCorrectedAt !== null && s2.provisionalEndedAt !== null,
     JSON.stringify(uygula));
+  const lu = await bekleyen(m[2]);
+  check("§7g uygulanan geciken kapanış panel listesinden düşer", lu.length === 0, String(lu));
 }
 
 function statikBolum(): void {
   console.log("\n§8 — statik");
   const src = readFileSync(join(__dirname, "../src/services/machine-watchdog.service.ts"), "utf8").replace(/\/\/.*$|\/\*[\s\S]*?\*\//gm, "");
   check("§8a watchdog duruş AÇMAZ (create/openStopCore/openMachineStop yok)", !/machineStopEvent\.(create|upsert)|openStopCore|openMachineStop/.test(src));
+  const liste = readFileSync(join(__dirname, "../src/services/loom-list.service.ts"), "utf8");
+  check("§8c yüklem tek kaynak: watchdog kuyruğu `LATE_STOP_END_WHERE`, panel listesi `WATCHDOG_PENDING_END_WHERE` (kopya yüklem yok)",
+    /LATE_STOP_END_WHERE/.test(src) && !/lateEndedAt:\s*\{\s*not/.test(src) && /pendingEndOnly \? WATCHDOG_PENDING_END_WHERE/.test(liste));
   check("§8b watchdog duruşu doğrudan yazmaz — kapanış yalnız `closeStopCore`", !/machineStopEvent\.update|UPDATE machine_stop_events/.test(src) && /closeStopCore\(/.test(src));
 }
 
