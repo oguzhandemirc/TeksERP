@@ -12,10 +12,13 @@ import {
   emptyQuerySchema,
   reportEnvelope,
   resolveDateRange,
+  capReportLists,
 } from "../../services/reports/_shared";
 import { getStockScorecard } from "../../services/reports/stock-scorecard.report.service";
 
 const router = Router();
+/** Satır tavanına giren liste (Perf-2 B5): kumaş kırılımı katalogla büyür; yaş kovası/en eski 25 sabit. */
+export const STOCK_LISTS = [["byItem", "Kumaş kırılımı"]] as const;
 /**
  * Kimlik → RAPOR KAPISI → izin. Sıra load-bearing (K4): kimliksiz istek 401 almalı
  * (kapalı raporun varlığı anonim çağırana sızmaz), rapor kapısı ise izin reddinden
@@ -32,8 +35,8 @@ const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), req
 router.get("/scorecard", ...reportGate("inventory/scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     emptyQuerySchema.parse(req.query);
-    const data = await getStockScorecard();
-    res.status(200).json(reportEnvelope(data, resolveDateRange({})));
+    const { data, warnings } = capReportLists(await getStockScorecard(), STOCK_LISTS);
+    res.status(200).json(reportEnvelope(data, resolveDateRange({}), null, { warnings }));
   } catch (e) {
     next(e);
   }

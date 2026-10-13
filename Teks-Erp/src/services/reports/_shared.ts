@@ -161,9 +161,11 @@ export interface ReportResponse<T> {
   suzgec?: SuzgecEcho;
   /** R5b-c3: seçici kaynakları (`_secenekler`) — raporun eksenleri, pencerede geçen değerler, süzgeçten bağımsız. */
   meta?: { secenekler: Secenekler };
+  /** Engel olmayan not (ApiResponse.warnings) — ör. satır tavanı; yoksa anahtar YOK. */
+  warnings?: string[];
 }
 
-export interface EnvelopeEk { suzgec?: SuzgecEcho; secenekler?: Secenekler }
+export interface EnvelopeEk { suzgec?: SuzgecEcho; secenekler?: Secenekler; warnings?: string[] }
 
 export function reportEnvelope<T>(
   data: T,
@@ -180,7 +182,32 @@ export function reportEnvelope<T>(
       : {}),
     ...(ek.suzgec ? { suzgec: ek.suzgec } : {}),
     ...(ek.secenekler ? { meta: { secenekler: ek.secenekler } } : {}),
+    ...(ek.warnings && ek.warnings.length > 0 ? { warnings: ek.warnings } : {}),
   };
+}
+
+/** Kırılım listelerinin satır tavanı (Perf-2 B5) — kasa defteri `MAX_ROWS` emsali. */
+export const REPORT_MAX_ROWS = 5000;
+
+/**
+ * Raporun kırılım LİSTELERİNİ tavana keser; özet alanlarına dokunmaz (özet tam kümeden
+ * hesaplanmıştır). Kesilen her liste için Türkçe uyarı döner — sessiz kesme yok.
+ */
+export function capReportLists<T extends object>(
+  data: T,
+  lists: ReadonlyArray<readonly [keyof T & string, string]>,
+  max: number = REPORT_MAX_ROWS,
+): { data: T; warnings: string[] } {
+  const warnings: string[] = [];
+  let out = data;
+  for (const [key, label] of lists) {
+    const v = data[key];
+    if (Array.isArray(v) && v.length > max) {
+      out = { ...out, [key]: v.slice(0, max) };
+      warnings.push(`${label}: ${v.length} satırın ilk ${max} satırı gösteriliyor — özet tüm kayıtları kapsar; daha dar bir aralık ya da süzgeç seçin.`);
+    }
+  }
+  return { data: out, warnings };
 }
 
 /** Rapor nesnesinden `secenekler`i ayırır: `data` temiz kalır, liste `meta.secenekler`e gider. */

@@ -6,6 +6,7 @@ import { useServerStatusStore } from "@/store/serverStatus";
 import { recordNetSample } from "@/services/netStats";
 import { applyClientInfoHeaders } from "@/lib/client-info";
 import { shouldToastWarnings, showServerWarnings } from "@/lib/serverNotes";
+import { DEFAULT_TIMEOUT_MS, resolveRequestTimeout } from "@/lib/report-request";
 import { presentLiveReferences } from "@/lib/live-references";
 import { notifyLicenseGate } from "@/lib/license/signal";
 import { useLicenseSuspension } from "@/lib/license/suspension";
@@ -90,7 +91,7 @@ export const DEFAULT_API_BASE_URL =
 
 const apiClient = axios.create({
   baseURL: DEFAULT_API_BASE_URL,
-  timeout: 15_000,
+  timeout: DEFAULT_TIMEOUT_MS,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -113,6 +114,7 @@ const holdForOutage = createRequestHold({
 apiClient.interceptors.request.use(async (config) => {
   await holdForOutage(config.url);
   (config as TimedConfig).__startedAt = Date.now();
+  config.timeout = resolveRequestTimeout(config.url, config.timeout);
   const token = await tokenStore.get();
   // Per-istek açık Authorization (ör. logout revoke'unun YAKALANMIŞ token'ı)
   // EZİLMEZ — aksi hâlde logout→anında re-login yarışında revoke isteği yeni

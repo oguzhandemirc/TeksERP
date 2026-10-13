@@ -14,6 +14,7 @@ import {
   reportEnvelope,
   resolveCompareRange,
   resolveDateRange,
+  capReportLists,
 } from "../../services/reports/_shared";
 import { getQualityScorecard } from "../../services/reports/quality-scorecard.report.service";
 import { getScrapScorecard } from "../../services/reports/scrap-scorecard.report.service";
@@ -30,6 +31,12 @@ const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), req
 
 /** Kalite/fire karnesi sorgusu: karşılaştırma aralığı + LEVENT/LOT ekseni (R5b-b; top → CONSUMED.rollId, defterden). İkizler aynı şemayı paylaşır. */
 const LEVENT_ANAHTARLARI = ["warpBeamId", "lotNo"] as const;
+/** Satır tavanına giren kırılım listeleri (Perf-2 B5); `daily` aralıkla (≤ 366 gün) sınırlı. */
+export const QUALITY_LISTS = [["byItem", "Kumaş kırılımı"], ["byColor", "Renk kırılımı"], ["bySubcontractor", "Fasoncu kırılımı"]] as const;
+export const SCRAP_LISTS = [
+  ["scrapByDefect", "Hata kırılımı"], ["byItem", "Kumaş kırılımı"], ["byColor", "Renk kırılımı"], ["bySource", "Kaynak kırılımı"],
+  ["detectionByStation", "Tespit (istasyon)"], ["detectionByDefect", "Tespit (hata)"],
+] as const;
 export const qualityQuerySchema = compareRangeSchema
   .extend({ warpBeamId: z.string().uuid("Geçersiz levent").optional(), lotNo: z.string().trim().min(1).max(64).optional() })
   .strict();
@@ -47,8 +54,11 @@ router.get("/scorecard", ...reportGate("quality/scorecard"), async (req: Request
     const input = qualityQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getQualityScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo });
-    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, LEVENT_ANAHTARLARI) }));
+    const { data, warnings } = capReportLists(
+      await getQualityScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo }),
+      QUALITY_LISTS,
+    );
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, LEVENT_ANAHTARLARI), warnings }));
   } catch (e) {
     next(e);
   }
@@ -63,8 +73,11 @@ router.get("/scrap-scorecard", ...reportGate("quality/scrap-scorecard"), async (
     const input = qualityQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getScrapScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo });
-    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, LEVENT_ANAHTARLARI) }));
+    const { data, warnings } = capReportLists(
+      await getScrapScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo }),
+      SCRAP_LISTS,
+    );
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, LEVENT_ANAHTARLARI), warnings }));
   } catch (e) {
     next(e);
   }

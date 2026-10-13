@@ -7,6 +7,7 @@
 // eylemi olmadan giden istek `serverWarnings: "handled" | "silent"` taşır.
 // Bekçi: Teks-Erp/scripts/test_sunucu_notlari.ts.
 import { toast, type ExternalToast } from "sonner";
+import { isReportUrl } from "./report-request";
 
 /** Servislerin bir kısmı zarfı kendi tipine daraltır; okuma bilerek GEVŞEK. */
 type ServerResponseLike = { message?: unknown; warnings?: unknown } | null | undefined;
@@ -34,11 +35,13 @@ export function showServerWarnings(res: ServerResponseLike, now: number = Date.n
 
 /** Yazım yanıtı genel basıma girer mi: yöntem yazım, bayrak yok, gövde zarf (`success` alanı). */
 export function shouldToastWarnings(
-  config: { method?: string; serverWarnings?: "handled" | "silent" } | undefined,
+  config: { method?: string; url?: string; serverWarnings?: "handled" | "silent" } | undefined,
   body: unknown,
 ): boolean {
   const method = (config?.method ?? "get").toLowerCase();
-  if (!["post", "put", "patch", "delete"].includes(method)) return false;
+  // Rapor GET'i de basılır: satır tavanı uyarısı orada gelir (Perf-2 B5).
+  const reportRead = method === "get" && isReportUrl(config?.url);
+  if (!reportRead && !["post", "put", "patch", "delete"].includes(method)) return false;
   if (config?.serverWarnings) return false;
   return !!body && typeof body === "object" && "success" in body;
 }
