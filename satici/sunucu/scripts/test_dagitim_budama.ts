@@ -15,6 +15,7 @@ import { Readable } from "node:stream";
 import { abandonStaleSessions, BODY_PRUNED_MODELS, pruneExpiredBodies } from "../src/distribution/retention";
 import { completeSession, startSession, writePart, type SessionOwner } from "../src/distribution/sessions.service";
 import { bodyPath } from "../src/distribution/storage";
+import { rastgelePdf } from "./lib/ornek-dosya";
 import { dagitimOrtamiKur, genelIstek, sha256 } from "./lib/dagitim-ortam";
 import { hedefDbKapisi, kapat, kontrol, portalFetch, SATICI_KOKU, sonuc } from "./lib/test-ortam";
 
@@ -30,8 +31,8 @@ async function main(): Promise<void> {
       await writePart(config, { owner, sessionId: s.oturumId, index: 0, sha256: sha256(veri), body: Readable.from([veri]), nowMs: Date.now() });
       return (await completeSession(config, { owner, sessionId: s.oturumId, nowMs: Date.now() })).id;
     };
-    const eskiId = await yukle(sahip, "eski.pdf", randomBytes(4000));
-    const taze = randomBytes(5000);
+    const eskiId = await yukle(sahip, "eski.pdf", rastgelePdf(4000));
+    const taze = rastgelePdf(5000);
     const tazeId = await yukle(sahip, "taze.pdf", taze);
     const eski = await prisma.dagitimDosyasi.findUniqueOrThrow({ where: { id: eskiId } });
     const eskiBag = await d.p("POST", "/dagitim/baglantilar", { tur: "DOSYA", musteriId: d.musteriId, dosyaId: eskiId, gecerlilikSaat: 24, azamiIndirme: 5 });

@@ -10,7 +10,8 @@ import { lockUploadScope } from "../lib/locks";
 import { prisma } from "../lib/prisma";
 import { isUniqueViolation } from "../lib/prisma-errors";
 import { requestExpired } from "./requests.service";
-import { INCOMING_EXTENSIONS, OUTGOING_EXTENSIONS, assembleParts, bodyPath, moveInto, newBodyKey, partDir, partPath, removeQuietly, streamToTemp, vetFile } from "./storage";
+import { vetContent } from "./content-vet";
+import { INCOMING_EXTENSIONS, OUTGOING_EXTENSIONS, assembleParts, bodyPath, extensionOf, moveInto, newBodyKey, partDir, partPath, removeQuietly, streamToTemp, vetFile } from "./storage";
 import { appendLedger } from "./tokens";
 import { MIB } from "./view";
 
@@ -182,6 +183,14 @@ export async function completeSession(config: VendorConfig, g: { owner: SessionO
     await removeQuietly(whole.tmp);
     await abandonSession(config, s, g.owner.actor, "BUTUNLUK");
     throw new VendorError(422, "PARCA_BUTUNLUGU", "Birleşik dosyanın özeti beyanla tutmadı; yükleme yeniden başlatılmalı");
+  }
+  // B7: içerik uzantının türüne ve yönün kuralına uymuyorsa gövde depoya girmez; red belirlenimli → oturum TERK (kota iade).
+  try {
+    await vetContent(whole.tmp, extensionOf(s.dosyaAdi), s.yon);
+  } catch (err) {
+    await removeQuietly(whole.tmp);
+    await abandonSession(config, s, g.owner.actor, "ICERIK");
+    throw err;
   }
   const key = newBodyKey();
   await moveInto(whole.tmp, bodyPath(config.DOSYA_DIZINI, key));

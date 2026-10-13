@@ -5,7 +5,7 @@
 //   §3 parça bütünlüğü: özet/boyut tutmayan parça 422; aynı sıra aynı özet idempotent, farklı özet 422
 //   §4 sürdürme: aynı işlem kimliği aynı oturumu + alınan parçaları döndürür; eksik parçada tamamlama 409
 //   §5 tamamlama: birleşik gövde = kaynak; defter DOSYA_YUKLENDI; parçalar silinir; tekrar aynı dosya (idempotent)
-//   §6 birleşik özet beyanla tutmazsa 422 + oturum TERK + kota iadesi
+//   §6 birleşik özet beyanla tutmazsa 422 + oturum TERK + kota iadesi; içerik denetimi (B7) reddi 415 + TERK + kota iadesi
 //   §7 GİDEN: portaldan parçalı yükle → paylaşım bağlantısı → /d ile iner; portal gövde indirmesi
 //   §8 iptal: açık oturum TERK, parçaları silinir, /y 410
 //   §9 tarayıcı betiği: artımlı SHA-256 Node'la birebir; yükleyici betiği derlenir
@@ -17,6 +17,7 @@ import path from "node:path";
 import vm from "node:vm";
 import { SHA256_JS, UPLOAD_JS } from "../src/http/upload-page-script";
 import { dagitimOrtamiKur, genelIstek, sha256 } from "./lib/dagitim-ortam";
+import { ornekZip, rastgelePdf, rastgeleZip } from "./lib/ornek-dosya";
 import { hedefDbKapisi, kapat, kontrol, portalFetch, portalIstek, sonuc } from "./lib/test-ortam";
 
 const MB = 1024 * 1024;
@@ -45,7 +46,7 @@ async function main(): Promise<void> {
     kontrol("§1d bilinmeyen yükleme belirteci 404", bilinmeyen.status === 404, `${bilinmeyen.status}`);
 
     console.log("\n§2 kapılar");
-    const kaynak = randomBytes(Math.floor(2.5 * MB));
+    const kaynak = rastgeleZip(Math.floor(2.5 * MB), "ekran.png");
     const parcalar = [kaynak.subarray(0, MB), kaynak.subarray(MB, 2 * MB), kaynak.subarray(2 * MB)];
     const exe = await jsonPost("/oturum", { clientToken: randomUUID(), dosyaAdi: "arac.exe", boyut: 10, sha256: sha256(Buffer.from("x")) });
     const mime = await jsonPost("/oturum", { clientToken: randomUUID(), dosyaAdi: "rapor.pdf", boyut: 10, sha256: sha256(Buffer.from("x")), mime: "text/html" });
@@ -111,9 +112,23 @@ async function main(): Promise<void> {
     const bt = await jsonPost(`/oturum/${bozukId}/tamamla`, {});
     const bOturum = await prisma.yuklemeOturumu.findUniqueOrThrow({ where: { id: bozukId } });
     kontrol("§6a 422 PARCA_BUTUNLUGU + oturum TERK + kota iade", bt.status === 422 && bOturum.durum === "TERK" && (await kullanilan()) === once, `${bt.status} ${bOturum.durum}`);
+    // B7: içerik denetimi tamamlamada — kap içinde yürütülebilir olan GELEN zip depoya girmez.
+    const zararli = ornekZip([{ ad: "belge.txt", veri: Buffer.from("merhaba") }, { ad: "araclar/kur.exe", veri: Buffer.from("MZ sahte") }]);
+    const zo = await jsonPost("/oturum", { clientToken: randomUUID(), dosyaAdi: "loglar.zip", boyut: zararli.length, sha256: sha256(zararli) });
+    const zId = (zo.json.data as { oturumId: string }).oturumId;
+    await parca(zId, 0, zararli);
+    const zt = await jsonPost(`/oturum/${zId}/tamamla`, {});
+    const zOturum = await prisma.yuklemeOturumu.findUniqueOrThrow({ where: { id: zId } });
+    kontrol("§6b içinde .exe olan zip 415 DOSYA_TURU_YASAK + oturum TERK + kota iade + dosya satırı yok", zt.status === 415 && zt.kod === "DOSYA_TURU_YASAK" && zOturum.durum === "TERK" && zOturum.dosyaId === null && (await kullanilan()) === once, `${zt.status} ${zt.kod ?? ""} ${zOturum.durum}`);
+    const sahte = Buffer.concat([Buffer.from("MZ"), randomBytes(500)]);
+    const so = await jsonPost("/oturum", { clientToken: randomUUID(), dosyaAdi: "rapor.pdf", boyut: sahte.length, sha256: sha256(sahte) });
+    const sId = (so.json.data as { oturumId: string }).oturumId;
+    await parca(sId, 0, sahte);
+    const st = await jsonPost(`/oturum/${sId}/tamamla`, {});
+    kontrol("§6c adı .pdf, baytları yürütülebilir → 415 + TERK", st.status === 415 && (await prisma.yuklemeOturumu.findUniqueOrThrow({ where: { id: sId } })).durum === "TERK", `${st.status}`);
 
     console.log("\n§7 GİDEN (bizden müşteriye)");
-    const giden = randomBytes(Math.floor(1.5 * MB));
+    const giden = rastgelePdf(Math.floor(1.5 * MB));
     const go = await d.p("POST", "/dagitim/giden-oturum", { musteriId: d.musteriId, dosyaAdi: "Kurulum Kılavuzu.pdf", boyut: giden.length, sha256: sha256(giden) }, d.operator.cerez);
     const gid = go.veri.oturumId as string;
     const put = (i: number, v: Buffer, cerez = d.operator.cerez) =>
