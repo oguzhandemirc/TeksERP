@@ -27,22 +27,22 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "Yeni Uyarılar ekranı: açık tezgah alarmını üstlenir, susturur, not eklersiniz; uygulama açıkken yeni alarm sesle ve titreşimle duyurulur, arka plana geçerken üstlenilmemiş alarm için hatırlatma kalır (Uyarılar izni gerekir)."
+          "metin": "Uyarılar ekranı: tezgah alarmını üstlenir, susturur, not eklersiniz; uygulama açıkken yeni alarm sesle ve titreşimle duyurulur."
         },
         {
           "kapsam": "tablet",
           "tip": "iyilestirme",
-          "metin": "Sunucu güncellemesinden 5 dakika önce şerit çıkar; kesintide girilen kayıt bekletilip bağlantı gelince gönderilir."
+          "metin": "Sunucu güncellemesinden 5 dakika önce şerit çıkar; kesintide girilen kayıt bağlantı gelince gönderilir."
         },
         {
           "kapsam": "tablet",
           "tip": "iyilestirme",
-          "metin": "Uzun adlar tek satırda kısalır, basılı tutunca tam görünür. İş emri artık Terbiye iş emri, Dokuma işi artık Dokuma iş emri diye geçer."
+          "metin": "Uzun adlar tek satırda kısalır, basılı tutunca tam görünür. İş emri artık Terbiye iş emri, Dokuma işi Dokuma iş emri diye geçer."
         },
         {
           "kapsam": "tablet",
           "tip": "iyilestirme",
-          "metin": "PIN ya da kartla girişte hesap doğrulama kodu isterse tablet kodu sorar: telefondaki doğrulama uygulamasındaki 6 haneli kodu yazıp devam edersiniz, yanlış kodda yeniden sorar. Destek hesabı tablette PIN/kartla her zaman bu kodla girer; hesapta iki adımlı doğrulama kurulu değilse kullanıcı adı ve parolayla girmeniz istenir. Bunun için sunucunun 2.15.7 sürümü gerekir; eski sunucuda giriş bugünkü gibi çalışır."
+          "metin": "Doğrulama kodu isteyen hesapta tablet 6 haneli kodu sorar; destek hesabı PIN/kartla hep bu kodla girer. Sunucu 2.15.7 gerekir."
         }
       ]
     },
