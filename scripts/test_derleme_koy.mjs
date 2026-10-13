@@ -13,7 +13,7 @@
 //   §5 VDS kapıları: bağ salt okunur değil/başka yol · bağ yok · yardımcı imaj etiketsiz · dizin okunamaz · disk · yarım yazım
 //   §6 ssh kopuk → ÖLÇÜLEMEDİ 2
 //   §7 --uygula mutlu yol: sıra vds(önce) → yazımlar → ölçüm → vds(sonra); her yazım ilk vds'ten SONRA, son çağrı vds
-//   §8 vds-dogrula sonra FARK ya da çıktısı öncekinden farklı → DUR 1 · §9 vds-dogrula önce FARK → DUR 1, yazma YOK
+//   §8 vds-dogrula sonra FARK ya da çıktısı öncekinden farklı → DUR 1 (yalnız yedek kesim damgası kıyas dışı: §8c/§8d) · §9 vds-dogrula önce FARK → DUR 1, yazma YOK
 //   §10 konteyner betiği (IC_BETIK) geçici dizinde: yeni dosya yayınlanır, gizli ad kalmaz · var olan dosya EZİLMEZ (3)
 //   §11 ad kuralı satıcının kaynağından okunur; bulunamazsa ÖLÇÜLEMEDİ · §12 yazım çağrıları yalnız uygula() içinde
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (bash yok). Cırcır değil.
@@ -63,7 +63,9 @@ cmd="\${@: -1}"; hedef="\${@: -2:1}"
 printf 'ssh\\t%s\\t%s\\n' "$hedef" "$(printf '%s' "$cmd" | tr '\\n' ' ')" >> "$SAHTE_LOG"
 [ -n "\${SAHTE_KOPUK:-}" ] && exit 255
 case "$cmd" in
-  *@@YEDEK*) [ "$hedef" = tekserp-vds ] && cat "$SAHTE_DIR/vds-yedek" ;;
+  *@@YEDEK*) [ "$hedef" = tekserp-vds ] || exit 0
+    n=$(cat "$SAHTE_DIR/yedek-sayac" 2>/dev/null || echo 0); echo $((n+1)) > "$SAHTE_DIR/yedek-sayac"
+    if [ "$n" -ge 1 ] && [ -f "$SAHTE_DIR/vds-yedek-sonra" ]; then cat "$SAHTE_DIR/vds-yedek-sonra"; else cat "$SAHTE_DIR/vds-yedek"; fi ;;
   *@@KOK*)
     n=$(cat "$SAHTE_DIR/vds-sayac" 2>/dev/null || echo 0); echo $((n+1)) > "$SAHTE_DIR/vds-sayac"
     if [ "$n" -ge 1 ] && [ -f "$SAHTE_DIR/vds-sonra" ]; then cat "$SAHTE_DIR/vds-sonra"; else cat "$SAHTE_DIR/vds"; fi ;;
@@ -121,6 +123,7 @@ function kos(args, s = {}) {
   fs.writeFileSync(path.join(SAHTE, 'sha-sonra'), s.shaSonra ?? `${OZ}  ${D}/${AD}\n`);
   fs.writeFileSync(path.join(SAHTE, 'koy'), s.koy ?? `${OZ}  ${AD}\n`);
   if (s.vdsSonra) fs.writeFileSync(path.join(SAHTE, 'vds-sonra'), s.vdsSonra);
+  if (s.vdsYedekSonra) fs.writeFileSync(path.join(SAHTE, 'vds-yedek-sonra'), s.vdsYedekSonra);
   const env = { ...process.env, PATH: `${BIN}${path.delimiter}${process.env.PATH}`, HOME: yol('ev'), TEKSERP_VDS_TABAN: TABAN, TEKSERP_YEDEK_SSH_HEDEF: '', SAHTE_LOG: LOG, SAHTE_DIR: SAHTE, LC_ALL: 'C' };
   if (s.kopuk) env.SAHTE_KOPUK = '1';
   if (s.indir) env.SAHTE_INDIR = s.indir;
@@ -246,6 +249,12 @@ console.log('test_derleme_koy — satıcının derleme deposuna koyma (sahte ssh
   check('§8a vds-dogrula SONRA FARK → DUR 1 (yazım ölçüldü ama sonuç kırmızı)', r.kod === 1 && /vds-dogrula \(sonra\)/.test(r.cikti), `kod ${r.kod} ${r.cikti.slice(-200)}`);
   const ls = kos(['--ortam', 'uretim', '--dosya', DOSYA, '--uygula'], { vdsSonra: vdsCikti().replace('@@LS\nadnansahin', '@@LS\nadnansahin\nyeni-dizin') });
   check('§8b vds-dogrula sonra AYNI ama çıktısı öncekinden farklı (html/ + defter/ listesi) → DUR 1', ls.kod === 1 && /öncekinden FARKLI/.test(ls.cikti), `kod ${ls.kod} ${ls.cikti.slice(-200)}`);
+  // Kesim uzak saatten her koşumda yeniden hesaplanır (gerçek VDS'te önce 19:26:47 → sonra 19:28:06): kıyas dışı.
+  const yedekSonra = (kesim, db = '20261013_030000') => ['@@YEDEK', kesim, `satici_${db}.dump.tkenc`, 'anahtarlar_20261013_030000.tar.tkenc.tkenc', ''].join('\n');
+  const kz = kos(['--ortam', 'uretim', '--dosya', DOSYA, '--uygula'], { vdsYedekSonra: yedekSonra('20261012_090119') });
+  check('§8c yalnız yedek kesim damgası ilerledi (uzak saat) → AYNI sayılır, çıkış 0', kz.kod === 0 && /vds-dogrula \(sonra\): AYNI/.test(kz.cikti), `kod ${kz.kod} ${kz.cikti.slice(-200)}`);
+  const yd = kos(['--ortam', 'uretim', '--dosya', DOSYA, '--uygula'], { vdsYedekSonra: yedekSonra('20261012_090119', '20261013_040000') });
+  check('§8d yedek DB damgası değişti (kesim dışı fark) → hâlâ öncekinden FARKLI, DUR 1', yd.kod === 1 && /öncekinden FARKLI/.test(yd.cikti), `kod ${yd.kod} ${yd.cikti.slice(-200)}`);
   fs.writeFileSync(path.join(SAHTE, 'vds'), vdsCikti(true));
   const o = kos(['--ortam', 'uretim', '--dosya', DOSYA, '--uygula']);
   fs.writeFileSync(path.join(SAHTE, 'vds'), vdsCikti());

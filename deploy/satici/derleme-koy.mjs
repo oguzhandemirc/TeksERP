@@ -370,6 +370,10 @@ function yaz(komut, args, { girdiAkisi = false } = {}) {
 }
 const sshYaz = (uzak) => yaz('ssh', [...sshTemel(), uzak]);
 
+// Yedek satırındaki kesim damgası uzak saatten (şimdi − 26 sa) her koşumda yeniden hesaplanır; önce/sonra kıyası
+// yalnız onu yok sayar — yedek damgaları ve bayt satırları birebir kalır.
+const kesimsiz = (metin) => metin.replace(/\(kesim \d{8}_\d{6} UTC\)/g, '(kesim <uzak saat> UTC)');
+
 function vdsDogrula(ag, ne) {
   const r = ag.yerelBetik(VDS_DOGRULA);
   const metin = `${r.cikti}${r.hata}`.trim();
@@ -465,7 +469,7 @@ async function uygula(ag, ortam, olcum, yazilacak, kaldirilacak = [], arsiv = AR
   if (sorun.length) throw new Dur(1, 'YAZIM SONRASI ÖLÇÜM', sorun);
   console.log(`  ✓ ${no(bul('ölç (salt okuma)'))}. ölçüm: ${yazilacak.length ? 'yeni dosya depoda 0644, sahibi dizinle aynı, özet yerelle aynı, satıcı konteyneri görüyor' : ''}${yazilacak.length && kaldirilacak.length ? ' · ' : ''}${kaldirilacak.length ? 'kaldırılanlar depoda ve konteynerde yok' : ''}`);
   const sonraVds = vdsDogrula(ag, 'sonra');
-  if (sonraVds !== once) throw new Dur(1, 'vds-dogrula (sonra) çıktısı öncekinden FARKLI — adnansahin tarafında değişiklik var, incele', ['önce:', ...once.trim().split('\n'), 'sonra:', ...sonraVds.trim().split('\n')]);
+  if (kesimsiz(sonraVds) !== kesimsiz(once)) throw new Dur(1, 'vds-dogrula (sonra) çıktısı öncekinden FARKLI — adnansahin tarafında değişiklik var, incele', ['önce:', ...once.trim().split('\n'), 'sonra:', ...sonraVds.trim().split('\n')]);
   console.log(`  ✓ ${plan.adimlar.length}. vds-dogrula (sonra): AYNI, çıktı öncekiyle birebir`);
 }
 
