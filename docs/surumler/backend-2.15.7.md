@@ -97,7 +97,9 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   izleme'den yazılır (panel 1.6.5 satırları — D5 dilim 1).
 - Duruş listesine `pendingEnd=true` süzgeci: watchdog'un geçici kapattığı ve gerçek bitişi henüz uygulanmamış
   duruşlar (panel 1.6.5 "Geçici kapanışlar" kapsamı — D5 dilim 2). Kuyruk ve sağlık sayacı aynı yüklemi okur.
-- `dist-web`: bu madde panel kaynağını değiştirmez.
+- Ekran kataloğuna iki satır: "Makine Kartları" ve "Duruş Kodu Eşleme" (tezgah izleme modülü, tezgah künyesi
+  yetkisi) — yetki atamasının "Ekrana göre" görünümünde listelenir (panel 1.6.5 ekranları — D5 dilim 3). Uçlar değişmedi.
+- `dist-web`: panel 1.6.5 kaynağı değişir (Tanımlar'da iki yeni ekran).
 
 **Kimlik dilim 3 (güvenlik denetimi Y-02, B1, B2, B4, B5)** (commit `fix(kimlik): dilim 3 …`; kısa kimliği paketlemede yazılır)
 

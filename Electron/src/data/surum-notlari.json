@@ -132,6 +132,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Tanımlar'a iki yeni ekran: “Makine Kartları” ile tezgaha takılan kartı kaydeder (ad, kart tipi, bağlı tezgahlar), düzenler, sırrını yeniler ya da iptal edersiniz. Kartın sırrı yalnız kayıt ya da yenileme anında bir kez gösterilir; Kopyala ile alıp kartın ayarına girin, pencere kapanınca bir daha görüntülenemez. İptalden önce kartla bağı çözülecek her tezgah adıyla listelenir. Tezgah alarmı ya da “Sebepsiz duruşta alarm” kapalıysa ekranın üstünde uyarı çıkar: eşlemesi olmayan kart duruşları için alarm doğmaz. “Duruş Kodu Eşleme” ile kartın bildirdiği ham duruş kodunun hangi duruş sebebine çözüleceğini tanımlarsınız — kart tipinin tüm tezgahları için ya da tek tezgah için; tezgah eşlemesi önce gelir. Eşleme yalnız yeni duruşları etkiler. İki ekran Tezgah izleme modülü açıkken ve tezgah künyesi yetkisiyle görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Destek hesabı ilk kurulumda gelen ortak parolayla duruyorsa panelin üstünde kırmızı bir uyarı şeridi çıkar. Destek hesabıyla girildiyse şerit kendi parolanızı hemen belirlemenizi, yönetici olarak girildiyse satıcınızdan parolayı değiştirmesini istemenizi söyler. Şerit elle kapatılamaz; parola değişince kendiliğinden kalkar. Bunun için de sunucunun 2.15.5 sürümü gerekir."
         },
         {
