@@ -48,7 +48,7 @@ import {
   withAdminClient,
   type AdminCapability,
 } from "./helpers/pg-admin-client";
-import { pgToolArgs, quoteIdent, quoteLiteral, withDatabase } from "./helpers/pg-conn.helper";
+import { pgToolArgs, quoteIdent, quoteLiteral, withDatabase, type PgConn } from "./helpers/pg-conn.helper";
 import {
   SERVER_VERSION_SQL,
   clientVersion,
@@ -589,6 +589,15 @@ async function runCopyJob({ absDump, backupName, copyName, liveDb, identity }: C
   }
 }
 
+/**
+ * Kopya geri yüklemesinin `pg_restore` argümanları — TEK kaynak (bekçi `test_migration_super_olmayan` aynısını koşar).
+ * `--no-acl`: döküm başka kümedense GRANT'ları orada olmayan rollere gider ("role does not exist") ve
+ * `--exit-on-error` kopyayı siler; yetkileri açılışta rol göçü (`db-rol-gocu`) yeniden kurar.
+ */
+export function copyRestoreArgs(target: PgConn, absDump: string, jobs = 1): string[] {
+  return [...pgToolArgs(target), "--exit-on-error", "--no-acl", ...(jobs > 1 ? ["-j", String(jobs)] : []), absDump];
+}
+
 /** Adım 1–4: CREATE DATABASE → pg_restore → GUC replay → doğrulama (düz döküm üzerinde). */
 async function restoreIntoCopy(absDump: string, copyName: string, liveDb: string): Promise<void> {
   const conn = liveConn();
@@ -632,7 +641,8 @@ async function restoreIntoCopy(absDump: string, copyName: string, liveDb: string
 
   // --- 2) pg_restore
   // `--clean`/`--if-exists` YOK (hedef boş) · `--no-owner` YOK (sahiplik canlıyla
-  // birebir kalmalı; dump `ALTER SCHEMA public OWNER TO …` içeriyor) ·
+  // birebir kalmalı; dump `ALTER SCHEMA public OWNER TO …` içeriyor) · `--no-acl` VAR
+  // (`copyRestoreArgs`) ·
   // `--exit-on-error` VAR: varsayılan "hataları say ve devam et" yarım bir
   // veritabanını başarı gibi gösterirdi.
   setPhase("restoring");
@@ -657,12 +667,7 @@ async function restoreIntoCopy(absDump: string, copyName: string, liveDb: string
   const jobs = Number(process.env.PG_RESTORE_JOBS) > 1 ? Number(process.env.PG_RESTORE_JOBS) : 1;
   const restore = await runTool(
     pgTool("pg_restore"),
-    [
-      ...pgToolArgs(withDatabase(conn, copyName)),
-      "--exit-on-error",
-      ...(jobs > 1 ? ["-j", String(jobs)] : []),
-      absDump,
-    ],
+    copyRestoreArgs(withDatabase(conn, copyName), absDump, jobs),
     conn.password,
   );
   if (restore.spawnError || restore.code !== 0) {

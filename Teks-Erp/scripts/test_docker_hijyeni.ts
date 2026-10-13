@@ -517,7 +517,7 @@ function geriAlmaStatik(runbook: string): string[] {
     if (/pg_restore[^\n]*--clean/.test(l) && !/YETMEZ/.test(l)) ih.push("§6 geri yüklemeyi `pg_restore --clean` ile öneriyor");
   }
   const sifirla = b6.search(/DROP SCHEMA public CASCADE/);
-  const yukle = b6.search(/yedek pg_restore --no-owner -d /);
+  const yukle = b6.search(/yedek pg_restore --no-owner --no-acl -d /);
   if (sifirla < 0) ih.push("§6 public şemasını sıfırlamıyor");
   if (yukle < 0) ih.push("§6 pg_restore adımı yok");
   if (sifirla >= 0 && yukle >= 0 && sifirla > yukle) ih.push("§6 şemayı geri yüklemeden SONRA sıfırlıyor");
@@ -530,7 +530,7 @@ function geriAlmaStatik(runbook: string): string[] {
   const gercek = geriAlmaStatik(rb);
   check("§5i ⭐ göçlü geri alma: şema sıfırla → pg_restore → göç sayısı (pg_restore --clean önerilmez)", gercek.length === 0, gercek.join(" | "));
   const sondalar: Array<[string, string]> = [
-    ["--clean'e dönüş", rb.replace("yedek pg_restore --no-owner -d ", "yedek pg_restore --clean --if-exists --no-owner -d ")],
+    ["--clean'e dönüş", rb.replace("yedek pg_restore --no-owner --no-acl -d ", "yedek pg_restore --clean --if-exists --no-owner --no-acl -d ")],
     ["sıfırlama silindi", rb.replace(/^.*DROP SCHEMA public CASCADE.*\n/m, "")],
   ];
   for (const [ad, r] of sondalar) check(`§5i sonda: ${ad} → kırmızı`, r !== rb && geriAlmaStatik(r).length > 0, r !== rb ? "" : "MUTASYON UYGULANMADI");

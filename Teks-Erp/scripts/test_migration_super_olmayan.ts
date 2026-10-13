@@ -12,7 +12,8 @@
 // §3 purge kapısı davranışı birebir: arşivleyici guard açıkken taşır, çağrı sonrası purge
 //    'on' KALMAZ, doğrudan DELETE reddedilir; fonksiyon ayarlarında teks.* yok.
 // §4 bakım rolü (CREATEDB, sahibe üye, süper değil) o DB'yi döker ve panel kopyasının
-//    argümanlarıyla `pg_restore --exit-on-error` geri yükler.
+//    argümanlarıyla (`copyRestoreArgs`: --exit-on-error + --no-acl) geri yükler; döküm
+//    kümede olmayan role GRANT taşır — §4d sondası `--no-acl`siz düştüğünü ölçer.
 // Ölçülemezse (süper olmayan DATABASE_URL, PG aracı yok) yerelde ⏭, CI'da ❌.
 // =============================================================================
 import "dotenv/config";
@@ -24,6 +25,7 @@ import { Client } from "pg";
 import { cocukOrtami, fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { parseDatabaseUrl, quoteIdent, toClientConfig, withDatabase, pgToolArgs, type PgConn } from "../src/services/helpers/pg-conn.helper";
 import { pgTool, runProcess, runTool } from "../src/services/helpers/pg-tool.helper";
+import { copyRestoreArgs } from "../src/services/db-copy.service";
 
 const ROOT = join(__dirname, "..");
 const MIG_DIR = join(ROOT, "prisma", "migrations");
@@ -103,11 +105,18 @@ async function kume(su: Client, base: PgConn): Promise<void> {
   const bakim = `${PREFIX}${damga}_bakim_test`;
   const db = `${PREFIX}${damga}_ana_test`;
   const kopya = `${PREFIX}${damga}_kopya_test`;
+  const yok = `${PREFIX}${damga}_yok_test`;
   const sahipPass = crypto.randomBytes(12).toString("hex");
   const bakimPass = crypto.randomBytes(12).toString("hex");
   const sahipConn: PgConn = { ...withDatabase(base, db), user: sahip, password: sahipPass };
   const bakimConn: PgConn = { ...withDatabase(base, db), user: bakim, password: bakimPass };
   const dump = join(os.tmpdir(), `${db}.dump`);
+  const sahipSorgu = async (hedef: string, sql: string): Promise<Array<Record<string, string>>> => {
+    const c = new Client(toClientConfig(withDatabase(sahipConn, hedef)));
+    c.on("error", () => {});
+    await c.connect();
+    try { return (await c.query<Record<string, string>>(sql)).rows; } finally { await c.end().catch(() => {}); }
+  };
   try {
     await sweep(su);
     // Windows `tekserp` eşdeğeri: süper değil, DB yaratamaz, rol yaratamaz; yalnız DB sahibi.
@@ -126,7 +135,7 @@ async function kume(su: Client, base: PgConn): Promise<void> {
     const hata = [...satirlar.filter((l) => /42501|permission denied|Migration name/i.test(l)), ...satirlar.filter((l) => /error/i.test(l))]
       .slice(0, 4).join(" | ");
     check(`§2a ⭐ süper olmayan sahip rol BÜTÜN migration'ları uyguladı (prisma migrate deploy, ${((Date.now() - t0) / 1000).toFixed(0)} sn)`,
-      dep.code === 0 && !dep.spawnError, hata || dep.spawnError || `kod ${dep.code}`);
+      dep.code === 0 && !dep.spawnError, dep.code === 0 ? "" : hata || dep.spawnError || `kod ${dep.code}`);
     const sc = new Client(toClientConfig(sahipConn));
     sc.on("error", () => {});
     await sc.connect();
@@ -164,30 +173,39 @@ async function kume(su: Client, base: PgConn): Promise<void> {
       await sc.end().catch(() => {});
     }
 
-    // ── §4 bakım rolü döker + geri yükler ─────────────────────────────────────
+    // ── §4 bakım rolü döker + panel kopyası argümanlarıyla geri yükler ────────
+    // Döküm, hedef kümede OLMAYAN bir role GRANT taşır (başka kümeden gelen yedek):
+    // panel kopyası `--no-acl` ile geçer, onsuz "role does not exist" ile düşer (§4d sonda).
     await su.query(`CREATE ROLE ${quoteIdent(bakim)} LOGIN NOSUPERUSER CREATEDB NOCREATEROLE PASSWORD '${bakimPass}'`);
     await su.query(`GRANT ${quoteIdent(sahip)} TO ${quoteIdent(bakim)}`);
+    await su.query(`CREATE ROLE ${quoteIdent(yok)} NOLOGIN`);
+    await sahipSorgu(db, `GRANT SELECT ON "system_logs" TO ${quoteIdent(yok)}`);
     const d = await runTool(pgTool("pg_dump"), [...pgToolArgs(bakimConn), "-Fc", "-f", dump], bakimPass);
     check("§4a bakım rolü sahip DB'yi pg_dump ile döktü", d.code === 0, d.stderr.slice(0, 200));
-    const bc = new Client(toClientConfig(withDatabase(bakimConn, "postgres")));
-    bc.on("error", () => {});
-    await bc.connect();
-    try {
-      await bc.query(`CREATE DATABASE ${quoteIdent(kopya)} OWNER ${quoteIdent(sahip)} TEMPLATE template0 ENCODING 'UTF8'`);
-    } finally {
-      await bc.end().catch(() => {});
-    }
-    const r = await runTool(pgTool("pg_restore"), [...pgToolArgs(withDatabase(bakimConn, kopya)), "--exit-on-error", dump], bakimPass);
-    check("§4b ⭐ bakım rolü (süper değil) pg_restore --exit-on-error ile geri yükledi", r.code === 0, r.stderr.trim().slice(0, 300));
-    const kc = new Client(toClientConfig(withDatabase(sahipConn, kopya)));
-    kc.on("error", () => {});
-    await kc.connect();
-    try {
-      const k = (await kc.query<{ n: string }>(`SELECT count(*)::text AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL`)).rows[0];
-      check("§4c kopyada migration defteri tam", Number(k?.n) === migrations.length, `${k?.n}/${migrations.length}`);
-    } finally {
-      await kc.end().catch(() => {});
-    }
+    await sahipSorgu(db, `REVOKE ALL ON "system_logs" FROM ${quoteIdent(yok)}`);
+    await su.query(`DROP ROLE ${quoteIdent(yok)}`);
+    const yeniKopya = async (ad: string): Promise<void> => {
+      const bc = new Client(toClientConfig(withDatabase(bakimConn, "postgres")));
+      bc.on("error", () => {});
+      await bc.connect();
+      try {
+        await bc.query(`CREATE DATABASE ${quoteIdent(ad)} OWNER ${quoteIdent(sahip)} TEMPLATE template0 ENCODING 'UTF8'`);
+      } finally {
+        await bc.end().catch(() => {});
+      }
+    };
+    await yeniKopya(kopya);
+    const args = copyRestoreArgs(withDatabase(bakimConn, kopya), dump);
+    const r = await runTool(pgTool("pg_restore"), args, bakimPass);
+    check("§4b ⭐ bakım rolü (süper değil) panel kopyası argümanlarıyla geri yükledi (rolü olmayan GRANT dahil)",
+      r.code === 0 && args.includes("--exit-on-error"), r.stderr.trim().slice(0, 300));
+    const k = await sahipSorgu(kopya, `SELECT count(*)::text AS n FROM _prisma_migrations WHERE finished_at IS NOT NULL`);
+    check("§4c kopyada migration defteri tam", Number(k[0]?.n) === migrations.length, `${k[0]?.n}/${migrations.length}`);
+    // Sonda geçerliliği: senaryo gerçekten ACL'de kırılıyor mu (`--no-acl` olmadan).
+    const kopya2 = kopya.replace("_kopya_", "_acl_");
+    await yeniKopya(kopya2);
+    const r2 = await runTool(pgTool("pg_restore"), copyRestoreArgs(withDatabase(bakimConn, kopya2), dump).filter((a) => a !== "--no-acl"), bakimPass);
+    check("§4d sonda: --no-acl olmadan aynı döküm 'role does not exist' ile düşer", r2.code !== 0 && /does not exist/.test(r2.stderr), r2.stderr.trim().slice(0, 160));
   } finally {
     rmSync(dump, { force: true });
     await sweep(su).catch(() => {});

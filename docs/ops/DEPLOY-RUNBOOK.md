@@ -708,12 +708,18 @@ if ($ok) { pg_restore --list "$safe" > $null; $ok = ($LASTEXITCODE -eq 0) }
 
 # 3) YALNIZ guvenlik yedegi dogrulandiysa geri yukle
 if (-not $ok) { Write-Host "GUVENLIK YEDEGI ALINAMADI - GERI YUKLEME YAPILMADI." -ForegroundColor Red }
-if ($ok) { pg_restore -h 127.0.0.1 -p 5432 -U postgres -d tekserp --clean --if-exists "...\tekserp_....dump" }
+if ($ok) { pg_restore -h 127.0.0.1 -p 5432 -U postgres -d tekserp --clean --if-exists --no-acl "...\tekserp_....dump" }
 
 # 4) Her durumda: sifreyi temizle, backend'i baslat
 Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 pm2 start tekserp-backend
 ```
+
+> **`--no-acl` (2026-10-13):** başka kümeden (yeni sunucu, rolleri olmayan küme) gelen
+> döküm, orada olmayan rollere GRANT taşır; `--no-acl`siz geri yükleme yüzlerce
+> "role does not exist" hatasıyla çıkış 1 verir. Yetkileri rol göçü kurar (Docker'da her
+> açılışta; Windows'ta rol göçü yok — sahip rolle koşulduğu için bugünkü davranış).
+> Panelin ürettiği blok henüz bu bayrağı taşımıyor (panel sürümüyle gelir).
 
 > **⚠ Bloğu "sadeleştirmeyin".** Üç satır load-bearing ve sebepleri sezgiye aykırı:
 > **(a)** `$LASTEXITCODE = 1` sıfırlaması — bu değişken yalnız *native* exe'lerce

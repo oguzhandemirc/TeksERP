@@ -713,7 +713,7 @@ function PremigrateCoz {
   & node $arac coz --girdi $son.FullName --cikti $duz --anahtar-dizini $anahtarDizini
   if ($LASTEXITCODE -eq 0 -and (Test-Path $duz)) {
     Ok "cozuldu: $duz"
-    Write-Host "  Geri yukleme (backend DURDURULMUS, yonetici pencere): pg_restore -h localhost -p <port> -U <kullanici> -d <db> --clean --if-exists `"$duz`""
+    Write-Host "  Geri yukleme (backend DURDURULMUS, yonetici pencere): pg_restore -h localhost -p <port> -U <kullanici> -d <db> --clean --if-exists --no-acl `"$duz`""
     Write-Host "  Bitince DUZ kopyayi sil: Remove-Item `"$duz`""
   } else {
     Uyar "cozulemedi (kod $LASTEXITCODE) - parola/anahtar. Musteri anahtariyla: node `"$arac`" coz --girdi `"$($son.FullName)`" --cikti `"$duz`" --anahtar <musteri.tksec>"

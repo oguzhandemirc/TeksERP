@@ -105,7 +105,7 @@ docker compose run --rm --no-deps -v "$PWD/ozel":/ozel:ro backend node /app/dist
   coz --girdi /var/lib/tekserp/yedek/<güncelleme-öncesi>.dump.tkenc --cikti /var/lib/tekserp/yedek/geri.dump --anahtar /ozel/<ad>.tkkey
 docker compose run --rm --no-deps yedek pg_restore --list /var/lib/tekserp/yedek/geri.dump | grep -c TABLE   # > 0 değilse DUR
 docker compose exec postgres psql -U tekserp -d tekserp -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public'
-docker compose run --rm --no-deps yedek pg_restore --no-owner -d tekserp /var/lib/tekserp/yedek/geri.dump   # uyarıları sakla
+docker compose run --rm --no-deps yedek pg_restore --no-owner --no-acl -d tekserp /var/lib/tekserp/yedek/geri.dump   # uyarıları sakla
 docker compose run --rm --no-deps yedek rm -f /var/lib/tekserp/yedek/geri.dump
 docker compose exec postgres psql -U tekserp -d tekserp -Atc 'select count(*) from _prisma_migrations' -c 'show teks.audit_guard'
 # göç sayısı §3.2'deki notla AYNI, audit_guard 'on' (veritabanı ayarı şema sıfırlamasından etkilenmez)
