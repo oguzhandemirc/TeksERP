@@ -35,6 +35,7 @@ export function NotificationBell() {
     queryKey: ["notifications", "recent"],
     queryFn: () => systemLogService.list({ category: "DOMAIN", limit: LIMIT }),
     enabled: canSee,
+    // tab-aktif-muaf: kabuk yoklayıcısı — sekmeden bağımsız, panel başına tek örnek.
     refetchInterval: 60_000,
     staleTime: 30_000,
   });

@@ -22,6 +22,7 @@ import { AlarmNotifications } from "./AlarmNotifications";
 import { AlarmTimeline } from "./AlarmTimeline";
 import { loomAlarmService } from "./service";
 import { LOOM_ALARMS_QUERY_ROOT, useLoomAlarmActions } from "./useLoomAlarmActions";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 
 export const LOOM_ALARM_DETAIL_POLL_MS = 15_000;
 
@@ -42,11 +43,12 @@ export function LoomAlarmDetailPage() {
   const meId = useAuthStore((s) => s.user?.userId ?? null);
   const now = useServerNow();
   const actions = useLoomAlarmActions(id);
+  const tabActive = useIsTabActive();
   const q = useQuery({
     queryKey: [LOOM_ALARMS_QUERY_ROOT, "detail", id],
     queryFn: () => loomAlarmService.detail(id),
     enabled: id !== "",
-    refetchInterval: (query) => (isAlarmClosedError(query.state.error) ? false : LOOM_ALARM_DETAIL_POLL_MS),
+    refetchInterval: (query) => (!tabActive || isAlarmClosedError(query.state.error) ? false : LOOM_ALARM_DETAIL_POLL_MS),
     retry: false,
   });
   const d = q.data;

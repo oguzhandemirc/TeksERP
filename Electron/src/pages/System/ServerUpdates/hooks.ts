@@ -16,6 +16,7 @@ export function useServerUpdateStatus(enabled = true) {
     queryKey: SERVER_UPDATE_KEY,
     queryFn: serverUpdateService.status,
     enabled,
+    // tab-aktif-muaf: kabuk yoklayıcısı — sekmeden bağımsız, panel başına tek örnek.
     refetchInterval: (q) => refetchIntervalFor(q.state.data),
     retry: false,
   });
@@ -27,6 +28,7 @@ export function useServerUpdateSummary(enabled = true) {
     queryKey: SERVER_UPDATE_SUMMARY_KEY,
     queryFn: serverUpdateService.summary,
     enabled,
+    // tab-aktif-muaf: kabuk yoklayıcısı — sekmeden bağımsız, panel başına tek örnek.
     refetchInterval: (q) => refetchIntervalFor(q.state.data),
     retry: false,
   });

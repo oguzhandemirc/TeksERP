@@ -53,6 +53,8 @@ export default defineConfig(({ command }) => ({
     },
     build: {
       outDir: "out/renderer",
+      // electron-vite varsayılanı minify:false — okunur paket 10,7 MB idi (Perf-5 E-01); isim bağımlı kod yok.
+      minify: "esbuild",
       rollupOptions: {
         input: { index: resolve(__dirname, "index.html") },
       },

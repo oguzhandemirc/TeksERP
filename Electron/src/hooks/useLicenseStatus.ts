@@ -28,6 +28,7 @@ export function useLicenseStatus(): LicenseStatusSummary | null {
     queryFn: licenseService.status,
     enabled: userId !== null,
     staleTime: 60_000,
+    // tab-aktif-muaf: kabuk yoklayıcısı — sekmeden bağımsız, panel başına tek örnek.
     refetchInterval: STATUS_REFRESH_MS,
     retry: false,
   });

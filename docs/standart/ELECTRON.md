@@ -35,6 +35,7 @@ Route kaydı, `screen-catalog.ts` girdisi, hub karosu / komut paleti girişi ve 
 - **[EL-11]** Servis yolunu TAM yaz (`/api/...`); `apiClient.baseURL` öneki İÇERMEZ · zorlama: bekçi:`src/services/api-path-prefix.test.ts` · kanıt: bekçi başlığı :12-16 — öneksiz beş çağrı bir ekranı **on iki gün** kırık bıraktı (`d0575389`); muaf liste yalnız `/health` · devralınan: yok
 - **[EL-12]** query-key'in ilk elemanını kebab-case string literal yaz (ya da kebab değerli bir `*_QUERY_KEY` sabiti) · zorlama: insan:sabitten gelen anahtar AST'de literal görünmez · kanıt: 569 anahtarın 532'si doğrudan literal, 37'si kebab değerli sabit; camelCase/PascalCase 0; emsal `pages/Operations/Shipments/ShipmentsPage.tsx:37` · devralınan: yok
 - **[EL-13]** Picker/lookup listesini `loadAllForPicker(service)` ile yükle; inline `pageSize: N` yazma (backend `MAX_PAGE_SIZE` değişince 400 gelir) · zorlama: insan:inline `pageSize` ölçüldü (22 kullanım, çoğu sayaç) ve ESLint kuralı bu yüzden REDDEDİLDİ · kanıt: `src/lib/picker-loader.ts:60-84`; ret gerekçesi `olcum/eslint-electron.json` kova 3 · devralınan: yok
+- **[EL-43]** Yoklayan sorguyu (`refetchInterval`) `useIsTabActive()` değişkenine bağla; pasif sekme mount kalır ve TanStack onu arka plan saymaz. Kabuk yoklayıcısı bir üst satırda `// tab-aktif-muaf: <neden>` taşır · zorlama: bekçi:`src/lib/perf-istemci.test.ts` · kanıt: arşiv 2026-10-13 "Perf kalan dilimi"
 
 ## 4 · Süzme sunucuda
 

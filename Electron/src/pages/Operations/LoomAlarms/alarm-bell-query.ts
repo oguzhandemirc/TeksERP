@@ -12,6 +12,7 @@ export function useLoomAlarmBellQuery(enabled: boolean) {
     queryKey: LOOM_ALARM_BELL_QUERY_KEY,
     queryFn: () => loomAlarmService.list({ scope: "active", limit: LOOM_ALARM_WATCH_LIMIT }, true),
     enabled,
+    // tab-aktif-muaf: kabuk yoklayıcısı — sekmeden bağımsız, panel başına tek örnek.
     refetchInterval: LOOM_ALARM_BELL_POLL_MS,
     staleTime: 5_000,
     retry: false,

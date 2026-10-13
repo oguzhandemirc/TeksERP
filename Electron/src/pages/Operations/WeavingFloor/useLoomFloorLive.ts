@@ -4,11 +4,12 @@
 // Yoklama 5 sn (TV arka planda da tazelenir), sayaç saati 1 sn. "Şimdi" SUNUCU
 // saatine hizalanır (`asOf` − alındığı an): istemci saati kaymışsa sayaç eksi/fazla akmaz.
 // =============================================================================
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fromApi } from "./fromApi";
 import { loomFloorService } from "./service";
 import type { FloorState } from "./types";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 
 export const LOOM_FLOOR_QUERY_KEY = ["loom-floor"] as const;
 
@@ -44,13 +45,22 @@ export interface LoomFloorLive {
 
 export function useLoomFloorLive(options: LoomFloorLiveOptions = {}): LoomFloorLive {
   const { pollMs = 5_000, clockMs = 1_000 } = options;
+  // Pasif sekme mount kalır; yoklamaz (Perf-5 E-02). TV penceresi sekme dışında → hep aktif.
+  const active = useIsTabActive();
   const q = useQuery({
     queryKey: LOOM_FLOOR_QUERY_KEY,
     queryFn: loomFloorService.get,
-    refetchInterval: pollMs,
+    refetchInterval: active ? pollMs : false,
     refetchIntervalInBackground: true,
     staleTime: 0,
   });
+  const { refetch } = q;
+  const wasActive = useRef(active);
+  useEffect(() => {
+    // Sekmeye dönüşte bir yoklama aralığı beklemeden tazele (bayat şerit görünmesin).
+    if (active && !wasActive.current) void refetch();
+    wasActive.current = active;
+  }, [active, refetch]);
   const floor = useMemo(() => (q.data ? fromApi(q.data) : null), [q.data]);
   const offset = floor ? floor.updatedAt - q.dataUpdatedAt : 0;
   const [clientNow, setClientNow] = useState<number>(() => Date.now());
@@ -64,6 +74,6 @@ export function useLoomFloorLive(options: LoomFloorLiveOptions = {}): LoomFloorL
     sampleData: false,
     isLoading: q.isPending,
     error: q.error,
-    stale: isFloorStale({ hasData: q.data !== undefined, failed: q.isError, ageMs: clientNow - q.dataUpdatedAt, pollMs }),
+    stale: active && isFloorStale({ hasData: q.data !== undefined, failed: q.isError, ageMs: clientNow - q.dataUpdatedAt, pollMs }),
   };
 }

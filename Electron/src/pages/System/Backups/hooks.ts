@@ -9,6 +9,7 @@ import {
   type BackupListing,
   type OffsiteStatus,
 } from "./service";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 
 export function useBackups() {
   return useQuery<BackupListing>({
@@ -43,10 +44,11 @@ export function useRestoreImpact(
 }
 
 export function useOffsiteStatus() {
+  const tabActive = useIsTabActive();
   return useQuery<OffsiteStatus>({
     queryKey: OFFSITE_QUERY_KEY,
     queryFn: fetchOffsiteStatus,
     // Süpürme saatte bir koşuyor; bu ekran açıkken dakikada bir tazelemek yeter.
-    refetchInterval: 60_000,
+    refetchInterval: tabActive ? 60_000 : false,
   });
 }

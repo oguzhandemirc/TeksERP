@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { safeFormat } from "@/lib/format";
 import { supportService } from "@/services/supportService";
 import { SUPPORT_STATUS_LABEL, supportStatusTone, type SupportTicket } from "./types";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 
 export const SUPPORT_LIST_KEY = ["destek", "liste"] as const;
 const formatDateTime = (iso: string | null): string => safeFormat(iso, "dd.MM.yyyy HH:mm");
@@ -16,7 +17,8 @@ export function ticketMeta(t: SupportTicket): string {
 }
 
 export function SupportTicketList({ selectedId, onSelect }: { selectedId: string | null; onSelect: (id: string) => void }) {
-  const q = useQuery({ queryKey: SUPPORT_LIST_KEY, queryFn: () => supportService.list(), refetchInterval: 60_000 });
+  const tabActive = useIsTabActive();
+  const q = useQuery({ queryKey: SUPPORT_LIST_KEY, queryFn: () => supportService.list(), refetchInterval: tabActive ? 60_000 : false });
   const rows = q.data ?? [];
   return (
     <Card>
@@ -49,7 +51,12 @@ export function SupportTicketList({ selectedId, onSelect }: { selectedId: string
 }
 
 export function SupportTicketDetail({ id }: { id: string }) {
-  const q = useQuery({ queryKey: ["destek", "ayrinti", id], queryFn: () => supportService.detail(id), refetchInterval: 60_000 });
+  const tabActive = useIsTabActive();
+  const q = useQuery({
+    queryKey: ["destek", "ayrinti", id],
+    queryFn: () => supportService.detail(id),
+    refetchInterval: tabActive ? 60_000 : false,
+  });
   const t = q.data;
   if (!t) return <p className="text-sm text-muted-foreground">{q.isLoading ? "Yükleniyor…" : "Talep okunamadı."}</p>;
   return (

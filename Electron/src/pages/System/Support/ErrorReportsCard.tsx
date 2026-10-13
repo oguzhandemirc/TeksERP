@@ -8,6 +8,7 @@ import { safeFormat } from "@/lib/format";
 import { SettingsPasswordCancelled } from "@/lib/settings-password";
 import { errorReportService } from "@/services/errorReportService";
 import { ERROR_SOURCE_LABEL, type ErrorReportConsent, type ErrorReportRow } from "./error-report-types";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 
 export const ERROR_REPORTS_KEY = ["hata-raporlari"] as const;
 const formatDateTime = (iso: string | null): string => safeFormat(iso, "dd.MM.yyyy HH:mm");
@@ -31,7 +32,8 @@ export function rowMeta(r: ErrorReportRow): string {
  */
 export function ErrorReportsCard() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ERROR_REPORTS_KEY, queryFn: errorReportService.overview, refetchInterval: 60_000 });
+  const tabActive = useIsTabActive();
+  const q = useQuery({ queryKey: ERROR_REPORTS_KEY, queryFn: errorReportService.overview, refetchInterval: tabActive ? 60_000 : false });
   const m = useMutation({
     mutationFn: (acik: boolean) => errorReportService.setConsent(acik),
     onSuccess: (r) => {

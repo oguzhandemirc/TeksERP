@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { licenseService } from "@/services/licenseService";
 import { LICENSE_DETAIL_KEY, LICENSE_STATUS_KEY } from "@/hooks/useLicenseStatus";
 import { apiErrorText } from "@/lib/api-error";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 
 export const LICENSE_ACCEPTANCE_KEY = ["license", "kabul"] as const;
 
@@ -13,12 +14,13 @@ export function useLicenseAcceptance(enabled: boolean) {
 }
 
 export function useLicenseDetail(enabled: boolean) {
+  const tabActive = useIsTabActive();
   return useQuery({
     queryKey: LICENSE_DETAIL_KEY,
     queryFn: licenseService.detail,
     enabled,
     // Yoklama/zil durumu backend belleğinde değişir; ekran açıkken dakikada bir yeter.
-    refetchInterval: 60_000,
+    refetchInterval: tabActive ? 60_000 : false,
     retry: false,
   });
 }
