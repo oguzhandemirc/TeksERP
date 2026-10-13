@@ -60,6 +60,10 @@ export interface ShippedCell {
 export async function collectShipped(range: DateRange, f: ShippedFilter = {}): Promise<ShippedCell[]> {
   // Yön süzgeci aktifken doğrudan sevk (yön kaydı yok) hiçbir kümeye girmez.
   const withDirect = directShipmentsMatchDestinationFilter(f.destination);
+  // Sevkiyat süzgeci TEK parça: CTE de, aşağıdaki top yarı-birleşimi de bunu okur.
+  const dispWhere = Prisma.sql`status = 'DISPATCHED'
+        AND "dispatchedAt" >= ${range.from} AND "dispatchedAt" <= ${range.to}
+        ${shipmentDestinationSql(f.destination, "shipments")}`;
   const rows = await prisma.$queryRaw<
     Array<{
       customerId: string;
@@ -81,14 +85,17 @@ export async function collectShipped(range: DateRange, f: ShippedFilter = {}): P
       -- tarihi zaten olmaz ve alttaki aralık süzgeci onu eler. Süzgeç bu
       -- invariant'a GÜVENMEMEK için duruyor — silmeden önce onu kimin
       -- koruduğunu bil.
-      WHERE status = 'DISPATCHED'
-        AND "dispatchedAt" >= ${range.from} AND "dispatchedAt" <= ${range.to}
-        ${shipmentDestinationSql(f.destination, "shipments")}
+      WHERE ${dispWhere}
     ),
     parts AS (
       -- 1) Sevkiyatta DURAN toplar (iade sonrası eksilmiş canlı küme)
       SELECT d."customerId", d.destination, r."itemId", r."colorId", 1::int AS cnt, r."currentQty" AS qty
+      -- Yarı-birleşim sonucu DEĞİŞTİRMEZ (disp ile aynı küme); planlayıcıya gerçek
+      -- istatistikli süzgeç + kısmi indeks yüklemini verir — yoksa sevk edilmiş TÜM
+      -- topları hash'liyordu (Perf-2 B6, ölçüm arşiv 2026-10-13).
       FROM rolls r JOIN disp d ON d.id = r."shipmentId"
+      WHERE r."shipmentId" IS NOT NULL
+        AND r."shipmentId" IN (SELECT id FROM shipments WHERE ${dispWhere})
       UNION ALL
       -- 2) İADE GERİ-EKLEMESİ — spec snapshot'ı iadenin KENDİ satırından okunur
       SELECT d."customerId", d.destination, rr."itemId", rr."colorId", 1::int, rr.qty
