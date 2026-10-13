@@ -155,6 +155,20 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   ("Sistem → Şirket & Güvenlik → Şirket Bilgileri → "Saat dilimi""). Eski ">" ayracı " → " oldu. Hata kodları değişmez;
   yalnız mesaj metni.
 
+**Docker imaj sertleştirmesi (G4-A kalıntısı · G6)** (commit `fix(docker): G4-A kalıntısı …` · `fix(docker): G6 — korumasız …` · `feat(docker): G6 — korumalı …`; kısa kimlikler paketlemede yazılır)
+
+- PID 1 artık açılış betiği (`ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]`, korumalıda CMD yok): göç + rol ayrımından
+  sonra sunucu `exec tini -s -- node dist/server.js` ile açılır → `/proc/1/environ` ve sunucu sürecinin ortamında sahip
+  DB parolası yok (yalnız uygulama rolü URL'i). Başka komut (`yedek` servisi, güncelleyici araçları) betiğin
+  dağıtıcısıyla tini altında aynen koşar; `compose run … backend goc` aynı.
+- Korumalı imajda `dist/tools/*` araçları V8 bayt kodu (`<ad>.jsc` + küçük `<ad>.cjs` yükleyici); çağrı biçimi
+  (`node dist/tools/<ad>.cjs …`) değişmedi. Korumasız imajda `dist/**/*.map` yok (yığın izi değişmez — haritalar hiç
+  okunmuyordu).
+- **Eski kurulum ne yapar:** compose dosyası DEĞİŞMEZ; yeni imaj eski compose ile açılır (yedek servisinin
+  `command`ı dağıtıcıdan geçer). Eski güncelleyici `goc` adımını argümanla çağırır — yeni betik aynı kipe girer.
+  Rol ayrımı yapılamazsa (eski PG, süper olmayan sahip) bugünkü geri düşüş: sahip URL'iyle açılır, `/proc` ortamı
+  o kurulumda sahip URL'ini yine taşır. Windows paketi etkilenmez.
+
 ## 3. Sözleşme
 
 - **Kırıldı mı:** HAYIR (Perf-2 B5/B6) — rapor zarfına isteğe bağlı `warnings` (yalnız tavan aşılınca); eski panel
