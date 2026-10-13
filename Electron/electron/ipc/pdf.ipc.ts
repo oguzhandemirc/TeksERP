@@ -1,5 +1,5 @@
 import { BrowserWindow, session } from "electron";
-import type { BrowserWindowConstructorOptions, Session, WebContents } from "electron";
+import type { BrowserWindowConstructorOptions, PrintToPDFOptions, Session, WebContents } from "electron";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -136,6 +136,18 @@ function makePdfWindow(): BrowserWindow {
   return win;
 }
 
+/**
+ * Tekil ve toplu PDF'in TEK baskı seçeneği. `preferCSSPageSize` olmadan belgenin `@page { size }`
+ * boyutu yok sayılır ve PDF Letter çıkar; `@page` boyutu tanımlamayan belge A4'e düşer.
+ */
+export const PDF_PRINT_OPTIONS = {
+  printBackground: true,
+  preferCSSPageSize: true,
+  pageSize: "A4",
+  // Kenar boşluğu belgenin kendi @page kuralından gelsin (0 = belge yönetir).
+  margins: { top: 0, bottom: 0, left: 0, right: 0 },
+} satisfies PrintToPDFOptions;
+
 /** Belgeyi verilen pencerede çizer; pencerenin ömrü çağıranındır. Zaman aşımı belge başınadır. */
 async function renderInWindow(win: BrowserWindow, html: string, settleMs: number): Promise<Uint8Array> {
   const token = randomUUID();
@@ -146,11 +158,7 @@ async function renderInWindow(win: BrowserWindow, html: string, settleMs: number
         await win.loadURL(PDF_DOC_PREFIX + token);
         // Görsellerin (logo/QR data-uri) yerleşmesi için kısa bekleme (tekil kayıt; toplu yolda 0, bkz. htmlsToPdfs).
         if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
-        return win.webContents.printToPDF({
-          printBackground: true,
-          // Kenar boşluğu belgenin kendi @page kuralından gelsin (0 = belge yönetir).
-          margins: { top: 0, bottom: 0, left: 0, right: 0 },
-        });
+        return win.webContents.printToPDF(PDF_PRINT_OPTIONS);
       })(),
       PDF_TIMEOUT_MS,
     );
