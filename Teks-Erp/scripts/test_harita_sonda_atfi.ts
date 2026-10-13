@@ -124,10 +124,10 @@ function sahnelenmisSatirlar(): Set<number> {
  */
 function blameSha(satirMetni: string): string | null {
   try {
-    const headMetni = git(["show", `HEAD:${HARITA}`], { cwd: KOK }).split("\n");
+    const { headMetni, blame } = headBlame();
     const headNo = headMetni.indexOf(satirMetni) + 1;
     if (headNo === 0) return null; // HEAD'de yok ⇒ satır YENİ ⇒ sahnelenmiş olmalı
-    const b = git(["blame", "-l", "-s", "-L", `${headNo},${headNo}`, "HEAD", "--", HARITA], { cwd: KOK });
+    const b = blame[headNo - 1] ?? "";
     // `^` SINIR işareti sha'nın ilk hanesinin YERİNE basılır (39 hane kalır) — sığ klonda her
     // satır sınırdır ve bu "çözülmedi" demektir; tam klonda yalnız kök commit'te görülür.
     if (b.startsWith("^")) return null;
@@ -136,6 +136,18 @@ function blameSha(satirMetni: string): string | null {
   } catch {
     return null;
   }
+}
+
+// ⚡ HIZ (2026-10-13): satır başına `git show` + `git blame -L` (502 işaretli satır ⇒ ~1000 git
+// süreci, 170–220 sn) yerine HEAD metni ve TÜM-DOSYA blame'i TEK KEZ alınır; çıktı satır sırasıyla
+// aynıdır (blame satırı i = dosya satırı i), sonuç birebir aynı.
+let headOnbellek: { headMetni: string[]; blame: string[] } | null = null;
+function headBlame(): { headMetni: string[]; blame: string[] } {
+  if (headOnbellek) return headOnbellek;
+  const headMetni = git(["show", `HEAD:${HARITA}`], { cwd: KOK }).split("\n");
+  const blame = git(["blame", "-l", "-s", "HEAD", "--", HARITA], { cwd: KOK }).split("\n");
+  headOnbellek = { headMetni, blame };
+  return headOnbellek;
 }
 
 /**
