@@ -1,7 +1,7 @@
 import {
   Package, Users2, Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Award, Palette, Sparkles, Tag,
   Building2, Tags, Bookmark, Undo2, Warehouse, FileText, Printer, Ruler, LayoutTemplate, MessageSquareText, Clock3,
-  BellRing, Cpu, type LucideIcon,
+  BellRing, Cpu, Binary, type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
@@ -18,6 +18,7 @@ import {
 import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
 import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
 import { isMachineCollectorsVisible } from "@/pages/MachineCollectors/collector-model";
+import { isMachineStopCodeMapsVisible } from "@/pages/MachineStopCodeMaps/code-map-model";
 import { TERIM } from "@/lib/terim";
 
 export interface DefinitionTile {
@@ -204,6 +205,16 @@ export const definitionTiles: DefinitionTile[] = [
     group: "production",
     permission: "loom:spec-manage",
     visibleWhen: isMachineCollectorsVisible,
+  },
+  {
+    key: "machine-stop-codes",
+    title: "Duruş Kodu Eşleme",
+    description: "Kartın ham duruş kodu → duruş sebebi; kart tipi geneli ya da tezgah üst-yazımı",
+    icon: Binary,
+    to: "/definitions/machine-stop-codes",
+    group: "production",
+    permission: "loom:spec-manage",
+    visibleWhen: isMachineStopCodeMapsVisible,
   },
   {
     key: "peripherals",

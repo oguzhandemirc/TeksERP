@@ -72,6 +72,7 @@ import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrder
 import { ShiftDefinitionsPage } from "@/pages/ShiftDefinitions/ShiftDefinitionsPage";
 import { LoomAlarmDutyPage } from "@/pages/LoomAlarmDuty/LoomAlarmDutyPage";
 import { MachineCollectorsPage } from "@/pages/MachineCollectors/MachineCollectorsPage";
+import { MachineStopCodeMapsPage } from "@/pages/MachineStopCodeMaps/MachineStopCodeMapsPage";
 import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
 import { WeavingFloorPage } from "@/pages/Operations/WeavingFloor/WeavingFloorPage";
 import { LoomAlarmsPage } from "@/pages/Operations/LoomAlarms/LoomAlarmsPage";
@@ -220,6 +221,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="loom:spec-manage">
         <MachineCollectorsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Duruş Kodu Eşleme — karo izniyle BİREBİR; modül kapısı backend (tezgah) + ROUTE_MODULE.
+    path: "definitions/machine-stop-codes",
+    element: (
+      <ProtectedRoute requirePermission="loom:spec-manage">
+        <MachineStopCodeMapsPage />
       </ProtectedRoute>
     ),
   },

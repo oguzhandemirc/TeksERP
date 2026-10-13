@@ -52,6 +52,8 @@ const CIFTLER: Ciftt[] = [
     darGerekce: "Renk adı etikete/rozete sığmalı — panel bilerek DB'den dar (80 < 100).",
   },
   { dosya: "Warehouses/schema.ts", alan: "name", model: "Warehouse", kolon: "name" },
+  { dosya: "MachineStopCodeMaps/code-map-model.ts", alan: "rawStopCode", model: "MachineStopCodeMap", kolon: "rawStopCode" },
+  { dosya: "MachineCollectors/collector-model.ts", alan: "name", model: "MachineCollector", kolon: "name" },
 ];
 
 /** `model X { … kolon Tip @db.VarChar(n) … }` → n (yoksa null = sınırsız). */
