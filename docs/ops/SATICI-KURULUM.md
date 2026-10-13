@@ -570,7 +570,7 @@ Döngü hazırlıkla aynıdır (`yedek-dongusu.sh`: günde bir DB dökümü + an
 ```bash
 v "cd $K && docker compose exec -T satici-yedek /arac/yedek-dongusu.sh tek && docker compose exec -T satici-yedek ls -1 /yedek"
 install -d -m 700 ~/.tekserp/satici-uretim-yedek
-for f in satici_<damga>.dump.tkenc anahtarlar_<damga>.tar.tkenc; do
+for f in satici_<damga>.dump.tkenc anahtarlar_<damga>.tar.tkenc.tkenc; do
   v "cd $K && docker compose exec -T satici-yedek cat /yedek/$f" > ~/.tekserp/satici-uretim-yedek/$f
 done
 export PATH="/opt/homebrew/opt/libpq/bin:$PATH"; umask 077
@@ -579,6 +579,34 @@ export PATH="/opt/homebrew/opt/libpq/bin:$PATH"; umask 077
 ```
 
 **Düzenli çekim:** yedekler VDS'te durur; VDS kaybında işe yaramazlar → haftada bir en yeni ikili Mac'e çekilir (yukarıdaki döngü, özetler iki uçta `sha256sum`/`shasum -a 256`).
+
+**Anahtar arşivi çift katman (B8, 2026-10-13).** Anahtar birimi arşivi önce `$K/yedek-alici/anahtar-katmani/*.tkpub` alıcısına, sonra yukarıdaki olağan alıcılara şifrelenir → `anahtarlar_<damga>.tar.tkenc.tkenc`. Mac (ya da kurtarma) anahtarı tek başına yalnız dış katmanı açar; ALT/İNDİRME/pepper/TOTP/modül anahtarları ancak katman anahtarı + **tören yedek parolası** (yedek birimini ve PAKET yedeğini saran mevcut parola) ile açılır. Katman alıcısı yoksa döngü DB dökümünü alır, anahtar arşivini ALMAZ ve `HATA: anahtar katmanı alıcısı yok` yazar (güvenlik bildirimi `YEDEK_ALINAMADI`). Yedekten anahtar çıkarılmaz (felaket kurtarma bozulmaz). Eski tek katmanlı `anahtarlar_*.tar.tkenc` dosyaları budama sırasıyla yaşlanıp gider.
+
+Katman anahtarının kurulumu (bir kez, Mac; parola terminalde gizli sorulur — argümana, loga, nota YAZILMAZ):
+
+```bash
+install -d -m 700 ~/.tekserp/satici-uretim/anahtar-katmani
+(cd Teks-Erp && npx tsx scripts/yedek-sifrele.ts anahtar-uret --ad anahtar-katmani --dizin ~/.tekserp/satici-uretim/anahtar-katmani --parolali)
+# anahtar-katmani.tkkey (parolayla sarılı) → Mac + yedek birimi (USB); VDS'e YALNIZ .tkpub gider:
+v 'install -d -m 700 ~/satici-uretim-gecici'
+scp -P 2222 ~/.tekserp/satici-uretim/anahtar-katmani/anahtar-katmani.tkpub oguzhan@80.253.255.188:satici-uretim-gecici/
+v "docker run --rm --network none --user 0 -v $K:/k -v ~/satici-uretim-gecici:/g:ro --entrypoint sh $Y -c 'install -d -m 755 -o 0 -g 0 /k/yedek-alici/anahtar-katmani && install -m 644 -o 0 -g 0 /g/anahtar-katmani.tkpub /k/yedek-alici/anahtar-katmani/'" && v 'rm -rf ~/satici-uretim-gecici'
+v "cd $K && docker compose exec -T satici-yedek /arac/yedek-dongusu.sh tek && docker compose exec -T satici-yedek ls -1 /yedek"   # anahtarlar_<damga>.tar.tkenc.tkenc
+```
+
+Geri yükleme (iki adım; düz tar yalnız `umask 077` geçici dizinde, sonra silinir):
+
+```bash
+umask 077; T=$(mktemp -d)
+(cd Teks-Erp && npx tsx scripts/yedek-sifrele.ts coz --girdi ~/.tekserp/satici-uretim-yedek/anahtarlar_<damga>.tar.tkenc.tkenc \
+  --cikti "$T/ic.tkenc" --anahtar ~/.tekserp/satici-uretim/yedek-ozel/satici-uretim-mac.txt \
+ && npx tsx scripts/yedek-sifrele.ts coz --girdi "$T/ic.tkenc" --cikti "$T/anahtarlar.tar" \
+  --anahtar ~/.tekserp/satici-uretim/anahtar-katmani/anahtar-katmani.tkkey)   # yedek parolası sorulur
+tar -tvf "$T/anahtarlar.tar"   # anahtar biriminin altı dosyası; yerine koyma §13 adım 4'teki gibi
+rm -rf "$T"
+```
+
+Doğrulama: `satici/sunucu/scripts/test_yedek_dongusu.ts` (gerçek şifreleme aracıyla: dış anahtar iç katmanı açamaz, katmansız tur anahtar arşivi üretmez).
 
 ### 13.8 Geri alma (ters sıra)
 
