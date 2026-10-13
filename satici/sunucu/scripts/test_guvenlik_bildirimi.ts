@@ -11,18 +11,22 @@
 //   §6 olay yerleri: her sınıfın üretim kodunda en az bir `securityEvent` çağrısı var (sınıf sessizce düşmez)
 //   §7 JWKS yaşı: istek beklemeden ölçüm; yarı tavan/aşım kademesi JWKS_YASI olayı, aynı kademe saatte bir
 //   N4 (dosya DIŞI, geri alındı): `warnAge`teki `securityEvent("JWKS_YASI"…)` silinir → §6a · §7b · §7d ❌
+//   §8 yedek tazeliği: istek beklemeden ölçüm; en yeni DB dökümü/anahtar arşivi tavandan eski ya da dizin yok →
+//      YEDEK_ALINAMADI (kademe değişince hemen, aynı kademe 6 saatte bir); taze yedek sessiz
+//   N5 (dosya DIŞI, geri alındı): `BackupFreshness.check`teki `securityEvent` silinir → §6a · §8b–§8g ❌
 // NEGATİF SONDA (dosya DIŞI, geri alındı): N1 güvenlik kapsamı + `transportFor` işletme taşıyıcısına düşer → §3a/§3b/§4a/§4b
 //   ❌ (yalnız `transportFor`daki düşüş ISIRMAZ: kapsam süzgeci satırı önce KAPALI yapar — iki katman) ·
 //   N2 çekirdekte açık pencere yok sayılır (her eşik aşımı ilk ileti) → §1c/§2a ❌ · N3 güvenlik sohbeti boşsa
 //   `TELEGRAM_CHAT_ID`e düşer → §5a ❌.
 // Koşum: npx tsx scripts/test_guvenlik_bildirimi.ts   (yalnız *_test DB)
 // =============================================================================
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { BildirimKanali } from "@prisma/client";
 import { generateKeyPairSync } from "node:crypto";
 import { JwksCache } from "../src/http/access-jwt";
+import { BackupFreshness } from "../src/lib/yedek-tazeligi";
 import { GuvenlikAlarmi } from "../src/lib/guvenlik-alarm";
 import { SECURITY_CLASSES, outboxDelivery, refreshSecurityChannelState, resetSecurityEventsForTest, securityEvent, securityHealth, securityTick, SECURITY_WINDOW_MS } from "../src/lib/security-events";
 import { SECURITY_EVENTS } from "../src/notifications/catalog";
@@ -193,6 +197,44 @@ async function jwksYasi(): Promise<void> {
   resetSecurityEventsForTest(Date.now());
 }
 
+/** §8 yedek tazeliği (B3 artığı): satıcı yedek dizinini salt okur, bayat yedek güvenlik olayına döner. */
+async function yedekTazeligi(): Promise<void> {
+  console.log("§8 yedek tazeliği");
+  const dir = mkdtempSync(path.join(os.tmpdir(), "yedek-tazelik-"));
+  const SA = 60 * DK;
+  let saat = T0;
+  const dosya = (ad: string, yasMs: number): void => {
+    const f = path.join(dir, ad);
+    writeFileSync(f, "şifreli");
+    utimesSync(f, (saat - yasMs) / 1000, (saat - yasMs) / 1000);
+  };
+  const b = new BackupFreshness({ dir, maxAgeMs: 26 * SA, now: () => saat, warn: () => undefined });
+  const say = () => securityHealth(saat).son24Saat.YEDEK_ALINAMADI ?? 0;
+  try {
+    resetSecurityEventsForTest(T0);
+    dosya("satici_20261012_080000.dump.tkenc", SA);
+    dosya("anahtarlar_20261012_080000.tar.tkenc.tkenc", SA);
+    kontrol("§8a taze döküm + anahtar arşivi → TAZE, olay yok", (await b.check()) === "TAZE" && say() === 0, String(say()));
+    saat += 30 * SA; // döngü durdu: ikisi de 31 saatlik
+    kontrol("§8b döküm tavandan eski → DB_BAYAT olayı (istek yok)", (await b.check()) === "DB_BAYAT" && say() === 1, String(say()));
+    saat += 2 * SA;
+    await b.check();
+    kontrol("§8c aynı kademede 6 saat dolmadan yeni olay yok", say() === 1, String(say()));
+    saat += 5 * SA;
+    await b.check();
+    kontrol("§8d 6 saat sonra aynı kademe yeniden bildirilir", say() === 2, String(say()));
+    dosya("satici_20261013_210000.dump.tkenc", 0); // döküm alındı, anahtar arşivi alınamadı (B8 katmanı yok)
+    kontrol("§8e döküm taze, anahtar arşivi eski → ANAHTAR_BAYAT hemen", (await b.check()) === "ANAHTAR_BAYAT" && say() === 3, String(say()));
+    dosya("anahtarlar_20261013_210000.tar.tkenc.tkenc", 0);
+    kontrol("§8f ✓K ikisi taze → TAZE, yeni olay yok", (await b.check()) === "TAZE" && say() === 3, String(say()));
+    const yok = new BackupFreshness({ dir: path.join(dir, "yok"), maxAgeMs: 26 * SA, now: () => saat, warn: () => undefined });
+    kontrol("§8g yedek dizini okunamıyor → DIZIN_YOK olayı", (await yok.check()) === "DIZIN_YOK" && say() === 4, String(say()));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    resetSecurityEventsForTest(Date.now());
+  }
+}
+
 async function main(): Promise<void> {
   hedefDbKapisi();
   const { prisma } = await import("../src/lib/prisma");
@@ -205,6 +247,7 @@ async function main(): Promise<void> {
     yapilandirma();
     olayYerleri();
     await jwksYasi();
+    await yedekTazeligi();
   } catch (err) {
     kontrol("beklenmeyen hata", false, err instanceof Error ? (err.stack ?? err.message) : String(err));
   } finally {

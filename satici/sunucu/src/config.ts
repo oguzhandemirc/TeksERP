@@ -149,6 +149,10 @@ const EnvSchema = z.object({
   CF_ACCESS_JWKS_DOSYASI: z.string().min(1).optional(),
   /** JWKS dosyasının yaş tavanı (gün, dosyanın mtime'ından): aşan küme RED (genel portal 404), yarısında uyarı. */
   CF_ACCESS_JWKS_AZAMI_YAS_GUN: positiveInt(1, 30).default(JWKS_AZAMI_YAS_GUN_VARSAYILAN),
+  /** Yedek döngüsünün dizini (satıcıya SALT OKUNUR bağlı); verilmezse tazelik ölçülmez (geliştirme/bekçi). */
+  YEDEK_DURUM_DIZINI: z.string().min(1).optional(),
+  /** En yeni DB dökümü / anahtar arşivi bundan eskiyse YEDEK_ALINAMADI (saat; döngü 24 sa + saatlik yeniden deneme payı). */
+  YEDEK_AZAMI_YAS_SAAT: positiveInt(2, 24 * 14).default(26),
   /** İç zil: tesis başına dakikalık tavan. */
   IC_ZIL_HIZ_DK: positiveInt(1, 1000).default(12),
   /** İç API çağrı sayacının denetime yazılma aralığı (dk; her istek değil, pencere başına tek satır). */

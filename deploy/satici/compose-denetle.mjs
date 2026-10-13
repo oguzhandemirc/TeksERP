@@ -337,6 +337,7 @@ const BAGLAR = {
     { hedef: "/derlemeler", degisken: "DERLEME_DIZINI_HOST", ro: true },
     { hedef: "/yayin", degisken: "YAYIN_DIZINI_HOST", ro: true },
     { hedef: "/erisim-jwks", degisken: "ERISIM_JWKS_DIZINI_HOST", ro: true },
+    { hedef: "/yedek-durum", degisken: "YEDEK_DIZINI_HOST", ro: true },
   ],
   "satici-yedek": [
     { hedef: "/yedek", degisken: "YEDEK_DIZINI_HOST", ro: false },

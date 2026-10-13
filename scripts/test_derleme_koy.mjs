@@ -78,7 +78,7 @@ fs.writeFileSync(path.join(BIN, 'scp'), '#!/usr/bin/env bash\nprintf \'scp\\t%s\
 // vds-dogrula tabanı: sahte ssh çıktısından (gerçek betik --taban-yaz ile).
 function vdsCikti(bozuk = false) {
   const h = (i) => (i === 3 && bozuk ? 'f' : 'a').repeat(2) + i.toString(16).padStart(62, '0');
-  return [...Array.from({ length: 310 }, (_, i) => `${h(i)}  adnansahin/electron/d${i}.bin`), '@@KOK', `${h(900)}  electron/latest.yml`, '@@DIGER', `${h(901)}  /opt/x/defter.tsv`, '@@LS', 'adnansahin', 'electron', ''].join('\n');
+  return [...Array.from({ length: 310 }, (_, i) => `${h(i)}  adnansahin/electron/d${i}.bin`), '@@KOK', `${h(900)}  electron/latest.yml`, '@@DIGER', `${h(901)}  /opt/x/defter.tsv`, '@@YEDEK', '20261012_090000', 'satici_20261013_030000.dump.tkenc', 'anahtarlar_20261013_030000.tar.tkenc.tkenc', '@@LS', 'adnansahin', 'electron', ''].join('\n');
 }
 const TABAN = yol('taban');
 fs.writeFileSync(path.join(SAHTE, 'vds'), vdsCikti());

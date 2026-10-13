@@ -96,6 +96,8 @@ services:
       DERLEME_DIZINI: /derlemeler
       YAYIN_DIZINI: /yayin
       GENEL_KOK_ADRESI: ${GENEL_KOK_ADRESI:?GENEL_KOK_ADRESI gerekli (https://<SATICI_HOST>)}
+      # Yedek tazeliği (B3): döngünün dizini salt okunur; bayat yedek → YEDEK_ALINAMADI güvenlik olayı.
+      YEDEK_DURUM_DIZINI: /yedek-durum
     secrets: [db_parolasi, ic_api_belirteci]
     volumes:
       # Anahtar birimi SALT OKUNUR: kök (parolalı) · alt/indirme · portal-totp.key · etkinlestirme-kodu.pepper ·
@@ -105,6 +107,8 @@ services:
       - ${DOSYA_DIZINI_HOST:?DOSYA_DIZINI_HOST gerekli}:/dosyalar
       - ${DERLEME_DIZINI_HOST:?DERLEME_DIZINI_HOST gerekli}:/derlemeler:ro
       - ${YAYIN_DIZINI_HOST:?YAYIN_DIZINI_HOST gerekli (güncelleme sunucusu kökü)}:/yayin:ro
+      # Yalnız dosya yaşı okunur; içerik .tkenc (satıcı açamaz) — satici-yedek'in yazdığı dizin.
+      - ${YEDEK_DIZINI_HOST:?YEDEK_DIZINI_HOST gerekli}:/yedek-durum:ro
     tmpfs:
       - /tmp:mode=1777
     networks:

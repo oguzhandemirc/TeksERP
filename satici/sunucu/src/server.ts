@@ -22,9 +22,10 @@ import { MaintenanceScheduler, syncKeyRegistry } from "./services/maintenance";
 import { webAppAvailable } from "./http/web-static";
 import { SecretFileModeError } from "./keys/secret-file-mode";
 import { outboxDelivery, startSecurityAlerts } from "./lib/security-events";
+import { BackupFreshness } from "./lib/yedek-tazeligi";
 
 /** JWKS yaş ölçümü aralığı; uyarı kademesi saatlik kısıtlıdır, sık ölçüm ileti sayısını artırmaz. */
-const JWKS_YAS_OLCUM_MS = 10 * 60_000;
+const JWKS_YAS_OLCUM_MS = 10 * 60_000; // yedek tazeliği de aynı aralıkla ölçülür
 
 function listen(server: http.Server, port: number, host: string): Promise<AddressInfo> {
   return new Promise((resolve, reject) => {
@@ -90,6 +91,10 @@ async function main(): Promise<void> {
   // B3: JWKS yaşı istek beklemeden ölçülür (boş portalda da yan konteyner durması alarma döner).
   const jwksAgeTimer = accessVerifier ? setInterval(() => void accessVerifier.jwks.checkAge().catch(() => undefined), JWKS_YAS_OLCUM_MS) : null;
   jwksAgeTimer?.unref();
+  // B3: yedek döngüsü durursa ya da anahtar arşivi alınamazsa (B8 katmanı yok) güvenlik sohbetine düşsün.
+  const backupFreshness = config.YEDEK_DURUM_DIZINI ? new BackupFreshness({ dir: config.YEDEK_DURUM_DIZINI, maxAgeMs: config.YEDEK_AZAMI_YAS_SAAT * 3_600_000 }) : null;
+  const backupTimer = backupFreshness ? setInterval(() => void backupFreshness.check().catch(() => undefined), JWKS_YAS_OLCUM_MS) : null;
+  backupTimer?.unref();
   const maintenance = new MaintenanceScheduler(ctx);
   maintenance.start();
   void maintenance.runOnce();
@@ -103,6 +108,7 @@ async function main(): Promise<void> {
     stopSecurityAlerts();
     clearInterval(counterTimer);
     if (jwksAgeTimer) clearInterval(jwksAgeTimer);
+    if (backupTimer) clearInterval(backupTimer);
     await hub.stop();
     await Promise.all([
       new Promise<void>((r) => publicServer.close(() => r())),
