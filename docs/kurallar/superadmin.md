@@ -46,7 +46,7 @@
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** Ayar şifresi hash'i `security.settingsPasswordHash`; `systemSettingService.set()` ile YAZILMAZ (audit oldData/newData HAM) — doğrudan upsert + ayrı olay. `security.*` ön eki ayar listesi ve `config-bundle`dan dışlanır, `PUT /admin/settings/:key` reddeder; `settingsPasswordRequired` bayrak değil. · bekçi: `scripts/test_settings_password.ts §H (11; hash system_logs, arşiv, erişim logu ve config-bundle dâhil HİÇBİR yüzeyde görünmez) + §K (8; hash yazımı systemSettingService.set KULLANMAZ) + §I (5; ham ayar ucundan yazılamaz → 400 SETTING_KEY_RESERVED)` <sub>(CLAUDE.md:98)</sub>
+- **[ÇEKİRDEK]** Ayar şifresi hash'i `security.settingsPasswordHash`; `systemSettingService.set()` ile YAZILMAZ (audit maskesi anahtar ADINA bakar (`maskAuditPayload`, derin); SystemSetting satırında hash `value` alanındadır, adı sır değil ⇒ maske görmez) — doğrudan upsert + ayrı olay. `security.*` ön eki ayar listesi ve `config-bundle`dan dışlanır, `PUT /admin/settings/:key` reddeder; `settingsPasswordRequired` bayrak değil. · bekçi: `scripts/test_settings_password.ts §H (11; hash system_logs, arşiv, erişim logu ve config-bundle dâhil HİÇBİR yüzeyde görünmez) + §K (8; hash yazımı systemSettingService.set KULLANMAZ) + §I (5; ham ayar ucundan yazılamaz → 400 SETTING_KEY_RESERVED)` <sub>(CLAUDE.md:98)</sub>
 
 ### Tuzaklar
 
