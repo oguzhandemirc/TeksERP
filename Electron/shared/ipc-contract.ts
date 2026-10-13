@@ -13,6 +13,7 @@ import type { LicenseRelayRequest, LicenseRelayResult } from "./license-relay";
 import type { ScreenshotResult } from "./screenshot";
 import type { TvDisplayInfo, TvWindowOpenRequest, TvWindowOpenResult } from "./tv-window";
 import type { LoomAlarmNotifyRequest, LoomAlarmNotifyResult } from "./loom-alarm-notify";
+import type { PdfBatchProgress } from "./pdf-progress";
 
 export type { DiscoveredServer };
 
@@ -97,6 +98,8 @@ export interface PdfApi {
   saveBatch: (opts: PdfSaveBatchOpts) => Promise<SaveBatchResult>;
   /** PDF meta verisine yazılacak lisans filigranı (lisans sahibi + no); null = yalnız üretici. */
   setLicenseMeta: (meta: PdfLicenseMetaInput | null) => Promise<void>;
+  /** Toplu kayıtta her yazılan belgeden sonra ilerleme; dönen fonksiyon aboneliği kapatır. */
+  onBatchProgress: (cb: (p: PdfBatchProgress) => void) => () => void;
 }
 /** Lisans filigranı — main süreç biçimi yeniden doğrular (TKS-YYYY-NNNN, ≤200 karakter sahip). */
 export interface PdfLicenseMetaInput {

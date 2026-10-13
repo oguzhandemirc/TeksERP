@@ -1,6 +1,7 @@
 import { printedDocumentService } from "@/services/printedDocumentService";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { docTablesToSheets, type DocTablesPayload } from "@/lib/doc-tables-export";
+import { withPdfBatchProgress } from "@/lib/pdf-batch-progress";
 import { accountingDispatchService } from "@/pages/Operations/AccountingDispatch/service";
 import {
   buildDispatchReportSheets,
@@ -110,7 +111,7 @@ export async function downloadDocsPdf(targets: DocTarget[]): Promise<ExportOutco
   for (const t of targets) {
     items.push({ html: await printedDocumentService.getHtml(docTypeOf(t), t.id), name: t.shipmentNo });
   }
-  const res = await pdfApi.saveBatch({ items });
+  const res = await withPdfBatchProgress(pdfApi, items.length, () => pdfApi.saveBatch({ items }));
   return { ok: res.saved, count: res.count, error: res.error };
 }
 

@@ -16,6 +16,7 @@ import type {
 } from "@shared/ipc-contract";
 import type { LicenseRelayRequest } from "@shared/license-relay";
 import { isAppDocumentUrl, readAppEntryArgument } from "@shared/app-origin";
+import { PDF_BATCH_PROGRESS_CHANNEL, parsePdfBatchProgress } from "@shared/pdf-progress";
 import { LOOM_ALARM_NOTIFY_CHANNEL, LOOM_ALARM_OPEN_CHANNEL, parseLoomAlarmOpenEvent } from "@shared/loom-alarm-notify";
 
 const api: ApiBridge = {
@@ -83,6 +84,14 @@ const api: ApiBridge = {
     save: (opts: PdfSaveOpts) => ipcRenderer.invoke("pdf:save", opts),
     saveBatch: (opts: PdfSaveBatchOpts) => ipcRenderer.invoke("pdf:saveBatch", opts),
     setLicenseMeta: (meta: PdfLicenseMetaInput | null) => ipcRenderer.invoke("pdf:setLicenseMeta", meta),
+    onBatchProgress: (cb) => {
+      const listener = (_e: unknown, payload: unknown) => {
+        const p = parsePdfBatchProgress(payload);
+        if (p) cb(p);
+      };
+      ipcRenderer.on(PDF_BATCH_PROGRESS_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(PDF_BATCH_PROGRESS_CHANNEL, listener);
+    },
   },
   files: {
     save: (opts: FileSaveOpts) => ipcRenderer.invoke("files:save", opts),

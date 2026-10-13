@@ -18,6 +18,7 @@ import {
   PDF_TIMEOUT_MS,
   pdfTooLargeMessage,
 } from "../../shared/pdf-limits.js";
+import { PDF_BATCH_PROGRESS_CHANNEL, type PdfBatchProgress } from "../../shared/pdf-progress.js";
 
 /** Dosya adını güvenli hale getir (yasak karakterler → _), max 100. */
 function safeFileName(name: string): string {
@@ -129,18 +130,22 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }
 
-async function renderPdf(html: string): Promise<Uint8Array> {
-  hardenedPdfSession();
-  const token = randomUUID();
-  pendingDocs.set(token, html);
+function makePdfWindow(): BrowserWindow {
   const win = new BrowserWindow(PDF_WINDOW_OPTIONS);
   hardenPdfContents(win.webContents);
+  return win;
+}
+
+/** Belgeyi verilen pencerede çizer; pencerenin ömrü çağıranındır. Zaman aşımı belge başınadır. */
+async function renderInWindow(win: BrowserWindow, html: string, settleMs: number): Promise<Uint8Array> {
+  const token = randomUUID();
+  pendingDocs.set(token, html);
   try {
     const pdf = await withTimeout(
       (async () => {
         await win.loadURL(PDF_DOC_PREFIX + token);
-        // Görsellerin (logo/QR data-uri) yerleşmesi için kısa bekleme.
-        await new Promise((r) => setTimeout(r, 250));
+        // Görsellerin (logo/QR data-uri) yerleşmesi için kısa bekleme (tekil kayıt; toplu yolda 0, bkz. htmlsToPdfs).
+        if (settleMs > 0) await new Promise((r) => setTimeout(r, settleMs));
         return win.webContents.printToPDF({
           printBackground: true,
           // Kenar boşluğu belgenin kendi @page kuralından gelsin (0 = belge yönetir).
@@ -152,6 +157,15 @@ async function renderPdf(html: string): Promise<Uint8Array> {
     return await applyPdfLicenseMeta(pdf, licenseMeta);
   } finally {
     pendingDocs.delete(token);
+  }
+}
+
+async function renderPdf(html: string): Promise<Uint8Array> {
+  hardenedPdfSession();
+  const win = makePdfWindow();
+  try {
+    return await renderInWindow(win, html, 250);
+  } finally {
     win.destroy();
   }
 }
@@ -159,15 +173,41 @@ async function renderPdf(html: string): Promise<Uint8Array> {
 // Tek kuyruk: büyük belge render süreci GB mertebesinde bellek ister, iki paralel PDF bunu ikiye katlar.
 let pdfQueue: Promise<unknown> = Promise.resolve();
 
+function enqueue<T>(job: () => Promise<T>): Promise<T> {
+  const run = pdfQueue.then(job);
+  pdfQueue = run.catch(() => undefined);
+  return run;
+}
+
 export function htmlToPdf(html: string): Promise<Uint8Array> {
   try {
     assertPdfSize(html);
   } catch (err) {
     return Promise.reject(err);
   }
-  const run = pdfQueue.then(() => renderPdf(html));
-  pdfQueue = run.catch(() => undefined);
-  return run;
+  return enqueue(() => renderPdf(html));
+}
+
+/**
+ * Toplu PDF: TEK gizli pencere ardışık belgeleri çizer; kuyruk yuvası iş boyunca tutulur. Sabit
+ * bekleme yok: 1 MB data-URI görselli 40 belgede 250 ms ↔ 0 çıktısı piksel-eşit ölçüldü (Perf-2 B8).
+ * İlk hatada (zaman aşımı dahil) durur, pencere her durumda yok edilir.
+ */
+export function htmlsToPdfs(htmls: readonly string[], onEach: (pdf: Uint8Array, index: number) => Promise<void>): Promise<void> {
+  try {
+    for (const html of htmls) assertPdfSize(html);
+  } catch (err) {
+    return Promise.reject(err);
+  }
+  return enqueue(async () => {
+    hardenedPdfSession();
+    const win = makePdfWindow();
+    try {
+      for (let i = 0; i < htmls.length; i++) await onEach(await renderInWindow(win, htmls[i]!, 0), i);
+    } finally {
+      win.destroy();
+    }
+  });
 }
 
 export function registerPdfIpc(): void {
@@ -205,17 +245,24 @@ export function registerPdfIpc(): void {
       if (canceled || !filePaths?.[0]) return { saved: false };
       const dir = filePaths[0];
       const used = new Set<string>();
-      let count = 0;
-      for (const item of opts.items) {
-        let base = safeFileName(item.name);
+      const names = opts.items.map((item) => {
+        const base = safeFileName(item.name);
         let name = base;
         let n = 2;
         while (used.has(name.toLowerCase())) name = `${base} (${n++})`;
         used.add(name.toLowerCase());
-        const pdf = await htmlToPdf(item.html);
-        await writeFile(join(dir, `${name}.pdf`), pdf);
-        count++;
-      }
+        return name;
+      });
+      const total = opts.items.length;
+      let count = 0;
+      await htmlsToPdfs(
+        opts.items.map((item) => item.html),
+        async (pdf, i) => {
+          await writeFile(join(dir, `${names[i]}.pdf`), pdf);
+          count++;
+          if (!e.sender.isDestroyed()) e.sender.send(PDF_BATCH_PROGRESS_CHANNEL, { done: count, total } satisfies PdfBatchProgress);
+        },
+      );
       return { saved: true, dir, count };
     } catch (err) {
       return { saved: false, error: pdfErrorMessage(err, "PDF'ler oluşturulamadı") };

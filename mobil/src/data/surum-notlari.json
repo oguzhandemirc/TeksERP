@@ -263,6 +263,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "“Tüm listeyi indir” 500.000 kaydı aşan listede artık uyarır: indirilen dosyanın listenin tamamı olmadığını söyler, süzgeçle daraltıp yeniden indirebilirsiniz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Toplu belgeyi PDF olarak kaydetmek (iş emri belgeleri, seçili sevkiyatların irsaliyeleri) yaklaşık üç kat hızlandı; kayıt sürerken ekranın köşesinde kaçıncı belgede olunduğu görünür. Takılan bir belge 60 saniye sonra hata verir, iş sonsuza dek beklemez."
         }
       ]
     },

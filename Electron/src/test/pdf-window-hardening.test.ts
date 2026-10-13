@@ -33,9 +33,11 @@ const h = vi.hoisted(() => ({
   openExternal: vi.fn(),
   printFails: false,
   printHangs: false,
+  hangOn: null as string | null,
   printLog: [] as string[],
   aliveAtPrint: [] as number[],
   dialogSave: null as null | ((opts: unknown) => unknown),
+  dialogOpen: null as null | (() => unknown),
 }));
 
 vi.mock("electron", () => {
@@ -54,7 +56,7 @@ vi.mock("electron", () => {
         },
         printToPDF: async () => {
           if (h.printFails) throw new Error("yazdırılamadı");
-          if (h.printHangs) return new Promise(() => undefined);
+          if (h.printHangs || (h.hangOn !== null && rec.served === h.hangOn)) return new Promise(() => undefined);
           h.printLog.push(rec.served ?? "");
           h.aliveAtPrint.push(h.windows.filter((w) => !w.destroyed).length);
           return new Uint8Array([1, 2, 3]);
@@ -87,7 +89,7 @@ vi.mock("electron", () => {
     BrowserWindow: FakeBrowserWindow,
     session: { fromPartition },
     ipcMain: { handle: (ch: string, fn: Listener) => h.handlers.set(ch, fn), on: vi.fn() },
-    dialog: { showSaveDialog: vi.fn(async (...args: unknown[]) => h.dialogSave?.(args.at(-1)) ?? { canceled: true }), showOpenDialog: vi.fn(async () => ({ canceled: true })) },
+    dialog: { showSaveDialog: vi.fn(async (...args: unknown[]) => h.dialogSave?.(args.at(-1)) ?? { canceled: true }), showOpenDialog: vi.fn(async () => h.dialogOpen?.() ?? { canceled: true }) },
     shell: { openExternal: h.openExternal },
   };
 });
@@ -273,4 +275,72 @@ describe("PDF boyut kapısı, hata metni, kuyruk ve zaman aşımı", () => {
       vi.useRealTimers();
     }
   });
+});
+
+// =============================================================================
+// PERF-2 B8: toplu PDF TEK pencere, belge başına zaman aşımı, ilerleme olayı.
+// Negatif sonda: belge başına pencere açan eski döngü → "tek pencere" kırmızı.
+// =============================================================================
+const { mkdtemp, readdir } = await import("node:fs/promises");
+const { tmpdir } = await import("node:os");
+const progress = await import("../../shared/pdf-progress");
+
+function batchSender() {
+  const sent: Array<[string, unknown]> = [];
+  return { sent, event: { senderFrame: { url: `${ENTRY}#/is-emri`, parent: null }, sender: { send: (ch: string, p: unknown) => sent.push([ch, p]), isDestroyed: () => false } } };
+}
+
+describe("Toplu PDF: tek pencere, ilerleme, zaman aşımı", () => {
+  it("⭐ N belge TEK pencerede sırayla çizilir, her biri ayrı dosya, ilerleme n/N, pencere sonunda yok edilir", async () => {
+    pdf.registerPdfIpc();
+    trusted.setTrustedAppEntry(ENTRY);
+    const dir = await mkdtemp(`${tmpdir()}/pdf-b8-`);
+    h.dialogOpen = () => ({ canceled: false, filePaths: [dir] });
+    h.printLog.length = 0;
+    const before = h.windows.length;
+    const { sent, event } = batchSender();
+    const items = [{ name: "A", html: "<p>A</p>" }, { name: "A", html: "<p>B</p>" }, { name: "C", html: "<p>C</p>" }];
+    const res = await h.handlers.get("pdf:saveBatch")?.(event, { items });
+    h.dialogOpen = null;
+    expect(res).toEqual({ saved: true, dir, count: 3 });
+    expect(h.windows.length - before).toBe(1);
+    expect(h.windows.at(-1)?.destroyed).toBe(true);
+    expect(h.printLog).toEqual(["<p>A</p>", "<p>B</p>", "<p>C</p>"]);
+    expect((await readdir(dir)).sort()).toEqual(["A (2).pdf", "A.pdf", "C.pdf"]);
+    expect(sent).toEqual([1, 2, 3].map((done) => [progress.PDF_BATCH_PROGRESS_CHANNEL, { done, total: 3 }]));
+  });
+
+  it("⭐ takılan belge: 60 s sonra sabit metin, pencere yok edilir, sonraki belge çizilmez, kuyruk yürür", async () => {
+    pdf.registerPdfIpc();
+    trusted.setTrustedAppEntry(ENTRY);
+    const dir = await mkdtemp(`${tmpdir()}/pdf-b8-`);
+    h.dialogOpen = () => ({ canceled: false, filePaths: [dir] });
+    h.printLog.length = 0;
+    const { sent, event } = batchSender();
+    const items = [{ name: "a", html: "<p>a</p>" }, { name: "b", html: "<p>b</p>" }, { name: "c", html: "<p>c</p>" }];
+    h.hangOn = "<p>b</p>";
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const run = Promise.resolve(h.handlers.get("pdf:saveBatch")?.(event, { items }));
+      // Dosya yazımı gerçek G/Ç: b'nin pencereye yüklenmesini (zaman aşımı saati kurulmuş) gerçek turlarla bekle.
+      for (let i = 0; i < 500 && h.windows.at(-1)?.served !== "<p>b</p>"; i++) {
+        await vi.advanceTimersByTimeAsync(300);
+        await new Promise((r) => setImmediate(r));
+      }
+      await vi.advanceTimersByTimeAsync(limits.PDF_TIMEOUT_MS + 300);
+      expect(await run).toEqual({ saved: false, error: limits.PDF_TIMEOUT_MESSAGE });
+      expect(h.windows.at(-1)?.destroyed).toBe(true);
+      expect(h.printLog).toEqual(["<p>a</p>"]);
+      expect(sent).toEqual([[progress.PDF_BATCH_PROGRESS_CHANNEL, { done: 1, total: 3 }]]);
+      const next = pdf.htmlToPdf("<p>sonra</p>");
+      await vi.advanceTimersByTimeAsync(300);
+      await expect(next).resolves.toBeInstanceOf(Uint8Array);
+    } finally {
+      h.hangOn = null;
+      h.dialogOpen = null;
+      vi.useRealTimers();
+    }
+    expect(await readdir(dir)).toEqual(["a.pdf"]);
+  });
+
 });

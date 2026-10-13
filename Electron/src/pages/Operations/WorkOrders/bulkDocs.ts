@@ -20,6 +20,7 @@
 import { printedDocumentService, type PrintedDocType } from "@/services/printedDocumentService";
 import { mergeDocsForPrint } from "@/lib/print-merge";
 import { printHtmlString } from "@/lib/print";
+import { withPdfBatchProgress } from "@/lib/pdf-batch-progress";
 import { workOrderService } from "./service";
 import type { WorkOrderDocument } from "./types";
 
@@ -262,8 +263,8 @@ export async function savePdfDocs(docs: FetchedDoc[]): Promise<PdfOutcome> {
     const res = await pdfApi.save({ html: d.html, suggestedName: pdfName(d.row) });
     return { ok: res.saved, count: res.saved ? 1 : 0, error: res.error };
   }
-  const res = await pdfApi.saveBatch({
-    items: docs.map((d) => ({ html: d.html, name: pdfName(d.row) })),
-  });
+  const res = await withPdfBatchProgress(pdfApi, docs.length, () =>
+    pdfApi.saveBatch({ items: docs.map((d) => ({ html: d.html, name: pdfName(d.row) })) }),
+  );
   return { ok: res.saved, count: res.count, error: res.error };
 }

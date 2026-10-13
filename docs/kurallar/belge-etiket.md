@@ -174,7 +174,7 @@
 
 ## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
 
-- **[ÇEKİRDEK]** Toplu belgede PDF Kaydet yolu birleştirme motorunu HİÇ kullanmaz — `pdf:saveBatch` her belgeyi kendi gizli penceresinde render eder; arşiv çıktısı tekil baskıyla birebirdir. <sub>(eski Electron/CLAUDE.md toplu belge)</sub>
+- **[ÇEKİRDEK]** Toplu belgede PDF Kaydet yolu birleştirme motorunu HİÇ kullanmaz — `pdf:saveBatch` (`htmlsToPdfs`) belgeleri TEK gizli pencerede ardışık çizer, kuyruk yuvasını iş boyunca tutar, zaman aşımı belge başınadır, her yazılan belgeden sonra `pdf:batch-progress` olayı yollar; arşiv çıktısı tekil kayıtla piksel-eşittir. · bekçi: `pdf-window-hardening.test.ts` (Toplu PDF) <sub>(eski Electron/CLAUDE.md toplu belge; Perf-2 B8 2026-10-13)</sub>
 
 ## Bekçiler — bu alana dokununca koş
 
@@ -196,6 +196,7 @@ Backend: `test_belge_sablon_temizleyici`, `test_belge_baslik_harf`, `test_belge_
 - 2026-07-30 · 2026-07-30 — çuval notu + çuval etiketi + tek dokunuş tartı — `CLAUDE-NOT-ARSIVI.md:28-35`
 - 2026-10-12 · Bölge 4+5 düzeltmesi: CSV formül öneki [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-12 Bölge 4+5
 - 2026-10-12 · Perf-2 B2/B3: PDF belgesi bellek şemasından + bayt kapısı + kuyruk; barkod SVG raw() + önbellek [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-12 Perf-2 B2/B3
+- 2026-10-13 · Perf-2 B8: toplu PDF tek pencere + ilerleme olayı [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-13 Perf-2 B8
 - 2026-08-05 · 2026-08-05 — BELGE YERLEŞİMİ: A5 yoğunluk profili + ALAN BAZLI punto/kalınlık — `CLAUDE-NOT-ARSIVI.md:267-284`
 - 2026-08-13 · 2026-08-13 — KESİMDE KAT SESSİZCE DÜŞÜYORDU: mutationFn gövdesi alanı geçirmiyordu — `CLAUDE-NOT-ARSIVI.md:192-202`
 - 2026-09-04 · 2026-09-04 — Sevk belgesinde MÜŞTERİDEKİ ürün adı: veri vardı, belge yolu yoktu [PROFİL/ÇEKİRDEK karma] — `arsiv/2026-09.md`
