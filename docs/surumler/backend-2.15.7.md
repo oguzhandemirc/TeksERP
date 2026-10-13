@@ -31,6 +31,12 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 2. Ne değişti
 
+**Tezgah Salonu: tezgahta aktif operatör (D5)** (commit `feat(salon): D5 …`; kısa kimliği paketlemede yazılır)
+
+- Salon cevabında tezgah başına `operator: { name, since } | null` — tezgahın açık ve hareketsizlik süresi dolmamış
+  tablet oturumu. Salon okuması oturum kapatmaz (yazma yok).
+- `dist-web`: panel 1.6.5 kaynağı değişir (detay satırı + kart ipucu).
+
 **Tezgah Salonu: Sebep ata** (commit `feat(salon): Sebep ata …`; kısa kimliği paketlemede yazılır)
 
 - Yeni `POST /api/machine-stops/bulk/classify/preview` ve `/bulk/classify` (izin `loom:classify`, mevcut): seçili
@@ -67,6 +73,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 3. Sözleşme
 
+- **Kırıldı mı:** HAYIR (D5) — yalnız ekleme: salon cevabında tezgah başına `operator`.
 - **Kırıldı mı:** HAYIR (Sebep ata) — yalnız ekleme: iki uç, salon cevabında bir alan. Eski panel alanı okumaz.
 
 - **Kırıldı mı:** HAYIR (watchdog) — yalnız ekleme: bir kart ucu (nabız), duruş cevabında

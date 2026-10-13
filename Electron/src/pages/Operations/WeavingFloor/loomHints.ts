@@ -49,6 +49,10 @@ function sourceLine(t: LiveLoom): HintLine[] {
   return t.stateSource ? [{ label: "Kaynak", value: STATE_SOURCE_LABEL[t.stateSource] }] : [];
 }
 
+function operatorLine(t: LiveLoom): HintLine[] {
+  return t.operator ? [{ label: "Operatör", value: t.operator.name }] : [];
+}
+
 function jobLine(t: LiveLoom): HintLine[] {
   return t.job ? [{ label: "Dokunan iş", value: `${t.job.no} · ${t.job.fabric}` }] : [];
 }
@@ -70,6 +74,7 @@ function stopHint(t: LiveLoom, stop: OpenStop, now: number): HintModel {
     targetLine(stop, now),
     ...(tier === "ESCALATED" ? [{ label: "Durum", value: TIER_LABEL.ESCALATED, tone: "danger" as const }] : []),
     ...attendantLines(stop, now),
+    ...operatorLine(t),
     ...sourceLine(t),
     ...jobLine(t),
   ];
@@ -86,6 +91,7 @@ export function loomHintOf(t: LiveLoom, now: number): HintModel {
   const lines: HintLine[] = [
     ...(t.rpm !== null ? [{ label: "Devir", value: `${formatNumber(t.rpm)} atkı/dk` }] : []),
     { label: "Bugün", value: pct === null ? "—" : `%${pct} çalıştı` },
+    ...operatorLine(t),
     ...sourceLine(t),
     ...jobLine(t),
   ];

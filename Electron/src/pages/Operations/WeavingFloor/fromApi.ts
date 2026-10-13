@@ -102,6 +102,7 @@ function loomOf(l: WireLoom, asOf: number): LiveLoom {
     monitored: l.state !== "UNMONITORED",
     stateSource: l.stateSource ?? null,
     collectorSilentSince: l.collectorSilentSince ? ms(l.collectorSilentSince) : null,
+    operator: l.operator ? { name: l.operator.name, since: ms(l.operator.since) } : null,
     loomType: null,
     targetRpm: l.targetUnitsPerMin,
     rpm: null,

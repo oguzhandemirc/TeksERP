@@ -10,7 +10,7 @@
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { readWorkSessionIdleTimeoutMinutes } from "../system-setting.service";
-import type { WorkSessionEndReason } from "@prisma/client";
+import type { Prisma, WorkSessionEndReason } from "@prisma/client";
 
 export interface ActiveWorkSession {
   id: string;
@@ -151,10 +151,34 @@ export async function getStampContext(
 export async function sweepIdleSessions(): Promise<number> {
   const idleMin = await readWorkSessionIdleTimeoutMinutes();
   if (idleMin <= 0) return 0;
-  const cutoff = new Date(Date.now() - idleMin * 60_000);
+  const cutoff = idleCutoff(idleMin, new Date());
   const res = await prisma.workSession.updateMany({
     where: { endedAt: null, lastActivityAt: { lt: cutoff } },
     data: { endedAt: new Date(), endReason: "IDLE" as WorkSessionEndReason },
   });
   return res.count;
+}
+
+/** Hareketsizlik eşiği: bu andan eski `lastActivityAt` süresi dolmuş sayılır (süpürme ve canlı okuma aynı hesap). */
+function idleCutoff(idleMin: number, now: Date): Date {
+  return new Date(now.getTime() - idleMin * 60_000);
+}
+
+/**
+ * CANLI oturum yüklemi — açık VE hareketsizlik süresi dolmamış. Yazmayan okumalar (Tezgah Salonu) içindir:
+ * süresi dolmuş oturumu kapatmaz, yalnız saymaz; kapatma tembel yolların işidir (`sweepIdleSessions` tümleyeni kapatır).
+ */
+export function liveSessionWhere(idleMin: number, now: Date): Prisma.WorkSessionWhereInput {
+  return idleMin > 0 ? { endedAt: null, lastActivityAt: { gte: idleCutoff(idleMin, now) } } : { endedAt: null };
+}
+
+/** Tezgah başına canlı oturumun operatörü (D5) — makinede tek açık oturum DB seddiyle (`work_sessions_active_machine_uq`). */
+export async function liveMachineOperators(machineIds: readonly string[], now: Date): Promise<Map<string, { name: string; since: Date }>> {
+  if (machineIds.length === 0) return new Map();
+  const idleMin = await readWorkSessionIdleTimeoutMinutes();
+  const rows = await prisma.workSession.findMany({
+    where: { ...liveSessionWhere(idleMin, now), machineId: { in: [...machineIds] } },
+    select: { machineId: true, startedAt: true, user: { select: { fullName: true, username: true } } },
+  });
+  return new Map(rows.map((r) => [r.machineId!, { name: r.user.fullName?.trim() || r.user.username, since: r.startedAt }]));
 }

@@ -88,6 +88,8 @@ export interface WireLoom {
   stateSource?: StateSource;
   /** Tezgahın makine kartı SESSİZ (D4 watchdog): kartın son görülmesi; null = kart yok ya da canlı; eski sunucuda yok. */
   collectorSilentSince?: string | null;
+  /** Tezgahta tabletten oturum açmış operatör (D5); oturum yoksa null; eski sunucuda yok. */
+  operator?: { name: string; since: string } | null;
   openStop: WireOpenStop | null;
   today: { potSec: number; aptSec: number; availabilityPct: number | null; stopCount: number; breakdown: WireBreakdownRow[] };
   targetUnitsPerMin: number | null;

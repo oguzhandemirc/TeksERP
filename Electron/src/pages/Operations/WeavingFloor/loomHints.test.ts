@@ -73,6 +73,11 @@ describe("loomHintOf — çalışan ve verisiz", () => {
     expect(line(h, "Kaynak")?.value).toBe("Ölçülen");
   });
 
+  it("D5: operatör varsa ipucunda adı, yoksa satır yok", () => {
+    expect(line(loomHintOf(loom({ operator: { name: "Ayşe Dokumacı", since: 0 } }), 0), "Operatör")?.value).toBe("Ayşe Dokumacı");
+    expect(line(loomHintOf(loom({ operator: null }), 0), "Operatör")).toBeUndefined();
+  });
+
   it("verisiz: 'Veri yok' ve nedeni", () => {
     const h = loomHintOf(loom({ monitored: false, stateSource: "cikarim" }), NOW);
     expect(h.subtitle).toBe("Veri yok");

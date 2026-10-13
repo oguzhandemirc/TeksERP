@@ -17,6 +17,7 @@ import { LOOM_MACHINE_WHERE, MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-
 import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled, readTezgahAlarmNoShiftMode, resolveTezgahAlarmUnclassifiedTarget, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled, TEZGAH_ALARM_NO_SHIFT_MODES, type TezgahAlarmNoShiftMode } from "./system-setting.service";
 import { ACTIVE_ALARM_STATES } from "./loom-alarm.service";
 import { mountedBeamViewsTx, type MountedBeamView } from "./helpers/warp-beam-mount.helper";
+import { liveMachineOperators } from "./helpers/work-session.helper";
 import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms, type SourceBucket } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis } from "./helpers/loom-efficiency.helper";
 import { clockShiftsFrom, loadAlarmShiftFacts, loadClockShiftWindows, type CurrentShift } from "./helpers/loom-alarm-shift.helper";
@@ -116,6 +117,8 @@ export interface LoomFloorLoomDto {
   openRuns: LoomFloorOpenRunDto[] | null;
   /** Takılı leventler (yuva sırasıyla) — yalnız devere + levent tezgah bağı defteri açıkken dizi; kapalıyken null. */
   beams: MountedBeamView[] | null;
+  /** Tezgahta tabletten oturum açmış operatör (D5; açık ve hareketsizlik süresi dolmamış oturum); yoksa null. */
+  operator: { name: string; since: Date } | null;
   recentStops: LoomFloorStopRow[];
   source: MachineDataSource;
 }
@@ -249,7 +252,7 @@ function openStopDto(s: StopRow, src: FloorSources, ctx: { grace: number; unclas
   };
 }
 
-function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; unclassifiedTarget: number | null; alarmEnabled: boolean; noShiftMode: TezgahAlarmNoShiftMode; shifts: ShiftWindow[]; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
+function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: Date; grace: number; unclassifiedTarget: number | null; alarmEnabled: boolean; noShiftMode: TezgahAlarmNoShiftMode; shifts: ShiftWindow[]; beamsBy: Map<string, MountedBeamView[]> | null; byStop: Map<string, StopRow[]>; byRun: Map<string, RunRow[]>; byDoff: Map<string, Array<{ machineId: string; counterSource: MachineDataSource }>>; operators: Map<string, { name: string; since: Date }> }): { dto: LoomFloorLoomDto; terms: ShiftTerms } {
   const stops = ctx.byStop.get(loom.id) ?? [];
   const runs = ctx.byRun.get(loom.id) ?? [];
   const terms = todayTerms(loom, { stops, runs, doffSources: (ctx.byDoff.get(loom.id) ?? []).map((d) => d.counterSource) }, src, ctx);
@@ -283,14 +286,12 @@ function loomDto(loom: LoomRow, src: FloorSources, ctx: { dayStart: Date; now: D
             .filter((r) => r.endedAt === null)
             .sort((a, b) => a.productionLineNo - b.productionLineNo)
             .map((r) => ({
-              id: r.id,
-              productionLineNo: r.productionLineNo,
-              weavingOrderId: r.weavingOrderId,
+              id: r.id, productionLineNo: r.productionLineNo, weavingOrderId: r.weavingOrderId, startedAt: r.startedAt,
               weavingOrderNumber: r.weavingOrderId ? (src.jobs.get(r.weavingOrderId)?.weavingOrderNumber ?? null) : null,
-              startedAt: r.startedAt,
             }))
         : null,
       beams: ctx.beamsBy ? (ctx.beamsBy.get(loom.id) ?? []) : null,
+      operator: ctx.operators.get(loom.id) ?? null,
       recentStops: recent.map((s) => ({ id: s.id, reasonCode: s.reasonCode, lossClass: s.lossClass, startedAt: s.startedAt, endedAt: s.endedAt })),
       source: terms.source,
     },
@@ -309,7 +310,7 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
   const alarm = await alarmShiftState(now);
   const { alarmEnabled, mode: noShiftMode } = alarm;
   const shifts = await loadClockShiftWindows(prisma, clockShiftsFrom(src.stops.filter((s) => s.endedAt === null)), now);
-  const ctx = { dayStart, now, grace, unclassifiedTarget, alarmEnabled, noShiftMode, shifts, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs) };
+  const ctx = { dayStart, now, grace, unclassifiedTarget, alarmEnabled, noShiftMode, shifts, beamsBy, byStop: groupBy(src.stops), byRun: groupBy(src.runs), byDoff: groupBy(src.doffs), operators: await liveMachineOperators(src.looms.map((l) => l.id), now) };
   const built = src.looms.map((l) => loomDto(l, src, ctx));
   const cores = built.map(({ dto, terms }) => ({
     hallId: dto.hallId, hallName: dto.hallName, state: dto.state,

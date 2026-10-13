@@ -188,7 +188,7 @@ Esin: dokuma izleme/MES salon panoları (Loepfe/Barco tipi salon izleme, Picanol
 - "İş ver" önizlemesinde dolu hat satırları baştan işaretsiz, "İşi değiştir"de işaretli (1e kararı).
 - "Olmayanları yeniden dene" başarısız satırları körlemesine tekrar göndermez, YENİDEN ÖNİZLER.
 - "Koşumu geri al" salonda yalnız AÇIK koşum + tek tezgah (çok hatlıysa koşum sorulur); bitmiş koşumun geri alınması salon dışı (1e kararı).
-- Salon ucuna operatör (D5) bu fazda eklenmedi — açık.
+- Salon ucuna operatör (D5) bu fazda eklenmedi — ~~açık~~ → 2026-10-13 indi (aşağıda).
 
 ### F2 teslimi (2026-10-12) — tasarımdan sapmalar
 - Üç eylem: "Duruş bildir…" (başlangıç Şimdi/Daha önce, sebep pencere içinde listeden BİR KEZ ya da "Sebep sonra girilecek"), "Hepsi çalıştı…" (seçimin açık duruşlarını kapatır, bitiş Şimdi/Daha önce), "Duruşu geri al…" (gerekçe bir kez, karar 7). Hepsi önizlemeli; satır başına işaret; sonuç Oldu/Olmadı + yalnız başarısızları yeniden önizle.
@@ -200,6 +200,9 @@ Esin: dokuma izleme/MES salon panoları (Loepfe/Barco tipi salon izleme, Picanol
 ### Sebep ata teslimi (2026-10-13) — tasarımdan sapmalar
 - Yalnız AÇIK ve sebepsiz duruş hedeflenir; satır başına mevcut ilk sınıflandırma (`classifyStop`). Sebep→sebep düzeltmesi salonda yok (Tezgah Duruşları, `reclassify` defteri) — 1e kararı, gerekçe arşiv `2026-10.md`.
 - Önizleme F2'nin tek kaynağından (`previewBulkStops`, `CLASSIFY`), ama ayrı rota `POST /machine-stops/bulk/classify/preview` (izin `loom:classify`; aç/kapat/geri al `loom:manual-entry`).
+
+### D5 operatör teslimi (2026-10-13)
+- Kaynak tezgahın canlı tablet oturumu (`WorkSession`, açık ∧ hareketsizlik süresi dolmamış); salon ucu yazmadığı için süresi dolmuş oturumu kapatmaz, saymaz. Görünüm: detayda "Operatör: ad · HH:mm'den beri tablette", kartta ipucu satırı (kart yüzeyi kalabalık olduğu için kartın kendisine yazı eklenmedi — 1e kararı).
 
 ## Ek · Ölçüm kaynakları (dosya)
 - `Teks-Erp/prisma/schema.prisma`: `WeavingOrder`, `MachineRun` (sedler yorumda), `Machine` (`productionLineCount`, `warpBeamSlots`; en/tip yok), `MachineSpec` (`shedType`, `nominalUnitsPerMin`), `WarpSpec` (`reedWidthCm`), `WorkSession`, `KursunBypassAssignment`

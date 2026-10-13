@@ -233,6 +233,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Tezgah Salonu'nda sebebi girilmemiş duruşlara salondan sebep yazabilirsiniz: tezgahı ya da birkaç tezgahı seçip sağ tık menüsünden veya seçim çubuğundan Sebep ata'yı seçin. Sebebi listeden bir kez seçersiniz ve seçili her duruşa aynı sebep yazılır. Göndermeden önce her tezgah adıyla listelenir; şu an duruşta olmayan ya da duruşunun sebebi zaten girilmiş tezgah işaretsiz gelir ve nedenini yazar. Girilmiş bir sebebi değiştirmek için Tezgah Duruşları ekranını kullanın. Bu seçenek için duruş sınıflandırma izni ve sunucunun 2.15.7 sürümü gerekir; eski sunucuda soluk kalır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah Salonu'nda tezgahta tabletten oturum açmış operatörün adı görünür: tezgahın ayrıntısında \"Operatör\" satırında adı ve tablete ne zamandan beri bağlı olduğu yazar, kartın üzerine gelince de adı çıkar. Tablette oturum kapanmış ya da uzun süre işlem yapılmamışsa ad görünmez. Bu bilgi için sunucunun 2.15.7 sürümü gerekir; eski sunucuda satır hiç görünmez."
         }
       ]
     },

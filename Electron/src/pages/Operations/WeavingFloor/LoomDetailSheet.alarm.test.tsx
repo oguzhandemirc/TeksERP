@@ -54,3 +54,13 @@ describe("LoomDetailSheet — duruşu bildiren", () => {
     expect(screen.queryByText(/Bildiren:/)).toBeNull();
   });
 });
+
+describe("LoomDetailSheet — D5 operatör", () => {
+  it("⭐ tabletten oturum açan operatör detayda adıyla; oturum yoksa satır yok", () => {
+    const { unmount } = render(<LoomDetailSheet loom={{ ...loom({}), operator: { name: "Ayşe Dokumacı", since: NOW - 60 * 60_000 } }} now={NOW} onClose={() => undefined} />);
+    expect(screen.getByTestId("operator-line").textContent).toContain("Ayşe Dokumacı");
+    unmount();
+    render(<LoomDetailSheet loom={{ ...loom({}), operator: null }} now={NOW} onClose={() => undefined} />);
+    expect(screen.queryByTestId("operator-line")).toBeNull();
+  });
+});

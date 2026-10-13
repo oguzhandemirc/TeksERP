@@ -89,6 +89,11 @@ function DetailBody({ loom: t, now, onOpenAlarm }: { loom: LiveLoom; now: number
               Makine kartı sessiz — son görülme {formatFactory(t.collectorSilentSince, "dd.MM HH:mm")}; duruşu elle bildirin.
             </div>
           ) : null}
+          {t.operator ? (
+            <div data-testid="operator-line" className="mt-1 text-sm text-muted-foreground">
+              Operatör: <span className="font-semibold text-foreground">{t.operator.name}</span> · {formatFactory(t.operator.since, "HH:mm")}'den beri tablette
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="rounded-2xl p-4" style={{ background: hsl("var(--ds-floor)") }}>

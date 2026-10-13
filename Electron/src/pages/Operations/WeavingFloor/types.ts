@@ -145,6 +145,8 @@ export interface LiveLoom {
   stateSource: StateSource | null;
   /** Makine kartı sessiz — kartın son görülmesi (ms); kart yok/canlı ya da eski sunucu → null (etiket çizilmez). Eski örnek veride yok. */
   collectorSilentSince?: number | null;
+  /** Tezgahta tabletten oturum açmış operatör (D5; `since` ms); oturum yok ya da eski sunucu/örnek veri → null/yok. */
+  operator?: { name: string; since: number } | null;
   loomType: LoomType | null;
   /** Hedef devir (atkı/dk) — performansın paydası; ölçülmemişse null. */
   targetRpm: number | null;

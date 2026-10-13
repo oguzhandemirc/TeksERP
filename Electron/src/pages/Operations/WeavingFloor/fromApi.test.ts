@@ -266,4 +266,11 @@ describe("fromApi — makine kartı sessiz (D4 watchdog)", () => {
     expect(canli!.collectorSilentSince).toBeNull();
     expect(eski!.collectorSilentSince).toBeNull();
   });
+
+  it("⭐ D5 `operator` → ad + başlangıç (ms); oturumsuz (null) ve eski sunucu (alan yok) → null", () => {
+    const [oturumlu, yok, eski] = fromApi(dto([loom({ id: "a", operator: { name: "Ayşe", since: T0 } }), loom({ id: "b", operator: null }), loom({ id: "c" })])).looms;
+    expect(oturumlu!.operator).toEqual({ name: "Ayşe", since: Date.parse(T0) });
+    expect(yok!.operator).toBeNull();
+    expect(eski!.operator).toBeNull();
+  });
 });
