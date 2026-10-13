@@ -127,6 +127,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Tezgah Duruşları'nda her duruşun kaynağı rozetle görünür: “Kart” (makine kartı bildirdi), “Elle” (tablet ya da panelden girildi) ya da “Simüle” (deneme verisi, gerçek değil). Kart, elle açılmış bir duruşu devraldıysa rozetin altında “kart devraldı” yazar. Kapsam süzgecine “Geçici kapanışlar” eklendi: sunucunun geçici kapattığı ve kartın gerçek bitişini bekleyen duruşlar günden bağımsız tek listede görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Destek hesabı ilk kurulumda gelen ortak parolayla duruyorsa panelin üstünde kırmızı bir uyarı şeridi çıkar. Destek hesabıyla girildiyse şerit kendi parolanızı hemen belirlemenizi, yönetici olarak girildiyse satıcınızdan parolayı değiştirmesini istemenizi söyler. Şerit elle kapatılamaz; parola değişince kendiliğinden kalkar. Bunun için de sunucunun 2.15.5 sürümü gerekir."
         },
         {
