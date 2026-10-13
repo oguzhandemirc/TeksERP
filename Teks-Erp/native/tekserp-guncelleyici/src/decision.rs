@@ -271,8 +271,15 @@ pub const NOTICE_STALE_MS: f64 = 15.0 * 60_000.0;
 /// duyurulmuş (`announced` = önceki `planlanan`) ve gelmiş bir anda olur; yoksa `planlanan = şimdi + 5 dk` ile
 /// PENCERE_BEKLIYOR (aralık = [planlanan, pencere sonu]; yeni neden kodu YOK). Saat geri giderse bekleme 5 dk'yı aşmaz; süre pencere kapanmadan dolmuyorsa sıradaki aralık.
 ///
-/// İkinci değer: kapı devredeyken duyurulan an (geçtiyse duyurulmuş an, bekliyorsa `planlanan`); kapı dışı `None`.
-pub fn announce_gate(d: Decision, p: &UpdatePolicy, approved: bool, announced: Option<f64>, now: f64) -> (Decision, Option<f64>) {
+/// `notice` = süre (üretimde `NOTICE_MS`). İkinci değer: kapı devredeyken duyurulan an (geçtiyse duyurulmuş an, bekliyorsa `planlanan`); kapı dışı `None`.
+pub fn announce_gate(
+    d: Decision,
+    p: &UpdatePolicy,
+    approved: bool,
+    announced: Option<f64>,
+    now: f64,
+    notice: f64,
+) -> (Decision, Option<f64>) {
     if d.karar != Kind::Install || d.neden.as_deref() != Some("PENCERE") || p.kip != Mode::Automatic || approved {
         return (d, None);
     }
@@ -280,7 +287,7 @@ pub fn announce_gate(d: Decision, p: &UpdatePolicy, approved: bool, announced: O
     if let Some(a) = announced.filter(|a| *a <= now && now - *a <= NOTICE_STALE_MS) {
         return (d, Some(a));
     }
-    let due = announced.filter(|a| *a > now && *a <= now + NOTICE_MS).unwrap_or(now + NOTICE_MS);
+    let due = announced.filter(|a| *a > now && *a <= now + notice).unwrap_or(now + notice);
     let (neden, aralik, notice) = if due < current.end_ms() {
         (None, Some(Interval { baslangic: iso_ms(due), bitis: current.bitis }), Some(due))
     } else {

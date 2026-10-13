@@ -174,7 +174,8 @@ python3 -I "$IMAJ_DIZINI/cdn.py" "$FX/cdn" "$PORT" &
 CDN_PID=$!
 for _ in $(seq 20); do curl -fsS -o /dev/null "$SUNUCU/testkanal/backend-oci/son.json" && break; sleep 0.5; done
 sudo install -d -m 0755 "/etc/systemd/system/$AD.service.d"
-printf '[Service]\nEnvironment=TEKSERP_TEST_CAPASI=%s/capa.json\n' "$FX" | sudo tee "$EK" >/dev/null
+# R23 ön duyurusu (üretimde 5 dk) test çapalı ikilide 2 sn: her sürüm pencere içinde ilk görülür, kapı yine koşar.
+printf '[Service]\nEnvironment=TEKSERP_TEST_CAPASI=%s/capa.json\nEnvironment=TEKSERP_TEST_ON_DUYURU_MS=2000\n' "$FX" | sudo tee "$EK" >/dev/null
 sudo install -d -m 0700 "$KOK/yapilandirma"
 printf 'POSTGRES_PASSWORD=duman-%s\nJWT_SECRET=duman-jwt-%s\n' "$RANDOM$RANDOM" "$RANDOM$RANDOM" | sudo tee "$KOK/yapilandirma/.env" >/dev/null
 sudo chmod 0600 "$KOK/yapilandirma/.env"

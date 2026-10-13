@@ -29,7 +29,7 @@ fn install_in(current: (i64, i64)) -> Decision {
 
 /// Kapının sonucu `karar/neden/aralık başı/duyuru` biçiminde.
 fn gate(p: &UpdatePolicy, d: Decision, approved: bool, announced: Option<i64>, now: i64) -> String {
-    let (d, notice) = decision::announce_gate(d, p, approved, announced.map(|a| a as f64), now as f64);
+    let (d, notice) = decision::announce_gate(d, p, approved, announced.map(|a| a as f64), now as f64, NOTICE_MS);
     format!(
         "{}/{}/{}/{}",
         d.karar.label(),

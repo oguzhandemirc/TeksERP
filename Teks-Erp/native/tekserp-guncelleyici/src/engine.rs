@@ -149,6 +149,18 @@ type Fail = (&'static str, String);
 
 /// Hazırlık dizini işlemi düştü: kilit (erişim engellendi · Windows paylaşım/kilit ihlali 32/33) `DOSYA_KILITLI`,
 /// diğerleri verilen kod. Kilit bir indirme hatası değildir ve paketi ertelemeye sokmaz.
+/// R23 ön duyuru süresi. Test çapalı (duman) derlemede `TEKSERP_TEST_ON_DUYURU_MS` kısaltır — gerçek dumanın her
+/// sürümü 5 dk beklemesin; üretim ikilisinde bu yol YOKTUR (`paketle.ps1` test çapalı ikiliyi zaten reddeder).
+fn notice_ms() -> f64 {
+    #[cfg(feature = "test-anchor")]
+    if let Some(ms) =
+        std::env::var("TEKSERP_TEST_ON_DUYURU_MS").ok().and_then(|v| v.parse::<f64>().ok()).filter(|v| v.is_finite() && *v >= 0.0)
+    {
+        return ms;
+    }
+    decision::NOTICE_MS
+}
+
 fn staging_fail(otherwise: &'static str, path: &std::path::Path, e: &std::io::Error) -> Fail {
     let locked = e.kind() == std::io::ErrorKind::PermissionDenied || crate::platform::is_sharing_violation(e);
     if locked {
@@ -819,7 +831,7 @@ impl Engine {
                 .and_then(|s| s.planned)
                 .map(|t| tekserp_dogrulama::iso::date_parse_ms(&t))
                 .filter(|t| t.is_finite());
-            let (gated, notice) = decision::announce_gate(d, p, used_approval.is_some(), announced, now as f64);
+            let (gated, notice) = decision::announce_gate(d, p, used_approval.is_some(), announced, now as f64, notice_ms());
             d = gated;
             f.notice = notice.map(|t| timefmt::iso_millis(t as i64));
             f.decision = Some(d.clone());
