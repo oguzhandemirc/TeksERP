@@ -87,6 +87,10 @@ esac`,
   node: `echo "node $*" >> "$STUB_LOG"
 case "$1" in dist/tools/seed.cjs) exit "\${STUB_SEED_EXIT:-0}" ;; esac
 exit 0`,
+  // PID 1 sahtesi değil: yalnız `--`dan sonrasını exec eder; gördüğü ortamı yazar (§7i sır ölçümü).
+  tini: `echo "tini $*" >> "$STUB_LOG"; env > "$STUB_LOG.tini-env"
+while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+shift; exec "$@"`,
 };
 
 interface Kosum { cikis: number | null; log: string[]; stdout: string; hata?: string }
@@ -1103,13 +1107,26 @@ case "$*" in
   *"FROM users"*) printf '%s\\n' "\${STUB_USERS:-3}" ;;
 esac
 exit 0`,
-  node: `echo "node $*" >> "$STUB_LOG"; exit 0`,
+  node: `echo "node $*" >> "$STUB_LOG"
+case "$*" in
+  *db-rol-gocu.cjs*) [ -n "\${STUB_UYG_URL:-}" ] && printf '%s\\n' "$STUB_UYG_URL"; exit 0 ;;
+  "dist/server.js") env > "$STUB_LOG.node-env" ;;
+esac
+exit 0`,
+  // PID 1 sahtesi değil: yalnız `--`dan sonrasını exec eder; gördüğü ortamı yazar (§7i sır ölçümü).
+  tini: `echo "tini $*" >> "$STUB_LOG"; env > "$STUB_LOG.tini-env"
+while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+shift; exec "$@"`,
 };
 const GOCLER = ["20260101000000_init", "20260201000000_dizin_eszamanli", "20260301000000_kolon"];
 const ESZAMANLI = "20260201000000_dizin_eszamanli";
 
-interface Kosum7 extends Kosum { cagri: { deploy: number; denetim: boolean; sunucu: boolean; seed: boolean; elle: boolean; resolve: boolean } }
-function kos7(env: Record<string, string>, o: { db?: string[]; gocBagi?: boolean; arg?: string[] } = {}): Kosum7 {
+interface Kosum7 extends Kosum {
+  cagri: { deploy: number; denetim: boolean; sunucu: boolean; seed: boolean; elle: boolean; resolve: boolean };
+  /** Sahtelerin gördüğü ortam (`env` dökümü); süreç hiç başlamadıysa null. */
+  ortam: { tini: string | null; node: string | null };
+}
+function kos7(env: Record<string, string>, o: { db?: string[]; gocBagi?: boolean; arg?: string[]; betikMetni?: string } = {}): Kosum7 {
   const dir = mkdtempSync(join(tmpdir(), "docker-goc-"));
   try {
     const bin = join(dir, "bin");
@@ -1127,6 +1144,10 @@ function kos7(env: Record<string, string>, o: { db?: string[]; gocBagi?: boolean
     const logYolu = join(dir, "stub.log");
     writeFileSync(logYolu, "");
     let betik = ENTRYPOINT;
+    if (o.betikMetni !== undefined) {
+      betik = join(dir, "entrypoint.sh");
+      writeFileSync(betik, o.betikMetni);
+    }
     if (o.gocBagi) {
       betik = join(dir, "goc");
       symlinkSync(ENTRYPOINT, betik);
@@ -1141,8 +1162,10 @@ function kos7(env: Record<string, string>, o: { db?: string[]; gocBagi?: boolean
       },
     });
     const log = readFileSync(logYolu, "utf8").split("\n").filter(Boolean);
+    const ortamOku = (ek: string): string | null => (existsSync(`${logYolu}.${ek}`) ? readFileSync(`${logYolu}.${ek}`, "utf8") : null);
     return {
       cikis: r.status, log, stdout: `${r.stdout ?? ""}${r.stderr ?? ""}`, hata: r.error?.message,
+      ortam: { tini: ortamOku("tini-env"), node: ortamOku("node-env") },
       cagri: {
         deploy: log.filter((l) => l === "npx prisma migrate deploy").length,
         denetim: log.some((l) => l.includes("to_regclass")),
@@ -1247,21 +1270,80 @@ function kodTablosuStatik(betik: string, tablo: AcilisKodu[]): string[] {
   }
 }
 
-// §7g imaj: `goc` bağı açılış betiğine gider (güncelleyicinin `compose run … backend goc`u) ve CMD açılış betiği kalır.
+// §7g imaj: `goc` bağı açılış betiğine gider (eski güncelleyicinin `goc` komutu) ve PID 1 AÇILIŞ BETİĞİDİR:
+// tini PID 1 olsaydı /proc/1/environ ilk ortamı (sahip DB URL'i) aynı uid'e gösterirdi (G4-A kalıntısı, §7m).
+// CMD yok: argümansız = açılış, `goc` = göç kipi, başka komut (yedek servisi) betiğin dağıtıcısıyla tini altında.
+const PID1_ENTRYPOINT = /^ENTRYPOINT \["\/usr\/local\/bin\/entrypoint\.sh"\]$/m;
 function gocBagiStatik(dockerfile: string): string[] {
   const son = dockerfile.slice(dockerfile.lastIndexOf("\nFROM "));
   const ih: string[] = [];
   if (!/^RUN ln -s \/usr\/local\/bin\/entrypoint\.sh \/usr\/local\/bin\/goc$/m.test(son)) ih.push("çalışma aşamasında `goc` bağı yok");
-  if (!/^CMD \["\/usr\/local\/bin\/entrypoint\.sh"\]$/m.test(son)) ih.push("CMD açılış betiği değil (compose run komutu onu ezer)");
-  if (!/^ENTRYPOINT \["\/usr\/bin\/tini", "--"\]$/m.test(son)) ih.push("ENTRYPOINT yalnız tini değil (`goc` komut olarak koşmaz)");
+  if (/^CMD /m.test(son)) ih.push("CMD var (ENTRYPOINT betiğine argüman olur; argümansız açılış bozulur)");
+  if (!PID1_ENTRYPOINT.test(son)) ih.push("ENTRYPOINT açılış betiği değil (PID 1 tini → /proc/1/environ sahip URL'ini taşır)");
   return ih;
+}
+function pid1Statik(dockerfile: string): string[] {
+  const son = dockerfile.slice(dockerfile.lastIndexOf("\nFROM "));
+  return PID1_ENTRYPOINT.test(son) && !/^ENTRYPOINT .*tini/m.test(son) ? [] : ["ENTRYPOINT açılış betiği değil ya da tini PID 1"];
 }
 {
   const df = oku("Teks-Erp/docker/korumali/Dockerfile");
   const g = gocBagiStatik(df);
-  check("§7g ⭐ korumalı imajda `goc` → entrypoint.sh bağı, ENTRYPOINT tini, CMD açılış betiği", g.length === 0, g.join(" | "));
+  check("§7g ⭐ korumalı imajda `goc` → entrypoint.sh bağı, ENTRYPOINT açılış betiği (PID 1), CMD yok", g.length === 0, g.join(" | "));
   const sonda = df.replace(/^RUN ln -s \/usr\/local\/bin\/entrypoint\.sh \/usr\/local\/bin\/goc\n/m, "");
   check("§7g sonda: bağ silindi → kırmızı", sonda !== df && gocBagiStatik(sonda).length > 0, sonda !== df ? "" : "MUTASYON UYGULANMADI");
+  const sondaTini = df.replace(PID1_ENTRYPOINT, 'ENTRYPOINT ["/usr/bin/tini", "--"]\nCMD ["/usr/local/bin/entrypoint.sh"]');
+  check("§7g sonda: PID 1 tini (eski biçim) → kırmızı", sondaTini !== df && gocBagiStatik(sondaTini).length > 0, sondaTini !== df ? "" : "MUTASYON UYGULANMADI");
+  const demo = oku("Teks-Erp/Dockerfile");
+  const d = pid1Statik(demo);
+  check("§7g ⭐ korumasız imajda da PID 1 açılış betiği", d.length === 0, d.join(" | "));
+  const sondaDemo = demo.replace(PID1_ENTRYPOINT, 'ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]');
+  check("§7g sonda: korumasızda tini PID 1 → kırmızı", sondaDemo !== demo && pid1Statik(sondaDemo).length > 0, sondaDemo !== demo ? "" : "MUTASYON UYGULANMADI");
+}
+
+// §7m PID 1 / sunucu ortamında SAHİP parolası yok (G4-A kalıntısı): rol ayrımı geçince sunucu `exec tini -s --
+// node dist/server.js` ile uygulama URL'iyle açılır; tini'nin (exec sonrası PID 1) ve node'un ortamı sahip
+// parolasını taşımaz. Dağıtıcı: başka komut tini altında koşar, açılış/göç koşmaz. Gerçek konteyner ölçümü arşivde.
+const SAHIP_PAROLASI = "SahipParolasi_7i_9f3c";
+const SAHIP_URL = `postgresql://tekserp:${SAHIP_PAROLASI}@postgres:5432/tekserp?schema=public`;
+const UYG_URL = "postgresql://tekserp_uygulama:UygParolasi_7i@postgres:5432/tekserp?schema=public";
+function pid1Ihlalleri(k: Kosum7, uygBekle: boolean): string[] {
+  const ih: string[] = [];
+  if (k.cikis !== 0) ih.push(`çıkış ${k.cikis}`);
+  if (!k.log.includes("tini -s -- node dist/server.js")) ih.push("sunucu `tini -s --` ile exec edilmedi");
+  if (k.ortam.tini === null || k.ortam.node === null) ih.push("tini/node ortamı ölçülemedi");
+  if (uygBekle) {
+    for (const [ad, o] of Object.entries(k.ortam)) {
+      if (o?.includes(SAHIP_PAROLASI)) ih.push(`${ad} ortamında sahip parolası`);
+      if (o !== null && !o.split("\n").includes(`DATABASE_URL=${UYG_URL}`)) ih.push(`${ad} ortamında DATABASE_URL uygulama URL'i değil`);
+    }
+  }
+  return ih;
+}
+{
+  const gecti = kos7({ DATABASE_URL: SAHIP_URL, STUB_UYG_URL: UYG_URL });
+  const ih = pid1Ihlalleri(gecti, true);
+  check("§7m ⭐ rol ayrımı geçti → PID 1 (tini) ve node ortamında sahip parolası YOK, DATABASE_URL uygulama rolü", ih.length === 0, ih.join(" | "));
+  const dusme = kos7({ DATABASE_URL: SAHIP_URL });
+  const ihD = pid1Ihlalleri(dusme, false);
+  check("§7m rol ayrımı yapılamadı → sunucu yine tini ile açılır (sahip URL'i — beyanlı geri düşüş, auditProtection kismi)",
+    ihD.length === 0 && (dusme.ortam.node ?? "").includes(SAHIP_PAROLASI), ihD.join(" | "));
+  const dagit = kos7({ DATABASE_URL: SAHIP_URL }, { arg: ["node", "dist/tools/jwt-sir.cjs", "--denetle"] });
+  check("§7m ⭐ dağıtıcı: başka komut tini altında koşar, göç/denetim/sunucu yok",
+    dagit.cikis === 0 && dagit.log.includes("tini -s -- node dist/tools/jwt-sir.cjs --denetle") && dagit.cagri.deploy === 0 && !dagit.cagri.denetim && !dagit.cagri.sunucu,
+    dagit.cikis === 0 ? "" : `çıkış ${dagit.cikis} · ${dagit.log.join(" ; ")}`);
+  const eski = kos7({ DATABASE_URL: SAHIP_URL, STUB_UYG_URL: UYG_URL }, { arg: ["/usr/local/bin/entrypoint.sh"] });
+  check("§7m eski biçim (CMD = açılış betiği) → açılış, PID 1 temiz", pid1Ihlalleri(eski, true).length === 0 && eski.cagri.deploy === 1, pid1Ihlalleri(eski, true).join(" | "));
+  const betik = oku("Teks-Erp/docker/entrypoint.sh");
+  const sondalar: Array<[string, string]> = [
+    ["uygulama URL'i ortama yazılmadı", betik.replace(/^\s*DATABASE_URL="\$UYG_URL"\n/m, "")],
+    ["sunucu tini'siz exec", betik.replace("exec tini -s -- node dist/server.js", "exec node dist/server.js")],
+    ["sahip URL'i başka adla ortamda", betik.replace(/^set -e$/m, "set -e\nexport SAHIP_YEDEK=\"$DATABASE_URL\"")],
+  ];
+  for (const [ad, m] of sondalar) {
+    const kk = m === betik ? null : kos7({ DATABASE_URL: SAHIP_URL, STUB_UYG_URL: UYG_URL }, { betikMetni: m });
+    check(`§7m sonda: ${ad} → kırmızı`, kk !== null && pid1Ihlalleri(kk, true).length > 0, kk === null ? "MUTASYON UYGULANMADI" : "");
+  }
 }
 
 // §7h güncelleyicili compose şablonu kuralları (GUNCELLEYICI-SAGLAMLIK §1.2).

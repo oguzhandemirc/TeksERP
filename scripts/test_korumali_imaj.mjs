@@ -19,6 +19,8 @@
 //   K9 app altında sembolik bağ yok (imza aracı bağı imzalamaz; `node_modules/.bin` imaja girmez)
 //   K10 göç aracı: `usr/local/bin/goc` açılış betiğine (`entrypoint.sh`) bağ — güncelleyicinin GOC adımı
 //      `compose run --rm --no-deps backend goc` onu çağırır (GUNCELLEYICI-SAGLAMLIK L5)
+//   K11 PID 1 açılış betiğidir (Config.Entrypoint = ["/usr/local/bin/entrypoint.sh"]): PID 1 tini olsaydı
+//      /proc/1/environ ilk ortamı (sahip DB URL'i) aynı uid'e gösterirdi; betik sonunda temiz ortamla `exec tini`
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (docker yok / imaj yok / akış okunamadı).
 // İmaj yoksa YEŞİL DEĞİL ÖLÇÜLEMEDİ döner — sessiz yeşil yok. Cırcır DEĞİL (taban yok).
@@ -54,8 +56,11 @@ export const IMZA_YUKLERI = ['app/butunluk-zincir.jws', 'app/butunluk.jws'];
  * Saf denetim — `{ user, dosyalar: [{ ad, boyut, uid, mod, tip, icerik? }], imza? }` → ihlal listesi.
  * `imza = { etiket, iste }`: imajın `tr.tekserp.butunluk` etiketi (yoksa null) ve imzalı imaj şartı (`--imzali`).
  */
-export function denetle({ user, dosyalar, imza = { etiket: null, iste: false } }) {
+export const PID1_GIRIS = ['/usr/local/bin/entrypoint.sh'];
+
+export function denetle({ user, dosyalar, entrypoint, imza = { etiket: null, iste: false } }) {
   const ihlal = [];
+  if (JSON.stringify(entrypoint ?? null) !== JSON.stringify(PID1_GIRIS)) ihlal.push(`K11 PID 1 açılış betiği değil (Entrypoint=${JSON.stringify(entrypoint ?? null)}; tini PID 1 → /proc/1/environ sahip URL'ini taşır)`);
   const u = String(user ?? '').trim();
   if (u === '' || u === 'root' || u === '0' || /^(0|root)(:|$)/.test(u)) ihlal.push(`K1 süreç kullanıcısı root (User="${u}")`);
   const adlar = new Set(dosyalar.map((d) => d.ad));
@@ -195,7 +200,7 @@ async function olc(imaj) {
       p.on('close', (kod) => (kod === 0 ? coz() : red(new Olculemedi(`docker export çıkış ${kod}: ${hataMetni.slice(0, 200)}`))));
     });
     if (!akis.bitti || akis.dosyalar.length === 0) throw new Olculemedi('tar akışı eksik/boş okundu');
-    return { user: config.User, dosyalar: akis.dosyalar, etiket: (config.Labels ?? {})['tr.tekserp.butunluk'] || null };
+    return { user: config.User, entrypoint: config.Entrypoint, dosyalar: akis.dosyalar, etiket: (config.Labels ?? {})['tr.tekserp.butunluk'] || null };
   } finally {
     docker(['rm', id]);
   }
@@ -206,6 +211,7 @@ function temizOrnek() {
   const f = (ad, ek = {}) => ({ ad, boyut: 10, uid: 0, mod: 0o644, tip: 'dosya', ...ek });
   return {
     user: '10001:10001',
+    entrypoint: [...PID1_GIRIS],
     dosyalar: [
       ...ZORUNLU.map((z) => f(z)),
       f('app/dist/tools/seed.cjs', { icerik: '"use strict";var a=1;' }),
@@ -220,6 +226,8 @@ function temizOrnek() {
 const MUTASYONLAR = [
   ['K1', 'root kullanıcı', (o) => { o.user = ''; }],
   ['K1', '0:0 kullanıcı', (o) => { o.user = '0:0'; }],
+  ['K11', 'PID 1 tini (eski biçim)', (o) => { o.entrypoint = ['/usr/bin/tini', '--']; }],
+  ['K11', 'Entrypoint yok', (o) => { o.entrypoint = null; }],
   ['K2 kaynak dizini', 'src dizini (.js bile)', (o) => o.dosyalar.push({ ad: 'app/src/lib/x.js', boyut: 5, uid: 0, mod: 0o644, tip: 'dosya' })],
   ['K2 TypeScript', 'seed .ts', (o) => o.dosyalar.push({ ad: 'app/prisma/seed.ts', boyut: 5, uid: 0, mod: 0o644, tip: 'dosya' })],
   ['K2 kaynak haritası', 'kaynak haritası', (o) => o.dosyalar.push({ ad: 'app/dist/server.cjs.map', boyut: 5, uid: 0, mod: 0o644, tip: 'dosya' })],
@@ -313,7 +321,7 @@ async function main() {
       console.log(`\n  ✖ KIRMIZI: ${ih.length} ihlal`);
       process.exit(1);
     }
-    console.log(`  ✓ K1–K10 temiz: kaynak/harita/tsx/bağ yok, root değil, zorunlu parçalar var · imaj içi liste: ${olcum.etiket ? `imzalı (${olcum.etiket})` : 'YOK (imzasız taban)'}`);
+    console.log(`  ✓ K1–K11 temiz: kaynak/harita/tsx/bağ yok, root değil, zorunlu parçalar var, PID 1 açılış betiği · imaj içi liste: ${olcum.etiket ? `imzalı (${olcum.etiket})` : 'YOK (imzasız taban)'}`);
     process.exit(0);
   } catch (e) {
     if (e instanceof Olculemedi) {

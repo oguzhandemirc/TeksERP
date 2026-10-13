@@ -21,9 +21,17 @@ KOD_GOC_BEKLIYOR=47
 KOD_GOC_YARIM=48
 KOD_SEMA_ILERIDE=49
 
+# PID 1 bu betiktir (ENTRYPOINT; tini DEĞİL): /proc/1/environ konteynerin İLK ortamını (sahip DB URL'i dahil)
+# aynı uid'e gösterir. Betik sonunda `exec tini` PID 1'in görüntüsünü TEMİZ ortamla değiştirir (§3).
+# Başka bir komut (yedek servisinin `command`ı, güncelleyicinin araçları) tini altında olduğu gibi koşar.
 KIP=acilis
+# Eski biçim (CMD = bu betik) açılış sayılır.
+if [ "${1:-}" = "/usr/local/bin/entrypoint.sh" ]; then shift; fi
 if [ "$(basename "$0")" = "goc" ] || [ "${1:-}" = "goc" ]; then
   KIP=goc
+elif [ "$#" -gt 0 ]; then
+  if command -v tini > /dev/null 2>&1; then exec tini -s -- "$@"; fi
+  exec "$@"
 fi
 
 echo ""
@@ -226,11 +234,15 @@ fi
 unset UYG_URL PSQL_URL
 
 # =============================================================================
-# 3) Express sunucusunu başlat
+# 3) Express sunucusunu başlat — `exec tini`: PID 1'in ortamı artık yalnız uygulama URL'i
 # =============================================================================
 echo ""
 echo "[3/3] Express sunucusu başlatılıyor (port 4000)..."
 echo "================================================================"
 echo ""
 
+if command -v tini > /dev/null 2>&1; then
+  exec tini -s -- node dist/server.js
+fi
+echo "      ! tini yok — sunucu doğrudan açılıyor (sinyal/zombi bekçisi yok)."
 exec node dist/server.js

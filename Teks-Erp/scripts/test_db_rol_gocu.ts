@@ -35,7 +35,7 @@ function statik(): void {
   const ep = oku("docker/entrypoint.sh");
   const iArac = ep.indexOf("node dist/tools/db-rol-gocu.cjs --uygula --url-yaz");
   const iSeed = ep.indexOf("node dist/tools/seed.cjs");
-  const iExec = ep.indexOf("exec node dist/server.js");
+  const iExec = ep.indexOf("exec tini -s -- node dist/server.js");
   check("§1a ⭐ entrypoint rol göçünü seed'den SONRA, sunucudan ÖNCE koşar", iArac > iSeed && iSeed > 0 && iExec > iArac);
   const blok = ep.slice(iArac, iExec);
   check("§1b geri düşüş fabrikayı durdurmaz (blokta exit yok) ve URL yalnız doğrulanınca alınır",

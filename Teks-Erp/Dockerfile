@@ -45,4 +45,5 @@ COPY prisma ./prisma
 COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 USER node
 EXPOSE 4000
-ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+# PID 1 açılış betiği; sunucuyu `exec tini -s -- node …` ile temiz ortamla açar (/proc/1/environ'da sahip URL'i kalmaz).
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

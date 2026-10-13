@@ -89,7 +89,7 @@ COPY --from=derle /arsiv /
 FROM --platform=linux/amd64 debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS korumali
 ARG TEKSERP_COMMIT=""
 # pg_dump/pg_restore/psql 16 PGDG'den (bookworm'unki 15: "server version mismatch" → gece
-# yedeği sessizce düşer). tini: PID 1 sinyal/zombi. /etc/machine-id imaja GİRMEZ (parmak izi
+# yedeği sessizce düşer). tini: sinyal/zombi (açılış betiği onu exec eder). /etc/machine-id imaja GİRMEZ (parmak izi
 # F1 konaktan salt-okunur bağlanır; imajda dolu olursa her kopya aynı kimliği taşır).
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates curl gnupg tini tzdata \
@@ -124,5 +124,7 @@ USER 10001:10001
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/usr/local/bin/entrypoint.sh"]
+# PID 1 açılış betiğidir (tini DEĞİL): göçten sonra sahip URL'ini ortamdan atıp `exec tini -s -- node …`
+# yapar; PID 1 tini olsaydı /proc/1/environ sahip parolasını aynı uid'e gösterirdi (G4-A kalıntısı).
+# CMD yok: argümansız = açılış · `goc` = göç kipi · başka komut (yedek servisi) tini altında koşar.
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
