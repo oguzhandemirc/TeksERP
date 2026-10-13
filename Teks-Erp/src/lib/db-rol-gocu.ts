@@ -7,6 +7,10 @@
 //   --url-yaz           (--uygula ile) uygulama rolünün URL'ini YALNIZ stdout'a yazar — entrypoint yakalar
 //   --rol <ad>          uygulama rolünün adı (varsayılan: <sahip>_uygulama)
 //   --okuma-rol <ad>    G5 yalnız-okuma rolünün adı (varsayılan: <sahip>_okuma; kural/liste `okuma-rolu.ts`)
+//   --sahip <ad>        WINDOWS KİPİ (aktivasyon 2.15.8; bugün yalnız elle/test): bağlantı SÜPER kullanıcı,
+//                       URL'i YALNIZ ortamdan `TEKSERP_PG_SUPER_URL`; sahip = <ad> (audit tablolarının relowner'ı
+//                       olmalı). Sahip parolası `TEKSERP_SAHIP_PAROLASI` ya da `--kimlik <db-credentials.json>`
+//                       (user = <ad>, db = bağlantı DB'si) — argv'de parola/URL YOK.
 // Çıkış: 0 tamam · 1 hata (bağlantı/PG/doğrulama) · 2 uygulanamaz (sahip değil, şema yok)
 // Uygulama rolü: LOGIN, süper/CREATEDB/CREATEROLE değil, hiçbir role üye değil, hiçbir nesnenin
 // sahibi değil; tablolarda DML, system_logs'ta yalnız SELECT+INSERT, arşivde yalnız SELECT
@@ -18,6 +22,7 @@
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from "node:crypto";
 import { Client } from "pg";
 import { AUDIT_TAMPER_SQL } from "./audit-koruma-sql";
+import { windowsInput } from "./db-rol-gocu-windows";
 import { READ_ONLY_HIDDEN_COLUMNS, READ_ONLY_HIDDEN_TABLES, readOnlyCatalog, readOnlyPlan } from "./okuma-rolu";
 
 export const EXIT_OK = 0;
@@ -53,7 +58,10 @@ function pgUrl(url: string): string {
 }
 
 export interface RoleState {
+  /** Tabloların sahibi: Docker'da bağlı rol, Windows kipinde `--sahip` (bağlı süper kullanıcı DEĞİL). */
   sahip: string;
+  /** Bağlantının rolü (Docker'da = sahip; Windows kipinde süper kullanıcı). */
+  baglanan: string;
   db: string;
   roleExists: boolean;
   /** Uygulama rolünün bu DB'de sahip olduğu nesne sayısı (onarılacak). */
@@ -64,25 +72,41 @@ export interface RoleState {
   canTamper: boolean;
 }
 
-export async function measureRoleState(c: Client, rol: string): Promise<RoleState> {
+/**
+ * `sahip` verilmezse (Docker) sahip = bağlı rol. Verilirse (Windows kipi) bağlı rol SÜPER olmalı ve
+ * audit tablolarının relowner'ı ADIYLA `sahip` olmalı — REASSIGN/DEFAULT PRIVILEGES süper kullanıcıya gitmesin.
+ */
+export async function measureRoleState(c: Client, rol: string, sahip?: string): Promise<RoleState> {
   const r = await c.query(`
-    SELECT current_user AS sahip, current_database() AS db, s.rolsuper, s.rolcreaterole,
+    SELECT current_user AS baglanan, current_database() AS db, s.rolsuper, s.rolcreaterole,
            to_regclass('public.system_logs') IS NOT NULL AS sl,
            to_regclass('public.system_log_archives') IS NOT NULL AS sla
     FROM pg_roles s WHERE s.rolname = current_user`);
   const o = r.rows[0];
   if (!o.sl || !o.sla) throw new NotApplicable("system_logs/system_log_archives yok (göç uygulanmamış)");
-  if (o.sahip === rol) throw new NotApplicable(`uygulama rolü sahip rolüyle aynı ad (${rol})`);
-  const ownership = await c.query(
-    `SELECT pg_has_role(current_user, relowner, 'MEMBER') AS m FROM pg_class
-     WHERE oid IN ('public.system_logs'::regclass, 'public.system_log_archives'::regclass)`);
-  const isOwner = ownership.rows.every((x: { m: boolean }) => x.m);
-  if (!o.rolsuper && !(isOwner && o.rolcreaterole)) {
-    throw new NotApplicable(`bağlı rol (${o.sahip}) süper kullanıcı ya da audit tablolarının CREATEROLE'lü sahibi değil`);
+  const owner: string = sahip ?? o.baglanan;
+  if (owner === rol) throw new NotApplicable(`uygulama rolü sahip rolüyle aynı ad (${rol})`);
+  if (sahip !== undefined) {
+    if (!o.rolsuper) throw new NotApplicable(`bağlı rol (${o.baglanan}) süper kullanıcı değil (Windows kipi süper bağlantı ister)`);
+    const ro = await c.query(
+      `SELECT pg_get_userbyid(relowner) AS o FROM pg_class
+       WHERE oid IN ('public.system_logs'::regclass, 'public.system_log_archives'::regclass)`);
+    const sahipler = [...new Set(ro.rows.map((x: { o: string }) => x.o))];
+    if (sahipler.length !== 1 || sahipler[0] !== sahip) {
+      throw new NotApplicable(`sahip uyuşmazlığı: audit tablolarının sahibi ${sahipler.join(",")}, --sahip ${sahip}`);
+    }
+  } else {
+    const ownership = await c.query(
+      `SELECT pg_has_role(current_user, relowner, 'MEMBER') AS m FROM pg_class
+       WHERE oid IN ('public.system_logs'::regclass, 'public.system_log_archives'::regclass)`);
+    const isOwner = ownership.rows.every((x: { m: boolean }) => x.m);
+    if (!o.rolsuper && !(isOwner && o.rolcreaterole)) {
+      throw new NotApplicable(`bağlı rol (${o.baglanan}) süper kullanıcı ya da audit tablolarının CREATEROLE'lü sahibi değil`);
+    }
   }
   const rv = await c.query(`SELECT oid FROM pg_roles WHERE rolname = $1`, [rol]);
   if (rv.rowCount === 0) {
-    return { sahip: o.sahip, db: o.db, roleExists: false, ownedObjects: 0, memberships: [], canTamper: false };
+    return { sahip: owner, baglanan: o.baglanan, db: o.db, roleExists: false, ownedObjects: 0, memberships: [], canTamper: false };
   }
   const oid = rv.rows[0].oid;
   const n = await c.query(
@@ -101,7 +125,7 @@ export async function measureRoleState(c: Client, rol: string): Promise<RoleStat
        OR has_table_privilege($1, 'public.system_log_archives', 'UPDATE, DELETE, TRUNCATE') AS t
      FROM pg_roles a WHERE a.rolname = $1`, [rol]);
   return {
-    sahip: o.sahip, db: o.db, roleExists: true, ownedObjects: Number(n.rows[0].n),
+    sahip: owner, baglanan: o.baglanan, db: o.db, roleExists: true, ownedObjects: Number(n.rows[0].n),
     memberships: u.rows.map((x: { rolname: string }) => x.rolname), canTamper: Boolean(k.rows[0].t),
   };
 }
@@ -133,7 +157,10 @@ export function plan(o: RoleState, rol: string, verifier?: string): string[] {
   return out;
 }
 
-export interface MigrateOptions { ownerUrl: string; rol?: string; readRole?: string; uygula: boolean; log?: (s: string) => void }
+/** `ownerUrl`: Docker'da sahip URL'i; Windows kipinde (`sahip` verili) SÜPER kullanıcının URL'i. */
+export interface MigrateOptions {
+  ownerUrl: string; sahip?: { ad: string; parola: string }; rol?: string; readRole?: string; uygula: boolean; log?: (s: string) => void;
+}
 export interface MigrateResult {
   kod: number; appUrl?: string; state?: RoleState; statements?: string[];
   /** G5 okuma rolü ifadeleri ve sonucu ("ready" · "closed" — okuma rolü düşerse uygulama rolü etkilenmez). */
@@ -189,20 +216,23 @@ export async function readRoleViolations(c: Client, readRoleName: string): Promi
 export async function runRoleMigration(s: MigrateOptions): Promise<MigrateResult> {
   const log = s.log ?? ((m: string) => process.stderr.write(m + "\n"));
   const url = new URL(s.ownerUrl);
-  const ownerPassword = decodeURIComponent(url.password);
-  const rol = s.rol ?? `${decodeURIComponent(url.username)}_uygulama`;
-  const readRoleName = s.readRole ?? `${decodeURIComponent(url.username)}_okuma`;
+  const ownerName = s.sahip?.ad ?? decodeURIComponent(url.username);
+  const ownerPassword = s.sahip ? s.sahip.parola : decodeURIComponent(url.password);
+  const rol = s.rol ?? `${ownerName}_uygulama`;
+  const readRoleName = s.readRole ?? `${ownerName}_okuma`;
+  if (s.sahip && !ROLE_NAME_PATTERN.test(s.sahip.ad)) { log(`X Gecersiz sahip adi: ${s.sahip.ad}`); return { kod: EXIT_NOT_APPLICABLE }; }
   if (!ROLE_NAME_PATTERN.test(rol)) { log(`X Gecersiz rol adi: ${rol}`); return { kod: EXIT_NOT_APPLICABLE }; }
   if (!ROLE_NAME_PATTERN.test(readRoleName) || readRoleName === rol) { log(`X Gecersiz okuma rolu adi: ${readRoleName}`); return { kod: EXIT_NOT_APPLICABLE }; }
-  if (!ownerPassword) { log("X Sahip URL'inde parola yok (uygulama parolasi turetilemez)."); return { kod: EXIT_NOT_APPLICABLE }; }
+  if (!ownerPassword) { log("X Sahip parolasi yok (uygulama parolasi turetilemez)."); return { kod: EXIT_NOT_APPLICABLE }; }
 
   const c = new Client({ connectionString: pgUrl(s.ownerUrl) });
   let state: RoleState;
   let statements: string[];
   let readStatements: string[];
   try {
+    if (s.sahip) await verifyOwnerPassword(s.ownerUrl, s.sahip.ad, ownerPassword);
     await c.connect();
-    state = await measureRoleState(c, rol);
+    state = await measureRoleState(c, rol, s.sahip?.ad);
     if (state.sahip === readRoleName) throw new NotApplicable(`okuma rolu sahip rolüyle aynı ad (${readRoleName})`);
     statements = plan(state, rol);
     const rs = await readRoleState(c, readRoleName);
@@ -210,7 +240,8 @@ export async function runRoleMigration(s: MigrateOptions): Promise<MigrateResult
       owner: state.sahip, db: state.db, appRole: rol, role: readRoleName, roleExists: rs.exists, memberships: rs.memberships,
       catalog: await readOnlyCatalog((q) => c.query(q)),
     });
-    log(`Hedef: ${state.db} · sahip: ${state.sahip} · uygulama rolu: ${rol} (${state.roleExists ? "var" : "yok"})`);
+    log(`Hedef: ${state.db} · sahip: ${state.sahip}${state.baglanan !== state.sahip ? ` (baglanan: ${state.baglanan})` : ""}`
+      + ` · uygulama rolu: ${rol} (${state.roleExists ? "var" : "yok"})`);
     if (state.roleExists) {
       log(`  state: audit kurcalayabilir=${state.canTamper} · sahip oldugu nesne=${state.ownedObjects}`
         + ` · uyelik=${state.memberships.join(",") || "-"}`);
@@ -266,6 +297,22 @@ export async function runRoleMigration(s: MigrateOptions): Promise<MigrateResult
   }
 }
 
+/** Windows kipi: verilen parola gerçekten sahibin mi (uygulama parolası ondan türer; yanlışsa 2.15.8 `.env`i tutmaz). */
+async function verifyOwnerPassword(superUrl: string, ad: string, parola: string): Promise<void> {
+  const u = new URL(superUrl);
+  u.username = encodeURIComponent(ad);
+  u.password = encodeURIComponent(parola);
+  const c = new Client({ connectionString: pgUrl(u.toString()) });
+  try {
+    await c.connect();
+  } catch (e) {
+    const kod = (e as { code?: string }).code;
+    throw kod === "28P01" || kod === "28000" ? new NotApplicable(`sahip parolasi dogrulanamadi (${ad}, ${kod})`) : e;
+  } finally {
+    await c.end().catch(() => undefined);
+  }
+}
+
 /** Uygulama rolüyle bağlanıp /health ile AYNI yüklemi koşar: kurcalayamıyor olmalı. */
 async function verifyAppRole(appUrl: string, rol: string, log: (s: string) => void): Promise<number> {
   const c = new Client({ connectionString: pgUrl(appUrl) });
@@ -284,13 +331,15 @@ async function verifyAppRole(appUrl: string, rol: string, log: (s: string) => vo
 }
 
 async function main(argv: string[]): Promise<number> {
-  const ownerUrl = process.env.DATABASE_URL;
-  if (!ownerUrl) { process.stderr.write("X DATABASE_URL tanimli degil.\n"); return EXIT_NOT_APPLICABLE; }
   const ri = argv.indexOf("--rol");
   const oi = argv.indexOf("--okuma-rol");
   const uygula = argv.includes("--uygula");
+  const w = argv.includes("--sahip") ? windowsInput(argv, process.env)
+    : process.env.DATABASE_URL ? { ownerUrl: process.env.DATABASE_URL, sahip: undefined } : { hata: "DATABASE_URL tanimli degil." };
+  if ("hata" in w) { process.stderr.write(`X ${w.hata}\n`); return EXIT_NOT_APPLICABLE; }
+  const { ownerUrl, sahip } = w;
   const result = await runRoleMigration({
-    ownerUrl, rol: ri >= 0 ? argv[ri + 1] : undefined, readRole: oi >= 0 ? argv[oi + 1] : undefined, uygula,
+    ownerUrl, sahip, rol: ri >= 0 ? argv[ri + 1] : undefined, readRole: oi >= 0 ? argv[oi + 1] : undefined, uygula,
   });
   if (result.kod === EXIT_OK && uygula && argv.includes("--url-yaz") && result.appUrl) {
     process.stdout.write(result.appUrl);

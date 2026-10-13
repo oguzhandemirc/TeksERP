@@ -9,17 +9,27 @@
 // DELETE/TRUNCATE 42501, iş tablosu DML + definer arşivleyici çalışır, sır günlüğe girmez ·
 // §4 idempotent · §5 ⭐ bozulmuş durum (yetki/ownership/üyelik geri geldi) ölçümde kırmızı, yeniden
 // koşum onarır · §6 uygulanamaz → 2 + değişiklik yok · §7 /health yüklemi (readAuditProtection)
-// uygulama rolünde writeOnly, sahip rolünde değil.
+// uygulama rolünde writeOnly, sahip rolünde değil. §8 ⭐ WINDOWS KİPİ (`--sahip`; aktivasyon 2.15.8):
+// süper olmayan sahip rolle migrate deploy edilmiş geçici DB'de süper bağlantı + açık sahip —
+// REASSIGN/DEFAULT PRIVILEGES/advisory GRANT sahibe gider, sahip uyuşmazlığı · süper olmayan bağlantı ·
+// yanlış sahip parolası → 2, CLI URL/parolayı yalnız ortamdan/kimlik dosyasından alır.
 // Rol küme geneli: ad koşuma özgü (`_test` sonekli), finally'de DROP OWNED + DROP ROLE.
 // =============================================================================
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "pg";
-import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { cocukOrtami, fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AUDIT_TAMPER_SQL } from "../src/lib/audit-koruma-sql";
-import { EXIT_OK, EXIT_NOT_APPLICABLE, runRoleMigration, measureRoleState } from "../src/lib/db-rol-gocu";
+import {
+  EXIT_OK, EXIT_NOT_APPLICABLE, deriveAppPassword, measureRoleState, runRoleMigration, scramVerifier,
+} from "../src/lib/db-rol-gocu";
+import { OWNER_PASSWORD_ENV, SUPER_URL_ENV } from "../src/lib/db-rol-gocu-windows";
 import { ADVISORY_FUNCTION_SQL } from "../src/lib/okuma-rolu";
+import { parseDatabaseUrl, quoteIdent, toClientConfig, withDatabase } from "../src/services/helpers/pg-conn.helper";
+import { runProcess } from "../src/services/helpers/pg-tool.helper";
 
 let pass = 0;
 let fail = 0;
@@ -51,12 +61,26 @@ function statik(): void {
     && /c\.query\(AUDIT_TAMPER_SQL\)/.test(arac));
   check("§1e araç KURU varsayılan (--uygula olmadan yazmaz)", /const uygula = argv\.includes\("--uygula"\)/.test(arac)
     && /if \(!s\.uygula\) \{[\s\S]{0,120}return/.test(arac));
+  // Windows kipi: süper URL ve sahip parolası argv'den ALINMAZ (süreç listesinde görünür).
+  const argvBayraklari = [...`${arac}\n${oku("src/lib/db-rol-gocu-windows.ts")}`.matchAll(/argv\.(?:indexOf|includes)\("(--[a-z-]+)"\)/g)].map((m) => m[1]);
+  check("§1f Windows kipi: argv'de URL/parola bayrağı yok, süper URL yalnız ortamdan",
+    argvBayraklari.length > 0 && argvBayraklari.every((b) => !/^--(url|super|super-url|parola|pass|password|sahip-parola|baglanti)$/.test(b))
+    && /const superUrl = env\[SUPER_URL_ENV\]/.test(oku("src/lib/db-rol-gocu-windows.ts")), argvBayraklari.join(" "));
+  // Bugün hiçbir kurulum betiği Windows kipini çağırmaz (aktivasyon 2.15.8).
+  const betikler = ["../deploy/kur.ps1", "../deploy/kurulum/kurulum.ps1", "../deploy/ilk-kurulum.ps1"]
+    .filter((b) => oku(b).includes("db-rol-gocu"));
+  check("§1g Windows kipi bu sürümde hiçbir kurulum betiğinden çağrılmaz (aktivasyon 2.15.8)", betikler.length === 0, betikler.join(" "));
 }
 
 async function hataKodu(c: Client, sql: string): Promise<string> {
   await c.query("SAVEPOINT s");
   try { await c.query(sql); await c.query("RELEASE SAVEPOINT s"); return "ok"; }
   catch (e) { await c.query("ROLLBACK TO SAVEPOINT s"); return String((e as { code?: string }).code ?? (e as Error).message); }
+}
+
+/** Transaction dışında tek ifade: "ok" ya da hata kodu. */
+async function tekKod(c: Client, sql: string): Promise<string> {
+  try { await c.query(sql); return "ok"; } catch (e) { return String((e as { code?: string }).code ?? (e as Error).message); }
 }
 
 async function kurcalayabilir(url: string): Promise<boolean> {
@@ -194,7 +218,182 @@ async function main(): Promise<void> {
   }
 }
 
+// =============================================================================
+// §8 — Windows kipi: süper bağlantı + açık sahip (`--sahip`)
+// =============================================================================
+const W8 = "tekserp_w8";
+async function w8Sweep(su: Client): Promise<void> {
+  const dbs = await su.query<{ d: string }>(`SELECT datname AS d FROM pg_database WHERE datname ~ '^tekserp_w8[0-9a-z]+_[a-z]+_test$'`);
+  for (const r of dbs.rows) await su.query(`DROP DATABASE IF EXISTS ${quoteIdent(r.d)} WITH (FORCE)`).catch(() => undefined);
+  const roles = await su.query<{ r: string }>(`SELECT rolname AS r FROM pg_roles WHERE rolname ~ '^tekserp_w8[0-9a-z]+_[a-z]+_test(_uygulama|_okuma)?$'`);
+  for (const r of roles.rows) await su.query(`DROP ROLE IF EXISTS ${quoteIdent(r.r)}`).catch(() => undefined);
+}
+
+function cli(args: string[], env: NodeJS.ProcessEnv): { kod: number | null; cikti: string } {
+  const r = spawnSync("npx", ["tsx", "src/lib/db-rol-gocu.ts", ...args], { cwd: ROOT, env, encoding: "utf8" });
+  return { kod: r.status, cikti: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+}
+
+async function windowsKipi(baseUrl: string): Promise<void> {
+  console.log("\n=== §8 Windows kipi (--sahip) ===");
+  const base = parseDatabaseUrl(baseUrl);
+  if (!base) { check("§8 DATABASE_URL çözülemedi", false); return; }
+  const engel = fixtureHedefEngeli();
+  if (engel) { check("§8 hedef kapısı: küme katmanı yalnız fixture hedefinde koşar", false, engel); return; }
+  const su = new Client(toClientConfig(withDatabase(base, "postgres")));
+  await su.connect();
+  if (!(await su.query(`SELECT rolsuper AS s FROM pg_roles WHERE rolname = current_user`)).rows[0]?.s) {
+    await su.end();
+    if (process.env.CI) check("§8 ölçüm koşulu (CI'da atlanamaz): DATABASE_URL süper değil", false);
+    else console.log("⏭️  §8 DATABASE_URL süper değil — Windows kipi ÖLÇÜLEMEDİ");
+    return;
+  }
+  const damga = `${process.pid.toString(36)}${Date.now().toString(36)}`;
+  const sahip = `${W8}${damga}_sahip_test`;
+  const baska = `${W8}${damga}_baska_test`;
+  const rol = `${W8}${damga}_uyg_test`;
+  const okr = `${W8}${damga}_okr_test`;
+  const db = `${W8}${damga}_db_test`;
+  const sahipPass = randomBytes(12).toString("hex");
+  const baskaPass = randomBytes(12).toString("hex");
+  const kimlik = join(tmpdir(), `${db}-kimlik.json`);
+  const hp = (rolAdi: string, parola: string) => `postgresql://${rolAdi}:${parola}@${base.host}:${base.port}/${db}`;
+  const superUrl = `postgresql://${encodeURIComponent(base.user)}:${encodeURIComponent(base.password ?? "")}@${base.host}:${base.port}/${db}`;
+  const sahipUrl = hp(sahip, sahipPass);
+  const roleExists = async (ad: string) => (await su.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [ad])).rowCount === 1;
+  const baglan = async (url: string) => { const c = new Client({ connectionString: url }); c.on("error", () => undefined); await c.connect(); return c; };
+  try {
+    await w8Sweep(su);
+    // Windows `tekserp` eşdeğeri: süper değil, DB/rol yaratamaz; yalnız DB sahibi, göçü o koşar.
+    await su.query(`CREATE ROLE ${quoteIdent(sahip)} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '${sahipPass}'`);
+    await su.query(`CREATE ROLE ${quoteIdent(baska)} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '${baskaPass}'`);
+    await su.query(`CREATE DATABASE ${quoteIdent(db)} OWNER ${quoteIdent(sahip)} TEMPLATE template0 ENCODING 'UTF8'`);
+    const dep = await runProcess(process.execPath, [join(ROOT, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"],
+      { timeoutMs: 10 * 60 * 1000, env: cocukOrtami({ DATABASE_URL: `${sahipUrl}?schema=public` }), captureStdout: true });
+    check("§8a süper olmayan sahip bütün migration'ları uyguladı (Windows düzeni)", dep.code === 0, dep.code === 0 ? "" : dep.stderr.slice(-300));
+    if (dep.code !== 0) return;
+
+    // ── KURU: varsayılan adlar ve sahip kavramı --sahip'ten, bağlanan süper kullanıcıdan DEĞİL ──
+    const kuruLog: string[] = [];
+    const kuru = await runRoleMigration({ ownerUrl: superUrl, sahip: { ad: sahip, parola: sahipPass }, uygula: false, log: (m) => kuruLog.push(m) });
+    const q = kuru.statements ?? [];
+    const rq = kuru.readStatements ?? [];
+    check("§8b ⭐ KURU: sahip = --sahip (bağlanan süper değil), varsayılan adlar ondan türer, hiçbir rol doğmaz",
+      kuru.kod === EXIT_OK && kuru.state?.sahip === sahip && kuru.state?.baglanan === base.user
+      && q.includes(`CREATE ROLE "${sahip}_uygulama"`) && rq.includes(`CREATE ROLE "${sahip}_okuma"`)
+      && !(await roleExists(`${sahip}_uygulama`)) && !(await roleExists(`${sahip}_okuma`)), `kod ${kuru.kod}`);
+    const yanlisaGiden = [...q, ...rq].filter((x) => x.includes(`FOR ROLE "${base.user}"`) || x.includes(`TO "${base.user}"`));
+    check("§8c ⭐ DEFAULT PRIVILEGES / advisory GRANT sahibe, süper kullanıcıya hiçbir ifade gitmez",
+      q.some((x) => x.startsWith(`ALTER DEFAULT PRIVILEGES FOR ROLE "${sahip}"`)) && yanlisaGiden.length === 0
+      && rq.some((x) => /^GRANT EXECUTE ON FUNCTION pg_catalog\.pg_advisory_lock\(bigint\) TO /.test(x) && x.includes(`"${sahip}"`)),
+    yanlisaGiden.slice(0, 2).join(" | "));
+
+    // ── uygulanamaz: sahip uyuşmazlığı · süper olmayan bağlantı · yanlış parola ──
+    const bos = () => undefined;
+    const u1 = await runRoleMigration({ ownerUrl: superUrl, sahip: { ad: baska, parola: baskaPass }, rol, readRole: okr, uygula: true, log: bos });
+    const u2 = await runRoleMigration({ ownerUrl: superUrl, sahip: { ad: base.user, parola: base.password ?? "" }, rol, readRole: okr, uygula: true, log: bos });
+    check("§8d ⭐ sahip uyuşmazlığı (başka rol · süper kullanıcının kendisi) → 2, rol doğmaz",
+      u1.kod === EXIT_NOT_APPLICABLE && u2.kod === EXIT_NOT_APPLICABLE && !(await roleExists(rol)) && !(await roleExists(okr)), `${u1.kod}/${u2.kod}`);
+    const u3 = await runRoleMigration({ ownerUrl: sahipUrl, sahip: { ad: sahip, parola: sahipPass }, rol, readRole: okr, uygula: true, log: bos });
+    check("§8e ⭐ süper olmayan bağlantı (sahibin kendisi) → 2 uygulanamaz, rol doğmaz", u3.kod === EXIT_NOT_APPLICABLE && !(await roleExists(rol)), String(u3.kod));
+    let trust = false;
+    try { const t = await baglan(hp(sahip, "yanlis-parola")); trust = true; await t.end(); } catch { /* beklenen: 28P01 */ }
+    if (trust) console.log("⏭️  §8f küme parola istemiyor (trust) — yanlış parola ölçülemedi");
+    else {
+      const u4 = await runRoleMigration({ ownerUrl: superUrl, sahip: { ad: sahip, parola: "yanlis-parola" }, rol, readRole: okr, uygula: true, log: bos });
+      check("§8f yanlış sahip parolası → 2, rol doğmaz (türetilen uygulama parolası tutmazdı)", u4.kod === EXIT_NOT_APPLICABLE && !(await roleExists(rol)), String(u4.kod));
+    }
+
+    // ── uygula ──
+    const log: string[] = [];
+    const s1 = await runRoleMigration({ ownerUrl: superUrl, sahip: { ad: sahip, parola: sahipPass }, rol, readRole: okr, uygula: true, log: (m) => log.push(m) });
+    const appUrl = s1.appUrl ?? "";
+    const appPass = appUrl ? decodeURIComponent(new URL(appUrl).password) : "";
+    check("§8g ⭐ uygula çıkış 0, okuma rolü hazır, uygulama parolası SAHİP parolasından türer",
+      s1.kod === EXIT_OK && s1.readResult === "ready" && appPass === deriveAppPassword(sahipPass, rol), `kod ${s1.kod} okuma ${s1.readResult}`);
+    // Süper parola rol/DB adının parçası olabilir (yerel `tekserp`); yalnız ad dışı bir dizgeyse aranır.
+    const superSir = base.password && ![base.user, sahip, db].some((x) => x.includes(base.password as string)) ? base.password : "";
+    const sizinti = [sahipPass, appPass, superSir, "postgresql://", "SCRAM-SHA-256$"].filter((x) => x && log.some((l) => l.includes(x)));
+    check("§8h sır günlüğe girmez (sahip/uygulama/süper parolası · URL · SCRAM)", appPass.length === 64 && sizinti.length === 0,
+      sizinti.length ? `${sizinti.length} sızıntı` : "");
+    if (!appUrl) return;
+    const sc = await baglan(sahipUrl);
+    const uc = await baglan(appUrl);
+    try {
+      const sahiplik = (await sc.query(`
+        SELECT (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'public' AND c.relkind IN ('r','p','S','v','m') AND pg_get_userbyid(c.relowner) <> $1) AS yabanci,
+               (SELECT array_agg(DISTINCT pg_get_userbyid(defaclrole)::text) FROM pg_default_acl) AS dacl`, [sahip])).rows[0];
+      check("§8i ⭐ tablolar yine sahipte, varsayılan ayrıcalık yalnız sahip adına (süper kullanıcıya gitmedi)",
+        sahiplik.yabanci === 0 && JSON.stringify(sahiplik.dacl) === JSON.stringify([sahip]), JSON.stringify(sahiplik));
+      await uc.query("BEGIN");
+      try {
+        check("§8j uygulama rolü audit'e EKLER", await hataKodu(uc, `INSERT INTO system_logs (id, category, action, "tableName", "recordId", "createdAt")
+           VALUES (gen_random_uuid(), 'SYSTEM', 'BEKCI_W8', 'BEKCI_W8', 'x', now())`) === "ok");
+        const k = [await hataKodu(uc, `DELETE FROM system_logs WHERE "tableName" = 'BEKCI_W8'`),
+          await hataKodu(uc, `UPDATE system_logs SET "recordId" = 'y' WHERE "tableName" = 'BEKCI_W8'`),
+          await hataKodu(uc, "TRUNCATE system_log_archives")];
+        check("§8k ⭐ uygulama rolüyle DELETE/UPDATE system_logs + TRUNCATE arşiv → 42501", k.every((x) => x === "42501"), k.join(","));
+        check("§8l uygulama rolü advisory kilit alır (açık GRANT)", await hataKodu(uc, "SELECT pg_advisory_xact_lock(8039, 0)") === "ok");
+      } finally { await uc.query("ROLLBACK").catch(() => undefined); }
+      // Okuma rolüne parola uygulama rolünün yetkili yolundan (süper sahipli definer) verilir.
+      const okuParola = randomBytes(16).toString("hex");
+      const pr = await tekKod(uc, `SELECT okuma_rolu_parola('${scramVerifier(okuParola)}')`);
+      const oc = pr === "ok" ? await baglan(hp(okr, okuParola)).catch(() => null) : null;
+      if (oc) {
+        try {
+          await oc.query("BEGIN");
+          const a = await hataKodu(oc, "SELECT pg_advisory_lock(8039, 0)");
+          const okunur = await hataKodu(oc, "SELECT count(*) FROM _prisma_migrations");
+          await oc.query("ROLLBACK");
+          check("§8m ⭐ okuma rolüyle pg_advisory_lock reddedilir (42501), gizli olmayan tablo okunur", a === "42501" && okunur === "ok", `${a}/${okunur}`);
+        } finally { await oc.end().catch(() => undefined); }
+      } else check("§8m okuma rolüne parola verilip bağlanılamadı", false, pr);
+      // Sonraki göç sahibin işi: advisory kilit ve yeni tablonun uygulama rolüne açılması.
+      await sc.query(`CREATE TABLE w8_yeni (x int)`);
+      check("§8n sahibin yeni tablosu uygulama rolüne kendiliğinden açılır; sahip advisory kilit alır",
+        await tekKod(uc, "INSERT INTO w8_yeni VALUES (1)") === "ok" && (await sc.query("SELECT pg_try_advisory_lock(72707369) AS k")).rows[0].k === true);
+    } finally {
+      await sc.end().catch(() => undefined);
+      await uc.end().catch(() => undefined);
+    }
+    const dep2 = await runProcess(process.execPath, [join(ROOT, "node_modules", "prisma", "build", "index.js"), "migrate", "deploy"],
+      { timeoutMs: 5 * 60 * 1000, env: cocukOrtami({ DATABASE_URL: `${sahipUrl}?schema=public` }), captureStdout: true });
+    check("§8o rol göçünden sonra sahip `migrate deploy` koşabilir (advisory REVOKE göçü kırmaz)", dep2.code === 0, dep2.stderr.slice(-200));
+    const s2 = await runRoleMigration({ ownerUrl: superUrl, sahip: { ad: sahip, parola: sahipPass }, rol, readRole: okr, uygula: true, log: bos });
+    check("§8p idempotent: ikinci koşum 0, rolü yeniden yaratmaz, aynı URL",
+      s2.kod === EXIT_OK && !(s2.statements ?? []).some((x) => x.startsWith("CREATE ROLE")) && s2.appUrl === appUrl);
+    const p = korumaOku(appUrl);
+    check("§8q readAuditProtection Windows kipi uygulama rolünde writeOnly=true", p?.writeOnly === true, JSON.stringify(p));
+
+    // ── CLI: URL/parola yalnız ortamdan ya da kimlik dosyasından ──
+    const env = cocukOrtami({ [SUPER_URL_ENV]: superUrl, [OWNER_PASSWORD_ENV]: undefined, DATABASE_URL: sahipUrl });
+    delete env[OWNER_PASSWORD_ENV];
+    writeFileSync(kimlik, `\uFEFF${JSON.stringify({ db, port: base.port, user: sahip, pass: sahipPass })}`, { mode: 0o600 });
+    const c1 = cli(["--sahip", sahip, "--kimlik", kimlik, "--rol", rol, "--okuma-rol", okr], env);
+    check("§8r CLI kimlik dosyasıyla KURU 0, çıktıda parola yok", c1.kod === 0 && !c1.cikti.includes(sahipPass) && /KURU/.test(c1.cikti), `kod ${c1.kod}`);
+    writeFileSync(kimlik, JSON.stringify({ db, port: base.port, user: baska, pass: baskaPass }), { mode: 0o600 });
+    const c2 = cli(["--sahip", sahip, "--kimlik", kimlik], env);
+    const c3 = cli(["--sahip", sahip, "--kimlik", kimlik], { ...env, [OWNER_PASSWORD_ENV]: sahipPass });
+    const envsiz = { ...env };
+    delete envsiz[SUPER_URL_ENV];
+    const c4 = cli(["--sahip", sahip], { ...envsiz, [OWNER_PASSWORD_ENV]: sahipPass });
+    check("§8s ⭐ CLI: kimlik kullanıcısı ≠ --sahip · iki parola kaynağı · süper URL ortamda yok (DATABASE_URL olsa da) → 2",
+      c2.kod === 2 && c3.kod === 2 && c4.kod === 2, `${c2.kod}/${c3.kod}/${c4.kod}`);
+  } finally {
+    rmSync(kimlik, { force: true });
+    await su.query(`DROP DATABASE IF EXISTS ${quoteIdent(db)} WITH (FORCE)`).catch(() => undefined);
+    for (const r of [rol, okr, `${sahip}_uygulama`, `${sahip}_okuma`, baska, sahip]) {
+      await su.query(`DROP ROLE IF EXISTS ${quoteIdent(r)}`).catch((e) => console.log(`! ${r} silinemedi: ${(e as Error).message}`));
+    }
+    const kalan = await su.query(`SELECT count(*)::int AS n FROM pg_roles WHERE rolname LIKE $1`, [`${W8}${damga}%`]);
+    check("§8 temizlik: geçici DB ve roller yok", kalan.rows[0].n === 0);
+    await su.end();
+  }
+}
+
 main()
+  .then(async () => { if (!hedefDbEngeli()) await windowsKipi(process.env.DATABASE_URL as string); })
   .catch((e) => { console.error(e); fail++; })
   .finally(() => {
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
