@@ -55,11 +55,11 @@ async function bump(key: string, scopeKey: string, fmt: NumberSeriesFormat): Pro
     ? await prisma.$queryRaw<Array<{ n: number }>>`
         UPDATE "number_series_counters"
            SET "n" = CASE WHEN "n" + ${step} > ${fmt.maxValue!} THEN ${fmt.startValue ?? 1} ELSE "n" + ${step} END,
-               "updatedAt" = now()
+               "updatedAt" = ${new Date()}
          WHERE "seriesKey" = ${key} AND "scopeKey" = ${scopeKey}
      RETURNING "n"`
     : await prisma.$queryRaw<Array<{ n: number }>>`
-        UPDATE "number_series_counters" SET "n" = "n" + ${step}, "updatedAt" = now()
+        UPDATE "number_series_counters" SET "n" = "n" + ${step}, "updatedAt" = ${new Date()}
          WHERE "seriesKey" = ${key} AND "scopeKey" = ${scopeKey}
      RETURNING "n"`;
   return rows.length ? Number(rows[0]!.n) : null;
@@ -78,7 +78,7 @@ async function takeSeq({ key, fmt, fullPrefix, scopeKey }: Scope, loadCodes: Loa
     const seed = scopedNextSeq(key, fmt, fullPrefix, await loadCodes(fullPrefix, fmt));
     const won = await prisma.$queryRaw<Array<{ n: number }>>`
       INSERT INTO "number_series_counters" ("id", "seriesKey", "scopeKey", "n", "createdAt", "updatedAt")
-      VALUES (gen_random_uuid(), ${key}, ${scopeKey}, ${seed}, now(), now())
+      VALUES (gen_random_uuid(), ${key}, ${scopeKey}, ${seed}, ${new Date()}, ${new Date()})
       ON CONFLICT ("seriesKey", "scopeKey") DO NOTHING
       RETURNING "n"`;
     if (won.length) return seed;
