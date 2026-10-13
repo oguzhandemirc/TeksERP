@@ -13,6 +13,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { parseUrlToQueryParams } from "@/lib/query-builder";
 import { usePreferences } from "@/providers/PreferencesProvider";
+import { drainCursor, EXPORT_PAGE_LIMIT } from "@/lib/export-drain";
 
 interface Options<T> {
   queryKey: string;
@@ -219,35 +220,32 @@ export function useDataTable<T>({
   // Dışa aktarma için: aktif filtre/sıralama/arama ile SUNUCUDAKİ TÜM kayıtları
   // (yalnız ekrana yüklenen sayfalar değil) cursor'u sonuna kadar döndürerek çeker.
   // "Tümünü indir" bunu kullanır → 30.000 top olsa da hepsi iner. Büyük sayfa boyu
-  // (500, backend tavanıyla hizalı) ile istek sayısı az; guard ile kaçak döngü kesilir.
+  // (500, backend tavanıyla hizalı) ile istek sayısı az; tavanda onTruncated SÖYLER (drainCursor).
   // onProgress: her sayfadan sonra (yüklenen, ~toplam) — uzun indirmede ilerleme çubuğu.
   const fetchAll = useCallback(
-    async (onProgress?: (loaded: number, total?: number) => void): Promise<T[]> => {
-      const all: T[] = [];
-      let cursor: string | null = null;
-      let total: number | undefined;
-      const EXPORT_LIMIT = 500;
-      for (let guard = 0; guard < 1000; guard++) {
-        const page = await fetchFn({
-          cursor,
-          limit: EXPORT_LIMIT,
-          sortBy: baseKey.sortBy,
-          sortOrder: baseKey.sortOrder,
-          filters: baseKey.filters,
-          search: baseKey.search,
-          dateField: baseKey.dateField,
-          dateFrom: baseKey.dateFrom,
-          dateTo: baseKey.dateTo,
-          // Yalnız ilk sayfada toplam tahmini iste (ilerleme "N / ~T" için).
-          withTotal: cursor === null,
-        });
-        if (cursor === null) total = page.pagination.totalEstimate;
-        all.push(...page.data);
-        onProgress?.(all.length, total);
-        cursor = page.pagination.nextCursor;
-        if (!cursor) break;
-      }
-      return all;
+    async (
+      onProgress?: (loaded: number, total?: number) => void,
+      onTruncated?: (loaded: number) => void,
+    ): Promise<T[]> => {
+      const { rows, truncated } = await drainCursor<T>(
+        (cursor) =>
+          fetchFn({
+            cursor,
+            limit: EXPORT_PAGE_LIMIT,
+            sortBy: baseKey.sortBy,
+            sortOrder: baseKey.sortOrder,
+            filters: baseKey.filters,
+            search: baseKey.search,
+            dateField: baseKey.dateField,
+            dateFrom: baseKey.dateFrom,
+            dateTo: baseKey.dateTo,
+            // Yalnız ilk sayfada toplam tahmini iste (ilerleme "N / ~T" için).
+            withTotal: cursor === null,
+          }),
+        onProgress,
+      );
+      if (truncated) onTruncated?.(rows.length);
+      return rows;
     },
     [fetchFn, baseKey],
   );

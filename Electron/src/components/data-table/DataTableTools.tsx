@@ -13,6 +13,7 @@ import {
   exportListName,
 } from "@/lib/table-export";
 import { useExportRange } from "@/hooks/useExportRange";
+import { truncatedExportNote } from "@/lib/export-drain";
 
 type ExportKind = "pdf" | "xlsx" | "csv";
 
@@ -24,7 +25,7 @@ interface Props<T> {
    *  SUNUCUDAKİ TÜM kayıtları çeker (useDataTable.fetchAll). Sektör standardı: dışa
    *  aktarma = tüm liste. Verilmezse yalnız bellekteki satırlar iner (geriye uyumlu).
    *  onProgress: her sayfadan sonra (yüklenen, ~toplam) — uzun indirmede ilerleme. */
-  fetchAll?: (onProgress?: (loaded: number, total?: number) => void) => Promise<T[]>;
+  fetchAll?: (onProgress?: (loaded: number, total?: number) => void, onTruncated?: (loaded: number) => void) => Promise<T[]>;
   /** true → indirme bölümü gizlenir (yalnız sütun göster/gizle kalır). İndirme başka
    *  bir yerde (ör. sayfalama çubuğunda "Tümünü İndir") görünür olduğunda çift olmasın. */
   hideExport?: boolean;
@@ -59,7 +60,10 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
     setProgress(null);
     try {
       const rows = fetchAll
-        ? await fetchAll((loaded, total) => setProgress({ loaded, total }))
+        ? await fetchAll(
+            (loaded, total) => setProgress({ loaded, total }),
+            (loaded) => toast.warning(truncatedExportNote(loaded), { duration: 12000 }),
+          )
         : table.getRowModel().rows.map((r) => r.original);
       if (rows.length === 0) {
         toast.info("İndirilecek kayıt yok.");

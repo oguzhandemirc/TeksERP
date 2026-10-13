@@ -16,7 +16,7 @@ interface Props<T> {
   /** Verilirse indirme, ekrandaki yüklü satırları değil aktif filtreye uyan SUNUCUDAKİ
    *  TÜM kayıtları çeker (`useDataTable.fetchAll`). Sektör standardı: dışa aktarma =
    *  tüm liste; verilmezse kullanıcı EKSİK dosya indirdiğini fark etmez. */
-  fetchAll?: (onProgress?: (loaded: number, total?: number) => void) => Promise<T[]>;
+  fetchAll?: (onProgress?: (loaded: number, total?: number) => void, onTruncated?: (loaded: number) => void) => Promise<T[]>;
   /** Arama kutusunu gizle — arama dışarıdan (ör. sayfa üstündeki birleşik input) sürülüyor. */
   hideSearch?: boolean;
   /** Sola dayalı ek içerik (araç menüsünden ÖNCE) — ör. tarih aralığı filtresi. */
