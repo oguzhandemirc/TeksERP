@@ -46,6 +46,10 @@ export interface MachineStop {
   shiftInstanceId: string | null;
   factoryDay: string;
   source: StopSource;
+  /** Kart (toplayıcı) alanları — yalnız sinyal yolu / K1 sahiplenmesi yazar; elle duruşta ve eski sunucuda yok/null. */
+  collectorId?: string | null;
+  rawStopCode?: string | null;
+  signalKind?: string | null;
   revokedAt: string | null;
   revokeReason: string | null;
   createdAt: string;

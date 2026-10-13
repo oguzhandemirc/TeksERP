@@ -2,7 +2,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { LOSS_CLASS_META, SOURCE_LABEL, formatDateTime, formatDuration, watchdogCloseNote, type MachineStop } from "./types";
+import { SOURCE_TONE_CLASS, stopSourceBadge } from "./source-badge";
+import { LOSS_CLASS_META, formatDateTime, formatDuration, watchdogCloseNote, type MachineStop } from "./types";
 
 interface Deps {
   labelOf: (code: string | null) => string;
@@ -24,6 +25,19 @@ function DurationCell({ r, nowMs }: { r: MachineStop; nowMs: number }) {
           {wd.label}
         </span>
       )}
+    </span>
+  );
+}
+
+/** Kaynak rozeti: Kart / Elle / Simüle — simüle ayrı tonla, ipucunda SİMÜLASYON. */
+function SourceCell({ r }: { r: MachineStop }) {
+  const b = stopSourceBadge(r);
+  return (
+    <span className="flex flex-col items-start gap-0.5">
+      <Badge data-testid="stop-source" title={b.hint} className={SOURCE_TONE_CLASS[b.tone]}>
+        {b.label}
+      </Badge>
+      {b.notes.length > 0 && <span className="text-muted-foreground text-xs">{b.notes.join(" · ")}</span>}
     </span>
   );
 }
@@ -90,7 +104,7 @@ export function stopColumns({ labelOf, nowMs, actions }: Deps): ColumnDef<Machin
         return lc ? <Badge className={LOSS_CLASS_META[lc].badgeClass}>{LOSS_CLASS_META[lc].label}</Badge> : <span className="text-muted-foreground">—</span>;
       },
     },
-    { id: "source", header: "Kaynak", cell: ({ row }) => <span className="text-xs">{SOURCE_LABEL[row.original.source]}</span> },
+    { id: "source", header: "Kaynak", cell: ({ row }) => <SourceCell r={row.original} /> },
     { id: "actions", header: "", cell: ({ row }) => actions(row.original) },
   ];
 }
