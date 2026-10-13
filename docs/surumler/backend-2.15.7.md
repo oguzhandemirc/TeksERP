@@ -111,7 +111,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 **Docker DB rol ayrımı (G4-A)** (commit `feat(docker): G4-A …`; kısa kimliği paketlemede yazılır)
 
 - Açılış (`entrypoint.sh` §2b): göç + seed sahip rolüyle (compose `DATABASE_URL` = `POSTGRES_USER`, değişmedi), sonra
-  `dist/tools/db-rol-gocu.cjs --uygula` `<POSTGRES_USER>_uygulama` rolünü idempotent kurar/onarır (LOGIN; süper/CREATEDB/
+  `dist/tools/db-rol-gocu.cjs --uygula` `tekserp_uygulama` (`POSTGRES_USER` adı + `_uygulama`) rolünü idempotent kurar/onarır (LOGIN; süper/CREATEDB/
   CREATEROLE değil; tablolarda DML, `system_logs` yalnız SELECT+INSERT, arşiv yalnız SELECT; sonraki göçler için
   varsayılan yetkiler) ve uygulama rolüyle bağlanıp doğrular; sunucu o URL'le açılır. Parola sahip parolasından
   türetilir (yeni sır yok), PG'ye SCRAM doğrulayıcısı gider.
@@ -148,7 +148,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   1 ay zorlanır (panel zaten ≥ 1 ay gönderir).
 - **Kırıldı mı:** HAYIR (Docker rol ayrımı) — HTTP sözleşmesi aynı. **Eski kurulum ne yapar:** Windows ve göçü yapılamayan
   Docker kurulumu bugünkü gibi sahip rolüyle çalışır (`auditProtection` "kismi"); eski compose dosyası + yeni imaj da
-  göçer (compose değişmedi). Eski imaja geri dönüşte backend yine sahip rolüyle açılır; kalan `<sahip>_uygulama` rolü
+  göçer (compose değişmedi). Eski imaja geri dönüşte backend yine sahip rolüyle açılır; kalan `tekserp_uygulama` rolü
   zararsızdır.
 - **Kırıldı mı:** HAYIR (doff kodu) — uç, gövde ve cevap aynı; aynı `clientToken` tekrarı yine aynı kaydı döner.
 - **Eski istemci ne yapar:** eski panel ve tablet yeni alanları okumaz; davranışları değişmez. Kartın kendisi
