@@ -9,6 +9,8 @@
 //      BAĞLI (/dev/null → KAPALI 'boş', dolu → AÇIK); e-posta ikincil
 //      yalnız `GUVENLIK_EPOSTA_ALICI` ile; nabız metni "güvenlik bildirimi: KAPALI" der
 //   §6 olay yerleri: her sınıfın üretim kodunda en az bir `securityEvent` çağrısı var (sınıf sessizce düşmez)
+//   §7 JWKS yaşı: istek beklemeden ölçüm; yarı tavan/aşım kademesi JWKS_YASI olayı, aynı kademe saatte bir
+//   N4 (dosya DIŞI, geri alındı): `warnAge`teki `securityEvent("JWKS_YASI"…)` silinir → §6a · §7b · §7d ❌
 // NEGATİF SONDA (dosya DIŞI, geri alındı): N1 güvenlik kapsamı + `transportFor` işletme taşıyıcısına düşer → §3a/§3b/§4a/§4b
 //   ❌ (yalnız `transportFor`daki düşüş ISIRMAZ: kapsam süzgeci satırı önce KAPALI yapar — iki katman) ·
 //   N2 çekirdekte açık pencere yok sayılır (her eşik aşımı ilk ileti) → §1c/§2a ❌ · N3 güvenlik sohbeti boşsa
@@ -19,6 +21,8 @@ import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, wr
 import os from "node:os";
 import path from "node:path";
 import type { BildirimKanali } from "@prisma/client";
+import { generateKeyPairSync } from "node:crypto";
+import { JwksCache } from "../src/http/access-jwt";
 import { GuvenlikAlarmi } from "../src/lib/guvenlik-alarm";
 import { SECURITY_CLASSES, outboxDelivery, refreshSecurityChannelState, resetSecurityEventsForTest, securityEvent, securityHealth, securityTick, SECURITY_WINDOW_MS } from "../src/lib/security-events";
 import { SECURITY_EVENTS } from "../src/notifications/catalog";
@@ -160,6 +164,35 @@ function olayYerleri(): void {
   kontrol("§6a her güvenlik sınıfının üretimde olay yeri var", eksik.length === 0, eksik.join(",") || `${SECURITY_CLASSES.length} sınıf`);
 }
 
+/** §7 JWKS yaşı (B3 artığı): yaş kademesi istek beklemeden ölçülür, uyarı güvenlik olayına döner. */
+async function jwksYasi(): Promise<void> {
+  console.log("§7 JWKS yaşı");
+  const jwk = generateKeyPairSync("rsa", { modulusLength: 2048 }).publicKey.export({ format: "jwk" });
+  const body = JSON.stringify({ keys: [{ kid: "k1", kty: "RSA", n: jwk.n, e: jwk.e, alg: "RS256", use: "sig" }] });
+  const SA = 60 * DK; // tavan 2 saat: iki kademe 24 saatlik sayaç içinde kalır
+  let saat = T0;
+  let kaynak = T0;
+  const c = new JwksCache({ source: "/yok", fetchJwks: async () => ({ status: 200, body, sourceTimeMs: kaynak }), now: () => saat, ttlMs: 60_000, cooldownMs: 0, maxSourceAgeMs: 2 * SA, warn: () => undefined });
+  const say = () => securityHealth(saat).son24Saat.JWKS_YASI ?? 0;
+  resetSecurityEventsForTest(T0);
+  await c.checkAge();
+  kontrol("§7a taze küme → olay yok", say() === 0, String(say()));
+  saat = T0 + 1.5 * SA; // yarısı geçti, istek YOK
+  await c.checkAge();
+  kontrol("§7b istek gelmeden yarı tavan → JWKS_YASI olayı (UYARI)", say() === 1, String(say()));
+  saat += 10 * DK;
+  await c.checkAge();
+  kontrol("§7c aynı kademede saat dolmadan yeni olay yok", say() === 1, String(say()));
+  saat = T0 + 2.5 * SA;
+  await c.checkAge();
+  kontrol("§7d ASILDI'ya geçiş hemen olay", say() === 2, String(say()));
+  kaynak = saat; // yan konteyner dosyayı yeniledi
+  saat += 2 * DK;
+  await c.checkAge();
+  kontrol("§7e ✓K kaynak yenilenince TAZE, yeni olay yok", c.state().ageLevel === "TAZE" && say() === 2, `${c.state().ageLevel} · ${say()}`);
+  resetSecurityEventsForTest(Date.now());
+}
+
 async function main(): Promise<void> {
   hedefDbKapisi();
   const { prisma } = await import("../src/lib/prisma");
@@ -171,6 +204,7 @@ async function main(): Promise<void> {
     await yonlendirme(prisma);
     yapilandirma();
     olayYerleri();
+    await jwksYasi();
   } catch (err) {
     kontrol("beklenmeyen hata", false, err instanceof Error ? (err.stack ?? err.message) : String(err));
   } finally {

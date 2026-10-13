@@ -23,6 +23,9 @@ import { webAppAvailable } from "./http/web-static";
 import { SecretFileModeError } from "./keys/secret-file-mode";
 import { outboxDelivery, startSecurityAlerts } from "./lib/security-events";
 
+/** JWKS yaş ölçümü aralığı; uyarı kademesi saatlik kısıtlıdır, sık ölçüm ileti sayısını artırmaz. */
+const JWKS_YAS_OLCUM_MS = 10 * 60_000;
+
 function listen(server: http.Server, port: number, host: string): Promise<AddressInfo> {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -84,6 +87,9 @@ async function main(): Promise<void> {
   );
 
   const stopSecurityAlerts = startSecurityAlerts(prisma);
+  // B3: JWKS yaşı istek beklemeden ölçülür (boş portalda da yan konteyner durması alarma döner).
+  const jwksAgeTimer = accessVerifier ? setInterval(() => void accessVerifier.jwks.checkAge().catch(() => undefined), JWKS_YAS_OLCUM_MS) : null;
+  jwksAgeTimer?.unref();
   const maintenance = new MaintenanceScheduler(ctx);
   maintenance.start();
   void maintenance.runOnce();
@@ -96,6 +102,7 @@ async function main(): Promise<void> {
     maintenance.stop();
     stopSecurityAlerts();
     clearInterval(counterTimer);
+    if (jwksAgeTimer) clearInterval(jwksAgeTimer);
     await hub.stop();
     await Promise.all([
       new Promise<void>((r) => publicServer.close(() => r())),

@@ -9,7 +9,7 @@ import { GuvenlikAlarmi, type AlarmIletisi, type GunlukOzet } from "./guvenlik-a
 import { lockSecurityAlert } from "./locks";
 import type { Db } from "./prisma";
 
-export const SECURITY_CLASSES = ["ERISIM_RED", "IC_API_401", "PORTAL_KILIT", "IMZA_KILIDI", "KIMLIKSIZ_TASIMA", "SIR_DOSYASI_RED", "HIZ_SINIRI"] as const;
+export const SECURITY_CLASSES = ["ERISIM_RED", "IC_API_401", "PORTAL_KILIT", "IMZA_KILIDI", "KIMLIKSIZ_TASIMA", "SIR_DOSYASI_RED", "HIZ_SINIRI", "JWKS_YASI"] as const;
 export type SecurityClass = (typeof SECURITY_CLASSES)[number];
 
 export const SECURITY_CLASS_LABELS: Readonly<Record<SecurityClass, string>> = {
@@ -20,6 +20,7 @@ export const SECURITY_CLASS_LABELS: Readonly<Record<SecurityClass, string>> = {
   KIMLIKSIZ_TASIMA: "Kimliksiz taşıma talebi seli",
   SIR_DOSYASI_RED: "Sır dosyası izni güvensiz — açılış reddedildi",
   HIZ_SINIRI: "Hız sınırı aşıldı",
+  JWKS_YASI: "Erişim JWKS yenilenmiyor (yaş tavanının yarısı geçti ya da aşıldı)",
 };
 
 /** Dakikada eşik: tekil olay (kilit, sır izni) 1; sel sınıfları gürültüyü eşik altında tutar. */
@@ -31,6 +32,7 @@ export const SECURITY_THRESHOLDS: Readonly<Record<SecurityClass, number>> = {
   KIMLIKSIZ_TASIMA: 5,
   SIR_DOSYASI_RED: 1,
   HIZ_SINIRI: 3,
+  JWKS_YASI: 1,
 };
 
 export const SECURITY_WINDOW_MS = 5 * 60_000;

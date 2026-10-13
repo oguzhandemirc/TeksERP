@@ -13,6 +13,7 @@
 import { createPublicKey, verify as verifySignature, type KeyObject } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { JWKS_AZAMI_YAS_GUN_VARSAYILAN, type VendorConfig } from "../config";
+import { securityEvent } from "../lib/security-events";
 
 export const ACCESS_HEADER = "cf-access-jwt-assertion";
 /** Kabul edilen TEK algoritma: RSA PKCS#1 v1.5 + SHA-256. */
@@ -210,6 +211,8 @@ export class JwksCache {
     this.lastAgeWarnLevel = level;
     if (level === "TAZE" || (same && this.now() - this.lastAgeWarnAt < AGE_WARN_INTERVAL_MS)) return;
     this.lastAgeWarnAt = this.now();
+    // B3: yaş uyarısı konsolda kalmasın — güvenlik sohbetine de gider (kademe değişince hemen, sonra saatte bir).
+    securityEvent("JWKS_YASI", level, this.now());
     const hours = Math.round((this.now() - this.sourceTime) / 3_600_000);
     const cap = Math.round(this.maxSourceAgeMs / 3_600_000);
     this.warn(
@@ -217,6 +220,12 @@ export class JwksCache {
         ? `JWKS ${hours} saattir yenilenmedi — yaş tavanı (${cap} sa) AŞILDI, istekler reddediliyor; yan konteyneri (satici-jwks) denetle`
         : `JWKS ${hours} saattir yenilenmedi (tavan ${cap} sa, yarısı geçti) — yan konteyneri (satici-jwks) denetle`,
     );
+  }
+
+  /** Periyodik yaş ölçümü (sunucu zamanlayıcısı): istek gelmese de bayat küme fark edilsin; TTL dolduysa önce yeniden okur. */
+  async checkAge(): Promise<void> {
+    if ((this.keys === null || this.now() - this.fetchedAt > this.ttlMs) && this.mayFetch()) await this.refresh();
+    if (this.keys !== null) this.warnAge(this.ageLevel());
   }
 
   /** kid'in anahtarı; hiç dolmamış/erişilemeyen JWKS → "JWKS", yaş tavanını aşan küme → "ESKI", tazelemeden sonra da bilinmeyen kid → "KID". */

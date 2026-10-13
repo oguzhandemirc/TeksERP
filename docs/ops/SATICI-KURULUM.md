@@ -271,7 +271,7 @@ VDS YAZIMIDIR (kullanıcının "uygula" cümlesiyle); `lisans/bildirim` dilimi y
 
 ## 5d. Güvenlik bildirimi (B3) — AYRI Telegram grubu, e-posta ikincil
 
-Güvenlik olayları (Access reddi seli · iç API 401 · portal/imza kilidi · kimliksiz taşıma seli · sır dosyası izni reddi · hız sınırı) işletme bildirimlerinden AYRI sınıftır: gönderici bunları YALNIZ güvenlik grubuna yollar, grup tanımlı değilse satır `KAPALI` olur (işletme grubuna DÜŞMEZ). Gürültü: sınıf başına dakikalık eşik, ilk ileti hemen, sonraki 5 dk tek iletide sayaçla; günde bir özet (olay yoksa da gelir — kanalın canlılık sinyali). Portal "Sistem sağlığı" kartı `guvenlik.uyari`da "güvenlik bildirimi: KAPALI" der; göndericinin nabzı `guvenlik` alanında aynısını.
+Güvenlik olayları (Access reddi seli · iç API 401 · portal/imza kilidi · kimliksiz taşıma seli · sır dosyası izni reddi · hız sınırı · ERİŞİM JWKS yaşı — yarı tavan/aşım, istek beklemeden 10 dk'da bir ölçülür) işletme bildirimlerinden AYRI sınıftır: gönderici bunları YALNIZ güvenlik grubuna yollar, grup tanımlı değilse satır `KAPALI` olur (işletme grubuna DÜŞMEZ). Gürültü: sınıf başına dakikalık eşik, ilk ileti hemen, sonraki 5 dk tek iletide sayaçla; günde bir özet (olay yoksa da gelir — kanalın canlılık sinyali). Portal "Sistem sağlığı" kartı `guvenlik.uyari`da "güvenlik bildirimi: KAPALI" der; göndericinin nabzı `guvenlik` alanında aynısını.
 
 Kullanıcının adımları (değerleri Claude'a VERMEYİN; dosyaya siz yazın):
 
