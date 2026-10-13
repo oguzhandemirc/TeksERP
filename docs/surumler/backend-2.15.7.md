@@ -222,6 +222,21 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   bugünkü gibi geçer, başka kümeden dökümde "role does not exist" ile düşer → runbook bloğu kullanılır.
 - **Eski kurulum ne yapar:** 2.15.6'dan gelen kurulum düzeltilmiş dosyayı uygular; HTTP sözleşmesi aynı.
 
+**Müşteri karnesi: risk oranı Infinity olmaz + bulut raporu düşmez** (commit `fix(rapor): karne ritmi 0'a yuvarlanınca …`; kısa kimliği paketlemede yazılır)
+
+- Aynı oturumda girilen ≥3 siparişin ortalama aralığı tek ondalıkta 0'a düşüyor, risk oranı `gün / 0` = Infinity
+  çıkıyordu (panelde JSON `null`, buluta giden tel kodlayıcısında istisna). 0'a yuvarlanan ritim artık ölçülemez
+  (`avgIntervalDays: null`); müşteri risk listesine girmez, "yetersiz geçmiş" sayacına düşer.
+- Bulut: `computeReportResult` tele çevirmeyi `try` içinde yapar; çevrilemeyen sonuç `HATA/PARAMETRE_GECERSIZ`
+  döner, saatlik standart görüntü döngüsünde sonraki raporlar gitmeye devam eder. Tel sözleşmesi aynı (yeni hata
+  kodu yok). Bekçi: `test_customer_scorecard` §7e.
+- `dist-web`: panel kaynağı değişmez (alan zaten `number | null`).
+
+**Güncelleyici 0.2.7 (R23)** (commit `feat(guncelleyici): R23 …`; kısa kimliği paketlemede yazılır)
+
+- Onaysız pencerede (otomatik kip) kurulum 5 dk önceden duyurulur; panel şeridi ve tablet uyarısı bu duyuruyu
+  gösterir. Teslim paketi 0.2.7 güncelleyicisini taşır; hizmet ikilisi değişmedi (0.2.0).
+
 ## 3. Sözleşme
 
 - **Kırıldı mı:** HAYIR (Perf-2 B5/B6) — rapor zarfına isteğe bağlı `warnings` (yalnız tavan aşılınca); eski panel
@@ -305,7 +320,7 @@ otomatik yedekten geri yüklenir.
 ## 7. Doğrulama — kurulumdan sonra rapor edilecekler
 
 - Sağlık bilgisi: sürüm 2.15.7, sunucu ve veritabanı ayakta.
-- Veritabanı: 391 migration bitmiş, sorunlu migration yok.
+- Veritabanı: 392 migration bitmiş, sorunlu migration yok.
 - `/api/admin/health` `machineWatchdog`: `{ silentCollectors: 0, lateStopEnds: 0 }` (kart yokken); `null` ise
   sayaç okunamadı — günlüğe bak, insana rapor et.
 - `/api/admin/health` `auditProtection`: Docker'da `writeOnly: true` ve açılıştan birkaç dakika sonra `level` "tam"
