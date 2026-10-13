@@ -222,6 +222,23 @@ function olc(d: Dosyalar): Olcum {
     if (!/apt-get install[^\n]*\blibssl-dev\b/.test(linux) || !/apt-get install[^\n]*\bpkg-config\b/.test(linux)) k("§7L", "linux güncelleyici derlemesi libssl-dev + pkg-config kurmuyor (native-tls)");
     if (!/ldd "\$ikili" \| grep -q 'libssl\\\.so\\\.3 => \/' \|\| \{/.test(linux)) k("§7L", "linux güncelleyicinin libssl.so.3 bağı ölçülmüyor");
   }
+
+  // §9 (G6 Windows kolu) — KORUMALI paketin araçları V8 bayt koduna (.jsc) çevrilir.
+  // Karartılmış araç bile OKUNUR JS'tir (lisans/kimlik/sır yolları); Docker ile AYNI yol.
+  // Bayt kodu V8/platform/mimariye kilitli → server.jsc ile AYNI $runtimeNode (paketin kendi
+  // node'u) üretmeli; sistem node'u (thinkpad 26.x ≠ paket 24.x) üretseydi paketin node'u açamazdı.
+  // Yükleyici docker/korumali/arac-jsc.mjs'ten (TEK KAYNAK, K12 imini taşır); V8 kapısı
+  // uyuşmazlıkta TR hata + çıkış 78. Çağrı biçimi (node dist\tools\<ad>.cjs) değişmez.
+  if (!/& \$runtimeNode \(Join-Path \(Join-Path \(Join-Path \$proj "docker"\) "korumali"\) "arac-jsc\.mjs"\) \(Join-Path \(Join-Path \$proj "dist"\) "tools"\)/.test(paketle)) {
+    k("§9", "korumalı paket araçları $runtimeNode ile arac-jsc.mjs'ten .jsc'ye çevirmiyor (okunur JS kalır)");
+  }
+  if (!/if \(\$LASTEXITCODE -ne 0\) \{ Fail "KORUMALI paket: araclar \.jsc'ye cevrilemedi/.test(paketle)) k("§9", "arac-jsc.mjs düşerse paketleme durmuyor");
+  if (!/foreach \(\$a in \$araclar\) \{[\s\S]*?ChangeExtension\(\$cjsYol, "\.jsc"\)/.test(paketle)) k("§9", "üretilen .jsc'ler araç araç doğrulanmıyor");
+  if (!/if \(-not \(Test-Path \$jscYol\)\) \{ Fail /.test(paketle)) k("§9", ".jsc üretilmeyen araçta Fail yok (eksik bayt kodu sessiz geçer)");
+  if (!/-Pattern 'require\("bytenode"\)' -SimpleMatch/.test(paketle) || !/Fail "KORUMALI paket: \$\(\$a\.ad\)\.cjs yukleyiciye donusturulmemis/.test(paketle)) {
+    k("§9", "araç .cjs'in bytenode yükleyicisine dönüştüğü doğrulanmıyor (okunur araç gövdesi kalabilir)");
+  }
+
   return { kirmizi, olculemedi };
 }
 
@@ -289,6 +306,9 @@ function sondalar(taban: Dosyalar): void {
     ["N21 linux güncelleyici test-anchor ile derleniyor → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "cargo build --release --locked -p tekserp-guncelleyici\n", "cargo build --release --locked -p tekserp-guncelleyici --features test-anchor\n"), "§7L"],
     ["N22 linux güncelleyici libssl-dev kurmadan derleniyor → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "install -y --no-install-recommends libssl-dev pkg-config", "install -y --no-install-recommends pkg-config"), "§7L"],
     ["N23 linux güncelleyicinin libssl.so.3 bağı ölçülmüyor → KIRMIZI (§7L)", "kirmizi", metin(KORUMALI_CI, "ldd \"$ikili\" | grep -q 'libssl\\.so\\.3 => /' || {", "ldd \"$ikili\" | grep -q 'libssl' || true || {"), "§7L"],
+    ["N24 araç .jsc çevirme adımı silindi (okunur araç kalır) → KIRMIZI (§9)", "kirmizi", metin(PAKETLE, '"arac-jsc.mjs")', '"yok.mjs")'), "§9"],
+    ["N25 .jsc üretilmeyen araçta Fail gevşedi → KIRMIZI (§9)", "kirmizi", metin(PAKETLE, "if (-not (Test-Path $jscYol)) { Fail ", "if (-not (Test-Path $jscYol)) { Write-Host "), "§9"],
+    ["N26 yükleyici dönüşüm doğrulaması kalktı → KIRMIZI (§9)", "kirmizi", metin(PAKETLE, "-Pattern 'require(\"bytenode\")' -SimpleMatch", "-Pattern 'require(\"yok\")' -SimpleMatch"), "§9"],
     ["O1 paketle.ps1 okunamadı → ÖLÇÜLEMEDİ", "olculemedi", (d) => { d[PAKETLE] = undefined; }],
     ["O2 $ALT_BETIKLER listesi kayboldu → ÖLÇÜLEMEDİ (§1)", "olculemedi", metin(PAKETLE, "$ALT_BETIKLER = @(", "$ALT_BETIKLER_ESKI = @("), "§1"],
   ];

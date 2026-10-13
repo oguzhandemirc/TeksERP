@@ -413,6 +413,28 @@ if ($Korumali) {
   $yolYorumu = @(Select-String -Path (Join-Path (Join-Path (Join-Path $proj "dist") "tools") "*.cjs") -Pattern '^\s*//\s*(src|scripts)/' -CaseSensitive -ErrorAction SilentlyContinue).Count
   if ($yolYorumu -gt 0) { Fail "KORUMALI paket: dist/tools araclari karartilmamis ($yolYorumu kaynak yolu yorumu) - build-araclar --korumali almadi." }
   Write-Host "  araclar karartildi: kaynak yolu yorumu = 0"
+
+  # ⚠ Karartilmis araclar hala OKUNUR JS (lisans/kimlik/sir yollari). Docker ile AYNI yol (G6):
+  #   her dist\tools\<ad>.cjs -> <ad>.jsc (V8 bayt kodu) + kucuk <ad>.cjs yukleyici. Bayt kodu
+  #   V8/platform/mimariye KILITLI -> server.jsc ile AYNI runtime node (($runtimeNode), [2/6]'da
+  #   indirilen paketin kendi node'u) uretir; sistem node'u (thinkpad 26.x) uretseydi paketin
+  #   runtime node'u (24.x) ACAMAZDI. Yukleyici docker\korumali\arac-jsc.mjs'ten (TEK KAYNAK);
+  #   `node dist\tools\<ad>.cjs` sozlesmesi (kur.ps1, guncelleyici, panel) degismez. Yukleyici
+  #   server-kunye.json V8 kapisini uygular -> uyusmazlikta TR hata + cikis 78.
+  & $runtimeNode (Join-Path (Join-Path (Join-Path $proj "docker") "korumali") "arac-jsc.mjs") (Join-Path (Join-Path $proj "dist") "tools")
+  if ($LASTEXITCODE -ne 0) { Fail "KORUMALI paket: araclar .jsc'ye cevrilemedi (arac-jsc.mjs runtime node ile) - paket uretilmedi." }
+  foreach ($a in $araclar) {
+    # Araclar her zaman dist\tools\<ad>.cjs (build-araclar ciktisi); .jsc kardesi + .cjs yukleyici.
+    $cjsYol = Join-Path (Join-Path (Join-Path $proj "dist") "tools") "$($a.ad).cjs"
+    $jscYol = [System.IO.Path]::ChangeExtension($cjsYol, ".jsc")
+    if (-not (Test-Path $jscYol)) { Fail "KORUMALI paket: $($a.ad) icin .jsc uretilmedi: $jscYol" }
+    # Yukleyici imzasi ASCII (dosya UTF-8; Turkce imle Select-String kodlamaya takilmasin):
+    # bytenode require'i YALNIZ yukleyicide gecer (karartilmis arac govdesi onu bundle etmez).
+    if (-not (Select-String -Path $cjsYol -Pattern 'require("bytenode")' -SimpleMatch -CaseSensitive -Encoding utf8 -ErrorAction SilentlyContinue)) {
+      Fail "KORUMALI paket: $($a.ad).cjs yukleyiciye donusturulmemis (hala okunur arac govdesi)."
+    }
+  }
+  Write-Host "  araclar .jsc: $($araclar.Count) arac bayt koduna cevrildi (yukleyici + <ad>.jsc, runtime node $(Split-Path $runtimeNode -Leaf))"
 }
 
 # --- Web paneli: 2026-09-30'dan (B6) beri pakete GIRMEZ ----------------------

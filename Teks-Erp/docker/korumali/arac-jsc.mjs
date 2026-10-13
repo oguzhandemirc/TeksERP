@@ -10,6 +10,7 @@
 // =============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /** Yükleyicinin her araçta aynı olan imi — imaj bekçisi (test_korumali_imaj K12) bunu arar. */
 export const ARAC_YUKLEYICI_IMI = 'KORUMALI ARAÇ YÜKLEYİCİSİ';
@@ -62,8 +63,9 @@ export async function araclariJscYap(dizin, bytenode) {
   return adlar;
 }
 
-// Doğrudan koşum (ölçüm/prova): node arac-jsc.mjs <tools-dizini> — bytenode o dizinin ağacından çözülür.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Doğrudan koşum (paketle.ps1 -Korumali · ölçüm/prova): node arac-jsc.mjs <tools-dizini> — bytenode o dizinin
+// ağacından çözülür. pathToFileURL: Windows yolu (C:\...\, ters bölü) `file://` gömmesiyle EŞLEŞMEZ (POSIX'te eşleşir).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dizin = path.resolve(process.argv[2] || '');
   const { createRequire } = await import('node:module');
   const bytenode = createRequire(path.join(dizin, '_'))('bytenode');

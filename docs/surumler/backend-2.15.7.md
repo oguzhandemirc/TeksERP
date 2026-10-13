@@ -194,7 +194,18 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - **Eski kurulum ne yapar:** compose dosyası DEĞİŞMEZ; yeni imaj eski compose ile açılır (yedek servisinin
   `command`ı dağıtıcıdan geçer). Eski güncelleyici `goc` adımını argümanla çağırır — yeni betik aynı kipe girer.
   Rol ayrımı yapılamazsa (eski PG, süper olmayan sahip) bugünkü geri düşüş: sahip URL'iyle açılır, `/proc` ortamı
-  o kurulumda sahip URL'ini yine taşır. Windows paketi etkilenmez.
+  o kurulumda sahip URL'ini yine taşır.
+
+**Windows korumalı paketinde araçlar V8 bayt kodu (G6 Windows kolu)** (commit `feat(docker): G6 Windows — paketle.ps1 -Korumali araçları .jsc …`; kısa kimliği paketlemede yazılır)
+
+- `paketle.ps1 -Korumali` ile üretilen Windows paketinde `dist/tools/*` araçları artık V8 bayt kodu (`<ad>.jsc` +
+  küçük `<ad>.cjs` yükleyici), Docker imajıyla aynı. Daha önce yalnız karartılmış (okunur) JS'ti. Bayt kodu paketin
+  KENDİ runtime node'uyla (`server.jsc`yi üreten 24.18.0 node.exe) üretilir; çağrı biçimi (`node dist/tools/<ad>.cjs …`)
+  değişmedi — kurulum, güncelleyici ve panel aynı yolları çağırır.
+- **Eski kurulum / eski paket ne yapar:** Çağrı biçimi aynı; kurulum ve güncelleyici etkilenmez. Sahadaki eski
+  korumalı paketler araçları karartılmış JS olarak taşımayı sürdürür (yeni paketten etkilenmez). Araç paketin kendi
+  node'uyla çalışır; farklı V8 sürümlü bir node ile çağrılırsa araç Türkçe "bu Node ile AÇILAMAZ" hatası verip
+  çıkış 78 döner (kurulum/güncelleyici zaten paketin node'uyla çağırır).
 
 **Migration'lar süper olmayan sahip rolle koşar + geri yükleme `--no-acl`** (commit `fix(migration): audit purge kapısı …` · `test(migration): test_migration_super_olmayan …` · `fix(yedek): geri yükleme --no-acl …`; kısa kimliği paketlemede yazılır)
 
