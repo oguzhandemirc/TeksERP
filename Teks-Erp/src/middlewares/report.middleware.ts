@@ -30,6 +30,7 @@ import type { ReportKey } from "../constants/report-catalog";
 import { REPORT_BY_KEY } from "../constants/report-catalog";
 import { readReportsClosedKeys } from "../services/system-setting.service";
 import { AppError } from "../utils/app-error";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 
 /**
  * Bu anahtarın raporu açık mı? `verifyToken` sonrası, izin guard'ı öncesi takılır.
@@ -51,7 +52,7 @@ export function requireReportOpen(key: ReportKey) {
         // FAIL-CLOSED ve AYRI KOD: bu rapor kapalı OLABİLİR, bilemiyoruz.
         throw AppError.forbidden(
           "Rapor görünürlük listesi okunamadı; rapor geçici olarak kapalı. " +
-            "Sistem → Raporlar bölümünden liste yeniden kaydedilerek düzeltilir.",
+            `${ekranYolu("raporGorunurlugu")} bölümünden liste yeniden kaydedilerek düzeltilir.`,
           { code: "REPORT_GATE_UNAVAILABLE", rapor: key, neden: visibility.neden },
         );
       }

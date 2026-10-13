@@ -31,6 +31,7 @@ import {
   readShippingInvoiceMode,
   type ShippingInvoiceMode,
 } from "../system-setting.service";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 /** Etkin rejim. DÜZ okuyucu (Sevkiyat çekirdek blok — ebeveyn modül YOK). */
 export async function resolveInvoiceMode(): Promise<ShippingInvoiceMode> {
@@ -55,7 +56,7 @@ export function assertInvoiceTraceAllowed(
   if (mode !== "ic") return;
   if (p.clearing) return;
   throw AppError.badRequest(
-    "Bu kurulumda fatura numarası elle işaretlenmez — fatura Muhasebe → Faturalar " +
+    `Bu kurulumda fatura numarası elle işaretlenmez — fatura ${ekranYolu("faturalar")} ` +
       "ekranından kesilir ve onaylandığında sevkiyata kendisi işlenir. " +
       "(Yanlış girilmiş bir izi KALDIRMAK hâlâ mümkündür.)",
     { code: "INVOICE_TRACE_DISABLED" },

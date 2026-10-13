@@ -36,6 +36,7 @@ import { LabelKind } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { readCanvasLayout } from "../../config/label-elements";
 import { getUnifiedCatalog } from "../../config/label-fields";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 /** Bağlamın KİMLİK bind'i — o bağlamda basılmadıkça etiket kimsiz kalır. */
 const IDENTITY_BIND: Partial<Record<LabelKind, { key: string; label: string }>> = {
@@ -106,7 +107,7 @@ export function analyzeContextFit(t: TemplateLike, kind: LabelKind): ContextFit 
       reason: "no-canvas",
       message:
         `『${t.name}』 şablonunda tasarım (kanvas) yok — çuval etiketi olarak basılamaz. ` +
-        `Etiket Stüdyosu'nda şablona bir tasarım ekleyin, ya da Etiketler → Atamalar'da ` +
+        `Etiket Stüdyosu'nda şablona bir tasarım ekleyin, ya da ${ekranYolu("etiketAtamalari")}'nda ` +
         `Çuval bağlamına tasarımı olan bir şablon atayın.`,
     };
   }
@@ -118,7 +119,7 @@ export function analyzeContextFit(t: TemplateLike, kind: LabelKind): ContextFit 
         `『${t.name}』 şablonu çuval etiketi olarak basılamaz — çuval numarası ` +
         `("${identity.label}") alanı şablonda yok, dolayısıyla basılan etiket hangi çuvala ` +
         `ait olduğunu göstermez. Etiket Stüdyosu'nda bu alanı ekleyin, ya da ` +
-        `Etiketler → Atamalar'da Çuval bağlamına doğru şablonu atayın.`,
+        `${ekranYolu("etiketAtamalari")}'nda Çuval bağlamına doğru şablonu atayın.`,
     };
   }
   return { ok: true };

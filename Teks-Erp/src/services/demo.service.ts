@@ -26,6 +26,7 @@ import { AuditService } from "./audit.service";
 import { LabelService } from "./label.service";
 import { InventoryService } from "./inventory.service";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 
 /** Senaryo künyesi — panel listeyi BURADAN kurar, kendi kopyasını tutmaz. */
 export interface DemoScenario {
@@ -47,7 +48,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
   {
     code: "RELABEL_STALE",
     title: "Etiketi basılmış + sonradan değişmiş bir top hazırla",
-    screen: "Envanter → top detayı → Etiket",
+    screen: `${ekranYolu("kumasStogu")} → top detayı → Etiket`,
     description:
       "Seçilen (ya da uygun bulunan) topun etiketini BASILMIŞ olarak damgalar, sonra metrajını bir tık değiştirir. " +
       "Sonuç: top hem 'son basıldığı yer' bandını hem sarı 'etiket güncel değil' rozetini taşır — 'Yeniden Etiketle' akışı denenebilir hâle gelir.",

@@ -35,6 +35,7 @@
 import { z } from "zod";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 /** Kat değerlerini taşıyan katalog satırının kodu. */
 export const FOLD_PROPERTY_CODE = "KAT";
@@ -131,7 +132,7 @@ export async function resolveFoldTypeForWrite(
     .join(", ");
   throw AppError.badRequest(
     `'${normalized}' geçerli bir kat değeri değil. Tanımlı değerler: ${offered || "yok"}. ` +
-      `Yeni bir kat eklemek için Tanımlar → Kumaş Özellikleri → KAT ekranını kullanın.`,
+      `Yeni bir kat eklemek için ${ekranYolu("kumasOzellikleri")} ekranında KAT özelliğine değer ekleyin.`,
   );
 }
 

@@ -41,6 +41,7 @@
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
+import { settingScreenPath } from "./panel-ayar-yolu";
 
 /**
  * Kurulumun saat dilimi ayarı yoksa kullanılan değer — bugünkü davranış.
@@ -223,7 +224,7 @@ export function factoryTimezoneWarning(): { code: string; message: string; store
   const label = used === DEFAULT_FACTORY_TIMEZONE ? "İstanbul" : used;
   return {
     code: FACTORY_TIMEZONE_INVALID_STORED,
-    message: `Kayıtlı saat dilimi geçersiz; ${label} kullanılıyor — Şirket Bilgileri → Saat dilimi'den düzeltin`,
+    message: `Kayıtlı saat dilimi geçersiz; ${label} kullanılıyor — ${settingScreenPath("company")} → "Saat dilimi" alanından düzeltin`,
     stored: storedInvalidRaw,
   };
 }

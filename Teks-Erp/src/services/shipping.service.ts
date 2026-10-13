@@ -177,6 +177,7 @@ import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
 import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
 import { SWATCH_IN_STOCK_WHERE, transitionSwatchesTx } from "./helpers/swatch-event.helper";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -1626,7 +1627,7 @@ export class ShippingService {
       }
       if (simulated && !(await readSimulatedWeightEnabled())) {
         throw AppError.badRequest(
-          'Simüle kantarla tartı kaydedilemez — Tanımlar → Cihaz Kaydı\'ndan bu kantarın ' +
+          `Simüle kantarla tartı kaydedilemez — ${ekranYolu("donanim")} ekranındaki Cihaz Kaydı'ndan bu kantarın ` +
             '"simülasyon" bayrağını kapatın, ya da ⋮ → "Elle kg gir" ile girin.'
         );
       }

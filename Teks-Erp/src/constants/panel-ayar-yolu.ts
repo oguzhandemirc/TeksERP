@@ -6,6 +6,7 @@
 // değişince eski cümle yalan söyler. `test_ayar_yol_tarifi` bu tabloyu panel kataloğuyla bayt
 // bayt karşılaştırır ve backend dizgelerinde elle yazılmış yolu yasaklar.
 // =============================================================================
+import { yolBicimle } from "./panel-ekran-yolu";
 
 /** Ayar ekranı (panel kategori kimliği) → menü yolu (`settingsCategoryTrail`). */
 export const PANEL_SETTING_SCREEN = {
@@ -19,6 +20,7 @@ export const PANEL_SETTING_SCREEN = {
   yarn: "Sistem → Özellik Anahtarları → İplik",
   finance: "Sistem → Özellik Anahtarları → Muhasebe",
   session: "Sistem → Şirket & Güvenlik → Oturum & Güvenlik",
+  company: "Sistem → Şirket & Güvenlik → Şirket Bilgileri",
 } as const;
 
 export type PanelSettingScreen = keyof typeof PANEL_SETTING_SCREEN;
@@ -48,5 +50,5 @@ export function settingScreenPath(ekran: PanelSettingScreen): string {
 /** 'Sistem → Özellik Anahtarları → Tezgah izleme → "Tezgah alarmı"' */
 export function settingRowPath(satir: PanelSettingRow): string {
   const s = PANEL_SETTING_ROW[satir];
-  return `${PANEL_SETTING_SCREEN[s.ekran]} → "${s.baslik}"`;
+  return yolBicimle([PANEL_SETTING_SCREEN[s.ekran], `"${s.baslik}"`]);
 }

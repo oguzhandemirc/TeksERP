@@ -7,6 +7,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 type Db = Pick<Prisma.TransactionClient, "defectType">;
 
@@ -33,7 +34,7 @@ export async function resolveDefaultDefectTypeTx<T extends { defectTypeId?: stri
   const def = await findDefaultDefectType(db);
   if (!def) {
     throw AppError.badRequest(
-      "Hata tipi seçilmedi ve kataloğda varsayılan hata tipi tanımlı değil — Kalite → Hata Tipleri'nden bir tipi varsayılan yapın ya da hata tipini seçin.",
+      `Hata tipi seçilmedi ve kataloğda varsayılan hata tipi tanımlı değil — ${ekranYolu("hataTipleri")}'nden bir tipi varsayılan yapın ya da hata tipini seçin.`,
       { code: DEFAULT_DEFECT_TYPE_MISSING },
     );
   }
@@ -85,7 +86,7 @@ export async function assertNotDeactivatingDefault(
   const row = await db.defectType.findUnique({ where: { id }, select: { isDefault: true } });
   if (row?.isDefault) {
     throw AppError.badRequest(
-      "Bu hata tipi VARSAYILAN — pasife alınamaz/silinemez. Önce Kalite → Hata Tipleri'nden başka bir tipi varsayılan yapın.",
+      `Bu hata tipi VARSAYILAN — pasife alınamaz/silinemez. Önce ${ekranYolu("hataTipleri")}'nden başka bir tipi varsayılan yapın.`,
       { code: DEFAULT_DEFECT_TYPE_DEACTIVATE },
     );
   }

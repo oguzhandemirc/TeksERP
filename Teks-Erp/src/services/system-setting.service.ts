@@ -65,6 +65,7 @@ import {
   type PhaseOutLineQty,
   type PhaseOutNewOrder,
 } from "./helpers/item-lifecycle-settings.helper";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 
 /**
  * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
@@ -2436,7 +2437,7 @@ export class SystemSettingService {
     const entering = nextEnabled && nextMode === "REQUIRE_SHIFT" && (!curEnabled || curMode !== "REQUIRE_SHIFT");
     if (!entering || !alarmEnableBlocked(nextMode, await isShiftDefined(prisma))) return;
     throw AppError.badRequest(
-      `Vardiya tanımlı değil — "Vardiya olmadan açılamasın" kipinde tezgah alarmı açılamaz. Önce Tanımlar → Vardiya Tanımları'ndan vardiya tanımlayın ya da kipi değiştirin (${settingScreenPath("tezgah")}).`,
+      `Vardiya tanımlı değil — "Vardiya olmadan açılamasın" kipinde tezgah alarmı açılamaz. Önce ${ekranYolu("vardiyaTanimlari")}'ndan vardiya tanımlayın ya da kipi değiştirin (${settingScreenPath("tezgah")}).`,
       { code: "TEZGAH_ALARM_SHIFT_REQUIRED" },
     );
   }

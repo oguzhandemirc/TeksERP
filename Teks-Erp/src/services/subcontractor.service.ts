@@ -131,6 +131,7 @@ import { p2002Mentions } from "../utils/p2002";
 import { hata, uyari } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -550,7 +551,7 @@ function buildBatchMismatchMessage(items: ReceiptBatchMismatchItem[]): string {
   return (
     `Kabul iptal edilemez — topların parti üyeliği kabulden sonra değişmiş ` +
     `(birleştirme/taşıma): ${detail}. ` +
-    `Panelden Terbiye İş Emri → Partiler → Birleştir ile şu partileri birleştirin: ${pairs}. ` +
+    `Panelden ${ekranYolu("terbiyeIsEmirleri")} → detay → Partiler → Birleştir ile şu partileri birleştirin: ${pairs}. ` +
     `Sonra iptali tekrar deneyin.`
   );
 }

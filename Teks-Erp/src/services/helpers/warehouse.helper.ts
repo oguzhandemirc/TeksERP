@@ -15,6 +15,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { bilgi, uyari } from "../../lib/logger";
 import { p2002Mentions } from "../../utils/p2002";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -97,7 +98,7 @@ export async function resolveTargetWarehouseId(
 
   throw AppError.conflict(
     "Varsayılan depo yok ve oluşturulamadı — mal deposuz kaydedilemez. " +
-      "Tanımlar → Depolar'dan bir depo açıp varsayılan yapın.",
+      `${ekranYolu("depolar")}'dan bir depo açıp varsayılan yapın.`,
   );
 }
 

@@ -94,6 +94,7 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 import { unitLabel } from "../constants/item-unit";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 
 export interface InvoiceLineInput {
   itemId?: string | null;
@@ -1413,7 +1414,7 @@ export class InvoiceService {
     if (!warehouseId) {
       throw AppError.badRequest(
         `${ref.docNo}: iplik satırları stoktan düşülemedi — sistemde VARSAYILAN depo tanımlı değil. ` +
-          `Tanımlar > Depolar'dan bir depoyu varsayılan yapın ya da ${settingRowPath("financeYarnOutOnInvoiceEnabled")} ayarını kapatın.`,
+          `${ekranYolu("depolar")}'dan bir depoyu varsayılan yapın ya da ${settingRowPath("financeYarnOutOnInvoiceEnabled")} ayarını kapatın.`,
       );
     }
 

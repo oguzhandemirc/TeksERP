@@ -84,6 +84,7 @@ const TABLE_LABEL_PRINT = "LABEL_PRINT_EVENT";
 // import edilemeyeceği için koruma artık yapısaldır.
 import type { LabelPayload, SwatchLabelPayload } from "../types/label.types";
 import { hata } from "../lib/logger";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 export type { NameSource, LabelPayload, SwatchLabelPayload } from "../types/label.types";
 
 
@@ -1676,8 +1677,8 @@ export class LabelService {
     });
     if (!routing.template) {
       throw AppError.badRequest(
-        "Çuval etiket şablonu tanımlı değil — Tanımlar → Etiket Şablonları'ndan bir " +
-          "Çuval şablonu oluşturup Etiketler → Atamalar'da Bağlam Varsayılanı olarak atayın.",
+        `Çuval etiket şablonu tanımlı değil — ${ekranYolu("etiketDuzenleri")}'nden bir ` +
+          `Çuval şablonu oluşturup ${ekranYolu("etiketAtamalari")}'nda Bağlam Varsayılanı olarak atayın.`,
       );
     }
     // ARKA KAPI KAPANIŞI: üstteki guard yalnız "şablon var mı?" diye sorar. Üç atama

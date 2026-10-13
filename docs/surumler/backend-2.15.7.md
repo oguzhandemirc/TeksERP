@@ -134,6 +134,17 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   yoklaması bunu söyler); Docker geri yüklemesinin belgeli yolu runbook §6 (`yedek` servisi) değişmez. Gece yedeği
   (`yedek` servisi) sahip rolüyle sürer.
 
+**Ekran yolu tek kaynağı** (commit `chore(ekran-yolu): …`; kısa kimliği paketlemede yazılır)
+
+- Kullanıcıya dönen "şu ekrandan yapın" cümleleri panelin gerçek menüsünü gösterir; yedi bayat yol düzeldi:
+  "Sistem → Kalite Sınıfları" → "Tanımlar → Kalite Sınıfları" · "Kalite → Hata Tipleri" → "Tanımlar → Hata Tipleri" ·
+  "Sistem → Raporlar" → "Sistem → Modüller → Raporlar" · "Tanımlar → Cihaz Kaydı" ve "Makine Donanımı → Yazıcı IP" →
+  "Tanımlar → Donanım" · "Tanımlar → Etiket Şablonları" / "Etiketler → Atamalar" → "Tanımlar → Etiketler → Etiket
+  Düzenleri / Etiket Atamaları" · "Kullanıcılar → Kısa Kimlikler" → "Yetkilendirme → Kullanıcılar → Kısa Kimlikler" ·
+  demo senaryosu "Envanter → …" → "Operasyon → Kumaş Stoğu → …". Saat dilimi uyarısı tam ayar yolunu yazar
+  ("Sistem → Şirket & Güvenlik → Şirket Bilgileri → "Saat dilimi""). Eski ">" ayracı " → " oldu. Hata kodları değişmez;
+  yalnız mesaj metni.
+
 ## 3. Sözleşme
 
 - **Kırıldı mı:** HAYIR (Perf-2 B5/B6) — rapor zarfına isteğe bağlı `warnings` (yalnız tavan aşılınca); eski panel

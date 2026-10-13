@@ -20,6 +20,7 @@ import { AppError } from "../../utils/app-error";
 import { normalizeLotNo } from "./yarn-lot.helper";
 import { readDevereLotRequired } from "../system-setting.service";import { assertItemUsable } from "./item-usage.helper";
 import { PANEL_SETTING_ROW, settingRowPath } from "../../constants/panel-ayar-yolu";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 
 export interface PreflightLine {
@@ -75,7 +76,7 @@ export function priceRequiredMessage(itemName: string, currency: string): string
   return (
     `"${itemName}": birim fiyat çözülemedi — satırda fiyat yok ve kalem kartında ${currency} alış fiyatı tanımlı değil. ` +
     `"${PANEL_SETTING_ROW.goodsReceiptRequirePriceEnabled.baslik}" ayarı açık — satıra fiyatı girin, kalemin ${currency} alış fiyatını ` +
-    `Tanımlar > Kalem Fiyatları'ndan tanımlayın ya da ${settingRowPath("goodsReceiptRequirePriceEnabled")} ayarını kapatın.`
+    `${ekranYolu("kalemFiyatlari")}'ndan tanımlayın ya da ${settingRowPath("goodsReceiptRequirePriceEnabled")} ayarını kapatın.`
   );
 }
 

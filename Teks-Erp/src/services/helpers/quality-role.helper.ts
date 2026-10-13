@@ -27,6 +27,7 @@
 import { Prisma, QualityGradeRole, type PrismaClient } from "@prisma/client";
 import prismaClient from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 /** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
 type ReadDb = PrismaClient | Prisma.TransactionClient;
@@ -176,7 +177,7 @@ export async function loadQualityRoles(db: ReadDb = prismaClient): Promise<Quali
       if (!hit) {
         throw AppError.badRequest(
           `Kalite kataloğunda "${ROLE_LABEL[role]}" rolü atanmamış. ` +
-            `Sistem → Kalite Sınıfları'nda bir kaliteye bu rolü verin.`,
+            `${ekranYolu("kaliteSiniflari")}'nda bir kaliteye bu rolü verin.`,
         );
       }
       return hit;

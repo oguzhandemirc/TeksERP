@@ -57,6 +57,7 @@ import { deriveInvoiceDueDate } from "./finance.helper";
 import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 /**
  * Sevk edilmiş bir sevkiyattan SATIŞ faturası taslağı satırları.
@@ -459,6 +460,6 @@ export async function autoDraftInvoiceAfterDispatch(
     uyari("auto-draft", `Sevkiyat ${shipmentId} için fatura taslağı üretilemedi:`,
       err instanceof Error ? err.message : err,
     );
-    return "otomatik fatura taslağı üretilemedi — Muhasebe > Faturalar'dan elle oluşturun";
+    return `otomatik fatura taslağı üretilemedi — ${ekranYolu("faturalar")}'dan elle oluşturun`;
   }
 }

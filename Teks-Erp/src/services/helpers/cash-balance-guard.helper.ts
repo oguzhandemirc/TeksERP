@@ -46,6 +46,7 @@
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { readFinanceBlockNegativeCashEnabled } from "../system-setting.service";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 export interface CashOutflowRef {
   /** Guard yalnız kasa için çalışır; null/banka → no-op (banka muafiyeti). */
@@ -90,7 +91,7 @@ export async function assertCashBalanceCoversTx(
       `"${row.name}" kasası eksi bakiyeye düşecek: mevcut bakiye ${balance.toFixed(2)} ${row.currency}, ` +
         `istenen çıkış ${ref.amount.toFixed(2)} ${row.currency}. Eksi kasa engeli açık — ` +
         `kasada gerçekte para varsa açılış/devir bakiyesi girilmemiş olabilir: ` +
-        `Kasa Hareketleri > Açılış fişiyle devir bakiyesini girin ya da tutarı düzeltin.`,
+        `${ekranYolu("kasaHareketleri")} ekranında Açılış fişiyle devir bakiyesini girin ya da tutarı düzeltin.`,
     );
   }
 }

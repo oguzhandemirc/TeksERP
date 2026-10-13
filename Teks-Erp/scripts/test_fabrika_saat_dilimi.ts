@@ -22,6 +22,7 @@ import {
   getFactoryTimezonePeriods, isValidFactoryTimezone, resolveRangeStart,
 } from "../src/constants/time";
 import { isReservedSettingKey } from "../src/constants/reserved-settings";
+import { settingScreenPath } from "../src/constants/panel-ayar-yolu";
 import { SETTING_KEYS, invalidateFeatureFlagsCache, systemSettingService } from "../src/services/system-setting.service";
 import { cancelFactoryTimezoneChange, loadFactoryTimezoneAtBoot, setFactoryTimezone } from "../src/services/factory-timezone.service";
 import { previewFactoryTimezone } from "../src/services/factory-timezone-preview.service";
@@ -222,7 +223,7 @@ async function dbSection(): Promise<void> {
   check("§5o planlama + iptal audit'e düştü", audits >= 2, `${audits}`);
 }
 
-const TZ_INVALID_MSG = "Kayıtlı saat dilimi geçersiz; İstanbul kullanılıyor — Şirket Bilgileri → Saat dilimi'den düzeltin";
+const TZ_INVALID_MSG = `Kayıtlı saat dilimi geçersiz; İstanbul kullanılıyor — ${settingScreenPath("company")} → "Saat dilimi" alanından düzeltin`;
 const tzWarningCode = (v: unknown): unknown => (v as { code?: unknown } | null | undefined)?.code;
 
 /** §8 — geçersiz kayıtlı dilim: sunucu DURMAZ, o dönem varsayılanla yorumlanır ve uyarır; panelden düzeltilir. */

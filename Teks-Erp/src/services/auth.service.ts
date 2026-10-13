@@ -50,6 +50,7 @@ import {
   rememberIssuedPin,
 } from "./helpers/credential-reveal.helper";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -131,7 +132,7 @@ function keyMismatchError(kind: "pin" | "card"): AppError {
   const ne = kind === "pin" ? "hızlı PIN" : "personel kartı";
   return AppError.unauthorized(
     `Bu ${ne} doğrulanamıyor: kısa kimlik anahtarı bu veritabanıyla uyuşmuyor (yedek başka bir sunucudan geri yüklenmiş). ` +
-      "Yönetici: Kullanıcılar → Kısa Kimlikler'den anahtarı yedek parolasıyla geri yükleyin ya da PIN'leri toplu sıfırlayın. " +
+      `Yönetici: ${ekranYolu("kisaKimlikler")}'den anahtarı yedek parolasıyla geri yükleyin ya da PIN'leri toplu sıfırlayın. ` +
       "Şimdilik kullanıcı adı ve şifreyle giriş yapın.",
     { code: "SHORT_CREDENTIAL_KEY_MISMATCH" },
   );

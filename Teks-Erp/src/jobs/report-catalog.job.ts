@@ -21,6 +21,7 @@
 import { REPORT_BY_KEY } from "../constants/report-catalog";
 import { readReportsClosedKeys } from "../services/system-setting.service";
 import { bilgi, uyari } from "../lib/logger";
+import { ekranYolu } from "../constants/panel-ekran-yolu";
 
 const ETIKET = "rapor-katalogu";
 
@@ -40,7 +41,7 @@ export async function warnStaleReportKeys(): Promise<void> {
     // hepsi 403 `REPORT_GATE_UNAVAILABLE` verir. Sessiz kalsaydı destek ekibi
     // "yetki sorunu" diye arardı.
     uyari(ETIKET, `kapalı rapor listesi OKUNAMADI (${visibility.neden}); ` +
-      "rapor uçları fail-closed 403 veriyor — Sistem → Raporlar bölümünden liste yeniden kaydedilmeli");
+      `rapor uçları fail-closed 403 veriyor — ${ekranYolu("raporGorunurlugu")} bölümünden liste yeniden kaydedilmeli`);
     return;
   }
   const bayat = visibility.kapali.filter((k) => !REPORT_BY_KEY.has(k));
@@ -49,6 +50,6 @@ export async function warnStaleReportKeys(): Promise<void> {
     return;
   }
   uyari(ETIKET, `kapalı rapor listesinde katalogda OLMAYAN ${bayat.length} anahtar var ` +
-    `(${bayat.join(", ")}); kapı bunları yok sayıyor — Sistem → Raporlar bölümünden liste ` +
+    `(${bayat.join(", ")}); kapı bunları yok sayıyor — ${ekranYolu("raporGorunurlugu")} bölümünden liste ` +
     "yeniden kaydedilerek temizlenir");
 }

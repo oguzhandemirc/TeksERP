@@ -16,6 +16,7 @@
 
 import { PrinterLanguage } from "@prisma/client";
 import { sendOverTcp, DEFAULT_TCP_PORT, DEFAULT_TIMEOUT_MS } from "./device-transport";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
 export interface PrinterTransportResult {
   /** Gerçekten yazıcıya yazıldı mı (Faz-2, ayar açık + IP var + bağlantı OK). */
@@ -70,7 +71,7 @@ export async function dispatchNativeSend(
       language: opts.language,
       bytes,
       target: "(yazıcı IP'si tanımsız)",
-      error: "Hedef yazıcı IP'si tanımlı değil (Makine Donanımı → Yazıcı IP).",
+      error: `Hedef yazıcı IP'si tanımlı değil (${ekranYolu("donanim")} ekranında yazıcının adresi).`,
       note: "Gönderilemedi.",
     };
   }
