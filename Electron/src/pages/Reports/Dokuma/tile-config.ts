@@ -1,4 +1,4 @@
-import { Gauge, ListChecks, ClipboardList, Link2, Timer } from "lucide-react";
+import { Gauge, ListChecks, ClipboardList, Link2, Timer, Siren } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -27,6 +27,13 @@ export const dokumaReportTiles: HubTile[] = [
     description: "Sebep × süre sınıfı; mikro duruşlar, sınıflandırılmamış ve atanmamış (levent) kovaları ayrı",
     icon: Timer,
     to: "/reports/dokuma/durus-pareto",
+  },
+  {
+    key: "mudahale",
+    title: "Müdahale ve Çözüm Süresi",
+    description: "Tezgah alarmları: ortalama üstlenme ve çözüm süresi, hedef aşım oranı; sebep · hol · vardiya · tezgah · usta (yetkiliye) kırılımı",
+    icon: Siren,
+    to: "/reports/dokuma/mudahale",
   },
   {
     key: "vardiya-karnesi",

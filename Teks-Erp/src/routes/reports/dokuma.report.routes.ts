@@ -8,6 +8,7 @@
 // fabrika günü `YYYY-MM-DD`; süzme SUNUCUDA; her cevap `meta.ufuk` taşır.
 // `?byLine=1` OPT-IN: randıman + vardiya karnesi satırlarına `hatlar` (çift enli tezgah);
 // Pareto duruş ekseninde, hat bilmez. Opt-in yoksa gövde bayt bayt eski.
+// `/mudahale` (B4): kişi kırılımı yalnız `loom:alarm-escalation` (usta üstü amir) sahibine — yeni izin açılmaz.
 // =============================================================================
 import { Router, type Response } from "express";
 import { z } from "zod";
@@ -20,6 +21,8 @@ import { durusParetoReport, efficiencyReport, shiftScorecardReport, type WithSuz
 import { reportEnvelope, resolveDateRange, splitOptions } from "../../services/reports/_shared";
 import { filterEcho, musteriEkseni } from "../../services/reports/_filters";
 import { getProductionChain, CHAIN_STATUSES } from "../../services/reports/production-chain.report.service";
+import { alarmResponseReport } from "../../services/reports/alarm-response.report.service";
+import { hasAlarmEscalation } from "../../services/helpers/loom-alarm-recipient.helper";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -144,6 +147,32 @@ router.get("/vardiya-karnesi", requireReportOpen("dokuma/vardiya-karnesi"), guar
   try {
     const { byLine, ...q } = gunSchema.parse(req.query);
     yanit(res, await shiftScorecardReport({ ...q, ...byLineOf({ byLine }) }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/dokuma/mudahale:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Müdahale/çözüm süresi (B4) — tezgah alarmı defterinden ortalama üstlenme ve çözüm süresi, hedef (K2 vadesi) aşım oranı; kırılımlar sebep · hol · vardiya · tezgah · kişi (kişi yalnız loom:alarm-escalation sahibine)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, required: true, schema: { type: string, format: date }, description: "Fabrika günü (alarm doğuşu)" }
+ *       - { in: query, name: to, required: true, schema: { type: string, format: date } }
+ *     responses:
+ *       200: { description: "Rapor zarfı — data.ozet · sebepler · holler · vardiyalar · tezgahlar · (yetkiliyse) kisiler · kisiKirilimi; liste tavanında warnings" }
+ *       400: { description: Geçersiz aralık ya da tanınmayan parametre }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ */
+const mudahaleSchema = z.object({ from: YMD, to: YMD }).strict();
+router.get("/mudahale", requireReportOpen("dokuma/mudahale"), guard, async (req, res, next) => {
+  try {
+    const q = mudahaleSchema.parse(req.query);
+    const { data, range, warnings } = await alarmResponseReport({ ...q, withPeople: hasAlarmEscalation(req.user?.permissions ?? []) });
+    res.status(200).json(reportEnvelope(data, range, null, { warnings }));
   } catch (e) {
     next(e);
   }

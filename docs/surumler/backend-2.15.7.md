@@ -45,6 +45,15 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 2. Ne değişti
 
+**Dokuma raporu: Müdahale ve Çözüm Süresi (B4)** (commit `feat(rapor): B4 …`; kısa kimliği paketlemede yazılır)
+
+- Yeni `GET /api/reports/dokuma/mudahale?from&to` (fabrika günü; izin `report:production`, rapor kapısı `dokuma/mudahale`,
+  dokuma modülü). Tezgah alarmı defterinden: ortalama üstlenme (doğuş → ilk üstlenme), ortalama çözüm (doğuş →
+  duruşun kapanışı), hedef aşım oranı (çözüm hedefi = K2 vadesi; canlı/hedefsiz/iptal paydada değil, sayısı basılır);
+  kırılımlar sebep · hol · vardiya · tezgah. Kişi (ilk üstlenen) kırılımı yalnız `loom:alarm-escalation` sahibinin
+  cevabında; yeni izin yok, atama panelden.
+- `dist-web`: panel 1.6.5 kaynağı değişir (Raporlar → Dokuma karosu + rapor sayfası).
+
 **Tezgah Salonu: tezgahta aktif operatör (D5)** (commit `feat(salon): D5 …`; kısa kimliği paketlemede yazılır)
 
 - Salon cevabında tezgah başına `operator: { name, since } | null` — tezgahın açık ve hareketsizlik süresi dolmamış
@@ -125,6 +134,8 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 - **Kırıldı mı:** HAYIR (Perf-2 B5/B6) — rapor zarfına isteğe bağlı `warnings` (yalnız tavan aşılınca); eski panel
   alanı okumaz, listeyi kesik görür (uyarısız). Sevk karnesi rakamları değişmez.
+- **Kırıldı mı:** HAYIR (B4 müdahale raporu) — yalnız ekleme: bir rapor ucu + katalog anahtarı; 1.6.4 paneli karoyu
+  çizmez, uç yalnız yeni panelden çağrılır.
 - **Kırıldı mı:** HAYIR (D5) — yalnız ekleme: salon cevabında tezgah başına `operator`.
 - **Kırıldı mı:** HAYIR (Sebep ata) — yalnız ekleme: iki uç, salon cevabında bir alan. Eski panel alanı okumaz.
 - **Kırıldı mı:** HAYIR (C.6) — yalnız ekleme: iki gövdede isteğe bağlı satır alanı, iki cevap alanı. 1.6.4 paneli
@@ -199,3 +210,5 @@ otomatik yedekten geri yüklenir.
 - Sunucu hata günlüğünün son 30 satırı — `machine-watchdog` kaynaklı yeni hata var mı.
 - Destek hesabı tablette PIN ile: kod istendi mi (2FA kurulu) ya da 403 (kurulu değil); normal kullanıcının
   PIN/kart girişi kodsuz çalışıyor mu (bayrak kapalı).
+- `GET /api/reports/dokuma/mudahale` (from ve to = kurulum günü, YYYY-MM-DD; rapor izni olan hesapla) 200 dönüyor mu; `data.kisiKirilimi`
+  hesabın `loom:alarm-escalation` iznine uyuyor mu.

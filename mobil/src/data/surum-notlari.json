@@ -57,6 +57,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Raporlar → Dokuma altında yeni Müdahale ve Çözüm Süresi raporu: tezgah alarmlarının ortalama üstlenme ve çözüm süresini, çözüm hedefinin kaç alarmda aşıldığını sebep, hol, vardiya ve tezgah başına gösterir; Excel, PDF ve yazdırma çıktısı vardır. Usta başına kırılımı yalnız alarm üst kademesi yetkisi olanlar görür. Bunun için sunucunun 2.15.7 sürümü gerekir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Tezgah Salonu'nda seçtiğiniz tezgahlara sağ tık menüsünden ya da alttaki seçim çubuğundan iş verebilirsiniz: İş ver, İşi değiştir, İşi bitir ve Koşumu geri al. Önce Dokuma İş Emrini listeden seçersiniz; çift hatlı tezgah seçtiyseniz hangi hatta başlayacağı sorulur. Göndermeden önce etkilenecek her tezgah adıyla listelenir: tezgahın şu anki işi ve ne olacağı yazar, istemediğiniz tezgahın işaretini kaldırırsınız. Bu eylemler yalnız dokuma modülü açıkken ve Tezgah koşumu izniniz varsa çıkar; izniniz yoksa seçenek görünür ama soluktur ve nedenini yazar."
         },
         {

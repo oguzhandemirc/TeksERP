@@ -142,9 +142,23 @@ function qs(p: object): string {
   return out ? `?${out}` : "";
 }
 
+/** B4 müdahale/çözüm süresi — backend `alarm-response.report.service` hücresinin aynası. */
+export interface AlarmResponseCell {
+  alarm: number; iptal: number; ustlenilen: number; ustlenmeOrtSn: number | null; cozulen: number; cozumOrtSn: number | null;
+  asim: number; zamaninda: number; belirsiz: number; hedefsiz: number; asimOraniPct: number | null;
+}
+export interface AlarmResponseRow extends AlarmResponseCell { anahtar: string | null; etiket: string }
+export interface AlarmResponseReport {
+  ozet: AlarmResponseCell; sebepler: AlarmResponseRow[]; holler: AlarmResponseRow[]; vardiyalar: AlarmResponseRow[]; tezgahlar: AlarmResponseRow[];
+  /** Yalnız `loom:alarm-escalation` sahibine döner (sunucu kararı). */
+  kisiler?: AlarmResponseRow[]; kisiKirilimi: boolean;
+}
+
 export const dokumaReportsApi = {
   efficiency: async (p: RangeParams & PageParams) =>
     (await apiClient.get<ApiResponse<EfficiencyReport> & WithSuzgec>(`/api/reports/dokuma/randiman${qs(p)}`)).data,
+  mudahale: async (p: { from: string; to: string }) =>
+    (await apiClient.get<ApiResponse<AlarmResponseReport>>(`/api/reports/dokuma/mudahale${qs(p)}`)).data,
   pareto: async (p: RangeParams) =>
     (await apiClient.get<ApiResponse<ParetoReport> & WithSuzgec>(`/api/reports/dokuma/durus-pareto${qs(p)}`)).data,
   shiftScorecard: async (p: { factoryDay: string; shiftDefinitionId?: string; warpBeamId?: string; lotNo?: string }) =>

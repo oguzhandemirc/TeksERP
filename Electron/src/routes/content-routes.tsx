@@ -57,6 +57,7 @@ import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHub
 import { DokumaReportsHubPage } from "@/pages/Reports/Dokuma/DokumaReportsHubPage";
 import { RandimanPage } from "@/pages/Reports/Dokuma/RandimanPage";
 import { DurusParetoPage } from "@/pages/Reports/Dokuma/DurusParetoPage";
+import { MudahalePage } from "@/pages/Reports/Dokuma/MudahalePage";
 import { VardiyaKarnesiPage } from "@/pages/Reports/Dokuma/VardiyaKarnesiPage";
 import { KarnePage } from "@/pages/Reports/Dokuma/KarnePage";
 import { ProductionChainPage } from "@/pages/Reports/Dokuma/ProductionChainPage";
@@ -1330,6 +1331,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:production">
         <DurusParetoPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/mudahale",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <MudahalePage />
       </ProtectedRoute>
     ),
   },

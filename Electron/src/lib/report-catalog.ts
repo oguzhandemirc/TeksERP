@@ -131,6 +131,9 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "dokuma/zincir", baslik: "Üretim Zinciri", soru: "Hangi sipariş kalemi zincirin neresinde ve nerede takıldı?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/dokuma/zincir", uc: "/api/reports/dokuma/zincir", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/zincir" }], yuzey: "yaprak" },
+  { key: "dokuma/mudahale", baslik: "Müdahale ve Çözüm Süresi", soru: "Tezgah alarmları ne kadar sürede üstlenildi, ne kadar sürede çözüldü?",
+    sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
+    panelYolu: "reports/dokuma/mudahale", uc: "/api/reports/dokuma/mudahale", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/mudahale" }], yuzey: "yaprak" },
 
   // ── ÖN MUHASEBE ───────────────────────────────────────────────────────────
   { key: "finance/aging", baslik: "Cari Yaşlandırma", soru: "Cari bakiyeler bu tarihte hangi vade kovalarında duruyor?",

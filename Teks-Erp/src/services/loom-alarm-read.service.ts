@@ -124,7 +124,8 @@ export interface LoomAlarmSummaryDto {
   escalated: number;
 }
 
-async function reasonLabels(codes: Array<string | null>): Promise<Map<string, string>> {
+/** Duruş sebebi kodu → katalog etiketi (alarm yüzeyleri + müdahale raporu tek okuma). */
+export async function reasonLabels(codes: Array<string | null>): Promise<Map<string, string>> {
   const uniq = [...new Set(codes.filter((c): c is string => c !== null))];
   if (uniq.length === 0) return new Map();
   const rows = await prisma.reasonPreset.findMany({ where: { kind: "MACHINE_STOP", code: { in: uniq } }, select: { code: true, label: true } });

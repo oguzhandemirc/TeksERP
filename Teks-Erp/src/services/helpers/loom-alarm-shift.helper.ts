@@ -53,3 +53,26 @@ export async function loadClockShiftWindows(db: Db, from: Date | null, now: Date
     orderBy: { startsAt: "asc" },
   });
 }
+
+/** Rapor kırılımının vardiya penceresi — tanımın adıyla. */
+export interface NamedShiftWindow { id: string; shiftDefinitionId: string; name: string; startsAt: Date; endsAt: Date }
+
+/** `[from, to]` ile kesişen canlı vardiyalar, adıyla (B4 müdahale raporu: alarm doğuşunun vardiyası). */
+export async function loadNamedShiftWindows(db: Db, from: Date, to: Date): Promise<NamedShiftWindow[]> {
+  const rows = await db.shiftInstance.findMany({
+    where: { isCancelled: false, startsAt: { lte: to }, endsAt: { gt: from } },
+    select: { id: true, shiftDefinitionId: true, startsAt: true, endsAt: true, shiftDefinition: { select: { name: true } } },
+    orderBy: { startsAt: "asc" },
+  });
+  return rows.map((r) => ({ id: r.id, shiftDefinitionId: r.shiftDefinitionId, name: r.shiftDefinition.name, startsAt: r.startsAt, endsAt: r.endsAt }));
+}
+
+/** Anı kapsayan vardiya — `loadCurrentShift`in bellek ikizi (aynı yüklem: başlangıç ≤ an < bitiş, en geç başlayan kazanır). */
+export function shiftCoveringAt<W extends { startsAt: Date; endsAt: Date }>(windows: ReadonlyArray<W>, at: Date): W | null {
+  const t = at.getTime();
+  let best: W | null = null;
+  for (const w of windows) {
+    if (w.startsAt.getTime() <= t && w.endsAt.getTime() > t && (best === null || w.startsAt.getTime() > best.startsAt.getTime())) best = w;
+  }
+  return best;
+}
