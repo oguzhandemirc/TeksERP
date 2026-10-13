@@ -291,6 +291,14 @@ async function main(): Promise<void> {
     check("özet kalem adedi = 24 (10+10+3+1)", hc.summary.lineCount === 24, `${hc.summary.lineCount}`);
     check("özet kalem/sipariş = 24/15 = 1.6", hc.summary.avgLinesPerOrder === 1.6, `${hc.summary.avgLinesPerOrder}`);
     check("sevk sütunu var ve sayı (fixture'da sevk yok → 0)", M?.shippedQty === 0, `${M?.shippedQty}`);
+
+    // HSINGLE'ın 10 siparişi aynı gün 9 saate yayılı: ritim 0.04 → round1 → 0.
+    // Eskiden risk oranı days/0 = Infinity çıkıyor, bulut tel kodlayıcısı fırlatıyordu.
+    console.log("\n── 7e) Aynı oturumda girilen siparişler ritim sayılmaz ──");
+    check("HSINGLE ritmi ölçülemez (0'a yuvarlanan aralık ritim değil)", S?.avgIntervalDays === null, `${S?.avgIntervalDays}`);
+    check("HSINGLE risk listesinde DEĞİL", !hc.atRisk.some((r) => r.customerName === `${TAG} HSINGLE`));
+    check("risk listesinde sonlu olmayan oran yok", hc.atRisk.every((r) => Number.isFinite(r.overdueRatio) && r.avgIntervalDays > 0),
+      hc.atRisk.filter((r) => !Number.isFinite(r.overdueRatio)).map((r) => r.customerName).join(", "));
   } finally {
     await prisma.order.deleteMany({ where: { orderNumber: { startsWith: TAG } } });
     await prisma.customer.deleteMany({ where: { code: { startsWith: TAG } } });

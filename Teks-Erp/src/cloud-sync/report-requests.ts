@@ -179,7 +179,12 @@ export async function computeReportResult(g: {
     // İş kuralı hatası (ör. aralık > 366 gün) kullanıcı parametresinin sonucudur.
     return fail("PARAMETRE_GECERSIZ");
   }
-  return ReportResultRequestSchema.parse({ ...base, durum: "HAZIR", veri: toWireValue(value), hataKodu: null });
+  // Tel kodlayıcısı sonlu olmayan sayıda fırlatır; burada yakalanmazsa döngüdeki sonraki raporlar da gitmez.
+  try {
+    return ReportResultRequestSchema.parse({ ...base, durum: "HAZIR", veri: toWireValue(value), hataKodu: null });
+  } catch {
+    return fail("PARAMETRE_GECERSIZ");
+  }
 }
 
 export interface ReportRunOutcome {

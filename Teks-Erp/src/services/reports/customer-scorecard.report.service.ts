@@ -384,8 +384,10 @@ export async function getCustomerScorecard(
   const rhythm = (l: LifetimeAgg): number | null => {
     if (l.orderCount < MIN_ORDERS_FOR_RHYTHM) return null;
     const spanDays = (l.lastOrder.getTime() - l.firstOrder.getTime()) / 86_400_000;
-    if (spanDays <= 0) return null;
-    return round1(spanDays / (l.orderCount - 1));
+    // Aynı oturumda girilen siparişlerin "ritmi" 0'a yuvarlanır; o bir ritim
+    // değildir ve risk oranında days/0 = Infinity üretirdi (tel Infinity taşımaz).
+    const interval = round1(spanDays / (l.orderCount - 1));
+    return interval > 0 ? interval : null;
   };
 
   /**
