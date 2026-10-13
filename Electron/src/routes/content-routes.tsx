@@ -71,6 +71,7 @@ import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
 import { ShiftDefinitionsPage } from "@/pages/ShiftDefinitions/ShiftDefinitionsPage";
 import { LoomAlarmDutyPage } from "@/pages/LoomAlarmDuty/LoomAlarmDutyPage";
+import { MachineCollectorsPage } from "@/pages/MachineCollectors/MachineCollectorsPage";
 import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
 import { WeavingFloorPage } from "@/pages/Operations/WeavingFloor/WeavingFloorPage";
 import { LoomAlarmsPage } from "@/pages/Operations/LoomAlarms/LoomAlarmsPage";
@@ -210,6 +211,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="loom:spec-manage">
         <LoomAlarmDutyPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Makine Kartları — karo izniyle BİREBİR; modül kapısı backend (tezgah) + ROUTE_MODULE.
+    path: "definitions/machine-collectors",
+    element: (
+      <ProtectedRoute requirePermission="loom:spec-manage">
+        <MachineCollectorsPage />
       </ProtectedRoute>
     ),
   },

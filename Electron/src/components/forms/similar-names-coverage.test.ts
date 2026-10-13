@@ -24,6 +24,8 @@ const EXEMPT: Record<string, string> = {
     "yetki şablonu — ana veri değil, benzer-ad ucu yok (rol adı serbest metindir)",
   "Customers/BranchFormDialog.tsx":
     "şube adı YALNIZ müşteri içinde tekil; kapsamlı uç henüz yok (bkz. takip)",
+  "MachineCollectors/CollectorFormDialog.tsx":
+    "makine kartı — cihaz kaydı, ana veri değil; benzer-ad ucu yok, ad tekilliği sunucuda (409 COLLECTOR_NAME_TAKEN)",
   "SubcontractorCategories/SubcontractorCategoryFormDialog.tsx":
     "fason kategorisi — similar-names ucu henüz yok (bkz. takip)",
   "Subcontractors/SubcontractorFormDialog.tsx":

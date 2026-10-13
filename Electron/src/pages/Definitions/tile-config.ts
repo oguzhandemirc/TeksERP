@@ -1,29 +1,7 @@
 import {
-  Package,
-  Users2,
-  Factory,
-  Cog,
-  Route as RouteIcon,
-  FlaskConical,
-  AlertTriangle,
-  Award,
-  Palette,
-  Sparkles,
-  Tag,
-  Building2,
-  Settings2,
-  Tags,
-  Bookmark,
-  Undo2,
-  Warehouse,
-  FileText,
-  Printer,
-  Ruler,
-  LayoutTemplate,
-  MessageSquareText,
-  Clock3,
-  BellRing,
-  type LucideIcon,
+  Package, Users2, Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Award, Palette, Sparkles, Tag,
+  Building2, Tags, Bookmark, Undo2, Warehouse, FileText, Printer, Ruler, LayoutTemplate, MessageSquareText, Clock3,
+  BellRing, Cpu, type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
@@ -39,6 +17,7 @@ import {
 } from "./production-regime";
 import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
 import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
+import { isMachineCollectorsVisible } from "@/pages/MachineCollectors/collector-model";
 import { TERIM } from "@/lib/terim";
 
 export interface DefinitionTile {
@@ -215,6 +194,16 @@ export const definitionTiles: DefinitionTile[] = [
     group: "production",
     permission: "loom:spec-manage",
     visibleWhen: isLoomAlarmDutyVisible,
+  },
+  {
+    key: "machine-collectors",
+    title: "Makine Kartları",
+    description: "Tezgaha takılan kartların kaydı — bağlı tezgahlar, kart tipi, sır yenileme, iptal",
+    icon: Cpu,
+    to: "/definitions/machine-collectors",
+    group: "production",
+    permission: "loom:spec-manage",
+    visibleWhen: isMachineCollectorsVisible,
   },
   {
     key: "peripherals",
