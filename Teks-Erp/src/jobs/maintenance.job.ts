@@ -9,7 +9,7 @@
 import prisma from "../lib/prisma";
 import { rotateRollbackBackups } from "../services/backup.service";
 import { AuditService } from "../services/audit.service";
-import { verifyAndRecordAuditChain } from "../services/audit-chain.service";
+import { readLastAuditChainReport, verifyAndRecordAuditChain } from "../services/audit-chain.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import { readAuditArchiveRetentionYears } from "../services/system-setting.service";
@@ -24,6 +24,8 @@ const SETTING_KEY = "maintenance.lastRunDay";
 const PURGE_WATERMARK_KEY = "audit.archivePurgedThrough";
 const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const STARTUP_DELAY_MS = 60 * 1000;
+/** Hiç doğrulanmamış zincirin açılıştaki tek seferlik doğrulamasının süre bütçesi. */
+const FIRST_CHAIN_VERIFY_BUDGET_MS = 2 * 60 * 1000;
 const WATCHDOG_MS = 3 * 60 * 60 * 1000;
 /** Ölü oturum satırı bu yaştan sonra silinir (POST /admin/sessions/purge varsayılanıyla aynı). */
 export const SESSION_PURGE_OLDER_THAN_DAYS = 90;
@@ -159,11 +161,27 @@ export async function runMaintenanceIfDue(now: Date = new Date()): Promise<boole
   }
 }
 
+/**
+ * G4: zincir hiç doğrulanmamışsa (yeni kurulum, yeni göç) /health "kismi" kalmasın diye gece beklenmez —
+ * açılışta bir kez, süre bütçeli; bütçe biterse yarım sonuç yazılmaz, gece görevi tamamlar.
+ */
+async function firstChainVerifyIfMissing(): Promise<void> {
+  try {
+    if (await readLastAuditChainReport()) return;
+    const bitis = Date.now() + FIRST_CHAIN_VERIFY_BUDGET_MS;
+    const r = await verifyAndRecordAuditChain({ devamEt: () => Date.now() < bitis });
+    if (r.durum === "kurcalanmis") hata("maintenance", `audit zinciri KURCALANMIŞ: ${r.bulgular.length} bulgu`);
+  } catch (err) {
+    hata("maintenance", "ilk audit zinciri doğrulaması başarısız", err);
+  }
+}
+
 /** Gece bakımının iki zamanlayıcısı: audit arşivleyicisi (30 günde bir) + günlük görevler. */
 export function startMaintenanceScheduler(): void {
   startArchiveScheduler();
   if (timer) return;
   setTimeout(() => {
+    void firstChainVerifyIfMissing();
     void runMaintenanceIfDue();
     timer = setInterval(() => void runMaintenanceIfDue(), CHECK_INTERVAL_MS);
   }, STARTUP_DELAY_MS);

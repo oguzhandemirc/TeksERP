@@ -32,6 +32,10 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - **Etkinlik kaydı hiçbir sırrı yazmaz.** İç içe kayıtlardaki parola/PIN/kart özetleri de gizlenir.
 - **Etkinlik kaydı kurcalamaya karşı zincirlenir (güvenlik).** Her yeni kayıt bir öncekinin özetini taşır; araya
   kayıt silinir ya da değiştirilirse gece doğrulaması bunu yakalar ve sağlık bilgisinde "audit koruması: kısmi" görünür.
+- **Linux (Docker) kurulumunda sunucu artık veritabanının sahibi olarak çalışmaz (güvenlik).** Açılışta ayrı bir
+  uygulama rolü kendiliğinden kurulur; sunucu bu rolle bağlanır ve etkinlik kaydını yalnız ekleyebilir, silemez ya da
+  değiştiremez. Ek ayar ya da parola gerekmez. Rol kurulamazsa sunucu bugünkü gibi açılır, sağlık bilgisinde
+  "audit koruması: kısmi" görünür. Windows kurulumunda değişen yok (sonraki sürüm).
 - **Şifresiz yedek indirilirken uyarı.** Yedek anahtarı kurulu değilse panel indirme sırasında uyarır (yeni panel).
 - **Sevk karneleri uzun aralıkta daha hızlı açılır.** Sevk & Termin, Müşteri ve İade karneleri ile yön dağılımı
   aynı rakamı daha az okumayla hesaplar (yerel ölçüm, 1 M sevk edilmiş top: 90 gün 263 → 47 ms, 1 yıl 418 → 171 ms).
@@ -104,6 +108,19 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - `reports/_shared.capReportLists` + `REPORT_MAX_ROWS = 5000`: kalite · fire · stok karnesi kırılım listeleri;
   kesilirse yanıtta `warnings` (ApiResponse sözleşmesi), yoksa anahtar yok.
 
+**Docker DB rol ayrımı (G4-A)** (commit `feat(docker): G4-A …`; kısa kimliği paketlemede yazılır)
+
+- Açılış (`entrypoint.sh` §2b): göç + seed sahip rolüyle (compose `DATABASE_URL` = `POSTGRES_USER`, değişmedi), sonra
+  `dist/tools/db-rol-gocu.cjs --uygula` `<POSTGRES_USER>_uygulama` rolünü idempotent kurar/onarır (LOGIN; süper/CREATEDB/
+  CREATEROLE değil; tablolarda DML, `system_logs` yalnız SELECT+INSERT, arşiv yalnız SELECT; sonraki göçler için
+  varsayılan yetkiler) ve uygulama rolüyle bağlanıp doğrular; sunucu o URL'le açılır. Parola sahip parolasından
+  türetilir (yeni sır yok), PG'ye SCRAM doğrulayıcısı gider.
+- Zincir hiç doğrulanmamışsa açılıştan ~1 dk sonra bir kez doğrulanır (2 dk bütçe) — yeni kurulumda `auditProtection`
+  gece beklemeden "tam" olur.
+- Etki: Docker'da panelin "kopyaya geri yükleme" yeteneği artık süper kullanıcı bulamaz ve bakım rolü ister (yetenek
+  yoklaması bunu söyler); Docker geri yüklemesinin belgeli yolu runbook §6 (`yedek` servisi) değişmez. Gece yedeği
+  (`yedek` servisi) sahip rolüyle sürer.
+
 ## 3. Sözleşme
 
 - **Kırıldı mı:** HAYIR (Perf-2 B5/B6) — rapor zarfına isteğe bağlı `warnings` (yalnız tavan aşılınca); eski panel
@@ -129,6 +146,10 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   `POST /api/admin/system-logs/chain/verify`; mevcut izinler `admin:settings` / `system:activity`). Eski panel
   yeni alanları okumaz; arşiv ucu (`POST /system-logs/archive`) aynı gövde/cevapla çalışır, kesim artık DB'de en az
   1 ay zorlanır (panel zaten ≥ 1 ay gönderir).
+- **Kırıldı mı:** HAYIR (Docker rol ayrımı) — HTTP sözleşmesi aynı. **Eski kurulum ne yapar:** Windows ve göçü yapılamayan
+  Docker kurulumu bugünkü gibi sahip rolüyle çalışır (`auditProtection` "kismi"); eski compose dosyası + yeni imaj da
+  göçer (compose değişmedi). Eski imaja geri dönüşte backend yine sahip rolüyle açılır; kalan `<sahip>_uygulama` rolü
+  zararsızdır.
 - **Kırıldı mı:** HAYIR (doff kodu) — uç, gövde ve cevap aynı; aynı `clientToken` tekrarı yine aynı kaydı döner.
 - **Eski istemci ne yapar:** eski panel ve tablet yeni alanları okumaz; davranışları değişmez. Kartın kendisi
   nabız ucunu bilmiyorsa duruş yokken sessiz görünür (yalnız uyarı; duruş açılmaz).
@@ -171,8 +192,10 @@ otomatik yedekten geri yüklenir.
 - Veritabanı: 390 migration bitmiş, sorunlu migration yok.
 - `/api/admin/health` `machineWatchdog`: `{ silentCollectors: 0, lateStopEnds: 0 }` (kart yokken); `null` ise
   sayaç okunamadı — günlüğe bak, insana rapor et.
-- `/api/admin/health` `auditProtection`: `level` "kismi" beklenir (rol göçü bu sürümde yok, `writeOnly: false`);
-  ilk gece bakımından sonra `chain.durum` "saglam" olmalı — "kurcalanmis" ise insana rapor et.
+- `/api/admin/health` `auditProtection`: Docker'da `writeOnly: true` ve açılıştan birkaç dakika sonra `level` "tam"
+  beklenir (açılış günlüğünde "Backend uygulama rolüyle açılıyor"); "DB rol ayrımı YAPILAMADI" satırı varsa
+  `level` "kismi" kalır — günlükteki nedeni insana rapor et. Windows'ta "kismi" beklenir (rol göçü bu sürümde yok).
+  `chain.durum` "kurcalanmis" ise insana rapor et.
 - Sunucu hata günlüğünün son 30 satırı — `machine-watchdog` kaynaklı yeni hata var mı.
 - Destek hesabı tablette PIN ile: kod istendi mi (2FA kurulu) ya da 403 (kurulu değil); normal kullanıcının
   PIN/kart girişi kodsuz çalışıyor mu (bayrak kapalı).

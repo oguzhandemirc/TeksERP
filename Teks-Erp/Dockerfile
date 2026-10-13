@@ -18,7 +18,9 @@ COPY . .
 # runtime'da src yoktur; tek dosyaya derlenir, paketler node_modules'ten çözülür.
 # tsc ~3 GB bellek ister; varsayılan yığın sınırında "heap out of memory" ile düşer.
 RUN NODE_OPTIONS=--max-old-space-size=4096 npx tsc && npx esbuild prisma/seed.ts --bundle --platform=node --target=node22 \
-      --format=cjs --packages=external --outfile=dist/tools/seed.cjs
+      --format=cjs --packages=external --outfile=dist/tools/seed.cjs \
+ && npx esbuild src/lib/db-rol-gocu.ts --bundle --platform=node --target=node22 \
+      --format=cjs --packages=external --outfile=dist/tools/db-rol-gocu.cjs
 
 # ----- 3) runtime: çalışan image -----
 # Süreç KÖK DEĞİL (G22): uygulama ağacı root'a ait ve `node`a salt okunur; yazılabilir yalnız veri, lisans deposu

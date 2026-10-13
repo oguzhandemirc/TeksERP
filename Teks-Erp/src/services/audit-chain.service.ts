@@ -9,6 +9,7 @@
 
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { AUDIT_TAMPER_SQL } from "../lib/audit-koruma-sql";
 import { AuditService } from "./audit.service";
 
 /** Zincir trigger'ının advisory kilit uzayı. Kilidi DB trigger'ı alır (migration
@@ -171,7 +172,7 @@ export async function verifyAuditChain(
   };
 }
 
-/** Tam doğrulama + sonucu kaydet (gece bakımı ve elle uç). Sağlamsa kuyruk çapası ilerler;
+/** Tam doğrulama + resultu kaydet (gece bakımı ve elle uç). Sağlamsa kuyruk çapası ilerler;
  *  kurcalanmışsa `AUDIT_CHAIN_BROKEN` olayı (tek boğaz: iki çağıran da buradan geçer). */
 export async function verifyAndRecordAuditChain(
   opts: { devamEt?: () => boolean; userId?: string | null } = {},
@@ -189,7 +190,7 @@ export async function verifyAndRecordAuditChain(
   const value = JSON.parse(JSON.stringify(r)) as Prisma.InputJsonValue;
   await prisma.systemSetting.upsert({
     where: { key: AUDIT_CHAIN_CHECK_KEY },
-    create: { key: AUDIT_CHAIN_CHECK_KEY, value, description: "Audit hash zincirinin son doğrulama sonucu" },
+    create: { key: AUDIT_CHAIN_CHECK_KEY, value, description: "Audit hash zincirinin son doğrulama resultu" },
     update: { value },
   });
   if (r.durum === "saglam" && r.sonSira !== null) {
@@ -217,15 +218,9 @@ export interface AuditProtection {
   chain: { durum: AuditChainReport["durum"]; kontrolAni: string } | null;
 }
 
-/** Sağlık ekranı için: DB rolünün audit üzerindeki fiili yetkisi + son zincir sonucu. */
+/** Sağlık ekranı için: DB rolünün audit üzerindeki fiili yetkisi + son zincir resultu. */
 export async function readAuditProtection(): Promise<AuditProtection> {
-  const rows = await prisma.$queryRaw<Array<{ tamper: boolean }>>`
-    SELECT (r.rolsuper
-      OR pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE oid = 'public.system_logs'::regclass), 'MEMBER')
-      OR pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE oid = 'public.system_log_archives'::regclass), 'MEMBER')
-      OR has_table_privilege('public.system_logs', 'UPDATE, DELETE, TRUNCATE')
-      OR has_table_privilege('public.system_log_archives', 'UPDATE, DELETE, TRUNCATE')) AS tamper
-    FROM pg_roles r WHERE r.rolname = current_user`;
+  const rows = await prisma.$queryRawUnsafe<Array<{ tamper: boolean }>>(AUDIT_TAMPER_SQL);
   const writeOnly = rows[0] ? !rows[0].tamper : false;
   const last = await readLastAuditChainReport();
   const chain = last ? { durum: last.durum, kontrolAni: last.kontrolAni } : null;

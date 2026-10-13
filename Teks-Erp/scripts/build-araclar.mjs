@@ -51,6 +51,8 @@ const ARACLAR = [
   { giris: "scripts/yedek-sifrele.ts", cikti: "dist/tools/yedek-sifrele.cjs" },
   // JWT sırrı denetimi + rotasyonu (docs/ops/JWT-SIR-ROTASYONU.md) — backend açılışıyla aynı yüklem.
   { giris: "scripts/jwt-sir.ts", cikti: "dist/tools/jwt-sir.cjs" },
+  // G4 DB rol ayrımı: Docker açılışı (entrypoint §2b) uygulama rolünü kurar/onarır; KURU varsayılan.
+  { giris: "src/lib/db-rol-gocu.ts", cikti: "dist/tools/db-rol-gocu.cjs" },
 ];
 
 // Calisma aninda node_modules'ten cozulecekler. Hepsi URETIM bagimliligidir

@@ -208,6 +208,24 @@ else
 fi
 
 # =============================================================================
+# 2b) DB rol ayrımı (G4) — backend tablo SAHİBİ rolle değil, ayrı uygulama rolüyle koşar
+# =============================================================================
+# Compose'daki DATABASE_URL SAHİP rolüdür (POSTGRES_USER): göç ve seed onunla koştu. Araç
+# idempotent olarak `<sahip>_uygulama` rolünü kurar/onarır (audit'te yalnız SELECT+INSERT) ve
+# doğrulanmış URL'ini yalnız stdout'a verir; sunucu o URL'le açılır, sahip parolası sürece geçmez.
+# Yapılamazsa fabrika DURMAZ: uyarı + bugünkü davranış (sahip rolüyle açılış, /health auditProtection "kismi").
+echo ""
+echo "      DB rol ayrımı (uygulama rolü) denetleniyor..."
+if UYG_URL=$(node dist/tools/db-rol-gocu.cjs --uygula --url-yaz) && [ -n "$UYG_URL" ]; then
+  DATABASE_URL="$UYG_URL"
+  export DATABASE_URL
+  echo "      ✓ Backend uygulama rolüyle açılıyor (tablo sahibi değil)."
+else
+  echo "      ! DB rol ayrımı YAPILAMADI — backend sahip rolüyle açılıyor (auditProtection: kismi)."
+fi
+unset UYG_URL PSQL_URL
+
+# =============================================================================
 # 3) Express sunucusunu başlat
 # =============================================================================
 echo ""
