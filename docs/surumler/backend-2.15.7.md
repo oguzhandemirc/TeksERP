@@ -15,6 +15,9 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   Tezgah Salonu ile sağlık ekranına taşır; kartın açtığı duruş çok uzun süre kapanmazsa sunucu onu geçici olarak
   kapatır, kartın sonradan gelen "bitti"si bunu bir kez düzeltir. Kart bugün sahada olmadığından kurulumda görünen
   değişiklik yok.
+- **Top indirme kodu artık bekletmiyor.** Vardiya sonunda çok tablet aynı anda indirme kaydettiğinde kod sırası
+  artık tek bir kilitte sıraya girmiyor (yerel ölçüm, 50 tablet: en yavaş %5 ~170 ms → ~70 ms). Kod biçimi aynı;
+  başarısız bir kayıt sırada boşluk bırakabilir (bilinçli).
 
 - **Destek hesabı tablette PIN ya da kartla girerken doğrulama kodu da ister (güvenlik).** PIN tek başına
   kimlik olduğu için destek (sistem) hesabı artık PIN/kartla yalnız telefondaki doğrulama koduyla girer. Hesapta iki
@@ -43,6 +46,14 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   tezgahların AÇIK ve sebepsiz duruşuna sebep bir kez yazılır; satır başına mevcut ilk sınıflandırma yolu, sonuç
   parçalı. Girilmiş sebebi değiştirmek salondan yapılmaz. Salon cevabında `bulkClassifyAction: true`.
 - `dist-web`: panel 1.6.5 kaynağı değişir (Tezgah Salonu eylemi).
+
+**Top indirme kodu: sayaç satırı (Perf-4 B-03)** (commit `perf(dokuma): doff kodu sayaç satırından …`; kısa kimliği paketlemede yazılır)
+
+- İndirme kodunun günlük sırası yeni `number_series_counters` tablosundaki satırdan, kayıttan ÖNCE tek ifadeyle
+  alınır; eski yol günün bütün kodlarını bir kilit altında tarıyordu. Biçim (`DF`+GGAAYY+NNNN, panel ayarları) aynı.
+- Satır günün ilk indirmesinde mevcut en büyük koddan doğar: güncelleme günü sıra kaldığı yerden sürer, mevcut
+  kodlar değişmez. Kayıt başarısız olursa o numara kullanılmaz (boşluk) — kod kimliktir, sayım değil.
+- Panelde Numara serileri › Doff kodu "sıradaki numara" sayaç satırından okunur.
 
 **Makine kartı: watchdog (D4)** (commit `feat(tezgah): makine kartı watchdog'u …`; kısa kimliği paketlemede yazılır)
 
@@ -87,15 +98,17 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   `TOTP_ENROLLMENT_REQUIRED`. Kod adımı olmayan eski tablet 409'u "tableti güncelleyin ya da yönetim panelinden
   giriş yapın" iletisiyle gösterir; destek hesabı panelden ya da tablet 1.4.0'dan girer. Fabrika kullanıcıları için
   bayrak kapalıyken değişen yok.
+- **Kırıldı mı:** HAYIR (doff kodu) — uç, gövde ve cevap aynı; aynı `clientToken` tekrarı yine aynı kaydı döner.
 - **Eski istemci ne yapar:** eski panel ve tablet yeni alanları okumaz; davranışları değişmez. Kartın kendisi
   nabız ucunu bilmiyorsa duruş yokken sessiz görünür (yalnız uyarı; duruş açılmaz).
 - **`minVersion` dokunuldu mu:** hayır.
 
 ## 4. Migration
 
-- **Var mı:** EVET — 1 adet: `20261013010000_makine_watchdog` (yalnız EKLEME: toplayıcıya iki, duruşa bir boş
-  geçilebilir alan; veri dönüşümü yok).
-- **Toplam migration:** 388 (2.15.6'da 387). 2.15.6'dan gelen kurulum tam 1 migration uygulamalıdır. Farklı sayı =
+- **Var mı:** EVET — 2 adet: `20261013010000_makine_watchdog` (yalnız EKLEME: toplayıcıya iki, duruşa bir boş
+  geçilebilir alan; veri dönüşümü yok) · `20261013030000_doff_sayac_satiri` (yalnız EKLEME: boş
+  `number_series_counters` tablosu; veri dönüşümü yok, satırlar ilk kullanımda doğar).
+- **Toplam migration:** 389 (2.15.6'da 387). 2.15.6'dan gelen kurulum tam 2 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -103,7 +116,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 1 migration); süre kurulumda ölçülür.
+- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 2 migration); süre kurulumda ölçülür.
 - **Sıra:** sunucu önce; panel sonra (kırılma yok, sıra serbest).
 - **Bu sürüme özel:** yok (watchdog'un dokunabileceği onaylı kart ve kart duruşu sahada yok).
 - **Bu sürüme özel (kimlik dilim 3):** destek hesabıyla tablette PIN/kart kullanılıyorsa güncellemeden ÖNCE hesapta
@@ -121,7 +134,7 @@ otomatik yedekten geri yüklenir.
 ## 7. Doğrulama — kurulumdan sonra rapor edilecekler
 
 - Sağlık bilgisi: sürüm 2.15.7, sunucu ve veritabanı ayakta.
-- Veritabanı: 388 migration bitmiş, sorunlu migration yok.
+- Veritabanı: 389 migration bitmiş, sorunlu migration yok.
 - `/api/admin/health` `machineWatchdog`: `{ silentCollectors: 0, lateStopEnds: 0 }` (kart yokken); `null` ise
   sayaç okunamadı — günlüğe bak, insana rapor et.
 - Sunucu hata günlüğünün son 30 satırı — `machine-watchdog` kaynaklı yeni hata var mı.

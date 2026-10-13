@@ -7,7 +7,7 @@
 //   · sıralı tekrar, arada master veri değişti: cevap TOKEN'DAN gelir, iş kuralından değil;
 //   · 4. durum (iptal edilmiş kayıt) → yolun kodu · başka gövde → CLIENT_TOKEN_COLLISION · sahte 409 düzeltmeleri.
 //   §1 tahsilat/ödeme · §2 çek/senet · §3 alış siparişi · §4 mal kabul fişi (D5a)
-//   §5 levent planı · §6 dokuma işi (K′ 8032) · §7 fason dokuma kabulü (K′ iş emri claim'i) · §8 top indirme (K′ 8029) (D5b)
+//   §5 levent planı · §6 dokuma işi (K′ 8032) · §7 fason dokuma kabulü (K′ iş emri claim'i) · §8 top indirme (R; B-03'ten beri tx'siz tek INSERT) (D5b)
 //   §9 top doğumu · §10 açık kumaş (K′) · §11 Tambur elle top (a′: bağlı topta erken yol + kendini onarma) ·
 //   §12 kartsız bitmiş top · §13 çeki listesi · §14 iş emri arşivi · §15 birleştirilmiş parti (D5c)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Dokunulan ayarlar FOTOĞRAFINA döndürülür.
@@ -262,8 +262,9 @@ async function indirme(): Promise<void> {
   o.machineIds.push(mk.id);
   const t = randomUUID();
   const indir = (adet: number) => () => openDoff({ machineId: mk.id, productionLineNo: 1, pieceCount: adet, counterSource: MachineDataSource.OPERATOR, clientToken: t });
-  // B 8029'u tutarken INSERT'ten önce bekler; A kilitte bekler, sonra token'ı kilidin arkasında okur (K′).
-  await ikisiBasarili("⑧a top indirme", { model: "doffEvent", metod: "create" }, indir(2), async () => (await prisma.doffEvent.count({ where: { clientToken: t } })) === 1);
+  // B INSERT'ten önce bekler (tx yok — kod sayaç satırından, B-03); A'nın INSERT'i token unique'inde B'yi bekler,
+  // P2002 → `run` yeniden okur → replay (R).
+  await ikisiBasarili("⑧a top indirme", { model: "doffEvent", metod: "create", kapsam: "dis" }, indir(2), async () => (await prisma.doffEvent.count({ where: { clientToken: t } })) === 1);
   const d = await prisma.doffEvent.findUnique({ where: { clientToken: t }, select: { id: true } });
   if (d) o.doffIds.push(d.id);
   await prisma.machine.update({ where: { id: mk.id }, data: { isActive: false } });

@@ -5881,6 +5881,27 @@ model NumberSeries {
   @@map("number_series")
 }
 
+/// Kendi sayaç satırı olan serinin sırası (Perf-4 B-03; bugün tek üye `doffEvent`).
+/// Numara yazma tx'inden ÖNCE tek `UPDATE … n = n + adım RETURNING` ile alınır —
+/// kilit yalnız o ifade kadar sürer; tx geri dönerse boşluk serbesttir (tekillik
+/// hedef kolonun `@unique`inde). Satır yoksa mevcut kodların max'ından tohumlanır.
+/// `scopeKey` = tam ön ek + biçim/sayaç parmak izi: biçim ya da sayaç ayarı değişince
+/// yeni satır doğar, eskisi dokunulmadan kalır (sayaç DURUMDUR, defter değil).
+/// `seriesKey` bilerek FK DEĞİL: biçim çözümü seri satırı yokken tohuma düşer
+/// (fail-safe); FK o yolu üretimi durduran bir 500'e çevirirdi.
+model NumberSeriesCounter {
+  id        String   @id @default(uuid()) @db.Uuid
+  seriesKey String   @db.VarChar(64)
+  scopeKey  String   @db.VarChar(200)
+  /// Son VERİLEN sıra (adım hizalı); sıradaki = n + adım.
+  n         Int
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([seriesKey, scopeKey])
+  @@map("number_series_counters")
+}
+
 // =============================================================================
 // 8. REFAKAT KARTI (Traveler Card) — Adım 5
 // =============================================================================

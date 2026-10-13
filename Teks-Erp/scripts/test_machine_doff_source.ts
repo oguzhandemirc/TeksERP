@@ -23,9 +23,8 @@
 //      (2) tx-B claim'i almış, topu HENÜZ yazmamış — iptal yine bloklanır (asıl açık buradadır:
 //      FK'nın KEY SHARE kilidi iptalin NO KEY UPDATE'iyle çatışmaz, yalnız FOR UPDATE tutar)
 //      Bloklanmayan iptalin taban süresi 3 ms (1c W8, 2026-09-13); 400 ms eşiği ×130 pay.
-//   §6 kod biçimi DF+GGAAYY+NNNN ve günlük sıra artar; ⭐ 8029 kilidi: elle tutulan kilit
-//      kaydı BLOKLAR (sıra kanıtı) ve 25 paralel kayıt 25 tekil kod / 0 hata verir
-//      (kilitsiz sürüm 1c W9'da 23/2 vermişti)
+//   §6 kod biçimi DF+GGAAYY+NNNN ve günlük sıra artar; 25 paralel kayıt 25 tekil kod / 0 hata
+//      verir (kilitsiz tarama sürümü 1c W9'da 23/2 vermişti; bugün sayaç satırı — B-03)
 //
 // Negatif sondalar (2026-09-13, cp+sha256 ile geri; her kalem için kırmızı verdiği bölüm):
 //   · `claimDoffForRollTx` FOR UPDATE → düz SELECT: §5b-4/5 kırmızı (iptal beklemeden
@@ -36,7 +35,7 @@
 //     yalnız hedef satırı tazeler), damgaladı. İlk sürüm tam bu kusuru taşıyordu.
 //   · `rolls: { none: {} }` düşürülünce: §5b/§5d/§5b-2/3 kırmızı.
 //   · replay'den `deriveRunWarnings` düşürülünce: §1d/§1e kırmızı.
-//   · `nextDoffCodeTx`ten `lockCodeScopeTx` düşürülünce: §6b kırmızı (kilit beklemedi).
+//   · (2026-10-13) 8029 kod kilidi kalktı — sayaç satırı sondaları `test_perf_doff_sayac`ta.
 //   · `claimDoffForRollTx`e "damga yoksa 400" konunca: §4e kırmızı (ölü kapı, 1e hükmü).
 //   · "tezgah mı" koşulu (`station.kind !== WEAVING → return`) kaldırılınca: §4c2 kırmızı — masa KK1 hep 409 (47'nin bulgusu).
 //   · şemadan `doffEventId` düşürülünce: §4f kırmızı (alan sessizce düşer).
@@ -48,9 +47,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { openDoff, revokeDoff, mapRevokeTimeout, DOFF_CODE_PREFIX } from "../src/services/machine-doff.service";
 import { claimDoffForRollTx } from "../src/services/helpers/machine-doff-link.helper";
-import { lockCodeScopeTx } from "../src/services/helpers/code-unique.helper";
 import { initialEntrySchema } from "../src/controllers/inventory.controller";
-import { dailyCodePrefix } from "../src/utils/code-format";
 import { InventoryService } from "../src/services/inventory.service";
 import { AppError } from "../src/utils/app-error";
 
@@ -281,32 +278,13 @@ async function main(): Promise<void> {
     const seqs = kodlar.map((c) => Number(c.slice(-4)));
     check("§6 kod DF+GGAAYY+NNNN ve günlük sıra artıyor", kodlar.every((c) => desen.test(c)) && seqs.every((s, i) => i === 0 || s > seqs[i - 1]!), kodlar.join(","));
 
-    // ── §6b ⭐ 8029 KİLİDİ — sıra kanıtı + 25 paralel ────────────────────────
-    // Kilit elle tutulurken kayıt BLOKLANMALI (kanıt: 400 ms içinde dönmez, kilit
-    // bırakılınca döner). `p2002 === 0` pencereyi kanıtlamaz; ayırt edici SIRADIR.
-    let birakKilit!: () => void;
-    const kilitKapi = new Promise<void>((res) => { birakKilit = res; });
-    const kilitTx = prisma.$transaction(async (tx) => {
-      await lockCodeScopeTx(tx, "doffEvent", dailyCodePrefix(DOFF_CODE_PREFIX, new Date()));
-      await kilitKapi;
-    }, { timeout: 15_000 });
-    kilitTx.catch(() => undefined);
-    await new Promise((r) => setTimeout(r, 150));
-    let kayitBitti = false;
-    const kayit = openDoff({ ...taban }).then((r) => { kayitBitti = true; return r; });
-    kayit.catch(() => undefined);
-    await new Promise((r) => setTimeout(r, 400));
-    check("§6b-1 8029 kilidi tutulurken kayıt BLOKLANDI (400 ms içinde dönmedi)", !kayitBitti, `bitti=${kayitBitti}`);
-    birakKilit();
-    await kilitTx;
-    const kayitSonuc = await kayit;
-    doffIds.push(kayitSonuc.data!.id);
-    check("§6b-2 kilit bırakılınca kayıt tamamlandı", kayitBitti && desen.test(kayitSonuc.data!.code), kayitSonuc.data!.code);
+    // ── §6b 25 paralel kayıt — kod sırası sayaç satırından (Perf-4 B-03; 8029 kalktı,
+    // "kilit tutulurken bloklanmaz" kanıtı `test_perf_doff_sayac §1`de).
     const paralel = await Promise.all(Array.from({ length: 25 }, () => bekle(openDoff({ ...taban }))));
     const basarili = paralel.filter((p): p is { ok: true; v: Awaited<ReturnType<typeof openDoff>> } => p.ok);
     for (const p of basarili) doffIds.push(p.v.data!.id);
     const tekil = new Set(basarili.map((p) => p.v.data!.code)).size;
-    check("§6b-3 25 paralel kayıt: 25 başarılı, 25 tekil kod, 0 hata (kilitsiz 23/2 idi)", basarili.length === 25 && tekil === 25, `başarılı=${basarili.length} tekil=${tekil} hata=${paralel.filter((p) => !p.ok).map((p) => kod(p.e)).join(",")}`);
+    check("§6b 25 paralel kayıt: 25 başarılı, 25 tekil kod, 0 hata (kilitsiz tarama 23/2 idi)", basarili.length === 25 && tekil === 25, `başarılı=${basarili.length} tekil=${tekil} hata=${paralel.filter((p) => !p.ok).map((p) => kod(p.e)).join(",")}`);
   } finally {
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });

@@ -100,7 +100,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warp-beam.service.ts::createWarpBeamFresh`]: { giris: { [`${S}warp-beam.service.ts::createWarpBeam`]: "R" } },
   [`${S}weaving-order.service.ts::createWeavingOrderFresh`]: { giris: { [`${S}weaving-order.service.ts::createWeavingOrder`]: "R", [`${S}weaving-order.service.ts::createWeavingOrderFresh`]: "K′" } },
   [`${S}subcontractor-weaving.service.ts::receiveForWeavingFresh`]: { giris: { [`${S}subcontractor-weaving.service.ts::receiveForWeaving`]: "R", [`${S}subcontractor-weaving.service.ts::receiveForWeavingFresh`]: "K′" } },
-  [`${S}machine-doff.service.ts::openDoffFresh`]: { giris: { [`${S}machine-doff.service.ts::openDoff`]: "R", [`${S}machine-doff.service.ts::openDoffFresh`]: "K′" } },
+  // Top indirme yalnız R: kod sayaç satırından tx'ten ÖNCE (Perf-4 B-03), 8029 kalktı → K′'nin bekleyeceği kilit yok.
+  [`${S}machine-doff.service.ts::openDoffFresh`]: { giris: { [`${S}machine-doff.service.ts::openDoff`]: "R" } },
 
   // ── Boğazda: D5c (top doğumu · çeki) ────────────────────────────────────────────────────────────────────
   // Top doğumunun 8021'i koşullu (yalnız mükerrer kapısı açıkken) → yalnız R. Tambur'un iki yolu token'ı faz 1'e iletir

@@ -966,7 +966,8 @@ async function main(): Promise<void> {
       return yollar.some((yol) => {
         const tam = join(__dirname, "..", "src", yol);
         if (!existsSync(tam)) return true;
-        return !/next(SeriesNo|SeriesSeq)\s*\(/.test(readFileSync(tam, "utf-8"));
+        // `reserveSeriesNo` da C0 yoludur: sayaç satırı yoksa tohumu `scopedNextSeq` çekirdeğinden alır (B-03).
+        return !/(next(SeriesNo|SeriesSeq)|reserveSeriesNo)\s*\(/.test(readFileSync(tam, "utf-8"));
       });
     }
     return !new RegExp(`nextSeriesNo\\(\\s*"${e.key}"`).test(kaynakMetni);

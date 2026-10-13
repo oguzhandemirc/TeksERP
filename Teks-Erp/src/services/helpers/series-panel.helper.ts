@@ -29,6 +29,7 @@ import {
   type NumberSeriesPanelGroup,
 } from "../../constants/number-series-catalog";
 import prisma from "../../lib/prisma";
+import { peekSeriesCounter } from "./series-counter-store.helper";
 import { rollBarcodePrefix } from "./roll-barcode.helper";
 import {
   nextSeriesNo,
@@ -379,6 +380,10 @@ export async function previewNextNumber(key: string, draft?: SeriesDraftAxes): P
   const alan = e.countTable.field;
   const now = new Date();
   try {
+    // Sayaç satırlı seride (Perf-4 B-03) sıradakini satır söyler: boşluk sonrası tarama geride kalır.
+    // Taslak biçimi değiştiriyorsa kapsam anahtarı da değişir, satır bulunmaz → tarama.
+    const sayac = await peekSeriesCounter(key, candidateSeriesFormat(key, draft, now), now);
+    if (sayac !== null) return sayac;
     return await nextSeriesNo(
       key,
       async (fullPrefix, fmt) => {

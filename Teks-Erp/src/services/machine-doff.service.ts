@@ -9,11 +9,10 @@
 //   • KAYDET — tek INSERT; stok defterine DOKUNMAZ, koşum bağı OPSİYONEL
 //             (koşum yoksa 400 değil `warnings`: "iş emri metresine GİRMİYOR";
 //             uyarı REPLAY'de de döner — çevrimdışı yeniden gönderimde tek cevap odur).
-//             Advisory kilit yalnız KOD SIRASI için (8029, tx'in ilk ifadesi —
-//             `nextDoffCodeTx`): günlük sıra oku-sonra-yaz'dır ve 25 paralelde
-//             retry tükeniyordu. Başka kilit yok: partial unique yok ("tek açık
-//             doff" seddi yok), satır tek yazarlı. Tek unique `clientToken`
-//             idempotency içindir.
+//             Kod sırası sayaç satırından, INSERT'ten ÖNCE tek ifadeyle
+//             (`reserveDoffCode`, Perf-4 B-03): advisory kilit YOK, tx yok.
+//             Partial unique yok ("tek açık doff" seddi yok), satır tek yazarlı.
+//             `clientToken` idempotency, `code` kod tekilliği içindir.
 //   • GERİ AL — `revokedAt` damgası; yalnız hiç top doğurmamış indirmede açık
 //             (`NOT EXISTS rolls.doffEventId`, statüye BAKILMAZ — iptal edilmiş
 //             top da doff'u tarihsel olgu yapar). Top varsa 409 topu ADIYLA söyler
@@ -32,7 +31,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertDoffReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { resolveDoffStamp } from "./helpers/machine-run-open.helper";
 import { assertProductionLineValid } from "./helpers/production-line.helper";
-import { deriveRunWarnings, nextDoffCodeTx, WARN_RUN_WITHOUT_ORDER } from "./helpers/machine-doff-open.helper";
+import { deriveRunWarnings, reserveDoffCode, WARN_RUN_WITHOUT_ORDER } from "./helpers/machine-doff-open.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export { DOFF_CODE_PREFIX } from "./helpers/machine-doff-open.helper";
@@ -147,41 +146,34 @@ async function openDoffFresh(input: OpenDoffInput, userId?: string): Promise<Ope
   const stamp = await resolveDoffStamp(input.doffedAt);
   const warnings = [...ctx.warnings, ...(stamp.warning ? [stamp.warning] : [])];
 
-  // ④ Kod sunucuda, günlük sıra, 8029 kilidi tx'in İLK ifadesi (`nextDoffCodeTx`); ⑤ tek INSERT. Retry yalnız
-  // `code_key` P2002 kemeri — token P2002'si boğaza (`run` yeniden okur).
-  const outcome = await withBarcodeRetry(
-    () =>
-      prisma.$transaction(async (tx) => {
-        const code = await nextDoffCodeTx(tx, stamp.value);
-        // K′: aynı token'ın kaybedeni 8029'da bekler, token'ı kilidin arkasında okur (kod maksimumdan türer, sarf yok).
-        const replay = input.clientToken ? await doffReplay(input).behindLock(tx, input.clientToken) : null;
-        if (replay) return { fresh: false as const, replay };
-        return {
-          fresh: true as const,
-          row: await tx.doffEvent.create({
-            data: {
-              machineId: input.machineId,
-              productionLineNo: input.productionLineNo,
-              machineRunId: input.machineRunId ?? null,
-              doffedAt: stamp.value,
-              pieceCount: input.pieceCount,
-              counterAtDoff: input.counterAtDoff != null ? new Prisma.Decimal(input.counterAtDoff) : null,
-              counterSource: input.counterSource,
-              code,
-              notes: input.notes ?? null,
-              clientToken: input.clientToken ?? null,
-              createdById: userId ?? null,
-            },
-            select: DOFF_SELECT,
-          }),
-        };
-      }),
+  // ④ Kod sunucuda, günlük sıra sayaç satırından tx AÇILMADAN ÖNCE (`reserveDoffCode`, Perf-4 B-03 — tx'te
+  // kilit yok); ⑤ tek INSERT. Retry yalnız `code_key` P2002 kemeri, her denemede taze numara. Aynı token'ın
+  // kaybedeni R kipinde: uçuş kuyruğu (`token-replay.helper`) ya da token P2002'si → `run` yeniden okur.
+  const created = await withBarcodeRetry(
+    async () => {
+      const code = await reserveDoffCode(stamp.value);
+      // Tek INSERT — tx gerekmez (yanında başka yazma yok); tekillik `code_key` + `clientToken @unique`.
+      return prisma.doffEvent.create({
+        data: {
+          machineId: input.machineId,
+          productionLineNo: input.productionLineNo,
+          machineRunId: input.machineRunId ?? null,
+          doffedAt: stamp.value,
+          pieceCount: input.pieceCount,
+          counterAtDoff: input.counterAtDoff != null ? new Prisma.Decimal(input.counterAtDoff) : null,
+          counterSource: input.counterSource,
+          code,
+          notes: input.notes ?? null,
+          clientToken: input.clientToken ?? null,
+          createdById: userId ?? null,
+        },
+        select: DOFF_SELECT,
+      });
+    },
     undefined,
     (err) => p2002Mentions(err, /doff_events_code_key/),
     "İndirme kodu",
   );
-  if (!outcome.fresh) return outcome.replay;
-  const created = outcome.row;
   // ⑦ Audit tx DIŞINDA, best-effort.
   await AuditService.log({
     userId,

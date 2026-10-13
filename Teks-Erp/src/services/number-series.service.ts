@@ -317,7 +317,7 @@ function rowCode(r: SeriesCodeRow): string | null | undefined {
  * Sessizce yanlış numara üretmektense açık hata: sahada "numara alamadım" bir
  * operatörü durdurur, sessiz mükerrer kod ise defteri bozar.
  */
-const SKIP_LIMIT = 10_000;
+export const SKIP_LIMIT = 10_000;
 
 export async function nextSeriesNo(
   key: string,
@@ -340,7 +340,8 @@ export async function nextSeriesNo(
   return renderSeq(fmt, fullPrefix, seq);
 }
 
-function renderSeq(fmt: NumberSeriesFormat, fullPrefix: string, seq: number): string {
+// Dışa açık: sayaç satırlı üreteç (`series-counter-store.helper`) kodu AYNI kalıpla kurar.
+export function renderSeq(fmt: NumberSeriesFormat, fullPrefix: string, seq: number): string {
   return `${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`;
 }
 
@@ -409,7 +410,9 @@ function scopeSeriesRows(
   return { scoped, since, hasCreatedAt };
 }
 
-function scopedNextSeq(
+// Dışa açık: sayaç satırlı seri tohumunu bu çekirdekten alır; biçimi ÇAĞIRAN verir (kapsam anahtarıyla
+// aynı okuma — ikinci `resolveSeriesFormat` "iki okuma" sınıfına girerdi).
+export function scopedNextSeq(
   key: string,
   fmt: NumberSeriesFormat,
   fullPrefix: string,

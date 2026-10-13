@@ -6,12 +6,13 @@
 // `roll_barcode_counters` satır kilidi, artışı yapan tx COMMIT edene kadar tutulur;
 // sayaç bir tx'in içinde artırılırsa bütün top girişleri o satırda kuyruğa girer.
 // Bu bekçi sayaç helper'ının (generateRollBarcodeTx · reserveRollBarcodesTx ·
-// reserveRollBarcodesInOrderTx) bir tx BAĞLAMINDA çağrılmasını AST ile sayar:
+// reserveRollBarcodesInOrderTx) ve sayaç satırlı seri rezervasyonunun (reserveSeriesNo ·
+// reserveDoffCode — Perf-4 B-03) bir tx BAĞLAMINDA çağrılmasını AST ile sayar:
 //   · `$transaction(...)` callback'inin içinde (argüman tx de olsa prisma da olsa —
 //     havuz client'ı tx açıkken ikinci bağlantı ister, o da ayrı bir kusurdur);
 //   · parametresi tx client tipli (`TransactionClient`/`TxClient`) ya da `tx` adlı bir fonksiyonun içinde.
 // Dosya başına sayı TABAN'a karşı cırcırdır: artış her yerde sert; çürüme commit
-// kapısında uyarı, CI'da sert (`lib/circir-kolu.ts`). KK1 ve tambur dosyaları SIFIR.
+// kapısında uyarı, CI'da sert (`lib/circir-kolu.ts`). KK1, tambur ve doff dosyaları SIFIR.
 // `test_barcode_reservation` aynı soruyu regex ile ve yalnız `(tx` argümanıyla
 // sorar; bu bekçi bağlamı ölçer (prisma ile tx içinde çağrıyı da yakalar).
 //
@@ -20,6 +21,7 @@
 //   --sonda=artis   → TABAN'lı dosyaya (subcontractor) bir tx-içi çağrı eklenir: §3b artış kırmızı
 //   --sonda=duzelt  → TABAN'lı bir dosyanın bir çağrısı "düzeltilmiş" sayılır: §3 çürüme kırmızı
 //   --sonda=kor     → tarayıcı hiçbir çağrı bulamaz: §1 körlük zemini kırmızı
+//   --sonda=doff    → machine-doff.service.ts'e sentetik tx-içi `reserveDoffCode` eklenir: §2 kırmızı
 // Gerekli mi: KK1 ilk giriş ve rescueStuckRoll sayacı tx içinde artırıyordu (Perf-4 B-01);
 // düzeltildi, bekçi geri dönüşü yakalar; gerekçe ve önce/sonra tablosu arşiv notunda.
 // =============================================================================
@@ -30,8 +32,11 @@ import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
 
 const SRC = path.join(__dirname, "..", "src");
-const HELPER_FILE = "services/helpers/roll-barcode.helper.ts";
-const COUNTER_FNS = new Set(["generateRollBarcodeTx", "reserveRollBarcodesTx", "reserveRollBarcodesInOrderTx"]);
+const HELPER_FILES = new Set(["services/helpers/roll-barcode.helper.ts", "services/helpers/series-counter-store.helper.ts"]);
+const COUNTER_FNS = new Set([
+  "generateRollBarcodeTx", "reserveRollBarcodesTx", "reserveRollBarcodesInOrderTx",
+  "reserveSeriesNo", "reserveDoffCode", // sayaç satırlı seri (B-03): tx'e bağlanırsa satır kilidi commit'e kadar sürer
+]);
 
 /** Sayacı tx İÇİNDE artırmaya devam eden yollar — sayı yalnız DÜŞER (entegratör yazar). */
 const TABAN: Record<string, number> = {
@@ -41,7 +46,7 @@ const TABAN: Record<string, number> = {
   "services/helpers/roll-disposition.helper.ts": 1, // barkodsuz küme claim'den sonra okunuyor
 };
 /** Bu dosyalarda tx-içi sayaç çağrısı KALMAMALI (KK1 B-01 ve tambur düzeltmesi). */
-const MUST_BE_CLEAN = ["services/inventory.service.ts", "services/tambur.service.ts"];
+const MUST_BE_CLEAN = ["services/inventory.service.ts", "services/tambur.service.ts", "services/machine-doff.service.ts"];
 
 const MIN_FILES_SCANNED = 100;
 const MIN_COUNTER_CALLS = 8; // bugün 12 çağrı (tx dışı dahil); zemin rahat aşağıda
@@ -124,6 +129,9 @@ function main(): void {
   check("§0c tx AÇILMADAN ÖNCE çağrı ihlal sayılmaz", s3.txIci.length === 0 && s3.toplam === 1);
   const s4 = tara(`export async function g(tx: Prisma.TransactionClient){ return reserveRollBarcodesTx(tx, "F", 3); }`, "s4.ts");
   check("§0d TransactionClient parametreli helper içindeki çağrı yakalanır", s4.txIci.length === 1);
+  const s5 = tara(`async function f(){ await withBarcodeRetry(() => prisma.$transaction(async (tx) => { const c = await reserveDoffCode(d); })); }`, "s5.ts");
+  const s6 = tara(`async function f(){ await withBarcodeRetry(async () => { const c = await reserveDoffCode(d); return prisma.doffEvent.create({}); }); }`, "s6.ts");
+  check("§0e sayaç satırlı seri: tx içinde rezervasyon yakalanır, tx dışında sayılmaz", s5.txIci.length === 1 && s6.txIci.length === 0 && s6.toplam === 1);
 
   // ── gerçek tarama ──
   const dosyalar = walk(SRC);
@@ -131,9 +139,9 @@ function main(): void {
   let toplamCagri = 0;
   for (const f of dosyalar) {
     const rel = path.relative(SRC, f).split(path.sep).join("/");
-    if (rel === HELPER_FILE) continue; // tanımlayan dosya: kendi içindeki sarmalayıcı zinciri sayılmaz
+    if (HELPER_FILES.has(rel)) continue; // tanımlayan dosya: kendi içindeki sarmalayıcı zinciri sayılmaz
     const src = fs.readFileSync(f, "utf8");
-    if (!/RollBarcode|reserveRollBarcodes/.test(src)) continue;
+    if (!/RollBarcode|reserveRollBarcodes|reserveSeriesNo|reserveDoffCode/.test(src)) continue;
     const t = tara(src, rel);
     toplamCagri += t.toplam;
     if (t.txIci.length) bulunan[rel] = t.txIci;
@@ -141,6 +149,10 @@ function main(): void {
   if (SONDA === "ihlal") {
     const t = tara(`async function f(){ await prisma.$transaction(async (tx) => { await generateRollBarcodeTx(tx, "H"); }); }`, "sonda.ts");
     bulunan["services/inventory.service.ts"] = [...(bulunan["services/inventory.service.ts"] ?? []), ...t.txIci];
+  }
+  if (SONDA === "doff") {
+    const t = tara(`async function f(){ await prisma.$transaction(async (tx) => { await reserveDoffCode(new Date()); }); }`, "sonda.ts");
+    bulunan["services/machine-doff.service.ts"] = [...(bulunan["services/machine-doff.service.ts"] ?? []), ...t.txIci];
   }
   if (SONDA === "artis") {
     const t = tara(`async function f(tx: Prisma.TransactionClient){ await reserveRollBarcodesTx(tx, "H", 2); }`, "sonda.ts");
