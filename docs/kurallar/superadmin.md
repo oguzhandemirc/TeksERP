@@ -111,7 +111,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_db_invariants`, `test_fabrika_yoneticisi`, `test_kurulum_girdisi`, `test_parola_degisimi_zorunlu`, `test_settings_password`, `test_settings_password_callers`, `test_superadmin`⚠️, `test_superadmin_provision`, `test_superadmin_visible`, `test_sistem_hesabi_muhru`, `test_sistem_hesabi_muhru_uctan_uca` (bekci-http), `test_kimlik_totp_sifreleme`, `test_kimlik_oturum_tavani` (§4), `test_user_credentials_guard`, `test_varsayilan_superadmin`, `test_docker_hijyeni` (§5o beyanlı tek CI sırrı)
+Backend: `test_db_invariants`, `test_fabrika_yoneticisi`, `test_okuma_rolu`, `test_kurulum_girdisi`, `test_parola_degisimi_zorunlu`, `test_settings_password`, `test_settings_password_callers`, `test_superadmin`⚠️, `test_superadmin_provision`, `test_superadmin_visible`, `test_sistem_hesabi_muhru`, `test_sistem_hesabi_muhru_uctan_uca` (bekci-http), `test_kimlik_totp_sifreleme`, `test_kimlik_oturum_tavani` (§4), `test_user_credentials_guard`, `test_varsayilan_superadmin`, `test_docker_hijyeni` (§5o beyanlı tek CI sırrı)
 
 İstemci: `DefaultSuperadminBanner.test.tsx`, `FactoryAdminCard.test.tsx`, `SettingsPasswordDialog.test.tsx`⚠️, `superadmin-gate.test.ts`⚠️, `FeatureFlagSection.superadmin.test.tsx`, `SettingsPasswordCard.test.tsx`⚠️, `settings-surface.test.ts`, `ModuleProfilePage.test.tsx`⚠️, `SystemHubPage.superadmin.test.tsx`, `login-totp.test.ts`, `auth.test.ts`, `usePermission.test.ts`
 

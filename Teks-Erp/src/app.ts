@@ -110,6 +110,7 @@ import { requireAnyPermission } from "./middlewares/rbac.middleware";
 import dbCopyRoutes from "./routes/db-copy.routes";
 import shortCredentialRoutes from "./routes/short-credential.routes";
 import credentialResetRoutes from "./routes/credential-reset.routes";
+import readOnlyDbRoutes from "./routes/read-only-db.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
 import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
@@ -614,6 +615,7 @@ app.use("/api/config-bundle", configBundleRoutes);
 app.use("/api/admin/db-copies", dbCopyRoutes);
 app.use("/api/admin/short-credentials", shortCredentialRoutes);
 app.use("/api/admin/credential-reset-requests", credentialResetRoutes);
+app.use("/api/admin/read-only-db", readOnlyDbRoutes);
 // ZENGİN sağlık yükü — `/health`ten AYRILDI (F-CORE-GUV-002). adminRoutes'tan
 // ÖNCE kaydedilir ki aynı prefix altında bu özel yol önce eşleşsin. Guard'lar
 // route satırında açık: kimlik + `admin:settings` (Sunucu Durumu ekranı zaten

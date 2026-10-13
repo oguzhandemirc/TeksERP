@@ -83,6 +83,8 @@ async function main(): Promise<void> {
   const ownerUrl = process.env.DATABASE_URL as string;
   const rol = `tekserp_g4rol${process.pid}_test`;
   const yabanci = `tekserp_g4yab${process.pid}_test`;
+  // G5: rol göçü okuma rolünü de kurar — küme geneli ad koşuma özgü olmalı (varsayılan `<sahip>_okuma` değil).
+  const okr = `tekserp_g4okr${process.pid}_test`;
   const tmpTablo = `g4rol_tmp_${process.pid}`;
   const sahip = new Client({ connectionString: pgUrl(ownerUrl) });
   await sahip.connect();
@@ -90,13 +92,13 @@ async function main(): Promise<void> {
   try {
     // ── §2 KURU ──
     const kuruLog: string[] = [];
-    const kuru = await runRoleMigration({ ownerUrl, rol, uygula: false, log: (m) => kuruLog.push(m) });
+    const kuru = await runRoleMigration({ ownerUrl, readRole: okr, rol, uygula: false, log: (m) => kuruLog.push(m) });
     check("§2a KURU çıkış 0 ve ifade listesini basar", kuru.kod === EXIT_OK && kuruLog.some((l) => l.includes(`CREATE ROLE "${rol}"`)));
     check("§2b KURU rolü yaratmaz", !(await roleExists(rol)));
 
     // ── §3 uygula ──
     const log: string[] = [];
-    const s1 = await runRoleMigration({ ownerUrl, rol, uygula: true, log: (m) => log.push(m) });
+    const s1 = await runRoleMigration({ ownerUrl, readRole: okr, rol, uygula: true, log: (m) => log.push(m) });
     check("§3a ⭐ uygula çıkış 0, doğrulanmış uygulama URL'i döner", s1.kod === EXIT_OK && !!s1.appUrl, String(s1.kod));
     const url = s1.appUrl ?? "";
     const parola = url ? decodeURIComponent(new URL(url).password) : "";
@@ -141,7 +143,7 @@ async function main(): Promise<void> {
     }
 
     // ── §4 idempotent ──
-    const s2 = await runRoleMigration({ ownerUrl, rol, uygula: true, log: () => undefined });
+    const s2 = await runRoleMigration({ ownerUrl, readRole: okr, rol, uygula: true, log: () => undefined });
     check("§4a ikinci koşum çıkış 0, rolü yeniden yaratmaz, aynı URL", s2.kod === EXIT_OK
       && !(s2.statements ?? []).some((q) => q.startsWith("CREATE ROLE")) && s2.appUrl === url);
 
@@ -154,7 +156,7 @@ async function main(): Promise<void> {
     await sahip.query(`GRANT "${sahipAdi}" TO "${rol}"`);
     const bozuk = await measureRoleState(sahip, rol);
     check("§5b sonda: ownership + üyelik ölçülür", bozuk.canTamper && bozuk.ownedObjects >= 1 && bozuk.memberships.includes(sahipAdi));
-    const s3 = await runRoleMigration({ ownerUrl, rol, uygula: true, log: () => undefined });
+    const s3 = await runRoleMigration({ ownerUrl, readRole: okr, rol, uygula: true, log: () => undefined });
     const onarik = await measureRoleState(sahip, rol);
     const tOwner = (await sahip.query(`SELECT pg_get_userbyid(relowner) AS o FROM pg_class WHERE relname = $1`, [tmpTablo])).rows[0]?.o;
     check("§5c ⭐ yeniden koşum onarır: yetki · ownership · üyelik", s3.kod === EXIT_OK && !onarik.canTamper
@@ -162,10 +164,10 @@ async function main(): Promise<void> {
 
     // ── §6 uygulanamaz ──
     if (url) {
-      const s4 = await runRoleMigration({ ownerUrl: url, rol: yabanci, uygula: true, log: () => undefined });
+      const s4 = await runRoleMigration({ ownerUrl: url, readRole: okr, rol: yabanci, uygula: true, log: () => undefined });
       check("§6a ⭐ sahip/süper olmayan bağlantı → 2, hiçbir şey yaratılmaz", s4.kod === EXIT_NOT_APPLICABLE && !(await roleExists(yabanci)));
     }
-    const s5 = await runRoleMigration({ ownerUrl, rol: "Kotu-Ad", uygula: true, log: () => undefined });
+    const s5 = await runRoleMigration({ ownerUrl, readRole: okr, rol: "Kotu-Ad", uygula: true, log: () => undefined });
     check("§6b geçersiz rol adı → 2", s5.kod === EXIT_NOT_APPLICABLE);
 
     // ── §7 /health okuyucusu ──
@@ -175,13 +177,14 @@ async function main(): Promise<void> {
     check("§7b sahip rolünde (geri düşüş) writeOnly=false → 'kismi'", p2?.writeOnly === false && p2.level === "kismi", JSON.stringify(p2));
   } finally {
     await sahip.query(`DROP TABLE IF EXISTS "${tmpTablo}"`).catch(() => undefined);
-    for (const r of [rol, yabanci]) {
+    await sahip.query(`DROP FUNCTION IF EXISTS public.okuma_rolu_parola(text)`).catch(() => undefined);
+    for (const r of [okr, rol, yabanci]) {
       if (await roleExists(r)) {
         await sahip.query(`DROP OWNED BY "${r}"`).catch(() => undefined);
         await sahip.query(`DROP ROLE "${r}"`).catch((e) => console.log(`! ${r} silinemedi: ${(e as Error).message}`));
       }
     }
-    check("temizlik: test rolleri yok", !(await roleExists(rol)) && !(await roleExists(yabanci)));
+    check("temizlik: test rolleri yok", !(await roleExists(rol)) && !(await roleExists(yabanci)) && !(await roleExists(okr)));
     await sahip.end();
   }
 }

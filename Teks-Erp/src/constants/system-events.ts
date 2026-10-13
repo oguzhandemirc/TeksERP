@@ -114,6 +114,8 @@ const ADMIN_EVENTS = {
   /** Sistem hesabı kurulum aracıyla mühürlendi (`superadmin:kur -- --muhurle`). */
   SYSTEM_ACCOUNT_SEALED: "SYSTEM_ACCOUNT_SEALED",
   MODULE_PROFILE_APPLIED: "MODULE_PROFILE_APPLIED",
+  /** G5 — yalnız-okuma DB rolünün parolası yenilendi ve BİR KEZ gösterildi (yükte parola YOK). */
+  READ_ONLY_DB_PASSWORD_ROTATED: "READ_ONLY_DB_PASSWORD_ROTATED",
 } as const;
 
 /** Kısa kimlikler (hızlı PIN + QR kart) — özet, anahtar emaneti. Değer ve anahtar yüke GİRMEZ. */

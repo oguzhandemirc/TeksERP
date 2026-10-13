@@ -164,6 +164,8 @@ async function main(): Promise<void> {
       else {
         await ex(`GRANT USAGE ON SCHEMA public TO ${rolAdi}`);
         await ex(`GRANT SELECT, INSERT ON system_logs, system_log_archives TO ${rolAdi}`);
+        // G5: rol göçü definer fonksiyonları PUBLIC'ten kapatır; uygulama rolü EXECUTE'u açık GRANT'la alır.
+        await ex(`GRANT EXECUTE ON FUNCTION audit_arsivle(timestamptz, integer) TO ${rolAdi}`);
         await ex(`SET LOCAL ROLE ${rolAdi}`);
         await ex(`INSERT INTO system_logs (id, action, "tableName", "recordId") VALUES (gen_random_uuid(), 'UPDATE', 'BEKCI_ZINCIR', 'rol')`);
         const [rr] = await q<Array<{ seq: number | null }>>(`SELECT "chainSeq" AS seq FROM system_logs WHERE "recordId" = 'rol' AND "tableName" = 'BEKCI_ZINCIR'`);

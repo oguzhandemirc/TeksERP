@@ -6,6 +6,7 @@
 //   --uygula            tek transaction'da uygular, sonra uygulama rolüyle bağlanıp doğrular
 //   --url-yaz           (--uygula ile) uygulama rolünün URL'ini YALNIZ stdout'a yazar — entrypoint yakalar
 //   --rol <ad>          uygulama rolünün adı (varsayılan: <sahip>_uygulama)
+//   --okuma-rol <ad>    G5 yalnız-okuma rolünün adı (varsayılan: <sahip>_okuma; kural/liste `okuma-rolu.ts`)
 // Çıkış: 0 tamam · 1 hata (bağlantı/PG/doğrulama) · 2 uygulanamaz (sahip değil, şema yok)
 // Uygulama rolü: LOGIN, süper/CREATEDB/CREATEROLE değil, hiçbir role üye değil, hiçbir nesnenin
 // sahibi değil; tablolarda DML, system_logs'ta yalnız SELECT+INSERT, arşivde yalnız SELECT
@@ -17,6 +18,7 @@
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from "node:crypto";
 import { Client } from "pg";
 import { AUDIT_TAMPER_SQL } from "./audit-koruma-sql";
+import { READ_ONLY_HIDDEN_COLUMNS, READ_ONLY_HIDDEN_TABLES, readOnlyCatalog, readOnlyPlan } from "./okuma-rolu";
 
 export const EXIT_OK = 0;
 export const EXIT_ERROR = 1;
@@ -131,48 +133,126 @@ export function plan(o: RoleState, rol: string, verifier?: string): string[] {
   return out;
 }
 
-export interface MigrateOptions { ownerUrl: string; rol?: string; uygula: boolean; log?: (s: string) => void }
-export interface MigrateResult { kod: number; appUrl?: string; state?: RoleState; statements?: string[] }
+export interface MigrateOptions { ownerUrl: string; rol?: string; readRole?: string; uygula: boolean; log?: (s: string) => void }
+export interface MigrateResult {
+  kod: number; appUrl?: string; state?: RoleState; statements?: string[];
+  /** G5 okuma rolü ifadeleri ve sonucu ("ready" · "closed" — okuma rolü düşerse uygulama rolü etkilenmez). */
+  readStatements?: string[]; readResult?: "ready" | "closed";
+}
+
+/** G5 — okuma rolünün var olup olmadığı ve üyelikleri (sahip bağlantısıyla). */
+async function readRoleState(c: Client, readRoleName: string): Promise<{ exists: boolean; memberships: string[] }> {
+  const r = await c.query(`SELECT oid FROM pg_roles WHERE rolname = $1`, [readRoleName]);
+  if (r.rowCount === 0) return { exists: false, memberships: [] };
+  const u = await c.query(
+    `SELECT r.rolname FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid WHERE m.member = $1 ORDER BY 1`, [r.rows[0].oid]);
+  return { exists: true, memberships: u.rows.map((x: { rolname: string }) => x.rolname) };
+}
+
+/** G5 — okuma rolü yazamaz, sır okuyamaz, definer fonksiyon çağıramaz (sahip bağlantısıyla ölçülür). */
+export async function readRoleViolations(c: Client, readRoleName: string): Promise<string[]> {
+  const r = await c.query(`
+    SELECT 'yazma:' || c.relname AS i FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','S')
+       AND (has_table_privilege($1, c.oid, 'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+            OR (c.relkind = 'S' AND has_sequence_privilege($1, c.oid, 'USAGE, UPDATE')))
+    UNION ALL
+    SELECT 'definer:' || p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.prosecdef AND has_function_privilege($1, p.oid, 'EXECUTE')
+    UNION ALL
+    SELECT 'ozellik' FROM pg_roles a WHERE a.rolname = $1
+     AND (a.rolsuper OR a.rolcreatedb OR a.rolcreaterole OR a.rolreplication OR a.rolbypassrls
+          OR EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member = a.oid))
+    UNION ALL
+    SELECT 'sema-create' WHERE has_schema_privilege($1, 'public', 'CREATE')`, [readRoleName]);
+  const out = r.rows.map((x: { i: string }) => x.i);
+  for (const t of READ_ONLY_HIDDEN_TABLES) {
+    const v = await c.query(`SELECT to_regclass($2) IS NOT NULL AND has_table_privilege($1, to_regclass($2), 'SELECT')
+      OR EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass($2) AND attnum > 0 AND NOT attisdropped
+                 AND has_column_privilege($1, to_regclass($2), attnum, 'SELECT')) AS v`, [readRoleName, `public.${t}`]);
+    if (v.rows[0].v) out.push(`sir-tablo:${t}`);
+  }
+  for (const [t, columns] of Object.entries(READ_ONLY_HIDDEN_COLUMNS)) {
+    for (const k of columns) {
+      const v = await c.query(`SELECT a.attnum IS NOT NULL AND has_column_privilege($1, to_regclass($2), a.attnum, 'SELECT') AS v
+        FROM (SELECT 1) x LEFT JOIN pg_attribute a ON a.attrelid = to_regclass($2) AND a.attname = $3 AND NOT a.attisdropped`,
+      [readRoleName, `public.${t}`, k]);
+      if (v.rows[0].v) out.push(`sir-kolon:${t}.${k}`);
+    }
+  }
+  return out;
+}
 
 export async function runRoleMigration(s: MigrateOptions): Promise<MigrateResult> {
   const log = s.log ?? ((m: string) => process.stderr.write(m + "\n"));
   const url = new URL(s.ownerUrl);
   const ownerPassword = decodeURIComponent(url.password);
   const rol = s.rol ?? `${decodeURIComponent(url.username)}_uygulama`;
+  const readRoleName = s.readRole ?? `${decodeURIComponent(url.username)}_okuma`;
   if (!ROLE_NAME_PATTERN.test(rol)) { log(`X Gecersiz rol adi: ${rol}`); return { kod: EXIT_NOT_APPLICABLE }; }
+  if (!ROLE_NAME_PATTERN.test(readRoleName) || readRoleName === rol) { log(`X Gecersiz okuma rolu adi: ${readRoleName}`); return { kod: EXIT_NOT_APPLICABLE }; }
   if (!ownerPassword) { log("X Sahip URL'inde parola yok (uygulama parolasi turetilemez)."); return { kod: EXIT_NOT_APPLICABLE }; }
 
   const c = new Client({ connectionString: pgUrl(s.ownerUrl) });
   let state: RoleState;
   let statements: string[];
+  let readStatements: string[];
   try {
     await c.connect();
     state = await measureRoleState(c, rol);
+    if (state.sahip === readRoleName) throw new NotApplicable(`okuma rolu sahip rolüyle aynı ad (${readRoleName})`);
     statements = plan(state, rol);
+    const rs = await readRoleState(c, readRoleName);
+    readStatements = readOnlyPlan({
+      owner: state.sahip, db: state.db, appRole: rol, role: readRoleName, roleExists: rs.exists, memberships: rs.memberships,
+      catalog: await readOnlyCatalog((q) => c.query(q)),
+    });
     log(`Hedef: ${state.db} · sahip: ${state.sahip} · uygulama rolu: ${rol} (${state.roleExists ? "var" : "yok"})`);
     if (state.roleExists) {
       log(`  state: audit kurcalayabilir=${state.canTamper} · sahip oldugu nesne=${state.ownedObjects}`
         + ` · uyelik=${state.memberships.join(",") || "-"}`);
     }
     for (const q of statements) log(`  ${q};`);
+    log(`Okuma rolu: ${readRoleName} (${rs.exists ? "var" : "yok"}) · ${readStatements.length} ifade`);
+    if (!s.uygula) for (const q of readStatements) log(`  ${q};`);
     if (!s.uygula) {
       log("KURU: hicbir sey degismedi. Uygulamak icin --uygula.");
-      return { kod: EXIT_OK, state, statements };
+      return { kod: EXIT_OK, state, statements, readStatements };
     }
     const parola = deriveAppPassword(ownerPassword, rol);
+    let readResult: "ready" | "closed" = "ready";
     await c.query("BEGIN");
     try {
       for (const q of plan(state, rol, scramVerifier(parola))) await c.query(q);
+      // G5 okuma rolü ayrı kayıt noktasında: düşerse uygulama rolü yine kurulur, okuma girişi kapanır.
+      await c.query("SAVEPOINT okuma");
+      try {
+        for (const q of readStatements) await c.query(q);
+        await c.query("RELEASE SAVEPOINT okuma");
+      } catch (e) {
+        await c.query("ROLLBACK TO SAVEPOINT okuma");
+        log(`! Okuma rolu kurulamadi: ${(e as { code?: string }).code ?? ""} ${(e as Error).message}`);
+        readResult = "closed";
+      }
       await c.query("COMMIT");
     } catch (e) {
       await c.query("ROLLBACK").catch(() => undefined);
       throw e;
     }
+    const violations = readResult === "ready" ? await readRoleViolations(c, readRoleName) : ["kurulamadi"];
+    if (violations.length > 0) {
+      readResult = "closed";
+      log(`! Okuma rolu dogrulanamadi, giris kapatiliyor: ${violations.slice(0, 5).join(", ")}`);
+      if ((await readRoleState(c, readRoleName)).exists) await c.query(`ALTER ROLE "${readRoleName}" NOLOGIN`);
+    } else {
+      log(`OK ${readRoleName} hazir: yalniz SELECT (sir tablo/kolonlari haric), ${readStatements.length} ifade.`);
+    }
     const uyg = new URL(s.ownerUrl);
     uyg.username = encodeURIComponent(rol);
     uyg.password = parola;
     const kod = await verifyAppRole(uyg.toString(), rol, log);
-    return kod === EXIT_OK ? { kod, appUrl: uyg.toString(), state, statements } : { kod, state, statements };
+    const extra = { state, statements, readStatements, readResult };
+    return kod === EXIT_OK ? { kod, appUrl: uyg.toString(), ...extra } : { kod, ...extra };
   } catch (e) {
     if (e instanceof NotApplicable) { log(`X NotApplicable: ${e.message}`); return { kod: EXIT_NOT_APPLICABLE }; }
     // pg hata iletisi ifadeyi değil yalnız nedeni taşır; ifade parolayı taşıyabileceği için basılmaz.
@@ -204,8 +284,11 @@ async function main(argv: string[]): Promise<number> {
   const ownerUrl = process.env.DATABASE_URL;
   if (!ownerUrl) { process.stderr.write("X DATABASE_URL tanimli degil.\n"); return EXIT_NOT_APPLICABLE; }
   const ri = argv.indexOf("--rol");
+  const oi = argv.indexOf("--okuma-rol");
   const uygula = argv.includes("--uygula");
-  const result = await runRoleMigration({ ownerUrl, rol: ri >= 0 ? argv[ri + 1] : undefined, uygula });
+  const result = await runRoleMigration({
+    ownerUrl, rol: ri >= 0 ? argv[ri + 1] : undefined, readRole: oi >= 0 ? argv[oi + 1] : undefined, uygula,
+  });
   if (result.kod === EXIT_OK && uygula && argv.includes("--url-yaz") && result.appUrl) {
     process.stdout.write(result.appUrl);
   }

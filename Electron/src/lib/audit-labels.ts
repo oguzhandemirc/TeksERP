@@ -299,6 +299,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   DB_COPY_COMPLETED: "Kopya tamamlandı",
   DB_COPY_FAILED: "Kopya oluşturulamadı",
   DB_COPY_DROPPED: "Kopya silindi",
+  READ_ONLY_DB_PASSWORD_ROTATED: "Okuma DB parolası yenilendi ve gösterildi",
   DB_SWAP_COMMAND_ISSUED: "Veritabanı takas komutu verildi",
 
   // ── SYSTEM · içe aktarım & katalog uzlaştırması ──
