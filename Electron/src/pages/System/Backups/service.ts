@@ -168,6 +168,13 @@ export async function downloadBackup(name: string): Promise<void> {
  * koşulsuz silinir. Şifreleme açıksa güvenlik yedeği de sonda şifrelenir.
  * ---------------------------------------------------------------------------
  */
+/**
+ * Geri yükleme bayrakları — runbook (`docs/ops/DEPLOY-RUNBOOK.md`) ve `kur.ps1` ipucuyla AYNI dizi
+ * (vitest üçünü karşılaştırır). `--no-acl`: başka kümeden gelen döküm orada olmayan rollere GRANT
+ * taşır ("role does not exist", çıkış 1); yetkileri rol göçü kurar. `--no-owner` YOK: sahiplik birebir.
+ */
+export const PANEL_RESTORE_FLAGS = "--clean --if-exists --no-acl";
+
 export function restoreCommand(
   listing: BackupListing | undefined,
   name: string,
@@ -236,7 +243,7 @@ export function restoreCommand(
     `# 3) YALNIZ guvenlik yedegi dogrulandiysa geri yukle`,
     `if (-not $ok) { Write-Host "GUVENLIK YEDEGI ALINAMADI - GERI YUKLEME YAPILMADI. Disk/yetki/PATH kontrol edin." -ForegroundColor Red }`,
     ...decryptBlock,
-    `if ($ok) { ${pgRestore} ${conn} --clean --if-exists "${source}" }`,
+    `if ($ok) { ${pgRestore} ${conn} ${PANEL_RESTORE_FLAGS} "${source}" }`,
     `$restored = $ok -and ($LASTEXITCODE -eq 0)`,
     ``,
     `# 4) SEMA GUNCELLEME - ATLANIRSA SESSIZ BOZULMA`,

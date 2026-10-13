@@ -197,6 +197,9 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   bakım rolüyle döküm + geri yükleme ölçülür.
 - Panel DB kopyası geri yüklemesi `--no-acl` ile (`copyRestoreArgs`): başka kümeden gelen dökümün olmayan rollere
   GRANT'ı kopyayı düşürmez; runbook ve `kur.ps1` ipucu aynı. Yetkileri rol göçü kurar (Docker'da her açılışta).
+- `dist-web`: panel 1.6.5 Yedekler → "Geri yükle" komut bloğu da `--no-acl` taşır (`PANEL_RESTORE_FLAGS`;
+  runbook + `kur.ps1` ipucuyla aynı dizi, vitest ölçer). 1.6.4 paneli bayraksız blok üretir: aynı kümeden döküm
+  bugünkü gibi geçer, başka kümeden dökümde "role does not exist" ile düşer → runbook bloğu kullanılır.
 - **Eski kurulum ne yapar:** 2.15.6'dan gelen kurulum düzeltilmiş dosyayı uygular; HTTP sözleşmesi aynı.
 
 ## 3. Sözleşme

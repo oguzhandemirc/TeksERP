@@ -719,7 +719,8 @@ pm2 start tekserp-backend
 > döküm, orada olmayan rollere GRANT taşır; `--no-acl`siz geri yükleme yüzlerce
 > "role does not exist" hatasıyla çıkış 1 verir. Yetkileri rol göçü kurar (Docker'da her
 > açılışta; Windows'ta rol göçü yok — sahip rolle koşulduğu için bugünkü davranış).
-> Panelin ürettiği blok henüz bu bayrağı taşımıyor (panel sürümüyle gelir).
+> Panelin ürettiği blok (panel 1.6.5+) aynı bayrak dizisini taşır (`PANEL_RESTORE_FLAGS`; vitest
+> runbook + `kur.ps1` ipucuyla karşılaştırır).
 
 > **⚠ Bloğu "sadeleştirmeyin".** Üç satır load-bearing ve sebepleri sezgiye aykırı:
 > **(a)** `$LASTEXITCODE = 1` sıfırlaması — bu değişken yalnız *native* exe'lerce

@@ -89,6 +89,9 @@ describe("restoreCommand", () => {
       const restore = code.find((l) => l.includes("--clean --if-exists"));
       expect(restore).toBeDefined();
       expect(restore!.startsWith("if ($ok) {")).toBe(true);
+      // --no-acl: rolleri olmayan kümede "role does not exist" ile düşmesin; --no-owner YOK (sahiplik birebir).
+      expect(restore!.split(" ")).toContain("--no-acl");
+      expect(restore!.split(" ")).not.toContain("--no-owner");
     });
 
     it("KRİTİK: blokta exit/throw YOK — yapıştırılmış blokta iptal işlemez", () => {
