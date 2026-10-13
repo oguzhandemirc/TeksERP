@@ -232,6 +232,9 @@ describe("fromApi — durum kaynağı", () => {
   it("⭐ toplu duruş uçları: sunucu `bulkStopActions: true` → bulkStops; eski sunucu (alan yok) → false", () => {
     expect(fromApi({ ...dto([loom({})]), bulkStopActions: true }).bulkStops).toBe(true);
     expect(fromApi(dto([loom({})])).bulkStops).toBe(false);
+    // Sebep ata uçları ayrı beyan (2.15.7): 2.15.6 sunucusu toplu duruşu tanır ama sebep atamayı tanımaz.
+    expect(fromApi({ ...dto([loom({})]), bulkStopActions: true, bulkClassifyAction: true }).bulkClassify).toBe(true);
+    expect(fromApi({ ...dto([loom({})]), bulkStopActions: true }).bulkClassify).toBe(false);
   });
 
   it("⭐ hat sayısı + HER hattın açık koşumu taşınır; dokuma kapalıyken (null) ve eski sunucuda (yok) bilgi yok", () => {

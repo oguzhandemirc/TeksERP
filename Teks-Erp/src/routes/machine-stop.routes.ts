@@ -16,7 +16,7 @@ import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../services/machine-stop.service";
 import { listMachineStops, listStopReclasses } from "../services/loom-list.service";
-import { BULK_STOP_MAX, closeBulkStops, openBulkStops, previewBulkStops, revokeBulkStops } from "../services/machine-stop-bulk.service";
+import { BULK_STOP_MAX, classifyBulkStops, closeBulkStops, openBulkStops, previewBulkStops, revokeBulkStops } from "../services/machine-stop-bulk.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -197,6 +197,51 @@ router.post("/bulk/close", requirePermission("loom:manual-entry"), async (req, r
 router.post("/bulk/revoke", requirePermission("loom:manual-entry"), async (req, res, next) => {
   try {
     res.json(await revokeBulkStops(bulkRevokeSchema.parse(req.body ?? {}), req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Sebep ata — sebep KARARI (`loom:classify`); önizleme aynı kaynaktan (`previewBulkStops`), izni ayrı rotada.
+const bulkClassifyPreviewSchema = z
+  .object({ machineIds: z.array(z.string().uuid("Geçersiz tezgah")).min(1, "En az bir tezgah seçin.").max(BULK_STOP_MAX, tooMany) })
+  .strict();
+const bulkClassifySchema = z
+  .object({ reasonCode: z.string().trim().min(1, "Sebep seçin.").max(64), reasonNote: z.string().trim().max(300).nullish(), rows: stopRowsSchema })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-stops/bulk/classify/preview:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Sebep ata önizlemesi — her tezgah adıyla; yalnız sebepsiz AÇIK duruş seçilebilir (YAZMAZ)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ action: CLASSIFY, at: null, rows[] }" }
+ */
+router.post("/bulk/classify/preview", requirePermission("loom:classify"), async (req, res, next) => {
+  try {
+    res.json(await previewBulkStops({ action: "CLASSIFY", machineIds: bulkClassifyPreviewSchema.parse(req.body ?? {}).machineIds }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-stops/bulk/classify:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Seçili sebepsiz duruşlara SEBEP ATA (sebep bir kez; ilk sınıflandırma) — sonuç PARÇALI olabilir
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ requested, ok[], failed[] }" }
+ *       400: { description: Doğrulama / REASON_CODE_INVALID }
+ */
+router.post("/bulk/classify", requirePermission("loom:classify"), async (req, res, next) => {
+  try {
+    res.json(await classifyBulkStops(bulkClassifySchema.parse(req.body ?? {}), req.user?.userId));
   } catch (e) {
     next(e);
   }

@@ -169,7 +169,7 @@ const TEZGAH_EKRANI_EYLEM_DOSYALARI: ReadonlyArray<{
   {
     dosya: "Electron/src/pages/Operations/WeavingFloor/stops/stopService.ts",
     ekranKey: "operations/weaving-floor",
-    izinler: ["loom:manual-entry"],
+    izinler: ["loom:manual-entry", "loom:classify"],
     eylemListesi: "Electron/src/pages/Operations/WeavingFloor/floorActions.ts",
     anahtarSabiti: "STOP_ACTION_KEYS",
     iceAktaranlar: ["Electron/src/pages/Operations/WeavingFloor/stops/StopBulkDialog.tsx"],

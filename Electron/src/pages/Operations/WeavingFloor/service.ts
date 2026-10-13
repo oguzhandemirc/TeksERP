@@ -109,6 +109,8 @@ export interface LoomFloorDto {
   beamTracking: boolean;
   /** Sunucu toplu duruş uçlarını tanıyor (backend 2.15.6+); eski sunucuda alan yok → duruş eylemleri pasif. */
   bulkStopActions?: boolean;
+  /** Sunucu "Sebep ata" uçlarını tanıyor (2.15.7+); eski sunucuda yok. */
+  bulkClassifyAction?: boolean;
   summary: WireFloorCounts;
   halls: (WireFloorCounts & { hallId: string; hallName: string })[];
   looms: WireLoom[];

@@ -180,6 +180,8 @@ export interface FloorState {
   alarmNotice?: string | null;
   /** Sunucu toplu duruş uçlarını tanıyor mu (örnek veride yok). */
   bulkStops?: boolean;
+  /** Sunucu "Sebep ata" uçlarını tanıyor mu (örnek veride yok). */
+  bulkClassify?: boolean;
   halls: string[];
   looms: LiveLoom[];
   /** Son simülasyon adımının anı. */

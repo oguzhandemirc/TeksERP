@@ -293,7 +293,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Tezgah Salonu canlı ekranı (2026-10-10): `tezgahEnabled` arkasında — dokuma modülünün değil
   // tezgah izlemenin ekranı (DOKUMA-CANLI-EKRAN §8 karar 6).
   // Koşum eylemleri (İş ver · Değiştir · Bitir · Geri al) ekran içinde yalnız dokuma açıkken doğar (`test_dokuma_regime_gate §7f`).
-  { key: "operations/weaving-floor", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Salonu", requires: ["loom:live-view"], capabilities: ["loom:run", "loom:run-revoke", "loom:manual-entry"] },
+  { key: "operations/weaving-floor", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Salonu", requires: ["loom:live-view"], capabilities: ["loom:run", "loom:run-revoke", "loom:manual-entry", "loom:classify"] },
   // Tezgah Alarmları (A2a, 2026-10-11): liste + alarm sayfası; eylemler sayfa içinde izinle. Alarm bayrağı
   // modül değil davranış bayrağıdır — ekranın modülü tezgah izleme.
   { key: "operations/loom-alarms", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Alarmları", requires: ["loom:alarm-view"], capabilities: ["loom:alarm-ack", "loom:alarm-escalation"] },

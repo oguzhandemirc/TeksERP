@@ -1,10 +1,10 @@
-// Tezgah Salonu toplu duruş eylemleri (Duruş bildir · Hepsi çalıştı · Duruşu geri al) — `/api/machine-stops/bulk/*`
+// Tezgah Salonu toplu duruş eylemleri (Duruş bildir · Hepsi çalıştı · Sebep ata · Duruşu geri al) — `/api/machine-stops/bulk/*`
 // YALNIZ bu dosyadan çağrılır. Ekran `tezgahEnabled` arkasındadır; bu dosyayı açan eylemler yalnız `dokumaEnabled`
 // dalında doğar (`floorActions.ts`, bekçi `test_dokuma_regime_gate §7f`). Gövdeler sunucu Zod şemasının birebir aynası.
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 
-export type BulkStopAction = "OPEN" | "CLOSE" | "REVOKE";
+export type BulkStopAction = "OPEN" | "CLOSE" | "CLASSIFY" | "REVOKE";
 export type BulkStopOutcome = BulkStopAction | "BLOCKED";
 
 export interface BulkStopPreviewRow {
@@ -60,6 +60,11 @@ export const stopService = {
   open: (body: BulkStopOpenBody): Promise<BulkStopResult> => data(apiClient.post<ApiResponse<BulkStopResult>>("/api/machine-stops/bulk/open", body)),
   close: (body: { endedAt: string; rows: Array<{ stopId: string }> }): Promise<BulkStopResult> =>
     data(apiClient.post<ApiResponse<BulkStopResult>>("/api/machine-stops/bulk/close", body)),
+  /** Sebep ata önizlemesi — `loom:classify` ister (aç/kapat/geri al önizlemesi `loom:manual-entry`). */
+  classifyPreview: (body: { machineIds: string[] }): Promise<BulkStopPreview> =>
+    data(apiClient.post<ApiResponse<BulkStopPreview>>("/api/machine-stops/bulk/classify/preview", body)),
+  classify: (body: { reasonCode: string; reasonNote: string | null; rows: Array<{ stopId: string }> }): Promise<BulkStopResult> =>
+    data(apiClient.post<ApiResponse<BulkStopResult>>("/api/machine-stops/bulk/classify", body)),
   revoke: (body: { reason: string; rows: Array<{ stopId: string }> }): Promise<BulkStopResult> =>
     data(apiClient.post<ApiResponse<BulkStopResult>>("/api/machine-stops/bulk/revoke", body)),
 };

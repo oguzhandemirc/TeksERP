@@ -1,5 +1,6 @@
 // Toplu duruş penceresi (tasarım TEZGAH-SALONU-SECIM-IS-VERME F2): "Duruş bildir" (başlangıç Şimdi/Daha önce, sebep
-// BİR KEZ) · "Hepsi çalıştı" (açık duruşları kapatır) · "Duruşu geri al" (gerekçe bir kez, yalnız açık duruş). Yazmadan
+// BİR KEZ) · "Hepsi çalıştı" (açık duruşları kapatır) · "Sebep ata" (sebepsiz açık duruşa sebep bir kez, zorunlu) ·
+// "Duruşu geri al" (gerekçe bir kez, yalnız açık duruş). Yazmadan
 // önce önizler (her tezgah adıyla, satır başına işaret); sonuç Oldu/Olmadı listesi. Satır token'ı ve gönderilen saat
 // mantıksal denemeye yapışıktır: belirsiz hatada aynı, kesin 4xx'te / başarıda / form değişince yenilenir.
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,9 +18,9 @@ import type { LiveLoom } from "../types";
 import { ReasonList, StopPreviewTable, TimeChoice, type TimeValue } from "./StopBulkParts";
 import { stopService, type BulkStopAction, type BulkStopPreview, type BulkStopResult } from "./stopService";
 
-export type StopDialogMode = "open" | "close" | "revoke";
+export type StopDialogMode = "open" | "close" | "classify" | "revoke";
 
-const ACTION: Record<StopDialogMode, BulkStopAction> = { open: "OPEN", close: "CLOSE", revoke: "REVOKE" };
+const ACTION: Record<StopDialogMode, BulkStopAction> = { open: "OPEN", close: "CLOSE", classify: "CLASSIFY", revoke: "REVOKE" };
 const TEXT: Record<StopDialogMode, { title: string; desc: string; submit: string; ok: string }> = {
   open: {
     title: "Duruş bildir",
@@ -28,6 +29,12 @@ const TEXT: Record<StopDialogMode, { title: string; desc: string; submit: string
     ok: "Duruşa geçti",
   },
   close: { title: "Hepsi çalıştı", desc: "Seçili tezgahların açık duruşları birlikte kapanır.", submit: "Duruşları kapat", ok: "Kapandı" },
+  classify: {
+    title: "Sebep ata",
+    desc: "Sebebi girilmemiş açık duruşlara sebep bir kez seçilir ve her birine yazılır. Sebebi girilmiş duruşu değiştirmek için Tezgah Duruşları ekranını kullanın.",
+    submit: "Sebebi yaz",
+    ok: "Sebep girildi",
+  },
   revoke: {
     title: "Duruşu geri al",
     desc: "Açık duruş hiç olmamış sayılır; kaydı silinmez, geri alındı olarak kalır. Gerekçe bir kez yazılır ve her duruşa işlenir.",
@@ -74,7 +81,8 @@ function useStopBulkFlow({ open, mode, looms, online }: Omit<Props, "onOpenChang
   }, [attempt]);
 
   const previewMut = useMutation({
-    mutationFn: (machineIds: string[]) => stopService.preview({ action: ACTION[mode], machineIds, at: isoOf(form.time) }),
+    mutationFn: (machineIds: string[]) =>
+      mode === "classify" ? stopService.classifyPreview({ machineIds }) : stopService.preview({ action: ACTION[mode], machineIds, at: isoOf(form.time) }),
     onSuccess: (p) => {
       setPreview(p);
       setPicked(new Set(p.rows.filter((r) => r.defaultSelected && r.outcome !== "BLOCKED").map((r) => r.machineId)));
@@ -90,7 +98,7 @@ function useStopBulkFlow({ open, mode, looms, online }: Omit<Props, "onOpenChang
     setPreview(null);
     setResult(null);
     fresh();
-    // Kapat/geri al açılışta önizler ("şimdi" ile); aç önce başlangıç ve sebep ister.
+    // Kapat/sebep ata/geri al açılışta önizler ("şimdi" ile); aç önce başlangıç ve sebep ister.
     if (mode !== "open" && online && looms.length > 0) runPreview(looms.map((l) => l.id));
   }, [open, mode, looms, online, runPreview, fresh, resetForm]);
 
@@ -102,6 +110,7 @@ function useStopBulkFlow({ open, mode, looms, online }: Omit<Props, "onOpenChang
   const submitMut = useMutation({
     mutationFn: (): Promise<BulkStopResult> => {
       if (mode === "close") return stopService.close({ endedAt: stampNow(), rows: stopRows() });
+      if (mode === "classify") return stopService.classify({ reasonCode: form.reasonCode, reasonNote: form.note.trim() || null, rows: stopRows() });
       if (mode === "revoke") return stopService.revoke({ reason: form.revokeReason.trim(), rows: stopRows() });
       const rows = chosen.map((r) => ({ machineId: r.machineId, clientToken: attempt.keyed(r.machineId) }));
       return stopService.open({ startedAt: stampNow(), reasonCode: form.reasonCode || null, reasonNote: form.note.trim() || null, rows });
@@ -129,7 +138,7 @@ function useStopBulkFlow({ open, mode, looms, online }: Omit<Props, "onOpenChang
     fresh();
   };
   const timeOk = form.time.now || localInputToIso(form.time.local) !== null;
-  const reasonOk = mode !== "revoke" || form.revokeReason.trim().length >= 3;
+  const reasonOk = mode === "revoke" ? form.revokeReason.trim().length >= 3 : mode === "classify" ? form.reasonCode !== "" : true;
   const ready = online && timeOk && reasonOk && chosen.length > 0 && !submitMut.isPending;
   const retryFailed = result && result.failed.length > 0 ? () => runPreview(result.failed.map((f) => f.machineId)) : null;
   const doPreview = () => runPreview(looms.map((l) => l.id));
@@ -143,6 +152,14 @@ function FormFields({ mode, flow }: { mode: StopDialogMode; flow: Flow }) {
   const { form } = flow;
   if (mode === "revoke") {
     return <Textarea aria-label="Geri alma gerekçesi" placeholder="Gerekçe (zorunlu, en az 3 karakter)" maxLength={300} value={form.revokeReason} onChange={(e) => form.setRevokeReason(e.target.value)} />;
+  }
+  if (mode === "classify") {
+    return (
+      <div className="space-y-3">
+        <ReasonList presets={active} value={form.reasonCode} onChange={flow.edit(form.setReasonCode)} allowLater={false} />
+        <Textarea aria-label="Not" placeholder="Not (isteğe bağlı)" rows={2} maxLength={300} value={form.note} onChange={(e) => flow.edit(form.setNote)(e.target.value)} />
+      </div>
+    );
   }
   return (
     <div className="space-y-3">

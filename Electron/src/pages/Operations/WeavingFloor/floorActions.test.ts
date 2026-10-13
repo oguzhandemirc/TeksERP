@@ -92,7 +92,9 @@ describe("floorActionsOf", () => {
 });
 
 describe("floorActionsOf — toplu duruş eylemleri (F2)", () => {
-  const stops = (online = true, bulk = true, openStopLooms = 1) => ({ stops: { online, bulk, openStopLooms } });
+  const stops = (online = true, bulk = true, openStopLooms = 1, more: { unclassifiedStopLooms?: number; bulkClassify?: boolean } = {}) => ({
+    stops: { online, bulk, openStopLooms, unclassifiedStopLooms: more.unclassifiedStopLooms ?? 1, bulkClassify: more.bulkClassify ?? true },
+  });
   const STOP_KEYS = ["stopOpen", "stopClose", "stopRevoke"];
 
   it("⭐ duruş bağlamı yoksa (örnek veri, TV) duruş eylemi YOK", () => {
@@ -105,8 +107,8 @@ describe("floorActionsOf — toplu duruş eylemleri (F2)", () => {
 
   it("tam yetki + açık duruş: üç eylem etkin, çoklu seçimde de var, sıra sabit", () => {
     const list = floorActionsOf(ctx({ count: 3, ...stops(true, true, 2) }));
-    expect(list.map((a) => a.key)).toEqual(["stopOpen", "stopClose", "stopRevoke", "reports", "selectAll", "clear"]);
-    expect(list.map((a) => a.label).slice(0, 3)).toEqual(["Duruş bildir…", "Hepsi çalıştı…", "Duruşu geri al…"]);
+    expect(list.map((a) => a.key)).toEqual(["stopOpen", "stopClose", "stopClassify", "stopRevoke", "reports", "selectAll", "clear"]);
+    expect(list.map((a) => a.label).slice(0, 4)).toEqual(["Duruş bildir…", "Hepsi çalıştı…", "Sebep ata…", "Duruşu geri al…"]);
     expect(list.every((a) => a.enabled)).toBe(true);
   });
 
@@ -128,5 +130,22 @@ describe("floorActionsOf — toplu duruş eylemleri (F2)", () => {
   it("⭐ seçimde açık duruş yoksa Hepsi çalıştı / Duruşu geri al pasif; Duruş bildir açık", () => {
     expect(byKey(ctx(stops(true, true, 0)), "stopOpen")?.enabled).toBe(true);
     for (const k of ["stopClose", "stopRevoke"]) expect(byKey(ctx(stops(true, true, 0)), k)?.reason).toBe("Seçili tezgahta açık duruş yok.");
+  });
+
+  it("⭐ Sebep ata: loom:classify ister (manual-entry yetmez), manual-entry olmadan da açılır", () => {
+    const yalnizGiris = byKey(ctx({ ...stops(), can: (p) => p === "loom:manual-entry" }), "stopClassify");
+    expect(yalnizGiris).toMatchObject({ enabled: false });
+    expect(yalnizGiris?.reason).toContain("Duruş sınıflandırma");
+    expect(byKey(ctx({ ...stops(), can: (p) => p === "loom:classify" }), "stopClassify")?.enabled).toBe(true);
+  });
+
+  it("⭐ Sebep ata: sebepsiz açık duruş yoksa pasif; bağlantı yok / eski sunucu (bulkClassify yok) pasif", () => {
+    expect(byKey(ctx(stops(true, true, 2, { unclassifiedStopLooms: 0 })), "stopClassify")?.reason).toBe("Seçili tezgahta sebebi girilmemiş açık duruş yok.");
+    expect(byKey(ctx(stops(false)), "stopClassify")?.reason).toContain("Sunucuya ulaşılamıyor");
+    expect(byKey(ctx(stops(true, true, 1, { bulkClassify: false })), "stopClassify")?.reason).toContain("sunucu güncellenince");
+  });
+
+  it("dokuma KAPALI: Sebep ata hiç görünmez", () => {
+    expect(byKey(ctx({ dokumaEnabled: false, ...stops() }), "stopClassify")).toBeUndefined();
   });
 });

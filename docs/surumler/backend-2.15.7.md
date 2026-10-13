@@ -31,6 +31,13 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 2. Ne değişti
 
+**Tezgah Salonu: Sebep ata** (commit `feat(salon): Sebep ata …`; kısa kimliği paketlemede yazılır)
+
+- Yeni `POST /api/machine-stops/bulk/classify/preview` ve `/bulk/classify` (izin `loom:classify`, mevcut): seçili
+  tezgahların AÇIK ve sebepsiz duruşuna sebep bir kez yazılır; satır başına mevcut ilk sınıflandırma yolu, sonuç
+  parçalı. Girilmiş sebebi değiştirmek salondan yapılmaz. Salon cevabında `bulkClassifyAction: true`.
+- `dist-web`: panel 1.6.5 kaynağı değişir (Tezgah Salonu eylemi).
+
 **Makine kartı: watchdog (D4)** (commit `feat(tezgah): makine kartı watchdog'u …`; kısa kimliği paketlemede yazılır)
 
 - Kart belirli süre (ayar `tezgah.collectorSilenceMinutes`, varsayılan 10 dk) hiçbir imzalı istek göndermezse
@@ -59,6 +66,8 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   birimi (boş = kapalı).
 
 ## 3. Sözleşme
+
+- **Kırıldı mı:** HAYIR (Sebep ata) — yalnız ekleme: iki uç, salon cevabında bir alan. Eski panel alanı okumaz.
 
 - **Kırıldı mı:** HAYIR (watchdog) — yalnız ekleme: bir kart ucu (nabız), duruş cevabında
   `provisionalEndedAt`/`endCorrectedAt`/`lateEndedAt`, kart cevabında `lastSeenAt`/`silentSince`, salon cevabında

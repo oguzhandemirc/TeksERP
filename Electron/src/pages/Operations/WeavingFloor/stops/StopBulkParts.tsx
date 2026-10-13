@@ -44,8 +44,9 @@ export function TimeChoice({ label, value, onChange }: { label: string; value: T
 }
 
 /** Sebep kodu; `""` = sebep sonra girilecek (duruş yine açılır, sınıflama borcu doğar). */
-export function ReasonList({ presets, value, onChange }: { presets: readonly ReasonPreset[]; value: string; onChange: (code: string) => void }) {
-  const rows = [{ code: "", label: "Sebep sonra girilecek" }, ...presets.map((p) => ({ code: p.code, label: p.label }))];
+export function ReasonList({ presets, value, onChange, allowLater = true }: { presets: readonly ReasonPreset[]; value: string; onChange: (code: string) => void; allowLater?: boolean }) {
+  const list = presets.map((p) => ({ code: p.code, label: p.label }));
+  const rows = allowLater ? [{ code: "", label: "Sebep sonra girilecek" }, ...list] : list;
   return (
     <div role="radiogroup" aria-label="Duruş sebebi" className="max-h-48 overflow-auto rounded border">
       {rows.map((r) => (
@@ -64,7 +65,7 @@ export function ReasonList({ presets, value, onChange }: { presets: readonly Rea
   );
 }
 
-const OUTCOME_TEXT: Record<BulkStopAction, string> = { OPEN: "Duruş açılacak", CLOSE: "Duruş kapanacak", REVOKE: "Duruş geri alınacak" };
+const OUTCOME_TEXT: Record<BulkStopAction, string> = { OPEN: "Duruş açılacak", CLOSE: "Duruş kapanacak", CLASSIFY: "Sebep girilecek", REVOKE: "Duruş geri alınacak" };
 
 interface TableProps {
   rows: readonly BulkStopPreviewRow[];

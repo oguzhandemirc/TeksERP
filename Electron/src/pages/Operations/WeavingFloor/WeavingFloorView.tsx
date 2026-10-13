@@ -34,7 +34,7 @@ import type { ClickMods } from "./selection";
 import type { FloorState, LiveLoom } from "./types";
 import "./weaving-floor.css";
 
-const STOP_MODE: Record<StopActionKey, StopDialogMode> = { stopOpen: "open", stopClose: "close", stopRevoke: "revoke" };
+const STOP_MODE: Record<StopActionKey, StopDialogMode> = { stopOpen: "open", stopClose: "close", stopClassify: "classify", stopRevoke: "revoke" };
 const isStopKey = (k: string): k is StopActionKey => (STOP_ACTION_KEYS as readonly string[]).includes(k);
 
 function bestHallOf(halls: readonly { hall: string; pct: number | null }[]): string | null {
@@ -177,7 +177,7 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
     [floor.looms],
   );
   // Koşum ve duruş eylemleri yalnız gerçek veride; örnek veri ve TV'de yok.
-  const jobs: FloorJobs | undefined = tv || sampleData ? undefined : { online: !stale, looms: floor.looms, bulkStops: floor.bulkStops === true, onAction: openAction };
+  const jobs: FloorJobs | undefined = tv || sampleData ? undefined : { online: !stale, looms: floor.looms, bulkStops: floor.bulkStops === true, bulkClassify: floor.bulkClassify === true, onAction: openAction };
   const { click } = selection;
   const onCard = useCallback((id: string, mods: ClickMods) => click(id, mods) && setSelectedId(id), [click]);
   const selected = floor.looms.find((t) => t.id === selectedId) ?? null;

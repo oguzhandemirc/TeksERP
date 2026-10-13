@@ -1,11 +1,12 @@
 // =============================================================================
-// TeksERP — TEZGAH SALONU TOPLU DURUŞ · önizleme / aç / kapat ("Hepsi çalıştı") / geri al
+// TeksERP — TEZGAH SALONU TOPLU DURUŞ · önizleme / aç / kapat ("Hepsi çalıştı") / sebep ata / geri al
 // =============================================================================
 // İKİNCİ YAZAR AÇMAZ: her satır mevcut tek yolu çağırır (`openManualStop` · `closeManualStop` ·
-// `revokeStop`; alarm dürtmesi `nudgeLoomAlarm` onların içinde). Toplu koşum emsali: her satır KENDİ
+// `classifyStop` · `revokeStop`; alarm dürtmesi `nudgeLoomAlarm` onların içinde). Toplu koşum emsali: her satır KENDİ
 // transaction'ında, satırlar SUNUCUDA tezgah kodu sırasıyla ve SIRAYLA (Promise.all yok), olmayan satır
 // somut sebebiyle `failed`te döner; advisory kilit EKLENMEZ (tek açık duruş seddi DB'de). Önizleme yazmaz.
-// Kapat/geri al kayıt yaratmaz (claim): aynı kullanıcının aynı bitiş/gerekçeyle yeniden gönderimi `ok` döner.
+// Kapat/sebep ata/geri al kayıt yaratmaz (claim): aynı kullanıcının aynı bitiş/sebep/gerekçeyle yeniden gönderimi `ok` döner.
+// Sebep ata yalnız AÇIK ve sebepsiz duruşu hedefler (ilk sınıflandırma); sebep→sebep düzeltmesi Tezgah Duruşları'nda kalır.
 // =============================================================================
 import { MachineDataSource } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -14,14 +15,14 @@ import { AuditService } from "./audit.service";
 import { LOOM_MACHINE_WHERE } from "../constants/loom-shift";
 import { SYSTEM_EVENT } from "../constants/system-events";
 import { extractTransientSqlState } from "../middlewares/error.middleware";
-import { STOP_REPLAY_MESSAGE, closeManualStop, openManualStop, revokeStop } from "./machine-stop.service";
+import { STOP_REPLAY_MESSAGE, classifyStop, closeManualStop, openManualStop, revokeStop } from "./machine-stop.service";
 import { assertStopShiftWritableTx, resolveShiftInstanceId, resolveStopPreset, resolveStopStamp, stopOverlapWhere } from "./helpers/machine-stop-context.helper";
 import type { ApiResponse } from "../types/api.types";
 
 /** Tek istekte en çok tezgah — salonun tamamı (elektrik kesintisi) tek seferde seçilebilsin. */
 export const BULK_STOP_MAX = 300;
 
-export type BulkStopAction = "OPEN" | "CLOSE" | "REVOKE";
+export type BulkStopAction = "OPEN" | "CLOSE" | "CLASSIFY" | "REVOKE";
 export type BulkStopOutcome = BulkStopAction | "BLOCKED";
 
 export interface BulkStopCurrent {
@@ -84,6 +85,12 @@ export interface BulkStopCloseInput {
   rows: Array<{ stopId: string }>;
 }
 
+export interface BulkStopClassifyInput {
+  reasonCode: string;
+  reasonNote?: string | null;
+  rows: Array<{ stopId: string }>;
+}
+
 export interface BulkStopRevokeInput {
   reason: string;
   rows: Array<{ stopId: string }>;
@@ -124,7 +131,7 @@ async function shiftBlock(ref: { shiftInstanceId: string | null; machineId: stri
 
 /** Önizleme — YAZMAZ. Her tezgah kodu + adıyla; uygun satır varsayılan seçili, engelli satır sebebiyle. */
 export async function previewBulkStops(input: { action: BulkStopAction; machineIds: string[]; at?: Date | null }): Promise<ApiResponse<BulkStopPreviewDto>> {
-  const at = input.action === "REVOKE" ? null : resolveStopStamp(input.at, input.action === "OPEN" ? "duruş başlangıcı" : "duruş bitişi", MachineDataSource.SUPERVISOR).value;
+  const at = input.action === "REVOKE" || input.action === "CLASSIFY" ? null : resolveStopStamp(input.at, input.action === "OPEN" ? "duruş başlangıcı" : "duruş bitişi", MachineDataSource.SUPERVISOR).value;
   const looms = await loadLooms(input.machineIds);
   const openStops = await prisma.machineStopEvent.findMany({
     where: { machineId: { in: [...looms.keys()] }, endedAt: null, revokedAt: null },
@@ -148,7 +155,7 @@ export async function previewBulkStops(input: { action: BulkStopAction; machineI
 async function actionBlock(
   action: BulkStopAction,
   machineId: string,
-  stop: { id: string; startedAt: Date; shiftInstanceId: string | null } | null,
+  stop: { id: string; startedAt: Date; shiftInstanceId: string | null; reasonCode: string | null } | null,
   when: { at: Date | null; openShift: string | null },
 ): Promise<{ code: string; message: string } | null> {
   const { at, openShift } = when;
@@ -159,6 +166,9 @@ async function actionBlock(
     return shiftBlock({ shiftInstanceId: openShift, machineId });
   }
   if (!stop) return { code: "STOP_NOT_OPEN", message: "Tezgahta açık duruş yok." };
+  if (action === "CLASSIFY" && stop.reasonCode !== null) {
+    return { code: "STOP_ALREADY_CLASSIFIED", message: "Açık duruşun sebebi zaten girilmiş — değiştirmek için Tezgah Duruşları ekranını kullanın." };
+  }
   if (action === "CLOSE" && at && stop.startedAt > at) return { code: "STOP_END_BEFORE_START", message: "Bitiş zamanı duruşun başlangıcından önce." };
   return shiftBlock({ shiftInstanceId: stop.shiftInstanceId, machineId });
 }
@@ -264,6 +274,37 @@ export async function closeBulkStops(input: BulkStopCloseInput, userId?: string)
   const result = { requested: input.rows.length, ok, failed };
   await auditBulk("CLOSE", userId, result, { endedAt: input.endedAt });
   return { success: true, data: result, message: summary("duruş kapandı", result) };
+}
+
+/** Sebep ata — sebep bir kez, her satıra aynı; yalnız sebepsiz duruşun İLK sınıflandırması (`classifyStop` claim'i). */
+export async function classifyBulkStops(input: BulkStopClassifyInput, userId?: string): Promise<ApiResponse<BulkStopResultDto>> {
+  // Sebep istek düzeyinde doğrulanır: geçersiz kod her satırda aynı 400'ü üretmesin.
+  const preset = await resolveStopPreset(prisma, input.reasonCode);
+  const ok: BulkStopOk[] = [];
+  const failed: BulkStopFailure[] = [];
+  for (const r of await stopRows(input.rows)) {
+    const ident = { machineId: r.machineId, machineCode: r.machineCode };
+    if (!r.found) {
+      failed.push({ ...ident, code: "STOP_NOT_FOUND", message: "Duruş bulunamadı." });
+      continue;
+    }
+    try {
+      await classifyStop(r.stopId, { reasonCode: preset.code, reasonNote: input.reasonNote ?? null }, userId, MachineDataSource.SUPERVISOR);
+      ok.push({ ...ident, stopId: r.stopId, replayed: false, warnings: [] });
+    } catch (e) {
+      if (codeOf(e) === "STOP_ALREADY_CLASSIFIED") {
+        const cur = await prisma.machineStopEvent.findUnique({ where: { id: r.stopId }, select: { reasonCode: true, classifiedById: true } });
+        if (cur?.classifiedById === (userId ?? null) && cur.reasonCode === preset.code) {
+          ok.push({ ...ident, stopId: r.stopId, replayed: true, warnings: [] });
+          continue;
+        }
+      }
+      failed.push(rowFailure(e, ident));
+    }
+  }
+  const result = { requested: input.rows.length, ok, failed };
+  await auditBulk("CLASSIFY", userId, result, { reasonCode: preset.code });
+  return { success: true, data: result, message: summary("sebep girildi", result) };
 }
 
 /** Toplu geri al — gerekçe bir kez, her satıra aynı; satır silinmez, damgalanır. */

@@ -228,6 +228,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Sistem → Yedekler'de yedek anahtarı kurulu değilse şifresiz yedek uyarısı görünür ve şifresiz bir yedek indirirken ayrıca uyarı çıkar: bu dosyayı güvenli bir yerde saklayın, içinde fabrikanın bütün verisi açık durur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah Salonu'nda sebebi girilmemiş duruşlara salondan sebep yazabilirsiniz: tezgahı ya da birkaç tezgahı seçip sağ tık menüsünden veya seçim çubuğundan Sebep ata'yı seçin. Sebebi listeden bir kez seçersiniz ve seçili her duruşa aynı sebep yazılır. Göndermeden önce her tezgah adıyla listelenir; şu an duruşta olmayan ya da duruşunun sebebi zaten girilmiş tezgah işaretsiz gelir ve nedenini yazar. Girilmiş bir sebebi değiştirmek için Tezgah Duruşları ekranını kullanın. Bu seçenek için duruş sınıflandırma izni ve sunucunun 2.15.7 sürümü gerekir; eski sunucuda soluk kalır."
         }
       ]
     },

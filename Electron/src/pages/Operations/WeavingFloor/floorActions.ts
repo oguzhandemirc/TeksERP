@@ -10,6 +10,7 @@ export type FloorActionKey =
   | "revoke"
   | "stopOpen"
   | "stopClose"
+  | "stopClassify"
   | "stopRevoke"
   | "stops"
   | "reports"
@@ -21,7 +22,7 @@ export const RUN_ACTION_KEYS = ["assign", "replace", "finish", "revoke"] as cons
 export type RunActionKey = (typeof RUN_ACTION_KEYS)[number];
 
 /** Toplu duruş eylemleri — `/api/machine-stops/bulk/*` yalnız bunlardan açılır; YALNIZ `dokumaEnabled` dalında doğarlar (bekçi §7f). */
-export const STOP_ACTION_KEYS = ["stopOpen", "stopClose", "stopRevoke"] as const satisfies readonly FloorActionKey[];
+export const STOP_ACTION_KEYS = ["stopOpen", "stopClose", "stopClassify", "stopRevoke"] as const satisfies readonly FloorActionKey[];
 export type StopActionKey = (typeof STOP_ACTION_KEYS)[number];
 
 export interface FloorAction {
@@ -51,6 +52,10 @@ export interface FloorActionCtx {
     bulk: boolean;
     /** Seçimde açık duruşu olan tezgah sayısı. */
     openStopLooms: number;
+    /** Sunucu "Sebep ata" uçlarını tanıyor mu (salon ucunun `bulkClassifyAction` alanı); değilse eski sunucu → pasif. */
+    bulkClassify?: boolean;
+    /** Seçimde sebebi girilmemiş açık duruşu olan tezgah sayısı. */
+    unclassifiedStopLooms?: number;
   };
 }
 
@@ -78,6 +83,14 @@ function stopReason(ctx: FloorActionCtx, needsOpenStop: boolean): string | null 
   return ctx.stops.openStopLooms > 0 ? null : "Seçili tezgahta açık duruş yok.";
 }
 
+/** "Sebep ata" pasif mi — sıra: izin (`loom:classify`) → bağlantı → sunucu sürümü → seçimde sebepsiz açık duruş. */
+function classifyReason(ctx: FloorActionCtx): string | null {
+  if (!ctx.can("loom:classify")) return NO_PERM("Duruş sınıflandırma");
+  if (!ctx.stops?.online) return OFFLINE;
+  if (!ctx.stops.bulkClassify) return OLD_SERVER;
+  return (ctx.stops.unclassifiedStopLooms ?? 0) > 0 ? null : "Seçili tezgahta sebebi girilmemiş açık duruş yok.";
+}
+
 function item(key: FloorActionKey, label: string, reason: string | null): FloorAction {
   return { key, label, enabled: reason === null, reason };
 }
@@ -95,6 +108,7 @@ export function floorActionsOf(ctx: FloorActionCtx): FloorAction[] {
     if (ctx.stops && ctx.count > 0) {
       out.push(item("stopOpen", "Duruş bildir…", stopReason(ctx, false)));
       out.push(item("stopClose", "Hepsi çalıştı…", stopReason(ctx, true)));
+      out.push(item("stopClassify", "Sebep ata…", classifyReason(ctx)));
       out.push(item("stopRevoke", "Duruşu geri al…", stopReason(ctx, true)));
     }
     const stopsOk = ctx.can("loom:manual-entry") || ctx.can("loom:classify");

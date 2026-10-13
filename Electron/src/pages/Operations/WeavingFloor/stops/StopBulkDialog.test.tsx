@@ -8,7 +8,7 @@ import { formatFactory } from "@/lib/factory-time";
 import type { LiveLoom } from "../types";
 import type { BulkStopPreviewRow } from "./stopService";
 
-const api = vi.hoisted(() => ({ preview: vi.fn(), open: vi.fn(), close: vi.fn(), revoke: vi.fn() }));
+const api = vi.hoisted(() => ({ preview: vi.fn(), open: vi.fn(), close: vi.fn(), revoke: vi.fn(), classifyPreview: vi.fn(), classify: vi.fn() }));
 vi.mock("./stopService", () => ({ stopService: api }));
 vi.mock("@/pages/Operations/MachineStops/useStopReasonPresets", () => ({
   useStopReasonPresets: () => ({
@@ -157,5 +157,42 @@ describe("StopBulkDialog — Hepsi çalıştı / geri al", () => {
     fireEvent.change(screen.getByLabelText("Geri alma gerekçesi"), { target: { value: "yanlış tezgahlar" } });
     fireEvent.click(submit(/Geri al/));
     await waitFor(() => expect(api.revoke).toHaveBeenCalledWith({ reason: "yanlış tezgahlar", rows: [{ stopId: "s-a" }, { stopId: "s-b" }, { stopId: "s-c" }] }));
+  });
+});
+
+describe("StopBulkDialog — Sebep ata", () => {
+  beforeEach(() => {
+    api.classifyPreview.mockImplementation(({ machineIds }: { machineIds: string[] }) =>
+      Promise.resolve({
+        action: "CLASSIFY",
+        at: null,
+        rows: machineIds.map((id) =>
+          id === "c"
+            ? row("c", "BLOCKED", { current: { ...STOP, id: "s-c", reasonCode: "ELEKTRIK" }, block: { code: "STOP_ALREADY_CLASSIFIED", message: "Açık duruşun sebebi zaten girilmiş." } })
+            : row(id, "CLASSIFY", { current: { ...STOP, id: `s-${id}` } }),
+        ),
+      }),
+    );
+    api.classify.mockImplementation(({ rows }: { rows: Array<{ stopId: string }> }) => Promise.resolve(OK(rows.map((r) => r.stopId.slice(2)))));
+  });
+
+  it("⭐ açılışta KENDİ önizleme ucundan önizler; sebepli satır işaretsiz ve sebebiyle; 'Sebep sonra girilecek' seçeneği YOK", async () => {
+    show("classify");
+    const table = await screen.findByRole("table", { name: "Etkilenecek tezgahlar" });
+    expect(api.classifyPreview).toHaveBeenCalledWith({ machineIds: ["a", "b", "c"] });
+    expect(api.preview).not.toHaveBeenCalled();
+    expect(within(table).getByText("Açık duruşun sebebi zaten girilmiş.")).toBeTruthy();
+    expect((screen.getByRole("checkbox", { name: "T-c" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("radio", { name: "Sebep sonra girilecek" })).toBeNull();
+  });
+
+  it("⭐ sebep seçilmeden gönderim pasif; sebep BİR KEZ, seçili duruşlara", async () => {
+    show("classify");
+    await screen.findByRole("table", { name: "Etkilenecek tezgahlar" });
+    expect((submit(/Sebebi yaz \(2 tezgah\)/) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: "Planlı bakım" }));
+    fireEvent.click(submit(/Sebebi yaz \(2 tezgah\)/));
+    await waitFor(() => expect(api.classify).toHaveBeenCalledWith({ reasonCode: "PLANLI_BAKIM", reasonNote: null, rows: [{ stopId: "s-a" }, { stopId: "s-b" }] }));
+    expect(await screen.findByText(/Sebep girildi/)).toBeTruthy();
   });
 });

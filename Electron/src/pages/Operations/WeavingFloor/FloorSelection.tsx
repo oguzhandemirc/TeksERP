@@ -32,6 +32,8 @@ export interface FloorJobs {
   looms: readonly LiveLoom[];
   /** Sunucu toplu duruş uçlarını tanıyor mu (değilse duruş eylemleri pasif — eski sunucu). */
   bulkStops: boolean;
+  /** Sunucu "Sebep ata" uçlarını tanıyor mu (değilse eylem pasif — eski sunucu). */
+  bulkClassify?: boolean;
   /** Seçili tezgahların HEPSİ (süzgeçte görünmeyenler dahil). */
   onAction: (key: RunActionKey | StopActionKey, ids: string[]) => void;
 }
@@ -47,6 +49,11 @@ export function openRunLoomsOf(looms: readonly LiveLoom[], ids: ReadonlySet<stri
   return n;
 }
 
+/** Seçimde sebebi girilmemiş açık duruşu olan tezgah sayısı ("Sebep ata" hedefi). */
+export function unclassifiedStopLoomsOf(looms: readonly LiveLoom[], ids: ReadonlySet<string>): number {
+  return looms.filter((l) => ids.has(l.id) && l.openStop != null && l.openStop.reasonCode === null).length;
+}
+
 /** Seçimde açık duruşu olan tezgah sayısı. */
 export function openStopLoomsOf(looms: readonly LiveLoom[], ids: ReadonlySet<string>): number {
   return looms.filter((l) => ids.has(l.id) && l.openStop != null).length;
@@ -56,7 +63,9 @@ function useActions(s: FloorSelectionState, jobs: FloorJobs | undefined): FloorA
   const dokumaEnabled = useDokumaEnabled();
   const { hasPermission } = useRoleAccess();
   const runs: FloorActionCtx["runs"] = jobs ? { online: jobs.online, openRunLooms: openRunLoomsOf(jobs.looms, s.sel.ids) } : undefined;
-  const stops: FloorActionCtx["stops"] = jobs ? { online: jobs.online, bulk: jobs.bulkStops, openStopLooms: openStopLoomsOf(jobs.looms, s.sel.ids) } : undefined;
+  const stops: FloorActionCtx["stops"] = jobs
+    ? { online: jobs.online, bulk: jobs.bulkStops, openStopLooms: openStopLoomsOf(jobs.looms, s.sel.ids), bulkClassify: jobs.bulkClassify === true, unclassifiedStopLooms: unclassifiedStopLoomsOf(jobs.looms, s.sel.ids) }
+    : undefined;
   return floorActionsOf({ count: s.sel.ids.size, dokumaEnabled, can: hasPermission, runs, stops });
 }
 

@@ -135,6 +135,7 @@ export function fromApi(dto: LoomFloorDto): FloorState {
     shift: dto.shift ? { name: dto.shift.name, startsAt: ms(dto.shift.startsAt), endsAt: ms(dto.shift.endsAt) } : null,
     alarmNotice: dto.alarmNotice ?? null,
     bulkStops: dto.bulkStopActions === true,
+    bulkClassify: dto.bulkClassifyAction === true,
     halls,
     looms,
     updatedAt: ms(dto.asOf),

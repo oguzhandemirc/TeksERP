@@ -131,8 +131,9 @@ export interface LoomFloorDto {
   dokumaEnabled: boolean;
   /** Levent tezgah bağı ölçülüyor mu (devere ∧ `devere.mountTracking`) — kapalıyken her tezgahta `beams: null`. */
   beamTracking: boolean;
-  /** Sunucu toplu duruş uçlarını (`/api/machine-stops/bulk/*`) tanıyor — alanı görmeyen panel eski sunucu sayar, eylemi pasif çizer. */
+  /** Sunucu toplu duruş uçlarını (`/api/machine-stops/bulk/*`; "Sebep ata" `bulk/classify*` ayrıca) tanıyor — alanı görmeyen panel eski sunucu sayar, eylemi pasif çizer. */
   bulkStopActions: true;
+  bulkClassifyAction: true;
   summary: FloorCounts;
   halls: FloorHallSummary[];
   looms: LoomFloorLoomDto[];
@@ -323,9 +324,8 @@ export async function getLoomFloor(now: Date = new Date()): Promise<ApiResponse<
       shift: alarm.currentShift,
       alarmNotice: alarm.notice,
       graceMinutes: grace,
-      dokumaEnabled,
-      beamTracking,
-      bulkStopActions: true,
+      dokumaEnabled, beamTracking,
+      bulkStopActions: true, bulkClassifyAction: true,
       summary: countFloor(cores),
       halls: summarizeHalls(cores),
       looms: built.map((b) => b.dto),
