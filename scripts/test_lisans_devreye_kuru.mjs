@@ -13,8 +13,10 @@
 //   §3 SÖZLEŞME BİRİMİ — sshDenetle/psDenetle/httpDenetle sabit vektörlerle (izin listesi sessizce gevşemesin)
 //   §4 SONDALAR (her koşumda, geçici kopyada) — NEGATİF N1…N5 kırmızı vermeli; POZİTİF P1 temiz kopya ve
 //      P2 meşru yeni salt-okuma kontrolü eklenmiş kopya YEŞİL kalmalı (kapı meşru eklemeyi engellemez)
-//   §5 deploy/vds-dogrula.sh (§5h satıcı yedek tazeliği, B3) — tek ssh, uzak komut §3'ün izin listesinden (ag.mjs sshDenetle), yerel yazım yalnız
-//      taban dizinine; sahte `ssh` ile AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez. Sondalar N6…N10 kırmızı, P3/P4 yeşil
+//   §5 deploy/vds-dogrula.sh (§5h satıcı yedek tazeliği, B3) — iki ssh (bayt → tekserp-yayin, yedek → docker erişimli
+//      tekserp-vds), iki uzak komut §3'ün izin listesinden (ag.mjs sshDenetle), yerel yazım yalnız taban dizinine; hedefe
+//      duyarlı sahte `ssh` ile AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez · docker/ssh hatası BAYAT değil ÖLÇÜLEMEDİ (§5i–§5k).
+//      Sondalar N6…N10, N16…N20 kırmızı, P3/P4 yeşil
 //   §6 T4 özeti (lib/gozlem.mjs, ağsız) — etkinleşmemiş kurulumun `gecerlilik≠GECERLI` örneği AYRI sayılır, yanlış
 //      pozitif DEĞİLDİR; etkin örnekte aynı durum IHLAL kalır; hiç etkin örnek yoksa ÖLÇÜLEMEDİ. Sondalar N11/N12, P5
 //   §7 Aşama 7.1 satıcı kıyası (lib/asamalar-c.mjs, ağsız) — detay ucu satıcıyı yalnız HOST olarak döner; 7.1
@@ -191,19 +193,39 @@ const SONDALAR = [
   ['P2 meşru yeni salt-okuma kontrolü', null, [['lib/asamalar-b.mjs', "export const ASAMA_5 = [", "export const ASAMA_5 = [\n  { no: '5.0', ad: 'sonda', kos: (ag) => ag.ssh('docker ps --format \"{{.Names}}\"', { hedef: 'yayin' }), degerlendir: () => ({ sonuc: 'UYUMLU', not: '' }) },"]], true],
 ];
 
-// ---- §5 deploy/vds-dogrula.sh: VDS'e yalnız OKUMA (tek ssh, uzak komut ag.mjs izin listesinden), yerel yazım
-// yalnız taban dizinine; davranış sahte `ssh` ile (AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez) ----
+// ---- §5 deploy/vds-dogrula.sh: VDS'e yalnız OKUMA (iki ssh, uzak komutlar ag.mjs izin listesinden), yerel yazım
+// yalnız taban dizinine; davranış hedefe duyarlı sahte `ssh` ile (AYNI · FARK · ÖLÇÜLEMEDİ · taban ezilmez) ----
 const VDS_BETIK = path.join(KOK, 'deploy/vds-dogrula.sh');
 const kodSatirlari = (metin) => metin.split('\n').filter((x) => !/^\s*#/.test(x));
-const SAHTE_SSH = '#!/usr/bin/env bash\nprintf \'%s\\n\' "$@" > "$SAHTE_ARG"\ncat "$SAHTE_CIKTI"\nexit "${SAHTE_KOD:-0}"\n';
+// Sahte ssh hedef (sondan ikinci argüman) + komut türüne (@@YEDEK → yedek, yoksa bayt) göre `<hedef>-<tür>.{cikti,hata,kod}`
+// okur; dosya yoksa ssh gibi 255 döner. `.hata` docker hatasını taklit eder: stderr'e yazar, ls çıktısı vermez ve
+// `@@HATA`yı YALNIZ komut `|| echo '@@HATA'` taşıyorsa basar (uzak kabuğun davranışı). Her çağrı arg-<n>'e düşer.
+const SAHTE_SSH = `#!/usr/bin/env bash
+hedef="\${@: -2:1}"; cmd="\${@: -1}"
+n=$(( $(cat "$SAHTE_DIR/sayac" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$SAHTE_DIR/sayac"
+printf '%s\\n' "$@" > "$SAHTE_DIR/arg-$n"
+case "$cmd" in *@@YEDEK*) tur=yedek ;; *) tur=bayt ;; esac
+f="$SAHTE_DIR/$hedef-$tur"
+[ -f "$f.kod" ] && { echo "ssh: connect to host $hedef port 2222: Connection refused" >&2; exit "$(cat "$f.kod")"; }
+if [ -f "$f.hata" ]; then
+  echo '@@YEDEK'; head -n 1 "$f.hata"; tail -n +2 "$f.hata" >&2
+  case "$cmd" in *"|| echo '@@HATA'"*) echo '@@HATA' ;; esac
+  exit 0
+fi
+[ -f "$f.cikti" ] || { echo "ssh: Could not resolve hostname $hedef" >&2; exit 255; }
+cat "$f.cikti"
+`;
 
 // Yedek bölümü (B3): uzak kesim damgası + `ls -1 /yedek`; varsayılan taze (kesimden yeni döküm + çift katman arşiv).
 const YEDEK_TAZE = ['20261012_090000', 'satici_20261013_030000.dump.tkenc', 'anahtarlar_20261013_030000.tar.tkenc.tkenc'];
-function sahteCikti(bozuk = false, yedek = YEDEK_TAZE) {
+function sahteCikti(bozuk = false) {
   const h = (i) => (i === 7 && bozuk ? 'f' : 'a').repeat(2) + i.toString(16).padStart(62, '0');
   const a = Array.from({ length: 320 }, (_, i) => `${h(i)}  adnansahin/electron/d${i}.bin`);
-  return [...a, '@@KOK', `${h(900)}  electron/latest.yml`, '@@DIGER', `${h(901)}  /opt/x/defter.tsv`, '@@YEDEK', ...yedek, '@@LS', 'adnansahin', 'electron', ''].join('\n');
+  return [...a, '@@KOK', `${h(900)}  electron/latest.yml`, '@@DIGER', `${h(901)}  /opt/x/defter.tsv`, '@@LS', 'adnansahin', 'electron', ''].join('\n');
 }
+const yedekCikti = (yedek = YEDEK_TAZE) => ['@@YEDEK', ...yedek, ''].join('\n');
+// Gerçek arıza (2026-10-13): yayinci docker grubunda değil — docker soketi izin hatası (kesim + stderr).
+const DOCKER_IZIN_HATASI = '20261012_090000\npermission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock\n';
 
 async function vdsDogrulaDenetimi(betik, tmp) {
   const sonuc = [];
@@ -211,50 +233,76 @@ async function vdsDogrulaDenetimi(betik, tmp) {
   const { sshDenetle } = await import(path.join(HEDEF, 'lib/ag.mjs'));
   const kod = kodSatirlari(fs.readFileSync(betik, 'utf8'));
   const ssh = kod.filter((x) => /(^|[\s;|&(])ssh\s/.test(x));
-  ekle('§5a tek ssh çağrısı: -n BatchMode, yalnız "$SSH_HEDEF" "$UZAK"', ssh.length === 1 && /ssh -n -o BatchMode=yes -o ConnectTimeout=10 "\$SSH_HEDEF" "\$UZAK"\)/.test(ssh[0]), `${ssh.length} ssh satırı`);
-  // UZAK= satırı uzak komuttur (docker exec yalnız VDS'te koşar); onu §5d ag.mjs izin listesiyle ölçer.
-  const yasak = kod.filter((x) => !/^UZAK=/.test(x)).filter((x) => /(^|[\s;|&(])(scp|rsync|sftp|curl|wget|docker|nc|rm|mv|cp|tee|chmod|chown|sudo|dd|truncate|touch)(?=\s|$)/.test(x));
+  const sshBayt = ssh.filter((x) => /ssh -n -o BatchMode=yes -o ConnectTimeout=10 "\$SSH_HEDEF" "\$UZAK"\)/.test(x));
+  const sshYedek = ssh.filter((x) => /ssh -n -o BatchMode=yes -o ConnectTimeout=10 "\$YEDEK_SSH_HEDEF" "\$UZAK_YEDEK" 2>&1\)/.test(x));
+  ekle('§5a iki ssh çağrısı: -n BatchMode, yalnız "$SSH_HEDEF" "$UZAK" ve "$YEDEK_SSH_HEDEF" "$UZAK_YEDEK"', ssh.length === 2 && sshBayt.length === 1 && sshYedek.length === 1, `${ssh.length} ssh satırı · bayt ${sshBayt.length} · yedek ${sshYedek.length}`);
+  // UZAK=/UZAK_YEDEK= satırları uzak komuttur (docker exec yalnız VDS'te koşar); onları §5d ag.mjs izin listesiyle ölçer.
+  const yasak = kod.filter((x) => !/^UZAK(_YEDEK)?=/.test(x)).filter((x) => /(^|[\s;|&(])(scp|rsync|sftp|curl|wget|docker|nc|rm|mv|cp|tee|chmod|chown|sudo|dd|truncate|touch)(?=\s|$)/.test(x));
   ekle('§5b yerel yazma/ağ aracı yok (rm · mv · cp · docker · scp · curl …)', yasak.length === 0, yasak.map((x) => x.trim().slice(0, 60)).join(' | '));
   const hedefler = kod.flatMap((x) => [...x.matchAll(/\d?>>?\s*([^\s;)]+)/g)].map((m) => m[1]));
-  const disari = hedefler.filter((h) => h !== '/dev/null' && h !== '&2' && !/^"\$TABAN\/[a-z]+\.sha"$/.test(h));
+  // `&1`/`&2` dosya değil akış birleştirmedir (yedek ssh'inin stderr'i neden satırına girer).
+  const disari = hedefler.filter((h) => h !== '/dev/null' && h !== '&2' && h !== '&1' && !/^"\$TABAN\/[a-z]+\.sha"$/.test(h));
   ekle('§5c yerel yazım yalnız taban dizinine ("$TABAN/<ad>.sha")', hedefler.length >= 3 && disari.length === 0, disari.join(' ') || `${hedefler.length} yönlendirme`);
 
   const bin = path.join(tmp, 'bin');
   fs.mkdirSync(bin, { recursive: true });
   fs.writeFileSync(path.join(bin, 'ssh'), SAHTE_SSH, { mode: 0o755 });
-  const argDosya = path.join(tmp, 'ssh-arg.txt');
-  const ciktiDosya = path.join(tmp, 'ssh-cikti.txt');
-  const kos = (args, { cikti = sahteCikti(), kodu = '0' } = {}) => {
-    fs.rmSync(argDosya, { force: true });
-    fs.writeFileSync(ciktiDosya, cikti);
+  const sd = path.join(tmp, 'sahte');
+  // Varsayılan VDS: bayt yayinci hesabında, yedek docker erişimli hesapta; yayinci'den docker exec izin hatası verir.
+  const kos = (args, { bayt = sahteCikti(), yedek = yedekCikti(), yedekHata = null, yedekKod = null } = {}) => {
+    fs.rmSync(sd, { recursive: true, force: true });
+    fs.mkdirSync(sd, { recursive: true });
+    if (bayt !== null) fs.writeFileSync(path.join(sd, 'tekserp-yayin-bayt.cikti'), bayt); // null: bayt ssh'i kopuk (255)
+    fs.writeFileSync(path.join(sd, 'tekserp-yayin-yedek.hata'), DOCKER_IZIN_HATASI);
+    fs.writeFileSync(path.join(sd, yedekHata ? 'tekserp-vds-yedek.hata' : 'tekserp-vds-yedek.cikti'), yedekHata ?? yedek);
+    if (yedekKod) fs.writeFileSync(path.join(sd, 'tekserp-vds-yedek.kod'), yedekKod);
     const r = spawnSync('bash', [betik, ...args], { encoding: 'utf8', timeout: 30_000,
-      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, HOME: tmp, LC_ALL: 'C', TEKSERP_VDS_TABAN: '', SAHTE_ARG: argDosya, SAHTE_CIKTI: ciktiDosya, SAHTE_KOD: kodu } });
-    return { kod: r.status, cikti: `${r.stdout}${r.stderr}`, ssh: fs.existsSync(argDosya) ? fs.readFileSync(argDosya, 'utf8').split('\n') : null };
+      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, HOME: tmp, LC_ALL: 'C', TEKSERP_VDS_TABAN: '', TEKSERP_YEDEK_SSH_HEDEF: '', TEKSERP_SATICI_YEDEK_KONTEYNER: '', SAHTE_DIR: sd } });
+    const cagri = fs.readdirSync(sd).filter((f) => /^arg-\d+$/.test(f)).sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)))
+      .map((f) => fs.readFileSync(path.join(sd, f), 'utf8').split('\n').filter(Boolean));
+    const tur = (c) => (c.at(-1).includes('@@YEDEK') ? 'yedek' : 'bayt');
+    return { kod: r.status, cikti: `${r.stdout}${r.stderr}`, cagri, bayt: cagri.filter((c) => tur(c) === 'bayt'), yedek: cagri.filter((c) => tur(c) === 'yedek') };
   };
   const k = kos(['--komut-yaz']);
-  const uzak = k.cikti.trim();
-  let denetim = 'geçti';
-  try { sshDenetle(uzak); } catch (e) { denetim = e.message.slice(0, 120); }
-  ekle('§5d --komut-yaz: bağlanmaz, tek uzak komut ag.mjs salt-okuma izin listesinden geçer', k.kod === 0 && k.ssh === null && uzak.split('\n').length === 1 && denetim === 'geçti', `kod ${k.kod} · ssh ${k.ssh ? 'ÇAĞRILDI' : 'yok'} · ${denetim}`);
+  const satirlar = k.cikti.trim().split('\n').map((x) => x.split('\t'));
+  const [[bHedef, uzak] = [], [yHedef, uzakYedek] = []] = satirlar;
+  const denetim = [];
+  for (const u of [uzak, uzakYedek]) { try { sshDenetle(u ?? ''); } catch (e) { denetim.push(e.message.slice(0, 120)); } }
+  ekle('§5d --komut-yaz: bağlanmaz, iki satır "<hedef>\\t<komut>" (bayt + yedek), ikisi de ag.mjs salt-okuma izin listesinden geçer',
+    k.kod === 0 && k.cagri.length === 0 && satirlar.length === 2 && satirlar.every((x) => x.length === 2) && !uzak.includes('@@YEDEK') && uzakYedek.includes('@@YEDEK') && denetim.length === 0,
+    `kod ${k.kod} · ssh ${k.cagri.length ? 'ÇAĞRILDI' : 'yok'} · ${satirlar.length} satır · ${denetim.join(' | ') || 'denetim geçti'}`);
   const taban = path.join(tmp, 'taban');
   const y = kos([`--taban=${taban}`, '--taban-yaz']);
   const olc = kos([`--taban=${taban}`]);
-  const sshOk = olc.ssh !== null && olc.ssh.includes('BatchMode=yes') && olc.ssh.includes('tekserp-yayin') && olc.ssh.includes(uzak);
-  ekle('§5e taban-yaz → ölç: AYNI (çıkış 0), ssh uzak komutu --komut-yaz ile birebir', y.kod === 0 && olc.kod === 0 && /AYNI/.test(olc.cikti) && sshOk, `yaz ${y.kod} · ölç ${olc.kod} · ssh arg ${sshOk ? 'uyumlu' : 'UYUMSUZ'}`);
-  const fark = kos([`--taban=${taban}`], { cikti: sahteCikti(true) });
+  const birebir = (c, hedef, komut) => c.length === 1 && c[0].includes('BatchMode=yes') && c[0].at(-2) === hedef && c[0].at(-1) === komut;
+  const sshOk = birebir(olc.bayt, bHedef, uzak) && birebir(olc.yedek, yHedef, uzakYedek);
+  ekle('§5e taban-yaz (yalnız bayt ssh\'i) → ölç: AYNI (çıkış 0), iki ssh hedefi + uzak komutu --komut-yaz ile birebir',
+    y.kod === 0 && y.yedek.length === 0 && olc.kod === 0 && /AYNI/.test(olc.cikti) && sshOk, `yaz ${y.kod} (yedek ssh ${y.yedek.length}) · ölç ${olc.kod} · ssh arg ${sshOk ? 'uyumlu' : 'UYUMSUZ'}`);
+  ekle('§5i hedef ayrımı: bayt → tekserp-yayin, yedek → tekserp-vds (yayinci docker grubunda değil); taze yedek ✅',
+    bHedef === 'tekserp-yayin' && yHedef === 'tekserp-vds' && olc.bayt[0]?.at(-2) === 'tekserp-yayin' && olc.yedek[0]?.at(-2) === 'tekserp-vds' && /✅ satıcı yedeği taze/.test(olc.cikti),
+    `komut-yaz ${bHedef}/${yHedef} · çağrı ${olc.bayt[0]?.at(-2)}/${olc.yedek[0]?.at(-2)} · ${olc.cikti.split('\n').find((x) => /YEDEK|yedeği/.test(x)) ?? ''}`);
+  const dHata = kos([`--taban=${taban}`], { yedekHata: DOCKER_IZIN_HATASI });
+  ekle('§5j docker exec hatası BAYAT değil "YEDEK ÖLÇÜLEMEDİ: <konteyner> okunamadı … <neden>" (çıkış 1, adnansahin AYNI yine basılır)',
+    dHata.kod === 1 && /❌ YEDEK ÖLÇÜLEMEDİ: tekserp-satici-uretim-yedek okunamadı \(tekserp-vds\): .*permission denied/.test(dHata.cikti) && !/BAYAT/.test(dHata.cikti) && /adnansahin AYNI/.test(dHata.cikti),
+    `çıkış ${dHata.kod} · ${dHata.cikti.split('\n').find((x) => /YEDEK/.test(x)) ?? 'YEDEK satırı yok'}`);
+  const yKopuk = kos([`--taban=${taban}`], { yedekKod: '255' });
+  ekle('§5k yedek ssh\'i kopuk → "YEDEK ÖLÇÜLEMEDİ: tekserp-vds bağlantısı kurulamadı (çıkış 255): <neden>" (çıkış 1, BAYAT değil, adnansahin AYNI yine basılır)',
+    yKopuk.kod === 1 && /❌ YEDEK ÖLÇÜLEMEDİ: tekserp-vds bağlantısı kurulamadı \(çıkış 255\): .*Connection refused/.test(yKopuk.cikti) && !/BAYAT/.test(yKopuk.cikti) && /adnansahin AYNI/.test(yKopuk.cikti),
+    `çıkış ${yKopuk.kod} · ${yKopuk.cikti.split('\n').find((x) => /YEDEK/.test(x)) ?? 'YEDEK satırı yok'}`);
+  const fark = kos([`--taban=${taban}`], { bayt: sahteCikti(true) });
   ekle('§5f tek bayt farkı → FARK (çıkış 1)', fark.kod === 1 && /FARK: html\/adnansahin/.test(fark.cikti), `çıkış ${fark.kod}`);
   const once = fs.readFileSync(path.join(taban, 'adnansahin.sha'), 'utf8');
-  const ez = kos([`--taban=${taban}`, '--taban-yaz'], { cikti: sahteCikti(true) });
+  const ez = kos([`--taban=${taban}`, '--taban-yaz'], { bayt: sahteCikti(true) });
   const yok = kos([`--taban=${path.join(tmp, 'yok')}`]);
-  const kopuk = kos([`--taban=${taban}`], { kodu: '255' });
-  const az = kos([`--taban=${taban}`], { cikti: '@@KOK\n@@DIGER\n@@LS\n' });
+  const kopuk = kos([`--taban=${taban}`], { bayt: null });
+  const az = kos([`--taban=${taban}`], { bayt: '@@KOK\n@@DIGER\n@@LS\n' });
   ekle('§5g ÖLÇÜLEMEDİ (çıkış 2): taban ezilmez · taban yok · ssh kopuk · az dosya', ez.kod === 2 && fs.readFileSync(path.join(taban, 'adnansahin.sha'), 'utf8') === once && yok.kod === 2 && kopuk.kod === 2 && az.kod === 2,
     `ez ${ez.kod} · yok ${yok.kod} · kopuk ${kopuk.kod} · az ${az.kod}`);
-  const bayatDb = kos([`--taban=${taban}`], { cikti: sahteCikti(false, ['20261012_090000', 'satici_20261011_030000.dump.tkenc', 'anahtarlar_20261013_030000.tar.tkenc.tkenc']) });
-  const bayatAn = kos([`--taban=${taban}`], { cikti: sahteCikti(false, ['20261012_090000', 'satici_20261013_030000.dump.tkenc', 'anahtarlar_20261011_030000.tar.tkenc.tkenc']) });
-  const yedekYok = kos([`--taban=${taban}`], { cikti: sahteCikti(false, ['20261012_090000']) });
-  const kesimYok = kos([`--taban=${taban}`], { cikti: sahteCikti(false, ['satici_20261013_030000.dump.tkenc', 'anahtarlar_20261013_030000.tar.tkenc.tkenc']) });
-  ekle('§5h satıcı yedeği: bayat DB · bayat anahtar arşivi · yedek yok (konteyner okunamadı) · kesim yok → ❌ çıkış 1; adnansahin AYNI satırı yine basılır; taze yedek ✅ (§5e)',
+  const bayatDb = kos([`--taban=${taban}`], { yedek: yedekCikti(['20261012_090000', 'satici_20261011_030000.dump.tkenc', 'anahtarlar_20261013_030000.tar.tkenc.tkenc']) });
+  const bayatAn = kos([`--taban=${taban}`], { yedek: yedekCikti(['20261012_090000', 'satici_20261013_030000.dump.tkenc', 'anahtarlar_20261011_030000.tar.tkenc.tkenc']) });
+  const yedekYok = kos([`--taban=${taban}`], { yedek: yedekCikti(['20261012_090000']) });
+  const kesimYok = kos([`--taban=${taban}`], { yedek: yedekCikti(['satici_20261013_030000.dump.tkenc', 'anahtarlar_20261013_030000.tar.tkenc.tkenc']) });
+  ekle('§5h satıcı yedeği: bayat DB · bayat anahtar arşivi · yedek yok (konteyner okundu, döküm yok) · kesim yok → ❌ çıkış 1; adnansahin AYNI satırı yine basılır; taze yedek ✅ (§5e)',
     bayatDb.kod === 1 && /YEDEK BAYAT: en yeni DB/.test(bayatDb.cikti) && /AYNI/.test(bayatDb.cikti) && bayatAn.kod === 1 && /YEDEK BAYAT: en yeni anahtar/.test(bayatAn.cikti) && yedekYok.kod === 1 && /DB dökümü YOK/.test(yedekYok.cikti) && kesimYok.kod === 1 && /YEDEK ÖLÇÜLEMEDİ/.test(kesimYok.cikti) && /satıcı yedeği taze/.test(olc.cikti),
     `db ${bayatDb.kod} · anahtar ${bayatAn.kod} · yok ${yedekYok.kod} · kesim ${kesimYok.kod}`);
   return sonuc;
@@ -263,10 +311,14 @@ async function vdsDogrulaDenetimi(betik, tmp) {
 const VDS_SONDALAR = [
   ['N6 uzak komutta silme', '§5d', [["ls -1 $K/html $K/defter\"", "ls -1 $K/html $K/defter; rm -f $K/html/x\""]], false],
   ['N7 uzak komutta docker', '§5d', [["echo '@@LS';", "docker restart traefik; echo '@@LS';"]], false],
-  ['N8 ikinci ssh (yazan)', '§5a', [['rc=0\n', 'rc=0\nssh -n "$SSH_HEDEF" "touch /tmp/x"\n']], false],
+  ['N8 ek ssh (yazan)', '§5a', [['rc=0\n', 'rc=0\nssh -n "$SSH_HEDEF" "touch /tmp/x"\n']], false],
   ['N9 taban dışına yerel yazım', '§5c', [['rc=0\n', 'rc=0\nprintf x > "$HOME/vds-iz"\n']], false],
   ['N10 var olan taban ezilir', '§5g', [['[ -e "$TABAN/$f" ] && {', '[ -e "$TABAN/$f" ] && false && {']], false],
   ['N16 yedek tazeliği denetimi sökülür (bayat yedek sessiz)', '§5h', [['  echo "❌ YEDEK BAYAT: en yeni DB dökümü ${son_db:-YOK} (kesim $kesim UTC; $YEDEK_KONTEYNER günlüğüne bakın)"; rc=1', '  :']], false],
+  ['N17 yedek ölçümü yayinci hedefine (docker grubunda değil)', '§5i', [['YEDEK_SSH_HEDEF="${TEKSERP_YEDEK_SSH_HEDEF:-tekserp-vds}"', 'YEDEK_SSH_HEDEF="${TEKSERP_YEDEK_SSH_HEDEF:-tekserp-yayin}"']], false],
+  ['N18 docker exec hatası sınıfı sökülür (BAYAT diye okunur)', '§5j', [["elif printf '%s\\n' \"$y\" | grep -qx '@@HATA'; then", 'elif false; then']], false],
+  ['N19 uzak komutta @@HATA işareti yok', '§5j', [[" ls -1 /yedek || echo '@@HATA'\"", ' ls -1 /yedek"']], false],
+  ['N20 yedek ssh çıkış kodu yutulur', '§5k', [['2>&1); ykod=$?', '2>&1); ykod=0']], false],
   ['P3 temiz kopya', null, [], true],
   ['P4 meşru salt-okuma ekleme (uzak komuta ls)', null, [["ls -1 $K/html $K/defter\"", "ls -1 $K/html $K/defter; ls -1 $K/nginx\""]], true],
 ];

@@ -59,10 +59,11 @@ fs.mkdirSync(BIN);
 fs.mkdirSync(SAHTE);
 fs.mkdirSync(yol('ev'));
 fs.writeFileSync(path.join(BIN, 'ssh'), `#!/usr/bin/env bash
-cmd="\${@: -1}"
-printf 'ssh\\t%s\\n' "$(printf '%s' "$cmd" | tr '\\n' ' ')" >> "$SAHTE_LOG"
+cmd="\${@: -1}"; hedef="\${@: -2:1}"
+printf 'ssh\\t%s\\t%s\\n' "$hedef" "$(printf '%s' "$cmd" | tr '\\n' ' ')" >> "$SAHTE_LOG"
 [ -n "\${SAHTE_KOPUK:-}" ] && exit 255
 case "$cmd" in
+  *@@YEDEK*) [ "$hedef" = tekserp-vds ] && cat "$SAHTE_DIR/vds-yedek" ;;
   *@@KOK*)
     n=$(cat "$SAHTE_DIR/vds-sayac" 2>/dev/null || echo 0); echo $((n+1)) > "$SAHTE_DIR/vds-sayac"
     if [ "$n" -ge 1 ] && [ -f "$SAHTE_DIR/vds-sonra" ]; then cat "$SAHTE_DIR/vds-sonra"; else cat "$SAHTE_DIR/vds"; fi ;;
@@ -75,13 +76,15 @@ exit 0
 `, { mode: 0o755 });
 fs.writeFileSync(path.join(BIN, 'scp'), '#!/usr/bin/env bash\nprintf \'scp\\t%s\\n\' "$*" >> "$SAHTE_LOG"\ndst="${@: -1}"\ncase "$dst" in *.yarim) [ -n "${SAHTE_INDIR:-}" ] && cp "$SAHTE_INDIR" "$dst" ;; esac\nexit 0\n', { mode: 0o755 });
 
-// vds-dogrula tabanı: sahte ssh çıktısından (gerçek betik --taban-yaz ile).
+// vds-dogrula tabanı: sahte ssh çıktısından (gerçek betik --taban-yaz ile). Bayt ölçümü ve yedek ölçümü iki ayrı
+// ssh'tir; yedek yalnız docker erişimli tekserp-vds hedefinden cevap alır (yayinci docker grubunda değil).
 function vdsCikti(bozuk = false) {
   const h = (i) => (i === 3 && bozuk ? 'f' : 'a').repeat(2) + i.toString(16).padStart(62, '0');
-  return [...Array.from({ length: 310 }, (_, i) => `${h(i)}  adnansahin/electron/d${i}.bin`), '@@KOK', `${h(900)}  electron/latest.yml`, '@@DIGER', `${h(901)}  /opt/x/defter.tsv`, '@@YEDEK', '20261012_090000', 'satici_20261013_030000.dump.tkenc', 'anahtarlar_20261013_030000.tar.tkenc.tkenc', '@@LS', 'adnansahin', 'electron', ''].join('\n');
+  return [...Array.from({ length: 310 }, (_, i) => `${h(i)}  adnansahin/electron/d${i}.bin`), '@@KOK', `${h(900)}  electron/latest.yml`, '@@DIGER', `${h(901)}  /opt/x/defter.tsv`, '@@LS', 'adnansahin', 'electron', ''].join('\n');
 }
 const TABAN = yol('taban');
 fs.writeFileSync(path.join(SAHTE, 'vds'), vdsCikti());
+fs.writeFileSync(path.join(SAHTE, 'vds-yedek'), ['@@YEDEK', '20261012_090000', 'satici_20261013_030000.dump.tkenc', 'anahtarlar_20261013_030000.tar.tkenc.tkenc', ''].join('\n'));
 {
   const r = spawnSync('bash', [path.join(KOK, 'deploy/vds-dogrula.sh'), `--taban=${TABAN}`, '--taban-yaz'], { encoding: 'utf8', env: { ...process.env, PATH: `${BIN}${path.delimiter}${process.env.PATH}`, SAHTE_LOG: yol('taban-log'), SAHTE_DIR: SAHTE } });
   if (r.status !== 0) {
@@ -110,7 +113,7 @@ function olcum({ d = D, bag = `${d} false`, yardimci = YEDEK, imajlar = ['tekser
 }
 
 function kos(args, s = {}) {
-  for (const f of fs.readdirSync(SAHTE)) if (f !== 'vds') fs.rmSync(path.join(SAHTE, f));
+  for (const f of fs.readdirSync(SAHTE)) if (f !== 'vds' && f !== 'vds-yedek') fs.rmSync(path.join(SAHTE, f));
   fs.rmSync(LOG, { force: true });
   fs.writeFileSync(path.join(SAHTE, 'olcum'), s.olcum ?? olcum());
   fs.writeFileSync(path.join(SAHTE, 'olcum-sonra'), s.olcumSonra ?? olcum({ ls: [[AD, VERI.length]] }));
@@ -118,12 +121,13 @@ function kos(args, s = {}) {
   fs.writeFileSync(path.join(SAHTE, 'sha-sonra'), s.shaSonra ?? `${OZ}  ${D}/${AD}\n`);
   fs.writeFileSync(path.join(SAHTE, 'koy'), s.koy ?? `${OZ}  ${AD}\n`);
   if (s.vdsSonra) fs.writeFileSync(path.join(SAHTE, 'vds-sonra'), s.vdsSonra);
-  const env = { ...process.env, PATH: `${BIN}${path.delimiter}${process.env.PATH}`, HOME: yol('ev'), TEKSERP_VDS_TABAN: TABAN, SAHTE_LOG: LOG, SAHTE_DIR: SAHTE, LC_ALL: 'C' };
+  const env = { ...process.env, PATH: `${BIN}${path.delimiter}${process.env.PATH}`, HOME: yol('ev'), TEKSERP_VDS_TABAN: TABAN, TEKSERP_YEDEK_SSH_HEDEF: '', SAHTE_LOG: LOG, SAHTE_DIR: SAHTE, LC_ALL: 'C' };
   if (s.kopuk) env.SAHTE_KOPUK = '1';
   if (s.indir) env.SAHTE_INDIR = s.indir;
   const r = spawnSync(process.execPath, [s.betik ?? BETIK, ...args], { encoding: 'utf8', env, timeout: 60_000 });
   const log = fs.existsSync(LOG) ? fs.readFileSync(LOG, 'utf8').split('\n').filter(Boolean).map((l) => {
     const [arac, ...rest] = l.split('\t');
+    const hedef = arac === 'ssh' ? rest.shift() : null;
     const cmd = rest.join('\t');
     let okuma = false;
     if (arac === 'ssh') {
@@ -134,7 +138,8 @@ function kos(args, s = {}) {
         okuma = false;
       }
     }
-    return { arac, cmd, okuma, vds: cmd.includes('@@KOK') };
+    // vds-dogrula iki ssh açar (bayt @@KOK + yedek @@YEDEK); ikisi de vds sayılır, sıra listelerinde yedek bayta katlanır.
+    return { arac, hedef, cmd, okuma, vds: cmd.includes('@@KOK') || cmd.includes('@@YEDEK'), vdsYedek: cmd.includes('@@YEDEK') };
   }) : [];
   return { kod: r.status, cikti: `${r.stdout ?? ''}${r.stderr ?? ''}`, log, yazma: log.filter((x) => !x.okuma) };
 }
@@ -222,9 +227,12 @@ console.log('test_derleme_koy — satıcının derleme deposuna koyma (sahte ssh
   check('§7a --uygula: çıkış 0 · SONUC: YAZILDI', r.kod === 0 && /SONUC: YAZILDI/.test(r.cikti), `kod ${r.kod} ${r.cikti.slice(-400)}`);
   const ilkVds = r.log.findIndex((x) => x.vds);
   const ilkYazma = r.log.findIndex((x) => !x.okuma);
-  const tur = r.log.map((x) => (x.vds ? 'vds' : x.arac === 'scp' ? 'scp' : x.okuma ? 'oku' : /docker run/.test(x.cmd) ? 'koy' : /^install -d/.test(x.cmd) ? 'dizin' : /sha256sum -c/.test(x.cmd) ? 'ozet' : /^rm -rf/.test(x.cmd) ? 'sil' : '?'));
+  const tur = r.log.filter((x) => !x.vdsYedek).map((x) => (x.vds ? 'vds' : x.arac === 'scp' ? 'scp' : x.okuma ? 'oku' : /docker run/.test(x.cmd) ? 'koy' : /^install -d/.test(x.cmd) ? 'dizin' : /sha256sum -c/.test(x.cmd) ? 'ozet' : /^rm -rf/.test(x.cmd) ? 'sil' : '?'));
   const beklenen = ['oku', 'vds', 'dizin', 'scp', 'ozet', 'koy', 'sil', 'oku', 'oku', 'vds'];
   check('§7b sıra: ölç → vds(önce) → dizin → scp → sha256sum -c → yardımcı konteyner → sil → ölç → özet → vds(sonra)', JSON.stringify(tur) === JSON.stringify(beklenen) && ilkVds >= 0 && ilkYazma > ilkVds, tur.join(','));
+  // Her vds-dogrula koşumu = bayt ssh'i tekserp-yayin'e + hemen ardından yedek ssh'i docker erişimli tekserp-vds'e.
+  const vdsCift = r.log.filter((x) => x.vds).map((x) => `${x.vdsYedek ? 'yedek' : 'bayt'}@${x.hedef}`);
+  check('§7d vds-dogrula iki kez, her biri bayt@tekserp-yayin → yedek@tekserp-vds', JSON.stringify(vdsCift) === JSON.stringify(['bayt@tekserp-yayin', 'yedek@tekserp-vds', 'bayt@tekserp-yayin', 'yedek@tekserp-vds']), vdsCift.join(','));
   const scp = r.log.find((x) => x.arac === 'scp')?.cmd ?? '';
   const koy = r.log.find((x) => /docker run/.test(x.cmd))?.cmd ?? '';
   check('§7c scp yerel dosya + konteyner betiği + özet listesi → oguzhan@VDS:~/derleme-koy-<damga>/ · konteyner yalnız /g:ro + depo bağlı',
@@ -350,7 +358,7 @@ console.log('test_derleme_koy — satıcının derleme deposuna koyma (sahte ssh
 
   const uyg = arsivDizini();
   const u = kos(['--ortam', 'uretim', '--kaldir', ESKI, '--arsiv', uyg, '--uygula'], { ...temel, olcumSonra: olcum({ ls: [[AKTIF, 4000]], baglanti: [`${AKTIF}|1`] }), indir: ESKI_DOSYA, koy: '' });
-  const tur = u.log.map((x) => (x.vds ? 'vds' : x.arac === 'scp' ? 'scp' : x.cmd.includes('docker run') ? 'kaldir' : x.cmd.includes('@@BAG') ? 'olc' : x.cmd.startsWith('sha256sum') ? 'ozet' : '?'));
+  const tur = u.log.filter((x) => !x.vdsYedek).map((x) => (x.vds ? 'vds' : x.arac === 'scp' ? 'scp' : x.cmd.includes('docker run') ? 'kaldir' : x.cmd.includes('@@BAG') ? 'olc' : x.cmd.startsWith('sha256sum') ? 'ozet' : '?'));
   const kaldirCmd = u.log.find((x) => x.cmd.includes('docker run'))?.cmd ?? '';
   check('§13i --kaldir --uygula: 0 · KALDIRILDI · sıra ölç → özet → vds(önce) → ölç(taze) → scp(Mac) → kaldır → ölç → vds(sonra)',
     u.kod === 0 && /SONUC: KALDIRILDI/.test(u.cikti) && JSON.stringify(tur) === JSON.stringify(['olc', 'ozet', 'vds', 'olc', 'scp', 'kaldir', 'olc', 'vds']), `kod ${u.kod} · ${tur.join(',')} · ${u.cikti.slice(-300)}`);

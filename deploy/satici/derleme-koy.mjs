@@ -374,7 +374,7 @@ function vdsDogrula(ag, ne) {
   const r = ag.yerelBetik(VDS_DOGRULA);
   const metin = `${r.cikti}${r.hata}`.trim();
   if (r.kod === 2 || r.kod === null) throw new Dur(2, `ÖLÇÜLEMEDİ — vds-dogrula (${ne}): ${metin.split('\n').slice(-2).join(' · ')}`);
-  if (r.kod !== 0) throw new Dur(1, `vds-dogrula (${ne}) FARK — adnansahin baytları tabanla aynı değil ya da satıcı yedeği bayat${ne === 'önce' ? ', hiçbir şey yazılmadı' : ''}`, metin.split('\n').slice(0, 12));
+  if (r.kod !== 0) throw new Dur(1, `vds-dogrula (${ne}) FARK — adnansahin baytları tabanla aynı değil ya da satıcı yedeği bayat/ölçülemedi${ne === 'önce' ? ', hiçbir şey yazılmadı' : ''}`, metin.split('\n').slice(0, 12));
   return r.cikti;
 }
 

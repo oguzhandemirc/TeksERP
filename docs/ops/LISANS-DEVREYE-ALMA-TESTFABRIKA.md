@@ -17,7 +17,7 @@
 | `node deploy/lisans-devreye/asama-dogrula.mjs --asama=<1..8\|hepsi>` | Her aşamanın SALT-OKUMA ölçümü; üç sonuç ✅ UYUMLU · ❌ IHLAL (DUR) · ⚠️ ÖLÇÜLEMEDİ (araç/erişim yok — uyumlu SAYILMAZ). Çıkış 0 · 1 · 2 (3 = betiğin salt-okuma sözleşmesi bozuk) | **KURU** — ağa çıkmaz, koşacağı ölçümleri basar; gerçek ölçüm `--olc` |
 | `node deploy/lisans-devreye/t4-gozlem.mjs` | Senaryo T4 sürekli gözlem (yoklama başarı oranı · parmak izi kararlılığı · yanlış pozitif); `--ozet=<tsv>` ağsız özet | **KURU**; ölçüm `--olc` |
 | `Teks-Erp-wt/testfabrika-araclar/tp.sh <betik.ps1>` | thinkpad-1'de PowerShell 5.1; önce Tailscale kimlik kapısı (100.70.47.46), tutmazsa 99 | — |
-| `deploy/vds-dogrula.sh [--taban=<dizin>]` | adnansahin'e ait her VDS baytı tabanla AYNI mı (0 aynı · 1 fark · 2 ölçülemedi); `--taban-yaz` tabanı yazar (dolu dizini ezmez), `--komut-yaz` uzak komutu basar | VDS'e salt okuma; taban repo DIŞI `~/.tekserp/vds-taban/` |
+| `deploy/vds-dogrula.sh [--taban=<dizin>]` | adnansahin'e ait her VDS baytı tabanla AYNI mı (0 aynı · 1 fark · 2 ölçülemedi); `--taban-yaz` tabanı yazar (dolu dizini ezmez), `--komut-yaz` iki uzak komutu hedefiyle (`tekserp-yayin` bayt · `tekserp-vds` yedek) basar | VDS'e salt okuma; taban repo DIŞI `~/.tekserp/vds-taban/` |
 | `https://portal.etkiliyazilim.com` (tarayıcı) | Satıcı portalı — Cloudflare Access + parola + TOTP; YALNIZ üretim satıcısında (tünel 2026-10-05'te kalktı, hazırlık satıcısının portalı yok) | salt okuma dışı değil — tarayıcı oturumu |
 
 Betik sözleşmesi bekçiyle ölçülür: `node scripts/test_lisans_devreye_kuru.mjs` (kuru kipte sıfır ağ/süreç girişimi; `--olc`ta bile yalnız GET/HEAD ve ssh/PowerShell salt-okuma izin listesi).
