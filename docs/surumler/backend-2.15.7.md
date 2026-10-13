@@ -101,6 +101,16 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   yetkisi) — yetki atamasının "Ekrana göre" görünümünde listelenir (panel 1.6.5 ekranları — D5 dilim 3). Uçlar değişmedi.
 - `dist-web`: panel 1.6.5 kaynağı değişir (Tanımlar'da iki yeni ekran).
 
+**Makine kartı: iptal önizlemesi + kayıt tekrarı** (commit `feat(tezgah): makine kartı iptal önizlemesi …`; kısa kimliği paketlemede yazılır)
+
+- Yeni `GET /api/machine-collectors/:id/revoke/preview` (izin `loom:spec-manage`, tezgah modülü — iptalle aynı
+  kapılar; YAZMAZ): bağı çözülecek tezgahlar, kartın açık duruşları ve bekleyen geç kapanışları (watchdog'un geçici
+  kapattığı, gerçek bitişi gelmemiş duruş) tezgah koduyla, kırpmadan döner; iptal edilmiş kartta `revocable:false`.
+- Kart kaydı (`POST /api/machine-collectors`) isteğe bağlı `clientToken` alır: aynı token + aynı yük tekrarında
+  ikinci kart doğmaz ve sır YENİDEN DÖNMEZ (`secret: null`, `secretWithheld: true`, `idempotent: true` — "sırrı
+  yenileyin"); başka yük 409 `CLIENT_TOKEN_COLLISION`, kart iptal edilmişse 409 `COLLECTOR_REVOKED`.
+- `dist-web`: panel 1.6.5 kaynağı değişir (iptal penceresi sunucu önizlemesini okur; kayıt deneme başına token).
+
 **Kimlik dilim 3 (güvenlik denetimi Y-02, B1, B2, B4, B5)** (commit `fix(kimlik): dilim 3 …`; kısa kimliği paketlemede yazılır)
 
 - PIN/kart girişinde ikinci faktör: tek kapı `AuthService.assertSecondFactor` (token üretiminden ÖNCE). Süperadmin
@@ -177,6 +187,11 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   Docker kurulumu bugünkü gibi sahip rolüyle çalışır (`auditProtection` "kismi"); eski compose dosyası + yeni imaj da
   göçer (compose değişmedi). Eski imaja geri dönüşte backend yine sahip rolüyle açılır; kalan `tekserp_uygulama` rolü
   zararsızdır.
+- **Kırıldı mı:** HAYIR (makine kartı önizleme + kayıt tekrarı) — yalnız ekleme: bir okuma ucu, kayıt gövdesinde
+  isteğe bağlı `clientToken`. **Eski panel ne yapar:** 1.6.4 paneli token göndermez → kayıt bugünkü yoldan (201 +
+  sır) geçer; iptal önizlemesini `GET /:id` ile bağlı tezgahlardan yapmaya devam eder (açık duruşları göstermez).
+  1.6.5 paneli 2.15.6 sunucusunda önizleme ucunu 404 görür ("Önizleme okunamadı", iptal düğmesi pasif) ve kayıtta
+  `clientToken` alanı 400 alır — panel sunucudan sonra güncellenir.
 - **Kırıldı mı:** HAYIR (doff kodu) — uç, gövde ve cevap aynı; aynı `clientToken` tekrarı yine aynı kaydı döner.
 - **Eski istemci ne yapar:** eski panel ve tablet yeni alanları okumaz; davranışları değişmez. Kartın kendisi
   nabız ucunu bilmiyorsa duruş yokken sessiz görünür (yalnız uyarı; duruş açılmaz).
@@ -184,13 +199,15 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 4. Migration
 
-- **Var mı:** EVET — 3 adet: `20261013010000_makine_watchdog` (yalnız EKLEME: toplayıcıya iki, duruşa bir boş
+- **Var mı:** EVET — 4 adet: `20261013010000_makine_watchdog` (yalnız EKLEME: toplayıcıya iki, duruşa bir boş
   geçilebilir alan; veri dönüşümü yok) · `20261013030000_doff_sayac_satiri` (yalnız EKLEME: boş
   `number_series_counters` tablosu; veri dönüşümü yok, satırlar ilk kullanımda doğar).
   · `20261013120000_audit_hash_zinciri` (yalnız EKLEME: `system_logs`/arşivde iki boş kolon + iki unique index,
   zincir trigger'ı, iki SECURITY DEFINER arşiv/budama fonksiyonu, tek "zincir başlangıç çapası" satırı; mevcut audit
   satırlarına DOKUNMAZ — onlar zincir öncesidir. `count`suz: yalnız `max(createdAt)` index'ten okunur).
-- **Toplam migration:** 390 (2.15.6'da 387). 2.15.6'dan gelen kurulum tam 3 migration uygulamalıdır. Farklı sayı =
+  · `20261013150000_makine_karti_client_token` (yalnız EKLEME: makine kartına boş `clientToken` kolonu + unique
+  index; veri dönüşümü yok).
+- **Toplam migration:** 391 (2.15.6'da 387). 2.15.6'dan gelen kurulum tam 4 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -198,8 +215,9 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 3 migration); süre kurulumda ölçülür.
-- **Sıra:** sunucu önce; panel sonra (kırılma yok, sıra serbest).
+- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 4 migration); süre kurulumda ölçülür.
+- **Sıra:** sunucu önce; panel sonra (eski panel yeni sunucuda sorunsuz; 1.6.5 paneli 2.15.6 sunucusunda makine kartı
+  kaydında 400, iptal önizlemesinde 404 alır — kart sahada yok).
 - **Bu sürüme özel:** yok (watchdog'un dokunabileceği onaylı kart ve kart duruşu sahada yok).
 - **Bu sürüme özel (kimlik dilim 3):** destek hesabıyla tablette PIN/kart kullanılıyorsa güncellemeden ÖNCE hesapta
   iki adımlı doğrulamanın kurulu olduğu ölçülür; değilse parolayla girip kurulur. Migration getirmez.
@@ -216,7 +234,7 @@ otomatik yedekten geri yüklenir.
 ## 7. Doğrulama — kurulumdan sonra rapor edilecekler
 
 - Sağlık bilgisi: sürüm 2.15.7, sunucu ve veritabanı ayakta.
-- Veritabanı: 390 migration bitmiş, sorunlu migration yok.
+- Veritabanı: 391 migration bitmiş, sorunlu migration yok.
 - `/api/admin/health` `machineWatchdog`: `{ silentCollectors: 0, lateStopEnds: 0 }` (kart yokken); `null` ise
   sayaç okunamadı — günlüğe bak, insana rapor et.
 - `/api/admin/health` `auditProtection`: Docker'da `writeOnly: true` ve açılıştan birkaç dakika sonra `level` "tam"

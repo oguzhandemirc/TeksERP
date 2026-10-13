@@ -11,6 +11,7 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireTezgahEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { MachineCollectorService } from "../services/machine-collector.service";
+import { previewCollectorRevoke } from "../services/machine-collector-preview.service";
 
 const router = Router();
 router.use(verifyToken, requireTezgahEnabled);
@@ -28,12 +29,16 @@ const guard = requirePermission("loom:spec-manage");
  *       403: { description: Tezgah modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  *   post:
  *     tags: [MachineCollectors]
- *     summary: Kart kaydet — allowlist (name · collectorType · machineIds); sır YALNIZ bu cevapta döner
+ *     summary: Kart kaydet — allowlist (name · collectorType · machineIds · clientToken); sır YALNIZ ilk kayıt cevabında döner
+ *     description: >
+ *       `clientToken` (uuid, isteğe bağlı) mantıksal deneme başınadır. Aynı token + aynı yük → 201 replay
+ *       `{ collector, secret: null, secretWithheld: true }` + `idempotent: true` — sır YENİDEN DÖNMEZ (DB'de yalnız
+ *       tohum), kart sırrı yenilenerek kurulur. Başka yük → 409 CLIENT_TOKEN_COLLISION; kart iptal edilmişse 409 COLLECTOR_REVOKED.
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       201: { description: "Kaydedildi — { collector, secret } (secret 64 hex, bir daha gösterilmez)" }
+ *       201: { description: "Kaydedildi — { collector, secret } (secret 64 hex, bir daha gösterilmez) · replay'de secret null + secretWithheld" }
  *       400: { description: Tanınmayan alan · biçim · tezgah yok/pasif (MACHINE_NOT_FOUND · MACHINE_INACTIVE) }
- *       409: { description: Tezgah başka karta bağlı (MACHINE_ALREADY_LINKED) · ad dolu (COLLECTOR_NAME_TAKEN) }
+ *       409: { description: Tezgah başka karta bağlı (MACHINE_ALREADY_LINKED) · ad dolu (COLLECTOR_NAME_TAKEN) · CLIENT_TOKEN_COLLISION · COLLECTOR_REVOKED }
  *       503: { description: Anahtar halkası yok (SHORT_CREDENTIAL_KEY_UNAVAILABLE) }
  */
 router.get("/", guard, async (_req, res, next) => {
@@ -103,6 +108,27 @@ router.patch("/:id", guard, async (req, res, next) => {
 router.post("/:id/rotate-secret", guard, async (req, res, next) => {
   try {
     res.json(await MachineCollectorService.rotateSecret(assertValidUuid(req.params.id, "id"), req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-collectors/{id}/revoke/preview:
+ *   get:
+ *     tags: [MachineCollectors]
+ *     summary: Kart iptali ÖNİZLEMESİ — bağı çözülecek tezgahlar · kartın açık duruşları · bekleyen geç kapanışlar (YAZMAZ)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ collector, revocable, block, machines[], openStops[], pendingEnds[] } — satırlar tezgah kodu sırasında, kırpılmaz" }
+ *       403: { description: Tezgah modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Bulunamadı }
+ */
+router.get("/:id/revoke/preview", guard, async (req, res, next) => {
+  try {
+    res.json(await previewCollectorRevoke(assertValidUuid(req.params.id, "id")));
   } catch (e) {
     next(e);
   }

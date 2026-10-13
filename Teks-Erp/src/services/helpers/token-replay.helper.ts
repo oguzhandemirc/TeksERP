@@ -285,6 +285,18 @@ export function assertWarpBeamEventReplayAlive(existing: { reversal: { id: strin
 }
 
 /**
+ * Token'la bulunan makine kartı İPTAL edilmişse 409 `COLLECTOR_REVOKED` — iptal edilmiş kartı "zaten kayıtlı"
+ * diye döndürmek, imza atamayan bir kartı kurulmaya hazır gösterirdi. Ölü hâl DAMGADIR (`revokedAt`).
+ */
+export function assertCollectorReplayAlive(existing: { id: string; name: string; revokedAt: Date | null }): void {
+  if (!existing.revokedAt) return;
+  throw AppError.conflict(
+    `Bu form daha önce kaydedilmiş ve kart İPTAL edilmiş (${existing.name}) — aynı gönderim tekrar edilemez. Yeni kart için formu kapatıp yeniden açın.`,
+    { code: "COLLECTOR_REVOKED", collectorId: existing.id, revokedAt: existing.revokedAt },
+  );
+}
+
+/**
  * Token'la bulunan top indirmesi hâlâ canlı mı — geri alınmışsa 409 `DOFF_REVOKED`.
  * `assertMachineRunReplayAlive` ikizi: "ölü" hâl statü değil DAMGADIR.
  */

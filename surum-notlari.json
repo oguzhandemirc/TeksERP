@@ -136,6 +136,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Makine kartını iptal ederken açılan pencere artık iptalin etkileyeceği her şeyi sunucudan okuyup listeler: bağı çözülecek tezgahlar, kartın açık duruşları (kart artık kapatamaz, süre aşımında geçici kapanır) ve gerçek bitişi beklenen geç kapanışlar. Kart kaydederken bağlantı koparsa ve yeniden Kaydet'e basarsanız ikinci kart açılmaz; sır yalnız ilk kayıtta gösterildiği için bu durumda Sırrı yenile onayı açılır. Eski sunucuda pencere önizlemeyi okuyamaz ve iptal düğmesi pasif kalır; önce sunucu güncellenir."
+        },
+        {
+          "kapsam": "panel",
           "tip": "yeni",
           "metin": "Destek hesabı ilk kurulumda gelen ortak parolayla duruyorsa panelin üstünde kırmızı bir uyarı şeridi çıkar. Destek hesabıyla girildiyse şerit kendi parolanızı hemen belirlemenizi, yönetici olarak girildiyse satıcınızdan parolayı değiştirmesini istemenizi söyler. Şerit elle kapatılamaz; parola değişince kendiliğinden kalkar. Bunun için de sunucunun 2.15.5 sürümü gerekir."
         },

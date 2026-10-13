@@ -6,6 +6,8 @@
 // Okuma yüzeyi OPT-IN izdüşümdür (`COLLECTOR_PUBLIC_SELECT`) — tohum hiçbir yanıta, log'a, audit'e girmez.
 // İptal bir durum geçişidir (`revokedAt` damgası); kapsam satırları (③b pivot) iptalde ve PATCH'te
 // değiştirilir, değişiklik audit'e yazılır. Bir tezgahın TEK kartı olur (`machineId` UNIQUE → 409).
+// Kayıt `clientToken` replay'i dört durumludur (`collectorReplay`, tek boğaz) ama SIRRI YENİDEN DÖNMEZ:
+// tohumdan türetmek mümkün olsa da sır yalnız ilk cevapta yaşar — replay "kayıtlı, sırrı yenileyin" der.
 // =============================================================================
 import { DeviceStatus, type Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -17,6 +19,7 @@ import { AuditService } from "./audit.service";
 import { requireKeyRing } from "./short-credential.service";
 import { COLLECTOR_TYPE_RE } from "./machine-stop-code-map.service";
 import { deriveCollectorSecret, newCollectorSeed } from "./helpers/collector-secret.helper";
+import { assertCollectorReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
 const TABLE = "MACHINE_COLLECTOR";
@@ -46,6 +49,18 @@ export interface CollectorWithSecret {
   secret: string;
 }
 
+/** Kayıt replay'i (aynı `clientToken`): kart zaten kayıtlı, sır GÖSTERİLEMEZ — panel sır yenilemeye yönlendirir. */
+export interface CollectorSecretWithheld {
+  collector: CollectorDto;
+  secret: null;
+  secretWithheld: true;
+}
+
+/** `idempotent: true` = bu çağrıda kart DOĞMADI (istemci metne değil bayrağa bakar). */
+export type CollectorCreateResult = ApiResponse<CollectorWithSecret | CollectorSecretWithheld> & { idempotent?: true };
+
+export const COLLECTOR_REPLAY_MESSAGE = "Kart zaten kayıtlı (yeniden gönderim) — sır yalnız ilk kayıtta gösterilir; kartı kurmak için sırrı yenileyin.";
+
 const typeField = z.string().trim().regex(COLLECTOR_TYPE_RE, "Kart tipi büyük harf, rakam ve . _ - ile en çok 32 karakter olmalı (örn. TEKS-ESP32-V1).");
 const machinesField = z.array(z.string().uuid("Tezgah kimliği geçersiz.")).max(64, "Bir karta en çok 64 tezgah bağlanır.");
 
@@ -54,8 +69,10 @@ const createSchema = z
     name: z.string().trim().min(1, "Kart adı zorunlu.").max(100, "Kart adı en çok 100 karakter olabilir."),
     collectorType: typeField,
     machineIds: machinesField.min(1, "Karta en az bir tezgah bağlanmalı."),
+    clientToken: z.string().uuid("İstemci jetonu geçersiz.").nullish(),
   })
   .strict();
+type CreateInput = z.infer<typeof createSchema>;
 
 const updateSchema = z
   .object({
@@ -96,6 +113,53 @@ function secretHex(ringSecret: Buffer | null): string {
   return ringSecret.toString("hex");
 }
 
+// Kimlik kapısı `===` kıyaslar (dizi değil): küme sıralı metne indirilir — sıra farkı aynı yüktür.
+const sortedIds = (ids: readonly string[]) => [...new Set(ids.map((i) => i.toLowerCase()))].sort().join(",");
+
+/** Tek boğaz (R): ② aynı yük → kart + `secretWithheld` (sır YOK) · ③ başka yük → 409 · ④ iptal edilmiş → 409. */
+const collectorReplay = (input: CreateInput) =>
+  tokenReplay<CollectorDto, CollectorCreateResult>({
+    find: (db, clientToken) => db.machineCollector.findUnique({ where: { clientToken }, select: COLLECTOR_PUBLIC_SELECT }),
+    alive: assertCollectorReplayAlive,
+    identity: (p) => [
+      { ad: "name", mevcut: p.name, gelen: input.name },
+      { ad: "collectorType", mevcut: p.collectorType, gelen: input.collectorType },
+      { ad: "machineIds", mevcut: sortedIds(p.machines.map((m) => m.machine.id)), gelen: sortedIds(input.machineIds) },
+    ],
+    collision: "Bu form daha önce başka bir kart için kaydedilmiş — yeni kart için formu yeniden açın.",
+    collisionEk: (p) => ({ collectorId: p.id }),
+    respond: (p) => ({ success: true, data: { collector: p, secret: null, secretWithheld: true }, message: COLLECTOR_REPLAY_MESSAGE, idempotent: true }),
+  });
+
+/** Kayıt — kart ONAYLI doğar (yönetici kaydıdır); sır yalnız bu cevapta. */
+async function createCollectorFresh(input: CreateInput, userId?: string): Promise<ApiResponse<CollectorWithSecret>> {
+  const ring = requireKeyRing();
+  const id = randomUUID();
+  const seed = newCollectorSeed(ring.active);
+  let collector: CollectorDto;
+  try {
+    collector = await prisma.$transaction(async (tx) => {
+      const machineIds = await assertMachinesUsable(tx, input.machineIds);
+      await tx.machineCollector.create({
+        data: {
+          id, collectorKey: randomUUID(), name: input.name, collectorType: input.collectorType,
+          status: DeviceStatus.APPROVED, secretSeed: seed, secretIssuedAt: new Date(),
+          clientToken: input.clientToken ?? null, createdById: userId ?? null, updatedById: userId ?? null,
+        },
+      });
+      await tx.machineCollectorLink.createMany({ data: machineIds.map((machineId) => ({ collectorId: id, machineId })) });
+      return tx.machineCollector.findUniqueOrThrow({ where: { id }, select: COLLECTOR_PUBLIC_SELECT });
+    });
+  } catch (e) {
+    translateP2002(e);
+  }
+  await AuditService.log({
+    userId, action: "CREATE", tableName: TABLE, recordId: id,
+    newData: { name: collector.name, collectorType: collector.collectorType, machineIds: collector.machines.map((m) => m.machine.id), secretIssued: true },
+  }).catch(() => undefined);
+  return { success: true, data: { collector, secret: secretHex(deriveCollectorSecret(ring, id, seed)) }, message: "Kart kaydedildi — sır yalnız şimdi gösterilir" };
+}
+
 export class MachineCollectorService {
   static async list(): Promise<ApiResponse<CollectorDto[]>> {
     const data = await prisma.machineCollector.findMany({ select: COLLECTOR_PUBLIC_SELECT, orderBy: { createdAt: "asc" } });
@@ -108,34 +172,10 @@ export class MachineCollectorService {
     return { success: true, data };
   }
 
-  /** Kayıt — kart ONAYLI doğar (yönetici kaydıdır); sır yalnız bu cevapta. */
-  static async create(body: unknown, userId?: string): Promise<ApiResponse<CollectorWithSecret>> {
+  /** Kayıt; `clientToken`lı tekrar boğazdan döner (sırsız). Token'sız eski istemci bugünkü yoldan geçer. */
+  static async create(body: unknown, userId?: string): Promise<CollectorCreateResult> {
     const input = parse(createSchema, body);
-    const ring = requireKeyRing();
-    const id = randomUUID();
-    const seed = newCollectorSeed(ring.active);
-    let collector: CollectorDto;
-    try {
-      collector = await prisma.$transaction(async (tx) => {
-        const machineIds = await assertMachinesUsable(tx, input.machineIds);
-        await tx.machineCollector.create({
-          data: {
-            id, collectorKey: randomUUID(), name: input.name, collectorType: input.collectorType,
-            status: DeviceStatus.APPROVED, secretSeed: seed, secretIssuedAt: new Date(),
-            createdById: userId ?? null, updatedById: userId ?? null,
-          },
-        });
-        await tx.machineCollectorLink.createMany({ data: machineIds.map((machineId) => ({ collectorId: id, machineId })) });
-        return tx.machineCollector.findUniqueOrThrow({ where: { id }, select: COLLECTOR_PUBLIC_SELECT });
-      });
-    } catch (e) {
-      translateP2002(e);
-    }
-    await AuditService.log({
-      userId, action: "CREATE", tableName: TABLE, recordId: id,
-      newData: { name: collector.name, collectorType: collector.collectorType, machineIds: collector.machines.map((m) => m.machine.id), secretIssued: true },
-    }).catch(() => undefined);
-    return { success: true, data: { collector, secret: secretHex(deriveCollectorSecret(ring, id, seed)) }, message: "Kart kaydedildi — sır yalnız şimdi gösterilir" };
+    return collectorReplay(input).run(input.clientToken, () => createCollectorFresh(input, userId));
   }
 
   /** Ad · kart tipi · bağlı tezgahlar. Tezgah listesi verilirse kapsam YERİNE KONUR (③b). */

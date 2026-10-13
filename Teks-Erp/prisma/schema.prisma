@@ -2265,6 +2265,10 @@ model MachineCollector {
   revokedById String?   @db.Uuid
   isActive    Boolean   @default(true)
 
+  /// İdempotency (kk1.md) — panel kaydı deneme başına token taşır. Replay sırrı YENİDEN DÖNMEZ
+  /// (DB'de yalnız tohum): "kart kayıtlı, sırrı yenileyin" der (`collectorReplay`).
+  clientToken String? @unique @db.Uuid
+
   machines MachineCollectorLink[]
   stops    MachineStopEvent[]
 

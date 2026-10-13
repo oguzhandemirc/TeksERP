@@ -77,6 +77,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warp-beam-mount.service.ts::mountBeamFresh`]: { giris: { [`${S}warp-beam-mount.service.ts::mountBeam`]: "R" } },
   [`${S}warp-beam-wind.service.ts::windWarpBeamFresh`]: { giris: { [`${S}warp-beam-wind.service.ts::windWarpBeam`]: "R" } },
   [`${S}subcontractor-beam.service.ts::returnWarpBeamFresh`]: { giris: { [`${S}subcontractor-beam.service.ts::returnWarpBeam`]: "R" } },
+  // Makine kartı kaydı: replay sırrı YENİDEN DÖNMEZ (tohum DB'de, sır yalnız ilk cevapta) — `secretWithheld`.
+  [`${S}machine-collector.service.ts::createCollectorFresh`]: { giris: { [`${S}machine-collector.service.ts::create`]: "R" } },
   [`${S}machine-run.service.ts::openMachineRunFresh`]: { giris: { [`${S}machine-run.service.ts::openMachineRun`]: "R" } },
   // #12: quickStart create'i çağırır (iç boğaz) ve kendi boğazıyla sarar; kimlikte top kümesi YOK (kısmi bağlama).
   [`${S}workorder.service.ts::createFresh`]: { giris: { [`${S}workorder.service.ts::create`]: "R" } },
@@ -177,6 +179,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}inventory.service.ts::initialEntryReplay`]: ["itemId", "colorId", "initialQty"],
   [`${S}inventory.service.ts::openFabricReplay`]: ["parentReceiptId", "producedInStepId"],
   [`${S}invoice.service.ts::invoiceReplay`]: ["type", "taraf", "currency", "satırlar"],
+  [`${S}machine-collector.service.ts::collectorReplay`]: ["name", "collectorType", "machineIds"],
   [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],
   [`${S}machine-run.service.ts::runReplay`]: ["machineId", "productionLineNo", "weavingOrderId"],
   [`${S}order.service.ts::orderReplay`]: ["customerId", "branchId", "satırlar", "orderNumber"],

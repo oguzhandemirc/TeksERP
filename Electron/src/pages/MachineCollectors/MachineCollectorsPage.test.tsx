@@ -1,14 +1,15 @@
 // Makine Kartları ekranı: liste, kayıt → sır BİR KEZ gösterilir (pencere kapanınca DOM'da ve sorgu/mutasyon
-// önbelleğinde yok), sır yenileme onaydan geçer, iptal önizlemesi bağlı tezgahları taze okumadan listeler, K4 şeridi.
+// önbelleğinde yok), sır yenileme onaydan geçer, iptal önizlemesi SUNUCU ucundan etkilenen her kaydı listeler,
+// kayıt deneme başına clientToken taşır ve replay'de (secretWithheld) sır gösterilmez → sır yenileme onayı açılır, K4 şeridi.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
-import type { MachineCollector } from "./types";
+import type { CollectorRevokePreview, MachineCollector } from "./types";
 
 const SECRET = "ab".repeat(32);
 const list = vi.fn<() => Promise<MachineCollector[]>>();
-const get = vi.fn<(id: string) => Promise<MachineCollector>>();
+const revokePreview = vi.fn<(id: string) => Promise<CollectorRevokePreview>>();
 const create = vi.fn();
 const rotateSecret = vi.fn();
 const revoke = vi.fn();
@@ -18,7 +19,8 @@ vi.mock("@/components/layout/PageHeader", () => ({
   PageHeader: ({ title, actions }: { title: string; actions?: React.ReactNode }) => <header><h1>{title}</h1>{actions}</header>,
 }));
 vi.mock("@/components/PermissionGate", () => ({ PermissionGate: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const warning = vi.fn();
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: (...a: unknown[]) => warning(...a) } }));
 vi.mock("@/hooks/usePricingEnabled", () => ({ useFeatureFlags: () => ({ data: { data: flags } }) }));
 vi.mock("./CollectorFormDialog", () => ({
   CollectorFormDialog: ({ open, onSubmit }: { open: boolean; onSubmit: (v: unknown) => void }) =>
@@ -27,7 +29,7 @@ vi.mock("./CollectorFormDialog", () => ({
 vi.mock("./service", () => ({
   machineCollectorService: {
     list: () => list(),
-    get: (id: string) => get(id),
+    revokePreview: (id: string) => revokePreview(id),
     create: (...a: unknown[]) => create(...a),
     rotateSecret: (...a: unknown[]) => rotateSecret(...a),
     revoke: (...a: unknown[]) => revoke(...a),
@@ -58,7 +60,7 @@ function cacheHasSecret(): boolean {
 }
 
 beforeEach(() => {
-  [list, get, create, rotateSecret, revoke].forEach((f) => f.mockReset());
+  [list, revokePreview, create, rotateSecret, revoke, warning].forEach((f) => f.mockReset());
   flags.tezgahAlarmEnabled = true;
   flags.tezgahAlarmUnclassifiedEnabled = false;
 });
@@ -87,7 +89,7 @@ describe("MachineCollectorsPage", () => {
     fireEvent.click(await screen.findByText("Yeni kart"));
     fireEvent.click(screen.getByText("formu gönder"));
     expect((await screen.findByTestId("collector-secret")).textContent).toBe(SECRET);
-    expect(create).toHaveBeenCalledWith({ name: "Pano 2", collectorType: "TEKS-ESP32-V1", machineIds: ["m2"] });
+    expect(create).toHaveBeenCalledWith({ name: "Pano 2", collectorType: "TEKS-ESP32-V1", machineIds: ["m2"], clientToken: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     expect(cacheHasSecret()).toBe(false);
     fireEvent.click(screen.getByText(/kapat$/));
     await waitFor(() => expect(screen.queryByTestId("collector-secret")).toBeNull());
@@ -106,20 +108,71 @@ describe("MachineCollectorsPage", () => {
     expect(rotateSecret).toHaveBeenCalledWith("c1");
   });
 
-  it("iptal: önizleme taze okumadaki bağlı tezgahları listeler, onaydan sonra iptal eder", async () => {
+});
+
+describe("MachineCollectorsPage — kayıt tekrarı ve iptal önizlemesi", () => {
+  it("kayıt: belirsiz hatada token yapışır, kesin 4xx'te yenilenir", async () => {
+    list.mockResolvedValue([]);
+    create.mockRejectedValueOnce(new Error("Network Error")).mockRejectedValueOnce({ response: { status: 409 } }).mockResolvedValue({ collector: row({ id: "c2", name: "Pano 2" }), secret: SECRET });
+    renderPage();
+    fireEvent.click(await screen.findByText("Yeni kart"));
+    fireEvent.click(screen.getByText("formu gönder"));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    fireEvent.click(await screen.findByText("formu gönder"));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+    fireEvent.click(await screen.findByText("formu gönder"));
+    await screen.findByTestId("collector-secret");
+    const t = create.mock.calls.map((c) => (c[0] as { clientToken: string }).clientToken);
+    expect(t[1]).toBe(t[0]);
+    expect(t[2]).not.toBe(t[1]);
+  });
+
+  it("kayıt replay'i: sır gösterilmez, uyarı + sır yenileme onayı açılır", async () => {
+    list.mockResolvedValue([]);
+    create.mockResolvedValue({ collector: row({ id: "c2", name: "Pano 2" }), secret: null, secretWithheld: true });
+    renderPage();
+    fireEvent.click(await screen.findByText("Yeni kart"));
+    fireEvent.click(screen.getByText("formu gönder"));
+    expect(await screen.findByText("Kart sırrı yenilensin mi?")).toBeTruthy();
+    expect(warning).toHaveBeenCalledWith(expect.stringMatching(/sırrı yenileyin/));
+    expect(screen.queryByTestId("collector-secret")).toBeNull();
+    expect(rotateSecret).not.toHaveBeenCalled();
+  });
+
+  it("iptal: sunucu önizlemesi tezgahları, açık duruşları ve bekleyen geç kapanışları listeler, onaydan sonra iptal eder", async () => {
     list.mockResolvedValue([row()]);
-    get.mockResolvedValue(row({ machines: [{ machine: { id: "m1", code: "T-01", name: "Tezgah 1" } }, { machine: { id: "m3", code: "T-03", name: "Tezgah 3" } }] }));
+    const stop = { machineId: "m3", machineCode: "T-03", machineName: "Tezgah 3", startedAt: "2026-10-13T08:30:00Z", rawStopCode: "E-17", reasonCode: null };
+    revokePreview.mockResolvedValue({
+      collector: row(), revocable: true, block: null,
+      machines: [{ machineId: "m1", machineCode: "T-01", machineName: "Tezgah 1" }, { machineId: "m3", machineCode: "T-03", machineName: "Tezgah 3" }],
+      openStops: [{ ...stop, stopId: "s1" }],
+      pendingEnds: [{ ...stop, stopId: "s2", machineCode: "T-01", endedAt: "2026-10-13T09:00:00Z", lateEndedAt: null }],
+    });
     revoke.mockResolvedValue(row({ revokedAt: "2026-10-13T09:00:00Z", machines: [] }));
     renderPage();
     fireEvent.click(await screen.findByTitle("Kartı iptal et"));
     const ul = await screen.findByTestId("revoke-machines");
     expect(within(ul).getByText("T-03")).toBeTruthy();
-    expect(get).toHaveBeenCalledWith("c1");
+    expect(within(screen.getByTestId("revoke-open-stops")).getByText(/E-17/)).toBeTruthy();
+    expect(within(screen.getByTestId("revoke-pending-ends")).getByText(/artık gelmeyecek/)).toBeTruthy();
+    expect(revokePreview).toHaveBeenCalledWith("c1");
     expect(revoke).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Kartı iptal et" }));
     await waitFor(() => expect(revoke).toHaveBeenCalledWith("c1"));
   });
 
+  it("iptal: önizleme engel dönerse (zaten iptal) onay düğmesi pasif", async () => {
+    list.mockResolvedValue([row()]);
+    revokePreview.mockResolvedValue({ collector: row(), revocable: false, block: { code: "COLLECTOR_REVOKED", message: "Kart zaten iptal edilmiş." }, machines: [], openStops: [], pendingEnds: [] });
+    renderPage();
+    fireEvent.click(await screen.findByTitle("Kartı iptal et"));
+    expect(await screen.findByText("Kart zaten iptal edilmiş.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Kartı iptal et" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+});
+
+describe("MachineCollectorsPage — iptal edilmiş kart", () => {
   it("iptal edilmiş kartta eylem düğmesi yok", async () => {
     list.mockResolvedValue([row({ revokedAt: "2026-10-13T09:00:00Z", machines: [] })]);
     renderPage();

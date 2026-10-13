@@ -42,7 +42,7 @@ export function MachineCollectorsPage() {
           <div className="flex gap-2">
             <RefreshButton queryKey={[MACHINE_COLLECTORS_QUERY_ROOT]} />
             <PermissionGate permission="loom:spec-manage">
-              <Button onClick={() => setForm({ mode: "create" })}><Plus className="mr-1 h-4 w-4" /> Yeni kart</Button>
+              <Button onClick={() => { actions.startCreate(); setForm({ mode: "create" }); }}><Plus className="mr-1 h-4 w-4" /> Yeni kart</Button>
             </PermissionGate>
           </div>
         }
@@ -65,7 +65,7 @@ export function MachineCollectorsPage() {
         initial={form?.mode === "edit" ? form.row : null}
         isSubmitting={actions.busy}
         onSubmit={async (v) => {
-          const ok = form?.mode === "edit" ? await actions.update(form.row, v) : await actions.create(v);
+          const ok = form?.mode === "edit" ? await actions.update(form.row, v) : await actions.create(v, setRotating);
           if (ok) setForm(null);
         }}
       />
