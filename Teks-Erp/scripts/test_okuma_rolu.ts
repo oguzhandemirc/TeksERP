@@ -77,7 +77,7 @@ function statik(): void {
 
 /** Uç zincirini sahte istekle koşar: ilk hata ya da "geçti". */
 async function ucKapisi(isSystemAccount: boolean): Promise<number> {
-  const stack = (readOnlyDbRouter as unknown as { stack: Array<{ route?: unknown; handle: (q: Request, s: Response, n: NextFunction) => unknown }> }).stack;
+  const stack = readOnlyDbRouter.stack;
   const req = { user: { userId: "00000000-0000-4000-8000-000000000001", permissions: ["admin:settings", "admin:users"] },
     isSystemAccount, headers: {}, params: {}, query: {}, body: {} } as unknown as Request;
   for (const l of stack.filter((x) => !x.route).slice(1)) { // [0] = verifyToken; kimlik burada simüle

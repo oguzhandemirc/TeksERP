@@ -212,7 +212,10 @@ function statik(): void {
   const my = muhurYazarlari(DOSYALAR);
   check("§5 ⭐ `systemAccountSeal` yalnız yardımcıda yazılır", my.length === 0, my.join(", "));
   check("§5 körlük zemini: yardımcı mühür yazıyor", muhurYazarlari(new Map([["x.ts", DOSYALAR.get(MUHUR_YARDIMCISI) ?? ""]])).length === 1);
-  const srcAdi = [...DOSYALAR].filter(([r, t]) => r.startsWith("src/") && r !== MUHUR_YARDIMCISI && /\bsystemAccountSeal\b/.test(t)).map(([r]) => r);
+  // Beyanlı muafiyet: G5 okuma rolünün GİZLEME listesi adı yalnız kolon adı olarak taşır (okumaz/yazmaz);
+  // muafiyet yalnız o tek satırdadır — dosyanın başka yerinde ad geçerse yine kırmızı.
+  const adiMetni = (r: string, t: string) => (r === "src/lib/okuma-rolu.ts" ? t.replace(/^\s*users: \[[^\]\n]*\],$/m, "") : t);
+  const srcAdi = [...DOSYALAR].filter(([r, t]) => r.startsWith("src/") && r !== MUHUR_YARDIMCISI && /\bsystemAccountSeal\b/.test(adiMetni(r, t))).map(([r]) => r);
   check("§5 ⭐ `src/` altında `systemAccountSeal` adı yalnız yardımcıda geçer (Zod/route/seçim yok)", srcAdi.length === 0, srcAdi.join(", "));
   const sonda = new Map(DOSYALAR);
   sonda.set("src/routes/sonda.routes.ts", "prisma.user.update({ where: { id }, data: { systemAccountSeal: body.seal } })");

@@ -149,7 +149,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 **Yalnız-okuma DB rolü (G5)** (commit `feat(guvenlik): G5 …` + `fix(guvenlik): G5 okuma rolü advisory …`; kısa kimliği paketlemede yazılır)
 
-- Rol göçü (`db-rol-gocu.cjs`, açılış §2b) aynı transaction'da ayrı kayıt noktasıyla `<POSTGRES_USER>_okuma` rolünü
+- Rol göçü (`db-rol-gocu.cjs`, açılış §2b) aynı transaction'da ayrı kayıt noktasıyla `tekserp_okuma` (`POSTGRES_USER` adı + `_okuma`) rolünü
   kurar/onarır: LOGIN, CONNECTION LIMIT 5, salt-okur varsayılan işlem, `statement_timeout`/`idle_in_transaction` 300 sn;
   tablolarda yalnız SELECT, sır tablo/kolonlarında kolon düzeyi GRANT ile hariç (liste `src/lib/okuma-rolu.ts`).
   Public şemadaki SECURITY DEFINER fonksiyonlardan (`audit_arsivle`/`audit_arsiv_buda` dahil) ve pg_catalog advisory
