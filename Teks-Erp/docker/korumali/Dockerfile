@@ -3,7 +3,7 @@
 # TeksERP — KORUMALI LINUX İMAJI (Faz 2f · müşteri teslimi · BARINDIRILAN sınıfının temeli)
 # =============================================================================
 # Demo imajından (kök Dockerfile) FARKI: çalışma aşaması KAYNAK TAŞIMAZ — sunucu V8 bayt
-# kodu (.jsc, bytenode) + yükleyici, araçlar karartılmış tek dosya, native lisans çekirdeği,
+# kodu (.jsc, bytenode) + yükleyici, araçlar .jsc + küçük yükleyici (G6), native lisans çekirdeği,
 # prod node_modules, Prisma şema motoru (debian-openssl-3.0.x) ve migration SQL. src · tsx ·
 # seed .ts · .map YOK; süreç root DEĞİL; kök dosya sistemi salt-okunur koşabilir.
 #
@@ -60,6 +60,7 @@ COPY Teks-Erp/assets ./assets
 COPY Teks-Erp/native/lisans-cekirdek/dist-uretim/lisans-cekirdek.linux-x64-gnu.node \
      ./native/lisans-cekirdek/dist-uretim/lisans-cekirdek.linux-x64-gnu.node
 COPY Teks-Erp/docker/korumali/sahne.mjs ./docker/korumali/sahne.mjs
+COPY Teks-Erp/docker/korumali/arac-jsc.mjs ./docker/korumali/arac-jsc.mjs
 # Varsayılan süperadmin malzemesi derleme SIRRI olarak bağlanır (katmana/imaja girmez; yoksa hesap doğmaz):
 #   --secret id=varsayilan_sa,env=TEKSERP_VARSAYILAN_SA
 RUN --mount=type=secret,id=varsayilan_sa,required=false \

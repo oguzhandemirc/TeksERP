@@ -7,6 +7,7 @@
 //   2. build-araclar --korumali → dist/tools/*.cjs, ardından HER araç esbuild ile karartılır
 //      (2b'nin --korumali bayrağı yoksa da `// src/...` yol yorumu pakete girmesin)
 //   3. seed aracı (entrypoint §2'nin ilk kurulum seed'i) → dist/tools/seed.cjs, karartılmış
+//   3b. her araç → <ad>.jsc (bytenode) + <ad>.cjs yükleyici (arac-jsc.mjs; `node dist/tools/<ad>.cjs` aynı)
 //   4. prisma (YORUMSUZ şema + migration SQL + üretim config'i) · public · assets · native (+ çapa kipi denetimi)
 // Paketin RUNTIME Node'uyla koşar (V8 kilidi: .jsc onunla üretilir, onunla açılır).
 //   node docker/korumali/sahne.mjs /sahne/app
@@ -76,6 +77,13 @@ async function main() {
     const metin = fs.readFileSync(path.join(hedefTools, ad), 'utf8');
     if (/^\s*\/\/ (src|scripts|prisma)\//m.test(metin)) dur(`araç karartılmamış (kaynak yol yorumu): tools/${ad}`);
   }
+
+  // --- 3b. Araçlar V8 bayt koduna (G6): okunur JS imaja girmez; `<ad>.cjs` küçük yükleyici kalır ----------
+  const { araclariJscYap } = await import('./arac-jsc.mjs');
+  const bytenode = (await import('bytenode')).default ?? (await import('bytenode'));
+  const jscAraclar = await araclariJscYap(hedefTools, bytenode);
+  if (jscAraclar.length === 0) dur('araç .jsc üretilmedi');
+  console.log(`  ✓ araçlar .jsc: ${jscAraclar.length} (${jscAraclar.join(', ')})`);
 
   // --- 4. Prisma · public · assets · package · native ----------------------------
   fs.mkdirSync(path.join(SAHNE, 'prisma'), { recursive: true });

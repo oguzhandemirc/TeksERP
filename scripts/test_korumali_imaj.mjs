@@ -21,6 +21,8 @@
 //      `compose run --rm --no-deps backend goc` onu çağırır (GUNCELLEYICI-SAGLAMLIK L5)
 //   K11 PID 1 açılış betiğidir (Config.Entrypoint = ["/usr/local/bin/entrypoint.sh"]): PID 1 tini olsaydı
 //      /proc/1/environ ilk ortamı (sahip DB URL'i) aynı uid'e gösterirdi; betik sonunda temiz ortamla `exec tini`
+//   K12 araçlar okunur JS DEĞİL (G6): her `dist/tools/<ad>.cjs` küçük bytenode yükleyicisidir (arac-jsc.mjs imi,
+//      ≤ 4 KB) ve yanında `<ad>.jsc` vardır
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ (docker yok / imaj yok / akış okunamadı).
 // İmaj yoksa YEŞİL DEĞİL ÖLÇÜLEMEDİ döner — sessiz yeşil yok. Cırcır DEĞİL (taban yok).
@@ -29,6 +31,7 @@
 //   node scripts/test_korumali_imaj.mjs --sonda              # negatif + pozitif sondalar (docker'sız)
 // =============================================================================
 import { spawn, spawnSync } from 'node:child_process';
+import { ARAC_YUKLEYICI_IMI, aracYukleyicisi } from '../Teks-Erp/docker/korumali/arac-jsc.mjs';
 
 export const ZORUNLU = [
   'app/dist/server.js',
@@ -74,6 +77,11 @@ export function denetle({ user, dosyalar, entrypoint, imza = { etiket: null, ist
     if (/^app\/node_modules\/(tsx\/|\.bin\/tsx$)/.test(a)) ihlal.push(`K3 tsx: ${a}`);
     if (a === 'app/dist/server.cjs') ihlal.push('K4 bytenode öncesi server.cjs imajda');
     if (/^app\/dist\/tools\/[^/]+\.cjs$/.test(a) && typeof d.icerik === 'string' && /^\s*\/\/ (src|scripts|prisma)\//m.test(d.icerik)) ihlal.push(`K4 araç karartılmamış: ${a}`);
+    const arac = /^app\/dist\/tools\/([^/]+)\.cjs$/.exec(a);
+    if (arac && d.tip === 'dosya') {
+      if (typeof d.icerik !== 'string' || !d.icerik.includes(ARAC_YUKLEYICI_IMI) || d.boyut > 4096) ihlal.push(`K12 okunur araç (bytenode yükleyicisi değil, ${d.boyut} B): ${a}`);
+      if (!adlar.has(`app/dist/tools/${arac[1]}.jsc`)) ihlal.push(`K12 araç .jsc yok: app/dist/tools/${arac[1]}.jsc`);
+    }
     if (/^app\/prisma\/migrations\/[^/]+\/migration\.sql$/.test(a)) migration++;
     if (a.startsWith('app/') && !nm && d.tip === 'dosya' && (d.uid !== 0 || (d.mod & 0o022) !== 0)) ihlal.push(`K6 uygulama dosyası yazılabilir/root dışı (uid ${d.uid}, mod ${d.mod.toString(8)}): ${a}`);
     if ((a === 'etc/machine-id' || a === 'var/lib/dbus/machine-id') && d.tip === 'dosya' && d.boyut > 0) ihlal.push(`K7 imajda dolu makine kimliği: ${a}`);
@@ -213,8 +221,12 @@ function temizOrnek() {
     user: '10001:10001',
     entrypoint: [...PID1_GIRIS],
     dosyalar: [
+      // Araçlar ZORUNLU'dan ÖNCE: tekilleştirme ilk girdiyi tutar (içerikli yükleyici).
+      f('app/dist/tools/seed.cjs', { icerik: aracYukleyicisi('seed'), boyut: aracYukleyicisi('seed').length }),
+      f('app/dist/tools/seed.jsc', { boyut: 9000 }),
+      f('app/dist/tools/yedek-sifrele.cjs', { icerik: aracYukleyicisi('yedek-sifrele'), boyut: 900 }),
+      f('app/dist/tools/yedek-sifrele.jsc', { boyut: 9000 }),
       ...ZORUNLU.map((z) => f(z)),
-      f('app/dist/tools/seed.cjs', { icerik: '"use strict";var a=1;' }),
       f('app/prisma/migrations/20260101000000_x/migration.sql'),
       f('app/node_modules/zod/index.d.ts'),
       f('app/node_modules/pkg/src/kendi.ts', { uid: 0 }),
@@ -234,6 +246,9 @@ const MUTASYONLAR = [
   ['K3', 'tsx paketi', (o) => o.dosyalar.push({ ad: 'app/node_modules/tsx/package.json', boyut: 5, uid: 0, mod: 0o644, tip: 'dosya' })],
   ['K4 bytenode', 'server.cjs kaldı', (o) => o.dosyalar.push({ ad: 'app/dist/server.cjs', boyut: 5, uid: 0, mod: 0o644, tip: 'dosya' })],
   ['K4 araç', 'karartılmamış araç', (o) => { o.dosyalar.find((d) => d.ad === 'app/dist/tools/seed.cjs').icerik = '\n// src/lib/prisma.ts\nvar a=1;'; }],
+  ['K12 okunur araç', 'araç düz (karartılmış) JS', (o) => { Object.assign(o.dosyalar.find((d) => d.ad === 'app/dist/tools/seed.cjs'), { icerik: '"use strict";var a=1;', boyut: 21 }); }],
+  ['K12 okunur araç', 'yükleyici imi var ama gövde gömülü (büyük)', (o) => { const d = o.dosyalar.find((x) => x.ad === 'app/dist/tools/seed.cjs'); d.icerik += 'x'.repeat(5000); d.boyut = d.icerik.length; }],
+  ['K12 araç .jsc yok', 'yükleyici var, .jsc yok', (o) => { o.dosyalar = o.dosyalar.filter((d) => d.ad !== 'app/dist/tools/seed.jsc'); }],
   ['K5 zorunlu parça yok: app/dist/server.jsc', '.jsc yok', (o) => { o.dosyalar = o.dosyalar.filter((d) => d.ad !== 'app/dist/server.jsc'); }],
   ['K5 zorunlu parça yok: app/native', 'native yok', (o) => { o.dosyalar = o.dosyalar.filter((d) => !d.ad.startsWith('app/native/')); }],
   ['K5 migration', 'migration yok', (o) => { o.dosyalar = o.dosyalar.filter((d) => !d.ad.includes('/migrations/')); }],
@@ -321,7 +336,7 @@ async function main() {
       console.log(`\n  ✖ KIRMIZI: ${ih.length} ihlal`);
       process.exit(1);
     }
-    console.log(`  ✓ K1–K11 temiz: kaynak/harita/tsx/bağ yok, root değil, zorunlu parçalar var, PID 1 açılış betiği · imaj içi liste: ${olcum.etiket ? `imzalı (${olcum.etiket})` : 'YOK (imzasız taban)'}`);
+    console.log(`  ✓ K1–K12 temiz: kaynak/harita/tsx/bağ yok, root değil, zorunlu parçalar var, PID 1 açılış betiği, araçlar .jsc · imaj içi liste: ${olcum.etiket ? `imzalı (${olcum.etiket})` : 'YOK (imzasız taban)'}`);
     process.exit(0);
   } catch (e) {
     if (e instanceof Olculemedi) {
