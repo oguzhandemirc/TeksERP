@@ -187,6 +187,18 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   Rol ayrımı yapılamazsa (eski PG, süper olmayan sahip) bugünkü geri düşüş: sahip URL'iyle açılır, `/proc` ortamı
   o kurulumda sahip URL'ini yine taşır. Windows paketi etkilenmez.
 
+**Migration'lar süper olmayan sahip rolle koşar + geri yükleme `--no-acl`** (commit `fix(migration): audit purge kapısı …` · `test(migration): test_migration_super_olmayan …` · `fix(yedek): geri yükleme --no-acl …`; kısa kimliği paketlemede yazılır)
+
+- Audit hash zinciri migration'ının iki arşiv/budama fonksiyonu purge kapısını tanımda (`SET "teks.audit_purge"`)
+  açıyordu; süper olmayan sahipte (Windows `tekserp`) bu 42501 verir ve migration FAILED kalırdı. Kapı gövdeye
+  `set_config(…, true)` olarak taşındı, sonda önceki değer geri yazılır (davranış aynı). Beyanlı onarım
+  (`prisma/migration-onarimlari.json`) + eski hâli uygulamış DB'ler için `20261013200000_audit_purge_set_config`.
+- Yeni bekçi `test_migration_super_olmayan`: CI'da bütün migration'lar süper olmayan DB sahibi rolle uygulanır,
+  bakım rolüyle döküm + geri yükleme ölçülür.
+- Panel DB kopyası geri yüklemesi `--no-acl` ile (`copyRestoreArgs`): başka kümeden gelen dökümün olmayan rollere
+  GRANT'ı kopyayı düşürmez; runbook ve `kur.ps1` ipucu aynı. Yetkileri rol göçü kurar (Docker'da her açılışta).
+- **Eski kurulum ne yapar:** 2.15.6'dan gelen kurulum düzeltilmiş dosyayı uygular; HTTP sözleşmesi aynı.
+
 ## 3. Sözleşme
 
 - **Kırıldı mı:** HAYIR (Perf-2 B5/B6) — rapor zarfına isteğe bağlı `warnings` (yalnız tavan aşılınca); eski panel
@@ -233,7 +245,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 4. Migration
 
-- **Var mı:** EVET — 4 adet: `20261013010000_makine_watchdog` (yalnız EKLEME: toplayıcıya iki, duruşa bir boş
+- **Var mı:** EVET — 5 adet: `20261013010000_makine_watchdog` (yalnız EKLEME: toplayıcıya iki, duruşa bir boş
   geçilebilir alan; veri dönüşümü yok) · `20261013030000_doff_sayac_satiri` (yalnız EKLEME: boş
   `number_series_counters` tablosu; veri dönüşümü yok, satırlar ilk kullanımda doğar).
   · `20261013120000_audit_hash_zinciri` (yalnız EKLEME: `system_logs`/arşivde iki boş kolon + iki unique index,
@@ -241,7 +253,9 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   satırlarına DOKUNMAZ — onlar zincir öncesidir. `count`suz: yalnız `max(createdAt)` index'ten okunur).
   · `20261013150000_makine_karti_client_token` (yalnız EKLEME: makine kartına boş `clientToken` kolonu + unique
   index; veri dönüşümü yok).
-- **Toplam migration:** 391 (2.15.6'da 387). 2.15.6'dan gelen kurulum tam 4 migration uygulamalıdır. Farklı sayı =
+  · `20261013200000_audit_purge_set_config` (iki arşiv/budama fonksiyonunu aynı gövdeyle yeniden yazar; veri
+  dönüşümü yok. Audit hash zinciri dosyası beyanlı onarımla düzeltildi — süper olmayan sahip rolle koşar).
+- **Toplam migration:** 392 (2.15.6'da 387). 2.15.6'dan gelen kurulum tam 5 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -249,7 +263,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 4 migration); süre kurulumda ölçülür.
+- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 5 migration); süre kurulumda ölçülür.
 - **Sıra:** sunucu önce; panel sonra (eski panel yeni sunucuda sorunsuz; 1.6.5 paneli 2.15.6 sunucusunda makine kartı
   kaydında 400, iptal önizlemesinde 404 alır — kart sahada yok).
 - **Bu sürüme özel:** yok (watchdog'un dokunabileceği onaylı kart ve kart duruşu sahada yok).
