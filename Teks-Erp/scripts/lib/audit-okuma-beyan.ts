@@ -69,8 +69,12 @@ export const AYAK_IZI_OKUYUCULARI: readonly AyakIziBeyani[] = [
     gerekce: "geri yüklemede kaybolacak audit satırı sayısı — insana gösterilir, geri yüklemeyi durdurmaz" },
   { yer: "src/services/backup-impact.service.ts#auditRollup", adet: 2, sinif: "YEDEK_ETKI_TANISI",
     gerekce: "kaybolacak ayak izinin tablo/işlem kırılımı (RestoreAuditDelta) + kapsamın alt sınırı (en eski satır; yoksa 'ölçülemedi')" },
-  { yer: "src/services/audit.service.ts#AuditService.archiveOlderThan", adet: 1, sinif: "AUDIT_ALTYAPISI",
-    gerekce: "6 aydan eski satırı arşive TAŞIR; audit'in kendi yaşam döngüsü, iş verisi türetmez" },
+  // G4 (2026-10-13): arşivleyicinin okuması DB fonksiyonuna (`audit_arsivle`) taşındı; yerine
+  // hash zinciri doğrulayıcısı geldi — iki satır 1e onayı 2026-10-13.
+  { yer: "src/services/audit-chain.service.ts#union", adet: 1, sinif: "AUDIT_ALTYAPISI",
+    gerekce: "hash zinciri doğrulaması: canlı ∪ arşiv satırlarını sıraya dizer — kurcalama sonucu insana (uç/sağlık) gösterilir, iş verisi türetmez" },
+  { yer: "src/services/audit-chain.service.ts#tailFindings", adet: 1, sinif: "AUDIT_ALTYAPISI",
+    gerekce: "zincir başladıktan sonra trigger'ı atlatan (zincirsiz) satır sayımı — kurcalama bulgusu, iş sayısı değil" },
   { yer: "src/services/audit.service.ts#AuditService.getLogStats", adet: 1, sinif: "AUDIT_ALTYAPISI",
     gerekce: "sağlık ekranındaki audit boyutu ve en eski satır — audit'in kendi göstergesi" },
 ];

@@ -1016,6 +1016,12 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     why: "Audit değiştirilemezliği (ISO 27001 A.8.15) — koruma teks.audit_guard GUC'u ile PROD'da açılır, arşivleyici teks.audit_purge ile geçer (migration 20260819161000)",
   },
   {
+    table: "system_logs",
+    trigger: "system_logs_hash_chain",
+    timing: ["BEFORE INSERT", "FOR EACH ROW"],
+    why: "Audit hash zinciri (G4): her satıra sıra + önceki özetle sha256 — kurcalama doğrulaması bunu okur (migration 20261013120000, bekçi test_audit_hash_zinciri)",
+  },
+  {
     // ⚠️ AYRI AD ZORUNLU: aşağıdaki envanter trigger'ları YALNIZ ADA GÖRE
     // haritalıyor (`trgByName`); iki tabloda aynı adı kullanmak Map'te tekini
     // bırakır ve envanter sessizce yanlış çalışır. Fonksiyon tek, trigger iki.
@@ -1097,6 +1103,30 @@ const REQUIRED_EXTENSIONS: Array<{ name: string; why: string }> = [
 const TOLERATED_EXTENSIONS = new Set(["unaccent"]);
 
 const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragments: string[]; why: string }> = [
+  {
+    name: "audit_zincir_ozet",
+    volatility: "i",
+    bodyFragments: ["'TEKSERP-AUDIT-v1'", "sha256", "extract(epoch FROM p_created) * 1000000"],
+    why: "audit hash zincirinin TEK özet kaynağı (trigger + doğrulayıcı); gövde değişirse eski satırlar doğrulanamaz",
+  },
+  {
+    name: "audit_zincir_bagla",
+    volatility: "v",
+    bodyFragments: ["pg_advisory_xact_lock(8039, 0)", "SECURITY DEFINER", '"system_log_archives"', "audit_zincir_ozet"],
+    why: "zincir yazarı: kilit 8039 altında canlı ∪ arşiv en büyük sıranın özetine bağlar",
+  },
+  {
+    name: "audit_arsivle",
+    volatility: "v",
+    bodyFragments: ["SECURITY DEFINER", "interval '1 month'", "teks.audit_purge"],
+    why: "uygulama rolü DELETE'siz arşivler; taban kuralı (≥ 1 ay) DB'de",
+  },
+  {
+    name: "audit_arsiv_buda",
+    volatility: "v",
+    bodyFragments: ["SECURITY DEFINER", "interval '1 year'", "'AUDIT_CHAIN_CUT'", "teks.audit_purge"],
+    why: "arşiv budaması: taban ≥ 1 yıl, zincirde yalnız sıra-öneki + kesit çapası",
+  },
   {
     name: "defter_block_tamper",
     volatility: "v",

@@ -46,6 +46,8 @@ const RUNTIME_EVENTS = {
   AUDIT_ARCHIVE: "AUDIT_ARCHIVE",
   /** Gece bakımı: saklama süresi dolan audit ARŞİVİ satırları budandı (sayı + kesim yükte). */
   AUDIT_ARCHIVE_PURGE: "AUDIT_ARCHIVE_PURGE",
+  /** Gece/elle doğrulama zincirde kurcalama buldu (bulgular yükte). */
+  AUDIT_CHAIN_BROKEN: "AUDIT_CHAIN_BROKEN",
   /** Gece bakımı: tüketilmeden süresi dolan 2FA kurulum pencereleri (aday sır taşır) budandı. */
   TOTP_ENROLLMENT_PURGE: "TOTP_ENROLLMENT_PURGE",
   /** Bir kullanıcının hızlı PIN'i / kart kodu OKUNDU — güvenlik olayı. */
@@ -219,6 +221,10 @@ const REPAIR_EVENTS = {
  * taşınır (ölçüm 2026-09-12: ikisi de `Teks-Erp/src`te 0 eşleşme).
  */
 export const ARCHIVED_EVENTS = {
+  // G4 hash zinciri: bu iki adı YALNIZ DB yazar (uygulama `logEvent` ile yazamamalı — tip kapısı
+  // bunu sağlar). START migration 20261013120000'de bir kez · CUT `audit_arsiv_buda` kesit çapası.
+  AUDIT_CHAIN_START: "AUDIT_CHAIN_START",
+  AUDIT_CHAIN_CUT: "AUDIT_CHAIN_CUT",
   SUPERADMIN_ACCOUNT_CREATED: "SUPERADMIN_ACCOUNT_CREATED",
   SYSTEM_ACCOUNT_ACCESS_BLOCKED: "SYSTEM_ACCOUNT_ACCESS_BLOCKED",
 } as const;

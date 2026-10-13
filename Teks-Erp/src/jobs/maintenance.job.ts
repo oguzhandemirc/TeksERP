@@ -9,6 +9,7 @@
 import prisma from "../lib/prisma";
 import { rotateRollbackBackups } from "../services/backup.service";
 import { AuditService } from "../services/audit.service";
+import { verifyAndRecordAuditChain } from "../services/audit-chain.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import { readAuditArchiveRetentionYears } from "../services/system-setting.service";
@@ -87,6 +88,17 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
         payload: { retentionYears: years, cutoff: cutoff.toISOString(), deleted },
       });
       return `audit arşivi: ${deleted} satır budandı (${years} yıldan eski)`;
+    },
+  },
+  {
+    // G4: hash zinciri her gece baştan doğrulanır; kurcalama sağlık ekranına (auditProtection) düşer.
+    name: "audit-chain-verify",
+    run: async () => {
+      const r = await verifyAndRecordAuditChain({ devamEt: () => isInMaintenanceWindow(new Date()) });
+      if (r.yarim) return `audit zinciri: pencere kapandı, doğrulama yarım (${r.kontrolEdilen} satır)`;
+      if (r.durum !== "kurcalanmis") return null;
+      hata("maintenance", `audit zinciri KURCALANMIŞ: ${r.bulgular.length} bulgu`);
+      return `audit zinciri: ${r.bulgular.length} kurcalama bulgusu`;
     },
   },
   {

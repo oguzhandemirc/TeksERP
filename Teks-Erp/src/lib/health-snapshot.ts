@@ -431,7 +431,8 @@ export async function buildRichHealth(): Promise<Record<string, unknown>> {
     lastAuditFailureAt: auditHealth.lastFailureAt,
     // Audit değiştirilemezliği (ISO 27001 A.8.15) — "on" = UPDATE/DELETE engelli.
     // null = DB okunamadı, "off" ile karıştırma.
-    auditGuard,
+    // G4 auditProtection: "tam" = rol yalnız ekler + zincir sağlam; "kismi" uyarı, durdurmaz.
+    auditGuard, auditProtection: await import("../services/audit-chain.service").then((m) => m.readAuditProtection()).catch(() => null),
     // Servis keşfi — "yazdık ama sahada hiç çalışmadı"nın TEK ölçülebilir kanıtı.
     // `mdns.reason` sahada `"ok"` değilse ilan kurulamamıştır (Windows'ta 5353'ü
     // Apple Bonjour Service / Adobe tutuyor olabilir) ve keşif yalnız istemci

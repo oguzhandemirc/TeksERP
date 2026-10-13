@@ -61,6 +61,7 @@
 //   8036  CLIENT_TOKEN_LOCK_NS  services/helpers/token-replay.helper.ts  clientToken replay serileştirme (token başına; ilk kullanıcı çek teslim bordrosu)
 //   8037  FACTORY_TIMEZONE_LOCK_NS  services/factory-timezone.service.ts  fabrika saat dilimi dönem defteri (tek anahtar; değişiklik ↔ iptal)
 //   8038  SYSTEM_ACCOUNT_LOCK_NS  services/helpers/varsayilan-superadmin.helper.ts  satıcı hesabı doğuşu/devri (tek anahtar; boot varsayılanı ↔ kurulum aracı)
+//   8039  AUDIT_CHAIN_LOCK_NS  services/audit-chain.service.ts  audit hash zinciri sırası (tek anahtar; kilidi DB trigger'ı `audit_zincir_bagla` alır)
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı

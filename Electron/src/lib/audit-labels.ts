@@ -266,6 +266,9 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   UNCAUGHT_EXCEPTION: "Yakalanmayan istisna",
   AUDIT_ARCHIVE: "Log arşivlendi",
   AUDIT_ARCHIVE_PURGE: "Saklama süresi dolan log arşivi budandı",
+  AUDIT_CHAIN_START: "Denetim kaydı zinciri başlatıldı",
+  AUDIT_CHAIN_CUT: "Denetim zinciri kesit çapası (arşiv budaması)",
+  AUDIT_CHAIN_BROKEN: "Denetim kaydında kurcalama tespit edildi",
   TOTP_ENROLLMENT_PURGE: "Kullanılmadan süresi dolan 2FA kurulum bağlantıları budandı",
   // BULGU-T1-013: bir kullanıcının hızlı PIN'i / kart kodu OKUNDU. Okuyan kişi
   // hedefin kimliğine bürünebileceği için bu satır bir "yetki kullanımı" değil

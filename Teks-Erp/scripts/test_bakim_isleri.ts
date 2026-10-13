@@ -255,8 +255,9 @@ async function main(): Promise<void> {
   const db = await dbBudamasi();
   check("§4c ⭐ DB: 3 yıldan eski arşiv satırı budanır, 2 yıllık kalır (tamper kapısı tx içinde)", db.length === 0, db.join(" | "));
   const tdd = oku("scripts/test_telemetri_defter_degil.ts");
-  check("§4d SystemLogArchive budanan-defter-dışı beyanında TELEMETRİ, budayan audit.service",
-    /model: "SystemLogArchive", sinif: "TELEMETRI"[\s\S]{0,600}?silen: \["src\/services\/audit\.service\.ts"\]/.test(tdd));
+  // G4 (2026-10-13): budayan yol SECURITY DEFINER `audit_arsiv_buda` (uygulama rolü DELETE'siz).
+  check("§4d SystemLogArchive budanan-defter-dışı beyanında TELEMETRİ, budayan audit_arsiv_buda göçü",
+    /model: "SystemLogArchive", sinif: "TELEMETRI"[\s\S]{0,600}?silen: \["prisma\/migrations\/20261013120000_audit_hash_zinciri\/migration\.sql"\]/.test(tdd));
 
   const ro = await relOptions();
   check("§5 B2: altı tabloda autovacuum 0.02 / analyze 0.01", ro.length === 0, ro.join(" | "));

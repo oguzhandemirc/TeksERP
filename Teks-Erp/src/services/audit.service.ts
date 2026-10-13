@@ -209,82 +209,31 @@ export class AuditService {
    * X aydan eski sistem loglarını system_log_archives tablosuna taşır.
    * Büyük tablolarda ARCHIVE_BATCH_SIZE kadar kayıtla çalışır — tekrar çağır.
    * Dönen `archived` sayısı 0 ise tamamlandı.
+   *
+   * G4 (2026-10-13): taşıma DB fonksiyonu `audit_arsivle`dedir (SECURITY DEFINER,
+   * sahibi göç rolü) — uygulama rolü `system_logs`ta DELETE yetkisini kaybedince de
+   * yürür; taban kuralı (kesim ≥ 1 ay) DB'de zorlanır. Hash zinciri taşınan satırla
+   * arşive gider (doğrulama canlı ∪ arşivi okur), tamper guard'ı fonksiyonun kendi
+   * `SET teks.audit_purge` ayarı geçer.
    */
   static async archiveOlderThan(monthsToKeep: number): Promise<{ archived: number; cutoff: string }> {
     const cutoff = new Date();
     cutoff.setMonth(cutoff.getMonth() - monthsToKeep);
-
-    const logsToArchive = await prisma.systemLog.findMany({
-      where: { createdAt: { lt: cutoff } },
-      take: ARCHIVE_BATCH_SIZE,
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (logsToArchive.length === 0) {
-      return { archived: 0, cutoff: cutoff.toISOString() };
-    }
-
-    const ids = logsToArchive.map((l) => l.id);
-
-    await prisma.$transaction(async (tx) => {
-      // ── ARŞİVLEYİCİNİN MEŞRU SİLME İZNİ (2026-08-19) ──────────────────────
-      // `system_logs` üzerinde UPDATE/DELETE/TRUNCATE'i engelleyen trigger var
-      // (migration 20260819161000, ISO 27001 A.8.15). Arşivleme o engelin TEK
-      // meşru istisnasıdır — satır silinmiyor, TAŞINIYOR.
-      //
-      // ⚠️ `SET LOCAL` bu transaction'a özeldir ve COMMIT'te söner; havuzdaki
-      // diğer bağlantılara SIZMAZ. Prisma interactive tx'i adanmış bir client
-      // alır, dolayısıyla aşağıdaki `deleteMany` ile AYNI oturumda koşar.
-      //
-      // ⚠️ SIRA LOAD-BEARING: bu ifade `deleteMany`den ÖNCE gelmek zorunda.
-      // Bekçi (test_audit_depth §10) iki ifadenin kaynak sırasını da doğrular —
-      // "var mı" kontrolü sonradan aşağı kaydırılmasına karşı kör olurdu.
-      await tx.$executeRaw`SET LOCAL teks.audit_purge = 'on'`;
-
-      await tx.systemLogArchive.createMany({
-        data: logsToArchive.map((log) => ({
-          id: log.id,
-          userId: log.userId,
-          action: log.action,
-          category: log.category,
-          ipAddress: log.ipAddress,
-          tableName: log.tableName,
-          recordId: log.recordId,
-          deviceId: log.deviceId,
-          // İşlem gruplaması arşivde de yaşamalı — taşınmasaydı 6 ay sonra
-          // "bu değişiklikler aynı işlemden mi" sorusu cevapsız kalırdı.
-          requestId: log.requestId,
-          changes: log.changes as Prisma.InputJsonValue,
-          oldData: log.oldData as Prisma.InputJsonValue,
-          newData: log.newData as Prisma.InputJsonValue,
-          createdAt: log.createdAt,
-          // ⚠️ `system_logs.updatedAt` DÜŞÜRÜLDÜ (Faz B1): audit satırı yazıldıktan
-          // sonra hiç güncellenmez. Arşiv tablosunda kolon DURUYOR (taşınmış
-          // tarihsel veri, şeması değiştirilmez) → `createdAt` ile doldurulur.
-          // Bu bir kayıp DEĞİL: düşürmeden önce canlıda `updatedAt > createdAt`
-          // olan 0 satır vardı, yani ikisi zaten her zaman aynıydı.
-          updatedAt: log.createdAt,
-        })),
-        skipDuplicates: true,
-      });
-      await tx.systemLog.deleteMany({ where: { id: { in: ids } } });
-    });
-
-    return { archived: logsToArchive.length, cutoff: cutoff.toISOString() };
+    const rows = await prisma.$queryRaw<Array<{ n: number }>>`
+      SELECT audit_arsivle(${cutoff}::timestamptz, ${ARCHIVE_BATCH_SIZE}::int) AS n`;
+    return { archived: Number(rows[0]?.n ?? 0), cutoff: cutoff.toISOString() };
   }
 
   /**
    * `before`dan eski ARŞİV satırlarının budaması — tek dilim (çağıran dilimleri aylık ilerletir).
    * Arşivi OKUMAZ (audit iş kaynağı değil): yalnız yaş yüklemli silme. Audit ayak izidir,
-   * defter değil; arşiv satırı silinince raporlanan sayı değişmez. Tamper guard'ın tek
-   * meşru kapısı burada da tx'in İLK ifadesi `SET LOCAL`.
+   * defter değil; arşiv satırı silinince raporlanan sayı değişmez. G4: silme DB fonksiyonu
+   * `audit_arsiv_buda`dadır (taban ≥ 1 yıl; zincirli satırda yalnız sıra-öneki + kesit çapası).
    */
   static async purgeArchiveBefore(before: Date): Promise<{ deleted: number }> {
-    const res = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SET LOCAL teks.audit_purge = 'on'`;
-      return tx.systemLogArchive.deleteMany({ where: { createdAt: { lt: before } } });
-    });
-    return { deleted: res.count };
+    const rows = await prisma.$queryRaw<Array<{ n: bigint | number }>>`
+      SELECT audit_arsiv_buda(${before}::timestamptz) AS n`;
+    return { deleted: Number(rows[0]?.n ?? 0) };
   }
 
   /**

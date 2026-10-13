@@ -13,6 +13,7 @@ import {
 import { RAW_SETTING_SCOPE_PERMISSIONS, settingKeyWriters } from "../constants/settings-scopes";
 import { isEncryptedBackupName } from "../services/helpers/backup-naming.helper";
 import { AuditService } from "../services/audit.service";
+import { readAuditProtection, readLastAuditChainReport, verifyAndRecordAuditChain } from "../services/audit-chain.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { TotpAccountService } from "../services/totp-account.service";
@@ -1247,6 +1248,51 @@ router.post(
         payload: { monthsToKeep, archived: result.archived, cutoff: result.cutoff },
       });
       res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/system-logs/chain:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Audit hash zincirinin son doğrulama sonucu ve koruma düzeyi
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/system-logs/chain",
+  verifyToken,
+  requireAnyPermission("admin:settings", "system:activity"),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const [rapor, koruma] = [await readLastAuditChainReport(), await readAuditProtection()];
+      res.status(200).json({ success: true, data: { rapor, koruma } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/system-logs/chain/verify:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Audit hash zincirini şimdi baştan doğrula (sonuç kaydedilir)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/system-logs/chain/verify",
+  verifyToken,
+  requireSystemAccountWhenPresent,
+  requirePermission("admin:settings"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const rapor = await verifyAndRecordAuditChain({ userId: req.user?.userId ?? null });
+      res.status(200).json({ success: true, data: rapor });
     } catch (error) {
       next(error);
     }

@@ -50,10 +50,15 @@ export const BUDANAN_DEFTER_DISI: Array<{ model: string; sinif: "DURUM" | "TELEM
     silen: ["src/services/totp-account.service.ts"] },
   { model: "SystemLogArchive", sinif: "TELEMETRI",
     gerekce: "audit arşivi = 6 aydan eski ayak izi; audit iş kararına girmez ve kalıcı sayaç/rapor KALICI KOLONDAN okunur ⇒ arşiv satırı silindiğinde raporlanan hiçbir sayı değişmez (`SystemLog` beyanının ikizi). Budama yaşa bağlıdır: `audit.archiveRetentionYears` (varsayılan 3, 0 = budama yok), gece bakım penceresinde parti 5000",
-    silen: ["src/services/audit.service.ts"] },
+    silen: ["prisma/migrations/20261013120000_audit_hash_zinciri/migration.sql"] },
   { model: "ErrorReportEntry", sinif: "TELEMETRI",
     gerekce: "müşteri onaylı hata raporu kuyruğu (kişisel verisiz grup özeti); satıcıya gönderilir, hiçbir iş kararı ve raporlanan sayı bu satırdan türemez — silinince yalnız panelin \"ne gönderildi\" listesi kısalır",
     silen: ["src/services/error-report.service.ts"] },
+];
+/** SQL'de yaşayan yaş budayıcıları (TS `deleteMany` taramasının göremediği yol). */
+const SQL_BUDAYICILAR: Array<{ model: string; dosya: string; desen: RegExp }> = [
+  { model: "SystemLogArchive", dosya: "prisma/migrations/20261013120000_audit_hash_zinciri/migration.sql",
+    desen: /DELETE FROM "system_log_archives"\s+WHERE "createdAt" < p_before/ },
 ];
 let pass = 0;
 let fail = 0;
@@ -134,6 +139,15 @@ function main(): void {
   for (const f of walkTs(join(KOK, "src"))) {
     const rel = relative(KOK, f);
     budamalar.push(...budamalariTara(readFileSync(f, "utf8"), rel));
+  }
+
+  // G4 (2026-10-13): audit arşivi budaması uygulama rolünden alındı, SECURITY DEFINER DB
+  // fonksiyonundadır (`audit_arsiv_buda`). SQL budayıcı beyanlı desenle ölçülür; desen
+  // kaybolursa beyan ÖLÜ düşer (§3 iki yönlü).
+  for (const sb of SQL_BUDAYICILAR) {
+    const kaynak = readFileSync(join(KOK, sb.dosya), "utf8");
+    const i = kaynak.search(sb.desen);
+    if (i >= 0) budamalar.push({ model: sb.model, dosya: sb.dosya, satir: kaynak.slice(0, i).split("\n").length, yas: true, alan: "createdAt" } as BudamaYeri);
   }
 
   check("§1 körlük zemini: yaş budaması bulundu", budamalar.length > 0,

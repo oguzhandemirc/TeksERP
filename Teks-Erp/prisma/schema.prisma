@@ -8654,6 +8654,10 @@ model SystemLog {
   /// rastgele uuid) — arayüz sıra vaadi vermez, yalnız "aynı işlem" der.
   /// Job/script/test bağlamında null (bağlam yok, uydurmak yanlış olurdu).
   requestId String?           @db.Uuid
+  /// AUDIT HASH ZİNCİRİ (G4/B, 2026-10-13) — DB trigger'ı yazar (`audit_zincir_bagla`),
+  /// uygulama ASLA yazmaz. Zincir-öncesi satırlarda NULL. Doğrulama `audit-chain.service`.
+  chainSeq  Int?              @unique
+  chainHash String?
 
   // Relations
   /// K6 (2026-08-29): `onDelete: Restrict` — şema/migration RESTRICT diyordu ama
@@ -8710,6 +8714,9 @@ model SystemLogArchive {
   requestId  String?           @db.Uuid
   oldData    Json?
   newData    Json?
+  /// Hash zinciri (G4/B) — sıcak tablodan AYNEN taşınır; doğrulama canlı ∪ arşivi okur.
+  chainSeq   Int?              @unique
+  chainHash  String?
   archivedAt DateTime          @default(now()) @db.Timestamptz
   createdAt  DateTime          @db.Timestamptz
   updatedAt  DateTime          @db.Timestamptz

@@ -30,6 +30,8 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - **Silinen kullanıcının giriş bilgileri tamamen temizlenir.** Kayıt (geçmiş ve atıflar için) durur ama parola,
   doğrulama sırrı, PIN, kart ve kullanılmamış kurtarma kodları kalmaz.
 - **Etkinlik kaydı hiçbir sırrı yazmaz.** İç içe kayıtlardaki parola/PIN/kart özetleri de gizlenir.
+- **Etkinlik kaydı kurcalamaya karşı zincirlenir (güvenlik).** Her yeni kayıt bir öncekinin özetini taşır; araya
+  kayıt silinir ya da değiştirilirse gece doğrulaması bunu yakalar ve sağlık bilgisinde "audit koruması: kısmi" görünür.
 - **Şifresiz yedek indirilirken uyarı.** Yedek anahtarı kurulu değilse panel indirme sırasında uyarır (yeni panel).
 
 ## 2. Ne değişti
@@ -108,6 +110,11 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   `TOTP_ENROLLMENT_REQUIRED`. Kod adımı olmayan eski tablet 409'u "tableti güncelleyin ya da yönetim panelinden
   giriş yapın" iletisiyle gösterir; destek hesabı panelden ya da tablet 1.4.0'dan girer. Fabrika kullanıcıları için
   bayrak kapalıyken değişen yok.
+- **Kırıldı mı:** HAYIR (audit hash zinciri, G4) — yalnız ekleme: `system_logs`/arşivde iki kolon (`chainSeq`,
+  `chainHash`), `/api/admin/health`te `auditProtection`, iki yeni uç (`GET /api/admin/system-logs/chain`,
+  `POST /api/admin/system-logs/chain/verify`; mevcut izinler `admin:settings` / `system:activity`). Eski panel
+  yeni alanları okumaz; arşiv ucu (`POST /system-logs/archive`) aynı gövde/cevapla çalışır, kesim artık DB'de en az
+  1 ay zorlanır (panel zaten ≥ 1 ay gönderir).
 - **Kırıldı mı:** HAYIR (doff kodu) — uç, gövde ve cevap aynı; aynı `clientToken` tekrarı yine aynı kaydı döner.
 - **Eski istemci ne yapar:** eski panel ve tablet yeni alanları okumaz; davranışları değişmez. Kartın kendisi
   nabız ucunu bilmiyorsa duruş yokken sessiz görünür (yalnız uyarı; duruş açılmaz).
@@ -115,10 +122,13 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 4. Migration
 
-- **Var mı:** EVET — 2 adet: `20261013010000_makine_watchdog` (yalnız EKLEME: toplayıcıya iki, duruşa bir boş
+- **Var mı:** EVET — 3 adet: `20261013010000_makine_watchdog` (yalnız EKLEME: toplayıcıya iki, duruşa bir boş
   geçilebilir alan; veri dönüşümü yok) · `20261013030000_doff_sayac_satiri` (yalnız EKLEME: boş
   `number_series_counters` tablosu; veri dönüşümü yok, satırlar ilk kullanımda doğar).
-- **Toplam migration:** 389 (2.15.6'da 387). 2.15.6'dan gelen kurulum tam 2 migration uygulamalıdır. Farklı sayı =
+  · `20261013120000_audit_hash_zinciri` (yalnız EKLEME: `system_logs`/arşivde iki boş kolon + iki unique index,
+  zincir trigger'ı, iki SECURITY DEFINER arşiv/budama fonksiyonu, tek "zincir başlangıç çapası" satırı; mevcut audit
+  satırlarına DOKUNMAZ — onlar zincir öncesidir. `count`suz: yalnız `max(createdAt)` index'ten okunur).
+- **Toplam migration:** 390 (2.15.6'da 387). 2.15.6'dan gelen kurulum tam 3 migration uygulamalıdır. Farklı sayı =
   yanlış paket ya da yanlış veritabanı → DUR. (Paketleme anında yeniden sayılır.)
 - **Prova:** YAPILMADI — taslak; paketlemeden önce en eski canlı dump'ta restore → `migrate deploy` → bekçiler →
   profil açılışı.
@@ -126,7 +136,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 ## 5. Kurulum notu
 
-- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 2 migration); süre kurulumda ölçülür.
+- **Beklenen kesinti:** güncellemede sunucu kısa süre kapalı kalır (yedek + 3 migration); süre kurulumda ölçülür.
 - **Sıra:** sunucu önce; panel sonra (kırılma yok, sıra serbest).
 - **Bu sürüme özel:** yok (watchdog'un dokunabileceği onaylı kart ve kart duruşu sahada yok).
 - **Bu sürüme özel (kimlik dilim 3):** destek hesabıyla tablette PIN/kart kullanılıyorsa güncellemeden ÖNCE hesapta
@@ -144,9 +154,11 @@ otomatik yedekten geri yüklenir.
 ## 7. Doğrulama — kurulumdan sonra rapor edilecekler
 
 - Sağlık bilgisi: sürüm 2.15.7, sunucu ve veritabanı ayakta.
-- Veritabanı: 389 migration bitmiş, sorunlu migration yok.
+- Veritabanı: 390 migration bitmiş, sorunlu migration yok.
 - `/api/admin/health` `machineWatchdog`: `{ silentCollectors: 0, lateStopEnds: 0 }` (kart yokken); `null` ise
   sayaç okunamadı — günlüğe bak, insana rapor et.
+- `/api/admin/health` `auditProtection`: `level` "kismi" beklenir (rol göçü bu sürümde yok, `writeOnly: false`);
+  ilk gece bakımından sonra `chain.durum` "saglam" olmalı — "kurcalanmis" ise insana rapor et.
 - Sunucu hata günlüğünün son 30 satırı — `machine-watchdog` kaynaklı yeni hata var mı.
 - Destek hesabı tablette PIN ile: kod istendi mi (2FA kurulu) ya da 403 (kurulu değil); normal kullanıcının
   PIN/kart girişi kodsuz çalışıyor mu (bayrak kapalı).
