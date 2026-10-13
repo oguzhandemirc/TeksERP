@@ -55,6 +55,14 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   kodlar değişmez. Kayıt başarısız olursa o numara kullanılmaz (boşluk) — kod kimliktir, sayım değil.
 - Panelde Numara serileri › Doff kodu "sıradaki numara" sayaç satırından okunur.
 
+**Tezgah Salonu: çok iş → çok tezgah (C.6)** (commit `feat(salon): C.6 …`; kısa kimliği paketlemede yazılır)
+
+- `POST /api/machine-runs/bulk/preview` hedefinde ve `/bulk/assign` satırında isteğe bağlı `weavingOrderId`
+  (null = işsiz koşum): satır o işle önizlenir/açılır; verilmezse istek düzeyindeki iş (bugünkü davranış). Satır
+  işinin engeli (fason/kapalı iş, iş zorunlu ayarı) yalnız o satırı engeller; istek düzeyi işin engeli bugünkü gibi
+  400. Önizleme satırında `weavingOrder`, bağlam ucunda `rowJobs: true`. Yazım yolu aynı (satır başına koşum açılışı).
+- `dist-web`: panel 1.6.5 kaynağı değişir (İş ver penceresinde tezgah başına iş).
+
 **Makine kartı: watchdog (D4)** (commit `feat(tezgah): makine kartı watchdog'u …`; kısa kimliği paketlemede yazılır)
 
 - Kart belirli süre (ayar `tezgah.collectorSilenceMinutes`, varsayılan 10 dk) hiçbir imzalı istek göndermezse
@@ -86,6 +94,8 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 
 - **Kırıldı mı:** HAYIR (D5) — yalnız ekleme: salon cevabında tezgah başına `operator`.
 - **Kırıldı mı:** HAYIR (Sebep ata) — yalnız ekleme: iki uç, salon cevabında bir alan. Eski panel alanı okumaz.
+- **Kırıldı mı:** HAYIR (C.6) — yalnız ekleme: iki gövdede isteğe bağlı satır alanı, iki cevap alanı. 1.6.4 paneli
+  alanı göndermez, davranışı değişmez; 1.6.5 paneli `rowJobs` yoksa (2.15.6 sunucusu) tezgah başına seçiciyi çizmez.
 
 - **Kırıldı mı:** HAYIR (watchdog) — yalnız ekleme: bir kart ucu (nabız), duruş cevabında
   `provisionalEndedAt`/`endCorrectedAt`/`lateEndedAt`, kart cevabında `lastSeenAt`/`silentSince`, salon cevabında

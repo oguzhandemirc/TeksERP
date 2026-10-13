@@ -2,7 +2,7 @@
 // "İşi değiştir"de işaretli), gönderilecek satırlar (engelli/işaretsiz düşer, dolu hatta replaceRunId = açık rıza).
 import { describe, expect, it } from "vitest";
 import type { LiveLoom } from "../types";
-import { assignRowsOf, assignTargetsOf, finishTargetsOf, initialSelection, maxLinesOf, rowKey } from "./plan";
+import { NO_JOB, allJobsChosen, assignRowsOf, assignTargetsOf, effectiveJobOf, finishTargetsOf, initialSelection, isMixed, maxLinesOf, rowKey, withRowJobs } from "./plan";
 import type { BulkPreviewRow } from "./runService";
 
 const loom = (id: string, lines?: number, openRuns?: LiveLoom["openRuns"]): LiveLoom => ({ id, code: `T-${id}`, lines, openRuns }) as LiveLoom;
@@ -64,14 +64,47 @@ describe("plan — gönderilecek satırlar", () => {
     expect(sent.map((r) => r.machineId)).toEqual(["a"]);
   });
 
-  it("⭐ dolu hat replaceRunId ile gider (açık rıza); boş hat null; token satır anahtarından", () => {
+  it("⭐ dolu hat replaceRunId ile gider (açık rıza); boş hat null; token satır anahtarı + işten; tek işte satır alanı YOK", () => {
     expect(assignRowsOf(rows, new Set(["a:1", "b:1"]), token)).toEqual([
-      { machineId: "a", productionLineNo: 1, clientToken: "tok-a:1", replaceRunId: null },
-      { machineId: "b", productionLineNo: 1, clientToken: "tok-b:1", replaceRunId: "r-old" },
+      { machineId: "a", productionLineNo: 1, clientToken: "tok-a:1|-", replaceRunId: null },
+      { machineId: "b", productionLineNo: 1, clientToken: "tok-b:1|-", replaceRunId: "r-old" },
+    ]);
+  });
+
+  it("⭐ C.6 karışık seçimde satırın işi önizlemeden gider (null = işsiz); iş değişince token anahtarı değişir", () => {
+    const mixed = [row("a", "START", { weavingOrder: { id: "w1", weavingOrderNumber: "DI-1" } }), row("b", "START", { weavingOrder: null })];
+    expect(assignRowsOf(mixed, new Set(["a:1", "b:1"]), token, true)).toEqual([
+      { machineId: "a", productionLineNo: 1, clientToken: "tok-a:1|w1", replaceRunId: null, weavingOrderId: "w1" },
+      { machineId: "b", productionLineNo: 1, clientToken: "tok-b:1|-", replaceRunId: null, weavingOrderId: null },
     ]);
   });
 
   it("satır anahtarı tezgah + hat", () => {
     expect(rowKey({ machineId: "x", productionLineNo: 2 })).toBe("x:2");
+  });
+});
+
+describe("plan — tezgah başına iş (C.6)", () => {
+  const looms = [loom("a"), loom("b"), loom("c")];
+
+  it("⭐ ayrı iş seçilmeyen tezgah ortak işi alır; karışıklık yalnız ortaktan farklı iş varken", () => {
+    const o = new Map([["b", "w2"]]);
+    expect(looms.map((l) => effectiveJobOf(l.id, "w1", o))).toEqual(["w1", "w2", "w1"]);
+    expect(isMixed(looms, "w1", o)).toBe(true);
+    expect(isMixed(looms, "w1", new Map())).toBe(false);
+  });
+
+  it("⭐ önizleme her tezgahın işi seçiliyken: ortak yokken tek tezgah eksikse kapalı", () => {
+    expect(allJobsChosen(looms, null, new Map([["a", "w1"], ["b", "w2"]]))).toBe(false);
+    expect(allJobsChosen(looms, null, new Map([["a", "w1"], ["b", "w2"], ["c", NO_JOB]]))).toBe(true);
+  });
+
+  it("⭐ karışık seçimde hedefe satır işi eklenir (numune → null); tek işte hedef bugünkü gibi", () => {
+    const targets = assignTargetsOf(looms.slice(0, 2), 1);
+    expect(withRowJobs(targets, (id) => (id === "a" ? "w1" : NO_JOB))).toEqual([
+      { machineId: "a", productionLineNo: 1, weavingOrderId: "w1" },
+      { machineId: "b", productionLineNo: 1, weavingOrderId: null },
+    ]);
+    expect(withRowJobs(targets, null)).toEqual(targets);
   });
 });

@@ -1,23 +1,22 @@
 // "İş ver" / "İşi değiştir" penceresi: ① Dokuma İş Emri seçici (modal içinde liste) → ② önizleme (her tezgah adıyla,
 // satır başına seçim) → ③ sonuç (Başladı · Olmadı · Uyarılar). Dolu hatta iş vermek Değiştir'dir ve yalnız işaretlenen
-// satırda olur; satır token'ı mantıksal deneme başına bir kez (`useAttemptToken.keyed`).
+// satırda olur; satır token'ı mantıksal deneme başına bir kez (`useAttemptToken.keyed`). Tezgah başına farklı iş (C.6)
+// yalnız sunucu `rowJobs` derse çizilir; tek işte gövde bugünkü gibi.
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useAttemptToken } from "@/lib/attemptToken";
-import { foldedIncludes } from "@/lib/search-fold";
 import { apiErrorMessage } from "@/services/apiClient";
 import { LOOM_FLOOR_QUERY_KEY } from "../useLoomFloorLive";
 import type { LiveLoom } from "../types";
 import { PreviewTable, ResultView, usePickedRows } from "./BulkParts";
-import { assignRowsOf, assignTargetsOf, initialSelection, maxLinesOf, rowKey, type JobDialogMode } from "./plan";
-import { runService, type BulkPreview, type BulkResult, type BulkTarget, type JobOption } from "./runService";
+import { JobPicker } from "./JobPicker";
+import { RowJobs } from "./RowJobs";
+import { allJobsChosen, assignRowsOf, assignTargetsOf, effectiveJobOf, initialSelection, isMixed, jobIdOf, maxLinesOf, rowKey, withRowJobs, type JobDialogMode } from "./plan";
+import { runService, type BulkPreview, type BulkResult, type BulkTarget } from "./runService";
 
 export const BULK_CONTEXT_QUERY_KEY = ["machine-runs", "bulk-context"] as const;
-/** İşsiz (numune) koşum seçimi — yalnız "iş zorunlu" ayarı kapalıyken çizilir. */
-const NO_JOB = "__numune__";
 
 interface Props {
   open: boolean;
@@ -25,41 +24,6 @@ interface Props {
   looms: readonly LiveLoom[];
   mode: JobDialogMode;
   online: boolean;
-}
-
-function JobPicker({ jobs, required, value, onChange }: { jobs: JobOption[]; required: boolean; value: string | null; onChange: (v: string) => void }) {
-  const [q, setQ] = useState("");
-  const shown = jobs.filter((j) => foldedIncludes(`${j.weavingOrderNumber} ${j.item.code} ${j.item.name} ${j.warpSpec?.code ?? ""}`, q));
-  return (
-    <div className="space-y-2">
-      <Input placeholder="Dokuma İş Emri ara (no, kumaş, çözgü)" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Dokuma İş Emri ara" />
-      <div role="radiogroup" aria-label="Dokuma İş Emri" className="max-h-[45vh] overflow-auto rounded border">
-        {!required && (
-          <JobRow id={NO_JOB} checked={value === NO_JOB} onChange={onChange} title="İşsiz (numune) koşum" sub="Dokuma İş Emrine bağlanmaz" />
-        )}
-        {shown.map((j) => (
-          <JobRow
-            key={j.id}
-            id={j.id}
-            checked={value === j.id}
-            onChange={onChange}
-            title={j.weavingOrderNumber}
-            sub={[j.item.name, j.warpSpec ? `çözgü ${j.warpSpec.code}` : null, j.plannedM !== null ? `${j.plannedM} m` : null, j.status === "IN_PROGRESS" ? "devam ediyor" : "planlandı"].filter(Boolean).join(" · ")}
-          />
-        ))}
-        {shown.length === 0 && <p className="p-3 text-sm text-muted-foreground">Açık Dokuma İş Emri yok.</p>}
-      </div>
-    </div>
-  );
-}
-
-function JobRow({ id, checked, onChange, title, sub }: { id: string; checked: boolean; onChange: (v: string) => void; title: string; sub: string }) {
-  return (
-    <button type="button" role="radio" aria-checked={checked} onClick={() => onChange(id)} className={`block w-full border-b px-3 py-2 text-left last:border-b-0 ${checked ? "bg-primary/10" : "hover:bg-muted"}`}>
-      <div className="font-medium">{title}</div>
-      <div className="text-xs text-muted-foreground">{sub}</div>
-    </button>
-  );
 }
 
 function LinePicker({ max, value, onChange }: { max: number; value: number; onChange: (n: number) => void }) {
@@ -78,7 +42,8 @@ function LinePicker({ max, value, onChange }: { max: number; value: number; onCh
 function useAssignFlow({ open, looms, mode }: Pick<Props, "open" | "looms" | "mode">) {
   const qc = useQueryClient();
   const attempt = useAttemptToken();
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobId, setShared] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<ReadonlyMap<string, string>>(new Map());
   const [line, setLine] = useState(1);
   const [preview, setPreview] = useState<BulkPreview | null>(null);
   const { picked, setPicked, toggle } = usePickedRows();
@@ -87,7 +52,8 @@ function useAssignFlow({ open, looms, mode }: Pick<Props, "open" | "looms" | "mo
 
   useEffect(() => {
     if (!open) return;
-    setJobId(null);
+    setShared(null);
+    setOverrides(new Map());
     setLine(1);
     setPreview(null);
     setResult(null);
@@ -95,10 +61,26 @@ function useAssignFlow({ open, looms, mode }: Pick<Props, "open" | "looms" | "mo
   }, [open, attempt]);
 
   const ctx = useQuery({ queryKey: BULK_CONTEXT_QUERY_KEY, queryFn: runService.context, enabled: open });
-  const weavingOrderId = jobId === NO_JOB ? null : jobId;
+  const weavingOrderId = jobIdOf(jobId);
+  const mixed = ctx.data?.rowJobs === true && isMixed(looms, jobId, overrides);
+  /** Ortak işi seçmek = "hepsine aynı işi uygula": tezgah başına seçimler sıfırlanır. */
+  const setJobId = (v: string) => {
+    setShared(v);
+    setOverrides(new Map());
+  };
+  const pickRow = (loomId: string, v: string | null) =>
+    setOverrides((m) => {
+      const next = new Map(m);
+      if (v === null || v === jobId) next.delete(loomId);
+      else next.set(loomId, v);
+      return next;
+    });
 
   const previewMut = useMutation({
-    mutationFn: (targets: BulkTarget[]) => runService.preview({ action: "ASSIGN", weavingOrderId, targets }),
+    mutationFn: (targets: BulkTarget[]) =>
+      mixed
+        ? runService.preview({ action: "ASSIGN", targets: withRowJobs(targets, (id) => effectiveJobOf(id, jobId, overrides)) })
+        : runService.preview({ action: "ASSIGN", weavingOrderId, targets }),
     onSuccess: (p) => {
       setPreview(p);
       setPicked(initialSelection(p.rows, mode));
@@ -107,7 +89,10 @@ function useAssignFlow({ open, looms, mode }: Pick<Props, "open" | "looms" | "mo
   });
 
   const assignMut = useMutation({
-    mutationFn: () => runService.assign({ weavingOrderId, rows: assignRowsOf(preview?.rows ?? [], picked, attempt.keyed) }),
+    mutationFn: () =>
+      mixed
+        ? runService.assign({ rows: assignRowsOf(preview?.rows ?? [], picked, attempt.keyed, true) })
+        : runService.assign({ weavingOrderId, rows: assignRowsOf(preview?.rows ?? [], picked, attempt.keyed) }),
     onError: (e) => attempt.onFailure(e),
     onSuccess: (r) => {
       attempt.onSuccess();
@@ -118,11 +103,14 @@ function useAssignFlow({ open, looms, mode }: Pick<Props, "open" | "looms" | "mo
 
   const pickedCount = preview ? preview.rows.filter((r) => r.outcome !== "BLOCKED" && picked.has(rowKey(r))).length : 0;
   const retryFailed = result && result.failed.length > 0 ? () => previewMut.mutate(result.failed.map((f) => ({ machineId: f.machineId, productionLineNo: f.productionLineNo }))) : null;
-  return { ctx, jobId, setJobId, line, setLine, maxLines, preview, setPreview, picked, toggle, result, previewMut, assignMut, pickedCount, retryFailed };
+  const canPreview = allJobsChosen(looms, jobId, overrides);
+  return { ctx, jobId, setJobId, overrides, pickRow, mixed, canPreview, line, setLine, maxLines, preview, setPreview, picked, toggle, result, previewMut, assignMut, pickedCount, retryFailed };
 }
 
 export function AssignJobDialog({ open, onOpenChange, looms, mode, online }: Props) {
-  const { ctx, jobId, setJobId, line, setLine, maxLines, preview, setPreview, picked, toggle, result, previewMut, assignMut, pickedCount, retryFailed } = useAssignFlow({ open, looms, mode });
+  const f = useAssignFlow({ open, looms, mode });
+  const { ctx, jobId, setJobId, line, setLine, maxLines, preview, setPreview, picked, toggle, result, previewMut, assignMut, pickedCount, retryFailed } = f;
+  const required = ctx.data?.weavingOrderRequired ?? true;
   const title = mode === "replace" ? "İşi değiştir" : "İş ver";
 
   return (
@@ -144,7 +132,7 @@ export function AssignJobDialog({ open, onOpenChange, looms, mode, online }: Pro
         ) : preview ? (
           <>
             {preview.weavingOrder && <p className="text-sm">Dokuma İş Emri: <span className="font-medium">{preview.weavingOrder.weavingOrderNumber}</span></p>}
-            <PreviewTable rows={preview.rows} picked={picked} onToggle={toggle} />
+            <PreviewTable rows={preview.rows} picked={picked} onToggle={toggle} showJob={f.mixed} />
           </>
         ) : ctx.isLoading ? (
           <p className="text-sm text-muted-foreground">İşler yükleniyor…</p>
@@ -152,7 +140,10 @@ export function AssignJobDialog({ open, onOpenChange, looms, mode, online }: Pro
           <p className="text-sm text-destructive">{apiErrorMessage(ctx.error, "İş listesi alınamadı")}</p>
         ) : (
           <div className="space-y-3">
-            <JobPicker jobs={ctx.data?.weavingOrders ?? []} required={ctx.data?.weavingOrderRequired ?? true} value={jobId} onChange={setJobId} />
+            <JobPicker label={ctx.data?.rowJobs === true && looms.length > 1 ? "Hepsine aynı iş" : undefined} jobs={ctx.data?.weavingOrders ?? []} required={required} value={jobId} onChange={setJobId} />
+            {ctx.data?.rowJobs === true && looms.length > 1 && (
+              <RowJobs looms={looms} jobs={ctx.data.weavingOrders} required={required} shared={jobId} overrides={f.overrides} onPick={f.pickRow} />
+            )}
             {maxLines > 1 && <LinePicker max={maxLines} value={line} onChange={setLine} />}
           </div>
         )}
@@ -177,7 +168,7 @@ export function AssignJobDialog({ open, onOpenChange, looms, mode, online }: Pro
               </Button>
             </>
           ) : (
-            <Button onClick={() => previewMut.mutate(assignTargetsOf(looms, line))} disabled={!online || jobId === null || previewMut.isPending}>
+            <Button onClick={() => previewMut.mutate(assignTargetsOf(looms, line))} disabled={!online || !f.canPreview || previewMut.isPending}>
               {previewMut.isPending ? "Önizleniyor…" : "Önizle"}
             </Button>
           )}

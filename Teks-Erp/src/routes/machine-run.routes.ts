@@ -104,13 +104,15 @@ router.get("/", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA),
 // ── Tezgah Salonu toplu koşum (panel) — satır başına tek yol; önizleme yazmaz ──────────────
 const lineNo = z.number().int("Üretim hattı numarası tam sayı olmalıdır").min(1, "Hat numarası 1'den küçük olamaz");
 const targetSchema = z.object({ machineId: z.string().uuid("Geçersiz tezgah"), productionLineNo: lineNo.default(1) }).strict();
+/** İş ver hedefi: satır başına iş (C.6) opsiyonel — tanımsız = istek düzeyindeki iş, null = işsiz (numune). */
+const jobTargetSchema = targetSchema.extend({ weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri").nullish() });
 const tooMany = `Tek seferde en çok ${BULK_RUN_MAX} tezgah seçilebilir.`;
 
 const bulkPreviewSchema = z
   .object({
     action: z.enum(["ASSIGN", "FINISH"], { message: "Geçersiz işlem" }),
     weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri").nullish(),
-    targets: z.array(targetSchema).min(1, "En az bir tezgah seçin.").max(BULK_RUN_MAX, tooMany),
+    targets: z.array(jobTargetSchema).min(1, "En az bir tezgah seçin.").max(BULK_RUN_MAX, tooMany),
   })
   .strict();
 
@@ -120,7 +122,7 @@ const bulkAssignSchema = z
     targetUnitsPerMin: z.number().int().positive("Hedef devir pozitif olmalı").max(10_000).nullish(),
     rows: z
       .array(
-        targetSchema.extend({
+        jobTargetSchema.extend({
           clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
           replaceRunId: z.string().uuid("Geçersiz koşum").nullish(),
         }),
@@ -173,7 +175,8 @@ router.get("/bulk/context", requireAnyPermission("loom:run"), async (_req, res, 
  *     summary: Toplu iş ver / bitir ÖNİZLEMESİ — her tezgah adıyla, YAZMAZ
  *     description: >
  *       Satır sonucu START · REPLACE (dolu hat, varsayılan seçili değil) · SAME_JOB · FINISH · BLOCKED (sebepli).
- *       Satırlar tezgah kodu + hat sırasında. İş düzeyindeki engel (fason/kapalı iş, iş zorunlu ayarı) 400.
+ *       Satırlar tezgah kodu + hat sırasında. İstek düzeyindeki iş engeli (fason/kapalı iş, iş zorunlu ayarı) 400;
+ *       hedefte satır başına `weavingOrderId` (C.6, null = işsiz) verilirse o işin engeli yalnız o satırı BLOCKED yapar.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: "{ action, weavingOrder, rows[] }" }
@@ -196,7 +199,8 @@ router.post("/bulk/preview", requireAnyPermission("loom:run"), async (req, res, 
  *     description: >
  *       Her satır kendi transaction'ında, tezgah kodu sırasıyla; satır başına `clientToken` (aynı token'la
  *       yeniden gönderim özgün koşumu döndürür). Dolu hatta `replaceRunId` yoksa satır 409 PRODUCTION_LINE_OCCUPIED
- *       ile `failed`e düşer. Olmayan her satır kod + Türkçe sebeple döner.
+ *       ile `failed`e düşer. Olmayan her satır kod + Türkçe sebeple döner. Satırda `weavingOrderId` (C.6) verilirse
+ *       o satır o işle açılır (null = işsiz), verilmezse istek düzeyindeki iş.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: "{ requested, ok[], failed[] }" }

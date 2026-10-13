@@ -157,3 +157,78 @@ describe("AssignJobDialog — önizleme ve gönderim", () => {
     expect(screen.getByText(/Sunucuya ulaşılamıyor/)).toBeTruthy();
   });
 });
+
+describe("AssignJobDialog — tezgah başına iş (C.6)", () => {
+  const JOB2 = { ...JOB, id: "w2", weavingOrderNumber: "DI-002" };
+  beforeEach(() => {
+    api.context.mockResolvedValue({ weavingOrders: [JOB, JOB2], weavingOrderRequired: false, rowJobs: true });
+    api.preview.mockImplementation(({ targets }: { targets: Array<{ machineId: string; weavingOrderId?: string | null }> }) =>
+      Promise.resolve({
+        action: "ASSIGN",
+        weavingOrder: null,
+        rows: targets.map((t) => row(t.machineId, "START", { weavingOrder: t.weavingOrderId ? { id: t.weavingOrderId, weavingOrderNumber: t.weavingOrderId === "w2" ? "DI-002" : "DI-001" } : null })),
+      }),
+    );
+  });
+
+  async function pickFor(code: string, job: RegExp) {
+    fireEvent.click(screen.getByRole("button", { name: `${code} için başka iş` }));
+    const list = await screen.findByRole("radiogroup", { name: `${code} için Dokuma İş Emri` });
+    fireEvent.click(within(list).getByRole("radio", { name: job }));
+    await waitFor(() => expect(screen.queryByRole("radiogroup", { name: `${code} için Dokuma İş Emri` })).toBeNull());
+  }
+
+  it("⭐ eski sunucu (rowJobs yok) ya da tek tezgah → tezgah başına liste ÇİZİLMEZ", async () => {
+    api.context.mockResolvedValue({ weavingOrders: [JOB], weavingOrderRequired: false });
+    const { unmount } = open([loom("a"), loom("b")]);
+    await screen.findByRole("radiogroup", { name: "Dokuma İş Emri" });
+    expect(screen.queryByRole("region", { name: "Tezgah başına iş" })).toBeNull();
+    unmount();
+    api.context.mockResolvedValue({ weavingOrders: [JOB], weavingOrderRequired: false, rowJobs: true });
+    open([loom("a")]);
+    await screen.findByRole("radiogroup", { name: "Dokuma İş Emri" });
+    expect(screen.queryByRole("region", { name: "Tezgah başına iş" })).toBeNull();
+  });
+
+  it("⭐ farklı iş: önizleme ve gönderim TEK istek, satır başına iş; istek düzeyi iş gitmez", async () => {
+    api.assign.mockResolvedValue({ requested: 2, ok: [], failed: [] });
+    open([loom("a"), loom("b")]);
+    fireEvent.click(await screen.findByRole("radio", { name: /DI-001/ }));
+    await pickFor("T-b", /DI-002/);
+    expect(within(screen.getByRole("region", { name: "Tezgah başına iş" })).getByText("DI-002")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Önizle" }));
+    const table = await screen.findByRole("table", { name: "Etkilenecek tezgahlar" });
+    expect(api.preview).toHaveBeenCalledWith({
+      action: "ASSIGN",
+      targets: [
+        { machineId: "a", productionLineNo: 1, weavingOrderId: "w1" },
+        { machineId: "b", productionLineNo: 1, weavingOrderId: "w2" },
+      ],
+    });
+    expect(within(table).getByText("Yeni iş")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Başlat \(2 tezgah\)/ }));
+    await waitFor(() => expect(api.assign).toHaveBeenCalledTimes(1));
+    const body = api.assign.mock.calls[0]![0];
+    expect(body.weavingOrderId).toBeUndefined();
+    expect(body.rows.map((r: { weavingOrderId: string }) => r.weavingOrderId)).toEqual(["w1", "w2"]);
+  });
+
+  it("⭐ 'hepsine aynı iş' kısayolu tezgah başına seçimleri sıfırlar → gövde bugünkü gibi", async () => {
+    open([loom("a"), loom("b")]);
+    fireEvent.click(await screen.findByRole("radio", { name: /DI-001/ }));
+    await pickFor("T-b", /DI-002/);
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Hepsine aynı iş" })).getByRole("radio", { name: /DI-002/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Önizle" }));
+    await screen.findByRole("table", { name: "Etkilenecek tezgahlar" });
+    expect(api.preview).toHaveBeenCalledWith({ action: "ASSIGN", weavingOrderId: "w2", targets: [{ machineId: "a", productionLineNo: 1 }, { machineId: "b", productionLineNo: 1 }] });
+  });
+
+  it("ortak iş seçilmeden her tezgaha ayrı iş verilince önizleme açılır; biri eksikken kapalı", async () => {
+    open([loom("a"), loom("b")]);
+    await screen.findByRole("region", { name: "Tezgah başına iş" });
+    await pickFor("T-a", /DI-001/);
+    expect(screen.getByRole("button", { name: "Önizle" }).hasAttribute("disabled")).toBe(true);
+    await pickFor("T-b", /İşsiz \(numune\)/);
+    expect(screen.getByRole("button", { name: "Önizle" }).hasAttribute("disabled")).toBe(false);
+  });
+});

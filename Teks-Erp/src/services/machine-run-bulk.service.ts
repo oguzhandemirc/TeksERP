@@ -20,6 +20,7 @@ import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from ".
 import { mountedBeamsOnMachineTx, runOpenBeamWarning } from "./helpers/warp-beam-mount.helper";
 import { assertRunWeavingOrderGate, assertWeavingOrderLinkableTx, warpSpecMismatchWarning, type LinkableWeavingOrder } from "./helpers/production-chain-gates.helper";
 import { resolveRunWeavingOrderRequired } from "./system-setting.service";
+import { checkRowJobs, rowJobIdOf, usesRequestJob, type RowJobCheck, type RowJobInput } from "./helpers/machine-run-bulk-jobs.helper";
 import type { ApiResponse } from "../types/api.types";
 
 /** Tek istekte en çok satır (kurşun emsali). */
@@ -32,6 +33,9 @@ export interface BulkRunTarget {
   machineId: string;
   productionLineNo: number;
 }
+
+/** İş ver hedefi — satır başına iş (C.6) opsiyonel; tanımsızsa istek düzeyindeki iş. */
+export interface BulkRunJobTarget extends BulkRunTarget, RowJobInput {}
 
 export interface BulkRunCurrent {
   id: string;
@@ -47,6 +51,8 @@ export interface BulkRunPreviewRow {
   productionLineNo: number;
   productionLineCount: number;
   current: BulkRunCurrent | null;
+  /** Bu satıra verilecek iş (İş ver; satır başına farklı olabilir). Bitirde ve işsiz koşumda null. */
+  weavingOrder: { id: string; weavingOrderNumber: string } | null;
   outcome: BulkRunOutcome;
   /** Arayüzün satırı ilk açılışta işaretleyip işaretlemeyeceği; yıkıcı satır (Değiştir) işaretsiz gelir. */
   defaultSelected: boolean;
@@ -64,9 +70,11 @@ export interface BulkRunContextDto {
   weavingOrders: MachineRunTabletContextDto["weavingOrders"];
   /** Açıkken işsiz (numune) koşum açılamaz — pencere o seçeneği çizmez. */
   weavingOrderRequired: boolean;
+  /** Sunucu satır başına işi tanır (C.6) — 2.15.6 sunucusunda alan yok, panel tezgah başına seçiciyi çizmez. */
+  rowJobs: true;
 }
 
-export interface BulkAssignRow extends BulkRunTarget {
+export interface BulkAssignRow extends BulkRunJobTarget {
   clientToken: string;
   /** Dolu hatta açık koşumun id'si — verilirse "Değiştir": eski koşum aynı tx'te kapanır. */
   replaceRunId?: string | null;
@@ -175,17 +183,19 @@ async function assignWarnings(machineId: string, order: LinkableWeavingOrder | n
 export async function bulkRunContext(): Promise<ApiResponse<BulkRunContextDto>> {
   return {
     success: true,
-    data: { weavingOrders: await listOpenInHouseWeavingOrders(prisma), weavingOrderRequired: await resolveRunWeavingOrderRequired() },
+    data: { weavingOrders: await listOpenInHouseWeavingOrders(prisma), weavingOrderRequired: await resolveRunWeavingOrderRequired(), rowJobs: true },
   };
 }
 
-/** Önizleme — YAZMAZ. Her hedef satırı tezgah adıyla; iş düzeyindeki engel (fason/kapalı iş, iş zorunlu) tüm isteği 400 yapar. */
-export async function previewBulkRuns(input: { action: BulkRunAction; weavingOrderId?: string | null; targets: BulkRunTarget[] }): Promise<ApiResponse<BulkRunPreviewDto>> {
+/** Önizleme — YAZMAZ. Her hedef satırı tezgah adıyla; İSTEK düzeyindeki iş engeli (fason/kapalı iş, iş zorunlu) tüm isteği 400 yapar, SATIR işinin engeli yalnız o satırı BLOCKED yapar. */
+export async function previewBulkRuns(input: { action: BulkRunAction; weavingOrderId?: string | null; targets: BulkRunJobTarget[] }): Promise<ApiResponse<BulkRunPreviewDto>> {
   let order: LinkableWeavingOrder | null = null;
-  if (input.action === "ASSIGN") {
+  const assign = input.action === "ASSIGN";
+  if (assign && usesRequestJob(input.targets)) {
     await assertRunWeavingOrderGate(prisma, input.weavingOrderId ?? null);
     if (input.weavingOrderId) order = await assertWeavingOrderLinkableTx(prisma, input.weavingOrderId);
   }
+  const rowJobs = assign ? await checkRowJobs(input.targets.filter((t) => t.weavingOrderId !== undefined).map((t) => rowJobIdOf(t, null))) : new Map<string | null, RowJobCheck>();
   const looms = await loadLooms(input.targets.map((t) => t.machineId));
   const open = await openRunsOf(input.targets.map((t) => t.machineId));
   const rows: BulkRunPreviewRow[] = [];
@@ -196,8 +206,10 @@ export async function previewBulkRuns(input: { action: BulkRunAction; weavingOrd
     seen.add(key);
     const loom = looms.get(t.machineId);
     const info = loom ?? UNKNOWN_LOOM(t.machineId);
-    const base = { machineId: t.machineId, machineCode: info.code, machineName: info.name, productionLineNo: t.productionLineNo, productionLineCount: info.productionLineCount };
-    const block = targetBlock(loom, t.productionLineNo);
+    const ident = { machineId: t.machineId, machineCode: info.code, machineName: info.name, productionLineNo: t.productionLineNo, productionLineCount: info.productionLineCount };
+    const job: RowJobCheck = !assign ? { order: null, block: null } : t.weavingOrderId === undefined ? { order, block: null } : rowJobs.get(rowJobIdOf(t, null))!;
+    const base = { ...ident, weavingOrder: job.order ? { id: job.order.id, weavingOrderNumber: job.order.weavingOrderNumber } : null };
+    const block = targetBlock(loom, t.productionLineNo) ?? job.block;
     const current = block ? null : (open.get(key) ?? null);
     if (block) {
       rows.push({ ...base, current: null, outcome: "BLOCKED", defaultSelected: false, warnings: [], block });
@@ -208,8 +220,8 @@ export async function previewBulkRuns(input: { action: BulkRunAction; weavingOrd
           : { ...base, current: null, outcome: "BLOCKED", defaultSelected: false, warnings: [], block: { code: "RUN_NOT_OPEN", message: "Bu hatta açık koşum yok." } },
       );
     } else {
-      const warnings = await assignWarnings(t.machineId, order);
-      const sameJob = current !== null && (current.weavingOrderId ?? null) === (order?.id ?? null);
+      const warnings = await assignWarnings(t.machineId, job.order);
+      const sameJob = current !== null && (current.weavingOrderId ?? null) === (job.order?.id ?? null);
       const outcome: BulkRunOutcome = current === null ? "START" : sameJob ? "SAME_JOB" : "REPLACE";
       rows.push({ ...base, current, outcome, defaultSelected: outcome === "START", warnings, block: null });
     }
@@ -264,7 +276,7 @@ export async function assignBulkRuns(input: BulkAssignInput, userId?: string): P
     }
     try {
       const res = await openMachineRun(
-        { machineId: r.machineId, productionLineNo: r.productionLineNo, weavingOrderId: input.weavingOrderId ?? null, targetUnitsPerMin: input.targetUnitsPerMin ?? null, clientToken: r.clientToken },
+        { machineId: r.machineId, productionLineNo: r.productionLineNo, weavingOrderId: rowJobIdOf(r, input.weavingOrderId), targetUnitsPerMin: input.targetUnitsPerMin ?? null, clientToken: r.clientToken },
         userId,
         { replaceRunId: r.replaceRunId ?? null },
       );
@@ -274,7 +286,7 @@ export async function assignBulkRuns(input: BulkAssignInput, userId?: string): P
     }
   }
   const result = { requested: input.rows.length, ok, failed };
-  await auditBulk("ASSIGN", userId, result, { weavingOrderId: input.weavingOrderId ?? null, replaced: ok.filter((o) => o.replacedRunId).length });
+  await auditBulk("ASSIGN", userId, result, { weavingOrderId: input.weavingOrderId ?? null, rowJobs: input.rows.filter((r) => r.weavingOrderId !== undefined).length, replaced: ok.filter((o) => o.replacedRunId).length });
   return { success: true, data: result, message: summary("iş başladı", result) };
 }
 

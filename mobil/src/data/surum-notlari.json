@@ -238,6 +238,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Tezgah Salonu'nda tezgahta tabletten oturum açmış operatörün adı görünür: tezgahın ayrıntısında \"Operatör\" satırında adı ve tablete ne zamandan beri bağlı olduğu yazar, kartın üzerine gelince de adı çıkar. Tablette oturum kapanmış ya da uzun süre işlem yapılmamışsa ad görünmez. Bu bilgi için sunucunun 2.15.7 sürümü gerekir; eski sunucuda satır hiç görünmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgah Salonu'nda birden çok tezgaha tek seferde farklı işler verebilirsiniz: İş ver penceresinde üstteki listeden seçtiğiniz iş Hepsine aynı iş olarak her tezgaha gelir; bir tezgaha başka iş vermek için altındaki Tezgah başına iş listesinde o tezgahın Başka iş düğmesine basıp işi seçersiniz. Üstteki listeden yeniden iş seçmek bütün tezgahları o işe döndürür. Önizlemede her tezgahın yeni işi ayrı sütunda yazar; gönderim tek seferde yapılır ve her tezgahın sonucu ayrı ayrı yazar. Bu seçenek için sunucunun 2.15.7 sürümü gerekir; eski sunucuda pencere bugünkü gibi tek iş sorar."
         }
       ]
     },

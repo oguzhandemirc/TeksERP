@@ -12,11 +12,18 @@ export interface BulkTarget {
   productionLineNo: number;
 }
 
+/** İş ver hedefi: satır başına iş (C.6) yalnız karışık seçimde; null = işsiz (numune). */
+export interface AssignTarget extends BulkTarget {
+  weavingOrderId?: string | null;
+}
+
 export interface BulkPreviewRow extends BulkTarget {
   machineCode: string;
   machineName: string;
   productionLineCount: number;
   current: { id: string; weavingOrderId: string | null; weavingOrderNumber: string | null; startedAt: string } | null;
+  /** Bu satıra verilecek iş (2.15.6 sunucusunda alan yok). */
+  weavingOrder?: { id: string; weavingOrderNumber: string } | null;
   outcome: BulkRunOutcome;
   defaultSelected: boolean;
   warnings: string[];
@@ -41,6 +48,8 @@ export interface JobOption {
 export interface BulkContext {
   weavingOrders: JobOption[];
   weavingOrderRequired: boolean;
+  /** Sunucu satır başına işi tanır (C.6); yoksa tezgah başına seçici çizilmez. */
+  rowJobs?: boolean;
 }
 
 export interface BulkFailure extends BulkTarget {
@@ -62,7 +71,7 @@ export interface BulkResult {
   failed: BulkFailure[];
 }
 
-export interface AssignRow extends BulkTarget {
+export interface AssignRow extends AssignTarget {
   clientToken: string;
   replaceRunId?: string | null;
 }
@@ -71,9 +80,9 @@ const data = <T,>(p: Promise<{ data: ApiResponse<T> }>): Promise<T> => p.then((r
 
 export const runService = {
   context: (): Promise<BulkContext> => data(apiClient.get<ApiResponse<BulkContext>>("/api/machine-runs/bulk/context")),
-  preview: (body: { action: BulkRunAction; weavingOrderId?: string | null; targets: BulkTarget[] }): Promise<BulkPreview> =>
+  preview: (body: { action: BulkRunAction; weavingOrderId?: string | null; targets: AssignTarget[] }): Promise<BulkPreview> =>
     data(apiClient.post<ApiResponse<BulkPreview>>("/api/machine-runs/bulk/preview", body)),
-  assign: (body: { weavingOrderId: string | null; rows: AssignRow[] }): Promise<BulkResult> =>
+  assign: (body: { weavingOrderId?: string | null; rows: AssignRow[] }): Promise<BulkResult> =>
     data(apiClient.post<ApiResponse<BulkResult>>("/api/machine-runs/bulk/assign", body)),
   finish: (body: { rows: Array<{ runId: string; picksAtClose?: number | null }> }): Promise<BulkResult> =>
     data(apiClient.post<ApiResponse<BulkResult>>("/api/machine-runs/bulk/finish", body)),

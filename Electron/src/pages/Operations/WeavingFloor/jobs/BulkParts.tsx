@@ -11,11 +11,13 @@ interface PreviewProps {
   onToggle: (key: string, on: boolean) => void;
   /** Satır başına ek giriş (Bitir: atkı sayacı). */
   extra?: (r: BulkPreviewRow) => React.ReactNode;
+  /** Tezgah başına farklı iş (C.6): satırın yeni işi ayrı sütunda. */
+  showJob?: boolean;
 }
 
 const lineText = (r: BulkPreviewRow) => (r.productionLineCount > 1 ? `${r.productionLineNo}. hat` : "—");
 
-export function PreviewTable({ rows, picked, onToggle, extra }: PreviewProps) {
+export function PreviewTable({ rows, picked, onToggle, extra, showJob }: PreviewProps) {
   return (
     <div className="max-h-[50vh] overflow-auto rounded border">
       <table className="w-full text-sm" aria-label="Etkilenecek tezgahlar">
@@ -25,6 +27,7 @@ export function PreviewTable({ rows, picked, onToggle, extra }: PreviewProps) {
             <th className="p-2">Tezgah</th>
             <th className="p-2">Hat</th>
             <th className="p-2">Şu anki iş</th>
+            {showJob && <th className="p-2">Yeni iş</th>}
             <th className="p-2">Ne olacak</th>
             {extra && <th className="p-2">Atkı sayacı</th>}
           </tr>
@@ -49,6 +52,7 @@ export function PreviewTable({ rows, picked, onToggle, extra }: PreviewProps) {
                 </td>
                 <td className="p-2">{lineText(r)}</td>
                 <td className="p-2">{r.current ? (r.current.weavingOrderNumber ?? "İşsiz koşum") : "Boş"}</td>
+                {showJob && <td className="p-2">{r.weavingOrder ? r.weavingOrder.weavingOrderNumber : r.block ? "—" : "İşsiz (numune)"}</td>}
                 <td className="p-2">
                   <div>{r.block ? r.block.message : OUTCOME_TEXT[r.outcome]}</div>
                   {r.warnings.map((w) => (
