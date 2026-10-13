@@ -1,7 +1,8 @@
 // BEKÇİ — "Tüm listeyi indir" tavana çarpınca SÖYLER (Perf-2 B4)
 //   NEGATİF SONDA: tavan dalı `truncated: false` dönerse §2 ❌
+//   NEGATİF SONDA: confirmTotal çağrılmazsa §5 ❌
 import { describe, expect, it, vi } from "vitest";
-import { drainCursor, truncatedExportNote, type DrainPage } from "./export-drain";
+import { drainCursor, EXPORT_CONFIRM_ROWS, truncatedExportNote, type DrainPage } from "./export-drain";
 
 /** n satırlık sunucu; sayfa boyu 2. */
 function sunucu(n: number) {
@@ -37,5 +38,24 @@ describe("drainCursor", () => {
   it("§4 uyarı metni sayıyı ve 'TAMAMI DEĞİL'i taşır", () => {
     expect(truncatedExportNote(500000)).toContain("500.000");
     expect(truncatedExportNote(1)).toContain("TAMAMI DEĞİL");
+  });
+
+  it("§5 ⭐ toplam 100K'yı aşınca ilk sayfadan sonra sorulur; red → kalan sayfa çekilmez, cancelled", async () => {
+    const s = sunucu(EXPORT_CONFIRM_ROWS + 1);
+    const confirm = vi.fn(async () => false);
+    const r = await drainCursor(s.fetchPage, undefined, 10, confirm);
+    expect(confirm).toHaveBeenCalledWith(EXPORT_CONFIRM_ROWS + 1);
+    expect(r).toEqual({ rows: [], truncated: false, cancelled: true });
+    expect(s.calls).toEqual([null]);
+  });
+  it("§6 onay → indirme sürer; eşik ve altında hiç sorulmaz", async () => {
+    const yes = vi.fn(async () => true);
+    const r = await drainCursor(sunucu(EXPORT_CONFIRM_ROWS + 1).fetchPage, undefined, 2, yes);
+    expect(yes).toHaveBeenCalledTimes(1);
+    expect(r.rows).toEqual([0, 1, 2, 3]);
+    const never = vi.fn(async () => false);
+    const r2 = await drainCursor(sunucu(5).fetchPage, undefined, 10, never);
+    expect(never).not.toHaveBeenCalled();
+    expect(r2.rows).toHaveLength(5);
   });
 });

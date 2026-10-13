@@ -16,6 +16,7 @@ import type {
 } from "@shared/ipc-contract";
 import type { LicenseRelayRequest } from "@shared/license-relay";
 import { isAppDocumentUrl, readAppEntryArgument } from "@shared/app-origin";
+import type { XlsxStreamBeginOpts, XlsxStreamEndOpts, XlsxStreamRowsOpts } from "@shared/xlsx-stream";
 import { PDF_BATCH_PROGRESS_CHANNEL, parsePdfBatchProgress } from "@shared/pdf-progress";
 import { LOOM_ALARM_NOTIFY_CHANNEL, LOOM_ALARM_OPEN_CHANNEL, parseLoomAlarmOpenEvent } from "@shared/loom-alarm-notify";
 
@@ -96,6 +97,15 @@ const api: ApiBridge = {
   files: {
     save: (opts: FileSaveOpts) => ipcRenderer.invoke("files:save", opts),
     saveBatch: (opts: FilesSaveBatchOpts) => ipcRenderer.invoke("files:saveBatch", opts),
+  },
+  xlsx: {
+    // Yalnız bilinen alanlar geçer; ana süreç yükü yeniden doğrular (shared/xlsx-stream).
+    streamBegin: (o: XlsxStreamBeginOpts) =>
+      ipcRenderer.invoke("xlsx:streamBegin", { suggestedName: o.suggestedName, sheetName: o.sheetName, columns: o.columns, preamble: o.preamble }),
+    streamRows: (o: XlsxStreamRowsOpts) => ipcRenderer.invoke("xlsx:streamRows", { sessionId: o.sessionId, rows: o.rows }),
+    streamEnd: (o: XlsxStreamEndOpts) =>
+      ipcRenderer.invoke("xlsx:streamEnd", { sessionId: o.sessionId, totalRow: o.totalRow, notes: o.notes }),
+    streamAbort: (sessionId: string) => ipcRenderer.invoke("xlsx:streamAbort", sessionId),
   },
   updater: {
     status: () => ipcRenderer.invoke("updater:status"),

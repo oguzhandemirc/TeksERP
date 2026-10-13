@@ -6,6 +6,7 @@
 
 import { toast } from "sonner";
 import { buildWorkbook, saveWorkbook, type SheetSpec } from "./xlsx-export";
+import { XLSX_STREAM_MIN_ROWS, isStreamableSheet, streamSheetToXlsx } from "./xlsx-stream";
 import { upTo3ExcelNumFmt, upTo3Text } from "./number-format";
 import { saveTextAs } from "./file-save";
 import { factoryLocaleString } from "./factory-time";
@@ -184,8 +185,12 @@ export async function exportRowsToXlsx<T>(
   filename: string,
   notes?: string[],
 ): Promise<boolean> {
-  const blob = await buildWorkbook([buildListSheet(cols, rows, filename, notes)]);
-  return saveWorkbook(blob, filename);
+  const sheet = buildListSheet(cols, rows, filename, notes);
+  // Büyük liste ana süreçte akışla yazılır (renderer'da çalışma kitabı kurulmaz); web yapısında köprü yok.
+  if (rows.length >= XLSX_STREAM_MIN_ROWS && typeof window !== "undefined" && window.api?.xlsx && isStreamableSheet(sheet)) {
+    return streamSheetToXlsx(sheet, filename);
+  }
+  return saveWorkbook(await buildWorkbook([sheet]), filename);
 }
 
 /** Satırları .csv olarak kaydeder. */

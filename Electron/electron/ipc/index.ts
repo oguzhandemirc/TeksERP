@@ -9,6 +9,7 @@ import { registerPrinterIpc } from "./printer.ipc.js";
 import { registerScaleIpc } from "./scale.ipc.js";
 import { registerPdfIpc } from "./pdf.ipc.js";
 import { registerFilesIpc } from "./files.ipc.js";
+import { registerXlsxIpc } from "./xlsx.ipc.js";
 import { registerUpdaterIpc } from "./updater.ipc.js";
 import { registerLicenseIpc } from "./license.ipc.js";
 import { registerLoomAlarmNotifyIpc } from "./loom-alarm-notify.ipc.js";
@@ -25,6 +26,7 @@ export function registerIpcHandlers(): void {
   registerScaleIpc();
   registerPdfIpc();
   registerFilesIpc();
+  registerXlsxIpc();
   registerUpdaterIpc();
   registerLicenseIpc();
   registerLoomAlarmNotifyIpc();

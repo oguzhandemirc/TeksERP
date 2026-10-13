@@ -366,6 +366,7 @@ export function RollsPage() {
           exportName="Kumaş Stoğu"
           paginationActions={
             <>
+              {exportAll.confirmDialog}
               <ExportMenu
                 label="Tümünü İndir"
                 busyLabel={exportAll.busyLabel}

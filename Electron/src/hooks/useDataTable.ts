@@ -13,7 +13,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { parseUrlToQueryParams } from "@/lib/query-builder";
 import { usePreferences } from "@/providers/PreferencesProvider";
-import { drainCursor, EXPORT_PAGE_LIMIT } from "@/lib/export-drain";
+import { drainCursor, EXPORT_PAGE_LIMIT, ExportCancelledError } from "@/lib/export-drain";
 
 interface Options<T> {
   queryKey: string;
@@ -226,8 +226,9 @@ export function useDataTable<T>({
     async (
       onProgress?: (loaded: number, total?: number) => void,
       onTruncated?: (loaded: number) => void,
+      confirmTotal?: (total: number) => Promise<boolean>,
     ): Promise<T[]> => {
-      const { rows, truncated } = await drainCursor<T>(
+      const { rows, truncated, cancelled } = await drainCursor<T>(
         (cursor) =>
           fetchFn({
             cursor,
@@ -243,7 +244,10 @@ export function useDataTable<T>({
             withTotal: cursor === null,
           }),
         onProgress,
+        undefined,
+        confirmTotal,
       );
+      if (cancelled) throw new ExportCancelledError();
       if (truncated) onTruncated?.(rows.length);
       return rows;
     },

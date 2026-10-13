@@ -14,6 +14,13 @@ import type { ScreenshotResult } from "./screenshot";
 import type { TvDisplayInfo, TvWindowOpenRequest, TvWindowOpenResult } from "./tv-window";
 import type { LoomAlarmNotifyRequest, LoomAlarmNotifyResult } from "./loom-alarm-notify";
 import type { PdfBatchProgress } from "./pdf-progress";
+import type {
+  XlsxStreamBeginOpts,
+  XlsxStreamBeginResult,
+  XlsxStreamEndOpts,
+  XlsxStreamResult,
+  XlsxStreamRowsOpts,
+} from "./xlsx-stream";
 
 export type { DiscoveredServer };
 
@@ -132,6 +139,18 @@ export interface FilesApi {
   save: (opts: FileSaveOpts) => Promise<FileSaveResult>;
   /** Renderer'ın ürettiği dosyaları (base64) seçilen KLASÖRE yazar (ör. toplu Excel). */
   saveBatch: (opts: FilesSaveBatchOpts) => Promise<SaveBatchResult>;
+}
+
+/** Akışlı Excel (büyük liste) — ana süreç WorkbookWriter; tel tipleri `shared/xlsx-stream.ts`. */
+export interface XlsxApi {
+  /** Kaydet diyaloğunu açar; onaylanırsa yazım oturumu döner. */
+  streamBegin: (opts: XlsxStreamBeginOpts) => Promise<XlsxStreamBeginResult>;
+  /** ≤10K satırlık parça ekler. */
+  streamRows: (opts: XlsxStreamRowsOpts) => Promise<XlsxStreamResult>;
+  /** TOPLAM + notlar; dosyayı kapatıp hedef ada taşır. */
+  streamEnd: (opts: XlsxStreamEndOpts) => Promise<XlsxStreamResult>;
+  /** Oturumu bırakır, yarım dosyayı siler. */
+  streamAbort: (sessionId: string) => Promise<void>;
 }
 
 export interface PowerApi {
@@ -430,6 +449,7 @@ export interface ApiBridge {
   scale: ScaleApi;
   pdf: PdfApi;
   files: FilesApi;
+  xlsx: XlsxApi;
   updater: UpdaterApi;
   license: LicenseApi;
   tvWindow: TvWindowApi;

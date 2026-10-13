@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
 import { toast } from "sonner";
 import {
@@ -8,6 +8,8 @@ import {
   exportTableToXlsx,
 } from "@/lib/table-export";
 import { useExportRange } from "./useExportRange";
+import { useExportConfirm } from "./useExportConfirm";
+import { isExportCancelled } from "@/lib/export-drain";
 
 /**
  * "Tümünü İndir" — aktif filtreye uyan SUNUCUDAKİ tüm kayıtları çekip PDF/Excel/CSV
@@ -17,7 +19,11 @@ import { useExportRange } from "./useExportRange";
  */
 export function useTableExportAll<T>(opts: {
   table: Table<T>;
-  fetchAll: (onProgress?: (loaded: number, total?: number) => void) => Promise<T[]>;
+  fetchAll: (
+    onProgress?: (loaded: number, total?: number) => void,
+    onTruncated?: (loaded: number) => void,
+    confirmTotal?: (total: number) => Promise<boolean>,
+  ) => Promise<T[]>;
   /** Dosya adı tabanı (ör. "Envanter"). Tarih/aralık damgası otomatik eklenir. */
   name: string;
 }): {
@@ -26,14 +32,17 @@ export function useTableExportAll<T>(opts: {
   onPdf: () => Promise<void>;
   onExcel: () => Promise<void>;
   onCsv: () => Promise<void>;
+  /** Büyük liste onayı — çağıran sayfa ağacında çizer. */
+  confirmDialog: ReactNode;
 } {
   const [progress, setProgress] = useState<{ loaded: number; total?: number } | null>(null);
   const range = useExportRange();
+  const { confirmTotal, confirmDialog } = useExportConfirm();
 
   const run = async (kind: "pdf" | "xlsx" | "csv"): Promise<void> => {
     setProgress(null);
     try {
-      const rows = await opts.fetchAll((loaded, total) => setProgress({ loaded, total }));
+      const rows = await opts.fetchAll((loaded, total) => setProgress({ loaded, total }), undefined, confirmTotal);
       if (rows.length === 0) {
         toast.info("İndirilecek kayıt yok.");
         return;
@@ -42,8 +51,8 @@ export function useTableExportAll<T>(opts: {
       if (kind === "pdf") await exportTableToPdf(opts.table, rows, filename);
       else if (kind === "csv") await exportTableToCsv(opts.table, rows, filename);
       else await exportTableToXlsx(opts.table, rows, filename);
-    } catch {
-      toast.error("İndirme hazırlanamadı.");
+    } catch (err) {
+      if (!isExportCancelled(err)) toast.error("İndirme hazırlanamadı.");
     } finally {
       setProgress(null);
     }
@@ -58,5 +67,6 @@ export function useTableExportAll<T>(opts: {
     onPdf: () => run("pdf"),
     onExcel: () => run("xlsx"),
     onCsv: () => run("csv"),
+    confirmDialog,
   };
 }

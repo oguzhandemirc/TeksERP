@@ -273,6 +273,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "PDF'ler artık doğru kâğıt boyutunda (A4/A5) kaydedilir; önceden belge A4 ya da A5 olsa bile PDF Letter boyutunda çıkıyordu. Yatay belgeler yatay kalır, kâğıt baskısı değişmedi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "20.000 satırı aşan listeler Excel'e daha hızlı ve çok daha az bellekle indirilir; büyük indirmede panel yavaşlamaz. 100.000 kaydı aşan \"Tümünü indir\" başlamadan önce yaklaşık kayıt sayısını gösterip onay ister."
         }
       ]
     },

@@ -13,7 +13,8 @@ import {
   exportListName,
 } from "@/lib/table-export";
 import { useExportRange } from "@/hooks/useExportRange";
-import { truncatedExportNote } from "@/lib/export-drain";
+import { isExportCancelled, truncatedExportNote } from "@/lib/export-drain";
+import { useExportConfirm } from "@/hooks/useExportConfirm";
 
 type ExportKind = "pdf" | "xlsx" | "csv";
 
@@ -25,7 +26,11 @@ interface Props<T> {
    *  SUNUCUDAKİ TÜM kayıtları çeker (useDataTable.fetchAll). Sektör standardı: dışa
    *  aktarma = tüm liste. Verilmezse yalnız bellekteki satırlar iner (geriye uyumlu).
    *  onProgress: her sayfadan sonra (yüklenen, ~toplam) — uzun indirmede ilerleme. */
-  fetchAll?: (onProgress?: (loaded: number, total?: number) => void, onTruncated?: (loaded: number) => void) => Promise<T[]>;
+  fetchAll?: (
+    onProgress?: (loaded: number, total?: number) => void,
+    onTruncated?: (loaded: number) => void,
+    confirmTotal?: (total: number) => Promise<boolean>,
+  ) => Promise<T[]>;
   /** true → indirme bölümü gizlenir (yalnız sütun göster/gizle kalır). İndirme başka
    *  bir yerde (ör. sayfalama çubuğunda "Tümünü İndir") görünür olduğunda çift olmasın. */
   hideExport?: boolean;
@@ -48,6 +53,7 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
   // Uzun "tümünü indir"de ilerleme (yüklenen / ~toplam) — 30k'da 30+ sn sürebilir,
   // belirsiz spinner "dondu mu?" paniği yaratır; sayaç güven verir.
   const [progress, setProgress] = useState<{ loaded: number; total?: number } | null>(null);
+  const { confirmTotal, confirmDialog } = useExportConfirm();
   const hideable = table
     .getAllLeafColumns()
     .filter((c) => c.getCanHide() && c.id !== "select" && c.id !== "actions");
@@ -63,6 +69,7 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
         ? await fetchAll(
             (loaded, total) => setProgress({ loaded, total }),
             (loaded) => toast.warning(truncatedExportNote(loaded), { duration: 12000 }),
+            confirmTotal,
           )
         : table.getRowModel().rows.map((r) => r.original);
       if (rows.length === 0) {
@@ -73,8 +80,8 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
       if (kind === "pdf") await exportTableToPdf(table, rows, name);
       else if (kind === "csv") await exportTableToCsv(table, rows, name);
       else await exportTableToXlsx(table, rows, name);
-    } catch {
-      toast.error("İndirme hazırlanamadı.");
+    } catch (err) {
+      if (!isExportCancelled(err)) toast.error("İndirme hazırlanamadı.");
     } finally {
       setBusy(null);
       setProgress(null);
@@ -92,6 +99,8 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
   };
 
   return (
+    <>
+    {confirmDialog}
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="h-8 gap-1.5" title="Sütunlar & dışa aktar">
@@ -166,5 +175,6 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
         )}
       </PopoverContent>
     </Popover>
+    </>
   );
 }

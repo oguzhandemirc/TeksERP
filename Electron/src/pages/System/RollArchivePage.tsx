@@ -118,13 +118,16 @@ export default function RollArchivePage() {
         pagination={dataTable.pagination}
         exportName="Top-Arsivi"
         paginationActions={
-          <ExportMenu
-            label="Tümünü İndir"
-            busyLabel={exportAll.busyLabel}
-            onPdf={exportAll.onPdf}
-            onExcel={exportAll.onExcel}
-            onCsv={exportAll.onCsv}
-          />
+          <>
+            {exportAll.confirmDialog}
+            <ExportMenu
+              label="Tümünü İndir"
+              busyLabel={exportAll.busyLabel}
+              onPdf={exportAll.onPdf}
+              onExcel={exportAll.onExcel}
+              onCsv={exportAll.onCsv}
+            />
+          </>
         }
       />
     </PageShell>
