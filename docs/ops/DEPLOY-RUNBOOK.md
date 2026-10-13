@@ -913,6 +913,27 @@ sadece backend (4000) fabrika ağına açıktır.
 >   geçersiz kılmak için aktif hale getirilmeli.
 > - JWT secret rotasyonu + şifre politikası gözden geçirilmeli.
 
+### 10b) DB rol göçü — Windows kipi (YALNIZ ELLE / test; aktivasyon 2.15.8)
+
+2.15.7'de hiçbir kurulum/güncelleme betiği bunu çağırmaz; sahadaki kurulumda koşma. `.env` sahip rolünde kalır,
+`auditProtection` "kismi" kalır. Test kurulumunda elle (yönetici PowerShell, `<kok>` = veri kökü):
+
+```powershell
+. <yol>\kurulum-ortak.ps1   # deploy/kurulum/kurulum-ortak.ps1 — DpapiCoz
+$p = DpapiCoz ([IO.File]::ReadAllBytes("<kok>\pg-setup\pg-yonetici.dpapi"))
+$env:TEKSERP_PG_SUPER_URL = "postgresql://postgres:$([Uri]::EscapeDataString($p))@127.0.0.1:<port>/<db>"; $p = $null
+node dist\tools\db-rol-gocu.cjs --sahip tekserp --kimlik "<kok>\pg-setup\db-credentials.json"            # KURU
+node dist\tools\db-rol-gocu.cjs --sahip tekserp --kimlik "<kok>\pg-setup\db-credentials.json" --uygula   # tek tx + ölçüm
+Remove-Item env:TEKSERP_PG_SUPER_URL
+```
+
+- URL ve parola komut satırına yazılmaz (süreç listesinde görünür); parolayı ekrana basma.
+- Çıkış 2 = uygulanamaz, değişiklik yok (bağlı rol süper değil · audit tablolarının sahibi `--sahip` değil · kimlik
+  dosyasının kullanıcısı/DB'si uymuyor · sahip parolası yanlış).
+- Uygulandıktan sonra `okuma_rolu_parola` fonksiyonu `postgres`e ait olur. Süper olmayan rolle (bakım rolü, panel kopyası)
+  `--exit-on-error` geri yükleme "must be able to SET ROLE postgres" ile düşer (ölçüldü). Bu kurulumda geri yüklemeyi
+  `postgres` ile yap, sonra rol göçünü yeniden koş.
+
 ---
 
 ## 11) Deploy provası — doğrulandı (2026-06-13)

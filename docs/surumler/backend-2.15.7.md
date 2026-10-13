@@ -162,6 +162,15 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - Kapalı kolon taşıyan tabloda (`users`) `SELECT *` 42501 verir — BI aracında kolonlar seçilir (bilinçli).
 - `dist-web`: panel 1.6.5 kaynağı değişir (Sistem → Veritabanı Okuma Erişimi).
 
+**Rol göçü aracında Windows kipi — hazır, aktivasyon 2.15.8** (commit `feat(guvenlik): G4 Windows kipi …`; kısa kimliği paketlemede yazılır)
+
+- Windows kurulumunda DEĞİŞEN YOK: hiçbir kurulum/güncelleme betiği aracı çağırmaz, `.env` `DATABASE_URL` sahip
+  rolünde kalır, `auditProtection` "kismi" kalır. Araç (`dist\tools\db-rol-gocu.cjs`) yalnız elle/test için koşulabilir.
+- `--sahip <ad>`: bağlantı süper kullanıcı (`postgres`), URL'i yalnız `TEKSERP_PG_SUPER_URL` ortam değişkeninden;
+  sahip açık parametre ve audit tablolarının sahibiyle eşleşmeli; sahip parolası `TEKSERP_SAHIP_PAROLASI` ya da
+  `--kimlik <pg-setup\db-credentials.json>` (argv'de parola/URL yok). Uyuşmazlık, süper olmayan bağlantı, yanlış sahip
+  parolası → çıkış 2, değişiklik yok. Docker kipi aynen.
+
 **Ekran yolu tek kaynağı** (commit `chore(ekran-yolu): …`; kısa kimliği paketlemede yazılır)
 
 - Kullanıcıya dönen "şu ekrandan yapın" cümleleri panelin gerçek menüsünü gösterir; yedi bayat yol düzeldi:
@@ -290,7 +299,7 @@ otomatik yedekten geri yüklenir.
   sayaç okunamadı — günlüğe bak, insana rapor et.
 - `/api/admin/health` `auditProtection`: Docker'da `writeOnly: true` ve açılıştan birkaç dakika sonra `level` "tam"
   beklenir (açılış günlüğünde "Backend uygulama rolüyle açılıyor"); "DB rol ayrımı YAPILAMADI" satırı varsa
-  `level` "kismi" kalır — günlükteki nedeni insana rapor et. Windows'ta "kismi" beklenir (rol göçü bu sürümde yok).
+  `level` "kismi" kalır — günlükteki nedeni insana rapor et. Windows'ta "kismi" beklenir (rol göçü bu sürümde çağrılmaz; araç hazır, aktivasyon 2.15.8).
   `chain.durum` "kurcalanmis" ise insana rapor et.
 - Sunucu hata günlüğünün son 30 satırı — `machine-watchdog` kaynaklı yeni hata var mı.
 - Destek hesabı tablette PIN ile: kod istendi mi (2FA kurulu) ya da 403 (kurulu değil); normal kullanıcının
