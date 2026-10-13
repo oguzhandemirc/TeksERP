@@ -40,8 +40,11 @@ async function main(): Promise<void> {
     /audit_arsivle\(/.test(auditSrc) && /audit_arsiv_buda\(/.test(auditSrc));
   check("§1c AuditService audit tablosunda doğrudan silme yapmıyor",
     !/systemLog(Archive)?\.delete(Many)?\(/.test(auditSrc));
-  check("§1d iki definer fn purge ayarını kendi SET'iyle açıyor",
-    (MIG.match(/SECURITY DEFINER[\s\S]{0,80}SET "teks\.audit_purge" = 'on'/g) ?? []).length === 2);
+  // Tanımdaki `SET "teks.audit_purge"` süper olmayan sahipte 42501 (onarım 2026-10-13): kapı gövdede.
+  check("§1d iki definer fn purge ayarını gövdede tx-yerel açıp sonda geri yazıyor, tanımda SET yok",
+    (MIG.match(/SECURITY DEFINER[\s\S]{0,400}?set_config\('teks\.audit_purge', 'on', true\)/g) ?? []).length === 2 &&
+      (MIG.match(/set_config\('teks\.audit_purge', coalesce\(v_onceki, ''\), true\)/g) ?? []).length === 2 &&
+      !/^SET "teks\./m.test(MIG));
 
   const engel = hedefDbEngeli();
   if (engel) { check("hedef DB kapısı", false, engel); return; }

@@ -11,5 +11,12 @@
     "sha256": "4b56f0adbefbb8432c1c6f8678ee48d9daa9b241e008e394136f39c6056a5dd9",
     "tarih": "2026-09-28",
     "gerekce": "İnişte ölçüldü: migration satırı silinip ikinci kez deploy edilince 42P07 ile düşüyordu (IF NOT EXISTS yoktu). Dosya aynı dalda doğdu ve hiçbir canlı kuruluma (fabrika, test fabrikası) uygulanmadan onarıldı: CREATE TABLE/INDEX IF NOT EXISTS + FK'lar pg_constraint kontrollü DO bloğunda. Ölçüm: şablondan temiz DB'de deploy → satır sil → ikinci deploy temiz, 6 kısıt + 4 indeks. Uygulanmış test DB'lerinde yalnız checksum farkı doğar (migrate deploy bunu reddetmez)."
+  },
+  {
+    "migration": "20261013120000_audit_hash_zinciri",
+    "sha256": "23e14b85868c8a6131ac055b81f6a929a3c120130a5d58edbc87440e4092c5c7",
+    "tarih": "2026-10-13",
+    "tasindigiMigration": "20261013200000_audit_purge_set_config",
+    "gerekce": "audit_arsivle ve audit_arsiv_buda tanımında `SET \"teks.audit_purge\" = 'on'` vardı; PG15+'da süper olmayan rol özel parametreyi fonksiyon tanımında yazamaz (42501). Windows'ta migrate deploy'u koşan sahip `tekserp` süper değil: 2.15.7 her Windows kurulumunda FAILED migration ile dururdu; bakım rolüyle panel kopyası da aynı hatayla kırılırdı (CI süper kullanıcıyla koştuğu için görmedi). Dosyayı ESKİ hâline almak çare değil: eski hâli süper olmayan sahipte koşamıyor. Purge kapısı gövdeye `set_config(..., true)` olarak taşındı, sonda önceki değer geri yazılır (davranış birebir). Eski hâli uygulanmış DB'ler (CI, yerel test DB'leri) için sonraki migration iki fonksiyonu aynı gövdeyle CREATE OR REPLACE eder. 2.15.7 yayınlanmamıştı; sahada uygulanmış kopya yok. Bekçi: test_migration_super_olmayan."
   }
 ]

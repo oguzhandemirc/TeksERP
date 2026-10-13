@@ -17,6 +17,9 @@
 --      yalnız bu iki fonksiyondan, sahip rolüyle ve TABAN KURALIYLA yürür
 --      (arşiv ≥ 1 ay, budama ≥ 1 yıl). Budama sıra-öneki siler ve zincire
 --      "kesit çapası" (`AUDIT_CHAIN_CUT`) bırakır: doğrulayıcı kesik başı buradan bağlar.
+--      Purge kapısı GÖVDEDE `set_config(…, true)` ile açılır, sonda önceki değer geri
+--      yazılır: fonksiyon tanımında `SET "teks.audit_purge"` PG15+'da süper olmayan
+--      sahipte 42501 verir (beyanlı onarım 2026-10-13, `migration-onarimlari.json`).
 -- Geri alınamaz değil ama geri alma gerekmez: kolonlar nullable, trigger yalnız ekler.
 -- Bekçi: scripts/test_audit_hash_zinciri.ts · test_db_invariants §6/§8.
 -- =============================================================================
@@ -86,11 +89,12 @@ CREATE OR REPLACE FUNCTION "audit_arsivle"(p_cutoff timestamptz, p_limit integer
 RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, pg_temp
-SET "teks.audit_purge" = 'on'
 AS $fn$
 DECLARE
   v_n integer;
+  v_onceki text := current_setting('teks.audit_purge', true);
 BEGIN
+  PERFORM set_config('teks.audit_purge', 'on', true);
   -- tz-ok: iki timestamptz karşılaştırılıyor; taban kuralı yaşa bağlı.
   IF p_cutoff IS NULL OR p_cutoff > now() - interval '1 month' THEN
     RAISE EXCEPTION 'Audit arşiv kesimi en az 1 ay önce olmalı (verilen: %).', p_cutoff
@@ -118,6 +122,7 @@ BEGIN
     RETURNING 1
   )
   SELECT count(*)::integer INTO v_n FROM tasinan;
+  PERFORM set_config('teks.audit_purge', coalesce(v_onceki, ''), true);
   RETURN v_n;
 END;
 $fn$;
@@ -129,13 +134,14 @@ CREATE OR REPLACE FUNCTION "audit_arsiv_buda"(p_before timestamptz)
 RETURNS bigint
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, pg_temp
-SET "teks.audit_purge" = 'on'
 AS $fn$
 DECLARE
   v_s integer;
   v_hash text;
   v_n bigint;
+  v_onceki text := current_setting('teks.audit_purge', true);
 BEGIN
+  PERFORM set_config('teks.audit_purge', 'on', true);
   -- tz-ok: iki timestamptz karşılaştırılıyor; taban kuralı yaşa bağlı.
   IF p_before IS NULL OR p_before > now() - interval '1 year' THEN
     RAISE EXCEPTION 'Audit arşiv budama kesimi en az 1 yıl önce olmalı (verilen: %).', p_before
@@ -162,6 +168,7 @@ BEGIN
   DELETE FROM "system_log_archives"
    WHERE "createdAt" < p_before AND ("chainSeq" IS NULL OR "chainSeq" <= v_s);
   GET DIAGNOSTICS v_n = ROW_COUNT;
+  PERFORM set_config('teks.audit_purge', coalesce(v_onceki, ''), true);
   RETURN v_n;
 END;
 $fn$;

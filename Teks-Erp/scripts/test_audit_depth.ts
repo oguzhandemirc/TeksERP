@@ -530,7 +530,7 @@ async function bolum3veSonrasi(): Promise<void> {
 
   // 10.5 — KAYNAK SIRASI: `SET LOCAL` deleteMany'den ÖNCE gelmeli. Yalnız
   // "var mı" diye baksaydık, ifadenin aşağı kaydırılmasına kör kalırdık.
-  const purgeIdx = archSrc.indexOf(`SET "teks.audit_purge" = 'on'`);
+  const purgeIdx = archSrc.indexOf(`set_config('teks.audit_purge', 'on', true)`);
   const delIdx = archSrc.indexOf(`DELETE FROM "system_logs"`);
   check("arşivleyici purge GUC'unu deleteMany'den ÖNCE açıyor",
     purgeIdx > 0 && delIdx > 0 && purgeIdx < delIdx, `purge@${purgeIdx} < delete@${delIdx}`);
