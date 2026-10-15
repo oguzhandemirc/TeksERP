@@ -155,7 +155,7 @@ export async function askPassword(question: string, kasa: KasaAdi | null = null)
 // ---------------------------------------------------------------- parola kasası (macOS Anahtar Zinciri)
 // Kaynak `scripts/lib/parola-kasasi.mjs` (katalog, biçim, `security` çağrısı); bu blok onun TEK TS kopyasıdır —
 // satıcı imajı repo kökünü görmez. Eşitlik bekçisi `scripts/test_parola_kasasi.mjs`. Değer hiçbir çıktıya basılmaz.
-export const KASA_ADLARI = ["kok", "ara", "paket", "istemci", "yedek", "play-yukleme"] as const;
+export const KASA_ADLARI = ["kok", "ara", "paket", "istemci", "yedek", "play-yukleme", "patron-play-yukleme"] as const;
 export type KasaAdi = (typeof KASA_ADLARI)[number];
 export const KASA_ORTAM = "TEKSERP_PAROLA_KASASI";
 export const KASA_KOMUTU = "/usr/bin/security";

@@ -6,3 +6,8 @@ web-build/
 .env
 .env.*
 !.env.example
+
+# Native: prebuild çıktısı (scripts/build-aab.mjs her derlemede --clean ile yeniden üretir)
+/android
+/ios
+.kotlin/

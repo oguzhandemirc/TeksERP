@@ -33,6 +33,7 @@ export const KASA_KATALOGU = Object.freeze({
   istemci: Object.freeze({ ad: 'İSTEMCİ parolası (panel künyesi ist-* + tablet OTA yaprağı)', min: 12, kullanan: 'panel-imza · ota-zinciri · mobil-grup-yayinla · uretim-toren donem --istemci' }),
   yedek: Object.freeze({ ad: 'YEDEK anahtar parolası (istemci + paket yedeği, ortak)', min: 12, kullanan: 'uretim-toren donem / *-yedek-dogrula · araçlarda --kasa=yedek' }),
   'play-yukleme': Object.freeze({ ad: 'Google Play yükleme keystore parolası', min: 6, kullanan: 'mobil build-apk --aab (Gradle + keytool)' }),
+  'patron-play-yukleme': Object.freeze({ ad: 'Patron uygulaması Google Play yükleme keystore parolası', min: 12, kullanan: 'patron/uygulama build-aab (Gradle + keytool)' }),
 });
 export const KASA_ADLARI = Object.freeze(Object.keys(KASA_KATALOGU));
 

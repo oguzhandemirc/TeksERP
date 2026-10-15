@@ -1,11 +1,12 @@
 // Bildirim ekranının alt bölümleri: bu cihazı kaydet (izin isteme akışı) + kayıtlı cihazlar + son bildirimler.
 import { useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import type { TestNotificationResult } from "../api/wire";
 import { safeRoute } from "../lib/notification-form";
 import { formatDateTime } from "../lib/format";
 import { registerThisDevice } from "../push/register";
+import { NATIVE_PUSH_SOON, pushAvailable } from "../push/support";
 import { useSession } from "../state/session";
 import { useRemote } from "../state/useRemote";
 import { Banner, Body, Button, Card, ConfirmButton, Muted, Title } from "./kit";
@@ -31,7 +32,8 @@ export function testOutcome(r: TestNotificationResult): { tone: "off" | "warn"; 
   return { tone: r.gonderilen > 0 && failed + dropped === 0 ? "off" : "warn", text: parts.join(" · ") };
 }
 
-export function NotificationDevices({ vapidKey }: { vapidKey: string | null }) {
+// `pushHere` yanlışsa (ilk mağaza sürümünde telefon) kayıt düğmesi yerine "yakında" notu çizilir; liste ve deneme kalır.
+export function NotificationDevices({ vapidKey, pushHere = pushAvailable(Platform.OS) }: { vapidKey: string | null; pushHere?: boolean }) {
   const { api } = useSession();
   const devices = useRemote("cihazlar", () => api.deviceList());
   const [outcome, setOutcome] = useState<{ tone: "off" | "warn" | "error"; text: string } | null>(null);
@@ -55,7 +57,11 @@ export function NotificationDevices({ vapidKey }: { vapidKey: string | null }) {
   return (
     <View style={{ gap: space.m }}>
       <Title>Bu cihaz</Title>
-      <Button label="Bu cihazda bildirimleri aç" busy={register.busy} disabled={register.disabled} onPress={() => void onRegister()} testID="cihaz-kaydet" />
+      {pushHere ? (
+        <Button label="Bu cihazda bildirimleri aç" busy={register.busy} disabled={register.disabled} onPress={() => void onRegister()} testID="cihaz-kaydet" />
+      ) : (
+        <Muted testID="cihaz-yakinda">{NATIVE_PUSH_SOON}</Muted>
+      )}
       {register.error ? <Banner tone="error" text={register.error} /> : null}
       {outcome ? <Banner tone={outcome.tone} text={outcome.text} testID="cihaz-sonuc" /> : null}
       {(devices.data ?? []).map((d) => (
@@ -70,7 +76,7 @@ export function NotificationDevices({ vapidKey }: { vapidKey: string | null }) {
         <Button label="Deneme bildirimi gönder" tone="plain" busy={test.busy} disabled={test.disabled} onPress={() => void onTest()} testID="bildirim-deneme" />
       ) : null}
       {test.error ? <Banner tone="error" text={test.error} testID="bildirim-deneme-hata" /> : null}
-      {devices.data && devices.data.length === 0 ? <Muted>Kayıtlı cihaz yok; bildirim almak için yukarıdaki düğmeye dokunun.</Muted> : null}
+      {devices.data && devices.data.length === 0 && pushHere ? <Muted>Kayıtlı cihaz yok; bildirim almak için yukarıdaki düğmeye dokunun.</Muted> : null}
     </View>
   );
 }

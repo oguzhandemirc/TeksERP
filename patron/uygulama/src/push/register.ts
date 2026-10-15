@@ -1,13 +1,12 @@
 // Bu cihazı bildirim için kaydet — izin isteme + belirteç + `POST /cihazlar`. Platform ayrımı burada:
-//   · iOS/Android: expo-notifications izni → Expo push belirteci (EAS proje kimliği gerekir) → platform ios/android.
+//   · iOS/Android: yalnız `NATIVE_PUSH` açıkken `register-native.ts` (expo-notifications izni → Expo push belirteci);
+//     kapalıyken izin istenmez, native modüle dokunulmaz, ağ çağrısı yapılmaz.
 //   · Web: service worker (`/bildirim-sw.js`) + Push API aboneliği (VAPID açık anahtarı sunucudan) → platform web.
 // İzin reddi/desteklenmeyen ortam HATA değil DURUMdur (ekran açıklar); ağ/sunucu hatası olduğu gibi yükselir.
-import Constants from "expo-constants";
-import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import type { Api } from "../api/endpoints";
 import { base64UrlToBytes } from "../lib/notification-form";
+import { NATIVE_PUSH, NATIVE_PUSH_SOON } from "./support";
 
 export type RegisterOutcome =
   | { readonly kind: "KAYITLI"; readonly deviceId: string }
@@ -30,23 +29,8 @@ async function registerWeb(api: Api, vapidKey: string | null): Promise<RegisterO
   return { kind: "KAYITLI", deviceId: device.id };
 }
 
-async function registerNative(api: Api): Promise<RegisterOutcome> {
-  if (!Device.isDevice) return { kind: "DESTEKLENMIYOR", message: "Bildirim yalnız gerçek cihazda alınabilir (öykünücü değil)" };
-  const current = await Notifications.getPermissionsAsync();
-  const status = current.granted ? current.status : (await Notifications.requestPermissionsAsync()).status;
-  if (status !== "granted") return { kind: "IZIN_YOK", message: "Bildirim izni verilmedi; telefon ayarlarından açabilirsiniz" };
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("varsayilan", { name: "Bildirimler", importance: Notifications.AndroidImportance.HIGH });
-  }
-  const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined;
-  const projectId = extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-  if (!projectId) return { kind: "YAPILANDIRMA_EKSIK", message: "Uygulama derlemesinde bildirim proje kimliği yok" };
-  const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-  const platform = Platform.OS === "ios" ? "ios" : "android";
-  const device = await api.deviceRegister({ platform, belirtec: token, ...(Device.deviceName ? { ad: Device.deviceName.slice(0, 120) } : {}) });
-  return { kind: "KAYITLI", deviceId: device.id };
-}
-
-export function registerThisDevice(api: Api, vapidKey: string | null): Promise<RegisterOutcome> {
-  return Platform.OS === "web" ? registerWeb(api, vapidKey) : registerNative(api);
+export function registerThisDevice(api: Api, vapidKey: string | null, nativePush: boolean = NATIVE_PUSH): Promise<RegisterOutcome> {
+  if (Platform.OS === "web") return registerWeb(api, vapidKey);
+  if (!nativePush) return Promise.resolve({ kind: "DESTEKLENMIYOR", message: NATIVE_PUSH_SOON });
+  return (require("./register-native") as typeof import("./register-native")).registerNative(api);
 }

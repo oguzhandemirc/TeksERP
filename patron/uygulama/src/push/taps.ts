@@ -2,18 +2,15 @@
 // uygulama adresten okuyup aynı akıştan geçirir (`webTapFromUrl`). Yol bildirimin
 // verisinden gelir ve `safeRoute`tan geçer: uygulamanın kendi ekranı değilse hiçbir yere gidilmez. Bildirim başka
 // tesise aitse (`data.tesisId`) önce o tesise geçilir; geçiş reddedilirse yol AÇILMAZ (ileti oturumdan gösterilir).
-import * as Notifications from "expo-notifications";
+// Telefonda dinleyici yalnız `NATIVE_PUSH` açıkken kurulur (`taps-native.ts`); kapalıyken native modüle dokunulmaz.
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { safeRoute } from "../lib/notification-form";
 import { useSession } from "../state/session";
+import { NATIVE_PUSH } from "./support";
 
-if (Platform.OS !== "web") {
-  Notifications.setNotificationHandler({
-    handleNotification: () => Promise.resolve({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
-  });
-}
+const nativeTaps = (): typeof import("./taps-native") => require("./taps-native") as typeof import("./taps-native");
 
 export interface TapDeps {
   readonly facilityId: string | null;
@@ -63,12 +60,7 @@ export function useNotificationTaps(enabled: boolean): void {
     });
   }, [enabled]);
   useEffect(() => {
-    if (!enabled || Platform.OS === "web") return;
-    const open = (r: Notifications.NotificationResponse | null) => {
-      if (r) void openNotification(r.notification.request.content.data, deps.current);
-    };
-    void Notifications.getLastNotificationResponseAsync().then(open);
-    const sub = Notifications.addNotificationResponseReceivedListener(open);
-    return () => sub.remove();
+    if (!enabled || Platform.OS === "web" || !NATIVE_PUSH) return;
+    return nativeTaps().listenNativeTaps((data) => void openNotification(data, deps.current));
   }, [enabled]);
 }

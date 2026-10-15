@@ -1,6 +1,6 @@
 {
   "name": "tekserp-patron-uygulama",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "main": "entry.ts",
   "scripts": {
@@ -10,7 +10,12 @@
     "test": "jest --runInBand",
     "typecheck": "tsc --noEmit",
     "typecheck:plain": "tsc --noEmit --pretty false",
-    "duman": "../sunucu/node_modules/.bin/tsx scripts/duman.ts"
+    "duman": "../sunucu/node_modules/.bin/tsx scripts/duman.ts",
+    "build:aab": "node scripts/build-aab.mjs",
+    "build:apk:duman": "node scripts/build-aab.mjs --apk",
+    "gorsel:yer-tutucu": "node scripts/yer-tutucu-gorsel.cjs",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -51,5 +56,15 @@
     "modulePaths": [
       "<rootDir>/node_modules"
     ]
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "exclude": [
+          "expo-notifications",
+          "expo-application"
+        ]
+      }
+    }
   }
 }

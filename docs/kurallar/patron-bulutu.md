@@ -156,6 +156,7 @@ Bulutta BAĞIMSIZ (fabrika kullanıcısına bağlanmaz). TEK KİMLİK, ÇOK TES�
 - **[ÇEKİRDEK]** Projeksiyon ve anlık verinin şekli fabrikada tanımlıdır; uygulama alanları jenerik biçimler (TR sayı/tarih, `…Id` gizli) ve aritmetik yapmaz. · bekçi: `format.test.ts` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Pano ve rapor ekranı odaklanınca `POST /api/tazele` (§14 S47) çağrılır ve sunucunun `sonrakiMs` aralığına uyulur: aralık dolmadan ikinci istek yok, hata sessiz ve geri çekilir; web çıktısının dili `tr`dir (`app.json` `web.lang`). · bekçi: `refresh.test.ts` <sub>(arşiv:2026-09-30 I6)</sub>
 - **[ÇEKİRDEK]** Rapor isteğinin parametresi fabrikanın kendi şemasıdır: uygulama yalnız özel aralığı (`dateFrom`/`dateTo`) ve katalog girdisinin ek alanlarını toplar; istenebilir liste fabrikanın `rapor-katalogu` anlık kaydından okunur. · bekçi: `forms.test.ts` <sub>(arşiv:2026-09-29)</sub>
+- **[PROFİL]** Telefonda native push yalnız `NATIVE_PUSH` kapısı (`src/push/support.ts`) açıkken vardır ve ilk mağaza sürümünde kapalıdır: `expo-notifications` Android'de bağlanmaz, ona dokunan kod yalnız `*-native.ts`te ve kapı açıkken yüklenir, bildirim ekranı "yakında" der; web push etkilenmez. Android paketi yalnız `npm run build:aab` ile (yükleme anahtarı repo dışında, parola Anahtar Zinciri'nde; izin kümesi yalnız INTERNET). · bekçi: `native-push.test.tsx` · `scripts/build-aab.mjs` doğrulaması <sub>(arşiv:2026-10-15 patron Android ilk paket)</sub>
 
 ## Dağıtım (`deploy/patron`, VDS)
 
@@ -192,7 +193,7 @@ Dağıtım (kurulum öncesi, Mac'te, CI dışı): `node deploy/patron/compose-de
 
 Uçtan uca: **Senaryo P** (plan §8 P1–P16 + sözleşme §13 P17–P25; gerçek patron bulutu + gerçek fabrika backend'i, lisans fikstürü + sahte satıcı ve iç API'si; iki `_test` DB, patron DB'si `patron/sunucu/.env`den, `migrate deploy` önceden): `cd Teks-Erp && DATABASE_URL='postgresql://…/<fabrika>_test?schema=public' node ../scripts/agir-is.mjs -- npx tsx scripts/senaryo-patron.ts [--json=<dosya>] [--son=P7] [--yalniz=P1,P3]` — ~4 dk; çıkış 0 hepsi yeşil · 1 yeşil olmayan adım · 2 hedef reddi/düzenek.
 
-Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `refresh.test.ts`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`, `web-path.test.ts`, `export.test.ts`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
+Uygulama (DB'siz): `cd patron/uygulama && node ../../scripts/agir-is.mjs -- npx jest --runInBand` — `notifications.test.tsx`, `refresh.test.ts`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`, `web-path.test.ts`, `export.test.ts`, `native-push.test.tsx`; yerel API dumanı `scripts/duman.ts` (kendi `_test` sunucusuna, `tesis-ac` + `kurulum-kaydet --sinif=URETIM --moduller=patron-bulut` + `yonetici-davet` sonrası).
 
 Yeni patron bulutu bekçisi doğduğu commit'te bu listeye VE haritanın `## patron-bulutu` bölümüne birlikte eklenir. Katalog ya da tetikleyici değişince `test_db_invariants` (TRIGGERS/EXPECTED_FUNCTIONS) de koşulur.
 

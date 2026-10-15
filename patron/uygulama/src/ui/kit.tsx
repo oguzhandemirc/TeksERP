@@ -17,8 +17,8 @@ export function Title({ children }: { children: ReactNode }) {
   return <Text style={s.title}>{children}</Text>;
 }
 
-export function Muted({ children }: { children: ReactNode }) {
-  return <Text style={s.muted}>{children}</Text>;
+export function Muted({ children, testID }: { children: ReactNode; testID?: string }) {
+  return <Text style={s.muted} testID={testID}>{children}</Text>;
 }
 
 export function Body({ children }: { children: ReactNode }) {
