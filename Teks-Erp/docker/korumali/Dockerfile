@@ -4,7 +4,8 @@
 # =============================================================================
 # Demo imajından (kök Dockerfile) FARKI: çalışma aşaması KAYNAK TAŞIMAZ — sunucu V8 bayt
 # kodu (.jsc, bytenode) + yükleyici, araçlar .jsc + küçük yükleyici (G6), native lisans çekirdeği,
-# prod node_modules, Prisma şema motoru (debian-openssl-3.0.x) ve migration SQL. src · tsx ·
+# prod node_modules, Prisma şema motoru (debian-openssl-3.0.x), migration SQL ve web paneli derlemesi
+# (`/app/dist-web`, opt-in `WEB_DIST_DIR`). src · tsx ·
 # seed .ts · .map YOK; süreç root DEĞİL; kök dosya sistemi salt-okunur koşabilir.
 #
 # ⚠ BAĞLAM DEPO KÖKÜDÜR (deploy/node-surumu.json + scripts/lib gerekir); içerik
@@ -36,6 +37,21 @@ COPY scripts/lib/node-surumu.mjs scripts/lib/node-surumu.mjs
 COPY scripts/koruma-runtime-indir.mjs scripts/koruma-runtime-indir.mjs
 RUN node scripts/koruma-runtime-indir.mjs linux-x64 /w/sahne \
   && /w/sahne/runtime/bin/node -e "console.log('runtime node', process.version, 'V8', process.versions.v8)"
+
+# ---------------------------------------------------------------------------
+# 1b) PANEL — Electron kod tabanının WEB hedefi (vite.config.web.ts); kök Dockerfile'ın panel aşamasının ikizi.
+# Çıktı imaja HEP girer, sunum yalnız `WEB_DIST_DIR` doluyken açılır (docs/design/BULUT-WEB-PANELI.md K1).
+# ---------------------------------------------------------------------------
+FROM --platform=linux/amd64 node:24-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS panel
+# Depo düzeni korunur: `build-identity.ts` ortak kimliği `../deploy/dagitim.json` + `../scripts/lib/dagitim.mjs`ten okur.
+WORKDIR /repo/Electron
+COPY Electron/package.json Electron/package-lock.json ./
+# `--ignore-scripts`: Electron ikilisi ve native donanım modüllerinin kurulum betikleri web hedefinde kullanılmaz.
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY deploy/dagitim.json /repo/deploy/dagitim.json
+COPY scripts/lib/dagitim.mjs /repo/scripts/lib/dagitim.mjs
+COPY Electron/ ./
+RUN npm run build:web
 
 # ---------------------------------------------------------------------------
 # 2) DERLE — esbuild + bytenode (.jsc) + karartılmış araçlar + prod node_modules
@@ -108,6 +124,8 @@ RUN apt-get update \
 COPY --from=derle --chown=root:root /sahne/app /app
 COPY --from=runtime-node --chown=root:root /w/sahne/runtime/bin/node /app/runtime/bin/node
 RUN ln -s /app/runtime/bin/node /usr/local/bin/node
+# Web paneli: root'a ait, salt-okunur; imzalı bütünlük kapsamı dışında (public/ gibi; imaj özeti teslimde imzalı).
+COPY --from=panel --chown=root:root /repo/Electron/dist-web /app/dist-web
 COPY --chmod=0755 Teks-Erp/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 # Güncelleyicinin GOC adımı: `compose run --rm --no-deps backend goc` (açılış betiğinin göç kipi; sunucu açılmaz).
 RUN ln -s /usr/local/bin/entrypoint.sh /usr/local/bin/goc

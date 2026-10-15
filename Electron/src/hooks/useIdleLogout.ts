@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import type { ApiBridge } from "@shared/ipc-contract";
 import { useAuthStore } from "@/store/auth";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 import { useIdleTimeoutMinutes } from "./usePricingEnabled";
 
 /** Sistem-geneli modda boşta süresi bu sıklıkla okunur (ms). */
@@ -109,7 +110,8 @@ export function useIdleLogout(): void {
     // --- MOD 2: FALLBACK (pencere-içi aktivite) ---
     // window.api.power yok (main/preload henüz güncellenmemiş) → dev restart gerekli.
     // Bu arada sessizce ölmemesi için pencere-içi hareketsizlik ile çalışır.
-    console.warn(
+    // Web panelinde bu mod ASIL moddur (sistem-geneli sayaç yok) — uyarı yalnız masaüstünde.
+    if (IS_ELECTRON) console.warn(
       "[useIdleLogout] window.api.power yok → pencere-içi hareketsizlik moduna düşüldü. " +
         "Sistem-geneli için tam dev restart (npm run dev) ile main/preload'ı yeniden derleyin.",
     );

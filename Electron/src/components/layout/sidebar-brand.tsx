@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import logoUrl from "@/assets/teks-logo-fullsize.png";
 import { useCompanyName } from "@/hooks/usePricingEnabled";
@@ -5,6 +6,7 @@ import { useUpdater } from "@/hooks/useUpdater";
 import { guncellemeRozeti } from "@/lib/updater-durum";
 import { RELEASE_NOTES_PATH } from "@/pages/ReleaseNotes/release-notes-path";
 import { useAppVersion } from "@/hooks/useAppVersion";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 import { useTabsStore } from "@/store/tabs";
 import { useServerClock } from "@/hooks/useServerClock";
 import { factoryDateTimeFormat } from "@/lib/factory-time";
@@ -98,6 +100,26 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
 
 /** Footer — ürün adı + sürüm ve güncellik durumu; tıklanınca sürüm notları açılır.
  *  Daraltılmışta "EY" (sürüm tooltip'te). */
+const VENDOR_URL = "https://etkiliyazilim.com";
+
+/** Üretici bağlantısı: Electron'da `openExternal` köprüsü (beyanlı https listesi); webde köprü
+ *  yok (ölü düğme olurdu) → düz bağlantı, yeni sekmede. */
+function VendorLink(props: { title: string; className: string; children: ReactNode; "aria-label"?: string }) {
+  const { children, ...rest } = props;
+  if (!IS_ELECTRON) {
+    return (
+      <a href={VENDOR_URL} target="_blank" rel="noopener noreferrer" {...rest}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={() => void window.api?.system?.openExternal(VENDOR_URL)} {...rest}>
+      {children}
+    </button>
+  );
+}
+
 export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   const version = useAppVersion();
   const { status } = useUpdater();
@@ -105,23 +127,18 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   // ⚠️ Eşleme tek kaynaktan (`@/lib/updater-durum`) — eskiden bu dosyada ve
   // `SurumRozeti`de BİREBİR kopyalanmıştı; kopyalar ayrışsa aynı makine aynı
   // anda iki farklı şey derdi.
-  const guncellik = guncellemeRozeti(status?.state);
-  const handleClick = () => {
-    void window.api?.system?.openExternal("https://etkiliyazilim.com");
-  };
+  const guncellik = IS_ELECTRON ? guncellemeRozeti(status?.state) : null;
 
   if (collapsed) {
     return (
       <div className="flex justify-center border-t border-border/50 py-3">
-        <button
-          type="button"
-          onClick={handleClick}
+        <VendorLink
           aria-label="Etkili Yazılım"
           title={`${PRODUCT_NAME}${version ? ` v${version}` : ""} · etkiliyazilim.com`}
           className="text-[10px] font-medium tracking-wider text-muted-foreground/50 transition-colors hover:text-foreground"
         >
           EY
-        </button>
+        </VendorLink>
       </div>
     );
   }
@@ -141,14 +158,9 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
         {version ? ` v${version}` : ""}
         {guncellik ? <span className={guncellik.sinif}> · {guncellik.metin}</span> : null}
       </button>
-      <button
-        type="button"
-        onClick={handleClick}
-        title="etkiliyazilim.com"
-        className="text-[10px] text-muted-foreground/50 transition-colors hover:text-foreground"
-      >
+      <VendorLink title="etkiliyazilim.com" className="text-[10px] text-muted-foreground/50 transition-colors hover:text-foreground">
         by Etkili Yazılım
-      </button>
+      </VendorLink>
     </div>
   );
 }

@@ -21,6 +21,7 @@ import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { relabelService } from "@/pages/Operations/RelabelStation/service";
 import { RelabelPrintForCustomer as PrintForCustomerCard } from "./PrintForCustomerCard";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 interface Props {
   rollId: string | null;
@@ -229,15 +230,17 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                   </Button>
                 )}
                 {canPrint && payload && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!hasBarcode || !scrapGateOpen || previewQuery.isLoading || printMut.isPending || sending}
-                    onClick={handlePrint}
-                    className="gap-1"
-                  >
-                    <Printer className="h-3.5 w-3.5" /> Bas
-                  </Button>
+                  <DesktopOnlyAction>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!hasBarcode || !scrapGateOpen || previewQuery.isLoading || printMut.isPending || sending}
+                      onClick={handlePrint}
+                      className="gap-1"
+                    >
+                      <Printer className="h-3.5 w-3.5" /> Bas
+                    </Button>
+                  </DesktopOnlyAction>
                 )}
                 <Button type="button" size="sm" variant="outline" onClick={() => onOpenChange(false)}>
                   Kapat

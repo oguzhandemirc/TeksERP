@@ -94,7 +94,7 @@ export function AccountingDispatchPage() {
       isDirect: r.kind === "DIRECT",
     }));
     const res = fmt === "pdf" ? await downloadDocsPdf(targets) : await downloadDocsExcel(targets);
-    if (res.ok) toast.success(`${res.count ?? targets.length} belge indirildi.`);
+    if (res.ok) toast.success(`${res.count ?? targets.length} belge ${res.printed ? "yazdırma penceresinde açıldı" : "indirildi"}.`);
     else if (res.error) toast.error(res.error);
   };
 

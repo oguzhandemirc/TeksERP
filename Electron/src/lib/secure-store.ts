@@ -7,14 +7,11 @@
  * iki hedefte de çalışır ve Electron davranışı bayt-bayt aynı kalır (api varsa
  * her çağrı ona delege edilir).
  *
- * ⚠️ BİLİNÇLİ İSTİSNA — "renderer localStorage'a TOKEN YAZMAZ" kuralı (CLAUDE.md
- * Process Boundary): o kural Electron'da `safeStorage` gibi daha güvenli bir
- * alternatif OLDUĞU için var. Tarayıcıda işletim sistemi anahtarlığına erişim yok;
- * SPA'larda JWT'nin standart yeri localStorage'dır ve XSS yüzeyine karşı savunma
- * burada değil, kullanıcı HTML'i basan iframe'lerin sandbox'ında (`lib/print.ts`)
- * ve sunucudaki `sanitizeTemplateHtml`'dedir. Bu istisnayı genişletme: Electron
- * yolunda localStorage'a düşmek YASAK olmaya devam ediyor (api varken webStore'a
- * asla düşülmez).
+ * OTURUM TOKEN'I TARAYICIDA HİÇ SAKLANMAZ (bulut web paneli K2, 2026-10-15): kimlik
+ * sunucunun httpOnly çerezindedir; `auth.token` webStore'da yazılmaz/okunmaz (silme
+ * eski demo derlemesinden kalan kaydı temizler). Panel kipi kapalı backend JSON token
+ * dönerse token yalnız `tokenStore`un bellek önbelleğinde yaşar (yenilemede ölür).
+ * Electron yolunda localStorage'a düşmek YASAK (api varken webStore'a asla düşülmez).
  */
 import type { SecureStoreApi } from "@shared/ipc-contract";
 
@@ -22,12 +19,17 @@ import type { SecureStoreApi } from "@shared/ipc-contract";
  *  kayıtlarıyla ad çakışmasın. */
 const WEB_PREFIX = "secure.";
 
+/** Tarayıcıda kalıcı depoya HİÇ girmeyen anahtar — oturum token'ı (`secure-token.ts`). */
+const WEB_NEVER_PERSIST = "auth.token";
+
 /** Tarayıcı fallback'i — SecureStoreApi ile aynı sözleşme (async imzalar). */
 const webStore: SecureStoreApi = {
   async get(key: string): Promise<string | null> {
+    if (key === WEB_NEVER_PERSIST) return null;
     return window.localStorage.getItem(WEB_PREFIX + key);
   },
   async set(key: string, value: string): Promise<void> {
+    if (key === WEB_NEVER_PERSIST) return;
     window.localStorage.setItem(WEB_PREFIX + key, value);
   },
   async delete(key: string): Promise<void> {

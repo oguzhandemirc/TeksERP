@@ -6,6 +6,7 @@
 
 import { toast } from "sonner";
 import { buildWorkbook, saveWorkbook, type SheetSpec } from "./xlsx-export";
+import { isWebPdf, printAsPdf } from "./web-pdf";
 import { XLSX_STREAM_MIN_ROWS, isStreamableSheet, streamSheetToXlsx } from "./xlsx-stream";
 import { upTo3ExcelNumFmt, upTo3Text } from "./number-format";
 import { saveTextAs } from "./file-save";
@@ -272,7 +273,7 @@ export function buildListHtml<T>(
   </body></html>`;
 }
 
-/** Satırları PDF olarak kaydeder (Electron printToPDF). PDF API yoksa false. */
+/** Satırları PDF olarak kaydeder (Electron printToPDF; webde yazdırma penceresi). PDF API yoksa false. */
 export async function exportRowsToPdf<T>(
   cols: ExportColumn<T>[],
   rows: T[],
@@ -280,11 +281,15 @@ export async function exportRowsToPdf<T>(
   notes?: string[],
 ): Promise<boolean> {
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
-  if (!pdfApi) return false;
-  // Ana süreç bayt kapısının erken aynası: dev HTML'i kurmadan Excel'e yönlendir.
+  if (!pdfApi && !isWebPdf()) return false;
+  // Ana süreç bayt kapısının erken aynası: dev HTML'i kurmadan Excel'e yönlendir (iki hedefte aynı sınır).
   if (rows.length > PDF_MAX_ROWS) {
     toast.error(pdfTooManyRowsMessage(rows.length));
     return false;
+  }
+  if (!pdfApi) {
+    printAsPdf(buildListHtml(cols, rows, filename, notes));
+    return true;
   }
   const res = await pdfApi.save({ html: buildListHtml(cols, rows, filename, notes), suggestedName: filename });
   if (!res.saved && res.error) toast.error(res.error);

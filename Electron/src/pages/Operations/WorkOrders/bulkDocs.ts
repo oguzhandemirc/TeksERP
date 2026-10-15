@@ -21,6 +21,7 @@ import { printedDocumentService, type PrintedDocType } from "@/services/printedD
 import { mergeDocsForPrint } from "@/lib/print-merge";
 import { printHtmlString } from "@/lib/print";
 import { withPdfBatchProgress } from "@/lib/pdf-batch-progress";
+import { isWebPdf, printDocsAsPdfOutcome } from "@/lib/web-pdf";
 import { workOrderService } from "./service";
 import type { WorkOrderDocument } from "./types";
 
@@ -250,11 +251,17 @@ export interface PdfOutcome {
   ok: boolean;
   count?: number;
   error?: string;
+  /** Webde PDF dosyaya yazılmadı, yazdırma penceresinde açıldı (`lib/web-pdf`). */
+  printed?: boolean;
 }
 
 /** Tek belge → kaydet diyaloğu; çok belge → klasöre her biri ayrı PDF. */
 export async function savePdfDocs(docs: FetchedDoc[]): Promise<PdfOutcome> {
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
+  if (!pdfApi && isWebPdf()) {
+    if (docs.length === 0) return { ok: false, error: "Belge yok." };
+    return printDocsAsPdfOutcome(docs.map((d) => d.html));
+  }
   if (!pdfApi) return { ok: false, error: "PDF desteği yok (masaüstü uygulaması gerekli)." };
   if (docs.length === 0) return { ok: false, error: "Belge yok." };
 

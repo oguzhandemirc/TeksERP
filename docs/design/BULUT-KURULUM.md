@@ -42,7 +42,9 @@ Bulut kurulum, fabrika kurulumunun aynısıdır. Tek fark, backend ile PostgreSQ
 
 ### 0.3 Kapsam dışı
 
-Çok kiracılı model (SaaS taslağı) · bulutta web paneli (`WEB_DIST_DIR`, bugün de yok) · tablet çevrimdışı kuyruğu (K-B2) · zamanda geri dönüş (PITR) · fabrika kurulumundan buluta veri taşıma (ilk müşteri gelince ayrı runbook olarak yazılır; yol: şifreli döküm, `--geri-yukle`, lisans taşıma akışı).
+Çok kiracılı model (SaaS taslağı) · tablet çevrimdışı kuyruğu (K-B2) · zamanda geri dönüş (PITR) · fabrika kurulumundan buluta veri taşıma (ilk müşteri gelince ayrı runbook olarak yazılır; yol: şifreli döküm, `--geri-yukle`, lisans taşıma akışı).
+
+**Web paneli kapsamdadır, opt-in (2026-10-15):** korumalı imaj `/app/dist-web`i hep taşır; panel yalnız `.env`de `WEB_DIST_DIR=/app/dist-web` iken aynı adresten sunulur (boş = kapalı, `/` durum sayfası). Oturum, CSRF, TOTP ve `web:access` sözleşmesi `BULUT-WEB-PANELI.md`. `dist-web` imzalı bütünlük kapsamının DIŞINDADIR (`public/` gibi): `/app` root'a ait ve salt-okunur, süreç 10001 kullanıcısıyla koşar, imajın özeti teslimde imzalıdır.
 
 ## 1. Mimari
 
@@ -157,7 +159,7 @@ Komut Mac'te (yönetici makinesi) koşar. **Varsayılanı kuru koşumdur:** her 
 | R8 | JWT sırrını kurulum betiği üretir (64 bayt). Örnek ya da sızmış değerler ret listesiyle reddedilir. İzinler kullanıcı satırından tazelenir. Rotasyon prosedürü runbook'tadır | Ret listesi her kurulumda (çekirdek, G20 dilimi) | G20 |
 | R9 | Bilinen parolalı seed yoktur. İlk yönetici rastgele parolayla ve zorunlu değişimle doğar. Parola politikası en az 10 karakterdir | Windows kurulumu bugünkü gibi; Docker seed'inin sabit parolası her yerde kalkar | G20 |
 | R10 | Backend'in yerel ağ çıkışı kapalıdır (§1.3). Arka uçtan ağ yazıcısına RAW TCP (`label.nativeSendEnabled`, `Teks-Erp/src/services/helpers/printer-transport.ts`) ve ağ kantarı/metre bulutta **yazılamaz ve çizilmez**. Etiket panelden ya da tabletten basılır. Yazıcı IP'si özel aralık denetiminden geçer (SSRF) | Opt-in açık | — |
-| R11 | Panelde ve tablette sunucu adresi elle yazılır ya da panelin QR'ından gelir; tablet tek ortak Play paketi olduğu için adres pakete GÖMÜLMEZ. Alan adı kanal kaydından (T1) türer. Adres değişikliği onaylıdır: tablette kaldır + yeniden ekle (kip kayda yazılı, kurulum kimliği değişirse bağlanmaz) | Keşif + elle adres | G21 |
+| R11 | Panelde ve tablette sunucu adresi elle yazılır ya da panelin QR'ından gelir (web panelinde adres yazılmaz: aynı origin, §0.3); tablet tek ortak Play paketi olduğu için adres pakete GÖMÜLMEZ. Alan adı kanal kaydından (T1) türer. Adres değişikliği onaylıdır: tablette kaldır + yeniden ekle (kip kayda yazılı, kurulum kimliği değişirse bağlanmaz) | Keşif + elle adres | G21 |
 | R12 | API yanıtlarında `Cache-Control: no-store`. Cloudflare'de host için önbellek BYPASS kuralı | Gerek yok | — |
 | R13 | Yönetim erişimi yalnız 2222'den ve yalnız anahtarla yapılır (parola girişi kapalı, `MaxAuthTries 3`, `AllowUsers` tek hesap, fail2ban; K-B10). Müşteriye kabuk yoktur. Destek amaçlı veri erişimi yalnız müşteri talebiyle olur ve kayda geçer (patron destek kalıbı) | Tailscale (bugün) | G1 · G2 |
 | R14 | Gece şifreli yedek ve başka sağlayıcıdaki kopya **zorunludur**. Yapılandırılmamışsa kurulum bitmiş sayılmaz ve sağlık özeti kırmızı olur | İsteğe bağlı | — |

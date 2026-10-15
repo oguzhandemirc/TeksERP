@@ -48,6 +48,8 @@
 //      teslim paketi elle compose'u DEĞİL güncelleyicili şablonu taşır ·
 //      §7k kurulum sınıfı (`TEKSERP_KURULUM_SINIFI`) compose'dan backend'e geçer, şablon boş, bulut örneği BARINDIRILAN.
 //      §7l PG servisi `shm_size: 256m`, her servis `logging: *gunluk` (json-file 20m × 5) — iki compose da.
+//      §7o web paneli: imaj `/app/dist-web`i özet sabitli `panel` aşamasından taşır, compose `WEB_DIST_DIR`i boş varsayılanla
+//      geçirir, şablon boş, izin listesi Electron + dağıtım kimliğini alır (node_modules/derleme artığı hariç).
 // =============================================================================
 import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -1568,6 +1570,63 @@ function konteynerBakimStatik(c: string): string[] {
   for (const [ad, s] of sondalar) {
     const uygulandi = s !== c;
     check(`§7l sonda: ${ad} → kırmızı`, uygulandi && konteynerBakimStatik(s).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
+  }
+}
+
+// §7o web paneli (BULUT-WEB-PANELI.md K1): korumalı imaj `/app/dist-web`i HEP taşır (özet sabitli `panel` aşaması,
+// root sahipli kopya), compose `WEB_DIST_DIR`i boş varsayılanla geçirir (boş = kapalı = bugünkü), şablon boş doğar,
+// bağlam izin listesi Electron kaynağını + ortak dağıtım kimliğini alır, node_modules/derleme artığını almaz.
+function webPaneliStatik(d: { dockerfile: string; ignore: string; compose: string; guncelleyici: string; envOrnek: string }): string[] {
+  const ih: string[] = [];
+  const gecis = /^ {6}WEB_DIST_DIR: \$\{WEB_DIST_DIR:-\}$/m;
+  for (const [n, c] of [["elle compose", d.compose], ["güncelleyicili compose", d.guncelleyici]] as const) {
+    if (!gecis.test(servisBloklari(c).get("backend") ?? "")) ih.push(`${n} backend'e WEB_DIST_DIR'ı boş varsayılanla geçirmiyor`);
+  }
+  if (!/^WEB_DIST_DIR=$/m.test(d.envOrnek)) ih.push(".env.ornek WEB_DIST_DIR'ı boş doğurmuyor (panel varsayılan kapalı)");
+  const panel = /^FROM (?:--platform=\S+ )?node:[\w.-]+@sha256:[0-9a-f]{64} AS panel$/m.exec(d.dockerfile);
+  if (!panel) ih.push("özet sabitli `panel` aşaması yok");
+  const pBas = d.dockerfile.search(/ AS panel$/m);
+  const pGovde = pBas < 0 ? "" : d.dockerfile.slice(pBas, d.dockerfile.indexOf("\nFROM ", pBas));
+  if (!/^RUN npm ci --ignore-scripts\b/m.test(pGovde)) ih.push("panel aşaması `npm ci --ignore-scripts` koşmuyor");
+  if (!/^RUN npm run build:web$/m.test(pGovde)) ih.push("panel aşaması `npm run build:web` koşmuyor");
+  const son = d.dockerfile.slice(d.dockerfile.lastIndexOf("\nFROM "));
+  if (!/^COPY --from=panel --chown=root:root \/repo\/Electron\/dist-web \/app\/dist-web$/m.test(son)) ih.push("çalışma aşaması `/app/dist-web`i panel aşamasından root sahipli kopyalamıyor");
+  const satirlar = d.ignore.split("\n").map((x) => x.trim());
+  for (const z of ["!Electron/**", "!deploy/dagitim.json", "!scripts/lib/dagitim.mjs"]) if (!satirlar.includes(z)) ih.push(`izin listesinde ${z} yok`);
+  const izin = satirlar.indexOf("!Electron/**");
+  for (const z of ["**/node_modules", "Electron/dist", "Electron/dist-web", "Electron/out", "Electron/release"]) {
+    const i = satirlar.indexOf(z);
+    if (i < 0 || i < izin) ih.push(`${z} izin listesinden SONRA dışlanmıyor`);
+  }
+  return ih;
+}
+{
+  const d = {
+    dockerfile: oku("Teks-Erp/docker/korumali/Dockerfile"),
+    ignore: oku("Teks-Erp/docker/korumali/Dockerfile.dockerignore"),
+    compose: oku("Teks-Erp/docker/korumali/docker-compose.yml"),
+    guncelleyici: oku(GUNCELLEYICI_COMPOSE),
+    envOrnek: oku("Teks-Erp/docker/korumali/.env.ornek"),
+  };
+  const g = webPaneliStatik(d);
+  check("§7o ⭐ web paneli: imaj /app/dist-web'i özet sabitli panel aşamasından taşır, iki compose boş varsayılanla geçirir, şablon boş, izin listesi doğru", g.length === 0, g.join(" | "));
+  const SATIR = "      WEB_DIST_DIR: ${WEB_DIST_DIR:-}\n";
+  const sondalar: Array<[string, typeof d]> = [
+    ["elle compose geçirmiyor", { ...d, compose: d.compose.replace(SATIR, "") }],
+    ["güncelleyicili compose geçirmiyor", { ...d, guncelleyici: d.guncelleyici.replace(SATIR, "") }],
+    ["varsayılan açık", { ...d, compose: d.compose.replace("${WEB_DIST_DIR:-}", "${WEB_DIST_DIR:-/app/dist-web}") }],
+    ["şablon dolu doğuyor", { ...d, envOrnek: d.envOrnek.replace(/^WEB_DIST_DIR=$/m, "WEB_DIST_DIR=/app/dist-web") }],
+    ["panel FROM özetsiz", { ...d, dockerfile: d.dockerfile.replace(/(node:24-bookworm-slim)@sha256:[0-9a-f]{64}( AS panel)/, "$1$2") }],
+    ["dist-web kopyası yok", { ...d, dockerfile: d.dockerfile.replace(/^COPY --from=panel .*\n/m, "") }],
+    ["dist-web root sahipli değil", { ...d, dockerfile: d.dockerfile.replace("COPY --from=panel --chown=root:root ", "COPY --from=panel --chown=10001:10001 ") }],
+    ["izin listesinde Electron yok", { ...d, ignore: d.ignore.replace("!Electron/**\n", "") }],
+    ["izin listesinde dagitim.mjs yok", { ...d, ignore: d.ignore.replace("!scripts/lib/dagitim.mjs\n", "") }],
+    ["node_modules dışlaması söküldü", { ...d, ignore: d.ignore.replace("**/node_modules\n", "") }],
+    ["dist-web artığı dışlanmıyor", { ...d, ignore: d.ignore.replace("Electron/dist-web\n", "") }],
+  ];
+  for (const [ad, s] of sondalar) {
+    const uygulandi = JSON.stringify(s) !== JSON.stringify(d);
+    check(`§7o sonda: ${ad} → kırmızı`, uygulandi && webPaneliStatik(s).length > 0, uygulandi ? "" : "MUTASYON UYGULANMADI");
   }
 }
 

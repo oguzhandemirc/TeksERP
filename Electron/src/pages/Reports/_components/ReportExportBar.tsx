@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { printHtmlString } from "@/lib/print";
 import { PDF_MAX_ROWS, pdfTooManyRowsMessage } from "@shared/pdf-limits";
+import { isWebPdf, printAsPdf } from "@/lib/web-pdf";
 import { buildReportHtml, reportRowCount, slugifyFileName, toSheets, type ReportExportSpec } from "./reportExport";
 
 interface Props {
@@ -25,6 +26,7 @@ interface Props {
 export function ReportExportBar({ buildSpec, disabled }: Props) {
   const [busy, setBusy] = useState<null | "xlsx" | "pdf">(null);
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
+  const webPdf = !pdfApi && isWebPdf();
 
   const onExcel = async () => {
     const spec = buildSpec();
@@ -43,13 +45,14 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
 
   const onPdf = async () => {
     const spec = buildSpec();
-    if (!spec || !pdfApi) return;
+    if (!spec || (!pdfApi && !webPdf)) return;
     // Ana süreç bayt kapısının erken aynası: dev rapor HTML'i hiç kurulmaz.
     const rows = reportRowCount(spec);
     if (rows > PDF_MAX_ROWS) {
       toast.error(pdfTooManyRowsMessage(rows, "Rapor"));
       return;
     }
+    if (!pdfApi) return printAsPdf(buildReportHtml(spec));
     setBusy("pdf");
     try {
       const res = await pdfApi.save({
@@ -76,9 +79,8 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
       <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={disabled || busy !== null} onClick={onExcel}>
         <FileSpreadsheet className="h-4 w-4" /> {busy === "xlsx" ? "Excel…" : "Excel"}
       </Button>
-      {/* PDF yalnız Electron'da var (main süreçteki printToPDF). Web'de butonu
-          çizmek, tıklayınca hiçbir şey olmayan bir vaat olurdu. */}
-      {pdfApi ? (
+      {/* PDF Electron'da main süreçteki printToPDF; webde yazdırma penceresi (`lib/web-pdf`). */}
+      {pdfApi || webPdf ? (
         <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={disabled || busy !== null} onClick={onPdf}>
           <FileDown className="h-4 w-4" /> {busy === "pdf" ? "PDF…" : "PDF"}
         </Button>

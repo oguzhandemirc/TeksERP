@@ -123,7 +123,7 @@ shred -u ozel/<ad>.tkkey
 - **Vekil arkasında** `.env`e `TRUST_PROXY=1` ve `RATE_LIMIT_ENABLED=true` yazılır (compose ikisini de backend'e geçirir; §10 örneği kendisi koyar). Yazılmazsa Docker köprüsü ve vekil bütün istemcileri TEK adres gösterir: bir kişinin hatalı girişi herkesi kilitler, hız sınırı da kapalı kalır. `TRUST_PROXY=1` yalnız port `127.0.0.1`deyken ve vekil `X-Forwarded-For`u gerçek adresle EZERKEN güvenlidir. `true` istemcinin yazdığı başlığa güvenir; backend bu durumda uyarı basar. Vekilsiz kurulumda ikisi de boş kalır (bugünkü davranış).
 - Postgres portu dışarı açılmaz (yalnız compose ağı). Uzak erişim tüneli 2026-09-30'da emekli (B6); patron erişimi patron bulutundandır.
 - Servisler `cap_drop: ALL`, `no-new-privileges`, salt-okunur kök ile koşar; yazılabilir yerler yalnız birimler + `/tmp`.
-- Web paneli (`WEB_DIST_DIR`) bu imajda YOK: panel Electron'dan ve tabletten bağlanır; `/` durum sayfasıdır.
+- Web paneli imajda HEP durur (`/app/dist-web`) ama varsayılan KAPALIDIR: `/` durum sayfasıdır, panel Electron'dan ve tabletten bağlanır. Açmak için `yapilandirma/.env`e `WEB_DIST_DIR=/app/dist-web` yazılır ve `docker compose up -d` koşulur; panel aynı adresten (`https://<ad>/`) açılır, giriş TOTP + `web:access` ister (`docs/design/BULUT-WEB-PANELI.md`). Kapatmak: değeri boşalt, `up -d`.
 
 ## 8. İmza
 
@@ -214,7 +214,7 @@ Yalnız bizim kurup yönettiğimiz sunucular içindir (deneme, demo, bulut kurul
 6. **Sına:** sunucuda `curl -fsS --resolve <ad>.etkiliyazilim.com:443:127.0.0.1 -k https://<ad>.etkiliyazilim.com/health` UP döner, `curl -sk https://127.0.0.1/health` el sıkışmada reddedilir. Bundan SONRA DNS A kaydı (turuncu) açılır. Dışarıdan: ad üzerinden `/health` UP; `--resolve <ad>…:443:<sunucu IP>` ile doğrudan IP zaman aşımına uğrar (ufw Cloudflare dışını düşürür).
    Mac'teki provada (Docker Desktop) konak ağı Linux sanal makinesinin ağıdır, Mac'in 443'ü DEĞİLDİR: Mac'ten `curl` bağlanamaz. Sınama kenarın içinden yapılır (nginx imajında `curl` var): `docker compose exec kenar curl -fsS --resolve <ad>:443:127.0.0.1 -k https://<ad>/health` UP · `docker compose exec kenar curl -sk https://127.0.0.1/health` çıkış 35 (el sıkışma reddi).
 7. **Güncelleme ve geri alma:** paketteki `docker-compose.yml` güncelleyicili şablondur ve elle kuruluma konmaz. `docker-compose.yml` ile `docker-compose.override.yml` paketin commit'indeki depodan yenilenir (§3 madde 3); `kenar/` ve `.env` yerinde kalır. Geri almada (§6) `kenar` de durdurulur.
-- Panel ve tablet bu ada internet kipinde bağlanır (genel CA, 443; tablet vc61+ — `docs/kurallar/kesif-cihaz.md`).
+- Panel ve tablet bu ada internet kipinde bağlanır (genel CA, 443; tablet vc61+ — `docs/kurallar/kesif-cihaz.md`). Web paneli açıksa (§7) tarayıcı da aynı adı açar; kenar `location /`u olduğu gibi geçirir, ek ayar gerekmez.
 
 ## 11. Güncelleyici düzenine geçiş (`gecis`)
 

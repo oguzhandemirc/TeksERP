@@ -38,6 +38,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { usePackingGroupMode, usePackingGroupsEnabled, useShippingManualWeightRestrictedEnabled } from "@/hooks/usePricingEnabled";
 import { useAttemptToken } from "@/lib/attemptToken";
 import type { EditorTarget } from "./types";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 /** Editör hedefine geri yazılan yama — müşteri/şube (ReassignCustomerDialog) ya da parti/ambalaj no. */
 export type EditorPatch = Partial<
@@ -286,21 +287,23 @@ export function SackEditorView({
               {/* TEK DOKUNUŞ tartı: kantardan oku → doğrudan kaydet (diyalog YOK).
                   Elle giriş yanındaki ⌄ menüsünde — kantar bozuksa kaçış yolu. */}
               <div className="flex">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-r-none border-r-0"
-                  disabled={sackWeigh.busy}
-                  title={
-                    sackWeigh.hasScale
-                      ? "Kantardan oku ve kaydet"
-                      : "Kantar tanımlı değil — ⌄ menüsünden elle girin"
-                  }
-                  onClick={() => data && void sackWeigh.weigh({ id: data.id, sackNo: data.sackNo })}
-                >
-                  <Scale className={cn("mr-1 h-4 w-4", sackWeigh.busy && "animate-pulse")} />
-                  {sackWeigh.busy ? "Tartılıyor…" : "Tart"}
-                </Button>
+                <DesktopOnlyAction>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-r-none border-r-0"
+                    disabled={sackWeigh.busy}
+                    title={
+                      sackWeigh.hasScale
+                        ? "Kantardan oku ve kaydet"
+                        : "Kantar tanımlı değil — ⌄ menüsünden elle girin"
+                    }
+                    onClick={() => data && void sackWeigh.weigh({ id: data.id, sackNo: data.sackNo })}
+                  >
+                    <Scale className={cn("mr-1 h-4 w-4", sackWeigh.busy && "animate-pulse")} />
+                    {sackWeigh.busy ? "Tartılıyor…" : "Tart"}
+                  </Button>
+                </DesktopOnlyAction>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button

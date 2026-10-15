@@ -459,6 +459,7 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
 export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: string }> = [
   { code: "admin:*", reason: "Wildcard — tek tek ekran beyanı anlamsız." },
   { code: "mobile:*", reason: "Wildcard — tüm mobil ekranları kapsar." },
+  { code: "web:access", reason: "Giriş kanalı izni (bulut web paneli) — ekran açmaz, çerezli web girişinin kapısıdır (BULUT-WEB-PANELI.md K4)." },
   // Dokuma P2b (2026-09-13): koşum yazma yüzeyi backend'de doğdu, ekranı tablet
   // TEZGAH ekranıdır (DOKUMA-IS-EMRI §3.2) ve henüz yok. Ekran doğduğu gün bu iki
   // satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.

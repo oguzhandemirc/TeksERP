@@ -17,6 +17,8 @@ import { useAuthStore } from "@/store/auth";
 import { useLicenseSuspension } from "@/lib/license/suspension";
 import { useActivationLock } from "@/lib/license/activation-lock";
 import { tokenStore } from "@/lib/secure-token";
+import { IS_ELECTRON } from "@/lib/runtime-env";
+import { probeWebSession } from "@/lib/web-session";
 import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
 import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
@@ -50,9 +52,20 @@ function AuthHydrator() {
   const setUser = useAuthStore((s) => s.setUser);
   const setHydrated = useAuthStore((s) => s.setHydrated);
   const refreshSystemAccount = useAuthStore((s) => s.refreshSystemAccount);
+  const applyAccountFlags = useAuthStore((s) => s.applyAccountFlags);
 
   useEffect(() => {
     void (async () => {
+      if (!IS_ELECTRON) {
+        // Web: kimlik httpOnly çerezde, JWT çözülmez — sunucuya sorulur (401 → giriş ekranı).
+        const session = await probeWebSession();
+        if (session) {
+          setUser(session.user);
+          applyAccountFlags(session.me);
+        }
+        setHydrated(true);
+        return;
+      }
       const token = await tokenStore.get();
       if (token) {
         const decoded = decodeJwt(token);
@@ -71,7 +84,7 @@ function AuthHydrator() {
       }
       setHydrated(true);
     })();
-  }, [setUser, setHydrated, refreshSystemAccount]);
+  }, [setUser, setHydrated, refreshSystemAccount, applyAccountFlags]);
 
   return null;
 }

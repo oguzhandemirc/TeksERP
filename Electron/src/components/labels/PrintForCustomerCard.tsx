@@ -12,6 +12,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { labelService } from "@/services/labelService";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import type { RelabelContext } from "@/pages/Operations/RelabelStation/types";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 /**
  * "B müşterisi için yeniden bas" — etiket A için basılmış ama mal B'ye gidecek.
@@ -204,16 +205,18 @@ export function RelabelPrintForCustomer({
               : "Topun mevcut etiketi basılacak"}
         </div>
         {canPrint ? (
-          <Button
-            type="button"
-            size="sm"
-            disabled={!hasBarcode || previewQuery.isLoading || printMut.isPending || sending}
-            onClick={handlePrint}
-            className="gap-1"
-          >
-            <Printer className="h-3.5 w-3.5" />
-            {printMut.isPending ? "Basılıyor..." : "Bas"}
-          </Button>
+          <DesktopOnlyAction>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!hasBarcode || previewQuery.isLoading || printMut.isPending || sending}
+              onClick={handlePrint}
+              className="gap-1"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              {printMut.isPending ? "Basılıyor..." : "Bas"}
+            </Button>
+          </DesktopOnlyAction>
         ) : (
           <span className="text-xs text-muted-foreground">Basım yetkiniz yok</span>
         )}

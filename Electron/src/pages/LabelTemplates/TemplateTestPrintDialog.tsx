@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CopiesInput } from "./CopiesInput";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 interface Props {
   open: boolean;
@@ -125,14 +126,16 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
                 <p className="text-xs text-muted-foreground">
                   Yazıcı: <span className="font-mono">{lpCfg?.path}</span>
                 </p>
-                <Button
-                  type="button"
-                  disabled={sending}
-                  onClick={() => void doSend(lpCfg?.transport ?? "serial", lpCfg!.path!, lpCfg?.baudRate)}
-                  className="gap-1"
-                >
-                  <Printer className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Bu PC'deki yazıcıya bas"}
-                </Button>
+                <DesktopOnlyAction>
+                  <Button
+                    type="button"
+                    disabled={sending}
+                    onClick={() => void doSend(lpCfg?.transport ?? "serial", lpCfg!.path!, lpCfg?.baudRate)}
+                    className="gap-1"
+                  >
+                    <Printer className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Bu PC'deki yazıcıya bas"}
+                  </Button>
+                </DesktopOnlyAction>
               </div>
             ) : (
               <p className="text-xs text-amber-600 dark:text-amber-500">
@@ -153,14 +156,16 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
                   className="font-mono"
                 />
               </div>
-              <Button
-                type="button"
-                disabled={!printerIp.trim() || sending || !printerApi}
-                onClick={() => void doSend("tcp", printerIp.trim())}
-                className="gap-1"
-              >
-                <Send className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Gönder"}
-              </Button>
+              <DesktopOnlyAction>
+                <Button
+                  type="button"
+                  disabled={!printerIp.trim() || sending || !printerApi}
+                  onClick={() => void doSend("tcp", printerIp.trim())}
+                  className="gap-1"
+                >
+                  <Send className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Gönder"}
+                </Button>
+              </DesktopOnlyAction>
             </div>
           )}
 

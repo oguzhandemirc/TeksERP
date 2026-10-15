@@ -16,7 +16,7 @@ import {
   isTotpRequired,
 } from "@/lib/totp-auth";
 import { useAuthStore } from "@/store/auth";
-import { canEnterApp, type ExistingSessionInfo } from "@/types/auth";
+import { canEnterApp, type ExistingSessionInfo, type JwtPayload, type LoginResponse } from "@/types/auth";
 import { usePasswordChangeStep } from "./usePasswordChangeStep";
 
 /**
@@ -48,6 +48,26 @@ function toastUnhandledLoginError(err: unknown): void {
       (err.response ? "Giriş yapılamadı." : "Sunucuya ulaşılamıyor."))
     : "Giriş yapılamadı.";
   toast.error(message);
+}
+
+/**
+ * Başarılı girişin kimliğini benimser. Çerez kipinde (bulut web paneli) token YOK: kimlik
+ * sunucunun httpOnly çerezinde, kullanıcı cevaptaki `user`dan. Token gelirse (Electron ya da
+ * panel kipi kapalı backend) eski yol: token depoya (webde yalnız bellek) ve JWT çözümü.
+ */
+async function adoptLoginSession(data: LoginResponse["data"]): Promise<JwtPayload> {
+  if (data.cookieSession === true || !data.token) return data.user;
+  await tokenStore.set(data.token);
+  return decodeJwt(data.token) ?? data.user;
+}
+
+/** Girişe izin verilmeyen oturumu bırakır: token yolunda yerel silme, çerez yolunda sunucu çıkışı. */
+async function dropLoginSession(data: LoginResponse["data"]): Promise<void> {
+  if (data.cookieSession === true || !data.token) {
+    await authService.logout().catch(() => undefined);
+    return;
+  }
+  await tokenStore.clear();
 }
 
 export function useLoginFlow() {
@@ -87,13 +107,12 @@ export function useLoginFlow() {
         // ⑤ Token yalnız bellekte: yeni parola belirlenmeden uygulamaya girilmez.
         setConflict(null);
         setTotp(null);
-        passwordChange.open(res.data.token, values);
+        passwordChange.open(res.data.token ?? null, values);
         return;
       }
-      await tokenStore.set(res.data.token);
-      const decoded = decodeJwt(res.data.token) ?? res.data.user;
+      const decoded = await adoptLoginSession(res.data);
       if (!canEnterApp(decoded.permissions)) {
-        await tokenStore.clear();
+        await dropLoginSession(res.data);
         toast.error("Bu uygulamayı kullanma yetkin yok. Yöneticine başvur.");
         return;
       }

@@ -93,9 +93,9 @@ export const ELECTRON_VERSION_POLICY: ClientVersionPolicy = {
 
 /**
  * WEB PANELİ — Electron renderer'ının tarayıcıda koşan ikizi (`npm run build:web`
- * → `dist-web`, `WEB_DIST_DIR` ile aynı origin'den servis edilir). Bugün yalnız
- * DEMO imajında yaşar (`Dockerfile`: panel ve backend AYNI imajda derlenir);
- * fabrika paketi web panelini taşımaz (uzaktan erişim tüneli B6'da kalktı).
+ * → `dist-web`, `WEB_DIST_DIR` ile aynı origin'den servis edilir). Yalnız Docker
+ * imajlarında yaşar (demo `Dockerfile` + korumalı bulut imajı, opt-in; panel ve backend
+ * AYNI imajda derlenir); Windows fabrika paketi web panelini taşımaz (B6).
  *
  * ⚠️ ELECTRON POLİTİKASININ TAKMASI DEĞİL, AYRI BİR EKSEN: panel kendi
  * güncelleyicisiyle gelir, web paneli backend'le aynı imajda. Drift bu yüzden

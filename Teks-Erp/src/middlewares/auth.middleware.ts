@@ -20,6 +20,13 @@ import {
   completeSealRow,
   SEAL_SCALAR_SELECT,
 } from "../services/helpers/system-account-seal.helper";
+import { ClientType } from "@prisma/client";
+import {
+  clearSessionCookie,
+  hasCsrfHeader,
+  isSafeMethod,
+  readRequestToken,
+} from "../lib/web-session-cookie";
 
 /**
  * Session.lastSeenAt yazımını cihaz başına (jti) kısıtla — her istekte DB update
@@ -108,6 +115,21 @@ export function resetSessionTouchCacheForTest(): void {
 }
 
 /**
+ * Kimlik bilgisi: `Authorization: Bearer` (RFC 6750 §2.1, şema büyük/küçük harf duyarsız); başlık
+ * YOKSA bulut web panelinin `tekserp_oturum` çerezi (başlık varsa çerez HİÇ okunmaz). Çerez tarayıcıca
+ * kendiliğinden gider → durum değiştiren çerezli istek aynı-origin JS'in koyabildiği başlığı taşımalı (CSRF).
+ */
+function readCredential(req: Request): { token: string; viaCookie: boolean } | AppError {
+  const credential = readRequestToken(req);
+  if (!credential) return AppError.unauthorized("Token bulunamadı. Authorization header gerekli.");
+  const viaCookie = credential.via === "cookie";
+  if (viaCookie && !isSafeMethod(req.method) && !hasCsrfHeader(req)) {
+    return AppError.forbidden("Güvenlik başlığı eksik. Sayfayı yenileyip tekrar deneyin.", { code: "CSRF_REQUIRED" });
+  }
+  return { token: credential.token, viaCookie };
+}
+
+/**
  * Middleware: Verify JWT token from Authorization header.
  * Sets `req.user` with decoded JwtPayload on success.
  *
@@ -120,20 +142,13 @@ export function resetSessionTouchCacheForTest(): void {
  */
 async function authenticate(
   req: Request,
+  res: Response,
   next: NextFunction,
   allowPasswordChangePending: boolean,
 ): Promise<void> {
-  const authHeader = req.headers.authorization;
-
-  // RFC 6750 §2.1: scheme adı case-insensitive ("Bearer" = "bearer" = "BEARER").
-  // Header: `<scheme> <token>` — scheme'i case-insensitive doğrula, sonra
-  // boşluktan sonraki token'ı al.
-  const match = authHeader?.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    return next(AppError.unauthorized("Token bulunamadı. Authorization header gerekli."));
-  }
-
-  const token = match[1].trim();
+  const credential = readCredential(req);
+  if (credential instanceof AppError) return next(credential);
+  const { token, viaCookie } = credential;
 
   try {
     const payload = AuthService.verifyToken(token);
@@ -174,14 +189,15 @@ async function authenticate(
       // zaten ağır bir olay; ama `Session.userId` kolonu ELDEYKEN kontrol
       // etmemek bedava bir katmanı boşa bırakmaktı. Ek maliyet: sıfır (aynı
       // sorguda bir kolon).
-      select: { revokedAt: true, revokeReason: true, userId: true, expiresAt: true },
+      select: { revokedAt: true, revokeReason: true, userId: true, expiresAt: true, deviceType: true },
     });
     if (!session) {
       throw AppError.unauthorized("Oturum kaydı bulunamadı. Tekrar giriş yapın.", {
         code: "SESSION_INVALID",
       });
     }
-    if (session.userId !== payload.userId) {
+    // Çerez yalnız WEB oturumunu taşır: Electron/tablet token'ı çereze konsa da kabul edilmez (aynı kod/ileti).
+    if (session.userId !== payload.userId || (viaCookie && session.deviceType !== ClientType.WEB)) {
       // Aynı kod + aynı mesaj: "hangi oturum kimin" bilgisini dışarı SIZDIRMAZ
       // (ayrı bir kod/mesaj, saldırgana jti'nin geçerli ama sahibinin farklı
       // olduğunu söyleyen bir orakül olurdu).
@@ -229,13 +245,15 @@ async function authenticate(
     touchSessionLastSeen(payload.jti, readClientVersionHeader(req.headers));
     next();
   } catch (error) {
+    // Ölü çerez tarayıcıda kalmasın (başlık henüz gönderilmediyse).
+    if (viaCookie && error instanceof AppError && error.statusCode === 401 && !res.headersSent) clearSessionCookie(res);
     next(error);
   }
 }
 
 /** Kimliği doğrulanmış her uç; zorunlu parola değişimi bekleyen hesaba 403 PASSWORD_CHANGE_REQUIRED. */
-export const verifyToken = (req: Request, _res: Response, next: NextFunction): Promise<void> =>
-  authenticate(req, next, false);
+export const verifyToken = (req: Request, res: Response, next: NextFunction): Promise<void> =>
+  authenticate(req, res, next, false);
 
 /**
  * Parola değişimi bekleyen hesabın da geçebildiği kapı — YALNIZ /auth/me, /auth/logout,
@@ -243,6 +261,6 @@ export const verifyToken = (req: Request, _res: Response, next: NextFunction): P
  */
 export const verifyTokenAllowPasswordChange = (
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction,
-): Promise<void> => authenticate(req, next, true);
+): Promise<void> => authenticate(req, res, next, true);

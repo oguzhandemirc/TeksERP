@@ -13,6 +13,7 @@ import { buildSackDumpSheets } from "./dumpSheets";
 import { dumpRowCount, type SackDump, type SackDumpOptions } from "./types";
 import { factoryDayKey } from "@/lib/factory-time";
 import { PDF_MAX_ROWS } from "@shared/pdf-limits";
+import { isWebPdf, printAsPdf } from "@/lib/web-pdf";
 
 // Yazdır/PDF üst sınırı ortak PDF kapısının satır aynasıdır: 200 çuval × onlarca top
 // bu sınıra ulaşabilir → Excel'e yönlendir.
@@ -52,10 +53,11 @@ export function printSackDump(dumps: SackDump[], opts?: SackDumpOptions): void {
   printHtmlString(buildSackDumpHtml(dumps, opts));
 }
 
-/** PDF dosyası olarak kaydet (Electron printToPDF + kaydet dialoğu). */
+/** PDF dosyası olarak kaydet (Electron printToPDF + kaydet dialoğu; webde yazdırma penceresi). */
 export async function saveSackDumpPdf(dumps: SackDump[], opts?: SackDumpOptions): Promise<void> {
   if (!guardEmpty(dumps) || !withinPrintLimit(dumps)) return;
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
+  if (!pdfApi && isWebPdf()) return printAsPdf(buildSackDumpHtml(dumps, opts));
   if (!pdfApi) {
     toast.error("PDF desteği yok (masaüstü uygulaması gerekli).");
     return;

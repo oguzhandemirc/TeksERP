@@ -14,6 +14,7 @@ import { activationLockClassOf, useActivationLock } from "@/lib/license/activati
 import { licenseModuleKey, licenseModuleLabel } from "@/lib/license/ceiling";
 import { PASSWORD_CHANGE_REQUIRED_CODE } from "@/types/auth";
 import { createRequestHold } from "@/lib/sunucu-kesintisi";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 
 /**
  * KURULUM KARARI olan 403'ler yetki sorunu değildir — "yetkiniz yok" kullanıcıyı rolünü
@@ -89,6 +90,10 @@ function readDateHeader(headers: unknown): string | undefined {
 export const DEFAULT_API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000";
 
+/** Çerez kimliğinde CSRF kanıtı — yalnız web hedefi, güvenli olmayan yöntemlerde. */
+export const CSRF_HEADER = "X-TeksERP-CSRF";
+const SAFE_METHODS = new Set(["get", "head", "options"]);
+
 const apiClient = axios.create({
   baseURL: DEFAULT_API_BASE_URL,
   timeout: DEFAULT_TIMEOUT_MS,
@@ -121,6 +126,11 @@ apiClient.interceptors.request.use(async (config) => {
   // oturumun token'ıyla gidip YENİ oturumu iptal ederdi.
   if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // Web paneli kimliği httpOnly çerezde taşır (çerez kipinde token yok → Bearer de yok); durum değiştiren
+  // her istek CSRF başlığı ister (sözleşme BULUT-WEB-PANELI.md); Electron göndermez.
+  if (!IS_ELECTRON && !SAFE_METHODS.has((config.method ?? "get").toLowerCase())) {
+    config.headers[CSRF_HEADER] = "1";
   }
   // İSTEMCİ KÜNYESİ (`X-Client-*`) — Sistem → Bağlı İstemciler ekranını besler.
   // BİLGİLENDİRME, kimlik kanıtı DEĞİL; sunucuda hiçbir kapı bu başlıklara

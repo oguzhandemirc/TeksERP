@@ -118,6 +118,7 @@ import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
 import { licenseGate } from "./middlewares/license.middleware";
+import { isWebPanelMode } from "./lib/web-session-cookie";
 import { clientInfoMiddleware } from "./middlewares/client-info.middleware";
 import {
   readWebHardeningConfig,
@@ -172,7 +173,10 @@ if (hardening.trustProxy !== null) {
 // paneli build'i (Electron/dist-web) ayni origin'den servis edilir — panel ile
 // API tek adreste bulusur (CORS/mixed-content/adres-ayari uclusu tamamen duser).
 // Degisken YOKKEN davranis bayt-bayt bugunku gibidir; fabrika deploy'u etkilenmez.
-const webDistDir = process.env.WEB_DIST_DIR ?? null;
+// Kip kararı tek yerde (`isWebPanelMode`: boş/boşluk = kapalı); giriş, kimlik ve lisans kapısı aynı yüklemi okur.
+const webDistDir = isWebPanelMode() ? (process.env.WEB_DIST_DIR ?? "").trim() : null;
+const WEB_NO_STORE = "no-store";
+const WEB_IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
 
 // HSTS + CSP `upgrade-insecure-requests` yalnız operatör HTTPS beyan ettiğinde
 // (`HTTPS_ENABLED`): HTTP-only LAN'da aynı başlıklar paneli kırar ve geri dönüş
@@ -201,10 +205,13 @@ function buildHelmet(httpsMode: boolean): express.RequestHandler {
               fontSrc: ["'self'", "data:"],
               frameSrc: ["'self'", "blob:"],
               workerSrc: ["'self'", "blob:"],
+              // Panel kimliği çerezde (BULUT-WEB-PANELI.md): başka sitenin çerçevesine gömülmez (clickjacking).
+              frameAncestors: ["'none'"],
             }
           : {}),
       },
     },
+    ...(webDistDir ? { frameguard: { action: "deny" as const } } : {}),
     // HSTS: HTTP-only LAN kurulumunda yalnizca anlamsiz DEGIL, TEHLIKELIDIR —
     // tarayici basligi bir kez gordugunde o host icin https'i AYLARCA zorunlu
     // kilar; sunucu 443 dinlemedigi icin panel acilmaz ve geri donus sunucuda
@@ -319,8 +326,17 @@ if (hardening.swaggerEnabled) {
 // Web paneli statigi DURUM SAYFASINDAN ONCE baglanir: panel modunda kok (/)
 // artik paneldir (durum bilgisi /health'te yasamaya devam eder). Env yokken bu
 // blok hic kosmaz ve kok, asagidaki durum sayfasidir.
+// Önbellek: özetli `assets/*` değişmez (uzun önbellek); index.html ve özetsiz her dosya her açılışta
+// tazelenir — yoksa yeni sürümden sonra tarayıcı eski index'in artık olmayan asset'lerini ister.
 if (webDistDir) {
-  app.use(express.static(webDistDir));
+  const webAssetsDir = path.resolve(webDistDir, "assets") + path.sep;
+  app.use(
+    express.static(webDistDir, {
+      setHeaders: (res, dosya) => {
+        res.setHeader("Cache-Control", path.resolve(dosya).startsWith(webAssetsDir) ? WEB_IMMUTABLE_CACHE : WEB_NO_STORE);
+      },
+    }),
+  );
 }
 
 const publicDir = path.join(process.cwd(), "public");
@@ -688,6 +704,7 @@ if (webDistDir) {
     // `root` opsiyonu SART: mutlak yol verilirse `send` yolun ICINDEKI nokta
     // segmentlerini (orn. gelistirme worktree'sindeki `.claude/`) gizli dosya
     // sayip 404 uretir; root'a gore "index.html" ise nokta segmenti tasimaz.
+    res.setHeader("Cache-Control", WEB_NO_STORE);
     res.sendFile("index.html", { root: webDistDir });
   });
 }

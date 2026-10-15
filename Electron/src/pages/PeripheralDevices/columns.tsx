@@ -3,6 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 import { testPeripheral } from "./service";
 import {
   connectionTypeLabels,
@@ -39,9 +40,11 @@ function TestCell({ device }: { device: PeripheralDevice }) {
     }
   };
   return (
-    <Button size="sm" variant="outline" disabled={busy} onClick={run}>
-      Test
-    </Button>
+    <DesktopOnlyAction>
+      <Button size="sm" variant="outline" disabled={busy} onClick={run}>
+        Test
+      </Button>
+    </DesktopOnlyAction>
   );
 }
 

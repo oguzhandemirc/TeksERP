@@ -51,6 +51,8 @@ import {
 } from "./helpers/credential-reveal.helper";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
+import { cookieLoginApplies } from "../lib/web-session-cookie";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -512,7 +514,15 @@ export class AuthService {
     const status = await TotpAccountService.getStatus(userId);
     const shortPath = via !== "password";
     let isSystemAccount = false;
-    if (shortPath) {
+    // Bulut web paneli (çerez kipi, K4): giriş yolu ne olursa olsun TOTP zorunlu; kurulmamışsa giriş yok.
+    if (cookieLoginApplies(ctx?.clientType)) {
+      if (!status.enabled) {
+        throw AppError.forbidden(
+          "Web paneline giriş için iki adımlı doğrulama kurulmalı. Yöneticinizden kurulum bağlantısı isteyin.",
+          { code: "TOTP_ENROLLMENT_REQUIRED" },
+        );
+      }
+    } else if (shortPath) {
       const row = await prisma.user.findUnique({ where: { id: userId }, select: { isSystemAccount: true } });
       isSystemAccount = row?.isSystemAccount === true;
       if (isSystemAccount && !status.enabled) {
@@ -605,6 +615,13 @@ export class AuthService {
         "Bu hesabın masaüstü paneline erişimi yok. Yalnızca mobil uygulamada kullanılabilir.",
         { code: "CHANNEL_DENIED", channel: "desktop" },
       );
+    }
+
+    // Bulut web paneli (çerez kipi, K4): kanal izni ayrıca aranır; `admin:*` vermez, süperadmin `*` verir.
+    if (cookieLoginApplies(ctx?.clientType) && !matchesPermission(permissions, "web:access")) {
+      throw AppError.forbidden("Bu hesabın web paneline erişim izni yok. Masaüstü uygulamasından giriş yapın.", {
+        code: "WEB_ACCESS_DENIED",
+      });
     }
 
     // Oturum zaman aşımı TEK ayar: auth.autoLogoutOnExpiry.

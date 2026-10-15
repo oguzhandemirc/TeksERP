@@ -20,6 +20,10 @@ vi.mock("@/services/authService", () => ({
   },
 }));
 
+// Hedef: masaüstü varsayılan (sözleşme Electron'da bayt-bayt aynı); web dalı aşağıda çevrilir.
+const rt = vi.hoisted(() => ({ IS_ELECTRON: true }));
+vi.mock("@/lib/runtime-env", () => rt);
+
 import { useAuthStore } from "./auth";
 import { tokenStore } from "@/lib/secure-token";
 import { authService } from "@/services/authService";
@@ -28,6 +32,7 @@ const fakeUser = { userId: "a", username: "admin", permissions: [] } as never;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  rt.IS_ELECTRON = true;
   useAuthStore.setState({ user: fakeUser });
 });
 
@@ -64,6 +69,15 @@ describe("local-first logout", () => {
     expect(useAuthStore.getState().user).toBeNull();
     await new Promise((r) => setTimeout(r, 10));
     expect(authService.logout).not.toHaveBeenCalled();
+  });
+
+  it("⭐ web (çerez oturumu): token YOK ama revoke yine gider — başlıksız, çerez sunucuda silinir", async () => {
+    rt.IS_ELECTRON = false;
+    (tokenStore.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    await useAuthStore.getState().logout();
+    expect(useAuthStore.getState().user).toBeNull();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(authService.logout).toHaveBeenCalledWith(null);
   });
 
   it("tokenStore.clear reddetse bile logout RESOLVE eder (çağıran #/login'e geçebilir)", async () => {

@@ -1,7 +1,9 @@
 import { printedDocumentService } from "@/services/printedDocumentService";
-import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
+import { buildWorkbook, downloadWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { docTablesToSheets, type DocTablesPayload } from "@/lib/doc-tables-export";
 import { withPdfBatchProgress } from "@/lib/pdf-batch-progress";
+import { isWebPdf, printDocsAsPdfOutcome } from "@/lib/web-pdf";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 import { accountingDispatchService } from "@/pages/Operations/AccountingDispatch/service";
 import {
   buildDispatchReportSheets,
@@ -31,6 +33,8 @@ export interface ExportOutcome {
   ok: boolean;
   count?: number;
   error?: string;
+  /** Webde PDF dosyaya yazılmadı, yazdırma penceresinde açıldı (`lib/web-pdf`). */
+  printed?: boolean;
 }
 
 const docTypeOf = (t: DocTarget) =>
@@ -97,6 +101,12 @@ export async function buildDispatchWorkbook(
 /** Seçili sevkiyatların belgesini PDF olarak indir: tek → kaydet dialoğu; çok → klasör. */
 export async function downloadDocsPdf(targets: DocTarget[]): Promise<ExportOutcome> {
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
+  if (!pdfApi && isWebPdf()) {
+    if (targets.length === 0) return { ok: false, error: "Sevkiyat seçilmedi." };
+    const htmls: string[] = [];
+    for (const t of targets) htmls.push(await printedDocumentService.getHtml(docTypeOf(t), t.id));
+    return printDocsAsPdfOutcome(htmls);
+  }
   if (!pdfApi) return { ok: false, error: "PDF desteği yok (masaüstü uygulaması gerekli)." };
   if (targets.length === 0) return { ok: false, error: "Sevkiyat seçilmedi." };
 
@@ -115,6 +125,18 @@ export async function downloadDocsPdf(targets: DocTarget[]): Promise<ExportOutco
   return { ok: res.saved, count: res.count, error: res.error };
 }
 
+/** Webde klasöre toplu yazım yok: her fiş tarayıcı indirmesiyle tek tek iner. */
+async function downloadEachWorkbook(targets: DocTarget[]): Promise<ExportOutcome> {
+  let count = 0;
+  for (const t of targets) {
+    const blob = await buildDispatchWorkbook(t);
+    if (!blob) continue;
+    downloadWorkbook(blob, t.shipmentNo);
+    count += 1;
+  }
+  return count > 0 ? { ok: true, count } : { ok: false, error: "Fiş verisi alınamadı." };
+}
+
 /** Seçili sevkiyatların belgesini Excel olarak indir: tek → indirme; çok → klasör. */
 export async function downloadDocsExcel(targets: DocTarget[]): Promise<ExportOutcome> {
   if (targets.length === 0) return { ok: false, error: "Sevkiyat seçilmedi." };
@@ -128,6 +150,7 @@ export async function downloadDocsExcel(targets: DocTarget[]): Promise<ExportOut
   }
 
   const filesApi = typeof window !== "undefined" ? window.api?.files : undefined;
+  if (!filesApi && !IS_ELECTRON) return downloadEachWorkbook(targets);
   if (!filesApi) return { ok: false, error: "Dosya desteği yok (masaüstü uygulaması gerekli)." };
   const items: { name: string; base64: string }[] = [];
   for (const t of targets) {

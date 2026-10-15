@@ -45,6 +45,8 @@ export const ZORUNLU = [
   'app/runtime/bin/node',
   'usr/local/bin/node',
   'usr/local/bin/entrypoint.sh',
+  // Web paneli imajda HEP durur (sunum opt-in WEB_DIST_DIR; docs/design/BULUT-WEB-PANELI.md K1).
+  'app/dist-web/index.html',
 ];
 
 /** Güncelleyicinin GOC adımının imajdaki aracı: açılış betiğinin göç kipine bağ. */

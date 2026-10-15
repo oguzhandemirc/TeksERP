@@ -22,6 +22,7 @@ import type { LicenseState } from "../lib/license/state";
 import { isOpenInTier, isOpenWhenActivationLocked, isPublicRoute, type ActivationLockRouteClass } from "../constants/license-routes";
 import { AuthService } from "../services/auth.service";
 import { verifyToken } from "./auth.middleware";
+import { readRequestToken } from "../lib/web-session-cookie";
 
 function currentSnapshot(): LicenseSnapshot | null {
   try {
@@ -31,9 +32,9 @@ function currentSnapshot(): LicenseSnapshot | null {
   }
 }
 
-/** Hafif denetim: Bearer başlığı + JWT imzası ve süresi (DB'siz). */
+/** Hafif denetim: Bearer başlığı ya da web oturum çerezi + JWT imzası ve süresi (DB'siz). */
 function hasPlausibleToken(req: Request): boolean {
-  const token = req.headers.authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const token = readRequestToken(req)?.token;
   if (!token) return false;
   try {
     AuthService.verifyToken(token);

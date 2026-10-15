@@ -34,6 +34,7 @@ import {
   type LockoutKeySpec,
 } from "../middlewares/login-lockout";
 import { passwordPolicyViolation } from "../constants/password-policy";
+import { clearSessionCookie, cookieLoginApplies, isWebPanelMode, setSessionCookie } from "../lib/web-session-cookie";
 import "../types/express-augment";
 
 const changePasswordSchema = z.object({
@@ -138,6 +139,36 @@ async function auditLockedOnce(
 
 // K6 (2026-06-12): register endpoint'i + şeması kaldırıldı — kullanıcı
 // oluşturmanın tek yolu POST /api/admin/users (PermissionManagementService).
+
+/**
+ * Giriş cevabı — üç giriş yolunun TEK çıkışı. Bulut web paneli çerez kipinde (panel kipi +
+ * `clientType:"web"`) token httpOnly çereze gider, gövdede `token` yerine `cookieSession:true`.
+ */
+function respondLogin(
+  res: Response,
+  clientType: string | undefined,
+  result: { token: string; user: unknown; mustChangePassword: boolean },
+): void {
+  if (cookieLoginApplies(clientType)) {
+    setSessionCookie(res, result.token);
+    res.status(200).json({
+      success: true,
+      data: { user: result.user, mustChangePassword: result.mustChangePassword, cookieSession: true },
+      message: "Giriş başarılı",
+    });
+    return;
+  }
+  res.status(200).json({
+    success: true,
+    data: {
+      token: result.token,
+      user: result.user,
+      // Panel bunu görünce uygulamaya girmeden parola değiştirme adımını açar.
+      mustChangePassword: result.mustChangePassword,
+    },
+    message: "Giriş başarılı",
+  });
+}
 
 export class AuthController {
   /**
@@ -260,16 +291,7 @@ export class AuthController {
         ipAddress,
       });
 
-      res.status(200).json({
-        success: true,
-        data: {
-          token: result.token,
-          user: result.user,
-          // Panel bunu görünce uygulamaya girmeden parola değiştirme adımını açar.
-          mustChangePassword: result.mustChangePassword,
-        },
-        message: "Giriş başarılı",
-      });
+      respondLogin(res, body.clientType, result);
     } catch (error) {
       // F49 (kart/PIN ile aynı kural): yalnız 401 brute-force sayılır. 409
       // SESSION_EXISTS / 403 gibi sonuçlar kimlik-bilgisi denemesi DEĞİLDİR →
@@ -362,11 +384,7 @@ export class AuthController {
         ipAddress,
         payload: { method: "card" },
       });
-      res.status(200).json({
-        success: true,
-        data: { token: result.token, user: result.user, mustChangePassword: result.mustChangePassword },
-        message: "Giriş başarılı",
-      });
+      respondLogin(res, body.clientType, result);
     } catch (error) {
       // F49: yalnız 401 (kimlik-bilgisi hatası) brute-force sayılır. 409 SESSION_EXISTS
       // / 403 (yöntem kapalı / erişim yok) brute-force DEĞİL → assume-fail rezervasyonunu
@@ -450,11 +468,7 @@ export class AuthController {
         ipAddress,
         payload: { method: "quick-pin" },
       });
-      res.status(200).json({
-        success: true,
-        data: { token: result.token, user: result.user, mustChangePassword: result.mustChangePassword },
-        message: "Giriş başarılı",
-      });
+      respondLogin(res, body.clientType, result);
     } catch (error) {
       // F49: yalnız 401 brute-force sayılır; 409/403 assume-fail'i geri al (F20 reserve).
       const isCredentialError = error instanceof AppError && error.statusCode === 401;
@@ -664,6 +678,7 @@ export class AuthController {
         ipAddress: req.ip ?? null,
       });
 
+      if (isWebPanelMode()) clearSessionCookie(res);
       res.status(200).json({
         success: true,
         message: "Çıkış kaydedildi. Oturum iptal edildi — token istemci tarafında da silinmeli.",
@@ -780,6 +795,8 @@ export class AuthController {
     try {
       await AuthService.changeOwnPassword(userId, body.currentPassword, body.newPassword);
       resetLoginLockout(lockKeys);
+      // Değişim bütün oturumları kapatır; web çerezi de ölür.
+      if (isWebPanelMode()) clearSessionCookie(res);
       res.status(200).json({
         success: true,
         message: "Parolanız değiştirildi. Yeni parolanızla tekrar giriş yapın.",

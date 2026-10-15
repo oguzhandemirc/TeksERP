@@ -46,7 +46,7 @@ export default defineConfig(({ command }) => ({
             process.env.VITE_WEB_API_BASE_URL ?? "",
           ),
           // 2FA kurulum bağlantısının kökü: verilmezse sayfanın kendi origin'i (web paneli
-          // yalnız demo imajında yaşar; fabrika dış adresi tünelle birlikte emekli, B6).
+          // yalnız Docker imajlarında yaşar — demo + korumalı bulut, opt-in WEB_DIST_DIR; Windows paketi taşımaz, B6).
           "import.meta.env.VITE_PUBLIC_APP_URL": JSON.stringify(process.env.VITE_PUBLIC_APP_URL ?? ""),
         }
       : {}),

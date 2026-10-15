@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { JwtPayload } from "@/types/auth";
+import type { AuthMeResponse, JwtPayload } from "@/types/auth";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 import { tokenStore } from "@/lib/secure-token";
 
 interface AuthState {
@@ -37,6 +38,8 @@ interface AuthState {
   /** `/api/auth/me`den sistem-hesabı bayraklarını tazeler. ASLA reject etmez
    *  (best-effort): düşerse fail-closed varsayılanlar yerinde kalır. */
   refreshSystemAccount: () => Promise<void>;
+  /** Elde olan `/api/auth/me` cevabının hesap bayraklarını uygular (web açılış yoklaması). */
+  applyAccountFlags: (me: AuthMeResponse) => void;
   logout: () => Promise<void>;
 }
 
@@ -48,6 +51,20 @@ const SIFIR_HESAP_BAYRAKLARI = {
   defaultSuperadminPasswordPending: false,
   systemAccountSealStatus: "ok",
 } as const;
+
+/** `/api/auth/me` cevabından hesap bayrakları — alanı taşımayan ESKİ backend fail-closed yöne düşer. */
+function accountFlagsOf(me: AuthMeResponse) {
+  return {
+    isSystemAccount: me.isSystemAccount === true,
+    systemAccountExists: me.systemAccountExists !== false,
+    factoryAdminExists: me.factoryAdminExists !== false,
+    defaultSuperadminPasswordPending: me.defaultSuperadminPasswordPending === true,
+    systemAccountSealStatus:
+      me.systemAccountSealStatus === "pending" || me.systemAccountSealStatus === "invalid"
+        ? me.systemAccountSealStatus
+        : ("ok" as const),
+  };
+}
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
@@ -64,22 +81,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) =>
     set(user === null ? { user: null, ...SIFIR_HESAP_BAYRAKLARI } : { user }),
   setHydrated: (isHydrated) => set({ isHydrated }),
+  applyAccountFlags: (me) => set(accountFlagsOf(me)),
   refreshSystemAccount: async () => {
     try {
       // Dinamik import: apiClient ↔ auth store döngüsünü kır (logout ile aynı desen).
       const { authService } = await import("@/services/authService");
       const me = await authService.getMe();
-      set({
-        isSystemAccount: me.data.isSystemAccount === true,
-        // Alan taşımayan ESKİ backend → `true` (fail-closed; bkz. tip yorumu).
-        systemAccountExists: me.data.systemAccountExists !== false,
-        factoryAdminExists: me.data.factoryAdminExists !== false,
-        defaultSuperadminPasswordPending: me.data.defaultSuperadminPasswordPending === true,
-        systemAccountSealStatus:
-          me.data.systemAccountSealStatus === "pending" || me.data.systemAccountSealStatus === "invalid"
-            ? me.data.systemAccountSealStatus
-            : "ok",
-      });
+      set(accountFlagsOf(me.data));
     } catch {
       /* sunucuya ulaşılamadı / oturum düştü — varsayılanlar korunur */
     }
@@ -113,7 +121,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     void import("@/store/tabs")
       .then((m) => m.useTabsStore.getState().resetTabs())
       .catch(() => undefined);
-    if (token) {
+    // Webde token yok ama oturum sunucunun çerezinde: revoke yine gider (çerezi de siler).
+    if (token || !IS_ELECTRON) {
       // Dinamik import: apiClient ↔ auth store döngüsünü kır (eski desen korunur).
       void (async () => {
         try {

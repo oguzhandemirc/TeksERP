@@ -185,7 +185,7 @@ export function ShipmentsPage() {
     const res = fmt === "pdf" ? await downloadDocsPdf(targets) : await downloadDocsExcel(targets);
     if (res.ok) {
       toast.success(
-        `${res.count ?? targets.length} belge indirildi${skipped ? ` — ${skipped} sevk-dışı satır atlandı` : ""}.`,
+        `${res.count ?? targets.length} belge ${res.printed ? "yazdırma penceresinde açıldı" : "indirildi"}${skipped ? ` — ${skipped} sevk-dışı satır atlandı` : ""}.`,
       );
     } else if (res.error) {
       toast.error(res.error);

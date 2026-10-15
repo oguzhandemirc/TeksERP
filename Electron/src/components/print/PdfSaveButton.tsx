@@ -2,18 +2,23 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isWebPdf, printAsPdf } from "@/lib/web-pdf";
 
 /**
  * PDF kaydetme mantığı (Electron main → printToPDF → kaydet dialoğu) — TEK KAYNAK.
  * Hem düğme hem de "İndir ▾" menü kalemi bunu kullanır; iki ayrı kopya olsaydı
- * `window.api` yokluğu (web build) yalnız birinde kontrol edilirdi.
+ * web dalı (`lib/web-pdf`) yalnız birinde olurdu.
  */
 export function usePdfSave(html: string | null, fileName: string) {
   const [busy, setBusy] = useState(false);
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
 
+  const web = !pdfApi && isWebPdf();
+
   const save = async () => {
-    if (!html || !pdfApi) return;
+    if (!html) return;
+    if (web) return printAsPdf(html);
+    if (!pdfApi) return;
     setBusy(true);
     try {
       const res = await pdfApi.save({ html, suggestedName: fileName });
@@ -26,12 +31,12 @@ export function usePdfSave(html: string | null, fileName: string) {
     }
   };
 
-  return { available: Boolean(pdfApi), busy, save };
+  return { available: Boolean(pdfApi) || web, busy, save };
 }
 
 /**
- * Belge HTML'ini PDF olarak kaydeder. Yazdır düğmesinin yanında durur; web
- * (Electron dışı) ortamda `window.api` yoksa gizlenir.
+ * Belge HTML'ini PDF olarak kaydeder. Yazdır düğmesinin yanında durur; webde aynı belge
+ * yazdırma penceresinde açılır (Hedef: PDF olarak kaydet — `lib/web-pdf`).
  */
 export function PdfSaveButton({
   html,

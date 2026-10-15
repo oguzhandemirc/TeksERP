@@ -272,6 +272,9 @@ export const PERMISSION_CATALOG = [
   // tanıyan kişinin (satış/planlama) işidir; "bu iki müşteri aynı firma mı?"
   // sorusuna cevabı sysadmin bilmez.
   { code: "master-data:merge", module: "MASTER_DATA", category: "web", description: "Mükerrer ana veri kaydını birleştirme (müşteri/kumaş/renk/fason) — varlığın kendi düzenleme yetkisiyle BİRLİKTE aranır; GERİ ALINAMAZ" },
+  // Bulut web paneli (BULUT-WEB-PANELI.md K4, 2026-10-15): tarayıcıdan çerezli giriş kanalı izni;
+  // TOTP ile birlikte aranır. `mobile:` önekli değil (masaüstü kapısında sayılır); `admin:*` VERMEZ.
+  { code: "web:access", module: "ADMIN", category: "web", description: "Bulut web paneline tarayıcıdan giriş (iki adımlı doğrulamayla birlikte)" },
   { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
   { code: "report:production", module: "REPORTS", category: "web", description: "Üretim raporları" },
   { code: "report:sales", module: "REPORTS", category: "web", description: "Sipariş raporları" },

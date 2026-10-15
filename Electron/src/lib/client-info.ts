@@ -32,7 +32,7 @@ export const CLIENT_KIND = IS_ELECTRON ? "electron" : "web";
 
 /** Web build'inde sürüm derleme anında gömülür (`vite.config.web.ts` `define`, renderer `package.json`):
  *  web paneli backend paketiyle birlikte dağıtılır, başlıktaki değer Electron ile AYNI eksendir (panel sürümü). */
-const WEB_VERSION: string | null = typeof __APP_VERSION__ === "string" && __APP_VERSION__ ? __APP_VERSION__ : null;
+export const WEB_VERSION: string | null = typeof __APP_VERSION__ === "string" && __APP_VERSION__ ? __APP_VERSION__ : null;
 
 /** Sürümsüz istek için üst sınır: login İLK istektir, `Session.clientVersion` damgası ilk istekte dolsun;
  *  süre dolarsa istek başlıksız gider (sunucu sonraki istekte doldurur), asla düşmez. */

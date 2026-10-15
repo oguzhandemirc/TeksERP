@@ -13,7 +13,8 @@ import type { LoginFormValues } from "./useLoginFlow";
  * token da ölür) → akış yeni parolayla normal girişe (`relogin`) devam eder.
  */
 export interface PendingPasswordChange {
-  token: string;
+  /** Çerezli web oturumunda null — kısıtlı oturum sunucunun çerezindedir. */
+  token: string | null;
   /** İlk girişin değerleri — `password` değişimin "mevcut parola"sıdır. */
   values: LoginFormValues;
   /** Son denemenin sunucu cevabı (mevcut parola yanlış · politika · kilit) — adımda gösterilir. */
@@ -37,7 +38,7 @@ export function usePasswordChangeStep({ relogin, onClose }: Options) {
   const [pending, setPending] = useState<PendingPasswordChange | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const open = (token: string, values: LoginFormValues) => setPending({ token, values, error: null });
+  const open = (token: string | null, values: LoginFormValues) => setPending({ token, values, error: null });
 
   const submit = async (newPassword: string) => {
     if (!pending) return;

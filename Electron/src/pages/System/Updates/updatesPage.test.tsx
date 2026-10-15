@@ -24,6 +24,9 @@ vi.mock("@/store/tabs", () => ({ useTabsStore: (sel: (s: { navigateActive: unkno
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/hooks/useClientPolicy", () => ({ useClientPolicy: () => null }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: ({ title }: { title: string }) => <h1>{title}</h1> }));
+// Hedef: masaüstü varsayılan; web paneli testi kendisi çevirir ("bu bilgisayar" satırı yalnız masaüstünde).
+const rt = vi.hoisted(() => ({ IS_ELECTRON: true }));
+vi.mock("@/lib/runtime-env", () => rt);
 const { UpdatesPage } = await import("./UpdatesPage");
 
 const ozet = (p: Partial<UpdateSummary> = {}): UpdateSummary => ({
@@ -57,6 +60,7 @@ beforeEach(() => {
   perms.length = 0;
   useSurumNotuStore.setState({ acik: false, elle: false });
   panel(null);
+  rt.IS_ELECTRON = true;
 });
 afterEach(() => panel(null));
 
@@ -150,12 +154,20 @@ describe("Güncellemeler — bu bilgisayar satırı", () => {
     expect(install).toHaveBeenCalledTimes(1);
   });
 
-  it("S7 tarayıcıda (güncelleyici yok): yenilemede güncel cümlesi; 'Neler yeni?' Sürüm Notları sayfasına gider", async () => {
+  it("S7 masaüstü, güncelleyici köprüsü yok: satır yine çizilir; 'Neler yeni?' Sürüm Notları sayfasına gider", async () => {
     renderWithProviders(<UpdatesPage />);
-    expect(await panelDurumu()).toMatch(/Tarayıcıda/);
+    expect(await panelDurumu()).toMatch(/en güncel sürümü yükler/);
     fireEvent.click(screen.getByRole("button", { name: "Neler yeni?" }));
     expect(navigateActive).toHaveBeenCalledWith(RELEASE_NOTES_PATH);
     expect(useSurumNotuStore.getState().acik).toBe(false);
+  });
+
+  it("⭐ web paneli: 'bu bilgisayar' satırı HİÇ çizilmez (güncelleyici yok), sunucu satırı kalır", async () => {
+    rt.IS_ELECTRON = false;
+    summary.mockResolvedValue(ozet());
+    renderWithProviders(<UpdatesPage />);
+    await sunucuDurumu();
+    expect(screen.queryByTestId("guncelleme-durumu-panel")).toBeNull();
   });
 
   it("S10 ⭐ masaüstünde 'Neler yeni?' sürüm notu penceresini ELLE kipte açar", async () => {

@@ -19,12 +19,20 @@
 !Teks-Erp/docker/korumali/sahne.mjs
 !Teks-Erp/docker/korumali/arac-jsc.mjs
 !Teks-Erp/docker/korumali/yedek-zamanlayici.sh
+# Web paneli (panel aşaması): Electron kaynağı + ortak dağıtım kimliği.
+!Electron/**
+!deploy/dagitim.json
+!scripts/lib/dagitim.mjs
 # İzinli ağaçlarda bile giremeyecekler (sır, döküm, derleme artığı).
 **/.env*
 **/*.dump
 **/*.tkenc
 **/node_modules
 Teks-Erp/dist
+Electron/dist
+Electron/dist-web
+Electron/out
+Electron/release
 # Geliştirme ağacında git'e girmeyen fabrika verisi/anahtar dizinleri izinli ağaçların (scripts/**) altında da olabilir (G22).
 **/scripts/out
 **/dump

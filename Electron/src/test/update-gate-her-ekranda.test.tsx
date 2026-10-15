@@ -22,6 +22,8 @@ import type { JwtPayload } from "@/types/auth";
 vi.mock("@/lib/secure-token", () => ({
   tokenStore: { get: async () => null, set: async () => {}, clear: async () => {} },
 }));
+// Kurulum kapısı masaüstü senaryosudur (electron-updater); oturum açılışı da masaüstü yolundan.
+vi.mock("@/lib/runtime-env", () => ({ IS_ELECTRON: true }));
 vi.mock("@/lib/scanner/barcode-kind", () => ({ loadScanSeries: async () => {} }));
 vi.mock("@/hooks/useClientPolicy", () => ({ useClientPolicy: () => null }));
 vi.mock("@/components/layout/AppShell", () => ({

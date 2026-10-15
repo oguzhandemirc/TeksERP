@@ -106,6 +106,25 @@ describe("clientType — build hedefine göre ayrışır", () => {
   });
 });
 
+/**
+ * WEB DALI — çerez oturumu (bulut web paneli, 2026-10-15). Panel kipinde web girişi `token`
+ * yerine `cookieSession: true` alır (PIN/kart dahil üç giriş yolu aynı şekil). Davranış testi
+ * `pages/Login/useLoginFlow.cookie-session.test.tsx`; burada iki kaynağın sözleşme iddiası.
+ */
+describe("web dalı — cookieSession", () => {
+  const flow = stripComments(readFileSync(resolve(process.cwd(), "src/pages/Login/useLoginFlow.ts"), "utf-8"));
+  const svc = stripComments(readFileSync(resolve(process.cwd(), "src/services/authService.ts"), "utf-8"));
+
+  it("giriş akışı cookieSession cevabında token beklemez", () => {
+    expect(flow).toMatch(/data\.cookieSession\s*===\s*true/);
+  });
+
+  it("parola değişimi token'sız (çerez) çağrılabilir — Bearer koşulsuz gömülü DEĞİL", () => {
+    expect(svc).toMatch(/token:\s*string\s*\|\s*null/);
+    expect(svc).not.toMatch(/headers:\s*\{\s*Authorization:\s*`Bearer \$\{token\}`\s*\},?\s*\}\)/);
+  });
+});
+
 describe("ClientType birliği backend enum'unu yansıtır", () => {
   it("üç değer de tanımlı — 'web' unutulmamış", () => {
     const t = readFileSync(resolve(process.cwd(), "src/types/auth.ts"), "utf-8");

@@ -4,6 +4,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { lastUpdateText } from "../ServerUpdates/serverRow";
 import { SERVER_UPDATE_KEY, SERVER_UPDATE_SUMMARY_KEY } from "../ServerUpdates/hooks";
 import { PanelRow } from "./PanelRow";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 import { ServerRow } from "./ServerRow";
 import { UpdateDetails } from "./UpdateDetails";
 import { useServerUpdateView } from "./useServerUpdateView";
@@ -19,7 +20,8 @@ export function UpdatesPage() {
       <PageHeader title="Güncellemeler" actions={<RefreshButton queryKey={[...SERVER_UPDATE_KEY]} extraKeys={[[...SERVER_UPDATE_SUMMARY_KEY]]} />} />
       <PageBody className="max-w-4xl space-y-4 p-6">
         <ServerRow v={v} />
-        <PanelRow />
+        {/* Web paneli güncelleyici taşımaz — "bu bilgisayar" satırı yalnız masaüstünde. */}
+        {IS_ELECTRON && <PanelRow />}
         {v.summary && (
           <p data-testid="son-guncelleme" className="text-xs text-muted-foreground">
             {lastUpdateText(v.summary.son)}

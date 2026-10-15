@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
 import { useUpdater } from "@/hooks/useUpdater";
+import { useAppVersion } from "@/hooks/useAppVersion";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 import { guncellemeRozeti } from "@/lib/updater-durum";
 
 /**
@@ -25,26 +26,18 @@ import { guncellemeRozeti } from "@/lib/updater-durum";
  */
 export function SurumRozeti() {
   const { status } = useUpdater();
-  const [surum, setSurum] = useState<string | null>(null);
-
-  useEffect(() => {
-    let aktif = true;
-    const p = window.api?.appInfo?.version?.();
-    if (p) void p.then((v) => aktif && setSurum(v)).catch(() => {});
-    return () => {
-      aktif = false;
-    };
-  }, []);
+  const appVersion = useAppVersion();
 
   // ⚠️ Eşleme burada YAZILMAZ — tek kaynak `@/lib/updater-durum` (sidebar
   // footer'ı ve topbar denetleme düğmesi de onu okur). `error`/`idle` `null`
   // döner; kırmızı basmama kuralı orada gerekçesiyle yazılı.
-  const durum = guncellemeRozeti(status?.state);
+  // Web paneli güncelleyici taşımaz (her yenileme en güncel sürümü yükler) → durum çizilmez.
+  const durum = IS_ELECTRON ? guncellemeRozeti(status?.state) : null;
 
   return (
     <div className="app-no-drag pointer-events-none absolute bottom-2 right-3">
       <span className="text-[11px] font-medium text-muted-foreground">
-        TeksERP{surum ? ` v${surum}` : ""}
+        TeksERP{appVersion ? ` v${appVersion}` : ""}
         {durum ? <span className={durum.sinif}> · {durum.metin}</span> : null}
       </span>
     </div>

@@ -15,6 +15,7 @@ import { z } from "zod";
 import { readClientVersionHeader } from "../constants/client-info";
 import { HARDWARE_REPORT_REASON_MAX } from "../lib/license/protocol";
 import { verifyToken } from "../middlewares/auth.middleware";
+import { hasRequestCredential } from "../lib/web-session-cookie";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
 import { DOWNLOAD_PRODUCTS } from "../lib/license/protocol";
@@ -39,9 +40,9 @@ import tempCodeRoutes from "./license-temp-code.routes";
 
 const router = Router();
 
-/** Başlık varsa TAM doğrulama (geçersiz token 401); yoksa kimliksiz devam. */
+/** Kimlik bilgisi (başlık ya da web çerezi) varsa TAM doğrulama (geçersiz token 401); yoksa kimliksiz devam. */
 function verifyTokenIfPresent(req: Request, res: Response, next: NextFunction): void {
-  if (!req.headers.authorization) {
+  if (!hasRequestCredential(req)) {
     next();
     return;
   }
@@ -54,7 +55,7 @@ function requireApprovedDeviceOrSession(req: Request, res: Response, next: NextF
     next();
     return;
   }
-  if (req.headers.authorization) {
+  if (hasRequestCredential(req)) {
     void verifyToken(req, res, next);
     return;
   }

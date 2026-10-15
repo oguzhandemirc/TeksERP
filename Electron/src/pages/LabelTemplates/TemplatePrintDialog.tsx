@@ -28,6 +28,7 @@ import {
 } from "@/services/labelTemplateService";
 import { CopiesInput } from "./CopiesInput";
 import { TemplatePrintPreview } from "./TemplatePrintPreview";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 interface Props {
   template: LabelTemplateListRow;
@@ -241,11 +242,13 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
                     Yerel yazıcı: <span className="font-mono">{lpCfg?.path}</span> (
                     {lpCfg?.transport ?? "serial"}). Sistem → Bu Bilgisayar → Yazıcı'dan değişir.
                   </p>
-                  <Button type="button" disabled={!canPrint}
-                    onClick={() => void doSendNative(lpCfg?.transport ?? "serial", lpCfg!.path!, lpCfg?.baudRate)}
-                    className="gap-1">
-                    <Printer className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Bu PC'deki yazıcıya bas"}
-                  </Button>
+                  <DesktopOnlyAction>
+                    <Button type="button" disabled={!canPrint}
+                      onClick={() => void doSendNative(lpCfg?.transport ?? "serial", lpCfg!.path!, lpCfg?.baudRate)}
+                      className="gap-1">
+                      <Printer className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Bu PC'deki yazıcıya bas"}
+                    </Button>
+                  </DesktopOnlyAction>
                 </div>
               ) : (
                 <p className="text-xs text-amber-600 dark:text-amber-500">
@@ -263,10 +266,12 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
                     <Input id="tpl-print-ip" value={printerIp} onChange={(e) => setPrinterIp(e.target.value)}
                       placeholder="192.168.1.50" className="font-mono" />
                   </div>
-                  <Button type="button" disabled={!printerIp.trim() || !canPrint || !printerApi}
-                    onClick={() => void doSendNative("tcp", printerIp.trim())} className="gap-1">
-                    <Send className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Gönder"}
-                  </Button>
+                  <DesktopOnlyAction>
+                    <Button type="button" disabled={!printerIp.trim() || !canPrint || !printerApi}
+                      onClick={() => void doSendNative("tcp", printerIp.trim())} className="gap-1">
+                      <Send className="h-3.5 w-3.5" /> {sending ? "Gönderiliyor…" : "Gönder"}
+                    </Button>
+                  </DesktopOnlyAction>
                 </div>
               )}
 
@@ -276,9 +281,11 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
                     Etiket HTML olarak üretilir ve işletim sisteminin yazdırma penceresi açılır —
                     etiket yazıcısı olmayan normal (A4/ofis) yazıcılar için.
                   </p>
-                  <Button type="button" disabled={!canPrint} onClick={() => void doPrintHtml()} className="gap-1">
-                    <Printer className="h-3.5 w-3.5" /> {sending ? "Hazırlanıyor…" : "Tarayıcıdan Yazdır"}
-                  </Button>
+                  <DesktopOnlyAction>
+                    <Button type="button" disabled={!canPrint} onClick={() => void doPrintHtml()} className="gap-1">
+                      <Printer className="h-3.5 w-3.5" /> {sending ? "Hazırlanıyor…" : "Tarayıcıdan Yazdır"}
+                    </Button>
+                  </DesktopOnlyAction>
                 </div>
               )}
 

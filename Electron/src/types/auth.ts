@@ -88,7 +88,10 @@ export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED" as const
 export interface LoginResponse {
   success: boolean;
   data: {
-    token: string;
+    /** Çerez kipinde (bulut web paneli) YOK — yerine `cookieSession: true` gelir. */
+    token?: string;
+    /** Sunucu kimliği httpOnly çereze bastı; istemci token saklamaz (yalnız web hedefi). */
+    cookieSession?: boolean;
     user: JwtPayload;
     /**
      * Hesap ilk kurulumda üretilmiş parolayla açıldı: token yalnız me/logout/

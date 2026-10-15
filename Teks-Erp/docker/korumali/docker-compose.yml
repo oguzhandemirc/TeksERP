@@ -85,6 +85,8 @@ services:
       # Kurulum sınıfı: boş = fabrika kurulumu (bugünkü davranış); bizim yönettiğimiz bulut sunucusunda
       # BARINDIRILAN (yalnız sertleştirir, hiçbir kuralı gevşetmez — install-class.helper.ts).
       TEKSERP_KURULUM_SINIFI: ${TEKSERP_KURULUM_SINIFI:-}
+      # Web paneli: boş = kapalı (kök / durum sayfası, bugünkü davranış); açmak için .env'de /app/dist-web.
+      WEB_DIST_DIR: ${WEB_DIST_DIR:-}
     ports:
       # YALNIZ bu makine: 4000 şifresizdir ve Docker'ın yayımladığı port ufw'nin önünden geçer.
       # Docker kurulumunda fabrika ağı TLS'i yok; ağdan erişim yalnız TLS'i sonlandıran vekille

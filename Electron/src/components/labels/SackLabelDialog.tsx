@@ -16,6 +16,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { labelService } from "@/services/labelService";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 /**
  * Çuval etiketi önizleme + baskı — `RollLabelDialog`'un çuval karşılığı.
@@ -115,15 +116,17 @@ export function SackLabelDialog({
 
           <DialogFooter>
             {hasPermission("label:print") && (
-              <Button
-                type="button"
-                size="sm"
-                disabled={htmlQuery.isLoading || htmlQuery.isError || sending}
-                onClick={handlePrint}
-                className="gap-1"
-              >
-                <Printer className="h-3.5 w-3.5" /> Bas
-              </Button>
+              <DesktopOnlyAction>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={htmlQuery.isLoading || htmlQuery.isError || sending}
+                  onClick={handlePrint}
+                  className="gap-1"
+                >
+                  <Printer className="h-3.5 w-3.5" /> Bas
+                </Button>
+              </DesktopOnlyAction>
             )}
           </DialogFooter>
         </PermissionGate>

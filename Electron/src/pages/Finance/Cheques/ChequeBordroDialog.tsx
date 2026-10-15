@@ -19,6 +19,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { isWebPdf, printAsPdf } from "@/lib/web-pdf";
 import { Eye, FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -136,6 +137,7 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
   const savePdf = async () => {
     if (!preview) return;
     const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
+    if (!pdfApi && isWebPdf()) return printAsPdf(preview.html);
     if (!pdfApi) {
       toast.error("PDF desteği yok (masaüstü uygulaması gerekli) — Yazdır ile PDF'e basabilirsiniz.");
       return;

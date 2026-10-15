@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { printHtmlString } from "@/lib/print";
 import { labelService } from "@/services/labelService";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 interface Props {
   /** Etiketi basılacak topların id'leri (iptal edilmişler ÇAĞIRAN tarafında elenir). */
@@ -86,17 +87,19 @@ export function BulkRollLabelButton({
   return (
     <>
       {!controlled && (
-        <Button
-          variant={variant}
-          size={size}
-          className={className}
-          disabled={rollIds.length === 0}
-          onClick={() => setOpen(true)}
-          title={rollIds.length === 0 ? "Basılacak top yok" : `${rollIds.length} top etiketi`}
-        >
-          <Tags className="mr-1 h-4 w-4" />
-          {label} ({rollIds.length})
-        </Button>
+        <DesktopOnlyAction>
+          <Button
+            variant={variant}
+            size={size}
+            className={className}
+            disabled={rollIds.length === 0}
+            onClick={() => setOpen(true)}
+            title={rollIds.length === 0 ? "Basılacak top yok" : `${rollIds.length} top etiketi`}
+          >
+            <Tags className="mr-1 h-4 w-4" />
+            {label} ({rollIds.length})
+          </Button>
+        </DesktopOnlyAction>
       )}
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
@@ -127,18 +130,20 @@ export function BulkRollLabelButton({
             <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
               İptal
             </Button>
-            <Button
-              size="sm"
-              className="gap-1.5"
-              disabled={printMut.isPending || rollIds.length === 0}
-              onClick={() => {
-                printMut.mutate();
-                setOpen(false);
-              }}
-            >
-              <Printer className="h-4 w-4" />
-              {printMut.isPending ? "Basılıyor…" : `${rollIds.length} etiketi bas`}
-            </Button>
+            <DesktopOnlyAction>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                disabled={printMut.isPending || rollIds.length === 0}
+                onClick={() => {
+                  printMut.mutate();
+                  setOpen(false);
+                }}
+              >
+                <Printer className="h-4 w-4" />
+                {printMut.isPending ? "Basılıyor…" : `${rollIds.length} etiketi bas`}
+              </Button>
+            </DesktopOnlyAction>
           </DialogFooter>
         </DialogContent>
       </Dialog>

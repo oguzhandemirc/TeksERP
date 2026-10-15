@@ -5,6 +5,8 @@ import { renderWithProviders } from "@/test/render";
 import type { RelabelContext } from "./types";
 
 // --- Yetki: tam izinli (store boşken hasPermission=false → form kilitli kalırdı) ---
+// Etiket baskısı masaüstü işidir (webde DesktopOnlyAction soluk tutar) — bu dosya masaüstünü sınar.
+vi.mock("@/lib/runtime-env", () => ({ IS_ELECTRON: true }));
 vi.mock("@/hooks/useRoleAccess", () => ({
   useRoleAccess: () => ({
     isAdmin: true,

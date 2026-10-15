@@ -130,7 +130,7 @@ export function WorkOrderBulkDocsDialog({ open, onOpenChange, workOrders, onDone
         );
       } else {
         const res = await savePdfDocs(docs);
-        if (res.ok) toast.success(`${res.count ?? docs.length} belge PDF olarak kaydedildi.`);
+        if (res.ok) toast.success(`${res.count ?? docs.length} belge ${res.printed ? "yazdırma penceresinde açıldı" : "PDF olarak kaydedildi"}.`);
         else if (res.error) toast.error(res.error);
         else return; // kullanıcı kaydet/klasör diyaloğunu iptal etti — sessiz.
       }

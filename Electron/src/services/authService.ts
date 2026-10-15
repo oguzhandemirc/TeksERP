@@ -29,6 +29,12 @@ export interface LoginMethodsInfo {
   lisansEtkinlesmedi?: boolean;
 }
 
+/**
+ * Webde uçuştaki çıkış isteği. Çerezli oturumda çıkış token yakalayamaz: gecikmiş revoke
+ * hemen ardından açılan YENİ oturumun çerezini iptal ederdi → web girişi önce bunu bekler.
+ */
+let webLogoutInFlight: Promise<unknown> | null = null;
+
 export const authService = {
   /**
    * Giriş — gövdeye `clientType` eklenir (Electron'da 'electron', tarayıcıda
@@ -36,14 +42,16 @@ export const authService = {
    * çakışmasını onaylayabilir. `config` ile per-istek axios ayarı (ör.
    * `suppressErrorToast`) geçilebilir — hata UX'ini çağıran yönetir.
    */
-  login: (credentials: LoginRequest, config?: AxiosRequestConfig): Promise<LoginResponse> =>
-    apiClient
+  login: async (credentials: LoginRequest, config?: AxiosRequestConfig): Promise<LoginResponse> => {
+    if (!IS_ELECTRON && webLogoutInFlight) await webLogoutInFlight.catch(() => undefined);
+    return apiClient
       .post<LoginResponse>(
         "/api/auth/login",
         { clientType: CLIENT_TYPE, ...credentials },
         config,
       )
-      .then((r) => r.data),
+      .then((r) => r.data);
+  },
 
   /**
    * Çıkış — bu oturumu backend registry'sinde iptal eder (+ audit). Best-effort:
@@ -55,8 +63,8 @@ export const authService = {
    * bulamayacağı için header'ı buradan taşırız. 3sn timeout: revoke best-effort,
    * UI zaten beklemiyor; asılı sunucuya 15sn bağlı kalmanın anlamı yok.
    */
-  logout: (capturedToken?: string): Promise<void> =>
-    apiClient
+  logout: (capturedToken?: string | null): Promise<void> => {
+    const p = apiClient
       .post(
         "/api/auth/logout",
         {},
@@ -68,23 +76,32 @@ export const authService = {
             : {}),
         },
       )
-      .then(() => undefined),
+      .then(() => undefined);
+    if (!IS_ELECTRON) {
+      const tracked = p.finally(() => {
+        if (webLogoutInFlight === tracked) webLogoutInFlight = null;
+      });
+      webLogoutInFlight = tracked;
+    }
+    return p;
+  },
 
   /**
-   * Kendi parolasını değiştir (zorunlu ilk değişim dahil). Token AÇIKÇA verilir:
+   * Kendi parolasını değiştir (zorunlu ilk değişim dahil). Token AÇIKÇA verilir (webde null):
    * zorunlu değişim adımında token kalıcı depoya yazılmamıştır. Başarıda sunucu
    * kullanıcının bütün oturumlarını kapatır → çağıran yeni parolayla yeniden girer.
    * Hata UX'ini çağıran yönetir (`suppressErrorToast`, login deseni).
    */
   changePassword: (
     body: ChangePasswordRequest,
-    token: string,
+    token: string | null,
     config?: AxiosRequestConfig,
   ): Promise<ChangePasswordResponse> =>
     apiClient
       .post<ChangePasswordResponse>("/api/auth/change-password", body, {
         ...config,
-        headers: { Authorization: `Bearer ${token}` },
+        // Çerezli web oturumunda token yok: kısıtlı oturum çerezde, CSRF interceptor'dan.
+        ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
       })
       .then((r) => r.data),
 

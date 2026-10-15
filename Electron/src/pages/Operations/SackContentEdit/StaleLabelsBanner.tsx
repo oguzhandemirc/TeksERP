@@ -9,6 +9,7 @@ import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { labelService } from "@/services/labelService";
 import { invalidateSackHub } from "./useSackData";
 import type { SackContentRoll } from "./types";
+import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 /**
  * "Bu topların etiketi yeni müşterinin şablonuyla yeniden basılmalı" uyarısı +
@@ -90,16 +91,18 @@ export function StaleLabelsBanner({
             üstündeki etiket artık geçerli değil.
           </span>
           <PermissionGate permission="label:print">
-            <Button
-              type="button"
-              size="sm"
-              className="gap-1.5"
-              disabled={sending || auditMut.isPending}
-              onClick={handlePrint}
-            >
-              <Printer className="h-3.5 w-3.5" />
-              {sending ? "Basılıyor…" : `Hepsini bas (${stale.length})`}
-            </Button>
+            <DesktopOnlyAction>
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1.5"
+                disabled={sending || auditMut.isPending}
+                onClick={handlePrint}
+              >
+                <Printer className="h-3.5 w-3.5" />
+                {sending ? "Basılıyor…" : `Hepsini bas (${stale.length})`}
+              </Button>
+            </DesktopOnlyAction>
           </PermissionGate>
         </div>
       </Callout>
