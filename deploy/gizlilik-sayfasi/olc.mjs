@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Gizlilik sayfası canlı ölçümü — internetten SALT OKUMA (curl). Paket yok.
-//   node deploy/gizlilik-sayfasi/olc.mjs              # sayfa + köken + komşular (DNS kaydı açıldıktan sonra)
+//   node deploy/gizlilik-sayfasi/olc.mjs              # iki sayfa (/gizlilik · /patron-gizlilik) + köken + komşular
 //   node deploy/gizlilik-sayfasi/olc.mjs --adnansahin # yalnız komşular: adnansahin eski adresi 200 · indir kapısı 403
 // Çıkış: 0 hepsi geçti · 1 en az biri düştü.
 
@@ -13,10 +13,15 @@ import { fileURLToPath } from 'node:url';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ADRES = 'https://tekserp.etkiliyazilim.com/gizlilik';
+const PATRON_ADRES = 'https://tekserp.etkiliyazilim.com/patron-gizlilik';
 const KOKEN_IP = '80.253.255.188';
-const HTML = fs.readFileSync(path.join(KOK, 'deploy/gizlilik-sayfasi/html/gizlilik.html'));
 // Kenarın tek dönüşümü: Cloudflare email_off yorum işaretlerini siler (canlıda ölçüldü 2026-10-08), başka bayta dokunmaz.
-const KENAR_BEKLENEN = Buffer.from(HTML.toString('utf8').replaceAll('<!--email_off-->', '').replaceAll('<!--/email_off-->', ''), 'utf8');
+const kenarBeklenen = (rel) => Buffer.from(fs.readFileSync(path.join(KOK, rel), 'utf8').replaceAll('<!--email_off-->', '').replaceAll('<!--/email_off-->', ''), 'utf8');
+const OLCULEN = [
+  { adres: ADRES, html: 'deploy/gizlilik-sayfasi/html/gizlilik.html', capa: null },
+  // Play hesap silme adresi = PATRON_ADRES#hesap-silme: çapa sunucuya gitmez, sayfada id olarak bulunmalı.
+  { adres: PATRON_ADRES, html: 'deploy/gizlilik-sayfasi/html/patron-gizlilik.html', capa: 'hesap-silme' },
+];
 const KARARTMA = ['[email protected]', '[email&#160;protected]', 'cdn-cgi/l/email-protection', '__cf_email__', 'email-decode'];
 
 /** curl ile tek istek: { kod, baslik: {ad→değer}, govde: Buffer } (yönlendirme izlenmez). */
@@ -55,31 +60,39 @@ function komsular() {
   bak('indir kapısı belirteçsiz → 403', r.kod === 403, `HTTP ${r.kod}`);
 }
 
+function sayfaOlc({ adres, html, capa }) {
+  const { pathname } = new URL(adres);
+  const beklenen = kenarBeklenen(html);
+  const r = iste(adres);
+  bak(`${pathname} → 200`, r.kod === 200, `HTTP ${r.kod}`);
+  bak(`${pathname} text/html; charset=utf-8`, /^text\/html;\s*charset=utf-8$/i.test(r.baslik['content-type'] ?? ''), r.baslik['content-type']);
+  bak(`${pathname} Cache-Control kısa (max-age=300)`, /max-age=300\b/.test(r.baslik['cache-control'] ?? ''), r.baslik['cache-control']);
+  bak(`${pathname} CSP default-src none`, /default-src 'none'/.test(r.baslik['content-security-policy'] ?? ''));
+  const ozet = (x) => crypto.createHash('sha256').update(x).digest('hex').slice(0, 12);
+  bak(`${pathname} yayındaki sayfa repodakiyle bayt-eşit (email_off işaretleri hariç)`, r.govde.equals(beklenen), `yayın ${ozet(r.govde)} ↔ repo ${ozet(beklenen)}`);
+  const karartma = KARARTMA.filter((x) => r.govde.includes(x));
+  bak(`${pathname} e-posta karartması yok ([email protected] · cdn-cgi/l/email-protection · çözücü betik)`, r.kod === 200 && karartma.length === 0, karartma.join(', '));
+  bak(`${pathname} yer tutucu yok`, r.kod === 200 && !/\[[A-ZÇĞİÖŞÜ][^\]\n]{1,80}\]/.test(r.govde.toString()));
+  if (capa) bak(`${pathname}#${capa} çapası sayfada`, r.govde.includes(`id="${capa}"`));
+  const s = iste(`${adres}/`);
+  bak(`${pathname}/ → 301 ${pathname}`, s.kod === 301 && s.baslik.location === pathname, `HTTP ${s.kod} ${s.baslik.location ?? ''}`);
+}
+
 async function sayfa() {
   const { host, pathname } = new URL(ADRES);
   let ipler = [];
   try { ipler = await dns.resolve4(host); } catch { /* aşağıda düşer */ }
   bak(`DNS ${host} çözülüyor ve proxy açık (köken IP'si görünmez)`, ipler.length > 0 && !ipler.includes(KOKEN_IP), `A: ${ipler.join(',') || 'YOK'}`);
 
-  const r = iste(ADRES);
-  bak(`${pathname} → 200`, r.kod === 200, `HTTP ${r.kod}`);
-  bak('text/html; charset=utf-8', /^text\/html;\s*charset=utf-8$/i.test(r.baslik['content-type'] ?? ''), r.baslik['content-type']);
-  bak('Cache-Control kısa (max-age=300)', /max-age=300\b/.test(r.baslik['cache-control'] ?? ''), r.baslik['cache-control']);
-  bak('CSP default-src none', /default-src 'none'/.test(r.baslik['content-security-policy'] ?? ''));
-  const ozet = (x) => crypto.createHash('sha256').update(x).digest('hex').slice(0, 12);
-  bak('yayındaki sayfa repodakiyle bayt-eşit (email_off işaretleri hariç)', r.govde.equals(KENAR_BEKLENEN), `yayın ${ozet(r.govde)} ↔ repo ${ozet(KENAR_BEKLENEN)}`);
-  const karartma = KARARTMA.filter((x) => r.govde.includes(x));
-  bak('sayfada e-posta karartması yok ([email protected] · cdn-cgi/l/email-protection · çözücü betik)', r.kod === 200 && karartma.length === 0, karartma.join(', '));
-  bak('sayfada yer tutucu yok', r.kod === 200 && !/\[[A-ZÇĞİÖŞÜ][^\]\n]{1,80}\]/.test(r.govde.toString()));
-
-  const s = iste(`${ADRES}/`);
-  bak(`${pathname}/ → 301 ${pathname}`, s.kod === 301 && s.baslik.location === pathname, `HTTP ${s.kod} ${s.baslik.location ?? ''}`);
+  for (const o of OLCULEN) sayfaOlc(o);
   const k = iste(`https://${host}/`);
   bak(`/ → 302 ${pathname}`, k.kod === 302 && k.baslik.location === pathname, `HTTP ${k.kod} ${k.baslik.location ?? ''}`);
   const y = iste(`https://${host}/yok-${Date.now()}`);
   bak('bulunamayan → 404 no-store', y.kod === 404 && /no-store/.test(y.baslik['cache-control'] ?? ''), `HTTP ${y.kod} ${y.baslik['cache-control'] ?? ''}`);
-  const d = iste(ADRES, ['-k', '--resolve', `${host}:443:${KOKEN_IP}`]);
-  bak("köke doğrudan (Cloudflare'siz) → 403", d.kod === 403, `HTTP ${d.kod}`);
+  for (const { adres } of OLCULEN) {
+    const d = iste(adres, ['-k', '--resolve', `${host}:443:${KOKEN_IP}`]);
+    bak(`köke doğrudan (Cloudflare'siz) ${new URL(adres).pathname} → 403`, d.kod === 403, `HTTP ${d.kod}`);
+  }
 }
 
 if (!process.argv.includes('--adnansahin')) await sayfa();

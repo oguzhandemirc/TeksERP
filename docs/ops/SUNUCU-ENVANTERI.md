@@ -120,7 +120,7 @@ Kurulum günü ölçüm: **11 saatte 1193 başarısız giriş denemesi**, ilk sa
 | `docker-socket-proxy` | nginx:alpine | 64m | `docker.sock`u traefik'e **salt-okunur** verir |
 | `tekserp-guncelleme` | nginx:alpine | 64m | Statik yayın (panel + tablet) |
 | `tekserp-indir` | nginx:alpine (salt-okunur kök) | 64m | Tek ortak paketin indirme kökeni `indir.etkiliyazilim.com` (2026-10-08'den beri yayında; kapı önündeki Cloudflare Worker'da) |
-| `tekserp-gizlilik` | nginx:alpine (salt-okunur kök) | 32m | **PLANLI (kurulmadı)** — herkese açık gizlilik sayfası `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2; [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md)) |
+| `tekserp-gizlilik` | nginx:alpine (salt-okunur kök) | 32m | **KURULU** (canlı ölçüm 2026-10-15) — herkese açık gizlilik sayfası `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2) + `/patron-gizlilik` (repo hazır 2026-10-15, yayın kullanıcı onayıyla; [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md)) |
 
 Docker günlükleri: `json-file`, 20 MB × 5 dosya (sınırsız büyümeye karşı).
 
@@ -170,7 +170,7 @@ Cloudflare'i kabul eder (doğrudan `--resolve …:80.253.255.188` → 403; ölç
 sonra VDS'te `cd /opt/stack/apps/tekserp-indir && docker compose down`. Dizin SİLİNMEZ; eski
 `tekserp-guncelleme` ve adnansahin bu adımlardan etkilenmez — her adımdan sonra adnansahin ölçümü koşulur.
 
-**`tekserp-gizlilik` (PLANLI, repo hazır 2026-10-08):** `https://tekserp.etkiliyazilim.com/gizlilik` — yönlendirici
+**`tekserp-gizlilik` (KURULU; `/patron-gizlilik` repo hazır 2026-10-15, yayın bekliyor):** `https://tekserp.etkiliyazilim.com/gizlilik` — yönlendirici
 `tekserp-gizlilik`, kendi kenar zinciri `tekserp-gizlilik-cf` → `tekserp-gizlilik-hiz`; indir Worker'ının ve eski sitenin
 dışında. Kurulum `deploy/gizlilik-sayfasi/vds-kur.sh` (kuru varsayılan · `--uygula` · `--geri-al`; sudo'suz yardımcı
 konteyner; komşu ölçümü önce/sonra), DNS `A tekserp` proxy açık EN SON. Runbook: [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md).

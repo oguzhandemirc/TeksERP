@@ -1,7 +1,7 @@
 name: tekserp-gizlilik
 
 # =============================================================================
-# TeksERP herkese açık yasal sayfaları — tekserp.etkiliyazilim.com (bugün yalnız /gizlilik)
+# TeksERP herkese açık yasal sayfaları — tekserp.etkiliyazilim.com (/gizlilik · /patron-gizlilik)
 # /opt/stack/apps/tekserp-gizlilik/docker-compose.yml
 # =============================================================================
 # Google Play gizlilik politikası adresi (K2, 2026-10-08): girişsiz, belirteçsiz, PDF olmayan HTML.

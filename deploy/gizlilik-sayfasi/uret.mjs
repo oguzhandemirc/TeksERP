@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Gizlilik sayfası üreticisi — docs/legal/GIZLILIK-POLITIKASI.md (tek kaynak) → html/gizlilik.html. Paket yok.
+// Yasal sayfa üreticisi — her sayfanın TEK kaynağı docs/legal/*.md → html/*.html (SAYFALAR). Paket yok.
 // Kaynağın baştaki `>` iç notu sayfaya GİRMEZ. Desteklenen alt küme: #, ##, "- " madde (2 boşluk devam),
 // paragraf, **kalın**, `kod`, https bağlantısı, e-posta (email_off içinde). Başka biçim → hata (sessiz bozulma yerine).
-//   node deploy/gizlilik-sayfasi/uret.mjs            # html'i yaz
-//   node deploy/gizlilik-sayfasi/uret.mjs --denetle  # yazma; fark varsa 1
+//   node deploy/gizlilik-sayfasi/uret.mjs            # bütün sayfaların html'ini yaz
+//   node deploy/gizlilik-sayfasi/uret.mjs --denetle  # yazma; herhangi birinde fark varsa 1
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,6 +12,13 @@ import { fileURLToPath } from 'node:url';
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const KAYNAK_REL = 'docs/legal/GIZLILIK-POLITIKASI.md';
 export const HTML_REL = 'deploy/gizlilik-sayfasi/html/gizlilik.html';
+export const PATRON_KAYNAK_REL = 'docs/legal/PATRON-GIZLILIK-POLITIKASI.md';
+export const PATRON_HTML_REL = 'deploy/gizlilik-sayfasi/html/patron-gizlilik.html';
+/** Kökenin sunduğu sayfalar: yol ↔ kaynak ↔ html (nginx konumu, olc.mjs ve bekçi bu listeyi okur). */
+export const SAYFALAR = Object.freeze([
+  Object.freeze({ yol: '/gizlilik', kaynak: KAYNAK_REL, html: HTML_REL }),
+  Object.freeze({ yol: '/patron-gizlilik', kaynak: PATRON_KAYNAK_REL, html: PATRON_HTML_REL }),
+]);
 
 const kacis = (s) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
 
@@ -113,14 +120,18 @@ ${govde.join('\n')}
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const html = uret(fs.readFileSync(path.join(KOK, KAYNAK_REL), 'utf8'));
-  const hedef = path.join(KOK, HTML_REL);
-  if (process.argv.includes('--denetle')) {
-    const var_ = fs.existsSync(hedef) ? fs.readFileSync(hedef, 'utf8') : null;
-    if (var_ !== html) { console.log(`❌ ${HTML_REL} kaynaktan üretilenle aynı değil — node deploy/gizlilik-sayfasi/uret.mjs`); process.exit(1); }
-    console.log(`✅ ${HTML_REL} kaynakla bayt-eşit`);
-  } else {
-    fs.writeFileSync(hedef, html);
-    console.log(`yazıldı: ${HTML_REL}`);
+  let fark = 0;
+  for (const { kaynak, html: rel } of SAYFALAR) {
+    const html = uret(fs.readFileSync(path.join(KOK, kaynak), 'utf8'));
+    const hedef = path.join(KOK, rel);
+    if (process.argv.includes('--denetle')) {
+      const var_ = fs.existsSync(hedef) ? fs.readFileSync(hedef, 'utf8') : null;
+      if (var_ !== html) { console.log(`❌ ${rel} kaynaktan üretilenle aynı değil — node deploy/gizlilik-sayfasi/uret.mjs`); fark++; }
+      else console.log(`✅ ${rel} kaynakla bayt-eşit`);
+    } else {
+      fs.writeFileSync(hedef, html);
+      console.log(`yazıldı: ${rel}`);
+    }
   }
+  if (fark) process.exit(1);
 }

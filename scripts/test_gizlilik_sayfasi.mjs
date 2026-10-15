@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 // =============================================================================
-// BEKÇİ — HERKESE AÇIK GİZLİLİK SAYFASI (tekserp.etkiliyazilim.com/gizlilik, Play K2) · zero-dep, DB'siz, ağsız
+// BEKÇİ — HERKESE AÇIK YASAL SAYFALAR (tekserp.etkiliyazilim.com/gizlilik · /patron-gizlilik) · zero-dep, DB'siz, ağsız
 // =============================================================================
-// Kaynak: deploy/gizlilik-sayfasi/ (VDS /opt/stack/apps/tekserp-gizlilik) + docs/legal/GIZLILIK-POLITIKASI.md.
-//   §1 tek kaynak: html/gizlilik.html = uret(GIZLILIK-POLITIKASI.md) bayt-eşit; sayfada betik/dış kaynak yok;
+// Kaynak: deploy/gizlilik-sayfasi/ (VDS /opt/stack/apps/tekserp-gizlilik) + docs/legal/{GIZLILIK,PATRON-GIZLILIK}-POLITIKASI.md.
+//   §1 tek kaynak: her sayfa (uret.mjs SAYFALAR) html = uret(kaynak) bayt-eşit; sayfada betik/dış kaynak yok;
 //      her e-posta/mailto <!--email_off--> içinde (Cloudflare karartması çözücü betik ister, CSP onu engeller)
 //   §2 compose: proje/konteyner adı, salt-okunur kök + salt-okunur bağlar, Host = ADRES, websecure+tls,
 //      yalnız kendi önekli etiketler (indir/eski güncelleme sitesinin adı ve adresi yok)
 //   §3 kenar zinciri (deploy/traefik/kenar-zinciri.mjs): CF ipallowlist = satıcı CLOUDFLARE_NETWORKS birebir → hız seddi
 //   §4 nginx: `always` yalnız no-store/no-cache başlığında · dizin listesi kapalı · nokta-dosya 404 ilk regex ·
-//      göreli yönlendirme · sayfa konumu = ADRES yolu ve dosyası · 404 no-store
-//   §5 adres tutarlılığı: ADRES kurulum/ölçüm betiğinde, kaynak notta, Play form belgesinde, sunucu envanterinde aynı
+//      göreli yönlendirme · her sayfanın konumu = yolu ve dosyası (+ yol/ → 301) · 404 no-store
+//   §5 adres tutarlılığı: ADRES kurulum/ölçüm betiğinde, kaynak notta, Play form belgesinde, sunucu envanterinde aynı;
+//      PATRON_ADRES kurulum/ölçüm betiğinde, kendi kaynağında, mağaza runbook'unda; #hesap-silme çapası sayfada ve runbook'ta
 //   §6 kablolama: commit kancası + CI bu bekçiyi koşar
+//   §7 Patron metni ↔ kod: saklama süreleri (patron/sunucu maintenance.ts + config.ts varsayılanları) ve native push
+//      cümlesi (patron/uygulama push/support.ts NATIVE_PUSH) metinde koddaki değerle yazılı
 // Köşeli parantezli yer tutucu bekçiyi KIRMIZI yapmaz (taslak meşru); yayını vds-kur.sh durdurur — burada ⏳ basılır.
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ. Cırcır değil.
@@ -24,10 +27,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { kenarZinciriSorunlari } from '../deploy/traefik/kenar-zinciri.mjs';
-import { HTML_REL, KAYNAK_REL, uret } from '../deploy/gizlilik-sayfasi/uret.mjs';
+import { HTML_REL, KAYNAK_REL, PATRON_HTML_REL, PATRON_KAYNAK_REL, SAYFALAR, uret } from '../deploy/gizlilik-sayfasi/uret.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const ADRES = 'https://tekserp.etkiliyazilim.com/gizlilik';
+export const PATRON_ADRES = 'https://tekserp.etkiliyazilim.com/patron-gizlilik';
+const SILME_CAPASI = 'hesap-silme';
 const PROJE = 'tekserp-gizlilik';
 const PROJE_DIZINI = `/opt/stack/apps/${PROJE}`;
 const YABANCI = ['tekserp-indir', 'tekserpguncelleme', 'indir.etkiliyazilim.com', 'guncelleme.etkiliyazilim.com'];
@@ -44,10 +49,16 @@ const ZINCIR_REL = 'deploy/traefik/kenar-zinciri.mjs';
 const KANCA_REL = 'scripts/hooks/pre-commit.mjs';
 const CI_REL = '.github/workflows/ci.yml';
 const BEN_REL = 'scripts/test_gizlilik_sayfasi.mjs';
+const MAGAZA_REL = 'docs/ops/PATRON-MAGAZA-ANDROID.md';
+const BAKIM_REL = 'patron/sunucu/src/services/maintenance.ts';
+const AYAR_REL = 'patron/sunucu/src/config.ts';
+const PUSH_REL = 'patron/uygulama/src/push/support.ts';
+/** NATIVE_PUSH kapalıyken metinde DURMASI, açıkken DURMAMASI gereken cümle. */
+const PUSH_YOK_CUMLESI = 'Android uygulamasında anlık bildirim bu sürümde yoktur';
 
 /** Commit tetiği: bekçinin okuduğu her dosya (§6 listenin kancada aynen geçtiğini ölçer). */
-export const TETIK = Object.freeze([KAYNAK_REL, HTML_REL, COMPOSE_REL, NGINX_REL, URET_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, CF_REL, ZINCIR_REL, BEN_REL]);
-const OKUNAN = [KAYNAK_REL, HTML_REL, COMPOSE_REL, NGINX_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, CF_REL, KANCA_REL, CI_REL];
+export const TETIK = Object.freeze([KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, URET_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, PUSH_REL, CF_REL, ZINCIR_REL, BEN_REL]);
+const OKUNAN = [KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, PUSH_REL, CF_REL, KANCA_REL, CI_REL];
 
 function dosyalariOku() {
   const d = {};
@@ -96,16 +107,18 @@ export function olc(d) {
   const { host, pathname } = new URL(ADRES);
 
   // §1
-  const h = d[HTML_REL];
-  try {
-    if (uret(d[KAYNAK_REL]) !== h) s.kirmizi.push(`§1 ${HTML_REL} kaynaktan üretilenle aynı değil (node ${URET_REL})`);
-  } catch (e) {
-    s.kirmizi.push(`§1 kaynak çevrilemedi: ${e.message}`);
+  for (const { kaynak, html } of SAYFALAR) {
+    const h = d[html];
+    try {
+      if (uret(d[kaynak]) !== h) s.kirmizi.push(`§1 ${html} kaynaktan üretilenle aynı değil (node ${URET_REL})`);
+    } catch (e) {
+      s.kirmizi.push(`§1 ${kaynak} çevrilemedi: ${e.message}`);
+    }
+    if (/<script|<link|<iframe|<img|\ssrc=/i.test(h)) s.kirmizi.push(`§1 ${html} sayfada betik/dış kaynak var (CSP default-src none)`);
+    const acik = emailOffDisi(h);
+    if (acik.length) s.kirmizi.push(`§1 email_off dışında e-posta/mailto (Cloudflare karartır, CSP çözücüyü engeller): ${html}: ${[...new Set(acik)].join(', ')}`);
+    if (!/<html lang="tr">/.test(h) || !/name="viewport"/.test(h)) s.kirmizi.push(`§1 ${html} lang="tr" ya da mobil viewport yok`);
   }
-  if (/<script|<link|<iframe|<img|\ssrc=/i.test(h)) s.kirmizi.push('§1 sayfada betik/dış kaynak var (CSP default-src none)');
-  const acik = emailOffDisi(h);
-  if (acik.length) s.kirmizi.push(`§1 email_off dışında e-posta/mailto (Cloudflare karartır, CSP çözücüyü engeller): ${[...new Set(acik)].join(', ')}`);
-  if (!/<html lang="tr">/.test(h) || !/name="viewport"/.test(h)) s.kirmizi.push('§1 lang="tr" ya da mobil viewport yok');
 
   // §2
   const c = d[COMPOSE_REL];
@@ -149,14 +162,21 @@ export function olc(d) {
   const nokta = k.find((x) => x.desen === '~ (^|/)\\.');
   if (!nokta || !/return\s+404;/.test(nokta.govde)) s.kirmizi.push('§4 nokta-dosya konumu 404 dönmüyor');
   else if (regexler.indexOf(nokta) !== 0) s.kirmizi.push('§4 nokta-dosya konumu ilk regex değil');
-  const sayfa = k.find((x) => x.desen === `= ${pathname}`);
-  const dosya = `/${path.posix.basename(HTML_REL)}`;
-  if (!sayfa) s.kirmizi.push(`§4 "location = ${pathname}" yok`);
-  else {
-    if (!new RegExp(`try_files\\s+${dosya.replace('.', '\\.')}\\s+=404;`).test(sayfa.govde)) s.kirmizi.push(`§4 sayfa konumu ${dosya}'ı sunmuyor`);
-    const yas = /Cache-Control\s+"[^"]*max-age=([0-9]+)/.exec(sayfa.govde)?.[1];
-    if (!yas || Number(yas) > 3600) s.kirmizi.push(`§4 sayfa önbelleği kısa değil (max-age=${yas ?? 'YOK'}, tavan 3600)`);
-    if (!/Content-Security-Policy\s+"default-src 'none'/.test(sayfa.govde)) s.kirmizi.push('§4 sayfa konumunda CSP default-src none yok');
+  if (SAYFALAR[0].yol !== pathname) s.kirmizi.push(`§4 uret.mjs SAYFALAR ilk sayfası ${pathname} değil`);
+  if (!SAYFALAR.some((x) => x.yol === new URL(PATRON_ADRES).pathname && x.html === PATRON_HTML_REL)) s.kirmizi.push('§4 uret.mjs SAYFALAR Patron sayfasını taşımıyor');
+  for (const { yol, html } of SAYFALAR) {
+    const sayfa = k.find((x) => x.desen === `= ${yol}`);
+    const dosya = `/${path.posix.basename(html)}`;
+    if (dosya !== `${yol}.html`) s.kirmizi.push(`§4 ${yol} sayfasının dosyası ${dosya} (beklenen ${yol}.html — vds-kur.sh bu eşleşmeye dayanır)`);
+    if (!sayfa) s.kirmizi.push(`§4 "location = ${yol}" yok`);
+    else {
+      if (!new RegExp(`try_files\\s+${dosya.replace('.', '\\.')}\\s+=404;`).test(sayfa.govde)) s.kirmizi.push(`§4 ${yol} konumu ${dosya}'ı sunmuyor`);
+      const yas = /Cache-Control\s+"[^"]*max-age=([0-9]+)/.exec(sayfa.govde)?.[1];
+      if (!yas || Number(yas) > 3600) s.kirmizi.push(`§4 ${yol} önbelleği kısa değil (max-age=${yas ?? 'YOK'}, tavan 3600)`);
+      if (!/Content-Security-Policy\s+"default-src 'none'/.test(sayfa.govde)) s.kirmizi.push(`§4 ${yol} konumunda CSP default-src none yok`);
+    }
+    const bolu = k.find((x) => x.desen === `= ${yol}/`);
+    if (!bolu || !new RegExp(`return\\s+301\\s+${yol};`).test(bolu.govde)) s.kirmizi.push(`§4 "location = ${yol}/" → 301 ${yol} yok`);
   }
   const bulunamadi = k.find((x) => x.desen === '@bulunamadi');
   if (!/error_page\s+404\s*=\s*@bulunamadi;/.test(n) || !bulunamadi || !/Cache-Control\s+"no-store"\s+always;/.test(bulunamadi.govde)) s.kirmizi.push('§4 404 no-store hattı yok');
@@ -164,6 +184,18 @@ export function olc(d) {
   // §5
   for (const rel of [KUR_REL, OLC_REL, KAYNAK_REL, FORM_REL, ENVANTER_REL]) if (!d[rel].includes(ADRES)) s.kirmizi.push(`§5 ${rel} adresi (${ADRES}) anmıyor`);
   if (!d[KUR_REL].includes(PROJE_DIZINI)) s.kirmizi.push(`§5 ${KUR_REL} proje dizinini (${PROJE_DIZINI}) anmıyor`);
+  for (const rel of [KUR_REL, OLC_REL, PATRON_KAYNAK_REL, MAGAZA_REL]) if (!d[rel].includes(PATRON_ADRES)) s.kirmizi.push(`§5 ${rel} Patron adresini (${PATRON_ADRES}) anmıyor`);
+  const silmeAdresi = `${PATRON_ADRES}#${SILME_CAPASI}`;
+  for (const rel of [PATRON_KAYNAK_REL, MAGAZA_REL]) if (!d[rel].includes(silmeAdresi)) s.kirmizi.push(`§5 ${rel} hesap silme adresini (${silmeAdresi}) anmıyor`);
+  if (!d[PATRON_HTML_REL].includes(`<h2 id="${SILME_CAPASI}">`)) s.kirmizi.push(`§5 ${PATRON_HTML_REL} #${SILME_CAPASI} çapasını taşımıyor (Play hesap silme adresi kırılır)`);
+  if (!/^\*\*Metin sürümü:\*\* `PATRON-GP-\d{4}\.\d+`$/m.test(d[PATRON_KAYNAK_REL]) || !/^\*\*Yürürlük:\*\* \S/m.test(d[PATRON_KAYNAK_REL])) s.kirmizi.push(`§5 ${PATRON_KAYNAK_REL} metin sürümü (PATRON-GP-YYYY.N) ya da yürürlük satırı yok`);
+  const kurSayfa = /^SAYFALAR="([^"]*)"$/m.exec(d[KUR_REL])?.[1]?.split(/\s+/).filter(Boolean) ?? [];
+  const beklenenSayfa = SAYFALAR.map((x) => path.posix.basename(x.html, '.html'));
+  if (kurSayfa.join(' ') !== beklenenSayfa.join(' ')) s.kirmizi.push(`§5 ${KUR_REL} SAYFALAR="${kurSayfa.join(' ')}" ≠ uret.mjs (${beklenenSayfa.join(' ')})`);
+  for (const ad of beklenenSayfa) {
+    if (!d[KUR_REL].includes(`html/${ad}.html`)) s.kirmizi.push(`§5 ${KUR_REL} html/${ad}.html'ı taşımıyor`);
+    if (!d[OLC_REL].includes(`html/${ad}.html`)) s.kirmizi.push(`§5 ${OLC_REL} html/${ad}.html'ı ölçmüyor`);
+  }
 
   // §6
   const kanca = d[KANCA_REL];
@@ -173,6 +205,37 @@ export function olc(d) {
   if (kume === undefined) s.kirmizi.push('§6 commit kancasında GIZLILIK_SAYFASI_TETIK kümesi yok');
   for (const t of TETIK) if (!(kume ?? '').includes(`"${t}"`)) s.kirmizi.push(`§6 commit kancası tetiği "${t}"i kapsamıyor`);
   if (!d[CI_REL].includes(`node ${BEN_REL} && node ${BEN_REL} --sonda`)) s.kirmizi.push('§6 CI bu bekçiyi (+ --sonda) koşmuyor');
+
+  // §7 — metindeki süreler ve bildirim cümlesi koddaki değerden ayrışırsa politika yalan söyler.
+  const sabit = (metin, ad) => { const m = new RegExp(`export const ${ad} = (\\d+);`).exec(metin); return m ? Number(m[1]) : null; };
+  const varsayilan = (ad) => { const m = new RegExp(`${ad}:\\s*positiveInt\\([^)]*\\)\\.default\\((\\d+)\\)`).exec(d[AYAR_REL]); return m ? Number(m[1]) : null; };
+  const silme = sabit(d[BAKIM_REL], 'IDENTITY_PURGE_DAYS');
+  const ip = sabit(d[BAKIM_REL], 'IP_RETENTION_DAYS');
+  const giris = varsayilan('DENETIM_GIRIS_SAKLAMA_GUN');
+  const denetim = varsayilan('DENETIM_SAKLAMA_GUN');
+  const pushM = /export const NATIVE_PUSH = (true|false);/.exec(d[PUSH_REL]);
+  if (silme === null || ip === null) s.olculemedi.push(`§7 ${BAKIM_REL} IDENTITY_PURGE_DAYS / IP_RETENTION_DAYS okunamadı`);
+  if (giris === null || denetim === null) s.olculemedi.push(`§7 ${AYAR_REL} DENETIM_GIRIS_SAKLAMA_GUN / DENETIM_SAKLAMA_GUN varsayılanı okunamadı`);
+  if (!pushM) s.olculemedi.push(`§7 ${PUSH_REL} NATIVE_PUSH okunamadı`);
+  if (s.olculemedi.length) return s;
+  const md = d[PATRON_KAYNAK_REL].replace(/\s+/g, ' ');
+  const yil = denetim / 365;
+  if (!Number.isInteger(yil)) s.kirmizi.push(`§7 DENETIM_SAKLAMA_GUN=${denetim} tam yıl değil — metin "${yil} yıl" yazamaz, ${PATRON_KAYNAK_REL} elle güncellenir ve bu bekçi uyarlanır`);
+  const gerekli = [
+    `IP adresi ${ip} gün sonra silinir`,
+    `Başarısız giriş kayıtları ${giris} gün, diğer güvenlik kayıtları ${yil} yıl saklanır`,
+    `kapanıştan ${silme} gün sonra silinir`,
+    `Kapanıştan sonraki ${silme}. günde`,
+    `(başarısız giriş ${giris} gün, diğerleri ${yil} yıl)`,
+    `IP adresi ${ip} gün sonra çıkarılır`,
+  ];
+  for (const c of gerekli) if (!md.includes(c)) s.kirmizi.push(`§7 ${PATRON_KAYNAK_REL} koddaki süreyi yazmıyor: "${c}"`);
+  const pushKapali = pushM[1] === 'false';
+  if (pushKapali !== md.includes(PUSH_YOK_CUMLESI)) {
+    s.kirmizi.push(pushKapali
+      ? `§7 NATIVE_PUSH kapalı ama ${PATRON_KAYNAK_REL} "${PUSH_YOK_CUMLESI}" demiyor`
+      : `§7 NATIVE_PUSH AÇIK ama ${PATRON_KAYNAK_REL} hâlâ "${PUSH_YOK_CUMLESI}" diyor — §2/§4 (cihaz anahtarı, Google/Apple/Expo) + PATRON-MAGAZA-ANDROID §4.2 birlikte güncellenir`);
+  }
   return s;
 }
 
@@ -210,8 +273,26 @@ function sondalar(taban) {
     ['N25 mailto email_off dışında', 'kirmizi', deg(HTML_REL, (t) => t.replaceAll('<!--email_off-->', '').replaceAll('<!--/email_off-->', '')), '§1 email_off dışında'],
     ['N26 düz e-posta email_off dışında', 'kirmizi', deg(HTML_REL, (t) => t.replace('</main>', '<p>destek@etkiliyazilim.com</p>\n</main>')), '§1 email_off dışında'],
     ['P1 kaynağa yeni e-posta + üretildi', 'yesil', (d) => { d[KAYNAK_REL] = d[KAYNAK_REL].replace('## 10. Çocuklar', 'Ek: destek@etkiliyazilim.com\n\n## 10. Çocuklar'); d[HTML_REL] = uret(d[KAYNAK_REL]); }],
+    ['N27 Patron kaynağı değişti, html üretilmedi', 'kirmizi', deg(PATRON_KAYNAK_REL, (t) => t.replace('## 8. Çocuklar', '## 8. Çocuklar ve gençler')), '§1'],
+    ['N28 hesap silme başlığı değişti (çapa kırıldı), html üretildi', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace('## 9. Hesap silme', '## 9. Hesabımı sil'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§5'],
+    ['N29 nginx Patron konumu yok', 'kirmizi', N((t) => t.replace('location = /patron-gizlilik {', 'location = /patron-gizlilik-eski {')), '§4'],
+    ['N30 nginx Patron 301 konumu yok', 'kirmizi', N((t) => t.replace(/location = \/patron-gizlilik\/ \{\s*return 301 \/patron-gizlilik;\s*\}/, '')), '§4'],
+    ['N31 Patron sayfasına betik', 'kirmizi', deg(PATRON_HTML_REL, (t) => t.replace('</body>', '<script>1</script></body>')), '§1'],
+    ['N32 kimlik silme süresi kodda 45', 'kirmizi', deg(BAKIM_REL, (t) => t.replace('export const IDENTITY_PURGE_DAYS = 30;', 'export const IDENTITY_PURGE_DAYS = 45;')), '§7'],
+    ['N33 IP saklama kodda 60', 'kirmizi', deg(BAKIM_REL, (t) => t.replace('export const IP_RETENTION_DAYS = 30;', 'export const IP_RETENTION_DAYS = 60;')), '§7'],
+    ['N34 denetim saklama varsayılanı 1095', 'kirmizi', deg(AYAR_REL, (t) => t.replace(/(DENETIM_SAKLAMA_GUN:\s*positiveInt\([^)]*\)\.default\()\d+/, '$11095')), '§7'],
+    ['N35 native push açıldı, metin aynı', 'kirmizi', deg(PUSH_REL, (t) => t.replace('export const NATIVE_PUSH = false;', 'export const NATIVE_PUSH = true;')), '§7'],
+    ['N36 metinden push cümlesi silindi, kapı kapalı', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(PUSH_YOK_CUMLESI, 'Android uygulaması bildirim gönderir'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§7'],
+    ['N37 mağaza runbook\'u silme adresini anmıyor', 'kirmizi', deg(MAGAZA_REL, (t) => t.replaceAll(`${PATRON_ADRES}#${SILME_CAPASI}`, `${PATRON_ADRES}#silme`)), '§5'],
+    ['N38 kurulum betiği Patron sayfasını taşımıyor', 'kirmizi', deg(KUR_REL, (t) => t.replace('SAYFALAR="gizlilik patron-gizlilik"', 'SAYFALAR="gizlilik"')), '§5'],
+    ['N39 ölçüm betiği Patron sayfasını ölçmüyor', 'kirmizi', deg(OLC_REL, (t) => t.replaceAll('html/patron-gizlilik.html', 'html/x.html')), '§5'],
+    ['N40 metin sürümü satırı yok', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(/^\*\*Metin sürümü:\*\*.*\n/m, ''); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§5'],
+    ['N41 kanca tetiği maintenance.ts kapsamıyor', 'kirmizi', deg(KANCA_REL, (t) => t.replace(`"${BAKIM_REL}"`, '"z"')), '§6'],
+    ['P2 native push açıldı + metin güncellendi + üretildi', 'yesil', (d) => { d[PUSH_REL] = d[PUSH_REL].replace('export const NATIVE_PUSH = false;', 'export const NATIVE_PUSH = true;'); d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(PUSH_YOK_CUMLESI, 'Android uygulaması anlık bildirim için cihazın bildirim anahtarını kaydeder'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }],
     ['O1 CF kaynağı okunamadı', 'olculemedi', deg(CF_REL, () => undefined)],
     ['O2 CLOUDFLARE_NETWORKS adı değişti', 'olculemedi', deg(CF_REL, (t) => t.replaceAll('CLOUDFLARE_NETWORKS', 'CF_AGLARI'))],
+    ['O3 IDENTITY_PURGE_DAYS adı değişti', 'olculemedi', deg(BAKIM_REL, (t) => t.replaceAll('IDENTITY_PURGE_DAYS', 'KIMLIK_SILME_GUN'))],
+    ['O4 push kapısı okunamadı', 'olculemedi', deg(PUSH_REL, () => undefined)],
   ];
   let kotu = 0;
   for (const [ad, beklenen, boz, ileti] of liste) {
@@ -223,7 +304,7 @@ function sondalar(taban) {
       kotu++;
       continue;
     }
-    if ((beklenen !== 'yesil' || ad.startsWith('P1')) && Object.keys(d).every((k) => d[k] === taban[k])) { console.log(`❌ ${ad} — bozma metni değiştirmedi (sonda geçersiz)`); kotu++; continue; }
+    if ((beklenen !== 'yesil' || ad.startsWith('P1') || ad.startsWith('P2')) && Object.keys(d).every((k) => d[k] === taban[k])) { console.log(`❌ ${ad} — bozma metni değiştirmedi (sonda geçersiz)`); kotu++; continue; }
     const s = olc(d);
     const h = s.olculemedi.length ? 'olculemedi' : s.kirmizi.length ? 'kirmizi' : 'yesil';
     const ok = h === beklenen && (!ileti || s.kirmizi.some((x) => x.startsWith(ileti)));
@@ -248,8 +329,8 @@ const s = olc(girdi);
 for (const x of s.olculemedi) console.log(`⛔ ÖLÇÜLEMEDİ ${x}`);
 for (const x of s.kirmizi) console.log(`❌ ${x}`);
 if (!s.olculemedi.length && !s.kirmizi.length) {
-  console.log('✅ gizlilik sayfası: kaynak ↔ html bayt-eşit · e-posta email_off içinde · compose ayrı ve salt-okunur · kenar zinciri CF birebir · nginx önbellek/always/404 · adres tutarlı · kablolu');
-  const yt = typeof girdi[HTML_REL] === 'string' ? yerTutucular(girdi[HTML_REL]) : [];
+  console.log('✅ yasal sayfalar (/gizlilik · /patron-gizlilik): kaynak ↔ html bayt-eşit · e-posta email_off içinde · compose ayrı ve salt-okunur · kenar zinciri CF birebir · nginx önbellek/always/404 · adres + #hesap-silme tutarlı · Patron süreleri/push koda eşit · kablolu');
+  const yt = SAYFALAR.flatMap(({ html }) => (typeof girdi[html] === 'string' ? yerTutucular(girdi[html]) : []));
   if (yt.length) console.log(`⏳ yayın öncesi doldurulacak yer tutucu (vds-kur.sh --uygula durdurur): ${yt.join(' ')}`);
 }
 process.exit(s.olculemedi.length ? 2 : s.kirmizi.length ? 1 : 0);
