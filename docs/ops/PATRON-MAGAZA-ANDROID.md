@@ -254,5 +254,6 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
 | İzinler | `INTERNET` + `com.etkiliyazilim.tekserp.yonetim.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` · imza yükleme sertifikası `3DD96B00…` (vc1/vc2 ile AYNI anahtar) |
 | JS paketi | `https://yonetim.etkiliyazilim.com` var · `patron.etkiliyazilim.com` YOK · geliştirme adresi yok · "TeksERP Yönetim" var, "TeksERP Patron" yok |
 | Önbellek dersi | ilk deneme doğrulamada KIRMIZI: ortak `$TMPDIR/metro-cache` eski `EXPO_PUBLIC_PATRON_API` (patron) değerini gömmüştü (Metro dönüşüm anahtarı env değerini katmaz); `build-aab` artık her derlemeye kendi boş TMPDIR'ini verir |
-| Duman (Pixel_10_Pro, API 37) | kurulum ✓ (vc1) · çökme yok · giriş ekranı "TeksERP Yönetim" · E-posta/Parola/Devam/Davet kodum var · giriş DENENMEDİ (`yonetim` DNS kaydı henüz yok — `PATRON-BULUTU-KURULUM.md` §15) |
+| Duman (Pixel_10_Pro, API 37) | kurulum ✓ (vc1) · çökme yok · giriş ekranı "TeksERP Yönetim" · E-posta/Parola/Devam/Davet kodum var · giriş DENENMEDİ (derleme anında `yonetim` DNS kaydı yoktu; artık canlı — `PATRON-BULUTU-KURULUM.md` §15a) |
 | Parola sızıntısı | AAB + APK derleme günlüklerinde kasa parolası aranıp bulunmadı |
+| Play (2026-10-16 01:50 TSİ) | **dahili test** `internal [completed: 1]` "1.0.2 (1)" — hizmet hesabıyla yüklendi, geri okundu; sürüm notu §5.4; diğer kanallar boş; yayın defteri `yonetim-1.0.2-play-internal`. Bulut `yonetim.etkiliyazilim.com` canlı (`PATRON-BULUTU-KURULUM.md` §15a) |
