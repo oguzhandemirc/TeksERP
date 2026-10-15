@@ -3,8 +3,9 @@
 > Durum (2026-10-15): ilk AAB hazır (1.0.0 · versionCode 1), Play'e YÜKLENMEDİ. iOS sonra (Xcode kurulumu).
 > Kararlar (kullanıcı 2026-10-15): önce yalnız Android · ilk sürümde telefonda ANLIK BİLDİRİM YOK (Firebase yok;
 > uygulama native push kaydı denemez, uyarı göstermez; bildirim ekranında "yakında" notu) · web push aynen.
-> Tablet (ortak paket) Play yolu ayrıdır: `PLAY-STORE-YAYIN.md` · `PLAY-KONSOL-FORMLARI.md`. Hesap türü (KİŞİSEL)
-> kısıtları oradaki §4/§6 ile aynıdır ve bu uygulamaya da uygulanır.
+> Tablet (ortak paket) Play yolu ayrıdır: `PLAY-STORE-YAYIN.md` · `PLAY-KONSOL-FORMLARI.md`.
+> Play geliştirici hesabı **KURUMSAL** (kuruluş hesabı, Etkili Yazılım — doğrulandı 2026-10-15): kişisel hesabın
+> "12 test kullanıcısı × 14 gün kapalı test" şartı bu uygulamaya **uygulanmaz** (§3 madde 7).
 
 | | |
 |---|---|
@@ -69,25 +70,32 @@ izin bilerek eklenir, formu da güncellenir.
 5. **Mağaza girişi:** §5'teki metinler + görseller: ikon `patron/uygulama/assets/magaza/ikon-512.png`, öne çıkan görsel
    `assets/magaza/one-cikan-1024x500.png` (ikisi de YER TUTUCU), telefon ekran görüntüleri (en az 2; demo hesapla
    alınmalı — gerçek fabrika verisi görünmesin).
-6. **Uygulama içeriği formları:** gizlilik politikası URL'si (§4 — önce sayfa yayımlanmalı), uygulama erişimi
-   (inceleme hesabı — §6 açık konu), reklam yok, hedef kitle 18+, veri güvenliği (§4.2), içerik derecelendirmesi
-   (iş uygulaması, kullanıcı etkileşimi: kullanıcılar arası iletişim yok), hesap silme (§4.3).
-7. **Üretim erişimi:** kişisel hesapta yeni uygulama için kapalı testte 12 test kullanıcısı × 14 gün şartı
-   (`PLAY-STORE-YAYIN.md` §4 — ⚠ güncel eşik web'den doğrulanmalı).
+6. **Uygulama içeriği formları:** gizlilik politikası URL'si `https://tekserp.etkiliyazilim.com/patron-gizlilik`
+   (§4.1 — önce sayfa VDS'e yayımlanmalı), uygulama erişimi (inceleme hesabı — §6 madde 2), reklam yok, hedef
+   kitle 18+, veri güvenliği (§4.2), içerik derecelendirmesi (iş uygulaması, kullanıcı etkileşimi: kullanıcılar
+   arası iletişim yok), hesap silme URL'si `https://tekserp.etkiliyazilim.com/patron-gizlilik#hesap-silme` (§4.3).
+7. **Üretim yayını:** hesap KURUMSAL olduğu için kapalı test şartı (12 test kullanıcısı × 14 gün) YOKTUR — bu şart
+   13 Kasım 2023 sonrası açılmış KİŞİSEL hesaplara özgüdür (kuruluş hesabına uygulanmadığı doğrulandı 2026-10-15).
+   Dahili testte duman (§4) geçince aynı sürüm Test → Dahili test → **Sürümü tanıt → Üretim** ile ya da Üretim →
+   Yeni sürüm ile doğrudan üretime gönderilir; ilk üretim sürümü Play incelemesine girer (§6 madde 2 inceleme hesabı
+   hazır olmadan gönderilmez). Kapalı test istenirse isteğe bağlıdır, kapı değildir.
 
 ## 4. Gizlilik ve veri güvenliği
 
-### 4.1 Gizlilik politikası adresi — BUGÜN YOK
+### 4.1 Gizlilik politikası adresi — `/patron-gizlilik`
 
-- `https://tekserp.etkiliyazilim.com/gizlilik` (yayında) TABLET uygulamasının politikasıdır ("Etkili Yazılım bu
-  verileri toplamaz, kendi sunucularında saklamaz") — patron bulutu için YANLIŞTIR, kullanılmaz.
-- `docs/hukuk/PATRON-BULUTU-AYDINLATMA-METNI.md` (PBAM-2026.1) TASLAK — avukat incelemesi bekliyor; hiçbir
-  adreste sunulmuyor. `https://patron.etkiliyazilim.com/gizlilik` bugün SPA'nın giriş HTML'ini döndürüyor (200, metin değil).
-- Gereken iş (karar kullanıcıda): (a) patron uygulaması için ayrı gizlilik politikası metni — kaynak PBAM §3 tam
-  metin + Ek-6 veri kategorileri; veri sorumlusu fabrika, Etkili Yazılım veri işleyen; Türkiye VDS; alt işleyenler
-  (Cloudflare; native push açılınca Google/Apple/Expo); (b) yayın yeri — öneri: mevcut gizlilik sayfası düzeneğine
-  ikinci sayfa `https://tekserp.etkiliyazilim.com/patron-gizlilik` (`deploy/gizlilik-sayfasi/` kalıbı, ayrı köken;
-  patron sunucusuna dokunmaz). Alternatif patron web'inde statik sayfa (`patron/sunucu` `web-static.ts` + CSP — sunucu değişikliği).
+- **Adres: `https://tekserp.etkiliyazilim.com/patron-gizlilik`** (yayın kullanıcı onayıyla VDS'e — repo hazır,
+  2026-10-15; dağıtım `GIZLILIK-SAYFASI.md` § Patron sayfası). Metin kimliği `PATRON-GP-2026.1`, yürürlük 15 Ekim 2026.
+- Tek kaynak `docs/legal/PATRON-GIZLILIK-POLITIKASI.md` → `node deploy/gizlilik-sayfasi/uret.mjs` →
+  `deploy/gizlilik-sayfasi/html/patron-gizlilik.html` (tabletinkiyle aynı köken ve düzenek, ayrı sayfa; patron
+  sunucusuna dokunmaz). Bekçi `scripts/test_gizlilik_sayfasi.mjs` bayt-eşitliği, `#hesap-silme` çapasını, saklama
+  sürelerini (`patron/sunucu` koduna karşı) ve native push cümlesini (`NATIVE_PUSH`) ölçer.
+- Kaynağı PBAM'dır (`docs/hukuk/PATRON-BULUTU-AYDINLATMA-METNI.md`, taslak, uygulamada gösterilecek aydınlatma
+  metni) ama SADE bir uygulama politikasıdır: veri sorumlusu fabrika · veri işleyen Etkili Yazılım, toplanan veriler
+  (aşağıdaki §4.2 tablosuyla BİREBİR), amaç, aktarım (Cloudflare; native push kapalı), saklama, güvenlik, KVKK md. 11,
+  18+, değişiklikler, iletişim, hesap silme. §4.2 değişirse politika §2 aynı commit'te değişir (ve tersi).
+- `https://tekserp.etkiliyazilim.com/gizlilik` TABLET uygulamasının politikasıdır ("Etkili Yazılım bu verileri
+  toplamaz") — patron için YANLIŞTIR, kullanılmaz. `https://patron.etkiliyazilim.com/gizlilik` SPA giriş HTML'idir, metin değil.
 
 ### 4.2 Veri güvenliği formu — toplanan veri (koddan ölçüldü, 2026-10-15)
 
@@ -114,10 +122,20 @@ deposunda; çevrimdışı önbellek uygulamanın korumalı alanında, yedeğe gi
 
 ### 4.3 Hesap silme
 
-Hesaplar yalnız davetle açılır; silme bugün tesis yöneticisinin "arşiv" işlemidir (PASIF → 30. günde kimlik
-silinir, `test_kimlik_silme`). Play, uygulama içinde hesap oluşturulabiliyorsa (davet kabulü sayılabilir) hem
-uygulama içi yol hem de **web'de silme isteği adresi** ister (⚠ doğrulanmalı). Gereken: gizlilik sayfasında
-"Hesabımı sil" bölümü (tesis yöneticisine başvuru + `info@etkiliyazilim.com` yolu, 30 gün süresi). Açık konu.
+Play politikası (https://support.google.com/googleplay/android-developer/answer/13327111) hesap açılabilen
+uygulamadan iki şey ister: **uygulama içinde** hesap silme yolu ve uygulamayı kurmadan erişilebilen **web'de silme
+isteği adresi**; hesabı yalnız dondurmak/devre dışı bırakmak silme SAYILMAZ (davetle açılan hesap da kapsamdadır).
+Bugünkü tesis yöneticisi "arşiv" işlemi (PASIF → 30. günde kimlik silinir, `test_kimlik_silme`) tek başına yetmez.
+
+Çözüm (kullanıcı kararı 2026-10-15):
+- **Uygulama içi:** Profil → **Hesabımı sil** → TOTP onayı → hesap hemen kapanır (kimlik PASİF, e-postaya bağlı
+  bütün tesis üyelikleri) → 30. günde ad, e-posta, parola özeti, TOTP sırrı, oturum ve cihaz kayıtları silinir.
+  İstisna: güvenlik kayıtları kendi süresiyle (başarısız giriş 90 gün, diğerleri 2 yıl; IP 30 gün) — politikada
+  açıkça yazılı. Kod ayrı ajanın işi; politika metni bu davranışı anlatır, davranış değişirse metin de değişir.
+- **Web:** `https://tekserp.etkiliyazilim.com/patron-gizlilik#hesap-silme` — uygulamaya erişimi olmayan kullanıcı
+  tesis yöneticisine ya da kayıtlı e-posta adresinden `info@etkiliyazilim.com`a yazar; 30 gün içinde sonuçlanır.
+  Play formundaki "hesap silme URL'si" alanına bu adres girilir.
+- Form cevabı: kullanıcı silme isteyebilir **Evet** · veri silindiğinde saklanan: güvenlik kayıtları (süreli).
 
 ## 5. Mağaza metni taslağı (Türkçe)
 
@@ -164,14 +182,18 @@ Destek: info@etkiliyazilim.com
 `İlk sürüm: pano, üretim, sevkiyat, stok, finans, siparişler, cariler, gelen kutusu, raporlar, çoklu tesis.`
 
 ### 5.5 Kategori ve iletişim
-Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · gizlilik politikası §4.1.
+Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · gizlilik politikası
+`https://tekserp.etkiliyazilim.com/patron-gizlilik` (§4.1).
 
 ## 6. Açık konular
 
-1. Gizlilik politikası sayfası + hesap silme bölümü yok (§4.1, §4.3) — Play formu bunlar olmadan tamamlanmaz.
-2. İnceleme hesabı: Play incelemesi giriş ister; patron girişi TOTP zorunlu (`test_totp_zorunlu`). İncelemeciye
-   sabit kodlu kimlik verilemez — DEMO sınıfı tesiste inceleme hesabı + TOTP sırrının "Uygulama erişimi"
-   talimatına yazılması (incelemeci kodu kendi doğrulayıcısında üretir) ya da başka bir yol kararı gerekir.
+1. Gizlilik politikası + hesap silme sayfası repoda hazır (§4.1, §4.3), **VDS'e yayın kullanıcı onayıyla**
+   (`GIZLILIK-SAYFASI.md` § Patron sayfası). Uygulama içi "Hesabımı sil" kodu ayrı işte; ikisi yayımlanmadan Play
+   formu tamamlanmaz.
+2. **İnceleme hesabı — KARAR (kullanıcı 2026-10-15):** DEMO sınıfı tesis + uydurma veri + o tesiste inceleme hesabı.
+   Play Console → Uygulama içeriği → **Uygulama erişimi** talimatına e-posta, parola ve TOTP sırrı (base32;
+   incelemeci kodu kendi doğrulayıcısında üretir) yazılır. Sır (parola, TOTP sırrı) repoya, sürüm notuna, günlüğe
+   GİRMEZ — yalnız Play Console'a. Gerçek fabrika verisi inceleme tesisinde bulunmaz.
 3. Görseller yer tutucu (ikon, uyarlanır ikon, açılış, mağaza ikonu, öne çıkan görsel) — nihai görsel kullanıcı onayıyla.
 4. Native push (sonraki sürüm): Firebase/APNs + EAS proje kimliği + veri güvenliği formu güncellemesi (§1).
 5. iOS: Xcode kurulumu sonrası ayrı runbook (bundle `com.etkiliyazilim.tekserp.patron` app.json'da hazır).
