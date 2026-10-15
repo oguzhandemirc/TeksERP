@@ -15,6 +15,7 @@
 //   §6 kablolama: commit kancası + CI bu bekçiyi koşar
 //   §7 Patron metni ↔ kod: saklama süreleri (patron/sunucu maintenance.ts + config.ts varsayılanları) ve native push
 //      cümlesi (patron/uygulama push/support.ts NATIVE_PUSH) metinde koddaki değerle yazılı
+//   §8 vds-kur.sh: çok satırlı `sh -c '…'` gövdesi kesme işareti taşımaz (tırnağı erken kapatır, kalanını uzak bash koşar)
 // Köşeli parantezli yer tutucu bekçiyi KIRMIZI yapmaz (taslak meşru); yayını vds-kur.sh durdurur — burada ⏳ basılır.
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ. Cırcır değil.
@@ -246,6 +247,13 @@ export function olc(d) {
       ? `§7 NATIVE_PUSH kapalı ama ${PATRON_KAYNAK_REL} "${PUSH_YOK_CUMLESI}" demiyor`
       : `§7 NATIVE_PUSH AÇIK ama ${PATRON_KAYNAK_REL} hâlâ "${PUSH_YOK_CUMLESI}" diyor — §2/§4 (cihaz anahtarı, Google/Apple/Expo) + PATRON-MAGAZA-ANDROID §4.2 birlikte güncellenir`);
   }
+  // §8 — 2026-10-16 canlıda ölçüldü: gövdedeki `onceki/'de` tırnağı kapattı, --uygula yarıda durdu.
+  const govdeler = [...d[KUR_REL].matchAll(/-c '\n([\s\S]*?)\n'\n/g)];
+  if (!govdeler.length) s.olculemedi.push(`§8 ${KUR_REL} çok satırlı sh -c '…' gövdesi bulunamadı`);
+  for (const [, g] of govdeler) {
+    const satir = g.split('\n').find((x) => x.includes("'"));
+    if (satir !== undefined) s.kirmizi.push(`§8 ${KUR_REL} sh -c gövdesinde kesme işareti (tırnağı erken kapatır): ${satir.trim()}`);
+  }
   return s;
 }
 
@@ -302,6 +310,7 @@ function sondalar(taban) {
     ['N39b mağaza runbook\'u hâlâ eski adresi veriyor', 'kirmizi', deg(MAGAZA_REL, (t) => t.replaceAll(PATRON_ADRES, 'https://tekserp.etkiliyazilim.com/patron-gizlilik')), '§5'],
     ['N40 metin sürümü satırı yok', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(/^\*\*Metin sürümü:\*\*.*\n/m, ''); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§5'],
     ['N41 kanca tetiği maintenance.ts kapsamıyor', 'kirmizi', deg(KANCA_REL, (t) => t.replace(`"${BAKIM_REL}"`, '"z"')), '§6'],
+    ['N42 sh -c gövdesinde kesme işaretli yorum', 'kirmizi', deg(KUR_REL, (t) => t.replace("-c '\n", "-c '\n  # dosya onceki/'de kalır\n")), '§8'],
     ['P2 native push açıldı + metin güncellendi + üretildi', 'yesil', (d) => { d[PUSH_REL] = d[PUSH_REL].replace('export const NATIVE_PUSH = false;', 'export const NATIVE_PUSH = true;'); d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(PUSH_YOK_CUMLESI, 'Android uygulaması anlık bildirim için cihazın bildirim anahtarını kaydeder'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }],
     ['O1 CF kaynağı okunamadı', 'olculemedi', deg(CF_REL, () => undefined)],
     ['O2 CLOUDFLARE_NETWORKS adı değişti', 'olculemedi', deg(CF_REL, (t) => t.replaceAll('CLOUDFLARE_NETWORKS', 'CF_AGLARI'))],

@@ -194,7 +194,7 @@ docker run --rm --network none --user 0 -v /opt/stack/apps:/a -v "$G:/g:ro" --en
   for f in docker-compose.yml nginx/default.conf html/gizlilik.html html/yonetim-gizlilik.html; do
     if [ -f "$H/$f" ]; then cp -p "$H/$f" "$H/onceki/$(echo "$f" | tr / _)"; fi
   done
-  # Emekli sayfa (2026-10-16 ad değişimi): conf artık 301 verir; dosya geri alma için onceki/'de kalır.
+  # Emekli sayfa (2026-10-16 ad değişimi): conf artık 301 verir; dosya geri alma için onceki/ altında kalır.
   if [ -f "$H/html/patron-gizlilik.html" ]; then mv "$H/html/patron-gizlilik.html" "$H/onceki/html_patron-gizlilik.html"; fi
   install -o 0 -g 0 -m 0644 /g/docker-compose.yml "$H/docker-compose.yml"
   install -o 0 -g 0 -m 0644 /g/default.conf "$H/nginx/default.conf"
