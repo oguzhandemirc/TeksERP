@@ -1,0 +1,1 @@
+İlk sürüm: pano, üretim, sevkiyat, stok, finans, siparişler, cariler, gelen kutusu, raporlar, çoklu tesis. Hesabınızı uygulamadan silebilirsiniz: Profil → "Hesabımı sil".

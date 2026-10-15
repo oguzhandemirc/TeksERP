@@ -96,10 +96,15 @@ manifestinden ölçülmüş tam tablosu: `PLAY-KONSOL-FORMLARI.md` §4. Özet:
 
 ## 3. Mağaza listelemesi varlıkları
 
-- Uygulama ikonu 512×512 — repoda `assets/icon.png` 1024×1024; 512'ye dışa aktarılacak.
-- Öne çıkan grafik 1024×500 — **yok, üretilecek**.
-- Ekran görüntüleri: telefon + 7"/10" tablet — **yok**; demo verisiyle çekilir, gerçek müşteri verisi görünmez.
-- Kısa ve tam açıklama taslağı: `PLAY-KONSOL-FORMLARI.md` §5.
+Kaynak `mobil/magaza/` (`metinler.json` + `gorseller/`); araç `deploy/play-magaza.mjs --app=tablet [--uygula]`,
+görsel üretimi `deploy/play-magaza-gorsel.swift` (ayrıntı `PATRON-MAGAZA-ANDROID.md` §10). **Play'e yüklendi 2026-10-16**
+(tek edit commit, geri okundu):
+
+- tr-TR + en-US başlık "TeksERP", kısa + tam açıklama (metin `feat/play-uretim` dalındaki PLAY-URETIM-KONSOL-METINLERI belgesi §4).
+- Simge 512×512 32 bit (`assets/icon.png`'den) · öne çıkan görsel 1024×500.
+- İletişim `info@etkiliyazilim.com` · web `https://tekserp.etkiliyazilim.com` · varsayılan dil tr-TR.
+- Ekran görüntüleri (telefon + 7"/10" tablet) **YOK**: Play'in vc62 universal APK'sı emülatörde Play lisans denetimi
+  (pairip) yüzünden açılmadı; inceleme kurulumu hazır olunca örnek veriyle çekilir (`PLAY-SABAH-YAPILACAKLAR.md` B2).
 
 ## 4. Hesap türü — KURUMSAL (kullanıcı doğruladı 2026-10-15)
 

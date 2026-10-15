@@ -325,6 +325,11 @@ if (staged.some((f) => PLAY_TETIK.includes(f) || f.startsWith("scripts/lib/") ||
   adimlar.push({ ad: "Play yayıncısı", cwd: ".", cmd: ["node", ["scripts/test_play_yayinla.mjs"]], gitEnvSil: true });
 }
 
+// PLAY MAĞAZA GİRİŞİ: metin sınırları, görsel boyut/alfa, maskesiz görüntü ve inceleme hesabı izi (ağsız).
+if (staged.some((f) => f === "deploy/play-magaza.mjs" || f === "scripts/test_play_magaza.mjs" || f.startsWith("patron/uygulama/magaza/") || f.startsWith("mobil/magaza/"))) {
+  adimlar.push({ ad: "Play mağaza girişi", cwd: ".", cmd: ["node", ["scripts/test_play_magaza.mjs"]], gitEnvSil: true });
+}
+
 // GRUP YAYINI (O10a · O10b · O11b): ortak grup kitaplığı üç ürünün kapısıdır — kitaplık/terfi değişince üç bekçi birden.
 // Ortak yayın kitaplıkları (eski kanal kapıları emekli olunca — O15 — tetikleri buraya geçti): üç grup bekçisi onları koşturur.
 const GRUP_KITAPLIGI = new Set([

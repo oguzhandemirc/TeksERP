@@ -1,0 +1,19 @@
+{
+  "details": {
+    "contactEmail": "info@etkiliyazilim.com",
+    "contactWebsite": "https://tekserp.etkiliyazilim.com",
+    "defaultLanguage": "tr-TR"
+  },
+  "listings": {
+    "tr-TR": {
+      "title": "TeksERP",
+      "shortDescription": "Tekstil fabrikası üretim takibi: barkodla kalite, tambur, depo ve sevkiyat.",
+      "fullDescription": "TeksERP, tekstil fabrikalarında sahada çalışan ekipler için geliştirilmiş üretim takip uygulamasıdır. Fabrikanızın TeksERP sunucusuna bağlanır; kumaş topunun stoktan sevkiyata kadar her adımını tablet veya telefondan barkod okutarak kaydetmenizi sağlar.\n\nÖNEMLİ: Uygulama tek başına kullanılmaz. TeksERP sunucusu kurulu bir işletmede, fabrika yöneticisinin açtığı kullanıcı hesabıyla çalışır. Hesap uygulama içinden açılamaz.\n\nNELER YAPABİLİRSİNİZ\n• Giriş kalite kontrolü: topları okutun, metraj ve kalite kararını girin.\n• Tambur ve kesim: topu kesin, parçaları kaydedin, etiketini basın.\n• Kurşun dağıtımı ve proses kalite kontrolü.\n• Depo: topları okutarak yerleştirin, sayın ve bulun.\n• Tartı ve paketleme: çuval oluşturun, tartın, etiketleyin.\n• Sevkiyat: çuvalları okutarak sevkiyata ekleyin, belgeleri yazdırın.\n• Fason ve kartela: fasona gönderin, geri kabul edin.\n• İade girişi, hızlı iş emri, dokuma ve sipariş ekranları.\n• Uyarılar: tezgah alarmlarını üstlenin, susturun, not ekleyin.\n\nSAHAYA UYGUN\n• Kamera ile barkod ve QR okuma; el tipi barkod okuyucu desteği.\n• Bluetooth metre, kantar ve etiket yazıcısı bağlantısı.\n• Ağ kesildiğinde istasyon kayıtları cihazda sıraya alınır, bağlantı gelince gönderilir.\n• Okutmada sesli ve titreşimli geri bildirim: kabul, tekrar ve ret ayrı sinyal verir.\n• Kullanıcı adı ve parola, hızlı PIN veya personel kartıyla giriş.\n• Tablette yatay, telefonda dikey kullanım.\n\nSUNUCUYA ŞİFRELİ BAĞLANIR\nFabrika içindeki sunucu, yönetim panelindeki QR okutularak ya da adres yazılıp ekranda çıkan doğrulama kodu karşılaştırılarak eklenir; bulut sunucusu adıyla eklenir ve genel sertifikasıyla doğrulanır. Tablet sunucuya yalnız şifreli bağlantıyla bağlanır.\n\nVERİLERİNİZ SİZDE\nÜretim verileriniz fabrikanızın TeksERP sunucusunda tutulur. Uygulamada reklam yoktur, konumunuz okunmaz, kamera görüntüsü kaydedilmez veya gönderilmez.\n\nTeksERP, Etkili Yazılım tarafından geliştirilmektedir."
+    },
+    "en-US": {
+      "title": "TeksERP",
+      "shortDescription": "Textile mill shop-floor tracking: barcode QC, cutting, warehouse, shipping.",
+      "fullDescription": "TeksERP is a shop-floor app for textile mills. It connects to your company's TeksERP server and lets teams record every step of a fabric roll - from quality control to shipping - by scanning barcodes on a tablet or phone.\n\nIMPORTANT: The app does not work on its own. It requires a TeksERP server and a user account created by the factory administrator. Accounts cannot be created in the app.\n\n• Incoming quality control, cutting, warehouse, weighing and packing, shipping.\n• Camera barcode/QR scanning and handheld scanner support.\n• Bluetooth tape measures, scales and label printers.\n• Offline queue: station records are sent when the connection returns.\n• Encrypted connection to the server only. No ads; location is not read.\n\nThe app interface is in Turkish.\n\nTeksERP is developed by Etkili Yazilim."
+    }
+  }
+}

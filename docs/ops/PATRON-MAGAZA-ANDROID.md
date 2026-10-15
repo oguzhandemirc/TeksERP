@@ -20,7 +20,7 @@
 | Parola | macOS Anahtar Zinciri `tekserp/patron-play-yukleme` (hesap `tekserp`) — hiçbir çıktıya/dosyaya basılmaz |
 | Şifreli yedek | `patron/uygulama/keystore-yedek.tar.gz.enc` + `keystore-yedek.README.md` |
 | Çıktı | `~/.tekserp/patron-android/cikti/tekserp-yonetim-<sürüm>-vc<kod>.aab` + `.sha256` (eski `tekserp-patron-*` dosyaları emekli paketindir, yüklenmez) |
-| Görseller | `patron/uygulama/assets/` — **YER TUTUCU** (tablet logosu + altın halka; `scripts/yer-tutucu-gorsel.cjs`). Kullanıcı onaylı nihai görsel gerekir. |
+| Görseller | Uygulama: `patron/uygulama/assets/` (tablet logosu + altın halka; `scripts/yer-tutucu-gorsel.cjs`). Mağaza: `patron/uygulama/magaza/` (metin + simge + öne çıkan görsel + MASKELİ ekran görüntüleri; §10) — Play'e yüklendi 2026-10-16. |
 
 ## 1. Derleme (Claude/geliştirici)
 
@@ -70,9 +70,8 @@ izin bilerek eklenir, formu da güncellenir.
 4. **Dahili test:** Test → Dahili test → Yeni sürüm → `~/.tekserp/patron-android/cikti/tekserp-yonetim-<sürüm>-vc<kod>.aab` (en yenisi §9)
    yükle → sürüm notu (aşağıda §5.4) → test kullanıcıları listesi → kaydet → yayınla. Yüklemeden önce sha256'yı
    `.sha256` dosyasıyla karşılaştır (`shasum -a 256 <aab>`).
-5. **Mağaza girişi:** §5'teki metinler + görseller: ikon `patron/uygulama/assets/magaza/ikon-512.png`, öne çıkan görsel
-   `assets/magaza/one-cikan-1024x500.png` (ikisi de YER TUTUCU), telefon ekran görüntüleri (en az 2; demo hesapla
-   alınmalı — gerçek fabrika verisi görünmesin).
+5. **Mağaza girişi:** YAPILDI 2026-10-16 (API, §10): tr-TR + en-US metin, simge, öne çıkan görsel, 7 maskeli telefon
+   ekran görüntüsü, iletişim. Console'da yalnız gözden geçirilir; kalan formlar `PLAY-SABAH-YAPILACAKLAR.md` § A.
 6. **Uygulama içeriği formları:** gizlilik politikası URL'si `https://tekserp.etkiliyazilim.com/yonetim-gizlilik`
    (§4.1 — önce sayfa VDS'e yayımlanmalı), uygulama erişimi (inceleme hesabı — §6 madde 2), reklam yok, hedef
    kitle 18+, veri güvenliği (§4.2), içerik derecelendirmesi (iş uygulaması, kullanıcı etkileşimi: kullanıcılar
@@ -213,7 +212,7 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
    Play Console → Uygulama içeriği → **Uygulama erişimi** talimatına e-posta, parola ve TOTP sırrı (base32;
    incelemeci kodu kendi doğrulayıcısında üretir) yazılır. Sır (parola, TOTP sırrı) repoya, sürüm notuna, günlüğe
    GİRMEZ — yalnız Play Console'a. Gerçek fabrika verisi inceleme tesisinde bulunmaz.
-3. Görseller yer tutucu (ikon, uyarlanır ikon, açılış, mağaza ikonu, öne çıkan görsel) — nihai görsel kullanıcı onayıyla.
+3. Uygulama içi görseller (ikon, uyarlanır ikon, açılış) yer tutucu; mağaza görselleri bunlardan üretildi (§10) — nihai marka görseli gelirse ikisi birlikte değişir.
 4. Native push (sonraki sürüm): Firebase/APNs + EAS proje kimliği + veri güvenliği formu güncellemesi (§1).
 5. iOS: Xcode kurulumu sonrası ayrı runbook (bundle `com.etkiliyazilim.tekserp.yonetim` app.json'da hazır).
 6. Görseller/ekran görüntüleri "Patron" yazısı taşımamalı (yer tutucu ikonda yazı yok; ekran görüntüleri yeni adla alınır).
@@ -257,3 +256,15 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
 | Duman (Pixel_10_Pro, API 37) | kurulum ✓ (vc1) · çökme yok · giriş ekranı "TeksERP Yönetim" · E-posta/Parola/Devam/Davet kodum var · giriş DENENMEDİ (derleme anında `yonetim` DNS kaydı yoktu; artık canlı — `PATRON-BULUTU-KURULUM.md` §15a) |
 | Parola sızıntısı | AAB + APK derleme günlüklerinde kasa parolası aranıp bulunmadı |
 | Play (2026-10-16 01:50 TSİ) | **dahili test** `internal [completed: 1]` "1.0.2 (1)" — hizmet hesabıyla yüklendi, geri okundu; sürüm notu §5.4; diğer kanallar boş; yayın defteri `yonetim-1.0.2-play-internal`. Bulut `yonetim.etkiliyazilim.com` canlı (`PATRON-BULUTU-KURULUM.md` §15a) |
+| Mağaza girişi (2026-10-16 ~02:40 TSİ) | `node deploy/play-magaza.mjs --app=yonetim --uygula` → tek edit COMMIT, geri okundu: tr-TR + en-US başlık/kısa/tam · simge 1 · öne çıkan 1 · telefon ekran görüntüsü 7 (her dilde) · `contactEmail` `info@etkiliyazilim.com` · `contactWebsite` `https://tekserp.etkiliyazilim.com` · varsayılan `tr-TR` |
+| Üretim denemesi (2026-10-16) | `--uretim=1 --yuzde=20` → `400 FAILED_PRECONDITION "Precondition check failed."`; commit edilmeyen sondada `draft`/`completed`/`inProgress` üçü de aynı, `alpha` taslağı 200. Play eksiği adlandırmıyor → Console görevleri `PLAY-SABAH-YAPILACAKLAR.md` § A. Veri güvenliği API'ye GÖNDERİLMEDİ (CSV şablonu elde yok) |
+
+## 10. Mağaza girişi kaynakları ve araç (2026-10-16)
+
+| | |
+|---|---|
+| Metin | `patron/uygulama/magaza/metinler.json` — `listings` (tr-TR, en-US: `title` ≤30, `shortDescription` ≤80, `fullDescription` ≤4000) + `details` (iletişim, varsayılan dil). Yetenek listesi koddan (`app/(app)/*`, `src/lib/access.ts`); kodda olmayan özellik yazılmaz |
+| Görsel | `magaza/gorseller/icon.png` (512, 32 bit, `assets/icon.png`'den) · `featureGraphic.png` (1024×500, 24 bit; logo + altın halka + ad) · `phoneScreenshots/*.png` (1080×1920, 24 bit) |
+| Üretim | `swift deploy/play-magaza-gorsel.swift ikon / one / maske …` — yalnız macOS AppKit; dış font/asset indirilmez |
+| Ekran görüntüsü | Pixel_10_Pro emülatörü `wm size 1080x1920` + `wm density 420` (Play telefon oranı ≤ 2:1), duman APK, inceleme hesabıyla giriş (sırlar Anahtar Zinciri'nden, hiçbir çıktıya girmez). İnceleme tesisi bugün GERÇEK veri taşıdığı için her sayı, sipariş no, tarih, ürün adı ve e-posta `uiautomator` sınırlarından opak düz kutuyla kapatılır (`maske`; bulanıklık değil, geri çözülemez) ve her görüntü gözle denetlenir. Maskesiz ham görüntü repoya GİRMEZ |
+| Yükleme | `node deploy/play-magaza.mjs --app=yonetim` (kuru okuma; edit silinir) · `--uygula` (details + listings + her dilde görselleri sil-yükle → commit → geri oku) · `--uretim=<vc> --yuzde=<N> --uygula` (yalnız yonetim; not `magaza/surum-notu-vc<vc>.tr-TR.txt`) |
