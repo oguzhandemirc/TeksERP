@@ -63,6 +63,9 @@ input, select, textarea { font: inherit; padding: 7px 9px; border: 1px solid #cf
 input[type="checkbox"], input[type="radio"] { padding: 0; }
 .checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .check { display: inline-flex; gap: 6px; align-items: center; }
+/* .field sütun yönü .check.field'de kutuyu metnin üstüne itiyordu (Lisans hakkı/imza pencereleri). */
+.check.field { flex-direction: row; align-items: flex-start; }
+.check.field input { margin-top: 3px; flex: none; }
 .form { max-width: 440px; }
 
 .error { color: var(--danger); margin: 8px 0; }
