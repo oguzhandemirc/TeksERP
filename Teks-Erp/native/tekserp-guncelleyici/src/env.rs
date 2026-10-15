@@ -132,6 +132,19 @@ pub trait Services: Send + Sync {
     fn set_start_mode(&self, name: &str, _mode: &str) -> EnvResult<()> {
         Err(EnvError(format!("{name}: açılış davranışı bu arka uçta yazılmaz")))
     }
+    /// Backend imajını paylaşan yan hizmetler, `current`in tanımından (Linux: compose'ta `tekserp-korumali` imajlı,
+    /// backend dışı servisler — `yedek`). Backend yalnız kendisi yeniden yaratılır; yanları `yan_hizmet_esitle` taşır.
+    fn yan_hizmetler(&self, _name: &str) -> EnvResult<Vec<String>> {
+        Ok(vec![])
+    }
+    /// Yan hizmet kesilmemesi gereken bir iş yürütüyor mu (yedek: döküm · doğrulama · şifreleme süreci).
+    fn yan_hizmet_mesgul(&self, _svc: &str) -> EnvResult<bool> {
+        Ok(false)
+    }
+    /// Yan hizmeti `current`in tanımına eşitler; tanımı zaten aynıysa DOKUNMAZ (çalışan konteyner kesilmez).
+    fn yan_hizmet_esitle(&self, _svc: &str) -> EnvResult<()> {
+        Ok(())
+    }
 }
 
 /// Açılış davranışının günlük/işaret değerleri (Windows başlangıç türleri; Linux'ta politika adı olduğu gibi).

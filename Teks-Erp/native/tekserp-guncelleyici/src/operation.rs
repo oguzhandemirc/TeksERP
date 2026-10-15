@@ -440,6 +440,65 @@ pub fn start_service(ctx: &Ctx, name: &str, args: &[&str], code: &'static str) -
     Ok(())
 }
 
+/// Yan hizmetin meşguliyet sondası aralığı.
+pub const SIDECAR_POLL: Duration = Duration::from_secs(5);
+
+/// Backend imajını paylaşan yan hizmetleri (Linux: `yedek`) `current`in tanımına eşitler — ileri yolda yeni sürüm
+/// DOĞRULANDIKTAN sonra, geri dönüşte önceki sürüm başlatıldıktan sonra. Sürmekte olan yedek işi kesilmez: bitmesi
+/// yedek zaman aşımı kadar beklenir, bitmezse eşitleme ertelenir. Hiçbir sonucu backend işlemini düşürmez (sağlıklı
+/// backend yan hizmet yüzünden geri alınmaz); sapma günlüğe + olaya yazılır, adım verisinde kalır.
+pub fn sync_sidecars(ctx: &Ctx) -> Value {
+    let svc = ctx.settings.backend_service();
+    let names = match ctx.env.svc.yan_hizmetler(svc) {
+        Ok(n) => n,
+        Err(e) => {
+            let m = format!("yan hizmetler ölçülemedi ({}) — eski imajda kalmış olabilirler", e.0);
+            ctx.log.warn(&m);
+            ctx.env.events.event(Level::Warn, &m);
+            return json!({ "hata": e.0 });
+        }
+    };
+    let mut out = serde_json::Map::new();
+    for name in names {
+        let deadline = ctx.env.clock.now_ms() + i64::try_from(ctx.settings.backup_timeout().as_millis()).unwrap_or(i64::MAX);
+        let mut announced = false;
+        let busy = loop {
+            match ctx.env.svc.yan_hizmet_mesgul(&name) {
+                Ok(false) => break Ok(false),
+                Ok(true) if ctx.env.clock.now_ms() < deadline => {
+                    if !announced {
+                        ctx.log.info(&format!("{name}: yedek işi sürüyor — bitmesi bekleniyor (kesilmez)"));
+                        announced = true;
+                    }
+                    ctx.env.clock.sleep(SIDECAR_POLL);
+                }
+                Ok(true) => break Ok(true),
+                Err(e) => break Err(e.0),
+            }
+        };
+        let (result, message) = match busy {
+            Ok(true) => (
+                "ERTELENDI",
+                Some(format!(
+                    "{name}: yedek işi {} sn içinde bitmedi — kesilmedi, eski imajda kaldı; iş bitince `docker compose up -d {name}` eşitler",
+                    ctx.settings.backup_timeout().as_secs()
+                )),
+            ),
+            Err(e) => ("OLCULEMEDI", Some(format!("{name}: meşguliyet ölçülemedi ({e}) — yeniden yaratılmadı, eski imajda kalmış olabilir"))),
+            Ok(false) => match ctx.env.svc.yan_hizmet_esitle(&name) {
+                Ok(()) => ("ESIT", None),
+                Err(e) => ("HATA", Some(format!("{name}: yeniden yaratılamadı ({}) — elle `docker compose up -d {name}`", e.0))),
+            },
+        };
+        if let Some(m) = &message {
+            ctx.log.warn(m);
+            ctx.env.events.event(if result == "HATA" { Level::Error } else { Level::Warn }, m);
+        }
+        out.insert(name, json!({ "sonuc": result, "mesaj": message }));
+    }
+    Value::Object(out)
+}
+
 // ── Backend güncellemesi (§8) ────────────────────────────────────────────────────────────────────
 
 pub const BACKEND_STEPS: &[&str] = &["CIT", "BACKEND_DURDUR", "YEDEK", "GECIS", "GOC", "DOGRULAMA", "BASLAT", "ONAY"];
@@ -633,9 +692,12 @@ impl BackendOp {
     }
 
     /// Geri dönüşün backend'i: önceki sürümle başlat + sağlık (lisans şartı yok; işlem öncesi görüntüyle kıyaslanır).
+    /// Yan hizmetler sağlık sonucundan bağımsız `current`e (= önceki sürüm) eşitlenir: ileri yolda yenilenmişlerse eskiye döner.
     fn start_previous(&self, ctx: &Ctx) -> Result<(), StepError> {
         start_service(ctx, ctx.settings.backend_service(), &[], codes::GERI_DONUS_SAGLIKSIZ)?;
-        self.health(ctx, &self.plan.source_version, false)
+        let health = self.health(ctx, &self.plan.source_version, false);
+        sync_sidecars(ctx);
+        health
             .map(|_| ())
             .map_err(|e| step_err(codes::GERI_DONUS_SAGLIKSIZ, format!("önceki sürüm sağlıklı başlamadı: {} {}", e.code, e.message)))
     }
@@ -772,7 +834,10 @@ impl Operation for BackendOp {
             }
             "BASLAT" => {
                 self.restart_backend(ctx, &[])?;
-                self.health(ctx, &self.plan.version, true)
+                let mut data = self.health(ctx, &self.plan.version, true)?;
+                // Yan hizmetler yalnız doğrulanmış yeni sürüme taşınır (doğrulama kipinde ve öncesinde eski imajda kalır).
+                data["yanHizmetler"] = sync_sidecars(ctx);
+                Ok(data)
             }
             "ONAY" => {
                 let mut data = self.commit(ctx, view)?;
