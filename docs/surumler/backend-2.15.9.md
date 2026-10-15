@@ -34,7 +34,7 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 **Güncelleyici 0.2.8 — imajı paylaşan yan hizmetler eşitlenir (BULGU-2)** (commit `fix(guncelleyici): move image-sharing sidecars …`; kısa kimliği paketlemede yazılır)
 
 - Linux/Docker: `BASLAT` adımında yeni sürüm normal kipte sağlıklı açıldıktan SONRA `current` compose tanımında
-  backend imajını (`tekserp-korumali:*`) kullanan yan hizmetler (bugün `yedek`) `compose up -d --no-deps <svc>` ile
+  backend imajını (`tekserp-korumali:*`) kullanan yan hizmetler (bugün `yedek`) `compose up -d --no-deps yedek` ile
   (`--force-recreate` yok) eşitlenir; geri dönüşte (`start_previous`) önceki sürüme. Doğrulama kipinde dokunulmaz.
 - Sürmekte olan yedek işi (`pg_dump`/`pg_restore`/şifreleme, taze `*.part`) kesilmez: yedek zaman aşımı kadar
   beklenir, bitmezse `ERTELENDI`. Yan hizmet sonucu (`ERTELENDI`/`OLCULEMEDI`/`HATA`) sağlıklı backend kurulumunu

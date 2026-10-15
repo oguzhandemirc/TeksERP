@@ -23,7 +23,7 @@ describe("izinli menü", () => {
     expect(screen.getByTestId("menu-siparisler")).toBeTruthy();
     expect(screen.queryByTestId("menu-finans")).toBeNull();
     expect(screen.queryByTestId("menu-hesaplar")).toBeNull();
-    expect(screen.getByText("TeksERP Patron")).toBeTruthy(); // tesis adı yoksa nötr ad
+    expect(screen.getByText("TeksERP Yönetim")).toBeTruthy(); // tesis adı yoksa nötr ad
   });
   it("tesis adı hesaptan gelir", () => {
     mockSession.facility = { tesis: { id: "t", ad: "Örnek Tekstil", saklamaAy: 13 }, hesap: { ad: "A" }, esitleme: null };

@@ -83,7 +83,7 @@ export default function Invite() {
           <Field label="Parola (tekrar)" value={pw2} onChangeText={setPw2} secureTextEntry autoComplete="new-password" />
           {pw2 !== "" && pw !== pw2 ? <Muted>Parolalar aynı değil</Muted> : null}
           <Button label="Devam" busy={busy} disabled={pw === "" || pw !== pw2} onPress={() => void run(async () => setSecret(await api.inviteAccept(code.trim(), pw)))} />
-          <Button label="Zaten TeksERP Patron hesabım var — bağla" tone="plain" testID="davet-bagla"
+          <Button label="Zaten TeksERP Yönetim hesabım var — bağla" tone="plain" testID="davet-bagla"
             onPress={() => { setLinkMode(true); setLinkEmail(info.eposta); setError(null); }} />
         </View>
       ) : (

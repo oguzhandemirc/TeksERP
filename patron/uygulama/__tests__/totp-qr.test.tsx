@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
-const OTPAUTH = "otpauth://totp/TeksERP%20Patron:a%40ornek.invalid?secret=JBSWY3DPEHPK3PXP&issuer=TeksERP%20Patron&algorithm=SHA1&digits=6&period=30";
+const OTPAUTH = "otpauth://totp/TeksERP%20Y%C3%B6netim:a%40ornek.invalid?secret=JBSWY3DPEHPK3PXP&issuer=TeksERP%20Y%C3%B6netim&algorithm=SHA1&digits=6&period=30";
 const mockApi = {
   inviteInspect: jest.fn(async () => ({ ad: "Ayşe", eposta: "a@ornek.invalid", tesisAd: "Tesis", bitis: "2026-10-01T00:00:00.000Z" })),
   inviteAccept: jest.fn(async () => ({ eposta: "a@ornek.invalid", totpSirri: "JBSWY3DPEHPK3PXP", otpauth: OTPAUTH })),

@@ -16,7 +16,7 @@ Aynı commit'ten her ürün için TEK paket çıkar (backend · panel · fabrika
 | Panel kimliği | `TEKSERP_KANAL` ile derleme anında; appId/ürün adı/adres kanaldan | tek kimlik (`deploy/dagitim.json`), derleme argümansız |
 | Tablet kimliği | paket adı, ERP adresi, OTA sertifikası, güncelleme adresi kanaldan | tek paket adı, tek OTA sertifikası, ERP adresi YOK (keşif / elle IP) |
 | Backend paketi | `paketle.ps1 -Musteri`; filigrana müşteri kodu | argümansız tek paket; filigranda müşteri yok |
-| Patron | zaten tek paket (`com.etkiliyazilim.tekserp.patron`) | değişmez |
+| Patron | zaten tek paket (`com.etkiliyazilim.tekserp.yonetim`, "TeksERP Yönetim"; 2026-10-16 öncesi `…patron`, Play'e yüklenmedi) | değişmez |
 | Güncelleme yolu | `/<kanal>/<ürün>/` · `guncelleme.etkiliyazilim.com` · kapısız | `/<grup>/<ürün>/` · `indir.etkiliyazilim.com` · Worker kapısı |
 | Grup nereden | — (kanal pakete gömülü) | satıcıda kurulumun grubu → kira `kanal.kod` → belirteç `yolOneki` |
 | Terfi | hazırlık → üretim kanalı (`terfi/<kanal>/…`) | `test → oncu → genel` (`terfi/<grup>/…`) |
@@ -104,7 +104,7 @@ Aynı commit'ten her ürün için TEK paket çıkar (backend · panel · fabrika
   - ⇒ Güncelleyici grup modeline bugünden hazır. Sunucu adresi `ayar.json guncellemeSunucusu`dan gelir.
 - CI: `korumali-paket.yml` `musteri` girdisini alır ve çapa kipini kanaldan seçer.
 
-**Patron.** `patron/uygulama/app.json` tek kimlik taşır (`com.etkiliyazilim.tekserp.patron`, OTA yok). Bulut adresi `EXPO_PUBLIC_PATRON_API` derleme anında verilir (`src/lib/config.ts`, "tek mağaza uygulaması"). ⇒ Zaten tek paket; bu iş patron uygulamasının koduna dokunmaz. Yalnız mağaza test kanalları ileride gruplara eşlenir (3.7).
+**Patron.** `patron/uygulama/app.json` tek kimlik taşır (`com.etkiliyazilim.tekserp.yonetim`, OTA yok). Bulut adresi `EXPO_PUBLIC_PATRON_API` derleme anında verilir (`src/lib/config.ts`, "tek mağaza uygulaması"). ⇒ Zaten tek paket; bu iş patron uygulamasının koduna dokunmaz. Yalnız mağaza test kanalları ileride gruplara eşlenir (3.7).
 
 ### 1.3 Satıcı — grup modelinin yarısı zaten var
 

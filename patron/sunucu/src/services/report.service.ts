@@ -58,8 +58,8 @@ export async function createReportRequest(ctx: CloudContext, s: SessionContext, 
   const verdict = reportVerdict(input.raporAnahtari);
   if (!verdict.ok) {
     if (verdict.reason === "BICIM") throw badRequest("Rapor anahtarı biçimsiz");
-    if (verdict.reason === "BULUTTA_YOK") throw new CloudError(404, "RAPOR_BULUTTA_YOK", "Bu rapor patron bulutunda sunulmuyor");
-    throw new CloudError(404, "RAPOR_BILINMIYOR", "Rapor patron bulutunda tanınmıyor");
+    if (verdict.reason === "BULUTTA_YOK") throw new CloudError(404, "RAPOR_BULUTTA_YOK", "Bu rapor TeksERP Yönetim'de sunulmuyor");
+    throw new CloudError(404, "RAPOR_BILINMIYOR", "Rapor TeksERP Yönetim'de tanınmıyor");
   }
   if (!hasAll(s, requiredReportPermissions(verdict.permission, undefined))) throw forbidden("Bu raporu isteme yetkiniz yok");
   if (Buffer.byteLength(JSON.stringify(input.parametreler), "utf8") > MAX_PARAMS_BYTES) throw badRequest("Rapor parametreleri çok büyük");
@@ -183,7 +183,7 @@ export async function claimReports(ctx: CloudContext, caller: FactoryCaller, req
  */
 async function recordStandardResult(ctx: CloudContext, caller: FactoryCaller, req: ReportResult): Promise<ReportResultResponse> {
   const verdict = reportVerdict(req.raporAnahtari);
-  if (!verdict.ok) throw new CloudError(404, "RAPOR_BILINMIYOR", "Bu rapor patron bulutunda sunulmuyor");
+  if (!verdict.ok) throw new CloudError(404, "RAPOR_BILINMIYOR", "Bu rapor TeksERP Yönetim'de sunulmuyor");
   if (req.durum === "HATA") return { v: 1, kabul: true, durum: "HATA" };
   await withTesis(ctx.sync, { tesisId: caller.tesisId, projections: [verdict.projection] }, (tx) =>
     tx.reportResult.create({

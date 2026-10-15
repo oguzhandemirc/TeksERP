@@ -13,7 +13,7 @@
 //   ⑤ anahtar birimi her bağlandığı yerde salt okunur
 //   ⑥ köprü ağları 100.64/10 ve 127/8 DIŞINDA · ⑥b kenarda dinamik aralık alt ağda, patronun sabit
 //      adresi aralığın DIŞINDA (Traefik patronun adresini kapamasın)
-//   ⑦ Traefik etiketi yalnız `patron`de, kenar ağını gösterir; kural Host + iç ad alanı dışlaması
+//   ⑦ Traefik etiketi yalnız `patron`de, kenar ağını gösterir; kural (birincil Host || kalıcı takma Host) + iç ad alanı dışlaması
 //      (web-static.ts IC_ONEKLER); patron YALNIZ kenar adresinde dinler (BIND); DB portsuz, yalnız ic'te ·
 //      ⑦k kenar zinciri (deploy/traefik/kenar-zinciri.mjs): Cloudflare ipallowlist = rate-limit.ts CLOUDFLARE_NETWORKS
 //      birebir, ardından Cf-Connecting-Ip anahtarlı cömert hız seddi (uygulamanın /v1 sınırının altına inmez)
@@ -57,8 +57,9 @@ function envOku(dosya) {
   return out;
 }
 let saticiEnv = null;
+let ortamDosyasi = {};
 try {
-  envOku(envDosyasi);
+  ortamDosyasi = envOku(envDosyasi);
   if (saticiEnvDosyasi) saticiEnv = envOku(saticiEnvDosyasi);
 } catch (err) {
   console.error(`ÖLÇÜLEMEDİ: .env okunamadı — ${err.message}`);
@@ -185,7 +186,10 @@ const et = patron.labels ?? {};
 kontrol("⑦ Traefik kenar ağını kullanır", et["traefik.docker.network"] === aglar.kenar?.name, `${et["traefik.docker.network"]} ↔ ${aglar.kenar?.name}`);
 // `config` çıktısı `$` kaçışını (`$$`) korur; konteyner etiketinde tek `$` olur (yerel dumanda ölçüldü).
 const kurallar = Object.entries(et).filter(([k]) => /^traefik\.http\.routers\..+\.rule$/.test(k)).map(([, v]) => v);
-kontrol("⑦ tek yönlendirici: Host + iç ad alanı dışlaması (ic|yonetim)", kurallar.length === 1 && /^Host\(`[a-z0-9.-]+`\) && !PathRegexp\(`\^\/\(ic\|yonetim\)\(\/\|\$\$?\)`\)$/.test(kurallar[0]), kurallar.join(" | ") || "YOK");
+// İki ad: birincil (yonetim) + KALICI takma ad (patron — kurulu fabrikaların eşitleme adresi; düşerse fabrikalar susar).
+const hostlar = /^\(Host\(`([a-z0-9.-]+)`\) \|\| Host\(`([a-z0-9.-]+)`\)\) && !PathRegexp\(`\^\/\(ic\|yonetim\)\(\/\|\$\$?\)`\)$/.exec(kurallar[0] ?? "");
+kontrol("⑦ tek yönlendirici: (birincil Host || takma Host) + iç ad alanı dışlaması (ic|yonetim)", kurallar.length === 1 && hostlar !== null && hostlar[1] !== hostlar[2], kurallar.join(" | ") || "YOK");
+kontrol("⑦ Host'lar .env'deki PATRON_HOST + PATRON_TAKMA_HOST", hostlar !== null && hostlar[1] === ortamDosyasi.PATRON_HOST && hostlar[2] === ortamDosyasi.PATRON_TAKMA_HOST, `${hostlar?.[1] ?? "?"} · ${hostlar?.[2] ?? "?"}`);
 const hizmetPortu = Object.entries(et).find(([k]) => /\.loadbalancer\.server\.port$/.test(k))?.[1];
 kontrol("⑦ yönlendirici 4620'ye, websecure + TLS", String(hizmetPortu) === "4620" && Object.entries(et).some(([k, v]) => k.endsWith(".entrypoints") && v === "websecure") && Object.entries(et).some(([k, v]) => k.endsWith(".tls") && String(v) === "true"), `port ${hizmetPortu ?? "YOK"}`);
 {

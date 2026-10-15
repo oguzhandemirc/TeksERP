@@ -7,7 +7,7 @@ import { InviteShown } from "../../../src/ui/InviteShown";
 import { useWrite } from "../../../src/ui/useWrite";
 
 type Template = "PATRON" | "MUHASEBE" | "SATIS";
-const TEMPLATES: readonly { key: Template; label: string }[] = [{ key: "PATRON", label: "Patron" }, { key: "MUHASEBE", label: "Muhasebe" }, { key: "SATIS", label: "Satış" }];
+const TEMPLATES: readonly { key: Template; label: string }[] = [{ key: "PATRON", label: "Tam yetki" }, { key: "MUHASEBE", label: "Muhasebe" }, { key: "SATIS", label: "Satış" }];
 
 export default function NewAccount() {
   const { api } = useSession();

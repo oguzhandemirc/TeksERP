@@ -1,10 +1,10 @@
-# Yasal sayfalar — `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2) · `/patron-gizlilik`
+# Yasal sayfalar — `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2) · `/yonetim-gizlilik` (eski `/patron-gizlilik` → 301)
 
 > Durum (2026-10-08): YAYINDA — DNS proxy açık, `olc.mjs` tamamen yeşil (e-posta karartması email_off ile kapatıldı). Karar: kullanıcı K2, 2026-10-08 (`PLAY-KONSOL-FORMLARI.md` §0).
 
 | | |
 |---|---|
-| Metin (tek kaynak) | `docs/legal/GIZLILIK-POLITIKASI.md` → `html/gizlilik.html` (tablet) · `docs/legal/PATRON-GIZLILIK-POLITIKASI.md` → `html/patron-gizlilik.html` (Patron) — ikisi de `node deploy/gizlilik-sayfasi/uret.mjs` (`SAYFALAR`) |
+| Metin (tek kaynak) | `docs/legal/GIZLILIK-POLITIKASI.md` → `html/gizlilik.html` (tablet) · `docs/legal/PATRON-GIZLILIK-POLITIKASI.md` → `html/yonetim-gizlilik.html` (TeksERP Yönetim) — ikisi de `node deploy/gizlilik-sayfasi/uret.mjs` (`SAYFALAR`) |
 | Köken | VDS `/opt/stack/apps/tekserp-gizlilik` — compose projesi/konteyner `tekserp-gizlilik` (nginx:alpine, salt-okunur kök, 32m) |
 | Kenar | Traefik yönlendirici `tekserp-gizlilik` → `tekserp-gizlilik-cf` (Cloudflare ipallowlist) → `tekserp-gizlilik-hiz`; TLS Origin CA `*.etkiliyazilim.com` |
 | Ayrılık | indir kapısının (Worker) ve eski güncelleme sitesinin DIŞINDA; ortak ara katman yok |
@@ -26,14 +26,18 @@
 3. Type **A** · Name **`tekserp`** · IPv4 address **`80.253.255.188`** · Proxy status **Proxied** (turuncu bulut AÇIK) · TTL **Auto** → **Save**.
 4. Kontrol: alanın **Workers Routes** listesinde `*.etkiliyazilim.com/*` joker rota ya da `tekserp.etkiliyazilim.com` rotası YOK (olursa sayfa belirteç ister); **Zero Trust → Access → Applications**'ta bu adı kapsayan uygulama YOK; **Security → WAF**'ta ülke engeli bu adı kapsamaz (Play coğrafi kısıt istemez).
 
-## Patron sayfası (`/patron-gizlilik`, 2026-10-15)
+## Patron sayfası (`/yonetim-gizlilik`; 2026-10-15 `/patron-gizlilik` olarak doğdu, 2026-10-16 ad değişimi)
 
-- Patron uygulamasının Play gizlilik politikası (`PATRON-GP-2026.2`) ve hesap silme adresi
-  `https://tekserp.etkiliyazilim.com/patron-gizlilik#hesap-silme` (çapa "Hesap silme" başlığından; başlık değişmez).
-  Aynı köken, aynı konteyner; nginx'te ayrı konum (`= /patron-gizlilik` + `= /patron-gizlilik/` → 301). Tablet sayfası bayt-eşit kalır.
+- TeksERP Yönetim (patron) uygulamasının Play gizlilik politikası (`YONETIM-GP-2026.3`) ve hesap silme adresi
+  `https://tekserp.etkiliyazilim.com/yonetim-gizlilik#hesap-silme` (çapa "Hesap silme" başlığından; başlık değişmez).
+  Aynı köken, aynı konteyner; nginx'te ayrı konum (`= /yonetim-gizlilik` + `= /yonetim-gizlilik/` → 301). Tablet sayfası bayt-eşit kalır.
+- Emekli yol: `= /patron-gizlilik` ve `= /patron-gizlilik/` → kalıcı 301 `/yonetim-gizlilik` (`uret.mjs` `YONLENDIRMELER`,
+  bekçi §4; `#hesap-silme` çapası sunucuya gelmez, tarayıcı 301 hedefine kendisi ekler). `vds-kur.sh --uygula` eski
+  `html/patron-gizlilik.html`'i `onceki/`'ye taşır ve konteyner içinden 301'i ölçer; `olc.mjs` canlıda iki eski yolu da ölçer.
 - İlk yayın conf değiştirdiği için `--html` kipi YETMEZ (VDS conf'u repodakinden farklıyken durur): kuru
   `deploy/gizlilik-sayfasi/vds-kur.sh` → `deploy/gizlilik-sayfasi/vds-kur.sh --uygula` → `node deploy/gizlilik-sayfasi/olc.mjs`
-  (kenar ≤ 5 dk'da tazelenir). DNS/Cloudflare adımı yok (aynı ad). Sonra yalnız metin değişikliğinde `--html`.
+  (kenar ≤ 5 dk'da tazelenir). DNS/Cloudflare adımı yok (aynı ad). 2026-10-16 ad değişimi de conf değiştirir → yine `--uygula`.
+  Sonra yalnız metin değişikliğinde `--html`.
 - Metin koddan ölçülür: süreler (`patron/sunucu` `IDENTITY_PURGE_DAYS` · `IP_RETENTION_DAYS` · denetim saklama
   varsayılanları) ve `NATIVE_PUSH` cümlesi bekçi §7'de; native push açılınca politika §2/§4 + `PATRON-MAGAZA-ANDROID.md` §4.2 birlikte güncellenir.
 

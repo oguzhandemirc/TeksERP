@@ -137,7 +137,7 @@ async function main(): Promise<void> {
     const compose = readFileSync(path.join(PATRON_KOKU, "..", "..", "deploy", "patron", "docker-compose.yml"), "utf8");
     const kurallar = [...compose.matchAll(/traefik\.http\.routers\.[^.]+\.rule=(.*)$/gm)].map((m) => m[1]!.replace(/"$/, ""));
     const disarida = kurallar.map((k) => /!PathRegexp\(`\^\/\(([a-z|]+)\)\(\/\|\$\$?\)`\)/.exec(k)?.[1]?.split("|") ?? null);
-    kontrol("§8a tek yönlendirici, Host kuralı + iç önek dışlaması taşır", kurallar.length === 1 && /^Host\(`\$\{PATRON_HOST[^}]*\}`\) && /.test(kurallar[0]!) && disarida[0] !== null, kurallar.join(" | ") || "YOK");
+    kontrol("§8a tek yönlendirici, (birincil || kalıcı takma) Host kuralı + iç önek dışlaması taşır", kurallar.length === 1 && /^\(Host\(`\$\{PATRON_HOST[^}]*\}`\) \|\| Host\(`\$\{PATRON_TAKMA_HOST[^}]*\}`\)\) && /.test(kurallar[0]!) && disarida[0] !== null, kurallar.join(" | ") || "YOK");
     const dis = [...(disarida[0] ?? [])].sort().join(",");
     kontrol("§8b ⭐ Traefik'in dışarıda tuttuğu önekler = IC_ONEKLER (kod ↔ kenar tek liste)", dis === [...IC_ONEKLER].sort().join(","), `traefik: ${dis || "YOK"} · kod: ${[...IC_ONEKLER].join(",")}`);
 

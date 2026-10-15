@@ -7,7 +7,9 @@ export const TOTP_STEP_SECONDS = 30;
 export const TOTP_DIGITS = 6;
 /** ±1 adım (±30 sn) — telefon saati NTP ile senkron; genişletmek kaba kuvvete pay verir. */
 export const TOTP_DRIFT_STEPS = 1;
-export const TOTP_ISSUER = "TeksERP Patron";
+/** Yalnız authenticator'daki görünen etiket (2026-10-16 "TeksERP Patron" → "TeksERP Yönetim"); doğrulama sırdan
+ *  ve saatten hesaplanır, etikete bakmaz — eski etiketle kurulmuş kayıtlar aynen çalışır. */
+export const TOTP_ISSUER = "TeksERP Yönetim";
 
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 

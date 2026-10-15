@@ -37,7 +37,7 @@ export default function Login() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, backgroundColor: color.bg }}>
       <ScrollView contentContainerStyle={{ padding: space.xl, maxWidth: 440, width: "100%", alignSelf: "center", marginTop: space.xl * 2 }}>
-        <Title>TeksERP Patron</Title>
+        <Title>TeksERP Yönetim</Title>
         {!configured ? <Banner tone="error" text="Uygulama bulut adresi olmadan derlenmiş; giriş yapılamaz" /> : null}
         {error ? <Banner tone="error" text={error} testID="giris-hata" /> : null}
         {step === 1 ? (

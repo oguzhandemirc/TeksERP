@@ -14,11 +14,11 @@ export async function assertFacilityCloudOpen(ctx: CloudContext, tesisId: string
   }));
   const state = facts ? serviceState(facts, nowMs) : null;
   if (state && state.phase !== "ACIK") {
-    throw new CloudError(403, "PATRON_BULUT_KAPALI", "Patron bulutu hizmeti sona erdi; veriler salt okunur, yeni kayıt girilemez", {
+    throw new CloudError(403, "PATRON_BULUT_KAPALI", "TeksERP Yönetim hizmeti sona erdi; veriler salt okunur, yeni kayıt girilemez", {
       asama: state.phase,
       saltOkunurBitis: state.readOnlyUntil?.toISOString() ?? null,
     });
   }
   const open = installations.some((i) => cloudEntitlementError({ ...i, stale: false }, nowMs) === null);
-  if (!state || !open) throw new CloudError(403, "PATRON_BULUT_KAPALI", "Tesisin patron bulutu aboneliği açık değil; fabrika bu isteği alamaz");
+  if (!state || !open) throw new CloudError(403, "PATRON_BULUT_KAPALI", "Tesisin TeksERP Yönetim aboneliği açık değil; fabrika bu isteği alamaz");
 }

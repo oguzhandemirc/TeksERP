@@ -1,33 +1,34 @@
-# TeksERP Patron — Gizlilik Politikası
+# TeksERP Yönetim — Gizlilik Politikası
 
-> **Patron uygulamasının Google Play gizlilik politikası** (kullanıcı kararı 2026-10-15: PBAM taslağından KISA
+> **TeksERP Yönetim (eski adı TeksERP Patron; iç kod adı `patron`) uygulamasının Google Play gizlilik politikası**
+> (ad değişimi kullanıcı kararı 2026-10-16; ilk metin kararı 2026-10-15: PBAM taslağından KISA
 > uygulama politikası, sürüm kimlikli, taslak işaretsiz; avukat sonra düzeltir). Kaynak:
 > `docs/hukuk/PATRON-BULUTU-AYDINLATMA-METNI.md` (PBAM) + `docs/ops/PATRON-MAGAZA-ANDROID.md` §4.2 veri güvenliği
 > tablosu (§2 maddeleri o tabloyla BİREBİR tutarlı tutulur; biri değişince öbürü aynı commit'te).
 >
-> **Yayın:** `https://tekserp.etkiliyazilim.com/patron-gizlilik` · hesap silme adresi
-> `https://tekserp.etkiliyazilim.com/patron-gizlilik#hesap-silme` (çapa "Hesap silme" başlığından üretilir; Play
+> **Yayın:** `https://tekserp.etkiliyazilim.com/yonetim-gizlilik` · hesap silme adresi
+> `https://tekserp.etkiliyazilim.com/yonetim-gizlilik#hesap-silme` (eski `/patron-gizlilik` kalıcı 301 ile buraya; çapa "Hesap silme" başlığından üretilir; Play
 > formuna yazılır, başlık değişmez). Bu dosya sayfanın TEK KAYNAĞIDIR: `deploy/gizlilik-sayfasi/uret.mjs` ile
-> `deploy/gizlilik-sayfasi/html/patron-gizlilik.html`e çevrilir. Bekçi `scripts/test_gizlilik_sayfasi.mjs`
+> `deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html`e çevrilir. Bekçi `scripts/test_gizlilik_sayfasi.mjs`
 > bayt-eşitliği, süreleri (`patron/sunucu` `IDENTITY_PURGE_DAYS` · `IP_RETENTION_DAYS` · denetim saklama
 > varsayılanları) ve native push cümlesini (`patron/uygulama/src/push/support.ts` `NATIVE_PUSH`) koda karşı ölçer.
 > Metin değişince sürüm kimliği ve yürürlük tarihi birlikte artar.
 
-**Metin sürümü:** `PATRON-GP-2026.2`
-**Yürürlük:** 15 Ekim 2026
-**Uygulama:** TeksERP Patron (Google Play paket adı: `com.etkiliyazilim.tekserp.patron`)
+**Metin sürümü:** `YONETIM-GP-2026.3`
+**Yürürlük:** 16 Ekim 2026
+**Uygulama:** TeksERP Yönetim (Google Play paket adı: `com.etkiliyazilim.tekserp.yonetim`)
 **Geliştirici:** Etkili Yazılım Ltd. Şti.
 **İletişim:** info@etkiliyazilim.com
 
 ## 1. Uygulama ve taraflar
 
-TeksERP Patron, TeksERP kullanan tekstil fabrikalarının yöneticilerine fabrikanın özet verisini (üretim,
+TeksERP Yönetim, TeksERP kullanan tekstil fabrikalarının yöneticilerine fabrikanın özet verisini (üretim,
 sevkiyat, stok, finans, sipariş, cari) gösteren ve fabrikaya sipariş ve cari talebi iletmeyi sağlayan bir iş
 uygulamasıdır. Hesaplar yalnız fabrikanın tesis yöneticisinin davetiyle açılır; uygulamada açık kayıt yoktur.
 
 - **Veri sorumlusu: hesabınızı açan fabrika.** Uygulamada gördüğünüz fabrika verisi ve hesabınızla ilgili
   kişisel veriler fabrika adına işlenir; KVKK kapsamındaki başvurularınızın muhatabı fabrikadır.
-- **Veri işleyen: Etkili Yazılım Ltd. Şti.** Uygulamayı ve Patron Bulutu sunucusunu (`patron.etkiliyazilim.com`,
+- **Veri işleyen: Etkili Yazılım Ltd. Şti.** Uygulamayı ve TeksERP Yönetim sunucusunu (`yonetim.etkiliyazilim.com`,
   Türkiye'deki sunucular) fabrikanın talimatıyla işletir. Verileri kendi amaçları için kullanmaz, satmaz,
   reklam ya da profilleme için kullanmaz.
 
@@ -67,7 +68,7 @@ görebilmeniz için uygulamanın korumalı alanında saklanır, cihaz yedeğine 
 ## 4. Aktarım ve hizmet sağlayıcılar
 
 - **Fabrika (veri sorumlusu):** girdiğiniz talepler fabrikanın TeksERP sistemine iletilir.
-- **Barındırma:** Patron Bulutu sunucusu Türkiye'de yerleşik bir sunucu sağlayıcısında çalışır.
+- **Barındırma:** TeksERP Yönetim sunucusu Türkiye'de yerleşik bir sunucu sağlayıcısında çalışır.
 - **Cloudflare, Inc. (yurt dışı):** bağlantı güvenliği; uygulama ile sunucu arasındaki şifreli trafik
   Cloudflare ağından geçer.
 - **Web bildirimleri:** aynı hesabı tarayıcıdan kullanıp bildirime izin verirseniz bildirim, tarayıcınızın
