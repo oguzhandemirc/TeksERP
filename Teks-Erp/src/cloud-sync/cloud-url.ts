@@ -2,7 +2,8 @@
 // Adres tek başına eşitlemeyi ya da gelen kutusunu AÇMAZ: ön koşul kiradan ve HAK'tan gelir (`eligibility.ts`).
 import { isEgressTargetAllowed } from "../lib/http-egress";
 
-export const DEFAULT_PATRON_CLOUD_URL = "https://patron.etkiliyazilim.com";
+// Birincil ad; patron.etkiliyazilim.com kalıcı takma ad olarak açık kalır (eski kurulumlar ona eşitler).
+export const DEFAULT_PATRON_CLOUD_URL = "https://yonetim.etkiliyazilim.com";
 /** `PATRON_CLOUD_URL=kapali`: buluta hiç çıkılmaz (geliştirme makinesi, çevrimdışı kurulum). */
 export const PATRON_CLOUD_DISABLED = "kapali";
 
