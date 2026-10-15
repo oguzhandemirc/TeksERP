@@ -6,7 +6,7 @@
 //   §4 claim yarışında tek hazırlayıcı · süresi dolmuş claim devralınır.
 //   §5 hata yolu: claim bırakılır, deneme + kısa hata + bekleme; yarım göç defteri DB'yi kilitler (P3009).
 //   §6 ad çakışması reddedilir · merkez adı tavanı · merkez işareti.
-//   §7 sunucu hazırlayıcıyı import ETMEZ (import grafiği; negatif sonda: CLI grafiği bulur).
+//   §7 sunucu hazırlayıcıyı ve rol hizasını import ETMEZ (import grafiği; negatif sonda: CLI grafiği bulur).
 //   §8 B6 parolasız sır (tesis DB anahtarı · TOTP anahtarı) diğerlerine açıksa yüklenmez; 0640 serbest; geliştirme beyanı yalnız NODE_ENV≠production.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -205,9 +205,10 @@ function sunucuGrafigi(): void {
   console.log("\n§7 sunucu hazırlayıcıyı import etmez");
   const hedef = path.join(PATRON_KOKU, "src/lib/tesis-db-hazirlik.ts");
   const sunucu = importGraph(path.join(PATRON_KOKU, "src/server.ts"));
-  kontrol("§7a src/server.ts grafiğinde tesis-db-hazirlik YOK", !sunucu.has(hedef), `${sunucu.size} dosya`);
+  const hiza = path.join(PATRON_KOKU, "src/lib/tesis-rol-hizasi.ts");
+  kontrol("§7a src/server.ts grafiğinde tesis-db-hazirlik ve tesis-rol-hizasi YOK", !sunucu.has(hedef) && !sunucu.has(hiza), `${sunucu.size} dosya`);
   const cli = importGraph(path.join(PATRON_KOKU, "scripts/tesis-db.ts"));
-  kontrol("§7b negatif sonda: CLI grafiği hazırlayıcıyı BULUR (tarayıcı çalışıyor)", cli.has(hedef));
+  kontrol("§7b negatif sonda: CLI grafiği hazırlayıcıyı ve rol hizasını BULUR (tarayıcı çalışıyor)", cli.has(hedef) && cli.has(hiza));
 }
 
 function sirIzni(): void {

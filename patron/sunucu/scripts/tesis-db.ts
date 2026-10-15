@@ -9,6 +9,9 @@
 //   npx tsx scripts/tesis-db.ts ozet-yenile [--apply] (anahtar değişiminden sonra: bağlı kimliklerin e-posta özetini
 //        geçerli anahtarla yeniden hesaplar; kuru koşum varsayılan, yalnız kimlik kimliği + sayı basar; çakışmada
 //        HİÇ yazmaz; anahtar dosyası YOKSA üretmez, durur — PATRON-TESIS-DB §6)
+//   npx tsx scripts/tesis-db.ts rol-hizala [--apply]  (anahtar değişiminden sonra, ozet-yenile'den ÖNCE: HAZIR tesislerin
+//        çalışma rolü parolalarını geçerli anahtara hizalar; kuru koşum varsayılan, yalnız uyumsuz rolü yazar; HAZIR
+//        olmayan tesis atlanır ve çıkış 1; anahtar dosyası YOKSA üretmez, durur — PATRON-TESIS-DB §3)
 // Anahtar: `TESIS_ROL_ANAHTARI_DOSYASI` (üretim sırrı) ya da `ANAHTAR_DIZINI/patron-tesis-db.key`.
 // =============================================================================
 import { Client } from "pg";
@@ -19,6 +22,7 @@ import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 import { assertCentralName, databaseOf } from "../src/lib/tesis-db-ad";
 import { centralSchemaVersion, migrateFacilityDbs, pendingFacilityDbs, prepareFacilityDb, type PrepareDeps, type PrepareOutcome } from "../src/lib/tesis-db-hazirlik";
 import { expectedSchemaVersion } from "../src/lib/tesis-goc";
+import { applyRoleAlignment, planRoleAlignment, type RoleAlignPlan } from "../src/lib/tesis-rol-hizasi";
 import { TesisDbRouter } from "../src/lib/tesis-db";
 import { applyDigestRekey, describePlan, planDigestRekey } from "../src/services/identity-rekey";
 
@@ -127,6 +131,40 @@ export async function rekeyDigests(env: NodeJS.ProcessEnv, cwd: string, apply: b
   }
 }
 
+function describeRolePlan(plan: RoleAlignPlan, log: (line: string) => void): void {
+  for (const item of plan.items) {
+    if (item.kind === "atlandi") {
+      log(`⏭️ atlandı ${item.tesisId} ${item.database} durum=${item.status} — HAZIR değil; hazır olunca komutu yeniden koşun`);
+      continue;
+    }
+    for (const r of item.roles) if (r.state !== "uyumlu") log(`${r.state === "yok" ? "⛔ rol yok" : "uyumsuz"} ${item.tesisId} ${item.database} rol=${r.role}`);
+  }
+}
+
+const roleSummary = (kip: string, c: RoleAlignPlan["counts"], extra = ""): string =>
+  `PATRON_ROL_HIZALA kip=${kip} tesis=${c.tesis} uyumlu=${c.uyumlu} uyumsuz=${c.uyumsuz} yok=${c.yok} atlanan=${c.atlanan}${extra}`;
+
+/** Rol parolası hizası. Çıkış 0: (uygulamadan sonra) her HAZIR tesisin iki rolü anahtarla uyumlu · 1: atlanan/yok/yazılamayan/durdu. */
+export async function alignRoles(env: NodeJS.ProcessEnv, cwd: string, apply: boolean, log: (line: string) => void = console.log): Promise<number> {
+  const gocUrl = env.GOC_DATABASE_URL;
+  if (!gocUrl) throw new Error("GOC_DATABASE_URL tanımlı değil");
+  if (assertCentralName(databaseOf(gocUrl)).startsWith("tekserp_fabrika_")) throw new Error("Fabrika verisi sınıfındaki DB'de rol hizalanmaz");
+  const k = facilityDbKeyPath(env, cwd);
+  // Yeni anahtar burada ÜRETİLMEZ: yanlış yoldan doğan anahtar bütün tesis rollerini ona çevirirdi (hepsi kilitlenir).
+  const key = FacilityDbKey.load(k.file, { create: false });
+  if (!apply) {
+    const plan = await planRoleAlignment(gocUrl, key);
+    describeRolePlan(plan, log);
+    log(`${roleSummary("kuru", plan.counts)}${plan.counts.uyumsuz > 0 ? " — yazmak için --apply" : ""}`);
+    return plan.counts.yok > 0 || plan.counts.atlanan > 0 ? 1 : 0;
+  }
+  const r = await applyRoleAlignment(gocUrl, key);
+  for (const f of r.failed) log(`⛔ yazılamadı rol=${f.role} (${f.code})`);
+  describeRolePlan(r.after, log);
+  log(roleSummary("uygula", r.after.counts, ` degisen=${r.changed.length} hata=${r.failed.length}`));
+  return r.failed.length > 0 || r.after.counts.uyumsuz > 0 || r.after.counts.yok > 0 || r.after.counts.atlanan > 0 ? 1 : 0;
+}
+
 async function watch(deps: PrepareDeps, seconds: number): Promise<void> {
   let stop = false;
   const wake: { fn: (() => void) | null } = { fn: null };
@@ -161,6 +199,7 @@ async function main(): Promise<number> {
   const [komut, ...rest] = process.argv.slice(2);
   const a = args(rest);
   if (komut === "ozet-yenile") return rekeyDigests(process.env, process.cwd(), a.apply === "true");
+  if (komut === "rol-hizala") return alignRoles(process.env, process.cwd(), a.apply === "true");
   const deps = cliDeps();
   switch (komut) {
     case "hazirla": {
@@ -178,7 +217,7 @@ async function main(): Promise<number> {
     case "goc":
       return migrateAll(deps);
     default:
-      console.error("Kullanım: tesis-db.ts hazirla --tesis=<uuid> | izle [--aralik=10] | durum | goc | ozet-yenile [--apply]");
+      console.error("Kullanım: tesis-db.ts hazirla --tesis=<uuid> | izle [--aralik=10] | durum | goc | rol-hizala [--apply] | ozet-yenile [--apply]");
       return 2;
   }
 }

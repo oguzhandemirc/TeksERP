@@ -8,7 +8,8 @@
 //      üyelik e-postaları tutarsız → çakışma · plandan SONRA doğan çakışma kilit altında yakalanır, durur
 //   §3 uygula: K ve L yeni anahtarla, P ve D bayat · ayak izi üyelik tesislerinde yüksüz (e-posta/özet yok)
 //   §4 ikinci koşum no-op (servis 0, CLI degisen=0)
-//   §5 roller K2'ye hizalanınca K2'li sunucuda K iki tesisle, L girer · K1'li eski özetle 401 · D çözülmez (bayat)
+//   §5 reçetenin rol adımı (`tesis-db rol-hizala --apply`, CLI) roller K2'ye hizalanınca K2'li sunucuda K iki
+//      tesisle, L girer · K1'li eski özetle 401 · D çözülmez (bayat)
 // Koşum: npx tsx scripts/test_kimlik_ozet_yenile.ts
 // =============================================================================
 import { spawnSync } from "node:child_process";
@@ -16,13 +17,9 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Client } from "pg";
 import { FacilityDbKey } from "../src/auth/facility-db-key";
 import { acceptInvite } from "../src/auth/invite.service";
-import { ensureLoginRole } from "../src/lib/db-roles";
-import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 import { withCentral, withTesis } from "../src/lib/tenant";
-import { databaseOf, facilityDbName, facilityRoles } from "../src/lib/tesis-db-ad";
 import { REKEY_AUDIT_EVENT, applyDigestRekey, planDigestRekey, type RekeyPlan } from "../src/services/identity-rekey";
 import { inviteFacilityAdmin } from "../src/services/vendor-admin.service";
 import { giris, idler, veri } from "./lib/coklu-tesis-ek";
@@ -53,8 +50,8 @@ const ozetOf = async (o: Ortam, id: string) => (await withCentral(o.goc, {}, (tx
 const durumu = (plan: RekeyPlan, id: string) => plan.items.find((i) => i.identityId === id);
 const izler = (o: Ortam, tesisId: string) => withTesis(o.goc, { tesisId }, (tx) => tx.accountAudit.findMany({ where: { tesisId, event: REKEY_AUDIT_EVENT } }));
 
-function cli(apply: boolean): { code: number; out: string } {
-  const r = spawnSync("npx", ["tsx", "scripts/tesis-db.ts", "ozet-yenile", ...(apply ? ["--apply"] : [])], {
+function cli(apply: boolean, komut: "ozet-yenile" | "rol-hizala" = "ozet-yenile"): { code: number; out: string } {
+  const r = spawnSync("npx", ["tsx", "scripts/tesis-db.ts", komut, ...(apply ? ["--apply"] : [])], {
     cwd: PATRON_KOKU,
     encoding: "utf8",
     env: { ...process.env, TESIS_ROL_ANAHTARI_DOSYASI: K2_DOSYA },
@@ -142,16 +139,9 @@ async function girisler(o: Ortam, s: Kurgu): Promise<void> {
   console.log("\n§5 yeni anahtarla giriş");
   const eski = await giris(o, s.k);
   kontrol("§5a eski anahtarlı sunucu artık K'yi bulamaz (401)", eski.status === 401, `${eski.status}`);
-  const merkez = new Client({ connectionString: process.env.GOC_DATABASE_URL!, options: PG_SESSION_OPTIONS });
-  await merkez.connect();
-  try {
-    for (const t of [s.a, s.b, s.c]) {
-      const roles = facilityRoles(facilityDbName(databaseOf(process.env.GOC_DATABASE_URL!), t));
-      for (const rol of [roles.app, roles.sync]) await ensureLoginRole(merkez, rol, K2.rolePassword(rol));
-    }
-  } finally {
-    await merkez.end();
-  }
+  // Reçetenin rol adımı gerçek yoldan (CLI): el hizası yok; adım atlanırsa K2'li sunucu tesis DB'sine bağlanamaz.
+  const h = cli(true, "rol-hizala");
+  kontrol("§5b0 `rol-hizala --apply` çıkış 0 · uyumsuz=0 · sırsız", h.code === 0 && /kip=uygula .*uyumsuz=0 /.test(h.out) && sirsiz(h.out), h.out.slice(-300));
   const o2 = await ortamKur({ GIRIS_HIZ_DK: "1000", GIRIS_ESIGI: "50" }, undefined, undefined, { anahtar: K2, secrets: o.ctx.secrets });
   try {
     o2.saat.ayarla(o.saat.simdi() + 120_000);
