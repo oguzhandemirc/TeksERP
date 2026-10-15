@@ -34,7 +34,7 @@ Beklenen: ① beş sayı da **0** (tesis 0; dalda merkez → tesis veri taşıma
 ## 2. Mac'te hazırlık
 
 1. Dal `main`e indi ve işletim kaydı §6 açıldı (patron sunucusu müşteriye kurulan ürün değil, bizim barındırdığımız servis: sürüm notu / terfi etiketi yok; panel/tablet etkilenmez).
-2. Anahtar (repo DIŞINDA, `docs/ops/PATRON-BULUTU-KURULUM.md` §2.1 kalıbı): `node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url")+"\n")' > tesis-rol-anahtari` — 32 bayt base64url. Kaybı veri kaybı DEĞİLDİR (`tesis-db goc` parolaları yeni anahtarla yeniden yazar, giriş dizini aynı komutla yeniden kurulur) ama anahtarı değiştirmek bütün tesis rollerini döndürür; bir kopya Mac + USB'de.
+2. Anahtar (repo DIŞINDA, `docs/ops/PATRON-BULUTU-KURULUM.md` §2.1 kalıbı): `node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url")+"\n")' > tesis-rol-anahtari` — 32 bayt base64url. Kaybı veri kaybı DEĞİLDİR (`tesis-db goc` parolaları yeni anahtarla yeniden yazar, kimlik e-posta özetleri `tesis-db.js ozet-yenile --apply` ile yeniden hesaplanır, §5b) ama anahtarı değiştirmek bütün tesis rollerini döndürür; bir kopya Mac + USB'de.
 3. İmaj: temiz ağaçtan `deploy/patron/imaj-derle.sh --platform linux/amd64` (Dockerfile `dist-cli/scripts/tesis-db.js`i derler ve `test -f` ile doğrular).
 4. Yerel duman: `deploy/patron/duman.sh kur <sha>` — göç zinciri `tesis-db goc` ile biter, `patron-hazirla` ayağa kalkar ve yeniden başlamaz (`RestartCount` 0), HTTP ölçümleri 127.0.0.1'den döner (duman örtüsünün kenar köprüsü üzerinden), yedek turu merkez + tesis dökümünü üretir ve ikisi de özel yarıyla açılır, `docker stats` dört uzun ömürlü servisi gösterir. `duman.sh kaldir <sha>`.
 5. `.env`: `ornek.env`teki yeni satır `TESIS_ROL_ANAHTARI_DOSYASI_HOST=/opt/stack/apps/tekserp-patron-uretim/sirlar/tesis-rol-anahtari`; yeni `docker-compose.yml`.
@@ -81,6 +81,20 @@ deploy/vds-dogrula.sh                                                           
 - **Kenar zinciri tek başına sorunluysa** (CF üzerinden 403/429): yeni `docker-compose.yml`de yalnız `traefik.http.routers.tekserp-patron-${ORTAM}.middlewares=` satırını kaldır + `sudo docker compose up -d patron` (eski compose'u bu yüzden geri koyma — yeni imajın sunucu rolü `tesis_rol_anahtari` ister; DB/göç etkilenmez).
 - **Sonradan geri dönüş:** `.env`'i `~/ptd-env-yedek-<eski sha>`ten geri yaz, eski `docker-compose.yml`i geri koy, eski imajla `patron-goc` (yetkiler) + `up -d`; `patron-hazirla` eski compose'da yoktur (`docker compose up -d --remove-orphans`). Geçişten sonra doğmuş tesis DB'leri merkezin dışında kalır — eski sürüm onları GÖRMEZ: geri dönüşten önce `tesis-db.js durum` ile say; sıfır değilse geri dönüş veri kaybı demektir (kullanıcı kararı), dökümleri `tesis_<id>_*` yedeklerinde durur.
 - Göç geri alınamaz; veri gerekiyorsa §3.1 yedeğinden geri yükleme (KURULUM §7).
+
+## 5b. Tesis DB anahtarı değiştikten sonra — kimlik e-posta özetleri
+
+Anahtar değişince bağlı kimliklerin merkez özeti bayatlar: giriş 401 alır ve aynı e-postayla gelen davet kabulü YENİ kimlik doğurabilir (sonra çakışma). Bu yüzden anahtar değişimi ile özet yenileme AYNI bakım penceresinde, sunucu açılmadan önce koşulur.
+
+```bash
+sudo docker compose --profile goc run --rm --no-deps patron-goc node dist-cli/scripts/tesis-db.js ozet-yenile           # kuru: yalnız kimlik kimliği + sayılar
+sudo docker compose --profile goc run --rm --no-deps patron-goc node dist-cli/scripts/tesis-db.js ozet-yenile --apply   # PATRON_OZET_YENILE kip=uygula degisen=N
+sudo docker compose --profile goc run --rm --no-deps patron-goc node dist-cli/scripts/tesis-db.js ozet-yenile           # ikinci ölçüm: yenilenecek=0
+```
+
+- `cakisma` 0 değilse `--apply` hiçbir özet yazmaz (çıkış 1): satırdaki kimlik kimliği + sebep (`OZET_BASKA_KIMLIKTE` · `OZET_CIFT` · `EPOSTA_TUTARSIZ`) incelenir, karar kullanıcıda. `okunamadi` tesis DB'si hazır olmayan kimliktir; o tesis HAZIR olunca komut yeniden koşulur. "durdu" satırı yarışta değişen kimliktir; yeniden koşum kalanı tamamlar.
+- Bağsız kimlik (DAVETLİ bekleyen, PASİF) bilerek bayat kalır; bakım kapatır/siler, kişi yeniden davet edilir.
+- Geri alma: eski anahtar dosyasını geri koy + aynı komut `--apply` (özet belirlenimli, eskiye döner). Eski anahtarın kopyası yoksa geri dönüş yoktur.
 
 ## 6. Kayıt
 

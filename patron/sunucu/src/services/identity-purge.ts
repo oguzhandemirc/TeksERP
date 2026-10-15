@@ -2,7 +2,7 @@
 // Kimlik verisi defter değildir; satır KALIR (tombstone), yalnız sır + e-posta özeti silinir; üyelik satırlarının
 // silmesi beyanlı yerde (`auth/membership.ts` `dropMemberships`, `PRUNED_TABLES.login_routes`).
 import { createHash } from "node:crypto";
-import { dropMemberships, identityEngagedOutside } from "../auth/membership";
+import { ENGAGED_ACCOUNT_STATUSES, accountEngagedTo, dropMemberships, identityEngagedOutside } from "../auth/membership";
 import { CloudError } from "../lib/errors";
 import { withCentral, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
@@ -18,9 +18,9 @@ async function engagedIdentities(ctx: CloudContext, routes: readonly { identityI
   for (const [tesisId, rs] of byTesis) {
     try {
       const rows = await withTesis(ctx.app, { tesisId }, (tx) =>
-        tx.account.findMany({ where: { tesisId, id: { in: rs.map((r) => r.accountId) }, status: { in: ["AKTIF", "KILITLI", "DAVETLI"] } }, select: { id: true, identityId: true } }),
+        tx.account.findMany({ where: { tesisId, id: { in: rs.map((r) => r.accountId) }, status: { in: [...ENGAGED_ACCOUNT_STATUSES] } }, select: { id: true, identityId: true, status: true } }),
       );
-      for (const r of rs) if (rows.some((a) => a.id === r.accountId && a.identityId === r.identityId)) out.add(r.identityId);
+      for (const r of rs) if (rows.some((a) => a.id === r.accountId && accountEngagedTo(a, r.identityId))) out.add(r.identityId);
     } catch (err) {
       if (err instanceof CloudError && err.status === 404) continue;
       for (const r of rs) out.add(r.identityId);

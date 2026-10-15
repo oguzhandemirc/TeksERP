@@ -107,10 +107,16 @@ export async function closeIdentitySessions(
  * KİLİTLİ ya da satıcının kimlik sıfırlamasıyla bağlı bekleyen DAVETLİ (üyelik satırı ancak onayla doğar). İmha
  * edilmiş tesis (404) bağ değildir; hazır olmayan tesis (503) FIRLAR — karar verilemiyorsa sıfırlama yapılmaz.
  */
+export const ENGAGED_ACCOUNT_STATUSES = ["AKTIF", "KILITLI", "DAVETLI"] as const;
+
+/** Bağlılık yüklemi (tek kaynak): sıfırlama, kimlik kapanışı ve özet yenileme aynı soruyu sorar. */
+export const accountEngagedTo = (a: { status: string; identityId: string | null } | null, identityId: string): boolean =>
+  a !== null && a.identityId === identityId && (ENGAGED_ACCOUNT_STATUSES as readonly string[]).includes(a.status);
+
 export async function routeEngaged(ctx: AppCtx, route: { identityId: string; tesisId: string; accountId: string }): Promise<boolean> {
   try {
     const a = await withTesis(ctx.app, { tesisId: route.tesisId }, (tx) => tx.account.findUnique({ where: { id: route.accountId }, select: { status: true, identityId: true } }));
-    return a !== null && a.identityId === route.identityId && (a.status === "AKTIF" || a.status === "KILITLI" || a.status === "DAVETLI");
+    return accountEngagedTo(a, route.identityId);
   } catch (err) {
     if (err instanceof CloudError && err.status === 404) return false;
     throw err;

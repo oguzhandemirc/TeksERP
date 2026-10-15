@@ -108,14 +108,20 @@ function surecAnahtari(): FacilityDbKey {
   return ortakAnahtar;
 }
 
-export async function ortamKur(ekOrtam: Record<string, string> = {}, fetchImpl?: typeof fetch, doorbell?: Doorbell): Promise<Ortam> {
+/** `ezme`: tesis DB anahtarı değişimini ölçen bekçi için (rolleri o anahtara bekçi hizalar; sır kutusu önceki ortamınki). */
+export async function ortamKur(
+  ekOrtam: Record<string, string> = {},
+  fetchImpl?: typeof fetch,
+  doorbell?: Doorbell,
+  ezme: { anahtar?: FacilityDbKey; secrets?: SecretBox } = {},
+): Promise<Ortam> {
   hedefDbKapisi();
   await applyRoles(process.env);
   const dizin = mkdtempSync(path.join(os.tmpdir(), "patron-bekci-"));
   const config = loadConfig({ ...process.env, ANAHTAR_DIZINI: dizin, ...ekOrtam }, PATRON_KOKU);
   const saat = new Saat();
   const zil = new KayitliZil();
-  const anahtar = surecAnahtari();
+  const anahtar = ezme.anahtar ?? surecAnahtari();
   const schemaVersion = expectedSchemaVersion();
   const goc = new TesisDbRouter({ role: "goc", centralUrl: process.env.GOC_DATABASE_URL!, key: anahtar, schemaVersion, cacheSeconds: 0 });
   const app = new TesisDbRouter({ role: "uygulama", centralUrl: config.DATABASE_URL, key: anahtar, schemaVersion });
@@ -124,7 +130,7 @@ export async function ortamKur(ekOrtam: Record<string, string> = {}, fetchImpl?:
     config,
     app,
     sync,
-    secrets: SecretBox.load(dizin, { create: true }),
+    secrets: ezme.secrets ?? SecretBox.load(dizin, { create: true }),
     directory: new InstallationDirectory(sync, config, fetchImpl),
     doorbell: doorbell ?? zil,
     now: saat.simdi,

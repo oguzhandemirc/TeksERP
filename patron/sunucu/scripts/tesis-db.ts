@@ -6,6 +6,9 @@
 //   npx tsx scripts/tesis-db.ts goc                      (HAZIR tesis DB'lerine eksik göçler, TEK TEK; merkez ÖNCE
 //        `prisma migrate deploy` + `db-rolleri` ile — `patron-goc` zinciri; bir tesisin hatası ötekini durdurmaz,
 //        rapor basılır, hata varsa çıkış 1)
+//   npx tsx scripts/tesis-db.ts ozet-yenile [--apply] (anahtar değişiminden sonra: bağlı kimliklerin e-posta özetini
+//        geçerli anahtarla yeniden hesaplar; kuru koşum varsayılan, yalnız kimlik kimliği + sayı basar; çakışmada
+//        HİÇ yazmaz; anahtar dosyası YOKSA üretmez, durur — PATRON-TESIS-DB §6)
 // Anahtar: `TESIS_ROL_ANAHTARI_DOSYASI` (üretim sırrı) ya da `ANAHTAR_DIZINI/patron-tesis-db.key`.
 // =============================================================================
 import { Client } from "pg";
@@ -16,6 +19,8 @@ import { PG_SESSION_OPTIONS } from "../src/lib/pg-session";
 import { assertCentralName, databaseOf } from "../src/lib/tesis-db-ad";
 import { centralSchemaVersion, migrateFacilityDbs, pendingFacilityDbs, prepareFacilityDb, type PrepareDeps, type PrepareOutcome } from "../src/lib/tesis-db-hazirlik";
 import { expectedSchemaVersion } from "../src/lib/tesis-goc";
+import { TesisDbRouter } from "../src/lib/tesis-db";
+import { applyDigestRekey, describePlan, planDigestRekey } from "../src/services/identity-rekey";
 
 function args(argv: readonly string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -89,6 +94,39 @@ async function migrateAll(deps: PrepareDeps): Promise<number> {
   return failed > 0 ? 1 : 0;
 }
 
+/** Özet yenileme: önce plan (kuru), `--apply` ile ve planda çakışma yoksa yazar. Çıkış 0 temiz · 1 çakışma/okunamayan/durdu. */
+export async function rekeyDigests(env: NodeJS.ProcessEnv, cwd: string, apply: boolean, log: (line: string) => void = console.log): Promise<number> {
+  const gocUrl = env.GOC_DATABASE_URL;
+  if (!gocUrl) throw new Error("GOC_DATABASE_URL tanımlı değil");
+  const k = facilityDbKeyPath(env, cwd);
+  // Yeni anahtar burada ÜRETİLMEZ: yanlış yoldan doğan anahtar bütün özetleri ona yazardı.
+  const key = FacilityDbKey.load(k.file, { create: false });
+  const db = new TesisDbRouter({ role: "goc", centralUrl: gocUrl, key, schemaVersion: expectedSchemaVersion(), centralPoolMax: 2, facilityPoolMax: 2, cacheSeconds: 0 });
+  try {
+    const plan = await planDigestRekey(db, key);
+    for (const line of describePlan(plan)) log(line);
+    let code = plan.counts.cakisma > 0 || plan.counts.okunamadi > 0 ? 1 : 0;
+    if (!apply) {
+      log(`PATRON_OZET_YENILE kip=kuru yenilenecek=${plan.counts.yenilenecek} cakisma=${plan.counts.cakisma} — yazmak için --apply`);
+      return code;
+    }
+    const r = await applyDigestRekey(db, key, plan);
+    if (r.kind === "reddedildi") {
+      log(`⛔ ${r.conflicts} kimlikte çakışma — HİÇBİR özet yazılmadı; çakışan kimlikler incelenmeli (runbook)`);
+      log(`PATRON_OZET_YENILE kip=uygula degisen=0 cakisma=${r.conflicts}`);
+      return 1;
+    }
+    if (r.kind === "durdu") {
+      log(`⛔ ${r.stop.identityId} kimliğinde durdu (${r.stop.reason}) — ${r.changed} kimlik yazıldı; komutu yeniden koşun`);
+      code = 1;
+    }
+    log(`PATRON_OZET_YENILE kip=uygula degisen=${r.changed} cakisma=${plan.counts.cakisma}`);
+    return code;
+  } finally {
+    await db.close();
+  }
+}
+
 async function watch(deps: PrepareDeps, seconds: number): Promise<void> {
   let stop = false;
   const wake: { fn: (() => void) | null } = { fn: null };
@@ -122,6 +160,7 @@ async function main(): Promise<number> {
   loadEnvFile();
   const [komut, ...rest] = process.argv.slice(2);
   const a = args(rest);
+  if (komut === "ozet-yenile") return rekeyDigests(process.env, process.cwd(), a.apply === "true");
   const deps = cliDeps();
   switch (komut) {
     case "hazirla": {
@@ -139,7 +178,7 @@ async function main(): Promise<number> {
     case "goc":
       return migrateAll(deps);
     default:
-      console.error("Kullanım: tesis-db.ts hazirla --tesis=<uuid> | izle [--aralik=10] | durum | goc");
+      console.error("Kullanım: tesis-db.ts hazirla --tesis=<uuid> | izle [--aralik=10] | durum | goc | ozet-yenile [--apply]");
       return 2;
   }
 }
