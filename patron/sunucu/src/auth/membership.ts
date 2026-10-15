@@ -113,6 +113,14 @@ export const ENGAGED_ACCOUNT_STATUSES = ["AKTIF", "KILITLI", "DAVETLI"] as const
 export const accountEngagedTo = (a: { status: string; identityId: string | null } | null, identityId: string): boolean =>
   a !== null && a.identityId === identityId && (ENGAGED_ACCOUNT_STATUSES as readonly string[]).includes(a.status);
 
+/**
+ * Kimliğe BAĞLI BEKLEYEN DAVET: kabul edilmiş (hesap kimliğe bağlandı) ama onaylanmamış (DAVETLİ) hesap. Üyelik satırı
+ * yalnız onayda doğduğu için merkezde izi yoktur — tesis DB'sinde sorulur. Prisma parçası ↔ bellek-içi yüklem boğaz-ikizdir.
+ */
+export const pendingInviteWhere = (identityId: string) => ({ identityId, status: "DAVETLI" as const });
+export const pendingInviteBoundTo = <A extends { status: string; identityId: string | null }>(a: A | null, identityId: string): a is A =>
+  a !== null && a.status === pendingInviteWhere(identityId).status && a.identityId === identityId;
+
 export async function routeEngaged(ctx: AppCtx, route: { identityId: string; tesisId: string; accountId: string }): Promise<boolean> {
   try {
     const a = await withTesis(ctx.app, { tesisId: route.tesisId }, (tx) => tx.account.findUnique({ where: { id: route.accountId }, select: { status: true, identityId: true } }));

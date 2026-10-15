@@ -9,6 +9,9 @@
 //      üyelikleri PASİF, öteki tesisteki oturum da 401, kimlik PASİF · başka kimlik etkilenmez
 //   §6 tek kaynak: 30. günde bakımın MEVCUT silmesi hesabı ve kimliği tombstone'a çeker (29. günde dokunmaz)
 //   §7 geri alma yolu: silmeden sonra yönetici aynı e-postayı yeniden davet edebilir (201)
+//   §8 bekleyen davet: başka tesiste KABUL edilmiş ama onaylanmamış davet (hesap DAVETLİ, kimliğe bağlı, üyelik satırı
+//      yok) aynı silmede PASİF olur (belirteç düşer, ayak izi DAVET_KAPANDI); eski belirteçle yeniden kabul/onay 404,
+//      kimlik PASİF kalır (dirilmez) · ilgisiz kimliğin aynı tesisteki bekleyen daveti dokunulmaz
 // Koşum: npx tsx scripts/test_hesap_kendini_silme.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -144,9 +147,47 @@ async function geriAlma(o: Ortam, a: string, yonetici: TestHesabi, eposta: strin
   kontrol("§7a silinen e-posta aynı tesiste yeniden davet edilebilir (201)", r.status === 201, `${r.status} ${r.json.details?.code}`);
 }
 
+/** Yöneticinin daveti (gerçek HTTP) + davetlinin kabulü: kimlik başka tesiste AKTİF olduğundan hesap ona bağlanır, onaylanmaz. */
+async function davetKabul(o: Ortam, yonetici: TestHesabi, eposta: string): Promise<{ hesapId: string; davet: string; kabul: number }> {
+  const r = await api(o, "POST", "/api/hesaplar", { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), eposta, ad: "Bekleyen Davetli", sablon: "PATRON" } });
+  const d = r.json.data as { hesap: { id: string }; davet: string };
+  const k = await api(o, "POST", "/api/davet/kabul", { govde: { davet: d.davet, parola: TEST_PAROLASI } });
+  return { hesapId: d.hesap.id, davet: d.davet, kabul: k.status };
+}
+
+async function bekleyenDavet(o: Ortam, t: { a: string; e: string }): Promise<void> {
+  console.log("\n§8 bekleyen davet");
+  const yonE = await hesapKur(o, t.e, YONETICI);
+  const x = await hesapKur(o, t.a, OKUMA);
+  const y = await hesapKur(o, t.a, OKUMA);
+  const dx = await davetKabul(o, yonE, x.eposta);
+  const dy = await davetKabul(o, yonE, y.eposta);
+  const ix = await kimlik(o, x.eposta);
+  const iy = await kimlik(o, y.eposta);
+  const ex = await hesap(o, t.e, dx.hesapId);
+  const uyelik = await withCentral(o.goc, {}, (tx) => tx.loginRoute.count({ where: { accountId: { in: [dx.hesapId, dy.hesapId] } } }));
+  kontrol("§8a ön koşul: iki davet kabul edildi, hesap DAVETLİ + kimliğe bağlı, üyelik satırı yok", dx.kabul === 200 && dy.kabul === 200 && ex?.status === "DAVETLI" && ex.identityId === ix?.id && uyelik === 0, `${dx.kabul} ${dy.kabul} ${ex?.status} ${uyelik}`);
+  const r = await sil(o, x);
+  const kapanis = o.saat.simdi();
+  const sonra = await hesap(o, t.e, dx.hesapId);
+  kontrol("§8b 200 · tesisSayisi yalnız üyelikler (1)", r.status === 200 && (r.json.data as AccountDeletion).tesisSayisi === 1, `${r.status} ${JSON.stringify(r.json.data)}`);
+  kontrol("§8c bekleyen davet aynı silmede PASİF, kapanış anı aynı, belirteç düştü", sonra?.status === "PASIF" && sonra.closedAt?.getTime() === kapanis && sonra.inviteTokenHash === null, `${sonra?.status} ${sonra?.inviteTokenHash}`);
+  kontrol("§8d ayak izi DAVET_KAPANDI (davet tesisinde)", (await olaylar(o, t.e, dx.hesapId)).includes("DAVET_KAPANDI"));
+  o.saat.ilerlet(31_000);
+  const yeniKabul = await api(o, "POST", "/api/davet/kabul", { govde: { davet: dx.davet, parola: TEST_PAROLASI } });
+  const onay = await api(o, "POST", "/api/davet/onay", { govde: { davet: dx.davet, totp: totpKodu(x.sir, o.saat.simdi()) } });
+  kontrol("§8e eski belirteçle yeniden kabul → 404 DAVET_GECERSIZ", yeniKabul.status === 404 && yeniKabul.json.details?.code === "DAVET_GECERSIZ", `${yeniKabul.status} ${yeniKabul.json.details?.code}`);
+  kontrol("§8f eski belirteçle onay → 404 DAVET_GECERSIZ", onay.status === 404 && onay.json.details?.code === "DAVET_GECERSIZ", `${onay.status} ${onay.json.details?.code}`);
+  const ixSonra = await kimlikId(o, ix!.id);
+  kontrol("§8g kimlik PASİF kalır, kapanış anı değişmez (dirilmez)", ixSonra?.status === "PASIF" && ixSonra.closedAt?.getTime() === kapanis, `${ixSonra?.status} ${ixSonra?.closedAt?.toISOString()}`);
+  const ey = await hesap(o, t.e, dy.hesapId);
+  kontrol("§8h ilgisiz kimliğin bekleyen daveti dokunulmaz (DAVETLİ, bağlı, belirteç duruyor)", ey?.status === "DAVETLI" && ey.identityId === iy?.id && ey.inviteTokenHash !== null && !(await olaylar(o, t.e, dy.hesapId)).includes("DAVET_KAPANDI"), `${ey?.status}`);
+  kontrol("§8i ilgisiz kimlik AKTİF, oturumu açık", (await kimlik(o, y.eposta))?.status === "AKTIF" && (await oturum(o, y.belirtec)) === 200);
+}
+
 async function main(): Promise<void> {
   const o = await ortamKur();
-  const t = { a: (await tesisKur(o)).tesisId, b: (await tesisKur(o)).tesisId, c: (await tesisKur(o)).tesisId, d: (await tesisKur(o)).tesisId };
+  const t = { a: (await tesisKur(o)).tesisId, b: (await tesisKur(o)).tesisId, c: (await tesisKur(o)).tesisId, d: (await tesisKur(o)).tesisId, e: (await tesisKur(o)).tesisId };
   try {
     const yonA = await hesapKur(o, t.a, YONETICI);
     const k = await hesapKur(o, t.a, OKUMA);
@@ -155,6 +196,7 @@ async function main(): Promise<void> {
     await ikinciCagri(o, t.a, k, kapanis);
     await sonYonetici(o, t.b);
     await cokTesis(o, t, yonA);
+    await bekleyenDavet(o, t);
     await geriAlma(o, t.a, yonA, k.eposta);
     await otuzGun(o, t.a, k, kapanis);
   } finally {

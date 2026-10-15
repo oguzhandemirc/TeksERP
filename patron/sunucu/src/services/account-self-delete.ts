@@ -5,11 +5,13 @@
 // AKTİF yöneticisi olduğu tesis varsa hiçbir şey değişmez: 409 SON_YONETICI (`details.tesisler`). Kilit sırası: merkez
 // LOGIN_ROUTE (İLK ifade) → tesis başına ACCOUNT_ADMIN (her tesis kendi DB'sinde, kendi tx'inde). Tesisler ayrı DB olduğundan
 // kilit altındaki yarış reddi önceki tesislerin arşivini geri almaz; bağsız kalan kimliği bakım tiki kapatır (yakınsar).
-import { accountEngagedTo, type MembershipRoute } from "../auth/membership";
+// Kimliğe bağlı BEKLEYEN DAVETLER (kabul edilmiş, onaylanmamış; üyelik satırı yok) aynı kilit altında hazır tesislerde
+// aranır ve aynı arşiv yoluyla kapanır — yoksa eski belirteçle yeniden kabul PASİF kimliği yeniden sırlayıp diriltirdi.
+import { accountEngagedTo, pendingInviteBoundTo, pendingInviteWhere, type MembershipRoute } from "../auth/membership";
 import { ipSummary, totpStepClaim, verifyOwnFactors, wrongFactors, type SessionContext } from "../auth/session.service";
 import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError, stateConflict } from "../lib/errors";
-import { withCentral, withTesis } from "../lib/tenant";
+import { listReadyFacilities, withCentral, withTesis } from "../lib/tenant";
 import type { AccountDeletion } from "../wire/api";
 import { archiveAccountTx, isLastActiveAdmin } from "./account.service";
 import type { CloudContext } from "./context";
@@ -53,12 +55,39 @@ async function lastAdminFacilities(ctx: CloudContext, identityId: string, routes
   return out;
 }
 
+/**
+ * Kimliğe bağlı bekleyen davetleri kapatır (`archiveAccountTx`: PASİF + kapanış anı, belirteç düşer). Çağıran merkez
+ * LOGIN_ROUTE kilidini tutar — kabul aynı kilitle bağladığından küme bu sırada büyüyemez; karar ACCOUNT_ADMIN altında yinelenir.
+ */
+async function closePendingInvites(ctx: CloudContext, identityId: string, nowMs: number): Promise<MembershipRoute[]> {
+  const out: MembershipRoute[] = [];
+  for (const tesisId of await listReadyFacilities(ctx.app)) {
+    const hits = await inFacility(() => withTesis(ctx.app, { tesisId }, (tx) => tx.account.findMany({ where: { tesisId, ...pendingInviteWhere(identityId) }, select: { id: true } })));
+    if (!hits || hits.length === 0) continue;
+    const done = await inFacility(() =>
+      withTesis(ctx.app, { tesisId, lock: { name: "ACCOUNT_ADMIN", key: tesisId } }, async (tx) => {
+        const ids: string[] = [];
+        for (const { id } of hits) {
+          const a = await tx.account.findUnique({ where: { id } });
+          if (!pendingInviteBoundTo(a, identityId)) continue;
+          await archiveAccountTx(tx, a, nowMs);
+          ids.push(id);
+        }
+        return ids;
+      }),
+    );
+    for (const accountId of done ?? []) out.push({ tesisId, accountId });
+  }
+  return out;
+}
+
 export async function deleteOwnAccount(ctx: CloudContext, s: SessionContext, g: { password: string; totp: string; ip: string | null }): Promise<AccountDeletion> {
   const { identity, step, nowMs } = await verifyOwnFactors(ctx, s, g);
   const routes = await withCentral(ctx.app, {}, (tx) => tx.loginRoute.findMany({ where: { identityId: identity.id }, select: { tesisId: true, accountId: true }, orderBy: { tesisId: "asc" } }));
   const blocked = await lastAdminFacilities(ctx, identity.id, routes);
   if (blocked.length > 0) throw lastAdminOf(blocked);
   const closed: MembershipRoute[] = [];
+  const invites: MembershipRoute[] = [];
   try {
     await withCentral(ctx.app, { lock: { name: "LOGIN_ROUTE", key: identity.emailDigest } }, async (central) => {
       // Adım iddiası aynı tx'te: sonraki bir ret tx'i geri alınca kod da yanmamış olur.
@@ -75,12 +104,17 @@ export async function deleteOwnAccount(ctx: CloudContext, s: SessionContext, g: 
         );
         if (done) closed.push(r);
       }
+      invites.push(...(await closePendingInvites(ctx, identity.id, nowMs)));
       if ((await closeIdentityClaim(ctx, central, identity.id, { nowMs, expected: { status: "AKTIF" } })) === 0) throw stateConflict("Hesap bu arada değişti; yeniden giriş yapıp tekrar deneyin");
     });
   } finally {
     // Ayak izi kapananı yazar (yarış reddinde de: o tesislerin arşivi geri alınmadı).
     for (const r of closed) {
       await recordAudit(ctx.app, { tesisId: r.tesisId, actor: accountActor(r.accountId), event: "HESAP_KENDINI_SILDI", entity: "Account", entityId: r.accountId, summary: { tesisSayisi: closed.length, ...ipSummary(g.ip) } });
+    }
+    // Davet tesisine tesis sayısı/IP yazılmaz: kimliğin başka tesislerini ele vermez.
+    for (const r of invites) {
+      await recordAudit(ctx.app, { tesisId: r.tesisId, actor: accountActor(r.accountId), event: "DAVET_KAPANDI", entity: "Account", entityId: r.accountId, summary: { sebep: "HESAP_KENDINI_SILDI" } });
     }
   }
   return { kapanis: new Date(nowMs).toISOString(), silinme: new Date(nowMs + IDENTITY_PURGE_DAYS * DAY_MS).toISOString(), tesisSayisi: closed.length };

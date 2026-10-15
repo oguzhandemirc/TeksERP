@@ -85,7 +85,7 @@ izin bilerek eklenir, formu da güncellenir.
 ### 4.1 Gizlilik politikası adresi — `/patron-gizlilik`
 
 - **Adres: `https://tekserp.etkiliyazilim.com/patron-gizlilik`** (yayın kullanıcı onayıyla VDS'e — repo hazır,
-  2026-10-15; dağıtım `GIZLILIK-SAYFASI.md` § Patron sayfası). Metin kimliği `PATRON-GP-2026.1`, yürürlük 15 Ekim 2026.
+  2026-10-15; dağıtım `GIZLILIK-SAYFASI.md` § Patron sayfası). Metin kimliği `PATRON-GP-2026.2`, yürürlük 15 Ekim 2026.
 - Tek kaynak `docs/legal/PATRON-GIZLILIK-POLITIKASI.md` → `node deploy/gizlilik-sayfasi/uret.mjs` →
   `deploy/gizlilik-sayfasi/html/patron-gizlilik.html` (tabletinkiyle aynı köken ve düzenek, ayrı sayfa; patron
   sunucusuna dokunmaz). Bekçi `scripts/test_gizlilik_sayfasi.mjs` bayt-eşitliği, `#hesap-silme` çapasını, saklama
@@ -129,7 +129,8 @@ Hesaplar yalnız davetle açılır. Üç yol var (kullanıcı kararı 2026-10-15
 
 - **Uygulama içi (kişinin kendisi):** Profil → "Hesabımı sil" → açıklama ekranı → parola + güncel
   doğrulama kodu → iki adımlı onay (`POST /api/oturum/hesap-sil`). Hesap HEMEN kapanır: kimliğin bütün tesis
-  üyelikleri PASİF, bütün oturumlar düşer, bildirim cihazları pasif; 30. günde ad, e-posta, parola özeti, TOTP sırrı
+  üyelikleri PASİF, kabul edilmiş ama onaylanmamış davetleri de PASİF (eski belirteç 404), bütün oturumlar düşer,
+  bildirim cihazları pasif; 30. günde ad, e-posta, parola özeti, TOTP sırrı
   silinir (bakımın mevcut silmesi). İstisna: güvenlik kayıtları kendi süresiyle (başarısız giriş 90 gün, diğerleri
   2 yıl; IP 30 gün) — politikada açıkça yazılı. Bir tesisin son aktif hesap yöneticisi önce başka yönetici
   atamalıdır (409 `SON_YONETICI`). Geri alma: 30 gün içinde tesis yöneticisi yeniden davet eder.

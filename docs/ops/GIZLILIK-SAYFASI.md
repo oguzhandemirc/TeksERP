@@ -28,7 +28,7 @@
 
 ## Patron sayfası (`/patron-gizlilik`, 2026-10-15)
 
-- Patron uygulamasının Play gizlilik politikası (`PATRON-GP-2026.1`) ve hesap silme adresi
+- Patron uygulamasının Play gizlilik politikası (`PATRON-GP-2026.2`) ve hesap silme adresi
   `https://tekserp.etkiliyazilim.com/patron-gizlilik#hesap-silme` (çapa "Hesap silme" başlığından; başlık değişmez).
   Aynı köken, aynı konteyner; nginx'te ayrı konum (`= /patron-gizlilik` + `= /patron-gizlilik/` → 301). Tablet sayfası bayt-eşit kalır.
 - İlk yayın conf değiştirdiği için `--html` kipi YETMEZ (VDS conf'u repodakinden farklıyken durur): kuru

@@ -13,7 +13,7 @@
 > varsayılanları) ve native push cümlesini (`patron/uygulama/src/push/support.ts` `NATIVE_PUSH`) koda karşı ölçer.
 > Metin değişince sürüm kimliği ve yürürlük tarihi birlikte artar.
 
-**Metin sürümü:** `PATRON-GP-2026.1`
+**Metin sürümü:** `PATRON-GP-2026.2`
 **Yürürlük:** 15 Ekim 2026
 **Uygulama:** TeksERP Patron (Google Play paket adı: `com.etkiliyazilim.tekserp.patron`)
 **Geliştirici:** Etkili Yazılım Ltd. Şti.
@@ -117,7 +117,7 @@ Hesabınızı uygulamanın içinden kendiniz silebilirsiniz:
 - **Profil → Hesabımı sil** adımını açın ve silmeyi parolanız ile iki adımlı doğrulama (TOTP) koduyla onaylayın.
 - Bir tesisin tek hesap yöneticisiyseniz, silmeden önce o tesiste başka bir yönetici atanmalıdır.
 - Hesabınız hemen kapanır: oturumlarınız sona erer, e-posta adresinize bağlı bütün tesis üyelikleriyle giriş
-  yapılamaz.
+  yapılamaz; kabul edip henüz onaylamadığınız davetler de kapanır ve yeniden kullanılamaz.
 - Kapanıştan sonraki 30. günde adınız, e-posta adresiniz, parolanızın özeti, doğrulama sırrınız, oturumlarınız
   ve cihaz bildirim kayıtlarınız silinir; geçmiş kayıtlarda adınızın yerine "Silinmiş hesap" yazar.
 - **Saklanan istisna:** hesap güvenlik kayıtları (giriş olayları ve hesapta yapılan değişiklikler) yetkisiz
