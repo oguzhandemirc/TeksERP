@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Copy, KeyRound } from "lucide-react";
 import {
@@ -18,6 +17,7 @@ import { FormField } from "@/components/forms/FormField";
 import { userFormSchema } from "@/pages/Access/Users/UserFormDialog";
 import { adminUserService, type FactoryAdminCreated } from "@/services/adminUserService";
 import { isAmbiguousFailure } from "@/lib/attemptToken";
+import { useTabsStore } from "@/store/tabs";
 
 const schema = userFormSchema.pick({ username: true, fullName: true });
 
@@ -51,7 +51,8 @@ export function FactoryAdminDialog({ open, onClose }: Props) {
   const [errors, setErrors] = useState<{ username?: string; fullName?: string }>({});
   const [created, setCreated] = useState<FactoryAdminCreated | null>(null);
   const [outcome, setOutcome] = useState<Outcome>(null);
-  const navigate = useNavigate();
+  // Pencere kabukta, Router DIŞINDA çizilir: `useNavigate` kabuğu çökertir — gezinme sekme eylemiyle.
+  const openTab = useTabsStore((s) => s.openTab);
 
   const mutation = useMutation({
     mutationFn: (body: { username: string; fullName: string }) => adminUserService.createFactoryAdmin(body),
@@ -71,7 +72,7 @@ export function FactoryAdminDialog({ open, onClose }: Props) {
 
   const goToUsers = () => {
     close();
-    navigate("/access/users");
+    openTab("/access/users");
   };
 
   const submit = () => {

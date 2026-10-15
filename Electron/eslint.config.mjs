@@ -241,6 +241,47 @@ const KATALOG_DOSYALARI = [
   "src/routes/content-routes.tsx",
 ];
 
+// Katman sınırı: renderer Node'a inemez, köprü `window.api`dır (contextIsolation).
+// Sabit olarak durur çünkü kabuk bloğu (1b) aynı kuralı EZER (tuzak (a)) — listeyi tekrar taşımalı.
+const RENDERER_YASAK_IMPORTLAR = [
+  { name: "electron", message: "Renderer'da electron import edilemez. window.api üzerinden çağır." },
+  { name: "fs", message: "Renderer'da fs import edilemez." },
+  { name: "path", message: "Renderer'da path import edilemez." },
+  { name: "child_process", message: "Renderer'da child_process import edilemez." },
+  { name: "os", message: "Renderer'da os import edilemez." },
+];
+
+// ── Kabuk düzeyi: Router DIŞINDA çizilen dosyalar ───────────────────────────
+// App `Root` → AppShell/LicenseLockGate/UpdateGate ve AppShell → Topbar/Sidebar/ShellBanners/
+// CommandPalette… bilerek data-router DIŞINDADIR (sekme router'ları TabHost→TabRouter içinde).
+// Buradaki bir router hook'u/Link'i kabuğu çökertir (panel 1.6.5: FactoryAdminDialog `useNavigate`).
+// Gezinme sekme eylemiyle: `useTabsStore().openTab/navigateActive`. Yalnız router KURAN adlar serbest.
+// Kapsam ÖLÇÜLDÜ (2026-10-15): App.tsx'ten .tsx import kapanışı, TabRouter/content-routes sınırında.
+const KABUK_ROUTER_IZINLI = ["RouterProvider", "MemoryRouter", "createHashRouter", "createMemoryRouter", "useInRouterContext"];
+const KABUK_ROUTER_MESAJI =
+  "Kabuk düzeyi bileşen Router DIŞINDA çizilir; react-router hook/Link/Navigate çöker. Sekme eylemi kullan: useTabsStore → openTab/navigateActive.";
+const KABUK_DOSYALARI = [
+  "src/App.tsx",
+  "src/components/layout/*.{ts,tsx}",
+  "src/components/ErrorBoundary.tsx",
+  "src/components/CopyContextMenu.tsx",
+  "src/components/LiveReferences*.tsx",
+  "src/components/demo/**/*.tsx",
+  "src/components/forms/**/*.tsx",
+  "src/components/license/**/*.tsx",
+  "src/components/scanner/**/*.tsx",
+  "src/components/settings/**/*.tsx",
+  "src/providers/**/*.tsx",
+  "src/hooks/useGuardedInstall.tsx",
+  "src/pages/Operations/LoomAlarms/LoomAlarm{Bell,Strip}.tsx",
+  "src/pages/Operations/WeavingFloor/WeavingFloorTvScreen.tsx",
+  "src/pages/System/License/LicenseParts.tsx",
+  "src/pages/System/ServerUpdates/Update{ApprovalCard,ApprovalPrompt,ProgressWindow}.tsx",
+];
+// Muaf: sayfa sarmalayıcıları SEKME router'ı İÇİNDE çizilir (PageHeader geri okunu, CrudPage
+// satır gezinmesini router'dan alır); tabs/ zaten tek seviyeli `*` kalıbının dışında.
+const KABUK_MUAF = ["src/components/layout/PageHeader.tsx", "src/components/layout/CrudPage.tsx", "**/*.test.{ts,tsx}"];
+
 export default [
   js.configs.recommended,
 
@@ -264,18 +305,7 @@ export default [
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       // Katman sınırı: renderer Node'a inemez, köprü `window.api`dır (contextIsolation).
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [
-            { name: "electron", message: "Renderer'da electron import edilemez. window.api üzerinden çağır." },
-            { name: "fs", message: "Renderer'da fs import edilemez." },
-            { name: "path", message: "Renderer'da path import edilemez." },
-            { name: "child_process", message: "Renderer'da child_process import edilemez." },
-            { name: "os", message: "Renderer'da os import edilemez." },
-          ],
-        },
-      ],
+      "no-restricted-imports": ["error", { paths: RENDERER_YASAK_IMPORTLAR }],
       "no-restricted-syntax": ["error", ...ORTAK_YASAKLAR],
       "@typescript-eslint/naming-convention": NAMING_CONVENTION,
       // Unutulmuş `console.log` üretimde kullanıcı konsoluna sızar; tanı çıktısı
@@ -285,6 +315,25 @@ export default [
       ...BOYUT_KURALLARI,
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
+    },
+  },
+
+  // ── 1b) Kabuk düzeyi: react-router hook/Link yasağı (başlıkta KABUK_DOSYALARI) ──
+  // Tuzak (a): bu blok `no-restricted-imports`u EZER → renderer yasakları da burada taşınır.
+  {
+    files: KABUK_DOSYALARI,
+    ignores: KABUK_MUAF,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            ...RENDERER_YASAK_IMPORTLAR,
+            { name: "react-router-dom", allowImportNames: KABUK_ROUTER_IZINLI, message: KABUK_ROUTER_MESAJI },
+            { name: "react-router", allowImportNames: KABUK_ROUTER_IZINLI, message: KABUK_ROUTER_MESAJI },
+          ],
+        },
+      ],
     },
   },
 
