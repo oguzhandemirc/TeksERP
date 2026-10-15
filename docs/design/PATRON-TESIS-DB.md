@@ -28,11 +28,12 @@ Bugün buluttaki tesis sayısı 0'dır (hazırlık tesisi imha edildi): taşına
 |---|---|---|
 | `facility_databases` | tesis → DB adı, durum (`ISTENDI` · `HAZIR` · `IMHA_SURUYOR` · `IMHA_EDILDI`), şema sürümü (son göç adı), hazırlık kilidi (süreli claim), deneme sayısı + son hata, son göç anı + hatası, imha planı | hazırlayıcı + göç koşucusu + imha (göç rolü); eşitleme rolü YALNIZ `tesis_id` ile yeni satır (hazırlık isteği) |
 | `installation_routes` | kurulum kimliği → tesis (değişmez) | kurulum kaydı (CLI) · satıcı iç API önbelleği (eşitleme rolü) |
-| `login_routes` | e-posta özeti (HMAC-SHA256, anahtar `patron-tesis-db.key`) → tesis + hesap; yalnız ETKİN (AKTIF · KILITLI) hesabın e-postası | davet onayı (uygulama rolü); bayat satırı bakım siler |
+| `identities` | bulut kimliği (2026-10-15): e-posta özeti (HMAC-SHA256, anahtar `patron-tesis-db.key`) UNIQUE, parola özeti, mühürlü TOTP sırrı, durum | davet onayı / bağla, parola değişimi, satıcı CLI'si (uygulama rolü; eşitleme rolü RED, destek rolüne sır kolonları kapalı) |
+| `login_routes` | üyelik (2026-10-15): kimlik → tesis + hesap; UNIQUE(account_id), UNIQUE(identity_id, tesis_id) | davet onayı / bağla (uygulama rolü); bayat satırı bakım siler |
 | `facility_destructions` | imha tutanağı (değiştirilemez, silinemez) — tesis DB'si silindikten SONRA da kalır | imha (göç rolü) |
 | `support_access` (arşiv kopyası) | imha edilen tesisin destek erişim kayıtları (silinemez kayıt imhada da kalır, Ek-6/B §3.2) | imha (göç rolü), kaynak tesis DB'sinden kopya |
 
-Merkezde e-posta, ad, parola, TOTP ya da fabrika verisi DURMAZ; e-posta yalnız anahtarlı özet olarak yönlendirme satırındadır.
+Merkezde düz e-posta, ad ya da fabrika verisi DURMAZ; e-posta yalnız anahtarlı özet olarak kimlik satırındadır. Parola ve TOTP 2026-10-15'ten beri merkez `identities`tedir (tek kimlik, çok tesis).
 
 **Tesis** (`TESIS_TABLES` = `CLOUD_TABLES` − merkez tabloları): `facilities` (tesisin kendi kaydı: ad, saklama, durum, hizmet bitişi) · `installations` (açık anahtar + eşitleme hakkı) · `accounts` · `sessions` · `account_audit` · `operation_receipts` · `inbox_messages` · `report_requests` · `report_results` · `push_devices` · `notification_defaults` · `notification_preferences` · `notifications` · `projection_rows` · `sync_watermarks` · `package_receipts` · `sync_state` · `full_sync_runs` · `request_nonces` · `support_access`.
 
@@ -59,7 +60,7 @@ Servislerin DB'ye tek yolu `lib/tenant.ts`dir (`withTesis` · `withLookup` · te
 - **`withTesis(router, {tesisId,…})`** → `facility_databases` satırı (merkez, `TESIS_DIZIN_ONBELLEK_SN` = 30 sn önbellek) → DB adı → rolün tesis istemcisi. Satır yok → 404 `BULUNAMADI` (merkeze DÜŞMEZ); `ISTENDI` → 503 `TEKRAR_DENEYIN` (fabrika zaten yeniden dener); `IMHA_*` → 404; şema sürümü sunucunun beklediği son göç değil → 503 `TEKRAR_DENEYIN` ("tesis bakımda").
 - **Kimlik kaynakları** (kiracı gövdeden ALINMAZ — değişmez):
   - fabrika kanalı: imzalı isteğin kurulum kimliği → `installation_routes` → tesis;
-  - giriş: e-posta özeti → `login_routes` → tesis;
+  - giriş: e-posta özeti → `identities` → üyelik `login_routes` → tesis (2026-10-15);
   - oturum ve davet belirteci: belirtecin ön eki tesis kimliğidir (`<tesis 22 hane base64url>.<rastgele 43>`), özet belirtecin TAMAMINDAN alınır ⇒ ön eki değiştirilmiş belirteç başka tesiste hiçbir satırla eşleşmez (401);
   - bakım/bildirim döngüsü: `facility_databases` `HAZIR` listesi.
   Çözülemeyen kimlik sorgusuz `null` döner (giriş 401, kanal 401 `KURULUM_BILINMIYOR`).
@@ -82,12 +83,16 @@ Hata: claim bırakılır, `attempts+1`, `last_error` (kısa, sırsız), `next_at
 - `KURULUM_KAYNAGI=kayit`: satıcı CLI'si `tesis-ac` hazırlığı EŞZAMANLI koşar (göç rolü elinde), sonra tesis kaydını yazar.
 - `KURULUM_KAYNAGI=satici` (üretim): satıcının bildirdiği yeni tesisin ilk imzalı isteğinde sunucu (eşitleme rolü) `facility_databases`e yalnız `tesis_id` yazar (`INSERT … ON CONFLICT DO NOTHING`) ve 503 `TEKRAR_DENEYIN` döner; **hazırlayıcı servisi** (`patron-hazirla`, aynı imajdan `tesis-db izle`) `ISTENDI` satırlarını 10 sn'de bir yoklar ve hazırlar; fabrikanın bir sonraki turunda tesis hazırdır. Sunucu CREATE DATABASE/CREATE ROLE yetkisi ve göç parolası ALMAZ (değişmez korunur).
 
-## 6. Giriş dizini (`login_routes`)
+## 6. Giriş dizini → üyelik tablosu (`login_routes`) — 2026-10-15
 
-- Satır yalnız davet onayında (DAVETLI → AKTIF) yazılır; merkez tx'inin İLK ifadesi e-posta özeti başına advisory kilittir (uzay 9204 `LOGIN_ROUTE`). Satır başka (tesis, hesap) gösteriyorsa o hesap kendi tesis DB'sinde hâlâ ETKİN mi sorulur: etkinse 409 `DAVET_ETKINLESTIRILEMEDI` (hangi tesiste olduğu söylenmez); değilse (bayat) satır bu hesaba devredilir. Ardından tesis tx'i (kilit `ACCOUNT_ADMIN`) hesabı AKTİF yapar; claim tutmazsa dizin satırı geri alınır. Kilit sırası sabittir: önce merkez `LOGIN_ROUTE`, sonra tesis `ACCOUNT_ADMIN` — tersini alan yol yok (DB'ler arası kilitlenmeyi PostgreSQL göremez).
-- E-postanın bulut genelinde yalnız etkin hesapta tekilliği böylece merkezde, tesis içinde PASİF olmayan hesapta tekilliği tesis DB'sindeki kısmi indekste sağlanır.
-- Hesap etkinlikten çıkınca (arşiv, sıfırlama, yeniden davet) satır hemen silinmez: giriş satırı izleyip tesis DB'sinde ETKİN hesap bulamazsa aynı 401'i verir. Bakım, hedefi etkin olmayan satırı siler (budama beyanı `login_routes`); kimliği silinen hesabın satırı en geç kimlik silmesinde gider.
-- Anahtar değişince `tesis-db goc` dizini tesis DB'lerindeki etkin hesaplardan yeniden kurar.
+> Önceki biçim (e-posta özeti → tek tesis + hesap; UNIQUE(email_digest)) GEÇERSİZ → 2026-10-15 (tek kimlik, çok tesis; arşiv `docs/history/arsiv/2026-10.md`).
+
+- Kimlik merkez `identities`tedir (`email_digest` UNIQUE; parola, TOTP, DB CHECK'leri burada). `login_routes` artık üyeliktir: `(identity_id, tesis_id, account_id)`; UNIQUE(account_id) + UNIQUE(identity_id, tesis_id). `accounts.identity_id` DB'ler arası olduğu için FK taşımaz; AKTIF hesapta doludur (CHECK).
+- Üyelik davet onayında ("yeni hesap" ya da "mevcut hesabımla bağlan") yazılır; merkez tx'inin İLK ifadesi e-posta özeti başına advisory kilittir (uzay 9204 `LOGIN_ROUTE`), ardından tesis tx'i (`ACCOUNT_ADMIN`) hesabı AKTİF yapar; claim tutmazsa üyelik geri alınır. Kilit sırası sabittir: önce merkez `LOGIN_ROUTE`, sonra tesis `ACCOUNT_ADMIN`. E-posta zaten bir kimliğe bağlıyken "yeni hesap" onayı 409 `DAVET_ETKINLESTIRILEMEDI` (genel ileti); "bağla" yolunda yanlış faktör girişle aynı 401. Davet ve `davet/incele` kimlik varlığını sızdırmaz.
+- Giriş: özet → kimlik → parola + TOTP (TOTP adımı merkezde atomik claim) → AKTİF üyelikler → oturum istemcinin `tesisId` ipucundaki, yoksa ada göre ilk tesiste (tesis DB'sinde `sessions`). Etkin üyelik yoksa aynı 401. `POST /api/oturum/gecis` hedef tesiste aynı kimliğin AKTİF hesabını ister, TOTP sormaz, oturumun azami ömrünü devralır (uzatmaz).
+- Hesap etkinlikten çıkınca üyelik satırı hemen silinmez: giriş tesis DB'sinde ETKİN hesap bulamazsa o üyeliği atlar. Bakım hedefi etkin olmayan üyeliği siler (budama beyanı `login_routes`); hiçbir AKTİF/KILITLI üyeliği kalmayan kimlik 30 gün sonra silinir (`purgeClosedIdentities` merkez dalı).
+- Anahtar değişiminde özetin yeniden kurulumu (eski biçimde `tesis-db goc` dizini tesis DB'lerinden kuruyordu) kimlik tablosu için kod diliminde yeniden tanımlanır — AÇIK.
+- Üretim ölçümü (2026-10-15): 1 tesis, 0 hesap ⇒ veri taşıma betiği yok; göç sır dolu `accounts` satırı görürse durur (fail-closed).
 
 ## 7. Göç koşucusu (`src/lib/tesis-goc.ts`, CLI `scripts/tesis-db.ts goc`)
 
