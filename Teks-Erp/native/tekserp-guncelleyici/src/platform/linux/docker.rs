@@ -37,6 +37,32 @@ pub const RESTART_POLICY_FORMAT: &str = "{{.HostConfig.RestartPolicy.Name}}";
 pub const GOC_ADLARI_BETIGI: &str =
     "for d in /app/prisma/migrations/*/; do if [ -f \"${d}migration.sql\" ]; then basename \"$d\"; fi; done";
 
+/// Yan hizmetin (yedek) kesilmemesi gereken işi sürüyor mu — konteynerin İÇİNDE koşar: `pg_dump`/`pg_restore`
+/// süreci, şifreleme aracı ya da son dakikada yazılmış yarım döküm (`*.part`) ⇒ `MESGUL_KODU`. Süreç adı argv0'dan,
+/// aracın yolu yalnız `node` süreçlerinin argümanlarından (sondanın kendi `sh`ı eşleşmez); `yedek-zamanlayici.sh`
+/// `yedek_al` adımlarıyla eşlidir. Gerçek imajda dört durumu sınanmıştır (2026-10-16, tekserp-korumali:2.15.7).
+pub const MESGUL_BETIGI: &str = "for f in /proc/[0-9]*/cmdline; do set -f; set -- $(tr '\\000' ' ' 2>/dev/null < \"$f\"); set +f; \
+case \"${1##*/}\" in pg_dump|pg_restore) exit 10;; node) for a in \"$@\"; do case \"$a\" in *yedek-sifrele.cjs) exit 10;; esac; done;; esac; done; \
+[ -n \"$(find \"${BACKUP_DIR:-/var/lib/tekserp/yedek}\" -maxdepth 1 -name '*.part' -mmin -1 2>/dev/null)\" ] && exit 10; exit 0";
+pub const MESGUL_KODU: i32 = 10;
+
+/// `compose config --format json` → backend imajını paylaşan, backend dışı servisler (sıralı).
+pub fn yan_hizmetleri_coz(cfg: &serde_json::Value) -> Vec<String> {
+    let prefix = format!("{IMAJ_DEPOSU}:");
+    let mut out: Vec<String> = cfg
+        .get("services")
+        .and_then(serde_json::Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(name, s)| {
+            name.as_str() != BACKEND && s.get("image").and_then(serde_json::Value::as_str).is_some_and(|i| i.starts_with(&prefix))
+        })
+        .map(|(name, _)| name.clone())
+        .collect();
+    out.sort();
+    out
+}
+
 /// `docker volume inspect` tek değer: birimin konaktaki dizini.
 pub const BIRIM_YOLU_FORMAT: &str = "{{.Mountpoint}}";
 
@@ -219,6 +245,44 @@ impl Services for DockerServices {
         }
         Ok(policy)
     }
+    /// `current`in compose tanımında backend imajını (`tekserp-korumali:*`) kullanan, backend dışı servisler.
+    fn yan_hizmetler(&self, name: &str) -> EnvResult<Vec<String>> {
+        if compose_hizmeti(name).map_err(EnvError)? != BACKEND {
+            return Ok(vec![]);
+        }
+        let c = self.komut.compose().args(["config", "--format", "json"]).timeout(Duration::from_secs(60));
+        let out = run(self.procs.as_ref(), &c, "compose config").map_err(EnvError)?;
+        let cfg: serde_json::Value =
+            serde_json::from_slice(&out.stdout).map_err(|_| EnvError("compose config çıktısı JSON değil".into()))?;
+        Ok(yan_hizmetleri_coz(&cfg))
+    }
+
+    /// Konteynerin içinden `MESGUL_BETIGI`: 10 = yedek işi sürüyor, 0 = boşta. Başka sonuç: konteyner çalışmıyorsa
+    /// kesilecek iş yok (boşta); çalışıyorsa ölçülemedi (hata — çağıran yeniden yaratmaz).
+    fn yan_hizmet_mesgul(&self, svc: &str) -> EnvResult<bool> {
+        let svc = compose_hizmeti(svc).map_err(EnvError)?;
+        let c = self.komut.compose().args(["exec", "-T", svc, "sh", "-c", MESGUL_BETIGI]).timeout(Duration::from_secs(60));
+        let out = self.procs.run(&c)?;
+        match out.code {
+            Some(MESGUL_KODU) => Ok(true),
+            Some(0) => Ok(false),
+            _ if self.incele(svc)?.is_none_or(|d| d.status != "running") => Ok(false),
+            _ => Err(EnvError(describe_failure(&format!("{svc} meşguliyet sondası"), &out))),
+        }
+    }
+
+    /// `compose up -d --no-deps <svc>` — `--force-recreate` YOK: compose yalnız tanımı (imaj etiketi) değişen
+    /// konteyneri yeniden yaratır; eşit olan çalışmayı sürdürür.
+    fn yan_hizmet_esitle(&self, svc: &str) -> EnvResult<()> {
+        let svc = compose_hizmeti(svc).map_err(EnvError)?;
+        if svc == BACKEND {
+            return Err(EnvError("backend yan hizmet değil (başlatma `start` ile, etiket ölçülerek)".into()));
+        }
+        let c =
+            self.komut.compose().args(["up", "-d", "--no-deps", svc]).env("TEKSERP_DOGRULAMA_KIPI", "").timeout(Duration::from_secs(300));
+        run(self.procs.as_ref(), &c, "compose up").map_err(EnvError).map(|_| ())
+    }
+
     fn image_path(&self, name: &str) -> EnvResult<String> {
         Err(EnvError(super::unsupported(&format!("{name}: komut satırı (PG imajı L8'de `pg.env`)"))))
     }
@@ -843,6 +907,54 @@ mod tests {
         let s = DockerServices::new(komut, Arc::clone(&env.procs), Arc::clone(&env.fs), 60);
         assert_eq!(s.state("backend").unwrap(), SvcState::Stopped);
         assert!(s.state("TeksERP-Backend-ikinci").is_err(), "büyük harfli ad compose servisi değil");
+    }
+
+    #[test]
+    fn yan_hizmetler_compose_tanimindan_ve_esitleme_zorla_yaratmaz() {
+        let cfg = serde_json::json!({ "services": {
+            "backend": { "image": "tekserp-korumali:2.15.8" },
+            "yedek": { "image": "tekserp-korumali:2.15.8" },
+            "postgres": { "image": "postgres:16-bookworm" },
+            "kenar": { "image": "nginx:1.27" },
+        } });
+        assert_eq!(yan_hizmetleri_coz(&cfg), ["yedek"], "backend ve üçüncü taraf imajlılar yan hizmet değil");
+        let (p, komut, env) = kur(|a| match alt_komut(a).as_slice() {
+            [c, ..] if c == "config" => {
+                out(0, r#"{"services":{"backend":{"image":"tekserp-korumali:1.0.0"},"yedek":{"image":"tekserp-korumali:1.0.0"}}}"#)
+            }
+            [e, ..] if e == "exec" => out(MESGUL_KODU, ""),
+            _ => out(0, ""),
+        });
+        let s = DockerServices::new(komut, Arc::clone(&env.procs), Arc::clone(&env.fs), 60);
+        assert_eq!(s.yan_hizmetler("TeksERP-Backend").unwrap(), ["yedek"]);
+        assert!(s.yan_hizmet_mesgul("yedek").unwrap());
+        s.yan_hizmet_esitle("yedek").unwrap();
+        assert!(s.yan_hizmet_esitle("backend").is_err(), "backend etiket ölçülerek `start` ile başlar");
+        let calls = p.calls.lock().unwrap();
+        let exec = calls.iter().find(|(a, _)| alt_komut(a).first().map(String::as_str) == Some("exec")).unwrap();
+        assert_eq!(alt_komut(&exec.0), ["exec", "-T", "yedek", "sh", "-c", MESGUL_BETIGI]);
+        let up = calls.iter().find(|(a, _)| alt_komut(a).first().map(String::as_str) == Some("up")).unwrap();
+        assert_eq!(alt_komut(&up.0), ["up", "-d", "--no-deps", "yedek"], "--force-recreate YOK: eşit tanım kesilmez");
+        assert_eq!(up.1, [("TEKSERP_DOGRULAMA_KIPI".to_string(), String::new())]);
+    }
+
+    #[test]
+    fn mesgul_sondasi_kapanmis_konteyneri_bosta_sayar_calisani_olcemezse_hata() {
+        let (_, komut, env) = kur(|a| match alt_komut(a).first().map(String::as_str) {
+            Some("exec") => out(1, ""),
+            Some("ps") => out(0, ""),
+            _ => out(0, ""),
+        });
+        let s = DockerServices::new(komut, Arc::clone(&env.procs), Arc::clone(&env.fs), 60);
+        assert!(!s.yan_hizmet_mesgul("yedek").unwrap(), "konteyner yok ⇒ kesilecek iş yok");
+        let (_, komut, env) = kur(|a| match alt_komut(a).first().map(String::as_str) {
+            Some("exec") => out(126, ""),
+            Some("ps") => out(0, "abc\n"),
+            Some("inspect") => out(0, "running|0|0|\n"),
+            _ => out(0, ""),
+        });
+        let s = DockerServices::new(komut, Arc::clone(&env.procs), Arc::clone(&env.fs), 60);
+        assert!(s.yan_hizmet_mesgul("yedek").is_err(), "çalışan konteynerde ölçülemedi ⇒ hata (yeniden yaratılmaz)");
     }
 
     #[test]

@@ -404,6 +404,18 @@ pub struct Faults {
     pub update_requests: Mutex<Vec<String>>,
     /// Güncelleme sunucusu erişilemez (bağlantı hatası; istek yine sayılır).
     pub update_server_down: AtomicBool,
+    /// Linux: backend imajını paylaşan `yedek` konteynerinin imaj sürümü (`None` = konteyner yok).
+    pub sidecar_version: Mutex<Option<String>>,
+    /// GÖZLEM: `yedek` konteynerinin yeniden yaratılışları, sırayla hangi sürüme.
+    pub sidecar_recreates: Mutex<Vec<String>>,
+    /// `yedek` konteynerinde yedek işi bu ana (sahte saat, ms) kadar sürer.
+    pub sidecar_busy_until: Mutex<Option<i64>>,
+    /// Meşguliyet sondası bu kadar kez daha "iş sürüyor" der (her sonda bir azaltır).
+    pub sidecar_busy_probes: AtomicU64,
+    /// `compose up yedek` düşer (konteyner eskisiyle kalır).
+    pub sidecar_up_fails: AtomicBool,
+    /// Meşguliyet sondası çalışan konteynerde ölçemez (çıkış 126).
+    pub sidecar_probe_fails: AtomicBool,
 }
 
 /// Açılışın bir hizmet için kararı (`WorldRefs::boot_plan`): gerçek açılış da her noktadaki önizleme de bunu uygular.
@@ -833,6 +845,8 @@ impl FakeProcs {
                 let tags = images.iter().flat_map(|i| i.tags.iter()).filter_map(|t| t.strip_prefix(&pre));
                 ok_out(&tags.map(|t| format!("{t}\n")).collect::<String>())
             }
+            ["ps", "-a", "-q", "yedek"] => ok_out(if self.w.faults.sidecar_version.lock().unwrap().is_some() { "id-yedek\n" } else { "" }),
+            ["inspect", "--format", _, "id-yedek"] => ok_out("running|0|0|\n"),
             ["ps", "-a", "-q", svc] => {
                 let name = self.svc_name(svc);
                 let known = self.w.svcs.lock().unwrap().contains_key(&name);
@@ -887,6 +901,43 @@ impl FakeProcs {
                     }
                     Err(e) => fail_out(1, &e.0),
                 }
+            }
+            ["up", "-d", "--no-deps", "yedek"] => {
+                // `--force-recreate` yok: compose yalnız tanımı (imaj etiketi) değişen konteyneri yeniden yaratır.
+                if self.w.faults.sidecar_up_fails.load(Ordering::SeqCst) {
+                    return fail_out(1, "Error response from daemon: failed to create task for container");
+                }
+                let want = current_version(&self.w.root);
+                let mut have = self.w.faults.sidecar_version.lock().unwrap();
+                if *have != want {
+                    let now = self.w.clock.load(Ordering::SeqCst);
+                    let busy = self.w.faults.sidecar_busy_until.lock().unwrap().is_some_and(|t| now < t);
+                    if busy || self.w.faults.sidecar_busy_probes.load(Ordering::SeqCst) > 0 {
+                        self.w.events.lock().unwrap().push("IHLAL: yedek işi sürerken yedek konteyneri yeniden yaratıldı".into());
+                    }
+                    // Yan hizmet yalnız aynı sürümü NORMAL kipte koşan backend'in ardından taşınır (doğrulamadan önce değil).
+                    let backend = self.svc_name("backend");
+                    let b = self.w.svcs.lock().unwrap().get(&backend).map(|b| (b.state, b.args.clone(), b.version.clone()));
+                    if b != Some((SvcState::Running, vec![], want.clone())) {
+                        self.w.events.lock().unwrap().push(format!("IHLAL: yedek konteyneri {want:?}'e backend {b:?} iken taşındı"));
+                    }
+                    *have = want.clone();
+                    self.w.faults.sidecar_recreates.lock().unwrap().push(want.unwrap_or_default());
+                }
+                ok_out("")
+            }
+            ["exec", "-T", "yedek", "sh", "-c", betik] if *betik == tekserp_guncelleyici::platform::linux::docker::MESGUL_BETIGI => {
+                if self.w.faults.sidecar_version.lock().unwrap().is_none() {
+                    return fail_out(1, "service \"yedek\" is not running");
+                }
+                if self.w.faults.sidecar_probe_fails.load(Ordering::SeqCst) {
+                    return fail_out(126, "OCI runtime exec failed");
+                }
+                let now = self.w.clock.load(Ordering::SeqCst);
+                let counted =
+                    self.w.faults.sidecar_busy_probes.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1)).is_ok();
+                let busy = counted || self.w.faults.sidecar_busy_until.lock().unwrap().is_some_and(|t| now < t);
+                CmdOut { code: Some(if busy { 10 } else { 0 }), stdout: vec![], stderr: vec![], timed_out: false }
             }
             ["exec", "-T", "backend", "node", "-e", script] => {
                 let path = script
@@ -1508,10 +1559,17 @@ pub fn oci_image_archive(v: &str) -> Vec<u8> {
 
 /// Sertleştirilmiş compose (`config --format json` biçimi): kurallardan geçer (`platform::linux::compose`).
 pub fn oci_compose(v: &str) -> Value {
-    json!({ "name": "tekserp", "services": { "backend": {
-        "image": format!("tekserp-korumali:{v}"), "pull_policy": "never", "read_only": true, "cap_drop": ["ALL"],
-        "security_opt": ["no-new-privileges:true"], "user": "10001:10001",
-        "ports": [{ "host_ip": "127.0.0.1", "target": 4000, "published": "4000" }] } } })
+    json!({ "name": "tekserp", "services": {
+        "backend": {
+            "image": format!("tekserp-korumali:{v}"), "pull_policy": "never", "read_only": true, "cap_drop": ["ALL"],
+            "security_opt": ["no-new-privileges:true"], "user": "10001:10001",
+            "ports": [{ "host_ip": "127.0.0.1", "target": 4000, "published": "4000" }] },
+        // Aynı imajı paylaşan yan hizmet (şablonun `yedek`i); PG üçüncü taraf imajdır, yan hizmet sayılmaz.
+        "yedek": {
+            "image": format!("tekserp-korumali:{v}"), "pull_policy": "never", "read_only": true, "cap_drop": ["ALL"],
+            "security_opt": ["no-new-privileges:true"], "user": "10001:10001",
+            "command": ["/usr/local/bin/yedek-zamanlayici.sh"] },
+        "postgres": { "image": "postgres:16-bookworm", "pull_policy": "never" } } })
 }
 
 /// Sürümün güncelleyici ikilisi (paketin kökünde; bayt içeriği testin seçimi).
@@ -1931,6 +1989,9 @@ impl World {
             std::fs::create_dir_all(alici.parent().unwrap()).unwrap();
             std::fs::rename(w.layout.root.join("yedek-anahtar"), &alici).unwrap();
             w.docker_seed(OLD);
+            // Kurulu sürümün compose'u (`current`ten okunur) ve onun imajında çalışan yedek konteyneri.
+            std::fs::write(w.layout.version_dir(OLD).join("docker-compose.yml"), oci_compose(OLD).to_string()).unwrap();
+            *w.faults.sidecar_version.lock().unwrap() = Some(OLD.to_string());
             std::fs::write(w.layout.backend_env(), "POSTGRES_USER=tekserp\nPOSTGRES_PASSWORD=gizli-parola\nPOSTGRES_DB=tekserp\n").unwrap();
             let (legacy, customer, extra, updater) = oci;
             let (signer, kid) = if legacy { (&w.keys.legacy, "paket-hazirlik") } else { (&w.keys.package, "paket-2026") };
@@ -2433,6 +2494,16 @@ pub fn assert_invariants(w: &World, ctx: &str) {
     }
     let races: Vec<String> = w.events.lock().unwrap().iter().filter(|e| e.starts_with("IHLAL: açılış")).cloned().collect();
     assert!(races.is_empty(), "{ctx}: {races:?}");
+    // Linux: backend imajını paylaşan yedek konteyneri son durumda `current`in imajında; yedek işi hiç kesilmedi.
+    if w.profil() == Profil::Linux {
+        assert_eq!(
+            w.faults.sidecar_version.lock().unwrap().as_deref(),
+            Some(cur.as_str()),
+            "{ctx}: yedek konteyneri current'ın imajında değil"
+        );
+        let cut: Vec<String> = w.events.lock().unwrap().iter().filter(|e| e.starts_with("IHLAL: yedek")).cloned().collect();
+        assert!(cut.is_empty(), "{ctx}: {cut:?}");
+    }
     for stray in ["current.yeni", "current.eski"] {
         assert!(std::fs::symlink_metadata(w.layout.root.join(stray)).is_err(), "{ctx}: artık bağlantı {stray}");
     }
