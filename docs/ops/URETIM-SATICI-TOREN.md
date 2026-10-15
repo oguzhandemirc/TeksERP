@@ -18,7 +18,7 @@
 | `yedek-alici/satici-uretim-mac.tkpub` · `satici-uretim-kurtarma.tkpub` | satıcı yedeklerinin iki alıcısı (açık) | — | Mac · VDS `yedek-alici/` |
 | `yedek-ozel/satici-uretim-mac.txt` | yedekleri açar (rutin) | düz, 0600 | **YALNIZ Mac** |
 | `yedek-ozel/satici-uretim-kurtarma.tkkey` | yedekleri açar (kurtarma) | **kök parolası** | Mac → USB |
-| `kurtarma/sirlar.tar.tkenc` | `anahtarlar/` + `paket/` + modül anahtarları arşivi | iki alıcıya şifreli | Mac → USB |
+| `kurtarma/sirlar[-<tarih>].tar.tkenc` | `anahtarlar/` + `paket/` + modül anahtarları (+ yenilemede `donemler/` · `kok-kuyrugu/` · `anahtar-katmani/`) arşivi | iki alıcıya şifreli | Mac → USB |
 | `yedek-sinama.txt.tkenc` | sınama dosyası (anahtar hâlâ açıyor mu?) | iki alıcıya şifreli | Mac → USB |
 | `TOREN-KUNYE.json` · `BENIOKU.md` | açık künye (kid · açık anahtar · parmak izi · dosya özetleri) + ne-nedir/nasıl geri yüklenir | sır YOK | Mac → USB; künye yöneticiye |
 
@@ -130,14 +130,18 @@ node deploy/satici/uretim-toren.mjs usb-kopyala --usb=/Volumes/<USB adı>
 | Mac kayboldu | USB + kâğıt: `BENIOKU.md` §Geri yükleme 2 (kurtarma arşivi kök parolasıyla açılır → `anahtarlar/` · `paket/` · `modul-anahtarlari/` geri gelir) |
 | VDS kayboldu | Mac'teki `anahtarlar/` + Mac'e çekilmiş satıcı yedekleri (`satici_<damga>.dump.tkenc`, Mac anahtarıyla açılır) → yeni VDS (SATICI-KURULUM §13) |
 
-Kurtarma arşivini yenilemek (rotasyondan sonra; eski arşiv silinmez, yenisi tarihli ad alır):
+Kurtarma arşivini yenilemek (her rotasyon VE her dönem töreninden sonra; eski arşiv silinmez, yenisi tarihli ad alır). Yürürlükteki ALT · ARA · İNDİRME · istemci · paket anahtarları `donemler/<damga>/` altındadır, `anahtarlar/` yalnız tören hâlidir — `donemler` dışarıda kalırsa arşiv bayattır (2026-10-15 ölçüldü):
 
 ```bash
-D=~/.tekserp/satici-uretim; T=$(mktemp -d); umask 077
-COPYFILE_DISABLE=1 tar -C "$D" -cf "$T/s.tar" anahtarlar paket modul-anahtarlari
-(cd Teks-Erp && npx tsx scripts/yedek-sifrele.ts sifrele --girdi "$T/s.tar" --cikti "$D/kurtarma/sirlar-$(date +%Y%m%d).tar.tkenc" \
-  --alici "$D/yedek-alici/satici-uretim-mac.tkpub" --alici "$D/yedek-alici/satici-uretim-kurtarma.tkpub" --duzu-sil) && rmdir "$T"
+D=~/.tekserp/satici-uretim; T=$(mktemp -d); umask 077; A="$D/kurtarma/sirlar-$(date +%Y%m%d).tar.tkenc"
+COPYFILE_DISABLE=1 tar -C "$D" -cf "$T/s.tar" anahtarlar paket modul-anahtarlari donemler kok-kuyrugu anahtar-katmani
+(cd Teks-Erp && npx tsx scripts/yedek-sifrele.ts sifrele --girdi "$T/s.tar" --cikti "$A" \
+  --alici "$D/yedek-alici/satici-uretim-mac.tkpub" --alici "$D/yedek-alici/satici-uretim-kurtarma.tkpub" --duzu-sil \
+  && npx tsx scripts/yedek-sifrele.ts coz --girdi "$A" --cikti "$T/geri.tar" --anahtar "$D/yedek-ozel/satici-uretim-mac.txt" \
+  && tar -tf "$T/geri.tar" | grep -c -v '/$') && rm -P "$T/geri.tar" && rmdir "$T"
 ```
+
+Son satır arşivdeki dosya sayısıdır (geri açma sınaması). Arşiv Drive `TeksERP-Anahtarlar/satici-uretim/<tarih>-kurtarma-arsivi/`e yüklenir (özet iki uçta eşit); kök parolasıyla sarılı `satici-uretim-kurtarma.tkkey` açar.
 
 `dogrula` bu yeni dosyaları "künyede olmayan dosya (rotasyon sonrası beklenir)" diye listeler; USB'ye elle kopyalanır.
 
