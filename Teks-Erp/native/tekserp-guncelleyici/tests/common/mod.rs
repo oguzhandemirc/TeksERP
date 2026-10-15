@@ -934,8 +934,18 @@ impl FakeProcs {
                     return fail_out(126, "OCI runtime exec failed");
                 }
                 let now = self.w.clock.load(Ordering::SeqCst);
-                let counted =
-                    self.w.faults.sidecar_busy_probes.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1)).is_ok();
+                // Elle CAS: `fetch_update` yeni stable'da deprecated, `try_update` eski araç zincirinde yok.
+                let probes = &self.w.faults.sidecar_busy_probes;
+                let mut cur = probes.load(Ordering::SeqCst);
+                let counted = loop {
+                    if cur == 0 {
+                        break false;
+                    }
+                    match probes.compare_exchange(cur, cur - 1, Ordering::SeqCst, Ordering::SeqCst) {
+                        Ok(_) => break true,
+                        Err(v) => cur = v,
+                    }
+                };
                 let busy = counted || self.w.faults.sidecar_busy_until.lock().unwrap().is_some_and(|t| now < t);
                 CmdOut { code: Some(if busy { 10 } else { 0 }), stdout: vec![], stderr: vec![], timed_out: false }
             }
