@@ -5,11 +5,12 @@
 > yayınlandı**. Geliştirici hesabı **KURUMSAL** (kuruluş hesabı, Etkili Yazılım — kullanıcı doğruladı
 > 2026-10-15; 2026-10-08'deki "kişisel" okuması GEÇERSİZ) — sonuçları §4.
 >
-> **Dağıtım kararı (K-14, 2026-10-07):** ortak fabrika tableti yalnız Google Play'den kurulur; native
+> **Dağıtım kararı (K-14, 2026-10-07; K5 2026-10-16):** ortak fabrika tableti yalnız Google Play'den kurulur; native
 > güncelleme Play'den, JS güncellemesi OTA ile gelir (`docs/kurallar/surum-yayin.md` Tablet → Kararlar).
-> Kararın "Managed Google Play **gizli yayın**" kısmının dayandığı kurumsal hesap varsayımı doğrulandı
-> (2026-10-15); 12×14 kapalı test şartı bu hesaba uygulanmaz (§4, `PLAY-KONSOL-FORMLARI.md` K5). 2026-07-30'daki
-> "herkese açık yayın" kararı K-14 ile geçersizdir. iOS kapsam dışı (BT-Classic SPP iOS'ta MFi ister).
+> **K5 = ÜRETİM (kullanıcı kararı 2026-10-16):** uygulama Play üretim kanalında HERKESE AÇIK yayınlanır; K-14'ün
+> "Managed Google Play gizli yayın" kısmı GEÇERSİZDİR. Hesap kurumsal, 12×14 kapalı test şartı yok (§4).
+> Üretim hazırlık denetimi ve Console'a yapıştırılacak metinler: [`PLAY-URETIM-KONSOL-METINLERI.md`](PLAY-URETIM-KONSOL-METINLERI.md).
+> iOS kapsam dışı (BT-Classic SPP iOS'ta MFi ister).
 >
 > Form cevapları (kopyala-yapıştır): [`PLAY-KONSOL-FORMLARI.md`](PLAY-KONSOL-FORMLARI.md). Tablet derleme ve
 > OTA: [`MOBIL-UZAKTAN-GUNCELLEME.md`](MOBIL-UZAKTAN-GUNCELLEME.md), `mobil/CLAUDE.md`.
@@ -49,8 +50,10 @@ Gizlilik politikası metni: [`../legal/GIZLILIK-POLITIKASI.md`](../legal/GIZLILI
 ### 1.3 İncelemecinin uygulamayı kullanabilmesi — demo sunucu
 
 Ortak pakette **ERP adresi GÖMÜLMEZ**; adres yokken hiçbir istek atılmaz ve ilk ekran **"Sunucuyu bul"**dur
-(`mobil/src/navigation/RootNavigator.tsx`). Derlemeye demo adresi de gömülmez: incelemeci "Adresi elle gir"
-ile demo sunucunun adresini yazar (talimat metni `PLAY-KONSOL-FORMLARI.md` §2). Dahili test incelemeye
+(`mobil/src/navigation/RootNavigator.tsx`). Derlemeye demo adresi de gömülmez: incelemeci `*.etkiliyazilim.com`
+altındaki bulut kurulumunun adını yazar (İNTERNET kipi: 443, sistem sertifika zinciri, doğrulama kodu YOK —
+`mobil/src/lib/internet-tls.ts`, vc 62'de var). Eski `demo.etkiliyazilim.com` 2026-10-15'te kaldırıldı (DNS yok,
+ölçüldü 2026-10-16). Aday kurulum, ölçümleri ve açık karar: `PLAY-URETIM-KONSOL-METINLERI.md` §0–§1. Dahili test incelemeye
 girmez; kapalı test, açık test ve üretim girer ⇒ demo sunucu ve "Uygulama erişimi" formu ondan ÖNCE hazır
 olmalı (K4).
 
@@ -110,8 +113,7 @@ GEÇERSİZDİR (gerekçe arşivde, 2026-10-15).
 - **12×14 kapalı test şartı YOK:** "en az 12 test kullanıcısı × 14 gün kesintisiz kapalı test + üretim
   erişimi başvurusu" yalnız 13 Kasım 2023 sonrası açılan KİŞİSEL hesaplara uygulanır; kuruluş hesabı muaftır.
   Üretime ya da gizli yayına doğrudan çık.
-- **Gizli yayın (K-14):** karar kurumsal hesap varsayımıyla verilmişti, varsayım doğru. Managed Google Play
-  gizli uygulaması tabletlerin bir kuruluşa bağlanmasını gerektirir — bu bağlantıyı kullanıcıyla kur (K5).
+- **Dağıtım yolu (K5, 2026-10-16):** ÜRETİM, herkese açık. Gizli yayın (Managed Google Play) GEÇERSİZ.
 
 ## 5. Dahili test akışı (bugün yayında olan yol)
 
@@ -136,23 +138,28 @@ Dahili test incelemeye girmeden yayınlanır (vc 59'da gözlendi).
 5. K4 → demo sunucu + deneme hesabı → "Uygulama erişimi" formu.
 6. Formlar: Veri güvenliği, içerik derecelendirme, hedef kitle (`PLAY-KONSOL-FORMLARI.md` §3).
 7. Listeleme varlıkları (§3).
-8. K5 → dağıtım yolu: gizli yayın (K-14; Managed Google Play kuruluş bağlantısı) ya da üretim — kapalı test şartı yok.
+8. ~~K5~~ → ÜRETİM (2026-10-16). Sıra ve Console adımları: `PLAY-URETIM-KONSOL-METINLERI.md` §5; yayın
+   `node deploy/play-yayinla.mjs --kanal=production --yuzde=<N>` (§7) — kullanıcının `terfi/genel/tablet-vX` onayıyla.
 
 > Play Console menü adları ve politika eşikleri değişebiliyor; her adımda konsoldaki güncel yazımı teyit et.
 
 ## 7. Araçla yayın — `deploy/play-yayinla.mjs`
 
-Servis hesabı anahtarı `~/.tekserp/sirlar/play-yayinci.json` (izin 600; hesap yalnız test kanallarına yayın + uygulama bilgisi görüntüleme, üretim YOK). Araç anahtarın içeriğini basmaz, yalnız `client_email`.
+Servis hesabı anahtarı `~/.tekserp/sirlar/play-yayinci.json` (izin 600; hesap test kanallarına yayın + uygulama bilgisi görüntüleme; üretim izni Console'da VERİLMEDİ diye kaydedilmişti — API'den ölçülemedi, 2026-10-16: üretime taslak yazma `400 FAILED_PRECONDITION`, kullanıcı Console → Kullanıcılar ve izinler'den bakar/verir). Araç anahtarın içeriğini basmaz, yalnız `client_email`.
 
 ```
 node deploy/play-yayinla.mjs --kanal=internal [--aab=<yol>]          # KURU: kapılar + Play'in kanalları + plan
 node deploy/play-yayinla.mjs --kanal=internal --uygula               # yükle → dahili teste ata → onayla → geri oku
 node deploy/play-yayinla.mjs --kanal=alpha --uygula                  # kapalı test: dahilideki AYNI paketi ata
+node deploy/play-yayinla.mjs --kanal=production --yuzde=10           # KURU: üretim planı (%10 kademeli)
+node deploy/play-yayinla.mjs --kanal=production --yuzde=10 --uygula  # üretim: dahilideki AYNI paketi %10'a ata
+node deploy/play-yayinla.mjs --kanal=production --yuzde=100 --uygula # kademe artır → herkese
 ```
 
 - Varsayılan AAB `mobil/android/app/build/outputs/bundle/release/app-release.aab`; komut AAB'nin derlendiği commit'te (künye commit'i = HEAD) koşar — `build:aab`'ı koşturan ağaçta.
 - Kapılar: paket adı = `deploy/dagitim.json` · künye ↔ AAB sha256 ↔ HEAD · `build:aab --verify-only` (kimlik, izin, cleartext, imza; AAB'nin KOPYASI üzerinde) · versionCode > Play'deki en büyük (yüklü vc yalnız aynı baytsa kanala atanır) · tr-TR not = `surum-notlari.json` tablet maddeleri, en çok 500 karakter (aşarsa DUR — notu kısalt) · kanal yalnız `internal`/`alpha`.
+- Üretim (`production`) `terfi/genel/tablet-vX` açıklamalı etiketini (kullanıcının onay cümlesi) HEAD'de ve dahili testte aynı vc + aynı sha256'yı ister; kapalı test şart değil. Üretime YÜKLEME yapılmaz, `--terfi-atla` yok, `--yuzde=1..100` zorunlu (<100 kademeli `inProgress`, 100 `completed`). Aynı vc üretimdeyse yalnız oran artırılır; düşürme, durdurma (`halted`) ve geri çekme Console'dan — araç bu durumlarda DURUR.
 - Kapalı test (`alpha`) terfi ister: `tablet-vX` + `terfi/oncu/tablet-vX` açıklamalı etiketi HEAD'de (kullanıcının onay cümlesi) ve dahili testte aynı vc + aynı sha256. Acil kaçış yalnız kullanıcının cümlesiyle `--terfi-atla="<cümle>"`.
 - Hedef kanalda aynı vc zaten yayındaysa araç "ZATEN YAYINDA" der ve çıkar (0).
-- Her `--uygula` yayını `~/.tekserp/yayin-defteri/play-YAYIN-DEFTERI.tsv`e satır yazar (saat · `tablet-X-play-<kanal>` · kim · sha256 ilk 16 · boyut · vc · yükle/ata · doğrulandı); dahili test yayınından sonra `tablet-vX` etiketi atılır.
+- Her `--uygula` yayını `~/.tekserp/yayin-defteri/play-YAYIN-DEFTERI.tsv`e satır yazar (saat · `tablet-X-play-<kanal>` · kim · sha256 ilk 16 · boyut · vc · yükle/ata/kademe · doğrulandı · üretimde `yuzdeN`); dahili test yayınından sonra `tablet-vX` etiketi atılır.
 - Kapalı test kullanıcıları (Google Grubu) konsoldan yönetilir; araç yalnız sürümü kanala atar.

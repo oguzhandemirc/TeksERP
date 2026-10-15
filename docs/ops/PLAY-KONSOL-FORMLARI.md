@@ -17,7 +17,7 @@
 | K2 | Gizlilik politikası nerede yayınlansın? | **KARAR: bizim sunucu — `https://tekserp.etkiliyazilim.com/gizlilik`** | VDS'te ayrı küçük köken (`deploy/gizlilik-sayfasi/`, runbook `GIZLILIK-SAYFASI.md`); indir kapısının (Worker) DIŞINDA, girişsiz. Konsola URL ancak sayfa yayına çıkınca girilir. |
 | K3 | "Veriler aktarım sırasında şifreleniyor mu?" | **KARAR: "Evet" — YALNIZ vc60 yayına çıkınca forma yazılır** | vc60'tan itibaren tablet fabrika sunucusuna yalnız şifreli bağlanır. vc59 bugün düz HTTP'ye izin veriyor (`usesCleartextTraffic=true`) — vc60 öncesi formda "Evet" yazılmaz; gizlilik politikası §7 de vc60 ile birlikte güncellenir. |
 | K4 | İnceleme için demo sunucu + deneme hesabı | **AÇIK** | `demo.etkiliyazilim.com` (2026-08-14 runbook'u) bugün ayakta mı, 1.1.0 tabletle uyumlu mu — ölçülmedi. Uygulama giriş istiyor; incelemeci bağlanamazsa "işlevsiz uygulama" reddi gelir. |
-| K5 | Dağıtım yolu: Managed Google Play gizli yayın mı, doğrudan üretim mi? | **AÇIK (daraldı)** — yalnız kuruluş bağlantısı kullanıcıyla | Hesap KURUMSAL (kullanıcı doğruladı 2026-10-15): 12×14 kapalı test şartı YOK; K-14 "gizli yayın" kararının varsayımı doğru (§6). |
+| K5 | Dağıtım yolu: Managed Google Play gizli yayın mı, doğrudan üretim mi? | **KARAR: ÜRETİM, herkese açık (kullanıcı 2026-10-16)** | Gizli yayın GEÇERSİZ. Üretim hazırlık denetimi + güncel yapıştırma metinleri: `PLAY-URETIM-KONSOL-METINLERI.md` (bu dosyanın §2–§5'inden yeni olanı geçerli). |
 | K6 | İletişim e-postası | **KARAR: `info@etkiliyazilim.com`** | Mağazada ve gizlilik sayfasında herkese açık görünür. |
 
 ---|---|---|---|

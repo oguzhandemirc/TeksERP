@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // =============================================================================
 // PLAY YAYINCISI (deploy/play-yayinla.mjs) — ağsız (sahte fetch), DB'siz; geçici git deposu + sahte AAB.
-//   §1 kanal: production/beta/bilinmeyen RED, ağa çıkmadan · kök kanalda --terfi-atla RED
+//   §1 kanal: beta/bilinmeyen RED, ağa çıkmadan · kök kanalda --terfi-atla RED · üretimde --yuzde zorunlu, kaçış yok
 //   §2 sürüm notu: tablet maddeleri, 500 sınırı (501 RED), notsuz sürüm RED
 //   §3 kuru: Play yalnız OKUNUR (yazan çağrı yok, edit silinir) · zaten yayında = 0
 //   §4 kapılar: küçük/eşit versionCode · paket adı · künye özeti · AAB doğrulaması · aynı vc başka bayt · Play'in aldığı bayt
 //   §5 uygula: yükle → ata → onayla → geri oku → defter + sürüm etiketi; kapalı test terfi (etiket, dahilide aynı bayt, kaçış)
 //   §6 sır: anahtar içeriği ve erişim belirteci hiçbir çıktıda/adreste yok · gevşek izinli anahtar RED
+//   §7 üretim: yükleme yok · terfi/genel etiketi + dahilide aynı bayt · kademeli oran · kademe artırma · düşürme/halted DUR
 // Koşum: node scripts/test_play_yayinla.mjs
 // =============================================================================
 import crypto from 'node:crypto';
@@ -123,9 +124,20 @@ async function kos(argv, { play = sahtePlay(), aab, dogrula = { gecti: true, sat
 
 try {
   console.log('\n§1 kanal');
-  for (const k of ['production', 'beta', 'uretim']) {
+  for (const k of ['beta', 'uretim']) {
     const r = await kos([`--kanal=${k}`, '--uygula'], { aab: aabYaz().yol });
     ol(`1 ${k} reddedilir, ağa çıkılmaz`, r.kod === 1 && /REDDEDİLDİ|bilinmeyen kanal/.test(r.cikti) && r.play.cagri.length === 0, r.cikti);
+  }
+  for (const [argv, desen, ad] of [
+    [['--kanal=production', '--uygula'], /--yuzde=<1\.\.100> üretim kanalında ZORUNLU/, 'üretimde --yuzde yoksa'],
+    [['--kanal=production', '--yuzde=0'], /1\.\.100 arası tam sayı/, 'üretimde --yuzde=0'],
+    [['--kanal=production', '--yuzde=12.5'], /1\.\.100 arası tam sayı/, 'üretimde kesirli --yuzde'],
+    [['--kanal=production', '--yuzde=101'], /1\.\.100 arası tam sayı/, 'üretimde --yuzde=101'],
+    [['--kanal=production', '--yuzde=100', '--terfi-atla=Acil düzeltme, etiketsiz üretime çıkmasını ben istiyorum'], /üretim kanalında verilemez/, 'üretimde --terfi-atla'],
+    [['--kanal=internal', '--yuzde=10'], /yalnız üretim kanalında/, 'dahili testte --yuzde'],
+  ]) {
+    const r = await kos(argv, { aab: aabYaz().yol });
+    ol(`1 ${ad} RED, ağa çıkılmaz`, r.kod === 1 && desen.test(r.cikti) && r.play.cagri.length === 0, r.cikti);
   }
   { const r = await kos([], { aab: aabYaz().yol }); ol('1 kanalsız çağrı DUR', r.kod === 1 && /--kanal/.test(r.cikti), r.cikti); }
   { const r = await kos(['--kanal=internal', '--terfi-atla=Kullanıcı bu sürümü test etmeden onayladı'], { aab: aabYaz().yol });
@@ -226,6 +238,60 @@ try {
     const p = sahtePlay();
     const r = await kos(['--kanal=internal', `--anahtar=${gevsek}`], { aab: aabYaz().yol, play: p });
     ol('6 başkalarınca okunabilir anahtar RED, ağa çıkılmaz', r.kod === 1 && /başkalarınca okunabilir/.test(r.cikti) && p.cagri.length === 0 && !r.cikti.includes(PEM.split('\n')[1]), r.cikti); }
+
+  console.log('\n§7 üretim');
+  const genelOnay = (terfi = true) => ({ bas: BAS, surumEtiketi: BAS, terfiEtiketi: terfi ? { tur: 'tag', commit: BAS, mesaj: 'Dahili testte bir hafta denedim, herkese açılabilir. 2026-10-16 10:00' } : null });
+  const URETIM = (vc, status, oran) => ({ track: 'production', releases: [{ status, versionCodes: [String(vc)], ...(oran === undefined ? {} : { userFraction: oran }) }] });
+  const geri = (status, oran) => ({ releases: [{ status, versionCodes: ['61'], ...(oran === undefined ? {} : { userFraction: oran }) }] });
+  const putGovde = (p) => { const c = p.cagri.find((x) => x.m === 'PUT'); return c ? JSON.parse(c.govde) : null; };
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(60)] });
+    const r = await kos(['--kanal=production', '--yuzde=10', '--uygula'], { aab: a.yol, play: p, git: genelOnay() });
+    ol('7 Play\'de yüklü olmayan vc üretime YÜKLENMEZ', r.kod === 1 && /üretime yükleme yapılmaz/.test(r.cikti) && p.yazan().length === 0 && !p.cagri.some((c) => c.url.includes('/upload/')), r.cikti); }
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(61)], bundles: [{ versionCode: 61, sha256: a.sha256 }] });
+    const r = await kos(['--kanal=production', '--yuzde=10', '--uygula'], { aab: a.yol, play: p, git: genelOnay(false) });
+    ol('7 terfi/genel etiketi yoksa RED', r.kod === 1 && /terfi\/genel\/tablet-v9\.1\.0 onay etiketi YOK/.test(r.cikti) && p.yazan().length === 0, r.cikti); }
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(60)], bundles: [{ versionCode: 61, sha256: a.sha256 }] });
+    const r = await kos(['--kanal=production', '--yuzde=10', '--uygula'], { aab: a.yol, play: p, git: genelOnay() });
+    ol('7 dahili testte yayında olmayan sürüm RED', r.kod === 1 && /test kanalı GERİDE|YOK/.test(r.cikti) && p.yazan().length === 0, r.cikti); }
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(61)], bundles: [{ versionCode: 61, sha256: a.sha256 }] });
+    const r = await kos(['--kanal=production', '--yuzde=10'], { aab: a.yol, play: p, git: genelOnay() });
+    ol('7 kuru üretim: plan %10 inProgress basılır, yazma yok', r.kod === 0 && /inProgress, %10/.test(r.cikti) && p.yazan().length === 0 && r.defter === null, r.cikti); }
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(61)], bundles: [{ versionCode: 61, sha256: a.sha256 }], geriOkuma: geri('inProgress', 0.1) });
+    const r = await kos(['--kanal=production', '--yuzde=10', '--uygula'], { aab: a.yol, play: p, git: genelOnay() });
+    const g0 = putGovde(p);
+    const sira = p.cagri.map((c) => (c.url.includes('/upload/') ? 'YUKLE' : c.m === 'PUT' ? 'ATA' : c.url.endsWith(':commit') ? 'ONAY' : null)).filter(Boolean).join('>');
+    ol('7 %10: yüklemeden ata > onayla, geri okundu', r.kod === 0 && sira === 'ATA>ONAY' && /geri okundu/.test(r.cikti), `${sira}\n${r.cikti}`);
+    ol('7 %10 gövdesi: production, inProgress, userFraction 0.1, tr-TR not', g0?.track === 'production' && g0.releases[0].status === 'inProgress' && g0.releases[0].userFraction === 0.1 && g0.releases[0].releaseNotes[0].language === 'tr-TR', JSON.stringify(g0));
+    ol('7 %10 defter satırı (ata, yuzde10), sürüm etiketi atılmaz', /\ttablet-9\.1\.0-play-production\t.*\tvc61\tata\tdogrulandi\tyuzde10\n$/.test(r.defter ?? '') && r.etiket.length === 0, `${r.defter} ${r.etiket}`); }
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(61), URETIM(61, 'inProgress', 0.1)], bundles: [{ versionCode: 61, sha256: a.sha256 }], geriOkuma: geri('inProgress', 0.5) });
+    const r = await kos(['--kanal=production', '--yuzde=50', '--uygula'], { aab: a.yol, play: p, git: genelOnay() });
+    const g0 = putGovde(p);
+    ol('7 kademe artır %10 → %50: inProgress 0.5, defter kademe', r.kod === 0 && /kademe ARTIR/.test(r.cikti) && /şu an %10/.test(r.cikti) && g0?.releases[0].userFraction === 0.5 && /\tkademe\tdogrulandi\tyuzde50\n$/.test(r.defter ?? ''), r.cikti); }
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(61), URETIM(61, 'inProgress', 0.5)], bundles: [{ versionCode: 61, sha256: a.sha256 }], geriOkuma: geri('completed') });
+    const r = await kos(['--kanal=production', '--yuzde=100', '--uygula'], { aab: a.yol, play: p, git: genelOnay() });
+    const g0 = putGovde(p);
+    ol('7 %100: completed, userFraction yok', r.kod === 0 && g0?.releases[0].status === 'completed' && !('userFraction' in g0.releases[0]), r.cikti); }
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(61), URETIM(61, 'inProgress', 0.5)], bundles: [{ versionCode: 61, sha256: a.sha256 }] });
+    const r = await kos(['--kanal=production', '--yuzde=50', '--uygula'], { aab: a.yol, play: p, git: genelOnay() });
+    ol('7 aynı oran: ZATEN YAYINDA, yazma yok', r.kod === 0 && /ZATEN YAYINDA.*%50/.test(r.cikti) && p.yazan().length === 0, r.cikti); }
+  for (const [tr, ad, desen] of [[URETIM(61, 'inProgress', 0.5), 'oran düşürme (%50 → %20)', /oran düşürülmez/], [URETIM(61, 'halted', 0.2), 'durdurulmuş (halted) yayın', /DURDURULMUŞ/], [URETIM(61, 'completed'), 'herkese açık sürümde %20', /zaten %100/]]) {
+    const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(61), tr], bundles: [{ versionCode: 61, sha256: a.sha256 }] });
+    const r = await kos(['--kanal=production', '--yuzde=20', '--uygula'], { aab: a.yol, play: p, git: genelOnay() });
+    ol(`7 ${ad} DUR, yazma yok, edit silinir`, r.kod === 1 && desen.test(r.cikti) && p.yazan().length === 0 && p.cagri.at(-1).m === 'DELETE', r.cikti);
+  }
+  { const a = aabYaz();
+    const p = sahtePlay({ tracks: [IC(61)], bundles: [{ versionCode: 61, sha256: a.sha256 }], geriOkuma: geri('inProgress', 0.2) });
+    const r = await kos(['--kanal=production', '--yuzde=10', '--uygula'], { aab: a.yol, play: p, git: genelOnay() });
+    ol('7 geri okunan oran istenenden farklıysa DOGRULANAMADI, çıkış 1', r.kod === 1 && /DOGRULANAMADI/.test(r.defter ?? ''), r.cikti); }
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

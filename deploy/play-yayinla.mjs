@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // =============================================================================
-// TeksERP — ORTAK TABLET AAB'Sİ → GOOGLE PLAY TEST KANALI (androidpublisher v3, bağımlılıksız)
+// TeksERP — ORTAK TABLET AAB'Sİ → GOOGLE PLAY KANALI (androidpublisher v3, bağımlılıksız)
 // =============================================================================
 //   node deploy/play-yayinla.mjs --kanal=internal [--aab=<yol>]            # KURU: ölçer, Play'i okur, planı basar
 //   node deploy/play-yayinla.mjs --kanal=internal --uygula                  # yükler + kanala atar + geri okur
 //   node deploy/play-yayinla.mjs --kanal=alpha --uygula [--terfi-atla="<kullanıcının cümlesi>"]
+//   node deploy/play-yayinla.mjs --kanal=production --yuzde=<1..100> [--uygula]   # üretim: kademeli yayın / kademe artırma
 //
 // Kanallar: internal (dahili test = kök grup, etiketsiz) · alpha (kapalı test = kökten sonraki grup; terfi etiketi
-// `terfi/<grup>/tablet-vX` + dahili testteki AYNI bayt). production/beta bu araçla AÇILMAZ.
+// `terfi/<grup>/tablet-vX` + dahili testteki AYNI bayt) · production (üretim = son grup `genel`; terfi etiketi
+// `terfi/genel/tablet-vX` + dahili testteki AYNI bayt, yükleme YOK, --yuzde ZORUNLU, --terfi-atla YOK). beta AÇILMAZ.
 // Kapılar ağdan ÖNCE ölçülür; hedef kanalda aynı versionCode zaten yayındaysa iş yoktur (çıkış 0).
 // Servis hesabı anahtarının içeriği hiçbir çıktıya girmez; yalnız client_email basılır.
 // =============================================================================
@@ -30,9 +32,16 @@ import { protoManifestOgeleri } from '../mobil/scripts/lib/apk-kimlik.mjs';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Play kanalı → terfi zincirindeki sırası (0 = kök grup). Listede olmayan kanal reddedilir. */
-export const PLAY_KANALLARI = Object.freeze({ internal: { ad: 'dahili test', sira: 0 }, alpha: { ad: 'kapalı test', sira: 1 } });
-const REDDEDILEN = { production: 'üretim kanalı bu araçla açılmaz (hesabın üretim izni de yok)', beta: 'açık test kullanılmıyor (dağıtım = dahili + kapalı test)' };
+/**
+ * Play kanalı → terfi zincirindeki sırası (0 = kök grup) ve AYNI baytın önce yayında olması gereken kaynak grup
+ * (Play'de daima dahili test). Üretim kapalı testi şart koşmaz (kurumsal hesap, kullanıcı kararı 2026-10-16).
+ */
+export const PLAY_KANALLARI = Object.freeze({
+  internal: { ad: 'dahili test', sira: 0, kaynakSira: null },
+  alpha: { ad: 'kapalı test', sira: 1, kaynakSira: 0 },
+  production: { ad: 'üretim (herkese açık)', sira: 2, kaynakSira: 0, kademeli: true },
+});
+const REDDEDILEN = { beta: 'açık test kullanılmıyor (dağıtım = dahili test → üretim)' };
 export const NOT_SINIRI = 500;
 export const ANAHTAR_VARSAYILAN = path.join(os.homedir(), '.tekserp', 'sirlar', 'play-yayinci.json');
 export const DEFTER_VARSAYILAN = path.join(os.homedir(), '.tekserp', 'yayin-defteri', 'play-YAYIN-DEFTERI.tsv');
@@ -58,13 +67,20 @@ export function argumanlar(argv) {
     const [, ad, deger] = m;
     if (ad === 'uygula' && deger === undefined) o.uygula = true;
     else if (ad === 'kuru' && deger === undefined) o.uygula = false;
-    else if (['kanal', 'aab', 'anahtar', 'terfi-atla'].includes(ad) && deger !== undefined) o[ad] = deger;
+    else if (['kanal', 'aab', 'anahtar', 'terfi-atla', 'yuzde'].includes(ad) && deger !== undefined) o[ad] = deger;
     else throw new Dur(`tanınmayan argüman: ${a}`);
   }
   if (argv.includes('--uygula') && argv.includes('--kuru')) throw new Dur('--uygula ile --kuru birlikte verilmez');
   if (!o.kanal) throw new Dur('--kanal=internal|alpha zorunlu');
   if (REDDEDILEN[o.kanal]) throw new Dur(`"${o.kanal}" kanalı REDDEDİLDİ — ${REDDEDILEN[o.kanal]}`);
-  if (!Object.hasOwn(PLAY_KANALLARI, o.kanal)) throw new Dur(`bilinmeyen kanal "${o.kanal}" (internal | alpha)`);
+  if (!Object.hasOwn(PLAY_KANALLARI, o.kanal)) throw new Dur(`bilinmeyen kanal "${o.kanal}" (internal | alpha | production)`);
+  if (PLAY_KANALLARI[o.kanal].kademeli) {
+    // Herkese açık yayında yüzde tahmin edilmez; kaçış yok — onay cümlesi terfi/genel etiketinde durur.
+    if (o['terfi-atla'] !== undefined) throw new Dur('--terfi-atla üretim kanalında verilemez — onay terfi/genel/tablet-vX etiketindeki kullanıcı cümlesidir');
+    if (o.yuzde === undefined) throw new Dur('--yuzde=<1..100> üretim kanalında ZORUNLU (kademeli yayın oranı; 100 = herkese)');
+    if (!/^(?:[1-9]\d?|100)$/.test(o.yuzde)) throw new Dur(`--yuzde "${o.yuzde}" geçersiz — 1..100 arası tam sayı`);
+    o.yuzde = Number(o.yuzde);
+  } else if (o.yuzde !== undefined) throw new Dur(`--yuzde yalnız üretim kanalında verilir (${o.kanal} kademeli değil)`);
   return o;
 }
 
@@ -106,7 +122,9 @@ export function playDurumu({ tracks = [], bundles = [] }, kanal, vc) {
   for (const t of tracks) for (const r of t.releases ?? []) for (const k of kodlar(r)) enBuyuk = Math.max(enBuyuk, k);
   for (const b of bundles) enBuyuk = Math.max(enBuyuk, Number(b.versionCode) || 0);
   const kanalda = (ad, kosul) => (tracks.find((t) => t.track === ad)?.releases ?? []).some((r) => YAYINDA.has(r.status) && kodlar(r).some(kosul));
+  const hedefSurum = (tracks.find((t) => t.track === kanal)?.releases ?? []).find((r) => r.status !== 'draft' && kodlar(r).includes(vc));
   return {
+    hedef: hedefSurum ? { status: hedefSurum.status, oran: hedefSurum.userFraction === undefined ? null : Number(hedefSurum.userFraction) } : null,
     enBuyuk,
     hedefteYayinda: kanalda(kanal, (k) => k === vc),
     hedefteDahaYeni: kanalda(kanal, (k) => k > vc),
@@ -222,14 +240,14 @@ export async function calistir(argv, enjekte = {}) {
     const { zincir, hatalar } = grupZinciri(kayit.gruplar);
     if (hatalar.length || zincir.length <= kanal.sira) throw new Dur('dağıtım kaydının grup zinciri bu kanalı karşılamıyor', hatalar);
     const grup = zincir[kanal.sira];
-    const kaynakGrup = kanal.sira ? zincir[kanal.sira - 1] : null;
+    const kaynakGrup = kanal.kaynakSira === null ? null : zincir[kanal.kaynakSira];
     const beklenenPaket = kayit.urun?.tablet?.androidPaket;
     if (!beklenenPaket) throw new Dur(`${KAYIT_REL} urun.tablet.androidPaket yok`);
     if (!kaynakGrup && o['terfi-atla'] !== undefined) throw new Dur(`--terfi-atla ${o.kanal} kanalında verilemez (kök grup terfi istemez)`);
 
     const aabYolu = path.resolve(o.aab ?? AAB_VARSAYILAN(d.kok));
     if (!fs.existsSync(aabYolu)) throw new Dur(`AAB yok: ${aabYolu}`, ['Önce: cd mobil && npm run build:aab']);
-    yaz(`TeksERP → Google Play ${kanal.ad} (${o.kanal} · grup ${grup}) — ${o.uygula ? 'UYGULA' : 'KURU (yazma yok)'}`);
+    yaz(`TeksERP → Google Play ${kanal.ad} (${o.kanal} · grup ${grup}${kanal.kademeli ? ` · %${o.yuzde}` : ''}) — ${o.uygula ? 'UYGULA' : 'KURU (yazma yok)'}`);
     const kimlik = aabKimligi(aabYolu);
     const oz = dosyaOzeti(aabYolu);
     yaz(`  AAB     : ${aabYolu}`);
@@ -265,15 +283,30 @@ export async function calistir(argv, enjekte = {}) {
     const durum = playDurumu({ tracks: await istemci.kanallar(edit), bundles: await istemci.paketler(edit) }, o.kanal, kimlik.versionCode);
     yaz(`  Play    : ${durum.ozet.join(' · ') || '(kanal yok)'} · en büyük vc ${durum.enBuyuk}`);
 
-    if (durum.hedefteYayinda) {
-      yaz(`\n✓ ZATEN YAYINDA — vc ${kimlik.versionCode} ${kanal.ad} kanalında; yapılacak bir şey yok.`);
+    // Kademeli kanal: aynı vc hedefteyse yalnız oran ARTIRILABİLİR; geri çekme/durdurma/sürdürme Console işidir.
+    let kademe = null;
+    if (kanal.kademeli && durum.hedef) {
+      const h = durum.hedef;
+      const mevcut = h.status === 'completed' ? 100 : h.oran === null ? null : Math.round(h.oran * 1000) / 10;
+      if (h.status === 'halted') throw new Dur(`vc ${kimlik.versionCode} üretimde DURDURULMUŞ (halted) — sürdürme/geri çekme Play Console'dan; araç durdurulmuş yayına dokunmaz`);
+      if (!YAYINDA.has(h.status) || mevcut === null) throw new Dur(`vc ${kimlik.versionCode} üretimde tanınmayan durumda (${h.status}, oran ${h.oran}) — ÖLÇÜLEMEDİ, Console'dan bak`);
+      if (o.yuzde < mevcut) throw new Dur(`üretimde vc ${kimlik.versionCode} zaten %${mevcut} — oran düşürülmez (geri çekme/durdurma Console'dan)`);
+      if (o.yuzde > mevcut) kademe = mevcut;
+    }
+    if (durum.hedefteYayinda && kademe === null) {
+      yaz(`\n✓ ZATEN YAYINDA — vc ${kimlik.versionCode} ${kanal.ad} kanalında${kanal.kademeli ? ` (%${o.yuzde})` : ''}; yapılacak bir şey yok.`);
       for (const k of kapilar) yaz(`  ${k.gecti ? '✓' : '·'} ${k.ad}${k.gecti ? '' : ` — yeni yayın olsaydı DURDURURDU: ${k.satirlar[0] ?? ''}`}`);
       return 0;
     }
 
     // Sürüm kapısı: yeni yükleme en büyükten BÜYÜK olur; zaten yüklü paket yalnız aynı baytsa kanala atanır.
     let kip;
-    if (durum.paket) {
+    if (kademe !== null) {
+      kip = 'kademe';
+    } else if (kanal.kademeli && !durum.paket) {
+      kapi(`vc ${kimlik.versionCode} Play'de yüklü (üretime yükleme yapılmaz — paket dahili testten gelir)`, false, ['Önce: --kanal=internal --uygula, dahili testte dene, sonra terfi/genel etiketi']);
+      kip = 'ata';
+    } else if (durum.paket) {
       const ayni = durum.paket.sha256 === oz.sha256;
       kapi(`vc ${kimlik.versionCode} Play'de yüklü — aynı bayt mı`, ayni, ayni ? [] : [`Play sha256 ${String(durum.paket.sha256).slice(0, 16)}… ≠ AAB ${oz.sha256.slice(0, 16)}… — aynı versionCode başka paket`]);
       kapi('hedef kanalda daha yeni sürüm yok', !durum.hedefteDahaYeni);
@@ -311,9 +344,11 @@ export async function calistir(argv, enjekte = {}) {
     const kalan = kapilar.filter((k) => !k.gecti);
     if (kalan.length) throw new Dur(`${kalan.length} kapı geçilmedi — Play'e YAZILMADI`);
 
-    const surum = { name: `${kimlik.versionName} (${kimlik.versionCode})`, versionCodes: [String(kimlik.versionCode)], status: 'completed',
-      releaseNotes: [{ language: 'tr-TR', text: not.metin }] };
-    yaz(`\nPlan: ${kip === 'yukle' ? 'AAB yükle → ' : 'yüklü paketi '}${o.kanal} kanalına ata ("${surum.name}", completed) → onayla → geri oku`);
+    const kademeli = kanal.kademeli && o.yuzde < 100;
+    const surum = { name: `${kimlik.versionName} (${kimlik.versionCode})`, versionCodes: [String(kimlik.versionCode)], status: kademeli ? 'inProgress' : 'completed',
+      ...(kademeli ? { userFraction: o.yuzde / 100 } : {}), releaseNotes: [{ language: 'tr-TR', text: not.metin }] };
+    const oranMetni = kanal.kademeli ? `, %${o.yuzde}${kademe !== null ? ` (şu an %${kademe})` : ''}` : '';
+    yaz(`\nPlan: ${kip === 'yukle' ? 'AAB yükle → ' : kip === 'kademe' ? 'kademe ARTIR: ' : 'yüklü paketi '}${o.kanal} kanalına ata ("${surum.name}", ${surum.status}${oranMetni}) → onayla → geri oku`);
     yaz(`Not (${not.uzunluk} karakter):\n${not.metin.split('\n').map((s) => `  ${s}`).join('\n')}`);
     if (!o.uygula) {
       yaz('\nKURU — Play\'e hiçbir şey yazılmadı. Yayın için aynı komut + --uygula.');
@@ -337,14 +372,16 @@ export async function calistir(argv, enjekte = {}) {
     let dogrulandi = false;
     try {
       const t = await istemci.kanal(e2, o.kanal);
-      dogrulandi = (t.releases ?? []).some((r) => YAYINDA.has(r.status) && (r.versionCodes ?? []).map(Number).includes(kimlik.versionCode));
+      dogrulandi = (t.releases ?? []).some((r) => r.status === surum.status && (r.versionCodes ?? []).map(Number).includes(kimlik.versionCode)
+        && (surum.userFraction === undefined || Math.abs(Number(r.userFraction) - surum.userFraction) < 1e-6));
     } finally {
       await istemci.editSil(e2);
     }
     yaz(dogrulandi ? `  ✓ geri okundu: ${o.kanal} kanalında vc ${kimlik.versionCode} yayında` : `  ✖ geri okunamadı: ${o.kanal} kanalında vc ${kimlik.versionCode} görünmüyor`);
 
     defterYaz(d, [istanbulSaati(new Date(d.simdi())), `tablet-${kimlik.versionName}-play-${o.kanal}`, kimFn(), oz.sha256.slice(0, 16), String(oz.boyut),
-      `vc${kimlik.versionCode}`, kip, dogrulandi ? 'dogrulandi' : 'DOGRULANAMADI', ...(atla !== undefined ? [`terfi-atlandi: ${atla}`] : [])], yaz);
+      `vc${kimlik.versionCode}`, kip, dogrulandi ? 'dogrulandi' : 'DOGRULANAMADI', ...(kanal.kademeli ? [`yuzde${o.yuzde}`] : []),
+      ...(atla !== undefined ? [`terfi-atlandi: ${atla}`] : [])], yaz);
 
     if (!kaynakGrup) {
       const t = d.etiketAt('tablet', kimlik.versionName);
