@@ -19,12 +19,12 @@
 
 | # | Ölçülen | Sonuç |
 |---|---|---|
-| Ö1 | `demo.etkiliyazilim.com` | Ayakta. `/health` UP, backend **2.9.0**, firma adı sahte (DEMOTEKS). Kimlik ucunda `tls` alanı YOK → LAN TLS bu sürümde yok |
-| Ö2 | Nerede koşuyor | ESKİ paylaşımlı sunucuda (`SUNUCU-ENVANTERI.md` "Eski paylaşımlı sunucu"; ters DNS bir müşterinin posta sunucusu adı). Konteyner `tekserp-demo`, 2026-09-01'den beri, 1 GB bellek sınırı, port yayını yok (Traefik arkasında). Makine: 4 çekirdek, ~2,9 GB boş bellek, diskte 33 GB boş. Komşular: posta, WordPress'ler, ortak PostgreSQL/MariaDB/Redis |
+| Ö1 | `demo.etkiliyazilim.com` | Ayakta. `/health` UP, backend **2.9.0**, firma adı sahte (DEMOTEKS). Kimlik ucunda `tls` alanı YOK → LAN TLS bu sürümde yok. **GÜNCEL 2026-10-15:** eski satış demosu kaldırıldı (DNS kaydı + fzt kurulumu), `demo` adı boşta. |
+| Ö2 | Nerede koşuyor | ESKİ paylaşımlı sunucuda (`SUNUCU-ENVANTERI.md` "Eski paylaşımlı sunucu"; ters DNS bir müşterinin posta sunucusu adı). Konteyner `tekserp-demo`, 2026-09-01'den beri, 1 GB bellek sınırı, port yayını yok (Traefik arkasında). Makine: 4 çekirdek, ~2,9 GB boş bellek, diskte 33 GB boş. Komşular: posta, WordPress'ler, ortak PostgreSQL/MariaDB/Redis. **GÜNCEL 2026-10-15:** eski satış demosu kaldırıldı (DNS kaydı + fzt kurulumu), `demo` adı boşta. |
 | Ö3 | VDS (lisans/satıcı/patron) | Demo orada YOK. 2 çekirdek, ~3 GB bellek (≈2 GB kullanılabilir) — lisans sunucusunun yanında |
 | Ö4 | Demo `.env` | `TRUST_PROXY=2` (sıçrama sayısı) · `RATE_LIMIT_ENABLED=true` · `SWAGGER_ENABLED=false` · `LAN_TLS_MODE` yok · `CLIENT_IP_HEADER` tanımlı |
 | Ö5 | Eski sunucu güvenlik duvarı | 80/443 yalnız Cloudflare aralıklarına; 2222 (SSH) ve posta portları herkese. 4443/4000 dışarıdan kapalı (ölçüldü: zaman aşımı) |
-| Ö6 | Cloudflare bölgesi | Bütün A kayıtları turuncu bulut (vekil), SSL kipi `strict`. `demo` ve `api` eski sunucuya, `lisans/portal/patron/guncelleme/indir/tekserp` VDS'e bakıyor. Gri bulutlu (yalnız DNS) A kaydı yok |
+| Ö6 | Cloudflare bölgesi | Bütün A kayıtları turuncu bulut (vekil), SSL kipi `strict`. `demo` ve `api` eski sunucuya, `lisans/portal/patron/guncelleme/indir/tekserp` VDS'e bakıyor. Gri bulutlu (yalnız DNS) A kaydı yok. **GÜNCEL 2026-10-15:** `demo` A kaydı silindi (eski satış demosu kaldırıldı), `demo` adı hiçbir yere çözülmüyor |
 | Ö7 | Sunucu adreslerinin gizliliği | İki makinenin IP'si zaten açık: repo PUBLIC ve `SUNUCU-ENVANTERI.md` ikisini de yazıyor; eski sunucu ayrıca bir posta sunucusu (ters DNS). Gri bulutlu bir ad YENİ bir sır açmaz |
 | Ö8 | Tablet adres girişi | `parsePairAddress` sunucu ADI kabul eder, port yazılmazsa **4443**. İncelemeci yalnız `inceleme.etkiliyazilim.com` yazar |
 | Ö9 | Tablet doğrulaması | Native katman sertifikayı yalnız parmak iziyle kabul eder (`LanTlsPolicy.tlsVerdict`: iz kümede → kabul; sabitli uçta iz farklı → RED). Ad doğrulaması sabitli uçta atlanır → sertifikadaki adın `inceleme…` olması gerekmez |
@@ -60,7 +60,7 @@ Turuncu bulutta tableti karşılayan sertifika Cloudflare'in KENAR sertifikasıd
 
 > ⚠️ **2026-10-08 K1 değişti:** aşağıdaki "eski sunucu", "mevcut Traefik", Ö2/Ö5 atıfları `fzt` içindir ve GEÇERSİZDİR. Port, vekil ve TLS satırları bulut deneme sunucusunda yeniden belirlenir (orada ufw bugün yalnız 2222'yi açar; 443'ün yalnız Cloudflare aralıklarına açılması ve köken sertifikası D1'in konusudur). Kapsam (ayrı konteyner, kendi PG, deneme hesabı, veri, tablet) değişmez.
 
-**Ayrı inceleme kurulumu, satış demosundan bağımsız, Cloudflare arkasında.** Satış demosu (`demo.etkiliyazilim.com`) DOKUNULMADAN kalır. Ayrı olmasının nedeni artık yalnız veri yalıtımıdır (incelemecinin verisi satış demosunu kirletmez, ayrı sıfırlanır); A düzenindeki `TRUST_PROXY` gerekçesi düştü — yeni kapı açılmaz, bütün istekler aynı vekil zincirinden gelir.
+**Ayrı inceleme kurulumu, satış demosundan bağımsız, Cloudflare arkasında.** Satış demosu (`demo.etkiliyazilim.com`) DOKUNULMADAN kalır (**GÜNCEL 2026-10-15:** eski satış demosu kaldırıldı — DNS kaydı + fzt kurulumu; `demo` adı boşta, yeni demo henüz kurulmadı). Ayrı olmasının nedeni artık yalnız veri yalıtımıdır (incelemecinin verisi satış demosunu kirletmez, ayrı sıfırlanır); A düzenindeki `TRUST_PROXY` gerekçesi düştü — yeni kapı açılmaz, bütün istekler aynı vekil zincirinden gelir.
 
 | Konu | Karar |
 |---|---|

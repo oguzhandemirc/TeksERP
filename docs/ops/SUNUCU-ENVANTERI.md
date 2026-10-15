@@ -1,6 +1,6 @@
 # Sunucu envanteri — hangi makine ne yapıyor
 
-> Son güncelleme: **2026-10-08** (`fzt` takma adı + TeksERP kalıntı envanteri; bulut deneme sunucusu satırı; `tekserp-indir` kökeni; `tekserp-gizlilik` planı; fabrika satırları 2026-09-29 SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
+> Son güncelleme: **2026-10-15** (fzt TeksERP kalıntıları kaldırıldı, `demo` DNS kaydı silindi; önceki 2026-10-08: `fzt` takma adı + TeksERP kalıntı envanteri; bulut deneme sunucusu satırı; `tekserp-indir` kökeni; `tekserp-gizlilik` planı; fabrika satırları 2026-09-29 SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
 > iş eklendiğinde **buraya da yazılır** — aksi hâlde "bu port neden açık" sorusunun
 > cevabı kimsede kalmaz.
 
@@ -12,7 +12,7 @@
 |---|---|---|---|
 | **Fabrika sunucusu — adnansahin** | SAHINSRV, fabrika LAN'ı (Windows 10 Pro) | ERP backend + PostgreSQL + yerel yedek | Canlı üretim · uzak erişim **Tailscale** |
 | **tekserp-vds** | `80.253.255.188` | Güncelleme yayını + makine dışı yedek hedefi | 2026-09-01'den beri yayın burada |
-| **fzt** (eski ad `yenisunucu`) | `91.217.119.138`, ssh 2222 (`oguzhan`, parolasız sudo) | Kullanıcının fizik tedavi siteleri — TeksERP için **KULLANILMAZ** (kullanıcı kararı 2026-10-08) | TeksERP kalıntısı var (aşağıda §fzt), demo **kaldırılacak**; fizik tedavi sitelerine ASLA dokunulmaz |
+| **fzt** (eski ad `yenisunucu`) | `91.217.119.138`, ssh 2222 (`oguzhan`, parolasız sudo) | Kullanıcının fizik tedavi siteleri — TeksERP için **KULLANILMAZ** (kullanıcı kararı 2026-10-08) | TeksERP kalıntıları 2026-10-15'te KALDIRILDI (aşağıda §fzt; yalnız Origin sertifikası + Mac anahtarı kaldı), eski demo yok; fizik tedavi sitelerine ASLA dokunulmaz |
 | **Bulut deneme sunucusu** | `213.142.134.226` (`ssh tekserp-bulut-deneme`) | Bulut kurulumu provası + Play inceleme kurulumu + yeni satış demosu | Ubuntu 24.04 · ssh 2222 yalnız anahtar · ufw yalnız 2222 · fail2ban · 2026-10-10'dan beri backend 2.15.1 GÜNCELLEYİCİLİ düzende (`/opt/tekserp/ders`, `current` → `surumler/2.15.1`, hizmet `tekserp-guncelleyici` 0.2.4 — 2026-10-10 kendini yeniledi, `ayar.json` sunucusu `https://indir.etkiliyazilim.com`, kira birimden; backend 2.15.2 denemesi YEDEK adımında geri döndü, kurulu 2.15.1 — `LINUX-DOCKER-KURULUM.md` §11.1 uygulama kaydı) |
 
 > ⚠️ Çok müşteri notu — bu tablo **fabrika başına bir satır** taşımalıdır (`Fabrika sunucusu — <müşteri kodu>`), çünkü her kurulumun kendi LAN'ı, kendi tünel hostname'i (`<musteri>-erp.etkiliyazilim.com`), kendi yedek kullanıcısı (`fab-<müşteri>`) ve kendi yayın klasörü (`/<müşteri>/electron`, `/<müşteri>/mobil`) vardır. Aşağıdaki "Fabrika sunucusu — ağ / servisler" bölümleri **her fabrika için aynı şablondur** (4000 LAN · 4001 yalnız 127.0.0.1 · 5432 yerel) — şablon çekirdektir, satırlar müşteri başına çoğalır.
@@ -20,24 +20,27 @@
 ⚠️ **fzt paylaşımlıdır ve TeksERP'in değildir:** kullanıcının fizik tedavi siteleri
 (WordPress, fizyoterapist uygulaması, posta sunucusu) ile ortak `postgres`, `mariadb`,
 `redis` ve Traefik orada koşar. TeksERP oraya yeni bir şey KURMAZ; eski satış demosu
-`demo.etkiliyazilim.com` kaldırılır, yeni demo bulut deneme sunucusuna temiz kurulur
-(kullanıcı kararı 2026-10-08).
+`demo.etkiliyazilim.com` 2026-10-15'te kaldırıldı, yeni demo bulut deneme sunucusuna temiz kurulur
+(kullanıcı kararı 2026-10-08; henüz kurulmadı).
 
 ---
 
-## fzt — TeksERP kalıntıları (salt okuma, 2026-10-08)
+## fzt — TeksERP kalıntıları (envanter 2026-10-08 · temizlik 2026-10-15)
 
 Erişim: `ssh -p 2222 oguzhan@91.217.119.138` (`~/.ssh/config`te takma ad yok). Ortak bileşenler
-SİLİNMEZ; yalnız aşağıdaki TeksERP kalemleri çıkarılır.
+SİLİNMEZ. Kullanıcı kararıyla (2026-10-15) TeksERP kalemleri, yeni demo kurulmadan kaldırıldı.
 
-| Kalem | Ne | Not |
+| Kalem | Ne | Durum |
 |---|---|---|
-| `tekserp-demo` konteyneri + `tekserp-demo:latest`, `:pre-upgrade-20260901`, `:cache-warm` imajları | Satış demosu (Traefik `Host(demo.etkiliyazilim.com)`) | compose `/opt/stack/apps/tekserp-demo` (74 MB; `backups/` 11 MB, uygulamanın kendi gece dökümü) |
-| `tekserp-guncelleme` konteyneri (`nginx:alpine`) | Eski güncelleme yayını kopyası (`guncelleme` DNS'i 2026-09-01'den beri VDS'te) | `/opt/stack/apps/tekserp-guncelleme` 356 MB |
-| `/opt/stack/apps/etkiliyazilim-demo` | Konteyneri olmayan eski yer tutucu (20 KB) | — |
-| `tekserp_demo` veritabanı (28 MB) + `tekserp` rolü | Ortak `postgres` konteynerinde | `fizyodb`/`fizyo` aynı sunucuda — dokunulmaz |
-| `/opt/stack/traefik/certs/etkiliyazilim.*` + `dynamic/tls.yml` | `*.etkiliyazilim.com` Cloudflare Origin sertifikası (2041) | Yalnız etkiliyazilim adları kullanır; en son ve isteğe bağlı |
-| `authorized_keys` satırı `oguzhandemirc@icloud.com` | "GEÇİCİ: demo işi bitince kaldır" yorumlu Mac anahtarı | Mac'in tek erişim anahtarı; kullanıcı kararıyla en son |
+| `tekserp-demo` konteyneri + `tekserp-demo:latest`, `:pre-upgrade-20260901`, `:cache-warm` imajları | Satış demosu (Traefik `Host(demo.etkiliyazilim.com)`) | **KALDIRILDI** 2026-10-15 (compose `/opt/stack/apps/tekserp-demo` dahil) |
+| `tekserp-guncelleme` konteyneri (`nginx:alpine`) | Eski güncelleme yayını kopyası (`guncelleme` DNS'i 2026-09-01'den beri VDS'te) | **KALDIRILDI** 2026-10-15 (`/opt/stack/apps/tekserp-guncelleme` dahil) |
+| `/opt/stack/apps/etkiliyazilim-demo` | Konteyneri olmayan eski yer tutucu | **KALDIRILDI** 2026-10-15 |
+| `tekserp_demo` veritabanı + `tekserp` rolü | Ortak `postgres` konteynerinde | **KALDIRILDI** 2026-10-15; son döküm Mac'te `~/.tekserp/arsiv/fzt-demo-20261015/tekserp_demo.dump` (121 tablo). `fizyodb`/`fizyo` dokunulmadı |
+| `/opt/stack/traefik/certs/etkiliyazilim.*` + `dynamic/tls.yml` | `*.etkiliyazilim.com` Cloudflare Origin sertifikası (2041) | **KALDI** (kullanıcı kararı 2026-10-15) |
+| `authorized_keys` satırı `oguzhandemirc@icloud.com` | "GEÇİCİ: demo işi bitince kaldır" yorumlu Mac anahtarı | **KALDI** (kullanıcı kararı 2026-10-15; Mac'in tek erişim anahtarı) |
+
+Cloudflare: `demo.etkiliyazilim.com` A kaydı (→ `91.217.119.138`) 2026-10-15'te SİLİNDİ; `demo` adı
+şu an hiçbir yere çözülmüyor. Yeni satış demosu henüz kurulmadı.
 
 Ortak (silinmez): `postgres`, `traefik` + `docker-socket-proxy`, `web`/`backend` ağları,
 `node:22-bookworm-slim` ve `nginx:alpine` imajları (komşular da kullanır), `stack-backup.timer`
@@ -239,5 +242,5 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 - [ ] Fabrika sunucusundan tekserp-vds'e yedek (`YEDEK-VPS-KURULUM.md` §B) — SAHINSRV'de
       rclone VAR ama hedefi Google Drive (`gdrive`); VDS'e gelen yedek ölçülmedi
 - [ ] Geri yükleme provası
-- [ ] fzt'den TeksERP kalıntılarını kaldır (demo + eski yayın kopyası + `tekserp_demo`; §fzt) — yeni demo bulut deneme sunucusuna kurulduktan ve `demo` DNS'i oraya çevrildikten sonra
+- [x] fzt'den TeksERP kalıntılarını kaldır (demo + eski yayın kopyası + `tekserp_demo`; §fzt) — yapıldı 2026-10-15; yeni demo kurulmadan yapıldı (kullanıcı kararı), `demo` DNS kaydı silindi
 - [ ] **Kod imzalama** — taşıma ihtimali düşürür, imza sonucu ortadan kaldırır
