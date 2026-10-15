@@ -11,7 +11,8 @@
 // kümeyle ESLESMEDI (kopyalanan LICENSE_DIR) → uyarı, ikinci pencerede red; satıcı uyarıyı kapatıp
 // kümeyi kabul edince (meşru donanım değişimi) kira döner · ardışık "yakala" → ayırt edilemeyen
 // kopya uyarısı (yalnız uyarı) · D2s: sunulan kira bu kurulumun kira defterinde yoksa YABANCI_KIRA, raporlanan
-// kip elindeki kiranın zorlamasıyla uyuşmuyorsa KIP_UYUSMAZ — ikisi de yalnız uyarı, kira yine verilir.
+// kip elindeki kiranın zorlaması ∨ HAK alt sınırıyla uyuşmuyorsa KIP_UYUSMAZ (`hak: null` → kiranın bağlı HAK sürümü §8g–§8i) —
+// ikisi de yalnız uyarı, kira yine verilir.
 // Lisans v2 (L2-4): §9 K6 kapanış kirası — çatalın ikinci penceresinde kapanış kirasını anlayan (`odenmis-tarih`)
 // eşleşmeyen tarafa 403 yerine İMZALI K3 (çapa = olayın ilk kapanış kirası + ek süre; tekrar yoklamada AYNI kira, yeni
 // yaptırımda yeni kira ama AYNI tarih; uç ilerlemez) · §10 taşınmış anahtar ve iptal kurulum kapanışı (olay geç fark
@@ -71,8 +72,8 @@ async function main(): Promise<void> {
   const fpB = digestFingerprint({ ...HAM_PARMAK_IZI, f2: "11111111-2222-3333-4444-555555555555", f3: "KLONDISK0001" }, f.tuz);
   const fpC = digestFingerprint({ ...HAM_PARMAK_IZI, f1: "{0a0b0c0d-0e0f-4a4b-9c9d-0e0f0a0b0c0d}", f2: "99999999-8888-7777-6666-555555555555", f3: "BASKADISK77" }, f.tuz);
 
-  const etkinlestir = async (anahtar: TestAnahtari) => {
-    const k = await kurulumFiksturu(ctx);
+  const etkinlestir = async (anahtar: TestAnahtari, secenek: Parameters<typeof kurulumFiksturu>[1] = {}) => {
+    const k = await kurulumFiksturu(ctx, secenek);
     temizlenecek.push(k.kurulumDbId);
     const y = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, {
       kurulumId: k.kurulumId,
@@ -485,6 +486,39 @@ async function main(): Promise<void> {
     const w3y = await kipli(kiraOf(w2y)!.kiraId, "gozlem");
     kontrol("§8f elindeki kira ZORLA iken 'gozlem' raporu (kira/durum silinip varsayılana dönülmüş) → KIP_UYUSMAZ, kira yine verilir", w3y.status === 200 && (await acikKip()) === 1, `${w3y.status} açık=${await acikKip()}`);
     void w0;
+    // G3 (üretim 2026-10-15): alt sınırı `zorla` HAK'lı yeni kurulum, etkinleştirmenin hemen ardından `hak: null` ile
+    // 'zorla' bildirdi; beklenen kip yalnız bildirilen HAK'tan okunduğu için KIP_UYUSMAZ + kopya şüphesi doğdu.
+    const anahtar6 = kurulumAnahtariUret();
+    const { k: k6, t0: z0 } = await etkinlestir(anahtar6, { kipAltSiniriZorla: true });
+    const kip6 = (sonKiraId: string, kip: "gozlem" | "zorla", hak: { hakId: string; surum: number; ozet?: string } | null) => {
+      const govde = yoklamaGovdesi({ sonKiraId, parmakIzi: fpA, hak });
+      return imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: k6.kurulumId, amac: "yokla", anahtar: anahtar6, govde: { ...govde, durum: { ...govde.durum, kip } } });
+    };
+    const uyari6 = (tur: "KIP_UYUSMAZ" | "YABANCI_HAK") => prisma.kopyaUyarisi.count({ where: { kurulumId: k6.kurulumDbId, tur, durum: "ACIK" } });
+    const zorlama6 = (await prisma.kurulum.findUniqueOrThrow({ where: { id: k6.kurulumDbId } })).zorlama;
+    const z1y = await kip6(z0, "zorla", null);
+    kontrol(
+      "§8g ⭐ alt sınırı zorla HAK'lı kurulum (kira zorlaması kapalı) etkinleştirme kirasıyla `hak: null` + 'zorla' yoklar → KIP_UYUSMAZ DOĞMAZ",
+      !zorlama6 && z1y.status === 200 && (await uyari6("KIP_UYUSMAZ")) === 0,
+      `zorlama=${zorlama6} ${z1y.status} açık=${await uyari6("KIP_UYUSMAZ")}`,
+    );
+    // Her durum kendi uyarısını ölçer: öncekinin açık bıraktığı uyarı sonrakini maskelemesin.
+    const kapat6 = () => prisma.kopyaUyarisi.updateMany({ where: { kurulumId: k6.kurulumDbId, tur: "KIP_UYUSMAZ" }, data: { durum: "KAPANDI", kapanisZamani: new Date(), kapatan: "bekci" } });
+    await kapat6();
+    const surum6 = await prisma.hakSurumu.findFirstOrThrow({ where: { hakId: k6.hakId }, orderBy: { surum: "desc" } });
+    const z2y = await kip6(kiraOf(z1y)!.kiraId, "zorla", { hakId: k6.hakId, surum: surum6.surum, ozet: jwsDigest(surum6.belge) });
+    kontrol(
+      "§8h ✓K aynı kurulum elindeki HAK'ı doğru bildirip 'zorla' yoklar → KIP_UYUSMAZ ve YABANCI_HAK yok",
+      z2y.status === 200 && (await uyari6("KIP_UYUSMAZ")) === 0 && (await uyari6("YABANCI_HAK")) === 0,
+      `${z2y.status} kip=${await uyari6("KIP_UYUSMAZ")} hak=${await uyari6("YABANCI_HAK")}`,
+    );
+    await kapat6();
+    const z3y = await kip6(kiraOf(z2y)!.kiraId, "gozlem", null);
+    kontrol(
+      "§8i alt sınırlı HAK'ı teslim edilmiş kurulum `hak: null` + 'gozlem' (HAK ve pin silinmiş) → KIP_UYUSMAZ, kira yine verilir",
+      z3y.status === 200 && (await uyari6("KIP_UYUSMAZ")) === 1,
+      `${z3y.status} açık=${await uyari6("KIP_UYUSMAZ")}`,
+    );
 
     await kapanisKopya();
     await kapanisTasimaIptal();

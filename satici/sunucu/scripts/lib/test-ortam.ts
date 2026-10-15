@@ -245,7 +245,7 @@ export async function kanalFiksturu(kod: string): Promise<string> {
 
 export async function kurulumFiksturu(
   ctx: VendorContext,
-  g: { sinif?: LicenseClass; kanal?: string; moduller?: string[]; tesisId?: string; musteriId?: string; ilkImzaParolasi?: string } = {},
+  g: { sinif?: LicenseClass; kanal?: string; moduller?: string[]; tesisId?: string; musteriId?: string; ilkImzaParolasi?: string; kipAltSiniriZorla?: boolean } = {},
 ): Promise<KurulumFiksturu> {
   const svc = await import("../../src/services/entitlement.service");
   const musteriId = g.musteriId ?? (await svc.createCustomer({ name: `Bekçi Tekstil ${randomUUID().slice(0, 8)}`, actor: "bekci" })).id;
@@ -263,6 +263,8 @@ export async function kurulumFiksturu(
     maintenanceUntil: new Date(Date.now() + 365 * DAY_MS),
     // Bitişi zorunlu sınıf (DEMO — K5) bitişsiz doğamaz.
     ...(svc.isValidityEndRequired(kurulum.sinif) ? { validUntil: new Date(Date.now() + 30 * DAY_MS) } : {}),
+    // Portalın G3 varsayılanı (`kipAltSiniri: "zorla"`) yalnız isteyen bekçide; servis varsayılanı eski davranış.
+    ...(g.kipAltSiniriZorla === undefined ? {} : { modeFloorEnforce: g.kipAltSiniriZorla }),
     actor: "bekci",
   });
   // Varsayılan v1 kökle (eski derleme düzeni): `capabilities: []` beklenen yeteneği (ETKINLESMEDI → ara) bilerek ezer.

@@ -26,7 +26,7 @@ import {
   licenseResponse,
   type DeliveredEntitlement,
 } from "./lease.service";
-import { capabilityDowngradeRefusal, heldFloorEnforces, holdForRootSignatureTx, leaseUnbindable } from "./lease-binding";
+import { capabilityDowngradeRefusal, expectedFloorEnforces, holdForRootSignatureTx, leaseUnbindable } from "./lease-binding";
 import { isForeignEntitlement, type PollV2Report } from "./local-intervention";
 import { applyOwnerReportTx } from "./poll-report";
 
@@ -148,7 +148,8 @@ async function renewInTx(tx: Tx, ctx: VendorContext, g: RenewInput): Promise<Ren
   }
   if (g.telemetry) {
     // Fabrikanın kipi = HAK alt sınırı ∨ kira zorlaması (computeMode): alt sınırlı HAK'la gelen `zorla` uyuşmazlık değildir.
-    const expected = (await heldFloorEnforces(tx, g.clientEntitlement)) || (presented ? leaseEnforcement(presented.belge) : inst.zorlama);
+    // HAK'ını bildirmeyen fabrikada alt sınır kiranın bağlı sürümünden (defter tek kaynak; `hak: null` yanlış alarm doğurmaz).
+    const expected = (await expectedFloorEnforces(tx, { installationDbId: inst.id, held: g.clientEntitlement, lease: presented ?? tipRow })) || (presented ? leaseEnforcement(presented.belge) : inst.zorlama);
     if (expected !== null && (g.telemetry.durum.kip === "zorla") !== expected) {
       await upsertCopyAlert(tx, inst.id, "KIP_UYUSMAZ", { owner: accepted, other: measured }, g.nowMs);
     }

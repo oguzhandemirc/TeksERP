@@ -59,10 +59,26 @@ export async function assertBindableBeforeLease(g: {
   throw (g.refusal ?? capabilityDowngradeRefusal)();
 }
 
-/** Fabrikanın elindeki HAK sürümünün kip alt sınırı `zorla` mı (yalnız uyarı girdisi; belge bizim DB'mizden). */
-export async function heldFloorEnforces(tx: Tx, held: { readonly hakId: string; readonly surum: number } | null): Promise<boolean> {
-  if (!held) return false;
-  const row = await tx.hakSurumu.findFirst({ where: { hakId: held.hakId, surum: held.surum }, select: { belge: true } });
+/** Bu kurulumun defterindeki HAK sürümünün kip alt sınırı `zorla` mı (belge bizim DB'mizden; başka kurulumun HAK'ı sayılmaz). */
+async function versionFloorEnforces(tx: Tx, installationDbId: string, v: { readonly hakId: string; readonly surum: number }): Promise<boolean> {
+  const row = await tx.hakSurumu.findFirst({ where: { hakId: v.hakId, surum: v.surum, hak: { kurulumId: installationDbId } }, select: { belge: true } });
   const parsed = row ? parseJws(row.belge) : null;
   return parsed?.ok === true && (parsed.value.payload as { kipAltSiniri?: unknown }).kipAltSiniri === "zorla";
+}
+
+/**
+ * KIP_UYUSMAZ beklentisinin HAK yarısı — fabrikanın kipi = HAK alt sınırı ∨ kira zorlaması. Elindeki HAK'ı bildirdiyse o
+ * sürüm; bildirmediyse (`hak: null` — HAK doğrulanamadıysa fabrika durum kaydındaki HAK pininin alt sınırıyla yine `zorla`dır)
+ * defterimizde kiranın BAĞLI olduğu, onunla teslim ettiğimiz sürüm. Yalnız uyarı girdisi; kira yolunu değiştirmez.
+ */
+export async function expectedFloorEnforces(
+  tx: Tx,
+  g: {
+    readonly installationDbId: string;
+    readonly held: { readonly hakId: string; readonly surum: number } | null;
+    readonly lease: { readonly hakId: string; readonly hakSurum: number } | null;
+  },
+): Promise<boolean> {
+  if (g.held) return versionFloorEnforces(tx, g.installationDbId, g.held);
+  return g.lease ? versionFloorEnforces(tx, g.installationDbId, { hakId: g.lease.hakId, surum: g.lease.hakSurum }) : false;
 }
