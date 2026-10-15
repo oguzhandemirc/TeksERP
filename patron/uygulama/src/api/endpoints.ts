@@ -8,6 +8,7 @@ import type {
   CustomerMessageBody,
   ExportFormat,
   ExportManifest,
+  FacilityChoice,
   FacilityStatus,
   InboxItemKind,
   InboxItem,
@@ -35,8 +36,11 @@ export const ENDPOINTS = {
   inviteInspect: ["post", "/davet/incele"],
   inviteAccept: ["post", "/davet/kabul"],
   inviteConfirm: ["post", "/davet/onay"],
+  inviteLink: ["post", "/davet/bagla"],
   session: ["get", "/oturum"],
   logout: ["post", "/oturum/kapat"],
+  facilities: ["get", "/oturum/tesisler"],
+  switchFacility: ["post", "/oturum/gecis"],
   changePassword: ["post", "/oturum/parola"],
   permissions: ["get", "/izinler"],
   list: ["get", "/veri/:projeksiyon"],
@@ -91,12 +95,17 @@ export interface ListParams {
 export function createApi(c: ApiClient) {
   const q = (p: ListParams): Query => ({ imlec: p.imlec, limit: p.limit, durum: p.durum, cariKartId: p.cariKartId, ara: p.ara, suzgec: p.suzgec });
   return {
-    login: (b: { eposta: string; parola: string; totp: string; istemci?: "mobil" | "web" }) => c.post<LoginResponse>(pathOf("login"), b),
+    login: (b: { eposta: string; parola: string; totp: string; istemci?: "mobil" | "web"; tesisId?: string }) => c.post<LoginResponse>(pathOf("login"), b),
     inviteInspect: (davet: string) => c.post<InviteInfo>(pathOf("inviteInspect"), { davet }),
     inviteAccept: (davet: string, parola: string) => c.post<InviteAccepted>(pathOf("inviteAccept"), { davet, parola }),
     inviteConfirm: (davet: string, totp: string) => c.post<InviteConfirmed>(pathOf("inviteConfirm"), { davet, totp }),
+    /** Mevcut bulut kimliğini davetin tesisine bağlar (yeni hesap açmaz). */
+    inviteLink: (b: { davet: string; eposta: string; parola: string; totp: string }) => c.post<InviteConfirmed>(pathOf("inviteLink"), b),
     session: () => c.get<FacilityStatus>(pathOf("session")),
-    logout: () => c.post<null>(pathOf("logout"), {}),
+    logout: (b: { hepsi?: boolean } = {}) => c.post<null>(pathOf("logout"), b),
+    facilities: () => c.get<FacilityChoice[]>(pathOf("facilities")),
+    /** Yeni belirteç döner; eski oturum sunucuda kapanır. Ret: 403 `TESIS_GECISI_YOK`. */
+    switchFacility: (tesisId: string) => c.post<LoginResponse>(pathOf("switchFacility"), { tesisId }),
     changePassword: (b: { mevcutParola: string; yeniParola: string; totp: string }) => c.post<null>(pathOf("changePassword"), b),
     permissions: () => c.get<PermissionCatalog>(pathOf("permissions")),
     list: (projeksiyon: string, p: ListParams = {}) => c.get<Page<ProjectionRecord>>(pathOf("list", { projeksiyon }), q(p)),

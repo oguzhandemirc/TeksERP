@@ -1,12 +1,13 @@
 // Çerçeve: telefonda üst şerit + tek sütun; tablet/web'de (≥ 768) solda kalıcı menü + içerik.
 // Menü yalnız izinli bölümleri gösterir (karar yine sunucuda; izinsiz uç 403 döner).
 import { usePathname, useRouter } from "expo-router";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { moduleVisible, visibleModules, type ModuleKey } from "../lib/access";
 import { useSession } from "../state/session";
 import { StatusBands } from "./data";
+import { FacilitySwitchModal } from "./FacilitySwitcher";
 import { Banner } from "./kit";
 import { TOUCH, WIDE_MIN, color, space } from "./theme";
 
@@ -15,9 +16,21 @@ export function useWide(): boolean {
 }
 
 export function FacilityName() {
-  const { facility } = useSession();
+  const { facility, facilities } = useSession();
+  const [open, setOpen] = useState(false);
   // Firma adı KODDA yok: hesabın tesisinden gelir; yoksa nötr ad.
-  return <Text style={{ fontSize: 18, fontWeight: "700", color: color.text }} numberOfLines={1}>{facility?.tesis.ad ?? "TeksERP Patron"}</Text>;
+  const name = <Text style={{ fontSize: 18, fontWeight: "700", color: color.text, flexShrink: 1 }} numberOfLines={1}>{facility?.tesis.ad ?? "TeksERP Patron"}</Text>;
+  if (facilities.length < 2) return name;
+  return (
+    <>
+      <Pressable accessibilityRole="button" accessibilityLabel="Fabrika değiştir" testID="tesis-secici" onPress={() => setOpen(true)}
+        style={{ minHeight: TOUCH, flexDirection: "row", alignItems: "center", gap: space.s }}>
+        {name}
+        <Text style={{ fontSize: 13, color: color.primary }}>⇄ değiştir</Text>
+      </Pressable>
+      <FacilitySwitchModal visible={open} onClose={() => setOpen(false)} />
+    </>
+  );
 }
 
 export function SideNav() {
@@ -45,7 +58,7 @@ export function Screen({ title, module, children, back }: { title: string; modul
   const wide = useWide();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { permissions } = useSession();
+  const { permissions, switchError } = useSession();
   const allowed = module === undefined || moduleVisible(permissions, module);
   const showBack = !wide && (back ?? title !== "Pano");
   return (
@@ -60,6 +73,7 @@ export function Screen({ title, module, children, back }: { title: string; modul
       </View>
       <ScrollView contentContainerStyle={{ padding: space.l, paddingBottom: insets.bottom + space.xl, maxWidth: 960, width: "100%", alignSelf: "center" }}>
         <StatusBands />
+        {switchError ? <Banner tone="error" text={switchError} testID="bant-tesis-gecisi" /> : null}
         {allowed ? children : <Banner tone="error" text="Bu bölümü görme yetkiniz yok" />}
       </ScrollView>
     </View>
