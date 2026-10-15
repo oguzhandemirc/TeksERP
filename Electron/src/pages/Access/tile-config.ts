@@ -63,7 +63,7 @@ export const accessTiles: AccessTile[] = [
   {
     // Bulut hesapları bulutta yönetilir; burada teknik kullanıcı doğar ve hesaplar salt okunur görünür.
     key: "patron-bulut",
-    title: "Patron Bulutu",
+    title: "Yönetim Bulutu",
     description: "Buluttan gelen sipariş/cari kaydının kullanıcısı ve bulut hesapları",
     icon: CloudCog,
     to: "/access/patron-bulut",
