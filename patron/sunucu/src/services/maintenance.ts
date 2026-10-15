@@ -2,8 +2,8 @@
 // DB'leri), her satır işi o tesisin DB'sinde ve kiracı kapsamında (RLS) koşar; bir tesisin hatası ötekini durdurmaz.
 //   · Tik: süresi dolan claim'ler — gelen kutusu ISLENIYOR → BEKLIYOR (fabrikanın makbuzu tekrarı
 //     idempotent kılar); rapor HESAPLANIYOR → BEKLIYOR (bir kez), ikincide HATA `ZAMAN_ASIMI`; hizmet
-//     bitiş damgası (`service-lifecycle.ts`); kapanıştan 30 gün geçen hesabın kimlik silmesi; 30 günü dolan
-//     giriş olayının IP alanı (`AGED_FIELDS`).
+//     bitiş damgası (`service-lifecycle.ts`); kapanıştan 30 gün geçen hesabın kimlik silmesi; merkez kimliğinin
+//     kapanışı (bağlı üyeliği kalmayınca) ve 30 gün sonra silmesi; 30 günü dolan giriş olayının IP alanı (`AGED_FIELDS`).
 //   · Günlük: SAKLAMA (tesis başına 3 · 13 · 25 ay · tümü) + telemetri/ayak izi budaması.
 // Hard delete YALNIZ burada ve YALNIZ `PRUNED_TABLES` beyanındaki tablolarda (bekçi
 // `test_patron_kapilari` ölçer). Budanan hiçbir satır fabrikanın defteri değildir: bulut okuma
@@ -15,6 +15,7 @@ import { recordAudit } from "../lib/audit";
 import type { Tx } from "../lib/db";
 import { listReadyFacilities, withCentral, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
+import { closeAndPurgeIdentities } from "./identity-purge";
 import { refreshAllServiceEnds } from "./service-lifecycle";
 
 /** Yaşa göre hard delete izni olan tablolar (beyan) → gerekçe. Başka her silme yasak. */
@@ -31,7 +32,7 @@ export const PRUNED_TABLES = {
   operation_receipts: "ISLEM_SAKLAMA_GUN (işlem kimliği penceresi)",
   account_audit: "ayak izi: başarısız giriş DENETIM_GIRIS_SAKLAMA_GUN · diğerleri DENETIM_SAKLAMA_GUN",
   notifications: "sonuçlanmış (GONDERILDI · BASARISIZ · ATLANDI) + BILDIRIM_SAKLAMA_GUN (telemetri; olay kimliği günlük/olay başına, pencere ondan uzun)",
-  login_routes: "merkez giriş dizini: hedef hesap kendi tesis DB'sinde artık ETKİN değil (yönlendirme önbelleği, kişisel veri taşımaz)",
+  login_routes: "merkez giriş dizini: hedef hesap kendi tesis DB'sinde artık ETKİN değil (yönlendirme önbelleği, kişisel veri taşımaz) · kimliği silinen (kapanıştan IDENTITY_PURGE_DAYS sonra) merkez kimliğin bütün üyelikleri",
 } as const;
 
 const DAY_MS = 86_400_000;
@@ -59,7 +60,7 @@ export const IP_RETENTION_DAYS = 30;
 /** Silinmiş hesabın gösterim adı ve e-postası (`.invalid` ayrılmış TLD: gerçek adres olamaz; tekillik kimlikten). */
 export const tombstoneName = (accountId: string): string => `Silinmiş hesap #${accountId.slice(0, 8)}`;
 export const tombstoneEmail = (accountId: string): string => `silinmis-${accountId}@hesap.invalid`;
-const FAILED_LOGIN_EVENTS = ["GIRIS_BASARISIZ", "GIRIS_REDDEDILDI", "HESAP_GECICI_KILIT"];
+const FAILED_LOGIN_EVENTS = ["GIRIS_BASARISIZ", "GIRIS_REDDEDILDI", "HESAP_GECICI_KILIT", "DAVET_BAGLAMA_REDDEDILDI"];
 
 /**
  * İşlem makbuzu yanıtındaki silinen hesabın kimlik alanları → tombstone: hesap görünümü (`id` = hesap → `ad` ·
@@ -277,6 +278,11 @@ export async function purgeClosedIdentities(ctx: CloudContext, tesisId: string, 
   return purged.length;
 }
 
+// ---------------------------------------------------------------- tik: merkez kimliği (tek kimlik, çok tesis)
+
+/** Merkez kimliğinin kapanışı + kapanıştan IDENTITY_PURGE_DAYS sonra silmesi (`identity-purge.ts`; süre buradan). */
+export const purgeCentralIdentities = (ctx: CloudContext, nowMs: number) => closeAndPurgeIdentities(ctx, nowMs, IDENTITY_PURGE_DAYS);
+
 /** Tik: 30 günü dolan giriş olaylarından IP alanı çıkarılır (tesis kapsamında; yalnız `ip` anahtarı). */
 export async function stripAgedIps(ctx: CloudContext, tesisId: string, nowMs: number): Promise<number> {
   const cutoff = new Date(nowMs - IP_RETENTION_DAYS * DAY_MS);
@@ -340,6 +346,11 @@ export class MaintenanceScheduler {
         await perFacility(f.tesisId, "IP alanı", () => stripAgedIps(this.ctx, f.tesisId, nowMs));
       }
       if (purged > 0) console.log(`[patron] bakım: ${purged} kapanmış hesabın kimliği silindi (Ek-6/A §2.5)`);
+      const central = await purgeCentralIdentities(this.ctx, nowMs).catch((err: Error) => {
+        console.error(`[patron] bakım (merkez kimlik): ${(err as { code?: string }).code ?? err.message}`);
+        return { closed: 0, purged: 0 };
+      });
+      if (central.purged > 0) console.log(`[patron] bakım: ${central.purged} merkez kimliği silindi (kapanıştan ${IDENTITY_PURGE_DAYS} gün)`);
       const day = new Date(nowMs).toISOString().slice(0, 10);
       if (this.lastDailyDay !== day) {
         const n = await runDaily(this.ctx, nowMs);

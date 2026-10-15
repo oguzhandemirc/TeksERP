@@ -14,6 +14,8 @@ export interface PushMessage {
   readonly title: string;
   readonly body: string;
   readonly route: string | null;
+  /** Bildirimin tesisi: çok tesisli kimlikte dokunuş önce bu tesise geçer (yük `data.tesisId`). */
+  readonly tesisId: string;
 }
 
 export interface PushTarget {
@@ -77,7 +79,7 @@ export class ExpoTransport implements PushTransport {
 
   async send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
     const headers = this.headers();
-    const payload = { to: target.token, title: msg.title, body: msg.body, sound: "default", priority: "high", data: { bildirimId: msg.id, rota: msg.route } };
+    const payload = { to: target.token, title: msg.title, body: msg.body, sound: "default", priority: "high", data: { bildirimId: msg.id, rota: msg.route, tesisId: msg.tesisId } };
     let res: Response;
     try {
       res = await this.fetchImpl(this.config.EXPO_PUSH_URL, { method: "POST", headers, body: JSON.stringify([payload]), signal: AbortSignal.timeout(10_000) });
@@ -118,6 +120,9 @@ export class ExpoTransport implements PushTransport {
   }
 }
 
+/** Web push gövdesi (servis işçisi okur): başlık · metin · bildirim kimliği · rota · tesis. */
+export const webPushPayload = (msg: PushMessage): string => JSON.stringify({ baslik: msg.title, metin: msg.body, bildirimId: msg.id, rota: msg.route, tesisId: msg.tesisId });
+
 /** Web push (VAPID). Abonelik ucu gönderimde YENİDEN doğrulanır (izinli servis dışı → KALICI, istek atılmaz). */
 export class WebPushTransport implements PushTransport {
   constructor(
@@ -128,7 +133,7 @@ export class WebPushTransport implements PushTransport {
   async send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
     const sub = parseWebSubscription(target.token);
     if (!sub) return { kind: "GECERSIZ_CIHAZ", code: "ABONELIK_BICIMSIZ" };
-    const payload = JSON.stringify({ baslik: msg.title, metin: msg.body, bildirimId: msg.id, rota: msg.route });
+    const payload = webPushPayload(msg);
     try {
       await webpush.sendNotification(sub, payload, { vapidDetails: this.vapid.details(this.subject), TTL: 86_400, urgency: "high", timeout: 10_000 });
       return { kind: "OK" };

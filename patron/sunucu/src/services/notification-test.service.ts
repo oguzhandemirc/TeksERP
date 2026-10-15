@@ -35,7 +35,7 @@ export async function sendTestNotification(ctx: CloudContext, s: SessionContext)
   if (devices.length === 0) throw stateConflict("Bu hesaba kayıtlı etkin cihaz yok; önce bu cihazda bildirimleri açın", { neden: "CIHAZ_YOK" });
   if (seen.size > 10_000) for (const [k, v] of seen) if (nowMs - v >= TEST_INTERVAL_MS) seen.delete(k);
   seen.set(s.accountId, nowMs);
-  const msg = { id: randomUUID(), title: "Deneme bildirimi", body: "Bildirimler bu cihaza ulaşıyor.", route: null };
+  const msg = { id: randomUUID(), title: "Deneme bildirimi", body: "Bildirimler bu cihaza ulaşıyor.", route: null, tesisId: s.tesisId };
   const results: { id: string; ad: string | null; platform: string; outcome: PushOutcome }[] = [];
   for (const d of devices) {
     let outcome: PushOutcome;

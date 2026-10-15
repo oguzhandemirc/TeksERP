@@ -1,4 +1,5 @@
-// Bildirime dokununca ilgili ekran — yalnız iOS/Android (web'de service worker pencereyi açar). Yol bildirimin
+// Bildirime dokununca ilgili ekran. iOS/Android'de dinleyici; web'de service worker pencereyi `?tesis=` ile açar,
+// uygulama adresten okuyup aynı akıştan geçirir (`webTapFromUrl`). Yol bildirimin
 // verisinden gelir ve `safeRoute`tan geçer: uygulamanın kendi ekranı değilse hiçbir yere gidilmez. Bildirim başka
 // tesise aitse (`data.tesisId`) önce o tesise geçilir; geçiş reddedilirse yol AÇILMAZ (ileti oturumdan gösterilir).
 import * as Notifications from "expo-notifications";
@@ -32,12 +33,35 @@ export async function openNotification(data: unknown, d: TapDeps): Promise<boole
   return true;
 }
 
+/** Web: service worker'ın açtığı adresten dokunuş (`?tesis=` yoksa null). Yol `openNotification`da süzülür. */
+export function webTapFromUrl(href: string): { rota: string; tesisId: string } | null {
+  let u: URL;
+  try {
+    u = new URL(href);
+  } catch {
+    return null;
+  }
+  const tesisId = u.searchParams.get("tesis");
+  return tesisId ? { rota: u.pathname, tesisId } : null;
+}
+
 export function useNotificationTaps(enabled: boolean): void {
   const router = useRouter();
   const { facilityId, switchFacility } = useSession();
   // Tesis değişince dinleyici yeniden kurulmasın (son bildirim yeniden açılırdı): güncel değerler ref'te.
   const deps = useRef<TapDeps>({ facilityId, switchFacility, push: (r) => router.push(r as never) });
   deps.current = { facilityId, switchFacility, push: (r) => router.push(r as never) };
+  useEffect(() => {
+    if (!enabled || Platform.OS !== "web" || typeof window === "undefined") return;
+    const tap = webTapFromUrl(window.location.href);
+    if (!tap) return;
+    window.history.replaceState(window.history.state, "", tap.rota);
+    // Sayfa zaten o yolda: geçiş sonrası aynı yola `replace`; geçiş reddedilirse başka tesisin kaydında kalınmaz.
+    const replace = (r: string) => router.replace(r as never);
+    void openNotification(tap, { ...deps.current, push: replace }).then((ok) => {
+      if (!ok) replace("/pano");
+    });
+  }, [enabled]);
   useEffect(() => {
     if (!enabled || Platform.OS === "web") return;
     const open = (r: Notifications.NotificationResponse | null) => {

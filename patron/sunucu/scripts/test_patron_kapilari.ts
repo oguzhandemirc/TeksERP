@@ -6,10 +6,11 @@
 //      (kiracı ayarı + kilit her tx'in İLK ifadesi; başka yol RLS kapsamını atlayamaz)
 //   §3 kapsamsız sorgu yok: istemci (`ctx.app` · `ctx.sync` · `this.db` · `db`) üzerinden doğrudan model
 //      ya da ham sorgu çağrısı YOK — hepsi `withTesis/withLookup/withMaintenanceList` tx'inde
-//   §4 silme beyanı: `src`teki HER silme (`deleteMany`/`.delete(`/`DELETE FROM`) iki beyanlı dosyadan birinde:
-//      `maintenance.ts` (yaşa göre; hedef `PRUNED_TABLES`ta, ölü beyan da KIRMIZI) · `facility-destruction.ts`
-//      (tesis imhası: tesis DB'si bütünüyle düşer, satır silmesi YALNIZ merkezin yönlendirme satırları; tutanak sayım
-//      listesi = TESIS_TABLES − RETAINED_TABLES İKİ YÖNLÜ — yeni tablo tutanaktan kaçamaz)
+//   §4 silme beyanı: `src`teki HER silme (`<herhangi alıcı>.<model>.deleteMany|delete(` — `tx`/`central`/… · `DELETE FROM`)
+//      üç beyanlı dosyadan birinde: `maintenance.ts` (yaşa göre; hedef `PRUNED_TABLES`ta, ölü beyan da KIRMIZI) ·
+//      `facility-destruction.ts` (tesis imhası: tesis DB'si bütünüyle düşer, satır silmesi YALNIZ merkezin yönlendirme
+//      satırları; tutanak sayım listesi = TESIS_TABLES − RETAINED_TABLES İKİ YÖNLÜ — yeni tablo tutanaktan kaçamaz) ·
+//      `auth/membership.ts` (üyelik devri; YALNIZ `login_routes`)
 //   §5 rota tablosu: yöntem+yol tekil · her yazma rotası işlem kimliği ya da GEREKÇELİ muafiyet beyan
 //      eder, her okuma rotası OKUMA · muafiyet gerekçesi boş olamaz
 //   §6 katalog: izin kodları tekil · her okuma izni en az bir projeksiyon/rapor açar · yazma ve
@@ -121,10 +122,12 @@ export function silmeHedefleri(metin: string, modeller: ReadonlyMap<string, stri
   const tablolar = new Set<string>();
   const bilinmeyen: string[] = [];
   const k = kod(metin);
-  for (const m of k.matchAll(/\b(?:tx|db|prisma)\.([a-z][A-Za-z]+)\.(?:deleteMany|delete)\s*\(/g)) {
-    const t = modeller.get(m[1]!);
+  // Alıcı adı serbest (`tx` · `central` · `db` …): adı ne olursa olsun model üzerinden silme yakalanır; model olmayan
+  // ad (Map/Set `.delete(`) yalnız klasik alıcıda (tx|db|prisma) bilinmeyen sayılır.
+  for (const m of k.matchAll(/\b([A-Za-z_]\w*)\.([a-z][A-Za-z]+)\.(?:deleteMany|delete)\s*\(/g)) {
+    const t = modeller.get(m[2]!);
     if (t) tablolar.add(t);
-    else bilinmeyen.push(m[1]!);
+    else if (/^(?:tx|db|prisma)$/.test(m[1]!)) bilinmeyen.push(m[2]!);
   }
   for (const m of k.matchAll(/DELETE\s+FROM\s+"?([a-z_]+)"?/gi)) tablolar.add(m[1]!);
   return { tablolar, bilinmeyen };
@@ -136,8 +139,13 @@ function budama(): void {
   const beyan = new Set(Object.keys(PRUNED_TABLES));
   const bakim = path.join(SRC, "services", "maintenance.ts");
   const imha = path.join(SRC, "services", "facility-destruction.ts");
-  const baskaYer = kaynaklar.filter((f) => f !== bakim && f !== imha && silmeHedefleri(readFileSync(f, "utf8"), modeller).tablolar.size > 0).map(goreli);
-  kontrol("§4a silme YALNIZ services/maintenance.ts ve services/facility-destruction.ts'te", baskaYer.length === 0, baskaYer.join(", ") || "temiz");
+  const uyelik = path.join(SRC, "auth", "membership.ts");
+  const baskaYer = kaynaklar.filter((f) => f !== bakim && f !== imha && f !== uyelik && silmeHedefleri(readFileSync(f, "utf8"), modeller).tablolar.size > 0).map(goreli);
+  kontrol("§4a silme YALNIZ services/maintenance.ts, services/facility-destruction.ts ve auth/membership.ts'te", baskaYer.length === 0, baskaYer.join(", ") || "temiz");
+  const uyelikHedef = silmeHedefleri(readFileSync(uyelik, "utf8"), modeller);
+  kontrol("§4i auth/membership.ts YALNIZ üyelik satırı (`login_routes`) siler", [...uyelikHedef.tablolar].join(",") === "login_routes" && uyelikHedef.bilinmeyen.length === 0, [...uyelikHedef.tablolar].join(",") || "yok");
+  const merkezSonda = silmeHedefleri("await central.loginRoute.deleteMany({}); this.entries.delete(k);", modeller);
+  kontrol("§4j ✓K sonda: merkez tx alıcısıyla (`central.`) silme `login_routes` olarak ısırır · Map `.delete(` susar", merkezSonda.tablolar.has("login_routes") && merkezSonda.tablolar.size === 1 && merkezSonda.bilinmeyen.length === 0);
   const h = silmeHedefleri(readFileSync(bakim, "utf8"), modeller);
   const beyansiz = [...h.tablolar].filter((t) => !beyan.has(t));
   const olu = [...beyan].filter((t) => !h.tablolar.has(t));

@@ -1,6 +1,6 @@
 // =============================================================================
 // TEK KİMLİK → ÇOK TESİS BEKÇİSİ (kullanıcı kararı 2026-10-15), gerçek HTTP. Kimlik K: A ve B'de AKTİF, C'de KİLİTLİ
-// üye; kimlik L yalnız D'de. (İkinci tesise üyelik API'si A2 diliminde; burada üyelik göç rolüyle kurulur.)
+// üye (§1–§4 için göç rolüyle kurulur), §5'te E'ye davetle bağlanır; kimlik L yalnız D'de.
 //   §1 giriş `tesisler` yalnız AKTİF üyelikleri ada göre listeler (KİLİTLİ C yok) · ipucuyla seçilen tesiste oturum ·
 //      üye olunmayan/KİLİTLİ ipucu ada göre ilk tesise düşer · GET /oturum/tesisler aynı liste
 //   §2 geçiş: aynı kimliğin B'sine 200 (yeni belirteç B'de, eski kapanır) · `bitis` eskiyi AŞMAZ · KİLİTLİ C'ye,
@@ -8,14 +8,20 @@
 //   §3 parola değişimi kimliğin BÜTÜN tesislerindeki öteki oturumları kapatır · `hepsi` çıkışı iki tesisi kapatır
 //   §4 bilinmeyen e-posta · yanlış parola · yanlış TOTP · etkin üyeliği olmayan kimlik AYNI 401 (kod + ileti) ·
 //      aynı TOTP kodu ikinci girişte (başka tesis ipucuyla da) RED (merkez adım claim'i)
+//   §5–§9 (`lib/coklu-tesis-ek.ts`): davet "bağla" yolu (incele bayt-eşit · her ret girişle aynı 401 · başarıda E de
+//      listelenir) · paylaşımlı kimlikte tesis yöneticisi sıfırlaması 409, tek üyelikte çalışır · satıcı kimlik
+//      sıfırlaması yalnız zorlamayla ve denetimli, yabancı davet yeniden sırlayamaz · cihaz kaydı bütün AKTİF
+//      üyeliklerde, push yükü tesisi taşır · merkez kimliği bağsız kalınca PASİF, 30 gün sonra sırsız tombstone
 // Koşum: npx tsx scripts/test_coklu_tesis.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { withCentral, withTesis } from "../src/lib/tenant";
-import type { FacilityChoice, LoginResponse } from "../src/wire/api";
+import type { FacilityChoice } from "../src/wire/api";
+import { bagla, cihazlar, giris, idler, kimlikSilme, oturumTesisi, saticiZorlama, sifirlama, veri, type Kurgu } from "./lib/coklu-tesis-ek";
 import { TEST_PAROLASI, api, hesapKur, kontrol, ortamKur, sonuc, temizleTesis, tesisKur, totpKodu, type Ortam, type TestHesabi, type Yanit } from "./lib/test-ortam";
 
 const IZINLER = ["bulut:siparis:oku"];
+const YONETICI = ["bulut:hesap:yonet"];
 
 /** Kimliğin başka tesise üyeliği (göç rolüyle; davetle bağlama A2'de). */
 async function uyeEkle(o: Ortam, tesisId: string, h: TestHesabi, status: "AKTIF" | "KILITLI"): Promise<string> {
@@ -23,30 +29,6 @@ async function uyeEkle(o: Ortam, tesisId: string, h: TestHesabi, status: "AKTIF"
   const hesap = await withTesis(o.goc, { tesisId }, (tx) => tx.account.create({ data: { tesisId, email: h.eposta, name: "Ortak Patron", permissions: IZINLER, status, identityId: kimlik.id } }));
   await withCentral(o.goc, {}, (tx) => tx.loginRoute.create({ data: { identityId: kimlik.id, tesisId, accountId: hesap.id } }));
   return hesap.id;
-}
-
-async function giris(o: Ortam, h: Pick<TestHesabi, "eposta" | "sir">, g: { tesisId?: string; parola?: string; totp?: string; ilerletme?: boolean } = {}): Promise<Yanit> {
-  if (g.ilerletme !== false) o.saat.ilerlet(31_000);
-  const govde = { eposta: h.eposta, parola: g.parola ?? TEST_PAROLASI, totp: g.totp ?? totpKodu(h.sir, o.saat.simdi()), ...(g.tesisId ? { tesisId: g.tesisId } : {}) };
-  return api(o, "POST", "/api/oturum/ac", { govde });
-}
-
-const veri = (r: Yanit): LoginResponse => r.json.data as LoginResponse;
-const idler = (l: readonly FacilityChoice[] | undefined): string => (l ?? []).map((t) => t.id).join(",");
-const oturumTesisi = async (o: Ortam, belirtec: string): Promise<string | number> => {
-  const r = await api(o, "GET", "/api/oturum", { belirtec });
-  return r.status === 200 ? ((r.json.data as { tesis: { id: string } }).tesis.id ?? "") : r.status;
-};
-
-interface Kurgu {
-  readonly a: string;
-  readonly b: string;
-  readonly c: string;
-  readonly d: string;
-  readonly k: TestHesabi;
-  readonly l: TestHesabi;
-  /** §3 parolayı değiştirir; sonraki bölümler yenisiyle girer. */
-  parola: string;
 }
 
 async function listeVeIpucu(o: Ortam, s: Kurgu): Promise<void> {
@@ -144,20 +126,27 @@ async function ayniRet(o: Ortam, s: Kurgu, kilitsiz: TestHesabi): Promise<void> 
 
 async function main(): Promise<void> {
   const o = await ortamKur({ GIRIS_HIZ_DK: "1000", GIRIS_ESIGI: "50" });
-  const tesisler = [await tesisKur(o, { ad: "Bekçi Alfa" }), await tesisKur(o, { ad: "Bekçi Beta" }), await tesisKur(o, { ad: "Bekçi Gama" }), await tesisKur(o, { ad: "Bekçi Delta" })];
-  const [a, b, c, d] = tesisler.map((t) => t.tesisId) as [string, string, string, string];
+  const tesisler = [];
+  for (const ad of ["Bekçi Alfa", "Bekçi Beta", "Bekçi Gama", "Bekçi Delta", "Bekçi Epsilon"]) tesisler.push(await tesisKur(o, { ad }));
+  const [a, b, c, d, e] = tesisler.map((t) => t.tesisId) as [string, string, string, string, string];
   try {
     const k = await hesapKur(o, a, IZINLER);
-    await uyeEkle(o, b, k, "AKTIF");
+    const kB = await uyeEkle(o, b, k, "AKTIF");
     await uyeEkle(o, c, k, "KILITLI");
     const l = await hesapKur(o, d, IZINLER);
     const kilitsiz = await hesapKur(o, d, IZINLER);
     await withTesis(o.goc, { tesisId: d }, (tx) => tx.account.update({ where: { id: kilitsiz.accountId }, data: { status: "KILITLI" } }));
-    const s: Kurgu = { a, b, c, d, k, l, parola: TEST_PAROLASI };
+    const s: Kurgu = { a, b, c, d, e, k, l, kB, yonA: await hesapKur(o, a, YONETICI), yonD: await hesapKur(o, d, YONETICI), parola: TEST_PAROLASI, sir: k.sir };
+    const m = await hesapKur(o, d, IZINLER);
     await listeVeIpucu(o, s);
     await gecis(o, s);
     await kapanislar(o, s);
     await ayniRet(o, s, kilitsiz);
+    await bagla(o, s);
+    await sifirlama(o, s);
+    await saticiZorlama(o, s);
+    await cihazlar(o, s);
+    await kimlikSilme(o, s, m);
   } finally {
     for (const t of tesisler) await temizleTesis(o, t.tesisId);
     await o.kapat();

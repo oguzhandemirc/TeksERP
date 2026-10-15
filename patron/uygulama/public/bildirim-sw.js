@@ -1,5 +1,6 @@
 // Patron uygulaması web bildirimi service worker'ı — push geldiğinde bildirimi gösterir, dokununca uygulamanın
-// KENDİ ekranını açar (yol yalnız aynı kökenden, "/" ile başlayan ve "//" olmayan). Veri: {baslik, metin, rota}.
+// KENDİ ekranını açar (yol yalnız aynı kökenden, "/" ile başlayan ve "//" olmayan). Veri: {baslik, metin, rota, tesisId}.
+// Bildirim başka tesise aitse tesis `?tesis=` ile geçer; geçişi uygulama yapar (`src/push/taps.ts` webTapFromUrl).
 self.addEventListener("push", (event) => {
   let d = {};
   try {
@@ -10,13 +11,16 @@ self.addEventListener("push", (event) => {
   const title = typeof d.baslik === "string" ? d.baslik : "TeksERP Patron";
   const body = typeof d.metin === "string" ? d.metin : "";
   const rota = typeof d.rota === "string" && /^\/[a-z-]+(\/[A-Za-z0-9-]{1,64})?$/.test(d.rota) ? d.rota : "/pano";
-  event.waitUntil(self.registration.showNotification(title, { body, data: { rota }, tag: typeof d.bildirimId === "string" ? d.bildirimId : undefined }));
+  const tesisId = typeof d.tesisId === "string" && /^[0-9A-Fa-f-]{36}$/.test(d.tesisId) ? d.tesisId : null;
+  event.waitUntil(self.registration.showNotification(title, { body, data: { rota, tesisId }, tag: typeof d.bildirimId === "string" ? d.bildirimId : undefined }));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const rota = (event.notification.data && event.notification.data.rota) || "/pano";
-  const url = new URL(rota, self.location.origin).href;
+  const data = event.notification.data || {};
+  const u = new URL(data.rota || "/pano", self.location.origin);
+  if (data.tesisId) u.searchParams.set("tesis", data.tesisId);
+  const url = u.href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const c of list) {

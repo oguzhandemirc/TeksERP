@@ -3,15 +3,17 @@
 // tesis yöneticisinin daveti. Tesis yöneticisi ekibini kendisi yönetir; satıcı yalnız ilk yöneticiyi
 // açar ve yönetici kalmadığında sıfırlar — tesiste AKTİF yönetici varken yönetici daveti/yükseltmesi RED,
 // yalnız açık zorlama (talep no + gerekçe) ile ve denetime yazılarak. Her eylem `satici-cli` aktörüyle düşer.
+// Paylaşımlı (birden çok tesise üye) kimliğin sırrını YALNIZ satıcı sıfırlar (`resetIdentity`, her zaman zorlamayla).
 import type { LicenseClass } from "@prisma/client";
 import { createInvite } from "../auth/invite.service";
+import { closeIdentitySessions, identityEngagedOutside, membershipRoutes } from "../auth/membership";
 import { normalizeEmail } from "../auth/session.service";
 import { ROLE_TEMPLATES } from "../catalog/permissions";
 import { publicKeyFromX } from "../lisans-protokol";
 import { recordAudit } from "../lib/audit";
 import { CloudError, notFound, stateConflict } from "../lib/errors";
 import { uniqueViolationOn } from "../lib/prisma-errors";
-import { withTesis } from "../lib/tenant";
+import { withCentral, withTesis } from "../lib/tenant";
 import type { Tx } from "../lib/db";
 import { ADMIN_PERMISSION, assertEmailFreeInFacility, emailInUseHere } from "./account.service";
 import { bindInstallationRoute, safeKeyId } from "./installation-directory";
@@ -146,6 +148,10 @@ export async function reinviteAdmin(db: TesisDbRouter, g: { tesisId: string; ema
       throw notFound("Hesap");
     }
     const active = await assertNoActiveAdmin(tx, g.tesisId, g.zorla);
+    // Paylaşımlı kimlik bu yoldan sıfırlanmaz (kabul yeniden sırlamaz, davet ölü kalırdı): `kimlik-sifirla` kullanılır.
+    if (a.identityId && (await identityEngagedOutside({ app: db }, a.identityId, { tesisId: g.tesisId }))) {
+      throw new CloudError(409, "KIMLIK_PAYLASIMLI", "Hesabın bulut kimliği başka tesise de bağlı; sırrı `kimlik-sifirla --zorla --talep=<no> --gerekce=\"…\"` ile sıfırlayın");
+    }
     // Atomik claim: hedef okunduğu durumda değilse (bu arada değişti) dokunulmaz.
     const claimed = await tx.account.updateMany({
       where: { id: a.id, tesisId: g.tesisId, status: a.status },
@@ -164,4 +170,45 @@ export async function reinviteAdmin(db: TesisDbRouter, g: { tesisId: string; ema
   const summary = overrideSummary(g.zorla, active);
   await recordAudit(db, { tesisId: g.tesisId, actor: VENDOR_ACTOR, event: "YONETICI_YENIDEN_DAVET", entity: "Account", entityId: account.id, ...(summary ? { summary } : {}) });
   return { accountId: account.id, token: invite.token, expiresAt: invite.expiresAt };
+}
+
+/**
+ * Kimlik sırrı sıfırlaması (satıcı; telefon/parola kaybı, kimlik birden çok tesise üye): HER ZAMAN zorlamayla. Kimlik
+ * DAVETLİ'ye iner ve sırları silinir (bütün tesislerde giriş durur, bütün üyeliklerin oturumları kapanır); `tesisId`teki
+ * üyelik hesabı kimliğe BAĞLI kalarak yeni davet alır — yalnız bu davetin kabulü kimliği yeniden sırlar (`identityReclaimable`
+ * (b)); öteki tesislerin hesapları AKTİF kalır ve onayla yeniden açılır. Her üyelik tesisinin denetimine yazılır.
+ * Kilit sırası: merkez LOGIN_ROUTE → tesis ACCOUNT_ADMIN.
+ */
+export async function resetIdentity(db: TesisDbRouter, g: { tesisId: string; email: string; validHours: number; zorla?: VendorOverride }, nowMs: number = Date.now()) {
+  const zorla = g.zorla;
+  if (!zorla) throw new CloudError(400, "GOVDE_GECERSIZ", "Kimlik sıfırlaması yalnız --zorla --talep=<talep no> --gerekce=\"…\" ile yapılır (denetime yazılır)");
+  const emailDigest = db.key.emailDigest(normalizeEmail(g.email));
+  const invite = createInvite(g.tesisId, nowMs, g.validHours);
+  const { identityId, accountId } = await withCentral(db, { lock: { name: "LOGIN_ROUTE", key: emailDigest } }, async (central) => {
+    const identity = await central.identity.findUnique({ where: { emailDigest } });
+    if (!identity || identity.identityPurgedAt) throw notFound("Kimlik");
+    const route = await central.loginRoute.findUnique({ where: { identityId_tesisId: { identityId: identity.id, tesisId: g.tesisId } } });
+    if (!route) throw notFound("Kimliğin bu tesisteki üyeliği");
+    const ir = await central.identity.updateMany({
+      where: { id: identity.id, status: identity.status, updatedAt: identity.updatedAt },
+      data: { status: "DAVETLI", passwordHash: null, totpSecretSealed: null, totpLastStep: null, closedAt: null },
+    });
+    if (ir.count === 0) throw stateConflict("Kimlik bu arada değişti; tekrar deneyin");
+    await withTesis(db, { tesisId: g.tesisId, lock: { name: "ACCOUNT_ADMIN", key: g.tesisId } }, async (tx) => {
+      const claimed = await tx.account.updateMany({
+        where: { id: route.accountId, tesisId: g.tesisId, identityId: identity.id, status: { in: ["AKTIF", "KILITLI", "DAVETLI"] } },
+        data: { status: "DAVETLI", inviteTokenHash: invite.digest, inviteExpiresAt: invite.expiresAt },
+      });
+      if (claimed.count === 0) throw stateConflict("Üyeliğin hesabı bu tesiste etkin değil; kimlik sıfırlanamaz");
+    });
+    return { identityId: identity.id, accountId: route.accountId };
+  });
+  const closed = await closeIdentitySessions({ app: db }, identityId, { nowMs, reason: "SIFIRLAMA" });
+  const summary = { zorla: true, talep: zorla.talep, gerekce: zorla.gerekce };
+  for (const r of await membershipRoutes({ app: db }, identityId)) {
+    const own = r.tesisId === g.tesisId;
+    const oturum = closed.find((c) => c.tesisId === r.tesisId)?.count ?? 0;
+    await recordAudit(db, { tesisId: r.tesisId, actor: VENDOR_ACTOR, event: "KIMLIK_SIFIRLANDI", entity: "Account", entityId: r.accountId, summary: own ? { ...summary, oturum } : { zorla: true, talep: zorla.talep, oturum } });
+  }
+  return { accountId, token: invite.token, expiresAt: invite.expiresAt };
 }

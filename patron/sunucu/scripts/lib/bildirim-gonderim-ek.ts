@@ -55,6 +55,7 @@ async function teslim(o: Ortam, tesisId: string): Promise<void> {
   await kuyrugaKoy(o, tesisId, h.accountId, "bekci:iyi");
   await deliverDue(o.ctx, t, tesisId, o.saat.simdi());
   kontrol("§5d pozitif: sağlam cihaza gider (GONDERILDI)", (await bildirimler(o, tesisId)).find((n) => n.dedupKey === "bekci:iyi")?.status === "GONDERILDI");
+  kontrol("§5e ⭐ gönderilen ileti bildirimin tesisini taşır (push yükü `tesisId`)", t.sent.length > 0 && t.sent.every((x) => x.msg.tesisId === tesisId), t.sent.map((x) => x.msg.tesisId).join(","));
 }
 
 async function ayarApi(o: Ortam, tesisId: string, yonetici: TestHesabi): Promise<void> {

@@ -83,12 +83,12 @@ async function finish(ctx: CloudContext, claimOf: { tesisId: string; id: string;
   return r.count === 1;
 }
 
-async function sendAll(transport: PushTransport, n: Claimed, devices: readonly { id: string; platform: DevicePlatform; token: string }[]) {
+async function sendAll(transport: PushTransport, tesisId: string, n: Claimed, devices: readonly { id: string; platform: DevicePlatform; token: string }[]) {
   const results: { id: string; outcome: PushOutcome }[] = [];
   for (const d of devices) {
     let outcome: PushOutcome;
     try {
-      outcome = await transport.send({ platform: d.platform, token: d.token }, { id: n.id, title: n.title, body: n.body, route: n.route });
+      outcome = await transport.send({ platform: d.platform, token: d.token }, { id: n.id, title: n.title, body: n.body, route: n.route, tesisId });
     } catch {
       outcome = { kind: "GECICI", code: "TASIYICI_HATASI" };
     }
@@ -112,7 +112,7 @@ export async function deliverDue(ctx: CloudContext, transport: PushTransport, te
       if (await finish(ctx, mine, { status: "BEKLIYOR", nextAttemptAt: d.until, attempts: Math.max(0, n.attempts - 1) })) t.deferred++;
       continue;
     }
-    const results = await sendAll(transport, n, d.devices);
+    const results = await sendAll(transport, tesisId, n, d.devices);
     const invalid = results.filter((r) => r.outcome.kind === "GECERSIZ_CIHAZ").map((r) => r.id);
     if (invalid.length > 0) await withTesis(ctx.app, { tesisId }, (tx) => tx.pushDevice.updateMany({ where: { tesisId, id: { in: invalid }, active: true }, data: { active: false } }));
     const deliveries = results.map((r) => ({ cihazId: r.id, sonuc: r.outcome.kind === "OK" ? "OK" : `${r.outcome.kind}:${r.outcome.code}`, ...(r.outcome.kind === "OK" && r.outcome.ticket ? { bilet: r.outcome.ticket } : {}) }));

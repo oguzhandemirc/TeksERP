@@ -73,14 +73,14 @@ const switchDenied = (): CloudError => new CloudError(403, "TESIS_GECISI_YOK", "
 /** Başarısız girişin en kısa yanıt süresi (gerçek saat): DB'ye yazan dal ile yazmayan dal süreden ayırt edilmesin. */
 export const LOGIN_FAILURE_FLOOR_MS = 500;
 
-async function failAfterFloor(startedMs: number): Promise<never> {
+export async function failAfterFloor(startedMs: number): Promise<never> {
   const wait = LOGIN_FAILURE_FLOOR_MS - (Date.now() - startedMs);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   throw loginFailed();
 }
 
 /** Giriş olayının istemci adresi — hesap güvenlik kaydına girer, 30 gün sonra alan silinir (`maintenance.ts` `AGED_FIELDS`). */
-const ipSummary = (ip: string | null): { ip?: string } => (ip && ip !== "?" ? { ip: ip.slice(0, 64) } : {});
+export const ipSummary = (ip: string | null): { ip?: string } => (ip && ip !== "?" ? { ip: ip.slice(0, 64) } : {});
 
 /** Sayaç kimlik + kaynak; ayak izi girişin hedeflediği tesisin hesabına (üyelik yoksa ayak izi yok). */
 async function registerFailure(ctx: CloudContext, identityId: string, target: MembershipRoute | undefined, g: { nowMs: number; ip: string | null }): Promise<void> {

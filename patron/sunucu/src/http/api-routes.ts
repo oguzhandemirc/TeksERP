@@ -4,7 +4,7 @@
 // Bearer` (çerez YOK → CSRF yüzeyi yok); yazma yalnız application/json. Bekçi: test_patron_kapilari.
 import express, { type NextFunction, type Request, type Response, type Router } from "express";
 import { z } from "zod";
-import { acceptInvite, confirmInvite, inspectInvite } from "../auth/invite.service";
+import { acceptInvite, confirmInvite, inspectInvite, linkInvite } from "../auth/invite.service";
 import { changeOwnPassword, listFacilities, login, logout, resolveSession, switchFacility, type OpenedSession, type SessionContext } from "../auth/session.service";
 import { ASSIGNABLE_PERMISSIONS, ROLE_TEMPLATES } from "../catalog/permissions";
 import { CloudError, badRequest } from "../lib/errors";
@@ -71,6 +71,16 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     handler: async (c) => {
       const b = body(c, z.strictObject({ davet: z.string().max(100), totp: z.string().min(1).max(12) }));
       return { data: await confirmInvite(c.ctx, { token: b.davet, totp: b.totp }) };
+    },
+  },
+  {
+    method: "post",
+    path: "/davet/bagla",
+    auth: "ACIK",
+    kimlik: { muaf: "davet belirteci tek kullanımlık kimliktir; bağlama atomik claim (DAVETLI → AKTİF), her ret girişle aynı 401" },
+    handler: async (c) => {
+      const b = body(c, z.strictObject({ davet: z.string().max(100), eposta: z.string().min(3).max(254), parola: z.string().min(1).max(200), totp: z.string().min(1).max(12) }));
+      return { data: await linkInvite(c.ctx, { token: b.davet, email: b.eposta, password: b.parola, totp: b.totp, ip: clientAddress(c.req, c.ctx.config) }) };
     },
   },
   // ---- oturum ----

@@ -1,7 +1,7 @@
 // =============================================================================
 // BİLDİRİM MAKBUZU + DENEME BİLDİRİMİ BEKÇİSİ (B5 borçları) — negatif + pozitif:
 //   §1 Expo taşıyıcısı: bilet kimliği okunur · makbuz `DeviceNotRegistered` → GECERSIZ_CIHAZ · hazır olmayan
-//      makbuz haritada yok · ağ/5xx → GECICI (sahte fetch; gerçek gönderim YOK)
+//      makbuz haritada yok · ağ/5xx → GECICI · yük `data` = {bildirimId, rota, tesisId} (§1d) (sahte fetch; gerçek gönderim YOK)
 //   §2 ⭐ makbuz turu: bilet alan teslim 15 dk sonra yoklanır · kayıtsız cihaz pasife · bildirim durumu değişmez ·
 //      hazır olmayan tekrar sorulur, 24 saatte ZAMAN_ASIMI · biletsiz teslim yoklamaya hiç girmez (bugünkü
 //      davranış) · eşzamanlı iki tur aynı satırı bir kez işler · geçici hata makbuzu düşürmez
@@ -22,11 +22,17 @@ const IZIN = ["bulut:ozet:oku", "bulut:siparis:oku"];
 async function expoTasiyici(): Promise<void> {
   console.log("\n§1 Expo taşıyıcısı (sahte fetch)");
   let yanit: () => Response = () => new Response("{}");
-  const f = (() => Promise.resolve(yanit())) as unknown as typeof fetch;
+  let govde = "";
+  const f = ((_u: string, init?: { body?: string }) => {
+    govde = init?.body ?? "";
+    return Promise.resolve(yanit());
+  }) as unknown as typeof fetch;
   const t = new ExpoTransport({ EXPO_PUSH_URL: "https://exp.ornek.invalid/send", EXPO_MAKBUZ_URL: "https://exp.ornek.invalid/getReceipts", EXPO_ERISIM_BELIRTECI: undefined }, f);
   yanit = () => Response.json({ data: [{ status: "ok", id: "XXXX-1234" }] });
-  const s = await t.send({ platform: "ANDROID", token: "ExponentPushToken[a]" }, { id: "n", title: "t", body: "b", route: null });
+  const s = await t.send({ platform: "ANDROID", token: "ExponentPushToken[a]" }, { id: "n", title: "t", body: "b", route: null, tesisId: "00000000-0000-4000-8000-000000000000" });
   kontrol("§1a bilet kimliği okunur", s.kind === "OK" && s.ticket === "XXXX-1234", JSON.stringify(s));
+  const veri = (JSON.parse(govde || "[{}]") as { data?: Record<string, unknown> }[])[0]?.data;
+  kontrol("§1d ⭐ Expo yükü `data` = {bildirimId, rota, tesisId} (çok tesis: dokunuş önce tesise geçer)", JSON.stringify(veri) === JSON.stringify({ bildirimId: "n", rota: null, tesisId: "00000000-0000-4000-8000-000000000000" }), JSON.stringify(veri));
   yanit = () => Response.json({ data: { A: { status: "error", details: { error: "DeviceNotRegistered" } }, B: { status: "ok" }, C: { status: "error", details: { error: "MessageTooBig" } } } });
   const r = await t.receipts(["A", "B", "C", "D"]);
   const g = r.kind === "OK" ? r.results : new Map();

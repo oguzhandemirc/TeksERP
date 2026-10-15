@@ -5,7 +5,7 @@
 //   §3 VAPID sırrı: dosya 0600 · JSON/metin/inspect gizli anahtarı taşımaz · taşıyıcı hatası gizli anahtarı
 //      içerse de günlüğe, DB'ye, API yanıtına DÜŞMEZ · yeniden yüklemede üstüne yazılmaz
 //   §4 SSRF: web aboneliği yalnız izinli push servisine; Expo belirteci biçimi
-//   §5 geçersiz cihaz pasife · geçici hata yeniden denenir, hak bitince BASARISIZ
+//   §5 geçersiz cihaz pasife · geçici hata yeniden denenir, hak bitince BASARISIZ · ileti bildirimin tesisini taşır (§5e)
 //   §6 ayar API'si: katı şema · tesis varsayılanı yalnız yönetici · geçmiş yalnız kendi
 //   §7 budama: sonuçlanmış eski satır budanır, bekleyen kalır
 // Koşum: npx tsx scripts/test_bildirim_gonderim.ts

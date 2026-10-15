@@ -1,10 +1,12 @@
 // HESAP YÖNETİMİ — tesis yöneticisi (`bulut:hesap:yonet`) kendi tesisinin ekibini yönetir: davet ·
-// izin · kilit/aç · arşiv (PASIF; soft delete) · sıfırlama (yeniden davet). Hesap başına TEK tesis.
+// izin · kilit/aç · arşiv (PASIF; soft delete) · sıfırlama (yeniden davet). Hesap bu tesisteki ÜYELİKTİR; kimlik
+// (e-posta + parola + TOTP) merkezde ve birden çok tesise üye olabilir — paylaşımlı kimliği tesis yöneticisi sıfırlayamaz.
 // Her yazma işlem kimliğiyle idempotent ve tesis başına ACCOUNT_ADMIN kilidi altında (İLK ifade);
 // SON AKTİF YÖNETİCİ düşürülemez (izin, kilit, arşiv, sıfırlama — 409 SON_YONETICI). Kişi kendi
 // hesabını kilitleyemez/arşivleyemez/sıfırlayamaz (parolasını kendi değiştirir).
 import type { Account, AccountStatus } from "@prisma/client";
 import { createInvite } from "../auth/invite.service";
+import { identityEngagedOutside } from "../auth/membership";
 import { normalizeEmail, type SessionContext } from "../auth/session.service";
 import { ROLE_TEMPLATES, invalidAssignments, type RoleTemplate } from "../catalog/permissions";
 import { accountActor } from "../lib/audit";
@@ -248,7 +250,15 @@ export async function setAccountStatus(ctx: CloudContext, s: SessionContext, id:
   });
 }
 
-/** Sıfırlama (telefon kaybı / parola unutma): hesap kimlikten çözülür, yeni davet; oturumlar kapanır (kimlik sırrı kabulde yenilenir). */
+/** Kimlik başka tesise de bağlı: sıfırlama o tesislere erişimi de ele geçirirdi — tesis adı/sayısı söylenmez. */
+export const sharedIdentity = (): CloudError =>
+  new CloudError(409, "KIMLIK_PAYLASIMLI", "Bu kişinin bulut kimliği başka bir tesise de bağlı; sıfırlanamaz. Hesabı arşivleyip yeniden davet edin (kişi mevcut hesabıyla bağlanır); kimlik sırrı kaybında satıcı desteğine başvurun");
+
+/**
+ * Sıfırlama (telefon kaybı / parola unutma): hesap kimlikten çözülür, yeni davet; oturumlar kapanır (kimlik sırrı kabulde
+ * yenilenir). Kimliğin bu tesis DIŞINDA bağlı üyeliği varsa 409 `KIMLIK_PAYLASIMLI` (kabuldeki yeniden sırlama yasağı
+ * ikinci seddir — bu ön kontrol kilitsiz okur, karar kabulde LOGIN_ROUTE kilidi altında yinelenir).
+ */
 export async function resetAccount(ctx: CloudContext, s: SessionContext, id: string, input: { clientToken: string }): Promise<WriteResult> {
   requireAdmin(s);
   if (id === s.accountId) throw stateConflict("Kendi hesabınızı sıfırlayamazsınız; parolanızı Profil'den değiştirin");
@@ -265,6 +275,7 @@ export async function resetAccount(ctx: CloudContext, s: SessionContext, id: str
       const target = await loadTarget(tx, s, id);
       if (target.status === "PASIF") throw stateConflict("Arşivdeki hesap sıfırlanamaz", { durum: target.status });
       await assertNotLastAdmin(tx, target, { status: "DAVETLI", permissions: target.permissions });
+      if (target.identityId && (await identityEngagedOutside(ctx, target.identityId, { tesisId: s.tesisId }))) throw sharedIdentity();
       const r = await tx.account.updateMany({
         where: { id, tesisId: s.tesisId, status: target.status },
         data: { status: "DAVETLI", identityId: null, inviteTokenHash: invite.digest, inviteExpiresAt: invite.expiresAt },

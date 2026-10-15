@@ -9,6 +9,9 @@
 //   npx tsx scripts/tesis.ts yonetici-yeniden-davet --tesis=<uuid> --eposta=<e-posta> [--saat=72]
 //        (ikisi de tesiste AKTİF hesap yöneticisi varken REDDEDİLİR; zorunluysa yalnız
 //        `--zorla --talep=<talep no> --gerekce="…"` ile — talep ve gerekçe bulut denetimine yazılır)
+//   npx tsx scripts/tesis.ts kimlik-sifirla --tesis=<uuid> --eposta=<e-posta> --zorla --talep=<talep no> --gerekce="…" [--saat=72]
+//        (paylaşımlı bulut kimliğinin parola + TOTP sırrını siler; bütün tesislerde oturum kapanır, giriş durur;
+//        `--tesis`teki üyelik hesabı yeni davet alır ve kabulü kimliği yeniden sırlar. Zorlamasız RED; denetime yazılır)
 //   npx tsx scripts/tesis.ts imha --tesis=<uuid> --isleyen="Ad Soyad" [--erken-talep=<talep no>] [--uygula]
 //        (Ek-6/A §4.3: KURU KOŞUM varsayılan — tablo başına silinecek satır; `--uygula` tesisin veritabanını düşürür,
 //        destek erişim kayıtlarını merkeze kopyalar ve imha kaydını merkeze yazar; yarıda kalan aynı komutla tamamlanır.
@@ -26,7 +29,7 @@ import { prepareFacilityDb } from "../src/lib/tesis-db-hazirlik";
 import { expectedSchemaVersion } from "../src/lib/tesis-goc";
 import { cliDeps } from "./tesis-db";
 import { destroyFacility } from "../src/services/facility-destruction";
-import { inviteFacilityAdmin, openFacility, overrideFromArgs, registerInstallation, reinviteAdmin, setFacilityStatus } from "../src/services/vendor-admin.service";
+import { inviteFacilityAdmin, openFacility, overrideFromArgs, registerInstallation, reinviteAdmin, resetIdentity, setFacilityStatus } from "../src/services/vendor-admin.service";
 
 function args(argv: readonly string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -98,6 +101,13 @@ async function main(): Promise<void> {
         console.log(`   Davet belirteci (BİR KEZ gösterilir; yöneticiye güvenli kanaldan iletin): ${r.token}`);
         break;
       }
+      case "kimlik-sifirla": {
+        const zorla = overrideFromArgs(a);
+        const r = await resetIdentity(db, { tesisId: uuidArg(a, "tesis"), email: need(a, "eposta"), validHours: Number(a.saat ?? "72"), ...(zorla ? { zorla } : {}) });
+        console.log(`✅ kimlik sıfırlandı — hesap ${r.accountId} yeniden davetli, bitiş ${r.expiresAt.toISOString()}`);
+        console.log(`   Davet belirteci (BİR KEZ gösterilir; kişiye güvenli kanaldan iletin): ${r.token}`);
+        break;
+      }
       case "imha": {
         const tesisId = uuidArg(a, "tesis");
         const erken = a["erken-talep"];
@@ -114,7 +124,7 @@ async function main(): Promise<void> {
         break;
       }
       default:
-        throw new Error("Komut: tesis-ac | tesis-durum | kurulum-kaydet | yonetici-davet | yonetici-yeniden-davet | imha");
+        throw new Error("Komut: tesis-ac | tesis-durum | kurulum-kaydet | yonetici-davet | yonetici-yeniden-davet | kimlik-sifirla | imha");
     }
   } finally {
     await db.close();

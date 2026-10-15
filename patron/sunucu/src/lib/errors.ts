@@ -24,6 +24,7 @@ export const CLOUD_ERROR_CODES = [
   "HIZMET_KAPANDI",
   "KURULUM_BASKA_TESISTE",
   "TESIS_GECISI_YOK",
+  "KIMLIK_PAYLASIMLI",
 ] as const;
 export type CloudErrorCode = (typeof CLOUD_ERROR_CODES)[number];
 
