@@ -16,6 +16,8 @@
 //   §9 zorunlu parola değişimi: kısıtlı oturum çerezde; change-password CSRF'siz 403, CSRF'li 200 + çerez silinir.
 //   §10 statik: WEB_DIST_DIR src'de yalnız helper'da (app.ts Dilim B'de) · üç giriş yolu respondLogin'den çıkar.
 //   §11 lisans durumu ucu çerezi görür: geçerli çerez ayrinti:true, çöp çerez 401, çerezsiz ayrinti:false.
+//   §12 çerez JWT'si izin taşımaz (tam katalogla < 4096 bayt), gövde + /auth/me dolu, izinli uç 200 /
+//       izinsiz 403; Bearer (Electron) ve panel kipi kapalı JSON token claim'i bugünkü gibi dolu.
 // İzolasyon: TEST kullanıcıları + giriş yöntemi ayarı anlık görüntüsü; finally geri yükler/siler. DB GEREKİR.
 // =============================================================================
 import prisma from "../src/lib/prisma"; // İLK import: dotenv.config()
@@ -106,6 +108,14 @@ function cerezDegeri(setCookie: string[]): string | null {
   const s = setCookie.find((c) => c.startsWith("tekserp_oturum="));
   if (!s) return null;
   return s.slice("tekserp_oturum=".length).split(";")[0];
+}
+/** JWT gövdesini imza doğrulamadan çöz (yalnız claim okuması). */
+function jwtClaim(token: string): { permissions?: unknown; exp?: number } {
+  try {
+    return JSON.parse(Buffer.from(decodeURIComponent(token).split(".")[1] ?? "", "base64url").toString() || "{}") as { permissions?: unknown };
+  } catch {
+    return {};
+  }
 }
 const silenCerez = (setCookie: string[]) =>
   setCookie.some((c) => c.startsWith("tekserp_oturum=;") && /Max-Age=0/.test(c));
@@ -216,6 +226,41 @@ async function main(): Promise<void> {
     const elecToken = String(e2.body.data?.token ?? "");
     check("§2f panel kipinde Electron girişi bayt-bayt bugünkü gibi: JSON token, Set-Cookie yok",
       e2.status === 200 && elecToken.length > 0 && e2.body.data?.cookieSession === undefined && cerezDegeri(e2.setCookie) === null, `status=${e2.status}`);
+
+    // ── §12 çerez claim'i izin taşımaz (BULGU-1: tam liste çerezi 4096 bayta iter) ──
+    console.log("\n=== §12 çerez claim'inde izin yok ===");
+    const k1Izin = jwtClaim(String(k1.body.data?.token ?? "")).permissions;
+    check("§12a panel kipi kapalı web girişi (JSON token): claim izinleri bugünkü gibi dolu",
+      Array.isArray(k1Izin) && k1Izin.includes("roll:read"), JSON.stringify(k1Izin));
+    const tumKodlar = (await prisma.permission.findMany({ select: { code: true } })).map((p) => p.code);
+    const uTam = await kullanici("tam", tumKodlar);
+    // Bearer girişi TOTP kurulmadan: kurulu hesapta Electron şifre girişi de kod ister (bu ölçümün konusu değil).
+    const e12 = await giris(uTam.username, "electron");
+    const e12Izin = jwtClaim(String(e12.body.data?.token ?? "")).permissions;
+    const sTam = await totpKur(uTam.id, aktor.id);
+    const t12 = await giris(uTam.username, "web", { totpCode: kod(sTam) });
+    const hamTam = t12.setCookie.find((c) => c.startsWith("tekserp_oturum=")) ?? "";
+    const cerezTam = cerezDegeri(t12.setCookie) ?? "";
+    const claimTam = jwtClaim(cerezTam);
+    check("§12b tam izinli web girişi 200 + çerez", t12.status === 200 && cerezTam.length > 0, `status=${t12.status} code=${String(t12.body.details?.code)}`);
+    check("§12c çerezdeki JWT claim'i permissions: []",
+      Array.isArray(claimTam.permissions) && claimTam.permissions.length === 0, `claim=${JSON.stringify(claimTam.permissions)?.slice(0, 80)}`);
+    check("§12d Set-Cookie satırı < 4096 bayt (katalog büyüse de sabit kalır)",
+      hamTam.length > 0 && Buffer.byteLength(hamTam) < 4096, `bayt=${Buffer.byteLength(hamTam)} katalog=${tumKodlar.length}`);
+    const govdeIzin = ((t12.body.data?.user ?? {}) as { permissions?: unknown }).permissions;
+    check("§12e gövdedeki user.permissions DOLU (panel buradan okur)",
+      Array.isArray(govdeIzin) && govdeIzin.length === tumKodlar.length, `gövde=${Array.isArray(govdeIzin) ? govdeIzin.length : "yok"} katalog=${tumKodlar.length}`);
+    const p12 = await call("GET", "/api/license/proxy", { cookie: cerezTam });
+    check("§12f boş claim'li çerezle license:view uçu 200 (yetki DB'den)", p12.status === 200, `status=${p12.status} code=${String(p12.body.details?.code)}`);
+    const me12 = await call("GET", "/api/auth/me", { cookie: cerezTam });
+    const meIzin = me12.body.data?.permissions;
+    check("§12g /auth/me çerezle tam izin listesini döner", me12.status === 200 && Array.isArray(meIzin) && meIzin.length === tumKodlar.length,
+      `status=${me12.status} me=${Array.isArray(meIzin) ? meIzin.length : "yok"}`);
+    const p12dar = await call("GET", "/api/license/proxy", { cookie: cerez });
+    check("§12h izni olmayan çerez oturumu aynı uçta 403 PERMISSION_DENIED (kapı açık kalmadı)",
+      p12dar.status === 403 && p12dar.body.details?.code === "PERMISSION_DENIED", `status=${p12dar.status} code=${String(p12dar.body.details?.code)}`);
+    check("§12i Bearer (Electron) girişi: claim izinleri bugünkü gibi dolu",
+      e12.status === 200 && Array.isArray(e12Izin) && e12Izin.length === tumKodlar.length, `status=${e12.status} code=${String(e12.body.details?.code)} claim=${Array.isArray(e12Izin) ? e12Izin.length : "yok"}`);
 
     // ── §3 CSRF ─────────────────────────────────────────────────────────────
     console.log("\n=== §3 CSRF ===");

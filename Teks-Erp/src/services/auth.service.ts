@@ -717,7 +717,10 @@ export class AuthService {
       jwtid: jti,
       expiresIn: Math.max(1, Math.floor((effectiveExpiresAt.getTime() - nowMs) / 1000)),
     };
-    const token = jwt.sign(signPayload, JWT_SECRET, signOptions);
+    // Çerez kipinde claim izin TAŞIMAZ: tam liste çerezi tarayıcının 4096 bayt sınırına iter (138 kod ≈ 3,8 KB);
+    // karar zaten DB'den (`resolveRequestPermissions`), panel izni gövdedeki `user.permissions`ten okur.
+    const claim = cookieLoginApplies(ctx?.clientType) ? { ...signPayload, permissions: [] } : signPayload;
+    const token = jwt.sign(claim, JWT_SECRET, signOptions);
 
     const payload: JwtPayload = { ...signPayload, jti };
     return { token, user: payload, mustChangePassword };

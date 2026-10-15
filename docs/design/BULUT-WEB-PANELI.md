@@ -20,6 +20,7 @@
 | İzin | Çerez kipinde web girişi `web:access` izni olmadan 403 `details.code = "WEB_ACCESS_DENIED"`. İzin `mobile:` önekli DEĞİL; rol şablonlarına varsayılan atanmaz. İstisna: katalogla otomatik eşitlenen "Admin (Tam Yetki)" (`ADMIN_FULL`, `mode:"all"`) izni taşır — tam yetki kabul edildi, TOTP yine zorunlu. |
 | Çıkış | `POST /api/auth/logout` (CSRF başlıklı) oturumu iptal eder + `Set-Cookie: tekserp_oturum=; Max-Age=0`. |
 | Oturum yoklama | Web istemcisi açılışta `GET /api/auth/me` ile oturumu yoklar (JWT çözmez). |
+| Claim | Çerezdeki JWT `permissions: []` taşır (tam liste çerezi 4096 bayt tarayıcı sınırına iterdi: 138 kod ≈ 3,8 KB); yetki DB'den okunur, izin listesi giriş gövdesinin `user.permissions`i ve `/auth/me`dedir. Bearer token'ın claim'i değişmez. Bekçi `test_web_cerez_oturumu` §12. |
 | Zorunlu parola değişimi | Kısıtlı oturum da çerezde; `POST /api/auth/change-password` çerez + CSRF ile çalışır. |
 
 ## Statik sunum (panel kipi)
