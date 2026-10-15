@@ -370,6 +370,8 @@ export const TUKETICILER = Object.freeze([
   'deploy/satici/uretim-toren.mjs', 'satici/sunucu/scripts/test_uretim_toren.ts',
   // Linux güncelleyicisinin `kur` varsayılan sunucusu = indirmeKoku aynası; eşliği test_kurulum_betikleri §16 ölçer.
   'Teks-Erp/native/tekserp-guncelleyici/src/platform/linux/kurulum.rs',
+  // Bulut web paneli: korumalı imajın `panel` aşaması kimliği kayıttan okur (kök Dockerfile ile aynı); §7o ölçer.
+  'Teks-Erp/docker/korumali/Dockerfile', 'Teks-Erp/docker/korumali/Dockerfile.dockerignore', 'Teks-Erp/scripts/test_docker_hijyeni.ts',
 ]);
 
 /** İki dağıtım bekçisinin okuduğu dosyalar — commit tetiği bunları kapsar (okunandan dar olamaz). */
