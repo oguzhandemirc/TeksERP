@@ -108,7 +108,7 @@ export const failureLabel = (kod: string | null): string | null => (kod ? (FAILU
 export function moduleSettingLabel(key: string): string {
   const field = MODULE_FIELD_BY_SETTING_KEY[key];
   if (field) return MODULE_LABELS[field];
-  return key === "patron-bulut" ? "Patron bulutu" : key;
+  return key === "patron-bulut" ? "Yönetim bulutu" : key;
 }
 
 /** Lisans deposu sorunu (`detay.depo.sorun`) — makine kartı ve kurulum hatası kilidi aynı metni gösterir. */

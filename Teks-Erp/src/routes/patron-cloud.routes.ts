@@ -59,7 +59,7 @@ router.post("/etkinlestir", requireSettingsPassword, async (req, res, next) => {
     res.json({
       success: true,
       data: { ...r, durum: await getPatronCloudStatus() },
-      message: r.created ? "Patron bulutu etkinleştirildi: teknik kullanıcı oluşturuldu." : "Patron bulutu zaten etkin; teknik kullanıcı ve izinleri doğrulandı.",
+      message: r.created ? "Yönetim bulutu etkinleştirildi: teknik kullanıcı oluşturuldu." : "Yönetim bulutu zaten etkin; teknik kullanıcı ve izinleri doğrulandı.",
     });
   } catch (e) {
     next(e);
