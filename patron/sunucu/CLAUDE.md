@@ -32,7 +32,7 @@ Kilit tx'in İLK ifadesidir ve kiracı ayarıyla AYNI SELECT'te alınır (`lib/t
 | 9201 | `PACKAGE` | tesis başına eşitleme paketi — `try`: doluysa 409 `PAKET_ISLENIYOR` |
 | 9202 | `ACCOUNT_ADMIN` | tesis başına hesap yönetimi (son yönetici kuralı) |
 | 9203 | `CLIENT_TOKEN` | (tesis, işlem kimliği) başına tekrarlar sıraya girer |
-| 9204 | `LOGIN_ROUTE` | MERKEZ DB'sinde kimlik e-posta özeti başına (davet kabul/onay/bağla, satıcı kimlik sıfırlaması, merkez kimlik kapanışı/silmesi, özet yenileme (ozet-yenile)); hesap kilidinden ÖNCE |
+| 9204 | `LOGIN_ROUTE` | MERKEZ DB'sinde kimlik e-posta özeti başına (davet kabul/onay/bağla, satıcı kimlik sıfırlaması, merkez kimlik kapanışı/silmesi, kendi hesabını silme, özet yenileme (ozet-yenile)); hesap kilidinden ÖNCE |
 
 ## Alt-alan kuralları — dokunmadan önce oku
 

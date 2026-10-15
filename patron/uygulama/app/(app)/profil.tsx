@@ -1,4 +1,5 @@
-// Profil: hesap bilgisi, fabrika değiştir (çok tesiste), parola değişimi (TOTP ile), bildirim ayarlarına geçiş, çıkış.
+// Profil: hesap bilgisi, fabrika değiştir (çok tesiste), parola değişimi (TOTP ile), bildirim ayarlarına geçiş, çıkış,
+// hesabımı sil (ayrı ekran: açıklama + parola + TOTP).
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { useSession } from "../../src/state/session";
@@ -35,6 +36,9 @@ export default function Profile() {
       <Title>Bildirimler</Title>
       <Muted>Hangi bildirimlerin, hangi saatlerde geleceğini ve eşikleri seçin; bu cihazı bildirim için kaydedin.</Muted>
       <Button label="Bildirim ayarları" onPress={() => router.push("/bildirimler" as never)} testID="bildirim-ayarlari" />
+      <Title>Hesabımı sil</Title>
+      <Muted>Hesabınızı ve bütün fabrika üyeliklerinizi kapatır; kişisel verileriniz 30. günde silinir.</Muted>
+      <Button label="Hesabımı sil" tone="plain" onPress={() => router.push("/hesap-sil" as never)} testID="hesap-sil-git" />
       <ConfirmButton label="Çıkış yap" question="Bütün fabrikalardaki oturumunuz kapatılsın ve bu cihazdaki son veri silinsin mi?" onConfirm={() => void logout()} testID="cikis" />
     </Screen>
   );

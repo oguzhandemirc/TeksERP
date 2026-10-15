@@ -3,6 +3,7 @@
 import type { ApiClient, DownloadedFile, Query } from "./client";
 import type {
   Account,
+  AccountDeletion,
   AccountInviteResult,
   Device,
   CustomerMessageBody,
@@ -42,6 +43,7 @@ export const ENDPOINTS = {
   facilities: ["get", "/oturum/tesisler"],
   switchFacility: ["post", "/oturum/gecis"],
   changePassword: ["post", "/oturum/parola"],
+  deleteOwnAccount: ["post", "/oturum/hesap-sil"],
   permissions: ["get", "/izinler"],
   list: ["get", "/veri/:projeksiyon"],
   record: ["get", "/veri/:projeksiyon/:id"],
@@ -107,6 +109,8 @@ export function createApi(c: ApiClient) {
     /** Yeni belirteç döner; eski oturum sunucuda kapanır. Ret: 403 `TESIS_GECISI_YOK`. */
     switchFacility: (tesisId: string) => c.post<LoginResponse>(pathOf("switchFacility"), { tesisId }),
     changePassword: (b: { mevcutParola: string; yeniParola: string; totp: string }) => c.post<null>(pathOf("changePassword"), b),
+    /** Kendi hesabını silme: kimlik + bütün tesis üyelikleri kapanır, oturumlar düşer. Ret: 400 `GIRIS_BASARISIZ` · 409 `SON_YONETICI`. */
+    deleteOwnAccount: (b: { parola: string; totp: string }) => c.post<AccountDeletion>(pathOf("deleteOwnAccount"), b),
     permissions: () => c.get<PermissionCatalog>(pathOf("permissions")),
     list: (projeksiyon: string, p: ListParams = {}) => c.get<Page<ProjectionRecord>>(pathOf("list", { projeksiyon }), q(p)),
     record: (projeksiyon: string, id: string) => c.get<ProjectionRecord>(pathOf("record", { projeksiyon, id })),

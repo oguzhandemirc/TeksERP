@@ -9,6 +9,7 @@ import { changeOwnPassword, listFacilities, login, logout, resolveSession, switc
 import { ASSIGNABLE_PERMISSIONS, ROLE_TEMPLATES } from "../catalog/permissions";
 import { CloudError, badRequest } from "../lib/errors";
 import { createAccount, listAccountAudit, listAccounts, resetAccount, setAccountStatus, updateAccount } from "../services/account.service";
+import { deleteOwnAccount } from "../services/account-self-delete";
 import type { CloudContext } from "../services/context";
 import type { LoginResponse, PermissionCatalog } from "../wire/api";
 import { facilityStatus, getProjectionRecord, getSnapshot, listProjection } from "../services/data.service";
@@ -116,6 +117,16 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
       const b = body(c, z.strictObject({ mevcutParola: z.string().min(1).max(200), yeniParola: z.string().min(1).max(200), totp: z.string().min(1).max(12) }));
       await changeOwnPassword(c.ctx, s(c), { current: b.mevcutParola, next: b.yeniParola, totp: b.totp, ip: clientAddress(c.req, c.ctx.config) });
       return { data: null };
+    },
+  },
+  {
+    method: "post",
+    path: "/oturum/hesap-sil",
+    auth: "OTURUM",
+    kimlik: { muaf: "parola + TOTP adımı tekrar oynatmayı keser; başarıdan sonra bütün oturumlar kapalı, tekrar 401 (etkisiz)" },
+    handler: async (c) => {
+      const b = body(c, z.strictObject({ parola: z.string().min(1).max(200), totp: z.string().min(1).max(12) }));
+      return { data: await deleteOwnAccount(c.ctx, s(c), { password: b.parola, totp: b.totp, ip: clientAddress(c.req, c.ctx.config) }) };
     },
   },
   { method: "get", path: "/izinler", auth: "OTURUM", kimlik: "OKUMA", handler: async () => ({ data: { izinler: ASSIGNABLE_PERMISSIONS, sablonlar: ROLE_TEMPLATES } satisfies PermissionCatalog }) },

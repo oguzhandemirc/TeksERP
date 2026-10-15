@@ -3,7 +3,8 @@
 // (e-posta + parola + TOTP) merkezde ve birden çok tesise üye olabilir — paylaşımlı kimliği tesis yöneticisi sıfırlayamaz.
 // Her yazma işlem kimliğiyle idempotent ve tesis başına ACCOUNT_ADMIN kilidi altında (İLK ifade);
 // SON AKTİF YÖNETİCİ düşürülemez (izin, kilit, arşiv, sıfırlama — 409 SON_YONETICI). Kişi kendi
-// hesabını kilitleyemez/arşivleyemez/sıfırlayamaz (parolasını kendi değiştirir).
+// hesabını kilitleyemez/arşivleyemez/sıfırlayamaz (parolasını kendi değiştirir; kendi hesabını silmek ayrı uçtur —
+// `account-self-delete.ts`, aynı arşiv yolu `archiveAccountTx`).
 import type { Account, AccountStatus } from "@prisma/client";
 import { createInvite } from "../auth/invite.service";
 import { identityEngagedOutside } from "../auth/membership";
@@ -48,11 +49,13 @@ export function resolvePermissionInput(g: { izinler?: readonly string[]; sablon?
 
 const isActiveAdmin = (a: Pick<Account, "status" | "permissions">): boolean => a.status === "AKTIF" && a.permissions.includes(ADMIN_PERMISSION);
 
+const otherActiveAdmins = (tx: Tx, a: Pick<Account, "id" | "tesisId">): Promise<number> =>
+  tx.account.count({ where: { tesisId: a.tesisId, status: "AKTIF", permissions: { has: ADMIN_PERMISSION }, id: { not: a.id } } });
+
 /** Değişiklik hedefin yöneticiliğini düşürüyorsa ve başka AKTİF yönetici yoksa 409. */
 async function assertNotLastAdmin(tx: Tx, target: Account, after: Pick<Account, "status" | "permissions">): Promise<void> {
   if (!isActiveAdmin(target) || isActiveAdmin(after)) return;
-  const others = await tx.account.count({ where: { tesisId: target.tesisId, status: "AKTIF", permissions: { has: ADMIN_PERMISSION }, id: { not: target.id } } });
-  if (others === 0) throw new CloudError(409, "SON_YONETICI", "Tesisin son aktif hesap yöneticisi düşürülemez; önce başka bir yönetici atayın");
+  if ((await otherActiveAdmins(tx, target)) === 0) throw new CloudError(409, "SON_YONETICI", "Tesisin son aktif hesap yöneticisi düşürülemez; önce başka bir yönetici atayın");
 }
 
 async function loadTarget(tx: Tx, s: SessionContext, id: string): Promise<Account> {
@@ -63,6 +66,27 @@ async function loadTarget(tx: Tx, s: SessionContext, id: string): Promise<Accoun
 
 async function closeSessions(tx: Tx, accountId: string, nowMs: number, reason: "HESAP_KAPANDI" | "SIFIRLAMA"): Promise<void> {
   await tx.session.updateMany({ where: { accountId, closedAt: null }, data: { closedAt: new Date(nowMs), closeReason: reason } });
+}
+
+/**
+ * ARŞİV (PASİF) — tek yol: tesis yöneticisinin arşivi ve kişinin kendi hesabını silmesi (`account-self-delete.ts`).
+ * ACCOUNT_ADMIN kilidi altındaki tx'te: son aktif yönetici düşmez (409) · atomik claim `{id, beklenen durum}` · kapanış
+ * anı AYNI claim'de (kimlik silme işi bu andan 30 gün sayar; CHECK PASIF ⇔ closed_at) · oturumlar kapanır · cihazlar pasif.
+ */
+export async function archiveAccountTx(tx: Tx, target: Account, nowMs: number): Promise<void> {
+  await assertNotLastAdmin(tx, target, { status: "PASIF", permissions: target.permissions });
+  const r = await tx.account.updateMany({
+    where: { id: target.id, tesisId: target.tesisId, status: target.status },
+    data: { status: "PASIF", inviteTokenHash: null, inviteExpiresAt: null, closedAt: new Date(nowMs) },
+  });
+  if (r.count === 0) throw stateConflict("Hesap bu arada değişti; listeyi yenileyip tekrar deneyin");
+  await closeSessions(tx, target.id, nowMs, "HESAP_KAPANDI");
+  await tx.pushDevice.updateMany({ where: { tesisId: target.tesisId, accountId: target.id, active: true }, data: { active: false } });
+}
+
+/** Hesap tesisin son AKTİF yöneticisi mi (kendi hesabını silme ön ölçümü; karar kilit altında `archiveAccountTx`te yinelenir). */
+export async function isLastActiveAdmin(tx: Tx, a: Account): Promise<boolean> {
+  return isActiveAdmin(a) && (await otherActiveAdmins(tx, a)) === 0;
 }
 
 export async function listAccounts(ctx: CloudContext, s: SessionContext) {
@@ -235,12 +259,12 @@ export async function setAccountStatus(ctx: CloudContext, s: SessionContext, id:
       const target = await loadTarget(tx, s, id);
       const allowedFrom = STATUS_TRANSITIONS[input.durum];
       if (!allowedFrom.includes(target.status)) throw stateConflict(`Hesap ${target.status} durumundan ${input.durum} durumuna geçemez`, { durum: target.status });
+      if (input.durum === "PASIF") {
+        await archiveAccountTx(tx, target, nowMs);
+        return tx.account.findUniqueOrThrow({ where: { id } });
+      }
       await assertNotLastAdmin(tx, target, { status: input.durum, permissions: target.permissions });
-      const r = await tx.account.updateMany({
-        where: { id, tesisId: s.tesisId, status: target.status },
-        // Kapanış anı PASIF'le AYNI claim'de: kimlik silme işi bu andan 30 gün sayar (CHECK: PASIF ⇔ closed_at).
-        data: { status: input.durum, ...(input.durum === "PASIF" ? { inviteTokenHash: null, inviteExpiresAt: null, closedAt: new Date(nowMs) } : {}) },
-      });
+      const r = await tx.account.updateMany({ where: { id, tesisId: s.tesisId, status: target.status }, data: { status: input.durum } });
       if (r.count === 0) throw stateConflict("Hesap bu arada değişti; listeyi yenileyip tekrar deneyin");
       if (input.durum !== "AKTIF") await closeSessions(tx, id, nowMs, "HESAP_KAPANDI");
       return tx.account.findUniqueOrThrow({ where: { id } });

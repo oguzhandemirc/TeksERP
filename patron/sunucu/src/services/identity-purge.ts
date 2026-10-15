@@ -2,7 +2,9 @@
 // Kimlik verisi defter değildir; satır KALIR (tombstone), yalnız sır + e-posta özeti silinir; üyelik satırlarının
 // silmesi beyanlı yerde (`auth/membership.ts` `dropMemberships`, `PRUNED_TABLES.login_routes`).
 import { createHash } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { ENGAGED_ACCOUNT_STATUSES, accountEngagedTo, dropMemberships, identityEngagedOutside } from "../auth/membership";
+import type { Tx } from "../lib/db";
 import { CloudError } from "../lib/errors";
 import { withCentral, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
@@ -30,6 +32,18 @@ async function engagedIdentities(ctx: CloudContext, routes: readonly { identityI
 }
 
 /**
+ * Kimlik kapanış claim'i (tek yol: bakım tikinin kapanışı ve kişinin kendi hesabını silmesi): bağlı üyeliği kalmayan
+ * kimlik beklenen durumdan PASİF'e, kapanış anı AYNI claim'de (silme bu andan sayar). Çağıran LOGIN_ROUTE kilidini
+ * (İLK ifade) tutan merkez tx'indedir. Kapanan sayısı döner (bağlıysa ya da durum değiştiyse 0).
+ */
+export async function closeIdentityClaim(ctx: Pick<CloudContext, "app">, central: Tx, identityId: string, g: { readonly nowMs: number; readonly expected: Prisma.IdentityWhereInput }): Promise<number> {
+  const { nowMs, expected } = g;
+  if (await identityEngagedOutside(ctx, identityId, { central })) return 0;
+  const r = await central.identity.updateMany({ where: { ...expected, id: identityId }, data: { status: "PASIF", closedAt: new Date(nowMs) } });
+  return r.count;
+}
+
+/**
  * Merkez kimliği: bağlı üyeliği kalmayan AKTİF kimlik (ve davet süresi geçmiş, onaylanmamış DAVETLİ kimlik) PASİF'e
  * çekilir (kapanış anı aynı claim'de, CHECK); kapanıştan `purgeDays` (maintenance.ts `IDENTITY_PURGE_DAYS`) sonra tombstone: parola + TOTP NULL, e-posta
  * özeti anlamsız benzersiz değere, üyelik satırları silinir; satır KALIR. Karar her kimlikte LOGIN_ROUTE kilidi (İLK
@@ -44,14 +58,9 @@ export async function closeAndPurgeIdentities(ctx: CloudContext, nowMs: number, 
   const engaged = await engagedIdentities(ctx, routes);
   let closed = 0;
   for (const i of open.filter((x) => !engaged.has(x.id))) {
-    closed += await withCentral(ctx.app, { lock: { name: "LOGIN_ROUTE", key: i.emailDigest } }, async (central) => {
-      if (await identityEngagedOutside(ctx, i.id, { central })) return 0;
-      const r = await central.identity.updateMany({
-        where: { id: i.id, OR: [{ status: "AKTIF" }, { status: "DAVETLI", updatedAt: { lt: inviteCutoff } }] },
-        data: { status: "PASIF", closedAt: new Date(nowMs) },
-      });
-      return r.count;
-    });
+    closed += await withCentral(ctx.app, { lock: { name: "LOGIN_ROUTE", key: i.emailDigest } }, (central) =>
+      closeIdentityClaim(ctx, central, i.id, { nowMs, expected: { OR: [{ status: "AKTIF" }, { status: "DAVETLI", updatedAt: { lt: inviteCutoff } }] } }),
+    );
   }
   const cutoff = new Date(nowMs - purgeDays * 86_400_000);
   const due = { status: "PASIF" as const, identityPurgedAt: null, closedAt: { lte: cutoff } };

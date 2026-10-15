@@ -267,25 +267,40 @@ export async function logout(ctx: CloudContext, s: SessionContext, g: { all?: bo
   }
 }
 
-/** Kendi parolasını değiştirme (KİMLİKTE): mevcut parola + TOTP; kimliğin bütün tesislerindeki öteki oturumlar kapanır. */
-export async function changeOwnPassword(ctx: CloudContext, s: SessionContext, g: { current: string; next: string; totp: string; ip: string | null }): Promise<void> {
-  assertPasswordStrength(g.next);
+/**
+ * Hassas işlem kapısı (tek kaynak — parola değişimi · kendi hesabını silme): oturumun merkez kimliği AKTİF, parola + güncel
+ * TOTP doğru ve kaynak kilitli değil. Yanlışta girişle aynı sayaç + ayak izi, 400 `GIRIS_BASARISIZ`. Adım iddiası ÇAĞIRANDA
+ * atomik claim'dir (`totpStepClaim`): aynı kod ikinci kez geçmez.
+ */
+export async function verifyOwnFactors(ctx: CloudContext, s: SessionContext, g: { password: string; totp: string; ip: string | null }) {
   const nowMs = ctx.now();
   const identityId = s.identityId;
   const identity = identityId ? await withCentral(ctx.app, {}, (tx) => tx.identity.findUnique({ where: { id: identityId } })) : null;
   if (!identity?.passwordHash || !identity.totpSecretSealed || identity.status !== "AKTIF") throw new CloudError(401, "OTURUM_YOK", "Oturum geçersiz");
+  const sourceLocked = loginThrottleFor(ctx).isLocked(identity.id, g.ip, nowMs);
   const secret = ctx.secrets.open(identity.totpSecretSealed, identity.id);
   const totp = secret ? verifyTotp(secret, g.totp, { atMs: nowMs, lastUsedStep: identity.totpLastStep }) : null;
-  const wrong = new CloudError(400, "GIRIS_BASARISIZ", "Mevcut parola ya da doğrulama kodu hatalı");
-  if (!(await verifyPassword(g.current, identity.passwordHash)) || !totp?.ok) {
-    await registerFailure(ctx, identity.id, { tesisId: s.tesisId, accountId: s.accountId }, { nowMs, ip: g.ip });
-    throw wrong;
+  const passwordOk = await verifyPassword(g.password, identity.passwordHash);
+  if (sourceLocked || !passwordOk || !totp?.ok) {
+    if (!sourceLocked) await registerFailure(ctx, identity.id, { tesisId: s.tesisId, accountId: s.accountId }, { nowMs, ip: g.ip });
+    throw wrongFactors();
   }
+  return { identity, step: totp.step, nowMs };
+}
+
+export const wrongFactors = (): CloudError => new CloudError(400, "GIRIS_BASARISIZ", "Mevcut parola ya da doğrulama kodu hatalı");
+
+/** TOTP adım iddiası (merkez, atomik): kimlik AKTİF ∧ adım ileri. */
+export const totpStepClaim = (identityId: string, step: number) => ({ where: { id: identityId, status: "AKTIF" as const, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] }, data: { totpLastStep: step } });
+
+/** Kendi parolasını değiştirme (KİMLİKTE): mevcut parola + TOTP; kimliğin bütün tesislerindeki öteki oturumlar kapanır. */
+export async function changeOwnPassword(ctx: CloudContext, s: SessionContext, g: { current: string; next: string; totp: string; ip: string | null }): Promise<void> {
+  assertPasswordStrength(g.next);
+  const { identity, step, nowMs } = await verifyOwnFactors(ctx, s, { password: g.current, totp: g.totp, ip: g.ip });
   const hash = await hashPassword(g.next);
-  const r = await withCentral(ctx.app, {}, (tx) =>
-    tx.identity.updateMany({ where: { id: identity.id, status: "AKTIF", OR: [{ totpLastStep: null }, { totpLastStep: { lt: totp.step } }] }, data: { passwordHash: hash, totpLastStep: totp.step } }),
-  );
-  if (r.count === 0) throw wrong;
+  const claim = totpStepClaim(identity.id, step);
+  const r = await withCentral(ctx.app, {}, (tx) => tx.identity.updateMany({ where: claim.where, data: { ...claim.data, passwordHash: hash } }));
+  if (r.count === 0) throw wrongFactors();
   await closeIdentitySessions(ctx, identity.id, { nowMs, reason: "SIFIRLAMA", exceptSessionId: s.sessionId });
   await recordAudit(ctx.app, { tesisId: s.tesisId, actor: accountActor(s.accountId), event: "PAROLA_DEGISTI", entity: "Account", entityId: s.accountId });
 }

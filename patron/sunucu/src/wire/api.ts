@@ -283,6 +283,17 @@ export interface InviteConfirmed {
   readonly durum: "AKTIF";
 }
 
+/**
+ * `POST /oturum/hesap-sil` (parola + TOTP) — kendi hesabını silme: kimlik ve bütün tesis üyelikleri HEMEN kapanır, bütün
+ * oturumlar düşer; kişisel veri `silinme` anında silinir. Son aktif yöneticisi olunan tesis varsa 409 `SON_YONETICI`
+ * (`details.tesisler`: `{id, ad}[]`); yanlış faktör 400 `GIRIS_BASARISIZ`.
+ */
+export interface AccountDeletion {
+  readonly kapanis: string;
+  readonly silinme: string;
+  readonly tesisSayisi: number;
+}
+
 export interface Device {
   readonly id: string;
   readonly platform: string;

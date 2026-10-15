@@ -114,10 +114,19 @@ deposunda; çevrimdışı önbellek uygulamanın korumalı alanında, yedeğe gi
 
 ### 4.3 Hesap silme
 
-Hesaplar yalnız davetle açılır; silme bugün tesis yöneticisinin "arşiv" işlemidir (PASIF → 30. günde kimlik
-silinir, `test_kimlik_silme`). Play, uygulama içinde hesap oluşturulabiliyorsa (davet kabulü sayılabilir) hem
-uygulama içi yol hem de **web'de silme isteği adresi** ister (⚠ doğrulanmalı). Gereken: gizlilik sayfasında
-"Hesabımı sil" bölümü (tesis yöneticisine başvuru + `info@etkiliyazilim.com` yolu, 30 gün süresi). Açık konu.
+Hesaplar yalnız davetle açılır. İki silme yolu var:
+
+- **Uygulama içi (kişinin kendisi, 2026-10-15):** Profil → "Hesabımı sil" → açıklama ekranı → parola + güncel
+  doğrulama kodu → iki adımlı onay (`POST /api/oturum/hesap-sil`). Hesap HEMEN kapanır: kimliğin bütün tesis
+  üyelikleri PASİF, bütün oturumlar düşer, bildirim cihazları pasif; 30. günde ad, e-posta, parola, TOTP silinir
+  (bakımın mevcut silmesi); güvenlik kaydı kişisel bilgi taşımadan saklanır. Bir tesisin son aktif hesap
+  yöneticisi önce başka yönetici atamalıdır (409). Geri alma: 30 gün içinde tesis yöneticisi yeniden davet eder.
+  Bekçi `test_hesap_kendini_silme`, uygulama `__tests__/account-deletion.test.tsx`.
+- **Tesis yöneticisi:** "arşiv" işlemi (PASİF → 30. günde kimlik silinir, `test_kimlik_silme`).
+
+Play ayrıca **web'de silme isteği adresi** ister (⚠ doğrulanmalı). Gereken: gizlilik sayfasında "Hesabımı sil"
+bölümü (uygulama içi yol + tesis yöneticisine başvuru + `info@etkiliyazilim.com` yolu, 30 gün süresi). Web
+sayfası AÇIK konu (§4.1 ile birlikte).
 
 ## 5. Mağaza metni taslağı (Türkçe)
 
