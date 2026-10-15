@@ -243,3 +243,16 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
 | JS paketi | bulut adresi var, geliştirme adresi yok · "Hesabımı sil" dizgesi (Hermes UTF-16) ve `hesap-sil` rotası var · `NATIVE_PUSH = false` |
 | Duman (Pixel_10_Pro, API 37) | kurulum ✓ (vc2) · çökme yok · giriş ekranı çizildi · oturumsuz `tekserp-patron://hesap-sil` → giriş ekranı (koruma ✓) · Profil ekranı giriş gerektirdiğinden görülmedi |
 | Parola sızıntısı | AAB + APK derleme günlüklerinde kasa parolası aranıp bulunmadı |
+
+## 9. Ölçüm — TeksERP Yönetim 1.0.2 · vc1 (2026-10-16, YENİ paket `…tekserp.yonetim`)
+
+| | |
+|---|---|
+| AAB | `tekserp-yonetim-1.0.2-vc1.aab` · 46.5 MB · SHA-256 `07c5e415d248f20751690224082adb96254d049e277090ac18d1bedde0964609` |
+| Duman APK | `tekserp-yonetim-1.0.2-vc1.duman.apk` · 69.1 MB · SHA-256 `05cd2aac3c39a4fb432f0f66a987e107ad758a6ba1ef81c7b2289377105a0676` — dağıtılmaz |
+| `aapt2 dump badging` | `com.etkiliyazilim.tekserp.yonetim` · versionCode 1 · versionName 1.0.2 · targetSdk 36 · etiket "TeksERP Yönetim" (bütün yerellerde) |
+| İzinler | `INTERNET` + `com.etkiliyazilim.tekserp.yonetim.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` · imza yükleme sertifikası `3DD96B00…` (vc1/vc2 ile AYNI anahtar) |
+| JS paketi | `https://yonetim.etkiliyazilim.com` var · `patron.etkiliyazilim.com` YOK · geliştirme adresi yok · "TeksERP Yönetim" var, "TeksERP Patron" yok |
+| Önbellek dersi | ilk deneme doğrulamada KIRMIZI: ortak `$TMPDIR/metro-cache` eski `EXPO_PUBLIC_PATRON_API` (patron) değerini gömmüştü (Metro dönüşüm anahtarı env değerini katmaz); `build-aab` artık her derlemeye kendi boş TMPDIR'ini verir |
+| Duman (Pixel_10_Pro, API 37) | kurulum ✓ (vc1) · çökme yok · giriş ekranı "TeksERP Yönetim" · E-posta/Parola/Devam/Davet kodum var · giriş DENENMEDİ (`yonetim` DNS kaydı henüz yok — `PATRON-BULUTU-KURULUM.md` §15) |
+| Parola sızıntısı | AAB + APK derleme günlüklerinde kasa parolası aranıp bulunmadı |

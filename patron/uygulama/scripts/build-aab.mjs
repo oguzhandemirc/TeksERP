@@ -13,6 +13,7 @@
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import derleme from "./lib/android-derleme.cjs";
@@ -62,7 +63,11 @@ console.log(`Bulut adresi: ${PATRON_API} · JDK ${jdk} · SDK ${sdk}`);
 console.log(`Yükleme sertifikası SHA-256: ${SERTIFIKA}`);
 
 // (1) Prebuild — android/ git dışıdır; her derleme temiz üretilir (sürüm kimliği app.json'dan, elde kalan klasörden değil).
-const derlemeEnv = { ...javaEnv, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk, EXPO_PUBLIC_PATRON_API: PATRON_API, EXPO_NO_DOTENV: "1", EXPO_NO_TELEMETRY: "1", CI: "1", NODE_ENV: "production" };
+// Metro dönüşüm önbelleği EXPO_PUBLIC_* değerini anahtarına katmaz: ortak $TMPDIR/metro-cache eski bulut adresini
+// pakete gömdü (ölçüldü 2026-10-16). Her derleme kendi boş TMPDIR'iyle — ortak önbelleğe dokunmadan, çıkışta silinir.
+const metroTmp = fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-yonetim-derleme-"));
+process.on("exit", () => fs.rmSync(metroTmp, { recursive: true, force: true }));
+const derlemeEnv = { ...javaEnv, TMPDIR: metroTmp, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk, EXPO_PUBLIC_PATRON_API: PATRON_API, EXPO_NO_DOTENV: "1", EXPO_NO_TELEMETRY: "1", CI: "1", NODE_ENV: "production" };
 baslik("(1/3) expo prebuild --platform android --clean");
 const pb = spawnSync("npx", ["expo", "prebuild", "--platform", "android", "--clean", "--no-install"], { cwd: UYGULAMA, stdio: "inherit", env: derlemeEnv });
 if (pb.status !== 0) dur("prebuild başarısız");
