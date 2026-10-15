@@ -72,7 +72,7 @@ async function main(): Promise<void> {
     console.log("\n§3 ne silinir, ne kalır");
     const h3 = await hesap(o, a.tesisId, hedef.accountId);
     kontrol("§3a ad ve e-posta tombstone", h3?.name === tombstoneName(hedef.accountId) && h3.email === tombstoneEmail(hedef.accountId), `${h3?.name} · ${h3?.email}`);
-    kontrol("§3b parola özeti · TOTP sırrı + adımı · davet NULL", h3?.passwordHash === null && h3.totpSecretSealed === null && h3.totpLastStep === null && h3.inviteTokenHash === null);
+    kontrol("§3b merkez kimlik bağı · davet NULL (parola + TOTP merkez kimlikte)", h3?.identityId === null && h3.inviteTokenHash === null);
     kontrol("§3c satır ve kimlik KALIR (PASIF, izinler, kimlik silme anı)", h3?.id === hedef.accountId && h3.status === "PASIF" && h3.permissions.length === YONETICI.length && h3.identityPurgedAt?.getTime() === sinir);
     const s3 = await sayim(o, a.tesisId, hedef.accountId);
     kontrol("§3d oturum ve cihaz anahtarı satırı YOK", s3.oturum === 0 && s3.cihaz === 0, JSON.stringify({ oturum: s3.oturum, cihaz: s3.cihaz }));
@@ -92,8 +92,8 @@ async function main(): Promise<void> {
     console.log("\n§5 yeniden tanımlama kapısı");
     const duzenle = await api(o, "PATCH", `/api/hesaplar/${hedef.accountId}`, { belirtec: yonetici.belirtec, govde: { clientToken: randomUUID(), ad: "Geri Getirilen Ad" } });
     kontrol("§5a arşivdeki hesap düzenlenemez (409)", duzenle.status === 409 && duzenle.json.details?.code === "DURUM_CAKISMASI", String(duzenle.status));
-    const sir = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.account.update({ where: { id: hedef.accountId }, data: { passwordHash: "scrypt$x" } })).then(() => "gecti", (e: Error) => /accounts_\w+_check/.exec(e.message)?.[0] ?? e.message.slice(0, 60));
-    kontrol("§5b DB CHECK: kimliği silinmiş hesaba parola yazılamaz", /accounts_purged_no_secret_check/.test(sir), sir.slice(0, 80));
+    const sir = await withTesis(o.goc, { tesisId: a.tesisId }, (tx) => tx.account.update({ where: { id: hedef.accountId }, data: { identityId: randomUUID() } })).then(() => "gecti", (e: Error) => /accounts_\w+_check/.exec(e.message)?.[0] ?? e.message.slice(0, 60));
+    kontrol("§5b DB CHECK: kimliği silinmiş hesaba kimlik bağı yazılamaz", /accounts_purged_no_secret_check/.test(sir), sir.slice(0, 80));
 
     console.log("\n§6 e-posta yeniden kullanımı");
     const kapanacak = await hesapKur(o, a.tesisId, ["bulut:siparis:oku"]);

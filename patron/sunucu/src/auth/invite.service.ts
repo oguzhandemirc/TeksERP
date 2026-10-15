@@ -1,9 +1,13 @@
-// DAVET — hesap parolasız ve TOTP'siz DOĞAR (durum DAVETLI); davetli kendi cihazında iki adımda
-// etkinleşir: ① kabul (parola belirler → TOTP sırrı BİR KEZ gösterilir) ② onay (ilk TOTP kodu →
-// AKTİF). Onaysız hesap giriş YAPAMAZ (DB CHECK: AKTİF ⇒ parola + TOTP sırrı + son adım dolu).
+// DAVET — hesap kimliksiz DOĞAR (durum DAVETLI); davetli kendi cihazında iki adımda etkinleşir: ① kabul
+// (parola belirler → merkez KİMLİK DAVETLI doğar, TOTP sırrı BİR KEZ gösterilir) ② onay (ilk TOTP kodu → kimlik +
+// hesap AKTİF, üyelik yazılır). Onaysız hesap giriş YAPAMAZ (DB CHECK: AKTİF kimlik ⇒ parola + TOTP; AKTİF hesap ⇒ kimlik).
+// E-posta başka tesiste ETKİN bir kimliğe bağlıysa onay genel 409 ile reddedilir (kimliğin varlığı söylenmez).
 // Davet belirteci düz saklanmaz (sha256), süreli ve tek kullanımlık (onayda düşer). İlk tesis
 // yöneticisini satıcı CLI'si davet eder; sonrakileri tesis yöneticisi (kurtarma kodu YOK — kayıpta
 // yönetici sıfırlar, yönetici yoksa satıcı CLI'si).
+import { randomUUID } from "node:crypto";
+import type { Identity } from "@prisma/client";
+import type { Tx } from "../lib/db";
 import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError } from "../lib/errors";
 import { uniqueViolationOn } from "../lib/prisma-errors";
@@ -21,15 +25,22 @@ export function createInvite(tesisId: string, nowMs: number, validHours: number)
 
 class InviteClaimLost extends Error {}
 
-/** Dizin satırının gösterdiği hesap kendi tesis DB'sinde hâlâ ETKİN mi (AKTIF · KILITLI)? Tesis DB'si yoksa (imha) değil. */
-async function routeTargetActive(ctx: CloudContext, route: { tesisId: string; accountId: string }): Promise<boolean> {
+/** Üyeliğin gösterdiği hesap kendi tesis DB'sinde hâlâ ETKİN (AKTIF · KILITLI) ve aynı kimliğe bağlı mı? Tesis DB'si yoksa (imha) değil. */
+async function routeTargetActive(ctx: CloudContext, route: { identityId: string; tesisId: string; accountId: string }): Promise<boolean> {
   try {
-    const a = await withTesis(ctx.app, { tesisId: route.tesisId }, (tx) => tx.account.findUnique({ where: { id: route.accountId }, select: { status: true } }));
-    return a?.status === "AKTIF" || a?.status === "KILITLI";
+    const a = await withTesis(ctx.app, { tesisId: route.tesisId }, (tx) => tx.account.findUnique({ where: { id: route.accountId }, select: { status: true, identityId: true } }));
+    return (a?.status === "AKTIF" || a?.status === "KILITLI") && a.identityId === route.identityId;
   } catch (err) {
     if (err instanceof CloudError && err.status === 404) return false;
     throw err;
   }
+}
+
+/** Kimlik bu hesabın kabulüyle yeniden sırlanabilir mi: bu hesap DIŞINDA hiçbir etkin üyeliği yoksa. */
+async function identityReclaimable(ctx: CloudContext, central: Tx, identity: Identity, accountId: string): Promise<boolean> {
+  const routes = await central.loginRoute.findMany({ where: { identityId: identity.id, NOT: { accountId } }, select: { identityId: true, tesisId: true, accountId: true } });
+  for (const r of routes) if (await routeTargetActive(ctx, r)) return false;
+  return true;
 }
 
 const invalidInvite = (): CloudError => new CloudError(404, "DAVET_GECERSIZ", "Davet bağlantısı geçersiz ya da süresi dolmuş");
@@ -51,69 +62,82 @@ export async function inspectInvite(ctx: CloudContext, token: string): Promise<I
     ad: account.name,
     tesisAd: facility?.name ?? null,
     bitis: account.inviteExpiresAt!.toISOString(),
-    totpKurulumuBekliyor: account.totpSecretSealed !== null,
+    totpKurulumuBekliyor: account.identityId !== null,
   };
 }
 
-/** ① Kabul: parola belirlenir, TOTP sırrı üretilir ve YALNIZ bu yanıtta döner (tekrar kabul yeni sır üretir). */
+/**
+ * ① Kabul: kimlik DAVETLI doğar (ya da bu hesap dışında etkin üyeliği olmayan kimlik yeniden sırlanır); TOTP sırrı
+ * YALNIZ bu yanıtta döner (tekrar kabul yeni sır üretir). Kimlik başka tesiste etkinse sırrına DOKUNULMAZ: hesap ona
+ * bağlanır, onay genel 409 verir (yanıt şekli aynı — varlık söylenmez). Kilit sırası: merkez LOGIN_ROUTE → tesis ACCOUNT_ADMIN.
+ */
 export async function acceptInvite(ctx: CloudContext, g: { token: string; password: string }): Promise<InviteAccepted> {
   assertPasswordStrength(g.password);
   const nowMs = ctx.now();
   const { account, digest } = await findInvited(ctx, g.token, nowMs);
   const passwordHash = await hashPassword(g.password);
   const secret = generateTotpSecret();
-  const sealed = ctx.secrets.seal(secret, account.id);
-  const claimed = await withTesis(ctx.app, { tesisId: account.tesisId, lock: { name: "ACCOUNT_ADMIN", key: account.tesisId } }, (tx) =>
-    tx.account.updateMany({
-      where: { id: account.id, status: "DAVETLI", inviteTokenHash: digest, inviteExpiresAt: { gt: new Date(nowMs) } },
-      data: { passwordHash, totpSecretSealed: sealed, totpLastStep: null },
-    }),
-  );
-  if (claimed.count === 0) throw invalidInvite();
+  const emailDigest = ctx.app.key.emailDigest(account.email);
+  try {
+    await withCentral(ctx.app, { lock: { name: "LOGIN_ROUTE", key: emailDigest } }, async (central) => {
+      const existing = await central.identity.findUnique({ where: { emailDigest } });
+      let identityId = existing?.id ?? randomUUID();
+      if (!existing) {
+        await central.identity.create({ data: { id: identityId, emailDigest, passwordHash, totpSecretSealed: ctx.secrets.seal(secret, identityId), status: "DAVETLI" } });
+      } else if (await identityReclaimable(ctx, central, existing, account.id)) {
+        const r = await central.identity.updateMany({
+          where: { id: existing.id, status: existing.status, updatedAt: existing.updatedAt },
+          data: { status: "DAVETLI", passwordHash, totpSecretSealed: ctx.secrets.seal(secret, existing.id), totpLastStep: null, closedAt: null, identityPurgedAt: null },
+        });
+        if (r.count === 0) throw new InviteClaimLost();
+      } else identityId = existing.id;
+      const claimed = await withTesis(ctx.app, { tesisId: account.tesisId, lock: { name: "ACCOUNT_ADMIN", key: account.tesisId } }, (tx) =>
+        tx.account.updateMany({ where: { id: account.id, status: "DAVETLI", inviteTokenHash: digest, inviteExpiresAt: { gt: new Date(nowMs) } }, data: { identityId } }),
+      );
+      if (claimed.count === 0) throw new InviteClaimLost();
+    });
+  } catch (err) {
+    if (err instanceof InviteClaimLost) throw invalidInvite();
+    throw err;
+  }
   await recordAudit(ctx.app, { tesisId: account.tesisId, actor: accountActor(account.id), event: "DAVET_KABUL", entity: "Account", entityId: account.id });
   return { eposta: account.email, totpSirri: secret, otpauth: otpauthUri(account.email, secret) };
 }
 
-/** ② Onay: ilk TOTP kodu doğrulanır → AKTİF; davet belirteci düşer (tek kullanımlık). */
+/** ② Onay: ilk TOTP kodu doğrulanır → kimlik + hesap AKTİF, üyelik yazılır; davet belirteci düşer (tek kullanımlık). */
 export async function confirmInvite(ctx: CloudContext, g: { token: string; totp: string }): Promise<InviteConfirmed> {
   const nowMs = ctx.now();
   const { account, digest } = await findInvited(ctx, g.token, nowMs);
-  if (!account.totpSecretSealed || !account.passwordHash) {
-    throw new CloudError(409, "DURUM_CAKISMASI", "Önce daveti kabul edip parola belirleyin");
-  }
-  const secret = ctx.secrets.open(account.totpSecretSealed, account.id);
-  const totp = secret ? verifyTotp(secret, g.totp, { atMs: nowMs, lastUsedStep: null }) : null;
-  if (!totp?.ok) throw new CloudError(400, "GIRIS_BASARISIZ", "Doğrulama kodu hatalı; kimlik doğrulayıcı uygulamadaki güncel kodu girin");
+  const identityId = account.identityId;
+  const identity = identityId ? await withCentral(ctx.app, {}, (tx) => tx.identity.findUnique({ where: { id: identityId } })) : null;
+  if (!identity) throw new CloudError(409, "DURUM_CAKISMASI", "Önce daveti kabul edip parola belirleyin");
   const notActivated = async (): Promise<never> => {
-    // E-posta başka bir ETKİN hesapta: hangi tesiste olduğu (ve var olduğu) söylenmez, ayak izi sebepsiz.
+    // E-posta başka bir ETKİN kimlikte: hangi tesiste olduğu (ve var olduğu) söylenmez, ayak izi sebepsiz.
     await recordAudit(ctx.app, { tesisId: account.tesisId, actor: accountActor(account.id), event: "DAVET_ETKINLESTIRILEMEDI", entity: "Account", entityId: account.id });
     throw new CloudError(409, "DAVET_ETKINLESTIRILEMEDI", "Davet etkinleştirilemedi; tesis yöneticinize başvurun (farklı bir e-posta adresiyle yeniden davet gerekebilir)");
   };
-  const emailDigest = ctx.app.key.emailDigest(account.email);
-  let claimed: { count: number } | "ETKIN_BASKA";
+  if (identity.status !== "DAVETLI" || !identity.totpSecretSealed) return notActivated();
+  const secret = ctx.secrets.open(identity.totpSecretSealed, identity.id);
+  const totp = secret ? verifyTotp(secret, g.totp, { atMs: nowMs, lastUsedStep: null }) : null;
+  if (!totp?.ok) throw new CloudError(400, "GIRIS_BASARISIZ", "Doğrulama kodu hatalı; kimlik doğrulayıcı uygulamadaki güncel kodu girin");
   try {
-    // Giriş dizini (merkez) önce, tesis claim'i İÇİNDE: claim tutmazsa merkez tx'i geri alınır ve dizin satırı kalmaz.
-    // Kilit sırası sabit: merkez LOGIN_ROUTE → tesis ACCOUNT_ADMIN.
-    claimed = await withCentral(ctx.app, { lock: { name: "LOGIN_ROUTE", key: emailDigest } }, async (central) => {
-      const route = await central.loginRoute.findUnique({ where: { emailDigest } });
-      if (route && (route.tesisId !== account.tesisId || route.accountId !== account.id) && (await routeTargetActive(ctx, route))) return "ETKIN_BASKA" as const;
-      await central.loginRoute.deleteMany({ where: { accountId: account.id, NOT: { emailDigest } } });
-      await central.loginRoute.upsert({ where: { emailDigest }, create: { emailDigest, tesisId: account.tesisId, accountId: account.id }, update: { tesisId: account.tesisId, accountId: account.id } });
+    // Merkez (kimlik + üyelik) önce, tesis claim'i İÇİNDE: claim tutmazsa merkez tx'i geri alınır, üyelik kalmaz.
+    await withCentral(ctx.app, { lock: { name: "LOGIN_ROUTE", key: identity.emailDigest } }, async (central) => {
+      const ir = await central.identity.updateMany({ where: { id: identity.id, status: "DAVETLI", totpSecretSealed: identity.totpSecretSealed }, data: { status: "AKTIF", totpLastStep: totp.step } });
+      if (ir.count === 0) throw new InviteClaimLost();
+      // Bu hesabın ya da bu kimliğin bu tesisteki bayat üyeliği (tesis içi e-posta tekilliği: o hesap PASİF) devredilir.
+      await central.loginRoute.deleteMany({ where: { OR: [{ accountId: account.id }, { identityId: identity.id, tesisId: account.tesisId }] } });
+      await central.loginRoute.create({ data: { identityId: identity.id, tesisId: account.tesisId, accountId: account.id } });
       const r = await withTesis(ctx.app, { tesisId: account.tesisId, lock: { name: "ACCOUNT_ADMIN", key: account.tesisId } }, (tx) =>
-        tx.account.updateMany({
-          where: { id: account.id, status: "DAVETLI", inviteTokenHash: digest, totpSecretSealed: account.totpSecretSealed },
-          data: { status: "AKTIF", inviteTokenHash: null, inviteExpiresAt: null, totpLastStep: totp.step, failedLogins: 0, lockedUntil: null },
-        }),
+        tx.account.updateMany({ where: { id: account.id, status: "DAVETLI", inviteTokenHash: digest, identityId: identity.id }, data: { status: "AKTIF", inviteTokenHash: null, inviteExpiresAt: null } }),
       );
       if (r.count === 0) throw new InviteClaimLost();
-      return r;
     });
   } catch (err) {
     if (err instanceof InviteClaimLost) throw invalidInvite();
     if (!uniqueViolationOn(err, "email_etkin")) throw err;
     return notActivated();
   }
-  if (claimed === "ETKIN_BASKA") return notActivated();
   await recordAudit(ctx.app, { tesisId: account.tesisId, actor: accountActor(account.id), event: "HESAP_ETKINLESTI", entity: "Account", entityId: account.id });
   return { eposta: account.email, durum: "AKTIF" as const };
 }

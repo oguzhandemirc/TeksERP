@@ -186,10 +186,14 @@ export class TesisDbRouter {
     return r?.tesisId ?? null;
   }
 
-  /** Giriş dizini: normalleşmiş e-posta → (tesis, hesap); yoksa null. */
-  async routeOfEmail(normalizedEmail: string): Promise<{ tesisId: string; accountId: string } | null> {
-    const r = await this.central.prisma.loginRoute.findUnique({ where: { emailDigest: this.key.emailDigest(normalizedEmail) }, select: { tesisId: true, accountId: true } });
-    return r ?? null;
+  /** Giriş dizini: normalleşmiş e-posta → kimlik → üyelikleri (tesis, hesap); kimlik yoksa boş. Hesabın etkinliği tesiste sorulur. */
+  async membershipsOfEmail(normalizedEmail: string): Promise<{ identityId: string; tesisId: string; accountId: string }[]> {
+    const r = await this.central.prisma.loginRoute.findMany({
+      where: { identity: { emailDigest: this.key.emailDigest(normalizedEmail) } },
+      select: { identityId: true, tesisId: true, accountId: true },
+      orderBy: { tesisId: "asc" },
+    });
+    return r;
   }
 
   /** Satıcı kipi: bilinmeyen tesisin hazırlık isteği (eşitleme rolü yalnız `tesis_id` yazar; idempotent). */

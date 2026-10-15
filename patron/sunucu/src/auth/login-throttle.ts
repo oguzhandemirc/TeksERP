@@ -1,6 +1,6 @@
-// GİRİŞ KİLİDİ — hesap + KAYNAK ikilisine bağlıdır: ardışık başarısızlık eşiği yalnız o kaynaktan gelen denemeleri
+// GİRİŞ KİLİDİ — KİMLİK (merkez `identities`) + KAYNAK ikilisine bağlıdır: ardışık başarısızlık eşiği yalnız o kaynaktan gelen denemeleri
 // süreli durdurur, başka kaynaktan doğru üçlü girer — hesap düzeyi kilit, e-postayı bilen herkesin elinde süresiz
-// hizmet engeline dönüşüyordu. Bellek içi (tek süreç; yeniden başlatmada sıfırlanır), kaynak adresi düz saklanmaz.
+// hizmet engeline dönüşüyordu (tek kimlik bütün tesislerde tek sayaç). Bellek içi (tek süreç; yeniden başlatmada sıfırlanır), kaynak adresi düz saklanmaz.
 import { createHmac, randomBytes } from "node:crypto";
 import { securityEvent } from "../lib/security-events";
 
@@ -22,9 +22,9 @@ export class LoginThrottle {
     private readonly lockMs: number,
   ) {}
 
-  private slot(accountId: string, source: string | null): string {
+  private slot(identityId: string, source: string | null): string {
     const digest = createHmac("sha256", this.key).update(source && source !== "?" ? source : "?").digest("base64url").slice(0, 22);
-    return `${accountId}|${digest}`;
+    return `${identityId}|${digest}`;
   }
 
   private live(slot: string, nowMs: number): Entry | undefined {
@@ -38,14 +38,14 @@ export class LoginThrottle {
     return e;
   }
 
-  isLocked(accountId: string, source: string | null, nowMs: number): boolean {
-    const e = this.live(this.slot(accountId, source), nowMs);
+  isLocked(identityId: string, source: string | null, nowMs: number): boolean {
+    const e = this.live(this.slot(identityId, source), nowMs);
     return e !== undefined && e.lockedUntil > nowMs;
   }
 
   /** Başarısızlığı sayar; eşik bu denemeyle aşıldıysa kilidin bitişini döner. */
-  registerFailure(accountId: string, source: string | null, nowMs: number): Date | null {
-    const slot = this.slot(accountId, source);
+  registerFailure(identityId: string, source: string | null, nowMs: number): Date | null {
+    const slot = this.slot(identityId, source);
     const e = this.live(slot, nowMs) ?? { fails: 0, lockedUntil: 0, lastAt: nowMs };
     if (e.lockedUntil > nowMs) {
       e.lastAt = nowMs;
@@ -67,8 +67,8 @@ export class LoginThrottle {
     return locked;
   }
 
-  clear(accountId: string, source: string | null): void {
-    this.entries.delete(this.slot(accountId, source));
+  clear(identityId: string, source: string | null): void {
+    this.entries.delete(this.slot(identityId, source));
   }
 
   /** Bellek tavanı: önce sönmüş girdiler, sonra en eski dokunulanlar düşer. */

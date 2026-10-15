@@ -1,6 +1,6 @@
 // =============================================================================
 // TOTP ZORUNLULUĞU + HESAP YAŞAM DÖNGÜSÜ BEKÇİSİ (sözleşme §9.4), gerçek HTTP:
-//   §1 DB seddi: AKTİF hesap parola + TOTP sırrı + son adım OLMADAN doğamaz (CHECK) — koddan bağımsız
+//   §1 DB seddi: AKTİF kimlik parola + TOTP sırrı + son adım OLMADAN, AKTİF hesap kimliksiz doğamaz (CHECK) — koddan bağımsız
 //   §2 davet: incele → kabul (TOTP sırrı YALNIZ canlı yanıtta) → onaysız giriş YOK → yanlış kod RED →
 //      doğru kod AKTİF → davet tek kullanımlık (tekrar 404)
 //   §3 giriş: totp alanı yoksa 400 · yanlış kod ve yanlış parola AYNI 401 iletisi · aynı kod ikinci
@@ -15,21 +15,19 @@
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { LOGIN_FAILURE_FLOOR_MS } from "../src/auth/session.service";
-import { withTesis } from "../src/lib/tenant";
+import { withCentral, withTesis } from "../src/lib/tenant";
 import { inviteFacilityAdmin } from "../src/services/vendor-admin.service";
 import { TEST_PAROLASI, api, girisYap, hesapKur, kontrol, ortamKur, sonuc, temizleTesis, tesisKur, totpKodu, type Ortam, type TestHesabi } from "./lib/test-ortam";
 
 async function dbSeddi(o: Ortam, tesisId: string): Promise<void> {
   console.log("\n§1 DB seddi");
-  let red = false;
-  try {
-    await withTesis(o.goc, { tesisId }, (tx) =>
-      tx.account.create({ data: { tesisId, email: `sed-${randomUUID().slice(0, 8)}@ornek.test`, name: "Sed", permissions: [], status: "AKTIF", passwordHash: "scrypt$x" } }),
-    );
-  } catch (err) {
-    red = /accounts_active_needs_totp_check/.test((err as Error).message) || /check constraint/i.test((err as Error).message);
-  }
-  kontrol("§1a TOTP sırrı olmadan AKTİF hesap DB'de doğamaz (CHECK)", red);
+  const sed = (p: Promise<unknown>): Promise<string> => p.then(() => "gecti", (e: Error) => /violates check constraint "(\w+)"/.exec(e.message)?.[1] ?? e.message.slice(0, 80));
+  const kimlik = await sed(
+    withCentral(o.goc, {}, (tx) => tx.identity.create({ data: { emailDigest: o.anahtar.emailDigest(`sed-${randomUUID().slice(0, 8)}@ornek.test`), status: "AKTIF", passwordHash: "scrypt$x" } })),
+  );
+  kontrol("§1a TOTP sırrı olmadan AKTİF kimlik DB'de doğamaz (merkez CHECK)", kimlik === "identities_active_needs_totp_check", kimlik);
+  const hesap = await sed(withTesis(o.goc, { tesisId }, (tx) => tx.account.create({ data: { tesisId, email: `sed-${randomUUID().slice(0, 8)}@ornek.test`, name: "Sed", permissions: [], status: "AKTIF" } })));
+  kontrol("§1b kimliksiz AKTİF hesap DB'de doğamaz (tesis CHECK)", hesap === "accounts_active_needs_identity_check", hesap);
 }
 
 async function davetBolumu(o: Ortam, tesisId: string): Promise<void> {

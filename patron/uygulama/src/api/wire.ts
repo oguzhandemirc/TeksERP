@@ -27,12 +27,21 @@ export interface AccountSummary {
   readonly izinler: readonly string[];
 }
 
-/** `POST /oturum/ac` — e-posta + parola + TOTP tek istekte (TOTP'siz oturum yok). */
+/** Kimliğin erişebildiği tesis (yalnız AKTİF üyelik; KİLİTLİ görünmez). */
+export interface FacilityChoice {
+  readonly id: string;
+  readonly ad: string;
+  readonly hizmet: ServicePhase;
+}
+
+/** `POST /oturum/ac` — e-posta + parola + TOTP tek istekte (TOTP'siz oturum yok); `tesisId` ipucu opsiyonel. */
 export interface LoginResponse {
   readonly belirtec: string;
   readonly bitis: string;
   readonly hesap: AccountSummary;
   readonly tesisId: string;
+  /** Eski sunucu göndermez; yoksa tek tesis varsayılır. */
+  readonly tesisler?: readonly FacilityChoice[];
 }
 
 export interface SyncStatus {

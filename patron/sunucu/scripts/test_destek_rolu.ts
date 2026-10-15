@@ -153,7 +153,7 @@ async function main(): Promise<void> {
     try {
       const merkezRol = supportRoleName(decodeURIComponent(new URL(process.env.GOC_DATABASE_URL!).pathname.slice(1)));
       const okur = await merkez.query<{ t: string }>("SELECT t FROM unnest($1::text[]) t WHERE has_any_column_privilege($2, t, 'SELECT')", [[...CLOUD_TABLES], merkezRol]);
-      kontrol("§1m merkezin destek rolü hiçbir tabloyu OKUYAMAZ (kiracı verisi tesis DB'lerinde)", okur.rowCount === 0, okur.rows.map((x) => x.t).join(",") || "temiz");
+      kontrol("§1m merkezin destek rolü hiçbir tabloyu OKUYAMAZ (kiracı verisi tesis DB'lerinde; kimlik sırları `identities` dahil)", okur.rowCount === 0, okur.rows.map((x) => x.t).join(",") || "temiz");
     } finally {
       await merkez.end();
     }
@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     await ikinci.query("SELECT set_config('app.tesis_id', $1, false), set_config('app.projeksiyonlar', 'siparis', false)", [a.tesisId]);
     const devral = await dene(ikinci, "SELECT count(*)::int AS n FROM projection_rows");
     kontrol("§2g başka oturum (aynı rol) izni devralamaz → 0 satır", devral.rows[0]?.n === 0, JSON.stringify(devral.rows[0] ?? devral.hata));
-    const sir = await dene(d, "SELECT password_hash FROM accounts");
+    const sir = await dene(d, "SELECT invite_token_hash FROM accounts");
     kontrol("§2h sır kolonu sorgusu permission denied", /permission denied/i.test(sir.hata ?? ""), sir.hata?.slice(0, 60));
 
     console.log("\n§3 salt okunur");

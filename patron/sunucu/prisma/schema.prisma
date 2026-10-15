@@ -46,6 +46,14 @@ enum InstallationSource {
   SATICI
 }
 
+enum IdentityStatus {
+  /// Davet kabul edildi (parola + TOTP sırrı var), ilk kod henüz onaylanmadı — giriş YOK.
+  DAVETLI
+  AKTIF
+  /// Kapandı — giriş YOK.
+  PASIF
+}
+
 enum AccountStatus {
   /// Davet belirteci bekliyor (parola + TOTP kurulumu yapılmadı) — giriş YOK.
   DAVETLI
@@ -153,16 +161,39 @@ model InstallationRoute {
   @@map("installation_routes")
 }
 
-/// Giriş dizini: e-postanın ANAHTARLI özeti (HMAC-SHA256, `patron-tesis-db.key`, alan "giris-dizini") → tesis +
-/// hesap. Merkez düz e-posta TAŞIMAZ. Yalnız davet onayında yazılır; hedefi etkin olmayan satırı bakım siler.
-model LoginRoute {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  emailDigest String   @unique @map("email_digest") @db.VarChar(64)
-  tesisId     String   @map("tesis_id") @db.Uuid
-  accountId   String   @unique @map("account_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+/// Bulut KİMLİĞİ (merkez): tek e-posta (yalnız ANAHTARLI özet, HMAC-SHA256 `patron-tesis-db.key`) + tek parola + tek
+/// TOTP; birden çok tesise üyelikle (`login_routes`) erişir. Merkez düz e-posta TAŞIMAZ. TOTP sırrı kimlik id'siyle
+/// mühürlü. CHECK: AKTIF ⇒ parola + TOTP sırrı + son adım; PASIF ⇔ kapanış anı; silinmişte sır yok.
+model Identity {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  emailDigest      String         @unique @map("email_digest") @db.VarChar(64)
+  passwordHash     String?        @map("password_hash") @db.VarChar(200)
+  totpSecretSealed String?        @map("totp_secret_sealed") @db.VarChar(300)
+  totpLastStep     Int?           @map("totp_last_step")
+  status           IdentityStatus @default(DAVETLI) @map("status")
+  closedAt         DateTime?      @map("closed_at") @db.Timestamptz
+  identityPurgedAt DateTime?      @map("identity_purged_at") @db.Timestamptz
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
+  memberships LoginRoute[]
+
+  @@map("identities")
+}
+
+/// Üyelik (giriş dizini): kimlik → (tesis, hesap). Kimlik tesis başına en çok bir hesaba, hesap tek kimliğe bağlıdır.
+/// Yalnız davet onayında yazılır; hedefi etkin olmayan satırı bakım siler.
+model LoginRoute {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  identityId String   @map("identity_id") @db.Uuid
+  tesisId    String   @map("tesis_id") @db.Uuid
+  accountId  String   @unique @map("account_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  identity Identity @relation(fields: [identityId], references: [id], onDelete: Restrict)
+
+  @@unique([identityId, tesisId])
   @@index([tesisId])
   @@map("login_routes")
 }
@@ -218,27 +249,23 @@ model Installation {
 // HESAPLAR (bulutta BAĞIMSIZ — fabrika kullanıcısına bağlanmaz; hesap başına TEK tesis)
 // -----------------------------------------------------------------------------
 
-/// Bulut hesabı. E-posta küçük harfe normalleşir ve TÜM bulutta tekildir (giriş tesis sormaz). PASIF terminaldir;
+/// Bulut hesabı (tesis tarafı). E-posta küçük harfe normalleşir; bulut genelinde KİMLİK tekildir (`identities`). PASIF terminaldir;
 /// kapanıştan 30 gün sonra kimliği silinir (`src/services/maintenance.ts` `purgeClosedIdentities`), satır iş kayıtlarının izi için kalır.
-/// Parola scrypt özeti; TOTP sırrı AES-256-GCM ile sarılı (anahtar ANAHTAR_DIZINI'nde, DB'de değil).
+/// Tesis hesabı (üyeliğin tesis tarafı): ad, e-posta, izin, durum. Parola/TOTP merkez kimliktedir (`identities`).
 /// İzinler kod kataloğundan (`src/catalog/permissions.ts`); süper yetki yoktur.
 model Account {
   id               String        @id @default(uuid()) @db.Uuid
   tesisId          String        @map("tesis_id") @db.Uuid
-  /// Tekillik kısmi indekslerle (migration `20261001120000`): bulut genelinde yalnız AKTIF · KILITLI hesapta;
+  /// Tekillik kısmi indekslerle (migration `20261001120000`): tesis DB'si içinde AKTIF · KILITLI hesapta (bulut geneli tekillik `identities.email_digest`);
   /// tesis içinde PASİF olmayan hesapta. Davet ve arşiv e-postayı tutmaz.
   email            String        @map("email") @db.VarChar(254)
   name             String        @map("name") @db.VarChar(120)
-  passwordHash     String?       @map("password_hash") @db.VarChar(200)
-  totpSecretSealed String?       @map("totp_secret_sealed") @db.VarChar(300)
-  totpLastStep     Int?          @map("totp_last_step")
+  /// Merkez kimliği (`identities.id`; DB'ler arası, FK yok). CHECK: AKTIF · KILITLI ⇒ dolu. Parola/TOTP kimliktedir.
+  identityId       String?       @map("identity_id") @db.Uuid
   permissions      String[]      @map("permissions")
   status           AccountStatus @default(DAVETLI) @map("status")
   inviteTokenHash  String?       @unique @map("invite_token_hash") @db.VarChar(64)
   inviteExpiresAt  DateTime?     @map("invite_expires_at") @db.Timestamptz
-  /// Hesap düzeyi eski kilit sayacı/bitişi — karar VERMEZ (kilit hesap + kaynak, `auth/login-throttle.ts`); başarıda sıfırlanır.
-  failedLogins     Int           @default(0) @map("failed_logins")
-  lockedUntil      DateTime?     @map("locked_until") @db.Timestamptz
   lastLoginAt      DateTime?     @map("last_login_at") @db.Timestamptz
   /// Kapanış anı (PASIF geçişiyle aynı claim'de; CHECK: PASIF ⇔ dolu).
   closedAt         DateTime?     @map("closed_at") @db.Timestamptz

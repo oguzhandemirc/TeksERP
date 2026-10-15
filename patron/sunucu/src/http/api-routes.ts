@@ -5,7 +5,7 @@
 import express, { type NextFunction, type Request, type Response, type Router } from "express";
 import { z } from "zod";
 import { acceptInvite, confirmInvite, inspectInvite } from "../auth/invite.service";
-import { changeOwnPassword, login, logout, resolveSession, type SessionContext } from "../auth/session.service";
+import { changeOwnPassword, listFacilities, login, logout, resolveSession, switchFacility, type OpenedSession, type SessionContext } from "../auth/session.service";
 import { ASSIGNABLE_PERMISSIONS, ROLE_TEMPLATES } from "../catalog/permissions";
 import { CloudError, badRequest } from "../lib/errors";
 import { createAccount, listAccountAudit, listAccounts, resetAccount, setAccountStatus, updateAccount } from "../services/account.service";
@@ -16,7 +16,7 @@ import { deactivateDevice, listDevices, registerDevice } from "../services/devic
 import { requestSnapshotRefresh } from "../services/doorbell";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
 import { cancelReportRequest, createReportRequest, getReportRequest, listReportRequests } from "../services/report.service";
-import { PermissionList, Template, Token, body, page, param, s, sendFile, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
+import { PermissionList, Template, Token, Uuid, body, page, param, s, sendFile, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
 import { EXPORT_ROUTES } from "./export-routes";
 import { NOTIFICATION_ROUTES } from "./notification-routes";
 import { clientAddress, rateLimit } from "./rate-limit";
@@ -24,6 +24,14 @@ import { clientAddress, rateLimit } from "./rate-limit";
 export type { ApiCall, ApiRouteDef } from "./api-route-kit";
 
 const PROJECTION = "projeksiyon";
+
+const loginResponse = (r: OpenedSession): LoginResponse => ({
+  belirtec: r.token,
+  bitis: r.expiresAt.toISOString(),
+  hesap: { id: r.session.accountId, ad: r.session.accountName, eposta: r.session.email, izinler: [...r.session.permissions].sort() },
+  tesisId: r.session.tesisId,
+  tesisler: r.facilities,
+});
 
 export const API_ROUTES: readonly ApiRouteDef[] = [
   // ---- açık (oturumsuz) ----
@@ -33,10 +41,9 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     auth: "ACIK",
     kimlik: { muaf: "oturum doğumu; tekrar yeni oturum açar (eski oturum süresiyle kapanır)" },
     handler: async (c) => {
-      const b = body(c, z.strictObject({ eposta: z.string().min(3).max(254), parola: z.string().min(1).max(200), totp: z.string().min(1).max(12), istemci: z.enum(["mobil", "web"]).optional() }));
-      const r = await login(c.ctx, { email: b.eposta, password: b.parola, totp: b.totp, client: b.istemci ?? null, ip: clientAddress(c.req, c.ctx.config) });
-      const data: LoginResponse = { belirtec: r.token, bitis: r.expiresAt.toISOString(), hesap: { id: r.session.accountId, ad: r.session.accountName, eposta: r.session.email, izinler: [...r.session.permissions].sort() }, tesisId: r.session.tesisId };
-      return { data };
+      const b = body(c, z.strictObject({ eposta: z.string().min(3).max(254), parola: z.string().min(1).max(200), totp: z.string().min(1).max(12), istemci: z.enum(["mobil", "web"]).optional(), tesisId: Uuid.optional() }));
+      const r = await login(c.ctx, { email: b.eposta, password: b.parola, totp: b.totp, client: b.istemci ?? null, ip: clientAddress(c.req, c.ctx.config), ...(b.tesisId ? { tesisId: b.tesisId } : {}) });
+      return { data: loginResponse(r) };
     },
   },
   {
@@ -74,8 +81,20 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     auth: "OTURUM",
     kimlik: { muaf: "oturum kapatma atomik claim; tekrarı etkisiz" },
     handler: async (c) => {
-      await logout(c.ctx, s(c));
+      const b = body(c, z.strictObject({ hepsi: z.boolean().optional() }));
+      await logout(c.ctx, s(c), { all: b.hepsi === true });
       return { data: null };
+    },
+  },
+  { method: "get", path: "/oturum/tesisler", auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await listFacilities(c.ctx, s(c)) }) },
+  {
+    method: "post",
+    path: "/oturum/gecis",
+    auth: "OTURUM",
+    kimlik: { muaf: "eski oturumun kapanışı atomik claim; tekrar 401 (oturum kapandı), ikinci oturum doğmaz" },
+    handler: async (c) => {
+      const b = body(c, z.strictObject({ tesisId: Uuid }));
+      return { data: loginResponse(await switchFacility(c.ctx, s(c), b.tesisId)) };
     },
   },
   {

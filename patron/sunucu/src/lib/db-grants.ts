@@ -89,6 +89,7 @@ export const CLOUD_TABLES: readonly string[] = [
   "facility_databases",
   "installation_routes",
   "login_routes",
+  "identities",
 ];
 
 /**
@@ -96,21 +97,25 @@ export const CLOUD_TABLES: readonly string[] = [
  * erişim kaydı). Tesis DB'sinde bu tablolar BOŞ ve hiçbir çalışma rolüne yetkisizdir; `support_access` iki tarafta
  * da yaşar (tesiste canlı kayıt, merkezde imha arşivi).
  */
-export const MERKEZ_TABLES: readonly string[] = ["facility_databases", "installation_routes", "login_routes", "facility_destructions", "support_access"];
+export const MERKEZ_TABLES: readonly string[] = ["facility_databases", "installation_routes", "login_routes", "identities", "facility_destructions", "support_access"];
 
-/** Yönlendirme tabloları: kiracı verisi değildir, RLS TAŞIMAZ (merkezde çalışma rollerinin tek yetkisi bunlardır). */
-export const ROUTING_TABLES: readonly string[] = ["facility_databases", "installation_routes", "login_routes"];
+/**
+ * Yönlendirme tabloları: kiracı verisi değildir, RLS TAŞIMAZ (merkezde çalışma rollerinin tek yetkisi bunlardır).
+ * `identities` (bulut kimliği: e-posta özeti + parola + TOTP) da tesise ait değildir; tesis imhasında KALIR.
+ */
+export const ROUTING_TABLES: readonly string[] = ["facility_databases", "installation_routes", "login_routes", "identities"];
 
 /** Tesis DB'sinde yaşayan tablolar (CLOUD_TABLES − yalnız-merkez tabloları). */
 export const TESIS_TABLES: readonly string[] = CLOUD_TABLES.filter((t) => t === "support_access" || !MERKEZ_TABLES.includes(t));
 
-/** Merkez uygulama rolü: yönlendirme okur (tesis listesi), giriş dizinini davet onayında yazar. */
+/** Merkez uygulama rolü: yönlendirme okur (tesis listesi), kimliği ve üyeliği davette yazar, girişte kimliği doğrular. */
 export const MERKEZ_APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facility_databases: ["SELECT"],
   login_routes: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  identities: ["SELECT", "INSERT", "UPDATE"],
 };
 
-/** Merkez eşitleme rolü: kurulum yönü (satıcı iç API önbelleği) + hazırlık isteği + bayat giriş satırı budaması. */
+/** Merkez eşitleme rolü: kurulum yönü (satıcı iç API önbelleği) + hazırlık isteği + bayat giriş satırı budaması; kimliğe (`identities`) ERİŞEMEZ. */
 export const MERKEZ_SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   facility_databases: ["SELECT"],
   installation_routes: ["SELECT", "INSERT"],
@@ -132,7 +137,7 @@ export const MERKEZ_SYNC_COLUMN_GRANTS: ColumnGrants = {
 export const SUPPORT_GRANTS: Readonly<Record<string, "*" | readonly string[]>> = {
   facilities: "*",
   installations: "*",
-  accounts: ["id", "tesis_id", "email", "name", "permissions", "status", "invite_expires_at", "failed_logins", "locked_until", "last_login_at", "closed_at", "identity_purged_at", "created_by_id", "created_at", "updated_at"],
+  accounts: ["id", "tesis_id", "email", "name", "identity_id", "permissions", "status", "invite_expires_at", "last_login_at", "closed_at", "identity_purged_at", "created_by_id", "created_at", "updated_at"],
   sessions: ["id", "tesis_id", "account_id", "client", "last_used_at", "expires_at", "closed_at", "close_reason", "created_at", "updated_at"],
   account_audit: "*",
   operation_receipts: "*",

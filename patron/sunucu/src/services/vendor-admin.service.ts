@@ -151,13 +151,9 @@ export async function reinviteAdmin(db: TesisDbRouter, g: { tesisId: string; ema
       where: { id: a.id, tesisId: g.tesisId, status: a.status },
       data: {
         status: "DAVETLI",
-        passwordHash: null,
-        totpSecretSealed: null,
-        totpLastStep: null,
+        identityId: null,
         inviteTokenHash: invite.digest,
         inviteExpiresAt: invite.expiresAt,
-        failedLogins: 0,
-        lockedUntil: null,
         permissions: [...new Set([...a.permissions, ADMIN_PERMISSION])],
       },
     });

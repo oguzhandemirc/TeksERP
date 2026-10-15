@@ -39,8 +39,8 @@ const TOMBSTONE_DAYS = 7;
 
 /**
  * Kapanan hesabın KİMLİĞİ bu kadar gün sonra silinir (Ek-6/A §2.5, "30 gün içinde") — metnin sözü, ortamdan
- * değiştirilemez. Silinen: ad · e-posta · parola özeti · TOTP sırrı + adımı · davet · kilit sayaçları · oturumlar ·
- * cihaz anahtarları; gelen kutusundaki yazar adı ve işlem makbuzu yanıtlarındaki ad/e-posta tombstone olur. KALAN:
+ * değiştirilemez. Tesiste silinen: ad · e-posta · merkez kimlik bağı · davet · oturumlar · cihaz anahtarları
+ * (parola + TOTP merkez kimliktedir, kimliğin kendi silmesi ayrıdır); gelen kutusundaki yazar adı ve işlem makbuzu yanıtlarındaki ad/e-posta tombstone olur. KALAN:
  * satır ve kimliği (iş kayıtları ona bağlı), durum, izinler, tarihler, makbuzun kendisi. Ayak izi
  * `HESAP_KIMLIGI_SILINDI` (imha kaydı, Ek-6/A §6.1).
  */
@@ -255,13 +255,9 @@ export async function purgeClosedIdentities(ctx: CloudContext, tesisId: string, 
         data: {
           name: tombstoneName(id),
           email: tombstoneEmail(id),
-          passwordHash: null,
-          totpSecretSealed: null,
-          totpLastStep: null,
+          identityId: null,
           inviteTokenHash: null,
           inviteExpiresAt: null,
-          failedLogins: 0,
-          lockedUntil: null,
           identityPurgedAt: new Date(nowMs),
         },
       });

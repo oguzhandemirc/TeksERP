@@ -151,7 +151,8 @@ function budama(): void {
   const beklenen = TESIS_TABLES.filter((t) => !kalan.has(t)).sort();
   const sayilan = DESTRUCTION_STEPS.map((st) => st.table).sort();
   kontrol("§4e imha sayım listesi = TESIS_TABLES − RETAINED_TABLES (iki yönlü; yeni tablo tutanaktan kaçamaz)", JSON.stringify(sayilan) === JSON.stringify(beklenen) && new Set(sayilan).size === sayilan.length, `${sayilan.length}/${beklenen.length}`);
-  const yonlendirme = ROUTING_TABLES.filter((t) => t !== "facility_databases").sort();
+  // Kimlik (`identities`) tesise ait değildir: tesis imhasında KALIR (yalnız o tesisin üyelik satırı düşer).
+  const yonlendirme = ROUTING_TABLES.filter((t) => t !== "facility_databases" && t !== "identities").sort();
   const bulunan = [...imhaHedef.tablolar].sort();
   kontrol("§4f imha satır silmesi YALNIZ merkezin yönlendirme satırları (tesis verisi DB'yle düşer; facility_databases durum geçişi)", JSON.stringify(bulunan) === JSON.stringify(yonlendirme) && imhaHedef.bilinmeyen.length === 0 && /DROP DATABASE IF EXISTS/.test(kod(imhaMetni)), bulunan.concat(imhaHedef.bilinmeyen).join(",") || "boş");
   kontrol("§4g kalan tablo MERKEZDE ve tutanak sayımında değil", [...kalan].every((t) => MERKEZ_TABLES.includes(t) && !sayilan.includes(t)));

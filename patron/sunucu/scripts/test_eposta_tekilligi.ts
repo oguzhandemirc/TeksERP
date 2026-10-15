@@ -1,14 +1,17 @@
 // =============================================================================
-// E-POSTA TEKİLLİĞİ BEKÇİSİ (G19) — bulut genelinde tekillik YALNIZ etkin hesapta, başka tesisin varlığı sızmaz.
+// E-POSTA TEKİLLİĞİ BEKÇİSİ (G19 + tek kimlik 2026-10-15) — bulut genelinde e-posta TEK KİMLİKTİR (merkez
+// `identities.email_digest` UNIQUE); aynı kimlik birden çok tesise üye olabilir, iki AYRI kimlik aynı e-postayı taşıyamaz.
 // Gerçek HTTP; üç tesis, aynı e-posta:
 //   §1 davet başka tesisi SORMAZ: A'da AKTİF olan e-posta B'de davet edilir (201, yanıt taze e-postayla aynı biçim)
 //   §2 onayda çakışma GENEL iletiyle reddedilir (409 DAVET_ETKINLESTIRILEMEDI; tesis/hesap adı yok) · B'deki hesap
 //      DAVETLI kalır · A etkilenmez · B'nin ayak izi sebepsiz
-//   §3 arşiv e-postayı TUTMAZ: A'daki hesap PASİF olunca B'deki aynı davet onaylanır · giriş B'ye çözülür
+//   §3 arşiv e-postayı TUTMAZ: A'daki hesap PASİF olunca B'deki aynı davet YENİDEN KABULLE onaylanır (kimlik yeniden
+//      sırlanır) · giriş B'ye çözülür
 //   §4 davet e-postayı TUTMAZ: C'de bekleyen DAVETLİ varken başka tesiste etkinleştirme engellenmez · giriş
 //      DAVETLİ/PASİF satırı aday saymaz
 //   §5 aynı tesiste PASİF olmayan iki hesap aynı e-postayı taşıyamaz (409 EPOSTA_KULLANIMDA) · arşivlenenin
-//      e-postası aynı tesiste yeniden davet edilir · DB seddi: tesis içi kısmi UNIQUE + merkez giriş dizini UNIQUE doğrudan SQL'le de geçilmez
+//      e-postası aynı tesiste yeniden davet edilir · DB seddi: tesis içi kısmi UNIQUE + merkez kimlik UNIQUE(e-posta özeti)
+//      + üyelik UNIQUE(kimlik, tesis) doğrudan SQL'le de geçilmez; aynı kimliğin İKİNCİ tesise üyeliği geçer
 // Koşum: npx tsx scripts/test_eposta_tekilligi.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -71,9 +74,15 @@ async function main(): Promise<void> {
     console.log("\n§3 arşiv e-postayı tutmaz");
     const arsiv = await api(o, "POST", `/api/hesaplar/${ortak.accountId}/durum`, { belirtec: ya.belirtec, govde: { clientToken: randomUUID(), durum: "PASIF" } });
     o.saat.ilerlet(31_000);
-    const onay2 = await api(o, "POST", "/api/davet/onay", { govde: { davet: tokenB, totp: totpKodu(r2.sir, o.saat.simdi()) } });
-    kontrol("§3a ⭐ A'daki hesap PASİF → B'deki aynı davet onaylanır (AKTİF)", arsiv.status === 200 && onay2.status === 200 && (onay2.json.data as { durum?: string }).durum === "AKTIF", `${arsiv.status}/${onay2.status}`);
-    const girisB = await giris(o, ortak.eposta, r2.sir);
+    const eskiOnay = await api(o, "POST", "/api/davet/onay", { govde: { davet: tokenB, totp: totpKodu(r2.sir, o.saat.simdi()) } });
+    const r3 = await etkinlestir(o, tokenB);
+    const onay2 = r3.onay;
+    kontrol(
+      "§3a ⭐ A'daki hesap PASİF → B'deki aynı davet yeniden kabulle onaylanır (AKTİF); kimlik etkinken alınan kabul onaylanmaz",
+      arsiv.status === 200 && eskiOnay.status === 409 && onay2.status === 200 && (onay2.json.data as { durum?: string }).durum === "AKTIF",
+      `${arsiv.status}/${eskiOnay.status}/${onay2.status}`,
+    );
+    const girisB = await giris(o, ortak.eposta, r3.sir);
     kontrol("§3b giriş artık B'deki hesaba çözülür", girisB.status === 200 && (girisB.json.data as { tesisId?: string }).tesisId === b.tesisId);
 
     console.log("\n§4 davet e-postayı tutmaz; giriş yalnız etkin hesaba çözülür");
@@ -94,16 +103,24 @@ async function main(): Promise<void> {
     kontrol("§5b arşivlenenin e-postası aynı tesiste (A) yeniden davet edilir → 201", yeniden.status === 201, `${yeniden.status}`);
     const sed = async (tesisId: string, status: "DAVETLI" | "AKTIF") =>
       withTesis(o.goc, { tesisId }, (tx) =>
-        tx.$executeRaw`INSERT INTO accounts (id, tesis_id, email, name, permissions, status, password_hash, totp_secret_sealed, totp_last_step, updated_at)
-          VALUES (gen_random_uuid(), ${tesisId}::uuid, ${ortak.eposta}, 'Sed', '{}', ${status}::"AccountStatus", 'scrypt$x', 'x', 1, now())`,
+        tx.$executeRaw`INSERT INTO accounts (id, tesis_id, email, name, permissions, status, identity_id, updated_at)
+          VALUES (gen_random_uuid(), ${tesisId}::uuid, ${ortak.eposta}, 'Sed', '{}', ${status}::"AccountStatus", gen_random_uuid(), now())`,
       ).then(() => "gecti", (e: Error) => /accounts_\w+_key/.exec(e.message)?.[0] ?? e.message.slice(0, 80));
     const tesisIci = await sed(b.tesisId, "DAVETLI");
-    // Bulut geneli etkin tekillik tesis DB'lerinin ÜSTÜNDE: merkez giriş dizininde e-posta özeti başına tek satır.
+    // Bulut geneli tekillik tesis DB'lerinin ÜSTÜNDE: merkezde e-posta özeti başına TEK kimlik; kimlik tesis başına tek üyelik.
     const ozet = o.anahtar.emailDigest(ortak.eposta);
-    const genel = await withCentral(o.goc, {}, (tx) =>
-      tx.$executeRaw`INSERT INTO login_routes (email_digest, tesis_id, account_id) VALUES (${ozet}, ${c.tesisId}::uuid, gen_random_uuid())`,
-    ).then(() => "gecti", (e: Error) => /login_routes_\w+_key/.exec(e.message)?.[0] ?? e.message.slice(0, 80));
-    kontrol("§5c ⭐ DB seddi: aynı tesiste ikinci PASİF-olmayan satır (tesis_email) · başka tesiste ikinci ETKİN satır (merkez giriş dizini, email_digest) doğrudan SQL'le de RED", tesisIci === "accounts_tesis_email_key" && genel === "login_routes_email_digest_key", `${tesisIci} · ${genel}`);
+    const merkez = (q: (tx: Parameters<Parameters<typeof withCentral>[2]>[0]) => Promise<unknown>) =>
+      withCentral(o.goc, {}, q).then(() => "gecti", (e: Error) => /(identities|login_routes)_\w+_key/.exec(e.message)?.[0] ?? e.message.slice(0, 80));
+    const ikinciKimlik = await merkez((tx) => tx.$executeRaw`INSERT INTO identities (email_digest, status, updated_at) VALUES (${ozet}, 'DAVETLI', now())`);
+    const kimlik = await withCentral(o.goc, {}, (tx) => tx.identity.findUniqueOrThrow({ where: { emailDigest: ozet }, select: { id: true } }));
+    const ikinciUyelik = await merkez((tx) => tx.$executeRaw`INSERT INTO login_routes (identity_id, tesis_id, account_id) VALUES (${kimlik.id}::uuid, ${b.tesisId}::uuid, gen_random_uuid())`);
+    const baskaTesis = await merkez((tx) => tx.$executeRaw`INSERT INTO login_routes (identity_id, tesis_id, account_id) VALUES (${kimlik.id}::uuid, ${c.tesisId}::uuid, gen_random_uuid())`);
+    kontrol(
+      "§5c ⭐ DB seddi: aynı tesiste ikinci PASİF-olmayan satır (tesis_email) · aynı e-postada İKİNCİ KİMLİK (identities email_digest) · kimliğin aynı tesise ikinci üyeliği RED",
+      tesisIci === "accounts_tesis_email_key" && ikinciKimlik === "identities_email_digest_key" && ikinciUyelik === "login_routes_identity_id_tesis_id_key",
+      `${tesisIci} · ${ikinciKimlik} · ${ikinciUyelik}`,
+    );
+    kontrol("§5d aynı kimliğin BAŞKA tesise üyeliği DB'de İZİNLİ (tek kimlik → çok tesis)", baskaTesis === "gecti", baskaTesis);
   } finally {
     for (const t of [a, b, c]) await temizleTesis(o, t.tesisId);
     await o.kapat();

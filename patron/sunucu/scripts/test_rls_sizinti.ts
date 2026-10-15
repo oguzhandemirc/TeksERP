@@ -151,7 +151,7 @@ async function capraz(o: Ortam, a: { tesisId: string; hesap: string; eposta: str
     const guncelle = await kapsamda(c, ayarA, () => c.query("UPDATE accounts SET name = 'ele gecirildi' WHERE id = $1", [b.hesap]));
     kontrol("§3e A kapsamında B'nin hesabını güncelleme 0 satır", guncelle.rowCount === 0);
     const arama = await kapsamda(c, { "app.tesis_id": NO_TENANT, "app.giris_eposta": a.eposta }, () => c.query("SELECT id FROM accounts"));
-    kontrol("§3f giriş araması yalnız o e-postanın TEK satırını açar", arama.rowCount === 1 && arama.rows[0].id === a.hesap);
+    kontrol("§3f e-postayla ön-kiracı giriş araması KALKTI (kimlik merkezde): `app.giris_eposta` hiçbir hesabı açmaz", arama.rowCount === 0);
     const aramaYan = await kapsamda(c, { "app.tesis_id": NO_TENANT, "app.giris_eposta": a.eposta, "app.projeksiyonlar": "siparis" }, () =>
       c.query("SELECT count(*)::int AS n FROM projection_rows"),
     );
@@ -190,12 +190,12 @@ async function rolAyrimi(o: Ortam, a: { tesisId: string }): Promise<void> {
     kontrol("§5b eşitleme rolü hesap tablosunu OKUYAMAZ", oku.hata && /permission denied/i.test(oku.mesaj), oku.mesaj.slice(0, 60));
     const yazar = await kapsamda(sync, { "app.tesis_id": a.tesisId }, () => hataVerir(sync, "SELECT id, tesis_id, status, permissions FROM accounts"));
     const kimlik: string[] = [];
-    for (const kolon of ["email", "name", "password_hash", "totp_secret_sealed", "invite_token_hash", "last_login_at"]) {
+    for (const kolon of ["email", "name", "identity_id", "invite_token_hash", "last_login_at"]) {
       const r = await kapsamda(sync, { "app.tesis_id": a.tesisId }, () => hataVerir(sync, `SELECT ${kolon} FROM accounts`));
       if (!(r.hata && /permission denied/i.test(r.mesaj))) kimlik.push(kolon);
     }
     kontrol(
-      "§5b2 ⭐ eşitleme rolü `accounts`ta YALNIZ kimlik · tesis · durum · izin okur (gelen kutusu yazar sorgusu); e-posta · ad · sırlar · son giriş RED",
+      "§5b2 ⭐ eşitleme rolü `accounts`ta YALNIZ kimlik · tesis · durum · izin okur (gelen kutusu yazar sorgusu); e-posta · ad · kimlik bağı · davet sırrı · son giriş RED",
       !yazar.hata && yazar.satir >= 1 && kimlik.length === 0,
       yazar.hata ? yazar.mesaj.slice(0, 60) : kimlik.join(",") || `${yazar.satir} satır`,
     );

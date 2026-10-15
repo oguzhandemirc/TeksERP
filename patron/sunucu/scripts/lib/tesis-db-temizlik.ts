@@ -61,6 +61,8 @@ export async function sweepTestFacilityDbs(gocUrl: string): Promise<number> {
     }
     await c.query("DELETE FROM installation_routes");
     await c.query("DELETE FROM login_routes");
+    // Bekçi kimlikleri (rastgele e-posta; üyelikleri yukarıda düştü) — yalnız bu `_test` merkezinde.
+    await c.query("DELETE FROM identities");
     await c.query("DELETE FROM facility_databases");
     await c.query("BEGIN");
     await c.query("SET LOCAL session_replication_role = replica");

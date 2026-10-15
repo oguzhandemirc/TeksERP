@@ -6,8 +6,9 @@
 // DB bağı: hazırlayıcı her tesis DB'sine `app.veritabani_tesisi = <tesis>` yazar (merkeze `merkez`); işaret kapsamın
 // tesisi değilse tx hiçbir sorgu koşmadan düşer ⇒ dizin bozulsa bile A'nın kapsamı B'nin DB'sinde açılamaz.
 // `true` = SET LOCAL: tx bitince değer düşer (havuzlu bağlantıda sızmaz). Kapsamsız sorgu RLS'te HATA verir.
-// Ön-kiracı aramaları (giriş e-postası, oturum/davet özeti, kurulum kimliği) önce TESİSİ çözer (merkez dizini ya da
-// belirteç ön eki), sonra o tesisin DB'sinde tek anahtarlı SELECT kipinde koşar; çözülemeyen kimlik → null.
+// Ön-kiracı aramaları (oturum/davet özeti, kurulum kimliği) önce TESİSİ çözer (merkez dizini ya da belirteç ön eki),
+// sonra o tesisin DB'sinde tek anahtarlı SELECT kipinde koşar; çözülemeyen kimlik → null. Giriş e-postayla ARAMAZ:
+// merkez kimliği üyelikleri (tesis + hesap kimliği) verir, hesap tesis kapsamında (`withTesis`) okunur.
 import { Prisma } from "@prisma/client";
 import type { Tx } from "./db";
 import { CloudError } from "./errors";
@@ -18,7 +19,7 @@ import type { TesisDbRouter } from "./tesis-db";
 /** Kiracısız kiplerin `app.tesis_id` değeri: geçerli UUID ama hiçbir tesis değil. */
 export const NO_TENANT = "00000000-0000-0000-0000-000000000000";
 
-const LOOKUP_KEYS = ["app.giris_eposta", "app.oturum_ozeti", "app.davet_ozeti", "app.kurulum_id", "app.bakim"] as const;
+const LOOKUP_KEYS = ["app.oturum_ozeti", "app.davet_ozeti", "app.kurulum_id", "app.bakim"] as const;
 type LookupKey = (typeof LOOKUP_KEYS)[number];
 
 export interface TenantScope {
@@ -32,13 +33,11 @@ export interface TenantScope {
 
 /** Oturum ve davet aramasının tesisi belirtecin ön ekindendir (özet belirtecin TAMAMINDAN). */
 export type Lookup =
-  | { readonly kind: "eposta"; readonly value: string }
   | { readonly kind: "oturum"; readonly value: string; readonly tesisId: string }
   | { readonly kind: "davet"; readonly value: string; readonly tesisId: string }
   | { readonly kind: "kurulum"; readonly value: string };
 
 const LOOKUP_GUC: Readonly<Record<Lookup["kind"], LookupKey>> = {
-  eposta: "app.giris_eposta",
   oturum: "app.oturum_ozeti",
   davet: "app.davet_ozeti",
   kurulum: "app.kurulum_id",
@@ -124,11 +123,9 @@ export async function withTesis<T>(router: TesisDbRouter, scope: TenantScope, fn
   );
 }
 
-/** Aramanın tesisi: dizin (e-posta · kurulum) ya da belirteç ön eki (oturum · davet). */
+/** Aramanın tesisi: dizin (kurulum) ya da belirteç ön eki (oturum · davet). */
 async function lookupTesis(router: TesisDbRouter, lookup: Lookup): Promise<string | null> {
   switch (lookup.kind) {
-    case "eposta":
-      return (await router.routeOfEmail(lookup.value))?.tesisId ?? null;
     case "kurulum":
       return router.tesisOfInstallation(lookup.value);
     case "oturum":

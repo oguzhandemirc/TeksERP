@@ -248,7 +248,7 @@ export async function setAccountStatus(ctx: CloudContext, s: SessionContext, id:
   });
 }
 
-/** Sıfırlama (telefon kaybı / parola unutma): parola + TOTP silinir, yeni davet; oturumlar kapanır. */
+/** Sıfırlama (telefon kaybı / parola unutma): hesap kimlikten çözülür, yeni davet; oturumlar kapanır (kimlik sırrı kabulde yenilenir). */
 export async function resetAccount(ctx: CloudContext, s: SessionContext, id: string, input: { clientToken: string }): Promise<WriteResult> {
   requireAdmin(s);
   if (id === s.accountId) throw stateConflict("Kendi hesabınızı sıfırlayamazsınız; parolanızı Profil'den değiştirin");
@@ -267,7 +267,7 @@ export async function resetAccount(ctx: CloudContext, s: SessionContext, id: str
       await assertNotLastAdmin(tx, target, { status: "DAVETLI", permissions: target.permissions });
       const r = await tx.account.updateMany({
         where: { id, tesisId: s.tesisId, status: target.status },
-        data: { status: "DAVETLI", passwordHash: null, totpSecretSealed: null, totpLastStep: null, inviteTokenHash: invite.digest, inviteExpiresAt: invite.expiresAt, failedLogins: 0, lockedUntil: null },
+        data: { status: "DAVETLI", identityId: null, inviteTokenHash: invite.digest, inviteExpiresAt: invite.expiresAt },
       });
       if (r.count === 0) throw stateConflict("Hesap bu arada değişti; listeyi yenileyip tekrar deneyin");
       await closeSessions(tx, id, nowMs, "SIFIRLAMA");

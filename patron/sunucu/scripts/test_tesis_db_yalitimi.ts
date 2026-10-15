@@ -179,7 +179,7 @@ async function main(): Promise<void> {
     const davetSahte = await api(o, "POST", "/api/davet/incele", { govde: { davet: onekDegistir(davetToken, b.tesisId) } });
     kontrol("§3c A'nın daveti A'da incelenir; ön eki B'ye çevrilince 4xx", davet.status === 201 && davetGercek.status === 200 && davetSahte.status >= 400 && davetSahte.status < 500, `${davet.status}/${davetGercek.status}/${davetSahte.status}`);
     const giris = await api(o, "POST", "/api/oturum/ac", { govde: { eposta: hA.eposta, parola: "yanlis-parola-uzun-2026", totp: "000000" } });
-    kontrol("§3d A'nın e-postası merkez dizininden yalnız A'ya çözülür (yanlış parola → 401, B'ye sorulmaz)", giris.status === 401 && (await o.app.routeOfEmail(hA.eposta))?.tesisId === a.tesisId);
+    kontrol("§3d A'nın e-postası merkez dizininden yalnız A'ya çözülür (yanlış parola → 401, B'ye sorulmaz)", giris.status === 401 && JSON.stringify((await o.app.membershipsOfEmail(hA.eposta)).map((m) => m.tesisId)) === JSON.stringify([a.tesisId]));
     const tasima = await registerInstallation(o.goc, { tesisId: b.tesisId, installationId: a.kurulumId, publicKeyX: a.acikAnahtar, licenseClass: "URETIM", modules: ["patron-bulut"], cloudUntil: null }, o.saat.simdi()).then(
       () => "gecti",
       (e: Error) => (e instanceof CloudError ? e.code : e.message.slice(0, 80)),
@@ -201,8 +201,8 @@ async function main(): Promise<void> {
     kontrol("§4b uydurma tesis ön ekli belirteç 401", uydurma.status === 401, `${uydurma.status}`);
     const arama = await withLookup(o.app, { kind: "oturum", value: tokenDigest(tA), tesisId: yok }, async () => "acildi");
     const kurulum = await withLookup(o.sync, { kind: "kurulum", value: randomUUID() }, async () => "acildi");
-    const eposta = await withLookup(o.app, { kind: "eposta", value: `yok-${randomUUID().slice(0, 8)}@ornek.test` }, async () => "acildi");
-    kontrol("§4c çözülemeyen oturum/kurulum/e-posta araması sorgusuz null", arama === null && kurulum === null && eposta === null);
+    const eposta = await o.app.membershipsOfEmail(`yok-${randomUUID().slice(0, 8)}@ornek.test`);
+    kontrol("§4c çözülemeyen oturum/kurulum araması sorgusuz null · bilinmeyen e-postanın üyeliği yok", arama === null && kurulum === null && eposta.length === 0);
 
     console.log("\n§5 tablolar doğru DB'de: boş ve yetkisiz");
     const kiraci = TESIS_TABLES.filter((t) => !MERKEZ_TABLES.includes(t));
