@@ -14,9 +14,9 @@ export const SINIF = {
   KIMLIK: "KIMLIK",
   /** Birleşim: DENEME satırları aynen eklenir; KAYNAK satırları FK hedefi olduğu için KALIR ama girişsiz/sırsız/pasif. */
   BIRLESIM: "BIRLESIM",
-  /** system_settings: kurulum-özel anahtarlar DENEME'den, kalan iş ayarları KAYNAK'tan. */
+  /** system_settings: kurulum-özel + bayrak anahtarları DENEME'den (modüller açılır), kalan iş ayarları KAYNAK'tan. */
   AYAR: "AYAR",
-  /** system_logs: DENEME'nin hash zinciri aynen + KAYNAK'ın zincir-öncesi İŞ ayak izi (kimlik/oturum satırları süzülür). */
+  /** system_logs: yalnız DENEME'nin satırları (hash zinciri aynen); KAYNAK audit'i taşınmaz. */
   AUDIT: "AUDIT",
   /** Eşitleme konumu: boş başlar (yalnız tur sayacı DENEME'den) ⇒ ilk tur her projeksiyonu TAM gönderir, bulut işaretle-süpür yapar. */
   ESITLEME: "ESITLEME",
@@ -28,9 +28,9 @@ export const SINIF = {
 export const OZEL_TABLOLAR = {
   _prisma_migrations: [SINIF.SEMA, "migration defteri; iki uçta aynı göç kümesi şart"],
   users: [SINIF.BIRLESIM, "iş verisinin createdBy/updatedBy FK'leri KAYNAK kullanıcılarını gösterir (32 tablo, çoğu RESTRICT) — silinemez; girişsiz arşiv kimliği olarak kalır"],
-  devices: [SINIF.BIRLESIM, "work_sessions → devices RESTRICT; KAYNAK tabletleri pasif + kanıt tuzu silinir"],
-  system_settings: [SINIF.AYAR, "anahtar bazlı: kurulum-özel (rezerve küme + önekler) DENEME'den, modül/iş ayarları KAYNAK'tan"],
-  system_logs: [SINIF.AUDIT, "audit hash zinciri DENEME'nindir; KAYNAK satırları zincir-öncesi (chainSeq NULL) ve zincir başından ESKİ"],
+  devices: [SINIF.BIRLESIM, "work_sessions → devices RESTRICT; KAYNAK tabletleri onaysız + pasif, kanıt tuzu silinir, adı 'as. ' önekli"],
+  system_settings: [SINIF.AYAR, "anahtar bazlı: kurulum-özel + modül/bayrak/özellik ayarları DENEME'den (modüller AÇIK), belge tasarımı ve kalan iş ayarları KAYNAK'tan"],
+  system_logs: [SINIF.AUDIT, "audit DENEME'nindir: hash zinciri aynen, KAYNAK'ın hiçbir satırı taşınmaz (kullanıcı kararı 2026-10-16)"],
   sync_watermarks: [SINIF.ESITLEME, "DENEME'nin filigranı yeni veriyi göndermez (updatedAt < filigran) — sıfırlanır, tur sayacı korunur"],
   sync_marks: [SINIF.ESITLEME, "silme işaretleri telemetri; boş başlar"],
   system_log_archives: [SINIF.KIMLIK, "audit arşivi zincirin parçasıdır — DENEME'nin"],
@@ -114,13 +114,6 @@ export const KURULUM_AYAR_ONEKLERI = [
 ];
 export const KURULUM_AYAR_TAM = ["company.name", "company.timezone"];
 
-/** KAYNAK audit satırlarından YALNIZ bunlar taşınır (pozitif liste; bilinmeyen kategori düşer). */
-export const AUDIT_KIMLIK_ETIKETLERI = [
-  "SYSTEM_SETTING", "users", "USER_PASSWORD", "USER_QUICK_PIN", "USER_PERMISSION", "USER_PERMISSION_SET",
-  "devices", "PERIPHERAL_DEVICE", "PERIPHERAL_TEMPLATE_ROUTE",
-  "SYSTEM", "system_settings", "permissions", "permission_templates",
-];
-
 /** Rezerve ayar anahtarlarını kodun TEK kaynağından okur (Teks-Erp/src/constants/reserved-settings.ts). */
 export function rezerveAnahtarlar(kaynakMetni) {
   const out = [];
@@ -129,4 +122,68 @@ export function rezerveAnahtarlar(kaynakMetni) {
     throw new Error("reserved-settings.ts beklenen anahtarları taşımıyor (system.installationId · security.) — ayrıştırma bayat");
   }
   return out;
+}
+
+/**
+ * Belge TASARIMI ayarları — `PATCH /feature-flags` yükünde yaşar ama bayrak değil İŞ verisidir (belge-etiket.md):
+ * belge/etiket şablonları ve belge profilleriyle birlikte KAYNAK'tan gelir. Ad kodda bulunamazsa DUR (yeniden adlandırma).
+ */
+export const BELGE_TASARIM_AYARLARI = ["documents.config", "company.letterhead", "traveler.cardConfig"];
+
+/** `SETTING_KEYS` sabitini (ad → DB anahtarı) servis kaynağından okur. */
+function settingKeysOku(servis) {
+  const a = servis.indexOf("export const SETTING_KEYS = {");
+  const b = servis.indexOf("\n} as const", a);
+  if (a < 0 || b < 0) throw new Error("system-setting.service.ts: SETTING_KEYS bloğu bulunamadı — ayrıştırma bayat");
+  return new Map([...servis.slice(a, b).matchAll(/^\s+([A-Z][A-Z0-9_]*):\s*"([^"]+)"/gm)].map((m) => [m[1], m[2]]));
+}
+
+/** `{ ... }`/`[ ... ]` bloğunu açılış ayracından itibaren eşleşen kapanışa kadar keser (dize içi ayraç yok sayılmaz — kaynaklar düz). */
+function blok(metin, bas, ac, kapa) {
+  const i = metin.indexOf(ac, bas);
+  let d = 0;
+  for (let j = i; j < metin.length; j++) {
+    if (metin[j] === ac) d++;
+    else if (metin[j] === kapa && --d === 0) return metin.slice(i, j + 1);
+  }
+  throw new Error("blok kapanmadı — ayrıştırma bayat");
+}
+
+/**
+ * Modül/bayrak/özellik ayarlarının DB anahtarları — kodun TEK kaynaklarından türetilir (elle liste yok):
+ *   • bayrak = `setFeatureFlags` gövdesinin yazdığı her `SETTING_KEYS.X` (panelin `PATCH /api/feature-flags` yüzeyi)
+ *              ∪ `SETTINGS_SCOPES[].settingKeys` (panelin ham ayar satırları) − BELGE_TASARIM_AYARLARI
+ *   • modül  = `MODULE_SETTING_KEYS` (constants/module-flags.ts) — `MODULE_SETTING_KEY_BY_FLAG` ile birebir olmalı
+ *   • bağımlılık = `MODULE_DEPENDENCIES` (alan adı) → DB anahtarı çiftleri
+ */
+export function bayrakAnahtarlari({ servis, kapsamlar, moduller }) {
+  const sk = settingKeysOku(servis);
+  const i = servis.indexOf("  async setFeatureFlags(");
+  if (i < 0) throw new Error("system-setting.service.ts: setFeatureFlags bulunamadı — ayrıştırma bayat");
+  const govde = blok(servis, servis.indexOf("): Promise<ApiResponse<FeatureFlags>> {", i), "{", "}");
+  const adlar = [...new Set([...govde.matchAll(/SETTING_KEYS\.([A-Z0-9_]+)/g)].map((m) => m[1]))];
+  const bilinmeyen = adlar.filter((a) => !sk.has(a));
+  if (bilinmeyen.length) throw new Error(`setFeatureFlags bilinmeyen SETTING_KEYS adı: ${bilinmeyen.join(", ")}`);
+  const ham = [...kapsamlar.matchAll(/settingKeys:\s*\[([^\]]*)\]/g)].flatMap((m) => [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]));
+  if (ham.length === 0) throw new Error("settings-scopes.ts: settingKeys bulunamadı — ayrıştırma bayat");
+
+  const modulBlok = blok(moduller, moduller.indexOf("export const MODULE_SETTING_KEYS"), "[", "]");
+  const modul = [...modulBlok.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  const esBlok = blok(servis, servis.indexOf("const MODULE_SETTING_KEY_BY_FLAG"), "{", "}");
+  const alanDb = new Map([...esBlok.matchAll(/(\w+):\s*SETTING_KEYS\.([A-Z0-9_]+)/g)].map((m) => [m[1], sk.get(m[2])]));
+  const esDb = new Set(alanDb.values());
+  if (modul.length < 2 || modul.length !== esDb.size || modul.some((k) => !esDb.has(k))) {
+    throw new Error("MODULE_SETTING_KEYS ↔ MODULE_SETTING_KEY_BY_FLAG birebir değil — ayrıştırma bayat");
+  }
+  const bagBlok = blok(moduller, moduller.indexOf("export const MODULE_DEPENDENCIES"), "{", "}");
+  const bagimlilik = [...bagBlok.matchAll(/(\w+):\s*"(\w+)"/g)].map(([, b, o]) => {
+    if (!alanDb.has(b) || !alanDb.has(o)) throw new Error(`MODULE_DEPENDENCIES bilinmeyen modül: ${b} → ${o}`);
+    return [alanDb.get(b), alanDb.get(o)];
+  });
+  if (bagimlilik.length === 0) throw new Error("MODULE_DEPENDENCIES boş okundu — ayrıştırma bayat");
+
+  const tum = new Set([...adlar.map((a) => sk.get(a)), ...ham]);
+  for (const k of [...modul, ...BELGE_TASARIM_AYARLARI]) if (!tum.has(k)) throw new Error(`'${k}' bayrak yüzeyinde yok — ayrıştırma bayat ya da anahtar yeniden adlandırıldı`);
+  for (const k of BELGE_TASARIM_AYARLARI) tum.delete(k);
+  return { bayrak: [...tum].sort(), modul: [...modul].sort(), bagimlilik };
 }

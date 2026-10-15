@@ -1,6 +1,6 @@
 // dump-aktar — SQL gövdeleri. Tablo/anahtar adları yalnız sınıflar modülünden gelir (kullanıcı girdisi değil);
 // yine de her ad `lit`/`id` ile kaçışlanır. Birleştirme TEK tx'tedir: yarıda kalırsa HEDEF dokunulmamış kalır.
-import { AUDIT_KIMLIK_ETIKETLERI, IS_TABLOLARI, OZEL_TABLOLAR, SINIF } from "./dump-aktar-siniflar.mjs";
+import { IS_TABLOLARI, OZEL_TABLOLAR, SINIF } from "./dump-aktar-siniflar.mjs";
 
 export const lit = (s) => `'${String(s).replace(/'/g, "''")}'`;
 export const id = (s) => `"${String(s).replace(/"/g, '""')}"`;
@@ -18,9 +18,13 @@ export const USERS_KOLONLARI = [
 ];
 /** KAYNAK kullanıcı adlarına eklenen önek (DENEME adlarıyla çakışmasın; giriş zaten kapalı). */
 export const KULLANICI_ONEKI = "as.";
+/** KAYNAK cihaz adlarına eklenen önek — zaten bununla başlayan ada tekrar eklenmez. */
+export const CIHAZ_ONEKI = "as. ";
+/** Açılan modül satırının açıklaması (değer basılmaz; yalnız iz). */
+export const MODUL_ACIKLAMA = "dump-aktar: deneme kurulumunda tüm modüller açık";
 
 /** HEDEF'te kontrol şeması + yardımcılar + başlangıç sayımı + KAYNAK kimlik iğneleri. */
-export function hazirlaSql({ kurulumDesenleri }) {
+export function hazirlaSql({ kurulumDesenleri, bayrak }) {
   const sinifSatirlari = [
     ...IS_TABLOLARI.map((t) => [t, SINIF.IS]),
     ...Object.entries(OZEL_TABLOLAR).map(([t, [s]]) => [t, s]),
@@ -32,8 +36,12 @@ CREATE TABLE aktar_kontrol.siniflar (tablo text PRIMARY KEY, sinif text NOT NULL
 INSERT INTO aktar_kontrol.siniflar VALUES ${sinifSatirlari.map(([t, s]) => `(${lit(t)}, ${lit(s)})`).join(", ")};
 CREATE TABLE aktar_kontrol.kurulum_ayar (desen text NOT NULL);
 INSERT INTO aktar_kontrol.kurulum_ayar VALUES ${kurulumDesenleri.map((d) => `(${lit(d)})`).join(", ")};
-CREATE TABLE aktar_kontrol.audit_kimlik (etiket text PRIMARY KEY);
-INSERT INTO aktar_kontrol.audit_kimlik VALUES ${AUDIT_KIMLIK_ETIKETLERI.map((e) => `(${lit(e)})`).join(", ")};
+-- Modül/bayrak/özellik ayarları (koddan türetilir) — DENEME'den; modül satırları ayrıca AÇIK'a çekilir.
+CREATE TABLE aktar_kontrol.bayrak_ayar (key text PRIMARY KEY, modul boolean NOT NULL);
+INSERT INTO aktar_kontrol.bayrak_ayar VALUES ${bayrak.bayrak.map((k) => `(${lit(k)}, ${bayrak.modul.includes(k)})`).join(", ")};
+CREATE TABLE aktar_kontrol.modul_bagimlilik (bagimli text NOT NULL, on_kosul text NOT NULL);
+INSERT INTO aktar_kontrol.modul_bagimlilik VALUES ${bayrak.bagimlilik.map(([b, o]) => `(${lit(b)}, ${lit(o)})`).join(", ")};
+CREATE TABLE aktar_kontrol.acilan_modul (key text PRIMARY KEY, deneme_satiri_var boolean NOT NULL);
 CREATE TABLE aktar_kontrol.sonuc (sira serial, durum text NOT NULL, ad text NOT NULL, detay text);
 
 CREATE FUNCTION aktar_kontrol.kolonlar(t text, onek text DEFAULT '') RETURNS text LANGUAGE sql STABLE AS $f$
@@ -45,12 +53,23 @@ DECLARE n bigint; BEGIN EXECUTE format('SELECT count(*) FROM %I.%I', sema, t) IN
 CREATE FUNCTION aktar_kontrol.kurulum_anahtari(k text) RETURNS boolean LANGUAGE sql STABLE AS $f$
   SELECT EXISTS (SELECT 1 FROM aktar_kontrol.kurulum_ayar WHERE k LIKE desen)
 $f$;
+-- DENEME'den gelen anahtar: kurulum-özel ∪ modül/bayrak/özellik.
+CREATE FUNCTION aktar_kontrol.deneme_anahtari(k text) RETURNS boolean LANGUAGE sql STABLE AS $f$
+  SELECT aktar_kontrol.kurulum_anahtari(k) OR EXISTS (SELECT 1 FROM aktar_kontrol.bayrak_ayar WHERE key = k)
+$f$;
+-- asBoolean ikizi (system-setting.service.ts): boolean true ya da "true" dizesi açık; başka her şey kapalı.
+CREATE FUNCTION aktar_kontrol.acik_mi(v jsonb) RETURNS boolean LANGUAGE sql IMMUTABLE AS $f$
+  SELECT coalesce(v = 'true'::jsonb OR v = '"true"'::jsonb, false)
+$f$;
 CREATE FUNCTION aktar_kontrol.yaz(durum text, ad text, detay text) RETURNS void LANGUAGE sql AS $f$
   INSERT INTO aktar_kontrol.sonuc (durum, ad, detay) VALUES (durum, ad, detay)
 $f$;
 
 CREATE TABLE aktar_kontrol.sayim_once AS
   SELECT tablename::text AS tablo, aktar_kontrol.say('public', tablename) AS n FROM pg_tables WHERE schemaname = 'public';
+-- KAYNAK'ın ayarları ve cihaz adları birleşmeden ÖNCE (doğrulama ve sondalar kıyaslar).
+CREATE TABLE aktar_kontrol.ayar_once AS SELECT key, value FROM public.system_settings;
+CREATE TABLE aktar_kontrol.cihaz_once AS SELECT id, name FROM public.devices;
 
 -- KAYNAK'ın kurulum kimliği ve uzak yedek hedefi: birleşmeden SONRA HEDEF'in hiçbir metin kolonunda geçmemeli.
 CREATE TABLE aktar_kontrol.igne (ad text, deger text);
@@ -98,19 +117,26 @@ ${kimlik.map((t) => `  DELETE FROM public.${id(t)};\n  ${kopyala(t)}`).join("\n"
   WHERE id NOT IN (SELECT id FROM aktar_deneme.users);
   ${kopyala("users")}
 
-  -- ③ KAYNAK cihazları: work_sessions bağı için KALIR — pasif, onaysız, kanıt tuzu silinmiş.
-  UPDATE public.devices SET "isActive" = false, status = 'PENDING', "proofSalt" = NULL, "proofIssuedAt" = NULL, "proofConfirmedAt" = NULL
+  -- ③ KAYNAK cihazları: work_sessions bağı için KALIR — pasif, onaysız, kanıt tuzu silinmiş, adı önekli (bir kez).
+  UPDATE public.devices SET "isActive" = false, status = 'PENDING', "proofSalt" = NULL, "proofIssuedAt" = NULL, "proofConfirmedAt" = NULL,
+    name = CASE WHEN starts_with(name, ${lit(CIHAZ_ONEKI)}) THEN name ELSE left(${lit(CIHAZ_ONEKI)} || name, 100) END
   WHERE id NOT IN (SELECT id FROM aktar_deneme.devices);
   ${kopyala("devices")}
 
-  -- ④ Ayarlar: kurulum-özel anahtarlar DENEME'den, iş ayarları KAYNAK'tan.
-  DELETE FROM public.system_settings WHERE aktar_kontrol.kurulum_anahtari(key);
-  ${kopyala("system_settings", "WHERE aktar_kontrol.kurulum_anahtari(key)")}
+  -- ④ Ayarlar: kurulum-özel + modül/bayrak/özellik anahtarları DENEME'den (satırı olmayan = varsayılan, KAYNAK'ınki
+  --    da girmez); belge tasarımı ve kalan iş ayarları KAYNAK'tan.
+  DELETE FROM public.system_settings WHERE aktar_kontrol.deneme_anahtari(key);
+  ${kopyala("system_settings", "WHERE aktar_kontrol.deneme_anahtari(key)")}
+  -- ④b DENEME'de kapalı (ya da satırsız) her modül AÇIK; açık olanın satırı bayt-eşit kalır.
+  INSERT INTO aktar_kontrol.acilan_modul
+    SELECT b.key, s.key IS NOT NULL FROM aktar_kontrol.bayrak_ayar b LEFT JOIN public.system_settings s ON s.key = b.key
+     WHERE b.modul AND NOT coalesce(aktar_kontrol.acik_mi(s.value::jsonb), false);
+  INSERT INTO public.system_settings (key, value, description, "updatedById", "createdAt", "updatedAt")
+    SELECT key, 'true'::jsonb, ${lit(MODUL_ACIKLAMA)}, NULL, now(), now() FROM aktar_kontrol.acilan_modul
+  ON CONFLICT (key) DO UPDATE SET value = 'true'::jsonb, description = EXCLUDED.description, "updatedById" = NULL, "updatedAt" = now();
 
-  -- ⑤ Audit: KAYNAK'tan yalnız zincir-öncesi İŞ ayak izi; DENEME zinciri aynen (sıra + özet korunur).
-  DELETE FROM public.system_logs WHERE NOT (
-    "chainSeq" IS NULL AND category::text IN ('DOMAIN', 'SYSTEM') AND action NOT LIKE 'AUDIT_CHAIN%'
-    AND coalesce("tableName", '') NOT IN (SELECT etiket FROM aktar_kontrol.audit_kimlik));
+  -- ⑤ Audit: YALNIZ DENEME'nin satırları (hash zinciri aynen); KAYNAK'ın hiçbir satırı taşınmaz.
+  DELETE FROM public.system_logs;
   ${kopyala("system_logs")}
 
   -- ⑥ Eşitleme konumu sıfır (yalnız tur sayacı) ⇒ ilk tur TAM; silme işaretleri boş.
@@ -162,26 +188,6 @@ BEGIN
     EXCEPT SELECT unnest(ARRAY[${USERS_KOLONLARI.map(lit).join(", ")}])) x;
   IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'users-sema', format('%s yeni users kolonu — KAYNAK süpürmesini gözden geçir', n)); END IF;
 
-  -- ④ Cihazlar.
-  k := aktar_kontrol.kolonlar('devices');
-  EXECUTE format('SELECT count(*) FROM (SELECT %s FROM aktar_deneme.devices EXCEPT ALL SELECT %s FROM public.devices) x', k, k) INTO n;
-  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'deneme-cihaz', format('%s DENEME cihazı birebir değil', n)); END IF;
-  SELECT count(*) INTO n FROM public.devices WHERE id NOT IN (SELECT id FROM aktar_deneme.devices) AND ("isActive" OR status <> 'PENDING' OR "proofSalt" IS NOT NULL);
-  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'kaynak-cihaz', format('%s KAYNAK cihazı etkin', n)); END IF;
-
-  -- ⑤ Ayarlar: kurulum-özel küme DENEME'ninkiyle eşit; kurulum kimliği DENEME'nin.
-  SELECT count(*) INTO n FROM (
-    (SELECT key, value FROM public.system_settings WHERE aktar_kontrol.kurulum_anahtari(key)
-     EXCEPT SELECT key, value FROM aktar_deneme.system_settings WHERE aktar_kontrol.kurulum_anahtari(key))
-    UNION ALL
-    (SELECT key, value FROM aktar_deneme.system_settings WHERE aktar_kontrol.kurulum_anahtari(key)
-     EXCEPT SELECT key, value FROM public.system_settings WHERE aktar_kontrol.kurulum_anahtari(key))) x;
-  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'kurulum-ayar', format('%s kurulum-özel ayar DENEME ile eşit değil', n)); END IF;
-  IF (SELECT value FROM public.system_settings WHERE key = 'system.installationId')
-     IS DISTINCT FROM (SELECT value FROM aktar_deneme.system_settings WHERE key = 'system.installationId') THEN
-    PERFORM aktar_kontrol.yaz('HATA', 'kurulum-kimligi', 'system.installationId DENEME''ninki değil');
-  ELSE PERFORM aktar_kontrol.yaz('OK', 'kurulum-kimligi', 'system.installationId = DENEME'); END IF;
-
   -- ⑥ KAYNAK kimlik iğneleri HEDEF'in HİÇBİR metin/json kolonunda yok.
   SELECT count(*) INTO m FROM aktar_kontrol.igne;
   IF m = 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'igne', 'KAYNAK kurulum kimliği okunamadı — arama yapılamaz'); END IF;
@@ -205,23 +211,123 @@ BEGIN
   END LOOP;
   PERFORM aktar_kontrol.yaz('OK', 'fk', format('%s FK denetlendi', m));
 
-  -- ⑧ Audit zinciri: DENEME zinciri aynen; zincir başından sonra zincirsiz satır yok (doğrulayıcının ZINCIRSIZ_SATIR'ı).
-  k := aktar_kontrol.kolonlar('system_logs');
-  EXECUTE format('SELECT count(*) FROM (SELECT %s FROM aktar_deneme.system_logs EXCEPT ALL SELECT %s FROM public.system_logs) x', k, k) INTO n;
-  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'audit-zincir', format('%s DENEME audit satırı birebir değil', n)); END IF;
-  SELECT count(*) INTO n FROM public.system_logs l WHERE l."chainSeq" IS NULL
-     AND l."createdAt" > (SELECT min("createdAt") FROM public.system_logs WHERE "chainSeq" IS NOT NULL);
-  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'audit-zincirsiz', format('%s zincirsiz satır zincir başından yeni', n)); END IF;
-  PERFORM aktar_kontrol.yaz('OK', 'audit', (SELECT format('zincirli %s · KAYNAK iş ayak izi %s (önce %s)',
-    count(*) FILTER (WHERE "chainSeq" IS NOT NULL), count(*) FILTER (WHERE "chainSeq" IS NULL),
-    (SELECT o.n FROM aktar_kontrol.sayim_once o WHERE o.tablo = 'system_logs')) FROM public.system_logs));
-
   -- ⑨ Eşitleme konumu yalnız tur sayacı; silme işareti yok.
   SELECT count(*) INTO n FROM public.sync_watermarks WHERE source <> 'tur';
   SELECT count(*) INTO m FROM public.sync_marks;
   IF n + m > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'esitleme', format('filigran %s · işaret %s', n, m));
   ELSE PERFORM aktar_kontrol.yaz('OK', 'esitleme', 'filigran sıfır (ilk tur TAM)'); END IF;
 END $v$;
+${kuralDogrulaSql()}
 SELECT durum || '|' || ad || '|' || coalesce(detay, '') FROM aktar_kontrol.sonuc ORDER BY sira;
 `;
 }
+
+/**
+ * Kullanıcı kararı 2026-10-16 kuralları (cihaz · ayar/modül · audit) — ayrı blok: negatif sondalar YALNIZ bunu koşar
+ * (bozulmuş kopya tx içinde, ROLLBACK). Kuralların her biri kendi HATA adını yazar; sonda o adı bekler.
+ */
+export function kuralDogrulaSql() {
+  return `
+DO $k$
+DECLARE n bigint; m bigint; k text;
+BEGIN
+  -- ④ Cihazlar: DENEME'ninkiler bayt-eşit; KAYNAK'ınkiler onaysız + pasif + sırsız; adı tam BİR kez önekli.
+  k := aktar_kontrol.kolonlar('devices');
+  EXECUTE format('SELECT count(*) FROM (SELECT %s FROM aktar_deneme.devices EXCEPT ALL SELECT %s FROM public.devices) x', k, k) INTO n;
+  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'deneme-cihaz', format('%s DENEME cihazı birebir değil', n)); END IF;
+  SELECT count(*) INTO n FROM public.devices WHERE id NOT IN (SELECT id FROM aktar_deneme.devices) AND ("isActive" OR status <> 'PENDING' OR "proofSalt" IS NOT NULL);
+  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'kaynak-cihaz', format('%s KAYNAK cihazı etkin/onaylı', n)); END IF;
+  SELECT count(*) INTO n FROM public.devices d JOIN aktar_kontrol.cihaz_once o USING (id)
+   WHERE d.id NOT IN (SELECT id FROM aktar_deneme.devices)
+     AND d.name IS DISTINCT FROM (CASE WHEN starts_with(o.name, ${lit(CIHAZ_ONEKI)}) THEN o.name ELSE left(${lit(CIHAZ_ONEKI)} || o.name, 100) END);
+  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'kaynak-cihaz-ad', format('%s KAYNAK cihaz adı önekli değil ya da çift önekli', n)); END IF;
+  PERFORM aktar_kontrol.yaz('OK', 'cihaz', (SELECT format('DENEME %s · KAYNAK %s (onaysız+pasif, önekli %s)',
+    count(*) FILTER (WHERE id IN (SELECT id FROM aktar_deneme.devices)), count(*) FILTER (WHERE id NOT IN (SELECT id FROM aktar_deneme.devices)),
+    count(*) FILTER (WHERE id NOT IN (SELECT id FROM aktar_deneme.devices) AND starts_with(name, ${lit(CIHAZ_ONEKI)}))) FROM public.devices));
+
+  -- ⑤ Ayarlar: DENEME anahtarları (kurulum ∪ bayrak, modül HARİÇ) DENEME ile iki yönlü eşit; kurulum kimliği DENEME'nin.
+  SELECT count(*) INTO n FROM (
+    (SELECT key, value::text FROM public.system_settings WHERE aktar_kontrol.deneme_anahtari(key) AND key NOT IN (SELECT key FROM aktar_kontrol.acilan_modul)
+     EXCEPT SELECT key, value::text FROM aktar_deneme.system_settings WHERE aktar_kontrol.deneme_anahtari(key))
+    UNION ALL
+    (SELECT key, value::text FROM aktar_deneme.system_settings WHERE aktar_kontrol.deneme_anahtari(key) AND key NOT IN (SELECT key FROM aktar_kontrol.acilan_modul)
+     EXCEPT SELECT key, value::text FROM public.system_settings WHERE aktar_kontrol.deneme_anahtari(key))) x;
+  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'bayrak-ayar', format('%s kurulum/bayrak ayarı DENEME ile eşit değil (KAYNAK bayrağı sızmış ya da DENEME değeri kaybolmuş)', n)); END IF;
+  -- Modüller: HEPSİ açık; DENEME'de açık olanlar dokunulmadı; bağımlılık çiftleri tutarlı.
+  SELECT count(*) INTO n FROM aktar_kontrol.bayrak_ayar b LEFT JOIN public.system_settings s USING (key)
+   WHERE b.modul AND NOT coalesce(aktar_kontrol.acik_mi(s.value::jsonb), false);
+  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'modul-acik', format('%s modül kapalı', n)); END IF;
+  SELECT count(*) INTO n FROM aktar_kontrol.modul_bagimlilik m
+    LEFT JOIN public.system_settings b ON b.key = m.bagimli LEFT JOIN public.system_settings o ON o.key = m.on_kosul
+   WHERE coalesce(aktar_kontrol.acik_mi(b.value::jsonb), false) AND NOT coalesce(aktar_kontrol.acik_mi(o.value::jsonb), false);
+  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'modul-bagimlilik', format('%s bağımlı modül ön koşulsuz açık', n)); END IF;
+  -- KAYNAK'tan kalan anahtarlar (belge tasarımı + iş ayarı) KAYNAK'ın değerini taşır.
+  SELECT count(*) INTO n FROM (
+    (SELECT key, value::text FROM public.system_settings WHERE NOT aktar_kontrol.deneme_anahtari(key)
+     EXCEPT SELECT key, value::text FROM aktar_kontrol.ayar_once WHERE NOT aktar_kontrol.deneme_anahtari(key))
+    UNION ALL
+    (SELECT key, value::text FROM aktar_kontrol.ayar_once WHERE NOT aktar_kontrol.deneme_anahtari(key)
+     EXCEPT SELECT key, value::text FROM public.system_settings WHERE NOT aktar_kontrol.deneme_anahtari(key))) x;
+  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'is-ayar', format('%s iş ayarı KAYNAK ile eşit değil', n)); END IF;
+  IF (SELECT value FROM public.system_settings WHERE key = 'system.installationId')
+     IS DISTINCT FROM (SELECT value FROM aktar_deneme.system_settings WHERE key = 'system.installationId') THEN
+    PERFORM aktar_kontrol.yaz('HATA', 'kurulum-kimligi', 'system.installationId DENEME''ninki değil');
+  ELSE PERFORM aktar_kontrol.yaz('OK', 'kurulum-kimligi', 'system.installationId = DENEME'); END IF;
+  PERFORM aktar_kontrol.yaz('OK', 'ayar', (SELECT format('bayrak anahtarı %s (DENEME satırı %s) · modül %s, açılan %s: %s · KAYNAK iş ayarı %s',
+    (SELECT count(*) FROM aktar_kontrol.bayrak_ayar),
+    (SELECT count(*) FROM aktar_deneme.system_settings s JOIN aktar_kontrol.bayrak_ayar USING (key)),
+    (SELECT count(*) FROM aktar_kontrol.bayrak_ayar WHERE modul),
+    (SELECT count(*) FROM aktar_kontrol.acilan_modul),
+    coalesce((SELECT string_agg(key, ', ' ORDER BY key) FROM aktar_kontrol.acilan_modul), '-'),
+    (SELECT count(*) FROM public.system_settings WHERE NOT aktar_kontrol.deneme_anahtari(key)))));
+
+  -- ⑧ Audit: public.system_logs = DENEME'ninki, iki yönlü (KAYNAK'ın tek satırı bile yok; zincir aynen).
+  k := aktar_kontrol.kolonlar('system_logs');
+  EXECUTE format('SELECT (SELECT count(*) FROM (SELECT %s FROM public.system_logs EXCEPT ALL SELECT %s FROM aktar_deneme.system_logs) a), (SELECT count(*) FROM (SELECT %s FROM aktar_deneme.system_logs EXCEPT ALL SELECT %s FROM public.system_logs) b)', k, k, k, k) INTO n, m;
+  IF n > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'audit-yalniz-deneme', format('%s DENEME dışı audit satırı', n)); END IF;
+  IF m > 0 THEN PERFORM aktar_kontrol.yaz('HATA', 'audit-zincir', format('%s DENEME audit satırı eksik/değişmiş', m)); END IF;
+  PERFORM aktar_kontrol.yaz('OK', 'audit', (SELECT format('%s satır = DENEME (zincirli %s) · KAYNAK %s satırı taşınmadı',
+    count(*), count(*) FILTER (WHERE "chainSeq" IS NOT NULL), (SELECT o.n FROM aktar_kontrol.sayim_once o WHERE o.tablo = 'system_logs')) FROM public.system_logs));
+END $k$;`;
+}
+
+/**
+ * Negatif sondalar: her biri HEDEF'i tx içinde BİLEREK bozar, yalnız kural bloğunu koşar, beklenen HATA adını arar,
+ * ROLLBACK. Yakalanmayan sonda = doğrulama kör ⇒ betik 1 ile çıkar.
+ */
+export const SONDALAR = [
+  { ad: "modül kapatıldı", bekle: "modul-acik",
+    boz: `UPDATE public.system_settings SET value = 'false'::jsonb WHERE key = (SELECT min(key) FROM aktar_kontrol.bayrak_ayar WHERE modul);` },
+  { ad: "bağımlı modül ön koşulsuz", bekle: "modul-bagimlilik",
+    boz: `UPDATE public.system_settings SET value = 'false'::jsonb WHERE key = (SELECT min(on_kosul) FROM aktar_kontrol.modul_bagimlilik);` },
+  { ad: "KAYNAK bayrağı sızdı", bekle: "bayrak-ayar",
+    boz: `INSERT INTO public.system_settings (key, value, "createdAt", "updatedAt")
+            SELECT b.key, coalesce((SELECT value FROM aktar_kontrol.ayar_once WHERE key = b.key), '"sonda"'::jsonb), now(), now()
+              FROM aktar_kontrol.bayrak_ayar b WHERE NOT b.modul AND b.key NOT IN (SELECT key FROM public.system_settings)
+             ORDER BY (b.key IN (SELECT key FROM aktar_kontrol.ayar_once)) DESC, b.key LIMIT 1;` },
+  { ad: "KAYNAK audit satırı taşındı", bekle: "audit-yalniz-deneme",
+    boz: `CREATE TEMP TABLE sonda_log ON COMMIT DROP AS SELECT * FROM public.system_logs ORDER BY "createdAt" LIMIT 1;
+          UPDATE sonda_log SET id = gen_random_uuid(), "chainSeq" = NULL, "createdAt" = "createdAt" - interval '30 days';
+          INSERT INTO public.system_logs SELECT * FROM sonda_log;` },
+  { ad: "KAYNAK cihaz adı öneksiz", bekle: "kaynak-cihaz-ad",
+    boz: `UPDATE public.devices d SET name = o.name FROM aktar_kontrol.cihaz_once o
+           WHERE d.id = o.id AND d.id = (SELECT min(id::text)::uuid FROM public.devices WHERE id NOT IN (SELECT id FROM aktar_deneme.devices))
+             AND NOT starts_with(o.name, ${lit(CIHAZ_ONEKI)});` },
+  { ad: "KAYNAK cihaz adı çift önekli", bekle: "kaynak-cihaz-ad",
+    boz: `UPDATE public.devices SET name = left(${lit(CIHAZ_ONEKI)} || name, 100)
+           WHERE id = (SELECT min(id::text)::uuid FROM public.devices WHERE id NOT IN (SELECT id FROM aktar_deneme.devices));` },
+  { ad: "KAYNAK cihazı onaylı", bekle: "kaynak-cihaz",
+    boz: `UPDATE public.devices SET status = 'APPROVED', "isActive" = true
+           WHERE id = (SELECT min(id::text)::uuid FROM public.devices WHERE id NOT IN (SELECT id FROM aktar_deneme.devices));` },
+];
+
+/** Tek sondanın SQL'i: bozma + kural doğrulaması + yakalanan HATA adları; hep ROLLBACK. */
+export const sondaSql = (sonda) => `
+BEGIN;
+SET LOCAL session_replication_role = replica;
+DELETE FROM aktar_kontrol.sonuc;
+${sonda.boz}
+${kuralDogrulaSql()}
+SELECT 'HATA|' || ad FROM aktar_kontrol.sonuc WHERE durum = 'HATA';
+ROLLBACK;
+`;

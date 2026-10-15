@@ -5,6 +5,8 @@
 // KAYNAK = iş verisini veren döküm (HEDEF şemasına göç ettirilmiş) · DENEME = kimliği korunan
 // canlı kurulumun DB'si (yalnız OKUNUR) · HEDEF = yeni DB (KAYNAK'tan klon + DENEME kimliği).
 // Tablo sınıfları: scripts/lib/dump-aktar-siniflar.mjs (sınıfsız tablo → DUR).
+// Kullanıcı kararı 2026-10-16: modül/bayrak/özellik ayarları DENEME'nin (koddan türetilen küme) ve HER modül AÇIK;
+// audit yalnız DENEME'nin; KAYNAK cihazları onaysız + pasif + 'as. ' önekli. Doğrulama her kural için negatif sonda koşar.
 //
 //   node scripts/dump-aktar.mjs plan     --kaynak <db> --deneme <db>                  (varsayılan; salt okuma)
 //   node scripts/dump-aktar.mjs birlestir --kaynak <db> --deneme <db> --hedef <db> [--apply]
@@ -21,10 +23,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  AUDIT_KIMLIK_ETIKETLERI, IS_TABLOLARI, KURULUM_AYAR_ONEKLERI, KURULUM_AYAR_TAM, OZEL_TABLOLAR, SINIF, rezerveAnahtarlar,
+  BELGE_TASARIM_AYARLARI, IS_TABLOLARI, KURULUM_AYAR_ONEKLERI, KURULUM_AYAR_TAM, OZEL_TABLOLAR, SINIF, bayrakAnahtarlari, rezerveAnahtarlar,
 } from "./lib/dump-aktar-siniflar.mjs";
 import {
-  KULLANICI_ONEKI, SAHNELENEN, birlestirSql, dogrulaSql, hazirlaSql, id, lit, sahneTablosuSql,
+  CIHAZ_ONEKI, KULLANICI_ONEKI, SAHNELENEN, SONDALAR, birlestirSql, dogrulaSql, hazirlaSql, id, lit, sahneTablosuSql, sondaSql,
 } from "./lib/dump-aktar-sql.mjs";
 
 const KOK = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -77,6 +79,11 @@ function kurulumDesenleri() {
   for (const k of rezerve) desen.add(k.endsWith(".") ? `${k}%` : k);
   return [...desen].sort();
 }
+/** Modül/bayrak/özellik DB anahtarları — kodun tek kaynaklarından (bkz. bayrakAnahtarlari). */
+function bayrakKumesi() {
+  const oku = (y) => readFileSync(join(KOK, "Teks-Erp/src", y), "utf8");
+  return bayrakAnahtarlari({ servis: oku("services/system-setting.service.ts"), kapsamlar: oku("constants/settings-scopes.ts"), moduller: oku("constants/module-flags.ts") });
+}
 const kurulumMu = (desenler, key) => desenler.some((d) => (d.endsWith("%") ? key.startsWith(d.slice(0, -1)) : key === d));
 
 const SAYIM = `SELECT tablename || '|' || (xpath('/row/n/text()', query_to_xml(format('select count(*) as n from public.%I', tablename), false, true, '')))[1]::text
@@ -107,7 +114,7 @@ function plan({ kaynak, deneme }) {
     ozet[s].tablo++; ozet[s].kaynak += a; ozet[s].deneme += d;
     if (a + d === 0) continue;
     const giren = { IS: `KAYNAK ${a} (DENEME ${d} atılır)`, KIMLIK: `DENEME ${d} (KAYNAK ${a} atılır)`, BIRLESIM: `KAYNAK ${a} pasif + DENEME ${d}`,
-      AYAR: "anahtar bazlı (aşağıda)", AUDIT: "süzülür (aşağıda)", ESITLEME: "sıfır (+tur)", SEMA: `KAYNAK ${a}` }[s];
+      AYAR: "anahtar bazlı (aşağıda)", AUDIT: `DENEME ${d} (KAYNAK ${a} atılır)`, ESITLEME: "sıfır (+tur)", SEMA: `KAYNAK ${a}` }[s];
     console.log(`  ${t.padEnd(42)} ${s.padEnd(9)} ${String(a).padStart(7)} ${String(d).padStart(7)}  ${giren}`);
   }
   console.log("\nSınıf özeti (tablo · KAYNAK satır · DENEME satır):");
@@ -130,21 +137,33 @@ function plan({ kaynak, deneme }) {
   console.log(`Kullanıcı: KAYNAK ${ku[0]} (aktif ${ku[1]}, sistem ${ku[2]}) → hepsi pasif/girişsiz/'${KULLANICI_ONEKI}' önekli · DENEME ${du[0]} (aktif ${du[1]}, TOTP ${du[2]}, sistem ${du[3]}) → aynen`);
 
   const desen = kurulumDesenleri();
+  const bay = bayrakKumesi(); const bayK = new Set(bay.bayrak);
+  const denemeMi = (k) => kurulumMu(desen, k) || bayK.has(k);
   const kk = satirlar(kaynak, "SELECT key FROM system_settings ORDER BY 1;").map((r) => r[0]);
-  const dk = satirlar(deneme, "SELECT key FROM system_settings ORDER BY 1;").map((r) => r[0]);
-  console.log(`\nAyar: kurulum-özel desen ${desen.length} (rezerve küme reserved-settings.ts + önekler)`);
-  console.log(`  KAYNAK'tan GİRMEYEN (kurulum-özel): ${kk.filter((k) => kurulumMu(desen, k)).join(", ") || "-"}`);
-  console.log(`  KAYNAK'tan giren iş ayarı: ${kk.filter((k) => !kurulumMu(desen, k)).length}`);
-  console.log(`  DENEME'den giren: ${dk.filter((k) => kurulumMu(desen, k)).join(", ") || "-"}`);
-  console.log(`  DENEME'den GİRMEYEN (iş ayarı, KAYNAK'ınki geçerli): ${dk.filter((k) => !kurulumMu(desen, k)).join(", ") || "-"}`);
+  const dkv = new Map(satirlar(deneme, "SELECT key || '|' || value::text FROM system_settings ORDER BY 1;").map((r) => [r[0], r.slice(1).join("|")]));
+  const dk = [...dkv.keys()];
+  console.log(`\nAyar: kurulum-özel desen ${desen.length} (reserved-settings.ts + önekler) · modül/bayrak/özellik anahtarı ${bay.bayrak.length} (setFeatureFlags + SETTINGS_SCOPES.settingKeys − belge tasarımı ${BELGE_TASARIM_AYARLARI.length})`);
+  console.log(`  KAYNAK'tan GİRMEYEN kurulum-özel: ${kk.filter((k) => kurulumMu(desen, k)).join(", ") || "-"}`);
+  console.log(`  KAYNAK'tan GİRMEYEN bayrak (${kk.filter((k) => !kurulumMu(desen, k) && bayK.has(k)).length}): ${kk.filter((k) => !kurulumMu(desen, k) && bayK.has(k)).join(", ") || "-"}`);
+  console.log(`  KAYNAK'tan giren (belge tasarımı + iş ayarı): ${kk.filter((k) => !denemeMi(k)).join(", ") || "-"}`);
+  console.log(`  DENEME'den giren: ${dk.filter(denemeMi).join(", ") || "-"}`);
+  console.log(`  DENEME'den GİRMEYEN (iş ayarı, KAYNAK'ınki geçerli): ${dk.filter((k) => !denemeMi(k)).join(", ") || "-"}`);
+  const acik = (v) => v === "true" || v === '"true"';
+  const acilacak = bay.modul.filter((k) => !acik(dkv.get(k)));
+  console.log(`  Modül (${bay.modul.length}): DENEME'de açık ${bay.modul.filter((k) => acik(dkv.get(k))).join(", ") || "-"} · AÇILACAK ${acilacak.map((k) => `${k}${dkv.has(k) ? "" : " (satırsız)"}`).join(", ") || "-"}`);
+  console.log(`  Bağımlılık (hepsi açık ⇒ tutarlı): ${bay.bagimlilik.map(([b2, o]) => `${b2}→${o}`).join(", ")}`);
   if (!dk.includes("system.installationId")) hatalar.push("DENEME'de system.installationId yok");
 
-  const [al] = satirlar(kaynak, `SELECT count(*) || '|' || count(*) FILTER (WHERE "chainSeq" IS NULL AND category::text IN ('DOMAIN','SYSTEM') AND action NOT LIKE 'AUDIT_CHAIN%'
-      AND coalesce("tableName", '') NOT IN (${AUDIT_KIMLIK_ETIKETLERI.map(lit).join(",")}))
-      || '|' || coalesce(max("createdAt") FILTER (WHERE "chainSeq" IS NULL), 'epoch')::text FROM system_logs;`);
-  const [dl] = satirlar(deneme, `SELECT count(*) || '|' || coalesce(min("createdAt") FILTER (WHERE "chainSeq" IS NOT NULL), 'infinity')::text FROM system_logs;`);
-  console.log(`\nAudit: KAYNAK ${al[0]} → taşınan iş ayak izi ${al[1]} (son ${al[2]}) · DENEME zinciri ${dl[0]} (başı ${dl[1]})`);
-  if (!(new Date(al[2]) < new Date(dl[1]))) hatalar.push("KAYNAK audit'i DENEME zincir başından yeni — doğrulayıcı ZINCIRSIZ_SATIR verir");
+  // Audit: KAYNAK satırı taşınmaz; system_logs'a FK veren tablo DENEME'den gelmiyorsa satırları yetim kalır ⇒ DUR.
+  const [al] = satirlar(kaynak, "SELECT count(*) FROM system_logs;");
+  const [dl] = satirlar(deneme, `SELECT count(*) || '|' || count(*) FILTER (WHERE "chainSeq" IS NOT NULL) FROM system_logs;`);
+  const fk = satirlar(kaynak, `SELECT conrelid::regclass::text || '|' || conname FROM pg_constraint WHERE contype = 'f' AND confrelid = 'public.system_logs'::regclass;`);
+  console.log(`\nAudit: KAYNAK ${al[0]} satır → 0 taşınır · DENEME ${dl[0]} satır (zincirli ${dl[1]}) aynen · system_logs'a FK veren tablo: ${fk.map((r) => r[0]).join(", ") || "yok"}`);
+  for (const [t] of fk) if (!SAHNELENEN.includes(t)) hatalar.push(`${t} system_logs'a FK veriyor ama DENEME'den gelmiyor — KAYNAK audit'i silinince yetim kalır`);
+
+  const [dv] = satirlar(kaynak, `SELECT count(*) || '|' || count(*) FILTER (WHERE starts_with(name, ${lit(CIHAZ_ONEKI)})) || '|' || count(*) FILTER (WHERE length(${lit(CIHAZ_ONEKI)} || name) > 100) FROM devices;`);
+  console.log(`Cihaz: KAYNAK ${dv[0]} → onaysız + pasif, '${CIHAZ_ONEKI}' önekli (zaten önekli ${dv[1]} · 100 karakteri aşan ${dv[2]})`);
+  if (Number(dv[2]) > 0) hatalar.push("önekli cihaz adı 100 karakteri aşıyor (kesilir)");
 
   const [sw] = satirlar(deneme, "SELECT count(*) || '|' || count(*) FILTER (WHERE source = 'tur') FROM sync_watermarks;");
   console.log(`Eşitleme: DENEME filigranı ${sw[0]} satır → ${sw[1]} (tur) kalır; ilk tur her kayıt projeksiyonunu TAM gönderir`);
@@ -166,7 +185,7 @@ async function birlestir(b) {
   const sure = () => `${((Date.now() - t0) / 1000).toFixed(1)} sn`;
   psql("postgres", `CREATE DATABASE ${id(b.hedef)} TEMPLATE ${id(b.kaynak)};`);
   console.log(`① HEDEF klonlandı (${sure()})`);
-  psql(b.hedef, hazirlaSql({ kurulumDesenleri: kurulumDesenleri() }));
+  psql(b.hedef, hazirlaSql({ kurulumDesenleri: kurulumDesenleri(), bayrak: bayrakKumesi() }));
   for (const t of SAHNELENEN) {
     const kolonlar = psql(b.hedef, sahneTablosuSql(t));
     await akit(b.deneme, b.hedef, t, kolonlar);
@@ -180,6 +199,16 @@ async function birlestir(b) {
   for (const r of sonuc) console.log(`   ${r[0] === "OK" ? "✓" : "✗"} ${r[1]}: ${r[2]}`);
   console.log(`④ Doğrulama (${sure()})`);
   if (hata.length) { console.error(`⛔ ${hata.length} doğrulama hatası — HEDEF '${b.hedef}' incelemeye bırakıldı (aktar_* şemaları içinde)`); return 1; }
+  // Negatif sondalar: kural doğrulaması bilerek bozulmuş kopyada (tx + ROLLBACK) yakalamalı.
+  let kor = 0;
+  for (const sonda of SONDALAR) {
+    const yakalanan = satirlar(b.hedef, sondaSql(sonda)).filter((r) => r[0] === "HATA").map((r) => r[1]);
+    const ok = yakalanan.includes(sonda.bekle);
+    if (!ok) kor++;
+    console.log(`   ${ok ? "✓" : "✗"} sonda '${sonda.ad}' → ${ok ? `yakalandı (${sonda.bekle})` : `KÖR (beklenen ${sonda.bekle}, gelen: ${yakalanan.join(",") || "yok"})`}`);
+  }
+  console.log(`④b Negatif sonda: ${SONDALAR.length - kor}/${SONDALAR.length} yakalandı (${sure()})`);
+  if (kor) { console.error(`⛔ ${kor} sonda kör — doğrulama güvenilmez, HEDEF '${b.hedef}' incelemeye bırakıldı`); return 1; }
   psql(b.hedef, "DROP SCHEMA aktar_deneme CASCADE; DROP SCHEMA aktar_kontrol CASCADE;");
   dbAynala(b.deneme, b.hedef);
   console.log(`⑤ Hazırlık şemaları kaldırıldı, DB düzeyi ayar/yetki aynalandı (${sure()})`);
