@@ -69,7 +69,7 @@ export function StatusBands() {
         <Banner
           tone="warn"
           testID="bant-salt-okunur"
-          text={`Patron bulutu hizmeti ${formatDateTime(service?.bitis)} tarihinde sona erdi — veriler ${formatDateTime(service?.saltOkunurBitis)} tarihine kadar yalnız görüntülenir ve dışa aktarılabilir (Hesaplar › Dışa aktar); yeni kayıt girilemez.`}
+          text={`TeksERP Yönetim hizmeti ${formatDateTime(service?.bitis)} tarihinde sona erdi — veriler ${formatDateTime(service?.saltOkunurBitis)} tarihine kadar yalnız görüntülenir ve dışa aktarılabilir (Hesaplar › Dışa aktar); yeni kayıt girilemez.`}
         />
       ) : null}
       {facility && !readOnly && syncIsLate(last) ? (

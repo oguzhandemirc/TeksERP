@@ -5,7 +5,10 @@ name: tekserp-patron-${ORTAM:?ORTAM gerekli (uretim)}
 # =============================================================================
 # Runbook: docs/ops/PATRON-BULUTU-KURULUM.md (kurulum · doğrulama · geri alma). Bu dosya sunucuya ELLE
 # kopyalanır; değerler yanındaki `.env`ten (ornek.env). Web sürümü (patron/uygulama) ve API AYNI kökende:
-# patron.etkiliyazilim.com/ → web, /api → hesap API'si, /v1 → fabrika kanalı (kurulum imzalı).
+# yonetim.etkiliyazilim.com/ → web, /api → hesap API'si, /v1 → fabrika kanalı (kurulum imzalı). İki ad AYNI yönlendiricide:
+# PATRON_HOST birincil (yonetim — uygulama ve yeni bağlantılar), PATRON_TAKMA_HOST KALICI takma ad (patron — kurulu
+# fabrikalar https://patron.etkiliyazilim.com/v1'e eşitler; kapatılmaz). TLS: Cloudflare Origin CA `*.etkiliyazilim.com`
+# (Traefik varsayılan deposu) iki adı da kapsar; certresolver yok.
 #
 # Dört ağ — hiçbiri satıcının kendi ağlarıyla, güncelleme ya da `web` ağıyla ORTAK değil:
 #   kenar   (internal) Traefik ↔ patron. Traefik runbook adımıyla bağlanır (yeniden başlatmasız).
@@ -116,7 +119,7 @@ services:
       - traefik.enable=true
       - traefik.docker.network=tekserp-patron-${ORTAM}-kenar
       # Yalnız genel yüzeyler: iç/yönetim ad alanları (web-static.ts IC_ONEKLER) yönlendiriciye hiç girmez → Traefik 404.
-      - "traefik.http.routers.tekserp-patron-${ORTAM}.rule=Host(`${PATRON_HOST:?PATRON_HOST gerekli}`) && !PathRegexp(`^/(ic|yonetim)(/|$$)`)"
+      - "traefik.http.routers.tekserp-patron-${ORTAM}.rule=(Host(`${PATRON_HOST:?PATRON_HOST gerekli}`) || Host(`${PATRON_TAKMA_HOST:?PATRON_TAKMA_HOST gerekli (kalıcı takma ad)}`)) && !PathRegexp(`^/(ic|yonetim)(/|$$)`)"
       - traefik.http.routers.tekserp-patron-${ORTAM}.entrypoints=websecure
       - traefik.http.routers.tekserp-patron-${ORTAM}.tls=true
       - traefik.http.services.tekserp-patron-${ORTAM}.loadbalancer.server.port=4620

@@ -1,6 +1,9 @@
 # Patron bulutu — tekserp-vds kurulum runbook'u
 
 > **Durum (2026-10-15):** tekserp-vds'te **KURULU** — `tekserp-patron:8fc40a01c14c` (ilk kurulum `55203d9708ba`, yükseltmeler §13a · §13b · tesis DB geçişi `PATRON-TESIS-DB-GECIS.md` §6 · §13c · §13d), o gün hazırlık satıcısının iç API ağına bağlıydı (§11 ilk madde), `https://patron.etkiliyazilim.com` yanıt veriyor. Kurulum kaydı §13; yerel duman kaydı §12.
+> **Ad değişimi (kullanıcı kararı 2026-10-16):** kullanıcıya görünen ad "TeksERP Yönetim", birincil alan adı
+> `yonetim.etkiliyazilim.com`; `patron.etkiliyazilim.com` aynı yönlendiricide **KALICI takma ad** (kurulu fabrikalar
+> `https://patron.etkiliyazilim.com/v1`'e eşitler — kapatılmaz). Repo hazır (`feat/yonetim-ad`); VDS'e uygulama §15.
 > **Hazırlık izleri temizlendi (2026-10-05):** hazırlık satıcısı emekli ve verisi silindi; patron iç API'si ÜRETİM satıcısına bağlı (ölçüldü 2026-10-05: ağ `tekserp-satici-uretim-ic-api`, `.env`'de hazırlık değeri yok — §14 uygulanmış). Deneme tesisi "Etkili Yazılım Hazırlık" (`c0f70948…`) önce PASİF yapıldı, sonra `tesis.js imha` ile imha edildi (hesap 1 · hesap audit'i 4 · tesis 1; imha kaydı `facility_destructions`ta, yedekten düşme 2026-11-09); patron üretim DB'sinde tesis 0. Eski hazırlık env yedeği (VDS) ve davet dosyası (Mac) silindi. §0–§13'teki hazırlık anlatımı (ağ adı, sır kopyası, deneme tesisi) tarihtir; `deploy/patron/ornek.env`teki hazırlık örneği kod işinde (3.1).
 > Yapıtlar: [`deploy/patron/`](../../deploy/patron/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · duman). Sözleşme: [`PATRON-BULUTU-ESITLEME.md`](../design/PATRON-BULUTU-ESITLEME.md). Alan kuralları: [`kurallar/patron-bulutu.md`](../kurallar/patron-bulutu.md) § Dağıtım. Emsal ve paylaşılan adımlar: [`SATICI-KURULUM.md`](SATICI-KURULUM.md) (satıcı ÖNCE kurulu olmalı — patron onun iç API ağına katılır).
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur. Traefik **yeniden başlatılmaz**.
@@ -9,7 +12,7 @@
 
 | Kurulur | Kurulmaz |
 |---|---|
-| `ORTAM=uretim` — `patron.etkiliyazilim.com`: web sürümü `/` · hesap API'si `/api` · fabrika kanalı `/v1` | Bildirim çıkışı (B5: Expo/FCM/APNs/web push) — bu yığında dış ağ YOK (§11) |
+| `ORTAM=uretim` — `yonetim.etkiliyazilim.com` (birincil) + `patron.etkiliyazilim.com` (kalıcı takma ad), ikisi aynı yönlendirici: web sürümü `/` · hesap API'si `/api` · fabrika kanalı `/v1` | Bildirim çıkışı (B5: Expo/FCM/APNs/web push) — bu yığında dış ağ YOK (§11) |
 | Patronun kendi PG16'sı + şifreli yedek döngüsü | Satıcı (ayrı compose, `SATICI-KURULUM.md`) · Traefik yapılandırması (yalnız bir ağ bağlantısı + iki satır) |
 | Üç DB rolü (göç · uygulama · eşitleme) · ilk tesis + ilk tesis yöneticisi (CLI) | Mağaza uygulamaları (iOS/Android derlemesi) |
 
@@ -19,7 +22,7 @@ Dokunulmayan: `tekserp-guncelleme`, satıcı yığını (yalnız onun `ic-api` a
 
 ```
 Cloudflare (proxy AÇIK) ─443─► Traefik (websecure, Origin CA *.etkiliyazilim.com)
-                                  │  Host(`patron.etkiliyazilim.com`) && !PathRegexp(`^/(ic|yonetim)(/|$)`)
+                                  │  (Host(`yonetim.etkiliyazilim.com`) || Host(`patron.etkiliyazilim.com`)) && !PathRegexp(`^/(ic|yonetim)(/|$)`)
                                   ▼  ağ: tekserp-patron-uretim-kenar (internal)
                          patron :4620 (BIND = kenar adresi)  / web · /api · /v1 · /saglik
                          patron ◄─ ağ: …-ic (internal) ─► patron-db (PG16) ◄─ patron-yedek
@@ -80,7 +83,7 @@ VDS'te derleme YOK, kaynak VDS'e gitmez. Web aşaması derleme makinesinin KEND�
 
 ### 2.3 Sunucunun `.env`'i
 
-`deploy/patron/ornek.env`'den doldurulur (sır İÇERMEZ): ağlar §3'ten, satıcı değerleri (`SATICI_IC_API_AGI` = `tekserp-satici-<ortam>-ic-api` · `SATICI_IC_API_IP` = satıcının `IC_API_IP` · `PATRON_IC_IP` = satıcının `PATRON_IC_IP`) **satıcının `.env`'inden**, imaj etiketleri §2.2'den.
+`deploy/patron/ornek.env`'den doldurulur (sır İÇERMEZ): `PATRON_HOST=yonetim.etkiliyazilim.com` + `PATRON_TAKMA_HOST=patron.etkiliyazilim.com` (ikisi de zorunlu; eksikse `compose config` durur, aynıysa denetim ⑦ kırmızı), ağlar §3'ten, satıcı değerleri (`SATICI_IC_API_AGI` = `tekserp-satici-<ortam>-ic-api` · `SATICI_IC_API_IP` = satıcının `IC_API_IP` · `PATRON_IC_IP` = satıcının `PATRON_IC_IP`) **satıcının `.env`'inden**, imaj etiketleri §2.2'den.
 
 ### 2.4 Yalıtım denetimi — kurulumdan ÖNCE yeşil
 
@@ -157,7 +160,7 @@ ssh tekserp-vds 'docker version --format "{{.Server.Version}}"; docker compose v
    sudo docker compose --profile goc run --rm patron-goc node dist-cli/scripts/tesis.js yonetici-davet --tesis=<tesis uuid> --eposta=<e-posta> --ad="<Ad Soyad>"
    ```
 
-   Yönetici davetle `https://patron.etkiliyazilim.com/` üzerinden parolasını belirler, TOTP sırrını authenticator'a girer ve ilk kodla onaylar; ekibini kendisi davet eder. Kayıpta: `tesis.js yonetici-yeniden-davet` (tesiste AKTİF hesap yöneticisi varken REDDEDİLİR — o yönetici kendisi sıfırlar; tek aktif yönetici kendisi kayıpsa yalnız yazılı taleple `--zorla --talep=<talep no> --gerekce="…"`, ikisi de müşterinin bulut denetiminde görünür). Kurulum kaydı `KURULUM_KAYNAGI=satici` kipinde satıcı iç API'sinden dolar (CLI'yle kayıt gerekmez).
+   Yönetici davetle `https://yonetim.etkiliyazilim.com/davet?davet=<belirteç>` üzerinden parolasını belirler, TOTP sırrını authenticator'a girer ve ilk kodla onaylar; ekibini kendisi davet eder. Kayıpta: `tesis.js yonetici-yeniden-davet` (tesiste AKTİF hesap yöneticisi varken REDDEDİLİR — o yönetici kendisi sıfırlar; tek aktif yönetici kendisi kayıpsa yalnız yazılı taleple `--zorla --talep=<talep no> --gerekce="…"`, ikisi de müşterinin bulut denetiminde görünür). Kurulum kaydı `KURULUM_KAYNAGI=satici` kipinde satıcı iç API'sinden dolar (CLI'yle kayıt gerekmez).
 9. **İlk yedek:** `sudo docker compose exec patron-yedek /arac/yedek-dongusu.sh tek` → `patron_<damga>.dump.tkenc` + `anahtarlar_<damga>.tar.tkenc` ("Yerel anahtar (yerel.tkkey) yok" uyarısı BEKLENİR — VDS kendi yedeğini açamaz).
 10. **Sonra:** `deploy/vds-dogrula.sh` → ✅ adnansahin AYNI.
 
@@ -175,23 +178,23 @@ Kullanıcının adımları (değerleri Claude'a VERMEYİN):
 
 ## 5. DNS (kullanıcı — Cloudflare)
 
-`patron` A → `80.253.255.188`, **proxy AÇIK (turuncu bulut)** — sertifika Origin CA `*.etkiliyazilim.com`, ona yalnız CF Edge güvenir. Kayıt kurulumdan ÖNCE açılırsa `/saglik` 404 döner (Traefik'te yönlendirici yok, zararsız); sonra 200. Önbellek kuralı gerekmez: giriş HTML'i `no-store`, özetli varlıklar `immutable` (CF köken başlığına uyar), API `no-store`. Fabrikanın varsayılan bulut adresi zaten `https://patron.etkiliyazilim.com`'dur (`Teks-Erp/src/cloud-sync/cloud-url.ts`, `PATRON_CLOUD_URL`).
+`yonetim` A → `80.253.255.188` ve `patron` A → `80.253.255.188`, ikisi de **proxy AÇIK (turuncu bulut)** — sertifika Origin CA `*.etkiliyazilim.com` (iki adı da kapsar; certresolver yok), ona yalnız CF Edge güvenir; CF kenar sertifikası (Universal SSL `*.etkiliyazilim.com`) da ikisini kapsar. `patron` kaydı KALICIDIR — silinmez, DNS-only'ye çevrilmez (kurulu fabrikaların eşitleme adresi). Kayıt kurulumdan ÖNCE açılırsa `/saglik` 404 döner (Traefik'te yönlendirici yok, zararsız); sonra 200. Önbellek kuralı gerekmez: giriş HTML'i `no-store`, özetli varlıklar `immutable` (CF köken başlığına uyar), API `no-store`. Fabrikanın varsayılan bulut adresi bugün `https://patron.etkiliyazilim.com`'dur (`Teks-Erp/src/cloud-sync/cloud-url.ts`, `PATRON_CLOUD_URL`; yonetim'e çevirmek ayrı oturumun işi) — takma ad bu yüzden kalıcıdır.
 
 ## 6. Doğrulama (sonra)
 
 | Ölçüm | Nereden | Beklenen |
 |---|---|---|
-| `curl -s https://patron.etkiliyazilim.com/saglik` | internet | `{"success":true}` |
-| `curl -sI https://patron.etkiliyazilim.com/` | internet | `200` · `text/html` · `cache-control: no-store` · `content-security-policy` (`unsafe-inline` YOK) · `x-frame-options: DENY` |
+| `curl -s https://yonetim.etkiliyazilim.com/saglik` ve `curl -s https://patron.etkiliyazilim.com/saglik` | internet | ikisi de `{"success":true}` |
+| `curl -sI https://yonetim.etkiliyazilim.com/` (ve `patron.`) | internet | `200` · `text/html` · `cache-control: no-store` · `content-security-policy` (`unsafe-inline` YOK) · `x-frame-options: DENY` |
 | giriş HTML'indeki `/_expo/static/js/web/entry-<özet>.js` | internet | `200` · `cache-control: public, max-age=31536000, immutable` |
 | `/cariler/x` (istemci yönlendirmesi) | internet | `200` giriş HTML'i |
 | `/api/yok` · `/v1/yok` | internet | `404` JSON `BULUNAMADI` (HTML değil) |
 | `/ic/v1/zil` · `/yonetim` | internet | `404` (Traefik; yönlendirici bu yolları almaz) |
 | `/v1/esitle` imzasız `POST` | internet | `401`/`400` JSON (fabrika kanalı imza ister) |
 | `curl -m 5 http://80.253.255.188:4620/` | internet | zaman aşımı / reddedildi (port yayını yok) |
-| Tarayıcıda `https://patron.etkiliyazilim.com/` | Mac | giriş ekranı; geliştirici konsolunda CSP ihlali YOK |
+| Tarayıcıda `https://yonetim.etkiliyazilim.com/` (`tarayici-duman.cjs`) | Mac | giriş ekranı; geliştirici konsolunda CSP ihlali YOK |
 | `sudo docker compose ps` | VDS | üçü `healthy`/`Up` |
-| `docker inspect tekserp-patron-uretim --format '{{index .Config.Labels "traefik.http.routers.tekserp-patron-uretim.rule"}}'` | VDS | kural `!PathRegexp(…^/(ic\|yonetim)(/\|$)…)` ile biter — tek `$` (compose `$$` kaçışı çözülmüş) |
+| `docker inspect tekserp-patron-uretim --format '{{index .Config.Labels "traefik.http.routers.tekserp-patron-uretim.rule"}}'` | VDS | kural `(Host(`yonetim…`) \|\| Host(`patron…`))` ile başlar, `!PathRegexp(…^/(ic\|yonetim)(/\|$)…)` ile biter — tek `$` (compose `$$` kaçışı çözülmüş) |
 | `sudo docker compose logs patron \| grep PATRON_DINLIYOR` | VDS | `kurulumKaynagi=satici web=acik` |
 | Satıcı iç API'si patrondan | VDS | `docker exec tekserp-patron-uretim patron-baslat node -e "fetch('http://<IC_API_IP>:4612/ic/v1/kurulum/00000000-0000-4000-8000-000000000000',{headers:{Authorization:'Bearer '+process.env.SATICI_IC_API_BELIRTECI}}).then(r=>console.log(r.status))"` → `404` (kurulum yok, kapı geçildi); belirteçsiz `401` |
 | `sudo docker stats --no-stream` | VDS | sınırlar tablodaki gibi; `free -m` kullanılabilir ≥ 300 MB |
@@ -225,7 +228,7 @@ sudo docker network disconnect tekserp-patron-uretim-kenar traefik 2>/dev/null; 
 
 ## 9. Fabrika tarafı
 
-Bulut adresinin tek okuyucusu `Teks-Erp/src/cloud-sync/cloud-url.ts` (`PATRON_CLOUD_URL`; verilmezse `https://patron.etkiliyazilim.com`, `kapali` → çıkış yok). Eşitleme yalnız `URETIM` sınıfı + `patron-bulut` hakkıyla gider; bulut da aynı koşulu ikinci kez ölçer (`SINIF_GONDEREMEZ` / `PATRON_BULUT_KAPALI`).
+Bulut adresinin tek okuyucusu `Teks-Erp/src/cloud-sync/cloud-url.ts` (`PATRON_CLOUD_URL`; verilmezse `https://patron.etkiliyazilim.com` — kalıcı takma ad, §5; `kapali` → çıkış yok). Eşitleme yalnız `URETIM` sınıfı + `patron-bulut` hakkıyla gider; bulut da aynı koşulu ikinci kez ölçer (`SINIF_GONDEREMEZ` / `PATRON_BULUT_KAPALI`).
 
 ## 10. Satıcı iç API'si ile bağ
 
@@ -378,3 +381,27 @@ Satıcı tarafı `SATICI-KURULUM.md` §5b'dedir: ağ (`IC_API_AGI`), sabit adres
 6. **Yeniden yarat (yalnız patron):** `v "cd $P && docker compose up -d patron"` → patron üretim satıcısının `ic-api` ağına `172.31.251.35` ile katılır, hazırlığınkinden çıkar; DB ve yedek konteyneri dokunulmaz. Günlük: `PATRON_DINLIYOR … kurulumKaynagi=satici web=acik`.
 7. **Doğrula:** patrondan iç API — `v "docker exec tekserp-patron-uretim patron-baslat node -e \"fetch('http://172.31.251.34:4612/ic/v1/kurulum/00000000-0000-4000-8000-000000000000',{headers:{Authorization:'Bearer '+process.env.SATICI_IC_API_BELIRTECI}}).then(r=>console.log(r.status))\""` → `404` (kapı geçildi); aynı komut başlıksız → `401` · `docker network inspect tekserp-satici-uretim-ic-api` → satıcı `.34` + patron `.35`; `tekserp-satici-hazirlik-ic-api` → yalnız hazırlık satıcısı · `curl -s https://patron.etkiliyazilim.com/saglik` → `{"success":true}` · sonra `deploy/vds-dogrula.sh` ✅.
 8. **Etki ve geri dönüş:** hazırlıkta açılmış deneme tesisinin kurulumu (`eecfd6b7…`, TEST) üretim satıcısında YOK → patron ilk sorguda `404` alır ve kaydı pasife çeker (beklenen; §10). Gerçek tesisler üretim satıcısının tesis kimliğiyle `tesis-ac` ile açılır (geçiş dilimi). Geri dönüş: `.env` yedeği (`cat ~/patron-env-yedek-<damga> > $P/.env`) + `ic-api-belirteci.yedek-hazirlik` → `ic-api-belirteci` (aynı yardımcı konteyner kalıbı) → `docker compose up -d patron`. Üretim satıcısı geri alınacaksa bu dönüş ÖNCE yapılır (patron bağlıyken ağ silinemez; SATICI-KURULUM §13.8).
+
+## 15. Ad değişimi — `yonetim.etkiliyazilim.com` birincil, `patron.` kalıcı takma ad (2026-10-16; HAZIR, VDS'e UYGULANMADI)
+
+> Kullanıcı kararı 2026-10-16: kullanıcıya görünen ad "TeksERP Yönetim". Kod/dizin/izin adları `patron` kalır. Sıra
+> önemli: DNS ve yönlendirici ÖNCE (uygulama yonetim'e gömülü — ad çözülmeden mağaza paketi giriş yapamaz), mağaza SONRA.
+> VDS yazımıdır — kullanıcının "uygula" cümlesiyle; önce/sonra `deploy/vds-dogrula.sh` ✅, Traefik yeniden başlatılmaz.
+
+1. **DNS (kullanıcı, Cloudflare):** `yonetim` A → `80.253.255.188`, proxy AÇIK (§5). `patron` kaydına DOKUNULMAZ.
+   Kayıt yönlendiriciden önce açılırsa `yonetim.…/saglik` 404 döner (zararsız).
+2. **İmaj:** `deploy/patron/imaj-derle.sh` (feat/yonetim-ad inişi sonrası `main` HEAD) → §2.2/§4.4 kalıbıyla VDS'e;
+   web sürümü yeni adları (giriş başlığı, bildirim başlığı) imajla taşır; TOTP etiketi yalnız YENİ davetlerde "TeksERP Yönetim".
+3. **`.env`:** `PATRON_HOST=yonetim.etkiliyazilim.com` + YENİ satır `PATRON_TAKMA_HOST=patron.etkiliyazilim.com` +
+   imaj etiketleri; önce `cp -p .env ~/patron-env-yedek-<damga>`. Mac'te `compose-denetle.mjs --env-file <yeni .env> --satici-env …`
+   → ⑦ "Host'lar .env'deki PATRON_HOST + PATRON_TAKMA_HOST" ✅.
+4. **Yükselt:** §8 kalıbı (önce yedek → `--profile goc run --rm patron-goc` → `docker compose up -d`). Yönlendirici etiketi
+   değiştiği için patron konteyneri yeniden yaratılır; Traefik etiketi kendisi okur.
+5. **Doğrula:** `curl -s https://yonetim.etkiliyazilim.com/saglik` ve `https://patron.etkiliyazilim.com/saglik` → ikisi
+   `{"success":true}`; `/v1/esitle` imzasız POST iki adda da 401/400; köken doğrudan (`--resolve yonetim…:443:<IP>`) 403;
+   `tarayici-duman.cjs https://yonetim.etkiliyazilim.com` çıkış 0; fabrikadan bir eşitleme turu kabul (takma ad üzerinden).
+6. **Gizlilik sayfası:** `deploy/gizlilik-sayfasi/vds-kur.sh` (kuru) → `--uygula` (conf değişti; `--html` YETMEZ) →
+   `node deploy/gizlilik-sayfasi/olc.mjs` (`/yonetim-gizlilik` 200 + `/patron-gizlilik` 301). DNS adımı yok (aynı köken).
+7. **Mağaza:** Play'de YENİ uygulama "TeksERP Yönetim" → `tekserp-yonetim-<sürüm>-vc1.aab` (`PATRON-MAGAZA-ANDROID.md` §3, §9).
+8. **Geri dönüş:** `.env` yedeği + eski imaj etiketi → `docker compose up -d`; `yonetim` DNS kaydı kalabilir (yönlendirici
+   yoksa 404). `patron` adı hiçbir adımda kapanmadığı için fabrikalar etkilenmez.

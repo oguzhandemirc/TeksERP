@@ -47,7 +47,8 @@ docker run --rm --network none -v "$D:/d" --entrypoint node "$YIMAJ" /arac/yedek
   anahtar-uret --ad patron --dizin /d/yedek-alici --ozel-cikti /d/yedek-ozel.txt >/dev/null 2>&1
 cat > "$D/.env" <<EOF
 ORTAM=duman
-PATRON_HOST=patron.duman.invalid
+PATRON_HOST=yonetim.duman.invalid
+PATRON_TAKMA_HOST=patron.duman.invalid
 PATRON_IMAJ=$IMAJ
 PATRON_YEDEK_IMAJ=$YIMAJ
 KENAR_AGI=172.31.240.0/28

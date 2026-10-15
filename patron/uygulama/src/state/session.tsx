@@ -229,7 +229,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     cache,
     facility,
     facilityId,
-    facilities: choices.length > 0 ? choices : facility ? [{ id: facility.tesis.id, ad: facility.tesis.ad ?? "TeksERP Patron", hizmet: facility.hizmet?.asama ?? "ACIK" }] : [],
+    facilities: choices.length > 0 ? choices : facility ? [{ id: facility.tesis.id, ad: facility.tesis.ad ?? "TeksERP Yönetim", hizmet: facility.hizmet?.asama ?? "ACIK" }] : [],
     switchError,
     permissions: facility?.hesap.izinler ?? [],
     offline,

@@ -5,13 +5,17 @@
 const os = require("node:os");
 const path = require("node:path");
 
-const PATRON_API = "https://patron.etkiliyazilim.com";
+// Birincil ad yonetim (2026-10-16); patron.etkiliyazilim.com kalıcı takma addır (kurulu fabrikalar), uygulama onu taşımaz.
+const PATRON_API = "https://yonetim.etkiliyazilim.com";
+/** Mağaza paketinin görünen adı ve dosya adı öneki (app.json `expo.name` ile aynı olmalı; build-aab ölçer). */
+const GORUNEN_AD = "TeksERP Yönetim";
+const CIKTI_ONEKI = "tekserp-yonetim";
 const KOK_DIZIN = path.join(os.homedir(), ".tekserp", "patron-android");
 const IMZA = Object.freeze({
   dizin: path.join(KOK_DIZIN, "yukleme"),
   storeFile: "tekserp-patron-yukleme.keystore",
   alias: "tekserp-patron-yukleme",
-  cn: "TeksERP Patron Play Yukleme",
+  cn: "TeksERP Patron Play Yukleme", // var olan yükleme sertifikasının DN'i — anahtar AYNI kalır, değişmez
   kasa: "patron-play-yukleme",
 });
 const CIKTI_DIZINI = path.join(KOK_DIZIN, "cikti");
@@ -19,4 +23,4 @@ const CIKTI_DIZINI = path.join(KOK_DIZIN, "cikti");
 const ORTAM_DOSYA = "TEKSERP_PATRON_IMZA_DOSYASI";
 const ORTAM_PAROLA = "TEKSERP_PATRON_IMZA_PAROLASI";
 
-module.exports = { PATRON_API, KOK_DIZIN, IMZA, CIKTI_DIZINI, ORTAM_DOSYA, ORTAM_PAROLA };
+module.exports = { PATRON_API, GORUNEN_AD, CIKTI_ONEKI, KOK_DIZIN, IMZA, CIKTI_DIZINI, ORTAM_DOSYA, ORTAM_PAROLA };

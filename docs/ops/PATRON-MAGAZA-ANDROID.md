@@ -1,6 +1,9 @@
-# Patron uygulaması — Google Play (Android) ilk sürüm runbook'u
+# TeksERP Yönetim (patron uygulaması) — Google Play (Android) ilk sürüm runbook'u
 
-> Durum (2026-10-15): AAB 1.0.0 · vc1 ve 1.0.1 · vc2 (uygulama içi "Hesabımı sil") hazır, Play'e YÜKLENMEDİ. iOS sonra (Xcode kurulumu).
+> Durum (2026-10-16): uygulama kullanıcıya **"TeksERP Yönetim"** adıyla görünür, paket `com.etkiliyazilim.tekserp.yonetim`,
+> bulut adresi `https://yonetim.etkiliyazilim.com` (kullanıcı kararı 2026-10-16: "patron" kaba bulundu; iç kod/dizin/izin
+> adları `patron` kalır). Play'de YENİ uygulama: ilk AAB 1.0.2 · vc1 (§9). Eski paket `…tekserp.patron` (1.0.0 · vc1,
+> 1.0.1 · vc2; §7–§8) Play'e HİÇ YÜKLENMEDİ — emekli, kullanılmaz. iOS sonra (Xcode kurulumu).
 > Kararlar (kullanıcı 2026-10-15): önce yalnız Android · ilk sürümde telefonda ANLIK BİLDİRİM YOK (Firebase yok;
 > uygulama native push kaydı denemez, uyarı göstermez; bildirim ekranında "yakında" notu) · web push aynen.
 > Tablet (ortak paket) Play yolu ayrıdır: `PLAY-STORE-YAYIN.md` · `PLAY-KONSOL-FORMLARI.md`.
@@ -9,14 +12,14 @@
 
 | | |
 |---|---|
-| Paket adı | `com.etkiliyazilim.tekserp.patron` (değişmez — Play'de kalıcı kimlik) |
-| Görünen ad | TeksERP Patron |
-| Sürüm | `patron/uygulama/app.json` → `expo.version` (versionName) + `expo.android.versionCode` — tek kaynak; her yüklemede versionCode +1 |
-| Bulut adresi | `https://patron.etkiliyazilim.com` (`scripts/lib/android-derleme.cjs` `PATRON_API`; derlemeye gömülür, `.env*` okunmaz) |
+| Paket adı | `com.etkiliyazilim.tekserp.yonetim` (ilk AAB yüklenince Play'de kalıcı kimlik; 2026-10-16 öncesi `…tekserp.patron` hiç yüklenmedi) |
+| Görünen ad | TeksERP Yönetim (`app.json` `expo.name` = `android-derleme.cjs` `GORUNEN_AD`; `build-aab` manifest etiketini ölçer) |
+| Sürüm | `patron/uygulama/app.json` → `expo.version` (versionName) + `expo.android.versionCode` — tek kaynak; her yüklemede versionCode +1 (yeni uygulama vc1'den başladı) |
+| Bulut adresi | `https://yonetim.etkiliyazilim.com` (`scripts/lib/android-derleme.cjs` `PATRON_API`; derlemeye gömülür, `.env*` okunmaz). `patron.etkiliyazilim.com` aynı sunucunun KALICI takma adıdır (kurulu fabrikalar), uygulamada geçmez |
 | Yükleme anahtarı | `~/.tekserp/patron-android/yukleme/tekserp-patron-yukleme.keystore` (repo DIŞI, 700/600) · alias `tekserp-patron-yukleme` |
 | Parola | macOS Anahtar Zinciri `tekserp/patron-play-yukleme` (hesap `tekserp`) — hiçbir çıktıya/dosyaya basılmaz |
 | Şifreli yedek | `patron/uygulama/keystore-yedek.tar.gz.enc` + `keystore-yedek.README.md` |
-| Çıktı | `~/.tekserp/patron-android/cikti/tekserp-patron-<sürüm>-vc<kod>.aab` + `.sha256` |
+| Çıktı | `~/.tekserp/patron-android/cikti/tekserp-yonetim-<sürüm>-vc<kod>.aab` + `.sha256` (eski `tekserp-patron-*` dosyaları emekli paketindir, yüklenmez) |
 | Görseller | `patron/uygulama/assets/` — **YER TUTUCU** (tablet logosu + altın halka; `scripts/yer-tutucu-gorsel.cjs`). Kullanıcı onaylı nihai görsel gerekir. |
 
 ## 1. Derleme (Claude/geliştirici)
@@ -33,8 +36,8 @@ npm run build:apk:duman     # aynı imzalı release APK (yalnız emülatör duma
 (`~/Library/Android/sdk`) bulunur → anahtar dosyası ve izinleri (700/600) denetlenir → parola Anahtar Zinciri'nden
 okunur ve keytool ile anahtarı açtığı doğrulanır → `expo prebuild --platform android --clean` (android/ git dışı;
 her derleme temiz) → `./gradlew --no-daemon bundleRelease` (parola yalnız bu alt süreç ortamında) → DOĞRULAMA:
-birleşik manifestte paket/versionCode/versionName, izin kümesi yalnız `INTERNET` (+ AndroidX'in uygulamaya özel
-`DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`'ı), Firebase/bildirim bileşeni yok, `allowBackup` kapalı; JS paketinde
+birleşik manifestte paket/versionCode/versionName, uygulama etiketi (`@string/app_name` = `GORUNEN_AD`), izin kümesi yalnız
+`INTERNET` (+ AndroidX'in uygulamaya özel `<paket>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`'ı; paketten türetilir), Firebase/bildirim bileşeni yok, `allowBackup` kapalı; JS paketinde
 bulut adresi var, geliştirme adresi yok; AAB imzası yükleme sertifikası → kopya + sha256. Doğrulama kırmızıysa
 paket çıktı dizinine kopyalanmaz.
 
@@ -61,19 +64,19 @@ izin bilerek eklenir, formu da güncellenir.
 
 1. **Parolayı yedekle (bir kez):** Anahtar Zinciri `tekserp/patron-play-yukleme` değerini parola yöneticine kopyala
    (`keystore-yedek.README.md` § Parolayı parola yöneticisine kopyalamak). Mac kaybında tek kurtarıcı odur.
-2. **Uygulama oluştur:** Play Console → Tüm uygulamalar → **Uygulama oluştur** → ad "TeksERP Patron" · varsayılan
-   dil Türkçe · Uygulama · Ücretsiz · beyanlar ✓. (Paket adı ilk AAB yüklenince `com.etkiliyazilim.tekserp.patron` olarak kilitlenir.)
+2. **Uygulama oluştur:** Play Console → Tüm uygulamalar → **Uygulama oluştur** → ad "TeksERP Yönetim" · varsayılan
+   dil Türkçe · Uygulama · Ücretsiz · beyanlar ✓. (Paket adı ilk AAB yüklenince `com.etkiliyazilim.tekserp.yonetim` olarak kilitlenir.)
 3. **Play App Signing:** ilk sürüm oluştururken "Google tarafından oluşturulan anahtar" (varsayılan) seçili kalsın.
-4. **Dahili test:** Test → Dahili test → Yeni sürüm → `~/.tekserp/patron-android/cikti/tekserp-patron-<sürüm>-vc<kod>.aab` (en yenisi §7)
+4. **Dahili test:** Test → Dahili test → Yeni sürüm → `~/.tekserp/patron-android/cikti/tekserp-yonetim-<sürüm>-vc<kod>.aab` (en yenisi §9)
    yükle → sürüm notu (aşağıda §5.4) → test kullanıcıları listesi → kaydet → yayınla. Yüklemeden önce sha256'yı
    `.sha256` dosyasıyla karşılaştır (`shasum -a 256 <aab>`).
 5. **Mağaza girişi:** §5'teki metinler + görseller: ikon `patron/uygulama/assets/magaza/ikon-512.png`, öne çıkan görsel
    `assets/magaza/one-cikan-1024x500.png` (ikisi de YER TUTUCU), telefon ekran görüntüleri (en az 2; demo hesapla
    alınmalı — gerçek fabrika verisi görünmesin).
-6. **Uygulama içeriği formları:** gizlilik politikası URL'si `https://tekserp.etkiliyazilim.com/patron-gizlilik`
+6. **Uygulama içeriği formları:** gizlilik politikası URL'si `https://tekserp.etkiliyazilim.com/yonetim-gizlilik`
    (§4.1 — önce sayfa VDS'e yayımlanmalı), uygulama erişimi (inceleme hesabı — §6 madde 2), reklam yok, hedef
    kitle 18+, veri güvenliği (§4.2), içerik derecelendirmesi (iş uygulaması, kullanıcı etkileşimi: kullanıcılar
-   arası iletişim yok), hesap silme URL'si `https://tekserp.etkiliyazilim.com/patron-gizlilik#hesap-silme` (§4.3).
+   arası iletişim yok), hesap silme URL'si `https://tekserp.etkiliyazilim.com/yonetim-gizlilik#hesap-silme` (§4.3).
 7. **Üretim yayını:** hesap KURUMSAL olduğu için kapalı test şartı (12 test kullanıcısı × 14 gün) YOKTUR — bu şart
    13 Kasım 2023 sonrası açılmış KİŞİSEL hesaplara özgüdür (kuruluş hesabına uygulanmadığı doğrulandı 2026-10-15).
    Dahili testte duman (§4) geçince aynı sürüm Test → Dahili test → **Sürümü tanıt → Üretim** ile ya da Üretim →
@@ -82,12 +85,13 @@ izin bilerek eklenir, formu da güncellenir.
 
 ## 4. Gizlilik ve veri güvenliği
 
-### 4.1 Gizlilik politikası adresi — `/patron-gizlilik`
+### 4.1 Gizlilik politikası adresi — `/yonetim-gizlilik`
 
-- **Adres: `https://tekserp.etkiliyazilim.com/patron-gizlilik`** (yayın kullanıcı onayıyla VDS'e — repo hazır,
-  2026-10-15; dağıtım `GIZLILIK-SAYFASI.md` § Patron sayfası). Metin kimliği `PATRON-GP-2026.2`, yürürlük 15 Ekim 2026.
+- **Adres: `https://tekserp.etkiliyazilim.com/yonetim-gizlilik`** (yayın kullanıcı onayıyla VDS'e — repo hazır,
+  2026-10-16; dağıtım `GIZLILIK-SAYFASI.md` § Patron sayfası). Metin kimliği `YONETIM-GP-2026.3`, yürürlük 16 Ekim 2026.
+  Eski `/patron-gizlilik` (ve `/patron-gizlilik/`) kalıcı 301 ile buraya döner; `#çapa` tarayıcıda korunur.
 - Tek kaynak `docs/legal/PATRON-GIZLILIK-POLITIKASI.md` → `node deploy/gizlilik-sayfasi/uret.mjs` →
-  `deploy/gizlilik-sayfasi/html/patron-gizlilik.html` (tabletinkiyle aynı köken ve düzenek, ayrı sayfa; patron
+  `deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html` (tabletinkiyle aynı köken ve düzenek, ayrı sayfa; patron
   sunucusuna dokunmaz). Bekçi `scripts/test_gizlilik_sayfasi.mjs` bayt-eşitliği, `#hesap-silme` çapasını, saklama
   sürelerini (`patron/sunucu` koduna karşı) ve native push cümlesini (`NATIVE_PUSH`) ölçer.
 - Kaynağı PBAM'dır (`docs/hukuk/PATRON-BULUTU-AYDINLATMA-METNI.md`, taslak, uygulamada gösterilecek aydınlatma
@@ -95,12 +99,12 @@ izin bilerek eklenir, formu da güncellenir.
   (aşağıdaki §4.2 tablosuyla BİREBİR), amaç, aktarım (Cloudflare; native push kapalı), saklama, güvenlik, KVKK md. 11,
   18+, değişiklikler, iletişim, hesap silme. §4.2 değişirse politika §2 aynı commit'te değişir (ve tersi).
 - `https://tekserp.etkiliyazilim.com/gizlilik` TABLET uygulamasının politikasıdır ("Etkili Yazılım bu verileri
-  toplamaz") — patron için YANLIŞTIR, kullanılmaz. `https://patron.etkiliyazilim.com/gizlilik` SPA giriş HTML'idir, metin değil.
+  toplamaz") — TeksERP Yönetim için YANLIŞTIR, kullanılmaz. `https://yonetim.etkiliyazilim.com/gizlilik` SPA giriş HTML'idir, metin değil.
 
 ### 4.2 Veri güvenliği formu — toplanan veri (koddan ölçüldü, 2026-10-15)
 
 Uygulamada analitik, reklam, çökme raporu SDK'sı YOK; Firebase YOK; reklam kimliği (`AD_ID`) engelli. Bütün
-trafik HTTPS (`usesCleartextTraffic` varsayılan kapalı, adres `https://`). Veri yalnız `patron.etkiliyazilim.com`'a gider.
+trafik HTTPS (`usesCleartextTraffic` varsayılan kapalı, adres `https://`). Veri yalnız `yonetim.etkiliyazilim.com`'a gider.
 
 | Play veri türü | Ne | Toplanır/Paylaşılır | Amaç | Zorunlu mu |
 |---|---|---|---|---|
@@ -136,7 +140,7 @@ Hesaplar yalnız davetle açılır. Üç yol var (kullanıcı kararı 2026-10-15
   atamalıdır (409 `SON_YONETICI`). Geri alma: 30 gün içinde tesis yöneticisi yeniden davet eder.
   Bekçi `test_hesap_kendini_silme`, uygulama `__tests__/account-deletion.test.tsx`.
 - **Tesis yöneticisi:** "arşiv" işlemi (PASİF → 30. günde kimlik silinir, `test_kimlik_silme`).
-- **Web:** `https://tekserp.etkiliyazilim.com/patron-gizlilik#hesap-silme` — uygulamaya erişimi olmayan kullanıcı
+- **Web:** `https://tekserp.etkiliyazilim.com/yonetim-gizlilik#hesap-silme` — uygulamaya erişimi olmayan kullanıcı
   tesis yöneticisine ya da kayıtlı e-posta adresinden `info@etkiliyazilim.com`a yazar; 30 gün içinde sonuçlanır.
   Play formundaki "hesap silme URL'si" alanına bu adres girilir.
 - Form cevabı: kullanıcı silme isteyebilir **Evet** · veri silindiğinde saklanan: güvenlik kayıtları (süreli).
@@ -144,7 +148,7 @@ Hesaplar yalnız davetle açılır. Üç yol var (kullanıcı kararı 2026-10-15
 ## 5. Mağaza metni taslağı (Türkçe)
 
 ### 5.1 Uygulama adı (≤ 30)
-`TeksERP Patron`
+`TeksERP Yönetim`
 
 ### 5.2 Kısa açıklama (≤ 80)
 `Fabrikanızın üretim, sevkiyat, stok ve sipariş özetini cebinizden izleyin.`
@@ -152,9 +156,9 @@ Hesaplar yalnız davetle açılır. Üç yol var (kullanıcı kararı 2026-10-15
 ### 5.3 Uzun açıklama (≤ 4000)
 
 ```text
-TeksERP Patron, TeksERP kullanan tekstil fabrikalarının yöneticileri ve patronları için hazırlanmış güvenli
+TeksERP Yönetim, TeksERP kullanan tekstil fabrikalarının sahipleri ve yöneticileri için hazırlanmış güvenli
 bir takip uygulamasıdır. Fabrikanızın TeksERP sistemi, seçtiğiniz özet verileri şifreli bağlantıyla TeksERP
-Patron bulutuna gönderir; siz de bu verileri telefonunuzdan, tabletinizden ya da tarayıcınızdan görürsünüz.
+Yönetim bulutuna gönderir; siz de bu verileri telefonunuzdan, tabletinizden ya da tarayıcınızdan görürsünüz.
 
 Neler yapabilirsiniz?
 • Pano: fabrikanızın özet kartlarını tek ekranda görün.
@@ -173,7 +177,7 @@ Güvenlik
 • Uygulamada reklam, analitik ya da izleme yoktur.
 
 Kimler kullanabilir?
-TeksERP Patron yalnız TeksERP kullanan ve Patron Bulutu hizmeti açık olan fabrikaların davet ettiği hesaplarla
+TeksERP Yönetim yalnız TeksERP kullanan ve TeksERP Yönetim hizmeti açık olan fabrikaların davet ettiği hesaplarla
 çalışır. Hesabınızı tesis yöneticinizden davet bağlantısıyla alırsınız.
 
 Anlık bildirimler bu sürümde telefonda yoktur; bildirimleri web sürümünden alabilirsiniz. Telefon bildirimleri
@@ -189,9 +193,16 @@ Destek: info@etkiliyazilim.com
 | 1.0.0 · vc1 | `İlk sürüm: pano, üretim, sevkiyat, stok, finans, siparişler, cariler, gelen kutusu, raporlar, çoklu tesis.` |
 | 1.0.1 · vc2 | `Hesabınızı artık uygulamadan silebilirsiniz: Profil → "Hesabımı sil". Silme parola ve doğrulama kodunuzla onaylanır; hesabınız hemen kapanır, kişisel bilgileriniz 30 gün içinde silinir.` |
 
+Yukarıdaki iki satır emekli `…tekserp.patron` paketinindir (Play'e yüklenmedi). YENİ uygulamanın ilk sürüm notu (taslak —
+kullanıcı terfide onaylar):
+
+| Sürüm | Not |
+|---|---|
+| 1.0.2 · vc1 (`…tekserp.yonetim`) | `İlk sürüm: pano, üretim, sevkiyat, stok, finans, siparişler, cariler, gelen kutusu, raporlar, çoklu tesis. Hesabınızı uygulamadan silebilirsiniz: Profil → "Hesabımı sil".` |
+
 ### 5.5 Kategori ve iletişim
 Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · gizlilik politikası
-`https://tekserp.etkiliyazilim.com/patron-gizlilik` (§4.1).
+`https://tekserp.etkiliyazilim.com/yonetim-gizlilik` (§4.1).
 
 ## 6. Açık konular
 
@@ -204,9 +215,10 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
    GİRMEZ — yalnız Play Console'a. Gerçek fabrika verisi inceleme tesisinde bulunmaz.
 3. Görseller yer tutucu (ikon, uyarlanır ikon, açılış, mağaza ikonu, öne çıkan görsel) — nihai görsel kullanıcı onayıyla.
 4. Native push (sonraki sürüm): Firebase/APNs + EAS proje kimliği + veri güvenliği formu güncellemesi (§1).
-5. iOS: Xcode kurulumu sonrası ayrı runbook (bundle `com.etkiliyazilim.tekserp.patron` app.json'da hazır).
+5. iOS: Xcode kurulumu sonrası ayrı runbook (bundle `com.etkiliyazilim.tekserp.yonetim` app.json'da hazır).
+6. Görseller/ekran görüntüleri "Patron" yazısı taşımamalı (yer tutucu ikonda yazı yok; ekran görüntüleri yeni adla alınır).
 
-## 7. Ölçüm — ilk paket (2026-10-15)
+## 7. Ölçüm — ilk paket (2026-10-15; EMEKLİ paket `…tekserp.patron`, yüklenmedi)
 
 | | |
 |---|---|
@@ -219,7 +231,7 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
 | Duman (Pixel_10_Pro emülatör, API 37) | kurulum ✓ · açılış 373 ms, çökme yok · giriş ekranı çizildi · var olmayan hesapla (`duman@ornek.invalid`) giriş → üretim sunucusu TOTP adımını döndürdü (gidiş-dönüş ✓; hesap sayımı koruması aynı yanıtı verir) · kod girilmedi |
 | Parola sızıntısı | derleme günlüğünde kasa parolası aranıp bulunmadı |
 
-## 8. Ölçüm — 1.0.1 · vc2 (2026-10-15)
+## 8. Ölçüm — 1.0.1 · vc2 (2026-10-15; EMEKLİ paket `…tekserp.patron`, yüklenmedi)
 
 | | |
 |---|---|

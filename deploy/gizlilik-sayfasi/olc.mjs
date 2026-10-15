@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Gizlilik sayfası canlı ölçümü — internetten SALT OKUMA (curl). Paket yok.
-//   node deploy/gizlilik-sayfasi/olc.mjs              # iki sayfa (/gizlilik · /patron-gizlilik) + köken + komşular
+//   node deploy/gizlilik-sayfasi/olc.mjs              # iki sayfa (/gizlilik · /yonetim-gizlilik) + eski yol 301 + köken + komşular
 //   node deploy/gizlilik-sayfasi/olc.mjs --adnansahin # yalnız komşular: adnansahin eski adresi 200 · indir kapısı 403
 // Çıkış: 0 hepsi geçti · 1 en az biri düştü.
 
@@ -13,14 +13,16 @@ import { fileURLToPath } from 'node:url';
 
 const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ADRES = 'https://tekserp.etkiliyazilim.com/gizlilik';
-const PATRON_ADRES = 'https://tekserp.etkiliyazilim.com/patron-gizlilik';
+const PATRON_ADRES = 'https://tekserp.etkiliyazilim.com/yonetim-gizlilik';
+/** Emekli adres → kalıcı 301 yeni adrese (Play'e/dışarıya verilmiş eski bağlantı kırılmaz). */
+const ESKI_PATRON_ADRES = 'https://tekserp.etkiliyazilim.com/patron-gizlilik';
 const KOKEN_IP = '80.253.255.188';
 // Kenarın tek dönüşümü: Cloudflare email_off yorum işaretlerini siler (canlıda ölçüldü 2026-10-08), başka bayta dokunmaz.
 const kenarBeklenen = (rel) => Buffer.from(fs.readFileSync(path.join(KOK, rel), 'utf8').replaceAll('<!--email_off-->', '').replaceAll('<!--/email_off-->', ''), 'utf8');
 const OLCULEN = [
   { adres: ADRES, html: 'deploy/gizlilik-sayfasi/html/gizlilik.html', capa: null },
   // Play hesap silme adresi = PATRON_ADRES#hesap-silme: çapa sunucuya gitmez, sayfada id olarak bulunmalı.
-  { adres: PATRON_ADRES, html: 'deploy/gizlilik-sayfasi/html/patron-gizlilik.html', capa: 'hesap-silme' },
+  { adres: PATRON_ADRES, html: 'deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html', capa: 'hesap-silme' },
 ];
 const KARARTMA = ['[email protected]', '[email&#160;protected]', 'cdn-cgi/l/email-protection', '__cf_email__', 'email-decode'];
 
@@ -85,6 +87,11 @@ async function sayfa() {
   bak(`DNS ${host} çözülüyor ve proxy açık (köken IP'si görünmez)`, ipler.length > 0 && !ipler.includes(KOKEN_IP), `A: ${ipler.join(',') || 'YOK'}`);
 
   for (const o of OLCULEN) sayfaOlc(o);
+  const hedef = new URL(PATRON_ADRES).pathname;
+  for (const u of [ESKI_PATRON_ADRES, `${ESKI_PATRON_ADRES}/`]) {
+    const e = iste(u);
+    bak(`${new URL(u).pathname} → 301 ${hedef}`, e.kod === 301 && e.baslik.location === hedef, `HTTP ${e.kod} ${e.baslik.location ?? ''}`);
+  }
   const k = iste(`https://${host}/`);
   bak(`/ → 302 ${pathname}`, k.kod === 302 && k.baslik.location === pathname, `HTTP ${k.kod} ${k.baslik.location ?? ''}`);
   const y = iste(`https://${host}/yok-${Date.now()}`);

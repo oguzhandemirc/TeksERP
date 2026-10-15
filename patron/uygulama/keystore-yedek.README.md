@@ -1,6 +1,6 @@
 # `keystore-yedek.tar.gz.enc` — Patron uygulaması Play YÜKLEME anahtarının şifreli yedeği
 
-Patron uygulamasının (`com.etkiliyazilim.tekserp.patron`) Google Play **yükleme anahtarını** parola korumalı
+Patron uygulamasının (mağazada "TeksERP Yönetim", `com.etkiliyazilim.tekserp.yonetim`; 2026-10-16'ya kadar `…tekserp.patron`, o paket Play'e hiç yüklenmedi — anahtar AYNI) Google Play **yükleme anahtarını** parola korumalı
 arşivde taşır. Şifresiz hâli repo DIŞINDADIR: `~/.tekserp/patron-android/yukleme/` (dizin 700, dosya 600).
 Kalıp tabletinkiyle aynıdır (`mobil/keystore-yedek.README.md`); anahtar ve parola tablettekinden AYRIDIR.
 

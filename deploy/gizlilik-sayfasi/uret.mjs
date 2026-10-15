@@ -13,11 +13,15 @@ const KOK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const KAYNAK_REL = 'docs/legal/GIZLILIK-POLITIKASI.md';
 export const HTML_REL = 'deploy/gizlilik-sayfasi/html/gizlilik.html';
 export const PATRON_KAYNAK_REL = 'docs/legal/PATRON-GIZLILIK-POLITIKASI.md';
-export const PATRON_HTML_REL = 'deploy/gizlilik-sayfasi/html/patron-gizlilik.html';
+export const PATRON_HTML_REL = 'deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html';
 /** Kökenin sunduğu sayfalar: yol ↔ kaynak ↔ html (nginx konumu, olc.mjs ve bekçi bu listeyi okur). */
 export const SAYFALAR = Object.freeze([
   Object.freeze({ yol: '/gizlilik', kaynak: KAYNAK_REL, html: HTML_REL }),
-  Object.freeze({ yol: '/patron-gizlilik', kaynak: PATRON_KAYNAK_REL, html: PATRON_HTML_REL }),
+  Object.freeze({ yol: '/yonetim-gizlilik', kaynak: PATRON_KAYNAK_REL, html: PATRON_HTML_REL }),
+]);
+/** Emekli yollar: kalıcı 301 → yeni yol (çapa tarayıcıda korunur; Play'e/dışarıya verilmiş eski bağlantı kırılmaz). */
+export const YONLENDIRMELER = Object.freeze([
+  Object.freeze({ eski: '/patron-gizlilik', yeni: '/yonetim-gizlilik' }),
 ]);
 
 const kacis = (s) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');

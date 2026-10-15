@@ -19,18 +19,19 @@ import derleme from "./lib/android-derleme.cjs";
 import { buildTool, dur, jdkBul, sdkBul } from "./lib/android-ortam.mjs";
 import { kasadanOku } from "../../../scripts/lib/parola-kasasi.mjs";
 
-const { PATRON_API, IMZA, CIKTI_DIZINI, ORTAM_DOSYA, ORTAM_PAROLA } = derleme;
+const { PATRON_API, GORUNEN_AD, CIKTI_ONEKI, IMZA, CIKTI_DIZINI, ORTAM_DOSYA, ORTAM_PAROLA } = derleme;
 const UYGULAMA = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ANDROID = path.join(UYGULAMA, "android");
 const APK = process.argv.includes("--apk");
 const GOREV = APK ? "assembleRelease" : "bundleRelease";
 const STORE = path.join(IMZA.dizin, IMZA.storeFile);
 /** Birleşik manifestte bulunmasına izin verilen tek izin kümesi (fazlası Play formu ve en az yetki ihlali). */
-const IZINLI_IZINLER = ["android.permission.INTERNET", "com.etkiliyazilim.tekserp.patron.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"];
 const YASAK_BILESEN = /firebase|expo\.modules\.notifications|c2dm/i;
 
 const app = JSON.parse(fs.readFileSync(path.join(UYGULAMA, "app.json"), "utf8")).expo;
 const PAKET = app.android.package;
+// AndroidX'in uygulamaya özel imza izni paket adını taşır: literal yazılmaz, paketten türer (paket adı değişince kırılmasın).
+const IZINLI_IZINLER = ["android.permission.INTERNET", `${PAKET}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`];
 const SURUM = app.version;
 const KOD = app.android.versionCode;
 const baslik = (t) => console.log(`\n── ${t}`);
@@ -41,6 +42,7 @@ const jdk = jdkBul();
 if (!jdk) dur("JDK 17+ bulunamadı", "brew install openjdk@17  ya da  export JAVA_HOME=<yol>");
 const sdk = sdkBul();
 if (!sdk) dur("Android SDK bulunamadı (~/Library/Android/sdk)", "export ANDROID_HOME=<yol>");
+if (app.name !== GORUNEN_AD) dur(`app.json expo.name "${app.name}" ≠ "${GORUNEN_AD}" (scripts/lib/android-derleme.cjs)`);
 if (!Number.isInteger(KOD) || KOD < 1 || !/^\d+\.\d+\.\d+$/.test(String(SURUM))) dur("app.json: version X.Y.Z ve android.versionCode ≥ 1 olmalı");
 if (!fs.existsSync(STORE)) dur(`Yükleme anahtarı yok: ${STORE}`, "Yedekten geri yükle (keystore-yedek.README.md) ya da ilk kez: node scripts/anahtar-uret.mjs");
 for (const [y, beklenen] of [[path.dirname(IMZA.dizin), 0o700], [IMZA.dizin, 0o700], [STORE, 0o600]]) {
@@ -94,6 +96,11 @@ if (manifestAday) {
   const bilesen = [...m.matchAll(/<(?:service|receiver|provider)\b[^>]*?android:name="([^"]+)"/g)].map((x) => x[1]).filter((ad) => YASAK_BILESEN.test(ad));
   if (bilesen.length) sorunlar.push(`bildirim/Firebase bileşeni pakette: ${bilesen.join(", ")}`);
   if (/android:allowBackup="true"/.test(m)) sorunlar.push("allowBackup açık (önbellek yedeğe girmemeli)");
+  // Görünen ad: uygulama etiketi @string/app_name → prebuild'in yazdığı strings.xml (kaynak app.json expo.name).
+  const etiketRef = m.match(/<application\b[^>]*android:label="([^"]+)"/)?.[1];
+  const strings = path.join(ANDROID, "app/src/main/res/values/strings.xml");
+  const adDegeri = fs.existsSync(strings) ? fs.readFileSync(strings, "utf8").match(/<string name="app_name">([^<]*)<\/string>/)?.[1] : undefined;
+  if (etiketRef !== "@string/app_name" || adDegeri !== GORUNEN_AD) sorunlar.push(`uygulama etiketi ${etiketRef ?? "YOK"} = "${adDegeri ?? "?"}" ≠ "${GORUNEN_AD}"`);
 }
 
 const js = zipGirdisi(cikti, APK ? "assets/index.android.bundle" : "base/assets/index.android.bundle");
@@ -116,7 +123,7 @@ if (APK) {
 if (sorunlar.length) dur("DOĞRULAMA KIRMIZI — paket kopyalanmadı", ...sorunlar);
 
 fs.mkdirSync(CIKTI_DIZINI, { recursive: true, mode: 0o700 });
-const ad = `tekserp-patron-${SURUM}-vc${KOD}.${APK ? "duman.apk" : "aab"}`;
+const ad = `${CIKTI_ONEKI}-${SURUM}-vc${KOD}.${APK ? "duman.apk" : "aab"}`;
 const hedef = path.join(CIKTI_DIZINI, ad);
 fs.copyFileSync(cikti, hedef);
 const ozet = sha256(hedef);

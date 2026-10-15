@@ -281,7 +281,7 @@ if (staged.some((f) => INDIR_KOKENI_TETIK.has(f))) {
 // YASAL SAYFALAR (Play K2 + Patron): tetik = bekçinin okuduğu dosyalar (bekçi bu listenin burada aynen geçtiğini ölçer).
 const GIZLILIK_SAYFASI_TETIK = new Set([
   "docs/legal/GIZLILIK-POLITIKASI.md", "deploy/gizlilik-sayfasi/html/gizlilik.html", "deploy/gizlilik-sayfasi/docker-compose.yml",
-  "docs/legal/PATRON-GIZLILIK-POLITIKASI.md", "deploy/gizlilik-sayfasi/html/patron-gizlilik.html",
+  "docs/legal/PATRON-GIZLILIK-POLITIKASI.md", "deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html",
   "deploy/gizlilik-sayfasi/nginx/default.conf", "deploy/gizlilik-sayfasi/uret.mjs", "deploy/gizlilik-sayfasi/vds-kur.sh",
   "deploy/gizlilik-sayfasi/olc.mjs", "docs/ops/PLAY-KONSOL-FORMLARI.md", "docs/ops/SUNUCU-ENVANTERI.md",
   "docs/ops/PATRON-MAGAZA-ANDROID.md", "patron/sunucu/src/services/maintenance.ts", "patron/sunucu/src/config.ts",
