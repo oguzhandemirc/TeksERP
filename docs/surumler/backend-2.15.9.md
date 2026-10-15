@@ -15,6 +15,9 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
   listesini taşımıyor; çerez yaklaşık 3,8 KB'tan 0,4 KB'a indi. Tarayıcıların çerez sınırına (4 KB) yaklaşıldığı için
   izinler çoğaldıkça girişin sessizce kopması riski kapandı. Yetkiler bugünkü gibi her istekte sunucuda denetlenir;
   kullanıcının gördüğü ekranlar değişmez.
+- **Bulut kurulumunda yedekleyici de güncelleniyor.** Sunucu güncellenirken yedek alan yardımcı hizmet eski sürümde
+  kalıyordu; artık yeni sürüm sağlıklı açıldıktan sonra o da yeni sürüme geçiyor (sürmekte olan yedek kesilmez,
+  bitmesi beklenir). Geri dönüşte o da önceki sürüme döner.
 - **Masaüstü panel ve tablet için değişen yok.** Girişleri ve oturumları aynı kalır.
 
 ## 2. Ne değişti
@@ -27,6 +30,18 @@ Sürüm numarası: yama hanesi (otomatik, `scripts/backend-surum.mjs`).
 - Ölçüm: tam izinli kullanıcıda `Set-Cookie` 3774 → 427 bayt. Yan etki: kenar vekilinde (nginx) yanıt başlığı
   tamponu sınırına da artık yaklaşılmaz (2.15.8 kurulumunda görülen 502 "upstream sent too big header").
 - Bekçi: `test_web_cerez_oturumu` §12 (negatif sondalı).
+
+**Güncelleyici 0.2.8 — imajı paylaşan yan hizmetler eşitlenir (BULGU-2)** (commit `fix(guncelleyici): move image-sharing sidecars …`; kısa kimliği paketlemede yazılır)
+
+- Linux/Docker: `BASLAT` adımında yeni sürüm normal kipte sağlıklı açıldıktan SONRA `current` compose tanımında
+  backend imajını (`tekserp-korumali:*`) kullanan yan hizmetler (bugün `yedek`) `compose up -d --no-deps <svc>` ile
+  (`--force-recreate` yok) eşitlenir; geri dönüşte (`start_previous`) önceki sürüme. Doğrulama kipinde dokunulmaz.
+- Sürmekte olan yedek işi (`pg_dump`/`pg_restore`/şifreleme, taze `*.part`) kesilmez: yedek zaman aşımı kadar
+  beklenir, bitmezse `ERTELENDI`. Yan hizmet sonucu (`ERTELENDI`/`OLCULEMEDI`/`HATA`) sağlıklı backend kurulumunu
+  geri aldırmaz; günlüğe, olaya ve `BASLAT.yanHizmetler`e yazılır. Windows: yan hizmet yok, değişiklik yok.
+- Teslim paketi 0.2.8 güncelleyicisini taşır; güncelleyici kendini backend işleminden ÖNCE yenilediği için bu
+  sürümün kurulumu da düzeltmeden yararlanır. Testler: `tests/linux_yan_hizmet.rs` (8 senaryo, negatif sondalı),
+  `crash_restart` değişmezi.
 
 ## 3. Sözleşme
 
@@ -64,4 +79,6 @@ değişmediğinden 2.15.8 imajı sorunsuz açılır; 2.15.9'da açılmış web o
 - Veritabanı: 392 migration bitmiş, sorunlu migration yok.
 - `/api/admin/health` `sistemHesabiMuhru` ve `auditProtection` 2.15.8'deki değerleriyle aynı.
 - (Panel açıksa) tarayıcıda yeni girişin `Set-Cookie` uzunluğu ~0,5 KB'ın altında; giriş, liste ve çıkış çalışıyor.
+- `docker ps`: `yedek` konteyneri de `tekserp-korumali:2.15.9` imajında; güncelleme günlüğünde `BASLAT.yanHizmetler`
+  `yedek: ESIT`.
 - Masaüstü panelle giriş ve tabletle PIN girişi bugünkü gibi çalışıyor.
