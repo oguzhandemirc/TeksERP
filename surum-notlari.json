@@ -17,6 +17,21 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-15",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Yeni kurulumda destek hesabıyla girişte açılan hata ekranı giderildi",
+      "surumler": {
+        "panel": "1.6.6"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Henüz fabrika yöneticisi açılmamış yeni bir kurulumda destek hesabıyla giriş yapınca ya da lisansı etkinleştirince program \"Beklenmeyen Hata Oluştu\" ekranında kalıyordu. Artık ana ekran açılır ve üstteki şeritten fabrika yöneticisini açabilirsiniz. Yönetici zaten açılmışsa Kullanıcılar ekranına geçme düğmesi o sekmeyi açar."
+        }
+      ]
+    },
+    {
       "id": "2026-10-13",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Tablette Uyarılar ekranı, sunucu güncellemesi şeridi ve yeni iş emri adları",
