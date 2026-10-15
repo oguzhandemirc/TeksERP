@@ -1,6 +1,6 @@
 # Patron uygulaması — Google Play (Android) ilk sürüm runbook'u
 
-> Durum (2026-10-15): ilk AAB hazır (1.0.0 · versionCode 1), Play'e YÜKLENMEDİ. iOS sonra (Xcode kurulumu).
+> Durum (2026-10-15): AAB 1.0.0 · vc1 ve 1.0.1 · vc2 (uygulama içi "Hesabımı sil") hazır, Play'e YÜKLENMEDİ. iOS sonra (Xcode kurulumu).
 > Kararlar (kullanıcı 2026-10-15): önce yalnız Android · ilk sürümde telefonda ANLIK BİLDİRİM YOK (Firebase yok;
 > uygulama native push kaydı denemez, uyarı göstermez; bildirim ekranında "yakında" notu) · web push aynen.
 > Tablet (ortak paket) Play yolu ayrıdır: `PLAY-STORE-YAYIN.md` · `PLAY-KONSOL-FORMLARI.md`.
@@ -64,7 +64,7 @@ izin bilerek eklenir, formu da güncellenir.
 2. **Uygulama oluştur:** Play Console → Tüm uygulamalar → **Uygulama oluştur** → ad "TeksERP Patron" · varsayılan
    dil Türkçe · Uygulama · Ücretsiz · beyanlar ✓. (Paket adı ilk AAB yüklenince `com.etkiliyazilim.tekserp.patron` olarak kilitlenir.)
 3. **Play App Signing:** ilk sürüm oluştururken "Google tarafından oluşturulan anahtar" (varsayılan) seçili kalsın.
-4. **Dahili test:** Test → Dahili test → Yeni sürüm → `~/.tekserp/patron-android/cikti/tekserp-patron-1.0.0-vc1.aab`
+4. **Dahili test:** Test → Dahili test → Yeni sürüm → `~/.tekserp/patron-android/cikti/tekserp-patron-<sürüm>-vc<kod>.aab` (en yenisi §7)
    yükle → sürüm notu (aşağıda §5.4) → test kullanıcıları listesi → kaydet → yayınla. Yüklemeden önce sha256'yı
    `.sha256` dosyasıyla karşılaştır (`shasum -a 256 <aab>`).
 5. **Mağaza girişi:** §5'teki metinler + görseller: ikon `patron/uygulama/assets/magaza/ikon-512.png`, öne çıkan görsel
@@ -182,8 +182,12 @@ sonraki sürümde gelecek.
 Destek: info@etkiliyazilim.com
 ```
 
-### 5.4 Sürüm notu (1.0.0 · vc1)
-`İlk sürüm: pano, üretim, sevkiyat, stok, finans, siparişler, cariler, gelen kutusu, raporlar, çoklu tesis.`
+### 5.4 Sürüm notu (≤ 500)
+
+| Sürüm | Not |
+|---|---|
+| 1.0.0 · vc1 | `İlk sürüm: pano, üretim, sevkiyat, stok, finans, siparişler, cariler, gelen kutusu, raporlar, çoklu tesis.` |
+| 1.0.1 · vc2 | `Hesabınızı artık uygulamadan silebilirsiniz: Profil → "Hesabımı sil". Silme parola ve doğrulama kodunuzla onaylanır; hesabınız hemen kapanır, kişisel bilgileriniz 30 gün içinde silinir.` |
 
 ### 5.5 Kategori ve iletişim
 Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · gizlilik politikası
@@ -192,7 +196,7 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
 ## 6. Açık konular
 
 1. Gizlilik politikası + hesap silme sayfası repoda hazır (§4.1, §4.3), **VDS'e yayın kullanıcı onayıyla**
-   (`GIZLILIK-SAYFASI.md` § Patron sayfası). Uygulama içi "Hesabımı sil" kodu ayrı işte; ikisi yayımlanmadan Play
+   (`GIZLILIK-SAYFASI.md` § Patron sayfası). Uygulama içi "Hesabımı sil" 1.0.1 · vc2'de (`15a4fed81`); web sayfası yayımlanmadan Play
    formu tamamlanmaz.
 2. **İnceleme hesabı — KARAR (kullanıcı 2026-10-15):** DEMO sınıfı tesis + uydurma veri + o tesiste inceleme hesabı.
    Play Console → Uygulama içeriği → **Uygulama erişimi** talimatına e-posta, parola ve TOTP sırrı (base32;
@@ -214,3 +218,16 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
 | İmza | yükleme sertifikası (`keytool -printcert -jarfile` = anahtar; APK'da `apksigner verify`) |
 | Duman (Pixel_10_Pro emülatör, API 37) | kurulum ✓ · açılış 373 ms, çökme yok · giriş ekranı çizildi · var olmayan hesapla (`duman@ornek.invalid`) giriş → üretim sunucusu TOTP adımını döndürdü (gidiş-dönüş ✓; hesap sayımı koruması aynı yanıtı verir) · kod girilmedi |
 | Parola sızıntısı | derleme günlüğünde kasa parolası aranıp bulunmadı |
+
+## 8. Ölçüm — 1.0.1 · vc2 (2026-10-15)
+
+| | |
+|---|---|
+| Yenilik | Profil → "Hesabımı sil" (`app/(app)/hesap-sil.tsx`, `15a4fed81`) |
+| AAB | `tekserp-patron-1.0.1-vc2.aab` · 46.5 MB · SHA-256 `99844b1f1d2d11004331f19e59c6570051983e37424b6bd19cd665e2465668da` |
+| Duman APK | `tekserp-patron-1.0.1-vc2.duman.apk` · 69.1 MB · SHA-256 `794de80cce2df5e3113d29bfd16f7c194d8ce63ee1e593429bd56369a3105d15` — dağıtılmaz |
+| `aapt2 dump badging` | `com.etkiliyazilim.tekserp.patron` · versionCode 2 · versionName 1.0.1 · targetSdk 36 · etiket "TeksERP Patron" |
+| İzinler | `INTERNET` + `…DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` (vc1 ile aynı) · imza yükleme sertifikası `3DD96B00…` |
+| JS paketi | bulut adresi var, geliştirme adresi yok · "Hesabımı sil" dizgesi (Hermes UTF-16) ve `hesap-sil` rotası var · `NATIVE_PUSH = false` |
+| Duman (Pixel_10_Pro, API 37) | kurulum ✓ (vc2) · çökme yok · giriş ekranı çizildi · oturumsuz `tekserp-patron://hesap-sil` → giriş ekranı (koruma ✓) · Profil ekranı giriş gerektirdiğinden görülmedi |
+| Parola sızıntısı | AAB + APK derleme günlüklerinde kasa parolası aranıp bulunmadı |
