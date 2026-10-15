@@ -2,12 +2,13 @@
 
 > **Durum (ölçüldü 2026-10-08):** uygulama **TeksERP** · `com.etkiliyazilim.tekserp` Play Console'da açık.
 > 1.1.0 / vc 58 (API 35) **reddedildi**; 1.1.0 / vc 59 (targetSdk 36, commit `58e61f608`) **Dahili teste
-> yayınlandı**. Geliştirici hesabı **KİŞİSEL** (kurumsal değil) — sonuçları §4.
+> yayınlandı**. Geliştirici hesabı **KURUMSAL** (kuruluş hesabı, Etkili Yazılım — kullanıcı doğruladı
+> 2026-10-15; 2026-10-08'deki "kişisel" okuması GEÇERSİZ) — sonuçları §4.
 >
 > **Dağıtım kararı (K-14, 2026-10-07):** ortak fabrika tableti yalnız Google Play'den kurulur; native
 > güncelleme Play'den, JS güncellemesi OTA ile gelir (`docs/kurallar/surum-yayin.md` Tablet → Kararlar).
-> Kararın "Managed Google Play **gizli yayın**" kısmı kurumsal hesap varsayımıyla verildi; hesap kişisel
-> çıktığı için **yeniden açık — kullanıcıya sorulacak** (§4, `PLAY-KONSOL-FORMLARI.md` K5). 2026-07-30'daki
+> Kararın "Managed Google Play **gizli yayın**" kısmının dayandığı kurumsal hesap varsayımı doğrulandı
+> (2026-10-15); 12×14 kapalı test şartı bu hesaba uygulanmaz (§4, `PLAY-KONSOL-FORMLARI.md` K5). 2026-07-30'daki
 > "herkese açık yayın" kararı K-14 ile geçersizdir. iOS kapsam dışı (BT-Classic SPP iOS'ta MFi ister).
 >
 > Form cevapları (kopyala-yapıştır): [`PLAY-KONSOL-FORMLARI.md`](PLAY-KONSOL-FORMLARI.md). Tablet derleme ve
@@ -100,23 +101,21 @@ manifestinden ölçülmüş tam tablosu: `PLAY-KONSOL-FORMLARI.md` §4. Özet:
 - Ekran görüntüleri: telefon + 7"/10" tablet — **yok**; demo verisiyle çekilir, gerçek müşteri verisi görünmez.
 - Kısa ve tam açıklama taslağı: `PLAY-KONSOL-FORMLARI.md` §5.
 
-## 4. Hesap türü — KİŞİSEL (ölçüm 2026-10-08)
+## 4. Hesap türü — KURUMSAL (kullanıcı doğruladı 2026-10-15)
 
-Play Console geliştirici hesabı **kişisel** çıktı; hafızadaki ve plan §E'deki "kurumsal hesap" varsayımı
-konsolda yanlışlandı. Sonuçları (Play kuralları **⚠ web'den doğrulanmalı** — eşikler değişebilir):
+Tablet uygulamasını (`com.etkiliyazilim.tekserp`) Etkili Yazılım'ın KURUMSAL (kuruluş) Play hesabından yayınla;
+patron uygulamasıyla aynı hesap (`PATRON-MAGAZA-ANDROID.md`). 2026-10-08'deki "hesap kişisel" okuması
+GEÇERSİZDİR (gerekçe arşivde, 2026-10-15).
 
-- **Üretime çıkış için 12×14 kapalı test:** 13 Kasım 2023 sonrası açılan kişisel hesapta üretim erişimi için
-  en az **12 test kullanıcısının kesintisiz 14 gün** kapalı teste katılmış olması, ardından üretim erişimi
-  başvurusu gerekir. Sayaç 12. kullanıcı katıldığı anda başlar; kullanıcı düşerse bozulur.
-- **"Gizli yayın" kararı yeniden açık:** Managed Google Play gizli uygulamasının kişisel hesaptan yayınlanıp
-  yayınlanamayacağı ve 12×14 şartına tabi olup olmadığı bilinmiyor; gizli yayın ayrıca tabletlerin bir
-  kuruluşa (Managed Google Play) bağlanmasını gerektirir. **Kullanıcıya sorulacak** (K5).
-- **Kuruluş hesabına geçiş:** 12×14 şartını kaldırır ama D-U-N-S doğrulaması ister; kişisel hesabın
-  çevrilip çevrilemeyeceği doğrulanmalı.
+- **12×14 kapalı test şartı YOK:** "en az 12 test kullanıcısı × 14 gün kesintisiz kapalı test + üretim
+  erişimi başvurusu" yalnız 13 Kasım 2023 sonrası açılan KİŞİSEL hesaplara uygulanır; kuruluş hesabı muaftır.
+  Üretime ya da gizli yayına doğrudan çık.
+- **Gizli yayın (K-14):** karar kurumsal hesap varsayımıyla verilmişti, varsayım doğru. Managed Google Play
+  gizli uygulaması tabletlerin bir kuruluşa bağlanmasını gerektirir — bu bağlantıyı kullanıcıyla kur (K5).
 
 ## 5. Dahili test akışı (bugün yayında olan yol)
 
-Dahili test incelemeye girmeden yayınlanır (vc 59'da gözlendi); 12×14 sayacına sayılmaz — sayaç kapalı testte işler (⚠ web'den doğrulanmalı).
+Dahili test incelemeye girmeden yayınlanır (vc 59'da gözlendi).
 
 1. Play Console → Test → **Dahili test** → **Test kullanıcıları**: e-posta listesi oluştur, tabletlerde
    oturum açılacak Google hesaplarını ekle.
@@ -130,14 +129,14 @@ Dahili test incelemeye girmeden yayınlanır (vc 59'da gözlendi); 12×14 sayac�
 
 ## 6. Sıra
 
-1. ~~Play Console hesabı + uygulama~~ — yapıldı (kişisel hesap).
+1. ~~Play Console hesabı + uygulama~~ — yapıldı (kurumsal hesap).
 2. ~~İlk AAB → Dahili test~~ — vc 58 reddedildi (API 35), vc 59 yayında.
 3. K1 → kullanılmayan izinler → vc 60 AAB → manifest ölçümü.
 4. K2 → gizlilik politikası yayını → URL konsola.
 5. K4 → demo sunucu + deneme hesabı → "Uygulama erişimi" formu.
 6. Formlar: Veri güvenliği, içerik derecelendirme, hedef kitle (`PLAY-KONSOL-FORMLARI.md` §3).
 7. Listeleme varlıkları (§3).
-8. K5 → dağıtım yolu: kapalı test (12×14) → üretim erişimi başvurusu, ya da gizli yayın.
+8. K5 → dağıtım yolu: gizli yayın (K-14; Managed Google Play kuruluş bağlantısı) ya da üretim — kapalı test şartı yok.
 
 > Play Console menü adları ve politika eşikleri değişebiliyor; her adımda konsoldaki güncel yazımı teyit et.
 
