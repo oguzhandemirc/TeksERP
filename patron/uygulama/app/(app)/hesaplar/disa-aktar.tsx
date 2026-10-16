@@ -52,7 +52,7 @@ export default function ExportScreen() {
       {hizmet?.asama === "SALT_OKUNUR" && hizmet.saltOkunurBitis ? (
         <Banner tone="warn" testID="disa-aktar-sure" text={`Hizmet sona erdi; dökümü ${formatDateTime(hizmet.saltOkunurBitis)} tarihine kadar alabilirsiniz. Sonra veriler imha edilir.`} />
       ) : null}
-      {!web ? <Banner tone="off" testID="disa-aktar-web" text="Dosya yalnız web sürümünden indirilir: aynı hesapla tarayıcıdan patron bulutuna girip Hesaplar › Dışa aktar'ı açın." /> : null}
+      {!web ? <Banner tone="off" testID="disa-aktar-web" text="Dosya yalnız web sürümünden indirilir: aynı hesapla tarayıcıdan TeksERP Yönetim'e girip Hesaplar › Dışa aktar'ı açın." /> : null}
       {error ? <Banner tone="error" text={error} /> : null}
       {r.loading && !r.data ? <Loading /> : null}
       {r.error && !r.data ? <ErrorBox text={r.error} onRetry={r.reload} /> : null}

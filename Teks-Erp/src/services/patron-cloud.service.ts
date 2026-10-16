@@ -22,7 +22,7 @@ import { readPatronCloudUserId } from "./helpers/patron-cloud-user.helper";
 
 /** Teknik kullanıcının kullanıcı adı (panel kuralı: yalnız İngilizce harf + rakam). */
 export const PATRON_CLOUD_USERNAME = "patronbulutu";
-export const PATRON_CLOUD_FULL_NAME = "Patron Bulutu";
+export const PATRON_CLOUD_FULL_NAME = "Yönetim Bulutu";
 /** Teknik kullanıcının TAM izin kümesi — başka izin verilmez. */
 export const PATRON_CLOUD_PERMISSIONS = ["order:write", "customer:write"] as const;
 
@@ -97,7 +97,7 @@ export async function activatePatronCloud(actorUserId: string | undefined): Prom
     create: {
       key: PATRON_CLOUD_USER_SETTING_KEY,
       value: userId,
-      description: "Patron bulutu teknik kullanıcısı (bulut yazmalarının aktörü). Elle DEĞİŞTİRMEYİN.",
+      description: "Yönetim bulutu teknik kullanıcısı (bulut yazmalarının aktörü). Elle DEĞİŞTİRMEYİN.",
       updatedById: actorUserId ?? null,
     },
     update: { value: userId, updatedById: actorUserId ?? null },
@@ -134,7 +134,7 @@ export async function lockCloudAccount(
   transport: CloudTransport = egressCloudTransport,
 ): Promise<CloudAccount> {
   const e = cloudEligibility();
-  if (!e.ok) throw AppError.conflict("Patron bulutu bu kurulumda kullanılamıyor; hesap kilitlenemedi.", { code: "PATRON_BULUT_KAPALI", neden: e.reason });
+  if (!e.ok) throw AppError.conflict("Yönetim bulutu bu kurulumda kullanılamıyor; hesap kilitlenemedi.", { code: "PATRON_BULUT_KAPALI", neden: e.reason });
   const actor = input.actorUserId
     ? await prisma.user.findUnique({ where: { id: input.actorUserId }, select: { fullName: true, username: true } })
     : null;
@@ -147,7 +147,7 @@ export async function lockCloudAccount(
   );
   if (!r.ok) {
     if (r.status === 0 || r.status >= 500) {
-      throw new AppError("Patron bulutuna ulaşılamadı; aynı işlemi tekrar deneyin.", 503, true, { code: "BULUT_ULASILAMADI", neden: r.code });
+      throw new AppError("Yönetim bulutuna ulaşılamadı; aynı işlemi tekrar deneyin.", 503, true, { code: "BULUT_ULASILAMADI", neden: r.code });
     }
     const status = LOCK_REJECT_STATUS[r.code] ?? 409;
     const message = r.code === "SON_YONETICI"
@@ -156,7 +156,7 @@ export async function lockCloudAccount(
     throw new AppError(message, status, true, { code: r.code });
   }
   const parsed = AccountLockResponseSchema.safeParse(r.json);
-  if (!parsed.success) throw new AppError("Patron bulutunun yanıtı sözleşmeye uymuyor.", 502, true, { code: "YANIT_GECERSIZ" });
+  if (!parsed.success) throw new AppError("Yönetim bulutunun yanıtı sözleşmeye uymuyor.", 502, true, { code: "YANIT_GECERSIZ" });
   const hesap = parsed.data.hesap;
   if (accounts) {
     accounts = { list: accounts.list.map((a) => (a.id === hesap.id ? hesap : a)), fetchedAtMs: accounts.fetchedAtMs };

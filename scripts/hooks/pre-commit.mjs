@@ -281,7 +281,7 @@ if (staged.some((f) => INDIR_KOKENI_TETIK.has(f))) {
 // YASAL SAYFALAR (Play K2 + Patron): tetik = bekçinin okuduğu dosyalar (bekçi bu listenin burada aynen geçtiğini ölçer).
 const GIZLILIK_SAYFASI_TETIK = new Set([
   "docs/legal/GIZLILIK-POLITIKASI.md", "deploy/gizlilik-sayfasi/html/gizlilik.html", "deploy/gizlilik-sayfasi/docker-compose.yml",
-  "docs/legal/PATRON-GIZLILIK-POLITIKASI.md", "deploy/gizlilik-sayfasi/html/patron-gizlilik.html",
+  "docs/legal/PATRON-GIZLILIK-POLITIKASI.md", "deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html",
   "deploy/gizlilik-sayfasi/nginx/default.conf", "deploy/gizlilik-sayfasi/uret.mjs", "deploy/gizlilik-sayfasi/vds-kur.sh",
   "deploy/gizlilik-sayfasi/olc.mjs", "docs/ops/PLAY-KONSOL-FORMLARI.md", "docs/ops/SUNUCU-ENVANTERI.md",
   "docs/ops/PATRON-MAGAZA-ANDROID.md", "patron/sunucu/src/services/maintenance.ts", "patron/sunucu/src/config.ts",
@@ -323,6 +323,11 @@ if (staged.some((f) => TABLET_ORTAK_TETIK.includes(f) || f.startsWith("mobil/scr
 const PLAY_TETIK = ["deploy/play-yayinla.mjs", "scripts/test_play_yayinla.mjs", "deploy/dagitim.json"];
 if (staged.some((f) => PLAY_TETIK.includes(f) || f.startsWith("scripts/lib/") || f.startsWith("mobil/scripts/lib/"))) {
   adimlar.push({ ad: "Play yayıncısı", cwd: ".", cmd: ["node", ["scripts/test_play_yayinla.mjs"]], gitEnvSil: true });
+}
+
+// PLAY MAĞAZA GİRİŞİ: metin sınırları, görsel boyut/alfa, maskesiz görüntü ve inceleme hesabı izi (ağsız).
+if (staged.some((f) => f === "deploy/play-magaza.mjs" || f === "scripts/test_play_magaza.mjs" || f.startsWith("patron/uygulama/magaza/") || f.startsWith("mobil/magaza/"))) {
+  adimlar.push({ ad: "Play mağaza girişi", cwd: ".", cmd: ["node", ["scripts/test_play_magaza.mjs"]], gitEnvSil: true });
 }
 
 // GRUP YAYINI (O10a · O10b · O11b): ortak grup kitaplığı üç ürünün kapısıdır — kitaplık/terfi değişince üç bekçi birden.

@@ -142,7 +142,7 @@ async function bolum2(adminId: string): Promise<string> {
   const kodlar = (u?.permissions ?? []).map((p) => p.permission.code).sort();
   check("izinler TAM OLARAK order:write + customer:write", JSON.stringify(kodlar) === JSON.stringify([...PATRON_CLOUD_PERMISSIONS].sort()), kodlar.join(","));
   check("mobil kimliği yok (hızlı PIN üretilmedi)", (u?.quickPin ?? null) === null && (u?.quickPinDigest ?? null) === null);
-  check("ad 'Patron Bulutu', aktif", u?.fullName === "Patron Bulutu" && u?.isActive === true);
+  check("ad 'Yönetim Bulutu', aktif", u?.fullName === "Yönetim Bulutu" && u?.isActive === true);
   check("kimlik kaydı ham ayar ucundan yazılamaz (ayrılmış anahtar)", isReservedSettingKey(PATRON_CLOUD_USER_SETTING_KEY));
   check("etkinleştirme audit'li (SYSTEM_SETTING satırı)", auditlar.some((x) => x.tableName === "SYSTEM_SETTING" && x.recordId === PATRON_CLOUD_USER_SETTING_KEY) || !a.created);
   return a.userId;

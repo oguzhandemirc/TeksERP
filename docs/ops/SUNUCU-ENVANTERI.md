@@ -1,6 +1,6 @@
 # Sunucu envanteri — hangi makine ne yapıyor
 
-> Son güncelleme: **2026-10-15** (fzt TeksERP kalıntıları kaldırıldı, `demo` DNS kaydı silindi; önceki 2026-10-08: `fzt` takma adı + TeksERP kalıntı envanteri; bulut deneme sunucusu satırı; `tekserp-indir` kökeni; `tekserp-gizlilik` planı; fabrika satırları 2026-09-29 SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
+> Son güncelleme: **2026-10-16** (bulut deneme satırı: `/opt/tekserp/test-musteri` 2.15.8 + döküm aktarımı; önceki 2026-10-15: fzt TeksERP kalıntıları kaldırıldı, `demo` DNS kaydı silindi; önceki 2026-10-08: `fzt` takma adı + TeksERP kalıntı envanteri; bulut deneme sunucusu satırı; `tekserp-indir` kökeni; `tekserp-gizlilik` planı; fabrika satırları 2026-09-29 SAHINSRV salt-okuma envanterinden). Yeni bir makine, kullanıcı, port ya da zamanlanmış
 > iş eklendiğinde **buraya da yazılır** — aksi hâlde "bu port neden açık" sorusunun
 > cevabı kimsede kalmaz.
 
@@ -13,7 +13,7 @@
 | **Fabrika sunucusu — adnansahin** | SAHINSRV, fabrika LAN'ı (Windows 10 Pro) | ERP backend + PostgreSQL + yerel yedek | Canlı üretim · uzak erişim **Tailscale** |
 | **tekserp-vds** | `80.253.255.188` | Güncelleme yayını + makine dışı yedek hedefi | 2026-09-01'den beri yayın burada |
 | **fzt** (eski ad `yenisunucu`) | `91.217.119.138`, ssh 2222 (`oguzhan`, parolasız sudo) | Kullanıcının fizik tedavi siteleri — TeksERP için **KULLANILMAZ** (kullanıcı kararı 2026-10-08) | TeksERP kalıntıları 2026-10-15'te KALDIRILDI (aşağıda §fzt; yalnız Origin sertifikası + Mac anahtarı kaldı), eski demo yok; fizik tedavi sitelerine ASLA dokunulmaz |
-| **Bulut deneme sunucusu** | `213.142.134.226` (`ssh tekserp-bulut-deneme`) | Bulut kurulumu provası + Play inceleme kurulumu + yeni satış demosu | Ubuntu 24.04 · ssh 2222 yalnız anahtar · ufw yalnız 2222 · fail2ban · 2026-10-10'dan beri backend 2.15.1 GÜNCELLEYİCİLİ düzende (`/opt/tekserp/ders`, `current` → `surumler/2.15.1`, hizmet `tekserp-guncelleyici` 0.2.4 — 2026-10-10 kendini yeniledi, `ayar.json` sunucusu `https://indir.etkiliyazilim.com`, kira birimden; backend 2.15.2 denemesi YEDEK adımında geri döndü, kurulu 2.15.1 — `LINUX-DOCKER-KURULUM.md` §11.1 uygulama kaydı) |
+| **Bulut deneme sunucusu** | `213.142.134.226` (`ssh tekserp-bulut-deneme`) | Bulut kurulumu provası + Play inceleme kurulumu + yeni satış demosu | Ubuntu 24.04 · ssh 2222 yalnız anahtar · ufw yalnız 2222 · fail2ban · backend 2.15.8 GÜNCELLEYİCİLİ düzende (`/opt/tekserp/test-musteri`, compose projesi `tekserp-test-musteri`, `current` → `surumler/2.15.8`, 392 göç; hizmet `tekserp-guncelleyici` 0.2.7, `ayar.json` sunucusu `https://indir.etkiliyazilim.com`, kip ONAYLI; kenar nginx `deneme.etkiliyazilim.com`). 2026-10-16: iş verisi adnansahin dökümünden `scripts/dump-aktar.mjs` ile aktarıldı (kimlik/ayar/audit denemenin); önceki DB `tekserp_deneme_eski` 2026-11-15'e dek KALIR, elle yedek `/opt/tekserp/test-musteri/yedek-elle/` (0700) |
 
 > ⚠️ Çok müşteri notu — bu tablo **fabrika başına bir satır** taşımalıdır (`Fabrika sunucusu — <müşteri kodu>`), çünkü her kurulumun kendi LAN'ı, kendi tünel hostname'i (`<musteri>-erp.etkiliyazilim.com`), kendi yedek kullanıcısı (`fab-<müşteri>`) ve kendi yayın klasörü (`/<müşteri>/electron`, `/<müşteri>/mobil`) vardır. Aşağıdaki "Fabrika sunucusu — ağ / servisler" bölümleri **her fabrika için aynı şablondur** (4000 LAN · 4001 yalnız 127.0.0.1 · 5432 yerel) — şablon çekirdektir, satırlar müşteri başına çoğalır.
 
@@ -123,7 +123,7 @@ Kurulum günü ölçüm: **11 saatte 1193 başarısız giriş denemesi**, ilk sa
 | `docker-socket-proxy` | nginx:alpine | 64m | `docker.sock`u traefik'e **salt-okunur** verir |
 | `tekserp-guncelleme` | nginx:alpine | 64m | Statik yayın (panel + tablet) |
 | `tekserp-indir` | nginx:alpine (salt-okunur kök) | 64m | Tek ortak paketin indirme kökeni `indir.etkiliyazilim.com` (2026-10-08'den beri yayında; kapı önündeki Cloudflare Worker'da) |
-| `tekserp-gizlilik` | nginx:alpine (salt-okunur kök) | 32m | **KURULU** (canlı ölçüm 2026-10-15) — herkese açık gizlilik sayfası `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2) + `/patron-gizlilik` (repo hazır 2026-10-15, yayın kullanıcı onayıyla; [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md)) |
+| `tekserp-gizlilik` | nginx:alpine (salt-okunur kök) | 32m | **KURULU** (canlı ölçüm 2026-10-15) — herkese açık gizlilik sayfası `https://tekserp.etkiliyazilim.com/gizlilik` (Play K2) + `/yonetim-gizlilik` (eski `/patron-gizlilik` → 301; repo hazır 2026-10-16, yayın kullanıcı onayıyla; [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md)) |
 
 Docker günlükleri: `json-file`, 20 MB × 5 dosya (sınırsız büyümeye karşı).
 
@@ -173,7 +173,7 @@ Cloudflare'i kabul eder (doğrudan `--resolve …:80.253.255.188` → 403; ölç
 sonra VDS'te `cd /opt/stack/apps/tekserp-indir && docker compose down`. Dizin SİLİNMEZ; eski
 `tekserp-guncelleme` ve adnansahin bu adımlardan etkilenmez — her adımdan sonra adnansahin ölçümü koşulur.
 
-**`tekserp-gizlilik` (KURULU; `/patron-gizlilik` repo hazır 2026-10-15, yayın bekliyor):** `https://tekserp.etkiliyazilim.com/gizlilik` — yönlendirici
+**`tekserp-gizlilik` (KURULU; `/yonetim-gizlilik` + eski `/patron-gizlilik` 301 repo hazır 2026-10-16, yayın bekliyor):** `https://tekserp.etkiliyazilim.com/gizlilik` — yönlendirici
 `tekserp-gizlilik`, kendi kenar zinciri `tekserp-gizlilik-cf` → `tekserp-gizlilik-hiz`; indir Worker'ının ve eski sitenin
 dışında. Kurulum `deploy/gizlilik-sayfasi/vds-kur.sh` (kuru varsayılan · `--uygula` · `--geri-al`; sudo'suz yardımcı
 konteyner; komşu ölçümü önce/sonra), DNS `A tekserp` proxy açık EN SON. Runbook: [`GIZLILIK-SAYFASI.md`](GIZLILIK-SAYFASI.md).

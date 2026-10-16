@@ -34,10 +34,10 @@ export function PatronCloudPage() {
     setBusy(true);
     try {
       const r = await patronCloudService.activate();
-      toast.success(r.message ?? "Patron bulutu etkinleştirildi.");
+      toast.success(r.message ?? "Yönetim bulutu etkinleştirildi.");
       await qc.invalidateQueries({ queryKey: QUERY_KEY });
     } catch (err) {
-      if (!(err instanceof SettingsPasswordCancelled)) toast.error(apiErrorText(err, "Patron bulutu etkinleştirilemedi."));
+      if (!(err instanceof SettingsPasswordCancelled)) toast.error(apiErrorText(err, "Yönetim bulutu etkinleştirilemedi."));
     } finally {
       setBusy(false);
     }
@@ -46,9 +46,9 @@ export function PatronCloudPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Patron Bulutu"
+        title="Yönetim Bulutu"
         description="Patronun uygulamasından gelen sipariş ve cari kayıtları bu fabrikada normal yoldan işlenir."
-        actions={<RefreshButton queryKey={QUERY_KEY} successMessage="Patron bulutu durumu yenilendi" />}
+        actions={<RefreshButton queryKey={QUERY_KEY} successMessage="Yönetim bulutu durumu yenilendi" />}
       />
       <PageBody className="space-y-4 p-6">
         {q.isError && (
@@ -81,7 +81,7 @@ function StatusSection({ s, busy, onActivate }: { s: PatronCloudStatus; busy: bo
         </div>
         {!s.etkin && (
           <Button onClick={onActivate} disabled={busy}>
-            {busy ? "Etkinleştiriliyor…" : "Patron bulutunu etkinleştir"}
+            {busy ? "Etkinleştiriliyor…" : "Yönetim bulutunu etkinleştir"}
           </Button>
         )}
       </div>
@@ -175,7 +175,7 @@ function AccountsSection({ s, onLocked }: { s: PatronCloudStatus; onLocked: () =
         title="Bulut hesabı kilitlensin mi?"
         description={
           target
-            ? `${target.ad}${target.eposta ? ` (${target.eposta})` : ""} patron bulutunda kilitlenecek ve açık oturumları kapanacak. ` +
+            ? `${target.ad}${target.eposta ? ` (${target.eposta})` : ""} yönetim bulutunda kilitlenecek ve açık oturumları kapanacak. ` +
               "Kilidi yalnız fabrikanın bulut yöneticisi bulutta açabilir."
             : undefined
         }

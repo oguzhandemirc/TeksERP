@@ -23,7 +23,7 @@ const IMZA_BLOGU = `    signingConfigs {
                 keyAlias '${IMZA.alias}'
                 keyPassword patronParola
             } else if (patronRelease) {
-                throw new GradleException("TeksERP Patron: release paketi yalniz 'npm run build:aab' ile derlenir (yukleme anahtari + Anahtar Zinciri parolasi); debug muhrune dusulmez")
+                throw new GradleException("TeksERP Yonetim: release paketi yalniz 'npm run build:aab' ile derlenir (yukleme anahtari + Anahtar Zinciri parolasi); debug muhrune dusulmez")
             }
         }
     }`;

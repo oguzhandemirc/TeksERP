@@ -8,7 +8,7 @@ self.addEventListener("push", (event) => {
   } catch (e) {
     d = {};
   }
-  const title = typeof d.baslik === "string" ? d.baslik : "TeksERP Patron";
+  const title = typeof d.baslik === "string" ? d.baslik : "TeksERP Yönetim";
   const body = typeof d.metin === "string" ? d.metin : "";
   const rota = typeof d.rota === "string" && /^\/[a-z-]+(\/[A-Za-z0-9-]{1,64})?$/.test(d.rota) ? d.rota : "/pano";
   const tesisId = typeof d.tesisId === "string" && /^[0-9A-Fa-f-]{36}$/.test(d.tesisId) ? d.tesisId : null;

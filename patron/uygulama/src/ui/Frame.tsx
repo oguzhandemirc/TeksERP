@@ -19,7 +19,7 @@ export function FacilityName() {
   const { facility, facilities } = useSession();
   const [open, setOpen] = useState(false);
   // Firma adı KODDA yok: hesabın tesisinden gelir; yoksa nötr ad.
-  const name = <Text style={{ fontSize: 18, fontWeight: "700", color: color.text, flexShrink: 1 }} numberOfLines={1}>{facility?.tesis.ad ?? "TeksERP Patron"}</Text>;
+  const name = <Text style={{ fontSize: 18, fontWeight: "700", color: color.text, flexShrink: 1 }} numberOfLines={1}>{facility?.tesis.ad ?? "TeksERP Yönetim"}</Text>;
   if (facilities.length < 2) return name;
   return (
     <>

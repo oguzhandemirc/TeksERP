@@ -129,7 +129,7 @@
 ## 12. Patron bulutu daveti ve uygulamadan sipariş — yalnız 0.2-B
 
 - **Önkoşul (`cloudEligibility`):** lisans GEÇERLİ ve sınıf **Üretim** · HAK'ta patron bulutu modülü · kirada patron bulutu bitişi · backend'de `PATRON_CLOUD_URL`. 0.2-A'da bu adım beklenen RED'dir (⚠️), senaryo sürer.
-- **Panel:** "Yetkilendirme" → "Patron Bulutu" → "Patron bulutunu etkinleştir" → "Lisans ön koşulu:" satırı yeşil.
+- **Panel:** "Yetkilendirme" → "Yönetim Bulutu" → "Yönetim bulutunu etkinleştir" → "Lisans ön koşulu:" satırı yeşil.
 - **Satıcı (Mac):** `patron/sunucu/scripts/tesis.ts` → `tesis-ac` · `kurulum-kaydet` · `yonetici-davet --eposta=<e-posta> --ad=<ad>` → davet bağlantısı (`docs/ops/PATRON-BULUTU-KURULUM.md`). Panelde davet ekranı YOK — ilk yöneticiyi satıcı davet eder, diğerlerini yönetici uygulamadan açar.
 - **Patron uygulaması:** "Davet kodum var" → kod → parola (≥12, iki kez) → TOTP karekodu → "Onayla" → "Hesabınız etkin" → giriş (e-posta + parola → doğrulama kodu) → Siparişler → "Yeni sipariş": cari · döviz · termin · açıklama; kalem: ürün · renk · miktar · birim fiyat → "Fabrikaya gönder".
 - **Beklenen:** sipariş gelen kutusundan fabrikaya düşer (panelde siparişlerde görünür), bulutta durum İŞLENDİ. Zorla kipte KISITLI/DURDURULMUŞ iken sipariş çekilmez, bulutta BEKLİYOR kalır (§14'te bir kez ölç).

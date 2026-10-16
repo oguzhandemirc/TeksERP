@@ -53,6 +53,10 @@ const IZINLI = {
     { desen: /y = await fetch\(url, \{ method: yontem, headers: basliklar, body: govde \}\);/, gerekce: 'Google Play Developer API (androidpublisher.googleapis.com) — güncelleme sunucusu değil' },
     { desen: /y = await fetch\(TOKEN_URL, \{ method: 'POST'/, gerekce: 'Google OAuth belirteç ucu (oauth2.googleapis.com) — Play API erişimi için' },
   ],
+  'deploy/play-magaza.mjs': [
+    { desen: /const r = await fetch\(url, \{ method: yontem, headers: \{ authorization:/, gerekce: 'Google Play Developer API (androidpublisher.googleapis.com) — mağaza girişi; güncelleme sunucusu değil' },
+    { desen: /const y = await fetch\(TOKEN_URL, \{ method: 'POST'/, gerekce: 'Google OAuth belirteç ucu (oauth2.googleapis.com) — Play API erişimi için' },
+  ],
 };
 
 /** Yorum satırı mı (yalnız TAM yorum satırı; satır sonu yorumu kod sayılır — fail-closed). */

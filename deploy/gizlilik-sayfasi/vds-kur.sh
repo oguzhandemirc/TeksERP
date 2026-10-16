@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Yasal sayfalar kökeni — VDS kurulumu (https://tekserp.etkiliyazilim.com/gizlilik + /patron-gizlilik → /opt/stack/apps/tekserp-gizlilik)
+# Yasal sayfalar kökeni — VDS kurulumu (https://tekserp.etkiliyazilim.com/gizlilik + /yonetim-gizlilik → /opt/stack/apps/tekserp-gizlilik)
+# Eski /patron-gizlilik conf'ta 301 → /yonetim-gizlilik; eski patron-gizlilik.html --uygula'da onceki/'ye taşınır.
 # =============================================================================
 # Kullanım (Mac, herhangi bir dizinden):
 #   deploy/gizlilik-sayfasi/vds-kur.sh             KURU (varsayılan): denetler, planı basar, VDS'e YAZMAZ
@@ -18,7 +19,7 @@ cd "$(dirname "$0")/../.."
 SSH_HEDEF="${TEKSERP_VDS_SSH:-tekserp-vds}"
 K=/opt/stack/apps/tekserp-gizlilik
 ADRES=https://tekserp.etkiliyazilim.com/gizlilik
-PATRON_ADRES=https://tekserp.etkiliyazilim.com/patron-gizlilik
+PATRON_ADRES=https://tekserp.etkiliyazilim.com/yonetim-gizlilik
 HOST=tekserp.etkiliyazilim.com
 KOKEN_IP=80.253.255.188
 D=deploy/gizlilik-sayfasi
@@ -36,7 +37,7 @@ v() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HEDEF" "$@"; }
 dur() { echo "⛔ DUR: $*" >&2; exit 1; }
 koken_kodu() { curl -sk -o /dev/null -w '%{http_code}' -m 15 --resolve "$HOST:443:$KOKEN_IP" "${1:-$ADRES}" || true; }
 # Sayfa adları: html/<ad>.html ↔ /<ad> (uret.mjs SAYFALAR ile aynı; bekçi §5 ölçer).
-SAYFALAR="gizlilik patron-gizlilik"
+SAYFALAR="gizlilik yonetim-gizlilik"
 koken_403() {
   for a in "$ADRES" "$PATRON_ADRES"; do
     KOD=$(koken_kodu "$a")
@@ -51,6 +52,13 @@ icerden_esit() {
     [ "$ICERDE" = "$BEK" ] || dur "konteyner içinden /$ad repodakiyle aynı değil ($ICERDE ↔ $BEK) $1"
     echo "✅ konteyner içinden /$ad = repo ($BEK)"
   done
+}
+# Emekli /patron-gizlilik → 301 /yonetim-gizlilik (busybox wget -S ilk yanıtı ve Location'ı basar, sonra izler).
+icerden_yonlendirme() {
+  YON=$(v "docker exec tekserp-gizlilik sh -c 'wget -S -O /dev/null http://127.0.0.1/patron-gizlilik 2>&1'") || YON=""
+  echo "$YON" | grep -q 'HTTP/1.1 301' && echo "$YON" | grep -qi 'Location: /yonetim-gizlilik' \
+    || dur "konteyner içinden /patron-gizlilik → 301 /yonetim-gizlilik değil $1"
+  echo "✅ konteyner içinden /patron-gizlilik → 301 /yonetim-gizlilik"
 }
 
 komsu_olc() {
@@ -68,7 +76,7 @@ echo "═══ yasal sayfalar — kip: $KIP · hedef: $SSH_HEDEF:$K · adres: $
 # 1) Repo tarafı
 node scripts/test_gizlilik_sayfasi.mjs >/dev/null || dur "bekçi yeşil değil: node scripts/test_gizlilik_sayfasi.mjs"
 echo "✅ bekçi yeşil"
-YT=$(grep -hoE '\[[A-ZÇĞİÖŞÜ][^]]{1,80}\]' "$D/html/gizlilik.html" "$D/html/patron-gizlilik.html" | tr '\n' ' ' || true)
+YT=$(grep -hoE '\[[A-ZÇĞİÖŞÜ][^]]{1,80}\]' "$D/html/gizlilik.html" "$D/html/yonetim-gizlilik.html" | tr '\n' ' ' || true)
 if [ -n "$YT" ]; then
   case "$KIP" in uygula|html-uygula) dur "sayfada yer tutucu var: $YT — docs/legal/*.md doldurulur, node $D/uret.mjs, commit" ;; esac
   echo "⏳ yer tutucu (--uygula durdurur): $YT"
@@ -78,7 +86,7 @@ if ! git diff --quiet HEAD -- "$D" docs/legal/GIZLILIK-POLITIKASI.md docs/legal/
   echo "⚠ commit edilmemiş değişiklik var"
 fi
 HTML_SHA=$(shasum -a 256 "$D/html/gizlilik.html" | cut -d' ' -f1)
-PATRON_SHA=$(shasum -a 256 "$D/html/patron-gizlilik.html" | cut -d' ' -f1)
+PATRON_SHA=$(shasum -a 256 "$D/html/yonetim-gizlilik.html" | cut -d' ' -f1)
 CONF_SHA=$(shasum -a 256 "$D/nginx/default.conf" | cut -d' ' -f1)
 
 # 2) VDS salt-okuma
@@ -94,7 +102,7 @@ UZAK
 ) || dur "ssh $SSH_HEDEF bağlanamadı"
 echo "$DURUM" | sed 's/^/   VDS /'
 for g in docker=evet ag=evet imaj=evet; do echo "$DURUM" | grep -qx "$g" || dur "VDS önkoşulu yok: $g"; done
-echo "   köken (Cloudflare'siz) şimdi: /gizlilik HTTP $(koken_kodu) · /patron-gizlilik HTTP $(koken_kodu "$PATRON_ADRES")  (kurulu ve kapılı: 403 · yönlendirici yok: 404)"
+echo "   köken (Cloudflare'siz) şimdi: /gizlilik HTTP $(koken_kodu) · /yonetim-gizlilik HTTP $(koken_kodu "$PATRON_ADRES")  (kurulu ve kapılı: 403 · yönlendirici yok: 404)"
 
 komsu_olc önce || dur "komşu ölçümü önce düştü — kurulumdan bağımsız bir sorun var, önce o"
 
@@ -103,10 +111,10 @@ if [ "$KIP" = kuru ]; then
 
 KURU — VDS'e hiçbir şey yazılmadı. --uygula şunları yapar:
   1. nginx -t (yardımcı konteyner, yeni conf ile) — geçmezse durur
-  2. ~/tekserp-gizlilik-gecici.* → yardımcı konteyner (root, --network none) → $K/{docker-compose.yml,nginx/default.conf,html/gizlilik.html,html/patron-gizlilik.html}
-     root:root 0644; var olanlar önce $K/onceki/'ye kopyalanır
+  2. ~/tekserp-gizlilik-gecici.* → yardımcı konteyner (root, --network none) → $K/{docker-compose.yml,nginx/default.conf,html/gizlilik.html,html/yonetim-gizlilik.html}
+     root:root 0644; var olanlar önce $K/onceki/'ye kopyalanır; emekli html/patron-gizlilik.html onceki/'ye TAŞINIR
   3. cd $K && docker compose up -d --force-recreate   (proje tekserp-gizlilik, yalnız bu konteyner)
-  4. konteyner içinden /gizlilik = repo ($HTML_SHA) · /patron-gizlilik = repo ($PATRON_SHA) · köken Cloudflare'siz → 403 (iki sayfa)
+  4. konteyner içinden /gizlilik = repo ($HTML_SHA) · /yonetim-gizlilik = repo ($PATRON_SHA) · /patron-gizlilik → 301 · köken Cloudflare'siz → 403 (iki sayfa)
   5. geçici dizin silinir · komşu ölçümü sonra
 PLAN
   exit 0
@@ -116,8 +124,8 @@ if [ "$KIP" = html-kuru ] || [ "$KIP" = html-uygula ]; then
   echo "$DURUM" | grep -qx "konteyner=running" || dur "tekserp-gizlilik çalışmıyor — ilk kurulum: $0 --uygula"
   YAYIN_SHA=$(v "sha256sum $K/html/gizlilik.html | cut -d' ' -f1") || dur "VDS'teki html okunamadı"
   echo "   VDS gizlilik.html: $YAYIN_SHA · repo: $HTML_SHA"
-  YAYIN_PATRON=$(v "[ -f $K/html/patron-gizlilik.html ] && sha256sum $K/html/patron-gizlilik.html | cut -d' ' -f1 || echo YOK") || dur "VDS'teki html okunamadı"
-  echo "   VDS patron-gizlilik.html: $YAYIN_PATRON · repo: $PATRON_SHA"
+  YAYIN_PATRON=$(v "[ -f $K/html/yonetim-gizlilik.html ] && sha256sum $K/html/yonetim-gizlilik.html | cut -d' ' -f1 || echo YOK") || dur "VDS'teki html okunamadı"
+  echo "   VDS yonetim-gizlilik.html: $YAYIN_PATRON · repo: $PATRON_SHA"
   YAYIN_CONF=$(v "sha256sum $K/nginx/default.conf | cut -d' ' -f1") || dur "VDS'teki conf okunamadı"
   # Yeni sayfa konumu conf'tadır: conf farklıyken yalnız html yazmak sayfayı 404'te bırakır.
   [ "$YAYIN_CONF" = "$CONF_SHA" ] || dur "VDS'teki nginx conf repodakinden farklı ($YAYIN_CONF ↔ $CONF_SHA) — html kipi yetmez: $0 (kuru) → $0 --uygula"
@@ -125,10 +133,10 @@ if [ "$KIP" = html-kuru ] || [ "$KIP" = html-uygula ]; then
     cat <<PLAN
 
 KURU — VDS'e hiçbir şey yazılmadı. --html --uygula şunları yapar:
-  1. html/{gizlilik,patron-gizlilik}.html → ~/tekserp-gizlilik-gecici.* → yardımcı konteyner (root, --network none) → $K/html/
+  1. html/{gizlilik,yonetim-gizlilik}.html → ~/tekserp-gizlilik-gecici.* → yardımcı konteyner (root, --network none) → $K/html/
      root:root 0644; öncekiler $K/onceki/html_<ad>.html'e kopyalanır. compose, conf ve konteyner DEĞİŞMEZ
      (html dizin bağı: nginx yeni dosyayı yeniden başlatmadan sunar)
-  2. konteyner içinden /gizlilik = repo ($HTML_SHA) · /patron-gizlilik = repo ($PATRON_SHA) · köken Cloudflare'siz → 403
+  2. konteyner içinden /gizlilik = repo ($HTML_SHA) · /yonetim-gizlilik = repo ($PATRON_SHA) · köken Cloudflare'siz → 403
   3. geçici dizin silinir · komşu ölçümü sonra · node $D/olc.mjs (kenar en geç 5 dk'da tazelenir)
 PLAN
     exit 0
@@ -136,13 +144,13 @@ PLAN
   G=$(v 'mktemp -d "$HOME/tekserp-gizlilik-gecici.XXXXXX"') || dur "geçici dizin açılamadı"
   temizle() { v "rm -rf '$G'" || echo "⚠ geçici dizin kaldı: $G"; }
   trap temizle EXIT
-  scp -q -o BatchMode=yes "$D/html/gizlilik.html" "$D/html/patron-gizlilik.html" "$SSH_HEDEF:$G/" || dur "scp"
+  scp -q -o BatchMode=yes "$D/html/gizlilik.html" "$D/html/yonetim-gizlilik.html" "$SSH_HEDEF:$G/" || dur "scp"
   v "G=$G bash -s" <<'UZAK' || dur "yardımcı konteyner yazamadı"
 set -eu
 docker run --rm --network none --user 0 -v /opt/stack/apps/tekserp-gizlilik:/h -v "$G:/g:ro" --entrypoint sh nginx:alpine -c '
   set -eu
   install -d -o 0 -g 0 -m 0755 /h/onceki
-  for f in gizlilik.html patron-gizlilik.html; do
+  for f in gizlilik.html yonetim-gizlilik.html; do
     if [ -f "/h/html/$f" ]; then cp -p "/h/html/$f" "/h/onceki/html_$f"; fi
     install -o 0 -g 0 -m 0644 "/g/$f" "/h/html/$f"
   done
@@ -169,7 +177,7 @@ fi
 G=$(v 'mktemp -d "$HOME/tekserp-gizlilik-gecici.XXXXXX"') || dur "geçici dizin açılamadı"
 temizle() { v "rm -rf '$G'" || echo "⚠ geçici dizin kaldı: $G"; }
 trap temizle EXIT
-scp -q -o BatchMode=yes "$D/docker-compose.yml" "$D/nginx/default.conf" "$D/html/gizlilik.html" "$D/html/patron-gizlilik.html" "$SSH_HEDEF:$G/" || dur "scp"
+scp -q -o BatchMode=yes "$D/docker-compose.yml" "$D/nginx/default.conf" "$D/html/gizlilik.html" "$D/html/yonetim-gizlilik.html" "$SSH_HEDEF:$G/" || dur "scp"
 
 v "G=$G bash -s" <<'UZAK' || dur "nginx -t geçmedi — hiçbir şey yazılmadı"
 set -eu
@@ -183,13 +191,15 @@ docker run --rm --network none --user 0 -v /opt/stack/apps:/a -v "$G:/g:ro" --en
   set -eu
   H=/a/tekserp-gizlilik
   install -d -o 0 -g 0 -m 0755 "$H" "$H/nginx" "$H/html" "$H/onceki"
-  for f in docker-compose.yml nginx/default.conf html/gizlilik.html html/patron-gizlilik.html; do
+  for f in docker-compose.yml nginx/default.conf html/gizlilik.html html/yonetim-gizlilik.html; do
     if [ -f "$H/$f" ]; then cp -p "$H/$f" "$H/onceki/$(echo "$f" | tr / _)"; fi
   done
+  # Emekli sayfa (2026-10-16 ad değişimi): conf artık 301 verir; dosya geri alma için onceki/ altında kalır.
+  if [ -f "$H/html/patron-gizlilik.html" ]; then mv "$H/html/patron-gizlilik.html" "$H/onceki/html_patron-gizlilik.html"; fi
   install -o 0 -g 0 -m 0644 /g/docker-compose.yml "$H/docker-compose.yml"
   install -o 0 -g 0 -m 0644 /g/default.conf "$H/nginx/default.conf"
   install -o 0 -g 0 -m 0644 /g/gizlilik.html "$H/html/gizlilik.html"
-  install -o 0 -g 0 -m 0644 /g/patron-gizlilik.html "$H/html/patron-gizlilik.html"
+  install -o 0 -g 0 -m 0644 /g/yonetim-gizlilik.html "$H/html/yonetim-gizlilik.html"
 '
 ls -ln "$K" "$K/nginx" "$K/html" | grep -v '^total'
 UZAK
@@ -198,6 +208,7 @@ echo "✅ dosyalar yazıldı (root:root 0644)"
 v "cd $K && docker compose up -d --force-recreate" || dur "docker compose up — geri almak için: $0 --geri-al"
 sleep 3
 icerden_esit "— geri almak için: $0 --geri-al"
+icerden_yonlendirme "— geri almak için: $0 --geri-al"
 koken_403
 
 komsu_olc sonra || dur "komşu ölçümü SONRA düştü — $0 --geri-al ve incele"

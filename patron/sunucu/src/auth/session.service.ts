@@ -67,7 +67,7 @@ export function sessionProjections(permissions: ReadonlySet<CloudPermission>): s
 }
 
 const loginFailed = (): CloudError => new CloudError(401, "GIRIS_BASARISIZ", "E-posta, parola ya da doğrulama kodu hatalı");
-const serviceClosed = (): CloudError => new CloudError(403, "HIZMET_KAPANDI", "Patron bulutu hizmeti sona erdi ve salt okuma süresi doldu; veriler imha sürecinde");
+const serviceClosed = (): CloudError => new CloudError(403, "HIZMET_KAPANDI", "TeksERP Yönetim hizmeti sona erdi ve salt okuma süresi doldu; veriler imha sürecinde");
 const switchDenied = (): CloudError => new CloudError(403, "TESIS_GECISI_YOK", "Bu tesise geçiş yapılamıyor");
 
 /** Başarısız girişin en kısa yanıt süresi (gerçek saat): DB'ye yazan dal ile yazmayan dal süreden ayırt edilmesin. */

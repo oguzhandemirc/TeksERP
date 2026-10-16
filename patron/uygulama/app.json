@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "TeksERP Patron",
+    "name": "TeksERP Yönetim",
     "slug": "tekserp-patron",
     "scheme": "tekserp-patron",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "ios": {
-      "bundleIdentifier": "com.etkiliyazilim.tekserp.patron",
+      "bundleIdentifier": "com.etkiliyazilim.tekserp.yonetim",
       "supportsTablet": true
     },
     "android": {
-      "package": "com.etkiliyazilim.tekserp.patron",
-      "versionCode": 2,
+      "package": "com.etkiliyazilim.tekserp.yonetim",
+      "versionCode": 1,
       "allowBackup": false,
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
