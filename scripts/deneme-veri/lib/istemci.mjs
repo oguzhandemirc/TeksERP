@@ -33,7 +33,7 @@ export function zincirYaz(servis, hesap, parola) {
 
 const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function istemciKur({ url, kullanici, parola, deneme = 5, sessiz = false }) {
+export function istemciKur({ url, kullanici, parola, deneme = 12, sessiz = false }) {
   let token = null;
   const sayac = { istek: 0, yeniden: 0 };
 
@@ -62,7 +62,7 @@ export function istemciKur({ url, kullanici, parola, deneme = 5, sessiz = false 
       if ((r.status >= 500 || r.status === 429) && i < enCok) {
         sayac.yeniden++;
         if (!sessiz) console.log(`  ↻ ${method} ${path} ${r.status} — aynı gövdeyle yeniden (${i})`);
-        await bekle(Number(r.headers.get("retry-after") ?? 0) * 1000 || 500 * 2 ** i);
+        await bekle(r.status === 429 ? Math.max(21000, Number(r.headers.get("retry-after") ?? 0) * 1000) : (Number(r.headers.get("retry-after") ?? 0) * 1000 || 500 * 2 ** i));
         continue;
       }
       throw new ApiHatasi(method, path, r.status, j);
@@ -70,7 +70,7 @@ export function istemciKur({ url, kullanici, parola, deneme = 5, sessiz = false 
   }
 
   async function giris() {
-    const j = await hamIstek("POST", "/api/auth/login", { username: kullanici, password: parola, clientType: "electron", confirmKick: true }, { tokenli: false });
+    const j = await hamIstek("POST", "/api/auth/login", { username: kullanici, password: parola, clientType: "electron", confirmKick: true, ...(process.env.DENEME_SA_KOD && kullanici === "tekserp" ? { totpCode: process.env.DENEME_SA_KOD } : {}) }, { tokenli: false });
     if (j.data?.mustChangePassword) throw new Error(`"${kullanici}" parola değişimi bekliyor`);
     token = j.data?.token;
     if (!token) throw new Error("giriş token döndürmedi");

@@ -3,6 +3,7 @@
 // deneme-veri/hizmet-hesabi — doldurmanın HİZMET hesabını (`demoveri`) panelin resmi uçlarıyla kurar.
 //
 // Giriş: kurulumun süperadmini, masaüstü clientType + parola (2FA'sız olmalı; web/çerez kipinde 2FA zorunlu).
+// Süperadminde 2FA açıksa o anki kod DENEME_SA_KOD ortam değişkeniyle verilir (yalnız tekserp girişine eklenir; tek kullanımlık).
 // Süperadminin parolasına/TOTP'sine/izinlerine DOKUNULMAZ. Hizmet hesabı süperadmin DEĞİLDİR; izinleri aşağıdaki dar
 // kümedir (SoD üçlüsü shipping:invoice · shipping:undo-dispatch · roll:manual-adjust VERİLMEZ). İdempotent: hesap varsa
 // izin kümesi yeniden yazılır (replace), Anahtar Zinciri'ndeki parola çalışıyorsa korunur, çalışmıyorsa döndürülür.
