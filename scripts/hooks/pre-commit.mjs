@@ -325,6 +325,11 @@ if (staged.some((f) => PLAY_TETIK.includes(f) || f.startsWith("scripts/lib/") ||
   adimlar.push({ ad: "Play yayıncısı", cwd: ".", cmd: ["node", ["scripts/test_play_yayinla.mjs"]], gitEnvSil: true });
 }
 
+// DENEME VERİSİ: anonimleştirme/doldurma çekirdeği (bekçi bu iki tetik dizesinin burada geçtiğini ölçer).
+if (staged.some((f) => f.startsWith("scripts/deneme-veri/") || f === "scripts/test_deneme_veri.mjs")) {
+  adimlar.push({ ad: "deneme verisi", cwd: ".", cmd: ["node", ["scripts/test_deneme_veri.mjs"]] });
+}
+
 // PLAY MAĞAZA GİRİŞİ: metin sınırları, görsel boyut/alfa, maskesiz görüntü ve inceleme hesabı izi (ağsız).
 if (staged.some((f) => f === "deploy/play-magaza.mjs" || f === "scripts/test_play_magaza.mjs" || f.startsWith("patron/uygulama/magaza/") || f.startsWith("mobil/magaza/"))) {
   adimlar.push({ ad: "Play mağaza girişi", cwd: ".", cmd: ["node", ["scripts/test_play_magaza.mjs"]], gitEnvSil: true });
