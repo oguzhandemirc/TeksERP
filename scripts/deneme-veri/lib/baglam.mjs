@@ -5,7 +5,7 @@
 //   bulYaDaYarat(ad, bul, yarat)      → tokensız uçlar: önce canlı durumda ara, yoksa TEK denemeyle yarat; belirsiz
 //                                       hatada yeniden ARAR (körlemesine ikinci POST yok ⇒ çift kayıt doğmaz).
 //   kosulluYaz(ad, gerekliMi, yaz)    → durum geçişi: canlı durum geçişi gerektirmiyorsa yazma (ikinci koşum no-op).
-// Sayaç: modül → { yeni, mevcut }. Çıktı yalnız kod/numara/sayı basar.
+// Sayaç: modül → { yeni, mevcut, belirsiz }. Çıktı yalnız kod/numara/sayı basar.
 // =============================================================================
 import { belirlenimliToken } from "./token.mjs";
 import { liste } from "./istemci.mjs";
@@ -14,7 +14,7 @@ export function baglamKur({ api, cap }) {
   const sayac = new Map();
   const baslangic = Date.now();
   const say = (modul, tur) => {
-    if (!sayac.has(modul)) sayac.set(modul, { yeni: 0, mevcut: 0 });
+    if (!sayac.has(modul)) sayac.set(modul, { yeni: 0, mevcut: 0, belirsiz: 0 });
     sayac.get(modul)[tur]++;
   };
   const capMs = Date.parse(cap + "T00:00:00+03:00");
@@ -49,8 +49,8 @@ export function baglamKur({ api, cap }) {
       const j = await api("POST", yol, { ...govde, clientToken });
       const d = j?.data ?? j;
       const olusma = d?.createdAt ?? d?.[Object.keys(d ?? {}).find((k) => d[k]?.createdAt)]?.createdAt;
-      const replay = olusma ? Date.parse(olusma) < baslangic - 5_000 : false; // sayım içindir; karar değil
-      say(modul, replay ? "mevcut" : "yeni");
+      // Sayım içindir, karar değil; yanıt oluşma zamanı taşımıyorsa "belirsiz" (çoğaltma ölçümü DB sayımıyla yapılır).
+      say(modul, !olusma ? "belirsiz" : Date.parse(olusma) < baslangic - 5_000 ? "mevcut" : "yeni");
       return j.data ?? j;
     } catch (e) {
       if (e.kod === "CLIENT_TOKEN_COLLISION") throw new Error(`${anahtar}: aynı token BAŞKA gövdeyle yazılmış — gövde zamana bağlı olmamalı (${e.message})`);

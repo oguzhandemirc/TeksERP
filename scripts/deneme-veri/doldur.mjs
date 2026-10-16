@@ -16,6 +16,9 @@ import { baglamKur } from "./lib/baglam.mjs";
 import { anaVeri } from "./adimlar/ana-veri.mjs";
 import { ticaret } from "./adimlar/ticaret.mjs";
 import { dokuma } from "./adimlar/dokuma.mjs";
+import { salon } from "./adimlar/salon.mjs";
+import { uretim } from "./adimlar/uretim.mjs";
+import { finans } from "./adimlar/finans.mjs";
 
 /** Sonraki adımların kimlik okuduğu adımlar — seçimde de koşar (yazacakları yoksa no-op). */
 const ZORUNLU = new Set(["ana-veri"]);
@@ -24,6 +27,9 @@ export const ADIMLAR = [
   ["ana-veri", anaVeri],
   ["ticaret", ticaret],
   ["dokuma", dokuma],
+  ["salon", salon],
+  ["uretim", uretim],
+  ["finans", finans],
 ];
 
 const arg = (ad, v) => { const i = process.argv.indexOf(ad); return i > 0 ? process.argv[i + 1] : v; };
@@ -49,8 +55,8 @@ async function main() {
       console.log(`  ✓ ${ad} (${((Date.now() - s) / 1000).toFixed(1)} sn)`);
     }
   } finally {
-    console.log("\n== SAYAÇ (modül: yeni · mevcut)");
-    for (const [m, v] of [...c.sayac].sort()) console.log(`  ${m.padEnd(26)} ${v.yeni} · ${v.mevcut}`);
+    console.log("\n== SAYAÇ (modül: yeni · mevcut · belirsiz[tokenlı, yanıtta zaman yok])");
+    for (const [m, v] of [...c.sayac].sort()) console.log(`  ${m.padEnd(26)} ${v.yeni} · ${v.mevcut}${v.belirsiz ? " · " + v.belirsiz : ""}`);
     console.log(`istek ${ist.sayac.istek} · yeniden deneme ${ist.sayac.yeniden} · ${((Date.now() - t0) / 1000).toFixed(0)} sn`);
     await ist.cikis();
   }

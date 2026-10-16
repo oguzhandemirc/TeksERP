@@ -14,12 +14,11 @@ export const DOKUMA_ISLERI = [
 ];
 /** Tezgah → dokuma işi (ağızlık türüne uygun kumaş). */
 export const tezgahIsi = (i) => (i >= 25 ? (i <= 29 ? "DK6" : "DK7") : ["DK1", "DK2", "DK3", "DK4", "DK5"][(i - 1) % 5]);
-const DEVIR = { DK1: [520, 26], DK2: [500, 24], DK3: [600, 22], DK4: [540, 28], DK5: [520, 30], DK6: [420, 32], DK7: [420, 32] };
+export const DEVIR = { DK1: [520, 26], DK2: [500, 24], DK3: [600, 22], DK4: [540, 28], DK5: [520, 30], DK6: [420, 32], DK7: [420, 32] };
 
-export async function dokuma(c) {
+/** Dokuma işleri (iç + fason) — tokenlı; sonraki adımlar `k.dk`yi bundan okur (seçimli koşumda da çağrılır). */
+export async function dokumaIsleri(c) {
   const k = c.kayit;
-  const tedarikci = k.tedarikci["Atlas Çözgü Hazırlama"];
-  const iplikDepo = k.depo["İplik Deposu"];
   k.dk = {};
   for (const [key, kumas, czg, m, s, e, notes] of DOKUMA_ISLERI) {
     const r = await c.tokenli("dokuma-isi", `dv:dk:${key}`, "/api/weaving-orders", {
@@ -36,6 +35,13 @@ export async function dokuma(c) {
     });
     k.dk.F1 = { id: r.id, no: r.weavingOrderNumber };
   }
+}
+
+export async function dokuma(c) {
+  const k = c.kayit;
+  const tedarikci = k.tedarikci["Atlas Çözgü Hazırlama"];
+  const iplikDepo = k.depo["İplik Deposu"];
+  await dokumaIsleri(c);
 
   // Leventler: her dokuma işine bir hazır levent (PURCHASED) + DK1/DK3 için içeride sarılan (IN_HOUSE, iplik çıkışlı) + emanet
   const lotlar = await c.hepsi("/api/yarn/lots");

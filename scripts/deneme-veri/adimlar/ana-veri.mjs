@@ -16,6 +16,11 @@ export const KUMASLAR = [
   ["KETEN GÖRÜNÜMLÜ PERDE 280", "MT"], ["SATEN DÖŞEMELİK 140", "MT"],
 ];
 export const SARFLAR = [["KARTON MASURA 280 CM", "ADET"], ["AMBALAJ NAYLONU", "KG"]];
+/** Deneme müşterileri — kartla CARİ HESAP doğar (anonim eski kartların hesabı yok ⇒ finans bunlarla). Havuz kelimesi taşımaz. */
+export const MUSTERILER = [
+  ["Trakya Ev Tekstili", "Tekirdağ"], ["Akdeniz Perde Dekorasyon", "Antalya"], ["Marmara Döşemelik", "Bursa"],
+  ["Ege Konfeksiyon", "İzmir"], ["Anadolu Mobilya Kumaş", "Kayseri"],
+];
 export const TEDARIKCILER = ["Doruk İplik Sanayi", "Pınar Elyaf Ticaret", "Atlas Çözgü Hazırlama"];
 export const ISTASYONLAR = [
   { anahtar: "WEAVING", body: { name: "Dokuma Salonu A", type: "INTERNAL", kind: "WEAVING", department: "DOKUMA", allowAsWorkOrderStep: false, consumesWarpBeam: true } },
@@ -68,10 +73,17 @@ export async function anaVeri(c) {
     k.tedarikci[name] = (await c.bulYaDaYarat("cari", async () => (await c.hepsi(`/api/customers?search=${encodeURIComponent(name.split(" ")[0])}`)).find((x) => katlaAd(x.name) === katlaAd(name)),
       async () => (await c.api("POST", "/api/customers", { name, isSupplierRole: true, isCustomerRole: false, city: "Bursa" }, { tekDeneme: true })).data)).id;
   }
-  // Müşteriler: mevcut (anonimleştirilmiş) aktif müşteri rolündeki cariler, koda göre sıralı ilk 8 — belirlenimli
+  // Müşteriler: önce deneme müşterileri (cari hesaplı), ardından mevcut (anonimleştirilmiş) aktif müşteriler koda göre ilk 3
+  const yeniMusteri = [];
+  for (const [name, city] of MUSTERILER) {
+    const m = await c.bulYaDaYarat("cari", async () => (await c.hepsi(`/api/customers?search=${encodeURIComponent(name.split(" ")[0])}`)).find((x) => katlaAd(x.name) === katlaAd(name)),
+      async () => (await c.api("POST", "/api/customers", { name, isCustomerRole: true, isSupplierRole: false, city }, { tekDeneme: true })).data);
+    yeniMusteri.push({ id: m.id, code: m.code });
+  }
   const cariler = await c.hepsi("/api/customers");
-  k.musteriler = cariler.filter((x) => x.isActive && x.isCustomerRole && !x.isSupplierRole).sort((a, b) => a.code.localeCompare(b.code)).slice(0, 8).map((x) => ({ id: x.id, code: x.code }));
-  if (k.musteriler.length < 4) throw new Error(`en az 4 aktif müşteri gerekli (bulunan ${k.musteriler.length})`);
+  const eski = cariler.filter((x) => x.isActive && x.isCustomerRole && !x.isSupplierRole && !yeniMusteri.some((y) => y.id === x.id))
+    .sort((a, b) => a.code.localeCompare(b.code)).slice(0, 3).map((x) => ({ id: x.id, code: x.code }));
+  k.musteriler = [...yeniMusteri, ...eski];
   // İstasyonlar
   k.istasyon = {};
   for (const { anahtar, body } of ISTASYONLAR) {
