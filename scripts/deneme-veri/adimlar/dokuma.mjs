@@ -56,8 +56,13 @@ export async function dokuma(c) {
     { key: "LV-PLN", dk: "DK7", czg: "CZG-D02", m: 2500, origin: "IN_HOUSE", phys: "G-203", planOnly: true },
   ];
   k.levent = {};
+  // Sarımda sahiplik iplik lotundan KALITILIR ⇒ sarılmış emanet leventte plan gövdesi artık eşleşmez (replay 409);
+  // önce bizim çözgü kartımız + fiziksel no ile canlı listede aranır.
+  const mevcutLv = await c.hepsi("/api/warp-beams");
   for (const L of LEVENTLER) {
-    const b = await c.tokenli("levent", `dv:lv:${L.key}:plan`, "/api/warp-beams", {
+    const varLv = mevcutLv.find((x) => x.physicalBeamNo === L.phys && x.warpSpecId === k.cozgu[L.czg]);
+    if (varLv) c.say("levent", "mevcut");
+    const b = varLv ?? await c.tokenli("levent", `dv:lv:${L.key}:plan`, "/api/warp-beams", {
       warpSpecId: k.cozgu[L.czg], plannedLengthM: L.m, originKind: L.origin, supplierId: L.supplierId ?? null, ownerCustomerId: L.owner ?? null,
       weavingOrderId: L.dk ? k.dk[L.dk].id : null, physicalBeamNo: L.phys, notes: L.owner ? "Müşteri ipliğinden emanet levent" : null,
     });

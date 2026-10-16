@@ -58,10 +58,10 @@ export async function ticaret(c) {
 
   // Emanet: müşterinin kendi ipliği (sahiplik doğum niteliği) — lot + stok girişi
   const emanetSahibi = k.musteriler[0].id;
-  const lot = await c.bulYaDaYarat("iplik-lot", async () => (await c.hepsi(`/api/yarn/lots?search=EMN-2610`)).find((x) => x.lotNo === "EMN-2610-01"),
-    async () => (await c.api("POST", "/api/yarn/lots", { itemId: k.kalem["VİSKON 150 DENYE İPLİK"], lotNo: "EMN-2610-01", notes: "Müşteri emaneti — fason dokuma için", ownerCustomerId: emanetSahibi }, { tekDeneme: true })).data);
+  const lot = await c.bulYaDaYarat("iplik-lot", async () => (await c.hepsi(`/api/yarn/lots?search=EMN-2610`)).find((x) => x.lotNo === "EMN-2610-02"),
+    async () => (await c.api("POST", "/api/yarn/lots", { itemId: k.kalem["PES 150/48 ÇÖZGÜ İPLİĞİ"], lotNo: "EMN-2610-02", notes: "Müşteri emaneti — fason dokuma için", ownerCustomerId: emanetSahibi }, { tekDeneme: true })).data);
   k.emanetLot = lot.id;
-  await iplikHareketi(c, "DV-EMANET-1", { itemId: k.kalem["VİSKON 150 DENYE İPLİK"], warehouseId: iplikDepo, kind: "IN", qtyKg: 450, lotId: lot.id, reason: "Müşteri emanet ipliği girişi [DV-EMANET-1]" });
+  await iplikHareketi(c, "DV-EMANET-1", { itemId: k.kalem["PES 150/48 ÇÖZGÜ İPLİĞİ"], warehouseId: iplikDepo, kind: "IN", qtyKg: 450, lotId: lot.id, reason: "Müşteri emanet ipliği girişi [DV-EMANET-1]" });
   // Sayım farkı (gerçekçi küçük düzeltme)
   await iplikHareketi(c, "DV-SAYIM-1", { itemId: k.kalem["PES 300/96 ATKI İPLİĞİ"], warehouseId: iplikDepo, kind: "ADJUST_OUT", qtyKg: 12.5, reason: "Sayım farkı — bobin firesi [DV-SAYIM-1]" });
 }
