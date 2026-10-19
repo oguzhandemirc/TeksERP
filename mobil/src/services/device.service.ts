@@ -10,6 +10,11 @@ export interface DeviceAssignment {
    * gelir; o durumda `/devices/pairing-required` ucu taban olur.
    */
   pairingRequired?: boolean;
+  /**
+   * Onaysız (PENDING) cihaz onay beklemeden yalnız kullanıcı adı + parolayla girebilir mi
+   * (`device.unpairedPasswordLogin`). Eski backend göndermez → undefined = bugünkü kapı.
+   */
+  unpairedPasswordLogin?: boolean;
   status: DeviceAssignmentStatus;
   machineId: string | null;
   machineCode: string | null;

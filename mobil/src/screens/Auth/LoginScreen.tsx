@@ -34,6 +34,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import { upperTr } from '../../utils/trCase';
 import { isLoginSuspended } from '../../lib/license';
 import { LicenseSuspendedCard } from '../../components/lock/LicenseSuspendedGate';
+import UnpairedPasswordForm from './UnpairedPasswordForm';
 
 const COLORS = {
   bg: '#0f172a',
@@ -151,6 +152,8 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     gcTime: 24 * 60 * 60 * 1000,
   });
   const enabledMethods = methodsQ.data?.enabled ?? ['list'];
+  // Onaysız cihaz (device.unpairedPasswordLogin): yalnız kullanıcı adı + parola; liste/PIN/kart kapalı.
+  const unpairedOnly = methodsQ.data?.unpairedPasswordOnly === true;
   // K5 (lisans DURDURULDU): yalnız bu açılışta TAZE okunan sinyal geçerli — diskteki dünkü değer
   // tableti kilitlemez. Kilit kipinde (oturum var) karar `LicenseSuspendedGate`in.
   const mountedAtRef = useRef(Date.now());
@@ -179,7 +182,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     gcTime: 24 * 60 * 60 * 1000, // bkz. methodsQ — vardiya boyu bellekte kalsın
     // Kullanıcı listesi yalnız "liste+şifre" görünümünde gerekir (salt-PIN/kart
     // görünümlerinde kimse listelenmez — gereksiz istek atma).
-    enabled: enabledMethods.includes('list'),
+    enabled: enabledMethods.includes('list') && !unpairedOnly,
   });
 
   const users = usersQuery.data?.data ?? [];
@@ -937,6 +940,21 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
             onRetry={() => void methodsQ.refetch()}
           />
         </View>
+      ) : unpairedOnly ? (
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.cardWrap}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={16}
+        >
+          <UnpairedPasswordForm
+            initialUsername={lock?.user.username}
+            submitting={submitting}
+            error={error}
+            onSubmit={(username, password) =>
+              void submit(password, { id: '', username, fullName: username })
+            }
+          />
+        </KeyboardAwareScrollView>
       ) : activeMethod === 'card' ? (
         <KeyboardAwareScrollView
           contentContainerStyle={styles.cardWrap}

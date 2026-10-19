@@ -17,6 +17,8 @@ export interface LoginMethodsConfig {
   companyName?: string;
   /** Giriş öncesi K5 sinyali: yalnız zorlama kipinde lisans DURDURULMUŞKEN true (eski backend göndermez). */
   lisansDurduruldu?: boolean;
+  /** Onaysız cihazdan istek: yalnız kullanıcı adı + parola açık (liste/PIN/kart kapalı). Eski backend göndermez. */
+  unpairedPasswordOnly?: boolean;
 }
 export const DEFAULT_LOGIN_METHODS: LoginMethodsConfig = {
   enabled: ['list'],
