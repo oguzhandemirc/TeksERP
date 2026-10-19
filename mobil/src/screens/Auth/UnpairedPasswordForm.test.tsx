@@ -72,6 +72,10 @@ describe('§6 LoginScreen bağlantısı (kaynak bekçisi)', () => {
   it('onaysız cihazda personel listesi istenmez', () => {
     expect(src).toMatch(/enabled: enabledMethods\.includes\('list'\) && !unpairedOnly,/);
   });
+  it('onaysız formda kullanıcı adı gerçek ad diye kaydedilmez; ad giriş cevabından gelir', () => {
+    expect(src).toContain("void submit(password, { id: '', username, fullName: '' })");
+    expect(src).toContain('const name = user.fullName || res.data.user.fullName;');
+  });
   it('form kart/PIN/liste dallarından ÖNCE seçilir', () => {
     const dal = src.indexOf(') : unpairedOnly ? (');
     expect(dal).toBeGreaterThan(-1);

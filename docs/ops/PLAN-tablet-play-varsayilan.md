@@ -45,3 +45,10 @@
 
 ### Sonuç
 "Varsayılan yalnız Play kanalının derleme ayarında, müşteri kanalları değişmez" bugünkü düzende kurulamaz: Play paketi bütün fabrikalara giden TEK pakettir. Varsayılanı oraya gömmek her müşteri fabrikasındaki yeni tabletin ilk açılışta deneme sunucusuna bağlanması demektir; ayrıca iki çekirdek kuralı (ortak paket ERP adresi gömmez; `dagitim.json` davranış taşımaz) ve internet kipinin "insan onayı + kimlik kaydı" adımını deler. Kodlanmadı; karar kullanıcıya (bkz. dönüş raporu seçenekleri).
+
+### Karar (kullanıcı, 2026-10-19): seçenek (a) — tek dokunuşlu "Deneme sunucusuna bağlan"
+- Düğme "Sunucuyu ekle" ilk adımında (`ChooseStep`), QR ve elle adres kartlarının ALTINDA, nötr tonda; bütün tabletlerde görünür. Paket ERP adresi taşımaz.
+- Adres tek kaynak `DEMO_SERVER_URL` (`mobil/src/lib/internet-tls.ts`), `INTERNET_PARENT_DOMAINS[0]`dan TÜRER — tırnaklı üst alan literal'i yine tek satırdır (`internet-tls.test.ts` bekçisi).
+- Düğme elle adres yolunu koşar (`useServerPair.connectDemo` → `submitAddressText`): yoklama → `InternetConfirmStep` onayı → `decideInternetPair` → `completeInternetPairing` (kurulum kimliği kaydı + `CUSTOM_URL_KEY`). Yeni bağlantı yolu yok.
+- **Derleme kapısı ölçümü:** `ortakBundleAdresleri` yalnız `/api` ile biten VE (IP | port | `.ts.net`) adresi gömülü sayar. `https://deneme.etkiliyazilim.com` (portsuz, `/api`siz) hiç eşleşmez; `…/api` biçimi bile yalnız "diğer (bilgi)" olur. İstisna gerekmez; sabit portlu ya da `/api`li yazılırsa kapı onu yakalar (`:443/api` → gömülü).
+- Kabul: `ServerPairFlow.render.test.tsx` § deneme sunucusu düğmesi (5 test; onaysız tamamlama, boş adres alanı, değişen adres sondaları kırmızı).

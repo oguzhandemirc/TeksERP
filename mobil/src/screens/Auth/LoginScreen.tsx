@@ -265,16 +265,18 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
             token: res.data.token,
             resume: async (newPassword) => {
               const again = await authActions.password(user.username, newPassword, requestConfirm, requestCode);
-              if (!lock) Toast.show({ type: 'success', text1: 'Parolanız değiştirildi', text2: user.fullName });
-              await handleAuthed(again, user.fullName);
+              const againName = user.fullName || again.data.user.fullName;
+              if (!lock) Toast.show({ type: 'success', text1: 'Parolanız değiştirildi', text2: againName || user.username });
+              await handleAuthed(again, againName);
             },
           });
           return;
         }
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        if (!lock) Toast.show({ type: 'success', text1: 'Hoş geldin', text2: user.fullName });
-        // fullName seçili MobileUser'dan gelir (banner ismi gösterir).
-        await handleAuthed(res, user.fullName);
+        // Ad seçili MobileUser'dan; onaysız formda (ad bilinmez) giriş cevabından, o da yoksa banner kullanıcı adına düşer.
+        const name = user.fullName || res.data.user.fullName;
+        if (!lock) Toast.show({ type: 'success', text1: 'Hoş geldin', text2: name || user.username });
+        await handleAuthed(res, name);
       } catch (e) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const msg = e instanceof Error ? e.message : 'Hatalı PIN.';
@@ -951,7 +953,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
             submitting={submitting}
             error={error}
             onSubmit={(username, password) =>
-              void submit(password, { id: '', username, fullName: username })
+              void submit(password, { id: '', username, fullName: '' })
             }
           />
         </KeyboardAwareScrollView>

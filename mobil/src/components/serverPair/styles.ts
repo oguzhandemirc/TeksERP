@@ -19,6 +19,7 @@ export const styles = StyleSheet.create({
   },
   noticeText: { color: C.text, fontSize: 15, lineHeight: 22, flex: 1 },
   choices: { gap: 16 },
+  demoRow: { gap: 8 },
   choicesWide: { flexDirection: 'row', alignItems: 'stretch' },
   choice: {
     gap: 12,
