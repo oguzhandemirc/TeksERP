@@ -18,6 +18,7 @@ import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
 import type { CrudService } from "@/services/crudService";
 import type { WeavingExecutionKind, WeavingOrder } from "./types";
+import type { WeavingOrderOverview } from "./overview/types";
 
 const BASE = "/api/weaving-orders";
 
@@ -65,6 +66,8 @@ export interface WeavingOrderPayload {
 export const weavingOrderService = {
   listCursor: listWeavingOrders,
   getById: (id: string) => apiClient.get<ApiResponse<WeavingOrder>>(`${BASE}/${id}`).then((r) => r.data),
+  /** Sağ panel: "şu an ne hâlde" — açık koşumlar, son koşum/indirmeler, leventler (salt okuma). */
+  overview: (id: string) => apiClient.get<ApiResponse<WeavingOrderOverview>>(`${BASE}/${id}/overview`).then((r) => r.data),
   /** `clientToken` MANTIKSAL DENEME başına bir kez üretilir (idempotency). */
   create: (body: WeavingOrderPayload, clientToken: string) =>
     apiClient.post<ApiResponse<WeavingOrder>>(BASE, { ...body, clientToken }).then((r) => r.data),

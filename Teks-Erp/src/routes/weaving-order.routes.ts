@@ -24,6 +24,7 @@ import {
   listWeavingOrders,
   updateWeavingOrder,
 } from "../services/weaving-order.service";
+import { getWeavingOrderOverview } from "../services/weaving-order-overview.service";
 import "../types/express-augment";
 
 const router = Router();
@@ -146,6 +147,37 @@ router.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       res.status(200).json(await getWeavingOrder(assertValidUuid(req.params.id)));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/weaving-orders/{id}/overview:
+ *   get:
+ *     tags: [WeavingOrders]
+ *     summary: Dokuma işi genel bakış — şu an tezgahta ne var, ne dokundu (salt okuma)
+ *     description: >
+ *       İlerleme (hedef · doğan top sayısı ve ölçülen metresi · kapanmış koşum metresi · indirme sayısı;
+ *       ölçülmeyen null), açık koşumlar (tezgah · hat · açık duruş · canlı operatör · takılı levent),
+ *       son koşumlar, son indirmeler (doğan toplarıyla), işe bağlı leventler. Listeler tavanla kırpılır
+ *       ve `{ items, total, truncated }` taşır. Detayla aynı izin kümesi.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Genel bakış }
+ *       400: { description: Geçersiz kimlik }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Bulunamadı }
+ */
+router.get(
+  "/:id/overview",
+  requireAnyPermission("weavingorder:read", ...MOBILE_DOKUMA),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await getWeavingOrderOverview(assertValidUuid(req.params.id)));
     } catch (error) {
       next(error);
     }

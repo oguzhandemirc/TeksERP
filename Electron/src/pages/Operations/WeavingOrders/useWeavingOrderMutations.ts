@@ -12,6 +12,8 @@ import { weavingOrderService, type WeavingOrderPayload } from "./service";
 import { plannedToIso } from "./types";
 
 export const WEAVING_ORDERS_QUERY_KEY = "weaving-orders";
+/** Sağ panelin genel bakış sorgusu — mutasyon sonrası listeyle birlikte tazelenir. */
+export const WEAVING_ORDER_OVERVIEW_QUERY_KEY = "weaving-order-overview";
 
 /** Form METİN taşır; uç sayı/ISO bekler. Boş dize `null`a döner ("0" ≠ "girilmedi"). */
 export function buildPayload(v: WeavingOrderFormValues): WeavingOrderPayload {
@@ -47,6 +49,7 @@ export function useWeavingOrderMutations(onDone: () => void) {
     toast.success(message ?? fallback);
     onDone();
     void qc.invalidateQueries({ queryKey: [WEAVING_ORDERS_QUERY_KEY] });
+    void qc.invalidateQueries({ queryKey: [WEAVING_ORDER_OVERVIEW_QUERY_KEY] });
   };
   const save = useMutation({
     mutationFn: ({ id, values, clientToken }: SaveInput) =>
