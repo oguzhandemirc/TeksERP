@@ -14,12 +14,14 @@
 //   §7 bulut kataloğu gerçek kaynaktan okunur (customers.name, subcontractors.name projeksiyonda)
 //   §8 doldurma tokenı: UUIDv5 biçimi, belirlenimli, anahtara duyarlı
 //   §9 kablolama: CI bu bekçiyi (+ --sonda) koşar; commit kancası scripts/deneme-veri/ değişince koşar
+//   §10 adım kaydı: her adimlar/*.mjs doldur.mjs ADIMLAR'da kayıtlı · token anahtarı öneki (ad alanı:aile) tek dosyanın ·
+//       salon/dokuma dışı adımda saat okuması yok (gövde çapadan türer; saat → ikinci koşumda CLIENT_TOKEN_COLLISION)
 //
 // ÜÇ SONUÇ: 0 yeşil · 1 kırmızı · 2 ÖLÇÜLEMEDİ.
 //   node scripts/test_deneme_veri.mjs          # dinlenme durumu
 //   node scripts/test_deneme_veri.mjs --sonda  # kalıcı negatif sondalar (bozulmuş kopyalar kırmızı vermeli)
 // =============================================================================
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +29,10 @@ const KOK = join(dirname(fileURLToPath(import.meta.url)), "..");
 const CI_REL = ".github/workflows/ci.yml";
 const KANCA_REL = "scripts/hooks/pre-commit.mjs";
 const BEN_REL = "scripts/test_deneme_veri.mjs";
+const DOLDUR_REL = "scripts/deneme-veri/doldur.mjs";
+const ADIM_DIZIN = "scripts/deneme-veri/adimlar";
+/** "Bugün"ü boyayan adımlar — saat okuması meşru (salon bugünü, dokuma koşum/duruş geriye sınırı). */
+const SAATLI_ADIM = new Set(["salon.mjs", "dokuma.mjs"]);
 
 let A, K, T;
 try {
@@ -115,12 +121,36 @@ function olc(L, d) {
   // §9
   ok("§9 CI bu bekçiyi (+ --sonda) koşar", d[CI_REL].includes(`node ${BEN_REL} && node ${BEN_REL} --sonda`));
   ok("§9 commit kancası scripts/deneme-veri/ değişince koşar", d[KANCA_REL].includes(`"scripts/deneme-veri/"`) && d[KANCA_REL].includes(`"${BEN_REL}"`));
+  // §10
+  const adimlar = Object.keys(d).filter((f) => f.startsWith(ADIM_DIZIN + "/")).map((f) => f.slice(ADIM_DIZIN.length + 1));
+  ok("§10 adım dosyaları okundu", adimlar.length >= 10);
+  const dol = d[DOLDUR_REL] ?? "";
+  const kayitli = new Set([...(dol.match(/export const ADIMLAR = \[([\s\S]*?)\n\];/)?.[1] ?? "").matchAll(/\[\s*"[^"]+"\s*,\s*(\w+)\s*\]/g)].map((x) => x[1]));
+  for (const f of adimlar) {
+    const adlar = [...dol.matchAll(new RegExp(`import \\{([^}]*)\\} from "\\./adimlar/${f.replace(".", "\\.")}"`, "g"))].flatMap((x) => x[1].split(",").map((t) => t.trim()));
+    ok(`§10 ${f} doldur.mjs ADIMLAR'da kayıtlı`, adlar.some((a) => kayitli.has(a)));
+  }
+  const onekSahibi = new Map();
+  for (const f of adimlar) {
+    for (const x of d[`${ADIM_DIZIN}/${f}`].matchAll(/[`"](dv\d*:[^`"]*)[`"]/g)) {
+      const onek = x[1].split(":").slice(0, 2).join(":");
+      if (!onekSahibi.has(onek)) onekSahibi.set(onek, new Set());
+      onekSahibi.get(onek).add(f);
+    }
+  }
+  ok("§10 token anahtarları bulundu", onekSahibi.size >= 10);
+  for (const [onek, sahip] of onekSahibi) ok(`§10 token öneki '${onek}' tek dosyanın (${[...sahip].join(", ")})`, sahip.size === 1);
+  for (const f of adimlar.filter((x) => !SAATLI_ADIM.has(x))) {
+    const kod = d[`${ADIM_DIZIN}/${f}`].replace(/^\s*\/\/.*$/gm, "");
+    ok(`§10 ${f} saat okumaz (Date.now / argümansız new Date)`, !/\bDate\.now\s*\(|new Date\s*\(\s*\)/.test(kod));
+  }
   return kirmizi;
 }
 
 function dosyalar() {
   const d = {};
-  for (const f of [CI_REL, KANCA_REL]) d[f] = readFileSync(join(KOK, f), "utf8");
+  for (const f of [CI_REL, KANCA_REL, DOLDUR_REL]) d[f] = readFileSync(join(KOK, f), "utf8");
+  for (const f of readdirSync(join(KOK, ADIM_DIZIN)).filter((x) => x.endsWith(".mjs")).sort()) d[`${ADIM_DIZIN}/${f}`] = readFileSync(join(KOK, ADIM_DIZIN, f), "utf8");
   return d;
 }
 const L0 = { ...A, ...K, ...T };
@@ -137,6 +167,9 @@ function sondalar(d) {
     ["N7 sözlük kendi çıktısını yeniden eşler", { sozlukKur: (g) => { const s = A.sozlukKur(g); if (s.kelime.size === 0) s.kelime.set("LAVANTA", "Defne"); return s; } }],
     ["N8 token rastgele", { belirlenimliToken: () => crypto.randomUUID() }],
     ["N9 CI kablosu sökülür", null, { [CI_REL]: d[CI_REL].replace(`node ${BEN_REL} --sonda`, "true") }],
+    ["N10 adım dosyası ADIMLAR'a bağlanmaz", null, { [DOLDUR_REL]: d[DOLDUR_REL].replace(/\n\s*\["kartela", kartela\],/, "") }],
+    ["N11 iki dosya aynı token önekini kullanır", null, { [`${ADIM_DIZIN}/kalite.mjs`]: d[`${ADIM_DIZIN}/kalite.mjs`] + '\nconst _x = (c) => c.tokenli("x", "dv2:po:99", "/api/x", {});\n' }],
+    ["N12 adım gövdesi saatten türer", null, { [`${ADIM_DIZIN}/kartela.mjs`]: d[`${ADIM_DIZIN}/kartela.mjs`].replace('notes: "Yeni sezon kartelası', 'notes: new Date().toISOString() + "Yeni sezon kartelası') }],
   ];
   let kotu = 0;
   for (const [ad, bozuk, dBozuk] of liste) {
@@ -157,4 +190,4 @@ if (process.argv.includes("--sonda")) {
   process.exit(sondalar(d) ? 0 : 1);
 }
 if (taban.length) { for (const k of taban) console.log(`❌ ${k}`); console.log(`\n❌ test_deneme_veri: ${taban.length} kırmızı`); process.exit(1); }
-console.log("✅ test_deneme_veri: tüm bölümler yeşil (§1–§9)");
+console.log("✅ test_deneme_veri: tüm bölümler yeşil (§1–§10)");

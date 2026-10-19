@@ -59,7 +59,19 @@ async function main() {
     ["cari listesi", "/api/finance/cari?limit=5"], ["istasyon canlı durum", "/api/dashboard/stations/live-state"]]) {
     await dene(`${ad} GET`, () => c.api("GET", yol));
   }
+  // dolgu-2 menüleri: okuma 200 + kayıt sayısı (doldurmadan sonra artmış olmalı; 0 ise kırmızı)
+  const sayim = [];
+  for (const [ad, yol] of [["stok sayımı", "/api/stock-counts"], ["kartela sevk", "/api/kartela/dispatches"], ["kartela (swatch)", "/api/swatches"],
+    ["iadeler", "/api/returns"], ["iş emri şablonu", "/api/product-recipes"], ["hata tipleri", "/api/defect-types"],
+    ["mutabakat mektubu", "/api/finance/reconciliation-letters"]]) {
+    await dene(`${ad} GET`, async () => {
+      const n = (await c.hepsi(yol)).length;
+      sayim.push([ad, n]);
+      if (n === 0) throw new Error("liste boş — doldurma bu menüye yazmamış");
+    });
+  }
   for (const [ad, s] of sonuc) console.log(`  ${s === "200" ? "✓" : "✗"} ${ad.padEnd(22)} ${s}`);
+  if (sayim.length) console.log("\n== kayıt sayısı (dolgu-2 menüleri)\n" + sayim.map(([ad, n]) => `  ${ad.padEnd(22)} ${n}`).join("\n"));
   await ist.cikis();
   const kirmizi = sonuc.filter(([, s]) => s !== "200").length;
   console.log(kirmizi ? `\n✗ duman: ${kirmizi}/${sonuc.length} kırmızı` : `\n✓ duman: ${sonuc.length}/${sonuc.length} yeşil`);
