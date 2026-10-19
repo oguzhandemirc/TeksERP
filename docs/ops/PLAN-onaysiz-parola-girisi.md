@@ -95,18 +95,31 @@ Kısaltmalar: P=parola girişi, PIN, K=kart, L=personel listesi, İB=indirme bel
 | D3 tablet | pairingGate, LoginScreen kipi, `UnpairedPasswordForm` | `mobil/src/navigation/pairingGate.test.ts` yeni kollar (+ sonda); YENİ `UnpairedPasswordForm.test.tsx` (Auth ekran dizini); jest + tsc. |
 | D4 belge | kesif-cihaz kural satırı, arşiv karar notu, bekçi haritası | `check-docs` |
 
-## 6b. Ek kapsam (kullanıcı kararı 2026-10-19, koordinatör iletisi) — HENÜZ ÖLÇÜLMEDİ, TASARLANMADI
+## 6b. Ek kapsam (kullanıcı kararı 2026-10-19, koordinatör iletisi)
 
-**E1 — Tablet sunucu adresi (Play kanalı).** Play'den inen tablette elle adres girişi açık; varsayılan adres `https://deneme.etkiliyazilim.com`; kullanıcı hiçbir şey yapmazsa doğrudan deneme sunucusuna bağlanır. Elle girilen adres varsayılanı ezer ve kalıcı olur.
+**E1 — Tablet sunucu adresi (Play kanalı).** (Tablet ajanı ayrı worktree'de uygular; bu dalın kapsamı dışında.) Play'den inen tablette elle adres girişi açık; varsayılan adres `https://deneme.etkiliyazilim.com`; kullanıcı hiçbir şey yapmazsa doğrudan deneme sunucusuna bağlanır. Elle girilen adres varsayılanı ezer ve kalıcı olur.
 - Önce ölç: tablet bugün sunucuyu nasıl buluyor (keşif, kanal/derleme ayarına gömülü ERP adresi — `mobil/CLAUDE.md`: ortak pakette adres boş, ilk ekran "Sunucuyu bul"; `store/baseUrlStore`; elle giriş `components/serverPair/`).
 - Sınır: varsayılan YALNIZ Play kanalının derleme ayarına (kanal verisi; kanal kimliği `deploy/kanallar.json`, dağıtım kaydı `deploy/dagitim.json`); müşteri kanallarının keşif davranışı DEĞİŞMEZ; `if (musteri === ...)` yasak.
 - Kabul (taslak): Play derleme ayarıyla ilk açılış adresi varsayılandan alır; elle giriş sonrası yeniden başlatmada elle girilen kalır; müşteri kanalı derlemesinde varsayılan BOŞ (bugünkü).
 - Dikkat: deneme adı İNTERNET kipine düşmeli (`INTERNET_PARENT_DOMAINS`, `mobil/src/lib/internet-tls.ts`), yalnız şifreli bağlantı kuralı aynen.
 
 **E2 — Parola kilidi (barındırılan sınıf).** Bilerek yanlış parola girerek başkasının hesabını kilitlemek mümkün olmasın: hesap kilidi geçici (birkaç dakika), ek olarak IP başına deneme sınırı.
-- Önce ölç: `Teks-Erp/src/middlewares/login-lockout.ts` (anahtarlar: fabrikada tek `ip`; ters vekilde `ip|kullanıcı` ×1 + `ip` ×5), `services/helpers/login-lockout-store.helper.ts` (kalıcı kova), `auth.pinLockout*` ayarları (ceza süresi/merdiven, "kilit kapatılamaz" O-04), genel hız sınırı (`RATE_LIMIT_ENABLED`).
-- Varsayılan seçimi gerekçeyle yazılacak: fabrikada değişmesin mi (sınıf kuralı, `isHostedInstallation()`) yoksa bayrağa mı bağlansın — ölçümden sonra.
-- Kabul: saldırgan IP'den N yanlış deneme → o IP kesilir (429); meşru kullanıcı kilit süresi dolunca (ve başka IP'den kilitsiz) girer.
+
+Ölçüm (2026-10-19, kod okuması + HTTP bekçisi):
+- Kova anahtarı DAİMA istemci IP'sini taşır (`resolveLoginLockoutKeys`): fabrikada (`TRUST_PROXY` yok) tek `ip` kovası; vekil arkasında (`TRUST_PROXY`/`LOGIN_LOCKOUT_SCOPE=ip+identity`) `ip|u:kullanıcı` ×1 + `ip` ×5. IP yalnız çözülemezse cihaz kimliği, o da yoksa `unknown`. **IP'den bağımsız hesap kilidi YOK** — kullanıcı tablosunda kilit kolonu yok; `login_lockout_buckets` yalnız kova durumunun kalıcı kopyası (yeniden başlatma sıfırlamasın diye; "kalıcı" = süreç ömrünü aşar, ceza sonsuz değil).
+- Ceza süreli: eşik `auth.pinLockoutAttempts` (vars. 5) → `penaltySec` (vars. 60 sn); `escalateAfter` (vars. 3) turdan sonra `longPenaltyMin` (vars. 15 dk, tavan 1440). Tur sayısı boşta `longPenaltyMin` başına bir düşer. Kilit kapatılamaz (O-04).
+- Kilitli istek 429 `LOGIN_LOCKED` + `retryAfterSec`; parolası doğru olsa da. Başarılı giriş yalnız KENDİ kovalarını sıfırlar.
+- Ayrıca hız sınırı: değişkensiz kurulumda giriş uçları IP başına 60/dk (`RATE_LIMIT_*`, `test_web_hardening`).
+- Kilit ve hız sınırı aynı IP kaynağından beslenir (`CLIENT_IP_HEADER` ya da `TRUST_PROXY` hop sayısı).
+
+Sonuç: istenen davranış BUGÜN iki sınıfta da sağlanıyor; yeni bayrak/sınıf kuralı AÇILMADI (yeni bayrak bugünkü davranışı varsayılan alırdı = boş kapı; sınıf kuralı da aynı davranışı yeniden yazardı). Bu dalın işi kabulü bekçiyle MÜHÜRLEMEK: `Teks-Erp/scripts/test_parola_kilidi_ip.ts` (HTTP, barındırılan sınıf, iki kapsam):
+- §1/§2 saldırgan IP 5 yanlış → doğru parolayla da 429; AYNI ANDA başka IP'den kurban 200; meşru giriş saldırganın kilidini kaldırmaz; ceza süresi (5 sn) dolunca saldırgan IP doğru parolayla 200.
+- §3 IP başına sınır kullanıcı adından bağımsız: 25 farklı (yok) kullanıcı adıyla yanlış → o IP kurbanın doğru parolasında da 429; başka IP 200.
+- Negatif sondalar (geri alındı, md5 eşit): k1 `ip` kapsamında anahtar hesaba bağlanır → 2 kırmızı (§2b §2c) · k2 dar kova IP'siz → 2 (§1b §1c) · k3 kalıcı ceza → 2 (§1e §2e) · k4 geniş (IP) kova yok → 1 (§3a).
+
+Bilinen sınırlar (karar kullanıcıda):
+- **IP çöküşü:** barındırılan kurulum ters vekil arkasında `TRUST_PROXY`/`CLIENT_IP_HEADER` olmadan koşarsa bütün ziyaretçiler vekilin IP'sine düşer; tek saldırgan 5 denemede HERKESİ geçici kilitler. Bugün açılış yalnız UYARIR (`server.ts`). Açılışı durdurmak (fail-closed) önerilir ama vekilsiz doğrudan yayımlanan barındırılan kurulumu da durdurur ve deneme sunucusunun `.env`i bu dalda ölçülemedi → ayrı karar.
+- Aynı NAT arkasındaki saldırgan ve kurban aynı IP'dir: kurban en geç ceza süresi (merdivende 15 dk) dolunca girer. Bu, IP tabanlı her kilidin doğal sınırıdır.
 
 Testçi hesabı (`playinceleme` ortak salt-okuma) bu işin kapsamında değil.
 
