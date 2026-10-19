@@ -1,104 +1,73 @@
-import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { featureFlagService } from "@/services/featureFlagService";
 import { FlagToggle, ReadOnlyRow } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
-import { useRegisterSettingsDirty } from "./settings-dirty";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
+import { UnpairedPasswordLoginRow, UnpairedPasswordLoginWarning } from "./UnpairedPasswordLoginRow";
+import { useDevicePairingDrafts } from "./useDevicePairingDrafts";
 
 /**
  * Cihaz eşleştirme zorunluluğu + "hızlı PIN / kart yalnız onaylı cihazdan" kuralı.
  * İkinci kural eşleştirmeyi de zorunlu kılar (otomatik onaylanan cihaz "onaylı" sayılmasın);
  * backend aynı kuralı ENFORCE eder ve kural açıkken eşleştirmeyi kapatmayı 409 ile reddeder.
- * Kısa kimlik kuralını yalnız `admin:settings` yazar (dar `settings:devices` izni yazamaz).
+ * Kısa kimlik kuralını, cihaz kanıtını ve onaysız parola girişini yalnız `admin:settings` yazar.
  */
 export function DevicePairingSection({
   writePermissions = [SETTINGS_ADMIN_PERMISSION],
 }: {
   writePermissions?: string[];
 }) {
-  const qc = useQueryClient();
   const { hasAnyPermission } = useRoleAccess();
   const canEdit = hasAnyPermission(writePermissions);
-  const canEditShortCredential = hasAnyPermission([SETTINGS_ADMIN_PERMISSION]);
-  const flagsQ = useFeatureFlags();
-  const server = flagsQ.data?.data?.devicePairingRequired ?? false;
-  const serverShort = flagsQ.data?.data?.shortCredentialApprovedDeviceOnly ?? false;
-  const serverProof = flagsQ.data?.data?.deviceProofRequired ?? false;
+  const canEditAdmin = hasAnyPermission([SETTINGS_ADMIN_PERMISSION]);
+  const { isLoading, server, draft, set, dirty, mut, reset } = useDevicePairingDrafts();
 
-  const [draft, setDraft] = useState(server);
-  const [draftShort, setDraftShort] = useState(serverShort);
-  useEffect(() => setDraft(server), [server]);
-  useEffect(() => setDraftShort(serverShort), [serverShort]);
-  const [draftProof, setDraftProof] = useState(serverProof);
-  useEffect(() => setDraftProof(serverProof), [serverProof]);
-  // Kısa kimlik kuralı açıkken eşleştirme etkin zorunludur — taslak da onu yansıtsın.
-  const effectiveDraft = draft || draftShort;
-  const dirty = effectiveDraft !== server || draftShort !== serverShort || draftProof !== serverProof;
-  useRegisterSettingsDirty(dirty);
-
-  const mut = useMutation({
-    mutationFn: () =>
-      featureFlagService.update({
-        ...(draftShort !== serverShort ? { shortCredentialApprovedDeviceOnly: draftShort } : {}),
-        ...(effectiveDraft !== server ? { devicePairingRequired: effectiveDraft } : {}),
-        ...(draftProof !== serverProof ? { deviceProofRequired: draftProof } : {}),
-      }),
-    onSuccess: () => {
-      toast.success("Cihaz ayarları kaydedildi.");
-      void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
-    },
-  });
-
-  if (flagsQ.isLoading) {
+  if (isLoading) {
     return <Skeleton className="h-12 w-full" />;
   }
+  const busy = mut.isPending;
 
   return (
     <div className="space-y-4">
       <PairingRow
         canEdit={canEdit}
-        checked={effectiveDraft}
-        server={server}
-        locked={draftShort}
-        disabled={mut.isPending}
-        onChange={setDraft}
+        checked={draft.devicePairingRequired}
+        server={server.devicePairingRequired}
+        locked={draft.shortCredentialApprovedDeviceOnly}
+        disabled={busy}
+        onChange={set.pairing}
       />
 
       <ShortCredentialDeviceRow
-        canEdit={canEditShortCredential}
-        draft={draftShort}
-        server={serverShort}
-        disabled={mut.isPending}
-        onChange={setDraftShort}
+        canEdit={canEditAdmin}
+        draft={draft.shortCredentialApprovedDeviceOnly}
+        server={server.shortCredentialApprovedDeviceOnly}
+        disabled={busy}
+        onChange={set.short}
       />
-      {draftShort && !draftProof && <ShortCredentialProofWarning />}
+      {draft.shortCredentialApprovedDeviceOnly && !draft.deviceProofRequired && <ShortCredentialProofWarning />}
 
       <DeviceProofRow
-        canEdit={canEditShortCredential}
-        draft={draftProof}
-        server={serverProof}
-        disabled={mut.isPending}
-        onChange={setDraftProof}
+        canEdit={canEditAdmin}
+        draft={draft.deviceProofRequired}
+        server={server.deviceProofRequired}
+        disabled={busy}
+        onChange={set.proof}
       />
+
+      <UnpairedPasswordLoginRow
+        canEdit={canEditAdmin}
+        draft={draft.deviceUnpairedPasswordLogin}
+        server={server.deviceUnpairedPasswordLogin}
+        disabled={busy}
+        onChange={set.unpaired}
+      />
+      {draft.deviceUnpairedPasswordLogin && <UnpairedPasswordLoginWarning />}
 
       <PairingNote />
 
-      {(canEdit || canEditShortCredential) && (
-        <SettingsSaveBar
-          dirty={dirty}
-          saving={mut.isPending}
-          onSave={() => mut.mutate()}
-          onReset={() => {
-            setDraft(server);
-            setDraftShort(serverShort);
-            setDraftProof(serverProof);
-          }}
-        />
+      {(canEdit || canEditAdmin) && (
+        <SettingsSaveBar dirty={dirty} saving={busy} onSave={() => mut.mutate()} onReset={reset} />
       )}
     </div>
   );

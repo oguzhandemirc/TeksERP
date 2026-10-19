@@ -234,6 +234,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devicePairingRequired: "cekirdek",
   deviceProofRequired: "cekirdek",
   shortCredentialApprovedDeviceOnly: "cekirdek",
+  deviceUnpairedPasswordLogin: "cekirdek",
   shortCredentialTotpRequired: "cekirdek",
   sessionDurationMinutes: "cekirdek",
   sessionDurationHours: "cekirdek",
