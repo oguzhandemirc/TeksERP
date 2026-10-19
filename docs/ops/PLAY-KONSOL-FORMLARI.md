@@ -25,7 +25,7 @@
 | K2 | Gizlilik politikası nerede yayınlansın? | `https://etkiliyazilim.com/tekserp/gizlilik` (şirket sitesi, düz HTML sayfa) | Play herkese açık, giriş istemeyen, coğrafi kısıtsız, PDF olmayan etkin bir adres ister (⚠ web'den doğrulanmalı). `indir.` alt alanı Worker/VDS koduna dokunmayı gerektirir; şirket sitesi en az hareketli parça. |
 | K3 | "Veriler aktarım sırasında şifreleniyor mu?" | **Evet — vc 60 (1.2.0) ile** (kullanıcı kararı 2026-10-08) | vc 60'ta tablet sunucuya yalnız şifreli ve sabitli bağlanır (`usesCleartextTraffic=false`, AAB doğrulaması ölçer); sunucu QR ya da IP + doğrulama koduyla eklenir. vc 59 için cevap "Hayır"dı. Sunucu en az `LAN_TLS_MODE=dual` olmalı. |
 | K4 | İnceleme için demo sunucu + deneme hesabı | `demo.etkiliyazilim.com` (2026-08-14 runbook'u) bugün ayakta mı, 1.1.0 tabletle uyumlu mu — **ölçülmedi**; kapalı teste çıkmadan hazırlanmalı | Uygulama giriş istiyor ve sunucu adresi gömülü değil; incelemeci bağlanamazsa "işlevsiz uygulama" reddi gelir. |
-| K5 | Dağıtım yolu: Managed Google Play gizli yayın mı, doğrudan üretim mi? | Kuruluş bağlantısı kullanıcıyla kurulunca karar | Hesap KURUMSAL (2026-10-15): kapalı test şartı yok; K-14 "gizli yayın" varsayımı doğru (§6). |
+| K5 | Dağıtım yolu: Managed Google Play gizli yayın mı, doğrudan üretim mi? | Kuruluş bağlantısı kullanıcıyla kurulunca karar | Hesap KİŞİSEL (ölçüm 2026-10-20; 2026-10-15 "kurumsal" hükmü GEÇERSİZ): üretimden önce 12×14 kapalı test şartı var (§6). Karar yukarıdaki K5 satırında: ÜRETİM. |
 | K6 | İletişim e-postası | Kullanıcı yazar | Eski taslakta `info@etkiliyazilim.com` geçiyor; o adresin gerçekten okunduğunu kullanıcı doğrulamalı. Mağazada herkese açık görünür. |
 
 ---
@@ -361,13 +361,13 @@ TeksERP, Etkili Yazılım tarafından geliştirilmektedir.
 
 ---
 
-## 6. Hesap türü etkisi (hesap KURUMSAL — kullanıcı doğruladı 2026-10-15)
+## 6. Hesap türü etkisi (hesap KİŞİSEL — ölçüldü 2026-10-20)
 
-Tablet uygulaması Etkili Yazılım'ın KURUMSAL (kuruluş) Play hesabındadır; 2026-10-08'deki "kişisel" okuması GEÇERSİZDİR.
+Tablet uygulaması Etkili Yazılım LTD adlı KİŞİSEL Play hesabındadır (Console ana sayfası "Kişisel hesap", Hesap Kimliği 7547213456535100840). Düzeltme notu: 2026-10-15'teki "hesap KURUMSAL" hükmü GEÇERSİZ → 2026-10-20; 2026-10-08 "kişisel" ölçümü doğruydu.
 
-1. **Üretim erişimi:** kapalı test şartı (12 test kullanıcısı × 14 gün + üretim erişimi başvurusu) yalnız 13 Kasım 2023 sonrası açılan KİŞİSEL hesaplara uygulanır; bu hesap muaftır. Doğrudan üretime ya da gizli yayına çık.
-2. **Managed Google Play gizli (private) uygulama (K-14):** kararın kurumsal hesap varsayımı doğru. Gizli yayın fabrikanın tabletlerinin bir kuruluşa (Managed Google Play / Android Enterprise) bağlanmasını gerektirir; bu, "fabrika başına tek Gmail" önerisiyle çelişebilir — bağlantıyı kullanıcıyla kur (K5).
-3. **Hesap türü değişimi:** gerekmiyor (D-U-N-S zaten var).
+1. **Üretim erişimi:** 13 Kasım 2023 sonrası açılan kişisel hesapta üretimden önce en az 12 test kullanıcısı × 14 gün kesintisiz kapalı test + Console'dan üretim erişimi başvurusu ŞARTTIR (kesin koşul başvuru ekranından doğrulanır). Plan: `PLAN-play-kapali-test-12x14.md`.
+2. **Managed Google Play gizli (private) uygulama (K-14):** gizli yayın K5 kararıyla (2026-10-16) zaten GEÇERSİZ; kişisel hesaptan gizli yayının mümkün olup olmadığı bu belgede ölçülmedi ve karar onu gerektirmiyor. Yeniden gündeme gelirse önce Console'da ölçülür.
+3. **Hesap türü değişimi:** kişisel → kuruluş hesabına geçiş 12×14 şartını kaldırmanın tek yoludur; D-U-N-S var (`DEMOFABRIKA-KURULUM-BULGULARI.md` §E) ama geçişin süresi/koşulu ölçülmedi — kullanıcı kararı, plan şimdilik kapalı testle ilerler.
 
 Yayından önce §2 (demo sunucu) ve §3 (formlar) her hâlükârda gerekir.
 
@@ -380,7 +380,7 @@ Yayından önce §2 (demo sunucu) ve §3 (formlar) her hâlükârda gerekir.
 3. K4 → demo sunucu + deneme hesabı → §2 formu.
 4. §3 formları (veri güvenliği: ML Kit satırını web'den doğrulayarak).
 5. §5 mağaza girişi + grafikler.
-6. K5 → gizli yayın (Managed Google Play) ya da doğrudan üretim — kapalı test şartı yok.
+6. K5 (ÜRETİM) → önce 12 test kullanıcısı × 14 gün kapalı test + üretim erişimi başvurusu (hesap kişisel, §6; `PLAN-play-kapali-test-12x14.md`).
 
 ---
 
@@ -393,10 +393,10 @@ Yayından önce §2 (demo sunucu) ve §3 (formlar) her hâlükârda gerekir.
 
 ## 9. `PLAY-STORE-YAYIN.md` eskiyen yerleri (2026-10-08'de belge bu listeye göre yeniden yazıldı)
 
-- Başlık kararı "herkese açık yayın, Managed Google Play tercih edilmedi" → K-14 (2026-10-07) "gizli yayın" ile çelişiyor; K-14 geçerli, hesap kurumsal (§6).
+- Başlık kararı "herkese açık yayın, Managed Google Play tercih edilmedi" → K-14 (2026-10-07) "gizli yayın" ile çelişiyor; K-14'ün gizli yayın kısmı K5 (2026-10-16) ile GEÇERSİZ; hesap kişisel (§6).
 - §1.1 EAS imza akışı → bugün yerel `npm run build:aab` + `mobil/keystore/play-yukleme` yükleme anahtarı + Play App Signing.
 - §1.3 "varsayılan API adresi `localhost`, `EXPO_PUBLIC_API_URL` gömülür" → ortak pakette ERP adresi GÖMÜLMEZ; ilk ekran "Sunucuyu bul". Demo adresi derlemeye gömülmez, incelemeci elle girer (§2).
 - §2 izin tablosu: `SYSTEM_ALERT_WINDOW`, `USE_BIOMETRIC/FINGERPRINT`, FGS `mediaPlayback`/`microphone` hiç anılmıyor; `REQUEST_INSTALL_PACKAGES` engeli eklenmiş ama yazılmamış; `BLUETOOTH_SCAN neverForLocation` artık AAB'de VAR (açık iş yarı kapalı, konum `maxSdkVersion` hâlâ yok).
 - §3 "ikon `assets/icon.png`" → 1024×1024; 512 dışa aktarımı gerekli.
-- §4 "KARAR: kişisel hesap" → GEÇERSİZ: kullanıcı 2026-10-15'te hesabın KURUMSAL olduğunu doğruladı (`DEMOFABRIKA-KURULUM-BULGULARI.md` §E ile uyumlu); 2026-10-08'deki "kişisel" okuması yanlıştı.
+- §4 "KARAR: kişisel hesap" → DOĞRU (Console ölçümü 2026-10-20). 2026-10-15'te bu satıra yazılan "hesap KURUMSAL, kişisel okuması yanlıştı" düzeltmesi GEÇERSİZ → 2026-10-20.
 - §5 sıra: EAS adımları ve "public" varsayımı eskidi; Dahili test zaten yapıldı (vc 58 API 35 reddi, vc 59 yayında).

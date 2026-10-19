@@ -2,13 +2,14 @@
 
 > **Durum (ölçüldü 2026-10-08):** uygulama **TeksERP** · `com.etkiliyazilim.tekserp` Play Console'da açık.
 > 1.1.0 / vc 58 (API 35) **reddedildi**; 1.1.0 / vc 59 (targetSdk 36, commit `58e61f608`) **Dahili teste
-> yayınlandı**. Geliştirici hesabı **KURUMSAL** (kuruluş hesabı, Etkili Yazılım — kullanıcı doğruladı
-> 2026-10-15; 2026-10-08'deki "kişisel" okuması GEÇERSİZ) — sonuçları §4.
+> yayınlandı**. Geliştirici hesabı **KİŞİSEL** (Play Console ana sayfası "Etkili Yazılım LTD · Kişisel hesap",
+> ölçüm 2026-10-20; 2026-10-15'teki "kurumsal" hükmü GEÇERSİZ → 2026-10-20) — sonuçları §4.
 >
 > **Dağıtım kararı (K-14, 2026-10-07; K5 2026-10-16):** ortak fabrika tableti yalnız Google Play'den kurulur; native
 > güncelleme Play'den, JS güncellemesi OTA ile gelir (`docs/kurallar/surum-yayin.md` Tablet → Kararlar).
 > **K5 = ÜRETİM (kullanıcı kararı 2026-10-16):** uygulama Play üretim kanalında HERKESE AÇIK yayınlanır; K-14'ün
-> "Managed Google Play gizli yayın" kısmı GEÇERSİZDİR. Hesap kurumsal, 12×14 kapalı test şartı yok (§4).
+> "Managed Google Play gizli yayın" kısmı GEÇERSİZDİR. Hesap kişisel: üretimden önce 12 test kullanıcısı × 14 gün
+> kapalı test + üretim erişimi başvurusu ŞART (§4; plan [`PLAN-play-kapali-test-12x14.md`](PLAN-play-kapali-test-12x14.md)).
 > Üretim hazırlık denetimi ve Console'a yapıştırılacak metinler: [`PLAY-URETIM-KONSOL-METINLERI.md`](PLAY-URETIM-KONSOL-METINLERI.md).
 > iOS kapsam dışı (BT-Classic SPP iOS'ta MFi ister).
 >
@@ -109,16 +110,21 @@ görsel üretimi `deploy/play-magaza-gorsel.swift` (ayrıntı `PATRON-MAGAZA-AND
 - Ekran görüntüleri (telefon + 7"/10" tablet) **YOK**: Play'in vc62 universal APK'sı emülatörde Play lisans denetimi
   (pairip) yüzünden açılmadı; inceleme kurulumu hazır olunca örnek veriyle çekilir (`PLAY-SABAH-YAPILACAKLAR.md` B2).
 
-## 4. Hesap türü — KURUMSAL (kullanıcı doğruladı 2026-10-15)
+## 4. Hesap türü — KİŞİSEL (ölçüldü 2026-10-20)
 
-Tablet uygulamasını (`com.etkiliyazilim.tekserp`) Etkili Yazılım'ın KURUMSAL (kuruluş) Play hesabından yayınla;
-patron uygulamasıyla aynı hesap (`PATRON-MAGAZA-ANDROID.md`). 2026-10-08'deki "hesap kişisel" okuması
-GEÇERSİZDİR (gerekçe arşivde, 2026-10-15).
+Tablet uygulaması (`com.etkiliyazilim.tekserp`) Etkili Yazılım LTD adlı KİŞİSEL Play hesabındadır (Hesap Kimliği
+7547213456535100840); patron uygulamasıyla aynı hesap (`PATRON-MAGAZA-ANDROID.md`). Kanıt: Play Console ana sayfası
+"Kişisel hesap" yazıyor (kullanıcının ekran görüntüsü, 2026-10-20).
 
-- **12×14 kapalı test şartı YOK:** "en az 12 test kullanıcısı × 14 gün kesintisiz kapalı test + üretim
-  erişimi başvurusu" yalnız 13 Kasım 2023 sonrası açılan KİŞİSEL hesaplara uygulanır; kuruluş hesabı muaftır.
-  Üretime ya da gizli yayına doğrudan çık.
-- **Dağıtım yolu (K5, 2026-10-16):** ÜRETİM, herkese açık. Gizli yayın (Managed Google Play) GEÇERSİZ.
+> **Düzeltme notu (2026-10-20):** 2026-10-15'te yazılan "hesap KURUMSAL, 12×14 şartı yok" hükmü yanlıştı ve
+> GEÇERSİZ → 2026-10-20; 2026-10-08'deki "kişisel" ölçümü doğruydu (gerekçe arşivde, 2026-10-20).
+
+- **12×14 kapalı test şartı VAR:** 13 Kasım 2023 sonrası açılan kişisel hesapta üretime çıkmadan önce en az 12
+  test kullanıcısı 14 gün kesintisiz kapalı teste katılmış olmalı, sonra Console'dan **üretim erişimi başvurusu**
+  yapılır. Kesin koşul metni Console'daki başvuru ekranından doğrulanır. Adımlar ve takvim:
+  [`PLAN-play-kapali-test-12x14.md`](PLAN-play-kapali-test-12x14.md).
+- **Dağıtım yolu (K5, 2026-10-16):** ÜRETİM, herkese açık — kapalı test + başvuru onayından SONRA. Gizli yayın
+  (Managed Google Play) GEÇERSİZ.
 
 ## 5. Dahili test akışı (bugün yayında olan yol)
 
@@ -136,7 +142,7 @@ Dahili test incelemeye girmeden yayınlanır (vc 59'da gözlendi).
 
 ## 6. Sıra
 
-1. ~~Play Console hesabı + uygulama~~ — yapıldı (kurumsal hesap).
+1. ~~Play Console hesabı + uygulama~~ — yapıldı (kişisel hesap; 12×14 kapalı test şartı, §4).
 2. ~~İlk AAB → Dahili test~~ — vc 58 reddedildi (API 35), vc 59 yayında.
 3. K1 → kullanılmayan izinler → vc 60 AAB → manifest ölçümü.
 4. K2 → gizlilik politikası yayını → URL konsola.

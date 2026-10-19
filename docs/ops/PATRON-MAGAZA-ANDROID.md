@@ -7,8 +7,9 @@
 > Kararlar (kullanıcı 2026-10-15): önce yalnız Android · ilk sürümde telefonda ANLIK BİLDİRİM YOK (Firebase yok;
 > uygulama native push kaydı denemez, uyarı göstermez; bildirim ekranında "yakında" notu) · web push aynen.
 > Tablet (ortak paket) Play yolu ayrıdır: `PLAY-STORE-YAYIN.md` · `PLAY-KONSOL-FORMLARI.md`.
-> Play geliştirici hesabı **KURUMSAL** (kuruluş hesabı, Etkili Yazılım — doğrulandı 2026-10-15): kişisel hesabın
-> "12 test kullanıcısı × 14 gün kapalı test" şartı bu uygulamaya **uygulanmaz** (§3 madde 7).
+> Play geliştirici hesabı **KİŞİSEL** (Console ana sayfası "Etkili Yazılım LTD · Kişisel hesap", ölçüm 2026-10-20):
+> "12 test kullanıcısı × 14 gün kapalı test" şartı bu uygulamaya **uygulanır** (§3 madde 7). Düzeltme notu:
+> 2026-10-15'teki "hesap KURUMSAL, şart yok" hükmü GEÇERSİZ → 2026-10-20 (arşiv 2026-10-20).
 
 | | |
 |---|---|
@@ -76,11 +77,12 @@ izin bilerek eklenir, formu da güncellenir.
    (§4.1 — önce sayfa VDS'e yayımlanmalı), uygulama erişimi (inceleme hesabı — §6 madde 2), reklam yok, hedef
    kitle 18+, veri güvenliği (§4.2), içerik derecelendirmesi (iş uygulaması, kullanıcı etkileşimi: kullanıcılar
    arası iletişim yok), hesap silme URL'si `https://tekserp.etkiliyazilim.com/yonetim-gizlilik#hesap-silme` (§4.3).
-7. **Üretim yayını:** hesap KURUMSAL olduğu için kapalı test şartı (12 test kullanıcısı × 14 gün) YOKTUR — bu şart
-   13 Kasım 2023 sonrası açılmış KİŞİSEL hesaplara özgüdür (kuruluş hesabına uygulanmadığı doğrulandı 2026-10-15).
-   Dahili testte duman (§4) geçince aynı sürüm Test → Dahili test → **Sürümü tanıt → Üretim** ile ya da Üretim →
-   Yeni sürüm ile doğrudan üretime gönderilir; ilk üretim sürümü Play incelemesine girer (§6 madde 2 inceleme hesabı
-   hazır olmadan gönderilmez). Kapalı test istenirse isteğe bağlıdır, kapı değildir.
+7. **Üretim yayını:** hesap KİŞİSEL (ölçüm 2026-10-20) olduğu için kapalı test şartı KAPIDIR: en az 12 test
+   kullanıcısı 14 gün kesintisiz kapalı teste katılmış olmalı, ardından Console → **Üretim erişimi başvurusu**
+   yapılır; onaydan sonra Üretim → Yeni sürüm (ya da Kapalı test → Sürümü tanıt → Üretim). İlk üretim sürümü Play
+   incelemesine girer (§6 madde 2 inceleme hesabı hazır olmadan gönderilmez). Adımlar ve takvim:
+   [`PLAN-play-kapali-test-12x14.md`](PLAN-play-kapali-test-12x14.md). (Düzeltme 2026-10-20: önceki "kurumsal hesap,
+   şart yok" cümlesi yanlıştı.)
 
 ## 4. Gizlilik ve veri güvenliği
 
@@ -257,7 +259,7 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
 | Parola sızıntısı | AAB + APK derleme günlüklerinde kasa parolası aranıp bulunmadı |
 | Play (2026-10-16 01:50 TSİ) | **dahili test** `internal [completed: 1]` "1.0.2 (1)" — hizmet hesabıyla yüklendi, geri okundu; sürüm notu §5.4; diğer kanallar boş; yayın defteri `yonetim-1.0.2-play-internal`. Bulut `yonetim.etkiliyazilim.com` canlı (`PATRON-BULUTU-KURULUM.md` §15a) |
 | Mağaza girişi (2026-10-16 ~02:40 TSİ) | `node deploy/play-magaza.mjs --app=yonetim --uygula` → tek edit COMMIT, geri okundu: tr-TR + en-US başlık/kısa/tam · simge 1 · öne çıkan 1 · telefon ekran görüntüsü 7 (her dilde) · `contactEmail` `info@etkiliyazilim.com` · `contactWebsite` `https://tekserp.etkiliyazilim.com` · varsayılan `tr-TR` |
-| Üretim denemesi (2026-10-16) | `--uretim=1 --yuzde=20` → `400 FAILED_PRECONDITION "Precondition check failed."`; commit edilmeyen sondada `draft`/`completed`/`inProgress` üçü de aynı, `alpha` taslağı 200. Play eksiği adlandırmıyor → Console görevleri `PLAY-SABAH-YAPILACAKLAR.md` § A. Veri güvenliği API'ye GÖNDERİLMEDİ (CSV şablonu elde yok) |
+| Üretim denemesi (2026-10-16) | `--uretim=1 --yuzde=20` → `400 FAILED_PRECONDITION "Precondition check failed."`; commit edilmeyen sondada `draft`/`completed`/`inProgress` üçü de aynı, `alpha` taslağı 200. Olası neden (kesin değil): kişisel hesabın 12×14 kapalı test + üretim erişimi şartı henüz karşılanmadı (2026-10-20). Play eksiği adlandırmıyor → Console görevleri `PLAY-SABAH-YAPILACAKLAR.md` § A. Veri güvenliği API'ye GÖNDERİLMEDİ (CSV şablonu elde yok) |
 
 ## 10. Mağaza girişi kaynakları ve araç (2026-10-16)
 
