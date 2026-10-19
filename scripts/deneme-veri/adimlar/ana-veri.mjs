@@ -100,7 +100,10 @@ export async function anaVeri(c) {
       async () => (await c.api("POST", "/api/machines", { stationId: k.istasyon.WEAVING, name, warpBeamSlots: 1 }, { tekDeneme: true })).data);
     k.tezgahlar.push({ i, id: m.id, code: m.code, shed: SHED(i) });
   }
+  const pasifIst = new Set((await c.hepsi("/api/stations")).filter((x) => x.isActive === false).map((x) => x.id));
   for (const [ist, name] of [["WARPING", "Devere Makinesi 1 — Karl Mayer"], ["OTHER", "Katlama Masası 1"]]) {
+    // Kurulumda pasife alınmış istasyona makine eklenmez (bilinçli kapatma; silinmiş makine listede görünmez ⇒ kopya doğardı)
+    if (pasifIst.has(k.istasyon[ist])) { console.log(`  · ${ist} istasyonu pasif — '${name}' eklenmedi`); continue; }
     const m = await c.bulYaDaYarat("makine", () => makineBul(k.istasyon[ist], name),
       async () => (await c.api("POST", "/api/machines", { stationId: k.istasyon[ist], name }, { tekDeneme: true })).data);
     k[`makine_${ist}`] = m.id;
