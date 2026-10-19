@@ -17,6 +17,31 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-20",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Dokuma iş emrinde sağ bölme, onaysız tablete parolayla giriş ayarı ve Yönetim bulutu adı",
+      "surumler": {
+        "panel": "1.6.7"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Dokuma iş emri listesinde bir satıra tıklayınca sağda bölme açılır: işin hangi tezgahta dokunduğu, açık duruş, çalışan operatör, takılı levent ve kalan metresi, son indirmeler ve doğan toplar, hedefe göre ilerleme. Bölme açıkken kendiliğinden tazelenir; tezgah satırından Tezgah Salonu'na geçersiniz. Sunucu 2.15.11 gerekir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Genel Ayarlar › Cihaz eşleştirme bölümünde yeni ayar: \"Onaysız tabletler kullanıcı adı ve şifreyle girebilsin\". Açıkken onay bekleyen tablet yalnız kullanıcı adı ve şifreyle girer; hızlı PIN, personel kartı ve personel listesi tablet onaylanınca açılır. Varsayılan kapalıdır; ayar sunucu 2.15.10 ve üstünde çalışır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "\"Patron bulutu\" adı her ekranda \"Yönetim bulutu\" oldu."
+        }
+      ]
+    },
+    {
       "id": "2026-10-19",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Tablette deneme sunucusuna tek dokunuşla bağlanma ve onaysız tablette parolayla giriş",
