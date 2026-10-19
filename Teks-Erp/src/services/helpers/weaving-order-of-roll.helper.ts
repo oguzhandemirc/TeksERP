@@ -20,9 +20,14 @@ export type WeavingOrderOfRoll = {
   via: "DOFF" | "RECEIPT";
 };
 
+/** "Bu işten indirme yoluyla doğan top" yüklemi — sayı (detay) ve metre/liste (genel bakış) AYNI where'i okur. */
+export function rollsOfWeavingOrderWhere(weavingOrderId: string): Prisma.RollWhereInput {
+  return { doffEvent: { revokedAt: null, machineRun: { weavingOrderId } } };
+}
+
 /** Z1 (Y3 türetme, kolon yok): bu işten indirme yoluyla doğan (iptal edilmemiş) top sayısı — aynı zincir, aynı dosya. */
 export async function countRollsOfWeavingOrder(db: Db, weavingOrderId: string): Promise<number> {
-  return db.roll.count({ where: { doffEvent: { revokedAt: null, machineRun: { weavingOrderId } } } });
+  return db.roll.count({ where: rollsOfWeavingOrderWhere(weavingOrderId) });
 }
 
 /** Top hiçbir dokuma işine bağlı değilse `null` (uydurulmaz). */

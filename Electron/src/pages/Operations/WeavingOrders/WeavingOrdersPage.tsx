@@ -35,7 +35,8 @@ import { WeavingOrderFormDialog } from "./WeavingOrderFormDialog";
 import { WeavingOrderCancelDialog, WeavingOrderCloseDialog } from "./WeavingOrderActionDialogs";
 import { WeavingOrderRowMenu } from "./WeavingOrderRowMenu";
 import { FasonSheet } from "./fason/FasonSheet";
-import { WEAVING_ORDERS_QUERY_KEY, useWeavingOrderMutations } from "./useWeavingOrderMutations";
+import { WeavingOrderDetailSheet } from "./WeavingOrderDetailSheet";
+import { WEAVING_ORDERS_QUERY_KEY, WEAVING_ORDER_OVERVIEW_QUERY_KEY, useWeavingOrderMutations } from "./useWeavingOrderMutations";
 import { WEAVING_STATUSES, WEAVING_STATUS_META, type WeavingOrder } from "./types";
 import { TERIM } from "@/lib/terim";
 
@@ -57,11 +58,27 @@ const FILTERS: FilterDef[] = [
 type FormTarget = null | "new" | WeavingOrder;
 const swallow = () => undefined;
 
+function HeaderActions({ onNew }: { onNew: () => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <PermissionGate permission="weavingorder:write">
+        <Button size="sm" onClick={onNew}>
+          <Plus className="mr-1 h-4 w-4" />
+          Yeni {TERIM.dokumaIsEmri.tekil}
+        </Button>
+      </PermissionGate>
+      <RefreshButton queryKey={WEAVING_ORDERS_QUERY_KEY} extraKeys={[WEAVING_ORDER_OVERVIEW_QUERY_KEY]} />
+    </div>
+  );
+}
+
 export function WeavingOrdersPage() {
   const [formTarget, setFormTarget] = useState<FormTarget>(null);
   const [closing, setClosing] = useState<WeavingOrder | null>(null);
   const [cancelling, setCancelling] = useState<WeavingOrder | null>(null);
   const [fason, setFason] = useState<WeavingOrder | null>(null);
+  // Sağ panel: satır tıklaması açar (kapalı işte de); sağ tık menüsü ayrı kalır.
+  const [detail, setDetail] = useState<WeavingOrder | null>(null);
   const closeAll = () => {
     setFormTarget(null);
     setClosing(null);
@@ -75,24 +92,13 @@ export function WeavingOrdersPage() {
     defaultPageSize: 50,
     enableSelection: false,
   });
-  const openForEdit = (r: WeavingOrder) => WEAVING_STATUS_META[r.status].open && setFormTarget(r);
 
   return (
     <PageShell>
       <PageHeader
         title={TERIM.dokumaIsEmri.cogul}
         description="Ne dokunacak, ne kadar, kim dokuyacak. Koşum ve top indirme tabletten; 'devam ediyor' tezgahta koşum var demektir."
-        actions={
-          <div className="flex items-center gap-2">
-            <PermissionGate permission="weavingorder:write">
-              <Button size="sm" onClick={() => setFormTarget("new")}>
-                <Plus className="mr-1 h-4 w-4" />
-                Yeni {TERIM.dokumaIsEmri.tekil}
-              </Button>
-            </PermissionGate>
-            <RefreshButton queryKey={WEAVING_ORDERS_QUERY_KEY} />
-          </div>
-        }
+        actions={<HeaderActions onNew={() => setFormTarget("new")} />}
       />
       <DataTableToolbar fetchAll={fetchAll} search={search} onSearchChange={setSearch} placeholder="Dokuma no, kumaş veya fasoncu ara..." />
       <FilterBar filters={FILTERS} />
@@ -104,7 +110,7 @@ export function WeavingOrdersPage() {
         errorText="Bu bir “kayıt yok” cevabı DEĞİLDİR — istek reddedildi ya da sunucuya ulaşamadı (modül kapalı, yetki yok, ağ)."
         pagination={pagination}
         emptyText="Dokuma iş emri yok. Planlamak için “Yeni Dokuma İş Emri”."
-        onRowClick={openForEdit}
+        onRowClick={setDetail}
         rowContextMenu={(r) => <WeavingOrderRowMenu row={r} onEdit={setFormTarget} onClose={setClosing} onCancel={setCancelling} onFason={setFason} />}
       />
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}
@@ -124,6 +130,17 @@ export function WeavingOrdersPage() {
         onClose={() => setClosing(null)}
         isPending={close.isPending}
         onConfirm={(id) => close.mutateAsync(id).then(swallow, swallow)}
+      />
+      <WeavingOrderDetailSheet
+        order={detail}
+        onClose={() => setDetail(null)}
+        onEdit={setFormTarget}
+        onCloseOrder={setClosing}
+        onCancel={setCancelling}
+        onFason={(o) => {
+          setDetail(null);
+          setFason(o);
+        }}
       />
       <FasonSheet order={fason} onClose={() => setFason(null)} />
       {cancelling && (
