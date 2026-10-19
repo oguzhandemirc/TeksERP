@@ -49,9 +49,38 @@ function BackButton({ onPress }: { onPress: () => void }) {
   return <SettingsActionButton testID="sunucu-ekle-geri" tone="neutral" icon="arrow-left" label="Geri" onPress={onPress} />;
 }
 
-export function ChooseStep({ wide, onQr, onAddress }: { wide: boolean; onQr: () => void; onAddress: () => void }) {
+interface ChooseStepProps {
+  wide: boolean;
+  onQr: () => void;
+  onAddress: () => void;
+  /** İkincil: deneme sunucusunu elle adres yoluna verir. */
+  onDemo: () => void;
+}
+
+export function ChooseStep({ wide, onQr, onAddress, onDemo }: ChooseStepProps) {
   return (
-    <View style={[styles.choices, wide && styles.choicesWide]}>
+    <View style={styles.choices}>
+      <View style={[styles.choices, wide && styles.choicesWide]}>
+        <ChoiceCards wide={wide} onQr={onQr} onAddress={onAddress} />
+      </View>
+      <DemoServerRow onPress={onDemo} />
+    </View>
+  );
+}
+
+/** Deneme sunucusu satırı — iki ana yolun ALTINDA, nötr tonda (ikincil). */
+function DemoServerRow({ onPress }: { onPress: () => void }) {
+  return (
+    <View style={styles.demoRow}>
+      <Text style={styles.body}>Sunucunuz yoksa ürünü deneme sunucusunda inceleyebilirsiniz.</Text>
+      <SettingsActionButton testID="sunucu-ekle-deneme" tone="neutral" icon="cloud-outline" label="Deneme sunucusuna bağlan" onPress={onPress} />
+    </View>
+  );
+}
+
+function ChoiceCards({ wide, onQr, onAddress }: Omit<ChooseStepProps, 'onDemo'>) {
+  return (
+    <>
       <View style={[styles.choice, wide && styles.choiceWide]}>
         <Icon source="qrcode-scan" size={40} color={C.accentLight} />
         <Text style={styles.choiceTitle}>Paneldeki QR&apos;ı okut</Text>
@@ -69,7 +98,7 @@ export function ChooseStep({ wide, onQr, onAddress }: { wide: boolean; onQr: () 
         </Text>
         <SettingsActionButton testID="sunucu-ekle-adres" tone="primary" icon="keyboard-outline" label="Adresi yaz" onPress={onAddress} />
       </View>
-    </View>
+    </>
   );
 }
 

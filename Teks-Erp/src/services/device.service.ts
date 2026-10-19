@@ -12,7 +12,7 @@ import prisma from "../lib/prisma";
 import { DeviceKind } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { readDevicePairingRequired } from "./system-setting.service";
+import { readDevicePairingRequired, readDeviceUnpairedPasswordLogin } from "./system-setting.service";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
 import { getShortCredentialKeyRing } from "../lib/short-credential/keyring";
 import { deriveDeviceSecret, newProofSalt } from "../lib/device-proof";
@@ -73,15 +73,22 @@ type DeviceWithMachine = {
  * ayrı ayrı yanlış yapmak zorunda kalıyordu. Artık tek cevap kararı taşır:
  * onay ekranı koşulu = `pairingRequired && status !== "APPROVED"`.
  */
+/** Onaysız ama yasaklanmamış cihaz: PENDING + aktif (yeni ya da revoke edilmiş). Pasif cihaz HARİÇ. */
+export function isUnpairedPasswordCandidate(d: { status: string; isActive: boolean }): boolean {
+  return d.isActive && d.status === "PENDING";
+}
+
 /** Sır yalnız verildiği cevapta, tek alan olarak eklenir. */
 function withSecret<T extends object>(a: T, secret: string | null): T & { deviceSecret?: string } {
   return secret ? { ...a, deviceSecret: secret } : a;
 }
 
-function toAssignment(d: DeviceWithMachine, pairingRequired: boolean) {
+function toAssignment(d: DeviceWithMachine, pairingRequired: boolean, unpairedLoginFlag: boolean) {
   const station = d.machine?.station ?? null;
   return {
     pairingRequired,
+    // Onay ekranını atlatan TEK sinyal; middleware'in geçirdiği kümeyle aynı yüklem.
+    unpairedPasswordLogin: pairingRequired && unpairedLoginFlag && isUnpairedPasswordCandidate(d),
     status: d.isActive ? d.status : "INACTIVE",
     machineId: d.machineId,
     machineCode: d.machine?.code ?? null,
@@ -238,6 +245,7 @@ export class DeviceService {
     const deviceId = (input.deviceId ?? "").trim();
     if (!deviceId) throw AppError.badRequest("deviceId zorunlu");
     const pairingRequired = await readDevicePairingRequired();
+    const unpairedLoginFlag = await readDeviceUnpairedPasswordLogin();
     const kind = normalizeDeviceKind(input.kind);
     const kindLabel = kind === "PHONE" ? "Telefon" : kind === "DESKTOP" ? "Masaüstü" : "Tablet";
     const fallbackName = input.name?.trim() || `${kindLabel} ${deviceId.slice(0, 8)}`;
@@ -321,7 +329,7 @@ export class DeviceService {
         },
       }).catch(() => undefined);
     }
-    return withSecret(toAssignment(device, pairingRequired), await DeviceService.issueProofSecretIfDue(deviceId));
+    return withSecret(toAssignment(device, pairingRequired, unpairedLoginFlag), await DeviceService.issueProofSecretIfDue(deviceId));
   }
 
   /**
@@ -330,13 +338,15 @@ export class DeviceService {
    * (bkz. `toAssignment`); istemci iki ucu birleştirip mantığı kendi kurmaz.
    */
   static async getStatus(deviceId: string) {
-    const [device, pairingRequired] = await Promise.all([
+    const [device, pairingRequired, unpairedLoginFlag] = await Promise.all([
       prisma.device.findUnique({ where: { deviceId }, include: DEVICE_INCLUDE }),
       readDevicePairingRequired(),
+      readDeviceUnpairedPasswordLogin(),
     ]);
     if (!device) {
       return {
         pairingRequired,
+        unpairedPasswordLogin: false,
         status: "UNKNOWN",
         machineId: null,
         machineCode: null,
@@ -345,7 +355,7 @@ export class DeviceService {
         stationName: null,
       };
     }
-    return withSecret(toAssignment(device, pairingRequired), await DeviceService.issueProofSecretIfDue(deviceId));
+    return withSecret(toAssignment(device, pairingRequired, unpairedLoginFlag), await DeviceService.issueProofSecretIfDue(deviceId));
   }
 
   /**
@@ -538,6 +548,15 @@ export class DeviceService {
       oldData: { name: existing.name }, newData: { name },
     }).catch(() => undefined);
     return updated;
+  }
+
+  /**
+   * Middleware: çözülemeyen cihaz "onaysız ama yasaklanmamış" mı — `device.unpairedPasswordLogin`
+   * açıkken yalnız bu küme parola girişine geçer. Kayıtsız ve pasif cihaz `false` (kesilir).
+   */
+  static async isUnpairedPasswordCandidate(deviceId: string): Promise<boolean> {
+    const row = await prisma.device.findUnique({ where: { deviceId }, select: { status: true, isActive: true } });
+    return row !== null && isUnpairedPasswordCandidate(row);
   }
 
   // lastSeenAt yazım throttle'ı — resolveDevice her `x-device-id`'li istekte çalışır.

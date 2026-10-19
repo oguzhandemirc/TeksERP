@@ -5,6 +5,12 @@
 /** İnternet kipine giren üst alanlar — TEK KAYNAK (kullanıcı kararı KA 2026-10-08); bekçi başka yerde literal arar. */
 export const INTERNET_PARENT_DOMAINS: readonly string[] = ['etkiliyazilim.com'];
 
+/**
+ * Deneme sunucusu (kullanıcı kararı 2026-10-19): "Sunucuyu ekle" ekranındaki ikincil düğme bu adresi ELLE ADRES
+ * yoluna verir (yoklama + onay + kimlik kaydı aynen). Pakete ERP adresi olarak GÖMÜLMEZ; üst alandan türer (tek literal).
+ */
+export const DEMO_SERVER_URL = `https://deneme.${INTERNET_PARENT_DOMAINS[0]}`;
+
 /** İnternet kipinin varsayılan portu (sabitli kipte `LAN_TLS_DEFAULT_PORT` = 4443). */
 export const INTERNET_TLS_PORT = 443;
 

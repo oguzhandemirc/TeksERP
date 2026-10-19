@@ -36,7 +36,9 @@ export function ServerPairFlow({ onDone, notice }: ServerPairFlowProps) {
   return (
     <View style={styles.root} testID="sunucu-ekle">
       <NoticeBox text={notice} />
-      {step.kind === 'choose' && <ChooseStep wide={wide} onQr={() => setScanning(true)} onAddress={() => p.go({ kind: 'address' })} />}
+      {step.kind === 'choose' && (
+        <ChooseStep wide={wide} onQr={() => setScanning(true)} onAddress={() => p.go({ kind: 'address' })} onDemo={p.connectDemo} />
+      )}
       {step.kind === 'address' && (
         <AddressStep
           {...field}

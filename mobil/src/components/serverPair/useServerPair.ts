@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 
 import { INTERNET_HOST_NOT_PINNABLE, decideQrAddressPin, pairViaQrHosts, parsePairAddress, parseTlsQr, type PairDecision } from '../../lib/lan-tls';
-import { decideInternetPair, kipFor, type WebPkiObserved } from '../../lib/internet-tls';
+import { DEMO_SERVER_URL, decideInternetPair, kipFor, type WebPkiObserved } from '../../lib/internet-tls';
 import { completeInternetPairing, probeInternetServer } from '../../services/internetServers';
 import type { DiscoveredServer } from '../../lib/discovery';
 import { discoverServers } from '../../services/discovery.service';
@@ -120,16 +120,9 @@ function usePairCore(onDone: () => void) {
   return { step, busy, setBusy, error, setError, go, finish, finishInternet, probe, searchSeq };
 }
 
-export function useServerPair(onDone: () => void) {
-  const recentUrls = useBaseUrlStore((s) => s.recentUrls);
-  const core = usePairCore(onDone);
-  const { go, finish, probe, setError, searchSeq } = core;
-  const [address, setAddressRaw] = useState('');
-
-  const setAddress = (v: string) => {
-    setAddressRaw(v);
-    setError(null);
-  };
+/** Elle adres yolu: yazılan metin → kip → yoklama → onay adımı (kod ya da internet onayı). */
+function useAddressPath(core: ReturnType<typeof usePairCore>) {
+  const { go, probe, setError } = core;
 
   // (b) adres → yoklama → kod onayı
   const probeAddress = useCallback(
@@ -156,11 +149,34 @@ export function useServerPair(onDone: () => void) {
     [core, go, setError],
   );
 
-  const submitAddress = () => {
-    const a = parsePairAddress(address);
+  const submitAddressText = (text: string) => {
+    const a = parsePairAddress(text);
     if (!a.ok) setError(a.reason);
     else if (kipFor(a.host) === 'internet') void probeInternet(a.host, a.port);
     else void probeAddress(a.host, a.port);
+  };
+
+  return { probeAddress, submitAddressText };
+}
+
+export function useServerPair(onDone: () => void) {
+  const recentUrls = useBaseUrlStore((s) => s.recentUrls);
+  const core = usePairCore(onDone);
+  const { go, finish, probe, setError, searchSeq } = core;
+  const { probeAddress, submitAddressText } = useAddressPath(core);
+  const [address, setAddressRaw] = useState('');
+
+  const setAddress = (v: string) => {
+    setAddressRaw(v);
+    setError(null);
+  };
+  const submitAddress = () => submitAddressText(address);
+
+  // Deneme sunucusu: adres alanını doldurup ELLE ADRES yolunu koşar (ayrı bağlantı yolu yok; onay adımı aynen).
+  const connectDemo = () => {
+    go({ kind: 'address' });
+    setAddressRaw(DEMO_SERVER_URL);
+    submitAddressText(DEMO_SERVER_URL);
   };
 
   // (a) QR → QR'daki adresler (v2) → ağda bu izi taşıyan sunucu → yoksa adres
@@ -207,5 +223,5 @@ export function useServerPair(onDone: () => void) {
     if (server) await finish(decideQrAddressPin({ qrText, observed: server, now: new Date().toISOString() }));
   };
 
-  return { ...core, recentUrls, address, setAddress, probeAddress, submitAddress, onQr, submitQrAddress };
+  return { ...core, recentUrls, address, setAddress, probeAddress, submitAddress, connectDemo, onQr, submitQrAddress };
 }

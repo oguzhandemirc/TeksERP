@@ -9,7 +9,7 @@ import { discoverServers } from '../../services/discovery.service';
 import { probeTlsDetailed } from '../../services/tlsProbe';
 import { completePairing } from '../../services/serverPairing';
 import { completeInternetPairing, probeInternetServer } from '../../services/internetServers';
-import { webPkiFailureText } from '../../lib/internet-tls';
+import { DEMO_SERVER_URL, kipFor, webPkiFailureText } from '../../lib/internet-tls';
 import { ServerPairFlow } from './ServerPairFlow';
 
 jest.mock('../BarcodeScannerModal', () => {
@@ -171,5 +171,59 @@ describe('internet kipi (G3): izinli üst alandaki ad kodsuz, onayla', () => {
     expect(probeInternetServer).not.toHaveBeenCalled();
     expect(probeTlsDetailed).toHaveBeenCalledWith('erp.ornek.com', 4443, expect.any(Number));
     expect(screen.getByTestId('dogrulama-kodu')).toBeTruthy();
+  });
+});
+
+// Deneme sunucusu düğmesi (kullanıcı kararı 2026-10-19): ELLE ADRES yolunu koşar; onay + kimlik kaydı atlanmaz.
+// NEGATİF SONDA (ölçüldü): düğme onaysız tamamlamaya giderse / adres alanı doldurulmazsa / adres değişirse KIRMIZI.
+describe('deneme sunucusu düğmesi', () => {
+  const HOST = 'deneme.etkiliyazilim.com';
+  const WEB = { host: HOST, port: 443, installationId: 'iid-demo', companyName: 'Deneme' };
+
+  it('adres tek kaynakta, internet kipinde ve portsuz (pakete ERP adresi gömülmez)', () => {
+    expect(DEMO_SERVER_URL).toBe(`https://${HOST}`);
+    expect(kipFor(HOST)).toBe('internet');
+  });
+
+  it('ilk ekranda iki ana yolun yanında ikincil olarak görünür', () => {
+    renderWithPaper(<ServerPairFlow onDone={jest.fn()} />);
+    expect(screen.getByTestId('sunucu-ekle-qr')).toBeTruthy();
+    expect(screen.getByTestId('sunucu-ekle-adres')).toBeTruthy();
+    expect(screen.getByText('Deneme sunucusuna bağlan')).toBeTruthy();
+  });
+
+  it('elle adres yoluna doğru adresi verir; onay gelmeden bağlanmaz', async () => {
+    (probeInternetServer as jest.Mock).mockResolvedValue({ ok: true, server: WEB });
+    const onDone = jest.fn();
+    renderWithPaper(<ServerPairFlow onDone={onDone} />);
+    await press('sunucu-ekle-deneme');
+    expect(probeInternetServer).toHaveBeenCalledWith(HOST, 443, expect.any(Number));
+    expect(probeTlsDetailed).not.toHaveBeenCalled();
+    expect(screen.getByTestId('internet-onay-ad').props.children).toBe(HOST);
+    expect(completeInternetPairing).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+    await press('internet-ekle');
+    expect(completeInternetPairing).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: `https://${HOST}:443`, record: expect.objectContaining({ host: HOST, installationId: 'iid-demo' }) }),
+    );
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('"Vazgeç" bağlanmaz', async () => {
+    (probeInternetServer as jest.Mock).mockResolvedValue({ ok: true, server: WEB });
+    renderWithPaper(<ServerPairFlow onDone={jest.fn()} />);
+    await press('sunucu-ekle-deneme');
+    await press('internet-vazgec');
+    expect(completeInternetPairing).not.toHaveBeenCalled();
+    expect(screen.getByText('Onaylanmadı — bağlanılmadı.')).toBeTruthy();
+  });
+
+  it('yoklama düşerse adres adımında kalır, adres alanı dolu (elle düzeltilebilir)', async () => {
+    (probeInternetServer as jest.Mock).mockResolvedValue({ ok: false, reason: webPkiFailureText('network', HOST) });
+    renderWithPaper(<ServerPairFlow onDone={jest.fn()} />);
+    await press('sunucu-ekle-deneme');
+    expect(screen.getByTestId('sunucu-adres-input').props.value).toBe(DEMO_SERVER_URL);
+    expect(screen.getByTestId('sunucu-ekle-hata')).toBeTruthy();
+    expect(completeInternetPairing).not.toHaveBeenCalled();
   });
 });

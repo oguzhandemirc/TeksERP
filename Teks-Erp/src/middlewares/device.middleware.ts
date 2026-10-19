@@ -8,6 +8,8 @@
 // - Header VAR + ONAYLI       → req.device set edilir, next() (MAKİNEYE ATANMAMIŞ OLSA DA —
 //                              yönetici/atamasız cihaz da çalışır; donanım deviceId-join'den)
 // - Header VAR + PENDING/pasif/yok → 401 DEVICE_INACTIVE (tablet onay bekler)
+// - İstisna `device.unpairedPasswordLogin` açıkken: PENDING + aktif cihaz `req.device`siz,
+//   `req.unapprovedDevice` işaretiyle geçer (yalnız parola girişi; pasif/kayıtsız yine 401).
 //
 // Davranış (atama PASİF iken — device.pairingRequired = false, DEFAULT):
 // - Onaylı cihaz req.device set edilir (makine atfı korunur).
@@ -25,7 +27,9 @@
 
 import { Request, Response, NextFunction } from "express";
 import { DeviceService } from "../services/device.service";
-import { readDevicePairingRequired, readDeviceProofRequiredCached } from "../services/system-setting.service";
+import {
+  readDevicePairingRequired, readDeviceProofRequiredCached, readDeviceUnpairedPasswordLogin,
+} from "../services/system-setting.service";
 import { getShortCredentialKeyRing } from "../lib/short-credential/keyring";
 import {
   DEVICE_PROOF_HEADER, deriveDeviceSecret, proofPathOf, verifyDeviceProof, type ProofVerdict,
@@ -89,6 +93,12 @@ export const resolveDevice = async (
     // pairing storage'ı temizleyip kullanıcıyı pairing ekranına yönlendirir.
     // Eşleştirme pasifse (default) bloklama yok — cihaz req.device'sız geçer.
     if (await readDevicePairingRequired()) {
+      // Onaysız ama yasaklanmamış (PENDING + aktif) cihaz bayrak açıkken `req.device`siz geçer:
+      // yalnız parola girişi + o oturumun uçları; PIN/kart/liste/indirme belirteci işarete bakıp kapanır.
+      if ((await readDeviceUnpairedPasswordLogin()) && (await DeviceService.isUnpairedPasswordCandidate(deviceId))) {
+        req.unapprovedDevice = { deviceId };
+        return next();
+      }
       res.status(401).json({
         success: false,
         message:

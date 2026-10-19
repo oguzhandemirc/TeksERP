@@ -43,7 +43,8 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 /** Kimliksize açık login-methods yanıtının BEYANLI anahtarları; yeni anahtar bilinçli karar ister. */
 // `lisansEtkinlesmedi` (G2): yalnız boolean; sınıf (KOPYA/ETKINLESMEDI) kimliksize verilmez. Korumasız derlemede kilit kapalı ⇒ false.
-const LOGIN_METHODS_KEYS = new Set(["enabled", "primary", "companyName", "lisansDurduruldu", "lisansEtkinlesmedi"]);
+// `unpairedPasswordOnly` (2026-10-19): yalnız boolean, bu cihazın onaysız parola kipinde olduğunu söyler; lisans bilgisi taşımaz.
+const LOGIN_METHODS_KEYS = new Set(["enabled", "primary", "companyName", "lisansDurduruldu", "lisansEtkinlesmedi", "unpairedPasswordOnly"]);
 
 function yanitDenetle(data: Record<string, unknown>, beklenen: boolean): string[] {
   const hata: string[] = [];

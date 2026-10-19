@@ -22,7 +22,7 @@ export interface PairingGateInput {
    */
   flagFromEndpoint: boolean;
   /** `/devices/status` (ya da `/devices/announce`) cevabı; henüz yoksa undefined. */
-  assignment?: Pick<DeviceAssignment, 'status' | 'pairingRequired'> | null;
+  assignment?: Pick<DeviceAssignment, 'status' | 'pairingRequired' | 'unpairedPasswordLogin'> | null;
 }
 
 /**
@@ -42,5 +42,9 @@ export function shouldShowPairingGate(input: PairingGateInput): boolean {
   // Cevap henüz gelmediyse (assignment yok) kapı AÇIK sayılır — bayrak gerçekten
   // zorunluysa onaysız cihazı bir an için Login'e düşürmek, backend'in TÜM
   // isteklerini 401 DEVICE_INACTIVE ile kestiği bir ekran demektir.
-  return required && input.assignment?.status !== 'APPROVED';
+  // Onaysız-parola muafiyeti yalnız PENDING'e: pasif/kayıtsız cihaz alan gelse de kapıda kalır;
+  // `=== true` eski backend'in undefined'ını bugünkü kapıya bırakır.
+  const unpairedPassword =
+    input.assignment?.status === 'PENDING' && input.assignment.unpairedPasswordLogin === true;
+  return required && input.assignment?.status !== 'APPROVED' && !unpairedPassword;
 }

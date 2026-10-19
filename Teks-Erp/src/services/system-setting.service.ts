@@ -413,6 +413,10 @@ export const SETTING_KEYS = {
    *  eşleşmemiş/pasif cihaz device.middleware'de 401 ile kesilir. ENFORCE edilir. */
   DEVICE_PAIRING_REQUIRED: "device.pairingRequired",
   DEVICE_PROOF_REQUIRED: "device.proofRequired",
+  /** Onaysız (PENDING + aktif) tablet onay beklemeden YALNIZ kullanıcı adı + parolayla girebilsin mi.
+   *  Default false (bugünkü davranış). Eşleştirme etkin zorunluyken anlamlıdır; PIN/kart, personel
+   *  listesi ve indirme belirteci onaysız cihaza kapalı kalır. Barındırılanda ZORLANMAZ. ENFORCE edilir. */
+  DEVICE_UNPAIRED_PASSWORD_LOGIN: "device.unpairedPasswordLogin",
   /** Hızlı PIN / QR kartla giriş YALNIZ onaylı cihazdan mı. Default false (bugünkü davranış).
    *  Açıkken eşleştirme de etkin zorunlu olur (otomatik onay kapanır); barındırılan
    *  kurulumda (BARINDIRILAN) her iki kural ZORUNLUDUR ve kapatılamaz. ENFORCE edilir. */
@@ -1775,6 +1779,8 @@ export interface FeatureFlags {
    *  Diğerlerinden farklı olarak ENFORCE edilir (device.middleware). */
   devicePairingRequired: boolean;
   deviceProofRequired: boolean;
+  /** Onaysız tablet yalnız parolayla girebilsin mi (default false; eşleştirme zorunluyken etkili). */
+  deviceUnpairedPasswordLogin: boolean;
   /** Hızlı PIN / kart girişi yalnız onaylı cihazdan mı (ETKİN değer: barındırılan kurulumda hep true). */
   shortCredentialApprovedDeviceOnly: boolean;
   /** 2FA'sı açık hesabın PIN/kart girişinde kod sorulur mu (default false; süperadminde hep sorulur). */
@@ -2267,6 +2273,7 @@ export class SystemSettingService {
       fasonNoteMobileEntry: await readFasonNoteMobileEntry(cacheClient),
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
       deviceProofRequired: await readDeviceProofRequired(cacheClient),
+      deviceUnpairedPasswordLogin: await readDeviceUnpairedPasswordLogin(cacheClient),
       shortCredentialApprovedDeviceOnly: await readShortCredentialApprovedDeviceOnly(cacheClient),
       shortCredentialTotpRequired: await readShortCredentialTotpRequired(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
@@ -3184,6 +3191,18 @@ export class SystemSettingService {
         SETTING_KEYS.DEVICE_PROOF_REQUIRED,
         input.deviceProofRequired,
         "Cihaz kanıtı zorunlu: kanıtsız ya da yanlış kanıtlı tablet onaylı cihaz sayılmaz",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "deviceUnpairedPasswordLogin")) {
+      if (typeof input.deviceUnpairedPasswordLogin !== "boolean") {
+        throw AppError.badRequest("deviceUnpairedPasswordLogin boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DEVICE_UNPAIRED_PASSWORD_LOGIN,
+        input.deviceUnpairedPasswordLogin,
+        "Onaysız tablet onay beklemeden yalnız kullanıcı adı + parolayla girebilsin (PIN/kart/personel listesi kapalı)",
         userId
       );
     }
@@ -5148,6 +5167,23 @@ export async function readDeviceProofRequired(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.DEVICE_PROOF_REQUIRED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Onaysız (PENDING + aktif) tablet onay beklemeden yalnız kullanıcı adı + parolayla girebilsin mi.
+ * Default false (bugünkü davranış). Barındırılan sınıf ZORLAMAZ — yönetici açar/kapatır.
+ * ENFORCE: `device.middleware` (yalnız eşleştirme etkin zorunluyken) + `DeviceService` durum cevabı.
+ * Rejim okuması: cache'siz (kapatıldığı AN onaysız tabletler kesilir).
+ */
+export async function readDeviceUnpairedPasswordLogin(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DEVICE_UNPAIRED_PASSWORD_LOGIN },
     select: { value: true },
   });
   return asBoolean(setting?.value);

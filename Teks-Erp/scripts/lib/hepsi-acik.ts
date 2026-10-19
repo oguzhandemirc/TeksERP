@@ -162,6 +162,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   pinLockoutLongPenaltyMin: V("güvenlik sayısı"),
   devicePairingRequired: A(true),
   deviceProofRequired: A(true),
+  deviceUnpairedPasswordLogin: V("adı sır desenine (password) düşer, profil doğrulayıcısı reddeder; davranışı test_onaysiz_parola_girisi ölçer"),
   shortCredentialApprovedDeviceOnly: A(true),
   shortCredentialTotpRequired: V("adı sır desenine (totp) düşer, profil doğrulayıcısı reddeder; davranışı test_kimlik_kisa_yol_totp ölçer"),
   backupHour: V("yedek saati; açılacak bir şey değil"),

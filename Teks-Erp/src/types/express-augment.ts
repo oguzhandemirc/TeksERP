@@ -25,6 +25,12 @@ declare module "express-serve-static-core" {
       kind: string;
     };
     /**
+     * Onaysız (PENDING + aktif) cihaz `device.unpairedPasswordLogin` sayesinde geçti — yalnız
+     * `device.middleware` doldurur. `device` DOĞMAZ (makine atfı NULL); PIN/kart, personel listesi
+     * ve indirme belirteci bu işarete bakıp kapanır.
+     */
+    unapprovedDevice?: { deviceId: string };
+    /**
      * İstek SATICI (süperadmin) hesabından mı geliyor?
      *
      * `auth.middleware.verifyToken` doldurur — `User.isSystemAccount` her

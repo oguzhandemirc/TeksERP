@@ -396,6 +396,9 @@ export interface FeatureFlags {
   /** Hızlı PIN / QR kartla giriş yalnız onaylı cihazdan mı (false=default; barındırılan
    *  kurulumda backend hep true döner ve kapatılamaz). Açıkken eşleştirme de etkin zorunludur. */
   shortCredentialApprovedDeviceOnly: boolean;
+  /** Onaysız (PENDING) tablet yalnız kullanıcı adı + parolayla girebilir mi (false=default;
+   *  barındırılanda da zorlanmaz). Yalnız eşleştirme etkin zorunluyken anlamlıdır. */
+  deviceUnpairedPasswordLogin: boolean;
   /** 2FA'sı açık hesabın PIN/kart girişinde de kod sorulur mu (varsayılan false; süperadminde hep). */
   shortCredentialTotpRequired: boolean;
   /** Sevk onayı adımı zorunlu mu (false=default). Kapalıyken çuvallar seçilir seçilmez

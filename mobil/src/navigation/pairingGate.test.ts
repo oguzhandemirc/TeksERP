@@ -91,3 +91,43 @@ describe('shouldShowPairingGate', () => {
     ).toBe(true);
   });
 });
+
+// Onaysız-parola girişi (device.unpairedPasswordLogin, 2026-10-19).
+// NEGATİF SONDA (ölçüldü): muafiyet kaldırılınca §10 KIRMIZI; PENDING şartı düşünce §11 KIRMIZI;
+// `=== true` yerine `!== false` yazılınca §12 (ve §2 §5 §8) KIRMIZI.
+describe('shouldShowPairingGate — onaysız cihazda parola girişi', () => {
+  it('§10 zorunlu + PENDING + unpairedPasswordLogin → kapı YOK (girişe geçer)', () => {
+    expect(
+      shouldShowPairingGate({
+        flagFromEndpoint: true,
+        assignment: { pairingRequired: true, status: 'PENDING', unpairedPasswordLogin: true },
+      }),
+    ).toBe(false);
+  });
+
+  it('§11 muafiyet yalnız PENDING: pasif/kayıtsız cihaz alan gelse de kapıda kalır', () => {
+    for (const status of ['INACTIVE', 'UNKNOWN'] as const) {
+      expect(
+        shouldShowPairingGate({
+          flagFromEndpoint: true,
+          assignment: { pairingRequired: true, status, unpairedPasswordLogin: true },
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it('§12 alan yok / false (eski backend · bayrak kapalı) → PENDING kapıda bekler', () => {
+    expect(
+      shouldShowPairingGate({
+        flagFromEndpoint: true,
+        assignment: { pairingRequired: true, status: 'PENDING' },
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowPairingGate({
+        flagFromEndpoint: true,
+        assignment: { pairingRequired: true, status: 'PENDING', unpairedPasswordLogin: false },
+      }),
+    ).toBe(true);
+  });
+});

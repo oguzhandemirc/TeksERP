@@ -77,11 +77,14 @@ export default function RootNavigator() {
     // biriktirip yükü büyütmesin; sunucu toparlanınca normal tempoya döner.
     // Sık poll'un TEK gerekçesi "onay anında hızlı geç"tir; sunucu kapının
     // gerekmediğini söylediyse (pairingRequired=false) beklenecek bir onay da
-    // yoktur → APPROVED ile aynı seyrek tempoya düşülür.
+    // yoktur → APPROVED ile aynı seyrek tempoya düşülür. Onaysız-parola girişli
+    // cihaz da onay beklemez (girişe geçmiştir) → aynı seyrek tempo.
     refetchInterval: (q) =>
       q.state.fetchFailureCount > 0
         ? 30_000
-        : q.state.data?.status === 'APPROVED' || q.state.data?.pairingRequired === false
+        : q.state.data?.status === 'APPROVED' ||
+            q.state.data?.pairingRequired === false ||
+            q.state.data?.unpairedPasswordLogin === true
           ? 45_000
           : 5_000,
   }).data;
