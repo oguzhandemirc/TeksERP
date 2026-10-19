@@ -51,6 +51,13 @@ function verifyTokenIfPresent(req: Request, res: Response, next: NextFunction): 
 
 /** Onaylı cihaz (`req.device`, yalnız ONAYLI+aktif cihazda dolar) ya da kimlikli kullanıcı. */
 function requireApprovedDeviceOrSession(req: Request, res: Response, next: NextFunction): void {
+  // Onaysız-parola kipindeki cihaz parola oturumu taşısa da belirteç ALMAZ (yalnız onaylı cihaz).
+  if (req.unapprovedDevice) {
+    next(AppError.forbidden("Güncelleme indirme yalnız onaylı cihazlardan yapılabilir. Bu cihazı yöneticiye onaylatın.", {
+      code: "DEVICE_NOT_APPROVED",
+    }));
+    return;
+  }
   if (req.device) {
     next();
     return;

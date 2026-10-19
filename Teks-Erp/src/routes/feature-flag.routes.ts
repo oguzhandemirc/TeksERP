@@ -372,6 +372,8 @@ export const updateSchema = z.strictObject({
   // Mobil cihaz eşleştirmesi zorunlu mu (true=aktif) yoksa pasif mi (false=default).
   devicePairingRequired: z.boolean().optional(),
   deviceProofRequired: z.boolean().optional(),
+  // Onaysız tablet yalnız parolayla girebilsin (false=default; eşleştirme zorunluyken etkili).
+  deviceUnpairedPasswordLogin: z.boolean().optional(),
   // Hızlı PIN / QR kart yalnız onaylı cihazdan (false=default; barındırılan kurulumda kapatılamaz).
   shortCredentialApprovedDeviceOnly: z.boolean().optional(),
   // 2FA'sı açık hesabın PIN/kart girişinde de kod sorulsun (false=default; süperadminde hep sorulur).

@@ -108,7 +108,8 @@ function resolveLoginDeviceId(req: Request): string | null {
  * şart. Kimlik denemesi DEĞİLDİR → kilit sayacına girmez, 403 döner.
  */
 async function rejectUnapprovedDevice(req: Request, next: NextFunction): Promise<boolean> {
-  if (req.device || !(await readShortCredentialApprovedDeviceOnly())) return false;
+  // Onaysız-parola kipiyle geçen cihaz kuraldan bağımsız reddedilir: o kip yalnız parolayı açar.
+  if (!req.unapprovedDevice && (req.device || !(await readShortCredentialApprovedDeviceOnly()))) return false;
   next(
     AppError.forbidden(
       "Hızlı PIN ve personel kartıyla giriş yalnız onaylı cihazlardan yapılabilir. Bu cihazı yöneticiye onaylatın ya da kullanıcı adı ve şifreyle girin.",
@@ -495,9 +496,9 @@ export class AuthController {
    *     tags: [Auth]
    *     summary: Mobil giriş yöntemleri (public — login ekranı auth'suz okur)
    *     responses:
-   *       200: { description: "{ enabled: (list|pin|card)[], primary, companyName, lisansDurduruldu, lisansEtkinlesmedi }" }
+   *       200: { description: "{ enabled: (list|pin|card)[], primary, companyName, lisansDurduruldu, lisansEtkinlesmedi, unpairedPasswordOnly }" }
    */
-  static async loginMethods(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  static async loginMethods(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const methods = await readLoginMethods();
       // Giriş ekranındaki ad lisanstan (K-7); belge unvanı `company.name` ayrı kalır.
@@ -505,7 +506,12 @@ export class AuthController {
       // K5 giriş ekranı sinyali: kimliksize verilen tek lisans bilgisi (yalnız zorla + DURDURULMUŞ).
       const lisansDurduruldu = isSuspendedBeforeLogin();
       const lisansEtkinlesmedi = isActivationLockedBeforeLogin();
-      res.status(200).json({ success: true, data: { ...methods, companyName, lisansDurduruldu, lisansEtkinlesmedi } });
+      // Onaysız-parola kipi: tablet personel listesi yerine kullanıcı adı + parola formu gösterir.
+      const unpairedPasswordOnly = Boolean(req.unapprovedDevice);
+      res.status(200).json({
+        success: true,
+        data: { ...methods, companyName, lisansDurduruldu, lisansEtkinlesmedi, unpairedPasswordOnly },
+      });
     } catch (error) {
       next(error);
     }
@@ -538,6 +544,8 @@ export class AuthController {
     try {
       // Eşleştirme zorunluysa yalnız eşleşmiş tablet listeyi çekebilir. Pasif modda
       // (default) eşleşmemiş cihaz da login ekranı için kullanıcı listesini alabilir.
+      // Onaysız-parola kipindeki cihaz da (`req.unapprovedDevice`, yalnız eşleştirme zorunluyken doğar)
+      // `req.device`sizdir → burada kapanır; kullanıcı adını bilen yazar.
       if (!req.device && (await readDevicePairingRequired())) {
         res.status(401).json({
           success: false,

@@ -104,6 +104,7 @@ const PANEL_EXEMPT: Record<string, string> = {
   devicePairingRequired: "kind:'device' — Mobil Cihazlar section'ı yönetir",
   shortCredentialApprovedDeviceOnly: "kind:'device' — Mobil Cihazlar section'ı yönetir (yazma yalnız admin:settings; eşleştirmeyle birlikte okunur)",
   deviceProofRequired: "kind:'device' — Mobil Cihazlar section'ı yönetir (yazma yalnız admin:settings)",
+  deviceUnpairedPasswordLogin: "kind:'device' — Mobil Cihazlar section'ı yönetir (yazma yalnız admin:settings; eşleştirmeyle birlikte okunur)",
   autoLogoutOnExpiry: "kind:'session' — Oturum section'ı yönetir",
   mobileIdleLockEnabled: "kind:'session' — Oturum section'ı yönetir",
   mobileLockOnBackground: "kind:'session' — Oturum section'ı yönetir",

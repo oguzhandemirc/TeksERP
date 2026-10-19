@@ -39,7 +39,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 
 /** Boolean bayrakta `true` dışı değer yalnız burada beyanlıdır (gerekçe tabloda yazılı). */
 // shortCredentialTotpRequired: adı sır desenine (totp) düşer, profil doğrulayıcısı reddeder.
-const BOOLEAN_ISTISNALARI: ReadonlySet<string> = new Set(["demoModeEnabled", "shortCredentialTotpRequired"]);
+// deviceUnpairedPasswordLogin: adı sır desenine (password) düşer; davranışı test_onaysiz_parola_girisi ölçer.
+const BOOLEAN_ISTISNALARI: ReadonlySet<string> = new Set(["demoModeEnabled", "shortCredentialTotpRequired", "deviceUnpairedPasswordLogin"]);
 
 async function main(): Promise<void> {
   process.env.JWT_SECRET ??= "profil-tamligi-test-sirri-0123456789abcdef";
