@@ -4,13 +4,15 @@
 // Oturum: WEAVING istasyonu + makine (`SessionGate`); makine ve hat ekrandan
 // SEÇTİRİLMEZ (§3.7/3) — hat yalnız çok hatlı makinede seçilir. Kuyruk YOK:
 // mutation online-only, çevrimdışıyken buton kilitli, kalıcı düşüş anlık toast.
-// `clientToken` mantıksal deneme başına bir kez (`doffAttempt.ts`).
+// `clientToken` mantıksal deneme başına bir kez (`doffAttempt.ts`). D14 (S3d): `rollBirth` KK1_* iken top
+// KK1'de doğar — `doffEnabled` false, İNDİR kapalı; koşum/duruş/levent/bugünkü liste kalır.
 // =============================================================================
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import { useSessionStore } from '../../../store/sessionStore';
 import { usePermissions } from '../../../hooks/usePermission';
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
+import { useDokumaRollBirth } from '../../../hooks/useFeatureFlags';
 import { doffFingerprint, tokenForDoff } from './doffAttempt';
 import { EMPTY_DOFF_FORM, preselectMachineRunId, validateDoffForm, type DoffFormState } from './doffPayload';
 import { useDoffLists } from './useDoffLists';
@@ -47,6 +49,11 @@ function useRunPreselect(openRuns: readonly OpenMachineRun[], lineNo: number, pa
   return selectRun;
 }
 
+/** Bugünkü indirmeler listesi (KK1 doğumlular dahil — sunucu listesi aynen). */
+function pickToday(l: ReturnType<typeof useDoffLists>) {
+  return { todayRows: l.todayRows, todayLoading: l.todayLoading, todayError: l.todayError, refreshToday: l.refreshToday };
+}
+
 export function useDoffEntry() {
   const active = useSessionStore((s) => s.active);
   const machine = active?.machine ?? null;
@@ -55,6 +62,7 @@ export function useDoffEntry() {
   const canRevoke = usePermissions().has('mobile:dokuma-geri-al');
   const isOnline = useIsOnline();
   const offlineReason = useOfflineReason();
+  const doffEnabled = useDokumaRollBirth() === 'TABLET_DOFF';
 
   const [lineNo, setLineNo] = useState(1);
   const [form, setForm] = useState<DoffFormState>(EMPTY_DOFF_FORM);
@@ -83,7 +91,7 @@ export function useDoffEntry() {
   const revokeMutation = useDoffRevoke(save.invalidate, save.setFailure);
 
   const submit = useCallback(() => {
-    if (!machineId || save.mutation.isPending) return;
+    if (!doffEnabled || !machineId || save.mutation.isPending) return;
     if (!isOnline) {
       Toast.show({ type: 'error', text1: 'Çevrimdışı — indirme kaydedilemez', text2: offlineReason === 'server' ? 'Sunucuya ulaşılamıyor (IT).' : 'Ağ bağlantısı yok.', visibilityTime: 5000 });
       return;
@@ -95,7 +103,7 @@ export function useDoffEntry() {
     }
     const fingerprint = doffFingerprint({ machineId, productionLineNo: lineNo, pieceCount: Number(form.pieceCount) });
     save.mutation.mutate({ token: tokenForDoff(save.attemptRef.current, fingerprint), fingerprint });
-  }, [machineId, save, isOnline, offlineReason, form, lineNo]);
+  }, [doffEnabled, machineId, save, isOnline, offlineReason, form, lineNo]);
 
   /** Token çakışması modalı: "yeni indirme" → yapışkan token atılır, taze token'la gönderilir. */
   const resendAsNew = useCallback(() => {
@@ -104,9 +112,10 @@ export function useDoffEntry() {
     submit();
   }, [save, submit]);
 
-  const canSubmit = machineId != null && isOnline && validateDoffForm(form).ok && !save.mutation.isPending && !meter.reading;
+  const canSubmit = doffEnabled && machineId != null && isOnline && validateDoffForm(form).ok && !save.mutation.isPending && !meter.reading;
 
   return {
+    doffEnabled,
     machine,
     lineCount,
     lineNo,
@@ -128,10 +137,7 @@ export function useDoffEntry() {
     resendAsNew,
     isOnline,
     canRevoke,
-    todayRows: lists.todayRows,
-    todayLoading: lists.todayLoading,
-    todayError: lists.todayError,
-    refreshToday: lists.refreshToday,
+    ...pickToday(lists),
     revoke: (id: string, reason: string) => revokeMutation.mutate({ id, reason }),
     revoking: revokeMutation.isPending,
   };
