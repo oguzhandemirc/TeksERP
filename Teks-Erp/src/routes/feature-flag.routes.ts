@@ -329,6 +329,8 @@ export const updateSchema = z.strictObject({
   devereBeamWeavingLinkRequired: z.boolean().optional(),
   dokumaRunWeavingOrderRequired: z.boolean().optional(),
   dokumaOrderLineLinkRequired: z.boolean().optional(),
+  /** S1: top doğuş yolu (enum; `DOKUMA_ROLL_BIRTH_MODES` ile birebir). */
+  dokumaRollBirth: z.enum(["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"]).optional(),
   // reports.closedKeys — KAPALI raporların anahtar listesi (`REPORT_CATALOG` anahtarları).
   // ⚠️ Anahtar doğrulaması BURADA DEĞİL serviste: tanınmayan anahtar 400 `REPORT_KEY_UNKNOWN`
   // ile ADIYLA reddedilir; Zod'un `z.enum(29 anahtar)` hâli yalnız "geçersiz değer" derdi ve

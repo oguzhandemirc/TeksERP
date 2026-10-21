@@ -53,6 +53,7 @@
     "devereBeamWeavingLinkRequired": true,
     "dokumaRunWeavingOrderRequired": true,
     "dokumaOrderLineLinkRequired": true,
+    "dokumaRollBirth": "KK1_LABEL_OR_ORDER",
     "tezgahEscalationGraceMinutes": 5,
     "tezgahAlarmEnabled": true,
     "tezgahAlarmUnclassifiedTargetMinutes": 15,

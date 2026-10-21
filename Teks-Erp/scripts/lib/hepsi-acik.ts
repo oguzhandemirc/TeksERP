@@ -87,6 +87,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereBeamWeavingLinkRequired: A(true),
   dokumaRunWeavingOrderRequired: A(true),
   dokumaOrderLineLinkRequired: A(true),
+  dokumaRollBirth: A("KK1_LABEL_OR_ORDER"), // KK1_LABEL_ONLY A yolunu kapatır; en çok işleten değer iki yolu da açar
   tezgahEscalationGraceMinutes: A(5),
   tezgahAlarmEnabled: A(true),
   tezgahAlarmUnclassifiedTargetMinutes: A(15),

@@ -117,6 +117,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereBeamWeavingLinkRequired",
     ],
   },
+  // S1 (2026-10-21): `dokumaRollBirth` bu listeye S4b'de panel `enumKey` satırıyla BİRLİKTE girer — Electron
+  // `settings-scope-mirror.test` kapsamdaki her anahtarın panelde satırı olmasını ölçer; o güne dek yalnız `admin:settings` yazar.
   { permission: "settings:dokuma", flagKeys: ["dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired", "tezgahEscalationGraceMinutes", "tezgahAlarmEnabled", "tezgahAlarmUnclassifiedTargetMinutes", "tezgahAlarmUnclassifiedEnabled", "tezgahAlarmRenotifyMinutes", "tezgahAlarmEscalateWhenAcked", "tezgahAlarmNoShiftMode", "tezgahCollectorSilenceMinutes", "tezgahMaxOpenStopHours"] },
   {
     permission: "settings:warehouse",

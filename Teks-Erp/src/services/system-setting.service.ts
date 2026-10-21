@@ -299,6 +299,8 @@ export const SETTING_KEYS = {
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
   DOKUMA_ORDER_LINE_LINK_REQUIRED: "dokuma.orderLineLinkRequired",
+  /** S1 (2026-10-21, D1): topun doğuş yolu — `TABLET_DOFF` (bugün) · `KK1_LABEL_OR_ORDER` · `KK1_LABEL_ONLY`. Enum; kalıp `DOKUMA_ROLL_BIRTH_MODES`. */
+  DOKUMA_ROLL_BIRTH: "dokuma.rollBirth",
   /**
    * KAPALI raporların anahtar listesi (JSON `string[]`, `REPORT_CATALOG` anahtarları).
    *
@@ -861,6 +863,16 @@ export type TezgahAlarmNoShiftMode = "WARN" | "ALWAYS" | "REQUIRE_SHIFT";
 export const TEZGAH_ALARM_NO_SHIFT_MODES: TezgahAlarmNoShiftMode[] = ["WARN", "ALWAYS", "REQUIRE_SHIFT"];
 /** Varsayılan `WARN` — BUGÜNKÜ davranış (alarm açılabilir, vardiya dışında açılan duruş alarm üretmez). */
 export const DEFAULT_TEZGAH_ALARM_NO_SHIFT_MODE: TezgahAlarmNoShiftMode = "WARN";
+
+/**
+ * Dokuma: top nerede doğar (S1, D1/D18). `TABLET_DOFF` = bugünkü yol (tablet İNDİR → KK1 "hangi indirmeden?");
+ * `KK1_LABEL_OR_ORDER` = KK1 tezgah etiketi okutur YA DA iş emri seçer, indirmeyi sunucu üretir;
+ * `KK1_LABEL_ONLY` = yalnız etiket (iş emri yolu kapalı). KK1_* iken eski tabletin `doffEventId` yolu da kabul (geçiş).
+ */
+export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
+export const DOKUMA_ROLL_BIRTH_MODES: DokumaRollBirth[] = ["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"];
+/** Varsayılan `TABLET_DOFF` — BUGÜNKÜ davranış (KK1 gövdesinde yeni alan reddedilir, tablet İNDİR yolu aynen). */
+export const DEFAULT_DOKUMA_ROLL_BIRTH: DokumaRollBirth = "TABLET_DOFF";
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -1733,6 +1745,8 @@ export interface FeatureFlags {
   dokumaRunWeavingOrderRequired: boolean;
   /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */
   dokumaOrderLineLinkRequired: boolean;
+  /** S1: topun doğuş yolu (varsayılan `TABLET_DOFF` = bugün). HAM; etkin `resolveDokumaRollBirth` (dokuma kapalı → TABLET_DOFF). */
+  dokumaRollBirth: DokumaRollBirth;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */
@@ -2250,6 +2264,7 @@ export class SystemSettingService {
       devereBeamWeavingLinkRequired: await readDevereBeamWeavingLinkRequired(cacheClient),
       dokumaRunWeavingOrderRequired: await readDokumaRunWeavingOrderRequired(cacheClient),
       dokumaOrderLineLinkRequired: await readDokumaOrderLineLinkRequired(cacheClient),
+      dokumaRollBirth: await readDokumaRollBirth(cacheClient),
       dokumaEnabled: await readDokumaEnabledRaw(cacheClient),
       // ⚠️ ÜÇ SONUÇLU okumanın panele TAŞINAN hâli: ölçülemedi ⇒ `null`. Boş diziye
       // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
@@ -2911,6 +2926,13 @@ export class SystemSettingService {
         throw AppError.badRequest("dokumaOrderLineLinkRequired boolean olmalı");
       }
       await this.set(SETTING_KEYS.DOKUMA_ORDER_LINE_LINK_REQUIRED, input.dokumaOrderLineLinkRequired, "Dokuma: dokuma iş emri en az bir sipariş satırına bağlı", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "dokumaRollBirth")) {
+      const v = input.dokumaRollBirth;
+      if (typeof v !== "string" || !DOKUMA_ROLL_BIRTH_MODES.includes(v as DokumaRollBirth)) {
+        throw AppError.badRequest("Top doğuş yolu 'TABLET_DOFF', 'KK1_LABEL_OR_ORDER' veya 'KK1_LABEL_ONLY' olmalı");
+      }
+      await this.set(SETTING_KEYS.DOKUMA_ROLL_BIRTH, v, "Dokuma: top doğuş yolu — tablet İNDİR · KK1 etiket/iş emri · KK1 yalnız etiket", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "dokumaEnabled")) {
@@ -4811,6 +4833,13 @@ export async function readDokumaOrderLineLinkRequired(tx?: Pick<typeof prisma, "
   return asBoolean(setting?.value);
 }
 
+/** S1: top doğuş yolu — satır yok / çöp → `TABLET_DOFF` (bugünkü davranış; `includes` sigortası). HAM değer. */
+export async function readDokumaRollBirth(tx?: Pick<typeof prisma, "systemSetting">): Promise<DokumaRollBirth> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DOKUMA_ROLL_BIRTH }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && DOKUMA_ROLL_BIRTH_MODES.includes(v as DokumaRollBirth) ? (v as DokumaRollBirth) : DEFAULT_DOKUMA_ROLL_BIRTH;
+}
+
 /** Dokuma işi modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü davranış:
  *  fabrika dokumuyor, kumaş hazır geliyor). HAM değer döner; ön koşulu (production)
  *  `requireDokumaEnabled` ölçer. */
@@ -6037,6 +6066,12 @@ export async function effectivePackingGroupMode(
 export async function resolveOrderLineLinkRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   if (!(await readProductionEnabled(tx)) || !(await readDokumaEnabled(tx))) return false;
   return readDokumaOrderLineLinkRequired(tx);
+}
+
+/** S1 — top doğuş yolu — ETKİN değer: dokuma (üretim ∧ lisans tavanı) kapalıyken daima `TABLET_DOFF` (KK1 bugünküyle birebir). */
+export async function resolveDokumaRollBirth(tx?: Pick<typeof prisma, "systemSetting">): Promise<DokumaRollBirth> {
+  if (!(await readProductionEnabled(tx)) || !(await readDokumaEnabled(tx))) return DEFAULT_DOKUMA_ROLL_BIRTH;
+  return readDokumaRollBirth(tx);
 }
 
 export async function resolveKursunBypassEnabled(
