@@ -197,4 +197,21 @@ export const warpBeamService = {
   dismount: async (id: string, body: DismountWarpBeamRequest): Promise<ApiResponse<WarpBeam>> => (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/dismount`, body)).data,
   consume: async (id: string, body: ConsumeWarpBeamRequest): Promise<ApiResponse<WarpBeam>> => (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/consume`, body)).data,
   exhaust: async (id: string, body: ExhaustWarpBeamRequest): Promise<ApiResponse<WarpBeam>> => (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/exhaust`, body)).data,
+  // ── LEVENT ETİKETİ (S1b `LabelKind.WARP_BEAM`, barkod = beamNo) — çuval `/native` sözleşmesinin aynısı ──
+  // TODO(S1b): uçlar S1b ile iner; o inmeden sunucu 404 verir ve etiket kuyruğu işi "basılmadı" tutar (sarım etkilenmez).
+  /** Etiket SEÇİLİ yazıcı dilinde: rasterCapable → base64 zarfı; yoksa ham metin + `X-Label-Language`. */
+  labelNative: async (id: string, rasterCapable?: boolean): Promise<{ content: string; encoding: 'text' | 'base64'; language: string }> => {
+    if (rasterCapable) {
+      const r = await apiClient.get<{ success: boolean; data: { content: string; encoding: string; language: string } }>(`/labels/warp-beams/${id}/native`, { params: { encoding: 'b64' } });
+      return { content: r.data.data.content, encoding: 'base64', language: r.data.data.language };
+    }
+    const r = await apiClient.get<string>(`/labels/warp-beams/${id}/native`, { responseType: 'text' });
+    return { content: r.data, encoding: 'text', language: String(r.headers['x-label-language'] ?? '') };
+  },
+  /** Etiketin tam HTML'i — BT yazıcı çözülemezse expo-print yolu. */
+  labelHtml: async (id: string): Promise<string> => (await apiClient.get<string>(`/labels/warp-beams/${id}/html`, { responseType: 'text' })).data,
+  /** Baskı izi — yalnız GERÇEK baskıdan sonra (best-effort). */
+  labelPrintEvent: async (id: string): Promise<void> => {
+    await apiClient.post(`/labels/warp-beams/${id}/print-event`, { copies: 1 });
+  },
 };
