@@ -194,6 +194,8 @@ async function openDoffFresh(input: OpenDoffInput, userId?: string): Promise<Ope
 }
 
 export interface CreateDoffTxInput {
+  /** Tx öncesi havuzdan rezerve edilmiş indirme kodu (`reserveDoffCode(readDbNow(prisma))`) — tx içinde sayaç çağrısı YOK. */
+  code: string;
   machineId: string;
   productionLineNo: number;
   machineRunId: string | null;
@@ -211,8 +213,8 @@ export type CreatedDoffTx = { id: string; code: string; doffedAt: Date };
  * dosyada kalır (defter beyanı `machine-doff.service.ts`, `test_defter_ters_yol §5`). `openDoff`a
  * dokunulmaz; bu yol onun tx'li kardeşidir:
  *   • damga `readDbNow(tx)` — levent olaylarıyla TEK saat kaynağı (dokuma.md :65; beyan yok);
- *   • kod `reserveDoffCode(stamp)` havuz client'ından, tx DIŞI sayaç (mevcut sözleşme, Perf-4 B-03) —
- *     tx geri sararsa numara boşta kalır (boşluk serbest, barkod emsali);
+ *   • kod `input.code`: çağıran tx AÇILMADAN ÖNCE havuzdan alır (`reserveDoffCode`, Perf-4 B-03; barkod
+ *     emsali, `test_perf_sayac_tx_disi §2`) — tx geri sararsa ya da doff doğmazsa numara boşta kalır (boşluk serbest);
  *   • `clientToken: null` — KK1 token'ı TOP'ta, replay topu döndürür, ikinci doff doğmaz;
  *   • audit YOK — ebeveyn ROLL audit'i `doffEventId` izini taşır (ayak izi tek yerde);
  *   • retry YOK: PG tx içinde P2002 tx'i abort eder, aynı tx'te ikinci deneme çalışamaz —
@@ -221,7 +223,7 @@ export type CreatedDoffTx = { id: string; code: string; doffedAt: Date };
  */
 export async function createDoffTx(tx: Prisma.TransactionClient, input: CreateDoffTxInput): Promise<CreatedDoffTx> {
   const stamp = await readDbNow(tx);
-  const code = await reserveDoffCode(stamp);
+  const code = input.code;
   try {
     return await tx.doffEvent.create({
       data: {

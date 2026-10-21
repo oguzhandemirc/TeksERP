@@ -78,13 +78,13 @@ export const initialEntrySchema = z.object({
   }
   const kk1Birth = Boolean(v.machineCode || v.weavingOrderId);
   if (v.semiFinished && kk1Birth) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [v.machineCode ? "machineCode" : "weavingOrderId"], message: "Yarı mamul girişine tezgah/iş emri bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner." });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [v.machineCode ? "machineCode" : "weavingOrderId"], message: "Yarı mamul girişine tezgah/dokuma iş emri bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner." });
   }
   if (v.doffEventId && kk1Birth) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["doffEventId"], message: "İndirme bağı (doffEventId) ile tezgah etiketi/iş emri birlikte verilemez — top ya tablet indirmesinden ya KK1'de doğar." });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["doffEventId"], message: "İndirme bağı (doffEventId) ile tezgah etiketi/dokuma iş emri birlikte verilemez — top ya tablet indirmesinden ya KK1'de doğar." });
   }
   if (v.machineCode && v.weavingOrderId) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["weavingOrderId"], message: "Tezgah etiketi (machineCode) ile iş emri (weavingOrderId) birlikte verilemez — biri seçilir." });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["weavingOrderId"], message: "Tezgah etiketi (machineCode) ile dokuma iş emri (weavingOrderId) birlikte verilemez — biri seçilir." });
   }
   if (v.warpBeamId && !v.machineCode) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["warpBeamId"], message: "Levent beyanı (warpBeamId) yalnız tezgah etiketi (machineCode) ile verilebilir." });
@@ -102,20 +102,20 @@ export const initialEntrySchema = z.object({
  */
 export async function assertKk1BirthGate(weavingOrderId: string | null): Promise<void> {
   if (!(await readDokumaEnabled())) {
-    throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? AppError.forbidden(`Dokuma modülü bu kurulumda kapalı; tezgah etiketi/iş emri bağı verilemez. ${settingScreenPath("modules")} ekranından açılabilir.`, {
+    throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? AppError.forbidden(`Dokuma modülü bu kurulumda kapalı; tezgah etiketi/dokuma iş emri bağı verilemez. ${settingScreenPath("modules")} ekranından açılabilir.`, {
       code: "MODULE_DISABLED",
       modul: "dokuma",
     });
   }
   const mode = await resolveDokumaRollBirth();
   if (mode === "TABLET_DOFF") {
-    throw AppError.badRequest(`Top doğuşu bu kurulumda tablet indirmesindedir (dokuma.rollBirth=${mode}); KK1'de tezgah etiketi/iş emri verilemez — indirmeyi tezgah ekranından kaydedin.`, {
+    throw AppError.badRequest(`Top doğuşu bu kurulumda tablet indirmesindedir (dokuma.rollBirth=${mode}); KK1'de tezgah etiketi/dokuma iş emri verilemez — indirmeyi tezgah ekranından kaydedin.`, {
       code: "ROLL_BIRTH_MODE",
       mode,
     });
   }
   if (mode === "KK1_LABEL_ONLY" && weavingOrderId) {
-    throw AppError.badRequest(`Bu kurulumda top yalnız tezgah etiketiyle doğar (dokuma.rollBirth=${mode}); iş emri seçimi kapalı — etiketi okutun.`, {
+    throw AppError.badRequest(`Bu kurulumda top yalnız tezgah etiketiyle doğar (dokuma.rollBirth=${mode}); dokuma iş emri seçimi kapalı — etiketi okutun.`, {
       code: "ROLL_BIRTH_MODE",
       mode,
     });

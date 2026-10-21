@@ -10,6 +10,7 @@ import type { BeamSuzgec } from "../_hooks/reportAxisFilters";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { DataSource } from "./dokuma-regime";
+import type { BeamResultReport, CapacityReport, FinishForecastReport } from "./leventReportTypes";
 
 export type SealState = "OPEN" | "SEALED";
 export type LossClass = "UNPLANNED" | "SETUP" | "PLANNED" | "NON_SCHEDULED" | "MINOR";
@@ -159,6 +160,13 @@ export const dokumaReportsApi = {
     (await apiClient.get<ApiResponse<EfficiencyReport> & WithSuzgec>(`/api/reports/dokuma/randiman${qs(p)}`)).data,
   mudahale: async (p: { from: string; to: string }) =>
     (await apiClient.get<ApiResponse<AlarmResponseReport>>(`/api/reports/dokuma/mudahale${qs(p)}`)).data,
+  // S1c: levent sonucu · kapasite · bitiş tahmini (levent uçları ayrıca `requireDevereEnabled`).
+  leventSonucu: async (p: { from: string; to: string; warpSpecId?: string; machineId?: string }) =>
+    (await apiClient.get<ApiResponse<BeamResultReport> & WithSuzgec>(`/api/reports/dokuma/levent-sonucu${qs(p)}`)).data,
+  kapasiteKullanimi: async (p: { from: string; to: string; machineId?: string }) =>
+    (await apiClient.get<ApiResponse<CapacityReport> & WithSuzgec>(`/api/reports/dokuma/kapasite-kullanimi${qs(p)}`)).data,
+  leventBitisTahmini: async (p: { machineId?: string }) =>
+    (await apiClient.get<ApiResponse<FinishForecastReport> & WithSuzgec>(`/api/reports/dokuma/levent-bitis-tahmini${qs(p)}`)).data,
   pareto: async (p: RangeParams) =>
     (await apiClient.get<ApiResponse<ParetoReport> & WithSuzgec>(`/api/reports/dokuma/durus-pareto${qs(p)}`)).data,
   shiftScorecard: async (p: { factoryDay: string; shiftDefinitionId?: string; warpBeamId?: string; lotNo?: string }) =>

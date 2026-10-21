@@ -24,6 +24,7 @@ interface Props {
   onAddMachine: (stationId: string) => void;
   onEditMachine: (m: Machine) => void;
   onQrMachine: (m: Machine) => void;
+  onPrintLabelMachine: (m: Machine) => void;
   onDeactivateMachine: (m: Machine) => void;
   onReactivateMachine: (m: Machine) => void;
   onDeleteMachine: (m: Machine) => void;
@@ -50,6 +51,7 @@ export const StationCard = memo(function StationCard({
   onAddMachine,
   onEditMachine,
   onQrMachine,
+  onPrintLabelMachine,
   onDeactivateMachine,
   onReactivateMachine,
   onDeleteMachine,
@@ -103,6 +105,8 @@ export const StationCard = memo(function StationCard({
             onAdd={() => onAddMachine(s.id)}
             onEdit={onEditMachine}
             onQr={onQrMachine}
+            onPrintLabel={onPrintLabelMachine}
+            stationKind={s.kind}
             onDeactivate={onDeactivateMachine}
             onReactivate={onReactivateMachine}
             onDelete={onDeleteMachine}

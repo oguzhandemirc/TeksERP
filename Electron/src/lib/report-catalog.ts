@@ -134,16 +134,16 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "dokuma/mudahale", baslik: "Müdahale ve Çözüm Süresi", soru: "Tezgah alarmları ne kadar sürede üstlenildi, ne kadar sürede çözüldü?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/mudahale", uc: "/api/reports/dokuma/mudahale", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/mudahale" }], yuzey: "yaprak" },
-  // S1c: üç levent/kapasite raporunun panel yaprağı + karosu S4a dilimindedir; o güne dek panelYolu "" (yüzey yok — bekçi §2/§3/§7d yaprak aramaz). S4a yolu yazınca yaprak zorunlu olur.
+  // S1c uçları + S4a yaprakları (levent sonucu · kapasite · bitiş tahmini); levent karoları hub'da ayrıca devere ister.
   { key: "dokuma/levent-sonucu", baslik: "Levent Sonucu", soru: "Her leventten beklenen kumaş çıktı mı, fire ne kadar?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 30, tarih: "aralik-gun",
-    panelYolu: "", uc: "/api/reports/dokuma/levent-sonucu", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/levent-sonucu" }], yuzey: "yaprak" },
+    panelYolu: "reports/dokuma/levent-sonucu", uc: "/api/reports/dokuma/levent-sonucu", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/levent-sonucu" }], yuzey: "yaprak" },
   { key: "dokuma/kapasite-kullanimi", baslik: "Kapasite Kullanımı", soru: "Tezgahlar haftada teorik kapasitelerinin ne kadarını kumaşa çevirdi?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 30, tarih: "aralik-gun",
-    panelYolu: "", uc: "/api/reports/dokuma/kapasite-kullanimi", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/kapasite-kullanimi" }], yuzey: "yaprak" },
+    panelYolu: "reports/dokuma/kapasite-kullanimi", uc: "/api/reports/dokuma/kapasite-kullanimi", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/kapasite-kullanimi" }], yuzey: "yaprak" },
   { key: "dokuma/levent-bitis-tahmini", baslik: "Levent Bitiş Tahmini", soru: "Tezgahtaki leventler günlük hızla ne zaman biter?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "yok",
-    panelYolu: "", uc: "/api/reports/dokuma/levent-bitis-tahmini", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/levent-bitis-tahmini" }], yuzey: "yaprak" },
+    panelYolu: "reports/dokuma/levent-bitis-tahmini", uc: "/api/reports/dokuma/levent-bitis-tahmini", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/levent-bitis-tahmini" }], yuzey: "yaprak" },
 
   // ── ÖN MUHASEBE ───────────────────────────────────────────────────────────
   { key: "finance/aging", baslik: "Cari Yaşlandırma", soru: "Cari bakiyeler bu tarihte hangi vade kovalarında duruyor?",

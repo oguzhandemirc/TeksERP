@@ -100,7 +100,7 @@ function MachineCells({ r, canWrite, onAddMachine, h }: { r: StationMachineRow; 
         {r.devices.length > 0 ? r.devices.map((d) => d.name).join(", ") : "—"}
       </TableCell>
       <TableCell className="py-1.5">
-        <MachineRowActions m={m} canWrite={canWrite} h={h} />
+        <MachineRowActions m={m} canWrite={canWrite} h={h} stationKind={r.station.kind} />
       </TableCell>
     </>
   );
