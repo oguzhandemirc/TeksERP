@@ -25,6 +25,7 @@ import {
   stationNominalKg,
   stationPlanForm,
   validateStation,
+  yarnItemIdFor,
   type StationDeps,
   type StationForm,
   type StationSpec,
@@ -181,5 +182,13 @@ describe('§6 plan + zincir', () => {
     const f = afterWind(filled({ physicalBeamNo: 'G', breakCount: '2', target: { kind: 'beam', beamId: 'b1' } }));
     expect(f).toMatchObject({ warpSpecId: 's1', machineId: 'm1', lengthM: '1000', weighedKg: '', physicalBeamNo: '', breakCount: '', target: { kind: 'auto' } });
     expect(f.issues[0]).toMatchObject({ warehouseId: 'w1', qtyKg: '' });
+  });
+});
+
+describe('§7 lot süzgeci', () => {
+  it('kartın iplik kalemi aynı karttaki leventten; yoksa null', () => {
+    expect(yarnItemIdFor('s1', [beam('b1')])).toBe('y');
+    expect(yarnItemIdFor('s9', [beam('b1')])).toBeNull();
+    expect(yarnItemIdFor(null, [beam('b1')])).toBeNull();
   });
 });

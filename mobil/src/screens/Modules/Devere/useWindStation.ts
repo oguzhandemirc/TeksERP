@@ -13,7 +13,6 @@ import { signalScan } from '../../../services/scanFeedback';
 import { planFingerprint, tokenForBeam, windFingerprint, type BeamAttempt } from './devereAttempt';
 import { lastPlannedWarpSpecId, soleMachineId, soleWeavingOrderId } from './beamPayload';
 import { useBeamMutations } from './useBeamMutations';
-import { useBeamLabelQueue } from './beamLabelQueue';
 import {
   afterPlanCreated,
   afterWind,
@@ -53,7 +52,7 @@ interface SubmitDeps {
   onPlanned: (beam: WarpBeam) => void;
 }
 
-/** SAR: doğrula → (hedef yoksa) plan → sar; sar OK → etiket kuyruğu. Token deneme başına (`devereAttempt`). */
+/** SAR: doğrula → (hedef yoksa) plan → sar; etiket kuyruğu `useBeamMutations` sar başarısında. Token deneme başına (`devereAttempt`). */
 function useStationSubmit({ form, context, spec, target, isOnline, setFormState, setError, onWound, onPlanned }: SubmitDeps) {
   const attemptRef = useRef<BeamAttempt | null>(null);
   const onCollision = useCallback(
@@ -71,10 +70,7 @@ function useStationSubmit({ form, context, spec, target, isOnline, setFormState,
       mutations.wind.mutate(
         { beamId, originKind: 'IN_HOUSE', form: toWindForm(f, spec), token: tokenForBeam(attemptRef.current, fingerprint), fingerprint },
         {
-          onSuccess: (res) => {
-            const q = useBeamLabelQueue.getState();
-            if (res.data) q.enqueue(res.data.id, res.data.beamNo);
-            for (const s of res.data?.siblings ?? []) q.enqueue(s.id, s.beamNo);
+          onSuccess: () => {
             onWound(beamId);
             setFormState((cur) => (cur ? afterWind(cur) : cur));
           },

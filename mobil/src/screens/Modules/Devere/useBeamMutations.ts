@@ -13,6 +13,7 @@ import { useInvalidateReasonPresets } from '../../../hooks/useReasonPresets';
 import { FLAGS_KEY } from '../../../hooks/useFeatureFlags';
 import { onBeamFailed, onBeamSucceeded, type BeamAttempt } from './devereAttempt';
 import { buildPlanPayload, buildWindPayload, classifyBeamFailure, type PlanForm, type WindForm } from './beamPayload';
+import { enqueueWoundLabels } from './beamLabelQueue';
 
 export const BEAMS_KEY = ['warp-beams'] as const;
 export const CONTEXT_KEY = ['warp-beams', 'tablet-context'] as const;
@@ -77,6 +78,8 @@ export function useBeamMutations({ attemptRef, onDone, onCollision }: Deps) {
       attemptRef.current = onBeamSucceeded();
       ok(res.message ?? 'Levent sarıldı');
       showBeamWarnings(res.warnings, 'Sarım kaydedildi — uyarı');
+      // Levent no sunucuda doğdu → etiketi kalıcı kuyruğa (basılamazsa ekranda "etiketi çıkmadı" kalır).
+      enqueueWoundLabels(res.data);
       onDone();
       invalidateList();
     },

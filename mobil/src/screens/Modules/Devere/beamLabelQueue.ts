@@ -108,3 +108,11 @@ export const useBeamLabelQueue = create<BeamLabelQueueState>((set, get) => ({
     set({ jobs });
   },
 }));
+
+/** Sarım yanıtı → etiket işleri: levent + raşel kardeşleri (TEK giriş: her iki SAR yolu `useBeamMutations` üstünden). */
+export function enqueueWoundLabels(wound: { id: string; beamNo: string; siblings?: { id: string; beamNo: string }[] } | null | undefined): void {
+  if (!wound) return;
+  const q = useBeamLabelQueue.getState();
+  q.enqueue(wound.id, wound.beamNo);
+  for (const s of wound.siblings ?? []) q.enqueue(s.id, s.beamNo);
+}

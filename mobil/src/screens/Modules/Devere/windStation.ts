@@ -205,3 +205,9 @@ export function afterPlanCreated(form: StationForm, beamId: string): StationForm
 export function afterWind(form: StationForm): StationForm {
   return { ...form, target: { kind: 'auto' }, weighedKg: '', physicalBeamNo: '', issues: form.issues.map((l) => ({ ...l, qtyKg: '' })), returns: [], breakCount: '' };
 }
+
+/** Kartın iplik kalemi (lot seçicisini süzmek için): bağlam kartı iplik id'si taşımaz → aynı karttaki herhangi bir leventten; yoksa null (süzülmez, sunucu doğrular). */
+export function yarnItemIdFor(warpSpecId: string | null, beams: readonly Pick<WarpBeam, 'warpSpec'>[]): string | null {
+  if (!warpSpecId) return null;
+  return beams.find((b) => b.warpSpec.id === warpSpecId)?.warpSpec.yarnItem.id ?? null;
+}

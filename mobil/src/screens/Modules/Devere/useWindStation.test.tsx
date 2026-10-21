@@ -3,14 +3,13 @@
 // =============================================================================
 //   §1 bağlam gelince form kurulur: son levent kartı + tek makine ön-dolu
 //   §2 ⭐ planlı yok → plan, plan OK → sar; sar düşer → tekrar SAR AYNI leventi sarar (ikinci plan YOK)
-//   §3 planlı levent varsa doğrudan sar; OK → etiket kuyruğa, form ölçümleri temizlenir
+//   §3 planlı levent varsa doğrudan sar; OK → form ölçümleri temizlenir (etiket kuyruğu useBeamMutations'ta)
 //   §4 okutma: levent no → accept + hedef; sarılmış levent → reject + mesaj
 //   §5 çevrimdışı → mutasyon çağrılmaz, gerekçe yazılır
 // =============================================================================
 import { act, renderHook } from '@testing-library/react-native';
 import type { TabletContext, WarpBeam } from '../../../services/warpBeam.service';
 import { useWindStation } from './useWindStation';
-import { useBeamLabelQueue } from './beamLabelQueue';
 
 const mockPlan = { mutate: jest.fn(), isPending: false };
 const mockWind = { mutate: jest.fn(), isPending: false };
@@ -41,7 +40,6 @@ beforeEach(() => {
   mockPlan.mutate.mockReset();
   mockWind.mutate.mockReset();
   mockSignalScan.mockReset();
-  useBeamLabelQueue.setState({ jobs: [], activeId: null, hydrated: true });
 });
 
 it('§1 form kurulur: son levent kartı + tek makine', () => {
@@ -68,7 +66,7 @@ it('§2 ⭐ plan → sar; sar düşünce tekrar SAR aynı leventi sarar', () => 
   expect(mockWind.mutate.mock.calls[1][0].beamId).toBe('nb');
 });
 
-it('§3 planlı levent → doğrudan sar; OK → etiket kuyruğa, ölçüm temizlenir', () => {
+it('§3 planlı levent → doğrudan sar; OK → ölçüm temizlenir, hedef yeniden otomatik', () => {
   const h = setup([beam('p1')]);
   act(() => h.result.current.patch({ lengthM: '900', weighedKg: '50' }));
   expect(h.result.current.target?.id).toBe('p1');
@@ -78,7 +76,6 @@ it('§3 planlı levent → doğrudan sar; OK → etiket kuyruğa, ölçüm temiz
   act(() => {
     mockWind.mutate.mock.calls[0][1].onSuccess({ data: { id: 'p1', beamNo: 'LV-p1', siblings: [] } });
   });
-  expect(useBeamLabelQueue.getState().jobs.map((j) => j.beamNo)).toEqual(['LV-p1']);
   expect(h.result.current.form?.weighedKg).toBe('');
   expect(h.result.current.target).toBeNull();
 });

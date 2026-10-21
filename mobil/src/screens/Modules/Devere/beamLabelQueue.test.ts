@@ -5,9 +5,10 @@
 //   §2 başarı işi düşürür; hata işi `error`la tutar, sıradaki bekleyen onu atlar
 //   §3 TTL + tavan budaması
 //   §4 depo: hydrate MERGE — hydrate'ten önce eklenen iş ezilmez; diske yazılır
+//   §5 sarım yanıtı → levent + raşel kardeşleri kuyruğa
 // =============================================================================
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BEAM_LABEL_QUEUE_MAX, BEAM_LABEL_TTL_MS, enqueueJob, markJobDone, markJobFailed, nextPending, pruneJobs, useBeamLabelQueue } from './beamLabelQueue';
+import { BEAM_LABEL_QUEUE_MAX, BEAM_LABEL_TTL_MS, enqueueJob, enqueueWoundLabels, markJobDone, markJobFailed, nextPending, pruneJobs, useBeamLabelQueue } from './beamLabelQueue';
 
 const T = 1_000_000_000;
 
@@ -51,5 +52,13 @@ describe('beamLabelQueue depo', () => {
     await new Promise((r) => setTimeout(r, 0));
     const disk = JSON.parse((await AsyncStorage.getItem('TEKSERP_BEAM_LABEL_QUEUE_V1')) ?? '{}');
     expect(disk.jobs.find((j: { beamId: string }) => j.beamId === 'm1').error).toBe('kâğıt bitti');
+  });
+
+  it('§5 sarım yanıtı: levent + kardeşler, null yanıt hiçbir şey', () => {
+    useBeamLabelQueue.setState({ hydrated: true });
+    enqueueWoundLabels(null);
+    expect(useBeamLabelQueue.getState().jobs).toEqual([]);
+    enqueueWoundLabels({ id: 'b1', beamNo: 'LV-1', siblings: [{ id: 'b2', beamNo: 'LV-2' }] });
+    expect(useBeamLabelQueue.getState().jobs.map((j) => j.beamNo)).toEqual(['LV-1', 'LV-2']);
   });
 });
