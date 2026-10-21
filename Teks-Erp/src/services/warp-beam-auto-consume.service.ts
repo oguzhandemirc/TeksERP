@@ -11,10 +11,12 @@
 // Bayrak `devere.autoConsume` DEFAULT false: kapalıyken bu dosya HİÇ satır/uyarı üretmez (bayt bayt).
 // =============================================================================
 import { Prisma } from "@prisma/client";
+import { AppError } from "../utils/app-error";
 import { readDevereAutoConsume, readDevereEnabled } from "./system-setting.service";
 import { applyWarpBeamEventTx } from "./helpers/warp-beam-event.helper";
-import { beamsMountedDuring } from "./helpers/warp-beam-mount.helper";
+import { beamsMountedDuring, type BeamMountedDuringRow } from "./helpers/warp-beam-mount.helper";
 import { remainingMTx } from "./helpers/warp-beam-ledger.helper";
+import { KK1_BEAM_CHANGE_WINDOW_HOURS, KK1_BEAM_CHANGE_WINDOW_MS } from "../constants/dokuma-kk1";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -25,6 +27,35 @@ export interface AutoConsumeInput {
   /** Topun ölçülen kumaş metresi (`Roll.initialQty`). */
   fabricLengthM: Prisma.Decimal.Value;
   userId?: string | null;
+  /**
+   * S1 (D10): KK1'de BEYAN edilen levent — verilirse `beamsMountedDuring` yerine o levent düşer.
+   * Şart: o tezgahta son `KK1_BEAM_CHANGE_WINDOW_HOURS` içinde MOUNTED ya da DISMOUNTED olayı;
+   * yoksa 400 `WARP_BEAM_NOT_RECENT` (operatör sökümden sonra gelse de doğru levent düşer, uydurma düşmez).
+   */
+  beamOverrideId?: string | null;
+}
+
+/**
+ * Beyan edilen leventi pencere kapısından geçirir ve `beamsMountedDuring` satırı biçiminde döner.
+ * Pencere çıpası `doffedAt` (DB saati) — olay `createdAt`i de DB saatinden (tek saat kaynağı).
+ */
+async function resolveBeamOverrideTx(tx: Tx, beamId: string, machineId: string, doffedAt: Date): Promise<BeamMountedDuringRow> {
+  const beam = await tx.warpBeam.findUnique({ where: { id: beamId }, select: { id: true, beamNo: true } });
+  if (!beam) throw AppError.notFound("Levent bulunamadı", { code: "WARP_BEAM_NOT_FOUND", warpBeamId: beamId });
+  const since = new Date(doffedAt.getTime() - KK1_BEAM_CHANGE_WINDOW_MS);
+  const recent = await tx.warpBeamEvent.findFirst({
+    where: { beamId, machineId, kind: { in: ["MOUNTED", "DISMOUNTED"] }, createdAt: { gte: since } },
+    // "en son" okuyucusu eşitlik bozucuyla (aynı ms'de iki olay → id belirlenimli).
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { kind: true, mountPosition: true, createdAt: true },
+  });
+  if (!recent) {
+    throw AppError.badRequest(
+      `${beam.beamNo} leventi bu tezgaha son ${KK1_BEAM_CHANGE_WINDOW_HOURS} saat içinde takılmamış/sökülmemiş — levent beyanı kabul edilmedi.`,
+      { code: "WARP_BEAM_NOT_RECENT", warpBeamId: beamId, machineId, windowHours: KK1_BEAM_CHANGE_WINDOW_HOURS },
+    );
+  }
+  return { beamId: beam.id, beamNo: beam.beamNo, mountPosition: recent.mountPosition, mountedAt: recent.createdAt, dismountedAt: recent.kind === "DISMOUNTED" ? recent.createdAt : null };
 }
 
 /** Çözgü metresi: kumaş ÷ (1 − takeUp/100); take-up NULL → kumaş (ESTIMATED + uyarı). */
@@ -40,11 +71,17 @@ export function warpLengthFromFabric(fabricM: Prisma.Decimal, takeUpPct: Prisma.
  * Bayrak kapalı → [] (hiç sorgu bile yapılmaz). Bağlı levent yok → uyarı.
  */
 export async function autoConsumeForRollTx(tx: Tx, input: AutoConsumeInput): Promise<string[]> {
-  if (!(await readDevereAutoConsume(tx)) || !(await readDevereEnabled(tx))) return [];
+  if (!(await readDevereAutoConsume(tx)) || !(await readDevereEnabled(tx))) {
+    // Bayrak kapalıyken bayt bayt sessiz — yalnız YENİ alan (levent beyanı) geldiyse kayıp adıyla söylenir.
+    return input.beamOverrideId ? ["Levent beyanı yok sayıldı — levent otomatik tüketimi (devere.autoConsume) kapalı."] : [];
+  }
   const warnings: string[] = [];
   const doff = await tx.doffEvent.findUnique({ where: { id: input.doffEventId }, select: { machineId: true, doffedAt: true, machine: { select: { code: true, productionLineCount: true } } } });
   if (!doff) return warnings;
-  const mounted = await beamsMountedDuring(tx, doff.machineId, doff.doffedAt, doff.doffedAt);
+  // S1: beyan edilen levent pencere kapısından geçerse DEFTER penceresinin yerine o düşer (D10).
+  const mounted = input.beamOverrideId
+    ? [await resolveBeamOverrideTx(tx, input.beamOverrideId, doff.machineId, doff.doffedAt)]
+    : await beamsMountedDuring(tx, doff.machineId, doff.doffedAt, doff.doffedAt);
   if (mounted.length === 0) {
     warnings.push(`${doff.machine.code}: indirme anında tezgahta bağlı levent yoktu — çözgü tüketimi yazılmadı (elle tüketim gerekebilir).`);
     return warnings;

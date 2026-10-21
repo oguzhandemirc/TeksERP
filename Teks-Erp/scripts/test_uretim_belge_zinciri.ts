@@ -203,7 +203,11 @@ async function main(): Promise<void> {
     console.log("\n§6 Y3 kolon yok (şema taraması)");
     const schema = readFileSync(join(__dirname, "..", "prisma", "schema.prisma"), "utf8");
     const modelBody = (name: string) => schema.slice(schema.indexOf(`model ${name} {`), schema.indexOf("\n}", schema.indexOf(`model ${name} {`)));
-    check("⭐ `Roll` ve `WorkOrder`da `weavingOrderId` kolonu YOK — top→iş `weavingOrderOfRoll` ile türetilir", !/^\s*weavingOrderId\s/m.test(modelBody("Roll")) && !/^\s*weavingOrderId\s/m.test(modelBody("WorkOrder")));
+    // S1 (2026-10-21, D11) Y3 istisnası: `Roll.weavingOrderId` yalnız DOFF'SUZ A-yolu (iş birden çok tezgahta koşarken tezgah
+    // bilinmiyor); doff bağı ile aynı anda olamaz (CHECK XOR), okuyucu yine TEK (`weavingOrderOfRoll`, üçüncü dal `via:"ORDER"`).
+    const xorMigration = readFileSync(join(__dirname, "..", "prisma", "migrations", "20261021200000_roll_weaving_order_link", "migration.sql"), "utf8");
+    const okuyucu = readFileSync(join(__dirname, "..", "src", "services", "helpers", "weaving-order-of-roll.helper.ts"), "utf8");
+    check("⭐ `WorkOrder`da `weavingOrderId` kolonu YOK; `Roll.weavingOrderId` yalnız doff'suz A-yolu (CHECK `rolls_weaving_order_xor_ck`) ve top→iş yine tek okuyucu `weavingOrderOfRoll` (via ORDER)", !/^\s*weavingOrderId\s/m.test(modelBody("WorkOrder")) && /^\s*weavingOrderId\s+String\?\s+@db\.Uuid/m.test(modelBody("Roll")) && /rolls_weaving_order_xor_ck/.test(xorMigration) && /via: "ORDER"/.test(okuyucu));
     check("pivot + levent bağı şemada (yalnız ekleme)", /model WeavingOrderToOrderLine \{/.test(schema) && /^\s*weavingOrderId\s+String\?\s+@db\.Uuid/m.test(modelBody("WarpBeam")));
   } catch (e) {
     fail++;

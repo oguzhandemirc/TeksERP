@@ -19,6 +19,7 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { AppError } from "../utils/app-error";
 import { openDoff, revokeDoff } from "../services/machine-doff.service";
 import { listDoffsForDay, listUnlinkedDoffs, UNLINKED_MAX_DAYS } from "../services/loom-list.service";
+import { readKk1Context } from "../services/helpers/kk1-roll-birth.helper";
 
 const router = Router();
 
@@ -89,6 +90,55 @@ router.get("/", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA, 
       throw AppError.badRequest("Günün indirme listesi için machineId zorunlu (bağlanmamışlar için unlinked=true).", { code: "MACHINE_ID_REQUIRED" });
     }
     res.json(await listDoffsForDay({ machineId: q.machineId, date: q.date ?? null }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+const kk1ContextSchema = z
+  .object({
+    machineCode: z.string().trim().min(1, "Tezgah etiketi boş olamaz").max(32, "Tezgah etiketi çok uzun"),
+    productionLineNo: z.coerce.number().int("Üretim hattı numarası tam sayı olmalıdır").min(1, "Üretim hattı en az 1").optional(),
+  })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-doffs/kk1-context:
+ *   get:
+ *     tags: [MachineDoffs]
+ *     summary: KK1 ön-dolgu — tezgah etiketinden açık koşum, iş emri, kumaş/renk, çözgü kartı, takılı leventler
+ *     description: >
+ *       "Top KK1'de doğar" (`dokuma.rollBirth` KK1_LABEL_OR_ORDER · KK1_LABEL_ONLY): operatör etiketi okutunca ekran
+ *       bu uçla dolar; değerler ÖNERİDİR (D17), doğuş `POST /api/rolls/initial-entry` gövdesindeki `machineCode` ile
+ *       olur. Hatalar doğuşla AYNI (404 MACHINE_NOT_FOUND · 400 MACHINE_NOT_LOOM · 409 MACHINE_NO_OPEN_RUN) — ekran
+ *       kaydetmeden önce cevabı görür. `beams` yalnız devere açıkken dolar; `recentChange` son 12 saatteki en yeni
+ *       takma/sökme olayıdır (levent beyanı `warpBeamId` için aynı pencere). Koşumun deseni işin kumaşını ezer.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: machineCode
+ *         required: true
+ *         schema: { type: string, maxLength: 32 }
+ *       - in: query
+ *         name: productionLineNo
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *     responses:
+ *       200:
+ *         description: >
+ *           `{ machine:{id,code,name,productionLineCount}, run:{id,productionLineNo,startedAt,
+ *           weavingOrder:{id,weavingOrderNumber}|null, item:{id,code,name}|null, color:{id,name}|null,
+ *           warpSpec:{id,code,name,takeUpPct}|null}, beams:{mounted:[{id,beamNo,position,remainingM}],
+ *           recentChange:{at,dismounted:{id,beamNo}|null,mounted:{id,beamNo}|null}|null}, rollBirth }`
+ *       400: { description: Parametre hatası · MACHINE_NOT_LOOM · PRODUCTION_LINE_OUT_OF_RANGE }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: MACHINE_NOT_FOUND (yok ya da pasif) }
+ *       409: { description: MACHINE_NO_OPEN_RUN — hatta açık koşum yok; panelden "İş ver" }
+ */
+router.get("/kk1-context", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA, ...MOBILE_KK1), async (req, res, next) => {
+  try {
+    const q = kk1ContextSchema.parse(req.query);
+    res.json({ success: true, data: await readKk1Context(q.machineCode, q.productionLineNo ?? null) });
   } catch (e) {
     next(e);
   }

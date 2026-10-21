@@ -353,6 +353,8 @@ export interface FeatureFlags {
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;
   dokumaOrderLineLinkRequired: boolean;
+  /** S1 (2026-10-21): top doğuş yolu — `TABLET_DOFF` (bugün) · `KK1_LABEL_OR_ORDER` · `KK1_LABEL_ONLY`. Panel satırı S4b'de. */
+  dokumaRollBirth: DokumaRollBirth;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */
@@ -726,6 +728,8 @@ export type FeatureFlagsView = FeatureFlags & {
 };
 
 export type TezgahAlarmNoShiftMode = "WARN" | "ALWAYS" | "REQUIRE_SHIFT";
+/** S1: top doğuş yolu — backend `DokumaRollBirth` aynası. */
+export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
 export type AlarmShiftNotice = "NO_SHIFT_DEFINED" | "NO_SHIFT_NOW";
 /** `GET /api/feature-flags/tezgah-alarm-shift-status` — ayar ekranının KAYITLI durum şeridi + açma kilidi. */
 export interface TezgahAlarmShiftStatus {

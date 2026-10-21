@@ -12,7 +12,7 @@ import { DuplicateRollsService } from "../services/duplicate-rolls.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
-import { SETTING_KEYS, readDokumaEnabled } from "../services/system-setting.service";
+import { SETTING_KEYS, readDokumaEnabled, resolveDokumaRollBirth } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { RollEntrySource, RollStatus } from "@prisma/client";
@@ -62,11 +62,65 @@ export const initialEntrySchema = z.object({
   doffEventId: z.string().uuid("Geçersiz indirme ID").optional().nullable(),
   /** G3 emanet: topun sahibi olan müşteri (müşterinin işlenmek üzere bıraktığı kumaş). Emanet kapalıyken 403 (serviste). */
   ownerCustomerId: z.string().uuid("Geçersiz sahip müşteri").optional().nullable(),
+  /**
+   * TOP KK1'DE DOĞAR (S1, `dokuma.rollBirth` KK1_LABEL_OR_ORDER · KK1_LABEL_ONLY; plan DOKUMA-MANUEL-PLAN § S1):
+   * tablet doff'u yerine KK1 operatörü (B) tezgah etiketini okutur ya da (A) açık iş emrini seçer; sunucu DoffEvent'i
+   * AYNI tx'te üretir. `machineCode` XOR `weavingOrderId`; `doffEventId` ile birlikte verilemez (iki doğuş yolu);
+   * `warpBeamId` (levent beyanı) yalnız `machineCode` ile. Strict olmayan şema: alanlar LİSTEDE olmak zorunda.
+   */
+  machineCode: z.string().trim().min(1, "Tezgah etiketi boş olamaz").max(32, "Tezgah etiketi çok uzun").optional().nullable(),
+  weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri ID").optional().nullable(),
+  warpBeamId: z.string().uuid("Geçersiz levent ID").optional().nullable(),
+  productionLineNo: z.number().int("Üretim hattı numarası tam sayı olmalıdır").min(1, "Üretim hattı en az 1").optional().nullable(),
 }).superRefine((v, ctx) => {
   if (v.semiFinished && v.doffEventId) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["doffEventId"], message: "Yarı mamul girişine indirme bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner." });
   }
+  const kk1Birth = Boolean(v.machineCode || v.weavingOrderId);
+  if (v.semiFinished && kk1Birth) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [v.machineCode ? "machineCode" : "weavingOrderId"], message: "Yarı mamul girişine tezgah/dokuma iş emri bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner." });
+  }
+  if (v.doffEventId && kk1Birth) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["doffEventId"], message: "İndirme bağı (doffEventId) ile tezgah etiketi/dokuma iş emri birlikte verilemez — top ya tablet indirmesinden ya KK1'de doğar." });
+  }
+  if (v.machineCode && v.weavingOrderId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["weavingOrderId"], message: "Tezgah etiketi (machineCode) ile dokuma iş emri (weavingOrderId) birlikte verilemez — biri seçilir." });
+  }
+  if (v.warpBeamId && !v.machineCode) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["warpBeamId"], message: "Levent beyanı (warpBeamId) yalnız tezgah etiketi (machineCode) ile verilebilir." });
+  }
+  if (v.productionLineNo != null && !v.machineCode) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["productionLineNo"], message: "Üretim hattı (productionLineNo) yalnız tezgah etiketi (machineCode) ile verilebilir." });
+  }
 });
+/**
+ * TOP KK1'DE DOĞAR (S1) — controller kapısı, servisten ÖNCE (bekçi `test_kk1_roll_birth` §1/§5/§9).
+ * Sıra: dokuma kapalı → 403 MODULE_DISABLED (kapalı modülün yazma yolu yoktur); mod TABLET_DOFF → 400
+ * ROLL_BIRTH_MODE (bugünkü yol: KK1 tezgah bilmez, indirme tablette); KK1_LABEL_ONLY iken iş emri seçimi → 400
+ * ROLL_BIRTH_MODE (yalnız etiket). Ayrı fonksiyon: `createInitialEntry` gövdesi `test_dokuma_regime_gate §8a`nın
+ * 3000 karakterlik penceresinde kalmalı.
+ */
+export async function assertKk1BirthGate(weavingOrderId: string | null): Promise<void> {
+  if (!(await readDokumaEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? AppError.forbidden(`Dokuma modülü bu kurulumda kapalı; tezgah etiketi/dokuma iş emri bağı verilemez. ${settingScreenPath("modules")} ekranından açılabilir.`, {
+      code: "MODULE_DISABLED",
+      modul: "dokuma",
+    });
+  }
+  const mode = await resolveDokumaRollBirth();
+  if (mode === "TABLET_DOFF") {
+    throw AppError.badRequest(`Top doğuşu bu kurulumda tablet indirmesindedir (dokuma.rollBirth=${mode}); KK1'de tezgah etiketi/dokuma iş emri verilemez — indirmeyi tezgah ekranından kaydedin.`, {
+      code: "ROLL_BIRTH_MODE",
+      mode,
+    });
+  }
+  if (mode === "KK1_LABEL_ONLY" && weavingOrderId) {
+    throw AppError.badRequest(`Bu kurulumda top yalnız tezgah etiketiyle doğar (dokuma.rollBirth=${mode}); dokuma iş emri seçimi kapalı — etiketi okutun.`, {
+      code: "ROLL_BIRTH_MODE",
+      mode,
+    });
+  }
+}
 // ⚠️ Bu şema BİLEREK strict DEĞİL (`z.object` + `superRefine` = ZodEffects; `.strict()` yok): bilinmeyen alan sessizce
 // atılır. `feature-flag.routes.ts`'te strict doğru karardı (panel ↔ backend, tek
 // sürüm), ama BURASI istemci ucudur — sahada eski APK'lar var ve strict'e
@@ -298,7 +352,7 @@ export class InventoryController {
    */
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { confirmDuplicate, semiFinished, doffEventId, ownerCustomerId, ...body } = initialEntrySchema.parse(req.body);
+      const { confirmDuplicate, semiFinished, doffEventId, ownerCustomerId, machineCode, weavingOrderId, warpBeamId, productionLineNo, ...body } = initialEntrySchema.parse(req.body);
       // Kapalı modülün YAZMA yolu yoktur, tarihsel bağ dahil: `doffEventId` yalnız dokuma
       // açıkken kabul edilir (1e E1 hükmü 2026-09-14; kapı `requireDokumaEnabled` ile aynı gövde).
       if (doffEventId && !(await readDokumaEnabled())) {
@@ -307,6 +361,11 @@ export class InventoryController {
           modul: "dokuma",
         });
       }
+      // TOP KK1'DE DOĞAR (S1): kapı SERVİSTEN ÖNCE, üstteki bloktan AYRI (o blok §8a regex'iyle ölçülür).
+      const kk1Birth = machineCode || weavingOrderId
+        ? { machineCode: machineCode ?? null, weavingOrderId: weavingOrderId ?? null, warpBeamId: warpBeamId ?? null, productionLineNo: productionLineNo ?? null }
+        : null;
+      if (kk1Birth) await assertKk1BirthGate(kk1Birth.weavingOrderId);
       // Yarı mamul kabulü AYRI bir yetenek yetkisi ister (2026-08-17 kullanıcı
       // kararı): yetkisi olmayan operatörde ekran bugünkü gibi kalır ve renk
       // seçemez. Kapı BURADA — istemcinin kutuyu gizlemesine güvenilmez.
@@ -367,6 +426,8 @@ export class InventoryController {
           // Tezgahtan inen top: kaynak WEAVING, bağ KK1 tx'inde (doff satırı
           // kilitli). Statü zorlanmaz — dokuma ham çıkar, renk sezgisi doğru.
           ...(doffEventId ? { forcedEntrySource: RollEntrySource.WEAVING, doffEventId } : {}),
+          // KK1 doğuşu (S1): kaynak WEAVING; indirme SUNUCUDA, aynı tx'te doğar (`resolveKk1BirthTx` → `createDoffTx`).
+          ...(kk1Birth ? { forcedEntrySource: RollEntrySource.WEAVING, kk1Birth } : {}),
         },
       );
       res.status(201).json(result);

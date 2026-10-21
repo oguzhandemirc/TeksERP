@@ -50,6 +50,8 @@ export interface FeatureFlags {
   tezgahAlarmRenotifyMinutes?: number | null;
   /** Z1 üretim belge zinciri: açıkken tezgah koşumu bir dokuma işine bağlanmalı (`dokuma.runWeavingOrderRequired`) — default FALSE (bugünkü davranış). */
   dokumaRunWeavingOrderRequired: boolean;
+  /** S1: top doğuş yolu (`dokuma.rollBirth`) — default `TABLET_DOFF` (backend satır-yok değeri = bugünkü KK1). UI S3'te. */
+  dokumaRollBirth: "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
   /** Açıkken levent planı/sarımı bir dokuma işine bağlanmalı (`devere.beamWeavingLinkRequired`) — default FALSE. */
   devereBeamWeavingLinkRequired: boolean;
   pricingEnabled: boolean;
@@ -179,6 +181,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   // Backend satır-yok değeri FALSE — kapalıyken Tezgah/Levent ekranları Faz 1b ile birebir.
   devereMountTracking: false,
   dokumaRunWeavingOrderRequired: false,
+  // Backend satır-yok değeri TABLET_DOFF — bayrak yüklenene dek KK1 bugünkü yol (etiket/iş alanı çizilmez).
+  dokumaRollBirth: "TABLET_DOFF",
   devereBeamWeavingLinkRequired: false,
   pricingEnabled: false,
   targetQuantityEnabled: false,

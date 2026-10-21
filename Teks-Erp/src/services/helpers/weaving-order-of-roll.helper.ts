@@ -1,12 +1,14 @@
 // =============================================================================
 // "BU TOP HANGİ DOKUMA İŞİNDEN?" — TEK OKUYUCU (G2, 2026-09-14)
 // =============================================================================
-// İki doğum yolu, tek soru: kendi tezgahında dokunan top İNDİRME üzerinden
+// Üç doğum yolu, tek soru: kendi tezgahında dokunan top İNDİRME üzerinden
 // (`Roll.doffEventId → DoffEvent.machineRunId → MachineRun.weavingOrderId`),
 // fasonda dokunan top MAKBUZ üzerinden (`Roll.parentReceiptId →
-// SubcontractorReceipt.weavingOrderId`). `Roll.weavingOrderId` KOLONU YOKTUR —
-// açılsaydı in-house yolda ikinci kaynak olurdu ("aynı soruyu cevaplayan iki yol").
-// Bekçi (`test_subcontractor_weaving §5`) bu iki zinciri başka dosyada aramaz.
+// SubcontractorReceipt.weavingOrderId`), KK1'de iş emri seçilip tezgahı bilinmeyen
+// top (S1 A-yolu, D11) DOĞRUDAN `Roll.weavingOrderId` üzerinden. Kolon yalnız
+// doff'suz satırda dolar (CHECK `rolls_weaving_order_xor_ck`) — doff'lu topta
+// ikinci kaynak olmaz, zincir tek: doff varsa koşumdan, yoksa kolondan.
+// Bekçi (`test_subcontractor_weaving §5`) bu zincirleri başka dosyada aramaz.
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
@@ -16,13 +18,13 @@ type Db = Prisma.TransactionClient | typeof prisma;
 
 export type WeavingOrderOfRoll = {
   weavingOrderId: string;
-  /** DOFF = kendi tezgahı (indirme) · RECEIPT = fason dokuma makbuzu. */
-  via: "DOFF" | "RECEIPT";
+  /** DOFF = kendi tezgahı (indirme) · RECEIPT = fason dokuma makbuzu · ORDER = KK1 iş seçimi, tezgah bilinmiyor (S1 A-yolu). */
+  via: "DOFF" | "RECEIPT" | "ORDER";
 };
 
-/** "Bu işten indirme yoluyla doğan top" yüklemi — sayı (detay) ve metre/liste (genel bakış) AYNI where'i okur. */
+/** "Bu işten doğan top" yüklemi (indirme zinciri ∪ doff'suz iş bağı) — sayı (detay) ve metre/liste (genel bakış) AYNI where'i okur. */
 export function rollsOfWeavingOrderWhere(weavingOrderId: string): Prisma.RollWhereInput {
-  return { doffEvent: { revokedAt: null, machineRun: { weavingOrderId } } };
+  return { OR: [{ doffEvent: { revokedAt: null, machineRun: { weavingOrderId } } }, { weavingOrderId }] };
 }
 
 /** Z1 (Y3 türetme, kolon yok): bu işten indirme yoluyla doğan (iptal edilmemiş) top sayısı — aynı zincir, aynı dosya. */
@@ -35,6 +37,7 @@ export async function weavingOrderOfRoll(db: Db, rollId: string): Promise<Weavin
   const roll = await db.roll.findUnique({
     where: { id: rollId },
     select: {
+      weavingOrderId: true,
       doffEvent: { select: { revokedAt: true, machineRun: { select: { weavingOrderId: true } } } },
       parentReceipt: { select: { cancelledAt: true, weavingOrderId: true } },
     },
@@ -44,6 +47,7 @@ export async function weavingOrderOfRoll(db: Db, rollId: string): Promise<Weavin
   if (doffWo) return { weavingOrderId: doffWo, via: "DOFF" };
   const receiptWo = roll.parentReceipt?.cancelledAt ? null : roll.parentReceipt?.weavingOrderId ?? null;
   if (receiptWo) return { weavingOrderId: receiptWo, via: "RECEIPT" };
+  if (roll.weavingOrderId) return { weavingOrderId: roll.weavingOrderId, via: "ORDER" };
   return null;
 }
 

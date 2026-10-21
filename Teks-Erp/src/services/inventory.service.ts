@@ -13,6 +13,9 @@ import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { claimDoffForRollTx } from "./helpers/machine-doff-link.helper";
 import { autoConsumeForRollTx, cancelConsumedForRollTx, reconsumeForRollTx } from "./warp-beam-auto-consume.service";
+import { resolveKk1BirthTx, type Kk1BirthInput, type Kk1BirthResolution } from "./helpers/kk1-roll-birth.helper";
+import { reserveDoffCode } from "./helpers/machine-doff-open.helper";
+import { readDbNow } from "./helpers/machine-run-open.helper";
 import { postRescueEntryTx } from "./helpers/production-entry-ledger.helper";
 import { postEntryCorrectionTx } from "./helpers/entry-correction-ledger.helper";
 import { normalizeScanCode } from "../utils/code-format";
@@ -668,7 +671,8 @@ export interface ProductionFlowData {
  * Alan OPSİYONELDİR ve yalnız replay'de doldurulur: mevcut çağıranların
  * hiçbiri (`inventory.controller`, `tambur-manual.service`) etkilenmez.
  */
-export type InitialEntryResult = ApiResponse<Roll> & { idempotent?: true };
+/** S1: KK1 doğuşunda sunucunun doğurduğu indirme yalnız BU yanıtta (`ROLL_LIST_INCLUDE` genişlemez; tablet rozet basar). */
+export type InitialEntryResult = ApiResponse<Roll & { doffEvent?: { id: string; code: string } }> & { idempotent?: true };
 
 export class InventoryService {
   /**
@@ -696,23 +700,36 @@ export class InventoryService {
    */
   private initialEntryReplay(
     data: { itemId: string; colorId?: string | null; initialQty: number },
-    opts?: { goodsReceiptId?: string | null; parentReceiptId?: string | null; doffEventId?: string | null },
+    opts?: { goodsReceiptId?: string | null; parentReceiptId?: string | null; doffEventId?: string | null; kk1Birth?: Kk1BirthInput | null },
   ) {
-    type Prior = Prisma.RollGetPayload<{ include: { item: true; color: true; createdBy: { select: { id: true; username: true; fullName: true } } } }>;
-    const context = [
-      ["goodsReceiptId", opts?.goodsReceiptId],
-      ["parentReceiptId", opts?.parentReceiptId],
-      ["doffEventId", opts?.doffEventId],
-    ] as const;
+    // S1: doff `id/code` rozet için, `machine.code` + `machineRun.weavingOrderId` replay KİMLİĞİ için (bağlam alanları).
+    const PRIOR_INCLUDE = {
+      item: true,
+      color: true,
+      createdBy: { select: { id: true, username: true, fullName: true } },
+      doffEvent: { select: { id: true, code: true, machine: { select: { code: true } }, machineRun: { select: { weavingOrderId: true } } } },
+    } satisfies Prisma.RollInclude;
+    type Prior = Prisma.RollGetPayload<{ include: typeof PRIOR_INCLUDE }>;
+    // Bağlam: [alan, gelen, mevcut okuyucusu] — doff yoluyla doğan A-yolu topunda kolon NULL, iş koşumdan okunur.
+    const context: ReadonlyArray<readonly [string, string | null | undefined, (r: Prior) => string | null]> = [
+      ["goodsReceiptId", opts?.goodsReceiptId, (r) => r.goodsReceiptId],
+      ["parentReceiptId", opts?.parentReceiptId, (r) => r.parentReceiptId],
+      ["doffEventId", opts?.doffEventId, (r) => r.doffEventId],
+      ["machineCode", opts?.kk1Birth?.machineCode, (r) => r.doffEvent?.machine.code ?? null],
+      ["weavingOrderId", opts?.kk1Birth?.weavingOrderId, (r) => r.weavingOrderId ?? r.doffEvent?.machineRun?.weavingOrderId ?? null],
+    ];
+    const strip = (r: Prior): InitialEntryResult["data"] => {
+      const { doffEvent, ...rest } = r;
+      return doffEvent ? { ...rest, doffEvent: { id: doffEvent.id, code: doffEvent.code } } : rest;
+    };
     return tokenReplay<Prior, InitialEntryResult>({
-      find: (db, clientToken) =>
-        db.roll.findUnique({ where: { clientToken }, include: { item: true, color: true, createdBy: { select: { id: true, username: true, fullName: true } } } }),
+      find: (db, clientToken) => db.roll.findUnique({ where: { clientToken }, include: PRIOR_INCLUDE }),
       alive: (r) => assertRollReplayAlive(r),
       identity: (r) => [
         { ad: "itemId", mevcut: r.itemId, gelen: data.itemId },
         { ad: "colorId", mevcut: r.colorId, gelen: data.colorId ?? null },
         { ad: "initialQty", mevcut: r.initialQty, gelen: data.initialQty },
-        ...context.filter(([, v]) => v).map(([ad, v]) => ({ ad, mevcut: r[ad], gelen: v })),
+        ...context.filter(([, v]) => v).map(([ad, v, oku]) => ({ ad, mevcut: oku(r), gelen: v })),
       ],
       collision: "Bu istemci anahtarı farklı bir topla kullanılmış. Topu yeniden okutup tekrar deneyin.",
       collisionEk: (r) => ({
@@ -721,7 +738,7 @@ export class InventoryService {
         incoming: { itemId: data.itemId, colorId: data.colorId ?? null, initialQty: data.initialQty },
       }),
       // ⚠️ YENİ TOP DOĞMADI — defter tutan çağıran bunu SAYMAMALI (`InitialEntryResult` başlığı).
-      respond: (r) => ({ success: true, data: r, message: `Top zaten kayıtlı (idempotent retry). Barkod: ${r.barcode}`, idempotent: true }),
+      respond: (r) => ({ success: true, data: strip(r), message: `Top zaten kayıtlı (idempotent retry). Barkod: ${r.barcode}`, idempotent: true }),
     });
   }
 
@@ -799,6 +816,13 @@ export class InventoryService {
        * içinde doff satırı KİLİTLENEREK kurulur (`claimDoffForRollTx`).
        */
       doffEventId?: string | null;
+      /**
+       * S1 — TOP KK1'DE DOĞAR (`dokuma.rollBirth` KK1_*): tezgah etiketi (`machineCode`) ya da iş emri
+       * (`weavingOrderId`); indirme bu tx'te SUNUCUDA doğar (`resolveKk1BirthTx` → `createDoffTx`), sonra
+       * mevcut bağ + levent zinciri aynen. `doffEventId` ile birlikte VERİLMEZ (controller zod'u ayırır).
+       * Kapılar (modül, mod) controller'da — burası çağıranın beyanına güvenir (dahili çağıran vermez).
+       */
+      kk1Birth?: Kk1BirthInput | null;
       /**
        * Elle eklenen topun SEBEBİ — kalıcı kolona (`Roll.entryReason`) yazılır.
        * Zincire dayanan yollar (KK1 / kesim / fason) bunu VERMEZ; onların sebebi
@@ -1102,10 +1126,16 @@ export class InventoryService {
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     // Devere Faz 4: bağlı leventten otomatik tüketim uyarıları (bayrak kapalıyken dizi boş kalır, yanıta girmez).
     const autoConsumeWarnings: string[] = [];
+    // S1: KK1 doğuşunun çözümü (tx içinde dolar) — doğan doff'un id/kodu yanıta, uyarıları `warnings`a.
+    // Tutucu nesne: tx closure'undaki atama TS akış daraltmasında görünmez (`let` sonrası tip `null`a daralıyordu).
+    const kk1: { birth: Kk1BirthResolution | null } = { birth: null };
     // Barkod tx AÇILMADAN ÖNCE ve ayrı bağlantıda rezerve edilir: sayaç satır kilidi
     // tx içinde commit'e kadar tutulup bütün top girişlerini serileştiriyordu. Tx geri
     // sararsa (ikiz 409, ana veri 409, token P2002) numara boşluğu kalır — barkod kimliktir.
     const barcode = await generateRollBarcodeTx(prisma, rollType);
+    // S1: indirme kodu da tx AÇILMADAN ÖNCE havuzdan (`test_perf_sayac_tx_disi §2`); doff doğmazsa
+    // (çok tezgahlı iş, 4xx) numara boşta kalır — boşluk serbest (dokuma.md, barkod emsali).
+    const doffCode = opts?.kk1Birth ? await reserveDoffCode(await readDbNow(prisma)) : null;
     // Token P2002'si boğaza düşer (`run` yeniden okur).
     {
       roll = await prisma.$transaction(async (tx) => {
@@ -1212,10 +1242,15 @@ export class InventoryService {
         await assertItemUsableTx(tx, data.itemId, itemUsage);
         await assertMasterDataLiveTx(tx, { colorId: data.colorId ?? null });
 
+        // S1 KK1 DOĞUŞU — 8021'den SONRA, bağdan ÖNCE: tezgah/iş çözülür, indirme bu tx'te doğar
+        // (`createDoffTx`, damga DB saati); çok tezgahlı işte doff yok, iş bağı kolona (D11).
+        if (opts?.kk1Birth) kk1.birth = await resolveKk1BirthTx(tx, opts.kk1Birth, { userId: userId ?? null, itemId: data.itemId, doffCode });
+        const birth = kk1.birth;
+        const linkedDoffEventId = birth?.doffEventId ?? opts?.doffEventId ?? null;
         // DOFF BAĞI — satır kilidi (FOR UPDATE) ile; düz okuma eşzamanlı DOFF_CANCEL'e
         // pencere açar. Sıra: advisory kilit (yukarıda) → doff satırı; barkod sayacı
         // tx dışında. İptal yolu yalnız doff satırını tutar, ABBA yok.
-        await claimDoffForRollTx(tx, { doffEventId: opts?.doffEventId, entrySource, createdMachineId: machineId ?? null });
+        await claimDoffForRollTx(tx, { doffEventId: linkedDoffEventId, entrySource, createdMachineId: machineId ?? null });
 
         // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
         // Fabrika yolları parametre vermez → varsayılan depo → davranış aynı.
@@ -1243,7 +1278,9 @@ export class InventoryService {
             entrySource,
             createdById: userId ?? null,
             createdMachineId: machineId ?? null,
-            doffEventId: opts?.doffEventId ?? null,
+            doffEventId: linkedDoffEventId,
+            // S1 A-yolu: YALNIZ doff'suz (çok tezgahlı iş) — doff varsa iş koşumdan okunur (CHECK XOR, D11).
+            weavingOrderId: birth && !birth.doffEventId ? birth.weavingOrderId : null,
             parentReceiptId: opts?.parentReceiptId ?? null,
             ownerCustomerId: opts?.ownerCustomerId ?? null,
             // GİRİŞ İSTASYONU — çağıranın AÇIKÇA verdiği değer, burada
@@ -1304,6 +1341,9 @@ export class InventoryService {
         // LEVENT TÜKETİMİ (Faz 4) — yalnız tezgahtan inen top (doff bağı); aynı tx, top doğuşundan SONRA.
         if (opts?.doffEventId) {
           autoConsumeWarnings.push(...(await autoConsumeForRollTx(tx, { rollId: created.id, doffEventId: opts.doffEventId, fabricLengthM: data.initialQty, userId: userId ?? null })));
+        } else if (birth?.doffEventId) {
+          // S1: sunucunun doğurduğu doff — aynı zincir; beyan edilen levent override (D10, pencere kapısı helper'da).
+          autoConsumeWarnings.push(...(await autoConsumeForRollTx(tx, { rollId: created.id, doffEventId: birth.doffEventId, fabricLengthM: data.initialQty, userId: userId ?? null, beamOverrideId: opts?.kk1Birth?.warpBeamId ?? null })));
         }
         return created;
       });
@@ -1332,11 +1372,15 @@ export class InventoryService {
       },
     });
 
+    // S1: doğuş uyarıları (çok tezgah · kumaş uyuşmazlığı · işsiz koşum) önce, levent uyarıları sonra; alansız gövdede ikisi de boş → anahtar yok.
+    const birth = kk1.birth;
+    const warnings = [...(birth?.warnings ?? []), ...autoConsumeWarnings];
     return {
       success: true,
-      data: roll,
+      // Sunucunun doğurduğu indirme yalnız bu yanıtta (tablet rozet basar); eski yolda `data` bayt bayt aynı.
+      data: birth?.doffEventId && birth.doffCode ? { ...roll, doffEvent: { id: birth.doffEventId, code: birth.doffCode } } : roll,
       message: `Top oluşturuldu. Barkod: ${roll.barcode}`,
-      ...(autoConsumeWarnings.length ? { warnings: autoConsumeWarnings } : {}),
+      ...(warnings.length ? { warnings } : {}),
     };
   }
 
