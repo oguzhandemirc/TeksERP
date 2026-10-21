@@ -28,7 +28,7 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "KK1'de top girerken tezgah etiketini okutabilir ya da açık dokuma işini seçebilirsiniz (ayar \"KK1 etiket/iş emri\" ise); levent değiştiyse çipten seçilir, metre girilip KAYDET'e basılır. Bu modda Tezgah ekranında İNDİR yoktur: toplar KK1'de etiketle doğar. Levent takarken de barkod kullanılır: levent etiketi, tezgah etiketi okutulur ve büyük TAK düğmesine basılır. Varsayılan ayar bugünkü yoldur, değiştirmezseniz hiçbir şey değişmez."
+          "metin": "KK1'de top, tezgah etiketiyle ya da açık dokuma işi seçilerek kaydedilebilir; indirme kaydını sunucu yazar. Ayar panelden açılır; açıkken Tezgah ekranında İNDİR yoktur. Varsayılan bugünkü yoldur."
         },
         {
           "kapsam": "panel",
@@ -43,12 +43,12 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "Top artık KK1'de tezgahtan doğabilir: ayarlarda \"top doğuş yolu\" KK1 etiket/iş emri seçilirse operatör metreyi girerken tezgah etiketini okutur ya da açık dokuma işini seçer; indirme kaydı sunucuda kendiliğinden oluşur, top ona bağlanır ve bağlı leventten tüketim düşer. Tezgahta açık iş yoksa top kaydedilmez ve ekran \"önce iş ver\" der. İş birden çok tezgahta koşuyorsa top işe bağlanır, indirme ve levent düşümü yazılmaz; uyarı gösterilir. Varsayılan ayar bugünkü yol (indirme tablette) — değiştirilmedikçe hiçbir şey değişmez."
+          "metin": "Levent takarken levent ve tezgah etiketi okutulup büyük TAK düğmesine basılır."
         },
         {
           "kapsam": "tablet",
           "tip": "iyilestirme",
-          "metin": "Levent Sarım ekranı tablette istasyon düzenine geçti: solda çözgü kartı, sarılan metre (büyük tuş takımıyla), kg (tartı ya da nominal hesap), gövde no ve devere makinesi, altta büyük SAR düğmesi; sağda levent no ya da gövde no okutma bandı, levent listesi ve tuş takımı. Kartın planlı leventi varsa o sarılır, yoksa SAR önce planı açar sonra sarar. Sarımdan sonra levent etiketi kendiliğinden basılır; basılamazsa sağda \"etiketi çıkmadı\" satırı kalır ve Tekrar bas ile yeniden basılır. Etiket için panelde Levent Etiketi şablonu atanmış olmalı; sunucu güncellenmeden etiket basılmaz, sarım yine kaydedilir. Fason ve hazır levent ile çok adetli sarım listedeki SAR düğmesiyle eskisi gibi yapılır. Telefonda ekran değişmedi."
+          "metin": "Levent Sarım ekranı istasyon düzeninde: metre, kg, gövde no, büyük SAR düğmesi. Sarımdan sonra levent etiketi kendiliğinden basılır (panelde Levent Etiketi şablonu gerekir); basılamazsa Tekrar bas ile yeniden basılır."
         }
       ]
     },
