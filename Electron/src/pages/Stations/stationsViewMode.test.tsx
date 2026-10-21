@@ -71,7 +71,7 @@ describe("Liste görünümü — kart ve dosya ile aynı küme", () => {
     expect(stations).toHaveLength(3);
     const rows = buildStationMachineRows(stations, new Map([["s2", [machine("m1", "s2"), machine("m2", "s2")]]]), new Map(), new Map());
     expect(rows.map((r) => `${r.station.id}:${r.machine?.id ?? "-"}`)).toEqual(["s1:-", "s2:m1", "s2:m2", "s3:-"]);
-    renderWithProviders(<StationListView rows={rows} canWrite onEditStation={() => {}} onAddMachine={() => {}} machine={{ onEdit: () => {}, onQr: () => {}, onDeactivate: () => {}, onReactivate: () => {}, onDelete: () => {} }} />);
+    renderWithProviders(<StationListView rows={rows} canWrite onEditStation={() => {}} onAddMachine={() => {}} machine={{ onEdit: () => {}, onQr: () => {}, onPrintLabel: () => {}, onDeactivate: () => {}, onReactivate: () => {}, onDelete: () => {} }} />);
     expect(screen.getAllByRole("row")).toHaveLength(1 + rows.length);
     expect(screen.getByText("Makine m1")).toBeInTheDocument();
     expect(screen.getAllByText("Levent tüketir")).toHaveLength(2); // tezgahın iki makine satırı — istasyon sütunları tekrarlanır
@@ -82,7 +82,7 @@ describe("Liste görünümü — kart ve dosya ile aynı küme", () => {
   it("⭐ K22: istasyon KODU listede görünür (formda doğan kimlik listede de görünür)", () => {
     const s1 = station({ id: "s1", name: "KK1", code: "IST2309260007" });
     const rows = buildStationMachineRows([s1], new Map(), new Map(), new Map());
-    renderWithProviders(<StationListView rows={rows} canWrite onEditStation={() => {}} onAddMachine={() => {}} machine={{ onEdit: () => {}, onQr: () => {}, onDeactivate: () => {}, onReactivate: () => {}, onDelete: () => {} }} />);
+    renderWithProviders(<StationListView rows={rows} canWrite onEditStation={() => {}} onAddMachine={() => {}} machine={{ onEdit: () => {}, onQr: () => {}, onPrintLabel: () => {}, onDeactivate: () => {}, onReactivate: () => {}, onDelete: () => {} }} />);
     expect(screen.getByText("IST2309260007")).toBeInTheDocument();
   });
 });

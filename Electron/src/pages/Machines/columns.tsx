@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { MachineQrCell } from "./MachineQrPrintDialog";
+import { MachineLabelCell } from "./MachineLabelPrintDialog";
 import type { Machine } from "./types";
 
 export const machineColumns: ColumnDef<Machine>[] = [
@@ -29,5 +30,10 @@ export const machineColumns: ColumnDef<Machine>[] = [
     id: "qr",
     header: "QR",
     cell: ({ row }) => <MachineQrCell machine={row.original} />,
+  },
+  {
+    id: "loomLabel",
+    header: "Tezgah etiketi",
+    cell: ({ row }) => <MachineLabelCell machine={row.original} />,
   },
 ];

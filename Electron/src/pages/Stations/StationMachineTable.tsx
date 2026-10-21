@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { Machine } from "@/pages/Machines/types";
+import type { StationKind } from "@/types/enums";
 import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
 import { MachinePeripheralsCell } from "@/pages/Stations/MachinePeripheralsCell";
 import { MachineRowActions } from "@/pages/Stations/MachineRowActions";
@@ -15,9 +16,12 @@ interface Props {
    *  makine satırında "Cihazlar (N)" genişletici çıkar. */
   peripheralsByMachine?: Map<string, PeripheralDevice[]>;
   canWrite: boolean;
+  /** Satırların istasyon türü — tezgah etiketi düğmesi yalnız WEAVING'de. */
+  stationKind?: StationKind;
   onAdd: () => void;
   onEdit: (m: Machine) => void;
   onQr: (m: Machine) => void;
+  onPrintLabel: (m: Machine) => void;
   onDeactivate: (m: Machine) => void;
   onReactivate: (m: Machine) => void;
   onDelete: (m: Machine) => void;
@@ -34,6 +38,8 @@ export function StationMachineTable({
   onAdd,
   onEdit,
   onQr,
+  onPrintLabel,
+  stationKind,
   onDeactivate,
   onReactivate,
   onDelete,
@@ -130,7 +136,7 @@ export function StationMachineTable({
                     )}
                   </TableCell>
                   <TableCell className="py-1.5">
-                    <MachineRowActions m={m} canWrite={canWrite} h={{ onEdit, onQr, onDeactivate, onReactivate, onDelete }} />
+                    <MachineRowActions m={m} canWrite={canWrite} stationKind={stationKind} h={{ onEdit, onQr, onPrintLabel, onDeactivate, onReactivate, onDelete }} />
                   </TableCell>
                 </TableRow>
                 {showDevices && isOpen && (
