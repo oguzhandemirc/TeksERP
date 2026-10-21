@@ -117,10 +117,15 @@ export function entryFingerprint(p: {
   width?: number | null;
   /** Emanet sahibi (G3t) — iki giriş yalnız sahipte ayrılıyorsa ikincisi yutulmasın (renk emsali). */
   ownerCustomerId?: string | null;
+  /** KK1 doğuşu (S3a, `loomBirthFingerprint`): iki top yalnız tezgahta/işte ayrılıyorsa yutulmasın.
+   *  Bağ yoksa EKLENMEZ → TABLET_DOFF parmak izi bugünküyle birebir. */
+  birth?: string | null;
 }): string {
   const dec = (v: number | null | undefined) =>
     v == null || Number.isNaN(v) ? '-' : v.toFixed(3);
-  return [p.itemId, p.colorId ?? '-', dec(p.initialQty), dec(p.width), p.ownerCustomerId ?? '-'].join('|');
+  const parts = [p.itemId, p.colorId ?? '-', dec(p.initialQty), dec(p.width), p.ownerCustomerId ?? '-'];
+  if (p.birth) parts.push(p.birth);
+  return parts.join('|');
 }
 
 /** Yeni bir fiziksel top girişi için taze kimlik (token + damga BİRLİKTE). */

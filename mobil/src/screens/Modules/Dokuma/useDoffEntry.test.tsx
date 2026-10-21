@@ -5,6 +5,7 @@
 //   §2 operatör "Koşumsuz" (selectRun(null)) seçince ön-seçim TEKRAR ETMEZ (dokunuldu)
 //   §3 hat değişince (setLineNo) ön-seçim sıfırlanır — yeni hattın tek koşumu seçili
 //   §4 parça sayısı VARSAYILAN '1' (form açılışta geçerli)
+//   §5 (S3d, D14) `rollBirth` KK1_* → İNDİR kapalı (doffEnabled false, submit no-op); TABLET_DOFF bugünkü
 // Negatif sonda (2026-09-18, bir kezlik): `runTouched` guard'ı kaldırıldı → §2 ❌ (Koşumsuz
 // seçildikten sonra effect tek koşumu geri yazdı).
 // =============================================================================
@@ -19,17 +20,22 @@ jest.mock('./useDoffLists', () => ({
 }));
 jest.mock('./useDoffMeter', () => ({ useDoffMeter: () => ({ readMeter: jest.fn(), reading: false }) }));
 jest.mock('./useDoffMutations', () => ({
-  useDoffSave: () => ({ mutation: { mutate: jest.fn(), isPending: false }, attemptRef: { current: null }, result: null, setResult: jest.fn(), failure: null, setFailure: jest.fn(), invalidate: jest.fn() }),
+  useDoffSave: () => ({ mutation: { mutate: mockMutate, isPending: false }, attemptRef: { current: null }, result: null, setResult: jest.fn(), failure: null, setFailure: jest.fn(), invalidate: jest.fn() }),
   useDoffRevoke: () => ({ mutate: jest.fn(), isPending: false }),
 }));
 jest.mock('../../../store/sessionStore', () => ({ useSessionStore: (sel: (s: unknown) => unknown) => sel({ active: { machine: { id: 'mac1', productionLineCount: 2 } } }) }));
 jest.mock('../../../hooks/usePermission', () => ({ usePermissions: () => ({ has: () => true }) }));
 jest.mock('../../../offline/hooks', () => ({ useIsOnline: () => true, useOfflineReason: () => null }));
+let mockRollBirth = 'TABLET_DOFF';
+jest.mock('../../../hooks/useFeatureFlags', () => ({ useDokumaRollBirth: () => mockRollBirth }));
+const mockMutate = jest.fn();
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
 
 const run = (id: string, line = 1) => ({ id, startedAt: '2026-09-18T09:00:00.000Z', productionLineNo: line, weavingOrderId: 'wo1' });
 
 beforeEach(() => {
+  mockRollBirth = 'TABLET_DOFF';
+  mockMutate.mockClear();
   mockOpenRuns = [];
   mockRefetchRuns.mockClear();
 });
@@ -73,5 +79,26 @@ describe('useDoffEntry koşum ön-seçimi', () => {
     act(() => result.current.setLineNo(2)); // hat değişti → runTouched sıfırlanır
     rerender({});
     expect(result.current.form.machineRunId).toBe('r9');
+  });
+});
+
+describe('useDoffEntry — top doğuş yolu (S3d, D14)', () => {
+  it('§5 ⭐ KK1_* modda İNDİR kapalı: doffEnabled false, canSubmit false, submit gönderMEZ', () => {
+    for (const mode of ['KK1_LABEL_OR_ORDER', 'KK1_LABEL_ONLY']) {
+      mockRollBirth = mode;
+      const { result } = renderHook(() => useDoffEntry());
+      expect(result.current.doffEnabled).toBe(false);
+      expect(result.current.canSubmit).toBe(false);
+      act(() => result.current.submit());
+      expect(mockMutate).not.toHaveBeenCalled();
+    }
+  });
+
+  it('§5 TABLET_DOFF → İNDİR bugünkü gibi açık ve gönderir', () => {
+    const { result } = renderHook(() => useDoffEntry());
+    expect(result.current.doffEnabled).toBe(true);
+    expect(result.current.canSubmit).toBe(true);
+    act(() => result.current.submit());
+    expect(mockMutate).toHaveBeenCalledTimes(1);
   });
 });

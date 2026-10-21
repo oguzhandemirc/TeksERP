@@ -267,6 +267,26 @@ describe("istasyon mutation kayıt bütünlüğü", () => {
   });
 });
 
+describe("KK1 kuyruk gövdesi — tezgah doğuşu alanları (S3a, kat vakası dersi)", () => {
+  it("⭐ KK1_CREATE_ENTRY mutationFn machineCode · productionLineNo · warpBeamId · weavingOrderId'yi AYNEN geçirir", async () => {
+    // Çevrimdışı kuyrukta `machineCode` + metre bekler, bağlam replay'de SUNUCUDA çözülür.
+    // Gövde bir gün elle kurulursa (allowlist) alan sessizce düşer ve top dışarıdan doğar.
+    const { rollService } = jest.requireMock("../services/roll.service") as {
+      rollService: { createInitialEntry: jest.Mock };
+    };
+    rollService.createInitialEntry.mockReset();
+    rollService.createInitialEntry.mockResolvedValue({ success: true });
+    const fn = defaultsFor(STATION_MUT.KK1_CREATE_ENTRY).mutationFn as (vars: unknown) => Promise<unknown>;
+    const label = { itemId: "i1", initialQty: 190, clientToken: "t1", clientEnteredAt: "2026-10-21T06:00:00.000Z", machineCode: "T-07", productionLineNo: 2, warpBeamId: "b7" };
+    await fn(label);
+    expect(rollService.createInitialEntry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ machineCode: "T-07", productionLineNo: 2, warpBeamId: "b7", initialQty: 190, clientToken: "t1" }),
+    );
+    await fn({ itemId: "i1", initialQty: 50, clientToken: "t2", weavingOrderId: "wo1" });
+    expect(rollService.createInitialEntry).toHaveBeenLastCalledWith(expect.objectContaining({ weavingOrderId: "wo1" }));
+  });
+});
+
 describe("offline pause → online resume (gerçek networkMode + retry)", () => {
   // Paylaşılan queryClient'ı App.tsx'teki Provider gibi mount ediyoruz —
   // online→resumePausedMutations köprüsü mount listener'ı ile kurulur.

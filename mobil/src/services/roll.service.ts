@@ -181,6 +181,17 @@ export interface InitialEntryRequest {
    * kapalı sunucu 403 MODULE_DISABLED verir, eski sunucu alanı SESSİZCE düşürür (şema strict değil).
    */
   ownerCustomerId?: string;
+  /**
+   * KK1 DOĞUŞU (S1/S3a, `dokuma.rollBirth` KK1_*): tezgah etiketi → sunucu açık koşumu çözer ve
+   * indirmeyi (DoffEvent) topla AYNI tx'te yazar. `machineCode` XOR `weavingOrderId` (A yolu: iş seç);
+   * `warpBeamId` (eski levent beyanı) ve `productionLineNo` yalnız `machineCode` ile. ⚠️ Bu alanlar
+   * çevrimdışı kuyruğa (`STATION_MUT.KK1_CREATE_ENTRY`) AYNEN girer; bağlam replay'de sunucuda çözülür
+   * — mutationFn gövdeyi süzmez (`mutations.test` ölçer). Eski sunucu alanları sessizce düşürür.
+   */
+  machineCode?: string;
+  weavingOrderId?: string;
+  warpBeamId?: string;
+  productionLineNo?: number;
 }
 
 /** `GET /rolls/tablet-context` — emanet sahip adayları (yalnız id+ad; emanet kapalıyken boş). */

@@ -3,7 +3,8 @@
 // =============================================================================
 // Oturum WEAVING istasyonu + makine (`SessionGate` sarar; `stationScreens.ts`).
 // (1) KOŞUM (`RunPanel`) · (2) DURUŞ (`StopPanel`) · (4) TOP İNDİR ve geri almaları;
-// (3) LEVENT (`BeamPanel`, Faz 3 — bayrakla). Kuyruk YOK (online-only); çevrimdışıyken buton kilitli.
+// (3) LEVENT (`BeamPanel`, Faz 3 — bayrakla). `rollBirth` KK1_* iken (4) İNDİR çizilmez (D14).
+// Kuyruk YOK (online-only); çevrimdışıyken buton kilitli.
 // Kalıp: ince kabuk + görünüm bileşenleri + ekran-hook + saf mantık (MOBIL.md).
 // =============================================================================
 import React from 'react';
@@ -35,7 +36,14 @@ export default function DokumaScreen() {
       <View style={[styles.root, compact && styles.rootColumn]}>
         <View style={styles.pane}>
           <RunPanel entry={entry} />
-          <DoffEntryView entry={entry} />
+          {entry.doffEnabled ? (
+            <DoffEntryView entry={entry} />
+          ) : (
+            <View style={styles.info} testID="doff-kk1-info">
+              <Icon source="barcode-scan" size={20} color={colors.infoDark} />
+              <Text style={styles.infoText}>Toplar KK1'de etiketle doğar — bu ekranda İNDİR yok. Koşum, duruş ve levent burada.</Text>
+            </View>
+          )}
           {entry.result && (
             <View style={styles.resultBox}>
               <Text style={styles.resultCode}>{entry.result.code}</Text>
@@ -49,6 +57,7 @@ export default function DokumaScreen() {
               <Button compact onPress={entry.dismissResult}>Kapat</Button>
             </View>
           )}
+          {entry.doffEnabled && (
           <View style={[styles.bottomBar, { paddingBottom: insets.bottom }]}>
             {!entry.isOnline && <Text style={styles.offline}>Çevrimdışı — indirme kaydedilemez (kuyruk yok)</Text>}
             <Button
@@ -63,6 +72,7 @@ export default function DokumaScreen() {
               İNDİR
             </Button>
           </View>
+          )}
         </View>
         <View style={[styles.pane, styles.listPane]}>
           <StopPanel entry={entry} />
@@ -84,6 +94,8 @@ const styles = StyleSheet.create({
   submitContent: { height: 56 },
   submitLabel: { fontSize: typography.size.lg, fontWeight: typography.weight.bold },
   offline: { color: colors.dangerText, textAlign: 'center' },
+  info: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', margin: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.infoContainer },
+  infoText: { flex: 1, color: colors.infoText, fontSize: typography.size.base },
   resultBox: { margin: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.successContainer, gap: spacing.xs },
   resultCode: { fontSize: 28, fontWeight: typography.weight.bold, color: colors.successText, textAlign: 'center' },
   resultSub: { color: colors.successText, textAlign: 'center' },

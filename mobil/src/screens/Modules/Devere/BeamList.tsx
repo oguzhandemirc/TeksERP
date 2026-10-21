@@ -145,6 +145,8 @@ export default function BeamList({ state }: { state: DevereScreenState }) {
           loading={state.liveLoading}
           locked={!state.isOnline || state.busy}
           onMount={state.mountForm.open}
+          onScanBeam={(raw) => state.mountForm.scanBeam(raw, state.liveBeams)}
+          scanMessage={state.mountForm.scanMessage}
         />
       ) : (
         <>

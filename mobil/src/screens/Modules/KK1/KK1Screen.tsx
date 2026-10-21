@@ -68,10 +68,14 @@ import {
   useKk1HistoryAllEntriesEnabled,
   useKk1LabelScanVerifyEnabled,
   useDokumaEnabled,
+  useDokumaRollBirth,
   useEmanetEnabled,
 } from '../../../hooks/useFeatureFlags';
 import DoffLinkPicker, { UNLINKED_DOFFS_KEY } from './DoffLinkPicker';
 import { EMPTY_DOFF_LINK, doffLinkPayload, isDoffLinkVisible, validateDoffLink, type DoffLinkState } from './doffLink';
+import LoomBirthBar from './LoomBirthBar';
+import { useLoomBirth } from './useLoomBirth';
+import { isLoomBirthVisible, loomBirthFingerprint, loomBirthPayload, type LoomBirthState } from './loomBirth';
 import OwnerPicker from './OwnerPicker';
 import { EMPTY_OWNER_LINK, isOwnerPickerVisible, ownerLinkPayload, type OwnerLinkState } from './ownerLink';
 import { buildEntryWarningToast } from './entryWarnings';
@@ -435,6 +439,15 @@ export default function KK1Screen() {
   // payload bugünküyle birebir (`doffLink.ts` saf kural). Mod seçili kalır, seçim sıfırlanır.
   const dokumaEnabled = useDokumaEnabled();
   const [doffLink, setDoffLink] = useState<DoffLinkState>(EMPTY_DOFF_LINK);
+  // TOP KK1'DE DOĞAR (S3a): `dokuma.rollBirth` KK1_* iken soru yerine tezgah etiketi okutulur
+  // (`loomBirth.ts`); TABLET_DOFF iken bant çizilmez, payload bugünküyle birebir.
+  const rollBirth = useDokumaRollBirth();
+  const loomVisible = isLoomBirthVisible(dokumaEnabled, rollBirth, semiMode);
+  const prefillLoomItem = useCallback(
+    (item: { id: string; name: string }) => setForm((f) => ({ ...f, itemId: item.id, itemLabel: item.name })),
+    [],
+  );
+  const loom = useLoomBirth({ visible: loomVisible, rollBirth, isOnline, onPrefillItem: prefillLoomItem });
   // EMANET SAHİBİ (G3t): bayrak açıkken "Sahibi" seçicisi; kapalıyken çizilmez, payload
   // bugünküyle birebir (`ownerLink.ts` saf kural). Seçim kayıttan sonra KALIR (yarı mamul kalıbı).
   const emanetEnabled = useEmanetEnabled();
@@ -883,6 +896,7 @@ export default function KK1Screen() {
       prevForm: FormState;
       prevManualQty: string;
       prevManualWeight: string;
+      prevLoom: LoomBirthState;
     } | undefined
   >({
     mutationKey: STATION_MUT.KK1_CREATE_ENTRY,
@@ -960,10 +974,13 @@ export default function KK1Screen() {
       const prevManualWeight = manualWeight;
       setManualQty('');
       setManualWeight('');
+      // Tezgah şeridi de top başınadır: sıradaki top yeniden okutulur ("Aynı tezgah" çipi kalır).
+      const prevLoom = loom.afterSubmit();
       return {
         prevForm,
         prevManualQty,
         prevManualWeight,
+        prevLoom,
       };
     },
     onSuccess: (res, vars) => {
@@ -1030,6 +1047,7 @@ export default function KK1Screen() {
         );
         setManualQty(context.prevManualQty);
         setManualWeight(context.prevManualWeight);
+        loom.restore(context.prevLoom);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
@@ -1071,6 +1089,8 @@ export default function KK1Screen() {
         setAttempt(IDLE_ATTEMPT);
         failedVarsRef.current = null;
       }
+      // Tezgah doğuşu reddi (açık iş yok · ayar değişti · levent beyanı …): ekran eylemi + kendi metni.
+      if (!ambiguous && loom.handleFailure(e, vars.machineCode ?? null)) return;
       Toast.show({
         type: 'error',
         text1: itemDeleted ? 'Ürün silinmiş' : 'Kayıt başarısız',
@@ -1383,7 +1403,7 @@ export default function KK1Screen() {
       Toast.show({ type: 'error', text1: 'Yarı mamulde renk zorunlu' });
       return;
     }
-    const doffCheck = validateDoffLink(doffLink, dokumaEnabled, semiMode);
+    const doffCheck = validateDoffLink(doffLink, dokumaEnabled, semiMode, rollBirth);
     if (!doffCheck.ok) {
       Toast.show({ type: 'error', text1: doffCheck.message });
       return;
@@ -1435,12 +1455,14 @@ export default function KK1Screen() {
     // ⚠️ Renk parmak izine GİRMEK ZORUNDA: iki yarı mamul girişi yalnız renkte
     // ayrılıyorsa ve renk dışarıda kalsaydı, uçuştaki deneme "aynı yük" sayılıp
     // ikinci top sessizce YUTULURDU.
+    const birth = loomBirthPayload(loom.state, rollBirth, loomVisible);
     const fingerprint = entryFingerprint({
       itemId: form.itemId,
       initialQty: qty,
       width: width ?? null,
       colorId: semiMode ? form.colorId : null,
       ownerCustomerId: ownerLinkPayload(ownerLink, emanetEnabled).ownerCustomerId ?? null,
+      birth: loomBirthFingerprint(birth),
     });
     const action = decideSubmit(attempt, fingerprint);
     const fresh = freshEntryIdentity();
@@ -1463,7 +1485,9 @@ export default function KK1Screen() {
       // BİTMİŞ DEPO'ya düşerdi.
       ...(semiMode ? { colorId: form.colorId, semiFinished: true } : {}),
       // Dokuma bağı: bayrak kapalıyken BOŞ (bugünkü payload); dokuma ise seçim ya da null.
-      ...doffLinkPayload(doffLink, dokumaEnabled, semiMode),
+      ...doffLinkPayload(doffLink, dokumaEnabled, semiMode, rollBirth),
+      // KK1 doğuşu (S3a): bant görünmüyorsa BOŞ; etiket → machineCode (+hat/levent), iş → weavingOrderId.
+      ...birth,
       // Emanet sahibi: bayrak kapalıyken ya da seçim yoksa BOŞ; seçimse id (sevkte 409 kapısı).
       ...ownerLinkPayload(ownerLink, emanetEnabled),
       clientToken: identity.clientToken,
@@ -2028,9 +2052,11 @@ export default function KK1Screen() {
 
             {/* DOKUMA BAĞI — yalnız dokuma modülü açıkken ve yarı mamul DIŞINDA
                 (§3.5 "çıkarılmaz, sorulur"; §3.7/12 kapalıyken sıfır fark). */}
-            {isDoffLinkVisible(dokumaEnabled, semiMode) && (
+            {isDoffLinkVisible(dokumaEnabled, semiMode, rollBirth) && (
               <DoffLinkPicker value={doffLink} onChange={setDoffLink} onBeforeOpen={blurAll} />
             )}
+            {/* TEZGAH ETİKETİ (S3a) — telefonda sol formda; tablette sağ sütunun üstünde. */}
+            {loomVisible && compact && <LoomBirthBar loom={loom} rollBirth={rollBirth} onBeforeOpen={blurAll} />}
 
             {/* EMANET SAHİBİ — yalnız emanet modülü açıkken (G3t); iki modda da sorulur. */}
             {isOwnerPickerVisible(emanetEnabled) && (
@@ -2303,6 +2329,7 @@ export default function KK1Screen() {
             anlatıyor, başlık yer kaplıyordu). ── */}
         {!compact && (
           <View style={styles.recentsCol}>
+            {loomVisible && <LoomBirthBar loom={loom} rollBirth={rollBirth} onBeforeOpen={blurAll} />}
             <View style={styles.recentsList}>
               {recentRollsQuery.isLoading ? (
                 <SkeletonList count={6} />

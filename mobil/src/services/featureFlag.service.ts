@@ -17,6 +17,19 @@ import { applyServerFactoryTimezone } from '../lib/factory-time';
 /** Firma adı okunamadığında gösterilen NÖTR yedek (backend ile aynı) — müşteri adı değil. */
 export const DEFAULT_COMPANY_NAME = 'TeksERP';
 
+/** Top doğuş yolu — backend `DOKUMA_ROLL_BIRTH_MODES` aynası. */
+export const DOKUMA_ROLL_BIRTH_MODES = ['TABLET_DOFF', 'KK1_LABEL_OR_ORDER', 'KK1_LABEL_ONLY'] as const;
+export type DokumaRollBirth = (typeof DOKUMA_ROLL_BIRTH_MODES)[number];
+
+/**
+ * Etkin doğuş yolu (backend `resolveDokumaRollBirth` ikizi): dokuma kapalıyken ya da değer
+ * tanınmıyorsa (eski/yeni sunucu farkı) BUGÜNKÜ yol — tablet hiçbir ekranı tahminle değiştirmez.
+ */
+export function resolveDokumaRollBirth(f: Pick<FeatureFlags, 'dokumaEnabled' | 'dokumaRollBirth'> | null | undefined): DokumaRollBirth {
+  if (!f?.dokumaEnabled) return 'TABLET_DOFF';
+  return (DOKUMA_ROLL_BIRTH_MODES as readonly string[]).includes(f.dokumaRollBirth) ? f.dokumaRollBirth : 'TABLET_DOFF';
+}
+
 export interface FeatureFlags {
   /** Fabrikanın ŞU ANKİ saat dilimi (IANA, salt-okunur). */
   factoryTimezone?: string;
@@ -50,8 +63,9 @@ export interface FeatureFlags {
   tezgahAlarmRenotifyMinutes?: number | null;
   /** Z1 üretim belge zinciri: açıkken tezgah koşumu bir dokuma işine bağlanmalı (`dokuma.runWeavingOrderRequired`) — default FALSE (bugünkü davranış). */
   dokumaRunWeavingOrderRequired: boolean;
-  /** S1: top doğuş yolu (`dokuma.rollBirth`) — default `TABLET_DOFF` (backend satır-yok değeri = bugünkü KK1). UI S3'te. */
-  dokumaRollBirth: "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
+  /** S1: top doğuş yolu (`dokuma.rollBirth`) — default `TABLET_DOFF` (backend satır-yok değeri = bugünkü KK1).
+   *  Okuma TEK boğazdan: `resolveDokumaRollBirth` (dokuma kapalı ∨ tanınmayan değer → TABLET_DOFF). */
+  dokumaRollBirth: DokumaRollBirth;
   /** Açıkken levent planı/sarımı bir dokuma işine bağlanmalı (`devere.beamWeavingLinkRequired`) — default FALSE. */
   devereBeamWeavingLinkRequired: boolean;
   pricingEnabled: boolean;

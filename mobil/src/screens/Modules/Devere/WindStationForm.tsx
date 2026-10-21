@@ -112,8 +112,7 @@ export default function WindStationForm({ station, context, isOnline, busyBeams,
       {station.error ? <Text style={sheet.error}>{station.error}</Text> : null}
       {!isOnline ? <Text style={sheet.error}>Bağlantı yok — sarım yalnız çevrimiçi (levent no sunucuda doğar).</Text> : null}
       <View style={styles.action}>
-        {/* TODO(S3): StationActionButton `size="xl"` (112dp) S3'te ortak bileşene eklenince buraya geçilir; şimdilik `large` (72dp). */}
-        <StationActionButton label={target ? `SAR — ${target.beamNo}` : 'PLANLA + SAR'} icon="rotate-right" onPress={station.submit} tint={moduleAccents.Devere.tint} loading={station.busy} loadingLabel="Kaydediliyor…" disabled={!isOnline} large />
+        <StationActionButton label={target ? `SAR — ${target.beamNo}` : 'PLANLA + SAR'} icon="rotate-right" onPress={station.submit} tint={moduleAccents.Devere.tint} loading={station.busy} loadingLabel="Kaydediliyor…" disabled={!isOnline} size="xl" />
       </View>
 
       <PickerModal visible={picker === 'spec'} title="Çözgü kartı" options={(context?.warpSpecs ?? []).map((s) => ({ value: s.id, label: s.code, sublabel: `${s.name} · ${s.endsCount} tel` }))} selectedValue={form.warpSpecId} onSelect={(v) => { station.selectSpec(v); close(); }} onDismiss={close} emptyText="Tanımlı çözgü kartı yok — panelden ekleyin." />

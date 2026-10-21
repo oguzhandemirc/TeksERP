@@ -26,6 +26,13 @@ import { isLicenseBlocked } from '../lib/license';
 /** Sunucunun SORU sorduğu 409'lar — cevabı ekranın kendi modalıdır (ITEM_MISMATCH/ROUTE_SKIP: Fason Sevk onay modalı). */
 const CONFLICT_CODES = new Set(['POSSIBLE_DUPLICATE', 'CLIENT_TOKEN_COLLISION', 'MULTI_BATCH', 'ITEM_MISMATCH', 'ROUTE_SKIP']);
 
+/** KK1 tezgah doğuşunun (S3a) kesin redleri — kuyruktan düşen topta yönerge sabit metindir:
+ *  sunucu metni hat/tezgah ayrıntısı taşır ama operatörün işi tek: listeye bak, yoksa yeniden gir. */
+const LOOM_BIRTH_TEXT: Record<string, string> = {
+  MACHINE_NO_OPEN_RUN: 'Top kaydedilmedi: tezgahta açık iş yok. Listede yoksa tekrar girin.',
+  WEAVING_ORDER_NO_OPEN_RUN: 'Top kaydedilmedi: işin çalışan tezgahı yok. Listede yoksa tekrar girin.',
+};
+
 interface FailureLike {
   message?: string;
   noAuth?: boolean;
@@ -108,6 +115,8 @@ export function failureToastText(
       text2: `${e?.message ?? 'Sunucu bu kaydı sordu'} · Listede yoksa yeniden girin.`,
     };
   }
+  const code = e?.details?.code;
+  if (typeof code === 'string' && LOOM_BIRTH_TEXT[code]) return { text1: `${label} — KAYIT GİTMEDİ`, text2: LOOM_BIRTH_TEXT[code] };
   return {
     text1: `${label} — KAYIT GİTMEDİ`,
     // Sunucunun Türkçe mesajı varsa onu göster — sebebi o daha iyi biliyor.
