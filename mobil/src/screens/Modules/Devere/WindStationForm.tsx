@@ -13,6 +13,7 @@ import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal from '../../../components/PickerModal';
 import StationActionButton from '../../../components/StationActionButton';
 import { SheetField, sheet } from '../../../components/ModuleSheet';
+import { TERIM } from '../../../lib/terim';
 import { colors, moduleAccents, spacing, typography } from '../../../theme';
 import type { TabletContext, WarpBeam, WarpKgSource } from '../../../services/warpBeam.service';
 import { KG_SOURCE_LABEL, linesTotalKg, physicalBeamBusyWarning } from './beamPayload';
@@ -106,7 +107,7 @@ export default function WindStationForm({ station, context, isOnline, busyBeams,
         </>
       )}
       <SheetField label="Devere makinesi" value={machine ? `${machine.code} · ${machine.stationName}` : ''} placeholder={machines.length ? 'Seçin' : 'Makine yok'} onPress={() => setPicker('machine')} hint={machines.length ? undefined : NO_DEVERE_MACHINE_HINT} />
-      {!target && orders.length > 0 ? <SheetField label="Dokuma işi" value={order ? `${order.weavingOrderNumber} · ${order.item.code}` : ''} placeholder={context?.beamWeavingLinkRequired ? 'Seçin (zorunlu)' : 'Bağsız'} onPress={() => setPicker('order')} /> : null}
+      {!target && orders.length > 0 ? <SheetField label={TERIM.dokumaIsEmri.tekil} value={order ? `${order.weavingOrderNumber} · ${order.item.code}` : ''} placeholder={context?.beamWeavingLinkRequired ? 'Seçin (zorunlu)' : 'Bağsız'} onPress={() => setPicker('order')} /> : null}
       <SheetField label="İplik satırları" value={`${form.issues.length} çıkış · ${form.returns.length} iade${form.breakCount.trim() ? ` · kopuş ${form.breakCount}` : ''}`} placeholder="—" onPress={() => setPicker('yarn')} />
       {station.error ? <Text style={sheet.error}>{station.error}</Text> : null}
       {!isOnline ? <Text style={sheet.error}>Bağlantı yok — sarım yalnız çevrimiçi (levent no sunucuda doğar).</Text> : null}
@@ -117,7 +118,7 @@ export default function WindStationForm({ station, context, isOnline, busyBeams,
 
       <PickerModal visible={picker === 'spec'} title="Çözgü kartı" options={(context?.warpSpecs ?? []).map((s) => ({ value: s.id, label: s.code, sublabel: `${s.name} · ${s.endsCount} tel` }))} selectedValue={form.warpSpecId} onSelect={(v) => { station.selectSpec(v); close(); }} onDismiss={close} emptyText="Tanımlı çözgü kartı yok — panelden ekleyin." />
       <PickerModal visible={picker === 'machine'} title="Devere makinesi" options={machines.map((m) => ({ value: m.id, label: m.code, sublabel: m.stationName }))} selectedValue={form.machineId} onSelect={(v) => { patch({ machineId: v }); close(); }} onDismiss={close} emptyText={NO_DEVERE_MACHINE_HINT} />
-      <PickerModal visible={picker === 'order'} title="Dokuma işi" options={orders.map((o) => ({ value: o.id, label: o.weavingOrderNumber, sublabel: o.item.code }))} selectedValue={form.weavingOrderId} onSelect={(v) => { patch({ weavingOrderId: v }); close(); }} onDismiss={close} />
+      <PickerModal visible={picker === 'order'} title={TERIM.dokumaIsEmri.tekil} options={orders.map((o) => ({ value: o.id, label: o.weavingOrderNumber, sublabel: o.item.code }))} selectedValue={form.weavingOrderId} onSelect={(v) => { patch({ weavingOrderId: v }); close(); }} onDismiss={close} />
       <WindYarnSheet visible={picker === 'yarn'} form={form} spec={spec} context={context} yarnItemId={target?.warpSpec.yarnItem.id ?? yarnItemIdFor(form.warpSpecId, knownBeams)} onApply={patch} onDismiss={close} />
     </View>
   );

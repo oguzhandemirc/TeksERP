@@ -8,6 +8,7 @@
 // `createSchema` / `windSchema` ile birebirliğin TEK yeri orasıdır, burada ikinci kopya yok.
 // =============================================================================
 import type { WarpBeam, WarpKgSource, WindWarpBeamRequest } from '../../../services/warpBeam.service';
+import { TERIM } from '../../../lib/terim';
 import { foldSearchText } from '../../../utils/searchFold';
 import { normalizeScanCode } from '../../../utils/scanCode';
 import { EMPTY_PLAN, STATUS_LABEL, buildWindPayload, theoreticalKg, validateWind, windDefaultFor, type PlanForm, type Validation, type WindDefault, type WindForm, type YarnLineDraft } from './beamPayload';
@@ -25,7 +26,7 @@ export interface StationForm {
   /** Gövde no — yalnız YENİ planda yazılır (sarım ucu gövde almaz). */
   physicalBeamNo: string;
   machineId: string | null;
-  /** Yeni plan için dokuma işi (opsiyonel; `beamWeavingLinkRequired` açıkken zorunlu). */
+  /** Yeni plan için dokuma iş emri (opsiyonel; `beamWeavingLinkRequired` açıkken zorunlu). */
   weavingOrderId: string | null;
   /** Brüt iplik çıkışı; TEK satırda kg ana formdan gelir, çok satırda iplik sayfasından. */
   issues: YarnLineDraft[];
@@ -178,7 +179,7 @@ export interface StationRules {
 export function validateStation(form: StationForm, spec: StationSpec | null, target: WarpBeam | null, rules: StationRules): Validation {
   if (!spec) return { ok: false, message: 'Çözgü kartı seçin.' };
   if (form.target.kind === 'beam' && !target) return { ok: false, message: 'Seçilen levent artık planlı değil — listeyi yenileyin ya da kartı yeniden seçin.' };
-  if (!target && rules.beamWeavingLinkRequired && !form.weavingOrderId) return { ok: false, message: 'Bu kurulumda levent bir dokuma iş emrine bağlanmalı — "Dokuma işi" seçin.' };
+  if (!target && rules.beamWeavingLinkRequired && !form.weavingOrderId) return { ok: false, message: `Bu kurulumda levent bir ${TERIM.dokumaIsEmri.cekimKucuk.yonelme} bağlanmalı — "${TERIM.dokumaIsEmri.tekil}" seçin.` };
   if (form.issues.length === 1) {
     if (form.kgSource === 'THEORETICAL' && spec.denier == null) return { ok: false, message: 'İplik kartında denye yok — nominal kg hesaplanamaz; tartıp girin.' };
     if (form.kgSource === 'WEIGHED' && !((num(form.weighedKg) ?? 0) > 0)) return { ok: false, message: 'Tartı kg 0’dan büyük olmalı.' };
