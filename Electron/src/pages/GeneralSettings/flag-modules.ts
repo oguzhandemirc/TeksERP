@@ -106,7 +106,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devereBeamWeavingLinkRequired: "devereEnabled",
   dokumaRunWeavingOrderRequired: "dokumaEnabled",
   dokumaOrderLineLinkRequired: "dokumaEnabled",
-  // S1 (2026-10-21): top doğuş yolu dokumanın enum bayrağı — panel satırı S4b'de.
+  // S1 (2026-10-21): top doğuş yolu dokumanın enum bayrağı (panel satırı S4b).
   dokumaRollBirth: "dokumaEnabled",
   // Tezgah Salonu (2026-10-10): iletim payı tezgah izleme modülünün sayısal ayarı.
   tezgahEscalationGraceMinutes: "tezgahEnabled",

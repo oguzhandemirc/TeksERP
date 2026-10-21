@@ -353,7 +353,7 @@ export interface FeatureFlags {
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;
   dokumaOrderLineLinkRequired: boolean;
-  /** S1 (2026-10-21): top doğuş yolu — `TABLET_DOFF` (bugün) · `KK1_LABEL_OR_ORDER` · `KK1_LABEL_ONLY`. Panel satırı S4b'de. */
+  /** S1 (2026-10-21): top doğuş yolu — `TABLET_DOFF` (bugün) · `KK1_LABEL_OR_ORDER` · `KK1_LABEL_ONLY`. Panel: Dokuma kategorisi (S4b). */
   dokumaRollBirth: DokumaRollBirth;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM

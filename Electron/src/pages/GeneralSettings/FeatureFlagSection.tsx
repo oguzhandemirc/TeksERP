@@ -552,7 +552,16 @@ export function FeatureFlagSection({
    * Salt-okunur dalda düğme DEĞİL DEĞER basılır: gri bir <select> "değiştirilebilir"
    * vaat eder (belge tasarım izni dersinin ikizi — olmayan bir yolu gösterme).
    */
-  const renderEnum = (f: EnumFlagDef) => {
+  const renderEnum = (f: EnumFlagDef) =>
+    f.gate ? (
+      <f.gate key={f.enumKey} draftOf={draftOf} serverOf={serverOf}>
+        {() => renderEnumBody(f)}
+      </f.gate>
+    ) : (
+      renderEnumBody(f)
+    );
+
+  const renderEnumBody = (f: EnumFlagDef) => {
     const value = enumDraft[f.enumKey] ?? serverEnumFor(f);
     const selected = f.options.find((o) => o.value === value);
     const defaultLabel =
