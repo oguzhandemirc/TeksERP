@@ -17,6 +17,21 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-21",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Levent Sarım ekranı istasyon düzeninde, sarımdan sonra levent etiketi",
+      "surumler": {
+        "tablet": "1.4.2"
+      },
+      "maddeler": [
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Levent Sarım ekranı tablette istasyon düzenine geçti: solda çözgü kartı, sarılan metre (büyük tuş takımıyla), kg (tartı ya da nominal hesap), gövde no ve devere makinesi, altta büyük SAR düğmesi; sağda levent no ya da gövde no okutma bandı, levent listesi ve tuş takımı. Kartın planlı leventi varsa o sarılır, yoksa SAR önce planı açar sonra sarar. Sarımdan sonra levent etiketi kendiliğinden basılır; basılamazsa sağda \"etiketi çıkmadı\" satırı kalır ve Tekrar bas ile yeniden basılır. Etiket için panelde Levent Etiketi şablonu atanmış olmalı; sunucu güncellenmeden etiket basılmaz, sarım yine kaydedilir. Fason ve hazır levent ile çok adetli sarım listedeki SAR düğmesiyle eskisi gibi yapılır. Telefonda ekran değişmedi."
+        }
+      ]
+    },
+    {
       "id": "2026-10-20",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Dokuma iş emrinde sağ bölme, onaysız tablete parolayla giriş ayarı ve Yönetim bulutu adı",
