@@ -14,4 +14,4 @@ export const KK1_BEAM_CHANGE_WINDOW_MS = KK1_BEAM_CHANGE_WINDOW_HOURS * 3_600_00
 
 /** KK1 doğuşunda sunucunun yazdığı indirme notları (D9) — kaynak OPERATOR, sayaç NULL. */
 export const KK1_DOFF_NOTE_LABEL = "KK1 doğuşu (etiket)";
-export const KK1_DOFF_NOTE_ORDER = "KK1 doğuşu (iş emri)";
+export const KK1_DOFF_NOTE_ORDER = "KK1 doğuşu (dokuma iş emri)";

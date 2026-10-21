@@ -14,6 +14,8 @@ import prisma from "../lib/prisma";
 import { claimDoffForRollTx } from "./helpers/machine-doff-link.helper";
 import { autoConsumeForRollTx, cancelConsumedForRollTx, reconsumeForRollTx } from "./warp-beam-auto-consume.service";
 import { resolveKk1BirthTx, type Kk1BirthInput, type Kk1BirthResolution } from "./helpers/kk1-roll-birth.helper";
+import { reserveDoffCode } from "./helpers/machine-doff-open.helper";
+import { readDbNow } from "./helpers/machine-run-open.helper";
 import { postRescueEntryTx } from "./helpers/production-entry-ledger.helper";
 import { postEntryCorrectionTx } from "./helpers/entry-correction-ledger.helper";
 import { normalizeScanCode } from "../utils/code-format";
@@ -1131,6 +1133,9 @@ export class InventoryService {
     // tx içinde commit'e kadar tutulup bütün top girişlerini serileştiriyordu. Tx geri
     // sararsa (ikiz 409, ana veri 409, token P2002) numara boşluğu kalır — barkod kimliktir.
     const barcode = await generateRollBarcodeTx(prisma, rollType);
+    // S1: indirme kodu da tx AÇILMADAN ÖNCE havuzdan (`test_perf_sayac_tx_disi §2`); doff doğmazsa
+    // (çok tezgahlı iş, 4xx) numara boşta kalır — boşluk serbest (dokuma.md, barkod emsali).
+    const doffCode = opts?.kk1Birth ? await reserveDoffCode(await readDbNow(prisma)) : null;
     // Token P2002'si boğaza düşer (`run` yeniden okur).
     {
       roll = await prisma.$transaction(async (tx) => {
@@ -1239,7 +1244,7 @@ export class InventoryService {
 
         // S1 KK1 DOĞUŞU — 8021'den SONRA, bağdan ÖNCE: tezgah/iş çözülür, indirme bu tx'te doğar
         // (`createDoffTx`, damga DB saati); çok tezgahlı işte doff yok, iş bağı kolona (D11).
-        if (opts?.kk1Birth) kk1.birth = await resolveKk1BirthTx(tx, opts.kk1Birth, { userId: userId ?? null, itemId: data.itemId });
+        if (opts?.kk1Birth) kk1.birth = await resolveKk1BirthTx(tx, opts.kk1Birth, { userId: userId ?? null, itemId: data.itemId, doffCode });
         const birth = kk1.birth;
         const linkedDoffEventId = birth?.doffEventId ?? opts?.doffEventId ?? null;
         // DOFF BAĞI — satır kilidi (FOR UPDATE) ile; düz okuma eşzamanlı DOFF_CANCEL'e
