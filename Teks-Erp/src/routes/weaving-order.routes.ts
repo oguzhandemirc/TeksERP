@@ -32,6 +32,8 @@ router.use(verifyToken, requireDokumaEnabled);
 
 /** Tablet TEZGAH ekranı koşum açarken iş emri SEÇER — yalnız okuma uçları (2026-09-14). */
 const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
+/** KK1'in iş emri seçim listesi (S1, `dokuma.rollBirth` A yolu) — yalnız `GET /`. */
+const MOBILE_KK1 = ["mobile:kk1"] as const;
 
 const uuidOrNull = z.string().uuid().nullable().optional();
 const dateOrNull = z.string().datetime({ offset: true }).nullable().optional();
@@ -107,7 +109,9 @@ function parseStatuses(raw: string | undefined): WeavingOrderStatus[] {
  */
 router.get(
   "/",
-  requireAnyPermission("weavingorder:read", ...MOBILE_DOKUMA),
+  // `mobile:kk1` (S1): "top KK1'de doğar" A yolu — operatör açık işi (PLANNED/IN_PROGRESS süzgeci istemcide)
+  // listeden seçer; liste yazma yüzeyinin yüzüdür, ayrı okuma izni AÇILMADI (machine-doffs `unlinked` emsali).
+  requireAnyPermission("weavingorder:read", ...MOBILE_DOKUMA, ...MOBILE_KK1),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const q = listWeavingOrdersSchema.parse(req.query);

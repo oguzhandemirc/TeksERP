@@ -525,13 +525,54 @@ router.get("/:id/history", verifyToken, requireAnyPermission("roll:read", "roll:
  *                   bırakılabilir; sonra Tambur veya manuel düzenleme ile
  *                   doldurulur. Pozitif olmalı (verildiyse).
  *                 example: 150
+ *               doffEventId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: Tablet indirmesinin id'si (dokuma.rollBirth=TABLET_DOFF yolu); `machineCode`/`weavingOrderId` ile birlikte verilemez.
+ *               machineCode:
+ *                 type: string
+ *                 maxLength: 32
+ *                 nullable: true
+ *                 description: |
+ *                   TOP KK1'DE DOĞAR (B yolu, dokuma.rollBirth KK1_LABEL_OR_ORDER/KK1_LABEL_ONLY): tezgah etiketi.
+ *                   Sunucu açık koşumdan DoffEvent'i AYNI tx'te üretir (sayaç NULL, kaynak OPERATOR), topu bağlar,
+ *                   bağlı leventten otomatik tüketir. `weavingOrderId` ile birlikte verilemez.
+ *               weavingOrderId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: |
+ *                   TOP KK1'DE DOĞAR (A yolu, yalnız KK1_LABEL_OR_ORDER): açık dokuma iş emri. Tek tezgahta koşuyorsa
+ *                   doff doğar; birden çok tezgahta koşuyorsa doff YOK, top `Roll.weavingOrderId` ile işe bağlanır,
+ *                   levent tüketimi yazılmaz ve `warnings` söyler.
+ *               warpBeamId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: Levent beyanı (yalnız `machineCode` ile) — son 12 saatte o tezgahta takılmış/sökülmüş olmalı; aksi 400 WARP_BEAM_NOT_RECENT.
+ *               productionLineNo:
+ *                 type: integer
+ *                 minimum: 1
+ *                 nullable: true
+ *                 description: Çok hatlı tezgahta hat (yalnız `machineCode` ile); varsayılan 1.
  *     responses:
  *       201:
- *         description: Top oluşturuldu
+ *         description: >
+ *           Top oluşturuldu. KK1 doğuşunda (`machineCode`/`weavingOrderId`) ek olarak `data.doffEvent {id, code}`
+ *           (çok tezgahlı A yolunda null) ve `warnings` döner; aynı `clientToken` ile tekrar aynı yanıtı verir.
  *       400:
- *         description: Validasyon hatası
+ *         description: >
+ *           Validasyon hatası · ROLL_BIRTH_MODE (mod TABLET_DOFF ya da KK1_LABEL_ONLY iken iş emri) ·
+ *           MACHINE_NOT_LOOM · WEAVING_ORDER_SUBCONTRACTED · WARP_BEAM_NOT_RECENT · PRODUCTION_LINE_OUT_OF_RANGE
+ *       403:
+ *         description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok
  *       404:
- *         description: Ürün bulunamadı
+ *         description: Ürün bulunamadı · MACHINE_NOT_FOUND · WEAVING_ORDER_NOT_FOUND · WARP_BEAM_NOT_FOUND
+ *       409:
+ *         description: >
+ *           MACHINE_NO_OPEN_RUN · WEAVING_ORDER_NOT_OPEN · WEAVING_ORDER_NO_OPEN_RUN · DOFF_CODE_COLLISION ·
+ *           CLIENT_TOKEN_COLLISION · mükerrer top tuzağı
  */
 router.post("/initial-entry", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1), controller.createInitialEntry);
 

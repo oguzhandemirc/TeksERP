@@ -18,13 +18,16 @@
 // Bu dosya `doffEvent.create` İÇERMEZ — defter yazıcısı `machine-doff.service.ts`te
 // kalır (beyan değişmez). Tx AÇMAZ, alır; 8021 kilidinden SONRA çağrılır.
 // =============================================================================
-import { MachineDataSource, Prisma, StationKind, WeavingExecutionKind } from "@prisma/client";
+import { MachineDataSource, Prisma, StationKind, WarpBeamStatus, WeavingExecutionKind } from "@prisma/client";
+import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { createDoffTx } from "../machine-doff.service";
-import { OPEN_MACHINE_RUN_WHERE, RUN_OPENABLE_ORDER_STATUSES } from "./machine-run-open.helper";
+import { readDevereEnabled, resolveDokumaRollBirth, type DokumaRollBirth } from "../system-setting.service";
+import { OPEN_MACHINE_RUN_WHERE, RUN_OPENABLE_ORDER_STATUSES, readDbNow } from "./machine-run-open.helper";
 import { WARN_RUN_WITHOUT_ORDER } from "./machine-doff-open.helper";
 import { assertProductionLineValid } from "./production-line.helper";
-import { KK1_DOFF_NOTE_LABEL, KK1_DOFF_NOTE_ORDER } from "../../constants/dokuma-kk1";
+import { readRemainingM } from "./warp-beam-ledger.helper";
+import { KK1_BEAM_CHANGE_WINDOW_MS, KK1_DOFF_NOTE_LABEL, KK1_DOFF_NOTE_ORDER } from "../../constants/dokuma-kk1";
 
 type Tx = Prisma.TransactionClient;
 
@@ -119,14 +122,17 @@ export async function requireOpenRunTx(db: Pick<Tx, "machineRun">, machine: { id
     where: { machineId: machine.id, productionLineNo, ...OPEN_MACHINE_RUN_WHERE },
     select: OPEN_RUN_SELECT,
   });
-  if (!run) {
-    throw AppError.conflict(`${machine.code} tezgahında (${productionLineNo}. hat) açık koşum yok — top kaydedilmedi; önce panelden "İş ver".`, {
-      code: "MACHINE_NO_OPEN_RUN",
-      machineCode: machine.code,
-      productionLineNo,
-    });
-  }
+  if (!run) throw noOpenRunError(machine, productionLineNo);
   return run;
+}
+
+/** Tek kaynak: hem doğuş (`requireOpenRunTx`) hem ön-dolgu (`readKk1Context`) aynı 409'u atar — ekran doğuşta alacağı cevabı önceden görür. */
+export function noOpenRunError(machine: { code: string }, productionLineNo: number): AppError {
+  return AppError.conflict(`${machine.code} tezgahında (${productionLineNo}. hat) açık koşum yok — top kaydedilmedi; önce panelden "İş ver".`, {
+    code: "MACHINE_NO_OPEN_RUN",
+    machineCode: machine.code,
+    productionLineNo,
+  });
 }
 
 /**
@@ -184,4 +190,103 @@ export async function resolveKk1BirthTx(tx: Tx, input: Kk1BirthInput, ctx: { use
   }
 
   throw AppError.badRequest("KK1 doğuşu için tezgah etiketi (machineCode) ya da iş emri (weavingOrderId) gerekli.", { code: "ROLL_BIRTH_INPUT_MISSING" });
+}
+
+// =============================================================================
+// KK1 ÖN-DOLGU — `GET /api/machine-doffs/kk1-context?machineCode=` (D17: öneridir, red değil)
+// =============================================================================
+/** Ön-dolgu yanıtı; tel tipi mobil `kk1` ekranının aynasıdır (S2). */
+export interface Kk1Context {
+  machine: { id: string; code: string; name: string; productionLineCount: number };
+  run: {
+    id: string;
+    productionLineNo: number;
+    startedAt: Date;
+    weavingOrder: { id: string; weavingOrderNumber: string } | null;
+    item: { id: string; code: string; name: string } | null;
+    color: { id: string; name: string } | null;
+    warpSpec: { id: string; code: string; name: string; takeUpPct: Prisma.Decimal | null } | null;
+  };
+  beams: {
+    mounted: { id: string; beamNo: string; position: number | null; remainingM: Prisma.Decimal }[];
+    /** Son `KK1_BEAM_CHANGE_WINDOW_HOURS` içindeki en yeni takma/sökme; yoksa null (operatör levent beyanı sorulmaz). */
+    recentChange: { at: Date; dismounted: { id: string; beamNo: string } | null; mounted: { id: string; beamNo: string } | null } | null;
+  };
+  rollBirth: DokumaRollBirth;
+}
+
+const WARP_SPEC_SELECT = { id: true, code: true, name: true, takeUpPct: true } satisfies Prisma.WarpSpecSelect;
+
+/**
+ * KK1 ön-dolgu: tezgah → açık koşum (iş/kumaş/renk/çözgü kartı) → takılı leventler + son 12 sa levent değişimi.
+ * Hatalar `resolveLoomByCodeTx`/`requireOpenRunTx` ile aynı (404 MACHINE_NOT_FOUND · 400 MACHINE_NOT_LOOM ·
+ * 409 MACHINE_NO_OPEN_RUN) — KK1 ekranı doğuşta alacağı cevabı etiketi okuttuğu anda görür.
+ * Havuz client ile, tx AÇMAZ (salt okuma). Koşumun deseni işin kumaşını ezer (D17).
+ */
+export async function readKk1Context(machineCode: string, productionLineNo?: number | null): Promise<Kk1Context> {
+  const lineNo = productionLineNo ?? 1;
+  const machine = await resolveLoomByCodeTx(prisma, machineCode);
+  assertProductionLineValid(lineNo, machine.productionLineCount);
+  const run = await prisma.machineRun.findFirst({
+    where: { machineId: machine.id, productionLineNo: lineNo, ...OPEN_MACHINE_RUN_WHERE },
+    select: {
+      id: true,
+      productionLineNo: true,
+      startedAt: true,
+      weavingOrder: {
+        select: {
+          id: true,
+          weavingOrderNumber: true,
+          item: { select: { id: true, code: true, name: true, warpSpec: { select: WARP_SPEC_SELECT } } },
+          color: { select: { id: true, name: true } },
+          warpSpec: { select: WARP_SPEC_SELECT },
+        },
+      },
+      item: { select: { id: true, code: true, name: true, warpSpec: { select: WARP_SPEC_SELECT } } },
+      color: { select: { id: true, name: true } },
+    },
+    orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+  });
+  if (!run) throw noOpenRunError(machine, lineNo);
+  const item = run.item ?? run.weavingOrder?.item ?? null;
+  const warpSpec = run.weavingOrder?.warpSpec ?? item?.warpSpec ?? null;
+
+  let mounted: Kk1Context["beams"]["mounted"] = [];
+  let recentChange: Kk1Context["beams"]["recentChange"] = null;
+  if (await readDevereEnabled()) {
+    const beams = await prisma.warpBeam.findMany({
+      where: { currentMachineId: machine.id, status: WarpBeamStatus.MOUNTED },
+      select: { id: true, beamNo: true, currentPosition: true },
+      orderBy: [{ currentPosition: "asc" }, { beamNo: "asc" }, { id: "asc" }],
+    });
+    mounted = [];
+    for (const b of beams) mounted.push({ id: b.id, beamNo: b.beamNo, position: b.currentPosition, remainingM: await readRemainingM(prisma, b.id) });
+    // Pencere `autoConsumeForRollTx` override şartıyla AYNI sabit: ekranın sorduğu levent sunucunun kabul edeceği leventtir.
+    const since = new Date((await readDbNow(prisma)).getTime() - KK1_BEAM_CHANGE_WINDOW_MS);
+    const events = await prisma.warpBeamEvent.findMany({
+      where: { machineId: machine.id, kind: { in: ["MOUNTED", "DISMOUNTED"] }, createdAt: { gte: since } },
+      select: { kind: true, createdAt: true, beam: { select: { id: true, beamNo: true } } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    if (events.length > 0) {
+      const latest = events[0]!;
+      const pick = (kind: string) => events.find((e) => e.kind === kind)?.beam ?? null;
+      recentChange = { at: latest.createdAt, dismounted: pick("DISMOUNTED"), mounted: pick("MOUNTED") };
+    }
+  }
+
+  return {
+    machine,
+    run: {
+      id: run.id,
+      productionLineNo: run.productionLineNo,
+      startedAt: run.startedAt,
+      weavingOrder: run.weavingOrder ? { id: run.weavingOrder.id, weavingOrderNumber: run.weavingOrder.weavingOrderNumber } : null,
+      item: item ? { id: item.id, code: item.code, name: item.name } : null,
+      color: run.color ?? run.weavingOrder?.color ?? null,
+      warpSpec,
+    },
+    beams: { mounted, recentChange },
+    rollBirth: await resolveDokumaRollBirth(),
+  };
 }
