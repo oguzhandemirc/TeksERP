@@ -1331,8 +1331,6 @@ async function main() {
 
   const ENUM_PANEL_EXEMPT: Record<string, string> = {
     sameTypeSessionPolicy: "kind:'session' — Oturum section'ı yönetir (kendi select'i var)",
-    // GEÇİCİ (S1, 2026-10-21): backend + bekçi bu dalgada indi, panel `enumKey` satırı S4b'de iner — S4b inince bu satır DÜŞER (§16 'artık panelde' kırmızı verir).
-    dokumaRollBirth: "panel satırı S4b'de iner (dokuma manuel plan W5) — backend/tablet sözleşmesi önce",
   };
 
   console.log(

@@ -21,9 +21,15 @@
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Levent Sarım ekranı istasyon düzeninde, sarımdan sonra levent etiketi",
       "surumler": {
+        "panel": "1.6.8",
         "tablet": "1.4.2"
       },
       "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Özellik Anahtarları → Dokuma'da yeni ayar: \"Dokuma topu nerede doğar\". Bugünkü yol (tablette İNDİR) varsayılandır; istenirse top ham girişte tezgah etiketi ya da iş emriyle kaydedilir. Ham giriş yolu seçilip Devere'de levent tezgah bağı ya da otomatik levent düşümü kapalıysa ayarın altında sarı uyarı çıkar ve hangisinin kapalı olduğu yazılır; kayıt engellenmez."
+        },
         {
           "kapsam": "tablet",
           "tip": "yeni",

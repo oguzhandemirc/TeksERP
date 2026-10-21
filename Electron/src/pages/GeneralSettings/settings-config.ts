@@ -26,6 +26,7 @@ import type { FeatureFlags } from "@/services/featureFlagService";
 import { SETTING_KEYS as RAW_SETTING_KEYS } from "@/services/systemSettingService";
 import { BatchNumberHint } from "./BatchNumberHint";
 import { TezgahAlarmShiftGate } from "./TezgahAlarmShiftGate";
+import { RollBirthGate } from "./RollBirthGate";
 import { PHASE_OUT_LINE_QTY_OPTIONS, PHASE_OUT_NEW_ORDER_OPTIONS } from "@/lib/item-lifecycle-flags";
 import {
   SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
@@ -175,6 +176,8 @@ export interface EnumFlagDef {
   group?: string;
   /** "radio" = seçenekler alt alta, her birinin altında tek cümle (açılır liste yerine). */
   display?: "radio";
+  /** Satırı saran KAPI (opsiyonel; `FlagDef.gate` ile aynı sözleşme): enum satırında yalnız UYARI çizer, seçimi kilitlemez. */
+  gate?: ComponentType<FlagGateProps>;
 }
 
 /** FeatureFlags'in SERBEST METİN anahtarları — `textFlags` satırları (enum DEĞİL). */
@@ -1509,6 +1512,24 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Planlamacı", "Yönetim"],
         desc: "Açıkken dokuma iş emri en az bir sipariş satırına bağlanmadan kaydedilemez. Kapalıyken (varsayılan) stoka dokuma iş emri açılır ve hub'da ayrı sekmede durur.",
+      },
+    ],
+    enumFlags: [
+      {
+        // S4b (2026-10-21): `defaultValue` backend `DEFAULT_DOKUMA_ROLL_BIRTH` ile birebir (bekçi §16).
+        enumKey: "dokumaRollBirth",
+        title: "Dokuma topu nerede doğar",
+        summary: "Tezgahtan inen top tablette İNDİR ile mi, ham girişte (KK1) tezgah etiketi ya da iş emriyle mi kaydedilsin.",
+        desc: "Varsayılan yolda top, operatör tezgah ekranında İNDİR'e bastığında doğar; ham girişte hangi indirmeden geldiği sorulur. Ham giriş yollarında operatör metreyi girerken tezgah etiketini okutur (ya da açık dokuma işini seçer); indirme kaydını sunucu kendisi yazar. Tezgahta açık iş yoksa top kaydedilmez. Levent dengesinin tutması için Sistem → Özellik Anahtarları → Devere / Levent altında “Levent tezgah bağı defteri” ve “Tezgahtan inen top leventten otomatik düşsün” açık olmalıdır.",
+        defaultValue: "TABLET_DOFF",
+        display: "radio",
+        audience: ["Operatör", "Yönetim"],
+        options: [
+          { value: "TABLET_DOFF", label: "Tablette indirme (bugünkü)", hint: "Operatör tezgah ekranında İNDİR'e basar; ham girişte topun hangi indirmeden geldiği seçilir." },
+          { value: "KK1_LABEL_OR_ORDER", label: "Ham girişte: tezgah etiketi ya da iş emri", hint: "Ham girişte operatör tezgah etiketini okutur ya da açık dokuma işini seçer; indirme kaydı sunucuda kendiliğinden oluşur." },
+          { value: "KK1_LABEL_ONLY", label: "Ham girişte: yalnız tezgah etiketi", hint: "İş emri seçimi kapalıdır; her top tezgah etiketi okutularak kaydedilir." },
+        ],
+        gate: RollBirthGate,
       },
     ],
   },
