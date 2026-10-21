@@ -71,6 +71,6 @@ değişmediğinden 2.15.10 imajı sorunsuz açılır; yeni panelin sağ bölmesi
 - Sağlık bilgisi: sürüm 2.15.11, sunucu ve veritabanı ayakta.
 - Veritabanı: 392 migration bitmiş, sorunlu migration yok.
 - `/api/admin/health` `sistemHesabiMuhru` ve `auditProtection` 2.15.10'daki değerleriyle aynı.
-- Dokuma modülü açık kurulumda `GET /api/weaving-orders/<bir iş emri>/overview` 200 ve `progress` alanını taşıyor.
+- Dokuma modülü açık kurulumda `GET /api/weaving-orders/:id/overview` (bir iş emri için) 200 ve `progress` alanını taşıyor.
 - `docker ps`: `yedek` konteyneri de `tekserp-korumali:2.15.11` imajında.
 - Masaüstü panelle giriş ve tabletle PIN girişi bugünkü gibi çalışıyor.
