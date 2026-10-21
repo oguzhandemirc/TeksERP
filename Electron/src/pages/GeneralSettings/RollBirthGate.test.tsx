@@ -58,7 +58,7 @@ describe("dokuma topu doğuş yolu ayarı", () => {
     expect(f).toMatchObject({ title: "Dokuma topu nerede doğar", defaultValue: "TABLET_DOFF", display: "radio" });
     expect(f.options.map((o) => [o.value, o.label])).toEqual([
       ["TABLET_DOFF", "Tablette indirme (bugünkü)"],
-      ["KK1_LABEL_OR_ORDER", "Ham girişte: tezgah etiketi ya da iş emri"],
+      ["KK1_LABEL_OR_ORDER", "Ham girişte: tezgah etiketi ya da dokuma iş emri"],
       ["KK1_LABEL_ONLY", "Ham girişte: yalnız tezgah etiketi"],
     ]);
     for (const o of f.options) expect(o.hint.length).toBeGreaterThan(20);
