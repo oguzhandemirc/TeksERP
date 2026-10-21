@@ -78,8 +78,11 @@ function itemMismatchWarning(run: OpenRunRow, rollItemId: string): string | null
   return `${run.machine.code}: topun kumaşı koşumun/işin kumaşından farklı — kayıt yapıldı, kontrol edin.`;
 }
 
-async function birthFromRun(tx: Tx, run: OpenRunRow, note: string, ctx: { userId: string | null; itemId: string }): Promise<Kk1BirthResolution> {
+async function birthFromRun(tx: Tx, run: OpenRunRow, note: string, ctx: { userId: string | null; itemId: string; doffCode: string | null }): Promise<Kk1BirthResolution> {
+  // Kod tx ÖNCESİ rezerve edilir (`inventory.service` barkod emsali) — yoksa programlama hatası, iş hatası değil.
+  if (!ctx.doffCode) throw new Error("KK1 doğuşu: indirme kodu tx öncesi rezerve edilmemiş (doffCode null).");
   const doff = await createDoffTx(tx, {
+    code: ctx.doffCode,
     machineId: run.machineId,
     productionLineNo: run.productionLineNo,
     machineRunId: run.id,
@@ -139,15 +142,16 @@ export function noOpenRunError(machine: { code: string }, productionLineNo: numb
  * KK1 doğuşunun tezgah/iş çözümü — tx içinde, 8021 kilidinden SONRA, `claimDoffForRollTx`'ten ÖNCE.
  * Döner: doğan doff (varsa) + yazılacak `weavingOrderId` (yalnız doff'suz) + uyarılar.
  */
-export async function resolveKk1BirthTx(tx: Tx, input: Kk1BirthInput, ctx: { userId?: string | null; itemId: string }): Promise<Kk1BirthResolution> {
+export async function resolveKk1BirthTx(tx: Tx, input: Kk1BirthInput, ctx: { userId?: string | null; itemId: string; doffCode: string | null }): Promise<Kk1BirthResolution> {
   const userId = ctx.userId ?? null;
   const lineNo = input.productionLineNo ?? 1;
+  const birthCtx = { userId, itemId: ctx.itemId, doffCode: ctx.doffCode };
 
   if (input.machineCode) {
     const machine = await resolveLoomByCodeTx(tx, input.machineCode);
     assertProductionLineValid(lineNo, machine.productionLineCount);
     const run = await requireOpenRunTx(tx, machine, lineNo);
-    return birthFromRun(tx, run, KK1_DOFF_NOTE_LABEL, { userId, itemId: ctx.itemId });
+    return birthFromRun(tx, run, KK1_DOFF_NOTE_LABEL, birthCtx);
   }
 
   if (input.weavingOrderId) {
@@ -180,7 +184,7 @@ export async function resolveKk1BirthTx(tx: Tx, input: Kk1BirthInput, ctx: { use
         weavingOrderId: order.id,
       });
     }
-    if (runs.length === 1) return birthFromRun(tx, runs[0]!, KK1_DOFF_NOTE_ORDER, { userId, itemId: ctx.itemId });
+    if (runs.length === 1) return birthFromRun(tx, runs[0]!, KK1_DOFF_NOTE_ORDER, birthCtx);
     // D11: tezgah bilinmiyor → doff UYDURULMAZ, iş bağı kolona, levent tüketimi YOK.
     const warnings = [
       `Dokuma iş emri ${order.weavingOrderNumber} ${runs.length} tezgahta koşuyor (${runs.map((r) => r.machine.code).join(", ")}); tezgah bilinmediği için indirme ve levent tüketimi yazılmadı — top işe bağlandı.`,
@@ -189,7 +193,7 @@ export async function resolveKk1BirthTx(tx: Tx, input: Kk1BirthInput, ctx: { use
     return { doffEventId: null, doffCode: null, machineId: null, weavingOrderId: order.id, warnings };
   }
 
-  throw AppError.badRequest("KK1 doğuşu için tezgah etiketi (machineCode) ya da iş emri (weavingOrderId) gerekli.", { code: "ROLL_BIRTH_INPUT_MISSING" });
+  throw AppError.badRequest("KK1 doğuşu için tezgah etiketi (machineCode) ya da dokuma iş emri (weavingOrderId) gerekli.", { code: "ROLL_BIRTH_INPUT_MISSING" });
 }
 
 // =============================================================================

@@ -2932,7 +2932,7 @@ export class SystemSettingService {
       if (typeof v !== "string" || !DOKUMA_ROLL_BIRTH_MODES.includes(v as DokumaRollBirth)) {
         throw AppError.badRequest("Top doğuş yolu 'TABLET_DOFF', 'KK1_LABEL_OR_ORDER' veya 'KK1_LABEL_ONLY' olmalı");
       }
-      await this.set(SETTING_KEYS.DOKUMA_ROLL_BIRTH, v, "Dokuma: top doğuş yolu — tablet İNDİR · KK1 etiket/iş emri · KK1 yalnız etiket", userId);
+      await this.set(SETTING_KEYS.DOKUMA_ROLL_BIRTH, v, "Dokuma: top doğuş yolu — tablet İNDİR · KK1 etiket/dokuma iş emri · KK1 yalnız etiket", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "dokumaEnabled")) {

@@ -432,6 +432,8 @@ function main(): void {
     readDevereBeamWeavingLinkRequired: { resolver: "resolveBeamWeavingLinkRequired", ebeveyn: "ticaret+iplik+devere" },
     readDokumaRunWeavingOrderRequired: { resolver: "resolveRunWeavingOrderRequired", ebeveyn: "üretim+dokuma" },
     readDokumaOrderLineLinkRequired: { resolver: "resolveOrderLineLinkRequired", ebeveyn: "üretim+dokuma" },
+    // S1 top KK1'de doğar (2026-10-21): enum ayar, etkin değer dokuma kapalıyken TABLET_DOFF; kapı `assertKk1BirthGate` yalnız resolver okur.
+    readDokumaRollBirth: { resolver: "resolveDokumaRollBirth", ebeveyn: "üretim+dokuma" },
     // n irsaliye → 1 fatura (2026-09-18): onay toleransı muhasebe modülünün davranış bayrağı.
     readFinanceInvoiceMatchTolerance: { resolver: "resolveInvoiceMatchToleranceEnabled", ebeveyn: "finans" },
     readFinanceChequeNoteMovementEnabled: { resolver: "resolveChequeNoteMovementEnabled", ebeveyn: "finans" },
