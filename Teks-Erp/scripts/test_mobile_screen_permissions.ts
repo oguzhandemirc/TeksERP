@@ -323,6 +323,18 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "POST /machine-stops/:p/revoke",
     why: "Duruş kaydını geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`) — defterden satır düşürür; izni olmayanda buton çizilmez.",
   },
+  // Tezgah ekranında levent takma (#80, 2026-10-21): takma YETENEĞİ `mobile:devere`;
+  // iki okuma da `useBeamMount.canMount` (has('mobile:devere')) arkasında, yetkisizde sorgu hiç kalkmaz.
+  {
+    screen: "mobile:dokuma",
+    path: "GET /warp-beams/tablet-context",
+    why: "Levent takma bağlamı — tezgah ekranında YALNIZ `mobile:devere` yeteneği olana çağrılır (`useBeamMount` `enabled: canMount`); takma ucu da aynı izni ister.",
+  },
+  {
+    screen: "mobile:dokuma",
+    path: "GET /warp-beams",
+    why: "Levent etiketi okutunca kod araması — yalnız takma akışında (`useBeamMount.lookup`, `canMount` = `mobile:devere`); yetkisizde okutma bandı çizilmez.",
+  },
   {
     screen: "mobile:devere",
     path: "GET /warp-beams/:p/cancel-preview",
