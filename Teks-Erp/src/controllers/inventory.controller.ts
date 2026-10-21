@@ -100,7 +100,7 @@ export const initialEntrySchema = z.object({
  * ROLL_BIRTH_MODE (yalnız etiket). Ayrı fonksiyon: `createInitialEntry` gövdesi `test_dokuma_regime_gate §8a`nın
  * 3000 karakterlik penceresinde kalmalı.
  */
-async function assertKk1BirthGate(weavingOrderId: string | null): Promise<void> {
+export async function assertKk1BirthGate(weavingOrderId: string | null): Promise<void> {
   if (!(await readDokumaEnabled())) {
     throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? AppError.forbidden(`Dokuma modülü bu kurulumda kapalı; tezgah etiketi/iş emri bağı verilemez. ${settingScreenPath("modules")} ekranından açılabilir.`, {
       code: "MODULE_DISABLED",
