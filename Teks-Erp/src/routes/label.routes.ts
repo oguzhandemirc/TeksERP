@@ -540,6 +540,176 @@ router.post(
   controller.recordSackPrintEvent,
 );
 
+// ===========================================================================
+// TEZGAH (MACHINE) + LEVENT (WARP_BEAM) ETİKETİ — dokuma manuel veri S1b
+// ===========================================================================
+// Barkod/QR = Machine.code / WarpBeam.beamNo (ayrı barkod kolonu YOK). FAIL-CLOSED:
+// şablon atanmamışsa ya da kimlik alanını (machineCode / beamNo) bağlamıyorsa 400.
+// `copies` 1-200 (toplu rulo basımı), üstü 400 `LABEL_COPIES_RANGE`. Yeni izin kodu YOK.
+const MACHINE_LABEL_READ = requireAnyPermission("label:read", "station:read");
+const WARP_BEAM_LABEL_READ = requireAnyPermission("label:read", "warpbeam:read", "mobile:devere");
+
+/**
+ * @openapi
+ * /api/labels/machines/{id}:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Tezgah etiketi payload'ı (JSON) — barkod = Machine.code
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Tezgah etiketi payload'ı }
+ *       400: { description: Dokuma tezgahı değil (MACHINE_NOT_LOOM) }
+ *       404: { description: Makine bulunamadı }
+ *       409: { description: Tezgah pasif (MACHINE_INACTIVE) }
+ */
+router.get("/machines/:id", verifyToken, MACHINE_LABEL_READ, controller.getMachineLabel);
+
+/**
+ * @openapi
+ * /api/labels/machines/{id}/html:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Tezgah etiketinin tam HTML'i (N adet)
+ *     description: |
+ *       Şablon/varyant cihaz + Bağlam Varsayılanı (MACHINE) ile çözülür. Şablon yoksa ya da
+ *       "Tezgah Kodu" alanını bağlamıyorsa **400** (fail-closed). `copies` 1-200.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: copies, schema: { type: integer, minimum: 1, maximum: 200 } }
+ *     responses:
+ *       200: { description: Tezgah etiketi HTML }
+ *       400: { description: Şablon yok/uyumsuz · MACHINE_NOT_LOOM · LABEL_COPIES_RANGE }
+ *       404: { description: Makine bulunamadı }
+ *       409: { description: Tezgah pasif (MACHINE_INACTIVE) }
+ */
+router.get("/machines/:id/html", verifyToken, MACHINE_LABEL_READ, controller.getMachineLabelHtml);
+
+/**
+ * @openapi
+ * /api/labels/machines/{id}/native:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Tezgah etiketi SEÇİLİ yazıcı dilinde (HTML veya native komut)
+ *     description: |
+ *       Çuval `/native` sözleşmesi: dil `X-Label-Language`'da; `?encoding=b64` → base64 JSON.
+ *       `copies` 1-200 (native'de ≤100'lük işlerin birleşimi).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: encoding, schema: { type: string, enum: [b64] } }
+ *       - { in: query, name: copies, schema: { type: integer, minimum: 1, maximum: 200 } }
+ *     responses:
+ *       200: { description: Seçili dilde tezgah etiketi }
+ *       400: { description: Şablon yok/uyumsuz · MACHINE_NOT_LOOM · LABEL_COPIES_RANGE }
+ *       404: { description: Makine bulunamadı }
+ *       409: { description: Tezgah pasif (MACHINE_INACTIVE) }
+ */
+router.get("/machines/:id/native", verifyToken, MACHINE_LABEL_READ, controller.getMachineLabelNative);
+
+/**
+ * @openapi
+ * /api/labels/machines/{id}/print-event:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Tezgah etiketi baskı izi (LABEL_PRINT_EVENT)
+ *     description: Yalnız GERÇEK baskıdan sonra çağrılır; isteğe bağlı `copies` ize yazılır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { copies: { type: integer, minimum: 1, maximum: 200 } } }
+ *     responses:
+ *       200: { description: İz kaydedildi }
+ *       400: { description: MACHINE_NOT_LOOM · LABEL_COPIES_RANGE }
+ *       404: { description: Makine bulunamadı }
+ *       409: { description: Tezgah pasif (MACHINE_INACTIVE) }
+ */
+router.post("/machines/:id/print-event", verifyToken, requirePermission("label:print"), controller.recordMachinePrintEvent);
+
+/**
+ * @openapi
+ * /api/labels/warp-beams/{id}:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Levent etiketi payload'ı (JSON) — barkod = WarpBeam.beamNo
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Levent etiketi payload'ı }
+ *       404: { description: Levent bulunamadı }
+ */
+router.get("/warp-beams/:id", verifyToken, WARP_BEAM_LABEL_READ, controller.getWarpBeamLabel);
+
+/**
+ * @openapi
+ * /api/labels/warp-beams/{id}/html:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Levent etiketinin tam HTML'i (N adet)
+ *     description: |
+ *       Şablon yoksa ya da "Levent No" alanını bağlamıyorsa **400** (fail-closed). `copies` 1-200.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: copies, schema: { type: integer, minimum: 1, maximum: 200 } }
+ *     responses:
+ *       200: { description: Levent etiketi HTML }
+ *       400: { description: Şablon yok/uyumsuz · LABEL_COPIES_RANGE }
+ *       404: { description: Levent bulunamadı }
+ */
+router.get("/warp-beams/:id/html", verifyToken, WARP_BEAM_LABEL_READ, controller.getWarpBeamLabelHtml);
+
+/**
+ * @openapi
+ * /api/labels/warp-beams/{id}/native:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Levent etiketi SEÇİLİ yazıcı dilinde (HTML veya native komut)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: encoding, schema: { type: string, enum: [b64] } }
+ *       - { in: query, name: copies, schema: { type: integer, minimum: 1, maximum: 200 } }
+ *     responses:
+ *       200: { description: Seçili dilde levent etiketi }
+ *       400: { description: Şablon yok/uyumsuz · LABEL_COPIES_RANGE }
+ *       404: { description: Levent bulunamadı }
+ */
+router.get("/warp-beams/:id/native", verifyToken, WARP_BEAM_LABEL_READ, controller.getWarpBeamLabelNative);
+
+/**
+ * @openapi
+ * /api/labels/warp-beams/{id}/print-event:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Levent etiketi baskı izi (LABEL_PRINT_EVENT)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { copies: { type: integer, minimum: 1, maximum: 200 } } }
+ *     responses:
+ *       200: { description: İz kaydedildi }
+ *       400: { description: LABEL_COPIES_RANGE }
+ *       404: { description: Levent bulunamadı }
+ */
+router.post(
+  "/warp-beams/:id/print-event",
+  verifyToken,
+  requireAnyPermission("label:print", "mobile:devere"),
+  controller.recordWarpBeamPrintEvent,
+);
+
 /**
  * @openapi
  * /api/labels/order-lines/{id}:

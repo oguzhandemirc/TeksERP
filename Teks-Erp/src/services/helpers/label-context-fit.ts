@@ -21,7 +21,8 @@
 // ALANLARDAN türetilir. Bu "tek havuz" mimarisini KIRMAZ: tek havuzun iddiası
 // "şablon türden bağımsızdır", "şablon bağlamın KİMLİĞİNİ basmasa da olur" DEĞİL.
 //
-// ASİMETRİ BİLİNÇLİ: kimlik kontrolü yalnız SACK'te uygulanır.
+// ASİMETRİ BİLİNÇLİ: kimlik kontrolü yalnız okunur kimlik alanı olan bağlamlarda
+// (SACK · MACHINE · WARP_BEAM — tezgah/levent S1b 2026-10-21, aynı gerekçe) uygulanır.
 //   • ROLL_RAW/ROLL_FINISHED/SWATCH kimliği = zorunlu barkod/QR elemanının KENDİSİ
 //     (`assertTemplateAssignable` her varyantta qr/code128 şart koşar; `payload.barcode`
 //     = roll/swatch barkodu) → ayrı bir kimlik alanı yok, kontrol edilecek şey yok.
@@ -38,9 +39,20 @@ import { readCanvasLayout } from "../../config/label-elements";
 import { getUnifiedCatalog } from "../../config/label-fields";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
 
-/** Bağlamın KİMLİK bind'i — o bağlamda basılmadıkça etiket kimsiz kalır. */
-const IDENTITY_BIND: Partial<Record<LabelKind, { key: string; label: string }>> = {
-  [LabelKind.SACK]: { key: "sackNo", label: "Çuval No" },
+/** Bağlamın KİMLİK bind'i — o bağlamda basılmadıkça etiket kimsiz kalır.
+ *  `noun`/`idNoun`/`dative`/`context` yalnız Türkçe mesaj içindir (ek uyumu elle). */
+interface IdentityBind {
+  key: string;
+  label: string;
+  noun: string;
+  idNoun: string;
+  dative: string;
+  context: string;
+}
+const IDENTITY_BIND: Partial<Record<LabelKind, IdentityBind>> = {
+  [LabelKind.SACK]: { key: "sackNo", label: "Çuval No", noun: "çuval", idNoun: "çuval numarası", dative: "çuvala", context: "Çuval" },
+  [LabelKind.MACHINE]: { key: "machineCode", label: "Tezgah Kodu", noun: "tezgah", idNoun: "tezgah kodu", dative: "tezgaha", context: "Tezgah" },
+  [LabelKind.WARP_BEAM]: { key: "beamNo", label: "Levent No", noun: "levent", idNoun: "levent numarası", dative: "levente", context: "Levent" },
 };
 
 /**
@@ -99,16 +111,16 @@ export function analyzeContextFit(t: TemplateLike, kind: LabelKind): ContextFit 
   const identity = IDENTITY_BIND[kind];
   if (!identity) return { ok: true };
 
-  // Varyantsız şablon bu bağlamda BASILAMAZ: emitter'da SACK dalı yok, ROLL
+  // Varyantsız şablon bu bağlamda BASILAMAZ: emitter'da SACK/MACHINE/WARP_BEAM dalı yok, ROLL
   // düzenine düşer. Kanvas varyantı ŞART.
   if (!hasCanvasVariant(t)) {
     return {
       ok: false,
       reason: "no-canvas",
       message:
-        `『${t.name}』 şablonunda tasarım (kanvas) yok — çuval etiketi olarak basılamaz. ` +
+        `『${t.name}』 şablonunda tasarım (kanvas) yok — ${identity.noun} etiketi olarak basılamaz. ` +
         `Etiket Stüdyosu'nda şablona bir tasarım ekleyin, ya da ${ekranYolu("etiketAtamalari")}'nda ` +
-        `Çuval bağlamına tasarımı olan bir şablon atayın.`,
+        `${identity.context} bağlamına tasarımı olan bir şablon atayın.`,
     };
   }
   if (!collectBoundKeys(t).has(identity.key)) {
@@ -116,10 +128,10 @@ export function analyzeContextFit(t: TemplateLike, kind: LabelKind): ContextFit 
       ok: false,
       reason: "missing-identity",
       message:
-        `『${t.name}』 şablonu çuval etiketi olarak basılamaz — çuval numarası ` +
-        `("${identity.label}") alanı şablonda yok, dolayısıyla basılan etiket hangi çuvala ` +
+        `『${t.name}』 şablonu ${identity.noun} etiketi olarak basılamaz — ${identity.idNoun} ` +
+        `("${identity.label}") alanı şablonda yok, dolayısıyla basılan etiket hangi ${identity.dative} ` +
         `ait olduğunu göstermez. Etiket Stüdyosu'nda bu alanı ekleyin, ya da ` +
-        `${ekranYolu("etiketAtamalari")}'nda Çuval bağlamına doğru şablonu atayın.`,
+        `${ekranYolu("etiketAtamalari")}'nda ${identity.context} bağlamına doğru şablonu atayın.`,
     };
   }
   return { ok: true };

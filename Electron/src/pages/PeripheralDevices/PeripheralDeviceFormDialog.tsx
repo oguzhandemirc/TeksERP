@@ -147,6 +147,8 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         templateFinishedId: routeTemplateId(initial, "ROLL_FINISHED"),
         templateSwatchId: routeTemplateId(initial, "SWATCH"),
         templateSackId: routeTemplateId(initial, "SACK"),
+        templateMachineId: routeTemplateId(initial, "MACHINE"),
+        templateWarpBeamId: routeTemplateId(initial, "WARP_BEAM"),
         notes: initial.notes ?? "",
       }
     : peripheralFormDefaults;

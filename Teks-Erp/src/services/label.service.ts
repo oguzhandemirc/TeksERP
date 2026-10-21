@@ -61,6 +61,15 @@ import { resolveLabelFormat, loadMachinePrinter, type ResolvedLabelFormat } from
 import { resolveLabelRouting, findContextDefaultTemplate } from "./helpers/label-routing.resolver";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 import { assertContextRenderable } from "./helpers/label-context-fit";
+import {
+  buildLoomRenderInput,
+  loadMachineLabelPayload,
+  loadWarpBeamLabelPayload,
+  renderLoomHtml,
+  renderLoomNative,
+  resolveBatchCopies,
+  type LoomLabelOpts,
+} from "./helpers/label-loom-context.helper";
 import { pickVariant } from "./helpers/label-variant.resolver";
 import { templateTextLines } from "./helpers/native-label.shared";
 import { renderLabel, renderedBytes, shouldRasterize, type LabelRenderInput, type RenderedLabel } from "./helpers/label-renderer.registry";
@@ -1768,6 +1777,80 @@ export class LabelService {
       newData: { kind: LabelKind.SACK, sackNo: sack.sackNo },
     });
     return { success: true, data: { sackId, sackNo: sack.sackNo }, message: "Çuval etiketi baskı izi kaydedildi" };
+  }
+
+  // ---------------------------------------------------------------------------
+  // TEZGAH (MACHINE) + LEVENT (WARP_BEAM) ETİKETİ — çuval emsali; mantık
+  // `helpers/label-loom-context.helper` (payload · fail-closed şablon · 1-200 kopya)
+  // ---------------------------------------------------------------------------
+
+  /** Tezgah etiketi payload'ı — barkod/QR = `Machine.code`. */
+  async getMachineLabel(machineId: string): Promise<ApiResponse<LabelPayload>> {
+    return { success: true, data: await loadMachineLabelPayload(machineId) };
+  }
+
+  /** Tezgah etiketinin HTML'i — `copies` 1-200 (üstü 400). */
+  async getMachineLabelHtml(machineId: string, opts: LoomLabelOpts = {}): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
+    const input = await buildLoomRenderInput(await loadMachineLabelPayload(machineId), opts);
+    return { success: true, data: { html: await renderLoomHtml(input), kind: LabelKind.MACHINE } };
+  }
+
+  /** Tezgah etiketi SEÇİLİ yazıcı dilinde (çuval `/native` sözleşmesi). */
+  async getMachineLabelNative(machineId: string, opts: LoomLabelOpts & { encoding?: "b64" } = {}) {
+    return this.loomNative(await loadMachineLabelPayload(machineId), opts);
+  }
+
+  /** Tezgah etiketi baskı izi — LABEL_PRINT_EVENT (çuval kalıbı). */
+  async recordMachinePrintEvent(machineId: string, userId?: string, copies?: number): Promise<ApiResponse<unknown>> {
+    const p = await loadMachineLabelPayload(machineId);
+    return this.loomPrintEvent({ recordId: machineId, ident: { kind: LabelKind.MACHINE, machineCode: p.machineCode }, userId, copies, noun: "Tezgah" });
+  }
+
+  /** Levent etiketi payload'ı — barkod/QR = `WarpBeam.beamNo`. */
+  async getWarpBeamLabel(beamId: string): Promise<ApiResponse<LabelPayload>> {
+    return { success: true, data: await loadWarpBeamLabelPayload(beamId) };
+  }
+
+  async getWarpBeamLabelHtml(beamId: string, opts: LoomLabelOpts = {}): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
+    const input = await buildLoomRenderInput(await loadWarpBeamLabelPayload(beamId), opts);
+    return { success: true, data: { html: await renderLoomHtml(input), kind: LabelKind.WARP_BEAM } };
+  }
+
+  async getWarpBeamLabelNative(beamId: string, opts: LoomLabelOpts & { encoding?: "b64" } = {}) {
+    return this.loomNative(await loadWarpBeamLabelPayload(beamId), opts);
+  }
+
+  async recordWarpBeamPrintEvent(beamId: string, userId?: string, copies?: number): Promise<ApiResponse<unknown>> {
+    const p = await loadWarpBeamLabelPayload(beamId);
+    return this.loomPrintEvent({ recordId: beamId, ident: { kind: LabelKind.WARP_BEAM, beamNo: p.beamNo }, userId, copies, noun: "Levent" });
+  }
+
+  private async loomNative(payload: LabelPayload, opts: LoomLabelOpts & { encoding?: "b64" }) {
+    const input = await buildLoomRenderInput(payload, opts);
+    const r = await renderLoomNative(input);
+    const data = {
+      content: r.content,
+      language: r.language,
+      contentType: r.contentType,
+      kind: payload.kind!,
+      count: input.copies,
+      ...(opts.encoding === "b64" ? { contentB64: renderedBytes(r).toString("base64") } : {}),
+    };
+    return { success: true as const, data };
+  }
+
+  private async loomPrintEvent(a: {
+    recordId: string;
+    ident: Record<string, unknown>;
+    userId?: string;
+    copies?: number;
+    noun: string;
+  }): Promise<ApiResponse<unknown>> {
+    const { recordId, ident, userId, copies, noun } = a;
+    const count = copies === undefined ? undefined : resolveBatchCopies(copies);
+    const newData = { ...ident, ...(count !== undefined ? { copies: count } : {}) };
+    await AuditService.log({ userId, action: "CREATE", tableName: TABLE_LABEL_PRINT, recordId, newData });
+    return { success: true, data: { id: recordId, ...newData }, message: `${noun} etiketi baskı izi kaydedildi` };
   }
 
   // ---------------------------------------------------------------------------

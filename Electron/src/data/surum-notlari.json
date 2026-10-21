@@ -27,6 +27,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Etiket Stüdyosu'na iki yeni etiket türü: \"Tezgah Etiketi\" ve \"Levent Etiketi\". Tezgah etiketinin barkodu tezgah kodu, levent etiketininki levent numarasıdır; şablon bu kodu içermiyorsa o türe atanamaz. Tezgaha ve levente etiket basmak için önce şablonu atayın, atanmamışsa baskı yapılmaz. Tek seferde en fazla 200 adet basılabilir. Yazıcı ayarlarında bu iki tür için yazıcı seçebilirsiniz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Dokuma iş emri listesinde bir satıra tıklayınca sağda bölme açılır: işin hangi tezgahta dokunduğu, açık duruş, çalışan operatör, takılı levent ve kalan metresi, son indirmeler ve doğan toplar, hedefe göre ilerleme. Bölme açıkken kendiliğinden tazelenir; tezgah satırından Tezgah Salonu'na geçersiniz. Sunucu 2.15.11 gerekir."
         },
         {

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
 import {
-  labelKindLabels,
+  labelKindLabel,
   type ContextDefaultRow,
   type LabelTemplateListRow,
 } from "@/services/labelTemplateService";
@@ -48,7 +48,7 @@ export function PoolRow({
           <span className="font-medium">{t.name}</span>
           {defaultFor.map((d) => (
             <Badge key={d.kind} variant="muted" className="gap-1 text-[10px]">
-              <Star className="h-3 w-3" /> {labelKindLabels[d.kind]} varsayılanı
+              <Star className="h-3 w-3" /> {labelKindLabel(d.kind)} varsayılanı
             </Badge>
           ))}
           {t.standalone && <Badge variant="secondary" className="text-[10px]">Serbest</Badge>}
@@ -64,7 +64,7 @@ export function PoolRow({
               </span>
             ))
           )}
-          {t.kind && <span>· eski tür: {labelKindLabels[t.kind]}</span>}
+          {t.kind && <span>· eski tür: {labelKindLabel(t.kind)}</span>}
         </div>
       </div>
       <RowActions template={t} isAnyDefault={isAnyDefault} {...handlers} />

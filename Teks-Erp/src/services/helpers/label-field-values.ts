@@ -124,6 +124,44 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
       return { value: formatDate(payload.printedAt), present: !!payload.printedAt, role: "row" };
 
     default:
+      return loomFieldValue(payload, key);
+  }
+}
+
+/** Tezgah (MACHINE) ve levent (WARP_BEAM) bağlam alanları; bilinmeyen key → NONE. */
+function loomFieldValue(payload: LabelPayload, key: string): FieldValue {
+  switch (key) {
+    // ── MACHINE (tezgah) — kod etiketin kimliği → headline (sahada uzaktan okunur) ──
+    case "machineCode":
+      return str(payload.machineCode, "headline");
+    case "machineName":
+      return str(payload.machineName);
+    case "stationName":
+      return str(payload.stationName);
+
+    // ── WARP_BEAM (levent) — levent no kimlik → headline; sarılmamışta metre/kg boş ──
+    case "beamNo":
+      return str(payload.beamNo, "headline");
+    case "physicalBeamNo":
+      return str(payload.physicalBeamNo);
+    case "warpSpecCode":
+      return str(payload.warpSpecCode);
+    case "warpSpecName":
+      return str(payload.warpSpecName);
+    case "plannedLengthM":
+      return num(payload.plannedLengthM, "m");
+    case "woundLengthM":
+      return num(payload.woundLengthM, "m");
+    case "woundKg":
+      return num(payload.woundKg, "kg");
+    case "weavingOrderNumber":
+      return str(payload.weavingOrderNumber);
+    case "woundAt":
+      return payload.woundAt
+        ? { value: formatDate(payload.woundAt), present: true, role: "row" }
+        : NONE;
+
+    default:
       return NONE;
   }
 }

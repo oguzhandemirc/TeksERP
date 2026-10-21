@@ -79,8 +79,13 @@ router.get("/catalog/:kind", verifyToken, requirePermission("label-template:read
  *   get:
  *     tags: [Label Templates]
  *     summary: BİRLEŞİK alan kataloğu (tek havuz) — alan + değer ürettiği bağlamlar
- *     description: Kanvas editörünün eleman paleti; her alanda kinds[] uygunluk bilgisi.
+ *     description: |
+ *       Kanvas editörünün eleman paleti; her alanda kinds[] uygunluk bilgisi. `?kinds=all`
+ *       verilmezse yalnız eski panelin tanıdığı bağlamlar (ROLL_RAW · ROLL_FINISHED · SWATCH ·
+ *       SACK) döner — eski palet bilinmeyen türde çöküyordu (S1b).
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: kinds, schema: { type: string, enum: [all] } }
  *     responses:
  *       200: { description: "{ fields: (FieldDef & { kinds })[] }" }
  */

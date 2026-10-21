@@ -1037,6 +1037,11 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "(kusur ne kadar büyük), ikincisinde bir SÜRE sınıfı (mikro-duruş eşiğinin altı). " +
     "MACHINE_STOP_EVENT.lossClass override'ı ile ayrıldı (2026-09-13)",
   EXTERNAL: "StationType(dış istasyon) ve WarehouseEventType(dış hareket) — ikisi de 'Dış'",
+  // ── Tezgah + levent etiketi (dokuma manuel veri S1b, 2026-10-21)
+  MACHINE:
+    "MachineDataSource(değer makineden geldi) ve LabelKind(tezgah etiketi) — ikisi de 'Makine'yi işaret eder; ortak Türkçe doğru",
+  WARP_BEAM:
+    "SubcontractorDispatchItemKind(fason sevk kalemi levent) ve LabelKind(levent etiketi) — ikisi de 'Levent'; ortak Türkçe doğru",
   WEAVING:
     "RollEntrySource(top tezgahtan indi) ve StationKind(istasyon bir tezgah) — ortak Türkçe YETMEZ: " +
     "ilki topun KAYNAĞI, ikincisi istasyonun TÜRÜ. STATION.kind override'ı ile ayrıldı (2026-09-14)",

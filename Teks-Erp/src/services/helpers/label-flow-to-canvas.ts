@@ -20,7 +20,7 @@
 // =============================================================================
 
 import type { LabelKind } from "@prisma/client";
-import type { TemplateField } from "../../config/label-fields";
+import { kindHasLengthBanner, type TemplateField } from "../../config/label-fields";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
 import type { CanvasLayout, LabelElement } from "../../config/label-elements";
 import { CANVAS_SCHEMA_VERSION } from "../../config/label-elements";
@@ -75,10 +75,7 @@ export function flowTemplateToCanvas(
 
   // Metraj bandı yalnız TOP etiketinde (kartela/çuval hariç — label-template.service
   // getDefaults ile aynı kural).
-  const bannerOn =
-    tpl.lengthBanner === true &&
-    tpl.kind !== ("SWATCH" as LabelKind) &&
-    tpl.kind !== ("SACK" as LabelKind);
+  const bannerOn = tpl.lengthBanner === true && kindHasLengthBanner(tpl.kind);
   const bannerW = bannerOn ? EPL_FONT.xl.h * BANNER_MUL : 0;
   const contentRight = bannerOn ? right - bannerW - d(2) : right;
 
