@@ -29,7 +29,7 @@ import { AuditService } from "./audit.service";
 import { p2002Mentions } from "../utils/p2002";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertDoffReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
-import { resolveDoffStamp } from "./helpers/machine-run-open.helper";
+import { readDbNow, resolveDoffStamp } from "./helpers/machine-run-open.helper";
 import { assertProductionLineValid } from "./helpers/production-line.helper";
 import { deriveRunWarnings, reserveDoffCode, WARN_RUN_WITHOUT_ORDER } from "./helpers/machine-doff-open.helper";
 import type { ApiResponse } from "../types/api.types";
@@ -191,6 +191,60 @@ async function openDoffFresh(input: OpenDoffInput, userId?: string): Promise<Ope
     },
   }).catch(() => undefined);
   return { success: true, data: created, message: `İndirme kaydedildi (${created.code})`, ...(warnings.length ? { warnings } : {}) };
+}
+
+export interface CreateDoffTxInput {
+  machineId: string;
+  productionLineNo: number;
+  machineRunId: string | null;
+  pieceCount: number;
+  counterAtDoff: number | null;
+  counterSource: MachineDataSource;
+  notes: string | null;
+  createdById: string | null;
+}
+
+export type CreatedDoffTx = { id: string; code: string; doffedAt: Date };
+
+/**
+ * KK1 DOĞUŞU (S1, `dokuma.rollBirth` KK1_*): topun tx'i İÇİNDE indirme satırı — ileri yazıcı bu
+ * dosyada kalır (defter beyanı `machine-doff.service.ts`, `test_defter_ters_yol §5`). `openDoff`a
+ * dokunulmaz; bu yol onun tx'li kardeşidir:
+ *   • damga `readDbNow(tx)` — levent olaylarıyla TEK saat kaynağı (dokuma.md :65; beyan yok);
+ *   • kod `reserveDoffCode(stamp)` havuz client'ından, tx DIŞI sayaç (mevcut sözleşme, Perf-4 B-03) —
+ *     tx geri sararsa numara boşta kalır (boşluk serbest, barkod emsali);
+ *   • `clientToken: null` — KK1 token'ı TOP'ta, replay topu döndürür, ikinci doff doğmaz;
+ *   • audit YOK — ebeveyn ROLL audit'i `doffEventId` izini taşır (ayak izi tek yerde);
+ *   • retry YOK: PG tx içinde P2002 tx'i abort eder, aynı tx'te ikinci deneme çalışamaz —
+ *     `code_key` çakışması (yalnız kapsam değişimi anı) 409 `DOFF_CODE_COLLISION`, istemci
+ *     aynı token'la tekrar eder (belirsiz hata sınıfı, kk1.md).
+ */
+export async function createDoffTx(tx: Prisma.TransactionClient, input: CreateDoffTxInput): Promise<CreatedDoffTx> {
+  const stamp = await readDbNow(tx);
+  const code = await reserveDoffCode(stamp);
+  try {
+    return await tx.doffEvent.create({
+      data: {
+        machineId: input.machineId,
+        productionLineNo: input.productionLineNo,
+        machineRunId: input.machineRunId,
+        doffedAt: stamp,
+        pieceCount: input.pieceCount,
+        counterAtDoff: input.counterAtDoff != null ? new Prisma.Decimal(input.counterAtDoff) : null,
+        counterSource: input.counterSource,
+        code,
+        notes: input.notes,
+        clientToken: null,
+        createdById: input.createdById,
+      },
+      select: { id: true, code: true, doffedAt: true },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002" && p2002Mentions(err, /doff_events_code_key/)) {
+      throw AppError.conflict("İndirme kodu çakıştı — topu aynı anahtarla yeniden gönderin.", { code: "DOFF_CODE_COLLISION", doffCode: code });
+    }
+    throw err;
+  }
 }
 
 /**
