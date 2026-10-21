@@ -19,11 +19,17 @@
     {
       "id": "2026-10-21",
       "durum": "TASLAK — terfide kullanıcı onayı",
-      "baslik": "Levent Sarım ekranı istasyon düzeninde, sarımdan sonra levent etiketi",
+      "baslik": "Levent Sarım ekranı istasyon düzeninde, tezgah ve levent etiketi, üç yeni dokuma raporu",
       "surumler": {
+        "panel": "1.6.8",
         "tablet": "1.4.2"
       },
       "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Dokuma tezgahına ve levente panelden etiket basılıyor: Üretim İstasyonları'nda dokuma tezgahı satırındaki etiket düğmesiyle tezgah etiketi (1–200 adet), Leventler listesinde sağ tık \"Levent etiketi bas\" ile levent etiketi çıkar; önce önizleme gösterilir. Etiket Stüdyosu'nda bu türe şablon atanmamışsa baskı yapılmaz ve nedeni yazılır. Raporlar → Dokuma'ya üç rapor eklendi: Levent Sonucu (leventten beklenen kumaş, gerçek kumaş ve fire; gerçek kumaş otomatik ve elle ayrı), Kapasite Kullanımı (tezgah ve hafta bazında teorik kapasitenin ne kadarı kumaşa döndü) ve Levent Bitiş Tahmini (tezgahtaki leventin son 7 günlük hızla bitiş günü). Hesaplanamayan değer \"ölçülemedi\" ya da gerekçesiyle yazılır, sıfır gösterilmez; levent raporları Devere modülü kapalıyken görünmez."
+        },
         {
           "kapsam": "tablet",
           "tip": "yeni",

@@ -1,12 +1,15 @@
 // =============================================================================
-// Makine satırı İŞLEMLERİ — düzenle · QR · pasife al / aktifleştir · kalıcı sil (tek kaynak)
+// Makine satırı İŞLEMLERİ — düzenle · QR · tezgah etiketi · pasife al / aktifleştir · kalıcı sil (tek kaynak)
 // =============================================================================
 // Kart içindeki makine tablosu (`StationMachineTable`) ve liste görünümü (`StationListView`)
 // aynı ikon-buton dizisini çizer; iki yerde yazılsaydı yeni aksiyon birinde unutulurdu.
 // =============================================================================
-import { Pencil, QrCode, PowerOff, Power, Trash2 } from "lucide-react";
+import { Pencil, QrCode, Tag, PowerOff, Power, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { isLoomLabelPrintable } from "@/pages/Machines/MachineLabelPrintDialog";
 import type { Machine } from "@/pages/Machines/types";
+import type { StationKind } from "@/types/enums";
 
 // "İşlemler" sütununda kullanılan küçük ikon-buton. Tıklama alanı 28px — chip'lerdeki
 // minik ikonlardan büyük.
@@ -39,13 +42,17 @@ export function IconAction({
 export interface MachineActionHandlers {
   onEdit: (m: Machine) => void;
   onQr: (m: Machine) => void;
+  /** Tezgah etiketi (LabelKind MACHINE) — yalnız aktif dokuma tezgahında + `label:print`. */
+  onPrintLabel: (m: Machine) => void;
   onDeactivate: (m: Machine) => void;
   onReactivate: (m: Machine) => void;
   onDelete: (m: Machine) => void;
 }
 
-export function MachineRowActions({ m, canWrite, h }: { m: Machine; canWrite: boolean; h: MachineActionHandlers }) {
+export function MachineRowActions({ m, canWrite, h, stationKind }: { m: Machine; canWrite: boolean; h: MachineActionHandlers; stationKind?: StationKind }) {
   const active = m.isActive !== false;
+  const { hasPermission } = useRoleAccess();
+  const canPrintLabel = hasPermission("label:print") && isLoomLabelPrintable(m, stationKind ?? m.station?.kind);
   return (
     <div className="flex items-center justify-end gap-0.5">
       {canWrite && (
@@ -56,6 +63,11 @@ export function MachineRowActions({ m, canWrite, h }: { m: Machine; canWrite: bo
       {active && (
         <IconAction title="Makine QR etiketi (oturum açma)" onClick={() => h.onQr(m)}>
           <QrCode className="h-3.5 w-3.5" />
+        </IconAction>
+      )}
+      {canPrintLabel && (
+        <IconAction title="Tezgah etiketi bas (KK1 okutur)" onClick={() => h.onPrintLabel(m)}>
+          <Tag className="h-3.5 w-3.5" />
         </IconAction>
       )}
       {canWrite && active && (

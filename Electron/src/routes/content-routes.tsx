@@ -61,6 +61,9 @@ import { MudahalePage } from "@/pages/Reports/Dokuma/MudahalePage";
 import { VardiyaKarnesiPage } from "@/pages/Reports/Dokuma/VardiyaKarnesiPage";
 import { KarnePage } from "@/pages/Reports/Dokuma/KarnePage";
 import { ProductionChainPage } from "@/pages/Reports/Dokuma/ProductionChainPage";
+import { LeventSonucuPage } from "@/pages/Reports/Dokuma/LeventSonucuPage";
+import { KapasiteKullanimiPage } from "@/pages/Reports/Dokuma/KapasiteKullanimiPage";
+import { LeventBitisTahminiPage } from "@/pages/Reports/Dokuma/LeventBitisTahminiPage";
 import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
 import { ChequeDuePage } from "@/pages/Reports/Finance/ChequeDuePage";
@@ -1392,6 +1395,30 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:production">
         <ProductionChainPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/levent-sonucu",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <LeventSonucuPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/kapasite-kullanimi",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <KapasiteKullanimiPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/levent-bitis-tahmini",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <LeventBitisTahminiPage />
       </ProtectedRoute>
     ),
   },
