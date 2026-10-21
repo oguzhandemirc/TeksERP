@@ -24,6 +24,7 @@ import { StationFormDialog } from "@/pages/Stations/StationFormDialog";
 import { machineService, getMachineDeletePreview } from "@/pages/Machines/service";
 import type { Machine } from "@/pages/Machines/types";
 import { MachineQrPrintDialog } from "@/pages/Machines/MachineQrPrintDialog";
+import { MachineLabelPrintDialog } from "@/pages/Machines/MachineLabelPrintDialog";
 import type { MachineFormValues } from "@/pages/Machines/schema";
 import { MachineFormDialog } from "@/pages/Machines/MachineFormDialog";
 import { StationCard } from "@/pages/Stations/StationCard";
@@ -139,6 +140,7 @@ export function ProductionStationsPage() {
   const [machineDlg, setMachineDlg] = useState<{ open: boolean; initial: Machine | null; stationId?: string }>({ open: false, initial: null });
   const [capStation, setCapStation] = useState<StationCapabilitySummary | null>(null);
   const [qrMachine, setQrMachine] = useState<Machine | null>(null);
+  const [labelMachine, setLabelMachine] = useState<Machine | null>(null);
   const [deleteMachine, setDeleteMachine] = useState<Machine | null>(null);
   const [deactivateMachine, setDeactivateMachine] = useState<Machine | null>(null);
 
@@ -335,7 +337,7 @@ export function ProductionStationsPage() {
             canWrite={canWrite}
             onEditStation={onEditStation}
             onAddMachine={onAddMachine}
-            machine={{ onEdit: onEditMachine, onQr: setQrMachine, onDeactivate: setDeactivateMachine, onReactivate: onReactivateMachine, onDelete: setDeleteMachine }}
+            machine={{ onEdit: onEditMachine, onQr: setQrMachine, onPrintLabel: setLabelMachine, onDeactivate: setDeactivateMachine, onReactivate: onReactivateMachine, onDelete: setDeleteMachine }}
           />
         )}
         {stations.length > 0 && viewMode === "cards" && (
@@ -355,6 +357,7 @@ export function ProductionStationsPage() {
                 onAddMachine={onAddMachine}
                 onEditMachine={onEditMachine}
                 onQrMachine={setQrMachine}
+                onPrintLabelMachine={setLabelMachine}
                 onDeactivateMachine={setDeactivateMachine}
                 onReactivateMachine={onReactivateMachine}
                 onDeleteMachine={setDeleteMachine}
@@ -386,6 +389,8 @@ export function ProductionStationsPage() {
         onOpenChange={(o) => !o && setCapStation(null)}
       />
       <MachineQrPrintDialog machine={qrMachine} onOpenChange={(o) => !o && setQrMachine(null)} />
+      {/* Koşullu mount: her açılış taze adet (1) ve taze önizleme. */}
+      {labelMachine && <MachineLabelPrintDialog machine={labelMachine} onOpenChange={(o) => !o && setLabelMachine(null)} />}
 
       <ConfirmDialog
         open={!!deleteMachine}

@@ -1,7 +1,8 @@
-import { Pencil, Trash2, Disc3, Ban, Cable, Unplug, Scissors, SlidersHorizontal, Flag, Trash, Undo2 } from "lucide-react";
+import { Pencil, Trash2, Disc3, Ban, Cable, Unplug, Scissors, SlidersHorizontal, Flag, Trash, Undo2, Tag } from "lucide-react";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { PermissionGate } from "@/components/PermissionGate";
 import { undoMenuEnabled } from "./tezgah/beam-undo";
+import { isBeamLabelPrintable } from "./BeamLabelPrintDialog";
 import { isLiveBeam, type WarpBeam } from "./types";
 import type { BeamActionKind } from "./usePageActions";
 
@@ -13,11 +14,13 @@ interface Props {
   onDelete: (r: WarpBeam) => void;
   onWind: (r: WarpBeam) => void;
   onCancel: (r: WarpBeam) => void;
+  /** Levent etiketi (WARP_BEAM) — `label:print`; Faz 3 bayrağından bağımsız. */
+  onPrintLabel: (r: WarpBeam) => void;
   onBeamAction: (kind: BeamActionKind, r: WarpBeam) => void;
 }
 
 /** Satır menüsü — plan/sar/sil + tak/sök/tüket/düzelt/bitir `warpbeam:write`; sarım iptali · hurda · geri alma AYRI yetenek `warpbeam:cancel`. */
-export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, onCancel, onBeamAction }: Props) {
+export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, onCancel, onPrintLabel, onBeamAction }: Props) {
   const planned = row.status === "PLANNED";
   const ready = row.status === "READY";
   const mounted = row.status === "MOUNTED";
@@ -71,6 +74,12 @@ export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, 
             </ContextMenuItem>
           </>
         )}
+      </PermissionGate>
+      <PermissionGate permission="label:print">
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={!isBeamLabelPrintable(row)} onSelect={() => onPrintLabel(row)}>
+          <Tag /> Levent etiketi bas
+        </ContextMenuItem>
       </PermissionGate>
     </>
   );

@@ -27,6 +27,7 @@ import { warpBeamService } from "./service";
 import { WarpBeamFormDialog } from "./WarpBeamFormDialog";
 import { WindDialog } from "./WindDialog";
 import { CancelDialog } from "./CancelDialog";
+import { BeamLabelPrintDialog } from "./BeamLabelPrintDialog";
 import { WarpBeamRowMenu } from "./WarpBeamRowMenu";
 import { BeamActionDialogs } from "./tezgah/BeamActionDialogs";
 import { WARP_BEAMS_QUERY_KEY, useWarpBeamMutations } from "./useWarpBeamMutations";
@@ -105,6 +106,7 @@ export function WarpBeamsPage() {
       )}
       {dialog?.kind === "wind" && <WindDialog target={dialog.target} isPending={wind.isPending} onClose={() => setDialog(null)} onConfirm={(body) => wind.mutateAsync({ id: dialog.target.id, body })} />}
       {dialog && BEAM_ACTION_KINDS.has(dialog.kind) && "target" in dialog && <BeamActionDialogs kind={dialog.kind as BeamActionKind} target={dialog.target} act={act} onClose={() => setDialog(null)} />}
+      {dialog?.kind === "label" && <BeamLabelPrintDialog beam={dialog.target} onClose={() => setDialog(null)} />}
       {dialog?.kind === "cancel" && <CancelDialog target={dialog.target} isPending={cancel.isPending} onClose={() => setDialog(null)} onConfirm={(reason) => cancel.mutate({ id: dialog.target.id, reason })} />}
       {dialog?.kind === "delete" && (
         <ConfirmDialog
