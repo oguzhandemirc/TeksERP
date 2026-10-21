@@ -27,6 +27,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Dokuma raporları: Levent Sonucu, Kapasite Kullanımı, Levent Bitiş Tahmini. Sunucu bu üç raporu hesaplamaya başladı: leventten beklenen ve gerçekleşen kumaş ile fire, tezgahların haftalık kapasite kullanımı ve takılı leventlerin kaç günde biteceği. Rapor ekranları sonraki panel sürümünde Raporlar'a eklenecek."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Dokuma iş emri listesinde bir satıra tıklayınca sağda bölme açılır: işin hangi tezgahta dokunduğu, açık duruş, çalışan operatör, takılı levent ve kalan metresi, son indirmeler ve doğan toplar, hedefe göre ilerleme. Bölme açıkken kendiliğinden tazelenir; tezgah satırından Tezgah Salonu'na geçersiniz. Sunucu 2.15.11 gerekir."
         },
         {
