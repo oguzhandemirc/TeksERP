@@ -170,8 +170,9 @@ interface CursorPage<T> {
 
 export const warpBeamService = {
   /** `status` tek değer ya da liste — sunucu CSV okur (`readFilterList`). */
-  list: async (status: WarpBeamStatus | readonly WarpBeamStatus[], limit = 50): Promise<WarpBeam[]> => {
-    const res = await apiClient.get<CursorPage<WarpBeam>>('/warp-beams', { params: { status: Array.isArray(status) ? status.join(',') : status, limit } });
+  /** `search` (S3c): okutulan levent no / gövde no — süzme SUNUCUDA (liste tavanına takılmaz). */
+  list: async (status: WarpBeamStatus | readonly WarpBeamStatus[], limit = 50, search?: string): Promise<WarpBeam[]> => {
+    const res = await apiClient.get<CursorPage<WarpBeam>>('/warp-beams', { params: { status: Array.isArray(status) ? status.join(',') : status, limit, ...(search ? { search } : {}) } });
     return res.data.data ?? [];
   },
   tabletContext: async (): Promise<TabletContext> => {

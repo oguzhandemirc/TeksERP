@@ -1,8 +1,8 @@
 // =============================================================================
 // LEVENT PANELİ (Faz 3 E3) — bu tezgahtaki bağlı leventler: SÖK · TÜKET · BİTİR
 // =============================================================================
-// Yalnız devere + `devere.mountTracking` açıkken çizilir; Tak devere ekranındadır (yuva seçimi
-// orada). Kalan sunucuda türetilir; tüketim kalanı aşamaz (form önden kilitler, sunucu 409).
+// Yalnız devere + `devere.mountTracking` açıkken çizilir. Tak: S3c'den beri burada da barkodla
+// (`BeamMountBand`, oturum makinesi; `mobile:devere` ister), Devere ekranında da. Kalan sunucuda türetilir; tüketim kalanı aşamaz (form önden kilitler, sunucu 409).
 // =============================================================================
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -14,6 +14,8 @@ import type { WarpLengthSource } from '../../../services/warpBeam.service';
 import { LENGTH_SOURCE_LABEL } from '../Devere/tezgahPayload';
 import type { DoffEntry } from './useDoffEntry';
 import { useBeamPanel, type BeamPanelState } from './useBeamPanel';
+import { useBeamMount } from './useBeamMount';
+import BeamMountBand from './BeamMountBand';
 
 const SOURCES = (Object.keys(LENGTH_SOURCE_LABEL) as WarpLengthSource[]).filter((k) => k !== 'WEIGHED');
 
@@ -73,6 +75,7 @@ function BeamModal({ state }: { state: BeamPanelState }) {
 
 export default function BeamPanel({ entry }: { entry: DoffEntry }) {
   const state = useBeamPanel({ machineId: entry.machine?.id ?? null, isOnline: entry.isOnline });
+  const mount = useBeamMount({ machineId: entry.machine?.id ?? null, enabled: state.enabled, onDone: () => void state.refetch() });
   if (!state.enabled) return null;
   const locked = !entry.isOnline || state.pending;
   return (
@@ -81,9 +84,10 @@ export default function BeamPanel({ entry }: { entry: DoffEntry }) {
         <Text style={styles.heading}>{`Levent · ${state.beams.length} bağlı`}</Text>
         <Button compact icon="refresh" onPress={() => void state.refetch()}>Yenile</Button>
       </View>
+      <BeamMountBand mount={mount} isOnline={entry.isOnline} />
       {state.loading ? <ActivityIndicator /> : null}
       {state.isError ? <Text style={styles.error}>Levent listesi alınamadı.</Text> : null}
-      {!state.loading && state.beams.length === 0 ? <Text style={styles.meta}>Bu tezgahta bağlı levent yok — takma Levent Sarım ekranından.</Text> : null}
+      {!state.loading && state.beams.length === 0 ? <Text style={styles.meta}>{mount.canMount ? 'Bu tezgahta bağlı levent yok — leventin etiketini okutup takın.' : 'Bu tezgahta bağlı levent yok — takma Levent Sarım ekranından.'}</Text> : null}
       {state.beams.map((b) => (
         <View key={b.id} style={styles.beamRow}>
           <View style={styles.grow}>
