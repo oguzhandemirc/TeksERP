@@ -96,6 +96,14 @@ describe('failureToastText', () => {
   it('mesajsız hata da okunur metin üretir', () => {
     expect(failureToastText(null, 'Fason Sevk').text2).toContain('Bilinmeyen hata');
   });
+  it('S3a: kuyruktan düşen tezgah doğuşu (açık iş yok) → sabit yönerge, kesin "kaydedilmedi"', () => {
+    const e = { status: 409, message: 'T-07 tezgahının 1. hattında açık koşum yok', details: { code: 'MACHINE_NO_OPEN_RUN' } };
+    expect(shouldAnnounceFailure(['station', 'kk1-create-entry'], e)).toBe(true);
+    expect(failureToastText(e, 'Ham Giriş')).toEqual({
+      text1: 'Ham Giriş — KAYIT GİTMEDİ',
+      text2: 'Top kaydedilmedi: tezgahta açık iş yok. Listede yoksa tekrar girin.',
+    });
+  });
 });
 
 // =============================================================================

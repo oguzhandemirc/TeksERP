@@ -2,25 +2,34 @@ import { EMPTY_DOFF_LINK, doffLinkPayload, doffRowLabel, isDoffLinkVisible, vali
 
 describe('doffLink — KK1 dokuma bağı (saf)', () => {
   it('⭐ bayrak KAPALI → iki soru çizilmez ve payload bugünküyle birebir (alan yok)', () => {
-    expect(isDoffLinkVisible(false, false)).toBe(false);
-    expect(doffLinkPayload({ weaving: true, doffEventId: 'd1' }, false, false)).toEqual({});
-    expect('doffEventId' in doffLinkPayload({ weaving: true, doffEventId: 'd1' }, false, false)).toBe(false);
+    expect(isDoffLinkVisible(false, false, 'TABLET_DOFF')).toBe(false);
+    expect(doffLinkPayload({ weaving: true, doffEventId: 'd1' }, false, false, 'TABLET_DOFF')).toEqual({});
+    expect('doffEventId' in doffLinkPayload({ weaving: true, doffEventId: 'd1' }, false, false, 'TABLET_DOFF')).toBe(false);
   });
 
   it('yarı mamul modunda sorular gizli; bağ verilemez', () => {
-    expect(isDoffLinkVisible(true, true)).toBe(false);
-    expect(doffLinkPayload({ weaving: true, doffEventId: 'd1' }, true, true)).toEqual({});
+    expect(isDoffLinkVisible(true, true, 'TABLET_DOFF')).toBe(false);
+    expect(doffLinkPayload({ weaving: true, doffEventId: 'd1' }, true, true, 'TABLET_DOFF')).toEqual({});
   });
 
   it('⭐ dokuma AÇIK: "dokuma değil" → alan yok; "dokuma, seçim yok" → null (doff\'suz top kovası); seçim → id', () => {
-    expect(doffLinkPayload(EMPTY_DOFF_LINK, true, false)).toEqual({});
-    expect(doffLinkPayload({ weaving: true, doffEventId: null }, true, false)).toEqual({ doffEventId: null });
-    expect(doffLinkPayload({ weaving: true, doffEventId: 'd1' }, true, false)).toEqual({ doffEventId: 'd1' });
+    expect(doffLinkPayload(EMPTY_DOFF_LINK, true, false, 'TABLET_DOFF')).toEqual({});
+    expect(doffLinkPayload({ weaving: true, doffEventId: null }, true, false, 'TABLET_DOFF')).toEqual({ doffEventId: null });
+    expect(doffLinkPayload({ weaving: true, doffEventId: 'd1' }, true, false, 'TABLET_DOFF')).toEqual({ doffEventId: 'd1' });
   });
 
   it('doğrulama: yalnız görünürken ve yarı mamul + bağ çakışmasında kırmızı', () => {
-    expect(validateDoffLink({ weaving: true, doffEventId: 'd1' }, true, false).ok).toBe(true);
-    expect(validateDoffLink({ weaving: true, doffEventId: 'd1' }, false, true).ok).toBe(true);
+    expect(validateDoffLink({ weaving: true, doffEventId: 'd1' }, true, false, 'TABLET_DOFF').ok).toBe(true);
+    expect(validateDoffLink({ weaving: true, doffEventId: 'd1' }, false, true, 'TABLET_DOFF').ok).toBe(true);
+  });
+
+  it('⭐ S3a: rollBirth KK1_* → soru GİZLİ ve payload BOŞ (yerini tezgah etiketi alır); TABLET_DOFF bugünkü', () => {
+    for (const mode of ['KK1_LABEL_OR_ORDER', 'KK1_LABEL_ONLY'] as const) {
+      expect(isDoffLinkVisible(true, false, mode)).toBe(false);
+      expect(doffLinkPayload({ weaving: true, doffEventId: 'd1' }, true, false, mode)).toEqual({});
+      expect(validateDoffLink({ weaving: true, doffEventId: 'd1' }, true, false, mode).ok).toBe(true);
+    }
+    expect(isDoffLinkVisible(true, false, 'TABLET_DOFF')).toBe(true);
   });
 
   it('satır etiketi kod · saat · parça · hat (· makine)', () => {

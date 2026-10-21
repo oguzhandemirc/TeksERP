@@ -11,7 +11,7 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
-import type { MachineDataSource } from '../types/models';
+import type { Kk1Context, MachineDataSource } from '../types/models';
 
 export interface DoffEvent {
   id: string;
@@ -86,6 +86,15 @@ export const doffService = {
   /** `idempotent: true` = yeniden gönderim, yeni indirme doğmadı (metne BAKILMAZ). */
   open: (body: OpenDoffRequest): Promise<ApiResponse<DoffEvent> & { idempotent?: true }> =>
     apiClient.post<ApiResponse<DoffEvent> & { idempotent?: true }>('/machine-doffs', body).then((r) => r.data),
+
+  /** KK1 ön-dolgu (S3a): tezgah etiketinden açık koşum · iş · kumaş · leventler. Hatalar doğuşla AYNI
+   *  (404 MACHINE_NOT_FOUND · 400 MACHINE_NOT_LOOM · 409 MACHINE_NO_OPEN_RUN) — ekran kaydetmeden görür. */
+  kk1Context: (machineCode: string, productionLineNo?: number | null): Promise<ApiResponse<Kk1Context>> =>
+    apiClient
+      .get<ApiResponse<Kk1Context>>('/machine-doffs/kk1-context', {
+        params: { machineCode, ...(productionLineNo != null ? { productionLineNo } : {}) },
+      })
+      .then((r) => r.data),
 
   /** Geri al: damga; top doğmuşsa 409 `DOFF_HAS_ROLLS` (barkodlar `details.barcodes`). */
   revoke: (id: string, reason: string): Promise<ApiResponse<DoffEvent>> =>

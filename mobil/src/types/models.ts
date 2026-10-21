@@ -1460,3 +1460,25 @@ export interface Order {
   branch?: { id: string; name: string; code?: string | null } | null;
   lines?: OrderLine[];
 }
+
+// ── KK1 tezgah etiketi ön-dolgusu (S3a) — `GET /machine-doffs/kk1-context?machineCode=` ──
+// Backend `Kk1Context` (kk1-roll-birth.helper.ts) tel aynası; Decimal alanlar JSON'da sayı ya da
+// metin gelebilir → `number | string`, ekran `Number()` ile okur. Değerler ÖNERİDİR (D17), kilitlemez.
+export interface Kk1Context {
+  machine: { id: string; code: string; name: string; productionLineCount: number };
+  run: {
+    id: string;
+    productionLineNo: number;
+    startedAt: string;
+    weavingOrder: { id: string; weavingOrderNumber: string } | null;
+    item: { id: string; code: string; name: string } | null;
+    color: { id: string; name: string } | null;
+    warpSpec: { id: string; code: string; name: string; takeUpPct: number | string | null } | null;
+  };
+  beams: {
+    mounted: { id: string; beamNo: string; position: number | null; remainingM: number | string }[];
+    /** Son 12 saatteki en yeni takma/sökme — varsa operatöre "eski/yeni levent" sorulur. */
+    recentChange: { at: string; dismounted: { id: string; beamNo: string } | null; mounted: { id: string; beamNo: string } | null } | null;
+  };
+  rollBirth: 'TABLET_DOFF' | 'KK1_LABEL_OR_ORDER' | 'KK1_LABEL_ONLY';
+}

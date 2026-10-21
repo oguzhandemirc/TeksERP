@@ -8,7 +8,9 @@
 // "doff'suz top" kovası. Yarı mamulle birlikte verilemez (backend 400 + burada).
 // =============================================================================
 import type { DoffListRow } from '../../../services/doff.service';
+import type { DokumaRollBirth } from '../../../services/featureFlag.service';
 import { factoryLocaleTimeString } from '../../../lib/factory-time';
+import { isKk1BirthMode } from './loomBirth';
 
 export interface DoffLinkState {
   /** Operatörün cevabı: bu top tezgahtan mı indi? Mod SEÇİLİ KALIR (yarı mamul kalıbı). */
@@ -19,15 +21,16 @@ export interface DoffLinkState {
 
 export const EMPTY_DOFF_LINK: DoffLinkState = { weaving: false, doffEventId: null };
 
-/** İki soru yalnız dokuma modülü açıkken ve yarı mamul modu DIŞINDA çizilir. */
-export function isDoffLinkVisible(dokumaEnabled: boolean, semiMode: boolean): boolean {
-  return dokumaEnabled && !semiMode;
+/** İki soru yalnız dokuma açık ∧ yarı mamul DIŞI ∧ `rollBirth === TABLET_DOFF` iken çizilir;
+ *  KK1_* modda yerini tezgah etiketi okutma alır (`loomBirth.ts`, S3a). */
+export function isDoffLinkVisible(dokumaEnabled: boolean, semiMode: boolean, rollBirth: DokumaRollBirth): boolean {
+  return dokumaEnabled && !semiMode && !isKk1BirthMode(rollBirth);
 }
 
 export type DoffLinkValidation = { ok: true } | { ok: false; message: string };
 
-export function validateDoffLink(state: DoffLinkState, dokumaEnabled: boolean, semiMode: boolean): DoffLinkValidation {
-  if (!isDoffLinkVisible(dokumaEnabled, semiMode)) return { ok: true };
+export function validateDoffLink(state: DoffLinkState, dokumaEnabled: boolean, semiMode: boolean, rollBirth: DokumaRollBirth): DoffLinkValidation {
+  if (!isDoffLinkVisible(dokumaEnabled, semiMode, rollBirth)) return { ok: true };
   if (semiMode && state.doffEventId) {
     return { ok: false, message: 'Yarı mamul girişine indirme bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner.' };
   }
@@ -35,8 +38,8 @@ export function validateDoffLink(state: DoffLinkState, dokumaEnabled: boolean, s
 }
 
 /** Payload parçası: görünmüyorsa BOŞ nesne (bugünkü payload birebir); dokuma değilse boş; seçim yoksa null. */
-export function doffLinkPayload(state: DoffLinkState, dokumaEnabled: boolean, semiMode: boolean): { doffEventId?: string | null } {
-  if (!isDoffLinkVisible(dokumaEnabled, semiMode) || !state.weaving) return {};
+export function doffLinkPayload(state: DoffLinkState, dokumaEnabled: boolean, semiMode: boolean, rollBirth: DokumaRollBirth): { doffEventId?: string | null } {
+  if (!isDoffLinkVisible(dokumaEnabled, semiMode, rollBirth) || !state.weaving) return {};
   return { doffEventId: state.doffEventId };
 }
 

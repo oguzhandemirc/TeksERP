@@ -3,6 +3,8 @@ import {
   DEFAULT_COMPANY_NAME,
   DEFAULT_FEATURE_FLAGS,
   featureFlagService,
+  resolveDokumaRollBirth,
+  type DokumaRollBirth,
 } from '../services/featureFlag.service';
 import { useAuthStore } from '../store/authStore';
 import { pickableLifecycle, type ItemPickUse } from '../lib/item-lifecycle';
@@ -40,6 +42,11 @@ export function useProductionEnabled(): boolean {
  *  bayrak yüklenene dek çizilmez; kapı `useVisibleScreens`tedir. */
 export function useDokumaEnabled(): boolean {
   return useFeatureFlags().data?.dokumaEnabled ?? DEFAULT_FEATURE_FLAGS.dokumaEnabled;
+}
+
+/** Etkin top doğuş yolu (`dokuma.rollBirth`): bayrak yüklenmeden/dokuma kapalıyken `TABLET_DOFF` (bugünkü ekran). */
+export function useDokumaRollBirth(): DokumaRollBirth {
+  return resolveDokumaRollBirth(useFeatureFlags().data ?? DEFAULT_FEATURE_FLAGS);
 }
 
 /** Devere modülü açık mı? Default FALSE — Levent Sarım kartı bayrak yüklenene dek çizilmez. */
