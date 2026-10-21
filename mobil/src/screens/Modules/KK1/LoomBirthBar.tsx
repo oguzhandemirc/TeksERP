@@ -12,6 +12,7 @@ import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import PickerModal from '../../../components/PickerModal';
 import TruncatedText from '../../../components/TruncatedText';
+import { TERIM } from '../../../lib/terim';
 import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import type { DokumaRollBirth } from '../../../services/featureFlag.service';
 import { colors, radius, spacing, typography } from '../../../theme';
@@ -88,7 +89,7 @@ function LoomOverlays({ loom, camera, setCamera }: { loom: LoomBirthApi; camera:
         }))}
         selectedValue={loom.state.order?.id ?? ''}
         loading={loom.ordersLoading}
-        emptyText={loom.ordersError ? 'Liste yüklenemedi — bu bir "iş yok" cevabı DEĞİLDİR.' : 'Açık dokuma işi yok.'}
+        emptyText={loom.ordersError ? 'Liste yüklenemedi — bu bir "iş yok" cevabı DEĞİLDİR.' : `Açık ${TERIM.dokumaIsEmri.tekilKucuk} yok.`}
         onRefresh={loom.refetchOrders}
         refreshError={loom.ordersError}
         onSelect={(id) => {
