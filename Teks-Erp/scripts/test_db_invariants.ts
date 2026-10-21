@@ -562,6 +562,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "roll_status_events", name: "roll_status_events_pre_epoch_source_check" },
   { table: "rolls", name: "rolls_initialQty_nonneg" },
   { table: "rolls", name: "rolls_weightKg_nonneg" },
+  // S1 (2026-10-21, D11): doff bağı ∧ iş bağı aynı anda olamaz — `weavingOrderId` yalnız doff'suz A-yolunda dolar.
+  { table: "rolls", name: "rolls_weaving_order_xor_ck" },
   { table: "order_lines", name: "order_lines_quantity_pos" },
   { table: "order_lines", name: "order_lines_shippedQty_nonneg" },
   { table: "manifests", name: "manifests_source_shape" },

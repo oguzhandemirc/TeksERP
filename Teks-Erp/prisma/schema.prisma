@@ -1952,6 +1952,8 @@ model WeavingOrder {
   /// Fason dokuma (G2): levent/iplik bu iş adına fasona gider, TOP makbuzla döner.
   subcontractorDispatches SubcontractorDispatch[]   @relation("DispatchWeavingOrder")
   subcontractorReceipts   SubcontractorReceipt[]    @relation("ReceiptWeavingOrder")
+  /// A-yolu (doff'suz, çok tezgahlı iş) ile KK1'de doğan toplar — doff'lu toplar `machineRuns → doffEvents → rolls`.
+  rolls                   Roll[]                    @relation("RollWeavingOrder")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -3379,6 +3381,12 @@ model Roll {
   /// kovasında AYRI gösterilir. `entrySource=WEAVING` ile birlikte anlamlı.
   doffEventId String? @db.Uuid
 
+  /// BU TOP HANGİ DOKUMA İŞİNDEN — YALNIZ doff'suz A-yolu (KK1'de iş emri seçildi, iş birden çok
+  /// tezgahta koşuyor, tezgah bilinmiyor → DoffEvent uydurulmaz; D11, 2026-10-21). Doff varsa iş
+  /// doff→koşum zincirinden okunur, bu kolon NULL kalır — tek okuyucu `weavingOrderOfRoll`; ikisi
+  /// aynı anda dolu olamaz: CHECK `rolls_weaving_order_xor_ck`.
+  weavingOrderId String? @db.Uuid
+
   // Parti (Batch) üyeliği. Attach anında doğan partiye yazılır; fason kabulde born
   // roll'a (dispatch.batchId'den), Tambur kesiminde çocuk roll'a KALITILIR → bir parti
   // tüm rota boyunca (depodaki bölünmüş çocuklar dahil) tek kimlikle izlenir.
@@ -3667,6 +3675,8 @@ model Roll {
   parentReceipt        SubcontractorReceipt?       @relation("RollFromReceipt", fields: [parentReceiptId], references: [id])
   /// `Restrict`: topu doğurmuş indirme silinemez — ileri kaydın bağlamı (defter doktrini).
   doffEvent            DoffEvent?                  @relation(fields: [doffEventId], references: [id], onDelete: Restrict)
+  /// A-yolu (doff'suz) iş bağı — `Restrict`: top doğurmuş iş silinemez (doff bağıyla aynı doktrin).
+  weavingOrder         WeavingOrder?               @relation("RollWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
   /// Faz 4: bu toptan otomatik düşen levent tüketimleri (CONSUMED.rollId; çift leventte iki satır).
   warpBeamEvents       WarpBeamEvent[]             @relation("WarpBeamEventRoll")
   /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
@@ -3750,6 +3760,8 @@ model Roll {
   @@index([entrySource, createdAt])
   // Domain FK ([DB-12]): "bu indirmeden kaç top doğdu" + DOFF_CANCEL kapısı (NOT EXISTS).
   @@index([doffEventId])
+  // Domain FK: "bu işten (doff'suz A-yolu) kaç top doğdu" — `rollsOfWeavingOrderWhere` OR dalı.
+  @@index([weavingOrderId])
   // WO detayı: "şu adımda üretilen + WAREHOUSE/A1_STOCK" sorgusu
   @@index([producedInStepId, status])
   // Fason kuyruğu: "bu adımda + AT_SUBCONTRACTOR" listeleme
