@@ -99,12 +99,14 @@ describe("buildPeripheralPayload (form → API)", () => {
     expect(buildPeripheralPayload({ ...base, languageOverride: "ZPL" }).languageOverride).toBe("ZPL");
   });
 
-  it("templateRoutes 4-kind (ROLL_RAW/FINISHED/SWATCH/SACK); boş templateId → null", () => {
-    const p = buildPeripheralPayload({ ...base, templateFinishedId: "t1", templateSackId: "t2" });
-    expect(p.templateRoutes).toHaveLength(4);
+  it("templateRoutes 6-kind (ROLL_RAW/FINISHED/SWATCH/SACK/MACHINE/WARP_BEAM); boş templateId → null", () => {
+    const p = buildPeripheralPayload({ ...base, templateFinishedId: "t1", templateSackId: "t2", templateMachineId: "t3" });
+    expect(p.templateRoutes).toHaveLength(6);
     expect(p.templateRoutes.map((r) => r.kind).sort()).toEqual(
-      ["ROLL_FINISHED", "ROLL_RAW", "SACK", "SWATCH"],
+      ["MACHINE", "ROLL_FINISHED", "ROLL_RAW", "SACK", "SWATCH", "WARP_BEAM"],
     );
+    expect(p.templateRoutes.find((r) => r.kind === "MACHINE")?.templateId).toBe("t3");
+    expect(p.templateRoutes.find((r) => r.kind === "WARP_BEAM")?.templateId).toBeNull();
     const finished = p.templateRoutes.find((r) => r.kind === "ROLL_FINISHED");
     const raw = p.templateRoutes.find((r) => r.kind === "ROLL_RAW");
     const sack = p.templateRoutes.find((r) => r.kind === "SACK");

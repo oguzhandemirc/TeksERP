@@ -144,8 +144,10 @@ export function formatDate(iso: string): string {
  * kendi sayfasında; yazıcı arka arkaya basar). 1-100'e kırpılır (Etiket Stüdyosu
  * şablon baskısı; rulo/kartela akışı girişte 1-5'e kırpılır — clampCopies notu).
  */
-export function applyCopies(fullHtml: string, copies: number): string {
-  const copiesCount = Math.max(1, Math.min(100, Math.floor(copies)));
+export function applyCopies(fullHtml: string, copies: number, max = 100): string {
+  // `max` yalnız tezgah/levent toplu basımında 200'e çıkar (girişte 1-200 doğrulanır,
+  // label-loom-context.helper); varsayılan 100 = bugünkü davranış.
+  const copiesCount = Math.max(1, Math.min(max, Math.floor(copies)));
   if (copiesCount <= 1) return fullHtml;
   const bodyOpen = fullHtml.indexOf("<body>") + "<body>".length;
   const bodyClose = fullHtml.indexOf("</body>");

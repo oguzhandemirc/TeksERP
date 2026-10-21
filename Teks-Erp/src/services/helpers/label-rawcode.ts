@@ -152,5 +152,31 @@ export function mockPayload(kind: LabelKind, qualityCode: string | null = ""): L
       qualityGrade: "", widthCm: null, markedForKartela: false,
     } as LabelPayload;
   }
+  // MACHINE/WARP_BEAM dalı: SACK ile aynı gerekçe — stüdyo önizlemesi kimlik ve
+  // bağlam alanlarını DOLU göstermeli; top alanları boşaltılır (etikette yoklar).
+  const empty = {
+    itemCode: "", itemName: "", itemNameDefault: "",
+    colorCode: null, colorName: null, colorNameDefault: null, colorNameSource: null,
+    qualityGrade: "", widthCm: null, markedForKartela: false, lengthMeters: 0, weightKg: null,
+    customerName: null, customerId: null, orderNumber: null, orderLineId: null,
+    batchNumber: null, workOrderNumber: null, foldType: null,
+  };
+  if (kind === ("MACHINE" as LabelKind)) {
+    return {
+      ...base, ...empty,
+      barcode: "TZ-014", machineCode: "TZ-014", machineName: "Tezgah 14", stationName: "Dokuma Holü 1",
+    } as LabelPayload;
+  }
+  if (kind === ("WARP_BEAM" as LabelKind)) {
+    // Örnek numaralar seriden türer: biçim veri olduğu için yazılı literal bayatlar.
+    const beamNo = previewSeriesCode(resolveSeriesFormat("warpBeam"), 1);
+    return {
+      ...base, ...empty,
+      barcode: beamNo, beamNo, physicalBeamNo: "G-27",
+      warpSpecCode: "CZ-3200", warpSpecName: "Pamuk 30/1 3200 tel",
+      plannedLengthM: 1500, woundLengthM: 1480.5, woundKg: 212.4,
+      weavingOrderNumber: previewSeriesCode(resolveSeriesFormat("weavingOrder"), 1), itemName: "Pamuk Astar 60s", woundAt: new Date().toISOString(),
+    } as LabelPayload;
+  }
   return base as LabelPayload;
 }

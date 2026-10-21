@@ -121,6 +121,43 @@ async function resolveFormatOpts(req: Request): Promise<{
   };
 }
 
+/**
+ * Tezgah/levent toplu basımı `?copies=` — yok → undefined (servis 1 alır); tam sayı
+ * olmayan/aralık dışı değer servisin `resolveBatchCopies`inde 400 (kırpma YOK).
+ */
+function loomCopiesQuery(req: Request): number | undefined {
+  const raw = req.query.copies;
+  if (raw === undefined) return undefined;
+  return typeof raw === "string" && /^\d+$/.test(raw) ? parseInt(raw, 10) : Number.NaN;
+}
+
+/** print-event gövdesindeki isteğe bağlı `copies` (audit izine yazılır). */
+const loomPrintEventSchema = z.object({ copies: z.number().optional() }).optional();
+
+type LoomNativeResult = Awaited<ReturnType<LabelService["getMachineLabelNative"]>>;
+
+function sendLoomHtml(res: Response, r: { data: { html: string; kind: LabelKind } }): void {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("X-Label-Kind", r.data.kind);
+  res.status(200).send(r.data.html);
+}
+
+/** Çuval `/native` ile aynı sözleşme: `?encoding=b64` → base64 JSON zarfı, yoksa ham içerik. */
+function sendLoomNative(res: Response, r: LoomNativeResult, wantB64: boolean): void {
+  const d = r.data;
+  res.setHeader("X-Label-Language", d.language);
+  res.setHeader("X-Label-Kind", d.kind);
+  if (wantB64) {
+    res.status(200).json({
+      success: true,
+      data: { encoding: "base64", content: d.contentB64, language: d.language, contentType: d.contentType, kind: d.kind, count: d.count },
+    });
+    return;
+  }
+  res.setHeader("Content-Type", d.contentType);
+  res.status(200).send(d.content);
+}
+
 export class LabelController {
   private service = new LabelService();
 
@@ -503,6 +540,64 @@ export class LabelController {
     try {
       const result = await this.service.recordSackPrintEvent(req.params.id as string, req.user?.userId);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ── TEZGAH + LEVENT ETİKETİ — barkod/QR = Machine.code / WarpBeam.beamNo ─────
+
+  getMachineLabel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.getMachineLabel(req.params.id as string));
+    } catch (e) { next(e); }
+  };
+
+  getMachineLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const opts = { copies: loomCopiesQuery(req), ...(await resolveFormatOpts(req)) };
+      sendLoomHtml(res, await this.service.getMachineLabelHtml(req.params.id as string, opts));
+    } catch (e) { next(e); }
+  };
+
+  getMachineLabelNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const wantB64 = req.query.encoding === "b64";
+      const opts = { copies: loomCopiesQuery(req), ...(wantB64 ? { encoding: "b64" as const } : {}), ...(await resolveFormatOpts(req)) };
+      sendLoomNative(res, await this.service.getMachineLabelNative(req.params.id as string, opts), wantB64);
+    } catch (e) { next(e); }
+  };
+
+  recordMachinePrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = loomPrintEventSchema.parse(req.body ?? undefined);
+      res.status(200).json(await this.service.recordMachinePrintEvent(req.params.id as string, req.user?.userId, body?.copies));
+    } catch (e) { next(e); }
+  };
+
+  getWarpBeamLabel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.getWarpBeamLabel(req.params.id as string));
+    } catch (e) { next(e); }
+  };
+
+  getWarpBeamLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const opts = { copies: loomCopiesQuery(req), ...(await resolveFormatOpts(req)) };
+      sendLoomHtml(res, await this.service.getWarpBeamLabelHtml(req.params.id as string, opts));
+    } catch (e) { next(e); }
+  };
+
+  getWarpBeamLabelNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const wantB64 = req.query.encoding === "b64";
+      const opts = { copies: loomCopiesQuery(req), ...(wantB64 ? { encoding: "b64" as const } : {}), ...(await resolveFormatOpts(req)) };
+      sendLoomNative(res, await this.service.getWarpBeamLabelNative(req.params.id as string, opts), wantB64);
+    } catch (e) { next(e); }
+  };
+
+  recordWarpBeamPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = loomPrintEventSchema.parse(req.body ?? undefined);
+      res.status(200).json(await this.service.recordWarpBeamPrintEvent(req.params.id as string, req.user?.userId, body?.copies));
     } catch (e) { next(e); }
   };
 

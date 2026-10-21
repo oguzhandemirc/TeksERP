@@ -103,6 +103,29 @@ export interface LabelPayload {
   packageNo?: number | null;
   /** Sevk partisi adı (SP-3 / "Cuma tırı"); partisiz çuvalda null. */
   packingGroupName?: string | null;
+
+  // --- MACHINE (tezgah) için opsiyonel alanlar — yalnız `kind === MACHINE` iken dolu. ---
+  /** Tezgah kodu (`Machine.code`) — barkod/QR ile AYNI değer (tek kod kuralı). */
+  machineCode?: string | null;
+  machineName?: string | null;
+  /** Tezgahın dokuma istasyonu (hol) adı. */
+  stationName?: string | null;
+
+  // --- WARP_BEAM (levent) için opsiyonel alanlar — yalnız `kind === WARP_BEAM` iken dolu. ---
+  /** Levent no (`WarpBeam.beamNo`, LV+GGAAYY+NNNN) — barkod/QR ile AYNI değer. */
+  beamNo?: string | null;
+  /** Metal gövde numarası (demirbaş kartı yok; boş olabilir). */
+  physicalBeamNo?: string | null;
+  warpSpecCode?: string | null;
+  warpSpecName?: string | null;
+  plannedLengthM?: number | null;
+  /** İptal edilmemiş WOUND satırının metresi; sarılmamış leventte null. */
+  woundLengthM?: number | null;
+  /** İptal edilmemiş WOUND satırının kg'ı (`theoreticalKg` — tartıldıysa tartı değeri). */
+  woundKg?: number | null;
+  weavingOrderNumber?: string | null;
+  /** WOUND anı (ISO) — sarılmamış leventte null. */
+  woundAt?: string | null;
 }
 
 export interface SwatchLabelPayload {

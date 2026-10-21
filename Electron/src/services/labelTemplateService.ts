@@ -10,6 +10,8 @@ export const LabelKind = {
   ROLL_FINISHED: "ROLL_FINISHED",
   SWATCH: "SWATCH",
   SACK: "SACK",
+  MACHINE: "MACHINE",
+  WARP_BEAM: "WARP_BEAM",
 } as const;
 export type LabelKind = (typeof LabelKind)[keyof typeof LabelKind];
 
@@ -18,7 +20,15 @@ export const labelKindLabels: Record<LabelKind, string> = {
   ROLL_FINISHED: "Bitmiş Kumaş Etiketi",
   SWATCH: "Kartela Etiketi",
   SACK: "Çuval Etiketi",
+  MACHINE: "Tezgah Etiketi",
+  WARP_BEAM: "Levent Etiketi",
 };
+
+/** Bağlam adı FAIL-SOFT: sunucu bu panelin tanımadığı bir tür dönerse ham ad basılır
+ *  (eski panel `labelKindLabels[k].split` ile çöküyordu — S1b ölçümü). */
+export function labelKindLabel(kind: string): string {
+  return (labelKindLabels as Record<string, string | undefined>)[kind] ?? kind;
+}
 
 export type FieldType = "text" | "number" | "date" | "qr" | "barcode" | "table";
 
@@ -375,7 +385,8 @@ export const labelTemplateService = {
   /** BİRLEŞİK alan kataloğu (tek havuz) — eleman paleti buradan beslenir. */
   unifiedCatalog: (): Promise<UnifiedCatalogField[]> =>
     apiClient
-      .get<ApiResponse<{ fields: UnifiedCatalogField[] }>>("/api/label-templates/catalog")
+      // `kinds=all`: sunucu tüm bağlamları döner; parametresiz eski panel yalnız tanıdıklarını alır.
+      .get<ApiResponse<{ fields: UnifiedCatalogField[] }>>("/api/label-templates/catalog", { params: { kinds: "all" } })
       .then((r) => r.data.data.fields),
 
   /** Bakım sembolü kataloğu (kategoriler + inline SVG) — palet + kanvas görseli. */

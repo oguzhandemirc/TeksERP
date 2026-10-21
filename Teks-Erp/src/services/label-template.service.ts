@@ -39,6 +39,9 @@ import {
   getRequiredKeys,
   getUnifiedCatalog,
   getUnifiedKeys,
+  kindHasLengthBanner,
+  catalogForKinds,
+  LEGACY_PANEL_LABEL_KINDS,
 } from "../config/label-fields";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { renderLabel } from "./helpers/label-renderer.registry";
@@ -280,8 +283,10 @@ export class LabelTemplateService {
 
   /** BİRLEŞİK katalog (tek havuz) — her alan + değer ürettiği bağlamlar. Kanvas
    *  editörünün eleman paleti buradan beslenir. */
-  getUnifiedCatalogResponse(): ApiResponse<{ fields: ReturnType<typeof getUnifiedCatalog> }> {
-    return { success: true, data: { fields: getUnifiedCatalog() } };
+  getUnifiedCatalogResponse(allKinds = false): ApiResponse<{ fields: ReturnType<typeof getUnifiedCatalog> }> {
+    // `allKinds` yalnız yeni panelden (`?kinds=all`); yoksa eski panelin tanıdığı bağlamlar.
+    const fields = allKinds ? getUnifiedCatalog() : catalogForKinds(getUnifiedCatalog(), LEGACY_PANEL_LABEL_KINDS);
+    return { success: true, data: { fields } };
   }
 
   // ---------------------------------------------------------------------------
@@ -1075,7 +1080,7 @@ export class LabelTemplateService {
         qrScale: 5, // okunur QR (~20mm ayak izi)
         // Sağ dikey metraj bandı — yalnız TOP etiketinde anlamlı. Kartelada boy (cm),
         // çuvalda toplam metraj var ama bant tek-top vurgusu için tasarlandı → kapalı.
-        lengthBanner: kind !== LabelKind.SWATCH && kind !== LabelKind.SACK,
+        lengthBanner: kindHasLengthBanner(kind),
       },
     };
   }

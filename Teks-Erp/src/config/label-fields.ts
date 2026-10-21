@@ -142,6 +142,45 @@ export const SACK_FIELDS: readonly FieldDef[] = [
 ] as const;
 
 // =============================================================================
+// MACHINE — Tezgah etiketi (dokuma manuel veri S1b, D3)
+// =============================================================================
+// Operatör topa yapıştırır, KK1 okutur → top hangi tezgahtan çıktı. Barkod + QR =
+// `Machine.code` (ayrı barkod kolonu YOK — tek kod kuralı). Kimlik alanı
+// `machineCode`: şablon onu bağlamadıkça etiket basılmaz (IDENTITY_BIND, fail-closed).
+// =============================================================================
+export const MACHINE_FIELDS: readonly FieldDef[] = [
+  { key: "barcode",     defaultLabel: "Barkod",       type: "barcode" },
+  { key: "qrCode",      defaultLabel: "QR Kod",       type: "qr" },
+  { key: "machineCode", defaultLabel: "Tezgah Kodu",  type: "text", required: true },
+  { key: "machineName", defaultLabel: "Tezgah Adı",   type: "text" },
+  { key: "stationName", defaultLabel: "Dokuma Holü",  type: "text" },
+  { key: "printedAt",   defaultLabel: "Baskı Tarihi", type: "date" },
+] as const;
+
+// =============================================================================
+// WARP_BEAM — Levent etiketi (dokuma manuel veri S1b, D12)
+// =============================================================================
+// Levente yapışır; barkod + QR = `WarpBeam.beamNo` (LV+GGAAYY+NNNN, tek kod).
+// Sarım gerçekleri (metre/kg/tarih) iptal edilmemiş WOUND satırından gelir; sarılmamış
+// (PLANNED) leventte boş → eleman baskıda atlanır (present:false).
+// =============================================================================
+export const WARP_BEAM_FIELDS: readonly FieldDef[] = [
+  { key: "barcode",            defaultLabel: "Barkod",            type: "barcode" },
+  { key: "qrCode",             defaultLabel: "QR Kod",            type: "qr" },
+  { key: "beamNo",             defaultLabel: "Levent No",         type: "text", required: true },
+  { key: "physicalBeamNo",     defaultLabel: "Gövde No",          type: "text" },
+  { key: "warpSpecCode",       defaultLabel: "Çözgü Kartı Kodu",  type: "text" },
+  { key: "warpSpecName",       defaultLabel: "Çözgü Kartı",       type: "text" },
+  { key: "plannedLengthM",     defaultLabel: "Plan Metre",        type: "number" },
+  { key: "woundLengthM",       defaultLabel: "Sarılan Metre",     type: "number" },
+  { key: "woundKg",            defaultLabel: "Sarılan kg",        type: "number" },
+  { key: "weavingOrderNumber", defaultLabel: "Dokuma İş Emri No", type: "text" },
+  { key: "itemName",           defaultLabel: "Kumaş",             type: "text" },
+  { key: "woundAt",            defaultLabel: "Sarım Tarihi",      type: "date" },
+  { key: "printedAt",          defaultLabel: "Baskı Tarihi",      type: "date" },
+] as const;
+
+// =============================================================================
 // Aggregation + lookup
 // =============================================================================
 
@@ -150,7 +189,19 @@ export const FIELD_CATALOG: Record<LabelKind, readonly FieldDef[]> = {
   [LabelKind.ROLL_FINISHED]: ROLL_FINISHED_FIELDS,
   [LabelKind.SWATCH]:        SWATCH_FIELDS,
   [LabelKind.SACK]:          SACK_FIELDS,
+  [LabelKind.MACHINE]:       MACHINE_FIELDS,
+  [LabelKind.WARP_BEAM]:     WARP_BEAM_FIELDS,
 };
+
+/**
+ * Sağ dikey METRAJ BANDI bu bağlamda anlamlı mı — yalnız TOP etiketleri (ROLL_*) ve
+ * türsüz (deprecated `kind` null) şablon. Kartela/çuval/tezgah/levent tek-top metrajı
+ * taşımaz. TEK KAYNAK: varsayılan tasarım (`getTemplateDefaults`) ve akış→kanvas
+ * dönüşümü buradan sorar. Literal karşılaştırma: modül-üstü enum deref'i yok (TDZ).
+ */
+export function kindHasLengthBanner(kind: LabelKind | null | undefined): boolean {
+  return kind == null || kind === ("ROLL_RAW" as LabelKind) || kind === ("ROLL_FINISHED" as LabelKind);
+}
 
 export function getAllowedKeys(kind: LabelKind): Set<string> {
   return new Set(FIELD_CATALOG[kind].map((f) => f.key));
@@ -219,6 +270,25 @@ export function getUnifiedCatalog(): UnifiedFieldDef[] {
   }
   unifiedCache = [...byKey.values()];
   return unifiedCache;
+}
+
+/**
+ * Eski panelin (S1b öncesi, ≤1.6.x) tanıdığı bağlamlar. O sürümlerin eleman paleti
+ * `labelKindLabels[k].split(...)` yazar → bilinmeyen tür (MACHINE/WARP_BEAM) Etiket
+ * Stüdyosu'nu ÇÖKERTİR (ölçüldü: ElementPalette). Birleşik katalog `?kinds=all`
+ * istemeyen istemciye yalnız bu bağlamlarla döner — eski panel bugünkü yanıtı BAYT-AYNI
+ * alır; yeni panel `kinds=all` gönderir ve bilinmeyen türde ham ada düşer (fail-soft).
+ */
+export const LEGACY_PANEL_LABEL_KINDS: ReadonlySet<string> = new Set(["ROLL_RAW", "ROLL_FINISHED", "SWATCH", "SACK"]);
+
+/** Katalogu verilen bağlam kümesine daraltır: `kinds` ve `labelByKind` süzülür, bağlamı kalmayan alan düşer. */
+export function catalogForKinds(fields: readonly UnifiedFieldDef[], allowed: ReadonlySet<string>): UnifiedFieldDef[] {
+  return fields.flatMap((f) => {
+    const kinds = f.kinds.filter((k) => allowed.has(k));
+    if (kinds.length === 0) return [];
+    const byKind = Object.entries(f.labelByKind ?? {}).filter(([k]) => allowed.has(k));
+    return [{ ...f, kinds, labelByKind: byKind.length ? (Object.fromEntries(byKind) as UnifiedFieldDef["labelByKind"]) : undefined }];
+  });
 }
 
 /** Birleşik katalogdaki tüm izinli bind anahtarları (kanvas field elemanı için). */

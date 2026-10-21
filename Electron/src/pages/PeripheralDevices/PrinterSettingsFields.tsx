@@ -17,12 +17,14 @@ const LANGS = ["RASTER_HTML", "PPLA", "PPLB", "ZPL"] as const;
 const ROUTE_KINDS: {
   key: RouteLabelKind;
   label: string;
-  field: "templateRawId" | "templateFinishedId" | "templateSwatchId" | "templateSackId";
+  field: "templateRawId" | "templateFinishedId" | "templateSwatchId" | "templateSackId" | "templateMachineId" | "templateWarpBeamId";
 }[] = [
   { key: "ROLL_RAW", label: "Ham Top (KK1)", field: "templateRawId" },
   { key: "ROLL_FINISHED", label: "Bitmiş Top (Tambur)", field: "templateFinishedId" },
   { key: "SWATCH", label: "Kartela", field: "templateSwatchId" },
   { key: "SACK", label: "Çuval (Sevkiyat)", field: "templateSackId" },
+  { key: "MACHINE", label: "Tezgah (Dokuma)", field: "templateMachineId" },
+  { key: "WARP_BEAM", label: "Levent (Devere)", field: "templateWarpBeamId" },
 ];
 
 interface Props {

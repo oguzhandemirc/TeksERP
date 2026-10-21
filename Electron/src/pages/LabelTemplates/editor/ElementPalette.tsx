@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   labelTemplateService,
+  labelKindLabel,
   labelKindLabels,
   type LabelKind,
   type UnifiedCatalogField,
@@ -165,7 +166,7 @@ export function ElementPalette({ onAddField, onAddStructural, onAddIcon, preview
                   variant="outline"
                   className="h-auto w-full justify-start gap-1.5 px-2 py-1 text-left"
                   onClick={() => onAddField(f)}
-                  title={`Bağlamlar: ${f.kinds.map((k) => labelKindLabels[k]).join(", ")}`}
+                  title={`Bağlamlar: ${f.kinds.map((k) => labelKindLabel(k)).join(", ")}`}
                 >
                   <Plus className="h-3 w-3 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1">
@@ -173,7 +174,7 @@ export function ElementPalette({ onAddField, onAddStructural, onAddIcon, preview
                     <span className="block truncate font-mono text-[9px] text-muted-foreground">
                       {/* "tüm bağlamlar" eşiği bağlam SAYISINDAN türer — hardcoded 3
                           yeni bağlam (SACK) eklenince sessizce yanlışlanıyordu. */}
-                      {f.key} · {f.kinds.length === Object.keys(labelKindLabels).length ? "tüm bağlamlar" : f.kinds.map((k) => labelKindLabels[k].split(" ")[0]).join("+")}
+                      {f.key} · {f.kinds.length === Object.keys(labelKindLabels).length ? "tüm bağlamlar" : f.kinds.map((k) => labelKindLabel(k).split(" ")[0]).join("+")}
                     </span>
                   </span>
                 </Button>

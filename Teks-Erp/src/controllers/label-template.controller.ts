@@ -349,9 +349,9 @@ export class LabelTemplateController {
     } catch (e) { next(e); }
   };
 
-  unifiedCatalog = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  unifiedCatalog = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.status(200).json(this.service.getUnifiedCatalogResponse());
+      res.status(200).json(this.service.getUnifiedCatalogResponse(req.query.kinds === "all"));
     } catch (e) { next(e); }
   };
 

@@ -292,11 +292,17 @@ enum ScanType {
 ///   `barcode` kolonu YOK; code-format.ts "insan-okur kod = tarama barkodu, tek kod"
 ///   kuralı geçerli. Çuval içeriği karışık olabildiği için ürün/renk alanı YOK —
 ///   toplam metraj/kg/top adedi + müşteri + (opsiyonel) çuval yorumu basılır.
+/// MACHINE: Tezgah etiketi — barkod/QR = `Machine.code` (operatör topa yapıştırır,
+///   KK1 okutur); yalnız dokuma istasyonundaki aktif tezgah için basılır.
+/// WARP_BEAM: Levent etiketi — barkod/QR = `WarpBeam.beamNo` (LV+GGAAYY+NNNN); ikisinde
+///   de ayrı barkod kolonu YOK (tek kod kuralı).
 enum LabelKind {
   ROLL_RAW
   ROLL_FINISHED
   SWATCH
   SACK
+  MACHINE
+  WARP_BEAM
 }
 
 /// Yazıcı dili — etiket render driver registry anahtarı. Faz-1: yalnız
