@@ -56,6 +56,7 @@ export function agingSegments(b: AgingBlock): AgingSegment[] {
   return AGING_BUCKETS.filter((k) => b.kovalar[k] !== undefined).map((k) => ({
     label: AGING_BUCKET[k].label,
     tone: AGING_BUCKET[k].tone,
+    shade: AGING_BUCKET[k].shade,
     value: width(b.kovalar[k]),
     valueText: formatMoney(b.kovalar[k], b.doviz),
   }));

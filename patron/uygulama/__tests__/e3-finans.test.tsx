@@ -19,7 +19,19 @@ const mockSession = {
 const mockParams: { value: Record<string, string> } = { value: {} };
 const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn(), navigate: jest.fn(), canGoBack: () => true };
 jest.mock("../src/state/session", () => ({ useSession: () => mockSession }));
-jest.mock("expo-router", () => ({ useRouter: () => mockRouter, usePathname: () => "/finans", useLocalSearchParams: () => mockParams.value }));
+const mockFocus = { blur: [] as (() => void)[] };
+jest.mock("expo-router", () => ({
+  useRouter: () => mockRouter,
+  usePathname: () => "/finans",
+  useLocalSearchParams: () => mockParams.value,
+  // Odak = bağlanma; testler `mockFocus.blur` ile odak kaybını taklit eder.
+  useFocusEffect: (cb: () => void | (() => void)) =>
+    (require("react") as typeof import("react")).useEffect(() => {
+      const off = cb();
+      if (off) mockFocus.blur.push(off);
+      return off;
+    }, [cb]),
+}));
 jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
 // mock'lar kurulduktan SONRA yüklenir.
@@ -34,6 +46,10 @@ const { usePendingPoll, PENDING_POLL_MS } = require("../src/ui/raporlar/usePendi
 const { periodText } = require("../src/ui/raporlar/periods") as typeof import("../src/ui/raporlar/periods");
 const { invalidate } = require("../src/state/changes") as typeof import("../src/state/changes");
 const labels = require("../src/lib/labels/finans") as typeof import("../src/lib/labels/finans");
+const { agingSegments } = require("../src/ui/finans/FinanceSummary") as typeof import("../src/ui/finans/FinanceSummary");
+const { segmentColor } = require("../src/ui/charts/AgingBar") as typeof import("../src/ui/charts/AgingBar");
+const { schemes } = require("../src/ui/tokens") as typeof import("../src/ui/tokens");
+const present = require("../src/lib/present") as typeof import("../src/lib/present");
 
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const OZET = {
@@ -257,6 +273,7 @@ describe("§6 bekleyen rapor kısa yoklaması", () => {
       act(() => jest.advanceTimersByTime(60_000));
       expect(reload).toHaveBeenCalledTimes(2);
       const total = PENDING_POLL_MS.reduce((a, b) => a + b, 0);
+      expect(PENDING_POLL_MS.slice(0, 4)).toEqual([3_000, 6_000, 10_000, 20_000]);
       expect(total).toBeLessThanOrEqual(125_000);
     } finally {
       jest.useRealTimers();
@@ -279,5 +296,94 @@ describe("§7 finans alt satırı listesi bulut kataloğunun aynası", () => {
     for (const m of src.matchAll(re)) if (/subRows: \[[^\]]*"finans"/.test(m[0])) found.push(m[1]!);
     expect(found.length).toBeGreaterThan(5);
     expect([...labels.FINANCE_SUBROW_PROJECTIONS].sort()).toEqual([...new Set(found)].sort());
+  });
+});
+
+describe("§8 yaşlandırma kovası → durum tonu (renk anlamı)", () => {
+  it("vadesi gelmemiş iyi · 0–30 uyarı · 31–60 uyarının koyusu · 61–90 kritik · 90+ kritiğin koyusu · vadesiz nötr", () => {
+    const want = {
+      notDue: ["iyi", "fill"], d0_30: ["uyari", "fill"], d31_60: ["uyari", "deep"],
+      d61_90: ["kritik", "fill"], d90plus: ["kritik", "deep"], noDueDate: ["bilgi", "fill"],
+    } as const;
+    for (const k of labels.AGING_BUCKETS) expect([labels.AGING_BUCKET[k].tone, labels.AGING_BUCKET[k].shade]).toEqual(want[k]);
+    const segs = agingSegments(OZET.yaslandirma[0] as Parameters<typeof agingSegments>[0]);
+    expect(segs.map((x) => [x.tone, x.shade])).toEqual(labels.AGING_BUCKETS.map((k) => [...want[k]]));
+  });
+  it("koyu varyant token'dan; her temada komşu kovalar ayırt edilir, gün kovası asla 'iyi' değil", () => {
+    for (const t of Object.values(schemes)) {
+      const c = labels.AGING_BUCKETS.map((k) => segmentColor(t, labels.AGING_BUCKET[k]));
+      expect(new Set(c.slice(0, 5)).size).toBe(5);
+      expect(segmentColor(t, { tone: "uyari", shade: "deep" })).toBe(t.status.uyari.text);
+      expect(segmentColor(t, { tone: "kritik" })).toBe(t.status.kritik.fill);
+    }
+    for (const k of ["d0_30", "d31_60", "d61_90", "d90plus"] as const) expect(labels.AGING_BUCKET[k].tone).not.toBe("iyi");
+  });
+  it("çek vade şeridi değişmedi: geçmiş kritik, 7 gün uyarı, sonraki aylar iyi", () => {
+    expect(labels.CHEQUE_DUE_BUCKET.OVERDUE.tone).toBe("kritik");
+    expect(labels.CHEQUE_DUE_BUCKET.SOON.tone).toBe("uyari");
+    expect(labels.CHEQUE_DUE_BUCKET.LATER.tone).toBe("iyi");
+  });
+});
+
+describe("§9 ekranda ham anahtar/kod/ISO yok", () => {
+  it("alan adları Türkçe karakterli; rapor parametre adları Türkçe", () => {
+    expect(present.humanize("doviz")).toBe("Döviz");
+    expect(present.humanize("tur")).toBe("Tür");
+    expect(present.humanize("olusturulma")).toBe("Oluşturulma");
+    expect(present.humanize("siparisAdedi")).toBe("Sipariş adedi");
+    expect(present.humanize("oncekiDonemMiktari")).toBe("Önceki dönem miktarı");
+    expect(present.humanize("ozet")).toBe("Özet");
+    expect(present.humanize("isEmriNo")).toBe("İş emri no");
+    expect(present.humanize("dateFrom")).toBe("Başlangıç");
+  });
+  it("tam ISO damga anahtar adından bağımsız biçimlenir", () => {
+    expect(present.formatValue("onay", "2026-10-20T11:42:00Z")).toBe("20.10.2026 14:42");
+    expect(present.formatValue("dateFrom", "2026-10-01")).toBe("01.10.2026");
+    expect(present.formatValue("kod", "2026-10")).toBe("2026-10");
+  });
+  it("jenerik kayıt: enum değerleri sözlükten (SALES/CONFIRMED basılmaz)", async () => {
+    mockParams.value = { projeksiyon: "fatura", id: U(9) };
+    mockApi.record.mockResolvedValue({ id: U(9), kayit: { belgeNo: "FT-1", tur: "SALES", durum: "CONFIRMED", doviz: "TRY" }, surum: "1" });
+    render(<RecordDetail />);
+    await flush();
+    expect(screen.getByText("Satış faturası")).toBeTruthy();
+    expect(screen.getByText("Onaylı")).toBeTruthy();
+    expect(screen.queryByText("SALES")).toBeNull();
+    expect(screen.queryByText("CONFIRMED")).toBeNull();
+  });
+  it("rapor hata kodu cümleye çevrilir; her fabrika kodu sözlükte", async () => {
+    const wire = readFileSync(join(__dirname, "../../../Teks-Erp/src/cloud-sync/wire/esitleme.ts"), "utf8");
+    const codes = /REPORT_ERROR_CODES = \[([^\]]+)\]/.exec(wire)![1]!.match(/"([A-Z_]+)"/g)!.map((x) => x.slice(1, -1));
+    expect(codes.length).toBeGreaterThan(3);
+    for (const c of codes) expect(labels.REPORT_ERROR[c]).toBeTruthy();
+    mockSession.permissions = ["bulut:rapor:oku"];
+    mockParams.value = { id: U(10) };
+    mockApi.reportGet.mockResolvedValue({ id: U(10), raporAnahtari: "quality/scorecard", aile: "quality", parametreler: {}, durum: "HATA", hataKodu: "RAPOR_KAPALI", olusturulma: "2026-10-22T09:00:00Z", tamamlanma: "2026-10-22T09:01:00Z", sonuc: null });
+    render(<ReportDetail />);
+    await flush();
+    expect(screen.getByText(/Bu rapor fabrikada kapalı/)).toBeTruthy();
+    expect(screen.queryByText(/RAPOR_KAPALI/)).toBeNull();
+  });
+});
+
+describe("§10 bekleyen rapor yoklaması odak kaybında durur", () => {
+  function Probe({ reload }: { reload: () => void }) {
+    usePendingPoll(true, reload);
+    return null;
+  }
+  it("odaktan çıkınca sonraki adım yüklemez", () => {
+    jest.useFakeTimers();
+    try {
+      mockFocus.blur = [];
+      const reload = jest.fn();
+      render(<Probe reload={reload} />);
+      act(() => jest.advanceTimersByTime(3_000));
+      expect(reload).toHaveBeenCalledTimes(1);
+      act(() => mockFocus.blur.forEach((f) => f()));
+      act(() => jest.advanceTimersByTime(120_000));
+      expect(reload).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

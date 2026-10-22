@@ -34,13 +34,23 @@ function moneyEntries(obj: unknown, currency: string): FieldRow[] {
     }));
 }
 
+/** Alan → (fabrika enum değeri → Türkçe ad); ekranda "SALES"/"CONFIRMED" gibi ham değer basılmaz. */
+export type FieldEnums = Readonly<Record<string, Readonly<Record<string, string>>>>;
+
+function withEnumLabel(r: FieldRow, value: unknown, enums: FieldEnums): FieldRow {
+  const raw = (value as Record<string, unknown>)[r.key];
+  const label = typeof raw === "string" ? enums[r.key]?.[raw] : undefined;
+  return label ? { ...r, value: label } : r;
+}
+
 /**
  * Kaydın skaler alanları: gruplu satırlar (ad solda gri, değer sağda). `currency` verilirse alanlar PARA alt satırıdır:
  * her tutar o para birimiyle basılır (uygulama hesap yapmaz; değer fabrikanın).
  */
-export function Fields({ value, currency }: { value: unknown; currency?: string }) {
+export function Fields({ value, currency, enums }: { value: unknown; currency?: string; enums?: FieldEnums }) {
   const s = useFieldStyles();
-  const rows = currency !== undefined ? moneyEntries(value, currency) : scalarEntries(value);
+  const raw = currency !== undefined ? moneyEntries(value, currency) : scalarEntries(value);
+  const rows = enums ? raw.map((r) => withEnumLabel(r, value, enums)) : raw;
   if (rows.length === 0) return <Muted>Gösterilecek alan yok</Muted>;
   return (
     <View>
@@ -56,6 +66,12 @@ export function Fields({ value, currency }: { value: unknown; currency?: string 
 
 const SNAPSHOT_ROWS = 20;
 
+/** Blok başlığına çıkan alan (ör. `ad`) satırlarda yinelenmez. */
+function withoutTitle(item: object): Record<string, unknown> {
+  const title = recordTitle(item);
+  return Object.fromEntries(Object.entries(item).filter(([, v]) => v !== title));
+}
+
 /** Dizi: ilk 20 satır kart, "Tümünü göster" genişletir. */
 function SnapshotArray({ value, depth }: { value: readonly unknown[]; depth: number }) {
   const [all, setAll] = useState(false);
@@ -67,7 +83,7 @@ function SnapshotArray({ value, depth }: { value: readonly unknown[]; depth: num
         typeof item === "object" && item !== null ? (
           <View key={i} style={s.block}>
             <Text style={s.blockTitle}>{recordTitle(item) === "Kayıt" ? `${i + 1}. satır` : recordTitle(item)}</Text>
-            <Fields value={item} />
+            <Fields value={withoutTitle(item)} />
             {depth < 3 ? <SnapshotNested value={item} depth={depth + 1} /> : null}
           </View>
         ) : (
@@ -116,7 +132,7 @@ export function SnapshotView({ value, depth = 0 }: { value: unknown; depth?: num
           {stats.map((x) => (
             <View key={x.key} style={s.stat} accessible accessibilityLabel={`${x.label}: ${x.value}`}>
               <Text style={s.statLabel} numberOfLines={2}>{x.label}</Text>
-              <Text style={s.statValue} numberOfLines={1} adjustsFontSizeToFit>{x.value}</Text>
+              <Text style={s.statValue} numberOfLines={2} adjustsFontSizeToFit>{x.value}</Text>
             </View>
           ))}
         </View>

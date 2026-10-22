@@ -103,7 +103,7 @@ export function faturaRow(r: ProjectionRecord): ProjectionRowView {
   const cancelled = k.durum === "CANCELLED";
   return {
     title: str(k.belgeNo) ?? recordTitle(r.kayit),
-    subtitle: join(dict(INVOICE_TYPE, k.tur), str(k.tarih) && formatDate(k.tarih), cancelled && INVOICE_STATUS.CANCELLED!.label, overdue && "Vadesi geçti"),
+    subtitle: join(dict(INVOICE_TYPE, k.tur), str(k.tarih) && formatDate(k.tarih), cancelled && INVOICE_STATUS.CANCELLED!.label, overdue && "Gecikmiş"),
     icon: "document-text-outline",
     domain: "finans",
     ...amountView(r, "genelToplam"),

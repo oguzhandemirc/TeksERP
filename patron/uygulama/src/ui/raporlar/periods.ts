@@ -8,7 +8,7 @@ export const REPORT_PERIODS: readonly { readonly key: ReportPeriod; readonly lab
   { key: "ozel", label: "Özel" },
   { key: "bu-ay", label: "Bu ay" },
   { key: "gecen-ay", label: "Geçen ay" },
-  { key: "son-30-gun", label: "Son 30 gün" },
+  { key: "son-30-gun", label: "30 gün" },
 ];
 
 /** Kısayolun başlangıç/bitiş metni (GG.AA.YYYY); "Özel" metni değiştirmez → null. */

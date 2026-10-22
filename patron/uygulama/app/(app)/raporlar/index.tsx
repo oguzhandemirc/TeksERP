@@ -94,10 +94,10 @@ export default function Reports() {
                 key={r.id}
                 testID={`rapor-${r.id}`}
                 title={reportTitle(r.raporAnahtari, all)}
-                subtitle={`${formatDateTime(r.olusturulma)} · ${paramSummary(r.parametreler)}`}
+                subtitle={`${paramSummary(r.parametreler)} · ${formatDateTime(r.olusturulma)}`}
                 icon={d.icon}
                 domain={d.domain}
-                accessory={<ReportStatusBadge status={r.durum} testID={`rapor-durum-${r.id}`} />}
+                accessory={<ReportStatusBadge status={r.durum} testID={`rapor-durum-${r.id}`} compact />}
                 onPress={() => router.push({ pathname: "/raporlar/[id]", params: { id: r.id } } as never)}
               />
             );

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { errorMessage } from "../../../src/api/client";
 import { formatDateTime } from "../../../src/lib/format";
-import { reportDomain, reportPending, reportTitle } from "../../../src/lib/labels/finans";
+import { REPORT_ERROR, reportDomain, reportPending, reportTitle } from "../../../src/lib/labels/finans";
 import { catalogEntries } from "../../../src/lib/reports";
 import { invalidate } from "../../../src/state/changes";
 import { useSession } from "../../../src/state/session";
@@ -80,7 +80,7 @@ export default function ReportDetail() {
               </Text>
             </View>
           ) : null}
-          {d.durum === "HATA" ? <Banner tone="error" text={d.hataKodu ? `Rapor hesaplanamadı (kod: ${d.hataKodu}). Yeniden isteyebilirsiniz.` : "Rapor hesaplanamadı. Yeniden isteyebilirsiniz."} testID="rapor-hata" /> : null}
+          {d.durum === "HATA" ? <Banner tone="error" text={`Rapor hesaplanamadı. ${(d.hataKodu ? REPORT_ERROR[d.hataKodu] : undefined) ?? "Yeniden isteyebilirsiniz."}`} testID="rapor-hata" /> : null}
 
           {d.sonuc ? (
             <>

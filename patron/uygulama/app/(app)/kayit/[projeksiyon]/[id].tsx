@@ -3,7 +3,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams } from "expo-router";
 import { Text, View } from "react-native";
-import { FINANCE_LOCKED_TEXT, FINANCE_SUBROW_PROJECTIONS } from "../../../../src/lib/labels/finans";
+import { FINANCE_LOCKED_TEXT, FINANCE_SUBROW_PROJECTIONS, RECORD_ENUMS } from "../../../../src/lib/labels/finans";
 import { humanize, recordTitle } from "../../../../src/lib/present";
 import { useSession } from "../../../../src/state/session";
 import { useRemote } from "../../../../src/state/useRemote";
@@ -62,7 +62,7 @@ export default function RecordDetail() {
               </View>
             </View>
             <View style={s.fields}>
-              <Fields value={d.kayit} />
+              <Fields value={d.kayit} enums={RECORD_ENUMS[p]} />
             </View>
           </Card>
           {d.finans !== undefined ? (

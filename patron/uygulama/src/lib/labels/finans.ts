@@ -36,15 +36,19 @@ export const CHEQUE_DUE_BUCKET: Readonly<Record<(typeof CHEQUE_DUE_BUCKETS)[numb
   NO_DUE: { label: "Vadesiz", tone: "bilgi" },
 };
 
-/** Cari yaşlandırma kovası (`ozet-finans.yaslandirma[].kovalar`; gecikmiş GÜN — 0–30 iyi · 31–60 uyarı · 60+ kritik). */
+/** Cari yaşlandırma kovası (`ozet-finans.yaslandirma[].kovalar`). 0–30 dahil her gün kovası VADESİ GEÇMİŞ alacaktır:
+ *  vadesi gelmemiş iyi · 0–30 uyarı · 31–60 uyarının koyusu · 61–90 kritik · 90+ kritiğin koyusu · vadesiz nötr. */
+export interface AgingBucketEntry extends StatusEntry {
+  readonly shade: "fill" | "deep";
+}
 export const AGING_BUCKETS = ["notDue", "d0_30", "d31_60", "d61_90", "d90plus", "noDueDate"] as const;
-export const AGING_BUCKET: Readonly<Record<(typeof AGING_BUCKETS)[number], StatusEntry>> = {
-  notDue: { label: "Vadesi gelmemiş", tone: "bilgi" },
-  d0_30: { label: "0–30 gün", tone: "iyi" },
-  d31_60: { label: "31–60 gün", tone: "uyari" },
-  d61_90: { label: "61–90 gün", tone: "kritik" },
-  d90plus: { label: "90+ gün", tone: "kritik" },
-  noDueDate: { label: "Vadesiz", tone: "bilgi" },
+export const AGING_BUCKET: Readonly<Record<(typeof AGING_BUCKETS)[number], AgingBucketEntry>> = {
+  notDue: { label: "Vadesi gelmemiş", tone: "iyi", shade: "fill" },
+  d0_30: { label: "0–30 gün", tone: "uyari", shade: "fill" },
+  d31_60: { label: "31–60 gün", tone: "uyari", shade: "deep" },
+  d61_90: { label: "61–90 gün", tone: "kritik", shade: "fill" },
+  d90plus: { label: "90+ gün", tone: "kritik", shade: "deep" },
+  noDueDate: { label: "Vadesiz", tone: "bilgi", shade: "fill" },
 };
 
 /** Fatura türü (`fatura.tur`). */
@@ -77,6 +81,30 @@ export const PAYMENT_METHOD: Readonly<Record<string, string>> = {
 export const PAYMENT_STATUS: Readonly<Record<string, StatusEntry>> = {
   ACTIVE: { label: "Geçerli", tone: "iyi" },
   CANCELLED: { label: "İptal", tone: "bilgi" },
+};
+
+const labelsOf = (d: Readonly<Record<string, StatusEntry>>): Readonly<Record<string, string>> =>
+  Object.fromEntries(Object.entries(d).map(([k, v]) => [k, v.label]));
+
+/** Jenerik kayıt ayrıntısında enum alanlarının Türkçe adı (projeksiyon → alan → değer → ad). */
+export const RECORD_ENUMS: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>> = {
+  fatura: { tur: INVOICE_TYPE, durum: labelsOf(INVOICE_STATUS) },
+  "cek-senet": { tur: CHEQUE_KIND, belgeTuru: CHEQUE_DOC_TYPE, durum: labelsOf(CHEQUE_STATUS) },
+  "tahsilat-odeme": {
+    yon: Object.fromEntries(Object.entries(PAYMENT_DIRECTION).map(([k, v]) => [k, v.label])),
+    yontem: PAYMENT_METHOD,
+    durum: labelsOf(PAYMENT_STATUS),
+  },
+};
+
+/** Rapor hata kodu (`REPORT_ERROR_CODES`, fabrika) → kullanıcı cümlesi; ham kod ekrana basılmaz. */
+export const REPORT_ERROR: Readonly<Record<string, string>> = {
+  RAPOR_BILINMIYOR: "Fabrika bu raporu tanımıyor.",
+  PARAMETRE_GECERSIZ: "Seçilen dönem ya da ayar bu rapor için geçerli değil.",
+  ZAMAN_ASIMI: "Rapor zamanında hesaplanamadı; daha kısa bir dönemle yeniden deneyin.",
+  RAPOR_KAPALI: "Bu rapor fabrikada kapalı.",
+  MODUL_KAPALI: "Raporun ait olduğu modül fabrikada kapalı.",
+  SONUC_BUYUK: "Sonuç buluta gönderilemeyecek kadar büyük; daha kısa bir dönem seçin.",
 };
 
 /** Finans alt satırı alan adları (`.finans`) → okunur ad; sözlükte yoksa jenerik `humanize`. */
