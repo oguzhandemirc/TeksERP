@@ -99,6 +99,13 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### react-native-reanimated@~4.1.1 + react-native-worklets@0.5.1 + expo-haptics@~15.0.8 + @expo/vector-icons@^15.0.3 · patron/uygulama · 2026-10-22
+Dördü de mobilde §2'de kayıtlı aynı satırın ([KU-01]) patron uygulamasına taşınmasıdır; yeni ihtiyaç satırı açılmaz. Lisans: dördü de MIT. Sürümler `npx expo install` ile SDK 54 uyumlu aralıkta, SDK yükseltmesiyle birlikte gider; dağıtım: patron uygulaması için native modül ⇒ yeni mağaza derlemesi, OTA yetmez ([KU-11]).
+- `react-native-reanimated` : tasarım dili v2'nin geçiş/basma animasyonları UI iş parçacığında; alternatif RN `Animated` (sürücüsü JS iş parçacığında, düzen animasyonu yok) ve elle yazmak reddedildi.
+- `react-native-worklets`  : reanimated 4'ün zorunlu peer'ı; tek başına gerekçesi yok, reanimated çıkarsa birlikte çıkar.
+- `expo-haptics`           : `src/ui/haptics.ts` tek boğazından dokunsal geri bildirim; elle native modül reddedildi, `VIBRATE` izni `blockedPermissions`te kalır (izin etkisi yok).
+- `@expo/vector-icons`     : sekme/ray/KPI ikonları (`src/ui/icons.ts`); zaten geçişli kuruluydu, yalnız beyan edildi; `react-native-vector-icons` kullanılmaz ([KU-21]).
+
 ### expo-notifications@0.32.17 · mobil · 2026-10-11
 1. Problem      : tezgah alarmı (Faz A3/A6a) uygulama arka plandayken telefona/tablete ulaşmalı; ölçüm: RN 0.81 Android'de arka planda JS zamanlayıcıları DURUR (`JavaTimerManager.onHostPause`) ⇒ tek araç işletim sisteminin zamanladığı yerel bildirim; §2.3 "Yerel bildirim" satırı
 2. Alternatifler: elle yazılmış native modül (AlarmManager + kanal + izin + dokunma köprüsü — bakım yükü, Expo prebuild dışı) · `notifee` (ön plan servisi verir ama ayrı native paket, Expo eklentisi yok, internet push için yine FCM ister) · `expo-background-task` + `expo-task-manager` (≥15 dk WorkManager — alarm için yavaş, iki paket)
