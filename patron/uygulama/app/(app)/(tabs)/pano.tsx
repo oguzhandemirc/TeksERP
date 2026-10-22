@@ -1,14 +1,14 @@
 // Pano: izinli özet kartları + son eşitleme damgası; telefonda bölüm kısayolları.
 import { useRouter } from "expo-router";
 import { View } from "react-native";
-import { visibleCards, visibleModules } from "../../src/lib/access";
-import { formatAgo } from "../../src/lib/format";
-import { useSession } from "../../src/state/session";
-import { useOpenRefresh } from "../../src/state/useOpenRefresh";
-import { FacilityName, Screen, useWide } from "../../src/ui/Frame";
-import { Button, Card, Muted, Row } from "../../src/ui/kit";
-import { SnapshotCard } from "../../src/ui/SnapshotCard";
-import { space } from "../../src/ui/theme";
+import { visibleCards, visibleModules } from "../../../src/lib/access";
+import { formatAgo } from "../../../src/lib/format";
+import { useSession } from "../../../src/state/session";
+import { useOpenRefresh } from "../../../src/state/useOpenRefresh";
+import { FacilityName, Screen, useWide } from "../../../src/ui/Frame";
+import { Button, Card, Muted, Row } from "../../../src/ui/kit";
+import { SnapshotCard } from "../../../src/ui/SnapshotCard";
+import { space } from "../../../src/ui/tokens";
 
 export default function Dashboard() {
   const { facility, permissions } = useSession();

@@ -5,7 +5,7 @@
     "scheme": "tekserp-patron",
     "version": "1.0.2",
     "orientation": "default",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.etkiliyazilim.tekserp.yonetim",
       "supportsTablet": true

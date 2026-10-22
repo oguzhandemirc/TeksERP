@@ -33,6 +33,23 @@ describe("izinli menü", () => {
     expect(screen.getByTestId("menu-hesaplar")).toBeTruthy();
     mockSession.facility = null;
   });
+  it("ray sırası sekmelerle aynı; İş ve Hesap grupları ardından gelir", () => {
+    mockSession.permissions = ["bulut:siparis:oku", "bulut:uretim:oku", "bulut:kasa:oku", "bulut:cari:oku", "bulut:stok:oku", "bulut:siparis:yaz", "bulut:hesap:yonet"];
+    render(<SideNav />);
+    const order = screen.getAllByTestId(/^menu-/).map((n) => String(n.props.testID).slice(5));
+    expect(order).toEqual(["pano", "uretim", "siparisler", "finans", "cariler", "stok", "gelen-kutusu", "bildirimler", "hesaplar", "profil"]);
+    expect(screen.getByText("İş")).toBeTruthy();
+    expect(screen.getByText("Hesap")).toBeTruthy();
+  });
+  it("rol rozeti: hesap yönetimi izni Yönetici, diğerleri Ekip", () => {
+    mockSession.permissions = ["bulut:hesap:yonet"];
+    const a = render(<SideNav />);
+    expect(screen.getByTestId("rol-rozeti").props.accessibilityLabel).toBe("Rol: Yönetici");
+    a.unmount();
+    mockSession.permissions = ["bulut:siparis:oku"];
+    render(<SideNav />);
+    expect(screen.getByTestId("rol-rozeti").props.accessibilityLabel).toBe("Rol: Ekip");
+  });
   it("izinsiz ekran içerik yerine uyarı gösterir; çevrimdışı bandı çıkar", () => {
     mockSession.permissions = ["bulut:oturum"];
     mockSession.offline = true;
