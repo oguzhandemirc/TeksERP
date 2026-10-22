@@ -46,10 +46,10 @@ export function NotificationSettingsForm(p: { form: NotificationForm; kinds: rea
       <GroupNote>Boş bırakılan eşik kapalıdır. Değerler fabrikanın gönderdiği özetle karşılaştırılır.</GroupNote>
       <ListGroup testID="bildirim-esikler">
         <View style={{ paddingHorizontal: space.l, paddingTop: space.l, paddingBottom: space.xs }}>
-          <Field label="Ham stok şu miktarın altına inince" value={f.hamStokAlt} onChangeText={(t) => set("hamStokAlt", t)} keyboardType="decimal-pad" />
-          <Field label="Bitmiş stok şu miktarın altına inince" value={f.bitmisStokAlt} onChangeText={(t) => set("bitmisStokAlt", t)} keyboardType="decimal-pad" />
-          <Field label="Geciken sipariş kalemi şu sayıyı aşınca" value={f.gecikenKalemUst} onChangeText={(t) => set("gecikenKalemUst", t)} keyboardType="number-pad" />
-          <Field label="Günlük üretim şu miktarın altındaysa" value={f.gunlukUretimAlt} onChangeText={(t) => set("gunlukUretimAlt", t)} keyboardType="decimal-pad" />
+          <Field label="Ham stok şu miktarın altına inince" value={f.hamStokAlt} onChangeText={(t) => set("hamStokAlt", t)} placeholder="Kapalı" keyboardType="decimal-pad" />
+          <Field label="Bitmiş stok şu miktarın altına inince" value={f.bitmisStokAlt} onChangeText={(t) => set("bitmisStokAlt", t)} placeholder="Kapalı" keyboardType="decimal-pad" />
+          <Field label="Geciken sipariş kalemi şu sayıyı aşınca" value={f.gecikenKalemUst} onChangeText={(t) => set("gecikenKalemUst", t)} placeholder="Kapalı" keyboardType="number-pad" />
+          <Field label="Günlük üretim şu miktarın altındaysa" value={f.gunlukUretimAlt} onChangeText={(t) => set("gunlukUretimAlt", t)} placeholder="Kapalı" keyboardType="decimal-pad" />
           <Field label="Günlük üretim kontrol saati (0–23)" value={f.gunlukUretimSaati} onChangeText={(t) => set("gunlukUretimSaati", t.replace(/\D/g, "").slice(0, 2))} keyboardType="number-pad" />
           <Field label="Fabrikadan şu kadar dakika veri gelmezse" value={f.esitlemeGecikmeDk} onChangeText={(t) => set("esitlemeGecikmeDk", t.replace(/\D/g, "").slice(0, 5))} keyboardType="number-pad" />
         </View>

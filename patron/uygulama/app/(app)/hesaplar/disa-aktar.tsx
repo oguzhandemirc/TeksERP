@@ -7,6 +7,7 @@ import { errorMessage } from "../../../src/api/client";
 import type { ExportDataset, ExportFormat } from "../../../src/api/wire";
 import { canSaveFiles, saveDownloadedFile, type BrowserLike } from "../../../src/lib/export-file";
 import { formatDateTime, formatNumber } from "../../../src/lib/format";
+import { EXPORT_DATASET_LABEL } from "../../../src/lib/labels/diger";
 import { humanize } from "../../../src/lib/present";
 import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
@@ -19,17 +20,10 @@ import { Empty, ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, tabularNums, typography } from "../../../src/ui/tokens";
 
-const CLOUD_LABELS: Readonly<Record<string, string>> = {
-  "gelen-kutusu": "Gelen kutusu (sipariş/cari talepleri)",
-  hesaplar: "Bulut hesapları",
-  "hesap-denetimi": "Hesap güvenlik kaydı",
-  "destek-erisimi": "Destek erişim kaydı",
-};
-
 const browser: BrowserLike | undefined = typeof window === "undefined" ? undefined : (window as unknown as BrowserLike);
 
 function label(d: ExportDataset): string {
-  return CLOUD_LABELS[d.ad] ?? humanize(d.ad);
+  return EXPORT_DATASET_LABEL[d.ad] ?? humanize(d.ad);
 }
 
 export default function ExportScreen() {
@@ -68,10 +62,12 @@ export default function ExportScreen() {
         <ListGroup testID="kume-listesi">
           {r.data.kumeler.map((d) => (
             <View key={d.ad} testID={`kume-${d.ad}`} style={s.row}>
-              <IconChip domain="raporlar" icon="document-outline" size={36} />
-              <View style={s.text}>
-                <Text style={s.title}>{label(d)}</Text>
-                <Text style={s.count}>{`${formatNumber(d.adet, 0)} kayıt`}</Text>
+              <View style={s.head}>
+                <IconChip domain="raporlar" icon="document-outline" size={36} />
+                <View style={s.text}>
+                  <Text style={s.title}>{label(d)}</Text>
+                  <Text style={s.count}>{`${formatNumber(d.adet, 0)} kayıt`}</Text>
+                </View>
               </View>
               <View style={s.formats}>
                 {d.bicimler.map((b) => (
@@ -89,10 +85,12 @@ export default function ExportScreen() {
 }
 
 const useStyles = makeStyles((t) => ({
-  row: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, paddingHorizontal: space.l, paddingVertical: space.s, flexWrap: "wrap" as const },
-  text: { flex: 1, minWidth: 140 },
+  // Biçim düğmeleri her satırda başlığın altında, metinle aynı hizada (tek biçimli satır sağa kaçmasın).
+  row: { gap: space.s, paddingHorizontal: space.l, paddingVertical: space.m },
+  head: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m },
+  text: { flex: 1, minWidth: 0 },
   title: { ...typography.headline, color: t.text },
   count: { ...typography.footnote, ...tabularNums, color: t.textSecondary, marginTop: 1 },
-  formats: { flexDirection: "row" as const, gap: space.s },
+  formats: { flexDirection: "row" as const, gap: space.s, paddingLeft: 36 + space.m },
   format: { minWidth: 76 },
 }));

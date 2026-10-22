@@ -4,12 +4,13 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { INBOX_STATUSES, NOTIFICATION_KINDS, NOTIFICATION_STATUSES, REPORT_STATUSES } from "../src/api/wire";
 import { STATUS_DICT, lookup, statusEntry } from "../src/lib/labels";
-import { ACCOUNT_TEMPLATE, ACCOUNT_TEMPLATES, INBOX_KIND, NOTIFICATION_KIND, devicePlatform, inboxKind, notificationKind } from "../src/lib/labels/diger";
+import { ACCOUNT_TEMPLATE, ACCOUNT_TEMPLATES, EXPORT_DATASET_LABEL, INBOX_KIND, NOTIFICATION_KIND, devicePlatform, inboxKind, notificationKind } from "../src/lib/labels/diger";
 import { PERMISSION_GROUPS, PERMISSION_LABEL, groupPermissions, permissionLabel } from "../src/lib/labels/izin";
 
 const ROOT = join(__dirname, "..");
-const OZET = JSON.parse(readFileSync(join(ROOT, "..", "sunucu", "src", "catalog", "katalog-ozeti.json"), "utf8")) as { CLOUD_PERMISSIONS: string[] };
+const OZET = JSON.parse(readFileSync(join(ROOT, "..", "sunucu", "src", "catalog", "katalog-ozeti.json"), "utf8")) as { CLOUD_PERMISSIONS: string[]; ROOT_PROJECTIONS: { name: string }[] };
 const WIRE = readFileSync(join(ROOT, "src", "api", "wire.ts"), "utf8");
+const EXPORT_SRC = readFileSync(join(ROOT, "..", "sunucu", "src", "services", "export.service.ts"), "utf8");
 const PERMS_SRC = readFileSync(join(ROOT, "..", "sunucu", "src", "catalog", "permissions.ts"), "utf8");
 
 /** `export type X = "A" | "B";` birleşiminin değerleri (tip çalışma anında yok; metinden okunur). */
@@ -70,5 +71,16 @@ describe("§3 bilinmeyen değer ham döner", () => {
     expect(statusEntry("YENI_DURUM")).toEqual({ label: "YENI_DURUM", tone: "bilgi" });
     expect(lookup({ A: "a" }, "B")).toBe("B");
     expect(inboxKind(undefined).ad).toBe("—");
+  });
+});
+
+describe("§4 dışa aktarma küme adları sözlükte", () => {
+  it("her kök projeksiyon ve bulutta doğan her küme Türkçe adlı; sözlükte ölü ad yok", () => {
+    const cloud = [...EXPORT_SRC.matchAll(/name: "([a-z-]+)",\s*kind: "BULUT"/g)].map((x) => x[1]!);
+    expect(cloud.length).toBeGreaterThan(2);
+    const names = [...OZET.ROOT_PROJECTIONS.map((p) => p.name), ...cloud];
+    expect(OZET.ROOT_PROJECTIONS.length).toBeGreaterThan(20);
+    expect(names.filter((n) => !EXPORT_DATASET_LABEL[n])).toEqual([]);
+    expect(Object.keys(EXPORT_DATASET_LABEL).filter((n) => !names.includes(n))).toEqual([]);
   });
 });

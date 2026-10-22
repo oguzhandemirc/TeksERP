@@ -1,4 +1,4 @@
-// Hesap satırı: baş harf avatarı (rol renginde) · ad + rol rozeti · e-posta + son giriş · sağda durum rozeti.
+// Hesap satırı: baş harf avatarı (rol renginde) · ad · rol + durum rozeti yan yana · e-posta + son giriş.
 // Rol ölçütü `roleOf` (`bulut:hesap:yonet` → Yönetici); yalnız gösterir, karar sunucudadır.
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, Text, View } from "react-native";
@@ -30,14 +30,14 @@ export function AccountRow({ a, onPress }: { readonly a: Account; readonly onPre
     >
       <Avatar name={a.ad} permissions={a.izinler} size={44} />
       <View style={s.text}>
-        <View style={s.nameRow}>
-          <Text style={s.name} numberOfLines={1}>{a.ad}</Text>
+        <Text style={s.name} numberOfLines={1}>{a.ad}</Text>
+        <View style={s.badges}>
           <RoleBadge permissions={a.izinler} testID={`hesap-rol-${a.id}`} />
+          <StatusBadge value={a.durum} size="sm" />
         </View>
         <Text style={s.mail} numberOfLines={1}>{a.eposta}</Text>
-        <Text style={s.seen} numberOfLines={1}>{lastSeen(a)}</Text>
+        <Text style={s.seen} numberOfLines={2}>{lastSeen(a)}</Text>
       </View>
-      <StatusBadge value={a.durum} size="sm" />
       <Ionicons name="chevron-forward" size={18} color={t.textMuted} />
     </Pressable>
   );
@@ -65,9 +65,9 @@ export function Capsule({ label, icon, onPress, disabled, testID }: { readonly l
 const useStyles = makeStyles((t) => ({
   row: { minHeight: 76, flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, paddingHorizontal: space.l, paddingVertical: space.m },
   text: { flex: 1, minWidth: 0 },
-  nameRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s, flexWrap: "wrap" as const },
-  name: { ...typography.headline, color: t.text, flexShrink: 1 },
-  mail: { ...typography.subhead, color: t.textSecondary, marginTop: 2 },
+  name: { ...typography.headline, color: t.text },
+  badges: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s, flexWrap: "wrap" as const, marginTop: space.xs },
+  mail: { ...typography.subhead, color: t.textSecondary, marginTop: space.xs },
   seen: { ...typography.footnote, color: t.textMuted, marginTop: 1 },
   capsule: { minHeight: TOUCH - 4, flexDirection: "row" as const, alignItems: "center" as const, gap: space.s, paddingHorizontal: space.l, borderRadius: radius.chip, alignSelf: "flex-start" as const },
   capsuleText: { ...typography.callout, fontWeight: "600" as const },

@@ -10,7 +10,7 @@ import { inboxKind } from "../../../src/lib/labels/diger";
 import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
 import { Fields } from "../../../src/ui/data";
-import { inboxBody, inboxOverdue, inboxPending } from "../../../src/ui/diger/inbox-format";
+import { inboxBody, inboxOverdue, inboxPending, inboxSummary } from "../../../src/ui/diger/inbox-format";
 import { GroupCaption, GroupNote } from "../../../src/ui/diger/parts";
 import { useSettlePoll } from "../../../src/ui/diger/useSettlePoll";
 import { Screen } from "../../../src/ui/Frame";
@@ -59,8 +59,9 @@ export default function InboxDetail() {
             <View style={s.head}>
               <IconChip domain={kind.domain} icon={kind.icon} size={48} />
               <View style={s.flex}>
-                <Text style={s.title}>{kind.ad}</Text>
-                <Text style={s.sub}>{`${m.hesapAdi} · ${formatAgo(m.olusturulma)}`}</Text>
+                <Text style={s.title} numberOfLines={2}>{inboxSummary(m)}</Text>
+                <Text style={s.sub} numberOfLines={1}>{m.hesapAdi}</Text>
+                <Text style={s.sub} numberOfLines={1}>{formatAgo(m.olusturulma)}</Text>
               </View>
               <StatusBadge value={m.durum} />
             </View>
@@ -121,7 +122,7 @@ export default function InboxDetail() {
 const useStyles = makeStyles((t) => ({
   head: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m },
   flex: { flex: 1, minWidth: 0 },
-  title: { ...typography.title3, color: t.text },
+  title: { ...typography.headline, color: t.text },
   sub: { ...typography.subhead, color: t.textSecondary, marginTop: 2 },
   kv: { flexDirection: "row" as const, justifyContent: "space-between" as const, gap: space.m, paddingHorizontal: space.l, paddingVertical: space.m, minHeight: 48, alignItems: "center" as const },
   k: { ...typography.subhead, color: t.textSecondary },

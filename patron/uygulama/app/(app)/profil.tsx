@@ -119,21 +119,23 @@ export default function Profile() {
       {ok ? <Banner tone="off" icon="checkmark-circle" text="Parola değişti" /> : null}
       <GroupCaption>Güvenlik</GroupCaption>
       <ListGroup>
-        <ListRow title="Parola değiştir" subtitle="Mevcut parola ve doğrulama kodu ile" icon="key-outline" domain="genel" onPress={() => { setOk(false); setSheet(true); }} testID="parola-degistir" />
-        <ListRow title="Doğrulama kodu (TOTP)" subtitle="Her girişte istenir; uygulamayı değiştirmek için yöneticiniz daveti yeniler" icon="shield-checkmark-outline" domain="genel" />
+        <ListRow title="Parola değiştir" subtitle="Mevcut parola ve kod gerekir" icon="key-outline" domain="genel" onPress={() => { setOk(false); setSheet(true); }} testID="parola-degistir" />
+        <ListRow title="Doğrulama kodu (TOTP)" subtitle="Her girişte istenir" icon="shield-checkmark-outline" domain="genel" />
       </ListGroup>
+      <GroupNote>Doğrulama uygulamanızı değiştirmek için tesis yöneticiniz daveti yeniler.</GroupNote>
 
       <GroupCaption>Bildirimler</GroupCaption>
       <ListGroup>
-        <ListRow title="Bildirim ayarları" subtitle="Hangi bildirim, hangi saatte; eşikler ve bu cihaz" icon="notifications-outline" domain="gelenKutusu"
+        <ListRow title="Bildirim ayarları" subtitle="Türler, sessiz saatler, eşikler" icon="notifications-outline" domain="gelenKutusu"
           onPress={() => router.push("/bildirimler" as never)} testID="bildirim-ayarlari" />
       </ListGroup>
 
       <GroupCaption>Hesap</GroupCaption>
       <ListGroup>
-        <ListRow title="Hesabımı sil" subtitle="Hesabınızı ve bütün fabrika üyeliklerinizi kapatır; kişisel verileriniz 30. günde silinir." icon="trash-outline" domain="genel"
+        <ListRow title="Hesabımı sil" subtitle="Hesap ve bütün üyelikler kapanır" icon="trash-outline" domain="genel"
           onPress={() => router.push("/hesap-sil" as never)} testID="hesap-sil-git" />
       </ListGroup>
+      <GroupNote>Hesabınızı ve bütün fabrika üyeliklerinizi kapatır; kişisel verileriniz 30. günde silinir.</GroupNote>
       <View style={s.logout}>
         <ConfirmButton label="Çıkış yap" question="Bütün fabrikalardaki oturumunuz kapatılsın ve bu cihazdaki son veri silinsin mi?" onConfirm={() => void logout()} testID="cikis" />
       </View>

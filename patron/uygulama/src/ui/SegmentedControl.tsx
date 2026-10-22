@@ -98,7 +98,8 @@ const useStyles = makeStyles((t) => ({
     ...t.cardShadow,
   },
   part: { minHeight: TOUCH - 8, alignItems: "center" as const, justifyContent: "center" as const, paddingHorizontal: space.s },
-  flex: { flex: 1 },
+  // Eşit parçalı kipte yatay boşluk dar: 4 parçalı denetim 390 pt telefonda "Reddedilen" gibi etiketleri kırpmasın.
+  flex: { flex: 1, paddingHorizontal: space.xs },
   chip: { minWidth: 88, borderRadius: radius.control - PAD, paddingHorizontal: space.m },
   text: { ...typography.subhead, color: t.textSecondary },
   textOn: { color: t.text, fontWeight: "600" as const },

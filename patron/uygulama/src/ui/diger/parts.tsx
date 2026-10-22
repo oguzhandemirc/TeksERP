@@ -21,9 +21,12 @@ export function initials(name: string | null | undefined): string {
 /** Baş harf avatarı: yönetici navy + altın, ekip indigo zemin. */
 export function Avatar({ name, permissions, size = 44 }: { readonly name: string | null | undefined; readonly permissions: readonly string[]; readonly size?: number }) {
   const t = useTokens();
-  const c = t.role[roleOf(permissions)];
+  const role = roleOf(permissions);
+  const c = t.role[role];
+  // Koyu temada lacivert zemin yüzeyle birleşir; yönetici avatarı altın halkayla ayrılır.
+  const ring = role === "yonetici" && t.scheme === "dark" ? { borderWidth: 1.5, borderColor: t.gold } : null;
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" }, ring]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Text style={{ color: c.fg, fontSize: Math.round(size * 0.38), fontWeight: "700" }} maxFontSizeMultiplier={1}>{initials(name)}</Text>
     </View>
   );
