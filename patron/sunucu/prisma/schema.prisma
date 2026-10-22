@@ -548,6 +548,10 @@ model SyncState {
   horizon            DateTime @map("horizon") @db.Timestamptz
   horizonChangedAt   DateTime @map("horizon_changed_at") @db.Timestamptz
   contractWarning    String?  @map("contract_warning") @db.VarChar(40)
+  /// Değişim sayacı (iş hesabı DEĞİL): kabul edilen veriyle biten her pakette +1; uzun yoklamanın `sayac`ı.
+  changeCounter      BigInt   @default(0) @map("change_counter")
+  /// Son artıştaki projeksiyon adları (tekil); içerik taşımaz, okuyan hesabın izniyle süzülür.
+  changedProjections Json     @default("[]") @map("changed_projections")
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
