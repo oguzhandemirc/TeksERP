@@ -74,6 +74,12 @@ export const ENDPOINTS = {
   exportDownload: ["get", "/disa-aktar/:kume"],
 } as const satisfies Record<string, readonly ["get" | "post" | "patch", string]>;
 
+/**
+ * Değişim akışı (uzun yoklama, tam yol `GET /api/degisim?since=&bekle=`; `/api` önekini istemci koyar). Sunucu ucu
+ * P3 dilimiyle gelir; o inene dek `ENDPOINTS`e (ayna bekçisi) GİRMEZ — eski sunucu 404 → `changes.ts` 60 sn yoklama.
+ */
+export const CHANGE_FEED_PATH = "/degisim";
+
 type Name = keyof typeof ENDPOINTS;
 
 export function pathOf(name: Name, params: Readonly<Record<string, string>> = {}): string {
