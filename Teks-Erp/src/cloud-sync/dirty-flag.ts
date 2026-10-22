@@ -167,22 +167,32 @@ export function watchedDelegateKeys(): string[] {
 
 type AnyFn = (...args: unknown[]) => unknown;
 
+/**
+ * Sarma önbelleği KAYNAK kimliğine bağlıdır: test kancası (`scripts/lib/zorlanmis-sira.ts`) yöntemi
+ * yerinde değiştirirse yeni kaynak sarılır; geri yüklenen kendi sarmamız yeniden sarılmaz.
+ */
+const OWN_WRAPPERS = new WeakSet<object>();
+function cachedWrap(cache: Map<PropertyKey, { src: unknown; fn: AnyFn }>, prop: PropertyKey, v: AnyFn, make: (v: AnyFn) => AnyFn): AnyFn {
+  if (OWN_WRAPPERS.has(v)) return v;
+  const hit = cache.get(prop);
+  if (hit && hit.src === v) return hit.fn;
+  const fn = make(v);
+  OWN_WRAPPERS.add(fn);
+  cache.set(prop, { src: v, fn });
+  return fn;
+}
+
 /** İzlenen delegenin yazan yöntemleri ÇAĞRI anında işaretler; dönen PrismaPromise'e dokunulmaz (toplu tx bozulmaz). */
 function wrapDelegate(delegate: object, table: string): object {
-  const cache = new Map<PropertyKey, AnyFn>();
+  const cache = new Map<PropertyKey, { src: unknown; fn: AnyFn }>();
   return new Proxy(delegate, {
     get(target, prop) {
       const v: unknown = Reflect.get(target, prop, target);
       if (typeof prop !== "string" || !WRITE_OPERATIONS.has(prop) || typeof v !== "function") return v;
-      let fn = cache.get(prop);
-      if (!fn) {
-        fn = (...args: unknown[]): unknown => {
-          safeMark(() => markDirty(table));
-          return Reflect.apply(v, target, args) as unknown;
-        };
-        cache.set(prop, fn);
-      }
-      return fn;
+      return cachedWrap(cache, prop, v as AnyFn, (src) => (...args: unknown[]): unknown => {
+        safeMark(() => markDirty(table));
+        return Reflect.apply(src, target, args) as unknown;
+      });
     },
   });
 }
@@ -194,41 +204,40 @@ function wrapDelegate(delegate: object, table: string): object {
  * geri alınan yazım yalnız boş bir tur doğurur); itx istemcisi de aynı sarmadan geçer.
  */
 export function withDirtyTracking<T extends object>(client: T): T {
-  const delegates = new Map<string, object>();
-  const fns = new Map<PropertyKey, AnyFn>();
+  const delegates = new Map<string, { src: object; proxy: object }>();
+  const fns = new Map<PropertyKey, { src: unknown; fn: AnyFn }>();
   return new Proxy(client, {
     get(target, prop) {
       const v: unknown = Reflect.get(target, prop, target);
       if (typeof prop === "string") {
         const table = TABLE_BY_DELEGATE.get(prop);
         if (table && v && typeof v === "object") {
-          let d = delegates.get(prop);
-          if (!d) delegates.set(prop, (d = wrapDelegate(v, table)));
-          return d;
+          const hit = delegates.get(prop);
+          if (hit && hit.src === v) return hit.proxy;
+          const proxy = wrapDelegate(v, table);
+          delegates.set(prop, { src: v, proxy });
+          return proxy;
         }
       }
       if (typeof v !== "function") return v;
-      let fn = fns.get(prop);
-      if (!fn) {
+      return cachedWrap(fns, prop, v as AnyFn, (src) => {
         if (prop === "$transaction") {
           // İnteraktif tx: geri çağrıya verilen tx istemcisi de sarılır; dizi biçimi dokunulmaz.
-          fn = (arg: unknown, ...rest: unknown[]): unknown => {
+          return (arg: unknown, ...rest: unknown[]): unknown => {
             const wrapped = typeof arg === "function" ? (tx: object): unknown => Reflect.apply(arg, undefined, [withDirtyTracking(tx)]) as unknown : arg;
-            return Reflect.apply(v, target, [wrapped, ...rest]) as unknown;
+            return Reflect.apply(src, target, [wrapped, ...rest]) as unknown;
           };
-        } else if (typeof prop === "string" && RAW_OPERATIONS.has(prop)) {
-          fn = (...args: unknown[]): unknown => {
+        }
+        if (typeof prop === "string" && RAW_OPERATIONS.has(prop)) {
+          return (...args: unknown[]): unknown => {
             safeMark(() => {
               for (const t of rawWrittenTables(args)) markDirty(t);
             });
-            return Reflect.apply(v, target, args) as unknown;
+            return Reflect.apply(src, target, args) as unknown;
           };
-        } else {
-          fn = (...args: unknown[]): unknown => Reflect.apply(v, target, args) as unknown;
         }
-        fns.set(prop, fn);
-      }
-      return fn;
+        return (...args: unknown[]): unknown => Reflect.apply(src, target, args) as unknown;
+      });
     },
   });
 }

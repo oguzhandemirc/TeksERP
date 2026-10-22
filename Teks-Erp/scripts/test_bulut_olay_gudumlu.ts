@@ -15,6 +15,8 @@
 //   §8 zil turu tüm projeksiyonlar (`snapshotsOnly: false`); gelen kutusu işlenince olay turu istenir
 //   §9 ⭐ dinleyici ya da işaretleme adımı fırlatsa da izlenen modelde yazma (create · update · itx ·
 //      `$executeRaw`) BAŞARILI, satır DB'de görünür (iyileştirme katmanı yazma yolunu kıramaz)
+//   §10 ⭐ sarma yerinde yamaya şeffaf: `prisma.$transaction` / delege yöntemi değiştirilince yeni
+//      kaynak çağrılır, geri yükleme kendi sarmasını yeniden sarmaz (`zorlanmis-sira` kancası buna dayanır)
 //
 // NEGATİF SONDA (dosya dışı mutasyon, geri alındı; sonuç DEVIR notunda):
 //   N1 `EVENT_DEBOUNCE_MS = 0` → §2a + §3a ❌ (ilk yazım anında tur, kalan dördü 15 sn sonraki turda)
@@ -22,6 +24,9 @@
 //   N3 `markDirty` dinleyici try/catch'i kaldırıldı → §9f ❌ (ikinci tablo işaretsiz kalır)
 //   N4 `safeMark` try/catch'i kaldırıldı → §9g ❌ (saat hatası yazmayı düşürür)
 //   N5 ikisi birden kaldırıldı → §9a–§9d ❌ (dinleyici hatası yazma çağrısına yayılır)
+//   N6 `cachedWrap` kaynak kimliği yerine yalnız `prop`la önbellekler → §10a + §10c ❌ (CI'da
+//      `test_token_replay_d3_yollari` / `test_wo_roll_detach` "B kapıya varmadı" ile yakalamıştı)
+//   N7 `OWN_WRAPPERS` kontrolü kaldırıldı → §10b + §10d ❌ (geri yüklenen sarma yeniden sarılır)
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -326,6 +331,38 @@ async function firlatanDinleyiciBolumu(): Promise<void> {
   check("§9g ⭐ işaretleme fırlatır (model + ham yol): yazma DB'de", s1 === "ok" && s2 === "ok" && v6?.name === `${TAG} fir-saat-raw`, `${s1} · ${s2}`);
 }
 
+async function yamaBolumu(): Promise<void> {
+  console.log("\n§10 — sarma yerinde yamaya şeffaf");
+  const kanca = prisma as unknown as { $transaction: (...a: unknown[]) => unknown };
+  const onceki = kanca.$transaction;
+  let yamaCagri = 0;
+  try {
+    kanca.$transaction = (...a: unknown[]) => {
+      yamaCagri++;
+      return Reflect.apply(onceki, prisma, a);
+    };
+    await prisma.$transaction(async (tx) => tx.color.count());
+    check("§10a ⭐ yamalanmış `$transaction` çağrıldı", yamaCagri === 1, `${yamaCagri} çağrı`);
+  } finally {
+    kanca.$transaction = onceki;
+  }
+  check("§10b geri yükleme sonrası aynı sarma (çift sarma yok)", prisma.$transaction === onceki);
+  const delege = prisma.color as unknown as Record<string, unknown>;
+  const eskiUpdate = delege.updateMany as (...a: unknown[]) => unknown;
+  let dCagri = 0;
+  try {
+    delege.updateMany = (...a: unknown[]) => {
+      dCagri++;
+      return Reflect.apply(eskiUpdate, delege, a);
+    };
+    await prisma.color.updateMany({ where: { id: randomUUID() }, data: {} });
+    check("§10c ⭐ yamalanmış delege yöntemi çağrıldı", dCagri === 1, `${dCagri} çağrı`);
+  } finally {
+    delege.updateMany = eskiUpdate;
+  }
+  check("§10d delege geri yükleme sonrası aynı sarma", (prisma.color as unknown as Record<string, unknown>).updateMany === eskiUpdate);
+}
+
 async function main(): Promise<void> {
   console.log(`=== PATRON BULUTU OLAY GÜDÜMLÜ TUR (${TAG}) ===`);
   let bulut: SahteBulut | null = null;
@@ -350,6 +387,7 @@ async function main(): Promise<void> {
     haritaBolumu();
     zilBolumu();
     await firlatanDinleyiciBolumu();
+    await yamaBolumu();
   } catch (e) {
     check("beklenmeyen hata", false, e instanceof Error ? `${e.message}\n${e.stack}` : String(e));
   } finally {
