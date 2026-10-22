@@ -86,6 +86,14 @@ export function text(c: ApiCall, name: string, max = 200): string | undefined {
   return t ? t.slice(0, max) : undefined;
 }
 
+/** Sorgu tamsayısı ≥ 0; yoksa varsayılan. Biçimsiz, tekrarlı ya da negatif değer 400 (fail-closed). */
+export function nonNegativeInt(c: ApiCall, name: string, fallback: number): number {
+  const v = c.req.query[name];
+  if (v === undefined) return fallback;
+  if (typeof v !== "string" || !/^\d{1,15}$/.test(v.trim())) throw badRequest(`${name} sıfır ya da pozitif bir tamsayı olmalı`);
+  return Number(v.trim());
+}
+
 export function page(c: ApiCall): { cursor: string | undefined; limit: number } {
   const raw = text(c, "limit");
   const limit = raw === undefined ? 50 : Number(raw);

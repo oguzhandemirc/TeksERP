@@ -168,6 +168,13 @@ export interface SnapshotRefresh {
   readonly sonrakiMs: number;
 }
 
+/**
+ * `GET /api/degisim?since=<n>&bekle=<0..25>` uzun yoklama: `sayac > since` olunca ya da süre dolunca döner.
+ * İçerik taşımaz; `degisenler` hesabın okuyabildiği projeksiyon adlarıdır (halka eskiyse hepsi);
+ * `fabrikaDamgasi` son paketin ufku (fabrika veri anı, ISO). Uç yoksa (eski sunucu) 404 → yoklama kipi.
+ */
+export interface ChangeFeed { readonly sayac: number; readonly degisenler: readonly string[]; readonly fabrikaDamgasi: string | null }
+
 export const INBOX_STATUSES = ["BEKLIYOR", "ISLENIYOR", "ISLENDI", "REDDEDILDI", "IPTAL"] as const;
 export type InboxStatus = (typeof INBOX_STATUSES)[number];
 // Hesap API görünümü: eşitleme sözleşmesinin `InboxKind`/`InboxMessage` adları yalnız `esitleme.ts`te (test_bulut_tel_aynasi §4a).

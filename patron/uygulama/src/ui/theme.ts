@@ -1,19 +1,20 @@
-// Tek palet; büyük dokunma hedefi (≥ 48 pt) ve okunur yazı ("basit olan fazladır").
-export const color = {
-  bg: "#F4F5F7",
-  card: "#FFFFFF",
-  text: "#1B1F24",
-  muted: "#5E6773",
-  line: "#DDE1E6",
-  primary: "#1F5FAD",
-  primaryText: "#FFFFFF",
-  danger: "#B42318",
-  warn: "#8A5A00",
-  warnBg: "#FFF4D6",
-  offBg: "#E8EAED",
-  ok: "#1E7B34",
-} as const;
+// GEÇİCİ uyum katmanı: yeni kaynak `tokens.ts` + `useTokens()`. Henüz geçmemiş ekranlar (giriş, davet, hesap
+// ayrıntısı) eski `color` adlarını okur; değerler etkin temadan gelir. Son kullanıcı geçince bu dosya silinir.
+import { activeTokens } from "./theme-context";
 
-export const space = { xs: 4, s: 8, m: 12, l: 16, xl: 24 } as const;
-export const TOUCH = 48;
-export const WIDE_MIN = 768;
+export { space, TOUCH, WIDE_MIN } from "./tokens";
+
+export const color = {
+  get bg() { return activeTokens().bg; },
+  get card() { return activeTokens().surface; },
+  get text() { return activeTokens().text; },
+  get muted() { return activeTokens().textMuted; },
+  get line() { return activeTokens().separator; },
+  get primary() { return activeTokens().tint; },
+  get primaryText() { return activeTokens().onTint; },
+  get danger() { return activeTokens().status.kritik.fill; },
+  get warn() { return activeTokens().status.uyari.text; },
+  get warnBg() { return activeTokens().status.uyari.bg; },
+  get offBg() { return activeTokens().status.bilgi.bg; },
+  get ok() { return activeTokens().status.iyi.fill; },
+};

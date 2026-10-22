@@ -13,6 +13,7 @@ import { loadEnvFile } from "./lib/env";
 import { TesisDbRouter } from "./lib/tesis-db";
 import { expectedSchemaVersion } from "./lib/tesis-goc";
 import { createApp } from "./http/app";
+import { changeHub } from "./services/change-feed";
 import type { CloudContext } from "./services/context";
 import { createDoorbell } from "./services/doorbell";
 import { InstallationDirectory } from "./services/installation-directory";
@@ -78,6 +79,7 @@ async function main(): Promise<void> {
     maintenance.stop();
     notifier?.stop();
     stopSecurityAlerts();
+    changeHub.releaseAll(); // uzun yoklamalar 25 sn beklemeden yanıtlanır; dinleyici hemen kapanabilir
     await new Promise<void>((r) => server.close(() => r()));
     await app.close();
     await sync.close();

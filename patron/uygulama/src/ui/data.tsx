@@ -7,9 +7,12 @@ import { formatAgo, formatDateTime, syncIsLate } from "../lib/format";
 import { nestedEntries, recordSubtitle, recordTitle, scalarEntries } from "../lib/present";
 import { useSession } from "../state/session";
 import { Banner, Body, Button, Card, Loading, Muted, Row, Stat, Title } from "./kit";
-import { space } from "./theme";
+import { OfflineBand, ReadOnlyBand, SyncLateBand } from "./StateViews";
+import { useTokens } from "./theme-context";
+import { space, typography } from "./tokens";
 
 export function Fields({ value }: { value: unknown }) {
+  const t = useTokens();
   const rows = scalarEntries(value);
   if (rows.length === 0) return <Muted>Gösterilecek alan yok</Muted>;
   return (
@@ -17,7 +20,7 @@ export function Fields({ value }: { value: unknown }) {
       {rows.map((r) => (
         <View key={r.key} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: space.xs, gap: space.m }}>
           <Muted>{r.label}</Muted>
-          <Text style={{ fontSize: 16, flexShrink: 1, textAlign: "right" }}>{r.value}</Text>
+          <Text style={{ ...typography.callout, color: t.text, flexShrink: 1, textAlign: "right" }}>{r.value}</Text>
         </View>
       ))}
     </View>
@@ -26,6 +29,7 @@ export function Fields({ value }: { value: unknown }) {
 
 /** Anlık özet: üst düzey sayılar kutucuk, iç nesneler bölüm, diziler ilk 20 satır. */
 export function SnapshotView({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  const t = useTokens();
   if (Array.isArray(value)) {
     return (
       <View>
@@ -46,7 +50,7 @@ export function SnapshotView({ value, depth = 0 }: { value: unknown; depth?: num
       {depth < 3
         ? nestedEntries(value).map((n) => (
             <View key={n.key} style={{ marginTop: space.m }}>
-              <Text style={{ fontSize: 17, fontWeight: "600", marginBottom: space.s }}>{n.label}</Text>
+              <Text style={{ ...typography.headline, color: t.text, marginBottom: space.s }}>{n.label}</Text>
               <SnapshotView value={n.value} depth={depth + 1} />
             </View>
           ))
@@ -64,16 +68,14 @@ export function StatusBands() {
   const readOnly = service?.asama === "SALT_OKUNUR";
   return (
     <View>
-      {offline ? <Banner tone="off" testID="bant-cevrimdisi" text={`Çevrimdışı — son veri ${offlineSince ? formatAgo(offlineSince) : "bilinmiyor"}. Değişiklik yapılamaz.`} /> : null}
+      {offline ? <OfflineBand text={`Çevrimdışı — son veri ${offlineSince ? formatAgo(offlineSince) : "bilinmiyor"}. Değişiklik yapılamaz.`} /> : null}
       {readOnly ? (
-        <Banner
-          tone="warn"
-          testID="bant-salt-okunur"
+        <ReadOnlyBand
           text={`TeksERP Yönetim hizmeti ${formatDateTime(service?.bitis)} tarihinde sona erdi — veriler ${formatDateTime(service?.saltOkunurBitis)} tarihine kadar yalnız görüntülenir ve dışa aktarılabilir (Hesaplar › Dışa aktar); yeni kayıt girilemez.`}
         />
       ) : null}
       {facility && !readOnly && syncIsLate(last) ? (
-        <Banner tone="warn" testID="bant-gecikme" text={last ? `Fabrikadan eşitleme gecikti — son eşitleme ${formatAgo(last)}` : "Fabrikadan henüz veri gelmedi"} />
+        <SyncLateBand text={last ? `Fabrikadan eşitleme gecikti — son eşitleme ${formatAgo(last)}` : "Fabrikadan henüz veri gelmedi"} />
       ) : null}
     </View>
   );
