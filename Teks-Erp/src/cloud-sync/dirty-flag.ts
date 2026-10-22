@@ -8,6 +8,7 @@
 // 5 dk emniyet turunda gider — bu dosya bir iyileştirmedir, doğruluk kaynağı DEĞİL.
 // Hook maliyeti: yazan işlemde bir `Map.get` + `Set.add`; okuma işlemleri dokunulmaz.
 // =============================================================================
+import { uyari } from "../lib/logger";
 import { RECORD_PROJECTIONS, SNAPSHOT_PROJECTIONS, SYNC_AUX_READS } from "./projections";
 
 /**
@@ -67,11 +68,40 @@ let firstDirtyAt: number | null = null;
 let listener: (() => void) | null = null;
 let clock: () => number = Date.now;
 
+/** İşaretleme/dinleyici hatası iz aralığı: log seli olmasın, ama sessiz ölüm de olmasın. */
+const TRACK_ERROR_LOG_GAP_MS = 60_000;
+let lastTrackErrorLogAt: number | null = null;
+
+/** İyileştirme katmanının hatası yazmayı ASLA kırmaz; yalnız dakikada en fazla bir uyarı bırakır. */
+function reportTrackError(where: string, err: unknown): void {
+  try {
+    const now = Date.now();
+    if (lastTrackErrorLogAt !== null && now - lastTrackErrorLogAt < TRACK_ERROR_LOG_GAP_MS) return;
+    lastTrackErrorLogAt = now;
+    uyari("patron-bulut", `kirli bayrak ${where} hatası yutuldu (yazma sürdü; emniyet turu kapsar)`, err);
+  } catch {
+    // Log da fırlatırsa susulur: yazma yolu her koşulda sürer.
+  }
+}
+
 /** TEK YAZAR (dışa açık değil; yalnız istemci sarması çağırır): tablo adı + ilk kirlenme anı + dinleyici. */
 function markDirty(table: string): void {
   if (dirty.size === 0) firstDirtyAt = clock();
   dirty.add(table);
-  listener?.();
+  try {
+    listener?.();
+  } catch (err) {
+    reportTrackError("dinleyici", err);
+  }
+}
+
+/** İşaretleme adımı korumalı: fırlatsa bile çağıran gerçek Prisma çağrısını yapar. */
+function safeMark(mark: () => void): void {
+  try {
+    mark();
+  } catch (err) {
+    reportTrackError("işaretleme", err);
+  }
 }
 
 /** Kümeyi tüketir (tur başlarken); tur sürerken gelen yazım yeni kümeye düşer. */
@@ -96,6 +126,7 @@ export function onDirty(fn: (() => void) | null): void {
 export function __resetDirtyForTests(p: { now?: () => number } = {}): void {
   dirty = new Set<string>();
   firstDirtyAt = null;
+  lastTrackErrorLogAt = null;
   if (p.now) clock = p.now;
 }
 
@@ -146,7 +177,7 @@ function wrapDelegate(delegate: object, table: string): object {
       let fn = cache.get(prop);
       if (!fn) {
         fn = (...args: unknown[]): unknown => {
-          markDirty(table);
+          safeMark(() => markDirty(table));
           return Reflect.apply(v, target, args) as unknown;
         };
         cache.set(prop, fn);
@@ -187,7 +218,9 @@ export function withDirtyTracking<T extends object>(client: T): T {
           };
         } else if (typeof prop === "string" && RAW_OPERATIONS.has(prop)) {
           fn = (...args: unknown[]): unknown => {
-            for (const t of rawWrittenTables(args)) markDirty(t);
+            safeMark(() => {
+              for (const t of rawWrittenTables(args)) markDirty(t);
+            });
             return Reflect.apply(v, target, args) as unknown;
           };
         } else {

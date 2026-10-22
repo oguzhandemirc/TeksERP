@@ -13,10 +13,15 @@
 //   §7 ⭐ izlenen tablo kümesi (kökler ∪ `READS_MODEL_MAP`) = katalog değişiklik kaynakları (iki yönlü);
 //      harita şemadaki `@@map`le birebir; her delege istemcide var; `markDirty` tek yazar; sarma tek nokta
 //   §8 zil turu tüm projeksiyonlar (`snapshotsOnly: false`); gelen kutusu işlenince olay turu istenir
+//   §9 ⭐ dinleyici ya da işaretleme adımı fırlatsa da izlenen modelde yazma (create · update · itx ·
+//      `$executeRaw`) BAŞARILI, satır DB'de görünür (iyileştirme katmanı yazma yolunu kıramaz)
 //
 // NEGATİF SONDA (dosya dışı mutasyon, geri alındı; sonuç DEVIR notunda):
 //   N1 `EVENT_DEBOUNCE_MS = 0` → §2a + §3a ❌ (ilk yazım anında tur, kalan dördü 15 sn sonraki turda)
 //   N2 `EVENT_MIN_GAP_MS = 0`  → §4 ❌
+//   N3 `markDirty` dinleyici try/catch'i kaldırıldı → §9f ❌ (ikinci tablo işaretsiz kalır)
+//   N4 `safeMark` try/catch'i kaldırıldı → §9g ❌ (saat hatası yazmayı düşürür)
+//   N5 ikisi birden kaldırıldı → §9a–§9d ❌ (dinleyici hatası yazma çağrısına yayılır)
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
@@ -267,6 +272,60 @@ function zilBolumu(): void {
   check("§8b gelen kutusu işlenince olay turu istenir", /requestEventRound\(\)/.test(gk));
 }
 
+async function firlatanDinleyiciBolumu(): Promise<void> {
+  console.log("\n§9 — dinleyici fırlatır: yazma yine başarılı");
+  __resetDirtyForTests({ now: () => now });
+  let cagri = 0;
+  onDirty(() => {
+    cagri++;
+    throw new Error("x");
+  });
+  const kod = `${TAG}FIR`;
+  const sonuc = async (f: () => Promise<unknown>): Promise<string> => {
+    try {
+      await f();
+      return "ok";
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  };
+  let id = "";
+  const c = await sonuc(async () => {
+    id = (await prisma.color.create({ data: { code: kod, name: `${TAG} fir` }, select: { id: true } })).id;
+  });
+  const v1 = id ? await prisma.color.findUnique({ where: { id }, select: { name: true } }) : null;
+  check("§9a ⭐ create başarılı, satır DB'de", c === "ok" && v1?.name === `${TAG} fir`, c);
+  const u = await sonuc(() => prisma.color.update({ where: { id }, data: { name: `${TAG} fir-u` } }));
+  const v2 = id ? await prisma.color.findUnique({ where: { id }, select: { name: true } }) : null;
+  check("§9b ⭐ update başarılı, değer DB'de", u === "ok" && v2?.name === `${TAG} fir-u`, u);
+  const t = await sonuc(() => prisma.$transaction(async (tx) => tx.color.update({ where: { id }, data: { name: `${TAG} fir-tx` } })));
+  const v3 = id ? await prisma.color.findUnique({ where: { id }, select: { name: true } }) : null;
+  check("§9c itx içindeki update başarılı, değer DB'de", t === "ok" && v3?.name === `${TAG} fir-tx`, t);
+  const r = await sonuc(() => prisma.$executeRaw`UPDATE "colors" SET "name" = ${`${TAG} fir-raw`} WHERE "id" = ${id}::uuid`);
+  const v4 = id ? await prisma.color.findUnique({ where: { id }, select: { name: true } }) : null;
+  check("§9d ⭐ `$executeRaw` başarılı, değer DB'de", r === "ok" && v4?.name === `${TAG} fir-raw`, r);
+  check("§9e dinleyici gerçekten çağrıldı ve kirli küme doldu (sonda boş değil)", cagri >= 4 && peekDirty().tables.has("colors"), `${cagri} çağrı`);
+  // Çok tablolu ham SQL: ilk tablonun dinleyici hatası ikinci tablonun işaretini düşürmez (iç catch).
+  __resetDirtyForTests({ now: () => now });
+  const yok = randomUUID();
+  const m = await sonuc(() => prisma.$queryRawUnsafe(
+    `WITH a AS (UPDATE "colors" SET "name" = $1 WHERE "id" = $2::uuid RETURNING 1), b AS (UPDATE "invoices" SET "updatedAt" = NOW() WHERE "id" = $3::uuid RETURNING 1) SELECT (SELECT count(*) FROM a) + (SELECT count(*) FROM b) AS n`,
+    `${TAG} fir-cok`, id, yok,
+  ));
+  const v5 = id ? await prisma.color.findUnique({ where: { id }, select: { name: true } }) : null;
+  check("§9f ⭐ çok tablolu ham SQL: yazma DB'de + İKİ tablo da işaretli", m === "ok" && v5?.name === `${TAG} fir-cok` && peekDirty().tables.has("colors") && peekDirty().tables.has("invoices"),
+    `${m} · ${[...peekDirty().tables].join(",")}`);
+  // İşaretleme adımının kendisi fırlatır (saat): gerçek Prisma çağrısı yine yapılır (`safeMark`).
+  onDirty(null);
+  __resetDirtyForTests({ now: () => { throw new Error("saat"); } });
+  const s1 = await sonuc(() => prisma.color.update({ where: { id }, data: { name: `${TAG} fir-saat` } }));
+  __resetDirtyForTests({ now: () => { throw new Error("saat"); } });
+  const s2 = await sonuc(() => prisma.$executeRaw`UPDATE "colors" SET "name" = ${`${TAG} fir-saat-raw`} WHERE "id" = ${id}::uuid`);
+  const v6 = id ? await prisma.color.findUnique({ where: { id }, select: { name: true } }) : null;
+  __resetDirtyForTests({ now: () => now });
+  check("§9g ⭐ işaretleme fırlatır (model + ham yol): yazma DB'de", s1 === "ok" && s2 === "ok" && v6?.name === `${TAG} fir-saat-raw`, `${s1} · ${s2}`);
+}
+
 async function main(): Promise<void> {
   console.log(`=== PATRON BULUTU OLAY GÜDÜMLÜ TUR (${TAG}) ===`);
   let bulut: SahteBulut | null = null;
@@ -290,6 +349,7 @@ async function main(): Promise<void> {
     await itxBolumu(renk);
     haritaBolumu();
     zilBolumu();
+    await firlatanDinleyiciBolumu();
   } catch (e) {
     check("beklenmeyen hata", false, e instanceof Error ? `${e.message}\n${e.stack}` : String(e));
   } finally {
