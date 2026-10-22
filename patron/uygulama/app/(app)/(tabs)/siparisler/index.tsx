@@ -30,7 +30,7 @@ function Summary({ veri }: { veri: unknown }) {
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.m, marginBottom: space.s }} testID="siparis-ozet">
       <KpiCard label="Açık kalem" value={formatNumber(v.acikKalem, 0)} unit="kalem" domain="siparisler" icon="receipt-outline" testID="ozet-acik" />
       <KpiCard
-        label="Geciken kalem" value={formatNumber(v.gecikenKalem, 0)} unit="kalem" domain="siparisler" icon="alarm-outline" testID="ozet-geciken"
+        label="Geciken" value={formatNumber(v.gecikenKalem, 0)} unit="kalem" domain="siparisler" icon="alarm-outline" testID="ozet-geciken"
         status={late ? { kind: "kritik", label: "Gecikme var" } : { kind: "iyi", label: "Gecikme yok" }}
       />
       <KpiCard label="Açık miktar" value={formatNumber(v.acikMiktar, 0)} unit="m" domain="siparisler" icon="resize-outline" testID="ozet-miktar" />

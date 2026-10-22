@@ -8,7 +8,7 @@ import { deadlineBadge, isOpenOrder, orderStatus } from "../../lib/labels/sipari
 import { IconChip } from "../IconChip";
 import { StatusBadge } from "../StatusBadge";
 import { makeStyles, useTokens } from "../theme-context";
-import { FONT_SCALE, space, tabularNums, typography } from "../tokens";
+import { FONT_SCALE, radius, space, tabularNums, typography } from "../tokens";
 
 export type Obj = Readonly<Record<string, unknown>>;
 
@@ -23,13 +23,15 @@ export function orderRowText(r: ProjectionRecord, showCustomer = true) {
   const no = str(k.siparisNo) ?? "—";
   const title = showCustomer ? (str(k.musteriAdi) ?? "—") : no;
   const line1 = [showCustomer ? no : null, orderStatus(k.durum).label].filter(Boolean).join(" · ");
-  const line2 = [str(k.termin) ? `Termin ${formatDate(k.termin)}` : null, present(f.tutar) ? formatMoney(f.tutar, str(k.doviz) ?? "TRY") : null].filter(Boolean).join(" · ");
+  const termin = str(k.termin) ? `Termin ${formatDate(k.termin)}` : null;
+  const amount = present(f.tutar) ? formatMoney(f.tutar, str(k.doviz) ?? "TRY") : null;
+  const line2 = [termin, amount].filter(Boolean).join(" · ");
   // Açık miktar ölçülen (metre) kalemlerin toplamıdır (fabrika `acikMiktar`); kapanmış siparişte gösterilmez.
   const open = isOpenOrder(k.durum) && present(k.acikMiktar) ? `${formatNumber(k.acikMiktar)} m` : null;
-  return { title, line1, line2, subtitle: line2 ? `${line1}\n${line2}` : line1, open, badge: deadlineBadge(k) };
+  return { title, line1, line2, termin, amount, subtitle: line2 ? `${line1}\n${line2}` : line1, open, badge: deadlineBadge(k) };
 }
 
-/** Üç katlı satır: ad + açık metre · no + durum · termin tarihi + tutar + termin rozeti (metin tam genişlik kullanır). */
+/** Katlı satır: ad + açık metre · no + durum · termin + rozet · tutar. Rozet varken tutar kendi satırına iner (dar telefonda kırpılmasın). */
 export function OrderRow({ r, onPress, showCustomer = true }: { r: ProjectionRecord; onPress?: () => void; showCustomer?: boolean }) {
   const t = useTokens();
   const s = useStyles();
@@ -45,18 +47,29 @@ export function OrderRow({ r, onPress, showCustomer = true }: { r: ProjectionRec
       accessibilityLabel={label}
       style={({ pressed }) => [s.row, pressed && { backgroundColor: t.surfaceAlt }]}
     >
-      <IconChip domain="siparisler" icon={late ? "alert-circle-outline" : undefined} size={36} />
+      {late ? (
+        <View style={[s.chip, { backgroundColor: t.status.kritik.bg }]}>
+          <Ionicons name="alert-circle-outline" size={21} color={t.status.kritik.fill} />
+        </View>
+      ) : (
+        <IconChip domain="siparisler" size={36} />
+      )}
       <View style={s.text}>
         <View style={s.line}>
           <Text style={s.title} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.body}>{x.title}</Text>
           {x.open ? <Text style={[s.value, late ? { color: t.status.kritik.fill } : null]} numberOfLines={1}>{x.open}</Text> : null}
         </View>
         <Text style={s.subtitle} numberOfLines={1}>{x.line1}</Text>
-        {x.line2 || x.badge ? (
-          <View style={s.line}>
-            <Text style={s.meta} numberOfLines={1}>{x.line2}</Text>
-            {x.badge ? <StatusBadge kind={x.badge.tone} label={x.badge.label} size="sm" testID={`termin-${r.id}`} /> : null}
-          </View>
+        {x.badge ? (
+          <>
+            <View style={s.line}>
+              <Text style={s.meta} numberOfLines={1}>{x.termin ?? ""}</Text>
+              <StatusBadge kind={x.badge.tone} label={x.badge.label} size="sm" testID={`termin-${r.id}`} />
+            </View>
+            {x.amount ? <Text style={s.meta} numberOfLines={1}>{x.amount}</Text> : null}
+          </>
+        ) : x.line2 ? (
+          <Text style={s.meta} numberOfLines={1}>{x.line2}</Text>
         ) : null}
       </View>
       {onPress ? <Ionicons name="chevron-forward" size={18} color={t.textMuted} /> : null}
@@ -66,6 +79,7 @@ export function OrderRow({ r, onPress, showCustomer = true }: { r: ProjectionRec
 
 const useStyles = makeStyles((t) => ({
   row: { minHeight: 64, flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, paddingHorizontal: space.l, paddingVertical: space.m },
+  chip: { width: 36, height: 36, borderRadius: radius.cardInner, alignItems: "center" as const, justifyContent: "center" as const },
   text: { flex: 1, minWidth: 0, gap: 3 },
   line: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s },
   title: { ...typography.headline, color: t.text, flex: 1 },

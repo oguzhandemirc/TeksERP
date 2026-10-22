@@ -45,5 +45,5 @@ const useStyles = makeStyles((t) => ({
   text: { flex: 1, minWidth: 0, gap: 3 },
   title: { ...typography.headline, color: t.text },
   subtitle: { ...typography.subhead, ...tabularNums, color: t.textSecondary },
-  pills: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.xs, marginTop: 2 },
+  pills: { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: space.xs, marginTop: 2 },
 }));
