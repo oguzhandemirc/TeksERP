@@ -189,5 +189,11 @@ export const STRIPE = 4;
 export const TOUCH = 48;
 /** Bu genişlikten itibaren sol ray + iki sütun. */
 export const WIDE_MIN = 768;
-/** Geniş ekranda içerik en fazla bu kadar yayılır. */
+/** Geniş ekranda iki sütunlu içerik en fazla bu kadar yayılır. */
 export const CONTENT_MAX = 1200;
+/** Tek sütunlu okuma genişliği (form, liste). */
+export const READABLE_MAX = 960;
+/** Telefonda sıkı üst bar yüksekliği (iOS gezinme çubuğu). */
+export const BAR_HEIGHT = 44;
+/** Sol ray genişliği (≥ WIDE_MIN). */
+export const RAIL_WIDTH = 248;
