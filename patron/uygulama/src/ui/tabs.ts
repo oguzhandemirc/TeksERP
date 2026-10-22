@@ -37,3 +37,10 @@ export const MORE_GROUPS: readonly { readonly title: string; readonly modules: r
   { title: "Eylem", modules: ["gelen-kutusu"] },
   { title: "Hesap", modules: ["bildirimler", "hesaplar", "profil"] },
 ];
+
+/** Geniş ekran rayı: önce sekmelerle AYNI sırada ana bölümler, sonra başlıklı gruplar (gelen kutusu "İş" altında). */
+export const RAIL_GROUPS: readonly { readonly title: string | null; readonly modules: readonly ModuleKey[] }[] = [
+  { title: null, modules: TABS.flatMap((t) => (t.module ? [t.module] : [])) },
+  { title: "İş", modules: ["cariler", "sevkiyat", "stok", "raporlar", "gelen-kutusu"] },
+  { title: "Hesap", modules: ["bildirimler", "hesaplar", "profil"] },
+];

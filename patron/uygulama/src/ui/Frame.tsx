@@ -6,7 +6,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, RefreshControl, Text, useWindowDimensions, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { moduleVisible, visibleModules, type ModuleKey } from "../lib/access";
+import { MODULES, moduleVisible, type ModuleKey } from "../lib/access";
 import { useSession } from "../state/session";
 import { StatusBands } from "./data";
 import { FacilitySwitchModal } from "./FacilitySwitcher";
@@ -14,8 +14,10 @@ import { IconChip } from "./IconChip";
 import { MODULE_ICON } from "./icons";
 import { Banner } from "./kit";
 import { LargeHeader, LargeTitle, useHeaderScroll } from "./LargeHeader";
+import { RoleBadge } from "./RoleBadge";
+import { RAIL_GROUPS } from "./tabs";
 import { makeStyles, useTokens } from "./theme-context";
-import { RAIL_WIDTH, READABLE_MAX, TOUCH, WIDE_MIN, radius, space, typography } from "./tokens";
+import { CONTENT_MAX, RAIL_WIDTH, TOUCH, WIDE_MIN, radius, space, typography } from "./tokens";
 
 export function useWide(): boolean {
   return useWindowDimensions().width >= WIDE_MIN;
@@ -41,7 +43,7 @@ export function FacilityName() {
   );
 }
 
-/** Geniş ekran rayı: tesis adı + alan ikon çipli izinli bölümler. */
+/** Geniş ekran rayı: tesis adı + rol rozeti; sekmelerle aynı sırada ana bölümler, sonra "İş" ve "Hesap" grupları. */
 export function SideNav() {
   const { permissions } = useSession();
   const t = useTokens();
@@ -50,22 +52,37 @@ export function SideNav() {
   const path = usePathname();
   return (
     <View style={s.rail}>
-      <View style={s.railHead}><FacilityName /></View>
-      {visibleModules(permissions).map((m) => {
-        const active = path === m.route || path.startsWith(`${m.route}/`);
-        const icon = MODULE_ICON[m.key];
+      <View style={s.railHead}>
+        <FacilityName />
+        <RoleBadge permissions={permissions} />
+      </View>
+      {RAIL_GROUPS.map((g, gi) => {
+        const items = g.modules.flatMap((k) => {
+          const m = MODULES.find((x) => x.key === k);
+          return m && moduleVisible(permissions, k) ? [m] : [];
+        });
+        if (items.length === 0) return null;
         return (
-          <Pressable
-            key={m.key}
-            accessibilityRole="link"
-            accessibilityState={{ selected: active }}
-            testID={`menu-${m.key}`}
-            onPress={() => router.navigate(m.route as never)}
-            style={({ pressed }) => [s.railItem, active && { backgroundColor: t.tintContainer }, pressed && !active && { backgroundColor: t.surfaceAlt }]}
-          >
-            <IconChip domain={icon.domain} icon={icon.icon} size={28} />
-            <Text style={[s.railText, active && { color: t.tint, fontWeight: "600" }]} numberOfLines={1}>{m.title}</Text>
-          </Pressable>
+          <View key={g.title ?? `grup-${gi}`}>
+            {g.title ? <Text style={s.railSection} accessibilityRole="header">{g.title}</Text> : null}
+            {items.map((m) => {
+              const active = path === m.route || path.startsWith(`${m.route}/`);
+              const icon = MODULE_ICON[m.key];
+              return (
+                <Pressable
+                  key={m.key}
+                  accessibilityRole="link"
+                  accessibilityState={{ selected: active }}
+                  testID={`menu-${m.key}`}
+                  onPress={() => router.navigate(m.route as never)}
+                  style={({ pressed }) => [s.railItem, active && { backgroundColor: t.tintContainer }, pressed && !active && { backgroundColor: t.surfaceAlt }]}
+                >
+                  <IconChip domain={icon.domain} icon={icon.icon} size={28} />
+                  <Text style={[s.railText, active && { color: t.tint, fontWeight: "600" }]} numberOfLines={1}>{m.title}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
         );
       })}
     </View>
@@ -121,12 +138,13 @@ export function Screen({ title, module, children, back, onRefresh, refreshing, h
 
 const useStyles = makeStyles((t) => ({
   screen: { flex: 1, backgroundColor: t.bg },
-  content: { paddingTop: space.xs, maxWidth: READABLE_MAX, width: "100%" as const, alignSelf: "center" as const },
+  content: { paddingTop: space.xs, maxWidth: CONTENT_MAX, width: "100%" as const, alignSelf: "center" as const },
   facility: { ...typography.headline, color: t.text, flexShrink: 1 },
   facilityPress: { minHeight: TOUCH, flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs },
   facilitySwitch: { ...typography.footnote, color: t.tint },
   rail: { width: RAIL_WIDTH, borderRightWidth: 1, borderColor: t.separator, backgroundColor: t.surface, paddingTop: space.l, paddingHorizontal: space.s },
-  railHead: { paddingHorizontal: space.s, marginBottom: space.m },
+  railHead: { paddingHorizontal: space.s, marginBottom: space.m, gap: space.xs },
+  railSection: { ...typography.caption, color: t.textMuted, paddingHorizontal: space.s, marginTop: space.m, marginBottom: space.xs },
   railItem: { minHeight: TOUCH, flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, paddingHorizontal: space.s, borderRadius: radius.control, marginBottom: 2 },
   railText: { ...typography.callout, color: t.text, flex: 1 },
 }));
