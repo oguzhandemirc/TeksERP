@@ -67,8 +67,8 @@ let firstDirtyAt: number | null = null;
 let listener: (() => void) | null = null;
 let clock: () => number = Date.now;
 
-/** TEK YAZAR: kümeye tablo adı bırakır, ilk kirlenme anını tutar, dinleyiciyi dürter. */
-export function markDirty(table: string): void {
+/** TEK YAZAR (dışa açık değil; yalnız istemci sarması çağırır): tablo adı + ilk kirlenme anı + dinleyici. */
+function markDirty(table: string): void {
   if (dirty.size === 0) firstDirtyAt = clock();
   dirty.add(table);
   listener?.();

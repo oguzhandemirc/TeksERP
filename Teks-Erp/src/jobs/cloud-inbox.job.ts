@@ -17,6 +17,7 @@ import { INBOX_PULL_MAX } from "../cloud-sync/inbox-wire";
 import { AccountsResponseSchema, ENVELOPE_VERSION, InboxClaimResponseSchema, SYNC_PATHS, type InboxOutcome, type SyncPath } from "../cloud-sync/wire";
 import { processInboxMessage } from "../services/cloud-inbox.service";
 import { recordCloudAccounts, recordInboxRun, resolveActivePatronCloudUserId } from "../services/patron-cloud.service";
+import { requestEventRound } from "./cloud-sync.job";
 
 const STARTUP_DELAY_MS = 90 * 1000;
 /** Ön koşul yokken ne sıklıkla yeniden bakılır (kira/hak değişince zil zaten dürter). */
@@ -141,6 +142,8 @@ export async function runCloudInboxOnce(transport: VendorTransport = egressTrans
       if (!res.ok) return done({ outcome: "BASARISIZ", pulled: messages.length, outcomes, uncertain }, now, res.code);
     }
     if (messages.length > 0) bilgi("patron-bulut", `gelen kutusu: ${messages.length} kayıt · ${outcomes.length} kesin sonuç · ${uncertain} belirsiz`);
+    // Gelen kutusundan yazılan kayıt beklemeden buluta dönsün (bayrak kapalıysa olay turu no-op).
+    if (outcomes.some((o) => o.durum === "ISLENDI")) requestEventRound();
     return done({ outcome: "BASARILI", pulled: messages.length, outcomes, uncertain }, now);
   } catch (err) {
     reportJobFailure("cloud-inbox", err);
