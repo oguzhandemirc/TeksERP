@@ -1,9 +1,11 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 const mockList = jest.fn();
-const mockCache = { load: jest.fn(async (_k: string, f: () => Promise<unknown>) => ({ data: await f(), offline: false, savedAt: "" })) };
+const mockCache = { load: jest.fn(async (_k: string, f: () => Promise<unknown>) => ({ data: await f(), offline: false, savedAt: "" })), peek: jest.fn(async () => null) };
 const mockSession = { api: { list: mockList }, cache: mockCache, markOnline: jest.fn() };
 jest.mock("../src/state/session", () => ({ useSession: () => mockSession }));
+// Liste ilk sayfası `useRemote` ile gelir; gezinme bağlamı yok → odak kancası etkisiz (ekran hep odakta).
+jest.mock("expo-router", () => ({}));
 
 // mock'lar kurulduktan SONRA yüklenir.
 const { Picker } = require("../src/ui/Picker") as typeof import("../src/ui/Picker");
