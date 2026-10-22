@@ -35,3 +35,11 @@ export function createRefreshGate(): RefreshGate {
 
 /** Uygulama genelinde TEK kapı: pano ve rapor ekranı aynı aralığı paylaşır (sunucu tesis başına sayar). */
 export const openRefreshGate = createRefreshGate();
+
+/**
+ * Ekran odağı / öne gelme tazelemesi (P2): son çekimden bu yana alt sınır (`REFRESH_MIN_GAP_MS`) dolduysa
+ * yeniden çek. Ardışık sekme geçişleri ve kısa arka plan turları aynı veriyi tekrar tekrar istemez.
+ */
+export function dueForRefetch(lastFetchMs: number, nowMs: number, gapMs: number = REFRESH_MIN_GAP_MS): boolean {
+  return nowMs - lastFetchMs >= gapMs;
+}

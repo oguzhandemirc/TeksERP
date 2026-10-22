@@ -57,7 +57,7 @@ describe("bağlantı — pano ve rapor ekranı tazeler, uç sunucuda", () => {
     expect(ENDPOINTS.refresh).toEqual(["post", "/tazele"]);
     const kanca = oku("src/state/useOpenRefresh.ts");
     expect(kanca).toMatch(/useFocusEffect\(/);
-    expect(kanca).toMatch(/openRefreshGate\.request\(Date\.now\(\), \(\) => api\.refresh\(\)\)/);
+    expect(kanca).toMatch(/openRefreshGate\s*\.request\(Date\.now\(\), \(\) => api\.refresh\(\)/);
   });
 
   it.each(["app/(app)/pano.tsx", "app/(app)/raporlar/index.tsx"])("%s açılınca tazeler", (dosya) => {
