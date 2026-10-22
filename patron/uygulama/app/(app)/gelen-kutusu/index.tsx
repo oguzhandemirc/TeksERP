@@ -1,60 +1,96 @@
-// Gelen kutusu: fabrikaya gönderilen sipariş/cari istekleri ve durumları (sunucu süzer).
+// Gelen kutusu: fabrikaya gönderilen sipariş/cari talepleri ve durumları. Süzme SUNUCUDA (`durum`); istemci süzmez.
+// Bekleyen talep varken ekran kısa yoklama yapar (mesaj durumu değişim akışında sayılmaz); "gelen-kutusu" etiketi
+// geçersizleşince de tazelenir.
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { View } from "react-native";
 import { errorMessage } from "../../../src/api/client";
-import { INBOX_STATUSES, type InboxItem, type InboxStatus } from "../../../src/api/wire";
-import { formatDateTime, statusLabel } from "../../../src/lib/format";
-import { INBOX_KIND_LABEL } from "../../../src/lib/inbox";
+import type { InboxItem, InboxStatus } from "../../../src/api/wire";
+import { can } from "../../../src/lib/access";
 import { useSession } from "../../../src/state/session";
-import { ErrorBox } from "../../../src/ui/data";
+import { useRemote } from "../../../src/state/useRemote";
+import { inboxPending } from "../../../src/ui/diger/inbox-format";
+import { InboxRow } from "../../../src/ui/diger/InboxRow";
+import { GroupNote } from "../../../src/ui/diger/parts";
+import { useSettlePoll } from "../../../src/ui/diger/useSettlePoll";
 import { Screen } from "../../../src/ui/Frame";
-import { Badge, Body, Button, Card, Loading, Muted, Tabs } from "../../../src/ui/kit";
+import { Banner, Button } from "../../../src/ui/kit";
+import { ListGroup } from "../../../src/ui/ListRow";
+import { SegmentedControl } from "../../../src/ui/SegmentedControl";
+import { Empty, ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
+import { space } from "../../../src/ui/tokens";
 
 type Filter = "HEPSI" | InboxStatus;
-const FILTERS: readonly { key: Filter; label: string }[] = [{ key: "HEPSI", label: "Tümü" }, ...INBOX_STATUSES.map((s) => ({ key: s, label: statusLabel(s) }))];
+const FILTERS: readonly { key: Filter; label: string }[] = [
+  { key: "BEKLIYOR", label: "Bekleyen" },
+  { key: "ISLENDI", label: "İşlenen" },
+  { key: "REDDEDILDI", label: "Reddedilen" },
+  { key: "HEPSI", label: "Tümü" },
+];
+const EMPTY: Readonly<Record<Filter, string>> = {
+  BEKLIYOR: "Bekleyen talep yok. Fabrikaya gönderdiğiniz sipariş ve cari talepleri işlenene kadar burada durur.",
+  ISLENIYOR: "İşlenmekte olan talep yok.",
+  ISLENDI: "Henüz işlenen talep yok.",
+  REDDEDILDI: "Reddedilen talep yok.",
+  IPTAL: "İptal edilen talep yok.",
+  HEPSI: "Henüz talep gönderilmedi.",
+};
+const NOTE: Partial<Record<Filter, string>> = {
+  BEKLIYOR: "Fabrika işleyince durum kendiliğinden güncellenir. 24 saati geçen talep turuncu saatle işaretlenir.",
+  HEPSI: "İşleniyor ve iptal edilen talepler de burada.",
+};
 
 export default function Inbox() {
-  const { api, cache, markOnline } = useSession();
+  const { api, permissions, offline } = useSession();
   const router = useRouter();
-  const [filter, setFilter] = useState<Filter>("HEPSI");
-  const [items, setItems] = useState<InboxItem[]>([]);
-  const [next, setNext] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>("BEKLIYOR");
+  const durum = filter === "HEPSI" ? undefined : filter;
+  const r = useRemote(`gelen-kutusu:${filter}`, () => api.inboxList({ durum, limit: 50 }), { tags: ["gelen-kutusu"] });
+  // İlk sayfa `useRemote`ta (önbellek + etiket); "Daha fazla" sayfaları ilk sayfa tazelenince sıfırlanır.
+  const [more, setMore] = useState<{ items: InboxItem[]; next: string | null } | null>(null);
+  const [moreBusy, setMoreBusy] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  useEffect(() => {
+    setMore(null);
+    setMoreError(null);
+  }, [r.data]);
 
-  const load = useCallback(async (cursor: string | null) => {
-    if (!cache) return;
-    setLoading(true);
-    setError(null);
-    const durum = filter === "HEPSI" ? undefined : filter;
+  const items = [...(r.data?.kayitlar ?? []), ...(more?.items ?? [])];
+  const next = more ? more.next : r.offline ? null : (r.data?.sonraki ?? null);
+  useSettlePoll(items.some((m) => inboxPending(m.durum)), r.reload);
+
+  async function loadMore(cursor: string) {
+    setMoreBusy(true);
+    setMoreError(null);
     try {
-      const fetch = () => api.inboxList({ durum, imlec: cursor ?? undefined, limit: 50 });
-      const r = cursor ? { data: await fetch(), offline: false, savedAt: "" } : await cache.load(`gelen-kutusu:${filter}`, fetch);
-      if (!cursor) markOnline(!r.offline, r.savedAt);
-      setItems((o) => (cursor ? [...o, ...r.data.kayitlar] : [...r.data.kayitlar]));
-      setNext(r.offline ? null : r.data.sonraki);
+      const p = await api.inboxList({ durum, imlec: cursor, limit: 50 });
+      setMore((o) => ({ items: [...(o?.items ?? []), ...p.kayitlar], next: p.sonraki }));
     } catch (err) {
-      setError(errorMessage(err));
+      setMoreError(errorMessage(err));
     } finally {
-      setLoading(false);
+      setMoreBusy(false);
     }
-  }, [api, cache, filter, markOnline]);
+  }
 
-  useEffect(() => void load(null), [load]);
-
+  const admin = can(permissions, "bulut:hesap:yonet");
   return (
-    <Screen title="Gelen kutusu" module="gelen-kutusu">
-      <Tabs items={FILTERS} value={filter} onChange={setFilter} />
-      {error ? <ErrorBox text={error} onRetry={() => void load(null)} /> : null}
-      {items.map((m) => (
-        <Card key={m.mesajId} testID={`mesaj-${m.mesajId}`} onPress={() => router.push({ pathname: "/gelen-kutusu/[mesajId]", params: { mesajId: m.mesajId } } as never)}>
-          <Body>{`${INBOX_KIND_LABEL[m.tur] ?? m.tur} · ${formatDateTime(m.olusturulma)}`}</Body>
-          <Muted>{m.hesapAdi}</Muted>
-          <Badge status={m.durum} />
-        </Card>
-      ))}
-      {!loading && !error && items.length === 0 ? <Muted>Mesaj yok</Muted> : null}
-      {loading ? <Loading /> : next ? <Button label="Daha fazla" tone="plain" onPress={() => void load(next)} /> : null}
+    <Screen title="Gelen kutusu" module="gelen-kutusu" onRefresh={r.reload} refreshing={r.refreshing}>
+      <View style={{ marginBottom: space.m }}>
+        <SegmentedControl items={FILTERS} value={filter} onChange={setFilter} testIDPrefix="sekme-" accessibilityLabel="Talep durumu" />
+      </View>
+      {NOTE[filter] ? <GroupNote>{NOTE[filter]}</GroupNote> : null}
+      {r.loading && !r.data ? <LoadingSkeleton rows={4} /> : null}
+      {r.error && !r.data ? <ErrorState text={r.error} onRetry={r.reload} /> : null}
+      {r.data && items.length === 0 ? <Empty domain="gelenKutusu" icon="file-tray-outline" text={EMPTY[filter]} testID="gelen-bos" /> : null}
+      {items.length > 0 ? (
+        <ListGroup testID="gelen-liste">
+          {items.map((m) => (
+            <InboxRow key={m.mesajId} m={m} showAuthor={admin} onPress={() => router.push({ pathname: "/gelen-kutusu/[mesajId]", params: { mesajId: m.mesajId } } as never)} />
+          ))}
+        </ListGroup>
+      ) : null}
+      {moreError ? <Banner tone="error" text={moreError} /> : null}
+      {next ? <Button label="Daha fazla" tone="plain" icon="chevron-down" busy={moreBusy} disabled={offline} onPress={() => void loadMore(next)} testID="gelen-daha" /> : null}
     </Screen>
   );
 }
