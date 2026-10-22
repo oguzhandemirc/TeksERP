@@ -32,7 +32,6 @@ function Summary({ veri }: { veri: unknown }) {
       <KpiCard
         label="Geciken kalem" value={formatNumber(v.gecikenKalem, 0)} unit="kalem" domain="siparisler" icon="alarm-outline" testID="ozet-geciken"
         status={late ? { kind: "kritik", label: "Gecikme var" } : { kind: "iyi", label: "Gecikme yok" }}
-        trend={late ? { text: `${formatNumber(v.gecikenMiktar)} m`, direction: "flat", tone: "kritik" } : undefined}
       />
       <KpiCard label="Açık miktar" value={formatNumber(v.acikMiktar, 0)} unit="m" domain="siparisler" icon="resize-outline" testID="ozet-miktar" />
       <KpiCard label="Karşılanma" value={formatNumber(v.karsilanmaYuzde, 0)} unit="%" domain="siparisler" icon="checkmark-done-outline" testID="ozet-karsilanma" />
@@ -60,7 +59,7 @@ export default function Orders() {
       headerRight={canWrite ? <CapsuleButton label="Yeni sipariş" icon="add" disabled={offline} onPress={() => router.push("/siparisler/yeni")} testID="yeni-siparis" /> : undefined}
     >
       {summary.data ? <Summary veri={summary.data.veri} /> : null}
-      <SectionHeader title="Siparişler" domain="siparisler" count={!list.loading && !list.hasMore ? list.items.length : undefined} />
+      <SectionHeader title={durum === "tumu" ? "Tüm siparişler" : ORDER_STATUS[durum].label} domain="siparisler" count={!list.loading && !list.hasMore ? list.items.length : undefined} />
       <View style={{ flexDirection: "row", marginBottom: space.m }}>
         <FilterChip label="Durum" value={CHOICES.find((c) => c.key === durum)?.label ?? "Tümü"} selected={durum !== "tumu"} onPress={() => setSheet(true)} testID="suzgec-durum" />
       </View>

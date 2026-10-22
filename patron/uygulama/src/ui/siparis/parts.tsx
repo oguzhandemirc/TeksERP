@@ -1,6 +1,6 @@
 // Siparişler + Cariler ekranlarının ortak parçaları: arama alanı, kapsül düğme, liste altlığı, bilgi satırı, rol rozeti.
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { ARAMA_AZAMI } from "../../api/wire";
 import { fmtFactoryTime } from "../../lib/factory-time";
@@ -108,7 +108,10 @@ export function FactGroup({ children, testID }: { children: ReactNode; testID?: 
   return (
     <View style={s.group} testID={testID}>
       {items.map((c, i) => (
-        <View key={i} style={i > 0 ? s.sepTop : null}>{c}</View>
+        <Fragment key={i}>
+          {i > 0 ? <View style={s.sep} /> : null}
+          {c}
+        </Fragment>
       ))}
     </View>
   );
@@ -155,7 +158,7 @@ export const useStyles = makeStyles((t) => ({
   stale: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs, marginBottom: space.s },
   staleText: { ...typography.footnote, color: t.textMuted },
   group: { backgroundColor: t.surface, borderRadius: radius.card, overflow: "hidden" as const, marginBottom: space.m, ...t.cardShadow },
-  sepTop: { borderTopWidth: 1, borderTopColor: t.separator, marginLeft: space.l },
+  sep: { height: 1, backgroundColor: t.separator, marginLeft: space.l },
   fact: { minHeight: TOUCH, flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, paddingHorizontal: space.l, paddingVertical: space.s },
   factLabel: { ...typography.callout, color: t.textSecondary, flexShrink: 0 },
   factRight: { flex: 1, flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "flex-end" as const, gap: space.s },

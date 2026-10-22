@@ -48,8 +48,8 @@ export default function OrderDetail() {
             <View style={s.heroHead}>
               <IconChip domain="siparisler" size={44} />
               <View style={s.flex}>
+                <Text style={s.caption}>Müşteri</Text>
                 <Text style={s.customer} numberOfLines={2} maxFontSizeMultiplier={FONT_SCALE.title} testID="siparis-musteri">{str(k.musteriAdi) ?? "—"}</Text>
-                <Text style={s.no}>{no ?? "—"}</Text>
               </View>
             </View>
             <View style={s.badges}>
@@ -112,7 +112,7 @@ const useStyles = makeStyles((t) => ({
   heroHead: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m },
   flex: { flex: 1 },
   customer: { ...typography.title2, color: t.text },
-  no: { ...typography.subhead, ...tabularNums, color: t.textSecondary, marginTop: 2 },
+  caption: { ...typography.caption, color: t.textSecondary, marginBottom: 2 },
   badges: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.s },
   figures: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.l },
   figure: { flexGrow: 1, flexBasis: 140 },

@@ -26,14 +26,16 @@ export function orderRowText(r: ProjectionRecord, showCustomer = true) {
   const line2 = [str(k.termin) ? `Termin ${formatDate(k.termin)}` : null, present(f.tutar) ? formatMoney(f.tutar, str(k.doviz) ?? "TRY") : null].filter(Boolean).join(" · ");
   // Açık miktar ölçülen (metre) kalemlerin toplamıdır (fabrika `acikMiktar`); kapanmış siparişte gösterilmez.
   const open = isOpenOrder(k.durum) && present(k.acikMiktar) ? `${formatNumber(k.acikMiktar)} m` : null;
-  return { title, subtitle: line2 ? `${line1}\n${line2}` : line1, open, badge: deadlineBadge(k) };
+  return { title, line1, line2, subtitle: line2 ? `${line1}\n${line2}` : line1, open, badge: deadlineBadge(k) };
 }
 
+/** Üç katlı satır: ad + açık metre · no + durum · termin tarihi + tutar + termin rozeti (metin tam genişlik kullanır). */
 export function OrderRow({ r, onPress, showCustomer = true }: { r: ProjectionRecord; onPress?: () => void; showCustomer?: boolean }) {
   const t = useTokens();
   const s = useStyles();
   const x = orderRowText(r, showCustomer);
-  const label = [x.title, x.subtitle.replace("\n", ", "), x.open ? `açık ${x.open}` : null, x.badge?.label].filter(Boolean).join(", ");
+  const late = x.badge?.tone === "kritik";
+  const label = [x.title, x.line1, x.line2, x.open ? `açık ${x.open}` : null, x.badge?.label].filter(Boolean).join(", ");
   return (
     <Pressable
       onPress={onPress}
@@ -43,16 +45,19 @@ export function OrderRow({ r, onPress, showCustomer = true }: { r: ProjectionRec
       accessibilityLabel={label}
       style={({ pressed }) => [s.row, pressed && { backgroundColor: t.surfaceAlt }]}
     >
-      <IconChip domain="siparisler" icon={x.badge?.tone === "kritik" ? "alert-circle-outline" : undefined} size={36} />
+      <IconChip domain="siparisler" icon={late ? "alert-circle-outline" : undefined} size={36} />
       <View style={s.text}>
-        <Text style={s.title} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.body}>{x.title}</Text>
-        <Text style={s.subtitle} numberOfLines={2}>{x.subtitle}</Text>
-      </View>
-      <View style={s.right}>
-        {x.open ? (
-          <Text style={[s.value, x.badge?.tone === "kritik" ? { color: t.status.kritik.fill } : null]} numberOfLines={1}>{x.open}</Text>
+        <View style={s.line}>
+          <Text style={s.title} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.body}>{x.title}</Text>
+          {x.open ? <Text style={[s.value, late ? { color: t.status.kritik.fill } : null]} numberOfLines={1}>{x.open}</Text> : null}
+        </View>
+        <Text style={s.subtitle} numberOfLines={1}>{x.line1}</Text>
+        {x.line2 || x.badge ? (
+          <View style={s.line}>
+            <Text style={s.meta} numberOfLines={1}>{x.line2}</Text>
+            {x.badge ? <StatusBadge kind={x.badge.tone} label={x.badge.label} size="sm" testID={`termin-${r.id}`} /> : null}
+          </View>
         ) : null}
-        {x.badge ? <StatusBadge kind={x.badge.tone} label={x.badge.label} size="sm" testID={`termin-${r.id}`} /> : null}
       </View>
       {onPress ? <Ionicons name="chevron-forward" size={18} color={t.textMuted} /> : null}
     </Pressable>
@@ -61,9 +66,10 @@ export function OrderRow({ r, onPress, showCustomer = true }: { r: ProjectionRec
 
 const useStyles = makeStyles((t) => ({
   row: { minHeight: 64, flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, paddingHorizontal: space.l, paddingVertical: space.m },
-  text: { flex: 1, minWidth: 0 },
-  title: { ...typography.headline, color: t.text },
-  subtitle: { ...typography.subhead, color: t.textSecondary, marginTop: 2 },
-  right: { alignItems: "flex-end" as const, gap: space.xs, maxWidth: "40%" as const },
+  text: { flex: 1, minWidth: 0, gap: 3 },
+  line: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s },
+  title: { ...typography.headline, color: t.text, flex: 1 },
+  subtitle: { ...typography.subhead, color: t.textSecondary, flex: 1 },
+  meta: { ...typography.footnote, ...tabularNums, color: t.textMuted, flex: 1 },
   value: { ...typography.headline, ...tabularNums, color: t.text },
 }));

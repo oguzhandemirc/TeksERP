@@ -86,7 +86,7 @@ export default function NewOrder() {
             );
           })}
         </View>
-        <Field label="Tarih (GG.AA.YYYY)" value={termin} onChangeText={(v) => { setTermin(v); setQuick("elle"); }} keyboardType="numbers-and-punctuation" placeholder="31.12.2026" testID="termin-metin" />
+        <Field label="Tarih" value={termin} onChangeText={(v) => { setTermin(v); setQuick("elle"); }} keyboardType="numbers-and-punctuation" placeholder="GG.AA.YYYY" hint="Hızlı seçim tarihi doldurur; elle de yazabilirsiniz." testID="termin-metin" />
       </View>
 
       <SectionHeader title="Kalemler" count={lines.length} domain="siparisler" />

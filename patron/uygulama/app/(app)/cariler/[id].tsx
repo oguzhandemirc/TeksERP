@@ -99,8 +99,8 @@ export default function CustomerDetail() {
             <View style={s.cardHead}>
               <IconChip domain="cariler" icon="business-outline" size={44} />
               <View style={s.flex}>
-                <Text style={s.name} numberOfLines={2} maxFontSizeMultiplier={FONT_SCALE.title}>{str(k.ad) ?? "—"}</Text>
-                <Text style={s.code}>{[str(k.kod), place].filter(Boolean).join(" · ") || "—"}</Text>
+                <Text style={s.name} maxFontSizeMultiplier={FONT_SCALE.title}>{str(k.kod) ?? "—"}</Text>
+                {place ? <Text style={s.code}>{place}</Text> : null}
               </View>
             </View>
             <View style={s.pills}>
@@ -157,7 +157,7 @@ const useStyles = makeStyles((t) => ({
   cardHead: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m },
   cardTitle: { ...typography.headline, color: t.text, flex: 1 },
   flex: { flex: 1 },
-  name: { ...typography.title2, color: t.text },
+  name: { ...typography.headline, ...tabularNums, color: t.text },
   code: { ...typography.subhead, ...tabularNums, color: t.textSecondary, marginTop: 2 },
   pills: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.xs },
   meta: { ...typography.footnote, color: t.textSecondary },

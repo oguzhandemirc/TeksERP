@@ -5,16 +5,14 @@ import { useState } from "react";
 import { View } from "react-native";
 import { LIST_SEARCH } from "../../../src/api/wire";
 import { can } from "../../../src/lib/access";
-import { cariRoles } from "../../../src/lib/labels/siparis";
 import { useSession } from "../../../src/state/session";
 import { FilterChip } from "../../../src/ui/FilterChip";
 import { Screen } from "../../../src/ui/Frame";
-import { ListGroup, ListRow } from "../../../src/ui/ListRow";
+import { ListGroup } from "../../../src/ui/ListRow";
 import { useDebounced } from "../../../src/ui/Picker";
-import { StatusBadge } from "../../../src/ui/StatusBadge";
 import { ChoiceSheet } from "../../../src/ui/siparis/ChoiceSheet";
-import { asObj, str } from "../../../src/ui/siparis/OrderRow";
-import { CapsuleButton, ListStates, RolePill, SearchField, StaleNote } from "../../../src/ui/siparis/parts";
+import { CustomerRow } from "../../../src/ui/siparis/CustomerRow";
+import { CapsuleButton, ListStates, SearchField, StaleNote } from "../../../src/ui/siparis/parts";
 import { useRemoteList } from "../../../src/ui/siparis/useRemoteList";
 import { space } from "../../../src/ui/tokens";
 
@@ -45,27 +43,7 @@ export default function Customers() {
       </View>
       {list.items.length > 0 ? (
         <ListGroup testID="cari-listesi">
-          {list.items.map((r) => {
-            const k = asObj(r.kayit);
-            const roles = cariRoles(k);
-            const sub = [str(k.kod), str(k.il)].filter(Boolean).join(" · ");
-            return (
-              <ListRow
-                key={r.id} testID={`cari-${r.id}`} domain="cariler" icon={k.aktif === false ? "archive-outline" : "person-outline"}
-                title={str(k.ad) ?? "—"} subtitle={sub || undefined}
-                accessory={
-                  <View style={{ alignItems: "flex-end", gap: space.xs, maxWidth: "45%" }}>
-                    {k.aktif === false ? <StatusBadge kind="bilgi" label="Pasif" size="sm" /> : null}
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-end", gap: space.xs }}>
-                      {roles.map((x) => <RolePill key={x.key} roleKey={x.key} label={x.label} />)}
-                    </View>
-                  </View>
-                }
-                accessibilityLabel={[str(k.ad) ?? "—", sub, roles.map((x) => x.label).join(", ")].filter(Boolean).join(", ")}
-                onPress={() => router.push({ pathname: "/cariler/[id]", params: { id: r.id } } as never)}
-              />
-            );
-          })}
+          {list.items.map((r) => <CustomerRow key={r.id} r={r} onPress={() => router.push({ pathname: "/cariler/[id]", params: { id: r.id } } as never)} />)}
         </ListGroup>
       ) : null}
       <ListStates list={list} empty={ara ? "Eşleşen cari yok" : "Cari yok"} domain="cariler" icon={ara ? "search-outline" : undefined} testID="cariler" />

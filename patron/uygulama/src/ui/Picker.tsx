@@ -12,7 +12,8 @@ import { ListGroup, ListRow } from "./ListRow";
 import { ListStates, SearchField } from "./siparis/parts";
 import { useRemoteList } from "./siparis/useRemoteList";
 import { makeStyles, useTokens } from "./theme-context";
-import { FONT_SCALE, READABLE_MAX, TOUCH, radius, space, typography } from "./tokens";
+import type { IconName } from "./icons";
+import { FONT_SCALE, READABLE_MAX, TOUCH, radius, space, typography, type Domain } from "./tokens";
 
 export interface Picked {
   readonly id: string;
@@ -20,6 +21,14 @@ export interface Picked {
 }
 
 const ARAMA_BEKLEME_MS = 300;
+
+/** Seçici satırının alan ikonu (cari gül, ürün taş, renk paleti). */
+function rowIcon(projection: string): { domain: Domain; icon: IconName } {
+  if (projection === "cari-kart") return { domain: "cariler", icon: "person-outline" };
+  if (projection === "urun") return { domain: "stok", icon: "cube-outline" };
+  if (projection === "renk") return { domain: "uretim", icon: "color-palette-outline" };
+  return { domain: "genel", icon: "ellipse-outline" };
+}
 
 /** Yazım durunca terimi bırakır (her tuşta istek gitmesin). */
 export function useDebounced(value: string, ms: number): string {
@@ -96,7 +105,7 @@ function Sheet(p: { label: string; projection: string; spec: ListSearchSpec | un
               const title = recordTitle(r.kayit);
               const on = r.id === p.value?.id;
               return (
-                <ListRow key={r.id} testID={`kayit-${r.id}`} title={title} subtitle={recordSubtitle(r.kayit) || undefined}
+                <ListRow key={r.id} testID={`kayit-${r.id}`} title={title} subtitle={recordSubtitle(r.kayit) || undefined} {...rowIcon(p.projection)}
                   accessory={on ? <Ionicons name="checkmark-circle" size={22} color={t.tint} /> : undefined}
                   onPress={() => p.onPick({ id: r.id, title })} />
               );
