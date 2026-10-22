@@ -156,16 +156,20 @@ export async function applyRecordEntry(tx: Tx, g: { tesisId: string; horizon: Da
   acc.kabul.push({ projeksiyon: entry.projeksiyon, filigran: yeni });
 }
 
-export async function applySnapshot(tx: Tx, g: { tesisId: string; horizon: Date; snap: z.infer<typeof SnapshotEntrySchema> }, acc: PackageAccumulator): Promise<void> {
+/** Anlığı yazar; `true` = satır yazıldı (ret ya da ufku eski anlık `false`) — değişim sayacının girdisi. */
+export async function applySnapshot(tx: Tx, g: { tesisId: string; horizon: Date; snap: z.infer<typeof SnapshotEntrySchema> }, acc: PackageAccumulator): Promise<boolean> {
   const def = projectionDef(g.snap.projeksiyon);
-  if (!def) return reject(acc, g.snap.projeksiyon, "PROJEKSIYON_BILINMIYOR");
-  if (def.root.kind !== "ANLIK" || def.subRow) return reject(acc, g.snap.projeksiyon, "PROJEKSIYON_TURU");
-  await tx.$executeRaw`
+  if (!def || def.root.kind !== "ANLIK" || def.subRow) {
+    reject(acc, g.snap.projeksiyon, def ? "PROJEKSIYON_TURU" : "PROJEKSIYON_BILINMIYOR");
+    return false;
+  }
+  const written = await tx.$executeRaw`
     INSERT INTO projection_rows (tesis_id, projection, record_id, data, version_at, sort_at, updated_at)
     VALUES (${g.tesisId}::uuid, ${g.snap.projeksiyon}, ${NO_TENANT}::uuid, ${JSON.stringify(g.snap.veri)}::jsonb, ${g.horizon}::timestamptz, ${g.horizon}::timestamptz, now())
     ON CONFLICT (tesis_id, projection, record_id) DO UPDATE
       SET data = EXCLUDED.data, version_at = EXCLUDED.version_at, sort_at = EXCLUDED.sort_at, deleted_at = NULL, updated_at = now()
       WHERE projection_rows.version_at <= EXCLUDED.version_at`;
+  return written > 0;
 }
 
 /**

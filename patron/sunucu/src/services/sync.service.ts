@@ -23,6 +23,7 @@ import {
   type SyncPackage,
   type SyncResponse,
 } from "../wire/esitleme";
+import { changeHub } from "./change-feed";
 import type { CloudContext } from "./context";
 import type { FactoryCaller } from "./installation-auth";
 import { applyRecordEntry, applySnapshot, reconcile, type PackageAccumulator } from "./sync-apply";
@@ -111,13 +112,17 @@ interface SyncStamp {
   readonly pkg: SyncPackage;
   readonly nowMs: number;
   readonly warning: SyncResponse["sozlesmeUyarisi"];
+  /** Bu pakette KABUL edilen kayıt projeksiyonları + yazılan anlıklar (tekil); boşsa sayaç artmaz. */
+  readonly changed: readonly string[];
 }
 
-async function stampSyncState(tx: Tx, { caller, pkg, nowMs, warning }: SyncStamp): Promise<void> {
+/** Durum damgası + değişim sayacı (aynı tx, 9201 kilidi altında ⇒ tesis başına sıralı, monoton). Artış yoksa null. */
+async function stampSyncState(tx: Tx, { caller, pkg, nowMs, warning, changed }: SyncStamp): Promise<number | null> {
   const now = new Date(nowMs);
   const horizon = new Date(pkg.ufuk);
   const prior = await tx.syncState.findUnique({ where: { tesisId: caller.tesisId } });
   const moved = !prior || horizon.getTime() > prior.horizon.getTime();
+  const counter = (prior?.changeCounter ?? 0n) + (changed.length > 0 ? 1n : 0n);
   const data = {
     lastPackageAt: now,
     lastInstallationId: caller.installation.installationId,
@@ -126,8 +131,10 @@ async function stampSyncState(tx: Tx, { caller, pkg, nowMs, warning }: SyncStamp
     horizon: moved ? horizon : prior.horizon,
     horizonChangedAt: moved ? now : prior.horizonChangedAt,
     contractWarning: warning,
+    ...(changed.length > 0 ? { changeCounter: counter, changedProjections: [...changed] } : {}),
   };
   await tx.syncState.upsert({ where: { tesisId: caller.tesisId }, create: { tesisId: caller.tesisId, ...data }, update: data });
+  return changed.length > 0 ? Number(counter) : null;
 }
 
 export async function applyPackage(ctx: CloudContext, caller: FactoryCaller, g: { raw: Buffer; contentEncoding: string | undefined; nowMs: number }): Promise<SyncResponse> {
@@ -136,21 +143,22 @@ export async function applyPackage(ctx: CloudContext, caller: FactoryCaller, g: 
   const digest = createHash("sha256").update(json).digest("hex");
   const warning = contractVerdict(pkg.sozlesme) === "ESKI_UYARI" ? "FABRIKA_SURUMU_ESKI" : null;
   try {
-    return await withTesis(
+    const { response, change } = await withTesis(
       ctx.sync,
       { tesisId: caller.tesisId, projections: packageScope(pkg), lock: { name: "PACKAGE", key: caller.tesisId, mode: "try" }, timeoutMs: 120_000 },
       async (tx) => {
         const prior = await tx.packageReceipt.findUnique({ where: { tesisId_packageId: { tesisId: caller.tesisId, packageId: pkg.paketId } } });
         if (prior) {
           if (prior.bodyDigest !== digest) throw new CloudError(409, "PAKET_KIMLIGI_CAKISTI", "Bu paket kimliği başka bir gövdeyle kullanılmış");
-          return prior.response as unknown as SyncResponse;
+          return { response: prior.response as unknown as SyncResponse, change: null };
         }
         const facility = await tx.facility.findUnique({ where: { tesisId: caller.tesisId } });
         if (!facility) throw new CloudError(401, "KURULUM_BILINMIYOR", "Kurulumun tesisi bulutta kayıtlı değil");
         const acc: PackageAccumulator = { kabul: [], ret: [], istenen: [] };
         const horizon = new Date(pkg.ufuk);
         for (const entry of pkg.kayitlar) await applyRecordEntry(tx, { tesisId: caller.tesisId, horizon, entry, nowMs: g.nowMs }, acc);
-        for (const snap of pkg.anliklar) await applySnapshot(tx, { tesisId: caller.tesisId, horizon, snap }, acc);
+        const written: string[] = [];
+        for (const snap of pkg.anliklar) if (await applySnapshot(tx, { tesisId: caller.tesisId, horizon, snap }, acc)) written.push(snap.projeksiyon);
         for (const rec of pkg.uzlastirma) await reconcile(tx, { tesisId: caller.tesisId, rec }, acc);
         const response: SyncResponse = {
           v: 1,
@@ -161,13 +169,17 @@ export async function applyPackage(ctx: CloudContext, caller: FactoryCaller, g: 
           ufukTarihi: retentionHorizons(facility.retentionMonths, g.nowMs),
           sozlesmeUyarisi: warning,
         };
-        await stampSyncState(tx, { caller, pkg, nowMs: g.nowMs, warning });
+        const changed = [...new Set([...acc.kabul.map((k) => k.projeksiyon), ...written])];
+        const counter = await stampSyncState(tx, { caller, pkg, nowMs: g.nowMs, warning, changed });
         await tx.packageReceipt.create({
           data: { tesisId: caller.tesisId, packageId: pkg.paketId, installationId: caller.installation.installationId, bodyDigest: digest, response: toPlainJson(response) },
         });
-        return response;
+        return { response, change: counter === null ? null : { counter, changed } };
       },
     );
+    // Bekleyen uzun yoklamalar COMMIT'ten SONRA uyanır (yeni sayacı DB'de görsünler); makbuz tekrarı uyandırmaz.
+    if (change) changeHub.notify(caller.tesisId, change.counter, change.changed);
+    return response;
   } catch (err) {
     if (err instanceof LockBusyError) throw new CloudError(409, "PAKET_ISLENIYOR", "Bu tesisin başka bir paketi işleniyor; biraz sonra tekrar deneyin");
     throw err;

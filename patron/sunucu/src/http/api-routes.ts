@@ -18,6 +18,7 @@ import { requestSnapshotRefresh } from "../services/doorbell";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
 import { cancelReportRequest, createReportRequest, getReportRequest, listReportRequests } from "../services/report.service";
 import { PermissionList, Template, Token, Uuid, body, page, param, s, sendFile, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
+import { CHANGE_ROUTES } from "./change-routes";
 import { EXPORT_ROUTES } from "./export-routes";
 import { NOTIFICATION_ROUTES } from "./notification-routes";
 import { clientAddress, rateLimit } from "./rate-limit";
@@ -145,6 +146,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
   // Ekran açıkken tazeleme: `ozet` zili (§14 S47); içerik taşımaz, tesis başına 30 sn'de bir.
   { method: "post", path: "/tazele", auth: "OTURUM", kimlik: { muaf: "zil içerik taşımaz; tekrar yalnız fazladan anlık tur yaptırır (§6.5)" }, handler: async (c) => ({ data: requestSnapshotRefresh(c.ctx.doorbell, s(c).tesisId, c.ctx.now()) }) },
   { method: "get", path: `/anlik/:${PROJECTION}`, auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await getSnapshot(c.ctx, s(c), String(c.req.params[PROJECTION])) }) },
+  ...CHANGE_ROUTES,
   // ---- gelen kutusu ----
   {
     method: "post",
