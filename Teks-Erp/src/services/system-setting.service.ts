@@ -811,6 +811,8 @@ export const SETTING_KEYS = {
    *  İşi kimlik DOĞRULAMAK değil, FARKLI BİR KURULUMU TESPİT etmek. Gerçek yetki
    *  kontrolü JWT'dir. */
   SYSTEM_INSTALLATION_ID: "system.installationId",
+  /** Patron bulutu olay güdümlü tur (default false = yalnız kira aralığında tur). */
+  PATRON_BULUT_OLAY_GUDUMLU: "patronBulut.olayGudumluEnabled",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -1975,6 +1977,9 @@ export interface FeatureFlags {
    *  (jobs/backup-scheduler.ts her turda okur → değişiklik restart GEREKTİRMEZ).
    *  Kayıt yoksa `BACKUP_HOUR` env'ine, o da yoksa 3'e düşer. */
   backupHour: number;
+  /** Patron bulutu: değişiklik olunca kısa tur (3 sn birleştirme, ≥15 sn aralık; default false).
+   *  Backend ENFORCE eder (`jobs/cloud-sync.job.ts` `requestEventRound`). */
+  patronBulutOlayGudumluEnabled: boolean;
   /** Lisans modül tavanı — SALT OKUNUR (PATCH şemasında yok), önbelleğe girmez. Modül
    *  şalterleri HAM değerdir; lisansın kapattığı modül yalnız burada görünür (gözlemde boş). */
   license: LicenseModuleBlock;
@@ -2374,6 +2379,7 @@ export class SystemSettingService {
       mobileRasterEnabled: await readMobileRasterEnabled(cacheClient),
       scrapGradeLabelEnabled: await readScrapGradeLabelEnabled(cacheClient),
       defaultLabelMedia: await readDefaultLabelMedia(cacheClient),
+      patronBulutOlayGudumluEnabled: await readPatronBulutOlayGudumluEnabled(cacheClient),
     };
     // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
     // pinleme (taze değeri döndür, cache'i bir sonraki okuma tazeler).
@@ -4285,6 +4291,18 @@ export class SystemSettingService {
         SETTING_KEYS.LABEL_SCRAP_GRADE_ENABLED,
         input.scrapGradeLabelEnabled,
         "Fire (etiketsiz işaretli) kalitede de otomatik etiket bas (kapalıyken fire topa kâğıt çıkmaz)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "patronBulutOlayGudumluEnabled")) {
+      if (typeof input.patronBulutOlayGudumluEnabled !== "boolean") {
+        throw AppError.badRequest("patronBulutOlayGudumluEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.PATRON_BULUT_OLAY_GUDUMLU,
+        input.patronBulutOlayGudumluEnabled,
+        "Patron bulutu: değişiklik olunca anında gönder (3 sn birleştirme); kapalıysa yalnız kira aralığı",
         userId
       );
     }
@@ -7233,3 +7251,17 @@ export async function readScrapGradeLabelEnabled(
   return asBoolean(setting?.value);
 }
 
+/**
+ * Patron bulutu olay güdümlü tur açık mı? Default FALSE (kayıt yoksa → bugünkü davranış: yalnız
+ * kiradaki aralıkta tur). Açıkken bile ön koşul `cloudEligibility` tek kapıdır (fail-closed).
+ */
+export async function readPatronBulutOlayGudumluEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PATRON_BULUT_OLAY_GUDUMLU },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
