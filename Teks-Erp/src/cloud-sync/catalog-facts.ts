@@ -11,6 +11,13 @@ const WO_OF_ORDER_LINES =
 const WO_OF_ORDERS =
   'SELECT DISTINCT l."workOrderId" AS root_id FROM "work_order_to_order_lines" l JOIN "order_lines" ol ON ol."id" = l."orderLineId" WHERE ol."orderId" = ANY($1::uuid[]) AND l."unlinkedAt" IS NULL';
 
+// Görünen ad (cari/ürün/renk) olgu satırında türetilir: ad değişince bağlı kökler yeniden gider.
+const ORDERS_OF_CUSTOMERS = 'SELECT o."id" AS root_id FROM "orders" o WHERE o."customerId" = ANY($1::uuid[])';
+const SHIPMENTS_OF_CUSTOMERS = 'SELECT s."id" AS root_id FROM "shipments" s WHERE s."customerId" = ANY($1::uuid[])';
+const LINES_OF_ITEMS = 'SELECT l."id" AS root_id FROM "order_lines" l WHERE l."itemId" = ANY($1::uuid[])';
+const LINES_OF_COLORS = 'SELECT l."id" AS root_id FROM "order_lines" l WHERE l."colorId" = ANY($1::uuid[])';
+const NAME_OF = (model: string): string => `cloud-sync/derived displayNames: ${model}.name (BOYUT \`ad\` ile aynı kolon)`;
+
 /** Efektif vade (belge vadesi → tarih + cari vade günü) — `resolveEffectiveDue`in SQL ikizi (UTC oturum, tam gün = 86 400 sn). */
 const EFFECTIVE_DUE_SQL =
   'COALESCE(i."dueDate", i."issueDate" + c."paymentTermDays" * interval \'86400 seconds\')';
@@ -28,8 +35,9 @@ export const FACTS: readonly RecordProjection[] = [
       derived("acikMiktar", "helpers/order-line-scope.helper isActiveLine + isMeasuredLine: Σ(quantity − shippedQty)", ["order_lines"]),
       derived("kalemSayisi", "helpers/order-line-scope.helper isActiveLine", ["order_lines"]),
       derived("gecikmis", "helpers/order-deadline.helper daysPastDeadline ≠ null ∧ açık durum (PENDING · APPROVED · PARTIAL_SHIPPED)", ["orders"], { timeBound: true }),
+      derived("musteriAdi", NAME_OF("Customer"), ["customers"]),
     ],
-    sources: [self("orders"), via("order_lines", "orderId")],
+    sources: [self("orders"), via("order_lines", "orderId"), lookup("customers", "id", ORDERS_OF_CUSTOMERS, "cari adı değişince siparişleri yeniden gider")],
     crossings: [{ name: "termin", sql: 'SELECT o."id" AS root_id FROM "orders" o WHERE o."deadline" >= $1 AND o."deadline" < $2' }],
     deletion: "YOK", permission: "bulut:siparis:oku", retention: { wireFields: ["siparisTarihi"], sql: 't."orderDate"' }, catalogVersion: 1,
   },
@@ -42,8 +50,11 @@ export const FACTS: readonly RecordProjection[] = [
       col("olusturulma", "createdAt")],
     derived: [
       derived("acikMiktar", "helpers/order-line-scope.helper isActiveLine + isMeasuredLine: quantity − shippedQty (ölçülmeyen birimde null)", ["order_lines"]),
+      derived("urunAdi", NAME_OF("Item"), ["items"]),
+      derived("renkAdi", NAME_OF("Color"), ["colors"]),
     ],
-    sources: [self("order_lines")],
+    sources: [self("order_lines"), lookup("items", "id", LINES_OF_ITEMS, "ürün adı değişince kalemleri yeniden gider"),
+      lookup("colors", "id", LINES_OF_COLORS, "renk adı değişince kalemleri yeniden gider")],
     deletion: "DAMGA", permission: "bulut:siparis:oku", retention: { wireFields: ["olusturulma"], sql: 't."createdAt"' }, catalogVersion: 1,
   },
   {
@@ -57,11 +68,13 @@ export const FACTS: readonly RecordProjection[] = [
       derived("cuvalSayisi", "listShipments _count.sacks ile aynı sayım", ["sacks"]),
       derived("topSayisi", "helpers/shipment-gross-totals.helper grossRollCount (canlı + iptal edilmemiş iade)", ["rolls", "roll_returns"]),
       derived("siparisIdleri", "shipment_orders kümesi (listShipments `_count.orders` ile aynı; isActive yalnız PLANNED denormudur, süzülmez)", ["shipment_orders"]),
+      derived("musteriAdi", NAME_OF("Customer"), ["customers"]),
     ],
     sources: [self("shipments"),
       via("sacks", "shipmentId", "ESKİ sevkiyat ayrılmada görünmez → sacks_sync_parent_moved tetikleyicisi"),
       via("rolls", "shipmentId", "ESKİ sevkiyat ayrılmada görünmez → rolls_sync_parent_moved tetikleyicisi"),
-      via("roll_returns", "fromShipmentId")],
+      via("roll_returns", "fromShipmentId"),
+      lookup("customers", "id", SHIPMENTS_OF_CUSTOMERS, "cari adı değişince sevkiyatları yeniden gider")],
     markedBy: [{ table: "shipment_orders", trigger: "shipment_orders_sync_dirty" }],
     deletion: "YOK", permission: "bulut:sevkiyat:oku",
     retention: { wireFields: ["cikisTarihi", "olusturulma"], sql: 'COALESCE(t."dispatchedAt", t."createdAt")' }, catalogVersion: 1,

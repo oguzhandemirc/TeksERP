@@ -20,6 +20,8 @@
 //   §7 ⭐ paket şeması KATI: tanınmayan anahtar ve uuid olmayan satır kimliği RED
 //   §8 ⭐ her tel projeksiyon adı (alt satır · bölüm dahil) bulut izin kataloğuna eşlenir (fail-closed)
 //   §9 ⭐ uzak raporlar: audit/* ve kişi adı taşıyan rapor YOK, anahtar katalogda, çıktı sondası temiz
+//   §5e ⭐ görünen ad (sipariş/sevkiyat `musteriAdi`, kalem `urunAdi`/`renkAdi`) = BOYUT `ad`ı, kök
+//      satırda; cari/ürün/renk değişikliği bağlı kökü kirletir (ad değişimi yeniden gönderilir)
 //
 // ⭐ KALICI SONDALAR ✓K1–K5 (her koşumda, sentetik katalog kopyasıyla): `notes` kolonu ·
 // kök satırda `contactPhone` · `createdById` · kapsanmayan türetilmiş okuma · bilinmeyen izin —
@@ -27,6 +29,7 @@
 // NEGATİF SONDA — dosya DIŞI mutasyon (cp + shasum ile geri alındı; commit mesajında):
 //   A1 `cari-kart.yetkili` İŞLEM sınıfına alındı            → §3 + §5 ❌
 //   A2 `record-builder` alt satır bölmesini atladı (hepsi kök) → §5 ❌
+//   A3 `siparis` kaynağından `customers` lookup'ı silindi       → §4a + §5f ❌
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
@@ -47,6 +50,7 @@ import {
 import { DERIVERS } from "../src/cloud-sync/derived";
 import { getFactoryTimezone } from "../src/constants/time";
 import { buildRecords } from "../src/cloud-sync/record-builder";
+import { mapToRoots } from "../src/cloud-sync/change-scan";
 import { buildSnapshots, SNAPSHOT_WIRE_SCHEMAS } from "../src/cloud-sync/snapshots";
 import { PackageSchema } from "../src/cloud-sync/wire";
 import { REMOTE_REPORTS, computeReportResult } from "../src/cloud-sync/report-requests";
@@ -157,9 +161,14 @@ async function turetilmisBolumu(): Promise<void> {
   check("§4b türetici kümesi ↔ türetilmiş alanı olan projeksiyonlar birebir", JSON.stringify(turetilen) === JSON.stringify(turetici), `${turetilen.join(",")} ↔ ${turetici.join(",")}`);
 }
 
-interface Fikstur { musteri: string; cari: string; kasa: string; faturalar: string[]; odeme: string; cek: string }
+interface Fikstur { musteri: string; cari: string; kasa: string; faturalar: string[]; odeme: string; cek: string; urun: string; renk: string; siparis: string; kalemler: string[]; sevk: string }
 
 async function temizleFikstur(f: Partial<Fikstur>): Promise<void> {
+  if (f.kalemler?.length) await prisma.$executeRawUnsafe(`DELETE FROM "order_lines" WHERE "id" = ANY($1::uuid[])`, f.kalemler);
+  if (f.siparis) await prisma.$executeRawUnsafe(`DELETE FROM "orders" WHERE "id" = $1::uuid`, f.siparis);
+  if (f.sevk) await prisma.$executeRawUnsafe(`DELETE FROM "shipments" WHERE "id" = $1::uuid`, f.sevk);
+  if (f.urun) await prisma.$executeRawUnsafe(`DELETE FROM "items" WHERE "id" = $1::uuid`, f.urun);
+  if (f.renk) await prisma.$executeRawUnsafe(`DELETE FROM "colors" WHERE "id" = $1::uuid`, f.renk);
   if (f.faturalar?.length) {
     await prisma.$executeRawUnsafe(`DELETE FROM "invoice_lines" WHERE "invoiceId" = ANY($1::uuid[])`, f.faturalar);
     await prisma.$executeRawUnsafe(`DELETE FROM "invoices" WHERE "id" = ANY($1::uuid[])`, f.faturalar);
@@ -169,7 +178,8 @@ async function temizleFikstur(f: Partial<Fikstur>): Promise<void> {
   if (f.kasa) await prisma.$executeRawUnsafe(`DELETE FROM "cash_boxes" WHERE "id" = $1::uuid`, f.kasa);
   if (f.cari) await prisma.$executeRawUnsafe(`DELETE FROM "cari_accounts" WHERE "id" = $1::uuid`, f.cari);
   if (f.musteri) await prisma.$executeRawUnsafe(`DELETE FROM "customers" WHERE "id" = $1::uuid`, f.musteri);
-  await prisma.$executeRawUnsafe(`DELETE FROM "sync_marks" WHERE "rowId" = ANY($1::uuid[])`, [f.musteri, f.cari, f.kasa, f.odeme, f.cek, ...(f.faturalar ?? [])].filter(Boolean));
+  await prisma.$executeRawUnsafe(`DELETE FROM "sync_marks" WHERE "rowId" = ANY($1::uuid[])`,
+    [f.musteri, f.cari, f.kasa, f.odeme, f.cek, ...(f.faturalar ?? []), f.urun, f.renk, f.siparis, f.sevk, ...(f.kalemler ?? [])].filter(Boolean));
 }
 
 /** Finans tabloları bu DB'de boştur — türeticileri gerçek satırla koşturmak için küçük fikstür (sonda silinir). */
@@ -208,6 +218,45 @@ async function finansFikstur(f: Partial<Fikstur>): Promise<void> {
     `INSERT INTO "cheques" ("id", "docNo", "kind", "status", "cariId", "amount", "amountTry", "issueDate", "dueDate", "postingDate", "drawerName", "updatedAt") VALUES ($1::uuid, $2, 'RECEIVED', 'PORTFOLIO', $3::uuid, 30, 30, now(), now() + interval '20 days', now(), 'Keşideci Kişi', now())`,
     f.cek, `${TAG}C`, f.cari,
   );
+  // Görünen ad fikstürü (§5e): sipariş + iki kalem (biri renksiz) + sevkiyat aynı cariye.
+  f.urun = randomUUID();
+  await prisma.$executeRawUnsafe(`INSERT INTO "items" ("id", "code", "name", "itemType", "updatedAt") VALUES ($1::uuid, $2, $3, 'FABRIC', now())`, f.urun, `${TAG}U`, `${TAG} ürün`);
+  f.renk = randomUUID();
+  await prisma.$executeRawUnsafe(`INSERT INTO "colors" ("id", "code", "name", "updatedAt") VALUES ($1::uuid, $2, $3, now())`, f.renk, `${TAG}R`, `${TAG} renk`);
+  f.siparis = randomUUID();
+  await prisma.$executeRawUnsafe(`INSERT INTO "orders" ("id", "orderNumber", "customerId", "updatedAt") VALUES ($1::uuid, $2, $3::uuid, now())`, f.siparis, `${TAG}S`, f.musteri);
+  f.kalemler = [randomUUID(), randomUUID()];
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "order_lines" ("id", "orderId", "itemId", "colorId", "quantity", "updatedAt") VALUES ($1::uuid, $3::uuid, $4::uuid, $5::uuid, 10, now()), ($2::uuid, $3::uuid, $4::uuid, NULL, 5, now())`,
+    f.kalemler[0], f.kalemler[1], f.siparis, f.urun, f.renk,
+  );
+  f.sevk = randomUUID();
+  await prisma.$executeRawUnsafe(`INSERT INTO "shipments" ("id", "shipmentNo", "customerId", "updatedAt") VALUES ($1::uuid, $2, $3::uuid, now())`, f.sevk, `${TAG}V`, f.musteri);
+}
+
+/** §5e — görünen ad: değer BOYUT `ad`ıyla aynı, kök satırda; kaynağın kök eşlemesi ad değişimini bağlı köke taşır. */
+async function gorunenAdBolumu(f: Partial<Fikstur>): Promise<void> {
+  const proj = (ad: string): RecordProjection => RECORD_PROJECTIONS.find((p) => p.name === ad)!;
+  const sip = (await buildRecords(proj("siparis"), [f.siparis!], Date.now())).rows.get("siparis") ?? [];
+  const sev = (await buildRecords(proj("sevkiyat"), [f.sevk!], Date.now())).rows.get("sevkiyat") ?? [];
+  const kal = new Map(((await buildRecords(proj("siparis-kalemi"), f.kalemler!, Date.now())).rows.get("siparis-kalemi") ?? []).map((r) => [r.id, r]));
+  const k0 = kal.get(f.kalemler![0]!);
+  const k1 = kal.get(f.kalemler![1]!);
+  check("§5e ⭐ görünen ad kök satırda ve BOYUT `ad`ıyla aynı (renksiz kalemde null)",
+    sip[0]?.musteriAdi === `${TAG} müşteri` && sev[0]?.musteriAdi === `${TAG} müşteri` &&
+      k0?.urunAdi === `${TAG} ürün` && k0?.renkAdi === `${TAG} renk` && k1?.urunAdi === `${TAG} ürün` && k1?.renkAdi === null,
+    `sipariş ${String(sip[0]?.musteriAdi)} · sevk ${String(sev[0]?.musteriAdi)} · kalem ${String(k0?.urunAdi)}/${String(k0?.renkAdi)} · renksiz ${String(k1?.renkAdi)}`);
+  const kirlenen = async (ad: string, tablo: string, anahtar: string): Promise<string[]> => {
+    const s = proj(ad).sources.find((x) => x.table === tablo);
+    return s ? mapToRoots(s.root, [anahtar]) : [];
+  };
+  const sipK = await kirlenen("siparis", "customers", f.musteri!);
+  const sevK = await kirlenen("sevkiyat", "customers", f.musteri!);
+  const urnK = await kirlenen("siparis-kalemi", "items", f.urun!);
+  const rnkK = await kirlenen("siparis-kalemi", "colors", f.renk!);
+  check("§5f ⭐ cari/ürün/renk değişikliği bağlı kökü kirletir (ad değişimi yeniden gönderilir)",
+    sipK.includes(f.siparis!) && sevK.includes(f.sevk!) && f.kalemler!.every((k) => urnK.includes(k)) && rnkK.length === 1 && rnkK[0] === f.kalemler![0],
+    `sipariş ${sipK.length} · sevk ${sevK.length} · ürün→kalem ${urnK.length} · renk→kalem ${rnkK.length}`);
 }
 
 async function canliBolumu(): Promise<void> {
@@ -371,6 +420,7 @@ async function main(): Promise<void> {
     await turetilmisBolumu();
     await finansFikstur(f);
     await canliBolumu();
+    await gorunenAdBolumu(f);
     await anlikBolumu();
     paketBolumu();
     izinBolumu();

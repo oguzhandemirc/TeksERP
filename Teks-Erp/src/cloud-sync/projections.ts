@@ -12,8 +12,9 @@ import { FACTS } from "./catalog-facts";
 export * from "./projection-types";
 
 // ── BOYUT projeksiyonları ─────────────────────────────────────────────────────
-// Olgu satırları bu sözlüklere yalnız id ile işaret eder; ürün yeniden adlandırılınca
-// bir satır gider, on bin sipariş kalemi değil.
+// Olgu satırları bu sözlüklere id ile işaret eder. İstisna görünen ad (sipariş/sevkiyat
+// `musteriAdi`, kalem `urunAdi`/`renkAdi`): olguda da türetilir, cari/ürün/renk değişince
+// bağlı kökler yeniden gider (bilinçli bedel — uygulama listesi birleştirme yapmaz).
 const DIMENSIONS: readonly RecordProjection[] = [
   {
     name: "urun", kind: "KAYIT", role: "BOYUT", root: { table: "items", model: "Item" },
