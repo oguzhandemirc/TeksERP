@@ -126,7 +126,7 @@ describe("fabrika değiştir (çok tesis)", () => {
     expect(screen.queryByTestId("tesis-modal")).toBeNull();
     fireEvent.press(screen.getByTestId("tesis-secici"));
     expect(screen.getByTestId("tesis-modal")).toBeTruthy();
-    expect(screen.getByText("✓ Etkin")).toBeTruthy();
+    expect(screen.getByText("Etkin")).toBeTruthy();
     expect(screen.getByTestId("tesis-rozet-t2")).toBeTruthy();
     expect(screen.queryByTestId("tesis-rozet-t1")).toBeNull();
     fireEvent.press(screen.getByTestId("tesis-t2"));
