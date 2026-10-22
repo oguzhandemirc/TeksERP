@@ -15,6 +15,7 @@ Patronun buluttaki OKUMA KOPYASI ve TEK yazma kanalı. **Bulut hesap yapmaz, fab
 - **Servis**: durum geçişi atomik claim; claim kuyruğu `FOR UPDATE SKIP LOCKED` CTE; işlem kimliği tek boğaz `lib/idempotency.ts`.
 - **HTTP**: tek dinleyici — `/v1/*` fabrika kanalı (kurulum imzalı, boyut tavanlı) + `/api/*` hesap API'si (Bearer, rota tablosu veridir).
 - **Şema**: her tabloda `tesis_id` + RLS ENABLE + FORCE; çift yüklem DB CHECK ile de seddelenir.
+- **Değişim akışı** `services/change-feed.ts` + `GET /api/degisim?since=&bekle=` (`http/change-routes.ts`): `sync_state.change_counter` YALNIZ paket tx'inde (9201 altında), veri kabul edildiyse +1; hub süreç içidir (halka 64, `notify` COMMIT'ten sonra), yanıt içerik taşımaz, ≤ 25 sn, adlar oturumun okuyabildiği projeksiyonlarla süzülür (bekçi `test_degisim_sayaci`).
 
 ## Merkez DB + tesis başına DB — roller
 
