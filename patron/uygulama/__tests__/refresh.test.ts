@@ -3,7 +3,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { ENDPOINTS } from "../src/api/endpoints";
-import { REFRESH_FAIL_BACKOFF_MS, REFRESH_MIN_GAP_MS, createRefreshGate } from "../src/lib/refresh";
+import { REFRESH_FAIL_BACKOFF_MS, REFRESH_MIN_GAP_MS, createRefreshGate, dueForRefetch } from "../src/lib/refresh";
+
+jest.mock("expo-router", () => ({ useFocusEffect: jest.fn() }));
+jest.mock("../src/state/session", () => ({ useSession: jest.fn() }));
+const { AFTER_DOORBELL_MS, followDoorbell } = require("../src/state/useOpenRefresh") as typeof import("../src/state/useOpenRefresh");
 
 const KOK = path.join(__dirname, "..");
 const oku = (rel: string): string => readFileSync(path.join(KOK, rel), "utf8");
@@ -52,12 +56,56 @@ describe("ekran açılışı tazelemesi — aralığa saygı", () => {
   });
 });
 
+describe("zil sonrası çekme (P2) — fabrika paketi aynı ekranda görünür", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it("3/6/10 sn'de damgaya bakar; damga değişince BİR kez geçersizleştirir ve kalan adımlar düşer", async () => {
+    expect(AFTER_DOORBELL_MS).toEqual([3_000, 6_000, 10_000]);
+    const stamps = ["A", "B", "C"];
+    const check = jest.fn(async () => stamps.shift() ?? null);
+    const changed = jest.fn();
+    followDoorbell("A", check, changed);
+    await jest.advanceTimersByTimeAsync(2_999);
+    expect(check).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+    expect(changed).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(3_000);
+    expect(changed).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(10_000);
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it("damga hiç değişmezse 3 bakıştan sonra durur; odak kaybında bekleyenler iptal", async () => {
+    const check = jest.fn(async () => "A");
+    const changed = jest.fn();
+    followDoorbell("A", check, changed);
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(check).toHaveBeenCalledTimes(3);
+    expect(changed).not.toHaveBeenCalled();
+    const check2 = jest.fn(async () => "B");
+    const cancel = followDoorbell("A", check2, changed);
+    cancel();
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(check2).not.toHaveBeenCalled();
+  });
+
+  it("odak/öne gelme aralığı: son çekimden en az REFRESH_MIN_GAP_MS", () => {
+    expect(dueForRefetch(1_000, 1_000 + REFRESH_MIN_GAP_MS - 1)).toBe(false);
+    expect(dueForRefetch(1_000, 1_000 + REFRESH_MIN_GAP_MS)).toBe(true);
+  });
+});
+
 describe("bağlantı — pano ve rapor ekranı tazeler, uç sunucuda", () => {
   it("uç `POST /tazele` tabloda; kanca kapıdan `api.refresh`i çağırır", () => {
     expect(ENDPOINTS.refresh).toEqual(["post", "/tazele"]);
     const kanca = oku("src/state/useOpenRefresh.ts");
     expect(kanca).toMatch(/useFocusEffect\(/);
     expect(kanca).toMatch(/openRefreshGate\s*\.request\(Date\.now\(\), \(\) => api\.refresh\(\)/);
+    // Zil çaldıysa takip, damga değişince bütün veri kancaları (zil TÜM projeksiyonları tazeler).
+    expect(kanca).toMatch(/rang\?\.zil/);
+    expect(kanca).toMatch(/invalidate\(\[ALL_TAGS\]\)/);
   });
 
   it.each(["app/(app)/pano.tsx", "app/(app)/raporlar/index.tsx"])("%s açılınca tazeler", (dosya) => {
