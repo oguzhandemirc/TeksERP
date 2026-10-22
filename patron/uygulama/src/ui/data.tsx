@@ -22,7 +22,7 @@ interface FieldRow {
   readonly value: string;
 }
 
-/** Para alt satırı (`.finans`): tutar alanları kaydın dövizi ile (`…Tl` alanı ₺), kur/oran düz sayı. */
+/** Para alt satırı (`.finans`): tutar alanları kaydın dövizi ile (`…Tl` alanı ₺), kur/oran düz sayı; döviz bilinmiyorsa ("") simge uydurulmaz. */
 function moneyEntries(obj: unknown, currency: string): FieldRow[] {
   if (typeof obj !== "object" || obj === null || Array.isArray(obj)) return [];
   return Object.entries(obj as Record<string, unknown>)
@@ -30,7 +30,7 @@ function moneyEntries(obj: unknown, currency: string): FieldRow[] {
     .map(([k, v]) => ({
       key: k,
       label: FINANCE_FIELD[k] ?? humanize(k),
-      value: isMoneyField(k) && (typeof v === "string" || typeof v === "number") ? formatMoney(v, moneyCurrencyOf(k, currency)) : formatValue(k, v),
+      value: currency !== "" && isMoneyField(k) && (typeof v === "string" || typeof v === "number") ? formatMoney(v, moneyCurrencyOf(k, currency)) : formatValue(k, v),
     }));
 }
 

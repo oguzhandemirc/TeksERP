@@ -10,6 +10,8 @@ export const CHEQUE_KIND: Readonly<Record<string, string>> = { RECEIVED: "Alına
 
 /** Belge türü (`cek-senet.belgeTuru`). */
 export const CHEQUE_DOC_TYPE: Readonly<Record<string, string>> = { CHEQUE: "Çek", PROMISSORY_NOTE: "Senet" };
+/** Cümle içi küçük harfli hâli ("Alınan çek"); yerel ayar işlevi Hermes'te güvenilmez, elle yazılır. */
+export const CHEQUE_DOC_TYPE_LOWER: Readonly<Record<string, string>> = { CHEQUE: "çek", PROMISSORY_NOTE: "senet" };
 
 /** Çek/senet durumu (`cek-senet.durum`, `ozet-finans.cekDurum[].durum`). */
 export const CHEQUE_STATUS: Readonly<Record<string, StatusEntry>> = {
@@ -167,3 +169,23 @@ export const REPORT_PARAM: Readonly<Record<string, string>> = {
 };
 
 export type { StatusEntry, StatusTone };
+
+/** `.finans` alt satırı taşıyan projeksiyonlar (bulut kataloğu `patron/sunucu/src/catalog/projections.ts` aynası; bekçi
+ *  `e3-finans.test.tsx`). Alt satır yanıtta YOKSA hesap o alanı göremiyor demektir → kilit gösterilir. */
+export const FINANCE_SUBROW_PROJECTIONS: readonly string[] = [
+  "siparis",
+  "siparis-kalemi",
+  "cari-hesap",
+  "cari-hareket",
+  "kasa",
+  "banka",
+  "kasa-hareketi",
+  "cek-senet",
+  "fatura",
+  "fatura-kalemi",
+  "tahsilat-odeme",
+  "fiyat",
+];
+
+/** İzinsiz finans alanının metni (liste satırında erişilebilirlik etiketi, ayrıntıda görünür metin). */
+export const FINANCE_LOCKED_TEXT = "Bu alanı görme iznin yok";
