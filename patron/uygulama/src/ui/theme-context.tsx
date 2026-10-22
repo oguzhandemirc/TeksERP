@@ -94,3 +94,17 @@ export function useReducedMotion(): boolean {
   }, []);
   return reduced;
 }
+
+/** Temaya bağlı stil fabrikası: her tema için bir kez kurulur (bileşen başına yeniden hesaplanmaz). */
+export function makeStyles<T>(build: (t: Tokens) => T): () => T {
+  const cache = new Map<Tokens, T>();
+  return function useStyles(): T {
+    const t = useTokens();
+    let s = cache.get(t);
+    if (!s) {
+      s = build(t);
+      cache.set(t, s);
+    }
+    return s;
+  };
+}
