@@ -2,12 +2,16 @@
 // oturum görüntüsü önbellekten gelir ve YAZMA kapalıdır. 401 → belirteç silinir, giriş ekranı.
 // Çok tesis: tek bulut kimliği birden çok fabrikaya erişir; geçiş yeni belirteç + yeni kapsam alır, diğer tesisin
 // önbelleği (ayrık kapsam) durur; çıkış ve yeni giriş bütün önbelleği siler.
+// Tazelik (K1): öne gelince ve değişim akışında fabrika damgası değişince `refresh()`; "Son eşitleme" = fabrika
+// veri anı (`esitleme.ufuk`, paketin ufku), bulutun alım anı değil. Belirteç yenileme ucu sunucuda yok — dokunulmaz.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ApiError, createClient, errorMessage } from "../api/client";
 import { createApi, type Api } from "../api/endpoints";
 import type { FacilityChoice, FacilityStatus, LoginResponse } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
 import { clearCache, createCache, openingCacheHygiene, type Cache } from "./cache";
+import { createFeedFetcher, useChangeFeed, type FeedMode } from "./changes";
+import { useForeground } from "./useForeground";
 import { legacyPlainStore, plainStore, secretStore } from "./store";
 import { applyServerFactoryTimezone } from "../lib/factory-time";
 
@@ -33,11 +37,16 @@ export interface SessionValue {
   readonly permissions: readonly string[];
   readonly offline: boolean;
   readonly offlineSince: string | null;
+  /** Fabrika veri anı: son kabul edilen paketin ufku (`esitleme.ufuk`); eşitleme yoksa null. */
+  readonly factoryStamp: string | null;
+  /** Değişim akışı kipi: uzun yoklama · eski sunucu 60 sn yoklama · kapalı (arka plan / oturumsuz). */
+  readonly feedMode: FeedMode;
   readonly configured: boolean;
   markOnline(online: boolean, savedAt?: string): void;
   login(b: { eposta: string; parola: string; totp: string }): Promise<void>;
   logout(): Promise<void>;
-  refresh(): Promise<void>;
+  /** `GET /oturum` yeniden okunur (uçuştayken ikinci çağrı aynı sözü alır); oturumsuzken null. */
+  refresh(): Promise<FacilityStatus | null>;
   /** Başka tesise geç; reddedilirse `false` ve `switchError` dolar, etkin tesis değişmez. */
   switchFacility(tesisId: string): Promise<boolean>;
 }
@@ -106,6 +115,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
       await loadFacilityTimezone(c, api);
       setFacility(r.data);
       markOnline(!r.offline, r.savedAt);
+      return r.data;
     },
     [api, markOnline],
   );
@@ -219,9 +229,37 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     [api, adopt, cache, facilityId, loadChoices],
   );
 
-  const refresh = useCallback(async () => {
-    if (cache) await loadFacility(cache);
+  const inflight = useRef<Promise<FacilityStatus | null> | null>(null);
+  const refresh = useCallback((): Promise<FacilityStatus | null> => {
+    if (!cache) return Promise.resolve(null);
+    if (inflight.current) return inflight.current;
+    const p = loadFacility(cache).finally(() => {
+      inflight.current = null;
+    });
+    inflight.current = p;
+    return p;
   }, [cache, loadFacility]);
+
+  const live = useRef({ phase, refresh, stamp: facility?.esitleme?.ufuk ?? null });
+  live.current = { phase, refresh, stamp: facility?.esitleme?.ufuk ?? null };
+
+  // Öne gelince oturum (damga, hizmet aşaması, izinler) tazelenir; ekranlar kendi kancalarında tazelenir.
+  useForeground(() => {
+    if (live.current.phase === "hazir") void live.current.refresh().catch(() => undefined);
+  });
+
+  const feedFetch = useMemo(
+    () => (base ? createFeedFetcher({ baseUrl: base, getToken: () => token.current, onUnauthorized: () => { if (token.current) void reset(); } }) : null),
+    [base, reset],
+  );
+  const feedMode = useChangeFeed({
+    enabled: phase === "hazir",
+    fetchChanges: feedFetch,
+    resetKey: scope,
+    onStamp: (stamp) => {
+      if (stamp !== live.current.stamp) void live.current.refresh().catch(() => undefined);
+    },
+  });
 
   const value: SessionValue = {
     phase,
@@ -234,6 +272,8 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     permissions: facility?.hesap.izinler ?? [],
     offline,
     offlineSince,
+    factoryStamp: facility?.esitleme?.ufuk ?? null,
+    feedMode,
     configured: base !== null,
     markOnline,
     login,

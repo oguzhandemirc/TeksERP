@@ -41,6 +41,28 @@ describe("çevrimdışı salt-okunur önbellek", () => {
     await expect(c.load("x", () => Promise.reject(new ApiError(503, "SUNUCU_HATASI", "x")))).rejects.toMatchObject({ status: 503 });
     await expect(c.load("x", () => Promise.reject(new ApiError(401, "OTURUM_YOK", "x")))).rejects.toMatchObject({ status: 401 });
   });
+  it("peek: saklı kopya bayat (savedAt) etiketiyle döner, ağa gitmez; kayıt yoksa ya da bozuksa null", async () => {
+    const s = memStore();
+    const c = createCache(s, "t1:h1", () => new Date("2026-10-22T08:00:00Z"));
+    await expect(c.peek("pano")).resolves.toBeNull();
+    await c.load("pano", async () => ({ a: 1 }));
+    await expect(c.peek("pano")).resolves.toEqual({ data: { a: 1 }, offline: true, savedAt: "2026-10-22T08:00:00.000Z" });
+    s.m.set("patron:onbellek:t1:h1:bozuk", "{");
+    await expect(c.peek("bozuk")).resolves.toBeNull();
+  });
+  it("peek de 403/404 sonrası boş döner; peek saklı kopyayı değiştirmez (salt-okunur)", async () => {
+    const s = memStore();
+    const c = createCache(s, "t1:h1");
+    await c.load("finans", async () => 1);
+    await c.load("kayit", async () => 2);
+    const once = [...s.m.entries()];
+    await c.peek("finans");
+    expect([...s.m.entries()]).toEqual(once);
+    await expect(c.load("finans", () => Promise.reject(new ApiError(403, "YETKI_YOK", "x")))).rejects.toBeInstanceOf(ApiError);
+    await expect(c.load("kayit", () => Promise.reject(new ApiError(404, "BULUNAMADI", "x")))).rejects.toBeInstanceOf(ApiError);
+    await expect(c.peek("finans")).resolves.toBeNull();
+    await expect(c.peek("kayit")).resolves.toBeNull();
+  });
   it("kapsam hesap+tesis; çıkışta yalnız önbellek anahtarları silinir", async () => {
     const s = memStore();
     await createCache(s, "t1:h1").load("a", async () => 1);

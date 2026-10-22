@@ -1,4 +1,5 @@
 import { act, render, waitFor } from "@testing-library/react-native";
+import { AppState } from "react-native";
 
 // Bellek depoları (gizli + düz) — jest.mock fabrikası dış değişkene yalnız `mock` önekiyle uzanır.
 function mockMem() {
@@ -29,6 +30,13 @@ const hesap = (id: string) => ({ id, eposta: `${id}@x.test`, ad: id, izinler: ["
 interface Call { method: string; path: string; body: unknown; token: string | null }
 let calls: Call[] = [];
 let oldServer = false;
+/** Değişim akışı yanıtı; null → uç yok (eski sunucu, 404). */
+let feed: { sayac: number; degisenler: string[]; fabrikaDamgasi: string | null } | null = null;
+/** `GET /oturum` eşitleme ufku (fabrika veri anı); null → henüz eşitleme yok. */
+let ufuk: string | null = null;
+const esitleme = () => (ufuk ? { sonEsitleme: "2026-10-22T08:05:00.000Z", ufuk, ufukTakildi: false, sozlesmeUyarisi: null, fabrikaSurumu: null } : null);
+const appListeners = new Set<(s: string) => void>();
+const appState = (st: string) => [...appListeners].forEach((l) => l(st));
 /** Belirteç → tesis (sunucunun gözünden etkin tesis). */
 const tokenFacility: Record<string, string> = { b1: "t1", b2: "t2", c1: "t1" };
 
@@ -51,7 +59,7 @@ function server(url: string, init: RequestInit): Promise<Response> {
   }
   if (key === "GET /oturum") {
     const t = tokenFacility[token ?? ""]!;
-    return reply(200, { tesis: { id: t, ad: TESISLER.find((x) => x.id === t)!.ad, saklamaAy: 13 }, hesap: hesap("h1"), projeksiyonlar: [], esitleme: null, hizmet: { asama: "ACIK", bitis: null, saltOkunurBitis: null } });
+    return reply(200, { tesis: { id: t, ad: TESISLER.find((x) => x.id === t)!.ad, saklamaAy: 13 }, hesap: hesap("h1"), projeksiyonlar: [], esitleme: esitleme(), hizmet: { asama: "ACIK", bitis: null, saltOkunurBitis: null } });
   }
   if (key === "GET /oturum/tesisler") return oldServer ? reply(404, null, "BULUNAMADI") : reply(200, TESISLER);
   if (key === "POST /oturum/gecis") {
@@ -59,6 +67,10 @@ function server(url: string, init: RequestInit): Promise<Response> {
     return reply(403, null, "TESIS_GECISI_YOK");
   }
   if (key === "POST /oturum/kapat") return reply(200, null);
+  if (key === "GET /degisim" && feed) {
+    if (feed.fabrikaDamgasi) ufuk = feed.fabrikaDamgasi; // paket bulutta kabul edildi
+    return reply(200, feed);
+  }
   return reply(404, null, "BULUNAMADI");
 }
 
@@ -82,6 +94,14 @@ beforeEach(() => {
   mockPlain.m.clear();
   calls = [];
   oldServer = false;
+  feed = null;
+  ufuk = null;
+  appListeners.clear();
+  (AppState as { currentState: unknown }).currentState = "active";
+  (AppState.addEventListener as jest.Mock).mockImplementation((_t: string, l: (st: string) => void) => {
+    appListeners.add(l);
+    return { remove: () => appListeners.delete(l) };
+  });
   globalThis.fetch = jest.fn(server) as unknown as typeof fetch;
 });
 
@@ -160,5 +180,56 @@ describe("çok tesisli oturum", () => {
       expect.not.objectContaining({ tesisId: expect.anything() }),
     ]);
     expect(cur.facilities).toEqual([{ id: "t1", ad: "Bir Tekstil", hizmet: "ACIK" }]);
+  });
+});
+
+describe("tazelik (K1): öne gelme, değişim akışı, fabrika damgası", () => {
+  const sessionReads = () => calls.filter((c) => c.method === "GET" && c.path === "/oturum").length;
+
+  it("öne gelince refresh(): GET /oturum yeniden okunur; arka planda okunmaz", async () => {
+    await boot();
+    await login();
+    const before = sessionReads();
+    await act(async () => appState("background"));
+    expect(sessionReads()).toBe(before);
+    await act(async () => appState("active"));
+    await waitFor(() => expect(sessionReads()).toBe(before + 1));
+  });
+
+  it("oturumsuzken öne gelme GET /oturum atmaz", async () => {
+    await boot();
+    calls = [];
+    await act(async () => appState("background"));
+    await act(async () => appState("active"));
+    expect(sessionReads()).toBe(0);
+  });
+
+  it("eski sunucu (GET /degisim 404): akış yoklama kipine düşer, uygulama bugünkü gibi çalışır", async () => {
+    await boot();
+    await login();
+    await waitFor(() => expect(cur.feedMode).toBe("yoklama"));
+    expect(calls.filter((c) => c.path === "/degisim")).toHaveLength(1);
+    expect(cur.phase).toBe("hazir");
+  });
+
+  it("factoryStamp = esitleme.ufuk; akıştaki fabrika damgası değişince oturum tazelenir", async () => {
+    ufuk = "2026-10-22T08:00:00.000Z";
+    // Girişten hemen sonra fabrika yeni paket gönderir: akış yeni damgayı getirir (öne gelme YOK).
+    feed = { sayac: 5, degisenler: ["siparis"], fabrikaDamgasi: "2026-10-22T08:00:20.000Z" };
+    await boot();
+    await login();
+    await waitFor(() => expect(cur.factoryStamp).toBe("2026-10-22T08:00:20.000Z"));
+    expect(cur.feedMode).toBe("uzun");
+    expect(sessionReads()).toBe(2);
+  });
+
+  it("damga aynıysa akış oturumu yeniden okutmaz", async () => {
+    ufuk = "2026-10-22T08:00:00.000Z";
+    feed = { sayac: 1, degisenler: [], fabrikaDamgasi: ufuk };
+    await boot();
+    await login();
+    await waitFor(() => expect(calls.some((c) => c.path === "/degisim")).toBe(true));
+    await act(async () => undefined);
+    expect(sessionReads()).toBe(1);
   });
 });

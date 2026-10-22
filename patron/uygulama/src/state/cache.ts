@@ -1,6 +1,7 @@
-// Çevrimdışı SALT-OKUNUR önbellek: her okuma başarıda saklanır; yalnız AĞ hatasında son veri döner
-// ("çevrimdışı — son veri <zaman>"). Yetki düşerse (403) saklı kopya da silinir — izni kalkan veri
-// önbellekten gösterilmez. Kapsam hesap+tesis; çıkışta hepsi silinir.
+// SALT-OKUNUR önbellek: her okuma başarıda saklanır. `peek` saklı kopyayı (savedAt ile) verir — ekran onu ANINDA
+// "bayat" etiketiyle çizer, arkadan `load` tazeler (SWR, K1). `load` yalnız AĞ hatasında son veriyi döner
+// ("çevrimdışı — son veri <zaman>"). 403/404'te saklı kopya silinir — izni kalkan veri önbellekten gösterilmez.
+// Kapsam hesap+tesis; çıkışta hepsi silinir.
 import { ApiError } from "../api/client";
 import type { KeyValue, ListedStore } from "./browser-store";
 
