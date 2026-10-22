@@ -108,7 +108,7 @@ describe("bağlantı — pano ve rapor ekranı tazeler, uç sunucuda", () => {
     expect(kanca).toMatch(/invalidate\(\[ALL_TAGS\]\)/);
   });
 
-  it.each(["app/(app)/pano.tsx", "app/(app)/raporlar/index.tsx"])("%s açılınca tazeler", (dosya) => {
+  it.each(["app/(app)/(tabs)/pano.tsx", "app/(app)/raporlar/index.tsx"])("%s açılınca tazeler", (dosya) => {
     expect(oku(dosya)).toMatch(/^\s*useOpenRefresh\(\);$/m);
   });
 });

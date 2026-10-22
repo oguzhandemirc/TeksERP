@@ -1,13 +1,13 @@
 // Finans: yalnız izinli sekmeler görünür (bakiye özeti · kasa/banka · çek · fatura · tahsilat).
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { can } from "../../src/lib/access";
-import { useSession } from "../../src/state/session";
-import { ProjectionList } from "../../src/ui/data";
-import { Screen } from "../../src/ui/Frame";
-import { Muted, Tabs } from "../../src/ui/kit";
-import { SnapshotCard } from "../../src/ui/SnapshotCard";
-import { openRecord } from "../../src/ui/nav";
+import { can } from "../../../src/lib/access";
+import { useSession } from "../../../src/state/session";
+import { ProjectionList } from "../../../src/ui/data";
+import { Screen } from "../../../src/ui/Frame";
+import { Muted, Tabs } from "../../../src/ui/kit";
+import { SnapshotCard } from "../../../src/ui/SnapshotCard";
+import { openRecord } from "../../../src/ui/nav";
 
 type Tab = "ozet" | "kasa" | "cek" | "fatura" | "tahsilat";
 const TABS: readonly { key: Tab; label: string; perm: string }[] = [
@@ -25,7 +25,7 @@ export default function Finance() {
   const [tab, setTab] = useState<Tab | undefined>(tabs[0]?.key);
   const open = (p: string) => (r: { id: string }) => openRecord(router, p, r.id);
   return (
-    <Screen title="Finans" module="finans">
+    <Screen title="Finans" module="finans" back={false}>
       {tabs.length > 1 && tab ? <Tabs items={tabs} value={tab} onChange={setTab} /> : null}
       {tab === "ozet" ? <SnapshotCard projection="ozet-finans" title="Finans özeti" /> : null}
       {tab === "kasa" ? (
