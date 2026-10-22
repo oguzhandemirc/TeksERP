@@ -17,7 +17,7 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarInactiveTintColor: t.textMuted,
-        tabBarLabelStyle: { ...typography.caption, fontSize: 11 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: typography.caption.fontWeight },
         tabBarStyle: wide ? { display: "none" } : { backgroundColor: t.surface, borderTopColor: t.separator, borderTopWidth: 1 },
         sceneStyle: { backgroundColor: t.bg },
       }}
