@@ -2,7 +2,7 @@
 // kumaş bazında ilk satırlar. Tek kaynak `stok-karnesi` (saatlik anlık; "Fabrika verisi HH:MM" ile söylenir).
 import type { ReactNode } from "react";
 import { Text, View } from "react-native";
-import { STOCK_AGE_TONE, UNIT } from "../../src/lib/labels/uretim";
+import { DEAD_STOCK_STATUS, STOCK_AGE_TONE, UNIT } from "../../src/lib/labels/uretim";
 import { AgingBar } from "../../src/ui/charts";
 import { Screen } from "../../src/ui/Frame";
 import { ListGroup, ListRow } from "../../src/ui/ListRow";
@@ -32,6 +32,7 @@ function StockBody({ data, stamp }: { readonly data: unknown; readonly stamp: Re
   const s = useStyles();
   const o = obj(obj(data).ozet);
   const dead = (num(o.oluMiktar) ?? 0) > 0;
+  const deadSt = DEAD_STOCK_STATUS[dead ? "var" : "yok"];
   const ages = arr(obj(data).yasKovalari);
   const items = arr(obj(data).urunler).slice(0, TOP_ITEMS);
   return (
@@ -46,7 +47,7 @@ function StockBody({ data, stamp }: { readonly data: unknown; readonly stamp: Re
       <View style={[s.dead, dead ? s.deadOn : null]} testID="olu-stok" accessible accessibilityLabel={`Ölü stok: ${qty(o.oluMiktar)} ${UNIT.metre}`}>
         <View style={s.deadHead}>
           <Text style={s.deadTitle}>Ölü stok</Text>
-          <StatusBadge kind={dead ? "kritik" : "iyi"} label={dead ? "Dikkat" : "Yok"} size="sm" testID="olu-stok-rozet" />
+          <StatusBadge kind={deadSt.tone} label={deadSt.label} size="sm" testID="olu-stok-rozet" />
         </View>
         <Text style={s.deadValue}>{`${qty(o.oluMiktar)} ${UNIT.metre}`}</Text>
         <Text style={s.deadNote}>{`${qty(o.oluStokGun)} günden uzun duran ve siparişi olmayan bitmiş stok · yaşlı ${qty(o.yasliMiktar)} ${UNIT.metre}`}</Text>
@@ -97,7 +98,7 @@ function StockBody({ data, stamp }: { readonly data: unknown; readonly stamp: Re
 const useStyles = makeStyles((t) => ({
   card: { backgroundColor: t.surface, borderRadius: radius.card, padding: space.l, marginBottom: space.m, ...t.cardShadow },
   dead: { backgroundColor: t.surface, borderRadius: radius.card, padding: space.l, borderLeftWidth: STRIPE, borderLeftColor: t.status.iyi.fill, marginBottom: space.m, ...t.cardShadow },
-  deadOn: { borderLeftColor: t.status.kritik.fill },
+  deadOn: { borderLeftColor: t.status.uyari.fill },
   deadHead: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const },
   deadTitle: { ...typography.headline, color: t.text },
   deadValue: { ...typography.kpi, color: t.text, marginTop: space.s },

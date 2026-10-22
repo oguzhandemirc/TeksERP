@@ -1,7 +1,18 @@
 // Pano · Üretim · Stok · Sevkiyat sözlüğü: fabrikanın anlık/kayıt alanlarındaki ham değerler → Türkçe etiket + ton.
 // Kaynak enum'lar fabrikadadır (Teks-Erp prisma şeması, `cloud-sync/snapshots.ts`); bilinmeyen değer ham döner
 // (`lookup`) — ekran yine çizilir, bekçi testi eksik anahtarı yakalar.
-import type { StatusEntry } from "./ortak";
+import type { StatusEntry, StatusTone } from "./ortak";
+
+/**
+ * Kayıt durumu tonu: renk = anlam. iyi/uyari/kritik YALNIZ gerçekten o durumlar için; normal akış "etkin"
+ * (marka), bekleyen "notr", kapanmış/iptal "sonuk" (iptal arıza değildir). Rozet çizimi `ui/pano/RecordStatusBadge`.
+ */
+export type RecordTone = StatusTone | "etkin" | "notr" | "sonuk";
+
+export interface RecordStatusEntry {
+  readonly label: string;
+  readonly tone: RecordTone;
+}
 
 /** Fabrikanın dört standart dönemi (`ozet.sevkiyat` / `ozet.fason` anahtarları); segment için kısa ad, açıklamada `PERIOD_LABEL`. */
 export const PERIODS = [
@@ -27,12 +38,13 @@ export const PERIOD_LABEL: Readonly<Record<PeriodKey, string>> = {
 export const UNIT = { metre: "m", top: "top", kalem: "kalem", gun: "gün", adet: "adet" } as const;
 
 /** Terbiye iş emri durumu (`WorkOrderStatus`). */
-export const WORK_ORDER_STATUS: Readonly<Record<string, StatusEntry>> = {
-  PLANNED: { label: "Planlandı", tone: "bilgi" },
-  IN_PROGRESS: { label: "Üretimde", tone: "uyari" },
+// Fabrika "gecikmiş" diye bir iş emri durumu vermez; uyarı/kritik tonu bu sözlükte bilerek yok.
+export const WORK_ORDER_STATUS: Readonly<Record<string, RecordStatusEntry>> = {
+  PLANNED: { label: "Planlandı", tone: "notr" },
+  IN_PROGRESS: { label: "Üretimde", tone: "etkin" },
   COMPLETED: { label: "Tamamlandı", tone: "iyi" },
-  CANCELLED: { label: "İptal", tone: "kritik" },
-  SUPERSEDED: { label: "Devredildi", tone: "bilgi" },
+  CANCELLED: { label: "İptal", tone: "sonuk" },
+  SUPERSEDED: { label: "Devredildi", tone: "sonuk" },
 };
 
 /** Terbiye iş emri türü (`WorkOrderType`). */
@@ -42,10 +54,16 @@ export const WORK_ORDER_TYPE: Readonly<Record<string, string>> = {
 };
 
 /** Sevkiyat durumu (`ShipmentStatus`). */
-export const SHIPMENT_STATUS: Readonly<Record<string, StatusEntry>> = {
-  PLANNED: { label: "Onay bekliyor", tone: "uyari" },
+export const SHIPMENT_STATUS: Readonly<Record<string, RecordStatusEntry>> = {
+  PLANNED: { label: "Onay bekliyor", tone: "notr" },
   DISPATCHED: { label: "Sevk edildi", tone: "iyi" },
-  CANCELLED: { label: "İptal", tone: "bilgi" },
+  CANCELLED: { label: "İptal", tone: "sonuk" },
+};
+
+/** Ölü stok rozeti: siparişsiz bekleyen bitmiş stok dikkat ister (uyarı), arıza değildir (kritik değil). */
+export const DEAD_STOCK_STATUS: Readonly<Record<"var" | "yok", StatusEntry>> = {
+  var: { label: "Dikkat", tone: "uyari" },
+  yok: { label: "Yok", tone: "iyi" },
 };
 
 /** Sevkiyat varış kapsamı (`ShipmentDestination`). */
@@ -98,3 +116,9 @@ export const STOCK_AGE_TONE: Readonly<Record<string, StatusEntry["tone"]>> = {
 
 /** Üretim akışı kolonları (`uretim-akisi.kolonlar[].anahtar`; etiket fabrikadan, Kanban ile aynı). */
 export const FLOW_KEYS = ["hamStok", "yariMamul", "fason", "kursun", "tambur", "depo", "sevk"] as const;
+
+/** Kayıt durumu sözlükten; bilinmeyen değer ham adıyla nötr çizilir (uyarı rengi uydurulmaz). */
+export function recordStatus(dict: Readonly<Record<string, RecordStatusEntry>>, value: unknown): RecordStatusEntry {
+  const key = typeof value === "string" ? value : "";
+  return dict[key] ?? { label: key || "—", tone: "notr" };
+}

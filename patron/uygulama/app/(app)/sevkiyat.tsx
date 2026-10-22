@@ -5,20 +5,19 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { can } from "../../src/lib/access";
 import { formatDate } from "../../src/lib/format";
-import { statusEntry } from "../../src/lib/labels";
-import { PERIODS, PERIOD_LABEL, SHIPMENT_DESTINATION, SHIPMENT_STATUS, UNIT, type PeriodKey } from "../../src/lib/labels/uretim";
+import { PERIODS, PERIOD_LABEL, SHIPMENT_DESTINATION, SHIPMENT_STATUS, UNIT, recordStatus, type PeriodKey } from "../../src/lib/labels/uretim";
 import { useSession } from "../../src/state/session";
 import { Screen } from "../../src/ui/Frame";
 import { openRecord } from "../../src/ui/nav";
 import { MetricGrid, MetricTile } from "../../src/ui/pano/MetricTile";
 import { num, obj, period, pct, qty, str } from "../../src/ui/pano/read";
 import { RecordRow } from "../../src/ui/pano/RecordRow";
+import { RecordStatusBadge } from "../../src/ui/pano/RecordStatusBadge";
 import { RemoteList, useRecordPage } from "../../src/ui/pano/RemoteList";
 import { FactoryStamp, SnapshotGate } from "../../src/ui/pano/SnapshotGate";
 import { combine, useSnapshot } from "../../src/ui/pano/useSnapshot";
 import { SectionHeader } from "../../src/ui/SectionHeader";
 import { SegmentedControl } from "../../src/ui/SegmentedControl";
-import { StatusBadge } from "../../src/ui/StatusBadge";
 import { makeStyles } from "../../src/ui/theme-context";
 import { space, typography } from "../../src/ui/tokens";
 
@@ -73,18 +72,21 @@ export default function Shipments() {
         testID="sevkler"
         renderRow={(r) => {
           const k = obj(r.kayit);
-          const st = SHIPMENT_STATUS[String(k.durum)] ?? statusEntry(k.durum);
+          const st = recordStatus(SHIPMENT_STATUS, k.durum);
           const when = str(k.cikisTarihi) ?? str(k.olusturulma);
           const dest = k.yon === "EXPORT" ? ` · ${SHIPMENT_DESTINATION.EXPORT}` : "";
           // Sevk edilmiş satır sağda metreyi taşır; onay bekleyen/iptal satırında sağda rozet, metre alt metne iner.
           const sent = k.durum === "DISPATCHED";
           const meters = `${qty(k.toplamMetre)} ${UNIT.metre}`;
+          // Eski paketlerde müşteri adı yok: başlık "—" yerine sevk numarası olur.
+          const customer = str(k.musteriAdi);
+          const no = str(k.sevkNo) ?? "—";
           return (
             <RecordRow
-              title={str(k.musteriAdi) ?? "—"}
+              title={customer ?? no}
               value={sent ? meters : undefined}
-              badge={sent ? undefined : <StatusBadge kind={st.tone} label={st.label} size="sm" />}
-              lines={[`${str(k.sevkNo) ?? "—"} · ${formatDate(when)}${dest}${sent ? "" : ` · ${meters}`}`]}
+              badge={sent ? undefined : <RecordStatusBadge entry={st} testID={`durum-${r.id}`} />}
+              lines={[`${customer ? `${no} · ` : ""}${formatDate(when)}${dest}${sent ? "" : ` · ${meters}`}`]}
               domain="sevkiyat"
               onPress={() => openRecord(router, "sevkiyat", r.id)}
               testID={`kayit-${r.id}`}

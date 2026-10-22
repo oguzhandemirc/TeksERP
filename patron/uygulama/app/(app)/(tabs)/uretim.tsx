@@ -6,8 +6,8 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { can } from "../../../src/lib/access";
 import { formatDate, formatNumber } from "../../../src/lib/format";
-import { lookup, statusEntry } from "../../../src/lib/labels";
-import { PERIODS, PERIOD_LABEL, UNIT, WORK_ORDER_STATUS, WORK_ORDER_TYPE, type PeriodKey } from "../../../src/lib/labels/uretim";
+import { lookup } from "../../../src/lib/labels";
+import { PERIODS, PERIOD_LABEL, UNIT, WORK_ORDER_STATUS, WORK_ORDER_TYPE, recordStatus, type PeriodKey } from "../../../src/lib/labels/uretim";
 import { TERIM } from "../../../src/lib/terim";
 import { useSession } from "../../../src/state/session";
 import { Screen } from "../../../src/ui/Frame";
@@ -16,12 +16,12 @@ import { MetricGrid, MetricTile } from "../../../src/ui/pano/MetricTile";
 import { FlowStrip, StationBars } from "../../../src/ui/pano/production";
 import { obj, period, pct, qty, str } from "../../../src/ui/pano/read";
 import { RecordRow } from "../../../src/ui/pano/RecordRow";
+import { RecordStatusBadge } from "../../../src/ui/pano/RecordStatusBadge";
 import { RemoteList, useRecordPage } from "../../../src/ui/pano/RemoteList";
 import { FactoryStamp, SnapshotGate } from "../../../src/ui/pano/SnapshotGate";
 import { combine, useSnapshot } from "../../../src/ui/pano/useSnapshot";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
-import { StatusBadge } from "../../../src/ui/StatusBadge";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, typography } from "../../../src/ui/tokens";
 
@@ -108,12 +108,12 @@ export default function Production() {
         testID="is-emirleri"
         renderRow={(r) => {
           const k = obj(r.kayit);
-          const st = WORK_ORDER_STATUS[String(k.durum)] ?? statusEntry(k.durum);
+          const st = recordStatus(WORK_ORDER_STATUS, k.durum);
           const end = str(k.planBitis);
           return (
             <RecordRow
               title={str(k.isEmriNo) ?? "—"}
-              badge={<StatusBadge kind={st.tone} label={st.label} size="sm" />}
+              badge={<RecordStatusBadge entry={st} testID={`durum-${r.id}`} />}
               lines={[`${lookup(WORK_ORDER_TYPE, k.tur)}${end ? ` · plan ${formatDate(end)}` : ""}`, `${formatNumber(k.uretilenMetre, 0)} / ${formatNumber(k.hedefMiktar, 0)} ${UNIT.metre} üretildi`]}
               domain="uretim"
               icon="clipboard-outline"
