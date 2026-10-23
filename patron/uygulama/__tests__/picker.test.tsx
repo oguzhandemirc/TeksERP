@@ -4,7 +4,7 @@ const mockList = jest.fn();
 const mockCache = { load: jest.fn(async (_k: string, f: () => Promise<unknown>) => ({ data: await f(), offline: false, savedAt: "" })), peek: jest.fn(async () => null) };
 const mockSession = { api: { list: mockList }, cache: mockCache, markOnline: jest.fn() };
 jest.mock("../src/state/session", () => ({ useSession: () => mockSession }));
-// Gezinme bağlamı yok: `useFocusEffect`siz taklit → odak kancası etkisiz (her an odakta).
+// Liste ilk sayfası `useRemote` ile gelir (`peek` gerekli). Gezinme bağlamı yok: `useFocusEffect`siz taklit → odak kancası etkisiz (her an odakta).
 jest.mock("expo-router", () => ({}));
 jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
