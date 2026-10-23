@@ -70,6 +70,8 @@ export interface FacilityStatus {
   readonly projeksiyonlar: readonly string[];
   readonly esitleme: SyncStatus | null;
   readonly hizmet: ServiceStatus;
+  /** Eski sunucu göndermez: yoksa kimlik süzgeci ve yeni aramalar YOK sayılır (eski sunucu tanımadığı parametreyi yok sayar). */
+  readonly liste?: ListCapabilities;
 }
 
 // ---------------------------------------------------------------- dışa aktarma (Ek-6/A §4.2)
@@ -153,7 +155,44 @@ export const LIST_SEARCH: Readonly<Record<string, ListSearchSpec>> = {
       ],
     },
   },
+  // `musteriAdi` fabrika 2.15.13+ satırında; eski satır yalnız no ile bulunur. Zaman kovası ("bu hafta") yok:
+  // bulut tarih karşılaştırmaz. `gecikmis`i fabrika türetir, termin geçişi (`crossings`) satırı yeniden gönderir.
+  siparis: {
+    alanlar: ["siparisNo", "musteriAdi"],
+    suzgec: {
+      etiket: "Görünüm",
+      varsayilan: null,
+      secenekler: [
+        { deger: "GECIKMIS", etiket: "Gecikmiş", alan: "gecikmis", esit: true },
+        { deger: "BEKLEMEDE", etiket: "Beklemede", alan: "durum", esit: "PENDING" },
+        { deger: "ONAYLANDI", etiket: "Onaylandı", alan: "durum", esit: "APPROVED" },
+        { deger: "KISMI_SEVK", etiket: "Kısmi sevk", alan: "durum", esit: "PARTIAL_SHIPPED" },
+        { deger: "TAMAMLANDI", etiket: "Tamamlandı", alan: "durum", esit: "COMPLETED" },
+        { deger: "IPTAL", etiket: "İptal", alan: "durum", esit: "CANCELLED" },
+      ],
+    },
+  },
 };
+
+// ---------------------------------------------------------------- liste kimlik süzgeçleri
+export const LIST_ID_FILTER_KEYS = ["cariKartId", "cariHesapId", "siparisId"] as const;
+export type ListIdFilterKey = (typeof LIST_ID_FILTER_KEYS)[number];
+
+/**
+ * `GET /veri/:projeksiyon?<anahtar>=<uuid>` ⇒ kayıttaki AYNI ADLI alanın eşitliği. TEK beyan: anahtar yalnız alanı
+ * TAŞIYAN projeksiyonlarda (fabrika kataloğu kolonları) kabul edilir, diğerinde 400.
+ */
+export const LIST_ID_FILTERS: Readonly<Record<ListIdFilterKey, readonly string[]>> = {
+  cariKartId: ["sube", "fason-firma", "siparis", "sevkiyat", "dogrudan-sevk", "cuval", "cari-hesap", "fiyat"],
+  cariHesapId: ["cari-hareket", "cek-senet", "fatura", "tahsilat-odeme"],
+  siparisId: ["siparis-kalemi"],
+};
+
+/** `GET /oturum` `liste` — bu sunucunun liste yetenekleri; eski sunucu göndermez (istemci süzgeçli görünümü gizler). */
+export interface ListCapabilities {
+  readonly kimlikSuzgecleri: Readonly<Partial<Record<ListIdFilterKey, readonly string[]>>>;
+  readonly aranabilir: readonly string[];
+}
 
 /** `GET /anlik/:projeksiyon`. */
 export interface Snapshot {

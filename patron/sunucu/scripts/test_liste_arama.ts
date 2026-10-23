@@ -5,13 +5,18 @@
 //   §3 tek süzgeç: cari rolü · ürün türü · renk durumu; tanınmayan süzgeç 400
 //   §4 ⭐ imleç aynı terimle tutarlı: sayfalar kesişmez, eşleşmeyen sızmaz, hepsi gelir
 //   §5 kapılar: aranmayan liste 400 · uzun terim 400 · başka tesisin kaydı görünmez (RLS) · oturumsuz 401
+//   §6 sipariş araması + görünüm çipleri: no + `musteriAdi` (eski satır adsız) · `gecikmis` eşitliği · tanınmayan 400
+//   §7 ⭐ kimlik süzgeçleri (`LIST_ID_FILTERS` TEK beyan): beyanlı projeksiyonda 200, beyansızda 400; başka tesis sızmaz
+//   §8 beyan ↔ fabrika kataloğu iki yönlü (kolonu taşıyan her projeksiyon beyanlı, beyanlı her çift kolonu taşır) · `/oturum` yeteneği
 // Koşum: npx tsx scripts/test_liste_arama.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Client } from "pg";
 import { ROLE_TEMPLATES } from "../src/catalog/permissions";
 import { FOLD_FROM, FOLD_TO, foldTerm, likePattern } from "../src/lib/search";
-import { ARAMA_AZAMI, LIST_SEARCH } from "../src/wire/api";
+import { ARAMA_AZAMI, LIST_ID_FILTER_KEYS, LIST_ID_FILTERS, LIST_SEARCH, type FacilityStatus } from "../src/wire/api";
 import { api, girdi, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, type Ortam, type TestHesabi, type TestKurulumu } from "./lib/test-ortam";
 
 type Liste = { kayitlar: { id: string; kayit: Record<string, unknown> }[]; sonraki: string | null };
@@ -132,8 +137,8 @@ async function imlec(o: Ortam, h: TestHesabi, ids: Ids): Promise<void> {
 
 async function kapilar(o: Ortam, h: TestHesabi, yabanci: Ids): Promise<void> {
   console.log("\n§5 kapılar");
-  const sip = await ara(o, h, "siparis", { ara: "x" });
-  kontrol("§5a aranmayan liste (siparis) → 400", sip.status === 400, `${sip.status}`);
+  const sev = await ara(o, h, "sevkiyat", { ara: "x" });
+  kontrol("§5a aranmayan liste (sevkiyat) → 400", sev.status === 400, `${sev.status}`);
   const uzun = await ara(o, h, "cari-kart", { ara: "a".repeat(ARAMA_AZAMI + 1) });
   kontrol("§5b azamiden uzun terim → 400", uzun.status === 400, `${uzun.status}`);
   const sinir = await ara(o, h, "cari-kart", { ara: "a".repeat(ARAMA_AZAMI) });
@@ -142,6 +147,123 @@ async function kapilar(o: Ortam, h: TestHesabi, yabanci: Ids): Promise<void> {
   kontrol("§5d ⭐ başka tesisin aynı adlı kaydı görünmez", ![...rls.ids].some((x) => Object.values(yabanci.cari).includes(x)) && rls.ids.size === 2, `${rls.ids.size}`);
   const anon = await api(o, "GET", "/api/veri/cari-kart?ara=cagri");
   kontrol("§5e oturumsuz → 401", anon.status === 401, `${anon.status}`);
+}
+
+interface SiparisIds {
+  readonly siparis: { readonly yeni: string; readonly eski: string; readonly gec: string };
+  readonly kalem: { readonly a1: string; readonly a2: string; readonly b1: string };
+  readonly cariHesap: { readonly a: string; readonly b: string };
+  readonly hareket: { readonly a1: string; readonly a2: string; readonly b1: string };
+  readonly cariKart: string;
+}
+
+/** Sipariş + kalem + cari hesap/hareket fikstürü; `ortak` verilirse kimlikleri paylaşır (başka tesis aynı UUID'leri taşır). */
+async function siparisFikstur(o: Ortam, k: TestKurulumu, ortak?: SiparisIds): Promise<SiparisIds> {
+  const w = { t: new Date(o.saat.simdi() - 60_000).toISOString(), k: "000000000002" };
+  const t = new Date(o.saat.simdi() - 120_000).toISOString();
+  const id: SiparisIds = ortak ?? {
+    siparis: { yeni: randomUUID(), eski: randomUUID(), gec: randomUUID() },
+    kalem: { a1: randomUUID(), a2: randomUUID(), b1: randomUUID() },
+    cariHesap: { a: randomUUID(), b: randomUUID() },
+    hareket: { a1: randomUUID(), a2: randomUUID(), b1: randomUUID() },
+    cariKart: randomUUID(),
+  };
+  const sip = (sid: string, no: string, durum: string, gecikmis: boolean, musteriAdi?: string) =>
+    ({ id: sid, siparisNo: no, durum, gecikmis, cariKartId: id.cariKart, siparisTarihi: t, ...(musteriAdi ? { musteriAdi } : {}) });
+  const kalem = (kid: string, siparisId: string) => ({ id: kid, siparisId, urunId: randomUUID(), miktar: "10", birim: "MT", olusturulma: t });
+  const hareket = (hid: string, cariHesapId: string) => ({ id: hid, cariHesapId, doviz: "TRY", tarih: t, kaynak: "INVOICE" });
+  const kayitlar = [
+    girdi("siparis", {
+      yaz: [
+        sip(id.siparis.yeni, "SP-2026-0101", "PENDING", false, "MAVİ ÖRME TEKSTİL"),
+        sip(id.siparis.eski, "SP-2026-0102", "APPROVED", false),
+        sip(id.siparis.gec, "SP-2026-0103", "PARTIAL_SHIPPED", true, "Kırmızı Dokuma"),
+      ],
+      yeni: w,
+    }),
+    girdi("siparis-kalemi", { yaz: [kalem(id.kalem.a1, id.siparis.yeni), kalem(id.kalem.a2, id.siparis.yeni), kalem(id.kalem.b1, id.siparis.eski)], yeni: w }),
+    girdi("cari-hesap", { yaz: [{ id: id.cariHesap.a, tur: "CUSTOMER", cariKartId: id.cariKart, aktif: true }, { id: id.cariHesap.b, tur: "SUBCONTRACTOR", cariKartId: randomUUID(), aktif: true }], yeni: w }),
+    girdi("cari-hareket", { yaz: [hareket(id.hareket.a1, id.cariHesap.a), hareket(id.hareket.a2, id.cariHesap.a), hareket(id.hareket.b1, id.cariHesap.b)], yeni: w }),
+  ];
+  const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(o.saat.simdi() - 60_000), kayitlar }) });
+  if (r.status !== 200 || (r.json as unknown as { ret: unknown[] }).ret.length > 0) throw new Error(`sipariş fikstürü: ${r.status} ${JSON.stringify(r.json)}`);
+  return id;
+}
+
+async function siparisArama(o: Ortam, h: TestHesabi, id: SiparisIds): Promise<void> {
+  console.log("\n§6 sipariş araması + çipler");
+  const ad = await ara(o, h, "siparis", { ara: "mavi orme" });
+  kontrol("§6a ⭐ müşteri adıyla bulur (`musteriAdi`, Türkçe katlama)", ad.status === 200 && ayni(ad.ids, [id.siparis.yeni]), `${ad.status} ${ad.ids.size}`);
+  const no = await ara(o, h, "siparis", { ara: "0102" });
+  kontrol("§6b no ile bulur (adı olmayan eski satır dahil)", ayni(no.ids, [id.siparis.eski]), `${no.ids.size}`);
+  const hepsi = await ara(o, h, "siparis", { ara: "sp-2026-01" });
+  kontrol("§6c no parçası üç siparişi de bulur", ayni(hepsi.ids, Object.values(id.siparis)), `${hepsi.ids.size}`);
+  const gec = await ara(o, h, "siparis", { suzgec: "GECIKMIS" });
+  kontrol("§6d ⭐ \"Gecikmiş\" çipi fabrikanın `gecikmis` alanının eşitliği", ayni(gec.ids, [id.siparis.gec]), `${gec.ids.size}`);
+  const bek = await ara(o, h, "siparis", { suzgec: "BEKLEMEDE", ara: "sp" });
+  kontrol("§6e durum çipi + arama birlikte", ayni(bek.ids, [id.siparis.yeni]), `${bek.ids.size}`);
+  const yok = await ara(o, h, "siparis", { suzgec: "BU_HAFTA" });
+  kontrol("§6f tanınmayan çip → 400", yok.status === 400 && yok.kod !== undefined, `${yok.status}`);
+  const zaman = (LIST_SEARCH.siparis?.suzgec?.secenekler ?? []).filter((x) => !["gecikmis", "durum"].includes(x.alan));
+  kontrol("§6g sipariş çipleri yalnız fabrika eşitlik alanları (gecikmis · durum; zaman kovası yok)", zaman.length === 0, zaman.map((x) => x.alan).join(","));
+}
+
+async function kimlikSuzgecleri(o: Ortam, h: TestHesabi, id: SiparisIds): Promise<void> {
+  console.log("\n§7 kimlik süzgeçleri");
+  const kal = await ara(o, h, "siparis-kalemi", { siparisId: id.siparis.yeni });
+  kontrol("§7a ⭐ siparis-kalemi?siparisId → yalnız o siparişin kalemleri", kal.status === 200 && ayni(kal.ids, [id.kalem.a1, id.kalem.a2]), `${kal.status} ${kal.ids.size}`);
+  const buyuk = await ara(o, h, "siparis-kalemi", { siparisId: id.siparis.eski.toUpperCase() });
+  kontrol("§7b UUID büyük harfle de eşleşir", ayni(buyuk.ids, [id.kalem.b1]), `${buyuk.ids.size}`);
+  const beyansiz = await ara(o, h, "siparis", { siparisId: id.siparis.yeni });
+  kontrol("§7c ⭐ beyansız projeksiyonda siparisId → 400", beyansiz.status === 400 && beyansiz.kod !== undefined, `${beyansiz.status}`);
+  const bicim = await ara(o, h, "siparis-kalemi", { siparisId: "x' OR 1=1" });
+  kontrol("§7d biçimsiz siparisId → 400", bicim.status === 400, `${bicim.status}`);
+  const har = await ara(o, h, "cari-hareket", { cariHesapId: id.cariHesap.a });
+  kontrol("§7e cari-hareket?cariHesapId → yalnız o hesabın hareketleri", har.status === 200 && ayni(har.ids, [id.hareket.a1, id.hareket.a2]), `${har.status} ${har.ids.size}`);
+  const hesap = await ara(o, h, "cari-hesap", { cariKartId: id.cariKart });
+  kontrol("§7f cariKartId davranışı aynı (cari-hesap)", hesap.status === 200 && ayni(hesap.ids, [id.cariHesap.a]), `${hesap.status} ${hesap.ids.size}`);
+  const sip = await ara(o, h, "siparis", { cariKartId: id.cariKart });
+  kontrol("§7g cariKartId davranışı aynı (siparis)", sip.status === 200 && ayni(sip.ids, Object.values(id.siparis)), `${sip.status} ${sip.ids.size}`);
+  const hareketCari = await ara(o, h, "cari-hareket", { cariKartId: id.cariKart });
+  kontrol("§7h ⭐ cariKartId taşımayan projeksiyonda (cari-hareket) → 400", hareketCari.status === 400, `${hareketCari.status}`);
+  const kalemSayfa = await ara(o, h, "siparis-kalemi", { siparisId: id.siparis.yeni, limit: "1" });
+  const kalemSayfa2 = kalemSayfa.sonraki ? await ara(o, h, "siparis-kalemi", { siparisId: id.siparis.yeni, limit: "1", imlec: kalemSayfa.sonraki }) : null;
+  kontrol("§7i imleç süzgeçle devam eder (2 sayfa, kesişmez)", !!kalemSayfa2 && kalemSayfa2.ids.size === 1 && ![...kalemSayfa2.ids].some((x) => kalemSayfa.ids.has(x)) && ayni(new Set([...kalemSayfa.ids, ...kalemSayfa2.ids]), [id.kalem.a1, id.kalem.a2]), `${kalemSayfa2?.ids.size}`);
+}
+
+/** İki tesis AYNI sipariş kimliğini taşır, kalemleri ayrı: her hesap yalnız kendi tesisinin kalemlerini görür. */
+async function kimlikRls(o: Ortam, h: TestHesabi, h2: TestHesabi, id: SiparisIds, id2: SiparisIds): Promise<void> {
+  const bir = await ara(o, h, "siparis-kalemi", { siparisId: id.siparis.yeni });
+  const iki = await ara(o, h2, "siparis-kalemi", { siparisId: id.siparis.yeni });
+  kontrol("§7j ⭐ aynı siparisId iki tesiste: her hesap yalnız kendi tesisinin kalemleri (tesis yalıtımı)",
+    ayni(bir.ids, [id.kalem.a1, id.kalem.a2]) && ayni(iki.ids, [id2.kalem.a1, id2.kalem.a2]), `${bir.ids.size}/${iki.ids.size}`);
+}
+
+/** Fabrika kataloğunda `col("<anahtar>"` taşıyan projeksiyonlar (dosya METİN olarak okunur; içe aktarılmaz). */
+function katalogTasiyanlar(): Map<string, Set<string>> {
+  const kok = join(__dirname, "..", "..", "..", "Teks-Erp", "src", "cloud-sync");
+  const metin = ["catalog-facts.ts", "projections.ts"].map((f) => readFileSync(join(kok, f), "utf8")).join("\n");
+  const out = new Map<string, Set<string>>(LIST_ID_FILTER_KEYS.map((k) => [k, new Set<string>()]));
+  for (const blok of metin.split(/\bname: "/).slice(1)) {
+    const ad = blok.slice(0, blok.indexOf('"'));
+    for (const k of LIST_ID_FILTER_KEYS) if (blok.includes(`col("${k}",`)) out.get(k)!.add(ad);
+  }
+  return out;
+}
+
+async function beyanKatalog(o: Ortam, h: TestHesabi): Promise<void> {
+  console.log("\n§8 beyan ↔ fabrika kataloğu · /oturum yeteneği");
+  const tasiyan = katalogTasiyanlar();
+  kontrol("§8a tarayıcı körleşmedi (siparisId → siparis-kalemi bulundu)", tasiyan.get("siparisId")!.has("siparis-kalemi"));
+  const fark = LIST_ID_FILTER_KEYS.flatMap((k) => {
+    const beyan = new Set(LIST_ID_FILTERS[k]);
+    const kat = tasiyan.get(k)!;
+    return [...[...beyan].filter((p) => !kat.has(p)).map((p) => `${k}:${p} beyanlı ama kolon yok`), ...[...kat].filter((p) => !beyan.has(p)).map((p) => `${k}:${p} kolon var ama beyansız`)];
+  });
+  kontrol("§8b ⭐ LIST_ID_FILTERS ↔ fabrika kolonları iki yönlü eşit", fark.length === 0, fark.join(" | "));
+  const r = await api(o, "GET", "/api/oturum", { belirtec: h.belirtec });
+  const liste = (r.json.data as FacilityStatus | undefined)?.liste;
+  kontrol("§8c `/oturum` liste yeteneği beyanın kendisi", r.status === 200 && JSON.stringify(liste?.kimlikSuzgecleri) === JSON.stringify(LIST_ID_FILTERS) && JSON.stringify(liste?.aranabilir) === JSON.stringify(Object.keys(LIST_SEARCH)), `${r.status}`);
 }
 
 async function main(): Promise<void> {
@@ -157,6 +279,12 @@ async function main(): Promise<void> {
     await suzgec(o, h, ids);
     await imlec(o, h, ids);
     await kapilar(o, h, yabanci);
+    const sid = await siparisFikstur(o, k);
+    const sid2 = await siparisFikstur(o, k2, { ...sid, kalem: { a1: randomUUID(), a2: randomUUID(), b1: randomUUID() } });
+    await siparisArama(o, h, sid);
+    await kimlikSuzgecleri(o, h, sid);
+    await kimlikRls(o, h, await hesapKur(o, k2.tesisId, ROLE_TEMPLATES.PATRON), sid, sid2);
+    await beyanKatalog(o, h);
   } finally {
     await temizleTesis(o, k.tesisId);
     await temizleTesis(o, k2.tesisId);
