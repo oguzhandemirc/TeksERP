@@ -3,16 +3,11 @@
 // TEK döngü, yalnız ön planda ve oturum hazırken (pil); eski sunucu (404) → 60 sn'de bir "*" yayını (yoklama kipi).
 import { useEffect, useRef, useState } from "react";
 import { ApiError, createClient } from "../api/client";
-import { CHANGE_FEED_PATH } from "../api/endpoints";
+import { pathOf } from "../api/endpoints";
+import type { ChangeFeed } from "../api/wire";
 import { useAppActive } from "./useForeground";
 
-/** `GET /api/degisim` yanıtı — yerel tip; tel tipi (`ChangeFeed`) P3 ile `wire.ts`e gelir. */
-export interface ChangeFeed {
-  readonly sayac: number;
-  readonly degisenler: readonly string[];
-  /** Fabrikanın son kabul edilen paket ufku (fabrika veri anı); henüz paket yoksa null. */
-  readonly fabrikaDamgasi: string | null;
-}
+export type { ChangeFeed };
 
 /** Bütün etiketler (yoklama kipi, sayaç geri gitti, zil sonrası). */
 export const ALL_TAGS = "*";
@@ -109,7 +104,7 @@ export function createFeedFetcher(o: { baseUrl: string; getToken: () => string |
       });
     };
     const client = createClient({ baseUrl: o.baseUrl, getToken: o.getToken, onUnauthorized: o.onUnauthorized, fetchImpl: linked, timeoutMs: FEED_TIMEOUT_MS });
-    return client.get<unknown>(CHANGE_FEED_PATH, { since: q.since, bekle: q.bekle }).then(parseFeed);
+    return client.get<unknown>(pathOf("changes"), { since: q.since, bekle: q.bekle }).then(parseFeed);
   };
 }
 

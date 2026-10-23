@@ -4,8 +4,9 @@ const mockList = jest.fn();
 const mockCache = { load: jest.fn(async (_k: string, f: () => Promise<unknown>) => ({ data: await f(), offline: false, savedAt: "" })), peek: jest.fn(async () => null) };
 const mockSession = { api: { list: mockList }, cache: mockCache, markOnline: jest.fn() };
 jest.mock("../src/state/session", () => ({ useSession: () => mockSession }));
-// Liste ilk sayfası `useRemote` ile gelir; gezinme bağlamı yok → odak kancası etkisiz (ekran hep odakta).
+// Liste ilk sayfası `useRemote` ile gelir (`peek` gerekli). Gezinme bağlamı yok: `useFocusEffect`siz taklit → odak kancası etkisiz (her an odakta).
 jest.mock("expo-router", () => ({}));
+jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 
 // mock'lar kurulduktan SONRA yüklenir.
 const { Picker } = require("../src/ui/Picker") as typeof import("../src/ui/Picker");
@@ -33,7 +34,7 @@ describe("seçici — sunucu araması", () => {
     fireEvent.press(screen.getByTestId("cari-sec"));
     await bekle(0);
     expect(screen.getByTestId("secici-ara")).toBeTruthy();
-    expect(screen.getByText("Rol: Müşteri ▾")).toBeTruthy();
+    expect(screen.getByText("Rol: Müşteri")).toBeTruthy();
     expect(mockList).toHaveBeenLastCalledWith("cari-kart", expect.objectContaining({ suzgec: "MUSTERI", ara: undefined }));
   });
 

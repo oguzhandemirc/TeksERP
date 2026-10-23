@@ -371,6 +371,8 @@ export interface FeatureFlags {
   workOrderQuickOwnOnlyEnabled: boolean;
   /** Destek talepleri yalnız sahibine görünür (yönetici hepsini) — default false; backend ENFORCE. */
   supportOwnTicketsOnlyEnabled: boolean;
+  /** Patron bulutu olay güdümlü tur (3 sn birleştirme, ≥15 sn aralık) — default false; backend ENFORCE. */
+  patronBulutOlayGudumluEnabled: boolean;
   /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi — default false;
    *  mobil ENFORCE eder (açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket tek nefeste). */
   kk1OnlineOnlyEnabled: boolean;

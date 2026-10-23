@@ -6,6 +6,8 @@
 // dış istek atılmaz; tek yazım günlük işaret budamasıdır (tetikleyiciler her kurulumda yazar).
 // Beklenen ağ hatası `reportJobFailure`e YAZILMAZ; yalnız programcı hatası iz bırakır.
 // Günlük uzlaştırma fabrika saatiyle 03:30'dan sonra.
+// Olay turu (`patronBulut.olayGudumluEnabled`, varsayılan KAPALI): kirli bayrak (`cloud-sync/dirty-flag.ts`)
+// ilk kirlenmeden ≥3 sn sonra, iki tur arası ≥15 sn, tek uçuş; kira aralığı turu EMNİYET olarak aynen kalır.
 // =============================================================================
 import { whenIdentityReady } from "./installation-identity.job";
 import { reportJobFailure } from "./job-failure";
@@ -20,6 +22,8 @@ import { claimAndRunReportRequests, computeReportResult, reportDigest, sendRepor
 import { pruneSyncMarks } from "../cloud-sync/marks-pruning";
 import { loadWatermarks, saveWatermarks, wmKey } from "../cloud-sync/watermarks";
 import type { SnapshotCadence } from "../cloud-sync/projections";
+import { onDirty, peekDirty, takeDirty } from "../cloud-sync/dirty-flag";
+import { readPatronBulutOlayGudumluEnabled } from "../services/system-setting.service";
 
 const TICK_MS = 60 * 1000;
 const STARTUP_DELAY_MS = 90 * 1000;
@@ -33,6 +37,10 @@ const HOUR_MS = 60 * 60 * 1000;
 /** Günlük uzlaştırmanın fabrika saati (yedekten sonra, §4.4). */
 const RECONCILE_MINUTE_OF_DAY = 3 * 60 + 30;
 const RECONCILE_RETRY_MS = 30 * 60 * 1000;
+/** Olay turu: ilk kirlenmeden en erken bu kadar sonra (güvenli ufuk payı 2 sn + birleştirme). */
+export const EVENT_DEBOUNCE_MS = 3 * 1000;
+/** Olay turu: herhangi iki tur arası en az bu kadar (sıcak tabloda tur yağmuru olmasın). */
+export const EVENT_MIN_GAP_MS = 15 * 1000;
 
 export function clampInterval(minutes: number): number {
   return Math.min(SYNC_INTERVAL_MAX, Math.max(SYNC_INTERVAL_MIN, Math.round(minutes)));
@@ -44,7 +52,12 @@ export interface CloudSyncStatus {
   readonly lastRoundAt: number | null;
   readonly lastOutcome: Pick<RoundOutcome, "status" | "reason" | "packets" | "horizon" | "contractWarning"> | null;
   readonly lastReconcileYmd: string | null;
+  /** Son turu ne tetikledi (panel gösterimi): kira aralığı · kirli bayrak · zil. */
+  readonly lastTrigger: CloudSyncTrigger | null;
+  readonly lastEventRoundAt: number | null;
 }
+
+export type CloudSyncTrigger = "periyodik" | "olay" | "zil";
 
 let started = false;
 let stopped = false;
@@ -61,14 +74,28 @@ let lastReconcileAttemptAt = 0;
 /** Test kancası: bir sonraki tık 03:30 kapısını BİR KEZ atlar (senaryo gece de uzlaştırma koşabilsin). */
 let forceReconcileOnce = false;
 let lastPruneYmd: string | null = null;
-let status: CloudSyncStatus = { eligible: false, blockReason: null, lastRoundAt: null, lastOutcome: null, lastReconcileYmd: null };
+let eventTimer: { cancel(): void } | null = null;
+/** Olay turunun son DENEMESİ (bayrak kapalı çıksa da) — aralık kapısı buna da bakar. */
+let lastEventAttemptAt = 0;
+/** Ön koşul kapalı görüldüyse bu ana dek yazım başına yeniden ölçülmez (sıcak yolda lisans okuması yok). */
+let ineligibleUntil = 0;
+let clock: () => number = Date.now;
+type EventTimerFactory = (fn: () => Promise<void>, delayMs: number) => { cancel(): void };
+const realEventTimer: EventTimerFactory = (fn, delayMs) => {
+  const t = setTimeout(() => void fn(), delayMs);
+  t.unref();
+  return { cancel: () => clearTimeout(t) };
+};
+let eventTimerFactory: EventTimerFactory = realEventTimer;
+const INITIAL_STATUS: CloudSyncStatus = { eligible: false, blockReason: null, lastRoundAt: null, lastOutcome: null, lastReconcileYmd: null, lastTrigger: null, lastEventRoundAt: null };
+let status: CloudSyncStatus = INITIAL_STATUS;
 
 export function getCloudSyncStatus(): CloudSyncStatus {
   return status;
 }
 
-function remember(o: RoundOutcome, at: number): void {
-  status = { ...status, lastRoundAt: at, lastOutcome: { status: o.status, reason: o.reason, packets: o.packets, horizon: o.horizon, contractWarning: o.contractWarning } };
+function remember(o: RoundOutcome, at: number, trigger: CloudSyncTrigger): void {
+  status = { ...status, lastRoundAt: at, lastTrigger: trigger, lastOutcome: { status: o.status, reason: o.reason, packets: o.packets, horizon: o.horizon, contractWarning: o.contractWarning } };
   if (o.status === "HATA" || o.status === "KISMI") uyari("patron-bulut", `eşitleme turu ${o.status} (${o.reason ?? "ret"}) — sonraki turda tekrar`);
 }
 
@@ -128,8 +155,10 @@ export async function runCloudSyncTick(nowMs: number = Date.now()): Promise<void
       const hourly = nowMs - lastHourlyAt >= HOUR_MS;
       if (hourly) cadences.add("SAATLIK");
       if (lastDailyYmd !== ymd) cadences.add("GUNLUK");
+      // Emniyet turu her değişikliği zaten kapsar: kirli küme tüketilir (olay turu boşuna koşmaz).
+      takeDirty();
       const o = await runSyncRound({ kind: "ARTIMLI", cadences }, { transport, nowMs: () => nowMs });
-      remember(o, nowMs);
+      remember(o, nowMs, "periyodik");
       // Tavana takılan kaynak varsa bir sonraki tık beklemeden devam eder.
       lastRoundAt = o.status !== "HATA" && o.more ? 0 : nowMs;
       if (o.status !== "HATA") {
@@ -149,7 +178,7 @@ export async function runCloudSyncTick(nowMs: number = Date.now()): Promise<void
       if (stored.get(wmKey.reconcile)?.digest !== ymd) {
         lastReconcileAttemptAt = nowMs;
         const o = await runSyncRound({ kind: "UZLASTIRMA", cadences: new Set() }, { transport, nowMs: () => nowMs });
-        remember(o, nowMs);
+        remember(o, nowMs, "periyodik");
         if (o.status === "TAMAM" || o.status === "KISMI") {
           await saveWatermarks([{ source: wmKey.reconcile, digest: ymd, at: now }]);
           status = { ...status, lastReconcileYmd: ymd };
@@ -159,17 +188,64 @@ export async function runCloudSyncTick(nowMs: number = Date.now()): Promise<void
   });
 }
 
+/** Zil `ozet`: TÜM projeksiyonlar (kayıt + HER_TUR anlıklar) tazelenir — K1; 30 sn kapısı aynen. */
 async function runSnapshotRound(): Promise<void> {
-  const nowMs = Date.now();
+  const nowMs = clock();
   if (nowMs - lastSnapshotRoundAt < DOORBELL_MIN_GAP_MS) {
     pendingSnapshot = true;
     return;
   }
   lastSnapshotRoundAt = nowMs;
   await exclusive(async () => {
-    const o = await runSyncRound({ kind: "ARTIMLI", cadences: new Set(["HER_TUR"]), snapshotsOnly: true }, { transport, nowMs: () => nowMs });
-    remember(o, nowMs);
+    takeDirty();
+    const o = await runSyncRound({ kind: "ARTIMLI", cadences: new Set(["HER_TUR"]), snapshotsOnly: false }, { transport, nowMs: () => nowMs });
+    remember(o, nowMs, "zil");
+    if (o.status !== "HATA" && o.more) lastRoundAt = 0;
   });
+  requestEventRound();
+}
+
+/**
+ * Olay turu iste — kirli bayrak dinleyicisi ve gelen kutusu çağırır. Kirli küme boşsa,
+ * ön koşul kapalıysa (fail-closed; dışarı istek yok) ya da zamanlayıcı kuruluysa no-op.
+ * Zaman: max(ilk kirlenme + 3 sn, son tur/deneme + 15 sn). Bayrak turda okunur (yazım başına DB yok).
+ */
+export function requestEventRound(): void {
+  if (stopped || eventTimer) return;
+  const d = peekDirty();
+  if (d.tables.size === 0) return;
+  const t = clock();
+  if (t < ineligibleUntil) return;
+  if (!cloudEligibility(t).ok) {
+    ineligibleUntil = t + EVENT_MIN_GAP_MS;
+    return;
+  }
+  const lastAny = Math.max(lastEventAttemptAt, lastRoundAt, lastSnapshotRoundAt);
+  const at = Math.max((d.firstDirtyAt ?? t) + EVENT_DEBOUNCE_MS, lastAny + EVENT_MIN_GAP_MS);
+  eventTimer = eventTimerFactory(async () => {
+    eventTimer = null;
+    await runEventRound().catch((err) => reportJobFailure("cloud-sync", err));
+  }, Math.max(0, at - t));
+}
+
+/** Tek olay turu (tek uçuş `exclusive`): kayıt projeksiyonları + HER_TUR anlıklar. */
+export async function runEventRound(): Promise<void> {
+  const t = clock();
+  if (!cloudEligibility(t).ok) return;
+  // Başka tur sürüyorsa o bitince (tık/zil sonu) yeniden istenir.
+  if (running) return;
+  lastEventAttemptAt = t;
+  if (!(await readPatronBulutOlayGudumluEnabled())) return;
+  await exclusive(async () => {
+    takeDirty();
+    // Turun içi duvar saatiyle (ufuk payı uygulama↔DB saat farkını da sayar); kapı saati enjekte edilebilir.
+    const o = await runSyncRound({ kind: "ARTIMLI", cadences: new Set(["HER_TUR"]) }, { transport });
+    remember(o, t, "olay");
+    status = { ...status, lastEventRoundAt: t };
+    if (o.status !== "HATA" && o.more) lastRoundAt = 0;
+  });
+  // Tur sürerken gelen yazım kümede bekler → aralık kapısıyla bir sonraki olay turu.
+  requestEventRound();
 }
 
 function schedule(delayMs: number): void {
@@ -187,6 +263,7 @@ function schedule(delayMs: number): void {
         pendingReports = false;
         await exclusive(() => runReportClaims(Date.now()));
       }
+      requestEventRound();
     })().finally(() => schedule(TICK_MS));
   }, delayMs);
   timer.unref();
@@ -198,6 +275,7 @@ let offDoorbell: Array<() => void> = [];
 export function startCloudSync(): void {
   if (started) return;
   started = true;
+  onDirty(requestEventRound);
   offDoorbell = [
     onDoorbellTopic("ozet", () => {
       if (!running) void runSnapshotRound().catch((err) => reportJobFailure("cloud-sync", err));
@@ -222,6 +300,9 @@ export function startCloudSync(): void {
 
 export function stopCloudSync(): void {
   stopped = true;
+  onDirty(null);
+  eventTimer?.cancel();
+  eventTimer = null;
   for (const off of offDoorbell) off();
   offDoorbell = [];
   if (timer) clearTimeout(timer);
@@ -238,8 +319,10 @@ export function __forceNextCloudSyncRoundForTests(opts: { reconcile?: boolean } 
 }
 
 /** Test-only: sahte bulut taşıması + bellek durumu sıfırlama. */
-export function __configureCloudSyncForTests(p: { transport?: CloudTransport; reset?: boolean }): void {
+export function __configureCloudSyncForTests(p: { transport?: CloudTransport; reset?: boolean; now?: () => number; eventTimer?: EventTimerFactory | null }): void {
   if (p.transport) transport = p.transport;
+  if (p.now) clock = p.now;
+  if (p.eventTimer !== undefined) eventTimerFactory = p.eventTimer ?? realEventTimer;
   if (p.reset) {
     forceReconcileOnce = false;
     lastRoundAt = 0;
@@ -251,6 +334,10 @@ export function __configureCloudSyncForTests(p: { transport?: CloudTransport; re
     lastReconcileAttemptAt = 0;
     lastPruneYmd = null;
     running = false;
-    status = { eligible: false, blockReason: null, lastRoundAt: null, lastOutcome: null, lastReconcileYmd: null };
+    eventTimer?.cancel();
+    eventTimer = null;
+    lastEventAttemptAt = 0;
+    ineligibleUntil = 0;
+    status = INITIAL_STATUS;
   }
 }
