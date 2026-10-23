@@ -141,7 +141,8 @@ async function eskiIstemci(o: Ortam, k: TestKurulumu, h: TestHesabi): Promise<vo
   console.log("\n§6 eski istemci: yanıt gövdeleri aynı");
   const r = await api(o, "GET", "/api/oturum", { belirtec: h.belirtec });
   const d = r.json.data as Record<string, unknown>;
-  kontrol("§6a /api/oturum alan kümesi aynı", anahtarlar(d) === "esitleme,hesap,hizmet,projeksiyonlar,tesis", anahtarlar(d));
+  // `liste` (liste yetenekleri, P6) bilinçli EK alandır — opsiyonel, eski istemci yok sayar; sayaç alanı yine yok.
+  kontrol("§6a /api/oturum alan kümesi aynı (+ P6 `liste`)", anahtarlar(d) === "esitleme,hesap,hizmet,liste,projeksiyonlar,tesis", anahtarlar(d));
   kontrol("§6b /api/oturum esitleme alan kümesi aynı (sayaç SIZMAZ)", anahtarlar(d.esitleme) === "fabrikaSurumu,sonEsitleme,sozlesmeUyarisi,ufuk,ufukTakildi", anahtarlar(d.esitleme));
   const s = await gonder(o, k, kayitPaketi(o, k));
   kontrol("§6c /v1/esitle makbuz alan kümesi aynı", anahtarlar(s.json) === "istenen,kabul,paketId,ret,sozlesmeUyarisi,ufukTarihi,v", anahtarlar(s.json));

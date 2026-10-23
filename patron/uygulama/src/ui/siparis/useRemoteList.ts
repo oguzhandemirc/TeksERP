@@ -10,6 +10,8 @@ import { useRemote } from "../../state/useRemote";
 export interface ListQuery {
   readonly durum?: string;
   readonly cariKartId?: string;
+  readonly cariHesapId?: string;
+  readonly siparisId?: string;
   readonly ara?: string;
   readonly suzgec?: string;
 }
@@ -34,14 +36,15 @@ const LIMIT = 50;
 export function useRemoteList(projection: string, query: ListQuery = {}, options: { limit?: number; enabled?: boolean; tags?: readonly string[] } = {}): RemoteList {
   const { api } = useSession();
   const limit = options.limit ?? LIMIT;
-  const { durum, cariKartId, suzgec } = query;
+  const { durum, cariKartId, cariHesapId, siparisId, suzgec } = query;
   const ara = query.ara?.trim() || undefined;
   const enabled = options.enabled ?? true;
   const params = useCallback(
-    (imlec: string | undefined) => ({ imlec, limit, durum, cariKartId, ara, suzgec }),
-    [limit, durum, cariKartId, ara, suzgec],
+    (imlec: string | undefined) => ({ imlec, limit, durum, cariKartId, cariHesapId, siparisId, ara, suzgec }),
+    [limit, durum, cariKartId, cariHesapId, siparisId, ara, suzgec],
   );
-  const key = `veri:${projection}:${durum ?? ""}:${cariKartId ?? ""}:${suzgec ?? ""}:${limit}`;
+  const ids = [cariKartId, cariHesapId, siparisId].map((x) => x ?? "").join(":");
+  const key = `veri:${projection}:${durum ?? ""}:${ids}:${suzgec ?? ""}:${limit}`;
 
   // Terimsiz ilk sayfa: saklı kopya + arkadan ağ + etiketle tazeleme.
   const first = useRemote<Page<ProjectionRecord>>(enabled && !ara ? key : null, () => api.list(projection, params(undefined)), { tags: options.tags ?? [projection] });
