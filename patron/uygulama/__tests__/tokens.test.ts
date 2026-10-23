@@ -79,11 +79,12 @@ describe("§3 okunurluk (metin ≥ 4.5:1)", () => {
 });
 
 describe("§4 tasarım belgesi ↔ kod", () => {
-  it("docs/design/PATRON-TASARIM-DILI.md içindeki her hex tokens.ts'te var", () => {
+  // Metin araması değil DEĞER kümesi: yalnız tokens.ts yorumunda geçen hex belgeyi karşılamaz.
+  it("docs/design/PATRON-TASARIM-DILI.md içindeki her hex light/dark token değeridir", () => {
     const doc = readFileSync(join(ROOT, "../../docs/design/PATRON-TASARIM-DILI.md"), "utf8");
-    const code = readFileSync(join(ROOT, TOKENS_FILE), "utf8").toUpperCase();
+    const values = new Set(leaves(light).concat(leaves(dark)).map(([, v]) => String(v).toUpperCase()));
     const hexes = [...new Set(doc.match(HEX) ?? [])];
     expect(hexes.length).toBeGreaterThan(30);
-    expect(hexes.filter((h) => !code.includes(h.toUpperCase()))).toEqual([]);
+    expect(hexes.filter((h) => !values.has(h.toUpperCase()))).toEqual([]);
   });
 });
