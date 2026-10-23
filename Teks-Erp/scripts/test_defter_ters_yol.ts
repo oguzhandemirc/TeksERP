@@ -90,6 +90,8 @@ const SCRIPT_SINIFI: Record<string, "SEED" | "DEMO" | "DENETIM_REPRO" | "GECMIS_
   "scripts/seed-demo-shipments.ts": "SEED",
   "scripts/seed-kk2-test.ts": "SEED",
   "scripts/seed-load-scale.ts": "SEED",
+  // Ölçüm hacmi (W1, 2026-10-24): yalnız kayıtlı boş `*perf*_test` DB'sine sentetik top/hareket; fabrika verisine yazamaz.
+  "scripts/olcum-patron-olay-turu.ts": "SEED",
   "scripts/seed-tambur-test-roll.ts": "SEED",
   "scripts/seed-test-full.ts": "SEED",
   "scripts/demo_kursun_planlama.ts": "DEMO",
