@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { Text, View } from "react-native";
 import { can, visibleCards, visibleModules, type ModuleKey } from "../../../src/lib/access";
 import { PERIOD_LABEL, UNIT } from "../../../src/lib/labels/uretim";
+import { TERIM } from "../../../src/lib/terim";
 import { useSession } from "../../../src/state/session";
 import { useOpenRefresh } from "../../../src/state/useOpenRefresh";
 import { FacilityName, Screen, useWide } from "../../../src/ui/Frame";
@@ -38,7 +39,7 @@ const MODULE_HINT: Readonly<Partial<Record<ModuleKey, string>>> = {
   siparisler: "Açık siparişler ve termin",
   cariler: "Müşteri ve tedarikçi kartları",
   sevkiyat: "Son sevkler ve zamanında teslim",
-  uretim: "İstasyonlar ve iş emirleri",
+  uretim: `İstasyonlar ve ${TERIM.terbiyeIsEmri.cogulKucuk}`,
   stok: "Ham, yarı mamul ve bitmiş stok",
   finans: "Kasa, çek, fatura ve tahsilat",
   raporlar: "Hazır raporlar ve istekler",
