@@ -5,7 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
-import { roleOf } from "../../src/ui/RoleBadge";
+import { ROLE_LABEL, roleOf } from "../../src/ui/RoleBadge";
 import { useSession } from "../../src/state/session";
 import { initials, GroupCaption, GroupNote } from "../../src/ui/diger/parts";
 import { FacilitySwitchModal } from "../../src/ui/FacilitySwitcher";
@@ -14,12 +14,10 @@ import { Banner, Button, ConfirmButton, Field } from "../../src/ui/kit";
 import { ListGroup, ListRow } from "../../src/ui/ListRow";
 import { SegmentedControl } from "../../src/ui/SegmentedControl";
 import { makeStyles, THEME_PREF_LABEL, THEME_PREFS, useThemePref, useTokens } from "../../src/ui/theme-context";
-import { dark, radius, READABLE_MAX, space, typography } from "../../src/ui/tokens";
+import { radius, READABLE_MAX, space, typography } from "../../src/ui/tokens";
 import { useWrite } from "../../src/ui/useWrite";
 
-// Lacivert kart her temada koyudur: üstündeki metin koyu temanın metin token'larını kullanır.
-const ON_NAVY = { text: dark.text, secondary: dark.textSecondary, muted: dark.textMuted, chip: dark.tintContainer, tint: dark.tint, line: dark.separator } as const;
-const ROLE_LABEL = { yonetici: "Yönetici", ekip: "Ekip" } as const;
+// Lacivert kart her temada koyudur: üstündeki metin `onNavy` token'larındandır.
 
 function PasswordSheet({ visible, onClose, onDone }: { readonly visible: boolean; readonly onClose: () => void; readonly onDone: () => void }) {
   const { api } = useSession();
@@ -74,34 +72,34 @@ export default function Profile() {
   const many = facilities.length > 1;
   return (
     <Screen title="Profil" module="profil">
-      <View style={[s.hero, { backgroundColor: t.navy, borderColor: t.scheme === "dark" ? ON_NAVY.line : t.navy }]} testID="profil-kart">
+      <View style={[s.hero, { backgroundColor: t.navy, borderColor: t.scheme === "dark" ? t.onNavy.separator : t.navy }]} testID="profil-kart">
         <View style={s.heroTop}>
-          <View style={[s.avatar, { backgroundColor: role === "yonetici" ? t.gold : ON_NAVY.chip }]}>
-            <Text style={[s.avatarText, { color: role === "yonetici" ? t.navy : ON_NAVY.tint }]} maxFontSizeMultiplier={1}>{initials(hesap?.ad)}</Text>
+          <View style={[s.avatar, { backgroundColor: role === "yonetici" ? t.gold : t.onNavy.chip }]}>
+            <Text style={[s.avatarText, { color: role === "yonetici" ? t.navy : t.onNavy.tint }]} maxFontSizeMultiplier={1}>{initials(hesap?.ad)}</Text>
           </View>
           <View style={s.flex}>
-            <Text style={[s.heroName, { color: ON_NAVY.text }]} numberOfLines={2}>{hesap?.ad ?? ""}</Text>
-            <Text style={[s.heroMail, { color: ON_NAVY.secondary }]} numberOfLines={1}>{hesap?.eposta ?? ""}</Text>
+            <Text style={[s.heroName, { color: t.onNavy.text }]} numberOfLines={2}>{hesap?.ad ?? ""}</Text>
+            <Text style={[s.heroMail, { color: t.onNavy.textSecondary }]} numberOfLines={1}>{hesap?.eposta ?? ""}</Text>
           </View>
         </View>
         <View style={s.heroBadges}>
-          <View style={[s.rolePill, role === "yonetici" ? { backgroundColor: t.gold } : { backgroundColor: ON_NAVY.chip }]} testID="profil-rol" accessible accessibilityLabel={`Rol: ${ROLE_LABEL[role]}`}>
-            <Ionicons name={role === "yonetici" ? "shield-checkmark" : "people"} size={14} color={role === "yonetici" ? t.navy : ON_NAVY.tint} />
-            <Text style={[s.roleText, { color: role === "yonetici" ? t.navy : ON_NAVY.tint }]}>{ROLE_LABEL[role]}</Text>
+          <View style={[s.rolePill, role === "yonetici" ? { backgroundColor: t.gold } : { backgroundColor: t.onNavy.chip }]} testID="profil-rol" accessible accessibilityLabel={`Rol: ${ROLE_LABEL[role]}`}>
+            <Ionicons name={role === "yonetici" ? "shield-checkmark" : "people"} size={14} color={role === "yonetici" ? t.navy : t.onNavy.tint} />
+            <Text style={[s.roleText, { color: role === "yonetici" ? t.navy : t.onNavy.tint }]}>{ROLE_LABEL[role]}</Text>
           </View>
         </View>
-        <View style={[s.heroSep, { backgroundColor: ON_NAVY.line }]} />
+        <View style={[s.heroSep, { backgroundColor: t.onNavy.separator }]} />
         <View style={s.facRow}>
-          <Ionicons name="business-outline" size={18} color={ON_NAVY.secondary} />
+          <Ionicons name="business-outline" size={18} color={t.onNavy.textSecondary} />
           <View style={s.flex}>
-            <Text style={[s.facName, { color: ON_NAVY.text }]} numberOfLines={1}>{facility?.tesis.ad ?? "—"}</Text>
-            {many ? <Text style={[s.facMeta, { color: ON_NAVY.muted }]}>{`${facilities.length} fabrikaya üyesiniz`}</Text> : null}
+            <Text style={[s.facName, { color: t.onNavy.text }]} numberOfLines={1}>{facility?.tesis.ad ?? "—"}</Text>
+            {many ? <Text style={[s.facMeta, { color: t.onNavy.textMuted }]}>{`${facilities.length} fabrikaya üyesiniz`}</Text> : null}
           </View>
           {many ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Fabrika değiştir" onPress={() => setSwitcher(true)} testID="fabrika-degistir"
-              style={({ pressed }) => [s.switch, { backgroundColor: ON_NAVY.chip }, pressed && { opacity: 0.8 }]}>
-              <Ionicons name="swap-horizontal" size={16} color={ON_NAVY.tint} />
-              <Text style={[s.switchText, { color: ON_NAVY.tint }]}>Değiştir</Text>
+              style={({ pressed }) => [s.switch, { backgroundColor: t.onNavy.chip }, pressed && { opacity: 0.8 }]}>
+              <Ionicons name="swap-horizontal" size={16} color={t.onNavy.tint} />
+              <Text style={[s.switchText, { color: t.onNavy.tint }]}>Değiştir</Text>
             </Pressable>
           ) : null}
         </View>

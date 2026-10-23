@@ -83,7 +83,7 @@ export default function Inbox() {
       {r.error && !r.data ? <ErrorState text={r.error} onRetry={r.reload} /> : null}
       {r.data && items.length === 0 ? <Empty domain="gelenKutusu" icon="file-tray-outline" text={EMPTY[filter]} testID="gelen-bos" /> : null}
       {items.length > 0 ? (
-        <ListGroup testID="gelen-liste">
+        <ListGroup testID="gelen-liste" iconSize={40}>
           {items.map((m) => (
             <InboxRow key={m.mesajId} m={m} showAuthor={admin} onPress={() => router.push({ pathname: "/gelen-kutusu/[mesajId]", params: { mesajId: m.mesajId } } as never)} />
           ))}

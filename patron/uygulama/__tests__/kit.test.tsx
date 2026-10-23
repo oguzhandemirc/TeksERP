@@ -4,6 +4,7 @@ import { Text } from "react-native";
 import { INBOX_STATUSES, NOTIFICATION_STATUSES, REPORT_STATUSES, type AccountStatus } from "../src/api/wire";
 import { STATUS_DICT, statusEntry } from "../src/lib/labels";
 import { KpiCard, kpiAccessibilityLabel } from "../src/ui/KpiCard";
+import { ListRow } from "../src/ui/ListRow";
 import { Tabs } from "../src/ui/kit";
 import { SegmentedControl } from "../src/ui/SegmentedControl";
 import { StatusBadge } from "../src/ui/StatusBadge";
@@ -72,6 +73,18 @@ describe("KpiCard", () => {
     render(<KpiCard label="Sevk" value="3" domain="sevkiyat" onPress={fn} testID="kpi-sevk" />);
     fireEvent.press(screen.getByTestId("kpi-sevk"));
     expect(fn).toHaveBeenCalled();
+  });
+});
+
+describe("KpiCard yan değerler + ListRow Posta düzeni", () => {
+  it("KPI etiketi açıklama ve yan değerleri de okur", () => {
+    render(<KpiCard label="Bugün sevk" value="1.200" unit="m" caption="4 top · brüt" lines={[{ label: "Bu ay", value: "23.120 m" }]} domain="sevkiyat" testID="kpi-yan" />);
+    expect(screen.getByTestId("kpi-yan").props.accessibilityLabel).toBe("Bugün sevk: 1.200 m, 4 top · brüt, Bu ay 23.120 m");
+  });
+  it("ListRow `lines` alt satırları tam genişlikte basar; etiket başlık, değer, satırlar", () => {
+    render(<ListRow title="İE-12" value="400 m" lines={["Boya · plan 30.10.2026", "200 / 400 m üretildi"]} domain="uretim" testID="satir" />);
+    expect(screen.getByText("200 / 400 m üretildi")).toBeTruthy();
+    expect(screen.getByTestId("satir").props.accessibilityLabel).toBe("İE-12, 400 m, Boya · plan 30.10.2026, 200 / 400 m üretildi");
   });
 });
 

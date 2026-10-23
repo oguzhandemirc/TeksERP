@@ -33,8 +33,9 @@ export function FlowStrip({ data, testID = "akis" }: { readonly data: unknown; r
   );
 }
 
-/** İstasyon dağılımı: kuyruk çubuğu + "kuyrukta · işlemde · bugün" satırı; dış (fason) istasyon fason renginde. */
+/** İstasyon dağılımı: kuyruk çubuğu + "kuyrukta · işlemde · bugün" satırı; renk istasyon paletinden (iç · dış). */
 export function StationBars({ data, testID = "istasyonlar" }: { readonly data: unknown; readonly testID?: string }) {
+  const t = useTokens();
   const s = useStyles();
   const rows = arr((data as { istasyonlar?: unknown } | null)?.istasyonlar);
   if (rows.length === 0) return null;
@@ -51,7 +52,7 @@ export function StationBars({ data, testID = "istasyonlar" }: { readonly data: u
               value={num(r.kuyruk) ?? 0}
               max={max}
               valueText={`${qty(r.kuyruk)} ${UNIT.top} kuyrukta`}
-              domain={external ? "fason" : "uretim"}
+              color={t.station[external ? "dis" : "ic"].fg}
               testID={`istasyon-${String(r.kod ?? r.id ?? r.ad)}`}
             />
             <Text style={s.stationFoot}>{`${qty(r.aktif)} işlemde · ${today}`}</Text>
@@ -65,7 +66,7 @@ export function StationBars({ data, testID = "istasyonlar" }: { readonly data: u
 const useStyles = makeStyles((t) => ({
   flow: { flexGrow: 1, gap: space.xs, paddingBottom: space.s, paddingRight: space.l },
   stopWrap: { flexGrow: 1, flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs },
-  stop: { flexGrow: 1, minWidth: 92, backgroundColor: t.surface, borderRadius: radius.cardInner, paddingHorizontal: space.m, paddingVertical: space.s, borderTopWidth: 3, borderTopColor: t.domain.uretim.fg, ...t.cardShadow },
+  stop: { flexGrow: 1, minWidth: 92, backgroundColor: t.surface, borderRadius: radius.cardInner, paddingHorizontal: space.m, paddingVertical: space.s, borderTopWidth: 3, borderTopColor: t.station.ic.fg, ...t.cardShadow },
   stopLabel: { ...typography.caption, color: t.textSecondary },
   stopValueRow: { flexDirection: "row" as const, alignItems: "baseline" as const, gap: 3, marginTop: 2 },
   stopValue: { ...typography.title2, ...tabularNums, color: t.text },

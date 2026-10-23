@@ -1,10 +1,10 @@
 // Giriş/davet kabuğu: her temada lacivert zemin + nötr marka ("TeksERP Yönetim"; firma adı/logo KODDA yok) + opak
-// form kartı. Lacivert zemindeki metin koyu temanın metin token'larını kullanır (zemin her temada koyu).
+// form kartı. Lacivert zemindeki metin `onNavy` token'larındandır (zemin her temada koyu).
 import Ionicons from "@expo/vector-icons/Ionicons";
 import type { ReactNode } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { makeStyles, useTokens } from "../theme-context";
-import { FONT_SCALE, dark, radius, space, typography } from "../tokens";
+import { FONT_SCALE, radius, space, typography } from "../tokens";
 
 export function AuthShell({ title, subtitle, step, children, footer }: {
   readonly title: string;
@@ -41,7 +41,7 @@ export function AuthShell({ title, subtitle, step, children, footer }: {
         </View>
         {footer ? <View style={s.footer}>{footer}</View> : null}
         <View style={s.secure}>
-          <Ionicons name="lock-closed" size={13} color={dark.textMuted} />
+          <Ionicons name="lock-closed" size={13} color={t.onNavy.textMuted} />
           <Text style={s.secureText}>Parola + doğrulama kodu ile korunur</Text>
         </View>
       </ScrollView>
@@ -53,9 +53,9 @@ const useStyles = makeStyles((t) => ({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "center" as const, padding: space.l, paddingVertical: space.xxl, width: "100%" as const, maxWidth: 480, alignSelf: "center" as const },
   brand: { alignItems: "center" as const, marginBottom: space.xl },
-  mark: { width: 72, height: 72, borderRadius: radius.card, backgroundColor: dark.surfaceAlt, alignItems: "center" as const, justifyContent: "center" as const, marginBottom: space.l, borderWidth: 1, borderColor: dark.separator },
-  brandName: { ...typography.largeTitle, fontSize: 30, lineHeight: 36, color: dark.text, textAlign: "center" as const },
-  brandTag: { ...typography.subhead, color: dark.textSecondary, marginTop: space.xs, textAlign: "center" as const },
+  mark: { width: 72, height: 72, borderRadius: radius.card, backgroundColor: t.onNavy.surface, alignItems: "center" as const, justifyContent: "center" as const, marginBottom: space.l, borderWidth: 1, borderColor: t.onNavy.separator },
+  brandName: { ...typography.largeTitle, fontSize: 30, lineHeight: 36, color: t.onNavy.text, textAlign: "center" as const },
+  brandTag: { ...typography.subhead, color: t.onNavy.textSecondary, marginTop: space.xs, textAlign: "center" as const },
   card: { borderRadius: radius.sheet, padding: space.xl, borderWidth: 1, borderColor: t.scheme === "dark" ? t.separator : t.surface, ...t.floatShadow },
   steps: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, marginBottom: space.m },
   dot: { width: 8, height: 8, borderRadius: 4 },
@@ -66,5 +66,5 @@ const useStyles = makeStyles((t) => ({
   body: { marginTop: space.l },
   footer: { marginTop: space.l },
   secure: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "center" as const, gap: space.xs, marginTop: space.xl },
-  secureText: { ...typography.footnote, color: dark.textMuted },
+  secureText: { ...typography.footnote, color: t.onNavy.textMuted },
 }));

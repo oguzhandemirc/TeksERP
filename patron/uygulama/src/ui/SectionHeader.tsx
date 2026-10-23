@@ -1,23 +1,29 @@
-// Bölüm başlığı: başlık (+ sayaç) ve sağda isteğe bağlı "Tümü ›" bağlantısı.
+// Bölüm başlığı: isteğe bağlı alan ikon çipi · başlık (+ sayaç) ve sağda isteğe bağlı "Tümü ›" bağlantısı.
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, Text, View } from "react-native";
+import { IconChip } from "./IconChip";
+import type { IconName } from "./icons";
 import { makeStyles, useTokens } from "./theme-context";
 import { FONT_SCALE, TOUCH, radius, space, tabularNums, typography, type Domain } from "./tokens";
 
 export interface SectionHeaderProps {
   readonly title: string;
-  readonly count?: number;
+  /** Sayaç: adet ya da "3/8" gibi hazır metin. */
+  readonly count?: number | string;
+  /** Başlığın solunda alan ikon çipi (renk `domain`den, verilmezse `genel`). */
+  readonly icon?: IconName;
   readonly actionLabel?: string;
   readonly onAction?: () => void;
   readonly domain?: Domain;
   readonly testID?: string;
 }
 
-export function SectionHeader({ title, count, actionLabel = "Tümü", onAction, domain, testID }: SectionHeaderProps) {
+export function SectionHeader({ title, count, icon, actionLabel = "Tümü", onAction, domain, testID }: SectionHeaderProps) {
   const t = useTokens();
   const s = useStyles();
   return (
     <View style={s.row} testID={testID}>
+      {icon ? <IconChip domain={domain ?? "genel"} icon={icon} size={28} /> : null}
       <Text style={[s.title, domain ? { color: t.domain[domain].fg } : null]} accessibilityRole="header" maxFontSizeMultiplier={FONT_SCALE.title}>
         {title}
       </Text>

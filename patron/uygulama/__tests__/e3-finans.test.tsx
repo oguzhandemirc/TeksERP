@@ -43,7 +43,7 @@ const rows = require("../src/ui/finans/rows") as typeof import("../src/ui/finans
 const { ProjectionList } = require("../src/ui/data") as typeof import("../src/ui/data");
 const { ReportStatusBadge } = require("../src/ui/raporlar/parts") as typeof import("../src/ui/raporlar/parts");
 const { usePendingPoll, PENDING_POLL_MS } = require("../src/ui/raporlar/usePendingPoll") as typeof import("../src/ui/raporlar/usePendingPoll");
-const { periodText } = require("../src/ui/raporlar/periods") as typeof import("../src/ui/raporlar/periods");
+const { asOfDayText, asOfIso, periodText } = require("../src/ui/raporlar/periods") as typeof import("../src/ui/raporlar/periods");
 const { invalidate } = require("../src/state/changes") as typeof import("../src/state/changes");
 const labels = require("../src/lib/labels/finans") as typeof import("../src/lib/labels/finans");
 const { agingSegments } = require("../src/ui/finans/FinanceSummary") as typeof import("../src/ui/finans/FinanceSummary");
@@ -285,6 +285,17 @@ describe("§6 bekleyen rapor kısa yoklaması", () => {
     expect(periodText("gecen-ay", now)).toEqual({ from: "01.09.2026", to: "30.09.2026" });
     expect(periodText("son-30-gun", now)).toEqual({ from: "23.09.2026", to: "22.10.2026" });
     expect(periodText("ozel", now)).toBeNull();
+  });
+  it("kesit seçimi: Bugün gönderilmez; Dün / Geçen ay sonu / Özel o fabrika gününün son anı", () => {
+    const now = new Date("2026-10-22T09:00:00Z");
+    expect(asOfIso("bugun", "", now)).toBeUndefined();
+    expect(asOfIso("dun", "", now)).toBe("2026-10-21T20:59:59.999Z");
+    expect(asOfIso("gecen-ay-sonu", "", now)).toBe("2026-09-30T20:59:59.999Z");
+    expect(asOfIso("ozel", "15.08.2026", now)).toBe("2026-08-15T20:59:59.999Z");
+    expect(asOfIso("ozel", "", now)).toBeUndefined();
+    expect(asOfIso("ozel", "2026-08-15", now)).toBeNull();
+    expect(asOfDayText("dun", now)).toBe("21.10.2026");
+    expect(asOfDayText("gecen-ay-sonu", now)).toBe("30.09.2026");
   });
 });
 

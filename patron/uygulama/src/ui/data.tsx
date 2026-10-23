@@ -298,7 +298,7 @@ export function ProjectionList(p: ProjectionListProps) {
     <View>
       {error ? <ErrorBox text={error} onRetry={retry} /> : null}
       {items.length > 0 ? p.header : null}
-      {p.row || p.compact ? items.length > 0 ? <ListGroup>{rows}</ListGroup> : null : rows}
+      {p.row || p.compact ? items.length > 0 ? <ListGroup iconSize={p.row ? undefined : 0}>{rows}</ListGroup> : null : rows}
       {!loading && !error && items.length === 0 ? <Empty text={p.empty ?? "Kayıt yok"} domain={p.domain} /> : null}
       {loading && items.length === 0 ? <LoadingSkeleton rows={3} /> : null}
       {extra?.error ? <ErrorBox text={extra.error} onRetry={() => void loadMore()} /> : null}

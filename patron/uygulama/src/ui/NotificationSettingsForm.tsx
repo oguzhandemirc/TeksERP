@@ -20,7 +20,7 @@ export function NotificationSettingsForm(p: { form: NotificationForm; kinds: rea
           icon={f.acik ? "notifications" : "notifications-off-outline"} domain="gelenKutusu" />
       </ListGroup>
       <GroupCaption>Bildirim türleri</GroupCaption>
-      <ListGroup testID="bildirim-turleri">
+      <ListGroup testID="bildirim-turleri" iconSize={32}>
         {p.kinds.map((k) => {
           const look = notificationKind(k.tur);
           return (
@@ -32,7 +32,7 @@ export function NotificationSettingsForm(p: { form: NotificationForm; kinds: rea
         })}
       </ListGroup>
       <GroupCaption>Sessiz saatler</GroupCaption>
-      <ListGroup>
+      <ListGroup iconSize={32}>
         <ToggleRow label="Sessiz saatler" hint="Bu aralıkta doğan bildirim aralık bitince gelir (İstanbul saati)" value={f.sessizAcik} onChange={(v) => set("sessizAcik", v)}
           disabled={!f.acik} testID="sessiz" icon="moon-outline" domain="uretim" />
         {f.sessizAcik ? (

@@ -12,10 +12,10 @@ import { TERIM } from "../../../src/lib/terim";
 import { useSession } from "../../../src/state/session";
 import { Screen } from "../../../src/ui/Frame";
 import { openRecord } from "../../../src/ui/nav";
-import { MetricGrid, MetricTile } from "../../../src/ui/pano/MetricTile";
+import { KpiCard, KpiGrid } from "../../../src/ui/KpiCard";
+import { ListRow } from "../../../src/ui/ListRow";
 import { FlowStrip, StationBars } from "../../../src/ui/pano/production";
 import { obj, period, pct, qty, str } from "../../../src/ui/pano/read";
-import { RecordRow } from "../../../src/ui/pano/RecordRow";
 import { RecordStatusBadge } from "../../../src/ui/pano/RecordStatusBadge";
 import { RemoteList, useRecordPage } from "../../../src/ui/pano/RemoteList";
 import { FactoryStamp, SnapshotGate } from "../../../src/ui/pano/SnapshotGate";
@@ -47,9 +47,9 @@ export default function Production() {
           <View style={s.segment}>
             <SegmentedControl items={PERIODS} value={p} onChange={setP} testIDPrefix="donem-" accessibilityLabel="Dönem" />
           </View>
-          <MetricGrid testID="uretim-kpi">
+          <KpiGrid testID="uretim-kpi">
             {today.data ? (
-              <MetricTile
+              <KpiCard
                 label="Bugün tamamlanan"
                 value={qty(obj(today.data.veri).bugunTamamlananToplam)}
                 unit={UNIT.top}
@@ -60,7 +60,7 @@ export default function Production() {
               />
             ) : null}
             {fason.data ? (
-              <MetricTile
+              <KpiCard
                 label="Fasonda bekleyen"
                 value={qty(f.acikMiktar)}
                 unit={UNIT.metre}
@@ -71,7 +71,7 @@ export default function Production() {
               />
             ) : null}
             {fason.data ? (
-              <MetricTile
+              <KpiCard
                 label="Fason fire"
                 value={pct(f.fireYuzde)}
                 caption={`${PERIOD_LABEL[p]} · çekme dahil`}
@@ -81,7 +81,7 @@ export default function Production() {
                 testID="kpi-fason-fire"
               />
             ) : null}
-          </MetricGrid>
+          </KpiGrid>
           {!today.data && !fason.data ? <SnapshotGate remote={today} domain="uretim">{() => null}</SnapshotGate> : null}
         </>
       ) : null}
@@ -111,9 +111,9 @@ export default function Production() {
           const st = recordStatus(WORK_ORDER_STATUS, k.durum);
           const end = str(k.planBitis);
           return (
-            <RecordRow
+            <ListRow
               title={str(k.isEmriNo) ?? "—"}
-              badge={<RecordStatusBadge entry={st} testID={`durum-${r.id}`} />}
+              accessory={<RecordStatusBadge entry={st} testID={`durum-${r.id}`} />}
               lines={[`${lookup(WORK_ORDER_TYPE, k.tur)}${end ? ` · plan ${formatDate(end)}` : ""}`, `${formatNumber(k.uretilenMetre, 0)} / ${formatNumber(k.hedefMiktar, 0)} ${UNIT.metre} üretildi`]}
               domain="uretim"
               icon="clipboard-outline"

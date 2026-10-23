@@ -13,7 +13,7 @@ import { useRemote } from "../../../../src/state/useRemote";
 import { FilterChip } from "../../../../src/ui/FilterChip";
 import { useDebounced } from "../../../../src/ui/Picker";
 import { Screen } from "../../../../src/ui/Frame";
-import { KpiCard } from "../../../../src/ui/KpiCard";
+import { KpiCard, KpiGrid } from "../../../../src/ui/KpiCard";
 import { ListGroup } from "../../../../src/ui/ListRow";
 import { SectionHeader } from "../../../../src/ui/SectionHeader";
 import { openRecord } from "../../../../src/ui/nav";
@@ -31,7 +31,7 @@ function Summary({ veri }: { veri: unknown }) {
   const v = asObj(veri);
   const late = Number(v.gecikenKalem) > 0;
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.m, marginBottom: space.s }} testID="siparis-ozet">
+    <KpiGrid testID="siparis-ozet">
       <KpiCard label="Açık kalem" value={formatNumber(v.acikKalem, 0)} unit="kalem" domain="siparisler" icon="receipt-outline" testID="ozet-acik" />
       <KpiCard
         label="Geciken" value={formatNumber(v.gecikenKalem, 0)} unit="kalem" domain="siparisler" icon="alarm-outline" testID="ozet-geciken"
@@ -39,7 +39,7 @@ function Summary({ veri }: { veri: unknown }) {
       />
       <KpiCard label="Açık miktar" value={formatNumber(v.acikMiktar, 0)} unit="m" domain="siparisler" icon="resize-outline" testID="ozet-miktar" />
       <KpiCard label="Karşılanma" value={formatNumber(v.karsilanmaYuzde, 0)} unit="%" domain="siparisler" icon="checkmark-done-outline" testID="ozet-karsilanma" />
-    </View>
+    </KpiGrid>
   );
 }
 
