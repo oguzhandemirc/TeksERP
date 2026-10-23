@@ -4,6 +4,7 @@
 import type { InboxItemKind, NotificationKind } from "../../api/wire";
 import type { IconName } from "../../ui/icons";
 import type { Domain } from "../../ui/tokens";
+import { TERIM } from "../terim";
 
 export interface KindLabel {
   readonly ad: string;
@@ -85,7 +86,7 @@ export const EXPORT_DATASET_LABEL: Readonly<Record<string, string>> = {
   sevkiyat: "Sevkiyatlar",
   "dogrudan-sevk": "Doğrudan sevkler",
   cuval: "Çuvallar",
-  "is-emri": "İş emirleri",
+  "is-emri": TERIM.terbiyeIsEmri.cogul,
   "cari-hesap": "Cari hesaplar",
   "cari-hareket": "Cari hareketleri",
   kasa: "Kasalar",
