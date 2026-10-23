@@ -1,7 +1,9 @@
 // Cari ayrıntısı: kimlik kartı (ad, kod, roller) · bakiye kartları (`cari-hesap`, sunucu `cariKartId` süzgeci; tutar
-// yalnız `.finans` alt satırı izinliyse) · ekstre isteği (rapor) · son siparişler (`siparis`, `cariKartId`) · iletişim.
+// yalnız `.finans` alt satırı izinliyse) · son hareketler (`cari-hareket`, sunucu `cariHesapId` süzgeci — sunucu beyan
+// etmiyorsa bölüm yok) · ekstre isteği (rapor) · son siparişler (`siparis`, `cariKartId`) · iletişim.
 // Bakiye ve vadesi geçen tutar fabrikadan; uygulama hesap yapmaz.
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import { Text, View } from "react-native";
 import type { ProjectionRecord } from "../../../src/api/wire";
 import { can } from "../../../src/lib/access";
@@ -18,6 +20,8 @@ import { openRecord } from "../../../src/ui/nav";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
 import { StatusBadge } from "../../../src/ui/StatusBadge";
+import { useListCapability } from "../../../src/ui/siparis/capabilities";
+import { CustomerMovements } from "../../../src/ui/siparis/OrderLines";
 import { OrderRow, asObj, str } from "../../../src/ui/siparis/OrderRow";
 import { FactGroup, FactRow, ListStates, RolePill, StaleNote } from "../../../src/ui/siparis/parts";
 import { useRemoteList } from "../../../src/ui/siparis/useRemoteList";
@@ -77,6 +81,8 @@ export default function CustomerDetail() {
   const balance = can(permissions, "bulut:cari-bakiye:oku");
   const statement = balance && can(permissions, "bulut:rapor:oku");
   const orders = can(permissions, "bulut:siparis:oku");
+  const movements = useListCapability().idFilter("cari-hareket", "cariHesapId") && balance;
+  const [tick, setTick] = useState(0);
   const accounts = useRemoteList("cari-hesap", { cariKartId: cariId ?? undefined }, { enabled: balance && !!cariId && !!r.data });
   const recent = useRemoteList("siparis", { cariKartId: cariId ?? undefined }, { enabled: orders && !!cariId && !!r.data, limit: 10 });
   const k = asObj(r.data?.kayit);
@@ -87,6 +93,7 @@ export default function CustomerDetail() {
     r.reload();
     accounts.reload();
     recent.reload();
+    setTick((n) => n + 1);
   };
   return (
     <Screen title={str(k.ad) ?? "Cari"} module="cariler" back onRefresh={refresh} refreshing={r.refreshing} subtitle={<StaleNote stale={r.stale} savedAt={r.savedAt} />}>
@@ -119,6 +126,7 @@ export default function CustomerDetail() {
                 <Button label="Ekstre iste" tone="secondary" icon="document-text-outline" testID="ekstre-iste"
                   onPress={() => router.push({ pathname: "/raporlar/yeni", params: { anahtar: "finance/statement", cariKartId: String(cariId) } } as never)} />
               ) : null}
+              {movements ? <CustomerMovements accounts={accounts.items} tick={tick} /> : null}
             </>
           ) : <Muted>Bakiye görme izniniz yok.</Muted>}
 

@@ -61,6 +61,25 @@ export function CapsuleButton(p: { label: string; icon?: IconName; onPress: () =
   );
 }
 
+/** Tek seçimli hızlı süzgeç çipi (yatay şerit): seçili tint zemin; durum `accessibilityState.selected`. */
+export function QuickChip(p: { label: string; selected: boolean; onPress: () => void; testID?: string }) {
+  const t = useTokens();
+  const s = useStyles();
+  return (
+    <Pressable
+      onPress={p.onPress}
+      testID={p.testID}
+      accessibilityRole="button"
+      accessibilityLabel={p.label}
+      accessibilityState={{ selected: p.selected }}
+      hitSlop={4}
+      style={({ pressed }) => [s.quick, p.selected && { backgroundColor: t.tint, borderColor: t.tint }, pressed && { opacity: 0.8 }]}
+    >
+      <Text style={[s.quickText, { color: p.selected ? t.onTint : t.text }]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.title}>{p.label}</Text>
+    </Pressable>
+  );
+}
+
 /** Liste altlığı: iskelet · hata + tekrar dene · tasarlanmış boş durum · "Daha fazla". */
 export function ListStates(p: { list: RemoteList; empty: string; domain: Domain; icon?: IconName; testID?: string }) {
   const { list } = p;
@@ -154,6 +173,8 @@ export const useStyles = makeStyles((t) => ({
     backgroundColor: t.tint,
   },
   capsuleOff: { opacity: 0.4 },
+  quick: { minHeight: 36, justifyContent: "center" as const, paddingHorizontal: space.m, borderRadius: radius.chip, borderWidth: 1, borderColor: t.separator, backgroundColor: t.surface },
+  quickText: { ...typography.subhead, fontWeight: "600" as const },
   capsuleText: { ...typography.subhead, fontWeight: "600" as const, color: t.onTint },
   stale: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs, marginBottom: space.s },
   staleText: { ...typography.footnote, color: t.textMuted },
