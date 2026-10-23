@@ -67,6 +67,7 @@
     "kk1DuplicateGuardEnabled": true,
     "workOrderQuickOwnOnlyEnabled": true,
     "supportOwnTicketsOnlyEnabled": true,
+    "patronBulutOlayGudumluEnabled": true,
     "kk1OnlineOnlyEnabled": true,
     "kk1LabelScanVerifyEnabled": true,
     "kk1HistoryAllEntriesEnabled": true,

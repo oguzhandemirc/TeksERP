@@ -530,6 +530,8 @@ export const updateSchema = z.strictObject({
   mobileRasterEnabled: z.boolean().optional(),
   // label.scrapGradeLabelEnabled — fire (QualityGrade.skipLabel) kalitede de OTOMATİK etiket bas (default false → fire topa kâğıt çıkmaz). Client (mobil) ENFORCE; elle baskı onayla mümkün.
   scrapGradeLabelEnabled: z.boolean().optional(),
+  // patronBulut.olayGudumluEnabled — patron bulutuna değişiklik olunca kısa tur (default false → yalnız kira aralığı). Backend ENFORCE (cloud-sync.job).
+  patronBulutOlayGudumluEnabled: z.boolean().optional(),
   // auth.absoluteSessionCapDays — mutlak oturum tavanı, gün (0 = 30 gün sert tavan, 0–365). Backend ENFORCE (issueToken).
   absoluteSessionCapDays: z.number().int().min(0).max(365).optional(),
   // auth.pinLockoutEnabled — giriş deneme kilidi KAPATILAMAZ (O-04): false → 400 PIN_LOCKOUT_REQUIRED.

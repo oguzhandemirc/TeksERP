@@ -168,6 +168,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "pinLockoutPenaltySec",
       "pinLockoutEscalateAfter",
       "pinLockoutLongPenaltyMin",
+      // Panel "Patron Bulutu" kategorisi (sistem bölümü) aynı dar izni taşır.
+      "patronBulutOlayGudumluEnabled",
     ],
   },
   // Yedekler ekranındaki "otomatik yedek saati".
