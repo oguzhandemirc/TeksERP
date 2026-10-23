@@ -17,8 +17,9 @@ export function RoleBadge({ permissions, testID = "rol-rozeti" }: { readonly per
   const s = useStyles();
   const role = roleOf(permissions);
   const c = t.role[role];
+  // Koyu temada lacivert zemin koyu yüzeyle birleşir; altın ince çerçeve rozeti seçilir kılar.
   return (
-    <View style={[s.badge, { backgroundColor: c.bg }]} testID={testID} accessible accessibilityLabel={`Rol: ${LABEL[role]}`}>
+    <View style={[s.badge, { backgroundColor: c.bg }, role === "yonetici" && t.scheme === "dark" && { borderWidth: 1, borderColor: t.gold }]} testID={testID} accessible accessibilityLabel={`Rol: ${LABEL[role]}`}>
       <Text style={[s.text, { color: c.fg }]} maxFontSizeMultiplier={FONT_SCALE.title}>{LABEL[role]}</Text>
     </View>
   );

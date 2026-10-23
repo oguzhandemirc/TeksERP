@@ -1,30 +1,42 @@
-// Hesaplar (yalnız tesis yöneticisi): tesisin bulut hesapları + verinin dışa aktarımı (Ek-6/A §4.2).
+// Hesaplar (yalnız tesis yöneticisi): tesisin bulut hesapları (rol + durum rozetli) · davet · verinin dışa aktarımı (Ek-6/A §4.2).
 import { useRouter } from "expo-router";
-import { formatDateTime } from "../../../src/lib/format";
+import { View } from "react-native";
 import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
-import { ErrorBox } from "../../../src/ui/data";
+import { AccountRow, Capsule } from "../../../src/ui/diger/AccountRow";
+import { GroupNote } from "../../../src/ui/diger/parts";
 import { Screen } from "../../../src/ui/Frame";
-import { Badge, Body, Button, Card, Loading, Muted } from "../../../src/ui/kit";
+import { ListGroup, ListRow } from "../../../src/ui/ListRow";
+import { SectionHeader } from "../../../src/ui/SectionHeader";
+import { Empty, ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
+import { space } from "../../../src/ui/tokens";
 
 export default function Accounts() {
   const { api, offline } = useSession();
   const router = useRouter();
   const r = useRemote("hesaplar", () => api.accountList());
   return (
-    <Screen title="Hesaplar" module="hesaplar">
-      <Button label="Hesap davet et" disabled={offline} onPress={() => router.push("/hesaplar/yeni")} testID="hesap-davet" />
-      <Button label="Verileri dışa aktar (JSON / CSV)" tone="plain" onPress={() => router.push("/hesaplar/disa-aktar")} testID="hesap-disa-aktar" />
-      {r.loading && !r.data ? <Loading /> : null}
-      {r.error && !r.data ? <ErrorBox text={r.error} onRetry={r.reload} /> : null}
-      {r.data?.map((a) => (
-        <Card key={a.id} testID={`hesap-${a.id}`} onPress={() => router.push({ pathname: "/hesaplar/[id]", params: { id: a.id } } as never)}>
-          <Body>{a.ad}</Body>
-          <Muted>{a.eposta}</Muted>
-          <Badge status={a.durum} />
-          <Muted>{a.sonGiris ? `Son giriş: ${formatDateTime(a.sonGiris)}` : "Henüz giriş yapmadı"}</Muted>
-        </Card>
-      ))}
+    <Screen title="Hesaplar" module="hesaplar" onRefresh={r.reload} refreshing={r.refreshing}>
+      <View style={{ flexDirection: "row", marginTop: space.s, marginBottom: space.xs }}>
+        <Capsule label="Hesap davet et" icon="person-add" disabled={offline} onPress={() => router.push("/hesaplar/yeni")} testID="hesap-davet" />
+      </View>
+      <SectionHeader title="Ekip" count={r.data ? r.data.length : undefined} />
+      {r.loading && !r.data ? <LoadingSkeleton rows={3} /> : null}
+      {r.error && !r.data ? <ErrorState text={r.error} onRetry={r.reload} /> : null}
+      {r.data && r.data.length === 0 ? <Empty icon="people-outline" text="Henüz hesap yok. Ekibinizi davet edin." /> : null}
+      {r.data && r.data.length > 0 ? (
+        <ListGroup testID="hesap-listesi">
+          {r.data.map((a) => (
+            <AccountRow key={a.id} a={a} onPress={() => router.push({ pathname: "/hesaplar/[id]", params: { id: a.id } } as never)} />
+          ))}
+        </ListGroup>
+      ) : null}
+      <GroupNote>Yönetici rozeti hesap yönetimi izni olanlardadır; izinleri hesaba dokunarak değiştirin.</GroupNote>
+      <SectionHeader title="Veri" />
+      <ListGroup>
+        <ListRow title="Verileri dışa aktar" subtitle="JSON ya da CSV döküm; dosya web sürümünden indirilir" icon="download-outline" domain="raporlar"
+          onPress={() => router.push("/hesaplar/disa-aktar")} testID="hesap-disa-aktar" />
+      </ListGroup>
     </Screen>
   );
 }
