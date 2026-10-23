@@ -79,10 +79,12 @@ async function bosHedefKapisi(): Promise<void> {
 // ── SQL sayacı ────────────────────────────────────────────────────────────────
 interface Sayac { n: number; ms: number }
 const als = new AsyncLocalStorage<Sayac>();
-const origQuery = Client.prototype.query;
-(Client.prototype as unknown as { query: (...a: unknown[]) => unknown }).query = function (this: Client, ...args: unknown[]): unknown {
+// Tip zorlamasız sarma: `Reflect` ile (örnek genişletme mandalı `test_type_assertion_ratchet` §2).
+const origQuery: unknown = Reflect.get(Client.prototype, "query");
+function sayanQuery(this: Client, ...args: unknown[]): unknown {
   const ctx = als.getStore();
-  if (!ctx) return (origQuery as (...a: unknown[]) => unknown).apply(this, args);
+  if (typeof origQuery !== "function") throw new Error("pg Client#query bulunamadı");
+  if (!ctx) return Reflect.apply(origQuery, this, args);
   const t0 = performance.now();
   const bitti = (): void => {
     ctx.n++;
@@ -90,16 +92,17 @@ const origQuery = Client.prototype.query;
   };
   const son = args[args.length - 1];
   if (typeof son === "function") {
-    args[args.length - 1] = function (this: unknown, ...cb: unknown[]) {
+    args[args.length - 1] = function (this: unknown, ...cb: unknown[]): unknown {
       bitti();
-      return (son as (...x: unknown[]) => unknown).apply(this, cb);
+      return Reflect.apply(son, this, cb);
     };
-    return (origQuery as (...a: unknown[]) => unknown).apply(this, args);
+    return Reflect.apply(origQuery, this, args);
   }
-  const r = (origQuery as (...a: unknown[]) => unknown).apply(this, args) as Promise<unknown> | undefined;
-  if (r && typeof (r as Promise<unknown>).then === "function") return r.then((v) => (bitti(), v), (e: unknown) => { bitti(); throw e; });
+  const r: unknown = Reflect.apply(origQuery, this, args);
+  if (r instanceof Promise) return r.then((v: unknown) => (bitti(), v), (e: unknown) => { bitti(); throw e; });
   return r;
-};
+}
+Reflect.set(Client.prototype, "query", sayanQuery);
 
 async function olculu<T>(fn: () => Promise<T>): Promise<{ sonuc: T; duvarMs: number; sql: number; dbMs: number }> {
   const s: Sayac = { n: 0, ms: 0 };
