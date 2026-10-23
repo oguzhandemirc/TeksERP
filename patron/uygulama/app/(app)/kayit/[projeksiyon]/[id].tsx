@@ -5,6 +5,7 @@ import { useLocalSearchParams } from "expo-router";
 import { Text, View } from "react-native";
 import { FINANCE_LOCKED_TEXT, FINANCE_SUBROW_PROJECTIONS, RECORD_ENUMS } from "../../../../src/lib/labels/finans";
 import { humanize, recordTitle } from "../../../../src/lib/present";
+import { TERIM } from "../../../../src/lib/terim";
 import { useSession } from "../../../../src/state/session";
 import { useRemote } from "../../../../src/state/useRemote";
 import { ErrorBox, Fields } from "../../../../src/ui/data";
@@ -32,7 +33,7 @@ const KIND: Readonly<Record<string, { readonly label: string; readonly domain: D
   siparis: { label: "Sipariş", domain: "siparisler", icon: "receipt-outline" },
   "siparis-kalemi": { label: "Sipariş kalemi", domain: "siparisler", icon: "list-outline" },
   sevkiyat: { label: "Sevkiyat", domain: "sevkiyat", icon: "car-outline" },
-  "is-emri": { label: "İş emri", domain: "uretim", icon: "construct-outline" },
+  "is-emri": { label: TERIM.terbiyeIsEmri.tekil, domain: "uretim", icon: "construct-outline" },
   fiyat: { label: "Fiyat", domain: "finans", icon: "pricetag-outline" },
 };
 
