@@ -11,6 +11,16 @@ describe("TR biçimleri", () => {
     expect(formatNumber("abc")).toBe("—");
     expect(formatMoney("10.5", "USD")).toBe("10,5 $");
   });
+  it("para: simge her tutarın yanında, döviz ayrı; bilinmeyen döviz kodu olduğu gibi (çevrim/aritmetik yok)", () => {
+    expect(formatMoney("1234.5", "TRY")).toBe("1.234,5 ₺");
+    expect(formatMoney("1234.5")).toBe("1.234,5 ₺");
+    expect(formatMoney("99.90", "EUR")).toBe("99,9 €");
+    expect(formatMoney(-12, "USD")).toBe("-12 $");
+    expect(formatMoney("5", "GBP")).toBe("5 GBP");
+    expect(formatMoney(null, "USD")).toBe("—");
+    // Fabrikanın ondalık dizisi kayıpsız basılır (iki haneye yuvarlama yalnız gösterim).
+    expect(formatMoney("1000000.00", "TRY")).toBe("1.000.000 ₺");
+  });
   it("tarih fabrika gününde (UTC+3)", () => {
     expect(formatDate("2026-09-29T22:30:00Z")).toBe("30.09.2026");
     expect(formatDateTime("2026-09-29T10:05:00Z")).toBe("29.09.2026 13:05");
