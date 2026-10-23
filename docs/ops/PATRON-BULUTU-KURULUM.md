@@ -427,3 +427,133 @@ Satıcı tarafı `SATICI-KURULUM.md` §5b'dedir: ağ (`IC_API_AGI`), sabit adres
 - **Play (§15 adım 7):** `tekserp-yonetim-1.0.2-vc1.aab` (sha `07c5e415…` `.sha256` ile eşit) → `com.etkiliyazilim.tekserp.yonetim` **dahili test** (`internal`) — yükleme + kanal ataması + commit; geri okuma `internal [completed: 1]` "1.0.2 (1)", diğer kanallar boş; sürüm notu tr-TR `PATRON-MAGAZA-ANDROID.md` §5.4 (170 karakter). Uygulama taslak değildi (`completed` kabul edildi). Yayın defteri `play-YAYIN-DEFTERI.tsv` satırı `yonetim-1.0.2-play-internal … vc1 yukle dogrulandi-completed`.
 - **İmajlar:** VDS'te `e847c7a55f3e` (çalışan) + `8fc40a01c14c` (geri alma) + `83f837666826` (en eski — sonraki yükseltmede silinir).
 - **Geri alma:** göç yok, şema aynı → `cat ~/p8-env-yedek-8fc40a01c14c > .env` + eski compose (`docker-compose.yml.yedek-20261015_2233-8fc40a01c14c`, yardımcı konteynerle) + `docker compose up -d` (eski imaj yerinde); `yonetim` adı o zaman 404 verir, `patron` adı hiç kapanmaz. Veri gerekirse `patron_20261015_223052` ve `tesis_8716286a…_20261015_223052` yedeklerinden (§7).
+
+## 16. v2 (0.2.0) — ölçümler ve yayın hazırlığı (2026-10-24)
+
+> Patron uygulaması v2 dalgasının (W1) ölçüm kayıtları ve backend 2.15.13 test grubu yayınının HAZIRLIĞI. Hiçbiri VDS'e, Play'e ya da dağıtım kanalına yazmadı. Dağıtım sırası: P5 N−1 sonucu **KABUL** → backend ile bulut arasında sıra şartı YOK (serbest).
+
+### 16.1 Ölçüm — uçtan uca gecikme (yerel)
+
+Düzenek: Senaryo P'nin gerçek fabrika backend'i (`tekserp_w1_test`) + gerçek patron bulutu (`tekserp_w1bulut_test`), lisans kira aralığı 5 dk; betik `Teks-Erp/scripts/olcum-patron-uctan-uca.ts` (CI'a bağlı değil). Gecikme = fabrikada `POST /api/orders` 201 → bir bulut hesabının `GET /api/degisim?since=…&bekle=25` uzun yoklamasının `degisenler` içinde `siparis` ile dönmesi. Bayrak `patronBulut.olayGudumluEnabled` AÇIK:
+
+| Tekrar | Gecikme (ms) | Tetik |
+|---|---|---|
+| 1 | 3133 | periyodik (başlangıç tıkı aynı pencereye düştü) |
+| 2 | 3291 | olay |
+| 3 | 3236 | olay |
+| 4 | 3358 | olay |
+| 5 | 3110 | olay |
+| **Özet** | **min 3110 · medyan 3236 · maks 3358** | hedef medyan ≤ 20 sn → SAĞLANDI |
+
+- Bileşim: 3 sn debounce + ~0,2 sn tur/kabul; her tekrarda tek uzun yoklama yetti, sipariş bulutta.
+- **15 sn aralık kapısının etkisi:** önceki olay turundan ~2 sn sonra gelen ikinci yazım 12623 ms'de göründü (ilki 3477 ms) → en kötü hâl ≈ 15 sn + tur.
+- **Bayrak KAPALI (kanıt):** 25 sn'lik yoklama 25021 ms'de `degisenler: []` döndü, değişim sayacı 1→1, sipariş bulutta YOK; zorlanan emniyet (kira aralığı) turundan sonra bulutta VAR. ⇒ Bayrak kapalıyken davranış bugünkü gibi kira aralığına bağlıdır.
+
+### 16.2 Ölçüm — olay turu maliyeti (sentetik, yerel)
+
+Soru: olay turu en sık 15 sn'de bir koşar; büyük bir fabrikada bir turun DB maliyeti fabrikayı yavaşlatır mı? Betik `Teks-Erp/scripts/olcum-patron-olay-turu.ts` (CI'a bağlı değil; `dolgu` · `olc` · `kirilim`). Fabrika verisi KLONLANMADI.
+
+**Hacim (sentetik, `tekserp_w1perf_test`):** `dolgu` kendi üreticisidir — tek işlemde `generate_series` INSERT'leri (FK/CHECK/tetikleyicilere uyar; damgalar 365 güne yayılı, hiçbiri gelecekte değil; doğuş tetikleyicileri — top durum olayı, üretim damgası, `shipment_orders` kirli işareti — gerçek yoldaki gibi çalışır, her 80. sevkli topun çuval değişimi `rolls_sync_parent_moved` işaretini doğurur). Kapılar kaçışsız: ad `^tekserp_[a-z0-9]*perf[a-z0-9]*_test$` · `hedefDbEngeli` · host yerel · `node scripts/test-db.mjs liste` KAYITLI açılış · başlangıçta `rolls = 0`. `seed-load-scale.ts` çağrılmaz (onun ad kapısını aşan yol patron kararıyla reddedildi). Negatif sondalar: `tekserp_w1_test` (ad) · uzak host · kayıtsız ad · 72 toplu kayıtlı DB → dördü de çıkış 2, yazma yok.
+
+| Tablo | Satır | Tablo | Satır |
+|---|---|---|---|
+| `rolls` | 12.000 | `roll_movements` | 33.330 (ölçüm sonu 34.127) |
+| `orders` | 2.200 | `order_lines` | 6.600 |
+| `customers` / `cari_accounts` | 522 / 520 | `work_orders` / adımlar | 2.108 / 6.324 |
+| `shipments` / `sacks` | 1.841 / 3.682 | `sync_marks` | 1.968 |
+
+**Düzenek:** sahte bulut (yerel HTTP, `bulut-fikstur`), gerçek `runEventRound` (bayrak açık), ağ yok. Üç süre ayrı ölçülür: **duvar** (turun başı→sonu) · **sunucu** (`pg_stat_database.active_time` farkı; boşta 11 sn beklenerek okunur — PG istatistiği en geç 10 sn'de yazar) · **istemci DB toplamı** (her sorgunun gidiş-dönüşü toplanır; paralel sorguları üst üste ve macOS Docker ağ gecikmesini sayar → yükü ABARTIR, yalnız bilgi). İki koşum (2026-10-24; 1. koşumda sunucu ölçüsü yoktu), her seri 5 tekrar:
+
+| Seri | Duvar ms (min · medyan · maks) | Sunucu ms (koşum 2) | SQL/tur (medyan) |
+|---|---|---|---|
+| (a) değişiklik yok | 1: 234 · 337 · 382 — 2: 199 · **225** · 293 | 95 · **130** · 185 | 297–301 |
+| (b) tek sipariş değişti | 1: 203 · 269 · 340 — 2: 186 · 329 · 337 | 100 · 139 · 177 | 317–318 |
+| (c) 100 top hareketi sonrası | 1: 234 · 316 · 376 — 2: 284 · 329 · 337 | 96 · 111 · 136 | 315–318 |
+| İlk tam eşitleme (bir kez) | 1486 / 1577 (1 tur, 7 paket) | — | 473 |
+
+**(d) 15 sn aralıkla 5 dk sürekli yazma** (saniyede 1 top hareketi + top damgası, 5 sn'de bir sipariş değişikliği; koşum 2: 20 tur, 357 hareket, 71 sipariş): tur duvarı medyan 273 ms (163–355) · DB'nin toplam sunucu süresi 3102 ms, yalnız-yazıcı penceresinin hızı (60 sn'de 237 ms) düşülünce turların payı **1929 ms → %0,64** · tur duvarı toplamı / duvar **%1,73** (koşum 1: %1,49) · istemci DB toplamı %6,14 (abartılı ölçü, yukarıda).
+
+**Kırılım (nereye gidiyor):** 24 kayıt projeksiyonunun değişiklik taraması toplam 34–133 ms duvar, 118 SQL (projeksiyon başına 4–10; en pahalısı `cari-hesap` 4–21 ms) — tarama filigrandan sonrasına bakar; bu hacimde projeksiyon başına ≤ 21 ms. HER_TUR anlıkları tek başına 107–153 ms duvar, 171–182 SQL; modül birleşimleriyle ayrıştırma (`kirilim`, 3 tekrar, sunucu medyanı): yalnız `ozet` (üretimsiz) + `tesis` + `saglik` **111 ms / ~100 SQL** · + `ozet-finans` 116 ms · + `uretim-akisi` 146 ms · hepsi 121 ms. ⇒ Boş turun sunucu süresinin büyük kısmı her turda yeniden kurulan **`ozet` anlığıdır** (getFactoryOverview + dönem pencereleri); özet eşitse gönderilmez ama KURULUR.
+
+**Karar:** (d) eşiği (≤ %2) **SAĞLANDI** — sunucu payı %0,64, duvar payı %1,73. (a) eşiği (≤ 200 ms) duvar saatinde **AŞILDI** (medyan 225 / 337 ms), sunucu süresinde sağlandı (130 ms). ⇒ **DB darboğazı YOK**: tur fabrikanın DB'sine 15 sn'de ~0,13 sn iş bindirir; duvar fazlası ~300 sorgunun gidiş-dönüşüdür (Linux kurulumda yerel soket bunu küçültür — ölçülmedi). **Öneri (kod değiştirilmedi; ayrı dilim):** (1) olay turunda HER_TUR anlıklarını yalnız kirli küme onların okuduğu tablolara değdiyse kur, değmediyse periyodik tıka bırak — boş/ilgisiz turun maliyeti tarama düzeyine (~118 SQL) iner; (2) `ozet`in ~100 sorgusunu dönem pencerelerini tek CTE'de toplayarak azalt.
+
+### 16.3 Senaryo P ve bayrak açık bekçiler (yerel, 2026-10-24)
+
+- **Senaryo P tam koşum** (`tekserp_w1_test` + bulut `tekserp_w1bulut_test`, origin/main `86247e657` + bu dalın termin düzeltmesi): **24 YEŞİL · 1 KISMİ (P14) · 0 KIRMIZI**, adımların toplamı 159 sn. Çıkış **1**: koşucu KISMİ'yi de "yeşil olmayan" sayar ve P14 sözleşme v1'de TANIM GEREĞİ KISMİ'dir (N−1 = v0 yok; karar fonksiyonu ölçülür, uçtan uca bant sözleşme v2'de). ⇒ sözleşme v1 kaldıkça Senaryo P'nin ulaşabileceği en iyi sonuç budur; "çıkış 0" beklentisi P14 KISMİ'yi kapsamaz.
+- **İlk koşum KIRMIZIYDI (tarih çürümesi):** P5 gelen kutusu siparişi sabit `termin: "2026-10-15"` taşıyordu; tarih geçince fabrika iş kuralı "Termin tarihi sipariş tarihinden önce olamaz" ile reddetti → P5 ❌ ve P5'in sipariş kimliğine bağlı P24 ❌ (`invalid input syntax for type uuid: ""`). Düzeltme: termin koşum gününden 30 gün ileri fabrika günü, beklenen `deadline` `factoryDayStartOfKey(termin)` (`Teks-Erp/scripts/lib/senaryo-patron-adimlar-b.ts`). Ürün kodu değişmedi.
+- **Bayrak açık bekçiler (yerel, 2026-10-24):** `test_bulut_olay_gudumlu` (`tekserp_w1_test`, bayrağı kendisi açar/kapatır) **39 geçti / 0** · bulutta `test_degisim_sayaci` (`tekserp_w1bulut_test`) **21 geçti / 0**.
+
+### 16.4 Backend 2.15.13 → `test` grubu — yayın HAZIRLIĞI (2026-10-24; KOŞULMADI, kullanıcının "uygula" cümlesini bekler)
+
+Kalıp: 2.15.12 test grubu yayını (2026-10-21; runbook + rapor `~/.tekserp/dokuma-prova-1021/dagitim-{runbook,raporu}.md`). Bu bölüm o kalıbın 2.15.13 farkını ve hazır komutları verir; adımların gerekçesi orada.
+
+**Ölçülmüş başlangıç (2026-10-24, salt okuma):**
+
+| Ölçü | Değer |
+|---|---|
+| Son backend etiketi | `backend-v2.15.12` → `9efa190ac`; `node scripts/backend-surum.mjs` → **2.15.13** |
+| Kapsam (`backend-v2.15.12..origin/main`) | P4 olay güdümlü tur (`patronBulut.olayGudumluEnabled`, varsayılan KAPALI) + zil turu tüm projeksiyonlar · P5 `siparis`/`sevkiyat.musteriAdi`, `siparis-kalemi.urunAdi`/`renkAdi` (İŞLEM, opt-in) · panel: Sistem → Patron Bulutu ayar kategorisi. `Teks-Erp/src` 10 dosya; geri kalan commit'ler `patron/**` (pakete girmez) |
+| Migration | **YOK** — HEAD 395 = etiket 395 |
+| Native / güncelleyici / docker / pg / node | `git diff backend-v2.15.12 HEAD -- Teks-Erp/native deploy/pg deploy/node-surumu.json Teks-Erp/docker` BOŞ → güncelleyici 0.2.8 kalır |
+| Kanal kayıtları | `deploy/kanallar.json` ve `deploy/dagitim.json` etiketten beri DEĞİŞMEDİ |
+| Sürüm notu | main'de `docs/surumler/2.15.13-taslak.md` (P4) + `2.15.13-taslak-P5.md` (P5) — W2 tek taslakta birleştirir; `backend-2.15.13.md` YALNIZ yayın anında, kullanıcı onayıyla açılır |
+
+**Test grubunda kim var (ölçüldü):** `deploy/kanallar.json` grup üyeliği TAŞIMAZ — üç ESKİ kanal kaydı vardır: `adnansahin` (üretim, DONMUŞ — bu yayının hedefi DEĞİL), `testfabrika` (hazırlık, adnansahin aynası; emekli 2026-10-05), `demofabrika` (aynasız hazırlık; kanalı 2026-10-11'de kaldırıldı, blok bayt-donuk). Grup yayını hedefi `deploy/dagitim.json` `gruplar` (`test` kök · `oncu` ← test · `genel` ← oncu) + `indirmeKoku`'dan türer; kurulumun grubu satıcıdaki kiranın `kanal.kod` alanıdır (repoda yok). Bilinen tek `test` üyesi: **bulut deneme sunucusu** (`ssh tekserp-bulut-deneme`, 213.142.134.226, `/opt/tekserp/test-musteri`, kip ONAYLI; 2026-10-21'de kira `kanal.kod = test` ölçüldü — `SUNUCU-ENVANTERI.md`). Adnan Şahin kurulumu `adnansahin` eski kanalında / üretim satıcısında; `--grup=test` yolu ona hiç dokunmaz (kanal=test grep kalıbı her çıktıya uygulanır).
+
+**Deneme için 2.15.13'ün anlamı:** deneme patron bulutuna bağlı (§15a: test-müşteri `PATRON_CLOUD_URL` = `patron.` adı). Kurulumdan sonra (a) bayrak KAPALI kaldıkça eşitleme bugünkü gibi kira aralığında; (b) P5 lookup kaynaklarının filigranı olmadığından İLK tur bağlı bütün sipariş/sevkiyat/kalem satırlarını yeni alanlarla yeniden gönderir (2.000 satır/kaynak/tur; DEVIR-P5) — N−1 bulut fazla alanı saklar (P5 N−1 KABUL), bulut önce şartı YOK; (c) olay turu yalnız kullanıcı panelden açarsa çalışır (aşağıda isteğe bağlı adım 7).
+
+**Hazır komutlar (sıra 2.15.12 kalıbı; `<RUN>`/`<SURUM_SHA>` yayın anında ölçülür):**
+
+```sh
+# (0) ön koşul — izole worktree, ana ağaç KİRLİ
+cd /Users/demirci/Documents/Projeler/Teks-Erp && git fetch origin --tags
+gh pr list --state open; gh run list --branch main -L 3            # main CI yeşil
+git worktree add ../Teks-Erp-wt/yayin-21513 -b chore/yayin-21513 origin/main
+cd ../Teks-Erp-wt/yayin-21513 && (cd Teks-Erp && npm ci && npx prisma generate)
+git diff --quiet 'backend-v2.15.12^{commit}' HEAD -- deploy/kanallar.json && echo "kanallar.json donuk"
+node scripts/test_eski_kanal_donuk.mjs && node scripts/check-dagitim.mjs
+git diff --stat 'backend-v2.15.12^{commit}' HEAD -- Teks-Erp/prisma/migrations Teks-Erp/native deploy/pg deploy/node-surumu.json Teks-Erp/docker   # BOŞ beklenir
+
+# (1) sürüm commit'i — KULLANICI ONAYI: sürüm notu metni
+node scripts/backend-surum.mjs                    # 2.15.13
+node scripts/backend-surum.mjs --uygula           # Teks-Erp/package.json → 2.15.13
+(cd docs/surumler && git mv 2.15.13-taslak.md backend-2.15.13.md)   # TASLAK başlığı kaldırılır, SABLON yedi başlık; göç YOK (395), sözleşme kırılmadı, minVersion dokunulmadı
+(cd Teks-Erp && npx tsx scripts/test_surum_belgesi.ts)
+git commit -F <mesaj>   # "docs(sürüm): backend 2.15.12 → 2.15.13 — sürüm commit'i (test grubu yayını)" → PR → CI 21/21 → merge = <SURUM_SHA>
+
+# (2) korumalı paket CI'ı (yalnız workflow_dispatch; girdisi yok)
+gh workflow run korumali-paket.yml --ref main
+RUN=$(gh run list --workflow=korumali-paket.yml -L1 --json databaseId -q '.[0].databaseId')
+gh run view $RUN --json headSha -q .headSha      # = <SURUM_SHA>; değilse DUR
+gh run watch $RUN
+D=~/.tekserp/korumali-derleme/p21513-$RUN; mkdir -p $D/{imaj,kunye,guncelleyici,teslim}
+gh run download $RUN -n korumali-imaj-linux-x64 -D $D/imaj
+gh run download $RUN -n korumali-imaj-kunye-linux-x64 -D $D/kunye
+gh run download $RUN -n guncelleyici-linux-x64 -D $D/guncelleyici
+gunzip -c $D/imaj/tekserp-korumali-imzasiz-linux-x64.tar.gz | docker load
+
+# (3) imza + teslim (parola Anahtar Zinciri `tekserp/paket`; komuta yazılmaz)
+export TEKSERP_PAKET_ANAHTARI=~/.tekserp/satici-uretim/donemler/20261009T194029Z/paket/pkt-2026-1.paket.json
+node Teks-Erp/docker/korumali/imaj-imzala.mjs tekserp-korumali:2.15.13-imzasiz tekserp-korumali:2.15.13 --ci-kosu=$RUN 2>&1 | tee $D/imzala.log
+sh Teks-Erp/docker/korumali/teslim-paketle.sh tekserp-korumali:2.15.13 $D/guncelleyici $D/teslim 2>&1 | tee $D/teslim.log
+
+# (4) grup yayını — YALNIZ test; önce KURU
+node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --paket=$D/teslim/tekserp-backend-oci-2.15.13.tar --kuru 2>&1 | tee $D/yayin-kuru.log
+grep -c '/tekserp-indir/html/test/backend-oci' $D/yayin-kuru.log                       # > 0
+grep -nE 'adnansahin|guncelleme\.etkiliyazilim|sahinsrv|192\.168\.1\.250|100\.107\.103\.79|/oncu/|/genel/' $D/yayin-kuru.log && echo "⛔ DUR" || echo "✓ kanal=test temiz"
+grep -q 'göç 395' $D/yayin-kuru.log && echo "göç sayısı tamam"
+node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --paket=$D/teslim/tekserp-backend-oci-2.15.13.tar 2>&1 | tee $D/yayin.log   # gerçek
+node scripts/backend-surum.mjs --etiketle 2.15.13 && git ls-remote --tags origin backend-v2.15.13
+node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --dogrula
+
+# (5) deneme: ONAY_BEKLIYOR ölçümü (salt okuma) → kullanıcı panelden "Şimdi kur"
+#     beklenen durum.json: <kurulu: 2.15.12 ya da 2.15.11 — 2.15.12 "Şimdi kur" kullanıcı adımıydı, yayın anında ölç> HAZIR 2.15.13 ONAY_BEKLIYOR ONAYLI None
+# (6) kurulum sonrası: /health 2.15.13 · göç 395 / yarım 0 · durum.json son.sonuc BASARILI
+#     patron bulutu: tesis DB `sync_state.last_package_at` kurulumdan sonra ilerler; ilk turlarda sipariş/sevkiyat satırları `musteriAdi` taşır
+# (7) İSTEĞE BAĞLI (kullanıcı kararı): deneme web paneli → Sistem → Patron Bulutu → "Patron bulutuna anında gönder" AÇ
+#     → yönetim uygulamasında bir sipariş açıp fabrikada değiştir; beklenen ≤ ~20 sn (§16.1 yerel ölçüm). Kapatmak geri almadır.
+```
+
+**Geri alma:** göç YOK → kurulduktan sonra sorun çıkarsa güncelleyicinin önceki imaja dönüşü veri geri yüklemesiz mümkündür; grupta geri inme yok, düzeltme ileri sürümle (2.15.14). Davranış sorunu için ilk adım bayrağı KAPATMAK (kod geri alınmaz). Etiket `backend-v2.15.13` silinmez.
+
+**Bu bölümde koşulan:** yalnız salt okuma ölçümleri (`git`, `node scripts/backend-surum.mjs` yazdırma kipi, `deploy/*.json` okuma). Paket üretimi, imza, yayın, VDS/deneme erişimi YAPILMADI.
