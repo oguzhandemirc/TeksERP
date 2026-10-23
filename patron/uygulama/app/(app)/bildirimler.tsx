@@ -1,16 +1,20 @@
-// Bildirimler: ayarlar (ana anahtar · tür · sessiz saat · eşikler), tesis varsayılanı (yönetici), bu cihaz, geçmiş.
-// Karar sunucudadır: ayar katı şemadan geçer, izni yetmeyen türe ayar açık olsa da gönderilmez.
-import { useCallback, useEffect, useState } from "react";
+// Bildirimler — bölümler: Ayarlar (ana anahtar · tür · sessiz saat) · Eşikler · Cihazlar · Geçmiş; tesis varsayılanı
+// (yönetici). Karar sunucudadır: ayar katı şemadan geçer, izni yetmeyen türe ayar açık olsa da gönderilmez.
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { View } from "react-native";
 import type { NotificationSettingsView } from "../../src/api/wire";
 import { can } from "../../src/lib/access";
 import { fromForm, toForm, type NotificationForm } from "../../src/lib/notification-form";
 import { useSession } from "../../src/state/session";
 import { useRemote } from "../../src/state/useRemote";
-import { ErrorBox } from "../../src/ui/data";
+import { GroupNote } from "../../src/ui/diger/parts";
 import { Screen } from "../../src/ui/Frame";
-import { Banner, Button, ConfirmButton, Loading, Muted } from "../../src/ui/kit";
+import { Banner, Button, ConfirmButton } from "../../src/ui/kit";
 import { NotificationDevices, NotificationHistory } from "../../src/ui/NotificationDevices";
 import { NotificationSettingsForm } from "../../src/ui/NotificationSettingsForm";
+import { SectionHeader } from "../../src/ui/SectionHeader";
+import { Empty, ErrorState, LoadingSkeleton } from "../../src/ui/StateViews";
+import { space } from "../../src/ui/tokens";
 import { useWrite } from "../../src/ui/useWrite";
 
 const SOURCE: Readonly<Record<NotificationSettingsView["kaynak"], string>> = {
@@ -52,28 +56,34 @@ export default function Notifications() {
     adopt(await w.run(JSON.stringify(parsed.settings)), message);
   };
 
-  if (remote.loading && !view) return <Screen title="Bildirimler" module="bildirimler"><Loading /></Screen>;
-  if (remote.error && !view) return <Screen title="Bildirimler" module="bildirimler"><ErrorBox text={remote.error} onRetry={remote.reload} /></Screen>;
-  if (!view || !form) return <Screen title="Bildirimler" module="bildirimler"><Muted>Ayarlar okunamadı</Muted></Screen>;
+  const shell = (children: ReactNode) => (
+    <Screen title="Bildirimler" module="bildirimler" onRefresh={remote.reload} refreshing={remote.refreshing}>{children}</Screen>
+  );
+  if (remote.loading && !view) return shell(<LoadingSkeleton rows={5} />);
+  if (remote.error && !view) return shell(<ErrorState text={remote.error} onRetry={remote.reload} />);
+  if (!view || !form) return shell(<Empty icon="notifications-off-outline" text="Ayarlar okunamadı" actionLabel="Tekrar dene" onAction={remote.reload} />);
   const error = formError ?? saveOwn.error ?? reset.error ?? saveFacility.error;
-  return (
-    <Screen title="Bildirimler" module="bildirimler">
+  return shell(
+    <>
       {view.gonderim === "kapali" ? <Banner tone="warn" text="Bildirim gönderimi sunucuda henüz açık değil; ayarlarınız saklanır ve açıldığında geçerli olur." testID="gonderim-kapali" /> : null}
-      <Muted>{SOURCE[view.kaynak]}</Muted>
+      <SectionHeader title="Ayarlar" />
+      <GroupNote>{SOURCE[view.kaynak]}</GroupNote>
       <NotificationSettingsForm form={form} kinds={view.turler} onChange={(f) => { setForm(f); setSaved(null); }} />
       {error ? <Banner tone="error" text={error} testID="bildirim-hata" /> : null}
-      {saved ? <Banner tone="off" text={saved} /> : null}
-      <Button label="Kaydet" busy={saveOwn.busy} disabled={saveOwn.disabled} onPress={() => void submit(saveOwn, "Ayarlarınız kaydedildi")} testID="bildirim-kaydet" />
-      {view.kaynak === "HESAP" ? (
-        <ConfirmButton label="Tesis varsayılanına dön" question="Kendi ayarlarınız silinip tesis varsayılanı kullanılsın mı?" busy={reset.busy}
-          onConfirm={() => void reset.run("sifirla").then((v) => adopt(v, "Tesis varsayılanına dönüldü"))} />
-      ) : null}
-      {can(permissions, "bulut:hesap:yonet") ? (
-        <ConfirmButton label="Tesis varsayılanı olarak kaydet" question="Bu ayarlar, kendi ayarı olmayan bütün hesaplar için varsayılan olsun mu?" busy={saveFacility.busy}
-          onConfirm={() => void submit(saveFacility, "Tesis varsayılanı kaydedildi")} testID="tesis-varsayilani" />
-      ) : null}
+      {saved ? <Banner tone="off" icon="checkmark-circle" text={saved} /> : null}
+      <Button label="Kaydet" icon="checkmark" busy={saveOwn.busy} disabled={saveOwn.disabled} onPress={() => void submit(saveOwn, "Ayarlarınız kaydedildi")} testID="bildirim-kaydet" />
+      <View style={{ gap: space.xs }}>
+        {view.kaynak === "HESAP" ? (
+          <ConfirmButton label="Tesis varsayılanına dön" question="Kendi ayarlarınız silinip tesis varsayılanı kullanılsın mı?" busy={reset.busy}
+            onConfirm={() => void reset.run("sifirla").then((v) => adopt(v, "Tesis varsayılanına dönüldü"))} />
+        ) : null}
+        {can(permissions, "bulut:hesap:yonet") ? (
+          <ConfirmButton label="Tesis varsayılanı olarak kaydet" question="Bu ayarlar, kendi ayarı olmayan bütün hesaplar için varsayılan olsun mu?" busy={saveFacility.busy}
+            onConfirm={() => void submit(saveFacility, "Tesis varsayılanı kaydedildi")} testID="tesis-varsayilani" />
+        ) : null}
+      </View>
       <NotificationDevices vapidKey={view.webPushAnahtari} />
       <NotificationHistory />
-    </Screen>
+    </>,
   );
 }
