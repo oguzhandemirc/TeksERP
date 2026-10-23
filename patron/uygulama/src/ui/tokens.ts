@@ -44,6 +44,22 @@ export interface StatusColor {
   readonly icon: "checkmark-circle" | "warning" | "alert-circle" | "information-circle";
 }
 
+/** Lacivert (`navy`) yüzey üstü tonlar: giriş kabuğu, profil kahraman kartı. Zemin her temada koyu → değerler sabit. */
+export interface OnNavy {
+  readonly text: string;
+  readonly textSecondary: string;
+  readonly textMuted: string;
+  /** Lacivert üstünde bir kademe açık iç yüzey (marka işareti kutusu). */
+  readonly surface: string;
+  readonly separator: string;
+  /** İkincil çip/düğme zemini ve üstündeki vurgu. */
+  readonly chip: string;
+  readonly tint: string;
+}
+
+/** İstasyon türü: iç istasyon (fabrika içi) · dış istasyon (fason). */
+export type StationKind = "ic" | "dis";
+
 export interface Tokens {
   readonly scheme: Scheme;
   readonly bg: string;
@@ -61,6 +77,9 @@ export interface Tokens {
   readonly gold: string;
   readonly domain: Readonly<Record<Domain, DomainColor>>;
   readonly status: Readonly<Record<StatusKind, StatusColor>>;
+  readonly onNavy: OnNavy;
+  /** İstasyon renk paleti (Üretim akışı, istasyon dağılımı): çubuk/şerit `fg`, çip `chip`. */
+  readonly station: Readonly<Record<StationKind, DomainColor>>;
   readonly role: { readonly yonetici: { readonly bg: string; readonly fg: string }; readonly ekip: { readonly bg: string; readonly fg: string } };
   /** Kart gölgesi (koyu modda yok; yüzey tonu farkı yeter). */
   readonly cardShadow: ViewStyle;
@@ -68,6 +87,16 @@ export interface Tokens {
   /** Karekod gibi her temada beyaz kalması gereken yüzey. */
   readonly paper: string;
 }
+
+const ON_NAVY: OnNavy = {
+  text: "#F1F5F9",
+  textSecondary: "#CBD5E1",
+  textMuted: "#94A3B8",
+  surface: "#252933",
+  separator: "#2E3440",
+  chip: "#2A2A5C",
+  tint: "#818CF8",
+};
 
 const STATUS_ICON = {
   iyi: "checkmark-circle",
@@ -108,6 +137,8 @@ export const light: Tokens = {
     kritik: { fill: "#B91C1C", text: "#7F1D1D", bg: "#FEE2E2", icon: STATUS_ICON.kritik },
     bilgi: { fill: "#475569", text: "#1E293B", bg: "#F1F5F9", icon: STATUS_ICON.bilgi },
   },
+  onNavy: ON_NAVY,
+  station: { ic: { fg: "#7C3AED", chip: "#EDE9FE" }, dis: { fg: "#A21CAF", chip: "#FAE8FF" } },
   role: { yonetici: { bg: "#161C2B", fg: "#FDE68A" }, ekip: { bg: "#E0E7FF", fg: "#4F46E5" } },
   cardShadow: { boxShadow: "0 1px 2px rgba(15,23,42,0.06), 0 4px 12px rgba(15,23,42,0.05)" },
   floatShadow: { boxShadow: "0 8px 24px rgba(15,23,42,0.12)" },
@@ -146,6 +177,8 @@ export const dark: Tokens = {
     kritik: { fill: "#F87171", text: "#FECACA", bg: "#450A0A", icon: STATUS_ICON.kritik },
     bilgi: { fill: "#94A3B8", text: "#E2E8F0", bg: "#1E293B", icon: STATUS_ICON.bilgi },
   },
+  onNavy: ON_NAVY,
+  station: { ic: { fg: "#A78BFA", chip: "#2E1065" }, dis: { fg: "#E879F9", chip: "#4A044E" } },
   role: { yonetici: { bg: "#161C2B", fg: "#FDE68A" }, ekip: { bg: "#2A2A5C", fg: "#818CF8" } },
   cardShadow: {},
   floatShadow: {},

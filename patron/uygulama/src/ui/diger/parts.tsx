@@ -18,7 +18,7 @@ export function initials(name: string | null | undefined): string {
   return `${first}${last}`.replace(/i/g, "İ").replace(/ı/g, "I").toUpperCase();
 }
 
-/** Baş harf avatarı: yönetici navy + altın, ekip indigo zemin. */
+/** Baş harf avatarı: yönetici navy + altın, çalışan indigo zemin. */
 export function Avatar({ name, permissions, size = 44 }: { readonly name: string | null | undefined; readonly permissions: readonly string[]; readonly size?: number }) {
   const t = useTokens();
   const role = roleOf(permissions);

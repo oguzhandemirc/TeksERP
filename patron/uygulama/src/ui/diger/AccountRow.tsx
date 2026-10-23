@@ -6,7 +6,7 @@ import type { Account } from "../../api/wire";
 import { formatAgo } from "../../lib/format";
 import { statusEntry } from "../../lib/labels";
 import type { IconName } from "../icons";
-import { RoleBadge, roleOf } from "../RoleBadge";
+import { ROLE_LABEL, RoleBadge, roleOf } from "../RoleBadge";
 import { StatusBadge } from "../StatusBadge";
 import { makeStyles, useTokens } from "../theme-context";
 import { FONT_SCALE, TOUCH, radius, space, typography } from "../tokens";
@@ -25,7 +25,7 @@ export function AccountRow({ a, onPress }: { readonly a: Account; readonly onPre
       onPress={onPress}
       testID={`hesap-${a.id}`}
       accessibilityRole="button"
-      accessibilityLabel={`${a.ad}, ${roleOf(a.izinler) === "yonetici" ? "Yönetici" : "Ekip"}, ${statusEntry(a.durum).label}`}
+      accessibilityLabel={`${a.ad}, ${ROLE_LABEL[roleOf(a.izinler)]}, ${statusEntry(a.durum).label}`}
       style={({ pressed }) => [s.row, pressed && { backgroundColor: t.surfaceAlt }]}
     >
       <Avatar name={a.ad} permissions={a.izinler} size={44} />

@@ -200,6 +200,7 @@ kullanıcı terfide onaylar):
 | Sürüm | Not |
 |---|---|
 | 1.0.2 · vc1 (`…tekserp.yonetim`) | `İlk sürüm: pano, üretim, sevkiyat, stok, finans, siparişler, cariler, gelen kutusu, raporlar, çoklu tesis. Hesabınızı uygulamadan silebilirsiniz: Profil → "Hesabımı sil".` |
+| 1.1.0 · vc2 (`…tekserp.yonetim`, v2 görünümü; kaynak `magaza/surum-notu-vc2.tr-TR.txt`, 393 karakter) | `Yeni görünüm: uygulama baştan tasarlandı. Alt sekmelerle Pano, Üretim, Siparişler ve Finans tek dokunuşta. Pano günün özetini ve dikkat isteyen konuları öne çıkarır. Karanlık mod eklendi; Profil'den Sistem, Açık ya da Koyu seçebilirsiniz. Ekranlar yeni veriyi kendiliğinden tazeler. Siparişlerde arama ve durum süzgeci, cari ayrıntısında son hareketler var. Raporlarda tarih seçimi kolaylaştı.` |
 
 ### 5.5 Kategori ve iletişim
 Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · gizlilik politikası
@@ -268,5 +269,23 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
 | Metin | `patron/uygulama/magaza/metinler.json` — `listings` (tr-TR, en-US: `title` ≤30, `shortDescription` ≤80, `fullDescription` ≤4000) + `details` (iletişim, varsayılan dil). Yetenek listesi koddan (`app/(app)/*`, `src/lib/access.ts`); kodda olmayan özellik yazılmaz |
 | Görsel | `magaza/gorseller/icon.png` (512, 32 bit, `assets/icon.png`'den) · `featureGraphic.png` (1024×500, 24 bit; logo + altın halka + ad) · `phoneScreenshots/*.png` (1080×1920, 24 bit) |
 | Üretim | `swift deploy/play-magaza-gorsel.swift ikon / one / maske …` — yalnız macOS AppKit; dış font/asset indirilmez |
-| Ekran görüntüsü | Pixel_10_Pro emülatörü `wm size 1080x1920` + `wm density 420` (Play telefon oranı ≤ 2:1), duman APK, inceleme hesabıyla giriş (sırlar Anahtar Zinciri'nden, hiçbir çıktıya girmez). İnceleme tesisi bugün GERÇEK veri taşıdığı için her sayı, sipariş no, tarih, ürün adı ve e-posta `uiautomator` sınırlarından opak düz kutuyla kapatılır (`maske`; bulanıklık değil, geri çözülemez) ve her görüntü gözle denetlenir. Maskesiz ham görüntü repoya GİRMEZ |
+| Ekran görüntüsü | **1.1.0'dan itibaren (2026-10-24):** web çıktısı (`npx expo export --platform web`) + Playwright Chromium + SAHTE API (istekler sayfa içinde yakalanır, tel şekli `src/api/wire.ts`; oturum yanıtı P6 `liste` yeteneğini taşır, yoksa yeni liste görünümleri açılmaz), görüntü alanı 432×768 @2.5 = 1080×1920, 24 bit; üstte düğmesi olan ekranda (03) telefon durum çubuğu payı için kök 24 px aşağı kaydırılır. Gerçek veri HİÇ yoktur → maske gerekmez; her görüntü yine gözle denetlenir. Sıra: 01-pano · 02-uretim · 03-siparisler · 04-finans · 05-cariler · 06-gelen-kutusu · 07-profil (koyu). **1.0.2'de (emekli yöntem):** Pixel_10_Pro emülatörü `wm size 1080x1920` + `wm density 420`, duman APK, inceleme hesabıyla giriş; inceleme tesisi GERÇEK veri taşıdığı için her sayı/no/tarih/ad `uiautomator` sınırlarından opak düz kutuyla kapatıldı (`maske`). Maskesiz gerçek veri görüntüsü repoya GİRMEZ |
 | Yükleme | `node deploy/play-magaza.mjs --app=yonetim` (kuru okuma; edit silinir) · `--uygula` (details + listings + her dilde görselleri sil-yükle → commit → geri oku) · `--uretim=<vc> --yuzde=<N> --uygula` (yalnız yonetim; not `magaza/surum-notu-vc<vc>.tr-TR.txt`) |
+
+## 11. Ölçüm — 1.1.0 · vc2 (2026-10-24; paket `…tekserp.yonetim`, v2 görünümü)
+
+Kaynak: W2 dalı (uygulama kodu 1.1.0 sürüm commit'iyle aynı; squash sonrası main'deki W2 inişi), `npm run build:apk:duman` — parola Anahtar Zinciri
+`tekserp/patron-play-yukleme`'den okundu. AAB DERLENMEDİ ve Play'e yüklenmedi (kullanıcı: `npm run build:aab` →
+`node deploy/play-magaza.mjs --app=yonetim --uygula` görseller/metin; sürüm notu §5.4, terfide kullanıcı onayı).
+
+| | |
+|---|---|
+| Duman APK | `tekserp-yonetim-1.1.0-vc2.duman.apk` · 78.2 MB · SHA-256 `0eb68e7a8b634a204c89d8fe78eeaf5ef26cedd53a1dc12c3fd43bd9628ab98b` — dağıtılmaz |
+| `aapt2 dump badging` | `com.etkiliyazilim.tekserp.yonetim` · versionCode 2 · versionName 1.1.0 · targetSdk 36 · etiket "TeksERP Yönetim" |
+| İzinler | yalnız `INTERNET` + `com.etkiliyazilim.tekserp.yonetim.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` |
+| Firebase / bildirim | manifestte `firebase` / `c2dm` / `gms.messaging` eşleşmesi 0 · `NATIVE_PUSH = false` aynen · `allowBackup=false` |
+| İmza | yükleme sertifikası `3dd96b00468f3f8c…` (1.0.2 vc1 ile AYNI anahtar) |
+| JS paketi | `yonetim.etkiliyazilim.com` var · `patron.etkiliyazilim.com` yok · tek `localhost:8081` eşleşmesi React Native kütüphanesinin Metro varsayılanı (bağlam ölçüldü), uygulama geliştirme adresi yok (`build-aab` doğrulaması yeşil) |
+| Parola sızıntısı | derleme günlüğünde kasa parolası aranıp bulunmadı |
+| Mağaza görselleri | 7 telefon görüntüsü (§10 yöntemi) · `node scripts/test_play_magaza.mjs` 29/0 |
+| Emülatör dumanı | koşulmadı (görsel doğrulama web çıktısında yapıldı); kullanıcı yüklemeden önce isterse: `adb install -r ~/.tekserp/patron-android/cikti/tekserp-yonetim-1.1.0-vc2.duman.apk` |

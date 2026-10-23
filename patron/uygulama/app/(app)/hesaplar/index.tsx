@@ -25,7 +25,7 @@ export default function Accounts() {
       {r.error && !r.data ? <ErrorState text={r.error} onRetry={r.reload} /> : null}
       {r.data && r.data.length === 0 ? <Empty icon="people-outline" text="Henüz hesap yok. Ekibinizi davet edin." /> : null}
       {r.data && r.data.length > 0 ? (
-        <ListGroup testID="hesap-listesi">
+        <ListGroup testID="hesap-listesi" iconSize={44}>
           {r.data.map((a) => (
             <AccountRow key={a.id} a={a} onPress={() => router.push({ pathname: "/hesaplar/[id]", params: { id: a.id } } as never)} />
           ))}

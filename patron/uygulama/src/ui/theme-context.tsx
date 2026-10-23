@@ -18,12 +18,6 @@ interface ThemeValue {
 
 const ThemeContext = createContext<ThemeValue>({ tokens: light, pref: "sistem", setPref: () => undefined });
 
-// Eski `theme.ts` `color` nesnesi bu değeri okur (henüz `useTokens`a geçmemiş ekranlar için).
-let active: Tokens = light;
-export function activeTokens(): Tokens {
-  return active;
-}
-
 export function isThemePref(v: unknown): v is ThemePref {
   return typeof v === "string" && (THEME_PREFS as readonly string[]).includes(v);
 }
@@ -61,7 +55,6 @@ export function ThemeProvider({ children, store }: { children: ReactNode; store?
   );
 
   const tokens = schemes[resolveScheme(pref, system)];
-  active = tokens;
   const value = useMemo(() => ({ tokens, pref, setPref }), [tokens, pref, setPref]);
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

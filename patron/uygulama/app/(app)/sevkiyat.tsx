@@ -9,9 +9,9 @@ import { PERIODS, PERIOD_LABEL, SHIPMENT_DESTINATION, SHIPMENT_STATUS, UNIT, rec
 import { useSession } from "../../src/state/session";
 import { Screen } from "../../src/ui/Frame";
 import { openRecord } from "../../src/ui/nav";
-import { MetricGrid, MetricTile } from "../../src/ui/pano/MetricTile";
+import { KpiCard, KpiGrid } from "../../src/ui/KpiCard";
+import { ListRow } from "../../src/ui/ListRow";
 import { num, obj, period, pct, qty, str } from "../../src/ui/pano/read";
-import { RecordRow } from "../../src/ui/pano/RecordRow";
 import { RecordStatusBadge } from "../../src/ui/pano/RecordStatusBadge";
 import { RemoteList, useRecordPage } from "../../src/ui/pano/RemoteList";
 import { FactoryStamp, SnapshotGate } from "../../src/ui/pano/SnapshotGate";
@@ -42,10 +42,10 @@ export default function Shipments() {
               const late = num(d.ortGecikmeGun);
               return (
                 <>
-                  <MetricGrid testID="sevk-kpi">
-                    <MetricTile label="Sevk edilen" value={qty(d.sevkMiktari)} unit={UNIT.metre} caption={`${PERIOD_LABEL[p]} · ${qty(d.sevkTopSayisi)} ${UNIT.top} · brüt`} domain="sevkiyat" testID="kpi-sevk-metre" />
-                    <MetricTile label="Zamanında teslim" value={pct(d.zamanindaYuzde)} caption={`${qty(d.tamamlananSiparis)} sipariş tamamlandı`} domain="sevkiyat" icon="checkmark-done-outline" testID="kpi-zamaninda" />
-                    <MetricTile
+                  <KpiGrid testID="sevk-kpi">
+                    <KpiCard label="Sevk edilen" value={qty(d.sevkMiktari)} unit={UNIT.metre} caption={`${PERIOD_LABEL[p]} · ${qty(d.sevkTopSayisi)} ${UNIT.top} · brüt`} domain="sevkiyat" testID="kpi-sevk-metre" />
+                    <KpiCard label="Zamanında teslim" value={pct(d.zamanindaYuzde)} caption={`${qty(d.tamamlananSiparis)} sipariş tamamlandı`} domain="sevkiyat" icon="checkmark-done-outline" testID="kpi-zamaninda" />
+                    <KpiCard
                       label="Ortalama gecikme"
                       value={late === null ? "Yok" : qty(late)}
                       unit={late === null ? undefined : UNIT.gun}
@@ -54,7 +54,7 @@ export default function Shipments() {
                       icon="time-outline"
                       testID="kpi-gecikme"
                     />
-                  </MetricGrid>
+                  </KpiGrid>
                   <FactoryStamp snap={snap} offline={summary.offline} note="brüt, iade düşülmez" />
                 </>
               );
@@ -82,10 +82,10 @@ export default function Shipments() {
           const customer = str(k.musteriAdi);
           const no = str(k.sevkNo) ?? "—";
           return (
-            <RecordRow
+            <ListRow
               title={customer ?? no}
               value={sent ? meters : undefined}
-              badge={sent ? undefined : <RecordStatusBadge entry={st} testID={`durum-${r.id}`} />}
+              accessory={sent ? undefined : <RecordStatusBadge entry={st} testID={`durum-${r.id}`} />}
               lines={[`${customer ? `${no} · ` : ""}${formatDate(when)}${dest}${sent ? "" : ` · ${meters}`}`]}
               domain="sevkiyat"
               onPress={() => openRecord(router, "sevkiyat", r.id)}

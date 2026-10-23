@@ -11,9 +11,9 @@ import { useOpenRefresh } from "../../../src/state/useOpenRefresh";
 import { FacilityName, Screen, useWide } from "../../../src/ui/Frame";
 import { HeroSummary } from "../../../src/ui/HeroSummary";
 import { DOMAIN_ICON, MODULE_ICON } from "../../../src/ui/icons";
+import { KpiCard, KpiGrid, type KpiLine } from "../../../src/ui/KpiCard";
 import { ListGroup, ListRow } from "../../../src/ui/ListRow";
 import { AttentionStrip } from "../../../src/ui/pano/AttentionStrip";
-import { MetricGrid, MetricTile, type MetricLine } from "../../../src/ui/pano/MetricTile";
 import { areaSummary, attentionItems, column, dueAmount, dueRows, dueShort, obj, period, pct, qty, type AttentionItem } from "../../../src/ui/pano/read";
 import { FactoryStamp } from "../../../src/ui/pano/SnapshotGate";
 import { combine, useSnapshot } from "../../../src/ui/pano/useSnapshot";
@@ -100,12 +100,12 @@ export default function Dashboard() {
           <AttentionStrip items={items} checked={checkedText(permissions, on)} onOpen={open} />
           {firstLoad ? <LoadingSkeleton variant="kpi" rows={4} testID="pano-yukleniyor" /> : null}
           {production.data ? <TodayHero production={production.data} shipping={veri(shipping)} orders={veri(orders)} offline={production.offline} /> : null}
-          <MetricGrid testID="pano-kpi">
+          <KpiGrid testID="pano-kpi">
             {shipping.data ? <ShipTodayTile data={shipping.data.veri} onPress={() => router.push("/sevkiyat" as never)} /> : null}
             {orders.data ? <OpenOrdersTile data={orders.data.veri} onPress={() => router.push("/siparisler" as never)} /> : null}
             {finance.data ? <DueTile data={finance.data.veri} onPress={() => router.push("/finans" as never)} /> : null}
             {production.data ? <QueueTile data={production.data.veri} onPress={() => router.push("/uretim" as never)} /> : null}
-          </MetricGrid>
+          </KpiGrid>
           <SectionHeader title="Alanlar" testID="bolum-alanlar" />
           <ListGroup testID="alan-kartlari">
             {cards.map((c) => {
@@ -168,7 +168,7 @@ function ShipTodayTile({ data, onPress }: { readonly data: unknown; readonly onP
   const month = period(data, "buAy");
   const last = period(data, "gecenAy");
   return (
-    <MetricTile
+    <KpiCard
       label="Bugün sevk"
       value={qty(today.sevkMiktari)}
       unit={UNIT.metre}
@@ -187,12 +187,12 @@ function ShipTodayTile({ data, onPress }: { readonly data: unknown; readonly onP
 function OpenOrdersTile({ data, onPress }: { readonly data: unknown; readonly onPress: () => void }) {
   const d = obj(data);
   const late = typeof d.gecikenKalem === "number" && d.gecikenKalem > 0;
-  const lines: MetricLine[] = [
+  const lines: KpiLine[] = [
     { label: "Açık miktar", value: `${qty(d.acikMiktar)} ${UNIT.metre}` },
     { label: "Geciken", value: `${qty(d.gecikenKalem)} ${UNIT.kalem}`, tone: late ? "kritik" : undefined },
   ];
   return (
-    <MetricTile
+    <KpiCard
       label="Açık sipariş"
       value={qty(d.acikKalem)}
       unit={UNIT.kalem}
@@ -212,7 +212,7 @@ function DueTile({ data, onPress }: { readonly data: unknown; readonly onPress: 
   const overdue = dueRows(data, ["OVERDUE"]);
   const first = soon[0];
   return (
-    <MetricTile
+    <KpiCard
       label="Vadesi yaklaşan"
       value={first ? dueAmount(first) : "Yok"}
       caption={first ? `${dueShort(first)} · 7 gün içinde` : "7 gün içinde vadesi gelen çek/senet yok"}
@@ -234,7 +234,7 @@ function QueueTile({ data, onPress }: { readonly data: unknown; readonly onPress
   const depot = column(data, "depo");
   const lines = [fason, depot].flatMap((c) => (c ? [{ label: c.label, value: `${qty(c.count)} ${UNIT.top}` }] : []));
   return (
-    <MetricTile
+    <KpiCard
       label="Üretim kuyruğu"
       value={qty(semi?.count)}
       unit={UNIT.top}

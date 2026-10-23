@@ -73,6 +73,8 @@ describe("§3 okunurluk (metin ≥ 4.5:1)", () => {
     for (const s of Object.values(t.status)) expect(contrast(s.text, s.bg)).toBeGreaterThanOrEqual(4.5);
     for (const d of Object.values(t.domain)) expect(contrast(d.fg, t.surface)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(t.role.yonetici.fg, t.role.yonetici.bg)).toBeGreaterThanOrEqual(4.5);
+    for (const fg of [t.onNavy.text, t.onNavy.textSecondary, t.onNavy.textMuted]) expect(contrast(fg, t.navy)).toBeGreaterThanOrEqual(4.5);
+    for (const st of Object.values(t.station)) expect(contrast(st.fg, t.surface)).toBeGreaterThanOrEqual(4.5);
   });
 });
 

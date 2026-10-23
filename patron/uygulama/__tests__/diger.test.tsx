@@ -82,7 +82,7 @@ describe("hesap ayrıntısı: izinler", () => {
     expect(screen.getByText("Siparişleri görme")).toBeTruthy();
     expect(screen.getAllByText("Hesap yönetimi").length).toBeGreaterThan(0);
     expect(screen.getByText("Finans")).toBeTruthy();
-    expect(screen.getByTestId("hesap-rol").props.accessibilityLabel).toBe("Rol: Ekip");
+    expect(screen.getByTestId("hesap-rol").props.accessibilityLabel).toBe("Rol: Çalışan");
     fireEvent.press(screen.getByText("Kasa"));
     expect(screen.getByTestId("izin-degisti")).toBeTruthy();
     await act(async () => fireEvent.press(screen.getByTestId("izin-kaydet")));

@@ -82,7 +82,7 @@ export default function InboxDetail() {
           {body ? (
             <>
               {body.rows.length > 0 ? (
-                <ListGroup testID="mesaj-icerik">
+                <ListGroup testID="mesaj-icerik" iconSize={0}>
                   {body.rows.map((row) => (
                     <View key={row.label} style={s.kv}>
                       <Text style={s.k}>{row.label}</Text>

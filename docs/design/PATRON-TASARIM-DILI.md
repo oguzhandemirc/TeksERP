@@ -29,6 +29,20 @@
 | `gold` | `#FDE68A` | `#FDE68A` | yönetici rozeti metni |
 | `paper` | `#FFFFFF` | `#FFFFFF` | karekod zemini (her temada beyaz) |
 
+#### Lacivert yüzey üstü (`onNavy.*`; zemin her temada `navy` → değerler iki temada aynı)
+
+Giriş/davet kabuğu (`AuthShell`) ve Profil kahraman kartı. Koyu temanın `dark.*` setini doğrudan okumak YASAK; bu set kullanılır.
+
+| Token | Değer | Kullanım |
+|---|---|---|
+| `onNavy.text` | `#F1F5F9` | başlık, ad |
+| `onNavy.textSecondary` | `#CBD5E1` | e-posta, slogan |
+| `onNavy.textMuted` | `#94A3B8` | dipnot, güvenlik satırı |
+| `onNavy.surface` | `#252933` | lacivert üstü iç kutu (marka işareti) |
+| `onNavy.separator` | `#2E3440` | ince çizgi, kart kenarı (koyu tema) |
+| `onNavy.chip` | `#2A2A5C` | ikincil çip/düğme zemini (çalışan rozeti, "Değiştir") |
+| `onNavy.tint` | `#818CF8` | çip üstü vurgu metni/ikonu |
+
 ### 1.2 Alan renkleri (`domain.<alan>.fg` · `.chip`)
 
 | Alan | Açık metin/ikon | Açık çip | Koyu metin/ikon | Koyu çip |
@@ -43,6 +57,15 @@
 | Raporlar `raporlar` | `#475569` | `#E2E8F0` | `#94A3B8` | `#1E293B` |
 | Gelen kutusu `gelenKutusu` | `#4F46E5` | `#E0E7FF` | `#818CF8` | `#2A2A5C` |
 | Genel `genel` (Pano, Hesap, Profil) | `#475569` | `#E2E8F0` | `#94A3B8` | `#1E293B` |
+
+### 1.2b İstasyon paleti (`station.<tür>.fg` · `.chip`)
+
+Üretim akışı şeridi ve istasyon dağılımı çubukları alan rengini DOĞRUDAN okumaz; istasyon türü paletten gelir (bugün iç = üretim, dış = fason tonu; ayrı ayarlanabilir).
+
+| Tür | Açık metin/çubuk | Açık çip | Koyu metin/çubuk | Koyu çip |
+|---|---|---|---|---|
+| İç istasyon `ic` | `#7C3AED` | `#EDE9FE` | `#A78BFA` | `#2E1065` |
+| Dış istasyon (fason) `dis` | `#A21CAF` | `#FAE8FF` | `#E879F9` | `#4A044E` |
 
 ### 1.3 Durum seti (`status.<ton>`: dolgu · metin · zemin · ikon)
 
@@ -59,10 +82,10 @@ Eğilim: yön ok şekliyle (`arrow-up/down/remove`) + işaretli metin ("+%12"); 
 
 | Rol | Ölçüt | Açık | Koyu |
 |---|---|---|---|
-| YÖNETİCİ | `bulut:hesap:yonet` | zemin `#161C2B` · metin `#FDE68A` | aynı |
-| EKİP | diğer | zemin `#E0E7FF` · metin `#4F46E5` | zemin `#2A2A5C` · metin `#818CF8` |
+| Yönetici | `bulut:hesap:yonet` | zemin `#161C2B` · metin `#FDE68A` | aynı |
+| Çalışan | diğer | zemin `#E0E7FF` · metin `#4F46E5` | zemin `#2A2A5C` · metin `#818CF8` |
 
-Rozet yalnız gösterir; karar sunucudadır.
+Rozet yalnız gösterir; karar sunucudadır. Görünen ad TEK kaynak `ROLE_LABEL` (`src/ui/RoleBadge.tsx`; "Yönetici" · "Çalışan" — patron ve çalışan aynı sözü okur); profil kartı ve hesap satırı oradan okur. Token anahtarı `role.ekip` iç addır, ekranda görünmez.
 
 ## 2 · Tipografi (`typography`)
 
@@ -71,7 +94,7 @@ Sistem fontu (iOS SF Pro, Android Roboto, web system-ui); `allowFontScaling` aç
 | Token | Boyut/satır | Ağırlık | Kullanım |
 |---|---|---|---|
 | `display` | 40/44 | 700 + tabular | Pano kahraman sayısı |
-| `kpi` | 30/34 | 700 + tabular | KPI değeri |
+| `kpi` | 30/34 | 700 + tabular | KPI değeri (kartta 34/38; uzun değerde `valueSize()` 28 → 24 → 20 küçültür — web'de `adjustsFontSizeToFit` yok) |
 | `largeTitle` | 34/41 | 700 | ekran büyük başlığı |
 | `title2` | 22/28 | 700 | sheet/ayrıntı başlığı, `Stat` değeri |
 | `title3` | 20/25 | 600 | bölüm başlığı, `Title` |
@@ -79,15 +102,15 @@ Sistem fontu (iOS SF Pro, Android Roboto, web system-ui); `allowFontScaling` aç
 | `body` | 17/22 | 400 | gövde |
 | `callout` | 16/21 | 400 | düğme (600), form |
 | `subhead` | 15/20 | 400 | satır alt metni, `Muted` |
-| `footnote` | 13/18 | 400 | rozet, eşitleme damgası |
-| `caption` | 12/16 | 500 | KPI etiketi (BÜYÜK HARF değil) |
+| `footnote` | 13/18 | 400 | rozet, eşitleme damgası; KPI etiketi (600) ve yan değerleri |
+| `caption` | 12/16 | 500 | küçük etiket (BÜYÜK HARF değil) |
 
 ## 3 · Boşluk · yarıçap · gölge · ölçüler
 
 - **Boşluk `space`:** `xs 4 · s 8 · m 12 · l 16 · ml 20 · xl 24 · xxl 32`; ekran kenarı 16 (telefon) / 24 (geniş); kartlar arası 12.
 - **Yarıçap `radius` (eş merkezli, iç = dış − iç boşluk):** `sheet 28 · card 20 · cardInner 12 · control 12 · button 14 · chip 999`.
 - **Gölge:** açık modda `cardShadow` = `0 1px 2px rgba(15,23,42,0.06), 0 4px 12px rgba(15,23,42,0.05)`, `floatShadow` = `0 8px 24px rgba(15,23,42,0.12)` (`boxShadow`); koyu modda gölge yok, yüzey tonu farkı.
-- **Ölçüler:** `TOUCH 48` (en küçük dokunma hedefi) · `STRIPE 4` (kart şeridi) · `WIDE_MIN 768` (ray + iki sütun eşiği) · `READABLE_MAX 960` (tek sütun) · `CONTENT_MAX 1200` (iki sütun) · `BAR_HEIGHT 44` · `RAIL_WIDTH 248`.
+- **Ölçüler:** `TOUCH 48` (en küçük dokunma hedefi) · `STRIPE 4` (kart şeridi) · `WIDE_MIN 768` (ray + iki sütun eşiği) · `READABLE_MAX 960` (tek sütun) · `CONTENT_MAX 1120` (iki sütun) · `BAR_HEIGHT 44` · `RAIL_WIDTH 248`.
 
 ## 4 · Hareket
 
@@ -95,7 +118,7 @@ Sistem fontu (iOS SF Pro, Android Roboto, web system-ui); `allowFontScaling` aç
 
 ## 5 · Tema
 
-`ThemeProvider` (`src/ui/theme-context.tsx`) sistemi (`useColorScheme`) izler; tercih düz depoda `patron.tema` = `sistem | acik | koyu` (`useThemePref()`; Profil'de "Sistem · Açık · Koyu" — E4). Sağlayıcısız (testler) açık tema. `app.json` `userInterfaceStyle: "automatic"`. Geçici `src/ui/theme.ts` `color` nesnesi etkin temadan okur; `useTokens()`a geçmemiş son ekranlar (giriş, davet, hesap ayrıntısı) taşınınca silinir.
+`ThemeProvider` (`src/ui/theme-context.tsx`) sistemi (`useColorScheme`) izler; tercih düz depoda `patron.tema` = `sistem | acik | koyu` (`useThemePref()`; Profil'de "Sistem · Açık · Koyu" — E4). Sağlayıcısız (testler) açık tema. `app.json` `userInterfaceStyle: "automatic"`. Bütün ekranlar `useTokens()` okur; eski `src/ui/theme.ts` uyum katmanı kaldırıldı (W2, 1.1.0).
 
 ## 6 · Gezinme
 
@@ -126,10 +149,10 @@ Yeni bileşenler:
 
 | Bileşen | Dosya | Props |
 |---|---|---|
-| `KpiCard` | `KpiCard.tsx` | `label, value, unit?, domain, icon?, trend? {text, direction up·down·flat, tone}, status? {kind, label}, spark?, onPress?, testID?` — tek erişilebilirlik etiketi `kpiAccessibilityLabel()` |
+| `KpiCard` · `KpiGrid` | `KpiCard.tsx` | `label, value, unit?, caption?, domain, icon?, trend? {text, direction up·down·flat, tone}, status? {kind, label} (rozet), lines? [{label, value, tone?}], lineLayout? row·stack, spark?, onPress? (chevron), testID?` — yan değerler fabrikanın verdiği değerlerdir, karşılaştırma HESAPLANMAZ; tek erişilebilirlik etiketi `kpiAccessibilityLabel()` (etiket: değer birim, eğilim, durum, açıklama, yan değerler); `KpiGrid {children, testID?}` telefonda 2'li, genişte 4'lü |
 | `HeroSummary` | `HeroSummary.tsx` | `title, value, unit?, caption?, domain?, icon?, minis? [{label, value}] (≤3), testID?` |
-| `SectionHeader` | `SectionHeader.tsx` | `title, count?, actionLabel? ("Tümü"), onAction?, domain?, testID?` (`${testID}-tumu`) |
-| `ListRow` / `ListGroup` | `ListRow.tsx` | `title, subtitle?, value?, valueTone?, icon?, domain?, accessory?, onPress?, locked?, testID?, accessibilityLabel?` · `ListGroup {children, testID?}` |
+| `SectionHeader` | `SectionHeader.tsx` | `title, count? (sayı ya da "3/8"), icon? (alan ikon çipi, renk `domain`), actionLabel? ("Tümü"), onAction?, domain?, testID?` (`${testID}-tumu`) |
+| `ListRow` / `ListGroup` | `ListRow.tsx` | `title, subtitle?, lines?, value?, valueTone?, icon?, domain?, accessory?, onPress?, locked?, testID?, accessibilityLabel?` — `lines` verilirse ya da değer + rozet birlikteyse Posta düzeni (rozet/değer başlık satırında, alt satırlar tam genişlik, kırpılmaz) · `ListGroup {children, testID?, iconSize? (36 = LIST_ICON; ikonsuz satır 0)}` — ayraç metin hizasından başlar: `16 + iconSize + 12` |
 | `StatusBadge` | `StatusBadge.tsx` | `{value}` (sözlükten) ya da `{kind, label}`; `size? sm·md`, `testID?` |
 | `SegmentedControl` | `SegmentedControl.tsx` | `items, value, onChange, testIDPrefix? ("segment-"), accessibilityLabel?` — ≤4 kayan gösterge, 5+ kaydırılan çip |
 | `FilterChip` | `FilterChip.tsx` | `label, value, onPress, selected?, testID?` — "Durum: Tümü"; dokununca çağıran doğrudan sheet açar |
@@ -153,7 +176,7 @@ Etiket sözlüğü: `src/lib/labels/` — `STATUS_DICT` (gelen kutusu, rapor, he
 - **Siparişler:** özet şeridi (açık · gecikmiş · bu hafta · tamam) = süzgeç çipleri; satır cari + no / açık metre + termin rozeti.
 - **Finans:** alacak/borç/net hero; `AgingBar`; Kasa · Çek · Fatura · Tahsilat segmenti (izinliler).
 - **Cariler:** arama + "Rol: Tümü"; satır ad + rol / bakiye.
-- **Raporlar:** kart ızgarası + durum rozeti. **Gelen kutusu:** segment Bekleyen · İşlenen · Reddedilen, yaş, 24 sa uyarı.
+- **Raporlar:** kart ızgarası + durum rozeti. Rapor formunda kesit (`asOf`) serbest metin değil: "Bugün · Dün · Ay sonu (geçen ayın son günü) · Özel" segmenti, seçilen gün altında yazılı (+ Özel'de GG.AA.YYYY); istemci yalnız fabrika GÜNÜNÜ seçer, giden an o günün son anıdır, hesap fabrikada. **Gelen kutusu:** segment Bekleyen · İşlenen · Reddedilen, yaş, 24 sa uyarı.
 - **Hesaplar:** özet sayaçları + rol/durum rozeti. **Profil:** navy kahraman kart + tema seçimi.
 
 ## 9 · Erişilebilirlik

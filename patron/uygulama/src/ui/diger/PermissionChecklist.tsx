@@ -3,9 +3,9 @@
 import { Pressable, Text, View } from "react-native";
 import { ACCOUNT_TEMPLATE, ACCOUNT_TEMPLATES, type AccountTemplate } from "../../lib/labels/diger";
 import { groupPermissions, permissionLabel, type PermissionGroup } from "../../lib/labels/izin";
-import { IconChip } from "../IconChip";
 import type { IconName } from "../icons";
 import { ListGroup } from "../ListRow";
+import { SectionHeader } from "../SectionHeader";
 import { makeStyles, useTokens } from "../theme-context";
 import { TOUCH, radius, space, typography, type Domain } from "../tokens";
 import { CheckRow } from "./parts";
@@ -58,12 +58,8 @@ export function PermissionChecklist(p: {
         const on = g.codes.filter((c) => p.selected.includes(c)).length;
         return (
           <View key={g.key}>
-            <View style={s.head}>
-              <IconChip domain={look.domain} icon={look.icon} size={24} />
-              <Text style={[s.headText, { color: t.domain[look.domain].fg }]} accessibilityRole="header">{g.ad}</Text>
-              <Text style={s.headCount}>{`${on}/${g.codes.length}`}</Text>
-            </View>
-            <ListGroup testID={`izin-grup-${g.key}`}>
+            <SectionHeader title={g.ad} icon={look.icon} domain={look.domain} count={`${on}/${g.codes.length}`} />
+            <ListGroup testID={`izin-grup-${g.key}`} iconSize={0}>
               {g.codes.map((c) => {
                 const l = permissionLabel(c);
                 return <CheckRow key={c} title={l.ad} subtitle={l.aciklama || undefined} checked={p.selected.includes(c)} onPress={() => p.onToggle(c)} />;
@@ -81,7 +77,4 @@ const useStyles = makeStyles((t) => ({
   chip: { minHeight: TOUCH - 8, paddingHorizontal: space.l, borderRadius: radius.chip, borderWidth: 1, justifyContent: "center" as const },
   chipText: { ...typography.subhead, fontWeight: "600" as const },
   custom: { ...typography.footnote, color: t.textMuted },
-  head: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s, paddingHorizontal: space.xs, marginTop: space.m, marginBottom: space.s },
-  headText: { ...typography.subhead, fontWeight: "700" as const, flex: 1 },
-  headCount: { ...typography.footnote, color: t.textMuted },
 }));

@@ -42,7 +42,7 @@ export default function NewAccount() {
         </View>
       </ListGroup>
       <GroupCaption>Yetki şablonu</GroupCaption>
-      <ListGroup testID="sablonlar">
+      <ListGroup testID="sablonlar" iconSize={32}>
         {ACCOUNT_TEMPLATES.map((k) => {
           const n = catalog.data?.sablonlar[k]?.length;
           return (

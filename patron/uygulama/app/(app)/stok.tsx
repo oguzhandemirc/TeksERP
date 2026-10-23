@@ -5,8 +5,8 @@ import { Text, View } from "react-native";
 import { DEAD_STOCK_STATUS, STOCK_AGE_TONE, UNIT } from "../../src/lib/labels/uretim";
 import { AgingBar } from "../../src/ui/charts";
 import { Screen } from "../../src/ui/Frame";
+import { KpiCard, KpiGrid } from "../../src/ui/KpiCard";
 import { ListGroup, ListRow } from "../../src/ui/ListRow";
-import { MetricGrid, MetricTile } from "../../src/ui/pano/MetricTile";
 import { arr, num, obj, pct, qty, str } from "../../src/ui/pano/read";
 import { FactoryStamp, SnapshotGate } from "../../src/ui/pano/SnapshotGate";
 import { useSnapshot } from "../../src/ui/pano/useSnapshot";
@@ -38,11 +38,11 @@ function StockBody({ data, stamp }: { readonly data: unknown; readonly stamp: Re
   return (
     <View>
       {stamp}
-      <MetricGrid testID="stok-kpi">
-        <MetricTile label="Ham" value={qty(o.hamMiktar)} unit={UNIT.metre} caption={`${qty(o.hamAdet)} ${UNIT.top}`} domain="stok" icon="layers-outline" testID="kpi-ham" />
-        <MetricTile label="Yarı mamul" value={qty(o.yariMamulMiktar)} unit={UNIT.metre} caption={`${qty(o.yariMamulAdet)} ${UNIT.top}`} domain="stok" icon="sync-outline" testID="kpi-yari" />
-        <MetricTile label="Bitmiş" value={qty(o.bitmisMiktar)} unit={UNIT.metre} caption={`${qty(o.bitmisAdet)} ${UNIT.top}`} domain="stok" icon="cube-outline" testID="kpi-bitmis" />
-      </MetricGrid>
+      <KpiGrid testID="stok-kpi">
+        <KpiCard label="Ham" value={qty(o.hamMiktar)} unit={UNIT.metre} caption={`${qty(o.hamAdet)} ${UNIT.top}`} domain="stok" icon="layers-outline" testID="kpi-ham" />
+        <KpiCard label="Yarı mamul" value={qty(o.yariMamulMiktar)} unit={UNIT.metre} caption={`${qty(o.yariMamulAdet)} ${UNIT.top}`} domain="stok" icon="sync-outline" testID="kpi-yari" />
+        <KpiCard label="Bitmiş" value={qty(o.bitmisMiktar)} unit={UNIT.metre} caption={`${qty(o.bitmisAdet)} ${UNIT.top}`} domain="stok" icon="cube-outline" testID="kpi-bitmis" />
+      </KpiGrid>
 
       <View style={[s.dead, dead ? s.deadOn : null]} testID="olu-stok" accessible accessibilityLabel={`Ölü stok: ${qty(o.oluMiktar)} ${UNIT.metre}`}>
         <View style={s.deadHead}>
