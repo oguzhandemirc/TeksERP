@@ -94,7 +94,7 @@ export default function Reports() {
                 key={r.id}
                 testID={`rapor-${r.id}`}
                 title={reportTitle(r.raporAnahtari, all)}
-                subtitle={`${paramSummary(r.parametreler)} · ${formatDateTime(r.olusturulma)}`}
+                subtitle={`${paramSummary(r.parametreler)} · ${formatDateTime(r.olusturulma).replace(/^(\d{2}\.\d{2})\.\d{4} /, "$1 ")}`}
                 icon={d.icon}
                 domain={d.domain}
                 accessory={<ReportStatusBadge status={r.durum} testID={`rapor-durum-${r.id}`} compact />}
