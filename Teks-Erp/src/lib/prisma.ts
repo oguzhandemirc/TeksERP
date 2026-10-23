@@ -12,6 +12,7 @@ import dotenv from "dotenv";
 import { PG_SESSION_OPTIONS } from "./pg-session";
 import { hata } from "./logger";
 import { resolveEnvFilePath } from "./hizmet-duzeni";
+import { withDirtyTracking } from "../cloud-sync/dirty-flag";
 
 // Betik girişleri için; sunucuda server.ts zaten yükledi. Yol düzenden: Windows hizmetinde
 // `<kök>/yapilandirma/.env`, değilse cwd'deki `.env` (dotenv'in kendi varsayılanıyla aynı).
@@ -88,13 +89,15 @@ const adapter = new PrismaPg(pool);
 
 // O3-1: global transactionOptions — interaktif tx için varsayılan tavanları yükselt
 // (per-call override YOK, davranış daralmaz). timeout DB statement_timeout=50s altında.
-const prisma = new PrismaClient({
+// Patron bulutu kirli bayrağı TEK noktada sarılır (yalnız işaret bırakır; tur kararı işte).
+// `$extends` değil Proxy: genişletilmiş tip tx imzalarını kırıyordu (cloud-sync/dirty-flag.ts).
+const prisma = withDirtyTracking(new PrismaClient({
   adapter,
   transactionOptions: {
     maxWait: 5_000,
     timeout: 20_000,
   },
-});
+}));
 
 // O3-3: Graceful shutdown TEK noktada (server.ts) toplanmıştır. Buradaki
 // SIGTERM/SIGINT handler'ı KALDIRILDI — çift handler F10 graceful shutdown'ı boşa

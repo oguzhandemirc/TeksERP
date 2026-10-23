@@ -19,6 +19,7 @@ import {
   UsersRound,
   Warehouse,
   LifeBuoy,
+  Cloud,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -1998,6 +1999,26 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Yönetim"],
         desc: "Açıkken destek talebi açabilen kullanıcı listede ve ayrıntıda yalnız kendi taleplerini görür (başkasınınki 'bulunamadı' döner); ayar yönetme yetkisi olan yönetici hepsini görür. Kapalıyken (varsayılan) destek talebi açabilen herkes bütün talepleri ve ekran görüntülerini görür.",
+      },
+    ],
+  },
+  {
+    id: "patron-bulut",
+    label: "Patron Bulutu",
+    icon: Cloud,
+    description: "Fabrika verisinin patron bulutuna ne zaman gönderileceği.",
+    keywords: "patron bulut eşitleme senkron gönder anında olay güdümlü tur aralık kira uygulama telefon",
+    kind: "flags",
+    section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
+    flags: [
+      {
+        key: "patronBulutOlayGudumluEnabled",
+        title: "Patron bulutuna anında gönder (olay güdümlü)",
+        summary: "Sipariş, sevkiyat, finans gibi bir kayıt değişince birkaç saniye içinde patron bulutuna gönderilir.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken bulutun takip ettiği bir kayıt değişince 3 sn içindeki değişiklikler birleştirilip kısa bir eşitleme turu koşar (iki tur arası en az 15 sn); kiradaki aralık turu emniyet olarak sürer. Kapalıyken (varsayılan) veri yalnız kiradaki aralıkta (genelde 5 dk) gider. Patron bulutu hakkı olmayan kurulumda hiçbir durumda dışarı istek atılmaz.",
       },
     ],
   },
