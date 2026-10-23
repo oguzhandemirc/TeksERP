@@ -8,7 +8,7 @@ import { projectionDef, type ProjectionDef } from "../catalog/projections";
 import { badRequest, forbidden, notFound } from "../lib/errors";
 import { searchCondition } from "../lib/search";
 import { NO_TENANT, withTesis } from "../lib/tenant";
-import { ARAMA_AZAMI, LIST_SEARCH, type FacilityStatus, type Page, type ProjectionRecord, type Snapshot } from "../wire/api";
+import { ARAMA_AZAMI, LIST_ID_FILTER_KEYS, LIST_ID_FILTERS, LIST_SEARCH, type FacilityStatus, type ListCapabilities, type ListIdFilterKey, type Page, type ProjectionRecord, type Snapshot } from "../wire/api";
 import type { CloudContext } from "./context";
 import { loadServiceFacts, serviceState } from "./service-lifecycle";
 
@@ -32,7 +32,8 @@ export interface ListQuery {
   readonly cursor?: string;
   readonly limit: number;
   readonly durum?: string;
-  readonly cariKartId?: string;
+  /** Kimlik süzgeçleri (`LIST_ID_FILTERS` beyanı); beyansız projeksiyonda 400. */
+  readonly kimlik?: Partial<Readonly<Record<ListIdFilterKey, string>>>;
   /** Seçici araması (`LIST_SEARCH`teki projeksiyonlar); imleç aynı terimle devam eder. */
   readonly ara?: string;
   readonly suzgec?: string;
@@ -55,6 +56,29 @@ function searchFilters(name: string, q: ListQuery): Prisma.Sql[] {
   }
   return out;
 }
+
+/** Literal ifade: `projection_rows_cari_idx` (`data->>'cariKartId'`) parametreli anahtarla eşleşmez. */
+const ID_FIELD_SQL: Readonly<Record<ListIdFilterKey, Prisma.Sql>> = {
+  cariKartId: Prisma.sql`r.data->>'cariKartId'`,
+  cariHesapId: Prisma.sql`r.data->>'cariHesapId'`,
+  siparisId: Prisma.sql`r.data->>'siparisId'`,
+};
+
+/** Kimlik süzgeçleri: anahtar projeksiyonun beyanında değilse ya da değer UUID değilse 400 (fail-closed). */
+function idFilters(name: string, q: ListQuery): Prisma.Sql[] {
+  const out: Prisma.Sql[] = [];
+  for (const key of LIST_ID_FILTER_KEYS) {
+    const v = q.kimlik?.[key];
+    if (v === undefined) continue;
+    if (!LIST_ID_FILTERS[key].includes(name)) throw badRequest(`Bu listede ${key} süzgeci yok`);
+    if (!UUID.test(v)) throw badRequest(`${key} biçimsiz`);
+    out.push(Prisma.sql`AND ${ID_FIELD_SQL[key]} = ${v.toLowerCase()}`);
+  }
+  return out;
+}
+
+/** İstemcinin özellik kapısı: eski sunucu bu alanı göndermez, tanımadığı parametreyi de yok sayar. */
+export const LIST_CAPABILITIES: ListCapabilities = { kimlikSuzgecleri: LIST_ID_FILTERS, aranabilir: Object.keys(LIST_SEARCH) };
 
 function decodeCursor(cursor: string): { sortAt: Date; id: string } {
   try {
@@ -103,10 +127,8 @@ export function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.
 export async function listProjection(ctx: CloudContext, s: SessionContext, name: string, q: ListQuery): Promise<Page<ProjectionRecord>> {
   const def = readableDef(s, name, "KAYIT");
   if (q.durum !== undefined && !/^[A-Z][A-Z0-9_]{0,39}$/.test(q.durum)) throw badRequest("durum biçimsiz");
-  if (q.cariKartId !== undefined && !UUID.test(q.cariKartId)) throw badRequest("cariKartId biçimsiz");
-  const filters: Prisma.Sql[] = searchFilters(def.name, q);
+  const filters: Prisma.Sql[] = [...idFilters(def.name, q), ...searchFilters(def.name, q)];
   if (q.durum) filters.push(Prisma.sql`AND r.data->>'durum' = ${q.durum}`);
-  if (q.cariKartId) filters.push(Prisma.sql`AND r.data->>'cariKartId' = ${q.cariKartId.toLowerCase()}`);
   if (q.cursor) {
     const c = decodeCursor(q.cursor);
     filters.push(Prisma.sql`AND (r.sort_at, r.record_id) < (${c.sortAt}::timestamptz, ${c.id}::uuid)`);
@@ -164,5 +186,6 @@ export async function facilityStatus(ctx: CloudContext, s: SessionContext): Prom
         }
       : null,
     hizmet: { asama: service.phase, bitis: service.endedAt?.toISOString() ?? null, saltOkunurBitis: service.readOnlyUntil?.toISOString() ?? null },
+    liste: LIST_CAPABILITIES,
   };
 }

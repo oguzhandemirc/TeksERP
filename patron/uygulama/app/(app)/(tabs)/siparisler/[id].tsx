@@ -1,8 +1,9 @@
 // Sipariş ayrıntısı: başlık kartı (müşteri, no, durum + termin rozeti, açık metre, tutar) + teslim ve kalem özeti.
-// Her değer fabrikadan; durum/yön sözlükten. Kalem satırları: bulut `siparis-kalemi` listesinde sipariş süzgeci yok
-// (yalnız `durum`/`cariKartId`) — istemci süzmez, bu yüzden burada fabrikanın kalem özeti gösterilir.
+// Her değer fabrikadan; durum/yön sözlükten. Kalem satırları sunucunun `siparisId` süzgeciyle; sunucu süzgeci beyan
+// etmiyorsa (eski bulut, parametreyi yok sayar) fabrikanın kalem özeti kalır — istemci süzmez.
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { moduleVisible } from "../../../../src/lib/access";
 import { fmtFactoryDateTime } from "../../../../src/lib/factory-time";
@@ -16,6 +17,8 @@ import { SectionHeader } from "../../../../src/ui/SectionHeader";
 import { ErrorState, LoadingSkeleton } from "../../../../src/ui/StateViews";
 import { StatusBadge } from "../../../../src/ui/StatusBadge";
 import { asObj, str } from "../../../../src/ui/siparis/OrderRow";
+import { useListCapability } from "../../../../src/ui/siparis/capabilities";
+import { OrderLines } from "../../../../src/ui/siparis/OrderLines";
 import { FactGroup, FactRow, StaleNote } from "../../../../src/ui/siparis/parts";
 import { makeStyles, useTokens } from "../../../../src/ui/theme-context";
 import { FONT_SCALE, STRIPE, TOUCH, radius, space, tabularNums, typography } from "../../../../src/ui/tokens";
@@ -28,6 +31,8 @@ export default function OrderDetail() {
   const router = useRouter();
   const t = useTokens();
   const s = useStyles();
+  const lines = useListCapability().idFilter("siparis-kalemi", "siparisId");
+  const [tick, setTick] = useState(0);
   const r = useRemote(id ? `kayit:siparis:${id}` : null, () => api.record("siparis", String(id)));
   const k = asObj(r.data?.kayit);
   const f = asObj(r.data?.finans);
@@ -38,7 +43,10 @@ export default function OrderDetail() {
   const cariId = str(k.cariKartId);
   const showOpen = isOpenOrder(k.durum) && has(k.acikMiktar);
   return (
-    <Screen title={no ?? "Sipariş"} module="siparisler" back onRefresh={r.reload} refreshing={r.refreshing} subtitle={<StaleNote stale={r.stale} savedAt={r.savedAt} />}>
+    <Screen title={no ?? "Sipariş"} module="siparisler" back onRefresh={() => {
+        r.reload();
+        setTick((n) => n + 1);
+      }} refreshing={r.refreshing} subtitle={<StaleNote stale={r.stale} savedAt={r.savedAt} />}>
       {r.loading && !r.data ? <LoadingSkeleton rows={3} /> : null}
       {r.error && !r.data ? <ErrorState text={r.error} onRetry={r.reload} /> : null}
       {r.data ? (
@@ -95,9 +103,13 @@ export default function OrderDetail() {
           </FactGroup>
 
           <SectionHeader title="Kalemler" count={typeof k.kalemSayisi === "number" ? k.kalemSayisi : undefined} />
-          <FactGroup testID="siparis-kalem-ozeti">
-            <FactRow label="Etkin kalem" value={has(k.kalemSayisi) ? `${formatNumber(k.kalemSayisi, 0)} kalem` : "—"} />
-          </FactGroup>
+          {lines && id ? (
+            <OrderLines siparisId={String(id)} tick={tick} />
+          ) : (
+            <FactGroup testID="siparis-kalem-ozeti">
+              <FactRow label="Etkin kalem" value={has(k.kalemSayisi) ? `${formatNumber(k.kalemSayisi, 0)} kalem` : "—"} />
+            </FactGroup>
+          )}
 
           <Text style={s.foot} testID="fabrika-veri-ani">{`Fabrika verisi ${fmtFactoryDateTime(r.data.surum)}`}</Text>
         </>

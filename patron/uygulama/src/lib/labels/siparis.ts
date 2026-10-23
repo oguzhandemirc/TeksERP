@@ -65,3 +65,23 @@ export type CariRoleKey = (typeof CARI_ROLES)[number]["key"];
 export function cariRoles(kayit: Readonly<Record<string, unknown>>): (typeof CARI_ROLES)[number][] {
   return CARI_ROLES.filter((r) => kayit[r.key] === true);
 }
+
+/** Cari hareket kaynağı (`cari-hareket.kaynak` ← CariTxnSource); etiketler panelin audit sözlüğüyle aynı. */
+export const CARI_TXN_SOURCE: Readonly<Record<string, string>> = {
+  INVOICE: "Fatura",
+  INVOICE_CANCEL: "Fatura iptali",
+  PAYMENT: "Tahsilat / Ödeme",
+  PAYMENT_CANCEL: "Tahsilat / Ödeme iptali",
+  ADJUSTMENT: "Düzeltme kaydı",
+  ADJUSTMENT_CANCEL: "Düzeltme iptali",
+  CHEQUE_RECEIVE: "Çek/senet alındı",
+  CHEQUE_ISSUE: "Çek/senet verildi",
+  CHEQUE_ENDORSE: "Çek/senet cirosu",
+  CHEQUE_BOUNCE: "Çek/senet karşılıksız",
+  CHEQUE_CANCEL: "Çek/senet iptali",
+  CHEQUE_ENDORSE_CANCEL: "Çek/senet ciro stornosu",
+  CHEQUE_BOUNCE_CANCEL: "Çek/senet karşılıksız stornosu",
+  CHEQUE_RETURN_CANCEL: "Çek/senet iade stornosu",
+};
+
+export const cariTxnSourceLabel = (v: unknown): string => dictLabel(CARI_TXN_SOURCE, v);
