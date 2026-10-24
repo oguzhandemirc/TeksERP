@@ -50,7 +50,7 @@ export const adimlarD: AdimGrubu = async (d, adim) => {
     if (SYNC_CONTRACT_VERSION === 1) a.kismi("sözleşme v1: N−1 (v0) tanım gereği yok — N−1 kabul + 'fabrika sürümü eski' bandı uçtan uca v2 çıkınca ölçülür (karar fonksiyonu ölçüldü)");
   });
 
-  await adim("P15", "finans hard delete → silme damgasıyla ANINDA (uzlaştırma beklenmeden)", async (a) => {
+  await adim("P15", "fiyat kaldırma → damga; bulutta KAPSAM yoluyla bir sonraki artımlı turda düşer", async (a) => {
     const f = await d.istemci.istek("POST", "/api/item-prices", { itemId: d.ortak.urunId, customerId: d.ortak.cariId, kind: "SALE", currency: "TRY", price: 12.5 });
     const id = String(f.veri.id ?? "");
     a.kontrol("fabrika: fiyat yazıldı", f.status < 300 && !!id, `${f.status} ${f.kod ?? ""} ${JSON.stringify(f.veri).slice(0, 120)}`);
@@ -58,12 +58,13 @@ export const adimlarD: AdimGrubu = async (d, adim) => {
     a.kontrol("bulut: fiyat satırı geldi", geldi !== null, `${geldi ?? "-"} ms`);
     const sil = await d.istemci.istek("DELETE", `/api/item-prices/${id}`);
     a.kontrol("fabrika: DELETE /api/item-prices/:id → 200", sil.status === 200, `${sil.status} ${sil.kod ?? ""}`);
-    const mark = await d.fdb.query<{ kind: string }>(`SELECT kind FROM sync_marks WHERE "tableName" = 'item_prices' AND "rowId" = $1`, [id]);
-    a.kontrol("fabrika: silme işareti AYNI anda yazıldı (sync_marks DELETED)", mark.rows.some((m) => m.kind === "DELETED"), JSON.stringify(mark.rows));
+    // MAL-0b: kaldırma satırı SİLMEZ, damgalar — fabrikada satır durur, revokedAt dolu.
+    const satir = await d.fdb.query<{ revokedAt: Date | null }>(`SELECT "revokedAt" FROM item_prices WHERE id = $1`, [id]);
+    a.kontrol("fabrika: satır duruyor, revokedAt dolu (fiziksel silme yok)", satir.rows.length === 1 && satir.rows[0]?.revokedAt != null, JSON.stringify(satir.rows));
     const uzl0 = (await d.durum()).lastReconcileYmd;
     const gitti = await turlaBekle(d, async () => (await bulutSayisi(d, "fiyat", id)) === 0, 20_000);
     const uzl1 = (await d.durum()).lastReconcileYmd;
-    a.kontrol("bulut: fiyat bir sonraki ARTIMLI turda düştü (uzlaştırmasız)", gitti !== null && uzl0 === uzl1, `${gitti ?? "-"} ms · uzlaştırma ${uzl0} → ${uzl1}`);
+    a.kontrol("bulut: fiyat bir sonraki ARTIMLI turda KAPSAM yoluyla düştü (uzlaştırmasız)", gitti !== null && uzl0 === uzl1, `${gitti ?? "-"} ms · uzlaştırma ${uzl0} → ${uzl1}`);
   });
 
   await adim("P16", "özel aralıklı rapor isteği → zil `rapor` → saniyeler içinde bulutta", async (a) => {

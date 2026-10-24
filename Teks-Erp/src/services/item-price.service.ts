@@ -31,27 +31,23 @@
 // MÜŞTERİYE ÖZEL bir satırı da eşleyebilir. Kart varsayılanını sorarken müşteri
 // istisnası dönerdi: hata yok, log yok, yalnız yanlış fiyat.
 //
-// Bu yüzden bu dosyada:
-//   • okuma her zaman `customerId`i AÇIKÇA yazar (`customerId: null` / eşitlik),
-//   • yazma Prisma `upsert` DEĞİL, doğru partial index'i TANIMIYLA (predicate
-//     ile) çıkaran ham SQL `ON CONFLICT (...) WHERE ...` ile yapılır — `upsert`
-//     metodunun başındaki uzun nota bak.
+// Bu yüzden bu dosyada okuma her zaman `customerId`i AÇIKÇA yazar
+// (`customerId: null` / eşitlik) ve Prisma `upsert`/`findUnique` compound
+// lookup'ı KULLANILMAZ (partial index'te `ON CONFLICT` da predicate ister).
 //
-// ── SOFT DELETE YOK, BİLİNÇLİ ────────────────────────────────────────────────
-// `ItemPrice`'ta `isActive` kolonu YOKTUR ve eklenmedi. Fiyat satırı bir DEFTER
-// KAYDI değil bir AYARDIR; geçmiş belgeler etkilenmez çünkü fatura satırı
-// fiyatı KENDİ kolonunda (`InvoiceLine.unitPrice`) dondurur ve mal kabul topu
-// `Roll.purchasePrice`e yazar. Pasif fiyat satırı "var ama uygulanmıyor" gibi
-// üçüncü bir durum yaratır ve yukarıdaki iki adımlık çözüm sırasını üçe
-// çıkarırdı. Silme bu yüzden FİZİKSELDİR (CLAUDE.md'nin bilinçli istisnaları).
+// ── DAMGALI SÜRÜM (MAL-0b, 2026-10-24 — defter.md ③a) ───────────────────────
+// Fiyat satırı silinmez, yerinde ezilmez: değişim = eski satırın `revokedAt`
+// damgası + yeni satır, kaldırma = damga; maliyet/teklif fiyatı "şu tarih
+// itibarıyla" okur. Okuma yüklemi tek kaynak: `helpers/item-price-validity.helper`.
 // =============================================================================
 import { Prisma, PriceKind, Currency } from "@prisma/client";
-import { randomUUID } from "node:crypto";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { buildWhereClause, buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
-import type { ApiResponse } from "../types/api.types";import { assertItemUsable } from "./helpers/item-usage.helper";
+import type { ApiResponse } from "../types/api.types";
+import { assertItemUsable } from "./helpers/item-usage.helper";
+import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON, itemPriceValidAt } from "./helpers/item-price-validity.helper";
 
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -74,6 +70,11 @@ export interface ResolveItemPriceParams {
   currency: Currency;
   /** Yoksa/`null` ise yalnız kart varsayılanı aranır. */
   customerId?: string | null;
+  /**
+   * "Fiyat şu tarih itibarıyla" — verilirse o anda geçerli sürüm (`itemPriceValidAt`),
+   * verilmezse bugün geçerli olan (`ACTIVE_ITEM_PRICE`). Çözüm sırası İKİSİNDE de aynı.
+   */
+  asOf?: Date;
   /** Transaction içinden çağrılacaksa `tx`; verilmezse global client. */
   db?: Db;
 }
@@ -137,6 +138,8 @@ const ROW_SELECT = {
   kind: true,
   currency: true,
   price: true,
+  revokedAt: true,
+  revokeReason: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -189,6 +192,7 @@ export async function resolveItemPrice(params: ResolveItemPriceParams): Promise<
     kind: params.kind,
     currency: params.currency,
     customerId: params.customerId ?? null,
+    asOf: params.asOf,
     db: params.db,
   });
   return map.get(params.itemId) ?? null;
@@ -207,6 +211,8 @@ export async function resolveItemPricesFor(params: {
   kind: PriceKind;
   currency: Currency;
   customerId?: string | null;
+  /** Bkz. `ResolveItemPriceParams.asOf`. */
+  asOf?: Date;
   db?: Db;
 }): Promise<Map<string, ResolvedItemPrice>> {
   const out = new Map<string, ResolvedItemPrice>();
@@ -216,16 +222,27 @@ export async function resolveItemPricesFor(params: {
   const db = params.db ?? prisma;
   const customerId = params.customerId ?? null;
 
+  // Damgalı satır ya bugün (aktif) ya o tarihte (pencere) süzülür — ikinci bir yüklem YAZILMAZ.
+  const validity: Prisma.ItemPriceWhereInput = params.asOf ? itemPriceValidAt(params.asOf) : ACTIVE_ITEM_PRICE;
+
   // ⚠️ `customerId` AÇIKÇA yazılır. Prisma'nın `itemId_kind_currency` compound
   // unique'i burada kullanılamaz (dosya başlığındaki "Prisma yalan söyler" notu).
   const rows = await db.itemPrice.findMany({
     where: {
-      itemId: { in: ids },
-      kind: params.kind,
-      currency: params.currency,
-      ...(customerId ? { OR: [{ customerId }, { customerId: null }] } : { customerId: null }),
+      AND: [
+        validity,
+        {
+          itemId: { in: ids },
+          kind: params.kind,
+          currency: params.currency,
+          ...(customerId ? { OR: [{ customerId }, { customerId: null }] } : { customerId: null }),
+        },
+      ],
     },
     select: { id: true, itemId: true, customerId: true, price: true },
+    // As-of penceresinde aynı anahtara birden çok aday düşebilir: en yeni sürüm
+    // kazanır (`pickPrice` ilk eşleşeni alır); `id` eşitlik bozucu ŞART.
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
   });
 
   const byItem = new Map<string, Array<{ id: string; customerId: string | null; price: Prisma.Decimal }>>();
@@ -246,12 +263,16 @@ export class ItemPriceService {
    * Fiyat listesi. Filtreler jenerik `buildWhereClause` yolundan geçer; id
    * filtreleri `readIdCondition` ile okunur (CSV çoklu seçim → `in`; ham CSV
    * uuid kolonuna giderse P2007/400 üretirdi — 2026-08-06 kuralı).
+   *
+   * Varsayılan YALNIZ aktif satırlar (eski istemci aynı listeyi görür);
+   * `includeRevoked` damgalı geçmişi de getirir — satırlar, sayım ve sayfa AYNI where'den.
    */
   async list(params: {
     page: number;
     pageSize: number;
     filters: Record<string, string | string[]>;
     search?: string;
+    includeRevoked?: boolean;
   }): Promise<{ rows: unknown[]; total: number }> {
     const { itemId, customerId, kind, currency, ...rest } = params.filters;
     const where: Prisma.ItemPriceWhereInput = buildWhereClause(rest as Record<string, string | string[]>);
@@ -280,10 +301,11 @@ export class ItemPriceService {
     if (params.search?.trim()) {
       where.OR = buildTurkishSearch<Prisma.ItemPriceWhereInput>(params.search, ["item.code", "item.name"]);
     }
+    const scoped: Prisma.ItemPriceWhereInput = params.includeRevoked ? where : { AND: [where, ACTIVE_ITEM_PRICE] };
 
     const [rows, total] = await Promise.all([
       prisma.itemPrice.findMany({
-        where,
+        where: scoped,
         select: {
           ...ROW_SELECT,
           item: { select: { id: true, code: true, name: true, unit: true } },
@@ -291,11 +313,19 @@ export class ItemPriceService {
         },
         // Kart varsayılanı ÖNCE, sonra müşteri istisnaları — ekranda "temel
         // fiyat + sapmalar" olarak okunur. `customerId` nulls-first bunu verir.
-        orderBy: [{ itemId: "asc" }, { customerId: { sort: "asc", nulls: "first" } }, { kind: "asc" }],
+        // Geçmişte aynı anahtarın sürümleri yeniden eskiye; `id` sayfa sınırında eşitlik bozucu.
+        orderBy: [
+          { itemId: "asc" },
+          { customerId: { sort: "asc", nulls: "first" } },
+          { kind: "asc" },
+          { currency: "asc" },
+          { createdAt: "desc" },
+          { id: "desc" },
+        ],
         skip: (params.page - 1) * params.pageSize,
         take: params.pageSize,
       }),
-      prisma.itemPrice.count({ where }),
+      prisma.itemPrice.count({ where: scoped }),
     ]);
     return { rows, total };
   }
@@ -324,22 +354,15 @@ export class ItemPriceService {
   }
 
   /**
-   * Fiyat satırını YAZAR (yoksa açar, varsa günceller).
+   * FİYAT DEĞİŞTİR — aktif sürüm yoksa açar, aynı fiyatsa dokunmaz, farklıysa
+   * eski sürümü DAMGALAR ve yeni sürümü yazar (TEK tx; yerinde ezme YOK).
    *
-   * ── ⚠️ NEDEN PRISMA `upsert` DEĞİL, HAM SQL ─────────────────────────────────
-   * Prisma'nın `upsert`i bir unique lookup ister ve elimizdeki iki unique DB'de
-   * PARTIAL'dır. Prisma predicate'i bilmediği için `itemId_kind_currency`
-   * lookup'ı müşteriye özel bir satırı da eşleyebilir → kart varsayılanını
-   * yazarken müşteri istisnasının ÜSTÜNE yazardık (hata yok, log yok).
-   *
-   * `INSERT ... ON CONFLICT (kolonlar) WHERE <index_predicate> DO UPDATE`
-   * doğru partial index'i ADIYLA değil TANIMIYLA çıkarır ve işlemi TEK ifadede
-   * atomik yapar — `findFirst → if → create/update` (check-then-act) iki
-   * eşzamanlı yazımda P2002'ye düşerdi.
-   *
-   * ⚠️ P2002/23505 YUTULMAZ: buraya düşen bir çakışma "beklenmedik ikinci
-   * satır" demektir ve sessizce yenmek, iki varsayılanın DB'de yaşadığı
-   * duruma göz yummak olurdu. Anlamlı 409'a çevrilir.
+   * ⚠️ Prisma `upsert` YOK: lookup compound unique ister ve iki index DB'de
+   * PARTIAL'dır (dosya başlığı). Eşzamanlılık iki sedle kapalı: eski sürümün
+   * damgası atomik claim'dir (`updateMany WHERE {id, revokedAt: null}`,
+   * `count===0 → 409`) ve aynı anahtara ikinci AKTİF satır partial unique'e
+   * çarpar (P2002 → 409). P2002 YUTULMAZ — sessizce yenmek iki varsayılanın
+   * yaşadığı duruma göz yummak olurdu.
    */
   async upsert(input: ItemPriceUpsertInput, userId?: string): Promise<ApiResponse<ResolvedItemPrice & { created: boolean }>> {
     const price = normalizePrice(input.price);
@@ -347,7 +370,7 @@ export class ItemPriceService {
 
     // ── Dış referanslar: var mı + AKTİF mi ────────────────────────────────
     // Fiyat karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı.
-    const item = await assertItemUsable(prisma, input.itemId, "DEFINITION");
+    await assertItemUsable(prisma, input.itemId, "DEFINITION");
 
     if (customerId) {
       const cust = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, isActive: true } });
@@ -355,132 +378,116 @@ export class ItemPriceService {
       if (!cust.isActive) throw AppError.badRequest(`"${cust.name}" pasif durumda — fiyat istisnası tanımlanamaz.`);
     }
 
-    // Audit `oldData` için önceki değer. ⚠️ Bu bir check-then-act DEĞİLDİR:
-    // kararı aşağıdaki tek atomik ifade verir, burası yalnız "neydi" bilgisidir.
-    const before = await prisma.itemPrice.findFirst({
-      where: { itemId: input.itemId, kind: input.kind, currency: input.currency, customerId },
-      select: { id: true, price: true },
-    });
-
-    const id = randomUUID();
-    const priceStr = price.toFixed(4);
-
-    // ⚠️ `price` HAM SQL'den `Prisma.Decimal` OLARAK GELMEYEBİLİR (sürücü
-    // `numeric`i string döndürebilir) — bu yüzden tip `unknown` ve dönüşüm
-    // `String(...)` üzerinden yapılır. `Prisma.Decimal` diye tiplemek derlemede
-    // yeşil, çalışma zamanında `.plus is not a function` demekti.
-    type RawUpsertRow = { id: string; price: unknown; inserted: boolean };
-    let rows: RawUpsertRow[];
+    // Eski sürümün damgası ile yeni sürümün doğumu AYNI an: "şu tarih itibarıyla" her
+    // anda en çok bir sürüm geçerli kalsın (pencere `[createdAt, revokedAt)`).
+    const at = new Date();
+    type Outcome = { row: { id: string; price: Prisma.Decimal }; previous: { id: string; price: Prisma.Decimal } | null; wrote: boolean };
+    let outcome: Outcome;
     try {
-      rows = customerId
-        ? await prisma.$queryRaw<RawUpsertRow[]>`
-            INSERT INTO "item_prices" ("id", "itemId", "customerId", "kind", "currency", "price", "createdAt", "updatedAt")
-            VALUES (
-              ${id}::uuid, ${input.itemId}::uuid, ${customerId}::uuid,
-              ${input.kind}::text::"PriceKind", ${input.currency}::text::"Currency",
-              ${priceStr}::numeric, now(), now() -- tz-ok: item_prices.createdAt/updatedAt timestamptz, oturum UTC
-            )
-            ON CONFLICT ("itemId", "customerId", "kind", "currency") WHERE "customerId" IS NOT NULL
-            DO UPDATE SET "price" = EXCLUDED."price", "updatedAt" = now() -- tz-ok: item_prices.updatedAt timestamptz, oturum UTC
-            RETURNING "id", "price", ("item_prices".xmax = 0) AS inserted
-          `
-        : await prisma.$queryRaw<RawUpsertRow[]>`
-            INSERT INTO "item_prices" ("id", "itemId", "customerId", "kind", "currency", "price", "createdAt", "updatedAt")
-            VALUES (
-              ${id}::uuid, ${input.itemId}::uuid, NULL,
-              ${input.kind}::text::"PriceKind", ${input.currency}::text::"Currency",
-              ${priceStr}::numeric, now(), now() -- tz-ok: item_prices.createdAt/updatedAt timestamptz, oturum UTC
-            )
-            ON CONFLICT ("itemId", "kind", "currency") WHERE "customerId" IS NULL
-            DO UPDATE SET "price" = EXCLUDED."price", "updatedAt" = now() -- tz-ok: item_prices.updatedAt timestamptz, oturum UTC
-            RETURNING "id", "price", ("item_prices".xmax = 0) AS inserted
-          `;
+      outcome = await prisma.$transaction(async (tx): Promise<Outcome> => {
+        const current = await tx.itemPrice.findFirst({
+          where: { itemId: input.itemId, kind: input.kind, currency: input.currency, customerId, ...ACTIVE_ITEM_PRICE },
+          select: { id: true, price: true },
+        });
+        // Aynı fiyat: sürüm yazılmaz (geçmiş anlamsız tekrarla şişmesin).
+        if (current && current.price.equals(price)) return { row: current, previous: current, wrote: false };
+        if (current) {
+          const claim = await tx.itemPrice.updateMany({
+            where: { id: current.id, ...ACTIVE_ITEM_PRICE },
+            data: { revokedAt: at, revokedById: userId ?? null, revokeReason: ITEM_PRICE_REVOKE_REASON.CHANGED },
+          });
+          if (claim.count === 0) {
+            throw AppError.conflict("Fiyat aynı anda başka bir işlemle değişti — listeyi yenileyip tekrar deneyin.");
+          }
+        }
+        const row = await tx.itemPrice.create({
+          data: { itemId: input.itemId, customerId, kind: input.kind, currency: input.currency, price, createdAt: at },
+          select: { id: true, price: true },
+        });
+        return { row, previous: current, wrote: true };
+      });
     } catch (e) {
-      // ⚠️ HAM SORGUDA HATA KODU P2002 GELMEZ. Prisma, $queryRaw içinden çıkan
-      // DB hatalarını P2010 ("Raw query failed") ile sarar ve gerçek SQLSTATE'i
-      // yalnız MESAJA yazar (ölçüldü: "Raw query failed. Code: 23505"). Yalnız
-      // P2002'ye bakan bir dal bu yüzden ÖLÜDÜR — buradaki niyet ("çakışma
-      // anlamlı 409'a çevrilir") sessizce çalışmaz ve kullanıcı ham 500 görürdü.
-      // İki koşul birlikte tutulur: ORM yoluna dönülürse P2002 de yakalanır.
-      const msg = e instanceof Error ? e.message : "";
-      if (
-        (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") ||
-        /\b23505\b|duplicate key|item_price_(default|customer)_uq/.test(msg)
-      ) {
-        throw AppError.conflict("Bu kalem/müşteri/yön/para birimi için zaten bir fiyat satırı var.");
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw AppError.conflict("Bu kalem/müşteri/yön/para birimi için fiyat aynı anda başka bir işlemle yazıldı — listeyi yenileyip tekrar deneyin.");
       }
-      // Ham SQL yolunda negatif fiyat DB CHECK'ine takılır (savunma katmanı:
-      // `normalizePrice` zaten reddediyor, ama servis dışından çağrı olabilir).
-      if (/item_prices_price_nonneg/.test(msg)) {
+      // Servis dışından gelen negatif değer DB CHECK'ine takılır (savunma katmanı).
+      if (e instanceof Error && /item_prices_price_nonneg/.test(e.message)) {
         throw AppError.badRequest("Fiyat negatif olamaz.");
       }
       throw e;
     }
 
-    const row = rows[0];
-    if (!row) throw AppError.internal("Fiyat satırı yazılamadı.");
-
-    // `xmax = 0` → satır bu ifadede DOĞDU (Postgres deyimi). ON CONFLICT DO
-    // UPDATE dalında xmax kilitleyen transaction'ın xid'idir, yani sıfır değil.
-    // Audit eylemini önceki okumadan türetmek yarışa açıktı; kaynak buradaki
-    // ifadenin KENDİ sonucudur.
-    const created = row.inserted === true;
-    const writtenPrice = new Prisma.Decimal(String(row.price));
-
-    void AuditService.log({
-      userId,
-      action: created ? "CREATE" : "UPDATE",
-      tableName: "ITEM_PRICE",
-      recordId: row.id,
-      oldData: before ? { price: before.price.toString() } : null,
-      newData: {
-        itemId: input.itemId,
-        customerId,
-        kind: input.kind,
-        currency: input.currency,
-        price: priceStr,
-      },
-    });
+    const { row, previous, wrote } = outcome;
+    const created = previous === null;
+    const priceStr = price.toFixed(4);
+    const key = { itemId: input.itemId, customerId, kind: input.kind, currency: input.currency };
+    if (wrote && previous) {
+      void AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "ITEM_PRICE",
+        recordId: previous.id,
+        oldData: { revokeReason: null },
+        newData: { ...key, price: previous.price.toFixed(4), revokeReason: ITEM_PRICE_REVOKE_REASON.CHANGED },
+      });
+    }
+    if (wrote) {
+      void AuditService.log({
+        userId,
+        action: "CREATE",
+        tableName: "ITEM_PRICE",
+        recordId: row.id,
+        oldData: previous ? { price: previous.price.toFixed(4) } : null,
+        newData: { ...key, price: priceStr },
+      });
+    }
 
     return {
       success: true,
       data: {
         id: row.id,
-        price: writtenPrice,
+        price: new Prisma.Decimal(row.price),
         source: customerId ? "CUSTOMER" : "DEFAULT",
         customerId,
         created,
       },
-      message: created ? "Fiyat tanımlandı." : "Fiyat güncellendi.",
+      message: created ? "Fiyat tanımlandı." : wrote ? "Fiyat güncellendi." : "Fiyat zaten bu değerde — değişiklik yapılmadı.",
     };
   }
 
   /**
-   * Fiyat satırını KALDIRIR (fiziksel).
-   *
-   * ⚠️ Geçmiş belgeler etkilenmez — fatura satırı fiyatı kendi kolonunda
-   * dondurur (dosya başlığındaki "soft delete yok" notu). Müşteri istisnası
-   * kaldırıldığında o müşteri KART VARSAYILANINA döner; varsayılan
-   * kaldırıldığında fiyat "bilinmiyor" olur ve satır BOŞ gelir — sıfıra
-   * düşmez.
+   * FİYATI KALDIR — satır silinmez, DAMGALANIR (`revokedAt`); geçmiş tarih
+   * itibarıyla okunmaya devam eder. Müşteri istisnası kaldırılınca o müşteri
+   * KART VARSAYILANINA döner; varsayılan kaldırılınca fiyat "bilinmiyor" olur ve
+   * satır BOŞ gelir — sıfıra düşmez.
    */
   async remove(id: string, userId?: string): Promise<ApiResponse<{ id: string }>> {
+    // `revokedAt` SÜZÜLMEZ — satırın kendisi okunur: yoksa 404, zaten damgalıysa 409.
     const row = await prisma.itemPrice.findUnique({ where: { id }, select: ROW_SELECT });
     if (!row) throw AppError.notFound("Fiyat satırı bulunamadı.");
+    if (row.revokedAt) throw AppError.conflict("Bu fiyat satırı zaten kaldırılmış.");
 
-    await prisma.itemPrice.delete({ where: { id } });
+    const claim = await prisma.itemPrice.updateMany({
+      where: { id, ...ACTIVE_ITEM_PRICE },
+      data: { revokedAt: new Date(), revokedById: userId ?? null, revokeReason: ITEM_PRICE_REVOKE_REASON.REMOVED },
+    });
+    if (claim.count === 0) {
+      throw AppError.conflict("Fiyat satırı aynı anda başka bir işlemle değişti ya da kaldırıldı — listeyi yenileyin.");
+    }
 
     void AuditService.log({
       userId,
-      action: "DELETE",
+      action: "UPDATE",
       tableName: "ITEM_PRICE",
       recordId: id,
-      oldData: {
+      oldData: { revokeReason: null },
+      newData: {
         itemId: row.itemId,
         customerId: row.customerId,
         kind: row.kind,
         currency: row.currency,
         price: row.price.toString(),
+        revokeReason: ITEM_PRICE_REVOKE_REASON.REMOVED,
       },
     });
 

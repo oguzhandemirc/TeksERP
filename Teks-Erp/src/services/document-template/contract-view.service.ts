@@ -7,7 +7,7 @@
 
 import { DOC_CONFIG_KEYS } from "../printed-document.service";
 import { readDocumentsConfig, type DocumentsConfig } from "../system-setting.service";
-import { getSystemEquivalent } from "./sistem/kayit";
+import { getSystemEquivalent, materializeEquivalent } from "./sistem/kayit";
 import { getContract, internalFieldsOf, listContracts, shownToInternalFields, type RegisteredContract } from "./sozlesme/kayit";
 
 const LANGUAGE_WARNING =
@@ -57,5 +57,5 @@ export async function getSystemView(docType: string) {
   const contract = getContract(docType);
   const eq = getSystemEquivalent(docType);
   const frozen = freezeSystemSettings(contract, await readDocumentsConfig());
-  return { docType, copyable: eq !== null, equivalent: eq, ...frozen };
+  return { docType, copyable: eq !== null, equivalent: eq ? materializeEquivalent(eq, frozen.settings) : null, ...frozen };
 }
