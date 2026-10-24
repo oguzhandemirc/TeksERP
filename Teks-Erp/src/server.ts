@@ -27,6 +27,7 @@ import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
 import { startErrorReportJob, stopErrorReportJob } from './jobs/error-report.job';
+import { startNotificationJobs, stopNotificationJobs } from './jobs/notification-dispatch.job';
 import { recordServerError } from './services/error-report.service';
 import { initLicenseEngine } from './services/license.service';
 import { preloadEncryptedModules } from './lib/license/encrypted-module-router';
@@ -284,6 +285,9 @@ function startLanListener(): Server {
     if (!VERIFYING) startPatronCloudJobs();
     // Hata raporları: varsayılan KAPALI (onay yoksa toplanmaz/gönderilmez); doğrulama kipinde gönderim de yok.
     if (!VERIFYING) startErrorReportJob();
+    // Bildirim dağıtıcısı + koşul tarayıcısı: gözetmen `bildirim.gelenKutusuEnabled` açıkken başlatır,
+    // kapanınca durdurur (yeniden başlatma gerekmez); kapalıyken satır yazılmaz.
+    if (!VERIFYING) startNotificationJobs();
 
     void AuditService.logEvent({
         category: "SYSTEM",
@@ -304,10 +308,7 @@ function startLanListener(): Server {
 // Fabrika saat dilimi dinleyiciden ÖNCE yüklenir: ilk istek de ilk zamanlayıcı da doğru günü görür.
 // Geçersiz kayıtlı dilim → varsayılanla açılır + sağlık/panel uyarısı; DB'ye ulaşılamazsa bugünkü gibi açılır.
 let lanListener: Server | null = null;
-void bootFactoryTimezone({
-  info: (m) => bilgi("saat-dilimi", m),
-  warn: (m, e) => uyari("saat-dilimi", m, e),
-}).then(
+void bootFactoryTimezone({ info: (m) => bilgi("saat-dilimi", m), warn: (m, e) => uyari("saat-dilimi", m, e) }).then(
   () => {
     startLanTls();
     lanListener = startLanListener();
@@ -366,6 +367,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     shutdownPhase = "lisans";
     try {
         stopPatronCloudJobs();
+        stopNotificationJobs(); // LISTEN bağlantısı havuz kapanmadan ÖNCE döner
         stopLicenseDoorbell();
         stopLicensePoll();
     } catch (err) {

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { workOrderService } from "@/pages/Operations/WorkOrders/service";
+import { printTracked } from "@/lib/print";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
 
 /**
@@ -40,7 +41,10 @@ export function TravelerCardPreview({
 
   // Test baskısı — iframe'i (örnek kart) OS yazdırma diyaloğuna gönder. Baskıda
   // @media print + @page geçerli → gri zemin/gölge yok, gerçek A4/A5 + kenar payı.
-  const testPrint = () => iframeRef.current?.contentWindow?.print();
+  // Boğazdan basılır (TEST türü): sonuç yazdırma geçmişine düşer, sessiz basım ayarı da sınanır.
+  const testPrint = () => {
+    if (html) void printTracked({ subject: { kind: "TEST" }, html });
+  };
 
   // ── Sayfa sığma göstergesi ────────────────────────────────────────────────
   // A5'e geçişin bütün amacı "tek yaprak". Ayarı yapan kişi KAYDETMEDEN önce
@@ -187,9 +191,8 @@ export function TravelerCardPreview({
               srcDoc={html}
               // Script çalıştırma KAPALI (allow-scripts YOK) — belge HTML'i ileride
               // kullanıcı-yazımı olabilir (Faz 2 uzman modu) ve burası Electron
-              // renderer'ıdır. allow-same-origin + allow-modals bilinçli: "Test
-              // Baskısı" parent'tan contentWindow.print() çağırıyor; ikisi olmadan
-              // iframe opak-origin olur ve buton sessizce çalışmaz.
+              // renderer'ıdır. allow-same-origin bilinçli: sayfa sığma ölçümü iframe
+              // belgesini okur. "Test Baskısı" artık boğazdan (printTracked) basar.
               sandbox="allow-same-origin allow-modals"
               onLoad={measure}
               style={{

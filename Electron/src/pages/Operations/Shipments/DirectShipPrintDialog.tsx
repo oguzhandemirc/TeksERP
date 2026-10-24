@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { printHtmlString } from "@/lib/print";
+import { frozenDocSubject, printTracked } from "@/lib/print";
 import { printedDocumentService } from "@/services/printedDocumentService";
 
 interface Props {
@@ -86,7 +86,7 @@ export function DirectShipPrintDialog({ directShipmentId, open, onOpenChange, on
               type="button"
               className="gap-1"
               disabled={!html}
-              onClick={() => html && printHtmlString(html)}
+              onClick={() => html && void printTracked({ subject: frozenDocSubject("SUBCONTRACTOR_DIRECT_SHIP"), html })}
             >
               <Printer className="h-4 w-4" /> Yazdır
             </Button>

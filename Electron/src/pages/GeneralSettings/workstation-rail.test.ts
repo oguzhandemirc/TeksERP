@@ -70,7 +70,7 @@ const ALL = () => true;
 
 describe("§0 körlük zemini", () => {
   it("bölüm DOLU ve kategoriler okunabildi", () => {
-    expect(local().length).toBe(4);
+    expect(local().length).toBe(5);
     expect(SHELL_SRC.length).toBeGreaterThan(2000);
     expect(HUB_SRC.length).toBeGreaterThan(2000);
   });
@@ -78,12 +78,12 @@ describe("§0 körlük zemini", () => {
 
 describe("§1 yerleşim — dört kategori, iç içe sekme yok", () => {
   it("⭐ 'Bu Bilgisayar' bölümü tam olarak dört yerel kategori", () => {
-    expect(local().map((c) => c.id)).toEqual(["printer", "scale", "scanner", "server"]);
+    expect(local().map((c) => c.id)).toEqual(["printer", "document-printer", "scale", "scanner", "server"]);
   });
 
   it("⭐ her kategorinin KENDİ `kind`i var (tek gövde + alt sekme değil)", () => {
     const kinds = local().map((c) => c.kind);
-    expect(kinds).toEqual(["printer", "scale", "scanner", "server"]);
+    expect(kinds).toEqual(["printer", "documentPrinter", "scale", "scanner", "server"]);
     expect(new Set(kinds).size).toBe(kinds.length);
   });
 
@@ -108,6 +108,7 @@ describe("§1 yerleşim — dört kategori, iç içe sekme yok", () => {
     expect(groups.map((g) => g.section.id)).toEqual([WORKSTATION_SECTION]);
     expect(groups[0]?.categories.map((c) => c.id)).toEqual([
       "printer",
+      "document-printer",
       "scale",
       "scanner",
       "server",
@@ -131,7 +132,7 @@ describe("§2 izin hizası — dar izin bölümün İÇİNDE kalır", () => {
 
   it("⭐ dar izinli personel sistem-geneli HİÇBİR kategoriyi görmüyor", () => {
     const ids = visibleSettingsCategories(NARROW, undefined, true).map((c) => c.id);
-    expect(ids).toEqual(["printer", "scale", "scanner", "server"]);
+    expect(ids).toEqual(["printer", "document-printer", "scale", "scanner", "server"]);
   });
 
   it("`admin:settings` dördünü DE görmeye devam ediyor (daralma yok)", () => {
@@ -158,7 +159,7 @@ describe("§3 ortam kapısı — sunucu adresi yalnız masaüstünde", () => {
   });
 
   it("donanım kategorileri ortam kapısı TAŞIMAZ (kendi mesajlarını basarlar)", () => {
-    for (const id of ["printer", "scale", "scanner"]) {
+    for (const id of ["printer", "document-printer", "scale", "scanner"]) {
       expect(SETTINGS_CATEGORIES.find((c) => c.id === id)?.desktopOnly, id).toBeUndefined();
     }
   });

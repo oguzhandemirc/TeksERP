@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useMachineConfig } from "@/hooks/useMachineConfig";
 import type { MachineConfig } from "@/lib/machine-config";
 
-type DeviceKey = "scaleDevice" | "labelPrinter" | "scanner";
+type DeviceKey = "scaleDevice" | "labelPrinter" | "documentPrinter" | "scanner";
 
 /**
  * "Bu Bilgisayar" bölümündeki cihaz kategorileri için TASLAK sarmalayıcı. useMachineConfig
