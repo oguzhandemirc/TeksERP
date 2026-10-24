@@ -181,7 +181,7 @@ async function upsertInbox(tx: Tx, a: Agg[]): Promise<void> {
       (id, "userId", kind, klass, "subjectType", "subjectId", "groupKey", count, "firstAt", "lastAt",
        "lastOutboxId", payload, reason, "kanalMasaustu", "kanalTablet", ozet, "createdAt", "updatedAt")
     SELECT gen_random_uuid(), d.u::uuid, d.k, d.c, d.st, d.si::uuid, d.g, d.n, d.f::timestamptz, d.l::timestamptz,
-           d.o::uuid, d.p::jsonb, d.r, d.km, d.kt, false, now(), now()
+           d.o::uuid, d.p::jsonb, d.r, d.km, d.kt, false, now(), now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
     FROM unnest(${a.map((x) => x.userId)}::text[], ${a.map((x) => x.kind)}::text[], ${a.map((x) => x.klass)}::text[],
                 ${a.map((x) => x.subjectType)}::text[], ${a.map((x) => x.subjectId)}::text[], ${a.map((x) => x.groupKey)}::text[],
                 ${a.map((x) => x.n)}::int[], ${a.map((x) => x.firstAt.toISOString())}::text[], ${a.map((x) => x.lastAt.toISOString())}::text[],
@@ -195,7 +195,7 @@ async function upsertInbox(tx: Tx, a: Agg[]): Promise<void> {
       "lastOutboxId" = EXCLUDED."lastOutboxId",
       "readAt" = NULL,
       "snoozedUntil" = NULL,
-      "updatedAt" = now()`;
+      "updatedAt" = now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar`;
 }
 
 async function addLateCloses(tx: Tx, known: OutboxRow[], closeKeys: Map<string, string[]>): Promise<void> {
@@ -216,7 +216,7 @@ async function resolveClosed(tx: Tx, state: BatchState, users: Set<string>): Pro
   const { counts, errors, closeKeys } = state;
   if (closeKeys.size === 0) return 0;
   const closed = await tx.$queryRaw<Array<{ userId: string; groupKey: string }>>`
-    UPDATE notification_inbox SET "resolvedAt" = now(), "readAt" = COALESCE("readAt", now()), "updatedAt" = now()
+    UPDATE notification_inbox SET "resolvedAt" = now(), "readAt" = COALESCE("readAt", now()), "updatedAt" = now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
     WHERE "groupKey" = ANY(${[...closeKeys.keys()]}::text[]) AND "resolvedAt" IS NULL
     RETURNING "userId", "groupKey"`;
   for (const c of closed) users.add(c.userId);
@@ -234,9 +234,9 @@ async function bumpDailyStats(tx: Tx, s: Array<{ day: string; kind: string; n: n
   if (s.length === 0) return;
   await tx.$executeRaw`
     INSERT INTO notification_daily_stats (id, "factoryDay", kind, events, "createdAt", "updatedAt")
-    SELECT gen_random_uuid(), d.day::date, d.kind, d.n, now(), now()
+    SELECT gen_random_uuid(), d.day::date, d.kind, d.n, now(), now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
     FROM unnest(${s.map((x) => x.day)}::text[], ${s.map((x) => x.kind)}::text[], ${s.map((x) => x.n)}::int[]) AS d(day, kind, n)
-    ON CONFLICT ("factoryDay", kind) DO UPDATE SET events = notification_daily_stats.events + EXCLUDED.events, "updatedAt" = now()`;
+    ON CONFLICT ("factoryDay", kind) DO UPDATE SET events = notification_daily_stats.events + EXCLUDED.events, "updatedAt" = now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar`;
 }
 
 /** Atomik claim: kilitli satırlar yalnız bu turda işlenir; eksik sayı = başka yazar → tur geri alınır. */
@@ -244,8 +244,8 @@ async function claimBatch(tx: Tx, rows: OutboxRow[], state: BatchState): Promise
   const { counts, errors } = state;
   const ids = rows.map((r) => r.id);
   const claimed = await tx.$executeRaw`
-    UPDATE notification_outbox AS o SET "processedAt" = now(), "claimedAt" = now(), "recipientCount" = d.n,
-           "lastErrorCode" = d.e, "updatedAt" = now()
+    UPDATE notification_outbox AS o SET "processedAt" = now(), "claimedAt" = now(), "recipientCount" = d.n, -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
+           "lastErrorCode" = d.e, "updatedAt" = now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
     FROM unnest(${ids}::text[], ${ids.map((id) => counts.get(id) ?? 0)}::int[], ${ids.map((id) => errors.get(id) ?? null)}::text[]) AS d(id, n, e)
     WHERE o.id = d.id::uuid AND o."processedAt" IS NULL`;
   if (claimed !== rows.length) throw new Error(`outbox claim eksik: ${claimed}/${rows.length}`);

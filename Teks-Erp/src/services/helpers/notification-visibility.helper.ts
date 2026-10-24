@@ -45,21 +45,21 @@ export interface NotificationVisibilityEnv {
   gates: Partial<Record<GateKey, boolean>>;
 }
 
-/** Tam liste tip-zorunlu: yeni ModulKey eklenince burası derlenmez (okuyucusuz modül kalmaz). */
+/** Tam liste tip-zorunlu (yeni ModulKey derlenmez); açık çağrı: lisans tavanı bekçisi okuyucuyu AST'de izler. */
 const MODULE_READERS: Record<ModulKey, (db: SettingDb) => Promise<boolean>> = {
-  productionEnabled: readProductionEnabled,
-  financeEnabled: readFinanceEnabled,
-  ticaretEnabled: readTicaretEnabled,
-  iplikEnabled: readIplikEnabled,
-  depoMultiEnabled: readDepoMultiEnabled,
-  kumasTeknikEnabled: readKumasTeknikEnabled,
-  tezgahEnabled: readTezgahEnabled,
-  devereEnabled: readDevereEnabled,
-  dokumaEnabled: readDokumaEnabled,
-  emanetEnabled: readEmanetEnabled,
+  productionEnabled: (db) => readProductionEnabled(db),
+  financeEnabled: (db) => readFinanceEnabled(db),
+  ticaretEnabled: (db) => readTicaretEnabled(db),
+  iplikEnabled: (db) => readIplikEnabled(db),
+  depoMultiEnabled: (db) => readDepoMultiEnabled(db),
+  kumasTeknikEnabled: (db) => readKumasTeknikEnabled(db),
+  tezgahEnabled: (db) => readTezgahEnabled(db),
+  devereEnabled: (db) => readDevereEnabled(db),
+  dokumaEnabled: (db) => readDokumaEnabled(db),
+  emanetEnabled: (db) => readEmanetEnabled(db),
 };
 const GATE_READERS: Record<GateKey, (db: SettingDb) => Promise<boolean>> = {
-  tezgahAlarm: resolveTezgahAlarmEnabled,
+  tezgahAlarm: (db) => resolveTezgahAlarmEnabled(db),
 };
 
 /** Geniş tipli okuma: ham dize tür (DB'den) katalog dışıysa `undefined` döner. */

@@ -71,7 +71,7 @@ export async function runConditionSourceOnce(kind: NotificationKind): Promise<Co
       const subs = keys.map((k) => byKey.get(k)!);
       const rows = await tx.$queryRaw<Array<{ id: string; subjectKey: string }>>`
         INSERT INTO notification_conditions (id, kind, "subjectKey", "subjectType", "subjectId", "openedAt", payload, "createdAt", "updatedAt")
-        SELECT gen_random_uuid(), ${kind}, d.k, d.t, d.i::uuid, now(), d.p::jsonb, now(), now()
+        SELECT gen_random_uuid(), ${kind}, d.k, d.t, d.i::uuid, now(), d.p::jsonb, now(), now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
         FROM unnest(${keys}::text[], ${subs.map((s) => s.type.slice(0, 32))}::text[], ${subs.map((s) => s.id ?? null)}::text[],
                     ${subs.map((s) => JSON.stringify(s.payload ?? {}))}::text[]) AS d(k, t, i, p)
         ON CONFLICT (kind, "subjectKey") WHERE "resolvedAt" IS NULL DO NOTHING
@@ -83,7 +83,7 @@ export async function runConditionSourceOnce(kind: NotificationKind): Promise<Co
       }
     }
     const gone = await tx.$queryRaw<Array<{ id: string; subjectKey: string; subjectType: string; subjectId: string | null; payload: unknown }>>`
-      UPDATE notification_conditions SET "resolvedAt" = now(), "updatedAt" = now()
+      UPDATE notification_conditions SET "resolvedAt" = now(), "updatedAt" = now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
       WHERE kind = ${kind} AND "resolvedAt" IS NULL AND NOT ("subjectKey" = ANY(${keys}::text[]))
       RETURNING id, "subjectKey", "subjectType", "subjectId", payload`;
     for (const g of gone) {
