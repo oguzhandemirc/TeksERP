@@ -52,6 +52,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "oturum kaydı; giriş/çıkış/iptal audit'in AUTH kategorisinde zaten yazılır, satırın kendi CUD'u ikinci bir iz üretmez" },
   { model: "ShipmentEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "sevkiyat olay defteri satırını `helpers/shipment-event.helper` yazar; audit sevk eyleminde (`shipping.service`)" },
+  // e-İrsaliye `EIrsaliyeXml` · `EIrsaliyeEvent` (E1-SEMA şeması): CUD yolu henüz YOK ⇒ satır
+  // §3 "ölü muafiyet" olur. EBEVEYN_EYLEMDE satırları yazıcıyla (E5) AYNI commit'te girer.
   { model: "WorkOrderCloseSnapshot", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "kapanış künyesini `helpers/workorder-close-snapshot.helper` COMPLETED claim'iyle aynı tx'te yazar; audit kapanışı yapan eylemde (elle Kapat · tambur/fason/kurşun son adım)" },
   { model: "WorkOrderEvent", sinif: "EBEVEYN_EYLEMDE",
