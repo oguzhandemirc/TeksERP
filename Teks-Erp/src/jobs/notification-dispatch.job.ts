@@ -14,6 +14,7 @@ import { DISPATCH_BATCH_LIMIT, runNotificationDispatchOnce } from "../services/n
 import { NOTIFICATION_NOTIFY_CHANNEL } from "../services/helpers/notification-emit.helper";
 import { startNotificationConditionScanner, stopNotificationConditionScanner } from "./notification-condition.job";
 import { registerSystemConditionSources } from "../services/notification-sources/sistem";
+import { registerWorkConditionSources } from "../services/notification-sources/is";
 import { createNudgeCoalescer } from "./nudge-coalescer";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
@@ -161,6 +162,7 @@ export function startNotificationJobs(): void {
   if (supervisorTimer) return;
   shuttingDown = false;
   registerSystemConditionSources(); // koşul kaynakları tek noktadan (N1-KOSUL-SIS)
+  registerWorkConditionSources(); // iş koşulları (N1-KOSUL-IS)
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();
   supervisorTimer = setInterval(() => void reconcileNotificationJobs(), NOTIFICATION_SUPERVISOR_MS);
