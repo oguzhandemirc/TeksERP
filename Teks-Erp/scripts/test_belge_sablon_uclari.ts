@@ -16,6 +16,8 @@
 //
 // ⭐ NEGATİF SONDA (2026-10-24, ölçüldü): routes/document-template.routes.ts'de `/:id/publish`
 //    kapısı DOCUMENT_TEMPLATE_DESIGN'a çevrildi → §4 iki ❌ (design yayınladı, publish 403 aldı); geri alınınca 22/0.
+// ⭐ NEGATİF SONDA (2026-10-25, T1C, ölçüldü): tasarımcı kapısı her isteği geçirecek biçimde `return next()`e
+//    çevrildi → §6 iki ❌ (liste + oluşturma bayrak kapalıyken geçti); yedekten geri kondu, 25/0.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
