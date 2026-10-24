@@ -54,6 +54,11 @@ export type MoveRule =
        * ikizi olarak `IS NOT DISTINCT FROM` ile eşlenir.
        */
       crossSourceOn?: { columns: string[]; nullSafe?: string[] };
+      /**
+       * Partial UNIQUE'in "aktif" koşulu (ör. `revokedAt`): yalnız bu kolonları NULL olan satırlar
+       * çakışır — damgalı geçmiş kısıta girmez, serbestçe taşınır.
+       */
+      activeWhenNull?: string[];
     }
   | { kind: "EXEMPT"; model: string; table: string; column: string; reason: string };
 

@@ -1006,7 +1006,12 @@ async function describeConflictTx(
  * sırasıyla yürür ve ikinci kaynağın satırı birincinin taşınmış satırına çarpar.
  */
 function conflictPredicateSql(rule: ConflictRule): string {
-  return `s."${rule.column}" = ANY($1::uuid[]) AND (${survivorSideSql(rule)} OR ${earlierSourceSql(rule)})`;
+  return `s."${rule.column}" = ANY($1::uuid[])${activeSql(rule, "s")} AND (${survivorSideSql(rule)} OR ${earlierSourceSql(rule)})`;
+}
+
+/** Partial UNIQUE'in aktif koşulu — üç takma adda (s/t/p) AYNI; damgalı satır çakışmaz. */
+function activeSql(rule: ConflictRule, alias: "s" | "t" | "p"): string {
+  return (rule.activeWhenNull ?? []).map((c) => ` AND ${alias}."${c}" IS NULL`).join("");
 }
 
 /**
@@ -1016,7 +1021,7 @@ function conflictPredicateSql(rule: ConflictRule): string {
 function survivorSideSql(rule: ConflictRule): string {
   const other = rule.uniqueOn.filter((c) => c !== rule.column);
   const match = other.map((c) => ` AND t."${c}" = s."${c}"`).join("");
-  return `EXISTS (SELECT 1 FROM "${rule.table}" t WHERE t."${rule.column}" = $2::uuid${match})`;
+  return `EXISTS (SELECT 1 FROM "${rule.table}" t WHERE t."${rule.column}" = $2::uuid${match}${activeSql(rule, "t")})`;
 }
 
 /**
@@ -1032,7 +1037,7 @@ function earlierSourceSql(rule: ConflictRule): string {
     .map((c) => ` AND p."${c}" ${nullSafe.has(c) ? "IS NOT DISTINCT FROM" : "="} s."${c}"`)
     .join("");
   return `EXISTS (SELECT 1 FROM "${rule.table}" p WHERE p."${rule.column}" = ANY($1::uuid[])
-            AND array_position($1::uuid[], p."${rule.column}") < array_position($1::uuid[], s."${rule.column}")${match})`;
+            AND array_position($1::uuid[], p."${rule.column}") < array_position($1::uuid[], s."${rule.column}")${match}${activeSql(rule, "p")})`;
 }
 
 /**
