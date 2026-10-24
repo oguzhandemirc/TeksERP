@@ -652,6 +652,14 @@ WHERE i."exchangeRate" <= 0`,
     muaf: { gerekce: "SERH_ATFI", neden: "kendi şerhi yok; outOfScopeReason'ın bloğu onu tırnakla anıp 'donmuş belgede' der — donan sebep satırı, bu kolon sayan kişinin serbest notu" },
     neden: "imza devralınan cümleyle eşleşti",
   },
+  {
+    model: "DeviceBindingEvent",
+    alan: "deviceName",
+    sinif: "MUAF",
+    yazan: [],
+    muaf: { gerekce: "DEFTER_SATIRI", neden: "cihaz bağlama defteri satırının olay anı adı; satır append-only (mühür trigger'ı)" },
+    neden: "defter satırı bütünüyle değişmez, kolon sınıfı sorusu yok",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

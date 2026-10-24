@@ -210,6 +210,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // ayrılığının aynı ailesi: `shipping:write` ↔ `shipping:undo-dispatch`.
       "finance:close",
       "report:finance",
+      // K4P: müşteriye giden sertifikayı görür (fatura/sevk evrakına eklenir); yazma kalite işidir.
+      "certificate:read",
     ],
   },
   {
@@ -280,6 +282,17 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "item:read",
       "report:quality",
       "report:production",
+      // Kalite Güvence (K4P): muayene · 4 puan kuralı · lab testi · sertifika — modül kapalıyken yüzey çizilmez.
+      "inspection:read",
+      "inspection:write",
+      "inspection:correct",
+      "inspection:rules",
+      "labtest:read",
+      "labtest:write",
+      "labtest:approve",
+      "certificate:read",
+      "certificate:write",
+      "mobile:muayene",
     ],
   },
   {
@@ -365,6 +378,17 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Devere tablet ekranı + sarım iptali (§11 D3): iptal yalnız süpervizörde.
       "mobile:devere",
       "mobile:devere-iptal",
+      // Kalite Güvence (K4P): muayene · 4 puan kuralı · lab testi · sertifika — modül kapalıyken yüzey çizilmez.
+      "inspection:read",
+      "inspection:write",
+      "inspection:correct",
+      "inspection:rules",
+      "labtest:read",
+      "labtest:write",
+      "labtest:approve",
+      "certificate:read",
+      "certificate:write",
+      "mobile:muayene",
       // Yazdırma geçmişi (izlenebilirlik A1): "kim neyi bastı, hangi yazıcı düşüyor".
       "system:print-history",
     ],
@@ -543,7 +567,9 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
       "customer-alias:write", // bu müşteride kalıcı ad
     ],
   },
-  { code: "MOBILE_KK1", name: "Mobil — KK1 Operatörü", description: "Ham kumaş kabul ekranı", mode: "list", codes: ["mobile:kk1"] },
+  // K4P (patron kararı 2026-10-24): operatöre YALNIZ tablet kapsamlı muayene izni — web kodu (`inspection:*`)
+  // masaüstü paneline giriş açar (auth kanal kapısı); okuma/düzeltme/kural sorumlu-şef şablonlarında.
+  { code: "MOBILE_KK1", name: "Mobil — KK1 Operatörü", description: "Ham kumaş kabul ekranı", mode: "list", codes: ["mobile:kk1", "mobile:muayene"] },
   { code: "MOBILE_KK2_KURSUN", name: "Mobil — KK2/Kurşun Operatörü", description: "Kurşun + QC2 ekranı", mode: "list", codes: ["mobile:kk2-kursun"] },
   {
     code: "MOBILE_TAMBUR",

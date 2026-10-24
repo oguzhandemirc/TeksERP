@@ -8,7 +8,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   customerBranch: ["address", "city", "code", "contactName", "contactPhone", "createdById", "customerId", "defaultDestination", "district", "isActive", "name", "notes", "updatedById"],
   defectType: ["code", "createdById", "description", "isActive", "isDefault", "name", "severity", "updatedById"],
   exchangeRate: ["createdById", "currency", "rate", "rateDate", "source"],
-  fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "sortOrder", "updatedById", "valueType"],
+  fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "sortOrder", "updatedById", "valueType", "variantOfPropertyId"],
   item: ["code", "createdById", "isActive", "itemType", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason", "lifecycleStatus", "linearDensityDen", "mergedAt", "mergedById", "mergedIntoId", "name", "pendingReview", "unit", "updatedById", "warpSpecId"],
   machine: ["code", "createdById", "isActive", "name", "productionLineCount", "stationId", "updatedById", "warpBeamSlots"],
   machineStopCodeMap: ["collectorType", "isActive", "machineId", "rawStopCode", "stopReasonId"],

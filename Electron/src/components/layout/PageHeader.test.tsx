@@ -89,3 +89,20 @@ describe("PageHeader — geri oku", () => {
     expect(router.state.location.pathname).toBe(CHILD);
   });
 });
+
+describe("PageHeader — sayfa favorisi yıldızı", () => {
+  const renderFav = (pageFavorite?: boolean) => {
+    const router = createMemoryRouter([{ path: CHILD, element: <PageHeader title="Envanter" pageFavorite={pageFavorite} /> }], { initialEntries: [CHILD] });
+    render(<RouterProvider router={router} />);
+  };
+
+  it("varsayılan: kayıtlı sayfada genel yıldız çizilir", () => {
+    renderFav();
+    expect(screen.getByRole("button", { name: "Favorilere ekle" })).toBeInTheDocument();
+  });
+
+  it("`pageFavorite={false}` (kendi yıldızını taşıyan v2 rapor yaprağı): genel yıldız çizilmez — iki yıldız yan yana olmaz", () => {
+    renderFav(false);
+    expect(screen.queryByRole("button", { name: "Favorilere ekle" })).toBeNull();
+  });
+});

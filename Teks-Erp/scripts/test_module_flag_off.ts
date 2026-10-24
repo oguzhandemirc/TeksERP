@@ -157,7 +157,9 @@ type ModulAlani =
   // 2026-09-13: dokuma işi (dokuma → production; tezgahın kardeşi).
   | "dokumaEnabled"
   // Tezgah izleme (tezgah → production; dokumanın kardeşi).
-  | "tezgahEnabled";
+  | "tezgahEnabled"
+  // 2026-10-24: K4P kalite güvence (ön koşulsuz; route'u henüz yok — `rotasiz`).
+  | "kaliteGuvenceEnabled";
 
 interface ModulTanimi {
   /** `FeatureFlags` alanı (PATCH gövdesinde kullanılan ad). */
@@ -177,6 +179,11 @@ interface ModulTanimi {
    * 403 gövdesi ÖN KOŞULUN adını taşır (operatör doğru toggle'a gitsin).
    */
   onKosul?: { alan: ModulAlani; beklenenModulKodu: string };
+  /**
+   * Kapı doğdu ama onu taşıyan route HENÜZ YOK (gerekçe). Statik §1 sözleşmesi yine ölçülür;
+   * route/HTTP ayakları atlanır. §2d iki yönlü: route kapıyı taşıdığı gün gerekçe ölür (kırmızı).
+   */
+  rotasiz?: string;
 }
 
 const MODULLER: ModulTanimi[] = [
@@ -259,6 +266,19 @@ const MODULLER: ModulTanimi[] = [
     sondalar: modulUclari("depoMultiEnabled"),
   },
   {
+    // KALİTE GÜVENCE (K4P zemin, 2026-10-24): ön koşulsuz (KK1 üretimsiz de açık).
+    alan: "kaliteGuvenceEnabled",
+    dbAnahtari: "kaliteGuvence.enabled",
+    middleware: "requireKaliteGuvenceEnabled",
+    okuyucu: "readKaliteGuvenceEnabled",
+    modulKodu: "kaliteGuvence",
+    routeDosyalari: [],
+    sondalar: [],
+    rotasiz:
+      "K4P zemin dilimi kapıyı önden kurdu; muayene/kural/lab/sertifika router'ları MOTOR · LAB · SERT " +
+      "dilimlerinde iner — o gün route dosyası + `profil-kapi-haritasi` sondası bu satıra yazılır, gerekçe silinir.",
+  },
+  {
     alan: "productionEnabled",
     dbAnahtari: "production.enabled",
     middleware: "requireProductionEnabled",
@@ -309,6 +329,7 @@ const ALAN_DB_ANAHTARI: Record<string, string> = {
   devereEnabled: "devere.enabled",
   dokumaEnabled: "dokuma.enabled",
   emanetEnabled: "emanet.enabled",
+  kaliteGuvenceEnabled: "kaliteGuvence.enabled",
   maliyetEnabled: "maliyet.enabled",
 };
 
@@ -715,6 +736,29 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── §2d ROUTE'SUZ KAPI YALNIZ GEREKÇEYLE ve İKİ YÖNLÜ ─────────────────────
+  // Gerekçesiz satır route + sonda taşımak zorunda; gerekçeli satırın kapısını bir router
+  // takarsa gerekçe ÖLÜDÜR (satır route dosyası/sonda ile doldurulmadan HTTP ayağı onu görmez).
+  const routeMetinleri = (readdirSync(join(SRC, "routes"), { recursive: true }) as string[])
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => ({ f, metin: yorumlariSok(readFileSync(join(SRC, "routes", f), "utf8")) }));
+  for (const m of MODULLER) {
+    if (m.rotasiz) {
+      const tasiyan = routeMetinleri.filter((r) => new RegExp(`\\b${m.middleware}\\b`).test(r.metin)).map((r) => r.f);
+      check(
+        `§2d ${m.middleware} route'suz satırı CANLI (gerekçe dolu, route/sonda boş, hiçbir router kapıyı taşımıyor)`,
+        m.rotasiz.trim().length > 10 && m.routeDosyalari.length === 0 && m.sondalar.length === 0 && tasiyan.length === 0,
+        tasiyan.length ? `kapıyı taşıyan router(lar): ${tasiyan.join(", ")} — satıra route + sonda yaz, \`rotasiz\`ı sil` : "",
+      );
+    } else {
+      check(
+        `§2d ${m.middleware} satırı route + sonda taşıyor`,
+        m.routeDosyalari.length >= 1 && m.sondalar.length >= 1,
+        `route=${m.routeDosyalari.length} sonda=${m.sondalar.length}`,
+      );
+    }
+  }
+
   // ── §3 AYAR SATIRININ VARLIĞI (DB — migration'ın kendi koşuluyla) ────────
   const topVar = (await prisma.roll.count({ take: 1 })) > 0;
   const satirlar = await prisma.systemSetting.findMany({
@@ -885,6 +929,7 @@ async function main(): Promise<void> {
     }
     const sapma = await durumKorundu(hepsiKapali);
     for (const m of MODULLER) {
+      if (m.rotasiz) continue; // sondası yok — §2d ölçer
       if (sapma) {
         atla(`§4 ${m.alan}`, `ölçüm penceresinde bayrak dışarıdan değişti (${sapma})`);
         continue;
@@ -937,6 +982,7 @@ async function main(): Promise<void> {
   // ── §5 KİMLİKSİZ İSTEK 401 (403 DEĞİL) ───────────────────────────────────
   const anonKotu: string[] = [];
   for (const m of MODULLER) {
+    if (m.rotasiz) continue;
     const r = await fetch(`${BASE}${m.sondalar[0]}`);
     if (r.status !== 401) anonKotu.push(`${m.sondalar[0]}→${r.status}`);
   }
@@ -960,6 +1006,7 @@ async function main(): Promise<void> {
     }
     const sapma = await durumKorundu(hepsiAcik);
     for (const m of MODULLER) {
+      if (m.rotasiz) continue;
       if (sapma) {
         atla(`§6 ${m.alan}`, `ölçüm penceresinde bayrak dışarıdan değişti (${sapma})`);
         continue;
@@ -989,6 +1036,7 @@ async function main(): Promise<void> {
 
     const gozlem: Array<{ alan: string; yol: string; s: SondaSonucu }> = [];
     for (const m of MODULLER) {
+      if (m.rotasiz) continue;
       // Açık modüllerin HEPSİ sondalanır (2xx), kapalıların ilk ucu yeter.
       const yollar = acik.includes(m.alan) ? m.sondalar : [m.sondalar[0]!];
       for (const yol of yollar) gozlem.push({ alan: m.alan, yol, s: await sonda(yol) });

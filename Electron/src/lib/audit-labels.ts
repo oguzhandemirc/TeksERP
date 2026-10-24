@@ -157,6 +157,7 @@ export const TABLE_LABELS: Record<string, string> = {
   // Cihaz (mobil eşleştirme)
   users: "Kullanıcı",
   devices: "Cihaz",
+  device_rebind_requests: "Cihaz Yeniden Bağlama Talebi",
   pairing_codes: "Eşleştirme Kodu",
   latency_stats: "Gecikme İstatistiği",
   sessions: "Oturum",
@@ -913,6 +914,17 @@ export const ENUM_LABELS: Record<string, string> = {
   CARI: "Cari",
   ISLENDI: "İşlendi",
   REDDEDILDI: "Reddedildi",
+
+  // ── Cihaz bağlama defteri (eşleme v2, D1) — DeviceBindingEventType. `MERGED` DuplicateReviewDecision ile ORTAK.
+  REGISTERED: "Kaydedildi",
+  REBIND_REQUESTED: "Yeniden bağlama istendi",
+  REBOUND: "Yeniden bağlandı",
+  REBIND_REJECTED: "Yeniden bağlama reddedildi",
+  REVOKED: "Onay geri alındı",
+  UNMERGED: "Birleştirme geri alındı",
+  PROOF_RESET: "Cihaz sırrı sıfırlandı",
+  PURGED: "Kalıcı silindi",
+  HW_CONFLICT: "Donanım özeti çakıştı",
 };
 
 // =============================================================================
@@ -1013,6 +1025,9 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
  * şişmiş bir liste kapının kendisi olur.
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
+  // ── Cihaz eşleme v2 (D1, 2026-10-24)
+  MERGED:
+    "DuplicateReviewDecision(mükerrer kart birleşti) ve DeviceBindingEventType(cihaz kopyası ana kayda birleşti) — 'Birleştirildi' ikisinde de doğru",
   // ── Kasa tek yazar (2026-09-18)
   PAYMENT:
     "CariTxnSource(cari hareketinin kaynağı: tahsilat ya da ödeme) ve CashTxnKind(kasa defterinde ÖDEME satırı, çıkış) — ortak Türkçe YETMEZ: " +

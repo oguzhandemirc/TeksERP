@@ -48,6 +48,8 @@ export const fabricPropertyFormSchema = z.object({
       }),
     )
     .default([]),
+  // SEÇİM özelliğinin ana bayrağı (çeşit bağı); null = bağımsız seçim.
+  variantOfPropertyId: z.string().nullable().default(null),
   isActive: z.boolean(),
 }).superRefine((v, ctx) => {
   // SEÇİM tipli özellik DEĞERSİZ doğamaz — `stationIds`siz özelliğin ikizi:
@@ -76,5 +78,6 @@ export const fabricPropertyFormDefaults: FabricPropertyFormValues = {
   stationIds: [],
   valueType: "FLAG",
   values: [],
+  variantOfPropertyId: null,
   isActive: true,
 };

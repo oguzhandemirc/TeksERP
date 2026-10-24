@@ -102,7 +102,7 @@
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Canlı DB'de index migration VARDİYA DIŞINDA deploy edilir (CREATE INDEX büyük tabloda yazma kilidi). App DB'de `statement_timeout=50s` aktif ve uzun DDL'i keser → yüz binlerce satıra index ekleyen migration'ın EN BAŞINA `SET statement_timeout = 0;`. <sub>(CLAUDE.md:248, CLAUDE.md:274)</sub>
-- **[ÇEKİRDEK]** Backend izinli npm paketleri package.json ile birebir; kural 'paket ekleme, kendin yaz' (node-cron→setInterval, handlebars→kendi motor). Tek gerekçeli istisna `bonjour-service` 1.4.4 SABİT (^ yok — sonraki ana sürüm ESM-only olup require'ı sessizce kırar), tek dosyada tembel require + try/catch. <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** Backend izinli npm paketleri package.json ile birebir; kural 'paket ekleme, kendin yaz' (node-cron→setInterval, handlebars→kendi motor). Tek gerekçeli istisna `bonjour-service` 1.4.4 SABİT (^ yok — sonraki ana sürüm ESM-only olup require'ı sessizce kırar), tek dosyada tembel require + try/catch. Belge şablon tasarımcısı için `liquidjs` 10.30.0 SABİT (2026-10-24; 'handlebars→kendi motor' örneği o yüzey için GEÇERSİZ, RAW_HTML kendi motorunda kalır). <sub>(CLAUDE.md:152)</sub>
 
 ### Tuzaklar
 
