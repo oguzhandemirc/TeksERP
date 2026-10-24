@@ -17,6 +17,7 @@ export const PORTAL_MODULE_KEYS = [
   "devere.enabled",
   "dokuma.enabled",
   "emanet.enabled",
+  "kaliteGuvence.enabled",
   "patron-bulut",
 ] as const;
 

@@ -70,6 +70,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, string>> = {
   "devere.enabled": "devereEnabled",
   "dokuma.enabled": "dokumaEnabled",
   "emanet.enabled": "emanetEnabled",
+  "kaliteGuvence.enabled": "kaliteGuvenceEnabled",
 };
 
 /**
@@ -97,6 +98,7 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // Metin migration damgasıyla BİREBİR kalır (test_module_profile §6b/§6d) — görünen ad değişikliğinin dışında.
   "dokuma.enabled": "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
   "emanet.enabled": "Emanet / konsinye mülkiyet modülü (müşterinin malı: top · levent · iplik lotu; sevk sahiplik kapısı)",
+  "kaliteGuvence.enabled": "Kalite Güvence modülü (4 puan muayene · lab testleri · sertifika takibi)",
 };
 
 /** Yedi anahtarı `false` doğuran taban — profil satırları yalnız AÇTIKLARINI yazar. */
@@ -197,7 +199,7 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
   },
   tam: {
     ad: "Tam",
-    aciklama: "Dokuz modülün hepsi açık — demo ve iç test kurulumları.",
+    aciklama: "Bütün modüller açık — demo ve iç test (deneme) kurulumları.",
     moduller: acik(...MODULE_SETTING_KEYS),
     bayraklar: {},
   },

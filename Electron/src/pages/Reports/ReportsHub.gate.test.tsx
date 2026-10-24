@@ -22,7 +22,7 @@ const ctx = (): OperationsVisibilityContext => ({
   shipmentConfirmationEnabled: false,
   depoMultiEnabled: false,
   devereEnabled: false,
-  dokumaEnabled: true, tezgahEnabled: true,
+  dokumaEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false,
   financeEnabled: true,
   productionEnabled: true,
   ticaretEnabled: true,

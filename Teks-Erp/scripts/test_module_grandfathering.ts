@@ -91,6 +91,7 @@ const MIG_DIZINLERI: string[] = [
   "20260912120000_devere_modul_anahtari",
   "20260913260000_dokuma_modul_anahtari",
   "20260915051000_emanet_modul_anahtari",
+  "20261024040000_kalite_guvence_modul_anahtari",
 ];
 const MIGLER: string[] = MIG_DIZINLERI.map((d) =>
   path.join(KOK, "prisma/migrations", d, "migration.sql"),
@@ -134,6 +135,8 @@ const BEKLENEN: Array<{
   { key: "dokuma.enabled", deger: false, sqlIcerir: ["'false'::jsonb"], sqlIcermez: ["'true'"] },
   // 2026-09-15 — G3 emanet (konsinye mülkiyet): sahiplik alanı hiç yoktu → dünkü davranış KAPALI, sabit `false`.
   { key: "emanet.enabled", deger: false, sqlIcerir: ["'false'::jsonb"], sqlIcermez: ["'true'"] },
+  // 2026-10-24 — K4P kalite güvence: muayene/lab/sertifika yüzeyi hiç yoktu → dünkü davranış KAPALI, sabit `false`.
+  { key: "kaliteGuvence.enabled", deger: false, sqlIcerir: ["'false'::jsonb"], sqlIcermez: ["'true'"] },
   {
     key: "depo.multiEnabled",
     deger: "veriden",

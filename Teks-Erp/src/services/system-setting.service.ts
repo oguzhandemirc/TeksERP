@@ -277,6 +277,9 @@ export const SETTING_KEYS = {
    *  (Customer çekirdek). Ekransız modül: kapı owner YAZAN uçların gövdesinde (403); sevk sahiplik kapısı veri varsa
    *  bayraktan bağımsız çalışır. Varsayılan KAPALI = dünkü davranış (sahiplik alanı yoktu). */
   EMANET_ENABLED: "emanet.enabled",
+  /** K4P Kalite Güvence (4 puan muayene · lab testi · sertifika). Bağımlılık YOK: muayene KK1'de doğar ve KK1
+   *  üretim kapalıyken de açıktır. Varsayılan KAPALI = dünkü davranış (yüzey yoktu). */
+  KALITE_GUVENCE_ENABLED: "kaliteGuvence.enabled",
   /** [PROFİL] Devere Faz 2: içeride sarımda iplik çıkış satırı ve mal kabul iplik satırı LOT
    *  ZORUNLU mu. DEFAULT false = bugünkü davranış (lot kaydı bayraksız her kurulumda mümkün,
    *  lotsuz satır yalnız UYARI). Davranış bayrağı — profile/modül tablosuna GİRMEZ. */
@@ -1746,6 +1749,8 @@ export interface FeatureFlags {
   devereEnabled: boolean;
   /** G3 emanet / konsinye mülkiyet modülü. Varsayılan KAPALI. */
   emanetEnabled: boolean;
+  /** K4P Kalite Güvence modülü (muayene · lab testi · sertifika). Varsayılan KAPALI. */
+  kaliteGuvenceEnabled: boolean;
   /** Devere Faz 2: lot zorunluluğu (içeride sarım iplik çıkışı + mal kabul iplik satırı). Varsayılan KAPALI =
    *  bugünkü davranış: lotsuz satır yazılır, yalnız uyarı üretir. */
   devereLotRequired: boolean;
@@ -2022,6 +2027,7 @@ const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
   devereEnabled: SETTING_KEYS.DEVERE_ENABLED,
   dokumaEnabled: SETTING_KEYS.DOKUMA_ENABLED,
   emanetEnabled: SETTING_KEYS.EMANET_ENABLED,
+  kaliteGuvenceEnabled: SETTING_KEYS.KALITE_GUVENCE_ENABLED,
 };
 
 // =============================================================================
@@ -2280,6 +2286,7 @@ export class SystemSettingService {
       tezgahEnabled: await readTezgahEnabledRaw(cacheClient),
       devereEnabled: await readDevereEnabledRaw(cacheClient),
       emanetEnabled: await readEmanetEnabledRaw(cacheClient),
+      kaliteGuvenceEnabled: await readKaliteGuvenceEnabledRaw(cacheClient),
       devereLotRequired: await readDevereLotRequired(cacheClient),
       devereMountTracking: await readDevereMountTracking(cacheClient),
       devereMountTrackingRequired: await readDevereMountTrackingRequired(cacheClient),
@@ -2445,6 +2452,8 @@ export class SystemSettingService {
         return readDokumaEnabledRaw();
       case "emanetEnabled":
         return readEmanetEnabledRaw();
+      case "kaliteGuvenceEnabled":
+        return readKaliteGuvenceEnabledRaw();
       case "depoMultiEnabled":
         return readDepoMultiEnabledRaw();
       case "kumasTeknikEnabled":
@@ -2903,6 +2912,17 @@ export class SystemSettingService {
         SETTING_KEYS.EMANET_ENABLED,
         input.emanetEnabled,
         "Emanet / konsinye mülkiyet modülü (müşterinin malı: top · levent · iplik lotu; sevk sahiplik kapısı)",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "kaliteGuvenceEnabled")) {
+      if (typeof input.kaliteGuvenceEnabled !== "boolean") {
+        throw AppError.badRequest("kaliteGuvenceEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KALITE_GUVENCE_ENABLED,
+        input.kaliteGuvenceEnabled,
+        "Kalite Güvence modülü (4 puan muayene · lab testleri · sertifika takibi)",
         userId
       );
     }
@@ -4838,6 +4858,25 @@ export async function readEmanetEnabledRaw(
  *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
 export async function readEmanetEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   return applyModuleCeiling(SETTING_KEYS.EMANET_ENABLED, await readEmanetEnabledRaw(tx));
+}
+
+/** K4P Kalite Güvence modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü davranış: muayene/lab/sertifika
+ *  yüzeyi yoktu). Bağımlılık yok. */
+export async function readKaliteGuvenceEnabledRaw(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KALITE_GUVENCE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readKaliteGuvenceEnabledRaw` yalnız panel geri-okuması
+ *  ve bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readKaliteGuvenceEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.KALITE_GUVENCE_ENABLED, await readKaliteGuvenceEnabledRaw(tx));
 }
 
 /** Devere Faz 2: lot zorunlu mu? Default FALSE (satır yoksa lotsuz satır yazılır, yalnız

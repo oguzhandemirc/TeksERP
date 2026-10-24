@@ -5,7 +5,7 @@
 // (TEK-ORTAK-PAKET §6): ① `PATCH /api/feature-flags` şemasındaki HER anahtarın hepsi-açık
 // tablosunda (`lib/hepsi-acik.ts`) bir satırı var — yeni bayrak tabloya girmezse KIRMIZI ·
 // ② açık değerler şemadan geçer, boolean bayrak ancak gerekçeli istisnayla `true` olmaz,
-// dokuz modül açık ve bağımlılıkları sağlıyor · ③ diskteki profiller biçim/allowlist/sır
+// bütün modüller açık ve bağımlılıkları sağlıyor · ③ diskteki profiller biçim/allowlist/sır
 // kurallarına uyar; `kapali` boş, `acik` tablodan ÜRETİLMİŞ (elle sapma kırmızı) ·
 // ④ negatif sondalar: ihlalli girdiler gerçekten RED almalı (yüklem kördür diye yeşil olmasın) ·
 // ⑤ dışa aktarma (`profil-disa-aktar.ts`): `_test` hedef kapısı + allowlist süzgeci, sondalı.
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
   const booleanKusurlu = booleanlar.filter((k) => acik[k] !== true && !BOOLEAN_ISTISNALARI.has(k));
   check("her boolean bayrak açık profilde true (beyanlı istisna dışında)", booleanKusurlu.length === 0 && booleanlar.length > 60, `${booleanlar.length} boolean; kusurlu: ${booleanKusurlu.join(", ") || "yok"}`);
   const modulKapali = [...MODULE_FLAG_KEYS].filter((k) => acik[k] !== true);
-  check("on modül anahtarı açık profilde AÇIK", modulKapali.length === 0 && MODULE_FLAG_KEYS.size === 10, modulKapali.join(", "));
+  check("her modül anahtarı açık profilde AÇIK (körlük zemini ≥ 11 anahtar)", modulKapali.length === 0 && MODULE_FLAG_KEYS.size >= 11, modulKapali.join(", "));
   const bagimlilik = Object.entries(MODULE_DEPENDENCIES).filter(([b, o]) => acik[b] === true && acik[o] !== true);
   check("açık profil modül bağımlılıklarını sağlar", bagimlilik.length === 0, bagimlilik.map(([b, o]) => `${b}→${o}`).join(", "));
 

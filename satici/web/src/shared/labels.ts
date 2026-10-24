@@ -38,6 +38,7 @@ export const MODULE_LABEL: Record<string, string> = {
   "devere.enabled": "Devere",
   "dokuma.enabled": "Dokuma",
   "emanet.enabled": "Emanet",
+  "kaliteGuvence.enabled": "Kalite Güvence",
   "patron-bulut": "Patron bulutu",
 };
 

@@ -45,16 +45,17 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "devereEnabled",
   "dokumaEnabled",
   "emanetEnabled",
+  "kaliteGuvenceEnabled",
 ]);
 
 /**
  * `PATCH /api/feature-flags` gövdesinde SÜPERADMİN şartı doğuran anahtarların TAMAMI:
- * dokuz modül anahtarı + rapor görünürlük listesi.
+ * bütün modül anahtarları + rapor görünürlük listesi.
  *
  * ⚠️ NEDEN `MODULE_FLAG_KEYS`i GENİŞLETMEDİK, ÜSTÜNE KÜME KURDUK: `reportsClosedKeys`
  * bir modül anahtarı DEĞİL — bağımlılık tablosuna girmez, profil sabitinde yaşamaz,
- * `MODULE_SETTING_KEYS` ile birebirliği ölçülen dokuzluğun parçası değildir. Onu o kümeye
- * atmak `test_module_flags`in "dokuz ↔ dokuz" ölçümünü bozar ve `MODULE_DEPENDENCIES`
+ * `MODULE_SETTING_KEYS` ile birebirliği ölçülen modül kümesinin parçası değildir. Onu o kümeye
+ * atmak `test_module_flags`in "modül ↔ modül" birebir ölçümünü bozar ve `MODULE_DEPENDENCIES`
  * okuyan her yolu yanlış soruya sokardı. Ortak olan tek şey YAZMA KAPISIdır; kümeyi de
  * tam olarak o soruya göre adlandırdık.
  */
@@ -63,7 +64,7 @@ export const SUPERADMIN_ONLY_FLAG_KEYS: ReadonlySet<string> = new Set([
   "reportsClosedKeys",
 ]);
 
-/** Aynı dokuz modülün DB anahtarı (`system_settings.key`). */
+/** Aynı modüllerin DB anahtarı (`system_settings.key`). */
 export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "production.enabled",
   "finance.enabled",
@@ -75,11 +76,12 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "devere.enabled",
   "dokuma.enabled",
   "emanet.enabled",
+  "kaliteGuvence.enabled",
 ]);
 
 /**
  * Ham ayar ucundan (`PUT /api/admin/settings/:key`) YAZILAMAYAN DB anahtarları:
- * dokuz modül anahtarı + `reports.closedKeys`. K7 kalıbı — ikinci bir yazma yüzeyi
+ * bütün modül anahtarları + `reports.closedKeys`. K7 kalıbı — ikinci bir yazma yüzeyi
  * açılmaz, yoksa süperadmin kapısı (`flagWriteGuard`) etrafından dolaşılırdı.
  */
 export const SUPERADMIN_ONLY_SETTING_KEYS: ReadonlySet<string> = new Set([
@@ -116,6 +118,8 @@ export const MODULE_DEPENDENCIES: Readonly<Record<string, string>> = {
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
   dokumaEnabled: "productionEnabled",
+  // kaliteGuvenceEnabled BİLEREK YOK: muayene KK1'de doğar ve KK1 üretim kapalıyken de açıktır
+  // (`test_production_regime_gate §5`); üretime bağlamak üretimsiz kurulumda muayeneyi kapatırdı.
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -130,4 +134,5 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   devereEnabled: "Devere / levent",
   dokumaEnabled: "Dokuma iş emri",
   emanetEnabled: "Emanet / konsinye mülkiyet",
+  kaliteGuvenceEnabled: "Kalite Güvence",
 };

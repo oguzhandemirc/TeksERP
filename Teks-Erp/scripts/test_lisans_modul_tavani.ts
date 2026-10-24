@@ -5,7 +5,7 @@
 // modül satırlarını try İÇİNDE yazar, finally'de önceki hâline döndürür; audit bellekte yutulur)
 //
 // NE ÖLÇER:
-//   §1 on modül anahtarının her biri için ham ↔ enforcement çifti: ham gövde DB anahtarını
+//   §1 her modül anahtarının her biri için ham ↔ enforcement çifti: ham gövde DB anahtarını
 //      okur ve tavansızdır, enforcement AYNI anahtarla tavandan geçirir.
 //   §2 ⭐ `src/**`teki HER çağıran doğru varyantta (AST): ham okuyucu yalnız beyanlı ham
 //      çağıranlarda (panel geri-okuması `getFeatureFlags`, bağımlılık doğrulaması
@@ -152,7 +152,7 @@ async function tekBicimDavranisi(): Promise<void> {
   lisansKipKur({ zorlama: true, moduller: ["production.enabled"] });
   const kapali = [...MODULE_SETTING_KEYS].filter((k) => k !== "production.enabled");
   const bicimsiz = kapali.filter((k) => (licenseModuleError(k, "x")?.details as { modul?: string } | undefined)?.modul !== k);
-  check("§7f1 ⭐ üretici her modülde `modul` = DB anahtarı", kapali.length === 9 && bicimsiz.length === 0, bicimsiz.join(","));
+  check("§7f1 ⭐ üretici her modülde `modul` = DB anahtarı", kapali.length >= 10 && bicimsiz.length === 0, bicimsiz.join(","));
   const ayrinti = async (fn: () => Promise<unknown>): Promise<Record<string, unknown> | null> => {
     try {
       await fn();
