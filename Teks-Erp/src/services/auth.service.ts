@@ -53,6 +53,7 @@ import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
 import { cookieLoginApplies } from "../lib/web-session-cookie";
 import { matchesPermission } from "../middlewares/rbac.middleware";
+import { grantsDesktopPanel } from "../constants/permission-catalog";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -608,7 +609,7 @@ export class AuthService {
     // giremez → 403, token BİLE üretilmez. Mobil girişte bu kısıt yok.
     if (
       isDesktopClient(ctx?.clientType) &&
-      !permissions.some((p) => !p.startsWith("mobile:"))
+      !grantsDesktopPanel(permissions)
     ) {
       // Kanal reddi izin reddinden AYRI kod: istemci "yetki iste" değil "doğru uygulamayı aç" der.
       throw AppError.forbidden(

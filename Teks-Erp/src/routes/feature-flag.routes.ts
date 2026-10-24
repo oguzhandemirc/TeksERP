@@ -55,7 +55,7 @@ const router = Router();
  *
  * ÜÇ DAL (2026-09-03'te modül dalı eklendi — ayrıntı gövdedeki yorumlarda):
  *   ① gövde EN AZ BİR süperadmin anahtarı taşıyorsa → sistem hesabı (süperadmin) şartı
- *      (küme = dokuz modül anahtarı + `reportsClosedKeys`; Raporlar K3 — rapor görünürlüğü
+ *      (küme = bütün modül anahtarları + `reportsClosedKeys`; Raporlar K3 — rapor görünürlüğü
  *      de kurulumun satın aldığı ürünün sınırıdır, fabrika yöneticisinin ayarı değil)
  *      (sistem hesabı HİÇ YOKSA supap: defter TAZELENİR, hâlâ yoksa ② + ③'e düşer)
  *   ② gövde YALNIZ belge tasarım anahtarları taşıyorsa → dar izin
@@ -319,6 +319,7 @@ export const updateSchema = z.strictObject({
   tezgahEnabled: z.boolean().optional(),
   devereEnabled: z.boolean().optional(),
   emanetEnabled: z.boolean().optional(),
+  kaliteGuvenceEnabled: z.boolean().optional(),
   devereLotRequired: z.boolean().optional(),
   devereMountTracking: z.boolean().optional(),
   devereMountTrackingRequired: z.boolean().optional(),

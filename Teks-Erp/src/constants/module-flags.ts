@@ -45,6 +45,7 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "devereEnabled",
   "dokumaEnabled",
   "emanetEnabled",
+  "kaliteGuvenceEnabled",
   "maliyetEnabled",
 ]);
 
@@ -76,6 +77,7 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "devere.enabled",
   "dokuma.enabled",
   "emanet.enabled",
+  "kaliteGuvence.enabled",
   "maliyet.enabled",
 ]);
 
@@ -120,6 +122,8 @@ export const MODULE_DEPENDENCIES: Readonly<Record<string, string>> = {
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
   dokumaEnabled: "productionEnabled",
+  // kaliteGuvenceEnabled BİLEREK YOK: muayene KK1'de doğar ve KK1 üretim kapalıyken de açıktır
+  // (`test_production_regime_gate §5`); üretime bağlamak üretimsiz kurulumda muayeneyi kapatırdı.
   maliyetEnabled: "productionEnabled",
 };
 
@@ -135,5 +139,6 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   devereEnabled: "Devere / levent",
   dokumaEnabled: "Dokuma iş emri",
   emanetEnabled: "Emanet / konsinye mülkiyet",
+  kaliteGuvenceEnabled: "Kalite Güvence",
   maliyetEnabled: "Maliyet & Teklif",
 };

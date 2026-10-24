@@ -104,6 +104,11 @@ export interface OperationsVisibilityContext {
    */
   tezgahEnabled: boolean;
   /**
+   * KALİTE GÜVENCE modülü (`kaliteGuvence.enabled`, K4P) — zincirsiz (KK1 üretim kapalıyken de
+   * çalışır). Belirsizken FALSE ("sıfır görünür fark"); backend kapısı `requireKaliteGuvenceEnabled`.
+   */
+  kaliteGuvenceEnabled: boolean;
+  /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
    * AÇIKKEN tek "Cariler" karosu, KAPALIYKEN (fabrika) bugünkü Müşteriler +

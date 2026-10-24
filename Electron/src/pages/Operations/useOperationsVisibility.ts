@@ -54,6 +54,8 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // Tezgah izleme de ETKİN değer (production && tezgah) — dokumanın kardeşi, çocuğu değil;
   // backend kapısı `requireTezgahEnabled` aynı sırayı ölçer. Belirsizken FALSE.
   const tezgahEnabled = productionEnabled && (flagsQuery.data?.data?.tezgahEnabled ?? false);
+  // Kalite Güvence (K4P) zincirsiz: KK1 muayenesi üretim kapalıyken de vardır. Belirsizken FALSE.
+  const kaliteGuvenceEnabled = flagsQuery.data?.data?.kaliteGuvenceEnabled ?? false;
   // Rapor listesi: alan yoksa/yüklenmediyse de `null` — "boş liste = hepsi açık" yalnız
   // backend'in gerçekten boş dizi söylediği durumdur (fail-closed, K5).
   const reportsClosedKeys: readonly string[] | null = flagsQuery.data?.data?.reportsClosedKeys ?? null;
@@ -80,6 +82,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     devereEnabled,
     dokumaEnabled,
     tezgahEnabled,
+    kaliteGuvenceEnabled,
     reportsClosedKeys,
     isReportOpen,
     reportsV2Enabled,
