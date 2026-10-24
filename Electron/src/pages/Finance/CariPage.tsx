@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, FileSpreadsheet, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -99,6 +100,7 @@ export function CariPage() {
           Yalnız bakiyesi olanlar
         </Button>
       </div>
+      <RelocatedToolStrip host="/finance/cari" />
 
       <PageBody className="p-6">
         {q.isLoading ? (

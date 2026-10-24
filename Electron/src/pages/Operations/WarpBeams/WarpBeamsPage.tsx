@@ -9,6 +9,7 @@
 // =============================================================================
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -75,6 +76,7 @@ export function WarpBeamsPage() {
           </div>
         }
       />
+      <RelocatedToolStrip host="/operations/warp-beams" />
       <DataTableToolbar fetchAll={fetchAll} search={search} onSearchChange={setSearch} placeholder="Levent no, gövde no veya çözgü kartı ara..." />
       <FilterBar filters={FILTERS} />
       <DataTable<WarpBeam>

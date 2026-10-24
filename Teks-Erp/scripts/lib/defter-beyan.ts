@@ -165,6 +165,20 @@ export const CIFT_DISI_DEGERLER: CiftDisiDeger[] = [
     gerekce: "partinin DOĞUŞ satırı (\"Parti Ekle\", tasarım §6.5) — geri alma partinin toplarına Top Çıkar'dır ve her topun kendi defterine (RollMovement damgası · stok defteri bağlı ters) yazılır; yazıcı D8 diliminde doğar" },
   { enumAdi: "LoomAlarmEventKind", deger: "RESOLVED", sinif: "TERMINAL",
     gerekce: "alarm kapanışı — duruş bittiği için `state: RESOLVED` (loom-alarm.service `closeTx`); değerin KENDİSİ terminal, çözülen alarm yeniden açılmaz (yeni duruş yeni alarm)" },
+  { enumAdi: "DeviceBindingEventType", deger: "REGISTERED", sinif: "DOGUS",
+    gerekce: "cihaz satırının doğuşu (announce · AYRI_CIHAZ red) — tersi karşı olay değil cihazın kendi pasife alınması/kalıcı silinmesi (PURGED)" },
+  { enumAdi: "DeviceBindingEventType", deger: "REBIND_REQUESTED", sinif: "DOGUS",
+    gerekce: "yeni kurulum anahtarının deftere ilk girişi (talep açılışı) — tersi talebin kendi kararıdır (REBOUND ya da REBIND_REJECTED)" },
+  { enumAdi: "DeviceBindingEventType", deger: "REBIND_REJECTED", sinif: "TERMINAL",
+    gerekce: "talebin red kararı — reddedilen localId yeniden açılmaz (talep tablosunda tekil), yeni kurulum yeni talep doğurur" },
+  { enumAdi: "DeviceBindingEventType", deger: "REVOKED", sinif: "TERMINAL",
+    gerekce: "kanıt bağı düşer (tuz silinir) — geri dönmez; yeniden onay YENİ sır verir, eski bağ hiç dönmez" },
+  { enumAdi: "DeviceBindingEventType", deger: "PROOF_RESET", sinif: "TERMINAL",
+    gerekce: "kanıt sırrının sıfırlanması (D5 halka) — REVOKED ile aynı: eski sır geri gelmez" },
+  { enumAdi: "DeviceBindingEventType", deger: "PURGED", sinif: "TERMINAL",
+    gerekce: "hiç kullanılmamış cihaz satırının kalıcı silinmesi — satır yok, tersi yok" },
+  { enumAdi: "DeviceBindingEventType", deger: "HW_CONFLICT", sinif: "TERMINAL",
+    gerekce: "gözlem satırı: bilinen cihazın özeti başka canlı satırda — durum değiştirmez, geri alınacak ileri etki yok" },
 ];
 
 const D = (
@@ -465,6 +479,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // ── TEZGAH ALARMI (dokuma alarm Faz A1) ──
   // `LoomAlarm` DURUM'dur (§1c, buraya girmez); geçmişi bu defterde. Motor kademe/kapanış satırını,
   // kişi eylemleri (A1b) üstlenme/susturma/not satırını ve karşı olaylarını yazar — tek yazar dosya.
+  D("DeviceBindingEvent", "cihaz bağlama defteri (eşleme v2) — fiziksel cihaz ↔ kurulum anahtarı olayları; append-only (updatedAt YOK, `device_binding_events_block_tamper`); REBOUND'un tersi yeni REBOUND, MERGED↔UNMERGED (D4)",
+    { tur: "KARSI_OLAY", enumAdi: "DeviceBindingEventType", ciftler: [["MERGED", "UNMERGED"], ["REBOUND", "REBOUND"]] },
+    [{ dosya: "src/services/device-rebind.service.ts", sembol: "approve" }],
+    ["src/services/helpers/device-identity.helper.ts"]),
+
   D("LoomAlarmEvent", "alarm DEFTERİ — kademe çalması, üstlenme, susturma, not ve kapanış; append-only (updatedAt YOK, `defter_block_tamper`), kronoloji `createdAt` (alarm başına kesin artan); ters yolu TİPLİ ENUM ÇİFTİ: ACK↔ACK_RELEASE · SNOOZE↔UNSNOOZE · NOTE↔NOTE_RETRACT (not silinmez/değişmez, geri çekme `retractsEventId` bağlı ayrı satır) · RAISED/TIER_SKIPPED↔CANCELLED (duruş geri alındı / plan dışına sınıflandı)",
     { tur: "ENUM_CIFTI", enumAdi: "LoomAlarmEventKind", ciftler: [
       ["ACK", "ACK_RELEASE"], ["SNOOZE", "UNSNOOZE"], ["NOTE", "NOTE_RETRACT"], ["RAISED", "CANCELLED"], ["TIER_SKIPPED", "CANCELLED"],
@@ -569,6 +588,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "backend güncellemesinin panel ONAYI (Dağıtım v2): güncelleyicinin niyet dosyasına giden TETİK, yetki değil — silinse raporlanan hiçbir sayı değişmez; \"ne oldu\"nun sahibi güncelleyicinin işlem geçmişi (`gecmis.jsonl`, `onayId` ile) ve satıcının `kurulum_kaydi` defteridir; satır silinmez, güncellenmez — geri alma da yeni bir satırdır, yürürlükteki = en son satır (`services/update-approval.service.ts`)" },
   { model: "CloudInboxReceipt", sinif: "DURUM",
     gerekce: "patron bulutu mesajının TEK KULLANIMLIK tüketim kaydı (idempotency makbuzu): iş sonucu varlığın KENDİ defterinde (sipariş/cari), ters yolu da onun ters yoludur (sipariş iptali · kart arşivi); makbuz silinmez, güncellenmez, geri alınmaz — silinse raporlanan sayı değişmez ama aynı mesaj ikinci varlık doğururdu" },
+  { model: "ReportDefinitionVersion", sinif: "DURUM",
+    gerekce: "rapor tanımı gövdesinin DEĞİŞMEZ sürümü (rapor v2 R1-SEMA, append-only): rapor sayıları canlı veriden hesaplanır, sürüm satırı silinse raporlanan hiçbir sayı değişmez ⇒ defter değil; ters mekanizması = YENİ SÜRÜM SATIRI (düzenleme de geri alma da yeni satırdır), yürürlükteki = `ReportDefinition.activeVersionId` (atomik claim) — satır güncellenmez, silinmez" },
 ];
 
 // =============================================================================

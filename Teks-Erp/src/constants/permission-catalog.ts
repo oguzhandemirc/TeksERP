@@ -114,6 +114,18 @@ export const PERMISSION_CATALOG = [
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },
   { code: "property:write", module: "QUALITY", category: "web", description: "Özellik tanımlama/düzenleme" },
+  // ── Kalite Güvence (K4P, 2026-10-24) — modül `kaliteGuvence.enabled` ────────────────────────
+  // Okuma · giriş · düzeltme · kural ayrı kararlardır: KK1 operatörü muayene girer ama kural setini
+  // değiştiremez; geçmiş muayeneyi düzeltmek/iptal etmek süpervizör işidir.
+  { code: "inspection:read", module: "QUALITY", category: "web", description: "Muayene kayıtlarını görüntüleme" },
+  { code: "inspection:write", module: "QUALITY", category: "web", description: "Muayene girme (tablet/panel)" },
+  { code: "inspection:correct", module: "QUALITY", category: "web", description: "Muayene düzeltme/iptal" },
+  { code: "inspection:rules", module: "QUALITY", category: "web", description: "4 puan kural setlerini yönetme" },
+  { code: "labtest:read", module: "QUALITY", category: "web", description: "Lab test kayıtlarını görüntüleme" },
+  { code: "labtest:write", module: "QUALITY", category: "web", description: "Lab test sonucu girme/düzenleme" },
+  { code: "labtest:approve", module: "QUALITY", category: "web", description: "Lab test sonucunu onaylama" },
+  { code: "certificate:read", module: "QUALITY", category: "web", description: "Sertifikaları görüntüleme" },
+  { code: "certificate:write", module: "QUALITY", category: "web", description: "Sertifika ekleme/yenileme/iptal" },
   { code: "subcontractor:read", module: "SUBCONTRACTOR", category: "web", description: "Fason firma listesi/detay görüntüleme" },
   { code: "subcontractor:write", module: "SUBCONTRACTOR", category: "web", description: "Fason firma oluşturma/düzenleme" },
   { code: "kartela:read", module: "KARTELA", category: "web", description: "Kartela sevk/kabul takibi" },
@@ -343,5 +355,15 @@ export const PERMISSION_CATALOG = [
   // Tezgah alarmı mobil "Uyarılar" ekranı (A3): `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi
   // (`mobile:siparis` emsali); başkasının üstlenmesini bırakmak yine yalnız `loom:alarm-escalation`.
   { code: "mobile:tezgah-uyari", module: "MOBILE", category: "mobile", description: "Mobil — Uyarılar ekranı: tezgah alarmlarını görme, üstlenme/bırakma, susturma, not; bildirim" },
+  // K4P (2026-10-24): istasyondan bağımsız Muayene ekranı (top okut → 4 puan muayene); KK1 içi muayene `mobile:kk1` ile.
+  { code: "mobile:muayene", module: "MOBILE", category: "mobile", description: "Mobil — Muayene ekranı: top okutup 4 puan muayene girme (istasyondan bağımsız)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];
+
+/**
+ * Masaüstü paneli (Electron + web) girişini AÇAN izin kümesi mi? En az bir mobil-olmayan kod yeter.
+ * TEK yüklem: auth kanal kapısı ve rol şablonu bekçisi (operatör şablonu → panel girişi YOK) bunu okur.
+ */
+export function grantsDesktopPanel(codes: readonly string[]): boolean {
+  return codes.some((c) => !c.startsWith("mobile:"));
+}

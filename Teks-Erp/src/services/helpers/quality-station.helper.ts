@@ -24,8 +24,8 @@
 // ÜÇÜNCÜ ŞEKİL BİLİNÇLİ OLARAK DIŞARIDA: `expectedKind` ARGÜMANI alan jenerik
 // yardımcılar. `roll-step.helper.assertWoAtStepKind` TAMBUR ile PAYLAŞILIYOR
 // (tambur.service kart okutma) — imzasını yetenekleştirmek Tambur kart-okutma
-// yolunu da değiştirirdi. Tek PROCESS_QC çağrısı (kursun-qc getByCardBarcode)
-// Faz B'ye bırakıldı, bekçide GEREKÇELİ MUAF olarak durur.
+// yolunu da değiştirirdi. Kurşun kart okutması onu artık ÇAĞIRMAZ: adım oturum
+// istasyonundan `station-step-resolve.helper` ile çözülür (KQ-D2).
 //
 // ⚠️ WHERE parçaları `as const` DEĞİL `satisfies` ile yazılır:
 // readonly literal tip `OR:` konumunda Prisma'nın mutable input tipine oturmaz

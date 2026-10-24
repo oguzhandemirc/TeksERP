@@ -14,8 +14,8 @@ import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireProductionEnabled } from "../../middlewares/module.middleware";
 import type { ReportKey } from "../../constants/report-catalog";
-import { compareRangeSchema, reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
-import { resolveCoreCompare } from "../../services/reports/temel/_common";
+import { reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
+import { coreRangeQuerySchema, resolveCoreCompare } from "../../services/reports/temel/_common";
 import { fasonEkseni, kalemEkseni } from "../../services/reports/_filters";
 import { buildProductionFlowReport, PRODUCTION_FLOW_VIEWS } from "../../services/reports/temel/uretim-akisi.temel";
 import { buildQualityReport, QUALITY_VIEWS } from "../../services/reports/temel/kalite.temel";
@@ -38,17 +38,17 @@ export function permissionOf(key: ReportKey): string {
 const reportGate = (key: ReportKey) => [requireReportOpen(key), requirePermission(permissionOf(key))];
 
 // Şemalar bekçi için DIŞA AÇIK; her biri `.strict()` (tanınmayan anahtar 400). Süzgeç kümesi kaynak ucunkiyle aynı.
-export const coreProductionFlowQuerySchema = compareRangeSchema.extend({ varyant: z.enum(PRODUCTION_FLOW_VIEWS).optional() }).strict();
-export const coreQualityQuerySchema = compareRangeSchema
+export const coreProductionFlowQuerySchema = coreRangeQuerySchema.extend({ varyant: z.enum(PRODUCTION_FLOW_VIEWS).optional() }).strict();
+export const coreQualityQuerySchema = coreRangeQuerySchema
   .extend({
     warpBeamId: z.string().uuid("Geçersiz levent").optional(),
     lotNo: z.string().trim().min(1).max(64).optional(),
     varyant: z.enum(QUALITY_VIEWS).optional(),
   })
   .strict();
-export const coreLossQuerySchema = compareRangeSchema.strict();
+export const coreLossQuerySchema = coreRangeQuerySchema.strict();
 export const coreWarehouseQuerySchema = z.object({}).strict();
-export const coreSubcontractorsQuerySchema = compareRangeSchema.extend({ ...fasonEkseni, ...kalemEkseni }).strict();
+export const coreSubcontractorsQuerySchema = coreRangeQuerySchema.extend({ ...fasonEkseni, ...kalemEkseni }).strict();
 
 /**
  * @openapi
@@ -65,9 +65,7 @@ export const coreSubcontractorsQuerySchema = compareRangeSchema.extend({ ...faso
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
- *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] }, description: "Verilmezse önceki dönem (K-KIYAS; uygulanan kip `parametreler[]` içinde `kiyas`)" }
- *       - { in: query, name: compareFrom, schema: { type: string, format: date-time } }
- *       - { in: query, name: compareTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *       - { in: query, name: varyant, schema: { type: string, enum: [istasyon, operator] } }
  *     responses:
  *       200: { description: "RaporSunumu (data); operatör görünümünde sunumda kisiAdi:true" }
@@ -99,9 +97,7 @@ router.get("/production/uretim-akisi", requireProductionEnabled, ...reportGate("
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
- *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] }, description: "Verilmezse önceki dönem (K-KIYAS; uygulanan kip `parametreler[]` içinde `kiyas`)" }
- *       - { in: query, name: compareFrom, schema: { type: string, format: date-time } }
- *       - { in: query, name: compareTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: Levent }
  *       - { in: query, name: lotNo, schema: { type: string }, description: Lot }
  *       - { in: query, name: varyant, schema: { type: string, enum: [urun, renk, fasoncu] } }
@@ -139,9 +135,7 @@ router.get("/quality/kalite", requireProductionEnabled, ...reportGate("quality/k
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
- *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] }, description: "Verilmezse önceki dönem (K-KIYAS; uygulanan kip `parametreler[]` içinde `kiyas`)" }
- *       - { in: query, name: compareFrom, schema: { type: string, format: date-time } }
- *       - { in: query, name: compareTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Üretim modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -197,9 +191,7 @@ router.get("/inventory/depo", ...reportGate("inventory/depo"), async (req: Reque
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
- *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] }, description: "Verilmezse önceki dönem (K-KIYAS; uygulanan kip `parametreler[]` içinde `kiyas`)" }
- *       - { in: query, name: compareFrom, schema: { type: string, format: date-time } }
- *       - { in: query, name: compareTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *       - { in: query, name: subcontractorId, schema: { type: string }, description: "Fasoncu (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Topun kumaşı (uuid; CSV)" }
  *       - { in: query, name: colorId, schema: { type: string }, description: "Topun rengi (uuid; CSV)" }

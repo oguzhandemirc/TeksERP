@@ -152,9 +152,9 @@ async function rapbSection(): Promise<void> {
   check("§R0b ⭐ `parametreler[]` `kiyas` beyanı uygulanan kipi taşır + `kiyasDonemi` dolu",
     kiyas?.deger === "prev" && (kiyas.secenekler?.length ?? 0) >= 2 && flow.kiyasDonemi !== undefined,
     `kiyas ${JSON.stringify(kiyas?.deger)} · kiyasDonemi ${flow.kiyasDonemi ? "var" : "YOK"}`);
-  const none = resolveCoreCompare({ compare: "none" }, RANGE);
+  const none = resolveCoreCompare({ kiyas: "none" }, RANGE);
   const flowNone = (await buildProductionFlowReport({ range: RANGE, compareRange: none.compareRange, compareMode: none.mode })).sunum;
-  check("§R0c `compare=none` açıkça istenirse kıyas yok, beyan `none`",
+  check("§R0c `kiyas=none` açıkça istenirse kıyas yok, beyan `none`",
     flowNone.kiyasDonemi === undefined && flowNone.parametreler.find((p) => p.ad === "kiyas")?.deger === "none");
 
   // §R1 Üretim akışı = WIP karnesi (+ operatör iş hacmi)

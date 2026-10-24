@@ -53,6 +53,7 @@ import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
 import { cookieLoginApplies } from "../lib/web-session-cookie";
 import { matchesPermission } from "../middlewares/rbac.middleware";
+import { grantsDesktopPanel } from "../constants/permission-catalog";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
@@ -186,6 +187,21 @@ export class AuthService {
     password: string,
     ctx?: LoginContext
   ): Promise<LoginResult> {
+    const user = await this.authenticatePassword(username, password, ctx);
+    const result = await this.issueToken(
+      { id: user.id, username: user.username, tokenVersion: user.tokenVersion },
+      ctx,
+      "password",
+    );
+    await this.upgradePasswordHash(user.id, password, user.passwordHash);
+    return result;
+  }
+
+  /**
+   * Parola + ikinci faktör doğrulaması — `login` ile yerinde yönetici onayının ORTAK doğrulayıcısı
+   * (aynı 401 iletisi, aynı 2FA kuralı). Kilit sayacı çağıranın rezervasyonundadır (login-lockout).
+   */
+  private static async authenticatePassword(username: string, password: string, ctx?: LoginContext) {
     const user = await prisma.user.findUnique({
       where: { username },
       select: {
@@ -210,14 +226,31 @@ export class AuthService {
     // `kick` politikasında diğer oturumları düşürür; yalnız parolayı bilen biri
     // meşru kullanıcıyı oturumundan atamamalı.
     await this.assertSecondFactor(user.id, ctx, "password");
+    return user;
+  }
 
-    const result = await this.issueToken(
-      { id: user.id, username: user.username, tokenVersion: user.tokenVersion },
-      ctx,
-      "password",
-    );
-    await this.upgradePasswordHash(user.id, password, user.passwordHash);
-    return result;
+  /**
+   * Tablette YERİNDE yönetici onayı (cihaz yeniden bağlama): giriş doğrulayıcısının aynısı + token
+   * üreticisinin oturumsuz kapıları (patron teknik hesabı, sistem hesabı mührü, zorunlu parola
+   * değişimi). JWT ÜRETMEZ, oturum açmaz. İzin kararı çağıranda (etkin izin kümesi).
+   */
+  static async verifyPasswordForApproval(
+    username: string,
+    password: string,
+    ctx?: LoginContext,
+  ): Promise<{ userId: string; username: string }> {
+    const user = await this.authenticatePassword(username, password, ctx);
+    if (user.id === (await readPatronCloudUserId())) {
+      throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
+    }
+    await assertSealAllowsLogin(user.id);
+    const flags = await prisma.user.findUnique({ where: { id: user.id }, select: { mustChangePassword: true } });
+    if (flags?.mustChangePassword === true) {
+      throw AppError.forbidden("Bu hesabın parolası değiştirilmeli. Önce yönetim panelinden giriş yapıp parolanızı değiştirin.", {
+        code: PASSWORD_CHANGE_REQUIRED_CODE,
+      });
+    }
+    return { userId: user.id, username: user.username };
   }
 
   /**
@@ -608,7 +641,7 @@ export class AuthService {
     // giremez → 403, token BİLE üretilmez. Mobil girişte bu kısıt yok.
     if (
       isDesktopClient(ctx?.clientType) &&
-      !permissions.some((p) => !p.startsWith("mobile:"))
+      !grantsDesktopPanel(permissions)
     ) {
       // Kanal reddi izin reddinden AYRI kod: istemci "yetki iste" değil "doğru uygulamayı aç" der.
       throw AppError.forbidden(
