@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import apiClient from "@/services/apiClient";
 import { workOrderService } from "@/pages/Operations/WorkOrders/service";
 import { labelService } from "@/services/labelService";
+import { reportPrintJob, resetPrintJobCapabilityForTest } from "@/services/printJobService";
 
 // =============================================================================
 // BEKÇİ: "basıldı" bildirimleri GENEL hata toast'ını tetiklemez
@@ -50,6 +51,22 @@ describe("print-event bildirimleri — genel hata toast'ını bastırır", () =>
     expect(mockPost).toHaveBeenCalledTimes(1);
     const [url, , config] = mockPost.mock.calls[0] ?? [];
     expect(url).toBe("/api/labels/sacks/sack-1/print-event");
+    expect(config).toMatchObject({ suppressErrorToast: true });
+  });
+
+  it("toplu top etiketi: POST /labels/rolls/bulk-print-event suppressErrorToast taşır", async () => {
+    await labelService.recordBulkRollPrintEvent(["r1", "r2"]);
+    const [url, body, config] = mockPost.mock.calls[0] ?? [];
+    expect(url).toBe("/api/labels/rolls/bulk-print-event");
+    expect(body).toEqual({ rollIds: ["r1", "r2"] });
+    expect(config).toMatchObject({ suppressErrorToast: true });
+  });
+
+  it("yazdırma geçmişi raporu: POST /print-jobs suppressErrorToast taşır", async () => {
+    resetPrintJobCapabilityForTest();
+    await reportPrintJob({ subjectKind: "BELGE", status: "HATA", errorCode: "BILINMEYEN" });
+    const [url, , config] = mockPost.mock.calls[0] ?? [];
+    expect(url).toBe("/api/print-jobs");
     expect(config).toMatchObject({ suppressErrorToast: true });
   });
 });

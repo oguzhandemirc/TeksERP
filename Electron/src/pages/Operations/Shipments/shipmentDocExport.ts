@@ -3,6 +3,7 @@ import { buildWorkbook, downloadWorkbook, saveWorkbook } from "@/lib/xlsx-export
 import { docTablesToSheets, type DocTablesPayload } from "@/lib/doc-tables-export";
 import { withPdfBatchProgress } from "@/lib/pdf-batch-progress";
 import { isWebPdf, printDocsAsPdfOutcome } from "@/lib/web-pdf";
+import { trackPdfSave, type PrintSubject } from "@/lib/print";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 import { accountingDispatchService } from "@/pages/Operations/AccountingDispatch/service";
 import {
@@ -39,6 +40,21 @@ export interface ExportOutcome {
 
 const docTypeOf = (t: DocTarget) =>
   t.isDirect ? ("SUBCONTRACTOR_DIRECT_SHIP" as const) : ("SHIPMENT_DISPATCH" as const);
+
+/** Geçmiş konusu: tek belge → kaydı + no; toplu → sevkiyat id'leri (doğrudan sevk tablosu katalogda yok). */
+function docsSubject(targets: DocTarget[]): PrintSubject {
+  const first = targets[0];
+  if (targets.length === 1 && first) {
+    return {
+      kind: "BELGE",
+      docType: docTypeOf(first),
+      no: first.shipmentNo,
+      ...(first.isDirect ? {} : { table: "shipments" as const, id: first.id }),
+    };
+  }
+  const ids = targets.filter((t) => !t.isDirect).map((t) => t.id).slice(0, 200);
+  return { kind: "BELGE", itemCount: Math.max(targets.length, 1), ...(ids.length ? { table: "shipments" as const, ids } : {}) };
+}
 
 const reportOf = (t: DocTarget) =>
   t.isDirect ? accountingDispatchService.getDirectReport(t.id) : accountingDispatchService.getReport(t.id);
@@ -105,7 +121,7 @@ export async function downloadDocsPdf(targets: DocTarget[]): Promise<ExportOutco
     if (targets.length === 0) return { ok: false, error: "Sevkiyat seçilmedi." };
     const htmls: string[] = [];
     for (const t of targets) htmls.push(await printedDocumentService.getHtml(docTypeOf(t), t.id));
-    return printDocsAsPdfOutcome(htmls);
+    return printDocsAsPdfOutcome(htmls, docsSubject(targets));
   }
   if (!pdfApi) return { ok: false, error: "PDF desteği yok (masaüstü uygulaması gerekli)." };
   if (targets.length === 0) return { ok: false, error: "Sevkiyat seçilmedi." };
@@ -113,7 +129,7 @@ export async function downloadDocsPdf(targets: DocTarget[]): Promise<ExportOutco
   if (targets.length === 1) {
     const t = targets[0]!;
     const html = await printedDocumentService.getHtml(docTypeOf(t), t.id);
-    const res = await pdfApi.save({ html, suggestedName: t.shipmentNo });
+    const res = await trackPdfSave(docsSubject(targets), () => pdfApi.save({ html, suggestedName: t.shipmentNo }));
     return { ok: res.saved, count: res.saved ? 1 : 0, error: res.error };
   }
 
@@ -121,7 +137,9 @@ export async function downloadDocsPdf(targets: DocTarget[]): Promise<ExportOutco
   for (const t of targets) {
     items.push({ html: await printedDocumentService.getHtml(docTypeOf(t), t.id), name: t.shipmentNo });
   }
-  const res = await withPdfBatchProgress(pdfApi, items.length, () => pdfApi.saveBatch({ items }));
+  const res = await trackPdfSave(docsSubject(targets), () =>
+    withPdfBatchProgress(pdfApi, items.length, () => pdfApi.saveBatch({ items })),
+  );
   return { ok: res.saved, count: res.count, error: res.error };
 }
 

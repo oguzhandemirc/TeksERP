@@ -18,6 +18,7 @@ import type { LicenseRelayRequest } from "@shared/license-relay";
 import { isAppDocumentUrl, readAppEntryArgument } from "@shared/app-origin";
 import type { XlsxStreamBeginOpts, XlsxStreamEndOpts, XlsxStreamRowsOpts } from "@shared/xlsx-stream";
 import { PDF_BATCH_PROGRESS_CHANNEL, parsePdfBatchProgress } from "@shared/pdf-progress";
+import { DOC_PRINT_CHANNEL, DOC_PRINT_PRINTERS_CHANNEL } from "@shared/doc-print";
 import { LOOM_ALARM_NOTIFY_CHANNEL, LOOM_ALARM_OPEN_CHANNEL, parseLoomAlarmOpenEvent } from "@shared/loom-alarm-notify";
 
 const api: ApiBridge = {
@@ -93,6 +94,17 @@ const api: ApiBridge = {
       ipcRenderer.on(PDF_BATCH_PROGRESS_CHANNEL, listener);
       return () => ipcRenderer.removeListener(PDF_BATCH_PROGRESS_CHANNEL, listener);
     },
+  },
+  docPrint: {
+    // Yalnız bilinen alanlar geçer; ana süreç yeniden doğrular (shared/doc-print).
+    print: (req) =>
+      ipcRenderer.invoke(DOC_PRINT_CHANNEL, {
+        html: req.html,
+        silent: req.silent,
+        ...(req.deviceName !== undefined ? { deviceName: req.deviceName } : {}),
+        ...(req.copies !== undefined ? { copies: req.copies } : {}),
+      }),
+    printers: () => ipcRenderer.invoke(DOC_PRINT_PRINTERS_CHANNEL),
   },
   files: {
     save: (opts: FileSaveOpts) => ipcRenderer.invoke("files:save", opts),

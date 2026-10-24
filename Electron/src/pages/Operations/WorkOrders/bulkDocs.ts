@@ -19,7 +19,7 @@
 
 import { printedDocumentService, type PrintedDocType } from "@/services/printedDocumentService";
 import { mergeDocsForPrint } from "@/lib/print-merge";
-import { printHtmlString } from "@/lib/print";
+import { printTracked, trackPdfSave, type PrintSubject } from "@/lib/print";
 import { withPdfBatchProgress } from "@/lib/pdf-batch-progress";
 import { isWebPdf, printDocsAsPdfOutcome } from "@/lib/web-pdf";
 import { workOrderService } from "./service";
@@ -220,6 +220,12 @@ export interface PrintOutcome {
  * ⚠️ PDF yolunda bu bildirim YAPILMAZ — dosyaya yazmak "bastım" değildir; her
  * arşiv indirmesinde kart sürümü ilerletmek numarayı anlamsızlaştırırdı.
  */
+/** Toplu belge işinin geçmiş konusu: iş emirleri (tekil, ≤200) + belge adedi. */
+function bulkSubject(docs: FetchedDoc[]): PrintSubject {
+  const ids = [...new Set(docs.map((d) => d.row.wo.id))].slice(0, 200);
+  return { kind: "BELGE", table: "work_orders", ids, itemCount: Math.max(docs.length, 1) };
+}
+
 export async function printDocs(docs: FetchedDoc[]): Promise<PrintOutcome> {
   const merged = mergeDocsForPrint(docs.map((d) => d.html));
   const dropped = merged.unmergeable.map((i) => docs[i]!.row);
@@ -227,7 +233,9 @@ export async function printDocs(docs: FetchedDoc[]): Promise<PrintOutcome> {
   if (dropped.length === docs.length) {
     return { printed: 0, unmergeable: dropped, sizes: [] };
   }
-  printHtmlString(merged.html);
+  const out = await printTracked({ subject: bulkSubject(docs), html: merged.html });
+  // İptal/hata: kâğıt çıkmadı → kart "basıldı" bildirilmez (sürüm ilerlemez).
+  if (!out.proceed) return { printed: 0, unmergeable: dropped, sizes: [] };
 
   const cardIds = docs
     .filter((d, i) => d.row.doc.docType === "TRAVELER_CARD" && !merged.unmergeable.includes(i))
@@ -260,18 +268,20 @@ export async function savePdfDocs(docs: FetchedDoc[]): Promise<PdfOutcome> {
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
   if (!pdfApi && isWebPdf()) {
     if (docs.length === 0) return { ok: false, error: "Belge yok." };
-    return printDocsAsPdfOutcome(docs.map((d) => d.html));
+    return printDocsAsPdfOutcome(docs.map((d) => d.html), bulkSubject(docs));
   }
   if (!pdfApi) return { ok: false, error: "PDF desteği yok (masaüstü uygulaması gerekli)." };
   if (docs.length === 0) return { ok: false, error: "Belge yok." };
 
   if (docs.length === 1) {
     const d = docs[0]!;
-    const res = await pdfApi.save({ html: d.html, suggestedName: pdfName(d.row) });
+    const res = await trackPdfSave(bulkSubject(docs), () => pdfApi.save({ html: d.html, suggestedName: pdfName(d.row) }));
     return { ok: res.saved, count: res.saved ? 1 : 0, error: res.error };
   }
-  const res = await withPdfBatchProgress(pdfApi, docs.length, () =>
-    pdfApi.saveBatch({ items: docs.map((d) => ({ html: d.html, name: pdfName(d.row) })) }),
+  const res = await trackPdfSave(bulkSubject(docs), () =>
+    withPdfBatchProgress(pdfApi, docs.length, () =>
+      pdfApi.saveBatch({ items: docs.map((d) => ({ html: d.html, name: pdfName(d.row) })) }),
+    ),
   );
   return { ok: res.saved, count: res.count, error: res.error };
 }

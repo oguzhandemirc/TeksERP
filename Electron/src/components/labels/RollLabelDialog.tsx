@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Printer, Pencil, X, AlertTriangle } from "lucide-react";
@@ -16,6 +16,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { labelService } from "@/services/labelService";
+import type { PrintJobAttachment } from "@/services/printJobService";
+import { printTracked } from "@/lib/print";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
@@ -32,7 +34,6 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   const open = Boolean(rollId);
   const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Payload — orderLineId (Edit gating) ve LabelEditDialog için master adlar.
   const payloadQuery = useQuery({
@@ -71,11 +72,11 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     );
   const scrapGateOpen = !isScrapGrade || scrapConfirmed;
 
-  // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
+  // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa printTracked (sistem penceresi / sessiz basım).
   const { directEnabled, printRoll, peripheralId } = useLabelPrinter();
 
   // WYSIWYG önizleme — AKTİF DİLDE (native PPLB → görsel SVG, baskıyla birebir).
-  // Baskı yolu (native printRoll / iframe.print) ayrı; önizleme artık gerçek çıktı.
+  // Baskı yolu (native printRoll / printTracked) ayrı; önizleme artık gerçek çıktı.
   // peripheralId: önizleme bu PC'ye seçili yazıcının dilinde çözülür (baskıyla aynı).
   const previewQuery = useQuery({
     queryKey: ["label-roll-preview", rollId, peripheralId, scrapGateOpen],
@@ -105,7 +106,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   const [sending, setSending] = useState(false);
 
   const printMut = useMutation({
-    mutationFn: () => labelService.printRollLabel(rollId!),
+    mutationFn: (printJob?: PrintJobAttachment) => labelService.printRollLabel(rollId!, undefined, printJob),
     onSuccess: () => {
       toast.success("Etiket basıldı (audit kaydı oluşturuldu).");
       // Baskı labelDirty'yi temizledi → liste + detay sheet "Etiket güncel değil" rozeti tazelensin.
@@ -122,7 +123,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
         // Diyalogsuz: native PPLA → seri/COM. Hata olursa diyaloğa DÜŞME (görünür hata).
         const r = await printRoll(rollId!, scrapConfirmed ? { confirmScrap: true } : undefined);
         if (r.ok) {
-          printMut.mutate(); // audit + "Etiket basıldı" toast'ı printMut.onSuccess'ten.
+          printMut.mutate(r.printJob); // audit + "Etiket basıldı" toast'ı printMut.onSuccess'ten.
         } else {
           toast.error(r.error ?? "Yazıcıya gönderilemedi");
         }
@@ -131,8 +132,18 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
       }
       return;
     }
-    iframeRef.current?.contentWindow?.print();
-    printMut.mutate();
+    // Sistem penceresi yedeği: önizleme HTML'i boğazdan basılır. Ham komut önizlemesi (text)
+    // OS penceresinden basılamaz — kâğıt çıkmadan "basıldı" damgası atılmaz.
+    if (!preview || preview.mode === "text") {
+      toast.error("Bu etiket dili yazdırma penceresinden basılamaz; etiket yazıcısını ayarlayın.");
+      return;
+    }
+    const out = await printTracked({
+      subject: { kind: "ETIKET_TOP", table: "rolls", id: rollId! },
+      html: preview.content,
+      workEndpoint: true,
+    });
+    if (out.proceed) printMut.mutate(out.printJob);
   };
 
   const payload = payloadQuery.data?.data;
@@ -202,7 +213,6 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
               </pre>
             ) : (
               <iframe
-                ref={iframeRef}
                 title="Top etiketi"
                 srcDoc={preview?.content ?? ""}
                 sandbox="allow-same-origin allow-modals"

@@ -14,6 +14,7 @@ import type { ScreenshotResult } from "./screenshot";
 import type { TvDisplayInfo, TvWindowOpenRequest, TvWindowOpenResult } from "./tv-window";
 import type { LoomAlarmNotifyRequest, LoomAlarmNotifyResult } from "./loom-alarm-notify";
 import type { PdfBatchProgress } from "./pdf-progress";
+import type { DocPrintApi } from "./doc-print";
 import type {
   XlsxStreamBeginOpts,
   XlsxStreamBeginResult,
@@ -448,6 +449,8 @@ export interface ApiBridge {
   printer: PrinterTransportApi;
   scale: ScaleApi;
   pdf: PdfApi;
+  /** Belge basımı + sonucu (izlenebilirlik A2) — gizli pencere `webContents.print`. */
+  docPrint: DocPrintApi;
   files: FilesApi;
   xlsx: XlsxApi;
   updater: UpdaterApi;

@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { printDocumentArea } from "@/lib/print";
+import { printTracked } from "@/lib/print";
 import type { Machine } from "./types";
 
 /**
@@ -51,7 +51,15 @@ export function MachineQrPrintDialog({
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Kapat
           </Button>
-          <Button type="button" onClick={() => printDocumentArea(areaRef.current)}>
+          <Button
+            type="button"
+            onClick={() =>
+              void printTracked({
+                subject: { kind: "ETIKET_TEZGAH", ...(machine ? { table: "machines", id: machine.id, no: machine.code } : {}) },
+                root: areaRef.current,
+              })
+            }
+          >
             Yazdır
           </Button>
         </DialogFooter>
