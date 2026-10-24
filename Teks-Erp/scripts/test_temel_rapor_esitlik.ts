@@ -284,16 +284,14 @@ async function rapbSection(): Promise<void> {
 const RAPC_KEYS: ReportKey[] = ["dokuma/tezgah-randimani", "dokuma/duruslar", "dokuma/levent-dengesi", "finance/alacaklar"];
 const RAPC_DAYS = { from: "2097-07-01", to: "2097-07-31" };
 const rapcShiftDefs: string[] = [];
-type Handler = (req: unknown, res: unknown, next: (err?: unknown) => void) => unknown;
-type RouteLayer = { route?: { path: string; stack: Array<{ handle: Handler; name: string }> } };
 
 /** Ucun modül kapısı öneki (`require*Enabled`) — Express yığınından, gerçek fonksiyonlarla koşar. */
 async function runModuleGates(path: string): Promise<{ gates: string[]; err: unknown }> {
-  const layer = (coreWeavingFinanceRouter as unknown as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === path);
+  const layer = coreWeavingFinanceRouter.stack.find((l) => l.route?.path === path);
   const gates = (layer?.route?.stack ?? []).filter((h) => /^require\w*Enabled$/.test(h.name));
   for (const g of gates) {
     const err = await new Promise<unknown>((resolve) => {
-      void Promise.resolve(g.handle({ headers: {}, query: {} }, {}, (e?: unknown) => resolve(e ?? null)));
+      void Promise.resolve(Reflect.apply(g.handle, undefined, [{ headers: {}, query: {} }, {}, (e?: unknown) => resolve(e ?? null)]));
     });
     if (err) return { gates: gates.map((x) => x.name), err };
   }
