@@ -9,8 +9,6 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   peripheralDevice: ["lastSeenAt", "deletedAt"],
   // Künye yalnız oturumdan (`withActor`); gövde ayrıca Zod `.strict()` allowlist'inden geçer.
   machineStopCodeMap: ["createdById", "updatedById"],
-  // Rapor v2 hata grubu: kapalı küme kodda (R1-BOYUT) — doğrulaması inene dek gövdeden yazılamaz.
-  defectType: ["defectGroup"],
 };
 
 export function baseWriteClosedFields(modelName: string): readonly string[] {
