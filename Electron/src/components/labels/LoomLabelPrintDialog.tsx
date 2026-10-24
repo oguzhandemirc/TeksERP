@@ -2,7 +2,7 @@
 // TEZGAH / LEVENT ETİKETİ BASKI DİYALOĞU — ortak çekirdek (adet · önizleme · yazdır · iz)
 // =============================================================================
 // Önizleme 1 adetlik backend HTML'idir (`sandbox=""`, DOM'una erişilmez); Yazdır N adetlik
-// HTML'i ayrıca ister ve izole iframe'de basar, ARDINDAN `print-event` yazar.
+// HTML'i ayrıca ister ve boğazdan (`printTracked`) basar; YALNIZ gidince `print-event` yazar.
 // Şablon yoksa backend 400 → genel bildirim TEK toast basar; burası ikinci toast basmaz.
 // =============================================================================
 import { useState } from "react";
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { printHtmlString } from "@/lib/print";
+import { printTracked } from "@/lib/print";
 import {
   LOOM_LABEL_COPIES_MAX,
   LOOM_LABEL_COPIES_MIN,
@@ -50,9 +50,17 @@ export function LoomLabelPrintDialog({ target, subject, title, description, onOp
     setBusy(true);
     try {
       const html = copies === 1 && preview.data ? preview.data : await loomLabelService.getHtml(target, subject.id, copies);
-      printHtmlString(html);
+      // Adet HTML'in içinde: işletim sistemi kopyası verilmez (N×N basılırdı).
+      const out = await printTracked({
+        subject: target === "machines"
+          ? { kind: "ETIKET_TEZGAH", table: "machines", id: subject.id, itemCount: copies }
+          : { kind: "ETIKET_LEVENT", table: "warp_beams", id: subject.id, itemCount: copies },
+        html,
+        workEndpoint: true,
+      });
+      if (!out.proceed) return;
       try {
-        await loomLabelService.recordPrint(target, subject.id, copies);
+        await loomLabelService.recordPrint(target, subject.id, copies, out.printJob);
       } catch {
         toast.warning("Etiket yazdırıldı — baskı kaydı sunucuya işlenemedi.", {
           description: "Kâğıt geçerlidir; tekrar bastırmanız gerekmez.",

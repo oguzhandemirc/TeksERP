@@ -19,7 +19,7 @@ import { Printer, Tags } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { printHtmlString } from "@/lib/print";
+import { printTracked } from "@/lib/print";
 import { labelService } from "@/services/labelService";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
@@ -69,13 +69,22 @@ export function BulkRollLabelButton({
   const printMut = useMutation({
     mutationFn: async () => {
       if (rollIds.length === 0) throw new Error("Basılacak top yok");
+      // Başarıda toplu damga ucu (K-A5: `labelPrintedAt`); hata/iptalde çağrılmaz. Eski backend 404 → sessiz.
+      const stamp = (printJob?: Parameters<typeof labelService.recordBulkRollPrintEvent>[1]) =>
+        labelService.recordBulkRollPrintEvent(rollIds.slice(0, 200), printJob).catch(() => undefined);
       if (directEnabled) {
         const r = await printRollsBulk(rollIds);
         if (!r.ok) throw new Error(r.error ?? "Yazıcıya gönderilemedi");
+        await stamp(r.printJob);
         return null;
       }
       const bulkHtml = await labelService.getBulkRollLabelsHtml(rollIds);
-      await printHtmlString(bulkHtml);
+      const out = await printTracked({
+        subject: { kind: "ETIKET_TOPLU", table: "rolls", ids: rollIds.slice(0, 200), itemCount: rollIds.length },
+        html: bulkHtml,
+        workEndpoint: true,
+      });
+      if (out.proceed) await stamp(out.printJob);
       return null;
     },
     onSuccess: () => {

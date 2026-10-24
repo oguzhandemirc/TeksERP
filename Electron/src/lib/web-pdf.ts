@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { IS_ELECTRON } from "@/lib/runtime-env";
-import { printHtmlString } from "@/lib/print";
+import { printTracked, type PrintSubject } from "@/lib/print";
 import { mergeDocsForPrint } from "@/lib/print-merge";
 
 /**
@@ -19,9 +19,9 @@ export function isWebPdf(): boolean {
   return !IS_ELECTRON;
 }
 
-/** Tek belge HTML'ini yazdırma penceresinde açar (+ bir kezlik ipucu). */
-export function printAsPdf(html: string): void {
-  printHtmlString(html);
+/** Tek belge HTML'ini yazdırma penceresinde açar (+ bir kezlik ipucu). Geçmişe PDF + BELIRSIZ düşer. */
+export function printAsPdf(html: string, subject: PrintSubject): void {
+  void printTracked({ subject, html, outputKind: "PDF" });
   if (!hintShown) {
     hintShown = true;
     toast.info(WEB_PDF_HINT);
@@ -32,17 +32,20 @@ export function printAsPdf(html: string): void {
  * N belgeyi TEK baskı işinde açar (her belge kendi gölge kökünde, kendi sayfa boyutunda —
  * `print-merge`). Birleştirilemeyen belge sessizce düşmez: sayısı döner, çağıran söyler.
  */
-export function printDocsAsPdf(htmls: string[]): { count: number; skipped: number } {
+export function printDocsAsPdf(htmls: string[], subject: PrintSubject): { count: number; skipped: number } {
   if (htmls.length === 0) return { count: 0, skipped: 0 };
   const merged = mergeDocsForPrint(htmls);
   const skipped = merged.unmergeable.length;
-  if (skipped < htmls.length) printAsPdf(merged.html);
+  if (skipped < htmls.length) printAsPdf(merged.html, subject);
   return { count: htmls.length - skipped, skipped };
 }
 
 /** Toplu web baskısının ortak sonucu: birleştirilemeyen belge varsa kullanıcıya söyler. */
-export function printDocsAsPdfOutcome(htmls: string[]): { ok: boolean; count: number; printed: true; error?: string } {
-  const { count, skipped } = printDocsAsPdf(htmls);
+export function printDocsAsPdfOutcome(
+  htmls: string[],
+  subject: PrintSubject,
+): { ok: boolean; count: number; printed: true; error?: string } {
+  const { count, skipped } = printDocsAsPdf(htmls, subject);
   if (skipped > 0 && count > 0) toast.warning(`${skipped} belge birleştirilemedi — tek tek açıp yazdırın.`);
   return {
     ok: count > 0,
