@@ -139,6 +139,8 @@ import licenseRoutes from "./routes/license.routes";
 import updateRoutes from "./routes/update.routes";
 import supportRoutes from "./routes/support.routes";
 import errorReportRoutes from "./routes/error-report.routes";
+import semanticReportRoutes from "./routes/rapor-semantik.routes";
+import reportRunRoutes from "./routes/rapor-calistirma.routes";
 import patronCloudRoutes from "./routes/patron-cloud.routes";
 const app: Express = express();
 
@@ -661,6 +663,8 @@ app.get(
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/rapor-semantik", semanticReportRoutes);
+app.use("/api/rapor-calistirmalari", reportRunRoutes);
 app.use("/api/devices", devicePublicRouter);
 app.use("/api/admin/devices", deviceAdminRouter);
 app.use("/api/work-sessions", workSessionRoutes);
