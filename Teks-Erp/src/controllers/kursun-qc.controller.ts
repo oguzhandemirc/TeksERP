@@ -92,7 +92,13 @@ export class KursunQcController {
   /** GET /api/kursun-qc/by-card/:barcode */
   async getByCardBarcode(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getByCardBarcode(req.params.barcode as string);
+      // Okuma ucu: oturum varsa adım oturum istasyonundan çözülür (KQ-D2); enforce
+      // YOK — bu uç bugün oturumsuz da çalışıyor (panel/web → bugünkü davranış).
+      const stamp = await getStampContext(req);
+      const result = await this.service.getByCardBarcode(
+        req.params.barcode as string,
+        stamp?.stationId ?? null,
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);
@@ -111,9 +117,11 @@ export class KursunQcController {
   }
 
   /** GET /api/kursun-qc/open-cards */
-  async listOpenCards(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async listOpenCards(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.listOpenCards();
+      // Oturum istasyonu varsa yalnız o istasyonun kartları (KQ-D2); enforce YOK.
+      const stamp = await getStampContext(req);
+      const result = await this.service.listOpenCards(stamp?.stationId ?? null);
       res.status(200).json(result);
     } catch (err) {
       next(err);

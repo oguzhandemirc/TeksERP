@@ -6,6 +6,7 @@ import { operationsTiles, type OperationsTile } from "./tile-config";
 import { operationGroups, type OperationGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
+import { RelocatedToolsSection } from "@/pages/Reports/_v2/RelocatedTools";
 
 // İstasyon/akış anlamına göre ton — verilmeyen kartlar grup içinde palet tonunu alır.
 const TILE_TONES: Record<string, string> = {
@@ -77,6 +78,8 @@ export function OperationsHubPage() {
             </section>
           );
         })}
+        {/* Raporlar v2: rapor menüsünden çıkan iz sürme araçları (bayrak kapalıyken çizilmez). */}
+        {visibilityCtx.flagsReady ? <RelocatedToolsSection host="/operations" title="İz sürme" /> : null}
       </PageBody>
     </PageShell>
   );

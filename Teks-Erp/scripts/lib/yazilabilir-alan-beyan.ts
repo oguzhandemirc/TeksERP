@@ -6,7 +6,7 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   color: ["code", "createdById", "hex", "isActive", "mergedAt", "mergedById", "mergedIntoId", "name", "sortOrder", "updatedById"],
   customer: ["address", "city", "code", "contactName", "contactPhone", "country", "createdById", "defaultDestination", "district", "documentProfileId", "email", "exportCode", "isActive", "isCustomerRole", "isSubcontractorRole", "isSupplierRole", "mergedAt", "mergedById", "mergedIntoId", "name", "notes", "taxNumber", "type", "updatedById"],
   customerBranch: ["address", "city", "code", "contactName", "contactPhone", "createdById", "customerId", "defaultDestination", "district", "isActive", "name", "notes", "updatedById"],
-  defectType: ["code", "createdById", "description", "fixedPoints", "isActive", "isDefault", "name", "severity", "sortOrder", "updatedById"],
+  defectType: ["code", "createdById", "defectGroup", "description", "fixedPoints", "isActive", "isDefault", "name", "severity", "sortOrder", "updatedById"],
   exchangeRate: ["createdById", "currency", "rate", "rateDate", "source"],
   fabricProperty: ["category", "code", "color", "createdById", "description", "isActive", "name", "sortOrder", "updatedById", "valueType", "variantOfPropertyId"],
   item: ["code", "createdById", "isActive", "itemType", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason", "lifecycleStatus", "linearDensityDen", "mergedAt", "mergedById", "mergedIntoId", "name", "pendingReview", "unit", "updatedById", "warpSpecId", "widthCm"],
