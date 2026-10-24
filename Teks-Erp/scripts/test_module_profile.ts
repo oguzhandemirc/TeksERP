@@ -131,9 +131,8 @@ const TASARIM_S10: Record<string, string[]> = {
     "devere.enabled",
     "dokuma.enabled",
   ],
-  // 2026-10-24 — MAL-0: maliyet "Tam"a girer mi kullanıcı kararı bekliyor (MALIYET-TEKLIF-PLAN §8-3);
-  // karar inene dek Tam = maliyet DIŞINDAKİ hepsi. Literal elle yazıldı (profilin `TAM_DISI`inden türetilmez).
-  tam: [...MODULE_SETTING_KEYS].filter((k) => k !== "maliyet.enabled"),
+  // 2026-10-24 — MAL-0: maliyet "Tam"a girer (patron kararı, MALIYET-TEKLIF-PLAN §8-3).
+  tam: [...MODULE_SETTING_KEYS],
 };
 
 async function main(): Promise<void> {

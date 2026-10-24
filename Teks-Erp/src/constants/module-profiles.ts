@@ -101,9 +101,6 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "maliyet.enabled": "Maliyet & Teklif: ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi, iplik ihtiyaç planı",
 };
 
-/** "Tam" profilinin bilinçli dışarıda bıraktığı modüller (her biri karar bekliyor). */
-export const TAM_DISI: ReadonlySet<string> = new Set(["maliyet.enabled"]);
-
 /** Bütün modül anahtarlarını `false` doğuran taban — profil satırları yalnız AÇTIKLARINI yazar. */
 function taban(): Record<string, boolean> {
   const out: Record<string, boolean> = {};
@@ -202,10 +199,9 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
   },
   tam: {
     ad: "Tam",
-    aciklama: "Maliyet & Teklif dışında bütün modüller açık — demo ve iç test kurulumları.",
-    // Maliyet "Tam"a girer mi kullanıcı kararı bekliyor (MALIYET-TEKLIF-PLAN §8-3); karar inene
-    // dek dışarıda — bugünkü Tam kurulumu modülü hiç görmemişti.
-    moduller: acik(...[...MODULE_SETTING_KEYS].filter((k) => !TAM_DISI.has(k))),
+    aciklama: "Bütün modüller açık — demo ve iç test kurulumları.",
+    // Maliyet de dahil (patron kararı 2026-10-24, MALIYET-TEKLIF-PLAN §8-3); lisans tavanı yine korur.
+    moduller: acik(...MODULE_SETTING_KEYS),
     bayraklar: {},
   },
 };
