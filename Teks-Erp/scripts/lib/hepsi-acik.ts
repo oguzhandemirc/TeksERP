@@ -175,6 +175,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   nativeSendEnabled: A(true),
   mobileRasterEnabled: A(true),
   scrapGradeLabelEnabled: A(true),
+  // ── bildirim ───────────────────────────────────────────────────────────────
+  bildirimGelenKutusuEnabled: A(true),
 };
 
 /** `acik` profilinin `ayarlar`ı: tablodaki AÇIK değerler (varsayılanda kalanlar yazılmaz). */

@@ -261,6 +261,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   mobileRasterEnabled: "cekirdek",
   scrapGradeLabelEnabled: "cekirdek",
   backupHour: "cekirdek",
+  // bildirim: gelen kutusu davranış bayrağı (modül anahtarı değil — plan Karar Y1).
+  bildirimGelenKutusuEnabled: "cekirdek",
 };
 
 /**

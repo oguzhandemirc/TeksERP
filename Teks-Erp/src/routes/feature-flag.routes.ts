@@ -710,6 +710,8 @@ export const updateSchema = z.strictObject({
   // language/blankWidths şemada yoktu → Zod bunları SESSİZCE soyup kaydı engelliyordu.
   // Gevşek record → alanlar geçer, sanitize karar verir (z.any tipi DocumentsConfig'e uyumlu).
   documentsConfig: z.record(z.string(), z.any()).optional(),
+  // bildirim: bildirim.gelenKutusuEnabled — kişisel gelen kutusu + yeni zil (default false → bugünkü zil). Kapsamsız: yalnız admin:settings yazar.
+  bildirimGelenKutusuEnabled: z.boolean().optional(),
 }, {
   // Türkçe mesaj + hangi anahtarın tanınmadığını SÖYLE (rota kuralı: hata
   // mesajları Türkçe). Diğer issue kodlarında `undefined` → Zod varsayılanı.
