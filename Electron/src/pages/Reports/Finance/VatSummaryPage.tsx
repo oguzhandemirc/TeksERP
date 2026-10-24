@@ -173,8 +173,8 @@ export function VatSummaryPage() {
         <p className="text-sm text-muted-foreground">Yükleniyor…</p>
       ) : empty ? (
         <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          Bu dönemde onaylanmış fatura yok. Taslak ve iptal edilmiş faturalar rapora girmez; dönem
-          çıpası fatura tarihidir.
+          Bu dönemde onaylanmış fatura yok. Taslak ve iptal edilmiş faturalar rapora girmez; fatura,
+          üzerindeki fatura tarihine göre döneme girer.
         </div>
       ) : report ? (
         <>

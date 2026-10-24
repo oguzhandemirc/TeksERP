@@ -223,7 +223,7 @@ export const FX_CURRENCIES: Currency[] = (Object.keys(CURRENCY_SYMBOL) as Curren
 export const FX_DIFF_NOTES: string[] = [
   "Kur farkı bir yere kaydedilmez, her açılışta hesaplanır: faturanın kesildiği gündeki kur ile parasının geldiği (ya da ödendiği) gündeki kur arasındaki fark, kapanan tutarla çarpılır. Kapama çözülürse satır bu listeden kendiliğinden düşer.",
   "Artı işaretli tutar lehimize (kur kazancı), eksi işaretli tutar aleyhimize (kur kaybı) demektir. Kurun yükselmesi satış faturasında kazandırır, alış faturasında kaybettirir.",
-  "Dönem çıpası KAPAMANIN anıdır; faturanın ya da tahsilatın tarihi değil. Aynı dönemde kesilip kapanmayan fatura burada görünmez.",
+  "Satır, faturanın parasının kapandığı güne göre döneme girer; faturanın ya da tahsilatın tarihine göre değil. Aynı dönemde kesilip kapanmayan fatura burada görünmez.",
   "Farkı SIFIR çıkan kapama da listelenir: aynı kurla kapanmak meşru bir sonuçtur ve satırı gizlemek 'bu dönemde dövizli kapama olmadı' yalanını üretirdi.",
   "Satır farkı kuruşa yuvarlanır; özet toplamlar yuvarlanmış satırların toplamıdır — ekrandaki toplam, satırların toplamına birebir eşittir.",
   "TRY faturalar kapsam dışıdır: iki kur damgası da 1 olduğu için kur farkı tanım gereği sıfırdır.",

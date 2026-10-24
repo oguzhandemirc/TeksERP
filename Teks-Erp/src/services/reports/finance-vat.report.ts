@@ -375,8 +375,8 @@ export async function getVatSummaryReport(params: VatSummaryParams): Promise<Vat
     purchase: buildBlock("PURCHASE", "Alış", acc.PURCHASE),
     notes: [
       "Bu rapor KDV BEYANNAMESİ DEĞİLDİR — muhasebeciye giden dönem özetidir; resmî beyan dış muhasebe programından yapılır.",
-      "Kapsam: yalnız ONAYLANMIŞ faturalar. Taslaklar deftere işlemediği, iptal edilenler storno edildiği için rapora girmez — iptalden sonra aynı dönem yeniden alınırsa rakam değişir.",
-      "Dönem çıpası FATURA TARİHİDİR (tahakkuk) — onay/işlem tarihi değil; geriye tarihli onaylanan fatura kendi dönemine düşer.",
+      "Kapsam: yalnız ONAYLANMIŞ faturalar. Taslaklar deftere işlemediği, iptal edilenler ters kayıtla geri alındığı için rapora girmez — iptalden sonra aynı dönem yeniden alınırsa rakam değişir.",
+      "Fatura, üzerindeki FATURA TARİHİNE göre döneme girer — onaylandığı gün değil; geriye tarihli onaylanan fatura kendi dönemine düşer.",
       "İade faturaları kendi bloklarında AYRI satırdır; blok toplamına negatif (net) girer.",
       "Kırılım satır oranlarından toplanır — karışık oranlı fatura her oranda kendi payıyla görünür; tevkifat KDV üzerinden satır oranıyla türetilir.",
       "TL kolonları her belgenin KENDİ kur damgasıyla çevrilir (bugünkü kurla yeniden çevrim yapılmaz); kuruş kalıntısı en büyük matrah satırına yazılır ve TL toplamı belge TL toplamına birebir eşittir.",

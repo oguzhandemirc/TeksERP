@@ -248,8 +248,8 @@ export function FxDiffPage() {
         <p className="text-sm text-muted-foreground">Yükleniyor…</p>
       ) : empty ? (
         <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          Bu dönemde kur farkı doğuran dövizli kapama yok. Dönem çıpası{" "}
-          <strong>kapamanın tarihidir</strong> — faturanın değil.
+          Bu dönemde kur farkı doğuran dövizli kapama yok. Satır, faturanın{" "}
+          <strong>kapandığı güne</strong> göre döneme girer — kesildiği güne göre değil.
           {/* Kapalı bir süzgeci sebep gibi göstermek kullanıcıyı olmayan bir
               düğmeyi aramaya gönderir — ipucu yalnız süzgeç AÇIKKEN basılır. */}
           {axes.any || currency || kind ? " Cari / tür / para birimi süzgecini gevşetip tekrar bakın." : ""}
