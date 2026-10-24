@@ -28,8 +28,9 @@ const LONG_OPAQUE_SEGMENT = 24;
 const WORDLIKE_SEGMENT = /^[a-z][a-z-]*$/;
 
 /** Somut değer taşıyan segmentleri pattern'e indirger — ':param' adları ve
- *  normal path kelimeleri (items, subcontractor-categories...) olduğu gibi kalır. */
-function normalizeKeyPath(path: string): string {
+ *  normal path kelimeleri (items, subcontractor-categories...) olduğu gibi kalır.
+ *  Dışa açık: istek başlığı (`request-trace.middleware`) AYNI normalleştirmeyi kullanır. */
+export function normalizeKeyPath(path: string): string {
   return path
     .split("/")
     .map((seg) =>

@@ -189,6 +189,8 @@ const EXPECTED: Record<string, string> = {
   "Device <- PeripheralDevice.device : SetNull": "guarded (peripheralCount, A5 2026-07-31)",
   // Yazdırma geçmişi TELEMETRİdir (A1): eski basım satırı cihaz silmeyi bloklamaz; `source` + yazıcı adı/adresi satırda kalır.
   "Device <- PrintJob.device : SetNull": "telemetri künyesi — bağ değil; cihaz silinince künye boşalır, satır kalır (labelCustomer emsali)",
+  // İstek başlığı TELEMETRİdir (B1): eski iz cihaz silmeyi bloklamaz; `deviceLocalId` satırda kalır.
+  "Device <- RequestTrace.device : SetNull": "telemetri künyesi — bağ değil; cihaz silinince künye boşalır, satır kalır (PrintJob emsali)",
   "Item <- CustomerItemAlias.item : Cascade": "cascade-intended — alias ürünsüz anlamsız",
   "Item <- CustomerItemColorAlias.item : Cascade": "cascade-intended — ad eşlemesi kumaşsız anlamsız",
   "Item <- ItemAllowedColor.item : Cascade": "cascade-intended — izin pivotu (pivot replace istisnası)",

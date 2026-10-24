@@ -590,6 +590,11 @@ async function main() {
       file: "Teks-Erp/src/jobs/maintenance.job.ts",
       needle: "readPrintLogRetentionDays",
     },
+    REQUEST_TRACE_RETENTION_DAYS: {
+      why: "Bakım ayarı (gün, 0 = budama yok) — istek başlığı telemetrisinin saklama süresi; davranış bayrağı değil, tek okuyucusu gece bakım işi",
+      file: "Teks-Erp/src/jobs/maintenance.job.ts",
+      needle: "readRequestTraceRetentionDays",
+    },
     BACKUP_OFFSITE_DIR: {
       why: "Panel: Sistem → Yedekler → Offsite Yedek kartı (PATCH /api/admin/backups/offsite)",
       file: "Teks-Erp/src/routes/admin.routes.ts",

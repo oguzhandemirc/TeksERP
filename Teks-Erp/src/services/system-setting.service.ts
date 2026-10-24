@@ -12,6 +12,10 @@ import {
   DEFAULT_PRINT_LOG_RETENTION_DAYS,
   isValidPrintLogRetentionDays,
 } from "./helpers/print-job-retention.helper";
+import {
+  DEFAULT_REQUEST_TRACE_RETENTION_DAYS,
+  isValidRequestTraceRetentionDays,
+} from "./helpers/request-trace-retention.helper";
 import { createHash } from "crypto";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -813,6 +817,9 @@ export const SETTING_KEYS = {
   /** Yazdırma geçmişinin (`print_jobs`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 180.
    *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-A1). */
   PRINT_LOG_RETENTION_DAYS: "printLog.retentionDays",
+  /** İstek başlığının (`request_traces`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 90.
+   *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-B1). */
+  REQUEST_TRACE_RETENTION_DAYS: "requestTrace.retentionDays",
   /** Bu KURULUMUN kalıcı kimliği (uuid v4). İlk açılışta bir kez üretilir
    *  (`jobs/installation-identity.job.ts`) ve bir daha ASLA değişmez.
    *
@@ -7055,6 +7062,22 @@ export async function readPrintLogRetentionDays(
   });
   const v = asNumber(setting?.value);
   return isValidPrintLogRetentionDays(v) ? v : DEFAULT_PRINT_LOG_RETENTION_DAYS;
+}
+
+/**
+ * İstek başlığı saklama süresi (gün). Kayıt yoksa ya da geçersizse varsayılan 90;
+ * 0 açıkça yazılırsa budama yok.
+ */
+export async function readRequestTraceRetentionDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.REQUEST_TRACE_RETENTION_DAYS },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return isValidRequestTraceRetentionDays(v) ? v : DEFAULT_REQUEST_TRACE_RETENTION_DAYS;
 }
 
 /**
