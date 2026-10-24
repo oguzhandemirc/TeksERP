@@ -7,6 +7,7 @@
 // Birim top/metre/iş kaydı; puanlama dili ("performans") kullanılmaz.
 
 import { anlatiUret } from "../anlati/anlati";
+import { TERIM } from "../../../constants/terim";
 import type { DateRange } from "../_shared";
 import { getOperatorPerformance, type OperatorPerformanceRow } from "../production.report.service";
 import type { GrafikBlok, ParametreBeyani, TabloBlok } from "../sunum/sunum.types";
@@ -152,7 +153,7 @@ export async function buildProductionFlowReport(input: ProductionFlowInput): Pro
       satirlar: wip.byStation.filter((r) => r.waitingCount > 0).map((r) => ({ ad: r.label, deger: r.waitingCount })),
     },
     kapsam: [
-      { sayi: s.neverStartedWorkOrders, nesne: "iş emri", neden: "Açılıp hiç malzeme girmemiş", sonuc: "bekleyen toplara katılmadı" },
+      { sayi: s.neverStartedWorkOrders, nesne: TERIM.terbiyeIsEmri.tekilKucuk, neden: "Açılıp hiç malzeme girmemiş", sonuc: "bekleyen toplara katılmadı" },
     ],
   });
 

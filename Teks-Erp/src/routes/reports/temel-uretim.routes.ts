@@ -26,16 +26,11 @@ import { buildSubcontractorsReport } from "../../services/reports/temel/fasoncul
 const router = Router();
 // Kimlik dosya başında (BE-30, R0-RAPA ile aynı kalıp): kimliksiz istek 401, kapalı raporun varlığı sızmaz.
 router.use(verifyToken);
-/** Rapor kategorisi → birincil alan izni; katalog `izin`iyle birebirliği `test_temel_rapor_esitlik` §R0z ölçer. */
-export const CORE_PRODUCTION_PERMISSIONS = {
-  production: "report:production",
-  quality: "report:quality",
-  inventory: "report:inventory",
-  subcontract: "report:subcontract",
-} as const;
-// Fail-closed: haritada olmayan kategori modül yüklenirken patlar (izinsiz uç doğmaz).
+/** Beş ucun birincil alan izinleri (`report:<kategori>`); katalog `izin`iyle birebirliği `test_temel_rapor_esitlik` §R0z ölçer. */
+const CORE_PRODUCTION_PERMISSIONS = ["report:production", "report:quality", "report:inventory", "report:subcontract"] as const;
+// Fail-closed: listede olmayan kategori modül yüklenirken patlar (izinsiz uç doğmaz).
 export function permissionOf(key: ReportKey): string {
-  const code = (CORE_PRODUCTION_PERMISSIONS as Readonly<Record<string, string>>)[key.split("/")[0]!];
+  const code = CORE_PRODUCTION_PERMISSIONS.find((p) => p === `report:${key.split("/")[0]}`);
   if (!code) throw new Error(`Temel rapor izni tanımsız: ${key}`);
   return code;
 }
