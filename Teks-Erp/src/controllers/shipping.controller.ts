@@ -9,6 +9,8 @@ import { SackTagService, MAX_BULK_TAG_SACKS } from "../services/sack-tag.service
 import { PackingGroupService } from "../services/packing-group.service";
 import { PackingLotService } from "../services/packing-lot.service";
 import { HEX_RE } from "../services/helpers/sack-tag.helper";
+import { printJobAttachmentSchema } from "../services/print-job.service";
+import { resolvePrintJobContext } from "../services/helpers/print-job-context.helper";
 import "../types/express-augment";
 import { AppError } from "../utils/app-error";
 
@@ -996,10 +998,15 @@ export class ShippingController {
   printPickList = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = z
-        .object({ sackIds: z.array(z.string().uuid()).min(1).max(200), clientToken: z.string().uuid() })
+        .object({
+          sackIds: z.array(z.string().uuid()).min(1).max(200),
+          clientToken: z.string().uuid(),
+          printJob: printJobAttachmentSchema.optional(),
+        })
         .strict()
         .parse(req.body);
-      const result = await sackSearchService.printPickList(body.sackIds, req.user?.userId, body.clientToken);
+      const report = { ctx: await resolvePrintJobContext(req), attachment: body.printJob };
+      const result = await sackSearchService.printPickList(body.sackIds, req.user?.userId, body.clientToken, report);
       res.status(result.data?.reused ? 200 : 201).json(result);
     } catch (e) { next(e); }
   };

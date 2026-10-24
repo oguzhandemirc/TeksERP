@@ -667,6 +667,8 @@ model User {
   credentialResetTargets          CredentialResetRequest[]  @relation("CredentialResetTarget")
   credentialResetsRequested       CredentialResetRequest[]  @relation("CredentialResetRequestedBy")
   credentialResetsDecided         CredentialResetRequest[]  @relation("CredentialResetDecidedBy")
+  /// Yazdırma geçmişi künyesi (kim bastı — telemetri, A1).
+  printJobs                       PrintJob[]                @relation("PrintJobUser")
 
   @@map("users")
 }
@@ -1189,6 +1191,7 @@ model Device {
   peripherals   PeripheralDevice[] // (eski) tablete-bağlı tekil sahiplik (registerBt geçişte)
   hardwareLinks DevicePeripheral[] // YENİ: cihazın kullandığı donanım (çok-çok, paylaşılabilir)
   workSessions  WorkSession[]
+  printJobs     PrintJob[]         @relation("PrintJobDevice")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1272,6 +1275,7 @@ model PeripheralDevice {
 
   templateRoutes PeripheralTemplateRoute[]
   deviceLinks    DevicePeripheral[] // YENİ: bu donanımı kullanan cihaz(lar) (çok-çok)
+  printJobs      PrintJob[]         @relation("PrintJobPeripheral")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -11419,6 +11423,69 @@ model CredentialResetRequest {
   @@index([status, createdAt])
   @@index([targetUserId])
   @@map("credential_reset_requests")
+}
+
+/// YAZDIRMA GEÇMİŞİ (A1, `docs/design/IZLENEBILIRLIK-CIHAZ-PLAN.md` §3.1) — TELEMETRİ: hiçbir iş kararı okumaz
+/// (top iptal guard'ı `rolls.labelPrintedAt` okur), `printLog.retentionDays` (varsayılan 180) yaşında budanır.
+/// Yazan · okuyan · budayan TEK dosya `src/services/print-job.service.ts` (bekçi `test_print_jobs` §10).
+/// Şema dışı: CHECK'ler (outputKind · status · HATA→errorCode · itemCount/copies ≥1 · subjectIds ≤200),
+/// kısmi `(createdAt) WHERE status='HATA'` — `test_db_invariants` envanterinde.
+model PrintJob {
+  id                 String           @id @default(uuid()) @db.Uuid
+  /// İstemci raporunun mantıksal deneme kimliği; sunucuda doğan satırda NULL.
+  clientToken        String?          @unique @db.Uuid
+  requestId          String?          @db.Uuid
+  /// Token'dan (gövdeden ASLA). Künye FK; erişim `(userId, createdAt)` bileşiğiyle.
+  userId             String?          @db.Uuid
+  deviceRefId        String?          @db.Uuid
+  /// PANEL_MASAUSTU · PANEL_WEB · TABLET · TELEFON · SUNUCU — yalnız etiket.
+  source             String           @db.VarChar(16)
+  outputKind         String           @default("PRINTER") @db.VarChar(8)
+  appVersion         String?          @db.VarChar(32)
+  stationId          String?          @db.Uuid
+  machineId          String?          @db.Uuid
+  /// Katalog `src/constants/print-subject-catalog.ts` (DB CHECK yok: yeni tür migration istemesin).
+  subjectKind        String           @db.VarChar(40)
+  docType            PrintedDocType?
+  /// Polimorfik bağ — FK YOK (`PrintedDocument.sourceId` emsali): konu silinse de geçmiş satırı kalır.
+  subjectTable       String?          @db.VarChar(48)
+  subjectId          String?          @db.Uuid
+  subjectIds         String[]         @default([]) @db.Uuid
+  subjectNo          String?          @db.VarChar(64)
+  printedDocumentId  String?          @db.Uuid
+  docVersion         Int?
+  itemCount          Int              @default(1)
+  copies             Int              @default(1)
+  isReprint          Boolean?
+  transport          String?          @db.VarChar(16)
+  peripheralDeviceId String?          @db.Uuid
+  printerName        String?          @db.VarChar(120)
+  printerAddress     String?          @db.VarChar(128)
+  language           PrinterLanguage?
+  /// ILETILDI · HATA · IPTAL · BELIRSIZ · SIMULE (SIMULE başarı sayılmaz).
+  status             String           @db.VarChar(12)
+  errorCode          String?          @db.VarChar(60)
+  errorMessage       String?          @db.VarChar(300)
+  startedAt          DateTime?        @db.Timestamptz
+  finishedAt         DateTime?        @db.Timestamptz
+  durationMs         Int?
+  bytes              Int?
+  /// ≤2 KB (servis kırpar); KIMLIK_KARTI türünde hiç yazılmaz.
+  meta               Json?
+  createdAt          DateTime         @default(now()) @db.Timestamptz
+  updatedAt          DateTime         @updatedAt @db.Timestamptz
+
+  user       User?             @relation("PrintJobUser", fields: [userId], references: [id], onDelete: Restrict)
+  device     Device?           @relation("PrintJobDevice", fields: [deviceRefId], references: [id], onDelete: SetNull)
+  peripheral PeripheralDevice? @relation("PrintJobPeripheral", fields: [peripheralDeviceId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([peripheralDeviceId, createdAt])
+  @@index([deviceRefId, createdAt])
+  @@index([subjectTable, subjectId])
+  @@index([subjectIds], map: "print_jobs_subjectIds_gin", type: Gin)
+  @@map("print_jobs")
 }
 
 // =============================================================================
