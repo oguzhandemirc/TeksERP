@@ -187,6 +187,13 @@ const EXPECTED: Record<string, string> = {
   "Customer <- Roll.labelCustomer : SetNull": "ayna kolon — bağ değil; müşteri silinince aynanın boşalması doğru (snapshot JSON tarihsel kaydı korur)",
   "Device <- DevicePeripheral.device : Cascade": "guarded (pivotCount, A5 2026-07-31)",
   "Device <- PeripheralDevice.device : SetNull": "guarded (peripheralCount, A5 2026-07-31)",
+  // Eşleme v2 (D1): defter satırı silinmez — silmeden önce aynı tx'te PURGED yazılır, SetNull localId+adı korur.
+  "Device <- DeviceBindingEvent.device : SetNull": "ledger-kept — hardDelete aynı tx'te PURGED yazar; satır kalır, yalnız ref düşer",
+  "Device <- DeviceRebindRequest.target : Cascade": "cascade-intended — açık talep hedefsiz anlamsız; karar izi defterde (REBIND_*)",
+  // Yazdırma geçmişi TELEMETRİdir (A1): eski basım satırı cihaz silmeyi bloklamaz; `source` + yazıcı adı/adresi satırda kalır.
+  "Device <- PrintJob.device : SetNull": "telemetri künyesi — bağ değil; cihaz silinince künye boşalır, satır kalır (labelCustomer emsali)",
+  // İstek başlığı TELEMETRİdir (B1): eski iz cihaz silmeyi bloklamaz; `deviceLocalId` satırda kalır.
+  "Device <- RequestTrace.device : SetNull": "telemetri künyesi — bağ değil; cihaz silinince künye boşalır, satır kalır (PrintJob emsali)",
   "Item <- CustomerItemAlias.item : Cascade": "cascade-intended — alias ürünsüz anlamsız",
   "Item <- CustomerItemColorAlias.item : Cascade": "cascade-intended — ad eşlemesi kumaşsız anlamsız",
   "Item <- ItemAllowedColor.item : Cascade": "cascade-intended — izin pivotu (pivot replace istisnası)",

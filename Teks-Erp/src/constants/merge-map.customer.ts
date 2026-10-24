@@ -148,6 +148,21 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "FourPointRuleSet",
+      table: "four_point_rule_sets",
+      column: "customerId",
+      label: "4 puan müşteri kural seti",
+      uniqueOn: ["customerId", "itemId"],
+      crossSourceOn: { columns: ["itemId"], nullSafe: ["itemId"] },
+      policy: "BLOCK",
+      why:
+        "Müşteri spesifikasyonu sevk muayene özetinin ve muayene raporunun kararını verir; iki " +
+        "setten hangisinin geçerli olduğunu yalnız kalite sorumlusu bilir (K4P). Anahtar iki " +
+        "partial UNIQUE'in (`customer_uq` itemId NULL · `customer_item_uq`) birleşimidir; pasif " +
+        "setler de bloklar — bilinçli fail-closed.",
+    },
+    {
+      kind: "CONFLICT",
       model: "ItemPrice",
       table: "item_prices",
       column: "customerId",

@@ -28,6 +28,7 @@ import { deriveCapabilityFlags } from "./station-capability.service";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
 import { FABRIC_PROPERTY_ARCHIVE } from "./helpers/archive-gate/fabric-property-archive.helper";
+import { assertVariantCreate, assertVariantUpdate, readVariantOf } from "./helpers/property-variant.helper";
 
 /** Özellik kodu prefix'i — tek-tip kod formatı: `OZL + GGAAYY + NNNN`. */
 const PROPERTY_CODE_PREFIX = "OZL";
@@ -242,6 +243,9 @@ export class FabricPropertyService extends BaseService {
     }
     assertChoiceHasValues(valueType, values, 0);
 
+    // ÇEŞİT BAĞI (KQ-D4): bağ geçerli mi + seçilen her istasyonda ana bayrak var mı.
+    await assertVariantCreate(data, valueType, stationIds);
+
     // nestedCreateFields → performInsert bunu `{ create: [...] }`'a çevirir, yani
     // özellik, istasyon bağları ve (varsa) değerleri TEK insert'te doğar. Değerler
     // de nested: `stationIds`siz özellik gibi, DEĞERSİZ bir seçim özelliği de ara
@@ -300,7 +304,13 @@ export class FabricPropertyService extends BaseService {
     // hâli yalnız stationIds/values yokluğuna bakıyordu; `PATCH {valueType:
     // "FLAG"}` o dala girip TÜM tip-geçiş guard'larını atlıyordu — KAT bayrağa
     // çevrilip hedef seçicilere sızabilir, 0 değerli SEÇİM doğabilirdi.
-    if (stationIds === undefined && values === undefined && data.valueType === undefined) {
+    const variantOf = readVariantOf(data);
+    if (
+      stationIds === undefined &&
+      values === undefined &&
+      data.valueType === undefined &&
+      variantOf === undefined
+    ) {
       return super.update(id, data, userId);
     }
 
@@ -313,6 +323,8 @@ export class FabricPropertyService extends BaseService {
         code: true,
         name: true,
         valueType: true,
+        variantOfPropertyId: true,
+        variant: { select: { id: true, name: true } },
         _count: { select: { values: { where: { isActive: true } } } },
       },
     });
@@ -320,6 +332,8 @@ export class FabricPropertyService extends BaseService {
     const valueType = typeof data.valueType === "string" ? data.valueType : current.valueType;
     const typeChanging =
       typeof data.valueType === "string" && data.valueType !== current.valueType;
+
+    await assertVariantUpdate(id, current, { valueType, variantOf, stationIds, typeChanging });
 
     if (typeChanging) {
       // ── TİP GEÇİŞ KİLİTLERİ (2026-08-11, denetim F5 + SEK-3) ────────────────

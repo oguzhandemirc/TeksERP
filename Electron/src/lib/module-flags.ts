@@ -31,6 +31,8 @@ export const MODULE_FLAG_KEYS = [
   "devereEnabled",
   "dokumaEnabled",
   "emanetEnabled",
+  "kaliteGuvenceEnabled",
+  "maliyetEnabled",
 ] as const;
 
 export type ModuleFlagKey = (typeof MODULE_FLAG_KEYS)[number];
@@ -51,6 +53,7 @@ export const MODULE_DEPENDENCIES: Readonly<Partial<Record<ModuleFlagKey, ModuleF
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
   dokumaEnabled: "productionEnabled",
+  maliyetEnabled: "productionEnabled",
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -65,6 +68,8 @@ export const MODULE_LABELS: Readonly<Record<ModuleFlagKey, string>> = {
   devereEnabled: "Devere / levent",
   dokumaEnabled: "Dokuma iş emri",
   emanetEnabled: "Emanet / konsinye mülkiyet",
+  kaliteGuvenceEnabled: "Kalite Güvence",
+  maliyetEnabled: "Maliyet & Teklif",
 };
 
 /**
@@ -88,6 +93,8 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
   "devere.enabled": "devereEnabled",
   "dokuma.enabled": "dokumaEnabled",
   "emanet.enabled": "emanetEnabled",
+  "kaliteGuvence.enabled": "kaliteGuvenceEnabled",
+  "maliyet.enabled": "maliyetEnabled",
 };
 
 /**

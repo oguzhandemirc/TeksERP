@@ -38,6 +38,17 @@ export interface LabelPrinterConfig {
   peripheralId?: string;
 }
 
+/**
+ * Belge yazıcısı (izlenebilirlik A2) — işletim sistemi yazıcısına HTML belge basımı. Varsayılan
+ * bugünkü davranıştır: sistem yazdırma penceresi açılır. `silent` yalnız `deviceName` doluyken
+ * anlamlıdır; açıkken belge seçilen yazıcıya diyalogsuz gider. Sunucu bayrağı yok (makineye özel).
+ */
+export interface DocumentPrinterConfig {
+  silent?: boolean;
+  /** İşletim sisteminin yazıcı adı (`getPrintersAsync().name`). */
+  deviceName?: string;
+}
+
 /** Sevkiyat kantarı (seri/COM) — bu PC'ye USB/seri bağlı; okuma window.api.scale.read. */
 export interface ScaleDeviceConfig {
   /** COM yolu (COM3 / /dev/tty.*). Boş = tanımsız. */
@@ -89,6 +100,7 @@ export interface ScannerConfig {
 /** Bu bilgisayara özel donanım ayarlarının tamamı (tek secure-store blob'u). */
 export interface MachineConfig {
   labelPrinter?: LabelPrinterConfig;
+  documentPrinter?: DocumentPrinterConfig;
   scaleDevice?: ScaleDeviceConfig;
   scanner?: ScannerConfig;
 }

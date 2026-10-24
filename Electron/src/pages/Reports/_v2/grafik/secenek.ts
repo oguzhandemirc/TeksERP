@@ -6,8 +6,8 @@
 // =============================================================================
 
 import { reportCellText, upTo3Text } from "@/lib/number-format";
-import { GRAFIK_VERI_YOK, valueText, grafikBosMu, kategoriEtiketi, kutuIstatistigi, niceCeiling, sonlu } from "./bicim";
-import type { GrafikBlok } from "./tipler";
+import { GRAFIK_VERI_YOK, valueText, grafikBosMu, kategoriEtiketi, kutuIstatistigi, niceCeiling, sonlu, unitText } from "./bicim";
+import type { GrafikBlok } from "../sunum";
 import type { GrafikTema } from "./tema";
 
 export { GRAFIK_VERI_YOK, valueText, grafikBosMu, kategoriEtiketi, kutuIstatistigi } from "./bicim";
@@ -29,7 +29,7 @@ function lejant(blok: GrafikBlok, tema: GrafikTema): GrafikSecenek | undefined {
 }
 
 function valueAxis(blok: GrafikBlok, tema: GrafikTema, ek: GrafikSecenek = {}): GrafikSecenek {
-  const birim = blok.eksen.y.birim;
+  const birim = unitText(blok.eksen.y.birim);
   return {
     type: "value",
     name: birim ? `${blok.eksen.y.ad} (${birim})` : blok.eksen.y.ad,

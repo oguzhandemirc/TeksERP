@@ -114,6 +114,18 @@ export const PERMISSION_CATALOG = [
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },
   { code: "property:write", module: "QUALITY", category: "web", description: "Özellik tanımlama/düzenleme" },
+  // ── Kalite Güvence (K4P, 2026-10-24) — modül `kaliteGuvence.enabled` ────────────────────────
+  // Okuma · giriş · düzeltme · kural ayrı kararlardır: KK1 operatörü muayene girer ama kural setini
+  // değiştiremez; geçmiş muayeneyi düzeltmek/iptal etmek süpervizör işidir.
+  { code: "inspection:read", module: "QUALITY", category: "web", description: "Muayene kayıtlarını görüntüleme" },
+  { code: "inspection:write", module: "QUALITY", category: "web", description: "Muayene girme (tablet/panel)" },
+  { code: "inspection:correct", module: "QUALITY", category: "web", description: "Muayene düzeltme/iptal" },
+  { code: "inspection:rules", module: "QUALITY", category: "web", description: "4 puan kural setlerini yönetme" },
+  { code: "labtest:read", module: "QUALITY", category: "web", description: "Lab test kayıtlarını görüntüleme" },
+  { code: "labtest:write", module: "QUALITY", category: "web", description: "Lab test sonucu girme/düzenleme" },
+  { code: "labtest:approve", module: "QUALITY", category: "web", description: "Lab test sonucunu onaylama" },
+  { code: "certificate:read", module: "QUALITY", category: "web", description: "Sertifikaları görüntüleme" },
+  { code: "certificate:write", module: "QUALITY", category: "web", description: "Sertifika ekleme/yenileme/iptal" },
   { code: "subcontractor:read", module: "SUBCONTRACTOR", category: "web", description: "Fason firma listesi/detay görüntüleme" },
   { code: "subcontractor:write", module: "SUBCONTRACTOR", category: "web", description: "Fason firma oluşturma/düzenleme" },
   { code: "kartela:read", module: "KARTELA", category: "web", description: "Kartela sevk/kabul takibi" },
@@ -221,13 +233,15 @@ export const PERMISSION_CATALOG = [
   { code: "settings:finance", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Muhasebe (KDV, fatura toleransı, kasa/risk kuralları)" },
   { code: "settings:label", module: "ADMIN", category: "web", description: "Baskı & Cihazlar → Etiket Baskısı (kopya, ortam, gönderim)" },
   { code: "settings:devices", module: "ADMIN", category: "web", description: "Baskı & Cihazlar → Cihazlar (tablet eşleştirme zorunluluğu)" },
-  { code: "settings:company", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Şirket Bilgileri (ad, antet, logo)" },
+  { code: "settings:company", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Şirket Bilgileri (ad, antet, logo, resmi künye)" },
+  { code: "settings:e-irsaliye", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → e-İrsaliye (bağdaştırıcı, yürürlük tarihi)" },
   { code: "settings:session", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Oturum & Güvenlik (oturum süreleri, giriş yöntemleri, PIN kilidi) — güvenliği gevşetebilir" },
   // Sistem ekranları — her karo kendi izniyle açılır.
   { code: "system:activity", module: "ADMIN", category: "web", description: "Sistem → Aktivite Günlüğü · Sistem Kayıtları · Arşiv Tarama (okuma)" },
   { code: "system:work-sessions", module: "ADMIN", category: "web", description: "Sistem → Çalışma Oturumları (canlı görünüm, geçmiş, zorla kapatma)" },
   { code: "system:server-status", module: "ADMIN", category: "web", description: "Sistem → Sunucu Durumu" },
   { code: "system:clients", module: "ADMIN", category: "web", description: "Sistem → Bağlı İstemciler" },
+  { code: "system:print-history", module: "ADMIN", category: "web", description: "Sistem → Yazdırma Geçmişi (kim, neyi, hangi yazıcıdan bastı; hatalar — okuma)" },
   { code: "system:backups", module: "ADMIN", category: "web", description: "Sistem → Yedekler (yedek al, zamanlama, dış kopya durumu) — yedek listesi/indirme ayrıca admin:users ister" },
   // Lisans ekranı: görmek (durum ayrıntısı, kira, parmak izi ölçümü) ile yönetmek
   // (etkinleştirme, çevrimdışı/aktarma yanıtı, taşıma, DR devralma, proxy) AYRI — yönetim
@@ -251,6 +265,10 @@ export const PERMISSION_CATALOG = [
   // anında admin dahil herkesi dışarıda bırakırdı. Küme: constants/document-design.ts
   { code: "document-template:read", module: "ADMIN", category: "web", description: "Belge şablonları / refakat kartı ayarı / serbest belgeleri görüntüleme (salt-okunur)" },
   { code: "document-template:write", module: "ADMIN", category: "web", description: "Belge şablonu + refakat kartı ayarı/şablonu + serbest belge oluşturma/düzenleme/silme" },
+  // Belge tasarımcısı (2026-10-24, plan P-a): tasarım ile yayın AYRI izin — yayın müşteriye giden
+  // belgenin görünümünü değiştirir; "tasarlayan ≠ yayınlayan" SoD ayarı bu ayrıma dayanır.
+  { code: "document-template:design", module: "ADMIN", category: "web", description: "Belge tasarımcısında şablon oluşturma, düzenleme, sürüm kaydetme, arşivleme ve atama" },
+  { code: "document-template:publish", module: "ADMIN", category: "web", description: "Belge tasarımcısında şablon sürümünü yayınlama (basımda kullanılır hâle getirme)" },
   // 2026-08-19: TOPLU İÇE AKTARIM (Excel/CSV yükleme). Ayrı bir yetki olması
   // sektör standardıdır (Odoo `group_allow_export` / SAP veri aktarım rolü) ve
   // gerekçesi tekil CRUD'dan farkıdır: tek tıkla YÜZLERCE kaydı değiştirebilen
@@ -342,5 +360,15 @@ export const PERMISSION_CATALOG = [
   // Tezgah alarmı mobil "Uyarılar" ekranı (A3): `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi
   // (`mobile:siparis` emsali); başkasının üstlenmesini bırakmak yine yalnız `loom:alarm-escalation`.
   { code: "mobile:tezgah-uyari", module: "MOBILE", category: "mobile", description: "Mobil — Uyarılar ekranı: tezgah alarmlarını görme, üstlenme/bırakma, susturma, not; bildirim" },
+  // K4P (2026-10-24): istasyondan bağımsız Muayene ekranı (top okut → 4 puan muayene); KK1 içi muayene `mobile:kk1` ile.
+  { code: "mobile:muayene", module: "MOBILE", category: "mobile", description: "Mobil — Muayene ekranı: top okutup 4 puan muayene girme (istasyondan bağımsız)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];
+
+/**
+ * Masaüstü paneli (Electron + web) girişini AÇAN izin kümesi mi? En az bir mobil-olmayan kod yeter.
+ * TEK yüklem: auth kanal kapısı ve rol şablonu bekçisi (operatör şablonu → panel girişi YOK) bunu okur.
+ */
+export function grantsDesktopPanel(codes: readonly string[]): boolean {
+  return codes.some((c) => !c.startsWith("mobile:"));
+}

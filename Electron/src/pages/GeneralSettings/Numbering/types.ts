@@ -28,6 +28,8 @@ export interface SeriesCounterCapabilities {
   maxValue: boolean;
   reset: false;
   lockedReason?: string;
+  /** Başlangıç değerinin kuralı (sabit biçimli GİB serisi) — sunucu cümlesi, birebir. */
+  startValueNote?: string;
   resetReason: string;
 }
 

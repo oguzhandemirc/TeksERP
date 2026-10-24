@@ -7,7 +7,7 @@
 
 import { toast } from "sonner";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
-import { printHtmlString } from "@/lib/print";
+import { printTracked, trackPdfSave, type PrintSubject } from "@/lib/print";
 import { buildSackDumpHtml } from "./dumpHtml";
 import { buildSackDumpSheets } from "./dumpSheets";
 import { dumpRowCount, type SackDump, type SackDumpOptions } from "./types";
@@ -29,6 +29,11 @@ export function sackDumpFileName(dumps: SackDump[]): string {
   return `İçerik Dökümü ${who} ${dateStamp()}`;
 }
 
+/** Döküm geçmişe "Liste" türüyle düşer (çuval başına kayıt bağı yok; adet = çuval sayısı). */
+function dumpSubject(dumps: SackDump[]): PrintSubject {
+  return { kind: "LISTE", no: sackDumpFileName(dumps).slice(0, 64), itemCount: Math.max(dumps.length, 1) };
+}
+
 /** Tavan aşıldıysa kullanıcıyı Excel'e yönlendirir ve false döner. */
 function withinPrintLimit(dumps: SackDump[]): boolean {
   const rows = dumpRowCount(dumps);
@@ -47,25 +52,27 @@ function guardEmpty(dumps: SackDump[]): boolean {
   return true;
 }
 
-/** Yazıcıya gönder (izole iframe — `printHtmlString`). */
+/** Yazıcıya gönder (tek boğaz — `printTracked`). */
 export function printSackDump(dumps: SackDump[], opts?: SackDumpOptions): void {
   if (!guardEmpty(dumps) || !withinPrintLimit(dumps)) return;
-  printHtmlString(buildSackDumpHtml(dumps, opts));
+  void printTracked({ subject: dumpSubject(dumps), html: buildSackDumpHtml(dumps, opts) });
 }
 
 /** PDF dosyası olarak kaydet (Electron printToPDF + kaydet dialoğu; webde yazdırma penceresi). */
 export async function saveSackDumpPdf(dumps: SackDump[], opts?: SackDumpOptions): Promise<void> {
   if (!guardEmpty(dumps) || !withinPrintLimit(dumps)) return;
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
-  if (!pdfApi && isWebPdf()) return printAsPdf(buildSackDumpHtml(dumps, opts));
+  if (!pdfApi && isWebPdf()) return printAsPdf(buildSackDumpHtml(dumps, opts), dumpSubject(dumps));
   if (!pdfApi) {
     toast.error("PDF desteği yok (masaüstü uygulaması gerekli).");
     return;
   }
-  const res = await pdfApi.save({
-    html: buildSackDumpHtml(dumps, opts),
-    suggestedName: sackDumpFileName(dumps),
-  });
+  const res = await trackPdfSave(dumpSubject(dumps), () =>
+    pdfApi.save({
+      html: buildSackDumpHtml(dumps, opts),
+      suggestedName: sackDumpFileName(dumps),
+    }),
+  );
   if (res.saved) toast.success("İçerik dökümü PDF olarak indirildi");
   else if (res.error) toast.error(res.error);
 }

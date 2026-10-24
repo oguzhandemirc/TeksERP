@@ -71,8 +71,17 @@ export const ALWAYS_OPEN_ROUTES: readonly LicenseRouteRule[] = [
 export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   // Kişisel tercih ve iki adımlı doğrulama
   { method: "PUT", path: "/api/auth/preferences", reason: "kişisel tercih; iş verisi değil" },
+  // Bildirim gelen kutusu işaretleri kişiseldir (telemetri, defter değil); okuma uçları GET olarak zaten açık.
+  { method: "POST", path: "/api/bildirim/:id/okundu", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
+  { method: "POST", path: "/api/bildirim/:id/okunmadi", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
+  { method: "POST", path: "/api/bildirim/:id/ertele", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
+  { method: "POST", path: "/api/bildirim/tumunu-okundu", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
+  { method: "POST", path: "/api/bildirim/geri-al-okundu", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
   { method: "POST", path: "/api/admin/users/:id/totp/window", reason: "iki adımlı doğrulama kurulum penceresi — sıfırlanan kullanıcı yeniden kurabilsin (güvenlik)" },
   { method: "POST", path: "/api/devices/announce", reason: "cihaz duyurusu (tablet el sıkışması)" },
+  // Yeniden kurulan tableti eski kaydına bağlamak el sıkışmasının devamıdır — fabrika durmasın.
+  { method: "POST", path: "/api/devices/rebind-requests/onsite-approve", reason: "tablet yeniden bağlama — yerinde yönetici onayı (el sıkışmasının devamı)" },
+  { method: "POST", path: "/api/admin/devices/rebind-requests/:id/approve", reason: "tablet yeniden bağlama — panel onayı (el sıkışmasının devamı)" },
   // DB'ye yazmayan önizleme / gövdeli okuma
   { method: "POST", path: "/api/number-series/preview", reason: "numara biçimi önizlemesi; yazmaz" },
   { method: "POST", path: "/api/work-orders/:id/manual-move-preview", reason: "elle taşıma önizlemesi; yazmaz" },
@@ -107,6 +116,8 @@ export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/traveler-cards/:id/print-event", reason: "refakat kartı baskı ayak izi" },
   { method: "POST", path: "/api/work-orders/:id/traveler-cards/reprint", reason: "refakat kartı yeniden basımı" },
   { method: "POST", path: "/api/shipping/sack-search/pick-list/print", reason: "toplama listesi baskısı" },
+  { method: "POST", path: "/api/labels/rolls/bulk-print-event", reason: "toplu etiket baskı ayak izi (damga + yazdırma geçmişi)" },
+  { method: "POST", path: "/api/print-jobs", reason: "yazdırma geçmişi kaydı (telemetri); iş verisi yazmaz" },
   // Yedek (al · makine dışı kopya · DB kopyası)
   { method: "POST", path: "/api/admin/backup", reason: "yedek al (veri erişimi)" },
   { method: "PATCH", path: "/api/admin/backups/offsite", reason: "yedeğin makine dışı kopyası (veri erişimi)" },
@@ -174,6 +185,7 @@ export const PUBLIC_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/devices/announce", reason: "cihaz el sıkışması; eşleşmeden token yok" },
   { method: "GET", path: "/api/devices/status", reason: "cihaz atama durumu yoklaması" },
   { method: "GET", path: "/api/devices/pairing-required", reason: "eşleşme zorunluluğu (giriş öncesi)" },
+  { method: "POST", path: "/api/devices/rebind-requests/onsite-approve", reason: "yerinde yönetici onayı; kimlik gövdedeki yönetici girişi (JWT üretmez)" },
   { method: "POST", path: "/api/machine-signals/stop", reason: "makine kartı duruş açılışı; kimlik kart imzası (oturum yok) — kısıtlı kipte yazma gibi kapanır" },
   { method: "POST", path: "/api/machine-signals/end", reason: "makine kartı duruş kapanışı; kimlik kart imzası (oturum yok) — kısıtlı kipte yazma gibi kapanır" },
   { method: "POST", path: "/api/machine-signals/heartbeat", reason: "makine kartı nabzı (canlılık); kimlik kart imzası (oturum yok) — kısıtlı kipte yazma gibi kapanır, kart sessiz görünür" },

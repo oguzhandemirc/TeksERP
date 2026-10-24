@@ -2,6 +2,17 @@ import { useEffect } from "react";
 import apiClient from "@/services/apiClient";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
 import { IS_ELECTRON } from "@/lib/runtime-env";
+import { toast } from "sonner";
+import type { DeviceIdentityDescription } from "@shared/ipc-contract";
+
+/** Makine özeti + model (ana süreç); köprü yoksa ya da düşerse boş — `hw`siz announce bugünkü davranış. */
+async function describeMachine(): Promise<DeviceIdentityDescription> {
+  try {
+    return (await window.api?.deviceIdentity?.describe?.()) ?? { hw: null, model: null };
+  } catch {
+    return { hw: null, model: null };
+  }
+}
 
 /**
  * Açılışta bu PC'yi backend Device allowlist'ine bildirir (announce). Yeni kaydın
@@ -30,11 +41,21 @@ export function useDeviceAnnounce(): void {
         // Electron PC → tür DESKTOP (tablet/telefon değil).
         // ⚠️ `suppressErrorToast`: kullanıcının BAŞLATMADIĞI bir arka plan çağrısı
         // asla toast basmamalı — üstteki kapı düşse bile bu ikinci hat kalır.
-        await apiClient.post(
+        const { hw, model } = await describeMachine();
+        if (cancelled) return;
+        const res = await apiClient.post<{ data?: { status?: string; targetName?: string } }>(
           "/api/devices/announce",
-          { deviceId, name, kind: "DESKTOP" },
+          { deviceId, name, kind: "DESKTOP", ...(hw ? { hw } : {}), ...(model ? { model } : {}) },
           { suppressErrorToast: true },
         );
+        // Bilinen donanım + eşleştirme zorunlu → yönetici onayı bekleniyor. Panel girişi
+        // ENGELLENMEZ (masaüstü satırı yalnız kantar ataması/ad içindir); yalnız bilgi.
+        const data = res.data?.data;
+        if (!cancelled && data?.status === "REBIND_PENDING") {
+          toast.info("Bu bilgisayar yeniden bağlanmayı bekliyor", {
+            description: `Kayıtlı "${data.targetName ?? "cihaz"}" ile aynı donanım. Yetkilendirme → Tabletler sayfasındaki "Yeniden bağlama talepleri" bölümünden onaylanabilir.`,
+          });
+        }
       } catch {
         /* announce best-effort */
       }

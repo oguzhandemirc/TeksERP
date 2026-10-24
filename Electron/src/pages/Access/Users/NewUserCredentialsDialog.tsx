@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { printDocumentArea } from "@/lib/print";
+import { printIdentityCards } from "@/lib/print";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 import { adminUserService } from "@/services/adminUserService";
 
@@ -121,7 +121,7 @@ export function NewUserCredentialsDialog({ user, password, onOpenChange, onManag
             <Button
               type="button"
               variant="outline"
-              onClick={() => printDocumentArea(areaRef.current)}
+              onClick={() => void printIdentityCards(areaRef.current, user ? [user.id] : [])}
               disabled={loadingCred}
             >
               <Printer className="h-4 w-4" /> Yazdır

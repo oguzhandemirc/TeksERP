@@ -1,5 +1,6 @@
 import {
   Building2,
+  FileCheck2,
   Banknote,
   Blocks,
   Boxes,
@@ -8,6 +9,7 @@ import {
   Factory,
   Truck,
   TabletSmartphone,
+  FileText,
   Printer,
   Scale,
   ScanLine,
@@ -277,7 +279,7 @@ export interface SettingFieldDef {
  * - `flags`     → config'teki flag listesini generic toggle olarak çizer
  * - `device`    → mobil cihaz eşleştirme/onay (org düzeyi) özel section
  * - `session`   → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
- * - `printer` / `scale` / `scanner` / `server` → BU BİLGİSAYARA özel yerel donanım
+ * - `printer` / `documentPrinter` / `scale` / `scanner` / `server` → BU BİLGİSAYARA özel yerel donanım
  *
  * ⚠️ TEK BİR `workstation` KİNDİ VARDI VE İÇİNDE DÖRT ALT SEKME ÇİZİYORDU
  * (2026-09-04'te kaldırıldı, kullanıcı kararı: "bu bilgisayardaki yazıcı, kantar,
@@ -291,10 +293,12 @@ export type CategoryKind =
   | "flags"
   | "device"
   | "printer"
+  | "documentPrinter"
   | "scale"
   | "scanner"
   | "server"
   | "company"
+  | "eIrsaliye"
   | "session"
   | "label";
 
@@ -714,6 +718,24 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Depocu", "Planlamacı", "Yönetim"],
         desc: "Açıkken top, levent ve iplik lotunda “sahibi olan müşteri” alanı açılır; emanet mal ayrı sayılır. Kapalıyken (varsayılan) alan çizilmez, yazılamaz ve her mal fabrikanın sayılır.",
+      },
+      {
+        key: "kaliteGuvenceEnabled",
+        title: "Kalite Güvence modülünü aç",
+        summary: "4 puan kumaş muayenesi, lab testleri ve sertifika takibi açılır.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken KK1'de ve Muayene ekranında 4 puan muayenesi girilir; panelde Muayeneler, 4 Puan Kuralları, Lab Testleri ve Sertifikalar ekranları açılır. Kapalıyken (varsayılan) muayene kaydı doğmaz, uçlar 403 verir ve top kalitesi bugünkü gibi elle seçilir. Üretim modülüne bağlı değildir.",
+      },
+      {
+        // Ön koşul `production.enabled` (iplik ihtiyaç planı üretim dengesini okur); Üretim listenin başında.
+        key: "maliyetEnabled",
+        title: "Maliyet & Teklif modülünü aç",
+        summary:
+          "Ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi ve iplik ihtiyaç planı yüzeyleri açılır.",
+        defaultOn: false,
+        audience: ["Muhasebeci", "Planlamacı", "Yönetim"],
+        desc: "Açıkken maliyet ve teklif ekranları ile uçları açılır (ekranlar sonraki sürümlerde gelir). Kapalıyken (varsayılan) uçlar 403 verir, menü çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
       },
       // ⚠️ `kumasTeknikEnabled` BİLEREK BURADA YOK: arkasında henüz hiçbir
       // yüzey/kapı yok, satırı yalnız "açtım ama hiçbir şey olmadı" üretirdi.
@@ -1926,6 +1948,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
   },
   {
+    // Sessiz basım bilgisayar başına YEREL tercihtir (sunucu bayrağı yok); varsayılan bugünkü
+    // davranış = yazdırma penceresi. Donanım kategorisi: web'de kendi "yalnız masaüstü" mesajını basar.
+    id: "document-printer",
+    label: "Belge Yazıcısı",
+    icon: FileText,
+    description:
+      "Bu bilgisayarın belge yazıcısı (A4 irsaliye, refakat kartı, rapor) ve sessiz basım: açıkken yazdırma penceresi açılmaz.",
+    keywords:
+      "belge yazıcısı yazıcı printer a4 irsaliye refakat kartı rapor sessiz basım diyalogsuz yazdırma penceresi " +
+      "varsayılan yazıcı bu bilgisayar yerel workstation",
+    kind: "documentPrinter",
+    section: "workstation",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
+  },
+  {
     id: "scale",
     label: "Kantar",
     icon: Scale,
@@ -1972,6 +2009,17 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     kind: "company",
     section: "system",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:company"],
+  },
+  {
+    // Modül anahtarı DEĞİL, yapılandırma kapısı (E-IRS P1): künye + seri + yöntem + tarih.
+    id: "e-irsaliye",
+    label: "e-İrsaliye",
+    icon: FileCheck2,
+    description: "e-İrsaliye gönderim yöntemi ve yürürlük tarihi. Kapalıyken sevkiyat bugünkü gibi yalnız kâğıt irsaliyeyle çalışır.",
+    keywords: "e-irsaliye eirsaliye e irsaliye gib ubl xml entegratör portal dışa aktar simülasyon yürürlük ettn sevk irsaliyesi elektronik",
+    kind: "eIrsaliye",
+    section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:e-irsaliye"],
   },
   {
     id: "session",

@@ -12,8 +12,8 @@ import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import type { ReportKey } from "../../constants/report-catalog";
-import { compareRangeSchema, reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
-import { resolveCoreCompare } from "../../services/reports/temel/_common";
+import { reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
+import { coreRangeQuerySchema, resolveCoreCompare } from "../../services/reports/temel/_common";
 import { kalemEkseni, musteriEkseni } from "../../services/reports/_filters";
 import { buildOrderDemandReport } from "../../services/reports/temel/siparis-talep.temel";
 import { buildShippedReport } from "../../services/reports/temel/sevkiyat.temel";
@@ -28,11 +28,11 @@ router.use(verifyToken);
 const reportGate = (key: ReportKey) => [requireReportOpen(key), requirePermission("report:sales")];
 
 // Şemalar bekçi için DIŞA AÇIK; her biri `.strict()` (tanınmayan anahtar 400).
-export const coreOrderDemandQuerySchema = compareRangeSchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId }).strict();
-export const coreShippedQuerySchema = compareRangeSchema.extend({ destination: musteriEkseni.destination }).strict();
-export const coreDeadlineQuerySchema = compareRangeSchema.extend({ destination: musteriEkseni.destination }).strict();
+export const coreOrderDemandQuerySchema = coreRangeQuerySchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId }).strict();
+export const coreShippedQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination }).strict();
+export const coreDeadlineQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination }).strict();
 export const coreOpenOrderQuerySchema = z.object({ itemId: kalemEkseni.itemId }).strict();
-export const coreLostWorkQuerySchema = compareRangeSchema.strict();
+export const coreLostWorkQuerySchema = coreRangeQuerySchema.strict();
 
 /**
  * @openapi
@@ -48,9 +48,7 @@ export const coreLostWorkQuerySchema = compareRangeSchema.strict();
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
- *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] }, description: "Verilmezse önceki dönem (K-KIYAS; uygulanan kip `parametreler[]` içinde `kiyas`)" }
- *       - { in: query, name: compareFrom, schema: { type: string, format: date-time } }
- *       - { in: query, name: compareTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
  *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Siparişin yönü (Sipariş Karnesi ile aynı)" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
@@ -88,9 +86,7 @@ router.get("/sales/siparis-talep", ...reportGate("sales/siparis-talep"), async (
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
- *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] }, description: "Verilmezse önceki dönem (K-KIYAS; uygulanan kip `parametreler[]` içinde `kiyas`)" }
- *       - { in: query, name: compareFrom, schema: { type: string, format: date-time } }
- *       - { in: query, name: compareTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Sevkiyatın donmuş yönü" }
  *     responses:
  *       200: { description: "RaporSunumu (data) + süzgeç beyanı" }
@@ -121,9 +117,7 @@ router.get("/sales/sevkiyat", ...reportGate("sales/sevkiyat"), async (req: Reque
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
- *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] }, description: "Verilmezse önceki dönem (K-KIYAS; uygulanan kip `parametreler[]` içinde `kiyas`)" }
- *       - { in: query, name: compareFrom, schema: { type: string, format: date-time } }
- *       - { in: query, name: compareTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Yön (Sevk & Termin Karnesi ile aynı)" }
  *     responses:
  *       200: { description: "RaporSunumu (data) + süzgeç beyanı" }
@@ -180,9 +174,7 @@ router.get("/sales/acik-siparisler", ...reportGate("sales/acik-siparisler"), asy
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
- *       - { in: query, name: compare, schema: { type: string, enum: [none, prev, prevYear, custom] }, description: "Verilmezse önceki dönem (K-KIYAS; uygulanan kip `parametreler[]` içinde `kiyas`)" }
- *       - { in: query, name: compareFrom, schema: { type: string, format: date-time } }
- *       - { in: query, name: compareTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  */

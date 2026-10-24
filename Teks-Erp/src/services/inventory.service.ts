@@ -143,7 +143,6 @@ import {
   GoodsReceiptStatus,
   ItemType,
   StationKind,
-  StationPropertyMode,
   StepStatus,
   WorkOrderStatus,
   ShipmentStatus,
@@ -174,7 +173,9 @@ import {
   type PropertySelection,
   copyStationCapabilitiesToRoll,
   loadStationPropertyCaps,
+  resolveKursunApplication,
 } from "./helpers/station-capability-transfer.helper";
+import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import {
   STEP_FLOW_WHERE,
@@ -5558,12 +5559,8 @@ export class InventoryService {
     // "kurşun geçildi" derken topun özelliği boş kalırdı.
     const stationCaps = await loadStationPropertyCaps(prisma, stationId);
     assertPropertySelectionsValid(stationCaps, data.properties);
-    const selectedProps = new Set((data.properties ?? []).map((p) => p.propertyId));
-    const kursunCap = stationCaps.find((c) => c.code === "KURSUN");
-    const kursunApplied =
-      !!kursunCap &&
-      (kursunCap.mode === StationPropertyMode.AUTO ||
-        selectedProps.has(kursunCap.propertyId));
+    // KQ-D4: tek karar (`resolveKursunApplication`) — completeQc2 ile AYNI fonksiyon.
+    const kursun = resolveKursunApplication(stationCaps, data.properties);
 
     // Eşzamanlı çift çağrıda kaybeden tx movement kapatmada 0 satır eşler →
     // tüm tx (mükerrer RollError'lar dahil) geri sarılır, idempotent cevap döner.
@@ -5624,17 +5621,18 @@ export class InventoryService {
           } as Prisma.InputJsonValue,
         },
       ];
-      if (kursunApplied) {
-        ops.push({
+      await tx.rollOperation.createMany({ data: ops, skipDuplicates: true });
+      // Kurşun satırı (gramaj değeriyle) tek yazardan — düzeltme = damga + yeni satır.
+      if (kursun.applied) {
+        await applyKursunOperationTx(tx, {
           rollId,
-          workOrderStepId: stepId,
-          operationType: RollOperationType.KURSUN_APPLIED,
-          operatorId: userId ?? null,
+          stepId,
+          valueId: kursun.valueId,
+          userId: userId ?? null,
           machineId: machineId ?? null,
           metadata: { totalMeters: totalMeters } as Prisma.InputJsonValue,
         });
       }
-      await tx.rollOperation.createMany({ data: ops, skipDuplicates: true });
 
       // 3b) İstasyon yetenekleri Roll'a kopyalanır — AUTO satırlar + operatörün
       //     işaretledikleri (mod sözleşmesi, station-capability-transfer.helper).
@@ -5737,6 +5735,9 @@ export class InventoryService {
         // Operatörün elle işaretledikleri (SEÇİM tipinde valueCode ile) —
         // completeQc2 audit'i ile aynı iz; AUTO'lar bu listede olmayabilir (F2).
         selections: data.properties ?? [],
+        // KQ-D4: basılan kurşun gramajı (çeşit bağı yoksa / seçilmediyse null).
+        kursunApplied: kursun.applied,
+        valueCode: kursun.valueCode,
       },
     });
 

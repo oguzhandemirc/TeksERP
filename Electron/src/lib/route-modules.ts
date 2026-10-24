@@ -33,6 +33,7 @@ export type RouteModuleFlag = Extract<
   | "devereEnabled"
   | "dokumaEnabled"
   | "tezgahEnabled"
+  | "kaliteGuvenceEnabled"
 >;
 
 /** Ekran anahtarı (route yolunun ilk iki segmenti; hub tek segment) → modül. */
@@ -80,6 +81,11 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "definitions/loom-alarm-duty": "tezgahEnabled",
   "definitions/machine-collectors": "tezgahEnabled",
   "definitions/machine-stop-codes": "tezgahEnabled",
+  // ── KALİTE GÜVENCE (K4P) — sayfalar PANEL/LAB/SERT dilimlerinde; kapı manifestoyla önden ──
+  "quality/inspections": "kaliteGuvenceEnabled",
+  "quality/inspection-rules": "kaliteGuvenceEnabled",
+  "quality/lab-tests": "kaliteGuvenceEnabled",
+  "quality/certificates": "kaliteGuvenceEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */

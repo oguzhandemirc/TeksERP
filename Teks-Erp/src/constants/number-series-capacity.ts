@@ -36,6 +36,7 @@ export const NUMBER_SERIES_CODE_CAPACITY: Readonly<Record<string, number>> = {
   subcontractorReceipt: 64, // subcontractorReceipt.receiptNo
   kartelaDispatch: 64, // kartelaDispatch.dispatchNo
   kartelaReceipt: 64, // kartelaReceipt.receiptNo
+  eIrsaliye: 16, // eIrsaliye.documentNo   GİB biçimi tam 16 karakter
   packingLotCode: 16, // packingGroup.code   ⚠️ EN DAR PAY: 3 fazla hane
   packingLotName: 64, // packingGroup.name
   returnDoc: 64, // rollReturn.returnNo

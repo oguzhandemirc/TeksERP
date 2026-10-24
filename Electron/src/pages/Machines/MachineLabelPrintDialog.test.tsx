@@ -16,8 +16,9 @@ import type { Machine } from "./types";
 const get = vi.fn();
 const post = vi.fn();
 vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
-const printHtmlString = vi.fn();
-vi.mock("@/lib/print", () => ({ printHtmlString: (...a: unknown[]) => printHtmlString(...a) }));
+const JOB = { transport: "SISTEM_PENCERESI" };
+const printTracked = vi.fn(async (_opts: unknown) => ({ status: "ILETILDI", proceed: true, printJob: JOB }));
+vi.mock("@/lib/print", () => ({ printTracked: (opts: unknown) => printTracked(opts) }));
 const toastError = vi.fn();
 const toastWarning = vi.fn();
 vi.mock("sonner", () => ({ toast: { error: (...a: unknown[]) => toastError(...a), warning: (...a: unknown[]) => toastWarning(...a), success: vi.fn() } }));
@@ -83,8 +84,9 @@ describe("baskı akışı", () => {
     fireEvent.click(yazdir);
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(get).toHaveBeenLastCalledWith("/api/labels/machines/m1/html", expect.objectContaining({ params: { copies: 12 } }));
-    expect(printHtmlString).toHaveBeenCalledTimes(1);
-    expect(post).toHaveBeenCalledWith("/api/labels/machines/m1/print-event", { copies: 12 }, { suppressErrorToast: true });
+    expect(printTracked).toHaveBeenCalledTimes(1);
+    expect(printTracked.mock.calls[0]?.[0]).toMatchObject({ subject: { kind: "ETIKET_TEZGAH", id: "m1", itemCount: 12 }, workEndpoint: true });
+    expect(post).toHaveBeenCalledWith("/api/labels/machines/m1/print-event", { copies: 12, printJob: JOB }, { suppressErrorToast: true });
   });
   it("⭐ şablon yok (400): diyalog kendi toast'unu BASMAZ, satır içi açıklar, Yazdır kapalı", async () => {
     get.mockRejectedValue(Object.assign(new Error("400"), { response: { status: 400 } }));

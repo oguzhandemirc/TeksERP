@@ -43,6 +43,8 @@ export interface WipStationRow {
   avgWaitDays: number | null;
   /** DÖNEM: aralıkta bu istasyondan çıkan top ve ortalama kalış süresi. */
   passedCount: number;
+  /** DÖNEM: aralıkta bu istasyondan çıkan metre (`qtyIn`; temel rapor "geçen metre"). */
+  passedQty: number;
   avgDurationHours: number | null;
 }
 
@@ -57,6 +59,8 @@ export interface WipScorecard {
     neverStartedOldestDays: number | null;
     /** DÖNEM: aralıkta kapanan hareket sayısı. */
     passedCount: number;
+    /** DÖNEM: aralıkta kapanan hareketlerin metresi (`qtyIn`, bekleyenle aynı kolon). */
+    passedQty: number;
   };
   byStation: WipStationRow[];
   /** En uzun bekleyen toplar — doğrudan müdahale listesi. */
@@ -107,11 +111,12 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
     `),
     // ── DÖNEM: kapanan hareketler (istasyondan geçen mal) ───────────────────
     prisma.$queryRaw<
-      Array<{ stationId: string; cnt: bigint; avgSec: number | null }>
+      Array<{ stationId: string; cnt: bigint; qty: number | null; avgSec: number | null }>
     >(Prisma.sql`
       SELECT
         wos."stationId" AS "stationId",
         COUNT(*)        AS "cnt",
+        SUM(rm."qtyIn")::float AS "qty",
         AVG(EXTRACT(EPOCH FROM (rm."exitedAt" - rm."enteredAt"))) AS "avgSec"
       FROM roll_movements rm
       JOIN work_order_steps wos ON wos.id = rm."workOrderStepId"
@@ -215,6 +220,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
       oldestDays: w?.oldestDays != null ? round1(Number(w.oldestDays)) : null,
       avgWaitDays: w?.avgDays != null ? round1(Number(w.avgDays)) : null,
       passedCount: p ? Number(p.cnt) : 0,
+      passedQty: round1(Number(p?.qty ?? 0)),
       avgDurationHours: p?.avgSec != null ? Math.round((Number(p.avgSec) / 3600) * 10) / 10 : null,
     };
   });
@@ -245,6 +251,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
       neverStartedOldestDays:
         neverStartedAgg[0]?.oldestDays != null ? round1(Number(neverStartedAgg[0].oldestDays)) : null,
       passedCount: passedRows.reduce((a, r) => a + Number(r.cnt), 0),
+      passedQty: round1(passedRows.reduce((a, r) => a + Number(r.qty ?? 0), 0)),
     },
     byStation,
     oldestWaiting: oldestRows.map((r) => ({

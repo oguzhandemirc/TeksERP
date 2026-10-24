@@ -61,6 +61,8 @@ import {
   readDevereEnabled,
   readDokumaEnabled,
   readEmanetEnabled,
+  readKaliteGuvenceEnabled,
+  readMaliyetEnabled,
   readKumasTeknikEnabled,
   readTezgahEnabled,
   // §16 — ENUM ayağı (2026-09-03, Dilim 2). Aynı derleme bağı gerekçesi: okuyucu
@@ -584,6 +586,16 @@ async function main() {
       why: "Bakım ayarı (yıl, 0 = budama yok) — davranış bayrağı değil; ham anahtar PUT /api/admin/settings/:key ile yazılır, tek okuyucusu gece bakım işi",
       file: "Teks-Erp/src/jobs/maintenance.job.ts",
       needle: "readAuditArchiveRetentionYears",
+    },
+    PRINT_LOG_RETENTION_DAYS: {
+      why: "Bakım ayarı (gün, 0 = budama yok) — yazdırma geçmişi telemetrisinin saklama süresi; davranış bayrağı değil, tek okuyucusu gece bakım işi",
+      file: "Teks-Erp/src/jobs/maintenance.job.ts",
+      needle: "readPrintLogRetentionDays",
+    },
+    REQUEST_TRACE_RETENTION_DAYS: {
+      why: "Bakım ayarı (gün, 0 = budama yok) — istek başlığı telemetrisinin saklama süresi; davranış bayrağı değil, tek okuyucusu gece bakım işi",
+      file: "Teks-Erp/src/jobs/maintenance.job.ts",
+      needle: "readRequestTraceRetentionDays",
     },
     BACKUP_OFFSITE_DIR: {
       why: "Panel: Sistem → Yedekler → Offsite Yedek kartı (PATCH /api/admin/backups/offsite)",
@@ -1195,6 +1207,8 @@ async function main() {
     "devereEnabled",
     "dokumaEnabled",
     "emanetEnabled",
+    "kaliteGuvenceEnabled",
+    "maliyetEnabled",
   ] as const;
 
   const moduleGaps = MODULE_FLAGS.flatMap((k) => {
@@ -1245,7 +1259,9 @@ async function main() {
     tezgahEnabled: await readTezgahEnabled(emptyClient3),
     devereEnabled: await readDevereEnabled(emptyClient3),
     emanetEnabled: await readEmanetEnabled(emptyClient3),
+    kaliteGuvenceEnabled: await readKaliteGuvenceEnabled(emptyClient3),
     dokumaEnabled: await readDokumaEnabled(emptyClient3),
+    maliyetEnabled: await readMaliyetEnabled(emptyClient3),
   };
   // ⚠️ `productionEnabled` TEK İSTİSNA ve bu kalıcı bir karardır: damgası
   // OLMAYAN bir kopyada (eski dump, dev DB, prova) fabrika üretimsiz kalmasın.
@@ -1261,6 +1277,8 @@ async function main() {
     devereEnabled: false,
     dokumaEnabled: false,
     emanetEnabled: false,
+    kaliteGuvenceEnabled: false,
+    maliyetEnabled: false,
   };
   const varsayilanSapma = MODULE_FLAGS.filter(
     (k) => moduleDefaults[k] !== beklenenVarsayilan[k],

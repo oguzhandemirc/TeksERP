@@ -5,12 +5,13 @@
 // `test_temel_rapor_esitlik`). Burada yalnız zarfın tekrar eden parçaları kurulur: ölçü
 // adı/birimi/iyi yönü tanım sözlüğünden, başlık/soru katalogdan, tablo satır tavanı.
 
+import { z } from "zod";
 import { REPORT_BY_KEY, type ReportKey } from "../../../constants/report-catalog";
 import { OLCU_BY_KIMLIK, type OlcuIyiYon, type OlcuBirimi } from "../semantik/tanimlar";
 import { anaSayiKur, donemEtiketi } from "../sunum/sunum-kur";
 import type { AnaSayi, Birim, DonemAraligi, IyiYon, ParametreBeyani, RaporSunumu, RaporTanimi, TabloBlok } from "../sunum/sunum.types";
 import type { SuzgecEcho } from "../_filters";
-import { capReportLists, resolveCompareRange, type CompareMode, type CompareRangeInput, type DateRange } from "../_shared";
+import { capReportLists, resolveCompareRange, type CompareMode, type DateRange } from "../_shared";
 
 const UNIT_MAP: Readonly<Record<Exclude<OlcuBirimi, "para">, Birim>> = {
   metre: "m",
@@ -114,12 +115,12 @@ const COMPARE_OPTIONS = [
 ];
 
 /**
- * K-KIYAS: kıyas varsayılanının TEK kaynağı sunucudur — `compare` verilmezse "önceki dönem"
+ * K-KIYAS: kıyas varsayılanının TEK kaynağı sunucudur — `kiyas` verilmezse "önceki dönem"
  * uygulanır; istemci varsayılan yazmaz, çipi `parametreler[]`teki `kiyas` beyanından çizer.
  */
-export function resolveCoreCompare(input: CompareRangeInput, range: DateRange): { mode: CompareMode; compareRange: DateRange | null } {
-  const mode: CompareMode = input.compare ?? "prev";
-  return { mode, compareRange: resolveCompareRange({ ...input, compare: mode }, range) };
+export function resolveCoreCompare(input: CoreRangeQuery, range: DateRange): { mode: CompareMode; compareRange: DateRange | null } {
+  const mode: CompareMode = input.kiyas ?? "prev";
+  return { mode, compareRange: resolveCompareRange({ compare: mode }, range) };
 }
 
 /** Dönem + kıyas parametre beyanı; kıyasın anahtarı `kiyas`, `deger` UYGULANAN kip, `secenekler` diğerleri dahil hepsi. */
@@ -157,3 +158,16 @@ export interface CoreReportResult {
   sunum: RaporSunumu;
   suzgec?: SuzgecEcho;
 }
+
+/**
+ * K-TEL: rapor v2 uçlarının ORTAK sorgu teli — tel anahtarları Türkçe (`kiyas`; `compare` GEÇERSİZ). Kıyas
+ * kipleri panelin çipindeki `COMPARE_OPTIONS` ile aynı (özel aralık v2 telinde yok). Bekçi: `test_rapor_tel_anahtari`.
+ */
+export const coreRangeQuerySchema = z
+  .object({
+    dateFrom: z.string().datetime().optional(),
+    dateTo: z.string().datetime().optional(),
+    kiyas: z.enum(["none", "prev", "prevYear"]).optional(),
+  })
+  .strict();
+export type CoreRangeQuery = z.infer<typeof coreRangeQuerySchema>;

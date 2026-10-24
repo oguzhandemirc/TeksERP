@@ -13,6 +13,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLoomAlarmAccess } from "@/pages/Operations/LoomAlarms/alarm-access";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
 import { formatFactory } from "@/lib/factory-time";
 import { useLoomFloorLive } from "./useLoomFloorLive";
 import { WeavingFloorView } from "./WeavingFloorView";
@@ -70,6 +71,7 @@ export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
     return (
       <PageShell>
         <PageHeader title="Tezgah Salonu" />
+        <RelocatedToolStrip host="/operations/weaving-floor" />
         <PageBody className="p-4">
           <p className="py-10 text-center text-muted-foreground">
             {live.error ? `Salon verisi okunamadı: ${live.error.message}` : "Salon verisi yükleniyor…"}
@@ -84,6 +86,7 @@ export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
       now={live.now}
       sampleData={false}
       tv={tv}
+      toolStrip={tv ? undefined : <RelocatedToolStrip host="/operations/weaving-floor" />}
       stale={live.stale}
       notice={live.stale ? <StaleNotice updatedAt={live.floor.updatedAt} /> : undefined}
       onOpenTv={tv ? undefined : openTezgahTvHere}

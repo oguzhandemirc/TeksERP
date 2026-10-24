@@ -409,7 +409,8 @@ export interface RollProperty {
 
 export interface RollErrorRecord {
   id: string;
-  startMeter: number;
+  /** NULL yalnız muayene (INSPECTION) satırında — K4P; uçlar varsayılan PROCESS döner. */
+  startMeter: number | null;
   endMeter: number | null;
   defectTypeId: string | null;
   errorType: string | null;

@@ -150,7 +150,13 @@ function main(): void {
   // düzeyinde. Ölçüldü: `roll-step.helper` WorkOrderStep/RollMovement/Roll yazdığı için listede
   // KALDI (yalnız WorkOrder düştü) ⇒ net +1. Dürüstlük notu: otomatik geçişlerin audit izi
   // taşımadan ÖNCE de yoktu; artık WorkOrderEvent defterinde izleri var (audit eklemek ayrı borç).
-  const AUDITSIZ_YAZICI_TABAN = 32;
+  // 32 → 33 (2026-10-24, KQ-D4): `helpers/kursun-operation.helper.ts` — KURSUN_APPLIED defter
+  // satırının TEK YAZARI (create / no-op / damga+yeni satır, tx İÇİNDE); yazım önceden iki servisteydi
+  // (completeQc2 · kursunFinish), tek kaynağa alındı. Audit'i çağıran eylem basar — EBEVEYN_EYLEMDE kalıbı.
+  // 33 → 34 (2026-10-24, KQ-D6): `helpers/workorder-target-value.helper.ts` — İE hedef çeşit değerinin
+  // TEK YAZARI (FARK bazlı damga + yeni satır, tx İÇİNDE; create · replace · klon); audit'i çağıran eylem
+  // basar (`workorder-target-value.service` · `workorder.service`) — EBEVEYN_EYLEMDE kalıbı, dosya düzeyinde.
+  const AUDITSIZ_YAZICI_TABAN = 34;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

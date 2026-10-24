@@ -69,6 +69,9 @@ export interface KursunDistributionAssignedRow extends KursunDistributionRowBase
   assignedAt: string;
   assignedByName: string | null;
   notes: string | null;
+  /** KQ-D6 kâğıt gramajı (çeşit değeri); null = bilinmiyor. Eski backend alanı göndermez. */
+  propertyValueId?: string | null;
+  propertyValueName?: string | null;
   /** Atama artık anlamsız (adım kapandı / açık top kalmadı) → UI iptal önerir. */
   stale: boolean;
   staleReason: string | null;
@@ -94,6 +97,8 @@ export interface KursunDistributionPayload {
   machines: KursunBypassMachineOption[];
   waiting: KursunDistributionWaitingRow[];
   assigned: KursunDistributionAssignedRow[];
+  /** KQ-D6 gramaj seçenekleri (kurşun çeşidinin aktif değerleri). */
+  gramajOptions?: Array<{ id: string; name: string }>;
   /** Son 7 günde dağıtılmadan kapanan işler — bilgi bandının kaynağı. */
   unassignedClosures?: KursunUnassignedClosureStats;
 }

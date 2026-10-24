@@ -77,7 +77,9 @@ import labelTemplateRoutes from "./routes/label-template.routes";
 import { peripheralRouter } from "./routes/peripheral.routes";
 import shippingRoutes from "./routes/shipping.routes";
 import printedDocumentRoutes from "./routes/printed-document.routes";
+import printJobRoutes from "./routes/print-job.routes";
 import documentProfileRoutes from "./routes/document-profile.routes";
+import documentTemplateRoutes from "./routes/document-template.routes";
 import freeDocumentRoutes from "./routes/free-document.routes";
 import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
@@ -116,7 +118,10 @@ import reportsRoutes from "./routes/reports.routes";
 import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
+import notificationRoutes from "./routes/bildirim.routes";
+import { isNotificationBellPath } from "./constants/notification-stream";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
+import { requestTraceMiddleware } from "./middlewares/request-trace.middleware";
 import { licenseGate } from "./middlewares/license.middleware";
 import { isWebPanelMode } from "./lib/web-session-cookie";
 import { clientInfoMiddleware } from "./middlewares/client-info.middleware";
@@ -239,12 +244,17 @@ app.use(buildHelmet(hardening.httpsEnabled));
 // istemci etkilenmez). Uçların asıl koruması `verifyToken` + `requirePermission`;
 // origin listesi onların YERİNE geçmez.
 app.use(cors({
-  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date"],
+  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date", "X-Request-Id"],
   ...(hardening.corsOrigins ? { origin: hardening.corsOrigins } : {}),
 }));
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
 // 1KB altı response'lar atlanır (overhead'e değmez).
-app.use(compression({ threshold: 1024 }));
+// SSE zili sıkıştırılmaz: gzip akışı tamponlar ve `merhaba` istemciye ulaşmaz (bildirim plan §3.9 tuzak 1);
+// hub ayrıca `Cache-Control: no-transform` yazar — iki kat koruma, `test_bildirim_zil` §2 ölçer.
+app.use(compression({
+  threshold: 1024,
+  filter: (req, res) => !isNotificationBellPath(req.originalUrl ?? req.url) && compression.filter(req, res),
+}));
 // F17: production'da 'combined' (tarih/IP/UA — pm2 dosya log'una ANSI'siz),
 // dev'de renkli kısa 'dev'.
 const isProd = (process.env.APP_ENV ?? process.env.NODE_ENV) === "production";
@@ -358,6 +368,8 @@ app.use(resolveDevice);
 // verifyToken ile SONRA doluyor — kopyalasaydık audit hep boş okurdu.
 // resolveDevice'tan SONRA mount edilir ki `req.device` çözülmüş olsun.
 app.use((req, _res, next) => runWithRequestContext(req, next));
+// İstek başlığı (izlenebilirlik B1): `X-Request-Id` + koşullu `request_traces` anlık görüntüsü (await'siz).
+app.use(requestTraceMiddleware);
 
 // Sürüm bilgisi (durum sayfasında gösterilir). Okuma `lib/app-version.ts`e
 // taşındı — servis keşfi kimlik ucu da aynı sürümü basıyor ve `app.ts`'ten
@@ -563,7 +575,9 @@ app.use("/api/labels", labelRoutes);
 app.use("/api/label-templates", labelTemplateRoutes);
 app.use("/api/shipping", shippingRoutes);
 app.use("/api/printed-documents", printedDocumentRoutes);
+app.use("/api/print-jobs", printJobRoutes);
 app.use("/api/document-profiles", documentProfileRoutes);
+app.use("/api/document-templates", documentTemplateRoutes);
 app.use("/api/free-documents", freeDocumentRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
@@ -673,6 +687,8 @@ app.use("/api/destek", supportRoutes);
 app.use("/api/hata-raporlari", errorReportRoutes);
 // Patron bulutu (fabrika yüzeyi): teknik kullanıcı + salt okunur bulut hesapları. Gelen kutusu işi `jobs/cloud-inbox.job.ts`.
 app.use("/api/patron-bulut", patronCloudRoutes);
+// Bildirim zili + gelen kutusu (kişisel uçlar, verifyToken; bayrak `bildirim.gelenKutusuEnabled`).
+app.use("/api/bildirim", notificationRoutes);
 
 // =============================================================================
 // JSON 404 — tanımsız /api/* route'lar için

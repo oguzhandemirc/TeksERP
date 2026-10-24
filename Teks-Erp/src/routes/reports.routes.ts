@@ -18,6 +18,7 @@ import auditReportRoutes from "./reports/audit.routes";
 import financeReportRoutes from "./reports/finance.report.routes";
 import dokumaReportRoutes from "./reports/dokuma.report.routes";
 import coreSalesReportRoutes from "./reports/temel-satis.routes";
+import coreProductionReportRoutes from "./reports/temel-uretim.routes";
 
 const router = Router();
 
@@ -38,5 +39,8 @@ router.use("/dokuma", dokumaReportRoutes);
 // Raporlar v2 temel satış raporları (R0-RAPA): ÖNEKSİZ mount — yollar dosyada tam (`/sales/termin`),
 // katalog `kapiTasiyici.yol` beyanıyla bayt-eşit. `/sales` router'ında eşleşmeyen istek buraya düşer.
 router.use(coreSalesReportRoutes);
+// Raporlar v2 temel üretim/kalite/depo/fason raporları (R0-RAPB): ÖNEKSİZ mount — yollar dosyada tam
+// (`/quality/kayip`), katalog `kapiTasiyici.yol` ile bayt-eşit; kimlik kapısı uç zincirinde (router.use YOK).
+router.use(coreProductionReportRoutes);
 
 export default router;

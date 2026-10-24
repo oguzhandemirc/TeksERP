@@ -8,6 +8,14 @@ import {
   DEFAULT_AUDIT_ARCHIVE_RETENTION_YEARS,
   isValidAuditArchiveRetentionYears,
 } from "./helpers/audit-retention.helper";
+import {
+  DEFAULT_PRINT_LOG_RETENTION_DAYS,
+  isValidPrintLogRetentionDays,
+} from "./helpers/print-job-retention.helper";
+import {
+  DEFAULT_REQUEST_TRACE_RETENTION_DAYS,
+  isValidRequestTraceRetentionDays,
+} from "./helpers/request-trace-retention.helper";
 import { createHash } from "crypto";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -66,6 +74,16 @@ import {
   type PhaseOutNewOrder,
 } from "./helpers/item-lifecycle-settings.helper";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
+import {
+  DEFAULT_COMPANY_LEGAL_IDENTITY,
+  DEFAULT_EIRSALIYE_CONFIG,
+  readEIrsaliyeConfigValue,
+  sanitizeCompanyLegalIdentity,
+  validateEIrsaliyeConfigInput,
+  type CompanyLegalIdentity,
+  type EIrsaliyeConfig,
+} from "./e-irsaliye/e-irsaliye-settings";
+export type { CompanyLegalIdentity, EIrsaliyeConfig } from "./e-irsaliye/e-irsaliye-settings";
 
 /**
  * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
@@ -277,6 +295,9 @@ export const SETTING_KEYS = {
    *  (Customer çekirdek). Ekransız modül: kapı owner YAZAN uçların gövdesinde (403); sevk sahiplik kapısı veri varsa
    *  bayraktan bağımsız çalışır. Varsayılan KAPALI = dünkü davranış (sahiplik alanı yoktu). */
   EMANET_ENABLED: "emanet.enabled",
+  /** K4P Kalite Güvence (4 puan muayene · lab testi · sertifika). Bağımlılık YOK: muayene KK1'de doğar ve KK1
+   *  üretim kapalıyken de açıktır. Varsayılan KAPALI = dünkü davranış (yüzey yoktu). */
+  KALITE_GUVENCE_ENABLED: "kaliteGuvence.enabled",
   /** [PROFİL] Devere Faz 2: içeride sarımda iplik çıkış satırı ve mal kabul iplik satırı LOT
    *  ZORUNLU mu. DEFAULT false = bugünkü davranış (lot kaydı bayraksız her kurulumda mümkün,
    *  lotsuz satır yalnız UYARI). Davranış bayrağı — profile/modül tablosuna GİRMEZ. */
@@ -295,6 +316,10 @@ export const SETTING_KEYS = {
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */
   DOKUMA_ENABLED: "dokuma.enabled",
+  /** Maliyet & Teklif modülü (MAL): ürün maliyeti · standart maliyet · satış teklifi · fiyat listesi ·
+   *  iplik ihtiyaç planı. ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`); kapı `requireMaliyetEnabled`.
+   *  Varsayılan KAPALI = bugünkü davranış (modül yoktu). */
+  MALIYET_ENABLED: "maliyet.enabled",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -592,6 +617,12 @@ export const SETTING_KEYS = {
   /** Belge künyesi: irsaliye/çeki başına basılan firma adresi/telefon/vergi bilgisi.
    *  Firma adı ayrı (COMPANY_NAME); burada sadece ek künye satırları. */
   COMPANY_LETTERHEAD: "company.letterhead",
+  /** Gönderici RESMİ künyesi (VKN/TCKN, unvan, vergi dairesi, adres) — e-belgenin kimliği.
+   *  Serbest metin `company.letterhead`ten ayrı soru: o basılan süs, bu yapısal kimlik (E3-AYAR). */
+  COMPANY_LEGAL_IDENTITY: "company.legalIdentity",
+  /** e-İrsaliye yapılandırması: bağdaştırıcı + yürürlük tarihi. Varsayılan `yok` = özellik kapalı
+   *  (modül anahtarı DEĞİL, yapılandırma kapısı — plan §0.3 P1). */
+  EIRSALIYE_CONFIG: "eIrsaliye.config",
   /** Yazdırılan belgelerin (sevk irsaliyesi, fason sevk, kartela çeki) içerik ayarı:
    *  hangi bölümler basılsın + başlık/imza/footer override. CANLI okunur (snapshot DEĞİL)
    *  — irsaliye her açıldığında güncel ayarı yansıtır. Map: { [belgeKey]: DocumentConfig }. */
@@ -806,6 +837,12 @@ export const SETTING_KEYS = {
   /** Audit ARŞİVİNİN saklama süresi, YIL (0..50; 0 = budama yok). Default 3. Gece
    *  bakım işi okur; bu yaştan eski `system_log_archives` satırları budanır. */
   AUDIT_ARCHIVE_RETENTION_YEARS: "audit.archiveRetentionYears",
+  /** Yazdırma geçmişinin (`print_jobs`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 180.
+   *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-A1). */
+  PRINT_LOG_RETENTION_DAYS: "printLog.retentionDays",
+  /** İstek başlığının (`request_traces`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 90.
+   *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-B1). */
+  REQUEST_TRACE_RETENTION_DAYS: "requestTrace.retentionDays",
   /** Bu KURULUMUN kalıcı kimliği (uuid v4). İlk açılışta bir kez üretilir
    *  (`jobs/installation-identity.job.ts`) ve bir daha ASLA değişmez.
    *
@@ -1749,6 +1786,8 @@ export interface FeatureFlags {
   devereEnabled: boolean;
   /** G3 emanet / konsinye mülkiyet modülü. Varsayılan KAPALI. */
   emanetEnabled: boolean;
+  /** K4P Kalite Güvence modülü (muayene · lab testi · sertifika). Varsayılan KAPALI. */
+  kaliteGuvenceEnabled: boolean;
   /** Devere Faz 2: lot zorunluluğu (içeride sarım iplik çıkışı + mal kabul iplik satırı). Varsayılan KAPALI =
    *  bugünkü davranış: lotsuz satır yazılır, yalnız uyarı üretir. */
   devereLotRequired: boolean;
@@ -1769,6 +1808,9 @@ export interface FeatureFlags {
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */
   dokumaEnabled: boolean;
+  /** Maliyet & Teklif modülü. Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir;
+   *  etkin değer `production && maliyet` ve kapının içinde çözülür. */
+  maliyetEnabled: boolean;
   /**
    * KAPALI rapor anahtarları. `null` = LİSTE OKUNAMADI (bozuk satır) — "hiçbiri kapalı
    * değil" ile aynı şey DEĞİL; panel bunu fail-closed okur (R2/K5) ve rapor çizmez.
@@ -1899,6 +1941,10 @@ export interface FeatureFlags {
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */
   companyLetterhead: CompanyLetterhead;
+  /** Gönderici resmi künyesi (e-İrsaliye/e-belge kimliği). */
+  companyLegalIdentity: CompanyLegalIdentity;
+  /** e-İrsaliye yapılandırması; hazırlık sorusu yalnız `resolveEIrsaliyeReadiness`ten. */
+  eIrsaliyeConfig: EIrsaliyeConfig;
   /** Yazdırılan belgelerin içerik ayarı (canlı). Ham map; client resolveDocConfig ile çözer. */
   documentsConfig: DocumentsConfig;
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
@@ -2027,6 +2073,8 @@ const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
   devereEnabled: SETTING_KEYS.DEVERE_ENABLED,
   dokumaEnabled: SETTING_KEYS.DOKUMA_ENABLED,
   emanetEnabled: SETTING_KEYS.EMANET_ENABLED,
+  kaliteGuvenceEnabled: SETTING_KEYS.KALITE_GUVENCE_ENABLED,
+  maliyetEnabled: SETTING_KEYS.MALIYET_ENABLED,
 };
 
 // =============================================================================
@@ -2285,6 +2333,7 @@ export class SystemSettingService {
       tezgahEnabled: await readTezgahEnabledRaw(cacheClient),
       devereEnabled: await readDevereEnabledRaw(cacheClient),
       emanetEnabled: await readEmanetEnabledRaw(cacheClient),
+      kaliteGuvenceEnabled: await readKaliteGuvenceEnabledRaw(cacheClient),
       devereLotRequired: await readDevereLotRequired(cacheClient),
       devereMountTracking: await readDevereMountTracking(cacheClient),
       devereMountTrackingRequired: await readDevereMountTrackingRequired(cacheClient),
@@ -2294,6 +2343,7 @@ export class SystemSettingService {
       dokumaOrderLineLinkRequired: await readDokumaOrderLineLinkRequired(cacheClient),
       dokumaRollBirth: await readDokumaRollBirth(cacheClient),
       dokumaEnabled: await readDokumaEnabledRaw(cacheClient),
+      maliyetEnabled: await readMaliyetEnabledRaw(cacheClient),
       // ⚠️ ÜÇ SONUÇLU okumanın panele TAŞINAN hâli: ölçülemedi ⇒ `null`. Boş diziye
       // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
       reportsClosedKeys: ((): string[] | null => {
@@ -2366,6 +2416,8 @@ export class SystemSettingService {
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
+      companyLegalIdentity: await readCompanyLegalIdentity(cacheClient),
+      eIrsaliyeConfig: await readEIrsaliyeConfig(cacheClient),
       documentsConfig: await readDocumentsConfig(cacheClient),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
@@ -2451,6 +2503,10 @@ export class SystemSettingService {
         return readDokumaEnabledRaw();
       case "emanetEnabled":
         return readEmanetEnabledRaw();
+      case "kaliteGuvenceEnabled":
+        return readKaliteGuvenceEnabledRaw();
+      case "maliyetEnabled":
+        return readMaliyetEnabledRaw();
       case "depoMultiEnabled":
         return readDepoMultiEnabledRaw();
       case "kumasTeknikEnabled":
@@ -2912,6 +2968,17 @@ export class SystemSettingService {
         userId
       );
     }
+    if (Object.prototype.hasOwnProperty.call(input, "kaliteGuvenceEnabled")) {
+      if (typeof input.kaliteGuvenceEnabled !== "boolean") {
+        throw AppError.badRequest("kaliteGuvenceEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KALITE_GUVENCE_ENABLED,
+        input.kaliteGuvenceEnabled,
+        "Kalite Güvence modülü (4 puan muayene · lab testleri · sertifika takibi)",
+        userId
+      );
+    }
     if (Object.prototype.hasOwnProperty.call(input, "devereLotRequired")) {
       if (typeof input.devereLotRequired !== "boolean") {
         throw AppError.badRequest("devereLotRequired boolean olmalı");
@@ -2976,6 +3043,18 @@ export class SystemSettingService {
         input.dokumaEnabled,
         // Metin migration damgasıyla BİREBİR kalır (test_module_flags §6d) — görünen ad değişikliğinin dışında.
         "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "maliyetEnabled")) {
+      if (typeof input.maliyetEnabled !== "boolean") {
+        throw AppError.badRequest("maliyetEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.MALIYET_ENABLED,
+        input.maliyetEnabled,
+        "Maliyet & Teklif: ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi, iplik ihtiyaç planı",
         userId
       );
     }
@@ -3813,6 +3892,31 @@ export class SystemSettingService {
         SETTING_KEYS.COMPANY_LETTERHEAD,
         merged as unknown as Prisma.InputJsonValue,
         "Belge künyesi (irsaliye/çeki üst bloğunda basılan adres/telefon/vergi)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "companyLegalIdentity")) {
+      const c = input.companyLegalIdentity;
+      if (!c || typeof c !== "object" || Array.isArray(c)) {
+        throw AppError.badRequest("Resmi künye nesne olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.COMPANY_LEGAL_IDENTITY,
+        sanitizeCompanyLegalIdentity(c) as unknown as Prisma.InputJsonValue,
+        "Gönderici resmi künyesi (VKN/TCKN, unvan, vergi dairesi, adres — e-belge kimliği)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "eIrsaliyeConfig")) {
+      // Fail-closed: tanınmayan bağdaştırıcı `yok`a düşürülmez, 400 (Zod'u atlayan çağıran için de).
+      const r = validateEIrsaliyeConfigInput(input.eIrsaliyeConfig);
+      if (!r.ok) throw AppError.badRequest(r.message, { code: "EIRSALIYE_CONFIG_INVALID" });
+      await this.set(
+        SETTING_KEYS.EIRSALIYE_CONFIG,
+        r.value as unknown as Prisma.InputJsonValue,
+        "e-İrsaliye yapılandırması (bağdaştırıcı + yürürlük tarihi)",
         userId
       );
     }
@@ -4858,6 +4962,25 @@ export async function readEmanetEnabled(tx?: Pick<typeof prisma, "systemSetting"
   return applyModuleCeiling(SETTING_KEYS.EMANET_ENABLED, await readEmanetEnabledRaw(tx));
 }
 
+/** K4P Kalite Güvence modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü davranış: muayene/lab/sertifika
+ *  yüzeyi yoktu). Bağımlılık yok. */
+export async function readKaliteGuvenceEnabledRaw(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KALITE_GUVENCE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readKaliteGuvenceEnabledRaw` yalnız panel geri-okuması
+ *  ve bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readKaliteGuvenceEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.KALITE_GUVENCE_ENABLED, await readKaliteGuvenceEnabledRaw(tx));
+}
+
 /** Devere Faz 2: lot zorunlu mu? Default FALSE (satır yoksa lotsuz satır yazılır, yalnız
  *  uyarı — bugünkü davranış). Enforcement reader: cache'siz, aksiyon anında okunur. */
 export async function readDevereLotRequired(
@@ -4987,6 +5110,25 @@ export async function readDokumaEnabledRaw(
  *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
 export async function readDokumaEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   return applyModuleCeiling(SETTING_KEYS.DOKUMA_ENABLED, await readDokumaEnabledRaw(tx));
+}
+
+/** Maliyet & Teklif modülü açık mı? Default FALSE (satır yoksa kapalı — modül sıfırdan doğdu).
+ *  HAM değer döner; ön koşulu (production) `requireMaliyetEnabled` ölçer. */
+export async function readMaliyetEnabledRaw(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.MALIYET_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readMaliyetEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readMaliyetEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.MALIYET_ENABLED, await readMaliyetEnabledRaw(tx));
 }
 
 /**
@@ -6459,6 +6601,28 @@ export async function readCompanyLetterhead(
   };
 }
 
+/** Gönderici resmi künyesi (yoksa boş künye). Temizlik `sanitizeCompanyLegalIdentity`. */
+export async function readCompanyLegalIdentity(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<CompanyLegalIdentity> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({
+    where: { key: SETTING_KEYS.COMPANY_LEGAL_IDENTITY },
+    select: { value: true },
+  });
+  return setting ? sanitizeCompanyLegalIdentity(setting.value) : { ...DEFAULT_COMPANY_LEGAL_IDENTITY };
+}
+
+/** e-İrsaliye yapılandırması (yoksa/çöpse `{adapter:"yok"}` = bugünkü davranış). */
+export async function readEIrsaliyeConfig(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<EIrsaliyeConfig> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({
+    where: { key: SETTING_KEYS.EIRSALIYE_CONFIG },
+    select: { value: true },
+  });
+  return setting ? readEIrsaliyeConfigValue(setting.value) : { ...DEFAULT_EIRSALIYE_CONFIG };
+}
+
 /** Belge logosu kütüphanesi — bkz. SETTING_KEYS.DOCUMENTS_LOGO. */
 export interface DocumentsLogo {
   current: string | null;
@@ -7032,6 +7196,38 @@ export async function readAuditArchiveRetentionYears(
   });
   const v = asNumber(setting?.value);
   return isValidAuditArchiveRetentionYears(v) ? v : DEFAULT_AUDIT_ARCHIVE_RETENTION_YEARS;
+}
+
+/**
+ * Yazdırma geçmişi saklama süresi (gün). Kayıt yoksa ya da geçersizse varsayılan 180;
+ * 0 açıkça yazılırsa budama yok.
+ */
+export async function readPrintLogRetentionDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PRINT_LOG_RETENTION_DAYS },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return isValidPrintLogRetentionDays(v) ? v : DEFAULT_PRINT_LOG_RETENTION_DAYS;
+}
+
+/**
+ * İstek başlığı saklama süresi (gün). Kayıt yoksa ya da geçersizse varsayılan 90;
+ * 0 açıkça yazılırsa budama yok.
+ */
+export async function readRequestTraceRetentionDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.REQUEST_TRACE_RETENTION_DAYS },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return isValidRequestTraceRetentionDays(v) ? v : DEFAULT_REQUEST_TRACE_RETENTION_DAYS;
 }
 
 /**

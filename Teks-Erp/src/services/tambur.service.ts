@@ -107,6 +107,7 @@ import {
   type KursunBypassTamburContext,
 } from "./kursun-bypass.service";
 import { TAMBUR_ENTRY_SOURCES } from "../constants/tambur-entry-sources";
+import { processMeterNumber } from "./helpers/roll-error-meter.helper";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -461,7 +462,7 @@ export class TamburService {
         errorCount: m.roll.errors.length,
         errors: m.roll.errors.map((e) => ({
           id: e.id,
-          startMeter: Number(e.startMeter),
+          startMeter: processMeterNumber(e),
           errorType: e.errorType,
         })),
         batchId: m.roll.batchId ?? null,
@@ -859,7 +860,7 @@ export class TamburService {
         operationType: { in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED] },
       },
       // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
-      select: { workOrderStepId: true, operationType: true, operatorId: true, metadata: true, machineId: true },
+      select: { workOrderStepId: true, operationType: true, operatorId: true, metadata: true, machineId: true, propertyValueId: true },
     });
 
     // Cut'lardaki + parent qualityGrade'lerini topla → katalog target status'larını çek.
@@ -1194,6 +1195,7 @@ export class TamburService {
               operatorId: op.operatorId,
               machineId: op.machineId,
               metadata: op.metadata ?? undefined,
+              propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
               inheritedFromParentRollId: roll.id,
             })),
           });
@@ -2391,6 +2393,7 @@ export class TamburService {
         operatorId: true,
         metadata: true,
         machineId: true,
+        propertyValueId: true,
       },
     });
     if (inheritedOps.length > 0) {
@@ -2402,6 +2405,7 @@ export class TamburService {
           operatorId: op.operatorId,
           machineId: op.machineId,
           metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+          propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
           inheritedFromParentRollId: parent.id,
         })),
       });
@@ -2852,6 +2856,7 @@ export class TamburService {
             operatorId: true,
             metadata: true,
             machineId: true,
+            propertyValueId: true,
           },
         });
         if (inheritedOps.length > 0) {
@@ -2863,6 +2868,7 @@ export class TamburService {
               operatorId: op.operatorId,
               machineId: op.machineId,
               metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+              propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
               inheritedFromParentRollId: parent.id,
             })),
           });
@@ -3276,6 +3282,7 @@ export class TamburService {
         operatorId: true,
         metadata: true,
         machineId: true,
+        propertyValueId: true,
       },
     });
     if (inheritedOps.length > 0) {
@@ -3287,6 +3294,7 @@ export class TamburService {
           operatorId: op.operatorId,
           machineId: op.machineId,
           metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+          propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
           inheritedFromParentRollId: parent.id,
         })),
       });
@@ -4136,7 +4144,7 @@ export class TamburService {
       kursunFinishedAt: m.roll.operations[0]?.createdAt.toISOString() ?? null,
       errors: m.roll.errors.map((e) => ({
         id: e.id,
-        startMeter: Number(e.startMeter),
+        startMeter: processMeterNumber(e),
         errorType: e.errorType,
       })),
     }));

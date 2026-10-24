@@ -4,6 +4,7 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { REPORT_BY_KEY, type ReportKey } from "@/lib/report-catalog";
 import { ReportDateFilter } from "./ReportDateFilter";
 import { ReportSideRail } from "./ReportSideRail";
+import { LegacyReportBanner } from "./LegacyReportBanner";
 
 interface Props {
   title: string;
@@ -38,6 +39,8 @@ export function ReportPageLayout({ title, description, actions, reportKey, showC
   return (
     <PageShell className="overflow-hidden">
       <PageHeader title={title} description={description} actions={actions} />
+      {/* Raporlar v2 geçiş bandı: bayrak kapalıyken null döner (DOM bayt-eşit). */}
+      <LegacyReportBanner reportKey={reportKey} />
       {soru ? (
         <p className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">Bu rapor şunu cevaplar:</span> {soru}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Printer, Package } from "lucide-react";
@@ -10,6 +10,8 @@ import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { labelService } from "@/services/labelService";
+import type { PrintJobAttachment } from "@/services/printJobService";
+import { printTracked } from "@/lib/print";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import type { RelabelContext } from "@/pages/Operations/RelabelStation/types";
 import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
@@ -31,8 +33,7 @@ export function RelabelPrintForCustomer({
   const { hasPermission } = useRoleAccess();
   const canPrint = hasPermission("label:print");
   const qc = useQueryClient();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
+  // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa printTracked (sistem penceresi / sessiz basım).
   const { directEnabled, printRoll, peripheralId } = useLabelPrinter();
   const [sending, setSending] = useState(false);
 
@@ -62,7 +63,7 @@ export function RelabelPrintForCustomer({
   const preview = previewQuery.data;
 
   const printMut = useMutation({
-    mutationFn: () => labelService.printRollLabel(ctx.id, ctxOpts),
+    mutationFn: (printJob?: PrintJobAttachment) => labelService.printRollLabel(ctx.id, ctxOpts, printJob),
     onSuccess: () => {
       toast.success("Etiket basıldı (audit kaydı oluşturuldu).");
       // Baskı labelDirty'yi temizledi → liste + detay sheet rozeti de tazelensin.
@@ -80,7 +81,7 @@ export function RelabelPrintForCustomer({
         // Diyalogsuz: native PPLA → seri/COM. Hata olursa diyaloğa DÜŞME (görünür hata).
         const r = await printRoll(ctx.id, ctxOpts);
         if (r.ok) {
-          printMut.mutate(); // audit + "Etiket basıldı" toast'ı printMut.onSuccess'ten.
+          printMut.mutate(r.printJob); // audit + "Etiket basıldı" toast'ı printMut.onSuccess'ten.
         } else {
           toast.error(r.error ?? "Yazıcıya gönderilemedi");
         }
@@ -89,9 +90,18 @@ export function RelabelPrintForCustomer({
       }
       return;
     }
-    // Yapılandırılmış seri yazıcı yok → eski OS yazdırma diyaloğu yedeği.
-    iframeRef.current?.contentWindow?.print();
-    printMut.mutate();
+    // Yapılandırılmış seri yazıcı yok → sistem penceresi yedeği (boğazdan). Ham komut önizlemesi
+    // (text) OS penceresinden basılamaz — kâğıt çıkmadan "basıldı" damgası atılmaz.
+    if (!preview || preview.mode === "text") {
+      toast.error("Bu etiket dili yazdırma penceresinden basılamaz; etiket yazıcısını ayarlayın.");
+      return;
+    }
+    const out = await printTracked({
+      subject: { kind: "ETIKET_TOP", table: "rolls", id: ctx.id },
+      html: preview.content,
+      workEndpoint: true,
+    });
+    if (out.proceed) printMut.mutate(out.printJob);
   };
 
   const hasBarcode = Boolean(ctx.barcode);
@@ -188,7 +198,6 @@ export function RelabelPrintForCustomer({
         </pre>
       ) : (
         <iframe
-          ref={iframeRef}
           title="Yeniden etiket önizleme"
           srcDoc={preview?.content ?? ""}
           sandbox="allow-same-origin allow-modals"

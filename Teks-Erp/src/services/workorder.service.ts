@@ -118,6 +118,7 @@ import {
   recordWorkOrderFieldDiffTx,
 } from "./helpers/workorder-field-diff.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { assertTargetValueItems, targetValuesNestedCreate, type TargetValueItem } from "./helpers/workorder-target-value.helper";
 import { assertTargetColorChange } from "./helpers/workorder-target-color.helper";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
 import {
@@ -514,6 +515,8 @@ export interface WorkOrderCreateInput {
    * dolu ise bu liste onun alt kümesi olmalı.
    */
   targetPropertyIds?: string[];
+  /** KQ-D6: hedef çeşit değerleri (hedef kurşun gramajı) — `WorkOrderTargetValue`. */
+  targetValues?: TargetValueItem[];
   /**
    * Rota adımları — routeTemplateId verilmezse zorunlu.
    * Şablon verilirse bu alan override için kullanılabilir.
@@ -1070,6 +1073,7 @@ export class WorkOrderService {
     /** Engel olmayan planlama notları — yanıtta `warnings` olarak döner. */
     const routeWarnings: string[] = [...planWarnings];
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
+    const targetValues = data.targetValues ?? [];
     if (
       targetPropertyIds.length === 0 &&
       type === "ORDER_PRODUCTION" &&
@@ -1110,6 +1114,8 @@ export class WorkOrderService {
           );
         }
       }
+
+      await assertTargetValueItems(prisma, targetValues);
 
       // Özellik allowed list kontrolü
       if (targetPropertyIds.length > 0) {
@@ -1287,6 +1293,7 @@ export class WorkOrderService {
                 },
               }
             : {}),
+          ...targetValuesNestedCreate(targetValues, userId),
         },
         include: {
           steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
@@ -1343,6 +1350,7 @@ export class WorkOrderService {
         targetItemId:       workOrder.targetItemId,
         targetColorId:      workOrder.targetColorId,
         targetPropertyIds,
+        targetValues,
       },
     });
 

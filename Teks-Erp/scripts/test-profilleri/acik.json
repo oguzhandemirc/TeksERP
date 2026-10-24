@@ -13,6 +13,8 @@
     "devereEnabled": true,
     "dokumaEnabled": true,
     "emanetEnabled": true,
+    "kaliteGuvenceEnabled": true,
+    "maliyetEnabled": true,
     "pricingEnabled": true,
     "financeBlockNegativeCashEnabled": true,
     "financeInvoiceMatchTolerance": true,
