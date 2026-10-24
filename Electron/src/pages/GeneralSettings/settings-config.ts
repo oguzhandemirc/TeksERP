@@ -20,6 +20,7 @@ import {
   Warehouse,
   LifeBuoy,
   Cloud,
+  BarChart3,
   Bell,
   type LucideIcon,
 } from "lucide-react";
@@ -713,6 +714,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Depocu", "Planlamacı", "Yönetim"],
         desc: "Açıkken top, levent ve iplik lotunda “sahibi olan müşteri” alanı açılır; emanet mal ayrı sayılır. Kapalıyken (varsayılan) alan çizilmez, yazılamaz ve her mal fabrikanın sayılır.",
+      },
+      {
+        // Ön koşul `production.enabled` (iplik ihtiyaç planı üretim dengesini okur); Üretim listenin başında.
+        key: "maliyetEnabled",
+        title: "Maliyet & Teklif modülünü aç",
+        summary:
+          "Ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi ve iplik ihtiyaç planı yüzeyleri açılır.",
+        defaultOn: false,
+        audience: ["Muhasebeci", "Planlamacı", "Yönetim"],
+        desc: "Açıkken maliyet ve teklif ekranları ile uçları açılır (ekranlar sonraki sürümlerde gelir). Kapalıyken (varsayılan) uçlar 403 verir, menü çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
       },
       // ⚠️ `kumasTeknikEnabled` BİLEREK BURADA YOK: arkasında henüz hiçbir
       // yüzey/kapı yok, satırı yalnız "açtım ama hiçbir şey olmadı" üretirdi.
@@ -2020,6 +2031,29 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Yönetim"],
         desc: "Açıkken bulutun takip ettiği bir kayıt değişince 3 sn içindeki değişiklikler birleştirilip kısa bir eşitleme turu koşar (iki tur arası en az 15 sn); kiradaki aralık turu emniyet olarak sürer. Kapalıyken (varsayılan) veri yalnız kiradaki aralıkta (genelde 5 dk) gider. Patron bulutu hakkı olmayan kurulumda hiçbir durumda dışarı istek atılmaz.",
+      },
+    ],
+  },
+  {
+    // Raporlar v2 geçişi: bayrak açılınca rapor menüsü sade temel raporları gösterir (R0-SABLON);
+    // eski 36 rapor yönlendirmesiz yerinde kalır. Varsayılan KAPALI = bugünkü menü.
+    id: "reports",
+    label: "Raporlar",
+    icon: BarChart3,
+    description: "Rapor menüsünün hangi düzenle gösterileceği.",
+    keywords: "rapor raporlar rapor merkezi yeni rapor temel rapor eski raporlar v2 menü karne",
+    kind: "flags",
+    section: "system",
+    // Sistem bölümünün öteki bayrak kategorileriyle (Destek, Patron Bulutu) aynı dar izin.
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
+    flags: [
+      {
+        key: "reportsV2Enabled",
+        title: "Yeni rapor merkezi (Raporlar v2)",
+        summary: "Açıkken rapor menüsü sade temel raporları gösterir; eski raporlar 'Eski raporlar' bölümünde kalır.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken rapor menüsü sade temel raporları gösterir; eski raporlar 'Eski raporlar' bölümünde kalır ve kendi adreslerinden açılmaya devam eder (otomatik yönlendirme yok). Kapalıyken (varsayılan) bugünkü rapor menüsü aynen kalır.",
       },
     ],
   },

@@ -54,7 +54,7 @@
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** Backend'de yalnız izinli paket listesindeki paketler kullanılır; yeni ihtiyaçta önce 'kendin yaz' denenir (node-cron→setInterval, handlebars→kendi şablon motoru, CSV paketi→hiç). <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** Backend'de yalnız izinli paket listesindeki paketler kullanılır; yeni ihtiyaçta önce 'kendin yaz' denenir (node-cron→setInterval, handlebars→kendi şablon motoru, CSV paketi→hiç). 'handlebars→kendi motor' örneği belge şablon TASARIMCISI için GEÇERSİZ → 2026-10-24: orada katı `liquidjs` 10.30.0 SABİT izinli (RAW_HTML kendi motorunda kalır). <sub>(CLAUDE.md:152)</sub>
 
 ### Kararlar
 

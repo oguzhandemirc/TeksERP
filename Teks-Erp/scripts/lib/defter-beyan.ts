@@ -274,10 +274,10 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       "src/services/workorder-manual-move.service.ts", "src/services/workorder-split.service.ts",
     ], { yari: true }),
 
-  D("RollOperation", "kurşun/QC2/tambur/fason kanıtı", { tur: "DAMGA", kolon: "revokedAt" },
+  D("RollOperation", "kurşun/QC2/tambur/fason kanıtı; propertyValueId (kurşun gramajı, KQ-D4) ileri kaydın parçası — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeRollOperations" }],
-    ["src/services/inventory.service.ts", "src/services/kursun-qc.service.ts",
-     "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
+    ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory.service.ts",
+     "src/services/kursun-qc.service.ts", "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
 
   D("RollVariance", "fire · düzeltme · aşım defteri", { tur: "DAMGA", kolon: "reversedAt" },
     [
@@ -566,6 +566,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "kalıcı sayaç/rapor SystemLog'tan değil KALICI KOLONDAN okunur ⇒ audit satırı silindiğinde raporlanan hiçbir sayı değişmez",
     kararUfku: "6 ayda arşivlenir; iş kaynağı olarak okunmaz. ⚠️ ÇÜRÜTMENİN ZAYIF HALKASI ÖLÇÜLDÜ (2026-09-13): audit satırı BİR sayaçta okunuyor — backup-impact.service.ts:331 `systemLog.count`. Ama o satır \"İş kaybı DEĞİL — iz kaydı\" etiketiyle `system` grubunda duruyor (iş sayısı değil) ve kod arşivleme ufkunu ZATEN biliyor: :404 `_min(createdAt)` ile kapsamı ölçüp en eski log cutoff'tan sonraysa rollup'ı alt sınır saymıyor, \"ölçülemedi\" diyor — 0 demiyor. Panzehir yerinde olduğu için sınıf TELEMETRİ kalır. Audit'e uzanma ihtiyacı bir DEFTER EKSİKLİĞİNİN işaretidir (bkz. SackAllocation borcu)." },
 
+  // Yazdırma geçmişi (izlenebilirlik A1): "kim neyi hangi yazıcıdan bastı, ne düştü".
+  { model: "PrintJob", sinif: "TELEMETRI",
+    gerekce: "basım hareketi telemetrisi; tek yazar/okuyucu `src/services/print-job.service.ts`, hiçbir rapor sayısı ya da iş kararı bu tablodan okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
+    kararUfku: "YOK — iptal guard'ı labelPrintedAt okur; print_jobs hiçbir karara girmez. Budama yalnız YAŞA bağlıdır (`printLog.retentionDays`, varsayılan 180 gün, 0 = budama yok)",
+    silen: ["src/services/print-job.service.ts"] },
+
   // Patron bulutu eşitlemesi (B1): satırı uygulama kodu DEĞİL silme/ayrılma tetikleyicileri yazar.
   { model: "SyncMark", sinif: "TELEMETRI",
     gerekce: "patron bulutu eşitleme işareti (SILINDI/KIRLI) — yalnız \"bu kökü buluta yeniden gönder\" der; tek okuyucusu eşitleme taramasıdır (src/cloud-sync/change-scan.ts), hiçbir rapor/ekran/karar okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
@@ -582,6 +588,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "backend güncellemesinin panel ONAYI (Dağıtım v2): güncelleyicinin niyet dosyasına giden TETİK, yetki değil — silinse raporlanan hiçbir sayı değişmez; \"ne oldu\"nun sahibi güncelleyicinin işlem geçmişi (`gecmis.jsonl`, `onayId` ile) ve satıcının `kurulum_kaydi` defteridir; satır silinmez, güncellenmez — geri alma da yeni bir satırdır, yürürlükteki = en son satır (`services/update-approval.service.ts`)" },
   { model: "CloudInboxReceipt", sinif: "DURUM",
     gerekce: "patron bulutu mesajının TEK KULLANIMLIK tüketim kaydı (idempotency makbuzu): iş sonucu varlığın KENDİ defterinde (sipariş/cari), ters yolu da onun ters yoludur (sipariş iptali · kart arşivi); makbuz silinmez, güncellenmez, geri alınmaz — silinse raporlanan sayı değişmez ama aynı mesaj ikinci varlık doğururdu" },
+  { model: "ReportDefinitionVersion", sinif: "DURUM",
+    gerekce: "rapor tanımı gövdesinin DEĞİŞMEZ sürümü (rapor v2 R1-SEMA, append-only): rapor sayıları canlı veriden hesaplanır, sürüm satırı silinse raporlanan hiçbir sayı değişmez ⇒ defter değil; ters mekanizması = YENİ SÜRÜM SATIRI (düzenleme de geri alma da yeni satırdır), yürürlükteki = `ReportDefinition.activeVersionId` (atomik claim) — satır güncellenmez, silinmez" },
 ];
 
 // =============================================================================
