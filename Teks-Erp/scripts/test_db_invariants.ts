@@ -852,6 +852,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // 2026-09-22 — numara serisi (20260922140000_number_series). Hane sayısı 1..8:
   // 1 = dolgusuz (günlük parti no emsali), 8 = VarChar(64) kolonların pratik tavanı.
   // Sıfır hane sayacı görünmez kılar, 9+ hane kodu okunmaz uzunluğa taşır.
+  // 2026-10-24 sed 1..9 (20261024081443): GİB e-İrsaliye 9 hane; diğerlerinde kapı 1..8.
   { table: "number_series", name: "number_series_digits_range" },
   // 2026-09-23 — sayaç ayarları (20260923120000_number_series_counter). Üçü de
   // uygulama kapısının DB İKİZİ (çift yüklem): kapı 400 döner, sed bozuk satırı
@@ -861,6 +862,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "number_series", name: "number_series_start_value_positive" },
   { table: "number_series", name: "number_series_step_positive" },
   { table: "number_series", name: "number_series_max_value_range" },
+  // 2026-10-24 — başlangıcın yılı (20261024083651): yıl yalnız başlangıçla anlamlı.
+  { table: "number_series", name: "number_series_start_value_year_check" },
   // 2026-09-23 — biçim zaman çizgisi (20260923200000_number_series_line).
   // Hane sedi `number_series` ile AYNI: satır ile önbellek ayrı sedlerde olsaydı
   // biri geçerli, öteki geçersiz bir biçim kabul edebilirdi.

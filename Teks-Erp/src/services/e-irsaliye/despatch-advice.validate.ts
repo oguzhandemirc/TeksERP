@@ -124,7 +124,7 @@ function checkLines(push: Push, input: DespatchInput): void {
 
 function checkHeader(push: Push, input: DespatchInput): void {
   if (!DOCUMENT_NO_RE.test(input.documentNo ?? "")) {
-    push.add("documentNo", "Belge numarası GİB biçiminde olmalı: 3 karakter seri + 4 hane yıl + 9 hane sıra (ör. EIR2026000000001)");
+    push.add("documentNo", "Belge numarası GİB biçiminde olmalı: 3 karakter seri + 4 hane yıl + 9 hane sıra");
   }
   if (!ETTN_RE.test(input.ettn ?? "")) push.add("ettn", "ETTN geçerli bir UUID olmalı");
   if (!isRealDate(input.issueDate ?? "")) push.add("issueDate", "Düzenleme tarihi YYYY-AA-GG biçiminde olmalı");

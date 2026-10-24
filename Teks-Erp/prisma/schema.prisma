@@ -5993,6 +5993,10 @@ model NumberSeries {
   startValue Int?
   step       Int?
   maxValue   Int?
+  /// BAŞLANGIÇ DEĞERİNİN GEÇERLİ OLDUĞU FABRİKA YILI — NULL = her dönemde (bugünkü
+  /// davranış). Yalnız sabit biçimli (`fixedShape`) seri yazar: başka programdan
+  /// yıl ortasında geçen fabrika o yılın sırasını sürdürür, ertesi yıl 1'den başlar.
+  startValueYear Int?
 
   /// ÜST SINIRA VARINCA NE OLACAK — hata mı, BAŞA DÖNME mi? (D2③)
   ///
