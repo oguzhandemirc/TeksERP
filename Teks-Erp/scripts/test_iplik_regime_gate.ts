@@ -125,6 +125,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "okur (servis içinde, route prisma import etmez). Yazma yok; iplik kapalı kurulumda lot süzgeci 0 levent → boş rapor.",
   },
   {
+    dosya: "routes/reports/temel-uretim.routes.ts",
+    neden:
+      "RAPORLAR v2 TEMEL RAPORLAR (R0-RAPB) — kalite karnesini ÇAĞIRIR, `quality.routes.ts` ile aynı gerekçe: iplik/dokuma " +
+      "kullanmayan fabrikada da çalışır, iplik dokunuşu SALT-OKUMADIR ve yalnız `lotNo` verildiğinde (`resolveBeamLotFilter`); " +
+      "kayıp raporunun levent kaynağı dokuma+devere kapalıysa hiç okunmaz. Yazma yok.",
+  },
+  {
     dosya: "routes/reports/quality.routes.ts",
     neden:
       "KALİTE/FİRE KARNESİ (R5b-b levent/lot ekseni). Rapor kapısı KONULAMAZ: karne iplik/dokuma kullanmayan fabrikada " +
