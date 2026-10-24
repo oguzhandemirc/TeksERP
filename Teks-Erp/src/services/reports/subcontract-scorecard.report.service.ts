@@ -86,6 +86,10 @@ export interface SubcontractScorecard extends WithSecenekler {
     avgTurnaroundDays: number | null;
     prevFirePct?: number;
     prevDispatchedQty?: number;
+    /** Önceki dönem fire metresi (yalnız kapanmış kalemler; temel rapor kıyası). */
+    prevFireQty?: number;
+    /** Önceki dönem ortalama dönüş süresi (gün; kapanmış kalem yoksa null — temel rapor kıyası). */
+    prevAvgTurnaroundDays?: number | null;
   };
   bySubcontractor: SubcontractScorecardRow[];
   /** Dönemde AÇIK kalan en yaşlı sevkler — operasyonel takip listesi. */
@@ -173,6 +177,8 @@ export async function getSubcontractScorecard(
     const p = sumCells(prevCells);
     summary.prevFirePct = pctOf(fireOf(p), p.closedDispatchedQty);
     summary.prevDispatchedQty = round1(p.dispatchedQty);
+    summary.prevFireQty = round1(fireOf(p));
+    summary.prevAvgTurnaroundDays = avgTurnaround(p);
   }
 
   return {
