@@ -931,6 +931,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "notification_inbox", name: "notification_inbox_klass_ck" },
   { table: "notification_inbox", name: "notification_inbox_reason_ck" },
   { table: "notification_inbox", name: "notification_inbox_count_ck" },
+  // Belge şablon tasarımcısı (T1B, 2026-10-24): şablon durumu ve kip kümeleri kapalı.
+  { table: "document_templates", name: "document_templates_status_check" },
+  { table: "document_templates", name: "document_templates_edit_mode_check" },
+  { table: "document_template_versions", name: "document_template_versions_edit_mode_check" },
   { table: "notification_daily_stats", name: "notification_daily_stats_events_ck" },
   // e-İrsaliye (E1-SEMA): numaralı/gönderilmiş durum çift yüklemi · GİB biçimi · sayaç · doğuş olayı.
   { table: "e_irsaliyeler", name: "e_irsaliyeler_numarali_durum_chk" },
@@ -1206,6 +1210,11 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "shipment_orders_sync_dirty",
     timing: ["AFTER INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "sync_mark_shipment_orders()"],
     why: "patron bulutu filigransız küme: shipment_orders ne id ne updatedAt taşır, her yazım sevkiyatı KIRLI yapar",
+  },  {
+    table: "document_template_versions",
+    trigger: "document_template_versions_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "document_template_version_guard()"],
+    why: "belge şablonu: sürüm değişmezdir — içerik UPDATE'i ve yayınlanmış sürümün DELETE'i reddedilir (basılan belge sürümü dondurur)",
   },
   {
     table: "devices",
@@ -1364,6 +1373,11 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["TG_OP IN ('UPDATE', 'DELETE')", "TG_OP IN ('INSERT', 'UPDATE')", "'shipments'", "'DIRTY'"],
     why: "patron bulutu: sevkiyat ↔ sipariş kümesinin her yazımı (ekleme/güncelleme/silme) sevkiyatı KIRLI yapar",
+  },  {
+    name: "document_template_version_guard",
+    volatility: "v",
+    bodyFragments: ['OLD."publishedAt" IS NOT NULL', 'NEW."compiledLiquid" IS DISTINCT FROM OLD."compiledLiquid"', 'NEW."settings" IS DISTINCT FROM OLD."settings"', "yalnız bir kez"],
+    why: "belge şablonu: sürüm içeriği değişmez, yayın damgası bir kez yazılır, yayınlanmış sürüm silinmez",
   },
   {
     name: "devices_merge_no_chain",
