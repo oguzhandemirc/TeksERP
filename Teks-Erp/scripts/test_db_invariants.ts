@@ -116,6 +116,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "geri alınmış iz dururken aynı (top, adım, tip) yeniden yazılabilsin",
   },
+  // fabric_properties — KQ-D4 (migration 20261024073000): bir bayrağın TEK çeşidi.
+  {
+    table: "fabric_properties",
+    index: "fabric_properties_variant_of_uq",
+    uniq: true,
+    predicate: `("variantOfPropertyId" IS NOT NULL)`,
+    why: "bir bayrağın en fazla bir çeşidi (Kurşunlu → Kurşun gramajı)",
+  },
   // sack_allocations — K2 (2026-09-14): tahsis sil-yaz'dan damgaya döndü; tam unique
   // damgalı satır dururken aynı (çuval, satır)ın yeniden tahsisini engellerdi → PARTIAL.
   {
@@ -567,6 +575,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("processedAt" IS NULL)`,
     why: "dağıtıcı süpürmesi yalnız işlenmemiş kuyruğu tarasın (işlenmiş satırlar indekse girmez)",
   },
+  // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): "varsayılan ön ayar" seddi.
+  {
+    table: "report_presets",
+    index: "report_presets_one_default_uq",
+    uniq: true,
+    predicate: `("isDefault" = true)`,
+    why: "kullanıcı başına rapor başına tek varsayılan ön ayar — düşerse iki varsayılan yarışır, rapor hangi parametreyle açılacağını dizi sırasına bırakır",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -727,6 +743,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // "SUM(qty)" yazan her raporu sessizce yanlışlar (biri işareti dikkate alır,
   // diğeri almaz) ve bu yıllar sonra fark edilir.
   { table: "roll_variances", name: "roll_variances_qty_positive" },
+  // 2026-10-24 — KQ-D4 (migration 20261024073000_kursun_gramaj_cesit): gramaj değeri
+  // yalnız KURSUN_APPLIED satırında; özellik kendi kendisinin çeşidi olamaz.
+  { table: "roll_operations", name: "roll_operations_property_value_ck" },
+  { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
   // dokunduğu için yıllarca ihlal edilebiliyordu (T1-044 · T1-001 · T1-002 ·
@@ -882,6 +902,18 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "notification_inbox", name: "notification_inbox_reason_ck" },
   { table: "notification_inbox", name: "notification_inbox_count_ck" },
   { table: "notification_daily_stats", name: "notification_daily_stats_events_ck" },
+  // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): kapalı kümeler VarChar + CHECK
+  // (`defect_types.defectGroup` bilinçli CHECK'siz — küme kodda). Tanım biçimi: SISTEM ⇒ anahtarlı ve
+  // sahipsiz, OZEL ⇒ sahipli ve anahtarsız. Sürüm no ≥ 1; koşu süresi/satır negatif olamaz.
+  { table: "report_definitions", name: "report_definitions_kind_ck" },
+  { table: "report_definitions", name: "report_definitions_visibility_ck" },
+  { table: "report_definitions", name: "report_definitions_status_ck" },
+  { table: "report_definitions", name: "report_definitions_kind_shape_ck" },
+  { table: "report_definition_versions", name: "report_definition_versions_version_no_ck" },
+  { table: "report_shares", name: "report_shares_access_ck" },
+  { table: "report_runs", name: "report_runs_status_ck" },
+  { table: "report_runs", name: "report_runs_counts_ck" },
+  { table: "report_snapshots", name: "report_snapshots_kind_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

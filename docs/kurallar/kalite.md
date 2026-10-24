@@ -40,6 +40,14 @@
 - **[ÇEKİRDEK]** Faz B AÇIK — türe bağlı kalan yerler: bypass 'sonraki adım TAMBUR' şartı (R3), mobil ekran seçimi kind→ekran (R4, APK), RollError açılış yeri (R5, partial unique 409), dashboard ham SQL (R6), `QC2_COMPLETED` semantiği (R9), roll-finalize son-adım dalı (R10). İlk farklı-topolojili müşteride; canlı fabrikada talepsiz değiştirilmez. · bekçi: `yok (plan dokümanı; regresyon yüzeyi: test_e2e_full_flow, test_kursun_bypass, test_kursun_regime_lock, test_qc2_idempotency, mobil stationScreens.test.ts + useVisibleScreens.test.ts — plan "tile-visibility.test" der, o ad yok)` · Kapanır: `yedi R'nin her birinde "türe bakan karşılaştırma" sayısı 0 olduğunda — bugünkü sayım (2026-09-13, grep): R1 0 (KQ-D2 2026-10-24: kart okutması adımı oturum istasyonundan çözer) · R3 bypass helper kind!==TAMBUR 1 · R4 mobil/src PROCESS_QC 23 satır · R5 RollError yazan üç serviste PROCESS_QC 29 satır · R6 dashboard.service ham SQL kind='RAW_QC' 1 · R9 src QC2_COMPLETED 42 satır · R10 roll-finalize.helper StationKind 0 (jenerik; plan listesi bunu güncellemedi); "Faz B kapandı" bu yedi sayının yedisi de 0 iken denir, öncesinde denmez` · Öncül: ölçüldü <sub>(CLAUDE.md:100, CLAUDE.md:174, CLAUDE.md:176)</sub>
 - **[PROFİL]** Seed kalite hedefleri: 1.KALİTE ve A1 → WAREHOUSE (ikisi de SATILABİLİR), FİRE → SCRAP (2026-08-20 'fire çöpe gider', migration 20260820030000). Kalite kodu koda GÖMÜLMEZ (`code === 'FIRE'` reddedildi) — kova `targetStatus`/katalogdan çözülür. <sub>(CLAUDE.md:17)</sub>
 
+### K4P — Kalite Güvence
+
+- **[ÇEKİRDEK]** Muayene derecesini `QualityGrade` kataloğundan seç; paralel derece tablosu açma (A/B/C bant etiketidir). <sub>(arşiv 2026-10-24 "K4P zemin kararı")</sub>
+- **[ÇEKİRDEK]** Muayene hatasını `RollError origin=INSPECTION` olarak yaz; paralel hata tablosu kurma. <sub>(arşiv 2026-10-24)</sub>
+- **[ÇEKİRDEK]** Müşteri spesifikasyonunu yalnız görünüm/rapor hesabında kullan; muayene kaydına ve dereceye yazma. <sub>(arşiv 2026-10-24)</sub>
+- **[ÇEKİRDEK]** Modül kapalıyken (`kaliteGuvence.enabled`, varsayılan KAPALI) INSPECTION satırı doğurma; kapı `requireKaliteGuvenceEnabled` / `readKaliteGuvenceEnabled`. · bekçi: `test_module_flag_off` (§2d route'suz satır) <sub>(arşiv 2026-10-24)</sub>
+- **[ÇEKİRDEK]** KK1 operatör şablonuna yalnız tablet kapsamlı muayene izni ver (`mobile:muayene`); `inspection:*` · `labtest:*` · `certificate:*` panel girişi açar, yalnız sorumlu/şef (`WEB_*`) şablonlarına girer. · bekçi: `test_role_template_catalog §2e` <sub>(patron kararı 2026-10-24; arşiv)</sub>
+
 ## Backend
 
 
@@ -102,7 +110,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_default_defect_type`, `test_station_step_resolution`, `test_panel_station_kind_aynasi`, `test_finalize_last_step`⚠️, `test_helpers`, `test_iade_enhancements`, `test_label_element_condition`, `test_manual_move_backflush`, `test_manual_move_qc_reversal`, `test_null_quality_visibility`, `test_p2_kk2reopen`, `test_phase1_uretim_hardening`, `test_phase3_stok_hardening`, `test_phase6_reporterror_concurrency`, `test_produced_buckets`, `test_qc2_idempotency`⚠️, `test_quality_batch_flags`, `test_quality_code_literal`, `test_quality_role_catalog`, `test_quality_scorecard`, `test_scrap_grade_label`, `test_scrap_scorecard`, `test_station_quality_capability`, `test_wo_manual_complete`
+Backend: `test_role_template_catalog` (§2e K4P operatör şablonu), `test_module_flag_off` (§2d), `test_default_defect_type`, `test_station_step_resolution`, `test_panel_station_kind_aynasi`, `test_finalize_last_step`⚠️, `test_helpers`, `test_iade_enhancements`, `test_label_element_condition`, `test_manual_move_backflush`, `test_manual_move_qc_reversal`, `test_null_quality_visibility`, `test_p2_kk2reopen`, `test_phase1_uretim_hardening`, `test_phase3_stok_hardening`, `test_phase6_reporterror_concurrency`, `test_produced_buckets`, `test_qc2_idempotency`⚠️, `test_quality_batch_flags`, `test_quality_code_literal`, `test_quality_role_catalog`, `test_quality_scorecard`, `test_scrap_grade_label`, `test_scrap_scorecard`, `test_station_quality_capability`, `test_wo_manual_complete`
 
 İstemci: `WorkOrderCompleteDialog.test.tsx`, `shortCutQuality.test.ts`
 

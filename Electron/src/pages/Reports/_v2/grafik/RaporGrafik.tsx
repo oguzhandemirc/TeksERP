@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
 import { GRAFIK_VERI_YOK, grafikBosMu, grafikSecenek } from "./secenek";
 import { ekranTemasi } from "./tema";
-import type { GrafikBlok } from "./tipler";
+import type { GrafikBlok } from "../sunum";
 
 interface Props {
   blok: GrafikBlok;

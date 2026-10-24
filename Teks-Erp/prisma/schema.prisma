@@ -594,6 +594,16 @@ model User {
   hallShiftDutyOverrides   HallShiftDutyOverride[] @relation("HallShiftDutyOverrideUser")
   loomAlarmTierRules       LoomAlarmTierRule[]     @relation("LoomAlarmTierRuleUser")
   notificationInbox        NotificationInbox[]     @relation("NotificationInboxUser")
+  reportCategoriesCreated  ReportCategory[]        @relation("ReportCategoryCreatedBy")
+  reportCategoriesUpdated  ReportCategory[]        @relation("ReportCategoryUpdatedBy")
+  reportDefinitionsOwned   ReportDefinition[]      @relation("ReportDefinitionOwner")
+  reportDefinitionsCreated ReportDefinition[]      @relation("ReportDefinitionCreatedBy")
+  reportDefinitionsUpdated ReportDefinition[]      @relation("ReportDefinitionUpdatedBy")
+  reportVersionsCreated    ReportDefinitionVersion[] @relation("ReportVersionCreatedBy")
+  reportPresetsOwned       ReportPreset[]          @relation("ReportPresetOwner")
+  reportShares             ReportShare[]           @relation("ReportShareUser")
+  reportRuns               ReportRun[]             @relation("ReportRunUser")
+  reportSnapshotsCreated   ReportSnapshot[]        @relation("ReportSnapshotCreatedBy")
   machineShiftStatsSealed  MachineShiftStat[]      @relation("MachineShiftStatSealedBy")
   machineShiftSealsActed   MachineShiftStatSeal[]  @relation("MachineShiftSealBy")
   createdPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceCreatedBy")
@@ -5039,6 +5049,9 @@ model DefectType {
   /// istemci listenin ilkini UYDURMAZ (çakılı varsayım kararı A, 2026-09-14).
   isDefault   Boolean         @default(false)
   isActive    Boolean         @default(true)
+  /// Rapor boyutu "hata grubu" (rapor v2 R1-SEMA). null = gruplanmamış. CHECK YOK: küme kodda
+  /// (`constants/hata-gruplari.ts`, R1-BOYUT) — yeni grup migration istemesin.
+  defectGroup String?         @db.VarChar(16)
   createdAt   DateTime        @default(now()) @db.Timestamptz
   updatedAt   DateTime        @updatedAt @db.Timestamptz
 
@@ -5178,6 +5191,10 @@ model RollOperation {
   /// Aggregation/istatistik sorguları bu satırları "WHERE inheritedFromParentRollId IS NULL"
   /// ile filtreleyerek çift sayımı önler.
   inheritedFromParentRollId String?           @db.Uuid
+  /// Uygulanan çeşit değeri (KQ-D4: kurşun gramajı) — İLERİ KAYDIN PARÇASI.
+  /// Yalnız KURSUN_APPLIED taşır (DB CHECK `roll_operations_property_value_ck`).
+  /// Düzeltme satırı değiştirmez: eski satır damgalanır, yenisi yazılır.
+  propertyValueId           String?           @db.Uuid
 
   /// GERİ ALMA (2026-09-11, defter doktrini) — satır SİLİNMEZ, damgalanır.
   /// Eskiden yedi yerde `deleteMany` ile siliniyordu: "bu topa kurşun uygulandı
@@ -5197,6 +5214,7 @@ model RollOperation {
   operator            User?         @relation(fields: [operatorId], references: [id])
   machine             Machine?      @relation(fields: [machineId], references: [id])
   inheritedFromParent Roll?         @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
+  propertyValue       FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
 
   /// Append-only işlem log'u → `updatedAt` YOK (konvansiyon). İki güncelleme
   /// yolu var, ikisi de satırın İÇERİĞİNİ değiştirmez: idempotent `upsert`
@@ -5216,6 +5234,7 @@ model RollOperation {
   @@index([operatorId])
   @@index([machineId])
   @@index([inheritedFromParentRollId])
+  @@index([propertyValueId])
   // Bir adımın işlem log'u (workOrderStepId filtreli + zaman sıralı)
   @@index([workOrderStepId, createdAt])
   // Operatör performans raporu createdAt aralığıyla tarar (H-14)
@@ -7974,6 +7993,15 @@ model FabricProperty {
   /// `RollProperty`/`WorkOrderTargetProperty` pivotlarına `valueId` eklenir.
   valueType FabricPropertyValueType @default(FLAG)
 
+  /// ÇEŞİT BAĞI (KQ-D4, 2026-10-24): bu SEÇİM özelliği şu BAYRAK özelliğinin
+  /// çeşididir ("Kurşun gramajı" → "Kurşunlu"). Değer basılınca bayrak türer ve
+  /// değer `RollOperation.propertyValueId`ye yazılır. Doğrulama tek yerde:
+  /// `helpers/property-variant.helper.ts`. DB'de unique PARTIAL'dır
+  /// (`WHERE NOT NULL`, bir bayrağın en fazla bir çeşidi); FK RESTRICT.
+  variantOfPropertyId String?         @unique(map: "fabric_properties_variant_of_uq") @db.Uuid
+  variantOf           FabricProperty? @relation("FabricPropertyVariant", fields: [variantOfPropertyId], references: [id], onDelete: Restrict)
+  variant             FabricProperty? @relation("FabricPropertyVariant")
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -8073,6 +8101,8 @@ model FabricPropertyValue {
   /// Bu değeri taşıyan toplar — FK `Restrict`, yani kullanılan değer silinemez
   /// (zaten silinmiyor: `fabric-property.service` pasifleştiriyor).
   rollProperties RollProperty[]
+  /// Bu değerle yazılmış operasyon izleri (kurşun gramajı, KQ-D4) — FK RESTRICT.
+  rollOperations RollOperation[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -11586,4 +11616,212 @@ model NotificationDailyStats {
 
   @@unique([factoryDay, kind])
   @@map("notification_daily_stats")
+}
+
+// =============================================================================
+// RAPOR V2 — KAYITLI / ÖZEL RAPORLAR (R1-SEMA, `docs/design/RAPORLAR-V2-PLAN.md` §3.3)
+// Migration `rapor_v2_cekirdek`. Yazan/okuyan kod R1-KAYIT (tanım/sürüm/ön ayar/paylaşım) ve
+// R1-SEMCEK (koşu/anlık görüntü). Kapalı kümeler VarChar + DB CHECK (ŞEMA-DIŞI, `test_db_invariants`).
+// =============================================================================
+
+/// KATALOG — rapor kategorisi/klasörü. `code` dolu = sistem kategorisi (boot uzlaştırması),
+/// null = kullanıcının. ≤2 seviye kuralı serviste (R1-KAYIT); pasife alma yalnız boş kategoride.
+model ReportCategory {
+  id        String  @id @default(uuid()) @db.Uuid
+  code      String? @unique @db.VarChar(48)
+  name      String  @db.VarChar(100)
+  /// Öz-FK; derinlik (≤2) servis kuralı — DB yalnız varlığı mühürler.
+  parentId  String? @db.Uuid
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // Kayıt künyesi (KAYIT-KUNYESI-TASARIM) — FK index bilinçli yok (DefectType emsali).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ReportCategoryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ReportCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  parent      ReportCategory?    @relation("ReportCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    ReportCategory[]   @relation("ReportCategoryTree")
+  definitions ReportDefinition[]
+
+  @@index([parentId])
+  @@map("report_categories")
+}
+
+/// KATALOG — rapor tanımı. SISTEM satırı koddan (gövdesi kod servisi, sürüm yok; `key` = katalog
+/// anahtarı); OZEL satırın gövdesi `activeVersion`dadır. Numara YOK (iş belgesi değil). Silinmez:
+/// "sil" = `status` ARSIV geçişi (atomik claim). ŞEMA-DIŞI CHECK: kind/visibility/status kümeleri +
+/// biçim (SISTEM ⇒ key dolu, sahipsiz; OZEL ⇒ sahipli, key boş).
+model ReportDefinition {
+  id              String  @id @default(uuid()) @db.Uuid
+  /// SISTEM · OZEL — VarChar + CHECK.
+  kind            String  @db.VarChar(16)
+  key             String? @unique @db.VarChar(64)
+  name            String  @db.VarChar(150)
+  description     String?
+  categoryId      String  @db.Uuid
+  ownerId         String? @db.Uuid
+  /// OZEL · PAYLASIMLI · HERKES — VarChar + CHECK.
+  visibility      String  @default("OZEL") @db.VarChar(16)
+  /// TASLAK · YAYINDA · ARSIV — VarChar + CHECK; geçiş atomik claim.
+  status          String  @default("TASLAK") @db.VarChar(16)
+  /// Yürürlükteki sürüm; değişim `updateMany WHERE {id, activeVersionId: beklenen}` → 0 ise 409.
+  activeVersionId String? @unique @db.Uuid
+  /// Tanımın başvurduğu alan/ölçü kataloğdan düştüyse true (çalıştırma fail-closed).
+  isBroken        Boolean @default(false)
+  /// İdempotency — yaratan uç (`clientToken @unique` sözleşmesi).
+  clientToken     String? @unique @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ReportDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ReportDefinitionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  category      ReportCategory           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  owner         User?                    @relation("ReportDefinitionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  activeVersion ReportDefinitionVersion? @relation("ReportDefinitionActiveVersion", fields: [activeVersionId], references: [id], onDelete: Restrict)
+  versions      ReportDefinitionVersion[] @relation("ReportDefinitionVersions")
+  presets       ReportPreset[]
+  shares        ReportShare[]
+  runs          ReportRun[]
+  snapshots     ReportSnapshot[]
+
+  @@index([categoryId])
+  @@index([ownerId])
+  @@map("report_definitions")
+}
+
+/// APPEND-ONLY (yalnız `createdAt`) — tanım gövdesinin DEĞİŞMEZ sürümü. Düzenleme ve geri alma
+/// YENİ SÜRÜM SATIRIDIR; satır güncellenmez/silinmez. `defter-beyan.ts` sınıfı DURUM (gerekçe orada).
+model ReportDefinitionVersion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  definitionId        String   @db.Uuid
+  /// 1'den başlar, tanım başına tekil (CHECK ≥ 1).
+  versionNo           Int
+  /// Rapor tanımı JSON'u (`semantik/rapor-tanimi.schema.ts`, zod `.strict()`).
+  body                Json
+  /// Gövdenin gerektirdiği izin kodları — yazım anında katalogdan türetilir.
+  requiredPermissions String[]
+  /// Sürümü yazan; servis her zaman doldurur. NULLABLE: künye kolonu sözleşmesi (`test_record_provenance` §3).
+  createdById         String?  @db.Uuid
+  note                String?  @db.VarChar(500)
+  createdAt           DateTime @default(now()) @db.Timestamptz
+
+  definition ReportDefinition  @relation("ReportDefinitionVersions", fields: [definitionId], references: [id], onDelete: Restrict)
+  createdBy  User?             @relation("ReportVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  activeFor  ReportDefinition? @relation("ReportDefinitionActiveVersion")
+  runs       ReportRun[]
+  snapshots  ReportSnapshot[]
+
+  @@unique([definitionId, versionNo])
+  @@map("report_definition_versions")
+}
+
+/// KATALOG — parametre ön ayarı ("Kaya Tekstil — son 3 ay"). ŞEMA-DIŞI partial unique:
+/// (definitionId, ownerId) WHERE isDefault — kullanıcı başına rapor başına tek varsayılan.
+model ReportPreset {
+  id           String   @id @default(uuid()) @db.Uuid
+  definitionId String   @db.Uuid
+  name         String   @db.VarChar(100)
+  params       Json
+  ownerId      String   @db.Uuid
+  isShared     Boolean  @default(false)
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  definition ReportDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  owner      User             @relation("ReportPresetOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([definitionId, ownerId])
+  @@index([ownerId])
+  @@map("report_presets")
+}
+
+/// PİVOT (saf yapılandırma, replace serbest) — tanımın kullanıcıya paylaşımı. `access` GOR · DUZENLE
+/// (VarChar + CHECK). Paylaşım rol değil kişi/herkes (plan P4).
+model ReportShare {
+  definitionId String   @db.Uuid
+  userId       String   @db.Uuid
+  access       String   @default("GOR") @db.VarChar(16)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  definition ReportDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  user       User             @relation("ReportShareUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([definitionId, userId])
+  @@index([userId])
+  @@map("report_shares")
+}
+
+/// TELEMETRİ (90 gün budanır, defter değil) — rapor koşusu ölçümü + iptal kimliği. `backendPid` tx
+/// başında `pg_backend_pid()`; iptal ucu `pg_cancel_backend` için okur. `status` CALISIYOR · TAMAM ·
+/// ZAMAN_ASIMI · IPTAL · HATA (VarChar + CHECK).
+model ReportRun {
+  id           String    @id @default(uuid()) @db.Uuid
+  definitionId String?   @db.Uuid
+  /// Sistem rapor anahtarı (tanım satırı olmadan koşan temel rapor için).
+  key          String?   @db.VarChar(64)
+  versionId    String?   @db.Uuid
+  /// Parametrelerin özeti (önbellek anahtarı parçası) — ham parametre değil.
+  paramsDigest String    @db.VarChar(64)
+  userId       String    @db.Uuid
+  startedAt    DateTime  @default(now()) @db.Timestamptz
+  durationMs   Int?
+  rowCount     Int?
+  status       String    @default("CALISIYOR") @db.VarChar(16)
+  errorCode    String?   @db.VarChar(64)
+  backendPid   Int?
+  createdAt    DateTime  @default(now()) @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @db.Timestamptz
+
+  definition ReportDefinition?        @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  version    ReportDefinitionVersion? @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  user       User                     @relation("ReportRunUser", fields: [userId], references: [id], onDelete: Restrict)
+  snapshots  ReportSnapshot[]
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([definitionId])
+  @@index([versionId])
+  @@index([createdAt])
+  @@map("report_runs")
+}
+
+/// TELEMETRİ / ayak izi — "24.10.2026 14:00 itibarıyla" anlık görüntü (sunum + anlatı). Silinince
+/// raporlanan sayı değişmez → defter değil. `runId` SET NULL: koşu budanınca görüntü yaşar.
+/// `kind` KULLANICI · ZAMANLANMIS (VarChar + CHECK).
+model ReportSnapshot {
+  id           String    @id @default(uuid()) @db.Uuid
+  runId        String?   @db.Uuid
+  definitionId String    @db.Uuid
+  /// SISTEM tanımında sürüm yoktur → null.
+  versionId    String?   @db.Uuid
+  params       Json
+  result       Json
+  kind         String    @default("KULLANICI") @db.VarChar(16)
+  /// İdempotency — yaratan uç (`clientToken @unique` sözleşmesi).
+  clientToken  String?   @unique @db.Uuid
+  expiresAt    DateTime? @db.Timestamptz
+  /// Görüntüyü alan kullanıcı; ZAMANLANMIS'ta null.
+  createdById  String?   @db.Uuid
+  createdAt    DateTime  @default(now()) @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @db.Timestamptz
+
+  run        ReportRun?               @relation(fields: [runId], references: [id], onDelete: SetNull)
+  definition ReportDefinition         @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  version    ReportDefinitionVersion? @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  createdBy  User?                    @relation("ReportSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([definitionId, createdAt(sort: Desc)])
+  @@index([runId])
+  @@index([versionId])
+  @@index([createdById])
+  @@index([expiresAt])
+  @@map("report_snapshots")
 }

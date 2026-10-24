@@ -6,6 +6,7 @@ import { categoryHasOpenReport } from "@/lib/report-gate";
 import { reportTiles } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
+import { ReportCenterPage } from "./_v2/ReportCenterPage";
 
 export function ReportsHubPage() {
   const { isAdmin, hasPermission } = useRoleAccess();
@@ -27,6 +28,8 @@ export function ReportsHubPage() {
       // Bütün raporları kapatılmış kategori karosu boş bir hub'a götürürdü (K5).
       categoryHasOpenReport(ctx.reportsClosedKeys, t.key),
   );
+  // Raporlar v2 (`reports.v2Enabled`): TEK dal — açıkken Rapor Merkezi; kapalıyken aşağısı bayt bayt bugünkü hub.
+  if (ctx.reportsV2Enabled) return <ReportCenterPage legacyTiles={tiles} />;
 
   return (
     <PageShell>
