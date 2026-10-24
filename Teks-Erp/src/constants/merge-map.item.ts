@@ -123,6 +123,8 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       // İki KAYNAK arasında geniş anahtar yanlış bloklardı (farklı müşterilerin istisnaları
       // ya da varsayılan + istisna aynı hedefte yan yana durabilir): iki partial UNIQUE'in birebiri.
       crossSourceOn: { columns: ["customerId", "kind", "currency"], nullSafe: ["customerId"] },
+      // Partial UNIQUE yalnız aktif satırda: damgalı fiyat geçmişi serbestçe taşınır (MAL-0b).
+      activeWhenNull: ["revokedAt"],
       policy: "BLOCK",
       why:
         "Hangi fiyatın geçerli olduğunu yalnız operatör bilir. Anahtar BİLEREK iki partial " +

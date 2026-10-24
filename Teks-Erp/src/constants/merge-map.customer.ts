@@ -153,6 +153,8 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       column: "customerId",
       label: "Müşteri fiyat istisnası",
       uniqueOn: ["itemId", "customerId", "kind", "currency"],
+      // Partial UNIQUE yalnız aktif satırda: damgalı fiyat geçmişi serbestçe taşınır (MAL-0b).
+      activeWhenNull: ["revokedAt"],
       policy: "BLOCK",
       why:
         "Hangi fiyatın geçerli olduğunu yalnız operatör bilir — biri sessizce silinirse fatura " +
