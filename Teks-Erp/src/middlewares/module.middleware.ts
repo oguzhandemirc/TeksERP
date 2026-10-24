@@ -1,5 +1,5 @@
 // =============================================================================
-// MODÜL REJİM KAPILARI (ticaret · iplik · çoklu depo · üretim)
+// MODÜL REJİM KAPILARI (ticaret · iplik · çoklu depo · üretim · dokuma · tezgah · maliyet)
 // =============================================================================
 // `finance.middleware.ts`in birebir ikizi ve aynı gerekçeyle yazıldı: modül
 // anahtarı bir GÖRÜNÜRLÜK ayarı DEĞİL, bir REJİM anahtarıdır. Menüyü gizlemek
@@ -63,6 +63,7 @@ import {
   readDevereEnabled,
   readDokumaEnabled,
   readIplikEnabled,
+  readMaliyetEnabled,
   readProductionEnabled,
   readTezgahEnabled,
   readTicaretEnabled,
@@ -231,6 +232,37 @@ export async function requireDokumaEnabled(
     const enabled = await readDokumaEnabled();
     if (!enabled) {
       throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma iş emri") ?? modulKapali("dokuma", "Dokuma iş emri");
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Maliyet & Teklif modülü: ürün maliyeti · standart maliyet · satış teklifi · fiyat listesi ·
+ * iplik ihtiyaç planı (MALIYET-TEKLIF-PLAN; uçlar MAL-1… dilimlerinde bu kapıya takılır).
+ *
+ * ⚠️ ÖN KOŞUL ÖNCE ÖLÇÜLÜR (`MODULE_DEPENDENCIES.maliyetEnabled = productionEnabled`):
+ * iplik ihtiyaç planı üretim dengesini okur. Mesaj EKSİK OLANI söyler (iplik kapısının dersi).
+ */
+export async function requireMaliyetEnabled(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const production = await readProductionEnabled();
+    if (!production) {
+      throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim") ?? AppError.forbidden(
+        "Maliyet & Teklif modülü Üretim modülüne bağlıdır; Üretim modülü bu kurulumda kapalı. " +
+          `${settingScreenPath("modules")} ekranından açılabilir.`,
+        { code: "MODULE_DISABLED", modul: "production", dependent: "maliyet" },
+      );
+    }
+    const enabled = await readMaliyetEnabled();
+    if (!enabled) {
+      throw licenseModuleError(SETTING_KEYS.MALIYET_ENABLED, "Maliyet & Teklif") ?? modulKapali("maliyet", "Maliyet & Teklif");
     }
     next();
   } catch (e) {

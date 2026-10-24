@@ -684,6 +684,8 @@ model User {
   credentialResetTargets          CredentialResetRequest[]  @relation("CredentialResetTarget")
   credentialResetsRequested       CredentialResetRequest[]  @relation("CredentialResetRequestedBy")
   credentialResetsDecided         CredentialResetRequest[]  @relation("CredentialResetDecidedBy")
+  /// Yazdırma geçmişi künyesi (kim bastı — telemetri, A1).
+  printJobs                       PrintJob[]                @relation("PrintJobUser")
 
   @@map("users")
 }
@@ -1026,10 +1028,10 @@ model Station {
   /// istasyonun TÜRÜNDEN (`StationKind`) türetilmez, kendi alanıdır — yoksa
   /// "devere" bir tür adı olur ve ikinci bir devere istasyonu tanımlanamazdı.
   /// Yüzeyi devere modülü açıkken çizilir; kapalıyken form alanı yoktur.
-  producesWarpBeam Boolean @default(false)
+  producesWarpBeam   Boolean @default(false)
   /// Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma tezgahı / raşel). VARSAYILAN FALSE = bugün.
   /// Yuva kapısı BUDUR; `Machine.warpBeamSlots` yalnız üst sınırdır (§9.7h).
-  consumesWarpBeam Boolean @default(false)
+  consumesWarpBeam   Boolean @default(false)
   /// Bu istasyonda akış etiketinin (top/kartela/çuval) VARSAYILAN adedi — yalnız
   /// `label.copiesSource = STATION` iken okunur; NULL = genel adet (`label.copies`).
   /// DB CHECK 1–5 (`stations_default_label_copies_range`); çözücü `label-copies.helper.ts`.
@@ -1218,6 +1220,7 @@ model Device {
   mergedCopies   Device[]              @relation("DeviceMergedInto")
   bindingEvents  DeviceBindingEvent[]
   rebindRequests DeviceRebindRequest[]
+  printJobs      PrintJob[]            @relation("PrintJobDevice")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1352,6 +1355,7 @@ model PeripheralDevice {
 
   templateRoutes PeripheralTemplateRoute[]
   deviceLinks    DevicePeripheral[] // YENİ: bu donanımı kullanan cihaz(lar) (çok-çok)
+  printJobs      PrintJob[]                @relation("PrintJobPeripheral")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -2524,11 +2528,11 @@ model MachineStopEvent {
   /// Kova budansa bile duran üretim çıpası.
   pickCounter     Decimal? @db.Decimal(18, 0)
 
-  source      MachineDataSource
-  collectorId String?           @db.Uuid
+  source        MachineDataSource
+  collectorId   String?           @db.Uuid
   /// Kart, İNSANIN açtığı açık duruşu SAHİPLENDİYSE kartın kendi duruş anahtarı (K1) — `stopKey`
   /// insanın kimliği olarak KALIR (tablet replay'i bozulmasın); kartın tekrarı ve kapanışı bununla bulunur.
-  signalStopKey String?         @db.Uuid
+  signalStopKey String?           @db.Uuid
 
   /// GERİ ALMA — hayalet duruş SİLİNMEZ, damgalanır.
   revokedAt    DateTime? @db.Timestamptz
@@ -11482,6 +11486,69 @@ model CredentialResetRequest {
   @@index([status, createdAt])
   @@index([targetUserId])
   @@map("credential_reset_requests")
+}
+
+/// YAZDIRMA GEÇMİŞİ (A1, `docs/design/IZLENEBILIRLIK-CIHAZ-PLAN.md` §3.1) — TELEMETRİ: hiçbir iş kararı okumaz
+/// (top iptal guard'ı `rolls.labelPrintedAt` okur), `printLog.retentionDays` (varsayılan 180) yaşında budanır.
+/// Yazan · okuyan · budayan TEK dosya `src/services/print-job.service.ts` (bekçi `test_print_jobs` §10).
+/// Şema dışı: CHECK'ler (outputKind · status · HATA→errorCode · itemCount/copies ≥1 · subjectIds ≤200),
+/// kısmi `(createdAt) WHERE status='HATA'` — `test_db_invariants` envanterinde.
+model PrintJob {
+  id                 String           @id @default(uuid()) @db.Uuid
+  /// İstemci raporunun mantıksal deneme kimliği; sunucuda doğan satırda NULL.
+  clientToken        String?          @unique @db.Uuid
+  requestId          String?          @db.Uuid
+  /// Token'dan (gövdeden ASLA). Künye FK; erişim `(userId, createdAt)` bileşiğiyle.
+  userId             String?          @db.Uuid
+  deviceRefId        String?          @db.Uuid
+  /// PANEL_MASAUSTU · PANEL_WEB · TABLET · TELEFON · SUNUCU — yalnız etiket.
+  source             String           @db.VarChar(16)
+  outputKind         String           @default("PRINTER") @db.VarChar(8)
+  appVersion         String?          @db.VarChar(32)
+  stationId          String?          @db.Uuid
+  machineId          String?          @db.Uuid
+  /// Katalog `src/constants/print-subject-catalog.ts` (DB CHECK yok: yeni tür migration istemesin).
+  subjectKind        String           @db.VarChar(40)
+  docType            PrintedDocType?
+  /// Polimorfik bağ — FK YOK (`PrintedDocument.sourceId` emsali): konu silinse de geçmiş satırı kalır.
+  subjectTable       String?          @db.VarChar(48)
+  subjectId          String?          @db.Uuid
+  subjectIds         String[]         @default([]) @db.Uuid
+  subjectNo          String?          @db.VarChar(64)
+  printedDocumentId  String?          @db.Uuid
+  docVersion         Int?
+  itemCount          Int              @default(1)
+  copies             Int              @default(1)
+  isReprint          Boolean?
+  transport          String?          @db.VarChar(16)
+  peripheralDeviceId String?          @db.Uuid
+  printerName        String?          @db.VarChar(120)
+  printerAddress     String?          @db.VarChar(128)
+  language           PrinterLanguage?
+  /// ILETILDI · HATA · IPTAL · BELIRSIZ · SIMULE (SIMULE başarı sayılmaz).
+  status             String           @db.VarChar(12)
+  errorCode          String?          @db.VarChar(60)
+  errorMessage       String?          @db.VarChar(300)
+  startedAt          DateTime?        @db.Timestamptz
+  finishedAt         DateTime?        @db.Timestamptz
+  durationMs         Int?
+  bytes              Int?
+  /// ≤2 KB (servis kırpar); KIMLIK_KARTI türünde hiç yazılmaz.
+  meta               Json?
+  createdAt          DateTime         @default(now()) @db.Timestamptz
+  updatedAt          DateTime         @updatedAt @db.Timestamptz
+
+  user       User?             @relation("PrintJobUser", fields: [userId], references: [id], onDelete: Restrict)
+  device     Device?           @relation("PrintJobDevice", fields: [deviceRefId], references: [id], onDelete: SetNull)
+  peripheral PeripheralDevice? @relation("PrintJobPeripheral", fields: [peripheralDeviceId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([peripheralDeviceId, createdAt])
+  @@index([deviceRefId, createdAt])
+  @@index([subjectTable, subjectId])
+  @@index([subjectIds], map: "print_jobs_subjectIds_gin", type: Gin)
+  @@map("print_jobs")
 }
 
 // =============================================================================

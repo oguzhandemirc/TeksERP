@@ -100,3 +100,27 @@ export function readClientVersionHeader(
   const trimmed = v.trim();
   return trimmed && isPlausibleVersion(trimmed) ? trimmed : null;
 }
+
+/**
+ * Yazdırma geçmişi satırının künyesi (izlenebilirlik A1): kurulum kimliği (masaüstü panelin
+ * `Device` satırını ADIYLA göstermek için), istemci türü (kaynak ETİKETİ) ve sürüm.
+ *
+ * ⚠️ YALNIZ GÖSTERİM — değer bir KAPIYA girmez; okuyucusu `test_client_registry` §1d'de beyanlıdır.
+ * Kabul kalıbına uymayan değer NULL sayılır (uydurulmaz).
+ */
+export function readClientLabelHeaders(
+  headers: Record<string, string | string[] | undefined>,
+): { instanceId: string | null; kind: ClientKind | null; version: string | null } {
+  const tek = (name: string): string | null => {
+    const raw = headers[name];
+    const v = Array.isArray(raw) ? raw[0] : raw;
+    return typeof v === "string" ? v.trim() : null;
+  };
+  const instanceId = tek(CLIENT_INFO_HEADERS.instance);
+  const kind = tek(CLIENT_INFO_HEADERS.kind);
+  return {
+    instanceId: instanceId && isPlausibleInstanceId(instanceId) ? instanceId : null,
+    kind: kind && isClientKind(kind) ? kind : null,
+    version: readClientVersionHeader(headers),
+  };
+}

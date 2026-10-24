@@ -208,7 +208,13 @@ const EXEMPT: Record<string, string> = {
  * her panel kullanıcısı açar ve "Sunucu" satırının durumunu görür (kullanıcı kararı). Gövde OPT-IN izdüşümdür
  * (`updateSummaryOf`; belirteç/politika/onaylayan yok) — `scripts/test_guncelleme_durumu.ts` §8g · §10 ölçer.
  */
-const BARE_CHAIN_BASELINE = 17;
+/**
+ * ⚠️ 17 → 18 (2026-10-24, izlenebilirlik A1, BİLİNÇLİ): `POST /api/print-jobs` yalnız `verifyToken` taşır — basan
+ * HER kullanıcı kendi basımını (hata · iptal · PDF) bildirebilmeli; izin kodu yazmak yazıcı hatasını en çok görecek
+ * operatörü susturur. Kullanıcı token'dan, gövde ≤ 8 KB, kullanıcı başına hız sınırlı; okuma uçları izinli
+ * (`admin:settings` | `system:print-history`) — `scripts/test_print_jobs.ts` §1–§4 ölçer.
+ */
+const BARE_CHAIN_BASELINE = 18;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;
