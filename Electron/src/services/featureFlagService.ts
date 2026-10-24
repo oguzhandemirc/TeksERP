@@ -364,6 +364,8 @@ export interface FeatureFlags {
   /** KAPALI rapor anahtarları (katalog `key`leri). `null` = liste OKUNAMADI — "hiçbiri kapalı
    *  değil" DEĞİL; panel fail-closed okur ve rapor çizmez (R2/K5). Yazmada `null` gönderilmez. */
   reportsClosedKeys: string[] | null;
+  /** Yeni rapor merkezi (Raporlar v2) — default false; bugün hiçbir davranışı değiştirmez (okuyucusu R0-SABLON). */
+  reportsV2Enabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */

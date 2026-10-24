@@ -6,7 +6,7 @@
 // =============================================================================
 import { describe, expect, it } from "vitest";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
-import { categoryHasOpenReport, isReportOpenWith, reportKeyOfPath } from "./report-gate";
+import { categoryHasOpenReport, isReportOpenWith, isReportSurfaced, reportKeyOfPath } from "./report-gate";
 
 const AKEY = REPORT_CATALOG.find((r) => r.panelYolu !== "")!.key;
 
@@ -40,5 +40,20 @@ describe("report-gate", () => {
     expect(categoryHasOpenReport(all, cat)).toBe(false);
     expect(categoryHasOpenReport(all.slice(1), cat)).toBe(true);
     expect(categoryHasOpenReport([], "yok-kategori")).toBe(false);
+  });
+
+  it("§5 v2 satırı ucu inene kadar (`hazir:false`) çizilmez; kategoriyi tek başına açık göstermez", () => {
+    const v1 = REPORT_CATALOG.filter((r) => r.nesil === "v1");
+    const v2 = REPORT_CATALOG.find((r) => r.nesil === "v2");
+    expect(v1.length).toBe(36); // körlük zemini: bugünkü yüzeyler 36 v1 satırını çizer
+    expect(v2).toBeDefined();
+    expect(v1.every(isReportSurfaced)).toBe(true);
+    expect(isReportSurfaced({ ...v2!, nesil: "v2", hazir: false })).toBe(false);
+    expect(isReportSurfaced({ ...v2!, nesil: "v2", hazir: true })).toBe(true);
+    // Bütün v1 satış raporları kapalıyken yalnız hazır OLMAYAN v2 satırları "açık" kalırsa kategori karosu YOK.
+    // (R0-RAPA satış satırlarını `hazir:true` yapınca bu kol kendiliğinden düşer; yüklem kolu yukarıda kalır.)
+    const salesV1 = v1.filter((r) => r.key.startsWith("sales/")).map((r) => r.key);
+    const salesV2 = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && r.nesil === "v2");
+    if (salesV2.every((r) => !isReportSurfaced(r))) expect(categoryHasOpenReport(salesV1, "sales")).toBe(false);
   });
 });
