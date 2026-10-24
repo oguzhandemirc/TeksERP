@@ -72,6 +72,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "patron bulutu eşitleme işareti; satırı DB tetikleyicileri yazar (uygulama CUD'u değil), uygulamanın tek yazımı yaşa göre budamadır (src/cloud-sync/marks-pruning.ts) — `defter.md` § Telemetri ≠ defter" },
   { model: "SyncWatermark", sinif: "SISTEM_ISI",
     gerekce: "eşitleme filigranı (durum tablosu) — yazan eşitleme işidir (bulut onayından sonra), audit'in öznesi olacak bir kullanıcı yoktur; iş kaydı değildir" },
+  { model: "ReportRun", sinif: "TELEMETRI",
+    gerekce: "semantik rapor koşu ölçümü + iptal kimliği (durum/süre/satır sayısı; budanır, R1-ZAMAN) — tek yazıcısı semantik çalıştırıcı, hiçbir rapor sayısı ona bağlı değil; silinince raporlanan sayı değişmez — `defter.md` § Telemetri ≠ defter" },
   { model: "ShiftInstance", sinif: "SISTEM_ISI",
     gerekce: "vardiya takvimi `jobs/shift-calendar.job` tarafından üretilir; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
 ];

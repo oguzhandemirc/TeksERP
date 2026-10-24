@@ -345,3 +345,6 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:tezgah-uyari", module: "MOBILE", category: "mobile", description: "Mobil — Uyarılar ekranı: tezgah alarmlarını görme, üstlenme/bırakma, susturma, not; bildirim" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];
+
+/** Tüm `report:*` kodları — semantik rapor uçlarının giriş kapısı ("herhangi bir rapor izni"; veri yetkisi derleyicide). */
+export const REPORT_PERMISSION_CODES: readonly string[] = PERMISSION_CATALOG.filter((p) => p.code.startsWith("report:")).map((p) => p.code);
