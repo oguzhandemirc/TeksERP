@@ -940,6 +940,29 @@ export const ENUM_LABELS: Record<string, string> = {
   PROOF_RESET: "Cihaz sırrı sıfırlandı",
   PURGED: "Kalıcı silindi",
   HW_CONFLICT: "Donanım özeti çakıştı",
+  // ── K4P 4 puan muayene (SEMA, 2026-10-24)
+  // RollErrorOrigin
+  PROCESS: "Süreç hatası",
+  INSPECTION: "Muayene hatası",
+  // FourPointSize (ASTM D5430 boyut sınıfı)
+  UP_TO_3IN: "≤ 7,5 cm (1 puan)",
+  IN_3_TO_6: "7,5–15 cm (2 puan)",
+  IN_6_TO_9: "15–23 cm (3 puan)",
+  OVER_9IN: "> 23 cm (4 puan)",
+  // InspectionPhase
+  RAW: "Ham muayene",
+  FINAL: "Mamul muayene",
+  // InspectionWidthSource — MANUAL ortak ("Elle girildi")
+  ITEM_CARD: "Ürün kartı eni",
+  ROLL_MEASURED: "Topta ölçülen en",
+  UNKNOWN: "En bilinmiyor",
+  // RuleScope — CUSTOMER ortak ("Müşteri")
+  FACTORY: "Fabrika varsayılanı",
+  // ScoreUnit
+  M2: "100 m² başına",
+  YD2: "100 yd² başına",
+  // RunningCap — METER/NONE FIELD_ENUM_OVERRIDES ile ayrılır
+  YARD: "Yarda başına en fazla 4 puan",
 };
 
 // =============================================================================
@@ -998,6 +1021,8 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "WARP_BEAM.originKind": { IN_HOUSE: "İçeride sarıldı" },
   // CashTxnKind.PAYMENT "ödeme satırı (çıkış)" — CariTxnSource.PAYMENT'ın "Tahsilat / Ödeme"si kasa türünde yanlış (tek yazar, 2026-09-18)
   "CASH_TRANSACTION.kind": { PAYMENT: "Ödeme" },
+  // RunningCap (K4P, 2026-10-24) — METER global "Metre Sayacı" (PeripheralKind), NONE global "Tarih yok" (NumberSeriesDateSegment); koşu tavanı için ikisi de yanlış
+  "FOUR_POINT_RULE_SET.runningCap": { METER: "Metre başına en fazla 4 puan", NONE: "Koşu tavanı yok" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
@@ -1131,6 +1156,12 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   REDDEDILDI: "CloudInboxOutcome(bulut makbuzu reddedildi) ve EIrsaliyeStatus(alıcı yanıtı red) — ikisi de 'Reddedildi'; ortak Türkçe doğru",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  METER:
+    "PeripheralKind('Metre Sayacı') ve RunningCap(koşu tavanı metre başına) — ortak cevap tavan için YANLIŞ; " +
+    "FOUR_POINT_RULE_SET.runningCap override'ı ile ayrıldı (K4P, 2026-10-24)",
+  NONE:
+    "NumberSeriesDateSegment('Tarih yok') ve RunningCap(koşu tavanı yok) — ortak cevap tavan için YANLIŞ; " +
+    "FOUR_POINT_RULE_SET.runningCap override'ı ile ayrıldı (K4P, 2026-10-24)",
   SHIPMENT:
     "WarehouseEventType('Sevk çıkışı') ve EIrsaliyeSourceType(kaydın kaynağı sevkiyat) — ortak cevap kaynak türü için YANLIŞ; " +
     "E_IRSALIYE.sourceType override'ı ile ayrıldı (2026-10-24)",
