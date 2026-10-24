@@ -637,6 +637,8 @@ export interface FeatureFlags {
    *  Backend ENFORCE eder — zamanlayıcı her turda okur, değişiklik için sunucuyu
    *  yeniden başlatmak GEREKMEZ (en geç 15 dk içinde geçerli olur). */
   backupHour: number;
+  // bildirim: kişisel gelen kutusu + yeni zil — default false (bugünkü zil); okuyan N1-ZIL.
+  bildirimGelenKutusuEnabled: boolean;
 }
 
 export { DEFAULT_COMPANY_LETTERHEAD };
