@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
@@ -93,6 +94,7 @@ export function ActivityPage() {
           </>
         }
       />
+      <RelocatedToolStrip host="/system/activity" />
       <ActivityFilters value={filters} onChange={setFilters} />
 
       <PageBody ref={rootRef}>

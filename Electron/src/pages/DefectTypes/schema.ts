@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DefectSeverity } from "@/types/enums";
+import { DEFECT_GROUPS } from "@/lib/hata-gruplari";
 
 export const defectTypeFormSchema = z.object({
   // Sınır DB kolonuyla birebir (DefectType.name @db.VarChar(100)) — panel
@@ -19,6 +20,8 @@ export const defectTypeFormSchema = z.object({
     .enum([DefectSeverity.MINOR, DefectSeverity.MAJOR, DefectSeverity.CRITICAL])
     .optional()
     .or(z.literal("")),
+  // Küme tek kaynaktan (backend `constants/hata-gruplari.ts` aynası); "" = gruplanmamış.
+  defectGroup: z.enum(DEFECT_GROUPS).or(z.literal("")),
   isActive: z.boolean(),
   isDefault: z.boolean(),
 });
@@ -29,6 +32,7 @@ export const defectTypeFormDefaults: DefectTypeFormValues = {
   name: "",
   description: "",
   severity: "",
+  defectGroup: "",
   isActive: true,
   isDefault: false,
 };
