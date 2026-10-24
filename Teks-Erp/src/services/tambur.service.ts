@@ -107,6 +107,7 @@ import {
   type KursunBypassTamburContext,
 } from "./kursun-bypass.service";
 import { TAMBUR_ENTRY_SOURCES } from "../constants/tambur-entry-sources";
+import { processMeterNumber } from "./helpers/roll-error-meter.helper";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -461,7 +462,7 @@ export class TamburService {
         errorCount: m.roll.errors.length,
         errors: m.roll.errors.map((e) => ({
           id: e.id,
-          startMeter: Number(e.startMeter),
+          startMeter: processMeterNumber(e),
           errorType: e.errorType,
         })),
         batchId: m.roll.batchId ?? null,
@@ -4143,7 +4144,7 @@ export class TamburService {
       kursunFinishedAt: m.roll.operations[0]?.createdAt.toISOString() ?? null,
       errors: m.roll.errors.map((e) => ({
         id: e.id,
-        startMeter: Number(e.startMeter),
+        startMeter: processMeterNumber(e),
         errorType: e.errorType,
       })),
     }));

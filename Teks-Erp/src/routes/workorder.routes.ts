@@ -9,6 +9,7 @@ import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
+import { getWorkOrderSummary, putTargetValues } from "../controllers/workorder-process.controller";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -546,6 +547,55 @@ router.patch(
  *         description: İş emri kilitlendi
  */
 router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), controller.lockWorkOrder);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/target-values:
+ *   put:
+ *     tags: [WorkOrders]
+ *     summary: Hedef çeşit değerleri (hedef kurşun gramajı) — fark bazlı; boş liste hepsini damgalar
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [items]
+ *             properties:
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     propertyId: { type: string, format: uuid }
+ *                     valueId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Hedef güncellendi (ya da aynıydı) }
+ *       400: { description: Özellik çeşit değil / değer o özelliğe ait değil }
+ */
+router.put("/:id/target-values", verifyToken, requirePermission("workorder:write"), putTargetValues);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/process-summary:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: İşlem özeti — kurşun gramajı dağılımı (tablet + kâğıt), hedef ve sapma
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ kursun: { target, rows, totals } }" }
+ */
+router.get("/:id/process-summary", verifyToken, requirePermission("workorder:read"), getWorkOrderSummary);
 
 // ── Sipariş bağlama + hedef düzeltme (2026-08-17 saha talepleri 8/10/12) ─────
 // Bu dört uç, "Düzenle" ekranını hiç açmadan TEK bir şeyi değiştirir. Gerekçe:

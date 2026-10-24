@@ -31,13 +31,28 @@ interface RequestContext {
   /// İSTEK KİMLİĞİ — bağlam kurulurken BİR KEZ üretilir (2026-08-19).
   /// `req`ten farklı olarak bu değer kopyalanabilir: istek boyunca değişmez.
   requestId: string;
+  /// Bu istekte yazılan audit satırı sayısı (izlenebilirlik B1). NESNE tutucu: istek başlığı yazımı
+  /// `finish`ten sonra okur — yanıttan sonra biten fire-and-forget audit de sayılır.
+  audit: { count: number };
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
 
 /** İsteği bağlam içinde çalıştırır — middleware tarafından çağrılır. */
 export function runWithRequestContext(req: Request, fn: () => void): void {
-  storage.run({ req, requestId: randomUUID() }, fn);
+  storage.run({ req, requestId: randomUUID(), audit: { count: 0 } }, fn);
+}
+
+/** İstek başlığı (`request-trace.middleware`) için kimlik + audit sayacı tutucusu; bağlam yoksa null. */
+export function currentTraceContext(): { requestId: string; audit: { count: number } } | null {
+  const ctx = storage.getStore();
+  return ctx ? { requestId: ctx.requestId, audit: ctx.audit } : null;
+}
+
+/** `AuditService` yazdığı satır sayısı kadar çağırır; bağlam yoksa (job/script) no-op. */
+export function incAuditCount(n = 1): void {
+  const ctx = storage.getStore();
+  if (ctx && n > 0) ctx.audit.count += n;
 }
 
 /** Audit için "nereden" bilgisi. Bağlam yoksa hepsi null. */
