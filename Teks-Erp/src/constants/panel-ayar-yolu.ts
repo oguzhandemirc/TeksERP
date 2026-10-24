@@ -21,6 +21,7 @@ export const PANEL_SETTING_SCREEN = {
   finance: "Sistem → Özellik Anahtarları → Muhasebe",
   session: "Sistem → Şirket & Güvenlik → Oturum & Güvenlik",
   company: "Sistem → Şirket & Güvenlik → Şirket Bilgileri",
+  "e-irsaliye": "Sistem → Şirket & Güvenlik → e-İrsaliye",
 } as const;
 
 export type PanelSettingScreen = keyof typeof PANEL_SETTING_SCREEN;

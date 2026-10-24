@@ -73,3 +73,10 @@ export const TEXT_LIMITS = {
 
 /** Yurt içi alıcının ülkesi — v1 yalnız DOMESTIC sevkiyat üretir. */
 export const DOMESTIC_COUNTRY_NAME = "Türkiye";
+
+// ── Yapılandırma kapısı (E3-AYAR, plan §0.3 P1 / §3.5) ─────────────────────────
+/** Ayarın kapalı kümesi. `yok` = bugünkü davranış (özellik yapılandırılmamış). */
+export const EIRSALIYE_ADAPTERS = ["yok", "disaAktar", "simulasyon"] as const;
+export type EIrsaliyeAdapter = (typeof EIRSALIYE_ADAPTERS)[number];
+/** Hazırlık kapısının "tanınan bağdaştırıcı" kümesi — E5 kayıt defteri (registry) doğunca oradan okunur. */
+export const EIRSALIYE_ACTIVE_ADAPTERS: ReadonlySet<EIrsaliyeAdapter> = new Set(["disaAktar", "simulasyon"]);

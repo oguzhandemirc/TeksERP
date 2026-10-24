@@ -17,6 +17,11 @@ import { TIMELINE_GROUPS, type TimelineGroup } from "../constants/workorder-even
 import { readFilterList } from "../utils/query-parser";
 import "../types/express-augment";
 
+export const targetValueItemSchema = z.object({
+  propertyId: z.string().uuid("Geçersiz özellik ID"),
+  valueId: z.string().uuid("Geçersiz değer ID"),
+}).strict();
+
 // Create + quick-start ortak alan şeması. refine'siz tutuluyor ki spread ile
 // (quickStartSchema) yeniden kullanılabilsin — refine ZodEffects'e çevirir, spread'i bozar.
 const workOrderCoreShape = {
@@ -74,6 +79,8 @@ const workOrderCoreShape = {
     .optional(),
   orderLineIds: z.array(z.string().uuid()).optional().nullable(),
   targetPropertyIds: z.array(z.string().uuid()).optional(),
+  // KQ-D6: hedef çeşit değeri (hedef kurşun gramajı) — plan alanı, toplara yayılmaz.
+  targetValues: z.array(targetValueItemSchema).max(20).optional(),
 };
 
 const hasRoute = (d: { routeTemplateId?: string | null; steps?: unknown[] | null }) =>
