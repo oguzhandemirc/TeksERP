@@ -42,6 +42,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereEnabled: A(true),
   dokumaEnabled: A(true),
   emanetEnabled: A(true),
+  maliyetEnabled: A(true),
   // ── ön muhasebe / ticaret ──────────────────────────────────────────────────
   pricingEnabled: A(true),
   financeBlockNegativeCashEnabled: A(true),
@@ -103,6 +104,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   workOrderQuickOwnOnlyEnabled: A(true),
   supportOwnTicketsOnlyEnabled: A(true),
   patronBulutOlayGudumluEnabled: A(true),
+  reportsV2Enabled: A(true),
   kk1OnlineOnlyEnabled: A(true),
   kk1LabelScanVerifyEnabled: A(true),
   kk1HistoryAllEntriesEnabled: A(true),

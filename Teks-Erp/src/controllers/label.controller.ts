@@ -6,6 +6,9 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { LabelKind } from "@prisma/client";
 import { labelKindSchema } from "../config/label-kind.schema";
+import { printJobAttachmentSchema, type PrintJobAttachment, type PrintJobReportOpt } from "../services/print-job.service";
+import { resolvePrintJobContext } from "../services/helpers/print-job-context.helper";
+import { PRINT_SUBJECT_IDS_MAX } from "../constants/print-subject-catalog";
 import { LabelService } from "../services/label.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { parseCopiesQuery } from "../services/helpers/label-copies.helper";
@@ -93,7 +96,22 @@ const printEventSchema = z.object({
   /** FİRE KAPISI açık geçişi — operatör "fire ama yine de bas" onayını verdi. */
   confirmScrap: z.boolean().optional(),
   peripheralId: z.string().uuid("Geçersiz cihaz ID").nullish(),
+  printJob: printJobAttachmentSchema.optional(),
 });
+
+/** Toplu top etiketi baskı izi — panelin birleşik belgesi basıldıktan sonra (A2). */
+const bulkPrintEventSchema = z.object({
+  rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top").max(PRINT_SUBJECT_IDS_MAX),
+  printJob: printJobAttachmentSchema.optional(),
+});
+
+/** Çuval baskı izi gövdesi — eski istemci gövdesiz çağırır. */
+const sackPrintEventSchema = z.object({ printJob: printJobAttachmentSchema.optional() }).optional();
+
+/** İş ucunun basım künyesi: istek bağlamı + gövdedeki isteğe bağlı `printJob`. */
+async function jobReport(req: Request, attachment?: PrintJobAttachment): Promise<PrintJobReportOpt> {
+  return { ctx: await resolvePrintJobContext(req), attachment };
+}
 
 /**
  * Fiziksel medya çözümü girdisi: explicit ?peripheralId= (cihaz medyası) veya makine
@@ -133,7 +151,7 @@ function loomCopiesQuery(req: Request): number | undefined {
 }
 
 /** print-event gövdesindeki isteğe bağlı `copies` (audit izine yazılır). */
-const loomPrintEventSchema = z.object({ copies: z.number().optional() }).optional();
+const loomPrintEventSchema = z.object({ copies: z.number().optional(), printJob: printJobAttachmentSchema.optional() }).optional();
 
 type LoomNativeResult = Awaited<ReturnType<LabelService["getMachineLabelNative"]>>;
 
@@ -347,7 +365,7 @@ export class LabelController {
         stock: req.query.stock === "1" || req.query.stock === "true",
         confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
         ...(await resolveFormatOpts(req)),
-      });
+      }, await resolvePrintJobContext(req));
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -368,7 +386,7 @@ export class LabelController {
   testNativeSend = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = testNativeSchema.parse(req.body);
-      const result = await this.service.testNativeSend(body);
+      const result = await this.service.testNativeSend(body, await resolvePrintJobContext(req));
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -525,7 +543,8 @@ export class LabelController {
   /** Çuval etiketi baskı izi (LABEL_PRINT_EVENT) — yalnız GERÇEK baskıda çağrılır. */
   recordSackPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.service.recordSackPrintEvent(req.params.id as string, req.user?.userId);
+      const body = sackPrintEventSchema.parse(req.body ?? undefined);
+      const result = await this.service.recordSackPrintEvent(req.params.id as string, req.user?.userId, await jobReport(req, body?.printJob));
       res.status(200).json(result);
     } catch (e) { next(e); }
   };
@@ -556,7 +575,8 @@ export class LabelController {
   recordMachinePrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = loomPrintEventSchema.parse(req.body ?? undefined);
-      res.status(200).json(await this.service.recordMachinePrintEvent(req.params.id as string, req.user?.userId, body?.copies));
+      const report = await jobReport(req, body?.printJob);
+      res.status(200).json(await this.service.recordMachinePrintEvent(req.params.id as string, req.user?.userId, body?.copies, report));
     } catch (e) { next(e); }
   };
 
@@ -584,7 +604,8 @@ export class LabelController {
   recordWarpBeamPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = loomPrintEventSchema.parse(req.body ?? undefined);
-      res.status(200).json(await this.service.recordWarpBeamPrintEvent(req.params.id as string, req.user?.userId, body?.copies));
+      const report = await jobReport(req, body?.printJob);
+      res.status(200).json(await this.service.recordWarpBeamPrintEvent(req.params.id as string, req.user?.userId, body?.copies, report));
     } catch (e) { next(e); }
   };
 
@@ -626,8 +647,18 @@ export class LabelController {
           deviceId: req.device?.id ?? undefined,
           machineId: stamp?.machineId ?? req.device?.machineId ?? undefined,
         },
+        await jobReport(req, body.printJob),
       );
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** POST /api/labels/rolls/bulk-print-event — toplu top etiketi damgası + tek basım satırı. */
+  recordBulkRollPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = bulkPrintEventSchema.parse(req.body);
+      const report = await jobReport(req, body.printJob);
+      res.status(200).json(await this.service.recordBulkRollPrintEvent(body.rollIds, req.user?.userId, report));
     } catch (e) { next(e); }
   };
 

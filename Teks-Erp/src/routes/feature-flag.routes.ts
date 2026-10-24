@@ -325,6 +325,8 @@ export const updateSchema = z.strictObject({
   // devere.autoConsume — tezgahtan doğan top leventten otomatik tüketim (default false = elle). Backend ENFORCE.
   devereAutoConsume: z.boolean().optional(),
   dokumaEnabled: z.boolean().optional(),
+  // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.
+  maliyetEnabled: z.boolean().optional(),
   // Z1 üretim belge zinciri — üç davranış bayrağı (varsayılan false = bağ opsiyonel). Backend ENFORCE.
   devereBeamWeavingLinkRequired: z.boolean().optional(),
   dokumaRunWeavingOrderRequired: z.boolean().optional(),
@@ -336,6 +338,8 @@ export const updateSchema = z.strictObject({
   // ile ADIYLA reddedilir; Zod'un `z.enum(29 anahtar)` hâli yalnız "geçersiz değer" derdi ve
   // panelde hangi anahtarın yanlış olduğu görünmezdi. Şemanın işi TİP, servisin işi KÜME.
   reportsClosedKeys: z.array(z.string()).optional(),
+  // reports.v2Enabled — yeni rapor merkezi (default FALSE = bugünkü rapor menüsü).
+  reportsV2Enabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),

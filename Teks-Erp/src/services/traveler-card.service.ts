@@ -33,6 +33,7 @@
 import { Request } from "express";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
+import { fromAttachment, recordPrintJob, type PrintJobReportOpt } from "./print-job.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { normalizeScanCode } from "../utils/code-format";
@@ -386,7 +387,7 @@ export class TravelerCardService {
    * bastığı sürümü geri bildirmesi + sunucunun sürüm oynamışsa 409 vermesidir;
    * "her ihtimale karşı temizleme" gibi yarım çözümler işareti tümden güvenilmez yapar.
    */
-  async recordPrintEvent(cardId: string, userId?: string): Promise<ApiResponse<null>> {
+  async recordPrintEvent(cardId: string, userId?: string, report?: PrintJobReportOpt): Promise<ApiResponse<null>> {
     const card = await prisma.travelerCard.findUnique({
       where: { id: cardId },
       select: {
@@ -453,6 +454,17 @@ export class TravelerCardService {
         version: plan.version,
       },
     });
+    if (report) {
+      await recordPrintJob(
+        fromAttachment(report.ctx, report.attachment, {
+          subjectKind: "REFAKAT_KARTI",
+          subjectTable: "traveler_cards",
+          subjectId: cardId,
+          subjectNo: card.cardNumber,
+          docVersion: plan.version,
+        }),
+      );
+    }
 
     return {
       success: true,

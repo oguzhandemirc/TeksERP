@@ -35,6 +35,9 @@
 - **[ÇEKİRDEK]** Katalogla büyüyen rapor kırılım listesi `capReportLists` (`REPORT_MAX_ROWS`) tavanından geçer ve kesme yanıtta `warnings` ile söylenir; rapora yeni dizi alanı ekleyen onu rotanın liste beyanına ya da bekçinin muaf listesine yazar. · bekçi: `test_rapor_satir_tavani` <sub>(arşiv 2026-10-13 Perf-2 B5)</sub>
 - **[ÇEKİRDEK]** Rapor yorum cümlesini yalnız `services/reports/anlati/` üret; ekran, PDF, Excel ve patron uygulaması aynı `anlati[]` metnini basar; formül dili (Σ, P90, ABC/RFM…) cümleye girmez. · bekçi: `scripts/test_rapor_anlati.ts` <sub>(Raporlar v2 R0-ANLATI, 2026-10-24)</sub>
 
+- **[ÇEKİRDEK]** Her v1 rapor satırı `yeniHali` taşır (`birlesti → <v2 anahtarı>` · `uzman` · `tasindi → <panel yolu>`); v2 satırı uç inene kadar `hazir:false` kalır ve hiçbir yüzeyde çizilmez — tek süzgeç `isReportSurfaced` (`report-catalog.ts`, panelde `lib/report-gate.ts`); "uzman araç" `sinif` değil `yeniHali`dir (`test_rapor_katalogu §8`).
+- **[ÇEKİRDEK]** Ölçünün adı ve günlük dil açıklaması yalnız `services/reports/semantik/tanimlar.ts`te yazılır; "fire", "iptal oranı", "zamanında teslim" tek tanımlıdır, açıklama formül içermez ve beyanlı kaynak alanı servis dosyasında ölçülür (`test_rapor_katalogu §9`).
+
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Damganın KAYNAK STATÜ LİSTESİ load-bearing: yalnız IN_PRODUCTION|STOCK|AT_SUBCONTRACTOR|RETURNED_FROM_SUBCONTRACTOR → WAREHOUSE|A1_STOCK|SCRAP geçişi finalizedAt yazar. SHIPPED/CANCELLED BİLEREK dışarıda: storno aylar önceki topu bugünün karnesine sokar. · bekçi: `scripts/test_quality_scorecard.ts §8 — ÖLÇÜLDÜ 2026-09-13: trigger'ın OLD kaynak listesine SHIPPED eklenince TAM 1 kontrol kırmızı (33/0 → 32/1), kırmızı olan "SHIPPED → WAREHOUSE (storno/iade) damgayı DEĞİŞTİRMEZ"` <sub>(CLAUDE.md:69)</sub>

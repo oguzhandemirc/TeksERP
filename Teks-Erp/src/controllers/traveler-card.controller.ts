@@ -6,6 +6,8 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { TravelerCardService } from "../services/traveler-card.service";
 import { normalizeTravelerCardConfig } from "../services/system-setting.service";
+import { printJobAttachmentSchema } from "../services/print-job.service";
+import { resolvePrintJobContext } from "../services/helpers/print-job-context.helper";
 import "../types/express-augment";
 
 /**
@@ -43,6 +45,9 @@ export const sampleHtmlSchema = z.object({
     })
     .optional(),
 });
+
+/** Baskı izi gövdesi — eski istemci gövdesiz çağırır; `printJob` isteğe bağlı basım künyesi. */
+const printEventBodySchema = z.object({ printJob: printJobAttachmentSchema.optional() }).optional();
 
 const reprintSchema = z.object({
   reason: z.string().trim().min(3, "Gerekçe en az 3 karakter olmalı").max(500),
@@ -203,10 +208,11 @@ export class TravelerCardController {
   /** POST /api/traveler-cards/:id/print-event — baskı gerçekleşti, bayat işaretini temizle */
   async recordPrintEvent(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.recordPrintEvent(
-        req.params.id as string,
-        req.user?.userId,
-      );
+      const body = printEventBodySchema.parse(req.body ?? undefined);
+      const result = await this.service.recordPrintEvent(req.params.id as string, req.user?.userId, {
+        ctx: await resolvePrintJobContext(req),
+        attachment: body?.printJob,
+      });
       res.status(200).json(result);
     } catch (error) {
       next(error);

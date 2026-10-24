@@ -31,7 +31,7 @@
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { REPORT_CATALOG } from "../src/constants/report-catalog";
+import { REPORT_CATALOG, isReportSurfaced } from "../src/constants/report-catalog";
 import { SUPERADMIN_ONLY_FLAG_KEYS, SUPERADMIN_ONLY_SETTING_KEYS, MODULE_FLAG_KEYS } from "../src/constants/module-flags";
 import { atlamaDefteri } from "./lib/atlama";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
@@ -94,7 +94,9 @@ async function main(): Promise<void> {
 
   // ── §2 SIRA ve §3 KAPSAMA ────────────────────────────────────────────────
   const beyan = new Map<string, { dosya: string; yol: string }[]>();
-  for (const r of REPORT_CATALOG) if (r.kapiTasiyici) beyan.set(r.key, [...r.kapiTasiyici]);
+  // Ucu inmemiş v2 satırı (`hazir:false`) ölçülmez — ters yönü (dosyada kapı var ama satır "hazır değil")
+  // `test_rapor_katalogu §8f` tutar; uç doğup beyan `hazir:true`ya dönmezse burada §3 BEYANSIZ UÇ olur.
+  for (const r of REPORT_CATALOG) if (r.kapiTasiyici && isReportSurfaced(r)) beyan.set(r.key, [...r.kapiTasiyici]);
   const beyanliUc = new Set([...beyan.values()].flat().map((k) => `${k.dosya}|${k.yol}`));
   check("§2z körlük zemini: katalog kapı taşıyıcısı beyan ediyor",
     beyanliUc.size >= 25, `${beyanliUc.size} uç · ${beyan.size} rapor`);

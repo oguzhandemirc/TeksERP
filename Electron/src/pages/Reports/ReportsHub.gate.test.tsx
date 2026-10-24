@@ -15,7 +15,7 @@ import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
-import { isReportOpenWith } from "@/lib/report-gate";
+import { isReportOpenWith, isReportSurfaced } from "@/lib/report-gate";
 
 let closed: string[] | null = [];
 const ctx = (): OperationsVisibilityContext => ({
@@ -43,7 +43,8 @@ import { ReportsHubPage } from "./ReportsHubPage";
 import { salesReportTiles } from "./Sales/tile-config";
 import { reportCommandSections } from "@/components/layout/command-entries.reports";
 
-const SALES_KEYS = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/")).map((r) => r.key);
+// Karo taşıyan satırlar: ucu inmemiş v2 satırı (`hazir:false`) bugün hiçbir yüzeyde çizilmez.
+const SALES_KEYS = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && isReportSurfaced(r)).map((r) => r.key);
 const INTAKE = "sales/order-intake";
 const intakeTile = salesReportTiles.find((t) => t.to.endsWith(INTAKE))!;
 
