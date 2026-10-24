@@ -12,6 +12,7 @@ import { AuditService } from "../services/audit.service";
 import { readLastAuditChainReport, verifyAndRecordAuditChain } from "../services/audit-chain.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { TotpAccountService } from "../services/totp-account.service";
+import { pruneNotifications } from "../services/notification-prune.service";
 import { readAuditArchiveRetentionYears } from "../services/system-setting.service";
 import { auditArchivePurgeCutoff, nextAuditPurgeSliceEnd } from "../services/helpers/audit-retention.helper";
 import { isInMaintenanceWindow } from "../services/helpers/maintenance-window.helper";
@@ -121,6 +122,15 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
         payload: { olderThanDays: TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS, deleted: r.deleted },
       });
       return `2FA kurulum penceresi: ${r.deleted} süresi dolmuş satır silindi`;
+    },
+  },
+  {
+    // Bildirim telemetrisi (plan §3.4): bayrak kapalıyken de koşar — kapatılmış kutunun eski satırı da yaşlanır.
+    name: "notification-prune",
+    run: async () => {
+      const r = await pruneNotifications();
+      const total = r.inbox + r.outbox + r.conditions + r.dailyStats;
+      return total > 0 ? `bildirim: kutu ${r.inbox} · outbox ${r.outbox} · koşul ${r.conditions} · sayaç ${r.dailyStats} satır budandı` : null;
     },
   },
 ];
