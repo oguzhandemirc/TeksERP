@@ -234,6 +234,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   demoModeEnabled: "cekirdek",
   supportOwnTicketsOnlyEnabled: "cekirdek",
   patronBulutOlayGudumluEnabled: "cekirdek",
+  reportsV2Enabled: "cekirdek",
   devicePairingRequired: "cekirdek",
   deviceProofRequired: "cekirdek",
   shortCredentialApprovedDeviceOnly: "cekirdek",
