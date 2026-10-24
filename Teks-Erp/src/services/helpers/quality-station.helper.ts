@@ -1,15 +1,15 @@
 // =============================================================================
-// TeksERP — "Bu ADIM kalite kontrol yürütür mü?" — İKİZ BOĞAZ (2026-09-03)
+// TeksERP — İstasyon yetenek İKİZLERİ (2026-09-03 kalite ikizi; 2026-10-24 KQ-D1)
 // =============================================================================
-// Bu soruya eskiden `step.station.kind === StationKind.PROCESS_QC` diye cevap
-// veriliyordu ve literal 19 karar noktasına ELLE kopyalanmıştı. Yani "kalite"
-// bir YETENEK değil bir TÜR ADIydı: ikinci bir KK istasyonu tanımlamak
-// imkânsızdı ve tek bir kopyanın atlanması sessiz bir davranış farkı üretirdi.
+// AKIŞ İKİZİ: "Bu ADIM ara-istasyon kart akışında mı yürür (kart → top başına
+// tamamla → adımı kapat)? Kurşun kuyruğu / dağıtım adayı mı?" Bu ikiz eskiden
+// "kalite" adını taşıyordu ama cevapladığı soru AKIŞTIR (KQ planı T1); ad
+// soruya göre düzeltildi, gövde BAYT-EŞİT kaldı.
 //
 // BOĞAZ TEK DEĞİL İKİZ — çünkü karar noktaları İKİ FARKLI ŞEKİLDE:
 //
-//   (a) BELLEK-İÇİ kontrol (7 nokta) → `stepCanApplyQuality(station)`
-//   (b) PRİSMA WHERE parçası (12 nokta) → `station: { ...QUALITY_STATION_WHERE }`
+//   (a) BELLEK-İÇİ kontrol → `stepRunsStepFlow(station)`
+//   (b) PRİSMA WHERE parçası → `station: { ...STEP_FLOW_WHERE }`
 //
 // Saf boolean yüklem (b) noktalarında KULLANILAMAZ: sorgu DB'de koşuyor.
 // Özellikle `kursun-qc.setQueueUrgent` F167 atomik claim'inin WHERE'i —
@@ -23,34 +23,37 @@
 //
 // ÜÇÜNCÜ ŞEKİL BİLİNÇLİ OLARAK DIŞARIDA: `expectedKind` ARGÜMANI alan jenerik
 // yardımcılar. `roll-step.helper.assertWoAtStepKind` TAMBUR ile PAYLAŞILIYOR
-// (tambur.service:451, :3705) — imzasını yetenekleştirmek Tambur kart-okutma
-// yolunu da değiştirirdi, yani Faz A'nın "davranış birebir" iddiasını kırardı.
-// Tek PROCESS_QC çağrısı (kursun-qc:245) Faz B'ye bırakıldı, bekçide GEREKÇELİ
-// MUAF olarak durur.
+// (tambur.service kart okutma) — imzasını yetenekleştirmek Tambur kart-okutma
+// yolunu da değiştirirdi. Tek PROCESS_QC çağrısı (kursun-qc getByCardBarcode)
+// Faz B'ye bırakıldı, bekçide GEREKÇELİ MUAF olarak durur.
 //
-// ⚠️ `QUALITY_STATION_WHERE` `as const` DEĞİL `satisfies` ile yazılır:
+// ⚠️ WHERE parçaları `as const` DEĞİL `satisfies` ile yazılır:
 // readonly literal tip `OR:` konumunda Prisma'nın mutable input tipine oturmaz
 // ve her çağrı yerinde cast ister (`fason-open-dispatch.helper.ts:30-31` dersi).
 // ⚠️ Nesne MUTATE EDİLMEZ — her zaman spread ile kopyalanır (paylaşılan nesne).
-// ⚠️ `station: { OR: [...], ...QUALITY_STATION_WHERE }` yazılırsa biri SESSİZCE
+// ⚠️ `station: { OR: [...], ...STEP_FLOW_WHERE }` yazılırsa biri SESSİZCE
 // kaybolur (aynı anahtar) — spread'e ek `OR` koşulu eklenmez, gerekiyorsa
-// `AND: [{ ...QUALITY_STATION_WHERE }, { OR: [...] }]` yazılır.
+// `AND: [{ ...STEP_FLOW_WHERE }, { OR: [...] }]` yazılır.
 //
 // NEDEN AYRI DOSYA: `step-capability.helper.ts` saf TS'tir, Prisma tipi
 // import etmez — `Prisma.StationWhereInput` oraya girerse dosyanın karakteri
 // bozulur. Emsal: `fason-open-dispatch.helper.ts` (o da ayrı dosya).
 //
+// KALİTE İKİZİ (KQ-D1): "Bu istasyonda muayene (hata kaydı) açılır mı?" —
+// yalnız `Station.inspectionEnabled` okur; akış ikizinden AYRI çünkü Tambur
+// muayene yapar ama kart akışına girmez (girerse kurşun dağıtımına düşer).
+//
 // Bekçi: `scripts/test_station_quality_capability.ts`
 // =============================================================================
 
-import { Prisma, StationKind } from "@prisma/client";
+import { Prisma, StationKind, StationPropertyMode } from "@prisma/client";
 
 /**
  * Yüklemin okuduğu alanlar. Şekil BİLEREK dar (`step-capability.helper.ts`
  * 24-27 notunun aynı gerekçesi): yalnız kaliteyi soran çağıran renk/özellik
  * alanlarını taşımaz.
  */
-export interface QualityCaps {
+export interface StepFlowCaps {
   /**
    * ⚠️ FAZ A KÖPRÜSÜ — Faz B'de DÜŞER (aşağıdaki yüklem notu).
    */
@@ -65,10 +68,10 @@ export interface QualityCaps {
  * "yalnız appliesColor okuyan çağıranı appliesProperty seçmeye zorlama" diyor;
  * kaliteyi oraya eklemek aynı kuralı üçüncü kez ihlal ederdi.
  */
-export const STEP_QUALITY_SELECT = { kind: true, appliesQuality: true } as const;
+export const STEP_FLOW_SELECT = { kind: true, appliesQuality: true } as const;
 
 /**
- * Bu ADIM kalite kontrol (KK/muayene) süreci yürütür mü?
+ * Bu ADIM ara-istasyon kart akışında (Kurşun + KK2 ekranı) yürür mü?
  *
  * ⚠️ FAZ A KÖPRÜSÜ: `kind === PROCESS_QC` dalı BİLEREK duruyor. Migration
  * backfill'i mevcut satırları doldurur, AMA:
@@ -85,25 +88,90 @@ export const STEP_QUALITY_SELECT = { kind: true, appliesQuality: true } as const
  * argümanının kalitede karşılığı YOKTUR: `SubcontractorCategory`de
  * `appliesQuality` kolonu yok, çünkü fason firma kalite notu yazmaz.
  */
-export function stepCanApplyQuality(station: QualityCaps | null | undefined): boolean {
+export function stepRunsStepFlow(station: StepFlowCaps | null | undefined): boolean {
   if (!station) return false;
   return station.kind === StationKind.PROCESS_QC || station.appliesQuality;
 }
 
 /**
- * Yüklemin İKİZİ — "kalite yürüten istasyon" PRİSMA WHERE parçası.
- * Kullanım: `station: { ...QUALITY_STATION_WHERE }`
+ * Yüklemin İKİZİ — "kart akışı yürüten istasyon" PRİSMA WHERE parçası.
+ * Kullanım: `station: { ...STEP_FLOW_WHERE }`
  */
-export const QUALITY_STATION_WHERE = {
+export const STEP_FLOW_WHERE = {
   OR: [{ kind: StationKind.PROCESS_QC }, { appliesQuality: true }],
 } satisfies Prisma.StationWhereInput;
 
 /**
- * Kalite yürütmeyen adım için TEK hata metni.
+ * Kart akışı yürütmeyen adım için TEK hata metni.
  *
  * ⚠️ Metin yüklemden AYRIŞMAMALI: yüklem yeteneğe bakıp mesaj türü söylerse
  * (eski metinler "PROCESS_QC tipinde değil" diyordu) operatör, yeteneği kapalı
  * ama türü tam olarak PROCESS_QC olan bir istasyonda yanlış teşhis okur.
  */
-export const QUALITY_STEP_ERROR =
-  "Bu adım kalite kontrol yürütmüyor (Kurşun + KK2 yeteneği yok).";
+export const STEP_FLOW_ERROR =
+  "Bu adım ara-istasyon kart akışında yürümüyor (Kurşun + KK2 ekranı).";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KALİTE İKİZİ — muayene yeteneği (KQ-D1, 2026-10-24)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Kalite yükleminin okuduğu TEK alan — tür ve akış bayrağı BİLEREK yok. */
+export interface QualityCaps {
+  inspectionEnabled: boolean;
+}
+
+/** Kalite ikizinin `select` sözleşmesi — akış select'iyle karıştırılmaz. */
+export const STEP_QUALITY_SELECT = { inspectionEnabled: true } as const;
+
+/**
+ * Bu istasyonda kalite muayenesi (hata girişi) açılır mı?
+ * ⚠️ Gövde `kind`/`appliesQuality` OKUMAZ (bekçi §9): tür dalı eklemek akış
+ * sorusunu geri getirir ve yöneticinin kapattığı muayeneyi sessizce açar.
+ */
+export function stepCanApplyQuality(station: QualityCaps | null | undefined): boolean {
+  return !!station && station.inspectionEnabled === true;
+}
+
+/** Kalite yükleminin İKİZİ. Kullanım: `station: { ...QUALITY_STATION_WHERE }` */
+export const QUALITY_STATION_WHERE = {
+  inspectionEnabled: true,
+} satisfies Prisma.StationWhereInput;
+
+/** Muayenesi kapalı istasyonda hata yazma/silme için TEK metin. */
+export const QUALITY_STEP_ERROR = "Bu istasyonda kalite muayenesi (hata girişi) kapalı.";
+
+/** K4P'nin adı — AYNI fonksiyon nesnesi (bekçi §10); ince sarmalayıcı açılmaz. */
+export const stationCanInspect = stepCanApplyQuality;
+
+/**
+ * Doğuşta muayene varsayılanı: migration'ın türettiği kümeyle AYNI (bekçi §7
+ * SQL ↔ bu tablo). Eski panel alanı göndermezse `station.service` create bunu
+ * kullanır; seed ve içe aktarım da buradan okur.
+ */
+export const INSPECTION_DEFAULT_KINDS = [StationKind.PROCESS_QC, StationKind.TAMBUR] as const;
+
+export function inspectionDefaultForKind(kind: StationKind | null | undefined): boolean {
+  return !!kind && (INSPECTION_DEFAULT_KINDS as readonly StationKind[]).includes(kind);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KURŞUN DAĞITIM HEDEFİ — üçüncü yüklem DEĞİL: akış ikizi ∧ KURSUN AUTO
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Kurşun özelliğinin kodu — `code === "KURSUN"` literali tek sabite iner. */
+export const KURSUN_PROPERTY_CODE = "KURSUN";
+
+/**
+ * `listDistribution` makine listesi ve `assign` kabulü bu TEK parçadan beslenir
+ * (liste = kabul). Tambur akışa girmediği için muayenesi açık olsa da düşmez.
+ */
+export const KURSUN_DISPATCH_STATION_WHERE = {
+  AND: [
+    { ...STEP_FLOW_WHERE },
+    {
+      propertyCapabilities: {
+        some: { mode: StationPropertyMode.AUTO, property: { code: KURSUN_PROPERTY_CODE } },
+      },
+    },
+  ],
+} satisfies Prisma.StationWhereInput;

@@ -16,7 +16,8 @@ export function capabilityChips(s: Station): string[] {
   const out: string[] = [];
   if (s.appliesColor) out.push("Renk");
   if (s.appliesProperty) out.push("Özellik");
-  if (s.appliesQuality) out.push("Kalite");
+  if (s.inspectionEnabled) out.push("Muayene");
+  if (s.appliesQuality) out.push("Kart akışı");
   if (s.producesWarpBeam) out.push("Levent sarar");
   if (s.consumesWarpBeam) out.push("Levent tüketir");
   return out;
