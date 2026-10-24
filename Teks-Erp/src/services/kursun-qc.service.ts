@@ -66,6 +66,7 @@ import {
 import { resolveKursunBypassEnabled } from "./system-setting.service";
 import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
 
 /**
  * "Açık (pending) bypass ataması" yüklemi — `kursun-bypass-guard.helper`
@@ -1354,7 +1355,7 @@ export class KursunQcService {
       cached.rollId === data.rollId &&
       cached.defectTypeId === data.defectTypeId &&
       cached.detectedAtStepId === data.stepId &&
-      new Prisma.Decimal(data.startMeter).equals(cached.startMeter);
+      new Prisma.Decimal(data.startMeter).equals(requireProcessMeter(cached));
     if (!matches) {
       throw AppError.conflict(
         "Bu hata kimliği (clientErrorId) farklı bir kayıt için kullanılmış — " +
@@ -1491,7 +1492,7 @@ export class KursunQcService {
       if (!defectsByRoll.has(e.rollId)) defectsByRoll.set(e.rollId, []);
       defectsByRoll.get(e.rollId)!.push({
         id: e.id,
-        startMeter: Number(e.startMeter),
+        startMeter: processMeterNumber(e),
         defectTypeId: e.defectTypeId,
         errorType: e.errorType,
       });
