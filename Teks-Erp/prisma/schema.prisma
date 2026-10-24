@@ -10715,14 +10715,23 @@ model ItemPrice {
   item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
+  /// ③a TİCARİ PİVOT (2026-10-24, MAL-0b): satır SİLİNMEZ, fiyat yerinde EZİLMEZ — değişim
+  /// eski satırın damgası + YENİ satır, kaldırma damgadır; geçerlilik `[createdAt, revokedAt)`.
+  /// Okuma tek kaynaktan: `ACTIVE_ITEM_PRICE` / `itemPriceValidAt`. `revokedById` düz UUID.
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  // → partial: WHERE "customerId" IS NULL      (kart varsayılanı tektir)
+  // → partial: WHERE "customerId" IS NULL AND "revokedAt" IS NULL      (aktif kart varsayılanı tektir)
   @@unique([itemId, kind, currency], map: "item_price_default_uq")
-  // → partial: WHERE "customerId" IS NOT NULL  (müşteri istisnası tektir)
+  // → partial: WHERE "customerId" IS NOT NULL AND "revokedAt" IS NULL  (aktif müşteri istisnası tektir)
   @@unique([itemId, customerId, kind, currency], map: "item_price_customer_uq")
   @@index([customerId])
+  // "Fiyat şu tarih itibarıyla" okuması (`itemPriceValidAt`): anahtar + pencere başı.
+  @@index([itemId, kind, currency, createdAt], map: "item_prices_asof_idx")
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "item_prices_updatedAt_esitleme_idx")
   @@map("item_prices")
