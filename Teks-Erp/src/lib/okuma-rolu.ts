@@ -24,7 +24,10 @@ export const READ_ONLY_HIDDEN_TABLES: readonly string[] = [
 export const READ_ONLY_HIDDEN_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   users: ["passwordHash", "cardToken", "quickPin", "quickPinDigest", "cardTokenDigest", "totpSecret", "systemAccountSeal"],
   sessions: ["jti"],
-  devices: ["proofSalt"],
+  // hwDigest (eşleme v2): kimlik doğrulamaz ama bilen biri bayrak kapalı kurulumda yeni localId'yle cihaz satırını devralabilir.
+  devices: ["proofSalt", "hwDigest"],
+  device_binding_events: ["hwDigest"],
+  device_rebind_requests: ["hwDigest"],
   machine_collectors: ["secretSeed"],
 };
 
