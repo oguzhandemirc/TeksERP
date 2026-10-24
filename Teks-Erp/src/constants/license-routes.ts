@@ -107,6 +107,8 @@ export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/traveler-cards/:id/print-event", reason: "refakat kartı baskı ayak izi" },
   { method: "POST", path: "/api/work-orders/:id/traveler-cards/reprint", reason: "refakat kartı yeniden basımı" },
   { method: "POST", path: "/api/shipping/sack-search/pick-list/print", reason: "toplama listesi baskısı" },
+  { method: "POST", path: "/api/labels/rolls/bulk-print-event", reason: "toplu etiket baskı ayak izi (damga + yazdırma geçmişi)" },
+  { method: "POST", path: "/api/print-jobs", reason: "yazdırma geçmişi kaydı (telemetri); iş verisi yazmaz" },
   // Yedek (al · makine dışı kopya · DB kopyası)
   { method: "POST", path: "/api/admin/backup", reason: "yedek al (veri erişimi)" },
   { method: "PATCH", path: "/api/admin/backups/offsite", reason: "yedeğin makine dışı kopyası (veri erişimi)" },

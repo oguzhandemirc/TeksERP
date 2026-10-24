@@ -207,6 +207,8 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}credential-reset.service.ts::replayFor`]: ["hedef", "tur"],
   [`${S}license-acceptance.service.ts::replayFor`]: ["adSoyad", "unvan", "metinOzeti"],
   [`${S}update-approval.service.ts::replayFor`]: ["surum", "zamanlama", "onaylayan"],
+  // Yazdırma geçmişi raporu (izlenebilirlik A1): kim · tür · sonuç · kayıt · çıktı aynı basımı tanımlar.
+  [`${S}print-job.service.ts::reportReplay`]: ["kullanici", "tur", "sonuc", "kayit", "cikti"],
   [`${S}warp-beam-mount.service.ts::mountReplay`]: ["beamId", "kind", "machineId", "mountPosition"],
   [`${S}warp-beam-wind.service.ts::windReplay`]: ["beamId", "kind", "lengthM"],
   [`${S}warp-beam.service.ts::warpBeamReplay`]: ["warpSpecId", "originKind", "plannedLengthM", "subcontractorId", "supplierId", "ownerCustomerId", "weavingOrderId", "physicalBeamNo"],

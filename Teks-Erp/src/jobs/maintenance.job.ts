@@ -12,7 +12,8 @@ import { AuditService } from "../services/audit.service";
 import { readLastAuditChainReport, verifyAndRecordAuditChain } from "../services/audit-chain.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { TotpAccountService } from "../services/totp-account.service";
-import { readAuditArchiveRetentionYears } from "../services/system-setting.service";
+import { readAuditArchiveRetentionYears, readPrintLogRetentionDays } from "../services/system-setting.service";
+import { prunePrintJobs } from "../services/print-job.service";
 import { auditArchivePurgeCutoff, nextAuditPurgeSliceEnd } from "../services/helpers/audit-retention.helper";
 import { isInMaintenanceWindow } from "../services/helpers/maintenance-window.helper";
 import { factoryYmd } from "../constants/time";
@@ -121,6 +122,16 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
         payload: { olderThanDays: TOTP_ENROLLMENT_PURGE_OLDER_THAN_DAYS, deleted: r.deleted },
       });
       return `2FA kurulum penceresi: ${r.deleted} süresi dolmuş satır silindi`;
+    },
+  },
+  {
+    // Yazdırma geçmişi telemetridir: yalnız YAŞA göre budanır (`printLog.retentionDays`, 0 = budama yok).
+    name: "print-job-purge",
+    run: async () => {
+      const days = await readPrintLogRetentionDays();
+      const r = await prunePrintJobs(new Date(), days);
+      if (r.deleted === 0) return null;
+      return `yazdırma geçmişi: ${r.deleted} satır budandı (${days} günden eski)`;
     },
   },
 ];
