@@ -1,6 +1,7 @@
 import { registerSecureStoreIpc } from "./secure-store.ipc.js";
 import { registerDiscoveryIpc } from "./discovery.ipc.js";
 import { registerAppInfoIpc } from "./app-info.ipc.js";
+import { registerMachineIdIpc } from "./machine-id.ipc.js";
 import { registerWindowIpc } from "./window.ipc.js";
 import { registerSystemIpc } from "./system.ipc.js";
 import { registerPowerIpc } from "./power.ipc.js";
@@ -18,6 +19,7 @@ export function registerIpcHandlers(): void {
   registerSecureStoreIpc();
   registerDiscoveryIpc();
   registerAppInfoIpc();
+  registerMachineIdIpc();
   registerWindowIpc();
   registerSystemIpc();
   registerPowerIpc();
