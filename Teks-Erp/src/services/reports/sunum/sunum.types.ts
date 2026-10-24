@@ -189,6 +189,8 @@ export interface RaporSunumu {
   varyant?: VaryantBlok;
   donemler?: DonemBlok[];
   uyarilar: string[];
+  /** Kişi adı taşır (ör. operatör kırılımı) — patron bulutu sunumu okuyup bu raporu dışlar (K-KISI). */
+  kisiAdi?: true;
 }
 
 export const SIDE_FIGURE_LIMIT = 3;
