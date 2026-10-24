@@ -7,7 +7,7 @@
 // Bilinçli serbest: dış http(s) <img>/<a> (belge kararı); önizleme/PDF'te ağ zaten kapalı.
 // =============================================================================
 import { RAW_CONTENT_ELEMENTS, tokenizeHtml, type HtmlAttr, type HtmlToken } from "./template-html.tokenizer";
-import { classifyResourceUrl, sanitizeCss, stripUrlNoise, type UrlVerdict } from "./template-html.css";
+import { classifyResourceUrl, isExternalUrl, sanitizeCss, stripUrlNoise, type UrlVerdict } from "./template-html.css";
 import { decodeAttrEntities, encodeAttrValue } from "./template-html.entities";
 
 export const REMOVED = {
@@ -24,7 +24,13 @@ export const REMOVED = {
   tag: "izinsiz etiket",
   attr: "izinsiz öznitelik",
   loopMarker: "yanlış yerde döngü işareti",
+  external: "dış kaynak adresi (sıkı kip)",
 } as const;
+
+/** Sıkı kip (belge tasarımcısı şablonu): dış http(s) `<img src>`/`<a href>` ve CSS'te dış adres/`@font-face` de kesilir. */
+export interface SanitizeOptions {
+  readonly strict?: boolean;
+}
 
 const ALLOWED_TAGS: ReadonlySet<string> = new Set([
   "html", "head", "body", "title", "style", "meta",
@@ -126,6 +132,7 @@ const VERDICT_REMOVED: Readonly<Record<Exclude<UrlVerdict, "ok">, string>> = {
 
 class TemplateSanitizer {
   readonly removed = new Set<string>();
+  constructor(private readonly strict = false) {}
   private out = "";
   private skip: { name: string; depth: number } | null = null;
   private pendingRaw: { name: string; tag: string } | null = null;
@@ -208,7 +215,7 @@ class TemplateSanitizer {
     if (!pending) return;
     let body = this.stripLoopMarkers(text);
     if (pending.name === "style") {
-      const r = sanitizeCss(body);
+      const r = this.strict ? sanitizeCss(body, { strict: true }) : sanitizeCss(body);
       r.removed.forEach((x) => this.removed.add(x));
       body = r.css.replace(/<\/(style)/gi, "\\3c /$1");
     } else body = body.replace(/</g, "&lt;");
@@ -246,7 +253,7 @@ class TemplateSanitizer {
       return null;
     }
     if (a.name === "style") {
-      const r = sanitizeCss(decoded);
+      const r = this.strict ? sanitizeCss(decoded, { strict: true }) : sanitizeCss(decoded);
       r.removed.forEach((x) => this.removed.add(x));
       return r.css === decoded ? raw.replace(/"/g, "&quot;") : encodeAttrValue(r.css);
     }
@@ -254,6 +261,10 @@ class TemplateSanitizer {
     const verdict = stripUrlNoise(decoded).startsWith("{{") ? "url" : tag === "a" ? linkVerdict(decoded) : classifyResourceUrl(decoded);
     if (verdict !== "ok") {
       this.removed.add(VERDICT_REMOVED[verdict]);
+      return null;
+    }
+    if (this.strict && isExternalUrl(decoded)) {
+      this.removed.add(REMOVED.external);
       return null;
     }
     return encodeAttrValue(decoded);
@@ -266,8 +277,8 @@ export interface TemplateSanitizeResult {
 }
 
 /** Temizlenmiş HTML + kesilen kategoriler. İdempotent: ikinci geçiş aynı metni verir. */
-export function sanitizeUserHtml(html: string): TemplateSanitizeResult {
-  const s = new TemplateSanitizer();
+export function sanitizeUserHtml(html: string, opts: SanitizeOptions = {}): TemplateSanitizeResult {
+  const s = new TemplateSanitizer(opts.strict === true);
   const out = s.run(tokenizeHtml(html));
   return { html: out, removed: [...s.removed] };
 }
@@ -290,8 +301,9 @@ export function renderUserTemplate(
   template: string,
   fill: (safeTemplate: string, marker: (key: string) => string) => string,
   rawValues: Readonly<Record<string, string>>,
+  opts: SanitizeOptions = {},
 ): string {
-  const safe = sanitizeUserHtml(template).html;
+  const safe = sanitizeUserHtml(template, opts).html;
   const filled = fill(safe, (key) => RAW_OPEN + key + RAW_CLOSE);
-  return sanitizeUserHtml(filled).html.replace(RAW_MARK, (_m, key: string) => rawValues[key] ?? "");
+  return sanitizeUserHtml(filled, opts).html.replace(RAW_MARK, (_m, key: string) => rawValues[key] ?? "");
 }

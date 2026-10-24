@@ -10,6 +10,7 @@
 // KASITLI olarak yoktur. Şablon dili büyüdükçe (helper, koşul, kapsam) sunucuda
 // kullanıcı-yazımı mantık çalıştırmaya doğru kayar. İhtiyaç doğarsa çözüm yeni
 // bir sözdizimi değil, katalogda YENİ ALAN'dır (değer üretimi bizde kalır).
+// GEÇERSİZ → 2026-10-24 yalnız belge TASARIMCISI için (katı LiquidJS, bkz. arşiv 2026-10); bu motor için gerekçe GEÇERLİ.
 //
 // GÜVENLİK İKİ KATMANLI, ikisi de gerekli:
 //   1) `sanitizeTemplateHtml` — İZİN LİSTESİ temizleyicisi (template-html.sanitize.ts):

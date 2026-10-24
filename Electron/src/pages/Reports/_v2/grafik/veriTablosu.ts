@@ -1,8 +1,8 @@
 // Grafiğin VERİ TABLOSU — Excel'de grafik yerine bu sayfa, PDF'te SVG çizilemezse bu tablo.
 // Biçimler `REPORT_NUM_FMTS` kümesinden (PDF metni = Excel görünümü).
 import type { ReportColumn, ReportTableSpec } from "@/pages/Reports/_components/reportExport";
-import { kategoriEtiketi, kutuIstatistigi, sonlu } from "./bicim";
-import type { GrafikBlok } from "./tipler";
+import { kategoriEtiketi, kutuIstatistigi, sonlu, unitText } from "./bicim";
+import type { GrafikBlok } from "../sunum";
 
 /** Hepsi tam sayıysa ondalıksız, değilse tek hane; literal yazılır ki biçim bekçisi okuyabilsin. */
 function bicim(values: unknown[]): Pick<ReportColumn, "numFmt"> {
@@ -10,7 +10,7 @@ function bicim(values: unknown[]): Pick<ReportColumn, "numFmt"> {
 }
 
 export function grafikVeriTablosu(blok: GrafikBlok, ad: string): ReportTableSpec {
-  const birim = blok.eksen.y.birim;
+  const birim = unitText(blok.eksen.y.birim);
   const ek = birim ? ` (${birim})` : "";
   if (blok.tur === "kutu") {
     const ist = blok.seriler.map((s) => kutuIstatistigi(s.veri));

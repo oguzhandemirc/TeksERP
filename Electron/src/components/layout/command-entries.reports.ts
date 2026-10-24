@@ -1,4 +1,7 @@
+import { BarChart3 } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
+import { REPORT_CATALOG } from "@/lib/report-catalog";
+import { isCenterEntryOpen } from "@/pages/Reports/_v2/center-model";
 import { reportTiles, reportCategoryTiles } from "@/pages/Reports/tile-config";
 import { regimePredicate } from "@/lib/regime-predicate";
 import { categoryHasOpenReport, reportKeyOfPath } from "@/lib/report-gate";
@@ -60,4 +63,25 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     parent: { label: cat.title, to: cat.to },
     entries: [hub, ...subs],
   };
+});
+
+/**
+ * Raporlar v2 yaprakları — Rapor Merkezi ile AYNI yüklem (`isCenterEntryOpen`) + bayrak; izin
+ * girişin `permission`ında (satırın `izin`i = kategori izni). Bayrak kapalıyken hiçbiri görünmez.
+ */
+const reportV2Entries: CommandEntry[] = REPORT_CATALOG.filter((e) => e.nesil === "v2").map((e) => ({
+  key: `report-v2:${e.key}`,
+  label: e.baslik,
+  description: e.soru,
+  icon: BarChart3,
+  to: `/${e.panelYolu}`,
+  permission: e.izin,
+  visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true && isCenterEntryOpen(e, ctx),
+  keywords: "rapor raporlar rapor merkezi",
+}));
+
+reportCommandSections.push({
+  heading: "Raporlar · Rapor Merkezi",
+  parent: { label: "Raporlar", to: "/reports" },
+  entries: reportV2Entries,
 });
