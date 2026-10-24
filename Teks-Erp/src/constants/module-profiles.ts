@@ -21,8 +21,8 @@
 // Dilim 2'de (invoiceMode vb.) dolacak; şimdi açılmasaydı o gün dosya BİÇİMİ
 // değişirdi.
 //
-// ⚠️ FASON ve KARTELA anahtarsız (tasarım §2 on modül sayıyor, kodda yedi
-// anahtar var) → profil satırlarında YAZILMAZLAR. `screen-catalog.ts`
+// ⚠️ FASON ve KARTELA anahtarsız (tasarım §2'de modül, kodda anahtarı
+// yok) → profil satırlarında YAZILMAZLAR. `screen-catalog.ts`
 // `planlanan:*` değerleriyle aynı boşluğun ikizi.
 // =============================================================================
 
@@ -37,7 +37,7 @@ export interface ModuleProfile {
   /** Satıcının profili seçerken okuduğu tek cümle. */
   aciklama: string;
   /**
-   * DB anahtarı → değer. YEDİSİ DE zorunlu (bekçi §2 tamlığı ölçer):
+   * DB anahtarı → değer. HEPSİ zorunlu (bekçi §2 tamlığı ölçer):
    * eksik bırakılan anahtar "kod varsayılanına düşsün" demektir ve o varsayılan
    * profilin yanında GÖRÜNMEZ — profil tablosu okunabilirliğini kaybeder.
    */
@@ -70,6 +70,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, string>> = {
   "devere.enabled": "devereEnabled",
   "dokuma.enabled": "dokumaEnabled",
   "emanet.enabled": "emanetEnabled",
+  "maliyet.enabled": "maliyetEnabled",
 };
 
 /**
@@ -97,9 +98,13 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // Metin migration damgasıyla BİREBİR kalır (test_module_profile §6b/§6d) — görünen ad değişikliğinin dışında.
   "dokuma.enabled": "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
   "emanet.enabled": "Emanet / konsinye mülkiyet modülü (müşterinin malı: top · levent · iplik lotu; sevk sahiplik kapısı)",
+  "maliyet.enabled": "Maliyet & Teklif: ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi, iplik ihtiyaç planı",
 };
 
-/** Yedi anahtarı `false` doğuran taban — profil satırları yalnız AÇTIKLARINI yazar. */
+/** "Tam" profilinin bilinçli dışarıda bıraktığı modüller (her biri karar bekliyor). */
+export const TAM_DISI: ReadonlySet<string> = new Set(["maliyet.enabled"]);
+
+/** Bütün modül anahtarlarını `false` doğuran taban — profil satırları yalnız AÇTIKLARINI yazar. */
 function taban(): Record<string, boolean> {
   const out: Record<string, boolean> = {};
   for (const k of MODULE_SETTING_KEYS) out[k] = false;
@@ -121,7 +126,7 @@ function acik(...keys: string[]): Readonly<Record<string, boolean>> {
 }
 
 /**
- * Tasarım §10 tablosu (kod anahtarı olan yedi sütun).
+ * Tasarım §10 tablosu (kod anahtarı olan sütunlar).
  *
  * ⚠️ BAĞIMLILIK KURALI PROFİLLERDE DE GEÇERLİDİR (`MODULE_DEPENDENCIES`):
  * iplik → ticaret, tezgah → production. Bekçi §4 her profili SAF yüklemle
@@ -197,8 +202,10 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
   },
   tam: {
     ad: "Tam",
-    aciklama: "Dokuz modülün hepsi açık — demo ve iç test kurulumları.",
-    moduller: acik(...MODULE_SETTING_KEYS),
+    aciklama: "Maliyet & Teklif dışında bütün modüller açık — demo ve iç test kurulumları.",
+    // Maliyet "Tam"a girer mi kullanıcı kararı bekliyor (MALIYET-TEKLIF-PLAN §8-3); karar inene
+    // dek dışarıda — bugünkü Tam kurulumu modülü hiç görmemişti.
+    moduller: acik(...[...MODULE_SETTING_KEYS].filter((k) => !TAM_DISI.has(k))),
     bayraklar: {},
   },
 };

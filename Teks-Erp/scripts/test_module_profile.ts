@@ -131,7 +131,9 @@ const TASARIM_S10: Record<string, string[]> = {
     "devere.enabled",
     "dokuma.enabled",
   ],
-  tam: [...MODULE_SETTING_KEYS],
+  // 2026-10-24 — MAL-0: maliyet "Tam"a girer mi kullanıcı kararı bekliyor (MALIYET-TEKLIF-PLAN §8-3);
+  // karar inene dek Tam = maliyet DIŞINDAKİ hepsi. Literal elle yazıldı (profilin `TAM_DISI`inden türetilmez).
+  tam: [...MODULE_SETTING_KEYS].filter((k) => k !== "maliyet.enabled"),
 };
 
 async function main(): Promise<void> {
@@ -144,10 +146,10 @@ async function main(): Promise<void> {
     MODULE_PROFILE_IDS.length >= 2,
     `${MODULE_PROFILE_IDS.length} profil → ${MODULE_PROFILE_IDS.join(", ")}`,
   );
-  // 2026-09-15: on anahtar (emanet.enabled G3 ile doğdu; öncesi dokuz — dokuma 2026-09-13).
-  check("§1b Körlük zemini: MODULE_SETTING_KEYS dolu", beklenen.length === 10, `n=${beklenen.length}`);
+  // 2026-10-24: on bir anahtar (maliyet.enabled MAL-0 ile doğdu; öncesi on — emanet 2026-09-15).
+  check("§1b Körlük zemini: MODULE_SETTING_KEYS dolu", beklenen.length === 11, `n=${beklenen.length}`);
   check(
-    "§1c Körlük zemini: açıklama sabiti dokuz anahtarı da taşıyor",
+    "§1c Körlük zemini: açıklama sabiti her anahtarı taşıyor",
     beklenen.every((k) => (MODULE_DESCRIPTIONS[k] ?? "").length > 5),
     `n=${Object.keys(MODULE_DESCRIPTIONS).length}`,
   );
