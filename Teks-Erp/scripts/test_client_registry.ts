@@ -169,6 +169,34 @@ for (const okuyucu of okuyucular) {
     akisSatirlari.length === 0, akisSatirlari.map((l) => l.trim()).join(" | ") || "temiz");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// §1d — YAZDIRMA GEÇMİŞİ KÜNYESİ: `readClientLabelHeaders` (izlenebilirlik A1)
+// ─────────────────────────────────────────────────────────────────────────────
+// Kurulum kimliği + tür + sürüm `print_jobs` satırına ETİKET olarak girer (cihaz adı · kaynak).
+// §1c'nin ikizi: okuyucu beyanlı ve değer bir koşula/atmaya giremez.
+const ETIKET_OKUYUCULARI = new Map<string, string>([
+  ["services/helpers/print-job-context.helper.ts",
+   "basım satırının cihaz/kaynak/sürüm etiketi — yalnız `PrintJobRequestContext` nesnesine konur"],
+]);
+const etiketOkuyuculari: string[] = [];
+for (const file of walk(SRC)) {
+  if (ALLOWED.has(file)) continue;
+  if (/\breadClientLabelHeaders\b/.test(fs.readFileSync(file, "utf-8"))) etiketOkuyuculari.push(path.relative(SRC, file));
+}
+const etiketBeyansiz = etiketOkuyuculari.filter((f) => !ETIKET_OKUYUCULARI.has(f));
+const etiketOlu = [...ETIKET_OKUYUCULARI.keys()].filter((f) => !etiketOkuyuculari.includes(f));
+check("§1d künye etiketini okuyan her dosya BEYANLI", etiketBeyansiz.length === 0,
+  etiketBeyansiz.join(" · ") || `${etiketOkuyuculari.length} okuyucu, hepsi beyanlı`);
+check("§1d ÖLÜ beyan yok", etiketOlu.length === 0, etiketOlu.join(" · ") || "temiz");
+for (const okuyucu of etiketOkuyuculari) {
+  const metin = fs.readFileSync(path.join(SRC, okuyucu), "utf-8");
+  const karar = metin.split("\n")
+    .filter((l) => /\b(readClientLabelHeaders|kunye)\b/.test(l))
+    .filter((l) => /\bif\s*\(|throw |AppError|return next|res\./.test(l));
+  check(`§1d \`${okuyucu}\` künye etiketini bir KARARA sokmuyor`, karar.length === 0,
+    karar.map((l) => l.trim()).join(" | ") || "temiz");
+}
+
 // Middleware gerçekten fail-open mı: reddetme/yanıt yazma yüzeyi taşımamalı.
 const mwPath = path.join(SRC, "middlewares/client-info.middleware.ts");
 const mw = fs.readFileSync(mwPath, "utf-8");

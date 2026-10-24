@@ -228,6 +228,7 @@ export const PERMISSION_CATALOG = [
   { code: "system:work-sessions", module: "ADMIN", category: "web", description: "Sistem → Çalışma Oturumları (canlı görünüm, geçmiş, zorla kapatma)" },
   { code: "system:server-status", module: "ADMIN", category: "web", description: "Sistem → Sunucu Durumu" },
   { code: "system:clients", module: "ADMIN", category: "web", description: "Sistem → Bağlı İstemciler" },
+  { code: "system:print-history", module: "ADMIN", category: "web", description: "Sistem → Yazdırma Geçmişi (kim, neyi, hangi yazıcıdan bastı; hatalar — okuma)" },
   { code: "system:backups", module: "ADMIN", category: "web", description: "Sistem → Yedekler (yedek al, zamanlama, dış kopya durumu) — yedek listesi/indirme ayrıca admin:users ister" },
   // Lisans ekranı: görmek (durum ayrıntısı, kira, parmak izi ölçümü) ile yönetmek
   // (etkinleştirme, çevrimdışı/aktarma yanıtı, taşıma, DR devralma, proxy) AYRI — yönetim
