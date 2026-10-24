@@ -11,6 +11,7 @@ import {
   SYSTEM_BACKUPS_ACCESS,
   SYSTEM_CLIENTS_ACCESS,
   SYSTEM_HUB_ACCESS,
+  SYSTEM_PRINT_HISTORY_ACCESS,
   SYSTEM_ROLL_ARCHIVE_ACCESS,
   SYSTEM_SERVER_STATUS_ACCESS,
   SYSTEM_WORK_SESSIONS_ACCESS,
@@ -97,6 +98,7 @@ import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapa
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
 import { ModuleProfilePage } from "@/pages/System/ModuleProfile/ModuleProfilePage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
+import { PrintHistoryPage } from "@/pages/System/PrintHistory/PrintHistoryPage";
 import { SettingsSurfacePage } from "@/pages/GeneralSettings/SettingsSurfacePage";
 import { LegacySettingsRedirect } from "@/pages/GeneralSettings/LegacySettingsRedirect";
 import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
@@ -766,6 +768,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={SYSTEM_ACTIVITY_ACCESS}>
         <ActivityPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "system/print-history",
+    element: (
+      <ProtectedRoute requireAnyPermission={SYSTEM_PRINT_HISTORY_ACCESS}>
+        <PrintHistoryPage />
       </ProtectedRoute>
     ),
   },
