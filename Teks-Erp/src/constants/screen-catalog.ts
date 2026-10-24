@@ -26,6 +26,9 @@
 
 import { PERMISSION_CATALOG } from "./permission-catalog";
 import { TERIM } from "./terim";
+import { capLabel } from "./screen-capability-labels";
+
+export { capLabel };
 
 export interface ScreenCapability {
   /** Yetki kodu — PERMISSION_CATALOG'da BULUNMAK ZORUNDA (bekçi doğrular). */
@@ -51,6 +54,7 @@ export type ModulKey =
   | "devereEnabled"
   | "dokumaEnabled"
   | "emanetEnabled"
+  | "kaliteGuvenceEnabled"
   | "maliyetEnabled";
 
 /**
@@ -93,6 +97,7 @@ export const EKRAN_MODUL_DEGERLERI: ReadonlySet<string> = new Set<EkranModul>([
   "devereEnabled",
   "dokumaEnabled",
   "emanetEnabled",
+  "kaliteGuvenceEnabled",
   "maliyetEnabled",
   "cekirdek:ana-veri",
   "cekirdek:stok-giris",
@@ -126,69 +131,6 @@ export interface ScreenEntry {
   /** Ekran İÇİNDE ek yetenek açan izinler. */
   capabilities: ScreenCapability[];
 }
-
-/** Masaüstü ekranlarında yetenekler kod taramasından türetildi → etiket üretilir. */
-const CAP_LABEL: Record<string, string> = {
-  "item:write": "Kumaş ekleyip düzenleyebilir",
-  "customer:write": "Müşteri ekleyip düzenleyebilir",
-  "customer-alias:write": "Müşteriye özel ad eşlemesi yazabilir",
-  "station:write": "İstasyon/makine tanımı düzenleyebilir",
-  "quality:write": "Kalite tanımı düzenleyebilir",
-  "property:write": "Renk/özellik tanımı düzenleyebilir",
-  "return:write": "İade kaydı açabilir",
-  "subcontractor:write": "Fason firma düzenleyebilir",
-  "label-template:read": "Etiket şablonlarını görebilir",
-  "label-template:write": "Etiket şablonu düzenleyebilir",
-  "order:write": "Sipariş açıp düzenleyebilir",
-  "workorder:write": "Terbiye iş emri açıp düzenleyebilir",
-  "workorder:distribute": "Kurşun dağıtımı yapabilir",
-  "roll:write": "Top kaydı düzenleyebilir",
-  "roll:manual-adjust": "Top metraj/kalite düzeltmesi (riskli)",
-  "roll:history": "Topun yaşam döngüsünü görebilir",
-  "shipping:write": "Sevkiyat düzenleyebilir",
-  "shipping:invoice": "Fatura işareti koyabilir (riskli)",
-  "shipping:undo-dispatch": "Sevki geri alabilir (riskli)",
-  "shipping:packing-lot": "Sevk partisi silebilir, ambalaj no ezebilir",
-  "kartela:write": "Kartela işlemi yapabilir",
-  "label:print": "Etiket basabilir",
-  "label:read": "Etiket önizleyebilir",
-  "label:edit": "Etiketteki müşteri adını düzeltebilir",
-  "admin:settings": "Sistem ayarlarını değiştirebilir",
-  "order:read": "Sipariş görebilir",
-  "shipping:read": "Sevkiyat görebilir",
-  "workorder:read": "Terbiye iş emri görebilir",
-  "customer-alias:read": "Müşteri ad eşlemesini görebilir",
-  "property:read": "Renk/özellik görebilir",
-  "quality:read": "Kalite tanımı görebilir",
-  "station:read": "İstasyon görebilir",
-  "report:sales": "Satış raporu görebilir",
-  "document-template:write": "Belge tasarımını değiştirebilir",
-  "settings:workstation": "Bu bilgisayarın donanım ayarlarını değiştirebilir",
-  "system:backups": "Yedek alabilir",
-  "license:manage": "Lisansı etkinleştirip taşıyabilir, proxy ayarlayabilir",
-  "support:create": "Satıcıya destek talebi açabilir",
-  // Depo mal kabul + ön muhasebe (2026-09-01) — kutunun yanında NE yapabildiği
-  // yazmazsa yönetici atama ekranında ham kodu okur.
-  "goods-receipt:write": "Mal kabul fişi açıp düzenleyebilir",
-  "warehouse:write": "Depo tanımı ve sayım düzenleyebilir",
-  "yarn:write": "İplik stok hareketi girebilir",
-  "weavingorder:write": "Dokuma iş emri açıp düzenleyebilir, kapatıp iptal edebilir",
-  "warpbeam:write": "Levent planlayıp sarabilir (iplik çıkışı ve dip iadesi yazar)",
-  "warpbeam:cancel": "Sarımı iptal edebilir (iplik net geri döner)",
-  "price:write": "Kalem fiyatı tanımlayabilir",
-  "finance:write": "Cari/kasa/banka kartı düzenleyebilir",
-  "finance:invoice": "Fatura kesip iptal edebilir",
-  "finance:payment": "Tahsilat/ödeme girebilir",
-  "finance:cheque": "Çek/senet işleyebilir",
-  "finance:close": "Dönem kapanışı yapabilir",
-  "loom:alarm-ack": "Tezgah alarmını üstlenip bırakabilir, susturabilir, not düşebilir",
-  "loom:alarm-escalation": "Başkasının üstlendiği alarmı bırakabilir (üst kademe)",
-  "loom:run": "Tezgaha iş verebilir, işi değiştirip bitirebilir",
-  "loom:run-revoke": "Tezgahın açık koşumunu geri alabilir",
-};
-
-/** Etiketi olmayan kod için kodun kendisi basılır — sessiz boşluk bırakma. */
-export const capLabel = (code: string): string => CAP_LABEL[code] ?? code;
 
 const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[] }> = [
   { key: "definitions/items", app: "desktop", modul: "cekirdek:ana-veri", title: "Ürünler", requires: ["item:read"], capabilities: ["customer-alias:read", "customer-alias:write", "item:write"] },
@@ -364,6 +306,12 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Cariler = müşteri + fason firma TEK listede (satın alma tarafı da cari
   // gördüğü için). Giriş izni İKİSİNDEN BİRİ yeter — route `requireAnyPermission`.
   { key: "definitions/cariler", app: "desktop", modul: "cekirdek:ana-veri", title: "Cariler", requires: ["customer:read", "subcontractor:read"], capabilities: ["customer:write", "subcontractor:write"] },
+  // Kalite Güvence (K4P zemin, 2026-10-24): manifesto önden yazıldı; panel sayfaları PANEL/LAB/SERT
+  // dilimlerinde iner (karo yok → bekçide KARO_YOK muafı, karo doğunca muaf ölür).
+  { key: "quality/inspections", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Muayeneler", requires: ["inspection:read"], capabilities: ["inspection:write", "inspection:correct"] },
+  { key: "quality/inspection-rules", app: "desktop", modul: "kaliteGuvenceEnabled", title: "4 Puan Kuralları", requires: ["inspection:read"], capabilities: ["inspection:rules"] },
+  { key: "quality/lab-tests", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Lab Testleri", requires: ["labtest:read"], capabilities: ["labtest:write", "labtest:approve"] },
+  { key: "quality/certificates", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Sertifikalar", requires: ["certificate:read"], capabilities: ["certificate:write"] },
 ];
 
 const mobile: ScreenEntry[] = [
@@ -476,6 +424,8 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
+  // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
+  { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

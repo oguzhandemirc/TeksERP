@@ -51,6 +51,8 @@ interface ViewProps {
   /** Önizleme verisi — "Örnek veri" rozeti basılır. */
   sampleData: boolean;
   tv?: boolean;
+  /** Başlık altı araç şeridi (Raporlar v2 taşınan araç) — sayfa verir; görünüm kanca çağırmaz. */
+  toolStrip?: React.ReactNode;
   /** Başlıkta veri durumu (örn. "bağlantı koptu") — opsiyonel. */
   notice?: React.ReactNode;
   /** Veri tazelenemiyor — tam ekran başlığındaki "Canlı" damgası uyarıya döner. */
@@ -157,7 +159,7 @@ function EmptyNote({ total }: { total: number }) {
   );
 }
 
-export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, stale = false, onOpenTv, tvUrl = null, tvExit, initialSelectedId = null, onOpenAlarm }: ViewProps) {
+export function WeavingFloorView({ floor, now, sampleData, tv = false, toolStrip, notice, stale = false, onOpenTv, tvUrl = null, tvExit, initialSelectedId = null, onOpenAlarm }: ViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(tv ? null : initialSelectedId);
   const [filter, setFilter] = useState<ShowFilter>("ALL");
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
@@ -197,12 +199,15 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, notice, s
             {fullscreen.active ? (
               <FullscreenHeader now={now} sampleData={sampleData} updatedAt={floor.updatedAt} stale={stale} onExit={tv ? undefined : fullscreen.exit} legend={<StatusLegend />} />
             ) : (
-              <AppHeader
-                extra={sampleData ? <SampleDataBadge /> : notice}
-                filter={<ShowFilterPicker value={filter} onChange={setFilter} />}
-                tv={onOpenTv && <TvLaunchMenu onOpenHere={onOpenTv} tvUrl={tvUrl} />}
-                onFullscreen={fullscreen.enter}
-              />
+              <>
+                <AppHeader
+                  extra={sampleData ? <SampleDataBadge /> : notice}
+                  filter={<ShowFilterPicker value={filter} onChange={setFilter} />}
+                  tv={onOpenTv && <TvLaunchMenu onOpenHere={onOpenTv} tvUrl={tvUrl} />}
+                  onFullscreen={fullscreen.enter}
+                />
+                {toolStrip}
+              </>
             )}
             <PageBody className={cn("min-h-0 space-y-4 p-4", fullscreen.active && "space-y-3 px-6 pt-3")}>
               {floor.alarmNotice && (tv ? <AlarmShiftStrip notice={floor.alarmNotice} linkVisible={false} /> : <LinkedAlarmShiftStrip notice={floor.alarmNotice} />)}

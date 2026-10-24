@@ -157,6 +157,7 @@ export const TABLE_LABELS: Record<string, string> = {
   // Cihaz (mobil eşleştirme)
   users: "Kullanıcı",
   devices: "Cihaz",
+  device_rebind_requests: "Cihaz Yeniden Bağlama Talebi",
   pairing_codes: "Eşleştirme Kodu",
   latency_stats: "Gecikme İstatistiği",
   sessions: "Oturum",
@@ -913,6 +914,32 @@ export const ENUM_LABELS: Record<string, string> = {
   CARI: "Cari",
   ISLENDI: "İşlendi",
   REDDEDILDI: "Reddedildi",
+
+  // ── e-İrsaliye (E1-SEMA) — EIrsaliyeStatus · EIrsaliyeEventType (`REDDEDILDI` yukarıda ortak).
+  TASLAK: "Taslak",
+  OLUSTURULDU: "Oluşturuldu",
+  GONDERILDI: "Gönderildi",
+  KABUL: "Kabul edildi",
+  KISMI_KABUL: "Kısmen kabul edildi",
+  HATA: "Hata",
+  IPTAL: "İptal edildi",
+  HAZIRLANDI: "Hazırlandı",
+  XML_YENIDEN_URETILDI: "XML yeniden üretildi",
+  GONDERIM_GERI_ALINDI: "Gönderim geri alındı",
+  YANIT_KAYDEDILDI: "İrsaliye yanıtı kaydedildi",
+  YANIT_GERI_ALINDI: "İrsaliye yanıtı geri alındı",
+  HATA_ALINDI: "Hata alındı",
+  IPTAL_EDILDI: "İptal edildi",
+  // ── Cihaz bağlama defteri (eşleme v2, D1) — DeviceBindingEventType. `MERGED` DuplicateReviewDecision ile ORTAK.
+  REGISTERED: "Kaydedildi",
+  REBIND_REQUESTED: "Yeniden bağlama istendi",
+  REBOUND: "Yeniden bağlandı",
+  REBIND_REJECTED: "Yeniden bağlama reddedildi",
+  REVOKED: "Onay geri alındı",
+  UNMERGED: "Birleştirme geri alındı",
+  PROOF_RESET: "Cihaz sırrı sıfırlandı",
+  PURGED: "Kalıcı silindi",
+  HW_CONFLICT: "Donanım özeti çakıştı",
 };
 
 // =============================================================================
@@ -982,6 +1009,8 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // Partide CLOSED "sevk edildi"dir: son çuvalı sevk edilince sunucu yazar, elle
   // kapatma yoktur (2026-09-22); storno geri getirirse yeniden açık olur.
   "packing_groups.status": { OPEN: "Açık", CLOSED: "Sevk edildi" },
+  // EIrsaliyeSourceType.SHIPMENT (E1-SEMA) — kaydın KAYNAK türü; global `SHIPMENT` depo olayı dilinde ("Sevk çıkışı").
+  "E_IRSALIYE.sourceType": { SHIPMENT: "Sevkiyat" },
 };
 
 /**
@@ -1013,6 +1042,9 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
  * şişmiş bir liste kapının kendisi olur.
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
+  // ── Cihaz eşleme v2 (D1, 2026-10-24)
+  MERGED:
+    "DuplicateReviewDecision(mükerrer kart birleşti) ve DeviceBindingEventType(cihaz kopyası ana kayda birleşti) — 'Birleştirildi' ikisinde de doğru",
   // ── Kasa tek yazar (2026-09-18)
   PAYMENT:
     "CariTxnSource(cari hareketinin kaynağı: tahsilat ya da ödeme) ve CashTxnKind(kasa defterinde ÖDEME satırı, çıkış) — ortak Türkçe YETMEZ: " +
@@ -1093,7 +1125,15 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "MergeRefKind(birleştirmede çakışan satır silindi) ve SyncMarkKind(eşitleme işareti: kök satır silindi, 2026-09-29) — " +
     "SyncMark hiçbir denetim kaydına girmez (tetikleyici yazar, audit muafiyeti TELEMETRİ); ekranda yalnız birleştirme bağlamı görünür, ortak Türkçe orada doğru",
 
+  // ── e-İrsaliye (E1-SEMA, 2026-10-24) — durum ile olay aynı fiili taşır
+  GONDERILDI: "EIrsaliyeStatus(kayıt gönderildi) ve EIrsaliyeEventType(gönderim olayı) — aynı fiil; ortak Türkçe doğru",
+  OLUSTURULDU: "EIrsaliyeStatus(numara+XML üretildi) ve EIrsaliyeEventType(üretim olayı) — aynı fiil; ortak Türkçe doğru",
+  REDDEDILDI: "CloudInboxOutcome(bulut makbuzu reddedildi) ve EIrsaliyeStatus(alıcı yanıtı red) — ikisi de 'Reddedildi'; ortak Türkçe doğru",
+
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  SHIPMENT:
+    "WarehouseEventType('Sevk çıkışı') ve EIrsaliyeSourceType(kaydın kaynağı sevkiyat) — ortak cevap kaynak türü için YANLIŞ; " +
+    "E_IRSALIYE.sourceType override'ı ile ayrıldı (2026-10-24)",
   OPEN:
     "PurchaseOrderStatus('Açık (mal bekleniyor)'), MachineSealState(karne mühürsüz) ve PackingGroupStatus(sevk partisi) — ortak cevap karne ve parti için YANLIŞ; " +
     "MACHINE_SHIFT_STAT.sealState ve packing_groups.status override'ları ile ayrıldı (2026-09-14 · 2026-09-21); " +

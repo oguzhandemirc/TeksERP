@@ -150,6 +150,10 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // Tezgah alarmı vardiya durumu ucu: `flagKeyWriters("tezgahAlarmEnabled")` — ayarı yazabilen okur;
   // kodlar aynı settings-scopes tablosundan, kapsam `test_settings_scopes.ts` §1b'de.
   "src/routes/feature-flag.routes.ts": [`${DELEGE}scripts/test_settings_scopes.ts`],
+  // Bildirim görme süzgeci + dağıtıcının varsayılan alıcısı: `matchesPermission(codes, code)` — kodlar
+  // `NOTIFICATION_CATALOG[kind].izinler`/`varsayilan`dan; katalogda olduklarını `test_bildirim_katalogu` §3b ölçer.
+  "src/services/helpers/notification-visibility.helper.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
+  "src/services/notification-dispatch.service.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
   // GERİ SARMA (2026-09-12): `assertEntityPermission` ikinci kapıyı yine
   // `adapter.writePermission`den çözüyor — varlık KOŞUMUN KENDİSİNDEN
   // (`ImportRun.entity`) bulunuyor, `:entity` parametresinden değil. Desen ve
