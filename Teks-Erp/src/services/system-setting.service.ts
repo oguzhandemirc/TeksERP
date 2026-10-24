@@ -299,6 +299,10 @@ export const SETTING_KEYS = {
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */
   DOKUMA_ENABLED: "dokuma.enabled",
+  /** Maliyet & Teklif modülü (MAL): ürün maliyeti · standart maliyet · satış teklifi · fiyat listesi ·
+   *  iplik ihtiyaç planı. ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`); kapı `requireMaliyetEnabled`.
+   *  Varsayılan KAPALI = bugünkü davranış (modül yoktu). */
+  MALIYET_ENABLED: "maliyet.enabled",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -1776,6 +1780,9 @@ export interface FeatureFlags {
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */
   dokumaEnabled: boolean;
+  /** Maliyet & Teklif modülü. Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir;
+   *  etkin değer `production && maliyet` ve kapının içinde çözülür. */
+  maliyetEnabled: boolean;
   /**
    * KAPALI rapor anahtarları. `null` = LİSTE OKUNAMADI (bozuk satır) — "hiçbiri kapalı
    * değil" ile aynı şey DEĞİL; panel bunu fail-closed okur (R2/K5) ve rapor çizmez.
@@ -2034,6 +2041,7 @@ const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
   devereEnabled: SETTING_KEYS.DEVERE_ENABLED,
   dokumaEnabled: SETTING_KEYS.DOKUMA_ENABLED,
   emanetEnabled: SETTING_KEYS.EMANET_ENABLED,
+  maliyetEnabled: SETTING_KEYS.MALIYET_ENABLED,
 };
 
 // =============================================================================
@@ -2301,6 +2309,7 @@ export class SystemSettingService {
       dokumaOrderLineLinkRequired: await readDokumaOrderLineLinkRequired(cacheClient),
       dokumaRollBirth: await readDokumaRollBirth(cacheClient),
       dokumaEnabled: await readDokumaEnabledRaw(cacheClient),
+      maliyetEnabled: await readMaliyetEnabledRaw(cacheClient),
       // ⚠️ ÜÇ SONUÇLU okumanın panele TAŞINAN hâli: ölçülemedi ⇒ `null`. Boş diziye
       // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
       reportsClosedKeys: ((): string[] | null => {
@@ -2458,6 +2467,8 @@ export class SystemSettingService {
         return readDokumaEnabledRaw();
       case "emanetEnabled":
         return readEmanetEnabledRaw();
+      case "maliyetEnabled":
+        return readMaliyetEnabledRaw();
       case "depoMultiEnabled":
         return readDepoMultiEnabledRaw();
       case "kumasTeknikEnabled":
@@ -2983,6 +2994,18 @@ export class SystemSettingService {
         input.dokumaEnabled,
         // Metin migration damgasıyla BİREBİR kalır (test_module_flags §6d) — görünen ad değişikliğinin dışında.
         "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "maliyetEnabled")) {
+      if (typeof input.maliyetEnabled !== "boolean") {
+        throw AppError.badRequest("maliyetEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.MALIYET_ENABLED,
+        input.maliyetEnabled,
+        "Maliyet & Teklif: ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi, iplik ihtiyaç planı",
         userId
       );
     }
@@ -4994,6 +5017,25 @@ export async function readDokumaEnabledRaw(
  *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
 export async function readDokumaEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   return applyModuleCeiling(SETTING_KEYS.DOKUMA_ENABLED, await readDokumaEnabledRaw(tx));
+}
+
+/** Maliyet & Teklif modülü açık mı? Default FALSE (satır yoksa kapalı — modül sıfırdan doğdu).
+ *  HAM değer döner; ön koşulu (production) `requireMaliyetEnabled` ölçer. */
+export async function readMaliyetEnabledRaw(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.MALIYET_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readMaliyetEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readMaliyetEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.MALIYET_ENABLED, await readMaliyetEnabledRaw(tx));
 }
 
 /**

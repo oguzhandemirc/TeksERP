@@ -94,6 +94,14 @@ export function useEmanetEnabled(): boolean {
   return q.data?.data?.emanetEnabled ?? false;
 }
 
+/** Maliyet & Teklif modülü etkin mi (`production && maliyet`). Yüklenene dek ve alanı tanımayan eski
+ *  sunucuda KAPALI — fail-closed: maliyet menüsü/ekranı bayrak gelmeden çizilmez. */
+export function useMaliyetEnabled(): boolean {
+  const q = useFeatureFlags();
+  const d = q.data?.data;
+  return (d?.productionEnabled ?? false) && (d?.maliyetEnabled ?? false);
+}
+
 /** Devere Faz 2: iplik lotu zorunlu mu (`devere.lotRequired`). Yüklenene dek KAPALI = bugünkü davranış (lot isteğe bağlı). */
 export function useDevereLotRequired(): boolean {
   const q = useFeatureFlags();
