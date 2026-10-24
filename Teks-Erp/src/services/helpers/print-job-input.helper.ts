@@ -133,3 +133,35 @@ export function normalizeMeta(kind: PrintSubjectKind, meta: Record<string, unkno
   if (size <= PRINT_META_MAX_BYTES) return meta as Prisma.InputJsonValue;
   return { kirpildi: true, boyut: size };
 }
+
+/** Sunucunun kendi TCP gönderim sonucu (`PrinterTransportResult` alt kümesi). */
+export interface TransportOutcomeLike {
+  delivered: boolean;
+  simulated: boolean;
+  error?: string;
+  note?: string;
+}
+
+/**
+ * Sunucu gönderim sonucu → satır sonucu. `SIMULE` başarı değildir; hata metni sınıflı koda
+ * iner ki ekran "hangi yazıcı neden düşüyor" sorusunu serbest metin ayrıştırmadan cevaplasın.
+ */
+export function outcomeFromTransport(r: TransportOutcomeLike): Pick<PrintJobInput, "status" | "errorCode" | "errorMessage"> {
+  if (r.delivered) return { status: "ILETILDI", errorCode: null, errorMessage: null };
+  if (r.simulated) return { status: "SIMULE", errorCode: null, errorMessage: null };
+  const msg = r.error ?? r.note ?? null;
+  const m = (msg ?? "").toLowerCase();
+  let code = "GONDERIM_HATASI";
+  if (!r.error) code = "DOGRUDAN_GONDERIM_YOK";
+  else if (m.includes("tanımlı değil")) code = "HEDEF_YOK";
+  else if (m.includes("zaman aşımı") || m.includes("timeout")) code = "ZAMAN_ASIMI";
+  else if (m.includes("econnrefused")) code = "BAGLANTI_REDDEDILDI";
+  else if (m.includes("ehostunreach") || m.includes("enetunreach") || m.includes("enotfound")) code = "AG_ULASILAMAZ";
+  return { status: "HATA", errorCode: code, errorMessage: msg };
+}
+
+/** İş ucunun servise geçtiği basım künyesi: istek bağlamı + istemcinin isteğe bağlı eki. */
+export interface PrintJobReportOpt {
+  ctx: PrintJobRequestContext;
+  attachment?: PrintJobAttachment;
+}

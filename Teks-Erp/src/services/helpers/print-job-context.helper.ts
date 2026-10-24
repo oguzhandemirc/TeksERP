@@ -2,7 +2,7 @@
 // Yazdırma geçmişi satırının İSTEK KÜNYESİ (izlenebilirlik A1) — yalnız GÖSTERİM
 // =============================================================================
 // Kim (token) · hangi cihaz · hangi kaynak · hangi sürüm · hangi istasyon. Hiçbiri yetki
-// kararı değildir: masaüstü panelin `X-Client-Instance`ı uydurulabilir, değer yalnız ekranda
+// kararı değildir: masaüstü panelin kurulum kimliği başlığı uydurulabilir, değer yalnız ekranda
 // cihaz ADINI göstermeye yarar (`constants/client-info.ts` başlığı). Kullanıcı ASLA gövdeden okunmaz.
 // =============================================================================
 

@@ -43,7 +43,7 @@ export * from "./helpers/print-job-filter.helper";
 
 const health = { yazilan: 0, dusen: 0, sonHata: null as string | null, sonHataAt: null as string | null };
 
-/** `/health` → `printJobs`: best-effort yazımın sessiz düşmesi burada görünür (`AuditService.getHealth` emsali). */
+/** `/health` → `printJobs`: best-effort yazımın sessiz düşmesi burada görünür (audit servisinin sağlık sayacı emsali). */
 export function getPrintJobHealth(): { yazilan: number; dusen: number; sonHata: string | null; sonHataAt: string | null } {
   return { ...health };
 }
