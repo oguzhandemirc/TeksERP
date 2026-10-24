@@ -17,6 +17,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
+import { isReportSurfaced } from "@/lib/report-gate";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 
 let flagsData: Record<string, unknown> = {};
@@ -58,6 +59,16 @@ const rowOf = (key: string) => screen.getByTestId(`rapor-satir:${key}`);
 const checkboxOf = (key: string) => rowOf(key).querySelector<HTMLButtonElement>('[role="switch"]')!;
 const isChecked = (key: string) => checkboxOf(key).getAttribute("aria-checked") === "true";
 
+// Bölümün satırları: ucu inmemiş v2 satırı (`hazir:false`) çizilmez — kapatılacak bir yüzeyi yok.
+const SURFACED = REPORT_CATALOG.filter(isReportSurfaced);
+// Bugünkü (v1) satırların HEPSİ çizilir — v2 süzgeci eski listeden hiçbir şey düşürmez.
+function expectV2Suzgeci(): void {
+  expect(SURFACED.filter((r) => r.nesil === "v1").length).toBe(REPORT_CATALOG.filter((r) => r.nesil === "v1").length);
+  for (const r of REPORT_CATALOG.filter((x) => !isReportSurfaced(x))) {
+    expect(screen.queryByTestId(`rapor-satir:${r.key}`)).toBeNull();
+  }
+}
+
 describe("Modüller → Raporlar bölümü", () => {
   beforeEach(() => {
     flagsData = { reportsClosedKeys: [] };
@@ -68,20 +79,21 @@ describe("Modüller → Raporlar bölümü", () => {
 
   it("§1 katalogdaki her rapor bir satır, kategori başlıkları ve sınıf rozetleri çizilir", () => {
     renderWithProviders(<ReportVisibilitySection canWrite />);
-    for (const r of REPORT_CATALOG) {
+    for (const r of SURFACED) {
       expect(rowOf(r.key)).toBeInTheDocument();
       expect(rowOf(r.key).textContent).toContain(r.baslik);
       expect(rowOf(r.key).textContent).toContain(r.soru);
     }
-    expect(screen.getAllByText("Gelişmiş").length).toBe(REPORT_CATALOG.filter((r) => r.sinif === "gelismis").length);
-    expect(screen.getAllByText("Basit").length).toBe(REPORT_CATALOG.filter((r) => r.sinif === "basit").length);
+    expect(screen.getAllByText("Gelişmiş").length).toBe(SURFACED.filter((r) => r.sinif === "gelismis").length);
+    expect(screen.getAllByText("Basit").length).toBe(SURFACED.filter((r) => r.sinif === "basit").length);
+    expectV2Suzgeci();
     expect(screen.getByText("Ön Muhasebe")).toBeInTheDocument();
     expect(screen.getByText("Dokuma")).toBeInTheDocument();
   });
 
   it("§2 fabrika yöneticisi (canWrite=false): satırlar görünür, hepsi PASİF, yazma yok", () => {
     renderWithProviders(<ReportVisibilitySection canWrite={false} />);
-    for (const r of REPORT_CATALOG) expect(checkboxOf(r.key)).toBeDisabled();
+    for (const r of SURFACED) expect(checkboxOf(r.key)).toBeDisabled();
     fireEvent.click(checkboxOf("sales/order-intake"));
     expect(update).not.toHaveBeenCalled();
   });
@@ -89,8 +101,8 @@ describe("Modüller → Raporlar bölümü", () => {
   it("§3 ⭐ modülü kapalı raporun satırı kilit bandı taşır ve pasiftir; modülsüz (çekirdek) satır serbest", () => {
     regime = { financeEnabled: false, dokumaEnabled: false };
     renderWithProviders(<ReportVisibilitySection canWrite />);
-    const financeKeys = REPORT_CATALOG.filter((r) => r.modul === "financeEnabled").map((r) => r.key);
-    const dokumaKeys = REPORT_CATALOG.filter((r) => r.modul === "dokumaEnabled").map((r) => r.key);
+    const financeKeys = SURFACED.filter((r) => r.modul === "financeEnabled").map((r) => r.key);
+    const dokumaKeys = SURFACED.filter((r) => r.modul === "dokumaEnabled").map((r) => r.key);
     expect(financeKeys.length + dokumaKeys.length).toBeGreaterThan(3); // körlük zemini
     for (const k of [...financeKeys, ...dokumaKeys]) {
       expect(screen.getByTestId(`rapor-kilit:${k}`).textContent).toContain("Modül kapalı");

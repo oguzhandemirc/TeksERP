@@ -68,6 +68,7 @@
     "workOrderQuickOwnOnlyEnabled": true,
     "supportOwnTicketsOnlyEnabled": true,
     "patronBulutOlayGudumluEnabled": true,
+    "reportsV2Enabled": true,
     "kk1OnlineOnlyEnabled": true,
     "kk1LabelScanVerifyEnabled": true,
     "kk1HistoryAllEntriesEnabled": true,
