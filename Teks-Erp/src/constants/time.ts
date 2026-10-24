@@ -443,6 +443,13 @@ export function factoryDateTimeTr(at: Date): string {
   return `${factoryDateTr(at)} ${get("hour")}:${get("minute")}`;
 }
 
+/** `at` anının FABRİKA saati, saniyeli `SS:DD:ss` (UBL `IssueTime` / `ActualDespatchTime`). */
+export function factoryTimeHms(at: Date): string {
+  const parts = zoneFormatter("clock", factoryTimezoneAt(at)).formatToParts(at);
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "00";
+  return `${get("hour")}:${get("minute")}:${get("second")}`;
+}
+
 /**
  * `@db.Date` kolonlarına yazılacak takvim günü anahtarı.
  * Prisma + adapter-pg `DateTime`'ı UTC'ye çevirip DATE kolonuna UTC gün-parçasını
