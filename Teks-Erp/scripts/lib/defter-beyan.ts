@@ -569,6 +569,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "backend güncellemesinin panel ONAYI (Dağıtım v2): güncelleyicinin niyet dosyasına giden TETİK, yetki değil — silinse raporlanan hiçbir sayı değişmez; \"ne oldu\"nun sahibi güncelleyicinin işlem geçmişi (`gecmis.jsonl`, `onayId` ile) ve satıcının `kurulum_kaydi` defteridir; satır silinmez, güncellenmez — geri alma da yeni bir satırdır, yürürlükteki = en son satır (`services/update-approval.service.ts`)" },
   { model: "CloudInboxReceipt", sinif: "DURUM",
     gerekce: "patron bulutu mesajının TEK KULLANIMLIK tüketim kaydı (idempotency makbuzu): iş sonucu varlığın KENDİ defterinde (sipariş/cari), ters yolu da onun ters yoludur (sipariş iptali · kart arşivi); makbuz silinmez, güncellenmez, geri alınmaz — silinse raporlanan sayı değişmez ama aynı mesaj ikinci varlık doğururdu" },
+  { model: "ReportDefinitionVersion", sinif: "DURUM",
+    gerekce: "rapor tanımı gövdesinin DEĞİŞMEZ sürümü (rapor v2 R1-SEMA, append-only): rapor sayıları canlı veriden hesaplanır, sürüm satırı silinse raporlanan hiçbir sayı değişmez ⇒ defter değil; ters mekanizması = YENİ SÜRÜM SATIRI (düzenleme de geri alma da yeni satırdır), yürürlükteki = `ReportDefinition.activeVersionId` (atomik claim) — satır güncellenmez, silinmez" },
 ];
 
 // =============================================================================

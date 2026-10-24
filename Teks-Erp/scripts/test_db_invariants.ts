@@ -567,6 +567,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("processedAt" IS NULL)`,
     why: "dağıtıcı süpürmesi yalnız işlenmemiş kuyruğu tarasın (işlenmiş satırlar indekse girmez)",
   },
+  // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): "varsayılan ön ayar" seddi.
+  {
+    table: "report_presets",
+    index: "report_presets_one_default_uq",
+    uniq: true,
+    predicate: `("isDefault" = true)`,
+    why: "kullanıcı başına rapor başına tek varsayılan ön ayar — düşerse iki varsayılan yarışır, rapor hangi parametreyle açılacağını dizi sırasına bırakır",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -882,6 +890,18 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "notification_inbox", name: "notification_inbox_reason_ck" },
   { table: "notification_inbox", name: "notification_inbox_count_ck" },
   { table: "notification_daily_stats", name: "notification_daily_stats_events_ck" },
+  // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): kapalı kümeler VarChar + CHECK
+  // (`defect_types.defectGroup` bilinçli CHECK'siz — küme kodda). Tanım biçimi: SISTEM ⇒ anahtarlı ve
+  // sahipsiz, OZEL ⇒ sahipli ve anahtarsız. Sürüm no ≥ 1; koşu süresi/satır negatif olamaz.
+  { table: "report_definitions", name: "report_definitions_kind_ck" },
+  { table: "report_definitions", name: "report_definitions_visibility_ck" },
+  { table: "report_definitions", name: "report_definitions_status_ck" },
+  { table: "report_definitions", name: "report_definitions_kind_shape_ck" },
+  { table: "report_definition_versions", name: "report_definition_versions_version_no_ck" },
+  { table: "report_shares", name: "report_shares_access_ck" },
+  { table: "report_runs", name: "report_runs_status_ck" },
+  { table: "report_runs", name: "report_runs_counts_ck" },
+  { table: "report_snapshots", name: "report_snapshots_kind_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
