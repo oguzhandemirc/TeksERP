@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { RefreshButton } from "@/components/RefreshButton";
+import { KursunGramajReportLink } from "@/components/kursun/KursunGramajReportLink";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatNumber } from "@/lib/format";
 import { PoolPanel } from "./PoolPanel";
@@ -132,10 +133,10 @@ export function KursunDagitimPage() {
         title="Kurşun Planlama"
         description="Havuzdaki işleri sırala ve kurşun makinelerine dağıt; makineler arasında taşı."
         actions={
-          <RefreshButton
-            queryKey={DISTRIBUTION_QUERY_KEY}
-            successMessage="Liste yenilendi"
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <KursunGramajReportLink />
+            <RefreshButton queryKey={DISTRIBUTION_QUERY_KEY} successMessage="Liste yenilendi" />
+          </div>
         }
       />
 

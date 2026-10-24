@@ -89,6 +89,8 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   USER_QUICK_PIN: onEkli("hızlı PIN", RECORD_TERM),
   PAYMENT_ALLOCATION: onEkli("fatura kapama", RECORD_TERM),
   LABEL_PRINT_EVENT: onEkli("etiket baskı", RECORD_TERM),
+  ITEM_PRICE: onEkli("ürün", iyelik("fiyat", "ı", "a", "ı")),
+  WORK_ORDER_TARGET_VALUE: onEkli("hedef gramaj", RECORD_TERM),
 };
 
 /** Tablonun çekimleri; yoksa null (yedek cümle "<Modül> kaydı" kurar). */

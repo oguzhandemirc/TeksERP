@@ -123,6 +123,12 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   REDDEDILDI: "CloudInboxOutcome(bulut makbuzu reddedildi) ve EIrsaliyeStatus(alıcı yanıtı red) — ikisi de 'Reddedildi'; ortak Türkçe doğru",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  METER:
+    "PeripheralKind('Metre Sayacı') ve RunningCap(koşu tavanı metre başına) — ortak cevap tavan için YANLIŞ; " +
+    "FOUR_POINT_RULE_SET.runningCap override'ı ile ayrıldı (K4P, 2026-10-24)",
+  NONE:
+    "NumberSeriesDateSegment('Tarih yok') ve RunningCap(koşu tavanı yok) — ortak cevap tavan için YANLIŞ; " +
+    "FOUR_POINT_RULE_SET.runningCap override'ı ile ayrıldı (K4P, 2026-10-24)",
   SHIPMENT:
     "WarehouseEventType('Sevk çıkışı') ve EIrsaliyeSourceType(kaydın kaynağı sevkiyat) — ortak cevap kaynak türü için YANLIŞ; " +
     "E_IRSALIYE.sourceType override'ı ile ayrıldı (2026-10-24)",

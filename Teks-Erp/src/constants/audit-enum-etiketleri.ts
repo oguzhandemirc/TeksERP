@@ -316,6 +316,8 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "WARP_BEAM.originKind": { IN_HOUSE: "İçeride sarıldı" },
   // CashTxnKind.PAYMENT "ödeme satırı (çıkış)" — CariTxnSource.PAYMENT'ın "Tahsilat / Ödeme"si kasa türünde yanlış (tek yazar, 2026-09-18)
   "CASH_TRANSACTION.kind": { PAYMENT: "Ödeme" },
+  // RunningCap (K4P, 2026-10-24) — METER global "Metre Sayacı" (PeripheralKind), NONE global "Tarih yok" (NumberSeriesDateSegment); koşu tavanı için ikisi de yanlış
+  "FOUR_POINT_RULE_SET.runningCap": { METER: "Metre başına en fazla 4 puan", NONE: "Koşu tavanı yok" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },

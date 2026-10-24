@@ -115,6 +115,18 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "FourPointRuleSet",
+      table: "four_point_rule_sets",
+      column: "itemId",
+      label: "4 puan ürün kural seti",
+      uniqueOn: ["customerId", "itemId"],
+      policy: "BLOCK",
+      why:
+        "Aynı müşterinin iki ürününe ayrı spesifikasyon yazılmışsa birleşmiş üründe hangisinin " +
+        "geçerli olduğunu yalnız kalite sorumlusu bilir (K4P); `customer_item_uq` ile birebir.",
+    },
+    {
+      kind: "CONFLICT",
       model: "ItemPrice",
       table: "item_prices",
       column: "itemId",
@@ -123,6 +135,8 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       // İki KAYNAK arasında geniş anahtar yanlış bloklardı (farklı müşterilerin istisnaları
       // ya da varsayılan + istisna aynı hedefte yan yana durabilir): iki partial UNIQUE'in birebiri.
       crossSourceOn: { columns: ["customerId", "kind", "currency"], nullSafe: ["customerId"] },
+      // Partial UNIQUE yalnız aktif satırda: damgalı fiyat geçmişi serbestçe taşınır (MAL-0b).
+      activeWhenNull: ["revokedAt"],
       policy: "BLOCK",
       why:
         "Hangi fiyatın geçerli olduğunu yalnız operatör bilir. Anahtar BİLEREK iki partial " +

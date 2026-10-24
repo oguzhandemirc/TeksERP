@@ -323,6 +323,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/printed-document.service.ts", sembol: "reissue" }],
     ["src/services/printed-document.service.ts", "src/services/traveler-card.service.ts"], { yari: true }),
 
+  // K4P-SEMA (2026-10-24): yazarı MOTOR dilimi (`createInspectionTx`); o gün `yazan`
+  // ve `tersYazan` (revise/void) birlikte dolar — §4c boş ikiliyi sessiz sayar.
+  D("RollInspection", "muayene belgesi — içerik doğuşta donar; revizyon `supersededAt` damgası + yeni satır, iptal ikinci damga `voidedAt` (PrintedDocument emsali), silme yolu yok",
+    { tur: "DAMGA", kolon: "supersededAt" }, [], [], { yari: true }),
+
   D("ShipmentEvent", "sevkiyat durum defteri; tek damga ikinci turda birincisini ezerdi",
     { tur: "KARSI_OLAY", enumAdi: "ShipmentEventType", ciftler: [["DISPATCHED", "UNDISPATCHED"], ["INVOICED", "INVOICE_CLEARED"]] },
     [{ dosya: "src/services/helpers/shipment-event.helper.ts", sembol: "writeShipmentEvent" }],
@@ -568,6 +573,13 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "revokeTargetProperties" }],
     ["src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"]),
+  D("WorkOrderTargetValue", "iş emrinin HEDEF çeşit değeri (KQ-D6 hedef kurşun gramajı) — İE plan alanı; toplara yayılmaz, sapma türetilir. Değişim FARK bazlı: eski satır damgalanır, yenisi yazılır",
+    { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/helpers/workorder-target-value.helper.ts", sembol: "revokeTargetValueTx" }],
+    // İE oluşturma nested create'i helper'dan alır (`targetValuesNestedCreate`) — tek yazar helper.
+    ["src/services/helpers/workorder-target-value.helper.ts"],
+    // yarı: `revokedAt` damgası yerinde yazılır (WorkOrderToOrderLine emsali); değişim YENİ değer satırıdır.
+    { yari: true }),
 
   // ── TELEMETRİ — budanabilir, ama KARAR UFKU beyan edilir ──────────────────
   { model: "TravelerCardScan", sinif: "TELEMETRI",

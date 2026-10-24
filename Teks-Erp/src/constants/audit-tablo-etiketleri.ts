@@ -133,6 +133,7 @@ export const TABLE_LABELS: Record<string, string> = {
   MACHINE_SHIFT_STAT: "Vardiya Karnesi",
   MACHINE_SHIFT_SEAL: "Vardiya Karnesi Mührü",
   KURSUN_BYPASS_ASSIGNMENT: "Kurşun Dağıtım Ataması",
+  WORK_ORDER_TARGET_VALUE: "Terbiye İş Emri Hedef Gramajı",
   PERIPHERAL_TEMPLATE_ROUTE: "Cihaz–Şablon Yönlendirmesi",
   // Boot uzlaştırması + panel işleri: tablo adı küçük harfle yazılmış
   // (backend'de bilinçli, kayıt "kod tarafı" olduğunu belli etsin diye).

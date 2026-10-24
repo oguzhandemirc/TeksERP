@@ -336,4 +336,27 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   PROOF_RESET: "Cihaz sırrı sıfırlandı",
   PURGED: "Kalıcı silindi",
   HW_CONFLICT: "Donanım özeti çakıştı",
+  // ── K4P 4 puan muayene (SEMA, 2026-10-24)
+  // RollErrorOrigin
+  PROCESS: "Süreç hatası",
+  INSPECTION: "Muayene hatası",
+  // FourPointSize (ASTM D5430 boyut sınıfı)
+  UP_TO_3IN: "≤ 7,5 cm (1 puan)",
+  IN_3_TO_6: "7,5–15 cm (2 puan)",
+  IN_6_TO_9: "15–23 cm (3 puan)",
+  OVER_9IN: "> 23 cm (4 puan)",
+  // InspectionPhase
+  RAW: "Ham muayene",
+  FINAL: "Mamul muayene",
+  // InspectionWidthSource — MANUAL ortak ("Elle girildi")
+  ITEM_CARD: "Ürün kartı eni",
+  ROLL_MEASURED: "Topta ölçülen en",
+  UNKNOWN: "En bilinmiyor",
+  // RuleScope — CUSTOMER ortak ("Müşteri")
+  FACTORY: "Fabrika varsayılanı",
+  // ScoreUnit
+  M2: "100 m² başına",
+  YD2: "100 yd² başına",
+  // RunningCap — METER/NONE FIELD_ENUM_OVERRIDES ile ayrılır
+  YARD: "Yarda başına en fazla 4 puan",
 };
