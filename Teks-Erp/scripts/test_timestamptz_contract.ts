@@ -97,6 +97,9 @@ const DATE_ONLY_FIELDS = new Set([
   // KOPYA, DONAR; rapor ekseni. `MachineStopEvent.factoryDay` ile aynı gerekçe ve aynı yazım
   // (`factoryDayKeyUtcMidnight`, UTC gece yarısı).
   "MachineShiftStat.factoryDay",
+  // Bildirim günlük sayacının FABRİKA GÜNÜ (2026-10-24, N1-SEMA) — `(factoryDay, kind)` tekil anahtarının
+  // parçası, `constants/time.ts` diliminden hesaplanır; `MachineStopEvent.factoryDay` ile aynı gerekçe.
+  "NotificationDailyStats.factoryDay",
 ]);
 
 // Prisma'nın kendi defteri — bizim şemamız değil, zaten timestamptz.
