@@ -5,6 +5,7 @@ import type {
   WorkOrderType,
 } from "@/types/enums";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
+import type { WorkOrderLocation } from "./location";
 
 /** findById response'unda her adım için anlık rulo özeti. List view'de boş gelir. */
 export interface StepRollSummary {
@@ -138,6 +139,9 @@ export interface WorkOrder {
    *  `current: true` → mal ŞU AN orada. 2026-08-17 talebi: adım geçse de
    *  "bu işi kim yaptı" görünsün. */
   fasonFirms?: { name: string; current: boolean }[];
+  /** Liste response'unda — "Şu an nerede": canlı topların istasyon dağılımı + sınıf
+   *  (backend `workorder-location.helper`). Eski backend göndermez → sütun "—". */
+  konum?: WorkOrderLocation;
   /** Liste response'unda — canlı (birleştirilmemiş) partilerin İLK üçü,
    *  doğuş sırasına göre. Kolon `+N` rozetini `_count.batches` ile kurar. */
   batches?: { id: string; batchNumber: string }[];

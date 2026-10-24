@@ -37,7 +37,10 @@ import {
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import {
-  QUALITY_STATION_WHERE,
+  STEP_FLOW_WHERE,
+  STEP_FLOW_ERROR,
+  STEP_FLOW_SELECT,
+  stepRunsStepFlow,
   QUALITY_STEP_ERROR,
   STEP_QUALITY_SELECT,
   stepCanApplyQuality,
@@ -247,7 +250,7 @@ export class KursunQcService {
     const pqStep = await prisma.workOrderStep.findFirst({
       where: {
         workOrderId: card.workOrderId,
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
       },
       orderBy: { stepSequence: "asc" },
       select: { id: true, status: true },
@@ -303,7 +306,7 @@ export class KursunQcService {
     const OPEN_CARDS_CAP = 500;
     const steps = await prisma.workOrderStep.findMany({
       where: {
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         status: { not: "COMPLETED" },
         currentRolls: { some: {} },
         // Kurşun bypass'a DAĞITILMIŞ adımlar bu listede GÖRÜNMEZ: bu liste
@@ -419,7 +422,7 @@ export class KursunQcService {
     userId?: string,
     machineId?: string | null
   ): Promise<ApiResponse<RollOperation>> {
-    await this.assertRollInQualityStep(data.rollId, data.stepId);
+    await this.assertRollInFlowStep(data.rollId, data.stepId);
 
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
@@ -620,7 +623,12 @@ export class KursunQcService {
       );
     }
 
-    await this.assertRollInQualityStep(data.rollId, data.stepId);
+    const stepStation = await this.assertRollInFlowStep(data.rollId, data.stepId);
+    // Hata kaydı akışa EK olarak MUAYENE yeteneği ister (KQ-D1): muayenesi
+    // kapatılmış istasyondaki (eski APK paneli koşulsuz çizer) yazma 400 alır.
+    if (!stepCanApplyQuality(stepStation)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
+    }
 
     // Kurşun bypass: dağıtılmış adımda hatalar KÂĞITTA tutulur (fabrika kurşun
     // istasyonuna tablet koymuyor). Dijital RollError açmak iki soruna yol açar:
@@ -733,6 +741,8 @@ export class KursunQcService {
       return { success: true, data: { deleted: true }, message: "Hata kaydı zaten yok" };
     }
 
+    await this.assertDeleteStationInspects(err);
+
     // ATOMİK guard: yalnız İŞLENMEMİŞ kayıt silinir — findUnique↔delete arası
     // eşzamanlı Tambur finalize'ı isProcessed=true yaparsa count=0 → silinmez
     // (eski bare delete TOCTOU'su: işlenen hata kaydı sessizce silinebiliyordu).
@@ -799,8 +809,8 @@ export class KursunQcService {
       },
     });
     if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
-    if (!stepCanApplyQuality(step.station)) {
-      throw AppError.badRequest(QUALITY_STEP_ERROR);
+    if (!stepRunsStepFlow(step.station)) {
+      throw AppError.badRequest(STEP_FLOW_ERROR);
     }
 
     const openMovements = await prisma.rollMovement.findMany({
@@ -1066,8 +1076,8 @@ export class KursunQcService {
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    if (!stepCanApplyQuality(step.station)) {
-      throw AppError.badRequest(QUALITY_STEP_ERROR);
+    if (!stepRunsStepFlow(step.station)) {
+      throw AppError.badRequest(STEP_FLOW_ERROR);
     }
     if (step.status !== StepStatus.COMPLETED) {
       throw AppError.badRequest(
@@ -1269,8 +1279,8 @@ export class KursunQcService {
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    if (!stepCanApplyQuality(step.station)) {
-      throw AppError.badRequest(QUALITY_STEP_ERROR);
+    if (!stepRunsStepFlow(step.station)) {
+      throw AppError.badRequest(STEP_FLOW_ERROR);
     }
 
     const block = (reason: string) => ({
@@ -1372,16 +1382,14 @@ export class KursunQcService {
   }
 
   /**
-   * Top gerçekten BU adımda mı ve bu adım KALİTE yürütüyor mu?
-   *
-   * ⚠️ Eskiden `expectedKind` argümanı alan jenerik bir yardımcıydı; iki
-   * çağıranı da `StationKind.PROCESS_QC` geçiyordu. Kalite artık istasyon
-   * yeteneği (`stepCanApplyQuality`) — argüman düştü.
+   * Top gerçekten BU adımda mı ve bu adım kart AKIŞINDA mı (`stepRunsStepFlow`)?
+   * İstasyonun muayene alanını da döner: hata yazan çağıran (reportError)
+   * ayrıca kalite ikizini sorar; QC2 tamamlama sormaz.
    */
-  private async assertRollInQualityStep(
+  private async assertRollInFlowStep(
     rollId: string,
     stepId: string,
-  ): Promise<void> {
+  ): Promise<{ kind: StationKind; appliesQuality: boolean; inspectionEnabled: boolean }> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
       select: { id: true, currentStepId: true, barcode: true },
@@ -1394,10 +1402,36 @@ export class KursunQcService {
     }
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
-      select: { station: { select: STEP_QUALITY_SELECT } },
+      select: { station: { select: { ...STEP_FLOW_SELECT, ...STEP_QUALITY_SELECT } } },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    if (!stepCanApplyQuality(step.station)) {
+    if (!stepRunsStepFlow(step.station)) {
+      throw AppError.badRequest(STEP_FLOW_ERROR);
+    }
+    return step.station;
+  }
+
+  /**
+   * Hata SİLME muayene kapısı (KQ-D1). Bu uç Tambur ekranınca da kullanılır,
+   * bu yüzden AKIŞ ikizi uygulanmaz (Tambur akışta değildir); soru "silmenin
+   * yapıldığı istasyonda muayene açık mı": topun bulunduğu adım, yoksa hatanın
+   * tespit adımı. İkisi de yoksa (adımsız eski kayıt) bugünkü davranış.
+   */
+  private async assertDeleteStationInspects(err: {
+    rollId: string;
+    detectedAtStepId: string | null;
+  }): Promise<void> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: err.rollId },
+      select: { currentStepId: true },
+    });
+    const stepId = roll?.currentStepId ?? err.detectedAtStepId;
+    if (!stepId) return;
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: stepId },
+      select: { station: { select: STEP_QUALITY_SELECT } },
+    });
+    if (step && !stepCanApplyQuality(step.station)) {
       throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
   }
@@ -1418,8 +1452,8 @@ export class KursunQcService {
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    if (!stepCanApplyQuality(step.station)) {
-      throw AppError.badRequest(QUALITY_STEP_ERROR);
+    if (!stepRunsStepFlow(step.station)) {
+      throw AppError.badRequest(STEP_FLOW_ERROR);
     }
 
     // Adımda şu anda açık olan rollerin hareket kayıtları.
@@ -1588,7 +1622,7 @@ export class KursunQcService {
   async listQueue(): Promise<ApiResponse<KursunQueueItem[]>> {
     const steps = await prisma.workOrderStep.findMany({
       where: {
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         status: { not: StepStatus.COMPLETED },
         currentRolls: { some: {} },
       },
@@ -1709,7 +1743,7 @@ export class KursunQcService {
       where: {
         id: { in: ids },
         status: { not: StepStatus.COMPLETED },
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
       },
       select: { id: true },
     });
@@ -1755,20 +1789,20 @@ export class KursunQcService {
       where: {
         id: stepId,
         status: { not: StepStatus.COMPLETED },
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
       },
       data: { isUrgent, urgentMarkedAt: isUrgent ? new Date() : null },
     });
     if (claimed.count === 0) {
       const existing = await prisma.workOrderStep.findUnique({
         where: { id: stepId },
-        select: { status: true, station: { select: STEP_QUALITY_SELECT } },
+        select: { status: true, station: { select: STEP_FLOW_SELECT } },
       });
       if (!existing) throw AppError.notFound("Adım bulunamadı");
       // ⚠️ Bu tanı, hemen üstteki atomik claim'in WHERE'inin İKİZİdir — ikisi
       // AYNI yüklemden beslenmezse yarışın kaybedenine yanlış sebep basılır.
-      if (!stepCanApplyQuality(existing.station)) {
-        throw AppError.badRequest(QUALITY_STEP_ERROR);
+      if (!stepRunsStepFlow(existing.station)) {
+        throw AppError.badRequest(STEP_FLOW_ERROR);
       }
       throw AppError.badRequest("Adım tamamlanmış, acil işaretlenemez");
     }

@@ -54,9 +54,17 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *         name: filter[customerId]
  *         schema: { type: string }
  *         description: 'Bağlı siparişin müşterisi (uuid; CSV ile çoklu) — bağsız (stok) iş emri eşleşmez'
+ *       - in: query
+ *         name: filter[konumIstasyon]
+ *         schema: { type: string }
+ *         description: 'Şu an nerede — en az bir canlı topu bu istasyonda olan iş emirleri (istasyon uuid; CSV ile çoklu). Geçersiz id 400 INVALID_FILTER_VALUE'
+ *       - in: query
+ *         name: filter[konumSinifi]
+ *         schema: { type: string, enum: [BASLAMADI, TEK_ISTASYON, BOLUNMUS, FASONDA, BITTI] }
+ *         description: 'Konum sınıfı (CSV ile çoklu, VEYA). Tanınmayan değer 400 INVALID_FILTER_VALUE'
  *     responses:
  *       200:
- *         description: 'Sayfalanmış iş emri listesi; her satırda `customers` (bağlı siparişlerin DISTINCT müşterileri, id+ad, ad sırası, en çok 5) ve `customerCount`'
+ *         description: 'Sayfalanmış iş emri listesi; her satırda `customers` (bağlı siparişlerin DISTINCT müşterileri, id+ad, ad sırası, en çok 5), `customerCount` ve `konum` ({ sinif, canliTop, istasyonlar[{ istasyonId, ad, tur, dis, topSayisi, metre, fasondaTop, fasoncular }] } — canlı topların şu anki istasyon dağılımı)'
  */
 router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findAll);
 

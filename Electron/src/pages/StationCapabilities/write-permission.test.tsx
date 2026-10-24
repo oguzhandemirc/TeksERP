@@ -31,6 +31,7 @@ const OZELLIK_VEREN: StationCapabilitySummary = {
   canApplyColor: false,
   canApplyProperty: true,
   canApplyQuality: false,
+  inspectionEnabled: false,
   colorCount: 0,
   propertyCount: 2,
 };

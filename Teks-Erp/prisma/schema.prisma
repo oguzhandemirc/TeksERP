@@ -992,8 +992,17 @@ model Station {
   /// `SubcontractorCategory`de `appliesQuality` kolonu yoktur, çünkü fason
   /// firma kalite notu yazmaz (kalite kaydı KK1 girişi + Tambur finalize'da
   /// doğar). Bu yüzden `seedCapabilityFromCategory` bu alana DOKUNMAZ ve ortak
-  /// yüklem `stepCanApplyQuality` tek argümanlıdır.
+  /// yüklem `stepRunsStepFlow` tek argümanlıdır.
+  ///
+  /// ⚠️ 2026-10-24 (KQ-D1): bu bayrak bugün AKIŞ ikizinin (`stepRunsStepFlow`)
+  /// köprü koludur — "ara-istasyon kart akışı"; muayene sorusu `inspectionEnabled`.
   appliesQuality Boolean @default(false)
+
+  /// Muayene yeteneği: bu istasyonda hata kaydı (kalite paneli) açılır mı?
+  /// (2026-10-24, KQ-D1). Akış sorusuna KATILMAZ — kalite ikizi
+  /// `stepCanApplyQuality` yalnız bunu okur. Migration bugünkü etkin davranıştan
+  /// türetir (PROCESS_QC + TAMBUR = true); doğuşta `inspectionDefaultForKind`.
+  inspectionEnabled Boolean @default(false)
 
   /// Bu istasyonun makinelerinde LEVENT DOĞAR mı? (devere makinesi, 2026-09-12)
   ///
