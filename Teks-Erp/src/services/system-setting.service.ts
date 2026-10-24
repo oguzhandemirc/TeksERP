@@ -8,6 +8,10 @@ import {
   DEFAULT_AUDIT_ARCHIVE_RETENTION_YEARS,
   isValidAuditArchiveRetentionYears,
 } from "./helpers/audit-retention.helper";
+import {
+  DEFAULT_PRINT_LOG_RETENTION_DAYS,
+  isValidPrintLogRetentionDays,
+} from "./helpers/print-job-retention.helper";
 import { createHash } from "crypto";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -806,6 +810,9 @@ export const SETTING_KEYS = {
   /** Audit ARŞİVİNİN saklama süresi, YIL (0..50; 0 = budama yok). Default 3. Gece
    *  bakım işi okur; bu yaştan eski `system_log_archives` satırları budanır. */
   AUDIT_ARCHIVE_RETENTION_YEARS: "audit.archiveRetentionYears",
+  /** Yazdırma geçmişinin (`print_jobs`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 180.
+   *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-A1). */
+  PRINT_LOG_RETENTION_DAYS: "printLog.retentionDays",
   /** Bu KURULUMUN kalıcı kimliği (uuid v4). İlk açılışta bir kez üretilir
    *  (`jobs/installation-identity.job.ts`) ve bir daha ASLA değişmez.
    *
@@ -7032,6 +7039,22 @@ export async function readAuditArchiveRetentionYears(
   });
   const v = asNumber(setting?.value);
   return isValidAuditArchiveRetentionYears(v) ? v : DEFAULT_AUDIT_ARCHIVE_RETENTION_YEARS;
+}
+
+/**
+ * Yazdırma geçmişi saklama süresi (gün). Kayıt yoksa ya da geçersizse varsayılan 180;
+ * 0 açıkça yazılırsa budama yok.
+ */
+export async function readPrintLogRetentionDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PRINT_LOG_RETENTION_DAYS },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return isValidPrintLogRetentionDays(v) ? v : DEFAULT_PRINT_LOG_RETENTION_DAYS;
 }
 
 /**

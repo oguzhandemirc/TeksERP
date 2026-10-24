@@ -33,6 +33,7 @@ import { readPackingLotSettings } from "./helpers/packing-group.helper";
 import { readPackingGroupsEnabled } from "./system-setting.service";
 import { recordSackPickList, type PickListPrint } from "./helpers/manifest-number.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
+import { fromAttachment, recordPrintJob, type PrintJobReportOpt } from "./print-job.service";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
@@ -1204,10 +1205,30 @@ export class SackSearchService {
    * Çeki listesi BASIMI — numara ilk basımda doğar, kâğıt kayıttan çizilir. Canlı dökümün anahtarı
    * önceki bir basımla aynıysa AYNI CL ve AYNI anlık görüntü döner (yeniden basım); değilse yeni CL.
    */
-  async printPickList(sackIds: string[], userId: string | undefined, clientToken: string): Promise<ApiResponse<PickListPrint>> {
+  async printPickList(
+    sackIds: string[],
+    userId: string | undefined,
+    clientToken: string,
+    report?: PrintJobReportOpt,
+  ): Promise<ApiResponse<PickListPrint>> {
     return pickListReplay(sackIds).run(clientToken, async () => {
       const live = (await this.getPickList(sackIds)).data as Array<{ id: string }>;
       const data = await recordSackPickList(live, userId, clientToken);
+      // Kayıt kâğıttan ÖNCE düşer: istemci künyesi yoksa sonuç bilinmez (BELIRSIZ); replay'de yazılmaz.
+      if (report) {
+        await recordPrintJob(
+          fromAttachment(report.ctx, report.attachment, {
+            subjectKind: "CEKI_LISTESI",
+            subjectTable: "manifests",
+            subjectId: data.id,
+            subjectIds: live.map((r) => r.id),
+            subjectNo: data.manifestNo,
+            itemCount: live.length,
+            isReprint: data.reused,
+            status: report.attachment ? "ILETILDI" : "BELIRSIZ",
+          }),
+        );
+      }
       return { success: true, data, message: data.reused ? `Çeki listesi yeniden basıldı: ${data.manifestNo}` : `Çeki listesi oluşturuldu: ${data.manifestNo}` };
     });
   }
