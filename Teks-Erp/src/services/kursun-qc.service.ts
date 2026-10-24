@@ -16,6 +16,7 @@
 
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
+import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { randomUUID } from "crypto";
@@ -136,6 +137,10 @@ interface StepSummary {
     /// Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4; çeşit değilse null).
     variantOfPropertyId: string | null;
   }[];
+  /// KQ-D6: İE'nin AKTİF hedef çeşit değerleri (hedef kurşun gramajı). Tablet hedef
+  /// düğmeyi vurgular, sapmayı işaretler, ENGELLEMEZ (D5). Eski APK yok sayar.
+  /// `valueCode`: `properties[].values` id taşımaz, tablet düğmeyi koddan eşler.
+  targetValues: { propertyId: string; valueId: string; valueCode: string }[];
   /// Bu adıma (Kurşun + KK2) yazılan serbest talimat — WorkOrderStep.notes
   /// (rotadaki RouteStep.defaultNotes'tan WO açılırken kopyalanır). Operatöre
   /// kart açıkken üstte sticky şerit olarak gösterilir (Tambur stepNote ile aynı).
@@ -1540,6 +1545,11 @@ export class KursunQcService {
           values: c.values.map((v) => ({ code: v.code, name: v.name })),
           // KQ-D4: bu SEÇİM hangi BAYRAĞIN çeşidi (gramaj → Kurşunlu). Eski APK yok sayar.
           variantOfPropertyId: c.variantOfPropertyId,
+        })),
+        targetValues: (await readActiveTargetValues(prisma, step.workOrder.id)).map((t) => ({
+          propertyId: t.propertyId,
+          valueId: t.valueId,
+          valueCode: t.value.code,
         })),
         stepNote: step.notes,
         bypassAssignment: bypass

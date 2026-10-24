@@ -147,7 +147,9 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
   },
   { permission: "settings:devices", flagKeys: ["devicePairingRequired"] },
   // Logo ayrı uçtan yazılır (`PUT /api/feature-flags/documents-logo`) — o uç da bu izni kabul eder.
-  { permission: "settings:company", flagKeys: ["companyName", "companyLetterhead"] },
+  { permission: "settings:company", flagKeys: ["companyName", "companyLetterhead", "companyLegalIdentity"] },
+  // e-İrsaliye yapılandırması — künyeden AYRI izin: bağdaştırıcı seçimi mevzuat belgesini açar (E3-AYAR).
+  { permission: "settings:e-irsaliye", flagKeys: ["eIrsaliyeConfig"] },
   {
     permission: "settings:session",
     flagKeys: [

@@ -233,7 +233,8 @@ export const PERMISSION_CATALOG = [
   { code: "settings:finance", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Muhasebe (KDV, fatura toleransı, kasa/risk kuralları)" },
   { code: "settings:label", module: "ADMIN", category: "web", description: "Baskı & Cihazlar → Etiket Baskısı (kopya, ortam, gönderim)" },
   { code: "settings:devices", module: "ADMIN", category: "web", description: "Baskı & Cihazlar → Cihazlar (tablet eşleştirme zorunluluğu)" },
-  { code: "settings:company", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Şirket Bilgileri (ad, antet, logo)" },
+  { code: "settings:company", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Şirket Bilgileri (ad, antet, logo, resmi künye)" },
+  { code: "settings:e-irsaliye", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → e-İrsaliye (bağdaştırıcı, yürürlük tarihi)" },
   { code: "settings:session", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Oturum & Güvenlik (oturum süreleri, giriş yöntemleri, PIN kilidi) — güvenliği gevşetebilir" },
   // Sistem ekranları — her karo kendi izniyle açılır.
   { code: "system:activity", module: "ADMIN", category: "web", description: "Sistem → Aktivite Günlüğü · Sistem Kayıtları · Arşiv Tarama (okuma)" },

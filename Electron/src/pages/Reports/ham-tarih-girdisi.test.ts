@@ -135,6 +135,8 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
     let measured = 0;
     for (const r of REPORT_CATALOG) {
       if (r.panelYolu === "" || !isReportSurfaced(r)) continue; // ucu inmemiş v2 satırının yaprağı yok
+      // v2 satırı kendi yaprağını yazmaz: genel yaprak anahtarı katalogdan alır (backend test_rapor_katalogu §7dv ölçer).
+      if (r.nesil === "v2") continue;
       const comp = routeComponent.get(r.panelYolu);
       const path = comp ? componentPath.get(comp) : undefined;
       if (!path) { offenders.push(`${r.key}: ÖLÇÜLEMEDİ — route/bileşen çözülmedi`); continue; }
@@ -154,7 +156,7 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
         }
       }
     }
-    expect(measured).toBe(REPORT_CATALOG.filter((r) => r.panelYolu !== "" && isReportSurfaced(r)).length);
+    expect(measured).toBe(REPORT_CATALOG.filter((r) => r.panelYolu !== "" && isReportSurfaced(r) && r.nesil !== "v2").length);
     expect(offenders, offenders.join(" · ")).toEqual([]);
   });
 

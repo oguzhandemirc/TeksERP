@@ -18,6 +18,7 @@ import {
 } from "@/services/featureFlagService";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 import { FactoryTimezoneField } from "./FactoryTimezoneField";
+import { CompanyLegalIdentityCard } from "./CompanyLegalIdentityCard";
 
 /**
  * Şirket bilgileri paneli — firma adı + belge künyesi (adres/telefon/vergi).
@@ -70,7 +71,9 @@ export function CompanySettingsSection({
     head.phone.trim() !== currentHead.phone.trim() ||
     head.taxInfo.trim() !== currentHead.taxInfo.trim() ||
     cleanLines(head.extraLines) !== cleanLines(currentHead.extraLines);
-  useRegisterSettingsDirty(dirty);
+  // Resmi künye kartının kendi Kaydet'i var; sayfanın kirlilik kaydı TEK olduğu için birleşik bildirilir.
+  const [legalDirty, setLegalDirty] = useState(false);
+  useRegisterSettingsDirty(dirty || legalDirty);
   const reset = () => {
     setName(currentName);
     setHead(currentHead);
@@ -173,6 +176,8 @@ export function CompanySettingsSection({
           onReset={reset}
           note={`Firma adı boş bırakılırsa varsayılan (${DEFAULT_COMPANY_NAME}) kullanılır. Refakat kartının firma adı/künyesi ayrı yönetilir (Refakat Kartı sekmesi).`}
         />
+
+        <CompanyLegalIdentityCard onDirtyChange={setLegalDirty} />
       </div>
     </PermissionGate>
   );

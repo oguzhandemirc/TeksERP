@@ -24,6 +24,8 @@ const assignSchema = z.object({
   machineId: z.string().uuid("Geçersiz makine ID"),
   // KursunBypassAssignment.notes VarChar(500)
   notes: z.string().trim().max(500, "Not en fazla 500 karakter olabilir").nullish(),
+  // KQ-D6: kâğıt gramajı (isteğe bağlı; null = bilinmiyor).
+  propertyValueId: z.string().uuid("Geçersiz gramaj ID").nullish(),
 });
 
 const cancelSchema = z.object({
@@ -59,7 +61,12 @@ const completeSchema = z.object({
   rollIds: z
     .array(z.string().uuid("Geçersiz top ID"))
     .min(1, "En az bir top seçilmelidir"),
+  propertyValueId: z.string().uuid("Geçersiz gramaj ID").nullish(),
 });
+
+const gramajSchema = z.object({
+  propertyValueId: z.string().uuid("Geçersiz gramaj ID").nullable(),
+}).strict();
 
 export class KursunBypassController {
   private service: KursunBypassService;
@@ -74,6 +81,18 @@ export class KursunBypassController {
     this.cancelBulk = this.cancelBulk.bind(this);
     this.getCompletePreview = this.getCompletePreview.bind(this);
     this.complete = this.complete.bind(this);
+    this.setGramaj = this.setGramaj.bind(this);
+  }
+
+  /** PATCH /api/kursun-bypass/:id/gramaj — açık dağıtımın kâğıt gramajı (KQ-D6). */
+  async setGramaj(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const id = assertValidUuid(req.params.id, "id");
+      const body = gramajSchema.parse(req.body);
+      res.status(200).json(await this.service.setGramaj(id, body.propertyValueId, req.user?.userId));
+    } catch (err) {
+      next(err);
+    }
   }
 
   /**
@@ -108,6 +127,7 @@ export class KursunBypassController {
           workOrderId: body.workOrderId,
           machineId: body.machineId,
           notes: body.notes ?? null,
+          ...(body.propertyValueId !== undefined ? { propertyValueId: body.propertyValueId } : {}),
         },
         req.user?.userId,
       );
@@ -190,7 +210,10 @@ export class KursunBypassController {
       const body = completeSchema.parse(req.body);
       const result = await this.service.completeFromDistribution(
         id,
-        { rollIds: body.rollIds },
+        {
+          rollIds: body.rollIds,
+          ...(body.propertyValueId !== undefined ? { propertyValueId: body.propertyValueId } : {}),
+        },
         req.user?.userId,
       );
       res.status(200).json(result);

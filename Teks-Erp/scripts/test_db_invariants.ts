@@ -156,6 +156,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "damgalı hedef dururken aynı (iş emri, özellik) yeniden yazılabilsin; AKTİF çift tekil",
   },
+  // KQ-D6 (migration 20261024140855): İE hedef çeşit değeri — damga ile sürümlenir.
+  {
+    table: "work_order_target_values",
+    index: "work_order_target_values_active_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "damgalı hedef değer dururken aynı (iş emri, çeşit özelliği) yeniden yazılabilsin; AKTİF hedef tekil",
+  },
   // rolls — null-yoğun FK'lar (migration 20260606001717 → 20260612100000 onarımı)
   { table: "rolls", index: "rolls_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun FK" },
   { table: "rolls", index: "rolls_shipmentId_idx", uniq: false, predicate: `("shipmentId" IS NOT NULL)`, why: "null-yoğun FK" },
