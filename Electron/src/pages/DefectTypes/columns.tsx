@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { defectSeverityLabels } from "@/types/enums";
+import { defectGroupLabel } from "@/lib/hata-gruplari";
 import type { DefectType } from "./types";
 
 const severityVariant: Record<string, "default" | "secondary" | "destructive" | "muted"> = {
@@ -28,6 +29,16 @@ export const defectTypeColumns: ColumnDef<DefectType>[] = [
       if (!s) return <span className="text-muted-foreground">—</span>;
       return <Badge variant={severityVariant[s] ?? "muted"}>{defectSeverityLabels[s]}</Badge>;
     },
+  },
+  {
+    accessorKey: "defectGroup",
+    header: () => <SortableHeader field="defectGroup" label="Grup" />,
+    cell: ({ row }) =>
+      row.original.defectGroup ? (
+        <span className="text-sm">{defectGroupLabel(row.original.defectGroup)}</span>
+      ) : (
+        <span className="text-muted-foreground">{defectGroupLabel(null)}</span>
+      ),
   },
   {
     accessorKey: "description",

@@ -406,6 +406,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   endMeter: "Bitiş Metre",
   defectType: "Hata Tipi",
   severity: "Şiddet",
+  defectGroup: "Hata grubu",
   actionTaken: "Alınan Aksiyon",
   isProcessed: "İşlendi",
   plateNumber: "Plaka",

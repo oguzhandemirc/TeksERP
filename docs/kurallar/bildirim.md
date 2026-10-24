@@ -20,6 +20,9 @@
 - **[ÇEKİRDEK]** Okunmamış sayısını `SystemLog`dan türetme: audit yalnız ayak izidir; sayı gelen kutusu satırlarından gelir.
 - **[ÇEKİRDEK]** Bildirim tablolarında tekilliği partial unique ile kur — `notification_inbox (userId, groupKey)` ve `notification_conditions (kind, subjectKey)`, ikisi de `WHERE "resolvedAt" IS NULL` (çözülen satır anahtarı bırakır; dağıtıcının `ON CONFLICT` hedefi budur); kapalı kümeleri (`phase` · `klass` · `reason`) VarChar + CHECK yaz, `kind`e CHECK koyma; FK yalnız `notification_inbox.userId → users` (RESTRICT), polimorfik ve budanan bağlar FK'sız. · bekçi: `test_db_invariants`
 
+- **[ÇEKİRDEK]** Dağıtıcı ve koşul tarayıcısı advisory uzayı 8040'tan kilit alır (`hashtext('bildirim-dagitici')` · `hashtext('bildirim-kosul:'||kind)`), kilit tx'in İLK ifadesidir; dağıtım hatası iş işlemine dokunmaz (ayrı tx'te `attempts++`), koşul kaynağı hata verirse hiçbir koşul kapanmaz. · bekçi: `test_bildirim_motoru`, `test_advisory_lock_namespaces`
+- **[ÇEKİRDEK]** Outbox INSERT'ünü yalnız `emitNotification`, gelen kutusu/sayaç yazımını yalnız dağıtıcı, koşul aç/kapa'yı yalnız koşul tarayıcısı, silmeyi yalnız `notification-prune.service` yapar; gelen kutusuna dokunan dosya görme helper'ını kullanır. · bekçi: `test_bildirim_tek_kaynak`
+
 ### Kararlar
 
 - **[ÇEKİRDEK]** `bildirim.gelenKutusuEnabled` bir DAVRANIŞ BAYRAĞIDIR, modül anahtarı değildir (`MODULE_FLAG_KEYS` genişletilmez); varsayılanı `false` (= bugünkü davranış); kapalıyken `emitNotification` no-op, dağıtıcı başlamaz, `/api/bildirim/*` 409 `BILDIRIM_KAPALI` (yalnız `/ozet` 200 `{enabled:false}`).
@@ -33,4 +36,4 @@
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## bildirim` bölümü.**
 
-Backend: `test_bildirim_katalogu`, `test_screen_catalog`
+Backend: `test_bildirim_katalogu`, `test_screen_catalog`, `test_bildirim_motoru`, `test_bildirim_tek_kaynak`, `test_advisory_lock_namespaces`, `test_telemetri_defter_degil`, `test_audit_muafiyeti`
