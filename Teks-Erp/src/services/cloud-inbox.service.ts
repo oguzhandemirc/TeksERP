@@ -14,6 +14,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { tokenReplay } from "./helpers/token-replay.helper";
+import { emitNotification } from "./helpers/notification-emit.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { cardWireToFactory, inboxPayloadDigest, orderWireToFactory } from "../cloud-sync/inbox-wire";
@@ -157,6 +158,16 @@ async function customerService() {
   return (await import("../routes/customer.routes")).customerService;
 }
 
+/** Katalog `payloadAlanlari` kadar (siparisId · siparisNo · musteriAd) — tutar/miktar bildirime girmez. */
+function patronOrderPayload(order: Record<string, unknown>): Record<string, unknown> {
+  const customer = order.customer as { name?: unknown } | null | undefined;
+  return {
+    siparisId: order.id,
+    siparisNo: typeof order.orderNumber === "string" ? order.orderNumber : null,
+    musteriAd: typeof customer?.name === "string" ? customer.name : null,
+  };
+}
+
 /** SİPARİŞ (K): kapılar `prepareOrderCreate`ten; sipariş + makbuz aynı tx; 8036 mesajId üzerinde tx'in ilk ifadesi. */
 async function createOrderFromMessage(f: ReceiptFields, w: OrderMessage, replay: ReceiptReplay, actorUserId: string): Promise<InboxOutcome> {
   const svc = await orderService();
@@ -176,6 +187,9 @@ async function createOrderFromMessage(f: ReceiptFields, w: OrderMessage, replay:
             mesaj: "Sipariş oluşturuldu",
           }),
         });
+        // Bildirim yalnız sipariş GERÇEKTEN doğduğunda ve aynı tx'te: replay/ret yolları buraya hiç gelmez,
+        // rollback'te outbox satırı da düşer. Aktör teknik kullanıcıdır (yalnız o hariç tutulur); tutar taşınmaz.
+        await emitNotification(tx, "siparis.patron-siparisi", { type: "order", id: order.id as string, key: order.id as string }, patronOrderPayload(order), { actorUserId });
         return { replay: false as const, order, receipt };
       }),
     undefined,
