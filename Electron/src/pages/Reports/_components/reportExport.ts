@@ -20,7 +20,7 @@
 import type { SheetSpec } from "@/lib/xlsx-export";
 import { reportCellText, reportExcelNumFmt } from "@/lib/number-format";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
-import type { GrafikBlok } from "../_v2/grafik/tipler";
+import type { GrafikBlok } from "../_v2/sunum";
 
 export interface ReportColumn {
   header: string;

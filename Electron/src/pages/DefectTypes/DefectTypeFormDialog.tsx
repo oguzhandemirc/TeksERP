@@ -1,13 +1,45 @@
-import { Controller } from "react-hook-form";
+import { Controller, type UseFormReturn } from "react-hook-form";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { defectSeverityLabels } from "@/types/enums";
+import { DEFECT_GROUPS, DEFECT_GROUP_LABELS, UNGROUPED_LABEL } from "@/lib/hata-gruplari";
+import { OptionPickerField, type PickerOption } from "@/pages/LoomAlarmDuty/OptionPickerModal";
 import { defectTypeFormDefaults, defectTypeFormSchema, type DefectTypeFormValues } from "./schema";
 import type { DefectType } from "./types";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
+// "" = gruplanmamış; seçici doğrudan modal açar (combobox yok — UI tercihi).
+const GROUP_OPTIONS: readonly PickerOption[] = [
+  { id: "", label: UNGROUPED_LABEL, subLabel: "Raporda ayrı bir grup olarak görünür" },
+  ...DEFECT_GROUPS.map((g) => ({ id: g, label: DEFECT_GROUP_LABELS[g] })),
+];
+
+function DefectGroupField({ form }: { form: UseFormReturn<DefectTypeFormValues> }) {
+  return (
+    <FormField
+      label="Hata grubu"
+      error={form.formState.errors.defectGroup}
+      hint="Raporlarda hatalar bu gruba göre toplanır (ör. çözgü × vardiya)."
+    >
+      <Controller
+        control={form.control}
+        name="defectGroup"
+        render={({ field }) => (
+          <OptionPickerField
+            value={field.value ?? ""}
+            onChange={(v) => field.onChange(v)}
+            options={GROUP_OPTIONS}
+            title="Hata grubu seç"
+            placeholder={UNGROUPED_LABEL}
+          />
+        )}
+      />
+    </FormField>
+  );
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,6 +54,7 @@ export function DefectTypeFormDialog({ open, onOpenChange, initial, onSubmit, is
         name: initial.name,
         description: initial.description ?? "",
         severity: (initial.severity ?? "") as DefectTypeFormValues["severity"],
+        defectGroup: initial.defectGroup ?? "",
         isActive: initial.isActive,
         isDefault: initial.isDefault,
       }
@@ -73,6 +106,7 @@ export function DefectTypeFormDialog({ open, onOpenChange, initial, onSubmit, is
               )}
             />
           </FormField>
+          <DefectGroupField form={form} />
           <FormField label="Açıklama" htmlFor="description" error={form.formState.errors.description}>
             <Input id="description" {...form.register("description")} />
           </FormField>

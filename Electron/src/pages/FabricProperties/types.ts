@@ -27,6 +27,11 @@ export interface FabricProperty {
    * Süzgeç: `valueType !== "CHOICE"`.
    */
   valueType: FabricPropertyValueType;
+  /**
+   * Bu SEÇİM özelliği hangi BAYRAĞIN çeşidi? (KQ-D4 — "Kurşun gramajı" →
+   * "Kurşunlu"). Değer basılınca ana bayrak da topa yazılır. Bayrakta hep null.
+   */
+  variantOfPropertyId?: string | null;
   /** SEÇİM tipliyse izin verilen değerler; BAYRAK'ta boş. */
   values?: FabricPropertyValue[];
   /**

@@ -127,6 +127,7 @@ import { DevicesPage } from "@/pages/Devices/DevicesPage";
 import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
+import { reportV2Routes } from "@/pages/Reports/_v2/routes";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
 import { WipScorecardPage } from "@/pages/Reports/Production/WipScorecardPage";
 import { OperatorPerformancePage } from "@/pages/Reports/Production/OperatorPerformancePage";
@@ -1534,6 +1535,8 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  // Raporlar v2 — 14 temel rapor yaprağı katalogdan (izin `izin`, kapı bayrak + `hazir`; `_v2/routes.tsx`).
+  ...reportV2Routes,
 
   { path: "*", element: <Navigate to="/" replace /> },
 ];

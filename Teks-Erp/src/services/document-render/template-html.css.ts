@@ -12,7 +12,19 @@ export const CSS_REMOVED = {
   url: "izinsiz adres",
   script: "script şeması",
   data: "izinsiz data: adresi",
+  external: "dış kaynak adresi (sıkı kip)",
+  fontFace: "yazı tipi tanımı (@font-face, sıkı kip)",
 } as const;
+
+/** Sıkı kip (belge tasarımcısı şablonu): dış http(s) adres ve `@font-face` de kesilir; yalnız `data:` görsel kalır. */
+export interface CssSanitizeOptions {
+  readonly strict?: boolean;
+}
+
+/** Şemalı dış adres mi (`http:`/`https:`) — sıkı kipte izinli adres yalnız `data:` görseldir. */
+export function isExternalUrl(decoded: string): boolean {
+  return /^https?:/i.test(stripUrlNoise(decoded));
+}
 
 /** Kaynak yükleyen ve url() dışında adres taşıyan işlevler — hepsi `none` olur. */
 const BLOCKED_FUNCTIONS = new Set([
@@ -145,8 +157,35 @@ function skipAtImport(css: string, i: number): number {
   return Math.min(j + 1, css.length);
 }
 
-/** Bir CSS metnini temizler; değişmeyen girdi BAYT-BAYT aynı döner. */
-export function sanitizeCss(css: string): CssResult {
+/** `@font-face` kuralını gövdesiyle atlar: `;` ya da eşleşen `}` sonrası (dize/kaçış farkında). */
+function skipAtRuleBlock(css: string, i: number): number {
+  let j = i;
+  while (j < css.length && css[j] !== ";" && css[j] !== "{") {
+    if (css[j] === '"' || css[j] === "'") j = skipString(css, j);
+    else if (css[j] === "\\") j += 2;
+    else j++;
+  }
+  if (css[j] !== "{") return Math.min(j + 1, css.length);
+  let depth = 0;
+  while (j < css.length) {
+    const c = css[j];
+    if (c === '"' || c === "'") {
+      j = skipString(css, j);
+      continue;
+    }
+    if (c === "\\") j += 2;
+    else {
+      if (c === "{") depth++;
+      if (c === "}" && --depth === 0) return j + 1;
+      j++;
+    }
+  }
+  return css.length;
+}
+
+/** Bir CSS metnini temizler; değişmeyen girdi BAYT-BAYT aynı döner. Varsayılan kip sıkı kipten bağımsızdır. */
+export function sanitizeCss(css: string, opts: CssSanitizeOptions = {}): CssResult {
+  const strict = opts.strict === true;
   const removed = new Set<string>();
   let out = "";
   let i = 0;
@@ -166,6 +205,9 @@ export function sanitizeCss(css: string): CssResult {
       if (name.toLowerCase() === "import") {
         removed.add(CSS_REMOVED.import);
         i = skipAtImport(css, j);
+      } else if (strict && name.toLowerCase() === "font-face") {
+        removed.add(CSS_REMOVED.fontFace);
+        i = skipAtRuleBlock(css, j);
       } else {
         out += "@" + raw;
         i = j;
@@ -182,8 +224,12 @@ export function sanitizeCss(css: string): CssResult {
         const close = matchParen(css, j);
         const stop = close < 0 ? css.length : close;
         // Kapanmayan url( metin sonuna kadar sürer — argümanın son karakteri KESİLMEZ.
-        const verdict = classifyResourceUrl(decodeUrlArg(css.slice(j + 1, close < 0 ? stop : stop - 1)));
-        if (verdict === "ok") out += css.slice(i, stop);
+        const arg = decodeUrlArg(css.slice(j + 1, close < 0 ? stop : stop - 1));
+        const verdict = classifyResourceUrl(arg);
+        if (verdict === "ok" && strict && isExternalUrl(arg)) {
+          removed.add(CSS_REMOVED.external);
+          out += "none";
+        } else if (verdict === "ok") out += css.slice(i, stop);
         else {
           removed.add(CSS_REMOVED[verdict]);
           out += "none";

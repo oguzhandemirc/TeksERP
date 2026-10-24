@@ -1,5 +1,5 @@
 // =============================================================================
-// MODÜL REJİM KAPILARI (ticaret · iplik · çoklu depo · üretim · dokuma · tezgah · maliyet)
+// MODÜL REJİM KAPILARI (ticaret · iplik · çoklu depo · üretim · dokuma · tezgah · kalite güvence · maliyet)
 // =============================================================================
 // `finance.middleware.ts`in birebir ikizi ve aynı gerekçeyle yazıldı: modül
 // anahtarı bir GÖRÜNÜRLÜK ayarı DEĞİL, bir REJİM anahtarıdır. Menüyü gizlemek
@@ -63,6 +63,7 @@ import {
   readDevereEnabled,
   readDokumaEnabled,
   readIplikEnabled,
+  readKaliteGuvenceEnabled,
   readMaliyetEnabled,
   readProductionEnabled,
   readTezgahEnabled,
@@ -294,6 +295,28 @@ export async function requireTezgahEnabled(
     const enabled = await readTezgahEnabled();
     if (!enabled) {
       throw licenseModuleError(SETTING_KEYS.TEZGAH_ENABLED, "Tezgah izleme") ?? modulKapali("tezgah", "Tezgah izleme");
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Kalite Güvence modülü (K4P): 4 puan muayene · kural setleri · lab testleri · sertifikalar.
+ *
+ * Ön koşul YOK (`MODULE_DEPENDENCIES` satırı bilerek yazılmadı): muayene KK1'de doğar ve
+ * KK1 üretim kapalıyken de açıktır — üretime bağlamak üretimsiz kurulumda muayeneyi kapatırdı.
+ */
+export async function requireKaliteGuvenceEnabled(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const enabled = await readKaliteGuvenceEnabled();
+    if (!enabled) {
+      throw licenseModuleError(SETTING_KEYS.KALITE_GUVENCE_ENABLED, "Kalite Güvence") ?? modulKapali("kaliteGuvence", "Kalite Güvence");
     }
     next();
   } catch (e) {
