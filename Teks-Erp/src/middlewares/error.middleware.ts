@@ -266,6 +266,7 @@ export function extractCheckConstraint(err: unknown): string | null {
  */
 const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   rolls_currentQty_nonneg: "Top metrajı negatif olamaz.",
+  stations_default_label_copies_range: "İstasyonun varsayılan etiket adedi 1–5 arasında olmalı (boş = genel adet).",
   // Ürün arşivinin DB seddi (tetikleyici, 23514) — URUN-YASAM-DONGUSU.md §7; mesaj çıkış yolunu söyler.
   rolls_item_not_archived: ROLL_ON_ARCHIVED_ITEM_MESSAGE,
   order_lines_item_not_archived: ORDER_LINE_ON_ARCHIVED_ITEM_MESSAGE,

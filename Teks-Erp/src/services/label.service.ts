@@ -18,8 +18,8 @@
 // =============================================================================
 
 import { createSliceYielder, renderCode128Svg, renderQrSvg } from "./helpers/barcode-svg.helper";
+import { resolveFlowLabelCopies } from "./helpers/label-copies.helper";
 import {
-  readLabelCopies,
   readLabelNativeSendEnabled,
   readScrapGradeLabelEnabled,
   readCompanyName,
@@ -117,7 +117,7 @@ export interface RollLabelRenderOpts {
   orderLineId?: string | null;
   customerId?: string | null;
   stock?: boolean;
-  /** Saha #6: kopya adedi override (1-5). Verilmezse label.copies ayarı (default 2). */
+  /** İstenen kopya adedi — çözücü `resolveFlowLabelCopies` (GLOBAL'de yok sayılır; STATION'da 1-5, dışı 400). */
   copies?: number;
   /** İstasyon makinesi — yazıcı medyası + dil oto çözülür (mobil: req.device.machineId). */
   machineId?: string | null;
@@ -137,13 +137,6 @@ export interface RollLabelRenderOpts {
   rasterCapable?: boolean;
 }
 
-/** Rulo/kartela FABRİKA AKIŞI kopya tavanı (1-5) — emit-katmanı clampCopies 100'e
- *  çıktı (Etiket Stüdyosu şablon baskısı); akış uçlarının ?copies= girişi BURADA
- *  kırpılır ki 100'lük tavan top/kartela hattına SIZMASIN (bulk uçlarda Zod max(5)
- *  zaten var — burası tekil ?copies= query yolunun kapısı). */
-function clampRollCopies(copies: number): number {
-  return Math.max(1, Math.min(5, Math.floor(copies) || 1));
-}
 
 /**
  * SwatchLabelPayload → LabelPayload eşlemesi — landscape/native builder'ları
@@ -839,9 +832,9 @@ export class LabelService {
     const qrSvg = payload.barcode
       ? renderQrSvg(payload.barcode)
       : "";
-    // Saha #6: kopya adedi — istek override > bulk-sabit > ayar (default 2).
-    // Akış tavanı 1-5 (clampRollCopies) — emit clampCopies artık 100 (stüdyo).
-    const copies = clampRollCopies(opts?.copies ?? preloaded?.copies ?? (await readLabelCopies()));
+    // Kopya adedi: toplu bağlamda bir kez çözülmüş değer > TEK çözücü (GLOBAL/STATION;
+    // akış tavanı 1-5 — emit clampCopies 100 yalnız stüdyo içindir).
+    const copies = preloaded?.copies ?? (await resolveFlowLabelCopies({ requested: opts?.copies, deviceId: opts?.deviceId }));
     const meta: LabelResolutionMeta = {
       templateId: template?.id ?? null,
       templateName: template?.name ?? null,
@@ -1125,7 +1118,7 @@ export class LabelService {
   ): Promise<ApiResponse<{ html: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
-    const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
+    const copies = await resolveFlowLabelCopies({ requested: opts?.copies, deviceId: opts?.deviceId });
 
     // N+1 → O(1): format/template/copies'i bir kez çöz + tüm top + ilişki verisini
     // toplu prefetch et. Render (aşağıdaki döngü) DEĞİŞMEDEN preloaded bağlamı kullanır;
@@ -1146,7 +1139,7 @@ export class LabelService {
     // LAN'daki diğer istasyonların bekleyen soketleri servis edilsin.
     const breathe = createSliceYielder();
     for (const id of ids) {
-      const res = await this.getRollLabelHtml(id, undefined, { copies, customerId: opts?.customerId ?? undefined }, ctx);
+      const res = await this.getRollLabelHtml(id, undefined, { customerId: opts?.customerId ?? undefined }, ctx);
       const full = res.data.html;
       if (!head) {
         // İlk belgenin <head> dahil <body ...> açılışına kadarki kısmı.
@@ -1181,7 +1174,7 @@ export class LabelService {
   ): Promise<ApiResponse<{ content: string; contentB64: string; encoding: "text" | "binary"; language: PrinterLanguage; contentType: string; count: number }>> {
     const ids = [...new Set(rollIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir top seçilmeli");
-    const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
+    const copies = await resolveFlowLabelCopies({ requested: opts?.copies, deviceId: opts?.deviceId });
     const ctx = await this.buildBulkContext(
       ids,
       copies,
@@ -1199,7 +1192,7 @@ export class LabelService {
       const { input } = await this.buildRollRenderInput(
         id,
         undefined,
-        { copies, customerId: opts?.customerId ?? undefined },
+        { customerId: opts?.customerId ?? undefined },
         ctx,
       );
       // rasterCapable değilse komut zorla (eski istemci binary alamaz). rasterCapable (b64)
@@ -1530,7 +1523,7 @@ export class LabelService {
     const qrSvg = payload.barcode
       ? renderQrSvg(payload.barcode)
       : "";
-    const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
+    const copies = await resolveFlowLabelCopies({ requested: opts?.copies, deviceId: opts?.deviceId });
     // KARTELA v1 KAPSAM DIŞI (Etiket Stüdyosu): variant BİLEREK geçilmez — kartela
     // hattı akış-modelinde bayt-aynı kalır. Kanvas'a alınırsa müşteri plumbing'iyle
     // birlikte ayrı iş (docs/design/KARTELA-TASARIM.md).
@@ -1699,7 +1692,7 @@ export class LabelService {
 
     const barcodeSvg = renderCode128Svg(payload.barcode);
     const qrSvg = renderQrSvg(payload.barcode);
-    const copies = clampRollCopies(opts?.copies ?? (await readLabelCopies()));
+    const copies = await resolveFlowLabelCopies({ requested: opts?.copies, deviceId: opts?.deviceId });
     return {
       // variant GEÇİLİR (swatch aksine) — çuval etiketi kanvas modelinde yaşar.
       input: {
@@ -1983,7 +1976,7 @@ export class LabelService {
     const qrSvg = payload.barcode
       ? renderQrSvg(payload.barcode)
       : "";
-    // Serbest baskı çok kopya isteyebilir → 1–100 (akış clampRollCopies 1–5 DEĞİL).
+    // Serbest baskı çok kopya isteyebilir → 1–100 (akış çözücüsü `resolveFlowLabelCopies` 1–5 DEĞİL).
     const copies = Math.max(1, Math.min(100, Math.floor(opts.copies ?? 1) || 1));
     const input: LabelRenderInput = {
       payload,

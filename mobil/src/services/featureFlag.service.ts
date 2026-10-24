@@ -148,6 +148,12 @@ export interface FeatureFlags {
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
    *  Açıkken WYSIWYG ama ~40KB binary HC-06'dan gider; sahada yavaşsa admin kapatır. */
   mobileRasterEnabled: boolean;
+  /** Akış etiketi adedini kim belirler — `STATION` iken tablet baskı düğmesinin yanında
+   *  "– N +" seçici çizer ve `copies` gönderir; `GLOBAL` (varsayılan) iken seçici yok,
+   *  adet gönderilmez (bugünkü ekran). Eski sunucu göndermez → GLOBAL. */
+  labelCopiesSource?: 'GLOBAL' | 'STATION';
+  /** Genel etiket adedi (`label.copies`, 1–5) — istasyon varsayılanı boşken seçicinin başlangıcı. */
+  labelCopies?: number;
   /** Fire ("etiketsiz" işaretli — QualityGrade.skipLabel) kalitede de OTOMATİK
    *  etiket basılsın mı (default false → fire topa kâğıt çıkmaz). Elle "Etiket"
    *  baskısı kapatılmaz, onay sorulur. Client (mobil) ENFORCE. */
@@ -238,6 +244,9 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   mobileIdleLockMinutes: 10,
   mobileLockOnBackground: true,
   mobileRasterEnabled: false,
+  // Fail-closed yön: bayrak okunamazsa seçici GİZLİ, adet gönderilmez → sunucu kendi çözer (bugünkü ekran).
+  labelCopiesSource: 'GLOBAL',
+  labelCopies: 2,
   // Fail-closed yön: bayrak okunamazsa da fire topa etiket BASILMAZ.
   scrapGradeLabelEnabled: false,
   kursunBypassEnabled: false,

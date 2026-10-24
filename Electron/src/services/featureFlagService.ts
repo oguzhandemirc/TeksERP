@@ -28,6 +28,8 @@ export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
 
 /** Mobil giriş yöntemleri (auth.loginMethods). */
 export type LoginMethod = "list" | "pin" | "card";
+/** Etiket adedi kaynağı — backend `LabelCopiesSource` aynası. */
+export type LabelCopiesSource = "GLOBAL" | "STATION";
 
 export type TravelerCardPageSize = "A4" | "A5";
 export type TravelerCardFontWeight = "light" | "normal" | "bold";
@@ -611,6 +613,9 @@ export interface FeatureFlags {
   loginMethods: { enabled: LoginMethod[]; primary: LoginMethod };
   /** Saha #6: top etiketi kopya adedi (default 2 — topun üstüne + altına). 1-5. */
   labelCopies: number;
+  /** Akış etiketi adedini kim belirler: GLOBAL (varsayılan — `labelCopies`) | STATION
+   *  (tablet seçer; varsayılanı istasyon kartında, boşsa `labelCopies`). Backend çözer. */
+  labelCopiesSource: LabelCopiesSource;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).

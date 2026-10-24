@@ -717,6 +717,11 @@ export const SETTING_KEYS = {
    *  altına yapıştırılıyor). /labels/rolls/:id/html bu kadar sayfa döner;
    *  çağıran ?copies= ile tek baskı için override edebilir. 1-5 arası. */
   LABEL_COPIES: "label.copies",
+  /** Akış etiketinin (top/kartela/çuval) adedini kim belirler: `GLOBAL` = `label.copies`
+   *  (istemcinin sayısı yok sayılır — bugünkü fiili davranış); `STATION` = baskı anında
+   *  istek, yoksa istasyonun `defaultLabelCopies`i, o da yoksa `label.copies`.
+   *  Çözücü TEK: `services/helpers/label-copies.helper.ts`. */
+  LABEL_COPIES_SOURCE: "label.copiesSource",
   /** Sistem VARSAYILAN etiket medyası (Etiket Stüdyosu v2 — "Boyutlar" kataloğu
    *  emekli). Cihazsız baskı/önizleme/kartela bu boyutu kullanır. JSON:
    *  { widthMm, heightMm, dpi, gapMm, marginMm }. */
@@ -875,6 +880,12 @@ export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_
 export const DOKUMA_ROLL_BIRTH_MODES: DokumaRollBirth[] = ["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"];
 /** Varsayılan `TABLET_DOFF` — BUGÜNKÜ davranış (KK1 gövdesinde yeni alan reddedilir, tablet İNDİR yolu aynen). */
 export const DEFAULT_DOKUMA_ROLL_BIRTH: DokumaRollBirth = "TABLET_DOFF";
+
+/** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
+export type LabelCopiesSource = "GLOBAL" | "STATION";
+export const LABEL_COPIES_SOURCES: LabelCopiesSource[] = ["GLOBAL", "STATION"];
+/** Varsayılan `GLOBAL` — BUGÜNKÜ davranış (hiçbir istemci akış etiketine `copies` göndermiyor; ölçüldü 2026-10-24). */
+export const DEFAULT_LABEL_COPIES_SOURCE: LabelCopiesSource = "GLOBAL";
 
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
@@ -1961,6 +1972,8 @@ export interface FeatureFlags {
   loginMethods: LoginMethodsConfig;
   /** Saha #6: top etiketi kopya adedi (default 2 — üst+alt yapıştırma). 1-5. */
   labelCopies: number;
+  /** Akış etiketi adedinin kaynağı — `GLOBAL` (varsayılan) | `STATION`. */
+  labelCopiesSource: LabelCopiesSource;
   /** Faz-2 opt-in: native komutları yazıcıya doğrudan (RAW TCP 9100) gönder (default false). */
   nativeSendEnabled: boolean;
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
@@ -2375,6 +2388,7 @@ export class SystemSettingService {
       pinLockoutLongPenaltyMin: await readPinLockoutLongPenaltyMin(cacheClient),
       loginMethods: await readLoginMethods(cacheClient),
       labelCopies: await readLabelCopies(cacheClient),
+      labelCopiesSource: await readLabelCopiesSource(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
       mobileRasterEnabled: await readMobileRasterEnabled(cacheClient),
       scrapGradeLabelEnabled: await readScrapGradeLabelEnabled(cacheClient),
@@ -4247,13 +4261,26 @@ export class SystemSettingService {
 
     if (Object.prototype.hasOwnProperty.call(input, "labelCopies")) {
       const v = input.labelCopies;
-      if (typeof v !== "number" || !Number.isFinite(v) || v < 1 || v > 5) {
-        throw AppError.badRequest("Etiket kopya adedi 1–5 aralığında olmalı");
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 1 || v > LABEL_COPIES_MAX) {
+        throw AppError.badRequest(`Etiket kopya adedi 1–${LABEL_COPIES_MAX} aralığında olmalı`);
       }
       await this.set(
         SETTING_KEYS.LABEL_COPIES,
         Math.floor(v),
         "Top etiketi kopya adedi — bir baskıda kaç etiket çıkar (üst+alt için 2)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "labelCopiesSource")) {
+      const v = input.labelCopiesSource;
+      if (typeof v !== "string" || !LABEL_COPIES_SOURCES.includes(v as LabelCopiesSource)) {
+        throw AppError.badRequest("Etiket adedi kaynağı GLOBAL ya da STATION olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.LABEL_COPIES_SOURCE,
+        v,
+        "Etiket adedini kim belirler: GLOBAL (sistem geneli) | STATION (istasyon; varsayılanı istasyon kartında)",
         userId
       );
     }
@@ -7160,7 +7187,26 @@ export async function readLabelCopies(
   if (!setting) return DEFAULT_LABEL_COPIES;
   const parsed = asNumber(setting.value);
   if (parsed === null || parsed < 1) return DEFAULT_LABEL_COPIES;
-  return Math.min(Math.floor(parsed), 5);
+  return Math.min(Math.floor(parsed), LABEL_COPIES_MAX);
+}
+
+/** Akış etiketinin en çok kopya adedi — genel ayar, istasyon varsayılanı ve istek aynı tavanı paylaşır. */
+export const LABEL_COPIES_MAX = 5;
+
+/** Etiket adedi kaynağı. Çöp değer → varsayılan (`GLOBAL`, bugünkü davranış). */
+export async function readLabelCopiesSource(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<LabelCopiesSource> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.LABEL_COPIES_SOURCE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && LABEL_COPIES_SOURCES.includes(v as LabelCopiesSource)) {
+    return v as LabelCopiesSource;
+  }
+  return DEFAULT_LABEL_COPIES_SOURCE;
 }
 
 /** Sistem varsayılan etiket medyası (cihazsız baskı/önizleme/kartela). Kayıt yoksa

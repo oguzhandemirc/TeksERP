@@ -11,6 +11,7 @@ import { useDevereEnabled, useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { stationFormDefaults, stationFormSchema, type StationFormValues } from "./schema";
 import { visibleStationKindLabels } from "./stationKindVisibility";
 import { suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
+import { StationLabelCopiesField } from "./StationLabelCopiesField";
 
 const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "producesWarpBeam", "consumesWarpBeam"] as const;
 import type { Station } from "./types";
@@ -41,6 +42,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         appliesQuality: initial.appliesQuality ?? false,
         producesWarpBeam: initial.producesWarpBeam ?? false,
         consumesWarpBeam: initial.consumesWarpBeam ?? false,
+        defaultLabelCopies: initial.defaultLabelCopies ?? null,
         defaultCategoryId: initial.defaultCategoryId ?? null,
       }
     : // Yeni kayıt: yetenek kutuları ön-seçili türün ÖNERİSİYLE açılır (`stationKindDefaults.ts`).
@@ -171,6 +173,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               )}
             </div>
           </FormField>
+          <StationLabelCopiesField form={form} />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif
           </label>

@@ -25,6 +25,7 @@ import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { assertStationDefaultLabelCopies } from "./helpers/label-copies.helper";
 
 /**
  * `kind` API davranış dispatch'inin anahtarıdır: rota/iş emri adımı, top girişi,
@@ -71,6 +72,7 @@ export class StationService extends BaseService {
     data: Record<string, unknown>,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
+    assertStationDefaultLabelCopies(data);
     await seedCapabilityFromCategory(data);
     return super.create(data, userId);
   }
@@ -80,6 +82,7 @@ export class StationService extends BaseService {
     data: Record<string, unknown>,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
+    assertStationDefaultLabelCopies(data);
     await assertKindChangeAllowed(id, data);
     await seedCapabilityFromCategory(data);
     return super.update(id, data, userId);
