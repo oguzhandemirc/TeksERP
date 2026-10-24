@@ -6,6 +6,7 @@
 > `https://patron.etkiliyazilim.com/v1`'e eşitler — kapatılmaz). VDS'e UYGULANDI 2026-10-15 22:33Z = 2026-10-16 01:33 TSİ (§15a).
 > **Hazırlık izleri temizlendi (2026-10-05):** hazırlık satıcısı emekli ve verisi silindi; patron iç API'si ÜRETİM satıcısına bağlı (ölçüldü 2026-10-05: ağ `tekserp-satici-uretim-ic-api`, `.env`'de hazırlık değeri yok — §14 uygulanmış). Deneme tesisi "Etkili Yazılım Hazırlık" (`c0f70948…`) önce PASİF yapıldı, sonra `tesis.js imha` ile imha edildi (hesap 1 · hesap audit'i 4 · tesis 1; imha kaydı `facility_destructions`ta, yedekten düşme 2026-11-09); patron üretim DB'sinde tesis 0. Eski hazırlık env yedeği (VDS) ve davet dosyası (Mac) silindi. §0–§13'teki hazırlık anlatımı (ağ adı, sır kopyası, deneme tesisi) tarihtir; `deploy/patron/ornek.env`teki hazırlık örneği kod işinde (3.1).
 > Yapıtlar: [`deploy/patron/`](../../deploy/patron/) (compose · Dockerfile · imaj derleme · yalıtım denetimi · duman). Sözleşme: [`PATRON-BULUTU-ESITLEME.md`](../design/PATRON-BULUTU-ESITLEME.md). Alan kuralları: [`kurallar/patron-bulutu.md`](../kurallar/patron-bulutu.md) § Dağıtım. Emsal ve paylaşılan adımlar: [`SATICI-KURULUM.md`](SATICI-KURULUM.md) (satıcı ÖNCE kurulu olmalı — patron onun iç API ağına katılır).
+> **v2 (0.2.0) yükseltme hazırlığı (2026-10-24):** §17 — UYGULANMADI; aday imaj `f80edf15df5b` web ikon fontu CSP'ye takıldığı için BLOKE (§17.3).
 > **Değişmez:** her VDS yazımından ÖNCE ve SONRA `deploy/vds-dogrula.sh` → *adnansahin baytları AYNI* (salt okuma, çıkış 0). Fark çıkarsa dur. Traefik **yeniden başlatılmaz**.
 
 ## 0. Kapsam
@@ -557,3 +558,58 @@ node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --dogrula
 **Geri alma:** göç YOK → kurulduktan sonra sorun çıkarsa güncelleyicinin önceki imaja dönüşü veri geri yüklemesiz mümkündür; grupta geri inme yok, düzeltme ileri sürümle (2.15.14). Davranış sorunu için ilk adım bayrağı KAPATMAK (kod geri alınmaz). Etiket `backend-v2.15.13` silinmez.
 
 **Bu bölümde koşulan:** yalnız salt okuma ölçümleri (`git`, `node scripts/backend-surum.mjs` yazdırma kipi, `deploy/*.json` okuma). Paket üretimi, imza, yayın, VDS/deneme erişimi YAPILMADI.
+
+## 17. v2 (0.2.0) yükseltme — HAZIRLIK (2026-10-24)
+
+> **Canlıya alma kullanıcının "uygula" onayıyla — UYGULANMADI.** Bu bölüm yazılırken VDS'e `ssh`/`scp`/`docker load`/`up` YAPILMADI; Play'e ve dağıtım kanalına dokunulmadı. **Aday imaj `f80edf15df5b` tarayıcı dumanında KIRMIZI (§17.3) → VDS'e GÖTÜRÜLMEZ;** düzeltme indikten sonra imaj yeniden derlenir ve §17.2 ölçümleri yeni sha ile tekrarlanır.
+
+### 17.1 Aday imaj (W3, Mac)
+
+- **Kaynak:** temiz, ayrık worktree'de `origin/main` @ `f80edf15d` (W1 #97 inişi; W2 #98 ve E1–E4, P1–P6 dahil). `deploy/patron/imaj-derle.sh --platform linux/amd64` → çıkış 0.
+- **Etiketler:** `PATRON_IMAJ=tekserp-patron:f80edf15df5b` · `PATRON_YEDEK_IMAJ=tekserp-patron-yedek:f80edf15df5b` (linux/amd64; etiket `org.opencontainers.image.revision=f80edf15df5b`).
+- **Arşiv:** `~/.tekserp/patron-imaj/tekserp-patron-f80edf15df5b.tar.gz` (321 MB, 325 279 489 bayt) + `.sha256` · sha256 `09b5df1455bbf251aed949a93fadc1194498b9d2d36f72e591aa6e352c0638d7` (`shasum -a 256 -c` OK) · imaj kimliği `sha256:92d85f34…` · yedek `sha256:01f37868…`. İmajdaki göç 10 (son `20261022120000_degisim_sayaci`).
+- **Değişmeyenler (`git diff e847c7a55 f80edf15d`):** `deploy/patron/` farkı YOK → compose ve `ornek.env` aynı; `.env`'de yeni anahtar yok, fark yalnız iki etiket satırı. `patron/sunucu/prisma` farkı tek göç.
+
+### 17.2 Ölçümler (yerel)
+
+- **compose-denetle:** `node deploy/patron/compose-denetle.mjs --env-file deploy/patron/ornek.env` → 44 geçti · 0 ihlal · 1 ölçülemedi (⑨ satıcıyla uyum: `--satici-env` verilmedi) · **çıkış 2**. Uygulamadan önce sunucunun gerçek `.env`'i + üretim satıcısının `.env`'iyle çıkış 0 şarttır (§2.4).
+- **Yerel duman (`deploy/patron/duman.sh kur f80edf15df5b`, amd64 öykünme):** 10 göç (`20261022120000_degisim_sayaci` dahil) · `✅ roller hizalandı` · `PATRON_TESIS_GOC tesis=0 hata=0`; duman tesisi açıldıktan sonra merkez DB ve tesis DB'si (`patron_tf17a93b4…`) 10 göç, `sync_state.change_counter=0` · `changed_projections='[]'::jsonb` DEFAULT'larıyla. HTTP: `/saglik` 200 · `/` 200 `no-store` + CSP · `entry-2a494200….js` `immutable` · `/cariler/x` 200 · `/api/yok` · `/v1/yok` · `/ic/v1/zil` · `/yonetim` 404 · `/api/oturum` 401 · **yeni:** oturumsuz `GET /api/degisim?since=0&bekle=0` 401 `OTURUM_YOK` · Traefik etiketi tek `$` · ic-api adresinde 4620 `ECONNREFUSED`. Uygulama dumanı 13/13. Yedek (`tek`, elle — betik tarayıcı adımında durdu): merkez + anahtarlar + tesis dökümü, özel yarıyla açıldı, merkez ve tesis `pg_restore --list` 26 tablo verisi. Hazırlayıcı `0 running`. Bellek: patron 180 / 512 MiB · DB 84 / 384 · hazırlayıcı 58 / 96 · yedek 17 / 128 (öykünme altında). `duman.sh kaldir` ile proje, birimler ve iki imaj kaldırıldı (arşiv durur).
+- **Tarayıcı dumanı (`tarayici-duman.cjs`, Chromium) — ❌ çıkış 1:** CSP ihlali **1** (`style-src-elem inline`) · konsol hatası **5** (CSP iletisi + 4 × `6000ms timeout exceeded`) · giriş formu çizildi ama logo kutusundaki ikon BOŞ · `//` ve `//cariler//x` → `/giris`, sayfa hatası 0.
+
+### 17.3 BLOKE — web'de ikon fontu CSP'ye takılıyor (P1 #89'dan beri)
+
+- **Kök neden:** v2 ekranları `@expo/vector-icons/Ionicons` kullanır (40 içe aktarma). Web'de ikon seti fontu `expo-font`un `ExpoFontLoader.web.js` `_createWebStyle`ıyla yükler: `<style id="expo-generated-fonts">` ögesine `@font-face{…}` **metin düğümü** ekler. Sunucu CSP'si (`patron/sunucu/src/http/web-static.ts` `webCsp`) `unsafe-inline` olmadan yalnız giriş HTML'indeki satır içi blokların ve BOŞ stilin özetine izin verir → kural engellenir, Ionicons hiç yüklenmez, `fontfaceobserver` 6 sn'de zaman aşar; web'de bütün ikonlar boş çizilir. Android etkilenmez (yerel font). v1 (`e847c7a55f3e`) ikon fontu kullanmıyordu; üretim tarayıcı dumanı CSP 0'dı (§15a).
+- **Doğrulanan düzeltme yolu (sonda; kod değişmedi):** aynı duman yığınında Playwright `addInitScript` ile sayfa betiklerinden önce `id="expo-generated-fonts"` `<style>` yaratılıp `@font-face` kuralı CSSOM'la (`sheet.insertRule`) eklendi → `expo-font` kuralı bulur (`getFontFaceRulesMatchingResource`), metin düğümü eklemez → CSP ihlali 0 · konsol hatası 0 · logo ikonu çizildi (önkayıtsız koşu aynı sondada 1 ihlal + boş ikon). CSSOM'u CSP kısıtlamaz (`BOS_STIL_OZETI` yorumundaki react-native-web kalıbı).
+- **Öneri (ayrı dilim, P1 sahası; CSP gevşetilmez):** web'e özgü önkayıt modülü (`src/web-path-fix.ts` kalıbı) ilk çizimden önce `Ionicons.font` kaynağını `Asset.fromModule(...).uri` ile çözüp kuralı `insertRule`la ekler. Bekçi: CI'da web export sonrası Chromium CSP dumanı yok — bu açık ancak `tarayici-duman.cjs` ile yakalandı; düzeltme dilimi aynı ölçümü kabul şartı yapar.
+
+### 17.4 Göç
+
+- `20261022120000_degisim_sayaci`: `sync_state`e iki DEFAULT'lu kolon (`change_counter BIGINT NOT NULL DEFAULT 0` · `changed_projections JSONB NOT NULL DEFAULT '[]'`). Yeni tablo, rol ya da yetki yok. PG 16'da sabit DEFAULT'lu `ADD COLUMN` meta-veri işlemidir (kısa kilit, tablo yeniden yazılmaz).
+- Komut: `sudo docker compose --profile goc run --rm --no-deps patron-goc` — merkez `migrate deploy` → roller → `tesis-db goc` ile her HAZIR tesis DB'si. Beklenen: `Applying migration 20261022120000_degisim_sayaci` · `All migrations have been successfully applied` · `✅ roller hizalandı` · her tesis için `1 göç uygulandı · şema 20261022120000_degisim_sayaci` · `PATRON_TESIS_GOC tesis=<N> hata=0`. Eski sunucu kolonları okumadığı için göç eski sunucu ÇALIŞIRKEN koşulabilir (§15a kalıbı). Göç geri alınmaz.
+
+### 17.5 Dağıtım sırası
+
+P5 N−1 sonucu **KABUL** (eski bulut yeni alanlı paketi 200 ile saklar) → sıra şartı YOK. **Önerilen:** (1) bulut 0.2.0 → (2) deneme fabrikası backend 2.15.13 (`test` grubu, §16.4) → (3) Play vc2 (kapalı test).
+- **Bulut önce:** web v2 imajla birlikte yayına girer; vc2'nin uzun yoklaması (`GET /api/degisim`) hazır olur (eski bulutta 404 → istemci yoklama kipine düşer, kırılmaz ama "saniyeler" sözü tutulmaz). vc1 yeni bulutla değişmeden çalışır (yeni ucu çağırmaz; kolonlar ek). N−1 fabrikalar bugünkü gibi eşitler.
+- **Fabrika ikinci:** olay güdümlü tur ve zil kapsamı ancak sayaçlı bulutta uçtan uca ~3 sn'lik yansımayı verir (§16.1); bayrak varsayılan KAPALI olduğundan kurulum tek başına davranış değiştirmez. P5 adları N−1 bulutta da saklanacağından bu sıra zorunlu değil, yalnız önerilir.
+- **Play en son:** yükleme + inceleme günler sürer; kullanıcı vc2'yi aldığında bulut ve deneme fabrikası hazırdır, ilk açılış yeni arayüzü canlı veriyle (P5 adları dahil) gösterir.
+- Adnan Şahin kurulumu 2.15.13 ALMAZ (donuk eski kanal); bulut yükseltmesi tek imaj olduğundan buluta bağlı BÜTÜN tesisleri birlikte etkiler — bağlı tesisler ve fabrika sürümleri önce-ölçümde sayılır.
+
+### 17.6 VDS adımları (UYGULANMADI — her yazım kullanıcının "uygula" cümlesiyle; §13d/§15a kalıbı)
+
+`K=/opt/stack/apps/tekserp-patron-uretim`. Her VDS yazımının ÖNCE ve SONRA `deploy/vds-dogrula.sh` → ✅ adnansahin AYNI; fark ya da ölçülemedi → DUR. Traefik, `tekserp-guncelleme`, `docker-socket-proxy`, `tekserp-satici-uretim*` yeniden BAŞLATILMAZ (`StartedAt`/`RestartCount` önce/sonra aynı; `adnansahin/electron/latest.yml` 200).
+
+0. **Ön koşul:** §17.3 düzeltmesi main'de; yeni aday `<sha>` temiz worktree'den derlendi, §17.2'nin hepsi yeşil (tarayıcı CSP 0 · konsol 0 · ikon çizildi dahil).
+1. **Önce ölçüm (salt okuma):** çalışan etiket (`.env` `PATRON_IMAJ`; kayıtlı son `e847c7a55f3e` — §15a; farklıysa geri alma etiketi ölçülen değerdir) · dört servis sağlıklı, `RestartCount` · merkez ve her tesis DB'si 9 göç, yarım 0 · `facility_databases` HAZIR · bağlı tesis sayısı ve `sync_state.last_package_at` · bellek/disk · B6 sır dosyası izinleri (§4 uyarısı).
+2. **compose-denetle (Mac):** `--env-file <yeni .env> --satici-env <üretim satıcısının .env'i>` → çıkış 0; satıcı `.env` kopyası ölçümden sonra silinir.
+3. **İmaj yükleme:** `scp ~/.tekserp/patron-imaj/tekserp-patron-<sha>.tar.gz* tekserp-vds:/tmp/` → `sha256sum -c` + `gunzip -c … | sudo docker load` + arşivi sil; iki uçta imaj kimliği aynı.
+4. **Önce yedek:** `sudo docker compose exec -T patron-yedek /arac/yedek-dongusu.sh tek` → merkez + anahtarlar + her tesis dökümü; Mac'e çek, iki uç sha eşit, özel yarıyla aç (`pg_restore --list`), düz kopyaları `rm -P` (§7).
+5. **`.env`:** `cp -p .env ~/p9-env-yedek-<eski sha12>`; yerinde yeniden yaz (fark YALNIZ `PATRON_IMAJ` + `PATRON_YEDEK_IMAJ`; sahip/mod/inode aynı) → `sudo docker compose config -q`. Compose dosyasına dokunulmaz (fark yok).
+6. **Göç:** §17.4 komutu (eski sunucu çalışırken). Hata → DUR: `up -d` YAPILMAZ, `.env` yedekten geri yazılır (eski kod yeni şemayla çalışır), insana rapor. Göç günlüğü sır taramasından (0 isabet) sonra silinir.
+7. **Başlatma:** `sudo docker compose up -d` (~19 sn kesinti; DB dokunulmaz) → `PATRON_DINLIYOR port=4620 kurulumKaynagi=satici web=acik` · hata 0 · `RestartCount` 0.
+8. **Sonra ölçüm:** merkez ve her tesis DB'si 10 göç, yarım 0, iki kolon · §6 dış ölçümleri iki adda (`yonetim.` · `patron.`) + yeni: oturumsuz `GET /api/degisim?since=0&bekle=0` 401 `OTURUM_YOK` · tarayıcı dumanı ÜRETİMDE iki adda (CSP 0 · konsol 0 · beacon beyanlı istisna · ikon çizildi) · fabrika eşitlemesi: `sync_state.last_package_at` ilerler, `change_counter` artar · kaynak (`docker stats`).
+9. **İmaj temizliği:** VDS'teki en eski çift (`83f837666826`) silinir; yeni + önceki (geri alma) kalır. Önce/sonra `vds-dogrula.sh`.
+
+### 17.7 Geri alma
+
+Göç geri alınmaz; iki kolon DEFAULT'lu ve eski sunucu onları okumaz → eski kod yeni şemayla çalışır. Geri dönüş: `cat ~/p9-env-yedek-<eski sha12> > .env` (önceki `PATRON_IMAJ` / `PATRON_YEDEK_IMAJ`, kayıtlı son `tekserp-patron:e847c7a55f3e`) + `sudo docker compose up -d` (compose değişmediği için compose geri yüklemesi yok; eski imaj VDS'te). Web de eski sürüme döner; v2 istemci eski bulutta `/api/degisim` 404 alıp yoklama kipine düşer. Veri yalnız gerekirse 4. adımdaki yedeklerden (§7, kullanıcı kararı). Sonunda `vds-dogrula.sh` → ✅.
