@@ -23,7 +23,7 @@ import { useReportDayState } from "../_hooks/useReportDay";
 import { BACK_PRESETS, FORWARD_PRESETS, endOfDayIso, startOfDayIso, toYmd } from "../_lib/report-date";
 
 const COMPARE_ORDER: CompareMode[] = ["none", "prev", "prevYear", "custom"];
-const INPUT = "h-7 w-[130px] px-2 text-xs";
+const INPUT = "h-7 w-[180px] px-2 text-xs";
 const BTN = "h-7 px-2 text-xs";
 
 export interface DateWindowValue {

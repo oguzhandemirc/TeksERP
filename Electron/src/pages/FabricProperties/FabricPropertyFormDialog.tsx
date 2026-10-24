@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { ColorPickerInput } from "@/components/forms/ColorPickerInput";
 import { PropertyStationsField } from "@/components/forms/PropertyStationsField";
 import { PropertyValuesField } from "./PropertyValuesField";
+import { VariantOfPickerField } from "./VariantOfPickerField";
 import {
   fabricPropertyFormDefaults,
   fabricPropertyFormSchema,
@@ -20,6 +21,8 @@ interface Props {
   initial?: FabricProperty | null;
   onSubmit: (values: FabricPropertyFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
+  /** Tüm özellikler — "Şunun çeşidi" seçicisi bayrakları buradan listeler. */
+  allProperties?: FabricProperty[];
 }
 
 export function FabricPropertyFormDialog({
@@ -28,6 +31,7 @@ export function FabricPropertyFormDialog({
   initial,
   onSubmit,
   isSubmitting,
+  allProperties = [],
 }: Props) {
   const defaults: FabricPropertyFormValues = initial
     ? {
@@ -44,6 +48,7 @@ export function FabricPropertyFormDialog({
           name: v.name,
           isActive: v.isActive,
         })),
+        variantOfPropertyId: initial.variantOfPropertyId ?? null,
         isActive: initial.isActive,
       }
     : fabricPropertyFormDefaults;
@@ -143,6 +148,25 @@ export function FabricPropertyFormDialog({
                     value={field.value ?? []}
                     onChange={field.onChange}
                     existingCodes={savedCodes}
+                  />
+                )}
+              />
+            </FormField>
+          )}
+          {form.watch("valueType") === "CHOICE" && (
+            <FormField
+              label="Şunun çeşidi"
+              hint="Seçim bir bayrağın çeşidiyse (Kurşun gramajı → Kurşunlu) değer basılınca bayrak da topa yazılır. Bayrak, bu özelliğin istasyonlarında da tanımlı olmalı."
+            >
+              <Controller
+                control={form.control}
+                name="variantOfPropertyId"
+                render={({ field }) => (
+                  <VariantOfPickerField
+                    value={field.value ?? null}
+                    onChange={field.onChange}
+                    properties={allProperties}
+                    selfId={initial?.id ?? null}
                   />
                 )}
               />

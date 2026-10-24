@@ -3,7 +3,7 @@
 import type { ReportExportSpec } from "@/pages/Reports/_components/reportExport";
 import { grafikSecenek } from "./secenek";
 import { BASKI_TEMASI } from "./tema";
-import type { GrafikBlok } from "./tipler";
+import type { GrafikBlok } from "../sunum";
 
 /** 180 mm @ 96 dpi. */
 export const BASKI_GENISLIK_PX = Math.round((180 * 96) / 25.4);

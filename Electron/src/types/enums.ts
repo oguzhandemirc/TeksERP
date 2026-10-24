@@ -57,7 +57,7 @@ export type StationKind = (typeof StationKind)[keyof typeof StationKind];
 
 export const stationKindLabels: Record<StationKind, string> = {
   RAW_QC: "Ham Kalite Kontrol (KK1)",
-  PROCESS_QC: "Kurşun + Kalite Kontrol 2",
+  PROCESS_QC: "Ara istasyon (işlem/kontrol)",
   TAMBUR: "Tambur",
   SUBCONTRACTOR: "Fason / Dış İşlem",
   SHIPPING: "Sevkiyat / Tartı",
