@@ -8,7 +8,7 @@
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 
-import { currentOrigin } from "../lib/request-context";
+import { currentOrigin, incAuditCount } from "../lib/request-context";
 import { diffCommonFields, maskAuditPayload } from "./helpers/audit-diff.helper";
 import type { SystemEventName } from "../constants/system-events";
 import { hata } from "../lib/logger";
@@ -110,6 +110,8 @@ export class AuditService {
           changes: (changes?.length ? maskAuditPayload(changes) : Prisma.JsonNull) as JsonValue,
         },
       });
+      // İstek başlığının `auditCount`u (B1): yalnız YAZILAN satır sayılır.
+      incAuditCount(1);
     } catch (error) {
       // Audit logging should never crash the main operation — but don't lose it
       // silently: sayacı artır ki /health audit kaybını görsün.
@@ -153,6 +155,7 @@ export class AuditService {
           newData: (maskAuditPayload(e.newData) ?? Prisma.JsonNull) as JsonValue,
         })),
       });
+      incAuditCount(entries.length);
     } catch (error) {
       recordAuditFailure(error);
       hata("audit", "SystemLog toplu yazımı başarısız", error);
@@ -199,6 +202,7 @@ export class AuditService {
           newData: (maskAuditPayload(params.payload) ?? Prisma.JsonNull) as JsonValue,
         },
       });
+      incAuditCount(1);
     } catch (error) {
       recordAuditFailure(error);
       hata("audit", "Olay SystemLog yazılamadı", error);

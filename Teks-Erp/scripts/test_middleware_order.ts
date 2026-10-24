@@ -32,7 +32,7 @@
 import app from "../src/app";
 
 /** Göreli sıra sözleşmesi — TAM eşitlik DEĞİL: yeni bir middleware eklemek
- *  testi kırmasın, yalnız bu dokuzunun birbirine göre yeri korunsun. */
+ *  testi kırmasın, yalnız bunların birbirine göre yeri korunsun. */
 const ORDER = [
   "helmetMiddleware",
   "corsMiddleware",
@@ -42,6 +42,7 @@ const ORDER = [
   "jsonParser", // express.json — morgan+latency'den SONRA (F-CORE-OPS-003)
   "serveStatic", // statik varlıklar
   "resolveDevice", // cihaz çözümü — statikten SONRA (F-CORE-VER-002)
+  "requestTraceMiddleware", // istek başlığı — istek bağlamından SONRA, rotalardan ÖNCE (izlenebilirlik B1)
   "licenseGate", // lisans kapısı — rotalardan ÖNCE (Faz 1c; aşağıda ayrıca ölçülür)
 ] as const;
 

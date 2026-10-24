@@ -12,6 +12,10 @@ import {
   DEFAULT_PRINT_LOG_RETENTION_DAYS,
   isValidPrintLogRetentionDays,
 } from "./helpers/print-job-retention.helper";
+import {
+  DEFAULT_REQUEST_TRACE_RETENTION_DAYS,
+  isValidRequestTraceRetentionDays,
+} from "./helpers/request-trace-retention.helper";
 import { createHash } from "crypto";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -823,6 +827,9 @@ export const SETTING_KEYS = {
   /** Semantik rapor bloğunun sorgu tavanı, SANİYE (5..45; DB seviyesi 50 sn'nin altında). Default 15.
    *  Davranış bayrağı değil, işletme ayarı: tek okuyucusu `reports/semantik/calistirici.ts`. */
   REPORTS_STATEMENT_TIMEOUT_SEC: "reports.statementTimeoutSec",
+  /** İstek başlığının (`request_traces`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 90.
+   *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-B1). */
+  REQUEST_TRACE_RETENTION_DAYS: "requestTrace.retentionDays",
   /** Bu KURULUMUN kalıcı kimliği (uuid v4). İlk açılışta bir kez üretilir
    *  (`jobs/installation-identity.job.ts`) ve bir daha ASLA değişmez.
    *
@@ -7161,6 +7168,22 @@ export async function readReportsStatementTimeoutSec(
   return v !== null && Number.isInteger(v) && v >= MIN_REPORTS_STATEMENT_TIMEOUT_SEC && v <= MAX_REPORTS_STATEMENT_TIMEOUT_SEC
     ? v
     : DEFAULT_REPORTS_STATEMENT_TIMEOUT_SEC;
+}
+
+/**
+ * İstek başlığı saklama süresi (gün). Kayıt yoksa ya da geçersizse varsayılan 90;
+ * 0 açıkça yazılırsa budama yok.
+ */
+export async function readRequestTraceRetentionDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.REQUEST_TRACE_RETENTION_DAYS },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return isValidRequestTraceRetentionDays(v) ? v : DEFAULT_REQUEST_TRACE_RETENTION_DAYS;
 }
 
 /**

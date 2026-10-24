@@ -7,7 +7,7 @@
 // gizlemeyi unutur (B4 fail-closed). Bu bekçi `src/`i tarar ve tablo × işlem başına İZİNLİ dosya
 // kümesini ölçer (Prisma delegesi + ham SQL metni):
 //   §1 outbox INSERT yalnız emit helper · UPDATE yalnız dağıtıcı · DELETE yalnız budama
-//   §2 gelen kutusu INSERT/UPDATE yalnız dağıtıcı · DELETE yalnız budama · günlük sayaç aynı
+//   §2 gelen kutusu INSERT yalnız dağıtıcı · UPDATE dağıtıcı + kutu okuma servisi (okundu/ertele) · DELETE yalnız budama · günlük sayaç aynı
 //   §3 koşul INSERT/UPDATE yalnız koşul tarayıcısı · DELETE yalnız budama
 //   §4 görme: katalog `izinler` alanını yalnız görme helper'ı okur · gelen kutusuna dokunan her
 //      dosya (budama hariç) görme helper'ını import eder · dağıtıcı kararı helper'dan alır
@@ -98,11 +98,13 @@ const DAGITICI = "src/services/notification-dispatch.service.ts";
 const KOSUL = "src/jobs/notification-condition.job.ts";
 const BUDAMA = "src/services/notification-prune.service.ts";
 const KATALOG = "src/constants/notification-catalog.ts";
+/** N1-ZIL: kişinin kendi satırında okundu/okunmadı/ertele (yalnız readAt/snoozedUntil; userId WHERE'de). */
+const KUTU_OKUMA = "src/services/notification-inbox.service.ts";
 
 /** Tablo × işlem → izinli dosyalar. READ'i olmayan tablo okuması serbesttir (görme kuralı §4'te). */
 export const IZINLI: Record<Tablo, Partial<Record<Islem, readonly string[]>>> = {
   outbox: { INSERT: [EMIT], UPDATE: [DAGITICI], DELETE: [BUDAMA] },
-  inbox: { INSERT: [DAGITICI], UPDATE: [DAGITICI], DELETE: [BUDAMA] },
+  inbox: { INSERT: [DAGITICI], UPDATE: [DAGITICI, KUTU_OKUMA], DELETE: [BUDAMA] },
   stats: { INSERT: [DAGITICI], UPDATE: [DAGITICI], DELETE: [BUDAMA] },
   conditions: { INSERT: [KOSUL], UPDATE: [KOSUL], DELETE: [BUDAMA] },
 };
@@ -141,7 +143,7 @@ function main(): void {
   check("§1 ⭐ outbox: INSERT yalnız emit helper, UPDATE yalnız dağıtıcı, DELETE yalnız budama", i1.length === 0,
     i1.length ? i1.join(" · ") : `INSERT ${yazan("outbox", "INSERT").join(",")}`);
   const i2 = [...ihlaller(sec("inbox")), ...ihlaller(sec("stats"))];
-  check("§2 ⭐ gelen kutusu + günlük sayaç: yazım yalnız dağıtıcı, silme yalnız budama", i2.length === 0, i2.join(" · ") || "tek yazar");
+  check("§2 ⭐ gelen kutusu + günlük sayaç: yazım yalnız dağıtıcı (+ okundu/ertele yalnız kutu okuma servisi), silme yalnız budama", i2.length === 0, i2.join(" · ") || "tek yazar");
   const i3 = ihlaller(sec("conditions"));
   check("§3 ⭐ koşul: aç/kapa yalnız koşul tarayıcısı, silme yalnız budama", i3.length === 0, i3.join(" · ") || "tek yazar");
 
