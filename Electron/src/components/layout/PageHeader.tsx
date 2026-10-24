@@ -25,13 +25,15 @@ interface Props {
   parent?: { label: string; to: string } | null;
   /** Sağdaki eylemlerin dikey hizası — kutulu/yüksek başlıklarda `center` (varsayılan üst). */
   actionsAlign?: "start" | "center";
+  /** Genel sayfa favorisi yıldızı — kendi favori düğmesini taşıyan yüzey (v2 rapor yaprağı) kapatır; iki yıldız yan yana çizilmesin. */
+  pageFavorite?: boolean;
 }
 
-export function PageHeader({ title, titleExtra, description, actions, className, onBack, parent: parentProp, actionsAlign = "start" }: Props) {
+export function PageHeader({ title, titleExtra, description, actions, className, onBack, parent: parentProp, actionsAlign = "start", pageFavorite = true }: Props) {
   const location = useLocation();
   const { pathname } = location;
   const navigate = useNavigate();
-  const entry = findCommandEntry(pathname);
+  const entry = pageFavorite ? findCommandEntry(pathname) : undefined;
   const parent = parentProp === null ? null : (parentProp ?? findBreadcrumbParent(pathname));
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(pathname);

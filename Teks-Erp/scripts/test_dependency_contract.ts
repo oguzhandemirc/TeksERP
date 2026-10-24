@@ -53,6 +53,9 @@ const EN_AZ_TABLO_TOKEN = 15;
 // konuşuyor → sürüm de birlikte yürür.
 const PIN_KAYDI = [
   { paket: "bonjour-service", projeler: ["Teks-Erp", "Electron"] as const },
+  // Belge şablon motoru: echo/cycle kaçışı ve capture bellek davranışı 10.30.0'da ÖLÇÜLDÜ (2026-10-24, `test_belge_liquid_kati` §4/§5)
+  // (motor/liquid.ts sarmalayıcıları buna dayanır) — sürüm değişimi yeniden ölçüm ister.
+  { paket: "liquidjs", projeler: ["Teks-Erp"] as const },
 ];
 const TAM_SABIT = /^\d+\.\d+\.\d+$/;
 

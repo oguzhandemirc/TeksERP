@@ -859,7 +859,7 @@ export class TamburService {
         operationType: { in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED] },
       },
       // machineId: parent'ın işlendiği makine kopyada KORUNUR (yeni damga uygulanmaz).
-      select: { workOrderStepId: true, operationType: true, operatorId: true, metadata: true, machineId: true },
+      select: { workOrderStepId: true, operationType: true, operatorId: true, metadata: true, machineId: true, propertyValueId: true },
     });
 
     // Cut'lardaki + parent qualityGrade'lerini topla → katalog target status'larını çek.
@@ -1194,6 +1194,7 @@ export class TamburService {
               operatorId: op.operatorId,
               machineId: op.machineId,
               metadata: op.metadata ?? undefined,
+              propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
               inheritedFromParentRollId: roll.id,
             })),
           });
@@ -2391,6 +2392,7 @@ export class TamburService {
         operatorId: true,
         metadata: true,
         machineId: true,
+        propertyValueId: true,
       },
     });
     if (inheritedOps.length > 0) {
@@ -2402,6 +2404,7 @@ export class TamburService {
           operatorId: op.operatorId,
           machineId: op.machineId,
           metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+          propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
           inheritedFromParentRollId: parent.id,
         })),
       });
@@ -2852,6 +2855,7 @@ export class TamburService {
             operatorId: true,
             metadata: true,
             machineId: true,
+            propertyValueId: true,
           },
         });
         if (inheritedOps.length > 0) {
@@ -2863,6 +2867,7 @@ export class TamburService {
               operatorId: op.operatorId,
               machineId: op.machineId,
               metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+              propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
               inheritedFromParentRollId: parent.id,
             })),
           });
@@ -3276,6 +3281,7 @@ export class TamburService {
         operatorId: true,
         metadata: true,
         machineId: true,
+        propertyValueId: true,
       },
     });
     if (inheritedOps.length > 0) {
@@ -3287,6 +3293,7 @@ export class TamburService {
           operatorId: op.operatorId,
           machineId: op.machineId,
           metadata: (op.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+          propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
           inheritedFromParentRollId: parent.id,
         })),
       });
