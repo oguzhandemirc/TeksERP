@@ -381,7 +381,7 @@ export async function getVatSummaryReport(params: VatSummaryParams): Promise<Vat
       "Kırılım satır oranlarından toplanır — karışık oranlı fatura her oranda kendi payıyla görünür; tevkifat KDV üzerinden satır oranıyla türetilir.",
       "TL kolonları her belgenin KENDİ kur damgasıyla çevrilir (bugünkü kurla yeniden çevrim yapılmaz); kuruş kalıntısı en büyük matrah satırına yazılır ve TL toplamı belge TL toplamına birebir eşittir.",
       ...(suzgecVar
-        ? ["SÜZGEÇ AÇIK: aşağıdaki rakamlar dönemin TAMAMI değil, süzgeçten geçen belgelerdir — `meta.suzgec` neyin elendiğini sayar."]
+        ? ["SÜZGEÇ AÇIK: aşağıdaki rakamlar dönemin TAMAMI değil, süzgeçten geçen belgelerdir — süzgeç şeridi neyin elendiğini sayar."]
         : []),
     ],
     ...(suzgecVar

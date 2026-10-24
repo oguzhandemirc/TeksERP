@@ -54,6 +54,7 @@ const DOKUM_SERHI = "Bu süzgeçler YALNIZ hareket dökümünü daraltır: özet
 import { CashLedgerTable } from "./CashLedgerTable";
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
+import { NarrativeBox } from "../_v2/NarrativeBox";
 import { buildCashBookExport } from "./cashBookExport";
 import {
   CASH_CATEGORY_GROUP_LABEL,
@@ -343,6 +344,8 @@ export function CashBookPage() {
       }
     >
       <ReportFilterNotes notes={axisNotlari} />
+      {/* "Ne görüyoruz?" — sunucunun anlatısı; eski backend göndermez → kutu çizilmez. */}
+      {summary?.anlati ? <NarrativeBox sentences={summary.anlati} /> : null}
       {/* ⚠️ HATA DALI EN ÜSTTE. Aksi halde 403/500'de ekran "hareketi olan
           kasa/banka hesabı yok" der — kasa raporunda bu, boş ekrandan çok daha
           kötüdür (kullanıcı "para hiç hareket etmemiş" diye okur). Fabrika

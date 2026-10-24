@@ -44,6 +44,7 @@ import { AXIS_EMPTY_HINTS, AXIS_LABELS } from "../_hooks/reportAxisFilters";
 const FX_AXES = ["cariId"] as const;
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
+import { NarrativeBox } from "../_v2/NarrativeBox";
 import { buildFxDiffExport } from "./fxDiffExport";
 import { moneyStr, type CariKind, type Currency } from "./service";
 import {
@@ -152,6 +153,8 @@ export function FxDiffPage() {
           sebep `finance.enabled` kapalı olmasıdır ve o cümle yalnız hata
           gövdesinde yaşar (`ReportErrorCard` başlığı). */}
       <ReportFilterNotes notes={axisNotlari} />
+      {/* "Ne görüyoruz?" — sunucunun anlatısı; eski backend göndermez → kutu çizilmez. */}
+      {report?.anlati ? <NarrativeBox sentences={report.anlati} /> : null}
       {q.isError ? <ReportErrorCard error={q.error} onRetry={() => void q.refetch()} /> : null}
 
       <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -170,7 +173,7 @@ export function FxDiffPage() {
           <MetricCard
             label="Lehte (kambiyo kârı)"
             value={moneyStr(summary.gainTry, "TRY")}
-            hint="Pozitif farkların toplamı"
+            hint="Kurun lehimize döndüğü kapamalardan gelen tutar"
             icon={TrendingUp}
             tone={hasGain ? "ok" : "neutral"}
             isLoading={q.isLoading}
@@ -178,7 +181,7 @@ export function FxDiffPage() {
           <MetricCard
             label="Aleyhte (kambiyo zararı)"
             value={moneyStr(summary.lossTry, "TRY")}
-            hint="Negatif farkların büyüklüğü — pozitif sayı olarak"
+            hint="Kurun aleyhimize döndüğü kapamalarda kaybedilen tutar"
             icon={TrendingDown}
             tone={hasLoss ? "bad" : "neutral"}
             isLoading={q.isLoading}
@@ -186,7 +189,7 @@ export function FxDiffPage() {
           <MetricCard
             label="Net kur farkı"
             value={moneyStr(summary.netTry, "TRY")}
-            hint="Lehte − aleyhte"
+            hint="Lehte olandan aleyhte olan düşülünce kalan"
             icon={Scale}
             tone={FX_TONE_METRIC[netTone]}
             isLoading={q.isLoading}
