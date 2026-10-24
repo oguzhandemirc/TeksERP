@@ -122,8 +122,8 @@ export const systemTiles: SystemTile[] = [
   },
   {
     key: "activity",
-    title: "Aktivite Günlüğü",
-    description: "Son aylarda kim hangi kaydı değiştirdi (aktif tablo)",
+    title: "Etkinlik",
+    description: "Sistemdeki son işlemler — kim hangi kaydı değiştirdi (aktif tablo)",
     icon: Activity,
     to: "/system/activity",
     group: "activity",
@@ -172,7 +172,7 @@ export const systemTiles: SystemTile[] = [
   {
     key: "archive-search",
     title: "Arşiv Tarama",
-    description: "Aktivite Günlüğü'nün arşivlenmiş eski kayıtlarını ara",
+    description: "Etkinlik akışının arşivlenmiş eski kayıtlarını ara",
     icon: Search,
     to: "/system/archive/search",
     group: "archive",
