@@ -157,7 +157,7 @@ async function main() {
       const r = await prisma.roll.create({
         data: {
           barcode: `${TAG}-${olusan.rollIds.length + 1}`, itemId: item.id, width: 150, initialQty: 100, currentQty: 100,
-          status: RollStatus.WAREHOUSE, qualityGrade: "1.KALITE", entrySource: RollEntrySource.SUPPLIER_RECEIPT,
+          status: RollStatus.WAREHOUSE, entrySource: RollEntrySource.SUPPLIER_RECEIPT,
           labelPrintedAt: null, labelDirty: dirty,
         },
         select: { id: true },
