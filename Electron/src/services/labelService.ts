@@ -1,3 +1,4 @@
+import type { PrintJobAttachment } from "@/services/printJobService";
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { PrinterLanguage } from "./featureFlagService";
@@ -121,12 +122,14 @@ export const labelService = {
   printRollLabel: (
     rollId: string,
     opts?: LabelCustomerContext,
+    printJob?: PrintJobAttachment,
   ): Promise<ApiResponse<{ rollId: string }>> =>
     apiClient
       .post<ApiResponse<{ rollId: string }>>(`/api/labels/rolls/${rollId}/print`, {
         ...(opts?.customerId ? { customerId: opts.customerId } : {}),
         ...(opts?.orderLineId ? { orderLineId: opts.orderLineId } : {}),
         ...(opts?.stock ? { stock: true } : {}),
+        ...(printJob ? { printJob } : {}),
       })
       .then((r) => r.data),
 
@@ -193,11 +196,25 @@ export const labelService = {
    *  temizlenmez ve bayat-etiket işareti KENDİ BAŞINA görünür kalır (sessizlik
    *  burada meşru — bilgi kaybolmuyor, işaret duruyor). Refakat kartındaki
    *  emsalden farkı budur; orada kayıp görünür değil, o yüzden mesaj basılır. */
-  recordSackPrintEvent: (sackId: string): Promise<ApiResponse<{ sackId: string }>> =>
+  recordSackPrintEvent: (sackId: string, printJob?: PrintJobAttachment): Promise<ApiResponse<{ sackId: string }>> =>
     apiClient
       .post<ApiResponse<{ sackId: string }>>(
         `/api/labels/sacks/${sackId}/print-event`,
-        {},
+        printJob ? { printJob } : {},
+        { suppressErrorToast: true },
+      )
+      .then((r) => r.data),
+
+  /**
+   * Toplu top etiketi basıldı (izlenebilirlik A2, K-A5): topların `labelPrintedAt`ını damgalar,
+   * tek geçmiş satırı doğar. Yalnız basım GİTTİKTEN sonra çağrılır; eski backend 404 → çağıran
+   * sessizce yutar (bugünkü davranış: toplu basım damga bırakmıyordu).
+   */
+  recordBulkRollPrintEvent: (rollIds: string[], printJob?: PrintJobAttachment): Promise<unknown> =>
+    apiClient
+      .post(
+        `/api/labels/rolls/bulk-print-event`,
+        { rollIds, ...(printJob ? { printJob } : {}) },
         { suppressErrorToast: true },
       )
       .then((r) => r.data),

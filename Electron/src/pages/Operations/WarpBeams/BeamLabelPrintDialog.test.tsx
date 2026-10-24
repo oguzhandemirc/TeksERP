@@ -8,7 +8,8 @@ import type { WarpBeam } from "./types";
 const get = vi.fn();
 const post = vi.fn();
 vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
-vi.mock("@/lib/print", () => ({ printHtmlString: vi.fn() }));
+const JOB = { transport: "SISTEM_PENCERESI" };
+vi.mock("@/lib/print", () => ({ printTracked: vi.fn(async () => ({ status: "ILETILDI", proceed: true, printJob: JOB })) }));
 
 const beam = { id: "b1", beamNo: "LV261021-0007", physicalBeamNo: "G-12", status: "READY" } as WarpBeam;
 
@@ -33,6 +34,6 @@ describe("levent etiketi", () => {
     expect(post).not.toHaveBeenCalled();
     fireEvent.click(yazdir);
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(post).toHaveBeenCalledWith("/api/labels/warp-beams/b1/print-event", { copies: 1 }, { suppressErrorToast: true });
+    expect(post).toHaveBeenCalledWith("/api/labels/warp-beams/b1/print-event", { copies: 1, printJob: JOB }, { suppressErrorToast: true });
   });
 });

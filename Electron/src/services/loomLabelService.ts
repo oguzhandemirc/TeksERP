@@ -5,6 +5,7 @@
 // Baskı istemcide: `html?copies=N` → izole iframe (`printHtmlString`) → yazıcı;
 // iz `print-event` YALNIZ kâğıt yolunda çağrılır (önizleme iz bırakmaz).
 // =============================================================================
+import type { PrintJobAttachment } from "@/services/printJobService";
 import type { AxiosResponseHeaders, RawAxiosResponseHeaders } from "axios";
 import apiClient from "./apiClient";
 
@@ -41,9 +42,9 @@ export const loomLabelService = {
       .then((r) => r.data),
 
   /** Baskı izi — çağıran sonucu kendisi söyler (`suppressErrorToast`; emsal `recordSackPrintEvent`). */
-  recordPrint: (target: LoomLabelTarget, id: string, copies: number): Promise<unknown> =>
+  recordPrint: (target: LoomLabelTarget, id: string, copies: number, printJob?: PrintJobAttachment): Promise<unknown> =>
     apiClient
-      .post(`/api/labels/${target}/${id}/print-event`, { copies }, { suppressErrorToast: true })
+      .post(`/api/labels/${target}/${id}/print-event`, { copies, ...(printJob ? { printJob } : {}) }, { suppressErrorToast: true })
       .then((r) => r.data),
 };
 

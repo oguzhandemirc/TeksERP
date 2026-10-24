@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { printDocumentArea } from "@/lib/print";
+import { preparePrintJob, printTracked } from "@/lib/print";
+import { supportsPrintJobs } from "@/services/printJobService";
 import { isDarkHex } from "@/pages/SackTags/service";
 import { isAmbiguousFailure } from "@/lib/attemptToken";
 import { sackHubService } from "./service";
@@ -61,9 +62,11 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   const tokenRef = useRef<string | null>(null);
   const bekleyenBaski = useRef(false);
   const printMut = useMutation({
-    mutationFn: (ids: string[]) => {
+    mutationFn: async (ids: string[]) => {
       tokenRef.current ??= crypto.randomUUID();
-      return sackHubService.printPickList(ids, tokenRef.current);
+      // Katı şemalı uç: künye yalnız yazdırma geçmişini bilen backend'e gider (eski backend 400 verirdi).
+      const printJob = (await supportsPrintJobs()) ? await preparePrintJob() : undefined;
+      return sackHubService.printPickList(ids, tokenRef.current, printJob);
     },
     onSuccess: (res) => {
       tokenRef.current = null;
@@ -78,7 +81,12 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   useEffect(() => {
     if (!baski || !bekleyenBaski.current || !printRef.current) return;
     bekleyenBaski.current = false;
-    printDocumentArea(printRef.current);
+    // Başarı satırını numara doğuşu yazdı (iş ucu); iptal/hata `/print-jobs`a ayrı satır olarak gider.
+    void printTracked({
+      subject: { kind: "CEKI_LISTESI", table: "manifests", id: baski.id, no: baski.manifestNo, itemCount: Math.max(baski.snapshot.length, 1) },
+      root: printRef.current,
+      workEndpoint: true,
+    });
   }, [baski]);
   // Diyalog kapanınca kayıt bağı düşer: yeniden açılış taze döküm + yeni deneme demektir.
   useEffect(() => {
