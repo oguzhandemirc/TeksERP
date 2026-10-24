@@ -17,6 +17,7 @@ export const buildStationPayload = (v: StationFormValues, initial: Station | nul
   appliesColor: v.appliesColor,
   appliesProperty: v.appliesProperty,
   appliesQuality: v.appliesQuality,
+  inspectionEnabled: v.inspectionEnabled,
   producesWarpBeam: v.producesWarpBeam,
   consumesWarpBeam: v.consumesWarpBeam,
   // Boş = genel adet (null); backend 1–5 doğrular, DB CHECK son kapı.

@@ -36,6 +36,11 @@ import {
   type RemainingAction,
 } from "./helpers/quality-role.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
+import {
+  QUALITY_STEP_ERROR,
+  STEP_QUALITY_SELECT,
+  stepCanApplyQuality,
+} from "./helpers/quality-station.helper";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
 import {
   resolveTamburOverQuantityEnabled,
@@ -1895,10 +1900,15 @@ export class TamburService {
     }
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
-      select: { station: { select: { kind: true } } },
+      select: { station: { select: { kind: true, ...STEP_QUALITY_SELECT } } },
     });
+    // Tür kontrolü EKRAN AİLESİ içindir (Tambur ucu yalnız Tambur adımında);
+    // hata yazma ayrıca MUAYENE yeteneği ister (KQ-D1, kalite ikizi).
     if (!step || step.station.kind !== StationKind.TAMBUR) {
       throw AppError.badRequest("Bu adım Tambur tipinde değil");
+    }
+    if (!stepCanApplyQuality(step.station)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
 
     // Mükerrer engeli (KK2 KursunQcService.reportError ile AYNI kural — iki giriş
