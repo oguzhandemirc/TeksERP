@@ -163,8 +163,8 @@ export async function setSettingsPassword(
  * ⚠️ Satır fiziksel olarak SİLİNİR (soft-delete YOK). `system_settings` bir
  * ayar deposudur, `isActive` kolonu taşımaz ve "pasif hash" diye bir durum
  * okuyucuya üçüncü bir hâl eklerdi ("şifre yok" ≠ "şifre vardı, kaldırıldı"
- * ayrımı hiçbir karara girmiyor). Kaldırmanın izi audit'tedir. Emsal:
- * `ItemPrice` satırı silme (CLAUDE.md "Ortak Konvansiyonlar" bilinçli istisnası).
+ * ayrımı hiçbir karara girmiyor). Kaldırmanın izi audit'tedir; saf ayar deposu
+ * olduğundan defter sınıfına girmez (`defter.md` hard delete sınıfları).
  */
 export async function revokeSettingsPassword(
   userId: string | undefined,

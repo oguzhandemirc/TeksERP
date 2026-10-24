@@ -328,15 +328,15 @@ const PARTIAL_INDEXES: Array<{
     table: "item_prices",
     index: "item_price_default_uq",
     uniq: true,
-    predicate: `("customerId" IS NULL)`,
-    why: "kalem+yön+para birimi başına TEK kart varsayılanı",
+    predicate: `(("customerId" IS NULL) AND ("revokedAt" IS NULL))`,
+    why: "kalem+yön+para birimi başına TEK AKTİF kart varsayılanı (damgalı geçmiş kısıta girmez — MAL-0b)",
   },
   {
     table: "item_prices",
     index: "item_price_customer_uq",
     uniq: true,
-    predicate: `("customerId" IS NOT NULL)`,
-    why: "kalem+müşteri+yön+para birimi başına TEK istisna",
+    predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
+    why: "kalem+müşteri+yön+para birimi başına TEK AKTİF istisna (damgalı geçmiş kısıta girmez — MAL-0b)",
   },
   // 2026-08-14 — sağlamlık paketi (migration 20260814110200_saglamlik_paketi).
   // Storno bağı: bir defter satırı EN FAZLA BİR KEZ terslenebilir.
