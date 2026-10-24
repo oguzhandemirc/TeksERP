@@ -21,6 +21,7 @@ import { AppError } from "../../utils/app-error";
 import { TravelerCardService } from "../traveler-card.service";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
+import { copyTargetValuesTx } from "./workorder-target-value.helper";
 import { createWorkOrderTx } from "./workorder-event.helper";
 import { rebindProductionIssuesTx } from "./production-issue-ledger.helper";
 
@@ -193,6 +194,9 @@ export async function cloneWorkOrderTx(
   if (!newReEntryStepId) {
     throw AppError.badRequest("Yeni terbiye iş emrinde geri-sarım adımı bulunamadı (rota kopyası tutarsız)");
   }
+
+  // KQ-D6: aktif hedef çeşit değeri (hedef kurşun gramajı) yeni İE'ye taşınır.
+  await copyTargetValuesTx(tx, { fromWorkOrderId: src.id, toWorkOrderId: newWo.id, userId: params.userId ?? null });
 
   // Yeni WO açılışında refakat kartı doğar (WO başına tek kart, idempotent).
   await travelerCardService.createForWorkOrder(tx, newWo.id, params.userId);

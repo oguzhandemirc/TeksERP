@@ -135,7 +135,7 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
     let measured = 0;
     for (const r of REPORT_CATALOG) {
       if (r.panelYolu === "" || !isReportSurfaced(r)) continue; // ucu inmemiş v2 satırının yaprağı yok
-      // v2 yaprağı dosya değil, katalogdan üretilen ortak `ReportV2Route` (`_v2/routes.tsx`); tarih çipi `ParamChips` + test_rapor_katalogu ölçer.
+      // v2 satırı kendi yaprağını yazmaz: genel yaprak anahtarı katalogdan alır (backend test_rapor_katalogu §7dv ölçer).
       if (r.nesil === "v2") continue;
       const comp = routeComponent.get(r.panelYolu);
       const path = comp ? componentPath.get(comp) : undefined;

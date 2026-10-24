@@ -52,7 +52,7 @@ import { baseWriteClosedFields } from "../constants/write-guard";
 
 /** Künye kolonu TAŞIYAN Prisma modelleri (BaseService yolundan yazılanlar). */
 const PROVENANCE_MODELS = new Set([
-  "color", "customer", "customerBranch", "defectType", "fabricProperty", "item",
+  "color", "customer", "customerBranch", "defectType", "fabricProperty", "fourPointRuleSet", "item",
   "machine", "order", "peripheralDevice", "productRecipe", "qualityGrade",
   "returnReason", "route", "station", "machineStopCodeMap",
 ]);

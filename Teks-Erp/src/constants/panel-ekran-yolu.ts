@@ -39,6 +39,7 @@ export const PANEL_EKRAN = {
   kasaHareketleri: { menu: "Muhasebe", karo: "Kasa Hareketleri" },
   kisaKimlikler: { menu: "Yetkilendirme", karo: "Kullanıcılar", alt: "Kısa Kimlikler" },
   raporGorunurlugu: { menu: "Sistem", karo: "Modüller", alt: "Raporlar" },
+  numaralandirma: { menu: "Sistem", karo: "Numaralandırma" },
 } as const satisfies Record<string, { menu: PanelMenu; karo: string; alt?: string }>;
 
 export type PanelEkran = keyof typeof PANEL_EKRAN;
