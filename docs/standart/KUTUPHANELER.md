@@ -99,6 +99,14 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### liquidjs@10.30.0 · Teks-Erp · 2026-10-24
+1. Problem      : belge şablon tasarımcısı (plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md` §3.3, §5) kullanıcı şablonunda döngü/koşul/filtre ister; mantıksız `{{alan}}` motoru (refakat kartı RAW_HTML) bunu taşımaz; §2.1 "Belge şablon dili" satırı
+2. Alternatifler: elle motor (ifade ayrıştırıcısı + kum havuzu = en riskli kod sınıfı; red) · Handlebars (yardımcı = JS; `compile` JS üretir; red) · Nunjucks (JS'e derler, kum havuzu yok; red) · Eta/EJS (şablon = JS; red) · LiquidJS: JS üretmez, `strictVariables/strictFilters/ownPropertyOnly`, süre/bellek/parse sınırı yerleşik
+3. Boyut/biçim  : saf JS, native YOK; CJS girişi `dist/liquid.node.js` (`require()` sınavı geçti); geçişli tek bağımlılık `commander@10.0.1` (yalnız CLI bin'i, çalışma anında yüklenmez)
+4. Bakım        : 10.30.0, TAM SABİT — `{% echo %}`/`{% cycle %}` veriyi `outputEscape`ten geçirmeden yazıyor ve `capture` dize katlaması `memoryLimit`e sayılmıyor (ÖLÇÜLDÜ; `motor/liquid.ts` sarmalayıcıları buna dayanır) ⇒ yükseltme yeniden ölçüm ister; `test_dependency_contract §(a)` + `test_belge_liquid_kati` korur
+5. Lisans       : MIT (commander MIT)
+6. Dağıtım      : yalnız backend paketi; Electron/mobil etkisi yok
+
 ### echarts@6.1.0 · Electron · 2026-10-24
 1. Problem      : Raporlar v2 grafikleri (8 tür: çizgi/önceki dönem soluk, çubuk, yığın, pasta, ısı haritası, saçılım, kutu, küçük çoklu) ekranda + PDF'e VEKTÖR (DOM'suz SVG SSR); §2.2 "Tema · animasyon · grafik" satırı — tek grafik motoru, `recharts` emekliye ayrılıyor (yeni import cırcırla yasak)
 2. Alternatifler: `recharts` (SVG-SSR yok — baskı için DOM'a çizip kopyalamak gerekir; ısı haritası/kutu/korelasyon grafikleri zayıf) · Vega-Lite (+~275 KB, ikinci motor + ayrı şema dili) · elle yazmak (8 tür × eksen/etiket yerleşimi — bakım yükü) — kullanıcı "kütüphane kullan" yönlendirmesi, plan K2

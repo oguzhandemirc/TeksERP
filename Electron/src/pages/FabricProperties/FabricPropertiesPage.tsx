@@ -51,6 +51,8 @@ export function FabricPropertiesPage() {
           })),
         }
       : {}),
+    // Çeşit bağı yalnız SEÇİM'de anlamlı; BAYRAK'a geçişte bağ açıkça kaldırılır.
+    variantOfPropertyId: v.valueType === "CHOICE" ? v.variantOfPropertyId : null,
     isActive: v.isActive,
   } as Partial<FabricProperty> & { stationIds: string[] });
 
@@ -71,6 +73,7 @@ export function FabricPropertiesPage() {
           onOpenChange={onOpenChange}
           initial={initial}
           isSubmitting={isSubmitting}
+          allProperties={allQ.data?.data ?? []}
           onSubmit={(values) => onSubmit(buildPayload(values, initial))}
         />
       )}

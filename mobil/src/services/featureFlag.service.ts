@@ -51,6 +51,9 @@ export interface FeatureFlags {
   /** G3 emanet / konsinye mülkiyet modülü (varsayılan kapalı). Tablette yüzeyi KK1 "Sahibi" seçicisi (G3t);
    *  kapalıyken seçici çizilmez ve bağlam ucu çağrılmaz. */
   emanetEnabled: boolean;
+  /** Maliyet & Teklif modülü (`maliyet.enabled`, HAM) — tablette ekranı YOK; alan yalnız backend
+   *  sözleşmesinin tip aynası. Eski sunucu göndermez → kapalı. */
+  maliyetEnabled?: boolean;
   /** Devere Faz 3: levent tezgah bağı defteri (`devere.mountTracking`) — default FALSE (satır-yok değeri).
    *  Tezgah ekranı "Levent" paneli ve Levent Sarım "Tezgahta" sekmesi yalnız AÇIKKEN çizilir. */
   devereMountTracking: boolean;
@@ -201,6 +204,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   tezgahAlarmEnabled: false,
   tezgahAlarmRenotifyMinutes: 10,
   emanetEnabled: false,
+  maliyetEnabled: false,
   // Backend satır-yok değeri FALSE — kapalıyken Tezgah/Levent ekranları Faz 1b ile birebir.
   devereMountTracking: false,
   dokumaRunWeavingOrderRequired: false,

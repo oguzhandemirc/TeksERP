@@ -717,6 +717,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Depocu", "Planlamacı", "Yönetim"],
         desc: "Açıkken top, levent ve iplik lotunda “sahibi olan müşteri” alanı açılır; emanet mal ayrı sayılır. Kapalıyken (varsayılan) alan çizilmez, yazılamaz ve her mal fabrikanın sayılır.",
       },
+      {
+        // Ön koşul `production.enabled` (iplik ihtiyaç planı üretim dengesini okur); Üretim listenin başında.
+        key: "maliyetEnabled",
+        title: "Maliyet & Teklif modülünü aç",
+        summary:
+          "Ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi ve iplik ihtiyaç planı yüzeyleri açılır.",
+        defaultOn: false,
+        audience: ["Muhasebeci", "Planlamacı", "Yönetim"],
+        desc: "Açıkken maliyet ve teklif ekranları ile uçları açılır (ekranlar sonraki sürümlerde gelir). Kapalıyken (varsayılan) uçlar 403 verir, menü çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
+      },
       // ⚠️ `kumasTeknikEnabled` BİLEREK BURADA YOK: arkasında henüz hiçbir
       // yüzey/kapı yok, satırı yalnız "açtım ama hiçbir şey olmadı" üretirdi.
       // Backend sözleşme bekçisinde gerekçeli muaf listesinde (`PANEL_EXEMPT`)

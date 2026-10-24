@@ -756,8 +756,26 @@ function main(): void {
     kapiliAlanlar.size >= 4,
     `${kapiliAlanlar.size} kapı → ${[...kapiliAlanlar].sort().join(", ")}`,
   );
+  // Hiçbir route'a TAKILMAMIŞ kapı henüz bir yüzeyi korumuyor (MAL-0: `requireMaliyetEnabled`); ekran
+  // beyanı ilk takıldığı gün zorunlu olur. Kullanım middlewares DIŞINDAKİ src'de aranır.
+  const SRC_DIZIN = path.join(ROOT, "Teks-Erp", "src");
+  const srcMetinleri: string[] = [];
+  (function gez(dir: string): void {
+    for (const ad of fs.readdirSync(dir)) {
+      const yol = path.join(dir, ad);
+      if (fs.statSync(yol).isDirectory()) {
+        if (yol !== MW_DIZIN) gez(yol);
+      } else if (ad.endsWith(".ts")) srcMetinleri.push(yorumlariSok(fs.readFileSync(yol, "utf8")));
+    }
+  })(SRC_DIZIN);
+  const takili = (alan: string): boolean => {
+    const re = new RegExp(`\\brequire${alan.charAt(0).toUpperCase()}${alan.slice(1)}\\b`);
+    return srcMetinleri.some((m) => re.test(m));
+  };
+  const rotasiz = [...kapiliAlanlar].filter((a) => !takili(a));
+  console.log(`   ℹ️  §10 route'a takılmamış kapı: ${rotasiz.join(", ") || "(yok)"}`);
   const kapiliAmaEkransiz = [...kapiliAlanlar].filter(
-    (a) => screensOfModul(a as EkranModul).length === 0,
+    (a) => takili(a) && screensOfModul(a as EkranModul).length === 0,
   );
   check(
     "§10b ⭐ Kapısı olan her modülün en az bir ekranı beyanlı",
