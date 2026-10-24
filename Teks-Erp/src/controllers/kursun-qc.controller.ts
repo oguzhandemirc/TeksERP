@@ -109,7 +109,12 @@ export class KursunQcController {
   async getStep(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const stepId = z.string().uuid("Geçersiz adım ID").parse(req.params.stepId);
-      const result = await this.service.getStep(stepId);
+      // Tanınmayan değer 400 (fail-closed); eski istemci parametre göndermez → yalnız PROCESS.
+      const includeInspection = z
+        .enum(["0", "1"], { message: "includeInspection yalnız 0 ya da 1 olabilir" })
+        .optional()
+        .parse(req.query.includeInspection);
+      const result = await this.service.getStep(stepId, { includeInspection: includeInspection === "1" });
       res.status(200).json(result);
     } catch (err) {
       next(err);

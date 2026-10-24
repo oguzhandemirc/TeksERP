@@ -45,6 +45,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { SESSION_INCLUDE } from "./work-session.service";
 import { RollStatus, type Prisma } from "@prisma/client";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 export type ActivityEventKind =
   | "ROLL_CREATED"
@@ -282,7 +283,8 @@ export class WorkSessionActivityService {
       }),
       // HATA: RollError'da makine yok — yalnız operatör dalı (detectedByUserId).
       prisma.rollError.findMany({
-        where: { AND: [{ detectedAt: window }, { detectedByUserId: session.userId }] },
+        // Muayene hatası operatör zaman çizelgesine girmez (eski panel metresiz satır görmez).
+        where: { ...ACTIONABLE_ROLL_ERROR_WHERE, AND: [{ detectedAt: window }, { detectedByUserId: session.userId }] },
         orderBy: [{ detectedAt: "asc" }, { id: "asc" }],
         take,
         select: {
