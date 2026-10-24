@@ -118,6 +118,7 @@
     "labelCopiesSource": "STATION",
     "nativeSendEnabled": true,
     "mobileRasterEnabled": true,
-    "scrapGradeLabelEnabled": true
+    "scrapGradeLabelEnabled": true,
+    "bildirimGelenKutusuEnabled": true
   }
 }
