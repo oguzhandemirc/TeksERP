@@ -51,6 +51,8 @@ export interface StationCapabilityProperty {
   valueType: "FLAG" | "CHOICE";
   mode: StationPropertyMode;
   values: { code: string; name: string; isActive: boolean }[];
+  /** Bu özellik hangi bayrağın çeşidi? (KQ-D4; eski backend göndermez → undefined) */
+  variantOfPropertyId?: string | null;
 }
 
 /**

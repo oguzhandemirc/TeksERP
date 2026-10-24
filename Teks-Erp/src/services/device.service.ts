@@ -9,14 +9,19 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { DeviceKind } from "@prisma/client";
+import { DeviceKind, Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
+import { p2002Mentions } from "../utils/p2002";
 import { AuditService } from "./audit.service";
 import { readDevicePairingRequired, readDeviceUnpairedPasswordLogin } from "./system-setting.service";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
 import { getShortCredentialKeyRing } from "../lib/short-credential/keyring";
 import { deriveDeviceSecret, newProofSalt } from "../lib/device-proof";
 import { uyari } from "../lib/logger";
+import { DeviceRebindService } from "./device-rebind.service";
+import {
+  MAX_DEVICE_ROWS, assertDeviceRowCapacity, countSeatDevices, writeBindingEventTx, type HwClaim,
+} from "./helpers/device-identity.helper";
 
 /** Kanıt tuzu hiçbir yanıta/audit yüküne girmez. */
 const DEVICE_SECRET_OMIT = { proofSalt: true } as const;
@@ -30,11 +35,12 @@ const DEVICE_SECRET_OMIT = { proofSalt: true } as const;
 const MAX_PENDING_DEVICES = 200;
 
 /** Admin cihaz listesi okuma tavanı — tavansız `findMany` yasağı (perf kuralı 5). */
-const DEVICE_LIST_LIMIT = 500;
+const DEVICE_LIST_LIMIT = MAX_DEVICE_ROWS;
 
 /**
- * Toplam cihaz satırı üst sınırı — `MAX_PENDING_DEVICES`in İKİZİ, eşleştirme
- * KAPALI rejim için (2026-09-04).
+ * Toplam cihaz satırı üst sınırı (`MAX_DEVICE_ROWS`, device-identity.helper) — `MAX_PENDING_DEVICES`in
+ * İKİZİ, eşleştirme KAPALI rejim için (2026-09-04). Sayım AKTİF ∧ birleşmemiş satırdır (eşleme v2):
+ * pasif kopyalar tavanı yemez; pasif satırı geri açmak (`reactivate`) da tavana bakar.
  *
  * ⚠️ Neden ikinci bir tavan gerekti: bayrak kapalıyken yeni cihaz artık APPROVED
  * doğuyor (aşağıdaki gerekçe), yani PENDING sayacı hiç artmıyor ve tek başına
@@ -45,7 +51,9 @@ const DEVICE_LIST_LIMIT = 500;
  * Tavan bilinçli olarak liste tavanına eşit: onun ötesinde ekran zaten kırpıyor,
  * yani sistem çoktan kullanılamaz durumda. Gerçek fabrikada 28 cihaz var.
  */
-const MAX_DEVICE_ROWS = DEVICE_LIST_LIMIT;
+
+/** Teyitsiz sırrın yeniden verimi için bekleme: aynı saniyedeki announce/status turları tek sır alır. */
+const PROOF_REISSUE_GRACE_MS = 30_000;
 
 const DEVICE_INCLUDE = {
   machine: {
@@ -241,69 +249,33 @@ export class DeviceService {
    * ettiği) cihaz" farklı şeylerdir; public bir uç bir yönetici kararını geri
    * alamaz (F216'nın aynı gerekçesi).
    */
-  static async announce(input: { deviceId: string; name?: string; kind?: string }) {
+  static async announce(input: { deviceId: string; name?: string; kind?: string; hw?: HwClaim; model?: string }) {
     const deviceId = (input.deviceId ?? "").trim();
     if (!deviceId) throw AppError.badRequest("deviceId zorunlu");
     const pairingRequired = await readDevicePairingRequired();
     const unpairedLoginFlag = await readDeviceUnpairedPasswordLogin();
     const kind = normalizeDeviceKind(input.kind);
-    const kindLabel = kind === "PHONE" ? "Telefon" : kind === "DESKTOP" ? "Masaüstü" : "Tablet";
-    const fallbackName = input.name?.trim() || `${kindLabel} ${deviceId.slice(0, 8)}`;
-    // ⚠️ YENİ CİHAZ KAYDI TAVANLI (2026-08-09 denetimi, F-CORE-GUV-003).
-    // Bu uç KİMLİK DOĞRULAMASIZ (tablet eşleşmeden token alamaz) ve hız sınırı
-    // yok — yani rastgele `deviceId` üreten bir betik sınırsız PENDING satırı
-    // açabiliyordu. Zarar satır sayısı değil GÖRÜNÜRLÜK: admin Cihazlar ekranı
-    // sahadaki gerçek tableti binlerce sahte kayıt arasında bulup onaylayamaz,
-    // yani yeni tablet üretime alınamaz. Temizlik yolu satır satır (hard delete).
-    //
-    // Tavan YALNIZ YENİ KAYIT açar/kapatır: bilinen bir cihazın `announce`ı
-    // (canlılık yazımı) HER ZAMAN çalışır — sahadaki tabletleri tavana kurban
-    // etmek, önlenmeye çalışılan şeyden kötü olurdu. Eşik cömert: gerçekte
-    // eşleşme bekleyen cihaz sayısı tek hanelidir (ölçüm: 9).
-    const existing = await prisma.device.findUnique({
+    // Tavan YALNIZ YENİ KAYIT açar/kapatır (F-CORE-GUV-003): kimliksiz uç sınırsız satır açmasın;
+    // bilinen cihazın canlılık yazımı HER ZAMAN çalışır (sahadaki tablet tavana kurban edilmez).
+    let existing = await prisma.device.findUnique({
       where: { deviceId },
-      select: { id: true },
+      select: { id: true, deviceId: true, name: true, hwDigest: true },
     });
-    if (!existing) {
-      // Rejimden BAĞIMSIZ satır tavanı (bkz. MAX_DEVICE_ROWS): bayrak kapalıyken
-      // PENDING sayacı hiç artmadığı için aşağıdaki tavan TEK BAŞINA yetmez.
-      const totalCount = await prisma.device.count();
-      if (totalCount >= MAX_DEVICE_ROWS) {
-        throw AppError.tooManyRequests(
-          `Kayıtlı cihaz sayısı üst sınıra ulaştı (${MAX_DEVICE_ROWS}). ` +
-            `Yönetici panelinden kullanılmayan cihazları kaldırın.`,
-          { code: "DEVICE_LIMIT" },
-        );
-      }
-      if (pairingRequired) {
-        const pendingCount = await prisma.device.count({ where: { status: "PENDING" } });
-        if (pendingCount >= MAX_PENDING_DEVICES) {
-          throw AppError.tooManyRequests(
-            `Eşleşme bekleyen cihaz sayısı üst sınıra ulaştı (${MAX_PENDING_DEVICES}). ` +
-              `Yönetici panelinden bekleyen cihazları onaylayın veya kaldırın.`,
-            { code: "PENDING_DEVICE_LIMIT" },
-          );
-        }
-      }
+    if (existing && input.hw) await DeviceRebindService.learnOnAnnounce(existing, input.hw);
+    if (!existing && input.hw) {
+      // Eşleme v2: bilinen donanım yeni kurulum anahtarıyla geldi → yeni satır AÇILMAZ.
+      const routed = await DeviceRebindService.routeKnownHardware({
+        localId: deviceId, hw: input.hw, kind, model: input.model, pairingRequired,
+      });
+      if (routed && "response" in routed) return routed.response;
+      if (routed) existing = { id: routed.reboundDeviceId, deviceId, name: "", hwDigest: input.hw.ozet };
     }
-
-    const device = await prisma.device.upsert({
-      where: { deviceId },
-      create: {
-        deviceId,
-        name: fallbackName,
-        kind,
-        // Kapı kapalıysa (bayrak false) onay diye bir adım yok → APPROVED doğar.
-        status: pairingRequired ? "PENDING" : "APPROVED",
-        isActive: true,
-        lastSeenAt: new Date(),
-      },
-      // F216: Var olan cihazda announce SADECE canlılık (lastSeenAt) yazar — kind burada
-      // DEĞİŞTİRİLMEZ. Aksi halde APPROVED bir cihaz public announce ile kind'ını DESKTOP'a
-      // flip edip work-session zorunluluğunu bypass edebilirdi.
-      update: { lastSeenAt: new Date() },
-      include: DEVICE_INCLUDE,
-    });
+    const created = existing ? null : await DeviceService.createAnnounced(deviceId, input, kind, pairingRequired);
+    // F216: var olan cihazda announce SADECE canlılık (lastSeenAt) yazar — kind burada DEĞİŞMEZ
+    // (APPROVED cihaz public announce ile DESKTOP'a geçip work-session zorunluluğunu atlatamasın).
+    const device = created ?? (await prisma.device.update({
+      where: { deviceId }, data: { lastSeenAt: new Date() }, include: DEVICE_INCLUDE,
+    }));
     // Cihaz tipini YALNIZ henüz onaylanmamış (PENDING) cihaz, client düzeltmesiyle
     // güncelleyebilir (ör. ilk announce TABLET tahmin etti, gerçekte PHONE). APPROVED
     // cihazın tipini yalnız admin (approveAndAssign) değiştirir. Atomik WHERE status=PENDING:
@@ -311,25 +283,87 @@ export class DeviceService {
     if (input.kind && device.status === "PENDING" && device.kind !== kind) {
       await prisma.device.updateMany({ where: { deviceId, status: "PENDING" }, data: { kind } });
     }
-    // Otomatik onayın İZİ (yalnız yeni doğan satırda). Bayrak sonradan açılırsa
-    // yöneticinin "bu cihazı hiç kimse onaylamadı" diyebileceği tek kayıt budur.
-    if (!existing && !pairingRequired && device.status === "APPROVED") {
-      await AuditService.log({
-        userId: undefined,
-        action: "CREATE",
-        tableName: "devices",
-        recordId: device.id,
-        newData: {
-          event: "DEVICE_AUTO_APPROVED",
-          deviceId,
-          name: device.name,
-          kind: device.kind,
-          status: "APPROVED",
-          reason: "devicePairingRequired=false",
-        },
-      }).catch(() => undefined);
-    }
+    if (created) await DeviceService.auditBirth(created, pairingRequired);
     return withSecret(toAssignment(device, pairingRequired, unpairedLoginFlag), await DeviceService.issueProofSecretIfDue(deviceId));
+  }
+
+  /**
+   * Bilinmeyen localId'nin doğuşu (bayraktan durum) + defter `REGISTERED`, tek tx. Eşzamanlı ikiz
+   * announce aynı localId'yi açtıysa (P2002 deviceId) null → çağıran canlılık yoluna düşer.
+   * `hw` varsa özet doğuşta yazılır; aynı özeti başka canlı satır kaptıysa 409.
+   */
+  private static async createAnnounced(
+    deviceId: string, input: { name?: string; hw?: HwClaim }, kind: DeviceKind, pairingRequired: boolean,
+  ) {
+    await assertDeviceRowCapacity(prisma);
+    if (pairingRequired) {
+      const pendingCount = await countSeatDevices(prisma, { status: "PENDING" });
+      if (pendingCount >= MAX_PENDING_DEVICES) {
+        throw AppError.tooManyRequests(
+          `Eşleşme bekleyen cihaz sayısı üst sınıra ulaştı (${MAX_PENDING_DEVICES}). ` +
+            `Yönetici panelinden bekleyen cihazları onaylayın veya kaldırın.`,
+          { code: "PENDING_DEVICE_LIMIT" },
+        );
+      }
+    }
+    const kindLabel = kind === "PHONE" ? "Telefon" : kind === "DESKTOP" ? "Masaüstü" : "Tablet";
+    const name = input.name?.trim() || `${kindLabel} ${deviceId.slice(0, 8)}`;
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const row = await tx.device.create({
+          data: {
+            deviceId,
+            name,
+            kind,
+            // Kapı kapalıysa (bayrak false) onay diye bir adım yok → APPROVED doğar.
+            status: pairingRequired ? "PENDING" : "APPROVED",
+            isActive: true,
+            lastSeenAt: new Date(),
+            ...(input.hw ? { hwDigest: input.hw.ozet, hwSource: input.hw.kaynak } : {}),
+          },
+          include: DEVICE_INCLUDE,
+        });
+        await writeBindingEventTx(tx, {
+          deviceRefId: row.id, localId: deviceId, deviceName: row.name, event: "REGISTERED",
+          hwDigest: input.hw?.ozet ?? null, meta: { status: row.status, kaynak: "ANNOUNCE" },
+        });
+        return row;
+      });
+    } catch (e) {
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") throw e;
+      // Hedef tek yardımcıdan: pg adaptörü `meta.target` vermez, kısıt adı `cause` altında gelir.
+      if (p2002Mentions(e, /hwDigest|hw_digest/i)) {
+        throw AppError.conflict("Bu donanım başka bir cihaz kaydıyla eşleşti. Tekrar deneyin.", { code: "DEVICE_REBIND_CONFLICT" });
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Doğuşun İZİ: otomatik onayda `DEVICE_AUTO_APPROVED` (bayrak sonradan açılırsa "bu cihazı hiç
+   * kimse onaylamadı" diyebilen tek kayıt), onay bekleyen doğuşta `DEVICE_REGISTERED_PENDING`
+   * (hayalet kaydın kaynağı — IP/zaman audit bağlamından).
+   */
+  private static async auditBirth(
+    device: { id: string; deviceId: string; name: string; kind: DeviceKind; status: string },
+    pairingRequired: boolean,
+  ): Promise<void> {
+    const pending = device.status === "PENDING";
+    if (!pending && pairingRequired) return;
+    await AuditService.log({
+      userId: undefined,
+      action: "CREATE",
+      tableName: "devices",
+      recordId: device.id,
+      newData: {
+        event: pending ? "DEVICE_REGISTERED_PENDING" : "DEVICE_AUTO_APPROVED",
+        deviceId: device.deviceId,
+        name: device.name,
+        kind: device.kind,
+        status: device.status,
+        reason: `devicePairingRequired=${pairingRequired}`,
+      },
+    }).catch(() => undefined);
   }
 
   /**
@@ -344,6 +378,9 @@ export class DeviceService {
       readDeviceUnpairedPasswordLogin(),
     ]);
     if (!device) {
+      // Eşleme v2: bu localId'nin yeniden bağlama talebi varsa announce ile aynı yanıt.
+      const rebind = await DeviceRebindService.statusFor(deviceId);
+      if (rebind) return rebind;
       return {
         pairingRequired,
         unpairedPasswordLogin: false,
@@ -362,6 +399,8 @@ export class DeviceService {
    * Cihaz sırrı verimi (TOFU, bir kez): ONAYLI + aktif cihazın sırrı henüz TEYİT edilmemişse
    * (hiç verilmemiş ya da cevabı yolda kaybolmuş) yeni tuz yazılır ve sır YALNIZ bu cevapta döner.
    * İlk geçerli kanıt `proofConfirmedAt`i doldurur; ondan sonra yeniden verim yalnız revoke ile.
+   * Teyitsiz sır `PROOF_REISSUE_GRACE_MS` dolmadan yeniden verilmez: tabletin aynı andaki
+   * announce/status turları tek sır alır (ölçüm: aynı saniyede dört verim, son tuz tutmayan sır).
    */
   static async issueProofSecretIfDue(deviceId: string): Promise<string | null> {
     const row = await prisma.device.findUnique({
@@ -376,9 +415,13 @@ export class DeviceService {
     }
     const salt = newProofSalt(st.ring.active);
     // Atomik claim: tuz okunduğu değerle değişir — eşzamanlı iki çağrıdan yalnız biri sır alır.
+    const now = new Date();
     const claim = await prisma.device.updateMany({
-      where: { deviceId, isActive: true, status: "APPROVED", proofConfirmedAt: null, proofSalt: row.proofSalt },
-      data: { proofSalt: salt, proofIssuedAt: new Date() },
+      where: {
+        deviceId, isActive: true, status: "APPROVED", proofConfirmedAt: null, proofSalt: row.proofSalt,
+        OR: [{ proofIssuedAt: null }, { proofIssuedAt: { lt: new Date(now.getTime() - PROOF_REISSUE_GRACE_MS) } }],
+      },
+      data: { proofSalt: salt, proofIssuedAt: now },
     });
     if (claim.count === 0) return null;
     await AuditService.log({
@@ -464,11 +507,18 @@ export class DeviceService {
   static async revoke(id: string, userId?: string) {
     const existing = await prisma.device.findUnique({ where: { id }, omit: DEVICE_SECRET_OMIT });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
-    const updated = await prisma.device.update({
-      where: { id },
-      // Kanıt sırrı da düşer: yeniden onaylanan cihaz YENİ sır alır (sızmış sır geri çağrılır).
-      data: { status: "PENDING", machineId: null, proofSalt: null, proofIssuedAt: null, proofConfirmedAt: null },
-      omit: DEVICE_SECRET_OMIT,
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.device.update({
+        where: { id },
+        // Kanıt sırrı da düşer: yeniden onaylanan cihaz YENİ sır alır (sızmış sır geri çağrılır).
+        data: { status: "PENDING", machineId: null, proofSalt: null, proofIssuedAt: null, proofConfirmedAt: null },
+        omit: DEVICE_SECRET_OMIT,
+      });
+      await writeBindingEventTx(tx, {
+        deviceRefId: id, localId: row.deviceId, deviceName: row.name, event: "REVOKED", actorId: userId ?? null,
+        meta: { oncekiDurum: existing.status },
+      });
+      return row;
     });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,
@@ -483,6 +533,7 @@ export class DeviceService {
     const existing = await prisma.device.findUnique({ where: { id }, omit: DEVICE_SECRET_OMIT });
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     if (existing.isActive) throw AppError.badRequest("Cihaz zaten aktif");
+    await assertDeviceRowCapacity(prisma); // aktif sayım: pasif satırı geri açmak tavanı aşamaz
     const updated = await prisma.device.update({ where: { id }, data: { isActive: true }, omit: DEVICE_SECRET_OMIT });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,
@@ -530,7 +581,14 @@ export class DeviceService {
         `Cihaza bağlı ${peripheralCount + pivotCount} çevre birimi bağı (terazi/yazıcı) var — önce bağlantıyı kaldırın.`,
       );
     }
-    await prisma.device.delete({ where: { id } });
+    // Defter önce: PURGED satırı aynı tx'te yazılır, silmeyle `deviceRefId` SetNull olur ama
+    // localId + ad + olay kalır ("ne oldu" silinmez).
+    await prisma.$transaction(async (tx) => {
+      await writeBindingEventTx(tx, {
+        deviceRefId: id, localId: existing.deviceId, deviceName: existing.name, event: "PURGED", actorId: userId ?? null,
+      });
+      await tx.device.delete({ where: { id } });
+    });
     await AuditService.log({
       userId, action: "DELETE", tableName: "devices", recordId: id,
       oldData: { deviceId: existing.deviceId, name: existing.name, status: existing.status },

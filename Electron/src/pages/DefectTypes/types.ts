@@ -1,4 +1,5 @@
 import type { DefectSeverity } from "@/types/enums";
+import type { DefectGroup } from "@/lib/hata-gruplari";
 
 export interface DefectType {
   id: string;
@@ -6,6 +7,8 @@ export interface DefectType {
   name: string;
   description: string | null;
   severity: DefectSeverity | null;
+  /** Rapor hata grubu (küme `@/lib/hata-gruplari`); null = gruplanmamış. */
+  defectGroup: DefectGroup | null;
   isActive: boolean;
   /** Tipsiz hata girişi bu tipe düşer; kurulumda en fazla bir. */
   isDefault: boolean;
