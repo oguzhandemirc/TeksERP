@@ -41,6 +41,9 @@ import {
   STEP_FLOW_ERROR,
   STEP_FLOW_SELECT,
   stepRunsStepFlow,
+  QUALITY_STEP_ERROR,
+  STEP_QUALITY_SELECT,
+  stepCanApplyQuality,
 } from "./helpers/quality-station.helper";
 import {
   assertPropertySelectionsValid,
@@ -620,7 +623,12 @@ export class KursunQcService {
       );
     }
 
-    await this.assertRollInFlowStep(data.rollId, data.stepId);
+    const stepStation = await this.assertRollInFlowStep(data.rollId, data.stepId);
+    // Hata kaydı akışa EK olarak MUAYENE yeteneği ister (KQ-D1): muayenesi
+    // kapatılmış istasyondaki (eski APK paneli koşulsuz çizer) yazma 400 alır.
+    if (!stepCanApplyQuality(stepStation)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
+    }
 
     // Kurşun bypass: dağıtılmış adımda hatalar KÂĞITTA tutulur (fabrika kurşun
     // istasyonuna tablet koymuyor). Dijital RollError açmak iki soruna yol açar:
@@ -732,6 +740,8 @@ export class KursunQcService {
       // sırasında ekleme hiç sunucuya ulaşmamış olabilir) → başarı dön.
       return { success: true, data: { deleted: true }, message: "Hata kaydı zaten yok" };
     }
+
+    await this.assertDeleteStationInspects(err);
 
     // ATOMİK guard: yalnız İŞLENMEMİŞ kayıt silinir — findUnique↔delete arası
     // eşzamanlı Tambur finalize'ı isProcessed=true yaparsa count=0 → silinmez
@@ -1372,16 +1382,14 @@ export class KursunQcService {
   }
 
   /**
-   * Top gerçekten BU adımda mı ve bu adım KALİTE yürütüyor mu?
-   *
-   * ⚠️ Eskiden `expectedKind` argümanı alan jenerik bir yardımcıydı; iki
-   * çağıranı da `StationKind.PROCESS_QC` geçiyordu. Kalite artık istasyon
-   * yeteneği (`stepRunsStepFlow`) — argüman düştü.
+   * Top gerçekten BU adımda mı ve bu adım kart AKIŞINDA mı (`stepRunsStepFlow`)?
+   * İstasyonun muayene alanını da döner: hata yazan çağıran (reportError)
+   * ayrıca kalite ikizini sorar; QC2 tamamlama sormaz.
    */
   private async assertRollInFlowStep(
     rollId: string,
     stepId: string,
-  ): Promise<void> {
+  ): Promise<{ kind: StationKind; appliesQuality: boolean; inspectionEnabled: boolean }> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
       select: { id: true, currentStepId: true, barcode: true },
@@ -1394,11 +1402,37 @@ export class KursunQcService {
     }
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
-      select: { station: { select: STEP_FLOW_SELECT } },
+      select: { station: { select: { ...STEP_FLOW_SELECT, ...STEP_QUALITY_SELECT } } },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
     if (!stepRunsStepFlow(step.station)) {
       throw AppError.badRequest(STEP_FLOW_ERROR);
+    }
+    return step.station;
+  }
+
+  /**
+   * Hata SİLME muayene kapısı (KQ-D1). Bu uç Tambur ekranınca da kullanılır,
+   * bu yüzden AKIŞ ikizi uygulanmaz (Tambur akışta değildir); soru "silmenin
+   * yapıldığı istasyonda muayene açık mı": topun bulunduğu adım, yoksa hatanın
+   * tespit adımı. İkisi de yoksa (adımsız eski kayıt) bugünkü davranış.
+   */
+  private async assertDeleteStationInspects(err: {
+    rollId: string;
+    detectedAtStepId: string | null;
+  }): Promise<void> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: err.rollId },
+      select: { currentStepId: true },
+    });
+    const stepId = roll?.currentStepId ?? err.detectedAtStepId;
+    if (!stepId) return;
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: stepId },
+      select: { station: { select: STEP_QUALITY_SELECT } },
+    });
+    if (step && !stepCanApplyQuality(step.station)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
   }
 

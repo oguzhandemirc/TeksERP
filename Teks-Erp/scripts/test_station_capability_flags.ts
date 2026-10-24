@@ -119,10 +119,10 @@ async function main() {
     }
 
     // ── 2) deriveCapabilityFlags istasyonun KENDİ alanlarını okur ───────────
-    const f1 = deriveCapabilityFlags({ kind: "OTHER", ...stPlain, defaultCategory: null });
+    const f1 = deriveCapabilityFlags({ kind: "OTHER", ...stPlain, inspectionEnabled: false, defaultCategory: null });
     check("kategorisiz + renk=false → canApplyColor false", f1.canApplyColor === false);
     check("kategorisiz + özellik=true → canApplyProperty true", f1.canApplyProperty === true);
-    const f2 = deriveCapabilityFlags({ kind: "OTHER", ...stDye, defaultCategory: null });
+    const f2 = deriveCapabilityFlags({ kind: "OTHER", ...stDye, inspectionEnabled: false, defaultCategory: null });
     check("kategorisiz + renk=true → canApplyColor TRUE (yeni kapı)", f2.canApplyColor === true);
 
     // ── 3) Ortak yüklem ─────────────────────────────────────────────────────

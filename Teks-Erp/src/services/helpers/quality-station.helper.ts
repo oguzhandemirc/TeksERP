@@ -39,10 +39,14 @@
 // import etmez — `Prisma.StationWhereInput` oraya girerse dosyanın karakteri
 // bozulur. Emsal: `fason-open-dispatch.helper.ts` (o da ayrı dosya).
 //
+// KALİTE İKİZİ (KQ-D1): "Bu istasyonda muayene (hata kaydı) açılır mı?" —
+// yalnız `Station.inspectionEnabled` okur; akış ikizinden AYRI çünkü Tambur
+// muayene yapar ama kart akışına girmez (girerse kurşun dağıtımına düşer).
+//
 // Bekçi: `scripts/test_station_quality_capability.ts`
 // =============================================================================
 
-import { Prisma, StationKind } from "@prisma/client";
+import { Prisma, StationKind, StationPropertyMode } from "@prisma/client";
 
 /**
  * Yüklemin okuduğu alanlar. Şekil BİLEREK dar (`step-capability.helper.ts`
@@ -106,3 +110,68 @@ export const STEP_FLOW_WHERE = {
  */
 export const STEP_FLOW_ERROR =
   "Bu adım ara-istasyon kart akışında yürümüyor (Kurşun + KK2 ekranı).";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KALİTE İKİZİ — muayene yeteneği (KQ-D1, 2026-10-24)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Kalite yükleminin okuduğu TEK alan — tür ve akış bayrağı BİLEREK yok. */
+export interface QualityCaps {
+  inspectionEnabled: boolean;
+}
+
+/** Kalite ikizinin `select` sözleşmesi — akış select'iyle karıştırılmaz. */
+export const STEP_QUALITY_SELECT = { inspectionEnabled: true } as const;
+
+/**
+ * Bu istasyonda kalite muayenesi (hata girişi) açılır mı?
+ * ⚠️ Gövde `kind`/`appliesQuality` OKUMAZ (bekçi §9): tür dalı eklemek akış
+ * sorusunu geri getirir ve yöneticinin kapattığı muayeneyi sessizce açar.
+ */
+export function stepCanApplyQuality(station: QualityCaps | null | undefined): boolean {
+  return !!station && station.inspectionEnabled === true;
+}
+
+/** Kalite yükleminin İKİZİ. Kullanım: `station: { ...QUALITY_STATION_WHERE }` */
+export const QUALITY_STATION_WHERE = {
+  inspectionEnabled: true,
+} satisfies Prisma.StationWhereInput;
+
+/** Muayenesi kapalı istasyonda hata yazma/silme için TEK metin. */
+export const QUALITY_STEP_ERROR = "Bu istasyonda kalite muayenesi (hata girişi) kapalı.";
+
+/** K4P'nin adı — AYNI fonksiyon nesnesi (bekçi §10); ince sarmalayıcı açılmaz. */
+export const stationCanInspect = stepCanApplyQuality;
+
+/**
+ * Doğuşta muayene varsayılanı: migration'ın türettiği kümeyle AYNI (bekçi §7
+ * SQL ↔ bu tablo). Eski panel alanı göndermezse `station.service` create bunu
+ * kullanır; seed ve içe aktarım da buradan okur.
+ */
+export const INSPECTION_DEFAULT_KINDS = [StationKind.PROCESS_QC, StationKind.TAMBUR] as const;
+
+export function inspectionDefaultForKind(kind: StationKind | null | undefined): boolean {
+  return !!kind && (INSPECTION_DEFAULT_KINDS as readonly StationKind[]).includes(kind);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KURŞUN DAĞITIM HEDEFİ — üçüncü yüklem DEĞİL: akış ikizi ∧ KURSUN AUTO
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Kurşun özelliğinin kodu — `code === "KURSUN"` literali tek sabite iner. */
+export const KURSUN_PROPERTY_CODE = "KURSUN";
+
+/**
+ * `listDistribution` makine listesi ve `assign` kabulü bu TEK parçadan beslenir
+ * (liste = kabul). Tambur akışa girmediği için muayenesi açık olsa da düşmez.
+ */
+export const KURSUN_DISPATCH_STATION_WHERE = {
+  AND: [
+    { ...STEP_FLOW_WHERE },
+    {
+      propertyCapabilities: {
+        some: { mode: StationPropertyMode.AUTO, property: { code: KURSUN_PROPERTY_CODE } },
+      },
+    },
+  ],
+} satisfies Prisma.StationWhereInput;

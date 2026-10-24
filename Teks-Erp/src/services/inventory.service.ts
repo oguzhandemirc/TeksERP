@@ -181,6 +181,9 @@ import {
   STEP_FLOW_ERROR,
   STEP_FLOW_SELECT,
   stepRunsStepFlow,
+  QUALITY_STEP_ERROR,
+  STEP_QUALITY_SELECT,
+  stepCanApplyQuality,
 } from "./helpers/quality-station.helper";
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import {
@@ -4993,7 +4996,7 @@ export class InventoryService {
     }
     if (!stepRunsStepFlow(step.station)) {
       throw AppError.badRequest(
-        `Açık kumaş Roll sadece kalite kontrol yürüten adımda açılabilir — ${STEP_FLOW_ERROR}`,
+        `Açık kumaş Roll sadece kart akışı yürüten adımda açılabilir — ${STEP_FLOW_ERROR}`,
       );
     }
     if (step.status === StepStatus.COMPLETED || step.status === StepStatus.SKIPPED) {
@@ -5416,7 +5419,7 @@ export class InventoryService {
           include: {
             // `appliesColor` + `requiredCategory`: adım renk verebiliyor mu (tek yüklem
             // stepCanApplyColor) — bitişte renksiz topa WO hedef rengi yazılır (3c).
-            station: { select: { ...STEP_FLOW_SELECT, appliesColor: true } },
+            station: { select: { ...STEP_FLOW_SELECT, ...STEP_QUALITY_SELECT, appliesColor: true } },
             requiredCategory: { select: { appliesColor: true } },
             workOrder: {
               include: {
@@ -5488,6 +5491,12 @@ export class InventoryService {
       throw AppError.badRequest(
         `${STEP_FLOW_ERROR} (topun bulunduğu adım: ${roll.currentStep.station.kind})`,
       );
+    }
+
+    // Hata listesi MUAYENE yeteneği ister (KQ-D1): akış yürüyen ama muayenesi
+    // kapalı adımda (ör. OTHER + appliesQuality) hata yazılmaz — bilinçli fark K2.
+    if ((data.errors ?? []).length > 0 && !stepCanApplyQuality(roll.currentStep.station)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
 
     // totalMeters opsiyonel — verilmezse mevcut currentQty (fason kabulden gelen

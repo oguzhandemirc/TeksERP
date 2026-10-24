@@ -391,12 +391,17 @@ async function main() {
     create: {
       code: "KURSUN_KK2", name: "Kurşun + KK2", type: "INTERNAL", kind: "PROCESS_QC",
       department: "KALITE", appliesQuality: true,
+      // Muayene (KQ-D1) de AÇIK yazılır: migration türetmesi boş tabloda no-op.
+      inspectionEnabled: true,
     },
   });
   const tambur = await prisma.station.upsert({
     where: { code: "TAMBUR_1" },
     update: {},
-    create: { code: "TAMBUR_1", name: "Tambur", type: "INTERNAL", kind: "TAMBUR", department: "KALITE" },
+    create: {
+      code: "TAMBUR_1", name: "Tambur", type: "INTERNAL", kind: "TAMBUR", department: "KALITE",
+      inspectionEnabled: true,
+    },
   });
   // ⚠️ YETENEK BAYRAKLARI AÇIKÇA YAZILIR (2026-08-10). Seed ham prisma kullanır,
   // yani `StationService`in "kategoriden tohumla" adımı KOŞMAZ; kolon

@@ -28,7 +28,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { stepRunsStepFlow } from "./helpers/quality-station.helper";
+import { stepCanApplyQuality, stepRunsStepFlow } from "./helpers/quality-station.helper";
 
 export interface StationCapabilityDto {
   stationId: string;
@@ -47,6 +47,11 @@ export interface StationCapabilityDto {
    * (kalite kademesi `QualityGrade` kataloğundan gelir, istasyona bağlı değil).
    */
   canApplyQuality: boolean;
+  /**
+   * Muayene yeteneği (KQ-D1): bu istasyonda hata kaydı açılır mı? Kalite ikizi
+   * `stepCanApplyQuality`ten; `canApplyQuality` (akış) ile karıştırılmaz.
+   */
+  inspectionEnabled: boolean;
   colors: { id: string; code: string; name: string; hex: string | null }[];
   properties: StationCapabilityProperty[];
 }
@@ -137,12 +142,14 @@ export function deriveCapabilityFlags(station: {
   appliesColor: boolean;
   appliesProperty: boolean;
   appliesQuality: boolean;
+  inspectionEnabled: boolean;
   defaultCategory: { appliesColor: boolean; appliesProperty: boolean } | null;
 }): {
   hasDefaultCategory: boolean;
   canApplyColor: boolean;
   canApplyProperty: boolean;
   canApplyQuality: boolean;
+  inspectionEnabled: boolean;
 } {
   return {
     hasDefaultCategory: !!station.defaultCategory,
@@ -153,6 +160,7 @@ export function deriveCapabilityFlags(station: {
     // `kind === PROCESS_QC` dalını orada taşır). `kind` parametresi ilk kez
     // burada gerçekten kullanılıyor.
     canApplyQuality: stepRunsStepFlow(station),
+    inspectionEnabled: stepCanApplyQuality(station),
   };
 }
 
@@ -173,6 +181,7 @@ export class StationCapabilityService {
         appliesColor: true,
         appliesProperty: true,
         appliesQuality: true,
+        inspectionEnabled: true,
         defaultCategory: {
           select: { appliesColor: true, appliesProperty: true },
         },
@@ -208,6 +217,7 @@ export class StationCapabilityService {
         canApplyColor: flags.canApplyColor,
         canApplyProperty: flags.canApplyProperty,
         canApplyQuality: flags.canApplyQuality,
+        inspectionEnabled: flags.inspectionEnabled,
         colors: colorRows
           .filter((r) => r.color.isActive)
           .map((r) => ({
@@ -291,6 +301,7 @@ export class StationCapabilityService {
         appliesColor: true,
         appliesProperty: true,
         appliesQuality: true,
+        inspectionEnabled: true,
         isActive: true,
         defaultCategory: {
           select: { appliesColor: true, appliesProperty: true },
@@ -452,6 +463,7 @@ export class StationCapabilityService {
         canApplyColor: boolean;
         canApplyProperty: boolean;
         canApplyQuality: boolean;
+        inspectionEnabled: boolean;
         colorCount: number;
         propertyCount: number;
       }[]
@@ -467,6 +479,7 @@ export class StationCapabilityService {
         appliesColor: true,
         appliesProperty: true,
         appliesQuality: true,
+        inspectionEnabled: true,
         defaultCategory: {
           select: { appliesColor: true, appliesProperty: true },
         },
@@ -490,6 +503,7 @@ export class StationCapabilityService {
           canApplyColor: flags.canApplyColor,
           canApplyProperty: flags.canApplyProperty,
           canApplyQuality: flags.canApplyQuality,
+          inspectionEnabled: flags.inspectionEnabled,
           colorCount: s._count.colorCapabilities,
           propertyCount: s._count.propertyCapabilities,
         };
@@ -512,6 +526,7 @@ export class StationCapabilityService {
         appliesColor: true,
         appliesProperty: true,
         appliesQuality: true,
+        inspectionEnabled: true,
         defaultCategory: {
           select: { appliesColor: true, appliesProperty: true },
         },
@@ -549,6 +564,7 @@ export class StationCapabilityService {
           canApplyColor: flags.canApplyColor,
           canApplyProperty: flags.canApplyProperty,
           canApplyQuality: flags.canApplyQuality,
+          inspectionEnabled: flags.inspectionEnabled,
           colors: s.colorCapabilities
             .filter((r) => r.color.isActive)
             .map((r) => ({
