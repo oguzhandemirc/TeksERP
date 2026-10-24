@@ -40,7 +40,8 @@ import { ApiResponse } from "../types/api.types";
 import { factoryDateTimeTr } from "../constants/time";
 import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
 import type { DocTablesPayload } from "./document-render/doc-model";
-import { NUMBER_ROUNDING_HALF_UP, type NumberRounding } from "./document-render/fmt-num";
+import { envelopeHead } from "./document-render/envelope-head";
+import type { NumberRounding } from "./document-render/fmt-num";
 import { renderFrozenTemplate, resolveTemplateForFreeze, type FrozenTemplateRef } from "./document-template/print-binding";
 
 /** Builder'ların aldığı istemci — tx içinden (freeze) veya dışından (reissue/lazy) çalışır. */
@@ -104,9 +105,7 @@ export interface PrintedDocSnapshot {
   templateWarnings?: string[];
 }
 
-/** Her yeni zarfın başı — damganın TEK yazıldığı yer (sözleşme senaryoları da buradan alır). */
-export const envelopeHead = () =>
-  ({ schemaVersion: 1, frozenAt: new Date().toISOString(), numberRounding: NUMBER_ROUNDING_HALF_UP }) as const;
+export { envelopeHead };
 
 /** Builder çıktısı — domain servisin freeze/reissue için ürettiği içerik. */
 export interface BuiltDocContent {

@@ -13,6 +13,7 @@ import { requireAnyPermission } from "../middlewares/rbac.middleware";
 import "../types/express-augment";
 import { readDocumentDesignerEnabled } from "../services/system-setting.service";
 import { AppError } from "../utils/app-error";
+import { settingRowPath } from "../constants/panel-ayar-yolu";
 
 const router = Router();
 router.use(verifyToken);
@@ -23,7 +24,7 @@ router.use((req: Request, _res: Response, next: NextFunction) => {
   if (req.method === "GET" && /^\/contracts(\/|$)/.test(req.path)) return next();
   readDocumentDesignerEnabled()
     .then((on) =>
-      next(on ? undefined : AppError.forbidden("Belge tasarımcısı kapalı — Genel Ayarlar > Belgeler'den açılır.", { code: "DOCUMENT_DESIGNER_DISABLED" })),
+      next(on ? undefined : AppError.forbidden(`Belge tasarımcısı kapalı. ${settingRowPath("documentDesignerEnabled")} ayarından açılabilir.`, { code: "DOCUMENT_DESIGNER_DISABLED" })),
     )
     .catch(next);
 });
