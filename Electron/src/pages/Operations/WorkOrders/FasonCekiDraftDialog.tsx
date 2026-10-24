@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { printHtmlString } from "@/lib/print";
+import { printTracked } from "@/lib/print";
 import { workOrderService } from "./service";
 
 interface Props {
@@ -72,7 +72,9 @@ export function FasonCekiDraftDialog({ open, onOpenChange, workOrderId, stepId, 
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Kapat
           </Button>
-          <Button type="button" className="gap-1" disabled={!html} onClick={() => html && printHtmlString(html)}>
+          <Button type="button" className="gap-1" disabled={!html} onClick={() =>
+              html && void printTracked({ subject: { kind: "FASON_CEKI", table: "work_orders", id: workOrderId }, html })
+            }>
             <Printer className="h-4 w-4" /> Yazdır
           </Button>
         </DialogFooter>

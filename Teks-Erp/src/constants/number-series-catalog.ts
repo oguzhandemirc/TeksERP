@@ -133,8 +133,8 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
       not: "Üreteç `nextSeriesNo` (sayaç satırı KULLANILMAZ — GİB sırası boşluksuz); belge tarihi fabrika günüdür. Motor (E5) bu giriş noktasını çağırır.",
       uretec: "services/e-irsaliye/e-irsaliye-number.ts",
     },
-    // Kayıt tablosu E1-SEMA'da doğar; o inince `countTable` (seri-onekli) yazılır.
-    countTablePending: { model: "eIrsaliye", field: "documentNo", not: "e-İrsaliye kayıt tablosu henüz şemada yok (E1-SEMA); sayım E5'te bağlanır." },
+    // Kayıt tablosu E1-SEMA'da doğdu; TASLAK'ta `documentNo` null, sayım numaralananları sayar.
+    countTable: { model: "eIrsaliye", field: "documentNo", birim: "belge", kapsam: "seri-onekli" },
   },
   {
     key: "subcontractorDispatch",

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Printer } from "lucide-react";
@@ -16,6 +16,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { labelService } from "@/services/labelService";
+import { printTracked } from "@/lib/print";
 import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 /**
@@ -23,7 +24,7 @@ import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
  *
  * Barkod/QR = `Sack.sackNo` (Sack'te ayrı barcode kolonu YOK, "tek kod" kuralı).
  * İki baskı yolu: bu PC'ye seri/COM yazıcı yapılandırılmışsa DİYALOGSUZ native
- * gönderim; yoksa iframe.print() yedeği.
+ * gönderim; yoksa printTracked yedeği (sistem penceresi / sessiz basım).
  *
  * FAIL-CLOSED: SACK şablonu (Bağlam Varsayılanı / cihaz rotası) atanmamışsa
  * backend 400 döner ve mesaj operatöre ne yapacağını söyler — roll etiketine
@@ -39,7 +40,6 @@ export function SackLabelDialog({
 }) {
   const open = sack !== null;
   const { hasPermission } = useRoleAccess();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const { directEnabled, printSack, peripheralId } = useLabelPrinter();
   const [sending, setSending] = useState(false);
 
@@ -60,7 +60,7 @@ export function SackLabelDialog({
       try {
         const r = await printSack(sack.id);
         if (r.ok) {
-          await labelService.recordSackPrintEvent(sack.id).catch(() => {
+          await labelService.recordSackPrintEvent(sack.id, r.printJob).catch(() => {
             /* audit best-effort — baskı gerçekleşti, iz hatası akışı düşürmez */
           });
           toast.success(`${sack.sackNo} etiketi basıldı.`);
@@ -72,8 +72,16 @@ export function SackLabelDialog({
       }
       return;
     }
-    iframeRef.current?.contentWindow?.print();
-    await labelService.recordSackPrintEvent(sack.id).catch(() => {});
+    const html = htmlQuery.data;
+    if (!html) return;
+    const out = await printTracked({
+      subject: { kind: "ETIKET_CUVAL", table: "sacks", id: sack.id, no: sack.sackNo },
+      html,
+      workEndpoint: true,
+    });
+    // İptal/hata: kâğıt çıkmadı → print-event yok (hata zaten geçmişe yazıldı ve toast'landı).
+    if (!out.proceed) return;
+    await labelService.recordSackPrintEvent(sack.id, out.printJob).catch(() => {});
     toast.success(`${sack.sackNo} etiketi basıldı.`);
   };
 
@@ -106,7 +114,6 @@ export function SackLabelDialog({
             </div>
           ) : (
             <iframe
-              ref={iframeRef}
               title="Çuval etiketi"
               srcDoc={htmlQuery.data ?? ""}
               sandbox="allow-same-origin allow-modals"

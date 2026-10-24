@@ -584,6 +584,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("processedAt" IS NULL)`,
     why: "dağıtıcı süpürmesi yalnız işlenmemiş kuyruğu tarasın (işlenmiş satırlar indekse girmez)",
   },
+  // e-İrsaliye (E1-SEMA, migration 20261024081108): kaynak başına tek canlı kayıt.
+  {
+    table: "e_irsaliyeler",
+    index: "e_irsaliyeler_kaynak_canli_key",
+    uniq: true,
+    predicate: `(status <> ALL (ARRAY['IPTAL'::"EIrsaliyeStatus", 'REDDEDILDI'::"EIrsaliyeStatus"]))`,
+    why: "kaynak (sevkiyat) başına TEK canlı e-İrsaliye — düşerse aynı sevke iki numara/ETTN doğar; IPTAL/REDDEDILDI yer işgal etmez",
+  },
   // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): "varsayılan ön ayar" seddi.
   {
     table: "report_presets",
@@ -919,6 +927,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "notification_inbox", name: "notification_inbox_reason_ck" },
   { table: "notification_inbox", name: "notification_inbox_count_ck" },
   { table: "notification_daily_stats", name: "notification_daily_stats_events_ck" },
+  // e-İrsaliye (E1-SEMA): numaralı/gönderilmiş durum çift yüklemi · GİB biçimi · sayaç · doğuş olayı.
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_numarali_durum_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_gonderilmis_durum_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_document_no_bicim_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_download_count_chk" },
+  { table: "e_irsaliye_olaylari", name: "e_irsaliye_olaylari_dogus_chk" },
   // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): kapalı kümeler VarChar + CHECK
   // (`defect_types.defectGroup` bilinçli CHECK'siz — küme kodda). Tanım biçimi: SISTEM ⇒ anahtarlı ve
   // sahipsiz, OZEL ⇒ sahipli ve anahtarsız. Sürüm no ≥ 1; koşu süresi/satır negatif olamaz.
@@ -1141,6 +1155,19 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
     why: "defter mührü: UPDATE her zaman, doğrudan DELETE RED; üst top silinince FK kaskadı geçer (ortak fonksiyon defter_block_tamper)",
   },
+  // e-İrsaliye (E1-SEMA): donmuş XML sürümü + olay defteri mühürleri.
+  {
+    table: "e_irsaliye_xmllari",
+    trigger: "e_irsaliye_xml_degismez",
+    timing: ["BEFORE INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "e_irsaliye_xml_degismez()"],
+    why: "e-İrsaliye XML'i donmuş belge: UPDATE/doğrudan DELETE RED; gönderilmiş/iptal kayda yeni sürüm RED (gönderilen sürüm mühürlü)",
+  },
+  {
+    table: "e_irsaliye_olaylari",
+    trigger: "e_irsaliye_olaylari_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "defter_block_tamper()"],
+    why: "e-İrsaliye olay defteri append-only — UPDATE/doğrudan DELETE RED, kayıt kaskadı geçer",
+  },
   // ── Patron bulutu eşitlemesi (20260929152815_patron_bulut_esitleme) ──────────
   // Silme tespiti koda değil DB'ye bağlı (statik tarama kaskad/dinamik silmede kör):
   // 24 katalog kök tablosunun HER BİRİ `sync_marks`a SILINDI yazar. Kök listesi
@@ -1241,6 +1268,12 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["TG_OP = 'UPDATE'", "pg_trigger_depth() <= 1", "RAISE EXCEPTION"],
     why: "ortak defter mührü: UPDATE koşulsuz red, DELETE yalnız doğrudan ifadede red (kaskad derinlik ≥ 2 geçer)",
+  },
+  {
+    name: "e_irsaliye_xml_degismez",
+    volatility: "v",
+    bodyFragments: ["TG_OP = 'UPDATE'", "pg_trigger_depth() <= 1", "FOR SHARE", "'GONDERILDI', 'KABUL', 'KISMI_KABUL', 'REDDEDILDI', 'IPTAL'"],
+    why: "e-İrsaliye XML mührü: değişmez + gönderilmiş/iptal kayda yeni sürüm yok (servis kapısının DB ikizi)",
   },
   {
     name: "roll_write_status_event",

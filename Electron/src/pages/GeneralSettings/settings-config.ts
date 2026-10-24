@@ -8,6 +8,7 @@ import {
   Factory,
   Truck,
   TabletSmartphone,
+  FileText,
   Printer,
   Scale,
   ScanLine,
@@ -277,7 +278,7 @@ export interface SettingFieldDef {
  * - `flags`     → config'teki flag listesini generic toggle olarak çizer
  * - `device`    → mobil cihaz eşleştirme/onay (org düzeyi) özel section
  * - `session`   → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
- * - `printer` / `scale` / `scanner` / `server` → BU BİLGİSAYARA özel yerel donanım
+ * - `printer` / `documentPrinter` / `scale` / `scanner` / `server` → BU BİLGİSAYARA özel yerel donanım
  *
  * ⚠️ TEK BİR `workstation` KİNDİ VARDI VE İÇİNDE DÖRT ALT SEKME ÇİZİYORDU
  * (2026-09-04'te kaldırıldı, kullanıcı kararı: "bu bilgisayardaki yazıcı, kantar,
@@ -291,6 +292,7 @@ export type CategoryKind =
   | "flags"
   | "device"
   | "printer"
+  | "documentPrinter"
   | "scale"
   | "scanner"
   | "server"
@@ -1940,6 +1942,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "yazıcı etiket yazıcısı printer com cups kuyruk seri baud winspool raw passthrough diyalogsuz doğrudan baskı " +
       "argox bixolon zpl ppla pplb usb bu bilgisayar yerel workstation cihaz kaydı",
     kind: "printer",
+    section: "workstation",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
+  },
+  {
+    // Sessiz basım bilgisayar başına YEREL tercihtir (sunucu bayrağı yok); varsayılan bugünkü
+    // davranış = yazdırma penceresi. Donanım kategorisi: web'de kendi "yalnız masaüstü" mesajını basar.
+    id: "document-printer",
+    label: "Belge Yazıcısı",
+    icon: FileText,
+    description:
+      "Bu bilgisayarın belge yazıcısı (A4 irsaliye, refakat kartı, rapor) ve sessiz basım: açıkken yazdırma penceresi açılmaz.",
+    keywords:
+      "belge yazıcısı yazıcı printer a4 irsaliye refakat kartı rapor sessiz basım diyalogsuz yazdırma penceresi " +
+      "varsayılan yazıcı bu bilgisayar yerel workstation",
+    kind: "documentPrinter",
     section: "workstation",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
   },

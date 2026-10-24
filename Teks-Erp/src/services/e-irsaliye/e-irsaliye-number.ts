@@ -9,10 +9,11 @@
 // numarayı görür ve `documentNo @unique` 409 verir. E5 seriyi kilitlemeli.
 //
 // ⚠️ YÜKLEYİCİ TEK: üretim ve başlangıç kilidi ("bu yıl numara üretildi mi")
-// AYNI yükleyiciden okur. Kayıt tablosu E1-SEMA'da doğar; o güne dek seriden
-// numara üretilemez, yükleyici boş döner. Model doğunca bekçi
-// (`test_number_series_panel §4e`) bu dosyanın tabloya bağlanmasını ister.
+// AYNI yükleyiciden okur: `e_irsaliyeler.documentNo` (E1-SEMA). E5 claim tx'inde
+// `eIrsaliyeCodeLoader(tx)` ile çağırır.
 // =============================================================================
+import type { Prisma } from "@prisma/client";
+import prisma from "../../lib/prisma";
 import { seriesPrefix, type NumberSeriesFormat } from "../helpers/series-format.helper";
 import {
   nextSeriesNo,
@@ -25,8 +26,20 @@ export const E_IRSALIYE_SERIES_KEY = "eIrsaliye";
 
 export type EIrsaliyeCodeLoader = (fullPrefix: string, fmt: NumberSeriesFormat) => Promise<SeriesCodeRow[]>;
 
-/** Kayıt tablosu doğana dek (E1-SEMA) boş: hiçbir e-İrsaliye numarası üretilmedi. */
-export const loadEIrsaliyeCodes: EIrsaliyeCodeLoader = async () => [];
+type EIrsaliyeReader = Pick<Prisma.TransactionClient, "eIrsaliye">;
+
+/** Ön ekle başlayan numaralı kayıtlar — gte (index seek) + startsWith (collation-bağımsız). */
+export function eIrsaliyeCodeLoader(db: EIrsaliyeReader): EIrsaliyeCodeLoader {
+  return async (fullPrefix) => {
+    const rows = await db.eIrsaliye.findMany({
+      where: { documentNo: { gte: fullPrefix, startsWith: fullPrefix } },
+      select: { documentNo: true, createdAt: true },
+    });
+    return rows.map((r) => ({ code: r.documentNo, createdAt: r.createdAt }));
+  };
+}
+
+export const loadEIrsaliyeCodes: EIrsaliyeCodeLoader = eIrsaliyeCodeLoader(prisma);
 
 /** Sıradaki GİB numarası — `issueDate` belge tarihi; yıl fabrika gününden. */
 export async function nextEIrsaliyeDocumentNo(

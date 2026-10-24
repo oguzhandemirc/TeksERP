@@ -1,12 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /**
- * ⭐ WEBDE PDF = YAZDIR (bulut web paneli K3): aynı belge HTML'i `printHtmlString` ile yazdırma
+ * ⭐ WEBDE PDF = YAZDIR (bulut web paneli K3): aynı belge HTML'i boğazdan (`printTracked`, PDF türü) ile yazdırma
  * penceresinde açılır; "Hedef: PDF olarak kaydet" ipucu oturumda BİR KEZ. Electron'da main
  * süreçteki `pdf.save` yolu aynen.
  */
+// Boğaz (`printTracked`) sahtelenir: web yolunun basılan HTML'i ve PDF türü ölçülür.
 const printHtmlString = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/print", () => ({ printHtmlString }));
+vi.mock("@/lib/print", () => ({
+  printTracked: (o: { html?: string; outputKind?: string }) => {
+    printHtmlString(o.html, o.outputKind);
+    return Promise.resolve({ status: "BELIRSIZ", proceed: true, printJob: {} });
+  },
+  trackPdfSave: (_s: unknown, run: () => Promise<unknown>) => run(),
+}));
 const toast = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn(), warning: vi.fn(), success: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
 
@@ -37,13 +44,14 @@ describe("liste PDF — web", () => {
     expect(await listExport.exportRowsToPdf(cols, rows, "Toplar")).toBe(true);
     expect(printHtmlString).toHaveBeenCalledTimes(2);
     expect(String(printHtmlString.mock.calls[0]?.[0])).toContain("Top-1");
+    expect(printHtmlString.mock.calls[0]?.[1]).toBe("PDF");
     expect(toast.info).toHaveBeenCalledTimes(1);
     expect(String(toast.info.mock.calls[0]?.[0])).toMatch(/PDF olarak kaydet/);
   });
 
   it("çoklu belge TEK baskı işinde açılır", async () => {
     const { webPdf } = await load(false);
-    const res = webPdf.printDocsAsPdfOutcome(["<html><body>A</body></html>", "<html><body>B</body></html>"]);
+    const res = webPdf.printDocsAsPdfOutcome(["<html><body>A</body></html>", "<html><body>B</body></html>"], { kind: "BELGE" });
     expect(res).toMatchObject({ ok: true, count: 2, printed: true });
     expect(printHtmlString).toHaveBeenCalledTimes(1);
   });

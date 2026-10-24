@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { printDocumentArea } from "@/lib/print";
+import { printIdentityCards } from "@/lib/print";
 import { adminUserService, type BulkPreviewRow, type BulkResetResult } from "@/services/adminUserService";
 
 const REASON_LABEL: Record<BulkPreviewRow["reason"], string> = {
@@ -137,7 +137,7 @@ function PinSheet({ result }: { result: BulkResetResult }) {
       </div>
       <div className="flex items-center justify-between">
         <span className="text-[11px] text-amber-600 dark:text-amber-400">Bu liste bir daha gösterilmez — şimdi yazdırıp dağıtın.</span>
-        <Button size="sm" variant="outline" onClick={() => printDocumentArea(printRef.current)}>
+        <Button size="sm" variant="outline" onClick={() => void printIdentityCards(printRef.current, result.results.map((r) => r.userId))}>
           <Printer className="h-3.5 w-3.5" /> Yazdır
         </Button>
       </div>

@@ -30,7 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/PermissionGate";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
-import { printHtmlString } from "@/lib/print";
+import { printTracked, trackPdfSave, type PrintSubject } from "@/lib/print";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { docTablesToSheets } from "@/lib/doc-tables-export";
 import {
@@ -134,15 +134,18 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
     },
   });
 
+  // Bordro tablosu geçmiş kataloğunda yok: konu belge türüyle ve adıyla tanınır.
+  const bordroSubject: PrintSubject = { kind: "BELGE", no: DRAFT_FILE };
+
   const savePdf = async () => {
     if (!preview) return;
     const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
-    if (!pdfApi && isWebPdf()) return printAsPdf(preview.html);
+    if (!pdfApi && isWebPdf()) return printAsPdf(preview.html, bordroSubject);
     if (!pdfApi) {
       toast.error("PDF desteği yok (masaüstü uygulaması gerekli) — Yazdır ile PDF'e basabilirsiniz.");
       return;
     }
-    const res = await pdfApi.save({ html: preview.html, suggestedName: DRAFT_FILE });
+    const res = await trackPdfSave(bordroSubject, () => pdfApi.save({ html: preview.html, suggestedName: DRAFT_FILE }));
     if (res.error) toast.error(res.error);
   };
 
@@ -286,7 +289,7 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
                 <Button variant="ghost" size="sm" onClick={() => setPreview(null)}>
                   Düzenle
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1" onClick={() => printHtmlString(preview.html)}>
+                <Button variant="outline" size="sm" className="gap-1" onClick={() => void printTracked({ subject: bordroSubject, html: preview.html })}>
                   <Printer className="h-4 w-4" /> Yazdır
                 </Button>
                 <Button variant="outline" size="sm" className="gap-1" onClick={() => void savePdf()}>
