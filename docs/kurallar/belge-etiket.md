@@ -28,6 +28,7 @@
 - **[ÇEKİRDEK]** Belge tasarımı ayrı yetkidir: Tanımlar → Çıktılar'ın dört ekranı (Belge Şablonları · Refakat Kartı · Refakat Kartı Şablonları · Serbest Belgeler) document-template:read/write ile korunur; kategori web — hasAdminAccess saymaz, taşıyan Yönetim menüsünü/Sistem hub'ını görmez. · bekçi: `scripts/test_document_template_permission.ts (81)` <sub>(CLAUDE.md:130, CLAUDE.md:152)</sub>
 - **[ÇEKİRDEK]** Belge tasarım izin kümeleri TEK kaynak constants/document-design.ts (saf string literal — AST bekçisi okur); Electron backend'i import edemez, lib/permissions.ts'te AYNALAR; kart tile-config.permissionAny ↔ route content-routes.requireAnyPermission BİREBİR (ayrışma = görünen kart + /forbidden). · bekçi: `scripts/test_document_template_permission.ts (kart/route hizası bozulunca 1)` <sub>(CLAUDE.md:130)</sub>
 - **[ÇEKİRDEK]** PATCH /api/feature-flags guard'ı ANAHTAR-KAPSAMLI, düz OR'a ÇEVRİLMEZ: gövde YALNIZ DOCUMENT_DESIGN_FLAG_KEYS (documentsConfig, travelerCardConfig) taşıyorsa DOCUMENT_DESIGN_WRITE yeter; tek yabancı anahtar / boş gövde → admin:settings (FAIL-CLOSED). Aynı yüklem ayar-şifresi belge muafiyeti. · bekçi: `scripts/test_document_template_permission.ts + test_settings_password.ts` <sub>(CLAUDE.md:130, CLAUDE.md:98)</sub>
+- **[ÇEKİRDEK]** Akış etiketinin (top · kartela · çuval) adedini YALNIZ `services/helpers/label-copies.helper.ts` (`resolveFlowLabelCopies`) çözsün; `label.service` `readLabelCopies`i doğrudan çağırmasın. `label.copiesSource=GLOBAL` (varsayılan) bugünkü API'yi korur (istek sessizce 1–5'e kırpılır, yoksa genel adet); `STATION`da istek 1–5 (dışı 400 `LABEL_COPIES_RANGE`) > oturum istasyonunun `defaultLabelCopies`i > genel adet; tezgah/levent toplu ve serbest şablon baskısı bu çözücünün dışındadır. · bekçi: `scripts/test_label_copies_source.ts`
 
 ### Yasaklar
 
@@ -191,6 +192,7 @@ Backend: `test_belge_sablon_temizleyici`, `test_belge_baslik_harf`, `test_belge_
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- 2026-10-24 · Etiket adedi kaynağı: sistem geneli ya da istasyon (yönetici varsayılanı) [ÇEKİRDEK+PROFİL] — `arsiv/2026-10.md` §2026-10-24 Etiket adedi kaynağı
 - 2026-10-01 · 2026-10-01 — Güvenlik denetimi G2: PDF penceresi, panel kabuğu, belge şablonu izin listesi — `arsiv/2026-10.md`
 - 2026-09-26 · 2026-09-26 — Belgelerde ticari yuvarlama; yuvarlama rejimi donmuş zarfta damgalanır — `arsiv/2026-09.md`
 - 2026-09-25 · 2026-09-25 — Aynı belgenin PDF'i ile Excel'i aynı kolon/değer çözücüsünden türer (sevk irsaliyesi) — `arsiv/2026-09.md`
