@@ -47,6 +47,8 @@
 - **[ÇEKİRDEK]** Müşteri spesifikasyonunu yalnız görünüm/rapor hesabında kullan; muayene kaydına ve dereceye yazma. <sub>(arşiv 2026-10-24)</sub>
 - **[ÇEKİRDEK]** Modül kapalıyken (`kaliteGuvence.enabled`, varsayılan KAPALI) INSPECTION satırı doğurma; kapı `requireKaliteGuvenceEnabled` / `readKaliteGuvenceEnabled`. · bekçi: `test_module_flag_off` (§2d route'suz satır) <sub>(arşiv 2026-10-24)</sub>
 - **[ÇEKİRDEK]** KK1 operatör şablonuna yalnız tablet kapsamlı muayene izni ver (`mobile:muayene`); `inspection:*` · `labtest:*` · `certificate:*` panel girişi açar, yalnız sorumlu/şef (`WEB_*`) şablonlarına girer. · bekçi: `test_role_template_catalog §2e` <sub>(patron kararı 2026-10-24; arşiv)</sub>
+- **[ÇEKİRDEK]** `RollInspection`ı silme ve içeriğini güncelleme; düzeltme revizyondur (`supersededAt` + yeni satır), iptal `voidedAt` damgasıdır; (top, faz) başına tek aktif belge partial unique `roll_inspections_one_active_uq` ile. · bekçi: `test_k4p_sema_sedleri` §3 <sub>(arşiv 2026-10-24 "K4P şema")</sub>
+- **[ÇEKİRDEK]** `RollError.startMeter`ı PROCESS yolunda `requireProcessMeter`/`processMeterNumber` (`helpers/roll-error-meter.helper.ts`) ile daralt; `Number(e.startMeter)` yazma (NULL sessizce 0 olur). · bekçi: `test_k4p_sema_sedleri` §1 (DB CHECK `roll_errors_meter_ck`) <sub>(arşiv 2026-10-24 "K4P şema")</sub>
 
 ## Backend
 
@@ -110,7 +112,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_role_template_catalog` (§2e K4P operatör şablonu), `test_module_flag_off` (§2d), `test_default_defect_type`, `test_panel_station_kind_aynasi`, `test_finalize_last_step`⚠️, `test_helpers`, `test_iade_enhancements`, `test_label_element_condition`, `test_manual_move_backflush`, `test_manual_move_qc_reversal`, `test_null_quality_visibility`, `test_p2_kk2reopen`, `test_phase1_uretim_hardening`, `test_phase3_stok_hardening`, `test_phase6_reporterror_concurrency`, `test_produced_buckets`, `test_qc2_idempotency`⚠️, `test_quality_batch_flags`, `test_quality_code_literal`, `test_quality_role_catalog`, `test_quality_scorecard`, `test_scrap_grade_label`, `test_scrap_scorecard`, `test_station_quality_capability`, `test_wo_manual_complete`
+Backend: `test_role_template_catalog` (§2e K4P operatör şablonu), `test_k4p_sema_sedleri` (K4P DB seddi), `test_module_flag_off` (§2d), `test_default_defect_type`, `test_panel_station_kind_aynasi`, `test_finalize_last_step`⚠️, `test_helpers`, `test_iade_enhancements`, `test_label_element_condition`, `test_manual_move_backflush`, `test_manual_move_qc_reversal`, `test_null_quality_visibility`, `test_p2_kk2reopen`, `test_phase1_uretim_hardening`, `test_phase3_stok_hardening`, `test_phase6_reporterror_concurrency`, `test_produced_buckets`, `test_qc2_idempotency`⚠️, `test_quality_batch_flags`, `test_quality_code_literal`, `test_quality_role_catalog`, `test_quality_scorecard`, `test_scrap_grade_label`, `test_scrap_scorecard`, `test_station_quality_capability`, `test_wo_manual_complete`
 
 İstemci: `WorkOrderCompleteDialog.test.tsx`, `shortCutQuality.test.ts`
 
