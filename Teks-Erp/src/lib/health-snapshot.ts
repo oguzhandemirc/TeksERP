@@ -5,6 +5,7 @@
 // yalnız kimlikli yüzeylere gider. Yoklama özeti ayrıca protokolün KATI şemasından geçer.
 import { shortCredentialHealthSnapshot } from "../services/short-credential.service";
 import { jwtSecretHealth } from "./jwt-secret";
+import { telemetryWriteHealth } from "./telemetry-write-health";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -17,7 +18,6 @@ import { getPresence } from "./presence";
 import { readUnvalidatedConstraints } from "./constraint-health";
 import { getMdnsState } from "../jobs/mdns-advertiser.job";
 import { getCachedInstallationIdentity } from "../jobs/installation-identity.job";
-import { AuditService } from "../services/audit.service";
 import { getOffsiteHealth } from "../services/helpers/offsite-backup.helper";
 import { isBackupFileName, NIGHTLY_PREFIX } from "../services/helpers/backup-naming.helper";
 import { seriesExhaustionWarnings } from "../services/helpers/series-exhaustion.helper";
@@ -367,8 +367,6 @@ export async function buildRichHealth(): Promise<Record<string, unknown>> {
   } catch {
     db = "DOWN";
   }
-  // Audit yazım sağlığı — best-effort log'lar sessizce düşerse burada görünür.
-  const auditHealth = AuditService.getHealth();
   return {
     status: "UP",
     message: "TeksERP API is running.",
@@ -425,10 +423,8 @@ export async function buildRichHealth(): Promise<Record<string, unknown>> {
     ...readAppDiskMetrics(),
     // Anlık online kullanıcı + bağlı cihaz (bellekte, son 5 dk)
     ...getPresence(),
-    // Audit kaybı izleme (0 = sağlıklı; >0 ise log yazımı başarısız oluyor)
-    auditWriteFailures: auditHealth.failureCount,
-    lastAuditError: auditHealth.lastError,
-    lastAuditFailureAt: auditHealth.lastFailureAt,
+    // Best-effort yazım sağlığı (audit + yazdırma geçmişi) — sessiz düşüş burada görünür.
+    ...telemetryWriteHealth(),
     // Audit değiştirilemezliği (ISO 27001 A.8.15) — "on" = UPDATE/DELETE engelli.
     // null = DB okunamadı, "off" ile karıştırma.
     // G4 auditProtection: "tam" = rol yalnız ekler + zincir sağlam; "kismi" uyarı, durdurmaz.

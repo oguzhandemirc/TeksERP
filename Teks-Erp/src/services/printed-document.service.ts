@@ -99,8 +99,8 @@ export interface PrintedDocSnapshot {
   numberRounding?: NumberRounding;
 }
 
-/** Her yeni zarfın başı — damganın TEK yazıldığı yer. */
-const envelopeHead = () =>
+/** Her yeni zarfın başı — damganın TEK yazıldığı yer (sözleşme senaryoları da buradan alır). */
+export const envelopeHead = () =>
   ({ schemaVersion: 1, frozenAt: new Date().toISOString(), numberRounding: NUMBER_ROUNDING_HALF_UP }) as const;
 
 /** Builder çıktısı — domain servisin freeze/reissue için ürettiği içerik. */

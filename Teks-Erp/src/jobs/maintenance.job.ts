@@ -13,7 +13,8 @@ import { readLastAuditChainReport, verifyAndRecordAuditChain } from "../services
 import { SessionRegistryService } from "../services/session-registry.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import { pruneNotifications } from "../services/notification-prune.service";
-import { readAuditArchiveRetentionYears } from "../services/system-setting.service";
+import { readAuditArchiveRetentionYears, readPrintLogRetentionDays } from "../services/system-setting.service";
+import { prunePrintJobs } from "../services/print-job.service";
 import { auditArchivePurgeCutoff, nextAuditPurgeSliceEnd } from "../services/helpers/audit-retention.helper";
 import { isInMaintenanceWindow } from "../services/helpers/maintenance-window.helper";
 import { factoryYmd } from "../constants/time";
@@ -131,6 +132,16 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
       const r = await pruneNotifications();
       const total = r.inbox + r.outbox + r.conditions + r.dailyStats;
       return total > 0 ? `bildirim: kutu ${r.inbox} · outbox ${r.outbox} · koşul ${r.conditions} · sayaç ${r.dailyStats} satır budandı` : null;
+    },
+  },
+  {
+    // Yazdırma geçmişi telemetridir: yalnız YAŞA göre budanır (`printLog.retentionDays`, 0 = budama yok).
+    name: "print-job-purge",
+    run: async () => {
+      const days = await readPrintLogRetentionDays();
+      const r = await prunePrintJobs(new Date(), days);
+      if (r.deleted === 0) return null;
+      return `yazdırma geçmişi: ${r.deleted} satır budandı (${days} günden eski)`;
     },
   },
 ];
