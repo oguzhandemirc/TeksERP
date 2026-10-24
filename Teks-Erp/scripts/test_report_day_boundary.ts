@@ -38,6 +38,7 @@ import {
   DEFAULT_FACTORY_TIMEZONE,
   getFactoryTimezone,
   factoryDaySql,
+  factoryWeekSql,
   factoryDayStart,
   factoryDayKeyUtcMidnight,
   factoryYmd,
@@ -158,6 +159,25 @@ async function main(): Promise<void> {
   check(
     "PG `date` → JS Date UTC-gece-yarısı geliyor (toISOString().slice(0,10) güvenli)",
     dayRows[0]?.factoryDay.getUTCHours() === 0 && dayRows[0]?.factoryDay.getUTCMinutes() === 0
+  );
+
+  // Hafta kolu (R1-SEMCEK `factoryWeekSql`): pazartesi 01:00 yerel = UTC'de PAZAR 22:00 —
+  // çıplak hafta kesimi olayı bir önceki haftaya yazar. SONDA (2026-10-24): gövde dilimsiz →
+  // bu kol 1 ❌; küpte çıplak `DATE_TRUNC('week', …)` → cephe 4 1 ❌; ikisi de md5 ile geri alındı.
+  const MONDAY_NIGHT = new Date("2026-10-18T22:00:00.000Z"); // 2026-10-19 Pzt 01:00 Europe/Istanbul
+  const weekRows = await prisma.$queryRaw<Array<{ factoryWeek: Date; naiveWeek: Date }>>`
+    SELECT
+      ${factoryWeekSql("t.ts")}              AS "factoryWeek",
+      DATE_TRUNC('week', t.ts)::date         AS "naiveWeek"
+    FROM (SELECT ${MONDAY_NIGHT}::timestamptz AS ts) t
+  `;
+  const factoryWeek = weekRows[0]?.factoryWeek.toISOString().slice(0, 10);
+  const naiveWeek = weekRows[0]?.naiveWeek.toISOString().slice(0, 10);
+  check("factoryWeekSql pazartesi 01:00 yereli O pazartesinin haftasına yazar", factoryWeek === "2026-10-19", String(factoryWeek));
+  check(
+    "çıplak hafta kesimi AYNI anı önceki haftaya yazıyordu — fark kanıtlandı",
+    naiveWeek === "2026-10-12" && naiveWeek !== factoryWeek,
+    `çıplak=${naiveWeek} · fabrika=${factoryWeek}`
   );
 
   // ── 3) Uçtan uca: audit `daily` serisi ────────────────────────────────────

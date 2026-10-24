@@ -61,6 +61,14 @@ const resolveSchema = z.object({
     .or(z.literal("").transform(() => undefined)),
 });
 
+// Geçmiş görünümü açıkça istenir; tanınmayan değer 400 (fail-closed), sessizce "aktif" sayılmaz.
+const listScopeSchema = z.object({
+  includeRevoked: z
+    .enum(["0", "1", "true", "false"], { message: "includeRevoked yalnız 0/1/true/false olabilir" })
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
+});
+
 const upsertSchema = z.object({
   itemId: z.string().uuid("Geçersiz kalem ID"),
   // `null` = KART VARSAYILANI. Alanın hiç gönderilmemesi de aynı anlama gelir.
@@ -123,9 +131,12 @@ router.get(
  *     description: >
  *       `filter[customerId]=null` (ya da `default`) YALNIZ kart varsayılanlarını
  *       getirir — o değer bir UUID değildir ve jenerik filtre yolundan geçseydi
- *       "null" METNİ uuid kolonuna gidip 400 üretirdi.
+ *       "null" METNİ uuid kolonuna gidip 400 üretirdi. Varsayılan YALNIZ aktif
+ *       (damgasız) satırlar; `includeRevoked=1` kaldırılmış/değişmiş sürümleri de
+ *       getirir (aynı anahtarda yeniden eskiye).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
+ *       - { in: query, name: includeRevoked, schema: { type: string, enum: ["0", "1", "true", "false"] }, description: "Damgalı fiyat geçmişini de getir" }
  *       - { in: query, name: "filter[itemId]", schema: { type: string } }
  *       - { in: query, name: "filter[customerId]", schema: { type: string }, description: "UUID · CSV · 'null' (yalnız varsayılanlar)" }
  *       - { in: query, name: "filter[kind]", schema: { type: string, enum: [PURCHASE, SALE] } }
@@ -140,7 +151,8 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { page, pageSize, filters, search } = parseQueryParams(req);
-      const { rows, total } = await itemPriceService.list({ page, pageSize, filters, search });
+      const { includeRevoked } = listScopeSchema.parse({ includeRevoked: req.query.includeRevoked });
+      const { rows, total } = await itemPriceService.list({ page, pageSize, filters, search, includeRevoked });
       res.status(200).json({
         success: true,
         data: rows,
@@ -157,16 +169,16 @@ router.get(
  * /api/item-prices:
  *   post:
  *     tags: [ItemPrices]
- *     summary: Fiyat yaz (yoksa açar, varsa günceller)
+ *     summary: Fiyat yaz (yoksa açar, farklıysa yeni sürüm, aynıysa dokunmaz)
  *     description: >
  *       `customerId` YOKSA/`null` ise KART VARSAYILANI yazılır; doluysa o
- *       müşterinin İSTİSNASI. Yazım tek atomik `INSERT ... ON CONFLICT`
- *       ifadesidir (iki eşzamanlı yazım aynı satırı iki kez doğuramaz).
+ *       müşterinin İSTİSNASI. Fiyat yerinde EZİLMEZ: eski sürüm `revokedAt` ile
+ *       damgalanır, yeni sürüm yazılır (tek tx; eşzamanlı ikinci yazım 409).
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: Yazıldı ("created" alanı yeni mi güncelleme mi olduğunu söyler) }
+ *       200: { description: Yazıldı ("created" alanı ilk tanım mı, değişim/aynı fiyat mı olduğunu söyler) }
  *       400: { description: Kalem/cari yok ya da pasif · fiyat negatif/çok büyük }
- *       409: { description: Beklenmedik çakışma }
+ *       409: { description: Aynı anahtara eşzamanlı yazım }
  */
 router.post(
   "/",
@@ -188,17 +200,17 @@ router.post(
  *     tags: [ItemPrices]
  *     summary: Fiyat satırını kaldır
  *     description: >
- *       FİZİKSEL silme — `ItemPrice`'ta `isActive` YOKTUR ve olmamalıdır (pasif
- *       fiyat, çözüm sırasına üçüncü bir durum eklerdi). Geçmiş belgeler
- *       etkilenmez: fatura satırı fiyatı KENDİ kolonunda dondurur. İstisna
- *       kaldırılınca müşteri kart varsayılanına döner; varsayılan kaldırılınca
- *       fiyat "bilinmiyor" olur ve satır BOŞ gelir (sıfıra düşmez).
+ *       Satır SİLİNMEZ, `revokedAt` ile damgalanır (defter ③a): fiyat geçmişi
+ *       "şu tarih itibarıyla" okunmaya devam eder. İstisna kaldırılınca müşteri
+ *       kart varsayılanına döner; varsayılan kaldırılınca fiyat "bilinmiyor" olur
+ *       ve satır BOŞ gelir (sıfıra düşmez).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: Kaldırıldı }
+ *       200: { description: Kaldırıldı (damgalandı) }
  *       404: { description: Bulunamadı }
+ *       409: { description: Zaten kaldırılmış ya da eşzamanlı değişti }
  */
 router.delete(
   "/:id",
