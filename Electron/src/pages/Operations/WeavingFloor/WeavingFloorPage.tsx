@@ -86,6 +86,7 @@ export function WeavingFloorPage({ tv = false }: { tv?: boolean }) {
       now={live.now}
       sampleData={false}
       tv={tv}
+      toolStrip={tv ? undefined : <RelocatedToolStrip host="/operations/weaving-floor" />}
       stale={live.stale}
       notice={live.stale ? <StaleNotice updatedAt={live.floor.updatedAt} /> : undefined}
       onOpenTv={tv ? undefined : openTezgahTvHere}
