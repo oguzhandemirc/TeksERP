@@ -115,6 +115,18 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "FourPointRuleSet",
+      table: "four_point_rule_sets",
+      column: "itemId",
+      label: "4 puan ürün kural seti",
+      uniqueOn: ["customerId", "itemId"],
+      policy: "BLOCK",
+      why:
+        "Aynı müşterinin iki ürününe ayrı spesifikasyon yazılmışsa birleşmiş üründe hangisinin " +
+        "geçerli olduğunu yalnız kalite sorumlusu bilir (K4P); `customer_item_uq` ile birebir.",
+    },
+    {
+      kind: "CONFLICT",
       model: "ItemPrice",
       table: "item_prices",
       column: "itemId",
