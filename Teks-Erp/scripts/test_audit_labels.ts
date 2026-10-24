@@ -59,6 +59,7 @@
 // Koşum: npx tsx scripts/test_audit_labels.ts
 // =============================================================================
 
+import crypto from "node:crypto";
 import fs from "fs";
 import path from "path";
 
@@ -78,6 +79,10 @@ function check(label: string, ok: boolean, detail?: string): void {
 
 const BACKEND_SRC = path.resolve(__dirname, "../src");
 const ELECTRON_LIB = path.resolve(__dirname, "../../Electron/src/lib");
+// B2 (2026-10-25): modül/olay/değer sözlüklerinin KAYNAĞI backend; Electron dosyaları bayt-eşit ayna.
+const BACKEND_CONST = path.resolve(__dirname, "../src/constants");
+const TABLO_KAYNAK = path.join(BACKEND_CONST, "audit-tablo-etiketleri.ts");
+const ENUM_KAYNAK = path.join(BACKEND_CONST, "audit-enum-etiketleri.ts");
 
 /** `X: "Türkçe",` satırlarını okur. Bloğu ADIYLA bulur, sonuna kadar tarar. */
 function readMap(file: string, constName: string): Record<string, string> | null {
@@ -157,7 +162,7 @@ const tableLiterals = new Set([
 // Bekçinin kendi sonda kayıtları kapsam dışı (test_audit_depth `BEKCI_B3` yazar).
 for (const probe of ["BEKCI_B3"]) tableLiterals.delete(probe);
 
-const tableLabels = readMap(path.join(ELECTRON_LIB, "audit-labels.ts"), "TABLE_LABELS");
+const tableLabels = readMap(TABLO_KAYNAK, "TABLE_LABELS");
 check("TABLE_LABELS okunabildi", tableLabels !== null);
 check("körlük zemini: kodda tableName literali bulundu", tableLiterals.size >= 40, `${tableLiterals.size} tablo`);
 
@@ -190,7 +195,7 @@ for (const m of backendText.matchAll(/logEvent\(\s*\{[\s\S]{0,400}?\}/g)) {
   }
 }
 
-const eventLabels = readMap(path.join(ELECTRON_LIB, "audit-labels.ts"), "EVENT_ACTION_LABELS");
+const eventLabels = readMap(TABLO_KAYNAK, "EVENT_ACTION_LABELS");
 check("EVENT_ACTION_LABELS okunabildi", eventLabels !== null);
 check("körlük zemini: kodda logEvent action'ı bulundu", eventActions.size >= 20, `${eventActions.size} olay`);
 
@@ -230,7 +235,10 @@ for (const m of schema.matchAll(/^enum\s+(\w+)\s*\{([^}]*)\}/gm)) {
 }
 const enumValues = new Map<string, string>([...enumOwners].map(([v, e]) => [v, e[0]!]));
 
-const enumLabels = readMap(path.join(ELECTRON_LIB, "audit-labels.ts"), "ENUM_LABELS");
+// B2: harita iki parçaya bölündü (dosya boyu tavanı) — anlam tek harita, ikisi birleşik okunur.
+const enumAna = readMap(ENUM_KAYNAK, "ENUM_LABELS_ANA");
+const enumEk = readMap(path.join(BACKEND_CONST, "audit-enum-etiketleri-ek.ts"), "ENUM_LABELS_EK");
+const enumLabels = enumAna && enumEk ? { ...enumAna, ...enumEk } : null;
 check("ENUM_LABELS okunabildi", enumLabels !== null);
 // Zemin ölçüme göre: 2026-08-25'te 140 üye. Yorum kırpması düşerse ~60'a
 // iner ve bekçi sessizce kör kalırdı — bu satır tam onu yakalar.
@@ -266,7 +274,7 @@ if (enumLabels) {
     `${cakisanlar.length} çakışma / ${enumOwners.size} değer`,
   );
 
-  const beyan = readMap(path.join(ELECTRON_LIB, "audit-labels.ts"), "SHARED_ENUM_VALUES");
+  const beyan = readMap(path.join(BACKEND_CONST, "audit-enum-paylasim.ts"), "SHARED_ENUM_VALUES");
   check("SHARED_ENUM_VALUES okunabildi", beyan !== null);
 
   if (beyan) {
@@ -320,6 +328,25 @@ check(
 check(
   "diff satırı da enum sözlüğünden geçiyor",
   /export function auditValueText[\s\S]{0,400}formatAuditValue\(/.test(auditLabelsSrc),
+);
+
+// =============================================================================
+// 6) SÖZLÜK AYNASI — backend kaynağı ≡ Electron kopyası (B2, sha256 bayt-eşit)
+// =============================================================================
+console.log("\n=== 6) Modül/olay/değer sözlüğü aynası (bayt-eşit) ===");
+for (const ad of ["audit-tablo-etiketleri.ts", "audit-enum-etiketleri.ts", "audit-enum-etiketleri-ek.ts", "audit-enum-paylasim.ts"]) {
+  const kaynak = path.join(BACKEND_CONST, ad);
+  const ayna = path.join(ELECTRON_LIB, ad);
+  const ozet = (f: string) => (fs.existsSync(f) ? crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex") : null);
+  const k = ozet(kaynak);
+  const a = ozet(ayna);
+  check(`⭐ ${ad}: Electron aynası bayt-eşit`, k !== null && a !== null && k === a,
+    k === null ? "kaynak yok" : a === null ? "ayna yok (ÖLÇÜLEMEDİ)" : k === a ? k.slice(0, 12) : `kaynak ${k.slice(0, 12)} ≠ ayna ${a.slice(0, 12)} — kaynağı Electron/src/lib'e kopyala`);
+}
+check(
+  "audit-labels.ts sözlükleri aynadan RE-EXPORT ediyor (ikinci harita yok)",
+  !/^export const (TABLE_LABELS|ENUM_LABELS|EVENT_ACTION_LABELS|SHARED_ENUM_VALUES)\b/m.test(auditLabelsSrc)
+    && /from "\.\/audit-tablo-etiketleri"/.test(auditLabelsSrc) && /from "\.\/audit-enum-etiketleri"/.test(auditLabelsSrc),
 );
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
