@@ -8,6 +8,8 @@ export interface Station {
   kind: StationKind;
   department: string | null;
   isActive: boolean;
+  /** İş emri rota adımı olabilir mi (false: KK1 girişi, Sevkiyat gibi giriş/çıkış istasyonları). */
+  allowAsWorkOrderStep?: boolean;
   /** Bu istasyon RENK uygulayabilir mi? (2026-08-10 — yetenek kategoriden ayrıldı) */
   appliesColor: boolean;
   /** Bu istasyon ÖZELLİK uygulayabilir mi? */
@@ -17,6 +19,11 @@ export interface Station {
    * Renk/özellikten farkı: fason kategorisinden türetilmez, atama listesi yoktur.
    */
   appliesQuality: boolean;
+  /**
+   * Kalite MUAYENESİ (hata girişi) bu istasyonda açık mı? (KQ-D1, 2026-10-24)
+   * `appliesQuality` artık yalnız ara istasyon kart akışıdır; muayene bu alandır.
+   */
+  inspectionEnabled: boolean;
   /** Devere: bu istasyonun makineleri LEVENT SARAR (WOUND.machineId adayı). */
   producesWarpBeam: boolean;
   /** Devere Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma/raşel); yuva kapısı budur. */

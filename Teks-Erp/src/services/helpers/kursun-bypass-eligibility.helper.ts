@@ -39,7 +39,7 @@ import {
   assertStepNotBypassAssigned,
   KURSUN_BYPASS_MARKER_PREFIX,
 } from "./kursun-bypass-guard.helper";
-import { STEP_QUALITY_SELECT, stepCanApplyQuality } from "./quality-station.helper";
+import { STEP_FLOW_SELECT, stepRunsStepFlow } from "./quality-station.helper";
 
 /** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -201,9 +201,9 @@ export async function resolveStepBypassEligibility(
     select: {
       id: true,
       status: true,
-      // ⚠️ `STEP_QUALITY_SELECT` — yüklem `appliesQuality`yi de okur; select
+      // ⚠️ `STEP_FLOW_SELECT` — yüklem `appliesQuality`yi de okur; select
       // genişletilmezse Prisma tipi tutmaz.
-      station: { select: STEP_QUALITY_SELECT },
+      station: { select: STEP_FLOW_SELECT },
       movements: {
         where: { ...ACTIVE_MOVEMENT, exitedAt: null },
         select: { qtyIn: true },
@@ -223,7 +223,7 @@ export async function resolveStepBypassEligibility(
       },
     },
   });
-  if (!step || !stepCanApplyQuality(step.station)) return null;
+  if (!step || !stepRunsStepFlow(step.station)) return null;
 
   const signals = await loadBypassEligibilitySignals(db, [step.id]);
   const blockReason = resolveBypassBlockReason(step, signals);

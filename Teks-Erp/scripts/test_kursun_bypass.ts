@@ -66,6 +66,7 @@ import { InventoryService } from "../src/services/inventory.service";
 import { TamburService } from "../src/services/tambur.service";
 import { recomputeStepStatus } from "../src/services/helpers/roll-step.helper";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { inspectionDefaultForKind } from "../src/services/helpers/quality-station.helper";
 import { AppError } from "../src/utils/app-error";
 
 const bypassSvc = new KursunBypassService();
@@ -253,6 +254,8 @@ async function makeStation(
       type: "INTERNAL",
       kind,
       department: "KALITE",
+      // Ham prisma doğuşu: servisin tür varsayılanı koşmaz (KQ-D1) — açık yaz.
+      inspectionEnabled: inspectionDefaultForKind(kind),
     },
     select: { id: true },
   });
