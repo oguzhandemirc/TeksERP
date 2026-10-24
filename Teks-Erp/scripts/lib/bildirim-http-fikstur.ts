@@ -10,7 +10,9 @@ import * as bcrypt from "bcryptjs";
 import prisma from "../../src/lib/prisma";
 import app from "../../src/app";
 import { SETTING_KEYS } from "../../src/services/system-setting.service";
+import { PASSWORD_BCRYPT_COST } from "../../src/constants/password-policy";
 import { kosumaOzguParola } from "../fixture-test-user";
+import { hedefDbEngeli } from "./hedef-db-kapisi";
 
 export interface FiksturKullanici {
   id: string;
@@ -28,6 +30,9 @@ export class BildirimFikstur {
   constructor(private readonly tag: string) {}
 
   async ac(): Promise<void> {
+    // Kendi satırlarını siler: yalnız `_test` hedefinde açılır (fabrika verisine asla).
+    const engel = hedefDbEngeli();
+    if (engel) throw new Error(`DURDURULDU — ${engel}`);
     this.server = await new Promise<Server>((resolve) => {
       const s = app.listen(0, "127.0.0.1", () => resolve(s));
     });
@@ -47,7 +52,7 @@ export class BildirimFikstur {
     const u = await prisma.user.create({
       data: {
         username: `${this.tag}-${ek}`,
-        passwordHash: await bcrypt.hash(this.parola, 10),
+        passwordHash: await bcrypt.hash(this.parola, PASSWORD_BCRYPT_COST),
         fullName: `${this.tag} ${ek}`,
         isActive: true,
         permissions: { create: izinler.map((p) => ({ permissionId: p.id })) },
