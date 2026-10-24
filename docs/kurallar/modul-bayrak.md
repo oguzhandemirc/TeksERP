@@ -93,6 +93,7 @@
 ### Kararlar
 
 - **[PROFİL]** Modül anahtarlarının TEK EVİ Sistem → Modüller (`/system/module-profile`, path DEĞİŞMEZ; demo + ayar şifresi kartı orada; karo `superadminOnly`); Genel Ayarlar'da sekmesi YOK. Davranış bayrakları Sistem → Özellik Anahtarları; Güncelleme çoklu kapı (`admin:settings` ∨ `settings:workstation`). · bekçi: `settings-surface.test.ts (19) + tile-route-permission.test` <sub>(CLAUDE.md:99)</sub>
+- **[ÇEKİRDEK]** Yalnız `admin:settings`in yazacağı (kapsam tablosuna girmeyen) anahtarı dar izinli kategoriye koyma; ayrı kategoride `permissionAny: [SETTINGS_ADMIN_PERMISSION]` ile durur ve kimliği `ADMIN_ONLY_CATEGORY_IDS`te beyanlıdır. · bekçi: `settings-surface.test.ts §6` + `settings-scope-mirror.test.ts` (kapsamsız anahtar hiçbir dar iznin tablosunda değil) <sub>(arşiv:2026-10-24)</sub>
 
 ## Tablet (mobil)
 
@@ -154,3 +155,4 @@ Backend: `test_profil_tamligi`, `test_lisans_modul_tavani`, `test_auto_draft_shi
 - 2026-09-04 · 2026-09-04 — [ÇEKİRDEK] Kapalı modülün bayrağı ÇİZİLMEZ: satış sınırı ekranda görünür olmalı — `arsiv/2026-09.md`
 - 2026-10-11 · 2026-10-11 — [ÇEKİRDEK] Tezgah alarmı "açtım ama kapalı": gövde düşmüyordu, yol tarifi olmayan menüyü gösteriyordu — `arsiv/2026-10.md`
 - 2026-10-11 · Ayar yolu tek kaynağı: backend'in "şuradan açılır" cümleleri panel kataloğunun aynası — `arsiv/2026-10.md`
+- 2026-10-24 · [ÇEKİRDEK] Kapsamsız ayar kategorisi beyanı (`bildirim.gelenKutusuEnabled`) — `arsiv/2026-10.md`
