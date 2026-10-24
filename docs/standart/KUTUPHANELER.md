@@ -99,6 +99,14 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### liquidjs@10.30.0 · Teks-Erp · 2026-10-24
+1. Problem      : belge şablon tasarımcısı (plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md` §3.3, §5) kullanıcı şablonunda döngü/koşul/filtre ister; mantıksız `{{alan}}` motoru (refakat kartı RAW_HTML) bunu taşımaz; §2.1 "Belge şablon dili" satırı
+2. Alternatifler: elle motor (ifade ayrıştırıcısı + kum havuzu = en riskli kod sınıfı; red) · Handlebars (yardımcı = JS; `compile` JS üretir; red) · Nunjucks (JS'e derler, kum havuzu yok; red) · Eta/EJS (şablon = JS; red) · LiquidJS: JS üretmez, `strictVariables/strictFilters/ownPropertyOnly`, süre/bellek/parse sınırı yerleşik
+3. Boyut/biçim  : saf JS, native YOK; CJS girişi `dist/liquid.node.js` (`require()` sınavı geçti); geçişli tek bağımlılık `commander@10.0.1` (yalnız CLI bin'i, çalışma anında yüklenmez)
+4. Bakım        : 10.30.0, TAM SABİT — `{% echo %}`/`{% cycle %}` veriyi `outputEscape`ten geçirmeden yazıyor ve `capture` dize katlaması `memoryLimit`e sayılmıyor (ÖLÇÜLDÜ; `motor/liquid.ts` sarmalayıcıları buna dayanır) ⇒ yükseltme yeniden ölçüm ister; `test_dependency_contract §(a)` + `test_belge_liquid_kati` korur
+5. Lisans       : MIT (commander MIT)
+6. Dağıtım      : yalnız backend paketi; Electron/mobil etkisi yok
+
 ### react-native-reanimated@~4.1.1 + react-native-worklets@0.5.1 + expo-haptics@~15.0.8 + @expo/vector-icons@^15.0.3 · patron/uygulama · 2026-10-22
 Dördü de mobilde §2'de kayıtlı aynı satırın ([KU-01]) patron uygulamasına taşınmasıdır; yeni ihtiyaç satırı açılmaz. Lisans: dördü de MIT. Sürümler `npx expo install` ile SDK 54 uyumlu aralıkta, SDK yükseltmesiyle birlikte gider; dağıtım: patron uygulaması için native modül ⇒ yeni mağaza derlemesi, OTA yetmez ([KU-11]).
 - `react-native-reanimated` : tasarım dili v2'nin geçiş/basma animasyonları UI iş parçacığında; alternatif RN `Animated` (sürücüsü JS iş parçacığında, düzen animasyonu yok) ve elle yazmak reddedildi.
