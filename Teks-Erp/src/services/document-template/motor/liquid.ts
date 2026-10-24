@@ -58,7 +58,7 @@ type TagClass = new (token: TagToken, remain: TopLevelToken[], liquid: Liquid, p
 
 /** `{% echo %}` (emitter'a) ve `{% cycle %}` (dönüş değeriyle) veriyi `outputEscape`ten GEÇİRMEDEN yazar (LiquidJS 10.30 ölçüldü) — aynı kaçışa bağlanır. */
 function escapedTag(baseTag: TagClass): TagClass {
-  return class EscapedTag extends (baseTag as unknown as new (...a: ConstructorParameters<TagClass>) => Tag) {
+  return class EscapedTag extends baseTag {
     *render(ctx: Context, emitter: Emitter): Generator<unknown, unknown, unknown> {
       const wrapped: Emitter = {
         write: (html: unknown) => emitter.write(escapeOutput.call({ context: ctx }, html)),
@@ -74,7 +74,7 @@ function escapedTag(baseTag: TagClass): TagClass {
       const result = yield* inner;
       return result === undefined || result === null || result === "" ? result : escapeOutput.call({ context: ctx }, result);
     }
-  } as unknown as TagClass;
+  };
 }
 
 /** Boyut sınırlı yazıcı: döngüdeki düz HTML de sayılır (LiquidJS bellek sayacı yalnız filtre/aralık ayırmasını sayar). */
@@ -97,7 +97,7 @@ interface CaptureInternals {
 
 /** `{% capture %}` kendi sınırsız yazıcısıyla render eder — sınırlı yazıcıyla yeniden kurulur. */
 function boundedCapture(baseTag: TagClass): TagClass {
-  return class BoundedCapture extends (baseTag as unknown as new (...a: ConstructorParameters<TagClass>) => Tag) {
+  return class BoundedCapture extends baseTag {
     *render(ctx: Context): Generator<unknown, unknown, unknown> {
       const self = this as unknown as CaptureInternals;
       const em = new BoundedEmitter();
@@ -107,7 +107,7 @@ function boundedCapture(baseTag: TagClass): TagClass {
       (ctx.bottom() as Record<string, unknown>)[self.variable] = new SafeHtml(em.buffer);
       return undefined;
     }
-  } as unknown as TagClass;
+  };
 }
 
 function buildEngine(): Liquid {
