@@ -8,11 +8,13 @@
 // Backend dosyası METİN olarak okunur (Electron backend'i import edemez).
 // NEGATİF SONDA (2026-09-24): tablodan bir sevkiyat anahtarı silinince "Kaydet
 // 403 almaz" KIRMIZI; kartela iznine sipariş anahtarı eklenince "ters yön" KIRMIZI.
+// SONDA (2026-10-24): `bildirimGelenKutusuEnabled` tabloya (`settings:session`) eklenince
+// "kapsamsız kategori" KIRMIZI (1; geri alındı, md5 eşit).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SETTINGS_CATEGORIES, categorySurface } from "./settings-config";
+import { ADMIN_ONLY_CATEGORY_IDS, SETTINGS_CATEGORIES, categorySurface } from "./settings-config";
 
 const SRC = readFileSync(resolve(__dirname, "../../../../Teks-Erp/src/constants/settings-scopes.ts"), "utf8");
 
@@ -48,10 +50,14 @@ function categoryKeys(c: (typeof SETTINGS_CATEGORIES)[number]): { flags: string[
   return { flags, settings: (c.settingFields ?? []).map((f) => f.key as string) };
 }
 
-const narrow = SETTINGS_CATEGORIES.filter((c) => categorySurface(c) !== "vendor").map((c) => ({
+const narrow = SETTINGS_CATEGORIES.filter(
+  (c) => categorySurface(c) !== "vendor" && !ADMIN_ONLY_CATEGORY_IDS.has(c.id),
+).map((c) => ({
   cat: c,
   perm: (c.permissionAny ?? [])[1],
 }));
+// bildirim: kapsamsız (yalnız `admin:settings`) kategoriler — anahtarları tabloda OLMAMALI.
+const adminOnly = SETTINGS_CATEGORIES.filter((c) => ADMIN_ONLY_CATEGORY_IDS.has(c.id));
 
 describe("ayar kategorisi ↔ backend kapsam tablosu", () => {
   it("körlük zemini: backend tablosu okundu", () => {
@@ -103,5 +109,18 @@ describe("ayar kategorisi ↔ backend kapsam tablosu", () => {
       for (const k of scope.settingKeys) if (!settings.includes(k)) extra.push(`${perm}: ${k} (ham)`);
     }
     expect(extra).toEqual([]);
+  });
+
+  it("⭐ kapsamsız kategorinin anahtarı HİÇBİR dar iznin tablosunda değil (yalnız admin:settings yazar)", () => {
+    expect(adminOnly.length).toBe(ADMIN_ONLY_CATEGORY_IDS.size);
+    const leaked: string[] = [];
+    for (const cat of adminOnly) {
+      const { flags, settings } = categoryKeys(cat);
+      for (const [perm, scope] of SCOPES) {
+        for (const k of flags) if (scope.flagKeys.includes(k)) leaked.push(`${cat.id}: ${k} → ${perm}`);
+        for (const k of settings) if (scope.settingKeys.includes(k)) leaked.push(`${cat.id}: ${k} (ham) → ${perm}`);
+      }
+    }
+    expect(leaked).toEqual([]);
   });
 });

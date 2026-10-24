@@ -20,6 +20,7 @@ import {
   Warehouse,
   LifeBuoy,
   Cloud,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -2023,6 +2024,28 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
   },
   {
+    // bildirim: KAPSAMSIZ kategori — anahtar `settings-scopes`ta yok, yalnız `admin:settings`
+    // yazar (plan Karar Y1); `ADMIN_ONLY_CATEGORY_IDS` beyanı iki panel bekçisini muaf tutar.
+    id: "bildirim",
+    label: "Bildirimler",
+    icon: Bell,
+    description: "Zilin kişisel bildirim gelen kutusunu gösterip göstermeyeceği.",
+    keywords: "bildirim zil gelen kutusu okunmamış uyarı haber",
+    kind: "flags",
+    section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION],
+    flags: [
+      {
+        key: "bildirimGelenKutusuEnabled",
+        title: "Yeni bildirim gelen kutusu",
+        summary: "Zil, her kullanıcıya kendi okunmamış bildirimlerini gösterir.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken zil kişisel gelen kutusunu gösterir; kapalıyken bugünkü davranış. Bu ayarı yalnız ayar yönetme yetkisi olan yönetici değiştirebilir.",
+      },
+    ],
+  },
+  {
     // ═══════════════════════════════════════════════════════════════════════
     // DEMO KURULUMU — sürüm paketinde OTOMATİK KAPALI
     // ═══════════════════════════════════════════════════════════════════════
@@ -2055,6 +2078,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
   },
 ];
+
+// bildirim: dar izin TAŞIMAYAN (yalnız `admin:settings`) fabrika kategorileri — beyan iki
+// yönlü ölçülür (settings-surface §6 + settings-scope-mirror): anahtarları kapsam tablosunda olamaz.
+export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim"]);
 
 /** Kategorinin çizildiği ekran — BÖLÜMÜNDEN türetilir (tek yazar). */
 export function categorySurface(cat: SettingsCategory): SettingsSurface {

@@ -23,6 +23,7 @@
 
 - **[ÇEKİRDEK]** `bildirim.gelenKutusuEnabled` bir DAVRANIŞ BAYRAĞIDIR, modül anahtarı değildir (`MODULE_FLAG_KEYS` genişletilmez); varsayılanı `false` (= bugünkü davranış); kapalıyken `emitNotification` no-op, dağıtıcı başlamaz, `/api/bildirim/*` 409 `BILDIRIM_KAPALI` (yalnız `/ozet` 200 `{enabled:false}`).
 - **[ÇEKİRDEK]** Yeni bildirim türü reçeteyle eklenir (`docs/RECETELER.md` § Yeni bildirim türü): katalog satırı → payload beyanı → kaynak (emit ya da koşul kaynağı) → bekçi; migration gerekmez (`kind` kolonunda CHECK yok).
+- **[ÇEKİRDEK]** Gelen kutusu bayrağını kapsam tablosuna koyma (yalnız `admin:settings` yazar; panelde `ADMIN_ONLY_CATEGORY_IDS` beyanlı `bildirim` kategorisi); backend okuyucusu `readNotificationInboxEnabled`, tablet `resolveNotificationInboxEnabled` (yalnız gerçek `true` açar, eski sunucu → kapalı). <sub>(arşiv:2026-10-24)</sub>
 
 ## Bekçiler — bu alana dokununca koş
 
