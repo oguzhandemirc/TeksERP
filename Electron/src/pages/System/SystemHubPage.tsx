@@ -6,6 +6,7 @@ import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { systemTiles, systemTileSections } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 
 export function SystemHubPage() {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
@@ -25,6 +26,7 @@ export function SystemHubPage() {
   // `lib/superadmin-gate.ts` başlığında.
   const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
   const licenseScreenVisible = useLicenseScreenVisible();
+  const flags = useFeatureFlags().data?.data;
   // Karo ile route AYNI kapıyı kullanır: `permission` taşıyan karo yalnız o izne
   // sahip kullanıcıya görünür, yoksa varsayılan `admin:settings` kapısı geçerli
   // (Sistem hub'ı zaten onun arkasında). Ayrışırsa kart görünür ama sayfa açılmaz.
@@ -61,7 +63,11 @@ export function SystemHubPage() {
                     key={tile.key}
                     to={tile.to}
                     title={tile.title}
-                    description={tile.description}
+                    description={
+                      tile.kapaliBayrak && flags && flags[tile.kapaliBayrak] !== true
+                        ? "Kapalı — Genel Ayarlar'dan açılır."
+                        : tile.description
+                    }
                     icon={tile.icon}
                     index={i}
                   />

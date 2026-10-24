@@ -1,4 +1,4 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone, Bell } from "lucide-react";
 import {
   LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
@@ -60,6 +60,11 @@ export interface SystemTile {
    * modüllerini bir daha yapılandıramaz.
    */
   superadminOnly?: boolean;
+  /**
+   * Karo bu bayrak KAPALIYKEN de görünür, açıklaması "kapalı — Genel Ayarlar'dan açılır" olur
+   * (bulunabilirlik şartı: kapalı özellik sessizce kaybolmaz).
+   */
+  kapaliBayrak?: "bildirimGelenKutusuEnabled";
   /**
    * Lisans GÖZLEM kapısı: kip `gozlem` iken karo yalnız satıcı kapısı açık
    * oturuma çizilir (lisans fabrikaya sıfır farktır); `zorla`da izin yeter.
@@ -128,6 +133,17 @@ export const systemTiles: SystemTile[] = [
     to: "/system/activity",
     group: "activity",
     permissionAny: SYSTEM_ACTIVITY_ACCESS,
+  },
+  {
+    // bildirim: kişisel gelen kutusu — kapısız (herkes kendi kutusunu görür); bayrak kapalıyken karo kalır.
+    key: "notifications",
+    title: "Bildirimler",
+    description: "Size gelen bildirimlerin geçmiş günlüğü — okundu, ertele, aç",
+    icon: Bell,
+    to: "/notifications",
+    group: "activity",
+    public: true,
+    kapaliBayrak: "bildirimGelenKutusuEnabled",
   },
   {
     key: "logs",

@@ -19,6 +19,7 @@ import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
 import { ReleaseNotesPage } from "@/pages/ReleaseNotes/ReleaseNotesPage";
+import { NotificationsPage } from "@/pages/Notifications/NotificationsPage"; // bildirim:
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
@@ -188,6 +189,7 @@ export const contentRoutes: RouteObject[] = [
   { path: "settings", element: <SettingsPage /> },
   // Kapısız: sürüm notlarını operatör de okur (`system/*` altı `admin:settings` ister).
   { path: "release-notes", element: <ReleaseNotesPage /> },
+  { path: "notifications", element: <NotificationsPage /> }, // bildirim: kişisel, kapısız (bayrak kapalıysa sayfa söyler)
   { path: "forbidden", element: <ForbiddenPage /> },
 
   // Tanımlar — hub sayfası ve alt sayfalar.
