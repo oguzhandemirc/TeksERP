@@ -10,6 +10,7 @@ import type { PrintedDocType } from "@prisma/client";
 import { envelopeHead, type PrintedDocSnapshot } from "../../printed-document.service";
 import type { DocumentConfig } from "../../system-setting.service";
 import { SAMPLE_PRINTED_DOCS, setSampleClock } from "../../document-render/sample-data";
+import { previewSeriesCode, resolveSeriesFormat } from "../../number-series.service";
 
 /** Senaryoların sabit saati — örnek numaranın tarih segmenti gün dönümünde kaymasın. */
 export const SCENARIO_CLOCK = "2026-09-25T08:30:00.000Z";
@@ -29,6 +30,14 @@ export function sampleDoc(docType: PrintedDocType): Record<string, unknown> {
   } finally {
     setSampleClock(null);
   }
+}
+
+/**
+ * Senaryo örnek kodu — SERİDEN türetilir, literal yazılmaz (D7): fabrika ön eki değişince
+ * senaryo da değişir. Yalnız senaryo kurulurken çağrılır (modül yüklenirken değil).
+ */
+export function sampleSeriesCode(key: string, seq: number): string {
+  return previewSeriesCode(resolveSeriesFormat(key), seq, new Date(SCENARIO_CLOCK));
 }
 
 /** Senaryo zarfı — künyesi dolu (ek satırlı), ticari yuvarlama damgalı. */

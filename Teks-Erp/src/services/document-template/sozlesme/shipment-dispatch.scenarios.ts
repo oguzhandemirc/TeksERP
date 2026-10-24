@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { asObject, asRows } from "./ortak";
-import { longText, sampleDoc, sampleEnvelope } from "./senaryolar";
+import { longText, sampleDoc, sampleEnvelope, sampleSeriesCode } from "./senaryolar";
 import type { DispatchLiveOptions } from "./shipment-dispatch.fields";
 import type { Scenario } from "./tipler";
 
@@ -15,15 +15,16 @@ function multiPageDoc(): Row {
   const multiSacks: Row[] = [];
   const multiCeki: Row[] = [];
   for (let i = 1; i <= 45; i++) {
-    const code = `CV26092500${String(i).padStart(2, "0")}`;
+    const code = sampleSeriesCode("sack", i);
     const group = Math.ceil(i / 10);
+    const lotCode = sampleSeriesCode("packingLotCode", group);
     multiSacks.push({
       code, seq: i, totalMeters: 300 + i, totalKg: 40 + i / 4, packageCount: 3,
-      packageNo: i, packingGroupName: `P-${group}`, packingGroupCode: `PRT-2609-000${group}`,
+      packageNo: i, packingGroupName: `P-${group}`, packingGroupCode: lotCode,
     });
     for (let j = 0; j < 3; j++) {
       multiCeki.push({
-        sackCode: code, seq: i, packageNo: i, packingGroupName: `P-${group}`, packingGroupCode: `PRT-2609-000${group}`,
+        sackCode: code, seq: i, packageNo: i, packingGroupName: `P-${group}`, packingGroupCode: lotCode,
         barcode: `R${i * 10 + j}`, desen: "Linen", varyant: "Ekru", customerDesen: "BS-6650", customerVaryant: j ? "EKRU" : null,
         width: 150 + j, meters: j === 0 ? 100 + i : 100, kg: j === 0 ? 40 + i / 4 : 0, batchNumber: `P0925${String(i).padStart(3, "0")}`,
       });
@@ -89,8 +90,8 @@ export function scenarios(): Scenario<DispatchLiveOptions>[] {
         canli: {
           itemNameMode: "ikisi", cekiNameMode: "ikisi", productColorSplit: true, packingLot: true,
           sackSeq: { prefix: "SP", showTotal: true },
-          rowNotes: { CV2609250001: "Kontrol et", CV2609250007: "Rampa 2" },
-          rowTags: { CV2609250002: "Eksik" },
+          rowNotes: { [sampleSeriesCode("sack", 1)]: "Kontrol et", [sampleSeriesCode("sack", 7)]: "Rampa 2" },
+          rowTags: { [sampleSeriesCode("sack", 2)]: "Eksik" },
         },
         baski: { surum: 1, durum: "ACTIVE", zaman: "2026-09-25T09:00:00.000Z", basan: "admin", not: "Acil" },
       },
