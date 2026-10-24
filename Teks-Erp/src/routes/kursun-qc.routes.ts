@@ -25,6 +25,10 @@ router.use(verifyToken, requireProductionEnabled);
  *   get:
  *     tags: [KursunQc]
  *     summary: Refakat kartı barkodu ile PROCESS_QC adımını ve açık topları getir
+ *     description: |
+ *       Cihazın aktif çalışma oturumu varsa adım oturum istasyonundan çözülür
+ *       (açık toplu adım → tamamlanmamış ilk adım → son adım); oturumsuz istekte
+ *       iş emrinin ilk ara-istasyon adımı.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -79,6 +83,7 @@ router.get(
  *       Mobil "kamera simülasyonu" modal'ı için. Sahada operatör fiziksel kart
  *       yokken bu listeden seçim yapabilir. Filtre: PROCESS_QC adımı COMPLETED
  *       olmamış, en az bir açık top mevcut, WO'nun ACTIVE refakat kartı var.
+ *       Cihazın aktif çalışma oturumu varsa yalnız oturum istasyonunun adımları döner.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Açık kart listesi }
