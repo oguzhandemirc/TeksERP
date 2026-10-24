@@ -136,6 +136,8 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // Semantik rapor (R1-SEMCEK): uç kapısı `requireAnyPermission(...REPORT_PERMISSION_CODES)` katalogdan
   // TÜRETİLİR; küp/ölçü/boyut izni `canAccess`te `matchesPermission(…, item.permission)`. Kodların
   // katalogda olduğunu `test_semantik_derleyici.ts` §6 MEKANİK doğrular.
+  "src/routes/rapor-semantik.routes.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
+  "src/routes/rapor-calistirma.routes.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
   "src/services/reports/semantik/izin.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
   "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
   // uncoveredCodes(actor, codes) — codes = verilmek istenen kodlar (gövdeden); katalog
