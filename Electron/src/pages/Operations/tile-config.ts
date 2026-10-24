@@ -162,6 +162,11 @@ export interface OperationsVisibilityContext {
   /** Rapor açık mı — katalogda olmayan anahtar KAPALI, liste okunamadıysa KAPALI. */
   isReportOpen: (key: string) => boolean;
   /**
+   * `reports.v2Enabled` — Rapor Merkezi + v2 yaprakları. Belirsizken FALSE (bugünkü hub). İsteğe
+   * bağlı alan: bağlamı elle kuran testler/yüzeyler eski davranışta kalır (yokluk = kapalı).
+   */
+  reportsV2Enabled?: boolean;
+  /**
    * Bayrak sorgusu SONUÇLANDI mı (başarı YA DA hata). Yüklenmemiş bayrak "kapalı" DEĞİL
    * "bilinmiyor"dur: modül/rapor kapısı bunu okuyup BEKLER — yenilemede (HMR · Cmd+R · ilk
    * giriş) ticaret yolu `?? false` ile kapalı okunup `/forbidden`a yönlendiriliyordu (2026-09-17).

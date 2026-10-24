@@ -2,7 +2,7 @@
 // AYNI metni bassın diye tek yerde. Sayı `lib/number-format`, tarih `lib/factory-time`.
 import { upTo3Text } from "@/lib/number-format";
 import { fmtDayKey, fmtFactoryDate } from "@/lib/factory-time";
-import type { GrafikBlok } from "./tipler";
+import { BIRIM_METNI, type GrafikBlok } from "../sunum";
 
 /** Boş grafik metni — ekran, PDF ve anlatının `veriYok` dili aynı. */
 export const GRAFIK_VERI_YOK = "Grafik için veri yok";
@@ -18,11 +18,17 @@ export function kategoriEtiketi(k: string, xTur: GrafikBlok["eksen"]["x"]["tur"]
   return ay ? `${ay[2]}.${ay[1]}` : k;
 }
 
+/** Birim kodunun görünen metni (`yuzde` → `%`, `TRY` → `TL`); zarfın dışındaki metin aynen geçer. */
+export function unitText(birim: string): string {
+  return (BIRIM_METNI as Readonly<Record<string, string>>)[birim] ?? birim;
+}
+
 /** Değer + birim metni (tooltip, pasta etiketi): `%12,5` · `9.800 m` · `—`. */
 export function valueText(v: unknown, birim: string): string {
   if (!sonlu(v)) return "—";
-  if (birim === "%") return `%${upTo3Text(v)}`;
-  return birim ? `${upTo3Text(v)} ${birim}` : upTo3Text(v);
+  const unit = unitText(birim);
+  if (unit === "%") return `%${upTo3Text(v)}`;
+  return unit ? `${upTo3Text(v)} ${unit}` : upTo3Text(v);
 }
 
 /** Çizilecek nokta yok mu (kategori yok ya da bütün değerler boş). */
