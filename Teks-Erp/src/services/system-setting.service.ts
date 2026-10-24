@@ -8,6 +8,10 @@ import {
   DEFAULT_AUDIT_ARCHIVE_RETENTION_YEARS,
   isValidAuditArchiveRetentionYears,
 } from "./helpers/audit-retention.helper";
+import {
+  DEFAULT_PRINT_LOG_RETENTION_DAYS,
+  isValidPrintLogRetentionDays,
+} from "./helpers/print-job-retention.helper";
 import { createHash } from "crypto";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -310,6 +314,9 @@ export const SETTING_KEYS = {
    * her kurulumda 29 rapor birden kaybolurdu ve yeni doğan rapor da kapalı doğardı.
    */
   REPORTS_CLOSED_KEYS: "reports.closedKeys",
+  /** Yeni rapor merkezi (Raporlar v2). Default FALSE = bugünkü rapor menüsü. Davranış
+   *  bayrağı (profile girmez); açıkken eski 36 rapor "Eski raporlar"da ve kendi adresinde kalır. */
+  REPORTS_V2_ENABLED: "reports.v2Enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
@@ -803,6 +810,9 @@ export const SETTING_KEYS = {
   /** Audit ARŞİVİNİN saklama süresi, YIL (0..50; 0 = budama yok). Default 3. Gece
    *  bakım işi okur; bu yaştan eski `system_log_archives` satırları budanır. */
   AUDIT_ARCHIVE_RETENTION_YEARS: "audit.archiveRetentionYears",
+  /** Yazdırma geçmişinin (`print_jobs`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 180.
+   *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-A1). */
+  PRINT_LOG_RETENTION_DAYS: "printLog.retentionDays",
   /** Bu KURULUMUN kalıcı kimliği (uuid v4). İlk açılışta bir kez üretilir
    *  (`jobs/installation-identity.job.ts`) ve bir daha ASLA değişmez.
    *
@@ -1771,6 +1781,8 @@ export interface FeatureFlags {
    * değil" ile aynı şey DEĞİL; panel bunu fail-closed okur (R2/K5) ve rapor çizmez.
    */
   reportsClosedKeys: string[] | null;
+  /** Yeni rapor merkezi (Raporlar v2) açık mı (default false). Client (panel) okur. */
+  reportsV2Enabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
@@ -2295,6 +2307,7 @@ export class SystemSettingService {
         const o = reportsClosedRead;
         return o.durum === "okundu" ? o.kapali : null;
       })(),
+      reportsV2Enabled: await readReportsV2Enabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
@@ -3023,6 +3036,18 @@ export class SystemSettingService {
         SETTING_KEYS.REPORTS_CLOSED_KEYS,
         [...new Set(incoming)].sort(),
         "Kapalı raporların anahtar listesi (boş/satır yok = hepsi açık)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "reportsV2Enabled")) {
+      if (typeof input.reportsV2Enabled !== "boolean") {
+        throw AppError.badRequest("reportsV2Enabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.REPORTS_V2_ENABLED,
+        input.reportsV2Enabled,
+        "Yeni rapor merkezi (Raporlar v2)",
         userId
       );
     }
@@ -4940,6 +4965,18 @@ export async function readReportsClosedKeys(
     return { durum: "olculemedi", neden: "dizinin her ögesi string olmalı" };
   }
   return { durum: "okundu", kapali: ham };
+}
+
+/** Yeni rapor merkezi (Raporlar v2) açık mı? Default false (bugün: eski rapor menüsü). */
+export async function readReportsV2Enabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.REPORTS_V2_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
 }
 
 export async function readDokumaEnabledRaw(
@@ -7002,6 +7039,22 @@ export async function readAuditArchiveRetentionYears(
   });
   const v = asNumber(setting?.value);
   return isValidAuditArchiveRetentionYears(v) ? v : DEFAULT_AUDIT_ARCHIVE_RETENTION_YEARS;
+}
+
+/**
+ * Yazdırma geçmişi saklama süresi (gün). Kayıt yoksa ya da geçersizse varsayılan 180;
+ * 0 açıkça yazılırsa budama yok.
+ */
+export async function readPrintLogRetentionDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PRINT_LOG_RETENTION_DAYS },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return isValidPrintLogRetentionDays(v) ? v : DEFAULT_PRINT_LOG_RETENTION_DAYS;
 }
 
 /**
