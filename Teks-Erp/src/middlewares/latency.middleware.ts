@@ -16,6 +16,7 @@ import {
   STATIC_ROUTE_KEY,
 } from "../services/latency-stats.service";
 import { noteLatencyDelta } from "../services/latency-persist.service";
+import { isLongLivedNotificationPath } from "../constants/notification-stream";
 
 const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NUMERIC_SEGMENT = /^\d+$/;
@@ -94,6 +95,11 @@ function resolveRouteKey(req: Request, statusCode: number): string {
 export const CLIENT_ABORTED_STATUS = 499;
 
 export function latencyMiddleware(req: Request, res: Response, next: NextFunction): void {
+  // Zil (SSE) ve uzun yoklama bilerek uzun sürer: ölçülürse "yavaş uç" yalanı üretir (bildirim plan §3.9 tuzak 3).
+  if (isLongLivedNotificationPath(req.originalUrl ?? req.url)) {
+    next();
+    return;
+  }
   const startNs = process.hrtime.bigint();
   let recorded = false;
   const record = (status: number): void => {
