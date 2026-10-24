@@ -84,12 +84,6 @@ const KALITE_ADLARI = new Set(["stepCanApplyQuality", "QUALITY_STATION_WHERE", "
  * ⚠️ İKİ YÖNLÜ: listede olup dosyada karşılığı kalmayan satır da KIRMIZI.
  */
 const KIND_MUAF: Record<string, { sayi: number; gerekce: string }> = {
-  "services/kursun-qc.service.ts": {
-    sayi: 1,
-    gerekce:
-      "assertWoAtStepKind(PROCESS_QC) — `roll-step.helper` TAMBUR ile PAYLAŞILIYOR; " +
-      "imzasını yetenekleştirmek Tambur kart-okutma yolunu da değiştirirdi (KQ-D2 siler).",
-  },
   "services/work-session.service.ts": {
     sayi: 1,
     gerekce:
