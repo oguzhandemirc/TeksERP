@@ -74,4 +74,13 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "eşitleme filigranı (durum tablosu) — yazan eşitleme işidir (bulut onayından sonra), audit'in öznesi olacak bir kullanıcı yoktur; iş kaydı değildir" },
   { model: "ShiftInstance", sinif: "SISTEM_ISI",
     gerekce: "vardiya takvimi `jobs/shift-calendar.job` tarafından üretilir; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
+  // bildirim: çekirdek tablolar (plan §3.4) — yazarları N1-MOTOR'da doğdu.
+  { model: "NotificationOutbox", sinif: "TELEMETRI",
+    gerekce: "bildirim kuyruğu satırını iş tx'inde `helpers/notification-emit.helper` yazar, dağıtıcı damgalar, 7 günde budanır; \"ne oldu\" iş kaydının kendi audit'indedir, hiçbir rapor sayısı bu satırdan türemez" },
+  { model: "NotificationInbox", sinif: "TELEMETRI",
+    gerekce: "kişisel gelen kutusu (dağıtıcı birleştirir, okundu/ertele kişinin kendi işaretidir); okunmuş 90 / okunmamış 180 günde budanır, raporlanan hiçbir sayı ona bağlı değildir" },
+  { model: "NotificationDailyStats", sinif: "TELEMETRI",
+    gerekce: "tercih önizlemesinin günlük sayacı (Karar Y3); yalnız \"haftada ~N\" tahmini besler, 35 günde budanır" },
+  { model: "NotificationCondition", sinif: "SISTEM_ISI",
+    gerekce: "koşul tarayıcısının (`jobs/notification-condition.job`) açık/çözülmüş durum satırı; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
 ];
