@@ -170,7 +170,12 @@ export async function inboxSummary(viewer: InboxViewer) {
   const openAlarms = await prisma.notificationInbox.count({
     where: { AND: [buildInboxWhere(viewer.userId, kinds, "alarmlar", { now }), { resolvedAt: null }] },
   });
-  return { enabled: true as const, okunmamis: unread, alarmAcik: openAlarms, ...bellVersion(viewer.userId) };
+  // Erteleme menüsü "Vardiya sonu"nu buna göre pasifler; ertele ucuyla AYNI helper (tek kaynak).
+  const shift = await loadCurrentShift(prisma, now);
+  return {
+    enabled: true as const, okunmamis: unread, alarmAcik: openAlarms, vardiyaBitis: shift?.endsAt ?? null,
+    ...bellVersion(viewer.userId),
+  };
 }
 
 // ---- okundu / okunmadı / ertele --------------------------------------------

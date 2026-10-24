@@ -63,10 +63,11 @@ export function SystemHubPage() {
                     key={tile.key}
                     to={tile.to}
                     title={tile.title}
-                    description={
+                    description={tile.description}
+                    note={
                       tile.kapaliBayrak && flags && flags[tile.kapaliBayrak] !== true
                         ? "Kapalı — Genel Ayarlar'dan açılır."
-                        : tile.description
+                        : undefined
                     }
                     icon={tile.icon}
                     index={i}

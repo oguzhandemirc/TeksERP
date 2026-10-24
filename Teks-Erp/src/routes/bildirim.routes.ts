@@ -50,7 +50,7 @@ router.get("/bekle", c.getWait);
  * /api/bildirim/ozet:
  *   get:
  *     tags: [Bildirim]
- *     summary: 'Zil özeti — `{enabled, okunmamis, alarmAcik, epoch, rev, alarmRev}`; bayrak kapalı → `{enabled:false}`'
+ *     summary: 'Zil özeti — `{enabled, okunmamis, alarmAcik, vardiyaBitis, epoch, rev, alarmRev}` (vardiyaBitis: süren vardiyanın bitişi ya da null); bayrak kapalı → `{enabled:false}`'
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Özet }

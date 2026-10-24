@@ -130,3 +130,18 @@ export function useNotificationActions() {
 }
 
 export { SNOOZE_LABEL };
+
+/**
+ * "Vardiya sonu" ertelemesi için süren vardiya — menü AÇILINCA okunur. `null` = vardiya yok (pasif),
+ * `undefined` = bilinmiyor (eski backend / yükleniyor): seçenek açık kalır, sunucu `VARDIYA_YOK` ile korur.
+ */
+export function useCurrentShiftEnd(enabled: boolean): string | null | undefined {
+  const q = useQuery({
+    queryKey: [...NOTIFICATION_QUERY_KEY, "vardiya"],
+    queryFn: () => bildirimService.ozet(),
+    enabled,
+    staleTime: 30_000,
+  });
+  const d = q.data;
+  return d && d.enabled ? d.vardiyaBitis : undefined;
+}

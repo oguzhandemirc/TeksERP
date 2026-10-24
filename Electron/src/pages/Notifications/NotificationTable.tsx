@@ -58,7 +58,7 @@ function NotificationTableRow({ b, secili, onSec, onAc, eylemler }: {
           <span className={cn("mt-1 inline-flex rounded border px-1.5 text-[10px] font-medium", sinif.renk)}>{sinif.etiket}</span>
         )}
       </td>
-      <td className="min-w-[16rem] px-3 py-2.5">
+      <td className="min-w-[14rem] px-3 py-2.5">
         <button type="button" onClick={() => onAc(b)} className={cn("text-left hover:underline", !b.okunduAn && "font-semibold")}>
           {b.baslik}
           {b.sayac > 1 && <span className="ml-1 font-normal text-muted-foreground">(+{b.sayac - 1})</span>}
@@ -77,7 +77,7 @@ function NotificationTableRow({ b, secili, onSec, onAc, eylemler }: {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 whitespace-nowrap px-2 text-xs"
+            className="h-7 w-[6.25rem] justify-center whitespace-nowrap px-2 text-xs"
             onClick={() => eylemler.okundu.mutate({ id: b.id, okundu: !b.okunduAn })}
           >
             {b.okunduAn ? "Okunmadı yap" : "Okundu"}
@@ -119,7 +119,7 @@ export function NotificationTable({ items, secili, setSecili, onAc, eylemler }: 
             <th className="px-3 py-2 font-medium">Alan</th>
             <th className="px-3 py-2 font-medium">Bildirim</th>
             <th className="px-3 py-2 font-medium">Durum</th>
-            <th className="px-3 py-2 text-right font-medium">İşlem</th>
+            <th className="whitespace-nowrap px-3 py-2 text-right font-medium">İşlem</th>
           </tr>
         </thead>
         <tbody>

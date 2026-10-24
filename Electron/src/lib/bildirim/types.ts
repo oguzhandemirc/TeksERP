@@ -41,7 +41,11 @@ export interface NotificationListResult {
 
 export type NotificationSummary =
   | { enabled: false }
-  | { enabled: true; okunmamis: number; alarmAcik: number; epoch: number; rev: number; alarmRev: number };
+  | {
+      enabled: true; okunmamis: number; alarmAcik: number; epoch: number; rev: number; alarmRev: number;
+      /** Süren vardiyanın bitişi (ISO) ya da null; eski backend göndermez → undefined. */
+      vardiyaBitis?: string | null;
+    };
 
 export interface NotificationWaitResult {
   epoch: number;
