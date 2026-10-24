@@ -7,6 +7,7 @@
 import { toast } from "sonner";
 import { buildWorkbook, saveWorkbook, type SheetSpec } from "./xlsx-export";
 import { isWebPdf, printAsPdf } from "./web-pdf";
+import { trackPdfSave, type PrintSubject } from "./print";
 import { XLSX_STREAM_MIN_ROWS, isStreamableSheet, streamSheetToXlsx } from "./xlsx-stream";
 import { upTo3ExcelNumFmt, upTo3Text } from "./number-format";
 import { saveTextAs } from "./file-save";
@@ -287,11 +288,13 @@ export async function exportRowsToPdf<T>(
     toast.error(pdfTooManyRowsMessage(rows.length));
     return false;
   }
+  // Liste çıktısı geçmişe "Liste" türüyle (kayıt bağı yok, satır sayısı adet) düşer.
+  const subject: PrintSubject = { kind: "LISTE", no: filename.slice(0, 64), itemCount: Math.max(rows.length, 1) };
   if (!pdfApi) {
-    printAsPdf(buildListHtml(cols, rows, filename, notes));
+    printAsPdf(buildListHtml(cols, rows, filename, notes), subject);
     return true;
   }
-  const res = await pdfApi.save({ html: buildListHtml(cols, rows, filename, notes), suggestedName: filename });
+  const res = await trackPdfSave(subject, () => pdfApi.save({ html: buildListHtml(cols, rows, filename, notes), suggestedName: filename }));
   if (!res.saved && res.error) toast.error(res.error);
   return res.saved;
 }

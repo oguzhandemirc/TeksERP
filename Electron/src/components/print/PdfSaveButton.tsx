@@ -3,13 +3,14 @@ import { toast } from "sonner";
 import { FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { isWebPdf, printAsPdf } from "@/lib/web-pdf";
+import { trackPdfSave, type PrintSubject } from "@/lib/print";
 
 /**
  * PDF kaydetme mantığı (Electron main → printToPDF → kaydet dialoğu) — TEK KAYNAK.
  * Hem düğme hem de "İndir ▾" menü kalemi bunu kullanır; iki ayrı kopya olsaydı
  * web dalı (`lib/web-pdf`) yalnız birinde olurdu.
  */
-export function usePdfSave(html: string | null, fileName: string) {
+export function usePdfSave(html: string | null, fileName: string, subject: PrintSubject) {
   const [busy, setBusy] = useState(false);
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
 
@@ -17,11 +18,11 @@ export function usePdfSave(html: string | null, fileName: string) {
 
   const save = async () => {
     if (!html) return;
-    if (web) return printAsPdf(html);
+    if (web) return printAsPdf(html, subject);
     if (!pdfApi) return;
     setBusy(true);
     try {
-      const res = await pdfApi.save({ html, suggestedName: fileName });
+      const res = await trackPdfSave(subject, () => pdfApi.save({ html, suggestedName: fileName }));
       if (res.saved) toast.success("PDF kaydedildi.");
       else if (res.error) toast.error(res.error);
     } catch {
@@ -42,12 +43,15 @@ export function PdfSaveButton({
   html,
   fileName,
   disabled,
+  subject,
 }: {
   html: string | null;
   fileName: string;
   disabled?: boolean;
+  /** Yazdırma geçmişindeki konu (yalnız kimlik). */
+  subject: PrintSubject;
 }) {
-  const { available, busy, save } = usePdfSave(html, fileName);
+  const { available, busy, save } = usePdfSave(html, fileName, subject);
   if (!available) return null;
 
   return (

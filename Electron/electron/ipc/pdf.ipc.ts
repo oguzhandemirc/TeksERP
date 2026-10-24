@@ -97,7 +97,8 @@ export function assertPdfSize(html: string): void {
 
 let pdfSessionHardened: Session | null = null;
 
-function hardenedPdfSession(): Session {
+/** Belge basım penceresi (print.ipc) de AYNI oturumu kullanır: tek güvenlik duruşu. */
+export function hardenedPdfSession(): Session {
   if (pdfSessionHardened) return pdfSessionHardened;
   const ses = session.fromPartition(PDF_PARTITION);
   ses.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -147,6 +148,13 @@ export const PDF_PRINT_OPTIONS = {
   // Kenar boşluğu belgenin kendi @page kuralından gelsin (0 = belge yönetir).
   margins: { top: 0, bottom: 0, left: 0, right: 0 },
 } satisfies PrintToPDFOptions;
+
+/** Belgeyi bellekten servis eder (ayrık oturum şeması); `release` çağrılana dek URL geçerlidir. */
+export function serveDoc(html: string): { url: string; release: () => void } {
+  const token = randomUUID();
+  pendingDocs.set(token, html);
+  return { url: PDF_DOC_PREFIX + token, release: () => void pendingDocs.delete(token) };
+}
 
 /** Belgeyi verilen pencerede çizer; pencerenin ömrü çağıranındır. Zaman aşımı belge başınadır. */
 async function renderInWindow(win: BrowserWindow, html: string, settleMs: number): Promise<Uint8Array> {

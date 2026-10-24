@@ -25,9 +25,18 @@ vi.mock("./service", () => ({
   },
 }));
 const basilanlar: string[] = [];
+const basimKonusu: unknown[] = [];
 vi.mock("@/lib/print", () => ({
-  printDocumentArea: (el: HTMLElement) => basilanlar.push(el.textContent ?? ""),
+  printTracked: (o: { root: HTMLElement; subject: unknown }) => {
+    basilanlar.push(o.root.textContent ?? "");
+    basimKonusu.push(o.subject);
+    return Promise.resolve({ status: "ILETILDI", proceed: true, printJob: {} });
+  },
+  preparePrintJob: () => Promise.resolve({ clientToken: "11111111-1111-4111-8111-111111111111", transport: "SISTEM_PENCERESI" }),
 }));
+// Yetenek tespiti sahtelenir: eski backend (uç yok) ↔ yeni backend.
+const yetenek = vi.hoisted(() => ({ var: false }));
+vi.mock("@/services/printJobService", () => ({ supportsPrintJobs: () => Promise.resolve(yetenek.var) }));
 
 function ciz() {
   const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
@@ -43,6 +52,8 @@ describe("PickListPrintDialog — çeki listesi no", () => {
     pickList.mockReset();
     printPickList.mockReset();
     basilanlar.length = 0;
+    basimKonusu.length = 0;
+    yetenek.var = false;
     pickList.mockResolvedValue({ success: true, data: [row("s1", "C-ONIZLEME", 10)] });
   });
 
@@ -57,7 +68,8 @@ describe("PickListPrintDialog — çeki listesi no", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Yazdır/ }));
     await waitFor(() => expect(basilanlar).toHaveLength(1));
-    expect(printPickList).toHaveBeenCalledWith(["s1", "s2"], expect.stringMatching(/^[0-9a-f-]{36}$/));
+    expect(printPickList).toHaveBeenCalledWith(["s1", "s2"], expect.stringMatching(/^[0-9a-f-]{36}$/), undefined);
+    expect(basimKonusu[0]).toMatchObject({ kind: "CEKI_LISTESI", table: "manifests", id: "m1", no: "CL2309260001" });
     expect(screen.getByTestId("ceki-listesi-no").textContent).toContain("CL2309260001");
     expect(basilanlar[0]).toContain("CL2309260001"); // basılan kâğıtta numara var
     expect(basilanlar[0]).toContain("C-KAYIT"); // içerik kayıttan
@@ -82,5 +94,31 @@ describe("PickListPrintDialog — çeki listesi no", () => {
     expect(t[1]).not.toBe(t[0]); // 400 sonrası yeni deneme
     expect(t[2]).toBe(t[1]); // 503 sonrası aynı deneme
     expect(basilanlar).toHaveLength(0); // kayıt doğmadan kâğıt basılmaz
+  });
+
+  it("⭐ ESKİ backend (yazdırma geçmişi yok): katı şemalı uca `printJob` alanı GÖNDERİLMEZ (400 olmasın)", async () => {
+    yetenek.var = false;
+    printPickList.mockResolvedValue({
+      success: true,
+      data: { id: "m1", manifestNo: "CL1", printedAt: "2026-09-23T10:00:00Z", reused: false, snapshot: [row("s1", "C-KAYIT", 12)] },
+    });
+    ciz();
+    await screen.findByText("C-ONIZLEME");
+    fireEvent.click(screen.getByRole("button", { name: /Yazdır/ }));
+    await waitFor(() => expect(basilanlar).toHaveLength(1));
+    expect(printPickList.mock.calls[0]?.[2]).toBeUndefined();
+  });
+
+  it("YENİ backend: künye (`printJob`) eklenir", async () => {
+    yetenek.var = true;
+    printPickList.mockResolvedValue({
+      success: true,
+      data: { id: "m1", manifestNo: "CL1", printedAt: "2026-09-23T10:00:00Z", reused: false, snapshot: [row("s1", "C-KAYIT", 12)] },
+    });
+    ciz();
+    await screen.findByText("C-ONIZLEME");
+    fireEvent.click(screen.getByRole("button", { name: /Yazdır/ }));
+    await waitFor(() => expect(basilanlar).toHaveLength(1));
+    expect(printPickList.mock.calls[0]?.[2]).toMatchObject({ transport: "SISTEM_PENCERESI" });
   });
 });

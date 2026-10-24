@@ -189,3 +189,25 @@ describe("IPC bağlaması: renderer kanalı ana-süreç anahtarına ulaşamaz", 
     expect(h.handlers.get("secure-store:get")?.(app, "config.apiBaseUrl")).toBe("http://10.0.0.5:4000");
   });
 });
+
+describe("üç durumlu okuma (cihaz kimliği ezme düzeltmesi, D3)", () => {
+  it("⭐ yok → ABSENT; çözülebilen → OK; çözülemeyen (anahtar halkası değişti) → UNREADABLE", () => {
+    const { disk, store } = harness(true);
+    expect(store.inspect("config.deviceId")).toEqual({ status: "ABSENT" });
+    store.write("config.deviceId", "kalici-kimlik-1234");
+    expect(store.inspect("config.deviceId")).toEqual({ status: "OK", value: "kalici-kimlik-1234" });
+    disk["config.deviceId"] = Buffer.from("baska-halka").toString("base64");
+    expect(store.inspect("config.deviceId")).toEqual({ status: "UNREADABLE" });
+    // `read` bugünkü gibi null döner (diğer anahtarların davranışı değişmez).
+    expect(store.read("config.deviceId")).toBeNull();
+  });
+
+  it("depo dosyası okunamazsa UNREADABLE (yok sayılmaz)", () => {
+    const store = createSecureStore({
+      kv: { readAll: () => { throw new Error("bozuk json"); }, writeAll: vi.fn() },
+      cipher: { isEncryptionAvailable: () => true, encryptString: (s) => Buffer.from(s), decryptString: (b) => b.toString() },
+      warn: vi.fn(),
+    });
+    expect(store.inspect("config.deviceId")).toEqual({ status: "UNREADABLE" });
+  });
+});
