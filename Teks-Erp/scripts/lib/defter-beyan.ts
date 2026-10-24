@@ -323,6 +323,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/printed-document.service.ts", sembol: "reissue" }],
     ["src/services/printed-document.service.ts", "src/services/traveler-card.service.ts"], { yari: true }),
 
+  // K4P-SEMA (2026-10-24): yazarı MOTOR dilimi (`createInspectionTx`); o gün `yazan`
+  // ve `tersYazan` (revise/void) birlikte dolar — §4c boş ikiliyi sessiz sayar.
+  D("RollInspection", "muayene belgesi — içerik doğuşta donar; revizyon `supersededAt` damgası + yeni satır, iptal ikinci damga `voidedAt` (PrintedDocument emsali), silme yolu yok",
+    { tur: "DAMGA", kolon: "supersededAt" }, [], [], { yari: true }),
+
   D("ShipmentEvent", "sevkiyat durum defteri; tek damga ikinci turda birincisini ezerdi",
     { tur: "KARSI_OLAY", enumAdi: "ShipmentEventType", ciftler: [["DISPATCHED", "UNDISPATCHED"], ["INVOICED", "INVOICE_CLEARED"]] },
     [{ dosya: "src/services/helpers/shipment-event.helper.ts", sembol: "writeShipmentEvent" }],
@@ -590,6 +595,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "basım hareketi telemetrisi; tek yazar/okuyucu `src/services/print-job.service.ts`, hiçbir rapor sayısı ya da iş kararı bu tablodan okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
     kararUfku: "YOK — iptal guard'ı labelPrintedAt okur; print_jobs hiçbir karara girmez. Budama yalnız YAŞA bağlıdır (`printLog.retentionDays`, varsayılan 180 gün, 0 = budama yok)",
     silen: ["src/services/print-job.service.ts"] },
+
+  // İstek başlığı (izlenebilirlik B1): "kim hangi uca ne attı" — gövdesiz künye.
+  { model: "RequestTrace", sinif: "TELEMETRI",
+    gerekce: "istek künyesi telemetrisi (yöntem · uç · durum · süre · cihaz · audit sayısı); tek yazar/okuyucu `src/services/request-trace.service.ts`, hiçbir rapor sayısı ya da iş kararı bu tablodan okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
+    kararUfku: "YOK — yalnız görüntü; hiçbir karar/sayı türetilmez. Budama yalnız YAŞA bağlıdır (`requestTrace.retentionDays`, varsayılan 90 gün, 0 = budama yok)",
+    silen: ["src/services/request-trace.service.ts"] },
 
   // Patron bulutu eşitlemesi (B1): satırı uygulama kodu DEĞİL silme/ayrılma tetikleyicileri yazar.
   { model: "SyncMark", sinif: "TELEMETRI",
