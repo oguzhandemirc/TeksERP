@@ -31,6 +31,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_ONLY_CATEGORY_IDS,
   SECTION_SURFACE,
   SETTINGS_CATEGORIES,
   SETTINGS_SECTIONS,
@@ -103,7 +104,7 @@ describe("§1 üç yüzeyin dağılımı", () => {
   it("eski Genel Ayarlar üç ekrana bölündü (2026-09-24)", () => {
     expect(idsOf("printing")).toEqual(["devices", "label"]);
     expect(idsOf("workstation")).toEqual(["printer", "scale", "scanner", "server"]);
-    expect(idsOf("company")).toEqual(["company", "patron-bulut", "session", "support"]);
+    expect(idsOf("company")).toEqual(["bildirim", "company", "patron-bulut", "session", "support"]);
   });
 
   it("her bölümün yüzeyi tanımlı (yeni bölüm eklerken tablo zorunlu)", () => {
@@ -259,8 +260,14 @@ describe("§6 EKRAN BAŞINA İZİN — her kategori kendi iznini taşır", () =>
   it("⭐ her fabrika kategorisi `admin:settings` + TEK dar izin taşır", () => {
     for (const c of factoryCats) {
       expect(c.permissionAny?.[0], c.id).toBe("admin:settings");
-      expect(c.permissionAny?.length, c.id).toBe(2);
+      // bildirim: beyanlı kapsamsız kategori YALNIZ `admin:settings` taşır (sonda 2026-10-24: `settings:session` eklenince ❌).
+      expect(c.permissionAny?.length, c.id).toBe(ADMIN_ONLY_CATEGORY_IDS.has(c.id) ? 1 : 2);
     }
+  });
+
+  it("⭐ kapsamsız beyanı ölü değil: her beyanlı kimlik bir fabrika kategorisidir", () => {
+    const ids = new Set(factoryCats.map((c) => c.id));
+    expect([...ADMIN_ONLY_CATEGORY_IDS].filter((id) => !ids.has(id))).toEqual([]);
   });
 
   it("⭐ ekran kapısı = sekmelerinin izinlerinin birleşimi (fazla da eksik de yok)", () => {
