@@ -36,6 +36,12 @@ describe("useOperationsVisibilityContext — bayrak okunamadığında yön", () 
     expect(c.depoMultiEnabled).toBe(false);
     expect(c.devereEnabled).toBe(false);
     expect(c.dokumaEnabled).toBe(false);
+    expect(c.kaliteGuvenceEnabled).toBe(false);
+  });
+
+  it("Kalite Güvence zincirsiz: üretim KAPALIYKEN de açık okunur (KK1 muayenesi üretimden bağımsız)", () => {
+    flagsData = { productionEnabled: false, kaliteGuvenceEnabled: true };
+    expect(ctx().kaliteGuvenceEnabled).toBe(true);
   });
 
   it("⭐ zincir tek yerde: dokuma AÇIK ama üretim KAPALI → etkin dokuma KAPALI", () => {

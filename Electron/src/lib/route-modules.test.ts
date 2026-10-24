@@ -17,7 +17,7 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     shipmentConfirmationEnabled: false,
     depoMultiEnabled: true,
     devereEnabled: true,
-    dokumaEnabled: true, tezgahEnabled: true,
+    dokumaEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -30,6 +30,10 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
   };
 }
 
+// K4P zemin (2026-10-24): kapı manifestoyla (`SCREEN_CATALOG`) önden yazıldı; sayfa/route PANEL·LAB·SERT
+// dilimlerinde iner. Route'u henüz olmayan beyanlı satırlar — iki yönlü ölçülür.
+const PENDING_ROUTE = new Set(["quality/inspections", "quality/inspection-rules", "quality/lab-tests", "quality/certificates"]);
+
 describe("route-modules — yol → modül aynası", () => {
   it("zemin: route metni okundu, tablo dolu", () => {
     expect(ALL_PATHS.length).toBeGreaterThan(100);
@@ -39,8 +43,12 @@ describe("route-modules — yol → modül aynası", () => {
   it("⭐ tablodaki her ekranın content-routes'ta bir route'u var (ölü satır yok)", () => {
     const roots = new Set(ALL_PATHS.map((p) => p.split("/").filter((s) => !s.startsWith(":") && s !== "new" && s !== "edit").slice(0, 2).join("/")));
     for (const key of Object.keys(ROUTE_MODULE)) {
-      expect(roots.has(key) || ALL_PATHS.includes(key), `${key} route'u yok`).toBe(true);
+      const hasRoute = roots.has(key) || ALL_PATHS.includes(key);
+      // Bekleyen satırın route'u doğunca muaf ÖLÜ olur → kırmızı, satır listeden düşer.
+      if (PENDING_ROUTE.has(key)) expect(hasRoute, `${key} route'u doğdu — PENDING_ROUTE muafını sil`).toBe(false);
+      else expect(hasRoute, `${key} route'u yok`).toBe(true);
     }
+    for (const key of PENDING_ROUTE) expect(ROUTE_MODULE[key], `${key} muafı tabloda yok (ölü muaf)`).toBeDefined();
   });
 
   it("alt yollar ebeveyne katlanır (:id · new · edit · üçüncü segment)", () => {
@@ -49,6 +57,7 @@ describe("route-modules — yol → modül aynası", () => {
     expect(routeModuleOf("/reports/production/wip")).toBe("productionEnabled");
     expect(routeModuleOf("/finance/cari")).toBe("financeEnabled");
     expect(routeModuleOf("/finance")).toBe("financeEnabled");
+    expect(routeModuleOf("/quality/inspections/:id")).toBe("kaliteGuvenceEnabled");
   });
 
   it("⭐ modülü olmayan yol dokunulmaz (çekirdek · planlanan · hub · bilinmeyen)", () => {
