@@ -1,6 +1,7 @@
 import { registerSecureStoreIpc } from "./secure-store.ipc.js";
 import { registerDiscoveryIpc } from "./discovery.ipc.js";
 import { registerAppInfoIpc } from "./app-info.ipc.js";
+import { registerMachineIdIpc } from "./machine-id.ipc.js";
 import { registerWindowIpc } from "./window.ipc.js";
 import { registerSystemIpc } from "./system.ipc.js";
 import { registerPowerIpc } from "./power.ipc.js";
@@ -8,6 +9,7 @@ import { registerScannerIpc } from "./scanner.ipc.js";
 import { registerPrinterIpc } from "./printer.ipc.js";
 import { registerScaleIpc } from "./scale.ipc.js";
 import { registerPdfIpc } from "./pdf.ipc.js";
+import { registerDocPrintIpc } from "./print.ipc.js";
 import { registerFilesIpc } from "./files.ipc.js";
 import { registerXlsxIpc } from "./xlsx.ipc.js";
 import { registerUpdaterIpc } from "./updater.ipc.js";
@@ -18,6 +20,7 @@ export function registerIpcHandlers(): void {
   registerSecureStoreIpc();
   registerDiscoveryIpc();
   registerAppInfoIpc();
+  registerMachineIdIpc();
   registerWindowIpc();
   registerSystemIpc();
   registerPowerIpc();
@@ -25,6 +28,7 @@ export function registerIpcHandlers(): void {
   registerPrinterIpc();
   registerScaleIpc();
   registerPdfIpc();
+  registerDocPrintIpc();
   registerFilesIpc();
   registerXlsxIpc();
   registerUpdaterIpc();

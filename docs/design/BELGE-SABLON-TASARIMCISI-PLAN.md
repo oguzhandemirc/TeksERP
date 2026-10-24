@@ -96,6 +96,7 @@ renderUserTemplate(strict) içinde: Liquid fill (katı) → çıktı ≤4 MB
 - Yayın: `updateMany WHERE {id, publishedVersionId: expected}` + `count===0 → 409`. Yayından önce tüm senaryolar strict render + temizleyici kesinti ölçümünden geçer. Kesinti varsa 400 `TEMPLATE_UNSAFE_CONTENT`, render düşerse 400 `TEMPLATE_RENDER_FAILED`.
 - Sürüm kaydı: `baseVersionId` bayatsa 409 döner; `contentHash` aynıysa yeni sürüm açılmaz. Sürüm no `latestVersionNo` üzerinde atomik artışla verilir.
 - Silme: yalnız hiç yayınlanmamış şablon hard delete edilebilir (taslak sınıfı); `delete-preview` önce çağrılır. Diğer durumlarda arşivlenir. Atanmış şablon arşivlenmek istenirse 409 döner ve etkilenen atamaların listesi gelir.
+- Not: `DocumentTemplateVersion.editMode` eklendi (patron onayı 2026-10-24; sürüm kendi kipini taşır).
 
 ### 3.6 Donma ve çözüm sırası
 - Freeze anında ve yalnız `designerEnabled` açıkken çözüm şu sırayla yapılır: kaynağın profili (`resolveProfileId`) → `DocumentProfileTemplate[profil, docType]` → `DocumentTemplateDefault[docType]` → Sistem. Atanan şablon ACTIVE ve yayında olmalıdır; değilse bir sonraki basamağa geçilir ve `warnings`'e not düşülür.

@@ -118,6 +118,10 @@ export const TABLE_LABELS: Record<string, string> = {
   LABEL_NATIVE_PRINT: "Yazıcı Baskısı",
   PRINTED_DOCUMENT: "Basılı Belge",
   DOCUMENT_PROFILE: "Belge Profili",
+  DOCUMENT_TEMPLATE: "Belge Şablonu",
+  DOCUMENT_TEMPLATE_VERSION: "Belge Şablonu Sürümü",
+  DOCUMENT_TEMPLATE_DEFAULT: "Varsayılan Belge Şablonu",
+  DOCUMENT_PROFILE_TEMPLATE: "Profil Belge Şablonu Ataması",
 
   // Kullanıcı & Yetki
   USER_PASSWORD: "Kullanıcı Şifresi",

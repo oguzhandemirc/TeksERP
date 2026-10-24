@@ -1,3 +1,4 @@
+import type { PrintJobAttachment } from "@/services/printJobService";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { buildCursorQueryString } from "@/lib/query-builder";
@@ -111,9 +112,14 @@ export const sackHubService = {
    * Çeki listesi BASIMI — CL numarası ilk basımda sunucuda doğar; aynı içerik aynı numarayı ve
    * aynı anlık görüntüyü döndürür. Kâğıt `snapshot`tan çizilir (numara istemcide üretilmez).
    */
-  printPickList: (sackIds: string[], clientToken: string): Promise<ApiResponse<PickListPrint>> =>
+  /** `printJob` YALNIZ yazdırma geçmişini bilen backend'e eklenir: bu uç `.strict()` — eski backend 400 döner. */
+  printPickList: (sackIds: string[], clientToken: string, printJob?: PrintJobAttachment): Promise<ApiResponse<PickListPrint>> =>
     apiClient
-      .post<ApiResponse<PickListPrint>>(`/api/shipping/sack-search/pick-list/print`, { sackIds, clientToken })
+      .post<ApiResponse<PickListPrint>>(`/api/shipping/sack-search/pick-list/print`, {
+        sackIds,
+        clientToken,
+        ...(printJob ? { printJob } : {}),
+      })
       .then((r) => r.data),
 
   /**

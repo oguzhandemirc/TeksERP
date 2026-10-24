@@ -264,6 +264,10 @@ export const PERMISSION_CATALOG = [
   // anında admin dahil herkesi dışarıda bırakırdı. Küme: constants/document-design.ts
   { code: "document-template:read", module: "ADMIN", category: "web", description: "Belge şablonları / refakat kartı ayarı / serbest belgeleri görüntüleme (salt-okunur)" },
   { code: "document-template:write", module: "ADMIN", category: "web", description: "Belge şablonu + refakat kartı ayarı/şablonu + serbest belge oluşturma/düzenleme/silme" },
+  // Belge tasarımcısı (2026-10-24, plan P-a): tasarım ile yayın AYRI izin — yayın müşteriye giden
+  // belgenin görünümünü değiştirir; "tasarlayan ≠ yayınlayan" SoD ayarı bu ayrıma dayanır.
+  { code: "document-template:design", module: "ADMIN", category: "web", description: "Belge tasarımcısında şablon oluşturma, düzenleme, sürüm kaydetme, arşivleme ve atama" },
+  { code: "document-template:publish", module: "ADMIN", category: "web", description: "Belge tasarımcısında şablon sürümünü yayınlama (basımda kullanılır hâle getirme)" },
   // 2026-08-19: TOPLU İÇE AKTARIM (Excel/CSV yükleme). Ayrı bir yetki olması
   // sektör standardıdır (Odoo `group_allow_export` / SAP veri aktarım rolü) ve
   // gerekçesi tekil CRUD'dan farkıdır: tek tıkla YÜZLERCE kaydı değiştirebilen

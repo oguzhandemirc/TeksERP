@@ -62,7 +62,8 @@ const formatSchema = z
       .number({ message: "Hane sayısı bir sayı olmalı." })
       .int("Hane sayısı tam sayı olmalı.")
       .min(1, "Hane sayısı en az 1 olabilir.")
-      .max(8, "Hane sayısı en fazla 8 olabilir."),
+      // 9 yalnız sabit biçimli (GİB) serinin değeri; diğerlerinde DEĞER kapısı 1..8'i tutar.
+      .max(9, "Hane sayısı en fazla 9 olabilir."),
     separator: z.string().max(2, "Ayraç en fazla 2 karakter olabilir."),
     /**
      * İKİNCİ AYRAÇ — `null` = `separator`a düş (bugünkü davranış).

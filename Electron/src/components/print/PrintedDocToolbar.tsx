@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { printHtmlString } from "@/lib/print";
+import { printTracked, type PrintSubject } from "@/lib/print";
 import { usePdfSave } from "@/components/print/PdfSaveButton";
 import { PrintPageSizeToggle, type DocPageSize } from "@/components/print/PrintPageSizeToggle";
 
@@ -24,6 +24,8 @@ import { PrintPageSizeToggle, type DocPageSize } from "@/components/print/PrintP
 
 interface Props {
   html: string | null;
+  /** Yazdırma geçmişindeki konu (belge türü + donmuş sürüm). */
+  subject: PrintSubject;
   /** PDF kaydet dialoğuna önerilen dosya adı. */
   fileName: string;
   /** Yeni HTML çekiliyor — kâğıt boyu düğmesi kilitlenir (yarış önlenir). */
@@ -41,6 +43,7 @@ interface Props {
 
 export function PrintedDocToolbar({
   html,
+  subject,
   fileName,
   fetching = false,
   printMenu,
@@ -50,8 +53,10 @@ export function PrintedDocToolbar({
   onPageSizeChange,
   docPageSize,
 }: Props) {
-  const pdf = usePdfSave(html, fileName);
-  const print = () => html && printHtmlString(html);
+  const pdf = usePdfSave(html, fileName, subject);
+  const print = () => {
+    if (html) void printTracked({ subject, html });
+  };
 
   return (
     <div className="flex flex-wrap items-center gap-2 px-1">
