@@ -608,6 +608,7 @@ model User {
   hallShiftResponsibles    HallShiftResponsible[]  @relation("HallShiftResponsibleUser")
   hallShiftDutyOverrides   HallShiftDutyOverride[] @relation("HallShiftDutyOverrideUser")
   loomAlarmTierRules       LoomAlarmTierRule[]     @relation("LoomAlarmTierRuleUser")
+  notificationInbox        NotificationInbox[]     @relation("NotificationInboxUser")
   machineShiftStatsSealed  MachineShiftStat[]      @relation("MachineShiftStatSealedBy")
   machineShiftSealsActed   MachineShiftStatSeal[]  @relation("MachineShiftSealBy")
   createdPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceCreatedBy")
@@ -11472,4 +11473,121 @@ model CredentialResetRequest {
   @@index([status, createdAt])
   @@index([targetUserId])
   @@map("credential_reset_requests")
+}
+
+// =============================================================================
+// BİLDİRİM ÇEKİRDEĞİ (F1, `docs/design/BILDIRIM-SISTEMI-PLAN.md` §3.2) — dört tablo da TELEMETRİ/DURUM:
+// budanır (`notification-prune.service`), hiçbir raporlanan sayı onlara bağlı değildir → defter DEĞİL.
+// Tablo adları plandan (`notification_outbox`/`_inbox` tekil — kuyruk/kutu adı, çoğul değil).
+// `kind` her tabloda VarChar, CHECK YOK: yeni tür migration istemesin; tek kaynak katalog + bekçi.
+// =============================================================================
+
+/// OUTBOX — iş işlemiyle AYNI tx'te yazılan olay satırı (tek yazar `emitNotification`); dağıtıcı
+/// `processedAt` damgasıyla claim eder, işlendikten 7 gün sonra budanır.
+/// ŞEMA-DIŞI: CHECK phase ∈ {OLAY, ACILDI, KAPANDI, GUNCELLENDI} · CHECK attempts ≥ 0 ·
+/// partial index (createdAt) WHERE processedAt IS NULL (`test_db_invariants`).
+model NotificationOutbox {
+  id             String    @id @default(uuid()) @db.Uuid
+  /// Katalog türü (`constants/notification-catalog.ts`); CHECK yok, bekçi korur.
+  kind           String    @db.VarChar(64)
+  /// OLAY · ACILDI · KAPANDI · GUNCELLENDI — VarChar + CHECK (enum değil: küme büyüyebilir, `ALTER TYPE` geri alınamaz).
+  phase          String    @db.VarChar(16)
+  subjectType    String    @db.VarChar(32)
+  /// FK YOK: polimorfik konu (sipariş/iş emri/tezgah…); telemetri satırı, budanır — konu silinse de iz anlamsızlaşmaz.
+  subjectId      String?   @db.Uuid
+  subjectKey     String    @db.VarChar(160)
+  /// FK YOK: koşul satırı outbox'tan önce budanabilir (180 gün ↔ 7 gün); telemetri.
+  conditionId    String?   @db.Uuid
+  /// FK YOK: yalnız "kendi eylemine bildirim yok" süzgecinin girdisi; telemetri, budanır.
+  actorUserId    String?   @db.Uuid
+  /// Yalnız kimlikler ve görüntü dizeleri (belgeNo, kod, ad) — tutar YOK.
+  payload        Json
+  dedupeKey      String    @db.VarChar(200)
+  occurredAt     DateTime  @default(now()) @db.Timestamptz
+  claimedAt      DateTime? @db.Timestamptz
+  processedAt    DateTime? @db.Timestamptz
+  attempts       Int       @default(0)
+  lastErrorCode  String?   @db.VarChar(64)
+  recipientCount Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("notification_outbox")
+}
+
+/// GELEN KUTUSU — kişi başına birleşmiş bildirim satırı; aynı konu `ON CONFLICT (userId, groupKey)
+/// WHERE resolvedAt IS NULL` ile sayaç olarak birleşir. Okunmuş 90 / okunmamış 180 günde budanır.
+/// ŞEMA-DIŞI: CHECK klass ∈ {ALARM, BILDIRIM} · CHECK reason ∈ {IZIN, TAKIPCI, OLUSTURAN, NOBET, LISTE,
+/// ALARM_ALICISI} · CHECK count ≥ 1 · partial unique (userId, groupKey) WHERE resolvedAt IS NULL.
+model NotificationInbox {
+  id            String    @id @default(uuid()) @db.Uuid
+  /// Kullanıcı soft delete olur → Restrict; satır budamayla gider.
+  userId        String    @db.Uuid
+  kind          String    @db.VarChar(64)
+  /// ALARM · BILDIRIM (ETKİNLİK gelen kutusuna girmez) — VarChar + CHECK.
+  klass         String    @db.VarChar(16)
+  subjectType   String    @db.VarChar(32)
+  /// FK YOK: polimorfik konu; telemetri, budanır.
+  subjectId     String?   @db.Uuid
+  groupKey      String    @db.VarChar(200)
+  count         Int       @default(1)
+  firstAt       DateTime  @db.Timestamptz
+  lastAt        DateTime  @db.Timestamptz
+  /// FK YOK: outbox 7 günde budanır, kutu satırı 90/180 gün yaşar.
+  lastOutboxId  String    @db.Uuid
+  payload       Json
+  /// Alıcı nedeni (IZIN · TAKIPCI · OLUSTURAN · NOBET · LISTE · ALARM_ALICISI) — VarChar + CHECK.
+  reason        String    @db.VarChar(16)
+  kanalMasaustu Boolean   @default(false)
+  kanalTablet   Boolean   @default(false)
+  ozet          Boolean   @default(false)
+  readAt        DateTime? @db.Timestamptz
+  snoozedUntil  DateTime? @db.Timestamptz
+  resolvedAt    DateTime? @db.Timestamptz
+
+  user User @relation("NotificationInboxUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([userId, lastAt(sort: Desc)])
+  @@map("notification_inbox")
+}
+
+/// KOŞUL — "durum sürdükçe tek kayıt" (KOSUL alt türü): tarayıcı açar/kapatır; çözülmüş satır 180 günde
+/// budanır. Durum tablosudur (defter değil): "ne oldu" outbox/gelen kutusundaki ACILDI/KAPANDI izindedir.
+/// ŞEMA-DIŞI: partial unique (kind, subjectKey) WHERE resolvedAt IS NULL.
+model NotificationCondition {
+  id          String    @id @default(uuid()) @db.Uuid
+  kind        String    @db.VarChar(64)
+  subjectKey  String    @db.VarChar(160)
+  subjectType String    @db.VarChar(32)
+  /// FK YOK: polimorfik konu; budanır.
+  subjectId   String?   @db.Uuid
+  openedAt    DateTime  @default(now()) @db.Timestamptz
+  resolvedAt  DateTime? @db.Timestamptz
+  payload     Json
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("notification_conditions")
+}
+
+/// GÜNLÜK SAYAÇ — tercih önizlemesinin (son 30 gün) kaynağı; outbox 7 günde budandığı için ayrı tablo
+/// (Karar Y3). 35 günde budanır; yalnız tahmin besler, hiçbir rapor sayısı ona bağlı değildir.
+/// ŞEMA-DIŞI: CHECK events ≥ 0.
+model NotificationDailyStats {
+  id         String   @id @default(uuid()) @db.Uuid
+  /// FABRİKA GÜNÜ (takvim günü anahtarı, an değil) — `constants/time.ts` diliminden hesaplanır.
+  factoryDay DateTime @db.Date
+  kind       String   @db.VarChar(64)
+  events     Int      @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([factoryDay, kind])
+  @@map("notification_daily_stats")
 }

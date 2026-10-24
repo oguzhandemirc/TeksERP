@@ -546,6 +546,28 @@ const PARTIAL_INDEXES: Array<{
     predicate: `(("hwDigest" IS NOT NULL) AND ("mergedIntoId" IS NULL))`,
     why: "aynı donanımdan eşzamanlı iki announce iki canlı satır açamasın; birleşmiş kopyalar özeti korusun",
   },
+  // Bildirim çekirdeği (N1-SEMA, migration 20261024023840): dağıtıcının birleştirme hedefi ve koşul açma seddi.
+  {
+    table: "notification_inbox",
+    index: "notification_inbox_open_group_uq",
+    uniq: true,
+    predicate: `("resolvedAt" IS NULL)`,
+    why: "açık satırda kişi × konu tek — dağıtıcının ON CONFLICT birleştirme hedefi; düşerse aynı konu çoğalır, sayaç kaybolur",
+  },
+  {
+    table: "notification_conditions",
+    index: "notification_conditions_open_uq",
+    uniq: true,
+    predicate: `("resolvedAt" IS NULL)`,
+    why: "açık koşul tür × konu başına tek — tarayıcının ON CONFLICT DO NOTHING seddi, çift ACILDI yok",
+  },
+  {
+    table: "notification_outbox",
+    index: "notification_outbox_pending_idx",
+    uniq: false,
+    predicate: `("processedAt" IS NULL)`,
+    why: "dağıtıcı süpürmesi yalnız işlenmemiş kuyruğu tarasın (işlenmiş satırlar indekse girmez)",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -852,6 +874,14 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "devices", name: "devices_merged_inactive" },
   { table: "device_rebind_requests", name: "device_rebind_requests_status_chk" },
   { table: "device_rebind_requests", name: "device_rebind_requests_decided_chk" },
+  // Bildirim çekirdeği (N1-SEMA, migration 20261024023840): kapalı kümeler VarChar + CHECK; `kind` bilinçli CHECK'siz
+  // (yeni tür migration istemez, tek kaynak katalog). Sayaçlar negatife düşmez; kutu satırı en az bir olay taşır.
+  { table: "notification_outbox", name: "notification_outbox_phase_ck" },
+  { table: "notification_outbox", name: "notification_outbox_attempts_ck" },
+  { table: "notification_inbox", name: "notification_inbox_klass_ck" },
+  { table: "notification_inbox", name: "notification_inbox_reason_ck" },
+  { table: "notification_inbox", name: "notification_inbox_count_ck" },
+  { table: "notification_daily_stats", name: "notification_daily_stats_events_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
