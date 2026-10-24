@@ -34,7 +34,7 @@ import {
   StepStatus,
   WorkOrderStatus,
 } from "@prisma/client";
-import { assertWoAtStepKind } from "./helpers/roll-step.helper";
+import { resolveWoStepForStation } from "./helpers/station-step-resolve.helper";
 import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import {
   STEP_FLOW_WHERE,
@@ -223,7 +223,10 @@ export class KursunQcService {
    * Operatör tablette kartı okutur, bu metot hangi step'te olduğunu ve hangi
    * rollerin bu step'e girmiş olduğunu döner.
    */
-  async getByCardBarcode(cardBarcode: string): Promise<ApiResponse<StepSummary>> {
+  async getByCardBarcode(
+    cardBarcode: string,
+    stationId: string | null = null,
+  ): Promise<ApiResponse<StepSummary>> {
     const card = await prisma.travelerCard.findUnique({
       where: { barcode: normalizeScanCode(cardBarcode) },
       select: {
@@ -241,31 +244,10 @@ export class KursunQcService {
       );
     }
 
-    // PROCESS_QC adımı KAPALI ise (finishStep yapılmış, toplar Tambur'a geçmiş):
-    // assertWoAtStepKind "açık top yok, mevcut konum: Tambur" diye 400 atardı.
-    // Bunun yerine COMPLETED özeti dön (rolls=[]) → frontend reopen-confirm
-    // akışını tetikler (operatör yanlışlıkla kapattıysa onayla geri açabilsin).
-    // Açık top varken status COMPLETED olamaz (recomputeStepStatus ACTIVE yapar),
-    // o yüzden bu kısayol normal akıştaki açık kartları etkilemez.
-    const pqStep = await prisma.workOrderStep.findFirst({
-      where: {
-        workOrderId: card.workOrderId,
-        station: { ...STEP_FLOW_WHERE },
-      },
-      orderBy: { stepSequence: "asc" },
-      select: { id: true, status: true },
-    });
-    if (pqStep?.status === StepStatus.COMPLETED) {
-      return this.buildStepSummary(pqStep.id);
-    }
-
-    // İş emrindeki PROCESS_QC step'ini doğrula. Multi-batch: WO'nun rulları
-    // farklı adımlarda olabilir; helper bu durumda net mesaj döner.
-    const { stepId } = await assertWoAtStepKind(
-      card.workOrderId,
-      StationKind.PROCESS_QC,
-    );
-
+    // Adım okutan tabletin OTURUM istasyonundan çözülür (KQ-D2): Kurşun→KK→Tambur
+    // rotasında KK tableti kurşun adımına düşmez. Oturumsuz istek bugünkü "ilk
+    // akış adımı" davranışında kalır; COMPLETED adım özeti reopen-confirm'i açar.
+    const { stepId } = await resolveWoStepForStation(card.workOrderId, stationId);
     return this.buildStepSummary(stepId);
   }
 
@@ -281,8 +263,10 @@ export class KursunQcService {
    *
    * Filtre: station.kind = PROCESS_QC, step.status != COMPLETED, en az 1 açık top
    * (currentStepId = step.id), ve WO'nun ACTIVE refakat kartı mevcut.
+   * `stationId` (oturum istasyonu, KQ-D2) verilirse yalnız o istasyonun adımları;
+   * oturumsuz istek bugünkü gibi tüm akış adımlarını görür.
    */
-  async listOpenCards(): Promise<
+  async listOpenCards(stationId: string | null = null): Promise<
     ApiResponse<
       Array<{
         cardId: string;
@@ -307,6 +291,8 @@ export class KursunQcService {
     const steps = await prisma.workOrderStep.findMany({
       where: {
         station: { ...STEP_FLOW_WHERE },
+        // Adım KOLONU — `station` spread'ine ek anahtar yazılmaz (OR ezilir).
+        ...(stationId ? { stationId } : {}),
         status: { not: "COMPLETED" },
         currentRolls: { some: {} },
         // Kurşun bypass'a DAĞITILMIŞ adımlar bu listede GÖRÜNMEZ: bu liste
