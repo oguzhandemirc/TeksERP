@@ -1331,6 +1331,7 @@ async function main() {
 
   const ENUM_PANEL_EXEMPT: Record<string, string> = {
     sameTypeSessionPolicy: "kind:'session' — Oturum section'ı yönetir (kendi select'i var)",
+    labelCopiesSource: "kind:'label' — Etiket section'ı yönetir (genel adetle aynı kartta; varsayılan beyanı test_label_copies_source ölçer)",
   };
 
   console.log(
@@ -1508,6 +1509,7 @@ async function main() {
     "shippingOrderRequirement",
     "shippingInvoiceMode",
     "shippingDocItemNameMode",
+    "labelCopiesSource",
   ] as const;
   const enumGaps = ENUM_FLAGS.flatMap((k) => {
     const missing = [

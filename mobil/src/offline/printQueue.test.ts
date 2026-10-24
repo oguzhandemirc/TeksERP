@@ -325,3 +325,19 @@ describe('printQueue — budama + sınıflandırma', () => {
     expect(classifyPrintRetry('prep', new Error('dil çözülemedi'))).toBe(false);
   });
 });
+
+describe('printQueue — etiket adedi (STATION modu seçicisi)', () => {
+  it('adet işe dondurulur; adetsiz iş alan TAŞIMAZ (GLOBAL = bugünkü istek)', () => {
+    usePrintQueue.getState().enqueue(roll('a'), 4);
+    usePrintQueue.getState().enqueue(roll('b'));
+    const [a, b] = usePrintQueue.getState().jobs;
+    expect(a.copies).toBe(4);
+    expect('copies' in b).toBe(false);
+  });
+
+  it('başarısız iş adetsiz yeniden istenirse ilk adedini korur', () => {
+    usePrintQueue.setState({ jobs: [job('a', { copies: 3, error: 'x', failedAt: Date.now() })] });
+    usePrintQueue.getState().enqueue(roll('a'));
+    expect(usePrintQueue.getState().jobs[0]).toMatchObject({ copies: 3, error: undefined });
+  });
+});

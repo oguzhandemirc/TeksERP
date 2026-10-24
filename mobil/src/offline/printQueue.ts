@@ -54,6 +54,8 @@ export interface PrintJob {
   /** Son deneme OTOMATİK miydi — düşerse online-only modal'ı yeniden AÇILMAZ
    *  (operatör tetiklemedi, spam olur); elle denemenin düşüşü açar. */
   lastAuto: boolean;
+  /** Etiket adedi (STATION modunda seçicinin değeri); yoksa sunucu çözer. */
+  copies?: number;
 }
 
 /** Baskı sonucunun eklere ayrılmış hâli (LabelPrinter.onResult ile aynı şekil). */
@@ -89,7 +91,7 @@ interface PrintQueueState {
   hydrate: () => Promise<void>;
   /** Kuyruğa al. Aynı top zaten bekliyor/basılıyorsa NO-OP (çift dokunuş 2
    *  kâğıt basmasın); başarısızdaysa bekleyene DÖNER (elle yeniden basım niyeti). */
-  enqueue: (roll: Roll) => void;
+  enqueue: (roll: Roll, copies?: number) => void;
   /** Pompa: aktif iş yokken ilk bekleyeni aktif yapar (KK1 effect'i çağırır). */
   startNext: () => void;
   /** Aktif işin sonucu: ok/iptal → iş düşer; hata → başarısız işaretlenir.
@@ -184,7 +186,13 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
         .filter(
           (j): j is PrintJob => !!j && typeof (j as PrintJob).roll?.id === 'string',
         )
-        .map((j) => ({ ...j, autoRetries: j.autoRetries ?? 0, lastAuto: false }));
+        .map((j) => ({
+          ...j,
+          autoRetries: j.autoRetries ?? 0,
+          lastAuto: false,
+          // Bozuk adet (elle düzenlenmiş/eski biçim) taşınmaz → sunucu kendi çözer.
+          copies: Number.isInteger(j.copies) ? j.copies : undefined,
+        }));
       const loadedVerifies = rawVerifies.filter(
         (v): v is VerifyItem =>
           !!v &&
@@ -222,7 +230,7 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
     }
   },
 
-  enqueue: (roll) => {
+  enqueue: (roll, copies) => {
     const { jobs } = get();
     const existing = jobs.find((j) => j.roll.id === roll.id);
     let next: PrintJob[];
@@ -231,13 +239,13 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
       // Başarısız iş yeniden istendi → bekleyene dön (elle niyet, sayaç sıfır).
       next = jobs.map((j) =>
         j.roll.id === roll.id
-          ? { ...j, roll, error: undefined, failedAt: undefined, autoRetries: 0, lastAuto: false }
+          ? { ...j, roll, copies: copies ?? j.copies, error: undefined, failedAt: undefined, autoRetries: 0, lastAuto: false }
           : j,
       );
     } else {
       // Aktif iş budamaya karşı KORUNUR (protectId) — atılırsa pompa kilitlenir.
       next = prunePrintJobs(
-        [...jobs, { roll, queuedAt: Date.now(), autoRetries: 0, lastAuto: false }],
+        [...jobs, { roll, queuedAt: Date.now(), autoRetries: 0, lastAuto: false, ...(copies !== undefined ? { copies } : {}) }],
         Date.now(),
         get().activeId ?? undefined,
       );

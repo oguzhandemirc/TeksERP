@@ -115,6 +115,7 @@
     "devicePairingRequired": true,
     "deviceProofRequired": true,
     "shortCredentialApprovedDeviceOnly": true,
+    "labelCopiesSource": "STATION",
     "nativeSendEnabled": true,
     "mobileRasterEnabled": true,
     "scrapGradeLabelEnabled": true

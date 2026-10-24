@@ -170,6 +170,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   backupHour: V("yedek saati; açılacak bir şey değil"),
   // ── etiket ─────────────────────────────────────────────────────────────────
   labelCopies: V("kopya adedi; açılacak bir şey değil"),
+  labelCopiesSource: A("STATION"), // istasyon kaynağı çözücünün tüm dallarını işletir (istek · istasyon · genel)
   nativeSendEnabled: A(true),
   mobileRasterEnabled: A(true),
   scrapGradeLabelEnabled: A(true),

@@ -1003,6 +1003,10 @@ model Station {
   /// Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma tezgahı / raşel). VARSAYILAN FALSE = bugün.
   /// Yuva kapısı BUDUR; `Machine.warpBeamSlots` yalnız üst sınırdır (§9.7h).
   consumesWarpBeam Boolean @default(false)
+  /// Bu istasyonda akış etiketinin (top/kartela/çuval) VARSAYILAN adedi — yalnız
+  /// `label.copiesSource = STATION` iken okunur; NULL = genel adet (`label.copies`).
+  /// DB CHECK 1–5 (`stations_default_label_copies_range`); çözücü `label-copies.helper.ts`.
+  defaultLabelCopies Int?
 
   // Relations
   machines             Machine[]

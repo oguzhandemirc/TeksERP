@@ -564,6 +564,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "rolls", name: "rolls_weightKg_nonneg" },
   // S1 (2026-10-21, D11): doff bağı ∧ iş bağı aynı anda olamaz — `weavingOrderId` yalnız doff'suz A-yolunda dolar.
   { table: "rolls", name: "rolls_weaving_order_xor_ck" },
+  // 2026-10-24: istasyonun varsayılan etiket adedi 1–5 ya da NULL (`label-copies.helper.ts`).
+  { table: "stations", name: "stations_default_label_copies_range" },
   { table: "order_lines", name: "order_lines_quantity_pos" },
   { table: "order_lines", name: "order_lines_shippedQty_nonneg" },
   { table: "manifests", name: "manifests_source_shape" },
