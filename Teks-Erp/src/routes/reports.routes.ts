@@ -17,6 +17,7 @@ import customerReportRoutes from "./reports/customer.routes";
 import auditReportRoutes from "./reports/audit.routes";
 import financeReportRoutes from "./reports/finance.report.routes";
 import dokumaReportRoutes from "./reports/dokuma.report.routes";
+import coreSalesReportRoutes from "./reports/temel-satis.routes";
 
 const router = Router();
 
@@ -34,5 +35,8 @@ router.use("/audit", auditReportRoutes);
 router.use("/finance", financeReportRoutes);
 // Dokuma raporları (Dilim 4, 2026-09-14): aynı kalıp — `requireDokumaEnabled` kendi dosyasında.
 router.use("/dokuma", dokumaReportRoutes);
+// Raporlar v2 temel satış raporları (R0-RAPA): ÖNEKSİZ mount — yollar dosyada tam (`/sales/termin`),
+// katalog `kapiTasiyici.yol` beyanıyla bayt-eşit. `/sales` router'ında eşleşmeyen istek buraya düşer.
+router.use(coreSalesReportRoutes);
 
 export default router;
