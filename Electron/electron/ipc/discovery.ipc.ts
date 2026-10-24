@@ -86,6 +86,11 @@ let state: DiscoveryState = emptyState();
 let running: Promise<DiscoveryState> | null = null;
 let lastScanAt = 0;
 
+/** Sabitlenmiş sunucunun kurulum kimliği — makine özetinin anahtarı (D3). */
+export function readPinnedInstallationId(): string | null {
+  return readPinnedId();
+}
+
 function readPinnedId(): string | null {
   try {
     const raw = readSecureValue(PINNED_IDENTITY_KEY);

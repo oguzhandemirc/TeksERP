@@ -438,10 +438,32 @@ export interface LicenseApi {
   relay: (req: LicenseRelayRequest) => Promise<LicenseRelayResult>;
 }
 
+/** Cihaz eşleme v2 (D3): donanım kaynağı — sunucu `hwSchema` ile aynı küme. */
+export type HwSource = "ANDROID_ID" | "WIN_MACHINE_GUID" | "MAC_PLATFORM_UUID" | "LINUX_MACHINE_ID";
+/** Sunucuya giden donanım iddiası — yalnız kuruluma özgü HMAC özeti; ham değer ana süreçten çıkmaz. */
+export interface HwClaim {
+  v: 1;
+  kaynak: HwSource;
+  ozet: string;
+}
+export interface DeviceIdentityDescription {
+  hw: HwClaim | null;
+  model: string | null;
+}
+/** Yerel cihaz kimliği okuması: "yok" ile "okunamadı" ayrı (okunamayan kimlik ezilmez). */
+export type LocalIdRead = { status: "ABSENT" } | { status: "OK"; value: string } | { status: "UNREADABLE" };
+export interface DeviceIdentityApi {
+  describe: () => Promise<DeviceIdentityDescription>;
+  readLocalId: () => Promise<LocalIdRead>;
+  /** Yalnız kayıt YOKSA yazar; yazdıysa `true`. */
+  createLocalId: (value: string) => Promise<boolean>;
+}
+
 export interface ApiBridge {
   secureStore: SecureStoreApi;
   discovery: DiscoveryApi;
   appInfo: AppInfoApi;
+  deviceIdentity: DeviceIdentityApi;
   window: WindowApi;
   system: SystemApi;
   power: PowerApi;

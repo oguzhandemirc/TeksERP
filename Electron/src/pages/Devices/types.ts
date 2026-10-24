@@ -70,3 +70,31 @@ export interface DeviceDetail {
   hardware: PeripheralSummary[];
   lastSession: DeviceLastSession | null;
 }
+
+/** Yeniden bağlama talebi (cihaz eşleme v2) — `GET /api/admin/devices/rebind-requests`.
+ *  Donanım özeti bilinçli olarak taşınmaz (ekranda gösterilmez). */
+export interface RebindRequest {
+  id: string;
+  localId: string;
+  kind: DeviceKind;
+  model: string | null;
+  status: "OPEN" | "APPROVED" | "REJECTED";
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  decidedBy: { id: string; username: string; fullName: string | null } | null;
+  target: {
+    id: string;
+    name: string;
+    kind: DeviceKind;
+    status: DeviceStatus;
+    isActive: boolean;
+    lastSeenAt: string | null;
+    machine: { id: string; code: string; name: string } | null;
+  };
+}
+
+export interface RebindRejectBody {
+  mode: "REDDET" | "AYRI_CIHAZ";
+  reason?: string;
+}
