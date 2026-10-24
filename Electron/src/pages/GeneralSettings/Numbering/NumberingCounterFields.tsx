@@ -37,7 +37,7 @@ function Tukenme({ exhaustion }: { exhaustion: SeriesExhaustion | null }) {
  * alanın hemen altında durur; kullanıcı sebebi aradığı yerde bulur (K5/K10).
  */
 function CounterField({
-  id, etiket, yer, deger, hata, onChange,
+  id, etiket, yer, deger, hata, onChange, disabled = false,
 }: {
   id: string;
   etiket: string;
@@ -45,6 +45,8 @@ function CounterField({
   deger: number | null;
   hata: string | null;
   onChange: (v: number | null) => void;
+  /** Alan bazında kilit (GİB serisi: yalnız başlangıç açık) — gizlenmez, pasifleşir. */
+  disabled?: boolean;
 }) {
   const readInt = (v: string): number | null => {
     const n = Number(v.trim());
@@ -57,12 +59,28 @@ function CounterField({
         id={id}
         inputMode="numeric"
         placeholder={yer}
+        disabled={disabled}
         value={deger ?? ""}
         aria-invalid={hata !== null}
         onChange={(e) => onChange(readInt(e.target.value))}
       />
       {hata && <p className="text-xs font-medium text-destructive">{hata}</p>}
     </div>
+  );
+}
+
+/**
+ * KISMİ SAYAÇ KİLİDİ (GİB serisi): kapalı alanların sebebi ve başlangıç kuralı
+ * alanın yanında — cümleler sunucudan, panel yalnız çizer.
+ */
+function PartialLockNotes({ caps }: { caps: NumberSeriesRow["counter"] }) {
+  return (
+    <>
+      {(!caps.step || !caps.maxValue) && caps.lockedReason && (
+        <p className="text-xs text-muted-foreground">{caps.lockedReason}</p>
+      )}
+      {caps.startValueNote && <p className="text-xs text-muted-foreground">{caps.startValueNote}</p>}
+    </>
   );
 }
 
@@ -97,8 +115,6 @@ export function NumberingCounterFields({
   /** Değer hataları — ALANIN YANINDA gösterilir, Kaydet'i de bağlar (K10). */
   hatalar?: CounterFieldError[];
 }) {
-  const locked = !row.counter.startValue;
-
   return (
     <div className="space-y-3 rounded-md border p-3">
       <div className="text-sm font-medium">Sayaç</div>
@@ -107,7 +123,7 @@ export function NumberingCounterFields({
           kapalı ama günlük kapasitesi (9.999) gerçek ve dolduğunda üretim durur. */}
       <Tukenme exhaustion={exhaustion} />
 
-      {locked ? (
+      {!row.counter.startValue ? (
         <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
           Sayaç ayarları bu seride kapalı
           <LockInfo text={row.counter.lockedReason ?? ""} />
@@ -121,22 +137,24 @@ export function NumberingCounterFields({
               onChange={(v) => onChange({ ...counter, startValue: v })}
             />
             <CounterField
-              id="ns-step" etiket="Artış adımı" yer="1"
+              id="ns-step" etiket="Artış adımı" yer="1" disabled={!row.counter.step}
               deger={counter.step} hata={counterFieldError(hatalar, "step")}
               onChange={(v) => onChange({ ...counter, step: v })}
             />
             <CounterField
-              id="ns-max" etiket="Üst sınır" yer="yok"
+              id="ns-max" etiket="Üst sınır" yer="yok" disabled={!row.counter.maxValue}
               deger={counter.maxValue} hata={counterFieldError(hatalar, "maxValue")}
               onChange={(v) => onChange({ ...counter, maxValue: v })}
             />
           </div>
 
+          <PartialLockNotes caps={row.counter} />
+
           {/* ⚠️ SARMA YALNIZ ÜST SINIR DOLUYKEN ÇİZİLİR: sınırsız bir seride
               "başa dön" çıkışsız bir kapıdır (açık görünür, hiçbir şey yapmaz).
               Alanı hep çizip devre dışı bırakmak yerine hiç çizmemek seçildi —
               kullanıcı önce sınırı girer, kutu o zaman belirir. */}
-          {counter.maxValue !== null && (
+          {counter.maxValue !== null && row.counter.maxValue && (
             <label className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"

@@ -26,10 +26,16 @@ export const DOCUMENT_DESIGN_READ = [
   "admin:settings",
   "document-template:read",
   "document-template:write",
+  "document-template:design",
+  "document-template:publish",
 ];
 
 /** Belge tasarımını DEĞİŞTİRMEK için yeterli izinler (herhangi biri). */
 export const DOCUMENT_DESIGN_WRITE = ["admin:settings", "document-template:write"];
+
+/** Belge tasarımcısı: tasarla / yayınla (backend constants/document-design.ts aynası). */
+export const DOCUMENT_TEMPLATE_DESIGN = ["admin:settings", "document-template:design"];
+export const DOCUMENT_TEMPLATE_PUBLISH = ["admin:settings", "document-template:publish"];
 
 // =============================================================================
 // Ekran başına ayar / sistem izinleri (2026-09-24)

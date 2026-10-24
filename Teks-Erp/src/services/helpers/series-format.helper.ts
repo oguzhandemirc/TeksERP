@@ -80,6 +80,8 @@ export interface NumberSeriesFormat {
   }>;
   numberSource?: "FREE" | "SYSTEM" | "MANUAL";
   startValue?: number | null;
+  /** Başlangıcın geçerli olduğu fabrika yılı; NULL = her dönem (`startValueInEffect`). */
+  startValueYear?: number | null;
   step?: number | null;
   maxValue?: number | null;
   /** Üst sınıra varınca başa dön (D2③). Hesabı `series-counter.helper` yapar. */

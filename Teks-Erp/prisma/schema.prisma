@@ -5993,6 +5993,10 @@ model NumberSeries {
   startValue Int?
   step       Int?
   maxValue   Int?
+  /// BAŞLANGIÇ DEĞERİNİN GEÇERLİ OLDUĞU FABRİKA YILI — NULL = her dönemde (bugünkü
+  /// davranış). Yalnız sabit biçimli (`fixedShape`) seri yazar: başka programdan
+  /// yıl ortasında geçen fabrika o yılın sırasını sürdürür, ertesi yıl 1'den başlar.
+  startValueYear Int?
 
   /// ÜST SINIRA VARINCA NE OLACAK — hata mı, BAŞA DÖNME mi? (D2③)
   ///
@@ -7206,6 +7210,7 @@ model DocumentProfile {
 
   customers      Customer[]      @relation("CustomerDocProfile")
   subcontractors Subcontractor[] @relation("SubcontractorDocProfile")
+  templateAssignments DocumentProfileTemplate[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -11896,6 +11901,111 @@ model NotificationDailyStats {
 
   @@unique([factoryDay, kind])
   @@map("notification_daily_stats")
+}
+
+// ═══ BELGE ŞABLON TASARIMCISI (T1B, 2026-10-24) — docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md §3.5 ═══
+
+/// Kullanıcı tasarımı belge şablonu (belge türü × N). Sürümler değişmezdir; yayın tek
+/// `publishedVersionId` claim'iyle değişir. ŞEMA-DIŞI: CHECK status (ACTIVE|ARCHIVED), editMode (VISUAL|CODE).
+/// editMode = son kaydedilen sürümün kipi (liste rozeti); sürüm kendi kipini ayrıca taşır.
+model DocumentTemplate {
+  id                 String    @id @default(uuid()) @db.Uuid
+  /// PrintedDocType adı ya da FREE_DOCUMENT / TRAVELER_CARD / FASON_CEKI_DRAFT.
+  docType            String    @db.VarChar(40)
+  name               String    @db.VarChar(80)
+  description        String?   @db.VarChar(300)
+  status             String    @default("ACTIVE") @db.VarChar(10)
+  editMode           String    @default("VISUAL") @db.VarChar(10)
+  /// Kaynak etiketi: "system" ya da "template:<id>" — iz, FK değil.
+  copiedFrom         String?   @db.VarChar(80)
+  publishedVersionId String?   @unique @db.Uuid
+  publishedVersion   DocumentTemplateVersion? @relation("DocumentTemplatePublished", fields: [publishedVersionId], references: [id], onDelete: Restrict)
+  /// Sürüm no sayacı — kayıt claim'i bununla serileşir (baseVersionNo == latestVersionNo).
+  latestVersionNo    Int       @default(0)
+  archivedAt         DateTime? @db.Timestamptz
+  clientToken        String?   @unique @db.Uuid
+
+  versions          DocumentTemplateVersion[] @relation("DocumentTemplateVersions")
+  defaultFor        DocumentTemplateDefault[]
+  profileAssignments DocumentProfileTemplate[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@unique([docType, name])
+  @@index([docType, status])
+  @@map("document_templates")
+}
+
+/// DEĞİŞMEZ şablon sürümü (append-only). ŞEMA-DIŞI: TRIGGER document_template_versions_block_tamper —
+/// içerik kolonu UPDATE'i ve yayınlanmış sürümün DELETE'i reddedilir; tek istisna publishedAt/publishedById
+/// NULL→değer (bir kez). CHECK editMode (VISUAL|CODE).
+model DocumentTemplateVersion {
+  id              String   @id @default(uuid()) @db.Uuid
+  templateId      String   @db.Uuid
+  template        DocumentTemplate @relation("DocumentTemplateVersions", fields: [templateId], references: [id], onDelete: Restrict)
+  versionNo       Int
+  editMode        String   @db.VarChar(10)
+  sourceHtml      String   @db.Text
+  css             String   @db.Text
+  compiledLiquid  String   @db.Text
+  projectData     Json?
+  pageSettings    Json
+  tableBindings   Json
+  /// P-d: dondurulmuş belge ayarı (şablonda `ayar`).
+  settings        Json
+  internalFields  Json
+  contractVersion Int
+  engineVersion   String   @db.VarChar(40)
+  contentHash     String   @db.VarChar(64)
+  note            String?  @db.VarChar(300)
+  removedOnSave   Json
+  clientToken     String?  @unique @db.Uuid
+  createdById     String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  publishedAt     DateTime? @db.Timestamptz
+  publishedById   String?  @db.Uuid
+
+  publishedOf DocumentTemplate? @relation("DocumentTemplatePublished")
+
+  @@unique([templateId, versionNo])
+  @@map("document_template_versions")
+}
+
+/// Belge türünün tasarımcı varsayılanı (saf yapılandırma: kaldırma = satır silme).
+model DocumentTemplateDefault {
+  id         String           @id @default(uuid()) @db.Uuid
+  docType    String           @unique @db.VarChar(40)
+  templateId String           @db.Uuid
+  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@index([templateId])
+  @@map("document_template_defaults")
+}
+
+/// Müşteri/fasoncu ataması PROFİL ÜZERİNDEN (XOR'lu çift bağ yok); saf yapılandırma pivotu.
+model DocumentProfileTemplate {
+  profileId  String           @db.Uuid
+  profile    DocumentProfile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  docType    String           @db.VarChar(40)
+  templateId String           @db.Uuid
+  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@id([profileId, docType])
+  @@index([templateId])
+  @@map("document_profile_templates")
 }
 
 // =============================================================================
