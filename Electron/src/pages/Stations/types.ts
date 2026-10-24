@@ -17,6 +17,11 @@ export interface Station {
    * Renk/özellikten farkı: fason kategorisinden türetilmez, atama listesi yoktur.
    */
   appliesQuality: boolean;
+  /**
+   * Kalite MUAYENESİ (hata girişi) bu istasyonda açık mı? (KQ-D1, 2026-10-24)
+   * `appliesQuality` artık yalnız ara istasyon kart akışıdır; muayene bu alandır.
+   */
+  inspectionEnabled: boolean;
   /** Devere: bu istasyonun makineleri LEVENT SARAR (WOUND.machineId adayı). */
   producesWarpBeam: boolean;
   /** Devere Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma/raşel); yuva kapısı budur. */

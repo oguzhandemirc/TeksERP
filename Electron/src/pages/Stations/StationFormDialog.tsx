@@ -13,7 +13,7 @@ import { visibleStationKindLabels } from "./stationKindVisibility";
 import { suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
 import { StationLabelCopiesField } from "./StationLabelCopiesField";
 
-const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "producesWarpBeam", "consumesWarpBeam"] as const;
+const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "inspectionEnabled", "producesWarpBeam", "consumesWarpBeam"] as const;
 import type { Station } from "./types";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
@@ -40,6 +40,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         appliesColor: initial.appliesColor ?? false,
         appliesProperty: initial.appliesProperty ?? true,
         appliesQuality: initial.appliesQuality ?? false,
+        inspectionEnabled: initial.inspectionEnabled ?? false,
         producesWarpBeam: initial.producesWarpBeam ?? false,
         consumesWarpBeam: initial.consumesWarpBeam ?? false,
         defaultLabelCopies: initial.defaultLabelCopies ?? null,
@@ -143,7 +144,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               renk atanabilir hale gelir (2026-08-06 uyarısı). */}
           <FormField
             label="Yetenekler"
-            hint="Bu istasyondan geçen topa ne uygulanabilir? Renk/özellikte fason istasyonlarda KATEGORİ de verebilir — ikisinden biri yeterlidir. KALİTE'de kategori karşılığı YOKTUR: yalnız bu kutu belirler."
+            hint="Bu istasyondan geçen topa ne uygulanabilir? Renk/özellikte fason istasyonlarda KATEGORİ de verebilir — ikisinden biri yeterlidir. Muayenede ve kart akışında kategori karşılığı YOKTUR: yalnız bu kutular belirler."
           >
             <div className="space-y-1.5">
               <label className="flex items-center gap-2 text-sm">
@@ -157,9 +158,15 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
                   ⚠️ İkinci bir KK istasyonu tanımlayıp Kurşun→KK→Tambur rotası
                   kurmayın: kurşun bypass uygunluğu "sonraki adım Tambur" şartına
                   bakar ve sessizce kapanır (Faz B'de çözülecek). */}
+              {/* KQ-D1: iki ayrı soru. Akış kutusu kolonu ve davranışı DEĞİŞMEDİ
+                  (`appliesQuality`); muayene yeni `inspectionEnabled`. */}
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" {...form.register("appliesQuality")} /> Kalite kontrol
-                uygular (Kurşun + KK2 süreci bu istasyonda yürür)
+                <input type="checkbox" {...form.register("inspectionEnabled")} /> Kalite muayenesi (hata girişi)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" {...form.register("appliesQuality")} /> Ara istasyon kart akışı
+                (Kurşun/KK2 ekranı)
+                <span className="text-xs text-muted-foreground">— Yalnız Ara istasyon türünde etkili</span>
               </label>
               {devereEnabled && (
                 <>

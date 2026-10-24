@@ -14,6 +14,13 @@ describe("İstasyon formu — türe göre önerilen yetenekler", () => {
     // Devere: levent ÜRETİR (tüketmez) — tezgahın aynası.
     expect(suggestedCapabilities(StationKind.WARPING)).toMatchObject({ producesWarpBeam: true, consumesWarpBeam: false, appliesQuality: false });
     expect(suggestedCapabilities(StationKind.TAMBUR)).toMatchObject({ appliesProperty: true, appliesColor: false });
+  });
+
+  it("⭐ muayene önerisi (KQ-D1): yalnız PROCESS_QC + TAMBUR — backend `inspectionDefaultForKind` ile aynı küme; Tambur kart akışına girmez", () => {
+    const muayeneli = Object.values(StationKind).filter((k) => suggestedCapabilities(k).inspectionEnabled).sort();
+    expect(muayeneli).toEqual([StationKind.PROCESS_QC, StationKind.TAMBUR].sort());
+    expect(suggestedCapabilities(StationKind.TAMBUR).appliesQuality).toBe(false);
+    expect(suggestedCapabilities(StationKind.PROCESS_QC)).toMatchObject({ appliesQuality: true, inspectionEnabled: true });
     for (const k of [StationKind.RAW_QC, StationKind.SHIPPING, StationKind.OTHER]) {
       expect(Object.values(suggestedCapabilities(k)).some(Boolean)).toBe(false);
     }
