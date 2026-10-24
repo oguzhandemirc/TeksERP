@@ -103,8 +103,8 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
     // R0-GECIS: yer tutucu yerine 36 v1 rapor, eski hub'ın kategorileriyle (`legacy-model.ts`).
     expect(within(legacy).getAllByRole("listitem")).toHaveLength(36);
     expect(within(legacy).getAllByRole("group")).toHaveLength(reportTiles.length);
-    // Bugün 14 v2 satırının hepsi `hazir:false` → hiçbiri Merkez'de yok.
-    for (const e of V2_ROWS) expect(screen.queryByText(e.baslik)).toBeNull();
+    // `hazir:false` v2 satırları Merkez'de yok; hazır küme katalogdan gelir (sabit sayı yok).
+    for (const e of V2_ROWS.filter((r) => !r.hazir)) expect(screen.queryByText(e.baslik)).toBeNull();
   });
 });
 
@@ -241,9 +241,11 @@ describe("§6 palet — bayrak kapalıyken görünen küme aynı", () => {
     const v2Entries = allCommandEntries.filter((e) => e.key.startsWith("report-v2:"));
     expect(v2Entries).toHaveLength(V2_ROWS.length);
     for (const e of v2Entries) expect(e.permission).toBe(REPORT_BY_KEY.get(e.key.slice("report-v2:".length))!.izin);
-    // Açık bayrakta bile `hazir:false` satırı görünmez (bugün 14/14).
+    // Açık bayrakta bile `hazir:false` satırı görünmez; görünen v2 girişleri katalogun hazır satırlarıdır.
     v2 = true;
-    expect(visibleKeys().some((k) => k.startsWith("report-v2:"))).toBe(false);
+    const readyKeys = new Set(V2_ROWS.filter((r) => r.hazir).map((r) => `report-v2:${r.key}`));
+    const shown = visibleKeys().filter((k) => k.startsWith("report-v2:"));
+    for (const k of shown) expect(readyKeys.has(k)).toBe(true);
   });
 });
 

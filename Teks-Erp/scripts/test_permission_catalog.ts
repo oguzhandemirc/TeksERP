@@ -127,6 +127,8 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // requirePermission(CORE_PRODUCTION_PERMISSIONS[key]) — beş temel raporun alan izni; katalog `izin`iyle
   // birebirliğini `test_temel_rapor_esitlik` §R0z ölçer (R0-RAPB).
   "src/routes/reports/temel-uretim.routes.ts": ["CORE_PRODUCTION_PERMISSIONS"],
+  // requirePermission(permissionOf(key)) — dört temel dokuma/alacak raporu; katalog `izin`iyle birebir (§C0a, R0-RAPC).
+  "src/routes/reports/temel-dokuma-finans.routes.ts": ["CORE_WEAVING_FINANCE_PERMISSIONS"],
   // matchesPermission(perms, adapter.writePermission / adapter.readPermission)
   // — adaptör `import-registry`den `:entity` ile çözülür. Yetki AKTARILAN
   // VERİYE göredir: `data:import` yalnız "toplu yükleme yapabilir" demektir,

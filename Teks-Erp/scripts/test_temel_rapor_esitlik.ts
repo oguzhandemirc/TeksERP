@@ -19,6 +19,18 @@
 //   ③ kayıp tablosunun `toplam` satırına oran (fire / payda toplamı) eklendi → ❌ 1 (§R3e toplam oran yok)
 // Temiz koşum 26/0.
 //
+// § Dokuma/finans (RAPC) — `dokuma/tezgah-randimani`, `dokuma/duruslar`, `dokuma/levent-dengesi`, `finance/alacaklar`:
+//   • modül kapısı kaynak raporunkiyle aynı (dokuma · levent ayrıca devere · finans) — Express yığınındaki
+//     GERÇEK fonksiyonlar koşar; kapalı bayrakta 403 `details.code`=MODULE_DISABLED (test DB'de bayrak geçici).
+//   • randıman TEK oran (`toplam.effectivenessPct`), duruş = Pareto toplamı (dakika), müdahale = `ustlenmeOrtSn`.
+//   • vardiya süzgeci: tüm vardiyalar = süzgeçsiz, tek vardiya = kaynağın aynı süzgeçli değeri, bilinmeyen 404.
+//   • levent dengesi: beklenen kumaşı bilinmeyen levent orana 0 metre olarak GİRMEZ, ayrı sayılır.
+//   • alacaklar: para birimleri toplanmaz; kesit kıyası "ölçülemedi" + ay sonu uyarısı.
+// NEGATİF SONDALAR (2026-10-25, md5 ile geri alındı → yeşil):
+//   ④ levent ucundan `requireDevereEnabled` kaldırıldı → ❌ 2 (§C0b zincir + §C0d devere kapalıyken 403)
+//   ⑤ `beamBalance` ölçülemeyen leventi 0 beklenenle saydı → ❌ 1 (§C3a; oran %140)
+// Temiz koşum 54/0 (RAPB + RAPC).
+//
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2097-07 (kıyas 2097-06), etiket TEST-TRE-<pid>.
 // Koşum: npx tsx scripts/test_temel_rapor_esitlik.ts
 // =============================================================================
@@ -44,6 +56,18 @@ import { beamResultReport } from "../src/services/reports/levent-sonucu.report.s
 import { readDevereEnabled, readDokumaEnabled } from "../src/services/system-setting.service";
 import { REPORT_BY_KEY, type ReportKey } from "../src/constants/report-catalog";
 import { permissionOf } from "../src/routes/reports/temel-uretim.routes";
+import coreWeavingFinanceRouter, { permissionOf as rapcPermissionOf } from "../src/routes/reports/temel-dokuma-finans.routes";
+import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
+import { buildLoomEfficiencyReport, efficiencyReasonText } from "../src/services/reports/temel/tezgah-randimani.temel";
+import { buildLoomStopsReport, mostFrequentReason, secondsToMinutes } from "../src/services/reports/temel/duruslar.temel";
+import { beamBalance, buildBeamBalanceReport } from "../src/services/reports/temel/levent-dengesi.temel";
+import { buildReceivablesReport, mainBlock, NO_MONTH_END_RECEIVABLES, receivedChequesDue } from "../src/services/reports/temel/alacaklar.temel";
+import { durusParetoReport, efficiencyReport } from "../src/services/reports/dokuma.report.service";
+import { capacityUsageReport } from "../src/services/reports/kapasite-kullanimi.report.service";
+import { alarmResponseReport } from "../src/services/reports/alarm-response.report.service";
+import { getAgingReport } from "../src/services/reports/finance-aging.report";
+import { chequeService } from "../src/services/cheque.service";
+import { yasakSozcukBul } from "../src/services/reports/anlati/yasak-sozcuk";
 
 let pass = 0;
 let fail = 0;
@@ -254,7 +278,147 @@ async function rapbSection(): Promise<void> {
     show(fig(subOne, "fason.bekleyenMetre")?.deger, subOneSrc.summary.openQty));
 }
 
+// =============================================================================
+// § Dokuma/finans (RAPC) — `dokuma/tezgah-randimani`, `dokuma/duruslar`, `dokuma/levent-dengesi`, `finance/alacaklar`
+// =============================================================================
+const RAPC_KEYS: ReportKey[] = ["dokuma/tezgah-randimani", "dokuma/duruslar", "dokuma/levent-dengesi", "finance/alacaklar"];
+const RAPC_DAYS = { from: "2097-07-01", to: "2097-07-31" };
+const rapcShiftDefs: string[] = [];
+type Handler = (req: unknown, res: unknown, next: (err?: unknown) => void) => unknown;
+type RouteLayer = { route?: { path: string; stack: Array<{ handle: Handler; name: string }> } };
+
+/** Ucun modül kapısı öneki (`require*Enabled`) — Express yığınından, gerçek fonksiyonlarla koşar. */
+async function runModuleGates(path: string): Promise<{ gates: string[]; err: unknown }> {
+  const layer = (coreWeavingFinanceRouter as unknown as { stack: RouteLayer[] }).stack.find((l) => l.route?.path === path);
+  const gates = (layer?.route?.stack ?? []).filter((h) => /^require\w*Enabled$/.test(h.name));
+  for (const g of gates) {
+    const err = await new Promise<unknown>((resolve) => {
+      void Promise.resolve(g.handle({ headers: {}, query: {} }, {}, (e?: unknown) => resolve(e ?? null)));
+    });
+    if (err) return { gates: gates.map((x) => x.name), err };
+  }
+  return { gates: gates.map((x) => x.name), err: null };
+}
+const moduleDisabled = (err: unknown): boolean =>
+  (err as { statusCode?: number })?.statusCode === 403 && (err as { details?: { code?: string } })?.details?.code === "MODULE_DISABLED";
+
+async function withFlags(flags: Record<string, boolean>, fn: () => Promise<void>): Promise<void> {
+  const keys = Object.keys(flags);
+  const before = await prisma.systemSetting.findMany({ where: { key: { in: keys } } });
+  try {
+    for (const [key, v] of Object.entries(flags)) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: v }, update: { value: v } });
+    await fn();
+  } finally {
+    await prisma.systemSetting.deleteMany({ where: { key: { in: keys.filter((k) => !before.some((b) => b.key === k)) } } });
+    for (const b of before) await prisma.systemSetting.update({ where: { key: b.key }, data: { value: b.value as never } });
+  }
+}
+
+async function rapcSection(): Promise<void> {
+  console.log("\n── § Dokuma/finans (RAPC) ──");
+  const permDrift = RAPC_KEYS.filter((k) => REPORT_BY_KEY.get(k)?.izin !== rapcPermissionOf(k));
+  check("§C0a uç izni = katalog satırının `izin`i (dört uç)", permDrift.length === 0, permDrift.join(", ") || "birebir");
+
+  // §C0b/c Modül kapısı kaynak raporunkiyle AYNI (dokuma · levent ayrıca devere · finans).
+  const expectGates: Record<string, string[]> = {
+    "/dokuma/tezgah-randimani": ["requireDokumaEnabled"],
+    "/dokuma/duruslar": ["requireDokumaEnabled"],
+    "/dokuma/levent-dengesi": ["requireDokumaEnabled", "requireDevereEnabled"],
+    "/finance/alacaklar": ["requireFinanceEnabled"],
+  };
+  await withFlags({ "production.enabled": false, "dokuma.enabled": false, "devere.enabled": false, "finance.enabled": false }, async () => {
+    for (const [path, gates] of Object.entries(expectGates)) {
+      const r = await runModuleGates(path);
+      check(`§C0b ${path} modül kapıları ${gates.join(" + ")}`, gates.every((g) => r.gates.includes(g)), r.gates.join(", ") || "kapı yok");
+      check(`§C0c ⭐ ${path} modül kapalıyken 403 \`details.code\`=MODULE_DISABLED`, moduleDisabled(r.err), JSON.stringify((r.err as { details?: unknown })?.details ?? null));
+    }
+  });
+  await withFlags({ "production.enabled": true, "dokuma.enabled": true, "devere.enabled": false }, async () => {
+    const lev = await runModuleGates("/dokuma/levent-dengesi");
+    const eff = await runModuleGates("/dokuma/tezgah-randimani");
+    check("§C0d ⭐ dokuma açık + devere kapalı: levent 403 MODULE_DISABLED, randıman kapıdan geçer",
+      moduleDisabled(lev.err) && eff.err === null, `levent ${JSON.stringify((lev.err as { details?: unknown })?.details ?? null)} · randıman ${eff.err ? "RED" : "geçti"}`);
+  });
+
+  const win = resolveCoreDayRange(RAPC_DAYS, 7);
+  check("§C0e parametresiz kıyas = önceki dönem (gün aralığı; `kiyas` tel anahtarı)", win.mode === "prev" && win.compareDays?.to === "2097-06-30" && win.compareDays.from === "2097-05-31",
+    JSON.stringify(win.compareDays));
+
+  // §C1 Tezgah randımanı = Randıman toplamı + Kapasite özeti
+  const eff = (await buildLoomEfficiencyReport({ window: win })).sunum;
+  const effSrc = await efficiencyReport({ ...RAPC_DAYS, limit: 1 });
+  const capSrc = await capacityUsageReport(RAPC_DAYS);
+  check("§C1a ana sayı = `EfficiencyReport.toplam.effectivenessPct` (tek oran)", eff.anaSayi.olcu === "dokuma.randimanYuzde" && same(eff.anaSayi.deger, effSrc.toplam.effectivenessPct),
+    show(eff.anaSayi.deger, effSrc.toplam.effectivenessPct));
+  check("§C1b yanlar = kapasite `toplamGercekM` · `kullanimPct`",
+    same(fig(eff, "dokuma.dokunanMetre")?.deger, capSrc.data.ozet.toplamGercekM) && same(fig(eff, "dokuma.kapasiteKullanimYuzde")?.deger, capSrc.data.ozet.kullanimPct));
+  check("§C1c `kiyas` beyanı uygulanan kip + `kiyasDonemi`", eff.parametreler.find((p) => p.ad === "kiyas")?.deger === "prev" && eff.kiyasDonemi !== undefined);
+  const reason = efficiencyReasonText(82.5, 91);
+  check("§C1d \"neden\" açıklaması günlük dil (yasak sözcük yok, iki pay adıyla)", reason !== null && yasakSozcukBul(reason).length === 0 && /Çalışma payı/.test(reason) && /Hız payı/.test(reason), reason ?? "yok");
+
+  // §C2 Duruşlar = Duruş Pareto + Müdahale
+  const stops = (await buildLoomStopsReport({ window: win })).sunum;
+  const par = await durusParetoReport(RAPC_DAYS);
+  const alarm = await alarmResponseReport({ ...RAPC_DAYS, withPeople: false });
+  check("§C2a ana sayı = `ParetoReport.toplam.stopSec` (dakika)", same(stops.anaSayi.deger, secondsToMinutes(par.toplam.stopSec)), show(stops.anaSayi.deger, par.toplam.stopSec));
+  check("§C2b yanlar = `toplam.stopCount` · müdahale `ozet.ustlenmeOrtSn` (dakika)",
+    same(fig(stops, "dokuma.durusSayisi")?.deger, par.toplam.stopCount) && same(fig(stops, "dokuma.mudahaleDakika")?.deger, secondsToMinutes(alarm.data.ozet.ustlenmeOrtSn)));
+  // Fikstür vardiya tanımı (seed yazmaz) — süzgeç yolu kimliğiyle koşsun; cleanup siler.
+  const fixtureDef = await prisma.shiftDefinition.create({ data: { code: `T${process.pid % 1_000_000}`, name: `${TAG} vardiya`, startMinute: 0, durationMinutes: 480 } });
+  rapcShiftDefs.push(fixtureDef.id);
+  const defs = await prisma.shiftDefinition.findMany({ select: { id: true } });
+  {
+    const allIds = defs.map((d) => d.id);
+    const allPar = await durusParetoReport({ ...RAPC_DAYS, shiftDefinitionIds: allIds });
+    const one = (await buildLoomStopsReport({ window: win, shiftDefinitionId: [allIds[0]] })).sunum;
+    const oneSrc = await durusParetoReport({ ...RAPC_DAYS, shiftDefinitionIds: [allIds[0]] });
+    check("§C2c vardiya süzgeci: tüm vardiyalar = süzgeçsiz; tek vardiya = kaynağın aynı süzgeçli değeri",
+      same(allPar.toplam.stopSec, par.toplam.stopSec) && same(one.anaSayi.deger, secondsToMinutes(oneSrc.toplam.stopSec))
+        && JSON.stringify(one.parametreler.find((p) => p.ad === "shiftDefinitionId")?.deger) === JSON.stringify([allIds[0]]));
+  }
+  let notFound = false;
+  try { await buildLoomStopsReport({ window: win, shiftDefinitionId: ["00000000-0000-4000-8000-000000000000"] }); }
+  catch (e) { notFound = (e as { statusCode?: number }).statusCode === 404; }
+  check("§C2d bilinmeyen vardiya 404 (sessiz boş rapor yok)", notFound);
+  check("§C2e en sık sebep = en çok tekrarlanan (süre değil)",
+    mostFrequentReason({ ...par, sebepler: [{ reasonCode: "A", reasonLabel: "Uzun", lossClass: null, stopCount: 1, stopSec: 9000 }, { reasonCode: "B", reasonLabel: "Sık", lossClass: null, stopCount: 5, stopSec: 100 }] })?.reasonCode === "B");
+
+  // §C3 Levent dengesi = Levent Sonucu (ölçülemeyen levent sıfıra çökmez)
+  const synth = beamBalance([{ beklenenKumasM: 100, gercekKumasM: 90 }, { beklenenKumasM: null, gercekKumasM: 50 }]);
+  check("§C3a ⭐ ölçülemeyen levent orana 0 metre olarak GİRMEZ (90/100 = %90; ayrı sayılır)", same(synth.balancePct, 90) && synth.unmeasured === 1 && same(synth.expectedM, 100),
+    JSON.stringify(synth));
+  check("§C3b hepsi ölçülemezse oran null (0 değil)", beamBalance([{ beklenenKumasM: null, gercekKumasM: 50 }]).balancePct === null);
+  await withFlags({ "production.enabled": true, "dokuma.enabled": true, "devere.enabled": true }, async () => {
+    const lev = (await buildBeamBalanceReport({ window: win })).sunum;
+    const src = await beamResultReport(RAPC_DAYS);
+    const bal = beamBalance(src.data.kapananlar);
+    check("§C3c ana = Levent Sonucu satırlarından denge; beklenen = `ozet.beklenenM`; ölçülemeyen = `ozet.olculemedi`",
+      same(lev.anaSayi.deger, bal.balancePct) && same(bal.expectedM, src.data.ozet.beklenenM) && same(fig(lev, "levent.olculemeyen")?.deger, src.data.ozet.olculemedi));
+    check("§C3d boş dönemde ana sayı ölçülemedi (0'a çökmez)", src.data.kapananlar.length > 0 || (lev.anaSayi.deger === null && Boolean(lev.anaSayi.olculemedi)));
+  });
+
+  // §C4 Alacaklar = Cari Yaşlandırma + Çek Vade Takvimi (kesit)
+  const asOf = new Date();
+  const rec = (await buildReceivablesReport(asOf)).sunum;
+  const aging = await getAgingReport({ asOf });
+  const block = mainBlock(aging.blocks);
+  check("§C4a ana sayı = ana bloğun `totals.overdueTotal`ı (yoksa ölçülemedi)",
+    block ? same(rec.anaSayi.deger, Number(block.totals.overdueTotal)) : rec.anaSayi.deger === null && Boolean(rec.anaSayi.olculemedi), show(rec.anaSayi.deger, block?.totals.overdueTotal ?? null));
+  if (block) {
+    const due = (await chequeService.dueSummary()).data!;
+    check("§C4b yan = 30 gün içinde vadesi gelecek ALINAN çek (`months[]`)", same(fig(rec, "cek.yaklasanVade")?.deger, Math.round(receivedChequesDue(due, block.currency) * 100) / 100));
+    check("§C4c kesit kıyası ölçülemedi + ay sonu uyarısı (0'a çökmez)", rec.anaSayi.kiyas?.deger === null && rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES));
+  } else check("§C4c ay sonu uyarısı (blok yok)", rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES));
+  const fakeBlock = (currency: string) => ({ currency, totals: { overdueTotal: "1" } }) as unknown as Parameters<typeof mainBlock>[0][number];
+  check("§C4d para birimleri toplanmaz: TL varsa TL, iki yabancı birimde ana sayı seçilmez",
+    mainBlock([fakeBlock("USD"), fakeBlock("TRY")])?.currency === "TRY" && mainBlock([fakeBlock("USD"), fakeBlock("EUR")]) === null && mainBlock([fakeBlock("EUR")])?.currency === "EUR");
+
+  const banned = [eff, stops, rec].flatMap((s) => yasakSozcukBul(JSON.stringify(s)).map((w) => `${s.anahtar}: ${w}`));
+  check("§C5 sunum metinlerinde yasak sözcük yok", banned.length === 0, banned.join(", ") || "temiz");
+}
+
 async function cleanup(): Promise<void> {
+  if (rapcShiftDefs.length) await prisma.shiftDefinition.deleteMany({ where: { id: { in: rapcShiftDefs } } });
   if (ids.receiptItems.length) await prisma.subcontractorReceiptItem.deleteMany({ where: { id: { in: ids.receiptItems } } });
   if (ids.receipts.length) await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: ids.receipts } } });
   if (ids.dispatchItems.length) await prisma.subcontractorDispatchItem.deleteMany({ where: { id: { in: ids.dispatchItems } } });
@@ -281,6 +445,7 @@ async function main(): Promise<void> {
   console.log("\n=== Temel rapor sayı eşitliği ===");
   try {
     await rapbSection();
+    await rapcSection();
   } finally {
     await cleanup();
   }
