@@ -16,6 +16,7 @@ import { startNotificationConditionScanner, stopNotificationConditionScanner } f
 import { createNudgeCoalescer } from "./nudge-coalescer";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
+import { closeAll as closeAllBells } from "../services/notification-bell-hub";
 
 export const NOTIFICATION_SWEEP_MS = 5_000;
 export const NOTIFICATION_SUPERVISOR_MS = 15_000;
@@ -172,4 +173,14 @@ export function stopNotificationJobs(): void {
   firstTimer = null;
   supervisorTimer = null;
   stopDispatching("kapanış");
+}
+
+/**
+ * Süreç kapanışı (server.ts): işler durur + açık SSE zil akışları biter. Dinleyiciler kapanmadan ÖNCE
+ * çağrılır — açık akış server.close'u bekletir ve 5 sn zorla çıkışa yol açardı (bildirim plan §3.9 tuzak 2).
+ */
+export function shutdownNotifications(): void {
+  stopNotificationJobs();
+  const closed = closeAllBells();
+  if (closed > 0) bilgi("bildirim", `${closed} zil akışı kapatıldı (kapanış)`);
 }

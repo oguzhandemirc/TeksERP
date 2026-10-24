@@ -27,12 +27,12 @@ import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
 import { startErrorReportJob, stopErrorReportJob } from './jobs/error-report.job';
-import { startNotificationJobs, stopNotificationJobs } from './jobs/notification-dispatch.job';
+import { shutdownNotifications, startNotificationJobs } from './jobs/notification-dispatch.job';
 import { recordServerError } from './services/error-report.service';
 import { initLicenseEngine } from './services/license.service';
 import { preloadEncryptedModules } from './lib/license/encrypted-module-router';
 import { AuditService } from './services/audit.service';
-import { flushLatencyNow } from './services/latency-persist.service';
+import { flushTelemetryNow } from './lib/telemetry-write-health';
 import { assertBaseServiceGuards } from './services/base.service';
 import { logProcessWarnings } from './lib/process-warnings';
 import { readWebHardeningConfig, isWebHardeningDeclared, trustProxyHostedRefusal } from './middlewares/web-hardening';
@@ -364,10 +364,10 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     // yakma riski doğardı). `stopMdnsAdvertiser` kendi içinde de 1sn kapı taşır
     // ve asla reject etmez — goodbye paketi gitmezse kapanış yine de ilerler.
     // Zil akışı kesilir, lisans birikimi diske yazılır (senkron, kısa).
-    shutdownPhase = "lisans";
+    shutdownPhase = "lisans + bildirim zili";
     try {
         stopPatronCloudJobs();
-        stopNotificationJobs(); // LISTEN bağlantısı havuz kapanmadan ÖNCE döner
+        shutdownNotifications(); // LISTEN havuza döner; SSE zilleri server.close'dan ÖNCE biter (yoksa 5 sn zorla çıkış)
         stopLicenseDoorbell();
         stopLicensePoll();
     } catch (err) {
@@ -376,7 +376,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     shutdownPhase = "gecikme flush + mDNS";
     void Promise.race([
         Promise.allSettled([
-            flushLatencyNow().catch(() => {}),
+            flushTelemetryNow(),
             stopMdnsAdvertiser(),
             flushLoginLockoutPersistence().catch(() => {}),
             stopErrorReportJob(),

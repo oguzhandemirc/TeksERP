@@ -71,6 +71,12 @@ export const ALWAYS_OPEN_ROUTES: readonly LicenseRouteRule[] = [
 export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   // Kişisel tercih ve iki adımlı doğrulama
   { method: "PUT", path: "/api/auth/preferences", reason: "kişisel tercih; iş verisi değil" },
+  // Bildirim gelen kutusu işaretleri kişiseldir (telemetri, defter değil); okuma uçları GET olarak zaten açık.
+  { method: "POST", path: "/api/bildirim/:id/okundu", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
+  { method: "POST", path: "/api/bildirim/:id/okunmadi", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
+  { method: "POST", path: "/api/bildirim/:id/ertele", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
+  { method: "POST", path: "/api/bildirim/tumunu-okundu", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
+  { method: "POST", path: "/api/bildirim/geri-al-okundu", reason: "kişisel gelen kutusu işareti; iş verisi değil" },
   { method: "POST", path: "/api/admin/users/:id/totp/window", reason: "iki adımlı doğrulama kurulum penceresi — sıfırlanan kullanıcı yeniden kurabilsin (güvenlik)" },
   { method: "POST", path: "/api/devices/announce", reason: "cihaz duyurusu (tablet el sıkışması)" },
   // Yeniden kurulan tableti eski kaydına bağlamak el sıkışmasının devamıdır — fabrika durmasın.
