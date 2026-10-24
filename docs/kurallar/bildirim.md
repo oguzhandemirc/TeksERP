@@ -18,6 +18,7 @@
 - **[ÇEKİRDEK]** Gelen kutusu, outbox ve günlük sayaç TELEMETRİdir (defter değil): `AUDIT_EXEMPT_MODELS`te beyanlı, budama yalnız prune servisinden (okunmuş 90 / okunmamış 180 gün · outbox işlendikten 7 gün · sayaç 35 gün); rapor sayısı bu tablolardan türetilmez.
 - **[ÇEKİRDEK]** "Bu kullanıcı bu türü görür mü" sorusunu yalnız `canSeeNotificationType(user, kind)` cevaplar (izin DNF ∧ modül ∧ ek kapı); dağıtım, gelen kutusu okuması ve tercih ekranı aynı helper'ı çağırır; alıcı kaynakları birleşip bu süzgeçle KESİŞİR, kural yetki genişletmez; izin kaybında tür gizlenir (fail-closed).
 - **[ÇEKİRDEK]** Okunmamış sayısını `SystemLog`dan türetme: audit yalnız ayak izidir; sayı gelen kutusu satırlarından gelir.
+- **[ÇEKİRDEK]** Bildirim tablolarında tekilliği partial unique ile kur — `notification_inbox (userId, groupKey)` ve `notification_conditions (kind, subjectKey)`, ikisi de `WHERE "resolvedAt" IS NULL` (çözülen satır anahtarı bırakır; dağıtıcının `ON CONFLICT` hedefi budur); kapalı kümeleri (`phase` · `klass` · `reason`) VarChar + CHECK yaz, `kind`e CHECK koyma; FK yalnız `notification_inbox.userId → users` (RESTRICT), polimorfik ve budanan bağlar FK'sız. · bekçi: `test_db_invariants`
 
 ### Kararlar
 
