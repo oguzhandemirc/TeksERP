@@ -73,12 +73,13 @@ export function ActivityPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Aktivite Günlüğü"
+        title="Etkinlik"
+        description="Sistemdeki son işlemler; yalnız görüntüleme"
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
             <ListExportMenu
-              name="Aktivite Günlüğü"
+              name="Etkinlik"
               rows={items}
               columns={ACTIVITY_EXPORT_COLUMNS}
               notes={[

@@ -18,12 +18,14 @@
 - **[ÇEKİRDEK]** Gelen kutusu, outbox ve günlük sayaç TELEMETRİdir (defter değil): `AUDIT_EXEMPT_MODELS`te beyanlı, budama yalnız prune servisinden (okunmuş 90 / okunmamış 180 gün · outbox işlendikten 7 gün · sayaç 35 gün); rapor sayısı bu tablolardan türetilmez.
 - **[ÇEKİRDEK]** "Bu kullanıcı bu türü görür mü" sorusunu yalnız `canSeeNotificationType(user, kind)` cevaplar (izin DNF ∧ modül ∧ ek kapı); dağıtım, gelen kutusu okuması ve tercih ekranı aynı helper'ı çağırır; alıcı kaynakları birleşip bu süzgeçle KESİŞİR, kural yetki genişletmez; izin kaybında tür gizlenir (fail-closed).
 - **[ÇEKİRDEK]** Okunmamış sayısını `SystemLog`dan türetme: audit yalnız ayak izidir; sayı gelen kutusu satırlarından gelir.
+- **[ÇEKİRDEK]** Bildirim tablolarında tekilliği partial unique ile kur — `notification_inbox (userId, groupKey)` ve `notification_conditions (kind, subjectKey)`, ikisi de `WHERE "resolvedAt" IS NULL` (çözülen satır anahtarı bırakır; dağıtıcının `ON CONFLICT` hedefi budur); kapalı kümeleri (`phase` · `klass` · `reason`) VarChar + CHECK yaz, `kind`e CHECK koyma; FK yalnız `notification_inbox.userId → users` (RESTRICT), polimorfik ve budanan bağlar FK'sız. · bekçi: `test_db_invariants`
 
 ### Kararlar
 
 - **[ÇEKİRDEK]** `bildirim.gelenKutusuEnabled` bir DAVRANIŞ BAYRAĞIDIR, modül anahtarı değildir (`MODULE_FLAG_KEYS` genişletilmez); varsayılanı `false` (= bugünkü davranış); kapalıyken `emitNotification` no-op, dağıtıcı başlamaz, `/api/bildirim/*` 409 `BILDIRIM_KAPALI` (yalnız `/ozet` 200 `{enabled:false}`).
 - **[ÇEKİRDEK]** Yeni bildirim türü reçeteyle eklenir (`docs/RECETELER.md` § Yeni bildirim türü): katalog satırı → payload beyanı → kaynak (emit ya da koşul kaynağı) → bekçi; migration gerekmez (`kind` kolonunda CHECK yok).
 - **[ÇEKİRDEK]** Gelen kutusu bayrağını kapsam tablosuna koyma (yalnız `admin:settings` yazar; panelde `ADMIN_ONLY_CATEGORY_IDS` beyanlı `bildirim` kategorisi); backend okuyucusu `readNotificationInboxEnabled`, tablet `resolveNotificationInboxEnabled` (yalnız gerçek `true` açar, eski sunucu → kapalı). <sub>(arşiv:2026-10-24)</sub>
+- **[ÇEKİRDEK]** Zil sayısı audit'ten türetilmez; Etkinlik sayfası (`/system/activity`) sayaçsızdır: Topbar'da yalnız rozetsiz "Etkinlik" bağlantısı, görünürlüğü sayfanın kendi `SYSTEM_ACTIVITY_ACCESS` kümesinden; eski "Son Aktivite" zili (`NotificationBell`) kalktı. <sub>(arşiv:2026-10-24)</sub>
 
 ## Bekçiler — bu alana dokununca koş
 
