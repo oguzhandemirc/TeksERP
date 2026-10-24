@@ -55,7 +55,7 @@ function ctx(
     // Çözgü Kartları karosu çizilmemeli.
     devereEnabled: false,
     // Dokuma işi de ETKİN değer (production && dokuma); fabrikada KAPALI.
-    dokumaEnabled: false, tezgahEnabled: false,
+    dokumaEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,

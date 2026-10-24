@@ -633,6 +633,7 @@ async function createFasonShipChild(
       operatorId: true,
       metadata: true,
       machineId: true,
+      propertyValueId: true,
     },
   });
   if (ops.length > 0) {
@@ -644,6 +645,7 @@ async function createFasonShipChild(
         operatorId: op.operatorId,
         machineId: op.machineId,
         metadata: (op.metadata ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+        propertyValueId: op.propertyValueId, // KQ-D4: gramaj mirası
         inheritedFromParentRollId: parent.id,
       })),
       skipDuplicates: true,

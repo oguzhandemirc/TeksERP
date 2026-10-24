@@ -70,6 +70,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, string>> = {
   "devere.enabled": "devereEnabled",
   "dokuma.enabled": "dokumaEnabled",
   "emanet.enabled": "emanetEnabled",
+  "kaliteGuvence.enabled": "kaliteGuvenceEnabled",
   "maliyet.enabled": "maliyetEnabled",
 };
 
@@ -98,6 +99,7 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   // Metin migration damgasıyla BİREBİR kalır (test_module_profile §6b/§6d) — görünen ad değişikliğinin dışında.
   "dokuma.enabled": "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
   "emanet.enabled": "Emanet / konsinye mülkiyet modülü (müşterinin malı: top · levent · iplik lotu; sevk sahiplik kapısı)",
+  "kaliteGuvence.enabled": "Kalite Güvence modülü (4 puan muayene · lab testleri · sertifika takibi)",
   "maliyet.enabled": "Maliyet & Teklif: ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi, iplik ihtiyaç planı",
 };
 

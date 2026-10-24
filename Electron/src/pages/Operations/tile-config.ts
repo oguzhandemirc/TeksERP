@@ -104,6 +104,11 @@ export interface OperationsVisibilityContext {
    */
   tezgahEnabled: boolean;
   /**
+   * KALİTE GÜVENCE modülü (`kaliteGuvence.enabled`, K4P) — zincirsiz (KK1 üretim kapalıyken de
+   * çalışır). Belirsizken FALSE ("sıfır görünür fark"); backend kapısı `requireKaliteGuvenceEnabled`.
+   */
+  kaliteGuvenceEnabled: boolean;
+  /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
    * AÇIKKEN tek "Cariler" karosu, KAPALIYKEN (fabrika) bugünkü Müşteriler +
@@ -161,6 +166,11 @@ export interface OperationsVisibilityContext {
   reportsClosedKeys: readonly string[] | null;
   /** Rapor açık mı — katalogda olmayan anahtar KAPALI, liste okunamadıysa KAPALI. */
   isReportOpen: (key: string) => boolean;
+  /**
+   * `reports.v2Enabled` — Rapor Merkezi + v2 yaprakları. Belirsizken FALSE (bugünkü hub). İsteğe
+   * bağlı alan: bağlamı elle kuran testler/yüzeyler eski davranışta kalır (yokluk = kapalı).
+   */
+  reportsV2Enabled?: boolean;
   /**
    * Bayrak sorgusu SONUÇLANDI mı (başarı YA DA hata). Yüklenmemiş bayrak "kapalı" DEĞİL
    * "bilinmiyor"dur: modül/rapor kapısı bunu okuyup BEKLER — yenilemede (HMR · Cmd+R · ilk

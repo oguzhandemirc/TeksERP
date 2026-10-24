@@ -44,13 +44,16 @@ import {
   QUALITY_STEP_ERROR,
   STEP_QUALITY_SELECT,
   stepCanApplyQuality,
+  KURSUN_PROPERTY_CODE,
 } from "./helpers/quality-station.helper";
 import {
   assertPropertySelectionsValid,
   type PropertySelection,
   copyStationCapabilitiesToRoll,
   loadStationPropertyCaps,
+  resolveKursunApplication,
 } from "./helpers/station-capability-transfer.helper";
+import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
@@ -129,6 +132,8 @@ interface StepSummary {
     /// SEÇİM tipliyse operatöre sunulacak AKTİF değerler (BAYRAK'ta boş).
     /// Tablet tuşlarını BURADAN çizer — kodda sabit liste YOK.
     values: { code: string; name: string }[];
+    /// Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4; çeşit değilse null).
+    variantOfPropertyId: string | null;
   }[];
   /// Bu adıma (Kurşun + KK2) yazılan serbest talimat — WorkOrderStep.notes
   /// (rotadaki RouteStep.defaultNotes'tan WO açılırken kopyalanır). Operatöre
@@ -433,13 +438,10 @@ export class KursunQcService {
     const caps = await loadStationPropertyCaps(prisma, step.stationId);
     assertPropertySelectionsValid(caps, data.properties);
 
-    // KURSUN bu topa yazılacak mı? AUTO ise evet, OPTIONAL/REQUIRED ise ancak
-    // operatör işaretlediyse. Log ile RollProperty aynı karardan beslenir.
-    const selectedSet = new Set((data.properties ?? []).map((p) => p.propertyId));
-    const kursunCap = caps.find((c) => c.code === "KURSUN");
-    const kursunApplied =
-      !!kursunCap &&
-      (kursunCap.mode === StationPropertyMode.AUTO || selectedSet.has(kursunCap.propertyId));
+    // KURSUN bu topa yazılacak mı + hangi gramajla? TEK karar (KQ-D4,
+    // `resolveKursunApplication`): defter satırı ile RollProperty aynı karardan.
+    const kursun = resolveKursunApplication(caps, data.properties);
+    const kursunApplied = kursun.applied;
 
     // F283: Idempotency — op zaten varsa (offline outbox replay: sunucu commit etti
     // ama yanıt istemciye ulaşmadı) upsert no-op'tur. RollOperation append-only
@@ -456,7 +458,7 @@ export class KursunQcService {
       select: { id: true },
     });
 
-    const op = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       // Kurşun bypass: adım fiziksel bir kurşun MAKİNESİNE dağıtılmışsa iş
       // KÂĞITTA yürüyor — tablet KK2 kaydı yazamaz. Guard tx İÇİNDE ve ilk
       // sırada: `existedBefore` / yetenek okumaları tx DIŞINDA yapıldığı
@@ -487,36 +489,29 @@ export class KursunQcService {
         update: {},
       });
 
-      if (kursunApplied) {
-        await tx.rollOperation.upsert({
-          where: {
-            rollId_workOrderStepId_operationType: {
-              rollId: data.rollId,
-              workOrderStepId: data.stepId,
-              operationType: RollOperationType.KURSUN_APPLIED,
-            },
-            ...ACTIVE_OPERATION,
-          },
-          create: {
+      // Gramaj düzeltmesi defteri değiştirmez: eski satır damgalanır, yenisi
+      // yazılır (`applyKursunOperationTx`); aynı değer replay'i no-op.
+      const kursunOutcome = kursunApplied
+        ? await applyKursunOperationTx(tx, {
             rollId: data.rollId,
-            workOrderStepId: data.stepId,
-            operationType: RollOperationType.KURSUN_APPLIED,
-            operatorId: userId ?? null,
+            stepId: data.stepId,
+            valueId: kursun.valueId,
+            userId: userId ?? null,
             machineId: machineId ?? null,
-          },
-          update: {},
-        });
-      }
+          })
+        : "noop";
 
-      await copyStationCapabilitiesToRoll(tx, {
+      const copied = await copyStationCapabilitiesToRoll(tx, {
         stationId: step.stationId,
         rollId: data.rollId,
         selections: data.properties,
         caps,
+        userId: userId ?? null,
       });
 
-      return qc2Op;
+      return { qc2Op, kursunOutcome, propertiesChanged: copied.changed };
     });
+    const op = result.qc2Op;
 
     // F283: yalnız gerçekten yeni oluşturulduysa audit yaz (replay'de mükerrer önlenir).
     if (!existedBefore) {
@@ -530,17 +525,17 @@ export class KursunQcService {
           stepId: data.stepId,
           type: RollOperationType.QC2_COMPLETED,
           kursunApplied,
+          // Basılan gramaj kodu (çeşit bağı yoksa / seçilmediyse null).
+          valueCode: kursun.valueCode,
           // Operatörün elle işaretledikleri — AUTO'lar bu listede olmayabilir.
           selections: data.properties ?? [],
         },
       });
-    } else if (data.properties?.length) {
-      // Op zaten vardı ama operatör SEÇİM göndererek tekrar bastı — meşru
-      // düzeltme yolu: `copyStationCapabilitiesToRoll` → `setRollPropertyValueTx`
-      // eski değeri damgalayıp yeni sürüm satırı yazar (örn. gramaj 25GR → 50GR). Bu dalı sessiz bırakmak, topun
-      // özellik DEĞERİNİN kayıtsız değişmesi demekti (denetim F2). Aynı
-      // seçimlerin no-op replay'i de bu audit'i yazar — kabul edilen bedel:
-      // fazladan bir UPDATE satırı, kaybolan bir düzeltme izinden iyidir.
+    } else if (result.kursunOutcome !== "noop" || result.propertiesChanged) {
+      // Op zaten vardı ve operatör FARKLI seçimle tekrar bastı — meşru düzeltme
+      // yolu (gramaj 25GR → 50GR: defter satırı damga + yeni satır, RollProperty
+      // sürüm). Sessiz bırakmak değerin kayıtsız değişmesi demekti (denetim F2).
+      // KQ-D4: aynı seçimin replay'i artık audit YAZMAZ — değişim ölçülüyor.
       await AuditService.log({
         userId,
         action: "UPDATE",
@@ -551,6 +546,8 @@ export class KursunQcService {
           stepId: data.stepId,
           type: RollOperationType.QC2_COMPLETED,
           reappliedSelections: data.properties,
+          kursunOutcome: result.kursunOutcome,
+          valueCode: kursun.valueCode,
         },
       });
     }
@@ -1545,7 +1542,7 @@ export class KursunQcService {
         // Eski APK sözleşmesi — KORUNUYOR. Mod modelinde "istasyon kurşun
         // uygulayabilir mi" ile "bu topa uygulanacak mı" ayrıştı; bu alan
         // BİRİNCİYİ söyler (eskiden de öyleydi).
-        appliesKursun: stationCaps.some((c) => c.code === "KURSUN"),
+        appliesKursun: stationCaps.some((c) => c.code === KURSUN_PROPERTY_CODE),
         // Yeni: mod güdümlü ekran çizimi. Eski APK bu alanı yok sayar.
         properties: stationCaps.map((c) => ({
           propertyId: c.propertyId,
@@ -1554,6 +1551,8 @@ export class KursunQcService {
           mode: c.mode,
           valueType: c.valueType,
           values: c.values.map((v) => ({ code: v.code, name: v.name })),
+          // KQ-D4: bu SEÇİM hangi BAYRAĞIN çeşidi (gramaj → Kurşunlu). Eski APK yok sayar.
+          variantOfPropertyId: c.variantOfPropertyId,
         })),
         stepNote: step.notes,
         bypassAssignment: bypass

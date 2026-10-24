@@ -152,7 +152,11 @@ async function main() {
     // ölçer. Bayrak kapalı rejimde PENDING sayacı hiç artmaz → tek tavan yetmez.
     const src = readFileSync(path.join(__dirname, "../src/services/device.service.ts"), "utf8");
     check("§7 PENDING tavanı duruyor", /pendingCount >= MAX_PENDING_DEVICES/.test(src) && src.includes("PENDING_DEVICE_LIMIT"));
-    check("§7b toplam satır tavanı eklendi", /totalCount >= MAX_DEVICE_ROWS/.test(src) && src.includes("DEVICE_LIMIT"));
+    // Eşleme v2 (D1): toplam tavan aktif sayımla kimlik helper'ında; doğuş yolu onu çağırır.
+    const helperSrc = readFileSync(path.join(__dirname, "../src/services/helpers/device-identity.helper.ts"), "utf8");
+    check("§7b toplam satır tavanı eklendi",
+      /countSeatDevices\(db\)\) >= MAX_DEVICE_ROWS/.test(helperSrc) && helperSrc.includes("DEVICE_LIMIT")
+        && /assertDeviceRowCapacity\(prisma\)/.test(src));
     check(
       "§7c toplam tavan REJİMDEN BAĞIMSIZ (pairingRequired dalının DIŞINDA)",
       src.indexOf("totalCount >= MAX_DEVICE_ROWS") < src.indexOf("if (pairingRequired) {"),
