@@ -890,7 +890,21 @@ export interface KursunStepSummary {
     /** SEÇİM tipliyse operatöre sunulacak AKTİF değerler. Tuşlar BURADAN
      *  çizilir — kodda sabit liste YOK (25GR/50GR/75GR panelden tanımlanır). */
     values?: { code: string; name: string }[];
+    /** Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4; gramaj → Kurşun). Eski backend göndermez. */
+    variantOfPropertyId?: string | null;
   }[];
+  /** Adım istasyonu muayene (hata girişi) yapar mı (KQ-D3). Eski backend
+   *  göndermez → undefined → hata paneli bugünkü gibi çizilir. */
+  inspectionEnabled?: boolean;
+  /** Sonraki (atlanmamış) adımın istasyon adı — "Toplar X'e" metni (KQ-D3). */
+  nextStepName?: string | null;
+  /** Adımda açık top yoksa neden + topların şu anki istasyonu (KQ-D3). Hata
+   *  değil BİLGİ durumudur; tablet `message`'ı basar. */
+  emptyStep?: {
+    code: 'NOT_ARRIVED' | 'PASSED' | 'NO_ACTIVE_ROLLS';
+    message: string;
+    currentStations: string[];
+  } | null;
   /** Bu adıma yazılan not (WorkOrderStep.notes; rotada KK2 istasyonuna özel
    *  talimat) — kart açıkken üstte gösterilir. */
   stepNote?: string | null;

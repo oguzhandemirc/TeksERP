@@ -163,7 +163,23 @@ interface StepSummary {
    * fonksiyondan beslenir ki ekran ile red sebebi ayrışmasın.
    */
   tabletReadOnly: { reason: string } | null;
+  /// Adım istasyonu MUAYENE yapar mı (KQ-D3; kalite ikizi `stepCanApplyQuality`).
+  /// Tablet hata panelini buradan çizer; eski APK yok sayar (paneli hep çizer,
+  /// kapalı istasyonda yazma 400 alır).
+  inspectionEnabled: boolean;
+  /// Atlanmamış sonraki adımın istasyon adı ("Adımı Kapat — Toplar X'e"); son adımsa null.
+  nextStepName: string | null;
+  /// Adımda açık top yoksa NEDEN boş + topların şu anki istasyonu (KQ-D3, D2 kararı):
+  /// tablet bunu hata değil bilgi olarak gösterir. Açık top varsa ya da adım bittiyse null.
+  emptyStep: EmptyStepInfo | null;
   rolls: RollSummary[];
+}
+
+interface EmptyStepInfo {
+  code: "NOT_ARRIVED" | "PASSED" | "NO_ACTIVE_ROLLS";
+  message: string;
+  /// Topların bulunduğu istasyon adları (sıralı; "KK Masa 2 (3 rulo)" değil, salt ad).
+  currentStations: string[];
 }
 
 export interface KursunQueueItem {
@@ -1485,6 +1501,18 @@ export class KursunQcService {
       }),
     ]);
 
+    // Sonraki adım: atlanmamış ilk büyük sıra (rota sırası stepSequence'tır).
+    const nextStep = await prisma.workOrderStep.findFirst({
+      where: {
+        workOrderId: step.workOrderId,
+        stepSequence: { gt: step.stepSequence },
+        status: { not: StepStatus.SKIPPED },
+      },
+      orderBy: { stepSequence: "asc" },
+      select: { station: { select: { name: true } } },
+    });
+    const nextStepName = nextStep?.station.name ?? null;
+
     const qc2DoneSet = new Set(qc2Ops.map((o) => o.rollId));
     const defectsByRoll = new Map<string, RollDefectSummary[]>();
     for (const e of errors) {
@@ -1548,8 +1576,50 @@ export class KursunQcService {
           stepId,
           bypass?.machine.name ?? null,
         ),
+        inspectionEnabled: stepCanApplyQuality(step.station),
+        nextStepName,
+        emptyStep:
+          rolls.length === 0 && step.status !== StepStatus.COMPLETED
+            ? await this.describeEmptyStep(step.workOrderId, step.stepSequence)
+            : null,
         rolls,
       },
+    };
+  }
+
+  /**
+   * Boş adım bilgisi: İE'nin topları şu an hangi akış dışı/içi adımda? Önceki bir
+   * adımdaysa "henüz gelmedi", sonrakindeyse "geçti". Salt okuma, tx dışı.
+   */
+  private async describeEmptyStep(
+    workOrderId: string,
+    stepSequence: number,
+  ): Promise<EmptyStepInfo> {
+    const holders = await prisma.workOrderStep.findMany({
+      where: { workOrderId, currentRolls: { some: {} } },
+      select: { stepSequence: true, station: { select: { name: true } } },
+      orderBy: { stepSequence: "asc" },
+    });
+    const currentStations = holders.map((h) => h.station.name);
+    const where = currentStations.join(", ");
+    if (holders.some((h) => h.stepSequence < stepSequence)) {
+      return {
+        code: "NOT_ARRIVED",
+        message: `Bu top henüz bu istasyona gelmedi — şu an: ${where}`,
+        currentStations,
+      };
+    }
+    if (holders.length > 0) {
+      return {
+        code: "PASSED",
+        message: `Bu kartın topları bu istasyonu geçti — şu an: ${where}`,
+        currentStations,
+      };
+    }
+    return {
+      code: "NO_ACTIVE_ROLLS",
+      message: "Bu kartın şu an hiçbir istasyonda açık topu yok.",
+      currentStations,
     };
   }
 
