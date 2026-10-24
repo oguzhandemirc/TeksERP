@@ -38,6 +38,11 @@ const api: ApiBridge = {
     tlsPins: () => ipcRenderer.invoke("discovery:tlsPins"),
     lanHosts: () => ipcRenderer.invoke("discovery:lanHosts"),
   },
+  deviceIdentity: {
+    describe: () => ipcRenderer.invoke("device-identity:describe"),
+    readLocalId: () => ipcRenderer.invoke("device-identity:read-local-id"),
+    createLocalId: (value: string) => ipcRenderer.invoke("device-identity:create-local-id", value),
+  },
   appInfo: {
     version: () => ipcRenderer.invoke("app:version"),
     platform: () => process.platform as AppPlatform,
