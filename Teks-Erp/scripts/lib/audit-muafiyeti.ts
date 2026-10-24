@@ -54,6 +54,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "cihaz bağlama DEFTERİ — tek yazar `helpers/device-identity.helper.ts#writeBindingEventTx`; audit'i çağıran eylem basar (announce doğuşu · yeniden bağlama · talep · red · revoke · kalıcı silme, `device.service`/`device-rebind.service`)" },
   { model: "ShipmentEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "sevkiyat olay defteri satırını `helpers/shipment-event.helper` yazar; audit sevk eyleminde (`shipping.service`)" },
+  // e-İrsaliye `EIrsaliyeXml` · `EIrsaliyeEvent` (E1-SEMA şeması): CUD yolu henüz YOK ⇒ satır
+  // §3 "ölü muafiyet" olur. EBEVEYN_EYLEMDE satırları yazıcıyla (E5) AYNI commit'te girer.
   { model: "WorkOrderCloseSnapshot", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "kapanış künyesini `helpers/workorder-close-snapshot.helper` COMPLETED claim'iyle aynı tx'te yazar; audit kapanışı yapan eylemde (elle Kapat · tambur/fason/kurşun son adım)" },
   { model: "WorkOrderEvent", sinif: "EBEVEYN_EYLEMDE",
