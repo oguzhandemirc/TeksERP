@@ -32,7 +32,7 @@ import { recordServerError } from './services/error-report.service';
 import { initLicenseEngine } from './services/license.service';
 import { preloadEncryptedModules } from './lib/license/encrypted-module-router';
 import { AuditService } from './services/audit.service';
-import { flushLatencyNow } from './services/latency-persist.service';
+import { flushTelemetryNow } from './lib/telemetry-write-health';
 import { assertBaseServiceGuards } from './services/base.service';
 import { logProcessWarnings } from './lib/process-warnings';
 import { readWebHardeningConfig, isWebHardeningDeclared, trustProxyHostedRefusal } from './middlewares/web-hardening';
@@ -376,7 +376,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     shutdownPhase = "gecikme flush + mDNS";
     void Promise.race([
         Promise.allSettled([
-            flushLatencyNow().catch(() => {}),
+            flushTelemetryNow(),
             stopMdnsAdvertiser(),
             flushLoginLockoutPersistence().catch(() => {}),
             stopErrorReportJob(),

@@ -562,6 +562,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `((status)::text = 'HATA'::text)`,
     why: "yazdırma geçmişinde hata süzgeci ve özet şeridinin hata sayımı tüm telemetriyi taramasın",
   },
+  // request_traces (izlenebilirlik B1, migration 20261024091047): "reddedilen istekler" süzgeci yalnız hata satırlarını tarar.
+  {
+    table: "request_traces",
+    index: "request_traces_hata_createdAt_idx",
+    uniq: false,
+    predicate: `(status >= 400)`,
+    why: "istek başlığında reddedilen istek süzgeci tüm telemetriyi taramasın",
+  },
   // Bildirim çekirdeği (N1-SEMA, migration 20261024023840): dağıtıcının birleştirme hedefi ve koşul açma seddi.
   {
     table: "notification_inbox",

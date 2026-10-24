@@ -177,6 +177,8 @@ for (const okuyucu of okuyucular) {
 const ETIKET_OKUYUCULARI = new Map<string, string>([
   ["services/helpers/print-job-context.helper.ts",
    "basım satırının cihaz/kaynak/sürüm etiketi — yalnız `PrintJobRequestContext` nesnesine konur"],
+  ["middlewares/request-trace.middleware.ts",
+   "istek künyesi satırının kurulum/tür/sürüm etiketi (izlenebilirlik B1) — yalnız `recordTrace` kaydına konur"],
 ]);
 const etiketOkuyuculari: string[] = [];
 for (const file of walk(SRC)) {

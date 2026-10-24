@@ -1233,6 +1233,7 @@ model Device {
   bindingEvents  DeviceBindingEvent[]
   rebindRequests DeviceRebindRequest[]
   printJobs      PrintJob[]            @relation("PrintJobDevice")
+  requestTraces  RequestTrace[]        @relation("RequestTraceDevice")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -11775,6 +11776,43 @@ model PrintJob {
   @@index([subjectTable, subjectId])
   @@index([subjectIds], map: "print_jobs_subjectIds_gin", type: Gin)
   @@map("print_jobs")
+}
+
+/// İSTEK BAŞLIĞI (izlenebilirlik B1, `docs/design/IZLENEBILIRLIK-CIHAZ-PLAN.md` §4.1) — TELEMETRİ: "kim hangi uca ne
+/// attı" sorusunun künyesi; hiçbir karar/sayı türetilmez, `requestTrace.retentionDays` (varsayılan 90) yaşında budanır.
+/// GÖVDE, sorgu dizesi, başlık değeri SAKLANMAZ (PIN/parola/ayar şifresi). Yazan · okuyan · budayan TEK dosya
+/// `src/services/request-trace.service.ts` (bekçi `test_request_trace`). Şema dışı: kısmi `(createdAt) WHERE status >= 400`.
+model RequestTrace {
+  /// = ALS istek kimliği (`lib/request-context.ts`); audit `system_logs.requestId` ile aynı değer — bu yüzden
+  /// `@default` YOK: kimliği istek bağlamı üretir, tablo değil.
+  id            String   @id @db.Uuid
+  /// Token'dan çözülen kullanıcı (künye; FK değil — telemetri kullanıcı yaşam döngüsünü bağlamaz).
+  userId        String?  @db.Uuid
+  /// Tablet `x-device-id` → `req.device`; panel `X-Client-Instance` → `devices.deviceId`. Yalnız GÖRÜNTÜ.
+  deviceRefId   String?  @db.Uuid
+  deviceLocalId String?  @db.VarChar(64)
+  clientType    String?  @db.VarChar(16)
+  appVersion    String?  @db.VarChar(32)
+  ip            String?  @db.VarChar(64)
+  method        String   @db.VarChar(8)
+  /// Normalleştirilmiş uç kalıbı (`normalizeKeyPath`): UUID/sayı/opak segment `:id` olur, değer sızmaz.
+  routeKey      String   @db.VarChar(160)
+  status        Int      @db.SmallInt
+  durationMs    Int
+  /// Hata yanıtının `details.code`u (gövdenin kendisi değil).
+  errorCode     String?  @db.VarChar(60)
+  /// Bu istekte yazılan audit satırı sayısı (`AuditService` sayacı).
+  auditCount    Int      @default(0)
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  updatedAt     DateTime @updatedAt @db.Timestamptz
+
+  device Device? @relation("RequestTraceDevice", fields: [deviceRefId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  /// FK SetNull taraması (cihaz silme) tüm telemetriyi gezmesin; cihaz süzgeci de bunu kullanır.
+  @@index([deviceRefId, createdAt])
+  @@map("request_traces")
 }
 
 // =============================================================================

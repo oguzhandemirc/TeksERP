@@ -591,6 +591,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     kararUfku: "YOK — iptal guard'ı labelPrintedAt okur; print_jobs hiçbir karara girmez. Budama yalnız YAŞA bağlıdır (`printLog.retentionDays`, varsayılan 180 gün, 0 = budama yok)",
     silen: ["src/services/print-job.service.ts"] },
 
+  // İstek başlığı (izlenebilirlik B1): "kim hangi uca ne attı" — gövdesiz künye.
+  { model: "RequestTrace", sinif: "TELEMETRI",
+    gerekce: "istek künyesi telemetrisi (yöntem · uç · durum · süre · cihaz · audit sayısı); tek yazar/okuyucu `src/services/request-trace.service.ts`, hiçbir rapor sayısı ya da iş kararı bu tablodan okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
+    kararUfku: "YOK — yalnız görüntü; hiçbir karar/sayı türetilmez. Budama yalnız YAŞA bağlıdır (`requestTrace.retentionDays`, varsayılan 90 gün, 0 = budama yok)",
+    silen: ["src/services/request-trace.service.ts"] },
+
   // Patron bulutu eşitlemesi (B1): satırı uygulama kodu DEĞİL silme/ayrılma tetikleyicileri yazar.
   { model: "SyncMark", sinif: "TELEMETRI",
     gerekce: "patron bulutu eşitleme işareti (SILINDI/KIRLI) — yalnız \"bu kökü buluta yeniden gönder\" der; tek okuyucusu eşitleme taramasıdır (src/cloud-sync/change-scan.ts), hiçbir rapor/ekran/karar okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
