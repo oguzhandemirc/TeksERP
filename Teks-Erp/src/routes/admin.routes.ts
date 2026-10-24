@@ -1626,7 +1626,7 @@ router.put(
           { code: "SETTING_KEY_RESERVED", key },
         );
       }
-      // ⚠️ KÜME `SUPERADMIN_ONLY_SETTING_KEYS` (dokuz modül + `reports.closedKeys`):
+      // ⚠️ KÜME `SUPERADMIN_ONLY_SETTING_KEYS` (bütün modül anahtarları + `reports.closedKeys`):
       // ham ayar ucu ikinci bir yazma yüzeyi açamaz, yoksa `flagWriteGuard`ın süperadmin
       // dalı buradan dolanılırdı (Raporlar K3/K7).
       if (SUPERADMIN_ONLY_SETTING_KEYS.has(key)) {

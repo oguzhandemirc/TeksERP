@@ -29,6 +29,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { stepCanApplyQuality, stepRunsStepFlow } from "./helpers/quality-station.helper";
+import { assertVariantParentsBound } from "./helpers/property-variant.helper";
 
 export interface StationCapabilityDto {
   stationId: string;
@@ -71,6 +72,8 @@ export interface StationCapabilityProperty {
   mode: StationPropertyMode;
   /** SEÇİM tipliyse izin verilen değerler (BAYRAK'ta boş dizi). */
   values: { code: string; name: string; isActive: boolean }[];
+  /** Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4: gramaj → Kurşunlu); değilse null. */
+  variantOfPropertyId: string | null;
 }
 
 /**
@@ -87,6 +90,7 @@ const CAPABILITY_PROPERTY_SELECT = {
   category: true,
   valueType: true,
   isActive: true,
+  variantOfPropertyId: true,
   values: {
     select: { code: true, name: true, isActive: true },
     orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
@@ -106,6 +110,7 @@ function toCapabilityProperty(row: {
     category: string | null;
     valueType: FabricPropertyValueType;
     values: { code: string; name: string; isActive: boolean }[];
+    variantOfPropertyId: string | null;
   };
 }): StationCapabilityProperty {
   return {
@@ -116,6 +121,7 @@ function toCapabilityProperty(row: {
     valueType: row.property.valueType,
     mode: row.mode,
     values: row.property.values,
+    variantOfPropertyId: row.property.variantOfPropertyId,
   };
 }
 
@@ -373,6 +379,10 @@ export class StationCapabilityService {
         );
       }
     }
+
+    // ÇEŞİT (KQ-D4): çeşit ("Kurşun gramajı") ana bayrağı ("Kurşunlu") aynı
+    // istasyonda yokken eklenemez — gramaj basılır ama kurşun türeyemezdi.
+    await assertVariantParentsBound([{ stationId, propertyIds: targetIds }]);
 
     // Eski snapshot — audit için (mod dahil: değişikliğin izi kaybolmasın)
     const [oldColors, oldProperties] = await Promise.all([

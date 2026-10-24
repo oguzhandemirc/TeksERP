@@ -169,7 +169,16 @@ function statik() {
     return i < 0 ? "" : auth.slice(i, j < 0 ? undefined : j);
   };
   for (const [ad, via] of [["loginWithCard", "card"], ["loginWithQuickPin", "quick-pin"], ["login", "password"]] as const) {
-    const g = govde(ad);
+    let g = govde(ad);
+    // D1: parolalı giriş doğrulamayı ortak `authenticatePassword`e devreder (yerinde onayla aynı doğrulayıcı);
+    // kapı o gövdede aranır, devir çağrısı issueToken'dan ÖNCE olmalı.
+    const devir = g.indexOf("this.authenticatePassword(");
+    if (ad === "login" && devir >= 0) {
+      const i = auth.indexOf("private static async authenticatePassword(");
+      const j = auth.slice(i + 1).search(/\n {2}(private )?static async /);
+      const yardimci = i < 0 ? "" : auth.slice(i, j < 0 ? undefined : i + 1 + j);
+      g = g.slice(0, devir) + (yardimci.search(new RegExp(`assertSecondFactor\\([^)]*"${via}"\\)`)) >= 0 ? `assertSecondFactor(x, "${via}")` : "") + g.slice(devir);
+    }
     const k = g.search(new RegExp(`assertSecondFactor\\([^)]*"${via}"\\)`));
     const t = g.indexOf("this.issueToken(");
     check(`§5a ${ad}: assertSecondFactor(…, "${via}") issueToken'dan ÖNCE`, g !== "" && k >= 0 && t > k, `kapı=${k} token=${t}`);

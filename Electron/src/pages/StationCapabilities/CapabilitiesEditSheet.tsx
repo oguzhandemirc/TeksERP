@@ -90,6 +90,10 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
     return propertyIds.map((id) => {
       const known = byId.get(id);
       const cat = all.find((p) => p.id === id);
+      const parentId = known?.variantOfPropertyId ?? cat?.variantOfPropertyId ?? null;
+      const parentName = parentId
+        ? (all.find((p) => p.id === parentId)?.name ?? byId.get(parentId)?.name ?? null)
+        : null;
       return {
         id,
         name: known?.name ?? cat?.name ?? id,
@@ -100,6 +104,8 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
         // değer yoktur — backend de 400 ile reddeder, buradaki kilit sadece
         // hatayı Kaydet'e bırakmamak için).
         valueType: known?.valueType ?? cat?.valueType ?? "FLAG",
+        // Çeşit ibaresi: ana bayrak da bu istasyonda olmalı (backend 400 verir).
+        variantOfName: parentName,
       };
     });
   }, [propertyIds, modes, detail.data, propsQuery.data]);
@@ -208,6 +214,11 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
                   <div key={row.id} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-sm" title={row.name}>
                       {row.name}
+                      {row.variantOfName && (
+                        <span className="ml-1 text-[11px] text-muted-foreground">
+                          ({row.variantOfName} çeşidi)
+                        </span>
+                      )}
                       {row.isNew && (
                         <span className="ml-1 text-[10px] text-muted-foreground">(yeni)</span>
                       )}
