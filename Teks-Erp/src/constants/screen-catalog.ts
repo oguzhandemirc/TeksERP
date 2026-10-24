@@ -163,6 +163,8 @@ const CAP_LABEL: Record<string, string> = {
   "station:read": "İstasyon görebilir",
   "report:sales": "Satış raporu görebilir",
   "document-template:write": "Belge tasarımını değiştirebilir",
+  "document-template:design": "Belge tasarımcısında şablon tasarlayabilir",
+  "document-template:publish": "Belge tasarımcısında şablon yayınlayabilir",
   "settings:workstation": "Bu bilgisayarın donanım ayarlarını değiştirebilir",
   "system:backups": "Yedek alabilir",
   "license:manage": "Lisansı etkinleştirip taşıyabilir, proxy ayarlayabilir",
@@ -316,10 +318,10 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // `requireAnyPermission={DOCUMENT_DESIGN_READ}` gibi SABİT REFERANSLA
   // korunuyorlar (satır içi dizi değil). Yeni bir sabit-referanslı route
   // eklenirse test kırmızı verir.
-  { key: "definitions/document-templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
+  { key: "definitions/document-templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)

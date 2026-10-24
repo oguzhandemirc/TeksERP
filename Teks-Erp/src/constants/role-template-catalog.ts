@@ -291,6 +291,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
     codes: [
       "document-template:read",
       "document-template:write",
+      "document-template:design",
+      "document-template:publish",
       "label-template:read",
       "label-template:write",
       "label:read",

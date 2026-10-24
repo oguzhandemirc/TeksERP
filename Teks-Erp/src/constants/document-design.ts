@@ -38,10 +38,18 @@ export const DOCUMENT_DESIGN_READ = [
   "admin:settings",
   "document-template:read",
   "document-template:write",
+  "document-template:design",
+  "document-template:publish",
 ];
 
 /** Belge tasarımını DEĞİŞTİRMEK (kaydet/sil/varsayılan yap) için yeterli izinler. */
 export const DOCUMENT_DESIGN_WRITE = ["admin:settings", "document-template:write"];
+
+/** Belge tasarımcısı: şablon oluştur/düzenle/sürüm kaydet/arşivle/ata (plan P-a). */
+export const DOCUMENT_TEMPLATE_DESIGN = ["admin:settings", "document-template:design"];
+
+/** Belge tasarımcısı: sürüm yayınla — tasarımdan ayrı (SoD, plan P-b). */
+export const DOCUMENT_TEMPLATE_PUBLISH = ["admin:settings", "document-template:publish"];
 
 /**
  * `PATCH /api/feature-flags` gövdesinde belge tasarım yüzeyine AİT anahtarlar.
