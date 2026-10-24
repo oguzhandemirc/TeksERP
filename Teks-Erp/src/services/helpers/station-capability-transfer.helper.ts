@@ -25,12 +25,20 @@
 //
 // Seçim gönderilmezse davranış = "yalnız AUTO" — yani eski istemci (APK) yeni
 // backend'e karşı bugünkü sonucu üretmeye devam eder.
+//
+// ⚠️ 2026-10-24 (KQ-D4) — ÇEŞİT SÖZLEŞMESİ. SEÇİM özelliği bir BAYRAĞIN çeşidi
+// olabilir (`variantOfPropertyId`: "Kurşun gramajı" → "Kurşunlu"). Çeşit değeri
+// basılınca bayrak HER ZAMAN uygulanır; "bayrak uygulandı mı + hangi değerle"
+// kararı TEK fonksiyondadır (`resolveProcessApplications`) — defter satırı
+// (KURSUN_APPLIED) ile topun özelliği (RollProperty) aynı karardan beslenir.
+// Çeşit bağı olmayan kurulumda karar bugünküyle birebir aynıdır.
 // =============================================================================
 
 import { FabricPropertyValueType, StationPropertyMode } from "@prisma/client";
 import type { TxClient } from "./roll-step.helper";
 import { AppError } from "../../utils/app-error";
 import { setRollPropertyValueTx } from "./property-revoke.helper";
+import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
 
 /** İstasyona bağlı bir özellik + modu + (SEÇİM ise) izin verilen değerleri. */
 export interface StationPropertyCap {
@@ -41,6 +49,21 @@ export interface StationPropertyCap {
   valueType: FabricPropertyValueType;
   /** SEÇİM tipliyse AKTİF değerler (BAYRAK'ta boş dizi). */
   values: { id: string; code: string; name: string }[];
+  /** Bu SEÇİM özelliği hangi BAYRAĞIN çeşidi? (KQ-D4; çeşit değilse null) */
+  variantOfPropertyId: string | null;
+  /**
+   * PASİF değerler — operatöre SUNULMAZ ama çeşit özelliğinde KABUL edilir
+   * (V9: çevrimdışı kuyrukta basıldığı an aktifti). Çeşit olmayan SEÇİM'de
+   * bugünkü gibi reddedilir.
+   */
+  retiredValues: { id: string; code: string; name: string }[];
+}
+
+/** Bayrak başına tek karar: uygulanıyor mu, hangi çeşit değeriyle? */
+export interface ProcessApplication {
+  flagPropertyId: string;
+  applied: boolean;
+  valueId: string | null;
 }
 
 /**
@@ -68,11 +91,11 @@ export async function loadStationPropertyCaps(
           name: true,
           sortOrder: true,
           valueType: true,
-          // Yalnız AKTİF değerler: pasif değer yeni seçimde sunulmaz (ama
-          // geçmiş kayıtlarda durmaya devam eder).
+          variantOfPropertyId: true,
+          // Pasif değer yeni seçimde SUNULMAZ (aşağıda `values`'tan ayrılır) ama
+          // çeşit özelliğinde kabul edilir (V9) — o yüzden hepsi okunur.
           values: {
-            where: { isActive: true },
-            select: { id: true, code: true, name: true },
+            select: { id: true, code: true, name: true, isActive: true },
             orderBy: [{ sortOrder: "asc" }, { code: "asc" }],
           },
         },
@@ -86,8 +109,27 @@ export async function loadStationPropertyCaps(
     code: r.property.code,
     name: r.property.name,
     valueType: r.property.valueType,
-    values: r.property.values,
+    values: r.property.values.filter((v) => v.isActive).map(({ id, code, name }) => ({ id, code, name })),
+    variantOfPropertyId: r.property.variantOfPropertyId,
+    retiredValues: r.property.values
+      .filter((v) => !v.isActive)
+      .map(({ id, code, name }) => ({ id, code, name })),
   }));
+}
+
+/**
+ * Seçilen kodun değer satırı. Karşılaştırma locale-BAĞIMSIZ upper ile (kod
+ * kimliktir; Türkçe upper "i"yi "İ" yapar — 2026-08-02 etiket dersi). Pasif
+ * değer YALNIZ çeşit özelliğinde bulunur (V9); başka her yerde bugünkü gibi yok.
+ */
+function findCapValue(
+  cap: StationPropertyCap,
+  wanted: string,
+): { id: string; code: string; name: string } | undefined {
+  const key = wanted.toUpperCase();
+  const hit = cap.values.find((v) => v.code.toUpperCase() === key);
+  if (hit || cap.variantOfPropertyId === null) return hit;
+  return cap.retiredValues.find((v) => v.code.toUpperCase() === key);
 }
 
 /** Seçim listesini `propertyId → seçim` haritasına indirger (son yazan kazanır). */
@@ -145,9 +187,7 @@ export function assertPropertySelectionsValid(
           { code: "PROPERTY_VALUE_REQUIRED", propertyId },
         );
       }
-      // Karşılaştırma locale-BAĞIMSIZ upper ile (kod kimliktir; Türkçe upper
-      // "i"yi "İ" yapıp eşleşmeyi sessizce bozar — 2026-08-02 etiket dersi).
-      const hit = cap.values.find((v) => v.code.toUpperCase() === wanted.toUpperCase());
+      const hit = findCapValue(cap, wanted);
       if (!hit) {
         throw AppError.badRequest(
           `'${wanted}' değeri '${cap.name}' için tanımlı değil. Geçerli değerler: ` +
@@ -163,6 +203,73 @@ export function assertPropertySelectionsValid(
       );
     }
   }
+}
+
+/**
+ * ÇEKİRDEK karar (atmaz): her BAYRAK için uygulanıyor mu + çeşit değeri.
+ *   • AUTO bayrak uygulanır
+ *   • OPTIONAL/REQUIRED bayrak operatör seçtiyse uygulanır
+ *   • çeşit değeri seçildiyse bayrak HER ZAMAN uygulanır, `valueId` = o değer
+ * Operatörsüz yol (bypass kapanışı) da buradan geçer — zorunluluk BURADA değil.
+ */
+function decideApplications(
+  caps: StationPropertyCap[],
+  selections: PropertySelection[] | null | undefined,
+): ProcessApplication[] {
+  const picked = toSelectionMap(selections);
+  return caps
+    .filter((c) => c.valueType === FabricPropertyValueType.FLAG)
+    .map((flag) => {
+      const variant = caps.find((c) => c.variantOfPropertyId === flag.propertyId);
+      const wanted = variant ? (picked.get(variant.propertyId)?.valueCode ?? "").trim() : "";
+      const value = variant && wanted ? findCapValue(variant, wanted) : undefined;
+      const applied =
+        flag.mode === StationPropertyMode.AUTO || picked.has(flag.propertyId) || value !== undefined;
+      return { flagPropertyId: flag.propertyId, applied, valueId: value?.id ?? null };
+    });
+}
+
+/**
+ * OPERATÖR YOLUNUN tek kararı (completeQc2 · kursunFinish). Çekirdeğe ek kural:
+ * çeşit REQUIRED ise ve bayrak uygulanıyorsa değer ZORUNLUDUR (400, ADIYLA).
+ */
+export function resolveProcessApplications(
+  caps: StationPropertyCap[],
+  selections: PropertySelection[] | null | undefined,
+): ProcessApplication[] {
+  const apps = decideApplications(caps, selections);
+  for (const a of apps) {
+    const variant = caps.find((c) => c.variantOfPropertyId === a.flagPropertyId);
+    if (a.applied && a.valueId === null && variant?.mode === StationPropertyMode.REQUIRED) {
+      throw AppError.badRequest(
+        `'${variant.name}' için bir değer seçilmeli ` +
+          `(${variant.values.map((v) => v.name).join(" / ") || "tanımlı değer yok"}).`,
+        { code: "PROPERTY_VALUE_REQUIRED", propertyId: variant.propertyId },
+      );
+    }
+  }
+  return apps;
+}
+
+/**
+ * KURŞUN kararı — `KURSUN_APPLIED` defter satırı bundan yazılır. `"KURSUN"`
+ * literali yalnız `KURSUN_PROPERTY_CODE`ta (AST bekçisi `test_kursun_gramaj §9`).
+ * İstasyonda kurşun yoksa `applied=false`.
+ */
+export function resolveKursunApplication(
+  caps: StationPropertyCap[],
+  selections: PropertySelection[] | null | undefined,
+): { applied: boolean; valueId: string | null; valueCode: string | null } {
+  const kursun = caps.find((c) => c.code === KURSUN_PROPERTY_CODE);
+  const app = kursun
+    ? resolveProcessApplications(caps, selections).find((a) => a.flagPropertyId === kursun.propertyId)
+    : undefined;
+  if (!kursun || !app?.applied) return { applied: false, valueId: null, valueCode: null };
+  const variant = caps.find((c) => c.variantOfPropertyId === kursun.propertyId);
+  const value = variant
+    ? [...variant.values, ...variant.retiredValues].find((v) => v.id === app.valueId)
+    : undefined;
+  return { applied: true, valueId: app.valueId, valueCode: value?.code ?? null };
 }
 
 /**
@@ -193,9 +300,9 @@ export async function copyStationCapabilitiesToRoll(
     /** Değer düzeltmesinde eski satırın damgasına yazılır (`revokedById`). */
     userId?: string | null;
   },
-): Promise<{ propertyIds: string[] }> {
+): Promise<{ propertyIds: string[]; changed: boolean }> {
   const caps = args.caps ?? (await loadStationPropertyCaps(tx, args.stationId));
-  if (caps.length === 0) return { propertyIds: [] };
+  if (caps.length === 0) return { propertyIds: [], changed: false };
 
   const picked = toSelectionMap(args.selections);
   const rows = caps
@@ -203,21 +310,27 @@ export async function copyStationCapabilitiesToRoll(
     .map((c) => {
       const wanted = (picked.get(c.propertyId)?.valueCode ?? "").trim();
       const value =
-        c.valueType === FabricPropertyValueType.CHOICE && wanted
-          ? c.values.find((v) => v.code.toUpperCase() === wanted.toUpperCase())
-          : undefined;
+        c.valueType === FabricPropertyValueType.CHOICE && wanted ? findCapValue(c, wanted) : undefined;
       return { propertyId: c.propertyId, valueId: value?.id ?? null };
     });
-  if (rows.length === 0) return { propertyIds: [] };
+  // Çeşit değeri seçildiyse bayrak da yazılır (defter satırıyla AYNI karar).
+  for (const a of decideApplications(caps, args.selections)) {
+    if (a.applied && !rows.some((r) => r.propertyId === a.flagPropertyId)) {
+      rows.push({ propertyId: a.flagPropertyId, valueId: null });
+    }
+  }
+  if (rows.length === 0) return { propertyIds: [], changed: false };
 
+  let changed = false;
   for (const r of rows) {
-    await setRollPropertyValueTx(tx, {
+    const res = await setRollPropertyValueTx(tx, {
       rollId: args.rollId,
       propertyId: r.propertyId,
       valueId: r.valueId,
       reason: "STATION_CAPABILITY_RESELECT",
       userId: args.userId ?? null,
     });
+    if (res !== "noop") changed = true;
   }
-  return { propertyIds: rows.map((r) => r.propertyId) };
+  return { propertyIds: rows.map((r) => r.propertyId), changed };
 }

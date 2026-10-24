@@ -5178,6 +5178,10 @@ model RollOperation {
   /// Aggregation/istatistik sorguları bu satırları "WHERE inheritedFromParentRollId IS NULL"
   /// ile filtreleyerek çift sayımı önler.
   inheritedFromParentRollId String?           @db.Uuid
+  /// Uygulanan çeşit değeri (KQ-D4: kurşun gramajı) — İLERİ KAYDIN PARÇASI.
+  /// Yalnız KURSUN_APPLIED taşır (DB CHECK `roll_operations_property_value_ck`).
+  /// Düzeltme satırı değiştirmez: eski satır damgalanır, yenisi yazılır.
+  propertyValueId           String?           @db.Uuid
 
   /// GERİ ALMA (2026-09-11, defter doktrini) — satır SİLİNMEZ, damgalanır.
   /// Eskiden yedi yerde `deleteMany` ile siliniyordu: "bu topa kurşun uygulandı
@@ -5197,6 +5201,7 @@ model RollOperation {
   operator            User?         @relation(fields: [operatorId], references: [id])
   machine             Machine?      @relation(fields: [machineId], references: [id])
   inheritedFromParent Roll?         @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
+  propertyValue       FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
 
   /// Append-only işlem log'u → `updatedAt` YOK (konvansiyon). İki güncelleme
   /// yolu var, ikisi de satırın İÇERİĞİNİ değiştirmez: idempotent `upsert`
@@ -5216,6 +5221,7 @@ model RollOperation {
   @@index([operatorId])
   @@index([machineId])
   @@index([inheritedFromParentRollId])
+  @@index([propertyValueId])
   // Bir adımın işlem log'u (workOrderStepId filtreli + zaman sıralı)
   @@index([workOrderStepId, createdAt])
   // Operatör performans raporu createdAt aralığıyla tarar (H-14)
@@ -7974,6 +7980,15 @@ model FabricProperty {
   /// `RollProperty`/`WorkOrderTargetProperty` pivotlarına `valueId` eklenir.
   valueType FabricPropertyValueType @default(FLAG)
 
+  /// ÇEŞİT BAĞI (KQ-D4, 2026-10-24): bu SEÇİM özelliği şu BAYRAK özelliğinin
+  /// çeşididir ("Kurşun gramajı" → "Kurşunlu"). Değer basılınca bayrak türer ve
+  /// değer `RollOperation.propertyValueId`ye yazılır. Doğrulama tek yerde:
+  /// `helpers/property-variant.helper.ts`. DB'de unique PARTIAL'dır
+  /// (`WHERE NOT NULL`, bir bayrağın en fazla bir çeşidi); FK RESTRICT.
+  variantOfPropertyId String?         @unique(map: "fabric_properties_variant_of_uq") @db.Uuid
+  variantOf           FabricProperty? @relation("FabricPropertyVariant", fields: [variantOfPropertyId], references: [id], onDelete: Restrict)
+  variant             FabricProperty? @relation("FabricPropertyVariant")
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -8073,6 +8088,8 @@ model FabricPropertyValue {
   /// Bu değeri taşıyan toplar — FK `Restrict`, yani kullanılan değer silinemez
   /// (zaten silinmiyor: `fabric-property.service` pasifleştiriyor).
   rollProperties RollProperty[]
+  /// Bu değerle yazılmış operasyon izleri (kurşun gramajı, KQ-D4) — FK RESTRICT.
+  rollOperations RollOperation[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
