@@ -1,6 +1,6 @@
 # Patron uygulaması v2 — UI/UX sıfırdan + senkron yenileme: dilimli plan
 
-**Durum: TASLAK 2026-10-22, patron oturumu** · Yazan: plan yazarı ajanı (Fable) · Girdiler: `scratchpad/patron/{KARARLAR,R1-uygulama,R2-senkron,R3-tasarim-dili,R4-kurallar}.md` · Ana dal `main` @ `4af7b1520`.
+**Durum: TÜM DİLİMLER İNDİ 2026-10-24** — #85 plan · #86 P2 · #87 P5 · #88 P3 · #89 P1 · #90 P4 · #91 P2b · #92 E2 · #93 E1 · #94 E4 · #95 E3 · #96 P6 · #98 W2 · #97 W1 · #99 W3. Açık kalanlar (kullanıcı kararı/işi): web ikon fontu CSP düzeltmesi (`expo-font` metin düğümü engelleniyor; aday imaj BLOKE — `docs/ops/PATRON-BULUTU-KURULUM.md` §17) · bulut 0.2.0 canlıya alma (§17, UYGULANMADI) · Play vc2 yükleme · backend 2.15.13 terfisi (test grubu, §16) · jsonb ifade indeksi (P6 `siparisId`/`cariHesapId` süzgeci; gerekirse ayrı göç) · gecikmiş iş emri/sevk durumu (fabrika vermiyor; türetme ayrı karar). İlk durum: TASLAK 2026-10-22, patron oturumu · Yazan: plan yazarı ajanı (Fable) · Girdiler: `scratchpad/patron/{KARARLAR,R1-uygulama,R2-senkron,R3-tasarim-dili,R4-kurallar}.md` · Ana dal `main` @ `4af7b1520`.
 
 > Kod YAZILMADI. Bu belge dilimlerin sözleşmesidir; her dilimin ajan istemi `scratchpad/patron/istemler/<DİLİM>.md`dedir, oradaki sözleşme buradakinin kopyasıdır (çelişirse BURASI kazanır; BURASI `KARARLAR.md` ile çelişirse KARAR kazanır).
 
