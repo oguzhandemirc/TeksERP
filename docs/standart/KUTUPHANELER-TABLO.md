@@ -43,7 +43,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | Font | `@fontsource/plus-jakarta-sans` (CSS import) | `@fontsource/roboto` ölü |
 | İkon | `lucide-react` (490) | ikinci ikon paketi EKLENMEZ |
 | Toast | `sonner` (219) | Radix Toast KULLANILMAZ |
-| Tema · animasyon · grafik | `next-themes` · `framer-motion` · `recharts` | — |
+| Tema · animasyon · grafik | `next-themes` · `framer-motion` · `echarts` **6.1.0 SABİT** · `recharts` | grafik: echarts (tembel `_v2/grafik/motor.ts`, baskıda SVG) — recharts emekliye ayrılıyor, yeni import yok (cırcır `recharts-cirit.test.ts`) |
 | Tarih · renk · takvim · QR · DnD | `date-fns` (17) · `react-colorful` · `react-day-picker` · `qrcode.react` · `@dnd-kit/*` | — |
 | Excel | `exceljs` — **dinamik import** | SheetJS/xlsx KULLANILMAZ; `buffer` polyfill'i bu yolun (§7) |
 | PDF | baskı HTML + sandbox'lı iframe; dosya main süreçte printToPDF ile · `pdf-lib` **1.17.1 SABİT** YALNIZ main süreçte meta verisi için (lisans filigranı: lisans sahibi + no, Faz 2e — lisans planında onaylı) | `@react-pdf/renderer` ölü; PDF ÇİZİM/düzen paketi EKLENMEZ, `pdf-lib` renderer'a girmez |
