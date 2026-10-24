@@ -71,6 +71,8 @@ export const SYSTEM_WORK_SESSIONS_ACCESS = ["admin:settings", "system:work-sessi
 export const SYSTEM_SERVER_STATUS_ACCESS = ["admin:settings", "system:server-status"];
 export const SYSTEM_CLIENTS_ACCESS = ["admin:settings", "system:clients"];
 export const SYSTEM_BACKUPS_ACCESS = ["admin:settings", "system:backups"];
+/** Yazdırma geçmişi — backend `PRINT_HISTORY_READ` ve `screen-catalog` `system/print-history` ile aynı küme. */
+export const SYSTEM_PRINT_HISTORY_ACCESS = ["admin:settings", "system:print-history"];
 export const SYSTEM_ROLL_ARCHIVE_ACCESS = ["admin:settings", "roll:read"];
 /**
  * Lisans ekranı — backend `SCREEN_CATALOG` `system/license` aynası; `admin:settings`
@@ -109,6 +111,7 @@ export const SYSTEM_HUB_ACCESS = [
   "system:server-status",
   "system:clients",
   "system:backups",
+  "system:print-history",
   "license:view",
   "license:manage",
 ];

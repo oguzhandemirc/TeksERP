@@ -27,6 +27,7 @@ import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import "./detail-v3/work-order-detail-v3.css";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 interface Props {
   workOrder: WorkOrder | null;
@@ -137,6 +138,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <span className="dot" />
                       {workOrderStatusLabels[wo.status]}
                     </span>
+                    <PrintHistoryLink subjectId={wo.id} className="ml-auto" />
                   </div>
                   <div className="sheet-sub">
                     {workOrderTypeLabels[wo.type]}

@@ -8,6 +8,7 @@ import {
   SYSTEM_ACTIVITY_ACCESS,
   SYSTEM_BACKUPS_ACCESS,
   SYSTEM_CLIENTS_ACCESS,
+  SYSTEM_PRINT_HISTORY_ACCESS,
   SYSTEM_ROLL_ARCHIVE_ACCESS,
   SYSTEM_SERVER_STATUS_ACCESS,
   SYSTEM_WORK_SESSIONS_ACCESS,
@@ -137,6 +138,15 @@ export const systemTiles: SystemTile[] = [
     to: "/system/logs",
     group: "activity",
     permissionAny: SYSTEM_ACTIVITY_ACCESS,
+  },
+  {
+    key: "print-history",
+    title: "Yazdırma Geçmişi",
+    description: "Kim, neyi, hangi yazıcıdan bastı — hatalar ve nedenleri",
+    icon: Printer,
+    to: "/system/print-history",
+    group: "activity",
+    permissionAny: SYSTEM_PRINT_HISTORY_ACCESS,
   },
   {
     key: "work-sessions",
