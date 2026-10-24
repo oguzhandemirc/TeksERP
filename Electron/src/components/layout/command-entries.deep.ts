@@ -1,4 +1,4 @@
-import { Cog, ServerCog, Settings2 } from "lucide-react";
+import { Cog, ServerCog, Settings2, Link2 } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -111,6 +111,17 @@ const hubGroupEntries: CommandEntry[] = [
     keywords: "yetki hub bölüm",
     deep: true,
   })),
+  // Cihaz eşleme v2 (D3): Tabletler sayfasının üst bölümü — aynı donanımdan gelen yeni kurulumlar.
+  {
+    key: "access-devices:rebind-requests",
+    label: "Tabletler · Yeniden bağlama talepleri",
+    description: "Aynı donanımdan gelen yeni kurulumları eski kayda bağla",
+    icon: Link2,
+    to: "/access/devices",
+    permission: "admin:settings",
+    keywords: "cihaz eşleme yeniden bağlama talep onay donanım kurulum masaüstü tablet",
+    deep: true,
+  },
   ...systemTileSections.map((s) => ({
     key: `sys-group:${s.group}`,
     label: `Sistem · ${s.title}`,

@@ -40,6 +40,21 @@ import {
 import { retiredPrefixesAfterChange, seriesPrefixUsage } from "./series-retired.helper";
 import { assertAxesAllowed } from "./series-client-axes.helper";
 import { assertScanOutcomeAllowed, assertSharedTablePrefixUnique } from "./series-scan-outcome.helper";
+import {
+  assertFixedShapeCounter,
+  assertFixedShapeFormat,
+  assertFixedShapeStartUnlocked,
+  fixedShapeStartYear,
+} from "./series-fixed-shape.helper";
+import { eIrsaliyeYearHasNumbers } from "../e-irsaliye/e-irsaliye-number";
+
+/**
+ * Sabit biçimli serinin "bu yıl numara üretildi mi" sorusu — üretecin yükleyicisi.
+ * Eksik anahtar kilidi AÇMAZ (fail-closed, bekçi `test_number_series §15`).
+ */
+export const FIXED_SHAPE_YEAR_USAGE: Readonly<Record<string, (at: Date) => Promise<boolean>>> = {
+  eIrsaliye: (at) => eIrsaliyeYearHasNumbers(at),
+};
 
 // ── KAPI ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +82,7 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
       key,
     });
   }
+  assertFixedShapeFormat(key, fmt); // dış standart: yalnız ön ek veri (GİB)
   const re = entry.kind ? SCANNED_PREFIX_RE : PLAIN_PREFIX_RE;
   if (!re.test(fmt.prefix)) {
     throw AppError.badRequest(
@@ -91,7 +107,7 @@ export function assertSeriesFormatAllowed(key: string, fmt: NumberSeriesFormat):
       { code: "NUMBER_SERIES_INFIX_NEEDS_DATE", key },
     );
   }
-  if (!Number.isInteger(fmt.digits) || fmt.digits < 1 || fmt.digits > 8) {
+  if (!entry.fixedShape && (!Number.isInteger(fmt.digits) || fmt.digits < 1 || fmt.digits > 8)) {
     throw AppError.badRequest("Hane sayısı 1 ile 8 arasında olmalı.", {
       code: "NUMBER_SERIES_DIGITS_INVALID",
       key,
@@ -361,6 +377,7 @@ export function assertSeriesCounterAllowed(key: string, next: SeriesCounterInput
       { code: "NUMBER_SERIES_COUNTER_OWN", key },
     );
   }
+  assertFixedShapeCounter(key, next); // GİB sırası: yalnız başlangıç değeri
   // ② DEĞER DOĞRULAMASI — DB CHECK'lerinin uygulama ikizi (çift yüklem).
   for (const [ad, deger, etiket] of [
     ["startValue", next.startValue, "Başlangıç değeri"],
@@ -410,7 +427,10 @@ export async function updateSeriesCounter(
 ): Promise<NumberSeries> {
   assertSeriesCounterAllowed(key, next);
   const current = resolveSeriesFormat(key);
-  const row = await prisma.numberSeries.update({ where: { key }, data: { ...next } });
+  const now = new Date();
+  await assertFixedShapeStartUnlocked(key, current, next.startValue, { now, yearHasNumbers: FIXED_SHAPE_YEAR_USAGE[key] });
+  const startYear = fixedShapeStartYear(key, next.startValue, now);
+  const row = await prisma.numberSeries.update({ where: { key }, data: { ...next, ...startYear } });
   await refreshNumberSeriesCache();
   // Sayaç ayarı bir İŞ KARARIDIR (bundan sonraki her numara etkilenir) ⇒ denetim
   // defterine, tx DIŞINDA, best-effort.
@@ -421,11 +441,12 @@ export async function updateSeriesCounter(
     recordId: row.id,
     oldData: {
       startValue: current.startValue ?? null,
+      ...("startValueYear" in startYear ? { startValueYear: current.startValueYear ?? null } : {}),
       step: current.step ?? null,
       maxValue: current.maxValue ?? null,
       wrap: current.wrap ?? false,
     },
-    newData: { ...next },
+    newData: { ...next, ...startYear },
   });
   return row;
 }

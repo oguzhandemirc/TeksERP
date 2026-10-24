@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { printHtmlString } from "@/lib/print";
+import { printTracked, type PrintSubject } from "@/lib/print";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { PrintNoteField } from "@/components/print/PrintNoteField";
 import { PdfSaveButton } from "@/components/print/PdfSaveButton";
@@ -37,6 +37,8 @@ export function FreeDocumentPrintDialog({
     staleTime: 0,
   });
   const html = htmlQuery.data ?? null;
+  // Serbest belge tablosu geçmiş kataloğunda yok: konu yalnız belge no ile tanınır.
+  const subject: PrintSubject = { kind: "SERBEST_BELGE", ...(doc?.documentNo ? { no: doc.documentNo } : {}) };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -61,8 +63,8 @@ export function FreeDocumentPrintDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Kapat
           </Button>
-          <PdfSaveButton html={html} fileName={`${doc?.title ?? "belge"}-${doc?.documentNo ?? ""}`} disabled={!html} />
-          <Button type="button" className="gap-1" disabled={!html} onClick={() => html && printHtmlString(html)}>
+          <PdfSaveButton html={html} fileName={`${doc?.title ?? "belge"}-${doc?.documentNo ?? ""}`} disabled={!html} subject={subject} />
+          <Button type="button" className="gap-1" disabled={!html} onClick={() => html && void printTracked({ subject, html })}>
             <Printer className="h-4 w-4" /> Yazdır
           </Button>
         </DialogFooter>

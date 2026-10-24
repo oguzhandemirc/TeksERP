@@ -38,6 +38,8 @@ const CAP_LABEL: Record<string, string> = {
   "station:read": "İstasyon görebilir",
   "report:sales": "Satış raporu görebilir",
   "document-template:write": "Belge tasarımını değiştirebilir",
+  "document-template:design": "Belge tasarımcısında şablon tasarlayabilir",
+  "document-template:publish": "Belge tasarımcısında şablon yayınlayabilir",
   "settings:workstation": "Bu bilgisayarın donanım ayarlarını değiştirebilir",
   "system:backups": "Yedek alabilir",
   "license:manage": "Lisansı etkinleştirip taşıyabilir, proxy ayarlayabilir",

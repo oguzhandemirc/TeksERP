@@ -1,5 +1,5 @@
 // =============================================================================
-// NUMARA SERİSİ KATALOĞU — ENVANTER (52 seri)
+// NUMARA SERİSİ KATALOĞU — ENVANTER (53 seri)
 // =============================================================================
 // ⚠️ SÖZLEŞME AYRI DOSYADA (`number-series-catalog.types.ts`): satır TİPİ, panel
 // grupları ve etiket yardımcıları orada. Bölme ekseni bu depodaki alışılmış
@@ -19,6 +19,7 @@ type NumberSeriesDateSegment = NumberSeries["dateSegment"];
 const D = "DDMMYY" as NumberSeriesDateSegment;
 const NONE = "NONE" as NumberSeriesDateSegment;
 const YYMM = "YYMM" as NumberSeriesDateSegment;
+const YYYY = "YYYY" as NumberSeriesDateSegment;
 
 export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   // ── Okutulan seriler (istemci sınıflandırmasına girer) ─────────────────────
@@ -106,6 +107,34 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedSeparator: "",
     kind: "SHIPMENT",
     scopedCounter: { durum: "hazir", not: "`shipping.service.nextShipmentNo` zengin biçime geçirildi." },
+  },
+  {
+    // GİB e-İrsaliye numarası: 3 karakter seri + yıl + 9 hane sıra (⚠ plan §3.6
+    // "doğrulanacak"). Numara yalnız "XML üret" claim'inde, aynı tx'te doğar.
+    key: "eIrsaliye",
+    panelGroup: "sevkiyat",
+    label: "e-İrsaliye no",
+    seedPrefix: "EIR",
+    seedDateSegment: YYYY,
+    seedDigits: 9,
+    seedSeparator: "",
+    // Taşma GENİŞLEMEZ, SARMAZ: kod uzunluğu standardın parçası (beyanlı istisna).
+    seedMaxValue: 999_999_999,
+    seedWrap: false,
+    fixedShape: {
+      prefixRe: "^[A-Z0-9]{3}$",
+      dateSegment: YYYY,
+      digits: 9,
+      separator: "",
+      not: "GİB e-İrsaliye numarası 3 karakter seri + yıl + 9 hane",
+    },
+    scopedCounter: {
+      durum: "hazir",
+      not: "Üreteç `nextSeriesNo` (sayaç satırı KULLANILMAZ — GİB sırası boşluksuz); belge tarihi fabrika günüdür. Motor (E5) bu giriş noktasını çağırır.",
+      uretec: "services/e-irsaliye/e-irsaliye-number.ts",
+    },
+    // Kayıt tablosu E1-SEMA'da doğdu; TASLAK'ta `documentNo` null, sayım numaralananları sayar.
+    countTable: { model: "eIrsaliye", field: "documentNo", birim: "belge", kapsam: "seri-onekli" },
   },
   {
     key: "subcontractorDispatch",

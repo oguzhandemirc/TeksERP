@@ -2,8 +2,11 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { accessTiles, accessGroups, type AccessTile, type AccessTileGroup } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { openRebindRequests, useRebindRequests } from "@/pages/Devices/rebind";
 
 export function AccessHubPage() {
+  // Bekleyen yeniden bağlama talebi → "Tabletler" karosunda sayaç (bulunabilirlik).
+  const rebindOpen = openRebindRequests(useRebindRequests().data).length;
   // Grup → tile (kullanıcı erişimi / cihaz erişimi). Tanımlar hub'ıyla aynı desen.
   const tilesByGroup = new Map<AccessTileGroup, AccessTile[]>();
   for (const tile of accessTiles) {
@@ -37,6 +40,8 @@ export function AccessHubPage() {
                     description={tile.description}
                     icon={tile.icon}
                     index={i}
+                    badge={tile.key === "devices" ? rebindOpen : undefined}
+                    badgeLabel={tile.key === "devices" ? `${rebindOpen} yeniden bağlama talebi bekliyor` : undefined}
                   />
                 ))}
               </HubGrid>

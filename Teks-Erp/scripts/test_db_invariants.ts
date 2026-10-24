@@ -871,6 +871,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // 2026-09-22 — numara serisi (20260922140000_number_series). Hane sayısı 1..8:
   // 1 = dolgusuz (günlük parti no emsali), 8 = VarChar(64) kolonların pratik tavanı.
   // Sıfır hane sayacı görünmez kılar, 9+ hane kodu okunmaz uzunluğa taşır.
+  // 2026-10-24 sed 1..9 (20261024081443): GİB e-İrsaliye 9 hane; diğerlerinde kapı 1..8.
   { table: "number_series", name: "number_series_digits_range" },
   // 2026-09-23 — sayaç ayarları (20260923120000_number_series_counter). Üçü de
   // uygulama kapısının DB İKİZİ (çift yüklem): kapı 400 döner, sed bozuk satırı
@@ -880,6 +881,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "number_series", name: "number_series_start_value_positive" },
   { table: "number_series", name: "number_series_step_positive" },
   { table: "number_series", name: "number_series_max_value_range" },
+  // 2026-10-24 — başlangıcın yılı (20261024083651): yıl yalnız başlangıçla anlamlı.
+  { table: "number_series", name: "number_series_start_value_year_check" },
   // 2026-09-23 — biçim zaman çizgisi (20260923200000_number_series_line).
   // Hane sedi `number_series` ile AYNI: satır ile önbellek ayrı sedlerde olsaydı
   // biri geçerli, öteki geçersiz bir biçim kabul edebilirdi.
@@ -942,6 +945,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "notification_inbox", name: "notification_inbox_klass_ck" },
   { table: "notification_inbox", name: "notification_inbox_reason_ck" },
   { table: "notification_inbox", name: "notification_inbox_count_ck" },
+  // Belge şablon tasarımcısı (T1B, 2026-10-24): şablon durumu ve kip kümeleri kapalı.
+  { table: "document_templates", name: "document_templates_status_check" },
+  { table: "document_templates", name: "document_templates_edit_mode_check" },
+  { table: "document_template_versions", name: "document_template_versions_edit_mode_check" },
   { table: "notification_daily_stats", name: "notification_daily_stats_events_ck" },
   // e-İrsaliye (E1-SEMA): numaralı/gönderilmiş durum çift yüklemi · GİB biçimi · sayaç · doğuş olayı.
   { table: "e_irsaliyeler", name: "e_irsaliyeler_numarali_durum_chk" },
@@ -1217,6 +1224,11 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "shipment_orders_sync_dirty",
     timing: ["AFTER INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "sync_mark_shipment_orders()"],
     why: "patron bulutu filigransız küme: shipment_orders ne id ne updatedAt taşır, her yazım sevkiyatı KIRLI yapar",
+  },  {
+    table: "document_template_versions",
+    trigger: "document_template_versions_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "document_template_version_guard()"],
+    why: "belge şablonu: sürüm değişmezdir — içerik UPDATE'i ve yayınlanmış sürümün DELETE'i reddedilir (basılan belge sürümü dondurur)",
   },
   {
     table: "devices",
@@ -1375,6 +1387,11 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["TG_OP IN ('UPDATE', 'DELETE')", "TG_OP IN ('INSERT', 'UPDATE')", "'shipments'", "'DIRTY'"],
     why: "patron bulutu: sevkiyat ↔ sipariş kümesinin her yazımı (ekleme/güncelleme/silme) sevkiyatı KIRLI yapar",
+  },  {
+    name: "document_template_version_guard",
+    volatility: "v",
+    bodyFragments: ['OLD."publishedAt" IS NOT NULL', 'NEW."compiledLiquid" IS DISTINCT FROM OLD."compiledLiquid"', 'NEW."settings" IS DISTINCT FROM OLD."settings"', "yalnız bir kez"],
+    why: "belge şablonu: sürüm içeriği değişmez, yayın damgası bir kez yazılır, yayınlanmış sürüm silinmez",
   },
   {
     name: "devices_merge_no_chain",

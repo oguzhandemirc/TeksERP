@@ -41,11 +41,8 @@ import {
   type NumberSeriesFormat,
 } from "./helpers/series-format.helper";
 import { nextDailySeq, normalizeScanCode } from "../utils/code-format";
-import {
-  nextCounterCandidate,
-  nextCounterSeq,
-  seriesCounterReadsLastBorn,
-} from "./helpers/series-counter.helper";
+import { nextCounterCandidate, nextCounterSeq, seriesCounterReadsLastBorn } from "./helpers/series-counter.helper";
+import { startValueInEffect } from "./helpers/series-fixed-shape.helper";
 
 // ── ÖNBELLEK ────────────────────────────────────────────────────────────────
 // `nextNumberTx` bir tx'in İÇİNDEN senkron okur: burada DB'ye gidilirse interaktif
@@ -99,6 +96,7 @@ function rowFormat(row: NumberSeries): NumberSeriesFormat {
     numberSource: row.numberSource,
     // NULL = ayarlanmamış = bugünkü davranış (başlangıç 1, adım 1, sınır yok).
     startValue: row.startValue,
+    startValueYear: row.startValueYear,
     step: row.step,
     maxValue: row.maxValue,
     wrap: row.wrap,
@@ -333,7 +331,8 @@ export async function nextSeriesNo(
    */
   fmtOverride?: NumberSeriesFormat,
 ): Promise<string> {
-  const fmt = fmtOverride ?? resolveSeriesFormat(key);
+  // Yıla bağlı başlangıç (sabit biçimli seri) yalnız kendi yılında sayılır.
+  const fmt = startValueInEffect(fmtOverride ?? resolveSeriesFormat(key), date);
   const fullPrefix = seriesPrefix(fmt, date);
   const rows = await loadCodes(fullPrefix, fmt);
   const seq = scopedNextSeq(key, fmt, fullPrefix, rows);
