@@ -2,6 +2,7 @@
 // Kaynak backend `helpers/workorder-location.helper.ts`: canlı topların şu anki
 // istasyon dağılımı + sınıf. Burada yalnız gösterim kararı verilir, sayı türetilmez.
 import type { StationKind, WorkOrderStatus } from "@/types/enums";
+import { TERIM } from "@/lib/terim";
 
 export type WorkOrderLocationClass = "BASLAMADI" | "TEK_ISTASYON" | "BOLUNMUS" | "FASONDA" | "BITTI";
 
@@ -66,7 +67,7 @@ export function locationView(konum: WorkOrderLocation | undefined, status: WorkO
     if (konum.sinif === "BASLAMADI") return { kind: "not-started" };
     return status === "COMPLETED"
       ? { kind: "done", label: "Tamamlandı", hint: "Üretimde canlı top kalmadı." }
-      : { kind: "done", label: "Üretim bitti", hint: "Üretimde canlı top kalmadı; iş emri henüz kapatılmadı." };
+      : { kind: "done", label: "Üretim bitti", hint: `Üretimde canlı top kalmadı; ${TERIM.terbiyeIsEmri.tekilKucuk} henüz kapatılmadı.` };
   }
   const fason = konum.sinif === "FASONDA";
   return {
