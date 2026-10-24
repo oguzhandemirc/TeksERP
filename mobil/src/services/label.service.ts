@@ -47,11 +47,13 @@ export const labelService = {
   getRollNative: (
     rollId: string,
     kind: 'ROLL_RAW' | 'ROLL_FINISHED',
-    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean },
+    // copies: etiket adedi — yalnız STATION modunda verilir; yoksa sunucu çözer.
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean; copies?: number },
     rasterCapable?: boolean,
   ): Promise<{ content: string; encoding: 'text' | 'base64'; language: string }> => {
     const params = {
       kind,
+      ...(ctx?.copies !== undefined ? { copies: String(ctx.copies) } : {}),
       ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
       ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
       ...(ctx?.stock ? { stock: '1' } : {}),

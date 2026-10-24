@@ -78,6 +78,7 @@ import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet'
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { LabelPrinter } from '../../../components/LabelPrinter';
+import { useLabelCopies } from '../../../hooks/useLabelCopies';
 import StandaloneLabelSheet from '../../../components/labels/StandaloneLabelSheet';
 import { StandaloneLabelPrinter } from '../../../components/labels/StandaloneLabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
@@ -523,6 +524,14 @@ export default function TamburScreen() {
   // Yazdırılacak aktif rol — LabelPrinter bu state'i izler ve sıfırlanınca
   // hazır olur. Per-row "Bas" butonu bu state'i set eder.
   const [activePrintRoll, setActivePrintRoll] = useState<Roll | null>(null);
+  // Etiket adedi seçicisi (yalnız STATION): kesimin OTOMATİK baskısı seçicinin
+  // değerini alır ve seçiciyi varsayılana döndürür; elle yeniden baskı adet
+  // taşımaz (sunucu istasyon varsayılanını basar).
+  const labelCopies = useLabelCopies();
+  const [printCopies, setPrintCopies] = useState<number | undefined>(undefined);
+  const copiesBar = labelCopies.enabled
+    ? { count: labelCopies.count, onInc: labelCopies.inc, onDec: labelCopies.dec }
+    : undefined;
   // Etiket TÜRÜ normalde RENKTEN çözülür (renksiz = ham kumaş → ROLL_RAW).
   // Manuel Mod BİTMİŞ ürün üretir ve renk OPSİYONELDİR → renksiz manuel top ham
   // etiketle basılırdı. Bu yüzden tür baskı İŞİNE bağlanır: null = renkten çöz
@@ -571,6 +580,7 @@ export default function TamburScreen() {
       setScrapPrintConfirm({ roll, kind });
       return;
     }
+    setPrintCopies(opts?.auto ? labelCopies.take() : undefined);
     setPrintKind(kind);
     setActivePrintRoll(roll);
   };
@@ -3674,6 +3684,7 @@ export default function TamburScreen() {
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
+                copies={copiesBar}
                 onToggleKartela={() => setMarkAsKartela((v) => !v)}
                 onKes={handleManualProduce}
                 kesLoading={produceManualRollMutation.isPending || measuring}
@@ -3960,6 +3971,7 @@ export default function TamburScreen() {
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
+                copies={copiesBar}
                 onToggleKartela={() => setMarkAsKartela((v) => !v)}
                 onBitir={() => setRecutFinalizeOpen(true)}
                 bitirDisabled={
@@ -4304,6 +4316,7 @@ export default function TamburScreen() {
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
+                copies={copiesBar}
                 onToggleKartela={() => setMarkAsKartela((v) => !v)}
                 onKes={handleKes}
                 onBitir={() => {
@@ -4835,6 +4848,7 @@ export default function TamburScreen() {
                   // SUNUCUYA da gider: backend aynı kuralı bağımsız uygular ve
                   // onaysız fire baskısını 409 ile reddeder.
                   setPrintConfirmScrap(true);
+                  setPrintCopies(undefined);
                   setPrintKind(job.kind);
                   setActivePrintRoll(job.roll);
                 }}
@@ -4918,6 +4932,7 @@ export default function TamburScreen() {
         }
         labelContext={labelContext}
         confirmScrap={printConfirmScrap}
+        copies={printCopies}
         onDone={(printed) => {
           // Yalnız HÂLÂ güncel slotu temizle: baskı uçuştayken slota yeni top
           // (B) atandıysa onun işi kuyruktadır — A'nın bitişi B'yi ezmesin.
@@ -4926,6 +4941,7 @@ export default function TamburScreen() {
             setPrintKind(null);
             setLabelContext(undefined);
             setPrintConfirmScrap(false);
+            setPrintCopies(undefined);
           }
         }}
       />
