@@ -37,7 +37,7 @@ export const ACTIVE_LINE = { cancelledAt: null } as const;
  * ayrım burada, TEK yüklemle yapılır.
  *
  * ⚠️ Yüklem `ACTIVE_LINE` ile AYNI ŞEYİ söylemek ZORUNDA — ayrışırsa aynı
- * sorunun iki cevabı olur. (`stepCanApplyQuality` ↔ `QUALITY_STATION_WHERE`
+ * sorunun iki cevabı olur. (`stepRunsStepFlow` ↔ `STEP_FLOW_WHERE`
  * boğaz-ikiz deseninin birebir emsali.)
  */
 export const isActiveLine = (line: { cancelledAt: Date | null }): boolean =>
