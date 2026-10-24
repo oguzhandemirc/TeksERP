@@ -47,6 +47,7 @@ import { KursunQcService } from "../src/services/kursun-qc.service";
 import { KursunBypassService } from "../src/services/kursun-bypass.service";
 import { assertKursunTabletMayWrite } from "../src/services/helpers/kursun-bypass-eligibility.helper";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { inspectionDefaultForKind } from "../src/services/helpers/quality-station.helper";
 import { AppError } from "../src/utils/app-error";
 
 const qcSvc = new KursunQcService();
@@ -195,6 +196,8 @@ async function makeStation(
       type: "INTERNAL",
       kind,
       department: "KALITE",
+      // Ham prisma doğuşu: servisin tür varsayılanı koşmaz (KQ-D1) — açık yaz.
+      inspectionEnabled: inspectionDefaultForKind(kind),
     },
     select: { id: true },
   });

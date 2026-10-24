@@ -18,6 +18,8 @@ export interface StationCapabilitySummary {
    * YAZMAZ (kural tek kaynakta: `helpers/quality-station.helper`).
    */
   canApplyQuality: boolean;
+  /** Muayene (hata girişi) yeteneği — akıştan (`canApplyQuality`) ayrı soru (KQ-D1). */
+  inspectionEnabled: boolean;
   colorCount: number;
   propertyCount: number;
 }
@@ -32,6 +34,7 @@ export interface StationCapabilityDetail {
   canApplyColor: boolean;
   canApplyProperty: boolean;
   canApplyQuality: boolean;
+  inspectionEnabled: boolean;
   colors: { id: string; code: string; name: string; hex: string | null }[];
   properties: StationCapabilityProperty[];
 }

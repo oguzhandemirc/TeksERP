@@ -175,7 +175,10 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *                 description: Bu istasyon ÖZELLİK uygulayabilir mi. Varsayılan true.
  *               appliesQuality:
  *                 type: boolean
- *                 description: Bu istasyon KALİTE KONTROL (Kurşun + KK2) yürütür mü. Varsayılan false.
+ *                 description: Ara istasyon KART AKIŞI (Kurşun/KK2 ekranı) bu istasyonda yürür mü — akış ikizinin köprü kolu. Varsayılan false.
+ *               inspectionEnabled:
+ *                 type: boolean
+ *                 description: Kalite MUAYENESİ (hata girişi) bu istasyonda açık mı. Gönderilmezse türden türetilir (PROCESS_QC ve TAMBUR true, diğerleri false).
  *               producesWarpBeam:
  *                 type: boolean
  *                 description: Devere — bu istasyonun makineleri LEVENT SARAR. Varsayılan false.
@@ -219,7 +222,10 @@ router.post("/", verifyToken, requirePermission("station:write"), validateStatio
  *               appliesProperty: { type: boolean }
  *               appliesQuality:
  *                 type: boolean
- *                 description: Bu istasyon KALİTE KONTROL (Kurşun + KK2) yürütür mü.
+ *                 description: Ara istasyon KART AKIŞI (Kurşun/KK2 ekranı) bu istasyonda yürür mü.
+ *               inspectionEnabled:
+ *                 type: boolean
+ *                 description: Kalite MUAYENESİ (hata girişi) açık mı. Gönderilmezse DOKUNULMAZ.
  *               isActive: { type: boolean }
  *     responses:
  *       200:

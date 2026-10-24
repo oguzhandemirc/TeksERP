@@ -99,6 +99,14 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### echarts@6.1.0 · Electron · 2026-10-24
+1. Problem      : Raporlar v2 grafikleri (8 tür: çizgi/önceki dönem soluk, çubuk, yığın, pasta, ısı haritası, saçılım, kutu, küçük çoklu) ekranda + PDF'e VEKTÖR (DOM'suz SVG SSR); §2.2 "Tema · animasyon · grafik" satırı — tek grafik motoru, `recharts` emekliye ayrılıyor (yeni import cırcırla yasak)
+2. Alternatifler: `recharts` (SVG-SSR yok — baskı için DOM'a çizip kopyalamak gerekir; ısı haritası/kutu/korelasyon grafikleri zayıf) · Vega-Lite (+~275 KB, ikinci motor + ayrı şema dili) · elle yazmak (8 tür × eksen/etiket yerleşimi — bakım yükü) — kullanıcı "kütüphane kullan" yönlendirmesi, plan K2
+3. Boyut/biçim  : saf JS, native YOK; ESM + `echarts/core` ağaç sallama (yalnız 6 grafik + 5 bileşen + 2 çizici); YALNIZ `Reports/_v2/grafik/motor.ts` statik import eder, o da `await import` ile ayrı parça (~656 KB küçültülmüş / ~224 KB gzip, ölçüldü) ([KU-17]; bekçi `raporGrafik.test.tsx`); geçişli `zrender` 6.1.0 (BSD-3) + `tslib` 2.3.0 (0BSD)
+4. Bakım        : 6.1.0 (Apache vakfı, düzenli yayın); TAM SABİT — SVG çıktısı PDF'in kendisidir, yama sürümü bile kâğıdı değiştirebilir (bilinçli yükseltme); pin `raporGrafik.test.tsx` § paket sözleşmesi
+5. Lisans       : Apache-2.0
+6. Dağıtım      : Electron rebuild GEREKMEZ (native yok); panel paketiyle gider; Türkçe yerel ayar kaydedilmez — eksen/ipucu metni `lib/number-format` + `lib/factory-time` ile bizde biçimlenir, araç kutusu/zaman ekseni kullanılmaz (`i18n/langTR-obj` UMD, ESM'de nesnesiz döner — ölçüldü)
+
 ### react-native-reanimated@~4.1.1 + react-native-worklets@0.5.1 + expo-haptics@~15.0.8 + @expo/vector-icons@^15.0.3 · patron/uygulama · 2026-10-22
 Dördü de mobilde §2'de kayıtlı aynı satırın ([KU-01]) patron uygulamasına taşınmasıdır; yeni ihtiyaç satırı açılmaz. Lisans: dördü de MIT. Sürümler `npx expo install` ile SDK 54 uyumlu aralıkta, SDK yükseltmesiyle birlikte gider; dağıtım: patron uygulaması için native modül ⇒ yeni mağaza derlemesi, OTA yetmez ([KU-11]).
 - `react-native-reanimated` : tasarım dili v2'nin geçiş/basma animasyonları UI iş parçacığında; alternatif RN `Animated` (sürücüsü JS iş parçacığında, düzen animasyonu yok) ve elle yazmak reddedildi.

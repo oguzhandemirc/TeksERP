@@ -21,7 +21,7 @@
 // =============================================================================
 
 import { Prisma, StationKind, StepStatus, type PrismaClient } from "@prisma/client";
-import { QUALITY_STATION_WHERE } from "./quality-station.helper";
+import { STEP_FLOW_WHERE } from "./quality-station.helper";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { AppError } from "../../utils/app-error";
 
@@ -115,7 +115,7 @@ export async function hasBypassClosureOnQualityStepTx(
       exitedAt: { not: null },
       notes: { startsWith: KURSUN_BYPASS_MARKER_PREFIX },
       // İlişki alanının adı `step` (kolon `workOrderStepId`) — schema.prisma:1880.
-      step: { station: { ...QUALITY_STATION_WHERE } },
+      step: { station: { ...STEP_FLOW_WHERE } },
     },
     select: { id: true },
   });
