@@ -20,9 +20,10 @@
 // ya da yanlış kanıtlı istek 401 DEVICE_PROOF_INVALID. Kapalıyken (varsayılan) bugünkü davranış;
 // geçerli kanıt yine de sırrı TEYİT eder (yeniden verim kapanır).
 //
-// İstisna: announce/status/pairing-required endpoint'leri bu kontrolden muaftır —
-// onaysız (PENDING) cihaz kendini bildirebilmeli, durumunu poll'layabilmeli ve mobil
-// login öncesi atamanın zorunlu olup olmadığını öğrenebilmeli.
+// İstisna: announce/status/pairing-required/rebind-requests/onsite-approve endpoint'leri bu
+// kontrolden muaftır — onaysız (PENDING) cihaz kendini bildirebilmeli, durumunu poll'layabilmeli,
+// mobil login öncesi atamanın zorunlu olup olmadığını öğrenebilmeli ve yeniden bağlama talebini
+// yerinde yönetici girişiyle onaylatabilmeli.
 // =============================================================================
 
 import { Request, Response, NextFunction } from "express";
@@ -43,6 +44,8 @@ const EXEMPT_PATHS = new Set([
   "/api/devices/announce",
   "/api/devices/status",
   "/api/devices/pairing-required",
+  // Yerinde onay: kayıtsız (yeni) localId'den gelir; kimliği gövdedeki yönetici girişi taşır.
+  "/api/devices/rebind-requests/onsite-approve",
 ]);
 
 export const resolveDevice = async (
@@ -102,7 +105,7 @@ export const resolveDevice = async (
       res.status(401).json({
         success: false,
         message:
-          "Cihaz pasifleştirilmiş veya kayıtlı değil. Yöneticiden yeni eşleştirme kodu isteyin.",
+          "Cihaz pasifleştirilmiş veya kayıtlı değil. Bu cihaz için yönetici onayı gerekiyor.",
         code: "DEVICE_INACTIVE",
       });
       return;

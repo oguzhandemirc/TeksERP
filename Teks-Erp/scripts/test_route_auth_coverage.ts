@@ -84,6 +84,7 @@ const EXEMPT: Record<string, string> = {
   "POST /api/devices/announce": "tablet kendini bildirir — eşleşmeden önce token alamaz",
   "GET /api/devices/status": "cihaz atama durumu yoklaması (x-device-id)",
   "GET /api/devices/pairing-required": "eşleşme zorunlu mu — login öncesi gate",
+  "POST /api/devices/rebind-requests/onsite-approve": "tablette yerinde yönetici onayı — yeni kurulumun token'ı yok; kimlik gövdedeki yönetici girişi (giriş kilidi + admin:settings), JWT üretmez",
   // Mobil uzaktan güncelleme (LAN ikizi): tablet güncellemeyi GİRİŞ EKRANINDAN
   // ÖNCE sorar — kimlik aransaydı "açılmayan tablete düzeltme gönderme" yolu,
   // yani kurtarmanın kendisi kapanırdı (`/health` ile aynı gerekçe sınıfı).
