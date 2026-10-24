@@ -263,10 +263,10 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       "src/services/workorder-manual-move.service.ts", "src/services/workorder-split.service.ts",
     ], { yari: true }),
 
-  D("RollOperation", "kurşun/QC2/tambur/fason kanıtı", { tur: "DAMGA", kolon: "revokedAt" },
+  D("RollOperation", "kurşun/QC2/tambur/fason kanıtı; propertyValueId (kurşun gramajı, KQ-D4) ileri kaydın parçası — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeRollOperations" }],
-    ["src/services/inventory.service.ts", "src/services/kursun-qc.service.ts",
-     "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
+    ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory.service.ts",
+     "src/services/kursun-qc.service.ts", "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
 
   D("RollVariance", "fire · düzeltme · aşım defteri", { tur: "DAMGA", kolon: "reversedAt" },
     [
