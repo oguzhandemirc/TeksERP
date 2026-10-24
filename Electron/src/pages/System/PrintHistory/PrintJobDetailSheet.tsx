@@ -14,7 +14,6 @@ import {
   PRINT_TONE_CLASS,
   PRINT_TRANSPORT_LABELS,
   isLegacyClientRow,
-  printDeviceText,
   printPrinterText,
   printStatusView,
   printSubjectText,
@@ -122,8 +121,9 @@ function DetailBody({ job }: { job: PrintJobRow }) {
         </Row>
         <Row label="Kopya">{job.copies}</Row>
         <Row label="Nereden">
-          {printDeviceText(job)} · {PRINT_SOURCE_LABELS[job.source] ?? job.source}
-          {job.appVersion ? ` · sürüm ${job.appVersion}` : ""}
+          {[job.device?.name, PRINT_SOURCE_LABELS[job.source] ?? job.source, job.appVersion ? `sürüm ${job.appVersion}` : null]
+            .filter(Boolean)
+            .join(" · ")}
         </Row>
         <Row label="Çıktı">{PRINT_OUTPUT_LABELS[job.outputKind] ?? job.outputKind}</Row>
         <Row label="Yazıcı">{printPrinterText(job)}</Row>
