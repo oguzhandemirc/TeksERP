@@ -102,7 +102,7 @@ describe("§1 üç yüzeyin dağılımı", () => {
   });
 
   it("eski Genel Ayarlar üç ekrana bölündü (2026-09-24)", () => {
-    expect(idsOf("printing")).toEqual(["devices", "label"]);
+    expect(idsOf("printing")).toEqual(["belgeler", "devices", "label"]);
     expect(idsOf("workstation")).toEqual(["document-printer", "printer", "scale", "scanner", "server"]);
     expect(idsOf("company")).toEqual(["bildirim", "company", "patron-bulut", "reports", "session", "support"]);
   });

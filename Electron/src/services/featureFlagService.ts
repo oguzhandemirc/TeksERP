@@ -646,6 +646,9 @@ export interface FeatureFlags {
   backupHour: number;
   // bildirim: kişisel gelen kutusu + yeni zil — default false (bugünkü zil); okuyan N1-ZIL.
   bildirimGelenKutusuEnabled: boolean;
+  // belge-sablon: tasarımcı + yayın SoD bayrakları — default false (bugünkü Sistem tasarımı).
+  documentDesignerEnabled: boolean;
+  documentPublishSodEnabled: boolean;
 }
 
 export { DEFAULT_COMPANY_LETTERHEAD };

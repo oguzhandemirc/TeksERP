@@ -11,9 +11,22 @@ import { documentTemplateController as c } from "../controllers/document-templat
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission } from "../middlewares/rbac.middleware";
 import "../types/express-augment";
+import { readDocumentDesignerEnabled } from "../services/system-setting.service";
+import { AppError } from "../utils/app-error";
 
 const router = Router();
 router.use(verifyToken);
+
+// Tasarımcı kapısı (P-c): bayrak kapalıyken yalnız sözleşme okuması açık; editör "kapalı"
+// ekranını çizer, diğer her uç 403 — kapalı bayrakla şablon/atama yazılamaz.
+router.use((req: Request, _res: Response, next: NextFunction) => {
+  if (req.method === "GET" && /^\/contracts(\/|$)/.test(req.path)) return next();
+  readDocumentDesignerEnabled()
+    .then((on) =>
+      next(on ? undefined : AppError.forbidden("Belge tasarımcısı kapalı — Genel Ayarlar > Belgeler'den açılır.", { code: "DOCUMENT_DESIGNER_DISABLED" })),
+    )
+    .catch(next);
+});
 
 type Handler = (req: Request, res: Response) => Promise<unknown>;
 const wrap = (h: Handler) => (req: Request, res: Response, next: NextFunction) => {

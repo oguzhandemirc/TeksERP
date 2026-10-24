@@ -243,7 +243,7 @@ app.use(buildHelmet(hardening.httpsEnabled));
 // istemci etkilenmez). Uçların asıl koruması `verifyToken` + `requirePermission`;
 // origin listesi onların YERİNE geçmez.
 app.use(cors({
-  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date"],
+  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date", "X-Document-Template", "X-Document-Template-Version", "X-Document-Tables-Available", "X-Document-Warnings"],
   ...(hardening.corsOrigins ? { origin: hardening.corsOrigins } : {}),
 }));
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.

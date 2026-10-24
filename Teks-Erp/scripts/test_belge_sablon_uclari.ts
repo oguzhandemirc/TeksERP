@@ -11,6 +11,8 @@
 //   §3 Tasarım uçları (oluştur, sürüm kaydet, ata): design + admin:settings; read/publish 403
 //   §4 Yayın ucu: publish + admin:settings; read/design 403
 //   §5 Gerçek kayıtlı önizleme + örnek kaynak listesi: belgenin kendi okuma izni de aranır
+//   §6 Tasarımcı bayrağı (T1C, P-c) KAPALIYKEN: sözleşme okuması 200, diğer uçlar 403 DOCUMENT_DESIGNER_DISABLED
+//      (§1–§5 bayrak AÇIK koşar; ayar satırı `finally`de birebir geri yazılır)
 //
 // ⭐ NEGATİF SONDA (2026-10-24, ölçüldü): routes/document-template.routes.ts'de `/:id/publish`
 //    kapısı DOCUMENT_TEMPLATE_DESIGN'a çevrildi → §4 iki ❌ (design yayınladı, publish 403 aldı); geri alınınca 22/0.
@@ -19,6 +21,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { atlamaDefteri } from "./lib/atlama";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4100";
 const API = `${BASE}/api/document-templates`;
@@ -52,6 +55,12 @@ const ROLES = {
 type RoleKey = keyof typeof ROLES;
 const userIds: string[] = [];
 const templateIds: string[] = [];
+const DESIGNER_KEY = SETTING_KEYS.DOCUMENTS_DESIGNER_ENABLED;
+let designerRow: { value: unknown } | null | undefined;
+
+async function setDesigner(on: boolean): Promise<void> {
+  await prisma.systemSetting.upsert({ where: { key: DESIGNER_KEY }, create: { key: DESIGNER_KEY, value: on }, update: { value: on } });
+}
 
 async function login(role: RoleKey): Promise<Record<string, string>> {
   const perms = await prisma.permission.findMany({ where: { code: { in: [...ROLES[role]] } }, select: { id: true } });
@@ -82,7 +91,7 @@ async function call(h: Record<string, string> | null, method: string, path: stri
   return { status: r.status, data: json?.data as Record<string, unknown> | undefined, code: json?.error?.details?.code ?? json?.details?.code };
 }
 
-const HTTP_KONTROL = 22;
+const HTTP_KONTROL = 25;
 
 async function main(): Promise<void> {
   console.log("=== Belge şablonu uçları izin matrisi ===\n");
@@ -98,6 +107,16 @@ async function main(): Promise<void> {
   }
   const H = {} as Record<RoleKey, Record<string, string>>;
   for (const r of Object.keys(ROLES) as RoleKey[]) H[r] = await login(r);
+
+  // §6 bayrak kapalı (kapı ham okur → önbellek beklemez)
+  designerRow = await prisma.systemSetting.findUnique({ where: { key: DESIGNER_KEY }, select: { value: true } });
+  await setDesigner(false);
+  check("§6 bayrak kapalıyken sözleşme okunur (200)", (await call(H.admin, "GET", "/contracts")).status === 200);
+  const offList = await call(H.admin, "GET", "/");
+  check("§6 bayrak kapalıyken şablon listesi 403 DOCUMENT_DESIGNER_DISABLED", offList.status === 403 && offList.code === "DOCUMENT_DESIGNER_DISABLED", `durum=${offList.status} kod=${offList.code}`);
+  const offCreate = await call(H.admin, "POST", "/", { docType: DOC, name: `${PREFIX}-kapali`, copyFrom: { kind: "blank" } });
+  check("§6 bayrak kapalıyken şablon oluşturulamaz (403)", offCreate.status === 403 && offCreate.code === "DOCUMENT_DESIGNER_DISABLED", `durum=${offCreate.status} kod=${offCreate.code}`);
+  await setDesigner(true);
 
   // §1
   check("§1 kimliksiz istek 401", (await call(null, "GET", "/contracts")).status === 401);
@@ -166,6 +185,8 @@ main()
   })
   .finally(async () => {
     try {
+      if (designerRow === null) await prisma.systemSetting.deleteMany({ where: { key: DESIGNER_KEY } });
+      else if (designerRow) await prisma.systemSetting.update({ where: { key: DESIGNER_KEY }, data: { value: designerRow.value as never } });
       if (templateIds.length) {
         await prisma.$transaction(async (tx) => {
           await tx.$executeRawUnsafe(`SET LOCAL session_replication_role = 'replica'`);
