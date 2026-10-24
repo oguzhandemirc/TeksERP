@@ -21,7 +21,7 @@ function fakeStorage(init: Record<string, string> = {}) {
 }
 
 const station = (over: Partial<Station>): Station =>
-  ({ id: "s1", code: "IST1", name: "İstasyon", type: StationType.INTERNAL, kind: StationKind.RAW_QC, department: null, isActive: true, appliesColor: false, appliesProperty: false, appliesQuality: false, producesWarpBeam: false, consumesWarpBeam: false, ...over }) as Station;
+  ({ id: "s1", code: "IST1", name: "İstasyon", type: StationType.INTERNAL, kind: StationKind.RAW_QC, department: null, isActive: true, appliesColor: false, appliesProperty: false, appliesQuality: false, inspectionEnabled: false, producesWarpBeam: false, consumesWarpBeam: false, ...over }) as Station;
 const machine = (id: string, stationId: string): Machine => ({ id, code: id, name: `Makine ${id}`, stationId, isActive: true }) as unknown as Machine;
 
 describe("Görünüm tercihi", () => {

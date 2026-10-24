@@ -26,6 +26,8 @@ import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { assertStationDefaultLabelCopies } from "./helpers/label-copies.helper";
+import { inspectionDefaultForKind } from "./helpers/quality-station.helper";
+import type { StationKind } from "@prisma/client";
 
 /**
  * `kind` API davranış dispatch'inin anahtarıdır: rota/iş emri adımı, top girişi,
@@ -74,6 +76,13 @@ export class StationService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     assertStationDefaultLabelCopies(data);
     await seedCapabilityFromCategory(data);
+    // Eski panel `inspectionEnabled` göndermez → türden doğar (KQ-D1). Update
+    // bu alana dokunmaz: yöneticinin kapattığı muayene sessizce açılmasın.
+    if (data.inspectionEnabled === undefined) {
+      data.inspectionEnabled = inspectionDefaultForKind(
+        typeof data.kind === "string" ? (data.kind as StationKind) : undefined,
+      );
+    }
     return super.create(data, userId);
   }
 

@@ -225,7 +225,7 @@ async function main(): Promise<void> {
     const steps = await prisma.workOrderStep.findMany({ where: { workOrderId: woId }, orderBy: { stepSequence: "asc" }, select: { id: true, station: { select: { kind: true } } } });
     // Bu bir YETENEK sorusu değil ROTA TOPOLOJİSİ iddiasıdır: fikstürün kurduğu
     // rotanın iş emrine hangi istasyon TÜRLERİ olarak klonlandığını kilitler.
-    // `stepCanApplyQuality` burada yanlış cevap verirdi — yeteneği okur, türü değil.
+    // `stepRunsStepFlow` burada yanlış cevap verirdi — yeteneği okur, türü değil.
     // eslint-disable-next-line no-restricted-syntax
     const rotaDogru = steps.length === 2 && steps[0].station.kind === StationKind.PROCESS_QC && steps[1].station.kind === StationKind.TAMBUR;
     check("HOP3 rota klonlandı: 1.adım PROCESS_QC, 2.adım TAMBUR", rotaDogru, steps.map((s) => s.station.kind).join("→"));

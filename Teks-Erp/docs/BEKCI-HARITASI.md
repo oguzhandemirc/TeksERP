@@ -1947,7 +1947,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `Teks-Erp/scripts/test_roll_cancel_step_recompute.ts` | Top iptalinin kapsamının 'hareketin adımı' değil 'hareketin iş emrinin SKIPPED-dışı tüm adımları' olduğunu kilitler; softDelete/hardDelete ve applyRol | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_search_field_config.ts` | `searchFields`/`codeSearchFields`/`buildTextSearch` kovalarını TS AST ile tarayıp her yolu Prisma DMMF üzerinden çözer: metin alanı KOD kovasında (ses |  |  |  |
 | `Teks-Erp/scripts/test_shipment_scope_lock.ts` | Storno ↔ iade yarışını kapatan sevkiyat kapsamlı advisory kilidin, koruduğu okumadan ÖNCE alındığını (§1 sıra ölçümü) ve kilit uzay numaralarının (802 | ✓ |  |  |
-| `Teks-Erp/scripts/test_station_quality_capability.ts` | 'Bu adım KK yürütür mü' ikizinin (saf yüklem stepCanApplyQuality ↔ QUALITY_STATION_WHERE) canlı DB'de aynı kümeyi verdiğini ve karar noktalarında kind | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_station_quality_capability.ts` | İki ikiz (AKIŞ stepRunsStepFlow ↔ STEP_FLOW_WHERE · KALİTE stepCanApplyQuality ↔ QUALITY_STATION_WHERE) canlı DB'de aynı kümeyi verir, gövdeler birbirinin alanını okumaz, migration türetmesi = inspectionDefaultForKind (tx+ROLLBACK), kalite tüketici beyanı iki yönlü, kurşun dağıtım listesi = assign kabulü (KQ-D1) | ✓ | ✓ S6–S10 (2026-10-24) |  |
 | `Teks-Erp/scripts/test_wo_terminal_guard.ts` | Kaynak taraması: status yazan hiçbir çıplak workOrder.update kalmamalı, status yazan her updateMany where'inde durum süzgeci taşımalı, subcontractor.s |  | ✓ |  |
 | `Teks-Erp/scripts/test_wo_terminal_race.ts` | "IN_PRODUCTION top ⇒ bağlı iş emri terminal değil" değişmezi + protokol taraması: WO satır kilidi tx'in İLK işi olmalı (üç serviste). | ✓ | ✓ |  |
 
@@ -2104,7 +2104,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `Teks-Erp/scripts/test_quality_scorecard.ts` | finalizedAt trigger'ının doğru anlarda yazıp storno/iadede YAZMADIĞINI ve Kalite Karnesi'nin metraj ağırlığı, K18 dışlaması, fason atfı sözleşmesini b | ✓ |  |  |
 | `Teks-Erp/scripts/test_scrap_grade_label.ts` | Fire kalitede etiket kapısını: kuralın STATÜDEN değil KALİTEDEN çözülmesi, kalite işaretinin liste yanıtında gelmesi, bayrağın dört kapıdan geçmesi ve | ✓ |  |  |
 | `Teks-Erp/scripts/test_scrap_scorecard.ts` | Fire Karnesi'nin producedQty'siyle Kalite Karnesi'nin totalQty'sinin BİREBİR mutabakatını ve çok hatalı topta metrajın çift sayılmamasını (K18 ölü sta | ✓ | ✓ |  |
-| `Teks-Erp/scripts/test_station_quality_capability.ts` | 'Bu adım KK yürütür mü' ikizinin (saf yüklem stepCanApplyQuality ↔ QUALITY_STATION_WHERE) canlı DB'de aynı kümeyi verdiğini ve karar noktalarında kind | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_station_quality_capability.ts` | İki ikiz (AKIŞ stepRunsStepFlow ↔ STEP_FLOW_WHERE · KALİTE stepCanApplyQuality ↔ QUALITY_STATION_WHERE) canlı DB'de aynı kümeyi verir, gövdeler birbirinin alanını okumaz, migration türetmesi = inspectionDefaultForKind (tx+ROLLBACK), kalite tüketici beyanı iki yönlü, kurşun dağıtım listesi = assign kabulü (KQ-D1) | ✓ | ✓ S6–S10 (2026-10-24) |  |
 | `Teks-Erp/scripts/test_wo_manual_complete.ts` | Manuel kapatmada kapanış dispozisyonu: beş statü uygulanır, dispozisyonsuz kapatma 400, fasondaki top 409 (rollback), TRANSFER klon üretir, kaynak COM | ✓ |  |  |
 | `mobil/src/screens/Modules/Tambur/shortCutQuality.test.ts` | Kısa kesim → otomatik A1 kuralı tek dosyada: shortCutOverride/shortCutRevert sınırları (eşik altı uzunluk, mevcut/varsayılan kalite kodu, katalogdan A |  |  |  |
 
