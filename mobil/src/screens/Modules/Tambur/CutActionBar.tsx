@@ -28,6 +28,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { LabelCopiesStepper } from '../../../components/labels/LabelCopiesStepper';
+import { labelCopiesSuffix } from '../../../lib/labelCopies';
 
 import {
   colors,
@@ -71,6 +73,9 @@ interface Props {
   bitirDisabled?: boolean;
   /** Kapanış isteği uçuşta — çift dokunuş engellenir. */
   bitirLoading?: boolean;
+  /** Etiket adedi seçicisi — yalnız `labelCopiesSource = STATION` iken verilir
+   *  (Bitir ile Kes arasında çizilir, Kes metnine "×N" eklenir). Yoksa bar bugünküyle aynı. */
+  copies?: { count: number; onInc: () => void; onDec: () => void };
 }
 
 export default function CutActionBar({
@@ -84,9 +89,24 @@ export default function CutActionBar({
   onBitir,
   bitirDisabled,
   bitirLoading,
+  copies,
 }: Props) {
   return (
     <Surface style={styles.bar} elevation={3}>
+      {/* Telefonda dört öğe tek satıra sığmaz → seçici kendi satırında, üstte. */}
+      {copies && compact && (
+        <View style={styles.copiesRow}>
+          <Text style={styles.copiesRowLabel}>Etiket adedi</Text>
+          <LabelCopiesStepper
+            count={copies.count}
+            onInc={copies.onInc}
+            onDec={copies.onDec}
+            height={56}
+            tint={PURPLE}
+            disabled={kesLoading}
+          />
+        </View>
+      )}
       <View style={styles.row}>
         <KartelaToggle on={kartelaOn} onToggle={onToggleKartela} compact={compact} />
         {onBitir && (
@@ -99,8 +119,18 @@ export default function CutActionBar({
             compact={compact}
           />
         )}
+        {copies && !compact && (
+          <LabelCopiesStepper
+            count={copies.count}
+            onInc={copies.onInc}
+            onDec={copies.onDec}
+            height={compact ? BAR_HEIGHT : BAR_HEIGHT_TABLET}
+            tint={PURPLE}
+            disabled={kesLoading}
+          />
+        )}
         <KesButton
-          label={kesLabel}
+          label={`${kesLabel}${labelCopiesSuffix(!!copies, copies?.count ?? 0)}`}
           onPress={onKes}
           disabled={kesDisabled}
           loading={kesLoading}
@@ -344,6 +374,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   row: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
+  copiesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  copiesRowLabel: { fontSize: 15, fontWeight: '700', color: colors.textSecondary },
 
   // Kartela toggle — sabit genişlik (outline↔dolu geçişinde Kes zıplamasın).
   toggle: {

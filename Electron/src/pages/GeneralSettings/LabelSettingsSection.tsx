@@ -6,12 +6,15 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService, type DefaultLabelMedia, type FeatureFlags } from "@/services/featureFlagService";
 import { FieldLabel, FlagToggle } from "./SettingRow";
+import {
+  DEFAULT_LABEL_COPIES,
+  DEFAULT_LABEL_COPIES_SOURCE,
+  LabelCopiesFields,
+  isValidLabelCopies,
+} from "./LabelCopiesFields";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
-
-const DEFAULT_COPIES = 2;
-const MAX_COPIES = 5;
 
 const FALLBACK_MEDIA: DefaultLabelMedia = { widthMm: 100, heightMm: 148, dpi: 203, gapMm: 2, marginMm: 3 };
 /** Varsayılan medya alanları: anahtar + etiket + [min,max] + tam sayı mı. */
@@ -47,18 +50,21 @@ export function LabelSettingsSection({
   const canEdit = hasAnyPermission(writePermissions);
   const flagsQ = useFeatureFlags();
 
-  const currentCopies = flagsQ.data?.data?.labelCopies ?? DEFAULT_COPIES;
+  const currentCopies = flagsQ.data?.data?.labelCopies ?? DEFAULT_LABEL_COPIES;
+  const currentSource = flagsQ.data?.data?.labelCopiesSource ?? DEFAULT_LABEL_COPIES_SOURCE;
   const currentNative = flagsQ.data?.data?.nativeSendEnabled ?? false;
   const currentMobileRaster = flagsQ.data?.data?.mobileRasterEnabled ?? false;
   const currentScrapLabel = flagsQ.data?.data?.scrapGradeLabelEnabled ?? false;
   const currentMedia = flagsQ.data?.data?.defaultLabelMedia ?? FALLBACK_MEDIA;
 
   const [copies, setCopies] = useState(String(currentCopies));
+  const [source, setSource] = useState(currentSource);
   const [native, setNative] = useState(currentNative);
   const [mobileRaster, setMobileRaster] = useState(currentMobileRaster);
   const [scrapLabel, setScrapLabel] = useState(currentScrapLabel);
   const [media, setMedia] = useState<Record<keyof DefaultLabelMedia, string>>(() => mediaToStr(currentMedia));
   useEffect(() => setCopies(String(currentCopies)), [currentCopies]);
+  useEffect(() => setSource(currentSource), [currentSource]);
   useEffect(() => setNative(currentNative), [currentNative]);
   useEffect(() => setMobileRaster(currentMobileRaster), [currentMobileRaster]);
   useEffect(() => setScrapLabel(currentScrapLabel), [currentScrapLabel]);
@@ -69,7 +75,7 @@ export function LabelSettingsSection({
   }, [currentMedia.widthMm, currentMedia.heightMm, currentMedia.dpi, currentMedia.gapMm, currentMedia.marginMm]);
 
   const copiesNum = Number(copies);
-  const copiesValid = Number.isInteger(copiesNum) && copiesNum >= 1 && copiesNum <= MAX_COPIES;
+  const copiesValid = isValidLabelCopies(copies);
   const mediaErrors = MEDIA_FIELDS.filter((f) => {
     const n = Number(media[f.key]);
     return !Number.isFinite(n) || n < f.min || n > f.max || (f.int && !Number.isInteger(n));
@@ -77,17 +83,19 @@ export function LabelSettingsSection({
   const mediaValid = mediaErrors.length === 0;
 
   const copiesDirty = copiesNum !== currentCopies;
+  const sourceDirty = source !== currentSource;
   const nativeDirty = native !== currentNative;
   const mobileRasterDirty = mobileRaster !== currentMobileRaster;
   const scrapLabelDirty = scrapLabel !== currentScrapLabel;
   const mediaDirty = MEDIA_FIELDS.some((f) => Number(media[f.key]) !== currentMedia[f.key]);
-  const dirty = copiesDirty || nativeDirty || mobileRasterDirty || scrapLabelDirty || mediaDirty;
+  const dirty = copiesDirty || sourceDirty || nativeDirty || mobileRasterDirty || scrapLabelDirty || mediaDirty;
   useRegisterSettingsDirty(dirty);
 
   const mut = useMutation({
     mutationFn: () => {
       const patch: Partial<FeatureFlags> = {};
       if (copiesDirty) patch.labelCopies = copiesNum;
+      if (sourceDirty) patch.labelCopiesSource = source;
       if (nativeDirty) patch.nativeSendEnabled = native;
       if (mobileRasterDirty) patch.mobileRasterEnabled = mobileRaster;
       if (scrapLabelDirty) patch.scrapGradeLabelEnabled = scrapLabel;
@@ -107,6 +115,7 @@ export function LabelSettingsSection({
 
   const reset = () => {
     setCopies(String(currentCopies));
+    setSource(currentSource);
     setNative(currentNative);
     setMobileRaster(currentMobileRaster);
     setScrapLabel(currentScrapLabel);
@@ -118,7 +127,10 @@ export function LabelSettingsSection({
   if (!canEdit) {
     return (
       <p className="text-sm">
-        Etiket kopya adedi: <span className="rounded-md border px-2 py-0.5 text-xs">{currentCopies}</span>
+        Etiket adedi: <span className="rounded-md border px-2 py-0.5 text-xs">{currentCopies}</span>{" "}
+        <span className="text-xs text-muted-foreground">
+          ({currentSource === "STATION" ? "istasyon belirler; bu genel adettir" : "sistem geneli"})
+        </span>
         <span className="ml-2 text-xs text-muted-foreground">
           (değiştirmek için <code>admin:settings</code> gerekir)
         </span>
@@ -128,27 +140,13 @@ export function LabelSettingsSection({
 
   return (
     <div className="space-y-4">
-      <div>
-        <FieldLabel
-          htmlFor="label-copies"
-          label="Etiket kopya adedi"
-          desc="Bir top etiketi baskısında kaç kopya çıkar. 2 = etiket topun bir üstüne, bir altına yapıştırılır (varsayılan). Tambur kesimi ve tartı/paket baskılarında geçerlidir."
-        />
-        <input
-          id="label-copies"
-          type="number"
-          inputMode="numeric"
-          value={copies}
-          min={1}
-          max={MAX_COPIES}
-          step={1}
-          onChange={(e) => setCopies(e.target.value)}
-          className="mt-2 flex h-9 w-40 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        />
-        {!copiesValid && (
-          <p className="mt-1 text-xs text-destructive">1–{MAX_COPIES} arası bir sayı girin.</p>
-        )}
-      </div>
+      <LabelCopiesFields
+        source={source}
+        onSourceChange={setSource}
+        copies={copies}
+        onCopiesChange={setCopies}
+        disabled={mut.isPending}
+      />
 
       {/* Etiket Stüdyosu v2: cihazsız baskı/önizleme için varsayılan medya */}
       <div className="border-t pt-4">

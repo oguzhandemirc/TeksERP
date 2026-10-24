@@ -23,6 +23,8 @@ export interface Station {
   producesWarpBeam: boolean;
   /** Devere Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma/raşel); yuva kapısı budur. */
   consumesWarpBeam: boolean;
+  /** Akış etiketinin istasyon varsayılan adedi (1–5); null = genel adet. Yalnız etiket adedi kaynağı "İstasyon" iken okunur. */
+  defaultLabelCopies: number | null;
   defaultCategoryId: string | null;
   defaultCategory?: { id: string; code: string; name: string } | null;
   createdAt: string;

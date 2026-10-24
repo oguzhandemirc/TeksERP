@@ -8,6 +8,7 @@ import { LabelKind } from "@prisma/client";
 import { labelKindSchema } from "../config/label-kind.schema";
 import { LabelService } from "../services/label.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
+import { parseCopiesQuery } from "../services/helpers/label-copies.helper";
 import "../types/express-augment";
 
 /**
@@ -228,11 +229,9 @@ export class LabelController {
           customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
           stock: req.query.stock === "1" || req.query.stock === "true",
           confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
-          // Saha #6: ?copies= override — verilmezse label.copies ayarı (default 2).
+          // ?copies= — TEK çözücü (GLOBAL'de yok sayılır, STATION'da 1-5 / dışı 400).
           copies:
-            typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
-              ? parseInt(req.query.copies, 10)
-              : undefined,
+            parseCopiesQuery(req.query.copies),
           ...(await resolveFormatOpts(req)),
         },
       );
@@ -259,9 +258,7 @@ export class LabelController {
         stock: req.query.stock === "1" || req.query.stock === "true",
         confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
         copies:
-          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
-            ? parseInt(req.query.copies, 10)
-            : undefined,
+          parseCopiesQuery(req.query.copies),
         ...(await resolveFormatOpts(req)),
       });
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -288,9 +285,7 @@ export class LabelController {
         stock: req.query.stock === "1" || req.query.stock === "true",
         confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
         copies:
-          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
-            ? parseInt(req.query.copies, 10)
-            : undefined,
+          parseCopiesQuery(req.query.copies),
         rasterCapable: wantB64,
         ...(await resolveFormatOpts(req)),
       });
@@ -442,9 +437,7 @@ export class LabelController {
     try {
       const result = await this.service.getSwatchLabelHtml(req.params.id as string, {
         copies:
-          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
-            ? parseInt(req.query.copies, 10)
-            : undefined,
+          parseCopiesQuery(req.query.copies),
         ...(await resolveFormatOpts(req)),
       });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -461,9 +454,7 @@ export class LabelController {
     try {
       const result = await this.service.getSwatchLabelNative(req.params.id as string, {
         copies:
-          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
-            ? parseInt(req.query.copies, 10)
-            : undefined,
+          parseCopiesQuery(req.query.copies),
         ...(await resolveFormatOpts(req)),
       });
       res.setHeader("Content-Type", result.data.contentType);
@@ -488,9 +479,7 @@ export class LabelController {
     try {
       const result = await this.service.getSackLabelHtml(req.params.id as string, {
         copies:
-          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
-            ? parseInt(req.query.copies, 10)
-            : undefined,
+          parseCopiesQuery(req.query.copies),
         ...(await resolveFormatOpts(req)),
       });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -508,9 +497,7 @@ export class LabelController {
       const wantB64 = req.query.encoding === "b64";
       const result = await this.service.getSackLabelNative(req.params.id as string, {
         copies:
-          typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
-            ? parseInt(req.query.copies, 10)
-            : undefined,
+          parseCopiesQuery(req.query.copies),
         ...(wantB64 ? { encoding: "b64" as const } : {}),
         ...(await resolveFormatOpts(req)),
       });

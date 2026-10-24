@@ -84,6 +84,9 @@ import { NumpadHost, useOptionalNumpadContext } from '../../../components/Numpad
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { LabelPrinter } from '../../../components/LabelPrinter';
+import { LabelCopiesStepper } from '../../../components/labels/LabelCopiesStepper';
+import { useLabelCopies } from '../../../hooks/useLabelCopies';
+import { labelCopiesSuffix } from '../../../lib/labelCopies';
 import { isWorkSessionLost } from '../../../services/api';
 import { findGradeByRole } from '../../../utils/qualityRole';
 import { sessionBucketKey, useSessionEntriesStore } from '../../../store/sessionEntriesStore';
@@ -552,10 +555,16 @@ export default function KK1Screen() {
   const [verifyScanOpen, setVerifyScanOpen] = useState(false);
   // useMemo: 3000+ satırlık ekranda her render'da taze dizi kimliği üretmek
   // alt bileşen memoizasyonunu boşa düşürür (inceleme bulgusu — perf).
-  const activePrintRoll = useMemo(
-    () => printJobs.find((j) => j.roll.id === printActiveId)?.roll ?? null,
+  const activePrintJob = useMemo(
+    () => printJobs.find((j) => j.roll.id === printActiveId) ?? null,
     [printJobs, printActiveId],
   );
+  const activePrintRoll = activePrintJob?.roll ?? null;
+  // Etiket adedi seçicisi (yalnız STATION modunda): basış anındaki değer kayıt
+  // kimliğine (clientToken) bağlanır, başarıda baskı işine geçer. Gövdeye GİRMEZ —
+  // sunucu kayıt yükünde adet tanımaz; uygulama yeniden başlarsa sunucu çözer.
+  const labelCopies = useLabelCopies();
+  const copiesByTokenRef = useRef(new Map<string, number>());
   const printQueue = useMemo(
     () =>
       printJobs
@@ -595,8 +604,8 @@ export default function KK1Screen() {
   }, [isOnline, printHydrated]);
 
   // Aynı top zaten bekliyorsa store dedup eder (çift dokunuş 2 kâğıt basmaz).
-  const enqueuePrint = useCallback((roll: Roll) => {
-    usePrintQueue.getState().enqueue(roll);
+  const enqueuePrint = useCallback((roll: Roll, copies?: number) => {
+    usePrintQueue.getState().enqueue(roll, copies);
   }, []);
 
   // onDone güvenlik ağı — onResult ÇAĞRILMAYAN yol (barkodsuz top erken dönüşü)
@@ -1019,7 +1028,9 @@ export default function KK1Screen() {
       // Offline'da pause olduysa burası ancak online dönünce çalışır.
       // Queue'ya at: birden fazla mutation sırayla resume olduğunda hepsi basılır
       // (eskiden setPrintRoll overwrite ediyordu, sadece son etiket basıyordu).
-      enqueuePrint(res.data);
+      const copies = vars.clientToken ? copiesByTokenRef.current.get(vars.clientToken) : undefined;
+      if (vars.clientToken) copiesByTokenRef.current.delete(vars.clientToken);
+      enqueuePrint(res.data, copies);
       // "Bu oturum" listesi — sunucu onayı: pending → onaylı kayda dönüşür.
       useSessionEntriesStore.getState().confirmRoll(bucketKey, res.data as Roll);
       qc.invalidateQueries({ queryKey: ['rolls', 'kk1'] });
@@ -1474,6 +1485,8 @@ export default function KK1Screen() {
           // o durumda form yeniden okunduğu için damga da yeni olmak DURUMUNDA,
           // ama token yapışkan kalır ki backend kopyayı yine de eritsin.
           { clientToken: tokenForSubmit(attempt, () => fresh.clientToken), clientEnteredAt: fresh.clientEnteredAt };
+    const takenCopies = labelCopies.take();
+    if (takenCopies !== undefined) copiesByTokenRef.current.set(identity.clientToken, takenCopies);
     createMutation.mutate({
       itemId: form.itemId,
       initialQty: qty,
@@ -2280,6 +2293,15 @@ export default function KK1Screen() {
               </Button>
             </View>
           )}
+          <View style={labelCopies.enabled ? styles.submitRow : undefined}>
+          {labelCopies.enabled && (
+            <LabelCopiesStepper
+              count={labelCopies.count}
+              onInc={labelCopies.inc}
+              onDec={labelCopies.dec}
+              height={compact ? 58 : 112}
+            />
+          )}
           <Button
             mode="contained"
             icon={
@@ -2303,7 +2325,7 @@ export default function KK1Screen() {
             buttonColor={
               justSaved ? colors.success : retrying ? colors.warningDark : undefined
             }
-            style={styles.submitBtn}
+            style={[styles.submitBtn, labelCopies.enabled && styles.submitRowBtn]}
             contentStyle={[styles.submitBtnContent, !compact && styles.submitBtnContentTablet]}
             labelStyle={[styles.submitBtnLabel, !compact && styles.submitBtnLabelTablet]}
           >
@@ -2319,8 +2341,9 @@ export default function KK1Screen() {
                       ? 'Kaydediliyor… bekle'
                       : retrying
                         ? 'Tekrar Dene (aynı top)'
-                        : 'Kaydet ve Etiket Bas'}
+                        : `Kaydet ve Etiket Bas${labelCopiesSuffix(labelCopies.enabled, labelCopies.count)}`}
           </Button>
+          </View>
         </Animated.View>
         </View>
 
@@ -2536,6 +2559,7 @@ export default function KK1Screen() {
         key={activePrintRoll?.id ?? 'idle'}
         roll={activePrintRoll}
         kind="ROLL_RAW"
+        copies={activePrintJob?.copies}
         onDone={handlePrintDone}
         onResult={handlePrintResult}
       />
@@ -4115,6 +4139,9 @@ const styles = StyleSheet.create({
   },
 
   submitBtn: { borderRadius: 12, marginTop: 4 },
+  // Etiket adedi seçicisi (STATION) — düğmenin solunda, aynı yükseklikte.
+  submitRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  submitRowBtn: { flex: 1 },
   // Telefon boyu (tablet kendi büyük değerini kullanır).
   submitBtnContent: { height: 58 },
   submitBtnContentTablet: { height: 112 },

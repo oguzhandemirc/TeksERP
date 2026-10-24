@@ -565,6 +565,7 @@ export const updateSchema = z.strictObject({
     .optional(),
   // Saha #6: top etiketi kopya adedi (1–5). (Servis ayrıca doğrular.)
   labelCopies: z.number().int().min(1).max(5).optional(),
+  labelCopiesSource: z.enum(["GLOBAL", "STATION"]).optional(),
   // label.nativeSendEnabled — Faz-2 doğrudan yazıcıya gönderim (default false).
   nativeSendEnabled: z.boolean().optional(),
   // label.defaultMedia — cihazsız baskı/önizleme için sistem varsayılan etiket medyası.

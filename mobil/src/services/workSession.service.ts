@@ -17,6 +17,8 @@ export interface SessionStation {
   code: string;
   name: string;
   kind: SessionStationKind | string;
+  /** İstasyonun varsayılan etiket adedi (1–5; null = genel adet). Eski sunucu göndermez. */
+  defaultLabelCopies?: number | null;
 }
 
 export interface SessionMachine {

@@ -39,6 +39,13 @@ export const stationFormSchema = z.object({
   // Devere yetenekleri (modül açıkken çizilir; kapalıyken varsayılan false gider = bugün).
   producesWarpBeam: z.boolean(),
   consumesWarpBeam: z.boolean(),
+  // Boş giriş → null (genel adet); `setValueAs` sayıya çevirir. Sınır backend `LABEL_COPIES_MAX` ile birebir.
+  defaultLabelCopies: z
+    .number({ message: "Etiket adedi sayı olmalı" })
+    .int("Etiket adedi tam sayı olmalı")
+    .min(1, "Etiket adedi en az 1")
+    .max(5, "Etiket adedi en fazla 5")
+    .nullable(),
   defaultCategoryId: z.string().nullable().optional(),
 });
 
@@ -59,5 +66,6 @@ export const stationFormDefaults: StationFormValues = {
   appliesQuality: false,
   producesWarpBeam: false,
   consumesWarpBeam: false,
+  defaultLabelCopies: null,
   defaultCategoryId: null,
 };

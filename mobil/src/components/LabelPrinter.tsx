@@ -49,6 +49,9 @@ interface Props {
    *  tüketiciler görmezden gelir, davranışları değişmez. Şekil TEK KAYNAKTAN
    *  (`printQueue.PrintResult`) — üç ayrı inline kopya sessizce ayrışıyordu. */
   onResult?: (r: PrintResult) => void;
+  /** Etiket adedi (yalnız `labelCopiesSource = STATION` iken dolu — `useLabelCopies().take()`).
+   *  Verilmezse istek adet TAŞIMAZ → sunucu kendi çözer (bugünkü davranış). İşe dondurulur. */
+  copies?: number;
 }
 
 /**
@@ -59,7 +62,7 @@ interface Props {
  * "Mobil ile Electron'daki etiket farklı" sorunu yapısal olarak çözülür —
  * Electron LabelPreview de iframe ile aynı HTML'i tüketir.
  */
-export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, onResult }: Props) {
+export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, onResult, copies }: Props) {
   // SERİ BASKI KUYRUĞU (2026-07-27): eski tek-slot `firedRef` modeli, baskı
   // uçuştayken parent `roll`u A→B değiştirirse B'yi SESSİZCE atlıyordu (bayrak
   // yalnız roll===null'da sıfırlanıyordu) — seri kesim + BT yazıcı akışında
@@ -118,9 +121,10 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
       roll,
       kind,
       labelContext: confirmScrap ? { ...(labelContext ?? {}), confirmScrap: true } : labelContext,
+      copies,
     };
     chainRef.current = chainRef.current.then(async () => {
-      const { roll: jobRoll, kind: jobKind, labelContext: jobContext } = job;
+      const { roll: jobRoll, kind: jobKind, labelContext: jobContext, copies: jobCopies } = job;
       if (!jobRoll.barcode) {
         if (mountedRef.current) {
           Toast.show({
@@ -182,7 +186,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
           const native = await labelService.getRollNative(
             jobRoll.id,
             jobKind,
-            jobContext,
+            jobCopies !== undefined ? { ...(jobContext ?? {}), copies: jobCopies } : jobContext,
             rasterEnabledRef.current,
           );
           phase = 'prep'; // fetch bitti — dil doğrulaması ağ hatası DEĞİLDİR
@@ -215,6 +219,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
               ...(jobContext?.orderLineId ? { orderLineId: jobContext.orderLineId } : {}),
               ...(jobContext?.customerId ? { customerId: jobContext.customerId } : {}),
               ...(jobContext?.stock ? { stock: "1" } : {}),
+              ...(jobCopies !== undefined ? { copies: String(jobCopies) } : {}),
             },
             responseType: 'text',
             transformResponse: [(d) => d],
@@ -282,7 +287,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
         onDoneRef.current(jobRoll); // unmount'ta da — aktif iş kilidi çözülsün
       }
     });
-  }, [roll, kind, labelContext, confirmScrap]);
+  }, [roll, kind, labelContext, confirmScrap, copies]);
 
   return null;
 }

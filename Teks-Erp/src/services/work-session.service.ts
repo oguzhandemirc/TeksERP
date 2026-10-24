@@ -82,7 +82,9 @@ export const SESSION_INCLUDE = {
   // `productionLineCount` (2026-09-14): tezgah ekranı çok hatlı makinede hat seçici çizer;
   // tek hatta seçici yok. Ek alan — eski tablet yok sayar.
   machine: { select: { id: true, code: true, name: true, productionLineCount: true } },
-  station: { select: { id: true, code: true, name: true, kind: true } },
+  // `defaultLabelCopies` (2026-10-24): tabletin "– N +" etiket adedi seçicisinin başlangıç değeri
+  // (yalnız `label.copiesSource = STATION`). Ek alan — eski tablet yok sayar.
+  station: { select: { id: true, code: true, name: true, kind: true, defaultLabelCopies: true } },
 } as const;
 
 /** "Devralan" ardıl oturumun tooltip için minimal alanları. */
