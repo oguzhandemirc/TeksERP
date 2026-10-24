@@ -517,6 +517,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "settings:label",
       "settings:devices",
       "settings:company",
+      "settings:e-irsaliye",
       "settings:session",
       "system:activity",
       "system:work-sessions",

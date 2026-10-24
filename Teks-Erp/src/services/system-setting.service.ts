@@ -12,6 +12,10 @@ import {
   DEFAULT_PRINT_LOG_RETENTION_DAYS,
   isValidPrintLogRetentionDays,
 } from "./helpers/print-job-retention.helper";
+import {
+  DEFAULT_REQUEST_TRACE_RETENTION_DAYS,
+  isValidRequestTraceRetentionDays,
+} from "./helpers/request-trace-retention.helper";
 import { createHash } from "crypto";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -70,6 +74,16 @@ import {
   type PhaseOutNewOrder,
 } from "./helpers/item-lifecycle-settings.helper";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
+import {
+  DEFAULT_COMPANY_LEGAL_IDENTITY,
+  DEFAULT_EIRSALIYE_CONFIG,
+  readEIrsaliyeConfigValue,
+  sanitizeCompanyLegalIdentity,
+  validateEIrsaliyeConfigInput,
+  type CompanyLegalIdentity,
+  type EIrsaliyeConfig,
+} from "./e-irsaliye/e-irsaliye-settings";
+export type { CompanyLegalIdentity, EIrsaliyeConfig } from "./e-irsaliye/e-irsaliye-settings";
 
 /**
  * SystemSetting.value bir JsonValue. Reader yardımcıları: gelen değer
@@ -603,6 +617,12 @@ export const SETTING_KEYS = {
   /** Belge künyesi: irsaliye/çeki başına basılan firma adresi/telefon/vergi bilgisi.
    *  Firma adı ayrı (COMPANY_NAME); burada sadece ek künye satırları. */
   COMPANY_LETTERHEAD: "company.letterhead",
+  /** Gönderici RESMİ künyesi (VKN/TCKN, unvan, vergi dairesi, adres) — e-belgenin kimliği.
+   *  Serbest metin `company.letterhead`ten ayrı soru: o basılan süs, bu yapısal kimlik (E3-AYAR). */
+  COMPANY_LEGAL_IDENTITY: "company.legalIdentity",
+  /** e-İrsaliye yapılandırması: bağdaştırıcı + yürürlük tarihi. Varsayılan `yok` = özellik kapalı
+   *  (modül anahtarı DEĞİL, yapılandırma kapısı — plan §0.3 P1). */
+  EIRSALIYE_CONFIG: "eIrsaliye.config",
   /** Yazdırılan belgelerin (sevk irsaliyesi, fason sevk, kartela çeki) içerik ayarı:
    *  hangi bölümler basılsın + başlık/imza/footer override. CANLI okunur (snapshot DEĞİL)
    *  — irsaliye her açıldığında güncel ayarı yansıtır. Map: { [belgeKey]: DocumentConfig }. */
@@ -820,6 +840,9 @@ export const SETTING_KEYS = {
   /** Yazdırma geçmişinin (`print_jobs`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 180.
    *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-A1). */
   PRINT_LOG_RETENTION_DAYS: "printLog.retentionDays",
+  /** İstek başlığının (`request_traces`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 90.
+   *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-B1). */
+  REQUEST_TRACE_RETENTION_DAYS: "requestTrace.retentionDays",
   /** Bu KURULUMUN kalıcı kimliği (uuid v4). İlk açılışta bir kez üretilir
    *  (`jobs/installation-identity.job.ts`) ve bir daha ASLA değişmez.
    *
@@ -1921,6 +1944,10 @@ export interface FeatureFlags {
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */
   companyLetterhead: CompanyLetterhead;
+  /** Gönderici resmi künyesi (e-İrsaliye/e-belge kimliği). */
+  companyLegalIdentity: CompanyLegalIdentity;
+  /** e-İrsaliye yapılandırması; hazırlık sorusu yalnız `resolveEIrsaliyeReadiness`ten. */
+  eIrsaliyeConfig: EIrsaliyeConfig;
   /** Yazdırılan belgelerin içerik ayarı (canlı). Ham map; client resolveDocConfig ile çözer. */
   documentsConfig: DocumentsConfig;
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
@@ -2396,6 +2423,8 @@ export class SystemSettingService {
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
+      companyLegalIdentity: await readCompanyLegalIdentity(cacheClient),
+      eIrsaliyeConfig: await readEIrsaliyeConfig(cacheClient),
       documentsConfig: await readDocumentsConfig(cacheClient),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
@@ -3872,6 +3901,31 @@ export class SystemSettingService {
         SETTING_KEYS.COMPANY_LETTERHEAD,
         merged as unknown as Prisma.InputJsonValue,
         "Belge künyesi (irsaliye/çeki üst bloğunda basılan adres/telefon/vergi)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "companyLegalIdentity")) {
+      const c = input.companyLegalIdentity;
+      if (!c || typeof c !== "object" || Array.isArray(c)) {
+        throw AppError.badRequest("Resmi künye nesne olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.COMPANY_LEGAL_IDENTITY,
+        sanitizeCompanyLegalIdentity(c) as unknown as Prisma.InputJsonValue,
+        "Gönderici resmi künyesi (VKN/TCKN, unvan, vergi dairesi, adres — e-belge kimliği)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "eIrsaliyeConfig")) {
+      // Fail-closed: tanınmayan bağdaştırıcı `yok`a düşürülmez, 400 (Zod'u atlayan çağıran için de).
+      const r = validateEIrsaliyeConfigInput(input.eIrsaliyeConfig);
+      if (!r.ok) throw AppError.badRequest(r.message, { code: "EIRSALIYE_CONFIG_INVALID" });
+      await this.set(
+        SETTING_KEYS.EIRSALIYE_CONFIG,
+        r.value as unknown as Prisma.InputJsonValue,
+        "e-İrsaliye yapılandırması (bağdaştırıcı + yürürlük tarihi)",
         userId
       );
     }
@@ -6580,6 +6634,28 @@ export async function readCompanyLetterhead(
   };
 }
 
+/** Gönderici resmi künyesi (yoksa boş künye). Temizlik `sanitizeCompanyLegalIdentity`. */
+export async function readCompanyLegalIdentity(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<CompanyLegalIdentity> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({
+    where: { key: SETTING_KEYS.COMPANY_LEGAL_IDENTITY },
+    select: { value: true },
+  });
+  return setting ? sanitizeCompanyLegalIdentity(setting.value) : { ...DEFAULT_COMPANY_LEGAL_IDENTITY };
+}
+
+/** e-İrsaliye yapılandırması (yoksa/çöpse `{adapter:"yok"}` = bugünkü davranış). */
+export async function readEIrsaliyeConfig(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<EIrsaliyeConfig> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({
+    where: { key: SETTING_KEYS.EIRSALIYE_CONFIG },
+    select: { value: true },
+  });
+  return setting ? readEIrsaliyeConfigValue(setting.value) : { ...DEFAULT_EIRSALIYE_CONFIG };
+}
+
 /** Belge logosu kütüphanesi — bkz. SETTING_KEYS.DOCUMENTS_LOGO. */
 export interface DocumentsLogo {
   current: string | null;
@@ -7169,6 +7245,22 @@ export async function readPrintLogRetentionDays(
   });
   const v = asNumber(setting?.value);
   return isValidPrintLogRetentionDays(v) ? v : DEFAULT_PRINT_LOG_RETENTION_DAYS;
+}
+
+/**
+ * İstek başlığı saklama süresi (gün). Kayıt yoksa ya da geçersizse varsayılan 90;
+ * 0 açıkça yazılırsa budama yok.
+ */
+export async function readRequestTraceRetentionDays(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.REQUEST_TRACE_RETENTION_DAYS },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return isValidRequestTraceRetentionDays(v) ? v : DEFAULT_REQUEST_TRACE_RETENTION_DAYS;
 }
 
 /**

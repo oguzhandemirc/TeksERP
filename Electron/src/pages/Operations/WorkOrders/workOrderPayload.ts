@@ -45,6 +45,8 @@ export interface CreatePayload {
   targetItemId: string | null;
   targetColorId: string | null;
   targetPropertyIds: string[];
+  /** KQ-D6 hedef çeşit değerleri (hedef kurşun gramajı) — yalnız create; sunucu zod'u iki uçta. */
+  targetValues?: Array<{ propertyId: string; valueId: string }>;
   orderLineIds?: string[];
   stepPlanning?: StepPlanPayload[];
   width: number | null;
@@ -58,6 +60,8 @@ export interface CreatePayload {
 export interface WorkOrderFormMeta {
   fasonPlans: FasonStepPlan[];
   customSteps: CustomRouteStep[];
+  /** Kurşun çeşit özelliğinin kimliği; hedef gramaj seçiliyse `targetValues`a yazılır. */
+  kursunTargetPropertyId?: string | null;
 }
 
 export function buildPayload(
@@ -109,6 +113,9 @@ export function buildPayload(
     targetItemId: v.targetItemId ?? null,
     targetColorId: v.targetColorId ?? null,
     targetPropertyIds: v.targetPropertyIds ?? [],
+    ...(meta.kursunTargetPropertyId && v.kursunTargetValueId
+      ? { targetValues: [{ propertyId: meta.kursunTargetPropertyId, valueId: v.kursunTargetValueId }] }
+      : {}),
     ...(hasLines ? { orderLineIds } : {}),
     width: v.width ?? null,
     targetQuantity: targetQuantityEnabled ? (v.targetQuantity ?? null) : null,

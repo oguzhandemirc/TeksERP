@@ -1,5 +1,6 @@
 import {
   Building2,
+  FileCheck2,
   Banknote,
   Blocks,
   Boxes,
@@ -297,6 +298,7 @@ export type CategoryKind =
   | "scanner"
   | "server"
   | "company"
+  | "eIrsaliye"
   | "session"
   | "label";
 
@@ -2007,6 +2009,17 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     kind: "company",
     section: "system",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:company"],
+  },
+  {
+    // Modül anahtarı DEĞİL, yapılandırma kapısı (E-IRS P1): künye + seri + yöntem + tarih.
+    id: "e-irsaliye",
+    label: "e-İrsaliye",
+    icon: FileCheck2,
+    description: "e-İrsaliye gönderim yöntemi ve yürürlük tarihi. Kapalıyken sevkiyat bugünkü gibi yalnız kâğıt irsaliyeyle çalışır.",
+    keywords: "e-irsaliye eirsaliye e irsaliye gib ubl xml entegratör portal dışa aktar simülasyon yürürlük ettn sevk irsaliyesi elektronik",
+    kind: "eIrsaliye",
+    section: "system",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:e-irsaliye"],
   },
   {
     id: "session",

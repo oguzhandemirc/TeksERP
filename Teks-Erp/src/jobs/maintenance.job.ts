@@ -13,8 +13,9 @@ import { readLastAuditChainReport, verifyAndRecordAuditChain } from "../services
 import { SessionRegistryService } from "../services/session-registry.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import { pruneNotifications } from "../services/notification-prune.service";
-import { readAuditArchiveRetentionYears, readPrintLogRetentionDays } from "../services/system-setting.service";
+import { readAuditArchiveRetentionYears, readPrintLogRetentionDays, readRequestTraceRetentionDays } from "../services/system-setting.service";
 import { prunePrintJobs } from "../services/print-job.service";
+import { pruneRequestTraces } from "../services/request-trace.service";
 import { auditArchivePurgeCutoff, nextAuditPurgeSliceEnd } from "../services/helpers/audit-retention.helper";
 import { isInMaintenanceWindow } from "../services/helpers/maintenance-window.helper";
 import { factoryYmd } from "../constants/time";
@@ -142,6 +143,16 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
       const r = await prunePrintJobs(new Date(), days);
       if (r.deleted === 0) return null;
       return `yazdırma geçmişi: ${r.deleted} satır budandı (${days} günden eski)`;
+    },
+  },
+  {
+    // İstek başlığı telemetridir: yalnız YAŞA göre budanır (`requestTrace.retentionDays`, 0 = budama yok).
+    name: "request-trace-purge",
+    run: async () => {
+      const days = await readRequestTraceRetentionDays();
+      const r = await pruneRequestTraces(new Date(), days);
+      if (r.deleted === 0) return null;
+      return `istek başlıkları: ${r.deleted} satır budandı (${days} günden eski)`;
     },
   },
 ];

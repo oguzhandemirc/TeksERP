@@ -121,6 +121,7 @@ import { resolveDevice } from "./middlewares/device.middleware";
 import notificationRoutes from "./routes/bildirim.routes";
 import { isNotificationBellPath } from "./constants/notification-stream";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
+import { requestTraceMiddleware } from "./middlewares/request-trace.middleware";
 import { licenseGate } from "./middlewares/license.middleware";
 import { isWebPanelMode } from "./lib/web-session-cookie";
 import { clientInfoMiddleware } from "./middlewares/client-info.middleware";
@@ -243,7 +244,7 @@ app.use(buildHelmet(hardening.httpsEnabled));
 // istemci etkilenmez). Uçların asıl koruması `verifyToken` + `requirePermission`;
 // origin listesi onların YERİNE geçmez.
 app.use(cors({
-  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date", "X-Document-Template", "X-Document-Template-Version", "X-Document-Tables-Available", "X-Document-Warnings"],
+  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date", "X-Request-Id", "X-Document-Template", "X-Document-Template-Version", "X-Document-Tables-Available", "X-Document-Warnings"],
   ...(hardening.corsOrigins ? { origin: hardening.corsOrigins } : {}),
 }));
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
@@ -367,6 +368,8 @@ app.use(resolveDevice);
 // verifyToken ile SONRA doluyor — kopyalasaydık audit hep boş okurdu.
 // resolveDevice'tan SONRA mount edilir ki `req.device` çözülmüş olsun.
 app.use((req, _res, next) => runWithRequestContext(req, next));
+// İstek başlığı (izlenebilirlik B1): `X-Request-Id` + koşullu `request_traces` anlık görüntüsü (await'siz).
+app.use(requestTraceMiddleware);
 
 // Sürüm bilgisi (durum sayfasında gösterilir). Okuma `lib/app-version.ts`e
 // taşındı — servis keşfi kimlik ucu da aynı sürümü basıyor ve `app.ts`'ten

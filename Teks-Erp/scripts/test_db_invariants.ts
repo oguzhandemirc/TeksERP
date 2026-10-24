@@ -156,6 +156,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "damgalı hedef dururken aynı (iş emri, özellik) yeniden yazılabilsin; AKTİF çift tekil",
   },
+  // KQ-D6 (migration 20261024140855): İE hedef çeşit değeri — damga ile sürümlenir.
+  {
+    table: "work_order_target_values",
+    index: "work_order_target_values_active_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "damgalı hedef değer dururken aynı (iş emri, çeşit özelliği) yeniden yazılabilsin; AKTİF hedef tekil",
+  },
   // rolls — null-yoğun FK'lar (migration 20260606001717 → 20260612100000 onarımı)
   { table: "rolls", index: "rolls_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun FK" },
   { table: "rolls", index: "rolls_shipmentId_idx", uniq: false, predicate: `("shipmentId" IS NOT NULL)`, why: "null-yoğun FK" },
@@ -227,7 +235,13 @@ const PARTIAL_INDEXES: Array<{
   },
   // roll_errors
   { table: "roll_errors", index: "roll_errors_isProcessed_idx", uniq: false, predicate: `("isProcessed" = false)`, why: "açık hata kuyruğu" },
-  { table: "roll_errors", index: "roll_errors_roll_meter_defect_uq", uniq: true, predicate: `("defectTypeId" IS NOT NULL)`, why: "aynı metrede mükerrer hata seddi" },
+  // K4P-SEMA: predicate'e `origin = PROCESS` — muayene revizyonu aynı üçlüyü yeniden yazar.
+  { table: "roll_errors", index: "roll_errors_roll_meter_defect_uq", uniq: true, predicate: `(("defectTypeId" IS NOT NULL) AND (origin = 'PROCESS'::"RollErrorOrigin"))`, why: "aynı metrede mükerrer SAHA hatası seddi" },
+  // K4P-SEMA (migration 20261024170759): tek aktif muayene + kural seti tekillikleri.
+  { table: "roll_inspections", index: "roll_inspections_one_active_uq", uniq: true, predicate: `(("supersededAt" IS NULL) AND ("voidedAt" IS NULL))`, why: "(top, faz) başına tek aktif muayene — eşzamanlı ikinci ilk muayenenin seddi" },
+  { table: "four_point_rule_sets", index: "four_point_rule_sets_one_factory_uq", uniq: true, predicate: `((scope = 'FACTORY'::"RuleScope") AND ("isActive" = true))`, why: "tek aktif fabrika kural seti" },
+  { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_uq", uniq: true, predicate: `(("isActive" = true) AND ("customerId" IS NOT NULL) AND ("itemId" IS NULL))`, why: "müşteri başına tek aktif genel kural seti" },
+  { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün) başına tek aktif kural seti" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
   // roll_returns — iade belge no KOLONA alındı (migration 20260922210000).
@@ -562,6 +576,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `((status)::text = 'HATA'::text)`,
     why: "yazdırma geçmişinde hata süzgeci ve özet şeridinin hata sayımı tüm telemetriyi taramasın",
   },
+  // request_traces (izlenebilirlik B1, migration 20261024091047): "reddedilen istekler" süzgeci yalnız hata satırlarını tarar.
+  {
+    table: "request_traces",
+    index: "request_traces_hata_createdAt_idx",
+    uniq: false,
+    predicate: `(status >= 400)`,
+    why: "istek başlığında reddedilen istek süzgeci tüm telemetriyi taramasın",
+  },
   // Bildirim çekirdeği (N1-SEMA, migration 20261024023840): dağıtıcının birleştirme hedefi ve koşul açma seddi.
   {
     table: "notification_inbox",
@@ -763,6 +785,19 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // 2026-10-24 — KQ-D4 (migration 20261024073000_kursun_gramaj_cesit): gramaj değeri
   // yalnız KURSUN_APPLIED satırında; özellik kendi kendisinin çeşidi olamaz.
   { table: "roll_operations", name: "roll_operations_property_value_ck" },
+  // K4P-SEMA (migration 20261024170759) — 4 puan muayene seddi; bekçi `test_k4p_sema_sedleri`.
+  { table: "roll_errors", name: "roll_errors_meter_ck" },
+  { table: "roll_errors", name: "roll_errors_points_ck" },
+  { table: "roll_errors", name: "roll_errors_inspection_ck" },
+  { table: "defect_types", name: "defect_types_fixed_points_ck" },
+  { table: "items", name: "items_width_cm_ck" },
+  { table: "roll_inspections", name: "roll_inspections_counts_ck" },
+  { table: "roll_inspections", name: "roll_inspections_length_ck" },
+  { table: "roll_inspections", name: "roll_inspections_width_ck" },
+  { table: "roll_inspections", name: "roll_inspections_stamp_ck" },
+  { table: "roll_inspections", name: "roll_inspections_revision_ck" },
+  { table: "four_point_rule_sets", name: "four_point_rule_sets_scope_ck" },
+  { table: "four_point_rule_bands", name: "four_point_rule_bands_max_score_ck" },
   { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
