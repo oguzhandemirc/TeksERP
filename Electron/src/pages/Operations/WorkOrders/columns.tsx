@@ -7,6 +7,8 @@ import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { safeFormat } from "@/lib/format";
 import type { WorkOrder } from "./types";
 import { customerCellView } from "./customer-cell";
+import { LocationCell } from "./LocationCell";
+import { locationText } from "./location";
 import { TERIM } from "@/lib/terim";
 
 // İlerleme = üretimden ÇIKAN ÷ üretime GİREN (detay sağlık şeridiyle birebir aynı).
@@ -119,6 +121,14 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     },
   },
   {
+    // ŞU AN NEREDE (2026-10-24): canlı topların istasyon dağılımı (backend `konum`); bölünmüşse
+    // en kalabalık istasyon + "+N" rozeti, dağılım tıkla açılan kartta. Satır yüksekliği sabit.
+    id: "location",
+    header: "Şu an nerede",
+    meta: { label: "Şu an nerede", exportValue: (wo: WorkOrder) => locationText(wo.konum, wo.status) },
+    cell: ({ row }) => <LocationCell konum={row.original.konum} status={row.original.status} />,
+  },
+  {
     id: "fasonFirms",
     header: "Fason",
     cell: ({ row }) => {
@@ -208,28 +218,10 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
   {
     accessorKey: "status",
     header: "Durum",
-    cell: ({ row }) => {
-      const fason = row.original.currentFasonStations ?? [];
-      return (
-        // Yan yana (2. satıra taşıp satır yüksekliğini bozmasın); amber rozet + tooltip
-        // zaten "fasonda" olduğunu belli ediyor → "Fasonda:" öneki gereksiz.
-        <div className="flex flex-wrap items-center gap-1.5">
-          <StatusBadge
-            status={row.original.status}
-            labels={workOrderStatusLabels}
-            tones={workOrderStatusTones}
-          />
-          {fason.length > 0 && (
-            <Badge
-              variant="outline"
-              className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
-              title="Şu an mal bu fason istasyon(lar)ında"
-            >
-              {fason.join(", ")}
-            </Badge>
-          )}
-        </div>
-      );
-    },
+    // "Şu an fasonda" rozeti buradan "Şu an nerede" sütununa taşındı (2026-10-24) — aynı bilgi
+    // iki sütunda durmasın; eski backend `konum` göndermezse yalnız rozet görünmez.
+    cell: ({ row }) => (
+      <StatusBadge status={row.original.status} labels={workOrderStatusLabels} tones={workOrderStatusTones} />
+    ),
   },
 ];

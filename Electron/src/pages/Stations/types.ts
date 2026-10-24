@@ -8,6 +8,8 @@ export interface Station {
   kind: StationKind;
   department: string | null;
   isActive: boolean;
+  /** İş emri rota adımı olabilir mi (false: KK1 girişi, Sevkiyat gibi giriş/çıkış istasyonları). */
+  allowAsWorkOrderStep?: boolean;
   /** Bu istasyon RENK uygulayabilir mi? (2026-08-10 — yetenek kategoriden ayrıldı) */
   appliesColor: boolean;
   /** Bu istasyon ÖZELLİK uygulayabilir mi? */
