@@ -183,6 +183,9 @@ export interface FeatureFlags {
   itemPhaseOutNewOrder: 'OKUTULAN_TOPLAR' | 'KAPALI' | 'SERBEST';
   /** "Tükenene kadar" karta yeni üretim planı (varsayılan açık). Yalnız seçici kapsamı. */
   itemPhaseOutNewPlan: boolean;
+  /** bildirim: kişisel gelen kutusu (backend `bildirim.gelenKutusuEnabled`, default false).
+   *  Eski sunucu alanı göndermez → `resolveNotificationInboxEnabled` false döner. */
+  bildirimGelenKutusuEnabled: boolean;
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -260,7 +263,16 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   // Backend varsayılanları (URUN-YASAM-DONGUSU §4.1).
   itemPhaseOutNewOrder: 'OKUTULAN_TOPLAR',
   itemPhaseOutNewPlan: true,
+  // bildirim: fail-closed — bayrak okunamazsa bugünkü davranış (gelen kutusu yok).
+  bildirimGelenKutusuEnabled: false,
 };
+
+/** bildirim: gelen kutusu açık mı — yalnız gerçek `true`; eksik/tanınmayan değer bugünkü davranış (false). */
+export function resolveNotificationInboxEnabled(
+  f: Partial<Pick<FeatureFlags, 'bildirimGelenKutusuEnabled'>> | null | undefined,
+): boolean {
+  return f?.bildirimGelenKutusuEnabled === true;
+}
 
 export const featureFlagService = {
   get: (): Promise<FeatureFlags> =>
