@@ -34,7 +34,9 @@
 //      EMEKLİ ön ekle yazılmış kayıt da sayıya giriyor
 //  §4d Her seri bir panel BÖLÜMÜNE ait (görünmez seri yok), liste grup sırasında
 //      gelir ve bölüm başlığını taşır
-//  §4e Sayım kaynağı olmayan seri `uretecBagi` ile BEYANLI (kaynaksızlık bir KARAR)
+//  §4e Sayım kaynağı olmayan seri `uretecBagi` ya da `countTablePending` ile BEYANLI
+//      (kaynaksızlık bir KARAR); bekleyen model şemada doğunca beyan çürür
+//  §3d Sabit biçimli (GİB) satır: yalnız ön ek + yıla bağlı başlangıç; uç 400/yazım
 //  §4f Kaynaklı HER seri gerçekten sayılabiliyor — yanlış model adı sessizce
 //      `null` döndürür ve hiçbir statik kontrol göremez
 //  §10 C0b İKİ EŞİK (Faz B + Faz D) · sınıflandırma sözleşmesi: alan EKLENDİ,
@@ -50,6 +52,8 @@
 //      yetenek listesi sunucudan, `reset` hep kapalı ve GEREKÇELİ
 //   §5 Önizleme SUNUCUDA hesaplanır ve biçim kapısından geçer
 //
+// ⭐ NEGATİF SONDA §4e (2026-10-24, ölçüldü, md5 ile geri alındı): şemaya geçici
+//    `model EIrsaliye` eklenince "beyan çürümedi" ❌1; geri alınca 145/145.
 // ⭐ NEGATİF SONDA ✓B3 (2026-09-22, ölçüldü): sayaç ve istemci kapılarının sırası
 //    TERS çevrilince §1 ❌1 (`…CLIENT_TOO_OLD` geliyor, beklenen `…COUNTER_NOT_SCOPED`) ·
 //    `listSeries.editable` yalnız `lockedReason`a bakınca §2 ❌1 (46 seri ayrışıyor) ·
@@ -95,6 +99,7 @@ import {
   seriesLock,
 } from "../src/services/helpers/series-panel.helper";
 import { seriesPrefix } from "../src/services/helpers/series-format.helper";
+import { factoryYmd } from "../src/constants/time";
 import { SAMPLE_PRINTED_DOCS } from "../src/services/document-render/sample-data";
 import {
   planRetiredPrefixCleanup,
@@ -342,9 +347,15 @@ async function main(): Promise<void> {
     // indi); `batchDaily` aynı gün akşam çıktı — gerekçesi ÖTEKİ rejimin biçimiydi
     // (P01…P99 sarması) ve o rejim kendi serisine (`batchShort`) taşındı, sarma
     // da `number_series.wrap` kolonuna indi.
-    const yapisal = kilitliler.filter((x) => x.lock.kind === "YAPISAL").map((x) => x.key).sort();
-    check("§3b ⭐ YAPISAL kilit kümesi BOŞ — her kilit gerekçesiyle EKSENE indi",
+    // ⚠️ 2026-10-24 (E2-SERI): kısmi YAPISAL doğdu — dış standart (GİB) serisinde
+    // tarih/hane/ayraç kalkmayacak kilit, ön ek açık. TAM yapısal küme hâlâ boş.
+    const yapisal = kilitliler.filter((x) => x.lock.kind === "YAPISAL" && seriesFullyLocked(x.key)).map((x) => x.key).sort();
+    check("§3b ⭐ TAM YAPISAL kilit kümesi BOŞ — her kilit gerekçesiyle EKSENE indi",
       yapisal.length === 0, yapisal.join(", ") || "(yok)");
+    const kismiYapisal = kilitliler.filter((x) => x.lock.kind === "YAPISAL" && !seriesFullyLocked(x.key));
+    check("§3b ⭐ kısmi YAPISAL kilit YALNIZ sabit biçimli (dış standart) seride",
+      kismiYapisal.every((x) => numberSeriesCatalogEntry(x.key).fixedShape !== undefined),
+      kismiYapisal.map((x) => x.key).join(", ") || "(yok)");
 
     // ── §3c OKUMA YÜKLEMİ = YAZMA KAPISI (iki fazlı eşik dahil) ───────────
     // `seriesLock` yalnız Faz B'ye bakıyordu, `assertSeriesFormatWritable` ise
@@ -361,6 +372,35 @@ async function main(): Promise<void> {
     check("§3c ⭐ okutulan serinin kilidi İKİ fazı da arıyor (B ve D)",
       seriesPanelKaynagi.includes("scanningClientsMissingPhases"),
       "series-panel.helper.ts");
+
+    // ── §3d SABİT BİÇİMLİ SATIR (GİB e-İrsaliye, 2026-10-24) ──────────────
+    // Panel satırı açık, yalnız ön ek düzenlenir; okuma kolu ile yazma kapısı
+    // AYNI eksen listesinden (`FIXED_SHAPE_LOCKED_AXES`) okur.
+    const eir = liste.find((r) => r.key === "eIrsaliye");
+    check("§3d ⭐ sabit biçimli satır düzenlenebilir, dört eksen kilitli, ön ek açık",
+      eir?.editable === true && eir.lockKind === "YAPISAL" && (eir.lockedAxes ?? []).length === 4 &&
+        !(eir.lockedAxes ?? []).includes("prefix"),
+      `${eir?.lockKind} / ${(eir?.lockedAxes ?? []).join(",")}`);
+    check("§3d ⭐ sayaçta yalnız başlangıç açık, kural cümlesi taşınıyor",
+      eir?.counter.startValue === true && !eir.counter.step && !eir.counter.maxValue &&
+        (eir.counter.startValueNote ?? "").length > 40 && (eir.counter.lockedReason ?? "").length > 40);
+    check("§3d ⭐ yazma ucu: hane 8 → 400 (eski panel tarih/hane gönderirse)",
+      kod(await dene(() => updateSeriesFormat("eIrsaliye", { prefix: "EIR", dateSegment: "YYYY", digits: 8, separator: "" }))) ===
+        "NUMBER_SERIES_FIXED_SHAPE");
+    check("§3d yazma ucu: sayaçta adım → 400",
+      kod(await dene(() => updateSeriesCounter("eIrsaliye", { startValue: null, step: 5, maxValue: 999_999_999, wrap: false }))) ===
+        "NUMBER_SERIES_FIXED_SHAPE");
+    const basYaz = await dene(() =>
+      updateSeriesCounter("eIrsaliye", { startValue: 1234, step: null, maxValue: 999_999_999, wrap: false }));
+    const basSatir = await prisma.numberSeries.findUnique({ where: { key: "eIrsaliye" } });
+    const buYil = Number(factoryYmd(new Date()).slice(0, 4));
+    check("§3d ⭐ başlangıç değeri yazılır ve fabrika YILINA bağlanır (audit'li uç)",
+      !(basYaz instanceof Error) && basSatir?.startValue === 1234 && basSatir.startValueYear === buYil,
+      `${basSatir?.startValue}/${basSatir?.startValueYear}`);
+    await updateSeriesCounter("eIrsaliye", { startValue: null, step: null, maxValue: 999_999_999, wrap: false });
+    const temiz = await prisma.numberSeries.findUnique({ where: { key: "eIrsaliye" } });
+    check("§3d başlangıç kaldırılınca yıl da kalkar (DB CHECK ikizi)",
+      temiz?.startValue === null && temiz.startValueYear === null);
 
     // ── §4 Etki sayısı ─────────────────────────────────────────────────────
     // ⚠️ FİKSTÜR ŞART: boş tabloda "0 = 0" iddiası, HER ZAMAN 0 dönen bir
@@ -623,7 +663,14 @@ async function main(): Promise<void> {
     // üretecini SÜRMEYEN bir serinin hangi kayıtları numaraladığını BİLEMEYİZ,
     // bu yüzden sayamayız (ve saymaya kalkışmak `T` gibi tek harfli bir ön ekte
     // eski `TEKS…`/`TEST-…` barkodlarını da toplardı).
-    const kaynaksizBeyansiz = NUMBER_SERIES_CATALOG.filter((e) => !e.countTable && !e.uretecBagi);
+    // `countTablePending` İKİNCİ beyan: tablo başka dilimde doğacak (E1-SEMA). Model
+    // şemada doğunca beyan ÇÜRÜR — `countTable`a geçilir ve üretecin yükleyicisi bağlanır.
+    const kaynaksizBeyansiz = NUMBER_SERIES_CATALOG.filter((e) => !e.countTable && !e.uretecBagi && !e.countTablePending);
+    const semaMetni = readFileSync(join(__dirname, "..", "prisma", "schema.prisma"), "utf-8");
+    const curuyenBeyan = NUMBER_SERIES_CATALOG.filter((e) => e.countTablePending &&
+      new RegExp(`^model ${e.countTablePending.model.replace(/^./, (c) => c.toUpperCase())}\\s`, "m").test(semaMetni));
+    check("§4e ⭐ `countTablePending` beyanı çürümedi (model doğduysa `countTable`a geç + yükleyiciyi bağla)",
+      curuyenBeyan.length === 0, curuyenBeyan.map((e) => e.key).join(", ") || "(bekleyen model henüz şemada yok)");
     check("§4e ⭐ sayım kaynağı olmayan seri `uretecBagi` ile BEYAN edilmiş",
       kaynaksizBeyansiz.length === 0,
       kaynaksizBeyansiz.map((e) => e.key).join(", ") ||
@@ -731,7 +778,9 @@ async function main(): Promise<void> {
       liste2.every((r) =>
         numberSeriesCatalogEntry(r.key).ownCounter
           ? !r.counter.startValue && !r.counter.step && !r.counter.maxValue && (r.counter.lockedReason ?? "").length > 20
-          : r.counter.startValue && r.counter.step && r.counter.maxValue),
+          : numberSeriesCatalogEntry(r.key).fixedShape // GİB: yalnız başlangıç (§3d)
+            ? r.counter.startValue && !r.counter.step && !r.counter.maxValue
+            : r.counter.startValue && r.counter.step && r.counter.maxValue),
       `${liste2.filter((r) => r.counter.startValue).length} açık / ${liste2.filter((r) => !r.counter.startValue).length} kapalı`);
 
     // ── §11 EMEKLİ ÖN EK HİJYENİ (K7, 2026-09-23) ──────────────────────────
@@ -828,6 +877,9 @@ async function main(): Promise<void> {
       ekranMetinleri.push({ nerede: `${e.key}.label`, metin: e.label });
       if (e.lockedReason) ekranMetinleri.push({ nerede: `${e.key}.lockedReason`, metin: e.lockedReason });
       if (e.ownCounter) ekranMetinleri.push({ nerede: `${e.key}.ownCounter`, metin: e.ownCounter.not });
+      const yet = seriesCounterCapabilities(e.key);
+      if (yet.lockedReason) ekranMetinleri.push({ nerede: `${e.key}.counter.lockedReason`, metin: yet.lockedReason });
+      if (yet.startValueNote) ekranMetinleri.push({ nerede: `${e.key}.counter.startValueNote`, metin: yet.startValueNote });
     }
     for (const e of NUMBER_SERIES_CATALOG) {
       const lock = seriesLock(e.key);

@@ -63,7 +63,8 @@ export interface NumberSeriesCatalogEntry {
    * Tarih segmenti · hane · ayraç (ikisi de) KODDA kilitli, fabrika yalnız
    * `prefixRe`e uyan ön eki seçer. "Hane taşarsa kod GENİŞLER" kuralının BEYANLI
    * istisnasıdır: kod uzunluğu standardın parçası, sayaç `seedMaxValue`da 409 ile
-   * durur (`seedWrap: false`) ve sayaç ayarları kapalıdır (boşluksuz sıra).
+   * durur (`seedWrap: false`); adım/sınır/sarma kapalı, yalnız yıla bağlı
+   * başlangıç değeri açık (yıl ortası geçiş; üretimden sonra kilit).
    * Kapı `assertSeriesFormatAllowed` (DEĞER) + `seriesLock` (okuma) aynı
    * yardımcıdan okur: `series-fixed-shape.helper`.
    */
