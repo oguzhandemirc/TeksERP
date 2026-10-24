@@ -223,6 +223,8 @@ async function main(): Promise<void> {
       check("§4e PENDING liste → 401", (await liste(ID.bekleyen)).status === 401);
       const h4 = await parolaGiris(ID.onayli);
       check("⭐ §4f onaylı kimlik KANITSIZ → 401 DEVICE_PROOF_INVALID (onaysız kipe DÜŞMEZ)", h4.status === 401 && kod(h4) === "DEVICE_PROOF_INVALID", ozet(h4));
+      // §3q'nun getStatus'u teyitsiz bir sır verdi; 30 sn yeniden verim penceresi (D1) dolmuş sayılır.
+      await prisma.device.updateMany({ where: { deviceId: ID.onayli }, data: { proofIssuedAt: new Date(Date.now() - 31_000) } });
       const s = await istek(port, "GET", "/api/devices/status", undefined, cihaz(ID.onayli));
       const sir = String(data(s).deviceSecret ?? "");
       const h5 = await pinGiris(ID.onayli, { "x-device-proof": buildDeviceProof(sir, Date.now(), "POST", "/api/auth/login-quick-pin") });

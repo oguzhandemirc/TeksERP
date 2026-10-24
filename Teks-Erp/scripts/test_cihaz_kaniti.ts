@@ -177,9 +177,14 @@ async function main(): Promise<void> {
     check("§3b DB'de sır YOK (yalnız tuz)", !!satir?.proofSalt && !satir.proofSalt.includes(sir1));
     const iz = await prisma.systemLog.count({ where: { recordId: cihaz.id, newData: { path: ["event"], equals: "DEVICE_PROOF_SECRET_ISSUED" } } });
     check("§3c verim audit'e düşer", iz >= 1, `${iz} satır`);
+    // 30 sn pencere (D1): aynı andaki announce/status turları tek sır alır; pencere dolunca teyitsiz sır yeniden verilir.
+    const sPencere = await istek(port, "GET", "/api/devices/status", undefined, { "x-device-id": cihazId });
+    check("§3d1 pencere içinde ikinci status sır ALMAZ (eşzamanlı turlar tek verim)", sPencere.status === 200 && data(sPencere).deviceSecret === undefined,
+      `HTTP ${sPencere.status}`);
+    await prisma.device.update({ where: { id: cihaz.id }, data: { proofIssuedAt: new Date(Date.now() - 31_000) } });
     const s2 = await istek(port, "GET", "/api/devices/status", undefined, { "x-device-id": cihazId });
     const sir2 = String(data(s2).deviceSecret ?? "");
-    check("§3d teyitsiz sır (cevap yolda kaybolmuş olabilir) yeniden verilir, eskisi geçersizleşir", /^[0-9a-f]{64}$/.test(sir2) && sir2 !== sir1);
+    check("§3d teyitsiz sır (cevap yolda kaybolmuş olabilir) pencere dolunca yeniden verilir, eskisi geçersizleşir", /^[0-9a-f]{64}$/.test(sir2) && sir2 !== sir1);
     const teyit = await pinGiris({ "x-device-id": cihazId, "x-device-proof": kanit(sir2) });
     check("§3e geçerli kanıtla giriş", tokenVar(teyit), `HTTP ${teyit.status}`);
     const teyitli = await prisma.device.findUnique({ where: { id: cihaz.id }, select: { proofConfirmedAt: true } });
