@@ -234,7 +234,8 @@ function main(): void {
   // Negatif sondalar (2026-10-24, yalnız backend sabiti bozuldu, md5 ile geri alındı; §5 ayna ❌'si
   // beklenen eş kırmızıdır): `sales/order-intake`ın `yeniHali` silindi → §8a ❌ (+§5);
   // `dokuma/levent-sonucu` `birlesti → dokuma/tezgah-randimani` yapıldı → §8c ❌ (+§5);
-  // `temel-satis.routes.ts`e `requireReportOpen("sales/termin")` yazıldı (satır hazir:false) → §8f ❌ (1).
+  // §8f K-KAPI (R0-RAPB, 2026-10-24): `temel-uretim.routes.ts` `quality/kayip` ucundan `...reportGate(...)` silindi
+  // → §8f ❌ (1); `/inventory/depo` yolu `/inventory/depo-x` yapıldı (kapı yolsuz kaldı) → §8f ❌ (1).
   const v1 = REPORT_CATALOG.filter((r) => r.nesil === "v1");
   const v2 = REPORT_CATALOG.filter((r) => r.nesil === "v2");
   check("§8z körlük zemini: iki nesil de dolu", v1.length > 0 && v2.length > 0, `v1 ${v1.length} · v2 ${v2.length}`);
@@ -277,19 +278,33 @@ function main(): void {
   check("§8e v1 `kategoriV2`: uzman ⇔ `muhasebe-araclari`, diğerleri `null`", kategoriSapan.length === 0,
     kategoriSapan.join(", ") || `${v1.filter((r) => r.kategoriV2 !== null).length} uzman`);
 
-  // §8f ⭐ İKİ YÖNLÜ hazırlık: `hazir:false` satırın taşıyıcısında kapı BULUNURSA kırmızı (uç inmiş,
-  // beyan geride kalmış); `hazir:true` satır §1–§3 ve `test_rapor_kapisi` ölçümüne zaten girer.
+  // §8f ⭐ AŞAMALI İNİŞ (K-KAPI 2026-10-24): `hazir:false` satırın ucu backend'de önce inebilir; o zaman uç
+  // KAPILI olmalı — kapı iki kalıpta tanınır: literal `requireReportOpen("<key>")` ya da `...reportGate("<key>")`
+  // fabrikası (aynı sıkılık). Ucu olmayan satırın taşıyıcısında kapı da OLMAZ (yolsuz kapı = beyan/uç ayrışması).
+  // `hazir:true` satır §1–§3 ve `test_rapor_kapisi` ölçümüne zaten girer.
   const hazirSapan: string[] = [];
+  let inmisUc = 0;
+  const kapiVar = (metin: string, key: string): boolean =>
+    metin.includes(`requireReportOpen("${key}")`) || metin.includes(`reportGate("${key}")`);
   for (const r of v2) {
     if (r.hazir) continue;
     for (const t of r.kapiTasiyici ?? []) {
       let kaynak: string;
       try { kaynak = readFileSync(join(KOK, t.dosya), "utf8"); } catch { continue; } // dosya henüz yok = beklenen
-      if (kaynak.includes(`requireReportOpen("${r.key}")`)) hazirSapan.push(`${r.key}: hazır değil diyor ama uç var — hazir:true yap (${t.dosya})`);
+      const bas = kaynak.indexOf(`router.get("${t.yol}"`);
+      if (bas < 0) {
+        if (kapiVar(kaynak, r.key)) hazirSapan.push(`${r.key}: uç yok ama kapı var (${t.dosya})`);
+        continue;
+      }
+      inmisUc++;
+      // Zincir: yol dizgisinden işleyicinin başına (`async (`) kadar.
+      const son = kaynak.indexOf("async (", bas);
+      const zincir = kaynak.slice(bas, son < 0 ? undefined : son);
+      if (!kapiVar(zincir, r.key)) hazirSapan.push(`${r.key}: uç inmiş ama RAPOR KAPISI yok (${t.dosya}${t.yol})`);
     }
   }
-  check("§8f ⭐ `hazir:false` satırın taşıyıcısında kapı YOK (uç inince beyan `hazir:true`ya döner)", hazirSapan.length === 0,
-    hazirSapan.join(" · ") || `${v2.filter((r) => !r.hazir).length} hazır değil · ${v2.filter((r) => r.hazir).length} hazır`);
+  check("§8f ⭐ `hazir:false` satırın inmiş ucu KAPILI, ucu olmayanda kapı yok (aşamalı iniş, K-KAPI)", hazirSapan.length === 0,
+    hazirSapan.join(" · ") || `${v2.filter((r) => !r.hazir).length} hazır değil (${inmisUc} uç inmiş) · ${v2.filter((r) => r.hazir).length} hazır`);
 
   // §8g v2 satırının biçimi: adres anahtardan türer, kategori/persona/varyant kapalı kümeden.
   const KATEGORI = new Set<string>(RAPOR_KATEGORILERI_V2);
