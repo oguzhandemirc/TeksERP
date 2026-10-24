@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { printHtmlString } from "@/lib/print";
+import { frozenDocSubject, printTracked } from "@/lib/print";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
@@ -189,7 +189,7 @@ export function FasonSevkPrintDialog({ dispatchId, open, onOpenChange, onBack }:
               type="button"
               className="gap-1"
               disabled={!html}
-              onClick={() => html && printHtmlString(html)}
+              onClick={() => html && void printTracked({ subject: frozenDocSubject(DOC_TYPE, shown), html })}
             >
               <Printer className="h-4 w-4" /> Yazdır
             </Button>

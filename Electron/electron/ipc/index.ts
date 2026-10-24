@@ -8,6 +8,7 @@ import { registerScannerIpc } from "./scanner.ipc.js";
 import { registerPrinterIpc } from "./printer.ipc.js";
 import { registerScaleIpc } from "./scale.ipc.js";
 import { registerPdfIpc } from "./pdf.ipc.js";
+import { registerDocPrintIpc } from "./print.ipc.js";
 import { registerFilesIpc } from "./files.ipc.js";
 import { registerXlsxIpc } from "./xlsx.ipc.js";
 import { registerUpdaterIpc } from "./updater.ipc.js";
@@ -25,6 +26,7 @@ export function registerIpcHandlers(): void {
   registerPrinterIpc();
   registerScaleIpc();
   registerPdfIpc();
+  registerDocPrintIpc();
   registerFilesIpc();
   registerXlsxIpc();
   registerUpdaterIpc();
