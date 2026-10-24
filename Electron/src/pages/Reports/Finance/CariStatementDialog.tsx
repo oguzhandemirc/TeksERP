@@ -31,6 +31,7 @@ import { ReportDateFilter, ReportExportBar } from "../_components";
 import { fmtDate } from "../_components/formatters";
 import { formatDayKey } from "../../Finance/PeriodClose/service";
 import { ReportErrorCard } from "./ReportErrorCard";
+import { LegacyReportBanner } from "../_components/LegacyReportBanner";
 import { buildStatementExport } from "./statementExport";
 import {
   CARI_TXN_SOURCE_LABEL,
@@ -145,6 +146,8 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
             negatifse siz ona borçlusunuz.
           </DialogDescription>
         </DialogHeader>
+        {/* Adresi olmayan eski rapor: band `ReportPageLayout` yerine burada (R0-GECIS). */}
+        <LegacyReportBanner reportKey="finance/statement" className="rounded-md border" />
 
         <div className="flex flex-wrap items-end gap-3">
           <div>

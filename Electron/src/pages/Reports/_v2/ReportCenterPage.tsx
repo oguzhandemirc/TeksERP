@@ -10,10 +10,11 @@ import { useOperationsVisibilityContext } from "@/pages/Operations/useOperations
 import type { ReportTile } from "../tile-config";
 import { centerGroups, filterGroups, isCenterEntryVisible } from "./center-model";
 import { useReportFavorites } from "./favorites";
+import { legacyGroups } from "./legacy-model";
 import { FavoritesStrip, LegacyReportsSection, ReportGroupSection } from "./ReportCenterSections";
 
 interface Props {
-  /** Eski hub'ın AYNI süzgeçten geçmiş kategori karoları — "Eski raporlar" yer tutucusu (içeriği R0-GECIS). */
+  /** Eski hub'ın AYNI süzgeçten geçmiş kategori karoları — "Eski raporlar" bölümünün kategori sırası ve adı. */
   legacyTiles: readonly ReportTile[];
 }
 
@@ -25,6 +26,7 @@ export function ReportCenterPage({ legacyTiles }: Props) {
   const [term, setTerm] = useState("");
   const access = useMemo(() => ({ isAdmin, hasPermission, ctx }), [isAdmin, hasPermission, ctx]);
   const groups = useMemo(() => filterGroups(centerGroups(access), term, foldedIncludes), [access, term]);
+  const legacy = useMemo(() => legacyGroups(legacyTiles, access, { term, includes: foldedIncludes }), [legacyTiles, access, term]);
   const favEntries = favorites
     .map((k) => REPORT_BY_KEY.get(k))
     .filter((e): e is ReportCatalogEntry => e !== undefined && isCenterEntryVisible(e, access));
@@ -35,7 +37,7 @@ export function ReportCenterPage({ legacyTiles }: Props) {
         title="Rapor Merkezi"
         description="Her rapor tek bir soruya cevap verir; sayının ne anlattığı altında günlük dille yazılır."
         actions={
-          <div className="relative w-64">
+          <div className="relative w-full sm:w-64">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Rapor ara…" className="pl-8" aria-label="Rapor ara" />
           </div>
@@ -49,10 +51,12 @@ export function ReportCenterPage({ legacyTiles }: Props) {
           ))}
           {groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {term ? `“${term}” ile eşleşen rapor yok.` : legacyTiles.length > 0 ? "Size açık yeni rapor henüz yok; önceki raporlar aşağıda." : "Size açık rapor henüz yok."}
+              {term
+                ? legacy.length > 0 ? `“${term}” ile eşleşen yeni rapor yok; eski raporlarda eşleşenler aşağıda.` : `“${term}” ile eşleşen rapor yok.`
+                : legacy.length > 0 ? "Size açık yeni rapor henüz yok; önceki raporlar aşağıda." : "Size açık rapor henüz yok."}
             </p>
           ) : null}
-          {!term && legacyTiles.length > 0 ? <LegacyReportsSection tiles={legacyTiles} /> : null}
+          {legacy.length > 0 ? <LegacyReportsSection groups={legacy} /> : null}
         </div>
       </PageBody>
     </PageShell>
