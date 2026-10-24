@@ -54,6 +54,19 @@ export const BUDANAN_DEFTER_DISI: Array<{ model: string; sinif: "DURUM" | "TELEM
   { model: "ErrorReportEntry", sinif: "TELEMETRI",
     gerekce: "müşteri onaylı hata raporu kuyruğu (kişisel verisiz grup özeti); satıcıya gönderilir, hiçbir iş kararı ve raporlanan sayı bu satırdan türemez — silinince yalnız panelin \"ne gönderildi\" listesi kısalır",
     silen: ["src/services/error-report.service.ts"] },
+  // bildirim (plan §3.4): satır silinince hiçbir rapor sayısı değişmez — önizleme yalnız tahmindir.
+  { model: "NotificationInbox", sinif: "TELEMETRI",
+    gerekce: "kişisel gelen kutusu; okunmuş 90 / okunmamış 180 gün (katalog `saklama`), çözülmemiş koşul satırı okunana dek kalır. Sayı ve karar türetilmez — iş kaydı kendi tablosunda",
+    silen: ["src/services/notification-prune.service.ts"] },
+  { model: "NotificationOutbox", sinif: "TELEMETRI",
+    gerekce: "dağıtım kuyruğu; işlendikten (ya da denemeden vazgeçildikten) 7 gün sonra budanır. İşlenmemiş canlı satır yaşından bağımsız kalır",
+    silen: ["src/services/notification-prune.service.ts"] },
+  { model: "NotificationDailyStats", sinif: "TELEMETRI",
+    gerekce: "tercih önizlemesi sayacı (Karar Y3); 35 günde budanır, yalnız \"haftada ~N\" tahmini okur",
+    silen: ["src/services/notification-prune.service.ts"] },
+  { model: "NotificationCondition", sinif: "DURUM",
+    gerekce: "koşulun \"şu an açık mı\" durumu; yalnız ÇÖZÜLMÜŞ satır 180 günde budanır — açık koşul yaşından bağımsız kalır, \"ne oldu\" gelen kutusu/audit'te",
+    silen: ["src/services/notification-prune.service.ts"] },
 ];
 /** SQL'de yaşayan yaş budayıcıları (TS `deleteMany` taramasının göremediği yol). */
 const SQL_BUDAYICILAR: Array<{ model: string; dosya: string; desen: RegExp }> = [

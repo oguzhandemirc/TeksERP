@@ -716,6 +716,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken top, levent ve iplik lotunda “sahibi olan müşteri” alanı açılır; emanet mal ayrı sayılır. Kapalıyken (varsayılan) alan çizilmez, yazılamaz ve her mal fabrikanın sayılır.",
       },
       {
+        key: "kaliteGuvenceEnabled",
+        title: "Kalite Güvence modülünü aç",
+        summary: "4 puan kumaş muayenesi, lab testleri ve sertifika takibi açılır.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Açıkken KK1'de ve Muayene ekranında 4 puan muayenesi girilir; panelde Muayeneler, 4 Puan Kuralları, Lab Testleri ve Sertifikalar ekranları açılır. Kapalıyken (varsayılan) muayene kaydı doğmaz, uçlar 403 verir ve top kalitesi bugünkü gibi elle seçilir. Üretim modülüne bağlı değildir.",
+      },
+      {
         // Ön koşul `production.enabled` (iplik ihtiyaç planı üretim dengesini okur); Üretim listenin başında.
         key: "maliyetEnabled",
         title: "Maliyet & Teklif modülünü aç",

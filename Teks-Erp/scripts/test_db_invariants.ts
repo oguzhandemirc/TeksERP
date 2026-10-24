@@ -553,6 +553,15 @@ const PARTIAL_INDEXES: Array<{
     predicate: `"isActive"`,
     why: "kart tipi × ham kod × tezgah (NULL = genel) için tek canlı eşleme (NULLS NOT DISTINCT); pasif satır yer işgal etmez",
   },
+  // Cihaz eşleme v2 (D1, migration 20261024025530_cihaz_baglama): bir donanım tek CANLI satıra bağlı;
+  // birleşmiş kopya (mergedIntoId dolu) aynı özeti taşıyabilir.
+  {
+    table: "devices",
+    index: "devices_hw_digest_live_uq",
+    uniq: true,
+    predicate: `(("hwDigest" IS NOT NULL) AND ("mergedIntoId" IS NULL))`,
+    why: "aynı donanımdan eşzamanlı iki announce iki canlı satır açamasın; birleşmiş kopyalar özeti korusun",
+  },
   // print_jobs (izlenebilirlik A1): hata süzgeci + "en çok hata veren yazıcı" yalnız HATA satırlarını tarar.
   {
     table: "print_jobs",
@@ -582,6 +591,22 @@ const PARTIAL_INDEXES: Array<{
     uniq: false,
     predicate: `("processedAt" IS NULL)`,
     why: "dağıtıcı süpürmesi yalnız işlenmemiş kuyruğu tarasın (işlenmiş satırlar indekse girmez)",
+  },
+  // e-İrsaliye (E1-SEMA, migration 20261024081108): kaynak başına tek canlı kayıt.
+  {
+    table: "e_irsaliyeler",
+    index: "e_irsaliyeler_kaynak_canli_key",
+    uniq: true,
+    predicate: `(status <> ALL (ARRAY['IPTAL'::"EIrsaliyeStatus", 'REDDEDILDI'::"EIrsaliyeStatus"]))`,
+    why: "kaynak (sevkiyat) başına TEK canlı e-İrsaliye — düşerse aynı sevke iki numara/ETTN doğar; IPTAL/REDDEDILDI yer işgal etmez",
+  },
+  // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): "varsayılan ön ayar" seddi.
+  {
+    table: "report_presets",
+    index: "report_presets_one_default_uq",
+    uniq: true,
+    predicate: `("isDefault" = true)`,
+    why: "kullanıcı başına rapor başına tek varsayılan ön ayar — düşerse iki varsayılan yarışır, rapor hangi parametreyle açılacağını dizi sırasına bırakır",
   },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
@@ -888,6 +913,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "credential_reset_requests", name: "credential_reset_requests_decision_check" },
   // Hata raporu kuyruğu (3.6, migration 20261006120000): grup sayacı en az 1 (boş grup yazılmaz).
   { table: "error_report_entries", name: "error_report_entries_count_check" },
+  // Cihaz eşleme v2 (D1): birleşme kendine olamaz, birleşmiş kopya pasiftir; talep durumu ↔ karar alanları.
+  { table: "devices", name: "devices_merged_not_self" },
+  { table: "devices", name: "devices_merged_inactive" },
+  { table: "device_rebind_requests", name: "device_rebind_requests_status_chk" },
+  { table: "device_rebind_requests", name: "device_rebind_requests_decided_chk" },
   // Yazdırma geçmişi (izlenebilirlik A1, migration 20261024025542): kapalı kümeler + HATA→kod + adet + toplu tavan.
   { table: "print_jobs", name: "print_jobs_output_kind_check" },
   { table: "print_jobs", name: "print_jobs_status_check" },
@@ -902,6 +932,24 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "notification_inbox", name: "notification_inbox_reason_ck" },
   { table: "notification_inbox", name: "notification_inbox_count_ck" },
   { table: "notification_daily_stats", name: "notification_daily_stats_events_ck" },
+  // e-İrsaliye (E1-SEMA): numaralı/gönderilmiş durum çift yüklemi · GİB biçimi · sayaç · doğuş olayı.
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_numarali_durum_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_gonderilmis_durum_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_document_no_bicim_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_download_count_chk" },
+  { table: "e_irsaliye_olaylari", name: "e_irsaliye_olaylari_dogus_chk" },
+  // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): kapalı kümeler VarChar + CHECK
+  // (`defect_types.defectGroup` bilinçli CHECK'siz — küme kodda). Tanım biçimi: SISTEM ⇒ anahtarlı ve
+  // sahipsiz, OZEL ⇒ sahipli ve anahtarsız. Sürüm no ≥ 1; koşu süresi/satır negatif olamaz.
+  { table: "report_definitions", name: "report_definitions_kind_ck" },
+  { table: "report_definitions", name: "report_definitions_visibility_ck" },
+  { table: "report_definitions", name: "report_definitions_status_ck" },
+  { table: "report_definitions", name: "report_definitions_kind_shape_ck" },
+  { table: "report_definition_versions", name: "report_definition_versions_version_no_ck" },
+  { table: "report_shares", name: "report_shares_access_ck" },
+  { table: "report_runs", name: "report_runs_status_ck" },
+  { table: "report_runs", name: "report_runs_counts_ck" },
+  { table: "report_snapshots", name: "report_snapshots_kind_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1112,6 +1160,19 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
     why: "defter mührü: UPDATE her zaman, doğrudan DELETE RED; üst top silinince FK kaskadı geçer (ortak fonksiyon defter_block_tamper)",
   },
+  // e-İrsaliye (E1-SEMA): donmuş XML sürümü + olay defteri mühürleri.
+  {
+    table: "e_irsaliye_xmllari",
+    trigger: "e_irsaliye_xml_degismez",
+    timing: ["BEFORE INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "e_irsaliye_xml_degismez()"],
+    why: "e-İrsaliye XML'i donmuş belge: UPDATE/doğrudan DELETE RED; gönderilmiş/iptal kayda yeni sürüm RED (gönderilen sürüm mühürlü)",
+  },
+  {
+    table: "e_irsaliye_olaylari",
+    trigger: "e_irsaliye_olaylari_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "defter_block_tamper()"],
+    why: "e-İrsaliye olay defteri append-only — UPDATE/doğrudan DELETE RED, kayıt kaskadı geçer",
+  },
   // ── Patron bulutu eşitlemesi (20260929152815_patron_bulut_esitleme) ──────────
   // Silme tespiti koda değil DB'ye bağlı (statik tarama kaskad/dinamik silmede kör):
   // 24 katalog kök tablosunun HER BİRİ `sync_marks`a SILINDI yazar. Kök listesi
@@ -1145,6 +1206,18 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "shipment_orders_sync_dirty",
     timing: ["AFTER INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "sync_mark_shipment_orders()"],
     why: "patron bulutu filigransız küme: shipment_orders ne id ne updatedAt taşır, her yazım sevkiyatı KIRLI yapar",
+  },
+  {
+    table: "devices",
+    trigger: "devices_merge_no_chain",
+    timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW", "devices_merge_no_chain()"],
+    why: "cihaz birleşmesi tek adım: okuyucu COALESCE(mergedIntoId, id) zinciri çözmez",
+  },
+  {
+    table: "device_binding_events",
+    trigger: "device_binding_events_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "device_binding_events_block_tamper()"],
+    why: "bağlama defteri append-only; tek meşru UPDATE cihaz kalıcı silinince FK SET NULL kaskadı",
   },
 ];
 
@@ -1200,6 +1273,12 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["TG_OP = 'UPDATE'", "pg_trigger_depth() <= 1", "RAISE EXCEPTION"],
     why: "ortak defter mührü: UPDATE koşulsuz red, DELETE yalnız doğrudan ifadede red (kaskad derinlik ≥ 2 geçer)",
+  },
+  {
+    name: "e_irsaliye_xml_degismez",
+    volatility: "v",
+    bodyFragments: ["TG_OP = 'UPDATE'", "pg_trigger_depth() <= 1", "FOR SHARE", "'GONDERILDI', 'KABUL', 'KISMI_KABUL', 'REDDEDILDI', 'IPTAL'"],
+    why: "e-İrsaliye XML mührü: değişmez + gönderilmiş/iptal kayda yeni sürüm yok (servis kapısının DB ikizi)",
   },
   {
     name: "roll_write_status_event",
@@ -1285,6 +1364,18 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["TG_OP IN ('UPDATE', 'DELETE')", "TG_OP IN ('INSERT', 'UPDATE')", "'shipments'", "'DIRTY'"],
     why: "patron bulutu: sevkiyat ↔ sipariş kümesinin her yazımı (ekleme/güncelleme/silme) sevkiyatı KIRLI yapar",
+  },
+  {
+    name: "devices_merge_no_chain",
+    volatility: "v",
+    bodyFragments: ['NEW."mergedIntoId"', "'23514'"],
+    why: "cihaz birleşme zinciri yasağı (hedef birleşmiş olamaz, kopyası olan birleşemez)",
+  },
+  {
+    name: "device_binding_events_block_tamper",
+    volatility: "v",
+    bodyFragments: ["pg_trigger_depth() > 1", 'NEW."deviceRefId" IS NULL', "IS NOT DISTINCT FROM OLD", "'23514'"],
+    why: "bağlama defteri mührü: yalnız FK SET NULL kaskadı geçer, başka her UPDATE/DELETE reddedilir",
   },
 ];
 

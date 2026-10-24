@@ -28,7 +28,7 @@ const ctx = (): OperationsVisibilityContext => ({
   depoMultiEnabled: false,
   devereEnabled: true,
   dokumaEnabled: true,
-  tezgahEnabled: true,
+  tezgahEnabled: true, kaliteGuvenceEnabled: false,
   financeEnabled: true,
   productionEnabled: true,
   ticaretEnabled: true,
@@ -100,7 +100,9 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
     const fav = screen.getByRole("region", { name: "Favorilerim" });
     expect(within(fav).getByText("Kasa & Banka Defteri")).toBeInTheDocument();
     const legacy = screen.getByRole("region", { name: "Eski raporlar (geçiş dönemi)" });
-    expect(within(legacy).getAllByRole("link")).toHaveLength(reportTiles.length);
+    // R0-GECIS: yer tutucu yerine 36 v1 rapor, eski hub'ın kategorileriyle (`legacy-model.ts`).
+    expect(within(legacy).getAllByRole("listitem")).toHaveLength(36);
+    expect(within(legacy).getAllByRole("group")).toHaveLength(reportTiles.length);
     // `hazir:true` satır Merkez'de çizilir, `hazir:false` çizilmez (ilk hazır satır KQ-D6 kurşun gramajı).
     const readyRows = V2_ROWS.filter((e) => e.hazir);
     expect(readyRows.length, "körlük zemini: hazır v2 satırı yok").toBeGreaterThan(0);

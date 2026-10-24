@@ -234,6 +234,21 @@ enum DeviceKind {
   DESKTOP
 }
 
+/// Cihaz bağlama defteri olayları (`device_binding_events.event`). Ters yol beyanı
+/// `scripts/lib/defter-beyan.ts` (MERGED↔UNMERGED; REBOUND'un tersi yeni REBOUND).
+enum DeviceBindingEventType {
+  REGISTERED
+  REBIND_REQUESTED
+  REBOUND
+  REBIND_REJECTED
+  REVOKED
+  MERGED
+  UNMERGED
+  PROOF_RESET
+  PURGED
+  HW_CONFLICT
+}
+
 // Phase 1: yaşam döngüsü sadeleşti. READY/SHORT/IN_PRODUCTION kaldırıldı —
 // "envanter hazır mı?" / "üretim sürüyor mu?" runtime hesabı (allocation +
 // workOrder.status üzerinden). Lifecycle:
@@ -594,10 +609,22 @@ model User {
   hallShiftDutyOverrides   HallShiftDutyOverride[] @relation("HallShiftDutyOverrideUser")
   loomAlarmTierRules       LoomAlarmTierRule[]     @relation("LoomAlarmTierRuleUser")
   notificationInbox        NotificationInbox[]     @relation("NotificationInboxUser")
+  reportCategoriesCreated  ReportCategory[]        @relation("ReportCategoryCreatedBy")
+  reportCategoriesUpdated  ReportCategory[]        @relation("ReportCategoryUpdatedBy")
+  reportDefinitionsOwned   ReportDefinition[]      @relation("ReportDefinitionOwner")
+  reportDefinitionsCreated ReportDefinition[]      @relation("ReportDefinitionCreatedBy")
+  reportDefinitionsUpdated ReportDefinition[]      @relation("ReportDefinitionUpdatedBy")
+  reportVersionsCreated    ReportDefinitionVersion[] @relation("ReportVersionCreatedBy")
+  reportPresetsOwned       ReportPreset[]          @relation("ReportPresetOwner")
+  reportShares             ReportShare[]           @relation("ReportShareUser")
+  reportRuns               ReportRun[]             @relation("ReportRunUser")
+  reportSnapshotsCreated   ReportSnapshot[]        @relation("ReportSnapshotCreatedBy")
   machineShiftStatsSealed  MachineShiftStat[]      @relation("MachineShiftStatSealedBy")
   machineShiftSealsActed   MachineShiftStatSeal[]  @relation("MachineShiftSealBy")
   createdPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceCreatedBy")
   updatedPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceUpdatedBy")
+  deviceBindingEventsActed DeviceBindingEvent[]    @relation("DeviceBindingEventActor")
+  deviceRebindsDecided     DeviceRebindRequest[]   @relation("DeviceRebindDecidedBy")
   createdProductRecipes    ProductRecipe[]         @relation("ProductRecipeCreatedBy")
   updatedProductRecipes    ProductRecipe[]         @relation("ProductRecipeUpdatedBy")
   createdWarpSpecs         WarpSpec[]              @relation("WarpSpecCreatedBy")
@@ -667,6 +694,8 @@ model User {
   credentialResetTargets          CredentialResetRequest[]  @relation("CredentialResetTarget")
   credentialResetsRequested       CredentialResetRequest[]  @relation("CredentialResetRequestedBy")
   credentialResetsDecided         CredentialResetRequest[]  @relation("CredentialResetDecidedBy")
+  createdEIrsaliyeler             EIrsaliye[]               @relation("EIrsaliyeCreatedBy")
+  updatedEIrsaliyeler             EIrsaliye[]               @relation("EIrsaliyeUpdatedBy")
   /// Yazdırma geçmişi künyesi (kim bastı — telemetri, A1).
   printJobs                       PrintJob[]                @relation("PrintJobUser")
 
@@ -1185,20 +1214,83 @@ model Device {
   proofIssuedAt    DateTime?    @db.Timestamptz
   /// İlk geçerli kanıtın anı — doluysa sır bir daha verilmez (yeniden verim yalnız revoke ile).
   proofConfirmedAt DateTime?    @db.Timestamptz
+  /// Cihaz eşleme v2: donanım ÖZETİ (HMAC(installationId, kaynak+ham), 64 hex) — yalnız TANIMA,
+  /// kimlik doğrulama değil. Canlı (birleşmemiş) satırlarda kısmi UNIQUE (ham SQL, migration).
+  hwDigest         String?      @db.VarChar(64)
+  /// Özetin kaynağı: ANDROID_ID | WIN_MACHINE_GUID | MAC_PLATFORM_UUID | LINUX_MACHINE_ID.
+  hwSource         String?      @db.VarChar(16)
+  /// Birleşmiş kopya → ana kayıt (D4 yazar). Okuyucu YALNIZ `helpers/device-identity.helper.ts`.
+  mergedIntoId     String?      @db.Uuid
+  mergedAt         DateTime?    @db.Timestamptz
 
   // Relations
-  machine       Machine?           @relation(fields: [machineId], references: [id])
-  peripherals   PeripheralDevice[] // (eski) tablete-bağlı tekil sahiplik (registerBt geçişte)
-  hardwareLinks DevicePeripheral[] // YENİ: cihazın kullandığı donanım (çok-çok, paylaşılabilir)
-  workSessions  WorkSession[]
-  printJobs     PrintJob[]         @relation("PrintJobDevice")
+  machine        Machine?              @relation(fields: [machineId], references: [id])
+  peripherals    PeripheralDevice[] // (eski) tablete-bağlı tekil sahiplik (registerBt geçişte)
+  hardwareLinks  DevicePeripheral[] // YENİ: cihazın kullandığı donanım (çok-çok, paylaşılabilir)
+  workSessions   WorkSession[]
+  mergedInto     Device?               @relation("DeviceMergedInto", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedCopies   Device[]              @relation("DeviceMergedInto")
+  bindingEvents  DeviceBindingEvent[]
+  rebindRequests DeviceRebindRequest[]
+  printJobs      PrintJob[]            @relation("PrintJobDevice")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([machineId])
   @@index([status])
+  @@index([mergedIntoId])
   @@map("devices")
+}
+
+/// Cihaz bağlama olayı — DEFTER (append-only, yalnız `createdAt`): "bu fiziksel cihaz hangi
+/// kurulum anahtarıyla (localId) ne zaman bağlandı". Eski localId'ler (Session/SystemLog metin
+/// kolonları) bu defterden fiziksel cihaza çözülür. Yazan tek boğaz `writeBindingEventTx`.
+model DeviceBindingEvent {
+  id          String                 @id @default(uuid()) @db.Uuid
+  /// SetNull BİLİNÇLİ: kalıcı silinen (hiç kullanılmamış) hayalet cihazın satırı gider ama
+  /// `PURGED` dahil olayları kalır — "ne oldu" silinmez (defter.md).
+  deviceRefId String?                @db.Uuid
+  localId     String                 @db.VarChar(64)
+  /// Olay anındaki cihaz adı (anlık) — sonradan yeniden adlandırma geçmişi değiştirmez.
+  deviceName  String                 @db.VarChar(120)
+  event       DeviceBindingEventType
+  actorId     String?                @db.Uuid
+  reason      String?                @db.VarChar(300)
+  hwDigest    String?                @db.VarChar(64)
+  meta        Json?
+  createdAt   DateTime               @default(now()) @db.Timestamptz
+
+  device Device? @relation(fields: [deviceRefId], references: [id], onDelete: SetNull)
+  actor  User?   @relation("DeviceBindingEventActor", fields: [actorId], references: [id])
+
+  @@index([deviceRefId, createdAt])
+  @@index([localId])
+  @@map("device_binding_events")
+}
+
+/// Yeniden bağlama talebi — DURUM: bilinen donanım yeni localId ile geldi, onay bekliyor.
+/// Bekleyen talep `devices`a satır AÇMAZ; onayda hedef satırın etkin anahtarı değişir.
+model DeviceRebindRequest {
+  id             String     @id @default(uuid()) @db.Uuid
+  targetDeviceId String     @db.Uuid
+  localId        String     @unique @db.VarChar(64)
+  kind           DeviceKind @default(TABLET)
+  model          String?    @db.VarChar(120)
+  hwDigest       String     @db.VarChar(64)
+  /// OPEN | APPROVED | REJECTED (CHECK `device_rebind_requests_status_chk`).
+  status         String     @default("OPEN") @db.VarChar(10)
+  decidedById    String?    @db.Uuid
+  decidedAt      DateTime?  @db.Timestamptz
+  createdAt      DateTime   @default(now()) @db.Timestamptz
+  updatedAt      DateTime   @updatedAt @db.Timestamptz
+
+  target    Device @relation(fields: [targetDeviceId], references: [id], onDelete: Cascade)
+  decidedBy User?  @relation("DeviceRebindDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([status, updatedAt])
+  @@index([targetDeviceId])
+  @@map("device_rebind_requests")
 }
 
 /// Birleşik CİHAZ KAYDI — yazıcılar (ağ/Bluetooth/USB/seri) + tekstil makine
@@ -5047,6 +5139,9 @@ model DefectType {
   /// istemci listenin ilkini UYDURMAZ (çakılı varsayım kararı A, 2026-09-14).
   isDefault   Boolean         @default(false)
   isActive    Boolean         @default(true)
+  /// Rapor boyutu "hata grubu" (rapor v2 R1-SEMA). null = gruplanmamış. CHECK YOK: küme kodda
+  /// (`constants/hata-gruplari.ts`, R1-BOYUT) — yeni grup migration istemesin.
+  defectGroup String?         @db.VarChar(16)
   createdAt   DateTime        @default(now()) @db.Timestamptz
   updatedAt   DateTime        @updatedAt @db.Timestamptz
 
@@ -7092,6 +7187,9 @@ model PrintedDocument {
   printedById   String?          @db.Uuid
   printedBy     User?            @relation("PrintedDocumentPrintedBy", fields: [printedById], references: [id])
 
+  /// Bu sürümden üretilmiş e-İrsaliye kayıtları (geri ilişki).
+  eIrsaliyeler  EIrsaliye[]
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -7645,6 +7743,8 @@ model Shipment {
   updatedBy   User?   @relation("ShipmentUpdatedBy", fields: [updatedById], references: [id])
 
   invoices Invoice[]
+  /// e-İrsaliye kayıtları (geri ilişki; kolon değil). Bağ `EIrsaliye.shipmentId`te.
+  eIrsaliyeler EIrsaliye[]
 
   @@index([customerId, status])
   @@index([branchId])
@@ -8683,6 +8783,190 @@ model ShipmentEvent {
   @@index([shipmentId, createdAt])
   @@index([type, createdAt])
   @@map("shipment_events")
+}
+
+// =============================================================================
+// e-İRSALİYE (E1-SEMA, plan docs/design/E-IRSALIYE-PLAN.md §3.1–§3.2)
+// =============================================================================
+
+/// e-İrsaliye kaydının KAYNAK belgesi. v1 yalnız müşteri sevkiyatı; yeni kaynak
+/// (fason sevki, doğrudan sevk) `ALTER TYPE ADD VALUE` reçetesiyle eklenir.
+enum EIrsaliyeSourceType {
+  SHIPMENT /// Müşteri sevkiyatı (`Shipment`)
+}
+
+/// e-İrsaliye kaydının GÜNCEL durumu (geçmiş `EIrsaliyeEvent`te). Geçişler plan §3.2.
+enum EIrsaliyeStatus {
+  TASLAK /// Hazırlandı; numara ve XML yok
+  OLUSTURULDU /// Numara + ETTN + XML üretildi; GİB'e gitmedi
+  GONDERILDI /// Entegratöre/portala iletildi (gönderilen XML mühürlü)
+  KABUL /// Alıcı yanıtı: kabul
+  KISMI_KABUL /// Alıcı yanıtı: kısmi kabul
+  REDDEDILDI /// Alıcı yanıtı: red (yerine yeni kayıt `replacesId` ile)
+  HATA /// Gönderimde hata alındı; düzeltilip yeniden üretilir
+  IPTAL /// Yerel iptal — GİB'e hiç gitmedi (terminal)
+}
+
+/// e-İrsaliye olay defterinin satır tipi. Ters çiftler `scripts/lib/defter-beyan.ts`te.
+enum EIrsaliyeEventType {
+  HAZIRLANDI /// Kayıt doğdu (TASLAK) — doğuş olayı
+  OLUSTURULDU /// Numara + ETTN + ilk XML sürümü üretildi
+  XML_YENIDEN_URETILDI /// Aynı numara + ETTN ile yeni XML sürümü
+  GONDERILDI /// Gönderildi / elle gönderildi işaretlendi
+  GONDERIM_GERI_ALINDI /// Gönderim kaydı geri alındı (GONDERILDI'nin tersi)
+  YANIT_KAYDEDILDI /// Alıcı yanıtı kaydedildi
+  YANIT_GERI_ALINDI /// Yanıt kaydı geri alındı (YANIT_KAYDEDILDI'nin tersi)
+  HATA_ALINDI /// Gönderim hatası kaydedildi
+  IPTAL_EDILDI /// Yerel iptal — terminal
+}
+
+/// e-İRSALİYE KAYDI — DURUM TABLOSU ("şu an ne"); geçmiş `EIrsaliyeEvent`te.
+///
+/// Şema-dışı sedler (migration `20261024081108_e_irsaliye`, envanter
+/// `scripts/test_db_invariants.ts`, davranış `scripts/test_e_irsaliye_db_invariants.ts`):
+///  · PARTIAL UNIQUE `e_irsaliyeler_kaynak_canli_key` (sourceType, sourceId)
+///    WHERE status NOT IN ('IPTAL','REDDEDILDI') — kaynak başına TEK canlı kayıt.
+///    Prisma partial index bilmez; şemada `@@unique` YOK, yalnız bu beyan.
+///  · CHECK `e_irsaliyeler_numarali_durum_chk` · `e_irsaliyeler_gonderilmis_durum_chk`
+///    · `e_irsaliyeler_document_no_bicim_chk` · `e_irsaliyeler_download_count_chk`.
+/// Alan adları E4'ün `DespatchRecordFields`iyle bire bir (planın `plaka`/`soforAd`… karşılığı).
+model EIrsaliye {
+  id         String              @id @default(uuid()) @db.Uuid
+  sourceType EIrsaliyeSourceType
+  /// Polimorfik kaynak (`PrintedDocument.sourceId` emsali) — FK YOK, bütünlük serviste.
+  sourceId   String              @db.Uuid
+  /// v1'de dolu; liste süzgeci join'i için. `Restrict`: e-İrsaliyesi olan sevkiyat silinemez.
+  shipmentId String?             @db.Uuid
+  status     EIrsaliyeStatus     @default(TASLAK)
+
+  /// GİB biçimi: 3 karakter seri + 4 hane yıl + 9 hane sıra (CHECK ile). TASLAK'ta null.
+  documentNo    String? @unique @db.VarChar(16)
+  ettn          String? @unique @db.Uuid
+  /// Entegratör portalı farklı numara/ETTN verdiyse (⚠ doğrulanacak: plan §3.1).
+  confirmedNo   String? @db.VarChar(32)
+  confirmedEttn String? @db.Uuid
+  /// Üretildiği andaki bağdaştırıcı (`disaAktar` · `simulasyon` · ileride entegratör kodu).
+  adapter       String  @db.VarChar(32)
+
+  /// XML'in üretildiği kâğıt irsaliye sürümü ("kaynak değişti" uyarısı bundan türer).
+  printedDocumentId String? @db.Uuid
+  printedDocVersion Int?
+
+  /// Güncel ve gönderilen XML sürümü. `NoAction`: XML satırı yalnız kaydıyla (kaskat) gider.
+  currentXmlId String? @unique @db.Uuid
+  sentXmlId    String? @unique @db.Uuid
+
+  // Taşıma — kayıtta elle tamamlanır (plan §2).
+  licensePlate     String? @db.VarChar(32)
+  trailerPlate     String? @db.VarChar(32)
+  driverFirstName  String? @db.VarChar(100)
+  driverFamilyName String? @db.VarChar(100)
+  /// Şoför TCKN — XML'e girer; audit yüküne ve log'a GİRMEZ (sır hijyeni).
+  driverNationalId String? @db.VarChar(11)
+  carrierName      String? @db.VarChar(200)
+  carrierTaxId     String? @db.VarChar(11)
+  /// TCKN'li alıcıda kişi adı/soyadı.
+  recipientFirstName  String? @db.VarChar(100)
+  recipientFamilyName String? @db.VarChar(100)
+
+  sentAt          DateTime? @db.Timestamptz
+  responseAt      DateTime? @db.Timestamptz
+  responseNote    String?   @db.VarChar(1000)
+  responseSummary Json?
+
+  /// DURUM kolonu: "indirildi mi" yeniden üretim onayına girer (CHECK >= 0).
+  lastDownloadedAt DateTime? @db.Timestamptz
+  downloadCount    Int       @default(0)
+
+  /// REDDEDILDI kaydın yerine geçen yeni kayıt eskisini gösterir.
+  replacesId  String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  shipment        Shipment?        @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  printedDocument PrintedDocument? @relation(fields: [printedDocumentId], references: [id], onDelete: Restrict)
+  currentXml      EIrsaliyeXml?    @relation("EIrsaliyeCurrentXml", fields: [currentXmlId], references: [id], onDelete: NoAction)
+  sentXml         EIrsaliyeXml?    @relation("EIrsaliyeSentXml", fields: [sentXmlId], references: [id], onDelete: NoAction)
+  replaces        EIrsaliye?       @relation("EIrsaliyeReplaces", fields: [replacesId], references: [id], onDelete: NoAction)
+  replacedBy      EIrsaliye[]      @relation("EIrsaliyeReplaces")
+  xmls            EIrsaliyeXml[]   @relation("EIrsaliyeXmlVersions")
+  events          EIrsaliyeEvent[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("EIrsaliyeCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("EIrsaliyeUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([shipmentId])
+  @@index([sourceType, sourceId])
+  @@index([printedDocumentId])
+  @@index([replacesId])
+  @@map("e_irsaliyeler")
+}
+
+/// e-İRSALİYE XML SÜRÜMÜ — DONMUŞ BELGE (append-only; `updatedAt` YOK ve OLMAMALI).
+///
+/// Trigger `e_irsaliye_xml_degismez`: UPDATE her zaman, doğrudan DELETE RED (kaydın
+/// kaskadı geçer); INSERT, bağlı kayıt GONDERILDI/KABUL/KISMI_KABUL/REDDEDILDI/IPTAL
+/// iken RED — gönderilen sürüm `EIrsaliye.sentXmlId` ile mühürlüdür.
+/// `createdById` FK'SIZ (`RollStatusEvent.actorId` emsali): kullanıcı silinince SET NULL
+/// bir UPDATE olur ve mühürle çarpışırdı.
+model EIrsaliyeXml {
+  id          String @id @default(uuid()) @db.Uuid
+  /// `Cascade` BİLİNÇLİ (`ShipmentEvent.shipment` emsali): kayıt canlıda hard delete
+  /// edilmez; kaskat yalnız bekçi temizliğinde koşar, doğrudan silme trigger'da RED.
+  eIrsaliyeId String @db.Uuid
+  /// Kayıt içinde 1'den artan sürüm (max+1).
+  version     Int
+  ettn        String @db.Uuid
+  xml         String @db.Text
+  sha256      String @db.Char(64)
+  /// Yapısal doğrulama raporu (E4 `ValidationResult`).
+  validation  Json
+  createdById String? @db.Uuid
+
+  eIrsaliye      EIrsaliye        @relation("EIrsaliyeXmlVersions", fields: [eIrsaliyeId], references: [id], onDelete: Cascade)
+  currentOf      EIrsaliye?       @relation("EIrsaliyeCurrentXml")
+  sentOf         EIrsaliye?       @relation("EIrsaliyeSentXml")
+  events         EIrsaliyeEvent[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([eIrsaliyeId, version])
+  @@map("e_irsaliye_xmllari")
+}
+
+/// e-İRSALİYE OLAY DEFTERİ — "bu kayda ne oldu" (append-only, `ShipmentEvent` emsali).
+///
+/// ⚠️ `updatedAt` YOK ve OLMAMALI. Mühür `defter_block_tamper` (UPDATE ve doğrudan
+/// DELETE RED). Kronoloji `createdAt`; "en son" okuyucusu `id` eşitlik bozucusuyla.
+/// Tek yazar `services/e-irsaliye/e-irsaliye-event.helper.ts` `writeEIrsaliyeEventTx`.
+/// `actorId` FK'SIZ (mühürle çarpışan SET NULL — `RollStatusEvent` emsali).
+model EIrsaliyeEvent {
+  id          String             @id @default(uuid()) @db.Uuid
+  eIrsaliyeId String             @db.Uuid
+  type        EIrsaliyeEventType
+  /// Doğuş olayında (HAZIRLANDI) null — öncesi yok.
+  fromStatus  EIrsaliyeStatus?
+  toStatus    EIrsaliyeStatus
+  /// Olayın ilgili olduğu XML sürümü (üretim/gönderim). `NoAction`: mühürlü satır SET NULL alamaz.
+  xmlId       String?            @db.Uuid
+  note        String?            @db.VarChar(1000)
+  actorId     String?            @db.Uuid
+
+  /// `Cascade` BİLİNÇLİ — `EIrsaliyeXml.eIrsaliye` şerhi.
+  eIrsaliye EIrsaliye     @relation(fields: [eIrsaliyeId], references: [id], onDelete: Cascade)
+  xml       EIrsaliyeXml? @relation(fields: [xmlId], references: [id], onDelete: NoAction)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([eIrsaliyeId, createdAt, id])
+  @@index([xmlId])
+  @@map("e_irsaliye_olaylari")
 }
 
 /// Çuval tartısının türü. Sıfırlama da bir OLAYDIR — sessiz silme değil.
@@ -11644,4 +11928,212 @@ model NotificationDailyStats {
 
   @@unique([factoryDay, kind])
   @@map("notification_daily_stats")
+}
+
+// =============================================================================
+// RAPOR V2 — KAYITLI / ÖZEL RAPORLAR (R1-SEMA, `docs/design/RAPORLAR-V2-PLAN.md` §3.3)
+// Migration `rapor_v2_cekirdek`. Yazan/okuyan kod R1-KAYIT (tanım/sürüm/ön ayar/paylaşım) ve
+// R1-SEMCEK (koşu/anlık görüntü). Kapalı kümeler VarChar + DB CHECK (ŞEMA-DIŞI, `test_db_invariants`).
+// =============================================================================
+
+/// KATALOG — rapor kategorisi/klasörü. `code` dolu = sistem kategorisi (boot uzlaştırması),
+/// null = kullanıcının. ≤2 seviye kuralı serviste (R1-KAYIT); pasife alma yalnız boş kategoride.
+model ReportCategory {
+  id        String  @id @default(uuid()) @db.Uuid
+  code      String? @unique @db.VarChar(48)
+  name      String  @db.VarChar(100)
+  /// Öz-FK; derinlik (≤2) servis kuralı — DB yalnız varlığı mühürler.
+  parentId  String? @db.Uuid
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // Kayıt künyesi (KAYIT-KUNYESI-TASARIM) — FK index bilinçli yok (DefectType emsali).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ReportCategoryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ReportCategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  parent      ReportCategory?    @relation("ReportCategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    ReportCategory[]   @relation("ReportCategoryTree")
+  definitions ReportDefinition[]
+
+  @@index([parentId])
+  @@map("report_categories")
+}
+
+/// KATALOG — rapor tanımı. SISTEM satırı koddan (gövdesi kod servisi, sürüm yok; `key` = katalog
+/// anahtarı); OZEL satırın gövdesi `activeVersion`dadır. Numara YOK (iş belgesi değil). Silinmez:
+/// "sil" = `status` ARSIV geçişi (atomik claim). ŞEMA-DIŞI CHECK: kind/visibility/status kümeleri +
+/// biçim (SISTEM ⇒ key dolu, sahipsiz; OZEL ⇒ sahipli, key boş).
+model ReportDefinition {
+  id              String  @id @default(uuid()) @db.Uuid
+  /// SISTEM · OZEL — VarChar + CHECK.
+  kind            String  @db.VarChar(16)
+  key             String? @unique @db.VarChar(64)
+  name            String  @db.VarChar(150)
+  description     String?
+  categoryId      String  @db.Uuid
+  ownerId         String? @db.Uuid
+  /// OZEL · PAYLASIMLI · HERKES — VarChar + CHECK.
+  visibility      String  @default("OZEL") @db.VarChar(16)
+  /// TASLAK · YAYINDA · ARSIV — VarChar + CHECK; geçiş atomik claim.
+  status          String  @default("TASLAK") @db.VarChar(16)
+  /// Yürürlükteki sürüm; değişim `updateMany WHERE {id, activeVersionId: beklenen}` → 0 ise 409.
+  activeVersionId String? @unique @db.Uuid
+  /// Tanımın başvurduğu alan/ölçü kataloğdan düştüyse true (çalıştırma fail-closed).
+  isBroken        Boolean @default(false)
+  /// İdempotency — yaratan uç (`clientToken @unique` sözleşmesi).
+  clientToken     String? @unique @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ReportDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ReportDefinitionUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  category      ReportCategory           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  owner         User?                    @relation("ReportDefinitionOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  activeVersion ReportDefinitionVersion? @relation("ReportDefinitionActiveVersion", fields: [activeVersionId], references: [id], onDelete: Restrict)
+  versions      ReportDefinitionVersion[] @relation("ReportDefinitionVersions")
+  presets       ReportPreset[]
+  shares        ReportShare[]
+  runs          ReportRun[]
+  snapshots     ReportSnapshot[]
+
+  @@index([categoryId])
+  @@index([ownerId])
+  @@map("report_definitions")
+}
+
+/// APPEND-ONLY (yalnız `createdAt`) — tanım gövdesinin DEĞİŞMEZ sürümü. Düzenleme ve geri alma
+/// YENİ SÜRÜM SATIRIDIR; satır güncellenmez/silinmez. `defter-beyan.ts` sınıfı DURUM (gerekçe orada).
+model ReportDefinitionVersion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  definitionId        String   @db.Uuid
+  /// 1'den başlar, tanım başına tekil (CHECK ≥ 1).
+  versionNo           Int
+  /// Rapor tanımı JSON'u (`semantik/rapor-tanimi.schema.ts`, zod `.strict()`).
+  body                Json
+  /// Gövdenin gerektirdiği izin kodları — yazım anında katalogdan türetilir.
+  requiredPermissions String[]
+  /// Sürümü yazan; servis her zaman doldurur. NULLABLE: künye kolonu sözleşmesi (`test_record_provenance` §3).
+  createdById         String?  @db.Uuid
+  note                String?  @db.VarChar(500)
+  createdAt           DateTime @default(now()) @db.Timestamptz
+
+  definition ReportDefinition  @relation("ReportDefinitionVersions", fields: [definitionId], references: [id], onDelete: Restrict)
+  createdBy  User?             @relation("ReportVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  activeFor  ReportDefinition? @relation("ReportDefinitionActiveVersion")
+  runs       ReportRun[]
+  snapshots  ReportSnapshot[]
+
+  @@unique([definitionId, versionNo])
+  @@map("report_definition_versions")
+}
+
+/// KATALOG — parametre ön ayarı ("Kaya Tekstil — son 3 ay"). ŞEMA-DIŞI partial unique:
+/// (definitionId, ownerId) WHERE isDefault — kullanıcı başına rapor başına tek varsayılan.
+model ReportPreset {
+  id           String   @id @default(uuid()) @db.Uuid
+  definitionId String   @db.Uuid
+  name         String   @db.VarChar(100)
+  params       Json
+  ownerId      String   @db.Uuid
+  isShared     Boolean  @default(false)
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  definition ReportDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  owner      User             @relation("ReportPresetOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([definitionId, ownerId])
+  @@index([ownerId])
+  @@map("report_presets")
+}
+
+/// PİVOT (saf yapılandırma, replace serbest) — tanımın kullanıcıya paylaşımı. `access` GOR · DUZENLE
+/// (VarChar + CHECK). Paylaşım rol değil kişi/herkes (plan P4).
+model ReportShare {
+  definitionId String   @db.Uuid
+  userId       String   @db.Uuid
+  access       String   @default("GOR") @db.VarChar(16)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  definition ReportDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  user       User             @relation("ReportShareUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([definitionId, userId])
+  @@index([userId])
+  @@map("report_shares")
+}
+
+/// TELEMETRİ (90 gün budanır, defter değil) — rapor koşusu ölçümü + iptal kimliği. `backendPid` tx
+/// başında `pg_backend_pid()`; iptal ucu `pg_cancel_backend` için okur. `status` CALISIYOR · TAMAM ·
+/// ZAMAN_ASIMI · IPTAL · HATA (VarChar + CHECK).
+model ReportRun {
+  id           String    @id @default(uuid()) @db.Uuid
+  definitionId String?   @db.Uuid
+  /// Sistem rapor anahtarı (tanım satırı olmadan koşan temel rapor için).
+  key          String?   @db.VarChar(64)
+  versionId    String?   @db.Uuid
+  /// Parametrelerin özeti (önbellek anahtarı parçası) — ham parametre değil.
+  paramsDigest String    @db.VarChar(64)
+  userId       String    @db.Uuid
+  startedAt    DateTime  @default(now()) @db.Timestamptz
+  durationMs   Int?
+  rowCount     Int?
+  status       String    @default("CALISIYOR") @db.VarChar(16)
+  errorCode    String?   @db.VarChar(64)
+  backendPid   Int?
+  createdAt    DateTime  @default(now()) @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @db.Timestamptz
+
+  definition ReportDefinition?        @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  version    ReportDefinitionVersion? @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  user       User                     @relation("ReportRunUser", fields: [userId], references: [id], onDelete: Restrict)
+  snapshots  ReportSnapshot[]
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([definitionId])
+  @@index([versionId])
+  @@index([createdAt])
+  @@map("report_runs")
+}
+
+/// TELEMETRİ / ayak izi — "24.10.2026 14:00 itibarıyla" anlık görüntü (sunum + anlatı). Silinince
+/// raporlanan sayı değişmez → defter değil. `runId` SET NULL: koşu budanınca görüntü yaşar.
+/// `kind` KULLANICI · ZAMANLANMIS (VarChar + CHECK).
+model ReportSnapshot {
+  id           String    @id @default(uuid()) @db.Uuid
+  runId        String?   @db.Uuid
+  definitionId String    @db.Uuid
+  /// SISTEM tanımında sürüm yoktur → null.
+  versionId    String?   @db.Uuid
+  params       Json
+  result       Json
+  kind         String    @default("KULLANICI") @db.VarChar(16)
+  /// İdempotency — yaratan uç (`clientToken @unique` sözleşmesi).
+  clientToken  String?   @unique @db.Uuid
+  expiresAt    DateTime? @db.Timestamptz
+  /// Görüntüyü alan kullanıcı; ZAMANLANMIS'ta null.
+  createdById  String?   @db.Uuid
+  createdAt    DateTime  @default(now()) @db.Timestamptz
+  updatedAt    DateTime  @updatedAt @db.Timestamptz
+
+  run        ReportRun?               @relation(fields: [runId], references: [id], onDelete: SetNull)
+  definition ReportDefinition         @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  version    ReportDefinitionVersion? @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  createdBy  User?                    @relation("ReportSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([definitionId, createdAt(sort: Desc)])
+  @@index([runId])
+  @@index([versionId])
+  @@index([createdById])
+  @@index([expiresAt])
+  @@map("report_snapshots")
 }
