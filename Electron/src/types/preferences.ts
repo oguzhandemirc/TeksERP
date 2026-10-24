@@ -80,6 +80,8 @@ export interface AppPreferences {
     /** Yeni alarmda / tekrar çalmada ses (varsayılan AÇIK; şerit ve bildirim sesten bağımsız). */
     sound?: boolean;
   };
+  /** Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin"); tablo YOK, blob alanı. */
+  raporlar?: { favoriler?: string[] };
   /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
   dashboard?: {
     hidden?: string[];
