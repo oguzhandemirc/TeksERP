@@ -234,6 +234,21 @@ enum DeviceKind {
   DESKTOP
 }
 
+/// Cihaz bağlama defteri olayları (`device_binding_events.event`). Ters yol beyanı
+/// `scripts/lib/defter-beyan.ts` (MERGED↔UNMERGED; REBOUND'un tersi yeni REBOUND).
+enum DeviceBindingEventType {
+  REGISTERED
+  REBIND_REQUESTED
+  REBOUND
+  REBIND_REJECTED
+  REVOKED
+  MERGED
+  UNMERGED
+  PROOF_RESET
+  PURGED
+  HW_CONFLICT
+}
+
 // Phase 1: yaşam döngüsü sadeleşti. READY/SHORT/IN_PRODUCTION kaldırıldı —
 // "envanter hazır mı?" / "üretim sürüyor mu?" runtime hesabı (allocation +
 // workOrder.status üzerinden). Lifecycle:
@@ -608,6 +623,8 @@ model User {
   machineShiftSealsActed   MachineShiftStatSeal[]  @relation("MachineShiftSealBy")
   createdPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceCreatedBy")
   updatedPeripheralDevices PeripheralDevice[]      @relation("PeripheralDeviceUpdatedBy")
+  deviceBindingEventsActed DeviceBindingEvent[]    @relation("DeviceBindingEventActor")
+  deviceRebindsDecided     DeviceRebindRequest[]   @relation("DeviceRebindDecidedBy")
   createdProductRecipes    ProductRecipe[]         @relation("ProductRecipeCreatedBy")
   updatedProductRecipes    ProductRecipe[]         @relation("ProductRecipeUpdatedBy")
   createdWarpSpecs         WarpSpec[]              @relation("WarpSpecCreatedBy")
@@ -1021,10 +1038,10 @@ model Station {
   /// istasyonun TÜRÜNDEN (`StationKind`) türetilmez, kendi alanıdır — yoksa
   /// "devere" bir tür adı olur ve ikinci bir devere istasyonu tanımlanamazdı.
   /// Yüzeyi devere modülü açıkken çizilir; kapalıyken form alanı yoktur.
-  producesWarpBeam Boolean @default(false)
+  producesWarpBeam   Boolean @default(false)
   /// Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma tezgahı / raşel). VARSAYILAN FALSE = bugün.
   /// Yuva kapısı BUDUR; `Machine.warpBeamSlots` yalnız üst sınırdır (§9.7h).
-  consumesWarpBeam Boolean @default(false)
+  consumesWarpBeam   Boolean @default(false)
   /// Bu istasyonda akış etiketinin (top/kartela/çuval) VARSAYILAN adedi — yalnız
   /// `label.copiesSource = STATION` iken okunur; NULL = genel adet (`label.copies`).
   /// DB CHECK 1–5 (`stations_default_label_copies_range`); çözücü `label-copies.helper.ts`.
@@ -1179,36 +1196,99 @@ model Machine {
 /// `machineId` = atandığı makine (atıf + cihaz çözümü); null = atanmamış.
 /// Cihaz değişmedikçe operatör değişse bile hangi makinede işlendiği bilinir.
 model Device {
-  id         String       @id @default(uuid()) @db.Uuid
-  deviceId   String       @unique @db.VarChar(64) // Tablet local UUID
-  name       String       @db.VarChar(100) // Admin'in verdiği etiket — "Tambur-1 Tablet"
-  machineId  String?      @db.Uuid
-  lastSeenAt DateTime?    @db.Timestamptz
-  isActive   Boolean      @default(true)
+  id               String       @id @default(uuid()) @db.Uuid
+  deviceId         String       @unique @db.VarChar(64) // Tablet local UUID
+  name             String       @db.VarChar(100) // Admin'in verdiği etiket — "Tambur-1 Tablet"
+  machineId        String?      @db.Uuid
+  lastSeenAt       DateTime?    @db.Timestamptz
+  isActive         Boolean      @default(true)
   /// Allowlist durumu: PENDING (yeni, atama bekliyor) / APPROVED (onaylı + kullanır).
-  status     DeviceStatus @default(PENDING)
+  status           DeviceStatus @default(PENDING)
   /// Cihaz türü: TABLET / PHONE / DESKTOP (yönetici PC'si). Sadece görsel/etiket.
-  kind       DeviceKind   @default(TABLET)
+  kind             DeviceKind   @default(TABLET)
   /// Cihaz kanıtı tuzu "<kid>:<64 hex>"; sır = HMAC(kısa kimlik halkası, tuz) — sır DB'de YOK.
   /// Yanıtlara/audit'e girmez (servis `omit` eder); yazan yalnız DeviceService.
-  proofSalt        String?   @db.VarChar(100)
-  proofIssuedAt    DateTime? @db.Timestamptz
+  proofSalt        String?      @db.VarChar(100)
+  proofIssuedAt    DateTime?    @db.Timestamptz
   /// İlk geçerli kanıtın anı — doluysa sır bir daha verilmez (yeniden verim yalnız revoke ile).
-  proofConfirmedAt DateTime? @db.Timestamptz
+  proofConfirmedAt DateTime?    @db.Timestamptz
+  /// Cihaz eşleme v2: donanım ÖZETİ (HMAC(installationId, kaynak+ham), 64 hex) — yalnız TANIMA,
+  /// kimlik doğrulama değil. Canlı (birleşmemiş) satırlarda kısmi UNIQUE (ham SQL, migration).
+  hwDigest         String?      @db.VarChar(64)
+  /// Özetin kaynağı: ANDROID_ID | WIN_MACHINE_GUID | MAC_PLATFORM_UUID | LINUX_MACHINE_ID.
+  hwSource         String?      @db.VarChar(16)
+  /// Birleşmiş kopya → ana kayıt (D4 yazar). Okuyucu YALNIZ `helpers/device-identity.helper.ts`.
+  mergedIntoId     String?      @db.Uuid
+  mergedAt         DateTime?    @db.Timestamptz
 
   // Relations
-  machine       Machine?           @relation(fields: [machineId], references: [id])
-  peripherals   PeripheralDevice[] // (eski) tablete-bağlı tekil sahiplik (registerBt geçişte)
-  hardwareLinks DevicePeripheral[] // YENİ: cihazın kullandığı donanım (çok-çok, paylaşılabilir)
-  workSessions  WorkSession[]
-  printJobs     PrintJob[]         @relation("PrintJobDevice")
+  machine        Machine?              @relation(fields: [machineId], references: [id])
+  peripherals    PeripheralDevice[] // (eski) tablete-bağlı tekil sahiplik (registerBt geçişte)
+  hardwareLinks  DevicePeripheral[] // YENİ: cihazın kullandığı donanım (çok-çok, paylaşılabilir)
+  workSessions   WorkSession[]
+  mergedInto     Device?               @relation("DeviceMergedInto", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedCopies   Device[]              @relation("DeviceMergedInto")
+  bindingEvents  DeviceBindingEvent[]
+  rebindRequests DeviceRebindRequest[]
+  printJobs      PrintJob[]            @relation("PrintJobDevice")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([machineId])
   @@index([status])
+  @@index([mergedIntoId])
   @@map("devices")
+}
+
+/// Cihaz bağlama olayı — DEFTER (append-only, yalnız `createdAt`): "bu fiziksel cihaz hangi
+/// kurulum anahtarıyla (localId) ne zaman bağlandı". Eski localId'ler (Session/SystemLog metin
+/// kolonları) bu defterden fiziksel cihaza çözülür. Yazan tek boğaz `writeBindingEventTx`.
+model DeviceBindingEvent {
+  id          String                 @id @default(uuid()) @db.Uuid
+  /// SetNull BİLİNÇLİ: kalıcı silinen (hiç kullanılmamış) hayalet cihazın satırı gider ama
+  /// `PURGED` dahil olayları kalır — "ne oldu" silinmez (defter.md).
+  deviceRefId String?                @db.Uuid
+  localId     String                 @db.VarChar(64)
+  /// Olay anındaki cihaz adı (anlık) — sonradan yeniden adlandırma geçmişi değiştirmez.
+  deviceName  String                 @db.VarChar(120)
+  event       DeviceBindingEventType
+  actorId     String?                @db.Uuid
+  reason      String?                @db.VarChar(300)
+  hwDigest    String?                @db.VarChar(64)
+  meta        Json?
+  createdAt   DateTime               @default(now()) @db.Timestamptz
+
+  device Device? @relation(fields: [deviceRefId], references: [id], onDelete: SetNull)
+  actor  User?   @relation("DeviceBindingEventActor", fields: [actorId], references: [id])
+
+  @@index([deviceRefId, createdAt])
+  @@index([localId])
+  @@map("device_binding_events")
+}
+
+/// Yeniden bağlama talebi — DURUM: bilinen donanım yeni localId ile geldi, onay bekliyor.
+/// Bekleyen talep `devices`a satır AÇMAZ; onayda hedef satırın etkin anahtarı değişir.
+model DeviceRebindRequest {
+  id             String     @id @default(uuid()) @db.Uuid
+  targetDeviceId String     @db.Uuid
+  localId        String     @unique @db.VarChar(64)
+  kind           DeviceKind @default(TABLET)
+  model          String?    @db.VarChar(120)
+  hwDigest       String     @db.VarChar(64)
+  /// OPEN | APPROVED | REJECTED (CHECK `device_rebind_requests_status_chk`).
+  status         String     @default("OPEN") @db.VarChar(10)
+  decidedById    String?    @db.Uuid
+  decidedAt      DateTime?  @db.Timestamptz
+  createdAt      DateTime   @default(now()) @db.Timestamptz
+  updatedAt      DateTime   @updatedAt @db.Timestamptz
+
+  target    Device @relation(fields: [targetDeviceId], references: [id], onDelete: Cascade)
+  decidedBy User?  @relation("DeviceRebindDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([status, updatedAt])
+  @@index([targetDeviceId])
+  @@map("device_rebind_requests")
 }
 
 /// Birleşik CİHAZ KAYDI — yazıcılar (ağ/Bluetooth/USB/seri) + tekstil makine
@@ -1285,7 +1365,7 @@ model PeripheralDevice {
 
   templateRoutes PeripheralTemplateRoute[]
   deviceLinks    DevicePeripheral[] // YENİ: bu donanımı kullanan cihaz(lar) (çok-çok)
-  printJobs      PrintJob[]         @relation("PrintJobPeripheral")
+  printJobs      PrintJob[]                @relation("PrintJobPeripheral")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -2458,11 +2538,11 @@ model MachineStopEvent {
   /// Kova budansa bile duran üretim çıpası.
   pickCounter     Decimal? @db.Decimal(18, 0)
 
-  source      MachineDataSource
-  collectorId String?           @db.Uuid
+  source        MachineDataSource
+  collectorId   String?           @db.Uuid
   /// Kart, İNSANIN açtığı açık duruşu SAHİPLENDİYSE kartın kendi duruş anahtarı (K1) — `stopKey`
   /// insanın kimliği olarak KALIR (tablet replay'i bozulmasın); kartın tekrarı ve kapanışı bununla bulunur.
-  signalStopKey String?         @db.Uuid
+  signalStopKey String?           @db.Uuid
 
   /// GERİ ALMA — hayalet duruş SİLİNMEZ, damgalanır.
   revokedAt    DateTime? @db.Timestamptz
