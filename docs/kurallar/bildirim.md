@@ -32,6 +32,7 @@
 - **[ÇEKİRDEK]** Yeni bildirim türü reçeteyle eklenir (`docs/RECETELER.md` § Yeni bildirim türü): katalog satırı → payload beyanı → kaynak (emit ya da koşul kaynağı) → bekçi; migration gerekmez (`kind` kolonunda CHECK yok).
 - **[ÇEKİRDEK]** Gelen kutusu bayrağını kapsam tablosuna koyma (yalnız `admin:settings` yazar; panelde `ADMIN_ONLY_CATEGORY_IDS` beyanlı `bildirim` kategorisi); backend okuyucusu `readNotificationInboxEnabled`, tablet `resolveNotificationInboxEnabled` (yalnız gerçek `true` açar, eski sunucu → kapalı). <sub>(arşiv:2026-10-24)</sub>
 - **[ÇEKİRDEK]** Zil sayısı audit'ten türetilmez; Etkinlik sayfası (`/system/activity`) sayaçsızdır: Topbar'da yalnız rozetsiz "Etkinlik" bağlantısı, görünürlüğü sayfanın kendi `SYSTEM_ACTIVITY_ACCESS` kümesinden; eski "Son Aktivite" zili (`NotificationBell`) kalktı. <sub>(arşiv:2026-10-24)</sub>
+- **[ÇEKİRDEK]** Koşul kaynağı mevcut sağlık/durum okuyucusunu çağırır, yüklemi kopyalamaz; kaynak hatası koşulu kapatmaz, ölçülemeyen konu (açılışta ilk ölçüm yok, dosya okunamadı) açık koşulu korur (`services/notification-sources/sistem.ts`). · bekçi: `test_bildirim_kosul_sistem`
 
 ## Bekçiler — bu alana dokununca koş
 
@@ -39,4 +40,4 @@
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## bildirim` bölümü.**
 
-Backend: `test_bildirim_katalogu`, `test_screen_catalog`, `test_bildirim_motoru`, `test_bildirim_tek_kaynak`, `test_advisory_lock_namespaces`, `test_telemetri_defter_degil`, `test_audit_muafiyeti`, `test_bildirim_api`, `test_bildirim_zil`, `test_bildirim_patron_siparisi`, `test_bulut_gelen_kutusu`
+Backend: `test_bildirim_katalogu`, `test_screen_catalog`, `test_bildirim_motoru`, `test_bildirim_tek_kaynak`, `test_advisory_lock_namespaces`, `test_telemetri_defter_degil`, `test_audit_muafiyeti`, `test_bildirim_api`, `test_bildirim_zil`, `test_bildirim_patron_siparisi`, `test_bulut_gelen_kutusu`, `test_bildirim_kosul_sistem`
