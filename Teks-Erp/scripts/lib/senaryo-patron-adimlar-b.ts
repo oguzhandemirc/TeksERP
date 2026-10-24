@@ -5,6 +5,7 @@ import { bulutIstek, type BulutYanit } from "./senaryo-patron-bulut";
 import { bulutSayisi } from "./senaryo-patron-adimlar-a";
 import type { Duzenek } from "./senaryo-patron-duzenek";
 import { ESITLE_YOLU, bosPaket, kanalPost, yeniKurulumAnahtari } from "./senaryo-patron-imza";
+import { factoryDayStartOfKey, factoryYmd } from "../../src/constants/time";
 
 type Sonuc = { durum?: string; sonuc?: { varlikId?: string | null; belgeNo?: string | null; kod?: string | null; mesaj?: string | null } | null };
 export const TR_HARF = /[çğıöşüÇĞİÖŞÜ]/;
@@ -48,7 +49,9 @@ export const adimlarB: AdimGrubu = async (d, adim) => {
   await adim("P5", "gelen kutusu sipariş → fabrikada normal yoldan kayıt; tekrar aynı sonuç; ISLENDI + push kaydı", async (a) => {
     const cihaz = await pushHazirla(d);
     a.kontrol("bulut: yöneticinin cihazı kayıtlı (Expo belirteci, 201) + sessiz saat kapalı", cihaz.kayit === 201 && cihaz.ayar === 200, `cihaz ${cihaz.kayit} · ayar ${cihaz.ayar}`);
-    const govde = { cariKartId: d.ortak.cariId, doviz: "TRY", termin: "2026-10-15", kalemler: [{ urunId, miktar: "125.5", birimFiyat: "10.50" }] };
+    // Termin koşum gününden ileri (sabit tarih geçmişe düşünce iş kuralı reddeder — 2026-10-24 ölçüldü).
+    const termin = factoryYmd(new Date(Date.now() + 30 * 86_400_000));
+    const govde = { cariKartId: d.ortak.cariId, doviz: "TRY", termin, kalemler: [{ urunId, miktar: "125.5", birimFiyat: "10.50" }] };
     const m = await mesajYazVeBekle(d, "SIPARIS", govde);
     a.kontrol("bulut: sipariş mesajı yazıldı (201)", m.yaz.status === 201, `${m.yaz.status} ${m.yaz.kod ?? ""}`);
     a.kontrol("zil ile ≤ 15 sn'de ISLENDI + sipariş no (IPC yok)", m.sonuc.durum === "ISLENDI" && !!m.sonuc.sonuc?.belgeNo && m.sure !== null && m.sure <= 15_000, `${m.sure ?? "-"} ms ${JSON.stringify(m.sonuc)}`);
@@ -59,7 +62,7 @@ export const adimlarB: AdimGrubu = async (d, adim) => {
     a.kontrol("fabrika: sipariş normal servis yolundan doğdu (clientToken = mesajId, sipariş no bulutla aynı)", sip.rowCount === 1 && o?.orderNumber === m.sonuc.sonuc?.belgeNo, JSON.stringify(o ?? null));
     a.kontrol("fabrika: makbuz aynı varlığa bağlı, yazan bulut hesabı adıyla", mk.rowCount === 1 && mk.rows[0]?.entityId === o?.id && mk.rows[0]?.outcome === "ISLENDI" && mk.rows[0]?.cloudAccountName === "Senaryo P Patron", JSON.stringify(mk.rows[0] ?? null));
     if (o && o.createdById === null) a.not("orders.createdById BOŞ — bilinen boşluk: sipariş doğuş yolu (panel dahil) bu kolonu yazmaz, aktör audit'te (arşiv B3 notu, yönetici kararına)");
-    a.kontrol("fabrika: termin fabrika günü başı (2026-10-15 → 2026-10-14T21:00Z)", o?.deadline?.toISOString() === "2026-10-14T21:00:00.000Z", o?.deadline?.toISOString() ?? "-");
+    a.kontrol(`fabrika: termin fabrika günü başı (${termin} → ${factoryDayStartOfKey(termin).toISOString()})`, o?.deadline?.toISOString() === factoryDayStartOfKey(termin).toISOString(), o?.deadline?.toISOString() ?? "-");
     const tekrar = await bulutIstek(d.patron.url, "POST", "/gelen-kutusu", { mesajId: m.mesajId, tur: "SIPARIS", govde }, d.yonetici.belirtec);
     const n = await d.bdb.query<{ n: string }>(`SELECT count(*) AS n FROM inbox_messages WHERE tesis_id = $1 AND message_id = $2`, [d.tesisId, m.mesajId]);
     a.kontrol("bulut: aynı mesaj yeniden yazılınca aynı kayıt (tek satır)", tekrar.status < 300 && Number(n.rows[0]?.n) === 1, `${tekrar.status} satır ${n.rows[0]?.n}`);
