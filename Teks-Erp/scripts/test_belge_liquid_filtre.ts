@@ -138,6 +138,9 @@ for (const [v, want] of WORDS) eq(`yaziyla ${JSON.stringify(v)}`, run("{{ v | ya
 eq("yaziyla USD", run("{{ v | yaziyla: 'USD' }}", { v: 12.3 }), "Yalnız on iki ABD Doları otuz Sent");
 check("yaziyla bilinmeyen birim → hata", /desteklemiyor/.test(run("{{ v | yaziyla: 'JPY' }}", { v: 1 })));
 eq("yaziyla boş → ''", run("{{ v | yaziyla }}", { v: null }), "");
+// Okunuş tek kaynağı `reports/anlati/sayi-okunus.ts` (sınır 10^12): sınırın iki yanı.
+eq("yaziyla 10^12 − 1 (milyar)", run("{{ v | yaziyla }}", { v: 999_999_999_999 }), "Yalnız dokuz yüz doksan dokuz milyar dokuz yüz doksan dokuz milyon dokuz yüz doksan dokuz bin dokuz yüz doksan dokuz TL");
+check("yaziyla 10^12 → Türkçe hata", /büyüklükte/.test(run("{{ v | yaziyla }}", { v: 1e12 })));
 
 // ── §6 barkod / satir_kir / css_metin ─────────────────────────────────────────
 console.log("\n§6 — barkod/qr işareti, satir_kir, css_metin");

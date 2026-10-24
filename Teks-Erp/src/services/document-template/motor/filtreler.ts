@@ -13,7 +13,8 @@ import { roundHalfUpParts, type DocNum } from "../../document-render/fmt-num";
 import { stripRawMarkers } from "../../document-render/template-html.sanitize";
 import { renderCode128Svg, renderQrSvg } from "../../helpers/barcode-svg.helper";
 import { lowerTr, upperTr } from "../../../utils/tr-case";
-import { integerWordsTr, TR_NUMBER_WORDS_LIMIT } from "../../../utils/tr-number-words";
+// Türkçe sayı okunuşunun tek kaynağı rapor anlatı motorundadır (R0-ANLATI); kopya yazılmaz.
+import { tamSayiOkunus } from "../../reports/anlati/sayi-okunus";
 import { escapeHtml, SafeHtml, TemplateUserError, toText } from "./cikti";
 
 /** Render başına durum: sayı rejimi + temizlik SONRASI yerine konacak SVG'ler. */
@@ -122,12 +123,12 @@ export function amountInWords(v: unknown, currency = "TRY"): string {
   const p = roundHalfUpParts(n, 2);
   const whole = Number(p.int);
   const cents = Number(p.frac);
-  const wholeWords = integerWordsTr(whole);
-  if (!wholeWords || whole >= TR_NUMBER_WORDS_LIMIT) throw new TemplateUserError("'yaziyla' filtresi bu büyüklükte tutarı yazamaz");
+  const wholeWords = tamSayiOkunus(whole)?.split(" ");
+  if (!wholeWords) throw new TemplateUserError("'yaziyla' filtresi bu büyüklükte tutarı yazamaz");
   const parts: string[] = ["Yalnız"];
   if (p.neg) parts.push("eksi");
   if (whole > 0 || cents === 0) parts.push(...wholeWords, units[0]);
-  if (cents > 0) parts.push(...(integerWordsTr(cents) ?? []), units[1]);
+  if (cents > 0) parts.push(...(tamSayiOkunus(cents) ?? "").split(" "), units[1]);
   return parts.join(" ");
 }
 

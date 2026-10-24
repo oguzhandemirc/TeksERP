@@ -128,7 +128,8 @@ check("güvenli parça sonrası filtre → yine kaçışlı", chain.ok && !chain
 
 // ── §5 sınırlar ──────────────────────────────────────────────────────────────────
 console.log("\n§5 — süre, bellek, çıktı ve parse sınırları");
-const slow = run("{% for i in (1..4000) %}{% for j in (1..4000) %}{% endfor %}{% endfor %}");
+// Gövde koşul taşır: boş döngü hızlı makinede 2000 ms altında bitebiliyordu (iç aralık bellek sayacı 16M ile tavanda, döngü büyütülemez).
+const slow = run("{% for i in (1..4000) %}{% for j in (1..4000) %}{% if j > i and i > 0 %}{% endif %}{% endfor %}{% endfor %}");
 check("süre sınırı (2000 ms) Türkçe düşer", !slow.ok && /süresi sınırı/.test(slow.msg) && slow.ms < 6000, `${msgOf(slow)} · ${slow.ok ? "-" : slow.ms} ms`);
 const big = run("{% for i in (1..100000000) %}x{% endfor %}");
 check("dev aralık → bellek/çıktı sınırı", !big.ok && /(bellek|4 MB|süresi)/.test(big.msg), msgOf(big));
