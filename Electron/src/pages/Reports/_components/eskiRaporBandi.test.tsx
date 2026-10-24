@@ -32,6 +32,7 @@ const ctx = (): OperationsVisibilityContext => ({
   productionEnabled: true,
   ticaretEnabled: true,
   iplikEnabled: true,
+  kaliteGuvenceEnabled: false,
   reportsClosedKeys: closed,
   isReportOpen: (key: string) => isReportOpenWith(closed, key),
   ...(v2 === undefined ? {} : { reportsV2Enabled: v2 }),
