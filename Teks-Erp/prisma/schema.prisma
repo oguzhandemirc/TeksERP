@@ -694,6 +694,8 @@ model User {
   credentialResetTargets          CredentialResetRequest[]  @relation("CredentialResetTarget")
   credentialResetsRequested       CredentialResetRequest[]  @relation("CredentialResetRequestedBy")
   credentialResetsDecided         CredentialResetRequest[]  @relation("CredentialResetDecidedBy")
+  createdEIrsaliyeler             EIrsaliye[]               @relation("EIrsaliyeCreatedBy")
+  updatedEIrsaliyeler             EIrsaliye[]               @relation("EIrsaliyeUpdatedBy")
   /// Yazdırma geçmişi künyesi (kim bastı — telemetri, A1).
   printJobs                       PrintJob[]                @relation("PrintJobUser")
 
@@ -7178,6 +7180,9 @@ model PrintedDocument {
   printedById   String?          @db.Uuid
   printedBy     User?            @relation("PrintedDocumentPrintedBy", fields: [printedById], references: [id])
 
+  /// Bu sürümden üretilmiş e-İrsaliye kayıtları (geri ilişki).
+  eIrsaliyeler  EIrsaliye[]
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -7731,6 +7736,8 @@ model Shipment {
   updatedBy   User?   @relation("ShipmentUpdatedBy", fields: [updatedById], references: [id])
 
   invoices Invoice[]
+  /// e-İrsaliye kayıtları (geri ilişki; kolon değil). Bağ `EIrsaliye.shipmentId`te.
+  eIrsaliyeler EIrsaliye[]
 
   @@index([customerId, status])
   @@index([branchId])
@@ -8736,6 +8743,190 @@ model ShipmentEvent {
   @@index([shipmentId, createdAt])
   @@index([type, createdAt])
   @@map("shipment_events")
+}
+
+// =============================================================================
+// e-İRSALİYE (E1-SEMA, plan docs/design/E-IRSALIYE-PLAN.md §3.1–§3.2)
+// =============================================================================
+
+/// e-İrsaliye kaydının KAYNAK belgesi. v1 yalnız müşteri sevkiyatı; yeni kaynak
+/// (fason sevki, doğrudan sevk) `ALTER TYPE ADD VALUE` reçetesiyle eklenir.
+enum EIrsaliyeSourceType {
+  SHIPMENT /// Müşteri sevkiyatı (`Shipment`)
+}
+
+/// e-İrsaliye kaydının GÜNCEL durumu (geçmiş `EIrsaliyeEvent`te). Geçişler plan §3.2.
+enum EIrsaliyeStatus {
+  TASLAK /// Hazırlandı; numara ve XML yok
+  OLUSTURULDU /// Numara + ETTN + XML üretildi; GİB'e gitmedi
+  GONDERILDI /// Entegratöre/portala iletildi (gönderilen XML mühürlü)
+  KABUL /// Alıcı yanıtı: kabul
+  KISMI_KABUL /// Alıcı yanıtı: kısmi kabul
+  REDDEDILDI /// Alıcı yanıtı: red (yerine yeni kayıt `replacesId` ile)
+  HATA /// Gönderimde hata alındı; düzeltilip yeniden üretilir
+  IPTAL /// Yerel iptal — GİB'e hiç gitmedi (terminal)
+}
+
+/// e-İrsaliye olay defterinin satır tipi. Ters çiftler `scripts/lib/defter-beyan.ts`te.
+enum EIrsaliyeEventType {
+  HAZIRLANDI /// Kayıt doğdu (TASLAK) — doğuş olayı
+  OLUSTURULDU /// Numara + ETTN + ilk XML sürümü üretildi
+  XML_YENIDEN_URETILDI /// Aynı numara + ETTN ile yeni XML sürümü
+  GONDERILDI /// Gönderildi / elle gönderildi işaretlendi
+  GONDERIM_GERI_ALINDI /// Gönderim kaydı geri alındı (GONDERILDI'nin tersi)
+  YANIT_KAYDEDILDI /// Alıcı yanıtı kaydedildi
+  YANIT_GERI_ALINDI /// Yanıt kaydı geri alındı (YANIT_KAYDEDILDI'nin tersi)
+  HATA_ALINDI /// Gönderim hatası kaydedildi
+  IPTAL_EDILDI /// Yerel iptal — terminal
+}
+
+/// e-İRSALİYE KAYDI — DURUM TABLOSU ("şu an ne"); geçmiş `EIrsaliyeEvent`te.
+///
+/// Şema-dışı sedler (migration `20261024081108_e_irsaliye`, envanter
+/// `scripts/test_db_invariants.ts`, davranış `scripts/test_e_irsaliye_db_invariants.ts`):
+///  · PARTIAL UNIQUE `e_irsaliyeler_kaynak_canli_key` (sourceType, sourceId)
+///    WHERE status NOT IN ('IPTAL','REDDEDILDI') — kaynak başına TEK canlı kayıt.
+///    Prisma partial index bilmez; şemada `@@unique` YOK, yalnız bu beyan.
+///  · CHECK `e_irsaliyeler_numarali_durum_chk` · `e_irsaliyeler_gonderilmis_durum_chk`
+///    · `e_irsaliyeler_document_no_bicim_chk` · `e_irsaliyeler_download_count_chk`.
+/// Alan adları E4'ün `DespatchRecordFields`iyle bire bir (planın `plaka`/`soforAd`… karşılığı).
+model EIrsaliye {
+  id         String              @id @default(uuid()) @db.Uuid
+  sourceType EIrsaliyeSourceType
+  /// Polimorfik kaynak (`PrintedDocument.sourceId` emsali) — FK YOK, bütünlük serviste.
+  sourceId   String              @db.Uuid
+  /// v1'de dolu; liste süzgeci join'i için. `Restrict`: e-İrsaliyesi olan sevkiyat silinemez.
+  shipmentId String?             @db.Uuid
+  status     EIrsaliyeStatus     @default(TASLAK)
+
+  /// GİB biçimi: 3 karakter seri + 4 hane yıl + 9 hane sıra (CHECK ile). TASLAK'ta null.
+  documentNo    String? @unique @db.VarChar(16)
+  ettn          String? @unique @db.Uuid
+  /// Entegratör portalı farklı numara/ETTN verdiyse (⚠ doğrulanacak: plan §3.1).
+  confirmedNo   String? @db.VarChar(32)
+  confirmedEttn String? @db.Uuid
+  /// Üretildiği andaki bağdaştırıcı (`disaAktar` · `simulasyon` · ileride entegratör kodu).
+  adapter       String  @db.VarChar(32)
+
+  /// XML'in üretildiği kâğıt irsaliye sürümü ("kaynak değişti" uyarısı bundan türer).
+  printedDocumentId String? @db.Uuid
+  printedDocVersion Int?
+
+  /// Güncel ve gönderilen XML sürümü. `NoAction`: XML satırı yalnız kaydıyla (kaskat) gider.
+  currentXmlId String? @unique @db.Uuid
+  sentXmlId    String? @unique @db.Uuid
+
+  // Taşıma — kayıtta elle tamamlanır (plan §2).
+  licensePlate     String? @db.VarChar(32)
+  trailerPlate     String? @db.VarChar(32)
+  driverFirstName  String? @db.VarChar(100)
+  driverFamilyName String? @db.VarChar(100)
+  /// Şoför TCKN — XML'e girer; audit yüküne ve log'a GİRMEZ (sır hijyeni).
+  driverNationalId String? @db.VarChar(11)
+  carrierName      String? @db.VarChar(200)
+  carrierTaxId     String? @db.VarChar(11)
+  /// TCKN'li alıcıda kişi adı/soyadı.
+  recipientFirstName  String? @db.VarChar(100)
+  recipientFamilyName String? @db.VarChar(100)
+
+  sentAt          DateTime? @db.Timestamptz
+  responseAt      DateTime? @db.Timestamptz
+  responseNote    String?   @db.VarChar(1000)
+  responseSummary Json?
+
+  /// DURUM kolonu: "indirildi mi" yeniden üretim onayına girer (CHECK >= 0).
+  lastDownloadedAt DateTime? @db.Timestamptz
+  downloadCount    Int       @default(0)
+
+  /// REDDEDILDI kaydın yerine geçen yeni kayıt eskisini gösterir.
+  replacesId  String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  shipment        Shipment?        @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  printedDocument PrintedDocument? @relation(fields: [printedDocumentId], references: [id], onDelete: Restrict)
+  currentXml      EIrsaliyeXml?    @relation("EIrsaliyeCurrentXml", fields: [currentXmlId], references: [id], onDelete: NoAction)
+  sentXml         EIrsaliyeXml?    @relation("EIrsaliyeSentXml", fields: [sentXmlId], references: [id], onDelete: NoAction)
+  replaces        EIrsaliye?       @relation("EIrsaliyeReplaces", fields: [replacesId], references: [id], onDelete: NoAction)
+  replacedBy      EIrsaliye[]      @relation("EIrsaliyeReplaces")
+  xmls            EIrsaliyeXml[]   @relation("EIrsaliyeXmlVersions")
+  events          EIrsaliyeEvent[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("EIrsaliyeCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("EIrsaliyeUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([shipmentId])
+  @@index([sourceType, sourceId])
+  @@index([printedDocumentId])
+  @@index([replacesId])
+  @@map("e_irsaliyeler")
+}
+
+/// e-İRSALİYE XML SÜRÜMÜ — DONMUŞ BELGE (append-only; `updatedAt` YOK ve OLMAMALI).
+///
+/// Trigger `e_irsaliye_xml_degismez`: UPDATE her zaman, doğrudan DELETE RED (kaydın
+/// kaskadı geçer); INSERT, bağlı kayıt GONDERILDI/KABUL/KISMI_KABUL/REDDEDILDI/IPTAL
+/// iken RED — gönderilen sürüm `EIrsaliye.sentXmlId` ile mühürlüdür.
+/// `createdById` FK'SIZ (`RollStatusEvent.actorId` emsali): kullanıcı silinince SET NULL
+/// bir UPDATE olur ve mühürle çarpışırdı.
+model EIrsaliyeXml {
+  id          String @id @default(uuid()) @db.Uuid
+  /// `Cascade` BİLİNÇLİ (`ShipmentEvent.shipment` emsali): kayıt canlıda hard delete
+  /// edilmez; kaskat yalnız bekçi temizliğinde koşar, doğrudan silme trigger'da RED.
+  eIrsaliyeId String @db.Uuid
+  /// Kayıt içinde 1'den artan sürüm (max+1).
+  version     Int
+  ettn        String @db.Uuid
+  xml         String @db.Text
+  sha256      String @db.Char(64)
+  /// Yapısal doğrulama raporu (E4 `ValidationResult`).
+  validation  Json
+  createdById String? @db.Uuid
+
+  eIrsaliye      EIrsaliye        @relation("EIrsaliyeXmlVersions", fields: [eIrsaliyeId], references: [id], onDelete: Cascade)
+  currentOf      EIrsaliye?       @relation("EIrsaliyeCurrentXml")
+  sentOf         EIrsaliye?       @relation("EIrsaliyeSentXml")
+  events         EIrsaliyeEvent[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([eIrsaliyeId, version])
+  @@map("e_irsaliye_xmllari")
+}
+
+/// e-İRSALİYE OLAY DEFTERİ — "bu kayda ne oldu" (append-only, `ShipmentEvent` emsali).
+///
+/// ⚠️ `updatedAt` YOK ve OLMAMALI. Mühür `defter_block_tamper` (UPDATE ve doğrudan
+/// DELETE RED). Kronoloji `createdAt`; "en son" okuyucusu `id` eşitlik bozucusuyla.
+/// Tek yazar `services/e-irsaliye/e-irsaliye-event.helper.ts` `writeEIrsaliyeEventTx`.
+/// `actorId` FK'SIZ (mühürle çarpışan SET NULL — `RollStatusEvent` emsali).
+model EIrsaliyeEvent {
+  id          String             @id @default(uuid()) @db.Uuid
+  eIrsaliyeId String             @db.Uuid
+  type        EIrsaliyeEventType
+  /// Doğuş olayında (HAZIRLANDI) null — öncesi yok.
+  fromStatus  EIrsaliyeStatus?
+  toStatus    EIrsaliyeStatus
+  /// Olayın ilgili olduğu XML sürümü (üretim/gönderim). `NoAction`: mühürlü satır SET NULL alamaz.
+  xmlId       String?            @db.Uuid
+  note        String?            @db.VarChar(1000)
+  actorId     String?            @db.Uuid
+
+  /// `Cascade` BİLİNÇLİ — `EIrsaliyeXml.eIrsaliye` şerhi.
+  eIrsaliye EIrsaliye     @relation(fields: [eIrsaliyeId], references: [id], onDelete: Cascade)
+  xml       EIrsaliyeXml? @relation(fields: [xmlId], references: [id], onDelete: NoAction)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([eIrsaliyeId, createdAt, id])
+  @@index([xmlId])
+  @@map("e_irsaliye_olaylari")
 }
 
 /// Çuval tartısının türü. Sıfırlama da bir OLAYDIR — sessiz silme değil.
