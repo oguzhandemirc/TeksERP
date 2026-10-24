@@ -156,6 +156,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Yazıcısını/kantarını kendisi kuran personel — sunucuya hiçbir şey yazmaz,
       // etkisi tek bilgisayarla sınırlıdır (bkz. permission-catalog.ts gerekçesi).
       "settings:workstation",
+      // Yazdırma geçmişi: etiket/çeki basımının ve yazıcı hatalarının izi (izlenebilirlik A1).
+      "system:print-history",
       // Ticaret paketi (2026-08-13): depoyu GÖRÜR ve depolar arası TAŞIR.
       // ⚠️ Fabrikada görünür fark YOK — tek depo varken transfer karosu ve depo
       // seçicileri zaten çizilmiyor; izin var ama yüzey yok.
@@ -387,6 +389,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "certificate:read",
       "certificate:write",
       "mobile:muayene",
+      // Yazdırma geçmişi (izlenebilirlik A1): "kim neyi bastı, hangi yazıcı düşüyor".
+      "system:print-history",
     ],
   },
   {
@@ -517,6 +521,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "system:server-status",
       "system:clients",
       "system:backups",
+      "system:print-history",
       // Lisans: kurulumun satıcıyla bağı sistem yönetimidir (etkinleştirme, taşıma, proxy).
       "license:view",
       "license:manage",
