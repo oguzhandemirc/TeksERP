@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportHtml, slugifyFileName, toSheets, type ReportExportSpec } from "./reportExport";
+import { buildReportHtml, reportRowCount, slugifyFileName, toSheets, type ReportExportSpec } from "./reportExport";
 
 const SPEC: ReportExportSpec = {
   title: "Kalite Karnesi",
@@ -123,5 +123,100 @@ describe("rapor dışa aktarım — tek spec, iki çıktı", () => {
       "kalite-karnesi-01-07-2026-31-07-2026",
     );
     expect(slugifyFileName("Fason Çıkış Şubat")).toBe("fason-cikis-subat");
+  });
+});
+
+// ---------- Rapor v2 blokları (R0-GRAFIK) ------------------------------------
+// Grafik PDF'e SVG (vektör), Excel'e VERİ TABLOSU olarak geçer; ana sayı, anlatı ve
+// tanımlar Excel'de "Özet" sayfasında PDF'teki AYNI metinle durur.
+// Negatif sonda (2026-10-24): `blockHtml` grafik dalında SVG atlandı (tabloya düştü) → 2 ❌.
+const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 300"><text>çizim</text></svg>';
+const veri = {
+  name: "Günlük sevk",
+  columns: [
+    { header: "Gün", key: "k" },
+    { header: "Bu dönem (m)", key: "s0", numFmt: "#,##0.0", align: "right" as const },
+  ],
+  rows: [
+    { k: "01.10.2026", s0: 12500.5 },
+    { k: "02.10.2026", s0: 9800 },
+  ],
+};
+const V2: ReportExportSpec = {
+  ...SPEC,
+  soru: "Siparişler terminde gitti mi?",
+  kiyasDonemi: "Eylül 2026",
+  parametreCumlesi: "Müşteri: Kaya Tekstil · Renk: tümü",
+  kullanici: "Ayşe",
+  basimAni: "2026-10-24T11:02:00Z",
+  uyarilar: ["Termini olmayan 12 sipariş orana katılmadı."],
+  bloklar: [
+    { tur: "anaSayi", kartlar: [{ ad: "Zamanında teslim", deger: "%78", kiyas: "▼ 6 puan (eylül %84)", ana: true }, { ad: "Geciken", deger: "23 sipariş" }] },
+    { tur: "anlati", cumleler: ["Siparişlerin %78'i terminde gitti; eylüle göre 6 puan düşük."] },
+    { tur: "grafik", baslik: "Günlük sevk", svg: SVG, veri },
+    { tur: "tanimlar", satirlar: [{ ad: "Zamanında teslim", aciklama: "Termin gününe kadar sevk edilen siparişlerin payı." }] },
+  ],
+};
+
+describe("rapor v2 blokları — grafik PDF'te SVG, Excel'de veri sayfası", () => {
+  it("⭐ grafik bloğu PDF HTML'inde gömülü SVG + başlık (dış kaynak yok)", () => {
+    const html = buildReportHtml(V2);
+    expect(html).toContain('<section class="grafik"><h2>Günlük sevk</h2><div class="svg"><svg');
+    expect(html).not.toMatch(/<img|<link|src="http/);
+  });
+
+  it("⭐ Excel: Özet + grafik veri sayfası + tablolar; veri sayfası grafiğin tablosu", () => {
+    const sheets = toSheets(V2);
+    expect(sheets.map((s) => s.name)).toEqual(["Özet", "Günlük sevk", "Kumaş Bazında"]);
+    expect(sheets[1]!.rows).toEqual(veri.rows);
+    expect(sheets[1]!.columns[1]!.numFmt).toBe("#,##0.0");
+  });
+
+  it("⭐ görünen metin eşitliği: kart, anlatı, tanım, uyarı ve üst blok iki çıktıda aynı", () => {
+    const html = buildReportHtml(V2);
+    const sheets = toSheets(V2);
+    const ozet = sheets[0]!.rows.flatMap((r) => Object.values(r).map(String));
+    const ust = (sheets[0]!.preamble ?? []).map((r) => String(r[0]));
+    for (const metin of ["%78", "▼ 6 puan (eylül %84)", "23 sipariş", "Siparişlerin %78'i terminde gitti; eylüle göre 6 puan düşük.", "Termin gününe kadar sevk edilen siparişlerin payı.", "Termini olmayan 12 sipariş orana katılmadı."]) {
+      expect(ozet, metin).toContain(metin);
+      expect(html, metin).toContain(metin);
+    }
+    for (const satir of ["Siparişler terminde gitti mi?", "Dönem: 01.07.2026 – 31.07.2026", "Kıyas: Eylül 2026", "Müşteri: Kaya Tekstil · Renk: tümü", "Basım: 24.10.2026 14:02 · Ayşe"]) {
+      expect(ust, satir).toContain(satir);
+      expect(html, satir).toContain(satir);
+    }
+  });
+
+  it("blok sırası: ana sayı → anlatı → grafik → tablolar → tanımlar → uyarılar", () => {
+    const html = buildReportHtml(V2);
+    const sira = ['class="kartlar"', 'class="anlati"', 'class="grafik"', 'class="tbl-wrap"', 'class="tanimlar"', 'class="uyari"'].map((k) => html.indexOf(k));
+    expect(sira.every((v) => v > 0)).toBe(true);
+    expect([...sira].sort((a, b) => a - b)).toEqual(sira);
+  });
+
+  it("baskı CSS'i: A4 14/12/16 mm, grafik bölünmez, renk korunur, thead tekrar", () => {
+    const html = buildReportHtml(V2);
+    expect(html).toContain("@page { size: A4 portrait; margin: 14mm 12mm 16mm; }");
+    expect(html).toContain(".grafik { break-inside: avoid; }");
+    expect(html).toContain("print-color-adjust: exact");
+    expect(html).toContain("thead { display: table-header-group; }");
+  });
+
+  it("SVG'siz grafik: PDF grafiğin veri tablosunu basar (kâğıda hiçbir şey düşmez değil)", () => {
+    const spec: ReportExportSpec = { ...V2, bloklar: [{ tur: "grafik", baslik: "Günlük sevk", veri }] };
+    const html = buildReportHtml(spec);
+    expect(html).not.toContain("<svg");
+    expect(html).toContain("<h2>Günlük sevk</h2>");
+    expect(html).toContain('<td style="text-align:right">12.500,5</td>');
+  });
+
+  it("PDF satır kapısı grafik veri satırlarını da sayar", () => {
+    expect(reportRowCount(V2)).toBe(3 + 2);
+    expect(reportRowCount(SPEC)).toBe(3);
+  });
+
+  it("serbest metin v2 bloklarında da kaçırılır", () => {
+    const html = buildReportHtml({ ...V2, bloklar: [{ tur: "anlati", cumleler: ["A & <b>B</b>"] }] });
+    expect(html).toContain("A &amp; &lt;b&gt;B&lt;/b&gt;");
   });
 });
