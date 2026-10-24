@@ -108,11 +108,11 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/production/batch-trace",
     uc: ["/api/reports/production/batch-search", "/api/reports/production/batch-trace/:batchId"], kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/batch-search" }, { dosya: "src/routes/reports/production.routes.ts", yol: "/batch-trace/:batchId" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations", aciklama: "Operasyon → İz sürme (parti kartından da açılır)" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations", aciklama: "Operasyon ekranındaki iz sürme; parti kartından da açılır" } },
   { key: "production/traveler-trace", baslik: "Top İzleme", soru: "Bu topun refakat kartı hangi istasyonlarda okutuldu?",
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/production/traveler-trace", uc: "/api/reports/production/traveler-trace", kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/traveler-trace" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations", aciklama: "Operasyon → İz sürme (top kartından da açılır)" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations", aciklama: "Operasyon ekranındaki iz sürme; top kartından da açılır" } },
   { key: "production/operator-performance", baslik: "Operatör İş Hacmi", soru: "Hangi operatör bu dönemde kaç iş kaydı üretti?",
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/production/operator-performance", uc: "/api/reports/production/operator-performance", kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/operator-performance" }], yuzey: "yaprak",
@@ -188,7 +188,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "dokuma/karne", baslik: "Karne Listesi ve Mühür", soru: "Hangi vardiya karneleri mühürlendi, hangileri hâlâ açık?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/karne", uc: null, kapiTasiyici: null, yuzey: "yaprak-yabanci-uc",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations/weaving-floor", aciklama: "Dokuma operasyonu → Karne listesi ve mühür" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations/weaving-floor", aciklama: "Dokuma salonu ekranındaki karne listesi ve mühür" } },
   { key: "dokuma/zincir", baslik: "Üretim Zinciri", soru: "Hangi sipariş kalemi zincirin neresinde ve nerede takıldı?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/dokuma/zincir", uc: "/api/reports/dokuma/zincir", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/zincir" }], yuzey: "yaprak",
@@ -209,7 +209,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "dokuma/levent-bitis-tahmini", baslik: "Levent Bitiş Tahmini", soru: "Tezgahtaki leventler günlük hızla ne zaman biter?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/dokuma/levent-bitis-tahmini", uc: "/api/reports/dokuma/levent-bitis-tahmini", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/levent-bitis-tahmini" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations/warp-beams", aciklama: "Dokuma planlama → Levent bitiş tahmini" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations/warp-beams", aciklama: "Levent planı ekranındaki bitiş tahmini" } },
 
   // ── ÖN MUHASEBE ───────────────────────────────────────────────────────────
   { key: "finance/aging", baslik: "Cari Yaşlandırma", soru: "Cari bakiyeler bu tarihte hangi vade kovalarında duruyor?",
@@ -235,7 +235,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "finance/statement", baslik: "Cari Ekstre", soru: "Bu carinin bu dönemdeki hareketleri ve bakiyesi ne?",
     sinif: "gelismis", izin: "report:finance", modul: "financeEnabled", varsayilanGun: null, tarih: "aralik-iso",
     panelYolu: "", uc: "/api/reports/finance/statement", kapiTasiyici: [{ dosya: "src/routes/reports/finance.report.routes.ts", yol: "/statement" }], yuzey: "diyalog",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "finance/cari", aciklama: "Cari kartı → Ekstre" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "finance/cari", aciklama: "Cari kartındaki ekstre" } },
 
   // ── FASON ─────────────────────────────────────────────────────────────────
   { key: "subcontract/scorecard", baslik: "Fason Karnesi", soru: "Fasoncular bu dönemde ne kadar iş aldı, ne kadarı zamanında döndü?",
@@ -257,11 +257,11 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "audit/system-log-summary", baslik: "Denetim Kaydı Özeti", soru: "Bu dönemde sistemde hangi işlemler kaç kez yapıldı?",
     sinif: "basit", izin: "report:audit", modul: "cekirdek:sistem-kimlik-belge", varsayilanGun: 7, tarih: "aralik-iso",
     panelYolu: "reports/audit/system-log-summary", uc: "/api/reports/audit/system-log-summary", kapiTasiyici: [{ dosya: "src/routes/reports/audit.routes.ts", yol: "/system-log-summary" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "system/logs", aciklama: "Sistem → Denetim kaydı özeti" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "system/logs", aciklama: "Denetim kaydı ekranındaki özet" } },
   { key: "audit/user-activity", baslik: "Kullanıcı Aktivitesi", soru: "Hangi kullanıcı bu dönemde hangi işlemleri yaptı?",
     sinif: "basit", izin: "report:audit", modul: "cekirdek:sistem-kimlik-belge", varsayilanGun: 7, tarih: "aralik-iso",
     panelYolu: "reports/audit/user-activity", uc: "/api/reports/audit/user-activity", kapiTasiyici: [{ dosya: "src/routes/reports/audit.routes.ts", yol: "/user-activity" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "system/activity", aciklama: "Sistem → Kullanıcı aktivitesi" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "system/activity", aciklama: "Kullanıcı aktivitesi ekranı" } },
   // ── RAPORLAR v2 — 14 TEMEL RAPOR (plan §5) ────────────────────────────────
   // `hazir:false` = uç henüz yok; hiçbir yüzeyde çizilmez (`isReportSurfaced`). Taşıyıcı dosya
   // R0-RAPA/B/C'nin yazacağı yerdir; `yol` o dosyada `router.get` yolu olarak beyan edilir.
