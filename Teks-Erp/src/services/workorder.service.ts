@@ -135,6 +135,7 @@ import {
   repointPendingBypassAssignmentsTx,
 } from "./helpers/kursun-bypass-guard.helper";
 import { computeWoInput } from "./helpers/coverage.helper";
+import { readWorkOrderLocationFilters, withWorkOrderLocation } from "./helpers/workorder-location.helper";
 import {
   buildHiddenStatusWhere,
   HIDE_CANCELLED_FILTER,
@@ -1697,6 +1698,9 @@ export class WorkOrderService {
     // serviste allowlist yok, `filter[customerId]` where'e sızıp 500 verirdi. CSV `in`.
     const customerCond = readIdCondition(params.filters.customerId);
     delete params.filters.customerId;
+    // "Şu an nerede" süzgeçleri (2026-10-24): istasyon + konum sınıfı; filtre kümesinden
+    // helper çıkarır, tanınmayan değer 400. Liste + cursor + sayım AYNI where'i görür.
+    const locationConds = await readWorkOrderLocationFilters(params.filters);
     // Arama kapsamı liste kolonlarıyla hizalı: İE no + parti no + kumaş/renk +
     // sipariş bağı üzerinden müşteri adı VE sipariş no (nested some → EXISTS
     // subquery). Sipariş no ile de aranabilmesi siparişten üretim emrine
@@ -1721,6 +1725,10 @@ export class WorkOrderService {
       const byCustomer: Prisma.WorkOrderWhereInput = { orderLinks: { some: { ...ACTIVE_ORDER_LINK, orderLine: { order: { customerId: customerCond } } } } };
       const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
       w.AND = [...(w.AND ?? []), byCustomer];
+    }
+    if (locationConds.length > 0) {
+      const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
+      w.AND = [...(w.AND ?? []), ...locationConds];
     }
     // Arşivli (isActive=false) WO'lar default'ta gizli — ?withArchived=true override
     if (req.query.withArchived !== "true") {
@@ -1789,7 +1797,7 @@ export class WorkOrderService {
           id: true,
           stepSequence: true,
           status: true,
-          station: { select: { id: true, code: true, name: true, type: true } },
+          station: { select: { id: true, code: true, name: true, type: true, kind: true } },
         },
         orderBy: { stepSequence: "asc" },
       },
@@ -1844,7 +1852,9 @@ export class WorkOrderService {
       ]);
 
       const hasMore = items.length > limit;
-      const data = await this.withProductionMeters(hasMore ? items.slice(0, limit) : items);
+      const data = await withWorkOrderLocation(
+        await this.withProductionMeters(hasMore ? items.slice(0, limit) : items),
+      );
       const last = data[data.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, sortBy) : null;
 
@@ -1868,7 +1878,7 @@ export class WorkOrderService {
       prisma.workOrder.findMany({ where, orderBy, skip, take, select }),
       prisma.workOrder.count({ where }),
     ]);
-    const data = await this.withProductionMeters(rawData);
+    const data = await withWorkOrderLocation(await this.withProductionMeters(rawData));
 
     return {
       success: true,

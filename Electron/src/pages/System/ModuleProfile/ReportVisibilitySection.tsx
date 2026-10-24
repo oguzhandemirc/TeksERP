@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { MODULE_LABELS, type ModuleFlagKey } from "@/lib/module-flags";
 import { REPORT_CATALOG, type ReportCatalogEntry } from "@/lib/report-catalog";
+import { isReportSurfaced } from "@/lib/report-gate";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { FlagToggle } from "@/pages/GeneralSettings/SettingRow";
@@ -42,10 +43,13 @@ export function isReportModuleClosed(entry: ReportCatalogEntry, ctx: OperationsV
   return value === false;
 }
 
+/** Bu bölümün satırları — ucu inmemiş v2 satırı kapatılacak bir şey değildir, çizilmez. */
+const SURFACED = REPORT_CATALOG.filter(isReportSurfaced);
+
 /** Kategori sırası katalogdaki ilk görünüm sırasıdır (elle liste yok). */
 export function reportCategories(): string[] {
   const seen: string[] = [];
-  for (const r of REPORT_CATALOG) {
+  for (const r of SURFACED) {
     const cat = r.key.split("/")[0]!;
     if (!seen.includes(cat)) seen.push(cat);
   }
@@ -101,7 +105,7 @@ export function ReportVisibilitySection({ canWrite }: { canWrite: boolean }) {
             {reportCategoryTitle[cat] ?? cat}
           </p>
           <div className="space-y-3">
-            {REPORT_CATALOG.filter((r) => r.key.startsWith(`${cat}/`)).map((r) => {
+            {SURFACED.filter((r) => r.key.startsWith(`${cat}/`)).map((r) => {
               const moduleClosed = isReportModuleClosed(r, ctx);
               const moduleFlag = reportModuleFlag(r.modul);
               const isOpen = !closed.includes(r.key);

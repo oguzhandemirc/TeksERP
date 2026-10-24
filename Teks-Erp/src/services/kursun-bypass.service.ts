@@ -51,7 +51,6 @@ import {
   type PrismaClient,
   RollOperationType,
   StationKind,
-  StationPropertyMode,
   StepStatus,
   TravelerCardStatus,
   WorkOrderStatus,
@@ -81,9 +80,10 @@ import {
   type RouteStepRef,
 } from "./helpers/kursun-bypass-eligibility.helper";
 import {
-  QUALITY_STATION_WHERE,
-  STEP_QUALITY_SELECT,
-  stepCanApplyQuality,
+  KURSUN_DISPATCH_STATION_WHERE,
+  STEP_FLOW_WHERE,
+  STEP_FLOW_SELECT,
+  stepRunsStepFlow,
 } from "./helpers/quality-station.helper";
 
 /**
@@ -145,7 +145,7 @@ const PENDING_ASSIGNMENT_WHERE = {
  *     ile tek sorguda eler (LIST_CAP kırpmasına da bağımlı değildir).
  */
 const WAITING_STEP_BASE_WHERE = {
-  station: { ...QUALITY_STATION_WHERE },
+  station: { ...STEP_FLOW_WHERE },
   movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
   workOrder: { status: { in: ASSIGNABLE_WO_STATUSES } },
 } satisfies Prisma.WorkOrderStepWhereInput;
@@ -516,14 +516,12 @@ export class KursunBypassService {
   async listDistribution(): Promise<ApiResponse<KursunDistributionPayload>> {
     const flagEnabled = await resolveKursunBypassEnabled();
 
-    // ATAMA HEDEFLERİ = KALİTE yürüten istasyona bağlı AKTİF makineler.
-    // Filtre `assign`'ın kabul koşuluyla BİREBİR aynı tutulur (aktif makine +
-    // istasyon kalite yürütüyor) — aksi halde listede görünen bir makine
-    // seçildiğinde 400 alınır ve dağıtımcı sebebi anlamaz.
-    // ⚠️ Bu filtre ile `assign`ın kabul koşulu (`stepCanApplyQuality`) AYNI
-    // ikiz boğazdan beslenir: `QUALITY_STATION_WHERE` ↔ `stepCanApplyQuality`.
+    // ATAMA HEDEFLERİ = kart akışı yürüten VE kurşunu OTOMATİK uygulayan
+    // istasyonun AKTİF makineleri. `assign` kabulü AYNI parçayı sorar
+    // (`KURSUN_DISPATCH_STATION_WHERE`, KQ-D1): liste = kabul; eskiden liste
+    // AUTO şartını aramıyordu ve listede görünen makine 400 alıyordu (T2).
     const machineRows = await prisma.machine.findMany({
-      where: { isActive: true, station: { ...QUALITY_STATION_WHERE } },
+      where: { isActive: true, station: { ...KURSUN_DISPATCH_STATION_WHERE } },
       select: {
         id: true,
         code: true,
@@ -794,7 +792,7 @@ export class KursunBypassService {
                 id: true,
                 stepSequence: true,
                 status: true,
-                station: { select: { ...STEP_QUALITY_SELECT, name: true } },
+                station: { select: { ...STEP_FLOW_SELECT, name: true } },
               },
             },
           },
@@ -814,7 +812,7 @@ export class KursunBypassService {
           status: s.status,
           station: s.station,
         }));
-        const step = wo.steps.find((s) => stepCanApplyQuality(s.station));
+        const step = wo.steps.find((s) => stepRunsStepFlow(s.station));
         if (!step) {
           throw AppError.badRequest("Bu terbiye iş emrinde Kurşun + KK2 adımı tanımlı değil");
         }
@@ -915,16 +913,16 @@ export class KursunBypassService {
             name: true,
             isActive: true,
             stationId: true,
-            station: { select: { name: true, ...STEP_QUALITY_SELECT } },
+            station: { select: { name: true, ...STEP_FLOW_SELECT } },
           },
         });
         if (!machine) throw AppError.notFound("Makine bulunamadı");
         if (!machine.isActive) throw AppError.badRequest("Seçilen makine pasif");
-        // ⚠️ `listDistribution`ın makine filtresiyle (QUALITY_STATION_WHERE)
-        // BİREBİR aynı kural — ikiz boğazın iki ucu.
-        if (!stepCanApplyQuality(machine.station)) {
+        // Sebebi söylemek için önce akış ikizi; KABULÜN kendisi aşağıda
+        // `listDistribution` ile AYNI parçadan (`KURSUN_DISPATCH_STATION_WHERE`).
+        if (!stepRunsStepFlow(machine.station)) {
           throw AppError.badRequest(
-            `Seçilen makine kalite kontrol yürüten bir istasyona bağlı değil (bağlı olduğu istasyon: ${machine.station.name})`,
+            `Seçilen makine kart akışı (Kurşun/KK2) yürüten bir istasyona bağlı değil (bağlı olduğu istasyon: ${machine.station.name})`,
           );
         }
 
@@ -942,15 +940,10 @@ export class KursunBypassService {
         //    operatör YOKTUR, dolayısıyla OPTIONAL/REQUIRED bir KURSUN satırı
         //    kapanışta topa hiç yazılmaz ve yukarıdaki "kilit modeli yalan
         //    söyler" arızası aynen geri gelirdi (bu kez sessizce).
-        const kursunCap = await tx.stationProperty.findFirst({
-          where: {
-            stationId: machine.stationId,
-            property: { code: "KURSUN" },
-            mode: StationPropertyMode.AUTO,
-          },
-          select: { id: true },
+        const dispatchable = await tx.station.count({
+          where: { id: machine.stationId, ...KURSUN_DISPATCH_STATION_WHERE },
         });
-        if (!kursunCap) {
+        if (dispatchable === 0) {
           throw AppError.badRequest(
             `Seçilen makinenin istasyonu (${machine.station.name}) kurşunu OTOMATİK uygulamıyor — ` +
               `bypass'ta tablette işaretleme yapılmadığı için KURSUN özelliği "Otomatik" modunda olmalı. ` +
@@ -1508,7 +1501,7 @@ export class KursunBypassService {
     const step = await db.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
       },
       orderBy: { stepSequence: "asc" },
@@ -1633,7 +1626,7 @@ export class KursunBypassService {
     const step = await prisma.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
       },
       orderBy: { stepSequence: "asc" },
@@ -2162,7 +2155,7 @@ export class KursunBypassService {
     const step = await prisma.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         movements: {
           some: {
             ...ACTIVE_MOVEMENT,
