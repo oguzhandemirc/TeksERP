@@ -30,7 +30,7 @@
 //    girmedi, kimse atayamıyor" sınıfını yakalıyor.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
-import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
+import { PERMISSION_CATALOG, grantsDesktopPanel } from "../src/constants/permission-catalog";
 import { SCREEN_CATALOG, mobileScreenPermissionCodes } from "../src/constants/screen-catalog";
 import {
   ROLE_TEMPLATE_CATALOG,
@@ -42,6 +42,8 @@ import {
 } from "../src/constants/role-template-catalog";
 import { reconcileRoleTemplates } from "../src/jobs/role-template-catalog.job";
 import { matchesPermission } from "../src/middlewares/rbac.middleware";
+import { readFileSync } from "fs";
+import * as path from "path";
 import { foldNameForCompare } from "../src/services/helpers/name-normalize.helper";
 
 let pass = 0;
@@ -147,6 +149,20 @@ async function main(): Promise<void> {
   check("`shipping:invoice` taşıyan rol `shipping:write` taşımaz (sevk eden faturalamaz)", faturaYazan.length === 0, faturaYazan.join(", ") || "temiz");
   const olu = SOD_ALLOWED_TEMPLATES.filter((c) => !kodlar.includes(c));
   check("SoD beyanındaki her rol katalogda var (ölü beyan yok)", olu.length === 0, olu.join(", "));
+
+  console.log("\n=== §2e OPERATÖR ŞABLONU → PANEL GİRİŞİ YOK (K4P patron kararı 2026-10-24) ===");
+  // Web izni (`inspection:*` vb.) masaüstü paneline giriş açar; KK1 operatörü yalnız tablet kapsamlı muayene alır.
+  // Sonda (2026-10-24): MOBILE_KK1'e `inspection:read` eklendi → iki ❌; geri alınınca yeşil.
+  const kk1 = ROLE_TEMPLATE_CATALOG.find((r) => r.code === "MOBILE_KK1");
+  check("MOBILE_KK1 var ve tablet muayene iznini (`mobile:muayene`) taşıyor", !!kk1 && kk1.codes.includes("mobile:muayene"));
+  check("⭐ MOBILE_KK1 masaüstü paneline giriş AÇMAZ (auth kanal kapısıyla aynı yüklem)", !!kk1 && !grantsDesktopPanel(kk1.codes), kk1?.codes.filter((c) => grantsDesktopPanel([c])).join(", ") || "temiz");
+  const k4pWeb = [...izinKodlari].filter((c) => /^(inspection|labtest|certificate):/.test(c));
+  const k4pSizinti = ROLE_TEMPLATE_CATALOG.filter((r) => !r.code.startsWith("WEB_") && r.mode !== "all")
+    .flatMap((r) => k4pWeb.filter((c) => r.codes.includes(c)).map((c) => `${r.code}:${c}`));
+  check("Körlük zemini: K4P web izinleri katalogda (≥ 9)", k4pWeb.length >= 9, `${k4pWeb.length} kod`);
+  check("⭐ K4P panel izinleri (muayene/lab/sertifika) yalnız WEB_* sorumlu-şef şablonlarında", k4pSizinti.length === 0, k4pSizinti.join(", ") || "temiz");
+  const authKaynak = readFileSync(path.join(__dirname, "..", "src", "services", "auth.service.ts"), "utf8");
+  check("Kanal kapısı tek yüklemi okur (`grantsDesktopPanel`; elle `startsWith(\"mobile:\")` yok)", authKaynak.includes("!grantsDesktopPanel(permissions)") && !authKaynak.includes('startsWith("mobile:")'));
 
   console.log("\n=== §2b EKRAN BAĞIMLILIKLARI: yazan, okuduğu ucu da görebiliyor mu? ===");
   // ⚠️ §2 "her izin BİR rolde var mı" diye sorar ve bu soru YETMEZ: bir izin

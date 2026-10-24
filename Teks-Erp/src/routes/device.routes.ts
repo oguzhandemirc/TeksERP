@@ -1,7 +1,8 @@
 // =============================================================================
 // TeksERP - Device Routes (allowlist + atama)
 // =============================================================================
-// PUBLIC: POST /api/devices/announce, GET /api/devices/status, /pairing-required
+// PUBLIC: POST /api/devices/announce, GET /api/devices/status, /pairing-required,
+//         POST /api/devices/rebind-requests/onsite-approve (yerinde yönetici onayı)
 // ADMIN : /api/admin/devices/* (admin:settings)
 // =============================================================================
 
@@ -56,6 +57,26 @@ devicePublicRouter.get("/status", DeviceController.status);
  */
 devicePublicRouter.get("/pairing-required", DeviceController.assignmentRequired);
 
+/**
+ * @openapi
+ * /api/devices/rebind-requests/onsite-approve:
+ *   post:
+ *     tags: [Devices]
+ *     summary: Tablette yerinde yönetici onayı — yeniden bağlama talebi (PUBLIC — JWT yok)
+ *     description: |
+ *       Gövde `{localId, username, password, totp?}`. Kimlik giriş ucunun doğrulayıcısıyla ve
+ *       AYNI kilit kovasıyla sınanır; izin `admin:settings`. JWT VERİLMEZ, oturum açılmaz.
+ *       Hız sınırı IP + localId. Başarıda talep onaylanır, tablet yeniden announce eder.
+ *     responses:
+ *       200: { description: "{ id, targetDeviceId, targetName, status: APPROVED }" }
+ *       401: { description: Geçersiz kimlik ya da TOTP_INVALID }
+ *       403: { description: REBIND_APPROVER_FORBIDDEN ya da PASSWORD_CHANGE_REQUIRED }
+ *       404: { description: REBIND_REQUEST_NOT_FOUND }
+ *       409: { description: TOTP_REQUIRED ya da REBIND_ALREADY_DECIDED }
+ *       429: { description: LOGIN_LOCKED ya da REBIND_RATE_LIMITED }
+ */
+devicePublicRouter.post("/rebind-requests/onsite-approve", DeviceController.onsiteApproveRebind);
+
 // ADMIN
 export const deviceAdminRouter = Router();
 
@@ -65,6 +86,28 @@ export const deviceAdminRouter = Router();
  *   get: { tags: [Admin], summary: Tüm cihazlar (PENDING'ler önce), security: [{ bearerAuth: [] }] }
  */
 deviceAdminRouter.get("/", verifyToken, requirePermission("admin:settings"), DeviceController.list);
+
+// ⚠️ STATİK yollar `/:id` rotalarından ÖNCE: yoksa "rebind-requests" bir cihaz id'si sanılır.
+/**
+ * @openapi
+ * /api/admin/devices/rebind-requests:
+ *   get: { tags: [Admin], summary: "Yeniden bağlama talepleri (açıklar önce)", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.get("/rebind-requests", verifyToken, requirePermission("admin:settings"), DeviceController.listRebindRequests);
+
+/**
+ * @openapi
+ * /api/admin/devices/rebind-requests/{id}/approve:
+ *   post: { tags: [Admin], summary: "Yeniden bağlama talebini onayla — yeni kurulum hedef cihaza bağlanır", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.post("/rebind-requests/:id/approve", verifyToken, requirePermission("admin:settings"), DeviceController.approveRebind);
+
+/**
+ * @openapi
+ * /api/admin/devices/rebind-requests/{id}/reject:
+ *   post: { tags: [Admin], summary: "Yeniden bağlama talebini reddet (body mode REDDET|AYRI_CIHAZ, reason?)", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.post("/rebind-requests/:id/reject", verifyToken, requirePermission("admin:settings"), DeviceController.rejectRebind);
 
 /**
  * @openapi

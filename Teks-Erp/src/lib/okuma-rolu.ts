@@ -24,7 +24,10 @@ export const READ_ONLY_HIDDEN_TABLES: readonly string[] = [
 export const READ_ONLY_HIDDEN_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   users: ["passwordHash", "cardToken", "quickPin", "quickPinDigest", "cardTokenDigest", "totpSecret", "systemAccountSeal"],
   sessions: ["jti"],
-  devices: ["proofSalt"],
+  // hwDigest (eşleme v2): kimlik doğrulamaz ama bilen biri bayrak kapalı kurulumda yeni localId'yle cihaz satırını devralabilir.
+  devices: ["proofSalt", "hwDigest"],
+  device_binding_events: ["hwDigest"],
+  device_rebind_requests: ["hwDigest"],
   machine_collectors: ["secretSeed"],
 };
 
@@ -36,7 +39,7 @@ export const READ_ONLY_NOT_SECRET_COLUMNS: readonly string[] = [
   "barcode", "cancelReasonCode", "cardTokenLegacy", "chainHash", "clientToken", "code", "codeBefore",
   "collectorKey", "contentKey", "dedupeKey", "defaultPasswordChangedAt", "defaultPasswordIssuedAt", "digest",
   "entryReasonCode", "errorCode", "exportCode", "factoryDayKey", "fromReasonCode", "groupKey", "installationKeyId",
-  "key", "keyValue", "lastErrorCode", "mustChangePassword", "pairKey", "payloadDigest", "pendingKey",
+  "key", "keyValue", "lastErrorCode", "mustChangePassword", "pairKey", "paramsDigest", "payloadDigest", "pendingKey",
   "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rawCode", "rawStopCode",
   "reasonCode", "routeKey", "rowKeys", "scopeKey", "sealGeneration", "sealState", "sealedAt", "sealedById",
   "secretIssuedAt", "seriesKey", "setKey", "signalStopKey", "stopKey", "subjectKey", "textDigest", "toReasonCode",
