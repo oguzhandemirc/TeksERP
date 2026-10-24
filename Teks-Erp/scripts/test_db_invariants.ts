@@ -116,6 +116,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "geri alınmış iz dururken aynı (top, adım, tip) yeniden yazılabilsin",
   },
+  // fabric_properties — KQ-D4 (migration 20261024073000): bir bayrağın TEK çeşidi.
+  {
+    table: "fabric_properties",
+    index: "fabric_properties_variant_of_uq",
+    uniq: true,
+    predicate: `("variantOfPropertyId" IS NOT NULL)`,
+    why: "bir bayrağın en fazla bir çeşidi (Kurşunlu → Kurşun gramajı)",
+  },
   // sack_allocations — K2 (2026-09-14): tahsis sil-yaz'dan damgaya döndü; tam unique
   // damgalı satır dururken aynı (çuval, satır)ın yeniden tahsisini engellerdi → PARTIAL.
   {
@@ -719,6 +727,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // "SUM(qty)" yazan her raporu sessizce yanlışlar (biri işareti dikkate alır,
   // diğeri almaz) ve bu yıllar sonra fark edilir.
   { table: "roll_variances", name: "roll_variances_qty_positive" },
+  // 2026-10-24 — KQ-D4 (migration 20261024073000_kursun_gramaj_cesit): gramaj değeri
+  // yalnız KURSUN_APPLIED satırında; özellik kendi kendisinin çeşidi olamaz.
+  { table: "roll_operations", name: "roll_operations_property_value_ck" },
+  { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
   // dokunduğu için yıllarca ihlal edilebiliyordu (T1-044 · T1-001 · T1-002 ·
