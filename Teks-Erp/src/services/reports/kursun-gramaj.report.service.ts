@@ -169,7 +169,7 @@ export async function buildKursunGramajSunumu(range: DateRange, g: KursunGramajS
   const anlati: AnlatiCumlesi[] = [];
   if (sapanTop > 0) {
     anlati.push({ kural: "kursun.hedefSapma", onem: Math.min(1, sapanTop / Math.max(1, totalRolls)),
-      metin: `${sapanTop} topa iş emrinin hedef gramajından farklı kurşun basıldı.`, kanit: { sapanTop, totalRolls } });
+      metin: `${sapanTop} topa terbiye iş emrinin hedef gramajından farklı kurşun basıldı.`, kanit: { sapanTop, totalRolls } });
   }
   if (bilinmeyenTop > 0) {
     anlati.push({ kural: "kursun.gramajBilinmiyor", onem: Math.min(1, bilinmeyenTop / Math.max(1, totalRolls)) / 2,
@@ -200,7 +200,7 @@ export async function buildKursunGramajSunumu(range: DateRange, g: KursunGramajS
     tablo,
     tanimlar: [
       { ad: "Kurşunlanan top", aciklama: "Dönemde kurşun basılan top × adım sayısı; tablette basılan ve kâğıtla dağıtılıp tamamlanan birlikte. Geri alınmış ve üst toptan miras kalan basımlar sayılmaz." },
-      { ad: "Hedeften sapma", aciklama: "İş emrine hedef gramaj verildiyse ve basılan gramaj ondan farklıysa işaretlenir; üretimi durdurmaz." },
+      { ad: "Hedeften sapma", aciklama: "Terbiye iş emrine hedef gramaj verildiyse ve basılan gramaj ondan farklıysa işaretlenir; üretimi durdurmaz." },
       { ad: "Gramaj bilinmiyor", aciklama: "Kâğıtla dağıtılan işte gramaj girilmemişse bu satıra düşer." },
     ],
     parametreler: parametreBeyani(kiyas, g, options),

@@ -869,7 +869,7 @@ export function WorkOrderFormView({
               {!isEdit && kursunCatalog.propertyId && kursunCatalog.options.length > 0 && (
                 <FormField
                   label="Hedef kurşun gramajı"
-                  hint="İsteğe bağlı. Basılan gramaj farklıysa iş emri kartında turuncu görünür; üretim durmaz."
+                  hint="İsteğe bağlı. Basılan gramaj farklıysa terbiye iş emri kartında turuncu görünür; üretim durmaz."
                 >
                   <Controller
                     control={form.control}

@@ -109,7 +109,7 @@ async function loadTargets(workOrderIds: string[]): Promise<Map<string, string>>
 
 async function listTablet(scope: KursunScope) {
   const ops = await prisma.rollOperation.findMany({
-    where: opWhere(scope),
+    where: { ...ACTIVE_OPERATION, ...opWhere(scope) },
     select: {
       rollId: true, workOrderStepId: true, propertyValueId: true, createdAt: true,
       step: { select: { workOrderId: true } },

@@ -140,7 +140,7 @@ const kursunGramajQuerySchema = z.object({
   kiyas: z.enum(KURSUN_KIYAS_MODLARI).optional(),
   gramaj: z.union([z.string().uuid("Geçersiz gramaj"), z.literal("none")]).optional(),
   kaynak: z.enum(["TABLET", "KAGIT"]).optional(),
-  workOrderId: z.string().uuid("Geçersiz iş emri").optional(),
+  workOrderId: z.string().uuid("Geçersiz terbiye iş emri").optional(),
 }).strict();
 
 router.get("/kursun-gramaj", ...reportGate("production/kursun-gramaj"), async (req: Request, res: Response, next: NextFunction) => {
