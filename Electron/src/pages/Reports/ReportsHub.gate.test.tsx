@@ -113,6 +113,9 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
     const dokuma = reportCommandSections.find((s) => s.heading.endsWith("Dokuma"))!;
     const off: OperationsVisibilityContext = { ...ctx(), dokumaEnabled: false };
     for (const e of dokuma.entries) expect(e.visibleWhen?.(off)).toBe(false);
-    for (const e of dokuma.entries) expect(e.visibleWhen?.(ctx())).toBe(true);
+    // "Eski:" ikizleri (R0-GECIS) yalnız Raporlar v2 açıkken görünür; aynı modül kapısını taşır.
+    const v2On: OperationsVisibilityContext = { ...ctx(), reportsV2Enabled: true };
+    for (const e of dokuma.entries) expect(e.visibleWhen?.(e.key.endsWith(":legacy") ? v2On : ctx())).toBe(true);
+    for (const e of dokuma.entries.filter((x) => x.key.endsWith(":legacy"))) expect(e.visibleWhen?.({ ...off, reportsV2Enabled: true })).toBe(false);
   });
 });
