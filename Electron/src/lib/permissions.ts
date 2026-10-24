@@ -69,8 +69,8 @@ export const SETTINGS_PRINTING_ACCESS = ["admin:settings", "settings:label", "se
 /** Bu Bilgisayar — yazıcı · kantar · tabanca · sunucu adresi (yerel). */
 export const SETTINGS_WORKSTATION_ACCESS = ["admin:settings", "settings:workstation"];
 
-/** Şirket & Güvenlik — Şirket Bilgileri · Oturum & Güvenlik. */
-export const SETTINGS_COMPANY_ACCESS = ["admin:settings", "settings:company", "settings:session"];
+/** Şirket & Güvenlik — Şirket Bilgileri · e-İrsaliye · Oturum & Güvenlik. */
+export const SETTINGS_COMPANY_ACCESS = ["admin:settings", "settings:company", "settings:e-irsaliye", "settings:session"];
 
 export const SYSTEM_ACTIVITY_ACCESS = ["admin:settings", "system:activity"];
 export const SYSTEM_WORK_SESSIONS_ACCESS = ["admin:settings", "system:work-sessions"];
@@ -111,6 +111,7 @@ export const SYSTEM_HUB_ACCESS = [
   "settings:label",
   "settings:devices",
   "settings:company",
+  "settings:e-irsaliye",
   "settings:session",
   "system:activity",
   "system:work-sessions",

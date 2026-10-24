@@ -14,6 +14,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
 import { safeFormat } from "@/lib/format";
+import { useState } from "react";
+import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { GramajDialog } from "./GramajDialog";
 import { RowIdentity } from "./RowIdentity";
 import type { KursunDistributionAssignedRow } from "./types";
 
@@ -51,6 +54,9 @@ export function AssignedRow({
   onComplete,
 }: Props) {
   const sortable = useSortable({ id: row.workOrderStepId, disabled: !canReorder });
+  const { catalog: gramajCatalog } = useKursunGramajCatalog();
+  const [gramajOpen, setGramajOpen] = useState(false);
+  const showGramaj = gramajCatalog.options.length > 0;
   const style = {
     transform: CSS.Transform.toString(sortable.transform),
     transition: sortable.transition,
@@ -99,7 +105,20 @@ export function AssignedRow({
           </div>
 
           <PermissionGate permission="workorder:distribute">
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 flex-wrap items-center gap-1">
+              {showGramaj && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={cn("gap-1", !row.propertyValueId && "text-muted-foreground")}
+                  disabled={busy}
+                  title="Kâğıt gramajını değiştir"
+                  onClick={() => setGramajOpen(true)}
+                >
+                  Gramaj: {row.propertyValueName ?? "bilinmiyor"}
+                </Button>
+              )}
               <Button
                 type="button"
                 size="sm"
@@ -158,6 +177,9 @@ export function AssignedRow({
           )}
         </CardContent>
       </Card>
+      {showGramaj && (
+        <GramajDialog open={gramajOpen} onOpenChange={setGramajOpen} row={row} options={gramajCatalog.options} />
+      )}
     </li>
   );
 }

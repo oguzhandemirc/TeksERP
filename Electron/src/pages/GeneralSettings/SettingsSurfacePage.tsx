@@ -29,6 +29,7 @@ import {
 import { FeatureFlagSection } from "./FeatureFlagSection";
 import { DevicePairingSection } from "./DevicePairingSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
+import { EIrsaliyeSettingsSection } from "./EIrsaliyeSettingsSection";
 import { SessionSettingsSection } from "./SessionSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
 import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
@@ -307,6 +308,7 @@ export function SettingsSurfacePage({
                 {cat.kind === "scanner" && <ScannerSettingsSection />}
                 {cat.kind === "server" && <ApiEndpointSection />}
                 {cat.kind === "company" && <CompanySettingsSection writePermissions={cat.permissionAny} />}
+                {cat.kind === "eIrsaliye" && <EIrsaliyeSettingsSection writePermissions={cat.permissionAny} />}
                 {cat.kind === "session" && <SessionSettingsSection writePermissions={cat.permissionAny} />}
                 {cat.kind === "label" && <LabelSettingsSection writePermissions={cat.permissionAny} />}
               </TabsContent>

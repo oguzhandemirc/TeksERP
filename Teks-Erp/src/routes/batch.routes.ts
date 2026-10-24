@@ -7,6 +7,7 @@
 
 import { Router } from "express";
 import { BatchController } from "../controllers/batch.controller";
+import { getBatchSummary } from "../controllers/workorder-process.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
@@ -48,6 +49,25 @@ router.get(
   requireAnyPermission("workorder:read", "admin:settings", "mobile:hizli-is-emri"),
   controller.numberState,
 );
+
+/**
+ * @openapi
+ * /api/batches/{id}/process-summary:
+ *   get:
+ *     tags: [Batches]
+ *     summary: Partinin işlem özeti — kurşun gramajı dağılımı (tablet + kâğıt), hedef ve sapma
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ kursun: { target, rows, totals } }" }
+ */
+// `report:production` DE kabul edilir: tüketicisi Parti İzleme raporu ve rapor
+// kullanıcısı `workorder:read` taşımak zorunda değil.
+router.get("/:id/process-summary", verifyToken, requireAnyPermission("workorder:read", "report:production"), getBatchSummary);
 
 /**
  * @openapi

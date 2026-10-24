@@ -21,11 +21,13 @@
 //   §0 KÖRLÜK ZEMİNİ — fixture gerçekten kuruldu mu (yoksa her şey vakumen yeşil)
 //   §1 Çözüm sırası: müşteri istisnası > kart varsayılanı > null
 //   §2 İki partial unique GERÇEKTEN çakışmayı engelliyor + farklı müşteriye
-//      ikinci istisna serbest + upsert ikinci satır DOĞURMUYOR
+//      ikinci istisna serbest + değişim eski satırı DAMGALAYIP yenisini doğuruyor
+//      (anahtar başına tek AKTİF satır — MAL-0b damgalı sürüm)
 //   §3 Negatif fiyat: serviste 400, DB CHECK'inde de red (servisi atlayan yol)
 //      · SIFIR fiyat MEŞRU ve `null`dan ayırt edilebiliyor
 //   §4 ⭐ PRISMA COMPOUND UNIQUE TUZAĞI — bu servisin var oluş sebebi
-//   §5 Silme: istisna kalkınca varsayılana dönülüyor, varsayılan da kalkınca null
+//   §5 Kaldırma: satır SİLİNMEZ, damgalanır; istisna kalkınca varsayılana,
+//      varsayılan da kalkınca null; ikinci kaldırma 409
 //   §6 Dış referans doğrulaması (yok / pasif kalem / pasif cari)
 //   §7 Rejim kapısı + izin kodları + yol sırası (kaynak taraması)
 //   §8 Tüketici ÖN-DOLUMU: mal kabul + alış faturası taslağı; ve ÖN-DOLUM EZMEZ
@@ -258,14 +260,20 @@ async function main(): Promise<void> {
 
   const again = await itemPriceService.upsert({ itemId: item.id, kind: PriceKind.SALE, currency: "TRY", price: 11 });
   check("§2d Aynı anahtarla ikinci yazım GÜNCELLER (created=false)", again.data.created === false);
-  const defaultRows = await prisma.itemPrice.count({
-    where: { itemId: item.id, customerId: null, kind: PriceKind.SALE, currency: "TRY" },
-  });
-  check("§2e Varsayılan satır sayısı hâlâ 1 (upsert ikinci satır doğurmadı)", defaultRows === 1, `satır=${defaultRows}`);
+  // MAL-0b: değişim yerinde EZMEZ — eski satır damgalı durur, anahtar başına tek AKTİF satır.
+  const defaultKey = { itemId: item.id, customerId: null, kind: PriceKind.SALE, currency: "TRY" as const };
+  const activeDefaultRows = await prisma.itemPrice.count({ where: { ...defaultKey, revokedAt: null } });
+  const allDefaultRows = await prisma.itemPrice.count({ where: defaultKey });
+  const revokedDefault = await prisma.itemPrice.findFirst({ where: { ...defaultKey, revokedAt: { not: null } }, select: { price: true, revokeReason: true } });
+  check(
+    "§2e Değişim: AKTİF varsayılan 1, toplam 2, eski satır damgalı (eski fiyat korunur)",
+    activeDefaultRows === 1 && allDefaultRows === 2 && revokedDefault?.price.equals(10) === true,
+    `aktif=${activeDefaultRows} toplam=${allDefaultRows} eski=${revokedDefault?.price}/${revokedDefault?.revokeReason}`,
+  );
   const afterUpdate = await resolveItemPrice({ itemId: item.id, kind: PriceKind.SALE, currency: "TRY", customerId: cPassive.id });
   check("§2f Güncellenen fiyat okunuyor", afterUpdate?.price.equals(11) === true, `${afterUpdate?.price}`);
 
-  // Audit: güncelleme CREATE olarak yazılmamalı (xmax kararı doğru mu).
+  // Audit (MAL-0b): değişimde ESKİ satır [CREATE, UPDATE(damga)], YENİ satır [CREATE].
   //
   // ⚠️ AUDIT BEST-EFFORT ve TX DIŞINDADIR (`item-price.service.ts`: `void
   // AuditService.log(…)` — bilerek beklenmiyor). Bu satırları ANINDA okumak,
@@ -275,19 +283,21 @@ async function main(): Promise<void> {
   // tek kelime "CREATE" — sıra değil SAYI eksikti).
   // ⇒ TAVANLI bekleme + gelmezse ÜÇÜNCÜ SONUÇ: "yazılmadı" ile "henüz yazılmadı"
   //   aynı kırmızıya düşemez.
-  const auditRows = await auditSatirlariniBekle(afterUpdate?.id ?? "", 2);
-  if (auditRows.length < 2) {
+  const oldDefault = await prisma.itemPrice.findFirst({ where: { ...defaultKey, revokedAt: { not: null } }, select: { id: true } });
+  const auditOld = await auditSatirlariniBekle(oldDefault?.id ?? "", 2);
+  const auditNew = await auditSatirlariniBekle(afterUpdate?.id ?? "", 1);
+  if (auditOld.length < 2 || auditNew.length < 1) {
     ATLAMA.atla(
-      "§2g Audit: ilk yazım CREATE, ikincisi UPDATE",
-      `best-effort audit ${AUDIT_BEKLEME_MS} ms içinde ${auditRows.length}/2 satır yazdı ` +
-        `(gelenler: ${auditRows.map((a) => a.action).join(",") || "—"}) — yazma YOK değil, GECİKMİŞ olabilir`,
+      "§2g Audit: eski satır CREATE+UPDATE, yeni satır CREATE",
+      `best-effort audit ${AUDIT_BEKLEME_MS} ms içinde eski ${auditOld.length}/2, yeni ${auditNew.length}/1 satır yazdı ` +
+        `(gelenler: ${[...auditOld, ...auditNew].map((a) => a.action).join(",") || "—"}) — yazma YOK değil, GECİKMİŞ olabilir`,
       1,
     );
   } else {
     check(
-      "§2g Audit: ilk yazım CREATE, ikincisi UPDATE",
-      auditRows[0]?.action === "CREATE" && auditRows[auditRows.length - 1]?.action === "UPDATE",
-      auditRows.map((a) => a.action).join(","),
+      "§2g Audit: eski satır CREATE+UPDATE, yeni satır CREATE",
+      auditOld.map((a) => a.action).join(",") === "CREATE,UPDATE" && auditNew.map((a) => a.action).join(",") === "CREATE",
+      `eski=${auditOld.map((a) => a.action).join(",")} yeni=${auditNew.map((a) => a.action).join(",")}`,
     );
   }
 
@@ -345,8 +355,8 @@ async function main(): Promise<void> {
   // `itemId_kind_currency` DB'de PARTIAL'dır (WHERE customerId IS NULL) ama
   // Prisma predicate'i bilmez. Yalnız MÜŞTERİ istisnası olan bir anahtarda
   // `findUnique` onu DÖNER — yani "kart varsayılanı var mı" sorusuna YANLIŞ
-  // cevap verir. Servis bu yüzden `customerId`i açıkça yazar ve yazımı ham
-  // `ON CONFLICT ... WHERE` ile yapar. Bu bölüm o tuzağın CANLI kanıtıdır.
+  // cevap verir. Servis bu yüzden `customerId`i ve aktif süzgecini açıkça yazar
+  // (MAL-0b: yazım tx içinde claim + create). Bu bölüm o tuzağın CANLI kanıtıdır.
   await itemPriceService.upsert({ itemId: itemNoPrice.id, customerId: c1.id, kind: PriceKind.SALE, currency: "GBP", price: 7 });
   const trap = await prisma.itemPrice.findUnique({
     where: { itemId_kind_currency: { itemId: itemNoPrice.id, kind: PriceKind.SALE, currency: "GBP" } },
@@ -364,9 +374,9 @@ async function main(): Promise<void> {
     `dönen=${JSON.stringify(trapSafe)}`,
   );
 
-  // ── §5 SİLME ─────────────────────────────────────────────────────────────
+  // ── §5 KALDIRMA (damga) ──────────────────────────────────────────────────
   const excRow = await prisma.itemPrice.findFirst({
-    where: { itemId: item.id, customerId: c1.id, kind: PriceKind.SALE, currency: "TRY" },
+    where: { itemId: item.id, customerId: c1.id, kind: PriceKind.SALE, currency: "TRY", revokedAt: null },
     select: { id: true },
   });
   await itemPriceService.remove(excRow?.id ?? "");
@@ -377,8 +387,17 @@ async function main(): Promise<void> {
     `${afterRemoveExc?.source}/${afterRemoveExc?.price}`,
   );
 
+  const excAfter = await prisma.itemPrice.findUnique({ where: { id: excRow?.id ?? "" }, select: { revokedAt: true, revokeReason: true } });
+  check(
+    "§5a2 ⭐ Kaldırma satırı SİLMEDİ, damgaladı (revokedAt dolu)",
+    excAfter !== null && excAfter.revokedAt !== null,
+    JSON.stringify(excAfter),
+  );
+  const removeTwice = await expectError(() => itemPriceService.remove(excRow?.id ?? ""));
+  check("§5a3 Damgalı satırı ikinci kez kaldırma REDDEDİLDİ (409)", removeTwice !== "", removeTwice.slice(0, 60));
+
   const defRow = await prisma.itemPrice.findFirst({
-    where: { itemId: item.id, customerId: null, kind: PriceKind.SALE, currency: "TRY" },
+    where: { itemId: item.id, customerId: null, kind: PriceKind.SALE, currency: "TRY", revokedAt: null },
     select: { id: true },
   });
   await itemPriceService.remove(defRow?.id ?? "");

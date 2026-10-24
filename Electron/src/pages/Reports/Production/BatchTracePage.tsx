@@ -10,6 +10,7 @@ import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_
 import { fmtDate, fmtInt, fmtNum } from "../_components/formatters";
 import { batchTraceApi, buildBatchTraceExport, type BatchTrace } from "./batchTrace";
 import { useScanSeed } from "@/hooks/useScanSeed";
+import { BatchKursunGramajSection } from "./BatchKursunGramajSection";
 
 type CustomerRow = BatchTrace["customers"][number];
 
@@ -197,6 +198,8 @@ export function BatchTracePage() {
               tone={t.returns.length > 0 ? "warn" : "neutral"}
             />
           </div>
+
+          {batchId && <BatchKursunGramajSection batchId={batchId} />}
 
           <DetailTable
             title="Bu partiden kime ne gitti"

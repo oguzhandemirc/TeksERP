@@ -11,7 +11,7 @@ import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { tokenReplay } from "../helpers/token-replay.helper";
 import { readDocumentsConfig } from "../system-setting.service";
-import { getSystemEquivalent, type SystemEquivalentLookup } from "./sistem/kayit";
+import { getSystemEquivalent, materializeEquivalent, type SystemEquivalentLookup } from "./sistem/kayit";
 import { getContract, type RegisteredContract } from "./sozlesme/kayit";
 import { freezeSystemSettings } from "./contract-view.service";
 import { prepareContent, versionData, VERSION_SUMMARY, type VersionContentInput } from "./version-content";
@@ -60,13 +60,14 @@ async function initialContent(
       });
     }
     const frozen = freezeSystemSettings(contract, await readDocumentsConfig());
+    const m = materializeEquivalent(eq, frozen.settings);
     return {
       content: {
-        editMode: eq.editMode,
-        sourceHtml: eq.html,
-        css: eq.css,
-        pageSettings: eq.pageSettings,
-        tableBindings: eq.tableBindings,
+        editMode: m.editMode,
+        sourceHtml: m.html,
+        css: m.css,
+        pageSettings: m.pageSettings,
+        tableBindings: m.tableBindings,
         settings: frozen.settings,
         internalFields: frozen.internalFields,
       },

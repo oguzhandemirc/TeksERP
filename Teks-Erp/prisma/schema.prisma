@@ -4433,6 +4433,8 @@ model WorkOrder {
   targetItem       Item?                     @relation("WorkOrderTargetItem", fields: [targetItemId], references: [id])
   targetColor      Color?                    @relation("WorkOrderTargetColor", fields: [targetColorId], references: [id])
   targetProperties WorkOrderTargetProperty[]
+  /// Hedef çeşit değerleri (KQ-D6: hedef kurşun gramajı) — plan alanı, toplara YAYILMAZ.
+  targetValues     WorkOrderTargetValue[]
   splitFrom        WorkOrder?                @relation("WorkOrderSplitLineage", fields: [splitFromId], references: [id])
   splitChildren    WorkOrder[]               @relation("WorkOrderSplitLineage")
   kursunBypasses   KursunBypassAssignment[] // Kurşun bypass atamaları (append-only)
@@ -4843,6 +4845,11 @@ model KursunBypassAssignment {
   cancelledById String?   @db.Uuid
   cancelReason  String?   @db.VarChar(200)
 
+  /// Kâğıtla yürüyen dağıtımın gramajı (KQ-D6) — İSTEĞE BAĞLI; boşsa özet
+  /// "gramaj bilinmiyor" der. Tamamlanınca donar (atomik claim). RollOperation YAZILMAZ.
+  propertyValueId String?              @db.Uuid
+  propertyValue   FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
+
   // Relations
   workOrder     WorkOrder     @relation(fields: [workOrderId], references: [id])
   workOrderStep WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
@@ -4863,6 +4870,7 @@ model KursunBypassAssignment {
   @@index([workOrderStepId])
   // Dağıtım/izleme ekranı: "bu kurşun MAKİNESİNE atanmış işler" listesi
   @@index([machineId])
+  @@index([propertyValueId])
   @@map("kursun_bypass_assignments")
 }
 
@@ -5512,11 +5520,11 @@ model RollOperation {
   revokeReason String?   @db.VarChar(300)
 
   // Relations
-  roll                Roll          @relation(fields: [rollId], references: [id])
-  step                WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
-  operator            User?         @relation(fields: [operatorId], references: [id])
-  machine             Machine?      @relation(fields: [machineId], references: [id])
-  inheritedFromParent Roll?         @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
+  roll                Roll                 @relation(fields: [rollId], references: [id])
+  step                WorkOrderStep        @relation(fields: [workOrderStepId], references: [id])
+  operator            User?                @relation(fields: [operatorId], references: [id])
+  machine             Machine?             @relation(fields: [machineId], references: [id])
+  inheritedFromParent Roll?                @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
   propertyValue       FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
 
   /// Append-only işlem log'u → `updatedAt` YOK (konvansiyon). İki güncelleme
@@ -8319,18 +8327,19 @@ model FabricProperty {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Relations
-  itemAllowed          ItemAllowedProperty[]
-  workOrderTargets     WorkOrderTargetProperty[]
-  rollProperties       RollProperty[]
-  orderLineRequired    OrderLineRequiredProperty[]
-  stationCapabilities  StationProperty[]
+  itemAllowed           ItemAllowedProperty[]
+  workOrderTargets      WorkOrderTargetProperty[]
+  workOrderTargetValues WorkOrderTargetValue[]
+  rollProperties        RollProperty[]
+  orderLineRequired     OrderLineRequiredProperty[]
+  stationCapabilities   StationProperty[]
   /// Fason kabullerde uygulandığı receipt'ler (boyahane dönüşü gibi).
-  appliedAtReceipts    SubcontractorReceiptProperty[]
-  productRecipeTargets ProductRecipeProperty[]
+  appliedAtReceipts     SubcontractorReceiptProperty[]
+  productRecipeTargets  ProductRecipeProperty[]
   /// Rota şablonu adımlarında planlanan hedef özellikler (şablon varsayılanı).
-  routeStepTargets     RouteStepProperty[]
+  routeStepTargets      RouteStepProperty[]
   /// SEÇİM tipli özelliğin izin verilen değerleri (BAYRAK tipte boş).
-  values               FabricPropertyValue[]
+  values                FabricPropertyValue[]
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -8338,7 +8347,7 @@ model FabricProperty {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  nameFold             String?                        @default(dbgenerated())
+  nameFold              String?                        @default(dbgenerated())
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("description")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -8346,7 +8355,7 @@ model FabricProperty {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  descriptionFold      String?                        @default(dbgenerated())
+  descriptionFold       String?                        @default(dbgenerated())
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("category")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -8354,7 +8363,7 @@ model FabricProperty {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  categoryFold         String?                        @default(dbgenerated())
+  categoryFold          String?                        @default(dbgenerated())
 
   // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
   // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
@@ -8410,12 +8419,15 @@ model FabricPropertyValue {
   /// bu yüzden değer satırı silinmez, pasifleştirilir.
   isActive   Boolean @default(true)
 
-  property       FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property                FabricProperty           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   /// Bu değeri taşıyan toplar — FK `Restrict`, yani kullanılan değer silinemez
   /// (zaten silinmiyor: `fabric-property.service` pasifleştiriyor).
-  rollProperties RollProperty[]
+  rollProperties          RollProperty[]
   /// Bu değerle yazılmış operasyon izleri (kurşun gramajı, KQ-D4) — FK RESTRICT.
-  rollOperations RollOperation[]
+  rollOperations          RollOperation[]
+  /// İş emri hedefleri (KQ-D6) ve kâğıt dağıtım gramajı — FK RESTRICT.
+  workOrderTargetValues   WorkOrderTargetValue[]
+  kursunBypassAssignments KursunBypassAssignment[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -8782,6 +8794,35 @@ model WorkOrderTargetProperty {
   @@index([propertyId])
   @@index([workOrderId, revokedAt])
   @@map("work_order_target_properties")
+}
+
+/// İş emrinin HEDEF çeşit değeri (KQ-D6: "hedef kurşun gramajı 50 gr").
+/// `WorkOrderTargetProperty` KULLANILMAZ: o toplara yayılır ve SEÇİM tipini reddeder;
+/// bu satır yalnız plan alanıdır — sapma TÜRETİLİR (process-summary), yazılmaz, engellemez.
+/// Değişim eski satırı damgalar + yenisini yazar; DB'de partial unique
+/// `(workOrderId, propertyId) WHERE "revokedAt" IS NULL`.
+model WorkOrderTargetValue {
+  id          String @id @default(uuid()) @db.Uuid
+  workOrderId String @db.Uuid
+  propertyId  String @db.Uuid
+  valueId     String @db.Uuid
+
+  workOrder WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  property  FabricProperty      @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  value     FabricPropertyValue @relation(fields: [valueId], references: [id], onDelete: Restrict)
+
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+  createdById  String?   @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([workOrderId, propertyId], map: "work_order_target_values_active_uq")
+  @@index([propertyId])
+  @@index([valueId])
+  @@map("work_order_target_values")
 }
 
 /// Roll ↔ FabricProperty M:N — bir rulonun fiilen sahip olduğu özellikler.
@@ -11242,14 +11283,23 @@ model ItemPrice {
   item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
+  /// ③a TİCARİ PİVOT (2026-10-24, MAL-0b): satır SİLİNMEZ, fiyat yerinde EZİLMEZ — değişim
+  /// eski satırın damgası + YENİ satır, kaldırma damgadır; geçerlilik `[createdAt, revokedAt)`.
+  /// Okuma tek kaynaktan: `ACTIVE_ITEM_PRICE` / `itemPriceValidAt`. `revokedById` düz UUID.
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  // → partial: WHERE "customerId" IS NULL      (kart varsayılanı tektir)
+  // → partial: WHERE "customerId" IS NULL AND "revokedAt" IS NULL      (aktif kart varsayılanı tektir)
   @@unique([itemId, kind, currency], map: "item_price_default_uq")
-  // → partial: WHERE "customerId" IS NOT NULL  (müşteri istisnası tektir)
+  // → partial: WHERE "customerId" IS NOT NULL AND "revokedAt" IS NULL  (aktif müşteri istisnası tektir)
   @@unique([itemId, customerId, kind, currency], map: "item_price_customer_uq")
   @@index([customerId])
+  // "Fiyat şu tarih itibarıyla" okuması (`itemPriceValidAt`): anahtar + pencere başı.
+  @@index([itemId, kind, currency, createdAt], map: "item_prices_asof_idx")
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "item_prices_updatedAt_esitleme_idx")
   @@map("item_prices")
