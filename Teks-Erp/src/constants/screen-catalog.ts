@@ -54,7 +54,8 @@ export type ModulKey =
   | "devereEnabled"
   | "dokumaEnabled"
   | "emanetEnabled"
-  | "kaliteGuvenceEnabled";
+  | "kaliteGuvenceEnabled"
+  | "maliyetEnabled";
 
 /**
  * Kapatılamaz çekirdek bloklar (MODUL-BAYRAK-TASARIM §2).
@@ -97,6 +98,7 @@ export const EKRAN_MODUL_DEGERLERI: ReadonlySet<string> = new Set<EkranModul>([
   "dokumaEnabled",
   "emanetEnabled",
   "kaliteGuvenceEnabled",
+  "maliyetEnabled",
   "cekirdek:ana-veri",
   "cekirdek:stok-giris",
   "cekirdek:siparis-musteri",
@@ -402,6 +404,7 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
       "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
+  { modul: "maliyetEnabled", reason: "Maliyet & Teklif (MAL-0): şalter + kapı doğdu, ilk ekranı MAL dilimlerinde; ekran eşlenince bu muaf silinir." },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */

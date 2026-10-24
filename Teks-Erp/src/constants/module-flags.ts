@@ -1,8 +1,8 @@
 // =============================================================================
 // TeksERP — MODÜL ANAHTARLARI (TEK KAYNAK)
 // =============================================================================
-// Bir ERP kurulumu "hangi modülleri kullanıyorum" sorusunu YEDİ anahtarla
-// cevaplar. Bunlar GÖRÜNÜRLÜK ayarı DEĞİL, REJİM anahtarlarıdır: kapalıyken
+// Bir ERP kurulumu "hangi modülleri kullanıyorum" sorusunu bu dosyadaki modül
+// anahtarlarıyla cevaplar (yeni MODÜL emanet emsaliyle eklenir). Bunlar GÖRÜNÜRLÜK ayarı DEĞİL, REJİM anahtarlarıdır: kapalıyken
 // menü çizilmez, route 403 verir (`middlewares/module.middleware.ts`) ve
 // kancalar no-op'a düşer. Emsal ve kalıp `finance.enabled` (2026-08-13).
 //
@@ -46,16 +46,17 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "dokumaEnabled",
   "emanetEnabled",
   "kaliteGuvenceEnabled",
+  "maliyetEnabled",
 ]);
 
 /**
  * `PATCH /api/feature-flags` gövdesinde SÜPERADMİN şartı doğuran anahtarların TAMAMI:
- * bütün modül anahtarları + rapor görünürlük listesi.
+ * modül anahtarlarının hepsi + rapor görünürlük listesi.
  *
  * ⚠️ NEDEN `MODULE_FLAG_KEYS`i GENİŞLETMEDİK, ÜSTÜNE KÜME KURDUK: `reportsClosedKeys`
  * bir modül anahtarı DEĞİL — bağımlılık tablosuna girmez, profil sabitinde yaşamaz,
  * `MODULE_SETTING_KEYS` ile birebirliği ölçülen modül kümesinin parçası değildir. Onu o kümeye
- * atmak `test_module_flags`in "modül ↔ modül" birebir ölçümünü bozar ve `MODULE_DEPENDENCIES`
+ * atmak `test_module_flags`in "alan ↔ DB anahtarı" birebir ölçümünü bozar ve `MODULE_DEPENDENCIES`
  * okuyan her yolu yanlış soruya sokardı. Ortak olan tek şey YAZMA KAPISIdır; kümeyi de
  * tam olarak o soruya göre adlandırdık.
  */
@@ -77,11 +78,12 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "dokuma.enabled",
   "emanet.enabled",
   "kaliteGuvence.enabled",
+  "maliyet.enabled",
 ]);
 
 /**
  * Ham ayar ucundan (`PUT /api/admin/settings/:key`) YAZILAMAYAN DB anahtarları:
- * bütün modül anahtarları + `reports.closedKeys`. K7 kalıbı — ikinci bir yazma yüzeyi
+ * modül anahtarlarının hepsi + `reports.closedKeys`. K7 kalıbı — ikinci bir yazma yüzeyi
  * açılmaz, yoksa süperadmin kapısı (`flagWriteGuard`) etrafından dolaşılırdı.
  */
 export const SUPERADMIN_ONLY_SETTING_KEYS: ReadonlySet<string> = new Set([
@@ -102,6 +104,8 @@ export const SUPERADMIN_ONLY_SETTING_KEYS: ReadonlySet<string> = new Set([
  * • Dokuma işi üretimin bir alt yüzeyidir ve tezgah izlemenin KARDEŞİDİR, çocuğu
  *   değil: fasona dokutan firmada dokuma işi var tezgah yok, yalnız devere
  *   makinesini izleyen firmada tersi (DOKUMA-IS-EMRI §2.5).
+ * • Maliyet & Teklif üretime bağlıdır: iplik ihtiyaç planı üretim dengesini okur
+ *   (MALIYET-TEKLIF-PLAN §8-2).
  *
  * İKİ YERDE UYGULANIR ve ikisi de gerekli: yazma yolunda (`setFeatureFlags`
  * 400 verir — tutarsız çift hiç DOĞMAZ) ve okuma yolunda (middleware; elle
@@ -120,6 +124,7 @@ export const MODULE_DEPENDENCIES: Readonly<Record<string, string>> = {
   dokumaEnabled: "productionEnabled",
   // kaliteGuvenceEnabled BİLEREK YOK: muayene KK1'de doğar ve KK1 üretim kapalıyken de açıktır
   // (`test_production_regime_gate §5`); üretime bağlamak üretimsiz kurulumda muayeneyi kapatırdı.
+  maliyetEnabled: "productionEnabled",
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -135,4 +140,5 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   dokumaEnabled: "Dokuma iş emri",
   emanetEnabled: "Emanet / konsinye mülkiyet",
   kaliteGuvenceEnabled: "Kalite Güvence",
+  maliyetEnabled: "Maliyet & Teklif",
 };

@@ -723,6 +723,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Operatör", "Yönetim"],
         desc: "Açıkken KK1'de ve Muayene ekranında 4 puan muayenesi girilir; panelde Muayeneler, 4 Puan Kuralları, Lab Testleri ve Sertifikalar ekranları açılır. Kapalıyken (varsayılan) muayene kaydı doğmaz, uçlar 403 verir ve top kalitesi bugünkü gibi elle seçilir. Üretim modülüne bağlı değildir.",
       },
+      {
+        // Ön koşul `production.enabled` (iplik ihtiyaç planı üretim dengesini okur); Üretim listenin başında.
+        key: "maliyetEnabled",
+        title: "Maliyet & Teklif modülünü aç",
+        summary:
+          "Ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi ve iplik ihtiyaç planı yüzeyleri açılır.",
+        defaultOn: false,
+        audience: ["Muhasebeci", "Planlamacı", "Yönetim"],
+        desc: "Açıkken maliyet ve teklif ekranları ile uçları açılır (ekranlar sonraki sürümlerde gelir). Kapalıyken (varsayılan) uçlar 403 verir, menü çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
+      },
       // ⚠️ `kumasTeknikEnabled` BİLEREK BURADA YOK: arkasında henüz hiçbir
       // yüzey/kapı yok, satırı yalnız "açtım ama hiçbir şey olmadı" üretirdi.
       // Backend sözleşme bekçisinde gerekçeli muaf listesinde (`PANEL_EXEMPT`)

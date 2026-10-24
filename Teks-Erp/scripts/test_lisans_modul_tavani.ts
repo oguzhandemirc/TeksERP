@@ -5,12 +5,12 @@
 // modül satırlarını try İÇİNDE yazar, finally'de önceki hâline döndürür; audit bellekte yutulur)
 //
 // NE ÖLÇER:
-//   §1 her modül anahtarının her biri için ham ↔ enforcement çifti: ham gövde DB anahtarını
+//   §1 her modül anahtarı için ham ↔ enforcement çifti: ham gövde DB anahtarını
 //      okur ve tavansızdır, enforcement AYNI anahtarla tavandan geçirir.
 //   §2 ⭐ `src/**`teki HER çağıran doğru varyantta (AST): ham okuyucu yalnız beyanlı ham
 //      çağıranlarda (panel geri-okuması `getFeatureFlags`, bağımlılık doğrulaması
 //      `effectiveModuleValue`); enforcement okuyucusu ham çağıranda yok; çağrı dışı anılış yok;
-//      ölü beyan yok. Yedi adlı kapıda okunan her modülün `licenseModuleError` eşi var.
+//      ölü beyan yok. Her adlı kapıda okunan her modülün `licenseModuleError` eşi var.
 //   §3 ⭐ DB'ye elle bayrak + geçerli HAK (modül yok) → okuyucu kapalı, kapı 403 LICENSE_MODULE,
 //      yazma tavanı 403, panel ham değeri + lisans bloğunu görür; kapatmak serbest.
 //   §4 belirsizlikte (ölçülemedi) ham değer · §5 ⭐ K2 dondurması ek sürede de, belirsizlikte de
@@ -44,6 +44,7 @@ import {
 } from "../src/services/system-setting.service";
 import { MODULE_SETTING_KEYS } from "../src/constants/module-flags";
 import { requireFinanceEnabled } from "../src/middlewares/finance.middleware";
+import { requireMaliyetEnabled } from "../src/middlewares/module.middleware";
 import { peekObservationCounters, resetObservationCounters } from "../src/lib/license/runtime";
 import { lisansKipKur, temizleLisansKipDizini } from "./lib/lisans-kip-fikstur";
 import { SERVIS, SRC_KOKU, anilislar, kapiGovdesi, lisansModulTaramasi, okuyucuCiftleri } from "./lib/modul-okuyucu-tarama";
@@ -72,7 +73,7 @@ const HAM_CAGIRANLAR: Record<string, string> = {
   "services/system-setting.service.ts#effectiveModuleValue": "bağımlılık doğrulaması: yazılan gövdeyle DB'nin ham birleşimi",
 };
 
-/** Yedi adlı modül kapısı (dosya → fonksiyon). */
+/** Adlı modül kapıları (dosya → fonksiyon). */
 const ADLI_KAPILAR: ReadonlyArray<[string, string]> = [
   ["middlewares/module.middleware.ts", "requireTicaretEnabled"],
   ["middlewares/module.middleware.ts", "requireIplikEnabled"],
@@ -80,6 +81,7 @@ const ADLI_KAPILAR: ReadonlyArray<[string, string]> = [
   ["middlewares/module.middleware.ts", "requireDepoMultiEnabled"],
   ["middlewares/module.middleware.ts", "requireProductionEnabled"],
   ["middlewares/module.middleware.ts", "requireDokumaEnabled"],
+  ["middlewares/module.middleware.ts", "requireMaliyetEnabled"],
   ["middlewares/finance.middleware.ts", "requireFinanceEnabled"],
 ];
 
@@ -87,7 +89,7 @@ function statikAyak(): void {
   console.log("\n§1 — ham ↔ enforcement çiftleri");
   const ciftler = okuyucuCiftleri();
   const anahtarlar = new Set(ciftler.map((c) => (SETTING_KEYS as Record<string, string>)[c.sabit]));
-  check("§1a ⭐ her modül anahtarı için tam bir çift (on)", ciftler.length === MODULE_SETTING_KEYS.size && [...MODULE_SETTING_KEYS].every((k) => anahtarlar.has(k)), `${ciftler.length} çift`);
+  check("§1a ⭐ her modül anahtarı için tam bir çift", ciftler.length === MODULE_SETTING_KEYS.size && [...MODULE_SETTING_KEYS].every((k) => anahtarlar.has(k)), `${ciftler.length} çift`);
   for (const c of ciftler) {
     check(`§1b ${c.ad}: ham ${c.sabit} okur ve tavansız; enforcement aynı anahtarla hamdan geçer`, c.hamOkur && c.hamTavansiz && c.tavanAyniSabit && c.hamdanGecer);
   }
@@ -107,7 +109,7 @@ function statikAyak(): void {
   check("§2c ⭐ ham çağıranda enforcement okuyucusu yok (panel tavanlı değeri geri okumaz)", yanlisTavan.length === 0, yanlisTavan.map((a) => `${yer(a)}:${a.ad}`).join(" | "));
   for (const [beyan, neden] of Object.entries(HAM_CAGIRANLAR)) {
     const okunan = new Set(hepsi.filter((a) => yer(a) === beyan && hamAdlar.has(a.ad)).map((a) => a.ad));
-    check(`§2d ölü beyan yok ve on hamın hepsi okunuyor: ${beyan} (${neden})`, okunan.size === hamAdlar.size, `${okunan.size}/${hamAdlar.size}`);
+    check(`§2d ölü beyan yok ve her ham okunuyor: ${beyan} (${neden})`, okunan.size === hamAdlar.size, `${okunan.size}/${hamAdlar.size}`);
   }
   const tavanCagri = hepsi.filter((a) => tavanAdlar.has(a.ad) && a.cagri && !(yer(a) in HAM_CAGIRANLAR));
   const dosyalar = new Set(tavanCagri.map((a) => a.dosya));
@@ -152,7 +154,7 @@ async function tekBicimDavranisi(): Promise<void> {
   lisansKipKur({ zorlama: true, moduller: ["production.enabled"] });
   const kapali = [...MODULE_SETTING_KEYS].filter((k) => k !== "production.enabled");
   const bicimsiz = kapali.filter((k) => (licenseModuleError(k, "x")?.details as { modul?: string } | undefined)?.modul !== k);
-  check("§7f1 ⭐ üretici her modülde `modul` = DB anahtarı", kapali.length >= 10 && bicimsiz.length === 0, bicimsiz.join(","));
+  check("§7f1 ⭐ üretici her modülde `modul` = DB anahtarı", kapali.length === MODULE_SETTING_KEYS.size - 1 && bicimsiz.length === 0, bicimsiz.join(","));
   const ayrinti = async (fn: () => Promise<unknown>): Promise<Record<string, unknown> | null> => {
     try {
       await fn();
@@ -165,6 +167,15 @@ async function tekBicimDavranisi(): Promise<void> {
   check("§7f2 ⭐ satır içi kapı (emanet sahibi) → LICENSE_MODULE emanet.enabled", emanet?.code === "LICENSE_MODULE" && emanet.modul === "emanet.enabled", JSON.stringify(emanet));
   const dokuma = await ayrinti(() => getWeavingTabletContext());
   check("§7f3 ⭐ satır içi kapı (fason dokuma tableti) → LICENSE_MODULE dokuma.enabled", dokuma?.code === "LICENSE_MODULE" && dokuma.modul === "dokuma.enabled", JSON.stringify(dokuma));
+}
+
+/** Maliyet kapısının red ayrıntısı (`details`); geçerse `null`. */
+async function maliyetKapisi(): Promise<Record<string, unknown> | null> {
+  let hata: unknown;
+  await requireMaliyetEnabled({} as Request, {} as Response, ((e?: unknown) => {
+    hata = e;
+  }) as NextFunction);
+  return (hata as { details?: Record<string, unknown> } | undefined)?.details ?? null;
 }
 
 async function kapiKodu(): Promise<string | undefined> {
@@ -205,6 +216,16 @@ async function davranisAyagi(): Promise<void> {
   check("§3e panel HAM şalteri + lisans bloğunu görür", ff.financeEnabled === true && ff.license.kip === "zorla" && kapali.includes("finance.enabled:LISANSTA_YOK") && !kapali.some((k) => k.startsWith("production")), kapali.join(","));
   check("§3f ⭐ yazma tavanı: lisansta olmayan modül AÇILAMAZ", (await yazmaKodu({ financeEnabled: true })) === "LICENSE_MODULE");
   check("§3g kapatmak serbest", (await yazmaKodu({ financeEnabled: false })) === "YAZDI" && (await readFinanceEnabledRaw()) === false);
+  // MAL-0: yeni modülün adlı kapısı da aynı tavandan geçer (açık bayrak + lisansta yok → LICENSE_MODULE).
+  await bayrakYaz(SETTING_KEYS.PRODUCTION_ENABLED, true);
+  await bayrakYaz(SETTING_KEYS.MALIYET_ENABLED, true);
+  const maliyetRed = await maliyetKapisi();
+  check("§3i ⭐ maliyet açık + lisansta yok → requireMaliyetEnabled 403 LICENSE_MODULE (maliyet.enabled)", maliyetRed?.code === "LICENSE_MODULE" && maliyetRed.modul === "maliyet.enabled", JSON.stringify(maliyetRed));
+  lisansKipKur({ zorlama: true, moduller: ["production.enabled", "maliyet.enabled"] });
+  check("§3j maliyet lisansta + bayrak açık → kapı geçer", (await maliyetKapisi()) === null);
+  await bayrakYaz(SETTING_KEYS.MALIYET_ENABLED, false);
+  const maliyetKapali = await maliyetKapisi();
+  check("§3k maliyet lisansta ama bayrak kapalı → MODULE_DISABLED (lisans suçlanmaz)", maliyetKapali?.code === "MODULE_DISABLED" && maliyetKapali.modul === "maliyet", JSON.stringify(maliyetKapali));
   lisansKipKur({ zorlama: true });
   check("§3h lisanstaki modül kapalıysa kod MODULE_DISABLED (lisans suçlanmaz)", (await kapiKodu()) === "MODULE_DISABLED");
 
@@ -245,7 +266,7 @@ async function main(): Promise<void> {
   AuditService.logEvent = async () => undefined;
   statikAyak();
   tekBicimAyagi();
-  const izlenen = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.TICARET_ENABLED, SETTING_KEYS.IPLIK_ENABLED];
+  const izlenen = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.TICARET_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.MALIYET_ENABLED];
   const once = await prisma.systemSetting.findMany({ where: { key: { in: izlenen } } });
   const yazan = await prisma.user.create({
     data: { username: `TEST-lisans-tavan-${Date.now()}`, passwordHash: await AuthService.hashPassword("Deneme-12345"), fullName: "TEST Lisans Tavanı" },

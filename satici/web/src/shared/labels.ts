@@ -39,6 +39,7 @@ export const MODULE_LABEL: Record<string, string> = {
   "dokuma.enabled": "Dokuma",
   "emanet.enabled": "Emanet",
   "kaliteGuvence.enabled": "Kalite Güvence",
+  "maliyet.enabled": "Maliyet & Teklif",
   "patron-bulut": "Patron bulutu",
 };
 

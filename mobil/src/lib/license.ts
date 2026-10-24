@@ -69,6 +69,7 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   'dokuma.enabled': 'Dokuma iş emri',
   'emanet.enabled': 'Emanet / konsinye mülkiyet',
   'kaliteGuvence.enabled': 'Kalite Güvence',
+  'maliyet.enabled': 'Maliyet & Teklif',
 };
 
 function settingKeyFromFlag(key: string): string {

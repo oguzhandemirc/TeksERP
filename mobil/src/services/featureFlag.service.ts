@@ -54,6 +54,9 @@ export interface FeatureFlags {
   /** Kalite Güvence (K4P, `kaliteGuvence.enabled`) — default FALSE (satır-yok değeri); muayene yüzeyi kapalıyken çizilmez.
    *  Opsiyonel: eski sunucu göndermez → kapalı (fail-closed). */
   kaliteGuvenceEnabled?: boolean;
+  /** Maliyet & Teklif modülü (`maliyet.enabled`, HAM) — tablette ekranı YOK; alan yalnız backend
+   *  sözleşmesinin tip aynası. Eski sunucu göndermez → kapalı. */
+  maliyetEnabled?: boolean;
   /** Devere Faz 3: levent tezgah bağı defteri (`devere.mountTracking`) — default FALSE (satır-yok değeri).
    *  Tezgah ekranı "Levent" paneli ve Levent Sarım "Tezgahta" sekmesi yalnız AÇIKKEN çizilir. */
   devereMountTracking: boolean;
@@ -205,6 +208,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   tezgahAlarmRenotifyMinutes: 10,
   emanetEnabled: false,
   kaliteGuvenceEnabled: false,
+  maliyetEnabled: false,
   // Backend satır-yok değeri FALSE — kapalıyken Tezgah/Levent ekranları Faz 1b ile birebir.
   devereMountTracking: false,
   dokumaRunWeavingOrderRequired: false,

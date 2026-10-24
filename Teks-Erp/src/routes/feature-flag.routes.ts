@@ -326,6 +326,8 @@ export const updateSchema = z.strictObject({
   // devere.autoConsume — tezgahtan doğan top leventten otomatik tüketim (default false = elle). Backend ENFORCE.
   devereAutoConsume: z.boolean().optional(),
   dokumaEnabled: z.boolean().optional(),
+  // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.
+  maliyetEnabled: z.boolean().optional(),
   // Z1 üretim belge zinciri — üç davranış bayrağı (varsayılan false = bağ opsiyonel). Backend ENFORCE.
   devereBeamWeavingLinkRequired: z.boolean().optional(),
   dokumaRunWeavingOrderRequired: z.boolean().optional(),
