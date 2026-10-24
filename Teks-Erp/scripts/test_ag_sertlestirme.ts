@@ -79,9 +79,11 @@ function s2(): void {
   const muaf = (s: string): boolean => {
     const m = s.match(/const EXEMPT_PATHS = new Set\(\[([\s\S]*?)\]\)/);
     const yollar = (m?.[1] ?? "").match(/"[^"]+"/g) ?? [];
-    return yollar.length === 3 && yollar.every((y) => /^"\/api\/devices\/(announce|status|pairing-required)"$/.test(y));
+    // Eşleme v2 (D1): yerinde onay kayıtsız localId'den gelir; kimliği gövdedeki yönetici girişi taşır.
+    return yollar.length === 4
+      && yollar.every((y) => /^"\/api\/devices\/(announce|status|pairing-required|rebind-requests\/onsite-approve)"$/.test(y));
   };
-  dedektor("§2b muaf yol kümesi yalnız announce/status/pairing-required", muaf, dm,
+  dedektor("§2b muaf yol kümesi yalnız announce/status/pairing-required/rebind-requests/onsite-approve", muaf, dm,
     dm.replace('"/api/devices/status",', '"/api/devices/status",\n  "/api/auth/login-quick-pin",'));
   console.log(`   ÖLÇÜ (kapsam dışı — G5-B3, 1e): cihaz kimliği başlık dışında kanıt okuyor mu: ${/proof|signature|hmac/i.test(yorumsuz(dm))}`);
 }

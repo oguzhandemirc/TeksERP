@@ -545,6 +545,15 @@ const PARTIAL_INDEXES: Array<{
     predicate: `"isActive"`,
     why: "kart tipi × ham kod × tezgah (NULL = genel) için tek canlı eşleme (NULLS NOT DISTINCT); pasif satır yer işgal etmez",
   },
+  // Cihaz eşleme v2 (D1, migration 20261024025530_cihaz_baglama): bir donanım tek CANLI satıra bağlı;
+  // birleşmiş kopya (mergedIntoId dolu) aynı özeti taşıyabilir.
+  {
+    table: "devices",
+    index: "devices_hw_digest_live_uq",
+    uniq: true,
+    predicate: `(("hwDigest" IS NOT NULL) AND ("mergedIntoId" IS NULL))`,
+    why: "aynı donanımdan eşzamanlı iki announce iki canlı satır açamasın; birleşmiş kopyalar özeti korusun",
+  },
   // print_jobs (izlenebilirlik A1): hata süzgeci + "en çok hata veren yazıcı" yalnız HATA satırlarını tarar.
   {
     table: "print_jobs",
@@ -896,6 +905,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "credential_reset_requests", name: "credential_reset_requests_decision_check" },
   // Hata raporu kuyruğu (3.6, migration 20261006120000): grup sayacı en az 1 (boş grup yazılmaz).
   { table: "error_report_entries", name: "error_report_entries_count_check" },
+  // Cihaz eşleme v2 (D1): birleşme kendine olamaz, birleşmiş kopya pasiftir; talep durumu ↔ karar alanları.
+  { table: "devices", name: "devices_merged_not_self" },
+  { table: "devices", name: "devices_merged_inactive" },
+  { table: "device_rebind_requests", name: "device_rebind_requests_status_chk" },
+  { table: "device_rebind_requests", name: "device_rebind_requests_decided_chk" },
   // Yazdırma geçmişi (izlenebilirlik A1, migration 20261024025542): kapalı kümeler + HATA→kod + adet + toplu tavan.
   { table: "print_jobs", name: "print_jobs_output_kind_check" },
   { table: "print_jobs", name: "print_jobs_status_check" },
@@ -1185,6 +1199,18 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     timing: ["AFTER INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "sync_mark_shipment_orders()"],
     why: "patron bulutu filigransız küme: shipment_orders ne id ne updatedAt taşır, her yazım sevkiyatı KIRLI yapar",
   },
+  {
+    table: "devices",
+    trigger: "devices_merge_no_chain",
+    timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW", "devices_merge_no_chain()"],
+    why: "cihaz birleşmesi tek adım: okuyucu COALESCE(mergedIntoId, id) zinciri çözmez",
+  },
+  {
+    table: "device_binding_events",
+    trigger: "device_binding_events_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "device_binding_events_block_tamper()"],
+    why: "bağlama defteri append-only; tek meşru UPDATE cihaz kalıcı silinince FK SET NULL kaskadı",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1330,6 +1356,18 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["TG_OP IN ('UPDATE', 'DELETE')", "TG_OP IN ('INSERT', 'UPDATE')", "'shipments'", "'DIRTY'"],
     why: "patron bulutu: sevkiyat ↔ sipariş kümesinin her yazımı (ekleme/güncelleme/silme) sevkiyatı KIRLI yapar",
+  },
+  {
+    name: "devices_merge_no_chain",
+    volatility: "v",
+    bodyFragments: ['NEW."mergedIntoId"', "'23514'"],
+    why: "cihaz birleşme zinciri yasağı (hedef birleşmiş olamaz, kopyası olan birleşemez)",
+  },
+  {
+    name: "device_binding_events_block_tamper",
+    volatility: "v",
+    bodyFragments: ["pg_trigger_depth() > 1", 'NEW."deviceRefId" IS NULL', "IS NOT DISTINCT FROM OLD", "'23514'"],
+    why: "bağlama defteri mührü: yalnız FK SET NULL kaskadı geçer, başka her UPDATE/DELETE reddedilir",
   },
 ];
 
