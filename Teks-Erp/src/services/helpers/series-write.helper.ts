@@ -46,15 +46,9 @@ import {
   assertFixedShapeStartUnlocked,
   fixedShapeStartYear,
 } from "./series-fixed-shape.helper";
-import { eIrsaliyeYearHasNumbers } from "../e-irsaliye/e-irsaliye-number";
+import { FIXED_SHAPE_YEAR_USAGE, withSeriesStartLock } from "./series-fixed-shape-usage.helper";
 
-/**
- * Sabit biçimli serinin "bu yıl numara üretildi mi" sorusu — üretecin yükleyicisi.
- * Eksik anahtar kilidi AÇMAZ (fail-closed, bekçi `test_number_series §15`).
- */
-export const FIXED_SHAPE_YEAR_USAGE: Readonly<Record<string, (at: Date) => Promise<boolean>>> = {
-  eIrsaliye: (at) => eIrsaliyeYearHasNumbers(at),
-};
+export { FIXED_SHAPE_YEAR_USAGE };
 
 // ── KAPI ────────────────────────────────────────────────────────────────────
 
@@ -428,9 +422,12 @@ export async function updateSeriesCounter(
   assertSeriesCounterAllowed(key, next);
   const current = resolveSeriesFormat(key);
   const now = new Date();
-  await assertFixedShapeStartUnlocked(key, current, next.startValue, { now, yearHasNumbers: FIXED_SHAPE_YEAR_USAGE[key] });
   const startYear = fixedShapeStartYear(key, next.startValue, now);
-  const row = await prisma.numberSeries.update({ where: { key }, data: { ...next, ...startYear } });
+  // Başlangıç kilidi numara üretimiyle serileşir (8041) — kontrol ile yazım arasına numara giremez.
+  const row = await withSeriesStartLock(key, async (tx) => {
+    await assertFixedShapeStartUnlocked(key, current, next.startValue, { now, yearHasNumbers: FIXED_SHAPE_YEAR_USAGE[key] });
+    return tx.numberSeries.update({ where: { key }, data: { ...next, ...startYear } });
+  });
   await refreshNumberSeriesCache();
   // Sayaç ayarı bir İŞ KARARIDIR (bundan sonraki her numara etkilenir) ⇒ denetim
   // defterine, tx DIŞINDA, best-effort.
