@@ -81,9 +81,9 @@ import {
   type RouteStepRef,
 } from "./helpers/kursun-bypass-eligibility.helper";
 import {
-  QUALITY_STATION_WHERE,
-  STEP_QUALITY_SELECT,
-  stepCanApplyQuality,
+  STEP_FLOW_WHERE,
+  STEP_FLOW_SELECT,
+  stepRunsStepFlow,
 } from "./helpers/quality-station.helper";
 
 /**
@@ -145,7 +145,7 @@ const PENDING_ASSIGNMENT_WHERE = {
  *     ile tek sorguda eler (LIST_CAP kırpmasına da bağımlı değildir).
  */
 const WAITING_STEP_BASE_WHERE = {
-  station: { ...QUALITY_STATION_WHERE },
+  station: { ...STEP_FLOW_WHERE },
   movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
   workOrder: { status: { in: ASSIGNABLE_WO_STATUSES } },
 } satisfies Prisma.WorkOrderStepWhereInput;
@@ -520,10 +520,10 @@ export class KursunBypassService {
     // Filtre `assign`'ın kabul koşuluyla BİREBİR aynı tutulur (aktif makine +
     // istasyon kalite yürütüyor) — aksi halde listede görünen bir makine
     // seçildiğinde 400 alınır ve dağıtımcı sebebi anlamaz.
-    // ⚠️ Bu filtre ile `assign`ın kabul koşulu (`stepCanApplyQuality`) AYNI
-    // ikiz boğazdan beslenir: `QUALITY_STATION_WHERE` ↔ `stepCanApplyQuality`.
+    // ⚠️ Bu filtre ile `assign`ın kabul koşulu (`stepRunsStepFlow`) AYNI
+    // ikiz boğazdan beslenir: `STEP_FLOW_WHERE` ↔ `stepRunsStepFlow`.
     const machineRows = await prisma.machine.findMany({
-      where: { isActive: true, station: { ...QUALITY_STATION_WHERE } },
+      where: { isActive: true, station: { ...STEP_FLOW_WHERE } },
       select: {
         id: true,
         code: true,
@@ -794,7 +794,7 @@ export class KursunBypassService {
                 id: true,
                 stepSequence: true,
                 status: true,
-                station: { select: { ...STEP_QUALITY_SELECT, name: true } },
+                station: { select: { ...STEP_FLOW_SELECT, name: true } },
               },
             },
           },
@@ -814,7 +814,7 @@ export class KursunBypassService {
           status: s.status,
           station: s.station,
         }));
-        const step = wo.steps.find((s) => stepCanApplyQuality(s.station));
+        const step = wo.steps.find((s) => stepRunsStepFlow(s.station));
         if (!step) {
           throw AppError.badRequest("Bu terbiye iş emrinde Kurşun + KK2 adımı tanımlı değil");
         }
@@ -915,14 +915,14 @@ export class KursunBypassService {
             name: true,
             isActive: true,
             stationId: true,
-            station: { select: { name: true, ...STEP_QUALITY_SELECT } },
+            station: { select: { name: true, ...STEP_FLOW_SELECT } },
           },
         });
         if (!machine) throw AppError.notFound("Makine bulunamadı");
         if (!machine.isActive) throw AppError.badRequest("Seçilen makine pasif");
-        // ⚠️ `listDistribution`ın makine filtresiyle (QUALITY_STATION_WHERE)
+        // ⚠️ `listDistribution`ın makine filtresiyle (STEP_FLOW_WHERE)
         // BİREBİR aynı kural — ikiz boğazın iki ucu.
-        if (!stepCanApplyQuality(machine.station)) {
+        if (!stepRunsStepFlow(machine.station)) {
           throw AppError.badRequest(
             `Seçilen makine kalite kontrol yürüten bir istasyona bağlı değil (bağlı olduğu istasyon: ${machine.station.name})`,
           );
@@ -1508,7 +1508,7 @@ export class KursunBypassService {
     const step = await db.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
       },
       orderBy: { stepSequence: "asc" },
@@ -1633,7 +1633,7 @@ export class KursunBypassService {
     const step = await prisma.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
       },
       orderBy: { stepSequence: "asc" },
@@ -2162,7 +2162,7 @@ export class KursunBypassService {
     const step = await prisma.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         movements: {
           some: {
             ...ACTIVE_MOVEMENT,

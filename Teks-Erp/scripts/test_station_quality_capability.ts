@@ -20,16 +20,16 @@
 //   §8 ⭐ AST — boğaz ikiz TEK dosyada + yan yana + `satisfies`; `=== PROCESS_QC` yok
 //
 // SONDA TABLOSU (hepsi ölçüldü; cp+md5 ile birebir geri alındı). Taban 22/0.
-//   S1 `QUALITY_STATION_WHERE`den `appliesQuality` dalı silinir → §3 kırmızı (3)
+//   S1 `STEP_FLOW_WHERE`den `appliesQuality` dalı silinir → §3 kırmızı (3)
 //   S2 yüklemden `appliesQuality` dalı silinir                  → §2+§3 kırmızı (2)
 //   S3 bir çağrı yeri `kind === PROCESS_QC`e döner              → §4 kırmızı (muaf 1↔2)
-//   S4 bir select'ten `STEP_QUALITY_SELECT` düşer               → §5 kırmızı (3↔2)
+//   S4 bir select'ten `STEP_FLOW_SELECT` düşer               → §5 kırmızı (3↔2)
 //   S5 helper'da `satisfies` → `as const`                       → §6 kırmızı
 //
 // ⚠️ İKİ KONTROL İLK YAZIMDA KÖRDÜ ve sonda onu ölçtü — kalıp kayda değer:
 //   • §4 muafı DOSYA bazındaydı → muaf dosyaya eklenen YENİ tür kontrolü
 //     sessizce kapsanıyordu (S3 yeşil kalmıştı). Muaf artık SAYIM taşır.
-//   • §5 "dosyada STEP_QUALITY_SELECT geçiyor mu" diye bakıyordu → aynı
+//   • §5 "dosyada STEP_FLOW_SELECT geçiyor mu" diye bakıyordu → aynı
 //     dosyadaki İKİNCİ select'in alanı atlaması gizleniyordu (S4 yeşil
 //     kalmıştı). Şimdi dosya başına TABAN SAYIM kilitli.
 //   "Kind seçen her select yüklem içindir" varsayımı da ölçümle çürüdü:
@@ -40,10 +40,10 @@ import * as tsc from "typescript";
 import prisma from "../src/lib/prisma";
 import { StationKind } from "@prisma/client";
 import {
-  stepCanApplyQuality,
-  QUALITY_STATION_WHERE,
-  QUALITY_STEP_ERROR,
-  STEP_QUALITY_SELECT,
+  stepRunsStepFlow,
+  STEP_FLOW_WHERE,
+  STEP_FLOW_ERROR,
+  STEP_FLOW_SELECT,
 } from "../src/services/helpers/quality-station.helper";
 
 let pass = 0;
@@ -95,7 +95,7 @@ async function main() {
       "utf8",
     );
     check("§1 zemin: helper okunabildi", helperSrc.length > 500, `${helperSrc.length} bayt`);
-    check("§1 zemin: hata metni tek kaynakta", QUALITY_STEP_ERROR.length > 10, QUALITY_STEP_ERROR);
+    check("§1 zemin: hata metni tek kaynakta", STEP_FLOW_ERROR.length > 10, STEP_FLOW_ERROR);
 
     const srcFiles: string[] = [];
     async function walk(dir: string): Promise<void> {
@@ -116,21 +116,21 @@ async function main() {
     for (const [ad, ham] of kaynaklar) {
       if (ad.startsWith("services/helpers/quality-station.helper")) continue;
       const s = yorumlariSok(ham);
-      yuklemCagri += (s.match(/stepCanApplyQuality\(/g) ?? []).length;
-      whereCagri += (s.match(/\.\.\.QUALITY_STATION_WHERE/g) ?? []).length;
+      yuklemCagri += (s.match(/stepRunsStepFlow\(/g) ?? []).length;
+      whereCagri += (s.match(/\.\.\.STEP_FLOW_WHERE/g) ?? []).length;
     }
     check("§1 zemin: saf yüklem çağrısı yayıldı (>=7)", yuklemCagri >= 7, `${yuklemCagri} çağrı`);
     check("§1 zemin: where parçası yayıldı (>=10)", whereCagri >= 10, `${whereCagri} kullanım`);
 
     // ── §2 Yüklem doğruluk tablosu ──────────────────────────────────────────
     check("§2 PROCESS_QC + appliesQuality=false → TRUE (Faz A köprüsü)",
-      stepCanApplyQuality({ kind: StationKind.PROCESS_QC, appliesQuality: false }) === true);
+      stepRunsStepFlow({ kind: StationKind.PROCESS_QC, appliesQuality: false }) === true);
     check("§2 OTHER + appliesQuality=true → TRUE (yeni kapı)",
-      stepCanApplyQuality({ kind: StationKind.OTHER, appliesQuality: true }) === true);
+      stepRunsStepFlow({ kind: StationKind.OTHER, appliesQuality: true }) === true);
     check("§2 OTHER + appliesQuality=false → FALSE",
-      stepCanApplyQuality({ kind: StationKind.OTHER, appliesQuality: false }) === false);
+      stepRunsStepFlow({ kind: StationKind.OTHER, appliesQuality: false }) === false);
     check("§2 null/undefined → FALSE (fail-closed)",
-      stepCanApplyQuality(null) === false && stepCanApplyQuality(undefined) === false);
+      stepRunsStepFlow(null) === false && stepRunsStepFlow(undefined) === false);
 
     // ── §3 ⭐ İKİZ EŞDEĞERLİĞİ (canlı DB) ────────────────────────────────────
     // Dört köşe fixture: türü/yeteneği çaprazla. `where` sonucu ile yüklem
@@ -159,13 +159,13 @@ async function main() {
 
     const hepsi = await prisma.station.findMany({
       where: { id: { in: cleanupStationIds } },
-      select: { id: true, ...STEP_QUALITY_SELECT },
+      select: { id: true, ...STEP_FLOW_SELECT },
     });
     const yuklemKume = new Set(
-      hepsi.filter((s) => stepCanApplyQuality(s)).map((s) => idAd.get(s.id)!),
+      hepsi.filter((s) => stepRunsStepFlow(s)).map((s) => idAd.get(s.id)!),
     );
     const whereSatirlar = await prisma.station.findMany({
-      where: { id: { in: cleanupStationIds }, ...QUALITY_STATION_WHERE },
+      where: { id: { in: cleanupStationIds }, ...STEP_FLOW_WHERE },
       select: { id: true },
     });
     const whereKume = new Set(whereSatirlar.map((s) => idAd.get(s.id)!));
@@ -224,7 +224,7 @@ async function main() {
     // Yüklem `appliesQuality`yi okur; select'te alan yoksa `undefined` gelir ve
     // yüklem SESSİZCE false döner (Faz A'da `kind` dalı kurtarır, Faz B'de
     // KURTARMAZ) — bugün sessiz, yarın davranış farkı.
-    // ⚠️ NEDEN SAYIM: "dosyada STEP_QUALITY_SELECT geçiyor mu" kontrolü, aynı
+    // ⚠️ NEDEN SAYIM: "dosyada STEP_FLOW_SELECT geçiyor mu" kontrolü, aynı
     //    dosyadaki İKİNCİ bir select'in alanı atlamasını gizler (sonda S4 bunu
     //    ölçtü, bekçi kör kalmıştı). "Kind seçen her select yüklem içindir"
     //    varsayımı da yanlış: `currentStepKind` gibi GÖRÜNTÜLEME select'leri de
@@ -239,37 +239,37 @@ async function main() {
     for (const [ad, beklenen] of Object.entries(SELECT_TABANI)) {
       const ham = kaynaklar.get(ad);
       if (!ham) { selectIhlal.push(`${ad}: DOSYA YOK (taban bayat)`); continue; }
-      const bulunan = (yorumlariSok(ham).match(/STEP_QUALITY_SELECT/g) ?? []).length;
+      const bulunan = (yorumlariSok(ham).match(/STEP_FLOW_SELECT/g) ?? []).length;
       if (bulunan < beklenen) selectIhlal.push(`${ad}: ${beklenen} bekleniyor, ${bulunan} var`);
     }
-    check("§5 ⭐ `STEP_QUALITY_SELECT` kullanımı taban sayımın ALTINA düşmedi",
+    check("§5 ⭐ `STEP_FLOW_SELECT` kullanımı taban sayımın ALTINA düşmedi",
       selectIhlal.length === 0, selectIhlal.join(" · ") || "0 ihlal");
     // Yüklemi çağıran ama select sözleşmesini hiç kullanmayan dosya (kaba ağ):
     const hicOkumayan: string[] = [];
     for (const [ad, ham] of kaynaklar) {
       if (ad.startsWith("services/helpers/quality-station.helper")) continue;
       const s = yorumlariSok(ham);
-      if (!s.includes("stepCanApplyQuality(")) continue;
-      if (!s.includes("STEP_QUALITY_SELECT") && !/appliesQuality:\s*true/.test(s)) hicOkumayan.push(ad);
+      if (!s.includes("stepRunsStepFlow(")) continue;
+      if (!s.includes("STEP_FLOW_SELECT") && !/appliesQuality:\s*true/.test(s)) hicOkumayan.push(ad);
     }
     check("§5 yüklemi çağıran her dosya `appliesQuality` alanını da okuyor",
       hicOkumayan.length === 0, hicOkumayan.join(", ") || "0 ihlal");
 
     // ── §6 Helper hijyeni ───────────────────────────────────────────────────
     const helperKod = yorumlariSok(helperSrc);
-    check("§6 `QUALITY_STATION_WHERE` `satisfies` ile yazılmış (`as const` DEĞİL)",
-      /QUALITY_STATION_WHERE[\s\S]{0,200}satisfies Prisma\.StationWhereInput/.test(helperKod) &&
-        !/QUALITY_STATION_WHERE[\s\S]{0,200}as const/.test(helperKod));
+    check("§6 `STEP_FLOW_WHERE` `satisfies` ile yazılmış (`as const` DEĞİL)",
+      /STEP_FLOW_WHERE[\s\S]{0,200}satisfies Prisma\.StationWhereInput/.test(helperKod) &&
+        !/STEP_FLOW_WHERE[\s\S]{0,200}as const/.test(helperKod));
     check("§6 where parçası SPREAD ile kullanılıyor (mutasyon yok)",
-      !/QUALITY_STATION_WHERE\.\w/.test(
+      !/STEP_FLOW_WHERE\.\w/.test(
         [...kaynaklar.values()].map(yorumlariSok).join("\n"),
       ));
-    // Aynı anahtar çakışması: `station: { OR: [...], ...QUALITY_STATION_WHERE }`
+    // Aynı anahtar çakışması: `station: { OR: [...], ...STEP_FLOW_WHERE }`
     // yazılırsa biri SESSİZCE kaybolur.
     const cakisma: string[] = [];
     for (const [ad, ham] of kaynaklar) {
       const s = yorumlariSok(ham);
-      if (/OR:\s*\[[\s\S]{0,400}?\.\.\.QUALITY_STATION_WHERE/.test(s)) cakisma.push(ad);
+      if (/OR:\s*\[[\s\S]{0,400}?\.\.\.STEP_FLOW_WHERE/.test(s)) cakisma.push(ad);
     }
     check("§6 spread ile aynı kapsamda ikinci `OR:` yok",
       cakisma.length === 0, cakisma.join(", ") || "0 çakışma");
@@ -302,13 +302,13 @@ async function main() {
     );
     const ustBildirimler = helperAst.statements;
     const yuklemIdx = ustBildirimler.findIndex(
-      (st) => tsc.isFunctionDeclaration(st) && st.name?.text === "stepCanApplyQuality",
+      (st) => tsc.isFunctionDeclaration(st) && st.name?.text === "stepRunsStepFlow",
     );
     const whereIdx = ustBildirimler.findIndex(
       (st) =>
         tsc.isVariableStatement(st) &&
         st.declarationList.declarations.some(
-          (d) => tsc.isIdentifier(d.name) && d.name.text === "QUALITY_STATION_WHERE",
+          (d) => tsc.isIdentifier(d.name) && d.name.text === "STEP_FLOW_WHERE",
         ),
     );
     check("§8 ⭐ ikizin İKİ ucu da AYNI dosyada tanımlı (IL-02)",
@@ -322,7 +322,7 @@ async function main() {
     const whereStmt = ustBildirimler[whereIdx];
     if (whereStmt && tsc.isVariableStatement(whereStmt)) {
       whereInit = whereStmt.declarationList.declarations.find(
-        (d) => tsc.isIdentifier(d.name) && d.name.text === "QUALITY_STATION_WHERE",
+        (d) => tsc.isIdentifier(d.name) && d.name.text === "STEP_FLOW_WHERE",
       )?.initializer;
     }
     check("§8 ⭐ where parçası `satisfies` düğümü (AST) — `as const` DEĞİL",

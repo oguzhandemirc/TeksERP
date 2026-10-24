@@ -177,10 +177,10 @@ import {
 } from "./helpers/station-capability-transfer.helper";
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import {
-  QUALITY_STATION_WHERE,
-  QUALITY_STEP_ERROR,
-  STEP_QUALITY_SELECT,
-  stepCanApplyQuality,
+  STEP_FLOW_WHERE,
+  STEP_FLOW_ERROR,
+  STEP_FLOW_SELECT,
+  stepRunsStepFlow,
 } from "./helpers/quality-station.helper";
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import {
@@ -1999,7 +1999,7 @@ export class InventoryService {
         // ⚠️ Kolon ADI "Kurşun" KALIR. Faz A'da küme birebir aynı (backfill
         // yalnız PROCESS_QC'yi işaretler); ikinci bir KK istasyonu doğarsa
         // kolonun ölçtüğü şey ile adı ayrışır — etiket kararı Faz B'de.
-        station: { ...QUALITY_STATION_WHERE },
+        station: { ...STEP_FLOW_WHERE },
         status: { not: StepStatus.COMPLETED },
         currentRolls: { some: {} },
       };
@@ -4984,16 +4984,16 @@ export class InventoryService {
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
       include: {
-        station: { select: STEP_QUALITY_SELECT },
+        station: { select: STEP_FLOW_SELECT },
       },
     });
     if (!step) throw AppError.notFound("Terbiye iş emri adımı bulunamadı");
     if (step.workOrderId !== receipt.workOrderId) {
       throw AppError.badRequest("Adım bu terbiye iş emrine ait değil");
     }
-    if (!stepCanApplyQuality(step.station)) {
+    if (!stepRunsStepFlow(step.station)) {
       throw AppError.badRequest(
-        `Açık kumaş Roll sadece kalite kontrol yürüten adımda açılabilir — ${QUALITY_STEP_ERROR}`,
+        `Açık kumaş Roll sadece kalite kontrol yürüten adımda açılabilir — ${STEP_FLOW_ERROR}`,
       );
     }
     if (step.status === StepStatus.COMPLETED || step.status === StepStatus.SKIPPED) {
@@ -5416,7 +5416,7 @@ export class InventoryService {
           include: {
             // `appliesColor` + `requiredCategory`: adım renk verebiliyor mu (tek yüklem
             // stepCanApplyColor) — bitişte renksiz topa WO hedef rengi yazılır (3c).
-            station: { select: { ...STEP_QUALITY_SELECT, appliesColor: true } },
+            station: { select: { ...STEP_FLOW_SELECT, appliesColor: true } },
             requiredCategory: { select: { appliesColor: true } },
             workOrder: {
               include: {
@@ -5441,12 +5441,12 @@ export class InventoryService {
     // QC2_COMPLETED RollOperation'ı varsa "zaten yapıldı" diye success dön
     // (duplicate movement/RollError yaratma riski yok — bu noktada zaten
     // ileri taşınmış).
-    if (!roll.currentStep || !stepCanApplyQuality(roll.currentStep.station)) {
+    if (!roll.currentStep || !stepRunsStepFlow(roll.currentStep.station)) {
       const priorFinish = await prisma.rollOperation.findFirst({
         where: { ...ACTIVE_OPERATION,
           rollId,
           operationType: RollOperationType.QC2_COMPLETED,
-          step: { station: { ...QUALITY_STATION_WHERE } },
+          step: { station: { ...STEP_FLOW_WHERE } },
         },
         select: { id: true, workOrderStepId: true },
       });
@@ -5486,7 +5486,7 @@ export class InventoryService {
       // adımda operatör yanlış teşhis okur. Mevcut istasyon adı/tür bağlam
       // olarak kalır.
       throw AppError.badRequest(
-        `${QUALITY_STEP_ERROR} (topun bulunduğu adım: ${roll.currentStep.station.kind})`,
+        `${STEP_FLOW_ERROR} (topun bulunduğu adım: ${roll.currentStep.station.kind})`,
       );
     }
 

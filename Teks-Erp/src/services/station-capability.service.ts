@@ -28,7 +28,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { stepCanApplyQuality } from "./helpers/quality-station.helper";
+import { stepRunsStepFlow } from "./helpers/quality-station.helper";
 
 export interface StationCapabilityDto {
   stationId: string;
@@ -149,10 +149,10 @@ export function deriveCapabilityFlags(station: {
     canApplyColor: station.appliesColor,
     canApplyProperty: station.appliesProperty,
     // ⚠️ Kuralı BURAYA KOPYALAMA — kalite yüklemi tek kaynakta
-    // (`helpers/quality-station.helper.stepCanApplyQuality`; Faz A köprüsü
+    // (`helpers/quality-station.helper.stepRunsStepFlow`; Faz A köprüsü
     // `kind === PROCESS_QC` dalını orada taşır). `kind` parametresi ilk kez
     // burada gerçekten kullanılıyor.
-    canApplyQuality: stepCanApplyQuality(station),
+    canApplyQuality: stepRunsStepFlow(station),
   };
 }
 

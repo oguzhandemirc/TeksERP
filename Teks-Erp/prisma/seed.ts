@@ -383,7 +383,7 @@ async function main() {
   // ⚠️ `appliesQuality` AÇIKÇA YAZILIR — aşağıdaki (2026-08-10) notun birebir
   // ikizi: kalite backfill'i (migration 20260903020000) seed'den ÖNCE, tablo
   // BOŞKEN koşar → taze kurulumda bu satır kolon varsayılanıyla (false) doğardı.
-  // Faz A'da `stepCanApplyQuality`nin `kind === PROCESS_QC` dalı hatayı örter;
+  // Faz A'da `stepRunsStepFlow`nin `kind === PROCESS_QC` dalı hatayı örter;
   // Faz B'de o dal kalkınca taze kurulum SESSİZCE kalitesiz doğardı.
   const kursun = await prisma.station.upsert({
     where: { code: "KURSUN_KK2" },

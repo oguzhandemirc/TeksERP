@@ -989,7 +989,7 @@ model Station {
   /// `SubcontractorCategory`de `appliesQuality` kolonu yoktur, çünkü fason
   /// firma kalite notu yazmaz (kalite kaydı KK1 girişi + Tambur finalize'da
   /// doğar). Bu yüzden `seedCapabilityFromCategory` bu alana DOKUNMAZ ve ortak
-  /// yüklem `stepCanApplyQuality` tek argümanlıdır.
+  /// yüklem `stepRunsStepFlow` tek argümanlıdır.
   appliesQuality Boolean @default(false)
 
   /// Bu istasyonun makinelerinde LEVENT DOĞAR mı? (devere makinesi, 2026-09-12)
