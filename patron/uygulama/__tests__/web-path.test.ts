@@ -59,6 +59,6 @@ describe("web adresi: fazla eğik çizgi katlaması", () => {
     const paket = JSON.parse(readFileSync(path.join(kok, "package.json"), "utf8")) as { main?: string };
     expect(paket.main).toBe("entry.ts");
     const aktarimlar = [...readFileSync(path.join(kok, "entry.ts"), "utf8").matchAll(/^import\s+"([^"]+)";/gm)].map((m) => m[1]);
-    expect(aktarimlar).toEqual(["@expo/metro-runtime", "./src/web-path-fix", "expo-router/entry"]);
+    expect(aktarimlar).toEqual(["@expo/metro-runtime", "./src/web-path-fix", "./src/web-icon-font", "expo-router/entry"]);
   });
 });
