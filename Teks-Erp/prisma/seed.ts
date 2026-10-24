@@ -383,7 +383,7 @@ async function main() {
   // ⚠️ `appliesQuality` AÇIKÇA YAZILIR — aşağıdaki (2026-08-10) notun birebir
   // ikizi: kalite backfill'i (migration 20260903020000) seed'den ÖNCE, tablo
   // BOŞKEN koşar → taze kurulumda bu satır kolon varsayılanıyla (false) doğardı.
-  // Faz A'da `stepCanApplyQuality`nin `kind === PROCESS_QC` dalı hatayı örter;
+  // Faz A'da `stepRunsStepFlow`nin `kind === PROCESS_QC` dalı hatayı örter;
   // Faz B'de o dal kalkınca taze kurulum SESSİZCE kalitesiz doğardı.
   const kursun = await prisma.station.upsert({
     where: { code: "KURSUN_KK2" },
@@ -391,12 +391,17 @@ async function main() {
     create: {
       code: "KURSUN_KK2", name: "Kurşun + KK2", type: "INTERNAL", kind: "PROCESS_QC",
       department: "KALITE", appliesQuality: true,
+      // Muayene (KQ-D1) de AÇIK yazılır: migration türetmesi boş tabloda no-op.
+      inspectionEnabled: true,
     },
   });
   const tambur = await prisma.station.upsert({
     where: { code: "TAMBUR_1" },
     update: {},
-    create: { code: "TAMBUR_1", name: "Tambur", type: "INTERNAL", kind: "TAMBUR", department: "KALITE" },
+    create: {
+      code: "TAMBUR_1", name: "Tambur", type: "INTERNAL", kind: "TAMBUR", department: "KALITE",
+      inspectionEnabled: true,
+    },
   });
   // ⚠️ YETENEK BAYRAKLARI AÇIKÇA YAZILIR (2026-08-10). Seed ham prisma kullanır,
   // yani `StationService`in "kategoriden tohumla" adımı KOŞMAZ; kolon

@@ -241,7 +241,7 @@ async function main(): Promise<void> {
   check("HOP2 WO type ORDER_PRODUCTION (orderLine'dan türedi)", woRes.data!.type === "ORDER_PRODUCTION", woRes.data!.type);
   check("HOP2 WO başlangıç status PLANNED", woRes.data!.status === WorkOrderStatus.PLANNED, woRes.data!.status);
   // Yetenek sorusu değil ROTA TOPOLOJİSİ iddiası: bekçi fixture'ın kurduğu adımın
-  // tam olarak hangi istasyon TÜRÜ olduğunu kilitler. `stepCanApplyQuality` burada
+  // tam olarak hangi istasyon TÜRÜ olduğunu kilitler. `stepRunsStepFlow` burada
   // yanlış cevap verirdi — yeteneği okur, türü değil.
   // eslint-disable-next-line no-restricted-syntax
   check("HOP2 rota: 1.adım PROCESS_QC", woSteps[0].station.kind === StationKind.PROCESS_QC);

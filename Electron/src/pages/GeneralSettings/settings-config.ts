@@ -20,6 +20,7 @@ import {
   Warehouse,
   LifeBuoy,
   Cloud,
+  BarChart3,
   Bell,
   type LucideIcon,
 } from "lucide-react";
@@ -2030,6 +2031,29 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Yönetim"],
         desc: "Açıkken bulutun takip ettiği bir kayıt değişince 3 sn içindeki değişiklikler birleştirilip kısa bir eşitleme turu koşar (iki tur arası en az 15 sn); kiradaki aralık turu emniyet olarak sürer. Kapalıyken (varsayılan) veri yalnız kiradaki aralıkta (genelde 5 dk) gider. Patron bulutu hakkı olmayan kurulumda hiçbir durumda dışarı istek atılmaz.",
+      },
+    ],
+  },
+  {
+    // Raporlar v2 geçişi: bayrak açılınca rapor menüsü sade temel raporları gösterir (R0-SABLON);
+    // eski 36 rapor yönlendirmesiz yerinde kalır. Varsayılan KAPALI = bugünkü menü.
+    id: "reports",
+    label: "Raporlar",
+    icon: BarChart3,
+    description: "Rapor menüsünün hangi düzenle gösterileceği.",
+    keywords: "rapor raporlar rapor merkezi yeni rapor temel rapor eski raporlar v2 menü karne",
+    kind: "flags",
+    section: "system",
+    // Sistem bölümünün öteki bayrak kategorileriyle (Destek, Patron Bulutu) aynı dar izin.
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:session"],
+    flags: [
+      {
+        key: "reportsV2Enabled",
+        title: "Yeni rapor merkezi (Raporlar v2)",
+        summary: "Açıkken rapor menüsü sade temel raporları gösterir; eski raporlar 'Eski raporlar' bölümünde kalır.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken rapor menüsü sade temel raporları gösterir; eski raporlar 'Eski raporlar' bölümünde kalır ve kendi adreslerinden açılmaya devam eder (otomatik yönlendirme yok). Kapalıyken (varsayılan) bugünkü rapor menüsü aynen kalır.",
       },
     ],
   },

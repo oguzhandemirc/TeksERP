@@ -6,6 +6,7 @@ import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { printHtmlString } from "@/lib/print";
 import { PDF_MAX_ROWS, pdfTooManyRowsMessage } from "@shared/pdf-limits";
 import { isWebPdf, printAsPdf } from "@/lib/web-pdf";
+import { grafikleriDoldur } from "../_v2/grafik/svgUret";
 import { buildReportHtml, reportRowCount, slugifyFileName, toSheets, type ReportExportSpec } from "./reportExport";
 
 interface Props {
@@ -52,11 +53,13 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
       toast.error(pdfTooManyRowsMessage(rows, "Rapor"));
       return;
     }
-    if (!pdfApi) return printAsPdf(buildReportHtml(spec));
     setBusy("pdf");
     try {
+      // Grafik blokları kâğıda SVG olarak girer; çizim yalnız tıklanınca (motor tembel).
+      const html = buildReportHtml(await grafikleriDoldur(spec));
+      if (!pdfApi) return printAsPdf(html);
       const res = await pdfApi.save({
-        html: buildReportHtml(spec),
+        html,
         suggestedName: `${slugifyFileName(`${spec.title} ${spec.subtitle ?? ""}`)}.pdf`,
       });
       if (res.saved) toast.success("PDF kaydedildi.");
@@ -68,10 +71,10 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
     }
   };
 
-  const onPrint = () => {
+  const onPrint = async () => {
     const spec = buildSpec();
     if (!spec) return;
-    printHtmlString(buildReportHtml(spec));
+    printHtmlString(buildReportHtml(await grafikleriDoldur(spec)));
   };
 
   return (

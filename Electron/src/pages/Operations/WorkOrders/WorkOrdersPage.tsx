@@ -21,6 +21,7 @@ import { useTabsStore } from "@/store/tabs";
 import { workOrderColumns } from "./columns";
 import { workOrderService } from "./service";
 import { WorkOrderDetailSheet } from "./WorkOrderDetailSheet";
+import { StatusLocationChips, StatusLocationFilter } from "./StatusLocationFilter";
 import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderBulkDocsDialog } from "./WorkOrderBulkDocsDialog";
@@ -29,18 +30,8 @@ import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
 
+// "Durum" süzgeci FilterBar'ın `leading` yuvasında: Durum + Şu an nerede + Özel (StatusLocationFilter).
 const FILTERS: FilterDef[] = [
-  {
-    kind: "multi-select",
-    key: "status",
-    label: "Durum",
-    options: [
-      { value: "PLANNED", label: "Planlandı" },
-      { value: "IN_PROGRESS", label: "Devam Ediyor" },
-      { value: "COMPLETED", label: "Tamamlandı" },
-      { value: "CANCELLED", label: "İptal" },
-    ],
-  },
   {
     // TEKİL KALIR (bilinçli): `type` NOT NULL + iki değerli → ikisini seçmek
     // "filtre yok" demektir. Tek seçimdeki açık "Tümü (Tip)" seçeneği daha net.
@@ -161,7 +152,8 @@ export function WorkOrdersPage() {
           </>
         }
       />
-      <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
+      <FilterBar filters={FILTERS} defaultDateRangeDays={30} leading={<StatusLocationFilter />} />
+      <StatusLocationChips />
       <DataTable<WorkOrder>
         table={table}
         isLoading={query.isLoading}

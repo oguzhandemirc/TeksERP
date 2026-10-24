@@ -537,6 +537,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `"isActive"`,
     why: "kart tipi × ham kod × tezgah (NULL = genel) için tek canlı eşleme (NULLS NOT DISTINCT); pasif satır yer işgal etmez",
   },
+  // print_jobs (izlenebilirlik A1): hata süzgeci + "en çok hata veren yazıcı" yalnız HATA satırlarını tarar.
+  {
+    table: "print_jobs",
+    index: "print_jobs_hata_createdAt_idx",
+    uniq: false,
+    predicate: `((status)::text = 'HATA'::text)`,
+    why: "yazdırma geçmişinde hata süzgeci ve özet şeridinin hata sayımı tüm telemetriyi taramasın",
+  },
   // Bildirim çekirdeği (N1-SEMA, migration 20261024023840): dağıtıcının birleştirme hedefi ve koşul açma seddi.
   {
     table: "notification_inbox",
@@ -860,6 +868,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "credential_reset_requests", name: "credential_reset_requests_decision_check" },
   // Hata raporu kuyruğu (3.6, migration 20261006120000): grup sayacı en az 1 (boş grup yazılmaz).
   { table: "error_report_entries", name: "error_report_entries_count_check" },
+  // Yazdırma geçmişi (izlenebilirlik A1, migration 20261024025542): kapalı kümeler + HATA→kod + adet + toplu tavan.
+  { table: "print_jobs", name: "print_jobs_output_kind_check" },
+  { table: "print_jobs", name: "print_jobs_status_check" },
+  { table: "print_jobs", name: "print_jobs_hata_kodu_check" },
+  { table: "print_jobs", name: "print_jobs_adet_check" },
+  { table: "print_jobs", name: "print_jobs_subject_ids_max_check" },
   // Bildirim çekirdeği (N1-SEMA, migration 20261024023840): kapalı kümeler VarChar + CHECK; `kind` bilinçli CHECK'siz
   // (yeni tür migration istemez, tek kaynak katalog). Sayaçlar negatife düşmez; kutu satırı en az bir olay taşır.
   { table: "notification_outbox", name: "notification_outbox_phase_ck" },

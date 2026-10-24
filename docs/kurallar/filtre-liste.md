@@ -119,7 +119,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_bare_filter_param`, `test_item_allowed_filter`, `test_filter_multi_select`
+Backend: `test_bare_filter_param`, `test_item_allowed_filter`, `test_filter_multi_select`, `test_workorder_location`
 
 İstemci: `Electron/src/components/forms/ItemPickerModal.test.tsx`
 

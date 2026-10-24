@@ -30,6 +30,7 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
+import { isReportSurfaced } from "@/lib/report-gate";
 
 const ROOT = join(__dirname, "..", "..");
 const REPORTS = join(ROOT, "pages", "Reports");
@@ -133,7 +134,7 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
     const offenders: string[] = [];
     let measured = 0;
     for (const r of REPORT_CATALOG) {
-      if (r.panelYolu === "") continue;
+      if (r.panelYolu === "" || !isReportSurfaced(r)) continue; // ucu inmemiş v2 satırının yaprağı yok
       const comp = routeComponent.get(r.panelYolu);
       const path = comp ? componentPath.get(comp) : undefined;
       if (!path) { offenders.push(`${r.key}: ÖLÇÜLEMEDİ — route/bileşen çözülmedi`); continue; }
@@ -153,7 +154,7 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
         }
       }
     }
-    expect(measured).toBe(REPORT_CATALOG.filter((r) => r.panelYolu !== "").length);
+    expect(measured).toBe(REPORT_CATALOG.filter((r) => r.panelYolu !== "" && isReportSurfaced(r)).length);
     expect(offenders, offenders.join(" · ")).toEqual([]);
   });
 

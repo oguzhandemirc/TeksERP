@@ -752,6 +752,34 @@ router.patch(
 
 /**
  * @openapi
+ * /api/labels/rolls/bulk-print-event:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Toplu top etiketi basıldı (damga + audit + tek basım satırı)
+ *     description: |
+ *       Panelin birleşik toplu etiket belgesi basıldıktan sonra çağrılır. Her topun
+ *       `labelPrintedAt` damgası ve `labelDirty=false` yazılır (tekil baskıyla aynı helper),
+ *       top başına LABEL_PRINT_EVENT audit'i ve tek `ETIKET_TOPLU` yazdırma geçmişi satırı.
+ *       Var olmayan top id'si → 400 `ROLL_NOT_FOUND` (`details.missing`), hiçbiri damgalanmaz.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollIds]
+ *             properties:
+ *               rollIds: { type: array, minItems: 1, maxItems: 200, items: { type: string, format: uuid } }
+ *               printJob: { type: object, description: "İsteğe bağlı basım künyesi (clientToken, transport, printerName …)" }
+ *     responses:
+ *       200: { description: Kaydedildi }
+ *       400: { description: Doğrulama hatası ya da bulunamayan top }
+ */
+router.post("/rolls/bulk-print-event", verifyToken, requirePermission("label:print"), controller.recordBulkRollPrintEvent);
+
+/**
+ * @openapi
  * /api/labels/rolls/{id}/print:
  *   post:
  *     tags: [Labels]
