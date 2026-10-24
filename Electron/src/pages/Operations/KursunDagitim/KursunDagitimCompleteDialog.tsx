@@ -12,6 +12,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
+import { useEffect, useState } from "react";
+import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
+import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { kursunDagitimService } from "./service";
 import type { KursunDistributionAssignedRow } from "./types";
 
@@ -52,12 +55,19 @@ export function KursunDagitimCompleteDialog({
     staleTime: 0,
   });
   const preview = previewQ.data?.data;
+  // KQ-D6: gramaj isteğe bağlı; atamadaki değerle açılır, bitirişle birlikte yazılır.
+  const { catalog: gramajCatalog } = useKursunGramajCatalog();
+  const [gramaj, setGramaj] = useState<string | null>(row?.propertyValueId ?? null);
+  useEffect(() => {
+    if (open) setGramaj(row?.propertyValueId ?? null);
+  }, [open, row?.propertyValueId]);
 
   const completeMut = useMutation({
     mutationFn: () =>
       kursunDagitimService.complete(
         assignmentId as string,
         (preview?.rolls ?? []).map((r) => r.rollId),
+        gramajCatalog.options.length > 0 ? gramaj : undefined,
       ),
     onSuccess: (res) => {
       toast.success(res.message ?? "İş tamamlandı.");
@@ -121,6 +131,21 @@ export function KursunDagitimCompleteDialog({
                 {formatNumber(preview.totalMeters, 0)} m — atanan makine:{" "}
                 <span className="font-medium">{preview.machineName}</span>
               </div>
+
+              {gramajCatalog.options.length > 0 && (
+                <div>
+                  <div className="text-muted-foreground mb-1 text-xs font-medium tracking-wide uppercase">
+                    Kurşun gramajı (isteğe bağlı)
+                  </div>
+                  <GramajChoiceButtons
+                    options={gramajCatalog.options}
+                    value={gramaj}
+                    onChange={setGramaj}
+                    emptyLabel="Bilinmiyor"
+                    disabled={completeMut.isPending}
+                  />
+                </div>
+              )}
 
               <div>
                 <div className="text-muted-foreground mb-1 text-xs font-medium tracking-wide uppercase">

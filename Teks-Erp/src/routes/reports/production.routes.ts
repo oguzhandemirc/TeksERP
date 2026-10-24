@@ -22,6 +22,7 @@ import {
 import { getWipScorecard } from "../../services/reports/wip-scorecard.report.service";
 import { getBatchTrace, searchBatches } from "../../services/reports/batch-trace.report.service";
 import { AppError } from "../../utils/app-error";
+import { buildKursunGramajSunumu, KURSUN_KIYAS_MODLARI } from "../../services/reports/kursun-gramaj.report.service";
 
 const router = Router();
 /**
@@ -119,6 +120,34 @@ router.get("/traveler-trace", ...reportGate("production/traveler-trace"), async 
     const data = await getTravelerTrace(rollId);
     if (!data) throw AppError.notFound("Rulo bulunamadı");
     res.status(200).json({ success: true, data });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/production/kursun-gramaj:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Kurşun gramajı — fabrika günü × gramaj × kumaş × makine × operatör (tablet + kâğıt)
+ *     security: [{ bearerAuth: [] }]
+ */
+/** v2 sunum sorgusu; `gramaj=none` → "gramaj bilinmiyor". Tanınmayan anahtar 400. */
+const kursunGramajQuerySchema = z.object({
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+  kiyas: z.enum(KURSUN_KIYAS_MODLARI).optional(),
+  gramaj: z.union([z.string().uuid("Geçersiz gramaj"), z.literal("none")]).optional(),
+  kaynak: z.enum(["TABLET", "KAGIT"]).optional(),
+  workOrderId: z.string().uuid("Geçersiz iş emri").optional(),
+}).strict();
+
+router.get("/kursun-gramaj", ...reportGate("production/kursun-gramaj"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { dateFrom, dateTo, ...girdi } = kursunGramajQuerySchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom, dateTo });
+    res.status(200).json({ success: true, data: await buildKursunGramajSunumu(range, girdi) });
   } catch (e) {
     next(e);
   }

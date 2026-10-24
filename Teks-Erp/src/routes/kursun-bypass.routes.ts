@@ -333,4 +333,31 @@ router.get(
  */
 router.post("/:id/complete", verifyToken, canDistribute, controller.complete);
 
+/**
+ * @openapi
+ * /api/kursun-bypass/{id}/gramaj:
+ *   patch:
+ *     tags: [KursunBypass]
+ *     summary: Açık dağıtımın kâğıt gramajı (KQ-D6) — isteğe bağlı; null = bilinmiyor
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [propertyValueId]
+ *             properties:
+ *               propertyValueId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Gramaj kaydedildi }
+ *       400: { description: Değer kurşun çeşidine ait değil / pasif }
+ *       409: { description: Tamamlanmış/iptal dağıtımın gramajı değişmez }
+ */
+router.patch("/:id/gramaj", verifyToken, canDistribute, controller.setGramaj);
+
 export default router;

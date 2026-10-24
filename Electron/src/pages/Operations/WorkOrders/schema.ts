@@ -32,6 +32,8 @@ export const workOrderFormSchema = z.object({
   targetItemId: z.string().nullable().optional(),
   targetColorId: z.string().nullable().optional(),
   targetPropertyIds: z.array(z.string()).optional().default([]),
+  /** KQ-D6 hedef kurşun gramajı (çeşit değeri); null = hedef yok. Yalnız yeni İE formunda. */
+  kursunTargetValueId: z.string().nullable().optional().default(null),
   orderLineIds: z.array(z.string()).optional().default([]),
   width: z
     .union([
@@ -75,6 +77,7 @@ export const workOrderFormDefaults: WorkOrderFormValues = {
   targetItemId: null,
   targetColorId: null,
   targetPropertyIds: [],
+  kursunTargetValueId: null,
   orderLineIds: [],
   width: null,
   targetQuantity: null,

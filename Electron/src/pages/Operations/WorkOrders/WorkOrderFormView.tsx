@@ -43,6 +43,8 @@ import { useNumberSourceState } from "@/lib/number-source";
 import { RouteEditor } from "./RouteEditor";
 import { TargetItemPicker } from "./TargetItemPicker";
 import { useFoldValues } from "@/hooks/useFoldValues";
+import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
+import { GramajChoiceButtons } from "@/components/kursun/GramajChoiceButtons";
 import { useDesignerSteps } from "./useDesignerSteps";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
 import type { CustomRouteStep } from "./RouteDesignerDialog";
@@ -99,7 +101,7 @@ interface Props {
   };
   onSubmit: (
     values: WorkOrderFormValues,
-    meta: { fasonPlans: FasonStepPlan[]; customSteps: CustomRouteStep[] },
+    meta: { fasonPlans: FasonStepPlan[]; customSteps: CustomRouteStep[]; kursunTargetPropertyId?: string | null },
   ) => Promise<void>;
   isSubmitting?: boolean;
   /** İptal / vazgeç — sayfayı kapatıp listeye (veya detaya) döner. */
@@ -208,6 +210,7 @@ export function WorkOrderFormView({
   // koşulsuz koşar: hook'u koşullu çağırmak React kuralını bozar, maliyet ise
   // 60 sn cache'li tek küçük istek.
   const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
+  const { catalog: kursunCatalog } = useKursunGramajCatalog();
 
   // Ön-seçim: yeni iş emrinde katalogun İLK değeri seçili gelsin (eski davranış
   // "2-KAT sabit ön-seçili" idi). Katalogdan okunduğu için 2-KAT'ı olmayan bir
@@ -469,7 +472,7 @@ export function WorkOrderFormView({
             await onSubmit(
               // Tambur yoksa kat tipi anlamsız — payload'a sızmasın.
               { ...v, foldType: hasTambur ? v.foldType : "" },
-              { fasonPlans: [], customSteps: stepsToCustom(routeSteps) },
+              { fasonPlans: [], customSteps: stepsToCustom(routeSteps), kursunTargetPropertyId: kursunCatalog.propertyId },
             );
           },
           (errors) => {
@@ -857,6 +860,27 @@ export function WorkOrderFormView({
                             </p>
                           )}
                       </div>
+                    )}
+                  />
+                </FormField>
+              )}
+              {/* KQ-D6 hedef kurşun gramajı — yalnız yeni İE'de ve kurşun çeşidi tanımlıysa.
+                  Düzenlemede detaydaki "Kurşun Gramajı" kartından değişir (ayrı uç). */}
+              {!isEdit && kursunCatalog.propertyId && kursunCatalog.options.length > 0 && (
+                <FormField
+                  label="Hedef kurşun gramajı"
+                  hint="İsteğe bağlı. Basılan gramaj farklıysa iş emri kartında turuncu görünür; üretim durmaz."
+                >
+                  <Controller
+                    control={form.control}
+                    name="kursunTargetValueId"
+                    render={({ field }) => (
+                      <GramajChoiceButtons
+                        options={kursunCatalog.options}
+                        value={field.value ?? null}
+                        onChange={field.onChange}
+                        emptyLabel="Hedef yok"
+                      />
                     )}
                   />
                 </FormField>
