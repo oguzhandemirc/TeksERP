@@ -48,7 +48,7 @@ export interface AuditOkumaBorcu {
 // ── BACKEND (Teks-Erp/src) ────────────────────────────────────────────────────
 export const AYAK_IZI_OKUYUCULARI: readonly AyakIziBeyani[] = [
   { yer: "src/services/system-log.service.ts#SystemLogService.list", adet: 1, sinif: "DENETIM_EKRANI",
-    gerekce: "Sistem › Aktivite listesi ve son aktivite zili: satırı olduğu gibi gösterir" },
+    gerekce: "Sistem › Etkinlik sayfası (sayaçsız akış, okunmamış sayısı yok): satırı olduğu gibi gösterir" },
   { yer: "src/services/system-log.service.ts#SystemLogService.findById", adet: 1, sinif: "DENETIM_EKRANI",
     gerekce: "aktivite ayrıntı paneli: tek satırın eski/yeni verisi" },
   { yer: "src/services/system-log.service.ts#SystemLogService.listArchive", adet: 1, sinif: "DENETIM_EKRANI",
@@ -136,15 +136,13 @@ export const AUDIT_ISTEMCI_MODULLERI: readonly string[] = [
 
 export const ISTEMCI_AYAK_IZI: readonly AyakIziBeyani[] = [
   { yer: "Electron/src/services/systemLogService.ts", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "/api/admin/system-logs istemcisi" },
-  { yer: "Electron/src/pages/System/Activity/ActivityPage.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "Sistem › Aktivite" },
+  { yer: "Electron/src/pages/System/Activity/ActivityPage.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "Sistem › Etkinlik (sayaçsız akış)" },
   { yer: "Electron/src/pages/System/Activity/ActivityFilters.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "aktivite süzgeç seçenekleri" },
   { yer: "Electron/src/pages/System/Activity/ActivityDetailSheet.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "aktivite ayrıntısı" },
   { yer: "Electron/src/pages/System/Archive/ArchiveSearchPage.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "arşiv araması" },
   { yer: "Electron/src/pages/System/Archive/ActivityArchivePage.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "arşive taşıma ekranı" },
   { yer: "Electron/src/pages/System/Events/SystemEventsPage.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "sistem olayları listesi" },
   { yer: "Electron/src/pages/System/Events/SystemEventDetailSheet.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "sistem olayı ayrıntısı" },
-  { yer: "Electron/src/components/layout/NotificationBell.tsx", adet: 1, sinif: "DENETIM_EKRANI",
-    gerekce: "son aktivite zili: son satırları listeler; rozet yalnız 'görülmemiş satır' sayısıdır, iş sayısı değil" },
   { yer: "Electron/src/components/RecordHistoryDialog.tsx", adet: 1, sinif: "KAYIT_GECMISI", gerekce: "kaydın değişiklik geçmişi penceresi" },
   { yer: "Electron/src/components/RecordInfoButton.tsx", adet: 1, sinif: "KAYIT_GECMISI", gerekce: "ⓘ künye düğmesi" },
   { yer: "Electron/src/pages/Reports/Audit/service.ts", adet: 1, sinif: "DENETIM_RAPORU", gerekce: "denetim raporları istemcisi" },

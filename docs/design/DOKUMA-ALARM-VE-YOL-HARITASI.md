@@ -24,7 +24,7 @@
 
 | Kanal | Durum | Kanıt |
 |---|---|---|
-| **Panel zili** | **[ÖLÇÜLDÜ] VAR ama alarm DEĞİL:** "Son Aktivite" — audit kaydını (`SystemLog`, DOMAIN) 60 sn'de bir okur, yalnız `admin:settings` iznine görünür. Kök kural gereği (audit yalnız ayak izi) **alarm bunun üstüne kurulamaz**; ayrı bir zil gerekir. | `Electron/src/components/layout/NotificationBell.tsx` |
+| **Panel zili** | **[ÖLÇÜLDÜ] VAR ama alarm DEĞİL:** "Son Aktivite" — audit kaydını (`SystemLog`, DOMAIN) 60 sn'de bir okur, yalnız `admin:settings` iznine görünür. Kök kural gereği (audit yalnız ayak izi) **alarm bunun üstüne kurulamaz**; ayrı bir zil gerekir. | `NotificationBell.tsx` (2026-10-24 kaldırıldı → sayaçsız Etkinlik sayfası `/system/activity`) |
 | Panel sesi / işletim sistemi bildirimi | **[YOK]** — `new Audio`, `Notification` çağrısı yok. Windows bildirimi için ön koşul hazır: `app.setAppUserModelId` çağrılıyor. | `Electron/electron/main.ts:121` |
 | Panel canlılığı | **[ÖLÇÜLDÜ]** WebSocket/SSE yok; ekranlar **yoklama** ile tazelenir (Tezgah Salonu 5 sn, react-query). | `DOKUMA-CANLI-EKRAN.md` §6, `useLoomFloorLive.ts` |
 | **Tablet/telefon (saha uygulaması)** | **[YOK]** bildirim paketi (`expo-notifications` mobilde yok). **[ÖLÇÜLDÜ]** `expo-audio` ve `expo-haptics` kurulu (ses + titreşim uygulama açıkken kullanılabilir). Dokuma ekranında yoklama yok. | `mobil/package.json:35,39` |

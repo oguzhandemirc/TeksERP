@@ -1,11 +1,10 @@
-import { PanelLeft, Search, LogOut, RotateCw, Settings } from "lucide-react";
+import { PanelLeft, Search, LogOut, RotateCw, Settings, Activity } from "lucide-react";
 import { PencereKontrolleri } from "./PencereKontrolleri";
 import { Button } from "@/components/ui/button";
 import { DemoModeBadge } from "@/components/demo/DemoModeBadge";
 import { ChannelBadge } from "./ChannelBadge";
 import { SupportSessionBadge } from "./SupportSessionBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
-import { NotificationBell } from "./NotificationBell";
 import { LoomAlarmBell } from "@/pages/Operations/LoomAlarms/LoomAlarmBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import {
@@ -16,9 +15,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/store/auth";
 import { useTabsStore } from "@/store/tabs";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { SYSTEM_ACTIVITY_ACCESS } from "@/lib/permissions";
 import { upperTr } from "../../lib/tr-case";
 
 interface Props {
@@ -42,7 +43,9 @@ function initials(name?: string): string {
 export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const { isAdmin, permissions } = useRoleAccess();
+  const { isAdmin, permissions, hasAnyPermission } = useRoleAccess();
+  // Etkinlik bağlantısı sayfanın kendi ProtectedRoute'uyla AYNI izin kümesinden okunur.
+  const canSeeActivity = hasAnyPermission(SYSTEM_ACTIVITY_ACCESS);
   const navigateActive = useTabsStore((s) => s.navigateActive);
 
   return (
@@ -94,10 +97,28 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
             hiç çizilmez. */}
         <GuncellemeDugmesi />
 
-        {/* Tezgah alarmı — "Son Aktivite"den AYRI zil; bayrak/izin yoksa hiç çizilmez. */}
+        {/* Tezgah alarmı — Etkinlik akışından AYRI zil; bayrak/izin yoksa hiç çizilmez. */}
         <LoomAlarmBell />
 
-        <NotificationBell />
+        {/* Etkinlik = sayaçsız akış (audit ayak izi): rozet/okunmamış sayısı TAŞIMAZ.
+            Kişisel bildirim zili (gelen kutusu) bu bağlantının yanına gelir. */}
+        {canSeeActivity && (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Etkinlik"
+                  onClick={() => navigateActive("/system/activity")}
+                >
+                  <Activity className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Etkinlik</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
 
         <AppearanceMenu />
 
