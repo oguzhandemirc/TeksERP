@@ -2,7 +2,7 @@ import { safeStorage } from "electron";
 import Store from "electron-store";
 import log from "electron-log/main.js";
 import { handleTrusted } from "../security/trusted-ipc.js";
-import { createSecureStore } from "./secure-store.core.js";
+import { createSecureStore, type SecureInspect } from "./secure-store.core.js";
 
 interface StoreSchema {
   encrypted: Record<string, string>;
@@ -34,6 +34,11 @@ const core = createSecureStore({
  */
 export function readSecureValue(key: string): string | null {
   return core.read(key);
+}
+
+/** Üç durumlu okuma (ABSENT / OK / UNREADABLE) — ana süreç içi. */
+export function inspectSecureValue(key: string): SecureInspect {
+  return core.inspect(key);
 }
 
 export function writeSecureValue(key: string, value: string): void {

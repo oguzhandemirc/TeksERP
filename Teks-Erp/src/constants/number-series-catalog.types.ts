@@ -58,6 +58,33 @@ export interface NumberSeriesCatalogEntry {
    */
   infix?: { re: string; aciklama: string };
   /**
+   * SABİT BİÇİM — dış standart (GİB) biçimi; yalnız ön ek veridir.
+   *
+   * Tarih segmenti · hane · ayraç (ikisi de) KODDA kilitli, fabrika yalnız
+   * `prefixRe`e uyan ön eki seçer. "Hane taşarsa kod GENİŞLER" kuralının BEYANLI
+   * istisnasıdır: kod uzunluğu standardın parçası, sayaç `seedMaxValue`da 409 ile
+   * durur (`seedWrap: false`); adım/sınır/sarma kapalı, yalnız yıla bağlı
+   * başlangıç değeri açık (yıl ortası geçiş; üretimden sonra kilit).
+   * Kapı `assertSeriesFormatAllowed` (DEĞER) + `seriesLock` (okuma) aynı
+   * yardımcıdan okur: `series-fixed-shape.helper`.
+   */
+  fixedShape?: {
+    prefixRe: string;
+    dateSegment: NumberSeriesDateSegment;
+    digits: number;
+    separator: string;
+    not: string;
+  };
+  /**
+   * SAYIM KAYNAĞI BEKLİYOR — kayıt tablosu henüz şemada yok (ayrı dilimde doğar).
+   *
+   * `countTable` yokluğunun ikinci beyanlı sebebi (birincisi `uretecBagi`):
+   * üreteç seriyi SÜRER ama numaralanan kayıtların tablosu doğmadı. Model doğunca
+   * beyan çürür ve yerine `countTable` yazılır (bekçi `test_number_series_panel §4e`
+   * modelin doğduğunu görünce söyler).
+   */
+  countTablePending?: { model: string; field: string; not: string };
+  /**
    * ÜRETEÇ BAĞI — bu satır üreteci SÜRÜYOR mu, yoksa yalnız TARİF mi ediyor?
    *
    * Normalde katalog satırı üreteci SÜRER: üreteç biçimi `resolveSeriesFormat`

@@ -43,8 +43,12 @@ export interface SecureStoreDeps {
   readonly warn: (message: string, meta: Record<string, unknown>) => void;
 }
 
+/** Üç durumlu okuma: "yok" ile "var ama okunamadı" AYRI (cihaz kimliği ezilmesin diye). */
+export type SecureInspect = { status: "ABSENT" } | { status: "OK"; value: string } | { status: "UNREADABLE" };
+
 export interface SecureStoreCore {
   read(key: string): string | null;
+  inspect(key: string): SecureInspect;
   write(key: string, value: string): void;
   remove(key: string): void;
   /** Renderer'dan gelen yazım: tip + ana-süreç-anahtarı kapısı. */
@@ -54,6 +58,24 @@ export interface SecureStoreCore {
   rendererRead(key: unknown): string | null;
 }
 
+/** Diskteki değeri çözer; çözülemeyen değer "yok" değil UNREADABLE'dır. */
+function decodeStored(key: string, stored: string | undefined, cipher: CipherPort, warn: SecureStoreDeps["warn"]): SecureInspect {
+  if (!stored) return { status: "ABSENT" };
+  if (cipher.isEncryptionAvailable()) {
+    try {
+      return { status: "OK", value: cipher.decryptString(Buffer.from(stored, "base64")) };
+    } catch {
+      return { status: "UNREADABLE" };
+    }
+  }
+  if (SECRET_KEYS.has(key)) {
+    // Şifreli değeri "düz metin" diye döndürme; eski düz değeri de kullanma (fail-closed).
+    warn("[guvenlik] şifreleme yok — gizli anahtar diskten okunmadı", { key });
+    return { status: "UNREADABLE" };
+  }
+  return { status: "OK", value: stored };
+}
+
 export function createSecureStore({ kv, cipher, warn }: SecureStoreDeps): SecureStoreCore {
   // Şifreleme yokken gizli değer YALNIZ burada yaşar (süreç kapanınca gider → yeniden giriş).
   const volatileSecrets = new Map<string, string>();
@@ -61,21 +83,20 @@ export function createSecureStore({ kv, cipher, warn }: SecureStoreDeps): Secure
   function read(key: string): string | null {
     const volatile = volatileSecrets.get(key);
     if (volatile !== undefined) return volatile;
-    const stored = kv.readAll()[key];
-    if (!stored) return null;
-    if (cipher.isEncryptionAvailable()) {
-      try {
-        return cipher.decryptString(Buffer.from(stored, "base64"));
-      } catch {
-        return null;
-      }
+    const r = decodeStored(key, kv.readAll()[key], cipher, warn);
+    return r.status === "OK" ? r.value : null;
+  }
+
+  function inspect(key: string): SecureInspect {
+    const volatile = volatileSecrets.get(key);
+    if (volatile !== undefined) return { status: "OK", value: volatile };
+    let stored: string | undefined;
+    try {
+      stored = kv.readAll()[key];
+    } catch {
+      return { status: "UNREADABLE" };
     }
-    if (SECRET_KEYS.has(key)) {
-      // Şifreli değeri "düz metin" diye döndürme; eski düz değeri de kullanma (fail-closed).
-      warn("[guvenlik] şifreleme yok — gizli anahtar diskten okunmadı", { key });
-      return null;
-    }
-    return stored;
+    return decodeStored(key, stored, cipher, warn);
   }
 
   function write(key: string, value: string): void {
@@ -116,6 +137,7 @@ export function createSecureStore({ kv, cipher, warn }: SecureStoreDeps): Secure
 
   return {
     read,
+    inspect,
     write,
     remove,
     rendererWrite(key, value) {
