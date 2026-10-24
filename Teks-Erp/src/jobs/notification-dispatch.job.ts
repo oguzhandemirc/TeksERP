@@ -13,6 +13,7 @@ import { readNotificationInboxEnabled } from "../services/system-setting.service
 import { DISPATCH_BATCH_LIMIT, runNotificationDispatchOnce } from "../services/notification-dispatch.service";
 import { NOTIFICATION_NOTIFY_CHANNEL } from "../services/helpers/notification-emit.helper";
 import { startNotificationConditionScanner, stopNotificationConditionScanner } from "./notification-condition.job";
+import { registerSystemConditionSources } from "../services/notification-sources/sistem";
 import { createNudgeCoalescer } from "./nudge-coalescer";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
@@ -159,6 +160,7 @@ export function isNotificationDispatcherRunning(): boolean {
 export function startNotificationJobs(): void {
   if (supervisorTimer) return;
   shuttingDown = false;
+  registerSystemConditionSources(); // koşul kaynakları tek noktadan (N1-KOSUL-SIS)
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();
   supervisorTimer = setInterval(() => void reconcileNotificationJobs(), NOTIFICATION_SUPERVISOR_MS);
