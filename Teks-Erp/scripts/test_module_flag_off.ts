@@ -345,6 +345,8 @@ const SONDA_IZINLERI = [
   // çarpar; bu izin olmadan "modül AÇIKKEN 2xx" körlük zemini modül yüzünden
   // değil YETKİ yüzünden kırmızı verir ve yanlış hikâye anlatır (ölçüldü).
   "warpspec:read",
+  // Kalite Güvence sondaları (`/api/lab-tests`, `/api/lab-test-types`) — aynı gerekçe.
+  "labtest:read",
   // Tezgah Salonu sondası (`/api/loom-floor`) — aynı gerekçe.
   "loom:live-view",
   // Dokuma sondası (`/api/weaving-orders`) — aynı gerekçe.
