@@ -6,6 +6,7 @@
 // BEYANDIR, sıfır değil). Takvim günü aritmetiği yalnız `YYYY-MM-DD` anahtarı üzerindedir
 // (UTC takvim parçası, dilimsiz); anı güne çeviren tek kaynak `constants/time.ts`.
 // =============================================================================
+import { Prisma } from "@prisma/client";
 
 const roundTo = (v: number, digits: number): number => {
   const f = 10 ** digits;
@@ -33,10 +34,21 @@ export function usedSharePct(woundM: number, remainingM: number): number | null 
   return shareOfPct(woundM - remainingM, woundM);
 }
 
-/** Teorik m/saat = devir/dk ÷ atkı/cm × 0,6 (cm/dk → m/sa). Eksik terim → null. */
+/**
+ * Teorik m/saat = devir/dk ÷ atkı/cm × 0,6 (cm/dk → m/sa) — FORMÜLÜN TEK EVİ (Decimal, yuvarlamasız).
+ * Maliyet motoru (`fabric-cost.helper`) bunu çağırır; sayı sürümü aşağıda buna delege eder.
+ */
+export function theoreticalMPerHourDecimal(nominalUnitsPerMin: Prisma.Decimal.Value | null, unitsPerCm: Prisma.Decimal.Value | null): Prisma.Decimal | null {
+  if (nominalUnitsPerMin === null || unitsPerCm === null) return null;
+  const p = new Prisma.Decimal(unitsPerCm);
+  if (!p.gt(0)) return null;
+  return new Prisma.Decimal(nominalUnitsPerMin).div(p).mul("0.6");
+}
+
+/** Rapor sürümü (sayı, 3 hane) — Decimal ikizine delege eder (iki formül yazılmaz). Eksik terim → null. */
 export function theoreticalMPerHour(nominalUnitsPerMin: number | null, unitsPerCm: number | null): number | null {
-  if (nominalUnitsPerMin === null || unitsPerCm === null || !(unitsPerCm > 0)) return null;
-  return roundM((nominalUnitsPerMin / unitsPerCm) * 0.6);
+  const d = theoreticalMPerHourDecimal(nominalUnitsPerMin, unitsPerCm);
+  return d === null ? null : roundM(d.toNumber());
 }
 
 /** Süre ağırlıklı ortalama; ağırlık toplamı 0 → null. */

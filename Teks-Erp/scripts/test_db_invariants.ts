@@ -349,6 +349,13 @@ const PARTIAL_INDEXES: Array<{
     why: "tek index iki tekillik: en fazla BİR taslak ve BİR aktif parametre seti",
   },
   {
+    table: "standard_cost_versions",
+    index: "standard_cost_versions_active_uq",
+    uniq: true,
+    predicate: `(status = 'ACTIVE'::"StandardCostStatus")`,
+    why: "kumaş başına TEK yürürlükteki standart maliyet sürümü (eşzamanlı kayıt → P2002 → 409)",
+  },
+  {
     table: "yarn_cost_prices",
     index: "yarn_cost_prices_active_uq",
     uniq: true,
@@ -916,6 +923,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "yarn_cost_prices", name: "yarn_cost_prices_price_ck" },
   { table: "finishing_rates", name: "finishing_rates_price_ck" },
   { table: "cost_structures", name: "cost_structures_values_ck" },
+  { table: "standard_cost_versions", name: "standard_cost_versions_version_no_ck" },
+  { table: "standard_cost_versions", name: "standard_cost_versions_amounts_ck" },
+  { table: "standard_cost_versions", name: "standard_cost_versions_superseded_ck" },
+  { table: "standard_cost_versions", name: "standard_cost_versions_hash_ck" },
+  { table: "standard_cost_lines", name: "standard_cost_lines_line_no_ck" },
   { table: "purchase_order_lines", name: "purchase_order_lines_qty_positive" },
   { table: "purchase_order_lines", name: "purchase_order_lines_received_nonneg" },
   // ⚠️ `receivedQty <= qty` seddi BİLİNÇLİ OLARAK YOK: fiziksel olarak fazla mal

@@ -1,7 +1,8 @@
 // =============================================================================
 // test_rapor_tanimi — kayıtlı/özel rapor arka ucu (Raporlar v2, R1-KAYIT; plan §3.2–3.4)
 // =============================================================================
-// Ölçtükleri: §0 iki izin kodu katalogda (`test_permission_catalog` devri) · §1 tanım şeması (strict, JSON yolu, öneri, başvurusuz/tanımsız parametre) · §2 sistem
+// Ölçtükleri: §0 iki izin kodu katalogda (`test_permission_catalog` devri) · §1 tanım şeması (strict, JSON yolu, öneri, başvurusuz/tanımsız parametre;
+// §1i–j R2-VERI oluşturucu süzgeç fikstürü `Electron/…/custom/data/filter-contract.fixture.json` geçer, "veya" reddedilir) · §2 sistem
 // tanımı boot uzlaştırması (idempotent, katalogdan çıkan ARSIV) + fikstür gövdeleri derleyiciden geçer ·
 // §3 clientToken replay DÖRT durum · §4 sürüm DEĞİŞMEZ + aktif sürüm claim'i 409 + eşzamanlı kayıt + sürüm replay'i ·
 // §5 durum geçişi atomik · §6 paylaşım veri yetkisi VERMEZ (izinsiz blok "yetkisiz") + görünürlük 404 ·
@@ -13,7 +14,10 @@
 //   S2 `saveNewVersion` claim WHERE'inden beklenen sürüm çıkarıldı → §4b + §4c ❌ 2 (§4d yarışı P2002 ile yine 409)
 //   S3 `audit-muafiyeti.ts` ReportSnapshot beyanı bozuldu → §10d ❌ 1
 //   S4 `blockQuerySchema` `.strict()` → `.passthrough()` → §1e ❌ 1
+//   S5 (R2-VERI) oluşturucu fikstüründe `suzgec.rules` → `kurallar` (plan §3.2'den sapma) → §1i ❌ 1
 // =============================================================================
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AUDIT_EXEMPT_MODELS } from "./lib/audit-muafiyeti";
@@ -25,6 +29,7 @@ import type { AccessContext } from "../src/services/reports/semantik/izin";
 import { compileQuery } from "../src/services/reports/semantik/derleyici";
 import { checkReportDefinition } from "../src/services/reports/semantik/rapor-tanimi.schema";
 import { toSemanticInput, resolveParams } from "../src/services/reports/semantik/definition-run";
+import { FILTER_OPERATORS } from "../src/services/reports/semantik/tipler";
 import * as defs from "../src/services/rapor-tanimi.service";
 import * as runs from "../src/services/rapor-kosu.service";
 import * as versions from "../src/services/rapor-surum.service";
@@ -124,6 +129,20 @@ async function main(): Promise<void> {
     check("§1g tanımsız `$ad` reddedilir + öneri", !t4.gecerli && t4.hatalar.some((h) => h.yol === "bloklar[0].sorgu.zaman.kiyas" && h.oneri === "$kiyas"), JSON.stringify(t4.gecerli ? [] : t4.hatalar));
     const t5 = checkReportDefinition({ surum: 1, baslik: "x", bloklar: [{ id: "a", tur: "grafik", gorsel: "echarts", sorgu: { kup: "sevk", olculer: ["sevk.brutMetre"] } }] });
     check("§1h serbest grafik türü yok (8 tür)", !t5.gecerli && t5.hatalar.some((h) => h.yol === "bloklar[0].gorsel"));
+    // §1i R2-VERI: oluşturucunun süzgeç fikstürü (Electron vitest aynı dosyayı kurucu çıktısıyla eşler) şemadan + derleyiciden geçer.
+    const builder = JSON.parse(readFileSync(join(__dirname, "../../Electron/src/pages/Reports/_v2/custom/data/filter-contract.fixture.json"), "utf8")) as { operatorler: string[]; govde: unknown };
+    const bf = checkReportDefinition(builder.govde);
+    let builderCompiled = false;
+    if (bf.gecerli) {
+      const b0 = bf.govde.bloklar[0]!;
+      if (b0.tur === "tablo") compileQuery(toSemanticInput(b0.sorgu, resolveParams(bf.govde, {}), bf.govde, { asTable: true, refresh: false }), ctxFor(ownerId, ["report:*"]));
+      builderCompiled = b0.tur === "tablo";
+    }
+    check("§1i oluşturucu süzgeç fikstürü geçerli + derlenir; işleç listesi sunucuyla aynı", bf.gecerli && builderCompiled && JSON.stringify(builder.operatorler) === JSON.stringify(FILTER_OPERATORS), bf.gecerli ? "" : JSON.stringify(bf.hatalar));
+    const orBody = JSON.parse(JSON.stringify(builder.govde)) as { bloklar: Array<{ sorgu: { suzgec: { combinator: string } } }> };
+    orBody.bloklar[0]!.sorgu.suzgec.combinator = "or";
+    const t6 = checkReportDefinition(orBody);
+    check("§1j \"veya\" süzgeci bugün reddedilir (oluşturucu yetenek bayrağı kapalı kalmalı)", !t6.gecerli && t6.hatalar.some((h) => h.yol.startsWith("bloklar[0].sorgu.suzgec")), JSON.stringify(t6.gecerli ? [] : t6.hatalar));
 
     // ── §2 Sistem tanımları ──────────────────────────────────────────────────
     await reconcileReportDefinitionCatalog();
