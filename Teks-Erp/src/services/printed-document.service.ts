@@ -43,6 +43,7 @@ import type { DocTablesPayload } from "./document-render/doc-model";
 import { envelopeHead } from "./document-render/envelope-head";
 import type { NumberRounding } from "./document-render/fmt-num";
 import { renderFrozenTemplate, resolveTemplateForFreeze, type FrozenTemplateRef } from "./document-template/print-binding";
+import { assertPaperReissueAllowedTx } from "./e-irsaliye/e-irsaliye-shipment.helper";
 
 /** Builder'ların aldığı istemci — tx içinden (freeze) veya dışından (reissue/lazy) çalışır. */
 export type PrintedDocDb = Prisma.TransactionClient | typeof prisma;
@@ -934,6 +935,8 @@ export class PrintedDocumentService {
     const snapshot = await buildSnapshotEnvelope(prisma, docType, built.doc, sourceId);
 
     const created = await prisma.$transaction(async (tx) => {
+      // İLK ifade: sevk irsaliyesinde sevkiyat kilidi + GİB'e gitmiş e-İrsaliye kilidi (409).
+      await assertPaperReissueAllowedTx(tx, docType, sourceId);
       // ATOMİK CLAIM: gözlenen versiyonu koşullu SUPERSEDED'e çek — eşzamanlı
       // 2. revize count===0 → 409 (çift vN+1 yarışını @@unique zaten keser,
       // claim daha temiz mesaj verir).
