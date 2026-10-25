@@ -7,6 +7,7 @@
 
 export { goodsReceiptContract } from "./goods-receipt"; // GOODS_RECEIPT
 export { kartelaDispatchContract } from "./kartela-dispatch"; // KARTELA_DISPATCH
+export { qualityCertificateContract } from "./quality-certificate"; // QUALITY_CERTIFICATE
 export { shipmentDispatchContract } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
 export { stockCountContract } from "./stock-count"; // STOCK_COUNT
 export { subcontractorDirectShipContract } from "./subcontractor-direct-ship"; // SUBCONTRACTOR_DIRECT_SHIP
