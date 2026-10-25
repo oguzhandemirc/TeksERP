@@ -87,11 +87,24 @@ export const kursunDagitimService = {
   complete: (
     assignmentId: string,
     rollIds: string[],
+    /** KQ-D6: verilmezse (undefined) atamadaki gramaj korunur; null = bilinmiyor. */
+    propertyValueId?: string | null,
   ): Promise<ApiResponse<KursunBypassCompleteResult>> =>
     apiClient
       .post<
         ApiResponse<KursunBypassCompleteResult>
-      >(`${BASE}/${assignmentId}/complete`, { rollIds })
+      >(`${BASE}/${assignmentId}/complete`, { rollIds, ...(propertyValueId !== undefined ? { propertyValueId } : {}) })
+      .then((r) => r.data),
+
+  /** KQ-D6 açık dağıtımın kâğıt gramajı; tamamlanmış/iptal atamada 409. */
+  setGramaj: (
+    assignmentId: string,
+    propertyValueId: string | null,
+  ): Promise<ApiResponse<{ assignmentId: string; propertyValueId: string | null; changed: boolean }>> =>
+    apiClient
+      .patch<
+        ApiResponse<{ assignmentId: string; propertyValueId: string | null; changed: boolean }>
+      >(`${BASE}/${assignmentId}/gramaj`, { propertyValueId })
       .then((r) => r.data),
 
   /**

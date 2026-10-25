@@ -38,6 +38,7 @@ import {
   resolveSeriesFormat,
 } from "../number-series.service";
 import { codeCountsForCounter, matchesSeries, type NumberSeriesFormat } from "./series-format.helper";
+import { fixedShapeCounterCaps, fixedShapeLock } from "./series-fixed-shape.helper";
 
 /**
  * Serinin BUGÜN düzenlenebilir olup olmadığı ve OLMADIYSA neden.
@@ -131,6 +132,8 @@ export function seriesLock(key: string): SeriesLock | null {
       kimde: "biz",
     };
   }
+  // Dış standart (GİB): kısmi YAPISAL — yalnız ön ek açık; yazma kapısıyla aynı liste.
+  if (e.fixedShape) return fixedShapeLock(e.fixedShape);
   // ⚠️ YAZMA KAPISIYLA AYNI YÜKLEM: `assertSeriesFormatWritable` İKİ eşiğe birden
   // bakar (Faz B "biçimi tablodan oku" · Faz D "emekli BİÇİMLERİ de dene"). Burası
   // yalnız Faz B'ye baksaydı, Faz D eşiği ileri alındığı gün panel seriyi AÇIK
@@ -252,8 +255,10 @@ export interface SeriesCounterCapabilities {
   step: boolean;
   maxValue: boolean;
   reset: false;
-  /** Ayarlar kapalıysa NEDEN (kendi sayaç mekanizması). */
+  /** Ayarlar kapalıysa NEDEN (kendi sayaç mekanizması / dış standart). */
   lockedReason?: string;
+  /** Başlangıç değerinin kuralı (yalnız sabit biçimli seri) — panelde birebir. */
+  startValueNote?: string;
   /** `reset` neden hep kapalı — ölçülmüş cümle, panelde birebir gösterilir. */
   resetReason: string;
 }
@@ -266,6 +271,8 @@ const RESET_REASON =
 export function seriesCounterCapabilities(key: string): SeriesCounterCapabilities {
   const e = numberSeriesCatalogEntry(key);
   const open = e.ownCounter === undefined;
+  // GİB sırası: yalnız başlangıç (yıla bağlı, üretimden sonra 409 — yazma kapısı).
+  if (e.fixedShape) return { ...fixedShapeCounterCaps(e.fixedShape), resetReason: RESET_REASON };
   return {
     startValue: open,
     step: open,

@@ -38,6 +38,9 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     // DEFTER satırıdır ve geri alınmışı da taşınır — birleştirme kimliği
     // değiştirir, geçmişi değil.
     { kind: "MOVE", model: "MachineRun", table: "machine_runs", column: "itemId", label: "Tezgah koşumu" },
+    // K4P-LAB (2026-10-25) — lab testinin kumaş snapshot'ı: referans bağ, tekillik yok;
+    // birleştirme kimliği değiştirir, test sonucunu değil.
+    { kind: "MOVE", model: "LabTest", table: "lab_tests", column: "itemId", label: "Lab testi" },
     // 2026-09-15 (fason G1) — fasona giden iplik kalemi (kind=YARN): referans bağ, tekillik yok;
     // `YarnMovement.itemId` ile aynı sınıf — birleştirme kimliği değiştirir, kg'yi değil.
     { kind: "MOVE", model: "SubcontractorDispatchItem", table: "subcontractor_dispatch_items", column: "yarnItemId", label: "Fason iplik kalemi" },
@@ -115,6 +118,53 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "FourPointRuleSet",
+      table: "four_point_rule_sets",
+      column: "itemId",
+      label: "4 puan ürün kural seti",
+      uniqueOn: ["customerId", "itemId"],
+      policy: "BLOCK",
+      why:
+        "Aynı müşterinin iki ürününe ayrı spesifikasyon yazılmışsa birleşmiş üründe hangisinin " +
+        "geçerli olduğunu yalnız kalite sorumlusu bilir (K4P); `customer_item_uq` ile birebir.",
+    },
+    { kind: "MOVE", model: "WeftSpecYarn", table: "weft_spec_yarns", column: "yarnItemId", label: "Atkı spesifikasyonu ipliği" },
+    {
+      kind: "CONFLICT",
+      model: "YarnCostPrice",
+      table: "yarn_cost_prices",
+      column: "yarnItemId",
+      label: "İplik maliyet fiyatı",
+      uniqueOn: ["yarnItemId"],
+      // Partial UNIQUE (`yarn_cost_prices_active_uq`) yalnız aktif satırda: damgalı geçmiş serbestçe taşınır.
+      activeWhenNull: ["revokedAt"],
+      policy: "BLOCK",
+      why: "İki ipliğin de aktif maliyet fiyatı varsa hangisinin geçerli olduğunu yalnız muhasebe bilir (MAL-1; ItemPrice emsali).",
+    },
+    {
+      kind: "CONFLICT",
+      model: "CostStructure",
+      table: "cost_structures",
+      column: "itemId",
+      label: "Ürün maliyet yapısı",
+      uniqueOn: ["itemId"],
+      policy: "BLOCK",
+      why: "Kumaş başına tek maliyet yapısı (`itemId @unique`); iki yapıdan hangisinin doğru olduğu operatör kararıdır (MAL-1).",
+    },
+    {
+      kind: "CONFLICT",
+      model: "CustomerLabSpec",
+      table: "customer_lab_specs",
+      column: "itemId",
+      label: "Müşteri lab spesifikasyonu (ürün)",
+      uniqueOn: ["customerId", "itemId", "testTypeId"],
+      policy: "BLOCK",
+      why:
+        "Aynı müşterinin iki ürününe aynı test türü için ayrı sınır yazılmışsa birleşmiş üründe hangisinin " +
+        "geçerli olduğunu yalnız kalite sorumlusu bilir (K4P-SERT); `customer_item_uq` ile birebir.",
+    },
+    {
+      kind: "CONFLICT",
       model: "ItemPrice",
       table: "item_prices",
       column: "itemId",
@@ -123,6 +173,8 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       // İki KAYNAK arasında geniş anahtar yanlış bloklardı (farklı müşterilerin istisnaları
       // ya da varsayılan + istisna aynı hedefte yan yana durabilir): iki partial UNIQUE'in birebiri.
       crossSourceOn: { columns: ["customerId", "kind", "currency"], nullSafe: ["customerId"] },
+      // Partial UNIQUE yalnız aktif satırda: damgalı fiyat geçmişi serbestçe taşınır (MAL-0b).
+      activeWhenNull: ["revokedAt"],
       policy: "BLOCK",
       why:
         "Hangi fiyatın geçerli olduğunu yalnız operatör bilir. Anahtar BİLEREK iki partial " +

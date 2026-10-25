@@ -107,6 +107,8 @@ import {
   type KursunBypassTamburContext,
 } from "./kursun-bypass.service";
 import { TAMBUR_ENTRY_SOURCES } from "../constants/tambur-entry-sources";
+import { processMeterNumber } from "./helpers/roll-error-meter.helper";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -172,12 +174,13 @@ async function closeOrphanRollErrors(
   userId?: string
 ): Promise<string[]> {
   const open = await tx.rollError.findMany({
-    where: { rollId, isProcessed: false },
+    // Muayene (INSPECTION) satırı kapatılmaz: Tambur kararına girmez, CHECK `isProcessed=false` ister.
+    where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId, isProcessed: false },
     select: { id: true },
   });
   if (open.length === 0) return [];
   await tx.rollError.updateMany({
-    where: { id: { in: open.map((e) => e.id) } },
+    where: { ...ACTIONABLE_ROLL_ERROR_WHERE, id: { in: open.map((e) => e.id) } },
     data: {
       isProcessed: true,
       actionTaken: "NO_CUT",
@@ -283,7 +286,7 @@ export class TamburService {
         item: true,
         color: true,
         errors: {
-          where: { isProcessed: false },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, isProcessed: false },
           orderBy: { startMeter: "asc" },
         },
       },
@@ -311,7 +314,7 @@ export class TamburService {
         item: true,
         color: true,
         errors: {
-          where: { isProcessed: false },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, isProcessed: false },
           orderBy: { startMeter: "asc" },
         },
         // En güncel iade kaydı — depo topu iade gelmişse operatör notunu/nedenini
@@ -427,7 +430,7 @@ export class TamburService {
               },
             },
             errors: {
-              where: { isProcessed: false },
+              where: { ...ACTIONABLE_ROLL_ERROR_WHERE, isProcessed: false },
               orderBy: { startMeter: "asc" },
               select: { id: true, startMeter: true, errorType: true },
             },
@@ -461,7 +464,7 @@ export class TamburService {
         errorCount: m.roll.errors.length,
         errors: m.roll.errors.map((e) => ({
           id: e.id,
-          startMeter: Number(e.startMeter),
+          startMeter: processMeterNumber(e),
           errorType: e.errorType,
         })),
         batchId: m.roll.batchId ?? null,
@@ -697,7 +700,7 @@ export class TamburService {
         orderBy: { createdAt: "asc" },
       });
       const processedErrors = await prisma.rollError.count({
-        where: { rollId: data.rollId, isProcessed: true },
+        where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: data.rollId, isProcessed: true },
       });
       return {
         success: true,
@@ -779,7 +782,7 @@ export class TamburService {
           // F134: yalnız AÇIK hatalar — daha önce idari NO_CUT ile kapanmış bir
           // errorId decisions'da gelirse tarihçesi (actionTaken/processedAt/By)
           // ezilmesin. Kapanmış hata errorById'de olmaz → aşağıdaki loop atlar.
-          where: { id: { in: errorIds }, rollId: data.rollId, isProcessed: false },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, id: { in: errorIds }, rollId: data.rollId, isProcessed: false },
         })
       : [];
     const errorById = new Map(errors.map((e) => [e.id, e]));
@@ -1082,7 +1085,7 @@ export class TamburService {
         // relatedErrorIds'a göre (CUT işaretlenenler kesildi).
         const actionTaken = actuallyCut ? "CUT" : "NO_CUT";
         await tx.rollError.update({
-          where: { id: d.errorId },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, id: d.errorId },
           data: {
             isProcessed: true,
             actionTaken,
@@ -1918,6 +1921,7 @@ export class TamburService {
     // mükerrer kayıt + şişen açık-hata sayaçları olurdu. Aynı metrede FARKLI tip serbest.
     const existing = await prisma.rollError.findFirst({
       where: {
+        ...ACTIONABLE_ROLL_ERROR_WHERE,
         rollId: data.rollId,
         startMeter: data.startMeter,
         defectTypeId: defectType.id,
@@ -1972,7 +1976,7 @@ export class TamburService {
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         const existing = await prisma.rollError.findFirst({
-          where: { rollId: data.rollId, startMeter: data.startMeter, defectTypeId: defectType.id },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: data.rollId, startMeter: data.startMeter, defectTypeId: defectType.id },
           select: { id: true },
         });
         if (existing) {
@@ -4113,7 +4117,7 @@ export class TamburService {
               // F131: kardeş sorgularla (getPendingRolls/getRollForDecision/loadTamburRolls)
               // aynı işlenmemiş-hata filtresi — NO_CUT ile idari kapatılmış (isProcessed=true)
               // hata, fason turundan sonra dönen açık kumaşta 'açık hata' olarak listelenmesin.
-              where: { isProcessed: false },
+              where: { ...ACTIONABLE_ROLL_ERROR_WHERE, isProcessed: false },
               orderBy: { startMeter: "asc" },
               select: {
                 id: true,
@@ -4143,7 +4147,7 @@ export class TamburService {
       kursunFinishedAt: m.roll.operations[0]?.createdAt.toISOString() ?? null,
       errors: m.roll.errors.map((e) => ({
         id: e.id,
-        startMeter: Number(e.startMeter),
+        startMeter: processMeterNumber(e),
         errorType: e.errorType,
       })),
     }));

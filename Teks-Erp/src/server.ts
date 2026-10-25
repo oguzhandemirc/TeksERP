@@ -10,7 +10,7 @@ import { startSuperadminAccount } from './jobs/superadmin.job';
 import { startShortCredentialJob } from './jobs/short-credential.job';
 import { flushLoginLockoutPersistence } from './middlewares/login-lockout';
 import { startModuleProfileJob } from './jobs/module-profile.job';
-import { warnStaleReportKeys } from './jobs/report-catalog.job';
+import { startReportDefinitionCatalog, warnStaleReportKeys } from './jobs/report-catalog.job';
 import { refreshDiscoveryCache } from './services/discovery.service';
 import { startMdnsAdvertiser, stopMdnsAdvertiser } from './jobs/mdns-advertiser.job';
 import { startMaintenanceScheduler } from './jobs/maintenance.job';
@@ -27,11 +27,12 @@ import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
 import { startErrorReportJob, stopErrorReportJob } from './jobs/error-report.job';
+import { shutdownNotifications, startNotificationJobs } from './jobs/notification-dispatch.job';
 import { recordServerError } from './services/error-report.service';
 import { initLicenseEngine } from './services/license.service';
 import { preloadEncryptedModules } from './lib/license/encrypted-module-router';
 import { AuditService } from './services/audit.service';
-import { flushLatencyNow } from './services/latency-persist.service';
+import { flushTelemetryNow } from './lib/telemetry-write-health';
 import { assertBaseServiceGuards } from './services/base.service';
 import { logProcessWarnings } from './lib/process-warnings';
 import { readWebHardeningConfig, isWebHardeningDeclared, trustProxyHostedRefusal } from './middlewares/web-hardening';
@@ -251,7 +252,8 @@ function startLanListener(): Server {
     startModuleProfileJob();
     // Kapalı rapor listesindeki BAYAT anahtarlar (katalogdan çıkmış rapor) ve bozuk
     // satır boot'ta TEK SEFER duyurulur; job yazmaz — liste temizliği süperadmin kararı.
-    void warnStaleReportKeys();
+    // Ardından kayıtlı raporlar (R1-KAYIT): hazır v2 satırların SISTEM tanımı + sistem kategorileri; silmez.
+    void warnStaleReportKeys().then(startReportDefinitionCatalog, startReportDefinitionCatalog);
     // Keşif ucunun port kopyası; firma adı istek anında bellekteki lisanstan okunur.
     refreshDiscoveryCache(Number(PORT));
     // Servis ilanı — "ben buradayım". Her arızada sessizce kapanır (ilanın
@@ -284,6 +286,9 @@ function startLanListener(): Server {
     if (!VERIFYING) startPatronCloudJobs();
     // Hata raporları: varsayılan KAPALI (onay yoksa toplanmaz/gönderilmez); doğrulama kipinde gönderim de yok.
     if (!VERIFYING) startErrorReportJob();
+    // Bildirim dağıtıcısı + koşul tarayıcısı: gözetmen `bildirim.gelenKutusuEnabled` açıkken başlatır,
+    // kapanınca durdurur (yeniden başlatma gerekmez); kapalıyken satır yazılmaz.
+    if (!VERIFYING) startNotificationJobs();
 
     void AuditService.logEvent({
         category: "SYSTEM",
@@ -304,10 +309,7 @@ function startLanListener(): Server {
 // Fabrika saat dilimi dinleyiciden ÖNCE yüklenir: ilk istek de ilk zamanlayıcı da doğru günü görür.
 // Geçersiz kayıtlı dilim → varsayılanla açılır + sağlık/panel uyarısı; DB'ye ulaşılamazsa bugünkü gibi açılır.
 let lanListener: Server | null = null;
-void bootFactoryTimezone({
-  info: (m) => bilgi("saat-dilimi", m),
-  warn: (m, e) => uyari("saat-dilimi", m, e),
-}).then(
+void bootFactoryTimezone({ info: (m) => bilgi("saat-dilimi", m), warn: (m, e) => uyari("saat-dilimi", m, e) }).then(
   () => {
     startLanTls();
     lanListener = startLanListener();
@@ -363,9 +365,10 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     // yakma riski doğardı). `stopMdnsAdvertiser` kendi içinde de 1sn kapı taşır
     // ve asla reject etmez — goodbye paketi gitmezse kapanış yine de ilerler.
     // Zil akışı kesilir, lisans birikimi diske yazılır (senkron, kısa).
-    shutdownPhase = "lisans";
+    shutdownPhase = "lisans + bildirim zili";
     try {
         stopPatronCloudJobs();
+        shutdownNotifications(); // LISTEN havuza döner; SSE zilleri server.close'dan ÖNCE biter (yoksa 5 sn zorla çıkış)
         stopLicenseDoorbell();
         stopLicensePoll();
     } catch (err) {
@@ -374,7 +377,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     shutdownPhase = "gecikme flush + mDNS";
     void Promise.race([
         Promise.allSettled([
-            flushLatencyNow().catch(() => {}),
+            flushTelemetryNow(),
             stopMdnsAdvertiser(),
             flushLoginLockoutPersistence().catch(() => {}),
             stopErrorReportJob(),

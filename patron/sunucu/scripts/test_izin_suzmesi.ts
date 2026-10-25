@@ -9,12 +9,19 @@
 //   §4 Patron (hepsi): finans alt satırı ve finans projeksiyonları görünür
 //   §5 DB düzeyi: hesabın hesaplanan projeksiyon kümesiyle ham SQL `siparis.finans` 0 satır
 //   §6 alt satırı projeksiyon diye doğrudan istemek 404; bilinmeyen projeksiyon 404; oturumsuz 401
+//   §7f–§7j (2026-10-25): para birimli TÜM alanlar düşer — tablo kolonu + hücreleri, `paraIcerir` anlatı, para eksenli
+//      grafik. NEGATİF SONDA: `tabloyuKirp` çağrısı söküldü → §7f + §7g ❌; anlatı süzgeci söküldü → §7h ❌; geri alındı → ✅.
+//   §7 rapor sunumu (K-BULUT): para birimli yan sayı finans DIŞI raporda `bulut:fiyat:oku` ister; finans ailesi
+//      kendi izniyle açar; rapor servisi sonucu bu süzgeçten geçirir
 // Koşum: npx tsx scripts/test_izin_suzmesi.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { CLOUD_PERMISSIONS, ROLE_TEMPLATES, effectivePermissions } from "../src/catalog/permissions";
 import { PROJECTION_CATALOG, ROOT_PROJECTIONS } from "../src/catalog/projections";
+import { stripMoneySideFigures } from "../src/catalog/reports";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { sessionProjections } from "../src/auth/session.service";
 import { api, girdi, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, tesisUrl, type Ortam, type TestHesabi, type TestKurulumu } from "./lib/test-ortam";
 
@@ -35,6 +42,44 @@ function katalogBolumu(): void {
   kontrol("§1e finans kökünün .finans'ı KENDİ iznine bağlı (fiyat değil)", cariFinans.length === 1 && cariFinans[0] === "bulut:cari-bakiye:oku");
   const satis = new Set(sessionProjections(effectivePermissions(ROLE_TEMPLATES.SATIS)));
   kontrol("§1f Satış şablonu hiçbir finans projeksiyonu okumaz", !["siparis.finans", "fatura", "kasa", "cari-hesap", "ozet-finans", "rapor.finance"].some((p) => satis.has(p)));
+}
+
+function raporSunumuBolumu(): void {
+  console.log("\n§7 rapor sunumu para alanları (K-BULUT)");
+  const sunum = { anahtar: "sales/sevkiyat", yanSayilar: [{ olcu: "sevk.top", birim: "top", deger: 3 }, { olcu: "sevk.tutar", birim: "TRY", deger: 1500 }, { olcu: "sevk.usd", birim: "USD", deger: 40 }] };
+  const yan = (v: unknown) => ((v as { yanSayilar: { olcu: string }[] }).yanSayilar).map((y) => y.olcu).join(",");
+  const satis = new Set<string>(["bulut:rapor:oku", "bulut:sevkiyat:oku"]);
+  kontrol("§7a ⭐ fiyat izni YOK → para yan sayıları düşer, para dışı kalır", yan(stripMoneySideFigures(sunum, "bulut:sevkiyat:oku", satis)) === "sevk.top");
+  kontrol("§7b fiyat izni VAR → sunum aynen döner", stripMoneySideFigures(sunum, "bulut:sevkiyat:oku", new Set([...satis, "bulut:fiyat:oku"])) === sunum);
+  kontrol("§7c finans ailesi raporu (cari-bakiye) kendi izniyle açar", stripMoneySideFigures(sunum, "bulut:cari-bakiye:oku", new Set(["bulut:rapor:oku", "bulut:cari-bakiye:oku"])) === sunum);
+  kontrol("§7d sunum olmayan (v1) sonuç dokunulmaz", JSON.stringify(stripMoneySideFigures({ satirlar: [1] }, "bulut:siparis:oku", satis)) === '{"satirlar":[1]}');
+  // §7f–§7j (2026-10-25): para birimli TÜM alanlar — tablo kolonu (+ satır/toplam hücresi), işaretli anlatı, para eksenli grafik.
+  const tam = {
+    ...sunum,
+    anlati: [{ kural: "enBuyukPay", onem: 0.9, metin: "En büyük pay 1.500 TL ile A'da.", kanit: {}, paraIcerir: true }, { kural: "egilim", onem: 0.5, metin: "Sevk metresi artıyor.", kanit: {} }],
+    tablo: {
+      kolonlar: [{ anahtar: "musteri", baslik: "Müşteri" }, { anahtar: "metre", baslik: "Metre", birim: "m" }, { anahtar: "tutar", baslik: "Tutar", birim: "TRY" }, { anahtar: "usd", baslik: "USD", birim: "USD" }],
+      satirlar: [{ musteri: "A", metre: 120, tutar: 1500, usd: 40 }, { musteri: "B", metre: 80, tutar: 900, usd: 25 }],
+      toplam: { musteri: "Toplam", metre: 200, tutar: 2400, usd: 65 },
+    },
+    grafik: { tur: "cubuk", baslik: "Tutar", eksen: { x: { ad: "Müşteri", tur: "kategori" }, y: { ad: "Tutar", birim: "TRY" } }, seriler: [], kategoriler: [] },
+  };
+  const kirpik = stripMoneySideFigures(tam, "bulut:sevkiyat:oku", satis) as typeof tam;
+  const anahtarlar = (o: Record<string, unknown> | undefined) => Object.keys(o ?? {}).sort().join(",");
+  kontrol("§7f ⭐ fiyat izni YOK → para birimli tablo kolonu düşer, para dışı kolon kalır",
+    kirpik.tablo.kolonlar.map((k) => k.anahtar).join(",") === "musteri,metre", kirpik.tablo.kolonlar.map((k) => k.anahtar).join(","));
+  kontrol("§7g ⭐ düşen kolonun hücresi satırlardan VE toplamdan da düşer (değer sızmaz)",
+    kirpik.tablo.satirlar.every((r) => anahtarlar(r) === "metre,musteri") && anahtarlar(kirpik.tablo.toplam) === "metre,musteri" && !JSON.stringify(kirpik.tablo).includes("1500"),
+    JSON.stringify(kirpik.tablo.satirlar[0]));
+  kontrol("§7h ⭐ fabrikanın `paraIcerir` işaretlediği anlatı cümlesi düşer, diğeri kalır (bulut metin okumaz)",
+    kirpik.anlati.map((c) => c.kural).join(",") === "egilim", kirpik.anlati.map((c) => c.kural).join(","));
+  const metreGrafik = { ...tam, grafik: { ...tam.grafik, eksen: { ...tam.grafik.eksen, y: { ad: "Metre", birim: "m" } } } };
+  kontrol("§7i para eksenli grafik düşer (null); para dışı grafik kalır",
+    kirpik.grafik === null && (stripMoneySideFigures(metreGrafik, "bulut:sevkiyat:oku", satis) as typeof tam).grafik !== null);
+  kontrol("§7j fiyat izni VAR / finans raporu → tablo, anlatı, grafik AYNEN (aynı nesne)",
+    stripMoneySideFigures(tam, "bulut:sevkiyat:oku", new Set([...satis, "bulut:fiyat:oku"])) === tam && stripMoneySideFigures(tam, "bulut:cek:oku", new Set(["bulut:rapor:oku", "bulut:cek:oku"])) === tam);
+  const servis = readFileSync(join(__dirname, "..", "src", "services", "report.service.ts"), "utf8").replace(/\/\/.*$/gm, "");
+  kontrol("§7e ⭐ rapor servisi sonucu süzgeçten geçirir (veri: stripMoneySideFigures(...))", /veri:\s*stripMoneySideFigures\(out\.result\.data,/.test(servis));
 }
 
 async function fikstur(o: Ortam, k: TestKurulumu): Promise<{ siparis: string; cari: string }> {
@@ -130,6 +175,7 @@ async function dbDuzeyi(o: Ortam, k: TestKurulumu, ids: { siparis: string }): Pr
 
 async function main(): Promise<void> {
   katalogBolumu();
+  raporSunumuBolumu();
   const o = await ortamKur();
   const k = await tesisKur(o);
   try {

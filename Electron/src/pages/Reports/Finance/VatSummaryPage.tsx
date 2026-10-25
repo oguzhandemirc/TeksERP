@@ -33,6 +33,7 @@ import { ReportDateFilter, ReportFilterNotes } from "../_components";
 import { filterNotes } from "../_hooks/reportAxisFilters";
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
+import { NarrativeBox } from "../_v2/NarrativeBox";
 import { moneyStr, type Currency } from "./service";
 import { buildVatSummaryExport } from "./vatExport";
 import {
@@ -87,7 +88,7 @@ export function VatSummaryPage() {
     <ReportPageLayout
       reportKey="finance/vat-summary"
       title="KDV Dönem Özeti"
-      description="Satış ve alış faturalarının oran kırılımlı matrah + KDV + tevkifat özeti — beyanname değildir, muhasebeciye giden dönem özetidir."
+      description="Satış ve alış faturalarında KDV oranına göre fatura tutarı, KDV ve tevkifat — beyanname değildir, muhasebeciye giden dönem özetidir."
       actions={<ReportExportBar disabled={!report} buildSpec={spec} />}
       filters={
         <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2 text-xs">
@@ -117,6 +118,8 @@ export function VatSummaryPage() {
       }
     >
       <ReportFilterNotes notes={suzgecNotlari} />
+      {/* "Ne görüyoruz?" — sunucunun anlatısı; eski backend göndermez → kutu çizilmez. */}
+      {report?.anlati ? <NarrativeBox sentences={report.anlati} /> : null}
       {/* Hata dalı EN ÜSTTE — 403/500'de "fatura yok" demek, boş ekrandan
           kötüdür (fabrika kurulumunda en sık sebep `finance.enabled` kapalı). */}
       {q.isError ? <ReportErrorCard error={q.error} onRetry={() => void q.refetch()} /> : null}
@@ -138,26 +141,26 @@ export function VatSummaryPage() {
           <MetricCard
             label="Hesaplanan KDV — Satış (TL)"
             value={moneyStr(report.sales.totalsTry.netVat, "TRY")}
-            hint="İade düşülmüş net; her belge kendi kur damgasıyla"
+            hint="İadeler düşüldükten sonra kalan; her fatura kendi günündeki kurla"
             icon={ArrowUpFromLine}
             isLoading={q.isLoading}
           />
           <MetricCard
             label="Yüklenilen KDV — Alış (TL)"
             value={moneyStr(report.purchase.totalsTry.netVat, "TRY")}
-            hint="İade düşülmüş net"
+            hint="İadeler düşüldükten sonra kalan"
             icon={ArrowDownToLine}
             isLoading={q.isLoading}
           />
           <MetricCard
-            label="Satış toplamı (TL, net)"
+            label="Satış toplamı (TL, iadeler düşülmüş)"
             value={moneyStr(report.sales.totalsTry.net, "TRY")}
             hint={`${report.sales.docCount} belge (iade dahil)`}
             icon={Percent}
             isLoading={q.isLoading}
           />
           <MetricCard
-            label="Alış toplamı (TL, net)"
+            label="Alış toplamı (TL, iadeler düşülmüş)"
             value={moneyStr(report.purchase.totalsTry.net, "TRY")}
             hint={`${report.purchase.docCount} belge (iade dahil)`}
             icon={Percent}
@@ -170,8 +173,8 @@ export function VatSummaryPage() {
         <p className="text-sm text-muted-foreground">Yükleniyor…</p>
       ) : empty ? (
         <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          Bu dönemde onaylanmış fatura yok. Taslak ve iptal edilmiş faturalar rapora girmez; dönem
-          çıpası fatura tarihidir.
+          Bu dönemde onaylanmış fatura yok. Taslak ve iptal edilmiş faturalar rapora girmez; fatura,
+          üzerindeki fatura tarihine göre döneme girer.
         </div>
       ) : report ? (
         <>

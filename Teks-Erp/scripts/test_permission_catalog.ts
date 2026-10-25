@@ -110,6 +110,9 @@ const DELEGE = "delege:";
 const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // requireAnyPermission(...entry[kind]) — entry = DOC_PERMISSIONS[docType]
   "src/routes/printed-document.routes.ts": ["DOC_PERMISSIONS"],
+  // matchesPermission(perms, p) — p ∈ DOC_PERMISSIONS[docType].read (belge tasarımcısı önizlemesinin
+  // gerçek kayıt kapısı). Sabit yukarıdaki printed-document.routes satırında çözülür; burada devir.
+  "src/controllers/document-template.controller.ts": [`${DELEGE}scripts/test_permission_catalog.ts`],
   // matchesPermission(codes, ALARM_*) — alarm yetki soruları + PERMISSION kademe kuralının kodu
   // (`rule.permissionCode`: yazılırken `loom-alarm-duty.service` PERMISSION_CATALOG'a karşı doğrular, 400 DUTY_RULE_INVALID).
   "src/services/helpers/loom-alarm-recipient.helper.ts": ["ALARM_VIEW_PERMISSIONS", "ALARM_ESCALATION_PERMISSION"],
@@ -121,6 +124,11 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // "kim değiştirdi"sini de okuyamamalı. Allowlist DIŞI tablo 400 ile reddedilir
   // (serbest tableName, audit'i dolaylı bir arama yüzeyine çevirirdi).
   "src/routes/record-info.routes.ts": ["TABLE_PERMISSIONS"],
+  // requirePermission(CORE_PRODUCTION_PERMISSIONS[key]) — beş temel raporun alan izni; katalog `izin`iyle
+  // birebirliğini `test_temel_rapor_esitlik` §R0z ölçer (R0-RAPB).
+  "src/routes/reports/temel-uretim.routes.ts": ["CORE_PRODUCTION_PERMISSIONS"],
+  // requirePermission(permissionOf(key)) — dört temel dokuma/alacak raporu; katalog `izin`iyle birebir (§C0a, R0-RAPC).
+  "src/routes/reports/temel-dokuma-finans.routes.ts": ["CORE_WEAVING_FINANCE_PERMISSIONS"],
   // matchesPermission(perms, adapter.writePermission / adapter.readPermission)
   // — adaptör `import-registry`den `:entity` ile çözülür. Yetki AKTARILAN
   // VERİYE göredir: `data:import` yalnız "toplu yükleme yapabilir" demektir,
@@ -133,6 +141,18 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // `test_import_framework.ts §11` registry'deki HER adaptörün iki iznini de
   // katalogla karşılaştırır ve registry boşalırsa körlük zemini düşer.
   // Bu yüzden burada delegasyon beyan ediyoruz — muafiyet DEĞİL, devir.
+  // Semantik rapor (R1-SEMCEK): uç kapısı `requireAnyPermission(...REPORT_PERMISSION_CODES)` katalogdan
+  // TÜRETİLİR; küp/ölçü/boyut izni `canAccess`te `matchesPermission(…, item.permission)`. Kodların
+  // katalogda olduğunu `test_semantik_derleyici.ts` §6 MEKANİK doğrular.
+  "src/routes/rapor-semantik.routes.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
+  "src/routes/rapor-calistirma.routes.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
+  "src/services/reports/semantik/izin.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
+  // Kayıtlı raporlar (R1-KAYIT): `report:builder`/`report:publish` sabitleri katalog dosyasından gelir, giriş
+  // kapısı yine `REPORT_PERMISSION_CODES`; iki kodun katalogda olduğunu `test_rapor_tanimi.ts` §0 ölçer.
+  "src/routes/rapor-tanimi.routes.ts": [`${DELEGE}scripts/test_rapor_tanimi.ts`],
+  "src/services/rapor-tanimi.service.ts": [`${DELEGE}scripts/test_rapor_tanimi.ts`],
+  "src/services/rapor-paylasim.service.ts": [`${DELEGE}scripts/test_rapor_tanimi.ts`],
+  "src/services/reports/semantik/calistirici.ts": [`${DELEGE}scripts/test_rapor_tanimi.ts`],
   "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
   // uncoveredCodes(actor, codes) — codes = verilmek istenen kodlar (gövdeden); katalog
   // doğrulaması verme yolunda (`permission-management`), kademe kapsamı yetki denetiminde.
@@ -144,6 +164,10 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // Tezgah alarmı vardiya durumu ucu: `flagKeyWriters("tezgahAlarmEnabled")` — ayarı yazabilen okur;
   // kodlar aynı settings-scopes tablosundan, kapsam `test_settings_scopes.ts` §1b'de.
   "src/routes/feature-flag.routes.ts": [`${DELEGE}scripts/test_settings_scopes.ts`],
+  // Bildirim görme süzgeci + dağıtıcının varsayılan alıcısı: `matchesPermission(codes, code)` — kodlar
+  // `NOTIFICATION_CATALOG[kind].izinler`/`varsayilan`dan; katalogda olduklarını `test_bildirim_katalogu` §3b ölçer.
+  "src/services/helpers/notification-visibility.helper.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
+  "src/services/notification-dispatch.service.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
   // GERİ SARMA (2026-09-12): `assertEntityPermission` ikinci kapıyı yine
   // `adapter.writePermission`den çözüyor — varlık KOŞUMUN KENDİSİNDEN
   // (`ImportRun.entity`) bulunuyor, `:entity` parametresinden değil. Desen ve

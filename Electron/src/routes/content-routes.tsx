@@ -11,6 +11,7 @@ import {
   SYSTEM_BACKUPS_ACCESS,
   SYSTEM_CLIENTS_ACCESS,
   SYSTEM_HUB_ACCESS,
+  SYSTEM_PRINT_HISTORY_ACCESS,
   SYSTEM_ROLL_ARCHIVE_ACCESS,
   SYSTEM_SERVER_STATUS_ACCESS,
   SYSTEM_WORK_SESSIONS_ACCESS,
@@ -19,6 +20,7 @@ import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
 import { ReleaseNotesPage } from "@/pages/ReleaseNotes/ReleaseNotesPage";
+import { NotificationsPage } from "@/pages/Notifications/NotificationsPage"; // bildirim:
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
@@ -86,6 +88,8 @@ import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
 // Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
+import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
+import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -96,6 +100,7 @@ import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapa
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
 import { ModuleProfilePage } from "@/pages/System/ModuleProfile/ModuleProfilePage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
+import { PrintHistoryPage } from "@/pages/System/PrintHistory/PrintHistoryPage";
 import { SettingsSurfacePage } from "@/pages/GeneralSettings/SettingsSurfacePage";
 import { LegacySettingsRedirect } from "@/pages/GeneralSettings/LegacySettingsRedirect";
 import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
@@ -123,11 +128,13 @@ import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage
 import { FreeDocumentsPage } from "@/pages/FreeDocuments/FreeDocumentsPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
 import { TravelerCardStudioPage } from "@/pages/Definitions/TravelerCardStudio/TravelerCardStudioPage";
+import { DocumentDesignerPage } from "@/pages/Definitions/DocumentDesigner/DocumentDesignerPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
 import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
 import { reportV2Routes } from "@/pages/Reports/_v2/routes";
+import { customReportRoutes } from "@/pages/Reports/_v2/custom/routes";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
 import { WipScorecardPage } from "@/pages/Reports/Production/WipScorecardPage";
 import { OperatorPerformancePage } from "@/pages/Reports/Production/OperatorPerformancePage";
@@ -174,6 +181,7 @@ import { RelabelStationPage } from "@/pages/Operations/RelabelStation/RelabelSta
 import { AccountingDispatchPage } from "@/pages/Operations/AccountingDispatch/AccountingDispatchPage";
 import { KartelaPage } from "@/pages/Operations/Kartela/KartelaPage";
 import { ReturnsPage } from "@/pages/Operations/Returns/ReturnsPage";
+import { EIrsaliyeRecordsPage } from "@/pages/Operations/Shipments/eirsaliye/EIrsaliyeRecordsPage";
 
 /**
  * Uygulama içeriği rotaları (kabuk/sekme şeridi hariç). Hem dış HashRouter'ın
@@ -188,6 +196,7 @@ export const contentRoutes: RouteObject[] = [
   { path: "settings", element: <SettingsPage /> },
   // Kapısız: sürüm notlarını operatör de okur (`system/*` altı `admin:settings` ister).
   { path: "release-notes", element: <ReleaseNotesPage /> },
+  { path: "notifications", element: <NotificationsPage /> }, // bildirim: kişisel, kapısız (bayrak kapalıysa sayfa söyler)
   { path: "forbidden", element: <ForbiddenPage /> },
 
   // Tanımlar — hub sayfası ve alt sayfalar.
@@ -567,6 +576,24 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // K4P-LAB — modül kapısı `route-modules.ts` eşlemesinden (kaliteGuvenceEnabled); izin backend'le birebir.
+    path: "quality/lab-tests",
+    element: (
+      <ProtectedRoute requirePermission="labtest:read">
+        <LabTestsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K4P-SERT — modül kapısı `route-modules.ts`ten; izin backend'le birebir (`certificate.routes.ts`).
+    path: "quality/certificates",
+    element: (
+      <ProtectedRoute requirePermission="certificate:read">
+        <CertificatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     // İzin backend'le BİREBİR: `stock-count.routes.ts` okuma uçları `warehouse:read`.
     // Detay da aynı izinle açılır; YAZMA yüzeyi sayfanın İÇİNDE ayrıca kapılı
     // (`warehouse:transfer` · Tamamla için `roll:manual-adjust` + `yarn:write`).
@@ -680,6 +707,23 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // Belge Tasarımcısı — kart ile AYNI izin listesi; GrapesJS sayfanın içinde tembel yüklenir.
+    path: "definitions/document-designer",
+    element: (
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
+        <DocumentDesignerPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/document-designer/:id",
+    element: (
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
+        <DocumentDesignerPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     // Saha tabletleri (allowlist + makine ataması) → Yetkilendirme→Cihaz Erişimi'ne
     // taşındı. "Cihaz Kaydı" (Donanım: metre/yazıcı/tartı) ile karışmasın diye
     // UI'da "Tabletler" adıyla görünür.
@@ -764,6 +808,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={SYSTEM_ACTIVITY_ACCESS}>
         <ActivityPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "system/print-history",
+    element: (
+      <ProtectedRoute requireAnyPermission={SYSTEM_PRINT_HISTORY_ACCESS}>
+        <PrintHistoryPage />
       </ProtectedRoute>
     ),
   },
@@ -1170,6 +1222,14 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  {
+    path: "operations/e-irsaliye",
+    element: (
+      <ProtectedRoute requirePermission="eirsaliye:read">
+        <EIrsaliyeRecordsPage />
+      </ProtectedRoute>
+    ),
+  },
 
   // Raporlar — domain bazlı hub'lar; alt sayfalar etap etap doldurulur
   { path: "reports", element: <ReportsHubPage /> },
@@ -1537,6 +1597,7 @@ export const contentRoutes: RouteObject[] = [
   },
   // Raporlar v2 — 14 temel rapor yaprağı katalogdan (izin `izin`, kapı bayrak + `hazir`; `_v2/routes.tsx`).
   ...reportV2Routes,
+  ...customReportRoutes,
 
   { path: "*", element: <Navigate to="/" replace /> },
 ];

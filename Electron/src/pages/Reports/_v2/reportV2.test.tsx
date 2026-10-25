@@ -100,22 +100,29 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
     const fav = screen.getByRole("region", { name: "Favorilerim" });
     expect(within(fav).getByText("Kasa & Banka Defteri")).toBeInTheDocument();
     const legacy = screen.getByRole("region", { name: "Eski raporlar (geçiş dönemi)" });
-    expect(within(legacy).getAllByRole("link")).toHaveLength(reportTiles.length);
-    // Bugün 14 v2 satırının hepsi `hazir:false` → hiçbiri Merkez'de yok.
-    for (const e of V2_ROWS) expect(screen.queryByText(e.baslik)).toBeNull();
+    // R0-GECIS: yer tutucu yerine 36 v1 rapor, eski hub'ın kategorileriyle (`legacy-model.ts`).
+    expect(within(legacy).getAllByRole("listitem")).toHaveLength(36);
+    expect(within(legacy).getAllByRole("group")).toHaveLength(reportTiles.length);
+    // `hazir:true` satır Merkez'de çizilir, `hazir:false` çizilmez (ilk hazır satır KQ-D6 kurşun gramajı).
+    const readyRows = V2_ROWS.filter((e) => e.hazir);
+    expect(readyRows.length, "körlük zemini: hazır v2 satırı yok").toBeGreaterThan(0);
+    for (const e of V2_ROWS) {
+      if (e.hazir) expect(screen.getAllByText(e.baslik).length).toBeGreaterThan(0);
+      else expect(screen.queryByText(e.baslik)).toBeNull();
+    }
   });
 });
 
 describe("§3 çizim kümesi — centerGroups / isCenterEntryOpen", () => {
-  const catalog: ReportCatalogEntry[] = [ready("sales/termin"), ready("quality/kalite"), ready("dokuma/levent-dengesi"), REPORT_BY_KEY.get("sales/sevkiyat")!];
+  const catalog: ReportCatalogEntry[] = [ready("sales/termin"), ready("quality/kalite"), ready("dokuma/levent-dengesi"), REPORT_BY_KEY.get("quality/kayip")!];
   const keys = (a: CenterAccess) => centerGroups(a, catalog).flatMap((g) => g.entries.map((e) => e.key));
 
   it("körlük zemini: tam erişimde hazır üç satır çizilir", () => {
     expect(keys(access())).toEqual(["sales/termin", "quality/kalite", "dokuma/levent-dengesi"]);
   });
   it("⭐ `hazir:false` satır çizilmez", () => {
-    expect(keys(access())).not.toContain("sales/sevkiyat");
-    expect(isCenterEntryOpen(REPORT_BY_KEY.get("sales/sevkiyat")!, ctx())).toBe(false);
+    expect(keys(access())).not.toContain("quality/kayip");
+    expect(isCenterEntryOpen(REPORT_BY_KEY.get("quality/kayip")!, ctx())).toBe(false);
   });
   it("⭐ izinsiz rapor çizilmez (admin değil, izin yok)", () => {
     expect(keys(access({ hasPermission: (c) => c !== "report:sales" }))).not.toContain("sales/termin");
@@ -239,9 +246,12 @@ describe("§6 palet — bayrak kapalıyken görünen küme aynı", () => {
     const v2Entries = allCommandEntries.filter((e) => e.key.startsWith("report-v2:"));
     expect(v2Entries).toHaveLength(V2_ROWS.length);
     for (const e of v2Entries) expect(e.permission).toBe(REPORT_BY_KEY.get(e.key.slice("report-v2:".length))!.izin);
-    // Açık bayrakta bile `hazir:false` satırı görünmez (bugün 14/14).
+    // Açık bayrakta yalnız `hazir:true` satırlar görünür; `hazir:false` olan hiçbiri görünmez.
     v2 = true;
-    expect(visibleKeys().some((k) => k.startsWith("report-v2:"))).toBe(false);
+    const shown = visibleKeys().filter((k) => k.startsWith("report-v2:")).sort();
+    const readyKeys = V2_ROWS.filter((e) => e.hazir).map((e) => `report-v2:${e.key}`).sort();
+    expect(readyKeys.length, "körlük zemini: hazır v2 satırı yok").toBeGreaterThan(0);
+    expect(shown).toEqual(readyKeys);
   });
 });
 
@@ -262,11 +272,12 @@ function renderLeaf(path: string, key: string) {
 describe("§7 yaprak kapısı", () => {
   it("⭐ bayrak kapalı → /forbidden; açık ama hazir:false → /forbidden", () => {
     v2 = false;
-    const a = renderLeaf("/reports/sales/termin", "sales/termin");
+    // `quality/kayip` hâlâ `hazir:false` (satış satırları R1-KAYIT'ta hazır oldu).
+    const a = renderLeaf("/reports/sales/termin", "quality/kayip");
     expect(screen.getByText("YASAK")).toBeInTheDocument();
     a.unmount();
     v2 = true;
-    renderLeaf("/reports/sales/termin", "sales/termin");
+    renderLeaf("/reports/sales/termin", "quality/kayip");
     expect(screen.getByText("YASAK")).toBeInTheDocument();
   });
 });

@@ -95,8 +95,17 @@ async function main(): Promise<void> {
   // ── §2 SIRA ve §3 KAPSAMA ────────────────────────────────────────────────
   const beyan = new Map<string, { dosya: string; yol: string }[]>();
   // Ucu inmemiş v2 satırı (`hazir:false`) ölçülmez — ters yönü (dosyada kapı var ama satır "hazır değil")
-  // `test_rapor_katalogu §8f` tutar; uç doğup beyan `hazir:true`ya dönmezse burada §3 BEYANSIZ UÇ olur.
-  for (const r of REPORT_CATALOG) if (r.kapiTasiyici && isReportSurfaced(r)) beyan.set(r.key, [...r.kapiTasiyici]);
+  // `test_rapor_katalogu §8f` tutar. AŞAMALI İNİŞ (R0-RAPA, backend önce): `hazir:false` satırın beyanlı
+  // ucu taşıyıcıda GERÇEKTEN varsa (`router.get("<yol>"`) beyanlıdır ve §2 sırası onda da ölçülür; panel
+  // yüzeyi inince satır `hazir:true`ya döner. Ucu olmayan `hazir:false` beyan ölü sayılmaz (henüz yazılmadı).
+  const ucuInmis = (t: { dosya: string; yol: string }): boolean => {
+    try { return readFileSync(join(KOK, t.dosya), "utf8").includes(`router.get("${t.yol}"`); } catch { return false; }
+  };
+  for (const r of REPORT_CATALOG) {
+    if (!r.kapiTasiyici) continue;
+    if (isReportSurfaced(r)) beyan.set(r.key, [...r.kapiTasiyici]);
+    else if (r.nesil === "v2" && r.kapiTasiyici.some(ucuInmis)) beyan.set(r.key, r.kapiTasiyici.filter(ucuInmis));
+  }
   const beyanliUc = new Set([...beyan.values()].flat().map((k) => `${k.dosya}|${k.yol}`));
   check("§2z körlük zemini: katalog kapı taşıyıcısı beyan ediyor",
     beyanliUc.size >= 25, `${beyanliUc.size} uç · ${beyan.size} rapor`);
@@ -117,10 +126,12 @@ async function main(): Promise<void> {
         if (!zincir.includes(`reportGate("${key}")`)) { kapisiz.push(`${t.dosya}${t.yol}: yanlış anahtar (${key} bekleniyordu)`); continue; }
         const fab = kaynak.match(/const reportGate = \(key: ReportKey\) => \[([^\]]*)\]/);
         if (!fab) { siraSapan.push(`${key}: ÖLÇÜLEMEDİ — \`reportGate\` fabrikası çözülemedi`); continue; }
-        const i1 = fab[1]!.indexOf("verifyToken");
+        // Kimlik fabrikada ya da (BE-30) dosya başında `router.use(verifyToken)` — ilk `router.get`ten ÖNCE.
+        const dosyaBasiKimlik = /router\.use\(\s*verifyToken/.test(kaynak.slice(0, kaynak.indexOf("router.get(")));
+        const i1 = dosyaBasiKimlik ? 0 : fab[1]!.indexOf("verifyToken");
         const i2 = fab[1]!.indexOf("requireReportOpen");
         const i3 = fab[1]!.indexOf("requirePermission");
-        if (!(i1 >= 0 && i2 > i1 && i3 > i2)) siraSapan.push(`${key}: sıra bozuk — ${fab[1]!.trim()}`);
+        if (!(i1 >= 0 && i2 >= i1 && i3 > i2)) siraSapan.push(`${key}: sıra bozuk — ${fab[1]!.trim()}`);
         continue;
       }
       if (!zincir.includes(`requireReportOpen("${key}")`)) { kapisiz.push(`${t.dosya}${t.yol}: kapı YOK`); continue; }

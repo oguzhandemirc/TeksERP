@@ -6,6 +6,7 @@ import { operationsTiles, type OperationsTile } from "./tile-config";
 import { operationGroups, type OperationGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
+import { RelocatedToolsSection } from "@/pages/Reports/_v2/RelocatedTools";
 
 // İstasyon/akış anlamına göre ton — verilmeyen kartlar grup içinde palet tonunu alır.
 const TILE_TONES: Record<string, string> = {
@@ -15,6 +16,8 @@ const TILE_TONES: Record<string, string> = {
   rolls: "text-station-depo",
   "kursun-dagitim": "text-station-process",
   shipments: "text-success",
+  "lab-tests": "text-station-kk1",
+  certificates: "text-station-kk1",
 };
 
 export function OperationsHubPage() {
@@ -30,12 +33,11 @@ export function OperationsHubPage() {
   // içinde kendiliğinden belirir ve bu, menüde kabul edilebilir tek yönlü hatadır.
   const visibilityCtx = useOperationsVisibilityContext();
 
-  const visible = operationsTiles.filter((t) => {
-    if (t.visibleWhen && !t.visibleWhen(visibilityCtx)) return false;
-    return t.permissionAny
-      ? hasAnyPermission(t.permissionAny)
-      : !t.permission || hasPermission(t.permission);
-  });
+  // `offHint`li karo modül kapalıyken GİZLENMEZ, soluk çizilir (K4P yerleşim kararı); izin yine şart.
+  const permitted = (t: OperationsTile) =>
+    t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
+  const isOff = (t: OperationsTile) => Boolean(t.visibleWhen && !t.visibleWhen(visibilityCtx));
+  const visible = operationsTiles.filter((t) => permitted(t) && (!isOff(t) || Boolean(t.offHint)));
 
   const byGroup = new Map<OperationGroupKey, OperationsTile[]>();
   for (const t of visible) {
@@ -71,12 +73,15 @@ export function OperationsHubPage() {
                     icon={tile.icon}
                     tone={TILE_TONES[tile.key]}
                     index={i}
+                    offHint={isOff(tile) ? tile.offHint : undefined}
                   />
                 ))}
               </HubGrid>
             </section>
           );
         })}
+        {/* Raporlar v2: rapor menüsünden çıkan iz sürme araçları (bayrak kapalıyken çizilmez). */}
+        {visibilityCtx.flagsReady ? <RelocatedToolsSection host="/operations" title="İz sürme" /> : null}
       </PageBody>
     </PageShell>
   );

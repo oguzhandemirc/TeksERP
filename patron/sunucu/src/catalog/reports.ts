@@ -1,7 +1,9 @@
 // RAPOR ANAHTARI → BULUT İZNİ (sözleşme §7) — güvenlik kararı BULUTTADIR ve RAPOR BAŞINADIR: aile düzeyi
 // izin aynı ailedeki dar izinli raporu (sevkiyat karnesi, çek vadesi) geniş izne açıyordu. Eşlenmeyen anahtar
 // RED (fail-closed). Küme fabrikanın `REMOTE_REPORTS` listesiyle birebir (bekçi `test_bulut_tel_aynasi` §8).
-// Audit ailesi buluta HİÇ gitmez; kişi adı taşıyan rapor v1 dışıdır.
+// Audit ailesi buluta HİÇ gitmez; kişi adı taşıyan rapor (ya da varyant) listeye girmez. v2 anahtarlarının
+// sonucu fabrikada kurulmuş `RaporSunumu`dur (tel tipi `wire/api.ts`); bulut yalnız saklar, hesaplamaz.
+import { PARA_BIRIMLERI } from "../wire/api";
 import { isCloudPermission, type CloudPermission } from "./permissions";
 
 export const REPORT_KEY_PERMISSION: Readonly<Record<string, CloudPermission>> = {
@@ -13,10 +15,24 @@ export const REPORT_KEY_PERMISSION: Readonly<Record<string, CloudPermission>> = 
   "inventory/scorecard": "bulut:stok:oku",
   "finance/aging": "bulut:cari-bakiye:oku",
   "finance/cheque-due": "bulut:cek:oku",
+  // Raporlar v2 temel raporları (R1-BULUT)
+  "sales/siparis-talep": "bulut:siparis:oku",
+  "sales/sevkiyat": "bulut:sevkiyat:oku",
+  "sales/termin": "bulut:sevkiyat:oku",
+  "sales/acik-siparisler": "bulut:siparis:oku",
+  "sales/vazgecilen-is": "bulut:siparis:oku",
+  "quality/kalite": "bulut:uretim:oku",
+  "quality/kayip": "bulut:uretim:oku",
+  "inventory/depo": "bulut:stok:oku",
+  "subcontract/fasoncular": "bulut:uretim:oku",
+  "dokuma/tezgah-randimani": "bulut:uretim:oku",
+  "dokuma/duruslar": "bulut:uretim:oku",
+  "dokuma/levent-dengesi": "bulut:uretim:oku",
+  "finance/alacaklar": "bulut:cari-bakiye:oku",
 };
 
 /** Buluttan İSTENEMEYEN raporlar (aile ya da tam anahtar). */
-export const REPORTS_NOT_IN_CLOUD: readonly string[] = ["audit/*", "production/operator-performance"];
+export const REPORTS_NOT_IN_CLOUD: readonly string[] = ["audit/*", "production/operator-performance", "production/uretim-akisi"];
 
 const KEY_PATTERN = /^([a-z][a-z0-9-]{0,39})\/([a-z0-9][a-z0-9-]{0,79})$/;
 const REPORT_READ: CloudPermission = "bulut:rapor:oku";
@@ -82,4 +98,42 @@ export function readableReportProjections(permissions: ReadonlySet<CloudPermissi
 /** Bütün rapor sonucu adları (rapor başına + geçiş aile adları) — bakım budaması bunların hepsini görmeli. */
 export function allReportProjections(): string[] {
   return [...Object.keys(REPORT_KEY_PERMISSION).map(reportProjectionName), ...[...familyKeys().keys()].map((f) => `rapor.${f}`)];
+}
+
+// PARA ALANLARI FİNANS SINIFIDIR (K-BULUT; kolon opt-in kalıbı `projections.ts` FINANS_KOLONU ile aynı): finans DIŞI
+// raporda para birimli HER alan `bulut:fiyat:oku` ister — yan sayı, tablo kolonu (satır/toplam hücresiyle), para eksenli
+// grafik ve fabrikanın `paraIcerir` işaretlediği anlatı cümlesi. Finans ailesi raporu KENDİ izniyle açar. Bulut hesap
+// yapmaz — yalnız alanı düşürür (sayı değiştirmez, yeniden sıralamaz). Ana sayı zorunlu alandır, düşürülmez.
+const FINANS_SINIFI: CloudPermission = "bulut:fiyat:oku";
+const FINANCE_REPORT_PERMISSIONS: ReadonlySet<CloudPermission> = new Set<CloudPermission>(["bulut:cari-bakiye:oku", "bulut:cek:oku"]);
+const PARA: ReadonlySet<string> = new Set<string>(PARA_BIRIMLERI);
+
+const nesne = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+const paraBirimli = (v: unknown): boolean => nesne(v) && PARA.has(String(v.birim));
+
+function hucreleriAyikla(satir: unknown, dusen: ReadonlySet<string>): unknown {
+  if (!nesne(satir)) return satir;
+  return Object.fromEntries(Object.entries(satir).filter(([k]) => !dusen.has(k)));
+}
+
+function tabloyuKirp(tablo: unknown): unknown {
+  if (!nesne(tablo) || !Array.isArray(tablo.kolonlar)) return tablo;
+  const dusen = new Set(tablo.kolonlar.filter(paraBirimli).map((k) => String((k as { anahtar?: unknown }).anahtar)));
+  if (dusen.size === 0) return tablo;
+  return {
+    ...tablo,
+    kolonlar: tablo.kolonlar.filter((k) => !paraBirimli(k)),
+    satirlar: Array.isArray(tablo.satirlar) ? tablo.satirlar.map((r) => hucreleriAyikla(r, dusen)) : tablo.satirlar,
+    ...(tablo.toplam !== undefined ? { toplam: hucreleriAyikla(tablo.toplam, dusen) } : {}),
+  };
+}
+
+export function stripMoneySideFigures(veri: unknown, reportPermission: CloudPermission, permissions: ReadonlySet<string>): unknown {
+  if (FINANCE_REPORT_PERMISSIONS.has(reportPermission) || permissions.has(FINANS_SINIFI)) return veri;
+  if (!nesne(veri) || !Array.isArray(veri.yanSayilar)) return veri; // sunum değil (v1 sonucu): dokunulmaz
+  const out: Record<string, unknown> = { ...veri, yanSayilar: veri.yanSayilar.filter((y) => !paraBirimli(y)) };
+  if (Array.isArray(veri.anlati)) out.anlati = veri.anlati.filter((c) => !(nesne(c) && c.paraIcerir === true));
+  if ("tablo" in veri) out.tablo = tabloyuKirp(veri.tablo);
+  if (nesne(veri.grafik) && nesne(veri.grafik.eksen) && paraBirimli(veri.grafik.eksen.y)) out.grafik = null;
+  return out;
 }

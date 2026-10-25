@@ -41,6 +41,7 @@ export const commandSections: CommandSection[] = [
       key: `nav:${item.to}`,
       label: item.label,
       icon: item.icon,
+      keywords: item.keywords,
       to: item.to,
       permission: item.permission,
       permissionAny: item.permissionAny,

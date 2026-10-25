@@ -84,6 +84,8 @@ export interface AnlatiCumlesi {
   onem: number;
   metin: string;
   kanit: Record<string, unknown>;
+  /** Cümle para birimli bir ölçüden doğdu (fabrika işaretler) — fiyat izni olmayan patron hesabında bulut atlar. */
+  paraIcerir?: true;
 }
 
 export const GRAFIK_TURLERI = [
@@ -146,12 +148,23 @@ export interface ParametreBeyani {
   secenekler?: ParametreSecenegi[];
 }
 
+/** Küçük çoklunun tek hücresi: o değerle SÜZÜLMÜŞ ana koşunun ana sayısı (kıyası dahil). */
+export interface VaryantHucresi {
+  deger: string;
+  ad: string;
+  anaSayi: AnaSayi;
+}
+
 /** Varyant görünümü: hangi boyutun hangi değerine bakılıyor, tek tıkla diğerleri. */
 export interface VaryantBlok {
   boyut: string;
   boyutEtiketi: string;
   secili: ParametreSecenegi | null;
   digerleri: ParametreSecenegi[];
+  /** Hücreye tıklanınca yazılacak süzgeç anahtarı (ucun kendi sorgu anahtarı). */
+  suzgecAnahtari?: string;
+  /** Küçük çoklular — en büyük ≤ 6 değer, büyükten küçüğe. */
+  hucreler?: VaryantHucresi[];
 }
 
 export interface DonemAraligi {
@@ -189,6 +202,8 @@ export interface RaporSunumu {
   varyant?: VaryantBlok;
   donemler?: DonemBlok[];
   uyarilar: string[];
+  /** Kişi adı taşır (ör. operatör kırılımı) — patron bulutu sunumu okuyup bu raporu dışlar (K-KISI). */
+  kisiAdi?: true;
 }
 
 export const SIDE_FIGURE_LIMIT = 3;

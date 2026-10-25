@@ -42,7 +42,8 @@ import { SETTING_KEYS } from "@/services/systemSettingService";
  * `as const` değil (olamaz — `icon`/`hint` bileşen taşır). Geniş küme derleme
  * kapısını korur: yeni bir bayrak PANELE eklenmeden ÖNCE de sahibini beyan eder.
  * Nesne değerli alanlar (`travelerCardConfig`, `documentsConfig`,
- * `companyLetterhead`, `loginMethods`) kendi panellerinde yaşar, satır değildir.
+ * `companyLetterhead`, `companyLegalIdentity`, `eIrsaliyeConfig`, `loginMethods`) kendi
+ * panellerinde yaşar, satır değildir (künye ve e-İrsaliye ayarı `cekirdek`: modül anahtarı yok).
  */
 type FlagRowKey = {
   [K in keyof FeatureFlags]: FeatureFlags[K] extends boolean | number | string | null ? K : never;
@@ -265,6 +266,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   backupHour: "cekirdek",
   // bildirim: gelen kutusu davranış bayrağı (modül anahtarı değil — plan Karar Y1).
   bildirimGelenKutusuEnabled: "cekirdek",
+  documentDesignerEnabled: "cekirdek",
+  documentPublishSodEnabled: "cekirdek",
 };
 
 /**

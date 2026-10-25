@@ -234,6 +234,11 @@ async function main(): Promise<void> {
   } else {
     check("açık sevk listede", openRow !== undefined && openRow.openQty === 200,
       `gelen: ${openRow?.openQty}`);
+    // Sabitleyici (N1-KOSUL-IS, açık kalem yüklemi helper'a taşınmadan ÖNCE eklendi): kalem adedi ve
+    // yaş (2096 fixture → negatif, tek ondalık) — bildirim koşulu aynı yüklemi okur.
+    check("açık sevk: 1 kalem, yaş tek ondalık ve gelecekte (negatif)",
+      openRow !== undefined && openRow.openItems === 1 && openRow.daysOpen < 0 && Math.abs(openRow.daysOpen * 10 - Math.round(openRow.daysOpen * 10)) < 1e-6,
+      `gelen: ${openRow?.openItems} kalem / ${openRow?.daysOpen} gün`);
   }
   // Bu kontrol HER ZAMAN anlamlıdır: iptal/doğrudan sevkin listede OLMAMASI,
   // listenin dolu olmasından bağımsız bir invariant.

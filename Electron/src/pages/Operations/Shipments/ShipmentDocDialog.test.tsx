@@ -60,7 +60,7 @@ vi.mock("./DispatchNoteEditor", () => ({
 }));
 
 vi.mock("@/hooks/useRoleAccess", () => ({
-  useRoleAccess: () => ({ hasPermission: () => true, isAdmin: true }),
+  useRoleAccess: () => ({ hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true, isAdmin: true }),
 }));
 
 vi.mock("@/hooks/useLabelPrinter", () => ({

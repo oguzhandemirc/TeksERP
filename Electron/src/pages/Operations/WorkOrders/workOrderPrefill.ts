@@ -39,6 +39,8 @@ export function formValuesFromWorkOrder(wo: WorkOrder): WorkOrderFormValues {
     targetItemId: wo.targetItemId,
     targetColorId: wo.targetColorId,
     targetPropertyIds: (wo.targetProperties ?? []).map((p) => p.propertyId),
+    // Düzenlemede hedef gramaj formda değil, detay kartından (ayrı uç) değişir.
+    kursunTargetValueId: null,
     orderLineIds: (wo.orderLinks ?? []).map((l) => l.orderLineId),
     width: wo.width,
     targetQuantity: wo.targetQuantity,

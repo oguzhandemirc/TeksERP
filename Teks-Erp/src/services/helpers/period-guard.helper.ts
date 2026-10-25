@@ -62,12 +62,14 @@
 //   8037  FACTORY_TIMEZONE_LOCK_NS  services/factory-timezone.service.ts  fabrika saat dilimi dönem defteri (tek anahtar; değişiklik ↔ iptal)
 //   8038  SYSTEM_ACCOUNT_LOCK_NS  services/helpers/varsayilan-superadmin.helper.ts  satıcı hesabı doğuşu/devri (tek anahtar; boot varsayılanı ↔ kurulum aracı)
 //   8039  AUDIT_CHAIN_LOCK_NS  services/audit-chain.service.ts  audit hash zinciri sırası (tek anahtar; kilidi DB trigger'ı `audit_zincir_bagla` alır)
+//   8040  NOTIFICATION_DISPATCH_LOCK_NS  services/notification-dispatch.service.ts  bildirim dağıtıcı + koşul tarayıcısı (anahtar `hashtext('bildirim-dagitici')` · `hashtext('bildirim-kosul:'||kind)`)
+//   8041  E_IRSALIYE_SERIES_LOCK_NS  services/e-irsaliye/e-irsaliye-number.ts  e-İrsaliye numara üretimi ↔ başlangıç değeri yazımı (tek anahtar; sevkiyat kilidi 8023'ün ARKASINDAN)
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı
 // deadlock üretti). ② Bir tx birden çok UZAYDAN kilit alacaksa uzay numarası
-// ARTAN sırada alınır — bugünkü tek çapraz-uzay çifti `inventory.service`
-// (8021 mükerrer tuzağı → 8030 birleştirme) ve ARTAN.
+// ARTAN sırada alınır — çapraz-uzay çiftleri `inventory.service`
+// (8021 mükerrer tuzağı → 8030 birleştirme) ve e-İrsaliye üretimi (8023 → 8041); ikisi de ARTAN.
 // =============================================================================
 
 import { Prisma, Currency } from "@prisma/client";

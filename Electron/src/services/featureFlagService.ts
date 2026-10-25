@@ -25,6 +25,12 @@ import type { NumberSourceInfo } from "@/lib/number-source";
 import { applyServerFactoryTimezone } from "@/lib/factory-time";
 
 export type { CompanyLetterhead, DocumentsConfig } from "./documentConfig";
+import {
+  DEFAULT_COMPANY_LEGAL_IDENTITY,
+  DEFAULT_EIRSALIYE_CONFIG,
+  type CompanyLegalIdentity,
+  type EIrsaliyeConfig,
+} from "./eIrsaliyeSettings";
 
 /** Mobil giriş yöntemleri (auth.loginMethods). */
 export type LoginMethod = "list" | "pin" | "card";
@@ -638,6 +644,10 @@ export interface FeatureFlags {
   travelerCardConfig: TravelerCardConfig;
   /** Belge künyesi (adres/tel/vergi) — irsaliye/çeki üst bloğunda basılır. */
   companyLetterhead: CompanyLetterhead;
+  /** Gönderici resmi künyesi (VKN/TCKN, unvan, vergi dairesi, adres) — e-belge kimliği. */
+  companyLegalIdentity: CompanyLegalIdentity;
+  /** e-İrsaliye yapılandırması (bağdaştırıcı + yürürlük tarihi); varsayılan Kapalı. */
+  eIrsaliyeConfig: EIrsaliyeConfig;
   /** Yazdırılan belgelerin içerik ayarı (canlı). resolveDocConfig ile çözülür. */
   documentsConfig: DocumentsConfig;
   /** Otomatik gece yedeğinin saati (0-23, SUNUCUNUN yerel saati; default 3).
@@ -646,9 +656,14 @@ export interface FeatureFlags {
   backupHour: number;
   // bildirim: kişisel gelen kutusu + yeni zil — default false (bugünkü zil); okuyan N1-ZIL.
   bildirimGelenKutusuEnabled: boolean;
+  // belge-sablon: tasarımcı + yayın SoD bayrakları — default false (bugünkü Sistem tasarımı).
+  documentDesignerEnabled: boolean;
+  documentPublishSodEnabled: boolean;
 }
 
 export { DEFAULT_COMPANY_LETTERHEAD };
+export { DEFAULT_COMPANY_LEGAL_IDENTITY, DEFAULT_EIRSALIYE_CONFIG };
+export type { CompanyLegalIdentity, EIrsaliyeConfig };
 
 /**
  * Kısa parti sayacının anlık durumu (`GET /api/batches/number-state`).

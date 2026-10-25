@@ -94,6 +94,8 @@ export interface ReportCatalogEntryV2 extends ReportCatalogBase {
   nesil: "v2";
   /** `false` iken uç yok: satır hiçbir yüzeyde çizilmez, taşıyıcı ölçülmez (R0-RAP dilimi `true` yapar). */
   hazir: boolean;
+  /** Hiçbir v1 satırının yeni hâli OLMAYAN yeni rapor (`test_rapor_katalogu §8c/§8c2` ölçer). */
+  yeniRapor?: true;
 }
 
 export type ReportCatalogEntry = ReportCatalogEntryV1 | ReportCatalogEntryV2;
@@ -268,27 +270,32 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "sales/siparis-talep", baslik: "Ne kadar iş aldık?", soru: "Bu dönemde kaç metre sipariş aldık, hangi müşteri hangi kumaşı ve rengi istedi, önceki döneme göre nasıl değişti?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/siparis-talep", uc: "/api/reports/sales/siparis-talep", kapiTasiyici: [{ dosya: "src/routes/reports/temel-satis.routes.ts", yol: "/sales/siparis-talep" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["patron", "satis"], varyantBoyutlari: ["musteri", "urun", "renk", "yon"], hazir: false },
+    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["patron", "satis"], varyantBoyutlari: ["musteri", "urun", "renk", "yon"], hazir: true },
   { key: "sales/sevkiyat", baslik: "Ne sevk ettik?", soru: "Bu dönemde kime, nereye kaç metre mal sevk ettik ve önceki döneme göre nasıl değişti?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/sevkiyat", uc: "/api/reports/sales/sevkiyat", kapiTasiyici: [{ dosya: "src/routes/reports/temel-satis.routes.ts", yol: "/sales/sevkiyat" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["patron", "sevkiyat", "muhasebe"], varyantBoyutlari: ["musteri", "urun", "renk", "yon"], hazir: false },
+    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["patron", "sevkiyat", "muhasebe"], varyantBoyutlari: ["musteri", "urun", "renk", "yon"], hazir: true },
   { key: "sales/termin", baslik: "Sözümüzü tuttuk mu?", soru: "Termini olan siparişlerin ne kadarı zamanında gitti ve siparişler kaç günde teslim edildi?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/termin", uc: "/api/reports/sales/termin", kapiTasiyici: [{ dosya: "src/routes/reports/temel-satis.routes.ts", yol: "/sales/termin" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["patron", "sevkiyat", "satis"], varyantBoyutlari: ["musteri", "urun", "yon"], hazir: false },
+    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["patron", "sevkiyat", "satis"], varyantBoyutlari: ["musteri", "urun", "yon"], hazir: true },
   { key: "sales/acik-siparisler", baslik: "Açık siparişler hazır mı?", soru: "Açık siparişlerin ne kadarı bugün depodan karşılanabiliyor, kalanı üretimin neresinde?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/sales/acik-siparisler", uc: "/api/reports/sales/acik-siparisler", kapiTasiyici: [{ dosya: "src/routes/reports/temel-satis.routes.ts", yol: "/sales/acik-siparisler" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["planlama", "sevkiyat"], varyantBoyutlari: ["urun", "renk"], hazir: false },
-  { key: "sales/vazgecilen-is", baslik: "Ne geri geldi, neden vazgeçildi?", soru: "Bu dönemde ne kadar mal iade geldi, kaç sipariş satırı iptal edildi ve hangi sebeplerle?",
+    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["planlama", "sevkiyat"], varyantBoyutlari: ["urun", "renk"], hazir: true },
+  { key: "sales/vazgecilen-is", baslik: "Ne geri geldi, neden vazgeçildi?", soru: "Bu dönemde ne kadar mal iade geldi, kaç sipariş iptal edildi ve hangi sebeplerle?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/vazgecilen-is", uc: "/api/reports/sales/vazgecilen-is", kapiTasiyici: [{ dosya: "src/routes/reports/temel-satis.routes.ts", yol: "/sales/vazgecilen-is" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["satis", "kalite"], varyantBoyutlari: ["musteri", "urun", "sebep"], hazir: false },
+    nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["satis", "kalite"], varyantBoyutlari: ["musteri", "urun", "sebep"], hazir: true },
   { key: "production/uretim-akisi", baslik: "Üretim nerede takıldı?", soru: "Toplar şu an hangi istasyonda bekliyor ve bu dönemde istasyonlardan ne kadar iş geçti?",
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/production/uretim-akisi", uc: "/api/reports/production/uretim-akisi", kapiTasiyici: [{ dosya: "src/routes/reports/temel-uretim.routes.ts", yol: "/production/uretim-akisi" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "uretim", persona: ["uretim"], varyantBoyutlari: ["istasyon", "operator"], hazir: false },
+  // KQ-D6: hazır ilk v2 satırı — uç `RaporSunumu` döner, sayfa katalogdan üretilen genel yaprak.
+  { key: "production/kursun-gramaj", baslik: "Kurşun Gramajı", soru: "Hangi gün hangi kumaşa hangi makinede kaç gram kurşun basıldı, hedeften sapan oldu mu?",
+    sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
+    panelYolu: "reports/production/kursun-gramaj", uc: "/api/reports/production/kursun-gramaj", kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/kursun-gramaj" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "uretim", persona: ["uretim", "kalite"], varyantBoyutlari: ["kaynak"], hazir: true, yeniRapor: true },
   { key: "quality/kalite", baslik: "Kalite nasıl gidiyor?", soru: "Bu dönemde kumaşın ne kadarı birinci kalite çıktı ve önceki döneme göre nasıl değişti?",
     sinif: "basit", izin: "report:quality", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/quality/kalite", uc: "/api/reports/quality/kalite", kapiTasiyici: [{ dosya: "src/routes/reports/temel-uretim.routes.ts", yol: "/quality/kalite" }], yuzey: "yaprak",
@@ -308,20 +315,20 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "dokuma/tezgah-randimani", baslik: "Tezgahlar verimli mi?", soru: "Tezgahlar bu dönemde dokuyabilecekleri kumaşın ne kadarını dokudu?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/tezgah-randimani", uc: "/api/reports/dokuma/tezgah-randimani", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/dokuma/tezgah-randimani" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma"], varyantBoyutlari: ["vardiya", "tezgah", "levent"], hazir: false },
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma"], varyantBoyutlari: ["vardiya", "tezgah", "levent"], hazir: true },
   { key: "dokuma/duruslar", baslik: "Tezgahlar neden duruyor?", soru: "Tezgahlar en çok hangi sebeplerle durdu ve duruşa ne çabuk müdahale edildi?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/duruslar", uc: "/api/reports/dokuma/duruslar", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/dokuma/duruslar" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma"], varyantBoyutlari: ["vardiya", "tezgah", "sebep"], hazir: false },
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma"], varyantBoyutlari: ["vardiya", "tezgah", "sebep"], hazir: true },
   // Levent karoları hub'da ayrıca devere ister (v1 levent satırlarıyla aynı beyan).
   { key: "dokuma/levent-dengesi", baslik: "Leventten beklenen kumaş çıktı mı?", soru: "Biten leventlerden beklenen kumaşın ne kadarı dokundu?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 30, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/levent-dengesi", uc: "/api/reports/dokuma/levent-dengesi", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/dokuma/levent-dengesi" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["cozguKarti", "tezgah"], hazir: false },
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["cozguKarti", "tezgah"], hazir: true },
   { key: "finance/alacaklar", baslik: "Kimden ne alacağız?", soru: "Vadesi geçmiş alacak ne kadar ve önümüzdeki günlerde hangi çeklerin vadesi geliyor?",
     sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: null, tarih: "kesit",
     panelYolu: "reports/finance/alacaklar", uc: "/api/reports/finance/alacaklar", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/finance/alacaklar" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["cari", "paraBirimi"], hazir: false },
+    nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["cari", "paraBirimi"], hazir: true },
 ];
 
 /** Katalogdan TÜRETİLİR — derleyici bilinmeyen anahtarı reddeder (K4). */

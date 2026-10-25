@@ -166,8 +166,10 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "access/permissions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetki Kataloğu", requires: ["admin:users"], capabilities: [] },
   { key: "access/patron-bulut", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yönetim Bulutu", requires: ["admin:users"], capabilities: [] },
   // Sistem hub'ı: karolarından BİRİNİ açabilen herkes girer (Electron `SYSTEM_HUB_ACCESS` aynası).
-  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings", "data:import", "master-data:merge", "settings:numbering", "settings:workstation", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance", "settings:label", "settings:devices", "settings:company", "settings:session", "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:backups", "system:print-history", "license:view", "license:manage", "support:create"], capabilities: [] },
+  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings", "data:import", "master-data:merge", "settings:numbering", "settings:workstation", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance", "settings:label", "settings:devices", "settings:company", "settings:e-irsaliye", "settings:session", "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:backups", "system:print-history", "license:view", "license:manage", "support:create"], capabilities: [] },
   { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings", "system:activity"], capabilities: [] },
+  // bildirim: kişisel gelen kutusu — kapısız (izin kodu yok; satır kapsamı kişinin kendi kutusu).
+  { key: "notifications", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirimler", requires: [], capabilities: [] },
   { key: "system/perf", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Endpoint Performansı", requires: ["admin:settings"], capabilities: [] },
   { key: "system/server-status", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Durumu", requires: ["admin:settings", "system:server-status"], capabilities: ["system:backups"] },
   { key: "system/print-history", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yazdırma Geçmişi", requires: ["admin:settings", "system:print-history"], capabilities: [] },
@@ -205,7 +207,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Genel Ayarlar 2026-09-24'te üç ekrana bölündü; her biri kendi sekmelerinin izinleriyle açılır.
   { key: "system/printing", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Baskı & Cihazlar", requires: ["admin:settings", "settings:label", "settings:devices"], capabilities: [] },
   { key: "system/workstation", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bu Bilgisayar", requires: ["admin:settings", "settings:workstation"], capabilities: [] },
-  { key: "system/company", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Şirket & Güvenlik", requires: ["admin:settings", "settings:company", "settings:session"], capabilities: [] },
+  { key: "system/company", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Şirket & Güvenlik", requires: ["admin:settings", "settings:company", "settings:e-irsaliye", "settings:session"], capabilities: [] },
   // Numaralandırma — numara BİÇİMİ veri olduğundan panelden yönetilir (Faz C).
   // Çekirdek: her kurulumda numara üretilir, kapatılabilir bir modüle ait değil.
   { key: "system/numbering", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Numaralandırma", requires: ["settings:numbering"], capabilities: [] },
@@ -220,7 +222,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/rolls", app: "desktop", modul: "cekirdek:stok-giris", title: "Kumaş Stoğu", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
   { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: "Kurşun Planlama", requires: ["quality:write", "workorder:distribute"], capabilities: [] },
   { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
-  { key: "operations/shipments", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
+  { key: "operations/shipments", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["eirsaliye:read", "eirsaliye:undo", "eirsaliye:write", "return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
   { key: "operations/sack-store", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevk Kapısı", requires: ["shipping:read"], capabilities: ["shipping:write"] },
   { key: "operations/sack-content-edit", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Paketleme / Çuvallar", requires: ["shipping:write"], capabilities: ["label:print", "shipping:packing-lot"] },
   { key: "operations/relabel-station", app: "desktop", modul: "cekirdek:stok-giris", title: "Yeniden Etiketle", requires: ["label:edit", "roll:write"], capabilities: [] },
@@ -247,6 +249,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/machine-collectors", app: "desktop", modul: "tezgahEnabled", title: "Makine Kartları", requires: ["loom:spec-manage"], capabilities: [] },
   { key: "definitions/machine-stop-codes", app: "desktop", modul: "tezgahEnabled", title: "Duruş Kodu Eşleme", requires: ["loom:spec-manage"], capabilities: [] },
   { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
+  { key: "operations/e-irsaliye", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "e-İrsaliye Kayıtları", requires: ["eirsaliye:read"], capabilities: [] },
   { key: "reports/production", app: "desktop", modul: "productionEnabled", title: "Üretim", requires: ["report:production"], capabilities: [] },
   { key: "reports/sales", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
   { key: "reports/quality", app: "desktop", modul: "productionEnabled", title: "Kalite", requires: ["report:quality"], capabilities: [] },
@@ -258,10 +261,12 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // `requireAnyPermission={DOCUMENT_DESIGN_READ}` gibi SABİT REFERANSLA
   // korunuyorlar (satır içi dizi değil). Yeni bir sabit-referanslı route
   // eklenirse test kırmızı verir.
-  { key: "definitions/document-templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
+  { key: "definitions/document-templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  // T2 iskeleti: Belge Şablonları ile aynı izin kümesi (T5).
+  { key: "definitions/document-designer", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Tasarımcısı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)
@@ -288,6 +293,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "finance/cheques", app: "desktop", modul: "financeEnabled", title: "Çek ve Senetler", requires: ["finance:read"], capabilities: ["finance:cheque"] },
   { key: "finance/allocations", app: "desktop", modul: "financeEnabled", title: "Tahsisler", requires: ["finance:read"], capabilities: ["finance:payment"] },
   { key: "finance/period-close", app: "desktop", modul: "financeEnabled", title: "Dönem Kapanışı", requires: ["finance:read"], capabilities: ["finance:close"] },
+  // Raporlar v2 kayıtlı/özel raporlar (R1-KAYIT): oluşturma/düzenleme builder; kategori, herkese açma
+  // ve başkasının koşusunu durdurma publish. Görüntüleme (`reports/kayitli/:id`) kapısızdır — görünürlük uçta.
+  { key: "reports/ozel", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Özel rapor oluştur", requires: ["report:builder"], capabilities: ["report:publish"] },
   { key: "reports/finance", app: "desktop", modul: "financeEnabled", title: "Ön Muhasebe Raporları", requires: ["report:finance"], capabilities: [] },
   // Dokuma raporları (Dilim 5, 2026-09-14): okuma `report:production` (1e hükmü ③); karne eylemleri ekran içi
   // PermissionGate — `loom:manual-entry` (terim düzelt · mühürle; machine-stops ekranıyla PAYLAŞILIR) ve
@@ -404,7 +412,7 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
       "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
-  { modul: "maliyetEnabled", reason: "Maliyet & Teklif (MAL-0): şalter + kapı doğdu, ilk ekranı MAL dilimlerinde; ekran eşlenince bu muaf silinir." },
+  { modul: "maliyetEnabled", reason: "Maliyet & Teklif: kapı MAL-1'de `/api/cost` uçlarına takıldı (API), ilk ekranlar MAL-3 (ürün maliyeti) ve MAL-7 (maliyet parametreleri ekranı); ekran eşlenince bu muaf silinir." },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */
@@ -426,6 +434,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
   // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
   { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
+  // MAL-1 (2026-10-25): maliyet girdileri uçları API olarak doğdu; ekranlar MAL-3/MAL-7'de — o gün bu üç satır ölü muaf olur ve silinir.
+  { code: "cost:read", reason: "Maliyet ekranları (MAL-3 ürün maliyeti, MAL-7 maliyet parametreleri ekranı) henüz yok — `/api/cost` uçları MAL-1'de API olarak doğdu." },
+  { code: "cost:write", reason: "Maliyet yapısı / iplik fiyatı / tarife ekranı MAL-3/MAL-7'de doğar — uç MAL-1'de API." },
+  { code: "cost:settings", reason: "maliyet parametreleri ekranı ekranı MAL-7'de doğar — uç MAL-1'de API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

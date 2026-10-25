@@ -1,5 +1,5 @@
 // =============================================================================
-// NUMARA SERİSİ KATALOĞU — ENVANTER (52 seri)
+// NUMARA SERİSİ KATALOĞU — ENVANTER (53 seri)
 // =============================================================================
 // ⚠️ SÖZLEŞME AYRI DOSYADA (`number-series-catalog.types.ts`): satır TİPİ, panel
 // grupları ve etiket yardımcıları orada. Bölme ekseni bu depodaki alışılmış
@@ -19,6 +19,7 @@ type NumberSeriesDateSegment = NumberSeries["dateSegment"];
 const D = "DDMMYY" as NumberSeriesDateSegment;
 const NONE = "NONE" as NumberSeriesDateSegment;
 const YYMM = "YYMM" as NumberSeriesDateSegment;
+const YYYY = "YYYY" as NumberSeriesDateSegment;
 
 export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   // ── Okutulan seriler (istemci sınıflandırmasına girer) ─────────────────────
@@ -106,6 +107,34 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedSeparator: "",
     kind: "SHIPMENT",
     scopedCounter: { durum: "hazir", not: "`shipping.service.nextShipmentNo` zengin biçime geçirildi." },
+  },
+  {
+    // GİB e-İrsaliye numarası: 3 karakter seri + yıl + 9 hane sıra (⚠ plan §3.6
+    // "doğrulanacak"). Numara yalnız "XML üret" claim'inde, aynı tx'te doğar.
+    key: "eIrsaliye",
+    panelGroup: "sevkiyat",
+    label: "e-İrsaliye no",
+    seedPrefix: "EIR",
+    seedDateSegment: YYYY,
+    seedDigits: 9,
+    seedSeparator: "",
+    // Taşma GENİŞLEMEZ, SARMAZ: kod uzunluğu standardın parçası (beyanlı istisna).
+    seedMaxValue: 999_999_999,
+    seedWrap: false,
+    fixedShape: {
+      prefixRe: "^[A-Z0-9]{3}$",
+      dateSegment: YYYY,
+      digits: 9,
+      separator: "",
+      not: "GİB e-İrsaliye numarası 3 karakter seri + yıl + 9 hane",
+    },
+    scopedCounter: {
+      durum: "hazir",
+      not: "Üreteç `nextSeriesNo` (sayaç satırı KULLANILMAZ — GİB sırası boşluksuz); belge tarihi fabrika günüdür. Motor (E5) bu giriş noktasını çağırır.",
+      uretec: "services/e-irsaliye/e-irsaliye-number.ts",
+    },
+    // Kayıt tablosu E1-SEMA'da doğdu; TASLAK'ta `documentNo` null, sayım numaralananları sayar.
+    countTable: { model: "eIrsaliye", field: "documentNo", birim: "belge", kapsam: "seri-onekli" },
   },
   {
     key: "subcontractorDispatch",
@@ -296,6 +325,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "noteReceived", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; anahtar PARAMETREDEN geldiği için üreteç dosyası beyanlı (E2 finans dilimi, 2026-09-23).", uretec: "services/cheque.service.ts" }, panelGroup: "finans", countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Alınan senet no", seedPrefix: "SNA", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "noteIssued", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; anahtar PARAMETREDEN geldiği için üreteç dosyası beyanlı (E2 finans dilimi, 2026-09-23).", uretec: "services/cheque.service.ts" }, panelGroup: "finans", countTable: { model: "cheque", field: "docNo", birim: "belge", kapsam: "seri-onekli" }, label: "Verilen senet no", seedPrefix: "SNV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "chequeDeliveryNote", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 finans dilimi, 2026-09-23).", uretec: "services/cheque-delivery-note.service.ts" }, panelGroup: "finans", countTable: { model: "chequeDeliveryNote", field: "docNo", birim: "belge" }, label: "Çek teslim bordro no", seedPrefix: "BRD", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  { key: "labTest", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor (K4P-LAB, 2026-10-25).", uretec: "services/lab-test.service.ts" }, panelGroup: "uretim", countTable: { model: "labTest", field: "testNo", birim: "belge" }, label: "Lab test no", seedPrefix: "LAB", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   { key: "reconciliationLetter", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 finans dilimi, 2026-09-23).", uretec: "services/reconciliation-letter.service.ts" }, panelGroup: "finans", countTable: { model: "reconciliationLetter", field: "docNo", birim: "belge" }, label: "Mutabakat mektubu no", seedPrefix: "MBT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Master data kodları ────────────────────────────────────────────────────

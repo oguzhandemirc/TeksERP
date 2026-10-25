@@ -20,10 +20,15 @@
 //   §9 ölçü tanım sözlüğü (`semantik/tanimlar.ts`): zorunlu kimlikler · formülsüz açıklama · ölçülü kaynak
 // §1–§3 ve §7d yalnız ÇİZİLEN satırları (`isReportSurfaced`) ölçer: ucu inmemiş v2 satırının route/karo/
 // yaprağı YOKTUR; onları saymak her v2 satırını "yüzeyde yok" diye kırmızıya düşürürdü. Ters yön §8f'de.
+// R0-RAPC (2026-10-25, ilk `hazir:true` v2 satırları): §1 öneksiz mount'u (`router.use(X)`) tanır · §2 v2 yaprağını
+// `...reportV2Routes` üreticisinden · §3 v2'yi karodan değil Rapor Merkezi'nden · §7d v2 tarih çipini sayar.
+// SONDALAR: `...reportV2Routes` yayılımı silindi → §2 ❌ · öneksiz mount silindi → §1 ❌ (md5 ile geri alındı, 33/0).
 // "İki taraflı" şu demek: katalogda olup yüzeyde olmayan KIRMIZI, yüzeyde olup
 // katalogda olmayan da KIRMIZI. Tek yön ölçen bir kapı, eksik satırı görür ama
 // FAZLA satırı göremez — ve fazlalık tam olarak "kimsenin kapatamadığı rapor"dur.
 //
+// Negatif sondalar (2026-10-24, KQ-D6, md5 ile geri alındı): `yeniRapor` beyanı silindi → §8c ❌ (+§5 ayna);
+// content-routes'tan `...reportV2Routes` çıkarıldı → §2v + §2 ❌.
 // DB GEREKTİRMEZ: metin + AST'siz desen; mandal olarak koşar.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
@@ -57,6 +62,10 @@ function ikiTarafli(ad: string, katalog: Set<string>, yuzey: Set<string>): void 
 function main(): void {
   console.log("=== RAPOR KATALOĞU ===\n");
   const CIZILEN = REPORT_CATALOG.filter(isReportSurfaced);
+  // Hazır v2 yaprağının yüzeyi ELLE yazılmaz: route `_v2/routes.tsx` katalogdan üretir, karo yerine
+  // Rapor Merkezi kategorisi çizer (KQ-D6, ilk `hazir:true`). §2v/§3v/§7dv o üretimi ölçer.
+  const CIZILEN_V1 = CIZILEN.filter((r) => r.nesil === "v1");
+  const CIZILEN_V2 = CIZILEN.filter((r) => r.nesil === "v2");
 
   // ── §0 körlük zemini ──────────────────────────────────────────────────────
   check("§0 katalog dolu ve anahtarlar TEKİL", REPORT_CATALOG.length >= 25
@@ -70,6 +79,11 @@ function main(): void {
   const monte = new Map<string, string>();       // dosya → mount öneki
   for (const m of readFileSync(join(KOK, "src/routes/reports.routes.ts"), "utf8")
     .matchAll(/router\.use\("(\/[a-z]+)",\s*(\w+)\)/g)) monte.set(m[2]!, m[1]!);
+  // Öneksiz mount (rapor v2 temel uçları, yollar dosyada tam): yalnız ÇİZİLEN satırın ucu sayılır — çizilmeyen
+  // (`hazir:false`) inmiş ucu §8f, kapsamayı `test_rapor_kapisi` ölçer (R0-RAPC, ilk `hazir:true` satırlar).
+  const oneksiz = new Set<string>();
+  for (const m of readFileSync(join(KOK, "src/routes/reports.routes.ts"), "utf8").matchAll(/router\.use\((\w+)\);/g)) { monte.set(m[1]!, ""); oneksiz.add(m[1]!); }
+  const cizilenUc = new Set(CIZILEN.flatMap((r) => (r.uc === null ? [] : Array.isArray(r.uc) ? r.uc : [r.uc])));
   const importAd = new Map<string, string>();    // değişken → dosya adı
   for (const m of readFileSync(join(KOK, "src/routes/reports.routes.ts"), "utf8")
     .matchAll(/import (\w+) from "\.\/reports\/([\w.-]+)"/g)) importAd.set(m[1]!, m[2]!);
@@ -78,7 +92,10 @@ function main(): void {
     const dosya = importAd.get(degisken);
     if (!dosya) continue;
     const kaynak = readFileSync(join(KOK, "src/routes/reports", `${dosya}.ts`), "utf8");
-    for (const m of kaynak.matchAll(/router\.get\(\s*"(\/[^"]*)"/g)) routeUclari.add(`/api/reports${onek}${m[1]}`);
+    for (const m of kaynak.matchAll(/router\.get\(\s*"(\/[^"]*)"/g)) {
+      const uc = `/api/reports${onek}${m[1]}`;
+      if (!oneksiz.has(degisken) || cizilenUc.has(uc)) routeUclari.add(uc);
+    }
   }
   check("§1z körlük zemini: route taraması bir şey gördü", routeUclari.size > 20, `${routeUclari.size} uç`);
   const katalogUclari = new Set(CIZILEN.flatMap((r) => (r.uc === null ? [] : Array.isArray(r.uc) ? r.uc : [r.uc])));
@@ -89,9 +106,21 @@ function main(): void {
   const panelYollari = new Set([...icerik.matchAll(/path:\s*"(reports\/[^"]+)"/g)].map((m) => m[1]!));
   // Kategori hub'ları (`reports/<kategori>`) katalogda satır DEĞİL — yaprak değiller.
   const yapraklar = new Set([...panelYollari].filter((p) => p.split("/").length === 3));
+  // Rapor v2 yaprakları KATALOGDAN üretilir (`_v2/routes.tsx`: `nesil === "v2"` → `path: e.panelYolu`); yayılım
+  // `content-routes`ta ve üretici kalıp yerindeyse ÇİZİLEN v2 satırının yolu yüzeydedir (elle eşleme yok).
+  const v2Uretici = readFileSync(join(ELECTRON, "src/pages/Reports/_v2/routes.tsx"), "utf8");
+  const v2Yayildi = /\.\.\.reportV2Routes\b/.test(icerik) && /filter\(\(e\) => e\.nesil === "v2"\)/.test(v2Uretici) && /path:\s*e\.panelYolu/.test(v2Uretici);
+  if (v2Yayildi) for (const r of CIZILEN) if (r.nesil === "v2") yapraklar.add(r.panelYolu);   // çizilmeyenin route'u kapıda boş döner
   check("§2z körlük zemini: panel route taraması dolu", panelYollari.size > 20,
     `${panelYollari.size} yol · ${yapraklar.size} yaprak · ${panelYollari.size - yapraklar.size} kategori hub'ı`);
   const katalogPanel = new Set(CIZILEN.filter((r) => r.panelYolu !== "").map((r) => r.panelYolu));
+  const v2RouteKaynak = readFileSync(join(ELECTRON, "src/pages/Reports/_v2/routes.tsx"), "utf8");
+  const v2Uretiliyor = icerik.includes("...reportV2Routes")
+    && /REPORT_CATALOG\.filter\(\(e\) => e\.nesil === "v2"\)/.test(v2RouteKaynak) && /path:\s*e\.panelYolu/.test(v2RouteKaynak)
+    && v2RouteKaynak.includes("<ReportV2Route reportKey={e.key} />");
+  check("§2v ⭐ v2 yaprak route'ları katalogdan üretilir (`_v2/routes.tsx`) ve içerik route'larına yayılır", v2Uretiliyor,
+    v2Uretiliyor ? `${CIZILEN_V2.length} hazır v2 yaprağı` : "üretim zinciri kopuk — hazır v2 satırının adresi yok");
+  if (v2Uretiliyor) for (const r of CIZILEN_V2) yapraklar.add(r.panelYolu);
   ikiTarafli("§2 panel route", katalogPanel, yapraklar);
 
   // ── §3 KARO ───────────────────────────────────────────────────────────────
@@ -105,7 +134,15 @@ function main(): void {
     for (const m of kaynak.matchAll(/to:\s*"\/(reports\/[^"]+)"/g)) karoYollari.add(m[1]!);
   }
   check("§3z körlük zemini: karo taraması dolu", karoYollari.size > 20, `${karoYollari.size} karo`);
-  ikiTarafli("§3 karo `to`", katalogPanel, karoYollari);
+  // Karo yalnız v1 hub'ındadır; v2 yaprağına giden karo bayrak kapalıyken /forbidden'a düşerdi (fazla = kırmızı).
+  ikiTarafli("§3 karo `to`", new Set(CIZILEN_V1.filter((r) => r.panelYolu !== "").map((r) => r.panelYolu)), karoYollari);
+  const merkez = readFileSync(join(ELECTRON, "src/pages/Reports/_v2/center-model.ts"), "utf8");
+  const merkezKategori = new Set([...(merkez.match(/CENTER_CATEGORIES[^=]*=\s*\[([\s\S]*?)\];/)?.[1] ?? "")
+    .matchAll(/key:\s*"([a-z-]+)"/g)].map((m) => m[1]!));
+  const merkezSapan = CIZILEN_V2.filter((r) => r.kategoriV2 === null || !merkezKategori.has(r.kategoriV2)).map((r) => r.key);
+  check("§3v ⭐ hazır v2 satırı Rapor Merkezi'nde bir kategoride çizilir (karosu merkezdir)",
+    merkezKategori.size > 0 && /e\.kategoriV2 === c\.key/.test(merkez) && merkezSapan.length === 0,
+    merkezSapan.length ? `KATEGORİSİZ: ${merkezSapan.join(", ")}` : `${CIZILEN_V2.length} satır · ${merkezKategori.size} kategori`);
 
   // ── §4 MODÜL SÖZ DAĞARCIĞI ────────────────────────────────────────────────
   const ekranModul = new Map(SCREEN_CATALOG.filter((s) => s.key.startsWith("reports/") && s.key.split("/").length === 2)
@@ -198,7 +235,7 @@ function main(): void {
     `${yolBilesen.size} yaprak · ${bilesenYolu.size} bileşen · düzen: ${/defaultDays/.test(duzen) ? "defaultDays VAR" : "fallback yok"}`);
   const ciftSapan: string[] = [];
   const ARALIK_HOOKLARI = /\b(useReportDateRange|useFactoryRange)\(([^)]*)\)/g;
-  for (const r of CIZILEN) {
+  for (const r of CIZILEN_V1) {
     if (r.varsayilanGun === null || r.panelYolu === "") continue;   // diyalog ve günsüzler §7a/§7b'de
     const bilesen = yolBilesen.get(r.panelYolu);
     if (!bilesen) { ciftSapan.push(`${r.key}: ÖLÇÜLEMEDİ — route'ta bileşen bulunamadı`); continue; }
@@ -217,7 +254,12 @@ function main(): void {
   }
   check("§7d ⭐ pencereli yaprak SAYI yazmaz, KENDİ anahtarını hook'a verir (çift yazım imkânsız; sayı yalnız katalogda)",
     ciftSapan.length === 0, ciftSapan.join(" · ")
-    || `${CIZILEN.filter((r) => r.varsayilanGun !== null && r.panelYolu !== "").length} yaprak ölçüldü`);
+    || `${CIZILEN_V1.filter((r) => r.varsayilanGun !== null && r.panelYolu !== "").length} yaprak ölçüldü`);
+  // v2 genel yaprağı tarihi `ReportDateFilter`a satırın KENDİ anahtarıyla verir (sayı katalogdan).
+  const cipler = readFileSync(join(ELECTRON, "src/pages/Reports/_v2/ParamChips.tsx"), "utf8");
+  check("§7dv ⭐ v2 genel yaprağı tarih hook'una KENDİ anahtarını verir (gün sayısı yazmaz)",
+    /<ReportDateFilter reportKey=\{entry\.key as ReportKey\}/.test(cipler) && !/defaultDays/.test(cipler),
+    `${CIZILEN_V2.filter((r) => r.varsayilanGun !== null).length} pencereli hazır v2`);
 
   // ── §6 BEYANLI YÜZEY TÜRLERİ görünür kalsın ───────────────────────────────
   const yabanci = REPORT_CATALOG.filter((r) => r.yuzey === "yaprak-yabanci-uc");
@@ -234,7 +276,8 @@ function main(): void {
   // Negatif sondalar (2026-10-24, yalnız backend sabiti bozuldu, md5 ile geri alındı; §5 ayna ❌'si
   // beklenen eş kırmızıdır): `sales/order-intake`ın `yeniHali` silindi → §8a ❌ (+§5);
   // `dokuma/levent-sonucu` `birlesti → dokuma/tezgah-randimani` yapıldı → §8c ❌ (+§5);
-  // `temel-satis.routes.ts`e `requireReportOpen("sales/termin")` yazıldı (satır hazir:false) → §8f ❌ (1).
+  // §8f K-KAPI (R0-RAPB, 2026-10-24): `temel-uretim.routes.ts` `quality/kayip` ucundan `...reportGate(...)` silindi
+  // → §8f ❌ (1); `/inventory/depo` yolu `/inventory/depo-x` yapıldı (kapı yolsuz kaldı) → §8f ❌ (1).
   const v1 = REPORT_CATALOG.filter((r) => r.nesil === "v1");
   const v2 = REPORT_CATALOG.filter((r) => r.nesil === "v2");
   check("§8z körlük zemini: iki nesil de dolu", v1.length > 0 && v2.length > 0, `v1 ${v1.length} · v2 ${v2.length}`);
@@ -259,7 +302,12 @@ function main(): void {
       + ` · uzman ${v1.filter((r) => halOf(r)?.tur === "uzman").length}`
       + ` · taşındı ${v1.filter((r) => halOf(r)?.tur === "tasindi").length}`);
   check("§8b `birlesti` hedefi katalogda `nesil:\"v2\"` satırıdır", yanlisHedef.length === 0, yanlisHedef.join(" · ") || "hepsi");
-  const yetim = v2.filter((r) => !gosterilen.has(r.key)).map((r) => r.key);
+  // `yeniRapor:true` = hiçbir v1'in yerine gelmeyen BEYANLI yeni rapor; beyansız yetim kırmızı kalır.
+  const yeniBeyan = (r: (typeof v2)[number]): boolean => (r as { yeniRapor?: true }).yeniRapor === true;
+  const yetim = v2.filter((r) => !gosterilen.has(r.key) && !yeniBeyan(r)).map((r) => r.key);
+  const yeniSapan = v2.filter((r) => yeniBeyan(r) && (gosterilen.has(r.key) || !r.hazir)).map((r) => r.key);
+  check("§8c2 `yeniRapor` beyanı yalnız hiçbir v1'in göstermediği HAZIR satırda", yeniSapan.length === 0,
+    yeniSapan.join(", ") || `${v2.filter(yeniBeyan).length} yeni rapor`);
   check("§8c ⭐ her v2 satırı EN AZ bir v1 satırının yeni hâlidir (yetim v2 yok)", yetim.length === 0,
     yetim.length ? `HİÇBİR v1 GÖSTERMİYOR: ${yetim.join(", ")}` : `${v2.length} v2 · ${[...gosterilen.values()].flat().length} v1 bağı`);
 
@@ -277,19 +325,33 @@ function main(): void {
   check("§8e v1 `kategoriV2`: uzman ⇔ `muhasebe-araclari`, diğerleri `null`", kategoriSapan.length === 0,
     kategoriSapan.join(", ") || `${v1.filter((r) => r.kategoriV2 !== null).length} uzman`);
 
-  // §8f ⭐ İKİ YÖNLÜ hazırlık: `hazir:false` satırın taşıyıcısında kapı BULUNURSA kırmızı (uç inmiş,
-  // beyan geride kalmış); `hazir:true` satır §1–§3 ve `test_rapor_kapisi` ölçümüne zaten girer.
+  // §8f ⭐ AŞAMALI İNİŞ (K-KAPI 2026-10-24): `hazir:false` satırın ucu backend'de önce inebilir; o zaman uç
+  // KAPILI olmalı — kapı iki kalıpta tanınır: literal `requireReportOpen("<key>")` ya da `...reportGate("<key>")`
+  // fabrikası (aynı sıkılık). Ucu olmayan satırın taşıyıcısında kapı da OLMAZ (yolsuz kapı = beyan/uç ayrışması).
+  // `hazir:true` satır §1–§3 ve `test_rapor_kapisi` ölçümüne zaten girer.
   const hazirSapan: string[] = [];
+  let inmisUc = 0;
+  const kapiVar = (metin: string, key: string): boolean =>
+    metin.includes(`requireReportOpen("${key}")`) || metin.includes(`reportGate("${key}")`);
   for (const r of v2) {
     if (r.hazir) continue;
     for (const t of r.kapiTasiyici ?? []) {
       let kaynak: string;
       try { kaynak = readFileSync(join(KOK, t.dosya), "utf8"); } catch { continue; } // dosya henüz yok = beklenen
-      if (kaynak.includes(`requireReportOpen("${r.key}")`)) hazirSapan.push(`${r.key}: hazır değil diyor ama uç var — hazir:true yap (${t.dosya})`);
+      const bas = kaynak.indexOf(`router.get("${t.yol}"`);
+      if (bas < 0) {
+        if (kapiVar(kaynak, r.key)) hazirSapan.push(`${r.key}: uç yok ama kapı var (${t.dosya})`);
+        continue;
+      }
+      inmisUc++;
+      // Zincir: yol dizgisinden işleyicinin başına (`async (`) kadar.
+      const son = kaynak.indexOf("async (", bas);
+      const zincir = kaynak.slice(bas, son < 0 ? undefined : son);
+      if (!kapiVar(zincir, r.key)) hazirSapan.push(`${r.key}: uç inmiş ama RAPOR KAPISI yok (${t.dosya}${t.yol})`);
     }
   }
-  check("§8f ⭐ `hazir:false` satırın taşıyıcısında kapı YOK (uç inince beyan `hazir:true`ya döner)", hazirSapan.length === 0,
-    hazirSapan.join(" · ") || `${v2.filter((r) => !r.hazir).length} hazır değil · ${v2.filter((r) => r.hazir).length} hazır`);
+  check("§8f ⭐ `hazir:false` satırın inmiş ucu KAPILI, ucu olmayanda kapı yok (aşamalı iniş, K-KAPI)", hazirSapan.length === 0,
+    hazirSapan.join(" · ") || `${v2.filter((r) => !r.hazir).length} hazır değil (${inmisUc} uç inmiş) · ${v2.filter((r) => r.hazir).length} hazır`);
 
   // §8g v2 satırının biçimi: adres anahtardan türer, kategori/persona/varyant kapalı kümeden.
   const KATEGORI = new Set<string>(RAPOR_KATEGORILERI_V2);

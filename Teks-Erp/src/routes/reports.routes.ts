@@ -17,6 +17,9 @@ import customerReportRoutes from "./reports/customer.routes";
 import auditReportRoutes from "./reports/audit.routes";
 import financeReportRoutes from "./reports/finance.report.routes";
 import dokumaReportRoutes from "./reports/dokuma.report.routes";
+import coreSalesReportRoutes from "./reports/temel-satis.routes";
+import coreProductionReportRoutes from "./reports/temel-uretim.routes";
+import coreWeavingFinanceReportRoutes from "./reports/temel-dokuma-finans.routes";
 
 const router = Router();
 
@@ -34,5 +37,13 @@ router.use("/audit", auditReportRoutes);
 router.use("/finance", financeReportRoutes);
 // Dokuma raporları (Dilim 4, 2026-09-14): aynı kalıp — `requireDokumaEnabled` kendi dosyasında.
 router.use("/dokuma", dokumaReportRoutes);
+// Raporlar v2 temel satış raporları (R0-RAPA): ÖNEKSİZ mount — yollar dosyada tam (`/sales/termin`),
+// katalog `kapiTasiyici.yol` beyanıyla bayt-eşit. `/sales` router'ında eşleşmeyen istek buraya düşer.
+router.use(coreSalesReportRoutes);
+// Raporlar v2 temel üretim/kalite/depo/fason raporları (R0-RAPB): ÖNEKSİZ mount — yollar dosyada tam
+// (`/quality/kayip`), katalog `kapiTasiyici.yol` ile bayt-eşit; kimlik kapısı uç zincirinde (router.use YOK).
+router.use(coreProductionReportRoutes);
+// Raporlar v2 temel dokuma/alacak raporları (R0-RAPC): aynı kalıp; modül kapısı (dokuma/devere/finans) uç zincirinde.
+router.use(coreWeavingFinanceReportRoutes);
 
 export default router;

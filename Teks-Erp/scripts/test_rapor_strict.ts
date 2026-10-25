@@ -16,6 +16,11 @@ import { yorumlariSok } from "./lib/regime-gate-scan";
 import { compareRangeSchema, dateRangeSchema, emptyQuerySchema } from "../src/services/reports/_shared";
 import { batchSearchQuerySchema, operatorPerformanceQuerySchema, travelerTraceQuerySchema } from "../src/routes/reports/production.routes";
 import { productionChainQuerySchema } from "../src/routes/reports/dokuma.report.routes";
+import { coreRangeQuerySchema } from "../src/services/reports/temel/_common";
+import * as temelUretim from "../src/routes/reports/temel-uretim.routes";
+import * as temelSatis from "../src/routes/reports/temel-satis.routes";
+import * as temelDokumaFinans from "../src/routes/reports/temel-dokuma-finans.routes";
+import { coreDayRangeQuerySchema } from "../src/services/reports/temel/_day-range";
 
 let pass = 0;
 let fail = 0;
@@ -68,6 +73,48 @@ check("§2c ⭐ operator-performance: limit 'abc' → RED (sessiz 50 YOK); limit
 check("§2d traveler-trace: rollId zorunlu uuid, fazladan anahtar red", red(travelerTraceQuerySchema, {}) && red(travelerTraceQuerySchema, { rollId: "x" }) && red(travelerTraceQuerySchema, { rollId: "11111111-1111-4111-8111-111111111111", foo: "1" }) && !red(travelerTraceQuerySchema, { rollId: "11111111-1111-4111-8111-111111111111" }));
 check("§2e zincir (Z3): süzgeçsiz geçer, durum kapalı enum, gecikmis yalnız 'true', fazladan anahtar red", !red(productionChainQuerySchema, {}) && !red(productionChainQuerySchema, { durum: "GECIKMIS", gecikmis: "true" }) && red(productionChainQuerySchema, { durum: "YOK" }) && red(productionChainQuerySchema, { gecikmis: "false" }) && red(productionChainQuerySchema, { from: "2026-01-01" }));
 check("§2e ortak şemalar strict: dateRangeSchema/compareRangeSchema bilinmeyen anahtarı reddeder", red(dateRangeSchema, { installationId: "1" }) && red(compareRangeSchema, { installationId: "1" }));
+
+// §3 K-TEL (2026-10-24): panelin rapor v2 isteğindeki tarih + kıyas anahtarları = ortak sorgu şemasının kümesi.
+// NEGATİF SONDA 2026-10-24: `_common.ts`te `kiyas` → `compare` yapıldı → §3a + §3b ❌; geri alındı → ✅.
+// NEGATİF SONDA 2026-10-25 (R0-RAPA): `temel-satis` termin şeması `compareRangeSchema`ya döndürüldü → §3b ❌; geri alındı → ✅.
+console.log("\n── §3 K-TEL: panel ↔ uç tel anahtarı eşitliği (rapor v2) ──");
+const PANEL = path.resolve(ROOT, "../Electron/src/pages/Reports");
+const kiyasAd = /export const COMPARE_PARAM = "(\w+)"/.exec(readFileSync(path.join(PANEL, "_v2/request-params.ts"), "utf8"))?.[1];
+const isoGovde = /export function rangeIsoParams\([^)]*\)[^{]*\{([\s\S]*?)\n\}/.exec(readFileSync(path.join(PANEL, "_lib/report-date.ts"), "utf8"))?.[1] ?? "";
+const panelKume = [...[...isoGovde.matchAll(/(\w+):/g)].map((m) => m[1]!), kiyasAd ?? "?"].sort();
+const ucKume = Object.keys(coreRangeQuerySchema.shape).sort();
+check("§3a panel {tarih (aralik-iso) + COMPARE_PARAM} = coreRangeQuerySchema anahtarları", panelKume.join(",") === ucKume.join(","), `panel ${panelKume.join(",")} · uç ${ucKume.join(",")}`);
+const v2Semalar = [...Object.entries(temelUretim), ...Object.entries(temelSatis)].filter(([ad]) => /^core\w+QuerySchema$/.test(ad)) as [string, { safeParse: (v: unknown) => { success: boolean }; shape: object }][];
+const kiyasli = v2Semalar.filter(([, s]) => "dateFrom" in s.shape);
+check("§3b her aralıklı v2 ucu `kiyas` kabul eder, `compare` reddeder", kiyasli.length >= 8 && kiyasli.every(([, s]) => !red(s, { kiyas: "prevYear" }) && red(s, { compare: "prev" })), kiyasli.map(([a]) => a).join(","));
+
+// §3c K-TEL gün sözleşmesi (R0-RAPC, `tarih:"aralik-gun"`): panel `rangeDayParams` gövdesi + COMPARE_PARAM = gün şeması.
+// NEGATİF SONDA 2026-10-25: `_day-range.ts`te `from` → `fromDay` yapıldı → §3c + §3d ❌; geri alındı → ✅.
+const gunGovde = /export function rangeDayParams\([^)]*\)[^\n]*\n\s*return \{([^}]*)\}/.exec(readFileSync(path.join(PANEL, "_lib/report-date.ts"), "utf8"))?.[1] ?? "";
+const panelGun = [...[...gunGovde.matchAll(/(\w+):/g)].map((m) => m[1]!), kiyasAd ?? "?"].sort();
+const ucGun = Object.keys(coreDayRangeQuerySchema.shape).sort();
+check("§3c panel {tarih (aralik-gun) + COMPARE_PARAM} = coreDayRangeQuerySchema anahtarları", panelGun.join(",") === ucGun.join(","), `panel ${panelGun.join(",")} · uç ${ucGun.join(",")}`);
+const gunSemalar = Object.entries(temelDokumaFinans).filter(([ad]) => /^core\w+QuerySchema$/.test(ad)) as [string, { safeParse: (v: unknown) => { success: boolean }; shape: object }][];
+const gunKiyasli = gunSemalar.filter(([, s]) => "from" in s.shape);
+check("§3d her gün aralıklı v2 ucu `kiyas` kabul eder, `compare` reddeder", gunKiyasli.length >= 3 && gunKiyasli.every(([, s]) => !red(s, { from: "2026-10-01", to: "2026-10-07", kiyas: "prevYear" }) && red(s, { compare: "prev" })), gunKiyasli.map(([a]) => a).join(","));
+
+// §4 R1-VARYANT (2026-10-25): `varyant` yalnız ucun BEYANLI boyutundan (katalogda olup kaynağı süzemeyen boyut dahil
+// dışı 400), `donemler` "birim:adet" (2–12). NEGATİF SONDA 2026-10-25: `variantQueryKeys` enum'u katalogun TÜM
+// boyutlarına açıldı → §4b ❌; geri alındı → ✅.
+console.log("\n── §4 R1-VARYANT: varyant + dönem anahtarları ──");
+const tumV2 = [...Object.entries(temelUretim), ...Object.entries(temelSatis), ...Object.entries(temelDokumaFinans)]
+  .filter(([ad]) => /^core\w+QuerySchema$/.test(ad)) as [string, { safeParse: (v: unknown) => { success: boolean } }][];
+const donemsiz = tumV2.filter(([, sch]) => red(sch, { donemler: "ay:6" }) || !red(sch, { donemler: "ay:13" }) || !red(sch, { donemler: "yil:2" }));
+check("§4a her v2 ucu `donemler=ay:6` kabul eder, ay:13 / yil:2 reddeder", tumV2.length >= 14 && donemsiz.length === 0, donemsiz.map(([a]) => a).join(",") || `${tumV2.length} şema`);
+const kirilim = [
+  ["siparis-talep musteri ✓ · renk ✗", !red(temelSatis.coreOrderDemandQuerySchema, { varyant: "musteri" }) && red(temelSatis.coreOrderDemandQuerySchema, { varyant: "renk" })],
+  ["vazgecilen-is her varyant ✗", red(temelSatis.coreLostWorkQuerySchema, { varyant: "musteri" })],
+  ["fasoncular fasoncu ✓ · renk ✗", !red(temelUretim.coreSubcontractorsQuerySchema, { varyant: "fasoncu" }) && red(temelUretim.coreSubcontractorsQuerySchema, { varyant: "renk" })],
+  ["duruslar vardiya ✓ · tezgah ✗", !red(temelDokumaFinans.coreLoomStopsQuerySchema, { varyant: "vardiya" }) && red(temelDokumaFinans.coreLoomStopsQuerySchema, { varyant: "tezgah" })],
+  ["depo her varyant ✗", red(temelUretim.coreWarehouseQuerySchema, { varyant: "urun" })],
+] as const;
+check("§4b ⭐ beyanda olmayan kırılım 400 (katalogda olsa bile kaynak süzemiyorsa)", kirilim.every(([, ok]) => ok), kirilim.filter(([, ok]) => !ok).map(([a]) => a).join(" · ") || "beşi de doğru");
+check("§4c görünüm anlamlı `varyant` (üretim akışı/kalite) korunur", !red(temelUretim.coreProductionFlowQuerySchema, { varyant: "operator" }) && red(temelUretim.coreProductionFlowQuerySchema, { varyant: "musteri" }));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

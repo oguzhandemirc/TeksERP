@@ -22,6 +22,7 @@ import { SessionRegistryService } from "./session-registry.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { USER_ADMIN_CODES, effectiveUserAdminGrantWhere, factoryAdminExists } from "./helpers/factory-admin.helper";
 import { geciciParolaUret } from "../lib/ilk-yonetici-parolasi";
+import { closeUser as closeUserBells } from "./notification-bell-hub";
 
 /**
  * Silinen kullanıcının sır kolonları (B5). `passwordHash` NOT NULL olduğu için geçersiz özet
@@ -303,6 +304,8 @@ export class PermissionManagementService {
       },
     });
 
+    // Görme kümesi değişti: açık zil akışı kapanır, istemci yeniden bağlanıp yeni kümeyle okur.
+    closeUserBells(userId, "yetki");
     return created;
   }
 
@@ -432,6 +435,7 @@ export class PermissionManagementService {
       },
     });
 
+    closeUserBells(userId, "yetki");
     return this.getUserPermissions(userId);
   }
 
@@ -483,6 +487,7 @@ export class PermissionManagementService {
       recordId: existing.id,
       oldData: { userId, permissionCode: existing.permission.code },
     });
+    closeUserBells(userId, "yetki");
   }
 
   // ---------------------------------------------------------------------------

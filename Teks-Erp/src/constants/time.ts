@@ -298,6 +298,20 @@ export function factoryMonthSql(columnExpr: string): Prisma.Sql {
 }
 
 /**
+ * FABRİKA HAFTASI — ISO hafta (pazartesi başlar), haftanın ilk fabrika gününü `date` döndürür.
+ * `factoryMonthSql`in hafta ikizi: pazartesi gecesi (yerel 00:00–03:00) UTC'de HÂLÂ pazardır;
+ * çıplak `DATE_TRUNC('week', tstz)` o saatleri önceki haftaya yazardı (semantik katman, R1-SEMCEK).
+ */
+export function factoryWeekSql(columnExpr: string): Prisma.Sql {
+  return Prisma.raw(`DATE_TRUNC('week', ${factoryLocalTimestampSqlText(columnExpr)})::date`);
+}
+
+/** FABRİKA SAATİ (0–23, `int`) — saat boyutu; gece yarısı yerel saate göre kesilir (semantik katman, R1-SEMKUP). */
+export function factoryHourSql(columnExpr: string): Prisma.Sql {
+  return Prisma.raw(`EXTRACT(HOUR FROM ${factoryLocalTimestampSqlText(columnExpr)})::int`);
+}
+
+/**
  * Verilen anın bir dilimdeki duvar-saati parçaları.
  * `Intl` kullanılır (izinli paket listesinde date kütüphanesi yok) — süreç
  * saat diliminden (`TZ` env) BAĞIMSIZ çalışır. `new Date().setHours(0,0,0,0)`

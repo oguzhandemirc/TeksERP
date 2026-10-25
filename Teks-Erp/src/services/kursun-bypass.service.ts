@@ -43,6 +43,7 @@
 
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
+import { assertKursunGramajValue, loadKursunGramajOptions } from "./helpers/kursun-bypass-gramaj.helper";
 import { randomUUID } from "crypto";
 import { normalizeScanCode } from "../utils/code-format";
 import {
@@ -85,6 +86,7 @@ import {
   STEP_FLOW_SELECT,
   stepRunsStepFlow,
 } from "./helpers/quality-station.helper";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 /**
  * Bypass kapanışının movement notes marker ÖN EKİ. Tur kimliği (uuid) suffix
@@ -219,6 +221,9 @@ export interface KursunDistributionAssignedRow extends KursunDistributionRowBase
   assignedAt: Date;
   assignedByName: string | null;
   notes: string | null;
+  /** KQ-D6: kâğıt gramajı (isteğe bağlı) — null = bilinmiyor. Eski panel yok sayar. */
+  propertyValueId: string | null;
+  propertyValueName: string | null;
   /** Atama artık anlamsız (adım kapandı / açık top kalmadı) → UI "iptal et" önerir. */
   stale: boolean;
   staleReason: string | null;
@@ -253,6 +258,8 @@ export interface KursunDistributionPayload {
   assigned: KursunDistributionAssignedRow[];
   /** Son 7 günde dağıtılmadan kapanan işler — bilgi bandı kaynağı. */
   unassignedClosures: KursunUnassignedClosureStats;
+  /** KQ-D6: kurşun çeşit özelliğinin AKTİF değerleri (gramaj seçici); bağ yoksa boş. */
+  gramajOptions: Array<{ id: string; name: string }>;
 }
 
 /**
@@ -484,6 +491,46 @@ export class KursunBypassService {
    * Havuz üzerinde `Promise.all` serbesttir (tx DEĞİL — ESLint guard'ı yalnız
    * `tx` client'ını yakalar; üç sorgu üç bağlantıda paralel koşar).
    */
+  /**
+   * KQ-D6: açık dağıtımın kâğıt gramajını değiştirir (`null` = bilinmiyor'a çek).
+   * Tamamlanmış/iptal atamada 409 — kapanmış iş donmuştur. RollOperation YAZILMAZ.
+   */
+  async setGramaj(
+    assignmentId: string,
+    propertyValueId: string | null,
+    userId?: string,
+  ): Promise<ApiResponse<{ assignmentId: string; propertyValueId: string | null; changed: boolean }>> {
+    if (propertyValueId) await assertKursunGramajValue(prisma, propertyValueId);
+    // Tamamlanınca DONAR: atomik claim `WHERE {id, completedAt: null, cancelledAt: null}`, kaybeden 409.
+    const { previousValueId } = await prisma.$transaction(async (tx) => {
+      const before = await tx.kursunBypassAssignment.findUnique({
+        where: { id: assignmentId },
+        select: { propertyValueId: true },
+      });
+      if (!before) throw AppError.notFound("Dağıtım kaydı bulunamadı");
+      const claim = await tx.kursunBypassAssignment.updateMany({
+        where: { id: assignmentId, completedAt: null, cancelledAt: null },
+        data: { propertyValueId },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict("Tamamlanmış/iptal dağıtımın gramajı değişmez", { code: "KURSUN_GRAMAJ_FROZEN" });
+      }
+      return { previousValueId: before.propertyValueId };
+    });
+    const changed = previousValueId !== propertyValueId;
+    if (changed) {
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "KURSUN_BYPASS_ASSIGNMENT",
+        recordId: assignmentId,
+        oldData: { propertyValueId: previousValueId },
+        newData: { event: "KURSUN_BYPASS_GRAMAJ", propertyValueId },
+      });
+    }
+    return { success: true, data: { assignmentId, propertyValueId, changed }, message: "Gramaj kaydedildi" };
+  }
+
   async getVisibility(): Promise<ApiResponse<KursunBypassVisibility>> {
     const [flagEnabled, pendingAssignmentCount, tabletRegimeCount] = await Promise.all([
       resolveKursunBypassEnabled(),
@@ -549,6 +596,8 @@ export class KursunBypassService {
         machineId: true,
         assignedAt: true,
         notes: true,
+        propertyValueId: true,
+        propertyValue: { select: { name: true } },
         machine: {
           select: {
             code: true,
@@ -640,6 +689,8 @@ export class KursunBypassService {
         assignedAt: a.assignedAt,
         assignedByName: a.assignedBy?.fullName ?? null,
         notes: a.notes,
+        propertyValueId: a.propertyValueId,
+        propertyValueName: a.propertyValue?.name ?? null,
         stale: staleReason !== null,
         staleReason,
         priority: step.priority,
@@ -660,7 +711,7 @@ export class KursunBypassService {
 
     return {
       success: true,
-      data: { flagEnabled, machines, waiting, assigned, unassignedClosures },
+      data: { flagEnabled, machines, waiting, assigned, unassignedClosures, gramajOptions: await loadKursunGramajOptions() },
     };
   }
 
@@ -750,7 +801,7 @@ export class KursunBypassService {
    * "geri yükleme" diye bir şey de yoktur.
    */
   async assign(
-    input: { workOrderId: string; machineId: string; notes?: string | null },
+    input: { workOrderId: string; machineId: string; notes?: string | null; propertyValueId?: string | null },
     userId?: string,
   ): Promise<
     ApiResponse<{
@@ -769,6 +820,9 @@ export class KursunBypassService {
     // assignedById NOT NULL — anonim atama olamaz (dağıtım bir sorumluluk kaydıdır).
     if (!userId) throw AppError.unauthorized();
     const notes = input.notes?.trim() ? input.notes.trim().slice(0, 500) : null;
+    // KQ-D6: kâğıt gramajı İSTEĞE BAĞLI; verildiyse kurşun çeşidinin aktif değeri olmalı.
+    if (input.propertyValueId) await assertKursunGramajValue(prisma, input.propertyValueId);
+    const gramaj = input.propertyValueId !== undefined ? { propertyValueId: input.propertyValueId } : {};
 
     let result;
     try {
@@ -885,7 +939,7 @@ export class KursunBypassService {
         }
         // 6e
         const errorCount = await tx.rollError.count({
-          where: { detectedAtStepId: step.id },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, detectedAtStepId: step.id },
         });
         if (errorCount > 0) {
           throw AppError.conflict(
@@ -958,7 +1012,7 @@ export class KursunBypassService {
         if (existingPending) {
           const claim = await tx.kursunBypassAssignment.updateMany({
             where: { id: existingPending.id, completedAt: null, cancelledAt: null },
-            data: { machineId: machine.id, notes },
+            data: { machineId: machine.id, notes, ...gramaj },
           });
           if (claim.count === 0) {
             throw AppError.conflict(
@@ -974,6 +1028,7 @@ export class KursunBypassService {
               machineId: machine.id,
               assignedById: userId,
               notes,
+              ...gramaj,
             },
             select: { id: true },
           });
@@ -1021,6 +1076,7 @@ export class KursunBypassService {
         reassigned: result.reassigned,
         isLastStep: result.isLastStep,
         notes,
+        ...gramaj,
       },
     });
 
@@ -1347,7 +1403,7 @@ export class KursunBypassService {
    */
   async completeFromDistribution(
     assignmentId: string,
-    input: { rollIds: string[] },
+    input: { rollIds: string[]; propertyValueId?: string | null },
     userId?: string,
   ): Promise<
     ApiResponse<{
@@ -1361,6 +1417,7 @@ export class KursunBypassService {
     const rollIds = [...new Set(input.rollIds)];
     if (rollIds.length === 0) throw AppError.badRequest("Tamamlanacak top seçilmedi");
 
+    if (input.propertyValueId) await assertKursunGramajValue(prisma, input.propertyValueId);
     const a = await this.loadAssignmentForCompletion(assignmentId);
     const next = nextNonSkippedStep(a.workOrder.steps, a.workOrderStepId);
     if (next) {
@@ -1373,6 +1430,14 @@ export class KursunBypassService {
       await touchWorkOrderTx(tx, a.workOrderId);
       await this.assertWorkOrderAliveTx(tx, a.workOrderId);
 
+      // KQ-D6: tamamlamada verilen gramaj, claim'den ÖNCE açık satıra yazılır (aynı
+      // tx); atama zaten kapanmışsa 0 satır döner ve claim'in idempotent dalı karar verir.
+      if (input.propertyValueId !== undefined) {
+        await tx.kursunBypassAssignment.updateMany({
+          where: { id: assignmentId, completedAt: null, cancelledAt: null },
+          data: { propertyValueId: input.propertyValueId },
+        });
+      }
       const claimed = await this.claimAssignmentTx(
         tx,
         assignmentId,
@@ -1438,6 +1503,7 @@ export class KursunBypassService {
         rollCount: result.finalized.length,
         barcodesGenerated,
         completedVia: KursunBypassCompletionSource.DISTRIBUTION_LAST_STEP,
+        ...(input.propertyValueId !== undefined ? { propertyValueId: input.propertyValueId } : {}),
       },
     });
 

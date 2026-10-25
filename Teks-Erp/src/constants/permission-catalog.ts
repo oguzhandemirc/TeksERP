@@ -80,6 +80,12 @@ export const PERMISSION_CATALOG = [
   // dokuma planlamacısı aynı kişi olmak zorunda değil.
   { code: "warpspec:read", module: "MASTER_DATA", category: "web", description: "Çözgü kartı (tel · iplik · tarak) listesi/detay görüntüleme" },
   { code: "warpspec:write", module: "MASTER_DATA", category: "web", description: "Çözgü kartı oluşturma/düzenleme" },
+  // ── Maliyet & Teklif (MAL-1, 2026-10-25) — modül `maliyet.enabled` ───────────────────────────
+  // Okuma TUTAR görmektir (maliyet tabanı ticari sırdır); yazma ürün yapısı + fiyat/tarife;
+  // tesis parametreleri ayrı karar (yürürlüğe alma bütün maliyetleri değiştirir).
+  { code: "cost:read", module: "COST", category: "web", description: "Maliyet girdilerini ve tutarlarını görüntüleme" },
+  { code: "cost:write", module: "COST", category: "web", description: "Ürün maliyet yapısı, iplik maliyet fiyatı ve terbiye tarifesi yazma" },
+  { code: "cost:settings", module: "COST", category: "web", description: "Tesis maliyet parametrelerini düzenleme ve yürürlüğe alma" },
   // ── Levent (devere Faz 1b, 2026-09-14): plan/sar yazma, sarım iptali AYRI yetenek (defterden net iplik döner).
   { code: "warpbeam:read", module: "PRODUCTION", category: "web", description: "Levent listesi/detayı (plan · sarım · kalan metre · iplik satırları)" },
   { code: "warpbeam:write", module: "PRODUCTION", category: "web", description: "Levent planlama, sarım (WOUND + iplik çıkışı/dip iadesi), taslak silme" },
@@ -143,6 +149,11 @@ export const PERMISSION_CATALOG = [
   // Sevk geri alma (storno) — `shipping:write`ten AYRI: sevk eden herkesin resmi
   // çıkış belgesini iptal edip stok/karşılanma defterini geri sarabilmesi istenmiyor.
   { code: "shipping:undo-dispatch", module: "LOGISTICS", category: "web", description: "Sevk edilmiş sevkiyatı geri alma (irsaliye iptal + stok depoya)" },
+  // e-İrsaliye (E5): okuma · hazırla/üret/gönder · elle gönderim/yanıt kaydını geri alma.
+  // `undo` ayrı: `shipping:undo-dispatch` ailesi — storno kapısını açan anahtar (plan §3.7).
+  { code: "eirsaliye:read", module: "LOGISTICS", category: "web", description: "e-İrsaliye kayıtlarını ve hazırlık durumunu görüntüleme" },
+  { code: "eirsaliye:write", module: "LOGISTICS", category: "web", description: "e-İrsaliye hazırlama, üretme, XML indirme, gönderme, yanıt kaydı ve iptal" },
+  { code: "eirsaliye:undo", module: "LOGISTICS", category: "web", description: "e-İrsaliye gönderim ya da yanıt kaydını geri alma (karşı kayıtla)" },
   // Defter onarımı — `shipping:write`ten AYRI (aynı gerekçe: sevk eden herkes
   // GEÇMİŞ bir sevkiyatın sipariş defterini değiştirmemeli). Onarım irsaliyenin
   // yeni bir sürümünü doğurur; sahadaki yöneticiye bilinçli olarak atanır.
@@ -233,7 +244,8 @@ export const PERMISSION_CATALOG = [
   { code: "settings:finance", module: "ADMIN", category: "web", description: "Özellik Anahtarları → Muhasebe (KDV, fatura toleransı, kasa/risk kuralları)" },
   { code: "settings:label", module: "ADMIN", category: "web", description: "Baskı & Cihazlar → Etiket Baskısı (kopya, ortam, gönderim)" },
   { code: "settings:devices", module: "ADMIN", category: "web", description: "Baskı & Cihazlar → Cihazlar (tablet eşleştirme zorunluluğu)" },
-  { code: "settings:company", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Şirket Bilgileri (ad, antet, logo)" },
+  { code: "settings:company", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Şirket Bilgileri (ad, antet, logo, resmi künye)" },
+  { code: "settings:e-irsaliye", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → e-İrsaliye (bağdaştırıcı, yürürlük tarihi)" },
   { code: "settings:session", module: "ADMIN", category: "web", description: "Şirket & Güvenlik → Oturum & Güvenlik (oturum süreleri, giriş yöntemleri, PIN kilidi) — güvenliği gevşetebilir" },
   // Sistem ekranları — her karo kendi izniyle açılır.
   { code: "system:activity", module: "ADMIN", category: "web", description: "Sistem → Aktivite Günlüğü · Sistem Kayıtları · Arşiv Tarama (okuma)" },
@@ -264,6 +276,10 @@ export const PERMISSION_CATALOG = [
   // anında admin dahil herkesi dışarıda bırakırdı. Küme: constants/document-design.ts
   { code: "document-template:read", module: "ADMIN", category: "web", description: "Belge şablonları / refakat kartı ayarı / serbest belgeleri görüntüleme (salt-okunur)" },
   { code: "document-template:write", module: "ADMIN", category: "web", description: "Belge şablonu + refakat kartı ayarı/şablonu + serbest belge oluşturma/düzenleme/silme" },
+  // Belge tasarımcısı (2026-10-24, plan P-a): tasarım ile yayın AYRI izin — yayın müşteriye giden
+  // belgenin görünümünü değiştirir; "tasarlayan ≠ yayınlayan" SoD ayarı bu ayrıma dayanır.
+  { code: "document-template:design", module: "ADMIN", category: "web", description: "Belge tasarımcısında şablon oluşturma, düzenleme, sürüm kaydetme, arşivleme ve atama" },
+  { code: "document-template:publish", module: "ADMIN", category: "web", description: "Belge tasarımcısında şablon sürümünü yayınlama (basımda kullanılır hâle getirme)" },
   // 2026-08-19: TOPLU İÇE AKTARIM (Excel/CSV yükleme). Ayrı bir yetki olması
   // sektör standardıdır (Odoo `group_allow_export` / SAP veri aktarım rolü) ve
   // gerekçesi tekil CRUD'dan farkıdır: tek tıkla YÜZLERCE kaydı değiştirebilen
@@ -296,6 +312,10 @@ export const PERMISSION_CATALOG = [
   { code: "report:subcontract", module: "REPORTS", category: "web", description: "Fason raporları" },
   { code: "report:customer", module: "REPORTS", category: "web", description: "Müşteri / satış profil raporları" },
   { code: "report:audit", module: "REPORTS", category: "web", description: "Sistem / audit raporları" },
+  // Raporlar v2 kayıtlı raporlar (R1-KAYIT): görme/çalıştırma yeni izin istemez (görünürlük + blok izinleri);
+  // oluşturma/düzenleme builder, kategori · herkese açma · başkasının koşusunu iptal publish.
+  { code: "report:builder", module: "REPORTS", category: "web", description: "Özel rapor oluşturma ve düzenleme (veri yetkisi vermez; her bölüm kendi rapor iznini ister)" },
+  { code: "report:publish", module: "REPORTS", category: "web", description: "Rapor kategorisi yönetimi, raporu herkese açma ve başkasının rapor çalıştırmasını durdurma" },
 
   // ----- MOBİL EKRAN izinleri -----
   // Route'larda `requireAnyPermission("web:perm", "mobile:xxx")` ile web
@@ -359,6 +379,12 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:muayene", module: "MOBILE", category: "mobile", description: "Mobil — Muayene ekranı: top okutup 4 puan muayene girme (istasyondan bağımsız)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];
+
+export const REPORT_BUILDER_PERMISSION = "report:builder";
+export const REPORT_PUBLISH_PERMISSION = "report:publish";
+
+/** Tüm `report:*` kodları — semantik rapor uçlarının giriş kapısı ("herhangi bir rapor izni"; veri yetkisi derleyicide). */
+export const REPORT_PERMISSION_CODES: readonly string[] = PERMISSION_CATALOG.filter((p) => p.code.startsWith("report:")).map((p) => p.code);
 
 /**
  * Masaüstü paneli (Electron + web) girişini AÇAN izin kümesi mi? En az bir mobil-olmayan kod yeter.

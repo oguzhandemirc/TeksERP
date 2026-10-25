@@ -37,6 +37,11 @@ export const TABLE_LABELS: Record<string, string> = {
 
   // Master data
   USER: "Kullanıcı",
+  REPORT_CATEGORY: "Rapor Kategorisi",
+  REPORT_DEFINITION: "Özel Rapor",
+  REPORT_DEFINITION_VERSION: "Özel Rapor Sürümü",
+  REPORT_PRESET: "Rapor Ön Ayarı",
+  REPORT_SHARE: "Rapor Paylaşımı",
   ITEM: "Kumaş / Stok Kalemi",
   CUSTOMER: "Müşteri",
   CUSTOMER_BRANCH: "Müşteri Şubesi",
@@ -104,6 +109,7 @@ export const TABLE_LABELS: Record<string, string> = {
   // türer). 2026-08-29'a dek değişim geçmişi HİÇ yoktu (BULGU-T2-003).
   SACK_ALLOCATION: "Sevk Tahsisi",
   SHIPMENT_LINE: "Sevkiyat Satırı",
+  E_IRSALIYE: "e-İrsaliye",
   SHIPMENT_PLANNED_ORDER: "Sevkiyat Planlı Sipariş",
   packaging_queue: "Paketleme Kuyruğu",
 
@@ -118,6 +124,10 @@ export const TABLE_LABELS: Record<string, string> = {
   LABEL_NATIVE_PRINT: "Yazıcı Baskısı",
   PRINTED_DOCUMENT: "Basılı Belge",
   DOCUMENT_PROFILE: "Belge Profili",
+  DOCUMENT_TEMPLATE: "Belge Şablonu",
+  DOCUMENT_TEMPLATE_VERSION: "Belge Şablonu Sürümü",
+  DOCUMENT_TEMPLATE_DEFAULT: "Varsayılan Belge Şablonu",
+  DOCUMENT_PROFILE_TEMPLATE: "Profil Belge Şablonu Ataması",
 
   // Kullanıcı & Yetki
   USER_PASSWORD: "Kullanıcı Şifresi",
@@ -145,6 +155,7 @@ export const TABLE_LABELS: Record<string, string> = {
   MACHINE_SHIFT_STAT: "Vardiya Karnesi",
   MACHINE_SHIFT_SEAL: "Vardiya Karnesi Mührü",
   KURSUN_BYPASS_ASSIGNMENT: "Kurşun Dağıtım Ataması",
+  WORK_ORDER_TARGET_VALUE: "Terbiye İş Emri Hedef Gramajı",
   PERIPHERAL_TEMPLATE_ROUTE: "Cihaz–Şablon Yönlendirmesi",
   // Boot uzlaştırması + panel işleri: tablo adı küçük harfle yazılmış
   // (backend'de bilinçli, kayıt "kod tarafı" olduğunu belli etsin diye).
@@ -185,6 +196,16 @@ export const TABLE_LABELS: Record<string, string> = {
   GOODS_RECEIPT: "Mal Kabul Fişi",
   PURCHASE_ORDER: "Alış Siparişi",
   ITEM_PRICE: "Ürün Fiyatı",
+  LAB_TEST: "Lab Testi",
+  LAB_TEST_TYPE: "Lab Test Türü",
+  CERTIFICATE: "Sertifika",
+  CERTIFICATE_FILE: "Sertifika Belgesi",
+  CUSTOMER_LAB_SPEC: "Müşteri Lab Spesifikasyonu",
+  COST_PARAMETER_SET: "Maliyet Parametre Seti",
+  COST_STRUCTURE: "Ürün Maliyet Yapısı",
+  FINISHING_RATE: "Apre Tarifesi",
+  WEFT_SPEC: "Atkı Spesifikasyonu",
+  YARN_COST_PRICE: "İplik Maliyet Fiyatı",
   STOCK_COUNT: "Stok Sayımı",
   STOCK_COUNT_LINE: "Stok Sayım Satırı",
   WAREHOUSE: "Depo",
@@ -603,8 +624,22 @@ export const ENUM_LABELS: Record<string, string> = {
   AUTO: "Otomatik uygulanır",
   OPTIONAL: "İsteğe bağlı",
   REQUIRED: "Zorunlu",
-  // SackWeightSource
+  // SackWeightSource (YarnCostPriceSource.MANUAL da aynı anlam)
   MANUAL: "Elle girildi",
+  // LabResultKind / LabVerdict (K4P-LAB)
+  NUMERIC: "Sayısal ölçüm",
+  PASS_FAIL: "Geçti / Kaldı",
+  PASS: "Geçti",
+  FAIL: "Kaldı",
+  // CertificateHolder (K4P-SERT)
+  OWN: "Fabrika",
+  PARTNER: "İş ortağı",
+  // YarnCostPriceSource
+  LAST_RECEIPT: "Son mal kabulden",
+  PURCHASE_PRICE: "Alış fiyatından",
+  // FinishingBasis
+  RAW_M: "Ham metre",
+  FINISHED_M: "Mamul metre",
   SIMULATED: "Simüle edildi",
   // PrintedDocType (eksik kalanlar)
   TRAVELER_CARD: "Refakat Kartı",
@@ -915,6 +950,21 @@ export const ENUM_LABELS: Record<string, string> = {
   ISLENDI: "İşlendi",
   REDDEDILDI: "Reddedildi",
 
+  // ── e-İrsaliye (E1-SEMA) — EIrsaliyeStatus · EIrsaliyeEventType (`REDDEDILDI` yukarıda ortak).
+  TASLAK: "Taslak",
+  OLUSTURULDU: "Oluşturuldu",
+  GONDERILDI: "Gönderildi",
+  KABUL: "Kabul edildi",
+  KISMI_KABUL: "Kısmen kabul edildi",
+  HATA: "Hata",
+  IPTAL: "İptal edildi",
+  HAZIRLANDI: "Hazırlandı",
+  XML_YENIDEN_URETILDI: "XML yeniden üretildi",
+  GONDERIM_GERI_ALINDI: "Gönderim geri alındı",
+  YANIT_KAYDEDILDI: "İrsaliye yanıtı kaydedildi",
+  YANIT_GERI_ALINDI: "İrsaliye yanıtı geri alındı",
+  HATA_ALINDI: "Hata alındı",
+  IPTAL_EDILDI: "İptal edildi",
   // ── Cihaz bağlama defteri (eşleme v2, D1) — DeviceBindingEventType. `MERGED` DuplicateReviewDecision ile ORTAK.
   REGISTERED: "Kaydedildi",
   REBIND_REQUESTED: "Yeniden bağlama istendi",
@@ -925,6 +975,29 @@ export const ENUM_LABELS: Record<string, string> = {
   PROOF_RESET: "Cihaz sırrı sıfırlandı",
   PURGED: "Kalıcı silindi",
   HW_CONFLICT: "Donanım özeti çakıştı",
+  // ── K4P 4 puan muayene (SEMA, 2026-10-24)
+  // RollErrorOrigin
+  PROCESS: "Süreç hatası",
+  INSPECTION: "Muayene hatası",
+  // FourPointSize (ASTM D5430 boyut sınıfı)
+  UP_TO_3IN: "≤ 7,5 cm (1 puan)",
+  IN_3_TO_6: "7,5–15 cm (2 puan)",
+  IN_6_TO_9: "15–23 cm (3 puan)",
+  OVER_9IN: "> 23 cm (4 puan)",
+  // InspectionPhase
+  RAW: "Ham muayene",
+  FINAL: "Mamul muayene",
+  // InspectionWidthSource — MANUAL ortak ("Elle girildi")
+  ITEM_CARD: "Ürün kartı eni",
+  ROLL_MEASURED: "Topta ölçülen en",
+  UNKNOWN: "En bilinmiyor",
+  // RuleScope — CUSTOMER ortak ("Müşteri")
+  FACTORY: "Fabrika varsayılanı",
+  // ScoreUnit
+  M2: "100 m² başına",
+  YD2: "100 yd² başına",
+  // RunningCap — METER/NONE FIELD_ENUM_OVERRIDES ile ayrılır
+  YARD: "Yarda başına en fazla 4 puan",
 };
 
 // =============================================================================
@@ -983,6 +1056,12 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "WARP_BEAM.originKind": { IN_HOUSE: "İçeride sarıldı" },
   // CashTxnKind.PAYMENT "ödeme satırı (çıkış)" — CariTxnSource.PAYMENT'ın "Tahsilat / Ödeme"si kasa türünde yanlış (tek yazar, 2026-09-18)
   "CASH_TRANSACTION.kind": { PAYMENT: "Ödeme" },
+  // RunningCap (K4P, 2026-10-24) — METER global "Metre Sayacı" (PeripheralKind), NONE global "Tarih yok" (NumberSeriesDateSegment); koşu tavanı için ikisi de yanlış
+  "FOUR_POINT_RULE_SET.runningCap": { METER: "Metre başına en fazla 4 puan", NONE: "Koşu tavanı yok" },
+  // LabResultKind.SCALE (K4P-LAB) — global "Kantar" çevre birimi dilidir; lab türünde gri ölçek notudur
+  "LAB_TEST_TYPE.resultKind": { SCALE: "Gri ölçek (1–5)" },
+  // LabVerdictSource.AUTO — global "Otomatik uygulanır" özellik modudur; hüküm sınırdan hesaplandı
+  "LAB_TEST.verdictSource": { AUTO: "Sınırdan otomatik" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
@@ -994,6 +1073,8 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // Partide CLOSED "sevk edildi"dir: son çuvalı sevk edilince sunucu yazar, elle
   // kapatma yoktur (2026-09-22); storno geri getirirse yeniden açık olur.
   "packing_groups.status": { OPEN: "Açık", CLOSED: "Sevk edildi" },
+  // EIrsaliyeSourceType.SHIPMENT (E1-SEMA) — kaydın KAYNAK türü; global `SHIPMENT` depo olayı dilinde ("Sevk çıkışı").
+  "E_IRSALIYE.sourceType": { SHIPMENT: "Sevkiyat" },
 };
 
 /**
@@ -1064,10 +1145,12 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   OTHER: "istasyon türü ve ödeme yöntemi — ikisi de 'Diğer'",
   YARN: "kalem türü, sayım satırı türü ve fason sevk kalemi türü (G1) — üçü de 'İplik'",
   SCRAP: "sapma türü / top statüsü / kalite rolü — üçünde de 'Fire'",
-  SCALE: "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'",
+  SCALE:
+    "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'; LabResultKind(gri ölçek) için YANLIŞ — " +
+    "LAB_TEST_TYPE.resultKind override'ı ile ayrıldı (K4P-LAB, 2026-10-25)",
   MANUAL:
     "tartı kaynağı, kur kaynağı ve NUMARA KAYNAĞI (2026-09-23) — üçünde de " +
-    "değeri ELLE giren insandır; ortak Türkçe doğru",
+    "değeri ELLE giren insandır; LabVerdictSource(hükmü elle veren) de aynı — ortak Türkçe doğru",
   // ── Numara kaynağı (2026-09-23)
   SYSTEM:
     "SystemLogCategory(olayın kaynağı sistemdir) ve NumberSourceMode(numarayı " +
@@ -1108,7 +1191,24 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "MergeRefKind(birleştirmede çakışan satır silindi) ve SyncMarkKind(eşitleme işareti: kök satır silindi, 2026-09-29) — " +
     "SyncMark hiçbir denetim kaydına girmez (tetikleyici yazar, audit muafiyeti TELEMETRİ); ekranda yalnız birleştirme bağlamı görünür, ortak Türkçe orada doğru",
 
+  // ── e-İrsaliye (E1-SEMA, 2026-10-24) — durum ile olay aynı fiili taşır
+  GONDERILDI: "EIrsaliyeStatus(kayıt gönderildi) ve EIrsaliyeEventType(gönderim olayı) — aynı fiil; ortak Türkçe doğru",
+  OLUSTURULDU: "EIrsaliyeStatus(numara+XML üretildi) ve EIrsaliyeEventType(üretim olayı) — aynı fiil; ortak Türkçe doğru",
+  REDDEDILDI: "CloudInboxOutcome(bulut makbuzu reddedildi) ve EIrsaliyeStatus(alıcı yanıtı red) — ikisi de 'Reddedildi'; ortak Türkçe doğru",
+
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  AUTO:
+    "StationPropertyMode('Otomatik uygulanır') ve LabVerdictSource(hüküm sınırdan hesaplandı) — ortak cevap hüküm için YANLIŞ; " +
+    "LAB_TEST.verdictSource override'ı ile ayrıldı (K4P-LAB, 2026-10-25)",
+  METER:
+    "PeripheralKind('Metre Sayacı') ve RunningCap(koşu tavanı metre başına) — ortak cevap tavan için YANLIŞ; " +
+    "FOUR_POINT_RULE_SET.runningCap override'ı ile ayrıldı (K4P, 2026-10-24)",
+  NONE:
+    "NumberSeriesDateSegment('Tarih yok') ve RunningCap(koşu tavanı yok) — ortak cevap tavan için YANLIŞ; " +
+    "FOUR_POINT_RULE_SET.runningCap override'ı ile ayrıldı (K4P, 2026-10-24)",
+  SHIPMENT:
+    "WarehouseEventType('Sevk çıkışı') ve EIrsaliyeSourceType(kaydın kaynağı sevkiyat) — ortak cevap kaynak türü için YANLIŞ; " +
+    "E_IRSALIYE.sourceType override'ı ile ayrıldı (2026-10-24)",
   OPEN:
     "PurchaseOrderStatus('Açık (mal bekleniyor)'), MachineSealState(karne mühürsüz) ve PackingGroupStatus(sevk partisi) — ortak cevap karne ve parti için YANLIŞ; " +
     "MACHINE_SHIFT_STAT.sealState ve packing_groups.status override'ları ile ayrıldı (2026-09-14 · 2026-09-21); " +

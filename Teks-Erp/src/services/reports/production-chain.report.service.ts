@@ -21,6 +21,7 @@ import { remainingByBeam } from "../helpers/warp-beam.helper";
 import { readDevereEnabled } from "../system-setting.service";
 import { droppedRows, optionList, type Secenekler, type WithSecenekler } from "./_secenekler";
 import { currentWorkOrderStep } from "../helpers/work-order-current-step.helper";
+import { DEADLINE_OPEN_ORDER_STATUSES } from "../helpers/order-deadline.helper";
 
 export const CHAIN_STATUSES = ["BEKLEYEN", "DEVAM", "GECIKMIS", "TAMAMLANAN"] as const;
 export type ChainStatus = (typeof CHAIN_STATUSES)[number];
@@ -65,7 +66,8 @@ export interface ChainReport {
 }
 
 export const MAX_CHAIN_ROWS = 500;
-const OPEN_ORDER: OrderStatus[] = [OrderStatus.PENDING, OrderStatus.APPROVED, OrderStatus.PARTIAL_SHIPPED];
+// Açık sipariş kümesi termin yüklemiyle TEK kaynak (`order-deadline.helper`).
+const OPEN_ORDER: OrderStatus[] = [...DEADLINE_OPEN_ORDER_STATUSES];
 const LIVE_BEAM: WarpBeamStatus[] = [WarpBeamStatus.MOUNTED, WarpBeamStatus.READY, WarpBeamStatus.PLANNED];
 const OPEN_WEAVING: WeavingOrderStatus[] = [WeavingOrderStatus.PLANNED, WeavingOrderStatus.IN_PROGRESS];
 /** Dışarıdan gelen top: kendi tezgahımızda doğmamış (satın alma / tedarikçi / yarı mamul) ve şu an bir iş emri adımında. */

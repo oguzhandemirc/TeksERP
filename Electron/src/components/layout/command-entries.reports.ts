@@ -1,7 +1,10 @@
-import { BarChart3 } from "lucide-react";
+import { BarChart3, FilePlus2 } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import { isCenterEntryOpen } from "@/pages/Reports/_v2/center-model";
+import { RELOCATED_TOOLS, relocatedHostOf } from "@/pages/Reports/_v2/legacy-model";
+import { isRouteModuleOpen } from "@/lib/route-modules";
+import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { reportTiles, reportCategoryTiles } from "@/pages/Reports/tile-config";
 import { regimePredicate } from "@/lib/regime-predicate";
 import { categoryHasOpenReport, reportKeyOfPath } from "@/lib/report-gate";
@@ -56,12 +59,27 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     keywords: `rapor ${cat.title}`,
   }));
 
+  // Raporlar v2 açıkken eski yapraklar "Eski:" önekli İKİZLE görünür, özgün giriş gizlenir. İkiz
+  // SONDA durur: aynı hedefin ilk girişi (sekme başlığı) özgün ad kalır; bayrak kapalıyken
+  // ikizlerin hiçbiri görünmez → palet çıktısı bayt-eşit.
+  const legacyTwins: CommandEntry[] = subs.map((sub) => ({
+    ...sub,
+    key: `${sub.key}:legacy`,
+    label: `Eski: ${sub.label}`,
+    visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true && sub.visibleWhen!(ctx),
+    keywords: `${sub.keywords} eski geçiş`,
+  }));
+  const currentSubs = subs.map((sub) => ({
+    ...sub,
+    visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled !== true && sub.visibleWhen!(ctx),
+  }));
+
   return {
     heading: `Raporlar · ${cat.title}`,
     // Alt raporun breadcrumb'ı kategori hub'ına çıkar (eskiden hiç yoktu —
     // rapor sayfasından geri dönüş yalnız sekme/geçmiş ile mümkündü).
     parent: { label: cat.title, to: cat.to },
-    entries: [hub, ...subs],
+    entries: [hub, ...currentSubs, ...legacyTwins],
   };
 });
 
@@ -84,4 +102,47 @@ reportCommandSections.push({
   heading: "Raporlar · Rapor Merkezi",
   parent: { label: "Raporlar", to: "/reports" },
   entries: reportV2Entries,
+});
+
+/** Özel raporlar (R1-KAYIT): oluşturucu `report:builder`; liste Rapor Merkezi'nin "Özel raporlarım" bölümü. */
+reportCommandSections.push({
+  heading: "Raporlar · Özel raporlar",
+  parent: { label: "Raporlar", to: "/reports" },
+  entries: [
+    {
+      key: "report-custom:new",
+      label: "Yeni özel rapor",
+      description: "Ölçü ve kırılım seçerek kendi raporunuzu kurun; kaydedin, paylaşın",
+      icon: FilePlus2,
+      to: "/reports/ozel/yeni",
+      permission: "report:builder",
+      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
+      keywords: "özel rapor raporlarım kayıtlı rapor oluşturucu ölçü kırılım paylaş",
+    },
+  ],
+});
+
+/**
+ * Rapor menüsünden çıkan yedi araç — YENİ yerlerinin adıyla aranır ("Operasyon · İz Sürme · Parti").
+ * Hedef aracın bugünkü adresi, izin o adresin route izni (yeni izin yok). Bayrak kapalıyken gizli.
+ */
+const relocatedEntries: CommandEntry[] = RELOCATED_TOOLS.map((t) => {
+  const entry = REPORT_BY_KEY.get(t.reportKey);
+  const host = relocatedHostOf(t.reportKey);
+  return {
+    key: `relocated:${t.reportKey}`,
+    label: `${t.hostLabel} · ${t.title}`,
+    description: t.description,
+    icon: t.icon,
+    to: t.to,
+    permission: t.permission,
+    visibleWhen: (ctx: OperationsVisibilityContext) =>
+      ctx.reportsV2Enabled === true && entry !== undefined && host !== null && isCenterEntryOpen(entry, ctx) && isRouteModuleOpen(host, ctx),
+    keywords: `rapor araç ${t.hostLabel} ${entry?.baslik ?? ""}`,
+  };
+});
+
+reportCommandSections.push({
+  heading: "Taşınan araçlar",
+  entries: relocatedEntries,
 });

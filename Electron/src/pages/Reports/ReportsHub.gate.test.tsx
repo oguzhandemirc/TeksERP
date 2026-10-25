@@ -44,7 +44,10 @@ import { salesReportTiles } from "./Sales/tile-config";
 import { reportCommandSections } from "@/components/layout/command-entries.reports";
 
 // Karo taşıyan satırlar: ucu inmemiş v2 satırı (`hazir:false`) bugün hiçbir yüzeyde çizilmez.
-const SALES_KEYS = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && isReportSurfaced(r)).map((r) => r.key);
+// Satış hub karoları yalnız v1 satırlarıdır; hazır v2 satırları Rapor Merkezi'nde (genel v2 yaprağı) çizilir.
+const SALES_KEYS = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && r.nesil !== "v2" && isReportSurfaced(r)).map((r) => r.key);
+/** Kategori kapısı ve palet v2 satırlarını da sayar: "hepsi kapalı" bu kümedir. */
+const SALES_ALL = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && isReportSurfaced(r)).map((r) => r.key);
 const INTAKE = "sales/order-intake";
 const intakeTile = salesReportTiles.find((t) => t.to.endsWith(INTAKE))!;
 
@@ -72,12 +75,12 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
   });
 
   it("§2 ⭐ üst karo: kategorinin BÜTÜN raporları kapalıysa kategori karosu yok; biri açıksa var", () => {
-    closed = SALES_KEYS;
+    closed = SALES_ALL;
     const { unmount } = renderWithProviders(<ReportsHubPage />);
     expect(screen.queryByText("Sipariş & Sevkiyat")).toBeNull();
     expect(screen.getByText("Üretim")).toBeInTheDocument(); // kontrol grubu: dokunulmayan kategori duruyor
     unmount();
-    closed = SALES_KEYS.slice(1);
+    closed = SALES_ALL.filter((k) => k !== SALES_KEYS[0]);
     renderWithProviders(<ReportsHubPage />);
     expect(screen.getByText("Sipariş & Sevkiyat")).toBeInTheDocument();
   });
@@ -105,7 +108,7 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
     expect(hub.visibleWhen?.(ctx())).toBe(true);
     const other = sales.entries.find((e) => e !== hub && e !== intake)!;
     expect(other.visibleWhen?.(ctx())).toBe(true);
-    closed = SALES_KEYS;
+    closed = SALES_ALL;
     expect(hub.visibleWhen?.(ctx())).toBe(false);
   });
 
@@ -113,6 +116,9 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
     const dokuma = reportCommandSections.find((s) => s.heading.endsWith("Dokuma"))!;
     const off: OperationsVisibilityContext = { ...ctx(), dokumaEnabled: false };
     for (const e of dokuma.entries) expect(e.visibleWhen?.(off)).toBe(false);
-    for (const e of dokuma.entries) expect(e.visibleWhen?.(ctx())).toBe(true);
+    // "Eski:" ikizleri (R0-GECIS) yalnız Raporlar v2 açıkken görünür; aynı modül kapısını taşır.
+    const v2On: OperationsVisibilityContext = { ...ctx(), reportsV2Enabled: true };
+    for (const e of dokuma.entries) expect(e.visibleWhen?.(e.key.endsWith(":legacy") ? v2On : ctx())).toBe(true);
+    for (const e of dokuma.entries.filter((x) => x.key.endsWith(":legacy"))) expect(e.visibleWhen?.({ ...off, reportsV2Enabled: true })).toBe(false);
   });
 });

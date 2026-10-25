@@ -111,6 +111,7 @@ import { reopenWorkOrderTx } from "./helpers/workorder-event.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { InventoryService } from "./inventory.service";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 /**
  * Elle eklenen topu geri alırken İKİNCİ BİR İPTAL MOTORU YAZILMAZ.
@@ -1077,7 +1078,7 @@ export class TamburUndoService {
 
     const reopenErrorCount = stepId
       ? await prisma.rollError.count({
-          where: { rollId: parentId, isProcessed: true, processedAtStepId: stepId },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: parentId, isProcessed: true, processedAtStepId: stepId },
         })
       : 0;
 
@@ -2036,7 +2037,7 @@ export class TamburUndoService {
       // 4) Bu finalize'ın kapattığı hata kayıtlarını yeniden aç (adım varsa).
       const reopened = stepId
         ? await tx.rollError.updateMany({
-            where: { rollId: parentId, isProcessed: true, processedAtStepId: stepId },
+            where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: parentId, isProcessed: true, processedAtStepId: stepId },
             data: { isProcessed: false, actionTaken: null, processedAtStepId: null, processedByUserId: null, processedAt: null },
           })
         : { count: 0 };

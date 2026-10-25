@@ -8,7 +8,7 @@ import type { Prisma, ReportRequest } from "@prisma/client";
 import type { z } from "zod";
 import type { SessionContext } from "../auth/session.service";
 import type { CloudPermission } from "../catalog/permissions";
-import { reportProjectionName, reportVerdict, requiredReportPermissions } from "../catalog/reports";
+import { reportProjectionName, reportVerdict, requiredReportPermissions, stripMoneySideFigures } from "../catalog/reports";
 import { accountActor, recordAudit } from "../lib/audit";
 import { CloudError, badRequest, forbidden, notFound, stateConflict } from "../lib/errors";
 import { bodyDigestOf, executeWrite, toPlainJson, type WriteResult } from "../lib/idempotency";
@@ -127,7 +127,7 @@ export async function getReportRequest(ctx: CloudContext, s: SessionContext, id:
   const allowed = verdict.ok && hasAll(s, requiredReportPermissions(verdict.permission, (await catalogEntry(ctx, s.tesisId, out.r.reportKey))?.izin));
   return {
     ...requestView(out.r),
-    sonuc: allowed && out.result ? { veri: out.result.data, hesaplandi: out.result.computedAt.toISOString(), kaynakUfuk: out.result.sourceHorizon?.toISOString() ?? null } : null,
+    sonuc: allowed && verdict.ok && out.result ? { veri: stripMoneySideFigures(out.result.data, verdict.permission, s.permissions), hesaplandi: out.result.computedAt.toISOString(), kaynakUfuk: out.result.sourceHorizon?.toISOString() ?? null } : null,
   };
 }
 

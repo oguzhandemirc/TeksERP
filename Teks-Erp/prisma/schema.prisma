@@ -694,8 +694,37 @@ model User {
   credentialResetTargets          CredentialResetRequest[]  @relation("CredentialResetTarget")
   credentialResetsRequested       CredentialResetRequest[]  @relation("CredentialResetRequestedBy")
   credentialResetsDecided         CredentialResetRequest[]  @relation("CredentialResetDecidedBy")
+  createdEIrsaliyeler             EIrsaliye[]               @relation("EIrsaliyeCreatedBy")
+  updatedEIrsaliyeler             EIrsaliye[]               @relation("EIrsaliyeUpdatedBy")
   /// Yazdırma geçmişi künyesi (kim bastı — telemetri, A1).
   printJobs                       PrintJob[]                @relation("PrintJobUser")
+
+  rollInspectionsInspected  RollInspection[]   @relation("RollInspectionInspectedBy")
+  rollInspectionsSuperseded RollInspection[]   @relation("RollInspectionSupersededBy")
+  rollInspectionsVoided     RollInspection[]   @relation("RollInspectionVoidedBy")
+  fourPointRuleSetsCreated  FourPointRuleSet[] @relation("FourPointRuleSetCreatedBy")
+  fourPointRuleSetsUpdated  FourPointRuleSet[] @relation("FourPointRuleSetUpdatedBy")
+  labTestTypesCreated       LabTestType[]      @relation("LabTestTypeCreatedBy")
+  labTestTypesUpdated       LabTestType[]      @relation("LabTestTypeUpdatedBy")
+  labTestsCreated           LabTest[]          @relation("LabTestCreatedBy")
+  labTestsUpdated           LabTest[]          @relation("LabTestUpdatedBy")
+  labTestsApproved          LabTest[]          @relation("LabTestApprovedBy")
+  labTestsVoided            LabTest[]          @relation("LabTestVoidedBy")
+  certificatesCreated       Certificate[]      @relation("CertificateCreatedBy")
+  certificatesUpdated       Certificate[]      @relation("CertificateUpdatedBy")
+  certificatesRevoked       Certificate[]      @relation("CertificateRevokedBy")
+  certificateFilesUploaded  CertificateFile[]  @relation("CertificateFileUploadedBy")
+  customerLabSpecsCreated   CustomerLabSpec[]  @relation("CustomerLabSpecCreatedBy")
+  customerLabSpecsUpdated   CustomerLabSpec[]  @relation("CustomerLabSpecUpdatedBy")
+  // MAL-1 (2026-10-25): atkı kartı + maliyet girdileri künyesi.
+  weftSpecsCreated          WeftSpec[]         @relation("WeftSpecCreatedBy")
+  weftSpecsUpdated          WeftSpec[]         @relation("WeftSpecUpdatedBy")
+  costParameterSetsCreated  CostParameterSet[] @relation("CostParameterSetCreatedBy")
+  costParameterSetsUpdated  CostParameterSet[] @relation("CostParameterSetUpdatedBy")
+  yarnCostPricesCreated     YarnCostPrice[]    @relation("YarnCostPriceCreatedBy")
+  finishingRatesCreated     FinishingRate[]    @relation("FinishingRateCreatedBy")
+  costStructuresCreated     CostStructure[]    @relation("CostStructureCreatedBy")
+  costStructuresUpdated     CostStructure[]    @relation("CostStructureUpdatedBy")
 
   @@map("users")
 }
@@ -1087,6 +1116,8 @@ model Station {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("StationUpdatedBy", fields: [updatedById], references: [id])
 
+  rollInspections RollInspection[]
+
   @@index([type])
   @@index([kind])
   @@index([defaultCategoryId])
@@ -1231,9 +1262,12 @@ model Device {
   bindingEvents  DeviceBindingEvent[]
   rebindRequests DeviceRebindRequest[]
   printJobs      PrintJob[]            @relation("PrintJobDevice")
+  requestTraces  RequestTrace[]        @relation("RequestTraceDevice")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+
+  rollInspections RollInspection[]
 
   @@index([machineId])
   @@index([status])
@@ -1772,6 +1806,63 @@ model WarpSpec {
   @@unique([nameFold])
   @@index([yarnItemId])
   @@map("warp_specs")
+}
+
+/// ATKI KARTI (S2 şema çekirdeği — MAL-1, 2026-10-25, patron kararı seçenek B).
+/// Çözgü kartının (`WarpSpec`) atkı ikizi: bir atkı tanımı N kumaşı besler. Atkı
+/// ipliği TEKİL kolon DEĞİL — rapordaki atkı adedi paylı `WeftSpecYarn` satırlarıdır
+/// (çoklu atkı; DOKUMA-MANUEL-PLAN §S2 notu). Katalog; silinmez, pasife alınır.
+model WeftSpec {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique @db.VarChar(32)
+  name         String   @db.VarChar(100)
+  /// Toplam atkı sıklığı (atkı/cm) — maliyetin `p` çarpanı. CHECK > 0; NULL = bilinmiyor.
+  picksPerCm   Decimal? @db.Decimal(6, 2)
+  /// Sıra/renk notu ("2 siyah 1 sim") — bilgi; pay hesabı `WeftSpecYarn.picksInRepeat`ten.
+  sequenceNote String?  @db.VarChar(300)
+  notes        String?  @db.VarChar(500)
+  isActive     Boolean  @default(true)
+
+  yarns       WeftSpecYarn[]
+  fabricItems Item[]         @relation("ItemWeftSpec")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR (`GENERATED ALWAYS AS (public.tr_fold("name")) STORED`).
+  nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ ──
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("WeftSpecCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("WeftSpecUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  /// AD SEDDİ (WarpSpec emsali; merge tombstone'u yok → koşulsuz).
+  @@unique([nameFold])
+  @@map("weft_specs")
+}
+
+/// ATKI KARTI İPLİK SATIRI — ③b SAF YAPILANDIRMA PİVOTU: gövde REPLACE edilir (audit'e
+/// eski/yeni küme yazılır); parasal sonucu standart maliyet sürümünde DONMUŞTUR (MAL-2).
+/// Pay = `picksInRepeat / Σ picksInRepeat`. İplik YARN ∧ denye dolu (servis 400).
+model WeftSpecYarn {
+  id            String   @id @default(uuid()) @db.Uuid
+  weftSpecId    String   @db.Uuid
+  yarnItemId    String   @db.Uuid
+  /// Rapordaki atkı adedi — CHECK > 0.
+  picksInRepeat Int
+  /// Kart içi sıra — CHECK ≥ 0.
+  sortOrder     Int      @db.SmallInt
+
+  weftSpec WeftSpec @relation(fields: [weftSpecId], references: [id], onDelete: Restrict)
+  yarnItem Item     @relation("WeftSpecYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([weftSpecId, sortOrder])
+  @@index([yarnItemId])
+  @@map("weft_spec_yarns")
 }
 
 // =============================================================================
@@ -3196,6 +3287,10 @@ model Item {
   /// geçirmesi/tamamlaması bekleniyor. Aktif ve kullanılabilir; yalnız işaret.
   /// Admin normal düzenleme/onay ile temizler. Normal admin create'te false kalır.
   pendingReview Boolean  @default(false)
+  /// K4P: ürün kartı eni (cm) — 4 puan muayene alanının BİRİNCİ kaynağı
+  /// (`resolveInspectionWidth`); BaseController skaleri, bilerek yazılabilir alan.
+  /// CHECK `items_width_cm_ck` (> 0).
+  widthCm       Decimal? @db.Decimal(8, 2)
 
   /// Yaşam döngüsü — tek yazar `services/helpers/item-lifecycle.helper.ts`; `isActive` ile BİRLİKTE yazılır
   /// (CHECK `items_lifecycle_isactive_ck`). Son geçiş kalıcı kolonda donar; ayrı defter yok — satır silinince
@@ -3220,6 +3315,20 @@ model Item {
   /// aktarım 0 referans). Kolon Faz 1a'da FK + kısmi index'iyle hazır bırakıldı.
   warpSpecId String? @db.Uuid
 
+  /// ── DOKUMA ÜRÜN YAPISI (S2 şema çekirdeği, MAL-1 2026-10-25 — seçenek B) ──
+  /// HAM en (cm): tezgahtan çıkan kumaşın eni. Maliyette atkı boyunun YEDEK kaynağı
+  /// (`rawWidthCm + weftSelvedgeAllowanceCm`, uyarılı). MAMUL/kart eni için ayrı kolon AÇILMADI:
+  /// kartın eni `widthCm` (K4P) — aynı soruya ikinci cevap olmasın. CHECK > 0.
+  rawWidthCm   Decimal? @db.Decimal(6, 2)
+  /// Ham / mamul gramaj (g/m²) — bilgi; CHECK > 0.
+  rawGsm       Decimal? @db.Decimal(7, 2)
+  finishedGsm  Decimal? @db.Decimal(7, 2)
+  /// Kompozisyon metni ("%100 PES") — bilgi.
+  composition  String?  @db.VarChar(200)
+  /// KUMAŞ → ATKI KARTI (N:1). Yalnız `ItemType.FABRIC` (servis 400). Atkı ipliği(leri)
+  /// kartın `WeftSpecYarn` satırlarındadır; maliyet tel/sıklık kopyası TUTMAZ.
+  weftSpecId   String?  @db.Uuid
+
   // Relations
   rolls                          Roll[]
   orderLines                     OrderLine[]
@@ -3242,6 +3351,14 @@ model Item {
   warpSpec                       WarpSpec?                   @relation("ItemWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ kullanan çözgü kartları (1:N) — silme kapısının bağımlılık kaynağı.
   warpSpecsAsYarn                WarpSpec[]                  @relation("WarpSpecYarn")
+  /// Bu KUMAŞIN atkı kartı (N:1) — dokuma ürün yapısı (MAL-1 / S2).
+  weftSpec                       WeftSpec?                   @relation("ItemWeftSpec", fields: [weftSpecId], references: [id], onDelete: Restrict)
+  /// Bu İPLİĞİ atkı olarak kullanan kart satırları (1:N).
+  weftSpecYarnsAsYarn            WeftSpecYarn[]              @relation("WeftSpecYarnItem")
+  /// İplik maliyet fiyatı sürümleri (MAL-1; damgalı, `ACTIVE_YARN_COST_PRICE`).
+  yarnCostPrices                 YarnCostPrice[]             @relation("YarnCostPriceYarn")
+  /// Kumaşın maliyete özgü ekleri (MAL-1; 1:1, katalog).
+  costStructure                  CostStructure?              @relation("CostStructureItem")
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -3313,6 +3430,10 @@ model Item {
   // ⚠️ YUMUŞAK KAPI (2026-08-22): migration mükerrer varken index'i ATLAR (NOTICE) —
   // prod'da temizlik (Mükerrer Kayıtlar paneli) bitene dek index EKSİK olabilir;
   // `test_db_invariants` orada kırmızı = "enforce bekliyor" (migration dosyasını yeniden koş).
+  fourPointRuleSets  FourPointRuleSet[]
+  labTests           LabTest[]
+  customerLabSpecs   CustomerLabSpec[]
+
   @@unique([nameFold])
   @@index([itemType])
   @@index([nameFold])
@@ -3321,6 +3442,7 @@ model Item {
   /// Çözgü kartının "bu çözgü hangi desenleri besliyor" sorgusu + kalıcı silme
   /// kapısının bağımlılık sayımı bu index'ten okur (devere Faz 1a).
   @@index([warpSpecId])
+  @@index([weftSpecId])
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "items_updatedAt_esitleme_idx")
   @@map("items")
@@ -3828,6 +3950,9 @@ model Roll {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  inspections          RollInspection[]
+  labTests             LabTest[]
+
   @@index([itemId])
   @@index([parentRollId])
   // PARTIAL (WHERE "parentReceiptId" IS NOT NULL) — migration 20260606001717.
@@ -4051,6 +4176,11 @@ model Customer {
 
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
+  fourPointRuleSets FourPointRuleSet[]
+  certificates      Certificate[]
+  customerLabSpecs  CustomerLabSpec[]
+  labTests          LabTest[]
+
   @@unique([nameFold])
   @@index([type])
   @@index([documentProfileId])
@@ -4410,6 +4540,8 @@ model WorkOrder {
   targetItem       Item?                     @relation("WorkOrderTargetItem", fields: [targetItemId], references: [id])
   targetColor      Color?                    @relation("WorkOrderTargetColor", fields: [targetColorId], references: [id])
   targetProperties WorkOrderTargetProperty[]
+  /// Hedef çeşit değerleri (KQ-D6: hedef kurşun gramajı) — plan alanı, toplara YAYILMAZ.
+  targetValues     WorkOrderTargetValue[]
   splitFrom        WorkOrder?                @relation("WorkOrderSplitLineage", fields: [splitFromId], references: [id])
   splitChildren    WorkOrder[]               @relation("WorkOrderSplitLineage")
   kursunBypasses   KursunBypassAssignment[] // Kurşun bypass atamaları (append-only)
@@ -4487,6 +4619,7 @@ model Batch {
   mergedChildren Batch[]                 @relation("BatchMergeLineage")
   rolls          Roll[]
   dispatches     SubcontractorDispatch[]
+  labTests       LabTest[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4820,6 +4953,11 @@ model KursunBypassAssignment {
   cancelledById String?   @db.Uuid
   cancelReason  String?   @db.VarChar(200)
 
+  /// Kâğıtla yürüyen dağıtımın gramajı (KQ-D6) — İSTEĞE BAĞLI; boşsa özet
+  /// "gramaj bilinmiyor" der. Tamamlanınca donar (atomik claim). RollOperation YAZILMAZ.
+  propertyValueId String?              @db.Uuid
+  propertyValue   FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
+
   // Relations
   workOrder     WorkOrder     @relation(fields: [workOrderId], references: [id])
   workOrderStep WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
@@ -4840,6 +4978,7 @@ model KursunBypassAssignment {
   @@index([workOrderStepId])
   // Dağıtım/izleme ekranı: "bu kurşun MAKİNESİNE atanmış işler" listesi
   @@index([machineId])
+  @@index([propertyValueId])
   @@map("kursun_bypass_assignments")
 }
 
@@ -5044,6 +5183,9 @@ model QualityGrade {
   /// aynı adı yazabilir. Kullanıcıya Türkçe 409'u guard verir; bu index onun
   /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
   /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
+  suggestedInRollInspections RollInspection[]
+  fourPointRuleBands         FourPointRuleBand[]
+
   @@unique([nameFold])
   /// ROL SEDDİ — rol başına EN FAZLA BİR AKTİF satır. Index PARTIAL'dır
   /// (`WHERE "role" IS NOT NULL AND "isActive"`); Prisma 7 predicate farkını
@@ -5132,6 +5274,11 @@ model DefectType {
   /// Rapor boyutu "hata grubu" (rapor v2 R1-SEMA). null = gruplanmamış. CHECK YOK: küme kodda
   /// (`constants/hata-gruplari.ts`, R1-BOYUT) — yeni grup migration istemesin.
   defectGroup String?         @db.VarChar(16)
+  /// K4P: boyuttan bağımsız sabit puan (1–4, CHECK `defect_types_fixed_points_ck`);
+  /// NULL = puan boyut sınıfından gelir.
+  fixedPoints Int?            @db.SmallInt
+  /// Tablet muayene düğme sırası (K4P).
+  sortOrder   Int             @default(0)
   createdAt   DateTime        @default(now()) @db.Timestamptz
   updatedAt   DateTime        @updatedAt @db.Timestamptz
 
@@ -5192,8 +5339,10 @@ model RollBarcodeCounter {
   @@map("roll_barcode_counters")
 }
 
-/// Top üzerinde tespit edilen hatalar. Kurşun/QC2 istasyonunda açılır,
-/// Tambur istasyonunda karara bağlanır (kesildi/korundu/A1).
+/// Top üzerinde tespit edilen hatalar. İKİ KÖKEN (`origin`, K4P-SEMA 2026-10-24):
+/// PROCESS — Kurşun/QC2 istasyonunda açılır, Tambur istasyonunda karara bağlanır
+/// (kesildi/korundu/A1); Tambur YALNIZ PROCESS satırı görür. INSPECTION — 4 puan
+/// muayene belgesinin (`RollInspection`) satırıdır; karar almaz, silinmez.
 ///
 /// Hata tipi iki alanla tutulur:
 ///   - defectTypeId → DefectType FK (canonical, işlem anında seçilir)
@@ -5205,11 +5354,23 @@ model RollError {
   /// Hatanın tespit edildiği metre noktası (KK2 operatörü "60. metrede hata"
   /// girer). Hata sadece NOKTA olarak takip edilir; aralık bilgisi tutulmaz.
   /// Tambur operatörü ekranda bu noktayı görüp fiziksel kesim kararı verir.
-  startMeter   Decimal          @db.Decimal(12, 3)
+  /// NULL yalnız INSPECTION satırında (konumsuz muayene hatası); PROCESS satırında
+  /// metre DB CHECK `roll_errors_meter_ck` ile zorunlu (K4P-SEMA).
+  startMeter   Decimal?         @db.Decimal(12, 3)
   defectTypeId String?          @db.Uuid
   errorType    String? // DefectType.name snapshot (kayıt anında kopyalanır)
   isProcessed  Boolean          @default(false) // Tambur kararı verildi mi?
   actionTaken  RollErrorAction? // Tambur kararı
+
+  /// K4P: iki köken. PROCESS = bugünkü KK2/Kurşun/Tambur hatası (Tambur YALNIZ bunu
+  /// görür); INSPECTION = 4 puan muayene belgesinin parçası (Tambur'a girmez,
+  /// `isProcessed` hep false — CHECK `roll_errors_inspection_ck`).
+  origin       RollErrorOrigin  @default(PROCESS)
+  sizeClass    FourPointSize?
+  /// 1–4 (CHECK `roll_errors_points_ck`); sabit puanlı türde `DefectType.fixedPoints`.
+  points       Int?             @db.SmallInt
+  inspectionId String?          @db.Uuid
+  inspection   RollInspection?  @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
 
   // Lifecycle — tespit (Kurşun/QC2) ve işlem (Tambur) ayrı izlenir.
   detectedAtStepId  String?   @db.Uuid
@@ -5234,6 +5395,8 @@ model RollError {
   // 20260623100000 bu @@index'i PARTIAL UNIQUE'e (WHERE defectTypeId IS NOT NULL)
   // çevirir (drift-free yöntem — şemada index, migration'da unique+partial). Tambur/
   // KK2 reportError eşzamanlı çift-tıkta P2002 → 409 DUPLICATE_ROLL_ERROR.
+  // K4P-SEMA: predicate'e `origin = 'PROCESS'` eklendi — muayene revizyonu aynı
+  // (top, metre, tür) üçlüsünü yeni revizyonda YENİDEN yazar, sed yalnız saha yarışınadır.
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE defectTypeId IS NOT NULL). Prisma 7
   // partial predicate'i drift saymaz; ama uniqueness FARKI (index↔unique) drift SAYAR →
   // bu yüzden @@unique olmalı (aksi halde migrate dev sonsuz CREATE üretir).
@@ -5251,7 +5414,415 @@ model RollError {
   // Dashboard "bugün açılan hata" + kalite raporu tarih aralıkları (H-14):
   @@index([detectedAt])
   @@index([processedAt])
+  @@index([inspectionId])
+  @@index([rollId, origin])
   @@map("roll_errors")
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// K4P — 4 puan muayene (docs/design/KALITE-4PUAN-PLAN.md §3, SEMA dilimi 2026-10-24)
+// ═════════════════════════════════════════════════════════════════════════════
+
+enum RollErrorOrigin {
+  PROCESS // Saha hatası (KK2/Kurşun) — Tambur karar listesine girer
+  INSPECTION // 4 puan muayene satırı — Tambur'a girmez
+}
+
+/// ASTM D5430 boyut sınıfı → puan 1..4.
+enum FourPointSize {
+  UP_TO_3IN
+  IN_3_TO_6
+  IN_6_TO_9
+  OVER_9IN
+}
+
+/// İstasyondan DEĞİL topun durumundan türer (`resolveInspectionPhase`).
+enum InspectionPhase {
+  RAW
+  FINAL
+}
+
+enum InspectionWidthSource {
+  ITEM_CARD
+  ROLL_MEASURED
+  MANUAL
+  UNKNOWN
+}
+
+enum RuleScope {
+  FACTORY
+  CUSTOMER
+}
+
+enum ScoreUnit {
+  M2
+  YD2
+}
+
+/// Koşu birimi tavanı (birim başına en fazla 4 puan).
+enum RunningCap {
+  NONE
+  METER
+  YARD
+}
+
+/// K4P-LAB: lab test türünün sonuç biçimi. SCALE = gri/mavi skala (0,5 adım; 4,5 = "4-5").
+enum LabResultKind {
+  NUMERIC
+  SCALE
+  PASS_FAIL
+}
+
+/// K4P-LAB: DRAFT düzenlenir · APPROVED donar · VOIDED gerekçeli iptal (DRAFT ya da APPROVED'dan).
+enum LabTestStatus {
+  DRAFT
+  APPROVED
+  VOIDED
+}
+
+enum LabVerdict {
+  PASS
+  FAIL
+}
+
+/// AUTO = sınır snapshot'ından hesaplandı · MANUAL = sınırsız ya da PASS_FAIL türde elle.
+/// K4P-SERT sertifika sahibi: fabrikanın kendisi ya da bir iş ortağı (tedarikçi/fason).
+enum CertificateHolder {
+  OWN
+  PARTNER
+}
+
+enum LabVerdictSource {
+  AUTO
+  MANUAL
+}
+
+/// Muayene belgesi — DEFTER (`PrintedDocument` emsali): içerik doğuşta donar, yalnız
+/// damgalar yazılır. Ters yol DAMGA: revizyon `supersededAt` (+ `supersedesId` zinciri),
+/// iptal `voidedAt`. Silme yolu YOK. Tek aktif (rollId, phase) partial unique
+/// `roll_inspections_one_active_uq` ile; CHECK'ler migration `k4p_four_point_schema`da.
+model RollInspection {
+  id                      String                @id @default(uuid()) @db.Uuid
+  rollId                  String                @db.Uuid
+  phase                   InspectionPhase
+  revision                Int                   @default(1)
+  /// Önceki revizyon (tek ardıl — @unique).
+  supersedesId            String?               @unique @db.Uuid
+  stationId               String?               @db.Uuid
+  deviceId                String?               @db.Uuid
+  inspectedLengthM        Decimal               @db.Decimal(12, 3)
+  /// Snapshot; `widthSource = UNKNOWN` ⇔ NULL (CHECK).
+  widthCm                 Decimal?              @db.Decimal(8, 2)
+  widthSource             InspectionWidthSource
+  totalPoints             Int
+  defectCount             Int
+  /// Metresiz hata sayısı — koşu tavanı bunlara uygulanmaz (rapor dipnotu).
+  unplacedDefectCount     Int
+  pointsPer100M2          Decimal?              @db.Decimal(8, 2)
+  ruleSetId               String?               @db.Uuid
+  /// Bantlar, birim, tavan — yalnız kimlik + sayı; kural seti değişse de sonuç donuk.
+  ruleSnapshot            Json
+  /// Kural setinin biriminde 2 haneye yuvarlanmış karar sayısı.
+  gradeScore              Decimal?              @db.Decimal(8, 2)
+  suggestedQualityGradeId String?               @db.Uuid
+  suggestedGradeCode      String?               @db.VarChar(32)
+  /// Önerilen derece ≠ topun doğuştaki kalitesi.
+  gradeMismatch           Boolean               @default(false)
+  note                    String?               @db.VarChar(500)
+  reviseReason            String?
+  inspectedById           String                @db.Uuid
+  inspectedAt             DateTime              @default(now()) @db.Timestamptz
+  supersededAt            DateTime?             @db.Timestamptz
+  supersededById          String?               @db.Uuid
+  voidedAt                DateTime?             @db.Timestamptz
+  voidedById              String?               @db.Uuid
+  voidReason              String?
+  clientToken             String?               @unique @db.Uuid
+  createdAt               DateTime              @default(now()) @db.Timestamptz
+  updatedAt               DateTime              @updatedAt @db.Timestamptz
+
+  roll                  Roll              @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  supersedes            RollInspection?   @relation("RollInspectionRevision", fields: [supersedesId], references: [id], onDelete: Restrict)
+  supersededBy          RollInspection?   @relation("RollInspectionRevision")
+  station               Station?          @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  device                Device?           @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  ruleSet               FourPointRuleSet? @relation(fields: [ruleSetId], references: [id], onDelete: Restrict)
+  suggestedQualityGrade QualityGrade?     @relation(fields: [suggestedQualityGradeId], references: [id], onDelete: Restrict)
+  inspectedBy           User              @relation("RollInspectionInspectedBy", fields: [inspectedById], references: [id], onDelete: Restrict)
+  supersededByUser      User?             @relation("RollInspectionSupersededBy", fields: [supersededById], references: [id], onDelete: Restrict)
+  voidedBy              User?             @relation("RollInspectionVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  rollErrors            RollError[]
+
+  // PARTIAL UNIQUE: WHERE "supersededAt" IS NULL AND "voidedAt" IS NULL (migration'da);
+  // Prisma predicate'i drift saymaz, uniqueness farkını sayar → @@unique(map:).
+  @@unique([rollId, phase], map: "roll_inspections_one_active_uq")
+  @@index([rollId])
+  @@index([inspectedAt])
+  @@index([suggestedQualityGradeId])
+  @@index([ruleSetId])
+  @@index([inspectedById, inspectedAt])
+  @@index([stationId])
+  @@index([deviceId])
+  @@map("roll_inspections")
+}
+
+/// 4 puan kural seti — yapılandırma (③b): muayene `ruleSnapshot` taşıdığı için
+/// değişiklik geçmişi değiştirmez; audit + pasife alma. FACTORY ⇔ customerId NULL;
+/// itemId yalnız müşteri setinde (CHECK `four_point_rule_sets_scope_ck`).
+model FourPointRuleSet {
+  id         String     @id @default(uuid()) @db.Uuid
+  name       String     @db.VarChar(80)
+  scope      RuleScope
+  customerId String?    @db.Uuid
+  itemId     String?    @db.Uuid
+  unit       ScoreUnit  @default(M2)
+  runningCap RunningCap @default(YARD)
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now()) @db.Timestamptz
+  updatedAt  DateTime   @updatedAt @db.Timestamptz
+
+  customer    Customer?           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  item        Item?               @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  bands       FourPointRuleBand[]
+  inspections RollInspection[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("FourPointRuleSetCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("FourPointRuleSetUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  // Üçü de PARTIAL UNIQUE (migration'da, `isActive` predicate'li) — tek aktif fabrika
+  // seti · müşteri başına tek aktif genel set · (müşteri, ürün) başına tek aktif set.
+  // COALESCE ifade index'i yerine iki partial: drift bekçisi ifadeyi göremez.
+  @@unique([scope], map: "four_point_rule_sets_one_factory_uq")
+  @@unique([customerId, scope], map: "four_point_rule_sets_customer_uq")
+  @@unique([customerId, itemId], map: "four_point_rule_sets_customer_item_uq")
+  @@index([itemId])
+  @@map("four_point_rule_sets")
+}
+
+/// Kural seti bandı — set kaydında tek tx'te replace edilir (③b saf yapılandırma pivotu).
+/// `maxScore` KAPSAYICI üst sınır; son bant NULL (tümü). FACTORY setinde qualityGradeId
+/// zorunlu, CUSTOMER setinde NULL — servis doğrulaması (MOTOR).
+model FourPointRuleBand {
+  id             String   @id @default(uuid()) @db.Uuid
+  ruleSetId      String   @db.Uuid
+  sortOrder      Int
+  maxScore       Decimal? @db.Decimal(8, 2)
+  label          String   @db.VarChar(16)
+  accepted       Boolean
+  qualityGradeId String?  @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamptz
+  updatedAt      DateTime @updatedAt @db.Timestamptz
+
+  ruleSet      FourPointRuleSet @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+  qualityGrade QualityGrade?    @relation(fields: [qualityGradeId], references: [id], onDelete: Restrict)
+
+  @@unique([ruleSetId, sortOrder])
+  @@index([qualityGradeId])
+  @@map("four_point_rule_bands")
+}
+
+/// K4P-LAB lab test türü kataloğu — yapılandırma (③b): sonuç satırı birim/sınır/skala
+/// snapshot'ı taşıdığı için değişiklik geçmişi değiştirmez; audit + pasife alma.
+/// `scaleMax` yalnız SCALE'de (CHECK `lab_test_types_kind_ck`).
+model LabTestType {
+  id         String        @id @default(uuid()) @db.Uuid
+  code       String        @unique @db.VarChar(32)
+  name       String        @db.VarChar(80)
+  method     String?       @db.VarChar(64)
+  resultKind LabResultKind
+  scaleMax   Int?          @db.SmallInt
+  unit       String?       @db.VarChar(16)
+  specMin    Decimal?      @db.Decimal(12, 3)
+  specMax    Decimal?      @db.Decimal(12, 3)
+  sortOrder  Int           @default(0)
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @db.Timestamptz
+  updatedAt  DateTime      @updatedAt @db.Timestamptz
+
+  results LabTestResult[]
+  customerSpecs CustomerLabSpec[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("LabTestTypeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("LabTestTypeUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("lab_test_types")
+}
+
+/// K4P-LAB lab testi — DURUM + onayda donan snapshot (plan §3.4). DRAFT'ta sonuçlar
+/// düzenlenir; onaydan sonra hiçbir sonuç yazılmaz (`status='DRAFT'` atomik WHERE'i).
+/// DRAFT hard delete meşrudur (deftere hiç yazmamış taslak); diğer durumlarda iptal damgası.
+/// `batchId` top verildiyse topun partisinden, `itemId` top/partiden doğuşta snapshot'lanır.
+model LabTest {
+  id           String        @id @default(uuid()) @db.Uuid
+  /// Numara serisi `labTest` (LAB…) — doğuşta materyalize.
+  testNo       String        @unique @db.VarChar(40)
+  rollId       String?       @db.Uuid
+  batchId      String?       @db.Uuid
+  itemId       String        @db.Uuid
+  /// K4P-SERT: testin yapıldığı müşteri (iş ortağı kimliği); verilirse sonuç sınırı müşteri spesifikasyonundan.
+  customerId   String?       @db.Uuid
+  sampleCode   String?       @db.VarChar(64)
+  labName      String?       @db.VarChar(120)
+  /// Fabrika takvim günü (`factoryDayKeyUtcMidnight`) — anı değil günü anlatır.
+  testedOn     DateTime      @db.Date
+  note         String?       @db.VarChar(500)
+  status       LabTestStatus @default(DRAFT)
+  approvedAt   DateTime?     @db.Timestamptz
+  approvedById String?       @db.Uuid
+  voidedAt     DateTime?     @db.Timestamptz
+  voidedById   String?       @db.Uuid
+  voidReason   String?       @db.VarChar(500)
+  clientToken  String?       @unique @db.Uuid
+  createdAt    DateTime      @default(now()) @db.Timestamptz
+  updatedAt    DateTime      @updatedAt @db.Timestamptz
+
+  roll       Roll?           @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  batch      Batch?          @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  item       Item            @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  customer   Customer?       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  approvedBy User?           @relation("LabTestApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  voidedBy   User?           @relation("LabTestVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  results    LabTestResult[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("LabTestCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("LabTestUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([rollId])
+  @@index([batchId])
+  @@index([itemId])
+  @@index([testedOn, id])
+  @@index([customerId])
+  @@map("lab_tests")
+}
+
+/// K4P-SERT müşteri spesifikasyonu — (müşteri × ürün? × test türü) lab sınırı. Yapılandırmadır:
+/// lab sonucu yazımda sınırı SNAPSHOT'lar, burada değişiklik geçmiş testi etkilemez. Pasife alma `isActive`.
+/// İki partial unique (migration'da): aktif (müşteri, tür) genel satır · aktif (müşteri, ürün, tür) satırı.
+model CustomerLabSpec {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @db.Uuid
+  itemId     String?  @db.Uuid
+  testTypeId String   @db.Uuid
+  specMin    Decimal? @db.Decimal(12, 3)
+  specMax    Decimal? @db.Decimal(12, 3)
+  note       String?  @db.VarChar(500)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  item     Item?       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  testType LabTestType @relation(fields: [testTypeId], references: [id], onDelete: Restrict)
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerLabSpecCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerLabSpecUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([customerId, testTypeId], map: "customer_lab_specs_customer_uq")
+  @@unique([customerId, itemId, testTypeId], map: "customer_lab_specs_customer_item_uq")
+  @@index([itemId])
+  @@index([testTypeId])
+  @@map("customer_lab_specs")
+}
+
+/// K4P-SERT sertifika (OEKO-TEX, GOTS…) — DURUM tablosu. Etkin = iptal edilmemiş ∧ yenileyeni yok
+/// (tek helper `ACTIVE_CERTIFICATE_WHERE`). Yenileme YENİ satırdır (`renewsId`); eski satır değişmez.
+model Certificate {
+  id            String            @id @default(uuid()) @db.Uuid
+  holder        CertificateHolder
+  /// PARTNER sahipliğinde iş ortağı kimliği (tek FK); OWN'da NULL (CHECK `certificates_holder_ck`).
+  partnerId     String?           @db.Uuid
+  standard      String            @db.VarChar(64)
+  certificateNo String            @db.VarChar(80)
+  issuer        String?           @db.VarChar(120)
+  scope         String?           @db.VarChar(500)
+  /// Takvim günleri (`@db.Date`) — sertifika anı değil günü anlatır.
+  issuedOn      DateTime?         @db.Date
+  expiresOn    DateTime          @db.Date
+  /// Belge eki yoksa dosya adı/yeri notu.
+  note          String?           @db.VarChar(500)
+  renewsId      String?           @unique @db.Uuid
+  revokedAt     DateTime?         @db.Timestamptz
+  revokedById   String?           @db.Uuid
+  revokeReason  String?           @db.VarChar(500)
+  clientToken   String?           @unique @db.Uuid
+  createdAt     DateTime          @default(now()) @db.Timestamptz
+  updatedAt     DateTime          @updatedAt @db.Timestamptz
+
+  partner   Customer?         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  renews    Certificate?      @relation("CertificateRenewal", fields: [renewsId], references: [id], onDelete: Restrict)
+  renewedBy Certificate?      @relation("CertificateRenewal")
+  revokedBy User?             @relation("CertificateRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict)
+  files     CertificateFile[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CertificateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CertificateUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([partnerId])
+  @@index([expiresOn, id])
+  @@map("certificates")
+}
+
+/// Sertifika belge eki — baytlar DB'de (≤ 5 MB, CHECK); tür SİHİRLİ BAYTTAN doğrulanır. Baytlar
+/// audit/log yüküne GİRMEZ. Aynı dosya (sha256) aynı sertifikaya ikinci kez yazılmaz.
+model CertificateFile {
+  id            String   @id @default(uuid()) @db.Uuid
+  certificateId String   @db.Uuid
+  fileName      String   @db.VarChar(200)
+  mimeType      String   @db.VarChar(32)
+  sizeBytes     Int
+  sha256        String   @db.VarChar(64)
+  content       Bytes
+  uploadedById  String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  updatedAt     DateTime @updatedAt @db.Timestamptz
+
+  certificate Certificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  uploadedBy  User?       @relation("CertificateFileUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@unique([certificateId, sha256])
+  @@map("certificate_files")
+}
+
+/// K4P-LAB sonuç satırı — ebeveyn testin parçası (DRAFT silinince Cascade ile gider).
+/// Birim, sınır, tür biçimi ve skala tavanı yazım anında snapshot'lanır; SCALE değeri
+/// 0,5 adımlı (CHECK `lab_test_results_scale_ck`). Test başına tür başına tek satır.
+model LabTestResult {
+  id            String           @id @default(uuid()) @db.Uuid
+  labTestId     String           @db.Uuid
+  testTypeId    String           @db.Uuid
+  resultKind    LabResultKind
+  scaleMax      Int?             @db.SmallInt
+  value         Decimal?         @db.Decimal(12, 3)
+  unit          String?          @db.VarChar(16)
+  specMin       Decimal?         @db.Decimal(12, 3)
+  specMax       Decimal?         @db.Decimal(12, 3)
+  verdict       LabVerdict
+  verdictSource LabVerdictSource
+  note          String?          @db.VarChar(500)
+  createdAt     DateTime         @default(now()) @db.Timestamptz
+  updatedAt     DateTime         @updatedAt @db.Timestamptz
+
+  labTest  LabTest     @relation(fields: [labTestId], references: [id], onDelete: Cascade)
+  testType LabTestType @relation(fields: [testTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([labTestId, testTypeId])
+  @@index([testTypeId])
+  @@map("lab_test_results")
 }
 
 /// Top üzerinde yapılan somut işlem log'u (Kurşun geçildi, QC2 bitti, Tambur kararı, paketleme vb.).
@@ -5289,11 +5860,11 @@ model RollOperation {
   revokeReason String?   @db.VarChar(300)
 
   // Relations
-  roll                Roll          @relation(fields: [rollId], references: [id])
-  step                WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
-  operator            User?         @relation(fields: [operatorId], references: [id])
-  machine             Machine?      @relation(fields: [machineId], references: [id])
-  inheritedFromParent Roll?         @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
+  roll                Roll                 @relation(fields: [rollId], references: [id])
+  step                WorkOrderStep        @relation(fields: [workOrderStepId], references: [id])
+  operator            User?                @relation(fields: [operatorId], references: [id])
+  machine             Machine?             @relation(fields: [machineId], references: [id])
+  inheritedFromParent Roll?                @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
   propertyValue       FabricPropertyValue? @relation(fields: [propertyValueId], references: [id], onDelete: Restrict)
 
   /// Append-only işlem log'u → `updatedAt` YOK (konvansiyon). İki güncelleme
@@ -5991,6 +6562,10 @@ model NumberSeries {
   startValue Int?
   step       Int?
   maxValue   Int?
+  /// BAŞLANGIÇ DEĞERİNİN GEÇERLİ OLDUĞU FABRİKA YILI — NULL = her dönemde (bugünkü
+  /// davranış). Yalnız sabit biçimli (`fixedShape`) seri yazar: başka programdan
+  /// yıl ortasında geçen fabrika o yılın sırasını sürdürür, ertesi yıl 1'den başlar.
+  startValueYear Int?
 
   /// ÜST SINIRA VARINCA NE OLACAK — hata mı, BAŞA DÖNME mi? (D2③)
   ///
@@ -6709,6 +7284,8 @@ model Subcontractor {
   mergedBy       User?           @relation("SubcontractorMergedBy", fields: [mergedById], references: [id])
 
   cariAccount CariAccount?
+  /// Bu firmanın terbiye/fason tarifeleri (MAL-1; damgalı sürüm).
+  finishingRates FinishingRate[] @relation("FinishingRateSubcontractor")
 
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
@@ -7177,6 +7754,9 @@ model PrintedDocument {
   printedById   String?          @db.Uuid
   printedBy     User?            @relation("PrintedDocumentPrintedBy", fields: [printedById], references: [id])
 
+  /// Bu sürümden üretilmiş e-İrsaliye kayıtları (geri ilişki).
+  eIrsaliyeler  EIrsaliye[]
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -7201,6 +7781,7 @@ model DocumentProfile {
 
   customers      Customer[]      @relation("CustomerDocProfile")
   subcontractors Subcontractor[] @relation("SubcontractorDocProfile")
+  templateAssignments DocumentProfileTemplate[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -7730,6 +8311,8 @@ model Shipment {
   updatedBy   User?   @relation("ShipmentUpdatedBy", fields: [updatedById], references: [id])
 
   invoices Invoice[]
+  /// e-İrsaliye kayıtları (geri ilişki; kolon değil). Bağ `EIrsaliye.shipmentId`te.
+  eIrsaliyeler EIrsaliye[]
 
   @@index([customerId, status])
   @@index([branchId])
@@ -8086,18 +8669,19 @@ model FabricProperty {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Relations
-  itemAllowed          ItemAllowedProperty[]
-  workOrderTargets     WorkOrderTargetProperty[]
-  rollProperties       RollProperty[]
-  orderLineRequired    OrderLineRequiredProperty[]
-  stationCapabilities  StationProperty[]
+  itemAllowed           ItemAllowedProperty[]
+  workOrderTargets      WorkOrderTargetProperty[]
+  workOrderTargetValues WorkOrderTargetValue[]
+  rollProperties        RollProperty[]
+  orderLineRequired     OrderLineRequiredProperty[]
+  stationCapabilities   StationProperty[]
   /// Fason kabullerde uygulandığı receipt'ler (boyahane dönüşü gibi).
-  appliedAtReceipts    SubcontractorReceiptProperty[]
-  productRecipeTargets ProductRecipeProperty[]
+  appliedAtReceipts     SubcontractorReceiptProperty[]
+  productRecipeTargets  ProductRecipeProperty[]
   /// Rota şablonu adımlarında planlanan hedef özellikler (şablon varsayılanı).
-  routeStepTargets     RouteStepProperty[]
+  routeStepTargets      RouteStepProperty[]
   /// SEÇİM tipli özelliğin izin verilen değerleri (BAYRAK tipte boş).
-  values               FabricPropertyValue[]
+  values                FabricPropertyValue[]
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -8105,7 +8689,7 @@ model FabricProperty {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  nameFold             String?                        @default(dbgenerated())
+  nameFold              String?                        @default(dbgenerated())
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("description")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -8113,7 +8697,7 @@ model FabricProperty {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  descriptionFold      String?                        @default(dbgenerated())
+  descriptionFold       String?                        @default(dbgenerated())
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("category")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -8121,7 +8705,7 @@ model FabricProperty {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  categoryFold         String?                        @default(dbgenerated())
+  categoryFold          String?                        @default(dbgenerated())
 
   // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
   // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
@@ -8177,12 +8761,15 @@ model FabricPropertyValue {
   /// bu yüzden değer satırı silinmez, pasifleştirilir.
   isActive   Boolean @default(true)
 
-  property       FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property                FabricProperty           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   /// Bu değeri taşıyan toplar — FK `Restrict`, yani kullanılan değer silinemez
   /// (zaten silinmiyor: `fabric-property.service` pasifleştiriyor).
-  rollProperties RollProperty[]
+  rollProperties          RollProperty[]
   /// Bu değerle yazılmış operasyon izleri (kurşun gramajı, KQ-D4) — FK RESTRICT.
-  rollOperations RollOperation[]
+  rollOperations          RollOperation[]
+  /// İş emri hedefleri (KQ-D6) ve kâğıt dağıtım gramajı — FK RESTRICT.
+  workOrderTargetValues   WorkOrderTargetValue[]
+  kursunBypassAssignments KursunBypassAssignment[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -8551,6 +9138,35 @@ model WorkOrderTargetProperty {
   @@map("work_order_target_properties")
 }
 
+/// İş emrinin HEDEF çeşit değeri (KQ-D6: "hedef kurşun gramajı 50 gr").
+/// `WorkOrderTargetProperty` KULLANILMAZ: o toplara yayılır ve SEÇİM tipini reddeder;
+/// bu satır yalnız plan alanıdır — sapma TÜRETİLİR (process-summary), yazılmaz, engellemez.
+/// Değişim eski satırı damgalar + yenisini yazar; DB'de partial unique
+/// `(workOrderId, propertyId) WHERE "revokedAt" IS NULL`.
+model WorkOrderTargetValue {
+  id          String @id @default(uuid()) @db.Uuid
+  workOrderId String @db.Uuid
+  propertyId  String @db.Uuid
+  valueId     String @db.Uuid
+
+  workOrder WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  property  FabricProperty      @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  value     FabricPropertyValue @relation(fields: [valueId], references: [id], onDelete: Restrict)
+
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+  createdById  String?   @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([workOrderId, propertyId], map: "work_order_target_values_active_uq")
+  @@index([propertyId])
+  @@index([valueId])
+  @@map("work_order_target_values")
+}
+
 /// Roll ↔ FabricProperty M:N — bir rulonun fiilen sahip olduğu özellikler.
 /// "Özellik veren" fason adımının (SubcontractorCategory.appliesProperty=true)
 /// Fason Kabul'ünde WO.targetProperties'tan kopyalanır. Sonradan
@@ -8735,6 +9351,190 @@ model ShipmentEvent {
   @@index([shipmentId, createdAt])
   @@index([type, createdAt])
   @@map("shipment_events")
+}
+
+// =============================================================================
+// e-İRSALİYE (E1-SEMA, plan docs/design/E-IRSALIYE-PLAN.md §3.1–§3.2)
+// =============================================================================
+
+/// e-İrsaliye kaydının KAYNAK belgesi. v1 yalnız müşteri sevkiyatı; yeni kaynak
+/// (fason sevki, doğrudan sevk) `ALTER TYPE ADD VALUE` reçetesiyle eklenir.
+enum EIrsaliyeSourceType {
+  SHIPMENT /// Müşteri sevkiyatı (`Shipment`)
+}
+
+/// e-İrsaliye kaydının GÜNCEL durumu (geçmiş `EIrsaliyeEvent`te). Geçişler plan §3.2.
+enum EIrsaliyeStatus {
+  TASLAK /// Hazırlandı; numara ve XML yok
+  OLUSTURULDU /// Numara + ETTN + XML üretildi; GİB'e gitmedi
+  GONDERILDI /// Entegratöre/portala iletildi (gönderilen XML mühürlü)
+  KABUL /// Alıcı yanıtı: kabul
+  KISMI_KABUL /// Alıcı yanıtı: kısmi kabul
+  REDDEDILDI /// Alıcı yanıtı: red (yerine yeni kayıt `replacesId` ile)
+  HATA /// Gönderimde hata alındı; düzeltilip yeniden üretilir
+  IPTAL /// Yerel iptal — GİB'e hiç gitmedi (terminal)
+}
+
+/// e-İrsaliye olay defterinin satır tipi. Ters çiftler `scripts/lib/defter-beyan.ts`te.
+enum EIrsaliyeEventType {
+  HAZIRLANDI /// Kayıt doğdu (TASLAK) — doğuş olayı
+  OLUSTURULDU /// Numara + ETTN + ilk XML sürümü üretildi
+  XML_YENIDEN_URETILDI /// Aynı numara + ETTN ile yeni XML sürümü
+  GONDERILDI /// Gönderildi / elle gönderildi işaretlendi
+  GONDERIM_GERI_ALINDI /// Gönderim kaydı geri alındı (GONDERILDI'nin tersi)
+  YANIT_KAYDEDILDI /// Alıcı yanıtı kaydedildi
+  YANIT_GERI_ALINDI /// Yanıt kaydı geri alındı (YANIT_KAYDEDILDI'nin tersi)
+  HATA_ALINDI /// Gönderim hatası kaydedildi
+  IPTAL_EDILDI /// Yerel iptal — terminal
+}
+
+/// e-İRSALİYE KAYDI — DURUM TABLOSU ("şu an ne"); geçmiş `EIrsaliyeEvent`te.
+///
+/// Şema-dışı sedler (migration `20261024081108_e_irsaliye`, envanter
+/// `scripts/test_db_invariants.ts`, davranış `scripts/test_e_irsaliye_db_invariants.ts`):
+///  · PARTIAL UNIQUE `e_irsaliyeler_kaynak_canli_key` (sourceType, sourceId)
+///    WHERE status NOT IN ('IPTAL','REDDEDILDI') — kaynak başına TEK canlı kayıt.
+///    Prisma partial index bilmez; şemada `@@unique` YOK, yalnız bu beyan.
+///  · CHECK `e_irsaliyeler_numarali_durum_chk` · `e_irsaliyeler_gonderilmis_durum_chk`
+///    · `e_irsaliyeler_document_no_bicim_chk` · `e_irsaliyeler_download_count_chk`.
+/// Alan adları E4'ün `DespatchRecordFields`iyle bire bir (planın `plaka`/`soforAd`… karşılığı).
+model EIrsaliye {
+  id         String              @id @default(uuid()) @db.Uuid
+  sourceType EIrsaliyeSourceType
+  /// Polimorfik kaynak (`PrintedDocument.sourceId` emsali) — FK YOK, bütünlük serviste.
+  sourceId   String              @db.Uuid
+  /// v1'de dolu; liste süzgeci join'i için. `Restrict`: e-İrsaliyesi olan sevkiyat silinemez.
+  shipmentId String?             @db.Uuid
+  status     EIrsaliyeStatus     @default(TASLAK)
+
+  /// GİB biçimi: 3 karakter seri + 4 hane yıl + 9 hane sıra (CHECK ile). TASLAK'ta null.
+  documentNo    String? @unique @db.VarChar(16)
+  ettn          String? @unique @db.Uuid
+  /// Entegratör portalı farklı numara/ETTN verdiyse (⚠ doğrulanacak: plan §3.1).
+  confirmedNo   String? @db.VarChar(32)
+  confirmedEttn String? @db.Uuid
+  /// Üretildiği andaki bağdaştırıcı (`disaAktar` · `simulasyon` · ileride entegratör kodu).
+  adapter       String  @db.VarChar(32)
+
+  /// XML'in üretildiği kâğıt irsaliye sürümü ("kaynak değişti" uyarısı bundan türer).
+  printedDocumentId String? @db.Uuid
+  printedDocVersion Int?
+
+  /// Güncel ve gönderilen XML sürümü. `NoAction`: XML satırı yalnız kaydıyla (kaskat) gider.
+  currentXmlId String? @unique @db.Uuid
+  sentXmlId    String? @unique @db.Uuid
+
+  // Taşıma — kayıtta elle tamamlanır (plan §2).
+  licensePlate     String? @db.VarChar(32)
+  trailerPlate     String? @db.VarChar(32)
+  driverFirstName  String? @db.VarChar(100)
+  driverFamilyName String? @db.VarChar(100)
+  /// Şoför TCKN — XML'e girer; audit yüküne ve log'a GİRMEZ (sır hijyeni).
+  driverNationalId String? @db.VarChar(11)
+  carrierName      String? @db.VarChar(200)
+  carrierTaxId     String? @db.VarChar(11)
+  /// TCKN'li alıcıda kişi adı/soyadı.
+  recipientFirstName  String? @db.VarChar(100)
+  recipientFamilyName String? @db.VarChar(100)
+
+  sentAt          DateTime? @db.Timestamptz
+  responseAt      DateTime? @db.Timestamptz
+  responseNote    String?   @db.VarChar(1000)
+  responseSummary Json?
+
+  /// DURUM kolonu: "indirildi mi" yeniden üretim onayına girer (CHECK >= 0).
+  lastDownloadedAt DateTime? @db.Timestamptz
+  downloadCount    Int       @default(0)
+
+  /// REDDEDILDI kaydın yerine geçen yeni kayıt eskisini gösterir.
+  replacesId  String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  shipment        Shipment?        @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  printedDocument PrintedDocument? @relation(fields: [printedDocumentId], references: [id], onDelete: Restrict)
+  currentXml      EIrsaliyeXml?    @relation("EIrsaliyeCurrentXml", fields: [currentXmlId], references: [id], onDelete: NoAction)
+  sentXml         EIrsaliyeXml?    @relation("EIrsaliyeSentXml", fields: [sentXmlId], references: [id], onDelete: NoAction)
+  replaces        EIrsaliye?       @relation("EIrsaliyeReplaces", fields: [replacesId], references: [id], onDelete: NoAction)
+  replacedBy      EIrsaliye[]      @relation("EIrsaliyeReplaces")
+  xmls            EIrsaliyeXml[]   @relation("EIrsaliyeXmlVersions")
+  events          EIrsaliyeEvent[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("EIrsaliyeCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("EIrsaliyeUpdatedBy", fields: [updatedById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([shipmentId])
+  @@index([sourceType, sourceId])
+  @@index([printedDocumentId])
+  @@index([replacesId])
+  @@map("e_irsaliyeler")
+}
+
+/// e-İRSALİYE XML SÜRÜMÜ — DONMUŞ BELGE (append-only; `updatedAt` YOK ve OLMAMALI).
+///
+/// Trigger `e_irsaliye_xml_degismez`: UPDATE her zaman, doğrudan DELETE RED (kaydın
+/// kaskadı geçer); INSERT, bağlı kayıt GONDERILDI/KABUL/KISMI_KABUL/REDDEDILDI/IPTAL
+/// iken RED — gönderilen sürüm `EIrsaliye.sentXmlId` ile mühürlüdür.
+/// `createdById` FK'SIZ (`RollStatusEvent.actorId` emsali): kullanıcı silinince SET NULL
+/// bir UPDATE olur ve mühürle çarpışırdı.
+model EIrsaliyeXml {
+  id          String @id @default(uuid()) @db.Uuid
+  /// `Cascade` BİLİNÇLİ (`ShipmentEvent.shipment` emsali): kayıt canlıda hard delete
+  /// edilmez; kaskat yalnız bekçi temizliğinde koşar, doğrudan silme trigger'da RED.
+  eIrsaliyeId String @db.Uuid
+  /// Kayıt içinde 1'den artan sürüm (max+1).
+  version     Int
+  ettn        String @db.Uuid
+  xml         String @db.Text
+  sha256      String @db.Char(64)
+  /// Yapısal doğrulama raporu (E4 `ValidationResult`).
+  validation  Json
+  createdById String? @db.Uuid
+
+  eIrsaliye      EIrsaliye        @relation("EIrsaliyeXmlVersions", fields: [eIrsaliyeId], references: [id], onDelete: Cascade)
+  currentOf      EIrsaliye?       @relation("EIrsaliyeCurrentXml")
+  sentOf         EIrsaliye?       @relation("EIrsaliyeSentXml")
+  events         EIrsaliyeEvent[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([eIrsaliyeId, version])
+  @@map("e_irsaliye_xmllari")
+}
+
+/// e-İRSALİYE OLAY DEFTERİ — "bu kayda ne oldu" (append-only, `ShipmentEvent` emsali).
+///
+/// ⚠️ `updatedAt` YOK ve OLMAMALI. Mühür `defter_block_tamper` (UPDATE ve doğrudan
+/// DELETE RED). Kronoloji `createdAt`; "en son" okuyucusu `id` eşitlik bozucusuyla.
+/// Tek yazar `services/e-irsaliye/e-irsaliye-event.helper.ts` `writeEIrsaliyeEventTx`.
+/// `actorId` FK'SIZ (mühürle çarpışan SET NULL — `RollStatusEvent` emsali).
+model EIrsaliyeEvent {
+  id          String             @id @default(uuid()) @db.Uuid
+  eIrsaliyeId String             @db.Uuid
+  type        EIrsaliyeEventType
+  /// Doğuş olayında (HAZIRLANDI) null — öncesi yok.
+  fromStatus  EIrsaliyeStatus?
+  toStatus    EIrsaliyeStatus
+  /// Olayın ilgili olduğu XML sürümü (üretim/gönderim). `NoAction`: mühürlü satır SET NULL alamaz.
+  xmlId       String?            @db.Uuid
+  note        String?            @db.VarChar(1000)
+  actorId     String?            @db.Uuid
+
+  /// `Cascade` BİLİNÇLİ — `EIrsaliyeXml.eIrsaliye` şerhi.
+  eIrsaliye EIrsaliye     @relation(fields: [eIrsaliyeId], references: [id], onDelete: Cascade)
+  xml       EIrsaliyeXml? @relation(fields: [xmlId], references: [id], onDelete: NoAction)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([eIrsaliyeId, createdAt, id])
+  @@index([xmlId])
+  @@map("e_irsaliye_olaylari")
 }
 
 /// Çuval tartısının türü. Sıfırlama da bir OLAYDIR — sessiz silme değil.
@@ -10825,14 +11625,23 @@ model ItemPrice {
   item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
+  /// ③a TİCARİ PİVOT (2026-10-24, MAL-0b): satır SİLİNMEZ, fiyat yerinde EZİLMEZ — değişim
+  /// eski satırın damgası + YENİ satır, kaldırma damgadır; geçerlilik `[createdAt, revokedAt)`.
+  /// Okuma tek kaynaktan: `ACTIVE_ITEM_PRICE` / `itemPriceValidAt`. `revokedById` düz UUID.
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  // → partial: WHERE "customerId" IS NULL      (kart varsayılanı tektir)
+  // → partial: WHERE "customerId" IS NULL AND "revokedAt" IS NULL      (aktif kart varsayılanı tektir)
   @@unique([itemId, kind, currency], map: "item_price_default_uq")
-  // → partial: WHERE "customerId" IS NOT NULL  (müşteri istisnası tektir)
+  // → partial: WHERE "customerId" IS NOT NULL AND "revokedAt" IS NULL  (aktif müşteri istisnası tektir)
   @@unique([itemId, customerId, kind, currency], map: "item_price_customer_uq")
   @@index([customerId])
+  // "Fiyat şu tarih itibarıyla" okuması (`itemPriceValidAt`): anahtar + pencere başı.
+  @@index([itemId, kind, currency, createdAt], map: "item_prices_asof_idx")
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "item_prices_updatedAt_esitleme_idx")
   @@map("item_prices")
@@ -11581,6 +12390,43 @@ model PrintJob {
   @@map("print_jobs")
 }
 
+/// İSTEK BAŞLIĞI (izlenebilirlik B1, `docs/design/IZLENEBILIRLIK-CIHAZ-PLAN.md` §4.1) — TELEMETRİ: "kim hangi uca ne
+/// attı" sorusunun künyesi; hiçbir karar/sayı türetilmez, `requestTrace.retentionDays` (varsayılan 90) yaşında budanır.
+/// GÖVDE, sorgu dizesi, başlık değeri SAKLANMAZ (PIN/parola/ayar şifresi). Yazan · okuyan · budayan TEK dosya
+/// `src/services/request-trace.service.ts` (bekçi `test_request_trace`). Şema dışı: kısmi `(createdAt) WHERE status >= 400`.
+model RequestTrace {
+  /// = ALS istek kimliği (`lib/request-context.ts`); audit `system_logs.requestId` ile aynı değer — bu yüzden
+  /// `@default` YOK: kimliği istek bağlamı üretir, tablo değil.
+  id            String   @id @db.Uuid
+  /// Token'dan çözülen kullanıcı (künye; FK değil — telemetri kullanıcı yaşam döngüsünü bağlamaz).
+  userId        String?  @db.Uuid
+  /// Tablet `x-device-id` → `req.device`; panel `X-Client-Instance` → `devices.deviceId`. Yalnız GÖRÜNTÜ.
+  deviceRefId   String?  @db.Uuid
+  deviceLocalId String?  @db.VarChar(64)
+  clientType    String?  @db.VarChar(16)
+  appVersion    String?  @db.VarChar(32)
+  ip            String?  @db.VarChar(64)
+  method        String   @db.VarChar(8)
+  /// Normalleştirilmiş uç kalıbı (`normalizeKeyPath`): UUID/sayı/opak segment `:id` olur, değer sızmaz.
+  routeKey      String   @db.VarChar(160)
+  status        Int      @db.SmallInt
+  durationMs    Int
+  /// Hata yanıtının `details.code`u (gövdenin kendisi değil).
+  errorCode     String?  @db.VarChar(60)
+  /// Bu istekte yazılan audit satırı sayısı (`AuditService` sayacı).
+  auditCount    Int      @default(0)
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  updatedAt     DateTime @updatedAt @db.Timestamptz
+
+  device Device? @relation("RequestTraceDevice", fields: [deviceRefId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  /// FK SetNull taraması (cihaz silme) tüm telemetriyi gezmesin; cihaz süzgeci de bunu kullanır.
+  @@index([deviceRefId, createdAt])
+  @@map("request_traces")
+}
+
 // =============================================================================
 // BİLDİRİM ÇEKİRDEĞİ (F1, `docs/design/BILDIRIM-SISTEMI-PLAN.md` §3.2) — dört tablo da TELEMETRİ/DURUM:
 // budanır (`notification-prune.service`), hiçbir raporlanan sayı onlara bağlı değildir → defter DEĞİL.
@@ -11698,6 +12544,111 @@ model NotificationDailyStats {
   @@map("notification_daily_stats")
 }
 
+// ═══ BELGE ŞABLON TASARIMCISI (T1B, 2026-10-24) — docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md §3.5 ═══
+
+/// Kullanıcı tasarımı belge şablonu (belge türü × N). Sürümler değişmezdir; yayın tek
+/// `publishedVersionId` claim'iyle değişir. ŞEMA-DIŞI: CHECK status (ACTIVE|ARCHIVED), editMode (VISUAL|CODE).
+/// editMode = son kaydedilen sürümün kipi (liste rozeti); sürüm kendi kipini ayrıca taşır.
+model DocumentTemplate {
+  id                 String    @id @default(uuid()) @db.Uuid
+  /// PrintedDocType adı ya da FREE_DOCUMENT / TRAVELER_CARD / FASON_CEKI_DRAFT.
+  docType            String    @db.VarChar(40)
+  name               String    @db.VarChar(80)
+  description        String?   @db.VarChar(300)
+  status             String    @default("ACTIVE") @db.VarChar(10)
+  editMode           String    @default("VISUAL") @db.VarChar(10)
+  /// Kaynak etiketi: "system" ya da "template:<id>" — iz, FK değil.
+  copiedFrom         String?   @db.VarChar(80)
+  publishedVersionId String?   @unique @db.Uuid
+  publishedVersion   DocumentTemplateVersion? @relation("DocumentTemplatePublished", fields: [publishedVersionId], references: [id], onDelete: Restrict)
+  /// Sürüm no sayacı — kayıt claim'i bununla serileşir (baseVersionNo == latestVersionNo).
+  latestVersionNo    Int       @default(0)
+  archivedAt         DateTime? @db.Timestamptz
+  clientToken        String?   @unique @db.Uuid
+
+  versions          DocumentTemplateVersion[] @relation("DocumentTemplateVersions")
+  defaultFor        DocumentTemplateDefault[]
+  profileAssignments DocumentProfileTemplate[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@unique([docType, name])
+  @@index([docType, status])
+  @@map("document_templates")
+}
+
+/// DEĞİŞMEZ şablon sürümü (append-only). ŞEMA-DIŞI: TRIGGER document_template_versions_block_tamper —
+/// içerik kolonu UPDATE'i ve yayınlanmış sürümün DELETE'i reddedilir; tek istisna publishedAt/publishedById
+/// NULL→değer (bir kez). CHECK editMode (VISUAL|CODE).
+model DocumentTemplateVersion {
+  id              String   @id @default(uuid()) @db.Uuid
+  templateId      String   @db.Uuid
+  template        DocumentTemplate @relation("DocumentTemplateVersions", fields: [templateId], references: [id], onDelete: Restrict)
+  versionNo       Int
+  editMode        String   @db.VarChar(10)
+  sourceHtml      String   @db.Text
+  css             String   @db.Text
+  compiledLiquid  String   @db.Text
+  projectData     Json?
+  pageSettings    Json
+  tableBindings   Json
+  /// P-d: dondurulmuş belge ayarı (şablonda `ayar`).
+  settings        Json
+  internalFields  Json
+  contractVersion Int
+  engineVersion   String   @db.VarChar(40)
+  contentHash     String   @db.VarChar(64)
+  note            String?  @db.VarChar(300)
+  removedOnSave   Json
+  clientToken     String?  @unique @db.Uuid
+  createdById     String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  publishedAt     DateTime? @db.Timestamptz
+  publishedById   String?  @db.Uuid
+
+  publishedOf DocumentTemplate? @relation("DocumentTemplatePublished")
+
+  @@unique([templateId, versionNo])
+  @@map("document_template_versions")
+}
+
+/// Belge türünün tasarımcı varsayılanı (saf yapılandırma: kaldırma = satır silme).
+model DocumentTemplateDefault {
+  id         String           @id @default(uuid()) @db.Uuid
+  docType    String           @unique @db.VarChar(40)
+  templateId String           @db.Uuid
+  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@index([templateId])
+  @@map("document_template_defaults")
+}
+
+/// Müşteri/fasoncu ataması PROFİL ÜZERİNDEN (XOR'lu çift bağ yok); saf yapılandırma pivotu.
+model DocumentProfileTemplate {
+  profileId  String           @db.Uuid
+  profile    DocumentProfile  @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  docType    String           @db.VarChar(40)
+  templateId String           @db.Uuid
+  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@id([profileId, docType])
+  @@index([templateId])
+  @@map("document_profile_templates")
+}
+
 // =============================================================================
 // RAPOR V2 — KAYITLI / ÖZEL RAPORLAR (R1-SEMA, `docs/design/RAPORLAR-V2-PLAN.md` §3.3)
 // Migration `rapor_v2_cekirdek`. Yazan/okuyan kod R1-KAYIT (tanım/sürüm/ön ayar/paylaşım) ve
@@ -11790,6 +12741,8 @@ model ReportDefinitionVersion {
   /// Sürümü yazan; servis her zaman doldurur. NULLABLE: künye kolonu sözleşmesi (`test_record_provenance` §3).
   createdById         String?  @db.Uuid
   note                String?  @db.VarChar(500)
+  /// İdempotency — yeni sürüm ucu (`clientToken @unique` sözleşmesi; v1 sürüm tanımın token'ıyla doğar).
+  clientToken         String?  @unique @db.Uuid
   createdAt           DateTime @default(now()) @db.Timestamptz
 
   definition ReportDefinition  @relation("ReportDefinitionVersions", fields: [definitionId], references: [id], onDelete: Restrict)
@@ -11904,4 +12857,161 @@ model ReportSnapshot {
   @@index([createdById])
   @@index([expiresAt])
   @@map("report_snapshots")
+}
+
+// =============================================================================
+// MALİYET & TEKLİF — girdiler (MAL-1, 2026-10-25). Plan: docs/design/MALIYET-TEKLIF-PLAN.md §3.2
+// Modül `maliyet.enabled` (kapı `requireMaliyetEnabled`). Hiçbiri bakiye yürütmez (defter DEĞİL);
+// partial unique'ler ŞEMA-DIŞI (migration `maliyet_girdileri`; envanter `test_db_invariants`).
+// =============================================================================
+
+enum CostParamStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+}
+
+enum YarnCostPriceSource {
+  MANUAL
+  LAST_RECEIPT
+  PURCHASE_PRICE
+}
+
+enum FinishingBasis {
+  RAW_M
+  FINISHED_M
+}
+
+/// TESİS MALİYET PARAMETRELERİ — DURUM + DONMUŞ SÜRÜM. ACTIVE satır DEĞİŞMEZ: düzenleme =
+/// taslak kopyası → "yürürlüğe al" (tek tx iki claim). Tek ACTIVE + tek DRAFT: DB'de ŞEMA-DIŞI
+/// partial unique `cost_parameter_sets_live_uq (status) WHERE status IN ('DRAFT','ACTIVE')`.
+/// Hard delete yalnız hiç yürürlüğe girmemiş taslakta (④). Yüzdeler `Decimal(5,2)` yüzde.
+model CostParameterSet {
+  id                      String          @id @default(uuid()) @db.Uuid
+  versionNo               Int             @unique
+  status                  CostParamStatus @default(DRAFT)
+  activatedAt             DateTime?       @db.Timestamptz
+  /// Düz UUID (ItemPrice `revokedById` emsali).
+  activatedById           String?         @db.Uuid
+  supersededAt            DateTime?       @db.Timestamptz
+  note                    String?         @db.VarChar(300)
+  loomHourRateTry         Decimal         @db.Decimal(12, 4)
+  laborHourRateTry        Decimal         @db.Decimal(12, 4)
+  loomsPerOperator        Decimal         @db.Decimal(6, 2)
+  energyKwhPerLoomHour    Decimal         @db.Decimal(8, 3)
+  energyPriceTryPerKwh    Decimal         @db.Decimal(10, 4)
+  overheadPct             Decimal         @db.Decimal(5, 2)
+  defaultTakeUpPct        Decimal?        @db.Decimal(5, 2)
+  defaultWarpWastePct     Decimal         @db.Decimal(5, 2)
+  defaultWeftWastePct     Decimal         @db.Decimal(5, 2)
+  defaultFabricWastePct   Decimal         @db.Decimal(5, 2)
+  defaultLoomRpm          Int?
+  defaultEfficiencyPct    Decimal         @db.Decimal(5, 2)
+  beamPrepCostTry         Decimal         @db.Decimal(12, 2)
+  defaultBeamLengthM      Decimal         @db.Decimal(10, 2)
+  weftSelvedgeAllowanceCm Decimal         @db.Decimal(6, 2)
+  defaultMarkupPct        Decimal         @db.Decimal(6, 2)
+  monthlyFinanceRatePct   Decimal?        @db.Decimal(5, 2)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("CostParameterSetCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String?  @db.Uuid
+  updatedBy   User?    @relation("CostParameterSetUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@map("cost_parameter_sets")
+}
+
+/// İPLİK MALİYET FİYATI — ③a TİCARİ PİVOT, DAMGALI SÜRÜM (ItemPrice/MAL-0b emsali): satır
+/// silinmez, fiyat yerinde ezilmez; değişim = eski satırın damgası + yeni satır (aynı tx).
+/// Okuma `ACTIVE_YARN_COST_PRICE` / `yarnCostPriceValidAt` tek kaynağından. İplik başına tek
+/// aktif: ŞEMA-DIŞI partial unique `yarn_cost_prices_active_uq (yarnItemId) WHERE revokedAt IS NULL`.
+/// `item_prices`ten AYRI tablodur (maliyet fiyatı ≠ alış fiyatı).
+model YarnCostPrice {
+  id           String              @id @default(uuid()) @db.Uuid
+  yarnItemId   String              @db.Uuid
+  currency     Currency
+  /// CHECK > 0.
+  pricePerKg   Decimal             @db.Decimal(14, 4)
+  source       YarnCostPriceSource @default(MANUAL)
+  sourceRef    String?             @db.VarChar(64)
+  note         String?             @db.VarChar(300)
+  revokedAt    DateTime?           @db.Timestamptz
+  revokedById  String?             @db.Uuid
+  revokeReason String?             @db.VarChar(300)
+
+  yarnItem Item @relation("YarnCostPriceYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("YarnCostPriceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  // "Fiyat şu tarih itibarıyla" okuması: anahtar + pencere başı.
+  @@index([yarnItemId, createdAt])
+  @@map("yarn_cost_prices")
+}
+
+/// TERBİYE/FASON TARİFESİ — ③a damgalı sürüm (YarnCostPrice ile aynı desen); fiyat değişimi
+/// aynı KODLA yeni satır. Kod başına tek aktif: ŞEMA-DIŞI partial unique
+/// `finishing_rates_active_code_uq (code) WHERE revokedAt IS NULL`.
+model FinishingRate {
+  id               String         @id @default(uuid()) @db.Uuid
+  code             String         @db.VarChar(32)
+  name             String         @db.VarChar(100)
+  subcontractorId  String?        @db.Uuid
+  basis            FinishingBasis
+  currency         Currency
+  /// CHECK ≥ 0.
+  pricePerM        Decimal        @db.Decimal(14, 4)
+  /// Tipik boy çekmesi (%) — CHECK 0 ≤ x < 100.
+  typicalShrinkPct Decimal?       @db.Decimal(5, 2)
+  note             String?        @db.VarChar(300)
+  revokedAt        DateTime?      @db.Timestamptz
+  revokedById      String?        @db.Uuid
+  revokeReason     String?        @db.VarChar(300)
+
+  subcontractor Subcontractor? @relation("FinishingRateSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("FinishingRateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([code, createdAt])
+  @@index([subcontractorId])
+  @@map("finishing_rates")
+}
+
+/// ÜRÜNÜN MALİYETE ÖZGÜ EKLERİ — KATALOG (canlı ayar; parasal sonucu standart maliyet
+/// sürümünde donar). Yalnız kartta OLMAYANLAR; her alan NULL = parametre varsayılanı.
+/// `finishingRateCode` KOD tutar (fiyat değişince yapı değişmez; aktif tarifeye çözülür).
+model CostStructure {
+  id                String   @id @default(uuid()) @db.Uuid
+  itemId            String   @unique @db.Uuid
+  loomRpm           Int?
+  efficiencyPct     Decimal? @db.Decimal(5, 2)
+  warpWastePct      Decimal? @db.Decimal(5, 2)
+  weftWastePct      Decimal? @db.Decimal(5, 2)
+  fabricWastePct    Decimal? @db.Decimal(5, 2)
+  weftLengthCm      Decimal? @db.Decimal(7, 2)
+  beamLengthM       Decimal? @db.Decimal(10, 2)
+  finishingRateCode String?  @db.VarChar(32)
+  lengthShrinkPct   Decimal? @db.Decimal(5, 2)
+  extraCostPerMTry  Decimal? @db.Decimal(12, 4)
+  extraCostLabel    String?  @db.VarChar(100)
+  notes             String?  @db.VarChar(500)
+
+  item Item @relation("CostStructureItem", fields: [itemId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("CostStructureCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String?  @db.Uuid
+  updatedBy   User?    @relation("CostStructureUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("cost_structures")
 }

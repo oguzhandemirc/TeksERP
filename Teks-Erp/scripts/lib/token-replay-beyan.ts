@@ -37,6 +37,19 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warp-beam-consume.service.ts::consumeBeam`]: { giris: { [`${S}warp-beam-consume.service.ts::consumeBeam`]: "R" } },
   // Destek talebi (3d-2): talep kaydı panelden clientToken ile doğar; satıcıya giden kimlik talebin id'sidir.
   [`${S}support.service.ts::createSupportTicket`]: { giris: { [`${S}support.service.ts::createSupportTicket`]: "R" } },
+  // K4P-LAB: lab testi panelden clientToken ile DRAFT doğar; iptal edilmiş testin token'ı 409 (4. durum).
+  [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
+  [`${S}certificate.service.ts::createCertificate`]: { giris: { [`${S}certificate.service.ts::createCertificate`]: "R" } },
+  [`${S}certificate.service.ts::renewCertificate`]: { giris: { [`${S}certificate.service.ts::renewCertificate`]: "R" } },
+  // Belge tasarımcısı (T1B): şablon + v1 ve yeni sürüm panelden clientToken ile doğar.
+  [`${S}document-template/template.service.ts::createTemplate`]: { giris: { [`${S}document-template/template.service.ts::createTemplate`]: "R" } },
+  [`${S}document-template/version.service.ts::saveVersion`]: { giris: { [`${S}document-template/version.service.ts::saveVersion`]: "R" } },
+  // Kayıtlı raporlar (R1-KAYIT): özel rapor tanımı (+ v1 sürüm) ve anlık görüntü panelden clientToken ile doğar.
+  [`${S}rapor-tanimi.service.ts::createDefinition`]: { giris: { [`${S}rapor-tanimi.service.ts::createDefinition`]: "R" } },
+  [`${S}rapor-snapshot.service.ts::takeSnapshot`]: { giris: { [`${S}rapor-snapshot.service.ts::takeSnapshot`]: "R" } },
+  [`${S}rapor-surum.service.ts::saveNewVersion`]: { giris: { [`${S}rapor-surum.service.ts::saveNewVersion`]: "R" } },
+  // e-İrsaliye hazırla (E5): TASLAK kayıt panelden clientToken ile doğar.
+  [`${S}e-irsaliye/e-irsaliye.service.ts::prepare`]: { giris: { [`${S}e-irsaliye/e-irsaliye.service.ts::prepare`]: "R" } },
   [`${S}credential-reset.service.ts::create`]: { giris: { [`${S}credential-reset.service.ts::create`]: "R" } },
   // Lisans sözleşmesi kabulü (Ek-7): kabul satırı panelden clientToken ile doğar; kimliği (kabulId) imzalı belgeye girer.
   [`${S}license-acceptance.service.ts::recordLicenseAcceptance`]: { giris: { [`${S}license-acceptance.service.ts::recordLicenseAcceptance`]: "R" } },
@@ -204,6 +217,15 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}loom-alarm-duty.service.ts::overrideReplay`]: ["shiftInstanceId", "stationId", "tier", "userId"],
   [`${S}loom-alarm-duty.service.ts::ruleReplay`]: ["tier", "kind", "userId", "permissionCode"],
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
+  [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
+  [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
+  [`${S}document-template/template.service.ts::createReplay`]: ["docType", "name", "copiedFrom"],
+  [`${S}document-template/version.service.ts::saveReplay`]: ["templateId", "sourceHtml", "css"],
+  [`${S}rapor-tanimi.service.ts::createReplay`]: ["ownerId", "govde"],
+  [`${S}rapor-snapshot.service.ts::snapshotReplay`]: ["tanimId", "kullanici", "parametreler"],
+  [`${S}rapor-surum.service.ts::versionReplay`]: ["definitionId", "createdById", "govde"],
+  // Hazırla gövdesi yalnız öneriyi ezen alanlardır; deneme kimliği sevkiyattır (alanlar sonradan PATCH'le değişir).
+  [`${S}e-irsaliye/e-irsaliye.service.ts::prepareReplay`]: ["shipmentId"],
   [`${S}credential-reset.service.ts::replayFor`]: ["hedef", "tur"],
   [`${S}license-acceptance.service.ts::replayFor`]: ["adSoyad", "unvan", "metinOzeti"],
   [`${S}update-approval.service.ts::replayFor`]: ["surum", "zamanlama", "onaylayan"],

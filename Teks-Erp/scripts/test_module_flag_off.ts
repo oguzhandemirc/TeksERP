@@ -102,8 +102,7 @@ const BASE = process.env.TEST_API_URL ?? "http://localhost:4101";
  * Tabloya girmeleri sonda (GET ucu) ister; ucu doğmamış kapının sondası olamaz.
  */
 const ROTASIZ_KAPILAR: Record<string, string> = {
-  requireMaliyetEnabled:
-    "MAL-0 (2026-10-24): modül şalteri + kapı doğdu, ilk maliyet ucu MAL-1'de; o gün tabloya satır + `profil-kapi-haritasi` sondası girer",
+  // MAL-1 (2026-10-25): `requireMaliyetEnabled` `/api/cost`a takıldı → MODULLER satırı + sonda; muaf silindi.
 };
 
 /** `src/**` içinde (middleware dosyası hariç) adı geçen ROTASIZ kapılar → ilk görülen dosya. */
@@ -159,7 +158,9 @@ type ModulAlani =
   // Tezgah izleme (tezgah → production; dokumanın kardeşi).
   | "tezgahEnabled"
   // 2026-10-24: K4P kalite güvence (ön koşulsuz; route'u henüz yok — `rotasiz`).
-  | "kaliteGuvenceEnabled";
+  | "kaliteGuvenceEnabled"
+  // 2026-10-25: maliyet & teklif (maliyet → production; MAL-1 ilk uçlar `/api/cost`).
+  | "maliyetEnabled";
 
 interface ModulTanimi {
   /** `FeatureFlags` alanı (PATCH gövdesinde kullanılan ad). */
@@ -241,8 +242,21 @@ const MODULLER: ModulTanimi[] = [
       "routes/machine-shift-stat.routes.ts",
       "routes/reports/dokuma.report.routes.ts",
       "routes/machine-spec.routes.ts",
+      // MAL-1 (S2 çekirdeği): atkı kartı — dokuma ürün yapısı.
+      "routes/weft-spec.routes.ts",
     ],
     sondalar: modulUclari("dokumaEnabled"),
+    onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
+  },
+  {
+    // MALİYET & TEKLİF (MAL-1, 2026-10-25): üretime bağımlı; kapı ön koşulu ÖNCE ölçer.
+    alan: "maliyetEnabled",
+    dbAnahtari: "maliyet.enabled",
+    middleware: "requireMaliyetEnabled",
+    okuyucu: "readMaliyetEnabled",
+    modulKodu: "maliyet",
+    routeDosyalari: ["routes/cost.routes.ts"],
+    sondalar: modulUclari("maliyetEnabled"),
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
   },
   {
@@ -266,17 +280,14 @@ const MODULLER: ModulTanimi[] = [
     sondalar: modulUclari("depoMultiEnabled"),
   },
   {
-    // KALİTE GÜVENCE (K4P zemin, 2026-10-24): ön koşulsuz (KK1 üretimsiz de açık).
+    // KALİTE GÜVENCE (K4P zemin 2026-10-24; LAB router'ları 2026-10-25): ön koşulsuz (KK1 üretimsiz de açık).
     alan: "kaliteGuvenceEnabled",
     dbAnahtari: "kaliteGuvence.enabled",
     middleware: "requireKaliteGuvenceEnabled",
     okuyucu: "readKaliteGuvenceEnabled",
     modulKodu: "kaliteGuvence",
-    routeDosyalari: [],
-    sondalar: [],
-    rotasiz:
-      "K4P zemin dilimi kapıyı önden kurdu; muayene/kural/lab/sertifika router'ları MOTOR · LAB · SERT " +
-      "dilimlerinde iner — o gün route dosyası + `profil-kapi-haritasi` sondası bu satıra yazılır, gerekçe silinir.",
+    routeDosyalari: ["routes/lab-test.routes.ts", "routes/lab-test-type.routes.ts"],
+    sondalar: modulUclari("kaliteGuvenceEnabled"),
   },
   {
     alan: "productionEnabled",
@@ -348,10 +359,14 @@ const SONDA_IZINLERI = [
   // çarpar; bu izin olmadan "modül AÇIKKEN 2xx" körlük zemini modül yüzünden
   // değil YETKİ yüzünden kırmızı verir ve yanlış hikâye anlatır (ölçüldü).
   "warpspec:read",
+  // Kalite Güvence sondaları (`/api/lab-tests`, `/api/lab-test-types`) — aynı gerekçe.
+  "labtest:read",
   // Tezgah Salonu sondası (`/api/loom-floor`) — aynı gerekçe.
   "loom:live-view",
   // Dokuma sondası (`/api/weaving-orders`) — aynı gerekçe.
   "weavingorder:read",
+  // Maliyet sondası (`/api/cost/parameter-sets`) — aynı gerekçe (MAL-1).
+  "cost:read",
 ];
 
 const TEST_USERNAME = `bekci.modul.${process.pid}`;

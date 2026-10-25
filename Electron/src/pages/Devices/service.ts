@@ -1,8 +1,10 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { DeviceDetail, DeviceListItem } from "./types";
+import type { DeviceDetail, DeviceListItem, RebindRejectBody, RebindRequest } from "./types";
 
 const BASE = "/api/admin/devices";
+// Talep uçları kendi hatasını gösterir (409 → "başka biri işledi"); eski backend 404 → bölüm gizli.
+const QUIET = { suppressErrorToast: true } as const;
 
 export const deviceService = {
   list: (): Promise<ApiResponse<DeviceListItem[]>> =>
@@ -55,4 +57,21 @@ export const deviceService = {
     apiClient
       .delete<ApiResponse<{ id: string }>>(`${BASE}/${id}/permanent`)
       .then((r) => r.data),
+
+  /** Yeniden bağlama talepleri; eski backend (uç yok) → `null`. */
+  rebindRequests: (): Promise<RebindRequest[] | null> =>
+    apiClient
+      .get<ApiResponse<RebindRequest[]>>(`${BASE}/rebind-requests`, QUIET)
+      .then((r) => r.data.data ?? [])
+      .catch((e: unknown) => {
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
+        throw e;
+      }),
+
+  approveRebind: (id: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`${BASE}/rebind-requests/${id}/approve`, {}, QUIET).then((r) => r.data),
+
+  /** "Ayrı cihazdır" (`AYRI_CIHAZ`, yeni satır açılır) ya da düz red (`REDDET`). */
+  rejectRebind: (id: string, body: RebindRejectBody): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`${BASE}/rebind-requests/${id}/reject`, body, QUIET).then((r) => r.data),
 };
