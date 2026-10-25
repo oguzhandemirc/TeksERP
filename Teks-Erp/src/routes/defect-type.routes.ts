@@ -17,6 +17,7 @@ import {
 } from "../services/helpers/default-defect-type.helper";
 import { AuditService } from "../services/audit.service";
 import { normalizeDefectGroupBody } from "../services/helpers/defect-group.helper";
+import { normalizeDefectTypeFourPointBody } from "../services/helpers/four-point-catalog-fields.helper";
 import type { NextFunction, Request, Response } from "express";
 
 const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur"] as const;
@@ -145,6 +146,7 @@ async function writeWithDefault(
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
     normalizeDefectGroupBody(body); // kapalı küme `constants/hata-gruplari.ts`; bilinmeyen 400
+    normalizeDefectTypeFourPointBody(body); // K4P: sabit puan 1–4 · tablet düğme sırası
     assertDefaultWriteConsistent(body); // K2: pasif + varsayılan birlikte gelmez (yarım yazım yok)
     const wantDefault = body.isDefault === true;
     if (wantDefault) delete body.isDefault;
@@ -197,6 +199,8 @@ router.post("/", verifyToken, requirePermission("quality:write"), (req, res, nex
  *               description: { type: string }
  *               severity: { type: string, enum: [MINOR, MAJOR, CRITICAL] }
  *               defectGroup: { type: string, nullable: true, description: "küme constants/hata-gruplari.ts" }
+ *               fixedPoints: { type: integer, nullable: true, minimum: 1, maximum: 4, description: "K4P sabit puan; null = boyuttan" }
+ *               sortOrder: { type: integer, description: "Tablet muayene düğme sırası" }
  *               isActive: { type: boolean }
  *     responses:
  *       200:

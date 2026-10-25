@@ -12,6 +12,17 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 import { readFilterList } from "../utils/query-parser";
 import { CustomerAliasController } from "../controllers/customer-alias.controller";
 import "../types/express-augment";
+import { normalizeItemWidthBody } from "../services/helpers/four-point-catalog-fields.helper";
+
+/** K4P: ürün kartı eni (`widthCm`, muayene en kaynağı #1) DB CHECK yerine Türkçe 400. */
+function itemWidthGuard(req: Request, _res: Response, next: NextFunction): void {
+  try {
+    if (req.body && typeof req.body === "object") normalizeItemWidthBody(req.body as Record<string, unknown>);
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
 
 export const itemService = new ItemService({
   modelName: "item",
@@ -213,7 +224,7 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
 // Mobil "Kumaş Ekle" ekranı da bu ucu kullanır. `mobile:kumas` YALNIZ buraya
 // (yaratma) eklenir — PATCH/DELETE hâlâ `item:write` ister, yoksa saha
 // kullanıcısı mevcut kumaşı düzenleyip pasife de alabilirdi.
-router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), controller.create);
+router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), itemWidthGuard, controller.create);
 
 /**
  * @openapi
@@ -281,11 +292,12 @@ router.post(
  *             properties:
  *               name: { type: string }
  *               unit: { type: string }
+ *               widthCm: { type: number, nullable: true, description: "Ürün kartı eni (cm) — K4P muayene en kaynağı" }
  *     responses:
  *       200:
  *         description: Güncellendi
  */
-router.patch("/:id", verifyToken, requirePermission("item:write"), controller.update);
+router.patch("/:id", verifyToken, requirePermission("item:write"), itemWidthGuard, controller.update);
 
 /**
  * @openapi
