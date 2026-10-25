@@ -183,6 +183,9 @@ enum ReasonPresetKind {
   /// İş emri plan düzeltmesi (Rengi/Eni Değiştir) — kod `WorkOrderEvent.reasonCode`a, görünen metin
   /// `reason`a düşer (hareket defteri D5).
   WORK_ORDER_PLAN_CHANGE
+  /// K4P: muayene iptali sebebi. Seçim İSTEĞE BAĞLI (serbest metin kalır); seçilen metin
+  /// `RollInspection.voidReason`a yazılır, kod saklanmaz (kolon yok).
+  INSPECTION_VOID
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.

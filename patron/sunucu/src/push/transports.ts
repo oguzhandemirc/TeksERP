@@ -6,6 +6,8 @@
 import webpush from "web-push";
 import type { DevicePlatform } from "@prisma/client";
 import type { CloudConfig } from "../config";
+import { KIND_RULES } from "../catalog/notifications";
+import { NOTIFICATION_KINDS, type NotificationKind } from "../wire/api";
 import { parseWebSubscription } from "./targets";
 import type { VapidKeys } from "./vapid";
 
@@ -16,6 +18,8 @@ export interface PushMessage {
   readonly route: string | null;
   /** Bildirimin tesisi: çok tesisli kimlikte dokunuş önce bu tesise geçer (yük `data.tesisId`). */
   readonly tesisId: string;
+  /** Katalog türü: native başlığı katalog etiketinden kurulur (olay metni telefona/aracıya gitmez). Deneme bildiriminde yok. */
+  readonly kind?: string;
 }
 
 export interface PushTarget {
@@ -70,6 +74,18 @@ export class RecordingTransport implements PushTransport {
   }
 }
 
+/** Native yükün izinli anahtarları — bekçi (`test_bildirim_patron_push`) bu kümeyi ölçer; yeni anahtar bilinçli eklenir. */
+export const NATIVE_PAYLOAD_KEYS = ["to", "title", "sound", "priority", "data"] as const;
+export const NATIVE_DATA_KEYS = ["bildirimId", "rota", "tesisId"] as const;
+
+/** İÇERİKSİZ native yük (F5): başlık + kimlikler; gövde/tutar/ad Expo'ya, FCM'e ve kilit ekranına GİTMEZ — içerik
+ *  uygulama içinden (oturumlu) çekilir. Başlık katalog etiketidir; türsüz (deneme) iletide iletinin sabit başlığı. */
+export function nativePushPayload(target: PushTarget, msg: PushMessage) {
+  const kind = msg.kind && (NOTIFICATION_KINDS as readonly string[]).includes(msg.kind) ? (msg.kind as NotificationKind) : null;
+  const title = kind ? KIND_RULES[kind].label : msg.title.slice(0, 60);
+  return { to: target.token, title, sound: "default", priority: "high", data: { bildirimId: msg.id, rota: msg.route, tesisId: msg.tesisId } };
+}
+
 /** Expo push: gönderim bilet döner; asıl teslim sonucu makbuzda (`receipts`, ikinci aşama — `DeviceNotRegistered` çoğu kez orada). */
 export class ExpoTransport implements PushTransport {
   constructor(
@@ -79,7 +95,7 @@ export class ExpoTransport implements PushTransport {
 
   async send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
     const headers = this.headers();
-    const payload = { to: target.token, title: msg.title, body: msg.body, sound: "default", priority: "high", data: { bildirimId: msg.id, rota: msg.route, tesisId: msg.tesisId } };
+    const payload = nativePushPayload(target, msg);
     let res: Response;
     try {
       res = await this.fetchImpl(this.config.EXPO_PUSH_URL, { method: "POST", headers, body: JSON.stringify([payload]), signal: AbortSignal.timeout(10_000) });
@@ -146,14 +162,18 @@ export class WebPushTransport implements PushTransport {
   }
 }
 
-/** Platforma göre yönlendiren taşıyıcı (gerçek kip). */
+/** Platforma göre yönlendiren taşıyıcı (gerçek kip). Native kapısı kapalıyken telefon hedefine İSTEK ATILMAZ
+ *  (`BILDIRIM_NATIVE_PUSH=kapali`, varsayılan): sonuç KALICI `NATIVE_PUSH_KAPALI`, web push aynen sürer. */
 export class RoutingTransport implements PushTransport {
   constructor(
     private readonly expo: PushTransport,
     private readonly web: PushTransport,
+    private readonly native: boolean = false,
   ) {}
   send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
-    return target.platform === "WEB" ? this.web.send(target, msg) : this.expo.send(target, msg);
+    if (target.platform === "WEB") return this.web.send(target, msg);
+    if (!this.native) return Promise.resolve({ kind: "KALICI", code: "NATIVE_PUSH_KAPALI" });
+    return this.expo.send(target, msg);
   }
   receipts(tickets: readonly string[]): Promise<ReceiptBatch> {
     return this.expo.receipts ? this.expo.receipts(tickets) : Promise.resolve({ kind: "OK", results: new Map() });

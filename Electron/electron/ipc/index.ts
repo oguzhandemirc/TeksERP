@@ -15,6 +15,7 @@ import { registerXlsxIpc } from "./xlsx.ipc.js";
 import { registerUpdaterIpc } from "./updater.ipc.js";
 import { registerLicenseIpc } from "./license.ipc.js";
 import { registerLoomAlarmNotifyIpc } from "./loom-alarm-notify.ipc.js";
+import { registerConnectGateIpc } from "./connect-gate.ipc.js";
 
 export function registerIpcHandlers(): void {
   registerSecureStoreIpc();
@@ -34,4 +35,5 @@ export function registerIpcHandlers(): void {
   registerUpdaterIpc();
   registerLicenseIpc();
   registerLoomAlarmNotifyIpc();
+  registerConnectGateIpc();
 }

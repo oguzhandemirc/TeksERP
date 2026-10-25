@@ -79,6 +79,9 @@ export const ERROR_CODE_REASONS: Readonly<Record<string, string>> = {
   DISPATCH_CANCELLED: "sevk iptal edilmiş",
   LOGIN_LOCKED: "hesap geçici olarak kilitli",
   CLIENT_TOKEN_REVOKED: "aynı istek daha önce geri alınmış",
+  // Ana veri arşiv kapısı (master-data-archive.helper) 409'u eşzamanlılık değil, canlı referans reddidir.
+  MASTER_DATA_HAS_LIVE_REFERENCES: "canlı referansı olduğu için pasife alınamadı",
+  ITEM_HAS_LIVE_REFERENCES: "canlı referansı olduğu için pasife alınamadı",
 };
 
 export const STATUS_REASONS: Readonly<Record<number, string>> = {
