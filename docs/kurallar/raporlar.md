@@ -51,6 +51,7 @@
 ### Tuzaklar
 
 - **[ÇEKİRDEK]** Parti numarası BENZERSİZ DEĞİLDİR (P01…P99 döner) → parti araması DAİMA aday listesi döndürür ve izleme batchId ile yapılır; tek sonuç varsaymak aynı numaralı BAŞKA partinin müşterilerini göstermek olur. · bekçi: `scripts/test_batch_trace.ts (15 kontrol)` <sub>(CLAUDE.md:69)</sub>
+- **[ÇEKİRDEK]** Kalite karnesinin hücre sorgusu ve kumaş kırılımı `helpers/quality-first-share.helper.ts`te (`collectPeriod` · `qualityByItem`), fason karnesinin açık kalem yüklemi `subcontract-scorecard-query.helper.ts` `openDispatchItemsSql`te yaşar; bildirim koşulu aynı fonksiyonu çağırır, rapor çıktısı değişmez. · bekçi: `test_bildirim_kosul_is` §B <sub>(arşiv:2026-10-25)</sub>
 
 ### Kararlar
 
