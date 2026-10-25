@@ -58,11 +58,13 @@ interface HubCardProps {
   badgeLabel?: string;
   /** Verilirse kart KAPALIDIR: soluk çizilir, tıkta bu mesaj gösterilir, gezinme olmaz. */
   offHint?: string;
+  /** Kartın altında küçük durum notu (ör. "Kapalı — …"); açıklamanın aksine BASILIR. */
+  note?: string;
 }
 
 /** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket.
  *  Açıklama (subtitle) bilinçli olarak BASILMAZ — başlık zaten kendini anlatıyor. */
-export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel, offHint }: HubCardProps) {
+export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel, offHint, note }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
   // Sol tık YERİNDE iner (hub → sayfa aynı sekmede; geri oku gerçek geçmişe basar),
   // sağ/orta tık yeni sekmede açar. Bkz. `useDrillTarget` notu.
@@ -120,6 +122,7 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
               </span>
             ) : null}
           </div>
+          {note && <p className="relative mt-1 text-xs text-muted-foreground">{note}</p>}
         </Card>
       </button>
       {/* Sürükleme tutamacı — kart butonunun KARDEŞİ (içinde değil): iç içe

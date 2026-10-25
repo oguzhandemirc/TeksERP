@@ -39,6 +39,7 @@ import { usePackingGroupMode, usePackingGroupsEnabled, useShippingManualWeightRe
 import { useAttemptToken } from "@/lib/attemptToken";
 import type { EditorTarget } from "./types";
 import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 /** Editör hedefine geri yazılan yama — müşteri/şube (ReassignCustomerDialog) ya da parti/ambalaj no. */
 export type EditorPatch = Partial<
@@ -370,6 +371,7 @@ export function SackEditorView({
               hasNotes={!!data?.notes}
               load={async () => fromDumpRows((await sackHubService.contentDump([target.sackId])).data)}
             />
+            <PrintHistoryLink subjectId={target.sackId} className="ml-2" />
           </div>
 
       </div>

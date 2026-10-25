@@ -1,4 +1,4 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone, Bell } from "lucide-react";
 import {
   LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
@@ -8,6 +8,7 @@ import {
   SYSTEM_ACTIVITY_ACCESS,
   SYSTEM_BACKUPS_ACCESS,
   SYSTEM_CLIENTS_ACCESS,
+  SYSTEM_PRINT_HISTORY_ACCESS,
   SYSTEM_ROLL_ARCHIVE_ACCESS,
   SYSTEM_SERVER_STATUS_ACCESS,
   SYSTEM_WORK_SESSIONS_ACCESS,
@@ -60,6 +61,11 @@ export interface SystemTile {
    * modüllerini bir daha yapılandıramaz.
    */
   superadminOnly?: boolean;
+  /**
+   * Karo bu bayrak KAPALIYKEN de görünür, açıklaması "kapalı — Genel Ayarlar'dan açılır" olur
+   * (bulunabilirlik şartı: kapalı özellik sessizce kaybolmaz).
+   */
+  kapaliBayrak?: "bildirimGelenKutusuEnabled";
   /**
    * Lisans GÖZLEM kapısı: kip `gozlem` iken karo yalnız satıcı kapısı açık
    * oturuma çizilir (lisans fabrikaya sıfır farktır); `zorla`da izin yeter.
@@ -130,6 +136,17 @@ export const systemTiles: SystemTile[] = [
     permissionAny: SYSTEM_ACTIVITY_ACCESS,
   },
   {
+    // bildirim: kişisel gelen kutusu — kapısız (herkes kendi kutusunu görür); bayrak kapalıyken karo kalır.
+    key: "notifications",
+    title: "Bildirimler",
+    description: "Size gelen bildirimlerin geçmiş günlüğü — okundu, ertele, aç",
+    icon: Bell,
+    to: "/notifications",
+    group: "activity",
+    public: true,
+    kapaliBayrak: "bildirimGelenKutusuEnabled",
+  },
+  {
     key: "logs",
     title: "Sistem Kayıtları",
     description: "Kimlik doğrulama ve sistem olayları (login, başlatma, hata)",
@@ -137,6 +154,15 @@ export const systemTiles: SystemTile[] = [
     to: "/system/logs",
     group: "activity",
     permissionAny: SYSTEM_ACTIVITY_ACCESS,
+  },
+  {
+    key: "print-history",
+    title: "Yazdırma Geçmişi",
+    description: "Kim, neyi, hangi yazıcıdan bastı — hatalar ve nedenleri",
+    icon: Printer,
+    to: "/system/print-history",
+    group: "activity",
+    permissionAny: SYSTEM_PRINT_HISTORY_ACCESS,
   },
   {
     key: "work-sessions",

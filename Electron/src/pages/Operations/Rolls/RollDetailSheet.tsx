@@ -24,6 +24,7 @@ import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from
 import { rollService } from "./service";
 import { type Roll, shipmentScopeLabels, categoryOfDispatch } from "./types";
 import { TERIM } from "@/lib/terim";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 interface Props {
   roll: Roll | null;
@@ -129,6 +130,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 <Tag className="h-3.5 w-3.5" /> Etiket
               </Button>
             </PermissionGate>
+            <PrintHistoryLink subjectId={roll.id} className="order-last ml-auto" />
             {/* TEK "Düzelt": renk/metraj/kalite/en/özellik. Üretimdeki topta sebep +
                 roll:manual-adjust ister (diyalog kendi içinde yönetir). Eskiden bu iş
                 "Yeniden Etiketle/Düzenle" + "Manuel Düzelt" diye iki butondaydı ve

@@ -132,6 +132,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "kayıp raporunun levent kaynağı dokuma+devere kapalıysa hiç okunmaz. Yazma yok.",
   },
   {
+    dosya: "routes/reports/temel-dokuma-finans.routes.ts",
+    neden:
+      "RAPORLAR v2 TEMEL DOKUMA/ALACAK RAPORLARI (R0-RAPC) — dokuma raporlarını (randıman, duruş Pareto, levent sonucu) " +
+      "ÇAĞIRIR; dokuma uçları `requireDokumaEnabled` taşır. Temel uçlar levent/lot süzgeci GEÇMEZ → `resolveBeamLotFilter` " +
+      "iplik hareketini hiç okumaz. Yazma yok.",
+  },
+  {
     dosya: "routes/reports/quality.routes.ts",
     neden:
       "KALİTE/FİRE KARNESİ (R5b-b levent/lot ekseni). Rapor kapısı KONULAMAZ: karne iplik/dokuma kullanmayan fabrikada " +

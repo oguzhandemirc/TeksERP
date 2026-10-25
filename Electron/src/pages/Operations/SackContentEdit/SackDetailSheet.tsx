@@ -25,6 +25,7 @@ import {
   weightSourceBadge,
   type SackSearchRow,
 } from "./types";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 const fmtQty = (n: number) =>
   `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
@@ -71,6 +72,7 @@ export function SackDetailSheet({ sack, onOpenChange }: Props) {
                 tones={sackStatusTones}
               />
             )}
+            <PrintHistoryLink subjectId={sack?.id} className="ml-auto mr-6 font-normal" />
           </SheetTitle>
           {/* Görsel kimlik PartyCard'da; burası ekran okuyucu özeti (Radix zorunlu). */}
           <SheetDescription className="sr-only">
