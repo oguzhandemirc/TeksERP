@@ -204,8 +204,9 @@ async function main() {
   check("§5 her beyanın gerekçesi var", ROLL_ERROR_KAPSAM_BEYANI.every((b) => b.gerekce.trim().length >= 20));
 
   // §6 Zemin: ölçülmüş envanter 2026-10-25 — çağrı ≥ 24, ilişki ≥ 8, SQL ≥ 2.
+  // KQ-D7: üç yazarın kopya mükerrer okumaları tek boğazda birleşti → çağrı zemini 23.
   console.log("\n§6 Zemin");
-  check("§6 rollError çağrısı ≥ 24", s2.list.length >= 24, String(s2.list.length));
+  check("§6 rollError çağrısı ≥ 23", s2.list.length >= 23, String(s2.list.length));
   check("§6 ilişki okuması ≥ 8", s3.list.length >= 8, String(s3.list.length));
   check("§6 ham SQL ≥ 2", s4.list.length >= 2, String(s4.list.length));
 

@@ -89,7 +89,15 @@ import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/Wa
 // Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
 import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
+import { InspectionsPage } from "@/pages/Quality/Inspections/InspectionsPage";
 import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage";
+import { CostHubPage } from "@/pages/Cost/CostHubPage";
+import { ParametersPage as CostParametersPage } from "@/pages/Cost/Parameters/ParametersPage";
+import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/YarnPricesPage";
+import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/FinishingRates/FinishingRatesPage";
+import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
+import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
+import { CalculatorPage as CostCalculatorPage } from "@/pages/Cost/Calculator/CalculatorPage";
 import { InspectionRulesPage } from "@/pages/Quality/InspectionRules/InspectionRulesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
@@ -577,6 +585,15 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // K4P-PANEL — modül kapısı `route-modules.ts`ten; izin backend'le birebir (`quality-inspection.routes.ts`).
+    path: "quality/inspections",
+    element: (
+      <ProtectedRoute requirePermission="inspection:read">
+        <InspectionsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     // K4P-LAB — modül kapısı `route-modules.ts` eşlemesinden (kaliteGuvenceEnabled); izin backend'le birebir.
     path: "quality/lab-tests",
     element: (
@@ -591,6 +608,65 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="certificate:read">
         <CertificatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── MALİYET & TEKLİF (MAL-3) — modül kapısı `route-modules.ts`ten (maliyetEnabled); izin karo
+  // (`pages/Cost/tile-config.ts`) ve backend `cost.routes.ts` okuma uçlarıyla birebir (`cost:read`).
+  // Yazma (`cost:write` · `cost:settings`) sayfa İÇİNDE PermissionGate.
+  {
+    path: "cost",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/parameters",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostParametersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/yarn-prices",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostYarnPricesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/finishing-rates",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostFinishingRatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/items",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostItemsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/items/:itemId",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostItemDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/calculator",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostCalculatorPage />
       </ProtectedRoute>
     ),
   },

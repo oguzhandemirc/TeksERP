@@ -34,6 +34,7 @@ export type RouteModuleFlag = Extract<
   | "dokumaEnabled"
   | "tezgahEnabled"
   | "kaliteGuvenceEnabled"
+  | "maliyetEnabled"
 >;
 
 /** Ekran anahtarı (route yolunun ilk iki segmenti; hub tek segment) → modül. */
@@ -86,6 +87,13 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "quality/inspection-rules": "kaliteGuvenceEnabled",
   "quality/lab-tests": "kaliteGuvenceEnabled",
   "quality/certificates": "kaliteGuvenceEnabled",
+  // ── MALİYET & TEKLİF (MAL-3) ────────────────────────────────────────────
+  cost: "maliyetEnabled",
+  "cost/parameters": "maliyetEnabled",
+  "cost/yarn-prices": "maliyetEnabled",
+  "cost/finishing-rates": "maliyetEnabled",
+  "cost/items": "maliyetEnabled",
+  "cost/calculator": "maliyetEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */

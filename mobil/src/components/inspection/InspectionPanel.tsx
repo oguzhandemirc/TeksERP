@@ -17,6 +17,7 @@ import type { DefectType } from '../../types/models';
 import DefectRuler from './DefectRuler';
 import DeletePointModal from './DeletePointModal';
 import InspectionEntry from './InspectionEntry';
+import PriorDefectList from './PriorDefectList';
 import {
   isCriticalDefect,
   rulerMaxFor,
@@ -29,6 +30,8 @@ import {
 
 export {
   inspectionSaveErrorText,
+  priorDefectKunye,
+  toInspectionPriorDefects,
   validateDefectInput,
   type InspectionDefect,
   type InspectionDefectInput,
@@ -90,7 +93,7 @@ function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnl
             <Text style={[styles.badgeText, styles.critBadgeText]}>{critCount} kritik</Text>
           </View>
         )}
-        <View style={{ flex: 1 }} />
+        {priorDefects.length > 0 ? <PriorDefectList defects={priorDefects} inline /> : <View style={{ flex: 1 }} />}
         {!readOnly && ownDefects.length > 0 && <Text style={styles.hint}>tik'e dokun → sil</Text>}
       </View>
       <DefectRuler

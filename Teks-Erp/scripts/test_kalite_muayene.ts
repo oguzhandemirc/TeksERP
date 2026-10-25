@@ -257,6 +257,11 @@ async function sectionList(fx: Fx) {
   check("uyumsuz süzgeci özetle tutarlı", mm.summary.total === mm.items.length && mm.items.every((i) => i.gradeMismatch));
   const wu = await svc.listInspections({ rollId: made.rolls.join(","), widthUnknown: "1" });
   check("en bilinmiyor süzgeci", wu.items.length === 1 && wu.items[0]!.widthSource === "UNKNOWN");
+  const all = await svc.listInspections({ rollId: made.rolls.join(",") });
+  check("özet şeridi 'en yok' = en bilinmiyor süzgecinin toplamı (aynı where)", all.summary.widthUnknown === wu.summary.total, `${all.summary.widthUnknown} = ${wu.summary.total}`);
+  const noBatch = await svc.listInspections({ rollId: made.rolls.join(","), batchId: "00000000-0000-4000-8000-000000000000" });
+  check("parti süzgeci sunucuda (başka parti → boş)", noBatch.items.length === 0 && noBatch.summary.total === 0);
+  check("biçimsiz parti kimliği → 400", (await errCode(svc.listInspections({ batchId: "x" }))) === "INSPECTION_FILTER_INVALID");
   check("biçimsiz kimlik → 400", (await errCode(svc.listInspections({ rollId: "x" }))) === "INSPECTION_FILTER_INVALID");
   check("tanınmayan aşama → 400", (await errCode(svc.listInspections({ phase: "MID" }))) === "INSPECTION_FILTER_INVALID");
   const det = await svc.getInspection((await prisma.rollInspection.findFirstOrThrow({ where: { rollId: fx.rolls.a, revision: 2 } })).id);
