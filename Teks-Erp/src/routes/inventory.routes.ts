@@ -26,6 +26,8 @@ const MOBILE_ROLL_READ = [
   // (`KartelaSevkScreen` → `rollService.getByBarcode`). 2026-08-17'ye kadar
   // yoktu: yalnız `mobile:kartela-sevk` taşıyan operatör okutmada 403 alıyordu.
   "mobile:kartela-sevk",
+  // K4P-EKRAN: bağımsız Muayene ekranı topu barkodla okutur (şerit: kumaş · metre · kalite).
+  "mobile:muayene",
 ] as const;
 const MOBILE_ROLL_WRITE_KK1 = ["mobile:kk1"] as const;
 const MOBILE_ROLL_WRITE_KURSUN = ["mobile:kk2-kursun"] as const;

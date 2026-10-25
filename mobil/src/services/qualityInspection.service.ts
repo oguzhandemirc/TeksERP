@@ -24,9 +24,36 @@ export interface InspectionPreview {
   gradeScore: string | number | null;
   ruleSet: { id: string; name: string; unit: string } | null;
   suggested: { qualityGradeId: string | null; code: string | null; label: string; accepted: boolean } | null;
+  /** Doğmuş topta topun durumundan türeyen aşama (taslakta null; eski sunucu göndermez). */
+  phase?: 'RAW' | 'FINAL' | null;
+  /** Bu aşamada aktif muayene — varsa tablet yeni kayıt açmaz (panelden düzeltilir). */
+  activeInspection?: { id: string; phase: 'RAW' | 'FINAL'; revision: number } | null;
+}
+
+/** Bağımsız Muayene ekranı yazma gövdesi (`POST /quality-inspections`); aşama verilmezse sunucu topun durumundan türetir. */
+export interface CreateInspectionRequest {
+  rollId: string;
+  defects: InspectionPreviewRequest['defects'];
+  inspectedLengthM?: number | null;
+  note?: string | null;
+  stationId?: string | null;
+  clientToken: string;
+}
+
+export interface CreatedInspection {
+  id: string;
+  rollId: string;
+  phase: 'RAW' | 'FINAL';
+  revision: number;
+  totalPoints: number;
+  defectCount: number;
+  pointsPer100M2: string | number | null;
+  suggestedGradeCode: string | null;
 }
 
 export const qualityInspectionService = {
   preview: (body: InspectionPreviewRequest, signal?: AbortSignal): Promise<ApiResponse<InspectionPreview>> =>
     apiClient.post<ApiResponse<InspectionPreview>>('/quality-inspections/preview', body, { signal }).then((r) => r.data),
+  create: (body: CreateInspectionRequest): Promise<ApiResponse<CreatedInspection>> =>
+    apiClient.post<ApiResponse<CreatedInspection>>('/quality-inspections', body).then((r) => r.data),
 };
