@@ -47,7 +47,7 @@
   "screens/Modules/KursunDagitim/CompleteConfirmModal.tsx": 1,
   "screens/Modules/KursunDagitim/KursunDagitimScreen.tsx": 1,
   "screens/Modules/KursunDagitim/dagitimUi.tsx": 1,
-  "screens/Modules/KursunQc/KursunQcScreen.tsx": 10,
+  "screens/Modules/KursunQc/KursunQcScreen.tsx": 9,
   "screens/Modules/Sevkiyat/SackContentsModal.tsx": 4,
   "screens/Modules/Sevkiyat/SevkiyatGecmisiScreen.tsx": 1,
   "screens/Modules/Sevkiyat/ShipmentDetailView.tsx": 1,
