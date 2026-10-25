@@ -24,6 +24,8 @@ export interface FieldDef {
   type: "text" | "number" | "date" | "qr" | "barcode" | "table";
   /** Bu alan kapatılabilir mi? false ise template'te isVisible=true zorunlu (örn. barkod). */
   required?: boolean;
+  /** false → yeni şablonda ve eski kayıtlı şablonlarda KAPALI doğar (opt-in alan). */
+  defaultVisible?: boolean;
 }
 
 export interface TemplateField {
@@ -85,6 +87,8 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   // etiketin üstünde belirgin mor şerit basılır. Yalnız işaretli topta görünür;
   // bu alan template'te kapatılırsa işaretli toplarda da basılmaz.
   { key: "kartelaMark",      defaultLabel: "Kartelalık",             type: "text" },
+  // Açık (kararsız) hatalar — tambursuz rotada bilgi (KQ-D8). OPT-IN: şablonda açılmadıkça basılmaz.
+  { key: "openDefects",      defaultLabel: "Hata Notu",              type: "text", defaultVisible: false },
   { key: "printedAt",        defaultLabel: "Baskı Tarihi",           type: "date" },
 ] as const;
 
@@ -224,7 +228,7 @@ export function buildDefaultFields(kind: LabelKind): TemplateField[] {
     key: f.key,
     label: f.defaultLabel,
     order: idx + 1,
-    isVisible: true,
+    isVisible: f.defaultVisible !== false,
   }));
 }
 

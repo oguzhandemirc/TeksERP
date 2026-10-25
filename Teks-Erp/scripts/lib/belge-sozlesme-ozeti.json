@@ -2645,7 +2645,7 @@
   }
  },
  "SHIPMENT_DISPATCH": {
-  "contractVersion": 1,
+  "contractVersion": 2,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -3067,6 +3067,10 @@
     "tur": "metin",
     "sinif": "musteri"
    },
+   "ic_acik.ceki_hata_notu": {
+    "tur": "mantiksal",
+    "sinif": "musteri"
+   },
    "ic_acik.ceki_parti_kodu": {
     "tur": "mantiksal",
     "sinif": "musteri"
@@ -3130,6 +3134,10 @@
    "tablolar.ceki[].en": {
     "tur": "sayi",
     "sinif": "musteri"
+   },
+   "tablolar.ceki[].hata_notu": {
+    "tur": "metin",
+    "sinif": "ic"
    },
    "tablolar.ceki[].kg": {
     "tur": "sayi",

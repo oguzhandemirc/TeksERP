@@ -213,7 +213,8 @@
   "orderLineId": "<L_X>",
   "batchNumber": null,
   "workOrderNumber": null,
-  "foldType": null
+  "foldType": null,
+  "openDefects": ""
  },
  "etiket:Y+L_Y": {
   "rollId": "<R_Y>",
@@ -238,7 +239,8 @@
   "orderLineId": "<L_Y>",
   "batchNumber": null,
   "workOrderNumber": null,
-  "foldType": null
+  "foldType": null,
+  "openDefects": ""
  },
  "etiket:Y+L_X": {
   "rollId": "<R_Y>",
@@ -263,7 +265,8 @@
   "orderLineId": "<L_X>",
   "batchNumber": null,
   "workOrderNumber": null,
-  "foldType": null
+  "foldType": null,
+  "openDefects": ""
  },
  "etiket:Z+C_A": {
   "rollId": "<R_Z>",
@@ -288,7 +291,8 @@
   "orderLineId": null,
   "batchNumber": null,
   "workOrderNumber": null,
-  "foldType": null
+  "foldType": null,
+  "openDefects": ""
  },
  "etiket:X+C_A": {
   "rollId": "<R_X>",
@@ -313,7 +317,8 @@
   "orderLineId": null,
   "batchNumber": null,
   "workOrderNumber": null,
-  "foldType": null
+  "foldType": null,
+  "openDefects": ""
  },
  "etiket:X+stok": {
   "rollId": "<R_X>",
@@ -338,7 +343,8 @@
   "orderLineId": null,
   "batchNumber": null,
   "workOrderNumber": null,
-  "foldType": null
+  "foldType": null,
+  "openDefects": ""
  },
  "onizleme:X+L_X": {
   "itemId": "<I_X>",

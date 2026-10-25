@@ -155,6 +155,69 @@ export function inspectionDefaultForKind(kind: StationKind | null | undefined): 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// KARAR İKİZİ — "Açık hataya CUT/NO_CUT kararını bu adım verir mi?" (KQ-D8, K7)
+// ─────────────────────────────────────────────────────────────────────────────
+// Bugün yalnız Tambur karar rehberi taşır; tür okuması bu ikizde BİLEREK serbest
+// (bekçi §4 muafı helper içi). Karar veren ikinci bir yetenek doğarsa İKİSİ birlikte değişir.
+
+export function stepDecidesDefects(s: { kind: StationKind } | null | undefined): boolean {
+  return s?.kind === StationKind.TAMBUR;
+}
+
+/** Karar yükleminin İKİZİ. Kullanım: `station: { ...DEFECT_DECISION_STATION_WHERE }` */
+export const DEFECT_DECISION_STATION_WHERE = {
+  kind: StationKind.TAMBUR,
+} satisfies Prisma.StationWhereInput;
+
+export interface DecisionGapStep {
+  name: string;
+  kind: StationKind;
+  inspectionEnabled: boolean;
+  /** Atlanmış (SKIPPED) adım ne hata üretir ne karar verir. */
+  skipped?: boolean;
+}
+
+/**
+ * Rota sırasıyla verilen adımlarda: muayenesi açık, kendisi karar vermeyen ve
+ * ARDINDAN atlanmamış karar adımı gelmeyen kalite adımlarının adları. Boş = boşluk yok.
+ */
+export function findDefectDecisionGap(steps: readonly DecisionGapStep[]): string[] {
+  const gaps: string[] = [];
+  steps.forEach((s, i) => {
+    if (s.skipped || !stepCanApplyQuality(s) || stepDecidesDefects(s)) return;
+    const decided = steps.slice(i + 1).some((n) => !n.skipped && stepDecidesDefects(n));
+    if (!decided) gaps.push(s.name);
+  });
+  return gaps;
+}
+
+/** Tambursuz rota uyarısı — rota şablonu ve iş emri yanıtında AYNI metin. */
+export function defectDecisionWarning(gapNames: readonly string[]): string | null {
+  if (gapNames.length === 0) return null;
+  return (
+    `Kalite adımından (${gapNames.join(", ")}) sonra hata kararı veren adım (Tambur) yok — ` +
+    "hatalar bilgi olarak etikete/sevk belgesine taşınır."
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TABLET SÜRÜM UYARISI — varsayılan dışı muayene düzeni (KQ-D8, plan §3.9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Muayenesi kapalı Ara istasyon / Tambur düzenini çizen ilk APK. Ölçüm: KQ-D3
+ * (0885fc976) tablet 1.4.2 (vc64, c1f840581) yayınından SONRA indi → 1.4.3.
+ */
+export const INSPECTION_LAYOUT_MIN_TABLET = "1.4.3";
+
+/** Varsayılanı muayene AÇIK olan türde kutu kapatılırsa eski APK hata panelini çizer ve 400 alır. */
+export function stationLayoutWarning(st: { kind?: unknown; inspectionEnabled?: unknown } | null | undefined): string | null {
+  if (!st || typeof st.kind !== "string") return null;
+  if (!inspectionDefaultForKind(st.kind as StationKind) || st.inspectionEnabled !== false) return null;
+  return `Bu düzen tablet ≥ ${INSPECTION_LAYOUT_MIN_TABLET} ister — eski tablet hata panelini gösterir ama kayıt reddedilir.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // KURŞUN DAĞITIM HEDEFİ — üçüncü yüklem DEĞİL: akış ikizi ∧ KURSUN AUTO
 // ─────────────────────────────────────────────────────────────────────────────
 

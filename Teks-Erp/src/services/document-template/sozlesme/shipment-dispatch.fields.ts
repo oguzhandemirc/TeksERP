@@ -187,6 +187,8 @@ export const TABLE_DEFS: TableDef[] = [
       col("en", "En", "sayi", { hiza: "c", ornek: 150, ondalik: 0, birim: "cm", kaynakKolon: "width" }),
       col("metre", "Metre", "sayi", { hiza: "r", ornek: 480, ondalik: 2, birim: "m", kaynakKolon: "meters", toplam: "metre" }),
       col("kg", "Kg (çuvalın ilk satırında)", "sayi", { hiza: "r", ornek: 42.5, ondalik: 2, birim: "kg", kaynakKolon: "kg", toplam: "kg" }),
+      // KQ-D8: açık hata notu — iç kolon (opt-in), yalnız hatalı topta dolu.
+      col("hata_notu", "Hata notu", "metin", { hiza: "l", ornek: "12,5 m Leke · 40 m Delik", kaynakKolon: "defectNote", sinif: "ic", icKod: "ceki_hata_notu" }),
     ],
   },
 ];

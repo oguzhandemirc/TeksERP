@@ -76,6 +76,8 @@ export interface LabelPayload {
    * Kat girilmemiş topta null → alan şablonda dursa bile baskıda atlanır.
    */
   foldType?: string | null;
+  /** Açık hata notu "12,5 m Leke · 40 m Delik" (KQ-D8); yalnız mamul topta, hatasız "". */
+  openDefects?: string | null;
 
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---
