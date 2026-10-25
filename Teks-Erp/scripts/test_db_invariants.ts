@@ -798,6 +798,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "roll_inspections", name: "roll_inspections_revision_ck" },
   { table: "four_point_rule_sets", name: "four_point_rule_sets_scope_ck" },
   { table: "four_point_rule_bands", name: "four_point_rule_bands_max_score_ck" },
+  // K4P-LAB (migration 20261025130000) — lab testi seddi; bekçi `test_lab_test`.
+  { table: "lab_test_types", name: "lab_test_types_kind_ck" },
+  { table: "lab_tests", name: "lab_tests_subject_ck" },
+  { table: "lab_tests", name: "lab_tests_approved_ck" },
+  { table: "lab_tests", name: "lab_tests_voided_ck" },
+  { table: "lab_test_results", name: "lab_test_results_value_ck" },
   { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye

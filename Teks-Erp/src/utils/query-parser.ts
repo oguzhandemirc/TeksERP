@@ -159,6 +159,8 @@ export const DATE_ONLY_COLUMNS: ReadonlySet<string> = new Set([
   // EndpointLatencyDaily.day — rollup anahtarı; bugün filtrelenmiyor ama aynı
   // sınıf (ad çakışması denetimi bu satır sayesinde `day`i de kapsar).
   "day",
+  // LabTest.testedOn — numunenin test edildiği fabrika günü (K4P-LAB).
+  "testedOn",
   // CashPeriodClose.periodEnd + CariPeriodClose.periodEnd — "2025 Aralık
   // kapanışı" takvim günüdür. Bugün `dateFields` whitelist'inde DEĞİL; yine de
   // burada durur, çünkü liste ŞEMAYI aynalar.

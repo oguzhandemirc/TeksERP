@@ -113,6 +113,11 @@ import {
   lockShipmentScopeTx,
 } from "./helpers/shipment-locks.helper";
 import {
+  eIrsaliyeListFields, eIrsaliyePreviewRow, eIrsaliyeUndoBlock, EIRSALIYE_LIST_SELECT, logVoidedEIrsaliye,
+  readLiveEIrsaliyeForShipmentTx, readSentEIrsaliyeForShipmentTx, resolveEIrsaliyeListFilter, voidLocalEIrsaliyeTx,
+  type ShipmentEIrsaliye, type VoidedEIrsaliye,
+} from "./e-irsaliye/e-irsaliye-shipment.helper";
+import {
   NON_SACKABLE_STATUSES,
   SACK_ABSENT_STATUSES,
   sackBlockMessage,
@@ -165,6 +170,7 @@ import {
   applyDateRange,
   buildTextSearch,
   resolveSortBy,
+  readFilterList,
 } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
@@ -3696,7 +3702,10 @@ export class ShippingService {
       },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
-    const canCancel = shipment.status !== ShipmentStatus.DISPATCHED && shipment.status !== ShipmentStatus.CANCELLED;
+    // İptal gövdesi yerel e-İrsaliyeyi IPTAL eder, gönderilmişte 409 verir — önizleme aynı helper'dan.
+    const liveEIrs = await readLiveEIrsaliyeForShipmentTx(prisma, shipmentId);
+    const eIrsBlock = eIrsaliyeUndoBlock(liveEIrs);
+    const canCancel = shipment.status !== ShipmentStatus.DISPATCHED && shipment.status !== ShipmentStatus.CANCELLED && !eIrsBlock;
     const byOrder = new Map<string, Prisma.Decimal>();
     for (const sk of shipment.sacks) {
       for (const a of sk.allocations) {
@@ -3713,7 +3722,8 @@ export class ShippingService {
         customerName: shipment.customer.name,
         branchName: shipment.branch?.name ?? null,
         canCancel,
-        reason: canCancel ? null : "Sevk edilmiş veya iptal edilmiş sevkiyat iptal edilemez.",
+        reason: canCancel ? null : (eIrsBlock ?? "Sevk edilmiş veya iptal edilmiş sevkiyat iptal edilemez."),
+        eIrsaliye: eIrsaliyePreviewRow(liveEIrs),
         sackCount: shipment._count.sacks,
         rollCount: shipment._count.rolls,
         swatchCount: shipment._count.swatches,
@@ -3735,7 +3745,7 @@ export class ShippingService {
     shipmentId: string,
     expectedStatus: ShipmentStatus,
     opts?: { userId?: string; reason?: string | null; reasonCode?: string | null },
-  ): Promise<void> {
+  ): Promise<VoidedEIrsaliye | null> {
     const claim = await tx.shipment.updateMany({
       where: { id: shipmentId, status: expectedStatus },
       // İPTAL KÜNYESİ (2026-09-11): 37 modelin konvansiyonu; iptal edilebilen tek
@@ -3749,6 +3759,8 @@ export class ShippingService {
       },
     });
     if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
+    // Yerel e-İrsaliye (GİB'e gitmemiş) sevkiyatla AYNI tx'te IPTAL; gönderilmişte 409 (ikinci sed).
+    const voidedEIrsaliye = await voidLocalEIrsaliyeTx(tx, shipmentId, opts?.userId ?? null);
     await writeShipmentEvent(tx, {
       shipmentId,
       type: ShipmentEventType.CANCELLED,
@@ -3783,6 +3795,7 @@ export class ShippingService {
     const lot = await readPackingLotSettings(tx);
     await reopenLotsForSacksTx(tx, returning.map((r) => r.id), lot.mode === "sevk-partisi");
     await recomputeOrderStatusForOrdersTx(tx, orderIds);
+    return voidedEIrsaliye;
   }
 
   /**
@@ -3795,10 +3808,13 @@ export class ShippingService {
     if (shipment.status === ShipmentStatus.CANCELLED) return { success: true, data: { shipmentId }, message: "Sevkiyat zaten iptal edilmiş" };
     if (shipment.status === ShipmentStatus.DISPATCHED) throw AppError.conflict("Sevk edilmiş sevkiyat iptal edilemez");
 
-    await prisma.$transaction(async (tx) => {
-      await this.cancelPlannedShipmentTx(tx, shipmentId, shipment.status, { userId });
+    const voidedEIrs = await prisma.$transaction(async (tx) => {
+      // Sevkiyat kilidi İLK ifade: e-İrsaliye gönderim işaretiyle aynı kapsamda serileşir.
+      await lockShipmentScopeTx(tx, shipmentId);
+      return this.cancelPlannedShipmentTx(tx, shipmentId, shipment.status, { userId });
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "CANCEL", freedSacks: shipment._count.sacks } });
+    await logVoidedEIrsaliye(userId, voidedEIrs);
     return { success: true, data: { shipmentId, freedSacks: shipment._count.sacks }, message: "Sevkiyat iptal edildi — çuvallar depoya döndü" };
   }
 
@@ -3827,6 +3843,7 @@ export class ShippingService {
     dispatchedAt: Date | null;
     activeReturnCount: number;
     sameDayOnly: boolean;
+    eIrsaliye: ShipmentEIrsaliye | null;
   }): string | null {
     if (input.status === ShipmentStatus.CANCELLED) return "İptal edilmiş sevkiyat geri alınamaz.";
     if (input.status !== ShipmentStatus.DISPATCHED) {
@@ -3837,6 +3854,10 @@ export class ShippingService {
     if (input.invoiceNo) {
       return `Bu sevkiyat faturalanmış (${input.invoiceNo}) — geri alınamaz. Fatura işaretini kaldırın ya da iade akışını kullanın.`;
     }
+    // e-İrsaliye: faturanın ikizi (GİB'deki resmî çıkış belgesi); iadeden ÖNCE, çünkü iade
+    // ancak çıkmış maldan doğar — kök engel GİB belgesidir ve çıkış yolu ona göre söylenir.
+    const eIrsBlock = eIrsaliyeUndoBlock(input.eIrsaliye);
+    if (eIrsBlock) return eIrsBlock;
     // İade: iki motor aynı topa dokunur. İade "mal çıktı ve döndü" der, storno
     // "hiç çıkmadı" — ikisi aynı sevkiyatta birleşince hangi rakamın doğru olduğu
     // hiçbir yüzeyde söylenemez hale gelir.
@@ -3887,7 +3908,7 @@ export class ShippingService {
       else looseRolls.push(row);
     }
 
-    const [activeReturnCount, sameDayOnly, confirmationEnabled] = await Promise.all([
+    const [activeReturnCount, sameDayOnly, confirmationEnabled, sentEIrs, liveEIrs] = await Promise.all([
       prisma.rollReturn.count({ where: { fromShipmentId: shipmentId, cancelledAt: null } }),
       readShipmentUndoSameDayOnly(),
       // İstemci "sevkiyatı da kapat" seçeneğinin VARSAYILANINI bundan kurar:
@@ -3895,6 +3916,8 @@ export class ShippingService {
       // karşılığı yok (çıkış onayı ekranı bayrak kapalıyken görünmez) → varsayılan
       // kapat; AÇIK rejimde PLANNED doğal durum → varsayılan beklet.
       readShipmentConfirmationEnabled(),
+      readSentEIrsaliyeForShipmentTx(prisma, shipmentId),
+      readLiveEIrsaliyeForShipmentTx(prisma, shipmentId),
     ]);
     const blockReason = this.resolveUndoBlockReason({
       status: shipment.status,
@@ -3902,6 +3925,7 @@ export class ShippingService {
       dispatchedAt: shipment.dispatchedAt,
       activeReturnCount,
       sameDayOnly,
+      eIrsaliye: sentEIrs,
     });
 
     // Topların döneceği raflar — 2. kalite topu WAREHOUSE'a yazmadığımız burada da görünür.
@@ -3933,6 +3957,8 @@ export class ShippingService {
         affectedOrders: [...new Set(shipment.orders.map((o) => o.order.orderNumber))],
         // Sevk irsaliyesi İPTAL (VOIDED) olacak — kullanıcı bunu onaydan ÖNCE bilmeli.
         voidsDispatchNote: true,
+        // Yalnız storno: kayıt yerinde kalır (yeniden sevkte yeniden üretilir); storno+kapat: IPTAL olur.
+        eIrsaliye: eIrsaliyePreviewRow(liveEIrs),
         confirmationEnabled,
         returnTargets: shelves.map((g) => ({
           status: g.preShipStatus ?? RollStatus.WAREHOUSE,
@@ -4048,12 +4074,15 @@ export class ShippingService {
       const activeReturnCount = await tx.rollReturn.count({
         where: { fromShipmentId: shipmentId, cancelledAt: null },
       });
+      // e-İrsaliye kilitten SONRA okunur: gönderim işareti aynı kilitle serileşir.
+      const eIrsaliye = await readSentEIrsaliyeForShipmentTx(tx, shipmentId);
       const block = this.resolveUndoBlockReason({
         status: sh.status,
         invoiceNo: sh.invoiceNo,
         dispatchedAt: sh.dispatchedAt,
         activeReturnCount,
         sameDayOnly,
+        eIrsaliye,
       });
       if (block) throw AppError.conflict(block);
 
@@ -4139,11 +4168,12 @@ export class ShippingService {
       // CANCELLED'a çeker ve çuval/top/kartela shipmentId'sini boşaltır. Toplar
       // ÇUVALDA KALIR (sackId'ye dokunulmaz) — depoya dönen şey çuvaldır.
       let freedSacks = 0;
+      let voidedEIrs: VoidedEIrsaliye | null = null;
       if (releaseSacks) {
         freedSacks = await tx.sack.count({ where: { shipmentId } });
-        await this.cancelPlannedShipmentTx(tx, shipmentId, ShipmentStatus.PLANNED, { userId });
+        voidedEIrs = await this.cancelPlannedShipmentTx(tx, shipmentId, ShipmentStatus.PLANNED, { userId });
       }
-      return { restored, voidedDocs, orderIds, freedSacks };
+      return { restored, voidedDocs, orderIds, freedSacks, voidedEIrs };
     });
 
     await AuditService.log({
@@ -4161,6 +4191,7 @@ export class ShippingService {
         freedSacks: result.freedSacks,
       },
     });
+    await logVoidedEIrsaliye(userId, result.voidedEIrs);
     return {
       success: true,
       data: {
@@ -4249,6 +4280,11 @@ export class ShippingService {
       where.invoicedAt = invoicedFilter ? { not: null } : null;
     }
 
+    // --- e-İRSALİYE SÜZGECİ — where parçası tek helper'da (liste + cursor + özet aynı where).
+    // DirectShipment'ın e-İrsaliyesi yok → süzgeç aktifken union'dan düşer.
+    const eIrsWhere = await resolveEIrsaliyeListFilter(readFilterList(params.filters.eIrsaliye));
+    if (eIrsWhere) where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), eIrsWhere];
+
     // destination (DOMESTIC|EXPORT) buildWhereClause tarafından where'e YAZILDI;
     // DirectShipment'ta destination YOK → aktifse doğrudan sevkler union'dan düşer
     // (muhasebe Excel'iyle AYNI yüklem: `directShipmentsMatchDestinationFilter`).
@@ -4317,6 +4353,7 @@ export class ShippingService {
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
       _count: { select: { sacks: true, rolls: true, orders: true, returns: { where: LIVE_RETURN_WHERE } } },
+      eIrsaliyeler: EIRSALIYE_LIST_SELECT,
     } as const;
 
     // --- BİRLEŞİK LİSTE: fasondan DOĞRUDAN sevkler (DirectShipment) çuval
@@ -4350,9 +4387,10 @@ export class ShippingService {
     type DirectRow = Prisma.DirectShipmentGetPayload<{ select: typeof directSelect }>;
     // totalMeters/totalKg: SHIPMENT satırlarında `attachTotals` doldurur (toplama
     // gerektirir); DIRECT'te metraj zaten denormalize (`DirectShipment.totalQty`) → sorgu yok.
-    const mapShip = (s: ShipRow) => ({
+    const mapShip = ({ eIrsaliyeler, ...s }: ShipRow) => ({
       kind: "SHIPMENT" as const,
       ...s,
+      ...eIrsaliyeListFields(eIrsaliyeler),
       totalMeters: 0,
       totalKg: 0,
     });
@@ -4379,6 +4417,7 @@ export class ShippingService {
       totalMeters: Number(d.totalQty),
       totalKg: 0, // doğrudan sevkte çuval/tartı yok
       _count: { sacks: 0, rolls: d.rollCount, orders: d._count.allocations, returns: 0 },
+      ...eIrsaliyeListFields([]),
     });
     type UnifiedRow = ReturnType<typeof mapShip> | ReturnType<typeof mapDirect>;
     // Union sıralama karşılaştırıcısı — sortField + sortDir'e göre (orderBy ile birebir).
@@ -4428,7 +4467,8 @@ export class ShippingService {
       (!statuses || statuses.includes(ShipmentStatus.DISPATCHED)) &&
       (!rawStatus || rawStatus === ShipmentStatus.DISPATCHED) &&
       !hasReturnsFilter &&
-      !hasDestinationFilter;
+      !hasDestinationFilter &&
+      !eIrsWhere;
 
     // DirectShipment where — Shipment ile AYNI filtreleri alanlarına eşle.
     const directBaseWhere: Prisma.DirectShipmentWhereInput = {};

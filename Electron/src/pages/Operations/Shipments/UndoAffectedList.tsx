@@ -1,6 +1,6 @@
-import { Package, Scroll } from "lucide-react";
-import type { UndoDispatchPreview } from "./service";
-import { undoAffectedRows } from "./undo-affected";
+import { FileText, Package, Scroll } from "lucide-react";
+import type { EIrsaliyeAffected, UndoDispatchPreview } from "./service";
+import { eIrsaliyeAffectedLines, undoAffectedRows } from "./undo-affected";
 
 /** Sevki Geri Al önizlemesi — etkilenen çuval/top listesi (çekirdek: HER kayıt somut). */
 export function UndoAffectedList({ preview }: { preview: Pick<UndoDispatchPreview, "sacks" | "looseRolls"> }) {
@@ -24,6 +24,22 @@ export function UndoAffectedList({ preview }: { preview: Pick<UndoDispatchPrevie
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** Etkilenen e-İrsaliye kaydı (iptal / storno önizlemesi) — kayıt yoksa hiç çizilmez. */
+export function EIrsaliyeAffectedNote({ eIrsaliye, willVoid }: { eIrsaliye: EIrsaliyeAffected | null | undefined; willVoid: boolean }) {
+  const lines = eIrsaliyeAffectedLines(eIrsaliye, willVoid);
+  if (lines.length === 0) return null;
+  return (
+    <div className="rounded-md border px-3 py-2 text-xs" data-testid="eirsaliye-affected">
+      {lines.map((l, i) => (
+        <p key={l} className={i === 0 ? "flex items-center gap-1.5 font-medium" : "pl-[18px] text-amber-700 dark:text-amber-400"}>
+          {i === 0 && <FileText className="h-3 w-3 text-muted-foreground" />}
+          {l}
+        </p>
+      ))}
     </div>
   );
 }
