@@ -1,5 +1,5 @@
 // =============================================================================
-// BİLDİRİM KATALOĞU — v1 (13 tür) · TEK KAYNAK
+// BİLDİRİM KATALOĞU — v1 (15 tür) · TEK KAYNAK
 // =============================================================================
 // Plan: docs/design/BILDIRIM-SISTEMI-PLAN.md §4 · kural dosyası docs/kurallar/bildirim.md.
 //
@@ -14,81 +14,16 @@
 // =============================================================================
 
 import { z } from "zod";
-import type { PERMISSION_CATALOG } from "./permission-catalog";
-import type { EkranModul } from "./screen-catalog";
 import { TERIM } from "./terim";
+import type { NotificationCatalogEntry, NotificationKanal, NotificationSaklama } from "./notification-catalog.types";
 
-/** Katalogdaki izin kodları — yazım hatası DERLEMEDE düşer. */
-type IzinKodu = (typeof PERMISSION_CATALOG)[number]["code"];
+export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
+export type {
+  NotificationSinif, NotificationAltTur, NotificationGrup, NotificationKilit, NotificationKanal,
+  NotificationPhase, NotificationSaklama, NotificationCatalogEntry,
+} from "./notification-catalog.types";
 
-export type NotificationSinif = "ALARM" | "BILDIRIM";
-/** OLAY bir kez olur; KOSUL durum sürdükçe TEK kayıttır ve düzelince "çözüldü" olur. ALARM'da `null`. */
-export type NotificationAltTur = "OLAY" | "KOSUL";
-export type NotificationGrup =
-  | "Sipariş" | "Üretim" | "Kalite" | "Sevkiyat" | "Fason" | "Stok" | "Finans" | "Dokuma" | "Sistem";
-/** HER_ZAMAN: uygulama kanalı kapatılamaz (ertelenir) · NOBETTE: yalnız nöbetteki alıcıya kilitli. */
-export type NotificationKilit = "YOK" | "HER_ZAMAN" | "NOBETTE";
-export type NotificationKanal = "UYGULAMA" | "OZET" | "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH";
-/** Outbox aşaması (N1-SEMA CHECK'iyle aynı küme). KAPANDI → `cozuldu` şablonu. */
-export const NOTIFICATION_PHASES = ["OLAY", "ACILDI", "KAPANDI", "GUNCELLENDI"] as const;
-export type NotificationPhase = (typeof NOTIFICATION_PHASES)[number];
-
-export const NOTIFICATION_GRUPLARI: readonly NotificationGrup[] = [
-  "Sipariş", "Üretim", "Kalite", "Sevkiyat", "Fason", "Stok", "Finans", "Dokuma", "Sistem",
-];
-
-/** Gelen kutusu TELEMETRİDİR (defter değil): budama süreleri (B2). */
-export interface NotificationSaklama {
-  okunmusGun: number;
-  okunmamisGun: number;
-}
 const SAKLAMA: NotificationSaklama = { okunmusGun: 90, okunmamisGun: 180 };
-
-export interface NotificationCatalogEntry {
-  /** Anahtarın kendisi (`<alan>.<tür>`); bekçi eşitliği ölçer. */
-  kod: string;
-  /** Ayarlar ekranındaki sabit ad (yer tutucusuz). */
-  ad: string;
-  sinif: NotificationSinif;
-  altTur: NotificationAltTur | null;
-  grup: NotificationGrup;
-  /** DNF: iç dizinin TAMAMI, dış dizinin HERHANGİ BİRİ. */
-  izinler: readonly (readonly IzinKodu[])[];
-  /** SCREEN_CATALOG `panelEkran` satırının modülü (bekçi §2). */
-  modul: EkranModul;
-  /** Ek görme kapısı (ör. tezgah alarmı çözücüsü); görme süzgeci ad üstünden çözer. */
-  kapi?: "tezgahAlarm";
-  /** subjectKey kalıbı, `{alan}` yer tutuculu; birleştirme anahtarı bundan türer (plan §3.6). */
-  tekilKalibi: string;
-  /** OLAY birleştirme penceresi (sn); 0 = pencere yok. */
-  pencereSn: number;
-  /** HERKES = görebilen herkes; izin listesi = bunlardan birini taşıyan; KAPALI = kimse (tercihle açılır). */
-  varsayilan: "HERKES" | "KAPALI" | readonly IzinKodu[];
-  kilit: NotificationKilit;
-  /** Kilitli türde "Neden kilitli" açıklaması (UI). */
-  kilitGerekcesi?: string;
-  kanallar: readonly NotificationKanal[];
-  varsayilanKanallar: readonly NotificationKanal[];
-  baslik: string;
-  govde: string;
-  /** KOSUL ve ALARM'da kapanış metni. */
-  cozuldu?: string;
-  /** SCREEN_CATALOG masaüstü anahtarı. */
-  panelEkran: string;
-  /** Derin bağlantı; `/`+panelEkran altında, `{alan}` yer tutuculu. */
-  panelYol: string;
-  /** SCREEN_CATALOG mobil anahtarı (tablet gelen kutusu/şerit uygunluğu). */
-  tabletEkran?: string;
-  /** Tablet navigasyon rotası (ekranın içindeki detay). */
-  tabletRota?: string;
-  /** Eşik/param şeması; `.strict()` + her alan varsayılanlı (bekçi §7). */
-  paramSemasi?: z.ZodType;
-  /** Şablon yer tutucularının BEYANI (bekçi §5). */
-  payloadAlanlari: readonly string[];
-  /** Önizleme verisi yokken "haftada ~N" tahmini (Karar Y3). */
-  tahminiHaftalik: number;
-  saklama: NotificationSaklama;
-}
 
 const KANAL_MASAUSTU: readonly NotificationKanal[] = ["UYGULAMA", "OZET", "MASAUSTU"];
 
@@ -162,6 +97,23 @@ export const NOTIFICATION_CATALOG = {
     panelEkran: "system", panelYol: "/system/updates",
     payloadAlanlari: ["surum"],
     tahminiHaftalik: 0.5, saklama: SAKLAMA,
+  },
+  "yazici.hata": {
+    kod: "yazici.hata", ad: "Yazıcıda baskı hatası",
+    sinif: "BILDIRIM", altTur: "OLAY", grup: "Sistem",
+    izinler: [["system:print-history"]],
+    modul: "cekirdek:sistem-kimlik-belge",
+    // Konu yazıcıdır (kayıtlı cihaz id'si, yoksa adı): aynı yazıcının 10 dk içindeki hataları
+    // TEK satırda birleşir ("N kayıt") — arızalı yazıcı gelen kutusunu doldurmaz.
+    tekilKalibi: "{yazici}",
+    pencereSn: 600, varsayilan: "HERKES", kilit: "YOK",
+    kanallar: KANAL_MASAUSTU,
+    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    baslik: "{yaziciAd} yazıcısında baskı hatası",
+    govde: "{kisi} · {tur} · {neden}",
+    panelEkran: "system/print-history", panelYol: "/system/print-history?printer={yazici}&status=HATA",
+    payloadAlanlari: ["yazici", "yaziciAd", "kisi", "tur", "neden"],
+    tahminiHaftalik: 3, saklama: SAKLAMA,
   },
 
   // ── Sipariş ───────────────────────────────────────────────────────────────

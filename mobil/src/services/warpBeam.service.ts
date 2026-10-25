@@ -7,6 +7,7 @@
 // Kuyruk YOK: iplik çıkışı deftere yazar, eksi-bakiye kapısı sunucudadır (§11 D).
 // =============================================================================
 import { apiClient } from './api';
+import type { PrintJobAttachment } from './printJob.service';
 import type { ApiResponse } from '../types/api';
 import type { WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource, YarnLotQualityStatus } from '../types/models';
 
@@ -212,7 +213,8 @@ export const warpBeamService = {
   /** Etiketin tam HTML'i — BT yazıcı çözülemezse expo-print yolu. */
   labelHtml: async (id: string): Promise<string> => (await apiClient.get<string>(`/labels/warp-beams/${id}/html`, { responseType: 'text' })).data,
   /** Baskı izi — yalnız GERÇEK baskıdan sonra (best-effort). */
-  labelPrintEvent: async (id: string): Promise<void> => {
-    await apiClient.post(`/labels/warp-beams/${id}/print-event`, { copies: 1 });
+  /** `printJob`: basım künyesi (Yazdırma geçmişi); eski backend alanı eler. */
+  labelPrintEvent: async (id: string, printJob?: PrintJobAttachment): Promise<void> => {
+    await apiClient.post(`/labels/warp-beams/${id}/print-event`, { copies: 1, ...(printJob ? { printJob } : {}) });
   },
 };
