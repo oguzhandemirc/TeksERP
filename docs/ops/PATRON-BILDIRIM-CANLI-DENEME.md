@@ -24,3 +24,13 @@
 ## Geri alma
 
 `BILDIRIM_KIPI=kapali` + yeniden başlat: iş kurulmaz, kuyruk birikmez; mevcut satırlar 90 günde budanır.
+
+## Telefon push (F5) — açma adımları (kullanıcı kararı; varsayılan KAPALI)
+
+Telefon yükü İÇERİKSİZDİR (başlık = katalog etiketi, `data` = `{bildirimId, rota, tesisId}`, gövde yok); içerik uygulama içinden oturumla çekilir. Hiçbir adım atılmazsa bugünkü davranış birebir sürer.
+
+1. **Firebase projesi** (kullanıcı hesabıyla): Android uygulaması `com.etkiliyazilim.tekserp.yonetim`; indirilen `google-services.json` yalnız derleme makinesinde `patron/uygulama/` altına konur — REPOYA GİRMEZ (`.gitignore`; biçim örneği `google-services.example.json`). FCM sunucu kimliği Expo/EAS proje ayarına yüklenir, patron sunucusuna DEĞİL.
+2. **Uygulama derlemesi:** `package.json` `expo.autolinking.android.exclude`dan `expo-notifications` çıkarılır, `scripts/build-aab.mjs` izinli izin kümesine `POST_NOTIFICATIONS` (+ FCM alımı) eklenir, `src/push/support.ts` `NATIVE_PUSH = true` yapılır (gizlilik metni bekçisi `scripts/test_gizlilik_sayfasi.mjs` §7 metnin AYNI committe güncellenmesini zorlar), derleme `PATRON_NATIVE_PUSH=1` ile koşulur. `app.config.js` dosya yoksa tek satır uyarıyla KAPALI derler; uygulama native modül bağlı değilse kapıyı kapalı sayar. Android 13+ telefonda izin istemi "Profil → Bildirimler → Bu cihazda bildirimleri aç" ile çıkar.
+3. **Gizlilik metni + Play veri güvenliği formu** güncellenir (mağaza adımı).
+4. **Patron VDS:** `.env` `BILDIRIM_KIPI=gercek` + `BILDIRIM_NATIVE_PUSH=acik` + `EXPO_ERISIM_BELIRTECI` (sır; compose'a dosyadan bağlanır — henüz bağlı değil). Belirteç yoksa açılış günlüğünde `PATRON_BILDIRIM native=kapali (EXPO_ERISIM_BELIRTECI yok)` tek satırı görünür ve telefona istek atılmaz.
+5. Geri alma: `BILDIRIM_NATIVE_PUSH=kapali` + yeniden başlat — telefon hedefi `KALICI:NATIVE_PUSH_KAPALI` olur, web push sürer.
