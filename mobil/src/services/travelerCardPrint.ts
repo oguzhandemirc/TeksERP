@@ -1,4 +1,4 @@
-import { printHtml } from './printHtml';
+import { printHtmlReported } from './printHtml';
 import { apiClient } from './api';
 import { travelerCardService } from './travelerCard.service';
 
@@ -16,7 +16,12 @@ export async function printTravelerCard(cardId: string): Promise<void> {
     headers: { Accept: 'text/html' },
   });
   const html = typeof res.data === 'string' ? res.data : String(res.data);
-  await printHtml({ html });
+  // Hata/iptal Yazdırma geçmişine raporlanır; başarı print-event'in `printJob` ekiyle yazılır.
+  const printJob = await printHtmlReported(
+    { html },
+    { subjectKind: 'REFAKAT_KARTI', subjectTable: 'traveler_cards', subjectId: cardId },
+    { reportSuccess: false },
+  );
 
   // Baskı GERÇEKLEŞTİ → kartın "güncel değil" işaretini temizle.
   // ⚠️ Yukarıdaki GET bunu YAPAMAZ: aynı uç önizlemeyi de besler ("HTML almak"
@@ -26,7 +31,7 @@ export async function printTravelerCard(cardId: string): Promise<void> {
   // Bildirim hatası YUTULUR: kâğıt çıktı, operatörün işi bitti — rozetin bir
   // süre daha durması, baskıyı hata ile kesmekten iyidir.
   try {
-    await apiClient.post(`/traveler-cards/${cardId}/print-event`);
+    await apiClient.post(`/traveler-cards/${cardId}/print-event`, { printJob });
   } catch {
     /* yukarıdaki gerekçe */
   }
