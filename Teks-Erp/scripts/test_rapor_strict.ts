@@ -18,6 +18,7 @@ import { batchSearchQuerySchema, operatorPerformanceQuerySchema, travelerTraceQu
 import { productionChainQuerySchema } from "../src/routes/reports/dokuma.report.routes";
 import { coreRangeQuerySchema } from "../src/services/reports/temel/_common";
 import * as temelUretim from "../src/routes/reports/temel-uretim.routes";
+import * as temelSatis from "../src/routes/reports/temel-satis.routes";
 import * as temelDokumaFinans from "../src/routes/reports/temel-dokuma-finans.routes";
 import { coreDayRangeQuerySchema } from "../src/services/reports/temel/_day-range";
 
@@ -75,6 +76,7 @@ check("§2e ortak şemalar strict: dateRangeSchema/compareRangeSchema bilinmeyen
 
 // §3 K-TEL (2026-10-24): panelin rapor v2 isteğindeki tarih + kıyas anahtarları = ortak sorgu şemasının kümesi.
 // NEGATİF SONDA 2026-10-24: `_common.ts`te `kiyas` → `compare` yapıldı → §3a + §3b ❌; geri alındı → ✅.
+// NEGATİF SONDA 2026-10-25 (R0-RAPA): `temel-satis` termin şeması `compareRangeSchema`ya döndürüldü → §3b ❌; geri alındı → ✅.
 console.log("\n── §3 K-TEL: panel ↔ uç tel anahtarı eşitliği (rapor v2) ──");
 const PANEL = path.resolve(ROOT, "../Electron/src/pages/Reports");
 const kiyasAd = /export const COMPARE_PARAM = "(\w+)"/.exec(readFileSync(path.join(PANEL, "_v2/request-params.ts"), "utf8"))?.[1];
@@ -82,9 +84,9 @@ const isoGovde = /export function rangeIsoParams\([^)]*\)[^{]*\{([\s\S]*?)\n\}/.
 const panelKume = [...[...isoGovde.matchAll(/(\w+):/g)].map((m) => m[1]!), kiyasAd ?? "?"].sort();
 const ucKume = Object.keys(coreRangeQuerySchema.shape).sort();
 check("§3a panel {tarih (aralik-iso) + COMPARE_PARAM} = coreRangeQuerySchema anahtarları", panelKume.join(",") === ucKume.join(","), `panel ${panelKume.join(",")} · uç ${ucKume.join(",")}`);
-const v2Semalar = Object.entries(temelUretim).filter(([ad]) => /^core\w+QuerySchema$/.test(ad)) as [string, { safeParse: (v: unknown) => { success: boolean }; shape: object }][];
+const v2Semalar = [...Object.entries(temelUretim), ...Object.entries(temelSatis)].filter(([ad]) => /^core\w+QuerySchema$/.test(ad)) as [string, { safeParse: (v: unknown) => { success: boolean }; shape: object }][];
 const kiyasli = v2Semalar.filter(([, s]) => "dateFrom" in s.shape);
-check("§3b her aralıklı v2 ucu `kiyas` kabul eder, `compare` reddeder", kiyasli.length >= 4 && kiyasli.every(([, s]) => !red(s, { kiyas: "prevYear" }) && red(s, { compare: "prev" })), kiyasli.map(([a]) => a).join(","));
+check("§3b her aralıklı v2 ucu `kiyas` kabul eder, `compare` reddeder", kiyasli.length >= 8 && kiyasli.every(([, s]) => !red(s, { kiyas: "prevYear" }) && red(s, { compare: "prev" })), kiyasli.map(([a]) => a).join(","));
 
 // §3c K-TEL gün sözleşmesi (R0-RAPC, `tarih:"aralik-gun"`): panel `rangeDayParams` gövdesi + COMPARE_PARAM = gün şeması.
 // NEGATİF SONDA 2026-10-25: `_day-range.ts`te `from` → `fromDay` yapıldı → §3c + §3d ❌; geri alındı → ✅.
