@@ -60,6 +60,7 @@ import { buildMergeConfirmDescription } from "./batch-merge-confirm";
 import { Wrench } from "lucide-react";
 import type { BatchLaneRoll } from "./service";
 import { LabTestsCard } from "@/pages/Quality/LabTests/LabTestsCard";
+import { BatchInspectionsLink } from "@/pages/Quality/Inspections/RollInspectionCard";
 import type { WorkOrderStepLite } from "./types";
 
 const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> = {
@@ -567,6 +568,7 @@ function BatchLaneCard({
 
         {expanded && (
           <>
+        <BatchInspectionsLink batchId={batch.batchId} batchLabel={batch.batchNumber} />
         <LabTestsCard batchId={batch.batchId} batchLabel={batch.batchNumber} />
         {/* Partinin topları — barkod · kumaş · renk · konum · metraj (açınca doğrudan). */}
         {batch.rolls.length > 0 ? (

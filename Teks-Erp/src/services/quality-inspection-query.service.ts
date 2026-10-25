@@ -14,6 +14,8 @@ export interface InspectionListQuery {
   to?: string;
   itemId?: string | string[];
   rollId?: string | string[];
+  /** Parti kartından gelen bağlantı: partinin toplarının muayeneleri. */
+  batchId?: string | string[];
   gradeId?: string | string[];
   phase?: string | string[];
   stationId?: string | string[];
@@ -60,6 +62,8 @@ export function buildInspectionWhere(q: InspectionListQuery): Prisma.RollInspect
   if (itemId) and.push({ roll: { itemId } });
   const rollId = idCondition(q.rollId);
   if (rollId) and.push({ rollId });
+  const batchId = idCondition(q.batchId);
+  if (batchId) and.push({ roll: { batchId } });
   const gradeId = idCondition(q.gradeId);
   if (gradeId) and.push({ suggestedQualityGradeId: gradeId });
   const stationId = idCondition(q.stationId);
@@ -105,6 +109,7 @@ export async function listInspections(q: InspectionListQuery) {
   // Özet şeridi listenin AYNI where'inden (cursor'suz) — şerit ile liste ayrışmaz.
   const agg = await prisma.rollInspection.aggregate({ where, _count: { _all: true }, _avg: { pointsPer100M2: true } });
   const mismatch = await prisma.rollInspection.count({ where: { AND: [where, { gradeMismatch: true }] } });
+  const widthUnknown = await prisma.rollInspection.count({ where: { AND: [where, { widthSource: "UNKNOWN" }] } });
   const grades = await prisma.rollInspection.groupBy({ by: ["suggestedGradeCode"], where, _count: { _all: true }, orderBy: { suggestedGradeCode: "asc" } });
   return {
     items,
@@ -113,6 +118,7 @@ export async function listInspections(q: InspectionListQuery) {
       total: agg._count._all,
       avgPointsPer100M2: agg._avg.pointsPer100M2 ? agg._avg.pointsPer100M2.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP) : null,
       mismatch,
+      widthUnknown,
       grades: grades.map((g) => ({ code: g.suggestedGradeCode, count: g._count._all })),
     },
   };

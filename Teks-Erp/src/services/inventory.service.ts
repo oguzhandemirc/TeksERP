@@ -33,7 +33,7 @@ import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger-reverse
 import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { AppError } from "../utils/app-error";
-import { resolveDefaultDefectTypeTx } from "./helpers/default-defect-type.helper";
+import { recordRollDefectsTx } from "./helpers/roll-defect.helper";
 import { assertMasterDataLiveTx } from "./helpers/master-data-live.helper";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { assertRollReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
@@ -183,7 +183,6 @@ import {
   STEP_FLOW_ERROR,
   STEP_FLOW_SELECT,
   stepRunsStepFlow,
-  QUALITY_STEP_ERROR,
   STEP_QUALITY_SELECT,
   stepCanApplyQuality,
 } from "./helpers/quality-station.helper";
@@ -5500,7 +5499,7 @@ export class InventoryService {
           include: {
             // `appliesColor` + `requiredCategory`: adım renk verebiliyor mu (tek yüklem
             // stepCanApplyColor) — bitişte renksiz topa WO hedef rengi yazılır (3c).
-            station: { select: { ...STEP_FLOW_SELECT, ...STEP_QUALITY_SELECT, appliesColor: true } },
+            station: { select: { ...STEP_FLOW_SELECT, appliesColor: true } },
             requiredCategory: { select: { appliesColor: true } },
             workOrder: {
               include: {
@@ -5574,12 +5573,6 @@ export class InventoryService {
       );
     }
 
-    // Hata listesi MUAYENE yeteneği ister (KQ-D1): akış yürüyen ama muayenesi
-    // kapalı adımda (ör. OTHER + appliesQuality) hata yazılmaz — bilinçli fark K2.
-    if ((data.errors ?? []).length > 0 && !stepCanApplyQuality(roll.currentStep.station)) {
-      throw AppError.badRequest(QUALITY_STEP_ERROR);
-    }
-
     // totalMeters opsiyonel — verilmezse mevcut currentQty (fason kabulden gelen
     // irsaliye değeri) kullanılır. Verilirse pozitif olmalı.
     if (data.totalMeters !== undefined && !(data.totalMeters > 0)) {
@@ -5592,34 +5585,9 @@ export class InventoryService {
       );
     }
 
-    // Hata validasyonu — sadece nokta (startMeter)
+    // Hata listesi: kapı (muayene yeteneği, bilinçli fark K2), metre, varsayılan/pasif
+    // tip ve mükerrer kuralları TEK boğazda (`recordRollDefectsTx`, KQ-D7) — tx içinde.
     const rawErrors = data.errors ?? [];
-    for (const e of rawErrors) {
-      if (e.startMeter < 0 || e.startMeter > totalMeters) {
-        throw AppError.badRequest(
-          `Hata metresi (${e.startMeter}) 0 ile ${totalMeters} arasında olmalı`,
-        );
-      }
-    }
-
-    // DefectType doğrulamaları (varsa) — M-28: isActive da aranır (pasif hata
-    // tipiyle kayıt açılamaz — soft-delete giriş guard'ı); eskiden birebir aynı
-    // findMany iki kez koşuyordu, tek sorguya indirildi.
-    // Tipsiz satır → kataloğun varsayılanı; varsayılan yoksa 400 (karar A; istemci
-    // listenin ilkini UYDURMAZ). Doğrulama ve yazma bu çözülmüş listeyi okur.
-    const errors = await resolveDefaultDefectTypeTx(prisma, rawErrors);
-    const defectIds = [...new Set(errors.map((e) => e.defectTypeId).filter((x): x is string => !!x))];
-    const defectMap = new Map<string, string>();
-    if (defectIds.length > 0) {
-      const found = await prisma.defectType.findMany({
-        where: { id: { in: defectIds }, isActive: true },
-        select: { id: true, name: true },
-      });
-      if (found.length !== defectIds.length) {
-        throw AppError.badRequest("Bazı hata tipleri bulunamadı veya pasif");
-      }
-      for (const d of found) defectMap.set(d.id, d.name);
-    }
 
     const allSteps = roll.currentStep.workOrder.steps;
     const currentIndex = allSteps.findIndex((s) => s.id === roll.currentStepId);
@@ -5670,19 +5638,15 @@ export class InventoryService {
         },
       });
 
-      // 2) RollError'lar toplu insert
-      if (errors.length > 0) {
-        await tx.rollError.createMany({
-          data: errors.map((e) => ({
-            rollId,
-            startMeter: e.startMeter,
-            defectTypeId: e.defectTypeId ?? null,
-            errorType: e.defectTypeId ? defectMap.get(e.defectTypeId) ?? null : null,
-            detectedAtStepId: stepId,
-            detectedByUserId: userId ?? null,
-          })),
-        });
-      }
+      // 2) RollError'lar toplu — tek yazma boğazı (KK2/Tambur ile aynı kurallar).
+      await recordRollDefectsTx(tx, {
+        rollId,
+        stepId,
+        userId,
+        stationGate: "FLOW",
+        defects: rawErrors,
+        maxMeter: totalMeters,
+      });
 
       // 3) RollOperation: QC2_COMPLETED (her zaman) + KURSUN_APPLIED (istasyonda
       //    KURSUN özelliği yetenek olarak atanmışsa). Eskiden ikisi de koşulsuzdu;
@@ -5696,7 +5660,7 @@ export class InventoryService {
           machineId: machineId ?? null,
           metadata: {
             totalMeters: totalMeters,
-            errorCount: errors.length,
+            errorCount: rawErrors.length,
             notes: data.notes ?? null,
           } as Prisma.InputJsonValue,
         },
@@ -5810,7 +5774,7 @@ export class InventoryService {
       newData: {
         kursunFinished: true,
         totalMeters: totalMeters,
-        errorCount: errors.length,
+        errorCount: rawErrors.length,
         nextStepId: nextStep?.id ?? null,
         // Operatörün elle işaretledikleri (SEÇİM tipinde valueCode ile) —
         // completeQc2 audit'i ile aynı iz; AUTO'lar bu listede olmayabilir (F2).
