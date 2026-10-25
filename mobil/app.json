@@ -21,6 +21,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.etkiliyazilim.tekserp",
+      "allowBackup": false,
       "versionCode": 64,
       "usesCleartextTraffic": false,
       "permissions": [
