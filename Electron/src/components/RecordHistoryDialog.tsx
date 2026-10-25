@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { safeFormat } from "@/lib/format";
 import { systemLogService } from "@/services/systemLogService";
 import { AuditChangeList } from "@/components/AuditChangeList";
+import { AuditNarrativeRow } from "@/components/audit/AuditNarrativeRow";
+import { AuditTechnicalDetail } from "@/components/audit/AuditTechnicalDetail";
 
 // =============================================================================
 // TEK KAYDIN DEĞİŞİKLİK GEÇMİŞİ (Faz C, 2026-08-19)
@@ -29,6 +31,10 @@ import { AuditChangeList } from "@/components/AuditChangeList";
 //
 // ⚠️ 6 aydan eski kayıtlar arşive taşınır ve bu liste SICAK tabloyu okur.
 // Arşiv sorgusu ayrı bir uçtur; burada "daha eski kayıtlar arşivde" denir.
+//
+// İzlenebilirlik B3: cümleyi Etkinlik akışıyla AYNI `AuditNarrativeRow` çizer
+// (sunucunun okuma-anı anlatısı); anlatı yoksa (eski backend) eski kart düzeni.
+// Her işlem grubunda "Teknik ayrıntı" katlı durur (uç, süre, cihaz, etkilenenler).
 // =============================================================================
 
 interface Props {
@@ -78,7 +84,7 @@ export function RecordHistoryDialog({ open, onOpenChange, table, id, title }: Pr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] max-w-2xl overflow-hidden">
+      <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <History className="h-4 w-4" /> Değişiklik Geçmişi
@@ -101,33 +107,44 @@ export function RecordHistoryDialog({ open, onOpenChange, table, id, title }: Pr
             </div>
           )}
 
-          {segments.map((seg) =>
-            seg.rows.length > 1 ? (
+          {segments.map((seg) => {
+            const rid = seg.rows[0]?.requestId ?? null;
+            return seg.rows.length > 1 ? (
               <div key={seg.key} className="rounded-md border border-primary/40 p-1.5">
                 <div className="mb-1 px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Tek işlem · {seg.rows.length} kayıt
+                  Aynı işlemde · {seg.rows.length} kayıt
                 </div>
-                <div className="space-y-1.5">{seg.rows.map(renderRow)}</div>
+                <div className="space-y-1.5">{seg.rows.map((r) => renderRow(r, false))}</div>
+                {rid && (
+                  <div className="mt-1.5">
+                    <AuditTechnicalDetail requestId={rid} />
+                  </div>
+                )}
               </div>
             ) : (
-              renderRow(seg.rows[0]!)
-            ),
-          )}
+              renderRow(seg.rows[0]!, true)
+            );
+          })}
         </div>
       </DialogContent>
     </Dialog>
   );
 
-  function renderRow(r: (typeof rows)[number]) {
+  function renderRow(r: (typeof rows)[number], withTechnical: boolean) {
+    const legacy = (
+      <>
+        <Badge variant={r.action === "DELETE" ? "destructive" : "secondary"}>
+          {ACTION_LABEL[r.action] ?? r.action}
+        </Badge>
+        <span className="font-medium">
+          {r.user?.fullName?.trim() || r.user?.username || "—"}
+        </span>
+      </>
+    );
     return (
       <div key={r.id} className="rounded-md border p-2.5 text-xs">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={r.action === "DELETE" ? "destructive" : "secondary"}>
-            {ACTION_LABEL[r.action] ?? r.action}
-          </Badge>
-          <span className="font-medium">
-            {r.user?.fullName?.trim() || r.user?.username || "—"}
-          </span>
+          <AuditNarrativeRow anlati={r.anlati} fallback={legacy} className="min-w-0 basis-full sm:basis-auto sm:flex-1" />
           <span className="text-muted-foreground">
             {safeFormat(r.createdAt, "dd.MM.yyyy HH:mm")}
           </span>
@@ -156,6 +173,11 @@ export function RecordHistoryDialog({ open, onOpenChange, table, id, title }: Pr
             Değişiklik ayrıntısı kaydedilmemiş (eski kayıt).
           </div>
         ) : null}
+        {withTechnical && r.requestId && (
+          <div className="mt-1.5">
+            <AuditTechnicalDetail requestId={r.requestId} />
+          </div>
+        )}
       </div>
     );
   }

@@ -116,7 +116,7 @@ export const systemTiles: SystemTile[] = [
   {
     key: "activity",
     title: "Etkinlik",
-    description: "Sistemdeki son işlemler — kim hangi kaydı değiştirdi (aktif tablo)",
+    description: "İşlemler — kim ne yaptı, günlük dille; teknik iz ve kayıt numarasıyla arama",
     icon: Activity,
     to: "/system/activity",
     group: "activity",
