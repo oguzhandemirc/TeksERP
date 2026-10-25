@@ -1,10 +1,10 @@
 // TÜRETİLMİŞ ALANLAR — fabrika hesaplar, bulut saklar (§1.1). Her alan katalogda adı geçen
 // TEK KAYNAK yardımcıyı çağırır; formül burada yeniden yazılmaz (liste ekranı ile
 // projeksiyon aynı sayıyı basmak zorunda — "ayrışan yüzey" sınıfı).
-import { ItemUnit, OrderStatus, Prisma } from "@prisma/client";
+import { ItemUnit, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { isActiveLine, isMeasuredLine } from "../services/helpers/order-line-scope.helper";
-import { daysPastDeadline } from "../services/helpers/order-deadline.helper";
+import { daysPastDeadline, isDeadlineOpenStatus } from "../services/helpers/order-deadline.helper";
 import { grossRollCount, loadShipmentGrossTotals, LIVE_RETURN_WHERE } from "../services/helpers/shipment-gross-totals.helper";
 import { loadSackContentTotals } from "../services/helpers/sack-content-totals.helper";
 import { currentWorkOrderStep } from "../services/helpers/work-order-current-step.helper";
@@ -40,9 +40,6 @@ async function displayNames(model: "customer" | "item" | "color", keys: readonly
   return new Map(found.map((r) => [r.id, r.name]));
 }
 
-/** Açık sipariş durumları — "gecikmiş" yalnız hâlâ karşılanmayı bekleyen siparişte anlamlıdır. */
-const OPEN_ORDER_STATUSES: ReadonlySet<string> = new Set<OrderStatus>([OrderStatus.PENDING, OrderStatus.APPROVED, OrderStatus.PARTIAL_SHIPPED]);
-
 async function orderDerived(rows: readonly RawRow[], nowMs: number): Promise<DerivedValues> {
   const lines = await prisma.orderLine.findMany({
     where: { orderId: { in: ids(rows) } },
@@ -61,7 +58,7 @@ async function orderDerived(rows: readonly RawRow[], nowMs: number): Promise<Der
   const out: DerivedValues = new Map();
   for (const r of rows) {
     const acc = byOrder.get(r.id) ?? { open: D0(), count: 0 };
-    const late = OPEN_ORDER_STATUSES.has(String(r.status)) && daysPastDeadline(r.deadline as Date | null, nowMs) !== null;
+    const late = isDeadlineOpenStatus(String(r.status)) && daysPastDeadline(r.deadline as Date | null, nowMs) !== null;
     out.set(r.id, { acikMiktar: acc.open, kalemSayisi: acc.count, gecikmis: late, musteriAdi: customers.get(r.customerId as string) ?? null });
   }
   return out;

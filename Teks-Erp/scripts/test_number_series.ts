@@ -20,6 +20,9 @@
 //  §14 YENİ TARİH SEGMENTLERİ (DDMMYYYY · MMYY · YYYYMMDD) + İKİNCİ AYRAÇ:
 //      her segment ÜRET + EŞLEŞTİR birlikte · `separator2` yok/null iken
 //      davranış BAYT BAYT bugünküyle aynı · `NONE`da ikinci eklem yok
+//  §15 SABİT BİÇİM (GİB e-İrsaliye): yalnız ön ek veri; tarih/hane/ayraç 400;
+//      9 hane tavanında 409; kod E4 `DOCUMENT_NO_RE`ye uyar; yıl fabrika
+//      gününden; sayaçta yalnız yıla bağlı başlangıç, üretimden sonra 409
 //  §11 ÜRETEÇ SERİYİ SÜRÜYOR: ön eki seriden alıp HANEYİ literal yazan üreteç
 //      yok (a: yapısal · b: ölçülmüş literal şekil) · beyanlı istisna kilitli
 //      olmak zorunda (c) · ön ek ile kod AYNI tarihten doğar (d, "iki tarih")
@@ -50,15 +53,31 @@
 //    listeden değil) · `roll.lockedReason` silinince §11c ❌1 · `base.service`te
 //    `buildSeriesCode(cfg.series, seq, now)` → `(cfg.series, seq)` yapılınca §11d ❌1.
 //    Hepsinde geri alınca yeşil (POZİTİF yön: ihlal düzelince taban DÜŞÜYOR).
+// ⭐ Negatif sonda §15 (2026-10-24, ölçüldü, md5 ile geri alındı): `assertSeriesFormatAllowed`
+//    içindeki `assertFixedShapeFormat` çağrısı kaldırılınca §15 ❌6 ("4 karakter ön ek 400"
+//    dahil) · başlangıç kilidinin 409 dalı `if (false)` yapılınca ❌3 · `nextSeriesNo`dan
+//    `startValueInEffect` kaldırılınca "ertesi yıl 1'den" ❌1 (EIR2027000001234).
 // Çalıştır: npx tsx scripts/test_number_series.ts
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
-import { formatSeriesCode, matchesSeries, resolveSeriesFormat, seriesPrefix, seriesSeqFrom, type NumberSeriesFormat } from "../src/services/number-series.service";
+import { formatSeriesCode, matchesSeries, nextSeriesNo, resolveSeriesFormat, seriesPrefix, seriesSeqFrom, type NumberSeriesFormat } from "../src/services/number-series.service";
 import { seriesClassifierTable } from "../src/services/helpers/series-classifier.helper";
-import { assertSeriesFormatAllowed } from "../src/services/helpers/series-write.helper";
+import { codeCountsForCounter } from "../src/services/helpers/series-format.helper";
+import {
+  FIXED_SHAPE_YEAR_USAGE,
+  assertSeriesCounterAllowed,
+  assertSeriesFormatAllowed,
+} from "../src/services/helpers/series-write.helper";
+import {
+  assertFixedShapeStartUnlocked,
+  fixedShapeStartYear,
+  startValueInEffect,
+} from "../src/services/helpers/series-fixed-shape.helper";
+import { nextEIrsaliyeDocumentNo } from "../src/services/e-irsaliye/e-irsaliye-number";
+import { DOCUMENT_NO_RE } from "../src/constants/e-irsaliye";
 import { buildDailyCode, dailyCodePrefix } from "../src/utils/code-format";
 import {
   nextCounterCandidate,
@@ -154,6 +173,8 @@ const BEKLENEN: Record<string, string> = {
   batchShort: "P01",
   returnDoc: `IADE-${ymd.slice(8, 10)}${ymd.slice(5, 7)}${ymd.slice(2, 4)}-000001`,
   item: "STK-000001",
+  // GİB e-İrsaliye: 3 karakter seri + 4 hane yıl + 9 hane sıra (sabit biçim).
+  eIrsaliye: `EIR${ymd.slice(0, 4)}000000001`,
 };
 
 let uyum = 0;
@@ -669,5 +690,122 @@ check("§14f ⭐ sabit baş ikinci eklemi SAYIYOR (kapasite kapısı `seriesPref
   `${seriesPrefix(segFmt("YYMM", { separator: "-", separator2: "" }), D5AT)} ↔ ` +
     `${seriesPrefix(segFmt("YYMM", { separator: "-" }), D5AT)}`);
 
-console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+// ⚠️ E2 hatası (ölçüldü 2026-10-25, `npx tsx scripts/test_e_irsaliye_flow.ts` §12a): ayırıcısız tarih + 9 hane sıra = 13 haneli kuyruk;
+// hane tavanı (12) TÜM kuyruğa uygulanınca kod sayılmıyor, başlangıç kilidi fail-open oluyordu.
+const eirsFmt = segFmt("YYYY", { prefix: "EIR", digits: 9 });
+check("§14g ⭐ ayırıcısız YYYY + 9 hane kod sayaca SAYILIR (tavan yalnız sıra hanesine)",
+  codeCountsForCounter(eirsFmt, formatSeriesCode(eirsFmt, 3, D5AT)), formatSeriesCode(eirsFmt, 3, D5AT));
+check("§14g tavan hâlâ ısırır: 13 haneli SIRA sayılmaz",
+  !codeCountsForCounter(eirsFmt, `EIR2026${"1".repeat(13)}`));
+
+// ── §15 Sabit biçim (GİB e-İrsaliye) ───────────────────────────────────────
+async function bolum15(): Promise<void> {
+  const eir = resolveSeriesFormat("eIrsaliye");
+  const g = (over: Partial<NumberSeriesFormat>): NumberSeriesFormat => ({ ...eir, ...over });
+  const FS = "NUMBER_SERIES_FIXED_SHAPE";
+  check("§15 ⭐ 4 karakter ön ek 400", throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ prefix: "EIRS" })), FS));
+  check("§15 2 karakter ön ek 400", throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ prefix: "EI" })), FS));
+  check("§15 küçük harf / tire ön ek 400",
+    throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ prefix: "eir" })), FS) &&
+    throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ prefix: "E-R" })), FS));
+  check("§15 tarih YYMM / NONE 400",
+    throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ dateSegment: "YYMM" })), FS) &&
+    throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ dateSegment: "NONE" })), FS));
+  check("§15 hane 8 ve 10 400",
+    throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ digits: 8 })), FS) &&
+    throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ digits: 10 })), FS));
+  check("§15 ayraç / ikinci ayraç \"-\" 400",
+    throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ separator: "-" })), FS) &&
+    throws(() => assertSeriesFormatAllowed("eIrsaliye", g({ separator2: "-" })), FS));
+  let ab1 = true;
+  try { assertSeriesFormatAllowed("eIrsaliye", g({ prefix: "AB1", separator2: null })); } catch { ab1 = false; }
+  check("§15 ⭐ ön ek \"AB1\" kabul (kapı her şeyi reddetmiyor)", ab1);
+  check("§15 9 hane DİĞER serilerde hâlâ 400 (genişleme yalnız sabit biçimde)",
+    throws(() => assertSeriesFormatAllowed("shipment", { ...resolveSeriesFormat("shipment"), digits: 9 }), "NUMBER_SERIES_DIGITS_INVALID"));
+
+  // Üreteç: yıl fabrika gününden (UTC 21:30 = İstanbul ertesi gün 00:30).
+  const yilbasi = new Date("2026-12-31T21:30:00.000Z");
+  const ilk = await nextEIrsaliyeDocumentNo(yilbasi, async () => []);
+  check("§15 ⭐ yıl fabrika gününden (31.12 21:30Z → 2027)", ilk === "EIR2027000000001", ilk);
+  check("§15 ⭐ kod E4 `DOCUMENT_NO_RE` ile eşleşir", DOCUMENT_NO_RE.test(ilk), ilk);
+  const ikinci = await nextEIrsaliyeDocumentNo(AT, async () => [`EIR${ymd.slice(0, 4)}000000041`]);
+  check("§15 sıra max+1 (boşluksuz)", ikinci === `EIR${ymd.slice(0, 4)}000000042`, ikinci);
+  let tasma = "";
+  try {
+    await nextEIrsaliyeDocumentNo(AT, async () => [`EIR${ymd.slice(0, 4)}999999999`]);
+  } catch (e) {
+    tasma = (e as { details?: { code?: string } }).details?.code ?? "?";
+  }
+  check("§15 ⭐ 999999999 sonrası 409 (genişlemez, sarmaz)", tasma === "NUMBER_SERIES_RANGE_EXHAUSTED", tasma || "(hata yok)");
+  const emekli = g({ prefix: "AB1", retiredPrefixes: ["EIR"] });
+  check("§15 ön ek değişince eski EIR kodu emekli ön ekle tanınır",
+    matchesSeries(emekli, `EIR${ymd.slice(0, 4)}000000007`) && matchesSeries(emekli, `AB1${ymd.slice(0, 4)}000000008`));
+
+  // Sayaç: yalnız başlangıç; adım/sarma/sınır 400; değer 1..tavan.
+  const tavan = 999_999_999;
+  const sayac = (over: Partial<{ startValue: number | null; step: number | null; maxValue: number | null; wrap: boolean }>) =>
+    ({ startValue: null, step: null, maxValue: tavan, wrap: false, ...over });
+  check("§15 sayaç: adım / sarma / sınır değişimi 400",
+    throws(() => assertSeriesCounterAllowed("eIrsaliye", sayac({ step: 2 })), FS) &&
+    throws(() => assertSeriesCounterAllowed("eIrsaliye", sayac({ wrap: true })), FS) &&
+    throws(() => assertSeriesCounterAllowed("eIrsaliye", sayac({ maxValue: 5000 })), FS) &&
+    throws(() => assertSeriesCounterAllowed("eIrsaliye", sayac({ maxValue: null })), FS));
+  let basGecti = true;
+  try { assertSeriesCounterAllowed("eIrsaliye", sayac({ startValue: 1234 })); } catch { basGecti = false; }
+  check("§15 ⭐ sayaç: başlangıç değeri kabul (tek istisna)", basGecti);
+  check("§15 sayaç: başlangıç 0 ve tavan üstü 400",
+    throws(() => assertSeriesCounterAllowed("eIrsaliye", sayac({ startValue: 0 })), FS) &&
+    throws(() => assertSeriesCounterAllowed("eIrsaliye", sayac({ startValue: tavan + 1 })), FS));
+
+  // Yıla bağlı başlangıç: kendi yılında 1234'ten, ertesi yıl 1'den.
+  const yil = Number(ymd.slice(0, 4));
+  const bas = g({ startValue: 1234, startValueYear: yil, maxValue: tavan });
+  const buYil = await nextSeriesNo("eIrsaliye", async () => [], AT, bas);
+  const ertesi = await nextSeriesNo("eIrsaliye", async () => [], new Date(`${yil + 1}-03-01T08:00:00.000Z`), bas);
+  check("§15 ⭐ başlangıç KENDİ yılında geçerli", buYil === `EIR${yil}000001234`, buYil);
+  check("§15 ⭐ ertesi yıl sıra yine 1'den", ertesi === `EIR${yil + 1}000000001`, ertesi);
+  check("§15 yılsız başlangıç (diğer seriler) aynen kalır",
+    startValueInEffect({ ...sackFmt, startValue: 5 }, AT).startValue === 5);
+  check("§15 yıl damgası yalnız sabit biçimde yazılır",
+    fixedShapeStartYear("eIrsaliye", 1234, AT).startValueYear === yil &&
+    fixedShapeStartYear("eIrsaliye", null, AT).startValueYear === null &&
+    !("startValueYear" in fixedShapeStartYear("sack", 5, AT)));
+
+  // Başlangıç kilidi: bu yıl numara üretildiyse 409; üretilmediyse geçer.
+  const kilit = async (used: boolean | undefined, cur = {}): Promise<string> => {
+    try {
+      await assertFixedShapeStartUnlocked("eIrsaliye", cur, 5000, {
+        now: AT, yearHasNumbers: used === undefined ? undefined : async () => used,
+      });
+      return "gecti";
+    } catch (e) {
+      return (e as { details?: { code?: string } }).details?.code ?? "?";
+    }
+  };
+  check("§15 ⭐ numara üretilmemişken başlangıç ayarlanır", (await kilit(false)) === "gecti");
+  check("§15 ⭐ bu yıl numara üretildiyse başlangıç 409", (await kilit(true)) === "NUMBER_SERIES_START_LOCKED");
+  check("§15 kullanım sorulamıyorsa 409 (fail-closed)", (await kilit(undefined)) === "NUMBER_SERIES_START_LOCKED");
+  check("§15 değer değişmiyorsa kilit sorulmaz",
+    (await kilit(true, { startValue: 5000, startValueYear: yil })) === "gecti");
+  check("§15 geçen yılın değeri bu yıl için değişim sayılır",
+    (await kilit(true, { startValue: 5000, startValueYear: yil - 1 })) === "NUMBER_SERIES_START_LOCKED");
+
+  // Katalog tutarlılığı: her sabit biçimli seri tohumu = standart, okutulmaz, tavan = 10^hane−1,
+  // ve "bu yıl üretildi mi" yükleyicisi beyanlı (eksik anahtar kilidi açmaz ama ayarı da kilitler).
+  for (const e of NUMBER_SERIES_CATALOG.filter((x) => x.fixedShape)) {
+    const fs = e.fixedShape!;
+    check(`§15 katalog ${e.key}: tohum = standart, okutulmaz, tavan`,
+      e.seedDateSegment === fs.dateSegment && e.seedDigits === fs.digits && e.seedSeparator === fs.separator &&
+        new RegExp(fs.prefixRe).test(e.seedPrefix) && !e.kind && e.seedMaxValue === 10 ** fs.digits - 1 && e.seedWrap === false);
+    check(`§15 katalog ${e.key}: yıl kullanım yükleyicisi beyanlı`, typeof FIXED_SHAPE_YEAR_USAGE[e.key] === "function");
+  }
+  // Uç gerçekten kilidi soruyor mu (eşzamansız kapı birim iddiada atlanabilir).
+  const yazma = readFileSync(join(SRC, "services/helpers/series-write.helper.ts"), "utf8");
+  check("§15 `updateSeriesCounter` başlangıç kilidini çağırır",
+    /assertFixedShapeStartUnlocked\(key, current, next\.startValue, \{ now, yearHasNumbers: FIXED_SHAPE_YEAR_USAGE\[key\] \}\)/.test(yazma));
+}
+
+void bolum15().then(() => {
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  process.exit(fail > 0 ? 1 : 0);
+});

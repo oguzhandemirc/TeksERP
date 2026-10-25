@@ -26,10 +26,16 @@ export const DOCUMENT_DESIGN_READ = [
   "admin:settings",
   "document-template:read",
   "document-template:write",
+  "document-template:design",
+  "document-template:publish",
 ];
 
 /** Belge tasarımını DEĞİŞTİRMEK için yeterli izinler (herhangi biri). */
 export const DOCUMENT_DESIGN_WRITE = ["admin:settings", "document-template:write"];
+
+/** Belge tasarımcısı: tasarla / yayınla (backend constants/document-design.ts aynası). */
+export const DOCUMENT_TEMPLATE_DESIGN = ["admin:settings", "document-template:design"];
+export const DOCUMENT_TEMPLATE_PUBLISH = ["admin:settings", "document-template:publish"];
 
 // =============================================================================
 // Ekran başına ayar / sistem izinleri (2026-09-24)
@@ -63,14 +69,16 @@ export const SETTINGS_PRINTING_ACCESS = ["admin:settings", "settings:label", "se
 /** Bu Bilgisayar — yazıcı · kantar · tabanca · sunucu adresi (yerel). */
 export const SETTINGS_WORKSTATION_ACCESS = ["admin:settings", "settings:workstation"];
 
-/** Şirket & Güvenlik — Şirket Bilgileri · Oturum & Güvenlik. */
-export const SETTINGS_COMPANY_ACCESS = ["admin:settings", "settings:company", "settings:session"];
+/** Şirket & Güvenlik — Şirket Bilgileri · e-İrsaliye · Oturum & Güvenlik. */
+export const SETTINGS_COMPANY_ACCESS = ["admin:settings", "settings:company", "settings:e-irsaliye", "settings:session"];
 
 export const SYSTEM_ACTIVITY_ACCESS = ["admin:settings", "system:activity"];
 export const SYSTEM_WORK_SESSIONS_ACCESS = ["admin:settings", "system:work-sessions"];
 export const SYSTEM_SERVER_STATUS_ACCESS = ["admin:settings", "system:server-status"];
 export const SYSTEM_CLIENTS_ACCESS = ["admin:settings", "system:clients"];
 export const SYSTEM_BACKUPS_ACCESS = ["admin:settings", "system:backups"];
+/** Yazdırma geçmişi — backend `PRINT_HISTORY_READ` ve `screen-catalog` `system/print-history` ile aynı küme. */
+export const SYSTEM_PRINT_HISTORY_ACCESS = ["admin:settings", "system:print-history"];
 export const SYSTEM_ROLL_ARCHIVE_ACCESS = ["admin:settings", "roll:read"];
 /**
  * Lisans ekranı — backend `SCREEN_CATALOG` `system/license` aynası; `admin:settings`
@@ -103,12 +111,14 @@ export const SYSTEM_HUB_ACCESS = [
   "settings:label",
   "settings:devices",
   "settings:company",
+  "settings:e-irsaliye",
   "settings:session",
   "system:activity",
   "system:work-sessions",
   "system:server-status",
   "system:clients",
   "system:backups",
+  "system:print-history",
   "license:view",
   "license:manage",
 ];

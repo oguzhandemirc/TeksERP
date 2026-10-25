@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { printHtmlString } from "@/lib/print";
+import { frozenDocSubject, printTracked } from "@/lib/print";
 import { printedDocumentService } from "@/services/printedDocumentService";
 import { sackStoreService } from "./service";
 import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
@@ -128,7 +128,7 @@ export function DispatchConfirmDialog({
   const printMut = useMutation({
     mutationFn: async () => {
       const html = await printedDocumentService.getHtml("SHIPMENT_DISPATCH", done!.id);
-      printHtmlString(html);
+      await printTracked({ subject: { ...frozenDocSubject("SHIPMENT_DISPATCH"), no: done!.shipmentNo }, html });
     },
   });
 

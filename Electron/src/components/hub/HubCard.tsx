@@ -51,11 +51,17 @@ interface HubCardProps {
   /** Sağ üst köşeye yerleşen sürükleme tutamacı (yalnız sıralanabilir grid'lerde).
    *  Verilince köşedeki hover oku yerine bu gösterilir. */
   dragHandle?: ReactNode;
+  /** Bekleyen iş sayısı (ör. yeniden bağlama talebi); 0/undefined → gösterilmez. */
+  badge?: number;
+  /** Sayacın ekran okuyucu metni. */
+  badgeLabel?: string;
+  /** Kartın altında küçük durum notu (ör. "Kapalı — …"); açıklamanın aksine BASILIR. */
+  note?: string;
 }
 
 /** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket.
  *  Açıklama (subtitle) bilinçli olarak BASILMAZ — başlık zaten kendini anlatıyor. */
-export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle }: HubCardProps) {
+export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel, note }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
   // Sol tık YERİNDE iner (hub → sayfa aynı sekmede; geri oku gerçek geçmişe basar),
   // sağ/orta tık yeni sekmede açar. Bkz. `useDrillTarget` notu.
@@ -95,9 +101,19 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle }: 
               />
             )}
           </div>
-          <div className="relative mt-4">
+          <div className="relative mt-4 flex items-center gap-2">
             <div className="font-medium">{title}</div>
+            {badge ? (
+              <span
+                className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums"
+                aria-label={badgeLabel ?? `${badge} bekleyen`}
+                title={badgeLabel}
+              >
+                {badge}
+              </span>
+            ) : null}
           </div>
+          {note && <p className="relative mt-1 text-xs text-muted-foreground">{note}</p>}
         </Card>
       </button>
       {/* Sürükleme tutamacı — kart butonunun KARDEŞİ (içinde değil): iç içe

@@ -26,6 +26,7 @@ import { FlagToggle } from "./SettingRow";
 import { DocumentStyleControls } from "./DocumentStyleControls";
 import { DocumentFieldsPanel } from "./DocumentFieldsPanel";
 import { DocumentAdvancedControls } from "./DocumentAdvancedControls";
+import { DefaultTemplatePicker } from "@/pages/Definitions/DocumentTemplates/DefaultTemplatePicker";
 
 /**
  * Belge Şablonları paneli — yazdırılan irsaliye/çeki listelerinin içerik ayarı.
@@ -165,6 +166,9 @@ export function DocumentConfigSection({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Tasarımcı şablonu yalnız genel ayarda seçilir; profil ataması T5 atama ekranında. */}
+        {def && !external && <DefaultTemplatePicker docKey={selected} />}
 
         {def && (
           <>

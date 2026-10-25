@@ -28,6 +28,9 @@ import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, typ
 import { sampleQualityCode, loadCustomerNamePolicy } from "./helpers/quality-role.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
+import { fromAttachment, outcomeFromTransport, recordPrintJob, type PrintJobReportOpt } from "./print-job.service";
+import type { PrintSubjectKind } from "../constants/print-subject-catalog";
+import { serverPrintJobContext, type PrintJobRequestContext } from "./helpers/print-job-context.helper";
 import { AppError } from "../utils/app-error";
 
 /**
@@ -994,6 +997,7 @@ export class LabelService {
     rollId: string,
     userId?: string,
     opts?: RollLabelRenderOpts & { port?: number },
+    jobCtx?: PrintJobRequestContext,
   ): Promise<ApiResponse<PrinterTransportResult & { kind: LabelKind }>> {
     const { input, kind, routing } = await this.buildRollRenderInput(rollId, undefined, opts);
     // RAW TCP (9100) → renderedBytes bayt gönderir (binary-güvenli) → ikon GW emit edilir.
@@ -1024,6 +1028,20 @@ export class LabelService {
         ...(result.error ? { error: result.error } : {}),
       },
     }).catch(() => undefined);
+    // Sunucu kendi sonucunu yazar: simülasyon SIMULE, düşen gönderim HATA + sınıflı kod.
+    await recordPrintJob({
+      ctx: { ...(jobCtx ?? serverPrintJobContext(userId)), source: "SUNUCU" },
+      subjectKind: "ETIKET_TOP",
+      subjectTable: "rolls",
+      subjectId: rollId,
+      subjectNo: input.payload.barcode,
+      transport: "SUNUCU_TCP",
+      peripheralDeviceId: routing?.peripheralId ?? null,
+      printerAddress: result.target,
+      language: result.language,
+      bytes: result.bytes,
+      ...outcomeFromTransport(result),
+    });
     return { success: true, data: { ...result, kind } };
   }
 
@@ -1048,7 +1066,7 @@ export class LabelService {
     printerIp: string;
     port?: number;
     language?: PrinterLanguage;
-  }): Promise<ApiResponse<PrinterTransportResult>> {
+  }, jobCtx?: PrintJobRequestContext): Promise<ApiResponse<PrinterTransportResult>> {
     const input = await this.buildSampleRenderInput(opts.peripheralId);
     const lang = opts.language ?? input.format.language;
     const rendered = await renderLabel(lang, { ...input, iconGraphicsOk: true }); // RAW TCP bayt → binary-güvenli
@@ -1057,6 +1075,16 @@ export class LabelService {
       enabled,
       printerIp: opts.printerIp,
       port: opts.port,
+    });
+    await recordPrintJob({
+      ctx: { ...(jobCtx ?? serverPrintJobContext()), source: "SUNUCU" },
+      subjectKind: "TEST",
+      transport: "SUNUCU_TCP",
+      peripheralDeviceId: opts.peripheralId ?? null,
+      printerAddress: result.target,
+      language: result.language,
+      bytes: result.bytes,
+      ...outcomeFromTransport(result),
     });
     return { success: true, data: result };
   }
@@ -1756,7 +1784,7 @@ export class LabelService {
   }
 
   /** Çuval etiketi baskı izi — LABEL_PRINT_EVENT audit (roll recordPrintEvent analoğu). */
-  async recordSackPrintEvent(sackId: string, userId?: string): Promise<ApiResponse<unknown>> {
+  async recordSackPrintEvent(sackId: string, userId?: string, report?: PrintJobReportOpt): Promise<ApiResponse<unknown>> {
     const sack = await prisma.sack.findUnique({ where: { id: sackId }, select: { sackNo: true } });
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
     // Etiket yeniden basıldı → "bayat" işareti kalkar (Roll.labelDirty emsali:
@@ -1769,6 +1797,7 @@ export class LabelService {
       recordId: sackId,
       newData: { kind: LabelKind.SACK, sackNo: sack.sackNo },
     });
+    await this.reportLabelJob(report, { subjectKind: "ETIKET_CUVAL", subjectTable: "sacks", subjectId: sackId, subjectNo: sack.sackNo });
     return { success: true, data: { sackId, sackNo: sack.sackNo }, message: "Çuval etiketi baskı izi kaydedildi" };
   }
 
@@ -1794,9 +1823,10 @@ export class LabelService {
   }
 
   /** Tezgah etiketi baskı izi — LABEL_PRINT_EVENT (çuval kalıbı). */
-  async recordMachinePrintEvent(machineId: string, userId?: string, copies?: number): Promise<ApiResponse<unknown>> {
+  async recordMachinePrintEvent(machineId: string, userId?: string, copies?: number, report?: PrintJobReportOpt): Promise<ApiResponse<unknown>> {
     const p = await loadMachineLabelPayload(machineId);
-    return this.loomPrintEvent({ recordId: machineId, ident: { kind: LabelKind.MACHINE, machineCode: p.machineCode }, userId, copies, noun: "Tezgah" });
+    const job = { report, subjectKind: "ETIKET_TEZGAH" as const, subjectTable: "machines", subjectNo: p.machineCode };
+    return this.loomPrintEvent({ recordId: machineId, ident: { kind: LabelKind.MACHINE, machineCode: p.machineCode }, userId, copies, noun: "Tezgah", job });
   }
 
   /** Levent etiketi payload'ı — barkod/QR = `WarpBeam.beamNo`. */
@@ -1813,9 +1843,10 @@ export class LabelService {
     return this.loomNative(await loadWarpBeamLabelPayload(beamId), opts);
   }
 
-  async recordWarpBeamPrintEvent(beamId: string, userId?: string, copies?: number): Promise<ApiResponse<unknown>> {
+  async recordWarpBeamPrintEvent(beamId: string, userId?: string, copies?: number, report?: PrintJobReportOpt): Promise<ApiResponse<unknown>> {
     const p = await loadWarpBeamLabelPayload(beamId);
-    return this.loomPrintEvent({ recordId: beamId, ident: { kind: LabelKind.WARP_BEAM, beamNo: p.beamNo }, userId, copies, noun: "Levent" });
+    const job = { report, subjectKind: "ETIKET_LEVENT" as const, subjectTable: "warp_beams", subjectNo: p.beamNo };
+    return this.loomPrintEvent({ recordId: beamId, ident: { kind: LabelKind.WARP_BEAM, beamNo: p.beamNo }, userId, copies, noun: "Levent", job });
   }
 
   private async loomNative(payload: LabelPayload, opts: LoomLabelOpts & { encoding?: "b64" }) {
@@ -1832,17 +1863,28 @@ export class LabelService {
     return { success: true as const, data };
   }
 
+  /** İş ucunun basım satırı — künye yoksa (servis içi çağrı, demo) satır yazılmaz. */
+  private async reportLabelJob(
+    report: PrintJobReportOpt | undefined,
+    subject: { subjectKind: PrintSubjectKind; subjectTable: string; subjectId: string; subjectNo?: string | null; copies?: number; isReprint?: boolean },
+  ): Promise<void> {
+    if (!report) return;
+    await recordPrintJob(fromAttachment(report.ctx, report.attachment, subject));
+  }
+
   private async loomPrintEvent(a: {
     recordId: string;
     ident: Record<string, unknown>;
     userId?: string;
     copies?: number;
     noun: string;
+    job: { report?: PrintJobReportOpt; subjectKind: PrintSubjectKind; subjectTable: string; subjectNo?: string | null };
   }): Promise<ApiResponse<unknown>> {
-    const { recordId, ident, userId, copies, noun } = a;
+    const { recordId, ident, userId, copies, noun, job } = a;
     const count = copies === undefined ? undefined : resolveBatchCopies(copies);
     const newData = { ...ident, ...(count !== undefined ? { copies: count } : {}) };
     await AuditService.log({ userId, action: "CREATE", tableName: TABLE_LABEL_PRINT, recordId, newData });
+    await this.reportLabelJob(job.report, { ...job, subjectId: recordId, copies: count });
     return { success: true, data: { id: recordId, ...newData }, message: `${noun} etiketi baskı izi kaydedildi` };
   }
 
@@ -2179,36 +2221,17 @@ export class LabelService {
       peripheralId?: string | null;
       deviceId?: string | null;
       machineId?: string | null;
-    }
+    },
+    report?: PrintJobReportOpt,
   ): Promise<ApiResponse<{ recorded: true }>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
-      select: { id: true, barcode: true, status: true, colorId: true },
+      select: { id: true, barcode: true, status: true, colorId: true, labelPrintedAt: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
-    // Niyet kalıcılaştırma (snapshot) — audit'ten ayrı primitif.
-    await this.seedRollLabelSnapshot(rollId, userId, opts);
-
-    // Etiket bayat bayrağını temizle + FİZİKSEL etiketin doğduğu anı damgala.
-    //
-    // ⚠️ İKİ ALAN, İKİ FARKLI SORU — birini diğerinden türetme:
-    //   `labelDirty`     → "basılı etiket veriyle uyuşuyor mu" (baskıda temizlenir)
-    //   `labelPrintedAt` → "ortada fiziksel bir etiket VAR mı" (baskıda damgalanır,
-    //                       bir daha silinmez — kâğıt basıldıysa basılmıştır)
-    // İptal yolu (`inventory.softDelete`) ikincisine bakar: etiketi basılmış topu
-    // sessizce iptal etmek sahaya ÖLÜ ETİKET bırakır (2026-08-05 vakası).
-    //
-    // ⚠️ Koşul KALDIRILDI (eskiden `where: { labelDirty: true }`): damga her baskıda
-    // yazılmalı, yoksa bayat OLMAYAN bir topun ilk baskısı hiç damgalanmaz ve iptal
-    // guard'ı tam da en sık durumda (KK1 girişi → hemen etiket) kör kalırdı.
-    //
-    // Burası TEK YAZMA NOKTASI. `seedRollLabelSnapshot` DEĞİL: o yazıcısız/iptal
-    // edilmiş baskı niyetinde de koşar ve "kâğıt çıktı" demez.
-    await prisma.roll.update({
-      where: { id: rollId },
-      data: { labelDirty: false, labelPrintedAt: new Date() },
-    });
+    // Niyet (snapshot) + fiziksel etiket damgası — tek yazma noktası `stampRollLabelPrinted`.
+    await this.stampRollLabelPrinted([rollId], userId, opts);
 
     // Çözülen şablon/varyant izi (BEST-EFFORT): reprint şablonu DONDURMADIĞINDAN
     // "o an hangi atama geçerliydi" audit'ten okunur — baskı davranışıyla aynı
@@ -2249,8 +2272,80 @@ export class LabelService {
         ...resolvedMeta,
       },
     });
+    await this.reportLabelJob(report, {
+      subjectKind: "ETIKET_TOP",
+      subjectTable: "rolls",
+      subjectId: rollId,
+      subjectNo: roll.barcode,
+      isReprint: roll.labelPrintedAt != null,
+    });
 
     return { success: true, data: { recorded: true } };
+  }
+
+  /**
+   * Fiziksel etiket damgası — `labelPrintedAt` + `labelDirty=false` yazan TEK YAZMA NOKTASI
+   * bu helper'dır (tekil ve toplu baskı ikisi de buradan). İki alan iki ayrı soru:
+   *   `labelDirty`     → "basılı etiket veriyle uyuşuyor mu" (baskıda temizlenir)
+   *   `labelPrintedAt` → "ortada fiziksel bir etiket VAR mı" (bir daha silinmez)
+   * İptal yolu (`inventory.softDelete`) ikincisine bakar: etiketi basılmış topu sessizce iptal
+   * etmek sahaya ÖLÜ ETİKET bırakır (2026-08-05). Damga koşulsuz yazılır — bayat olmayan topun
+   * ilk baskısı da damgalanmalı. `seedRollLabelSnapshot` tek başına DAMGALAMAZ: o yazıcısız/iptal
+   * niyette de koşar ve "kâğıt çıktı" demez.
+   */
+  async stampRollLabelPrinted(
+    rollIds: string[],
+    userId?: string,
+    opts?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
+  ): Promise<void> {
+    for (const rollId of rollIds) await this.seedRollLabelSnapshot(rollId, userId, opts);
+    await prisma.roll.updateMany({
+      where: { id: { in: rollIds } },
+      data: { labelDirty: false, labelPrintedAt: new Date() },
+    });
+  }
+
+  /**
+   * TOPLU top etiketi basıldı (panelin birleşik belgesi): her topu damgalar, top başına
+   * LABEL_PRINT_EVENT audit'i ve TEK `ETIKET_TOPLU` basım satırı yazar. Var olmayan id → 400
+   * (hangileri olduğu listelenir); hiçbiri damgalanmaz.
+   */
+  async recordBulkRollPrintEvent(
+    rollIds: string[],
+    userId?: string,
+    report?: PrintJobReportOpt,
+  ): Promise<ApiResponse<{ recorded: number }>> {
+    const ids = [...new Set(rollIds)];
+    const rolls = await prisma.roll.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, barcode: true, status: true },
+    });
+    const found = new Set(rolls.map((r) => r.id));
+    const missing = ids.filter((id) => !found.has(id));
+    if (missing.length > 0) {
+      throw AppError.badRequest(`${missing.length} top bulunamadı`, { code: "ROLL_NOT_FOUND", missing });
+    }
+    await this.stampRollLabelPrinted(ids, userId);
+    await AuditService.logMany(
+      rolls.map((r) => ({
+        userId,
+        action: "CREATE" as const,
+        tableName: TABLE_LABEL_PRINT,
+        recordId: r.id,
+        newData: { rollId: r.id, barcode: r.barcode, status: r.status, event: "LABEL_PRINTED", bulk: true },
+      })),
+    );
+    if (report) {
+      await recordPrintJob(
+        fromAttachment(report.ctx, report.attachment, {
+          subjectKind: "ETIKET_TOPLU",
+          subjectTable: "rolls",
+          subjectIds: ids,
+          itemCount: ids.length,
+        }),
+      );
+    }
+    return { success: true, data: { recorded: ids.length }, message: `${ids.length} top etiketi baskı izi kaydedildi` };
   }
 }
 

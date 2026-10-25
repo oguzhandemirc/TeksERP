@@ -6,6 +6,7 @@ import {
   ServerCog,
   ClipboardList,
   Calculator,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 import { SYSTEM_HUB_ACCESS } from "@/lib/permissions";
@@ -18,6 +19,8 @@ export interface NavItem {
   /** İzinlerden BİRİ yeter — route'un `requireAnyPermission`ıyla AYNI küme. */
   permissionAny?: string[];
   adminOnly?: boolean;
+  /** Komut paletinde aranacak ek sözcükler. */
+  keywords?: string;
   /** Opsiyonel sayısal rozet (bekleyen iş / uyarı). Veri bağlandığında dolar. */
   badge?: number;
   /**
@@ -65,6 +68,13 @@ export const navGroups: NavGroup[] = [
       { label: "Tanımlar", to: "/definitions", icon: Library },
       { label: "Operasyon", to: "/operations", icon: ClipboardList },
       { label: "Raporlar", to: "/reports", icon: ScrollText },
+      // bildirim: kişisel gelen kutusu (geçmiş günlüğü) — kapısız; bayrak kapalıysa sayfa "kapalı" der.
+      {
+        label: "Bildirimler",
+        to: "/notifications",
+        icon: Bell,
+        keywords: "bildirim zil gelen kutusu okunmamış uyarı haber ertele okundu geçmiş günlük",
+      },
       {
         label: "Muhasebe",
         to: "/finance",

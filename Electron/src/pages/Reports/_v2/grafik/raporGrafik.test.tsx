@@ -12,7 +12,7 @@ import { grafikSvg, grafikleriDoldur } from "./svgUret";
 import { grafikVeriTablosu } from "./veriTablosu";
 import { BASKI_TEMASI } from "./tema";
 import { RaporGrafik } from "./RaporGrafik";
-import type { GrafikBlok, GrafikTuru } from "./tipler";
+import type { GrafikBlok, GrafikTuru } from "../sunum";
 
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
 // jsdom'da canvas yok: zrender metin ölçümünde yaklaşık genişliğe düşer (gürültüsüz).

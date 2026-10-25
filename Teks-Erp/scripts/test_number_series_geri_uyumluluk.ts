@@ -781,6 +781,7 @@ const L2_YOLU: Record<string, L2Yolu> = {
     },
   },
   warehouseTransfer: { not: "WarehouseTransfer: iki depo + taşınacak GERÇEK stok ister." },
+  eIrsaliye: { not: "e-İrsaliye kayıt tablosu E1-SEMA'da doğar; L2 yolu E5 motoruyla (TASLAK→OLUSTURULDU claim) kurulur." },
 };
 
 /** Bu koşumda üretilen aday biçimler — her eksen ayrı bir dönüşüm. */
@@ -831,8 +832,9 @@ async function main(): Promise<void> {
   const kilitliEksenler = (key: string): SeriesFormatAxis[] => {
     const k = seriesLock(key);
     if (k === null) return [];
-    if (k.kind === "ISTEMCI") return k.lockedAxes ?? [];
-    return TUM_EKSENLER; // YAPISAL / SAYAC: hiçbir eksen açık değil
+    // Eksen listesi taşıyan kilit (ISTEMCI · kısmi YAPISAL = sabit biçim) yalnız o eksenleri kapatır.
+    if (k.lockedAxes) return k.lockedAxes;
+    return TUM_EKSENLER; // tam YAPISAL / SAYAC: hiçbir eksen açık değil
   };
   const acikSeriler = NUMBER_SERIES_CATALOG.filter(
     (e) => kilitliEksenler(e.key).length < TUM_EKSENLER.length,
@@ -845,6 +847,13 @@ async function main(): Promise<void> {
       `   ℹ️ kısmi açık (eksen kilidi): ${kismiAcik.map((e) => `${e.key}[kilitli: ${kilitliEksenler(e.key).join("+")}]`).join(", ")}`,
     );
   }
+  // Beyanlı daraltma: sabit biçimli (GİB) seride matris YALNIZ ön ek dönüşümünü dener.
+  const sabitBicim = acikSeriler.filter((e) => e.fixedShape);
+  if (sabitBicim.length > 0) {
+    console.log(`   ℹ️ sabit biçim (yalnız ön ek ölçülür; tarih/hane/ayraç standart): ${sabitBicim.map((e) => e.key).join(", ")}`);
+  }
+  check("sabit biçimli seride yalnız ön ek ekseni açık",
+    sabitBicim.every((e) => TUM_EKSENLER.filter((a) => !kilitliEksenler(e.key).includes(a)).join() === "prefix"));
   const l2Disi = acikSeriler.filter((e) => !L2_YOLU[e.key]);
   console.log(
     `   ℹ️ L2 (gerçek kayıt) kapsamı: ${acikSeriler.filter((e) => L2_YOLU[e.key]).map((e) => e.key).join(", ") || "(yok)"}` +

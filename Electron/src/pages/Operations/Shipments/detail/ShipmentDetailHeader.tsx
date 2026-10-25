@@ -10,6 +10,7 @@ import { ShipmentDocDialog } from "../ShipmentDocDialog";
 import { CancelShipmentDialog } from "../CancelShipmentDialog";
 import { UndoDispatchDialog } from "../UndoDispatchDialog";
 import { DispatchConfirmDialog } from "@/pages/Operations/SackStore/DispatchConfirmDialog";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 /**
  * Tam-sayfa sevkiyat detayının sabit başlığı — kimlik (sevkiyat no + statü + ihracat
@@ -46,6 +47,7 @@ export function ShipmentDetailHeader({
           d ? (
             <span className="flex items-center gap-1.5">
               <StatusBadge status={d.status} labels={shipmentStatusLabels} tones={shipmentStatusTones} />
+              <PrintHistoryLink subjectId={d.id} />
               {d.destination === "EXPORT" && (
                 <Badge variant="outline" className="gap-0.5 border-info/40 text-[10px] text-info">
                   <Globe className="h-3 w-3" /> İhracat

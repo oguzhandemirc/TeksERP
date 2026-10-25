@@ -84,6 +84,7 @@ const EXEMPT: Record<string, string> = {
   "POST /api/devices/announce": "tablet kendini bildirir — eşleşmeden önce token alamaz",
   "GET /api/devices/status": "cihaz atama durumu yoklaması (x-device-id)",
   "GET /api/devices/pairing-required": "eşleşme zorunlu mu — login öncesi gate",
+  "POST /api/devices/rebind-requests/onsite-approve": "tablette yerinde yönetici onayı — yeni kurulumun token'ı yok; kimlik gövdedeki yönetici girişi (giriş kilidi + admin:settings), JWT üretmez",
   // Mobil uzaktan güncelleme (LAN ikizi): tablet güncellemeyi GİRİŞ EKRANINDAN
   // ÖNCE sorar — kimlik aransaydı "açılmayan tablete düzeltme gönderme" yolu,
   // yani kurtarmanın kendisi kapanırdı (`/health` ile aynı gerekçe sınıfı).
@@ -207,7 +208,19 @@ const EXEMPT: Record<string, string> = {
  * her panel kullanıcısı açar ve "Sunucu" satırının durumunu görür (kullanıcı kararı). Gövde OPT-IN izdüşümdür
  * (`updateSummaryOf`; belirteç/politika/onaylayan yok) — `scripts/test_guncelleme_durumu.ts` §8g · §10 ölçer.
  */
-const BARE_CHAIN_BASELINE = 17;
+/**
+ * ⚠️ 17 → 18 (2026-10-24, izlenebilirlik A1, BİLİNÇLİ): `POST /api/print-jobs` yalnız `verifyToken` taşır — basan
+ * HER kullanıcı kendi basımını (hata · iptal · PDF) bildirebilmeli; izin kodu yazmak yazıcı hatasını en çok görecek
+ * operatörü susturur. Kullanıcı token'dan, gövde ≤ 8 KB, kullanıcı başına hız sınırlı; okuma uçları izinli
+ * (`admin:settings` | `system:print-history`) — `scripts/test_print_jobs.ts` §1–§4 ölçer.
+ */
+/**
+ * ⚠️ 18 → 28 (2026-10-24, bildirim N1-ZIL, BİLİNÇLİ): `/api/bildirim/*` on F1 ucu (zil · bekle · ozet · katalog ·
+ * liste · tumunu-okundu · geri-al-okundu · :id/okundu · :id/okunmadi · :id/ertele) yalnız `verifyToken` taşır —
+ * gelen kutusu KİŞİSELDİR (plan §5.6): satır kapsamı servisteki `userId` WHERE'i, tür kapsamı görme süzgeci
+ * (`visibleKindsFor`); izin kodu yazmak kendi bildirimini okumayı yetkiye bağlardı. `test_bildirim_api` §4 ölçer.
+ */
+const BARE_CHAIN_BASELINE = 28;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

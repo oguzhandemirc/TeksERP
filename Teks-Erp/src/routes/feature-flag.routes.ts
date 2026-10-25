@@ -42,6 +42,18 @@ import "../types/express-augment";
 import { manualNumberModes } from "../services/helpers/manual-number.helper";
 import { requireTezgahEnabled } from "../middlewares/module.middleware";
 import { getAlarmShiftStatus } from "../services/loom-floor.service";
+import { EIRSALIYE_ADAPTERS } from "../constants/e-irsaliye";
+import { isCalendarDate, LEGAL_IDENTITY_LIMITS } from "../services/e-irsaliye/e-irsaliye-settings";
+
+/** Künyenin metin alanları — eksik alan boş metin; tavan tek tablodan (+8: "123 456 78 90"
+ *  gibi boşluklu yazım kabul edilir, rakam süzme servisin temizleyicisinde). */
+function legalIdentityTextShape(): Record<keyof typeof LEGAL_IDENTITY_LIMITS, z.ZodDefault<z.ZodString>> {
+  const entries = Object.entries(LEGAL_IDENTITY_LIMITS).map(([k, max]) => [
+    k,
+    z.string().max(max + 8, `Resmi künye alanı çok uzun (${k})`).default(""),
+  ]);
+  return Object.fromEntries(entries) as Record<keyof typeof LEGAL_IDENTITY_LIMITS, z.ZodDefault<z.ZodString>>;
+}
 
 const router = Router();
 
@@ -55,7 +67,7 @@ const router = Router();
  *
  * ÜÇ DAL (2026-09-03'te modül dalı eklendi — ayrıntı gövdedeki yorumlarda):
  *   ① gövde EN AZ BİR süperadmin anahtarı taşıyorsa → sistem hesabı (süperadmin) şartı
- *      (küme = dokuz modül anahtarı + `reportsClosedKeys`; Raporlar K3 — rapor görünürlüğü
+ *      (küme = bütün modül anahtarları + `reportsClosedKeys`; Raporlar K3 — rapor görünürlüğü
  *      de kurulumun satın aldığı ürünün sınırıdır, fabrika yöneticisinin ayarı değil)
  *      (sistem hesabı HİÇ YOKSA supap: defter TAZELENİR, hâlâ yoksa ② + ③'e düşer)
  *   ② gövde YALNIZ belge tasarım anahtarları taşıyorsa → dar izin
@@ -319,12 +331,15 @@ export const updateSchema = z.strictObject({
   tezgahEnabled: z.boolean().optional(),
   devereEnabled: z.boolean().optional(),
   emanetEnabled: z.boolean().optional(),
+  kaliteGuvenceEnabled: z.boolean().optional(),
   devereLotRequired: z.boolean().optional(),
   devereMountTracking: z.boolean().optional(),
   devereMountTrackingRequired: z.boolean().optional(),
   // devere.autoConsume — tezgahtan doğan top leventten otomatik tüketim (default false = elle). Backend ENFORCE.
   devereAutoConsume: z.boolean().optional(),
   dokumaEnabled: z.boolean().optional(),
+  // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.
+  maliyetEnabled: z.boolean().optional(),
   // Z1 üretim belge zinciri — üç davranış bayrağı (varsayılan false = bağ opsiyonel). Backend ENFORCE.
   devereBeamWeavingLinkRequired: z.boolean().optional(),
   dokumaRunWeavingOrderRequired: z.boolean().optional(),
@@ -704,6 +719,27 @@ export const updateSchema = z.strictObject({
         .optional(),
     })
     .optional(),
+  // Gönderici resmi künyesi (E3-AYAR). Sınırlar servisin `LEGAL_IDENTITY_LIMITS` tablosundan —
+  // şema ile temizleyici aynı tavanı okur; rakam süzme ve kırpma servisin işi.
+  companyLegalIdentity: z
+    .strictObject(
+      {
+        kimlikTuru: z.enum(["VKN", "TCKN"], { error: "Kimlik türü VKN ya da TCKN olmalı" }),
+        ...legalIdentityTextShape(),
+      },
+      { error: (iss) => (iss.code === "unrecognized_keys" ? `Resmi künyede tanınmayan alan: ${iss.keys.join(", ")}` : undefined) },
+    )
+    .optional(),
+  // e-İrsaliye yapılandırması — tanınmayan bağdaştırıcı 400 (fail-closed; `yok`a düşürülmez).
+  eIrsaliyeConfig: z
+    .strictObject({
+      adapter: z.enum(EIRSALIYE_ADAPTERS, { error: "Bağdaştırıcı tanınmıyor; Kapalı, Dışa aktar ya da Simülasyon seçilmeli" }),
+      yururlukTarihi: z
+        .string()
+        .refine(isCalendarDate, "Yürürlük tarihi geçerli bir gün olmalı (YYYY-AA-GG)")
+        .nullable(),
+    })
+    .optional(),
   // Yazdırılan belge içerik ayarı — ham map. Alan doğrulaması TEK KAYNAK olan servis
   // katmanı sanitizeDocumentsConfig'te yapılır. Burada alan-alan Zod whitelist'i DRIFT
   // yaratıyordu: footerNotePlacement/style/logoPosition/columns/qr/stamps/blocks/
@@ -712,6 +748,9 @@ export const updateSchema = z.strictObject({
   documentsConfig: z.record(z.string(), z.any()).optional(),
   // bildirim: bildirim.gelenKutusuEnabled — kişisel gelen kutusu + yeni zil (default false → bugünkü zil). Kapsamsız: yalnız admin:settings yazar.
   bildirimGelenKutusuEnabled: z.boolean().optional(),
+  // belge-sablon T1C: documents.designerEnabled / documents.publishSodEnabled (default false). Kapsamsız: yalnız admin:settings yazar.
+  documentDesignerEnabled: z.boolean().optional(),
+  documentPublishSodEnabled: z.boolean().optional(),
 }, {
   // Türkçe mesaj + hangi anahtarın tanınmadığını SÖYLE (rota kuralı: hata
   // mesajları Türkçe). Diğer issue kodlarında `undefined` → Zod varsayılanı.

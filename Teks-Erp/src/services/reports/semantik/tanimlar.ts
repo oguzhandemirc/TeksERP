@@ -64,10 +64,10 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
     birim: "yuzde", iyiYon: "azalis", kaynak: { dosya: `${R}/return-scorecard.report.service.ts`, alan: "ReturnScorecardSummary.returnPct" } },
 
   // ── FİRE (tek tanım, üç kaynak) ───────────────────────────────────────────
-  // null: üç kaynağın toplamıdır, tek alanda durmaz (R0-RAPB `kayip.temel.ts` aşağıdaki üç alanı toplar).
+  // Üç kaynağın toplamı: temel rapor `kayip.temel.ts` aşağıdaki üç alanı toplar (ölçülmeyen kaynak düşer, 0 sayılmaz).
   { kimlik: "fire.metre", ad: "Fire",
     aciklama: "Satılabilir olmaktan çıkan kumaş metresi. Üç kaynaktan gelir: hurdaya ayrılan top, fasona gidenle dönen arasındaki fark (yalnız işi kapanmış partiler) ve leventten beklenenle dokunan arasındaki fark (yalnız biten levent). Her kaynağın oranı kendi satırında verilir; kaynaklar farklı şeylere oranlandığı için toplam oran verilmez.",
-    birim: "metre", iyiYon: "azalis", kaynak: null },
+    birim: "metre", iyiYon: "azalis", kaynak: { dosya: `${R}/temel/kayip.temel.ts`, alan: "totalLoss" } },
   { kimlik: "fire.hurdaMetre", ad: "Hurda",
     aciklama: "Dönemde hurdaya ayrılan topların metresi; oranı aynı dönemde üretilen metreye göre verilir.",
     birim: "metre", iyiYon: "azalis", kaynak: { dosya: `${R}/scrap-scorecard.report.service.ts`, alan: "ScrapScorecardSummary.scrapQty" } },
@@ -82,27 +82,30 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
   { kimlik: "kalite.birinciYuzde", ad: "Birinci kalite payı",
     aciklama: "Dönemde çıkan kumaşın, metre olarak ne kadarının birinci kalite olduğu; iptal edilmiş ya da artık var olmayan toplar sayılmaz, hurdaya ayrılanlar sayılır.",
     birim: "yuzde", iyiYon: "artis", kaynak: { dosya: `${R}/quality-scorecard.report.service.ts`, alan: "QualityScorecardSummary.topGrade.pct" } },
-  // null: hata ADEDİ Fire Karnesi'nde (`defectsDetected`), metreye bölünmüş alan hiçbir serviste yok (R0-RAPB türetir).
+  // Fire Karnesi'nin EK alanı (R0-RAPB): tespit adedi üretilen metreye bölünür; üretim yoksa null.
   { kimlik: "kalite.binMetredeHata", ad: "Bin metrede hata",
     aciklama: "Her 1.000 metre kumaşta bulunan hata sayısı; az ya da çok üretilen dönemleri aynı terazide tartmayı sağlar.",
-    birim: "adet", iyiYon: "azalis", kaynak: null },
+    birim: "adet", iyiYon: "azalis", kaynak: { dosya: `${R}/scrap-scorecard.report.service.ts`, alan: "ScrapScorecardSummary.defectsPerThousandM" } },
 
   // ── ÜRETİM ve STOK ────────────────────────────────────────────────────────
   { kimlik: "uretim.bekleyenTop", ad: "Bekleyen top",
     aciklama: "Şu an istasyonlarda işlenmeyi bekleyen top sayısı; tarih aralığından bağımsız, bugünün durumudur.",
     birim: "adet", iyiYon: "azalis", kaynak: { dosya: `${R}/wip-scorecard.report.service.ts`, alan: "WipScorecard.summary.waitingCount" } },
-  // null: Nerede Takıldı yalnız geçen hareket ADEDİ (`passedCount`) taşır, metre yok (R0-RAPB tamamlar).
+  // Nerede Takıldı'nın EK alanı (R0-RAPB): dönemde kapanan hareketlerin metresi (bekleyenle aynı kolon).
   { kimlik: "uretim.gecenMetre", ad: "İstasyondan geçen",
     aciklama: "Dönemde istasyonlardaki işi bitip bir sonraki adıma ilerleyen kumaş metresi.",
-    birim: "metre", iyiYon: "artis", kaynak: null },
+    birim: "metre", iyiYon: "artis", kaynak: { dosya: `${R}/wip-scorecard.report.service.ts`, alan: "WipScorecard.summary.passedQty" } },
   { kimlik: "stok.oluMetre", ad: "Ölü stok",
     aciklama: "90 günden uzun süredir depoda bekleyen ve hiçbir siparişe ayrılmamış bitmiş kumaş metresi.",
     birim: "metre", iyiYon: "azalis", kaynak: { dosya: `${R}/stock-scorecard.report.service.ts`, alan: "StockScorecard.summary.deadQty" } },
   { kimlik: "stok.yasiBilinmeyenMetre", ad: "Yaşı bilinmeyen stok",
     aciklama: "Depoya ne zaman girdiği bilinmeyen kumaş metresi; yaş gruplarına dağıtılmaz, toplam stokta sayılır.",
     birim: "metre", iyiYon: "azalis", kaynak: { dosya: `${R}/stock-scorecard.report.service.ts`, alan: "StockScorecard.summary.unagedQty" } },
-  // null: Fason Karnesi zamanında dönüşü ölçmüyor (söz verilen dönüş günü okunmuyor; yalnız ortalama
-  // dönüş süresi `avgTurnaroundDays` var) — R0-RAPB tanımlar.
+  { kimlik: "fason.ortalamaDonusGun", ad: "Ortalama dönüş süresi",
+    aciklama: "Dönemde işi kapanan fason partilerinin gönderildiği günden döndüğü güne kadar geçen ortalama gün.",
+    birim: "gun", iyiYon: "azalis", kaynak: { dosya: `${R}/subcontract-scorecard.report.service.ts`, alan: "SubcontractScorecard.summary.avgTurnaroundDays" } },
+  // null (R0-RAPB ölçtü, K-FASON): söz verilen dönüş günü HİÇBİR tabloda yok (`SubcontractorDispatch`te alan
+  // yok) — oran türetilemez; temel rapor bu yüzden ortalama dönüş süresini ana sayı yapar. Alan ayrı dilim.
   { kimlik: "fason.zamanindaDonusYuzde", ad: "Fasondan zamanında dönüş",
     aciklama: "Fasona giden partilerden söz verilen günde ya da daha önce dönenlerin payı.",
     birim: "yuzde", iyiYon: "artis", kaynak: null },
@@ -119,11 +122,10 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
   { kimlik: "dokuma.mudahaleDakika", ad: "Müdahale süresi",
     aciklama: "Tezgah alarmı çaldıktan sonra birinin işi üstlenmesine kadar geçen ortalama süre.",
     birim: "dakika", iyiYon: "azalis", kaynak: { dosya: `${R}/alarm-response.report.service.ts`, alan: "AlarmResponseCell.ustlenmeOrtSn" } },
-  // null: Levent Sonucu beklenen (`beklenenM`) ve gerçek (`gercekM`) metreyi verir, ikisinin oranı alan
-  // olarak yok (`firePct` farkın oranıdır) — R0-RAPC türetir.
+  // Levent Sonucu oranı alan olarak vermez (`firePct` farkın oranıdır); R0-RAPC satırlarından türetir.
   { kimlik: "levent.dengeYuzde", ad: "Levent dengesi",
     aciklama: "Biten leventlerden beklenen kumaşın yüzde kaçının gerçekten dokunduğu; ölçülemeyen levent orana girmez, ayrıca sayılır.",
-    birim: "yuzde", iyiYon: "artis", kaynak: null },
+    birim: "yuzde", iyiYon: "artis", kaynak: { dosya: `${R}/temel/levent-dengesi.temel.ts`, alan: "BeamBalance.balancePct" } },
 
   // ── PARA ──────────────────────────────────────────────────────────────────
   { kimlik: "alacak.vadesiGecmis", ad: "Vadesi geçmiş alacak",

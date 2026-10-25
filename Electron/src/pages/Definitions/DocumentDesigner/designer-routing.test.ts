@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DOCUMENT_DESIGN_READ } from "@/lib/permissions";
 import { definitionTiles } from "../tile-config";
-import { DESIGNER_DISABLED_TITLE, isDocumentDesignerEnabled } from "./designer-flag";
+import { DESIGNER_DISABLED_TITLE, designerSettingPath, designerSettingTrail, isDocumentDesignerEnabled } from "./designer-flag";
 
 const ROUTES_SRC = readFileSync(resolve(__dirname, "../../../routes/content-routes.tsx"), "utf8");
 
@@ -49,6 +49,9 @@ describe("tasarımcı bayrağı (fail-closed)", () => {
   });
 
   it("kapalı metni plan P-c ile birebir", () => {
-    expect(DESIGNER_DISABLED_TITLE).toBe("Belge tasarımcısı kapalı — Genel Ayarlar'dan açılır");
+    expect(DESIGNER_DISABLED_TITLE).toBe("Belge tasarımcısı kapalı");
+    // Ayar satırı kayıttan bulunur (T1C "Belgeler"); bulunamazsa Sistem hub'ı — elle yol yok.
+    expect(designerSettingPath()).toBe("/system/printing?tab=belgeler");
+    expect(designerSettingTrail()).toMatch(/Belgeler$/);
   });
 });

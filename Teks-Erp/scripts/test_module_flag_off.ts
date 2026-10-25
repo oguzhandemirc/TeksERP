@@ -71,8 +71,8 @@
 //    SONDA-22'nin HTTP kanıtı ek hattır (gövde alanı çalışma anında doğar; sunucuyu
 //    BOZUK kodla yeniden başlatmadan vakumen yeşil kalır) — statik §1h asıl kapıdır.
 // =============================================================================
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { systemSettingService } from "../src/services/system-setting.service";
 import { AuthService } from "../src/services/auth.service";
@@ -96,6 +96,32 @@ import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { modulUclari } from "./lib/profil-kapi-haritasi";
 
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4101";
+
+/**
+ * Middleware'de TANIMLI ama henüz hiçbir route'a TAKILMAMIŞ adlı kapılar — gerekçeli.
+ * Tabloya girmeleri sonda (GET ucu) ister; ucu doğmamış kapının sondası olamaz.
+ */
+const ROTASIZ_KAPILAR: Record<string, string> = {
+  requireMaliyetEnabled:
+    "MAL-0 (2026-10-24): modül şalteri + kapı doğdu, ilk maliyet ucu MAL-1'de; o gün tabloya satır + `profil-kapi-haritasi` sondası girer",
+};
+
+/** `src/**` içinde (middleware dosyası hariç) adı geçen ROTASIZ kapılar → ilk görülen dosya. */
+function rotasizKullanimlari(adlar: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const gez = (dir: string): void => {
+    for (const ad of readdirSync(dir)) {
+      const yol = join(dir, ad);
+      if (statSync(yol).isDirectory()) gez(yol);
+      else if (yol.endsWith(".ts") && yol !== MW_YOL) {
+        const metin = yorumlariSok(readFileSync(yol, "utf8"));
+        for (const k of adlar) if (!out.has(k) && new RegExp(`\\b${k}\\b`).test(metin)) out.set(k, relative(SRC, yol));
+      }
+    }
+  };
+  gez(SRC);
+  return out;
+}
 const SRC = join(__dirname, "..", "src");
 const MW_YOL = join(SRC, "middlewares", "module.middleware.ts");
 
@@ -131,7 +157,9 @@ type ModulAlani =
   // 2026-09-13: dokuma işi (dokuma → production; tezgahın kardeşi).
   | "dokumaEnabled"
   // Tezgah izleme (tezgah → production; dokumanın kardeşi).
-  | "tezgahEnabled";
+  | "tezgahEnabled"
+  // 2026-10-24: K4P kalite güvence (ön koşulsuz; route'u henüz yok — `rotasiz`).
+  | "kaliteGuvenceEnabled";
 
 interface ModulTanimi {
   /** `FeatureFlags` alanı (PATCH gövdesinde kullanılan ad). */
@@ -151,6 +179,11 @@ interface ModulTanimi {
    * 403 gövdesi ÖN KOŞULUN adını taşır (operatör doğru toggle'a gitsin).
    */
   onKosul?: { alan: ModulAlani; beklenenModulKodu: string };
+  /**
+   * Kapı doğdu ama onu taşıyan route HENÜZ YOK (gerekçe). Statik §1 sözleşmesi yine ölçülür;
+   * route/HTTP ayakları atlanır. §2d iki yönlü: route kapıyı taşıdığı gün gerekçe ölür (kırmızı).
+   */
+  rotasiz?: string;
 }
 
 const MODULLER: ModulTanimi[] = [
@@ -233,6 +266,19 @@ const MODULLER: ModulTanimi[] = [
     sondalar: modulUclari("depoMultiEnabled"),
   },
   {
+    // KALİTE GÜVENCE (K4P zemin, 2026-10-24): ön koşulsuz (KK1 üretimsiz de açık).
+    alan: "kaliteGuvenceEnabled",
+    dbAnahtari: "kaliteGuvence.enabled",
+    middleware: "requireKaliteGuvenceEnabled",
+    okuyucu: "readKaliteGuvenceEnabled",
+    modulKodu: "kaliteGuvence",
+    routeDosyalari: [],
+    sondalar: [],
+    rotasiz:
+      "K4P zemin dilimi kapıyı önden kurdu; muayene/kural/lab/sertifika router'ları MOTOR · LAB · SERT " +
+      "dilimlerinde iner — o gün route dosyası + `profil-kapi-haritasi` sondası bu satıra yazılır, gerekçe silinir.",
+  },
+  {
     alan: "productionEnabled",
     dbAnahtari: "production.enabled",
     middleware: "requireProductionEnabled",
@@ -283,6 +329,8 @@ const ALAN_DB_ANAHTARI: Record<string, string> = {
   devereEnabled: "devere.enabled",
   dokumaEnabled: "dokuma.enabled",
   emanetEnabled: "emanet.enabled",
+  kaliteGuvenceEnabled: "kaliteGuvence.enabled",
+  maliyetEnabled: "maliyet.enabled",
 };
 
 /** HTTP sondalarının 200 alabilmesi için gereken izinler. */
@@ -422,6 +470,98 @@ async function eksikTanisi(): Promise<string> {
     `ÖLÇÜLDÜ: migration ${mig.bitti.toISOString()} tarihinde KOŞTU · şu an ${topSayisi} top var → ` +
     "damga anında `rolls` BOŞTU (damgalayacak geçmiş yoktu) ya da satırlar sonradan SİLİNDİ"
   );
+}
+
+/**
+ * §8 STATİK ayak — sunucusuz koşumda da ölçülür (önceden HTTP ayağının erken dönüşünden SONRA
+ * duruyordu ve sunucu yokken hiç koşmuyordu; MAL-0 2026-10-24).
+ */
+function tersYonAyagi(): void {
+  // ── §8 ⭐ TERS YÖN: KAPI ↔ ANAHTAR — yeni kapı ya da yeni modül sessizce doğamaz
+  // §1–§7 hep BU dosyadaki `MODULLER` tablosundan gider ve o tablo ELLE yazılır:
+  // `module.middleware.ts`e eklenen adlandırılmış bir kapı ya da
+  // `MODULE_FLAG_KEYS`e eklenen bir modül bu bekçiye GÖRÜNMEZ. `test_module_flags`
+  // anahtar ↔ servis ↔ şema ↔ migration yönlerini ölçer; KAPI yönünü ölçmez.
+  console.log("\n── §8 Ters yön: kapı ↔ anahtar kapsaması ──");
+  const mwMetni = yorumlariSok(readFileSync(MW_YOL, "utf8"));
+  const kesfedilenKapilar = [
+    ...mwMetni.matchAll(/export\s+async\s+function\s+(require[A-Za-z]+Enabled)\b/g),
+  ].map((m) => m[1]!);
+  check(
+    "§8a Körlük zemini: middleware'de kapı bulundu",
+    kesfedilenKapilar.length >= 4,
+    `n=${kesfedilenKapilar.length}`,
+  );
+
+  const tabloKapilari = new Set(MODULLER.map((m) => m.middleware));
+  const tablosuz = kesfedilenKapilar.filter((k) => !tabloKapilari.has(k) && !(k in ROTASIZ_KAPILAR));
+  check(
+    "§8b ⭐ Keşfedilen HER kapının tabloda satırı var (ya da gerekçeli ROTASIZ)",
+    tablosuz.length === 0,
+    tablosuz.join(", ") || `${kesfedilenKapilar.length} kapı`,
+  );
+  // ROTASIZ muaf iki yönlü: kapı middleware'de VAR, tabloda YOK ve src'de hiçbir yerde kullanılmıyor.
+  // İlk route kapıyı taktığı gün muaf ölür (kırmızı) ve tabloya satır + sonda zorunlu olur.
+  const kullanilanKapilar = rotasizKullanimlari(Object.keys(ROTASIZ_KAPILAR));
+  const oluRotasiz = Object.keys(ROTASIZ_KAPILAR).filter(
+    (k) => !kesfedilenKapilar.includes(k) || tabloKapilari.has(k) || kullanilanKapilar.has(k),
+  );
+  check(
+    "§8b2 ROTASIZ muafta ölü satır yok (kapı var · tabloda yok · hiçbir route takmıyor)",
+    oluRotasiz.length === 0,
+    oluRotasiz.map((k) => `${k}${kullanilanKapilar.has(k) ? ` (kullanılıyor: ${kullanilanKapilar.get(k)})` : ""}`).join(", ") ||
+      `${Object.keys(ROTASIZ_KAPILAR).length} muaf`,
+  );
+  const oluSatir = [...tabloKapilari].filter((k) => !kesfedilenKapilar.includes(k));
+  check(
+    "§8c Tabloda ÖLÜ satır yok (kapı silinince fark edilir)",
+    oluSatir.length === 0,
+    oluSatir.join(", ") || "yok",
+  );
+
+  /** Bu bekçinin KAPSAMADIĞI modüller — gerekçeli ve İKİ YÖNLÜ denetlenir. */
+  const KAPSAM_DISI: Record<string, string> = {
+    financeEnabled:
+      "kapısı ayrı dosyada (finance.middleware.ts) ve ayrı bekçide (test_finance_flag_off)",
+    // Ölçüldü 2026-09-12: `MODULE_DEPENDENCIES`te satırı YOK, adlandırılmış kapısı
+    // YOK, hiçbir route onu okumuyor — bayrak + okuyucu + panel şeması var, YÜZEY
+    // yok. Yüzeyi doğduğu gün kapı da doğar ve §8b onu tabloya girmeye zorlar;
+    // bu satır o gün ölü muaf olarak §8e'den kırmızı alır.
+    kumasTeknikEnabled: "yüzeysiz modül — adlandırılmış kapısı ve route'u YOK",
+    // 2026-09-15 (G3): emanet EKRANSIZ modüldür — kapısı owner YAZAN uçların GÖVDESİNDE (`assertEmanetWritableTx`
+    // 403 MODULE_DISABLED; KK1 · levent create · lot create), adlandırılmış middleware'i ve kendi route'u YOK;
+    // sevk sahiplik kapısı bayraktan bağımsız (veri varsa). `test_emanet §1` kapalıyı ölçer.
+    emanetEnabled: "yüzeysiz modül — gövde kapısı `assertEmanetWritableTx` (403), adlandırılmış middleware'i YOK; `test_emanet §1`",
+  };
+  const yonetilenKume = new Set(YONETILEN);
+  const kapsanmayan = [...MODULE_FLAG_KEYS].filter(
+    (k) => !yonetilenKume.has(k) && !(k in KAPSAM_DISI),
+  );
+  check(
+    "§8d ⭐ Her modül anahtarı ya bu bekçide ya GEREKÇELİ muaf",
+    kapsanmayan.length === 0,
+    kapsanmayan.join(", ") || `${MODULE_FLAG_KEYS.size} anahtar`,
+  );
+  const oluMuaf = Object.keys(KAPSAM_DISI).filter(
+    (k) => !MODULE_FLAG_KEYS.has(k) || yonetilenKume.has(k),
+  );
+  check(
+    "§8e Muaf listesinde ölü satır yok (iki yönlü)",
+    oluMuaf.length === 0,
+    oluMuaf.join(", ") || `${Object.keys(KAPSAM_DISI).length} muaf`,
+  );
+
+  const dbAnahtarlari = new Set(Object.values(ALAN_DB_ANAHTARI));
+  const muafOnEkleri = new Set(Object.keys(KAPSAM_DISI).map((a) => a.replace(/Enabled$/, "")));
+  const kapsanmayanDb = [...MODULE_SETTING_KEYS].filter(
+    (k) => !dbAnahtarlari.has(k) && !muafOnEkleri.has(k.split(".")[0]!),
+  );
+  check(
+    "§8f ⭐ Her modül DB anahtarı ya tabloda ya muaf",
+    kapsanmayanDb.length === 0,
+    kapsanmayanDb.join(", ") || `${MODULE_SETTING_KEYS.size} anahtar`,
+  );
+
 }
 
 async function main(): Promise<void> {
@@ -596,6 +736,29 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── §2d ROUTE'SUZ KAPI YALNIZ GEREKÇEYLE ve İKİ YÖNLÜ ─────────────────────
+  // Gerekçesiz satır route + sonda taşımak zorunda; gerekçeli satırın kapısını bir router
+  // takarsa gerekçe ÖLÜDÜR (satır route dosyası/sonda ile doldurulmadan HTTP ayağı onu görmez).
+  const routeMetinleri = (readdirSync(join(SRC, "routes"), { recursive: true }) as string[])
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => ({ f, metin: yorumlariSok(readFileSync(join(SRC, "routes", f), "utf8")) }));
+  for (const m of MODULLER) {
+    if (m.rotasiz) {
+      const tasiyan = routeMetinleri.filter((r) => new RegExp(`\\b${m.middleware}\\b`).test(r.metin)).map((r) => r.f);
+      check(
+        `§2d ${m.middleware} route'suz satırı CANLI (gerekçe dolu, route/sonda boş, hiçbir router kapıyı taşımıyor)`,
+        m.rotasiz.trim().length > 10 && m.routeDosyalari.length === 0 && m.sondalar.length === 0 && tasiyan.length === 0,
+        tasiyan.length ? `kapıyı taşıyan router(lar): ${tasiyan.join(", ")} — satıra route + sonda yaz, \`rotasiz\`ı sil` : "",
+      );
+    } else {
+      check(
+        `§2d ${m.middleware} satırı route + sonda taşıyor`,
+        m.routeDosyalari.length >= 1 && m.sondalar.length >= 1,
+        `route=${m.routeDosyalari.length} sonda=${m.sondalar.length}`,
+      );
+    }
+  }
+
   // ── §3 AYAR SATIRININ VARLIĞI (DB — migration'ın kendi koşuluyla) ────────
   const topVar = (await prisma.roll.count({ take: 1 })) > 0;
   const satirlar = await prisma.systemSetting.findMany({
@@ -648,6 +811,8 @@ async function main(): Promise<void> {
   // Kapı YOKLUK ile YABANCIYI ayırır (tek kaynak `lib/http-bekci-kapisi.ts`):
   // sunucu yoksa beyan edilmiş ATLAMA, sunucu başka veritabanına bakıyorsa
   // KIRMIZI. Aşağıdaki kendi girişimiz ikinci settir (dar izinli kullanıcı).
+  tersYonAyagi();
+
   const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: httpKontrolSayisi });
   if (kapi.kirmizi) {
     check("HTTP ayağı ölçülebildi", false, kapi.kirmizi);
@@ -764,6 +929,7 @@ async function main(): Promise<void> {
     }
     const sapma = await durumKorundu(hepsiKapali);
     for (const m of MODULLER) {
+      if (m.rotasiz) continue; // sondası yok — §2d ölçer
       if (sapma) {
         atla(`§4 ${m.alan}`, `ölçüm penceresinde bayrak dışarıdan değişti (${sapma})`);
         continue;
@@ -816,6 +982,7 @@ async function main(): Promise<void> {
   // ── §5 KİMLİKSİZ İSTEK 401 (403 DEĞİL) ───────────────────────────────────
   const anonKotu: string[] = [];
   for (const m of MODULLER) {
+    if (m.rotasiz) continue;
     const r = await fetch(`${BASE}${m.sondalar[0]}`);
     if (r.status !== 401) anonKotu.push(`${m.sondalar[0]}→${r.status}`);
   }
@@ -839,6 +1006,7 @@ async function main(): Promise<void> {
     }
     const sapma = await durumKorundu(hepsiAcik);
     for (const m of MODULLER) {
+      if (m.rotasiz) continue;
       if (sapma) {
         atla(`§6 ${m.alan}`, `ölçüm penceresinde bayrak dışarıdan değişti (${sapma})`);
         continue;
@@ -868,6 +1036,7 @@ async function main(): Promise<void> {
 
     const gozlem: Array<{ alan: string; yol: string; s: SondaSonucu }> = [];
     for (const m of MODULLER) {
+      if (m.rotasiz) continue;
       // Açık modüllerin HEPSİ sondalanır (2xx), kapalıların ilk ucu yeter.
       const yollar = acik.includes(m.alan) ? m.sondalar : [m.sondalar[0]!];
       for (const yol of yollar) gozlem.push({ alan: m.alan, yol, s: await sonda(yol) });
@@ -905,79 +1074,6 @@ async function main(): Promise<void> {
         : `${gozlem.length} sonda beklendiği gibi`,
     );
   }
-
-  // ── §8 ⭐ TERS YÖN: KAPI ↔ ANAHTAR — yeni kapı ya da yeni modül sessizce doğamaz
-  // §1–§7 hep BU dosyadaki `MODULLER` tablosundan gider ve o tablo ELLE yazılır:
-  // `module.middleware.ts`e eklenen adlandırılmış bir kapı ya da
-  // `MODULE_FLAG_KEYS`e eklenen bir modül bu bekçiye GÖRÜNMEZ. `test_module_flags`
-  // anahtar ↔ servis ↔ şema ↔ migration yönlerini ölçer; KAPI yönünü ölçmez.
-  console.log("\n── §8 Ters yön: kapı ↔ anahtar kapsaması ──");
-  const mwMetni = yorumlariSok(readFileSync(MW_YOL, "utf8"));
-  const kesfedilenKapilar = [
-    ...mwMetni.matchAll(/export\s+async\s+function\s+(require[A-Za-z]+Enabled)\b/g),
-  ].map((m) => m[1]!);
-  check(
-    "§8a Körlük zemini: middleware'de kapı bulundu",
-    kesfedilenKapilar.length >= 4,
-    `n=${kesfedilenKapilar.length}`,
-  );
-
-  const tabloKapilari = new Set(MODULLER.map((m) => m.middleware));
-  const tablosuz = kesfedilenKapilar.filter((k) => !tabloKapilari.has(k));
-  check(
-    "§8b ⭐ Keşfedilen HER kapının tabloda satırı var",
-    tablosuz.length === 0,
-    tablosuz.join(", ") || `${kesfedilenKapilar.length} kapı`,
-  );
-  const oluSatir = [...tabloKapilari].filter((k) => !kesfedilenKapilar.includes(k));
-  check(
-    "§8c Tabloda ÖLÜ satır yok (kapı silinince fark edilir)",
-    oluSatir.length === 0,
-    oluSatir.join(", ") || "yok",
-  );
-
-  /** Bu bekçinin KAPSAMADIĞI modüller — gerekçeli ve İKİ YÖNLÜ denetlenir. */
-  const KAPSAM_DISI: Record<string, string> = {
-    financeEnabled:
-      "kapısı ayrı dosyada (finance.middleware.ts) ve ayrı bekçide (test_finance_flag_off)",
-    // Ölçüldü 2026-09-12: `MODULE_DEPENDENCIES`te satırı YOK, adlandırılmış kapısı
-    // YOK, hiçbir route onu okumuyor — bayrak + okuyucu + panel şeması var, YÜZEY
-    // yok. Yüzeyi doğduğu gün kapı da doğar ve §8b onu tabloya girmeye zorlar;
-    // bu satır o gün ölü muaf olarak §8e'den kırmızı alır.
-    kumasTeknikEnabled: "yüzeysiz modül — adlandırılmış kapısı ve route'u YOK",
-    // 2026-09-15 (G3): emanet EKRANSIZ modüldür — kapısı owner YAZAN uçların GÖVDESİNDE (`assertEmanetWritableTx`
-    // 403 MODULE_DISABLED; KK1 · levent create · lot create), adlandırılmış middleware'i ve kendi route'u YOK;
-    // sevk sahiplik kapısı bayraktan bağımsız (veri varsa). `test_emanet §1` kapalıyı ölçer.
-    emanetEnabled: "yüzeysiz modül — gövde kapısı `assertEmanetWritableTx` (403), adlandırılmış middleware'i YOK; `test_emanet §1`",
-  };
-  const yonetilenKume = new Set(YONETILEN);
-  const kapsanmayan = [...MODULE_FLAG_KEYS].filter(
-    (k) => !yonetilenKume.has(k) && !(k in KAPSAM_DISI),
-  );
-  check(
-    "§8d ⭐ Her modül anahtarı ya bu bekçide ya GEREKÇELİ muaf",
-    kapsanmayan.length === 0,
-    kapsanmayan.join(", ") || `${MODULE_FLAG_KEYS.size} anahtar`,
-  );
-  const oluMuaf = Object.keys(KAPSAM_DISI).filter(
-    (k) => !MODULE_FLAG_KEYS.has(k) || yonetilenKume.has(k),
-  );
-  check(
-    "§8e Muaf listesinde ölü satır yok (iki yönlü)",
-    oluMuaf.length === 0,
-    oluMuaf.join(", ") || `${Object.keys(KAPSAM_DISI).length} muaf`,
-  );
-
-  const dbAnahtarlari = new Set(Object.values(ALAN_DB_ANAHTARI));
-  const muafOnEkleri = new Set(Object.keys(KAPSAM_DISI).map((a) => a.replace(/Enabled$/, "")));
-  const kapsanmayanDb = [...MODULE_SETTING_KEYS].filter(
-    (k) => !dbAnahtarlari.has(k) && !muafOnEkleri.has(k.split(".")[0]!),
-  );
-  check(
-    "§8f ⭐ Her modül DB anahtarı ya tabloda ya muaf",
-    kapsanmayanDb.length === 0,
-    kapsanmayanDb.join(", ") || `${MODULE_SETTING_KEYS.size} anahtar`,
-  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 }

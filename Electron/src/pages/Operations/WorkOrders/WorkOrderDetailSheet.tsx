@@ -18,6 +18,8 @@ import { AddBatchButton } from "./AddBatchButton";
 import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { V3Section } from "./detail-v3/V3Section";
+import { ProcessSummaryCard } from "./detail-v3/ProcessSummaryCard";
+import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { KunyeCard } from "./detail-v3/KunyeCard";
 import { RouteStepline } from "./detail-v3/RouteStepline";
 import { ProducedV3 } from "./detail-v3/ProducedV3";
@@ -27,6 +29,7 @@ import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import "./detail-v3/work-order-detail-v3.css";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 interface Props {
   workOrder: WorkOrder | null;
@@ -53,6 +56,7 @@ const STATUS_PILL: Record<string, string> = {
  * burada YOK — "Detayı Aç" ile tam sayfada.
  */
 export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: Props) {
+  const { catalog: kursunCatalog } = useKursunGramajCatalog();
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
   const [linkOrderOpen, setLinkOrderOpen] = useState(false);
@@ -137,6 +141,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <span className="dot" />
                       {workOrderStatusLabels[wo.status]}
                     </span>
+                    <PrintHistoryLink subjectId={wo.id} className="ml-auto" />
                   </div>
                   <div className="sheet-sub">
                     {workOrderTypeLabels[wo.type]}
@@ -247,6 +252,13 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                 {sortedSteps.length > 0 && (
                   <V3Section title="Rota & İstasyonlar" active={wipSteps.length > 0}>
                     <RouteStepline steps={sortedSteps} />
+                  </V3Section>
+                )}
+
+                {/* KQ-D6: kurşun çeşidi tanımlı fabrikada gramaj özeti + hedef. */}
+                {kursunCatalog.propertyId && (
+                  <V3Section title="Kurşun Gramajı">
+                    <ProcessSummaryCard scope={{ workOrderId: wo.id }} editableTarget />
                   </V3Section>
                 )}
 

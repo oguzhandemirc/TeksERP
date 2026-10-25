@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { FileDown, FileSpreadsheet, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
-import { printHtmlString } from "@/lib/print";
+import { printTracked, trackPdfSave, type PrintSubject } from "@/lib/print";
 import { PDF_MAX_ROWS, pdfTooManyRowsMessage } from "@shared/pdf-limits";
 import { isWebPdf, printAsPdf } from "@/lib/web-pdf";
 import { grafikleriDoldur } from "../_v2/grafik/svgUret";
@@ -14,6 +14,9 @@ interface Props {
   buildSpec: () => ReportExportSpec | null;
   disabled?: boolean;
 }
+
+/** Rapor çıktısı geçmişe "Rapor" türüyle, başlığıyla düşer (içerik gitmez). */
+const reportSubject = (title: string): PrintSubject => ({ kind: "RAPOR", no: title.slice(0, 64) });
 
 /**
  * Rapor sayfalarının ortak dışa aktarım şeridi: Excel · PDF · Yazdır.
@@ -57,11 +60,13 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
     try {
       // Grafik blokları kâğıda SVG olarak girer; çizim yalnız tıklanınca (motor tembel).
       const html = buildReportHtml(await grafikleriDoldur(spec));
-      if (!pdfApi) return printAsPdf(html);
-      const res = await pdfApi.save({
-        html,
-        suggestedName: `${slugifyFileName(`${spec.title} ${spec.subtitle ?? ""}`)}.pdf`,
-      });
+      if (!pdfApi) return printAsPdf(html, reportSubject(spec.title));
+      const res = await trackPdfSave(reportSubject(spec.title), () =>
+        pdfApi.save({
+          html,
+          suggestedName: `${slugifyFileName(`${spec.title} ${spec.subtitle ?? ""}`)}.pdf`,
+        }),
+      );
       if (res.saved) toast.success("PDF kaydedildi.");
       else if (res.error) toast.error(res.error);
     } catch {
@@ -74,7 +79,7 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
   const onPrint = async () => {
     const spec = buildSpec();
     if (!spec) return;
-    printHtmlString(buildReportHtml(await grafikleriDoldur(spec)));
+    void printTracked({ subject: reportSubject(spec.title), html: buildReportHtml(await grafikleriDoldur(spec)) });
   };
 
   return (

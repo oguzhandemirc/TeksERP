@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Send, Printer, Usb, Globe, Star } from "lucide-react";
 import { useMachineConfig } from "@/hooks/useMachineConfig";
-import { printHtmlString } from "@/lib/print";
+import { printTracked, reportLabelSend, type PrintSubject } from "@/lib/print";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -72,6 +72,8 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
 
   // Havuz şablonu türsüz olabilir — örnek verinin bağlamı için güvenli varsayılan.
   const kind = template.kind ?? LabelKind.ROLL_FINISHED;
+  // Şablon stüdyosundan basım: konu şablonun kendisi (veri kaydı yok).
+  const templateSubject: PrintSubject = { kind: "ETIKET_SERBEST", table: "label_templates", id: template.id, itemCount: copies };
   const noVariants = variantsQ.isFetched && variants.length === 0;
   const hasFieldBinds = Boolean(variant?.elements.elements.some((e) => e.type === "field"));
   const hasConditions = Boolean(variant?.elements.elements.some((e) => e.showIf));
@@ -115,9 +117,16 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
         return;
       }
       // Raster modda base64 zarf baytları (binary-safe); komut modunda ham native metin.
+      const started = Date.now();
       const res = p.nativeB64
         ? await printerApi.send({ transport, target: targetPath, baudRate, contentB64: p.nativeB64 })
         : await printerApi.send({ transport, target: targetPath, baudRate, content: p.native });
+      reportLabelSend(
+        templateSubject,
+        { transport, address: targetPath, peripheralId: lpCfg?.peripheralId, copies },
+        res.available ? res : { ok: false, error: res.error, errorCode: transport === "serial" ? "SERI_SURUCU_YOK" : "GONDERIM_HATASI" },
+        { durationMs: Date.now() - started },
+      );
       if (res.ok) {
         setResult({ ok: true, text: `Gönderildi → ${targetPath} (${res.bytes} bayt, ${p.language}, ${copies} kopya)` });
         toast.success("Etiket yazıcıya gönderildi.");
@@ -141,7 +150,7 @@ export function TemplatePrintDialog({ template, open, onOpenChange, standalone }
     setResult(null);
     try {
       const p = await fetchOutput({ language: RawCodeLang.RASTER_HTML });
-      printHtmlString(p.content);
+      void printTracked({ subject: templateSubject, html: p.content });
       setResult({ ok: true, text: `Yazdırma penceresi açıldı (${copies} kopya, HTML).` });
     } catch (e) {
       setResult({ ok: false, text: (e as Error).message });

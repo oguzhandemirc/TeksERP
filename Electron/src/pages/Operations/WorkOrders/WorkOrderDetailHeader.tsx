@@ -22,6 +22,7 @@ import { AddBatchButton } from "./AddBatchButton";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 /**
  * Tam sayfa detayın sticky başlığı: kimlik (parti no + statü + tip/rota) +
@@ -91,6 +92,7 @@ export function WorkOrderDetailHeader({
           wo && (
             <>
               <StatusBadge status={wo.status} labels={workOrderStatusLabels} tones={workOrderStatusTones} />
+              <PrintHistoryLink subjectId={wo.id} />
               {/* ⓘ — kim oluşturdu / en son kim değiştirdi. Tarihler zaten
                   elimizde, sunucuya yalnız "kim" sorulur ve YALNIZ tıklanınca. */}
               <RecordInfoButton

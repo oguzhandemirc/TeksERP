@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 import { formatFactory } from "@/lib/factory-time";
-import { printDocumentArea } from "@/lib/print";
+import { printIdentityCards } from "@/lib/print";
 import { adminUserService } from "@/services/adminUserService";
 import { CredentialApprovalRequest } from "./CredentialApprovalRequest";
 import { MethodDisabledNotice } from "./MethodDisabledNotice";
@@ -104,7 +104,7 @@ export function CardTokenTab({ userId, username, fullName }: Props) {
             <div className="text-[10px] uppercase tracking-wide">Personel Kartı</div>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => printDocumentArea(areaRef.current)}>
+            <Button type="button" size="sm" variant="outline" onClick={() => void printIdentityCards(areaRef.current, [userId])}>
               Yazdır
             </Button>
             <Button

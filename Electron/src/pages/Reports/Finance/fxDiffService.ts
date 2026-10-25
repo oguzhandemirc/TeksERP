@@ -1,3 +1,4 @@
+import type { AnlatiCumlesi } from "../_v2/sunum";
 // =============================================================================
 // KUR FARKI RAPORU — tipler + API çağrısı (backend `finance-fx-diff.report.ts` aynası)
 // =============================================================================
@@ -72,6 +73,8 @@ export interface FxDiffSummary {
 }
 
 export interface FxDiffReport {
+  /** "Ne görüyoruz?" — sunucunun anlatısı (EK alan; eski backend göndermez → kutu çizilmez). */
+  anlati?: AnlatiCumlesi[];
   rows: FxDiffRow[];
   summary: FxDiffSummary;
 }
@@ -218,9 +221,9 @@ export const FX_CURRENCIES: Currency[] = (Object.keys(CURRENCY_SYMBOL) as Curren
  * öğretirdi (`reportExport.ts` başlığındaki sınıf).
  */
 export const FX_DIFF_NOTES: string[] = [
-  "Kur farkı SAKLANMAZ, türetilir: kapatılan tutar × (kaynak kuru − fatura kuru). Kapama çözülürse satır bu listeden kendiliğinden düşer.",
-  "İşaret sözleşmesi: + lehte (kambiyo kârı), − aleyhte (kambiyo zararı). Yön faturanın defter tarafından çözülür — satış ile alışta aynı kur hareketi ters sonuç verir.",
-  "Dönem çıpası KAPAMANIN anıdır; faturanın ya da tahsilatın tarihi değil. Aynı dönemde kesilip kapanmayan fatura burada görünmez.",
+  "Kur farkı bir yere kaydedilmez, her açılışta hesaplanır: faturanın kesildiği gündeki kur ile parasının geldiği (ya da ödendiği) gündeki kur arasındaki fark, kapanan tutarla çarpılır. Kapama çözülürse satır bu listeden kendiliğinden düşer.",
+  "Artı işaretli tutar lehimize (kur kazancı), eksi işaretli tutar aleyhimize (kur kaybı) demektir. Kurun yükselmesi satış faturasında kazandırır, alış faturasında kaybettirir.",
+  "Satır, faturanın parasının kapandığı güne göre döneme girer; faturanın ya da tahsilatın tarihine göre değil. Aynı dönemde kesilip kapanmayan fatura burada görünmez.",
   "Farkı SIFIR çıkan kapama da listelenir: aynı kurla kapanmak meşru bir sonuçtur ve satırı gizlemek 'bu dönemde dövizli kapama olmadı' yalanını üretirdi.",
   "Satır farkı kuruşa yuvarlanır; özet toplamlar yuvarlanmış satırların toplamıdır — ekrandaki toplam, satırların toplamına birebir eşittir.",
   "TRY faturalar kapsam dışıdır: iki kur damgası da 1 olduğu için kur farkı tanım gereği sıfırdır.",

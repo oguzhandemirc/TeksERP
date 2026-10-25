@@ -13,6 +13,8 @@
     "devereEnabled": true,
     "dokumaEnabled": true,
     "emanetEnabled": true,
+    "kaliteGuvenceEnabled": true,
+    "maliyetEnabled": true,
     "pricingEnabled": true,
     "financeBlockNegativeCashEnabled": true,
     "financeInvoiceMatchTolerance": true,
@@ -120,6 +122,8 @@
     "nativeSendEnabled": true,
     "mobileRasterEnabled": true,
     "scrapGradeLabelEnabled": true,
-    "bildirimGelenKutusuEnabled": true
+    "bildirimGelenKutusuEnabled": true,
+    "documentDesignerEnabled": true,
+    "documentPublishSodEnabled": true
   }
 }

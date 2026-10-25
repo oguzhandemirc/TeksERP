@@ -16,6 +16,7 @@ import {
   setDefaultDefectType,
 } from "../services/helpers/default-defect-type.helper";
 import { AuditService } from "../services/audit.service";
+import { normalizeDefectGroupBody } from "../services/helpers/defect-group.helper";
 import type { NextFunction, Request, Response } from "express";
 
 const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur"] as const;
@@ -119,6 +120,10 @@ router.get("/:id", verifyToken, requireAnyPermission("quality:read", ...MOBILE_D
  *                 type: string
  *                 enum: [MINOR, MAJOR, CRITICAL]
  *                 description: UI renklendirme / öncelik için opsiyonel.
+ *               defectGroup:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Rapor hata grubu (küme `constants/hata-gruplari.ts`); boş/null = gruplanmamış. Bilinmeyen kod 400.
  *     responses:
  *       201:
  *         description: Hata tipi oluşturuldu
@@ -139,6 +144,7 @@ async function writeWithDefault(
 ): Promise<void> {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
+    normalizeDefectGroupBody(body); // kapalı küme `constants/hata-gruplari.ts`; bilinmeyen 400
     assertDefaultWriteConsistent(body); // K2: pasif + varsayılan birlikte gelmez (yarım yazım yok)
     const wantDefault = body.isDefault === true;
     if (wantDefault) delete body.isDefault;
@@ -190,6 +196,7 @@ router.post("/", verifyToken, requirePermission("quality:write"), (req, res, nex
  *               name: { type: string }
  *               description: { type: string }
  *               severity: { type: string, enum: [MINOR, MAJOR, CRITICAL] }
+ *               defectGroup: { type: string, nullable: true, description: "küme constants/hata-gruplari.ts" }
  *               isActive: { type: boolean }
  *     responses:
  *       200:

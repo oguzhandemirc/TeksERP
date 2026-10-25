@@ -1,6 +1,7 @@
 import { createCrudService } from "@/services/crudService";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { PrintJobAttachment } from "@/services/printJobService";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
 import type {
   WorkOrder,
@@ -252,18 +253,18 @@ export const workOrderService = {
    *
    *  ⚠️ `suppressErrorToast` LOAD-BEARING (2026-08-06 saha bildirimi: "kart çıkıyor
    *  ama sunucu hatası yazıyor"). Bu çağrı BAŞARISIZ OLSA DA kâğıt çıkmıştır —
-   *  baskı tamamen istemci tarafındadır (`printHtmlString`), bildirim ondan AYRI
+   *  baskı tamamen istemci tarafındadır (`printTracked`), bildirim ondan AYRI
    *  bir istektir. Genel interceptor 5xx'te "Sunucu hatası", sunucu kapalıyken
    *  "Sunucuya ulaşılamıyor" basıyordu; ikisi de elinde kâğıt tutan operatöre
    *  **baskı başarısız** diye okunuyor ve onu tekrar bastırmaya davet ediyordu.
    *  Çağıran (TravelerCardPrintDialog) hatayı yakalayıp SONUCU söyleyen doğru
    *  cümleyi kendisi basar. Toast'ı susturmak hatayı GİZLEMEK değildir —
    *  gizlemek, kaydın güncellenmediğini hiç söylememek olurdu. */
-  recordTravelerCardPrint: (cardId: string) =>
+  recordTravelerCardPrint: (cardId: string, printJob?: PrintJobAttachment) =>
     apiClient
       .post<ApiResponse<null>>(
         `/api/traveler-cards/${cardId}/print-event`,
-        undefined,
+        printJob ? { printJob } : undefined,
         { suppressErrorToast: true },
       )
       .then((r) => r.data),

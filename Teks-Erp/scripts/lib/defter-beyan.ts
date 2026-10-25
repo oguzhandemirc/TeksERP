@@ -165,6 +165,31 @@ export const CIFT_DISI_DEGERLER: CiftDisiDeger[] = [
     gerekce: "partinin DOĞUŞ satırı (\"Parti Ekle\", tasarım §6.5) — geri alma partinin toplarına Top Çıkar'dır ve her topun kendi defterine (RollMovement damgası · stok defteri bağlı ters) yazılır; yazıcı D8 diliminde doğar" },
   { enumAdi: "LoomAlarmEventKind", deger: "RESOLVED", sinif: "TERMINAL",
     gerekce: "alarm kapanışı — duruş bittiği için `state: RESOLVED` (loom-alarm.service `closeTx`); değerin KENDİSİ terminal, çözülen alarm yeniden açılmaz (yeni duruş yeni alarm)" },
+  // e-İrsaliye (E1-SEMA): yazıcı E5'te doğar — gerekçe geçiş yönünden (plan §3.2), yazan satır o gün ölçülür.
+  { enumAdi: "EIrsaliyeEventType", deger: "HAZIRLANDI", sinif: "DOGUS",
+    gerekce: "kaydın DOĞUŞ olayı — `fromStatus: null` (DB CHECK `e_irsaliye_olaylari_dogus_chk`); tersi karşı olay değil kaydın terminal iptali `IPTAL_EDILDI`" },
+  { enumAdi: "EIrsaliyeEventType", deger: "OLUSTURULDU", sinif: "DOGUS",
+    gerekce: "belge KİMLİĞİNİN (numara + ETTN + XML v1) doğuşu, TASLAK→OLUSTURULDU; numara geri verilmez (GİB sırası) — tersi kaydın terminal iptali `IPTAL_EDILDI` (boşluk bırakır, plan §6 R3)" },
+  { enumAdi: "EIrsaliyeEventType", deger: "XML_YENIDEN_URETILDI", sinif: "DOGUS",
+    gerekce: "yeni XML SÜRÜMÜNÜN doğuşu (aynı numara + ETTN, version+1); önceki sürüm donmuş kalır, geri alma yok — yanlış sürümün tersi bir sonraki üretim ya da kaydın iptali" },
+  { enumAdi: "EIrsaliyeEventType", deger: "HATA_ALINDI", sinif: "TERMINAL",
+    gerekce: "gönderimin dış (entegratör) SONUCU — değerin kendisi geri yön (gönderim tutmadı, →HATA); HATA'dan çıkış karşı olay değil yeniden üretimdir (→OLUSTURULDU)" },
+  { enumAdi: "EIrsaliyeEventType", deger: "IPTAL_EDILDI", sinif: "TERMINAL",
+    gerekce: "`toStatus: IPTAL` — yerel iptal (GİB'e gitmedi); değerin KENDİSİ geri yön, iptalin iptali yok (terminal durum)" },
+  { enumAdi: "DeviceBindingEventType", deger: "REGISTERED", sinif: "DOGUS",
+    gerekce: "cihaz satırının doğuşu (announce · AYRI_CIHAZ red) — tersi karşı olay değil cihazın kendi pasife alınması/kalıcı silinmesi (PURGED)" },
+  { enumAdi: "DeviceBindingEventType", deger: "REBIND_REQUESTED", sinif: "DOGUS",
+    gerekce: "yeni kurulum anahtarının deftere ilk girişi (talep açılışı) — tersi talebin kendi kararıdır (REBOUND ya da REBIND_REJECTED)" },
+  { enumAdi: "DeviceBindingEventType", deger: "REBIND_REJECTED", sinif: "TERMINAL",
+    gerekce: "talebin red kararı — reddedilen localId yeniden açılmaz (talep tablosunda tekil), yeni kurulum yeni talep doğurur" },
+  { enumAdi: "DeviceBindingEventType", deger: "REVOKED", sinif: "TERMINAL",
+    gerekce: "kanıt bağı düşer (tuz silinir) — geri dönmez; yeniden onay YENİ sır verir, eski bağ hiç dönmez" },
+  { enumAdi: "DeviceBindingEventType", deger: "PROOF_RESET", sinif: "TERMINAL",
+    gerekce: "kanıt sırrının sıfırlanması (D5 halka) — REVOKED ile aynı: eski sır geri gelmez" },
+  { enumAdi: "DeviceBindingEventType", deger: "PURGED", sinif: "TERMINAL",
+    gerekce: "hiç kullanılmamış cihaz satırının kalıcı silinmesi — satır yok, tersi yok" },
+  { enumAdi: "DeviceBindingEventType", deger: "HW_CONFLICT", sinif: "TERMINAL",
+    gerekce: "gözlem satırı: bilinen cihazın özeti başka canlı satırda — durum değiştirmez, geri alınacak ileri etki yok" },
 ];
 
 const D = (
@@ -263,10 +288,10 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       "src/services/workorder-manual-move.service.ts", "src/services/workorder-split.service.ts",
     ], { yari: true }),
 
-  D("RollOperation", "kurşun/QC2/tambur/fason kanıtı", { tur: "DAMGA", kolon: "revokedAt" },
+  D("RollOperation", "kurşun/QC2/tambur/fason kanıtı; propertyValueId (kurşun gramajı, KQ-D4) ileri kaydın parçası — ters = DAMGA", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/roll-operation.helper.ts", sembol: "revokeRollOperations" }],
-    ["src/services/inventory.service.ts", "src/services/kursun-qc.service.ts",
-     "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
+    ["src/services/helpers/kursun-operation.helper.ts", "src/services/inventory.service.ts",
+     "src/services/kursun-qc.service.ts", "src/services/subcontractor.service.ts", "src/services/tambur.service.ts"]),
 
   D("RollVariance", "fire · düzeltme · aşım defteri", { tur: "DAMGA", kolon: "reversedAt" },
     [
@@ -298,10 +323,21 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/printed-document.service.ts", sembol: "reissue" }],
     ["src/services/printed-document.service.ts", "src/services/traveler-card.service.ts"], { yari: true }),
 
+  // K4P-SEMA (2026-10-24): yazarı MOTOR dilimi (`createInspectionTx`); o gün `yazan`
+  // ve `tersYazan` (revise/void) birlikte dolar — §4c boş ikiliyi sessiz sayar.
+  D("RollInspection", "muayene belgesi — içerik doğuşta donar; revizyon `supersededAt` damgası + yeni satır, iptal ikinci damga `voidedAt` (PrintedDocument emsali), silme yolu yok",
+    { tur: "DAMGA", kolon: "supersededAt" }, [], [], { yari: true }),
+
   D("ShipmentEvent", "sevkiyat durum defteri; tek damga ikinci turda birincisini ezerdi",
     { tur: "KARSI_OLAY", enumAdi: "ShipmentEventType", ciftler: [["DISPATCHED", "UNDISPATCHED"], ["INVOICED", "INVOICE_CLEARED"]] },
     [{ dosya: "src/services/helpers/shipment-event.helper.ts", sembol: "writeShipmentEvent" }],
     ["src/services/helpers/shipment-event.helper.ts"]),
+
+  // e-İrsaliye (E5-MOTOR): tek yazar `writeEIrsaliyeEventTx`; karşı olaylar `transitionEIrsaliyeTx` üzerinden aynı yazara iner.
+  D("EIrsaliyeEvent", "e-İrsaliye olay defteri (`ShipmentEvent` emsali) — durum tablosu `EIrsaliye` \"şu an ne\", bu defter \"ne oldu\"; append-only, mühür `defter_block_tamper`; gönderim ve alıcı yanıtı kaydı tipli karşı olayla geri alınır",
+    { tur: "KARSI_OLAY", enumAdi: "EIrsaliyeEventType", ciftler: [["GONDERILDI", "GONDERIM_GERI_ALINDI"], ["YANIT_KAYDEDILDI", "YANIT_GERI_ALINDI"]] },
+    [{ dosya: "src/services/e-irsaliye/e-irsaliye-event.helper.ts", sembol: "writeEIrsaliyeEventTx" }],
+    ["src/services/e-irsaliye/e-irsaliye-event.helper.ts"]),
 
   D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP değişiklik belgesi kalıbı): bir eylem = bir groupId, her alan = bir from→to satırı; kendi defteri olan olaylar (bağ, özellik, fason, Tambur) KOPYALANMAZ, Hareketler ucunda kaynaklarından okunur. Ters yol karşı kayıttır — geri almak aynı alanı eski değere çeviren YENİ satırdır (yeniden açılma = COMPLETED→IN_PROGRESS satırı), damga değil. DB mührü `defter_block_tamper` (UPDATE ve doğrudan DELETE reddedilir)",
     { tur: "KARSI_KAYIT", ciftler: [["fromValue", "toValue"]], enumAdi: "WorkOrderEventType",
@@ -465,6 +501,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // ── TEZGAH ALARMI (dokuma alarm Faz A1) ──
   // `LoomAlarm` DURUM'dur (§1c, buraya girmez); geçmişi bu defterde. Motor kademe/kapanış satırını,
   // kişi eylemleri (A1b) üstlenme/susturma/not satırını ve karşı olaylarını yazar — tek yazar dosya.
+  D("DeviceBindingEvent", "cihaz bağlama defteri (eşleme v2) — fiziksel cihaz ↔ kurulum anahtarı olayları; append-only (updatedAt YOK, `device_binding_events_block_tamper`); REBOUND'un tersi yeni REBOUND, MERGED↔UNMERGED (D4)",
+    { tur: "KARSI_OLAY", enumAdi: "DeviceBindingEventType", ciftler: [["MERGED", "UNMERGED"], ["REBOUND", "REBOUND"]] },
+    [{ dosya: "src/services/device-rebind.service.ts", sembol: "approve" }],
+    ["src/services/helpers/device-identity.helper.ts"]),
+
   D("LoomAlarmEvent", "alarm DEFTERİ — kademe çalması, üstlenme, susturma, not ve kapanış; append-only (updatedAt YOK, `defter_block_tamper`), kronoloji `createdAt` (alarm başına kesin artan); ters yolu TİPLİ ENUM ÇİFTİ: ACK↔ACK_RELEASE · SNOOZE↔UNSNOOZE · NOTE↔NOTE_RETRACT (not silinmez/değişmez, geri çekme `retractsEventId` bağlı ayrı satır) · RAISED/TIER_SKIPPED↔CANCELLED (duruş geri alındı / plan dışına sınıflandı)",
     { tur: "ENUM_CIFTI", enumAdi: "LoomAlarmEventKind", ciftler: [
       ["ACK", "ACK_RELEASE"], ["SNOOZE", "UNSNOOZE"], ["NOTE", "NOTE_RETRACT"], ["RAISED", "CANCELLED"], ["TIER_SKIPPED", "CANCELLED"],
@@ -483,6 +524,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // okuma helper'ı son kuşağı alır. Ters yolu kuşağın (Seal defterinin) ters yoludur.
   SATIR("MachineShiftStopBreakdown", "MachineShiftStatSeal", "sebep × kayıp sınıfı kırılımı, mühür KUŞAĞI başına; ters yol = YENİ KUŞAK (UNSEAL/RESEAL), satır kendi başına terslenmez; ham unique `machine_shift_stop_breakdowns_uq` sınıflandırılmamış kovayı (reasonCode NULL) COALESCE ile tekil tutar"),
   SATIR("LoomAlarmRecipient", "LoomAlarmEvent", "donmuş alarm alıcısı (A4) — RAISED satırının 'kime bildirildi' listesi, kademe çaldığı an aynı tx'te yazılır; append-only (`updatedAt` YOK, `defter_block_tamper`), tanım değişikliği onu değiştirmez; ters yol = ebeveyn RAISED'ın ters yolu (CANCELLED); tek yazar `loom-alarm.service.ts::writeRaisedEventTx` (motor)"),
+  SATIR("EIrsaliyeXml", "EIrsaliyeEvent", "e-İrsaliye XML sürümü — DONMUŞ İLERİ DEĞER (defter.md üçüncü sınıf b); append-only, mühür `e_irsaliye_xml_degismez` (UPDATE/doğrudan DELETE RED, gönderilmiş/iptal kayda yeni sürüm RED); ters yol = kaydın IPTAL'i (`IPTAL_EDILDI` olayı), düzeltme yeni sürüm (`XML_YENIDEN_URETILDI`); yazıcı E5'te doğar"),
   SATIR("WorkOrderCloseSnapshot", "WorkOrderEvent", "kapanış künyesi — COMPLETED geçişinin (STATUS_CHANGED satırı) aynı tx'te donan üretim çıktısı fotoğrafı; ters yol = yeniden açma KARŞI KAYDI (WorkOrderEvent), künye silinmez/güncellenmez (`defter_block_tamper`), sonraki kapanış yeni `version`; yazan tek dosya `helpers/workorder-close-snapshot.helper.ts` (test_workorder_event_yazar §6b)"),
   SATIR("WorkOrderCloseSnapshotLine", "WorkOrderEvent", "künyenin top başına kalemi — başlığıyla (`WorkOrderCloseSnapshot`) aynı iç içe yazımda doğar; ters yolu başlığınınkiyle aynı: yeniden açma KARŞI KAYDI, kalem değişmez"),
   SATIR("SwatchStockReductionItem", "SwatchStockReduction", "düşümün iptal kümesi; storno kalemden okur"),
@@ -530,6 +572,13 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "revokeTargetProperties" }],
     ["src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"]),
+  D("WorkOrderTargetValue", "iş emrinin HEDEF çeşit değeri (KQ-D6 hedef kurşun gramajı) — İE plan alanı; toplara yayılmaz, sapma türetilir. Değişim FARK bazlı: eski satır damgalanır, yenisi yazılır",
+    { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/helpers/workorder-target-value.helper.ts", sembol: "revokeTargetValueTx" }],
+    // İE oluşturma nested create'i helper'dan alır (`targetValuesNestedCreate`) — tek yazar helper.
+    ["src/services/helpers/workorder-target-value.helper.ts"],
+    // yarı: `revokedAt` damgası yerinde yazılır (WorkOrderToOrderLine emsali); değişim YENİ değer satırıdır.
+    { yari: true }),
 
   // ── TELEMETRİ — budanabilir, ama KARAR UFKU beyan edilir ──────────────────
   { model: "TravelerCardScan", sinif: "TELEMETRI",
@@ -547,6 +596,18 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "kalıcı sayaç/rapor SystemLog'tan değil KALICI KOLONDAN okunur ⇒ audit satırı silindiğinde raporlanan hiçbir sayı değişmez",
     kararUfku: "6 ayda arşivlenir; iş kaynağı olarak okunmaz. ⚠️ ÇÜRÜTMENİN ZAYIF HALKASI ÖLÇÜLDÜ (2026-09-13): audit satırı BİR sayaçta okunuyor — backup-impact.service.ts:331 `systemLog.count`. Ama o satır \"İş kaybı DEĞİL — iz kaydı\" etiketiyle `system` grubunda duruyor (iş sayısı değil) ve kod arşivleme ufkunu ZATEN biliyor: :404 `_min(createdAt)` ile kapsamı ölçüp en eski log cutoff'tan sonraysa rollup'ı alt sınır saymıyor, \"ölçülemedi\" diyor — 0 demiyor. Panzehir yerinde olduğu için sınıf TELEMETRİ kalır. Audit'e uzanma ihtiyacı bir DEFTER EKSİKLİĞİNİN işaretidir (bkz. SackAllocation borcu)." },
 
+  // Yazdırma geçmişi (izlenebilirlik A1): "kim neyi hangi yazıcıdan bastı, ne düştü".
+  { model: "PrintJob", sinif: "TELEMETRI",
+    gerekce: "basım hareketi telemetrisi; tek yazar/okuyucu `src/services/print-job.service.ts`, hiçbir rapor sayısı ya da iş kararı bu tablodan okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
+    kararUfku: "YOK — iptal guard'ı labelPrintedAt okur; print_jobs hiçbir karara girmez. Budama yalnız YAŞA bağlıdır (`printLog.retentionDays`, varsayılan 180 gün, 0 = budama yok)",
+    silen: ["src/services/print-job.service.ts"] },
+
+  // İstek başlığı (izlenebilirlik B1): "kim hangi uca ne attı" — gövdesiz künye.
+  { model: "RequestTrace", sinif: "TELEMETRI",
+    gerekce: "istek künyesi telemetrisi (yöntem · uç · durum · süre · cihaz · audit sayısı); tek yazar/okuyucu `src/services/request-trace.service.ts`, hiçbir rapor sayısı ya da iş kararı bu tablodan okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
+    kararUfku: "YOK — yalnız görüntü; hiçbir karar/sayı türetilmez. Budama yalnız YAŞA bağlıdır (`requestTrace.retentionDays`, varsayılan 90 gün, 0 = budama yok)",
+    silen: ["src/services/request-trace.service.ts"] },
+
   // Patron bulutu eşitlemesi (B1): satırı uygulama kodu DEĞİL silme/ayrılma tetikleyicileri yazar.
   { model: "SyncMark", sinif: "TELEMETRI",
     gerekce: "patron bulutu eşitleme işareti (SILINDI/KIRLI) — yalnız \"bu kökü buluta yeniden gönder\" der; tek okuyucusu eşitleme taramasıdır (src/cloud-sync/change-scan.ts), hiçbir rapor/ekran/karar okumaz ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
@@ -563,6 +624,10 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     gerekce: "backend güncellemesinin panel ONAYI (Dağıtım v2): güncelleyicinin niyet dosyasına giden TETİK, yetki değil — silinse raporlanan hiçbir sayı değişmez; \"ne oldu\"nun sahibi güncelleyicinin işlem geçmişi (`gecmis.jsonl`, `onayId` ile) ve satıcının `kurulum_kaydi` defteridir; satır silinmez, güncellenmez — geri alma da yeni bir satırdır, yürürlükteki = en son satır (`services/update-approval.service.ts`)" },
   { model: "CloudInboxReceipt", sinif: "DURUM",
     gerekce: "patron bulutu mesajının TEK KULLANIMLIK tüketim kaydı (idempotency makbuzu): iş sonucu varlığın KENDİ defterinde (sipariş/cari), ters yolu da onun ters yoludur (sipariş iptali · kart arşivi); makbuz silinmez, güncellenmez, geri alınmaz — silinse raporlanan sayı değişmez ama aynı mesaj ikinci varlık doğururdu" },
+  { model: "ReportDefinitionVersion", sinif: "DURUM",
+    gerekce: "rapor tanımı gövdesinin DEĞİŞMEZ sürümü (rapor v2 R1-SEMA, append-only): rapor sayıları canlı veriden hesaplanır, sürüm satırı silinse raporlanan hiçbir sayı değişmez ⇒ defter değil; ters mekanizması = YENİ SÜRÜM SATIRI (düzenleme de geri alma da yeni satırdır), yürürlükteki = `ReportDefinition.activeVersionId` (atomik claim) — satır güncellenmez, silinmez" },
+  { model: "DocumentTemplateVersion", sinif: "DURUM",
+    gerekce: "belge şablonu gövdesinin DEĞİŞMEZ sürümü (belge tasarımcısı T1B, append-only + trigger `document_template_versions_block_tamper`): basım sayıları `PrintedDocument` defterinden okunur, sürüm satırı silinse raporlanan hiçbir sayı değişmez ⇒ defter değil; ters mekanizması = YENİ SÜRÜM SATIRI, yürürlükteki = `DocumentTemplate.publishedVersionId` (atomik claim) — içerik güncellenmez, yayın damgası bir kez yazılır, yayınlanmış satır silinmez" },
 ];
 
 // =============================================================================

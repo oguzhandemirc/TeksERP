@@ -13,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DocVersionHistory } from "@/components/print/DocVersionBar";
-import { printHtmlString } from "@/lib/print";
+import { printTracked } from "@/lib/print";
 import { PrintPageSizeToggle, readDocPageSize } from "@/components/print/PrintPageSizeToggle";
 import { workOrderService } from "./service";
 import type { WorkOrder, TravelerCard } from "./types";
@@ -94,7 +94,7 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
    *
    * Bildirim baskının KENDİSİNDEN ayrı bir çağrıdır, çünkü backend GET /html'de
    * bayrağı temizleyemez (o uç önizlemeyi de besler). Baskı TAMAMEN istemci
-   * tarafındadır (`printHtmlString` → izole iframe → yazıcı): bildirim düşse de
+   * tarafındadır (`printTracked` → yazıcı): bildirim düşse de
    * kâğıt çıkmıştır.
    *
    * ⚠️ HATA MESAJI SONUCU SÖYLER, HTTP'yi DEĞİL (2026-08-06 saha bildirimi:
@@ -109,9 +109,15 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
    */
   const handlePrint = async () => {
     if (!html || !activeCard) return;
-    printHtmlString(html);
+    const out = await printTracked({
+      subject: { kind: "REFAKAT_KARTI", table: "traveler_cards", id: activeCard.id },
+      html,
+      workEndpoint: true,
+    });
+    // İptal/hata: kâğıt çıkmadı → "basıldı" bildirilmez (kart sürümü ilerlemez).
+    if (!out.proceed) return;
     try {
-      await workOrderService.recordTravelerCardPrint(activeCard.id);
+      await workOrderService.recordTravelerCardPrint(activeCard.id, out.printJob);
       // Rozet üç yerde okunuyor (WO detay başlığı, kart geçmişi, bu diyalog).
       //
       // ⚠️ Anahtarlar EKRANLARIN kullandığıyla BİREBİR olmalı (2026-08-17 dersi,

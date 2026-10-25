@@ -7,6 +7,7 @@ import { SupportSessionBadge } from "./SupportSessionBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { LoomAlarmBell } from "@/pages/Operations/LoomAlarms/LoomAlarmBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
+import { BildirimZili } from "./BildirimZili";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -100,8 +101,11 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
         {/* Tezgah alarmı — Etkinlik akışından AYRI zil; bayrak/izin yoksa hiç çizilmez. */}
         <LoomAlarmBell />
 
+        {/* Kişisel bildirim zili (gelen kutusu) — bayrak kapalı / eski backend → hiç çizilmez. */}
+        <BildirimZili />
+
         {/* Etkinlik = sayaçsız akış (audit ayak izi): rozet/okunmamış sayısı TAŞIMAZ.
-            Kişisel bildirim zili (gelen kutusu) bu bağlantının yanına gelir. */}
+            Kişisel bildirim zili (gelen kutusu) hemen solunda. */}
         {canSeeActivity && (
           <TooltipProvider delayDuration={200}>
             <Tooltip>

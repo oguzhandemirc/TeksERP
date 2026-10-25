@@ -1,7 +1,7 @@
 // =============================================================================
 // GÜZERGÂH · BT — Belge Tasarımcısı iskeleti (T2)
 // =============================================================================
-//   BT1 Bayrak kapalı (T1C'ye dek alan yok → fail-closed): "Belge tasarımcısı kapalı — Genel Ayarlar'dan açılır"
+//   BT1 Bayrak kapalı (varsayılan, fail-closed): "Belge tasarımcısı kapalı" + "Ayarlardan aç" (Sistem → Baskı & Cihazlar → Belgeler)
 //   BT2 Bayrak açık (yanıt yakalanır): boş editör, A4 dikey; kanvas iframe'i sandbox'lı; örnek belge yüklenir
 //   BT3 Kâğıt A5 + Yatay: kanvas genişliği/yüksekliği oranı
 //   BT4 Kanvasta seçim → Stil paneli Türkçe sektörler; sandbox ölçümü (seçim çalışır, enjekte script çalışmaz)
@@ -13,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const KANIT = process.env.E2E_KANIT_DIZINI ?? null;
-const KAPALI_METNI = "Belge tasarımcısı kapalı — Genel Ayarlar'dan açılır";
+const KAPALI_METNI = "Belge tasarımcısı kapalı";
 const olc = { kapali: null, sandbox: null, bos: null, a4: null, a5: null, secim: null, pwned: null, sektorler: null, ingilizce: null };
 
 /** Açık ve koyu temada kanıt görüntüsü (tema sınıfı yalnız ekran için değiştirilir, kaydedilmez). */
@@ -53,14 +53,14 @@ const cerceveOlcusu = (page) => cerceve(page).evaluate((f) => ({ w: f.clientWidt
 export const BELGE_TASARIMCI_ADIMLARI = [
   {
     id: "BT1", rol: "P",
-    yol: "Tanımlar → Belge Tasarımcısı (bayrak kapalı) → boş durum + Genel Ayarlar bağlantısı", rota: "definitions/document-designer",
+    yol: "Tanımlar → Belge Tasarımcısı (bayrak kapalı) → boş durum + Ayarlardan aç bağlantısı", rota: "definitions/document-designer",
     async yap({ git, gor, page }) {
       await git("Belge Tasarımcısı");
       await gor(KAPALI_METNI);
-      olc.kapali = await page().getByRole("button", { name: "Genel Ayarlar'a git" }).count();
+      olc.kapali = await page().getByRole("button", { name: "Ayarlardan aç" }).count();
       await kanit(page, "BT1-kapali");
     },
-    dogrula: [{ ad: "kapalı metni + Genel Ayarlar düğmesi görünüyor", sql: "SELECT 1", oku: () => olc.kapali, beklenen: (v) => v === 1 }],
+    dogrula: [{ ad: "kapalı metni + Ayarlardan aç düğmesi görünüyor", sql: "SELECT 1", oku: () => olc.kapali, beklenen: (v) => v === 1 }],
   },
   {
     id: "BT2", rol: "P", gerektirir: ["BT1"],

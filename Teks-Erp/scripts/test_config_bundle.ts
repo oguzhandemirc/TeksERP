@@ -238,8 +238,9 @@ async function main(): Promise<void> {
   );
 
   // Düzenlenebilir bir seri seç — kilitli/kapalı olanlar ayrı kolu ölçer.
+  // Sabit biçimli (GİB) seri hariç: orada yalnız ön ek veri, hane kolu ölçülemez.
   const duzenlenebilir = NUMBER_SERIES_CATALOG.find(
-    (e) => !e.lockedReason && e.scopedCounter && !e.kind,
+    (e) => !e.lockedReason && e.scopedCounter && !e.kind && !e.fixedShape,
   );
   const kilitli = NUMBER_SERIES_CATALOG.find((e) => e.lockedReason);
   // ⚠️ AYRI BİR SERİ ŞART: kilitli seriyi `assertSeriesFormatAllowed` DA

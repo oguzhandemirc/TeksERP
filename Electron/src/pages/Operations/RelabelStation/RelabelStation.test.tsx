@@ -39,7 +39,11 @@ vi.mock("@/services/labelService", () => ({
   },
 }));
 
-// Yerel yazıcı yok → iframe.print yedeği (usePreferences provider'ı test'te yok).
+// Yerel yazıcı yok → sistem penceresi yedeği, boğazdan (usePreferences provider'ı test'te yok).
+const PRINT_JOB = { transport: "SISTEM_PENCERESI" };
+vi.mock("@/lib/print", () => ({
+  printTracked: vi.fn(async () => ({ status: "BELIRSIZ", proceed: true, printJob: PRINT_JOB })),
+}));
 vi.mock("@/hooks/useLabelPrinter", () => ({
   useLabelPrinter: () => ({ directEnabled: false, printRoll: vi.fn(), printRollsBulk: vi.fn() }),
 }));
@@ -159,7 +163,7 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
     await waitFor(() => expect(basBtn).not.toBeDisabled());
     await userEvent.click(basBtn);
     await waitFor(() =>
-      expect(printRollLabel).toHaveBeenCalledWith("roll-1", { customerId: "cB", orderLineId: "ol-1" }),
+      expect(printRollLabel).toHaveBeenCalledWith("roll-1", { customerId: "cB", orderLineId: "ol-1" }, PRINT_JOB),
     );
   });
 
@@ -173,7 +177,7 @@ describe("RelabelPrintForCustomer — müşteri için yeniden bas", () => {
     await waitFor(() => expect(basBtn).not.toBeDisabled());
     await userEvent.click(basBtn);
     await waitFor(() =>
-      expect(printRollLabel).toHaveBeenCalledWith("roll-1", { stock: true }),
+      expect(printRollLabel).toHaveBeenCalledWith("roll-1", { stock: true }, PRINT_JOB),
     );
   });
 

@@ -24,6 +24,8 @@ export const PROFIL_DISI_ANAHTARLAR: Readonly<Record<string, string>> = {
   travelerCardConfig: "nesne değerli; belge tasarımı (belge-etiket.md)",
   companyLetterhead: "nesne değerli; belge tasarımı (belge-etiket.md)",
   documentsConfig: "nesne değerli; belge tasarımı (belge-etiket.md)",
+  companyLegalIdentity: "nesne değerli; firma KİMLİĞİ (VKN/unvan), profil kimliği değil (E-IRS P1)",
+  eIrsaliyeConfig: "nesne değerli; yapılandırma kapısı VERİDİR, bayrak değil (E-IRS P1/K-C) — açmak künye + seri ister",
   reportsClosedKeys: "liste değerli; ticari kapsam kararı, O13b'de ayrıca ele alınır",
 };
 
@@ -42,6 +44,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereEnabled: A(true),
   dokumaEnabled: A(true),
   emanetEnabled: A(true),
+  kaliteGuvenceEnabled: A(true),
+  maliyetEnabled: A(true),
   // ── ön muhasebe / ticaret ──────────────────────────────────────────────────
   pricingEnabled: A(true),
   financeBlockNegativeCashEnabled: A(true),
@@ -177,6 +181,9 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   scrapGradeLabelEnabled: A(true),
   // ── bildirim ───────────────────────────────────────────────────────────────
   bildirimGelenKutusuEnabled: A(true),
+  // ── belge-sablon ───────────────────────────────────────────────────────────
+  documentDesignerEnabled: A(true),
+  documentPublishSodEnabled: A(true),
 };
 
 /** `acik` profilinin `ayarlar`ı: tablodaki AÇIK değerler (varsayılanda kalanlar yazılmaz). */

@@ -100,12 +100,20 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 ## 9 · Kayıt defteri
 
 ### grapesjs@0.23.8 · Electron · 2026-10-24
-1. Problem      : Belge Tasarımcısı (plan `BELGE-SABLON-TASARIMCISI-PLAN.md` D1/T2) — kullanıcı belgeyi sürükle-bırak bloklar, katmanlar ve CSS stil paneliyle "sıfırdan" tasarlar; HTML/CSS çıktısı Liquid şablonuna gider; §2.2 "Görsel belge editörü" satırı
-2. Alternatifler: elle yazmak (seçim/sürükleme/katman/stil yöneticisi/geri al — aylar) · Puck / Craft.js (HTML kod kipi ve serbest CSS yok) · GrapesJS Studio SDK / Unlayer / Stimulsoft (ücretli) · `@grapesjs/react` sarmalayıcısı (EKLENMEDİ: editör tek `useEffect`te kurulup `appendTo` ile kendi panellerimize çizildi, sarmalayıcının çözdüğü sorun yok) — kullanıcı "kütüphane kullan" yönlendirmesi, patron kararı D1
-3. Boyut/biçim  : saf JS, native YOK; ESM `dist/grapes.mjs` + `dist/css/grapes.min.css` paketten import (CDN YOK); YALNIZ `DocumentDesigner/` statik import eder, sayfa onu `React.lazy` ile ayrı parçaya alır ([KU-17]; bekçi `designer-routing.test.ts`); geçişli `backbone` 1.4.1 (MIT) · `underscore` 1.13.8 (MIT) · `backbone-undo` (MIT) · `codemirror` 5.63.0 (MIT) · `html-entities` (MIT) · `promise-polyfill` (MIT) Ölçüm (2026-10-25 `electron-vite build`): `DesignerWorkspace` parçası 1.171 KB JS + 62 KB CSS; ana `index` parçasında grapesjs YOK.
-4. Bakım        : 0.x serisi, sık yayın (0.23.7 paketi 911 KB, 0.23.8 iki gün sonra 12 MB çıktı — eksik yayın şüphesiyle 0.23.8 seçildi); TAM SABİT — 0.x'te yama sürümü bile yapılandırma/olay adlarını değiştirebilir; pin `createEditor.test.ts` § paket sözleşmesi
+1. Problem      : Belge Tasarımcısı (plan D1/T2) — sürükle-bırak blok, katman, CSS stil paneli; HTML/CSS Liquid şablonuna gider
+2. Alternatifler: elle yazmak (aylar) · Puck / Craft.js (HTML kod kipi yok) · Studio SDK / Unlayer (ücretli) · `@grapesjs/react` (EKLENMEDİ: tek `useEffect` + `appendTo` yeter) — patron kararı D1
+3. Boyut/biçim  : saf JS, native YOK, CDN YOK; yalnız `DocumentDesigner/` import eder, `React.lazy` ayrı parça ([KU-17]): 1.171 KB JS + 62 KB CSS, ana parçada YOK (ölçüldü 2026-10-25); geçişli backbone · underscore · backbone-undo · codemirror 5 · html-entities · promise-polyfill (hepsi MIT)
+4. Bakım        : 0.x, TAM SABİT (yama sürümü olay adlarını değiştirebilir; 0.23.7 eksik yayın şüphesi); pin `createEditor.test.ts`
 5. Lisans       : BSD-3-Clause
-6. Dağıtım      : Electron rebuild GEREKMEZ; panel paketiyle gider. ⚠️ Varsayılanı `telemetry:true` — `app.grapesjs.com/api/gjs/telemetry/collect`e istek atar ve panel CSP'si `connect-src https:` olduğundan ENGELLENMEZ (ölçüldü 2026-10-24) → `telemetry:false` zorunlu; `cssIcons` varsayılanı font-awesome CDN'i → `''`. Kanvas iframe'i `sandbox="allow-same-origin"` ile çalışır (seçim/sürükleme/metin düzenleme ölçüldü; enjekte script çalışmaz) — `frameSandbox.ts`, bekçi `iframe-sandbox.test.ts`
+6. Dağıtım      : rebuild GEREKMEZ. ⚠️ Varsayılan `telemetry:true` → `app.grapesjs.com`e gider, panel CSP'si (`connect-src https:`) engellemez → `telemetry:false` zorunlu; `cssIcons` → `''`. Kanvas `sandbox="allow-same-origin"` (enjekte script çalışmaz) — bekçi `iframe-sandbox.test.ts`
+
+### liquidjs@10.30.0 · Teks-Erp · 2026-10-24
+1. Problem      : belge şablon tasarımcısı (plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md` §3.3, §5) kullanıcı şablonunda döngü/koşul/filtre ister; mantıksız `{{alan}}` motoru (refakat kartı RAW_HTML) bunu taşımaz; §2.1 "Belge şablon dili" satırı
+2. Alternatifler: elle motor (ifade ayrıştırıcısı + kum havuzu = en riskli kod sınıfı; red) · Handlebars (yardımcı = JS; `compile` JS üretir; red) · Nunjucks (JS'e derler, kum havuzu yok; red) · Eta/EJS (şablon = JS; red) · LiquidJS: JS üretmez, `strictVariables/strictFilters/ownPropertyOnly`, süre/bellek/parse sınırı yerleşik
+3. Boyut/biçim  : saf JS, native YOK; CJS girişi `dist/liquid.node.js` (`require()` sınavı geçti); geçişli tek bağımlılık `commander@10.0.1` (yalnız CLI bin'i, çalışma anında yüklenmez)
+4. Bakım        : 10.30.0, TAM SABİT — `{% echo %}`/`{% cycle %}` veriyi `outputEscape`ten geçirmeden yazıyor ve `capture` dize katlaması `memoryLimit`e sayılmıyor (ÖLÇÜLDÜ; `motor/liquid.ts` sarmalayıcıları buna dayanır) ⇒ yükseltme yeniden ölçüm ister; `test_dependency_contract §(a)` + `test_belge_liquid_kati` korur
+5. Lisans       : MIT (commander MIT)
+6. Dağıtım      : yalnız backend paketi; Electron/mobil etkisi yok
 
 ### echarts@6.1.0 · Electron · 2026-10-24
 1. Problem      : Raporlar v2 grafikleri (8 tür: çizgi/önceki dönem soluk, çubuk, yığın, pasta, ısı haritası, saçılım, kutu, küçük çoklu) ekranda + PDF'e VEKTÖR (DOM'suz SVG SSR); §2.2 "Tema · animasyon · grafik" satırı — tek grafik motoru, `recharts` emekliye ayrılıyor (yeni import cırcırla yasak)

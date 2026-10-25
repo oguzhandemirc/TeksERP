@@ -116,6 +116,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "geri alınmış iz dururken aynı (top, adım, tip) yeniden yazılabilsin",
   },
+  // fabric_properties — KQ-D4 (migration 20261024073000): bir bayrağın TEK çeşidi.
+  {
+    table: "fabric_properties",
+    index: "fabric_properties_variant_of_uq",
+    uniq: true,
+    predicate: `("variantOfPropertyId" IS NOT NULL)`,
+    why: "bir bayrağın en fazla bir çeşidi (Kurşunlu → Kurşun gramajı)",
+  },
   // sack_allocations — K2 (2026-09-14): tahsis sil-yaz'dan damgaya döndü; tam unique
   // damgalı satır dururken aynı (çuval, satır)ın yeniden tahsisini engellerdi → PARTIAL.
   {
@@ -147,6 +155,14 @@ const PARTIAL_INDEXES: Array<{
     uniq: true,
     predicate: `("revokedAt" IS NULL)`,
     why: "damgalı hedef dururken aynı (iş emri, özellik) yeniden yazılabilsin; AKTİF çift tekil",
+  },
+  // KQ-D6 (migration 20261024140855): İE hedef çeşit değeri — damga ile sürümlenir.
+  {
+    table: "work_order_target_values",
+    index: "work_order_target_values_active_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "damgalı hedef değer dururken aynı (iş emri, çeşit özelliği) yeniden yazılabilsin; AKTİF hedef tekil",
   },
   // rolls — null-yoğun FK'lar (migration 20260606001717 → 20260612100000 onarımı)
   { table: "rolls", index: "rolls_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun FK" },
@@ -219,7 +235,13 @@ const PARTIAL_INDEXES: Array<{
   },
   // roll_errors
   { table: "roll_errors", index: "roll_errors_isProcessed_idx", uniq: false, predicate: `("isProcessed" = false)`, why: "açık hata kuyruğu" },
-  { table: "roll_errors", index: "roll_errors_roll_meter_defect_uq", uniq: true, predicate: `("defectTypeId" IS NOT NULL)`, why: "aynı metrede mükerrer hata seddi" },
+  // K4P-SEMA: predicate'e `origin = PROCESS` — muayene revizyonu aynı üçlüyü yeniden yazar.
+  { table: "roll_errors", index: "roll_errors_roll_meter_defect_uq", uniq: true, predicate: `(("defectTypeId" IS NOT NULL) AND (origin = 'PROCESS'::"RollErrorOrigin"))`, why: "aynı metrede mükerrer SAHA hatası seddi" },
+  // K4P-SEMA (migration 20261024170759): tek aktif muayene + kural seti tekillikleri.
+  { table: "roll_inspections", index: "roll_inspections_one_active_uq", uniq: true, predicate: `(("supersededAt" IS NULL) AND ("voidedAt" IS NULL))`, why: "(top, faz) başına tek aktif muayene — eşzamanlı ikinci ilk muayenenin seddi" },
+  { table: "four_point_rule_sets", index: "four_point_rule_sets_one_factory_uq", uniq: true, predicate: `((scope = 'FACTORY'::"RuleScope") AND ("isActive" = true))`, why: "tek aktif fabrika kural seti" },
+  { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_uq", uniq: true, predicate: `(("isActive" = true) AND ("customerId" IS NOT NULL) AND ("itemId" IS NULL))`, why: "müşteri başına tek aktif genel kural seti" },
+  { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün) başına tek aktif kural seti" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
   // roll_returns — iade belge no KOLONA alındı (migration 20260922210000).
@@ -306,15 +328,15 @@ const PARTIAL_INDEXES: Array<{
     table: "item_prices",
     index: "item_price_default_uq",
     uniq: true,
-    predicate: `("customerId" IS NULL)`,
-    why: "kalem+yön+para birimi başına TEK kart varsayılanı",
+    predicate: `(("customerId" IS NULL) AND ("revokedAt" IS NULL))`,
+    why: "kalem+yön+para birimi başına TEK AKTİF kart varsayılanı (damgalı geçmiş kısıta girmez — MAL-0b)",
   },
   {
     table: "item_prices",
     index: "item_price_customer_uq",
     uniq: true,
-    predicate: `("customerId" IS NOT NULL)`,
-    why: "kalem+müşteri+yön+para birimi başına TEK istisna",
+    predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
+    why: "kalem+müşteri+yön+para birimi başına TEK AKTİF istisna (damgalı geçmiş kısıta girmez — MAL-0b)",
   },
   // 2026-08-14 — sağlamlık paketi (migration 20260814110200_saglamlik_paketi).
   // Storno bağı: bir defter satırı EN FAZLA BİR KEZ terslenebilir.
@@ -537,6 +559,31 @@ const PARTIAL_INDEXES: Array<{
     predicate: `"isActive"`,
     why: "kart tipi × ham kod × tezgah (NULL = genel) için tek canlı eşleme (NULLS NOT DISTINCT); pasif satır yer işgal etmez",
   },
+  // Cihaz eşleme v2 (D1, migration 20261024025530_cihaz_baglama): bir donanım tek CANLI satıra bağlı;
+  // birleşmiş kopya (mergedIntoId dolu) aynı özeti taşıyabilir.
+  {
+    table: "devices",
+    index: "devices_hw_digest_live_uq",
+    uniq: true,
+    predicate: `(("hwDigest" IS NOT NULL) AND ("mergedIntoId" IS NULL))`,
+    why: "aynı donanımdan eşzamanlı iki announce iki canlı satır açamasın; birleşmiş kopyalar özeti korusun",
+  },
+  // print_jobs (izlenebilirlik A1): hata süzgeci + "en çok hata veren yazıcı" yalnız HATA satırlarını tarar.
+  {
+    table: "print_jobs",
+    index: "print_jobs_hata_createdAt_idx",
+    uniq: false,
+    predicate: `((status)::text = 'HATA'::text)`,
+    why: "yazdırma geçmişinde hata süzgeci ve özet şeridinin hata sayımı tüm telemetriyi taramasın",
+  },
+  // request_traces (izlenebilirlik B1, migration 20261024091047): "reddedilen istekler" süzgeci yalnız hata satırlarını tarar.
+  {
+    table: "request_traces",
+    index: "request_traces_hata_createdAt_idx",
+    uniq: false,
+    predicate: `(status >= 400)`,
+    why: "istek başlığında reddedilen istek süzgeci tüm telemetriyi taramasın",
+  },
   // Bildirim çekirdeği (N1-SEMA, migration 20261024023840): dağıtıcının birleştirme hedefi ve koşul açma seddi.
   {
     table: "notification_inbox",
@@ -558,6 +605,22 @@ const PARTIAL_INDEXES: Array<{
     uniq: false,
     predicate: `("processedAt" IS NULL)`,
     why: "dağıtıcı süpürmesi yalnız işlenmemiş kuyruğu tarasın (işlenmiş satırlar indekse girmez)",
+  },
+  // e-İrsaliye (E1-SEMA, migration 20261024081108): kaynak başına tek canlı kayıt.
+  {
+    table: "e_irsaliyeler",
+    index: "e_irsaliyeler_kaynak_canli_key",
+    uniq: true,
+    predicate: `(status <> ALL (ARRAY['IPTAL'::"EIrsaliyeStatus", 'REDDEDILDI'::"EIrsaliyeStatus"]))`,
+    why: "kaynak (sevkiyat) başına TEK canlı e-İrsaliye — düşerse aynı sevke iki numara/ETTN doğar; IPTAL/REDDEDILDI yer işgal etmez",
+  },
+  // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): "varsayılan ön ayar" seddi.
+  {
+    table: "report_presets",
+    index: "report_presets_one_default_uq",
+    uniq: true,
+    predicate: `("isDefault" = true)`,
+    why: "kullanıcı başına rapor başına tek varsayılan ön ayar — düşerse iki varsayılan yarışır, rapor hangi parametreyle açılacağını dizi sırasına bırakır",
   },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
@@ -719,6 +782,23 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // "SUM(qty)" yazan her raporu sessizce yanlışlar (biri işareti dikkate alır,
   // diğeri almaz) ve bu yıllar sonra fark edilir.
   { table: "roll_variances", name: "roll_variances_qty_positive" },
+  // 2026-10-24 — KQ-D4 (migration 20261024073000_kursun_gramaj_cesit): gramaj değeri
+  // yalnız KURSUN_APPLIED satırında; özellik kendi kendisinin çeşidi olamaz.
+  { table: "roll_operations", name: "roll_operations_property_value_ck" },
+  // K4P-SEMA (migration 20261024170759) — 4 puan muayene seddi; bekçi `test_k4p_sema_sedleri`.
+  { table: "roll_errors", name: "roll_errors_meter_ck" },
+  { table: "roll_errors", name: "roll_errors_points_ck" },
+  { table: "roll_errors", name: "roll_errors_inspection_ck" },
+  { table: "defect_types", name: "defect_types_fixed_points_ck" },
+  { table: "items", name: "items_width_cm_ck" },
+  { table: "roll_inspections", name: "roll_inspections_counts_ck" },
+  { table: "roll_inspections", name: "roll_inspections_length_ck" },
+  { table: "roll_inspections", name: "roll_inspections_width_ck" },
+  { table: "roll_inspections", name: "roll_inspections_stamp_ck" },
+  { table: "roll_inspections", name: "roll_inspections_revision_ck" },
+  { table: "four_point_rule_sets", name: "four_point_rule_sets_scope_ck" },
+  { table: "four_point_rule_bands", name: "four_point_rule_bands_max_score_ck" },
+  { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
   // dokunduğu için yıllarca ihlal edilebiliyordu (T1-044 · T1-001 · T1-002 ·
@@ -807,6 +887,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // 2026-09-22 — numara serisi (20260922140000_number_series). Hane sayısı 1..8:
   // 1 = dolgusuz (günlük parti no emsali), 8 = VarChar(64) kolonların pratik tavanı.
   // Sıfır hane sayacı görünmez kılar, 9+ hane kodu okunmaz uzunluğa taşır.
+  // 2026-10-24 sed 1..9 (20261024081443): GİB e-İrsaliye 9 hane; diğerlerinde kapı 1..8.
   { table: "number_series", name: "number_series_digits_range" },
   // 2026-09-23 — sayaç ayarları (20260923120000_number_series_counter). Üçü de
   // uygulama kapısının DB İKİZİ (çift yüklem): kapı 400 döner, sed bozuk satırı
@@ -816,6 +897,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "number_series", name: "number_series_start_value_positive" },
   { table: "number_series", name: "number_series_step_positive" },
   { table: "number_series", name: "number_series_max_value_range" },
+  // 2026-10-24 — başlangıcın yılı (20261024083651): yıl yalnız başlangıçla anlamlı.
+  { table: "number_series", name: "number_series_start_value_year_check" },
   // 2026-09-23 — biçim zaman çizgisi (20260923200000_number_series_line).
   // Hane sedi `number_series` ile AYNI: satır ile önbellek ayrı sedlerde olsaydı
   // biri geçerli, öteki geçersiz bir biçim kabul edebilirdi.
@@ -860,6 +943,17 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "credential_reset_requests", name: "credential_reset_requests_decision_check" },
   // Hata raporu kuyruğu (3.6, migration 20261006120000): grup sayacı en az 1 (boş grup yazılmaz).
   { table: "error_report_entries", name: "error_report_entries_count_check" },
+  // Cihaz eşleme v2 (D1): birleşme kendine olamaz, birleşmiş kopya pasiftir; talep durumu ↔ karar alanları.
+  { table: "devices", name: "devices_merged_not_self" },
+  { table: "devices", name: "devices_merged_inactive" },
+  { table: "device_rebind_requests", name: "device_rebind_requests_status_chk" },
+  { table: "device_rebind_requests", name: "device_rebind_requests_decided_chk" },
+  // Yazdırma geçmişi (izlenebilirlik A1, migration 20261024025542): kapalı kümeler + HATA→kod + adet + toplu tavan.
+  { table: "print_jobs", name: "print_jobs_output_kind_check" },
+  { table: "print_jobs", name: "print_jobs_status_check" },
+  { table: "print_jobs", name: "print_jobs_hata_kodu_check" },
+  { table: "print_jobs", name: "print_jobs_adet_check" },
+  { table: "print_jobs", name: "print_jobs_subject_ids_max_check" },
   // Bildirim çekirdeği (N1-SEMA, migration 20261024023840): kapalı kümeler VarChar + CHECK; `kind` bilinçli CHECK'siz
   // (yeni tür migration istemez, tek kaynak katalog). Sayaçlar negatife düşmez; kutu satırı en az bir olay taşır.
   { table: "notification_outbox", name: "notification_outbox_phase_ck" },
@@ -867,7 +961,29 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "notification_inbox", name: "notification_inbox_klass_ck" },
   { table: "notification_inbox", name: "notification_inbox_reason_ck" },
   { table: "notification_inbox", name: "notification_inbox_count_ck" },
+  // Belge şablon tasarımcısı (T1B, 2026-10-24): şablon durumu ve kip kümeleri kapalı.
+  { table: "document_templates", name: "document_templates_status_check" },
+  { table: "document_templates", name: "document_templates_edit_mode_check" },
+  { table: "document_template_versions", name: "document_template_versions_edit_mode_check" },
   { table: "notification_daily_stats", name: "notification_daily_stats_events_ck" },
+  // e-İrsaliye (E1-SEMA): numaralı/gönderilmiş durum çift yüklemi · GİB biçimi · sayaç · doğuş olayı.
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_numarali_durum_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_gonderilmis_durum_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_document_no_bicim_chk" },
+  { table: "e_irsaliyeler", name: "e_irsaliyeler_download_count_chk" },
+  { table: "e_irsaliye_olaylari", name: "e_irsaliye_olaylari_dogus_chk" },
+  // Rapor v2 çekirdeği (R1-SEMA, migration 20261024135624): kapalı kümeler VarChar + CHECK
+  // (`defect_types.defectGroup` bilinçli CHECK'siz — küme kodda). Tanım biçimi: SISTEM ⇒ anahtarlı ve
+  // sahipsiz, OZEL ⇒ sahipli ve anahtarsız. Sürüm no ≥ 1; koşu süresi/satır negatif olamaz.
+  { table: "report_definitions", name: "report_definitions_kind_ck" },
+  { table: "report_definitions", name: "report_definitions_visibility_ck" },
+  { table: "report_definitions", name: "report_definitions_status_ck" },
+  { table: "report_definitions", name: "report_definitions_kind_shape_ck" },
+  { table: "report_definition_versions", name: "report_definition_versions_version_no_ck" },
+  { table: "report_shares", name: "report_shares_access_ck" },
+  { table: "report_runs", name: "report_runs_status_ck" },
+  { table: "report_runs", name: "report_runs_counts_ck" },
+  { table: "report_snapshots", name: "report_snapshots_kind_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1078,6 +1194,19 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW"],
     why: "defter mührü: UPDATE her zaman, doğrudan DELETE RED; üst top silinince FK kaskadı geçer (ortak fonksiyon defter_block_tamper)",
   },
+  // e-İrsaliye (E1-SEMA): donmuş XML sürümü + olay defteri mühürleri.
+  {
+    table: "e_irsaliye_xmllari",
+    trigger: "e_irsaliye_xml_degismez",
+    timing: ["BEFORE INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "e_irsaliye_xml_degismez()"],
+    why: "e-İrsaliye XML'i donmuş belge: UPDATE/doğrudan DELETE RED; gönderilmiş/iptal kayda yeni sürüm RED (gönderilen sürüm mühürlü)",
+  },
+  {
+    table: "e_irsaliye_olaylari",
+    trigger: "e_irsaliye_olaylari_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "defter_block_tamper()"],
+    why: "e-İrsaliye olay defteri append-only — UPDATE/doğrudan DELETE RED, kayıt kaskadı geçer",
+  },
   // ── Patron bulutu eşitlemesi (20260929152815_patron_bulut_esitleme) ──────────
   // Silme tespiti koda değil DB'ye bağlı (statik tarama kaskad/dinamik silmede kör):
   // 24 katalog kök tablosunun HER BİRİ `sync_marks`a SILINDI yazar. Kök listesi
@@ -1111,6 +1240,23 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "shipment_orders_sync_dirty",
     timing: ["AFTER INSERT OR DELETE OR UPDATE", "FOR EACH ROW", "sync_mark_shipment_orders()"],
     why: "patron bulutu filigransız küme: shipment_orders ne id ne updatedAt taşır, her yazım sevkiyatı KIRLI yapar",
+  },  {
+    table: "document_template_versions",
+    trigger: "document_template_versions_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "document_template_version_guard()"],
+    why: "belge şablonu: sürüm değişmezdir — içerik UPDATE'i ve yayınlanmış sürümün DELETE'i reddedilir (basılan belge sürümü dondurur)",
+  },
+  {
+    table: "devices",
+    trigger: "devices_merge_no_chain",
+    timing: ["BEFORE INSERT OR UPDATE OF", "FOR EACH ROW", "devices_merge_no_chain()"],
+    why: "cihaz birleşmesi tek adım: okuyucu COALESCE(mergedIntoId, id) zinciri çözmez",
+  },
+  {
+    table: "device_binding_events",
+    trigger: "device_binding_events_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "device_binding_events_block_tamper()"],
+    why: "bağlama defteri append-only; tek meşru UPDATE cihaz kalıcı silinince FK SET NULL kaskadı",
   },
 ];
 
@@ -1166,6 +1312,12 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["TG_OP = 'UPDATE'", "pg_trigger_depth() <= 1", "RAISE EXCEPTION"],
     why: "ortak defter mührü: UPDATE koşulsuz red, DELETE yalnız doğrudan ifadede red (kaskad derinlik ≥ 2 geçer)",
+  },
+  {
+    name: "e_irsaliye_xml_degismez",
+    volatility: "v",
+    bodyFragments: ["TG_OP = 'UPDATE'", "pg_trigger_depth() <= 1", "FOR SHARE", "'GONDERILDI', 'KABUL', 'KISMI_KABUL', 'REDDEDILDI', 'IPTAL'"],
+    why: "e-İrsaliye XML mührü: değişmez + gönderilmiş/iptal kayda yeni sürüm yok (servis kapısının DB ikizi)",
   },
   {
     name: "roll_write_status_event",
@@ -1251,6 +1403,23 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     volatility: "v",
     bodyFragments: ["TG_OP IN ('UPDATE', 'DELETE')", "TG_OP IN ('INSERT', 'UPDATE')", "'shipments'", "'DIRTY'"],
     why: "patron bulutu: sevkiyat ↔ sipariş kümesinin her yazımı (ekleme/güncelleme/silme) sevkiyatı KIRLI yapar",
+  },  {
+    name: "document_template_version_guard",
+    volatility: "v",
+    bodyFragments: ['OLD."publishedAt" IS NOT NULL', 'NEW."compiledLiquid" IS DISTINCT FROM OLD."compiledLiquid"', 'NEW."settings" IS DISTINCT FROM OLD."settings"', "yalnız bir kez"],
+    why: "belge şablonu: sürüm içeriği değişmez, yayın damgası bir kez yazılır, yayınlanmış sürüm silinmez",
+  },
+  {
+    name: "devices_merge_no_chain",
+    volatility: "v",
+    bodyFragments: ['NEW."mergedIntoId"', "'23514'"],
+    why: "cihaz birleşme zinciri yasağı (hedef birleşmiş olamaz, kopyası olan birleşemez)",
+  },
+  {
+    name: "device_binding_events_block_tamper",
+    volatility: "v",
+    bodyFragments: ["pg_trigger_depth() > 1", 'NEW."deviceRefId" IS NULL', "IS NOT DISTINCT FROM OLD", "'23514'"],
+    why: "bağlama defteri mührü: yalnız FK SET NULL kaskadı geçer, başka her UPDATE/DELETE reddedilir",
   },
 ];
 

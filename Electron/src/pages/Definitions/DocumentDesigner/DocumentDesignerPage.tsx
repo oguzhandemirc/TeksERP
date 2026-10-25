@@ -6,8 +6,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { SURFACE_PATH } from "@/pages/GeneralSettings/settings-config";
-import { DESIGNER_DISABLED_TITLE, isDocumentDesignerEnabled } from "./designer-flag";
+import { DESIGNER_DISABLED_TITLE, designerSettingPath, designerSettingTrail, isDocumentDesignerEnabled } from "./designer-flag";
 
 // GrapesJS (~1,1 MB) ayrı parçada: bayrak kapalıyken ya da sayfa açılmadıkça indirilmez (200 KB kuralı).
 const DesignerWorkspace = lazy(() => import("./DesignerWorkspace"));
@@ -45,10 +44,10 @@ export function DocumentDesignerPage() {
         <EmptyState
           icon={PenTool}
           title={DESIGNER_DISABLED_TITLE}
-          description="Bu kurulumda tasarımcı henüz açılmadı. Açma yetkisi olan kullanıcı ayarlardan etkinleştirebilir."
+          description={`Bu kurulumda tasarımcı açık değil. Açma yetkisi olan kullanıcı ${designerSettingTrail()} ekranından açar.`}
           action={
-            <Button size="sm" variant="outline" className="mt-2" onClick={() => navigate(SURFACE_PATH.flags)}>
-              Genel Ayarlar'a git
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => navigate(designerSettingPath())}>
+              Ayarlardan aç
             </Button>
           }
         />

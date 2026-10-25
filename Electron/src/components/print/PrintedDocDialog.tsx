@@ -241,6 +241,12 @@ export function PrintedDocDialog({
         {sourceId && (
           <PrintedDocToolbar
             html={html}
+            subject={{
+              kind: "BELGE",
+              docType,
+              ...(shownMeta?.id ? { printedDocumentId: shownMeta.id, docVersion: shownMeta.version } : {}),
+              ...(shownMeta?.documentNo ? { no: shownMeta.documentNo } : {}),
+            }}
             fileName={`${title}-${shownMeta?.documentNo ?? ""}`}
             fetching={htmlQuery.isFetching}
             printMenu={toolbarPrintMenu}

@@ -118,7 +118,7 @@ function categoriesTable(rep: CashBookReport, account: CashBookAccountSummary | 
       : undefined,
     notes: [
       "Kova toplamı dönemin giren/çıkan toplamına EŞİTTİR — kırılım, defteri üreten aynı hareket kümesinden türetilir.",
-      "İptal edilen belge kırılımda NETLEŞİR: ters satır aslının kategorisine ters yönde düşer (giren = çıkan, net 0).",
+      "İptal edilen belge kırılımda NETLEŞİR: ters satır aslının kategorisine ters yönde düşer (giren ile çıkan eşit, kalan sıfır).",
       "Kategori alanı yalnız kasa hareketlerinde vardır; tahsilat/ödeme, çek ve virman kendi kovalarında toplanır.",
     ],
   };
