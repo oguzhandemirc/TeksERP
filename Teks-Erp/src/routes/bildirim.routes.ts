@@ -7,7 +7,9 @@
 // =============================================================================
 import { Router } from "express";
 import { verifyToken } from "../middlewares/auth.middleware";
+import { requireAnyPermission } from "../middlewares/rbac.middleware";
 import * as c from "../controllers/bildirim.controller";
+import * as t from "../controllers/bildirim-tercih.controller";
 
 const router = Router();
 router.use(verifyToken);
@@ -88,6 +90,335 @@ router.get("/katalog", c.getCatalog);
  *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
  */
 router.get("/", c.getList);
+
+// ---- F4 tercih katmanı (plan §5.6) — `/:id/...`dan ÖNCE bağlanır ------------------
+const ADMIN = requireAnyPermission("settings:notifications", "admin:settings");
+
+/**
+ * @openapi
+ * /api/bildirim/tercihler:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Kişinin çözülmüş tercih hücreleri (tür × kanal: durum, kilit, kaynak, kapsam) + kendi sapma satırları'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{hucreler, satirlar}" }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ *   put:
+ *     tags: [Bildirim]
+ *     summary: 'Tam gövde; seyrek yazılır (yalnız varsayılandan sapan/kapsamlı satır). Kilitli türde uygulama içini kapatmak 409'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [tercihler]
+ *             properties:
+ *               tercihler:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [tur, kanal, acik]
+ *                   properties:
+ *                     tur: { type: string }
+ *                     kanal: { type: string, enum: [UYGULAMA, OZET, MASAUSTU, TABLET_SES, PATRON_PUSH] }
+ *                     acik: { type: boolean }
+ *                     kapsam: { type: object, description: "yalnizTakip · istasyonlar ('BENIM' | uuid[]) · esik — yalnız UYGULAMA, yalnız türün beyan ettiği anahtarlar" }
+ *     responses:
+ *       200: { description: "{hucreler, satirlar}" }
+ *       400: { description: "Görülemeyen tür (NOTIFICATION_KIND_NOT_VISIBLE) · kanal (NOTIFICATION_CHANNEL_INVALID) · kapsam (NOTIFICATION_SCOPE_INVALID)" }
+ *       409: { description: "Kilitli tür (NOTIFICATION_KIND_LOCKED) · gelen kutusu kapalı (BILDIRIM_KAPALI)" }
+ */
+router.get("/tercihler", t.getPreferences);
+router.put("/tercihler", t.putPreferences);
+
+/**
+ * @openapi
+ * /api/bildirim/tercihler/onizleme:
+ *   post:
+ *     tags: [Bildirim]
+ *     summary: '"Haftada ~N bildirim" önizlemesi (son 30 fabrika günü; veri yoksa katalog tahmini). YAZMAZ; gövde verilirse taslağa göre'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { tercihler: { type: array, items: { type: object } } } }
+ *     responses:
+ *       200: { description: "{haftalik, enCok: [{kind, sayi}], kaynak: olcum|tahmin}" }
+ *       400: { description: Geçersiz taslak }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ */
+router.post("/tercihler/onizleme", t.postPreferencePreview);
+
+/**
+ * @openapi
+ * /api/bildirim/tercihler/varsayilana-don/onizleme:
+ *   post:
+ *     tags: [Bildirim]
+ *     summary: 'Varsayılana dönüşte silinecek kendi tercih satırları (yazmaz; kayıt başına seçim için)'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{satirlar: [{id, tur, ad, kanal, acik, kapsam}]}" }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ */
+router.post("/tercihler/varsayilana-don/onizleme", t.postResetPreview);
+
+/**
+ * @openapi
+ * /api/bildirim/tercihler/varsayilana-don:
+ *   post:
+ *     tags: [Bildirim]
+ *     summary: 'Seçilen kendi tercih satırlarını siler (tür varsayılana döner); başkasının satırı etkilenmez'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [ids], properties: { ids: { type: array, minItems: 1, items: { type: string, format: uuid } } } }
+ *     responses:
+ *       200: { description: "{silinen}" }
+ *       400: { description: Geçersiz gövde }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ */
+router.post("/tercihler/varsayilana-don", t.postReset);
+
+/**
+ * @openapi
+ * /api/bildirim/ayarlar:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Kişisel bildirim ayarları — sessiz saat (fabrika saati), susturulan kanallar, gün özeti saati, ses'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{sessizBaslangic, sessizBitis, sessizKanallar, ozetSaati, ses}" }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ *   put:
+ *     tags: [Bildirim]
+ *     summary: 'Kişisel ayarları yazar (tam gövde)'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sessizBaslangic, sessizBitis, sessizKanallar, ozetSaati, ses]
+ *             properties:
+ *               sessizBaslangic: { type: string, nullable: true, example: "22:00" }
+ *               sessizBitis: { type: string, nullable: true, example: "07:00" }
+ *               sessizKanallar: { type: array, items: { type: string, enum: [MASAUSTU, TABLET_SES, PATRON_PUSH] } }
+ *               ozetSaati: { type: integer, nullable: true, minimum: 0, maximum: 23 }
+ *               ses: { type: boolean }
+ *     responses:
+ *       200: { description: Ayarlar }
+ *       400: { description: Geçersiz gövde }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ */
+router.get("/ayarlar", t.getSettings);
+router.put("/ayarlar", t.putSettings);
+
+/**
+ * @openapi
+ * /api/bildirim/takip/{tur}/{id}:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Kaydı takip ediyor muyum (sipariş · iş emri · dokuma işi)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: tur, required: true, schema: { type: string, enum: [siparis, is-emri, dokuma-isi] } }
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{takip, durum, neden}" }
+ *       404: { description: Kayıt görülemiyor (FOLLOW_TARGET_NOT_FOUND) }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ *   put:
+ *     tags: [Bildirim]
+ *     summary: 'Takip et (bırakılmışsa yeniden takip)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: tur, required: true, schema: { type: string, enum: [siparis, is-emri, dokuma-isi] } }
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{takip, durum, neden}" }
+ *       404: { description: Kayıt görülemiyor (FOLLOW_TARGET_NOT_FOUND) }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ *   delete:
+ *     tags: [Bildirim]
+ *     summary: 'Takibi bırak (durum geçişi TAKIP → BIRAKTI; oluşturan otomatiği bir daha ezmez)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: tur, required: true, schema: { type: string, enum: [siparis, is-emri, dokuma-isi] } }
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{takip, durum, neden}" }
+ *       404: { description: Kayıt görülemiyor (FOLLOW_TARGET_NOT_FOUND) }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ */
+router.get("/takip/:tur/:id", t.getFollow);
+router.put("/takip/:tur/:id", t.putFollow);
+router.delete("/takip/:tur/:id", t.deleteFollow);
+
+/**
+ * @openapi
+ * /api/bildirim/profiller:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Bildirim profilleri (yönetici) — hücreler ve üyelerle; `arsiv=1` arşivlileri de getirir'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: arsiv, required: false, schema: { type: string, enum: ["1", "true"] } }
+ *     responses:
+ *       200: { description: "{items}" }
+ *       403: { description: Yetki yok }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ *   post:
+ *     tags: [Bildirim]
+ *     summary: 'Profil oluştur (clientToken ile idempotent)'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [kod, ad], properties: { kod: { type: string, maxLength: 40 }, ad: { type: string, maxLength: 120 }, clientToken: { type: string, format: uuid } } }
+ *     responses:
+ *       201: { description: Profil }
+ *       400: { description: Geçersiz gövde }
+ *       403: { description: Yetki yok }
+ *       409: { description: "Kod kullanımda (NOTIFICATION_PROFILE_CODE_TAKEN) · token çakışması · gelen kutusu kapalı" }
+ */
+router.get("/profiller", ADMIN, t.getProfiles);
+router.post("/profiller", ADMIN, t.postProfile);
+
+/**
+ * @openapi
+ * /api/bildirim/profiller/{id}:
+ *   patch:
+ *     tags: [Bildirim]
+ *     summary: 'Profil adını değiştir'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [ad], properties: { ad: { type: string, maxLength: 120 } } }
+ *     responses:
+ *       200: { description: Profil }
+ *       403: { description: Yetki yok }
+ *       404: { description: Profil yok }
+ *       409: { description: Arşivli profil (NOTIFICATION_PROFILE_ARCHIVED) }
+ *   delete:
+ *     tags: [Bildirim]
+ *     summary: 'Profili arşivle (durum geçişi; çözüme katılmaz)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Profil }
+ *       403: { description: Yetki yok }
+ *       404: { description: Profil yok }
+ *       409: { description: Zaten arşivli (NOTIFICATION_PROFILE_ARCHIVED) }
+ */
+router.patch("/profiller/:id", ADMIN, t.patchProfile);
+router.delete("/profiller/:id", ADMIN, t.deleteProfile);
+
+/**
+ * @openapi
+ * /api/bildirim/profiller/{id}/hucreler:
+ *   put:
+ *     tags: [Bildirim]
+ *     summary: 'Profil hücrelerini değiştir (tür → ACIK/KAPALI/KILITLI; verilmeyen tür profilde yok)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [hucreler], properties: { hucreler: { type: array, items: { type: object, required: [tur, durum], properties: { tur: { type: string }, durum: { type: string, enum: [ACIK, KAPALI, KILITLI] } } } } } }
+ *     responses:
+ *       200: { description: Profil }
+ *       400: { description: Tanınmayan tür (NOTIFICATION_KIND_UNKNOWN) }
+ *       403: { description: Yetki yok }
+ *       404: { description: Profil yok }
+ *       409: { description: Arşivli profil (NOTIFICATION_PROFILE_ARCHIVED) }
+ */
+router.put("/profiller/:id/hucreler", ADMIN, t.putProfileCells);
+
+/**
+ * @openapi
+ * /api/bildirim/profiller/{id}/kilit-onizleme:
+ *   post:
+ *     tags: [Bildirim]
+ *     summary: 'Taslak hücrelerde KILITLI olacak türlerde kendi uygulama-içi tercihini kapatmış üyeler (yazmaz)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [hucreler], properties: { hucreler: { type: array, items: { type: object } } } }
+ *     responses:
+ *       200: { description: "{etkilenen: [{userId, ad, turler}]}" }
+ *       403: { description: Yetki yok }
+ *       404: { description: Profil yok }
+ */
+router.post("/profiller/:id/kilit-onizleme", ADMIN, t.postProfileLockPreview);
+
+/**
+ * @openapi
+ * /api/bildirim/profiller/{id}/uyeler:
+ *   put:
+ *     tags: [Bildirim]
+ *     summary: 'Profil üyelerini değiştir (profil izin VERMEZ)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [userIds], properties: { userIds: { type: array, items: { type: string, format: uuid } } } }
+ *     responses:
+ *       200: { description: Profil }
+ *       400: { description: Kullanıcı yok (USER_NOT_FOUND) }
+ *       403: { description: Yetki yok }
+ *       404: { description: Profil yok }
+ *       409: { description: Arşivli profil (NOTIFICATION_PROFILE_ARCHIVED) }
+ */
+router.put("/profiller/:id/uyeler", ADMIN, t.putProfileMembers);
+
+/**
+ * @openapi
+ * /api/bildirim/fabrika-varsayilani:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Fabrika varsayılanı — tür başına durum (MIRAS/ACIK/KAPALI/KILITLI), eşikler, ek alıcılar'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{turler}" }
+ *       403: { description: Yetki yok }
+ *   put:
+ *     tags: [Bildirim]
+ *     summary: 'Verilen türlerin fabrika varsayılanını yazar; eşikler katalog şemasıyla doğrulanır'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [turler], properties: { turler: { type: array, items: { type: object, required: [tur, durum], properties: { tur: { type: string }, durum: { type: string, enum: [MIRAS, ACIK, KAPALI, KILITLI] }, esikler: { type: object }, ekAlicilar: { type: array, items: { type: string, format: uuid } } } } } } }
+ *     responses:
+ *       200: { description: "{turler}" }
+ *       400: { description: "Tanınmayan tür · geçersiz eşik (NOTIFICATION_PARAMS_INVALID)" }
+ *       403: { description: Yetki yok }
+ */
+router.get("/fabrika-varsayilani", ADMIN, t.getFactoryDefaults);
+router.put("/fabrika-varsayilani", ADMIN, t.putFactoryDefaults);
 
 /**
  * @openapi

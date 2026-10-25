@@ -1,19 +1,23 @@
 // =============================================================================
 // Kullanıcı Tercihleri → "Masaüstü bildirimleri" (N3) — hangi türler arka plandayken OS bildirimi versin.
 // =============================================================================
-// Kişisel tercih (`UserPreference.bildirim.masaustuTurler`, kullanıcıyı takip eder); varsayılan boş =
-// hiçbiri (bugünkü davranış). Liste sunucunun görme süzgecinden geçmiş katalogdur (`/katalog`); tezgah
-// alarmı (ALARM sınıfı) kendi kanalından bildirir, burada seçilmez. Bayrak kapalıyken yalnız açıklama.
+// Kişisel tercih sunucuda (`notification_preferences`, MASAUSTU kanalı — N4-MOTOR); seçim `/katalog`
+// hücrelerinden okunur, `PUT /tercihler`e yazılır. N3 anahtarı (`masaustuTurler`) bir sürüm birleşimle okunur.
+// Tezgah alarmı (ALARM sınıfı) kendi kanalından bildirir, burada seçilmez. Bayrak kapalıyken yalnız açıklama.
 // =============================================================================
 import { useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Callout } from "@/components/ui/callout";
 import { usePreferences } from "@/providers/PreferencesProvider";
-import { useNotificationCatalog, useNotificationInboxFlag } from "@/lib/bildirim/hooks";
+import { NOTIFICATION_QUERY_KEY, useNotificationCatalog, useNotificationInboxFlag } from "@/lib/bildirim/hooks";
+import { desktopKinds, desktopPreferenceBody } from "@/lib/bildirim/masaustu-tercih";
+import { bildirimService } from "@/services/bildirimService";
 import { bildirimBridge } from "@/lib/bildirim/masaustu";
-import type { NotificationCatalogKind } from "@/lib/bildirim/types";
+import type { NotificationCatalogKind, NotificationPreferenceCell } from "@/lib/bildirim/types";
 import { NOTIFICATION_GROUP_ORDER } from "@/pages/Notifications/group-order";
 
 function groupKinds(kinds: readonly NotificationCatalogKind[]) {
@@ -90,23 +94,46 @@ function KindPicker(p: {
   );
 }
 
+/** Seçim yazıcısı — F4 sunucusunda `PUT /tercihler` (tam gövde), eski sunucuda N3 anahtarı. */
+function useDesktopWriter(hucreler: NotificationPreferenceCell[] | undefined, legacy: string[] | undefined, tumKodlar: string[]) {
+  const { prefs, setPreference } = usePreferences();
+  const qc = useQueryClient();
+  return (kodlar: Iterable<string>) => {
+    const yeni = new Set(kodlar);
+    void (async () => {
+      try {
+        if (hucreler) {
+          const { satirlar } = await bildirimService.tercihler();
+          await bildirimService.tercihleriYaz(desktopPreferenceBody(satirlar, hucreler, tumKodlar, yeni));
+        }
+        // N3 anahtarı bir sürüm okunur: yalnız yeni kümede kalanlar tutulur (kapatılan tür geri gelmesin).
+        if (!hucreler || (legacy && legacy.length > 0)) {
+          const kept = hucreler ? (legacy ?? []).filter((k) => yeni.has(k)) : [...yeni].sort();
+          setPreference({ bildirim: { ...(prefs.bildirim ?? {}), masaustuTurler: kept } });
+        }
+        await qc.invalidateQueries({ queryKey: [...NOTIFICATION_QUERY_KEY, "katalog"] });
+      } catch {
+        toast.error("Masaüstü bildirim tercihi kaydedilemedi.");
+      }
+    })();
+  };
+}
+
 export function MasaustuBildirimKarti() {
   const { acik, yuklendi } = useNotificationInboxFlag();
   const katalog = useNotificationCatalog(acik);
-  const { prefs, setPreference } = usePreferences();
+  const { prefs } = usePreferences();
   const masaustu = useMemo(() => bildirimBridge() !== null, []);
-  const secili = useMemo(
-    () => new Set(prefs.bildirim?.masaustuTurler ?? []),
-    [prefs.bildirim?.masaustuTurler],
-  );
+  const legacy = prefs.bildirim?.masaustuTurler;
+  const hucreler = katalog.data?.hucreler;
+  const secili = useMemo(() => new Set(desktopKinds(hucreler, legacy)), [hucreler, legacy]);
   const kinds = useMemo(() => katalog.data?.turler ?? [], [katalog.data]);
   const gruplar = useMemo(() => groupKinds(kinds), [kinds]);
   const tumKodlar = gruplar.flatMap((g) => g.turler.map((k) => k.kod));
   const alarmVar = kinds.some((k) => k.sinif === "ALARM");
   const seciliSayi = tumKodlar.filter((k) => secili.has(k)).length;
 
-  const yaz = (kodlar: Iterable<string>) =>
-    setPreference({ bildirim: { ...(prefs.bildirim ?? {}), masaustuTurler: [...new Set(kodlar)].sort() } });
+  const yaz = useDesktopWriter(hucreler, legacy, tumKodlar);
   const degistir = (kod: string, on: boolean) => {
     const yeni = new Set(secili);
     if (on) yeni.add(kod);
@@ -120,7 +147,7 @@ export function MasaustuBildirimKarti() {
         <CardTitle className="text-base">Masaüstü bildirimleri</CardTitle>
         <CardDescription>
           Seçtiğin bildirim türleri, uygulama arka plandayken işletim sistemi bildirimi olarak da gelir;
-          pencere öndeyken kısa bir uyarı çıkar. Varsayılan: hiçbiri.
+          pencere öndeyken kısa bir uyarı çıkar. Başlangıçta önerilen türler seçilidir.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

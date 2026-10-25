@@ -109,6 +109,9 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   ROLL_INSPECTION: onEkli("top", sIyelik("muayene", "i", "e")),
   FOUR_POINT_RULE_SET: onEkli("4 puan kural", iyelik("set", "i", "e", "i")),
   STANDARD_COST_VERSION: onEkli("standart maliyet", iyelik("sürüm", "ü", "e", "ü")),
+  // ── Bildirim tercih katmanı (N4-MOTOR)
+  NOTIFICATION_PROFILE: onEkli("bildirim", iyelik("profil", "i", "e", "i")),
+  NOTIFICATION_FACTORY_DEFAULT: onEkli("bildirim fabrika", iyelik("varsayılan", "ı", "a", "ı")),
   SALES_QUOTE: onEkli("satış", iyelik("teklif", "i", "e", "i")),
   PRICE_LIST: onEkli("fiyat", sIyelik("liste", "i", "e")),
 };

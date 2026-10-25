@@ -19,7 +19,20 @@ const svc = vi.hoisted(() => ({
     ],
   })),
   okundu: vi.fn(async () => ({ degisti: true })),
+  tercihler: vi.fn(async () => ({ hucreler: [], satirlar: [] as unknown[] })),
+  tercihleriYaz: vi.fn(async () => ({ hucreler: [], satirlar: [] })),
 }));
+const TURLER = [
+  { kod: "siparis.patron-siparisi", ad: "Patron siparişi geldi", sinif: "BILDIRIM", altTur: "OLAY", grup: "Sipariş", kilit: "YOK", kilitGerekcesi: null },
+  { kod: "sistem.yedek-basarisiz", ad: "Gece yedeği alınamadı", sinif: "BILDIRIM", altTur: "KOSUL", grup: "Sistem", kilit: "YOK", kilitGerekcesi: null },
+];
+const hucre = (kind: string, masaustu: "ACIK" | "KAPALI") => ({
+  kind,
+  kanallar: [
+    { kanal: "UYGULAMA", durum: "ACIK", kilit: false, kaynak: "katalog", kapsam: null },
+    { kanal: "MASAUSTU", durum: masaustu, kilit: false, kaynak: "katalog", kapsam: null },
+  ],
+});
 vi.mock("@/services/bildirimService", () => ({
   bildirimService: svc,
   httpStatusOf: () => null,
@@ -66,6 +79,10 @@ beforeEach(() => {
   d.setPreference.mockReset();
   navigateActive.mockReset();
   Object.values(svc).forEach((f) => f.mockClear());
+  // Testin kurduğu katalog cevabı sonrakine sızmasın: varsayılan (hücresiz = eski sunucu) geri kurulur.
+  svc.katalog.mockImplementation(async () => ({
+    turler: [...TURLER, { kod: "dokuma.tezgah-alarmi", ad: "Tezgah alarmı", sinif: "ALARM", altTur: null, grup: "Dokuma", kilit: "NOBETTE", kilitGerekcesi: null }],
+  }) as never);
   Object.values(bridge).forEach((f) => f.mockClear());
   openCb = null;
   svc.ozet.mockImplementation(async () => ({ enabled: true, okunmamis: 12, alarmAcik: 1, epoch: 1, rev: 1, alarmRev: 0 }));
@@ -110,6 +127,14 @@ describe("MasaustuBildirimKoprusu", () => {
     );
   });
 
+  it("F4 sunucusu: hücrede MASAUSTU ACIK tür, eski anahtar boşken de listeye girer", async () => {
+    svc.katalog.mockImplementation(async () => ({ turler: TURLER, hucreler: [hucre("sistem.yedek-basarisiz", "ACIK")] }) as never);
+    await kopru();
+    await waitFor(() =>
+      expect(svc.liste).toHaveBeenCalledWith({ sekme: "okunmamis", turler: ["sistem.yedek-basarisiz"], limit: 20 }),
+    );
+  });
+
   it("OS bildirimi tıklaması: göreli yola gider + okundu; dış adres yok sayılır", async () => {
     await kopru();
     await waitFor(() => expect(openCb).not.toBeNull());
@@ -141,12 +166,41 @@ describe("MasaustuBildirimKarti", () => {
     expect(screen.getByTestId("masaustu-secili-sayi").textContent).toBe("Hiçbir tür seçili değil");
     expect(screen.queryByText("Tezgah alarmı")).toBeNull();
     expect(screen.getByText(/Tezgah alarmı kendi masaüstü bildirimini/)).toBeTruthy();
+    // Eski sunucu (`hucreler` yok): yazım N3 anahtarına düşer, PUT yok.
     fireEvent.click(screen.getByLabelText("Gece yedeği alınamadı"));
-    expect(d.setPreference).toHaveBeenCalledWith({ bildirim: { masaustuTurler: ["sistem.yedek-basarisiz"] } });
+    await waitFor(() => expect(d.setPreference).toHaveBeenCalledWith({ bildirim: { masaustuTurler: ["sistem.yedek-basarisiz"] } }));
     fireEvent.click(screen.getByText("Tümünü seç"));
-    expect(d.setPreference).toHaveBeenLastCalledWith({
-      bildirim: { masaustuTurler: ["siparis.patron-siparisi", "sistem.yedek-basarisiz"] },
-    });
+    await waitFor(() =>
+      expect(d.setPreference).toHaveBeenLastCalledWith({
+        bildirim: { masaustuTurler: ["siparis.patron-siparisi", "sistem.yedek-basarisiz"] },
+      }),
+    );
+    expect(svc.tercihleriYaz).not.toHaveBeenCalled();
+  });
+
+  it("F4 sunucusu: seçim hücreden okunur, yazım PUT /tercihler; N3 anahtarı yalnız kalanlarla budanır", async () => {
+    svc.katalog.mockImplementationOnce(async () => ({
+      turler: TURLER,
+      hucreler: [hucre("siparis.patron-siparisi", "ACIK"), hucre("sistem.yedek-basarisiz", "KAPALI")],
+    }) as never);
+    svc.tercihler.mockImplementationOnce(async () => ({
+      hucreler: [],
+      satirlar: [{ id: "r1", tur: "siparis.patron-siparisi", kanal: "UYGULAMA", acik: true, kapsam: null }],
+    }));
+    d.prefs = { bildirim: { masaustuTurler: ["sistem.yedek-basarisiz"] } } as AppPreferences;
+    await kart();
+    await screen.findByText("Patron siparişi geldi");
+    // sunucu ACIK (patron) ∪ eski anahtar (yedek) → ikisi seçili
+    expect(screen.getByTestId("masaustu-secili-sayi").textContent).toBe("2 tür seçili");
+    fireEvent.click(screen.getByLabelText("Gece yedeği alınamadı"));
+    await waitFor(() =>
+      expect(svc.tercihleriYaz).toHaveBeenCalledWith([
+        { tur: "siparis.patron-siparisi", kanal: "UYGULAMA", acik: true },
+        { tur: "siparis.patron-siparisi", kanal: "MASAUSTU", acik: true },
+        { tur: "sistem.yedek-basarisiz", kanal: "MASAUSTU", acik: false },
+      ]),
+    );
+    await waitFor(() => expect(d.setPreference).toHaveBeenCalledWith({ bildirim: { masaustuTurler: [] } }));
   });
 
   it("web panelinde 'yalnız masaüstü uygulamasında' açıklaması", async () => {

@@ -219,8 +219,13 @@ const EXEMPT: Record<string, string> = {
  * liste · tumunu-okundu · geri-al-okundu · :id/okundu · :id/okunmadi · :id/ertele) yalnız `verifyToken` taşır —
  * gelen kutusu KİŞİSELDİR (plan §5.6): satır kapsamı servisteki `userId` WHERE'i, tür kapsamı görme süzgeci
  * (`visibleKindsFor`); izin kodu yazmak kendi bildirimini okumayı yetkiye bağlardı. `test_bildirim_api` §4 ölçer.
+ *
+ * ⚠️ 28 → 38 (2026-10-25, bildirim N4-MOTOR, BİLİNÇLİ): on F4 kişisel ucu (tercihler GET/PUT · tercihler/onizleme ·
+ * varsayilana-don/onizleme · varsayilana-don · ayarlar GET/PUT · takip/:tur/:id GET/PUT/DELETE) aynı gerekçeyle
+ * yalnız `verifyToken` taşır: satır kapsamı `userId`; takip ucu kayıt iznini serviste ölçer (yoksa 404). Yönetici
+ * uçları (`profiller*`, `fabrika-varsayilani`) `settings:notifications|admin:settings` guard'lıdır.
  */
-const BARE_CHAIN_BASELINE = 28;
+const BARE_CHAIN_BASELINE = 38;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

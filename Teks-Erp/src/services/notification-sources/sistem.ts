@@ -7,7 +7,8 @@
 // Lisans/yedek/eşitleme/güncelleme davranışına dokunulmaz — yalnız okunur; payload yalnız görüntü dizesi.
 // =============================================================================
 import prisma from "../../lib/prisma";
-import { getNotificationEntry, type NotificationKind } from "../../constants/notification-catalog";
+import { effectiveNotificationParams } from "../helpers/notification-params.helper";
+import type { NotificationKind } from "../../constants/notification-catalog";
 import { factoryDateTimeTr, factoryDateTr } from "../../constants/time";
 import { backupHealth } from "../../lib/health-snapshot";
 import { lastOffsiteSweep } from "../helpers/offsite-backup.helper";
@@ -50,18 +51,13 @@ export interface SystemSourceDeps {
   now: () => number;
 }
 
-function catalogParams(kind: NotificationKind): Record<string, unknown> {
-  const schema = getNotificationEntry(kind).paramSemasi;
-  return schema ? (schema.parse({}) as Record<string, unknown>) : {};
-}
-
 const REAL_DEPS: SystemSourceDeps = {
   backupHealth,
   offsiteSweep: lastOffsiteSweep,
   cloudSyncStatus: getCloudSyncStatus,
   licenseSnapshot: () => getLicenseSnapshot(),
   updateStatus: () => getUpdateStatus(),
-  params: catalogParams,
+  params: effectiveNotificationParams,
   now: Date.now,
 };
 

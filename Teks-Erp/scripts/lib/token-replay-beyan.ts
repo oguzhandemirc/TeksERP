@@ -45,6 +45,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
   [`${S}certificate.service.ts::createCertificate`]: { giris: { [`${S}certificate.service.ts::createCertificate`]: "R" } },
   [`${S}certificate.service.ts::renewCertificate`]: { giris: { [`${S}certificate.service.ts::renewCertificate`]: "R" } },
+  [`${S}notification-profile.service.ts::createProfile`]: { giris: { [`${S}notification-profile.service.ts::createProfile`]: "R" } },
   // Belge tasarımcısı (T1B): şablon + v1 ve yeni sürüm panelden clientToken ile doğar.
   [`${S}document-template/template.service.ts::createTemplate`]: { giris: { [`${S}document-template/template.service.ts::createTemplate`]: "R" } },
   [`${S}document-template/version.service.ts::saveVersion`]: { giris: { [`${S}document-template/version.service.ts::saveVersion`]: "R" } },
@@ -236,6 +237,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
+  [`${S}notification-profile.service.ts::createReplay`]: ["kod"],
   [`${S}document-template/template.service.ts::createReplay`]: ["docType", "name", "copiedFrom"],
   [`${S}document-template/version.service.ts::saveReplay`]: ["templateId", "sourceHtml", "css"],
   [`${S}rapor-tanimi.service.ts::createReplay`]: ["ownerId", "govde"],

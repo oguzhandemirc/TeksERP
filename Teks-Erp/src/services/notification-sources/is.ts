@@ -5,11 +5,12 @@
 // `notification-condition.job.ts`te. Rapor/ekranla AYNI soruyu soran yüklem kopyalanmaz, TEK helper'dan
 // okunur: termin `order-deadline.helper` · KK1 oranı `quality-first-share.helper` (karne `byItem`) ·
 // fason açık kalem `subcontract-scorecard-query.helper` · levent kalan gün `finishForecastReport`.
-// Eşikler yalnız katalog `paramSemasi`ndan (fabrika varsayılanı N4'te); payload'da tutar ve kişi adı yok.
+// Eşikler katalog `paramSemasi` ⊕ fabrika varsayılanı (`notification-params.helper`); payload'da tutar ve kişi adı yok.
 // Modülü kapalı türün kümesi boştur. Ölçülemeyen kaynak (1. kalite rolü yok) açık koşulu KORUR.
 // =============================================================================
 import { ShipmentStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
+import { effectiveNotificationParams } from "../helpers/notification-params.helper";
 import { getNotificationEntry, type NotificationKind } from "../../constants/notification-catalog";
 import type { ModulKey } from "../../constants/screen-catalog";
 import { factoryDateTr, factoryDayStart, factoryYmd } from "../../constants/time";
@@ -55,11 +56,6 @@ export interface WorkSourceDeps {
   now: () => number;
 }
 
-function catalogParams(kind: NotificationKind): Record<string, unknown> {
-  const schema = getNotificationEntry(kind).paramSemasi;
-  return schema ? (schema.parse({}) as Record<string, unknown>) : {};
-}
-
 async function moduleOpen(kind: NotificationKind): Promise<boolean> {
   const env = await loadNotificationVisibilityEnv(prisma, [kind]);
   // `cekirdek:*`/`planlanan:*` okuyucusuz → anahtar yok → açık; ModulKey okunmuş boolean taşır.
@@ -93,7 +89,7 @@ export const WORK_SOURCE_REAL_DEPS: Readonly<WorkSourceDeps> = {
     return rows.map((r) => ({ id: r.id, shipmentNo: r.shipmentNo, customerName: r.customer.name }));
   },
   beamForecast: async () => (await finishForecastReport({})).data.satirlar,
-  params: catalogParams,
+  params: effectiveNotificationParams,
   now: Date.now,
 };
 

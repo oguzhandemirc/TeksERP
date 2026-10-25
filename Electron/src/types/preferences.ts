@@ -81,9 +81,9 @@ export interface AppPreferences {
     sound?: boolean;
   };
   /**
-   * Bildirim — kişisel masaüstü kanalı (N3). `masaustuTurler`: arka plandayken OS bildirimi
-   * verecek katalog türleri; YOK/boş = hiçbiri (varsayılan bugünkü davranış: kapalı).
-   * F4 tercih tablosu gelince oraya taşınır.
+   * Bildirim — N3 masaüstü seçimi (ESKİ anahtar). N4-MOTOR'dan beri doğruluk `notification_preferences`
+   * (MASAUSTU kanalı); bu anahtar BİR SÜRÜM birleşimle okunur, ilk yazımda tabloya taşınır ve yalnız
+   * seçili kalanlarla budanır (`lib/bildirim/masaustu-tercih.ts`). Sonraki sürümde okuyucusu kalkar.
    */
   bildirim?: { masaustuTurler?: string[] };
   /** Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin"); tablo YOK, blob alanı. */

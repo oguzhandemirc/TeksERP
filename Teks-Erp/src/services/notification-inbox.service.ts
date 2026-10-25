@@ -61,7 +61,8 @@ export function buildInboxWhere(
   const tabWhere: Record<InboxTab, Prisma.NotificationInboxWhereInput> = {
     tumu: notSnoozed,
     // Rozet = okunmamış BİLDİRİM: ALARM kendi hapında (`LoomAlarmBell`) ve Alarmlar sekmesinde sayılır (plan §6.1).
-    okunmamis: { AND: [notSnoozed, { readAt: null }, { klass: "BILDIRIM" }] },
+    // Gün özeti satırı (`ozet=true`, N4) rozete girmez; zil onu "Gün özeti" kartında gruplar (plan §5.4).
+    okunmamis: { AND: [notSnoozed, { readAt: null }, { klass: "BILDIRIM" }, { ozet: false }] },
     alarmlar: { klass: "ALARM" },
     ertelenen: { snoozedUntil: { gt: now } },
   };

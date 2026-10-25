@@ -9,7 +9,7 @@ import type { InboxReason, OutboxRow } from "../notification-dispatch.service";
 
 export interface Agg {
   userId: string; kind: string; klass: string; subjectType: string; subjectId: string | null; groupKey: string;
-  n: number; firstAt: Date; lastAt: Date; lastOutboxId: string; payload: string; reason: InboxReason; km: boolean; kt: boolean;
+  n: number; firstAt: Date; lastAt: Date; lastOutboxId: string; payload: string; reason: InboxReason; km: boolean; kt: boolean; ozet: boolean;
 }
 
 export interface BatchState {
@@ -86,7 +86,7 @@ export function settleAlarmUpdates(state: BatchState, rows: ReadonlyArray<{ user
 export function addRecipients(
   state: BatchState,
   src: { row: OutboxRow; entry: NotificationCatalogEntry; groupKey: string },
-  recipients: ReadonlyArray<{ userId: string; reason: InboxReason }>,
+  recipients: ReadonlyArray<{ userId: string; reason: InboxReason; km?: boolean; kt?: boolean; ozet?: boolean }>,
 ): number {
   const { row, entry, groupKey } = src;
   const kind = row.kind;
@@ -107,7 +107,10 @@ export function addRecipients(
       state.agg.set(k, {
         userId: r.userId, kind, klass: entry.sinif, subjectType: row.subjectType, subjectId: row.subjectId, groupKey,
         n: 1, firstAt: row.occurredAt, lastAt: row.occurredAt, lastOutboxId: row.id, payload: JSON.stringify(row.payload ?? {}),
-        reason: r.reason, km: entry.varsayilanKanallar.includes("MASAUSTU"), kt: entry.varsayilanKanallar.includes("TABLET_SES"),
+        reason: r.reason,
+        // Teslim kararı (tercih + sessiz saat) verildiyse o; yoksa katalog varsayılan kanalları (F1).
+        km: r.km ?? entry.varsayilanKanallar.includes("MASAUSTU"), kt: r.kt ?? entry.varsayilanKanallar.includes("TABLET_SES"),
+        ozet: r.ozet ?? false,
       });
     }
   }

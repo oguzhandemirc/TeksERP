@@ -5,6 +5,7 @@ import { documentTemplateService } from "@/services/documentTemplateService";
 import type { ContractView } from "./binding/contract";
 import { applySettingsPatch, lockLanguage, type DocumentSettings } from "./binding/docSettings";
 import { DEFAULT_PAGE_SETTINGS, type PageSettings } from "./binding/pageSettings";
+import type { EditMode } from "./code/editMode";
 
 export const DEFAULT_DOC_TYPE = "SHIPMENT_DISPATCH";
 
@@ -27,6 +28,9 @@ export function useDesignerDraft() {
   const [settings, setSettings] = useState<DocumentSettings>({ language: "tr" });
   const [internalFields, setInternalFields] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
+  // Kod kipinde kaynak burada yaşar; görsel kipte GrapesJS'tedir (plan §4, D7 `editMode`).
+  const [editMode, setEditModeState] = useState<EditMode>("VISUAL");
+  const [code, setCodeState] = useState<{ html: string; css: string }>({ html: "", css: "" });
 
   const contractsQ = useQuery({ queryKey: ["document-templates", "contracts"], queryFn: () => documentTemplateService.contracts() });
   const contractQ = useQuery({ queryKey: ["document-templates", "contract", docType], queryFn: () => documentTemplateService.contract(docType) });
@@ -69,8 +73,20 @@ export function useDesignerDraft() {
       },
       dirty,
       touch,
+      editMode,
+      /** Kip geçişi: koda geçerken görsel kaynağın o anki hâli kod kaynağına kopyalanır. */
+      setEditMode: (mode: EditMode, seed?: { html: string; css: string }) => {
+        if (seed) setCodeState(seed);
+        setEditModeState(mode);
+        touch();
+      },
+      code,
+      setCode: (patch: Partial<{ html: string; css: string }>) => {
+        setCodeState((c) => ({ ...c, ...patch }));
+        touch();
+      },
     }),
-    [docType, contractsQ.data, contract, contractQ.isLoading, contractQ.isError, system, pageSettings, settings, internalFields, dirty, touch],
+    [docType, contractsQ.data, contract, contractQ.isLoading, contractQ.isError, system, pageSettings, settings, internalFields, dirty, touch, editMode, code],
   );
 }
 
