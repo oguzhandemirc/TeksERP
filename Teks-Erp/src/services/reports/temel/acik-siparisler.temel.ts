@@ -6,6 +6,7 @@
 // `warehouseCoveragePct`); açık metraj yoksa "ölçülemedi". Üretim zinciri bağlanmaz: o uç
 // `report:production` + dokuma kapısı ister, `report:sales` kitlesine sızardı.
 
+import { TERIM } from "../../../constants/terim";
 import { anlatiUret } from "../anlati/anlati";
 import { filterEcho } from "../_filters";
 import { getOpenOrderCoverage, type OpenOrderCoverageReport } from "../open-order-coverage.report.service";
@@ -86,7 +87,7 @@ export async function buildOpenOrderReport(input: OpenOrderReportInput): Promise
   const sideFigures = [
     plainFigure("acikSiparis.metre", "Açık sipariş", s.openQty, { unit: "m" }),
     plainFigure("acikSiparis.gecikmisKarsilanamayan", "Termini geçmiş, karşılanamayan", s.overdueUncoveredQty, { unit: "m", direction: "asagi" }),
-    plainFigure("acikSiparis.yeniIsEmri", "Yeni iş emri gereken", s.uncoveredQty, { unit: "m", direction: "asagi" }),
+    plainFigure("acikSiparis.yeniIsEmri", `Yeni ${TERIM.terbiyeIsEmri.tekilKucuk} gereken`, s.uncoveredQty, { unit: "m", direction: "asagi" }),
   ];
 
   const { chart, table } = coverageBlocks(report);
@@ -109,7 +110,7 @@ export async function buildOpenOrderReport(input: OpenOrderReportInput): Promise
     },
     kapsam: [
       { sayi: s.overdueUncoveredLines, nesne: "sipariş satırı", neden: "Termini geçmiş ve karşılanamayan", sonuc: "en acil iş", toplam: s.openLineCount },
-      { sayi: s.uncoveredLines, nesne: "sipariş satırı", neden: "Ne depoda ne üretimde karşılığı olmayan", sonuc: "yeni iş emri bekliyor", toplam: s.openLineCount },
+      { sayi: s.uncoveredLines, nesne: "sipariş satırı", neden: "Ne depoda ne üretimde karşılığı olmayan", sonuc: `yeni ${TERIM.terbiyeIsEmri.tekilKucuk} bekliyor`, toplam: s.openLineCount },
     ],
   });
 

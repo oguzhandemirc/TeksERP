@@ -509,7 +509,7 @@ async function salesSection(cD: string): Promise<void> {
   }
 }
 
-async function salesCleanup(): Promise<void> {
+async function cleanupSales(): Promise<void> {
   await prisma.rollReturn.deleteMany({ where: { id: { in: salesIds.returns } } });
   await prisma.sackAllocation.deleteMany({ where: { sackId: { in: salesIds.sacks } } });
   await prisma.roll.deleteMany({ where: { id: { in: salesIds.rolls } } });
@@ -532,7 +532,7 @@ async function main(): Promise<void> {
     const { cD } = await salesSetup();
     await salesSection(cD);
   } finally {
-    await salesCleanup();
+    await cleanupSales();
   }
   try {
     await rapbSection();
