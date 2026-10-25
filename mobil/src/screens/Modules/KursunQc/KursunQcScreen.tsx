@@ -3,7 +3,6 @@ import { Animated, View, StyleSheet, ScrollView, useWindowDimensions } from 'rea
 import AppModal from '../../../components/AppModal';
 import {
   Text,
-  TextInput,
   Button,
   IconButton,
   Surface,
@@ -30,7 +29,6 @@ import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
-import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { NumpadHost } from '../../../components/NumpadProvider';
@@ -59,9 +57,18 @@ import type {
   KursunRollSummary,
   KursunRollDefectSummary,
   KursunOpenCard,
-  DefectType,
 } from '../../../types/models';
 import { showScreenError } from '../../../lib/screenToast';
+import InspectionPanel, {
+  inspectionSaveErrorText,
+  type InspectionDefectInput,
+} from '../../../components/inspection/InspectionPanel';
+import {
+  composeStationPanels,
+  dativeTr,
+  finishStepLabel,
+  nextStationLabel,
+} from './stationPanels';
 
 // =============================================================================
 // Multi-job state — operatör birden fazla refakat kartını paralel açabilir.
@@ -180,8 +187,6 @@ export default function KursunQcScreen() {
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   /** Refactor 4 — "yanlış istasyon" / kart bulunamadı backend mesajı banner. */
   const [cardError, setCardError] = useState<string | null>(null);
-  /** Cetveldeki hata noktasına dokununca: o noktadaki hata id'leri (silme modalı). */
-  const [deletePointIds, setDeletePointIds] = useState<string[] | null>(null);
 
   // Açık kart listesi — modal açılmadan da (acil rozeti için) tazelenir.
   // OPEN_CARDS_REFETCH_MS polling: planlama acil işaretlediğinde tablet en geç
@@ -324,19 +329,15 @@ export default function KursunQcScreen() {
     [propAnswers],
   );
 
-  // Cetveldeki hata noktası modalı — dokunulan marker'ın hata id'leri CANLI defect
-  // listesinden çözülür; hata silindikçe liste küçülür, boşalınca modal kapanır
-  // (o noktadaki tüm hatalar silindi → nokta kalmadı).
-  const deletePointDefects = useMemo(() => {
-    if (!deletePointIds || !selectedRoll) return [];
-    const set = new Set(deletePointIds);
-    return selectedRoll.defects.filter((d) => set.has(d.id));
-  }, [deletePointIds, selectedRoll]);
-  useEffect(() => {
-    if (deletePointIds !== null && deletePointDefects.length === 0) {
-      setDeletePointIds(null);
-    }
-  }, [deletePointIds, deletePointDefects.length]);
+  // ── PANEL BİLEŞİMİ (KQ-D3) — ekran türden, İÇİ yetenekten ────────────────
+  // Kalite paneli `inspectionEnabled`'dan (eski backend → açık), işlem paneli
+  // istasyon özelliklerinden. Sonraki istasyon metni `nextStepName`'den.
+  const panels = composeStationPanels({
+    inspectionEnabled: activeJob?.stepSummary.inspectionEnabled,
+    properties: stationProps,
+  });
+  const nextStation = nextStationLabel(activeJob?.stepSummary.nextStepName);
+  const nextStationDative = nextStation ? dativeTr(nextStation) : null;
 
   // ── Backend re-fetch helper ────────────────────────────────────────────────
   const refetchActiveJob = async () => {
@@ -715,7 +716,8 @@ export default function KursunQcScreen() {
         removeDefectOptimistic(context.cardId, context.rollId, vars.clientErrorId);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showScreenError(err, 'Hata kaydedilemedi');
+      // Mükerrer 409 → "zaten kayıtlı" (InspectionPanel tek metin kaynağı).
+      showScreenError(err, 'Hata kaydedilemedi', inspectionSaveErrorText(err) ?? undefined);
     },
   });
 
@@ -820,7 +822,8 @@ export default function KursunQcScreen() {
         type: 'success',
         text1: 'Kumaş bitirildi',
         text2: onlineManager.isOnline()
-          ? "Tambur'a iletildi"
+          ? nextStationDative ? `${nextStationDative} iletildi` : 'İletildi'
+
           : 'Çevrimdışı — sync bekliyor',
       });
 
@@ -906,7 +909,8 @@ export default function KursunQcScreen() {
         type: 'success',
         text1: 'Adım kapatıldı',
         text2: onlineManager.isOnline()
-          ? "Toplar Tambur'a taşındı"
+          ? nextStationDative ? `Toplar ${nextStationDative} taşındı` : 'Toplar çıkarıldı'
+
           : 'Çevrimdışı — sync bekliyor',
       });
       return { job, index, prevActiveCardId };
@@ -967,55 +971,16 @@ export default function KursunQcScreen() {
     });
   };
 
-  // Hata tipi tuşu = ana aksiyon. Metraj girilmişse, basılan tipi DİREKT
-  // kaydeder (ön-seçim + ayrı Ekle yok). Metraj boş/geçersizse uyarır.
-  const handleReportDefect = (defectTypeId: string) => {
-    if (!activeJob || !selectedRoll) return;
-    const start = parseFloat(startMeter);
-    if (!Number.isFinite(start) || start < 0) {
-      Toast.show({
-        type: 'error',
-        text1: 'Önce hata metresini gir',
-        text2: 'Metre alanına sayı yaz, sonra hata tipine bas',
-      });
-      return;
-    }
-    // Metraj kumaş boyunu aşamaz — backend (reportError) ile birebir aynı kural.
-    // Client'ta da kontrol şart: offline'da optimistic ekleme backend'i görmez,
-    // bu kontrol olmadan kumaştan uzun metrede leke sıraya girer, sync'te 400 yer.
-    if (start > selectedRoll.currentQty) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      Toast.show({
-        type: 'error',
-        text1: 'Metraj kumaş boyunu aşıyor',
-        text2: `Hata metresi (${start}) topun metrajını (${selectedRoll.currentQty.toFixed(1)} mt) aşamaz`,
-      });
-      return;
-    }
-    // Mükerrer engeli: aynı metre + aynı hata tipi zaten kayıtlıysa engelle.
-    // Aynı metrede FARKLI tip serbest. Backend de 409 ile bunu garanti eder;
-    // bu kontrol anında geri bildirim için. (Decimal(12,3) → 0.0005 tolerans.)
-    const duplicate = selectedRoll.defects.some(
-      (d) =>
-        d.defectTypeId === defectTypeId &&
-        Math.abs(d.startMeter - start) < 0.0005,
-    );
-    if (duplicate) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      Toast.show({
-        type: 'error',
-        text1: 'Bu hata zaten eklenmiş',
-        text2: `${start}. metrede bu hata tipi zaten kayıtlı`,
-      });
-      return;
-    }
-    // clientErrorId burada üretilip vars'a gömülür → mutate variables persist
-    // edilir, online resume'da backend aynı id ile idempotent çalışır.
+  // Hata girişi: InspectionPanel metre/boy/mükerrer doğrulamasını yapıp geçerli
+  // girdiyi verir; KONAK yazar. clientErrorId burada üretilip vars'a gömülür →
+  // mutate variables persist edilir, online resume'da backend aynı id ile idempotent.
+  const handleReportDefect = (input: InspectionDefectInput) => {
+    if (!activeJob || !selectedRoll || input.meter === null) return;
     reportErrorMutation.mutate({
       rollId: selectedRoll.rollId,
       stepId: activeJob.stepSummary.workOrderStepId,
-      startMeter: start,
-      defectTypeId,
+      startMeter: input.meter,
+      defectTypeId: input.defectTypeId,
       clientErrorId: generateClientUuid(),
     });
   };
@@ -1183,6 +1148,9 @@ export default function KursunQcScreen() {
       ) : activeJob.stepSummary.rolls.length === 0 ? (
         <View style={styles.paneEmpty}>
           <Text style={styles.paneEmptyText}>Bu adımda bekleyen top yok</Text>
+          {!!activeJob.stepSummary.emptyStep && (
+            <Text style={styles.paneEmptyHint}>{activeJob.stepSummary.emptyStep.message}</Text>
+          )}
         </View>
       ) : (
         <FlashList
@@ -1199,6 +1167,7 @@ export default function KursunQcScreen() {
               index={index}
               selected={activeJob.selectedRollId === item.rollId}
               onPress={() => selectRoll(item.rollId)}
+              qualityStep={panels.qualityPanel}
             />
           )}
         />
@@ -1272,7 +1241,7 @@ export default function KursunQcScreen() {
 
   return (
     <ScreenChrome
-      title="Kurşun"
+      title={activeJob?.stepSummary.stationName ?? 'Kurşun'}
       subtitle={compact ? machineName : undefined}
       hidePlaceChip={compact}
       headerExtras={headerExtras}
@@ -1339,6 +1308,14 @@ export default function KursunQcScreen() {
                 {activeJob.stepSummary.rolls.length} top bekliyor
               </Text>
             </View>
+          ) : activeJob.stepSummary.emptyStep && activeJob.stepSummary.rolls.length === 0 ? (
+            // Boş adım (KQ-D2 kararı): HATA DEĞİL bilgi — topun şu an nerede
+            // olduğunu söyler ("Bu top henüz bu istasyona gelmedi — şu an: X").
+            <View style={styles.readOnlyState} testID="kursun-empty-step">
+              <Icon source="information-outline" size={64} color="#0369a1" />
+              <Text style={styles.readOnlyTitle}>Bu istasyonda top yok</Text>
+              <Text style={styles.readOnlyText}>{activeJob.stepSummary.emptyStep.message}</Text>
+            </View>
           ) : !selectedRoll ? (
             <View style={styles.emptyState}>
               <Icon source="package-variant" size={64} color="#cbd5e1" />
@@ -1351,121 +1328,12 @@ export default function KursunQcScreen() {
             // Tüm öğeler tek gap'li kolonda — cetvel · giriş · buton · numpad
             // arası boşluk EŞİT (styles.rollPane gap). Flex-spacer yok.
             <View style={styles.rollPane}>
-              {/* Kayıtlı hatalar — metre cetveli. Tek bakışta "nerede hata var"
-                  haritası; tek satır, sabit (scroll gerekmez). Tik'e dokun → o
-                  noktadaki hata(lar)ı sil.
-                  NOT: eski koyu "seçili top" bandı (barkod/metraj) KALDIRILDI —
-                  navbarla BİREBİR aynı renkteydi, sağ kolonda karşılığı yoktu →
-                  navbar uzuyormuş gibi görünüp simetriyi bozuyordu. Seçili topun
-                  kimliği sağ listede vurgulu; metraj cetvelin sağ ucunda. */}
-              <View style={styles.rulerBlock}>
-                {selectedRoll.defects.length === 0 ? (
-                  <View style={styles.emptyDefects}>
-                    <Icon
-                      source="check-circle-outline"
-                      size={28}
-                      color="#cbd5e1"
-                    />
-                    <Text style={styles.muted}>Henüz hata yok</Text>
-                  </View>
-                ) : (
-                  <Surface style={styles.section} elevation={1}>
-                    {(() => {
-                      const critCount = selectedRoll.defects.reduce(
-                        (n, d) =>
-                          n +
-                          (defectTypes.find((t) => t.name === d.errorType)
-                            ?.severity === 'CRITICAL'
-                            ? 1
-                            : 0),
-                        0,
-                      );
-                      return (
-                        <>
-                          <View style={styles.defectGuideTitleRow}>
-                            <Text style={styles.sectionTitle}>
-                              Hata Noktaları ({selectedRoll.defects.length})
-                            </Text>
-                            {critCount > 0 && (
-                              <View style={styles.defectCritBadge}>
-                                <Text style={styles.defectCritBadgeText}>
-                                  {critCount} kritik
-                                </Text>
-                              </View>
-                            )}
-                            <View style={{ flex: 1 }} />
-                            <Text style={styles.defectGuideHint}>
-                              tik'e dokun → sil
-                            </Text>
-                          </View>
-                          {/* Metre cetveli — hatalar top boyunca tik/küme; her
-                              marker dokunulabilir → o noktadaki hata(lar) silme
-                              modalında çıkar. Chip listesine göre çok daha az yer. */}
-                          <KursunDefectRuler
-                            defects={selectedRoll.defects}
-                            defectTypes={defectTypes}
-                            rulerMax={rulerMaxForDefects(
-                              selectedRoll.currentQty,
-                              selectedRoll.defects,
-                            )}
-                            onMarkerPress={(ids) => setDeletePointIds(ids)}
-                          />
-                        </>
-                      );
-                    })()}
-                  </Surface>
-                )}
-              </View>
-
-              {/* Hata giriş alanı — cetvelin altında, eşit gap ile. Metraj gir →
-                  hata tipine bas → hata DİREKT kaydedilir (ayrı Ekle yok). */}
-              <View style={styles.entryFixed}>
-                <Surface style={styles.entrySection} elevation={1}>
-                  {/* Önce metraj — tek nokta (aralık değil); bitiş Tambur kesimiyle.
-                      autoActivate: input'a tıklamadan numpad doğrudan buraya yazar. */}
-                  <NumpadInput
-                    mode="outlined"
-                    value={startMeter}
-                    onChangeText={setStartMeter}
-                    numpadLabel="Hata metresi"
-                    allowDecimal
-                    autoActivate
-                    numpadMaxLength={8}
-                    label="Hata metresi (mt)"
-                    dense
-                    style={styles.meterInput}
-                    useNativeKeyboard={compact}
-                  />
-
-                  {/* Hata tipi = ANA TUŞLAR (input'un altında, büyük). Metraj
-                      girip tipe basınca hata DİREKT kaydedilir — ayrı Ekle yok. */}
-                  {defectTypes.length === 0 ? (
-                    <Text style={styles.muted}>
-                      Hata tipi tanımlı değil — admin'den ekleyin
-                    </Text>
-                  ) : (
-                    <View style={styles.defectGrid}>
-                      {defectTypes.map((dt) => (
-                        // OFFLINE-AWARE: isPending'e disabled/opacity binding'i YOK.
-                        // Paused mutation (offline) isPending'i sonsuza true tutar;
-                        // bağlanırsa ilk lekeden sonra tüm tuşlar kilitlenir. Çift
-                        // basış zaten onMutate metraj temizliği + mükerrer kontrolü
-                        // + backend 409 ile engellenir.
-                        <TouchableRipple
-                          key={dt.id}
-                          onPress={() => handleReportDefect(dt.id)}
-                          rippleColor="rgba(255,255,255,0.25)"
-                          style={styles.defectBtn}
-                        >
-                          <Text style={styles.defectBtnText} numberOfLines={1}>
-                            {dt.name}
-                          </Text>
-                        </TouchableRipple>
-                      ))}
-                    </View>
-                  )}
-                </Surface>
-
+              {/* KQ-D3: hata girişi TEK bileşen (InspectionPanel; K4P ile ortak) —
+                  cetvel + metre + tip ızgarası. Kalite paneli kapalı istasyonda
+                  (yalnız kurşun) çizilmez; işlem paneli aynı sütunda kalır. */}
+              {(() => {
+                const processCard = (
+                  <>
                 {/* ── İSTASYON ÖZELLİKLERİ (mod güdümlü, 2026-08-10) ──
                     OTOMATİK satırlar salt bilgi (operatöre sorulmaz, adım
                     kapanınca yazılır); OPSİYONEL/ZORUNLU satırlar tuş olur.
@@ -1502,15 +1370,27 @@ export default function KursunQcScreen() {
                               <View style={styles.propChipsRow}>
                                 {(p.values ?? []).map((v) => {
                                   const on = picked === v.code;
+                                  // Çeşit (gramaj) değerleri eldivenle basılan BÜYÜK
+                                  // düğme satırı (≥64 dp, seçili = dolu); diğerleri çip.
+                                  const big = !!p.variantOfPropertyId;
                                   return (
                                     <TouchableRipple
                                       key={v.code}
                                       borderless
+                                      testID={big ? `kursun-variant-${v.code}` : undefined}
                                       onPress={() => pickValueProp(p.propertyId, v.code)}
-                                      style={[styles.propChip, on && styles.propChipOn]}
+                                      style={
+                                        big
+                                          ? [styles.variantBtn, on && styles.variantBtnOn]
+                                          : [styles.propChip, on && styles.propChipOn]
+                                      }
                                     >
                                       <Text
-                                        style={[styles.propChipText, on && styles.propChipTextOn]}
+                                        style={
+                                          big
+                                            ? [styles.variantBtnText, on && styles.variantBtnTextOn]
+                                            : [styles.propChipText, on && styles.propChipTextOn]
+                                        }
                                       >
                                         {v.name}
                                       </Text>
@@ -1540,13 +1420,31 @@ export default function KursunQcScreen() {
                     })}
                     {missingRequiredProps.length > 0 && (
                       <Text style={styles.propWarnLine}>
-                        Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden
-                        KK2 tamamlanamaz.
+                        Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden{' '}
+                        {panels.qualityPanel ? 'KK2 tamamlanamaz.' : 'tamamlanamaz.'}
                       </Text>
                     )}
                   </Surface>
                 )}
-              </View>
+                  </>
+                );
+                return panels.qualityPanel ? (
+                  <InspectionPanel
+                    defectTypes={defectTypes}
+                    ownDefects={selectedRoll.defects}
+                    meterInput={startMeter}
+                    onMeterChange={setStartMeter}
+                    onDefect={handleReportDefect}
+                    onDelete={handleDeleteError}
+                    maxMeter={selectedRoll.currentQty}
+                    compact={compact}
+                  >
+                    {processCard}
+                  </InspectionPanel>
+                ) : (
+                  <View style={styles.entryFixed}>{processCard}</View>
+                );
+              })()}
 
               {/* Sticky footer — durum sırası:
                   1) Tüm toplar KK2 tamam → Adımı Kapat (toplu Tambur'a)
@@ -1576,7 +1474,7 @@ export default function KursunQcScreen() {
                     contentStyle={styles.footerBtnContent}
                     labelStyle={styles.footerBtnLabel}
                   >
-                    Adımı Kapat — Toplar Tambur'a
+                    {finishStepLabel(activeJob.stepSummary.nextStepName)}
                   </Button>
                 ) : !selectedRoll.barcode ? (
                   // Açık kumaş: direkt Tambur'a iletir (KK2'de ölçüm yok).
@@ -1588,7 +1486,13 @@ export default function KursunQcScreen() {
                   // rulayı zaten listeden düşürdüğü için double-press riski yok.
                   <StationActionButton
                     icon="package-check"
-                    label={compact ? "Kumaşı Bitir (Tambur'a)" : "Kumaşı Bitir (Tambur'a Gönder)"}
+                    label={
+                      !nextStationDative
+                        ? 'Kumaşı Bitir'
+                        : compact
+                          ? `Kumaşı Bitir (${nextStationDative})`
+                          : `Kumaşı Bitir (${nextStationDative} Gönder)`
+                    }
                     compact={compact}
                     large={!compact}
                     onPress={() =>
@@ -1607,7 +1511,7 @@ export default function KursunQcScreen() {
                     contentStyle={styles.footerBtnContent}
                     labelStyle={styles.footerBtnLabel}
                   >
-                    KK2 Tamamlandı
+                    {panels.qualityPanel ? 'KK2 Tamamlandı' : 'Tamamlandı'}
                   </Button>
                 ) : (
                   // Barkodlu top — aynı offline-aware mantığı: loading/disabled
@@ -1616,12 +1520,17 @@ export default function KursunQcScreen() {
                     mode="contained"
                     icon="check-all"
                     onPress={() => footerThrottled(handleCompleteQc2)}
+                    // Zorunlu değer seçilmeden kilitli; sebep işlem panelinde yazılı.
+                    // (isPending bağı DEĞİL — duraklamış mutasyon kilitlemez.)
+                    disabled={missingRequiredProps.length > 0}
                     buttonColor="#059669"
                     style={styles.footerBtn}
                     contentStyle={styles.footerBtnContent}
                     labelStyle={styles.footerBtnLabel}
                   >
-                    {`KK2 Tamamla (${selectedRoll.errorCount} hata)`}
+                    {panels.qualityPanel
+                      ? `${panels.completeLabel} (${selectedRoll.errorCount} hata)`
+                      : panels.completeLabel}
                   </Button>
                 )}
               </Surface>
@@ -1629,8 +1538,8 @@ export default function KursunQcScreen() {
               {/* Tablet: sayısal tuş takımı sol kolonun altında — metre girişi
                   ile aynı sütunda, aksiyon butonunun hemen altında. fill: numpad
                   kalan alana esner (dar tablette taşmaz, geniş tablette iri tuş).
-                  Telefonda numpad yok. */}
-              {!compact && <NumpadHost style={styles.numpadHost} fill />}
+                  Telefonda numpad yok; kalite paneli kapalıysa metre girişi yok → numpad da yok. */}
+              {!compact && panels.qualityPanel && <NumpadHost style={styles.numpadHost} fill />}
             </View>
           )}
         </View>
@@ -1669,15 +1578,6 @@ export default function KursunQcScreen() {
         visible={noteModalOpen}
         note={activeJob?.stepSummary.stepNote ?? null}
         onDismiss={() => setNoteModalOpen(false)}
-      />
-
-      {/* Cetveldeki hata noktasına dokununca — o noktadaki hata(lar)ı sil */}
-      <DeletePointModal
-        visible={deletePointIds !== null}
-        defects={deletePointDefects}
-        defectTypes={defectTypes}
-        onDelete={handleDeleteError}
-        onDismiss={() => setDeletePointIds(null)}
       />
 
       {/* Kapalı kart okutulunca: reopen onay modalı (toplar Tambur'dan geri çekilir) */}
@@ -2178,16 +2078,41 @@ function JobTab({
   );
 }
 
+// Top satırının durum çipleri (hata sayısı + adım durumu) — kalite adımı değilse "KK2" demez.
+function RollStatusChips({ errorCount, done, qualityStep }: { errorCount: number; done: boolean; qualityStep: boolean }) {
+  return (
+    <View style={helperStyles.rollRight}>
+      {errorCount > 0 && (
+        <View style={helperStyles.chipAmber}>
+          <Text style={helperStyles.chipText}>{errorCount} hata</Text>
+        </View>
+      )}
+      {done ? (
+        <View style={helperStyles.chipBlue}>
+          <Text style={helperStyles.chipText}>{qualityStep ? 'KK2 ✓' : 'Tamam ✓'}</Text>
+        </View>
+      ) : (
+        <View style={helperStyles.chipNeutral}>
+          <Text style={helperStyles.chipText}>{qualityStep ? 'KK2 bekliyor' : 'Bekliyor'}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function RollListItem({
   roll,
   index,
   selected,
   onPress,
+  qualityStep,
 }: {
   roll: KursunRollSummary;
   index: number;
   selected: boolean;
   onPress: () => void;
+  /** Kalite paneli kapalı istasyonda (yalnız kurşun) çip "KK2" demez. */
+  qualityStep: boolean;
 }) {
   const done = roll.qc2Completed;
   const press = usePressScale();
@@ -2232,22 +2157,7 @@ function RollListItem({
             </Text>
           </View>
           {/* Durum chip'leri sağa yaslı — satır 2 satıra iner, liste kompaktlaşır */}
-          <View style={helperStyles.rollRight}>
-            {roll.errorCount > 0 && (
-              <View style={helperStyles.chipAmber}>
-                <Text style={helperStyles.chipText}>{roll.errorCount} hata</Text>
-              </View>
-            )}
-            {done ? (
-              <View style={helperStyles.chipBlue}>
-                <Text style={helperStyles.chipText}>KK2 ✓</Text>
-              </View>
-            ) : (
-              <View style={helperStyles.chipNeutral}>
-                <Text style={helperStyles.chipText}>KK2 bekliyor</Text>
-              </View>
-            )}
-          </View>
+          <RollStatusChips errorCount={roll.errorCount} done={done} qualityStep={qualityStep} />
           {selected && (
             <Icon source="chevron-left" size={22} color="#1e40af" />
           )}
@@ -2255,254 +2165,6 @@ function RollListItem({
         </TouchableRipple>
       </Surface>
     </Reanimated.View>
-  );
-}
-
-// Metre değeri — tamsa ondalıksız, değilse tek ondalık (47, 47.5).
-function fmtMeter(v: number): string {
-  return Number.isInteger(v) ? String(v) : v.toFixed(1);
-}
-
-// Cetvel sağ ucu = topun boyu; ölçüm dışı bir hata metresi topu aşarsa cetvel
-// o metreye kadar uzar (marker kadraja sığsın).
-function rulerMaxForDefects(
-  currentQty: number,
-  defects: KursunRollDefectSummary[],
-): number {
-  let m = currentQty > 0 ? currentQty : 0;
-  for (const d of defects) if (d.startMeter > m) m = d.startMeter;
-  return Math.max(m, 1);
-}
-
-// Etkileşimli metre cetveli — Tambur'un DefectRuler'ıyla aynı görsel dil (0→top
-// boyu ölçek, tik/küme, kritik=kırmızı) AMA marker'lar dokunulabilir: dokununca
-// o noktadaki hata id'leri onMarkerPress ile döner (silme modalı açılır). Yakın
-// noktalar tek dokunulabilir kümede toplanır (sayaç); kümeye dokun → hepsi.
-function KursunDefectRuler({
-  defects,
-  defectTypes,
-  rulerMax,
-  onMarkerPress,
-}: {
-  defects: KursunRollDefectSummary[];
-  defectTypes: DefectType[];
-  rulerMax: number;
-  onMarkerPress: (defectIds: string[]) => void;
-}) {
-  const [w, setW] = useState(0);
-  const isCritical = (e: KursunRollDefectSummary) =>
-    defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL';
-
-  const markers = useMemo(() => {
-    if (w <= 0)
-      return [] as {
-        x: number;
-        defects: KursunRollDefectSummary[];
-        critical: boolean;
-        meterMin: number;
-        meterMax: number;
-        label: string;
-        showLabel: boolean;
-      }[];
-    // Dokunulabilir marker'lar — Tambur'daki 16px'ten geniş: hit alanları (28px)
-    // çakışmasın diye 30px'ten yakın tik'ler tek kümede toplanır.
-    const MIN_GAP = 30;
-    const sorted = [...defects].sort((a, b) => a.startMeter - b.startMeter);
-    const out: {
-      x: number;
-      defects: KursunRollDefectSummary[];
-      critical: boolean;
-      meterMin: number;
-      meterMax: number;
-      label: string;
-      showLabel: boolean;
-    }[] = [];
-    for (const e of sorted) {
-      const x = (Math.min(e.startMeter, rulerMax) / rulerMax) * w;
-      const last = out[out.length - 1];
-      if (last && x - last.x < MIN_GAP) {
-        last.x = (last.x * last.defects.length + x) / (last.defects.length + 1);
-        last.defects.push(e);
-        last.critical = last.critical || isCritical(e);
-        last.meterMin = Math.min(last.meterMin, e.startMeter);
-        last.meterMax = Math.max(last.meterMax, e.startMeter);
-      } else {
-        out.push({
-          x,
-          defects: [e],
-          critical: isCritical(e),
-          meterMin: e.startMeter,
-          meterMax: e.startMeter,
-          label: '',
-          showLabel: false,
-        });
-      }
-    }
-    // Etiket (tek = metre, küme = min–max) + soldan sağa çakışma engelleme.
-    let lastEnd = -Infinity;
-    for (const m of out) {
-      m.label =
-        m.defects.length > 1 && m.meterMin !== m.meterMax
-          ? `${fmtMeter(m.meterMin)}–${fmtMeter(m.meterMax)}`
-          : fmtMeter(m.meterMin);
-      const halfW = (m.label.length * 5.5) / 2 + 2;
-      if (m.x - halfW >= lastEnd) {
-        m.showLabel = true;
-        lastEnd = m.x + halfW;
-      }
-    }
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defects, w, rulerMax, defectTypes]);
-
-  return (
-    <View
-      style={styles.rulerWrap}
-      onLayout={(e) => setW(e.nativeEvent.layout.width)}
-    >
-      <View style={styles.rulerTrack} />
-
-      {/* Uç ölçek: sol 0, sağ = topun boyu (metre). */}
-      {w > 0 && (
-        <>
-          <View style={[styles.rulerScaleTick, { left: 0 }]} />
-          <View style={[styles.rulerScaleTick, { left: w - 1 }]} />
-          <Text style={[styles.rulerEndLabel, styles.rulerEndLabelLeft]}>0</Text>
-          <Text style={[styles.rulerEndLabel, styles.rulerEndLabelRight]}>
-            {fmtMeter(rulerMax)} m
-          </Text>
-        </>
-      )}
-
-      {/* Hata metre etiketleri — marker'ların ÜSTÜnde (kritik = kırmızı). */}
-      {markers.map((m, i) =>
-        m.showLabel ? (
-          <Text
-            key={`l${i}`}
-            style={[
-              styles.rulerDefectLabel,
-              m.critical && styles.rulerDefectLabelCritical,
-              { left: Math.max(0, Math.min(m.x - 19, w - 38)) },
-            ]}
-            numberOfLines={1}
-          >
-            {m.label}
-          </Text>
-        ) : null,
-      )}
-
-      {/* Dokunulabilir marker'lar — tek tik veya sayaçlı küme. Geniş şeffaf hit
-          alanı (28px) parmakla kolay bassın; içteki tik/küme ortalanır. */}
-      {markers.map((m, i) => (
-        <TouchableRipple
-          key={i}
-          borderless
-          onPress={() => onMarkerPress(m.defects.map((d) => d.id))}
-          style={[
-            styles.rulerHit,
-            { left: Math.max(0, Math.min(m.x - 14, w - 28)) },
-          ]}
-          accessibilityLabel={`${m.label} metre hata — sil`}
-        >
-          {m.defects.length > 1 ? (
-            <View
-              style={[
-                styles.rulerCluster,
-                m.critical && styles.rulerClusterCritical,
-              ]}
-            >
-              <Text style={styles.rulerClusterText}>{m.defects.length}</Text>
-            </View>
-          ) : (
-            <View
-              style={[styles.rulerTick, m.critical && styles.rulerTickCritical]}
-            />
-          )}
-        </TouchableRipple>
-      ))}
-    </View>
-  );
-}
-
-// Cetveldeki bir hata noktasına (tik/küme) dokununca açılır — o noktadaki
-// hata(lar)ı listeler, her biri "Sil" ile kaldırılır (offline-aware
-// handleDeleteError). Tek hata → tek satır onay; küme → o noktadaki hepsi.
-function DeletePointModal({
-  visible,
-  defects,
-  defectTypes,
-  onDelete,
-  onDismiss,
-}: {
-  visible: boolean;
-  defects: KursunRollDefectSummary[];
-  defectTypes: DefectType[];
-  onDelete: (id: string) => void;
-  onDismiss: () => void;
-}) {
-  const { width: winW } = useWindowDimensions();
-  const phone = winW < 600;
-  const sorted = [...defects].sort((a, b) => a.startMeter - b.startMeter);
-  const isCritical = (e: KursunRollDefectSummary) =>
-    defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL';
-  return (
-    <AppModal visible={visible} onDismiss={onDismiss}>
-      <View
-        style={[
-          deletePointStyles.sheet,
-          { width: phone ? winW * 0.9 : Math.min(460, winW * 0.5) },
-        ]}
-      >
-        <View style={deletePointStyles.header}>
-          <Icon source="alert-circle-outline" size={22} color="#b45309" />
-          <Text style={deletePointStyles.title}>
-            {sorted.length > 1 ? `Hata Noktası (${sorted.length})` : 'Hatayı Sil'}
-          </Text>
-          <View style={{ flex: 1 }} />
-          <IconButton
-            icon="close"
-            size={22}
-            onPress={onDismiss}
-            style={{ margin: 0 }}
-          />
-        </View>
-        {sorted.map((d) => {
-          const crit = isCritical(d);
-          return (
-            <View key={d.id} style={deletePointStyles.row}>
-              <View
-                style={[
-                  deletePointStyles.dot,
-                  crit && deletePointStyles.dotCritical,
-                ]}
-              />
-              <Text style={deletePointStyles.rowMeter}>
-                {d.startMeter.toFixed(1)} m
-              </Text>
-              <Text style={deletePointStyles.rowType} numberOfLines={1}>
-                {d.errorType ?? 'Hata'}
-              </Text>
-              {crit && (
-                <View style={deletePointStyles.critBadge}>
-                  <Text style={deletePointStyles.critBadgeText}>KRİTİK</Text>
-                </View>
-              )}
-              <Button
-                mode="contained"
-                icon="delete"
-                compact
-                buttonColor="#dc2626"
-                onPress={() => onDelete(d.id)}
-                style={deletePointStyles.delBtn}
-                labelStyle={deletePointStyles.delBtnLabel}
-              >
-                Sil
-              </Button>
-            </View>
-          );
-        })}
-      </View>
-    </AppModal>
   );
 }
 
@@ -2638,12 +2300,9 @@ const styles = StyleSheet.create({
   // Hata giriş alanı — dış boşluk rollPane gap'inden gelir; burada yalnız yatay
   // iç boşluk (amber kartı kenardan içeri al). Border/zemin YOK (hr çizgisi kalktı).
   entryFixed: { paddingHorizontal: 8 },
-  // Metre cetveli bloğu — SABİT yükseklik: "henüz hata yok" ↔ cetvel geçişinde
-  // yükseklik değişmez (alttaki giriş zıplamaz). İçteki kart/boş durum flex ile
-  // bloğu tam doldurur → komşu gap'ler eşit kalır.
-  rulerBlock: { height: 112, paddingHorizontal: 8 },
+  // İşlem paneli kartı ("Bu istasyonun kazandırdıkları") — flex YOK: InspectionPanel
+  // girişinin altında içerik kadar uzar (flex:1 onu 56 dp'ye ezip içini gizliyordu).
   section: {
-    flex: 1,
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 14,
@@ -2669,6 +2328,22 @@ const styles = StyleSheet.create({
   propChipOn: { borderColor: '#059669', borderWidth: 2, backgroundColor: '#ecfdf5' },
   propChipText: { fontSize: 15, fontWeight: '700', color: '#475569' },
   propChipTextOn: { color: '#047857' },
+  // Gramaj (çeşit) düğmesi: büyük dokunma hedefi, seçili = dolu yeşil.
+  variantBtn: {
+    minHeight: 72,
+    flexGrow: 1,
+    flexBasis: 120,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#059669',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  variantBtnOn: { backgroundColor: '#059669' },
+  variantBtnText: { fontSize: 20, fontWeight: '800', color: '#047857' },
+  variantBtnTextOn: { color: '#ffffff' },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2677,91 +2352,8 @@ const styles = StyleSheet.create({
   muted: { fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
 
   // Kayıtlı hatalar — boş durum (cetvelle aynı yüksekliği doldurur → zıplama yok).
-  emptyDefects: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  defectGuideTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  defectGuideHint: { fontSize: 10, color: '#94a3b8', fontStyle: 'italic' },
-  defectCritBadge: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fca5a5',
-    borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 999,
-  },
-  defectCritBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#b91c1c',
-    letterSpacing: 0.2,
-  },
   // Metre cetveli — hatalar tik/küme olarak absolute konumlanır; her marker
   // geniş şeffaf hit alanına (rulerHit) sarılı, dokununca o nokta silinir.
-  rulerWrap: { height: 54, justifyContent: 'center', marginTop: 2 },
-  rulerTrack: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 26,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: '#e2e8f0',
-  },
-  rulerHit: {
-    position: 'absolute',
-    top: 12,
-    height: 34,
-    width: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-  },
-  rulerTick: { width: 4, height: 18, borderRadius: 2, backgroundColor: '#94a3b8' },
-  rulerTickCritical: { backgroundColor: '#dc2626' },
-  rulerCluster: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 4,
-    backgroundColor: '#94a3b8',
-    borderWidth: 2,
-    borderColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rulerClusterCritical: { backgroundColor: '#dc2626' },
-  rulerClusterText: { fontSize: 11, fontWeight: '800', color: '#fff' },
-  rulerDefectLabel: {
-    position: 'absolute',
-    top: 0,
-    width: 38,
-    textAlign: 'center',
-    fontSize: 9.5,
-    lineHeight: 12,
-    color: '#475569',
-    fontWeight: '700',
-  },
-  rulerDefectLabelCritical: { color: '#dc2626' },
-  rulerScaleTick: {
-    position: 'absolute',
-    top: 29,
-    width: 1,
-    height: 6,
-    backgroundColor: '#cbd5e1',
-  },
-  rulerEndLabel: {
-    position: 'absolute',
-    bottom: 0,
-    fontSize: 10,
-    color: '#64748b',
-    fontWeight: '700',
-  },
-  rulerEndLabelLeft: { left: 0 },
-  rulerEndLabelRight: { right: 0 },
 
   footer: {
     backgroundColor: '#fff',
@@ -2861,35 +2453,10 @@ const styles = StyleSheet.create({
 
   // Hata giriş alanı (sürekli açık, kompakt) — yatay iç boşluk küçültüldü
   // ki tuşlar genişliği tam kullansın.
-  entrySection: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fcd34d',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  meterInput: { backgroundColor: '#fff' },
-  defectGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   // Hata tipi = ANA TUŞ: büyük, dolgulu amber, az yuvarlak köşe (ana aksiyon
   // hissi). Metraj girip basınca hata direkt kaydedilir.
   // flexGrow+flexBasis: tuşlar satırı tam doldurur, sağda boş alan kalmaz;
   // dolu satırda eşit, yarım satırda esneyip genişler.
-  defectBtn: {
-    backgroundColor: '#d97706',
-    borderRadius: 10,
-    minHeight: 64,
-    flexGrow: 1,
-    flexBasis: 124,
-    minWidth: 124,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  defectBtnText: { fontSize: 17, fontWeight: '800', color: '#fff' },
 });
 
 const helperStyles = StyleSheet.create({
@@ -3170,32 +2737,3 @@ const reopenStyles = StyleSheet.create({
 });
 
 // Cetveldeki hata noktası → o noktadaki hata(lar)ı silme modalı stilleri.
-const deletePointStyles = StyleSheet.create({
-  sheet: { backgroundColor: '#fff', borderRadius: 16, padding: 12, gap: 4 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
-  title: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#94a3b8' },
-  dotCritical: { backgroundColor: '#dc2626' },
-  rowMeter: { fontSize: 16, fontWeight: '800', color: '#0f172a', minWidth: 64 },
-  rowType: { flex: 1, fontSize: 14, color: '#475569', fontWeight: '600' },
-  critBadge: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fca5a5',
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  },
-  critBadgeText: { fontSize: 9, fontWeight: '800', color: '#b91c1c' },
-  delBtn: { borderRadius: 8 },
-  delBtnLabel: { fontSize: 13, fontWeight: '800', marginVertical: 4, marginHorizontal: 10 },
-});

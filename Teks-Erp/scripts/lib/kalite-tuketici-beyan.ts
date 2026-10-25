@@ -33,6 +33,11 @@ export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
   },
   {
     dosya: "services/kursun-qc.service.ts",
+    fonksiyon: "buildStepSummary",
+    gerekce: "Tablet panel bileşimi (KQ-D3): `inspectionEnabled` özet alanı hata panelini çizer; yazma kapısının (reportError) ekran ikizi, bilgi — koruma değil.",
+  },
+  {
+    dosya: "services/kursun-qc.service.ts",
     fonksiyon: "assertDeleteStationInspects",
     gerekce: "Hata SİLME (KK2 + Tambur ortak ucu): silmenin yapıldığı istasyonda muayene açık olmalı; akış sorulmaz çünkü Tambur akışta değil.",
   },
