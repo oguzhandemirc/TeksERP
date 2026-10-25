@@ -24,7 +24,7 @@ type SnapshotRow = Prisma.ReportSnapshotGetPayload<{ select: typeof SNAPSHOT_SEL
 
 const toSummary = (s: SnapshotRow) => ({
   id: s.id, tanimId: s.definitionId, surumNo: s.version?.versionNo ?? null, parametreler: s.params, tur: s.kind,
-  itibariyla: s.createdAt.toISOString(), itibariylaMetni: `${factoryDateTimeTr(s.createdAt)} itibarıyla`,
+  itibariyla: s.createdAt.toISOString(), itibariylaMetni: factoryDateTimeTr(s.createdAt),
 });
 
 export interface SnapshotInput {

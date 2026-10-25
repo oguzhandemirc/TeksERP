@@ -270,7 +270,8 @@ async function main(): Promise<void> {
     const s2 = await snaps.takeSnapshot(d1.id, { parametreler: { donem: "son7gun" }, clientToken: stoken }, ctxFor(ownerId, owner.permissions as string[]), owner);
     const scount = await prisma.reportSnapshot.count({ where: { clientToken: stoken } });
     check("§10a görüntü replay'i ikinci satır üretmez", s1.id === s2.id && scount === 1);
-    check("§10b \"itibarıyla\" fabrika saatiyle basılır", /^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}.* itibarıyla$/.test(s1.itibariylaMetni), s1.itibariylaMetni);
+    // Koşu ile aynı biçim: yalnız fabrika saati; "itibarıyla" ekini istemci basar (çift ek olmasın).
+    check("§10b \"itibarıyla\" metni fabrika saatiyle, eksiz basılır", /^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}(:\d{2})?$/.test(s1.itibariylaMetni), s1.itibariylaMetni);
     const sc = await expectError(() => snaps.takeSnapshot(d1.id, { parametreler: { donem: "buAy" }, clientToken: stoken }, ctxFor(ownerId, owner.permissions as string[]), owner));
     check("§10c görüntü token'ı başka parametreyle → 409", sc?.status === 409 && sc.code === "CLIENT_TOKEN_COLLISION");
     check("§10d ReportSnapshot audit muafiyeti BEYANLI (TELEMETRI)", AUDIT_EXEMPT_MODELS.some((m) => m.model === "ReportSnapshot" && m.sinif === "TELEMETRI"));
