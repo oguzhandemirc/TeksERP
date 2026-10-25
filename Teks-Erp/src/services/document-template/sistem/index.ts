@@ -11,6 +11,7 @@
 export { chequeDeliveryNoteSystem } from "./cheque-delivery-note"; // CHEQUE_DELIVERY_NOTE
 export { freeDocumentSystem } from "./free-document"; // FREE_DOCUMENT
 export { goodsReceiptSystem } from "./goods-receipt"; // GOODS_RECEIPT
+export { inspectionReportSystem } from "./inspection-report"; // INSPECTION_REPORT
 export { invoiceInternalSystem } from "./invoice-internal"; // INVOICE_INTERNAL
 export { kartelaDispatchSystem } from "./kartela-dispatch"; // KARTELA_DISPATCH
 export { paymentReceiptSystem } from "./payment-receipt"; // PAYMENT_RECEIPT

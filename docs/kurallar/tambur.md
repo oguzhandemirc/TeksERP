@@ -77,6 +77,7 @@
 - **[ÇEKİRDEK]** Çok top okutan her ekran `trigger="tap"` (kamera kendiliğinden okumaz — sorun 'istenmeden okuma', onay değil taramayı KAPATARAK çözülür): Hızlı İş Emri, Fason Sevk, KK1 etiket-doğrulama. Tek okuyup kapananlar (Tambur, Kartela, refakat kartı) `auto`. · bekçi: `mobil/src/components/BarcodeScannerView.test.tsx` <sub>(CLAUDE.md:415)</sub>
 - **[PROFİL]** Kısa kesim → A1: bayrak+eşik FABRİKA ayarı; cihazda 3 durumlu `tamburShortCutA1Override` (server|on|off, bilinmeyen→server); birleştirme TEK yer `resolveShortCutConfig`; 'on'da eşik cihazınki, fabrika eşiğine SIZMAZ; override yalnız süpervizöre (`roll:manual-adjust || mobile:tambur-duzelt`). · bekçi: `mobil/src/screens/Modules/Tambur/resolveShortCutConfig.test.ts` <sub>(CLAUDE.md:335)</sub>
 - **[ÇEKİRDEK]** Kısa kesim kuralının TAMAMI `Tambur/shortCutQuality.ts`te — üç yol (elle yazım · makine ölçümü · 'kalanı kes') aynı fonksiyon; yalnız VARSAYILAN kaliteyle ateşler (seçilmiş A1/FIRE'a dokunmaz); eşik üstüne çıkınca yalnız OTOMATİK A1 geri döner (`shortCutRevert`); A1 katalogdan, yoksa fail-closed. · bekçi: `mobil/src/screens/Modules/Tambur/shortCutQuality.test.ts (12)` <sub>(CLAUDE.md:335)</sub>
+- **[ÇEKİRDEK]** Tambur'da hata girişini `inspectionEnabled` çekmecesinden aç (kapalıysa düğme yok); karar rehberini her zaman göster. · bekçi: `test_roll_defect_single_gateway §4` + `mobil TamburDefectDrawer.test.tsx` <sub>(arşiv 2026-10 "Hata yazımı tek boğazdan; önceki adım hataları sonraki istasyonda (KQ-D7)")</sub>
 
 ### Yasaklar
 

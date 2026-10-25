@@ -206,9 +206,11 @@ Backend: `test_belge_excel_esit`, `test_belge_sablon_excel_esit`, `test_belge_sa
 
 - **[ÇEKİRDEK]** Belge tasarımcısının görsel kipte ürettiği yönergeli HTML'i (`Electron/.../DocumentDesigner/binding/*`: bloklar, kalem tablosu `tr[data-each]`, `data-if` kurucusu, filtre önerisi, sayfa ayarı) değiştirince paylaşılan fikstürü iki uçtan tazele (`TASARIMCI_FIKSTUR_YAZ=1 npx vitest run …/binding/roundtrip.test.ts`; sözleşme değişince `npx tsx scripts/test_belge_tasarimci_gidis_donus.ts --yaz`) ve derleyici + önizleme hattından hatasız geçtiğini ölç; Belge ayarları paneli `language`ı `tr`ye kilitler. · bekçi: `scripts/test_belge_tasarimci_gidis_donus.ts` + `Electron/src/pages/Definitions/DocumentDesigner/binding/roundtrip.test.ts` + `Electron/src/pages/Definitions/DocumentDesigner/binding/settings.test.ts` <sub>(arşiv:2026-10-25 Belge tasarımcısı T3)</sub>
 - **[ÇEKİRDEK]** Şablonlu belgenin Excel'i şablondan DEĞİL sözleşme bağlamından (`insa`) ve sürümün `tableBindings`'inden üretilir (`document-template/excel-tables.ts`): kolon kümesi/sırası bağdan, hane gövde hücresinin `data-filtre`sinden, iç kolon yalnız `internalFields` opt-in'iyle; bağsız (kod kipi) sürümde Sistem tabloları + `warnings`. Tablo sırası kaynak HTML'den okunur (jsonb anahtar sırası korunmaz). Kalem tablosu biçimini (`itemTable.ts`), üreticiyi ya da `/tables` dalını değiştirince `test_belge_excel_esit` + `test_belge_sablon_excel_esit` koş.
+- **[ÇEKİRDEK]** Muayene raporunu `INSPECTION_REPORT` sözleşmesinden ve `buildShipmentInspectionSummary` tek kaynağından bas; iç kolonları (operatör · istasyon · cihaz) yalnız opt-in göster, Excel'i aynı kolon çözücüsünden üret. · bekçi: `test_muayene_raporu_sozlesme` · `test_belge_sistem_esdegeri` <sub>(arşiv 2026-10-25 "K4P-RAPOR")</sub>
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- 2026-10-25 · K4P-RAPOR: muayene raporu belgesi + sevk muayene özeti [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-25 K4P-RAPOR
 - 2026-10-24 · Belge şablon dili: LiquidJS katı [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-24 Belge şablon dili
 - 2026-10-24 · Sistem eşleniği: sevk irsaliyesi Liquid eşleniği + eşitlik bekçisi (T6) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-24 Sistem eşleniği
 - 2026-10-25 · Fason eşlenikleri: kabul makbuzu, doğrudan sevk, fason çeki + taslak; ölü CSS toleransı (T7) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-25 Fason eşlenikleri
