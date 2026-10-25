@@ -17,6 +17,7 @@ import {
   assertManualAdapter, eIrsaliyeAuditEntry, DEAD_STATUSES, loadRecord, recordView, requireReady, RESPONSE_STATUSES,
 } from "./e-irsaliye-common.helper";
 import { resolveEIrsaliyeGate } from "./e-irsaliye-readiness.helper";
+import { SHIPMENT_STILL_DISPATCHED } from "./e-irsaliye-shipment.helper";
 import { transitionEIrsaliyeTx, type EIrsaliyeTransition } from "./e-irsaliye-transition.helper";
 
 type Step = Omit<EIrsaliyeTransition, "id" | "actorId">;
@@ -57,7 +58,7 @@ export async function send(id: string, userId: string | null) {
     throw AppError.conflict(`Gönderim geçici olarak başarısız: ${result.hata}. Biraz sonra yeniden deneyin.`, { code: "EIRSALIYE_SEND_TEMPORARY" });
   }
   const step: Step = result.ok
-    ? { from: ["OLUSTURULDU"], to: "GONDERILDI", event: "GONDERILDI", xmlId: rec.currentXmlId, whereExtra: { currentXmlId: rec.currentXmlId },
+    ? { from: ["OLUSTURULDU"], to: "GONDERILDI", event: "GONDERILDI", xmlId: rec.currentXmlId, whereExtra: { currentXmlId: rec.currentXmlId, ...SHIPMENT_STILL_DISPATCHED },
         patch: { sentXmlId: rec.currentXmlId, sentAt: new Date() } }
     : { from: ["OLUSTURULDU"], to: "HATA", event: "HATA_ALINDI", note: result.hata, whereExtra: { currentXmlId: rec.currentXmlId } };
   try {
@@ -75,9 +76,10 @@ export async function markSent(id: string, body: { confirmedEttn?: string | null
   assertManualAdapter(rec);
   return applyStep(rec, userId, {
     from: ["OLUSTURULDU"], to: "GONDERILDI", event: "GONDERILDI", xmlId: rec.currentXmlId,
-    whereExtra: { currentXmlId: rec.currentXmlId },
+    // Storno ile yarışta ikisi birden başarılı olmasın: sevkiyat hâlâ çıkmış olmalı (aynı kilit).
+    whereExtra: { currentXmlId: rec.currentXmlId, ...SHIPMENT_STILL_DISPATCHED },
     patch: { sentXmlId: rec.currentXmlId, sentAt: new Date(), confirmedEttn: body.confirmedEttn ?? null, confirmedNo: body.confirmedNo ?? null },
-    conflictMessage: "Yalnız oluşturulmuş e-İrsaliye gönderildi olarak işaretlenir; sayfayı yenileyin.",
+    conflictMessage: "Yalnız sevk edilmiş sevkiyatın oluşturulmuş e-İrsaliyesi gönderildi olarak işaretlenir; sayfayı yenileyin.",
   }, "GONDERILDI");
 }
 
