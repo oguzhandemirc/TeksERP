@@ -203,6 +203,11 @@ export const TABLE_LABELS: Record<string, string> = {
   CERTIFICATE: "Sertifika",
   CERTIFICATE_FILE: "Sertifika Belgesi",
   CUSTOMER_LAB_SPEC: "Müşteri Lab Spesifikasyonu",
+  COST_PARAMETER_SET: "Maliyet Parametre Seti",
+  COST_STRUCTURE: "Ürün Maliyet Yapısı",
+  FINISHING_RATE: "Apre Tarifesi",
+  WEFT_SPEC: "Atkı Spesifikasyonu",
+  YARN_COST_PRICE: "İplik Maliyet Fiyatı",
   STOCK_COUNT: "Stok Sayımı",
   STOCK_COUNT_LINE: "Stok Sayım Satırı",
   WAREHOUSE: "Depo",
@@ -621,7 +626,7 @@ export const ENUM_LABELS: Record<string, string> = {
   AUTO: "Otomatik uygulanır",
   OPTIONAL: "İsteğe bağlı",
   REQUIRED: "Zorunlu",
-  // SackWeightSource
+  // SackWeightSource (YarnCostPriceSource.MANUAL da aynı anlam)
   MANUAL: "Elle girildi",
   // LabResultKind / LabVerdict (K4P-LAB)
   NUMERIC: "Sayısal ölçüm",
@@ -631,6 +636,12 @@ export const ENUM_LABELS: Record<string, string> = {
   // CertificateHolder (K4P-SERT)
   OWN: "Fabrika",
   PARTNER: "İş ortağı",
+  // YarnCostPriceSource
+  LAST_RECEIPT: "Son mal kabulden",
+  PURCHASE_PRICE: "Alış fiyatından",
+  // FinishingBasis
+  RAW_M: "Ham metre",
+  FINISHED_M: "Mamul metre",
   SIMULATED: "Simüle edildi",
   // PrintedDocType (eksik kalanlar)
   TRAVELER_CARD: "Refakat Kartı",

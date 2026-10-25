@@ -100,18 +100,40 @@ export function allReportProjections(): string[] {
   return [...Object.keys(REPORT_KEY_PERMISSION).map(reportProjectionName), ...[...familyKeys().keys()].map((f) => `rapor.${f}`)];
 }
 
-// PARA YAN SAYILARI FINANS SINIFIDIR (K-BULUT; kolon opt-in kalıbı `projections.ts` FINANS_KOLONU ile aynı): finans
-// DIŞI raporda para birimli yan sayı `bulut:fiyat:oku` ister; finans ailesi raporu KENDİ izniyle açar. Bulut
-// hesap yapmaz — yalnız alanı düşürür (sayı değiştirmez, yeniden sıralamaz).
+// PARA ALANLARI FİNANS SINIFIDIR (K-BULUT; kolon opt-in kalıbı `projections.ts` FINANS_KOLONU ile aynı): finans DIŞI
+// raporda para birimli HER alan `bulut:fiyat:oku` ister — yan sayı, tablo kolonu (satır/toplam hücresiyle), para eksenli
+// grafik ve fabrikanın `paraIcerir` işaretlediği anlatı cümlesi. Finans ailesi raporu KENDİ izniyle açar. Bulut hesap
+// yapmaz — yalnız alanı düşürür (sayı değiştirmez, yeniden sıralamaz). Ana sayı zorunlu alandır, düşürülmez.
 const FINANS_SINIFI: CloudPermission = "bulut:fiyat:oku";
 const FINANCE_REPORT_PERMISSIONS: ReadonlySet<CloudPermission> = new Set<CloudPermission>(["bulut:cari-bakiye:oku", "bulut:cek:oku"]);
 const PARA: ReadonlySet<string> = new Set<string>(PARA_BIRIMLERI);
 
+const nesne = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+const paraBirimli = (v: unknown): boolean => nesne(v) && PARA.has(String(v.birim));
+
+function hucreleriAyikla(satir: unknown, dusen: ReadonlySet<string>): unknown {
+  if (!nesne(satir)) return satir;
+  return Object.fromEntries(Object.entries(satir).filter(([k]) => !dusen.has(k)));
+}
+
+function tabloyuKirp(tablo: unknown): unknown {
+  if (!nesne(tablo) || !Array.isArray(tablo.kolonlar)) return tablo;
+  const dusen = new Set(tablo.kolonlar.filter(paraBirimli).map((k) => String((k as { anahtar?: unknown }).anahtar)));
+  if (dusen.size === 0) return tablo;
+  return {
+    ...tablo,
+    kolonlar: tablo.kolonlar.filter((k) => !paraBirimli(k)),
+    satirlar: Array.isArray(tablo.satirlar) ? tablo.satirlar.map((r) => hucreleriAyikla(r, dusen)) : tablo.satirlar,
+    ...(tablo.toplam !== undefined ? { toplam: hucreleriAyikla(tablo.toplam, dusen) } : {}),
+  };
+}
+
 export function stripMoneySideFigures(veri: unknown, reportPermission: CloudPermission, permissions: ReadonlySet<string>): unknown {
   if (FINANCE_REPORT_PERMISSIONS.has(reportPermission) || permissions.has(FINANS_SINIFI)) return veri;
-  if (veri === null || typeof veri !== "object" || Array.isArray(veri)) return veri;
-  const yan: unknown = (veri as { yanSayilar?: unknown }).yanSayilar;
-  if (!Array.isArray(yan)) return veri;
-  const kalan = yan.filter((y: unknown) => !(y !== null && typeof y === "object" && PARA.has(String((y as { birim?: unknown }).birim))));
-  return kalan.length === yan.length ? veri : { ...veri, yanSayilar: kalan };
+  if (!nesne(veri) || !Array.isArray(veri.yanSayilar)) return veri; // sunum değil (v1 sonucu): dokunulmaz
+  const out: Record<string, unknown> = { ...veri, yanSayilar: veri.yanSayilar.filter((y) => !paraBirimli(y)) };
+  if (Array.isArray(veri.anlati)) out.anlati = veri.anlati.filter((c) => !(nesne(c) && c.paraIcerir === true));
+  if ("tablo" in veri) out.tablo = tabloyuKirp(veri.tablo);
+  if (nesne(veri.grafik) && nesne(veri.grafik.eksen) && paraBirimli(veri.grafik.eksen.y)) out.grafik = null;
+  return out;
 }

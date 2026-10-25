@@ -9,6 +9,9 @@
 // =============================================================================
 
 export { goodsReceiptSystem } from "./goods-receipt"; // GOODS_RECEIPT
+export { kartelaDispatchSystem } from "./kartela-dispatch"; // KARTELA_DISPATCH
+export { qualityCertificateSystem } from "./quality-certificate"; // QUALITY_CERTIFICATE
+export { returnDispatchSystem } from "./return-dispatch"; // RETURN_DISPATCH
 export { shipmentDispatchSystem } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
 export { stockCountSystem } from "./stock-count"; // STOCK_COUNT
 export { subcontractorDirectShipSystem } from "./subcontractor-direct-ship"; // SUBCONTRACTOR_DIRECT_SHIP
