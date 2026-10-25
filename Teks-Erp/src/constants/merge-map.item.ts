@@ -130,6 +130,18 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "CustomerLabSpec",
+      table: "customer_lab_specs",
+      column: "itemId",
+      label: "Müşteri lab spesifikasyonu (ürün)",
+      uniqueOn: ["customerId", "itemId", "testTypeId"],
+      policy: "BLOCK",
+      why:
+        "Aynı müşterinin iki ürününe aynı test türü için ayrı sınır yazılmışsa birleşmiş üründe hangisinin " +
+        "geçerli olduğunu yalnız kalite sorumlusu bilir (K4P-SERT); `customer_item_uq` ile birebir.",
+    },
+    {
+      kind: "CONFLICT",
       model: "ItemPrice",
       table: "item_prices",
       column: "itemId",
