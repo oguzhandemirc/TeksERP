@@ -1,6 +1,7 @@
 // InspectionPanel'in saf katmanı: tipler, doğrulama, cetvel kümeleme (KQ-D3).
 // Bileşenden ayrı tutulur ki jest doğrudan sınasın ve dosyalar lint sınırında kalsın.
-import type { DefectType } from '../../types/models';
+import type { DefectType, KursunPriorDefect } from '../../types/models';
+import { formatFactory } from '../../lib/factory-time';
 
 export type InspectionSizeClass = 'S1' | 'S2' | 'S3' | 'S4';
 
@@ -14,6 +15,22 @@ export interface InspectionDefect {
 /** Önceki adımın hatası — gri, salt-okunur, künyeli ("KK Masa 2 · Ayşe · 13:40"). */
 export interface InspectionPriorDefect extends InspectionDefect {
   origin?: string | null;
+  detectedStationName?: string | null;
+  detectedByName?: string | null;
+  detectedAt?: string | null;
+}
+
+/** Künye: "KK Masa 2 · Ayşe · 13:40" — saat fabrika diliminden; eksik parça atlanır. */
+export function priorDefectKunye(d: Pick<InspectionPriorDefect, 'detectedStationName' | 'detectedByName' | 'detectedAt'>): string {
+  const time = d.detectedAt ? formatFactory(d.detectedAt, 'HH:mm', '') : '';
+  return [d.detectedStationName, d.detectedByName, time].filter((x) => !!x).join(' · ');
+}
+
+/** Sunucu özetindeki önceki hatalar → panel tipi (metresiz satır cetvele giremez, düşer). */
+export function toInspectionPriorDefects(list: KursunPriorDefect[] | undefined): InspectionPriorDefect[] {
+  return (list ?? [])
+    .filter((d): d is KursunPriorDefect & { startMeter: number } => d.startMeter != null)
+    .map((d) => ({ ...d, defectTypeId: null }));
 }
 
 export interface InspectionDefectInput {

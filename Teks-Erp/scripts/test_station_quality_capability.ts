@@ -101,11 +101,17 @@ const KIND_MUAF: Record<string, { sayi: number; gerekce: string }> = {
  * Anahtar `dosya#fonksiyon`; sayı tam eşleşir (aşan da eksik de kırmızı).
  */
 const KALITE_KIND_MUAF: Record<string, { sayi: number; gerekce: string }> = {
-  "services/tambur.service.ts#reportError": {
+  "services/helpers/roll-defect.helper.ts#assertDefectStepGate": {
     sayi: 1,
     gerekce:
       "`kind !== TAMBUR` EKRAN AİLESİ kontrolüdür (Tambur ucu yalnız Tambur adımına yazar); " +
       "muayene sorusu hemen ardından kalite ikiziyle ayrıca sorulur.",
+  },
+  "services/tambur.service.ts#getStep": {
+    sayi: 1,
+    gerekce:
+      "`kind !== TAMBUR` EKRAN AİLESİ kontrolüdür (Tambur özeti yalnız Tambur adımını açar); " +
+      "`inspectionEnabled` alanı kalite ikizinden ayrıca hesaplanır (KQ-D7).",
   },
 };
 
@@ -340,10 +346,11 @@ async function main() {
       "services/kursun-bypass.service.ts": 3,
       "services/kursun-qc.service.ts": 3,
     };
+    // KQ-D7: hata yazma kapısı `roll-defect.helper`a taşındı (inventory/tambur seçimi oraya geçti).
     const KALITE_SELECT_TABANI: Record<string, number> = {
-      "services/inventory.service.ts": 2,
+      "services/helpers/roll-defect.helper.ts": 2,
       "services/kursun-qc.service.ts": 3,
-      "services/tambur.service.ts": 2,
+      "services/tambur.service.ts": 1,
     };
     const selectIhlal: string[] = [];
     for (const [tablo, ad] of [[AKIS_SELECT_TABANI, "STEP_FLOW_SELECT"], [KALITE_SELECT_TABANI, "STEP_QUALITY_SELECT"]] as const) {

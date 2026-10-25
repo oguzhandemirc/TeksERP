@@ -90,6 +90,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   // Veri paneli: taslak değişince gecikmeli `dogrula` (yazmaz, uyarısız zarf) + süzgeç değer listesi (sorgu zarfı `warnings` basabilir) — R2-VERI.
   { yer: "Electron/src/pages/Reports/_v2/custom/data/useDataPanel.ts::customReportApi.validate", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Reports/_v2/custom/data/dimension-values.ts::customReportApi.dimensionValues", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: true },
+  // MAL-3 maliyet önizlemesi: yapı/ezme değişince ~400 ms durulup sorar; yazmaz, uyarılar `data` içinde (zarf uyarısız).
+  { yer: "Electron/src/pages/Cost/shared/useCostPreview.ts::previewCost", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/hooks/useDeviceAnnounce.ts::apiClient", sinif: "BOOT", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/DocumentPreview.tsx::printedDocumentService.getSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/TravelerCardPreview.tsx::workOrderService.getTravelerCardSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
