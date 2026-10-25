@@ -20,6 +20,7 @@ import { previewCost } from "../src/services/cost-calc.service";
 import { measuredWarpWaste, suggestFxRate, suggestYarnPrices } from "../src/services/helpers/maliyet-bridge.helper";
 import { requireMaliyetEnabled } from "../src/middlewares/module.middleware";
 import { requirePermission } from "../src/middlewares/rbac.middleware";
+import { readCostItemStatuses } from "../src/routes/cost.routes";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { altinYapiYaz, fiksturKur, fiksturSil, type MaliyetFikstur } from "./lib/maliyet-fikstur";
 import { assertGelistirmeVeritabani } from "./db-guard";
@@ -173,6 +174,12 @@ async function bolum7(f: MaliyetFikstur): Promise<void> {
     const next = await svc.listCostItems({ limit: 1, cursor: all.nextCursor });
     check("§7c İkinci sayfa farklı kalem", next.data[0]?.itemId !== all.data[0]?.itemId);
   }
+  // Express "simple" ayrıştırıcı `filter[durum]` anahtarını DÜZ bırakır — panel bu biçimi yollar.
+  const q = (query: Record<string, string>) => ({ query }) as never;
+  const status400 = (fn: () => unknown): boolean => { try { fn(); return false; } catch (e) { return (e as { statusCode?: number }).statusCode === 400; } };
+  const parsed = readCostItemStatuses(q({ "filter[durum]": "TAM,YAPI_EKSIK" }));
+  check("§7d Route: düz `filter[durum]` CSV okunur (süzgeç sessizce düşmez)", parsed.join(",") === "TAM,YAPI_EKSIK", parsed.join(","));
+  check("§7e Route: çıplak `durum=` ve tanınmayan durum → 400", status400(() => readCostItemStatuses(q({ durum: "TAM" }))) && status400(() => readCostItemStatuses(q({ "filter[durum]": "X" }))));
 }
 
 /**

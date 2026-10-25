@@ -159,7 +159,10 @@ function main(): void {
   // 34 → 35 (2026-10-25, E5-MOTOR): `e-irsaliye/e-irsaliye-transition.helper.ts` — e-İrsaliye
   // STATÜSÜNÜN tek yazarı (`transitionEIrsaliyeTx`, atomik claim, tx İÇİNDE) + olay satırı; audit'i
   // çağıran eylem basar (service · generate · exchange) — `workorder-event.helper` ile aynı kalıp.
-  const AUDITSIZ_YAZICI_TABAN = 35;
+  // 35 → 36 (2026-10-25, KQ-D7): `helpers/roll-defect.helper.ts` — RollError satırının TEK YAZARI
+  // (üç kopya yazar — KK2/Kurşun · Tambur · kursunFinish — ve muayene satırları tek boğazda, tx İÇİNDE);
+  // helper `auditPayload` döner, audit'i çağıran eylem basar — EBEVEYN_EYLEMDE kalıbı (KQ-D4/D6 emsali).
+  const AUDITSIZ_YAZICI_TABAN = 36;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

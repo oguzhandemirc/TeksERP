@@ -60,9 +60,12 @@ import type {
 } from '../../../types/models';
 import { showScreenError } from '../../../lib/screenToast';
 import InspectionPanel, {
+  toInspectionPriorDefects,
   inspectionSaveErrorText,
   type InspectionDefectInput,
 } from '../../../components/inspection/InspectionPanel';
+import PriorDefectList from '../../../components/inspection/PriorDefectList';
+import PriorErrorBadge from '../../../components/inspection/PriorErrorBadge';
 import {
   composeStationPanels,
   dativeTr,
@@ -1465,6 +1468,7 @@ export default function KursunQcScreen() {
                   <InspectionPanel
                     defectTypes={defectTypes}
                     ownDefects={selectedRoll.defects}
+                    priorDefects={toInspectionPriorDefects(selectedRoll.priorDefects)}
                     meterInput={startMeter}
                     onMeterChange={setStartMeter}
                     onDefect={handleReportDefect}
@@ -1475,7 +1479,11 @@ export default function KursunQcScreen() {
                     {processCard}
                   </InspectionPanel>
                 ) : (
-                  <View style={styles.entryFixed}>{processCard}</View>
+                  <View style={styles.entryFixed}>
+                    {/* Yalnız kurşun: önceki hatalar bilgi amaçlı (KQ-D7). */}
+                    <PriorDefectList defects={toInspectionPriorDefects(selectedRoll.priorDefects)} />
+                    {processCard}
+                  </View>
                 );
               })()}
 
@@ -1759,6 +1767,7 @@ function CameraScanModal({
                       <Text style={cameraStyles.rowCardNo} numberOfLines={1}>
                         {item.cardNumber}
                       </Text>
+                      <PriorErrorBadge count={item.openErrorCount} testID="card-error-badge" />
                       <Text style={cameraStyles.rowMetaInline} numberOfLines={1}>
                         {item.batchNumber} · {item.stationName} · {item.openRollCount} top
                         {item.oldestEnteredAt
@@ -2116,9 +2125,10 @@ function JobTab({
 }
 
 // Top satırının durum çipleri (hata sayısı + adım durumu) — kalite adımı değilse "KK2" demez.
-function RollStatusChips({ errorCount, done, qualityStep }: { errorCount: number; done: boolean; qualityStep: boolean }) {
+function RollStatusChips({ errorCount, priorCount, done, qualityStep }: { errorCount: number; priorCount?: number; done: boolean; qualityStep: boolean }) {
   return (
     <View style={helperStyles.rollRight}>
+      <PriorErrorBadge count={priorCount} testID="roll-prior-badge" />
       {errorCount > 0 && (
         <View style={helperStyles.chipAmber}>
           <Text style={helperStyles.chipText}>{errorCount} hata</Text>
@@ -2194,7 +2204,7 @@ function RollListItem({
             </Text>
           </View>
           {/* Durum chip'leri sağa yaslı — satır 2 satıra iner, liste kompaktlaşır */}
-          <RollStatusChips errorCount={roll.errorCount} done={done} qualityStep={qualityStep} />
+          <RollStatusChips errorCount={roll.errorCount} priorCount={roll.priorOpenErrorCount} done={done} qualityStep={qualityStep} />
           {selected && (
             <Icon source="chevron-left" size={22} color="#1e40af" />
           )}

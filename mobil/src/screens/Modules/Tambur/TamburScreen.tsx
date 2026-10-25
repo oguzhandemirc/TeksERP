@@ -27,6 +27,11 @@ import {
 } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
+import TamburDefectDrawer from './TamburDefectDrawer';
+import {
+  inspectionSaveErrorText,
+  type InspectionDefectInput,
+} from '../../../components/inspection/InspectionPanel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
@@ -165,13 +170,6 @@ interface OpenJob {
   selectedRollId: string | null;
 }
 
-interface ErrorEntryState {
-  // Hata nokta (aralık değil): operatör sadece "kaç. metrede" girer.
-  // Tambur kesim kararını voluntaryCuts üzerinden verir; defect listesi rehber.
-  startMeter: string;
-  defectTypeId: string;
-}
-
 // Yeni model: kesim = tek metre (uzunluk). Sayaç sıfırdan başladığı için
 // her kesim bağımsız uzunlukta; toplam(lengths) ≤ Roll.currentQty olmalı.
 interface VoluntaryCutDraft {
@@ -197,13 +195,7 @@ interface RollWorkState {
   foldType: TamburFoldType | null;
   voluntaryCuts: VoluntaryCutDraft[];
   voluntaryEntry: VoluntaryEntryState;
-  errorEntry: ErrorEntryState;
 }
-
-const EMPTY_ERROR_ENTRY: ErrorEntryState = {
-  startMeter: '',
-  defectTypeId: '',
-};
 // Default kesim girişi: kalite ön seçimi KATALOGDAN gelir (karar ①).
 // Operatör çoğunlukla 1. kalite kesim yapar; 2. kalite/fire ihtiyaç anında değişir.
 //
@@ -229,7 +221,6 @@ const EMPTY_WORK: RollWorkState = {
   foldType: null,
   voluntaryCuts: [],
   voluntaryEntry: EMPTY_VOLUNTARY_ENTRY,
-  errorEntry: EMPTY_ERROR_ENTRY,
 };
 
 /** Manuel Mod sebep alanı alt sınırı — backend de aynı sınırı uygular. */
@@ -402,6 +393,7 @@ export default function TamburScreen() {
     undefined;
 
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  const [defectDrawerOpen, setDefectDrawerOpen] = useState(false);
   // Etiket "kime?" — baskı anında müşteri seçimi (gevşek model: top→sipariş bağı yok).
   const [labelContext, setLabelContext] = useState<LabelTargetContext | undefined>(undefined);
   const [targetSheet, setTargetSheet] = useState<{ roll: Roll; defaultLineId: string | null } | null>(null);
@@ -948,6 +940,8 @@ export default function TamburScreen() {
       ) ?? null
     );
   }, [activeJob]);
+  // KQ-D7: eski backend alanı göndermez → undefined → çekmece çizilmez (bugünkü ekran).
+  const inspectionEnabled = activeJob?.stepSummary?.inspectionEnabled === true;
 
   // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde PLANLANAN kat
   // otomatik seçili gelir; plan yoksa KATALOGUN İLK değeri. Operatör
@@ -1547,16 +1541,15 @@ export default function TamburScreen() {
     onSuccess: async () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({ type: 'success', text1: 'Hata listeye eklendi' });
-      setWork((w) => ({
-        ...w,
-        errorEntry: { ...EMPTY_ERROR_ENTRY, defectTypeId: w.errorEntry.defectTypeId },
-      }));
       await refetchActiveJob();
     },
     onError: (err: Error) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      showScreenError(err, 'Eklenemedi');
+      // Mükerrer 409 → "zaten kayıtlı" (InspectionPanel tek metin kaynağı).
+      const dup = inspectionSaveErrorText(err);
+      if (dup) Toast.show({ type: 'error', text1: dup });
+      else showScreenError(err, 'Eklenemedi');
     },
   });
 
@@ -1866,29 +1859,15 @@ export default function TamburScreen() {
     }));
   };
 
-  const handleAddError = () => {
-    if (!activeJob || !selectedRoll) return;
-    const start = parseFloat(work.errorEntry.startMeter);
-    if (!Number.isFinite(start) || start < 0) {
-      Toast.show({ type: 'error', text1: 'Metraj sayı olmalı' });
-      return;
-    }
-    // Hata tipi seçilmediyse kataloğun VARSAYILANI (isDefault) — listenin ilki UYDURULMAZ
-    // (sıra bir karar değildir). Varsayılan yoksa kayıt yollanmaz; admin katalogdan tanımlar.
-    const defectTypeId = work.errorEntry.defectTypeId || defectTypes.find((d) => d.isDefault)?.id;
-    if (!defectTypeId) {
-      Toast.show({
-        type: 'error',
-        text1: 'Hata tipi seçilmedi',
-        text2: 'Bir hata tipi seçin ya da panelden bir tipi varsayılan yapın',
-      });
-      return;
-    }
+  // KQ-D7: hata girişi "HATA GİR" çekmecesinden (InspectionPanel). Panel metreyi ve
+  // tipi doğrular; tip her zaman seçilidir (varsayılan ilk tuş, liste ilki uydurulmaz).
+  const handleDrawerDefect = (input: InspectionDefectInput) => {
+    if (!activeJob || !selectedRoll || input.meter == null) return;
     reportErrorMutation.mutate({
       rollId: selectedRoll.rollId,
       stepId: activeJob.stepSummary.workOrderStepId,
-      startMeter: start,
-      defectTypeId,
+      startMeter: input.meter,
+      defectTypeId: input.defectTypeId,
     });
   };
 
@@ -4130,6 +4109,22 @@ export default function TamburScreen() {
                         </View>
                       </TouchableRipple>
                     )}
+
+                  {/* KQ-D7: hata girişi — muayene kapalıysa düğme ÇİZİLMEZ, karar rehberi aynen çalışır. */}
+                  {inspectionEnabled && (
+                    <TouchableRipple
+                      onPress={() => setDefectDrawerOpen(true)}
+                      borderless
+                      testID="tambur-hata-gir"
+                      accessibilityLabel="Hata gir"
+                      style={[styles.headerBox, styles.headerBoxDefect, compact && styles.headerBoxFlex]}
+                    >
+                      <View style={styles.headerBoxInner}>
+                        <Icon source="alert-plus-outline" size={22} color="#fff" />
+                        <Text style={styles.headerBoxSub}>HATA GİR</Text>
+                      </View>
+                    </TouchableRipple>
+                  )}
                 </View>
               </Surface>
 
@@ -4429,6 +4424,19 @@ export default function TamburScreen() {
           applyRecutRoll(r);
         }}
       />
+
+      {/* KQ-D7: "HATA GİR" çekmecesi — yalnız istasyonda muayene açıkken. */}
+      {inspectionEnabled && (
+        <TamburDefectDrawer
+          visible={defectDrawerOpen}
+          roll={selectedRoll ?? null}
+          stepId={activeJob?.stepSummary.workOrderStepId ?? ''}
+          defectTypes={defectTypes}
+          onDefect={handleDrawerDefect}
+          onDelete={(errorId) => deleteErrorMutation.mutate({ errorId })}
+          onDismiss={() => setDefectDrawerOpen(false)}
+        />
+      )}
 
       {/* İş Emri Siparişleri modal'ı — operatör kesim planı için açar */}
       <OrdersDetailModal
@@ -8544,6 +8552,8 @@ const styles = StyleSheet.create({
   // Siparişler kutusu — turuncu. Yeşil (metre) / mor (katlama) / kırmızı (uyarı)
   // paletinde boşta olan tek belirgin renk; hiçbiriyle karışmaz.
   headerBoxOrders: { backgroundColor: '#ea580c' },
+  // KQ-D7 "HATA GİR": kırmızı, dokunma hedefi ≥ 64 dp.
+  headerBoxDefect: { backgroundColor: '#b91c1c', minHeight: 64, minWidth: 96 },
   headerBoxGreen: { backgroundColor: '#059669' },
   headerBoxDanger: { backgroundColor: '#dc2626' },
   // İş emrinde belirlenen katlama kutusu — yeşil metre / koyu sipariş'ten ayrışsın.
