@@ -16,16 +16,19 @@
 //   (a) `resolvePrintPlan` tasarımı karttaki `designTemplate` izinden DONDURDU (ilk basımın sürümü)
 //       → 3 ❌ (§3 v2 tasarımı, iz v2, audit v2)
 //   (b) `planKey` `designTemplate`i atmadı → 2 ❌ (§2/§3 sürüm: tasarım revizyon sayıldı)
+//   (c) serbest belge basımında tasarımcı dalı kapatıldı (`false && design`) → §6 3 ❌
 // =============================================================================
 import { isDeepStrictEqual } from "node:util";
 import { ItemType, PrintedDocType, StationType, WorkOrderStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
+import { freeDocumentService } from "../src/services/free-document.service";
 import { travelerTemplateService } from "../src/services/traveler-template.service";
 import { getSystemView } from "../src/services/document-template/contract-view.service";
 import type { SystemEquivalent } from "../src/services/document-template/sistem/tipler";
 import { getContract } from "../src/services/document-template/sozlesme/kayit";
+import type { ContractDocType } from "../src/services/document-template/sozlesme/tipler";
 import { createTemplate } from "../src/services/document-template/template.service";
 import { publishVersion, saveVersion } from "../src/services/document-template/version.service";
 import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -42,21 +45,25 @@ function check(label: string, ok: boolean, detail = ""): void {
   }
 }
 
-const TYPE = "TRAVELER_CARD";
+const TYPE: ContractDocType = "TRAVELER_CARD";
 const TAG = `bekci-kart-${process.pid}`;
 const cards = new TravelerCardService();
 const KEYS = [SETTING_KEYS.DOCUMENTS_DESIGNER_ENABLED, SETTING_KEYS.DOCUMENTS_PUBLISH_SOD_ENABLED] as const;
 const savedSettings = new Map<string, { value: unknown } | null>();
 const templateIds: string[] = [];
 let defaultRowBefore: { templateId: string } | null = null;
+let freeDefaultBefore: { templateId: string } | null = null;
+const FREE: ContractDocType = "FREE_DOCUMENT";
+const freeBody = (mark: string) => `<p class="m">${mark} {{ belge.no }} NOT-{{ ayar.footerNote }}</p>`;
 let woId = "";
 let cardId = "";
+let freeDocId = "";
 let USER_A = "";
 let USER_B = "";
 
 const setFlag = (key: string, on: boolean) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: on }, update: { value: on } });
 const body = (mark: string) => `<p class="m">${mark} {{ belge.kart_no }} SAYFA-{{ ayar.pageSize }}</p>`;
-const fakeEq = (html: string): SystemEquivalent => ({ docType: TYPE, editMode: "CODE", html, css: "p{margin:0}", pageSettings: {}, tableBindings: {} });
+const fakeEq = (html: string, docType: ContractDocType = TYPE): SystemEquivalent => ({ docType, editMode: "CODE", html, css: "p{margin:0}", pageSettings: {}, tableBindings: {} });
 
 async function fixtureUser(username: string, fullName: string): Promise<string> {
   const u = await prisma.user.upsert({ where: { username }, create: { username, fullName, passwordHash: "-", isActive: false }, update: {}, select: { id: true } });
@@ -107,24 +114,24 @@ async function archivedTrace(version: number) {
   return traceOf(row?.snapshot ?? null);
 }
 
-async function newDefaultTemplate() {
-  const r = await createTemplate({ docType: TYPE, name: `${TAG}-varsayilan`, copyFrom: { kind: "system" } }, USER_A, {
-    systemEquivalents: (d) => (d === TYPE ? fakeEq(body("KART-V1")) : null),
+async function newDefaultTemplate(docType: ContractDocType = TYPE, html = body("KART-V1")) {
+  const r = await createTemplate({ docType, name: `${TAG}-${docType}`, copyFrom: { kind: "system" } }, USER_A, {
+    systemEquivalents: (d) => (d === docType ? fakeEq(html, docType) : null),
   });
   templateIds.push(r.template.id);
   const v1 = await prisma.documentTemplateVersion.findFirstOrThrow({ where: { templateId: r.template.id, versionNo: 1 } });
   await publishVersion(r.template.id, { versionId: v1.id, expectedPublishedVersionId: null }, USER_B);
-  await prisma.documentTemplateDefault.upsert({ where: { docType: TYPE }, create: { docType: TYPE, templateId: r.template.id }, update: { templateId: r.template.id } });
+  await prisma.documentTemplateDefault.upsert({ where: { docType }, create: { docType, templateId: r.template.id }, update: { templateId: r.template.id } });
   return { id: r.template.id, v1 };
 }
 
-async function publishV2(templateId: string, v1: Awaited<ReturnType<typeof newDefaultTemplate>>["v1"]) {
+async function publishV2(templateId: string, v1: Awaited<ReturnType<typeof newDefaultTemplate>>["v1"], sourceHtml = body("KART-V2")) {
   const r = await saveVersion(
     templateId,
     {
       baseVersionId: v1.id,
       editMode: "CODE",
-      sourceHtml: body("KART-V2"),
+      sourceHtml,
       css: v1.css,
       pageSettings: v1.pageSettings,
       tableBindings: v1.tableBindings as Record<string, unknown>,
@@ -197,9 +204,29 @@ async function main(): Promise<void> {
   const view = await getSystemView(TYPE);
   check("sistem görünümü ayarı = kart ayarının normalize hâli", isDeepStrictEqual(view.settings, getContract(TYPE).ayarNormalize(live.config)));
   check("kopyanın v1 ayarı da aynı", isDeepStrictEqual(tpl.v1.settings, view.settings));
+
+  console.log("§6 Serbest belge canlı (P-e): türün varsayılanı her basımda çözülür");
+  await setFlag(SETTING_KEYS.DOCUMENTS_DESIGNER_ENABLED, false);
+  freeDefaultBefore = await prisma.documentTemplateDefault.findUnique({ where: { docType: FREE }, select: { templateId: true } });
+  const created = await freeDocumentService.create({ title: `${TAG} tutanak`, body: "Satır 1\nSatır 2", config: { footerNote: "BELGE-NOTU" } });
+  freeDocId = (created.data as { id: string }).id;
+  const freeHtml = async () => (await freeDocumentService.renderHtml(freeDocId)).data!.html;
+  const freeBase = await freeHtml();
+  const ft = await newDefaultTemplate(FREE, freeBody("SERBEST-V1"));
+  check("bayrak kapalı: serbest belge HTML'i bayt-eşit", (await freeHtml()) === freeBase);
+  await setFlag(SETTING_KEYS.DOCUMENTS_DESIGNER_ENABLED, true);
+  const f1 = await freeHtml();
+  check("bayrak açık: varsayılan şablonla basım", f1.includes("SERBEST-V1 "));
+  check("belgenin kendi ayarı şablon ayarının üstüne biner (R4)", f1.includes("NOT-BELGE-NOTU"));
+  await publishV2(ft.id, ft.v1, freeBody("SERBEST-V2"));
+  const f2 = await freeHtml();
+  check("v2 yayını sonraki basımda (donmaz)", f2.includes("SERBEST-V2 ") && !f2.includes("SERBEST-V1"));
 }
 
 async function cleanup(): Promise<void> {
+  if (freeDocId) await prisma.freeDocument.deleteMany({ where: { id: freeDocId } });
+  if (freeDefaultBefore) await prisma.documentTemplateDefault.update({ where: { docType: FREE }, data: { templateId: freeDefaultBefore.templateId } });
+  else await prisma.documentTemplateDefault.deleteMany({ where: { docType: FREE, templateId: { in: templateIds } } });
   if (cardId) {
     await prisma.printedDocument.deleteMany({ where: { docType: PrintedDocType.TRAVELER_CARD, sourceId: cardId } });
     await prisma.travelerCard.deleteMany({ where: { id: cardId } });

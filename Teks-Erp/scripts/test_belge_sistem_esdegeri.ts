@@ -50,6 +50,7 @@ import type { PrintedDocSnapshot } from "../src/services/printed-document.servic
 import { normalizeTravelerCardConfig, type DocumentConfig } from "../src/services/system-setting.service";
 import { renderTravelerCardHtml, type TravelerCardSnapshot } from "../src/services/document-render/traveler-card.html";
 import { renderQrSvg } from "../src/services/helpers/barcode-svg.helper";
+import { renderFreeDocumentHtml, type FreeDocumentSnapshot } from "../src/services/document-render/free-document.html";
 import type { TravelerCardSource } from "../src/services/document-template/sozlesme/traveler-card";
 
 /** Sistem renderer'ının baskı meta'sı — servis katmanının verdiği şekilde (canlı ayarlar + baskı girdisi). */
@@ -59,6 +60,7 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 // docType başına TEK satır, alfabetik (port dilimleri ekler).
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   CHEQUE_DELIVERY_NOTE: (s, m) => renderChequeDeliveryNoteHtml(s, m as Parameters<typeof renderChequeDeliveryNoteHtml>[1]),
+  FREE_DOCUMENT: (s, m) => renderFreeDocumentHtml({ ...(s as unknown as FreeDocumentSnapshot), config: (s.docConfigOverride ?? {}) as DocumentConfig }, m),
   GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
   INVOICE_INTERNAL: (s, m) => renderInvoiceInternalHtml(s, m as Parameters<typeof renderInvoiceInternalHtml>[1]),
   KARTELA_DISPATCH: (s, m) => renderKartelaCekiHtml(s, m as Parameters<typeof renderKartelaCekiHtml>[1]),

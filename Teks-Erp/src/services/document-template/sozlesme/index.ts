@@ -6,6 +6,7 @@
 // =============================================================================
 
 export { chequeDeliveryNoteContract } from "./cheque-delivery-note"; // CHEQUE_DELIVERY_NOTE
+export { freeDocumentContract } from "./free-document"; // FREE_DOCUMENT
 export { goodsReceiptContract } from "./goods-receipt"; // GOODS_RECEIPT
 export { invoiceInternalContract } from "./invoice-internal"; // INVOICE_INTERNAL
 export { kartelaDispatchContract } from "./kartela-dispatch"; // KARTELA_DISPATCH
