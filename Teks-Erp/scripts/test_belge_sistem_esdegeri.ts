@@ -15,7 +15,10 @@
  * Çalıştır: npx tsx scripts/test_belge_sistem_esdegeri.ts   (DB'siz)
  */
 
+import { renderQualityCertificateHtml } from "../src/services/document-render/quality-certificate.html";
+import { renderReturnDispatchHtml } from "../src/services/document-render/return-dispatch.html";
 import { renderShipmentDispatchHtml } from "../src/services/document-render/shipment-dispatch.html";
+import { renderKartelaCekiHtml } from "../src/services/document-render/kartela-ceki.html";
 import { renderFasonCekiHtml } from "../src/services/document-render/fason-ceki.html";
 import { renderFasonDirectShipHtml } from "../src/services/document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml } from "../src/services/document-render/fason-receipt.html";
@@ -39,6 +42,9 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 // docType başına TEK satır, alfabetik (port dilimleri ekler).
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
+  KARTELA_DISPATCH: (s, m) => renderKartelaCekiHtml(s, m as Parameters<typeof renderKartelaCekiHtml>[1]),
+  QUALITY_CERTIFICATE: (s, m) => renderQualityCertificateHtml(s, m as Parameters<typeof renderQualityCertificateHtml>[1]),
+  RETURN_DISPATCH: (s, m) => renderReturnDispatchHtml(s, m as Parameters<typeof renderReturnDispatchHtml>[1]),
   SHIPMENT_DISPATCH: (s, m) => renderShipmentDispatchHtml(s, m as Parameters<typeof renderShipmentDispatchHtml>[1]),
   STOCK_COUNT: (s, m) => renderStockCountHtml(s, m as Parameters<typeof renderStockCountHtml>[1]),
   SUBCONTRACTOR_DIRECT_SHIP: (s, m) => renderFasonDirectShipHtml(s, m as Parameters<typeof renderFasonDirectShipHtml>[1]),
