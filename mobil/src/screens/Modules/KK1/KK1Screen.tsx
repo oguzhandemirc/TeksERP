@@ -80,6 +80,7 @@ import { isLoomBirthVisible, loomBirthFingerprint, loomBirthPayload, type LoomBi
 import OwnerPicker from './OwnerPicker';
 import { EMPTY_OWNER_LINK, isOwnerPickerVisible, ownerLinkPayload, type OwnerLinkState } from './ownerLink';
 import { useKk1Inspection } from './useKk1Inspection';
+import { inspectionNotSavedToast, withoutInspectionWarning } from './kk1InspectionHost';
 import Kk1InspectionSheet from './Kk1InspectionSheet';
 import InspectionSuggestionChip from './InspectionSuggestionChip';
 import type { InspectionDraft } from '../../../components/inspection/inspectionDraft';
@@ -1038,7 +1039,10 @@ export default function KK1Screen() {
         });
       }
       // Devere Faz 4: sunucu uyarıları (levent tüketimi) — kayıt oldu, operatör bilsin; metin sunucudan aynen.
-      const uyari = buildEntryWarningToast(res.warnings, res.data?.barcode, current);
+      // K4P: muayene yazılmadıysa (modül/izin/istasyon) turuncu toast ayrı söyler; genel kanalda tekrarlanmaz.
+      const muayene = inspectionNotSavedToast(res.inspectionNotSaved, res.data?.barcode);
+      if (muayene) Toast.show({ type: 'warning', ...muayene, visibilityTime: 10000 });
+      const uyari = buildEntryWarningToast(withoutInspectionWarning(res.warnings, res.inspectionNotSaved), res.data?.barcode, current);
       if (uyari) Toast.show({ type: 'info', ...uyari, visibilityTime: 10000 });
       if (!res.data) return;
       // "Kaydet ve Etiket Bas" — başarılı kayıttan sonra otomatik etiket basımı.
