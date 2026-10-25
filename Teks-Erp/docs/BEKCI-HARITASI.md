@@ -15,6 +15,7 @@ Alanlar: bölüm başlıkları aşağıda. **Sayı YAZILMAZ** — güncel dağı
 > zaten 41 alan bölümüne bölünmüş, ve bir KOD okuyucusu (`scripts/test_identity_ledger.ts`)
 > + 40 canlı belge atfı var. Boyut tavanı da bilerek konmadı — gerekçe
 > `scripts/check-docs.mjs` boyut kapısının yanında yazılıdır.
+> 📌 **Özet satırı zorunlu:** bekçi `=== Sonuç: N geçti, M başarısız ===` basmadan çıkış 0 verirse koşucu onu KIRMIZI sayar (`scripts/lib/ozet-satiri.ts`, `test_bekci_sozlesmesi §ö`); büyük çıktılı bekçi `process.exit` değil `process.exitCode` ile biter.
 > 📌 **Çakışma kuralı:** harita satırı ekleyen commit **yalnız kendi alan bölümüne**
 > dokunur (7 günde 105 commit ölçüldü, dokuz oturum tek dosyada).
 
