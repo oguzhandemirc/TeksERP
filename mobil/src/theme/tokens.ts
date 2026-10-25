@@ -178,4 +178,5 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   Devere: { tint: '#c2410c', bg: '#fed7aa' },
   FasonDokuma: { tint: '#db2777', bg: '#fce7f3' }, // fason kabulün kardeşi — aynı renk ailesi
   Uyarilar: { tint: '#b91c1c', bg: '#fee2e2' }, // alarm — kırmızı aile (panel şeridiyle aynı ton)
+  Muayene: { tint: '#7c3aed', bg: '#ede9fe' }, // kalite güvence — üretim ailelerinden ayrışan mor
 };

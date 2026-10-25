@@ -12,6 +12,7 @@ import { variantToExport } from "../../variant-model";
 import type { BlockOutcome, RunResult } from "../custom-api";
 import { chartOf, headlineOf, periodTableOf, tableOf, variantOf } from "../result-model";
 import { orderedLayout, type DefinitionBody } from "./layout-model";
+import { CAUSALITY_TEXT, analysisVerdict } from "../../analysis/analysis-model";
 
 const NO_DATA = "Bu bölüm için veri yok.";
 
@@ -45,6 +46,19 @@ function blockBody(b: BlockOutcome, chartKind: string): ExportBlok {
   return { tur: "tablo", tablo: tableToExport(tableOf(r), name ?? "Tablo") };
 }
 
+/** Analiz bölümü PDF/Excel'de ekrandaki kartın parçalarıyla: görsel, özet tablo, sonuç (ya da uyarı) + sabit not. */
+function analysisBlocks(b: BlockOutcome): ExportBlok[] | null {
+  if (b.durum !== "tamam" || b.tur !== "analiz" || !b.analiz) return null;
+  const { sunum } = b.analiz;
+  const name = b.baslik ?? sunum.baslik;
+  const verdict = analysisVerdict(b.analiz);
+  const out: ExportBlok[] = [];
+  if (verdict.kind !== "empty" && sunum.grafik) out.push({ tur: "grafik", baslik: name, grafik: sunum.grafik, veri: grafikVeriTablosu(sunum.grafik, name) });
+  if (verdict.kind !== "empty" && sunum.tablo) out.push({ tur: "tablo", tablo: tableToExport(sunum.tablo, name) });
+  out.push({ tur: "anlati", cumleler: [verdict.kind === "warning" ? `⚠ ${verdict.text}` : verdict.text, CAUSALITY_TEXT] });
+  return out;
+}
+
 /** Ekranda görünen uyarıların aynısı (blok sonuçlarının birleşik, tekrarsız listesi). */
 export function resultWarnings(result: RunResult): string[] {
   return [...new Set(result.bloklar.flatMap((b) => (b.durum === "tamam" ? b.sonuclar.flatMap((s) => s.uyarilar) : [])))];
@@ -54,7 +68,9 @@ export function buildDefinitionExportSpec(result: RunResult, body: DefinitionBod
   const byId = new Map(result.bloklar.map((b) => [b.id, b]));
   const bloklar: ExportBlok[] = orderedLayout(body).flatMap(({ item }) => {
     const b = byId.get(item.i);
-    return b ? [{ ...blockBody(b, chartKindOf(b.id)), genislik: item.w, ...(item.sayfaKesmesi ? { sayfaKesmesi: true } : {}) }] : [];
+    if (!b) return [];
+    const extra = { genislik: item.w, ...(item.sayfaKesmesi ? { sayfaKesmesi: true } : {}) };
+    return (analysisBlocks(b) ?? [blockBody(b, chartKindOf(b.id))]).map((x, i) => ({ ...x, ...(i === 0 ? extra : { genislik: item.w }) }));
   });
   const warnings = resultWarnings(result);
   return {

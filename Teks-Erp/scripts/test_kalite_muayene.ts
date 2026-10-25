@@ -232,7 +232,10 @@ async function sectionPreview(adminId: string, fx: Fx) {
   const after = [await prisma.rollInspection.count(), await prisma.rollError.count()];
   check("satır sayıları aynı", before[0] === after[0] && before[1] === after[1]);
   check("önizleme = muayene sayıları (ham 11, tavanlı 9, 6,00, B/GB)", pv.totalPoints === 11 && pv.cappedPoints === 9 && pv.pointsPer100M2?.toFixed(2) === "6.00" && pv.suggested?.label === "B" && pv.suggested.code === fx.grades.b.code);
+  check("K4P-EKRAN: aktif muayenesiz top → activeInspection null, aşama RAW", pv.activeInspection === null && pv.phase === "RAW", JSON.stringify(pv.activeInspection));
   const real = await svc.create({ rollId: fx.rolls.e, defects: golden(fx) }, adminId);
+  const pa = await svc.preview({ rollId: fx.rolls.e, defects: [] });
+  check("K4P-EKRAN: aktif muayeneli top → activeInspection = yazılan satır (r1)", pa.activeInspection?.id === real.id && pa.activeInspection.revision === 1 && pa.activeInspection.phase === "RAW");
   // K4P-TABLET: KK1 doğuşu — top yok, taslak (kumaş + uzunluk) aynı motordan geçer; yazmaz.
   const before2 = [await prisma.rollInspection.count(), await prisma.rollError.count()];
   const dv = await svc.preview({ draft: { itemId: fx.items.main }, inspectedLengthM: 100, defects: golden(fx) });
@@ -331,6 +334,18 @@ async function sectionHttp(admin: { id: string; username: string; password: stri
     check("önizleme: ne top ne taslak → 400", none.status === 400, `${none.status}`);
     const td = await call("POST", "/api/quality-inspections/preview", tabletToken, { draft: { itemId: fx.items.main }, inspectedLengthM: 90, defects: [] });
     check("tablet taslak önizleme 200", td.status === 200, `${td.status} ${td.code}`);
+    // K4P-EKRAN: yalnız `mobile:muayene` taşıyan operatör ekranın her ucunu açar (tür ızgarası · top okutma · yazma);
+    // `inspection:write` (KK1 içi muayene) tür listesini okur (TABLET açık küçüğü).
+    const muayeneToken = await mk("muayene", ["mobile:muayene"], "mobile");
+    const writerToken = await mk("yazar", ["inspection:write"], "mobile");
+    check("mobile:muayene → GET /api/defect-types 200", (await call("GET", "/api/defect-types", muayeneToken)).status === 200);
+    check("inspection:write → GET /api/defect-types 200", (await call("GET", "/api/defect-types", writerToken)).status === 200);
+    check("izinsiz → GET /api/defect-types 403", (await call("GET", "/api/defect-types", noneToken)).status === 403);
+    const rb = await prisma.roll.findUniqueOrThrow({ where: { id: fx.rolls.e }, select: { barcode: true } });
+    const scan = await call("GET", `/api/rolls/barcode/${encodeURIComponent(rb.barcode ?? "")}`, muayeneToken);
+    check("mobile:muayene → top okutma 200", scan.status === 200, `${scan.status} ${scan.code}`);
+    const mp = await call("POST", "/api/quality-inspections/preview", muayeneToken, { rollId: fx.rolls.e, defects: [] });
+    check("mobile:muayene → önizleme 200", mp.status === 200, `${mp.status} ${mp.code}`);
     const strict = await call("POST", "/api/quality-inspections/preview", adminToken, { rollId: fx.rolls.e, defects: [], bogus: 1 });
     check("strict gövde: tanınmayan alan → 400", strict.status === 400, `${strict.status}`);
   } finally {

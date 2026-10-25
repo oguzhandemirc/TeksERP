@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { AlertTriangle, ChevronRight, FilePlus2, FileBarChart, Users } from "lucide-react";
+import { AlertTriangle, ChevronRight, FilePlus2, FileBarChart, Sparkles, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { foldedIncludes } from "@/lib/search-fold";
@@ -16,7 +16,7 @@ function CustomReportCard({ d, mine }: { d: DefinitionSummary; mine: boolean }) 
         <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span>{d.kategori.ad}</span>
           <span aria-hidden>·</span>
-          <span>{mine ? VISIBILITY_TEXT[d.gorunurluk] : `Paylaşan: ${d.sahip?.ad ?? "—"}`}</span>
+          <span>{d.sablon ? "Hazır şablon — kopyalayıp değiştirebilirsiniz" : mine ? VISIBILITY_TEXT[d.gorunurluk] : `Paylaşan: ${d.sahip?.ad ?? "—"}`}</span>
           {d.bozuk ? (
             <Badge variant="destructive" className="gap-1 px-1.5 py-0 text-[11px]">
               <AlertTriangle className="h-3 w-3" /> Bozuk
@@ -48,10 +48,13 @@ export function CustomReportsSection({ term }: { term: string }) {
   const match = (d: DefinitionSummary) => !term || foldedIncludes(d.ad, term);
   const mineItems = (mine.data?.items ?? []).filter(match);
   const sharedItems = (shared.data?.items ?? []).filter(match);
+  // R3-ANALIZ: sistem şablonları (gövdesi kodda, görünürlüğü kategori iznine bağlı).
+  const system = useCustomReportList("sistem", true);
+  const templates = (system.data?.items ?? []).filter((d) => d.sablon && match(d));
   const loading = mine.isLoading || shared.isLoading;
   const failed = mine.isError || shared.isError;
   // Oluşturamayan ve görecek raporu olmayan kullanıcıya boş bölüm çizilmez.
-  if (!canBuild && !loading && !failed && mineItems.length === 0 && sharedItems.length === 0) return null;
+  if (!canBuild && !loading && !failed && mineItems.length === 0 && sharedItems.length === 0 && templates.length === 0) return null;
 
   return (
     <section aria-label="Özel raporlarım" className="rounded-lg border bg-muted/20 p-4">
@@ -76,6 +79,14 @@ export function CustomReportsSection({ term }: { term: string }) {
           </p>
         ) : null}
         {mineItems.length > 0 ? <CardGrid items={mineItems} mine /> : null}
+        {templates.length > 0 ? (
+          <div>
+            <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <Sparkles className="h-3.5 w-3.5" /> Hazır şablonlar
+            </h3>
+            <CardGrid items={templates} mine={false} />
+          </div>
+        ) : null}
         {sharedItems.length > 0 ? (
           <div>
             <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">

@@ -10,6 +10,9 @@ export const DEFECT_GROUPS = ["COZGU", "ATKI", "BOYA", "LEKE", "MEKANIK", "DIGER
 
 export type DefectGroup = (typeof DEFECT_GROUPS)[number];
 
+/** Çözgü grubu — "vardiyaya göre çözgü hatası" şablonu süzgeci (literal tek kaynakta kalsın). */
+export const WARP_DEFECT_GROUP: DefectGroup = "COZGU";
+
 export const DEFECT_GROUP_LABELS: Readonly<Record<DefectGroup, string>> = {
   COZGU: "Çözgü",
   ATKI: "Atkı",

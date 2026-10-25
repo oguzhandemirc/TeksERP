@@ -13,7 +13,7 @@ import { computeFourPoint, FOUR_POINT_DEFAULTS, resolveBand, type ScoredDefect, 
 import {
   gradeMismatchOf, isUniqueOn, resolveFourPointRule, resolveInspectionPhase, resolveInspectionWidth, ruleSnapshotOf, toDec,
 } from "./helpers/four-point-resolve.helper";
-import { ACTIVE_INSPECTION_WHERE } from "./helpers/inspection-active.helper";
+import { ACTIVE_INSPECTION_WHERE, findActiveInspection } from "./helpers/inspection-active.helper";
 import { draftInspectionRoll, type DraftRollInput } from "./helpers/inspection-draft-roll.helper";
 import { insertInspectionDefectsTx } from "./helpers/roll-defect.helper";
 import { QUALITY_STEP_ERROR, STEP_QUALITY_SELECT, stationCanInspect } from "./helpers/quality-station.helper";
@@ -198,7 +198,11 @@ export async function preview(input: PreviewInput) {
   const roll = draft ? await draftInspectionRoll(prisma, draft) : await loadRoll(prisma, rollId ?? "");
   const ev = await evaluateInspection(prisma, { ...rest, roll });
   const unit = ev.rule?.unit ?? FOUR_POINT_DEFAULTS.unit;
+  // Doğmuş topta aktif muayene bilgisi: tablet yeni kayıt açmaz (asıl sed yazma ucunun 409'u).
+  const phase = draft ? null : resolveInspectionPhase(roll);
   return {
+    phase,
+    activeInspection: phase ? await findActiveInspection(prisma, roll.id, phase) : null,
     totalPoints: ev.result.totalPoints,
     cappedPoints: ev.result.cappedPoints,
     unplaced: ev.result.unplaced,
@@ -266,7 +270,7 @@ export async function create(body: CreateBody, userId: string) {
     const row = await prisma.$transaction(async (tx) => {
       const roll = await loadRoll(tx, body.rollId);
       const phase = phaseIn ?? resolveInspectionPhase(roll);
-      const active = await tx.rollInspection.findFirst({ where: { rollId: roll.id, phase, ...ACTIVE_INSPECTION_WHERE }, select: { id: true } });
+      const active = await findActiveInspection(tx, roll.id, phase);
       if (active) {
         throw AppError.conflict("Bu topun bu aşamada aktif bir muayenesi zaten var; düzeltme için revize edin.", { code: "INSPECTION_ALREADY_ACTIVE", inspectionId: active.id });
       }

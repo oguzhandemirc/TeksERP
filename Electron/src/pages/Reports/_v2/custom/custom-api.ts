@@ -6,6 +6,7 @@
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
+import type { AnalysisOutcome } from "../analysis/analysis-model";
 
 export const REPORT_BUILDER_PERMISSION = "report:builder";
 export const REPORT_PUBLISH_PERMISSION = "report:publish";
@@ -26,6 +27,8 @@ export interface DefinitionSummary {
   aktifSurum: { id: string; no: number; tarih: string } | null;
   bozuk: boolean;
   duzenleyebilir: boolean;
+  /** Sistem şablonu (R3-ANALIZ): görüntüleyicide çalışır, "Kopyasını özel rapor yap" ile OZEL olur. */
+  sablon?: boolean;
   guncellendi: string;
 }
 
@@ -73,7 +76,7 @@ export interface SemanticResultLite {
 }
 
 export type BlockOutcome =
-  | { id: string; tur: string; baslik: string | null; durum: "tamam"; sonuclar: SemanticResultLite[]; metin?: string }
+  | { id: string; tur: string; baslik: string | null; durum: "tamam"; sonuclar: SemanticResultLite[]; metin?: string; analiz?: AnalysisOutcome }
   | { id: string; tur: string; baslik: string | null; durum: "yetkisiz" | "desteklenmiyor"; mesaj: string };
 
 export interface RunResult {
@@ -92,7 +95,7 @@ export interface DefinitionIssue {
 const data = <T,>(p: Promise<{ data: { data: T } }>) => p.then((r) => r.data.data);
 
 export const customReportApi = {
-  list: (kapsam: "benim" | "paylasilan" | "tumu", ara?: string) =>
+  list: (kapsam: "benim" | "paylasilan" | "sistem" | "tumu", ara?: string) =>
     data<{ items: DefinitionSummary[] }>(apiClient.get(BASE, { params: { kapsam, ...(ara ? { ara } : {}), limit: 100 } })),
   get: (id: string) => data<DefinitionDetail>(apiClient.get(`${BASE}/${id}`)),
   catalog: () => data<CatalogCube[]>(apiClient.get("/api/rapor-semantik/katalog")),
@@ -120,7 +123,7 @@ export const customReportApi = {
   shareCandidates: () => data<Array<{ id: string; ad: string }>>(apiClient.get(`${BASE}/paylasim-adaylari`)),
 };
 
-export function useCustomReportList(kapsam: "benim" | "paylasilan" | "tumu", enabled: boolean) {
+export function useCustomReportList(kapsam: "benim" | "paylasilan" | "sistem" | "tumu", enabled: boolean) {
   return useQuery({ queryKey: ["custom-reports", kapsam], queryFn: () => customReportApi.list(kapsam), enabled, staleTime: 30_000 });
 }
 

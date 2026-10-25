@@ -23,7 +23,7 @@ import type { MobileScreenKey } from '../types/permissions';
 import { DEFAULT_FEATURE_FLAGS, type FeatureFlags } from '../services/featureFlag.service';
 
 /** Tablette ekranı olan modül anahtarları (`FeatureFlags` alan adıyla). */
-export type MobileModuleFlag = 'productionEnabled' | 'dokumaEnabled' | 'devereEnabled' | 'tezgahEnabled';
+export type MobileModuleFlag = 'productionEnabled' | 'dokumaEnabled' | 'devereEnabled' | 'tezgahEnabled' | 'kaliteGuvenceEnabled';
 
 /** Ekran → modül. Satırı olmayan ekran koşulsuzdur (yalnız izin). */
 export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> = {
@@ -40,6 +40,8 @@ export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> =
   FasonDokuma: 'dokumaEnabled',
   // Uyarılar (tezgah alarmı A3) — tezgah izleme modülü; backend `requireTezgahEnabled` ile aynı zincir.
   Uyarilar: 'tezgahEnabled',
+  // Bağımsız Muayene (K4P-EKRAN) — kalite güvence modülü; backend kalite uçlarının modül kapısıyla aynı anahtar.
+  Muayene: 'kaliteGuvenceEnabled',
 };
 
 export type MobileModuleState = Record<MobileModuleFlag, boolean>;
@@ -57,6 +59,8 @@ export function resolveMobileModuleState(
     // Devere HAM bayrak: hazır levent alan fabrika üretim modülü olmadan da açar (K3 emsali — bağımlılık yok).
     devereEnabled: flags?.devereEnabled ?? DEFAULT_FEATURE_FLAGS.devereEnabled,
     tezgahEnabled: productionEnabled && (flags?.tezgahEnabled ?? DEFAULT_FEATURE_FLAGS.tezgahEnabled ?? false),
+    // Kalite güvence HAM bayrak (KK1 içi muayene kapısı `useKaliteGuvenceEnabled` ile aynı okuma); varsayılan kapalı.
+    kaliteGuvenceEnabled: flags?.kaliteGuvenceEnabled ?? DEFAULT_FEATURE_FLAGS.kaliteGuvenceEnabled ?? false,
   };
 }
 

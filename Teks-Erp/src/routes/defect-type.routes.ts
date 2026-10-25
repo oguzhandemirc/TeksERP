@@ -21,7 +21,8 @@ import { normalizeDefectTypeFourPointBody } from "../services/helpers/four-point
 import type { NextFunction, Request, Response } from "express";
 
 // `inspection:write`: KK1 muayene paneli (K4P-TABLET) tür ızgarasını buradan okur; panelin kapısı bu izindir.
-const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur", "inspection:write"] as const;
+// K4P-EKRAN: bağımsız Muayene ekranı (`mobile:muayene`) tür ızgarasını aynı listeden çizer.
+const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur", "inspection:write", "mobile:muayene"] as const;
 
 export const defectTypeService = new BaseService({
   modelName: "defectType",

@@ -17,6 +17,7 @@ import { buildDefinitionExportSpec } from "./definition-export";
 import { LayoutWorkspace } from "./LayoutWorkspace";
 import { addBlock, baseQuery, type DefinitionBody, moveBlock, orderedLayout, shiftBlock } from "./layout-model";
 import { useLayoutEditor, VERSION_CONFLICT_MESSAGE } from "./useLayoutEditor";
+import { analysisBlockIssue } from "../../analysis/analysis-model";
 
 /** Kaydedilmemiş değişiklikle ayrılma uyarısı — yalnız veri yönlendiricisinde (testlerin MemoryRouter'ı değil). */
 function LeaveGuard({ when }: { when: () => boolean }) {
@@ -122,7 +123,7 @@ export function ReportLayoutPage() {
   const { id = "" } = useParams<{ id: string }>();
   const existing = useQuery({ queryKey: ["custom-report", id], queryFn: () => customReportApi.get(id), retry: false });
   const catalog = useSemanticCatalog();
-  const ed = useLayoutEditor(existing.data);
+  const ed = useLayoutEditor(existing.data, (b) => b.bloklar.some((x) => analysisBlockIssue(x, catalog.data) !== null));
   const [selected, setSelected] = useState<string | null>(null);
   const [printOpen, setPrintOpen] = useState(false);
   const dataRouter = useContext(UNSAFE_DataRouterContext);
@@ -140,6 +141,8 @@ export function ReportLayoutPage() {
   const current = items.find((x) => x.block.id === selected) ?? null;
   const spec = () => (ed.preview.data && draft ? buildDefinitionExportSpec(ed.preview.data, draft, chartKindOf) : null);
   const editable = Boolean(existing.data?.duzenleyebilir && existing.data.aktifSurum);
+  // Analiz bölümünde sayım ölçüsü maruziyetsizse kayıt bekler (neden panelde yazılı; son söz sunucuda).
+  const blocker = draft ? draft.bloklar.map((b) => analysisBlockIssue(b, catalog.data)).find((x) => x !== null) ?? null : null;
 
   const onAdd = (kind: Parameters<typeof addBlock>[1]) => {
     if (!draft) return;
@@ -153,10 +156,11 @@ export function ReportLayoutPage() {
         title={`Düzen: ${existing.data?.ad ?? "…"}`}
         description="Bölümleri tutamaçtan sürükleyerek sıralayın; genişlik ve sayfa kesmesi yalnız görünümü değiştirir, sayılar aynı kalır. Kayıt yeni sürüm açar."
         actions={
-          <HeaderActions id={id} spec={spec} ready={Boolean(ed.preview.data)} canSave={editable && ed.dirty && !ed.busy} busy={ed.busy} onPrint={() => setPrintOpen(true)} onSave={() => void ed.save()} />
+          <HeaderActions id={id} spec={spec} ready={Boolean(ed.preview.data)} canSave={editable && ed.dirty && !ed.busy && blocker === null} busy={ed.busy} onPrint={() => setPrintOpen(true)} onSave={() => void ed.save()} />
         }
       />
       <PageBody className="p-4 sm:p-6">
+        {blocker && editable ? <p role="alert" className="mb-3 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200">Kaydedilemiyor: {blocker}</p> : null}
         <LayoutAlerts loadFailed={existing.isError} readOnly={Boolean(existing.data) && !editable} conflict={ed.conflict} issues={ed.issues} previewFailed={ed.preview.isError} />
         {draft ? (
           <LayoutWorkspace

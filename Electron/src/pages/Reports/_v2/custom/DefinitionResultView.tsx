@@ -4,10 +4,12 @@ import { ReportTable } from "../ReportTable";
 import { RaporGrafik } from "../grafik/RaporGrafik";
 import { SmallMultiples } from "../SmallMultiples";
 import { formatFigure } from "../figures";
-import type { BlockOutcome, RunResult } from "./custom-api";
+import type { BlockOutcome, CatalogCube, RunResult } from "./custom-api";
+import { AnalysisCard } from "../analysis/AnalysisCard";
+import { Heatmap } from "../analysis/Heatmap";
 import { chartOf, headlineOf, periodTableOf, tableOf, variantOf } from "./result-model";
 import { GRID_SPAN_CLASS } from "./layout/grid-classes";
-import type { LayoutItem } from "./layout/layout-model";
+import type { DefinitionBody, LayoutItem } from "./layout/layout-model";
 
 interface Props {
   result: RunResult;
@@ -15,9 +17,17 @@ interface Props {
   chartKindOf: (blockId: string) => string;
   /** R2-DUZEN: görünür sıra + genişlik (`orderedLayout`). Verilmezse eski tek sütun akışı birebir. */
   layout?: ReadonlyArray<Pick<LayoutItem, "i" | "w">>;
+  /** R3-ANALIZ: analiz kartının karıştırıcı önizlemesi gövdeden ve katalogdan kurulur. */
+  body?: DefinitionBody;
+  cubes?: readonly CatalogCube[];
 }
 
-export function BlockBody({ block, chartKind }: { block: BlockOutcome; chartKind: string }) {
+interface AnalysisContext {
+  body?: DefinitionBody;
+  cubes?: readonly CatalogCube[];
+}
+
+export function BlockBody({ block, chartKind, context }: { block: BlockOutcome; chartKind: string; context?: AnalysisContext }) {
   if (block.durum !== "tamam") {
     return (
       <p className="flex items-center gap-2 rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
@@ -26,6 +36,11 @@ export function BlockBody({ block, chartKind }: { block: BlockOutcome; chartKind
     );
   }
   if (block.metin) return <p className="text-sm">{block.metin}</p>;
+  if (block.tur === "analiz") {
+    if (!block.analiz) return <p className="text-sm text-muted-foreground">Bu bölüm için veri yok.</p>;
+    const def = context?.body?.bloklar.find((b) => b.id === block.id);
+    return <AnalysisCard analysis={block.analiz} title={block.baslik} block={def} body={context?.body} cubes={context?.cubes} />;
+  }
   const r = block.sonuclar[0];
   if (!r) return <p className="text-sm text-muted-foreground">Bu bölüm için veri yok.</p>;
   if (block.tur === "anaSayi") {
@@ -46,6 +61,7 @@ export function BlockBody({ block, chartKind }: { block: BlockOutcome; chartKind
     const t = periodTableOf(r);
     return t ? <ReportTable table={t} /> : <p className="text-sm text-muted-foreground">Dönem sütunu çıkmadı.</p>;
   }
+  if (block.tur === "grafik" && chartKind === "isiHaritasi" && r.boyutlar.length === 2) return <Heatmap result={r} title={block.baslik ?? undefined} />;
   if (block.tur === "grafik") {
     const chart = chartOf(r, chartKind);
     return chart ? <RaporGrafik blok={chart} baslik={block.baslik ?? undefined} /> : <p className="text-sm text-muted-foreground">Grafik için kırılım yok.</p>;
@@ -65,7 +81,8 @@ function ordered(blocks: BlockOutcome[], layout: ReadonlyArray<Pick<LayoutItem, 
 }
 
 /** Kayıtlı raporun koşu sonucu — genel yaprağın parçalarıyla (ana sayı, grafik, tablo) çizilir. */
-export function DefinitionResultView({ result, chartKindOf, layout }: Props) {
+export function DefinitionResultView({ result, chartKindOf, layout, body, cubes }: Props) {
+  const context: AnalysisContext = { body, cubes };
   const warnings = [...new Set(result.bloklar.flatMap((b) => (b.durum === "tamam" ? b.sonuclar.flatMap((s) => s.uyarilar) : [])))];
   return (
     <div className="flex flex-col gap-4">
@@ -82,7 +99,7 @@ export function DefinitionResultView({ result, chartKindOf, layout }: Props) {
           {ordered(result.bloklar, layout).map(({ block: b, w }) => (
             <section key={b.id} aria-label={b.baslik ?? b.tur} className={`min-w-0 ${GRID_SPAN_CLASS[w] ?? GRID_SPAN_CLASS[12]} ${frameClass(b)}`}>
               {b.baslik ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
-              <BlockBody block={b} chartKind={chartKindOf(b.id)} />
+              <BlockBody block={b} chartKind={chartKindOf(b.id)} context={context} />
             </section>
           ))}
         </div>
@@ -90,7 +107,7 @@ export function DefinitionResultView({ result, chartKindOf, layout }: Props) {
         result.bloklar.map((b) => (
           <section key={b.id} aria-label={b.baslik ?? b.tur} className={b.tur === "anaSayi" ? "" : "rounded-lg border p-4"}>
             {b.baslik ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
-            <BlockBody block={b} chartKind={chartKindOf(b.id)} />
+            <BlockBody block={b} chartKind={chartKindOf(b.id)} context={context} />
           </section>
         ))
       )}

@@ -13,6 +13,7 @@ import { resolveParams, runDefinitionBlocks, type BlockOutcome } from "./reports
 import type { AccessContext } from "./reports/semantik/izin";
 import type { RunOrigin } from "./reports/semantik/calistirici";
 import { assertValidBody, brokenError, loadVisible, type Actor } from "./rapor-tanimi.service";
+import { SYSTEM_TEMPLATE_BY_KEY } from "./reports/semantik/sistem-sablonlari";
 
 export interface RunInput {
   parametreler: Record<string, unknown>;
@@ -59,6 +60,12 @@ export async function runBody(
 /** Kayıtlı raporu çalıştırır: doğrulama HER koşuda (silinen ölçü → bozuk + 400), bloklar sırayla. */
 export async function runDefinition(id: string, input: RunInput, ctx: AccessContext, a: Actor): Promise<DefinitionRunResult> {
   const row = await loadVisible(id, a);
+  const template = row.kind === "SISTEM" && row.key ? SYSTEM_TEMPLATE_BY_KEY.get(row.key) : undefined;
+  if (template) {
+    // Şablon gövdesi koddadır; sürüm satırı yok → koşu tanıma bağlanır, sürüme bağlanmaz.
+    const { body } = assertValidBody(template.govde);
+    return runBody(body, input, ctx, { origin: { definitionId: id, versionId: null }, label: { id, ad: row.name, surumNo: null } });
+  }
   if (row.kind === "SISTEM") {
     throw AppError.conflict("Sistem raporu kendi sayfasında çalışır.", { code: "RAPOR_SISTEM_TANIMI", panelYolu: row.key ? REPORT_BY_KEY.get(row.key)?.panelYolu ?? null : null });
   }
