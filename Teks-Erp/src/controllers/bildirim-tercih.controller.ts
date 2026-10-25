@@ -10,6 +10,7 @@ import { assertInboxEnabled } from "../services/notification-inbox.service";
 import * as pref from "../services/notification-preference.service";
 import * as follow from "../services/notification-follow.service";
 import * as profile from "../services/notification-profile.service";
+import * as audience from "../services/notification-profile-audience.service";
 
 type Handler = (req: Request) => Promise<unknown>;
 
@@ -43,6 +44,7 @@ export const putFollow = json((req) => follow.putFollow(viewer(req), param(req, 
 export const deleteFollow = json((req) => follow.deleteFollow(viewer(req), param(req, "tur"), param(req, "id")));
 
 export const getProfiles = json((req) => profile.listProfiles(req.query as Record<string, unknown>));
+export const getProfileCandidates = json(() => audience.listMemberCandidates());
 export const postProfile = json((req) => profile.createProfile(req.body, req.user!.userId), 201);
 export const patchProfile = json((req) => profile.updateProfile(profileId(req), req.body, req.user!.userId));
 export const deleteProfile = json((req) => profile.archiveProfile(profileId(req), req.user!.userId));
