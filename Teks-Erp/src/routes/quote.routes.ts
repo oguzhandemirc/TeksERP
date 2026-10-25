@@ -15,6 +15,7 @@ import { requireMaliyetEnabled } from "../middlewares/module.middleware";
 import { createQuote, getQuote, listQuotes, updateQuoteHeader } from "../services/sales-quote.service";
 import { addQuoteLine, deleteQuoteLine, refreshQuoteCosts, updateQuoteLine } from "../services/sales-quote-lines.service";
 import { acceptQuote, cancelQuote, rejectQuote, reviseQuote, sendQuote, unacceptQuote } from "../services/sales-quote-transitions.service";
+import { convertQuoteToOrder } from "../services/sales-quote-convert.service";
 import { quoteViewFor } from "../services/helpers/quote-view.helper";
 import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { AppError } from "../utils/app-error";
@@ -305,6 +306,30 @@ router.post("/:id/cancel", requirePermission("quote:write"), wrap(async (req, re
 router.post("/:id/revise", requirePermission("quote:write"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
   sendQuoteJson(req, res)(201, await reviseQuote(id, body(req), req.user?.userId), { message: "Revizyon açıldı." });
+}));
+
+/**
+ * @openapi
+ * /api/quotes/{id}/convert:
+ *   post:
+ *     tags: [Quotes]
+ *     summary: Siparişe dönüştür (ACCEPTED → CONVERTED + sipariş tek tx; `order:write` de gerekir; aynı clientToken aynı siparişi döndürür)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody:
+ *       required: true
+ *       content: { application/json: { schema: { type: object, required: [clientToken], properties: { clientToken: { type: string, format: uuid } } } } }
+ *     responses:
+ *       201: { description: "Sipariş oluşturuldu (data = teklif, orderId, orderNumber)" }
+ *       400: { description: QUOTE_LINE_ITEM_MISSING }
+ *       403: { description: "PERMISSION_DENIED (details.required: [order:write])" }
+ *       409: { description: QUOTE_STATUS_CONFLICT }
+ */
+router.post("/:id/convert", requirePermission("quote:convert"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const user = { userId: req.user?.userId, permissions: req.user?.permissions };
+  const out = await convertQuoteToOrder(id, body(req), user);
+  sendQuoteJson(req, res)(out.replay ? 200 : 201, out.quote, { orderId: out.orderId, orderNumber: out.orderNumber, message: "Teklif siparişe dönüştürüldü." });
 }));
 
 export default router;

@@ -1,7 +1,7 @@
 // =============================================================================
 // TEKLİF BEKÇİ FİKSTÜRÜ (MAL-4) — müşteri rollü cari + doğrudan teklif satırı; sonda siler
 // =============================================================================
-// `test_teklif_durum`, `test_teklif_donusum`, `test_teklif_maliyet_gorunurlugu`, `test_fiyat_listesi`
+// `test_teklif_durum`, `test_teklif_siparis`, `test_teklif_gorunurluk`, `test_teklif_uc`
 // ortak kullanır. Yalnız test DB (çağıran `assertGelistirmeVeritabani` + burada `hedefDbEngeli`).
 // `teklifYaz` durum makinesini ATLAYARAK istenen durumda satır kurar — geçiş matrisi her başlangıç
 // durumunu ölçebilsin diye; servis yolunu ölçen testler servis fonksiyonlarını çağırır.

@@ -16,7 +16,8 @@ import { buildTurkishSearch } from "../utils/query-parser";
 import { decodeOffsetCursor, encodeOffsetCursor } from "../utils/cursor";
 import { AuditService } from "./audit.service";
 import { nextSeriesNo } from "./number-series.service";
-import { isUniqueViolation, MARKUP_RULE, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { isUniqueViolation, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { resolveMarkup } from "./cost-calc.service";
 import { suggestUnitPrice } from "./helpers/fabric-cost.helper";
 import { suggestFxRate } from "./helpers/maliyet-bridge.helper";
 import { quoteToday } from "./helpers/sales-quote-state.helper";
@@ -201,12 +202,7 @@ export async function fillFromStandardCost(id: string, body: Record<string, unkn
   const head = await prisma.priceList.findUnique({ where: { id }, select: { currency: true, status: true } });
   if (!head) throw AppError.notFound("Fiyat listesi bulunamadı.");
   if (head.status !== "DRAFT") throw conflict(head.status);
-  let markupPct = parseDecimalField(body.markupPct, MARKUP_RULE("Kâr oranı"));
-  if (!markupPct) {
-    const set = await prisma.costParameterSet.findFirst({ where: { status: "ACTIVE" }, select: { defaultMarkupPct: true } });
-    if (!set) throw AppError.badRequest("Yürürlükte maliyet parametre seti yok; kâr oranını elle girin.", { code: "COST_INPUT_MISSING", missing: ["PARAMETER_SET_MISSING"] });
-    markupPct = set.defaultMarkupPct;
-  }
+  const markupPct = await resolveMarkup(body.markupPct);
   const fxRate = parseDecimalField(body.fxRate, FX_RULE) ?? (await suggestFxRate(head.currency, quoteToday()));
   if (!fxRate) throw AppError.badRequest(`${head.currency} kuru bulunamadı; kuru elle girin.`, { code: "COST_INPUT_MISSING", missing: ["FX_RATE_MISSING"] });
   const itemIds = Array.isArray(body.itemIds) ? body.itemIds.map((x, i) => readUuid(x, `${i + 1}. ürün`)) : null;
@@ -224,7 +220,7 @@ export async function fillFromStandardCost(id: string, body: Record<string, unkn
       .map((l) => ({ itemId: l.itemId, colorId: l.colorId, unitPrice: l.unitPrice, minQty: l.minQty, standardCostVersionId: l.standardCostVersionId, costPerMTry: l.costPerMTry, markupPct: l.markupPct }));
     const added: LineInput[] = versions.map((v) => ({
       itemId: v.itemId, colorId: null, minQty: existing.find((l) => l.itemId === v.itemId && l.colorId === null)?.minQty ?? null,
-      unitPrice: suggestUnitPrice({ costPerMTry: v.totalCostPerMTry, markupPct: markupPct!, fxRate })!.toDecimalPlaces(2, HALF_UP),
+      unitPrice: suggestUnitPrice({ costPerMTry: v.totalCostPerMTry, markupPct, fxRate })!.toDecimalPlaces(2, HALF_UP),
       standardCostVersionId: v.id, costPerMTry: v.totalCostPerMTry, markupPct,
     }));
     await writeLinesTx(tx, id, [...kept, ...added]);

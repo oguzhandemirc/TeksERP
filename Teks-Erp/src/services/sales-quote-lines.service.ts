@@ -14,7 +14,7 @@ import { claimDraftQuoteTx } from "./helpers/sales-quote-state.helper";
 import { resolveQuotePriceSuggestionTx } from "./helpers/quote-price.helper";
 import { refreshQuoteLineCost, resolveQuoteLineCost, type QuoteLineCost } from "./helpers/quote-line-cost.helper";
 import { MARKUP_RULE, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
-import { parseAdHoc } from "./cost-calc.service";
+import { parseAdHoc, resolveMarkup } from "./cost-calc.service";
 import { QUOTE_INCLUDE, QUOTE_TABLE, type QuoteRecord } from "./sales-quote-transitions.service";
 
 const QTY_RULE = { label: "Miktar", min: 0, minExclusive: true, scale: 3 } as const;
@@ -32,15 +32,6 @@ function readOptUuid(raw: unknown, label: string): string | null {
   if (raw === undefined || raw === null || raw === "") return null;
   if (typeof raw !== "string" || !/^[0-9a-f-]{36}$/i.test(raw)) throw AppError.badRequest(`${label} geçersiz.`);
   return raw;
-}
-
-/** Kâr: gövde ?? yürürlükteki parametre setinin varsayılanı; ikisi de yoksa 400 (sıfır varsayılmaz). */
-async function resolveMarkup(raw: unknown): Promise<Prisma.Decimal> {
-  const given = parseDecimalField(raw, MARKUP_RULE("Kâr oranı"));
-  if (given) return given;
-  const set = await prisma.costParameterSet.findFirst({ where: { status: "ACTIVE" }, select: { defaultMarkupPct: true } });
-  if (!set) throw AppError.badRequest("Yürürlükte maliyet parametre seti yok; kâr oranını elle girin.", { code: "COST_INPUT_MISSING", missing: ["PARAMETER_SET_MISSING"] });
-  return set.defaultMarkupPct;
 }
 
 interface Pricing { markupPct: Prisma.Decimal; manualPrice: Prisma.Decimal | null; quantity: Prisma.Decimal; colorId: string | null; itemId: string | null }
