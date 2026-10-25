@@ -17,11 +17,14 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import { assertLabValue, resolveLabVerdict, type LabResultSpec } from "./helpers/lab-verdict.helper";
 import { nextSeriesNo } from "./number-series.service";
 import { getLabTest, type LabTestDetail } from "./lab-test-query.service";
+import { resolveCustomerLabSpec } from "./customer-lab-spec.service";
 
 export interface CreateLabTestInput {
   clientToken?: string | null;
   rollId?: string | null;
   batchId?: string | null;
+  /** K4P-SERT: testin müşterisi — verilirse sınır müşteri spesifikasyonundan çözülür. */
+  customerId?: string | null;
   sampleCode?: string | null;
   labName?: string | null;
   /** YYYY-MM-DD fabrika günü; verilmezse bugün. */
@@ -33,7 +36,7 @@ export interface LabResultInput {
   testTypeId: string;
   value: number | null;
   verdict?: LabVerdict | null;
-  /** Müşteri spesifikasyonu: verilmezse türün varsayılan sınırı; `null` açıkça sınırsız. */
+  /** Elle sınır: verilmezse müşteri spesifikasyonu, o da yoksa türün varsayılanı; `null` açıkça sınırsız. */
   specMin?: number | null;
   specMax?: number | null;
   note?: string | null;
@@ -101,6 +104,9 @@ function replayFor(input: CreateLabTestInput) {
 export async function createLabTest(input: CreateLabTestInput, userId: string): Promise<LabTestDetail> {
   return replayFor(input).run(input.clientToken, async () => {
     const subject = await resolveSubject(input);
+    if (input.customerId && !(await prisma.customer.findUnique({ where: { id: input.customerId }, select: { id: true } }))) {
+      throw AppError.notFound("Müşteri bulunamadı.", { code: "CUSTOMER_NOT_FOUND" });
+    }
     const testedOn = parseTestedOn(input.testedOn);
     const now = new Date();
     const row = await withBarcodeRetry(
@@ -108,7 +114,7 @@ export async function createLabTest(input: CreateLabTestInput, userId: string): 
         const testNo = await nextLabTestNo(tx, now);
         return tx.labTest.create({
           data: {
-            testNo, ...subject, testedOn, clientToken: input.clientToken ?? null,
+            testNo, ...subject, customerId: input.customerId ?? null, testedOn, clientToken: input.clientToken ?? null,
             sampleCode: input.sampleCode?.trim() || null, labName: input.labName?.trim() || null, note: input.note?.trim() || null,
             createdById: userId, updatedById: userId,
           },
@@ -132,14 +138,20 @@ async function claimDraftTx(tx: Prisma.TransactionClient, labTestId: string, use
   throw exists ? LOCKED() : NOT_FOUND();
 }
 
-async function resolveResultSpec(input: LabResultInput): Promise<LabResultSpec & { unit: string | null }> {
+async function resolveResultSpec(labTestId: string, input: LabResultInput): Promise<LabResultSpec & { unit: string | null }> {
   const t = await prisma.labTestType.findUnique({ where: { id: input.testTypeId } });
   if (!t) throw AppError.notFound("Lab test türü bulunamadı.", { code: "LAB_TEST_TYPE_NOT_FOUND" });
-  const pick = (v: number | null | undefined, d: Prisma.Decimal | null): number | null => (v === undefined ? (d === null ? null : Number(d)) : v);
+  const test = await prisma.labTest.findUnique({ where: { id: labTestId }, select: { customerId: true, itemId: true } });
+  if (!test) throw NOT_FOUND();
+  // Sınır sırası: elle verilen → müşteri spesifikasyonu (müşteri+ürün → müşteri) → türün varsayılanı.
+  const customer = await resolveCustomerLabSpec(prisma, test.customerId, test.itemId, t.id);
+  const dflt = (d: Prisma.Decimal | null): number | null => (d === null ? null : Number(d));
+  const base = customer ?? { specMin: dflt(t.specMin), specMax: dflt(t.specMax) };
+  const pick = (v: number | null | undefined, d: number | null): number | null => (v === undefined ? d : v);
   const passFail = t.resultKind === "PASS_FAIL";
   const spec = {
     resultKind: t.resultKind, scaleMax: t.scaleMax, unit: passFail ? null : t.unit,
-    specMin: passFail ? null : pick(input.specMin, t.specMin), specMax: passFail ? null : pick(input.specMax, t.specMax),
+    specMin: passFail ? null : pick(input.specMin, base.specMin), specMax: passFail ? null : pick(input.specMax, base.specMax),
   };
   if (spec.specMin !== null && spec.specMax !== null && spec.specMin > spec.specMax) {
     throw AppError.badRequest("Alt sınır üst sınırdan büyük olamaz.", { code: "LAB_SPEC_INVALID" });
@@ -148,7 +160,7 @@ async function resolveResultSpec(input: LabResultInput): Promise<LabResultSpec &
 }
 
 export async function upsertLabResult(labTestId: string, input: LabResultInput, userId: string): Promise<LabTestDetail> {
-  const spec = await resolveResultSpec(input);
+  const spec = await resolveResultSpec(labTestId, input);
   assertLabValue(spec, input.value);
   const outcome = resolveLabVerdict(spec, input.value, input.verdict ?? null);
   const data = {

@@ -12,15 +12,19 @@
 //   §9 KAPANDI → resolvedAt + okundu · yeniden açılan koşul YENİ satır · §10 budama süreleri
 //   §11 gözetmen: bayrak açılınca işler başlar (yeniden başlatmasız), kapanınca durur; commit sonrası
 //       dürtme (pg_notify) süpürmeyi beklemeden dağıtır · §11e koparılan LISTEN yeniden kurulur · §11f durunca
-//       LISTEN bağlantısı UNLISTEN + havuza döner · §12 günlük sayaç · §M tek tur ölçümü (2026-10-24, bu bekçi basar)
+//       LISTEN bağlantısı UNLISTEN + havuza döner · §11g yardımcı sunucular dağıtmaz (yabancı dinleyen yok) · §12 günlük sayaç · §M tek tur ölçümü (2026-10-24, bu bekçi basar)
 //
 // NEGATİF SONDALAR (2026-10-24, sha256 ile birebir geri alındı): ① dağıtıcıda aktör süzgeci etkisizleştirildi
 // → yalnız §6a ❌ (35 ✅ / 1 ❌) · ② ikinci outbox yazarı → `test_bildirim_tek_kaynak` §1 ❌ (oradaki başlık) ·
 // ③ süpürmeden yeniden dinleme çıkarıldı → §11e ❌ (37/1) · ④ durdurmada UNLISTEN/release çıkarıldı → §11f ❌ (36/2, süreç pool.end'te asılır).
+// ⑤ (2026-10-25) bayrak açıkken aynı DB'de 5 yardımcı sunucu `NOTIFICATION_JOBS_ENABLED`siz → §11e/f/g ❌ (CI imzası
+//   "dinleyen 5"); kapamayla 5 sunucu açıkken yeşil · ci.yml satırından kapama silinince §11g ❌.
 // Global ayar yazar (`bildirim.gelenKutusuEnabled`); bulduğu değere `finally`de döner. Kendi satırlarını
 // tür ∧ başlangıç anı + kendi kullanıcılarıyla temizler.
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import * as bcrypt from "bcryptjs";
 import prisma, { pool } from "../src/lib/prisma";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -382,6 +386,16 @@ async function govde(): Promise<void> {
   };
   await bayrak(false);
   await reconcileNotificationJobs();
+  // §11g aynı DB'de YABANCI dağıtıcı yok: CI'nin yardımcı sunucuları bayrağı görüp dinliyordu (§11e/f "dinleyen 5",
+  // zil §5b "gelmedi") — kapama `NOTIFICATION_JOBS_ENABLED=false` ile, iki açılış yüzeyinde ölçülür.
+  const yabanci = await dinleyenler();
+  const ciYml = readFileSync(join(__dirname, "..", "..", ".github", "workflows", "ci.yml"), "utf8");
+  const ciSunucu = ciYml.split("\n").filter((l) => l.includes("npx tsx src/server.ts"));
+  const bekciHttp = readFileSync(join(__dirname, "bekci-http.ts"), "utf8");
+  check("§11g ⭐ yardımcı sunucular bildirim dağıtmaz (ci.yml + bekci-http `NOTIFICATION_JOBS_ENABLED=false`) · yabancı dinleyen yok",
+    ciSunucu.length > 0 && ciSunucu.every((l) => l.includes("NOTIFICATION_JOBS_ENABLED=false")) &&
+      /NOTIFICATION_JOBS_ENABLED: "false"/.test(bekciHttp) && yabanci.length === 0,
+    `ci.yml ${ciSunucu.length} satır · yabancı dinleyen ${yabanci.join(",") || "yok"}`);
   await bayrak(true);
   await reconcileNotificationJobs({ sweepMs: 200 });
   let p1: number[] = [];

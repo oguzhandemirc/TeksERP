@@ -11,14 +11,13 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { computeFourPoint, FOUR_POINT_DEFAULTS, resolveBand, type ScoredDefect, pointsFor } from "./helpers/four-point.helper";
 import {
-  resolveFourPointRule, resolveInspectionPhase, resolveInspectionWidth, type ResolvedRuleSet,
+  gradeMismatchOf, isUniqueOn, resolveFourPointRule, resolveInspectionPhase, resolveInspectionWidth, ruleSnapshotOf, toDec,
 } from "./helpers/four-point-resolve.helper";
 import { ACTIVE_INSPECTION_WHERE } from "./helpers/inspection-active.helper";
 import { QUALITY_STEP_ERROR, STEP_QUALITY_SELECT, stationCanInspect } from "./helpers/quality-station.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 
 type Tx = Prisma.TransactionClient;
-type Dec = Prisma.Decimal;
 
 export const INSPECTION_AUDIT_TABLE = "ROLL_INSPECTION";
 
@@ -59,22 +58,6 @@ const DEAD_FOR_INSPECTION: readonly RollStatus[] = ["CANCELLED"];
 
 function bad(message: string, code: string, extra: Record<string, unknown> = {}): AppError {
   return AppError.badRequest(message, { code, ...extra });
-}
-
-function toDec(v: Prisma.Decimal.Value | null | undefined): Dec | null {
-  if (v == null || v === "") return null;
-  try { return new Prisma.Decimal(v); } catch { return null; }
-}
-
-/** Kural seti → snapshot: yalnız kimlik + sayı (ad/derece metni değil) — geçmiş muayene donuk kalır. */
-function ruleSnapshotOf(rule: ResolvedRuleSet | null): Prisma.InputJsonValue {
-  if (!rule) return { ruleSetId: null, unit: FOUR_POINT_DEFAULTS.unit, runningCap: FOUR_POINT_DEFAULTS.runningCap, bands: [] };
-  return {
-    ruleSetId: rule.id, scope: rule.scope, unit: rule.unit, runningCap: rule.runningCap,
-    bands: rule.bands.map((b) => ({
-      sortOrder: b.sortOrder, maxScore: b.maxScore?.toFixed(2) ?? null, label: b.label, accepted: b.accepted, qualityGradeId: b.qualityGradeId,
-    })),
-  };
 }
 
 /** Hesabın tek yolu: doğrula → puanla → tavan → skor → bant. YAZMAZ (önizleme de bunu çağırır). */
@@ -132,19 +115,6 @@ export async function evaluateInspection(db: Tx, input: EvaluateInput) {
 }
 
 export type Evaluation = Awaited<ReturnType<typeof evaluateInspection>>;
-
-/** Önerilen derece ≠ topun kalitesi; top kalitesi boşken öneri varsa da uyumsuz. */
-function gradeMismatchOf(roll: InspectionRoll, grade: { id: string; code: string } | null): boolean {
-  if (!grade) return false;
-  if (roll.qualityGradeId) return roll.qualityGradeId !== grade.id;
-  if (roll.qualityGrade) return roll.qualityGrade !== grade.code;
-  return true;
-}
-
-function isUniqueOn(err: unknown, needle: string): boolean {
-  if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") return false;
-  return JSON.stringify(err.meta ?? {}).includes(needle) || err.message.includes(needle);
-}
 
 /**
  * Muayenenin TEK yazarı. Çağıran tx'i ve (KK1'de) kilidi tutar; burada ek kilit yok.

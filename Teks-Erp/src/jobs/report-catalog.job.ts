@@ -53,3 +53,6 @@ export async function warnStaleReportKeys(): Promise<void> {
     `(${bayat.join(", ")}); kapı bunları yok sayıyor — ${ekranYolu("raporGorunurlugu")} bölümünden liste ` +
     "yeniden kaydedilerek temizlenir");
 }
+
+// Boot zinciri tek girişten: kapalı rapor anahtarı uyarısının ardından sistem rapor tanımı uzlaştırması (R1-KAYIT).
+export { startReportDefinitionCatalog } from "./report-definition-catalog.job";

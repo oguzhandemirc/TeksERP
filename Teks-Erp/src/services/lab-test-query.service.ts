@@ -19,6 +19,7 @@ const DETAIL_SELECT = {
   roll: { select: { id: true, barcode: true } },
   batch: { select: { id: true, batchNumber: true } },
   item: { select: { id: true, code: true, name: true } },
+  customer: { select: { id: true, code: true, name: true } },
   approvedBy: USER, voidedBy: USER, createdBy: USER,
   results: {
     orderBy: [{ testType: { sortOrder: "asc" } }, { createdAt: "asc" }],
@@ -109,6 +110,7 @@ const LIST_SELECT = {
   roll: { select: { id: true, barcode: true } },
   batch: { select: { id: true, batchNumber: true } },
   item: { select: { id: true, code: true, name: true } },
+  customer: { select: { id: true, code: true, name: true } },
   _count: { select: { results: true } },
 } satisfies Prisma.LabTestSelect;
 

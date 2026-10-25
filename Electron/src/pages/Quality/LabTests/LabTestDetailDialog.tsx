@@ -50,6 +50,7 @@ export function LabTestDetailDialog({ testId, onClose }: Props) {
               <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
                 <Row k="Konu" v={t.roll ? `Top ${t.roll.barcode ?? "—"}${t.batch ? ` (parti ${t.batch.batchNumber})` : ""}` : `Parti ${t.batch?.batchNumber ?? "—"}`} />
                 <Row k="Kumaş" v={t.item ? `${t.item.code} · ${t.item.name}` : "—"} />
+                {t.customer && <Row k="Karşılaştırma" v={`${t.customer.name} spesifikasyonu (yoksa test türü sınırı)`} />}
                 <Row k="Test tarihi" v={fmtCalendarDay(t.testedOn)} />
                 <Row k="Numune · Lab" v={[t.sampleCode, t.labName].filter(Boolean).join(" · ") || "—"} />
                 {t.approvedAt && <Row k="Onay" v={`${fmtFactoryDateTime(t.approvedAt)} · ${t.approvedBy?.fullName ?? "—"}`} />}

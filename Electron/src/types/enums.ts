@@ -272,3 +272,53 @@ export const machineMonitoringStateLabels: Record<MachineMonitoringState, string
   SHADOW: "Gölge Mod",
   LIVE: "Yayında",
 };
+
+// ⚠️ Backend `enum EIrsaliyeStatus` ile BİREBİR (plan §3.2 durum makinesi).
+export const EIrsaliyeStatus = {
+  TASLAK: "TASLAK",
+  OLUSTURULDU: "OLUSTURULDU",
+  GONDERILDI: "GONDERILDI",
+  KABUL: "KABUL",
+  KISMI_KABUL: "KISMI_KABUL",
+  REDDEDILDI: "REDDEDILDI",
+  HATA: "HATA",
+  IPTAL: "IPTAL",
+} as const;
+export type EIrsaliyeStatus = (typeof EIrsaliyeStatus)[keyof typeof EIrsaliyeStatus];
+
+export const eIrsaliyeStatusLabels: Record<EIrsaliyeStatus, string> = {
+  TASLAK: "Taslak",
+  OLUSTURULDU: "Oluşturuldu",
+  GONDERILDI: "Gönderildi",
+  KABUL: "Kabul",
+  KISMI_KABUL: "Kısmi kabul",
+  REDDEDILDI: "Reddedildi",
+  HATA: "Hata",
+  IPTAL: "İptal",
+};
+
+// ⚠️ Backend `enum EIrsaliyeEventType` ile BİREBİR (olay defteri satır tipi).
+export const EIrsaliyeEventType = {
+  HAZIRLANDI: "HAZIRLANDI",
+  OLUSTURULDU: "OLUSTURULDU",
+  XML_YENIDEN_URETILDI: "XML_YENIDEN_URETILDI",
+  GONDERILDI: "GONDERILDI",
+  GONDERIM_GERI_ALINDI: "GONDERIM_GERI_ALINDI",
+  YANIT_KAYDEDILDI: "YANIT_KAYDEDILDI",
+  YANIT_GERI_ALINDI: "YANIT_GERI_ALINDI",
+  HATA_ALINDI: "HATA_ALINDI",
+  IPTAL_EDILDI: "IPTAL_EDILDI",
+} as const;
+export type EIrsaliyeEventType = (typeof EIrsaliyeEventType)[keyof typeof EIrsaliyeEventType];
+
+export const eIrsaliyeEventTypeLabels: Record<EIrsaliyeEventType, string> = {
+  HAZIRLANDI: "Hazırlandı",
+  OLUSTURULDU: "Numara ve XML üretildi",
+  XML_YENIDEN_URETILDI: "XML yeniden üretildi",
+  GONDERILDI: "Gönderildi",
+  GONDERIM_GERI_ALINDI: "Gönderim geri alındı",
+  YANIT_KAYDEDILDI: "Müşteri yanıtı kaydedildi",
+  YANIT_GERI_ALINDI: "Müşteri yanıtı geri alındı",
+  HATA_ALINDI: "Hata alındı",
+  IPTAL_EDILDI: "İptal edildi",
+};

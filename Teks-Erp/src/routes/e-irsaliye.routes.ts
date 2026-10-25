@@ -9,9 +9,13 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import * as svc from "../services/e-irsaliye/e-irsaliye.service";
+import {
+  EIRSALIYE_RECORD_FILTER_NAMES, listEIrsaliyeRecords, summarizeEIrsaliyeRecords,
+} from "../services/e-irsaliye/e-irsaliye-list.helper";
+import { assertNoBareFilterParams, parseQueryParams } from "../utils/query-parser";
 import "../types/express-augment";
 
 const router = Router();
@@ -20,6 +24,8 @@ router.use(verifyToken);
 const READ = requirePermission("eirsaliye:read");
 const WRITE = requirePermission("eirsaliye:write");
 const UNDO = requirePermission("eirsaliye:undo");
+// Hazırlık rozeti ayar ekranında da okunur: ayarı yapan yönetici e-İrsaliye okuyucusu olmayabilir.
+const READINESS = requireAnyPermission("eirsaliye:read", "settings:e-irsaliye", "admin:settings");
 
 type Handler = (req: Request) => Promise<unknown>;
 const wrap = (h: Handler, status = 200) => (req: Request, res: Response, next: NextFunction) => {
@@ -65,7 +71,41 @@ const body = <T extends z.ZodType>(s: T, req: Request) => s.parse(req.body ?? {}
  *     summary: "Hazırlık durumu (HAZIR / YAPILANDIRILMAMIS) + eksikler — kart ve ayar rozeti"
  *     security: [{ bearerAuth: [] }]
  */
-router.get("/readiness", READ, wrap(() => svc.getReadiness()));
+router.get("/readiness", READINESS, wrap(() => svc.getReadiness()));
+
+const listQueryOf = (req: Request) => {
+  assertNoBareFilterParams(req, EIRSALIYE_RECORD_FILTER_NAMES);
+  const q = parseQueryParams(req);
+  return { search: q.search, filters: q.filters };
+};
+
+/**
+ * @openapi
+ * /api/e-irsaliye:
+ *   get:
+ *     tags: [EIrsaliye]
+ *     summary: "e-İrsaliye kayıtları — cursor listesi (en yeni önce); süzgeç filter[status] (CSV), filter[adapter], search"
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/", READ, (req: Request, res: Response, next: NextFunction) => {
+  Promise.resolve()
+    .then(() => {
+      const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+      const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
+      return listEIrsaliyeRecords({ ...listQueryOf(req), cursor, limit, withTotal: req.query.withTotal === "true" });
+    })
+    .then((r) => res.json({ success: true, data: r.items, pagination: r.pagination }), next);
+});
+
+/**
+ * @openapi
+ * /api/e-irsaliye/summary:
+ *   get:
+ *     tags: [EIrsaliye]
+ *     summary: "e-İrsaliye kayıtları özet şeridi — durum başına adet; listeyle aynı süzgeç ve where"
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/summary", READ, wrap((req) => summarizeEIrsaliyeRecords(listQueryOf(req))));
 
 /**
  * @openapi

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { PanelRight, Award, Receipt } from "lucide-react";
@@ -33,6 +33,8 @@ import { shipmentStatusLabels, type ShipmentListItem, type BranchLookupItem } fr
 import { ShipmentDetailSheet } from "./ShipmentDetailSheet";
 import { DirectShipmentDetailSheet } from "./DirectShipmentDetailSheet";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { EIRSALIYE_LIST_FILTER } from "./eirsaliye/listFilter";
+import { useEIrsaliyePermissions, useEIrsaliyeReadiness } from "./eirsaliye/useEIrsaliye";
 
 const QUERY_KEY = "shipments";
 
@@ -158,6 +160,10 @@ export function ShipmentsPage() {
     return qs ? `${base}?${qs}` : base;
   };
 
+  // e-İrsaliye süzgeci yalnız hazırlık HAZIR iken (sunucu YAPILANDIRILMAMIS'ta 400 verir).
+  const eirsPerms = useEIrsaliyePermissions();
+  const eirsReady = useEIrsaliyeReadiness(eirsPerms.canRead).data?.durum === "HAZIR";
+  const filters = useMemo(() => (eirsReady ? [...FILTERS, EIRSALIYE_LIST_FILTER] : FILTERS), [eirsReady]);
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<ShipmentListItem>({
@@ -214,7 +220,7 @@ export function ShipmentsPage() {
           />
         }
       />
-      <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
+      <FilterBar filters={filters} defaultDateRangeDays={30} />
       <DataTable<ShipmentListItem>
         table={table}
         isLoading={query.isLoading}

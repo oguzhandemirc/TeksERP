@@ -23,6 +23,8 @@ export interface LabTestListRow {
   id: string; testNo: string; testedOn: string | null; status: LabTestStatus; sampleCode: string | null; labName: string | null; createdAt: string;
   roll: { id: string; barcode: string | null } | null; batch: { id: string; batchNumber: string } | null;
   item: { id: string; code: string; name: string } | null; resultCount: number; hasFail: boolean;
+  /** K4P-SERT — müşteri seçiliyse sonuç sınırı müşteri spesifikasyonundan gelir. Eski sunucuda yok. */
+  customer?: { id: string; code: string; name: string } | null;
 }
 export interface LabSummary { total: number; draft: number; approved: number; voided: number; failing: number }
 export interface LabTestPage { items: LabTestListRow[]; nextCursor: string | null; summary: LabSummary }
@@ -42,7 +44,7 @@ export interface LabListParams {
   status?: LabTestStatus | ""; verdict?: LabVerdict | ""; testTypeId?: string; batchNo?: string; q?: string;
   from?: string; to?: string; forRollId?: string; batchId?: string; cursor?: string | null; limit?: number;
 }
-export interface LabCreateInput { clientToken: string; rollId?: string | null; batchId?: string | null; sampleCode?: string | null; labName?: string | null; testedOn?: string | null; note?: string | null }
+export interface LabCreateInput { clientToken: string; rollId?: string | null; batchId?: string | null; customerId?: string | null; sampleCode?: string | null; labName?: string | null; testedOn?: string | null; note?: string | null }
 export interface LabResultInput { testTypeId: string; value: number | null; verdict?: LabVerdict | null; specMin?: number | null; specMax?: number | null; note?: string | null }
 
 /** Boş parametreyi göndermez — sunucu boş metni "süzgeç yok" saymak zorunda kalmasın. */
