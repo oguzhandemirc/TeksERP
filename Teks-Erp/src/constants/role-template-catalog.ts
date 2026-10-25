@@ -564,6 +564,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // varken depo yüzeyleri gizli ve öyle kalmalı — ikinci depoyu açmak bilinçli
       // bir kurulum kararıdır (`warehouse:transfer` ise günlük iş, o rolde).
       "warehouse:write",
+      // bildirim: bildirim profilleri + fabrika varsayılanları sistem yapılandırmasıdır (N4-SEMA).
+      "settings:notifications",
     ],
   },
 ];
