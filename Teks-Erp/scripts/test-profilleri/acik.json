@@ -92,6 +92,7 @@
     "shippingDocPackingLot": true,
     "shippingSackSeqOnDoc": true,
     "shippingSackSeqPrefix": "SQ",
+    "shippingReturnFootnote": "İade, sevk irsaliyesini iptal etmez.",
     "shippingSackSeqPrefixLive": true,
     "shippingSackSeqStart": 1,
     "shippingSackSeqShowTotal": true,

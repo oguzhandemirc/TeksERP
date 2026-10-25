@@ -221,6 +221,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   shippingSackSeqOnDoc: "cekirdek",
   shippingSackSeqPrefix: "cekirdek",
   shippingSackSeqPrefixLive: "cekirdek",
+  shippingReturnFootnote: "cekirdek",
   shippingSackSeqStart: "cekirdek",
   shippingSackSeqShowTotal: "cekirdek",
   packingPoolPackageNo: "cekirdek",

@@ -130,6 +130,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   shippingDocPackingLot: A(true),
   shippingSackSeqOnDoc: A(true),
   shippingSackSeqPrefix: A("SQ"),
+  shippingReturnFootnote: A("İade, sevk irsaliyesini iptal etmez."),
   shippingSackSeqPrefixLive: A(true),
   shippingSackSeqStart: A(1),
   shippingSackSeqShowTotal: A(true),

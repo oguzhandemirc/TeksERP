@@ -592,6 +592,8 @@ export const SETTING_KEYS = {
   SHIPPING_SACK_SEQ_SHOW_TOTAL: "shipping.sackSeqShowTotal",
   // Ön ek değişince ESKİ belgeler de değişsin mi (kapalı = sevk anındaki ön ek donar).
   SHIPPING_SACK_SEQ_PREFIX_LIVE: "shipping.sackSeqPrefixLive",
+  // İade irsaliyesi dipnotu (serbest metin; boş = basılmaz) — belge ilk basımda donar.
+  SHIPPING_RETURN_FOOTNOTE: "shipping.returnFootnote",
   // Partisiz (havuz) çuvalın ambalaj numarası ne zaman doğar: sevkte (sevk sırası) · açılışta (cari havuz sayacı).
   PACKING_POOL_PACKAGE_NO: "packing.poolPackageNo",
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik, bugünkü davranış). */
@@ -1024,6 +1026,13 @@ export function sanitizeSackSeqPrefix(v: unknown): string {
 }
 /** Başlangıç numarası: 1 (varsayılan, sektör) — 0 da seçilebilir; üst sınır 999. */
 export const DEFAULT_SHIPPING_SACK_SEQ_START = 1;
+/** İade irsaliyesi dipnotu üst sınırı (karakter) — belge altına tek paragraf. */
+export const SHIPPING_RETURN_FOOTNOTE_MAX = 300;
+/** Dipnot temizliği: kontrol karakteri (satır sonu hariç) atılır, kenar boşluğu kırpılır; boş = basılmaz. */
+export function sanitizeReturnFootnote(v: unknown): string {
+  if (typeof v !== "string") return "";
+  return v.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, "").trim().slice(0, SHIPPING_RETURN_FOOTNOTE_MAX);
+}
 /** İletim payı (dk): 0 = hedef dolunca patrona (varsayılan); üst sınır bir gün. */
 export const DEFAULT_TEZGAH_ESCALATION_GRACE_MINUTES = 0;
 export const TEZGAH_ESCALATION_GRACE_MINUTES_MAX = 1440;
@@ -1927,6 +1936,8 @@ export interface FeatureFlags {
   shippingSackSeqPrefixLive: boolean;
   /** Sıra başlangıcı (default 1; 0–999). */
   shippingSackSeqStart: number;
+  /** İade irsaliyesi dipnotu — serbest metin, en çok 300 karakter (default "" = basılmaz). */
+  shippingReturnFootnote: string;
   /** Etikette toplam da yazılsın: "3/100" (default FALSE). */
   shippingSackSeqShowTotal: boolean;
   /** Partisiz çuvalın ambalaj no'su: `sevkte` (default) · `acilista`. */
@@ -2408,6 +2419,7 @@ export class SystemSettingService {
       shippingSackSeqPrefix: await readShippingSackSeqPrefix(cacheClient),
       shippingSackSeqPrefixLive: await readShippingSackSeqPrefixLive(cacheClient),
       shippingSackSeqStart: await readShippingSackSeqStart(cacheClient),
+      shippingReturnFootnote: await readShippingReturnFootnote(cacheClient),
       tezgahEscalationGraceMinutes: await readTezgahEscalationGraceMinutes(cacheClient),
       tezgahAlarmEnabled: await readTezgahAlarmEnabled(cacheClient),
       tezgahAlarmUnclassifiedTargetMinutes: await readTezgahAlarmUnclassifiedTargetMinutes(cacheClient),
@@ -3695,6 +3707,13 @@ export class SystemSettingService {
         );
       }
       await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_PREFIX, sanitizeSackSeqPrefix(v), "Sevkiyat içi çuval sırası ön eki (serbest metin, ≤8)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingReturnFootnote")) {
+      const v = input.shippingReturnFootnote;
+      if (typeof v !== "string" || v.length > SHIPPING_RETURN_FOOTNOTE_MAX) {
+        throw AppError.badRequest(`İade irsaliyesi dipnotu en çok ${SHIPPING_RETURN_FOOTNOTE_MAX} karakter olabilir.`);
+      }
+      await this.set(SETTING_KEYS.SHIPPING_RETURN_FOOTNOTE, sanitizeReturnFootnote(v), "İade irsaliyesi dipnotu (serbest metin, boş = basılmaz)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqPrefixLive")) {
       if (typeof input.shippingSackSeqPrefixLive !== "boolean") throw AppError.badRequest("shippingSackSeqPrefixLive boolean olmalı");
@@ -6045,6 +6064,10 @@ export async function readShippingSackSeqPrefix(tx?: Pick<typeof prisma, "system
 export async function readShippingSackSeqPrefixLive(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_SACK_SEQ_PREFIX_LIVE }, select: { value: true } });
   return asBoolean(setting?.value);
+}
+export async function readShippingReturnFootnote(tx?: Pick<typeof prisma, "systemSetting">): Promise<string> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_RETURN_FOOTNOTE }, select: { value: true } });
+  return sanitizeReturnFootnote(setting?.value);
 }
 export async function readShippingSackSeqStart(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_SACK_SEQ_START }, select: { value: true } });

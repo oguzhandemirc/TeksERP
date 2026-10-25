@@ -3,7 +3,7 @@
 // =============================================================================
 // KOD KİPİ (T6 kalıbı, D8): kolon sırası/başlığı ayardan dinamik; tekil/çok kalem başlığı,
 // yalnız çok kalemde basılan toplam satırı ve ayraçlı referans satırı koşullu. İskelet
-// `_ortak/musteri.ts`ten. İade dipnotu snapshot'ta yok (T0 envanteri) → eşlenikte de yok.
+// `_ortak/musteri.ts`ten. İade dipnotu (`belge.iade_dipnotu`) snapshot'tan; boşsa basılmaz.
 // =============================================================================
 
 import { DOC_LOGO_CSS, DOC_STAMPS_CSS, docBlankGridCss, docTableCss, scaleDocCss } from "../../document-render/doc-style";
@@ -128,6 +128,7 @@ ${dynamicTable({
 })}
 {%- endif -%}
 ${REASON_BOX}
+{%- if ${filled("belge.iade_dipnotu")} -%}<div class="note">{{ belge.iade_dipnotu }}</div>{%- endif -%}
 {%- if ayar.footerNote != "" -%}<div class="note">{{ ayar.footerNote }}</div>{%- endif -%}`,
 });
 

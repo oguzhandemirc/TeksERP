@@ -4,7 +4,8 @@
 // Sistem renderer'ı (`document-render/return-dispatch.html.ts`) DEĞİŞMEZ ve yalnız okunur.
 // İade AYRI belgedir (storno ≠ iade); müşteriye gider (`hedef: musteri`), müşteri `karsi_taraf`.
 // Eski tekil snapshot (`line`) ile çok kalemli (`lines`) ayrımı ve toplamlar burada çözülür;
-// şablon hesap yapmaz. Renderer'da opt-in iç kolon yok → iç alan beyanı yok.
+// şablon hesap yapmaz. Renderer'da opt-in iç kolon yok → iç alan beyanı yok. İade dipnotu
+// (`shipping.returnFootnote`) snapshot'ta donar; eski/dipnotsuz snapshot'ta alan boştur.
 // =============================================================================
 
 import type { DocColSpec } from "../../document-render/doc-model";
@@ -65,6 +66,7 @@ const ROOT_FIELDS: FieldDef[] = [
   { yol: "belge.iade_nedeni", etiket: "İade nedeni", tur: "metin", sinif: "musteri", ornek: "Renk uyumsuzluğu" },
   { yol: "belge.notlar", etiket: "Not", tur: "metin", sinif: "musteri", ornek: "Müşteri partiyle uyumsuz olduğunu bildirdi" },
   { yol: "belge.teslim_alan", etiket: "Teslim alan", tur: "metin", sinif: "musteri", ornek: "Ayşe Kaya" },
+  { yol: "belge.iade_dipnotu", etiket: "İade dipnotu (ayardan, ilk basımda donar)", tur: "metin", sinif: "musteri", ornek: "İade, sevk irsaliyesini iptal etmez." },
   { yol: "karsi_taraf.ad", etiket: "Müşteri adı", tur: "metin", sinif: "musteri", ornek: "Örnek Tekstil A.Ş." },
   { yol: "karsi_taraf.kod", etiket: "Müşteri kodu", tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("customer", 1) },
   ...COMPANY_FIELDS,
@@ -115,6 +117,7 @@ function buildContext(snapshot: PrintedDocSnapshot, rawConfig: unknown, internal
       iade_nedeni: asText(doc.reason),
       notlar: asText(doc.note),
       teslim_alan: asText(doc.receivedBy),
+      iade_dipnotu: asText(doc.footnote),
     }),
     firma: root("firma", companyRoot(snapshot, extras?.baski)),
     karsi_taraf: root("karsi_taraf", { ad: asText(h.customerName), kod: asText(h.customerCode) }),
@@ -164,6 +167,7 @@ function scenarios(): Scenario<never>[] {
     { ad: "bos_opsiyonel", aciklama: "Opsiyonel alanların tümü boş/eksik; neden/not yokken teslim alan basılmaz", snapshot: sampleEnvelope(empty) },
     { ad: "yalniz_not", aciklama: "Nedensiz, yalnız notlu iade; tek referans", snapshot: sampleEnvelope(onlyNote) },
     { ad: "uzun_metin", aciklama: "Uzun ve kaçış gerektiren adlar; 999 cm en sınırı", snapshot: sampleEnvelope(long) },
+    { ad: "dipnotlu", aciklama: "Ayardan donmuş iade dipnotu (kaçış gerektiren metin)", snapshot: sampleEnvelope({ ...base(), footnote: "İade <sevk> irsaliyesini iptal etmez & brüt sevk değişmez." }) },
     {
       ad: "iptal",
       aciklama: "İptal edilmiş (VOIDED) ikinci sürüm",
@@ -176,7 +180,7 @@ function scenarios(): Scenario<never>[] {
 export const returnDispatchContract: DocumentContract<ReturnDispatchConfig, never> = {
   docType: "RETURN_DISPATCH",
   hedef: "musteri",
-  contractVersion: 1,
+  contractVersion: 2, // 2: belge.iade_dipnotu (ayardan donan iade dipnotu)
   kokler: ROOT_FIELDS,
   tablolar: [LETTERHEAD_EXTRA_TABLE, ROLL_TABLE],
   ayarSemasi: baseConfigSchema(Object.keys(SECTIONS), [["rollTable", "toplar"]]),

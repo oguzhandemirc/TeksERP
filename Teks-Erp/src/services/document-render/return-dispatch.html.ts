@@ -47,6 +47,8 @@ export interface ReturnDispatchDoc {
   reason: string | null;
   note: string | null;
   receivedBy: string | null;
+  /** İade dipnotu (`shipping.returnFootnote`) — ilk basımda donar; boş/eski snapshot'ta YOK → basılmaz. */
+  footnote?: string | null;
 }
 
 interface RenderMeta {
@@ -141,6 +143,7 @@ export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: Ren
     ? `<div class="sign">${sigLabels.map((l) => `<div class="sign-box"><div class="sign-line"></div><div class="sign-lbl">${esc(l)}</div></div>`).join("")}</div>`
     : "";
   const noteBlock = cfg.footerNote ? `<div class="note">${esc(cfg.footerNote)}</div>` : "";
+  const footnoteBlock = doc.footnote ? `<div class="note">${esc(doc.footnote)}</div>` : "";
 
   const css = scaleDocCss(
     `
@@ -197,6 +200,7 @@ export function renderReturnDispatchHtml(snapshot: PrintedDocSnapshot, meta: Ren
     ${blocksTop}
     ${table}
     ${reasonBox}
+    ${footnoteBlock}
     ${noteBlock}
     ${blocksBottom}
     ${printNote}

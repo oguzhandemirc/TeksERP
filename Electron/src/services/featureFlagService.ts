@@ -495,6 +495,8 @@ export interface FeatureFlags {
   shippingSackSeqPrefix: string;
   /** Ön ek eski belgelere de uygulansın (default false = sevk anındaki ön ek donar). */
   shippingSackSeqPrefixLive: boolean;
+  /** İade irsaliyesi dipnotu — serbest metin ≤300 (default "" = basılmaz); belge ilk basımda donar. */
+  shippingReturnFootnote: string;
   /** Sıra başlangıcı (default 1; 0–999). */
   shippingSackSeqStart: number;
   /** Etikette toplam da yazılsın: "3/100" (default false). */

@@ -1072,6 +1072,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Sevkiyat", "Muhasebeci"],
         group: "Belge",
       },
+      {
+        textKey: "shippingReturnFootnote",
+        title: "İade irsaliyesi dipnotu",
+        summary: "İade irsaliyesinin altına basılan serbest metin (en çok 300 karakter). Boş = basılmaz.",
+        desc: "Örn. “İade, sevk irsaliyesini iptal etmez.” Metin iade belgesi İLK basıldığında belgeye donar — sonradan değiştirmek eski iade belgelerini etkilemez (yeni sürüm kesilirse yeni metin girer). İade ayrı belgedir; sevk rakamı brüt kalır.",
+        defaultValue: "",
+        maxLength: 300,
+        // Sunucu yalnız uzunluğu sınırlar (`SHIPPING_RETURN_FOOTNOTE_MAX`); metin HTML kaçışıyla basılır.
+        pattern: /^[\s\S]{0,300}$/u,
+        placeholder: "örn. İade, sevk irsaliyesini iptal etmez.",
+        invalidHint: "En çok 300 karakter.",
+        audience: ["Sevkiyat", "Muhasebeci"],
+        group: "Belge",
+      },
     ],
     enumFlags: [
       {

@@ -2769,7 +2769,7 @@
   }
  },
  "RETURN_DISPATCH": {
-  "contractVersion": 1,
+  "contractVersion": 2,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -2960,6 +2960,10 @@
     "sinif": "musteri"
    },
    "belge.durum": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.iade_dipnotu": {
     "tur": "metin",
     "sinif": "musteri"
    },
