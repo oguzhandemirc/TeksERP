@@ -285,6 +285,19 @@ describe("KK1 kuyruk gövdesi — tezgah doğuşu alanları (S3a, kat vakası de
     await fn({ itemId: "i1", initialQty: 50, clientToken: "t2", weavingOrderId: "wo1" });
     expect(rollService.createInitialEntry).toHaveBeenLastCalledWith(expect.objectContaining({ weavingOrderId: "wo1" }));
   });
+
+  it("⭐ KK1_CREATE_ENTRY mutationFn doğuş muayenesini (`inspection`) SÜZMEZ (K4P-KK1)", async () => {
+    // Muayene topla aynı istekte gider; gövde süzülürse top doğar, muayene sessizce kaybolur.
+    const { rollService } = jest.requireMock("../services/roll.service") as {
+      rollService: { createInitialEntry: jest.Mock };
+    };
+    rollService.createInitialEntry.mockReset();
+    rollService.createInitialEntry.mockResolvedValue({ success: true });
+    const fn = defaultsFor(STATION_MUT.KK1_CREATE_ENTRY).mutationFn as (vars: unknown) => Promise<unknown>;
+    const inspection = { defects: [{ defectTypeId: "d1", sizeClass: "IN_3_TO_6", startMeter: 12 }], inspectedLengthM: 90, note: "kenar" };
+    await fn({ itemId: "i1", initialQty: 90, clientToken: "t3", inspection });
+    expect(rollService.createInitialEntry).toHaveBeenLastCalledWith(expect.objectContaining({ clientToken: "t3", inspection }));
+  });
 });
 
 describe("offline pause → online resume (gerçek networkMode + retry)", () => {

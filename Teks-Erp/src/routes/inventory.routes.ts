@@ -556,11 +556,30 @@ router.get("/:id/history", verifyToken, requireAnyPermission("roll:read", "roll:
  *                 minimum: 1
  *                 nullable: true
  *                 description: Çok hatlı tezgahta hat (yalnız `machineCode` ile); varsayılan 1.
+ *               inspection:
+ *                 type: object
+ *                 description: >
+ *                   K4P doğuş muayenesi — topla AYNI tx'te RAW 4 puan muayenesi yazılır. Modül kapalı ya da
+ *                   `inspection:write` yoksa top yine doğar; yanıt `inspectionNotSaved` + `warnings` taşır.
+ *                 properties:
+ *                   defects:
+ *                     type: array
+ *                     maxItems: 500
+ *                     items:
+ *                       type: object
+ *                       required: [defectTypeId]
+ *                       properties:
+ *                         defectTypeId: { type: string, format: uuid }
+ *                         sizeClass: { type: string, enum: [UP_TO_3IN, IN_3_TO_6, IN_6_TO_9, OVER_9IN], nullable: true }
+ *                         startMeter: { type: number, minimum: 0, nullable: true, description: "≤ initialQty" }
+ *                   inspectedLengthM: { type: number, nullable: true, description: "Varsayılan initialQty; ≤ initialQty" }
+ *                   note: { type: string, maxLength: 500, nullable: true }
  *     responses:
  *       201:
  *         description: >
  *           Top oluşturuldu. KK1 doğuşunda (`machineCode`/`weavingOrderId`) ek olarak `data.doffEvent {id, code}`
  *           (çok tezgahlı A yolunda null) ve `warnings` döner; aynı `clientToken` ile tekrar aynı yanıtı verir.
+ *           `inspection` gönderildiyse `data.inspection {id, pointsPer100M2, suggestedGradeCode}` (yazılmadıysa null).
  *       400:
  *         description: >
  *           Validasyon hatası · ROLL_BIRTH_MODE (mod TABLET_DOFF ya da KK1_LABEL_ONLY iken iş emri) ·
