@@ -402,8 +402,8 @@ HAVING kd."totalQty" <> COALESCE(SUM(kdi."dispatchedQty"), 0)`,
     model: "RollError",
     alan: "errorType",
     sinif: "DONMUS_ILERI",
-    yazan: [SVC + "inventory.service.ts", SVC + "kursun-qc.service.ts", SVC + "quality-inspection.service.ts", SVC + "tambur.service.ts"],
-    neden: "DefectType.name'in kayıt anı kopyası; katalog yeniden adlandırılsa tarihî etiket korunur (içe aktarım da kopyalar)",
+    yazan: [SVC + "helpers/roll-defect.helper.ts"],
+    neden: "DefectType.name'in kayıt anı kopyası; tek yazar KQ-D7 boğazı; katalog yeniden adlandırılsa tarihî etiket korunur (içe aktarım da kopyalar)",
     sql: [
       {
         id: "28g",
