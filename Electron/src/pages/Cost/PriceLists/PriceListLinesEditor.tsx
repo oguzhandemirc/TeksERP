@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
-import { decToInput, fmtDecFull, fmtPct } from "../shared/format";
+import { decToInput, fmtDec, fmtDecFull, fmtPct } from "../shared/format";
 import { hasListCostColumns, type PriceListDetail, type PriceListLine } from "./pl-types";
 import { buildLinesBody, priceListService, type EditorLine } from "./service";
 import { usePriceListMutation } from "./usePriceListMutation";
@@ -118,7 +118,7 @@ export function PriceListLinesView({ list }: { list: PriceListDetail }) {
               <TableCell>{l.color ? `${l.color.code} — ${l.color.name}` : <span className="text-muted-foreground">Tüm renkler</span>}</TableCell>
               {cost && <TableCell className="text-right tabular-nums">{fmtDecFull(l.costPerMTry ?? null, 4)}</TableCell>}
               {cost && <TableCell className="text-right tabular-nums">{fmtPct(l.markupPct ?? null)}</TableCell>}
-              <TableCell className="text-right tabular-nums">{fmtDecFull(l.unitPrice, 2)}</TableCell>
+              <TableCell className="text-right tabular-nums">{fmtDec(l.unitPrice, 2)}</TableCell>
               <TableCell className="text-right tabular-nums">{fmtDecFull(l.minQty, 3)}</TableCell>
             </TableRow>
           ))}

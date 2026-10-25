@@ -93,7 +93,7 @@ function PriceListTable({ rows, onOpen }: { rows: PriceListRow[]; onOpen: (id: s
           {rows.map((r) => (
             <TableRow key={r.id} className="cursor-pointer" onClick={() => onOpen(r.id)} data-testid="pl-row">
               <TableCell className="whitespace-nowrap font-mono text-xs">{priceListLabel(r)}</TableCell>
-              <TableCell>{r.name}</TableCell>
+              <TableCell className="min-w-40">{r.name}</TableCell>
               <TableCell>{r.customer ? r.customer.name : <span className="text-muted-foreground">Genel</span>}</TableCell>
               <TableCell>{r.currency}</TableCell>
               <TableCell className="whitespace-nowrap text-xs">
