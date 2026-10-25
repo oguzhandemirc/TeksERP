@@ -59,6 +59,7 @@ import { findBatchTransferContext, type BatchTransferContext } from "./batch-tra
 import { buildMergeConfirmDescription } from "./batch-merge-confirm";
 import { Wrench } from "lucide-react";
 import type { BatchLaneRoll } from "./service";
+import { LabTestsCard } from "@/pages/Quality/LabTests/LabTestsCard";
 import type { WorkOrderStepLite } from "./types";
 
 const STATUS_META: Record<BatchDispatchStatus, { label: string; cls: string }> = {
@@ -566,6 +567,7 @@ function BatchLaneCard({
 
         {expanded && (
           <>
+        <LabTestsCard batchId={batch.batchId} batchLabel={batch.batchNumber} />
         {/* Partinin topları — barkod · kumaş · renk · konum · metraj (açınca doğrudan). */}
         {batch.rolls.length > 0 ? (
           <div className="overflow-x-auto rounded-md border border-border/40">
