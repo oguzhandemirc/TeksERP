@@ -49,8 +49,8 @@ function readYmd(raw: unknown, label: string): Date {
 
 function readValidUntil(body: Record<string, unknown>, quoteDate: Date): Date {
   const until =
-    body.validUntil !== undefined && body.validUntil !== null
-      ? readYmd(body.validUntil, "Geçerlilik tarihi")
+    body.validUntilDate !== undefined && body.validUntilDate !== null
+      ? readYmd(body.validUntilDate, "Geçerlilik tarihi")
       : new Date(quoteDate.getTime() + Number(parseDecimalField(body.validDays, DAYS_RULE("Geçerlilik süresi (gün)")) ?? DEFAULT_VALID_DAYS) * DAY_MS);
   if (until.getTime() < quoteDate.getTime()) throw AppError.badRequest("Geçerlilik tarihi teklif tarihinden önce olamaz.");
   return until;
@@ -123,7 +123,7 @@ export async function createQuote(body: Record<string, unknown>, userId?: string
     const currency = readCurrency(body.currency);
     await assertCustomer(customerId, branchId);
     const quoteDate = quoteToday();
-    const validUntil = readValidUntil(body, quoteDate);
+    const validUntilDate = readValidUntil(body, quoteDate);
     const fx = await pickFx(currency, body.fxRate, quoteDate);
     const h = readHeaderFields(body);
     const created = await withBarcodeRetry(
@@ -132,7 +132,7 @@ export async function createQuote(body: Record<string, unknown>, userId?: string
           const quoteNo = await nextQuoteNo(tx);
           return tx.salesQuote.create({
             data: {
-              quoteNo, clientToken, customerId, branchId, quoteDate, validUntil, currency, ...fx,
+              quoteNo, clientToken, customerId, branchId, quoteDate, validUntilDate, currency, ...fx,
               paymentTermDays: intOrNull(h.paymentTermDays) ?? null, financeChargePct: h.financeChargePct ?? null,
               commissionPct: h.commissionPct ?? null, freightPerM: h.freightPerM ?? null, customerReference: h.customerReference ?? null,
               notes: h.notes ?? null, internalNote: h.internalNote ?? null, createdById: userId ?? null, updatedById: userId ?? null,
@@ -163,10 +163,10 @@ export async function updateQuoteHeader(id: string, body: Record<string, unknown
   if (!before) throw AppError.notFound("Teklif bulunamadı.");
   if (branchId) await assertCustomer(before.customerId, branchId);
   if (fxRate && before.currency === "TRY" && !fxRate.eq(1)) throw AppError.badRequest("TL teklifin kuru 1'dir.");
-  const validUntil = body.validUntil === undefined ? undefined : readValidUntil({ validUntil: body.validUntil }, before.quoteDate);
+  const validUntilDate = body.validUntilDate === undefined ? undefined : readValidUntil({ validUntilDate: body.validUntilDate }, before.quoteDate);
   const data: Prisma.SalesQuoteUncheckedUpdateInput = {
     ...(branchId !== undefined ? { branchId } : {}),
-    ...(validUntil ? { validUntil } : {}),
+    ...(validUntilDate ? { validUntilDate } : {}),
     ...(fxRate ? { fxRate, fxRateSource: "MANUAL", fxRateDate: quoteToday() } : {}),
     ...Object.fromEntries(Object.entries({ ...h, paymentTermDays: intOrNull(h.paymentTermDays) }).filter(([, v]) => v !== undefined)),
     updatedById: userId ?? null,

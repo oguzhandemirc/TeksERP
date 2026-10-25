@@ -5,7 +5,7 @@
 // Yayınlı listenin satırı DEĞİŞMEZ (claim `WHERE status='DRAFT'`); düzeltme revizyondur (yeni DRAFT, aynı
 // numara, revisionNo+1). Yayın TEK tx: önce aynı müşteri+dövizin PUBLISHED'ı ARCHIVED, sonra bu taslak
 // PUBLISHED; yarış `price_lists_published_uq` partial unique'inde → 409. Geçerlilik = yayın durumu
-// (validFrom/validUntil yalnız bilgi). Satır okuması teklif önerisi için `quote-price.helper`dadır.
+// (validFromDate/validUntilDate yalnız bilgi). Satır okuması teklif önerisi için `quote-price.helper`dadır.
 // =============================================================================
 import { Prisma, type Currency, type PriceListStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -119,7 +119,7 @@ export async function createPriceList(body: Record<string, unknown>, userId?: st
           tx.priceList.create({
             data: {
               listNo: await nextListNo(tx), clientToken, name, customerId, currency,
-              validFrom: readOptYmd(body.validFrom, "Geçerlilik başlangıcı") ?? null, validUntil: readOptYmd(body.validUntil, "Geçerlilik sonu") ?? null,
+              validFromDate: readOptYmd(body.validFromDate, "Geçerlilik başlangıcı") ?? null, validUntilDate: readOptYmd(body.validUntilDate, "Geçerlilik sonu") ?? null,
               notes: parseTextField(body.notes, "Not", 1000) ?? null, createdById: userId ?? null, updatedById: userId ?? null,
             },
             include: PRICE_LIST_INCLUDE,
@@ -141,8 +141,8 @@ export async function updatePriceList(id: string, body: Record<string, unknown>,
   if (name === null) throw AppError.badRequest("Liste adı boş bırakılamaz.");
   const data: Prisma.PriceListUncheckedUpdateInput = {
     ...(name ? { name } : {}),
-    ...(body.validFrom !== undefined ? { validFrom: readOptYmd(body.validFrom, "Geçerlilik başlangıcı") } : {}),
-    ...(body.validUntil !== undefined ? { validUntil: readOptYmd(body.validUntil, "Geçerlilik sonu") } : {}),
+    ...(body.validFromDate !== undefined ? { validFromDate: readOptYmd(body.validFromDate, "Geçerlilik başlangıcı") } : {}),
+    ...(body.validUntilDate !== undefined ? { validUntilDate: readOptYmd(body.validUntilDate, "Geçerlilik sonu") } : {}),
     ...(body.notes !== undefined ? { notes: parseTextField(body.notes, "Not", 1000) } : {}),
   };
   const out = await prisma.$transaction(async (tx) => {
@@ -278,7 +278,7 @@ export async function revisePriceList(id: string, body: { clientToken?: unknown 
         return tx.priceList.create({
           data: {
             listNo: old.listNo, revisionNo: old.revisionNo + 1, clientToken, revisionOfId: old.id, name: old.name, customerId: old.customerId,
-            currency: old.currency, validFrom: old.validFrom, validUntil: old.validUntil, notes: old.notes, createdById: userId ?? null, updatedById: userId ?? null,
+            currency: old.currency, validFromDate: old.validFromDate, validUntilDate: old.validUntilDate, notes: old.notes, createdById: userId ?? null, updatedById: userId ?? null,
             lines: {
               create: old.lines.map((l) => ({
                 lineNo: l.lineNo, itemId: l.itemId, colorId: l.colorId, unitPrice: l.unitPrice, minQty: l.minQty,

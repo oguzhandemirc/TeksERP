@@ -83,7 +83,7 @@ export function acceptQuote(id: string, body: { customerReference?: unknown }, u
     id,
     "accept",
     { acceptedAt: new Date(), acceptedById: userId ?? null, ...(ref ? { customerReference: ref } : {}) },
-    { userId, extra: { validUntil: { gte: quoteToday() } } },
+    { userId, extra: { validUntilDate: { gte: quoteToday() } } },
   );
 }
 
@@ -124,7 +124,7 @@ export async function reviseQuote(id: string, body: { clientToken?: unknown }, u
       await claimQuoteTx(tx, id, "revise", { data: { supersededAt: new Date(), updatedById: userId ?? null } });
       const old = await tx.salesQuote.findUniqueOrThrow({ where: { id }, include: { lines: { orderBy: { lineNo: "asc" } } } });
       const today = quoteToday();
-      const validDays = Math.max(0, Math.round((old.validUntil.getTime() - old.quoteDate.getTime()) / DAY_MS));
+      const validDays = Math.max(0, Math.round((old.validUntilDate.getTime() - old.quoteDate.getTime()) / DAY_MS));
       return tx.salesQuote.create({
         data: {
           quoteNo: old.quoteNo,
@@ -134,7 +134,7 @@ export async function reviseQuote(id: string, body: { clientToken?: unknown }, u
           customerId: old.customerId,
           branchId: old.branchId,
           quoteDate: today,
-          validUntil: new Date(today.getTime() + validDays * DAY_MS),
+          validUntilDate: new Date(today.getTime() + validDays * DAY_MS),
           currency: old.currency,
           fxRate: old.fxRate,
           fxRateSource: old.fxRateSource,

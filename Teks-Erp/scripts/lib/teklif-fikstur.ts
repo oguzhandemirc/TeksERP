@@ -48,7 +48,7 @@ export async function teklifYaz(
       clientToken: randomUUID(),
       customerId: f.customerId,
       quoteDate: new Date(today.getTime() - 10 * DAY),
-      validUntil: new Date(today.getTime() + (opts.validDays ?? 30) * DAY),
+      validUntilDate: new Date(today.getTime() + (opts.validDays ?? 30) * DAY),
       currency: "USD",
       fxRate: D(34),
       fxRateSource: "MANUAL",

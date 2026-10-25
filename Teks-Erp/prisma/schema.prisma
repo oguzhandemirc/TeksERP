@@ -13342,7 +13342,7 @@ model SalesQuote {
   branchId          String?             @db.Uuid
   /// İş/kur tarihi — fabrika günü.
   quoteDate         DateTime            @db.Date
-  validUntil        DateTime            @db.Date
+  validUntilDate    DateTime            @db.Date
   currency          Currency
   /// 1 döviz kaç TL; TRY → 1. Asla varsayılmaz (CHECK > 0).
   fxRate            Decimal             @db.Decimal(18, 6)
@@ -13398,7 +13398,7 @@ model SalesQuote {
   @@unique([quoteNo, revisionNo])
   @@index([customerId])
   @@index([branchId])
-  @@index([status, validUntil])
+  @@index([status, validUntilDate])
   @@index([quoteDate])
   @@map("sales_quotes")
 }
@@ -13459,8 +13459,8 @@ model PriceList {
   currency      Currency
   status        PriceListStatus @default(DRAFT)
   /// BİLGİ — çözümleyici tarih aralığı DEĞERLENDİRMEZ; geçerlilik = yayın durumu.
-  validFrom     DateTime?       @db.Date
-  validUntil    DateTime?       @db.Date
+  validFromDate DateTime?       @db.Date
+  validUntilDate DateTime?      @db.Date
   publishedAt   DateTime?       @db.Timestamptz
   publishedById String?         @db.Uuid
   archivedAt    DateTime?       @db.Timestamptz

@@ -89,18 +89,18 @@ async function main(): Promise<void> {
     check("§2 süresi dolmuş SENT kabul → 409 QUOTE_EXPIRED", he?.status === 409 && he.code === "QUOTE_EXPIRED", `${he?.status} ${he?.code}`);
     check("§2 durum SENT kalır", (await statusOf(exp)) === "SENT");
     const bugun = await teklifYaz(f, "SENT", { validDays: 0 });
-    check("§2 son gün (validUntil = bugün) kabul edilir", (await hata(() => tr.acceptQuote(bugun, { customerReference: "PO-77" }))) === null);
+    check("§2 son gün (validUntilDate = bugün) kabul edilir", (await hata(() => tr.acceptQuote(bugun, { customerReference: "PO-77" }))) === null);
     check("§2 müşteri referansı yazılır", (await prisma.salesQuote.findUniqueOrThrow({ where: { id: bugun } })).customerReference === "PO-77");
 
     // §3 boğaz-ikiz
     const today = quoteToday();
     await teklifYaz(f, "DRAFT", { validDays: -3 });
     await teklifYaz(f, "SENT", { validDays: 1 });
-    const rows = await prisma.salesQuote.findMany({ where: { customerId: f.customerId }, select: { id: true, status: true, validUntil: true } });
+    const rows = await prisma.salesQuote.findMany({ where: { customerId: f.customerId }, select: { id: true, status: true, validUntilDate: true } });
     const bellek = new Set(rows.filter((r) => isQuoteExpired(r, today)).map((r) => r.id));
     const sql = new Set((await prisma.salesQuote.findMany({ where: { customerId: f.customerId, ...quoteExpiredWhere(today) }, select: { id: true } })).map((r) => r.id));
     check("§3 süresi doldu: bellek yüklemi = Prisma parçası", bellek.size === sql.size && [...bellek].every((x) => sql.has(x)) && bellek.has(exp), `${bellek.size}/${sql.size}`);
-    check("§3 DRAFT süresi geçmiş olsa da 'süresi doldu' değildir", rows.filter((r) => r.status === "DRAFT" && r.validUntil < today).every((r) => !bellek.has(r.id)));
+    check("§3 DRAFT süresi geçmiş olsa da 'süresi doldu' değildir", rows.filter((r) => r.status === "DRAFT" && r.validUntilDate < today).every((r) => !bellek.has(r.id)));
 
     // §4 DRAFT kilidi
     const sent = await teklifYaz(f, "SENT");
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
       "§5 kalemler snapshot ve fiyatla kopya",
       rev.lines.length === 2 && rev.lines.every((l, i) => JSON.stringify(l.costSnapshot) === JSON.stringify(old.lines[i].costSnapshot) && l.unitPrice.equals(old.lines[i].unitPrice) && l.costPerMTry.equals(old.lines[i].costPerMTry)),
     );
-    const sure = (q: { quoteDate: Date; validUntil: Date }) => Math.round((q.validUntil.getTime() - q.quoteDate.getTime()) / 86_400_000);
+    const sure = (q: { quoteDate: Date; validUntilDate: Date }) => Math.round((q.validUntilDate.getTime() - q.quoteDate.getTime()) / 86_400_000);
     check("§5 geçerlilik süresi korunur, tarih bugünden", sure(rev) === sure(old) && rev.quoteDate.getTime() === quoteToday().getTime(), `${sure(rev)}/${sure(old)}`);
     const replay = await tr.reviseQuote(src, { clientToken: tok });
     check("§5 aynı token replay → aynı revizyon (ikinci kayıt yok)", replay.id === rev.id && (await prisma.salesQuote.count({ where: { revisionOfId: src } })) === 1);

@@ -2,7 +2,7 @@
 // SATIŞ TEKLİFİ DURUM MAKİNESİ — tek kaynak (MAL-4; plan §3.3)
 // =============================================================================
 // Her geçiş ATOMİK CLAIM: `updateMany WHERE {id, status IN beklenen}` + count 0 → 409. "Süresi doldu"
-// DURUM DEĞİL türetilmiş bayraktır (SENT ∧ validUntil < fabrika günü); bellek-içi yüklem
+// DURUM DEĞİL türetilmiş bayraktır (SENT ∧ validUntilDate < fabrika günü); bellek-içi yüklem
 // `isQuoteExpired` ile Prisma parçası `quoteExpiredWhere` boğaz-ikizdir (`test_teklif_durum` §3).
 // =============================================================================
 import { Prisma, type SalesQuoteStatus } from "@prisma/client";
@@ -30,13 +30,13 @@ export function quoteToday(at: Date = new Date()): Date {
 }
 
 /** Bellek-içi yüklem — `quoteExpiredWhere` ile ikiz. */
-export function isQuoteExpired(q: { status: SalesQuoteStatus; validUntil: Date }, today: Date = quoteToday()): boolean {
-  return q.status === "SENT" && q.validUntil.getTime() < today.getTime();
+export function isQuoteExpired(q: { status: SalesQuoteStatus; validUntilDate: Date }, today: Date = quoteToday()): boolean {
+  return q.status === "SENT" && q.validUntilDate.getTime() < today.getTime();
 }
 
 /** Prisma parçası — `isQuoteExpired` ile ikiz (liste süzgeci `suresiDoldu`). */
 export function quoteExpiredWhere(today: Date = quoteToday()): Prisma.SalesQuoteWhereInput {
-  return { status: "SENT", validUntil: { lt: today } };
+  return { status: "SENT", validUntilDate: { lt: today } };
 }
 
 export const quoteStatusConflict = (status?: SalesQuoteStatus): AppError =>
@@ -47,7 +47,7 @@ export const quoteStatusConflict = (status?: SalesQuoteStatus): AppError =>
 
 /** Claim düşünce NEDEN düştüğünü söyler: yok → 404, süresi dolmuş SENT → QUOTE_EXPIRED, diğer → durum çakışması. */
 export async function quoteClaimError(db: Prisma.TransactionClient, id: string, transition?: QuoteTransition): Promise<AppError> {
-  const q = await db.salesQuote.findUnique({ where: { id }, select: { status: true, validUntil: true } });
+  const q = await db.salesQuote.findUnique({ where: { id }, select: { status: true, validUntilDate: true } });
   if (!q) return AppError.notFound("Teklif bulunamadı.");
   if (transition === "accept" && isQuoteExpired(q)) {
     return AppError.conflict("Teklifin geçerlilik süresi dolmuş; kabul edilemez. Revizyon açıp yeni geçerlilik tarihi verin.", { code: "QUOTE_EXPIRED" });

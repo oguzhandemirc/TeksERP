@@ -4,7 +4,7 @@
 // "Bu müşteriye bu ürünü bu dövizde kaça öneririz?" sorusunun TEK cevabı:
 //   ① yayınlanmış MÜŞTERİ fiyat listesi → ② yayınlanmış GENEL liste → ③ `ItemPrice(SALE)` (köprü;
 //   ticaret kapalıysa SORGU ATMADAN atlanır) → ④ maliyet × (1 + kâr) (`suggestUnitPrice`).
-// Liste içinde renkli satır renksizden önce gelir. Liste geçerliliği YAYIN DURUMUDUR (validFrom/Until
+// Liste içinde renkli satır renksizden önce gelir. Liste geçerliliği YAYIN DURUMUDUR (validFromDate/validUntilDate
 // bilgi). Zinciri başka dosya kurmaz — `test_quote_price_single_source` (AST) ölçer. Sipariş formunun
 // öneri zinciri DEĞİŞMEZ (`resolveItemPrice`; veto §8-5).
 // =============================================================================
