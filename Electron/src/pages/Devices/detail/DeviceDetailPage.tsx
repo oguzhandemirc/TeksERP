@@ -9,6 +9,7 @@ import { useTabsStore } from "@/store/tabs";
 import { SessionHistoryList } from "@/pages/System/WorkSessions/SessionHistoryList";
 import { deviceService } from "../service";
 import { DeviceHeaderCard } from "./DeviceHeaderCard";
+import { MergeLinksCard } from "./MergeLinksCard";
 
 /**
  * Cihaz İşlem Dökümü — Tanımlar → Cihazlar'da bir cihaza tıklayınca açılır.
@@ -59,6 +60,7 @@ export function DeviceDetailPage() {
         ) : (
           <>
             <DeviceHeaderCard device={device} />
+            <MergeLinksCard device={device} />
             <SessionHistoryList filter={{ deviceId: device.id }} variant="device" />
           </>
         )}

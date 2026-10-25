@@ -266,3 +266,13 @@ export async function listRejectedTraces(
     select: REQUEST_TRACE_SELECT,
   });
 }
+
+/** Cihaz satırı başına izlerde görülen uygulama sürümleri (birleştirme sezgisi okur; tek okuyucu boğazı). */
+export async function listDeviceAppVersions(deviceRefIds: readonly string[]): Promise<Array<{ deviceRefId: string; appVersion: string }>> {
+  if (deviceRefIds.length === 0) return [];
+  const rows = await prisma.requestTrace.groupBy({
+    by: ["deviceRefId", "appVersion"],
+    where: { deviceRefId: { in: [...deviceRefIds] }, appVersion: { not: null } },
+  });
+  return rows.flatMap((r) => (r.deviceRefId && r.appVersion ? [{ deviceRefId: r.deviceRefId, appVersion: r.appVersion }] : []));
+}

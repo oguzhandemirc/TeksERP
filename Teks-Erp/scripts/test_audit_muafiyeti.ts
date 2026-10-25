@@ -165,7 +165,10 @@ function main(): void {
   // 36 → 37 (2026-10-25, MAL-4): `helpers/sales-quote-state.helper.ts` — teklif STATÜSÜNÜN tek yazarı
   // (`claimQuoteTx`/`claimDraftQuoteTx`, atomik claim, tx İÇİNDE); audit'i çağıran eylem basar
   // (`sales-quote-transitions.service` → `auditQuoteStatus`) — EBEVEYN_EYLEMDE kalıbı (E5-MOTOR emsali).
-  const AUDITSIZ_YAZICI_TABAN = 37;
+  // 37 → 38 (2026-10-25, izlenebilirlik D4): `helpers/device-identity.helper.ts` — cihaz birleşme bağının
+  // TEK yazarı (`claimMergeSourceTx` · `claimMergeTargetTx` · `claimUnmergeTx`, atomik claim, tx İÇİNDE; §9 AST
+  // `mergedIntoId`i bu dosyaya kilitler). Audit'i çağıran eylem basar (`device-merge.service`) — EBEVEYN_EYLEMDE.
+  const AUDITSIZ_YAZICI_TABAN = 38;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

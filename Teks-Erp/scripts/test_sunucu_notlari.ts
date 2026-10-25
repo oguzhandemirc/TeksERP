@@ -81,6 +81,8 @@ type Sinif = "PREVIEW_ON_TYPING" | "PREVIEW_ON_OPEN" | "AUTOSAVE" | "BOOT" | "TI
 const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: boolean }[] = [
   { yer: "Electron/src/pages/ShiftDefinitions/ShiftActiveDialog.tsx::shiftDefinitionService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/components/merge/MergeDialog.tsx::mergeService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  // İZL-D4 cihaz kopyası birleştirme önizlemesi: diyalog açılınca/seçim değişince sorar; yazmaz, zarf uyarısız.
+  { yer: "Electron/src/pages/Devices/MergeDialog.tsx::deviceService.mergePreview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // K4P-PANEL muayene önizlemesi: hata tablosu değiştikçe (debounce) puan/derece sorar; yazmaz.
   { yer: "Electron/src/pages/Quality/Inspections/useInspectionPreview.ts::inspectionService.preview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // Özel rapor açılınca koşulur (koşu satırı yazar; veri değiştirmez) — R1-KAYIT.
