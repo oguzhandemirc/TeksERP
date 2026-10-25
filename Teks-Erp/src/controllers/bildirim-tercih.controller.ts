@@ -8,6 +8,7 @@ import type { NextFunction, Request, Response } from "express";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { assertInboxEnabled } from "../services/notification-inbox.service";
 import * as pref from "../services/notification-preference.service";
+import * as follow from "../services/notification-follow.service";
 import * as profile from "../services/notification-profile.service";
 
 type Handler = (req: Request) => Promise<unknown>;
@@ -37,9 +38,9 @@ export const postResetPreview = json((req) => pref.resetPreview(viewer(req)));
 export const postReset = json((req) => pref.resetPreferences(viewer(req), req.body));
 export const getSettings = json((req) => pref.getSettings(viewer(req)));
 export const putSettings = json((req) => pref.putSettings(viewer(req), req.body));
-export const getFollow = json((req) => pref.getFollow(viewer(req), param(req, "tur"), param(req, "id")));
-export const putFollow = json((req) => pref.putFollow(viewer(req), param(req, "tur"), param(req, "id")));
-export const deleteFollow = json((req) => pref.deleteFollow(viewer(req), param(req, "tur"), param(req, "id")));
+export const getFollow = json((req) => follow.getFollow(viewer(req), param(req, "tur"), param(req, "id")));
+export const putFollow = json((req) => follow.putFollow(viewer(req), param(req, "tur"), param(req, "id")));
+export const deleteFollow = json((req) => follow.deleteFollow(viewer(req), param(req, "tur"), param(req, "id")));
 
 export const getProfiles = json((req) => profile.listProfiles(req.query as Record<string, unknown>));
 export const postProfile = json((req) => profile.createProfile(req.body, req.user!.userId), 201);
