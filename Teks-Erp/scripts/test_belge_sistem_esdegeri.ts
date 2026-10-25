@@ -40,6 +40,7 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
   SHIPMENT_DISPATCH: (s, m) => renderShipmentDispatchHtml(s, m as Parameters<typeof renderShipmentDispatchHtml>[1]),
+  STOCK_COUNT: (s, m) => renderStockCountHtml(s, m as Parameters<typeof renderStockCountHtml>[1]),
   SUBCONTRACTOR_DIRECT_SHIP: (s, m) => renderFasonDirectShipHtml(s, m as Parameters<typeof renderFasonDirectShipHtml>[1]),
   SUBCONTRACTOR_DISPATCH: (s, m) => renderFasonCekiHtml(s, m as Parameters<typeof renderFasonCekiHtml>[1]),
   SUBCONTRACTOR_RECEIPT: (s, m) => renderFasonReceiptHtml(s, m as Parameters<typeof renderFasonReceiptHtml>[1]),
