@@ -69,6 +69,7 @@ import { resolveKursunBypassEnabled } from "./system-setting.service";
 import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
+import { recordRollDefectTx } from "./helpers/roll-defect.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE, isActionableRollError } from "./helpers/roll-error-scope.helper";
 
 /** Muayene satırı KK2/Tambur silme ucundan silinemez (belge parçası; düzeltme revizyondur). */
@@ -111,6 +112,18 @@ interface RollSummary {
   /// kumaş toplarında barkod yok; mobil liste bunları ad + renkle tanımlar.
   itemName: string | null;
   colorName: string | null;
+  /// KQ-D7: topun BAŞKA adımda açılmış AÇIK hataları (gri, salt-okunur, künyeli). Eski APK yok sayar.
+  priorDefects: PriorDefectSummary[];
+  priorOpenErrorCount: number;
+}
+
+interface PriorDefectSummary {
+  id: string;
+  startMeter: number | null;
+  errorType: string | null;
+  detectedStationName: string | null;
+  detectedByName: string | null;
+  detectedAt: Date;
 }
 
 interface StepSummary {
@@ -316,6 +329,8 @@ export class KursunQcService {
         stationName: string;
         stationCode: string;
         openRollCount: number;
+        /** KQ-D7: karttaki açık topların açık hata toplamı (⚠N rozeti). Eski APK yok sayar. */
+        openErrorCount: number;
         priority: number;
         isUrgent: boolean;
       }>
@@ -390,6 +405,9 @@ export class KursunQcService {
       );
     }
 
+    // ⚠N rozeti: TEK groupBy (adım başına sorgu yok — uç 5 sn'de bir yoklanır).
+    const openErrorsByStep = await this.countOpenErrorsByStep(steps.map((s) => s.id));
+
     const data = steps
       .map((s) => {
         const card = s.workOrder.travelerCards[0];
@@ -405,6 +423,7 @@ export class KursunQcService {
           stationName: s.station.name,
           stationCode: s.station.code,
           openRollCount: s._count.currentRolls,
+          openErrorCount: openErrorsByStep.get(s.id) ?? 0,
           priority: s.priority,
           isUrgent: s.isUrgent,
         };
@@ -412,6 +431,28 @@ export class KursunQcService {
       .filter((x): x is NonNullable<typeof x> => x !== null);
 
     return { success: true, data };
+  }
+
+  /** Adımdaki açık topların açık (karar yolu) hata sayısı — `roll.currentStepId` üzerinden tek groupBy. */
+  private async countOpenErrorsByStep(stepIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (stepIds.length === 0) return out;
+    const groups = await prisma.rollError.groupBy({
+      by: ["rollId"],
+      where: { ...ACTIONABLE_ROLL_ERROR_WHERE, isProcessed: false, roll: { currentStepId: { in: stepIds } } },
+      _count: { _all: true },
+    });
+    if (groups.length === 0) return out;
+    const rolls = await prisma.roll.findMany({
+      where: { id: { in: groups.map((g) => g.rollId) } },
+      select: { id: true, currentStepId: true },
+    });
+    const stepOf = new Map(rolls.map((r) => [r.id, r.currentStepId]));
+    for (const g of groups) {
+      const st = stepOf.get(g.rollId);
+      if (st) out.set(st, (out.get(st) ?? 0) + g._count._all);
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------------------
@@ -620,108 +661,47 @@ export class KursunQcService {
       }
     }
 
-    const roll = await prisma.roll.findUnique({ where: { id: data.rollId } });
+    const roll = await prisma.roll.findUnique({ where: { id: data.rollId }, select: { id: true } });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
-    if (data.startMeter > Number(roll.currentQty)) {
-      throw AppError.badRequest(
-        `Hata metresi (${data.startMeter}) topun metrajını (${Number(roll.currentQty)}) aşıyor`
-      );
-    }
-
-    const defectType = await prisma.defectType.findUnique({
-      where: { id: data.defectTypeId },
-    });
-    if (!defectType) throw AppError.notFound("Hata tipi bulunamadı");
-    if (!defectType.isActive) {
-      throw AppError.badRequest(
-        `Hata tipi pasif durumda (${defectType.name}) — aktif bir tip seçin`
-      );
-    }
-
-    const stepStation = await this.assertRollInFlowStep(data.rollId, data.stepId);
-    // Hata kaydı akışa EK olarak MUAYENE yeteneği ister (KQ-D1): muayenesi
-    // kapatılmış istasyondaki (eski APK paneli koşulsuz çizer) yazma 400 alır.
-    if (!stepCanApplyQuality(stepStation)) {
-      throw AppError.badRequest(QUALITY_STEP_ERROR);
-    }
+    // Akış adımı (kart akışı) burada; muayene kapısı, konum, tip ve mükerrer
+    // kuralları TEK boğazda (`recordRollDefectTx`, KQ-D7).
+    await this.assertRollInFlowStep(data.rollId, data.stepId);
 
     // Kurşun bypass: dağıtılmış adımda hatalar KÂĞITTA tutulur (fabrika kurşun
     // istasyonuna tablet koymuyor). Dijital RollError açmak iki soruna yol açar:
     // (a) Tambur bypass onayı hatasız bir iş bekler, (b) `assign` de "bu adımda
-    // hata kaydı var" diye dağıtımı reddediyor — ters yönde açılan kayıt o
-    // kontrolü anlamsızlaştırırdı. Guard idempotent clientErrorId dönüşünden
-    // SONRA: zaten kayıtlı hatanın replay'i 409'a düşmemeli (kayıt ya dağıtım
-    // öncesinde açıldı ya da yarışı kaybetti; ikisinde de yeni yazma yok).
+    // hata kaydı var" diye dağıtımı reddediyor. Guard idempotent clientErrorId
+    // dönüşünden SONRA: zaten kayıtlı hatanın replay'i 409'a düşmemeli.
     await assertKursunTabletMayWrite(prisma, data.stepId, "hata kaydı");
 
-    // Mükerrer engeli: aynı top + aynı metre + aynı hata tipi tekrar girilemez.
-    // Aynı metrede FARKLI tip serbest (50. metrede hem delik hem leke olabilir).
-    const existing = await prisma.rollError.findFirst({
-      where: {
-        ...ACTIONABLE_ROLL_ERROR_WHERE,
-        rollId: data.rollId,
-        startMeter: data.startMeter,
-        defectTypeId: defectType.id,
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      throw AppError.conflict(
-        `Bu metrede (${data.startMeter}) "${defectType.name}" hatası zaten kayıtlı`,
-        { code: "DUPLICATE_ROLL_ERROR", existingErrorId: existing.id }
-      );
-    }
-
-    let err: RollError;
+    let rec: Awaited<ReturnType<typeof recordRollDefectTx>>;
     try {
-      err = await prisma.rollError.create({
-        data: {
-          // clientErrorId verildiyse onu id olarak kullan (offline idempotency);
-          // verilmediyse undefined → Prisma @default(uuid()) üretir.
+      rec = await prisma.$transaction((tx) =>
+        recordRollDefectTx(tx, {
           id: data.clientErrorId,
           rollId: data.rollId,
+          stepId: data.stepId,
           startMeter: data.startMeter,
-          defectTypeId: defectType.id,
-          errorType: defectType.name, // snapshot — katalog rename olsa bile sabit kalır
-          isProcessed: false,
-          detectedAtStepId: data.stepId,
-          detectedByUserId: userId ?? null,
-        },
-      });
+          defectTypeId: data.defectTypeId,
+          userId,
+          stationGate: "FLOW",
+        }),
+      );
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        // (a) Eşzamanlı replay yarışı: aynı clientErrorId ile 2. create araya girdiyse
-        //     PK üzerinde P2002 → mevcut kaydı idempotent dön.
-        if (data.clientErrorId) {
-          const dup = await prisma.rollError.findUnique({
-            where: { id: data.clientErrorId },
-          });
-          if (dup) {
-            this.assertClientErrorIdMatches(dup, data);
-            return {
-              success: true,
-              data: dup,
-              message: "Hata zaten kayıtlı (idempotent retry)",
-            };
-          }
-        }
-        // (b) İş-anahtarı (rollId,startMeter,defectTypeId) çakışması: EŞZAMANLI çift-tık
-        //     (farklı PK ile) — partial unique roll_errors_roll_meter_defect_uq P2002 →
-        //     409 DUPLICATE_ROLL_ERROR (sıralı findFirst guard'ının eşzamanlı kardeşi).
-        const existing = await prisma.rollError.findFirst({
-          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: data.rollId, startMeter: data.startMeter, defectTypeId: defectType.id },
-          select: { id: true },
-        });
-        if (existing) {
-          throw AppError.conflict(
-            `Bu metrede (${data.startMeter}) "${defectType.name}" hatası zaten kayıtlı`,
-            { code: "DUPLICATE_ROLL_ERROR", existingErrorId: existing.id }
-          );
+      // Eşzamanlı replay yarışı: aynı clientErrorId ile 2. create PK'de P2002 →
+      // mevcut kaydı idempotent dön (iş-anahtarı çakışması helper'da 409 olur).
+      if (data.clientErrorId && e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        const dup = await prisma.rollError.findUnique({ where: { id: data.clientErrorId } });
+        if (dup) {
+          this.assertClientErrorIdMatches(dup, data);
+          return { success: true, data: dup, message: "Hata zaten kayıtlı (idempotent retry)" };
         }
       }
       throw e;
     }
+    const err = rec.error;
+    const created = rec.auditPayload.defects[0];
 
     await AuditService.log({
       userId,
@@ -732,15 +712,15 @@ export class KursunQcService {
         rollId: data.rollId,
         stepId: data.stepId,
         startMeter: data.startMeter,
-        defectTypeId: defectType.id,
-        errorType: defectType.name,
+        defectTypeId: created.defectTypeId,
+        errorType: created.errorType,
       },
     });
 
     return {
       success: true,
       data: err,
-      message: `${defectType.name} · ${data.startMeter}. metrede`,
+      message: `${created.errorType} · ${data.startMeter}. metrede`,
     };
   }
 
@@ -1497,7 +1477,7 @@ export class KursunQcService {
     });
 
     const rollIds = openMovements.map((m) => m.roll.id);
-    const [qc2Ops, errors, stationCaps, bypass] = await Promise.all([
+    const [qc2Ops, errors, priorErrors, stationCaps, bypass] = await Promise.all([
       // Tambur kalıtım kayıtları sayılmaz — bu step'te fiilen yapılan QC2.
       prisma.rollOperation.findMany({
         where: { ...ACTIVE_OPERATION,
@@ -1522,6 +1502,26 @@ export class KursunQcService {
           origin: true,
         },
         orderBy: { startMeter: "asc" },
+      }),
+      // Önceki adım hataları (KQ-D7): açık + karar yolu kökeni + BAŞKA adımda (ya da adımsız) açılmış.
+      prisma.rollError.findMany({
+        where: {
+          ...ACTIONABLE_ROLL_ERROR_WHERE,
+          rollId: { in: rollIds },
+          isProcessed: false,
+          OR: [{ detectedAtStepId: null }, { detectedAtStepId: { not: stepId } }],
+        },
+        select: {
+          id: true,
+          rollId: true,
+          startMeter: true,
+          errorType: true,
+          origin: true,
+          detectedAt: true,
+          detectedAtStep: { select: { station: { select: { name: true } } } },
+          detectedBy: { select: { fullName: true } },
+        },
+        orderBy: [{ startMeter: "asc" }, { id: "asc" }],
       }),
       // İstasyonun özellik yetenekleri + MODLARI. Tablet bu listeden tuş çizer:
       // AUTO → salt bilgi, OPTIONAL → tuş, REQUIRED → tuş + kapanış engeli.
@@ -1560,6 +1560,20 @@ export class KursunQcService {
       });
     }
 
+    const priorByRoll = new Map<string, PriorDefectSummary[]>();
+    for (const e of priorErrors) {
+      const list = priorByRoll.get(e.rollId) ?? [];
+      list.push({
+        id: e.id,
+        startMeter: processMeterNumber(e),
+        errorType: e.errorType,
+        detectedStationName: e.detectedAtStep?.station.name ?? null,
+        detectedByName: e.detectedBy?.fullName ?? null,
+        detectedAt: e.detectedAt,
+      });
+      priorByRoll.set(e.rollId, list);
+    }
+
     // Kumaş cinsi + renk kart geneli aynı (WO target) — her role kopyalanır ki
     // barkodsuz açık kumaş topları listede ad + renkle görünsün.
     const itemName = step.workOrder.targetItem?.name ?? null;
@@ -1575,6 +1589,8 @@ export class KursunQcService {
         defects,
         itemName,
         colorName,
+        priorDefects: priorByRoll.get(m.roll.id) ?? [],
+        priorOpenErrorCount: priorByRoll.get(m.roll.id)?.length ?? 0,
       };
     });
 

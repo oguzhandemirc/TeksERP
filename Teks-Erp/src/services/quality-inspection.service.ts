@@ -14,6 +14,7 @@ import {
   gradeMismatchOf, isUniqueOn, resolveFourPointRule, resolveInspectionPhase, resolveInspectionWidth, ruleSnapshotOf, toDec,
 } from "./helpers/four-point-resolve.helper";
 import { ACTIVE_INSPECTION_WHERE } from "./helpers/inspection-active.helper";
+import { insertInspectionDefectsTx } from "./helpers/roll-defect.helper";
 import { QUALITY_STEP_ERROR, STEP_QUALITY_SELECT, stationCanInspect } from "./helpers/quality-station.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 
@@ -164,22 +165,18 @@ export async function createInspectionTx(tx: Tx, input: CreateInspectionInput) {
     }
     throw err;
   }
-  if (ev.scored.length > 0) {
-    await tx.rollError.createMany({
-      data: ev.scored.map((d) => ({
-        rollId: input.roll.id,
-        startMeter: d.startMeter,
-        defectTypeId: d.defectTypeId,
-        errorType: d.errorType,
-        origin: "INSPECTION" as const,
-        sizeClass: d.sizeClass,
-        points: d.points,
-        inspectionId: created.id,
-        detectedByUserId: inspectedById,
-        detectedAt: inspectedAt,
-      })),
-    });
-  }
+  // Satır basımı tek yazma boğazında (KQ-D7); köken orada INSPECTION'a sabitlenir, boş liste no-op.
+  await insertInspectionDefectsTx(tx, ev.scored.map((d) => ({
+    rollId: input.roll.id,
+    startMeter: d.startMeter,
+    defectTypeId: d.defectTypeId,
+    errorType: d.errorType,
+    sizeClass: d.sizeClass,
+    points: d.points,
+    inspectionId: created.id,
+    detectedByUserId: inspectedById,
+    detectedAt: inspectedAt,
+  })));
   return created;
 }
 
