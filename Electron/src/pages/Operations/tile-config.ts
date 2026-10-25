@@ -25,6 +25,7 @@ import {
   Layers,
   FlaskConical,
   BadgeCheck,
+  ScanSearch,
   FileCheck2,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
@@ -531,6 +532,17 @@ export const operationsTiles: OperationsTile[] = [
     // anahtarı `production.enabled` — backend ikizi `kursun-bypass.routes`
     // üzerindeki `requireProductionEnabled` (2026-09-03).
     visibleWhen: isKursunPlanningVisible,
+  },
+  {
+    key: "inspections",
+    title: "Muayeneler",
+    description: "4 puan muayeneleri — puan / 100 m², derece önerisi, düzelt ve iptal",
+    icon: ScanSearch,
+    to: "/quality/inspections",
+    group: "quality",
+    permission: "inspection:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
   },
   {
     key: "lab-tests",

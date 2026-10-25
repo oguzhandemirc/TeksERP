@@ -89,6 +89,7 @@ import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/Wa
 // Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
 import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
+import { InspectionsPage } from "@/pages/Quality/Inspections/InspectionsPage";
 import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
@@ -572,6 +573,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warehouse:transfer">
         <WarehouseTransfersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K4P-PANEL — modül kapısı `route-modules.ts`ten; izin backend'le birebir (`quality-inspection.routes.ts`).
+    path: "quality/inspections",
+    element: (
+      <ProtectedRoute requirePermission="inspection:read">
+        <InspectionsPage />
       </ProtectedRoute>
     ),
   },
