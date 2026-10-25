@@ -30,11 +30,28 @@ function targetsOf(refs: DesignerRefs): EditorTargets | null {
   };
 }
 
+const PAGE_TOP_GAP = 24;
+
 /** Sayfa kanvas alanına sığsın: %100'ü aşmaz, %40'ın altına inmez. */
 function fitZoom(editor: Editor, area: HTMLElement | null, pageWidthPx: number): void {
   if (!area) return;
   const pct = Math.floor(((area.clientWidth - 48) / pageWidthPx) * 100);
-  editor.Canvas.setZoom(Math.max(40, Math.min(100, pct)));
+  const zoom = Math.max(40, Math.min(100, pct));
+  editor.Canvas.setZoom(zoom);
+  centerPage(editor, pageWidthPx, zoom / 100);
+}
+
+/**
+ * Sayfa kanvastan genişken paket çerçeveyi `left:0`a koyar, ölçek alanın merkezinden alınınca
+ * sayfa sağa kayıp kırpılır (e2e BT2 ölçtü). Kayma hesapla geri alınır: ölçek ortasına göre
+ * sol kenar Wa(1-z)/2'de durur, hedef (Wa - Wp·z)/2; üst kenar hedefi PAGE_TOP_GAP.
+ */
+function centerPage(editor: Editor, pageWidthPx: number, z: number): void {
+  const cv = editor.Canvas.getElement();
+  if (!cv) return;
+  const { clientWidth: wa, clientHeight: ha } = cv;
+  // Sayfa sığıyorsa paket zaten ortalar (margin:auto) → yatay düzeltme yalnız taşmada.
+  editor.Canvas.setCoords(z * Math.min(0, (wa - pageWidthPx) / 2), PAGE_TOP_GAP - (ha * (1 - z)) / 2);
 }
 
 /**

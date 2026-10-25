@@ -37,6 +37,10 @@ describe("editör yapılandırması (saf)", () => {
     expect(cfg.panels).toEqual({ defaults: [] });
   });
 
+  it("sınıf seçici `appendTo` ile bağlanmaz (paket iki kez ekliyordu; createEditor elle tek kez bağlar)", () => {
+    expect(cfg.selectorManager).toEqual({ componentFirst: true });
+  });
+
   it("varlık yöneticisi: URL girişi gizli, sunucuya yükleme yok, gömülü base64", () => {
     expect(cfg.assetManager).toMatchObject({ showUrlInput: false, upload: false, embedAsBase64: true, assets: [] });
   });

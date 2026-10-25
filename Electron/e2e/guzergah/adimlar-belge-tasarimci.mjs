@@ -14,7 +14,7 @@ import path from "node:path";
 
 const KANIT = process.env.E2E_KANIT_DIZINI ?? null;
 const KAPALI_METNI = "Belge tasarımcısı kapalı";
-const olc = { kapali: null, sandbox: null, bos: null, a4: null, a5: null, secim: null, pwned: null, sektorler: null, ingilizce: null };
+const olc = { yerlesim: null, kapali: null, sandbox: null, bos: null, a4: null, a5: null, secim: null, pwned: null, sektorler: null, ingilizce: null };
 
 /** Açık ve koyu temada kanıt görüntüsü (tema sınıfı yalnız ekran için değiştirilir, kaydedilmez). */
 async function kanit(page, ad) {
@@ -64,6 +64,8 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT2", rol: "P", gerektirir: ["BT1"],
+    // bayragiAc() sayfayı tazeler; tazelemede cihaz duyurusu aynı oturumda ikinci kez 400 alır (koşum kalıntısı).
+    beklenenHatalar: [{ status: 400, url: /\/api\/devices\/announce/ }],
     yol: "Bayrak açık → Belge Tasarımcısı → boş A4 dikey kanvas (sandbox'lı) → Örnek belge yükle", rota: "definitions/document-designer",
     async yap(ctx) {
       const { git, page, tikla } = ctx;
@@ -77,10 +79,21 @@ export const BELGE_TASARIMCI_ADIMLARI = [
       await tikla("Örnek belge yükle");
       await page().waitForTimeout(1200);
       olc.a4 = await cerceveOlcusu(page);
+      olc.yerlesim = await page().evaluate(() => {
+        const f = document.querySelector("iframe.gjs-frame")?.getBoundingClientRect();
+        const c = document.querySelector(".gjs-cv-canvas")?.getBoundingClientRect();
+        return {
+          editor: document.querySelectorAll(".gjs-editor").length,
+          secici: document.querySelectorAll(".gjs-clm-tags").length,
+          sigar: !!f && !!c && f.left >= c.left - 1 && f.right <= c.right + 1,
+          f: f && [Math.round(f.left), Math.round(f.right)], c: c && [Math.round(c.left), Math.round(c.right)],
+        };
+      });
       await kanit(page, "BT2-dolu-a4-dikey");
     },
     dogrula: [
       { ad: "kanvas iframe'i sandbox=allow-same-origin", sql: "SELECT 1", oku: () => olc.sandbox, beklenen: "allow-same-origin" },
+      { ad: "tek editör, tek sınıf seçici; sayfa kanvas alanına sığar", sql: "SELECT 1", oku: () => JSON.stringify(olc.yerlesim), beklenen: () => olc.yerlesim?.editor === 1 && olc.yerlesim?.secici === 1 && olc.yerlesim?.sigar },
       { ad: "A4 dikey: yükseklik/genişlik ≈ 297/210", sql: "SELECT 1", oku: () => JSON.stringify(olc.a4), beklenen: () => Math.abs(olc.a4.h / olc.a4.w - 297 / 210) < 0.02 },
     ],
   },
@@ -98,6 +111,8 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT4", rol: "P", gerektirir: ["BT2"],
+    // Sandbox sondası kasıtlı: engellenen script ve `src="x"` görseli konsola düşer — beyanlı.
+    beklenenHatalar: [{ konsol: /Blocked script execution .* frame is sandboxed/ }, { konsol: /ERR_FILE_NOT_FOUND/ }],
     yol: "Kanvasta başlığa tıkla → Stil paneli (Türkçe sektörler); enjekte script kanvasta çalışmaz", rota: "definitions/document-designer",
     async yap({ page, tikla }) {
       const baslik = page().frameLocator("iframe.gjs-frame").getByText("SEVK İRSALİYESİ").first();
@@ -107,7 +122,9 @@ export const BELGE_TASARIMCI_ADIMLARI = [
       await tikla("Tipografi", { rol: "button" }).catch(() => page().getByText("Tipografi").first().click());
       await page().waitForTimeout(500);
       const panel = await page().locator("[aria-label='Tasarım paneli']").innerText();
-      olc.sektorler = ["Yerleşim", "Tipografi", "Kenarlık", "Arka plan", "Tablo", "Baskı"].filter((s) => panel.includes(s)).length;
+      const basliklar = (await page().locator(".gjs-sm-sector .gjs-sm-sector-title").allInnerTexts()).map((t) => t.trim());
+      olc.basliklar = basliklar;
+      olc.sektorler = ["Yerleşim", "Tipografi", "Kenarlık", "Arka plan", "Tablo", "Baskı"].filter((s) => basliklar.some((b) => b.toLocaleLowerCase("tr") === s.toLocaleLowerCase("tr"))).length;
       olc.ingilizce = ["Typography", "Layout", "Decorations", "General", "Select an element", "Classes"].filter((s) => panel.includes(s));
       await kanit(page, "BT4-stil-paneli");
       olc.pwned = await cerceve(page).evaluate(async (f) => {
@@ -122,7 +139,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
     },
     dogrula: [
       { ad: "seçim çalışıyor: stil sektörleri çizildi", sql: "SELECT 1", oku: () => olc.secim, beklenen: (v) => v >= 6 },
-      { ad: "altı Türkçe sektör, İngilizce kalıntı yok", sql: "SELECT 1", oku: () => JSON.stringify({ s: olc.sektorler, en: olc.ingilizce }), beklenen: () => olc.sektorler === 6 && olc.ingilizce.length === 0 },
+      { ad: "altı Türkçe sektör, İngilizce kalıntı yok", sql: "SELECT 1", oku: () => JSON.stringify({ s: olc.sektorler, b: olc.basliklar, en: olc.ingilizce }), beklenen: () => olc.sektorler === 6 && olc.ingilizce.length === 0 },
       { ad: "sandbox: kanvasa enjekte script/onerror ÇALIŞMAZ", sql: "SELECT 1", oku: () => JSON.stringify(olc.pwned), beklenen: () => olc.pwned?.[0] === 0 && olc.pwned?.[1] === 0 },
     ],
   },

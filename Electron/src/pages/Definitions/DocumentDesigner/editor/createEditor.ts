@@ -57,7 +57,8 @@ export function buildEditorConfig(targets: EditorTargets, hooks: EditorHooks): E
     deviceManager: { default: deviceId(DEFAULT_PAPER, DEFAULT_ORIENTATION), devices: pageDevices() },
     blockManager: { appendTo: targets.blocks, blocks: BASIC_BLOCKS },
     styleManager: { appendTo: targets.styles, sectors: STYLE_SECTORS },
-    selectorManager: { appendTo: targets.selectors, componentFirst: true },
+    // `appendTo` verilirse paket seçiciyi aynı hedefe İKİ kez ekliyor (e2e BT2 ölçtü) → elle tek kez.
+    selectorManager: { componentFirst: true },
     layerManager: { appendTo: targets.layers },
     traitManager: { appendTo: targets.traits },
     assetManager: {
@@ -129,5 +130,7 @@ export function applyPageGuides(editor: Editor, size: PaperSize, orientation: Or
 type GrapesInit = { init: (config: EditorConfig) => Editor };
 
 export function createEditor(grapesjs: GrapesInit, targets: EditorTargets, hooks: EditorHooks): Editor {
-  return grapesjs.init(buildEditorConfig(targets, hooks));
+  const editor = grapesjs.init(buildEditorConfig(targets, hooks));
+  targets.selectors.replaceChildren(editor.Selectors.render([]));
+  return editor;
 }

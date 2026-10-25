@@ -42,7 +42,8 @@ export const TR_ADDITIONS: Messages = {
   },
   styleManager: {
     fileButton: "Görseller",
-    sectors: { flex: "Esnek yerleşim" },
+    // Paket çevirisi `layout`u "Düzen" yapar; sektör adımız (styleSectors) "Yerleşim".
+    sectors: { flex: "Esnek yerleşim", layout: "Yerleşim" },
     properties: {
       margin: "Dış boşluk",
       "margin-top": "Dış boşluk üst",

@@ -34,6 +34,10 @@ describe("tasarımcı Türkçe dil dosyası", () => {
     expect(TR.get("styleManager.properties.font-family")).toBe("Yazı tipi");
   });
 
+  it("sektör adı i18n ile ezilmez: paketteki `layout: Düzen` yerine Yerleşim (e2e BT4 ölçtü)", () => {
+    expect(TR.get("styleManager.sectors.layout")).toBe("Yerleşim");
+  });
+
   it("ekler çekirdeği bozmaz: çekirdekte olup eklerde olmayan değer korunur", () => {
     expect(TR.get("styleManager.empty")).toBe(flat(TR_CORE as Tree).find(([k]) => k === "styleManager.empty")?.[1]);
     expect(mergeMessages({ a: { b: "1", c: "2" } }, { a: { b: "3" } })).toEqual({ a: { b: "3", c: "2" } });
