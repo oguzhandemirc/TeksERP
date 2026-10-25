@@ -130,6 +130,8 @@ export function useGramajTap(input: GramajTapInput) {
 
   return {
     title,
+    // Telefonda kuyruk çekmecede gizli: operatör sıradaki topu panelden görür.
+    rollTail: roll?.barcode ? roll.barcode.slice(-4) : null,
     values,
     target,
     locked: lock.locked,

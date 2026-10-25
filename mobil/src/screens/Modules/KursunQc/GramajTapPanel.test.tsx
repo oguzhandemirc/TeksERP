@@ -93,6 +93,7 @@ describe('GramajTapPanel — tek dokunuş', () => {
   it('hedef ★ ve başlıkta; hedef dışı basış yazar ve şeritte sapma gösterir', () => {
     const { getByTestId, getByText, complete, done } = setup('REQUIRED', '50GR');
     expect(getByTestId('gramaj-hedef')).toHaveTextContent('HEDEF 50 gr');
+    expect(getByTestId('gramaj-top')).toHaveTextContent('Top 3456');
     expect(getByText('★ 50 gr')).toBeTruthy();
     fireEvent.press(getByTestId('gramaj-tap-25GR'));
     expect(complete).toHaveBeenCalledTimes(1);

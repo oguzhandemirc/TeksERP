@@ -95,6 +95,9 @@ export default function GramajTapPanel({ state, hasRoll }: Props) {
               <Text style={s.targetChip} testID="gramaj-hedef">{`HEDEF ${state.target.label}`}</Text>
             )}
           </View>
+          {!state.correcting && !!state.rollTail && hasRoll && (
+            <Text style={s.rollLine} testID="gramaj-top">{`Top ${state.rollTail}`}</Text>
+          )}
           <Text style={s.hint}>
             {state.correcting ? 'Doğru değere dokunun' : 'Değere dokunun — top tamamlanır, sıradakine geçilir'}
           </Text>
@@ -153,6 +156,7 @@ const s = StyleSheet.create({
     paddingVertical: 6,
     overflow: 'hidden',
   },
+  rollLine: { fontSize: 18, fontWeight: '700', color: palette.slate[800] },
   hint: { fontSize: 14, color: palette.slate[600] },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   btn: {
