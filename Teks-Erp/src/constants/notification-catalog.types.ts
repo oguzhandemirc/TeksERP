@@ -13,7 +13,7 @@ export type NotificationSinif = "ALARM" | "BILDIRIM";
 export type NotificationAltTur = "OLAY" | "KOSUL";
 export type NotificationGrup =
   | "Sipariş" | "Üretim" | "Kalite" | "Sevkiyat" | "Fason" | "Stok" | "Finans" | "Dokuma" | "Sistem";
-/** HER_ZAMAN: uygulama kanalı kapatılamaz (ertelenir) · NOBETTE: yalnız nöbetteki alıcıya kilitli. */
+/** HER_ZAMAN: uygulama kanalı kapatılamaz (ertelenir) · NOBETTE: yalnız nöbetteki alıcıya lockedCell. */
 export type NotificationKilit = "YOK" | "HER_ZAMAN" | "NOBETTE";
 export type NotificationKanal = "UYGULAMA" | "OZET" | "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH";
 /** Outbox aşaması (N1-SEMA CHECK'iyle aynı küme). KAPANDI → `cozuldu` şablonu. */
@@ -28,6 +28,17 @@ export const NOTIFICATION_GRUPLARI: readonly NotificationGrup[] = [
 export interface NotificationSaklama {
   okunmusGun: number;
   okunmamisGun: number;
+}
+
+/**
+ * Kişisel kapsam süzgeci beyanı (plan §5.2) — yalnız DARALTIR. Beyan edilmeyen anahtar o türde 400.
+ * `esik`: anahtar `paramSemasi` alanıdır; ölçü payload alanından okunur (`UST`: ölçü ≤ eşik iletilir ·
+ * `ALT`: ölçü > eşik iletilir). Ölçü okunamazsa süzgeç İLETMEZ (fail-closed, kişi bunu kendisi seçti).
+ */
+export interface NotificationScopeDeclaration {
+  yalnizTakip?: true;
+  istasyonlar?: true;
+  esik?: Readonly<Record<string, { alan: string; yon: "UST" | "ALT" }>>;
 }
 
 export interface NotificationCatalogEntry {
@@ -69,6 +80,8 @@ export interface NotificationCatalogEntry {
   tabletRota?: string;
   /** Eşik/param şeması; `.strict()` + her alan varsayılanlı (bekçi §7). */
   paramSemasi?: z.ZodType;
+  /** Kişisel kapsam süzgeçleri (N4); yoksa türde süzgeç yok. */
+  kapsam?: NotificationScopeDeclaration;
   /** Şablon yer tutucularının BEYANI (bekçi §5). */
   payloadAlanlari: readonly string[];
   /** Önizleme verisi yokken "haftada ~N" tahmini (Karar Y3). */

@@ -33,14 +33,25 @@ function guardNavigation(kind: string, details: NavigationDetails): void {
   });
 }
 
+// PDF görüntüleyici penceresi: Chromium eklenti alt çerçevesi (chrome-extension://) bu genel kuralda
+// engellenir; o pencere kendi DAHA DAR alt çerçeve kuralını kurar (pdf-viewer.ts). Ana çerçeve burada kalır.
+const ownSubframePolicy = new WeakSet<WebContents>();
+
+/** Alt çerçeve denetimini çağıranın kendi kuralına bırakır; yalnız pdf-viewer.ts kullanır. */
+export function delegateSubframeGuard(contents: WebContents): void {
+  ownSubframePolicy.add(contents);
+}
+
 /** `app.on("web-contents-created")` her yeni webContents için çağırır. */
 export function guardWebContents(contents: WebContents): void {
   contents.on("will-navigate", (details) => guardNavigation("will-navigate", details));
   contents.on("will-frame-navigate", (details) => {
     // Ana çerçeve `will-navigate`te ölçülür; burada yalnız alt çerçeveler.
-    if (!details.isMainFrame) guardNavigation("will-frame-navigate", details);
+    if (!details.isMainFrame && !ownSubframePolicy.has(contents)) guardNavigation("will-frame-navigate", details);
   });
-  contents.on("will-redirect", (details) => guardNavigation("will-redirect", details));
+  contents.on("will-redirect", (details) => {
+    if (details.isMainFrame || !ownSubframePolicy.has(contents)) guardNavigation("will-redirect", details);
+  });
   contents.on("will-attach-webview", (event) => event.preventDefault());
   // Varsayılan: yeni pencere YOK. Ana pencere kendi işleyicisiyle bunu ezer (main.ts).
   contents.setWindowOpenHandler(() => ({ action: "deny" }));

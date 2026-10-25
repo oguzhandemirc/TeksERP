@@ -30,6 +30,7 @@ import { buildTextSearch } from "../utils/query-parser";
 import { buildNextDynamicCursor, decodeDynamicCursor, dynamicCursorWhere } from "../utils/cursor";
 import { AuditService } from "./audit.service";
 import { assertWeavingOrderReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
+import { followAsCreatorTx } from "./helpers/record-follow.helper";
 import { markWeavingOrderInProgressTx, nextWeavingOrderNumberTx } from "./helpers/weaving-order.helper";
 import { assertOrderLinesLinkableTx, normalizeOrderLineLinks, type NormalizedOrderLineLink } from "./helpers/weaving-order-links.helper";
 import { assertOrderLineLinkGate } from "./helpers/production-chain-gates.helper";
@@ -221,6 +222,8 @@ async function createWeavingOrderFresh(input: WeavingOrderCreateInput, userId?: 
           select: { id: true },
         });
         await replaceOrderLineLinksTx(tx, row.id, orderLines);
+        // Oluşturan otomatik takipçi (bildirim §5.3).
+        await followAsCreatorTx(tx, userId, { weavingOrderId: row.id });
         return { fresh: true as const, row: await tx.weavingOrder.findUniqueOrThrow({ where: { id: row.id }, select: WEAVING_ORDER_SELECT }) };
       }),
     undefined,

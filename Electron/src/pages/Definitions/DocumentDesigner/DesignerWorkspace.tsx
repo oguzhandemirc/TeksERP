@@ -4,7 +4,7 @@ import "./designer.css";
 import { AlertTriangle } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { regionPreview, toCanvasPaper } from "./binding/pageSettings";
-import { CmRuler } from "./CmRuler";
+import { DesignerCenter } from "./DesignerCenter";
 import { DesignerSidebar, type SidebarTab } from "./DesignerSidebar";
 import { DesignerToolbar } from "./DesignerToolbar";
 import { registerDocumentBlocks } from "./editor/documentBlocks";
@@ -86,10 +86,7 @@ export default function DesignerWorkspace({ templateId }: Props) {
           <h3 className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bloklar</h3>
           <div ref={refs.blocks} className="tekserp-designer-blocks min-h-0 flex-1 overflow-y-auto" />
         </aside>
-        <div ref={refs.area} className="flex min-w-0 flex-1 flex-col bg-muted/40">
-          <CmRuler widthMm={dim.widthMm} left={frame.left} width={frame.width} />
-          <div ref={refs.container} className="min-h-0 flex-1" />
-        </div>
+        <DesignerCenter refs={refs} editor={editor} draft={draft} widthMm={dim.widthMm} frame={frame} />
         <DesignerSidebar refs={refs} tab={tab} onTab={setTab} binding={<BindingPanel editor={editor} draft={draft} />}
           panels={{
             data: <DataTreePanel editor={editor} draft={draft} />,

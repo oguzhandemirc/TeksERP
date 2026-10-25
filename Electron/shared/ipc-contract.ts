@@ -90,6 +90,20 @@ export interface PdfSaveResult {
   path?: string;
   error?: string;
 }
+/** Tasarımcı PDF önizlemesi: çiz, baytları döndür, görüntüleyicide aç. */
+export interface PdfPreviewOpts {
+  html: string;
+  title: string;
+  /** false → yalnız baytlar (görüntüleyici açılmaz). */
+  openViewer?: boolean;
+}
+export interface PdfPreviewResult {
+  ok: boolean;
+  bytes?: Uint8Array;
+  /** Görüntüleyici penceresi açıldı mı; false → panel yedek yolu gösterir. */
+  viewer?: boolean;
+  error?: string;
+}
 export interface PdfBatchItem {
   /** Basılacak tam HTML belge. */
   html: string;
@@ -113,6 +127,8 @@ export interface PdfApi {
   save: (opts: PdfSaveOpts) => Promise<PdfSaveResult>;
   /** N belgeyi seçilen KLASÖRE ayrı ayrı PDF olarak yazar (her biri <name>.pdf). */
   saveBatch: (opts: PdfSaveBatchOpts) => Promise<SaveBatchResult>;
+  /** Belge Tasarımcısı PDF önizlemesi (pdf:save ile aynı çizim kapısı). */
+  preview: (opts: PdfPreviewOpts) => Promise<PdfPreviewResult>;
   /** PDF meta verisine yazılacak lisans filigranı (lisans sahibi + no); null = yalnız üretici. */
   setLicenseMeta: (meta: PdfLicenseMetaInput | null) => Promise<void>;
   /** Toplu kayıtta her yazılan belgeden sonra ilerleme; dönen fonksiyon aboneliği kapatır. */

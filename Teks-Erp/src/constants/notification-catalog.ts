@@ -20,11 +20,13 @@ import type { NotificationCatalogEntry, NotificationKanal, NotificationSaklama }
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
 export type {
   NotificationSinif, NotificationAltTur, NotificationGrup, NotificationKilit, NotificationKanal,
-  NotificationPhase, NotificationSaklama, NotificationCatalogEntry,
+  NotificationPhase, NotificationSaklama, NotificationCatalogEntry, NotificationScopeDeclaration,
 } from "./notification-catalog.types";
 
 const SAKLAMA: NotificationSaklama = { okunmusGun: 90, okunmamisGun: 180 };
 
+// MASAUSTU seçilebilir ama varsayılanı KAPALI (N3 "varsayılan hiçbiri" = bugünkü davranış, patron kararı 2026-10-25);
+// kullanıcı Kullanıcı Tercihleri → Masaüstü bildirimleri'nden açar. Tezgah alarmı kendi kanalıyla ayrıdır.
 const KANAL_MASAUSTU: readonly NotificationKanal[] = ["UYGULAMA", "OZET", "MASAUSTU"];
 
 export const NOTIFICATION_CATALOG = {
@@ -38,7 +40,7 @@ export const NOTIFICATION_CATALOG = {
     pencereSn: 0, varsayilan: "HERKES", kilit: "HER_ZAMAN",
     kilitGerekcesi: "Yedeksiz fabrika veri kaybına açıktır; bu uyarı kapatılamaz, yalnız ertelenebilir.",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Yedek alınamadı",
     govde: "{kaynakAd} yedeği alınamadı: {neden}",
     cozuldu: "{kaynakAd} yedeği yeniden alınıyor",
@@ -54,7 +56,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "bulut",
     pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Yönetim bulutu eşitlemesi gecikti",
     govde: "Son başarılı eşitleme {sonBasarili}; durum: {durum}",
     cozuldu: "Yönetim bulutu eşitlemesi yeniden başarılı",
@@ -72,7 +74,7 @@ export const NOTIFICATION_CATALOG = {
     pencereSn: 0, varsayilan: "HERKES", kilit: "HER_ZAMAN",
     kilitGerekcesi: "Lisans sorunu zamanında çözülmezse kurulum kısıtlı kipe geçebilir; bu uyarı kapatılamaz, yalnız ertelenebilir.",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Lisans uyarısı",
     govde: "{neden}",
     cozuldu: "Lisans uyarısı giderildi",
@@ -108,7 +110,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{yazici}",
     pencereSn: 600, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "{yaziciAd} yazıcısında baskı hatası",
     govde: "{kisi} · {tur} · {neden}",
     panelEkran: "system/print-history", panelYol: "/system/print-history?printer={yazici}&status=HATA",
@@ -126,7 +128,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "patron-siparisi",
     pencereSn: 600, varsayilan: ["order:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Yönetim bulutundan sipariş geldi",
     govde: "{musteriAd} için {siparisNo} numaralı sipariş açıldı",
     panelEkran: "operations/orders", panelYol: "/operations/orders?focus={siparisId}",
@@ -147,6 +149,7 @@ export const NOTIFICATION_CATALOG = {
     cozuldu: "{siparisNo} için termin yaklaşma uyarısı kapandı",
     panelEkran: "operations/orders", panelYol: "/operations/orders?focus={siparisId}",
     paramSemasi: z.object({ gun: z.number().int().min(1).max(30).default(3) }).strict(),
+    kapsam: { yalnizTakip: true },
     payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "termin"],
     tahminiHaftalik: 10, saklama: SAKLAMA,
   },
@@ -163,6 +166,7 @@ export const NOTIFICATION_CATALOG = {
     govde: "{siparisNo} ({musteriAd}) termini {termin} tarihinde geçti",
     cozuldu: "{siparisNo} kapandı ya da termini güncellendi",
     panelEkran: "operations/orders", panelYol: "/operations/orders?focus={siparisId}",
+    kapsam: { yalnizTakip: true },
     payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "termin"],
     tahminiHaftalik: 5, saklama: SAKLAMA,
   },
@@ -181,6 +185,7 @@ export const NOTIFICATION_CATALOG = {
     govde: "{isEmriNo} planlanan bitişi {planlananBitis} geçti",
     cozuldu: "{isEmriNo} tamamlandı ya da planı güncellendi",
     panelEkran: "operations/work-orders", panelYol: "/operations/work-orders/{isEmriId}",
+    kapsam: { yalnizTakip: true },
     payloadAlanlari: ["isEmriId", "isEmriNo", "planlananBitis"],
     tahminiHaftalik: 8, saklama: SAKLAMA,
   },
@@ -216,7 +221,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{sertifikaId}",
     pencereSn: 0, varsayilan: ["certificate:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Sertifika süresi doluyor",
     govde: "{standart} · {sertifikaNo} ({sahip}): {durum}",
     cozuldu: "{standart} · {sertifikaNo} yenilendi ya da iptal edildi",
@@ -242,6 +247,7 @@ export const NOTIFICATION_CATALOG = {
     cozuldu: "{firmaAd}: geciken fason dönüşü kalmadı",
     panelEkran: "reports/subcontract", panelYol: "/reports/subcontract/scorecard",
     paramSemasi: z.object({ gun: z.number().int().min(1).max(120).default(10) }).strict(),
+    kapsam: { esik: { gun: { alan: "enEskiGun", yon: "ALT" } } },
     payloadAlanlari: ["firmaId", "firmaAd", "acikKalem", "enEskiGun"],
     tahminiHaftalik: 3, saklama: SAKLAMA,
   },
@@ -281,6 +287,7 @@ export const NOTIFICATION_CATALOG = {
     panelEkran: "operations/warp-beams", panelYol: "/operations/warp-beams?search={leventNo}",
     tabletEkran: "Dokuma",
     paramSemasi: z.object({ kalanGun: z.number().min(0.5).max(14).default(1) }).strict(),
+    kapsam: { istasyonlar: true, esik: { kalanGun: { alan: "kalanGun", yon: "UST" } } },
     payloadAlanlari: ["leventId", "leventNo", "tezgahNo", "kalanGun"],
     tahminiHaftalik: 10, saklama: SAKLAMA,
   },
@@ -304,6 +311,7 @@ export const NOTIFICATION_CATALOG = {
     panelEkran: "operations/loom-alarms", panelYol: "/operations/loom-alarms/{alarmId}",
     tabletEkran: "Uyarilar",
     tabletRota: "UyariDetay",
+    kapsam: { istasyonlar: true },
     payloadAlanlari: ["alarmId", "tezgahNo", "alarmAd", "salonAd"],
     tahminiHaftalik: 20, saklama: SAKLAMA,
   },
