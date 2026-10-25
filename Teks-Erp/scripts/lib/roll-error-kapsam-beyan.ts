@@ -25,6 +25,13 @@ export interface RollErrorKapsamBeyani {
 
 export const ROLL_ERROR_KAPSAM_BEYANI: readonly RollErrorKapsamBeyani[] = [
   {
+    dosya: "services/quality-inspection-query.service.ts",
+    sembol: "getInspection",
+    erisim: "iliski.rollErrors",
+    sinif: "TARIHCE",
+    gerekce: "muayene detayı yalnız kendi `inspectionId` ilişkisindeki INSPECTION satırlarını gösterir; karar yolu değildir",
+  },
+  {
     dosya: "services/backup-impact.service.ts",
     sembol: "run",
     erisim: "rollError.count",

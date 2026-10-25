@@ -67,6 +67,13 @@ export const BUDANAN_DEFTER_DISI: Array<{ model: string; sinif: "DURUM" | "TELEM
   { model: "NotificationCondition", sinif: "DURUM",
     gerekce: "koşulun \"şu an açık mı\" durumu; yalnız ÇÖZÜLMÜŞ satır 180 günde budanır — açık koşul yaşından bağımsız kalır, \"ne oldu\" gelen kutusu/audit'te",
     silen: ["src/services/notification-prune.service.ts"] },
+  // rapor v2 (plan §3.3, R1-ZAMAN): sayılar semantik katmanda yeniden hesaplanır; satır silinince hiçbir sayı değişmez.
+  { model: "ReportRun", sinif: "TELEMETRI",
+    gerekce: "rapor koşu ölçümü + iptal kimliği (durum/süre/satır sayısı); 90 günde budanır, görüntünün `runId`si SET NULL (görüntü kalır). Hiçbir rapor sayısı ya da karar bu satırdan okunmaz",
+    silen: ["src/services/report-prune.service.ts"] },
+  { model: "ReportSnapshot", sinif: "TELEMETRI",
+    gerekce: "rapor görüntüsü = o anki sonucun kopyası; YALNIZ `ZAMANLANMIS` + `expiresAt` geçmiş satır budanır (§7 ölçer), `KULLANICI` görüntüsü sahibi silene kadar kalır. Ay sonu kesit görüntüsü bu tablo DEĞİLDİR — o defter sınıfıdır (kullanıcı kararı bekliyor)",
+    silen: ["src/services/report-prune.service.ts"] },
 ];
 /** SQL'de yaşayan yaş budayıcıları (TS `deleteMany` taramasının göremediği yol). */
 const SQL_BUDAYICILAR: Array<{ model: string; dosya: string; desen: RegExp }> = [
@@ -130,6 +137,28 @@ export function budamalariTara(kaynak: string, dosya: string): BudamaYeri[] {
           }
         }
       }
+    }
+    n.forEachChild(gez);
+  };
+  gez(sf);
+  return out;
+}
+
+/**
+ * `reportSnapshot.deleteMany` çağrılarının `where.kind` değeri — `KULLANICI` görüntüsü sahibinin kaydıdır,
+ * budayıcı yalnız `"ZAMANLANMIS"` literal eşitliğiyle süzebilir. SAF — çağrı başına bulunan değer (yoksa null).
+ */
+export function snapshotPruneKinds(kaynak: string, dosya: string): Array<string | null> {
+  const sf = ts.createSourceFile(dosya, kaynak, ts.ScriptTarget.Latest, true);
+  const out: Array<string | null> = [];
+  const gez = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "deleteMany"
+      && ts.isPropertyAccessExpression(n.expression.expression) && n.expression.expression.name.text === "reportSnapshot") {
+      const arg = n.arguments[0];
+      const w = arg && ts.isObjectLiteralExpression(arg) ? arg.properties.find((p) => p.name && ts.isIdentifier(p.name) && p.name.text === "where") : undefined;
+      const k = w && ts.isPropertyAssignment(w) && ts.isObjectLiteralExpression(w.initializer)
+        ? w.initializer.properties.find((p) => p.name && ts.isIdentifier(p.name) && p.name.text === "kind") : undefined;
+      out.push(k && ts.isPropertyAssignment(k) && ts.isStringLiteral(k.initializer) ? k.initializer.text : null);
     }
     n.forEachChild(gez);
   };
@@ -210,6 +239,21 @@ function main(): void {
   check("§6e iç içe yüklemde de bulunur (AND)",
     S("await prisma.x.deleteMany({ where: { AND: [{ day: { lt: c } }] } });")[0]?.alan === "day");
   check("§6f model adı büyük harfe çevrilir", S("await prisma.endpointLatencyDaily.deleteMany({ where: { day: { lt: c } } });")[0]?.model === "EndpointLatencyDaily");
+
+  // §7 ⭐ ReportSnapshot budayıcısı YALNIZ `ZAMANLANMIS` görüntüye dokunur (R1-ZAMAN).
+  // Negatif sonda (2026-10-25): `kind` süzgeci `{ in: ["ZAMANLANMIS","KULLANICI"] }` yapılınca 1 ❌ (§7a); beyan silinince 1 ❌ (§2);
+  // tarih yüklemi (`expiresAt` ya da `createdAt`) kaldırılınca 2 ❌ (§3 "ÖLÜ beyan" + §4b).
+  console.log("\n=== §7 RAPOR GÖRÜNTÜSÜ BUDAMASI ===");
+  const kinds: string[] = [];
+  for (const f of walkTs(join(KOK, "src"))) {
+    for (const k of snapshotPruneKinds(readFileSync(f, "utf8"), relative(KOK, f))) kinds.push(`${relative(KOK, f)}=${k ?? "SÜZGEÇSİZ"}`);
+  }
+  check("§7a ⭐ her `reportSnapshot.deleteMany` `kind: \"ZAMANLANMIS\"` ile süzer (KULLANICI görüntüsü budanmaz)",
+    kinds.length > 0 && kinds.every((k) => k.endsWith("=ZAMANLANMIS")), kinds.join(" · ") || "budayıcı bulunamadı");
+  const K = (k: string) => snapshotPruneKinds(k, "sonda.ts");
+  check("§7b sonda: süzgeçsiz budayıcı yakalanır", K("await prisma.reportSnapshot.deleteMany({ where: { expiresAt: { lt: n } } });")[0] === null);
+  check("§7c sonda: `in` listesi literal değildir → yakalanır",
+    K("await prisma.reportSnapshot.deleteMany({ where: { kind: { in: [\"ZAMANLANMIS\", \"KULLANICI\"] }, expiresAt: { lt: n } } });")[0] === null);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);

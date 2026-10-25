@@ -1,4 +1,4 @@
-import { printHtml } from './printHtml';
+import { printHtmlReported } from './printHtml';
 import { apiClient } from './api';
 
 // =============================================================================
@@ -13,5 +13,9 @@ export async function printFasonCeki(dispatchId: string): Promise<void> {
     { responseType: 'text', headers: { Accept: 'text/html' } },
   );
   const html = typeof res.data === 'string' ? res.data : String(res.data);
-  await printHtml({ html });
+  // Sonuç (belirsiz · iptal · hata) Yazdırma geçmişine raporlanır; iş ucu yok.
+  await printHtmlReported(
+    { html },
+    { subjectKind: 'FASON_CEKI', docType: 'SUBCONTRACTOR_DISPATCH', subjectTable: 'subcontractor_dispatches', subjectId: dispatchId },
+  );
 }

@@ -12,37 +12,47 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { printHtml } from '../../../services/printHtml';
 import { warpBeamService } from '../../../services/warpBeam.service';
-import { peripheralService } from '../../../services/peripheral.service';
-import { useSessionStore } from '../../../store/sessionStore';
-import { ensurePrinterPaired, isBtPrinterSupported, printRaw, printRawBytes } from '../../../services/btPrinter.service';
+import { resolveBtPrinter } from '../../../services/resolveBtPrinter';
+import { ensurePrinterPaired, printRaw, printRawBytes } from '../../../services/btPrinter.service';
 import { useMobileRasterEnabled } from '../../../hooks/useFeatureFlags';
 import { nextPending, useBeamLabelQueue, type BeamLabelJob } from './beamLabelQueue';
+import {
+  DIALOG_TARGET,
+  btTarget,
+  isPrintCancel,
+  printJobAttachment,
+  reportPrintOutcome,
+  type PrintStep,
+  type PrintTarget,
+} from '../../../services/printJob.service';
 
-async function resolveBtPrinter(): Promise<string | null> {
-  if (!isBtPrinterSupported() || useSessionStore.getState().active == null) return null;
-  try {
-    const printers = await peripheralService.getForSession('LABEL_PRINTER');
-    return printers.find((p) => p.connectionType === 'BLUETOOTH_SPP' && !!p.address && !p.simulate)?.address ?? null;
-  } catch {
-    return null; // çözüm hatası → HTML yolu
-  }
+/** Yazdırma geçmişi künyesi: hedef yazıcı + akışın son adımı (hata kodu buradan). */
+interface BeamTrack {
+  target: PrintTarget;
+  step: PrintStep;
 }
 
 /** Tek işi basar; hata fırlatır (mesaj Türkçe, sunucununki olduğu gibi). */
-async function printBeamLabel(job: BeamLabelJob, raster: boolean): Promise<void> {
-  const bt = await resolveBtPrinter();
-  if (bt) {
+async function printBeamLabel(job: BeamLabelJob, raster: boolean, track: BeamTrack): Promise<void> {
+  const printer = await resolveBtPrinter();
+  const bt = printer?.address ?? null;
+  if (printer && bt) {
+    track.target = btTarget(printer);
     const native = await warpBeamService.labelNative(job.beamId, raster);
+    track.step = 'lang';
     if (!['PPLA', 'PPLB', 'ZPL'].includes(native.language) || !native.content) {
       throw new Error('Yazıcının dili çözülemedi — Tanımlar → Donanım’da bu yerin yazıcısını ve dilini kontrol edin.');
     }
+    track.step = 'pair';
     await ensurePrinterPaired(bt);
+    track.step = 'send';
     if (native.encoding === 'base64') await printRawBytes(bt, atob(native.content));
     else await printRaw(bt, native.content);
     return;
   }
   const html = await warpBeamService.labelHtml(job.beamId);
   if (!html.startsWith('<')) throw new Error('Etiket HTML alınamadı');
+  track.step = 'dialog';
   await printHtml({ html, margins: { left: 0, top: 0, right: 0, bottom: 0 } });
 }
 
@@ -72,15 +82,27 @@ export default function WarpBeamLabelPrinter() {
     const q = useBeamLabelQueue.getState();
     q.setActive(job.beamId);
     void (async () => {
+      const track: BeamTrack = { target: DIALOG_TARGET, step: 'fetch' };
+      const startedAt = Date.now();
       try {
-        await printBeamLabel(job, rasterRef.current);
-        warpBeamService.labelPrintEvent(job.beamId).catch(() => {}); // iz best-effort
+        await printBeamLabel(job, rasterRef.current, track);
+        // İz best-effort; künye aynı çağrıda (başarı satırı iş ucundan doğar).
+        warpBeamService.labelPrintEvent(job.beamId, printJobAttachment(track.target, startedAt)).catch(() => {});
         useBeamLabelQueue.getState().done(job.beamId);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Toast.show({ type: 'success', text1: 'Levent etiketi basıldı', text2: job.beamNo });
       } catch (err) {
         const msg = failureText(err);
         const cancelled = /did not complete|cancel/i.test(msg);
+        // Rapor: iptal yalnız sistem penceresinde anlamlı; BT'de her düşüş gerçek hatadır.
+        reportPrintOutcome({
+          subject: { subjectKind: 'ETIKET_LEVENT', subjectTable: 'warp_beams', subjectId: job.beamId, subjectNo: job.beamNo },
+          target: track.target,
+          startedAt,
+          status: track.step === 'dialog' && isPrintCancel(msg) ? 'IPTAL' : 'HATA',
+          step: track.step,
+          error: err,
+        });
         useBeamLabelQueue.getState().fail(job.beamId, cancelled ? 'Yazdırma iptal edildi' : msg);
         void Haptics.notificationAsync(cancelled ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Error);
         Toast.show({ type: cancelled ? 'info' : 'error', text1: `${job.beamNo} etiketi basılmadı`, text2: cancelled ? 'Listeden Tekrar bas' : msg, visibilityTime: 8000 });

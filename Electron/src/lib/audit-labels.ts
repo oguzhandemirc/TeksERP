@@ -73,6 +73,8 @@ export const TABLE_LABELS: Record<string, string> = {
   ROLL_MOVEMENT: "Top Hareketi",
   ROLL_OPERATION: "Top İşlemi",
   ROLL_ERROR: "Top Hatası",
+  ROLL_INSPECTION: "Top Muayenesi (4 Puan)",
+  FOUR_POINT_RULE_SET: "4 Puan Kural Seti",
   ROLL_MANUAL_OVERRIDE: "Top Manuel Düzeltme",
   ROLL_RETURN: "Top İadesi",
   ROLL_SACK_ASSIGN: "Top → Çuval Atama",
