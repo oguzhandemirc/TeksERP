@@ -26,6 +26,8 @@
 //                                          (genel rejim mesajı onu gölgelememeli)
 //   5  Beş yazma yolunun HEPSİ kilide tabi (biri unutulmuş olamaz)
 //   6  PROCESS_QC olmayan adımda guard KARIŞMAZ (kapsam sızıntısı yok)
+//   7  KQ-D3: muayene kapalı istasyonda reportError 400 + özet alanları
+//      (inspectionEnabled, nextStepName, emptyStep boş adım bilgisi)
 //
 // Fixture'ı test kendi yaratır (`TEST-KRL-` prefix'i), global bayrak yedeklenip
 // geri yüklenir. Seed istasyon/makinelerine DOKUNULMAZ.
@@ -446,6 +448,51 @@ async function main(): Promise<void> {
   check("6a Ön koşul: adım TAMBUR (PROCESS_QC değil)", nonQcStep.station.kind === StationKind.TAMBUR);
   const v6 = await guardVerdict(nonQcStep.id);
   check("6b Guard REDDETMİYOR (kapsam sızıntısı yok)", !v6.blocked, v6.message ?? "");
+
+  // ===========================================================================
+  section("7) KQ-D3 — panel bileşimi alanları + muayene kapalı istasyonda hata 400");
+  // ===========================================================================
+  // Tablet hata panelini `inspectionEnabled`'dan çizer; eski APK paneli koşulsuz
+  // çizer → yazma yolunun KENDİSİ 400 vermeli (ekran bilgi, koruma sunucuda).
+  await setFlag(false);
+  const onlyKursunId = await makeStation("K", "TEST Yalnız Kurşun", StationKind.PROCESS_QC);
+  await prisma.station.update({ where: { id: onlyKursunId }, data: { inspectionEnabled: false } });
+  const fxNoInsp = await makeFixture({ ...md, kursunStationId: onlyKursunId }, md.tamburStationId);
+  const sum7 = (await qcSvc.getStep(fxNoInsp.kursunStepId)).data;
+  check("7a Muayene kapalı adımda inspectionEnabled=false", sum7.inspectionEnabled === false);
+  check("7b nextStepName = sonraki adımın istasyonu", sum7.nextStepName === "TEST Tambur", String(sum7.nextStepName));
+  check("7c Açık toplu adımda emptyStep NULL", sum7.emptyStep === null);
+  let st7 = 0;
+  let msg7 = "";
+  try {
+    await qcSvc.reportError(
+      { stepId: fxNoInsp.kursunStepId, rollId: fxNoInsp.rollIds[0], startMeter: 10, defectTypeId: md.defectTypeId },
+      md.adminUserId,
+    );
+  } catch (e) {
+    st7 = e instanceof AppError ? e.statusCode : -1;
+    msg7 = e instanceof Error ? e.message : String(e);
+  }
+  check("7d reportError muayene kapalı istasyonda 400", st7 === 400 && /muayene/.test(msg7), `${st7} ${msg7.slice(0, 60)}`);
+  const leaked7 = await prisma.rollError.count({ where: { detectedAtStepId: fxNoInsp.kursunStepId } });
+  check("7e Yan etki YOK — RollError açılmadı", leaked7 === 0, `${leaked7}`);
+  check("7f Varsayılan PROCESS_QC adımında inspectionEnabled=true (bugünkü ekran)",
+    (await qcSvc.getStep(fxOff.kursunStepId)).data.inspectionEnabled === true);
+
+  // Boş adım (D2 kararı): kart okutan KK tableti topu henüz gelmemiş adıma düşer →
+  // yanıt sessiz boş olmaz, neden + topların şu anki istasyonu taşınır.
+  const kkStationId = await makeStation("Q", "TEST KK Masa", StationKind.PROCESS_QC);
+  const fxEmpty = await makeFixture(md, kkStationId);
+  const kkStep = await prisma.workOrderStep.findFirstOrThrow({
+    where: { workOrderId: fxEmpty.woId, stepSequence: 2 },
+    select: { id: true },
+  });
+  const sumEmpty = (await qcSvc.getStep(kkStep.id)).data;
+  check("7g Boş adım: emptyStep.code NOT_ARRIVED", sumEmpty.emptyStep?.code === "NOT_ARRIVED", sumEmpty.emptyStep?.code ?? "null");
+  check("7h Boş adım mesajı topun şu anki istasyonunu söyler",
+    sumEmpty.emptyStep?.message === "Bu top henüz bu istasyona gelmedi — şu an: TEST Kurşun İstasyonu",
+    sumEmpty.emptyStep?.message ?? "");
+  check("7i Son adımda nextStepName NULL", sumEmpty.nextStepName === null, String(sumEmpty.nextStepName));
 }
 
 async function teardown(originalFlag: Prisma.JsonValue | null): Promise<void> {
