@@ -89,7 +89,7 @@ async function fixtures(adminId: string) {
     return s.id;
   };
   const stations = { on: await mkStation("ON", true), off: await mkStation("OFF", false) };
-  return { rolls, types, grades, setId: set.id, stations };
+  return { rolls, items: { main: item.id, bare: bare.id }, types, grades, setId: set.id, stations };
 }
 type Fx = Awaited<ReturnType<typeof fixtures>>;
 
@@ -233,6 +233,16 @@ async function sectionPreview(adminId: string, fx: Fx) {
   check("satır sayıları aynı", before[0] === after[0] && before[1] === after[1]);
   check("önizleme = muayene sayıları (ham 11, tavanlı 9, 6,00, B/GB)", pv.totalPoints === 11 && pv.cappedPoints === 9 && pv.pointsPer100M2?.toFixed(2) === "6.00" && pv.suggested?.label === "B" && pv.suggested.code === fx.grades.b.code);
   const real = await svc.create({ rollId: fx.rolls.e, defects: golden(fx) }, adminId);
+  // K4P-TABLET: KK1 doğuşu — top yok, taslak (kumaş + uzunluk) aynı motordan geçer; yazmaz.
+  const before2 = [await prisma.rollInspection.count(), await prisma.rollError.count()];
+  const dv = await svc.preview({ draft: { itemId: fx.items.main }, inspectedLengthM: 100, defects: golden(fx) });
+  const after2 = [await prisma.rollInspection.count(), await prisma.rollError.count()];
+  check("taslak önizleme (KK1 doğuşu) = top önizlemesi, yazmaz", dv.cappedPoints === pv.cappedPoints && dv.pointsPer100M2?.toFixed(2) === pv.pointsPer100M2?.toFixed(2) && dv.widthSource === pv.widthSource && before2[0] === after2[0] && before2[1] === after2[1], `${dv.pointsPer100M2} ${dv.widthSource}`);
+  const dw = await svc.preview({ draft: { itemId: fx.items.bare }, inspectedLengthM: 100, defects: [] });
+  check("taslak ensiz kumaş → en bilinmiyor", dw.widthSource === "UNKNOWN" && dw.pointsPer100M2 === null);
+  const dr = await svc.preview({ draft: { itemId: fx.items.bare, widthCm: 150 }, inspectedLengthM: 100, defects: golden(fx) });
+  check("taslak form eni topun eni gibi sayılır", dr.widthCm != null && dr.pointsPer100M2?.toFixed(2) === pv.pointsPer100M2?.toFixed(2), `${dr.widthSource}`);
+  check("taslakta uzunluk yok → 400", (await errCode(svc.preview({ draft: { itemId: fx.items.main }, defects: [] }))) === "INSPECTION_LENGTH_REQUIRED");
   check("aynı girdiyle yazılan muayene önizlemeyle eşit", real.totalPoints === pv.cappedPoints && real.pointsPer100M2?.equals(pv.pointsPer100M2!) === true && real.suggestedGradeCode === pv.suggested?.code);
 }
 
@@ -315,6 +325,12 @@ async function sectionHttp(admin: { id: string; username: string; password: stri
     const tp = await call("POST", "/api/quality-inspections/preview", tabletToken, { rollId: fx.rolls.e, defects: [] });
     check("tablet (mobile:muayene) önizleme 200", tp.status === 200, `${tp.status} ${tp.code}`);
     check("tablet liste okuyamaz 403", (await call("GET", "/api/quality-inspections", tabletToken)).status === 403);
+    const both = await call("POST", "/api/quality-inspections/preview", adminToken, { rollId: fx.rolls.e, draft: { itemId: fx.items.main }, defects: [] });
+    check("önizleme: rollId XOR draft (ikisi birden 400)", both.status === 400, `${both.status}`);
+    const none = await call("POST", "/api/quality-inspections/preview", adminToken, { defects: [] });
+    check("önizleme: ne top ne taslak → 400", none.status === 400, `${none.status}`);
+    const td = await call("POST", "/api/quality-inspections/preview", tabletToken, { draft: { itemId: fx.items.main }, inspectedLengthM: 90, defects: [] });
+    check("tablet taslak önizleme 200", td.status === 200, `${td.status} ${td.code}`);
     const strict = await call("POST", "/api/quality-inspections/preview", adminToken, { rollId: fx.rolls.e, defects: [], bogus: 1 });
     check("strict gövde: tanınmayan alan → 400", strict.status === 400, `${strict.status}`);
   } finally {

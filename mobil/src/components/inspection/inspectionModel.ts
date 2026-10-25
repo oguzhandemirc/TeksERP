@@ -39,11 +39,12 @@ export interface InspectionDefectInput {
   sizeClass?: InspectionSizeClass;
 }
 
-export const SIZE_CLASSES: { code: InspectionSizeClass; label: string }[] = [
-  { code: 'S1', label: '1 puan' },
-  { code: 'S2', label: '2 puan' },
-  { code: 'S3', label: '3 puan' },
-  { code: 'S4', label: '4 puan' },
+// 4 puan boyut şeridi: renk tek başına anlam taşımaz — rakam ve aralık da yazılır (plan §5.1).
+export const SIZE_CLASSES: { code: InspectionSizeClass; label: string; range: string }[] = [
+  { code: 'S1', label: '1', range: '≤7,5 cm' },
+  { code: 'S2', label: '2', range: '7,5–15 cm' },
+  { code: 'S3', label: '3', range: '15–23 cm' },
+  { code: 'S4', label: '4', range: '>23 cm' },
 ];
 
 /** Kayıt hatasının operatör metni: mükerrer 409 → "zaten kayıtlı"; diğerleri null (konak genel metni basar). */

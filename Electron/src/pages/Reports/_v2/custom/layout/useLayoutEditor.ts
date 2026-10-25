@@ -41,7 +41,15 @@ export function useLayoutEditor(existing: DefinitionDetail | undefined) {
     draftRef.current = draft;
   }, [draft]);
   const [previewBody, setPreviewBody] = useState<DefinitionBody | null>(null);
+  const previewStarted = useRef(false);
   useEffect(() => {
+    if (!draftRef.current) return;
+    // Gecikme yalnız ardışık düzenlemeleri birleştirir; açılıştaki ilk önizleme beklemez.
+    if (!previewStarted.current) {
+      previewStarted.current = true;
+      setPreviewBody(draftRef.current);
+      return;
+    }
     const t = setTimeout(() => setPreviewBody(draftRef.current), PREVIEW_DELAY_MS);
     return () => clearTimeout(t);
   }, [contentKey]);
