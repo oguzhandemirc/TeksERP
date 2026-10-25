@@ -183,7 +183,9 @@ describe("karo bağlantıları", () => {
     // 2026-09-25: `work-order-events` (İş Emri Hareketleri) — iş emirleriyle AYNI üretim kapısı.
     // 2026-10-11: `loom-alarms` (Tezgah Alarmları) — Tezgah Salonuyla AYNI tezgah izleme kapısı.
     // 2026-10-25: `lab-tests` (Lab Testleri) — Kalite Güvence kapısı; kapalıyken soluk çizilir (offHint).
+    // 2026-10-25: `certificates` (Sertifikalar) — aynı Kalite Güvence kapısı.
     expect(conditional.sort()).toEqual([
+      "certificates",
       "goods-receipts",
       "kursun-dagitim",
       "lab-tests",

@@ -141,6 +141,8 @@ import updateRoutes from "./routes/update.routes";
 import supportRoutes from "./routes/support.routes";
 import labTestRoutes from "./routes/lab-test.routes";
 import labTestTypeRoutes from "./routes/lab-test-type.routes";
+import certificateRoutes from "./routes/certificate.routes";
+import customerLabSpecRoutes from "./routes/customer-lab-spec.routes";
 import errorReportRoutes from "./routes/error-report.routes";
 import semanticReportRoutes from "./routes/rapor-semantik.routes";
 import reportRunRoutes from "./routes/rapor-calistirma.routes";
@@ -694,6 +696,8 @@ app.use("/api/destek", supportRoutes);
 // K4P lab testleri (kaliteGuvence modülü): test + sonuç + onay/iptal; tür kataloğu ayrı router.
 app.use("/api/lab-tests", labTestRoutes);
 app.use("/api/lab-test-types", labTestTypeRoutes);
+app.use("/api/certificates", certificateRoutes);
+app.use("/api/customer-lab-specs", customerLabSpecRoutes);
 // Hata raporları (3.6): onay (varsayılan KAPALI, ayar şifreli) + panel/tablet hata kaydı; gönderim `jobs/error-report.job.ts`.
 app.use("/api/hata-raporlari", errorReportRoutes);
 // Patron bulutu (fabrika yüzeyi): teknik kullanıcı + salt okunur bulut hesapları. Gelen kutusu işi `jobs/cloud-inbox.job.ts`.

@@ -399,6 +399,23 @@ const COUNT_SPECS: CountSpec[] = [
     note: "Geri yüklemede bu kartlar geçersizleşir (eski kart döner) — yeniden basılmalı",
     run: (c) => prisma.user.count({ where: { cardIssuedAt: { gte: c } } }),
   },
+  {
+    // K4P-SERT (plan §8 md. 8): belge baytları DB'de durur — geri yüklemede yedekten sonra
+    // yüklenen sertifika belgeleri kaybolur ve yeniden yüklenmelidir.
+    key: "certificateFile",
+    label: "Yüklenen sertifika belgesi",
+    group: "system",
+    timestampField: "createdAt",
+    note: "Geri yüklemede bu belgeler kaybolur — yeniden yüklenmeli",
+    run: (c) => prisma.certificateFile.count({ where: { createdAt: { gte: c } } }),
+  },
+  {
+    key: "certificate",
+    label: "Eklenen / yenilenen sertifika",
+    group: "system",
+    timestampField: "createdAt",
+    run: (c) => prisma.certificate.count({ where: { createdAt: { gte: c } } }),
+  },
 ];
 
 const GROUP_LABELS: Record<ImpactGroupKey, string> = {

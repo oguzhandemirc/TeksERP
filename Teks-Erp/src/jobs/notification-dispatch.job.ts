@@ -15,6 +15,7 @@ import { NOTIFICATION_NOTIFY_CHANNEL } from "../services/helpers/notification-em
 import { startNotificationConditionScanner, stopNotificationConditionScanner } from "./notification-condition.job";
 import { registerSystemConditionSources } from "../services/notification-sources/sistem";
 import { registerWorkConditionSources } from "../services/notification-sources/is";
+import { registerQualityConditionSources } from "../services/notification-sources/kalite";
 import { createNudgeCoalescer } from "./nudge-coalescer";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
@@ -163,6 +164,7 @@ export function startNotificationJobs(): void {
   shuttingDown = false;
   registerSystemConditionSources(); // koşul kaynakları tek noktadan (N1-KOSUL-SIS)
   registerWorkConditionSources(); // iş koşulları (N1-KOSUL-IS)
+  registerQualityConditionSources(); // sertifika süresi (K4P-SERT)
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();
   supervisorTimer = setInterval(() => void reconcileNotificationJobs(), NOTIFICATION_SUPERVISOR_MS);
