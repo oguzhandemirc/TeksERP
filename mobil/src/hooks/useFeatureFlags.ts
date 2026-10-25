@@ -79,6 +79,11 @@ export function useEmanetEnabled(): boolean {
   return useFeatureFlags().data?.emanetEnabled ?? DEFAULT_FEATURE_FLAGS.emanetEnabled;
 }
 
+/** Kalite Güvence (K4P) modülü açık mı? Yüklenene kadar / hata halinde false (muayene yüzeyi çizilmez). */
+export function useKaliteGuvenceEnabled(): boolean {
+  return useFeatureFlags().data?.kaliteGuvenceEnabled ?? DEFAULT_FEATURE_FLAGS.kaliteGuvenceEnabled ?? false;
+}
+
 /** KK1 ham en girişi açık mı? Yüklenene kadar / hata halinde false (gizli). */
 export function useRawWidthEnabled(): boolean {
   return useFeatureFlags().data?.rawWidthEnabled ?? false;

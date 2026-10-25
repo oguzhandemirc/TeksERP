@@ -17,6 +17,8 @@ export interface SessionStation {
   code: string;
   name: string;
   kind: SessionStationKind | string;
+  /** K4P: muayene düğmesi GÖSTERİM kapısı — sunucu `stationCanInspect` hesaplar; istemci `kind` okumaz. Eski sunucu göndermez → kapalı. */
+  canInspect?: boolean;
   /** İstasyonun varsayılan etiket adedi (1–5; null = genel adet). Eski sunucu göndermez. */
   defaultLabelCopies?: number | null;
 }

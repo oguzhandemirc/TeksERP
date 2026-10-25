@@ -207,14 +207,19 @@ export interface BirthInspectionRequest {
   note?: string | null;
 }
 
+/** K4P-KK1: muayene yazılmadıysa yapılı sebep (metin `warnings`te de var); eski sunucu göndermez. */
+export type InitialEntryResponse = ApiResponse<Roll> & {
+  inspectionNotSaved?: { code: 'INSPECTION_NOT_SAVED'; reason: string; message: string };
+};
+
 /** `GET /rolls/tablet-context` — emanet sahip adayları (yalnız id+ad; emanet kapalıyken boş). */
 export interface RollTabletContext {
   customers: { id: string; name: string }[];
 }
 
 export const rollService = {
-  createInitialEntry: (data: InitialEntryRequest): Promise<ApiResponse<Roll>> =>
-    apiClient.post<ApiResponse<Roll>>('/rolls/initial-entry', data).then((r) => r.data),
+  createInitialEntry: (data: InitialEntryRequest): Promise<InitialEntryResponse> =>
+    apiClient.post<InitialEntryResponse>('/rolls/initial-entry', data).then((r) => r.data),
 
   /** KK1 form bağlamı — tek uç, tek izin (`mobile:kk1`); `customer:read` istemez. */
   tabletContext: (): Promise<ApiResponse<RollTabletContext>> =>

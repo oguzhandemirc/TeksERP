@@ -13,7 +13,7 @@ import { LIVE_DOC_TYPES } from "./live-binding";
 import { getContract, listContracts } from "./sozlesme/kayit";
 import { TemplateRenderError, renderTemplate } from "./motor/render";
 import type { OverlayInput } from "./motor/overlay";
-import type { PrintInput } from "./sozlesme/tipler";
+import type { PrintInput, TemplateContext } from "./sozlesme/tipler";
 
 type Db = Pick<typeof prisma, "systemSetting" | "documentTemplate" | "documentTemplateDefault" | "documentProfileTemplate">;
 
@@ -101,6 +101,31 @@ export interface TemplatedPrintMeta {
 const STATUS_LABEL: Record<string, string> = { ACTIVE: "Geçerli", SUPERSEDED: "Eski sürüm", VOIDED: "İptal" };
 
 /**
+ * Donmuş şablonlu belgenin Liquid bağlamı — PDF (`renderFrozenTemplate`) ve Excel (`/tables`,
+ * `template-tables.ts`) AYNI fonksiyondan okur ki iki çıktı aynı değeri taşısın (plan Z5).
+ */
+export function frozenTemplateContext(
+  docType: string,
+  snapshot: { docConfigOverride: unknown } & Record<string, unknown>,
+  input: { meta: TemplatedPrintMeta; rec: TemplatedPrintRecord; internalFields: readonly string[] },
+): TemplateContext {
+  const { meta, rec } = input;
+  const contract = getContract(docType);
+  const baski: PrintInput = {
+    surum: rec.version,
+    durum: rec.status,
+    taslak: rec.draft === true,
+    iptalNedeni: meta.voidReason ?? null,
+    zaman: new Date().toISOString(),
+    basan: meta.printedBy ?? null,
+    not: meta.printNote ?? null,
+    logo: meta.logoDataUrl ?? null,
+    qr: meta.qrDataUrl ?? null,
+  };
+  return contract.insa(snapshot as never, contract.ayarNormalize(snapshot.docConfigOverride), input.internalFields, { baski, canli: meta });
+}
+
+/**
  * Donmuş şablon sürümüyle basım. Bağlam `insa(snapshot, ayar, internalFields)` ile kurulur;
  * filigran + künye üst katmanı renderer'ın işidir (şablon CSS'i gizleyemez). Hata 422.
  */
@@ -118,19 +143,7 @@ export async function renderFrozenTemplate(
   });
   // Sürüm silinmez (FK Restrict + trigger); yoksa veri bozulmuştur — sessizce Sistem'e düşülmez.
   if (!v) throw templateFailed(`Belgenin şablon sürümü bulunamadı (${ref.name} v${ref.versionNo}).`, []);
-  const contract = getContract(docType);
   const internalFields = Array.isArray(v.internalFields) ? (v.internalFields as string[]) : [];
-  const baski: PrintInput = {
-    surum: rec.version,
-    durum: rec.status,
-    taslak: rec.draft === true,
-    iptalNedeni: meta.voidReason ?? null,
-    zaman: new Date().toISOString(),
-    basan: meta.printedBy ?? null,
-    not: meta.printNote ?? null,
-    logo: meta.logoDataUrl ?? null,
-    qr: meta.qrDataUrl ?? null,
-  };
   const overlay: OverlayInput = {
     watermark: rec.draft ? "DRAFT" : rec.status === "VOIDED" ? "VOIDED" : rec.status === "SUPERSEDED" ? "SUPERSEDED" : null,
     imprint:
@@ -148,12 +161,7 @@ export async function renderFrozenTemplate(
     const r = renderTemplate(
       { versionId: v.id, compiledLiquid: v.compiledLiquid, css: v.css, pageSettings: v.pageSettings },
       {
-        context: contract.insa(
-          snapshot as never,
-          contract.ayarNormalize(snapshot.docConfigOverride),
-          internalFields,
-          { baski, canli: meta },
-        ) as unknown as Record<string, unknown>,
+        context: frozenTemplateContext(docType, snapshot, { meta, rec, internalFields }) as unknown as Record<string, unknown>,
         snapshot: snapshot as never,
         overlay,
       },

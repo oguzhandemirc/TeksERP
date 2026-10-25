@@ -197,7 +197,7 @@ async function main(): Promise<void> {
   check("§2 donan atıf dört alan", !!s2.template && s2.template.versionId === prof.v1.id && s2.template.versionNo === 1 && s2.template.name === `${TAG}-profil`);
   check("§2 schemaVersion 1 kalır", s2.schemaVersion === 1);
   const h2 = await html(onProfile);
-  check("§2 /html şablonla basar + additive alanlar", h2.html.includes("SABLON-PROF") && h2.template?.versionNo === 1 && h2.tablesAvailable === false);
+  check("§2 /html şablonla basar + additive alanlar", h2.html.includes("SABLON-PROF") && h2.template?.versionNo === 1 && h2.tablesAvailable === true);
 
   console.log("§3 Yayında olmayan / arşivdeki atama atlanır + uyarı");
   await prisma.documentProfileTemplate.update({ where: { profileId_docType: { profileId: profile.id, docType: TYPE } }, data: { templateId: draft.id } });

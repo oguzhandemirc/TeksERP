@@ -15,6 +15,7 @@ import { licenseModuleKey, licenseModuleLabel } from "@/lib/license/ceiling";
 import { PASSWORD_CHANGE_REQUIRED_CODE } from "@/types/auth";
 import { createRequestHold } from "@/lib/sunucu-kesintisi";
 import { IS_ELECTRON } from "@/lib/runtime-env";
+import { ensureConnectOrigin } from "@/lib/connect-gate";
 
 /**
  * KURULUM KARARI olan 403'ler yetki sorunu değildir — "yetkiniz yok" kullanıcıyı rolünü
@@ -140,6 +141,8 @@ export async function buildAuthHeaders(method: string, hasExplicitAuth = false):
 
 apiClient.interceptors.request.use(async (config) => {
   await holdForOutage(config.url);
+  // connect-src (T2): hedef köken ana sürecin izinli kümesinde olmalı — yoksa ağ kapısı keser.
+  await ensureConnectOrigin(apiClient.getUri(config));
   (config as TimedConfig).__startedAt = Date.now();
   config.timeout = resolveRequestTimeout(config.url, config.timeout);
   // Başlıklar TEK kurucudan (`buildAuthHeaders`): bildirim zilinin SSE `fetch`i de aynısını kullanır.

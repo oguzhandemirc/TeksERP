@@ -190,6 +190,9 @@ const api: ApiBridge = {
       return () => ipcRenderer.removeListener(BILDIRIM_OPEN_CHANNEL, listener);
     },
   },
+  connectGate: {
+    allow: (url: string) => ipcRenderer.invoke("connectGate:allow", url),
+  },
 };
 
 // Köprü YALNIZ uygulamanın kendi belgesine açılır: giriş adresi ana süreçten

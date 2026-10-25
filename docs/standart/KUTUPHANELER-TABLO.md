@@ -12,7 +12,7 @@ Yeni paket eklerken: önce `KUTUPHANELER.md` §1 (tek kütüphane ilkesi) ve §3
 
 Bu tablo **kayıtlı kararın kendisidir**: `package.json > dependencies` ile bu tablo arasındaki fark bekçi kırmızısıdır ([KU-08]). Backend'in izinli paket listesi bugüne kadar `Teks-Erp/CLAUDE.md` § Paketler'de yaşıyordu; **liste buraya taşındı**, CLAUDE.md yalnız buraya işaret eder (aynı cümle iki yerde yaşarsa biri bayatlar — `README.md` § Üç belge katmanı).
 
-### 2.1 Backend (`Teks-Erp/`) — CommonJS, 21 dependency
+### 2.1 Backend (`Teks-Erp/`) — CommonJS, 22 dependency
 
 | İhtiyaç | Paket | Not / reddedilen |
 |---|---|---|
@@ -22,6 +22,7 @@ Bu tablo **kayıtlı kararın kendisidir**: `package.json > dependencies` ile bu
 | Kimlik · API belgesi | `jsonwebtoken` · `bcryptjs` · `swagger-jsdoc` + `swagger-ui-express` | — |
 | Barkod sembolü | `bwip-js` (7 dosya) | — |
 | Belge şablon dili | `liquidjs` **10.30.0 SABİT** (belge tasarımcısı, `services/document-template/motor/`) | KATI ayar + etiket/filtre izin listesi; echo/cycle/capture sarmalayıcıları bu sürümde ölçüldü (§9 2026-10-24) · Handlebars/Nunjucks/Eta/EJS reddedildi; refakat kartı RAW_HTML `{{alan}}` motoru AYRI kalır |
+| Rapor analizi (korelasyon) | `simple-statistics` **7.12.1 SABİT** (yalnız `services/reports/anlati/istatistik/`) | katsayı paketten; olasılık (t, ki-kare kuyruğu) kendi `dagilim.ts` ~80 satır (KARARLAR: p-değeri paketi yok) · `jstat`/`mathjs` reddedildi (§9 2026-10-25) |
 | Font rasteri | `opentype.js` (2 dosya, DejaVu glif) | bwip ile ÇİFT DEĞİL: native yolun `asciiFold` kısıtını kaldıran Türkçe glif rasteri |
 | mDNS ilanı | `bonjour-service` **1.4.4 SABİT** | [KU-11]; tembel `require` + try/catch, tek dosya `jobs/mdns-advertiser.job.ts` |
 | Ortam | `dotenv` | — |
@@ -70,6 +71,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | HTTP | `axios` (oturumlu) + ham `fetch` (kimliksiz) | ÇİFT ama BİLİNÇLİ AYRIM — [KU-05] |
 | Tarih | `dayjs` (27) | tarih SEÇİCİ paketi EKLENMEZ (`docs/kurallar/filtre-liste.md:84`) |
 | Depolama | `expo-secure-store` (sır) · `@react-native-async-storage/async-storage` | — |
+| Kararlı donanım kimliği (yalnız tanıma) | `expo-application` | yalnız `utils/hardwareId.ts` (ANDROID_ID → kuruluma özgü HMAC özeti; ham değer cihazdan çıkmaz); native → APK/AAB turu; reddedilen: yerel Kotlin modülü (bakım yükü) |
 | Kamera · okutma geri bildirimi | `expo-camera` 17 · `expo-haptics` + `expo-audio` | ekranlar `Haptics`i doğrudan değil `scanFeedback.signalScan` üzerinden çağırır |
 | Yerel bildirim (tezgah alarmı) | `expo-notifications` ~0.32 (yalnız `services/alarmNotify.ts`, korumalı tembel `require`) | yalnız YEREL zamanlanmış hatırlatma; internet push (FCM/APNs) ayrı dilim (`DOKUMA-ALARM-VE-YOL-HARITASI.md` §A.12); native modül → OTA ile gitmez, APK turu ister |
 | Bluetooth | `react-native-bluetooth-classic` (3 dosya, lazy `require`) | `react-native-ble-plx` canlı ama sahipsiz — §7 |

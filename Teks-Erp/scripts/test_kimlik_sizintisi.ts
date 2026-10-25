@@ -196,7 +196,8 @@ function main(): void {
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  // Doğal çıkış: process.exit Node v26'da arka plan derleyicisi GC beklerken platform kapanışında asılabiliyor.
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

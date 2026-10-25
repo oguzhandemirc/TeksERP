@@ -280,7 +280,8 @@ describe('K1 · K3 — Play manifest temizliği (yalnız şifreli bağlantı; ku
     expect(betik).toMatch(/\.\.\.playManifestSorunlari\(ogeler\)/);
     const ogeler = (ozel: Record<string, unknown>) => [
       { ad: 'manifest', oznitelik: {} },
-      { ad: 'application', oznitelik: { usesCleartextTraffic: 'false', ...ozel } },
+      // Temiz paket yedeği de kapatır (K-C3, eşleme v2 — kalicilik.guard.test.ts).
+      { ad: 'application', oznitelik: { usesCleartextTraffic: 'false', allowBackup: 'false', ...ozel } },
     ];
     expect(playManifest.playManifestSorunlari(ogeler({}))).toEqual([]);
     expect(playManifest.playManifestSorunlari(ogeler({ usesCleartextTraffic: 'true' })).join()).toMatch(/usesCleartextTraffic=true/);

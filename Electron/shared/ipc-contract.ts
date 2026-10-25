@@ -484,6 +484,12 @@ export interface DeviceIdentityApi {
   createLocalId: (value: string) => Promise<boolean>;
 }
 
+/** connect-src kümesi (T2): renderer yapılandırdığı sunucu adresini ana sürece bildirir. */
+export interface ConnectGateApi {
+  /** Kökeni izinli kümeye ekler; ağ adresi değilse false. */
+  allow: (url: string) => Promise<boolean>;
+}
+
 export interface ApiBridge {
   secureStore: SecureStoreApi;
   discovery: DiscoveryApi;
@@ -505,6 +511,7 @@ export interface ApiBridge {
   tvWindow: TvWindowApi;
   loomAlarm: LoomAlarmApi;
   bildirim: BildirimDesktopApi;
+  connectGate: ConnectGateApi;
 }
 
 declare global {

@@ -42,6 +42,7 @@ export function shouldShowPairingGate(input: PairingGateInput): boolean {
   // Cevap henüz gelmediyse (assignment yok) kapı AÇIK sayılır — bayrak gerçekten
   // zorunluysa onaysız cihazı bir an için Login'e düşürmek, backend'in TÜM
   // isteklerini 401 DEVICE_INACTIVE ile kestiği bir ekran demektir.
+  // REBIND_PENDING/REBIND_REJECTED (eşleme v2) APPROVED değildir → kapıda kalır (yerinde onay orada).
   // Onaysız-parola muafiyeti yalnız PENDING'e: pasif/kayıtsız cihaz alan gelse de kapıda kalır;
   // `=== true` eski backend'in undefined'ını bugünkü kapıya bırakır.
   const unpairedPassword =
