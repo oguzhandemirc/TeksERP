@@ -28,7 +28,7 @@ export const YASAK_SOZCUKLER: readonly YasakSozcuk[] = [
   { sozcuk: "take-up", desen: sinirli("take[- ]?up"), karsilik: "\"leventten beklenen kumaş\"" },
   { sozcuk: "kohort", desen: sinirli("kohort\\p{L}*"), karsilik: "\"aynı ay ilk siparişini veren müşteriler\"" },
   // R3-ISTAT: analiz cümlesi günlük dildir; olasılık/katsayı kartta sayı olarak durur.
-  { sozcuk: "p", desen: sinirli("p(?:[- ]?değer\\p{L}*)?"), karsilik: "\"güçlü kanıt\" / \"kanıt var\"" },
+  { sozcuk: "p", desen: sinirli("p(?:[- ]?değer\\p{L}*|\\s*[<>=≤≥]\\s*[0-9][0-9,.]*)"), karsilik: "\"güçlü kanıt\" / \"kanıt var\"" },
   { sozcuk: "korelasyon", desen: sinirli("korelasyon\\p{L}*"), karsilik: "\"birlikte artıyor\"" },
   { sozcuk: "katsayı", desen: sinirli("katsayı\\p{L}*"), karsilik: "\"güçlü / orta düzeyde / zayıf ilişki\"" },
   { sozcuk: "ki-kare", desen: sinirli("ki[- ]?kare\\p{L}*"), karsilik: "\"bu fark tesadüf olmayacak kadar büyük\"" },
