@@ -73,6 +73,9 @@ export interface ShipmentListItem {
   /** Yalnız kumaş/renk (içerik) filtresi aktifken dolu — bu sevkiyattaki eşleşen top
    *  sayısı ("eşleşen: N top" rozeti). Filtre yoksa backend alanı HİÇ göndermez (undefined). */
   matchRollCount?: number;
+  /** IPTAL dışı en yeni e-İrsaliye kaydının durumu (E6); kayıt yok/DIRECT → null, eski sunucu → undefined. */
+  eIrsaliyeStatus?: string | null;
+  eIrsaliyeSimulasyon?: boolean;
 }
 
 /** Fasondan doğrudan sevk (DirectShipment) detayı — birleşik listeden DIRECT satırı açılınca. */

@@ -25,6 +25,7 @@ export const MODUL_SONDALARI: readonly ModulSondasi[] = [
   { alan: "dokumaEnabled", uclar: ["/api/weaving-orders"] },
   { alan: "tezgahEnabled", uclar: ["/api/loom-floor"] },
   { alan: "depoMultiEnabled", uclar: ["/api/warehouse-transfers"] },
+  { alan: "kaliteGuvenceEnabled", uclar: ["/api/lab-tests", "/api/lab-test-types"] },
   { alan: "productionEnabled", uclar: ["/api/routes", "/api/product-recipes", "/api/work-orders", "/api/production-balance"] },
 ];
 

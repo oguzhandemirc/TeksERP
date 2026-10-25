@@ -19,6 +19,7 @@ import { RollQtyAdjustDialog } from "./RollQtyAdjustDialog";
 import { canAdjustRollQty } from "./qtyAdjustService";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { RollCancelCard } from "./RollCancelCard";
+import { LabTestsCard } from "@/pages/Quality/LabTests/LabTestsCard";
 import { rollStatusLabels, rollEntrySourceLabels, rollOperationTypeLabels } from "@/types/enums";
 import { rollService } from "./service";
 import { type Roll, shipmentScopeLabels, categoryOfDispatch } from "./types";
@@ -294,6 +295,9 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 </CardContent>
               </Card>
             </div>
+
+            {/* K4P: modül kapalı ya da izin yoksa kart hiç çizilmez (istek de atılmaz). */}
+            <LabTestsCard rollId={r.id} />
 
             <Card>
               <CardContent className="space-y-2 p-3 text-sm">

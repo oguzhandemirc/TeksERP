@@ -38,6 +38,9 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     // DEFTER satırıdır ve geri alınmışı da taşınır — birleştirme kimliği
     // değiştirir, geçmişi değil.
     { kind: "MOVE", model: "MachineRun", table: "machine_runs", column: "itemId", label: "Tezgah koşumu" },
+    // K4P-LAB (2026-10-25) — lab testinin kumaş snapshot'ı: referans bağ, tekillik yok;
+    // birleştirme kimliği değiştirir, test sonucunu değil.
+    { kind: "MOVE", model: "LabTest", table: "lab_tests", column: "itemId", label: "Lab testi" },
     // 2026-09-15 (fason G1) — fasona giden iplik kalemi (kind=YARN): referans bağ, tekillik yok;
     // `YarnMovement.itemId` ile aynı sınıf — birleştirme kimliği değiştirir, kg'yi değil.
     { kind: "MOVE", model: "SubcontractorDispatchItem", table: "subcontractor_dispatch_items", column: "yarnItemId", label: "Fason iplik kalemi" },

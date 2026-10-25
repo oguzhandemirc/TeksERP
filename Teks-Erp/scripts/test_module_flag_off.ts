@@ -266,17 +266,14 @@ const MODULLER: ModulTanimi[] = [
     sondalar: modulUclari("depoMultiEnabled"),
   },
   {
-    // KALİTE GÜVENCE (K4P zemin, 2026-10-24): ön koşulsuz (KK1 üretimsiz de açık).
+    // KALİTE GÜVENCE (K4P zemin 2026-10-24; LAB router'ları 2026-10-25): ön koşulsuz (KK1 üretimsiz de açık).
     alan: "kaliteGuvenceEnabled",
     dbAnahtari: "kaliteGuvence.enabled",
     middleware: "requireKaliteGuvenceEnabled",
     okuyucu: "readKaliteGuvenceEnabled",
     modulKodu: "kaliteGuvence",
-    routeDosyalari: [],
-    sondalar: [],
-    rotasiz:
-      "K4P zemin dilimi kapıyı önden kurdu; muayene/kural/lab/sertifika router'ları MOTOR · LAB · SERT " +
-      "dilimlerinde iner — o gün route dosyası + `profil-kapi-haritasi` sondası bu satıra yazılır, gerekçe silinir.",
+    routeDosyalari: ["routes/lab-test.routes.ts", "routes/lab-test-type.routes.ts"],
+    sondalar: modulUclari("kaliteGuvenceEnabled"),
   },
   {
     alan: "productionEnabled",
@@ -348,6 +345,8 @@ const SONDA_IZINLERI = [
   // çarpar; bu izin olmadan "modül AÇIKKEN 2xx" körlük zemini modül yüzünden
   // değil YETKİ yüzünden kırmızı verir ve yanlış hikâye anlatır (ölçüldü).
   "warpspec:read",
+  // Kalite Güvence sondaları (`/api/lab-tests`, `/api/lab-test-types`) — aynı gerekçe.
+  "labtest:read",
   // Tezgah Salonu sondası (`/api/loom-floor`) — aynı gerekçe.
   "loom:live-view",
   // Dokuma sondası (`/api/weaving-orders`) — aynı gerekçe.
