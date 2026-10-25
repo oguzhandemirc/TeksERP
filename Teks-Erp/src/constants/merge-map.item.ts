@@ -153,6 +153,18 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "StandardCostVersion",
+      table: "standard_cost_versions",
+      column: "itemId",
+      label: "Standart maliyet sürümü",
+      // Sürüm numarası kumaş içinde sıralıdır (v1'den başlar): iki kumaşın da sürümü varsa numaralar çakışır.
+      uniqueOn: ["itemId", "versionNo"],
+      policy: "BLOCK",
+      why: "Donmuş maliyet fotoğrafı; iki kumaşın sürüm geçmişi tek kumaşta birleştirilemez — hangisinin yürürlükte kalacağı muhasebe kararıdır (MAL-2).",
+    },
+    { kind: "MOVE", model: "StandardCostLine", table: "standard_cost_lines", column: "yarnItemId", label: "Standart maliyet kalemi ipliği" },
+    {
+      kind: "CONFLICT",
       model: "CustomerLabSpec",
       table: "customer_lab_specs",
       column: "itemId",

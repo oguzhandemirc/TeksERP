@@ -94,8 +94,13 @@ export async function altinYapiYaz(f: MaliyetFikstur): Promise<void> {
   });
 }
 
-/** Sonraki dilimin tabloları (sürüm) için kanca — G2 doldurur. */
-async function oncekiTemizlik(_f: MaliyetFikstur): Promise<void> {}
+/** Standart maliyet sürümleri (donmuş fotoğraf; yalnız test DB'de silinir). */
+async function oncekiTemizlik(f: MaliyetFikstur): Promise<void> {
+  const versions = await prisma.standardCostVersion.findMany({ where: { itemId: f.fabricId }, select: { id: true } });
+  await prisma.standardCostLine.deleteMany({ where: { versionId: { in: versions.map((v) => v.id) } } });
+  await prisma.standardCostVersion.updateMany({ where: { itemId: f.fabricId }, data: { restoredFromId: null } });
+  await prisma.standardCostVersion.deleteMany({ where: { itemId: f.fabricId } });
+}
 
 export async function fiksturSil(f: MaliyetFikstur): Promise<void> {
   await oncekiTemizlik(f);

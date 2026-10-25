@@ -482,3 +482,20 @@ export class YarnService {
 
 export const yarnService = new YarnService();
 export default yarnService;
+
+/**
+ * Son mal kabul fiyatı (iplik modülünün malı) — maliyet köprüsü (`maliyet-bridge.helper`) bunu
+ * DİNAMİK import ile ve yalnız iplik modülü açıkken çağırır; fiyat fişin para birimindedir.
+ * Ters kayıt fiyat taşımaz (şema şerhi) → yalnız fişe bağlı `IN` satırı.
+ */
+export async function readLastYarnReceiptPrice(
+  itemId: string,
+): Promise<{ unitPrice: Prisma.Decimal; currency: string; at: Date; goodsReceiptId: string } | null> {
+  const row = await prisma.yarnMovement.findFirst({
+    where: { itemId, kind: YarnMovementKind.IN, unitPrice: { not: null }, goodsReceiptId: { not: null } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { unitPrice: true, createdAt: true, goodsReceiptId: true, goodsReceipt: { select: { currency: true } } },
+  });
+  if (!row?.unitPrice || !row.goodsReceipt || !row.goodsReceiptId) return null;
+  return { unitPrice: row.unitPrice, currency: row.goodsReceipt.currency, at: row.createdAt, goodsReceiptId: row.goodsReceiptId };
+}

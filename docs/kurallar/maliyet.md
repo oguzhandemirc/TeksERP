@@ -20,7 +20,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `maliyet` bölümü** (MAL-1 bekçileri `modul-bayrak` bölümünde).
 
-Backend: `test_maliyet_formul`, `test_maliyet_girdi`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_rapor_levent_sonucu`
+Backend: `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_rapor_levent_sonucu`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
