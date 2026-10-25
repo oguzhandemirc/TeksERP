@@ -143,6 +143,11 @@ export const PERMISSION_CATALOG = [
   // Sevk geri alma (storno) — `shipping:write`ten AYRI: sevk eden herkesin resmi
   // çıkış belgesini iptal edip stok/karşılanma defterini geri sarabilmesi istenmiyor.
   { code: "shipping:undo-dispatch", module: "LOGISTICS", category: "web", description: "Sevk edilmiş sevkiyatı geri alma (irsaliye iptal + stok depoya)" },
+  // e-İrsaliye (E5): okuma · hazırla/üret/gönder · elle gönderim/yanıt kaydını geri alma.
+  // `undo` ayrı: `shipping:undo-dispatch` ailesi — storno kapısını açan anahtar (plan §3.7).
+  { code: "eirsaliye:read", module: "LOGISTICS", category: "web", description: "e-İrsaliye kayıtlarını ve hazırlık durumunu görüntüleme" },
+  { code: "eirsaliye:write", module: "LOGISTICS", category: "web", description: "e-İrsaliye hazırlama, üretme, XML indirme, gönderme, yanıt kaydı ve iptal" },
+  { code: "eirsaliye:undo", module: "LOGISTICS", category: "web", description: "e-İrsaliye gönderim ya da yanıt kaydını geri alma (karşı kayıtla)" },
   // Defter onarımı — `shipping:write`ten AYRI (aynı gerekçe: sevk eden herkes
   // GEÇMİŞ bir sevkiyatın sipariş defterini değiştirmemeli). Onarım irsaliyenin
   // yeni bir sürümünü doğurur; sahadaki yöneticiye bilinçli olarak atanır.
