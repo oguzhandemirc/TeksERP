@@ -6,7 +6,7 @@
 // ile AYNI kümeden (K-TEL: tel anahtarı `kiyas`); kıyas günleri ana aralığın anlarından türetilir.
 
 import { z } from "zod";
-import { factoryYmd, resolveRangeEnd, resolveRangeStart } from "../../../constants/time";
+import { factoryDayStartOfKey, factoryYmd, resolveRangeEnd, resolveRangeStart } from "../../../constants/time";
 import { AppError } from "../../../utils/app-error";
 import { resolveCompareRange, type CompareMode, type DateRange } from "../_shared";
 import { coreRangeQuerySchema } from "./_common";
@@ -68,4 +68,9 @@ export function dayRangeParameters(days: DayWindow, mode: CompareMode): Parametr
     { ad: "to", etiket: "Bitiş", tur: "tarih", deger: days.to },
     { ad: "kiyas", etiket: "Kıyas", tur: "secim", deger: mode, secenekler: COMPARE_OPTIONS },
   ];
+}
+
+/** Önceki fabrika ayının SON anı (bu ayın ilk fabrika gününün ilk anı − 1 ms) — ay sonu kesiti (R1-ZAMAN). */
+export function factoryPreviousMonthEnd(at: Date = new Date()): Date {
+  return new Date(factoryDayStartOfKey(`${factoryYmd(at).slice(0, 7)}-01`).getTime() - 1);
 }
