@@ -8,7 +8,7 @@
 // =============================================================================
 import prisma from "../../src/lib/prisma";
 import { factoryDayStartOfKey, factoryDayEndOfKey, factoryMinuteOfDay, factoryYmd } from "../../src/constants/time";
-import { demoTargetBlock } from "./demo-db-gate";
+import { fixtureHedefEngeli } from "./hedef-db-kapisi";
 import { firstGrade } from "../fixture-quality-grade";
 
 export const DEMO_TAG = "DEMO-RPR";
@@ -90,12 +90,13 @@ function shiftInstant(day: string, shiftStart: number, minute: number): Date {
   return m >= 1440 ? factoryMinuteOfDay(factoryDayStartOfKey(addDays(day, 1)), m - 1440) : factoryMinuteOfDay(factoryDayStartOfKey(day), m);
 }
 
+// Kütüphane kapısı fixture hedefi ister (CI `teks_ci` dahil); kullanıcı betiği ayrıca dar `tekserp_<ad>_test` kapısını sorar.
 function assertTarget(): void {
-  const block = demoTargetBlock(process.env.DATABASE_URL);
+  const block = fixtureHedefEngeli();
   if (block) throw new Error(block);
 }
 
-export async function removeDemo(): Promise<void> {
+export async function cleanupDemo(): Promise<void> {
   assertTarget();
   const rolls = (await prisma.roll.findMany({ where: { barcode: starts }, select: { id: true } })).map((r) => r.id);
   await prisma.rollError.deleteMany({ where: { rollId: { in: rolls } } });
@@ -111,7 +112,7 @@ export async function removeDemo(): Promise<void> {
 
 export async function writeDemo(opts: DemoOptions = {}): Promise<DemoSummary> {
   assertTarget();
-  await removeDemo();
+  await cleanupDemo();
   const day0 = firstDay(opts);
   const days = opts.small ? 1 : DEMO_DAYS;
   const rnd = seeded(20261025);

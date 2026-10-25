@@ -17,9 +17,9 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
-import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { demoTargetBlock } from "./lib/demo-db-gate";
-import { DEMO_TAG, removeDemo, writeDemo, type DemoSummary } from "./lib/demo-rapor-veri";
+import { DEMO_TAG, cleanupDemo, writeDemo, type DemoSummary } from "./lib/demo-rapor-veri";
 import { SHIFT_WARP_TEMPLATE_KEY, SYSTEM_TEMPLATES } from "../src/services/reports/semantik/sistem-sablonlari";
 import { checkReportDefinition } from "../src/services/reports/semantik/rapor-tanimi.schema";
 import { reconcileReportDefinitionCatalog } from "../src/jobs/report-definition-catalog.job";
@@ -139,12 +139,12 @@ async function dbSections(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const block = hedefDbEngeli() ?? demoTargetBlock(process.env.DATABASE_URL);
+  const block = hedefDbEngeli() ?? fixtureHedefEngeli();
   if (block) throw new Error(block);
   try {
     await dbSections();
   } finally {
-    await removeDemo();
+    await cleanupDemo();
     await prisma.reportRun.deleteMany({ where: { user: { username: GUARD_USER } } });
     await prisma.user.deleteMany({ where: { username: GUARD_USER } });
   }

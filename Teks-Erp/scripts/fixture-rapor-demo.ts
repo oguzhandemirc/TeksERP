@@ -19,7 +19,7 @@ async function main(): Promise<void> {
   const demo = await import("./lib/demo-rapor-veri");
   try {
     if (args.includes("--sil")) {
-      await demo.removeDemo();
+      await demo.cleanupDemo();
       console.log("Demo verisi kaldırıldı.");
       return;
     }
