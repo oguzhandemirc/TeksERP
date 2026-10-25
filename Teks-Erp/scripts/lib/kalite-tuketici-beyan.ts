@@ -22,6 +22,11 @@ export interface KaliteTuketici {
 
 export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
   {
+    dosya: "services/quality-inspection.service.ts",
+    fonksiyon: "evaluateInspection",
+    gerekce: "K4P muayene yazımı/önizlemesi `stationId` verildiyse o istasyonda muayene açık olmalı (`stationCanInspect`); akış sorulmaz.",
+  },
+  {
     dosya: "services/kursun-qc.service.ts",
     fonksiyon: "reportError",
     gerekce: "KK2 hata YAZMA: akış adımında olmak yetmez, istasyonda muayene açık olmalı (kapalıysa eski APK yazması 400).",

@@ -64,12 +64,13 @@ async function fixtures(adminId: string) {
     return t.id;
   };
   const types = { size: await mkType("S", {}), fixed: await mkType("F", { fixedPoints: 4 }), passive: await mkType("P", { isActive: false }) };
-  const mkGrade = async (suffix: string) => {
-    const g = await prisma.qualityGrade.create({ data: { code: `${TAG}${suffix}`, name: `${TAG} ${suffix}` }, select: { id: true, code: true } });
+  // Kod koşuma özgü sıra numarasıyla üretilir (kalite kodu literali yazılmaz — `test_quality_code_literal`).
+  const mkGrade = async (n: number) => {
+    const g = await prisma.qualityGrade.create({ data: { code: `${TAG}Q${n}`, name: `${TAG} derece ${n}` }, select: { id: true, code: true } });
     made.grades.push(g.id);
     return g;
   };
-  const grades = { a: await mkGrade("GA"), b: await mkGrade("GB"), c: await mkGrade("GC") };
+  const grades = { a: await mkGrade(1), b: await mkGrade(2), c: await mkGrade(3) };
   const set = await prisma.fourPointRuleSet.create({
     data: {
       name: `${TAG} fabrika`, scope: "FACTORY", unit: "M2", runningCap: "YARD",
@@ -136,7 +137,7 @@ async function sectionCreate(adminId: string, fx: Fx) {
   const full = await prisma.rollInspection.findUniqueOrThrow({ where: { id: row.id }, select: { ruleSnapshot: true, ruleSetId: true } });
   const snap = full.ruleSnapshot as { ruleSetId: string; unit: string; runningCap: string; bands: Array<{ maxScore: string | null; qualityGradeId: string }> };
   check("snapshot: kimlik + sayı (3 bant, birim, tavan)", snap.ruleSetId === fx.setId && snap.unit === "M2" && snap.runningCap === "YARD" && snap.bands.length === 3 && snap.bands[0]!.maxScore === "5.00");
-  check("snapshot derece ADI taşımaz", !JSON.stringify(snap).includes(`${TAG} GB`));
+  check("snapshot derece ADI taşımaz", !JSON.stringify(snap).includes(`${TAG} derece`));
   const audit = await prisma.systemLog.findFirst({ where: { tableName: "ROLL_INSPECTION", recordId: row.id, action: "CREATE" }, select: { newData: true } });
   const nd = audit?.newData as Record<string, unknown> | undefined;
   check("audit CREATE: sayılar var, hata dizisi yok", nd?.defectCount === 4 && !("defects" in (nd ?? {})));
