@@ -736,6 +736,8 @@ export const DOC_DEFS: DocDef[] = [
           { key: "width", label: "En" },
           { key: "meters", label: "Metre" },
           { key: "kg", label: "Kg" },
+          // HATA NOTU (KQ-D8) — topun karar verilmemiş hataları; varsayılan KAPALI, müşteriye gider.
+          { key: "defectNote", label: "Hata notu — müşteriye gider", defaultHidden: true },
         ],
       },
     ],

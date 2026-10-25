@@ -21,6 +21,8 @@ import {
   type DocumentConfig,
 } from "./system-setting.service";
 import { renderFreeDocumentHtml } from "./document-render/free-document.html";
+import { envelopeHead } from "./document-render/envelope-head";
+import { renderLiveTemplate, resolveLiveTemplate } from "./document-template/live-binding";
 
 const TABLE = "FREE_DOCUMENT";
 const DOC_PREFIX = "SB";
@@ -132,19 +134,25 @@ export class FreeDocumentService {
     const [companyName, letterhead, logo] = [await readCompanyName(prisma), await readCompanyLetterhead(prisma), await readDocumentsLogo(prisma)];
     const cfg = sanitizeConfig(doc.config);
     const now = new Date();
-    const html = renderFreeDocumentHtml(
-      {
-        company: { name: companyName, letterhead, logoHash: logo.current },
-        config: cfg,
-        doc: { documentNo: doc.documentNo, title: doc.title, recipient: doc.recipient, body: doc.body, date: doc.createdAt.toISOString() },
-      },
-      {
-        logoDataUrl: logo.current ? (logo.items[logo.current] ?? null) : null,
-        printedAtText: factoryDateTimeTr(now),
-        printedBy: opts?.printedBy ?? null,
-        printNote: opts?.printNote?.trim().slice(0, 300) || null,
-      },
-    );
+    const company = { name: companyName, letterhead, logoHash: logo.current };
+    const body = { documentNo: doc.documentNo, title: doc.title, recipient: doc.recipient, body: doc.body, date: doc.createdAt.toISOString() };
+    const meta = {
+      logoDataUrl: logo.current ? (logo.items[logo.current] ?? null) : null,
+      printedAtText: factoryDateTimeTr(now),
+      printedBy: opts?.printedBy ?? null,
+      printNote: opts?.printNote?.trim().slice(0, 300) || null,
+    };
+    // P-e: serbest belge DONMAZ — türün tasarımcı varsayılanı her basımda canlı çözülür;
+    // belgenin kendi ayarı şablon ayarının üstüne biner (R4). Yoksa bugünkü renderer.
+    const { template: design } = await resolveLiveTemplate("FREE_DOCUMENT");
+    const html = design
+      ? renderLiveTemplate("FREE_DOCUMENT", design, {
+          source: { ...envelopeHead(), company, doc: body, docConfigOverride: null },
+          settingsOverlay: cfg as Record<string, unknown>,
+          baski: { zaman: now.toISOString(), basan: meta.printedBy, not: meta.printNote, logo: meta.logoDataUrl },
+          watermark: null,
+        })
+      : renderFreeDocumentHtml({ company, config: cfg, doc: body }, meta);
     return { success: true, data: { html } };
   }
 }

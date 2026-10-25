@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { StationKind } from "@/types/enums";
 import { stationFormDefaults } from "./schema";
-import { STATION_KIND_CAPABILITY_DEFAULTS, suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
+import { inspectionHintForKind, STATION_KIND_CAPABILITY_DEFAULTS, suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
 
 describe("İstasyon formu — türe göre önerilen yetenekler", () => {
   it("⭐ türe göre ön-işaret: PROCESS_QC kalite · SUBCONTRACTOR renk+özellik · WEAVING levent tüketir · KK1/sevkiyat/diğer hiçbiri", () => {
@@ -45,5 +45,22 @@ describe("İstasyon formu — türe göre önerilen yetenekler", () => {
     const a = suggestedCapabilities(StationKind.WEAVING);
     a.consumesWarpBeam = false;
     expect(suggestedCapabilities(StationKind.WEAVING).consumesWarpBeam).toBe(true);
+  });
+});
+
+describe("Kalite muayenesi ipucu (KQ-D8) — türe göre etkisi söylenir", () => {
+  it("⭐ KK1 oturum muayenesi · Ara istasyon/Tambur panel · diğerleri etkisiz", () => {
+    expect(inspectionHintForKind(StationKind.RAW_QC)).toBe("Oturum ekranında muayene (4 puan modülü açıksa)");
+    expect(inspectionHintForKind(StationKind.PROCESS_QC)).toBe("Hata girişi paneli açılır");
+    expect(inspectionHintForKind(StationKind.TAMBUR)).toBe("Hata girişi paneli açılır");
+    for (const k of [StationKind.OTHER, StationKind.SUBCONTRACTOR, StationKind.SHIPPING, StationKind.WEAVING, StationKind.WARPING]) {
+      expect(inspectionHintForKind(k)).toBe("Bu türün tablet muayene ekranı yok — etkisiz");
+    }
+  });
+
+  it("panel ipucu kümesi muayene önerisiyle tutarlı: öneri açık türlerde panel açılır", () => {
+    for (const k of Object.values(StationKind)) {
+      if (suggestedCapabilities(k).inspectionEnabled) expect(inspectionHintForKind(k)).toBe("Hata girişi paneli açılır");
+    }
   });
 });

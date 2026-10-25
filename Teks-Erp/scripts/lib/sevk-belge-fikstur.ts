@@ -48,7 +48,8 @@ const ZENGIN_DOC = {
     { code: "CV2609250003", seq: 3, totalMeters: 40, totalKg: 7.5, packageCount: 1, packageNo: null, packingGroupName: null, packingGroupCode: null },
   ],
   cekiRows: [
-    { sackCode: "CV2609250001", seq: 1, packageNo: 1, packingGroupName: "P-1", packingGroupCode: "PRT-2609-0001", barcode: "R0001", desen: "Linen", varyant: "Ekru", customerDesen: "BS-6650", customerVaryant: "EKRU", width: 330, meters: 112.456, kg: 15.25, batchNumber: "P0925001" },
+    // KQ-D8: açık hata notu yalnız bu topta (kaçış gerektiren "<" dahil); kolon opt-in.
+    { defectNote: "12,5 m Leke · 40 m <Delik> +1", sackCode: "CV2609250001", seq: 1, packageNo: 1, packingGroupName: "P-1", packingGroupCode: "PRT-2609-0001", barcode: "R0001", desen: "Linen", varyant: "Ekru", customerDesen: "BS-6650", customerVaryant: "EKRU", width: 330, meters: 112.456, kg: 15.25, batchNumber: "P0925001" },
     { sackCode: "CV2609250001", seq: 1, packageNo: 1, packingGroupName: "P-1", packingGroupCode: "PRT-2609-0001", barcode: null, desen: "Linen", varyant: "Ekru", customerDesen: "BS-6650", customerVaryant: null, width: 329.6, meters: 100, kg: 15, batchNumber: null },
     { sackCode: "CV2609250002", seq: 2, packageNo: 2, packingGroupName: "P-2", packingGroupCode: "PRT-2609-0002", barcode: "R0003", desen: "Linen", varyant: "Ekru", customerDesen: null, customerVaryant: null, width: null, meters: 100, kg: 0, batchNumber: "P0925002" },
     { sackCode: "CV2609250003", seq: 3, packageNo: null, packingGroupName: null, packingGroupCode: null, barcode: "R0004", desen: "Saten", varyant: "Siyah", width: 150, meters: 40, kg: 7.5, batchNumber: "P0925003" },
@@ -124,6 +125,8 @@ export const SEVK_BELGE_CFGS: Record<string, DocumentConfig | null> = {
   bos: {},
   tamKolon: { columns: TAM_KOLON },
   yalnizOptIn: { columns: { cuval: { shown: ["packingGroupCode"] }, ceki: { shown: ["packingGroupCode"] } } },
+  // KQ-D8 açık kombinasyon: "Hata notu" sütunu belge ayarından açılmış (varsayılan KAPALI).
+  hataNotu: { columns: { ceki: { shown: ["defectNote"] } } },
   bolumKapali: { sections: { urun: false, docNo: false, date: false, direction: false, vehicleInfo: false } },
   seritEn: { sections: { listHeader: true }, language: "en", blankWidths: true },
   otoDil: { language: "auto", titleOverride: "Sevk Fişi", footerNote: "not <b>", footerNotePlacement: "top" },
@@ -175,7 +178,7 @@ export interface SevkBelgeKombinasyon {
   meta: Meta;
 }
 
-/** Dört doc × sekiz config × on dört meta × iki yuvarlama rejimi = 896 kombinasyon, sıra deterministik. */
+/** Dört doc × dokuz config × on dört meta × iki yuvarlama rejimi = 896 kombinasyon, sıra deterministik. */
 export function sevkBelgeKombinasyonlari(): SevkBelgeKombinasyon[] {
   const out: SevkBelgeKombinasyon[] = [];
   for (const [rejimAd, rejim] of REJIMLER) {

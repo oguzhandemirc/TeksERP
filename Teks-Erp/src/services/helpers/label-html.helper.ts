@@ -32,6 +32,7 @@ import {
   formatNumber,
   formatDate,
   applyCopies,
+  isVisibleOptIn,
 } from "./label-html.shared";
 import { buildLandscapeRollLabelHtml } from "./label-html-landscape.helper";
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";
@@ -117,8 +118,10 @@ function buildPortraitRollLabelHtml(
     { key: "colorCode", value: colorCode, def: "Renk Kodu" },
     { key: "customerName", value: customerName, def: "Müşteri" },
     { key: "orderNumber", value: orderNumber, def: "Sipariş" },
+    { key: "openDefects", value: payload.openDefects ? escapeHtml(payload.openDefects) : "", def: "Hata Notu" },
   ]
-    .filter((r) => r.value && vis(r.key))
+    // `openDefects` OPT-IN (KQ-D8): şablonsuz düzende de basılmaz.
+    .filter((r) => r.value && (r.key === "openDefects" ? isVisibleOptIn(fields, r.key) : vis(r.key)))
     .sort((a, b) => orderOf(a.key) - orderOf(b.key))
     .map((r) => `<div class="meta-row" style="${sty(r.key)}"><span class="k">${lbl(r.key, r.def)}</span><span>${r.value}</span></div>`)
     .join("\n    ");
