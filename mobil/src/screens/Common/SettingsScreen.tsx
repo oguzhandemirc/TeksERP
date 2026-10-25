@@ -18,6 +18,8 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useBaseUrlStore, displayUrl } from '../../store/baseUrlStore';
 import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
+import { useFeatureFlags } from '../../hooks/useFeatureFlags';
+import { resolveNotificationInboxEnabled } from '../../services/featureFlag.service';
 import { useDeviceStore } from '../../store/deviceStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { useSubcontractorDefault } from '../../hooks/useSubcontractorDefault';
@@ -57,6 +59,7 @@ export default function SettingsScreen() {
   const signedIn = useAuthStore((s) => !!s.user);
   const license = useLicenseStatus();
   const printReports = usePrintReports((st) => st.items);
+  const notificationsOn = resolveNotificationInboxEnabled(useFeatureFlags().data);
 
   // Menü satırı sayfanın ÖZETİNİ göstermeli (dosyadaki kural).
   const sonYayin = SURUM_NOTLARI[0];
@@ -140,6 +143,14 @@ export default function SettingsScreen() {
     },
   ];
   if (signedIn) {
+    // Bulunabilirlik: satır bayrak kapalıyken de görünür; sayfa nedenini söyler.
+    rows.push({
+      key: 'notifications',
+      icon: 'bell-cog-outline',
+      title: 'Bildirim tercihleri',
+      value: notificationsOn ? 'Gelen kutusu ve tablet sesi' : 'Bu kurulumda kapalı',
+      route: 'SettingsNotifications',
+    });
     rows.push({
       key: 'license',
       icon: 'certificate-outline',
