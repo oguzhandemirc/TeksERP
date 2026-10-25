@@ -1,4 +1,4 @@
-import { BarChart3, FilePlus2, Filter, LayoutDashboard } from "lucide-react";
+import { BarChart3, FilePlus2, Filter, LayoutDashboard, Sigma, Sparkles } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import { isCenterEntryOpen } from "@/pages/Reports/_v2/center-model";
@@ -138,6 +138,26 @@ reportCommandSections.push({
       permission: "report:builder",
       visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "veri ağacı alan ölçü boyut kuyu satır sütun süzgeç filtre koşul varyant önerilen grafik özel rapor oluşturucu",
+    },
+    {
+      key: "report-custom:analysis",
+      label: "Özel raporda analiz bölümü",
+      description: "Özel raporlarım'dan bir rapor açın → 'Düzeni düzenle' → Bölüm ekle → Analiz: gruplar arasında fark var mı, iki ölçü birlikte mi değişiyor",
+      icon: Sigma,
+      to: "/reports",
+      permission: "report:builder",
+      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
+      keywords: "analiz ilişki fark kanıt vardiya karşılaştır örneklem neden birlikte değişiyor özel rapor",
+    },
+    {
+      key: "report-template:shift-warp",
+      label: "Vardiyaya göre çözgü hatası",
+      description: "Hazır şablon — Rapor Merkezi → Özel raporlarım → Hazır şablonlar; çözgü hatası gece vardiyasında mı fazla?",
+      icon: Sparkles,
+      to: "/reports",
+      permission: "report:quality",
+      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
+      keywords: "çözgü hata vardiya gece sabah akşam şablon kalite analiz tezgah",
     },
   ],
 });

@@ -4,7 +4,7 @@
 // Katsayı `simple-statistics`ten; anlamlılık t = r·√((n−2)/(1−r²)), df = n−2 (kendi `dagilim.ts`).
 // Spearman sıraları eşitlikte ORTALAMA sıra alır (scipy `spearmanr` ile aynı).
 
-import { sampleCorrelation } from "simple-statistics";
+import { linearRegression, sampleCorrelation } from "simple-statistics";
 import { studentTTwoSided } from "./dagilim";
 import { sampleWarnings, type TestResult } from "./tipler";
 
@@ -56,4 +56,14 @@ export function averageRanks(values: readonly number[]): number[] {
 export function spearman(x: readonly number[], y: readonly number[]): TestResult {
   assertPairs(x, y);
   return pearson(averageRanks(x), averageRanks(y));
+}
+
+/** Saçılımın eğilim çizgisi uçları (en küçük kareler): kart yalnız çizer, eğimi istemci hesaplamaz. */
+export function trendLine(xs: readonly number[], ys: readonly number[]): [[number, number], [number, number]] | null {
+  if (xs.length < 2 || xs.length !== ys.length) return null;
+  const lo = Math.min(...xs);
+  const hi = Math.max(...xs);
+  if (lo === hi) return null;
+  const { m, b } = linearRegression(xs.map((x, i) => [x, ys[i]!]));
+  return [[lo, m * lo + b], [hi, m * hi + b]];
 }
