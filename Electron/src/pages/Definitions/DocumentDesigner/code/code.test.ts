@@ -117,3 +117,22 @@ describe("kod ↔ görsel geçiş kilidi", () => {
     expect(visualReturnBlocker(html)).toContain("satır 2");
   });
 });
+
+describe("istemci Liquid ÇALIŞTIRMAZ (önizleme yalnız sunucudan)", () => {
+  it("panel kaynağında Liquid motoru import'u yok", async () => {
+    const { readdirSync, statSync } = await import("node:fs");
+    const root = resolve(__dirname, "../../../..");
+    const hits: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const p = resolve(dir, name);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(name) && !name.endsWith(".test.ts")) {
+          if (/(from\s+|import\(\s*|require\(\s*)["'](liquidjs|liquid|tinyliquid|@shopify\/liquid[^"']*)["']/.test(readFileSync(p, "utf8"))) hits.push(p);
+        }
+      }
+    };
+    walk(root);
+    expect(hits).toEqual([]);
+  });
+});

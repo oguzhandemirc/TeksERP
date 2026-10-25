@@ -113,6 +113,7 @@ import { SEVK_YONU_ADIMLARI } from "./adimlar-sevk-yonu.mjs";
 import { IS_EMRI_ADIMLARI } from "./adimlar-is-emri.mjs";
 import { BELGE_SABLON_ADIMLARI } from "./adimlar-belge-sablon.mjs";
 import { BELGE_TASARIMCI_ADIMLARI } from "./adimlar-belge-tasarimci.mjs";
+import { BELGE_KOD_ADIMLARI } from "./adimlar-belge-kod.mjs";
 import { MALIYET_ADIMLARI } from "./adimlar-maliyet.mjs";
 
 export const ADIMLAR = [
@@ -2023,6 +2024,7 @@ export const ADIMLAR = [
   ...IS_EMRI_ADIMLARI,
   ...BELGE_SABLON_ADIMLARI,
   ...BELGE_TASARIMCI_ADIMLARI,
+  ...BELGE_KOD_ADIMLARI,
   ...MALIYET_ADIMLARI,
   ...SIPARIS_YONU_ADIMLARI,
 ];

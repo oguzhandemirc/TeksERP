@@ -75,6 +75,8 @@ function editorExtensions(o: ExtensionOpts): Extension {
     autocompletion({ override: [completionSource(o.completion)], activateOnTyping: true }),
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...completionKeymap, indentWithTab]),
     o.readOnly,
+    // Görsel kipten gelen HTML tek satırdır; kaydırmasız satır editörü genişletiyordu.
+    EditorView.lineWrapping,
     EditorView.contentAttributes.of({ "aria-label": o.ariaLabel }),
     EditorView.updateListener.of((u) => {
       if (u.docChanged) o.onChange(u.state.doc.toString());

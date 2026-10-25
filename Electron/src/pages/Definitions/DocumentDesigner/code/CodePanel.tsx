@@ -52,7 +52,7 @@ export const CodePanel = forwardRef<CodeEditorHandle, Props>(function CodePanel(
   const excelNote = mode === "CODE" && (contract?.tablolar.length ?? 0) > 0 && Object.keys(tableBindingsFromHtml(source.html)).length === 0;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="kod-paneli">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="kod-paneli">
       <ModeBar tab={tab} onTab={onTab} editable={editable} blocker={blocker} onReturn={props.onReturnToVisual} onCode={() => setConfirming(true)} />
       <div className="space-y-1.5 px-2 pt-2 empty:hidden">
         {editable ? <Callout tone="warning">{CODE_MODE_WARNING}{blocker ? ` ${blocker}` : ""}</Callout> : <p className="text-xs text-muted-foreground">{VISUAL_READONLY_NOTE}</p>}
@@ -63,7 +63,7 @@ export const CodePanel = forwardRef<CodeEditorHandle, Props>(function CodePanel(
         )}
         {tab === "page" && pageIssues.length > 0 && <Callout tone="warning">{pageIssues.join(" · ")}</Callout>}
       </div>
-      <div className="relative min-h-0 flex-1 p-2">
+      <div className="relative min-h-0 min-w-0 flex-1 p-2">
         <div className={cn("h-full overflow-hidden rounded-md border", tab !== "html" && "hidden")}>
           <CodeEditor ref={htmlRef} value={source.html} language="html" readOnly={!editable} onChange={(html) => onCode({ html })} completion={completion} issues={issues} ariaLabel="HTML ve Liquid kaynağı" />
         </div>

@@ -7,15 +7,21 @@ import { CmRuler } from "./CmRuler";
 import { CodePanel, type CodeTab } from "./code/CodePanel";
 import type { CodeEditorHandle } from "./code/CodeEditor";
 import { CODE_MODE_WARNING } from "./code/editMode";
+import type { ServerIssue } from "./code/issueDiagnostics";
 import { exportVisual, useDesignerSource } from "./code/useDesignerSource";
+import { PreviewPane } from "./preview/PreviewPane";
+import { SamplePickerModal } from "./preview/SamplePickerModal";
+import { sampleLabel, usePreview, usePreviewRequest, useSampleChoice } from "./preview/usePreview";
+import { docTypeLabel } from "./useDesignerDraft";
 import type { DesignerDraft } from "./useDesignerDraft";
 import type { DesignerRefs, PageFrame } from "./useDesignerEditor";
 
-export type CenterView = "design" | "code";
+export type CenterView = "design" | "code" | "preview";
 
 const CENTER_VIEWS: ReadonlyArray<{ key: CenterView; label: string }> = [
   { key: "design", label: "Tasarım" },
   { key: "code", label: "Kod" },
+  { key: "preview", label: "Önizleme" },
 ];
 
 function CenterTabs({ view, onView }: { view: CenterView; onView: (v: CenterView) => void }) {
@@ -59,24 +65,47 @@ interface Props {
   frame: PageFrame;
 }
 
-/** Orta alan: Tasarım (GrapesJS kanvası, hep bağlı — editör bir kez kurulur) · Kod sekmeleri. */
+/** Kip geçişleri: koda geçerken görsel kaynak kopyalanır; dönüşte kod editöre yüklenir. */
+function useModeSwitch(editor: Editor | null, draft: DesignerDraft, setView: (v: CenterView) => void) {
+  return {
+    toCode: () => {
+      if (!editor) return;
+      draft.setEditMode("CODE", exportVisual(editor));
+      setView("code");
+    },
+    toVisual: () => {
+      if (!editor) return;
+      editor.setComponents(draft.code.html);
+      editor.setStyle(draft.code.css);
+      draft.setEditMode("VISUAL");
+      setView("design");
+    },
+  };
+}
+
+/**
+ * Orta alan: Tasarım (GrapesJS kanvası, hep bağlı) · Kod (geniş ekranda yanında canlı önizleme)
+ * · Önizleme. Önizleme yalnız görünürken sunucuya gider (400 ms debounce).
+ */
 export function DesignerCenter({ refs, editor, draft, widthMm, frame }: Props) {
   const [view, setView] = useState<CenterView>("design");
   const [codeTab, setCodeTab] = useState<CodeTab>("html");
+  const [picking, setPicking] = useState(false);
+  const [recordNo, setRecordNo] = useState<string | null>(null);
   const htmlEditor = useRef<CodeEditorHandle>(null);
   const source = useDesignerSource(editor, draft.editMode, draft.code);
-  const switchToCode = () => {
-    if (!editor) return;
-    draft.setEditMode("CODE", exportVisual(editor));
+  const [sample, setSample] = useSampleChoice(draft.contract);
+  const preview = usePreview(view !== "design", usePreviewRequest(draft, source, sample));
+  const mode = useModeSwitch(editor, draft, setView);
+  const onIssue = (i: ServerIssue) => {
     setView("code");
+    setCodeTab("html");
+    requestAnimationFrame(() => htmlEditor.current?.goto(i.satir, i.sutun));
   };
-  const returnToVisual = () => {
-    if (!editor) return;
-    editor.setComponents(draft.code.html);
-    editor.setStyle(draft.code.css);
-    draft.setEditMode("VISUAL");
-    setView("design");
-  };
+  const pane = (className?: string) => (
+    <PreviewPane state={preview} sampleText={sampleLabel(draft.contract, sample, recordNo)} onSample={() => setPicking(true)} onIssue={onIssue}
+      docType={draft.docType} title={`${docTypeLabel(draft.docType)} — önizleme`} className={className} />
+  );
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <CenterTabs view={view} onView={setView} />
@@ -85,23 +114,15 @@ export function DesignerCenter({ refs, editor, draft, widthMm, frame }: Props) {
         <div ref={refs.container} className="min-h-0 flex-1" />
         {draft.editMode === "CODE" && <CodeModeOverlay onGo={() => setView("code")} />}
       </div>
-      {view === "code" && (
-        <CodePanel
-          ref={htmlEditor}
-          mode={draft.editMode}
-          source={source}
-          contract={draft.contract}
-          internalFields={draft.internalFields}
-          pageSettings={draft.pageSettings}
-          issues={[]}
-          tab={codeTab}
-          onTab={setCodeTab}
-          onCode={draft.setCode}
-          onPageSettings={draft.setPageSettings}
-          onSwitchToCode={switchToCode}
-          onReturnToVisual={returnToVisual}
-        />
-      )}
+      <div className={cn("flex min-h-0 min-w-0 flex-1", view !== "code" && "hidden")}>
+        <CodePanel ref={htmlEditor} mode={draft.editMode} source={source} contract={draft.contract} internalFields={draft.internalFields}
+          pageSettings={draft.pageSettings} issues={preview.result?.hatalar ?? []} tab={codeTab} onTab={setCodeTab}
+          onCode={draft.setCode} onPageSettings={draft.setPageSettings} onSwitchToCode={mode.toCode} onReturnToVisual={mode.toVisual} />
+        {view === "code" && pane("hidden border-l xl:flex")}
+      </div>
+      {view === "preview" && pane()}
+      <SamplePickerModal open={picking} onOpenChange={setPicking} contract={draft.contract} current={sample}
+        onPick={(s, no) => { setSample(s); setRecordNo(no ?? null); }} />
     </div>
   );
 }
