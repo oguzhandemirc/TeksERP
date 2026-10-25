@@ -4,6 +4,7 @@ import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
 import { operationsTiles } from "@/pages/Operations/tile-config";
 import { financeTiles } from "@/pages/Finance/tile-config";
+import { costTiles } from "@/pages/Cost/tile-config";
 import { accessTiles } from "@/pages/Access/tile-config";
 import { systemTiles } from "@/pages/System/tile-config";
 import {
@@ -103,6 +104,20 @@ export const commandSections: CommandSection[] = [
       icon: tile.icon,
       to: tile.to,
       permissionAny: tile.permissionAny,
+    })),
+  },
+  {
+    // MAL-3: Muhasebe'den farklı olarak bayrak yüklemi TAŞINIR — `cost:read` Muhasebe rol şablonunda
+    // modül kapalıyken de atanmış olabilir; satır menüyle aynı `maliyetEnabled` kapısından geçer.
+    heading: "Maliyet & Teklif",
+    entries: costTiles.map<CommandEntry>((tile) => ({
+      key: `cost:${tile.key}`,
+      label: tile.title,
+      description: tile.description,
+      icon: tile.icon,
+      to: tile.to,
+      permissionAny: tile.permissionAny,
+      visibleWhen: regimePredicate("maliyetEnabled"),
     })),
   },
   ...reportCommandSections,

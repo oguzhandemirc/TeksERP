@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Calculator,
   Bell,
+  Coins,
   type LucideIcon,
 } from "lucide-react";
 import { SYSTEM_HUB_ACCESS } from "@/lib/permissions";
@@ -52,7 +53,8 @@ export interface NavItem {
     | "productionEnabled"
     | "ticaretEnabled"
     | "iplikEnabled"
-    | "depoMultiEnabled";
+    | "depoMultiEnabled"
+    | "maliyetEnabled";
 }
 
 export interface NavGroup {
@@ -81,6 +83,15 @@ export const navGroups: NavGroup[] = [
         icon: Calculator,
         permission: "finance:read",
         featureFlag: "financeEnabled",
+      },
+      {
+        // MAL-3: hub + alt ekranlar `cost/*` bu satırın bayrağını miras alır (test_screen_catalog §9 nav-miras).
+        label: "Maliyet & Teklif",
+        to: "/cost",
+        icon: Coins,
+        permission: "cost:read",
+        featureFlag: "maliyetEnabled",
+        keywords: "maliyet teklif standart maliyet iplik fiyatı fason tarife terbiye parametre hesaplayıcı kâr",
       },
     ],
   },

@@ -32,7 +32,7 @@ import {
   restoreStandardCostVersion,
   type StructureStatus,
 } from "../services/standard-cost.service";
-import { readFilterList } from "../utils/query-parser";
+import { assertNoBareFilterParams, parseQueryParams, readFilterList } from "../utils/query-parser";
 import { AppError } from "../utils/app-error";
 
 const router = Router();
@@ -355,6 +355,18 @@ const previewBody = z
 const versionBody = z.object({ reason: z.string().trim().max(300).optional(), fxRates: z.partialRecord(currencyEnum, decimalInput).optional() }).strict();
 const restoreBody = z.object({ reason: z.string().trim().max(300).optional() }).strict();
 const STRUCTURE_STATUSES = ["YAPI_EKSIK", "VARSAYILAN", "TAM"] as const;
+
+/**
+ * `filter[durum]` (CSV) → yapı durumları. Express "simple" ayrıştırıcısı anahtarı DÜZ bırakır (`req.query.filter`
+ * hep boştur) → süzgeç sessizce düşerdi; çıplak `durum=` de 400 (fail-closed). Bekçi: test_standart_maliyet_surum.
+ */
+export function readCostItemStatuses(req: Request): StructureStatus[] {
+  assertNoBareFilterParams(req, ["durum"]);
+  const statuses = readFilterList(parseQueryParams(req).filters.durum);
+  const bad = statuses.filter((d) => !(STRUCTURE_STATUSES as readonly string[]).includes(d));
+  if (bad.length) throw AppError.badRequest(`Geçersiz yapı durumu: ${bad.join(", ")}`);
+  return statuses as StructureStatus[];
+}
 const listQuery = z.object({
   q: z.string().trim().max(100).optional(),
   surum: z.enum(["VAR", "YOK"], { message: "surum yalnız VAR/YOK olabilir" }).optional(),
@@ -398,12 +410,9 @@ router.post("/preview", requirePermission("cost:read"), wrap(async (req, res) =>
  */
 router.get("/items", requirePermission("cost:read"), wrap(async (req, res) => {
   const q = listQuery.parse(req.query);
-  const filter = (req.query.filter ?? {}) as Record<string, string | string[] | undefined>;
-  const statuses = readFilterList(filter.durum);
-  const bad = statuses.filter((d) => !(STRUCTURE_STATUSES as readonly string[]).includes(d));
-  if (bad.length) throw AppError.badRequest(`Geçersiz yapı durumu: ${bad.join(", ")}`);
+  const statuses = readCostItemStatuses(req);
   const raw = req.query.girdiDegisti;
-  const out = await listCostItems({ ...q, durum: statuses as StructureStatus[], girdiDegisti: raw === undefined ? undefined : q.girdiDegisti });
+  const out = await listCostItems({ ...q, durum: statuses, girdiDegisti: raw === undefined ? undefined : q.girdiDegisti });
   res.status(200).json({ success: true, ...out });
 }));
 
