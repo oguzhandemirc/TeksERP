@@ -14,7 +14,14 @@ import { candidatesKey, PROFILES_QUERY_ROOT } from "./queries";
 import { UserPickerDialog } from "./UserPickerDialog";
 
 const STATES: FactoryDefaultState[] = ["MIRAS", "ACIK", "KAPALI", "KILITLI"];
-const ESIK_LABEL: Record<string, string> = { gun: "Gecikme eşiği (gün)", kalanGun: "Kalan gün eşiği" };
+// Katalog `paramSemasi` alan adları → görünen ad (bilinmeyen alan adıyla görünür, sessizce kaybolmaz).
+const ESIK_LABEL: Record<string, string> = {
+  gun: "Eşik (gün)",
+  kalanGun: "Kalan gün eşiği",
+  dakika: "Eşik (dakika)",
+  oranYuzde: "Oran eşiği (%)",
+  minMetre: "En az metre",
+};
 
 export function FactoryDefaultsTab({ kinds }: { kinds: readonly FactoryDefaultKind[] }) {
   const qc = useQueryClient();
@@ -55,7 +62,7 @@ export function FactoryDefaultsTab({ kinds }: { kinds: readonly FactoryDefaultKi
           </ul>
         </section>
       ))}
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t bg-background/95 py-2">
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t bg-background py-2">
         {changes.errors.length > 0 && <span className="mr-auto text-xs text-destructive">{changes.errors[0]}</span>}
         {changes.errors.length === 0 && changes.turler.length > 0 && (
           <span className="mr-auto text-xs text-muted-foreground">{changes.turler.length} türde değişiklik</span>

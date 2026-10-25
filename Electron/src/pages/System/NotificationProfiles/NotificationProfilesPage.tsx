@@ -64,6 +64,8 @@ export function NotificationProfilesPage() {
   const selected = profiles.find((p) => p.id === selectedId) ?? profiles.find((p) => !p.arsivlendi) ?? profiles[0] ?? null;
   const kinds = factory.data?.turler ?? [];
   const blocked = unavailableReason(list.error) ?? unavailableReason(factory.error);
+  // Profilsiz kurulumda yalnız fabrika varsayılanı anlamlıdır; pasif sekme seçili kalmasın.
+  const activeTab = !selected && !list.isLoading ? "fabrika" : tab;
 
   return (
     <PageShell>
@@ -96,7 +98,7 @@ export function NotificationProfilesPage() {
             />
             <section className="min-w-0 space-y-3">
               {selected && <SelectedHeader p={selected} onRename={() => setForm({ profile: selected })} onArchive={() => setArchiving(selected)} />}
-              <Tabs value={tab} onValueChange={setTab}>
+              <Tabs value={activeTab} onValueChange={setTab}>
                 <TabsList className="flex-wrap">
                   <TabsTrigger value="matris" disabled={!selected}>Matris</TabsTrigger>
                   <TabsTrigger value="uyeler" disabled={!selected}>Üyeler</TabsTrigger>
@@ -131,7 +133,7 @@ export function NotificationProfilesPage() {
 }
 
 function NoProfile() {
-  return <EmptyState icon={BellRing} title="Profil seçilmedi" description="Soldan bir profil seçin ya da “Yeni profil” oluşturun." />;
+  return <EmptyState icon={BellRing} title="Profil seçilmedi" description="Listeden bir profil seçin ya da “Yeni profil” oluşturun." />;
 }
 
 interface ListPanelProps {
