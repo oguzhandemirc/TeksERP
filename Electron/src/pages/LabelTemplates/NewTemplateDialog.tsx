@@ -74,7 +74,8 @@ export function NewTemplateDialog({ open, onOpenChange }: Props) {
         key: f.key,
         label: f.defaultLabel,
         order: i + 1,
-        isVisible: true,
+        // Opt-in alan (ör. "Hata Notu") kapalı doğar — sunucu `buildDefaultFields` ile aynı.
+        isVisible: f.defaultVisible !== false,
       }));
       return labelTemplateService.create({ name: name.trim(), kind, fields, isDefault: false });
     },

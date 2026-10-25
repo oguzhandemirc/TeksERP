@@ -26,7 +26,7 @@ import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { assertStationDefaultLabelCopies } from "./helpers/label-copies.helper";
-import { inspectionDefaultForKind } from "./helpers/quality-station.helper";
+import { inspectionDefaultForKind, stationLayoutWarning } from "./helpers/quality-station.helper";
 import type { StationKind } from "@prisma/client";
 
 /**
@@ -83,7 +83,7 @@ export class StationService extends BaseService {
         typeof data.kind === "string" ? (data.kind as StationKind) : undefined,
       );
     }
-    return super.create(data, userId);
+    return withLayoutWarning(await super.create(data, userId));
   }
 
   async update(
@@ -94,6 +94,12 @@ export class StationService extends BaseService {
     assertStationDefaultLabelCopies(data);
     await assertKindChangeAllowed(id, data);
     await seedCapabilityFromCategory(data);
-    return super.update(id, data, userId);
+    return withLayoutWarning(await super.update(id, data, userId));
   }
+}
+
+/** Varsayılan dışı muayene düzeni eski APK'da 400 verir (plan §3.9) — yazma engellenmez, uyarır. */
+function withLayoutWarning(res: ApiResponse<unknown>): ApiResponse<unknown> {
+  const w = stationLayoutWarning(res.data as { kind?: unknown; inspectionEnabled?: unknown } | null);
+  return w ? { ...res, warnings: [...(res.warnings ?? []), w] } : res;
 }

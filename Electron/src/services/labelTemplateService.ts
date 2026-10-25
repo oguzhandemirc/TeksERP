@@ -127,6 +127,8 @@ export interface CatalogField {
   defaultLabel: string;
   type: FieldType;
   required?: boolean;
+  /** false → yeni şablonda KAPALI doğar (opt-in alan; ör. `openDefects`). */
+  defaultVisible?: boolean;
 }
 
 export interface CatalogResponse {

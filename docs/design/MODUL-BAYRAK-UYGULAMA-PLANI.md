@@ -148,6 +148,7 @@ R5 (RollError çok-istasyon, partial unique 409 riski) · R6 (dashboard ham SQL)
 · R9 (`QC2_COMPLETED` semantiği) · R10 (roll-finalize son-adım dalı).
 Gerekçe: Faz A modeli + panel yüzeyini kurar (satış cümlesi söylenebilir),
 Faz B'nin 7 riskli guard geçişi canlı fabrikada talepsiz değiştirilmez.
+**Durum 2026-10-25 (KQ dalgası):** R1 KISMİ (KursunQc kart okutması oturum istasyonundan, KQ-D2; Tambur `assertWoAtStepKind` çağırır) · R4 KARAR (ekran türden kalır, paneller yetenekten — K4) · R5 KARAR (tek boğaz `recordRollDefectTx` + `priorDefects`, KQ-D7) · R3/R6/R9/R10 açık.
 
 ⚠️ Regresyon yüzeyi geniş: `test_e2e_full_flow`(20 kind referansı),
 `test_kursun_bypass`(16), `test_kursun_regime_lock`, `test_qc2_idempotency`,
