@@ -43,12 +43,17 @@ export interface LabTestListQuery {
   itemId?: string | string[];
   rollId?: string | string[];
   batchId?: string | string[];
+  /** Test türü süzgeci: o türden sonucu olan testler. */
+  testTypeId?: string | string[];
+  /** Parti numarası (içerir) — panel süzgeci; parti seçici yerine yazılır. */
+  batchNo?: string;
   /** Top detay kartı: topun kendi testleri + partisinin parti düzeyi testleri. */
   forRollId?: string;
   from?: string;
   to?: string;
   q?: string;
-  verdict?: "FAIL";
+  /** FAIL = en az bir Kaldı · PASS = sonuçlu ve hiç Kaldı yok. */
+  verdict?: "FAIL" | "PASS";
   cursor?: string;
   limit?: number;
 }
@@ -62,18 +67,29 @@ function dayKey(raw: string | undefined, label: string): Date | undefined {
   return new Date(`${raw}T00:00:00.000Z`);
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Kimlik süzgeci fail-closed: biçimsiz kimlik Prisma'ya 500 olarak düşmesin, 400 dönsün. */
+function idCondition(raw: string | string[] | undefined): ReturnType<typeof readIdCondition> {
+  if (readFilterList(raw).some((v) => !UUID.test(v))) throw AppError.badRequest("Geçersiz kimlik süzgeci.", { code: "LAB_FILTER_INVALID" });
+  return readIdCondition(raw);
+}
+
 export async function buildLabTestWhere(q: LabTestListQuery): Promise<Prisma.LabTestWhereInput> {
   const and: Prisma.LabTestWhereInput[] = [];
   const statuses = readFilterList(q.status);
   const unknown = statuses.filter((s) => !STATUSES.includes(s as LabTestStatus));
   if (unknown.length > 0) throw AppError.badRequest("Tanınmayan durum süzgeci.", { code: "LAB_FILTER_INVALID" });
   if (statuses.length > 0) and.push({ status: { in: statuses as LabTestStatus[] } });
-  const itemId = readIdCondition(q.itemId);
+  const itemId = idCondition(q.itemId);
   if (itemId) and.push({ itemId });
-  const rollId = readIdCondition(q.rollId);
+  const rollId = idCondition(q.rollId);
   if (rollId) and.push({ rollId });
-  const batchId = readIdCondition(q.batchId);
+  const batchId = idCondition(q.batchId);
   if (batchId) and.push({ batchId });
+  const testTypeId = idCondition(q.testTypeId);
+  if (testTypeId) and.push({ results: { some: { testTypeId } } });
+  const batchNo = q.batchNo?.trim();
+  if (batchNo) and.push({ batch: { batchNumber: { contains: batchNo, mode: "insensitive" } } });
   if (q.forRollId) {
     const roll = await prisma.roll.findUnique({ where: { id: q.forRollId }, select: { batchId: true } });
     and.push({ OR: [{ rollId: q.forRollId }, ...(roll?.batchId ? [{ rollId: null, batchId: roll.batchId }] : [])] });
@@ -82,8 +98,9 @@ export async function buildLabTestWhere(q: LabTestListQuery): Promise<Prisma.Lab
   const to = dayKey(q.to, "Bitiş");
   if (from || to) and.push({ testedOn: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } });
   const term = q.q?.trim();
-  if (term) and.push({ OR: [{ testNo: { contains: term, mode: "insensitive" } }, { sampleCode: { contains: term, mode: "insensitive" } }] });
+  if (term) and.push({ OR: [{ testNo: { contains: term, mode: "insensitive" } }, { sampleCode: { contains: term, mode: "insensitive" } }, { roll: { barcode: { contains: term, mode: "insensitive" } } }] });
   if (q.verdict === "FAIL") and.push({ results: { some: { verdict: "FAIL" } } });
+  if (q.verdict === "PASS") and.push({ results: { some: {} } }, { results: { none: { verdict: "FAIL" } } });
   return and.length > 0 ? { AND: and } : {};
 }
 

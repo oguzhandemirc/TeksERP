@@ -16,6 +16,7 @@ const TILE_TONES: Record<string, string> = {
   rolls: "text-station-depo",
   "kursun-dagitim": "text-station-process",
   shipments: "text-success",
+  "lab-tests": "text-station-kk1",
 };
 
 export function OperationsHubPage() {
@@ -31,12 +32,11 @@ export function OperationsHubPage() {
   // içinde kendiliğinden belirir ve bu, menüde kabul edilebilir tek yönlü hatadır.
   const visibilityCtx = useOperationsVisibilityContext();
 
-  const visible = operationsTiles.filter((t) => {
-    if (t.visibleWhen && !t.visibleWhen(visibilityCtx)) return false;
-    return t.permissionAny
-      ? hasAnyPermission(t.permissionAny)
-      : !t.permission || hasPermission(t.permission);
-  });
+  // `offHint`li karo modül kapalıyken GİZLENMEZ, soluk çizilir (K4P yerleşim kararı); izin yine şart.
+  const permitted = (t: OperationsTile) =>
+    t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
+  const isOff = (t: OperationsTile) => Boolean(t.visibleWhen && !t.visibleWhen(visibilityCtx));
+  const visible = operationsTiles.filter((t) => permitted(t) && (!isOff(t) || Boolean(t.offHint)));
 
   const byGroup = new Map<OperationGroupKey, OperationsTile[]>();
   for (const t of visible) {
@@ -72,6 +72,7 @@ export function OperationsHubPage() {
                     icon={tile.icon}
                     tone={TILE_TONES[tile.key]}
                     index={i}
+                    offHint={isOff(tile) ? tile.offHint : undefined}
                   />
                 ))}
               </HubGrid>

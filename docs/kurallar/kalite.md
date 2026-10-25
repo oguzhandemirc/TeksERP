@@ -50,6 +50,7 @@
 - **[ÇEKİRDEK]** `RollInspection`ı silme ve içeriğini güncelleme; düzeltme revizyondur (`supersededAt` + yeni satır), iptal `voidedAt` damgasıdır; (top, faz) başına tek aktif belge partial unique `roll_inspections_one_active_uq` ile. · bekçi: `test_k4p_sema_sedleri` §3 <sub>(arşiv 2026-10-24 "K4P şema")</sub>
 - **[ÇEKİRDEK]** `RollError.startMeter`ı PROCESS yolunda `requireProcessMeter`/`processMeterNumber` (`helpers/roll-error-meter.helper.ts`) ile daralt; `Number(e.startMeter)` yazma (NULL sessizce 0 olur). · bekçi: `test_k4p_sema_sedleri` §1 (DB CHECK `roll_errors_meter_ck`) <sub>(arşiv 2026-10-24 "K4P şema")</sub>
 - **[ÇEKİRDEK]** Lab testi onayda donar; sonuç yazımı `status='DRAFT'` atomik WHERE'iyle (`claimDraftTx`); iptal gerekçeli `voidedAt` damgası, fiziksel silme yalnız DRAFT'ta. Lab gramajı istasyon gramajı değildir — topa/istasyona yazma. · bekçi: `test_lab_test` §5/§6 <sub>(arşiv 2026-10-25 "K4P lab testleri")</sub>
+- **[PROFİL]** Kalite Güvence ekranlarının karosunu Operasyon hub'ının `quality` grubuna koy; bayrak kapalıyken gizleme, `offHint: KALITE_GUVENCE_OFF_HINT` ile soluk çiz (palet gizler). · bekçi: `LabTestsHubTile.test.tsx` <sub>(arşiv 2026-10-25 "K4P lab paneli")</sub>
 
 ## Backend
 

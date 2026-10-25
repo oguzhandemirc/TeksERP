@@ -86,6 +86,7 @@ import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
 // Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
+import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -563,6 +564,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warehouse:transfer">
         <WarehouseTransfersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K4P-LAB — modül kapısı `route-modules.ts` eşlemesinden (kaliteGuvenceEnabled); izin backend'le birebir.
+    path: "quality/lab-tests",
+    element: (
+      <ProtectedRoute requirePermission="labtest:read">
+        <LabTestsPage />
       </ProtectedRoute>
     ),
   },

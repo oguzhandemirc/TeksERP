@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { ArrowRight, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -55,11 +56,13 @@ interface HubCardProps {
   badge?: number;
   /** Sayacın ekran okuyucu metni. */
   badgeLabel?: string;
+  /** Verilirse kart KAPALIDIR: soluk çizilir, tıkta bu mesaj gösterilir, gezinme olmaz. */
+  offHint?: string;
 }
 
 /** Dashboard tarzı zengin hub kartı — gradient + tonlu ikon + watermark + hareket.
  *  Açıklama (subtitle) bilinçli olarak BASILMAZ — başlık zaten kendini anlatıyor. */
-export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel }: HubCardProps) {
+export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel, offHint }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
   // Sol tık YERİNDE iner (hub → sayfa aynı sekmede; geri oku gerçek geçmişe basar),
   // sağ/orta tık yeni sekmede açar. Bkz. `useDrillTarget` notu.
@@ -67,11 +70,15 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
   return (
     <motion.div
       variants={staggerItem}
-      whileHover={{ y: -3 }}
+      whileHover={offHint ? undefined : { y: -3 }}
       transition={springSnappy}
-      className="relative h-full"
+      className={cn("relative h-full", offHint && "opacity-50")}
     >
-      <button type="button" {...target} className="group block h-full w-full text-left">
+      <button
+        type="button"
+        {...(offHint ? { onClick: () => toast.info(offHint), title: offHint, "aria-disabled": true } : target)}
+        className="group block h-full w-full text-left"
+      >
         <Card className="card-glow relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent p-4">
           {/* Dev ikon filigranı — sağ alt, tona boyalı, hover'da hafif büyür */}
           <Icon
@@ -101,6 +108,7 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
           </div>
           <div className="relative mt-4 flex items-center gap-2">
             <div className="font-medium">{title}</div>
+            {offHint ? <span className="text-[11px] text-muted-foreground">kapalı</span> : null}
             {badge ? (
               <span
                 className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums"

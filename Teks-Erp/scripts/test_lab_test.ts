@@ -274,6 +274,17 @@ async function sectionList(fx: Awaited<ReturnType<typeof fixtures>>, batchTestId
   check("tanınmayan durum süzgeci → 400", (await errCode(listLabTests({ status: "BOGUS" }))) === "LAB_FILTER_INVALID");
   const v = await listLabTests({ forRollId: fx.rollId, status: "VOIDED" });
   check("durum süzgeci özet şeridini de süzer", v.summary.total === v.summary.voided && v.items.every((i) => i.status === "VOIDED"));
+  const bn = (await prisma.batch.findUnique({ where: { id: fx.batchId }, select: { batchNumber: true } }))?.batchNumber ?? "";
+  const byNo = await listLabTests({ batchNo: bn, limit: 200 });
+  check("parti no süzgeci yalnız o partinin testleri", byNo.items.length > 0 && byNo.items.every((i) => i.batch?.id === fx.batchId) && byNo.summary.total === byNo.items.length);
+  const anyResult = await prisma.labTestResult.findFirst({ where: { labTest: { batchId: fx.batchId } }, select: { testTypeId: true } });
+  const byType = await listLabTests({ testTypeId: anyResult?.testTypeId, limit: 200 });
+  const typeIds = new Set((await prisma.labTestResult.findMany({ where: { testTypeId: anyResult?.testTypeId }, select: { labTestId: true } })).map((r) => r.labTestId));
+  check("test türü süzgeci = o türden sonucu olan testler", byType.items.length === typeIds.size && byType.items.every((i) => typeIds.has(i.id)));
+  const pass = await listLabTests({ verdict: "PASS", limit: 200 });
+  const fail = await listLabTests({ verdict: "FAIL", limit: 200 });
+  check("Geçti ve Kaldı süzgeçleri ayrık; Geçti sonuçsuz testi almaz", pass.items.every((i) => !i.hasFail && i.resultCount > 0) && fail.items.every((i) => i.hasFail));
+  check("tanınmayan tür kimliği → 400", (await errCode(listLabTests({ testTypeId: "bogus" }))) === "LAB_FILTER_INVALID");
 }
 
 async function sectionHttp(admin: { id: string; username: string; password: string }) {
