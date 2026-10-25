@@ -18,6 +18,7 @@ import { runParamsSchema } from "../services/reports/semantik/definition-run";
 import * as definitions from "../services/rapor-tanimi.service";
 import * as runs from "../services/rapor-kosu.service";
 import * as versions from "../services/rapor-surum.service";
+import * as shares from "../services/rapor-paylasim.service";
 import * as categories from "../services/rapor-kategori.service";
 import * as presets from "../services/rapor-on-ayar.service";
 import * as snapshots from "../services/rapor-snapshot.service";
@@ -75,6 +76,25 @@ const presetBody = z
 const snapshotBody = z.object({ parametreler: runParamsSchema, clientToken: z.string().uuid().optional() }).strict();
 const categoryBody = z.object({ ad: z.string().trim().min(1).max(100), ustId: z.string().uuid().nullable().optional(), sira: z.number().int().min(0).max(10_000).optional() }).strict();
 const pageQuery = z.object({ cursor: z.string().uuid().optional(), limit: z.coerce.number().int().min(1).max(100).default(20) }).strict();
+
+// ── Paylaşım adayları ────────────────────────────────────────────────────────
+
+/**
+ * @openapi
+ * /api/rapor-tanimlari/paylasim-adaylari:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Paylaşım diyaloğu için etkin kullanıcılar (yalnız kimlik + ad; report:builder)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: ara, required: false, schema: { type: string, maxLength: 80 } }
+ *     responses:
+ *       200: { description: "Kullanıcı listesi (en çok 200)" }
+ */
+router.get("/paylasim-adaylari", requirePermission(REPORT_BUILDER_PERMISSION), wrap(async (req, res) => {
+  const ara = z.string().trim().max(80).optional().parse(typeof req.query.ara === "string" ? req.query.ara : undefined);
+  return ok(res, await shares.listShareCandidates(actor(req), ara));
+}));
 
 // ── Kategoriler ──────────────────────────────────────────────────────────────
 
@@ -348,8 +368,8 @@ router.delete("/:id/surumler/:surumId", wrap(async (req, res) => versions.refuse
  *     responses:
  *       200: { description: "Yeni paylaşım" }
  */
-router.get("/:id/paylasim", wrap(async (req, res) => ok(res, await definitions.listShares(id(req), actor(req)))));
-router.put("/:id/paylasim", wrap(async (req, res) => ok(res, await definitions.replaceShares(id(req), shareBody.parse(req.body), actor(req)))));
+router.get("/:id/paylasim", wrap(async (req, res) => ok(res, await shares.listShares(id(req), actor(req)))));
+router.put("/:id/paylasim", wrap(async (req, res) => ok(res, await shares.replaceShares(id(req), shareBody.parse(req.body), actor(req)))));
 
 /**
  * @openapi

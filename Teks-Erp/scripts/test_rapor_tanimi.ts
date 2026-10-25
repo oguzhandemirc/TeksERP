@@ -8,7 +8,7 @@
 // §7 bozuk tanım 400 + yol + rozet · §8 tek varsayılan ön ayar · §9 audit satırları · §10 anlık görüntü
 // (replay, itibarıyla, audit muafiyeti beyanı) · §11 kategori derinliği + yalnız boş kategori pasife.
 //
-// NEGATİF SONDALAR (2026-10-25 ÖLÇÜLDÜ, cp + md5 ile birebir geri alındı; taban 57/0):
+// NEGATİF SONDALAR (2026-10-25 ÖLÇÜLDÜ, cp + md5 ile birebir geri alındı; taban 58/0):
 //   S1 `definition-run.ts` izinsiz blok "tamam" sayıldı (blok izni atlandı) → §6d ❌ 1
 //   S2 `saveNewVersion` claim WHERE'inden beklenen sürüm çıkarıldı → §4b + §4c ❌ 2 (§4d yarışı P2002 ile yine 409)
 //   S3 `audit-muafiyeti.ts` ReportSnapshot beyanı bozuldu → §10d ❌ 1
@@ -28,6 +28,7 @@ import { toSemanticInput, resolveParams } from "../src/services/reports/semantik
 import * as defs from "../src/services/rapor-tanimi.service";
 import * as runs from "../src/services/rapor-kosu.service";
 import * as versions from "../src/services/rapor-surum.service";
+import * as shares from "../src/services/rapor-paylasim.service";
 import * as cats from "../src/services/rapor-kategori.service";
 import * as presets from "../src/services/rapor-on-ayar.service";
 import * as snaps from "../src/services/rapor-snapshot.service";
@@ -209,9 +210,11 @@ async function main(): Promise<void> {
     // ── §6 Paylaşım ≠ veri yetkisi ───────────────────────────────────────────
     const hidden = await expectError(() => runs.runDefinition(d1.id, { parametreler: {}, yenile: true }, ctxFor(viewerId, viewer.permissions as string[]), viewer));
     check("§6a paylaşılmamış özel rapor → 404 (varlığı sızmaz)", hidden?.status === 404);
-    const herkes = await expectError(() => defs.replaceShares(d1.id, { gorunurluk: "HERKES", paylasimlar: [] }, owner));
+    const herkes = await expectError(() => shares.replaceShares(d1.id, { gorunurluk: "HERKES", paylasimlar: [] }, owner));
     check("§6b HERKES report:publish ister → 403", herkes?.status === 403 && herkes.code === "RAPOR_YAYIN_YETKISI_YOK");
-    await defs.replaceShares(d1.id, { gorunurluk: "PAYLASIMLI", paylasimlar: [{ kullaniciId: viewerId, yetki: "GOR" }] }, owner);
+    const cands = await shares.listShareCandidates(owner, T);
+    check("§6g paylaşım adayları: kendisi yok, yalnız kimlik + ad", cands.some((c) => c.id === viewerId) && !cands.some((c) => c.id === ownerId) && cands.every((c) => Object.keys(c).sort().join() === "ad,id"), JSON.stringify(cands.slice(0, 3)));
+    await shares.replaceShares(d1.id, { gorunurluk: "PAYLASIMLI", paylasimlar: [{ kullaniciId: viewerId, yetki: "GOR" }] }, owner);
     const run = await runs.runDefinition(d1.id, { parametreler: {}, yenile: true }, ctxFor(viewerId, viewer.permissions as string[]), viewer);
     const byId = new Map(run.bloklar.map((b) => [b.id, b]));
     check("§6c paylaşılan kullanıcı izinli bloğu görür", byId.get("a1")?.durum === "tamam");
