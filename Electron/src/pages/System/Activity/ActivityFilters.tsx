@@ -1,5 +1,9 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -10,16 +14,17 @@ import {
 } from "@/components/ui/select";
 import { systemLogService } from "@/services/systemLogService";
 import { tableLabel, actionLabels } from "./labels";
-import type { SystemLogDomainAction } from "@/types/systemLog";
+import type { SystemLogDomainAction, SystemLogGun } from "@/types/systemLog";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
+import type { ActivityFilterState, ActivityView } from "./activity-view";
 
-export interface ActivityFilterState {
-  userId?: string;
-  tableName?: string;
-  action?: SystemLogDomainAction;
-  dateFrom?: string;
-  dateTo?: string;
-}
+export type { ActivityFilterState } from "./activity-view";
+
+const GUN_CIPLERI: Array<{ value: SystemLogGun; label: string }> = [
+  { value: "bugun", label: "Bugün" },
+  { value: "dun", label: "Dün" },
+  { value: "hafta", label: "Bu hafta" },
+];
 
 interface Props {
   value: ActivityFilterState;
@@ -41,6 +46,8 @@ export function ActivityFilters({ value, onChange }: Props) {
   });
 
   const hasActiveFilter = !!(
+    value.gun ||
+    value.q ||
     value.userId ||
     value.tableName ||
     value.action ||
@@ -56,7 +63,20 @@ export function ActivityFilters({ value, onChange }: Props) {
   };
 
   return (
-    <div className="flex flex-wrap items-end gap-2 border-b bg-card/30 px-6 py-3">
+    <div className="flex flex-wrap items-end gap-2 border-b bg-card/30 px-4 py-3 sm:px-6">
+      <Field label="Görünüm">
+        <ViewToggle value={value.gorunum ?? "islem"} onChange={(gorunum) => onChange({ ...value, gorunum })} />
+      </Field>
+      <Field label="Gün">
+        <DayChips
+          value={value.gun}
+          onChange={(gun) => onChange({ ...value, gun, dateFrom: undefined, dateTo: undefined })}
+        />
+      </Field>
+      <Field label="Ara (kayıt no)">
+        <SearchBox value={value.q} onChange={(q) => onChange({ ...value, q })} />
+      </Field>
+
       <Field label="Kullanıcı">
         <Select value={value.userId ?? ANY} onValueChange={(v) => set("userId", v)}>
           <SelectTrigger className="h-9 w-44">
@@ -109,8 +129,8 @@ export function ActivityFilters({ value, onChange }: Props) {
         <DateRangeInput
           from={value.dateFrom?.slice(0, 10) ?? ""}
           to={value.dateTo?.slice(0, 10) ?? ""}
-          onFrom={(v) => set("dateFrom", v ? `${v}T00:00:00.000Z` : undefined)}
-          onTo={(v) => set("dateTo", v ? `${v}T23:59:59.999Z` : undefined)}
+          onFrom={(v) => onChange({ ...value, gun: undefined, dateFrom: v ? `${v}T00:00:00.000Z` : undefined })}
+          onTo={(v) => onChange({ ...value, gun: undefined, dateTo: v ? `${v}T23:59:59.999Z` : undefined })}
           inputClassName="h-9 w-40"
           fromLabel="Başlangıç"
           toLabel="Bitiş"
@@ -121,13 +141,89 @@ export function ActivityFilters({ value, onChange }: Props) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onChange({})}
+          onClick={() => onChange({ gorunum: value.gorunum })}
           className="h-9 gap-1 text-muted-foreground"
         >
           <X className="h-3 w-3" />
           Temizle
         </Button>
       )}
+    </div>
+  );
+}
+
+function ViewToggle({ value, onChange }: { value: ActivityView; onChange: (v: ActivityView) => void }) {
+  const options: Array<[ActivityView, string]> = [
+    ["islem", "İşlemler"],
+    ["satir", "Tüm satırlar"],
+  ];
+  return (
+    <div role="radiogroup" aria-label="Görünüm" className="flex h-9 rounded-md border p-0.5">
+      {options.map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={value === v}
+          onClick={() => onChange(v)}
+          className={cn(
+            "whitespace-nowrap rounded px-3 text-sm transition-colors",
+            value === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Fabrika günü çipleri — aralığı SUNUCU hesaplar (`gun=`). Seçili çipe yeniden basmak kaldırır. */
+function DayChips({ value, onChange }: { value?: SystemLogGun; onChange: (v: SystemLogGun | undefined) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {GUN_CIPLERI.map((c) => (
+        <Button
+          key={c.value}
+          type="button"
+          size="sm"
+          variant={value === c.value ? "default" : "outline"}
+          aria-pressed={value === c.value}
+          className="h-9 whitespace-nowrap"
+          onClick={() => onChange(value === c.value ? undefined : c.value)}
+        >
+          {c.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+/** Kayıt numarası araması: terim gecikmeli olarak SUNUCUYA gider (`q`). */
+function SearchBox({ value, onChange }: { value?: string; onChange: (q: string | undefined) => void }) {
+  const [term, setTerm] = useState(value ?? "");
+  const debounced = useDebouncedValue(term, 350);
+  useEffect(() => {
+    const next = debounced.trim() || undefined;
+    if (next !== value) onChange(next);
+    // Yalnız terim değişince yayılır (value/onChange her render'da yenidir).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debounced]);
+  useEffect(() => {
+    // Dışarıdan "Temizle" — kutu da boşalır.
+    if (!value && term) setTerm("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={term}
+        onChange={(e) => setTerm(e.target.value)}
+        placeholder="SP-…, CV…, barkod"
+        aria-label="Kayıt numarasıyla ara"
+        className="h-9 w-full min-w-[10rem] pl-7 sm:w-52"
+      />
     </div>
   );
 }
