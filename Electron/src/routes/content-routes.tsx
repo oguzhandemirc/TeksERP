@@ -123,6 +123,7 @@ import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage
 import { FreeDocumentsPage } from "@/pages/FreeDocuments/FreeDocumentsPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
 import { TravelerCardStudioPage } from "@/pages/Definitions/TravelerCardStudio/TravelerCardStudioPage";
+import { DocumentDesignerPage } from "@/pages/Definitions/DocumentDesigner/DocumentDesignerPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
 import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
@@ -675,6 +676,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
         <FreeDocumentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Belge Tasarımcısı — kart ile AYNI izin listesi; GrapesJS sayfanın içinde tembel yüklenir.
+    path: "definitions/document-designer",
+    element: (
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
+        <DocumentDesignerPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/document-designer/:id",
+    element: (
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
+        <DocumentDesignerPage />
       </ProtectedRoute>
     ),
   },

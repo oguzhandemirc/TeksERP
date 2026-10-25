@@ -317,6 +317,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
   { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
   { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
+  // T2 iskeleti: bugünkü belge tasarım izinleriyle; `:design`/`:publish` T5'te bu satıra girer.
+  { key: "definitions/document-designer", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Tasarımcısı", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)
