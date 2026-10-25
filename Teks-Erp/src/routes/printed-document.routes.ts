@@ -69,6 +69,12 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read: ["shipping:read", "shipping:write", "mobile:sevkiyat", "report:quality"],
     write: ["shipping:write"],
   },
+  // Muayene raporu (K4P-RAPOR) — muayene okuyan basar; sevk izni tek başına yetmez
+  // (puan/etiket kalite verisidir). Yeni sürüm üretmek düzeltme iznidir.
+  INSPECTION_REPORT: {
+    read: ["inspection:read"],
+    write: ["inspection:correct"],
+  },
   // İade irsaliyesi — iade okuma/yazma.
   RETURN_DISPATCH: {
     read: ["return:read", "return:write", "mobile:iade"],

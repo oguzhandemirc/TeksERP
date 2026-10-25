@@ -6,7 +6,7 @@ import { Text, View } from "react-native";
 import { fmtFactoryDate } from "../../../src/lib/factory-time";
 import { REPORT_PARAM, reportDomain, reportTitle } from "../../../src/lib/labels/finans";
 import { humanize } from "../../../src/lib/present";
-import { buildReportParams, catalogEntries, extraParamNames, requestable } from "../../../src/lib/reports";
+import { buildReportParams, catalogEntries, extraParamNames, isPresentationKey, rangeParamNames, requestable } from "../../../src/lib/reports";
 import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
 import { Screen } from "../../../src/ui/Frame";
@@ -34,7 +34,8 @@ export default function NewReport() {
   const prefill = Object.fromEntries(Object.entries(params).filter(([k, v]) => k !== "anahtar" && typeof v === "string")) as Record<string, string>;
   const names = [...new Set([...extraParamNames(entry?.parametreler), ...Object.keys(prefill)])];
   // Katalog girdisi yoksa (henüz gelmedi) aralık sorulur — bugünkü davranış; girdi aralık almıyorsa sorulmaz.
-  const takesRange = !entry || (Array.isArray(entry.parametreler) && (entry.parametreler as unknown[]).some((p) => p === "dateFrom" || p === "dateTo"));
+  const rangeNames = entry ? rangeParamNames(entry.parametreler) : (["dateFrom", "dateTo"] as const);
+  const takesRange = rangeNames !== null;
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [period, setPeriod] = useState<ReportPeriod>("ozel");
@@ -45,11 +46,12 @@ export default function NewReport() {
   const takesAsOf = names.includes(AS_OF);
   const asOf = takesAsOf ? asOfIso(asOfChoice, asOfText) : undefined;
   const asOfDay = asOfDayText(asOfChoice);
-  const others = names.filter((n) => n !== AS_OF);
+  // v2 (sunumlu) raporda süzgeç/varyant/kıyas sorulmaz: "Tümü" = anahtar yok, kıyas varsayılanı fabrikada (K-KIYAS).
+  const others = isPresentationKey(key) ? [] : names.filter((n) => n !== AS_OF);
   const built =
     asOf === null
       ? ({ ok: false, error: "Tarih GG.AA.YYYY biçiminde olmalı" } as const)
-      : buildReportParams(takesRange ? from : "", takesRange ? to : "", { ...withoutAsOf(extra), ...(asOf ? { [AS_OF]: asOf } : {}) });
+      : buildReportParams(takesRange ? from : "", takesRange ? to : "", { ...(isPresentationKey(key) ? {} : withoutAsOf(extra)), ...(asOf ? { [AS_OF]: asOf } : {}) }, rangeNames ?? undefined);
   const send = useCallback((id: string) => (built.ok ? api.reportCreate(id, key, built.params) : Promise.reject(new Error(built.error))), [api, built, key]);
   const w = useWrite(send);
   const allowed = requestable(key, permissions);

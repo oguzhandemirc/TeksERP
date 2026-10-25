@@ -132,6 +132,39 @@ describe("BildirimZili · açılır liste ve eylemler", () => {
     expect(navigateActive).toHaveBeenCalledWith("/operations/orders?focus=o1");
   });
 
+  it("Alarmlar sekmesi: sayaç açık alarm, açıklar önce, satır alarm sayfasını açar, ertele yok", async () => {
+    svc.ozet.mockImplementation(async () => ({ enabled: true, okunmamis: 0, alarmAcik: 1, epoch: 1, rev: 1, alarmRev: 2 }));
+    const alarm = (over: Partial<NotificationItem>) =>
+      item({ tur: "dokuma.tezgah-alarmi", sinif: "ALARM", altTur: null, grup: "Dokuma", neden: "NOBET", ...over });
+    svc.liste.mockImplementation(async (p: { sekme: string }) =>
+      liste(p.sekme === "alarmlar"
+        ? [alarm({ id: "k", baslik: "Tezgah alarmı: T-02", cozulduAn: new Date().toISOString(), yol: "/operations/loom-alarms/a2" }),
+          alarm({ id: "o", baslik: "Tezgah alarmı: T-01", yol: "/operations/loom-alarms/a1" })]
+        : []),
+    );
+    await yukle();
+    fireEvent.click(await screen.findByRole("button", { name: "Bildirimler: okunmamış yok" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Alarmlar 1" }));
+    const acik = await screen.findByRole("button", { name: "Okunmamış: Tezgah alarmı: T-01" });
+    const kapanan = screen.getByRole("button", { name: "Okunmamış: Tezgah alarmı: T-02" });
+    expect(acik.compareDocumentPosition(kapanan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Açık")).toBeTruthy();
+    expect(screen.getByText("Kapanan")).toBeTruthy();
+    expect(screen.getAllByText("Nöbetçisiniz").length).toBe(2);
+    expect(screen.queryByRole("button", { name: /Ertele/ })).toBeNull();
+    expect(svc.liste).toHaveBeenCalledWith(expect.objectContaining({ sekme: "alarmlar" }));
+    fireEvent.click(acik);
+    await waitFor(() => expect(navigateActive).toHaveBeenCalledWith("/operations/loom-alarms/a1"));
+  });
+
+  it("Alarmlar sekmesi boş: 'Tezgah alarmı yok'", async () => {
+    svc.liste.mockImplementation(async () => liste([]));
+    await yukle();
+    fireEvent.click(await screen.findByRole("button", { name: "12 okunmamış bildirim" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Alarmlar" }));
+    expect(await screen.findByText("Tezgah alarmı yok")).toBeTruthy();
+  });
+
   it("boş durum: 'Yeni bildirim yok'", async () => {
     svc.liste.mockImplementation(async () => liste([]));
     await yukle();

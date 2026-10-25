@@ -79,5 +79,19 @@ check(
   degisen.length ? `${degisen.length} değişti: ${degisen.slice(0, 8).join(", ")}` : "",
 );
 
+console.log("§4 Hata notu sütunu (KQ-D8) — opt-in, kaçışlı, rakama dokunmaz");
+{
+  const html = (ad: string) => {
+    const k = kombinasyonlar.find((x) => x.ad === ad);
+    return k ? renderShipmentDispatchHtml(k.snapshot, k.meta) : "";
+  };
+  const acik = html("zengin/hataNotu/yok");
+  const kapali = html("zengin/yok/yok");
+  check("açık kombinasyonda başlık + kaçışlı hücre", acik.includes("HATA NOTU") && acik.includes("40 m &lt;Delik&gt; +1"));
+  check("varsayılan (ayar yok) belgede sütun YOK", !kapali.includes("HATA NOTU") && !kapali.includes("Leke"));
+  const toplam = (h: string) => (h.match(/112[.,]4/g) ?? []).length;
+  check("sütun açılınca toplam rakam aynı kalır (brüt)", toplam(acik) === toplam(kapali), `${toplam(acik)} / ${toplam(kapali)}`);
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

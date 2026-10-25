@@ -36,7 +36,7 @@
 // NEGATİF SONDALAR (2026-10-25, md5 ile geri alındı → yeşil):
 //   ④ levent ucundan `requireDevereEnabled` kaldırıldı → ❌ 2 (§C0b zincir + §C0d devere kapalıyken 403)
 //   ⑤ `beamBalance` ölçülemeyen leventi 0 beklenenle saydı → ❌ 1 (§C3a; oran %140)
-// Temiz koşum 88/0 (§ Satış 34 + RAPB/RAPC 54).
+// Temiz koşum 97/0 (§ Satış 34 + §V 8 + RAPB/RAPC 55).
 //
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2097-07 (kıyas 2097-06), etiket TEST-TRE-<pid>.
 // Koşum: npx tsx scripts/test_temel_rapor_esitlik.ts
@@ -84,13 +84,21 @@ import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
 import { buildLoomEfficiencyReport, efficiencyReasonText } from "../src/services/reports/temel/tezgah-randimani.temel";
 import { buildLoomStopsReport, mostFrequentReason, secondsToMinutes } from "../src/services/reports/temel/duruslar.temel";
 import { beamBalance, buildBeamBalanceReport } from "../src/services/reports/temel/levent-dengesi.temel";
-import { buildReceivablesReport, mainBlock, NO_MONTH_END_RECEIVABLES, receivedChequesDue } from "../src/services/reports/temel/alacaklar.temel";
+import { buildReceivablesReport, mainBlock, MONTH_END_REBUILT, NO_MONTH_END_RECEIVABLES, receivedChequesDue } from "../src/services/reports/temel/alacaklar.temel";
+import { factoryPreviousMonthEnd } from "../src/services/reports/temel/_day-range";
+import { invoiceService } from "../src/services/invoice.service";
+import { paymentService } from "../src/services/payment.service";
+import { paymentAllocationService } from "../src/services/payment-allocation.service";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { durusParetoReport, efficiencyReport } from "../src/services/reports/dokuma.report.service";
 import { capacityUsageReport } from "../src/services/reports/kapasite-kullanimi.report.service";
 import { alarmResponseReport } from "../src/services/reports/alarm-response.report.service";
 import { getAgingReport } from "../src/services/reports/finance-aging.report";
 import { chequeService } from "../src/services/cheque.service";
 import { yasakSozcukBul } from "../src/services/reports/anlati/yasak-sozcuk";
+import { periodRanges, runCoreWithExtras } from "../src/services/reports/temel/_variant";
+import { factoryDayEndOfKey } from "../src/constants/time";
+import { ORDER_DEMAND_DIMS, OPEN_ORDER_DIMS, SHIPPED_DIMS, SUBCONTRACTOR_DIMS, openOrderRunner, orderDemandRunner, shippedRunner, subcontractorRunner } from "../src/services/reports/temel/core-runs";
 
 let pass = 0;
 let fail = 0;
@@ -299,6 +307,17 @@ async function rapbSection(): Promise<void> {
     same(subOne.anaSayi.deger, subOneSrc.summary.avgTurnaroundDays) && same(fig(subOne, "fason.bekleyenMetre")?.deger, subOneSrc.summary.openQty)
       && same(fig(subOne, "fire.fasonMetre")?.deger, subOneSrc.summary.fireQty) && subOneSrc.summary.openQty !== sub.summary.openQty,
     show(fig(subOne, "fason.bekleyenMetre")?.deger, subOneSrc.summary.openQty));
+
+  // §V4 R1-VARYANT fasoncu kırılımı: hücre = AYNI süzgeçli karne (oran ölçüsü — toplam kuralı yok, oran yeniden hesaplanır)
+  const subVar = (await runCoreWithExtras({ range: RANGE, compareRange, dims: SUBCONTRACTOR_DIMS, varyant: "fasoncu", run: subcontractorRunner({}, mode) })).sunum;
+  const subCells = subVar.varyant?.hucreler ?? [];
+  let subCellOk = subCells.length >= 1;
+  for (const h of subCells) {
+    const srcCell = await getSubcontractScorecard(RANGE, compareRange, { subcontractorId: [h.deger] });
+    if (!same(h.anaSayi.deger, srcCell.summary.avgTurnaroundDays) || !same(h.anaSayi.kiyas?.deger, srcCell.summary.prevAvgTurnaroundDays)) subCellOk = false;
+  }
+  check("§V4 ⭐ fasoncu kırılımı: her hücre = `getSubcontractScorecard({subcontractorId:[hücre]})` ortalama dönüşü (+önceki)", subCellOk,
+    subCells.map((h) => `${h.ad}=${h.anaSayi.deger}`).join(" · "));
 }
 
 // =============================================================================
@@ -428,8 +447,15 @@ async function rapcSection(): Promise<void> {
   if (block) {
     const due = (await chequeService.dueSummary()).data!;
     check("§C4b yan = 30 gün içinde vadesi gelecek ALINAN çek (`months[]`)", same(fig(rec, "cek.yaklasanVade")?.deger, Math.round(receivedChequesDue(due, block.currency) * 100) / 100));
-    check("§C4c kesit kıyası ölçülemedi + ay sonu uyarısı (0'a çökmez)", rec.anaSayi.kiyas?.deger === null && rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES));
-  } else check("§C4c ay sonu uyarısı (blok yok)", rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES));
+    // R1-ZAMAN: kıyas = aynı yaşlandırmanın geçen ay sonu kesiti; o birimde blok yoksa ölçülemedi (0'a çökmez).
+    const prev = (await getAgingReport({ asOf: factoryPreviousMonthEnd(asOf) })).blocks.find((b) => b.currency === block.currency);
+    check("§C4c kıyas = geçen ay sonu kesitinin vadesi geçmişi (yoksa ölçülemedi + uyarı)",
+      prev
+        ? same(rec.anaSayi.kiyas?.deger, Number(prev.totals.overdueTotal)) && rec.uyarilar.includes(MONTH_END_REBUILT)
+        : rec.anaSayi.kiyas?.deger === null && rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES),
+      show(rec.anaSayi.kiyas?.deger ?? null, prev?.totals.overdueTotal ?? null));
+    check("§C4e kıyas dönemi geçen ay sonunun son anı", rec.kiyasDonemi?.to === factoryPreviousMonthEnd(asOf).toISOString());
+  } else check("§C4c blok yokken ay sonu uyarısı basılmaz", !rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES) && !rec.uyarilar.includes(MONTH_END_REBUILT));
   const fakeBlock = (currency: string) => ({ currency, totals: { overdueTotal: "1" } }) as unknown as Parameters<typeof mainBlock>[0][number];
   check("§C4d para birimleri toplanmaz: TL varsa TL, iki yabancı birimde ana sayı seçilmez",
     mainBlock([fakeBlock("USD"), fakeBlock("TRY")])?.currency === "TRY" && mainBlock([fakeBlock("USD"), fakeBlock("EUR")]) === null && mainBlock([fakeBlock("EUR")])?.currency === "EUR");
@@ -670,6 +696,59 @@ async function salesSection(cD: string): Promise<void> {
   }
 }
 
+// § R1-VARYANT (gerçek DB, satış fikstürü): küçük çoklu hücresi = o değerle SÜZÜLMÜŞ kaynak karne; hücre toplamı ≤ ana sayı
+// (metre toplanır; oran ölçüsünde toplam kuralı yok); dönem kıyasının son sütunu = o dönemin TEK koşusu.
+// NEGATİF SONDA (2026-10-25, md5 ile geri alındı): `variantCells` hücre ana sayısını süzgeçsiz ana koşudan kopyaladı
+//   → ❌ 4 (§V1b hücre = süzgeçli kaynak · §V1c toplam ≤ ana 860 > 430 · §V2a yön 700 > 350 · §V4 fasoncu).
+async function variantSection(): Promise<void> {
+  console.log("── §V R1-VARYANT: küçük çoklular + dönem kıyası ──");
+  const main = (await buildOrderDemandReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: {} })).sunum;
+  const v = (await runCoreWithExtras({ range: SALES_RANGE, compareRange: SALES_PREV, dims: ORDER_DEMAND_DIMS, varyant: "musteri", run: orderDemandRunner({}, "prev") })).sunum;
+  const cells = v.varyant?.hucreler ?? [];
+  check("§V1a müşteri kırılımı: 2–6 hücre, büyükten küçüğe, ana sayı DEĞİŞMEZ", cells.length >= 2 && cells.length <= 6
+    && cells.every((h, i) => i === 0 || (cells[i - 1]!.anaSayi.deger ?? 0) >= (h.anaSayi.deger ?? 0)) && v.anaSayi.deger === main.anaSayi.deger,
+    cells.map((h) => `${h.ad}=${h.anaSayi.deger}`).join(" · "));
+  let cellOk = cells.length > 0;
+  for (const h of cells) {
+    const src = await getOrderIntake(SALES_RANGE, SALES_PREV, { customerId: [h.deger] });
+    if (h.anaSayi.deger !== src.summary.totalQty || h.anaSayi.kiyas?.deger !== src.summary.prevTotalQty) cellOk = false;
+  }
+  check("§V1b ⭐ tek değer varyantı = o değerle süzülmüş ana sayı (`getOrderIntake({customerId:[hücre]})` totalQty + önceki)", cellOk);
+  const sum = cells.reduce((a, h) => a + (h.anaSayi.deger ?? 0), 0);
+  check("§V1c ⭐ hücre toplamı ≤ ana sayı (metre)", cells.length > 0 && sum <= (main.anaSayi.deger ?? 0) + 1e-6 && sum > 0, `${sum} ≤ ${main.anaSayi.deger}`);
+  check("§V1d beyan: `varyant` = musteri · `suzgecAnahtari` = customerId · müşteri çipi seçenekli",
+    v.parametreler.find((x) => x.ad === "varyant")?.deger === "musteri" && v.varyant?.suzgecAnahtari === "customerId" && (v.parametreler.find((x) => x.ad === "customerId")?.secenekler?.length ?? 0) >= 2);
+
+  const yon = (await runCoreWithExtras({ range: SALES_RANGE, compareRange: SALES_PREV, dims: SHIPPED_DIMS, varyant: "yon", run: shippedRunner(undefined, "prev") })).sunum;
+  const shipMain = (await buildShippedReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: {} })).sunum;
+  let yonOk = (yon.varyant?.hucreler ?? []).length === 2;
+  for (const h of yon.varyant?.hucreler ?? []) {
+    const one = (await buildShippedReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: { destination: h.deger as ShipmentDestination } })).sunum;
+    if (one.anaSayi.deger !== h.anaSayi.deger) yonOk = false;
+  }
+  const yonSum = (yon.varyant?.hucreler ?? []).reduce((a, h) => a + (h.anaSayi.deger ?? 0), 0);
+  check("§V2a ⭐ sevk yön kırılımı: hücre = yön süzgeçli BRÜT sevk; toplam ≤ ana", yonOk && yonSum <= (shipMain.anaSayi.deger ?? 0) + 1e-6, `${yonSum} ≤ ${shipMain.anaSayi.deger}`);
+
+  // Ana aralığın SONU fabrika gününün sonu (panelin gönderdiği gibi) → sütunlar Ocak · Şubat · Mart 2097.
+  const perRange = { from: SALES_RANGE.from, to: factoryDayEndOfKey("2097-03-31") };
+  const per = (await runCoreWithExtras({ range: perRange, compareRange: SALES_PREV, dims: ORDER_DEMAND_DIMS, donemler: { birim: "ay", adet: 3 }, run: orderDemandRunner({}, "prev") })).sunum;
+  const ranges = periodRanges(perRange.to, { birim: "ay", adet: 3 });
+  const lastR = ranges[2]!;
+  const single = (await buildOrderDemandReport({ range: lastR, compareRange: ranges[1]!, compareMode: "prev", filters: {} })).sunum;
+  const lastSrc = await getOrderIntake(lastR, ranges[1]!, {});
+  const cols = per.donemler ?? [];
+  check("§V3a ⭐ `donemler=ay:3` son sütun = o dönemin TEK koşusu (+bir önceki dönem kıyası) = kaynak totalQty",
+    cols.length === 3 && cols[2]!.anaSayi.deger === single.anaSayi.deger && cols[2]!.anaSayi.deger === lastSrc.summary.totalQty && cols[2]!.anaSayi.kiyas?.deger === lastSrc.summary.prevTotalQty,
+    cols.map((c) => `${c.etiket}=${c.anaSayi.deger}`).join(" · "));
+  const firstSrc = await getOrderIntake(ranges[0]!, null, {});
+  check("§V3b ilk sütunlar kıyassız ve kendi dönemlerinin kaynak değeri", cols.length === 3 && cols[0]!.anaSayi.deger === firstSrc.summary.totalQty && cols[0]!.anaSayi.kiyas === undefined);
+
+  const open = (await runCoreWithExtras({ range: SALES_RANGE, compareRange: null, dims: OPEN_ORDER_DIMS, donemler: { birim: "ay", adet: 3 }, snapshotOnly: true, run: openOrderRunner(undefined) })).sunum;
+  const openMain = (await buildOpenOrderReport({ filters: {} })).sunum;
+  check("§V3c ⭐ kesit (açık siparişler): dönem değerleri ÖLÇÜLEMEDİ (null, 0 değil) + 'kesit görüntüsü' uyarısı; ana sayı aynı",
+    (open.donemler ?? []).every((c) => c.anaSayi.deger === null && !!c.anaSayi.olculemedi) && open.uyarilar.some((u) => u.includes("kesit görüntüsü")) && open.anaSayi.deger === openMain.anaSayi.deger);
+}
+
 async function cleanupSales(): Promise<void> {
   await prisma.rollReturn.deleteMany({ where: { id: { in: salesIds.returns } } });
   await prisma.sackAllocation.deleteMany({ where: { sackId: { in: salesIds.sacks } } });
@@ -682,6 +761,113 @@ async function cleanupSales(): Promise<void> {
   await prisma.customer.deleteMany({ where: { id: { in: salesIds.customers } } });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// § Geçmiş kesit (R1-ZAMAN) — "defterden yeniden kurulan T kesiti = T anında alınmış kesit" mi?
+// T anında yaşlandırma alınır (görüntü), sonra T'den SONRA olaylar yazılır ve T kesiti yeniden kurulur.
+// Beklenen: sonraki kapama/iptal/geri alma sapma DOĞURMAZ; cari vade günü değişimi ve geriye tarihli
+// belge sapma doğurur (ölçülen ve uyarıda beyan edilen iki kaynak). Negatif sonda (2026-10-25):
+// yaşlandırmanın kapama geri sarması (`"createdAt" > asOf`) kaldırılınca 5 ❌ (§Z1–§Z5) · alacaklarda önceki
+// değer `null`a çekilince 1 ❌ (§Z6).
+// ─────────────────────────────────────────────────────────────────────────────
+async function pastSnapshotSection(): Promise<void> {
+  console.log("\n=== § Geçmiş kesit — alacaklar (R1-ZAMAN) ===");
+  const TAG = `TEST-R1Z-${Date.now()}`;
+  const DAY = 24 * 60 * 60 * 1000;
+  const invoiceIds: string[] = [];
+  const paymentIds: string[] = [];
+  const customer = await prisma.customer.create({ data: { code: TAG, name: `${TAG} Müşteri` }, select: { id: true } });
+  const box = await prisma.cashBox.create({ data: { code: TAG.slice(0, 32), name: `${TAG} Kasa`, currency: "TRY" }, select: { id: true } });
+  let cariId: string | null = null;
+  const invoice = async (total: number, issueAgo: number, dueAgo: number | null): Promise<string> => {
+    const now = Date.now();
+    const r = await invoiceService.createDraft({
+      type: "SALES", customerId: customer.id, currency: "TRY", issueDate: new Date(now - issueAgo * DAY),
+      dueDate: dueAgo === null ? null : new Date(now - dueAgo * DAY),
+      lines: [{ description: `${TAG} satır`, qty: 1, unit: "m", unitPrice: total, vatRate: 0 }],
+    });
+    invoiceIds.push(r.data.id);
+    await invoiceService.confirm(r.data.id);
+    return r.data.id;
+  };
+  const payment = async (amount: number): Promise<string> => {
+    const r = await paymentService.create({ direction: "IN", method: "CASH", customerId: customer.id, currency: "TRY", amount, cashBoxId: box.id });
+    paymentIds.push(r.data.id);
+    return r.data.id;
+  };
+  const overdueAt = async (at: Date): Promise<number> => {
+    const b = (await getAgingReport({ asOf: at, cariId: cariId! })).blocks.find((x) => x.currency === "TRY");
+    return b ? Number(b.totals.overdueTotal) : 0;
+  };
+  try {
+    await withFlags({ [SETTING_KEYS.FINANCE_ENABLED]: true, [SETTING_KEYS.FINANCE_AUTO_ALLOCATE_ON_PAYMENT_ENABLED]: false }, async () => {
+      // T öncesi: vadeli 1000 · vadesiz 500 (cari vade 30 gün) · 800'lük fatura + 300 kapama · sonra iptal edilecek 700.
+      const inv1 = await invoice(1000, 60, 30);
+      cariId = (await prisma.cariAccount.findFirstOrThrow({ where: { customerId: customer.id }, select: { id: true } })).id;
+      await prisma.cariAccount.update({ where: { id: cariId }, data: { paymentTermDays: 30 } });
+      await invoice(500, 60, null);
+      const inv3 = await invoice(800, 50, 20);
+      const pay3 = await payment(800);
+      const early = await paymentAllocationService.allocate({ invoiceId: inv3, paymentId: pay3, amount: 300 });
+      const inv4 = await invoice(700, 40, 10);
+      await new Promise((r) => setTimeout(r, 20));
+      const T = new Date();
+      const snapshot = await overdueAt(T);
+      await new Promise((r) => setTimeout(r, 20));
+      check("§Z0 körlük zemini: T anı kesitinde vadesi geçmiş alacak var", snapshot > 0, `${snapshot}`);
+
+      await paymentAllocationService.allocate({ invoiceId: inv3, paymentId: pay3, amount: 500 });
+      const afterAlloc = await overdueAt(T);
+      await invoiceService.cancel(inv4, "R1-ZAMAN ölçümü");
+      const afterCancel = await overdueAt(T);
+      await paymentAllocationService.deallocate(early.data.id);
+      const afterRevoke = await overdueAt(T);
+      await prisma.cariAccount.update({ where: { id: cariId }, data: { paymentTermDays: 90 } });
+      const afterTerm = await overdueAt(T);
+      await prisma.cariAccount.update({ where: { id: cariId }, data: { paymentTermDays: 30 } });
+      await invoice(200, 60, 30);
+      const afterBackdated = await overdueAt(T);
+      console.log(`   ⓘ ölçüm (TRY): görüntü ${snapshot} · sonraki kapama ${afterAlloc} · iptal ${afterCancel} · kapama geri alma ${afterRevoke} · vade günü 30→90 ${afterTerm} · geriye tarihli belge ${afterBackdated}`);
+      check("§Z1 ⭐ T'den sonraki kapama T kesitini değiştirmez (geri sarılır)", afterAlloc === snapshot, show(afterAlloc, snapshot));
+      check("§Z2 ⭐ T'den sonraki fatura iptali T kesitini değiştirmez", afterCancel === snapshot, show(afterCancel, snapshot));
+      check("§Z3 T'den önceki kapamanın sonradan geri alınması TOPLAMI değiştirmez (sanal mahsup karşılar)", afterRevoke === snapshot, show(afterRevoke, snapshot));
+      check("§Z4 ⭐ ölçülen sapma: cari vade günü değişimi vadesiz faturayı kovadan çıkarır (uyarıda beyanlı)", afterTerm === snapshot - 500 && MONTH_END_REBUILT.includes("vade günü"), show(afterTerm, snapshot - 500));
+      check("§Z5 ⭐ ölçülen sapma: geriye tarihli belge geçmiş kesite girer (uyarıda beyanlı)", afterBackdated === snapshot + 200 && MONTH_END_REBUILT.includes("geriye tarihli"), show(afterBackdated, snapshot + 200));
+      // Rapor yolu: kıyas = aynı yaşlandırmanın geçen ay sonu kesiti (fikstür 60 gün önce düzenlendi → ay sonunda var).
+      const nowAt = new Date();
+      const rec = (await buildReceivablesReport(nowAt)).sunum;
+      const prevB = (await getAgingReport({ asOf: factoryPreviousMonthEnd(nowAt) })).blocks.find((b) => b.currency === "TRY");
+      check("§Z6 ⭐ alacaklar kıyası = geçen ay sonu kesiti (ölçülemedi DEĞİL) + defterden kuruldu uyarısı",
+        Boolean(prevB) && same(rec.anaSayi.kiyas?.deger, Number(prevB!.totals.overdueTotal)) && rec.uyarilar.includes(MONTH_END_REBUILT)
+          && rec.kiyasDonemi?.to === factoryPreviousMonthEnd(nowAt).toISOString(),
+        show(rec.anaSayi.kiyas?.deger ?? null, prevB?.totals.overdueTotal ?? null));
+      void inv1;
+    });
+  } finally {
+    if (invoiceIds.length > 0) await prisma.paymentAllocation.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+    if (paymentIds.length > 0) await prisma.paymentAllocation.deleteMany({ where: { paymentId: { in: paymentIds } } });
+    if (invoiceIds.length > 0) {
+      await prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+      await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+      await prisma.printedDocument.deleteMany({ where: { sourceId: { in: invoiceIds } } });
+      await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+    }
+    if (paymentIds.length > 0) {
+      await prisma.cariTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } });
+      await prisma.printedDocument.deleteMany({ where: { sourceId: { in: paymentIds } } });
+      await prisma.cashTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } });
+      await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
+    }
+    if (cariId) {
+      await prisma.cariTransaction.deleteMany({ where: { cariId } });
+      await prisma.cariBalance.deleteMany({ where: { cariId } });
+      await prisma.cariAccount.deleteMany({ where: { id: cariId } });
+    }
+    await prisma.cashTransaction.deleteMany({ where: { cashBoxId: box.id } });
+    await prisma.cashBox.deleteMany({ where: { id: box.id } });
+    await prisma.customer.deleteMany({ where: { id: customer.id } });
+  }
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -692,6 +878,7 @@ async function main(): Promise<void> {
   try {
     const { cD } = await salesSetup();
     await salesSection(cD);
+    await variantSection();
   } finally {
     await cleanupSales();
   }
@@ -701,6 +888,7 @@ async function main(): Promise<void> {
   } finally {
     await cleanup();
   }
+  await pastSnapshotSection();
 }
 
 main()

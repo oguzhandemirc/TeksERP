@@ -128,6 +128,53 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
         "Aynı müşterinin iki ürününe ayrı spesifikasyon yazılmışsa birleşmiş üründe hangisinin " +
         "geçerli olduğunu yalnız kalite sorumlusu bilir (K4P); `customer_item_uq` ile birebir.",
     },
+    { kind: "MOVE", model: "WeftSpecYarn", table: "weft_spec_yarns", column: "yarnItemId", label: "Atkı spesifikasyonu ipliği" },
+    {
+      kind: "CONFLICT",
+      model: "YarnCostPrice",
+      table: "yarn_cost_prices",
+      column: "yarnItemId",
+      label: "İplik maliyet fiyatı",
+      uniqueOn: ["yarnItemId"],
+      // Partial UNIQUE (`yarn_cost_prices_active_uq`) yalnız aktif satırda: damgalı geçmiş serbestçe taşınır.
+      activeWhenNull: ["revokedAt"],
+      policy: "BLOCK",
+      why: "İki ipliğin de aktif maliyet fiyatı varsa hangisinin geçerli olduğunu yalnız muhasebe bilir (MAL-1; ItemPrice emsali).",
+    },
+    {
+      kind: "CONFLICT",
+      model: "CostStructure",
+      table: "cost_structures",
+      column: "itemId",
+      label: "Ürün maliyet yapısı",
+      uniqueOn: ["itemId"],
+      policy: "BLOCK",
+      why: "Kumaş başına tek maliyet yapısı (`itemId @unique`); iki yapıdan hangisinin doğru olduğu operatör kararıdır (MAL-1).",
+    },
+    {
+      kind: "CONFLICT",
+      model: "StandardCostVersion",
+      table: "standard_cost_versions",
+      column: "itemId",
+      label: "Standart maliyet sürümü",
+      // Sürüm numarası kumaş içinde sıralıdır (v1'den başlar): iki kumaşın da sürümü varsa numaralar çakışır.
+      uniqueOn: ["itemId", "versionNo"],
+      policy: "BLOCK",
+      why: "Donmuş maliyet fotoğrafı; iki kumaşın sürüm geçmişi tek kumaşta birleştirilemez — hangisinin yürürlükte kalacağı muhasebe kararıdır (MAL-2).",
+    },
+    { kind: "MOVE", model: "StandardCostLine", table: "standard_cost_lines", column: "yarnItemId", label: "Standart maliyet kalemi ipliği" },
+    {
+      kind: "CONFLICT",
+      model: "CustomerLabSpec",
+      table: "customer_lab_specs",
+      column: "itemId",
+      label: "Müşteri lab spesifikasyonu (ürün)",
+      uniqueOn: ["customerId", "itemId", "testTypeId"],
+      policy: "BLOCK",
+      why:
+        "Aynı müşterinin iki ürününe aynı test türü için ayrı sınır yazılmışsa birleşmiş üründe hangisinin " +
+        "geçerli olduğunu yalnız kalite sorumlusu bilir (K4P-SERT); `customer_item_uq` ile birebir.",
+    },
     {
       kind: "CONFLICT",
       model: "ItemPrice",

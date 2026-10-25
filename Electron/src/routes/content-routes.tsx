@@ -89,6 +89,16 @@ import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/Wa
 // Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
 import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
+import { InspectionsPage } from "@/pages/Quality/Inspections/InspectionsPage";
+import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage";
+import { CostHubPage } from "@/pages/Cost/CostHubPage";
+import { ParametersPage as CostParametersPage } from "@/pages/Cost/Parameters/ParametersPage";
+import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/YarnPricesPage";
+import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/FinishingRates/FinishingRatesPage";
+import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
+import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
+import { CalculatorPage as CostCalculatorPage } from "@/pages/Cost/Calculator/CalculatorPage";
+import { InspectionRulesPage } from "@/pages/Quality/InspectionRules/InspectionRulesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -127,11 +137,13 @@ import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage
 import { FreeDocumentsPage } from "@/pages/FreeDocuments/FreeDocumentsPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
 import { TravelerCardStudioPage } from "@/pages/Definitions/TravelerCardStudio/TravelerCardStudioPage";
+import { DocumentDesignerPage } from "@/pages/Definitions/DocumentDesigner/DocumentDesignerPage";
 import { DevicesPage } from "@/pages/Devices/DevicesPage";
 import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
 import { reportV2Routes } from "@/pages/Reports/_v2/routes";
+import { customReportRoutes } from "@/pages/Reports/_v2/custom/routes";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
 import { WipScorecardPage } from "@/pages/Reports/Production/WipScorecardPage";
 import { OperatorPerformancePage } from "@/pages/Reports/Production/OperatorPerformancePage";
@@ -178,6 +190,7 @@ import { RelabelStationPage } from "@/pages/Operations/RelabelStation/RelabelSta
 import { AccountingDispatchPage } from "@/pages/Operations/AccountingDispatch/AccountingDispatchPage";
 import { KartelaPage } from "@/pages/Operations/Kartela/KartelaPage";
 import { ReturnsPage } from "@/pages/Operations/Returns/ReturnsPage";
+import { EIrsaliyeRecordsPage } from "@/pages/Operations/Shipments/eirsaliye/EIrsaliyeRecordsPage";
 
 /**
  * Uygulama içeriği rotaları (kabuk/sekme şeridi hariç). Hem dış HashRouter'ın
@@ -572,11 +585,97 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    // K4P-PANEL — modül kapısı `route-modules.ts`ten; izin backend'le birebir (`quality-inspection.routes.ts`).
+    path: "quality/inspections",
+    element: (
+      <ProtectedRoute requirePermission="inspection:read">
+        <InspectionsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     // K4P-LAB — modül kapısı `route-modules.ts` eşlemesinden (kaliteGuvenceEnabled); izin backend'le birebir.
     path: "quality/lab-tests",
     element: (
       <ProtectedRoute requirePermission="labtest:read">
         <LabTestsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K4P-SERT — modül kapısı `route-modules.ts`ten; izin backend'le birebir (`certificate.routes.ts`).
+    path: "quality/certificates",
+    element: (
+      <ProtectedRoute requirePermission="certificate:read">
+        <CertificatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── MALİYET & TEKLİF (MAL-3) — modül kapısı `route-modules.ts`ten (maliyetEnabled); izin karo
+  // (`pages/Cost/tile-config.ts`) ve backend `cost.routes.ts` okuma uçlarıyla birebir (`cost:read`).
+  // Yazma (`cost:write` · `cost:settings`) sayfa İÇİNDE PermissionGate.
+  {
+    path: "cost",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/parameters",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostParametersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/yarn-prices",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostYarnPricesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/finishing-rates",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostFinishingRatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/items",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostItemsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/items/:itemId",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostItemDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/calculator",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostCalculatorPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K4P-TANIM — modül kapısı `route-modules.ts`ten; okuma izni backend'le birebir (`four-point-rule.routes.ts`).
+    path: "quality/inspection-rules",
+    element: (
+      <ProtectedRoute requirePermission="inspection:read">
+        <InspectionRulesPage />
       </ProtectedRoute>
     ),
   },
@@ -690,6 +789,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
         <FreeDocumentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Belge Tasarımcısı — kart ile AYNI izin listesi; GrapesJS sayfanın içinde tembel yüklenir.
+    path: "definitions/document-designer",
+    element: (
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
+        <DocumentDesignerPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/document-designer/:id",
+    element: (
+      <ProtectedRoute requireAnyPermission={DOCUMENT_DESIGN_READ}>
+        <DocumentDesignerPage />
       </ProtectedRoute>
     ),
   },
@@ -1192,6 +1308,14 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  {
+    path: "operations/e-irsaliye",
+    element: (
+      <ProtectedRoute requirePermission="eirsaliye:read">
+        <EIrsaliyeRecordsPage />
+      </ProtectedRoute>
+    ),
+  },
 
   // Raporlar — domain bazlı hub'lar; alt sayfalar etap etap doldurulur
   { path: "reports", element: <ReportsHubPage /> },
@@ -1559,6 +1683,7 @@ export const contentRoutes: RouteObject[] = [
   },
   // Raporlar v2 — 14 temel rapor yaprağı katalogdan (izin `izin`, kapı bayrak + `hazir`; `_v2/routes.tsx`).
   ...reportV2Routes,
+  ...customReportRoutes,
 
   { path: "*", element: <Navigate to="/" replace /> },
 ];

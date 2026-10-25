@@ -42,7 +42,84 @@ export interface SystemLogListItem {
    * (null filtre yanlış davranır).
    */
   requestId?: string | null;
+  /**
+   * İzlenebilirlik B3: sunucunun OKUMA ANINDA kurduğu Türkçe cümle. Eski backend
+   * göndermez → satır eski düzene düşer. YALNIZ GÖRÜNTÜ: istemci bundan karar
+   * türetmez, geri de yazmaz.
+   */
+  anlati?: Anlati;
+  /** `q` aramasında: eşleşen kaydın değil, aynı istekteki kardeş satır. */
+  kardes?: boolean;
 }
+
+export type AnlatiParcaTuru = "kisi" | "kayit" | "deger" | "metin";
+
+/** Backend `audit-narrative/sablonlar.ts` `Parca` sözleşmesinin aynası. */
+export interface AnlatiParca {
+  t: AnlatiParcaTuru;
+  text: string;
+  ref?: { table: string; id: string };
+}
+
+export interface Anlati {
+  parcalar: AnlatiParca[];
+  metin: string;
+}
+
+/** `gorunum=islem` öğesi: aynı istekteki audit satırları tek iş eylemi. */
+export interface SystemLogIslem {
+  /** requestId ya da (isteksiz satırda) log id. */
+  id: string;
+  requestId: string | null;
+  createdAt: string;
+  user: SystemLogUserOption | null;
+  kayitSayisi: number;
+  reddedildi: boolean;
+  iz: SystemLogTraceSummary | null;
+  anlati: Anlati;
+  satirlar: Array<{ id: string; tableName: string; recordId: string; action: string; createdAt: string; anlati?: Anlati }>;
+}
+
+/**
+ * İstek izi — YALNIZ bu alanlar çizilir. Gövde sunucuda SAKLANMAZ; istemci de
+ * buraya alan eklemeden hiçbir şey göstermez (bekçi: audit-technical-detail.test).
+ */
+export interface SystemLogTraceSummary {
+  id: string;
+  deviceLocalId: string | null;
+  clientType: string | null;
+  appVersion: string | null;
+  method: string;
+  routeKey: string;
+  status: number;
+  durationMs: number | null;
+  errorCode: string | null;
+  auditCount: number | null;
+  createdAt: string;
+  ip?: string | null;
+  cihazAdi?: string | null;
+}
+
+/** `GET /system-logs/islem/:requestId`. */
+export interface SystemLogIslemDetay {
+  requestId: string;
+  user: SystemLogUserOption | null;
+  anlati: Anlati;
+  iz: SystemLogTraceSummary | null;
+  kayitlar: Array<{
+    id: string;
+    tableName: string;
+    modul: string;
+    recordId: string;
+    action: string;
+    olay: string | null;
+    anlati?: Anlati;
+    changes?: AuditChange[] | null;
+  }>;
+  ham: unknown[];
+}
+
+export type SystemLogGun = "bugun" | "dun" | "hafta";
 
 export interface SystemLogDetail extends SystemLogListItem {
   oldData: Record<string, unknown> | null;
@@ -63,6 +140,12 @@ export interface SystemLogListParams {
   dateTo?: string;
   /** TEK İŞLEMİN tüm satırları. Geçersiz UUID backend'de boş sonuca çevrilir. */
   requestId?: string;
+  /** B3: "islem" = iş eylemi görünümü. Eski backend yok sayar → satır döner. */
+  gorunum?: "satir" | "islem";
+  /** Kayıt numarası araması (SP-…, CV…, barkod) — sunucuda. */
+  q?: string;
+  /** Fabrika günü kısayolu — aralığı SUNUCU hesaplar. */
+  gun?: SystemLogGun;
 }
 
 export interface SystemLogStats {

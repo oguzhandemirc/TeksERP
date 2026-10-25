@@ -242,6 +242,8 @@ const PARTIAL_INDEXES: Array<{
   { table: "four_point_rule_sets", index: "four_point_rule_sets_one_factory_uq", uniq: true, predicate: `((scope = 'FACTORY'::"RuleScope") AND ("isActive" = true))`, why: "tek aktif fabrika kural seti" },
   { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_uq", uniq: true, predicate: `(("isActive" = true) AND ("customerId" IS NOT NULL) AND ("itemId" IS NULL))`, why: "müşteri başına tek aktif genel kural seti" },
   { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün) başına tek aktif kural seti" },
+  { table: "customer_lab_specs", index: "customer_lab_specs_customer_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NULL))`, why: "(müşteri, test türü) başına tek aktif genel lab spesifikasyonu (K4P-SERT)" },
+  { table: "customer_lab_specs", index: "customer_lab_specs_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün, test türü) başına tek aktif lab spesifikasyonu (K4P-SERT)" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
   // roll_returns — iade belge no KOLONA alındı (migration 20260922210000).
@@ -337,6 +339,35 @@ const PARTIAL_INDEXES: Array<{
     uniq: true,
     predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
     why: "kalem+müşteri+yön+para birimi başına TEK AKTİF istisna (damgalı geçmiş kısıta girmez — MAL-0b)",
+  },
+  // 2026-10-25 — MAL-1 maliyet girdileri (migration 20261025140000_maliyet_girdileri); şema-dışı.
+  {
+    table: "cost_parameter_sets",
+    index: "cost_parameter_sets_live_uq",
+    uniq: true,
+    predicate: `(status = ANY (ARRAY['DRAFT'::"CostParamStatus", 'ACTIVE'::"CostParamStatus"]))`,
+    why: "tek index iki tekillik: en fazla BİR taslak ve BİR aktif parametre seti",
+  },
+  {
+    table: "standard_cost_versions",
+    index: "standard_cost_versions_active_uq",
+    uniq: true,
+    predicate: `(status = 'ACTIVE'::"StandardCostStatus")`,
+    why: "kumaş başına TEK yürürlükteki standart maliyet sürümü (eşzamanlı kayıt → P2002 → 409)",
+  },
+  {
+    table: "yarn_cost_prices",
+    index: "yarn_cost_prices_active_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "iplik başına TEK AKTİF maliyet fiyatı (damgalı geçmiş kısıta girmez)",
+  },
+  {
+    table: "finishing_rates",
+    index: "finishing_rates_active_code_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "apre tarifesi kodu başına TEK AKTİF sürüm (damgalı geçmiş kısıta girmez)",
   },
   // 2026-08-14 — sağlamlık paketi (migration 20260814110200_saglamlik_paketi).
   // Storno bağı: bir defter satırı EN FAZLA BİR KEZ terslenebilir.
@@ -622,6 +653,28 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("isDefault" = true)`,
     why: "kullanıcı başına rapor başına tek varsayılan ön ayar — düşerse iki varsayılan yarışır, rapor hangi parametreyle açılacağını dizi sırasına bırakır",
   },
+  // bildirim: tercih katmanı (N4-SEMA, migration 20261025160000) — kişi × kayıt başına tek takip satırı.
+  {
+    table: "record_follows",
+    index: "record_follows_user_order_uq",
+    uniq: true,
+    predicate: `("orderId" IS NOT NULL)`,
+    why: "kişi × sipariş tek takip — oluşturanın otomatik takibi ON CONFLICT DO NOTHING ile BIRAKTI'yı ezmez; düşerse çift satır, çift bildirim",
+  },
+  {
+    table: "record_follows",
+    index: "record_follows_user_work_order_uq",
+    uniq: true,
+    predicate: `("workOrderId" IS NOT NULL)`,
+    why: "kişi × iş emri tek takip — aynı ON CONFLICT hedefi",
+  },
+  {
+    table: "record_follows",
+    index: "record_follows_user_weaving_order_uq",
+    uniq: true,
+    predicate: `("weavingOrderId" IS NOT NULL)`,
+    why: "kişi × dokuma işi tek takip — aynı ON CONFLICT hedefi",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -804,6 +857,14 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "lab_tests", name: "lab_tests_approved_ck" },
   { table: "lab_tests", name: "lab_tests_voided_ck" },
   { table: "lab_test_results", name: "lab_test_results_value_ck" },
+  // K4P-SERT — sertifika sahipliği (OWN ⇔ partnerId NULL), iptal damgası ⇔ gerekçe, tarih sırası,
+  // belge 5 MB + tür, müşteri spesifikasyonu sınır tutarlılığı.
+  { table: "certificates", name: "certificates_holder_ck" },
+  { table: "certificates", name: "certificates_revoked_ck" },
+  { table: "certificates", name: "certificates_dates_ck" },
+  { table: "certificate_files", name: "certificate_files_size_ck" },
+  { table: "certificate_files", name: "certificate_files_mime_ck" },
+  { table: "customer_lab_specs", name: "customer_lab_specs_bounds_ck" },
   { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
@@ -873,6 +934,22 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "yarn_movements", name: "yarn_movements_qty_positive" },
   // Fiyat negatif olamaz; SIFIR serbest (promosyon/numune satırı meşru).
   { table: "item_prices", name: "item_prices_price_nonneg" },
+  // MAL-1 (20261025140000_maliyet_girdileri)
+  { table: "items", name: "items_raw_width_cm_ck" },
+  { table: "items", name: "items_gsm_ck" },
+  { table: "weft_specs", name: "weft_specs_picks_per_cm_ck" },
+  { table: "weft_spec_yarns", name: "weft_spec_yarns_picks_ck" },
+  { table: "cost_parameter_sets", name: "cost_parameter_sets_pct_ck" },
+  { table: "cost_parameter_sets", name: "cost_parameter_sets_amount_ck" },
+  { table: "cost_parameter_sets", name: "cost_parameter_sets_stamp_ck" },
+  { table: "yarn_cost_prices", name: "yarn_cost_prices_price_ck" },
+  { table: "finishing_rates", name: "finishing_rates_price_ck" },
+  { table: "cost_structures", name: "cost_structures_values_ck" },
+  { table: "standard_cost_versions", name: "standard_cost_versions_version_no_ck" },
+  { table: "standard_cost_versions", name: "standard_cost_versions_amounts_ck" },
+  { table: "standard_cost_versions", name: "standard_cost_versions_superseded_ck" },
+  { table: "standard_cost_versions", name: "standard_cost_versions_hash_ck" },
+  { table: "standard_cost_lines", name: "standard_cost_lines_line_no_ck" },
   { table: "purchase_order_lines", name: "purchase_order_lines_qty_positive" },
   { table: "purchase_order_lines", name: "purchase_order_lines_received_nonneg" },
   // ⚠️ `receivedQty <= qty` seddi BİLİNÇLİ OLARAK YOK: fiziksel olarak fazla mal
@@ -990,6 +1067,18 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "report_runs", name: "report_runs_status_ck" },
   { table: "report_runs", name: "report_runs_counts_ck" },
   { table: "report_snapshots", name: "report_snapshots_kind_ck" },
+  // bildirim: tercih katmanı (N4-SEMA, migration 20261025160000) — kapalı kümeler (TS aynası
+  // `constants/notification-preference.ts`), sessiz saat biçimi + çift yüklem, takipte TEK hedef FK.
+  { table: "notification_preferences", name: "notification_preferences_channel_ck" },
+  { table: "notification_user_settings", name: "notification_user_settings_quiet_format_ck" },
+  { table: "notification_user_settings", name: "notification_user_settings_quiet_pair_ck" },
+  { table: "notification_user_settings", name: "notification_user_settings_quiet_channels_ck" },
+  { table: "notification_user_settings", name: "notification_user_settings_digest_hour_ck" },
+  { table: "notification_profile_cells", name: "notification_profile_cells_state_ck" },
+  { table: "notification_factory_defaults", name: "notification_factory_defaults_state_ck" },
+  { table: "record_follows", name: "record_follows_one_target_ck" },
+  { table: "record_follows", name: "record_follows_state_ck" },
+  { table: "record_follows", name: "record_follows_reason_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

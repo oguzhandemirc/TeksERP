@@ -13,11 +13,16 @@ export function HeadlineCard({ headline, sideFigures, comparisonLabel }: Props) 
   const compare = comparisonText(headline, comparisonLabel);
   const notMeasured = headline.deger === null;
   return (
-    <section className="flex h-full flex-col gap-3 rounded-lg border bg-card p-4" aria-label="Ana sayı">
+    <section className="@container flex h-full flex-col gap-3 rounded-lg border bg-card p-4" aria-label="Ana sayı">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{headline.ad}</p>
+        {/* Dar kartta sayı küçülür, satıra kırılmaz (kart genişliğine oranlı yazı). */}
         <p
-          className={notMeasured ? "mt-1 text-2xl font-semibold text-muted-foreground" : "mt-1 text-4xl font-bold tabular-nums"}
+          className={
+            notMeasured
+              ? "mt-1 text-2xl font-semibold text-muted-foreground"
+              : "mt-1 whitespace-nowrap text-[clamp(1.25rem,11cqi,2.25rem)] leading-tight font-bold tabular-nums"
+          }
           data-testid="headline-value"
         >
           {formatFigure(headline.deger, headline.birim)}

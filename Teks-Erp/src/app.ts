@@ -30,6 +30,7 @@ import stationRoutes, { machineRouter } from "./routes/station.routes";
 import routeRoutes from "./routes/route.routes";
 import productRecipeRoutes from "./routes/product-recipe.routes";
 import warpSpecRoutes from "./routes/warp-spec.routes";
+import weftSpecRoutes from "./routes/weft-spec.routes";
 import warpBeamRoutes from "./routes/warp-beam.routes";
 import weavingOrderRoutes from "./routes/weaving-order.routes";
 import machineRunRoutes from "./routes/machine-run.routes";
@@ -57,6 +58,8 @@ import tamburRoutes from "./routes/tambur.routes";
 import kursunQcRoutes from "./routes/kursun-qc.routes";
 import kursunBypassRoutes from "./routes/kursun-bypass.routes";
 import eIrsaliyeRoutes from "./routes/e-irsaliye.routes";
+import qualityInspectionRoutes from "./routes/quality-inspection.routes";
+import fourPointRuleRoutes from "./routes/four-point-rule.routes";
 import travelerCardRoutes from "./routes/traveler-card.routes";
 import travelerTemplateRoutes from "./routes/traveler-template.routes";
 import subcontractorRoutes from "./routes/subcontractor.routes";
@@ -97,6 +100,7 @@ import chequeDeliveryNoteRoutes from "./routes/cheque-delivery-note.routes";
 // kapısını taşır → app seviyesinde, spesifik ön ekle bağlanırlar.
 import yarnRoutes from "./routes/yarn.routes";
 import itemPriceRoutes from "./routes/item-price.routes";
+import costRoutes from "./routes/cost.routes";
 import purchaseOrderRoutes from "./routes/purchase-order.routes";
 import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import stockCountRoutes from "./routes/stock-count.routes";
@@ -141,9 +145,12 @@ import updateRoutes from "./routes/update.routes";
 import supportRoutes from "./routes/support.routes";
 import labTestRoutes from "./routes/lab-test.routes";
 import labTestTypeRoutes from "./routes/lab-test-type.routes";
+import certificateRoutes from "./routes/certificate.routes";
+import customerLabSpecRoutes from "./routes/customer-lab-spec.routes";
 import errorReportRoutes from "./routes/error-report.routes";
 import semanticReportRoutes from "./routes/rapor-semantik.routes";
 import reportRunRoutes from "./routes/rapor-calistirma.routes";
+import reportDefinitionRoutes from "./routes/rapor-tanimi.routes";
 import patronCloudRoutes from "./routes/patron-cloud.routes";
 const app: Express = express();
 
@@ -529,6 +536,8 @@ app.use("/api/product-recipes", productRecipeRoutes);
 // Çözgü kartları (devere modülü) — router'ın kendi kapısı: verifyToken +
 // requireDevereEnabled (ticaret → iplik → devere zinciri) + requirePermission.
 app.use("/api/warp-specs", warpSpecRoutes);
+// MAL-1 (S2 çekirdeği): atkı kartı — router kendi kapısını taşır (`requireDokumaEnabled`).
+app.use("/api/weft-specs", weftSpecRoutes);
 app.use("/api/warp-beams", warpBeamRoutes);
 // Dokuma modülü (üç router, tek kapı): verifyToken + requireDokumaEnabled
 // (production → dokuma zinciri kapının içinde) + requirePermission.
@@ -563,6 +572,9 @@ app.use("/api/tambur", tamburRoutes);
 app.use("/api/kursun-qc", kursunQcRoutes);
 app.use("/api/kursun-bypass", kursunBypassRoutes);
 app.use("/api/e-irsaliye", eIrsaliyeRoutes);
+// K4P 4 puan muayene + kural setleri (kaliteGuvence modülü; kapı router içinde).
+app.use("/api/quality-inspections", qualityInspectionRoutes);
+app.use("/api/four-point-rules", fourPointRuleRoutes);
 app.use("/api/traveler-cards", travelerCardRoutes);
 app.use("/api/traveler-templates", travelerTemplateRoutes);
 app.use("/api/subcontractor", subcontractorRoutes);
@@ -599,6 +611,8 @@ app.use("/api/goods-receipts", goodsReceiptRoutes);
 
 app.use("/api/yarn", yarnRoutes);
 app.use("/api/item-prices", itemPriceRoutes);
+// MAL-1: maliyet girdileri — router kendi kapısını taşır (`requireMaliyetEnabled`).
+app.use("/api/cost", costRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 // Depolar arası transfer — kendi `verifyToken + requireDepoMultiEnabled`
 // kapısını taşır. Depo TANIMI ve DEFTERİ (`/api/warehouses`) rejimsiz KALIR;
@@ -669,6 +683,7 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/rapor-semantik", semanticReportRoutes);
 app.use("/api/rapor-calistirmalari", reportRunRoutes);
+app.use("/api/rapor-tanimlari", reportDefinitionRoutes);
 app.use("/api/devices", devicePublicRouter);
 app.use("/api/admin/devices", deviceAdminRouter);
 app.use("/api/work-sessions", workSessionRoutes);
@@ -694,6 +709,8 @@ app.use("/api/destek", supportRoutes);
 // K4P lab testleri (kaliteGuvence modülü): test + sonuç + onay/iptal; tür kataloğu ayrı router.
 app.use("/api/lab-tests", labTestRoutes);
 app.use("/api/lab-test-types", labTestTypeRoutes);
+app.use("/api/certificates", certificateRoutes);
+app.use("/api/customer-lab-specs", customerLabSpecRoutes);
 // Hata raporları (3.6): onay (varsayılan KAPALI, ayar şifreli) + panel/tablet hata kaydı; gönderim `jobs/error-report.job.ts`.
 app.use("/api/hata-raporlari", errorReportRoutes);
 // Patron bulutu (fabrika yüzeyi): teknik kullanıcı + salt okunur bulut hesapları. Gelen kutusu işi `jobs/cloud-inbox.job.ts`.

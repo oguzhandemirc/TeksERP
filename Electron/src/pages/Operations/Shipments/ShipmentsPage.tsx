@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { PanelRight, Award, Receipt } from "lucide-react";
+import { PanelRight, Award, Receipt, Gauge } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -31,8 +31,12 @@ import { shipmentColumns } from "./columns";
 import { shipmentService, branchLookupService } from "./service";
 import { shipmentStatusLabels, type ShipmentListItem, type BranchLookupItem } from "./types";
 import { ShipmentDetailSheet } from "./ShipmentDetailSheet";
+import { InspectionReportDialog } from "@/pages/Quality/Inspections/InspectionReportDialog";
+import { useInspectionsVisible } from "@/pages/Quality/Inspections/RollInspectionCard";
 import { DirectShipmentDetailSheet } from "./DirectShipmentDetailSheet";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { EIRSALIYE_LIST_FILTER } from "./eirsaliye/listFilter";
+import { useEIrsaliyePermissions, useEIrsaliyeReadiness } from "./eirsaliye/useEIrsaliye";
 
 const QUERY_KEY = "shipments";
 
@@ -137,6 +141,9 @@ export function ShipmentsPage() {
   const [selected, setSelected] = useState<ShipmentListItem | null>(null);
   const [docView, setDocView] = useState<{ docType: PrintedDocType; sourceId: string; title: string } | null>(null);
   const [invoiceRow, setInvoiceRow] = useState<ShipmentListItem | null>(null);
+  // Muayene raporu (K4P) — modül + izin kapısı muayene kartıyla aynı yüklem.
+  const inspectionsVisible = useInspectionsVisible();
+  const [inspectionReport, setInspectionReport] = useState<{ id: string; no: string } | null>(null);
   const [searchParams] = useSearchParams();
   // Elle fatura izi rejimi — muhasebe listesiyle AYNI yüklem (üç yüzey tek kural).
   const invoiceMode = useShippingInvoiceMode();
@@ -158,6 +165,10 @@ export function ShipmentsPage() {
     return qs ? `${base}?${qs}` : base;
   };
 
+  // e-İrsaliye süzgeci yalnız hazırlık HAZIR iken (sunucu YAPILANDIRILMAMIS'ta 400 verir).
+  const eirsPerms = useEIrsaliyePermissions();
+  const eirsReady = useEIrsaliyeReadiness(eirsPerms.canRead).data?.durum === "HAZIR";
+  const filters = useMemo(() => (eirsReady ? [...FILTERS, EIRSALIYE_LIST_FILTER] : FILTERS), [eirsReady]);
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<ShipmentListItem>({
@@ -214,7 +225,7 @@ export function ShipmentsPage() {
           />
         }
       />
-      <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
+      <FilterBar filters={filters} defaultDateRangeDays={30} />
       <DataTable<ShipmentListItem>
         table={table}
         isLoading={query.isLoading}
@@ -266,6 +277,11 @@ export function ShipmentsPage() {
                       <d.icon /> {d.label}
                     </ContextMenuItem>
                   ))}
+                  {inspectionsVisible && (
+                    <ContextMenuItem onSelect={() => setInspectionReport({ id: s.id, no: s.shipmentNo })}>
+                      <Gauge /> Muayene Raporu
+                    </ContextMenuItem>
+                  )}
                 </>
               )}
               {/* Fatura işareti — yalnız ÇIKMIŞ sevkiyatta anlamlı (sevk edilmemiş
@@ -290,6 +306,9 @@ export function ShipmentsPage() {
       />
 
       <InvoiceDialog row={invoiceRow} onClose={() => setInvoiceRow(null)} queryKey={QUERY_KEY} />
+      {inspectionReport && (
+        <InspectionReportDialog shipmentId={inspectionReport.id} shipmentNo={inspectionReport.no} onClose={() => setInspectionReport(null)} />
+      )}
       <PrintedDocDialog
         docType={docView?.docType ?? "QUALITY_CERTIFICATE"}
         sourceId={docView?.sourceId ?? null}

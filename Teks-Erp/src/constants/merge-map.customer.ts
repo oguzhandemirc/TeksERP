@@ -163,6 +163,21 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "CustomerLabSpec",
+      table: "customer_lab_specs",
+      column: "customerId",
+      label: "Müşteri lab spesifikasyonu",
+      uniqueOn: ["customerId", "itemId", "testTypeId"],
+      crossSourceOn: { columns: ["itemId", "testTypeId"], nullSafe: ["itemId"] },
+      policy: "BLOCK",
+      why:
+        "Aynı test türüne iki ayrı sınır yazılmışsa birleşmiş müşteride hangisinin geçerli olduğunu " +
+        "yalnız kalite sorumlusu bilir (K4P-SERT); iki partial UNIQUE'in birleşimi, pasifler de bloklar.",
+    },
+    { kind: "MOVE", model: "LabTest", table: "lab_tests", column: "customerId", label: "Lab testi (müşteri)" },
+    { kind: "MOVE", model: "Certificate", table: "certificates", column: "partnerId", label: "Sertifika (iş ortağı)" },
+    {
+      kind: "CONFLICT",
       model: "ItemPrice",
       table: "item_prices",
       column: "customerId",

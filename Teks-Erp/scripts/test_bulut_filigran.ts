@@ -46,6 +46,7 @@ import { __setScanLimitForTests } from "../src/cloud-sync/change-scan";
 import { RECORD_PROJECTIONS } from "../src/cloud-sync/projections";
 import { FULL_RESEND_MARKER, wmKey } from "../src/cloud-sync/watermarks";
 import { claimAndRunReportRequests, standardReportPlan, REMOTE_REPORTS } from "../src/cloud-sync/report-requests";
+import { REPORT_BY_KEY, isReportSurfaced } from "../src/constants/report-catalog";
 import { onDoorbellTopic, dispatchDoorbellTopic, __resetDoorbellTopicsForTests } from "../src/jobs/doorbell-topics";
 import { runCloudSyncTick, getCloudSyncStatus, __configureCloudSyncForTests } from "../src/jobs/cloud-sync.job";
 import { DAY_MS, msToIso } from "../src/lib/license/protocol";
@@ -348,9 +349,11 @@ async function raporBolumu(lisans: BulutLisans, bulut: SahteBulut): Promise<void
   check("§9c ⭐ audit raporu buluttan istenemez → RAPOR_BILINMIYOR", by.get(b)?.durum === "HATA" && by.get(b)?.hataKodu === "RAPOR_BILINMIYOR");
   check("§9d ⭐ tanınmayan parametre → PARAMETRE_GECERSIZ (fabrika kendi şemasıyla doğrular)", by.get(c)?.durum === "HATA" && by.get(c)?.hataKodu === "PARAMETRE_GECERSIZ");
   const plan = standardReportPlan(new Date());
-  const donemli = REMOTE_REPORTS.filter((x) => x.standard === "DONEMLI").length;
-  const kesit = REMOTE_REPORTS.filter((x) => x.standard === "KESIT").length;
-  check("§9e standart görüntü planı: dönemli × 3 dönem + kesit × 1", plan.length === donemli * 3 + kesit, `${plan.length} = ${donemli}×3 + ${kesit}`);
+  // Yüzeye çıkmamış v2 satırı (`hazir:false`) standart görüntü üretmez (R1-BULUT).
+  const yuzeyde = REMOTE_REPORTS.filter((x) => { const e = REPORT_BY_KEY.get(x.key); return e !== undefined && isReportSurfaced(e); });
+  const donemli = yuzeyde.filter((x) => x.standard === "DONEMLI").length;
+  const kesit = yuzeyde.filter((x) => x.standard === "KESIT").length;
+  check("§9e standart görüntü planı: yüzeydeki dönemli × 3 dönem + kesit × 1", plan.length === donemli * 3 + kesit, `${plan.length} = ${donemli}×3 + ${kesit}`);
 }
 
 async function isBolumu(lisans: BulutLisans, bulut: SahteBulut): Promise<void> {

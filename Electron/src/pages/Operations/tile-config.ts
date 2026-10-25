@@ -24,6 +24,10 @@ import {
   MonitorPlay, Siren,
   Layers,
   FlaskConical,
+  BadgeCheck,
+  Gauge,
+  ScanSearch,
+  FileCheck2,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
 // Paket D — görünürlük kuralları SAF katmanda (bileşen içindeki bir `&&`
@@ -109,6 +113,11 @@ export interface OperationsVisibilityContext {
    * çalışır). Belirsizken FALSE ("sıfır görünür fark"); backend kapısı `requireKaliteGuvenceEnabled`.
    */
   kaliteGuvenceEnabled: boolean;
+  /**
+   * MALİYET & TEKLİF modülü (`maliyet.enabled`, MAL) — ETKİN değer (`production && maliyet`); backend kapısı
+   * `requireMaliyetEnabled` (`/api/cost`). Belirsizken FALSE: menü bayrak gelmeden çizilmez (fail-closed).
+   */
+  maliyetEnabled: boolean;
   /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
@@ -500,6 +509,17 @@ export const operationsTiles: OperationsTile[] = [
     permission: "return:read",
   },
   {
+    // Modül anahtarı yok (E-IRS P1): yapılandırılmamış kurulumda da görünür; sayfa
+    // "yapılandırılmamış — <ayar yolu>" der (bulunabilirlik şartı).
+    key: "e-irsaliye",
+    title: "e-İrsaliye Kayıtları",
+    description: "Sevkiyatların e-İrsaliye kayıtları — durum, numara/ETTN, süzgeç ve özet",
+    icon: FileCheck2,
+    to: "/operations/e-irsaliye",
+    group: "shipping",
+    permission: "eirsaliye:read",
+  },
+  {
     // Eski "Kurşun Sırası" + "Kurşun Dağıtım" tek ekranda birleşti (2026-08-05).
     // İkisi de AYNI iş emirlerini gösteriyordu; bayrak yeni açıldığında ikisi
     // birden menüde çıkıyor ve planlamacı aynı işi iki listede arıyordu.
@@ -520,6 +540,17 @@ export const operationsTiles: OperationsTile[] = [
     visibleWhen: isKursunPlanningVisible,
   },
   {
+    key: "inspections",
+    title: "Muayeneler",
+    description: "4 puan muayeneleri — puan / 100 m², derece önerisi, düzelt ve iptal",
+    icon: ScanSearch,
+    to: "/quality/inspections",
+    group: "quality",
+    permission: "inspection:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
+  },
+  {
     key: "lab-tests",
     title: "Lab Testleri",
     description: "Numune sonuçları — gramaj, haslık, çekme; onaylanan test donar",
@@ -527,6 +558,28 @@ export const operationsTiles: OperationsTile[] = [
     to: "/quality/lab-tests",
     group: "quality",
     permission: "labtest:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
+  },
+  {
+    key: "certificates",
+    title: "Sertifikalar",
+    description: "OEKO-TEX, GOTS… bitiş takibi; müşteri spesifikasyonları",
+    icon: BadgeCheck,
+    to: "/quality/certificates",
+    group: "quality",
+    permission: "certificate:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
+  },
+  {
+    key: "inspection-rules",
+    title: "4 Puan Kuralları",
+    description: "Puan aralığı → kalite derecesi; fabrika varsayılanı ve müşteri spesifikasyonları",
+    icon: Gauge,
+    to: "/quality/inspection-rules",
+    group: "quality",
+    permission: "inspection:read",
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
     offHint: KALITE_GUVENCE_OFF_HINT,
   },

@@ -22,9 +22,14 @@ export interface KaliteTuketici {
 
 export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
   {
+    dosya: "services/quality-inspection.service.ts",
+    fonksiyon: "evaluateInspection",
+    gerekce: "K4P muayene yazımı/önizlemesi `stationId` verildiyse o istasyonda muayene açık olmalı (`stationCanInspect`); akış sorulmaz.",
+  },
+  {
     dosya: "services/kursun-qc.service.ts",
-    fonksiyon: "reportError",
-    gerekce: "KK2 hata YAZMA: akış adımında olmak yetmez, istasyonda muayene açık olmalı (kapalıysa eski APK yazması 400).",
+    fonksiyon: "buildStepSummary",
+    gerekce: "Tablet panel bileşimi (KQ-D3): `inspectionEnabled` özet alanı hata panelini çizer; yazma kapısının (reportError) ekran ikizi, bilgi — koruma değil.",
   },
   {
     dosya: "services/kursun-qc.service.ts",
@@ -33,17 +38,32 @@ export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
   },
   {
     dosya: "services/inventory.service.ts",
-    fonksiyon: "kursunFinish",
-    gerekce: "Panel kurşun bitirişinin hata LİSTESİ: liste doluysa adım istasyonunda muayene açık olmalı (bilinçli fark K2).",
-  },
-  {
-    dosya: "services/tambur.service.ts",
-    fonksiyon: "reportError",
-    gerekce: "Tambur hata YAZMA: tür kontrolü ekran ailesini söyler, muayene yeteneği ayrıca sorulur.",
+    fonksiyon: "entryStationCapableForInspection",
+    gerekce: "KK1 doğumundaki muayene için giriş istasyonunun kalite yeteneği: yeteneksizse top doğar, muayene yazılmaz (K4P-KK1b fail-soft, STATION_NO_QUALITY).",
   },
   {
     dosya: "services/station-capability.service.ts",
     fonksiyon: "deriveCapabilityFlags",
     gerekce: "Panel/tablet yetenek DTO'sunun `inspectionEnabled` alanı; `canApplyQuality` akış ikizinde kalır.",
+  },
+  {
+    dosya: "services/work-session.service.ts",
+    fonksiyon: "withSessionCanInspect",
+    gerekce: "K4P-KK1: oturum yanıtının `station.canInspect` alanı tabletin muayene düğmesini gösterir; akış sorulmaz.",
+  },
+  {
+    dosya: "services/helpers/roll-defect.helper.ts",
+    fonksiyon: "assertDefectStepGate",
+    gerekce: "Hata YAZMA tek boğazı (KQ-D7): KK2/Kurşun, Tambur ve kurşun bitirişi listesi buradan geçer; istasyonda muayene açık olmalı (kapalıysa eski APK yazması 400, bilinçli fark K2).",
+  },
+  {
+    dosya: "services/tambur.service.ts",
+    fonksiyon: "getStep",
+    gerekce: "Tambur özeti `inspectionEnabled` (KQ-D7): tablet HATA GİR çekmecesini çizer; yazma kapısının ekran ikizi, bilgi — koruma değil.",
+  },
+  {
+    dosya: "services/tambur.service.ts",
+    fonksiyon: "getByCardBarcode",
+    gerekce: "Kart okutma özeti `inspectionEnabled` (KQ-D7): getStep ile aynı alan, aynı anlam; koruma yazma boğazındadır.",
   },
 ];

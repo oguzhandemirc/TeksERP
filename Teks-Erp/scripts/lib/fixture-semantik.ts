@@ -139,6 +139,16 @@ export async function setupSemanticFixture(): Promise<SemanticFixture> {
     data: { rollId: r3, phase: "FINAL", revision: 1, inspectedLengthM: 300, widthSource: "UNKNOWN", totalPoints: 2, defectCount: 1, unplacedDefectCount: 0, ruleSnapshot: {}, gradeMismatch: false, inspectedById: op.id, inspectedAt: DAY },
     select: { id: true },
   })).id;
+  // K4P-RAPOR muayene küpü: aktif puanlı iki muayene (r1 Ham, r2 Mamul) + iptal edilmiş (sayılmaz) + pencere dışı.
+  const insp = (rollId: string, phase: "RAW" | "FINAL", score: number, at: Date, voided = false) =>
+    prisma.rollInspection.create({ data: {
+      rollId, phase, revision: 1, inspectedLengthM: 100, widthSource: "ITEM_CARD", widthCm: 150, totalPoints: 10, defectCount: 2, unplacedDefectCount: 0,
+      pointsPer100M2: score, ruleSnapshot: {}, gradeMismatch: false, inspectedById: op.id, inspectedAt: at, ...(voided ? { voidedAt: at, voidedById: op.id, voidReason: "fikstür" } : {}),
+    } });
+  await insp(r1, "RAW", 50, NIGHT, true);
+  await insp(r1, "RAW", 12.5, NIGHT);
+  await insp(r2, "FINAL", 20.25, DAY);
+  await insp(r4, "RAW", 99, OUTSIDE);
   const error = (rollId: string, defectTypeId: string, stepId: string | null, origin: "PROCESS" | "INSPECTION", detectedAt: Date) =>
     prisma.rollError.create({ data: { rollId, defectTypeId, detectedAtStepId: stepId, origin, detectedAt, startMeter: 10, ...(origin === "INSPECTION" ? { inspectionId: inspection, points: 2 } : {}) } });
   await error(r1, defectTypes[0], st1, "PROCESS", NIGHT);

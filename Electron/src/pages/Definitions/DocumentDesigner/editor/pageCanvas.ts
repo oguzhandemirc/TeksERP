@@ -1,0 +1,121 @@
+/**
+ * Belge tasarımcısının SAYFA KANVASI — kâğıt boyu, yön, mm → px dönüşümü,
+ * cetvel ve kılavuz çizgileri. Saf modül: GrapesJS'e yalnız `deviceManager`
+ * tanımı ve kanvas iframe'ine eklenen kılavuz CSS'i olarak dokunur.
+ *
+ * Kılavuz CSS'i şablonun parçası DEĞİLDİR: CssComposer'a değil, kanvas
+ * iframe'inin <head>'ine ayrı bir <style> olarak girer (getCss() onu görmez).
+ */
+
+export type PaperSize = "A4" | "A5" | "LETTER";
+export type Orientation = "portrait" | "landscape";
+
+export interface PaperSpec {
+  readonly label: string;
+  readonly widthMm: number;
+  readonly heightMm: number;
+}
+
+export const PAPER_SIZES: Record<PaperSize, PaperSpec> = {
+  A4: { label: "A4", widthMm: 210, heightMm: 297 },
+  A5: { label: "A5", widthMm: 148, heightMm: 210 },
+  LETTER: { label: "Letter", widthMm: 215.9, heightMm: 279.4 },
+};
+
+export const ORIENTATION_LABELS: Record<Orientation, string> = {
+  portrait: "Dikey",
+  landscape: "Yatay",
+};
+
+/** CSS mm'si: 96 dpi'da 1 in = 25.4 mm. Chromium baskıda da bu oranı kullanır. */
+export const PX_PER_MM = 96 / 25.4;
+export const DEFAULT_MARGIN_MM = 15;
+
+export function mmToPx(mm: number): number {
+  return Math.round(mm * PX_PER_MM);
+}
+
+export interface PageDimensions {
+  readonly widthMm: number;
+  readonly heightMm: number;
+  readonly widthPx: number;
+  readonly heightPx: number;
+}
+
+export function pageDimensions(size: PaperSize, orientation: Orientation): PageDimensions {
+  const spec = PAPER_SIZES[size];
+  const [w, h] = orientation === "portrait" ? [spec.widthMm, spec.heightMm] : [spec.heightMm, spec.widthMm];
+  return { widthMm: w, heightMm: h, widthPx: mmToPx(w), heightPx: mmToPx(h) };
+}
+
+export function deviceId(size: PaperSize, orientation: Orientation): string {
+  return `${size.toLowerCase()}-${orientation}`;
+}
+
+export interface PageDevice {
+  readonly id: string;
+  readonly name: string;
+  readonly width: string;
+  readonly height: string;
+}
+
+/** Altı cihaz: üç kâğıt × iki yön. `widthMedia` yok — belge tek genişlikte çizilir. */
+export function pageDevices(): PageDevice[] {
+  return (Object.keys(PAPER_SIZES) as PaperSize[]).flatMap((size) =>
+    (["portrait", "landscape"] as Orientation[]).map((o) => {
+      const d = pageDimensions(size, o);
+      return {
+        id: deviceId(size, o),
+        name: `${PAPER_SIZES[size].label} ${ORIENTATION_LABELS[o].toLowerCase()}`,
+        width: `${d.widthPx}px`,
+        height: `${d.heightPx}px`,
+      };
+    }),
+  );
+}
+
+export const GUIDE_STYLE_ID = "tekserp-page-guides";
+
+export interface PageMargins {
+  ust: number;
+  sag: number;
+  alt: number;
+  sol: number;
+}
+
+export interface GuideRegions {
+  /** Üst/alt bilgi temsil metni (boşsa şerit çizilmez). */
+  header: string;
+  footer: string;
+}
+
+const cssText = (s: string): string => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n]+/g, " ")}"`;
+
+/**
+ * Kenar boşluğu kılavuzu (kesikli çerçeve) + her sayfa yüksekliğinde sayfa kesmesi
+ * çizgisi + üst/alt bilgi temsil şeritleri + `.sayfa-kesmesi` işareti. Ayrı `<style>`a
+ * yazılır; şablon CSS'ine ve dışa aktarılan HTML'e girmez. Kenar gövde dolgusuyla taklit edilir.
+ */
+export function guideCss(dim: PageDimensions, margin: number | PageMargins = DEFAULT_MARGIN_MM, regions?: GuideRegions): string {
+  const m = typeof margin === "number" ? { ust: margin, sag: margin, alt: margin, sol: margin } : margin;
+  const [t, r, b, l] = [mmToPx(m.ust), mmToPx(m.sag), mmToPx(m.alt), mmToPx(m.sol)];
+  const pageH = dim.heightPx;
+  const band = "position:absolute;pointer-events:none;font:10px/1.2 Arial,sans-serif;color:rgba(37,99,235,.85);display:flex;align-items:center;justify-content:center;border:1px dotted rgba(37,99,235,.6);box-sizing:border-box;";
+  const out = [
+    `html{background:#fff;min-height:100%;position:relative;}`,
+    `body{margin:0;padding:${t}px ${r}px ${b}px ${l}px;box-sizing:border-box;min-height:${pageH}px;position:relative;`,
+    `background-image:repeating-linear-gradient(to bottom,transparent 0,transparent ${pageH - 1}px,rgba(220,38,38,.55) ${pageH - 1}px,rgba(220,38,38,.55) ${pageH}px);}`,
+    `body::before{content:"";position:absolute;pointer-events:none;left:${l}px;right:${r}px;top:${t}px;height:${pageH - t - b}px;`,
+    `outline:1px dashed rgba(59,130,246,.55);}`,
+    `.sayfa-kesmesi{border-top:1px dashed rgba(220,38,38,.8);height:0;margin:2mm 0;}`,
+  ];
+  if (regions?.header && t >= 8) out.push(`html::before{content:${cssText(regions.header)};${band}left:${l}px;right:${r}px;top:2px;height:${t - 4}px;}`);
+  if (regions?.footer && b >= 8) out.push(`html::after{content:${cssText(regions.footer)};${band}left:${l}px;right:${r}px;top:${pageH - b + 2}px;height:${b - 4}px;}`);
+  return out.join("");
+}
+
+/** Cetvel çentikleri: her cm bir çentik, her 2 cm'de etiket (0, 2, 4…). */
+export function rulerTicks(widthMm: number): Array<{ cm: number; labeled: boolean }> {
+  const count = Math.floor(widthMm / 10);
+  return Array.from({ length: count + 1 }, (_, cm) => ({ cm, labeled: cm % 2 === 0 }));
+}

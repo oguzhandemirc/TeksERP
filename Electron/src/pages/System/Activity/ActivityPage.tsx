@@ -7,63 +7,61 @@ import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
-import type { ExportColumn } from "@/lib/list-export";
-import { safeFormat } from "@/lib/format";
+import { Callout } from "@/components/ui/callout";
 import { systemLogService } from "@/services/systemLogService";
-import type { SystemLogListItem } from "@/types/systemLog";
-import { ActivityFilters, type ActivityFilterState } from "./ActivityFilters";
+import { ActivityFilters } from "./ActivityFilters";
 import { ActivityFeed } from "./ActivityFeed";
 import { ActivityDetailSheet } from "./ActivityDetailSheet";
-import { actionLabel, tableLabel } from "./labels";
+import {
+  ACTIVITY_EXPORT_COLUMNS,
+  buildFeedParams,
+  effectiveView,
+  isIslemItem,
+  type ActivityFilterState,
+  type FeedItem,
+} from "./activity-view";
 
 const QUERY_KEY = "system-logs";
 const PAGE_SIZE = 50;
 
-/** Akıştaki kullanıcı adı — kayıt sistem tarafından yazıldıysa "Sistem" (satırla aynı). */
-const activityUser = (i: SystemLogListItem): string =>
-  i.user ? i.user.fullName || i.user.username : "Sistem";
+type Selected = { logId: string } | { requestId: string } | null;
 
-// Dışa aktarım sütunları — akış satırının düz tablo karşılığı. "Özet" satırda
-// okunan cümlenin AYNISI (kullanıcı → modül → fiil); ekranda başka bir açıklama
-// alanı yok (eski/yeni değerler yalnız detay panelinde).
-const ACTIVITY_EXPORT_COLUMNS: ExportColumn<SystemLogListItem>[] = [
-  { label: "Tarih / Saat", value: (i) => safeFormat(i.createdAt, "dd.MM.yyyy HH:mm:ss") },
-  { label: "Kullanıcı", value: activityUser },
-  { label: "İşlem", value: (i) => actionLabel(i.action) },
-  { label: "Modül", value: (i) => tableLabel(i.tableName) },
-  { label: "Tablo (teknik)", value: (i) => i.tableName },
-  { label: "Kayıt", value: (i) => i.recordId },
-  {
-    label: "Özet",
-    value: (i) => `${activityUser(i)} → ${tableLabel(i.tableName)} kaydını ${actionLabel(i.action)}`,
-  },
+const exportNotes = (n: number): string[] => [
+  // ⚠️ Akış TEMBEL yüklenir (sonsuz kaydırma). Bunu yazmazsak indirilen
+  // dosya "hepsi buymuş" gibi okunur — sessiz kırpma en tehlikeli hatadır.
+  `Yalnız ekrana yüklenen ${n} kayıt — daha fazlası için listeyi aşağı kaydırarak genişletin.`,
+  "Süzgeçler (görünüm / gün / kişi / arama / modül / tarih) dosyaya birebir yansır.",
+  "Açıklama, sunucunun okuma anında kurduğu cümledir; eski/yeni değer dökümü satırın ayrıntısında görülür.",
 ];
 
 export function ActivityPage() {
-  const [filters, setFilters] = useState<ActivityFilterState>({});
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<ActivityFilterState>({ gorunum: "islem" });
+  const [selected, setSelected] = useState<Selected>(null);
 
   const query = useInfiniteQuery({
-    queryKey: [QUERY_KEY, filters],
+    queryKey: [QUERY_KEY, "feed", filters],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      systemLogService.list({
-        ...filters,
-        category: "DOMAIN", // AUTH/SYSTEM event'leri Sistem Kayıtları sayfasında
-        cursor: pageParam,
-        limit: PAGE_SIZE,
-      }),
-    getNextPageParam: (last) => last.pagination.nextCursor ?? undefined,
+    queryFn: ({ pageParam }) => systemLogService.feed(buildFeedParams(filters, pageParam, PAGE_SIZE)),
+    // `q` araması sayfalanmaz (yanıtında pagination yok).
+    getNextPageParam: (last) => last.pagination?.nextCursor ?? undefined,
     staleTime: 30_000,
   });
 
-  const items = useMemo<SystemLogListItem[]>(
-    () => query.data?.pages.flatMap((p) => p.data) ?? [],
-    [query.data],
-  );
+  const items = useMemo<FeedItem[]>(() => query.data?.pages.flatMap((p) => p.data) ?? [], [query.data]);
+  const warnings = query.data?.pages[0]?.warnings ?? [];
+  const requested = filters.gorunum ?? "islem";
+  const view = effectiveView(requested, items);
+  // İşlem görünümü istendi, sunucu satır döndürdü ve arama yok → eski backend.
+  const fellBack = requested === "islem" && view === "satir" && !filters.q;
 
   // Perf: ActivityFeed'in React.memo'lu satırları için stabil referans.
-  const handleSelect = useCallback((item: SystemLogListItem) => setDetailId(item.id), []);
+  const handleSelect = useCallback((item: FeedItem) => {
+    if (isIslemItem(item)) {
+      setSelected(item.requestId ? { requestId: item.requestId } : { logId: item.satirlar[0]?.id ?? item.id });
+    } else {
+      setSelected({ logId: item.id });
+    }
+  }, []);
 
   const { rootRef, sentinelRef } = useInfiniteScroll({
     hasMore: query.hasNextPage,
@@ -75,7 +73,7 @@ export function ActivityPage() {
     <PageShell>
       <PageHeader
         title="Etkinlik"
-        description="Sistemdeki son işlemler; yalnız görüntüleme"
+        description="Kim ne yaptı — günlük dille işlemler; ayrıntıda teknik iz"
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
@@ -83,13 +81,7 @@ export function ActivityPage() {
               name="Etkinlik"
               rows={items}
               columns={ACTIVITY_EXPORT_COLUMNS}
-              notes={[
-                // ⚠️ Akış TEMBEL yüklenir (sonsuz kaydırma). Bunu yazmazsak indirilen
-                // dosya "hepsi buymuş" gibi okunur — sessiz kırpma en tehlikeli hatadır.
-                `Yalnız ekrana yüklenen ${items.length} kayıt — daha fazlası için "Daha fazla yükle" ile listeyi genişletin.`,
-                "Filtreler (kullanıcı / modül / işlem / tarih) dosyaya birebir yansır.",
-                "Eski/yeni değer dökümü dosyaya girmez — satırın detay panelinde görülür.",
-              ]}
+              notes={exportNotes(items.length)}
             />
           </>
         }
@@ -98,8 +90,20 @@ export function ActivityPage() {
       <ActivityFilters value={filters} onChange={setFilters} />
 
       <PageBody ref={rootRef}>
-        <ActivityFeed items={items} loading={query.isLoading} onSelect={handleSelect} />
-        {items.length > 0 && (
+        {fellBack && items.length > 0 && (
+          <div className="px-4 pt-3 sm:px-6">
+            <Callout tone="info">
+              Sunucu sürümü işlem görünümünü desteklemiyor — tüm satırlar gösteriliyor.
+            </Callout>
+          </div>
+        )}
+        <ActivityFeed
+          items={items}
+          loading={query.isLoading}
+          onSelect={handleSelect}
+          emptyText={warnings[0] ?? (filters.q ? "Bu numarada kayıt bulunamadı." : undefined)}
+        />
+        {items.length > 0 && !filters.q && (
           <AutoLoadMore
             ref={sentinelRef}
             hasMore={query.hasNextPage}
@@ -109,7 +113,11 @@ export function ActivityPage() {
         )}
       </PageBody>
 
-      <ActivityDetailSheet logId={detailId} onClose={() => setDetailId(null)} />
+      <ActivityDetailSheet
+        logId={selected && "logId" in selected ? selected.logId : null}
+        requestId={selected && "requestId" in selected ? selected.requestId : null}
+        onClose={() => setSelected(null)}
+      />
     </PageShell>
   );
 }

@@ -650,10 +650,24 @@
     "subcontract/scorecard": "bulut:uretim:oku",
     "inventory/scorecard": "bulut:stok:oku",
     "finance/aging": "bulut:cari-bakiye:oku",
-    "finance/cheque-due": "bulut:cek:oku"
+    "finance/cheque-due": "bulut:cek:oku",
+    "sales/siparis-talep": "bulut:siparis:oku",
+    "sales/sevkiyat": "bulut:sevkiyat:oku",
+    "sales/termin": "bulut:sevkiyat:oku",
+    "sales/acik-siparisler": "bulut:siparis:oku",
+    "sales/vazgecilen-is": "bulut:siparis:oku",
+    "quality/kalite": "bulut:uretim:oku",
+    "quality/kayip": "bulut:uretim:oku",
+    "inventory/depo": "bulut:stok:oku",
+    "subcontract/fasoncular": "bulut:uretim:oku",
+    "dokuma/tezgah-randimani": "bulut:uretim:oku",
+    "dokuma/duruslar": "bulut:uretim:oku",
+    "dokuma/levent-dengesi": "bulut:uretim:oku",
+    "finance/alacaklar": "bulut:cari-bakiye:oku"
   },
   "REPORTS_NOT_IN_CLOUD": [
     "audit/*",
-    "production/operator-performance"
+    "production/operator-performance",
+    "production/uretim-akisi"
   ]
 }

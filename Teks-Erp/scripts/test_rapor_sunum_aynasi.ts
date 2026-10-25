@@ -5,6 +5,9 @@
 // Emsal: `test_lisans_protokol_aynasi`. Düzeltme: değişiklik ÖNCE kaynakta, sonra `cp -p` aynaya.
 //
 // ÜÇ SONUÇ: iki dosyadan biri yoksa KIRMIZI (yokluk "eşit" sayılmaz); kaynak ≥ 1 KB (boş = eşit yok).
+// §4 (R1-BULUT): patron bulutu tel dosyası `patron/sunucu/src/wire/api.ts` zarfın GÖVDESİNİ ("/** Ölçü birimi"nden
+// sona) AYNEN taşır — uygulama aynası `mirror.test.ts` ile bayt-eşit. ✓B2 (R1-BULUT 2026-10-25): api.ts'te
+// `kisiAdi` → `kisiAd` → §4 ❌ 1; md5 ile geri alındı.
 // ✓B1 (bu commit) — R0-SABLON 2026-10-24: aynada tek boşluk eklendi → ❌ 1; md5 ile geri alındı, 3/0.
 // Koşum: npx tsx scripts/test_rapor_sunum_aynasi.ts   (DB GEREKMEZ)
 // =============================================================================
@@ -23,6 +26,8 @@ function check(label: string, ok: boolean, extra = ""): void {
 const KOK = path.resolve(__dirname, "..", "..");
 const KAYNAK = "Teks-Erp/src/services/reports/sunum/sunum.types.ts";
 const AYNA = "Electron/src/pages/Reports/_v2/sunum.ts";
+const BULUT_TEL = "patron/sunucu/src/wire/api.ts";
+const GOVDE_BASI = "/** Ölçü birimi";
 
 const oku = (rel: string): Buffer | null => {
   const p = path.join(KOK, rel);
@@ -48,6 +53,13 @@ function main(): void {
   } else {
     check("§3 ayna kaynakla BAYT-EŞİT (sha256)", false, "ölçülemedi: dosya eksik");
   }
+  const tel = oku(BULUT_TEL);
+  const kaynakMetni = kaynak?.toString("utf8") ?? "";
+  const bas = kaynakMetni.indexOf(GOVDE_BASI);
+  const govde = bas >= 0 ? kaynakMetni.slice(bas) : "";
+  const telEsit = govde.length >= 1024 && tel !== null && tel.toString("utf8").endsWith(govde);
+  check(`§4 bulut tel dosyası (${BULUT_TEL}) zarf gövdesini AYNEN taşır ve dosya onunla biter`, telEsit,
+    telEsit ? `${govde.length} bayt` : govde.length < 1024 ? "gövde başı bulunamadı" : tel === null ? "dosya yok" : "gövde kaymış — düzelt: kaynak gövdesini api.ts sonuna kopyala, sonra cp -p api.ts patron/uygulama/src/api/wire.ts");
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) process.exit(1);
 }

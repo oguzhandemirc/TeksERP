@@ -5,6 +5,8 @@ import { safeFormat, formatNumber, safeFormatCalendar } from "@/lib/format";
 import { rollMatchesQuery, rollMatchesContext } from "./roll-search";
 import type { ShipmentDetail, ShipmentDetailRoll } from "./types";
 import { ShipmentSheetSackCard } from "./ShipmentSheetSackCard";
+import { EIrsaliyeSection } from "./eirsaliye/EIrsaliyeSection";
+import { ShipmentInspectionSection } from "@/pages/Quality/Inspections/ShipmentInspectionSection";
 
 const int = (v: number | null | undefined) => formatNumber(v, 0);
 const num = (v: number | null | undefined) => formatNumber(v, 1);
@@ -67,6 +69,9 @@ export function ShipmentSheetBody({
           <Info label="Sevk Tarihi" value={d.dispatchedAt ? safeFormat(d.dispatchedAt, "dd.MM.yyyy HH:mm") : null} />
         </CardContent>
       </Card>
+
+      <EIrsaliyeSection shipmentId={d.id} shipmentStatus={d.status} />
+      <ShipmentInspectionSection shipmentId={d.id} shipmentNo={d.shipmentNo} />
 
       {d.orders.map((o) => (
         <Card key={o.id}>

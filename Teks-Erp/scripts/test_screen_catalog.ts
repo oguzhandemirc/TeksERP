@@ -134,6 +134,7 @@ const TILE_FILES = [
   "pages/Access/tile-config.ts",
   "pages/Finance/tile-config.ts",
   "pages/Reports/tile-config.ts",
+  "pages/Cost/tile-config.ts",
 ];
 const NAV_FILE = "components/layout/nav-config.ts";
 
@@ -357,11 +358,6 @@ const KARO_YOK: ReadonlyArray<{ key: string; reason: string }> = [
       "(`command-entries.deep.ts`) ve İstasyonlar sayfasından giriliyor. Gizlenecek " +
       "bir karo olmadığı için karo↔modül hizası ölçülemez; P5 karo eklerse muaf ÖLÜR.",
   },
-  // K4P zemin (2026-10-24): manifesto + route kapısı önden yazıldı; sayfa ve karo PANEL/LAB/SERT
-  // dilimlerinde iner. Karo doğunca muaf "kullanılmayan" düşer ve silinir.
-  { key: "quality/inspections", reason: "K4P Muayeneler ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
-  { key: "quality/inspection-rules", reason: "K4P 4 Puan Kuralları ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
-  { key: "quality/certificates", reason: "K4P Sertifikalar ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
 ];
 
 
@@ -761,8 +757,8 @@ function main(): void {
     kapiliAlanlar.size >= 4,
     `${kapiliAlanlar.size} kapı → ${[...kapiliAlanlar].sort().join(", ")}`,
   );
-  // Hiçbir route'a TAKILMAMIŞ kapı henüz bir yüzeyi korumuyor (MAL-0: `requireMaliyetEnabled`); ekran
-  // beyanı ilk takıldığı gün zorunlu olur. Kullanım middlewares DIŞINDAKİ src'de aranır.
+  // Hiçbir route'a TAKILMAMIŞ kapı henüz bir yüzeyi korumuyor; ekran beyanı (ya da gerekçeli
+  // ekransız muaf) ilk takıldığı gün zorunlu olur. Kullanım middlewares DIŞINDAKİ src'de aranır.
   const SRC_DIZIN = path.join(ROOT, "Teks-Erp", "src");
   const srcMetinleri: string[] = [];
   (function gez(dir: string): void {
@@ -779,8 +775,11 @@ function main(): void {
   };
   const rotasiz = [...kapiliAlanlar].filter((a) => !takili(a));
   console.log(`   ℹ️  §10 route'a takılmamış kapı: ${rotasiz.join(", ") || "(yok)"}`);
+  // Gerekçeli EKRANSIZ muaf (§8) da bir beyandır: "gizlenecek ekran henüz yok" yazılıdır (MAL-1: kapı
+  // API uçlarına takıldı, ekran MAL-3/MAL-7). Muaf ekran doğunca §8b ölü muafı zaten kırmızıya çevirir.
+  const ekransizMuaf = new Set<string>(EKRANSIZ_MODULLER.map((e) => e.modul));
   const kapiliAmaEkransiz = [...kapiliAlanlar].filter(
-    (a) => takili(a) && screensOfModul(a as EkranModul).length === 0,
+    (a) => takili(a) && screensOfModul(a as EkranModul).length === 0 && !ekransizMuaf.has(a),
   );
   check(
     "§10b ⭐ Kapısı olan her modülün en az bir ekranı beyanlı",

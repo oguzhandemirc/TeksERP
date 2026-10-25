@@ -249,6 +249,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/machine-collectors", app: "desktop", modul: "tezgahEnabled", title: "Makine Kartları", requires: ["loom:spec-manage"], capabilities: [] },
   { key: "definitions/machine-stop-codes", app: "desktop", modul: "tezgahEnabled", title: "Duruş Kodu Eşleme", requires: ["loom:spec-manage"], capabilities: [] },
   { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
+  { key: "operations/e-irsaliye", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "e-İrsaliye Kayıtları", requires: ["eirsaliye:read"], capabilities: [] },
   { key: "reports/production", app: "desktop", modul: "productionEnabled", title: "Üretim", requires: ["report:production"], capabilities: [] },
   { key: "reports/sales", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
   { key: "reports/quality", app: "desktop", modul: "productionEnabled", title: "Kalite", requires: ["report:quality"], capabilities: [] },
@@ -264,6 +265,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
   { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
   { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  // T2 iskeleti: Belge Şablonları ile aynı izin kümesi (T5).
+  { key: "definitions/document-designer", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Tasarımcısı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)
@@ -290,6 +293,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "finance/cheques", app: "desktop", modul: "financeEnabled", title: "Çek ve Senetler", requires: ["finance:read"], capabilities: ["finance:cheque"] },
   { key: "finance/allocations", app: "desktop", modul: "financeEnabled", title: "Tahsisler", requires: ["finance:read"], capabilities: ["finance:payment"] },
   { key: "finance/period-close", app: "desktop", modul: "financeEnabled", title: "Dönem Kapanışı", requires: ["finance:read"], capabilities: ["finance:close"] },
+  // Raporlar v2 kayıtlı/özel raporlar (R1-KAYIT): oluşturma/düzenleme builder; kategori, herkese açma
+  // ve başkasının koşusunu durdurma publish. Görüntüleme (`reports/kayitli/:id`) kapısızdır — görünürlük uçta.
+  { key: "reports/ozel", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Özel rapor oluştur", requires: ["report:builder"], capabilities: ["report:publish"] },
   { key: "reports/finance", app: "desktop", modul: "financeEnabled", title: "Ön Muhasebe Raporları", requires: ["report:finance"], capabilities: [] },
   // Dokuma raporları (Dilim 5, 2026-09-14): okuma `report:production` (1e hükmü ③); karne eylemleri ekran içi
   // PermissionGate — `loom:manual-entry` (terim düzelt · mühürle; machine-stops ekranıyla PAYLAŞILIR) ve
@@ -314,6 +320,15 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "quality/inspection-rules", app: "desktop", modul: "kaliteGuvenceEnabled", title: "4 Puan Kuralları", requires: ["inspection:read"], capabilities: ["inspection:rules"] },
   { key: "quality/lab-tests", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Lab Testleri", requires: ["labtest:read"], capabilities: ["labtest:write", "labtest:approve"] },
   { key: "quality/certificates", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Sertifikalar", requires: ["certificate:read"], capabilities: ["certificate:write"] },
+  // Maliyet & Teklif (MAL-3): görüntüleme `cost:read` (uçların okuma izni); yazma ekran İÇİ yetenek.
+  { key: "cost", app: "desktop", modul: "maliyetEnabled", title: "Maliyet & Teklif", requires: ["cost:read"], capabilities: [] },
+  { key: "cost/parameters", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Parametreleri", requires: ["cost:read"], capabilities: ["cost:settings"] },
+  { key: "cost/yarn-prices", app: "desktop", modul: "maliyetEnabled", title: "İplik Maliyet Fiyatları", requires: ["cost:read"], capabilities: ["cost:write"] },
+  { key: "cost/finishing-rates", app: "desktop", modul: "maliyetEnabled", title: "Fason Tarifeleri", requires: ["cost:read"], capabilities: ["cost:write"] },
+  { key: "cost/items", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Kartları", requires: ["cost:read"], capabilities: ["cost:write"] },
+  { key: "cost/calculator", app: "desktop", modul: "maliyetEnabled", title: "Hızlı Hesaplayıcı", requires: ["cost:read"], capabilities: [] },
+  // bildirim: yönetici bildirim profilleri (N4-SEMA izni; sayfa + rota + karo N4-PROFIL'de).
+  { key: "system/notification-profiles", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim Profilleri", requires: ["settings:notifications", "admin:settings"], capabilities: [] },
 ];
 
 const mobile: ScreenEntry[] = [
@@ -406,7 +421,6 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
       "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
-  { modul: "maliyetEnabled", reason: "Maliyet & Teklif (MAL-0): şalter + kapı doğdu, ilk ekranı MAL dilimlerinde; ekran eşlenince bu muaf silinir." },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */

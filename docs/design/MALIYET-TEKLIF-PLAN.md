@@ -45,7 +45,7 @@
 | Enerji | Sayaç yok | — | Parametre: kWh/tezgah-saat × TL/kWh |
 | Hazırlık (devere/tahar) | `WarpBeam` var, maliyet yok | — | Parametre: levent başı TL ÷ levent kumaş metresi |
 | Genel gider | — | — | Parametre: % |
-| Kur | `ExchangeRate` + `jobs/exchange-rate.job.ts` (TCMB) + `finance.helper.ts` `resolveExchangeRateTx` (TRY = 1, yoksa null) — `finance.enabled` modeli | Finans kapalı kurulumda kur yok | Finans açıksa öneri; her zaman elle girilebilir; kur yoksa 400 `FX_RATE_MISSING` (1'e düşmez) |
+| Kur | `ExchangeRate` + `jobs/exchange-rate.job.ts` (TCMB) + `finance.helper.ts` `resolveExchangeRateTx` (TRY = 1, yoksa null) — `finance.enabled` modeli | Finans kapalı kurulumda kur yok | Finans açıksa öneri; her zaman elle girilebilir; kur yoksa `FX_RATE_MISSING` (1'e düşmez): sürüm kaydında 400 `COST_INPUT_MISSING`, önizlemede 200 + `sonuc: null` + `eksikler` (MAL-2 kararı, arşiv 2026-10-25) |
 | Satış fiyatı | `ItemPrice(SALE)` (kart varsayılanı + müşteri istisnası, `resolveItemPrice`), `OrderLine.unitPrice Decimal(12,2)` | Tarihli/sürümlü fiyat listesi yok | `PriceList` (yayınlanan, sürümlü) |
 | Açık talep | `order-line-scope.helper.ts` `ACTIVE_LINE`, `MEASURED_LINE`, `openLineWhere`; `production-balance.service.ts` (talep − depo − üretimde) | — | İhtiyaç planı aynı tek kaynaklardan okur |
 | İplik stoğu | `YarnStock.balanceKg` (iplik modülü), lot bakiyesi Σ hareket | Emanet lot ayrımı | İplik açıksa okunur; kapalıysa "bilinmiyor" (0 değil) |
@@ -67,7 +67,7 @@
 | N | çözgü tel sayısı (kenar dahil) | adet | `WarpSpec.endsCount` |
 | dᶜ | çözgü ipliği numarası | denye (g / 9000 m) | `resolveDenier(yarnItem)` |
 | t | çözgü çekmesi (take-up) | oran (0–1) | `WarpSpec.takeUpPct` → `CostParameterSet.defaultTakeUpPct` (uyarı) → YOK (hata) |
-| fᶜ | çözgü firesi (levent dengesi) | oran | `CostStructure.warpWastePct` (elle) → ölçülmüş (`beamResultReport.firePct`, son 180 gün, ≥ 3 kapanmış levent) → parametre varsayılanı |
+| fᶜ | çözgü firesi (levent dengesi) | oran | `CostStructure.warpWastePct` (elle) → parametre varsayılanı; ölçülmüş (`beamResultReport.firePct`, son 180 gün, ≥ 3 kapanmış levent) yalnız ÖNERİ, kullanıcı onaylarsa elle değer olarak girer (MAL-2 kararı, bkz. §7-10) |
 | p | toplam atkı sıklığı | atkı/cm | `WeftSpec.picksPerCm` |
 | sⱼ | j. atkı ipliğinin payı | oran, Σ = 1 | `WeftSpecYarn.picksInRepeat / Σ` |
 | dⱼ | j. atkı ipliği numarası | denye | `resolveDenier` |
@@ -120,7 +120,7 @@ Bütün yüzdeler DB'de `Decimal(5,2)` yüzde olarak tutulur (CHECK 0 ≤ x < 10
 
 **Yuvarlama.** Motor tam `Prisma.Decimal` hassasiyetiyle çalışır; saklanan bileşenler TL/m 4 hane, kg/m 6 hane, toplamlar 2 hane; kural ticari yarım-yukarı (`ROUND_HALF_UP`, belge `docNum` ile aynı). Kayan nokta (`number`) motorda YASAK.
 
-**Hata ve uyarı sözleşmesi.** Motor `{ sonuc | null, eksikler: Kod[], uyarilar: Kod[] }` döner. Eksik (sürüm kaydı 400 `COST_INPUT_MISSING`, `details.missing[]`): `WARP_SPEC_MISSING`, `DENIER_MISSING`, `TAKEUP_MISSING`, `WEFT_SPEC_MISSING`, `PICKS_MISSING`, `WEFT_LENGTH_MISSING`, `YARN_PRICE_MISSING`, `FX_RATE_MISSING`, `RPM_MISSING`, `PARAMETER_SET_MISSING`. Uyarı (kayda girer, rozet olur): `TAKEUP_DEFAULTED`, `WARP_WASTE_DEFAULTED`, `WARP_WASTE_MEASURED`, `WEFT_LENGTH_FROM_WIDTH`, `SHRINK_UNKNOWN`, `RPM_DEFAULTED`, `PRICE_STALE` (fiyat > 90 gün).
+**Hata ve uyarı sözleşmesi.** Motor `{ sonuc | null, eksikler: Kod[], uyarilar: Kod[] }` döner. Eksik (sürüm kaydı 400 `COST_INPUT_MISSING`, `details.missing[]`): `WARP_SPEC_MISSING`, `DENIER_MISSING`, `TAKEUP_MISSING`, `WEFT_SPEC_MISSING`, `PICKS_MISSING`, `WEFT_LENGTH_MISSING`, `YARN_PRICE_MISSING`, `FX_RATE_MISSING`, `RPM_MISSING`, `PARAMETER_SET_MISSING`, `FINISHING_RATE_MISSING` (MAL-2 eki). Uyarı (kayda girer, rozet olur): `TAKEUP_DEFAULTED`, `WARP_WASTE_DEFAULTED`, `WARP_WASTE_MEASURED`, `WEFT_LENGTH_FROM_WIDTH`, `SHRINK_UNKNOWN`, `RPM_DEFAULTED`, `PRICE_STALE` (fiyat > 90 gün).
 
 ### 2.3 Sayısal örnek (bekçinin ALTIN değeri — MAL-2 `test_maliyet_formul`)
 

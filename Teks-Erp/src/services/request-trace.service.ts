@@ -240,3 +240,29 @@ export async function pruneRequestTraces(now: Date, retentionDays: number): Prom
   const r = await prisma.requestTrace.deleteMany({ where: { createdAt: { lt: cutoff } } });
   return { deleted: r.count, cutoff };
 }
+
+/** İşlem görünümü (B2): sayfadaki istek kimliklerinin başlıkları — tek sorgu. */
+export async function getTracesByIds(ids: readonly string[]): Promise<RequestTraceDto[]> {
+  if (ids.length === 0) return [];
+  return prisma.requestTrace.findMany({ where: { id: { in: [...ids] } }, select: REQUEST_TRACE_SELECT });
+}
+
+/** İşlem görünümü (B2): reddedilen istekler (≥400) — audit satırı olmadığı için yalnız burada görünür. */
+export async function listRejectedTraces(
+  f: { userId?: string; from?: Date; to?: Date; before?: { at: Date; id: string } },
+  limit: number,
+): Promise<RequestTraceDto[]> {
+  const and: Prisma.RequestTraceWhereInput[] = [{ status: { gte: 400 } }, { auditCount: 0 }];
+  if (f.userId) and.push({ userId: f.userId });
+  if (f.from) and.push({ createdAt: { gte: f.from } });
+  if (f.to) and.push({ createdAt: { lte: f.to } });
+  if (f.before) {
+    and.push({ OR: [{ createdAt: { lt: f.before.at } }, { createdAt: f.before.at, id: { lt: f.before.id } }] });
+  }
+  return prisma.requestTrace.findMany({
+    where: { AND: and },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: Math.min(Math.max(1, limit), 200),
+    select: REQUEST_TRACE_SELECT,
+  });
+}

@@ -89,6 +89,7 @@ const LABELS = {
     ambalajNo: "AMBALAJ NO",
     sevkPartisi: "SEVK PARTİSİ",
     partiKodu: "PARTİ KODU",
+    hataNotu: "HATA NOTU",
     metreToplami: "METRE TOPLAMI",
     kgToplami: "KG TOPLAMI",
     paketSayisi: "TOP ADEDİ",
@@ -144,6 +145,7 @@ const LABELS = {
     ambalajNo: "PKG #",
     sevkPartisi: "LOT",
     partiKodu: "LOT CODE",
+    hataNotu: "DEFECT NOTE",
     metreToplami: "TOTAL METERS",
     kgToplami: "TOTAL KG",
     paketSayisi: "ROLL COUNT",
@@ -232,6 +234,9 @@ interface ShipmentDocCeki {
    *  Eski donmuş snapshot'larda alan YOK → kolon durur, hücre "—" basar
    *  (geriye dönük doldurma YAPILMAZ). */
   batchNumber?: string | null;
+  /** Açık (kararsız) hata notu "12,5 m Leke · 40 m Delik" (KQ-D8) — yalnız hatalı topta;
+   *  eski snapshot'ta YOK. Kolon OPT-IN (müşteri belgesinde iç kolon). */
+  defectNote?: string | null;
 }
 
 /** Donmuş sevk belgesi payload'ı — collectShipmentDocContent / getDispatchReport
@@ -699,6 +704,10 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
         { key: "meters", label: L.metre, align: "r", kind: QTY, value: (c) => c.meters, foot: { value: t.totalMeters } },
         // Top başına kg yalnız çuvalın ilk satırında dolu; 0 = BOŞ hücre (0,00 değil).
         { key: "kg", label: L.kg, align: "r", kind: QTY, value: (c) => (c.kg > 0 ? c.kg : null), foot: { value: t.totalKg } },
+        // Hata notu (KQ-D8) — ⚠️ `defaultHidden: true` LOAD-BEARING: iç kalite bilgisi müşteri
+        // belgesine yalnız belge ayarından bilerek açılınca girer (V-d). Rakama dokunmaz.
+        { key: "defectNote", label: L.hataNotu, align: "l", width: "22%", cellClass: "wrap", defaultHidden: true,
+          kind: TEXT, value: (c: ShipmentDocCeki) => c.defectNote ?? "" },
       ],
     });
   }

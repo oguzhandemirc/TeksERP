@@ -854,6 +854,19 @@ export interface KursunRollSummary {
   defects: KursunRollDefectSummary[];
   itemName?: string | null;
   colorName?: string | null;
+  /** KQ-D7: önceki adımlarda açılmış AÇIK hatalar (gri, salt-okunur). Eski backend göndermez. */
+  priorDefects?: KursunPriorDefect[];
+  priorOpenErrorCount?: number;
+}
+
+/** Önceki adım hatası + künye ("KK Masa 2 · Ayşe · 13:40"). */
+export interface KursunPriorDefect {
+  id: string;
+  startMeter: number | null;
+  errorType: string | null;
+  detectedStationName: string | null;
+  detectedByName: string | null;
+  detectedAt: string;
 }
 
 export interface KursunStepSummary {
@@ -891,7 +904,23 @@ export interface KursunStepSummary {
     /** SEÇİM tipliyse operatöre sunulacak AKTİF değerler. Tuşlar BURADAN
      *  çizilir — kodda sabit liste YOK (25GR/50GR/75GR panelden tanımlanır). */
     values?: { code: string; name: string }[];
+    /** Bu SEÇİM hangi BAYRAĞIN çeşidi (KQ-D4; gramaj → Kurşun). Eski backend göndermez. */
+    variantOfPropertyId?: string | null;
   }[];
+  /** Adım istasyonu muayene (hata girişi) yapar mı (KQ-D3). Eski backend
+   *  göndermez → undefined → hata paneli bugünkü gibi çizilir. */
+  inspectionEnabled?: boolean;
+  /** KQ-D6: iş emrinin hedef değerleri (gramaj vurgusu, KQ-D5). Eski backend göndermez. */
+  targetValues?: { propertyId: string; valueId: string; valueCode: string }[];
+  /** Sonraki (atlanmamış) adımın istasyon adı — "Toplar X'e" metni (KQ-D3). */
+  nextStepName?: string | null;
+  /** Adımda açık top yoksa neden + topların şu anki istasyonu (KQ-D3). Hata
+   *  değil BİLGİ durumudur; tablet `message`'ı basar. */
+  emptyStep?: {
+    code: 'NOT_ARRIVED' | 'PASSED' | 'NO_ACTIVE_ROLLS';
+    message: string;
+    currentStations: string[];
+  } | null;
   /** Bu adıma yazılan not (WorkOrderStep.notes; rotada KK2 istasyonuna özel
    *  talimat) — kart açıkken üstte gösterilir. */
   stepNote?: string | null;
@@ -928,6 +957,8 @@ export interface KursunOpenCard {
   stationName: string;
   stationCode: string;
   openRollCount: number;
+  /** KQ-D7: karttaki açık topların açık hata toplamı (⚠N rozeti). Eski backend göndermez. */
+  openErrorCount?: number;
   /// Planlamanın atadığı sıra (Electron Kurşun Sırası ile aynı kaynak).
   /// Liste backend tarafında bu alanlara göre sıralanmış gelir.
   priority: number;
@@ -963,6 +994,11 @@ export interface TamburRollDefect {
   id: string;
   startMeter: number;
   errorType: string | null;
+  /** KQ-D7 künyesi: hatanın açıldığı istasyon. Eski backend göndermez. */
+  detectedStationName?: string | null;
+  detectedByName?: string | null;
+  detectedAt?: string;
+  detectedAtStepId?: string | null;
 }
 
 export interface TamburRollSummary {
@@ -999,6 +1035,8 @@ export interface TamburStepSummary {
   stationId: string;
   stationCode: string;
   stationName: string;
+  /** KQ-D7: muayene açık mı — "HATA GİR" çekmecesi yalnız true iken çizilir. Eski backend: undefined → çizilmez. */
+  inspectionEnabled?: boolean;
   rolls: TamburRollSummary[];
 }
 

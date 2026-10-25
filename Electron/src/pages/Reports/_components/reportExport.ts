@@ -21,6 +21,7 @@ import type { SheetSpec } from "@/lib/xlsx-export";
 import { reportCellText, reportExcelNumFmt } from "@/lib/number-format";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import type { GrafikBlok } from "../_v2/sunum";
+import { hasPlacement, LAYOUT_CSS, placedBodyHtml } from "./reportExportLayout";
 
 export interface ReportColumn {
   header: string;
@@ -78,7 +79,15 @@ export interface AnaSayiKarti {
   ana?: boolean;
 }
 
-export type ExportBlok =
+/** Özel rapor düzeni (R2-DUZEN): blok genişliği (12 sütundan) ve öncesinde sayfa kesmesi. Yoksa çıktı bayt bayt eski. */
+export interface ExportPlacement {
+  genislik?: number;
+  sayfaKesmesi?: boolean;
+}
+
+export type ExportBlok = ExportBlockBody & ExportPlacement;
+
+type ExportBlockBody =
   | { tur: "anaSayi"; kartlar: AnaSayiKarti[] }
   | { tur: "anlati"; cumleler: string[] }
   | {
@@ -90,13 +99,16 @@ export type ExportBlok =
       /** Grafiğin veri tablosu — Excel'de ayrı sayfa, SVG yoksa PDF'te tablo. */
       veri: ReportTableSpec;
     }
-  | { tur: "tanimlar"; satirlar: { ad: string; aciklama: string }[] };
+  | { tur: "tanimlar"; satirlar: { ad: string; aciklama: string }[] }
+  /** Düzendeki yerinde basılan tablo — Excel'de aynı spec'ten ayrı sayfa (PDF = Excel). */
+  | { tur: "tablo"; tablo: ReportTableSpec }
+  | { tur: "metin"; baslik?: string; metin: string };
 
 const tableRowCount = (t: ReportTableSpec) => t.rows.length + (t.totalRow ? 1 : 0);
 
 /** PDF satır kapısı için: bütün tabloların ve grafik veri tablolarının gövde satırları (toplam satırı dahil). */
 export function reportRowCount(spec: ReportExportSpec): number {
-  const grafik = (spec.bloklar ?? []).reduce((n, b) => n + (b.tur === "grafik" ? tableRowCount(b.veri) : 0), 0);
+  const grafik = (spec.bloklar ?? []).reduce((n, b) => n + (b.tur === "grafik" ? tableRowCount(b.veri) : b.tur === "tablo" ? tableRowCount(b.tablo) : 0), 0);
   return spec.tables.reduce((n, t) => n + tableRowCount(t), grafik);
 }
 
@@ -163,6 +175,7 @@ function toSheetsV2(spec: ReportExportSpec): SheetSpec[] {
       for (const k of b.kartlar) summaryRows.push({ b: k.ana ? "Ana sayı" : "Yan sayı", a: k.ad, d: k.deger, k: k.kiyas ?? "" });
     else if (b.tur === "anlati") for (const c of b.cumleler) summaryRows.push({ b: WHAT_WE_SEE, a: c, d: "", k: "" });
     else if (b.tur === "tanimlar") for (const t of b.satirlar) summaryRows.push({ b: WHAT_IT_COUNTS, a: t.ad, d: t.aciklama, k: "" });
+    else if (b.tur === "metin") summaryRows.push({ b: "Not", a: b.baslik ?? "", d: b.metin, k: "" });
   }
   for (const u of spec.uyarilar ?? []) summaryRows.push({ b: "Uyarı", a: u, d: "", k: "" });
   const summarySheet: SheetSpec = {
@@ -176,7 +189,8 @@ function toSheetsV2(spec: ReportExportSpec): SheetSpec[] {
     ],
     rows: summaryRows,
   };
-  const grafikler = (spec.bloklar ?? []).flatMap((b) => (b.tur === "grafik" ? [tableToSheet(b.veri, preamble)] : []));
+  // Grafik verisi ve düzen tabloları blok sırasıyla — PDF'teki sırayla aynı.
+  const grafikler = (spec.bloklar ?? []).flatMap((b) => (b.tur === "grafik" ? [tableToSheet(b.veri, preamble)] : b.tur === "tablo" ? [tableToSheet(b.tablo, preamble)] : []));
   return [summarySheet, ...grafikler, ...spec.tables.map((t) => tableToSheet(t, preamble))];
 }
 
@@ -299,8 +313,13 @@ function blockHtml(b: ExportBlok): string {
       return `<section class="tanimlar"><h2>${WHAT_IT_COUNTS}</h2><dl>${b.satirlar
         .map((t) => `<dt>${esc(t.ad)}</dt><dd>${esc(t.aciklama)}</dd>`)
         .join("")}</dl></section>`;
+    case "tablo":
+      return tableHtml(b.tablo);
+    case "metin":
+      return `<section class="metin">${b.baslik ? `<h2>${esc(b.baslik)}</h2>` : ""}<p>${esc(b.metin)}</p></section>`;
   }
 }
+
 
 /**
  * v2 A4 belgesi: üst blok (ad · soru · dönem · kıyas · parametreler · basım) → bloklar
@@ -313,7 +332,10 @@ function buildReportHtmlV2(spec: ReportExportSpec): string {
   const defsIndex = blocks.findIndex((b) => b.tur === "tanimlar");
   const before = defsIndex < 0 ? blocks : blocks.slice(0, defsIndex);
   const after = defsIndex < 0 ? [] : blocks.slice(defsIndex);
-  const body = [...before.map(blockHtml), tablesHtml, ...after.map(blockHtml)].join("\n");
+  const placed = hasPlacement(blocks);
+  const body = placed
+    ? [placedBodyHtml(blocks, blockHtml), tablesHtml].join("\n")
+    : [...before.map(blockHtml), tablesHtml, ...after.map(blockHtml)].join("\n");
   const [question, ...context] = spec.soru ? v2ContextLines(spec) : ["", ...v2ContextLines(spec)];
   const printedLine = context.pop() ?? "";
   const warningsHtml = (spec.uyarilar ?? []).map((u) => `<div class="uyari">${esc(u)}</div>`).join("");
@@ -356,7 +378,7 @@ function buildReportHtmlV2(spec: ReportExportSpec): string {
   .tanimlar dl { margin: 0; }
   .tanimlar dt { font-weight: 600; margin-top: 4px; }
   .tanimlar dd { margin: 0 0 2px 0; color: #333; }
-  .uyari { font-size: 10px; color: #7a4b00; border-left: 2px solid #d9730d; padding-left: 6px; margin-top: 4px; }
+  .uyari { font-size: 10px; color: #7a4b00; border-left: 2px solid #d9730d; padding-left: 6px; margin-top: 4px; }${placed ? LAYOUT_CSS : ""}
 </style></head><body>
 <div class="hdr">
   <h1>${esc(spec.title)}</h1>

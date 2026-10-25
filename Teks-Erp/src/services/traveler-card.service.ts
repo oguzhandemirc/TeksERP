@@ -46,9 +46,12 @@ import { renderQrSvg } from "./helpers/barcode-svg.helper";
 import {
   renderTravelerCard,
   type TravelerCardSnapshot,
+  type TravelerCardMeta,
   type TravelerBatchLine,
 } from "./document-render/traveler-card.html";
 import { travelerTemplateService } from "./traveler-template.service";
+import { renderCardDesign, withDesign } from "./traveler-card-design";
+import { type LiveTemplate, resolveLiveTemplate } from "./document-template/live-binding";
 import type { TravelerPageSize } from "./document-render/traveler-card.density";
 // Ölü top kümesi TEK KAYNAK — parti sayımında elle statü listesi kopyalama (K18).
 import { K18_DEAD_STATUSES } from "./batch.service";
@@ -113,6 +116,8 @@ function planKey(snapshot: unknown): string {
   const plan = { ...(snapshot as Record<string, unknown>) };
   delete plan.config;
   delete plan.template;
+  // Tasarım izi (T11) de sunumdur: yeni şablon yayını kart sürümünü artırmaz.
+  delete plan.designTemplate;
   return JSON.stringify(sortDeep(plan));
 }
 
@@ -452,6 +457,8 @@ export class TravelerCardService {
         event: plan.revised ? "PRINT_REVISION" : "PRINT_EVENT",
         wasDirty: card.contentDirty,
         version: plan.version,
+        // Hangi tasarımla basıldı — yalnız iz (P-e); bayrak kapalıyken anahtar yok.
+        ...(plan.design ? { templateVersionId: plan.design.ref.versionId } : {}),
       },
     });
     if (report) {
@@ -993,6 +1000,7 @@ export class TravelerCardService {
     version: number;
     revised: boolean;
     printedAt?: Date;
+    design: LiveTemplate | null;
   }> {
     const row = await prisma.printedDocument.findUnique({
       where: {
@@ -1007,15 +1015,13 @@ export class TravelerCardService {
     if (!row) throw AppError.notFound(`Refakat kartının v${version} kopyası bulunamadı`);
 
     const { template, config } = await travelerTemplateService.resolveForPrint(null, prisma);
+    const { template: design } = await resolveLiveTemplate("TRAVELER_CARD");
     return {
-      snapshot: {
-        ...(row.snapshot as unknown as TravelerCardSnapshot),
-        config,
-        template,
-      } as TravelerCardSnapshot,
+      snapshot: withDesign({ ...(row.snapshot as unknown as TravelerCardSnapshot), config, template } as TravelerCardSnapshot, design),
       version: row.version,
       revised: false,
       printedAt: row.createdAt,
+      design,
     };
   }
 
@@ -1029,13 +1035,16 @@ export class TravelerCardService {
     version: number;
     revised: boolean;
     printedAt?: Date;
+    design: LiveTemplate | null;
   }> {
     const stored = card.snapshot as unknown as TravelerCardSnapshot | null;
     // SUNUM her yolda GÜNCEL — tek çözüm noktası, dallardan ÖNCE (aşağıdaki her
     // dönüş onu kullanır; dala kopyalanırsa biri sessizce donmuş kalır).
     const { template, config } = await travelerTemplateService.resolveForPrint(null, prisma);
+    // Tasarımcı varsayılanı da SUNUMDUR (P-e): kartla donmaz, burada canlı çözülür.
+    const { template: design } = await resolveLiveTemplate("TRAVELER_CARD");
     const dress = (base: TravelerCardSnapshot): TravelerCardSnapshot =>
-      ({ ...base, config, template }) as TravelerCardSnapshot;
+      withDesign({ ...base, config, template } as TravelerCardSnapshot, design);
 
     // İçeriği donmuş dal: geçersiz kart (tarihsel kopya) ya da okunamayan iş emri.
     const keepContent = async (): Promise<TravelerCardSnapshot> =>
@@ -1045,18 +1054,18 @@ export class TravelerCardService {
       );
 
     if (card.status !== TravelerCardStatus.ACTIVE) {
-      return { snapshot: await keepContent(), version: card.version, revised: false };
+      return { snapshot: await keepContent(), version: card.version, revised: false, design };
     }
 
     const plan = await this.buildPlan(prisma, card.workOrderId);
-    if (!plan) return { snapshot: await keepContent(), version: card.version, revised: false };
+    if (!plan) return { snapshot: await keepContent(), version: card.version, revised: false, design };
 
     const snapshot = dress({ config, template, ...plan } as unknown as TravelerCardSnapshot);
     // Karşılaştırma yalnız İÇERİĞE bakar (planKey config/template'i atar) — tasarım
     // değişikliği sürüm ARTIRMAZ, yoksa tek bir punto düzenlemesi sahadaki her kartı
     // bir sonraki baskıda revize göstermiş olurdu.
     const revised = stored != null && planKey(stored) !== planKey(snapshot);
-    return { snapshot, version: card.version + (revised ? 1 : 0), revised };
+    return { snapshot, version: card.version + (revised ? 1 : 0), revised, design };
   }
 
   /**
@@ -1113,7 +1122,7 @@ export class TravelerCardService {
       qrSvg = null;
     }
 
-    return renderTravelerCard(snapshot, {
+    const meta: TravelerCardMeta = {
       cardNumber: card.cardNumber,
       barcode: card.barcode,
       // Kâğıda basılan sürüm = baskı kaydedildiğinde yazılacak sürüm (tek kaynak).
@@ -1133,7 +1142,10 @@ export class TravelerCardService {
       // donmuş bir parti listesi diye bir şey hiç var olmadı.
       batches: await this.resolveLiveBatches(card.workOrderId),
       companyName: await readCompanyName(),
-    });
+    };
+    // Tasarımcı yolu yalnız ezmesiz kopyayı alır; sayfa ezmesi şablon ayarına biner.
+    if (plan.design) return renderCardDesign(plan.design, plan.snapshot, meta, opts?.pageSize);
+    return renderTravelerCard(snapshot, meta);
   }
 
   /**

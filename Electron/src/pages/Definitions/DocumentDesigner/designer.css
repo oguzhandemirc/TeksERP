@@ -1,0 +1,85 @@
+/* GrapesJS arayüzünü panel temasına bağlar (açık/koyu). Yalnız tasarımcı kabında geçerlidir. */
+.tekserp-designer {
+  --gjs-main-font: inherit;
+  --gjs-font-size: 0.75rem;
+  --gjs-primary-color: hsl(var(--card));
+  --gjs-secondary-color: hsl(var(--foreground));
+  --gjs-tertiary-color: hsl(var(--primary));
+  --gjs-quaternary-color: hsl(var(--primary));
+  --gjs-main-color: hsl(var(--card));
+  --gjs-font-color: hsl(var(--foreground));
+  --gjs-font-color-active: hsl(var(--foreground));
+  --gjs-main-dark-color: hsl(var(--muted));
+  --gjs-secondary-dark-color: hsl(var(--muted));
+  --gjs-main-light-color: hsl(var(--muted));
+  --gjs-secondary-light-color: hsl(var(--muted-foreground));
+  --gjs-soft-light-color: transparent;
+  --gjs-light-border: hsl(var(--border));
+  --gjs-arrow-color: hsl(var(--muted-foreground));
+  --gjs-dark-text-shadow: transparent;
+  --gjs-canvas-top: 16px;
+}
+
+.tekserp-designer .gjs-editor,
+.tekserp-designer .gjs-cv-canvas {
+  background-color: transparent;
+}
+.tekserp-designer .gjs-cv-canvas {
+  width: 100%;
+  top: 0;
+  height: 100%;
+}
+.tekserp-designer .gjs-frame-wrapper {
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.18);
+}
+
+/* Bloklar: iki sütun, ikon + Türkçe ad */
+.tekserp-designer-blocks .gjs-blocks-c {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+}
+.tekserp-designer-blocks .gjs-block {
+  width: auto;
+  min-height: 64px;
+  margin: 0;
+  padding: 8px 4px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  box-shadow: none;
+  color: hsl(var(--foreground));
+}
+.tekserp-designer-blocks .gjs-block:hover {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+/* Paket kuralı `.gjs-block svg{fill:currentColor}` çizgi ikonlarını dolu kareye çeviriyor (e2e BT5 PNG). */
+.tekserp-designer-blocks .gjs-block svg {
+  fill: none;
+}
+
+.tekserp-designer-blocks .gjs-block-label {
+  font-size: 11px;
+}
+.tekserp-designer-blocks .gjs-block-category .gjs-title {
+  background: transparent;
+  border-bottom: 1px solid hsl(var(--border));
+  font-weight: 600;
+}
+
+/* Sağ panel: GrapesJS girdileri panel girdilerine yakın */
+.tekserp-designer .gjs-sm-sector .gjs-sm-sector-title,
+.tekserp-designer .gjs-layer-item,
+.tekserp-designer .gjs-trt-header {
+  background-color: transparent;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.tekserp-designer .gjs-field {
+  background-color: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+}
+.tekserp-color-prop {
+  padding: 2px 0;
+}

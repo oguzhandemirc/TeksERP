@@ -98,5 +98,23 @@ const gunSemalar = Object.entries(temelDokumaFinans).filter(([ad]) => /^core\w+Q
 const gunKiyasli = gunSemalar.filter(([, s]) => "from" in s.shape);
 check("§3d her gün aralıklı v2 ucu `kiyas` kabul eder, `compare` reddeder", gunKiyasli.length >= 3 && gunKiyasli.every(([, s]) => !red(s, { from: "2026-10-01", to: "2026-10-07", kiyas: "prevYear" }) && red(s, { compare: "prev" })), gunKiyasli.map(([a]) => a).join(","));
 
+// §4 R1-VARYANT (2026-10-25): `varyant` yalnız ucun BEYANLI boyutundan (katalogda olup kaynağı süzemeyen boyut dahil
+// dışı 400), `donemler` "birim:adet" (2–12). NEGATİF SONDA 2026-10-25: `variantQueryKeys` enum'u katalogun TÜM
+// boyutlarına açıldı → §4b ❌; geri alındı → ✅.
+console.log("\n── §4 R1-VARYANT: varyant + dönem anahtarları ──");
+const tumV2 = [...Object.entries(temelUretim), ...Object.entries(temelSatis), ...Object.entries(temelDokumaFinans)]
+  .filter(([ad]) => /^core\w+QuerySchema$/.test(ad)) as [string, { safeParse: (v: unknown) => { success: boolean } }][];
+const donemsiz = tumV2.filter(([, sch]) => red(sch, { donemler: "ay:6" }) || !red(sch, { donemler: "ay:13" }) || !red(sch, { donemler: "yil:2" }));
+check("§4a her v2 ucu `donemler=ay:6` kabul eder, ay:13 / yil:2 reddeder", tumV2.length >= 14 && donemsiz.length === 0, donemsiz.map(([a]) => a).join(",") || `${tumV2.length} şema`);
+const kirilim = [
+  ["siparis-talep musteri ✓ · renk ✗", !red(temelSatis.coreOrderDemandQuerySchema, { varyant: "musteri" }) && red(temelSatis.coreOrderDemandQuerySchema, { varyant: "renk" })],
+  ["vazgecilen-is her varyant ✗", red(temelSatis.coreLostWorkQuerySchema, { varyant: "musteri" })],
+  ["fasoncular fasoncu ✓ · renk ✗", !red(temelUretim.coreSubcontractorsQuerySchema, { varyant: "fasoncu" }) && red(temelUretim.coreSubcontractorsQuerySchema, { varyant: "renk" })],
+  ["duruslar vardiya ✓ · tezgah ✗", !red(temelDokumaFinans.coreLoomStopsQuerySchema, { varyant: "vardiya" }) && red(temelDokumaFinans.coreLoomStopsQuerySchema, { varyant: "tezgah" })],
+  ["depo her varyant ✗", red(temelUretim.coreWarehouseQuerySchema, { varyant: "urun" })],
+] as const;
+check("§4b ⭐ beyanda olmayan kırılım 400 (katalogda olsa bile kaynak süzemiyorsa)", kirilim.every(([, ok]) => ok), kirilim.filter(([, ok]) => !ok).map(([a]) => a).join(" · ") || "beşi de doğru");
+check("§4c görünüm anlamlı `varyant` (üretim akışı/kalite) korunur", !red(temelUretim.coreProductionFlowQuerySchema, { varyant: "operator" }) && red(temelUretim.coreProductionFlowQuerySchema, { varyant: "musteri" }));
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

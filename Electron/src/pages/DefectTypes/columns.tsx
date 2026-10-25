@@ -61,3 +61,30 @@ export const defectTypeColumns: ColumnDef<DefectType>[] = [
     cell: ({ row }) => (row.original.isDefault ? <Badge variant="secondary">Varsayılan</Badge> : null),
   },
 ];
+
+/** K4P kolonları (sabit puan + sıra) — yalnız Kalite Güvence açıkken eklenir; kapalıyken tablo bugünkü gibi. */
+const fourPointColumns: ColumnDef<DefectType>[] = [
+  {
+    id: "fixedPoints",
+    accessorKey: "fixedPoints",
+    header: "4 puan",
+    cell: ({ row }) =>
+      row.original.fixedPoints == null ? (
+        <span className="text-sm text-muted-foreground">Boyuttan</span>
+      ) : (
+        <Badge variant="outline">{row.original.fixedPoints} puan</Badge>
+      ),
+  },
+  {
+    id: "sortOrder",
+    accessorKey: "sortOrder",
+    header: "Sıra",
+    cell: ({ row }) => <span className="tabular-nums">{row.original.sortOrder ?? 0}</span>,
+  },
+];
+
+export function buildDefectTypeColumns(fourPoint: boolean): ColumnDef<DefectType>[] {
+  if (!fourPoint) return defectTypeColumns;
+  const i = defectTypeColumns.findIndex((c) => "accessorKey" in c && c.accessorKey === "description");
+  return [...defectTypeColumns.slice(0, i), ...fourPointColumns, ...defectTypeColumns.slice(i)];
+}

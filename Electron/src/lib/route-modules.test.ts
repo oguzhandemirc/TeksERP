@@ -17,7 +17,7 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     shipmentConfirmationEnabled: false,
     depoMultiEnabled: true,
     devereEnabled: true,
-    dokumaEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true,
+    dokumaEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, maliyetEnabled: true,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -32,7 +32,7 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
 
 // K4P zemin (2026-10-24): kapı manifestoyla (`SCREEN_CATALOG`) önden yazıldı; sayfa/route PANEL·LAB·SERT
 // dilimlerinde iner. Route'u henüz olmayan beyanlı satırlar — iki yönlü ölçülür.
-const PENDING_ROUTE = new Set(["quality/inspections", "quality/inspection-rules", "quality/certificates"]);
+const PENDING_ROUTE = new Set<string>();
 
 describe("route-modules — yol → modül aynası", () => {
   it("zemin: route metni okundu, tablo dolu", () => {
@@ -83,10 +83,10 @@ describe("route-modules — yol → modül aynası", () => {
     expect(isRouteModuleOpen("/operations/work-orders", d)).toBe(true);
   });
 
-  it("referans fabrika (yalnız üretim açık): kapanan yollar tam olarak ticaret/muhasebe/iplik/depo/devere/dokuma ekranları", () => {
-    const fabrika = ctx({ financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, kaliteGuvenceEnabled: false });
+  it("referans fabrika (yalnız üretim açık): kapanan yollar tam olarak ticaret/muhasebe/iplik/depo/devere/dokuma/maliyet ekranları", () => {
+    const fabrika = ctx({ financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false });
     const kapanan = new Set(ALL_PATHS.filter((p) => !isRouteModuleOpen(`/${p}`, fabrika)).map((p) => routeModuleOf(`/${p}`)));
-    expect([...kapanan].sort()).toEqual(["depoMultiEnabled", "devereEnabled", "dokumaEnabled", "financeEnabled", "iplikEnabled", "kaliteGuvenceEnabled", "ticaretEnabled"]);
+    expect([...kapanan].sort()).toEqual(["depoMultiEnabled", "devereEnabled", "dokumaEnabled", "financeEnabled", "iplikEnabled", "kaliteGuvenceEnabled", "maliyetEnabled", "ticaretEnabled"]);
     expect(isRouteModuleOpen("/operations/work-orders", fabrika)).toBe(true);
   });
 });

@@ -1,0 +1,1640 @@
+{
+  "contract": {
+    "docType": "SHIPMENT_DISPATCH",
+    "hedef": "musteri",
+    "contractVersion": 2,
+    "kokler": [
+      {
+        "yol": "belge.no",
+        "etiket": "İrsaliye no",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "SVK-2026-0042"
+      },
+      {
+        "yol": "belge.tur",
+        "etiket": "Belge türü",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "SHIPMENT_DISPATCH"
+      },
+      {
+        "yol": "belge.baslik",
+        "etiket": "Belge başlığı",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "SEVK İRSALİYESİ"
+      },
+      {
+        "yol": "belge.tarih",
+        "etiket": "Sevk tarihi",
+        "tur": "tarih",
+        "sinif": "musteri",
+        "ornek": "2026-09-25T08:30:00.000Z"
+      },
+      {
+        "yol": "belge.surum",
+        "etiket": "Belge sürümü",
+        "tur": "sayi",
+        "ondalik": 0,
+        "sinif": "musteri",
+        "ornek": 1
+      },
+      {
+        "yol": "belge.durum",
+        "etiket": "Belge durumu (ACTIVE/VOIDED/SUPERSEDED)",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "ACTIVE"
+      },
+      {
+        "yol": "belge.iptal_nedeni",
+        "etiket": "İptal nedeni",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": null
+      },
+      {
+        "yol": "belge.yurtdisi",
+        "etiket": "Yurtdışı sevk mi",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": false
+      },
+      {
+        "yol": "belge.ihracat_kodu",
+        "etiket": "İhracat kodu (şube, yoksa cari)",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "IST-01"
+      },
+      {
+        "yol": "belge.gumruk_no",
+        "etiket": "Gümrük/ihracat no (yalnız yurtdışı)",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": null
+      },
+      {
+        "yol": "belge.siparisler",
+        "etiket": "Sipariş numaraları",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "SIP-2026-0107"
+      },
+      {
+        "yol": "belge.plaka",
+        "etiket": "Plaka",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "34 ABC 123"
+      },
+      {
+        "yol": "belge.sofor",
+        "etiket": "Şoför",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "Mehmet Yılmaz"
+      },
+      {
+        "yol": "belge.tasiyici",
+        "etiket": "Taşıyıcı",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "Hızlı Nakliyat"
+      },
+      {
+        "yol": "firma.ad",
+        "etiket": "Firma adı",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "Örnek Tekstil A.Ş."
+      },
+      {
+        "yol": "firma.adres",
+        "etiket": "Firma adresi",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "Organize Sanayi Bölgesi 3. Cadde No:5"
+      },
+      {
+        "yol": "firma.telefon",
+        "etiket": "Firma telefonu",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "0232 000 00 00"
+      },
+      {
+        "yol": "firma.vergi_bilgisi",
+        "etiket": "Vergi dairesi / no",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "Ege VD 1234567890"
+      },
+      {
+        "yol": "firma.logo",
+        "etiket": "Firma logosu",
+        "tur": "gorsel",
+        "sinif": "musteri",
+        "ornek": null
+      },
+      {
+        "yol": "karsi_taraf.ad",
+        "etiket": "Müşteri adı",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "Örnek Tekstil A.Ş."
+      },
+      {
+        "yol": "karsi_taraf.kod",
+        "etiket": "Müşteri kodu",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "M001"
+      },
+      {
+        "yol": "karsi_taraf.vergi_no",
+        "etiket": "Vergi no",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "1234567890"
+      },
+      {
+        "yol": "karsi_taraf.sube",
+        "etiket": "Şube",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "Merkez Şube"
+      },
+      {
+        "yol": "karsi_taraf.sube_kodu",
+        "etiket": "Şube ihracat kodu",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "IST-01"
+      },
+      {
+        "yol": "karsi_taraf.ihracat_kodu",
+        "etiket": "Cari ihracat kodu",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "EXP-TR-042"
+      },
+      {
+        "yol": "toplamlar.top_adedi",
+        "etiket": "Toplam top",
+        "tur": "sayi",
+        "ondalik": 0,
+        "sinif": "musteri",
+        "ornek": 5
+      },
+      {
+        "yol": "toplamlar.metre",
+        "etiket": "Toplam metre (brüt)",
+        "tur": "sayi",
+        "ondalik": 2,
+        "birim": "m",
+        "sinif": "musteri",
+        "ornek": 680
+      },
+      {
+        "yol": "toplamlar.kg",
+        "etiket": "Toplam kg",
+        "tur": "sayi",
+        "ondalik": 2,
+        "birim": "kg",
+        "sinif": "musteri",
+        "ornek": 73.5
+      },
+      {
+        "yol": "toplamlar.cuval_adedi",
+        "etiket": "Çuval kaydı adedi",
+        "tur": "sayi",
+        "ondalik": 0,
+        "sinif": "musteri",
+        "ornek": 2
+      },
+      {
+        "yol": "toplamlar.cuval_beyan_adedi",
+        "etiket": "Beyan edilen fiziksel çuval",
+        "tur": "sayi",
+        "ondalik": 0,
+        "sinif": "musteri",
+        "ornek": null
+      },
+      {
+        "yol": "baski.zaman",
+        "etiket": "Basım zamanı",
+        "tur": "tarih_saat",
+        "sinif": "musteri",
+        "ornek": "2026-09-25T08:30:00.000Z"
+      },
+      {
+        "yol": "baski.basan",
+        "etiket": "Basan kullanıcı",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "admin"
+      },
+      {
+        "yol": "baski.nusha",
+        "etiket": "Nüsha etiketi (ASIL, KOPYA…)",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": "ASIL"
+      },
+      {
+        "yol": "baski.not",
+        "etiket": "Tek seferlik baskı notu",
+        "tur": "metin",
+        "sinif": "musteri",
+        "ornek": null
+      },
+      {
+        "yol": "baski.taslak",
+        "etiket": "Taslak baskı mı",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": false
+      },
+      {
+        "yol": "baski.qr",
+        "etiket": "Doğrulama karekodu",
+        "tur": "gorsel",
+        "sinif": "musteri",
+        "ornek": null
+      },
+      {
+        "yol": "baski.bizdeki_ad",
+        "etiket": "Ürün listesinde bizdeki ad",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": true
+      },
+      {
+        "yol": "baski.musteri_ad",
+        "etiket": "Ürün listesinde müşterideki ad",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": false
+      },
+      {
+        "yol": "baski.ceki_bizdeki_ad",
+        "etiket": "Çeki listesinde bizdeki ad",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": true
+      },
+      {
+        "yol": "baski.ceki_musteri_ad",
+        "etiket": "Çeki listesinde müşterideki ad",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": false
+      },
+      {
+        "yol": "baski.renk_ayri",
+        "etiket": "Müşteri rengi ayrı sütun",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": false
+      },
+      {
+        "yol": "baski.ambalaj_partisi",
+        "etiket": "Ambalaj no + sevk partisi kolonları",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": false
+      },
+      {
+        "yol": "baski.cuval_sira",
+        "etiket": "Çuval sıra kolonu",
+        "tur": "mantiksal",
+        "sinif": "musteri",
+        "ornek": false
+      }
+    ],
+    "tablolar": [
+      {
+        "anahtar": "antet_ek",
+        "etiket": "Künye ek satırları",
+        "kolonlar": [
+          {
+            "yol": "metin",
+            "etiket": "Satır",
+            "tur": "metin",
+            "sinif": "musteri",
+            "ornek": "IBAN: TR00 0000 0000",
+            "hiza": "l"
+          }
+        ]
+      },
+      {
+        "anahtar": "urun",
+        "etiket": "Ürün listesi",
+        "kolonlar": [
+          {
+            "yol": "ad",
+            "etiket": "Stok adı (bizdeki)",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "Pamuklu Astar · Bej",
+            "kaynakKolon": "name"
+          },
+          {
+            "yol": "musteri_ad",
+            "etiket": "Müşterideki stok adı",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "AKTOS · SAND",
+            "kaynakKolon": "customerName"
+          },
+          {
+            "yol": "musteri_urun_adi",
+            "etiket": "Müşterideki stok adı (renksiz)",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "AKTOS",
+            "kaynakKolon": "customerName"
+          },
+          {
+            "yol": "musteri_renk",
+            "etiket": "Müşterideki renk",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "SAND",
+            "kaynakKolon": "customerColor"
+          },
+          {
+            "yol": "top_adedi",
+            "etiket": "Top adedi",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 3,
+            "ondalik": 0,
+            "kaynakKolon": "rollCount",
+            "toplam": "top_adedi"
+          },
+          {
+            "yol": "metre",
+            "etiket": "Toplam metre",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 480,
+            "ondalik": 2,
+            "birim": "m",
+            "kaynakKolon": "totalMeters",
+            "toplam": "metre"
+          }
+        ]
+      },
+      {
+        "anahtar": "cuval",
+        "etiket": "Çuval listesi",
+        "kolonlar": [
+          {
+            "yol": "kod",
+            "etiket": "Çuval no",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "Ç-01",
+            "kaynakKolon": "code"
+          },
+          {
+            "yol": "sira",
+            "etiket": "Sevkiyat içi sıra",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 1,
+            "ondalik": 0
+          },
+          {
+            "yol": "sira_etiketi",
+            "etiket": "Sıra etiketi",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": "SP1/2",
+            "kaynakKolon": "seq"
+          },
+          {
+            "yol": "ambalaj_no",
+            "etiket": "Ambalaj no",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 1,
+            "ondalik": 0,
+            "kaynakKolon": "packageNo"
+          },
+          {
+            "yol": "sevk_partisi",
+            "etiket": "Sevk partisi",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "P-1",
+            "kaynakKolon": "packingGroupName"
+          },
+          {
+            "yol": "parti_kodu",
+            "etiket": "Sevk partisi kodu",
+            "tur": "metin",
+            "sinif": "ic",
+            "hiza": "l",
+            "ornek": null,
+            "kaynakKolon": "packingGroupCode",
+            "icKod": "cuval_parti_kodu"
+          },
+          {
+            "yol": "metre",
+            "etiket": "Metre toplamı",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 480,
+            "ondalik": 2,
+            "birim": "m",
+            "kaynakKolon": "totalMeters",
+            "toplam": "metre"
+          },
+          {
+            "yol": "kg",
+            "etiket": "Kg toplamı",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 42.5,
+            "ondalik": 2,
+            "birim": "kg",
+            "kaynakKolon": "totalKg",
+            "toplam": "kg"
+          },
+          {
+            "yol": "top_adedi",
+            "etiket": "Top adedi",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 3,
+            "ondalik": 0,
+            "kaynakKolon": "packageCount",
+            "toplam": "top_adedi"
+          },
+          {
+            "yol": "aciklama",
+            "etiket": "Çuval yorumu",
+            "tur": "metin",
+            "sinif": "ic",
+            "hiza": "l",
+            "ornek": "Kontrol et",
+            "kaynakKolon": "note",
+            "icKod": "cuval_aciklama"
+          },
+          {
+            "yol": "iz",
+            "etiket": "Çuval izi",
+            "tur": "metin",
+            "sinif": "ic",
+            "hiza": "l",
+            "ornek": "Eksik",
+            "kaynakKolon": "tag",
+            "icKod": "cuval_iz"
+          }
+        ]
+      },
+      {
+        "anahtar": "ceki",
+        "etiket": "Çeki listesi",
+        "kolonlar": [
+          {
+            "yol": "cuval_kodu",
+            "etiket": "Çuval no",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "Ç-01",
+            "kaynakKolon": "sackCode"
+          },
+          {
+            "yol": "sira",
+            "etiket": "Sevkiyat içi sıra",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 1,
+            "ondalik": 0
+          },
+          {
+            "yol": "sira_etiketi",
+            "etiket": "Sıra etiketi",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": "SP1/2",
+            "kaynakKolon": "seq"
+          },
+          {
+            "yol": "ambalaj_no",
+            "etiket": "Ambalaj no",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 1,
+            "ondalik": 0,
+            "kaynakKolon": "packageNo"
+          },
+          {
+            "yol": "sevk_partisi",
+            "etiket": "Sevk partisi",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "P-1",
+            "kaynakKolon": "packingGroupName"
+          },
+          {
+            "yol": "parti_kodu",
+            "etiket": "Sevk partisi kodu",
+            "tur": "metin",
+            "sinif": "ic",
+            "hiza": "l",
+            "ornek": null,
+            "kaynakKolon": "packingGroupCode",
+            "icKod": "ceki_parti_kodu"
+          },
+          {
+            "yol": "barkod",
+            "etiket": "Barkod no",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "TR-260607-R0200",
+            "kaynakKolon": "barcode"
+          },
+          {
+            "yol": "parti_no",
+            "etiket": "Parti no",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": null,
+            "kaynakKolon": "batchNumber"
+          },
+          {
+            "yol": "desen",
+            "etiket": "Desen (bizdeki)",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "Pamuklu Astar",
+            "kaynakKolon": "desen"
+          },
+          {
+            "yol": "varyant",
+            "etiket": "Varyant (bizdeki)",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "Bej",
+            "kaynakKolon": "varyant"
+          },
+          {
+            "yol": "musteri_desen",
+            "etiket": "Müşterideki desen",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "AKTOS",
+            "kaynakKolon": "customerDesen"
+          },
+          {
+            "yol": "musteri_varyant",
+            "etiket": "Müşterideki varyant",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "l",
+            "ornek": "SAND",
+            "kaynakKolon": "customerVaryant"
+          },
+          {
+            "yol": "en",
+            "etiket": "En",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "c",
+            "ornek": 150,
+            "ondalik": 0,
+            "birim": "cm",
+            "kaynakKolon": "width"
+          },
+          {
+            "yol": "metre",
+            "etiket": "Metre",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 480,
+            "ondalik": 2,
+            "birim": "m",
+            "kaynakKolon": "meters",
+            "toplam": "metre"
+          },
+          {
+            "yol": "kg",
+            "etiket": "Kg (çuvalın ilk satırında)",
+            "tur": "sayi",
+            "sinif": "musteri",
+            "hiza": "r",
+            "ornek": 42.5,
+            "ondalik": 2,
+            "birim": "kg",
+            "kaynakKolon": "kg",
+            "toplam": "kg"
+          },
+          {
+            "yol": "hata_notu",
+            "etiket": "Hata notu",
+            "tur": "metin",
+            "sinif": "ic",
+            "hiza": "l",
+            "ornek": "12,5 m Leke · 40 m Delik",
+            "kaynakKolon": "defectNote",
+            "icKod": "ceki_hata_notu"
+          }
+        ]
+      }
+    ],
+    "ayarSemasi": [
+      {
+        "yol": "titleOverride",
+        "etiket": "Başlık (boş = varsayılan)",
+        "tur": "metin"
+      },
+      {
+        "yol": "showLetterhead",
+        "etiket": "Künye basılsın",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "showSignatures",
+        "etiket": "İmza kutuları",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "signatureLabels",
+        "etiket": "İmza etiketleri",
+        "tur": "liste"
+      },
+      {
+        "yol": "footerNote",
+        "etiket": "Alt not",
+        "tur": "metin"
+      },
+      {
+        "yol": "footerNotePlacement",
+        "etiket": "Alt not konumu",
+        "tur": "secim",
+        "secenekler": [
+          "top",
+          "bottom"
+        ]
+      },
+      {
+        "yol": "sections.docNo",
+        "etiket": "Bölüm: docNo",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.date",
+        "etiket": "Bölüm: date",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.exportCode",
+        "etiket": "Bölüm: exportCode",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.taxNo",
+        "etiket": "Bölüm: taxNo",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.branchName",
+        "etiket": "Bölüm: branchName",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.customerCode",
+        "etiket": "Bölüm: customerCode",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.direction",
+        "etiket": "Bölüm: direction",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.procedureCode",
+        "etiket": "Bölüm: procedureCode",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.orders",
+        "etiket": "Bölüm: orders",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.vehicleInfo",
+        "etiket": "Bölüm: vehicleInfo",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.urun",
+        "etiket": "Bölüm: urun",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.cuval",
+        "etiket": "Bölüm: cuval",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.ceki",
+        "etiket": "Bölüm: ceki",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "sections.listHeader",
+        "etiket": "Bölüm: listHeader",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "style.pageSize",
+        "etiket": "Sayfa boyutu",
+        "tur": "secim",
+        "secenekler": [
+          "A4",
+          "A5"
+        ]
+      },
+      {
+        "yol": "style.margins.top",
+        "etiket": "Üst kenar (mm)",
+        "tur": "sayi"
+      },
+      {
+        "yol": "style.margins.right",
+        "etiket": "Sağ kenar (mm)",
+        "tur": "sayi"
+      },
+      {
+        "yol": "style.margins.bottom",
+        "etiket": "Alt kenar (mm)",
+        "tur": "sayi"
+      },
+      {
+        "yol": "style.margins.left",
+        "etiket": "Sol kenar (mm)",
+        "tur": "sayi"
+      },
+      {
+        "yol": "style.fontScale",
+        "etiket": "Yazı ölçeği",
+        "tur": "sayi"
+      },
+      {
+        "yol": "style.fontWeight",
+        "etiket": "Yazı kalınlığı",
+        "tur": "secim",
+        "secenekler": [
+          "light",
+          "normal",
+          "bold"
+        ]
+      },
+      {
+        "yol": "style.tableDensity",
+        "etiket": "Tablo yoğunluğu",
+        "tur": "secim",
+        "secenekler": [
+          "compact",
+          "normal",
+          "relaxed"
+        ]
+      },
+      {
+        "yol": "style.tableStyle",
+        "etiket": "Tablo çizgisi",
+        "tur": "secim",
+        "secenekler": [
+          "grid",
+          "zebra",
+          "plain"
+        ]
+      },
+      {
+        "yol": "showLogo",
+        "etiket": "Logo",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "logoPosition",
+        "etiket": "Logo konumu",
+        "tur": "secim",
+        "secenekler": [
+          "left",
+          "right"
+        ]
+      },
+      {
+        "yol": "columns.urun.hidden",
+        "etiket": "urun: gizli kolonlar",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.urun.order",
+        "etiket": "urun: kolon sırası",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.urun.shown",
+        "etiket": "urun: açılan opt-in kolonlar (iç kolon hariç)",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.urun.labels",
+        "etiket": "urun: kolon başlıkları",
+        "tur": "nesne"
+      },
+      {
+        "yol": "columns.urun.blankLabels",
+        "etiket": "urun: başlıksız kolonlar",
+        "tur": "liste"
+      },
+      {
+        "yol": "kolonlar.urun",
+        "etiket": "urun: çözülmüş kolon düzeni",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.cuval.hidden",
+        "etiket": "cuval: gizli kolonlar",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.cuval.order",
+        "etiket": "cuval: kolon sırası",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.cuval.shown",
+        "etiket": "cuval: açılan opt-in kolonlar (iç kolon hariç)",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.cuval.labels",
+        "etiket": "cuval: kolon başlıkları",
+        "tur": "nesne"
+      },
+      {
+        "yol": "columns.cuval.blankLabels",
+        "etiket": "cuval: başlıksız kolonlar",
+        "tur": "liste"
+      },
+      {
+        "yol": "kolonlar.cuval",
+        "etiket": "cuval: çözülmüş kolon düzeni",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.ceki.hidden",
+        "etiket": "ceki: gizli kolonlar",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.ceki.order",
+        "etiket": "ceki: kolon sırası",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.ceki.shown",
+        "etiket": "ceki: açılan opt-in kolonlar (iç kolon hariç)",
+        "tur": "liste"
+      },
+      {
+        "yol": "columns.ceki.labels",
+        "etiket": "ceki: kolon başlıkları",
+        "tur": "nesne"
+      },
+      {
+        "yol": "columns.ceki.blankLabels",
+        "etiket": "ceki: başlıksız kolonlar",
+        "tur": "liste"
+      },
+      {
+        "yol": "kolonlar.ceki",
+        "etiket": "ceki: çözülmüş kolon düzeni",
+        "tur": "liste"
+      },
+      {
+        "yol": "qr",
+        "etiket": "Doğrulama karekodu",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "stamps.printedAt",
+        "etiket": "Basım zamanı damgası",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "stamps.printedBy",
+        "etiket": "Basan damgası",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "stamps.copyLabel",
+        "etiket": "Nüsha etiketi",
+        "tur": "metin"
+      },
+      {
+        "yol": "blocks",
+        "etiket": "Serbest metin blokları",
+        "tur": "liste"
+      },
+      {
+        "yol": "language",
+        "etiket": "Dil",
+        "tur": "secim",
+        "secenekler": [
+          "tr"
+        ]
+      },
+      {
+        "yol": "blankWidths",
+        "etiket": "En değerleri boş",
+        "tur": "mantiksal"
+      },
+      {
+        "yol": "fields",
+        "etiket": "Alan yazı ayarları",
+        "tur": "nesne"
+      },
+      {
+        "yol": "blankGrid",
+        "etiket": "Boş grid",
+        "tur": "nesne"
+      }
+    ],
+    "icAlanlar": [
+      {
+        "kod": "cuval_parti_kodu",
+        "yol": "tablolar.cuval[].parti_kodu",
+        "tablo": "cuval",
+        "kaynakKolon": "packingGroupCode"
+      },
+      {
+        "kod": "cuval_aciklama",
+        "yol": "tablolar.cuval[].aciklama",
+        "tablo": "cuval",
+        "kaynakKolon": "note"
+      },
+      {
+        "kod": "cuval_iz",
+        "yol": "tablolar.cuval[].iz",
+        "tablo": "cuval",
+        "kaynakKolon": "tag"
+      },
+      {
+        "kod": "ceki_parti_kodu",
+        "yol": "tablolar.ceki[].parti_kodu",
+        "tablo": "ceki",
+        "kaynakKolon": "packingGroupCode"
+      },
+      {
+        "kod": "ceki_hata_notu",
+        "yol": "tablolar.ceki[].hata_notu",
+        "tablo": "ceki",
+        "kaynakKolon": "defectNote"
+      }
+    ],
+    "senaryolar": [
+      {
+        "ad": "ornek",
+        "aciklama": "Panel önizlemesinin örnek irsaliyesi"
+      },
+      {
+        "ad": "tek_kalem",
+        "aciklama": "Tek ürün, tek çuval, tek top"
+      },
+      {
+        "ad": "cok_sayfa",
+        "aciklama": "45 çuval / 135 top; ad rejimi, sıra, sevk partisi, yorum ve iz açık"
+      },
+      {
+        "ad": "bos_opsiyonel",
+        "aciklama": "Opsiyonel alanların tümü boş/eksik"
+      },
+      {
+        "ad": "uzun_metin",
+        "aciklama": "Uzun ve kaçış gerektiren adlar, yurtdışı"
+      },
+      {
+        "ad": "iptal",
+        "aciklama": "İptal edilmiş (VOIDED) ikinci sürüm"
+      },
+      {
+        "ad": "en_999",
+        "aciklama": "En sınırı: 999 ve 999,4 cm (binlik ayracı yok)"
+      }
+    ]
+  },
+  "settings": {
+    "titleOverride": "",
+    "showLetterhead": true,
+    "showSignatures": true,
+    "signatureLabels": [
+      "Teslim Eden",
+      "Teslim Alan"
+    ],
+    "footerNote": "",
+    "footerNotePlacement": "bottom",
+    "sections": {
+      "docNo": true,
+      "date": true,
+      "exportCode": true,
+      "taxNo": true,
+      "branchName": true,
+      "customerCode": true,
+      "direction": true,
+      "procedureCode": true,
+      "orders": true,
+      "vehicleInfo": true,
+      "urun": true,
+      "cuval": true,
+      "ceki": true,
+      "listHeader": false
+    },
+    "style": {
+      "pageSize": "A4",
+      "margins": {
+        "top": 9,
+        "right": 9,
+        "bottom": 9,
+        "left": 9
+      },
+      "fontScale": 1,
+      "fontWeight": "normal",
+      "tableDensity": "normal",
+      "tableStyle": "grid"
+    },
+    "showLogo": true,
+    "logoPosition": "left",
+    "columns": {
+      "urun": {
+        "hidden": [],
+        "order": [],
+        "shown": [],
+        "labels": {},
+        "blankLabels": []
+      },
+      "cuval": {
+        "hidden": [],
+        "order": [],
+        "shown": [],
+        "labels": {},
+        "blankLabels": []
+      },
+      "ceki": {
+        "hidden": [],
+        "order": [],
+        "shown": [],
+        "labels": {},
+        "blankLabels": []
+      }
+    },
+    "qr": false,
+    "stamps": {
+      "printedAt": false,
+      "printedBy": false,
+      "copyLabel": ""
+    },
+    "blocks": [],
+    "language": "tr",
+    "blankWidths": false,
+    "fields": {},
+    "blankGrid": null,
+    "kolonlar": {
+      "urun": [
+        {
+          "anahtar": "ad",
+          "kaynak": "name",
+          "etiket": "STOK ADI",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "musteri_ad",
+          "kaynak": "customerName",
+          "etiket": "MÜŞTERİ STOK ADI",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "musteri_renk",
+          "kaynak": "customerColor",
+          "etiket": "MÜŞTERİ VARYANT",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "top_adedi",
+          "kaynak": "rollCount",
+          "etiket": "TOP ADEDİ",
+          "hiza": "r",
+          "toplam": "top_adedi"
+        },
+        {
+          "anahtar": "metre",
+          "kaynak": "totalMeters",
+          "etiket": "TOPLAM METRE",
+          "hiza": "r",
+          "toplam": "metre"
+        }
+      ],
+      "cuval": [
+        {
+          "anahtar": "kod",
+          "kaynak": "code",
+          "etiket": "ÇUVAL NO",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "sira_etiketi",
+          "kaynak": "seq",
+          "etiket": "SIRA",
+          "hiza": "r",
+          "toplam": null
+        },
+        {
+          "anahtar": "ambalaj_no",
+          "kaynak": "packageNo",
+          "etiket": "AMBALAJ NO",
+          "hiza": "r",
+          "toplam": null
+        },
+        {
+          "anahtar": "sevk_partisi",
+          "kaynak": "packingGroupName",
+          "etiket": "SEVK PARTİSİ",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "parti_kodu",
+          "kaynak": "packingGroupCode",
+          "etiket": "PARTİ KODU",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "metre",
+          "kaynak": "totalMeters",
+          "etiket": "METRE TOPLAMI",
+          "hiza": "r",
+          "toplam": "metre"
+        },
+        {
+          "anahtar": "kg",
+          "kaynak": "totalKg",
+          "etiket": "KG TOPLAMI",
+          "hiza": "r",
+          "toplam": "kg"
+        },
+        {
+          "anahtar": "top_adedi",
+          "kaynak": "packageCount",
+          "etiket": "TOP ADEDİ",
+          "hiza": "r",
+          "toplam": "top_adedi"
+        },
+        {
+          "anahtar": "aciklama",
+          "kaynak": "note",
+          "etiket": "AÇIKLAMA",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "iz",
+          "kaynak": "tag",
+          "etiket": "İZ",
+          "hiza": "l",
+          "toplam": null
+        }
+      ],
+      "ceki": [
+        {
+          "anahtar": "cuval_kodu",
+          "kaynak": "sackCode",
+          "etiket": "ÇUVAL NO",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "sira_etiketi",
+          "kaynak": "seq",
+          "etiket": "SIRA",
+          "hiza": "r",
+          "toplam": null
+        },
+        {
+          "anahtar": "ambalaj_no",
+          "kaynak": "packageNo",
+          "etiket": "AMBALAJ NO",
+          "hiza": "r",
+          "toplam": null
+        },
+        {
+          "anahtar": "sevk_partisi",
+          "kaynak": "packingGroupName",
+          "etiket": "SEVK PARTİSİ",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "parti_kodu",
+          "kaynak": "packingGroupCode",
+          "etiket": "PARTİ KODU",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "barkod",
+          "kaynak": "barcode",
+          "etiket": "BARKOD NO",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "parti_no",
+          "kaynak": "batchNumber",
+          "etiket": "PARTİ NO",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "desen",
+          "kaynak": "desen",
+          "etiket": "DESEN",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "varyant",
+          "kaynak": "varyant",
+          "etiket": "VARYANT",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "musteri_desen",
+          "kaynak": "customerDesen",
+          "etiket": "MÜŞTERİ DESEN",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "musteri_varyant",
+          "kaynak": "customerVaryant",
+          "etiket": "MÜŞTERİ VARYANT",
+          "hiza": "l",
+          "toplam": null
+        },
+        {
+          "anahtar": "en",
+          "kaynak": "width",
+          "etiket": "EN",
+          "hiza": "c",
+          "toplam": null
+        },
+        {
+          "anahtar": "metre",
+          "kaynak": "meters",
+          "etiket": "METRE",
+          "hiza": "r",
+          "toplam": "metre"
+        },
+        {
+          "anahtar": "kg",
+          "kaynak": "kg",
+          "etiket": "KG",
+          "hiza": "r",
+          "toplam": "kg"
+        },
+        {
+          "anahtar": "hata_notu",
+          "kaynak": "defectNote",
+          "etiket": "HATA NOTU",
+          "hiza": "l",
+          "toplam": null
+        }
+      ]
+    }
+  },
+  "internalFields": [],
+  "samples": [
+    {
+      "ad": "veri-alani belge.no",
+      "html": "<p><span class=\"veri-alani\" data-alan=\"belge.no\">SVK-2026-0042</span></p>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "veri-alani belge.tarih",
+      "html": "<p><span class=\"veri-alani\" data-alan=\"belge.tarih\" data-filtre=\"tarih\">2026-09-25T08:30:00.000Z</span></p>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "veri-alani baski.zaman",
+      "html": "<p><span class=\"veri-alani\" data-alan=\"baski.zaman\" data-filtre=\"tarih_saat\">2026-09-25T08:30:00.000Z</span></p>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "veri-alani toplamlar.metre",
+      "html": "<p><span class=\"veri-alani\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\">680</span></p>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "kalem-tablosu antet_ek",
+      "html": "<table class=\"kalem-tablosu\" data-tablo=\"antet_ek\"><thead><tr><th data-kolon=\"metin\">Satır</th></tr></thead><tbody><tr data-each=\"satir in tablolar.antet_ek\"><td data-kolon=\"metin\" data-alan=\"satir.metin\">IBAN: TR00 0000 0000</td></tr></tbody></table>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "kalem-tablosu urun",
+      "html": "<table class=\"kalem-tablosu\" data-tablo=\"urun\"><thead><tr><th data-kolon=\"ad\">Stok adı (bizdeki)</th><th data-kolon=\"musteri_ad\">Müşterideki stok adı</th><th data-kolon=\"musteri_urun_adi\">Müşterideki stok adı (renksiz)</th><th data-kolon=\"musteri_renk\">Müşterideki renk</th><th data-kolon=\"top_adedi\" class=\"hiza-r\">Top adedi</th><th data-kolon=\"metre\" class=\"hiza-r\">Toplam metre</th></tr></thead><tbody><tr data-each=\"satir in tablolar.urun\"><td data-kolon=\"ad\" data-alan=\"satir.ad\">Pamuklu Astar · Bej</td><td data-kolon=\"musteri_ad\" data-alan=\"satir.musteri_ad\">AKTOS · SAND</td><td data-kolon=\"musteri_urun_adi\" data-alan=\"satir.musteri_urun_adi\">AKTOS</td><td data-kolon=\"musteri_renk\" data-alan=\"satir.musteri_renk\">SAND</td><td data-kolon=\"top_adedi\" class=\"hiza-r\" data-alan=\"satir.top_adedi\" data-filtre=\"sayi: 0\">3</td><td data-kolon=\"metre\" class=\"hiza-r\" data-alan=\"satir.metre\" data-filtre=\"metre\">480</td></tr></tbody><tfoot><tr><td data-kolon=\"ad\">Toplam</td><td data-kolon=\"musteri_ad\"></td><td data-kolon=\"musteri_urun_adi\"></td><td data-kolon=\"musteri_renk\"></td><td data-kolon=\"top_adedi\" class=\"hiza-r\" data-alan=\"toplamlar.top_adedi\" data-filtre=\"sayi: 0\">Σ</td><td data-kolon=\"metre\" class=\"hiza-r\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\">Σ</td></tr></tfoot></table>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "kalem-tablosu cuval",
+      "html": "<table class=\"kalem-tablosu\" data-tablo=\"cuval\"><thead><tr><th data-kolon=\"kod\">Çuval no</th><th data-kolon=\"sira\" class=\"hiza-r\">Sevkiyat içi sıra</th><th data-kolon=\"sira_etiketi\" class=\"hiza-r\">Sıra etiketi</th><th data-kolon=\"ambalaj_no\" class=\"hiza-r\">Ambalaj no</th><th data-kolon=\"sevk_partisi\">Sevk partisi</th><th data-kolon=\"metre\" class=\"hiza-r\">Metre toplamı</th></tr></thead><tbody><tr data-each=\"satir in tablolar.cuval\"><td data-kolon=\"kod\" data-alan=\"satir.kod\">Ç-01</td><td data-kolon=\"sira\" class=\"hiza-r\" data-alan=\"satir.sira\" data-filtre=\"sayi: 0\">1</td><td data-kolon=\"sira_etiketi\" class=\"hiza-r\" data-alan=\"satir.sira_etiketi\">SP1/2</td><td data-kolon=\"ambalaj_no\" class=\"hiza-r\" data-alan=\"satir.ambalaj_no\" data-filtre=\"sayi: 0\">1</td><td data-kolon=\"sevk_partisi\" data-alan=\"satir.sevk_partisi\">P-1</td><td data-kolon=\"metre\" class=\"hiza-r\" data-alan=\"satir.metre\" data-filtre=\"metre\">480</td></tr></tbody><tfoot><tr><td data-kolon=\"kod\">Toplam</td><td data-kolon=\"sira\" class=\"hiza-r\"></td><td data-kolon=\"sira_etiketi\" class=\"hiza-r\"></td><td data-kolon=\"ambalaj_no\" class=\"hiza-r\"></td><td data-kolon=\"sevk_partisi\"></td><td data-kolon=\"metre\" class=\"hiza-r\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\">Σ</td></tr></tfoot></table>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "kalem-tablosu ceki",
+      "html": "<table class=\"kalem-tablosu\" data-tablo=\"ceki\"><thead><tr><th data-kolon=\"cuval_kodu\">Çuval no</th><th data-kolon=\"sira\" class=\"hiza-r\">Sevkiyat içi sıra</th><th data-kolon=\"sira_etiketi\" class=\"hiza-r\">Sıra etiketi</th><th data-kolon=\"ambalaj_no\" class=\"hiza-r\">Ambalaj no</th><th data-kolon=\"sevk_partisi\">Sevk partisi</th><th data-kolon=\"barkod\">Barkod no</th></tr></thead><tbody><tr data-each=\"satir in tablolar.ceki\"><td data-kolon=\"cuval_kodu\" data-alan=\"satir.cuval_kodu\">Ç-01</td><td data-kolon=\"sira\" class=\"hiza-r\" data-alan=\"satir.sira\" data-filtre=\"sayi: 0\">1</td><td data-kolon=\"sira_etiketi\" class=\"hiza-r\" data-alan=\"satir.sira_etiketi\">SP1/2</td><td data-kolon=\"ambalaj_no\" class=\"hiza-r\" data-alan=\"satir.ambalaj_no\" data-filtre=\"sayi: 0\">1</td><td data-kolon=\"sevk_partisi\" data-alan=\"satir.sevk_partisi\">P-1</td><td data-kolon=\"barkod\" data-alan=\"satir.barkod\">TR-260607-R0200</td></tr></tbody></table>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "ic-kolon-acik cuval_parti_kodu",
+      "html": "<table class=\"kalem-tablosu\" data-tablo=\"cuval\"><thead><tr><th data-kolon=\"kod\">Çuval no</th><th data-kolon=\"sira\" class=\"hiza-r\">Sevkiyat içi sıra</th><th data-kolon=\"sira_etiketi\" class=\"hiza-r\">Sıra etiketi</th><th data-kolon=\"ambalaj_no\" class=\"hiza-r\">Ambalaj no</th><th data-kolon=\"sevk_partisi\">Sevk partisi</th><th data-kolon=\"metre\" class=\"hiza-r\">Metre toplamı</th><th data-kolon=\"parti_kodu\">Sevk partisi kodu</th></tr></thead><tbody><tr data-each=\"satir in tablolar.cuval\"><td data-kolon=\"kod\" data-alan=\"satir.kod\">Ç-01</td><td data-kolon=\"sira\" class=\"hiza-r\" data-alan=\"satir.sira\" data-filtre=\"sayi: 0\">1</td><td data-kolon=\"sira_etiketi\" class=\"hiza-r\" data-alan=\"satir.sira_etiketi\">SP1/2</td><td data-kolon=\"ambalaj_no\" class=\"hiza-r\" data-alan=\"satir.ambalaj_no\" data-filtre=\"sayi: 0\">1</td><td data-kolon=\"sevk_partisi\" data-alan=\"satir.sevk_partisi\">P-1</td><td data-kolon=\"metre\" class=\"hiza-r\" data-alan=\"satir.metre\" data-filtre=\"metre\">480</td><td data-kolon=\"parti_kodu\" data-alan=\"satir.parti_kodu\">Sevk partisi kodu</td></tr></tbody><tfoot><tr><td data-kolon=\"kod\">Toplam</td><td data-kolon=\"sira\" class=\"hiza-r\"></td><td data-kolon=\"sira_etiketi\" class=\"hiza-r\"></td><td data-kolon=\"ambalaj_no\" class=\"hiza-r\"></td><td data-kolon=\"sevk_partisi\"></td><td data-kolon=\"metre\" class=\"hiza-r\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\">Σ</td><td data-kolon=\"parti_kodu\"></td></tr></tfoot></table>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}",
+      "internalFields": [
+        "cuval_parti_kodu"
+      ]
+    },
+    {
+      "ad": "toplam-kutusu",
+      "html": "<div class=\"toplam-kutusu\"><div class=\"toplam-satiri\"><span>Toplam top</span><b class=\"veri-alani\" data-alan=\"toplamlar.top_adedi\" data-filtre=\"sayi: 0\">5</b></div><div class=\"toplam-satiri\"><span>Toplam metre (brüt)</span><b class=\"veri-alani\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\">680</b></div><div class=\"toplam-satiri\"><span>Toplam kg</span><b class=\"veri-alani\" data-alan=\"toplamlar.kg\" data-filtre=\"kg\">73.5</b></div></div>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "logo",
+      "html": "<img class=\"logo\" data-bag-src=\"firma.logo\" alt=\"Logo\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=\"/>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "barkod",
+      "html": "<span class=\"barkod\" data-alan=\"belge.no\" data-filtre=\"barkod: &quot;code128&quot;\">Barkod</span>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "qr",
+      "html": "<span class=\"karekod\" data-alan=\"belge.no\" data-filtre=\"qr\">QR</span>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "imza-alani",
+      "html": "<div class=\"imza-alani\" data-if=\"ayar.showSignatures\"><div class=\"imza-kutusu\" data-alan=\"ayar.signatureLabels[0]\">Teslim Eden</div><div class=\"imza-kutusu\" data-alan=\"ayar.signatureLabels[1]\">Teslim Alan</div></div>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "sayfa-kesmesi",
+      "html": "<p>1</p><div class=\"sayfa-kesmesi\"></div><p>2</p>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "kosul-kurucu",
+      "html": "<div data-if=\"belge.ihracat_kodu\">k0</div><div data-if=\"karsi_taraf.ad == &quot;ACME A.Ş.&quot; or belge.yurtdisi == true\">k1</div><div data-if=\"belge.siparisler contains &quot;SP-&quot; and belge.plaka != blank or toplamlar.kg >= 12.5\">k2</div>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    },
+    {
+      "ad": "pilot-sevk-irsaliyesi",
+      "html": "<header class=\"ust\"><img class=\"logo\" data-bag-src=\"firma.logo\" alt=\"Logo\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=\"/><div><h1><span class=\"veri-alani\" data-alan=\"belge.baslik\">SEVK İRSALİYESİ</span></h1><div>No: <span class=\"veri-alani\" data-alan=\"belge.no\">SVK-2026-0042</span></div><div>Tarih: <span class=\"veri-alani\" data-alan=\"belge.tarih\" data-filtre=\"tarih\">2026-09-25T08:30:00.000Z</span></div></div></header><section><b>Sayın:</b> <span class=\"veri-alani\" data-alan=\"karsi_taraf.ad\">Örnek Tekstil A.Ş.</span><div data-if=\"belge.ihracat_kodu\">İhracat kodu: <span class=\"veri-alani\" data-alan=\"belge.ihracat_kodu\">IST-01</span></div></section><table class=\"kalem-tablosu\" data-tablo=\"urun\"><thead><tr><th data-kolon=\"ad\">Stok adı (bizdeki)</th><th data-kolon=\"musteri_ad\">Müşterideki stok adı</th><th data-kolon=\"musteri_urun_adi\">Müşterideki stok adı (renksiz)</th><th data-kolon=\"musteri_renk\">Müşterideki renk</th><th data-kolon=\"top_adedi\" class=\"hiza-r\">Top adedi</th><th data-kolon=\"metre\" class=\"hiza-r\">Toplam metre</th></tr></thead><tbody><tr data-if=\"satir.metre > 0\" data-each=\"satir in tablolar.urun\"><td data-kolon=\"ad\" data-alan=\"satir.ad\">Pamuklu Astar · Bej</td><td data-kolon=\"musteri_ad\" data-alan=\"satir.musteri_ad\">AKTOS · SAND</td><td data-kolon=\"musteri_urun_adi\" data-alan=\"satir.musteri_urun_adi\">AKTOS</td><td data-kolon=\"musteri_renk\" data-alan=\"satir.musteri_renk\">SAND</td><td data-kolon=\"top_adedi\" class=\"hiza-r\" data-alan=\"satir.top_adedi\" data-filtre=\"sayi: 0\">3</td><td data-kolon=\"metre\" class=\"hiza-r\" data-alan=\"satir.metre\" data-filtre=\"metre\">480</td></tr></tbody><tfoot><tr><td data-kolon=\"ad\">Toplam</td><td data-kolon=\"musteri_ad\"></td><td data-kolon=\"musteri_urun_adi\"></td><td data-kolon=\"musteri_renk\"></td><td data-kolon=\"top_adedi\" class=\"hiza-r\" data-alan=\"toplamlar.top_adedi\" data-filtre=\"sayi: 0\">Σ</td><td data-kolon=\"metre\" class=\"hiza-r\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\">Σ</td></tr></tfoot></table><div class=\"toplam-kutusu\"><div class=\"toplam-satiri\"><span>Toplam top</span><b class=\"veri-alani\" data-alan=\"toplamlar.top_adedi\" data-filtre=\"sayi: 0\">5</b></div><div class=\"toplam-satiri\"><span>Toplam metre (brüt)</span><b class=\"veri-alani\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\">680</b></div><div class=\"toplam-satiri\"><span>Toplam kg</span><b class=\"veri-alani\" data-alan=\"toplamlar.kg\" data-filtre=\"kg\">73.5</b></div></div><div class=\"imza-alani\" data-if=\"ayar.showSignatures\"><div class=\"imza-kutusu\" data-alan=\"ayar.signatureLabels[0]\">Teslim Eden</div><div class=\"imza-kutusu\" data-alan=\"ayar.signatureLabels[1]\">Teslim Alan</div></div><footer><span class=\"barkod\" data-alan=\"belge.no\" data-filtre=\"barkod: &quot;code128&quot;\">Barkod</span> <span class=\"karekod\" data-alan=\"belge.no\" data-filtre=\"qr\">QR</span></footer>",
+      "css": ".kalem-tablosu{width:100%;border-collapse:collapse;font-size:9pt;}.kalem-tablosu th,.kalem-tablosu td{border:0.25mm solid #444444;padding:1mm 1.5mm;text-align:left;}.kalem-tablosu th{background-color:#eeeeee;}.kalem-tablosu .hiza-r{text-align:right;}.kalem-tablosu .hiza-c{text-align:center;}.sayfa-kesmesi{break-after:page;height:0;}.toplam-kutusu{margin-left:auto;width:70mm;font-size:9.5pt;}.toplam-satiri{display:flex;justify-content:space-between;padding:0.8mm 0;border-bottom:0.2mm solid #999999;}.imza-alani{display:flex;justify-content:space-between;gap:10mm;margin-top:15mm;}.imza-kutusu{flex:1;border-top:0.3mm solid #222222;padding-top:2mm;text-align:center;font-size:9pt;}.logo{max-width:40mm;max-height:20mm;}.barkod{display:inline-block;min-width:30mm;min-height:10mm;}.karekod{display:inline-block;width:22mm;height:22mm;}"
+    }
+  ],
+  "conditions": {
+    "valid": [
+      "belge.ihracat_kodu",
+      "satir.metre > 0",
+      "karsi_taraf.ad == \"ACME A.Ş.\" or belge.yurtdisi == true",
+      "belge.siparisler contains \"SP-\" and belge.plaka != blank or toplamlar.kg >= 12.5"
+    ],
+    "invalid": [
+      "",
+      "(belge.no)",
+      "belge.no ==",
+      "belge.no and",
+      "belge.no xor belge.tur",
+      "belge.no == '{{x}}'",
+      "belge.no == \"x{y\"",
+      "belge.no == 12,5"
+    ]
+  },
+  "filters": {
+    "names": [
+      "tarih",
+      "tarih_saat",
+      "takvim",
+      "saat",
+      "sayi",
+      "metre",
+      "kg",
+      "adet",
+      "para",
+      "yaziyla",
+      "barkod",
+      "qr",
+      "css_metin",
+      "satir_kir",
+      "upcase",
+      "downcase",
+      "capitalize",
+      "escape",
+      "default",
+      "strip",
+      "truncate",
+      "replace",
+      "append",
+      "prepend",
+      "first",
+      "last",
+      "size",
+      "join"
+    ],
+    "suggestions": [
+      "tarih",
+      "takvim",
+      "tarih_saat",
+      "saat",
+      "para: \"TRY\"",
+      "para",
+      "yaziyla: \"TRY\"",
+      "upcase",
+      "default: \"-\"",
+      "metre",
+      "sayi: 2",
+      "kg",
+      "sayi: 1",
+      "sayi: 0"
+    ]
+  },
+  "pageSettings": {
+    "valid": [
+      {
+        "kagit": "A4",
+        "yon": "dikey",
+        "kenar": {
+          "ust": 15,
+          "sag": 15,
+          "alt": 15,
+          "sol": 15
+        },
+        "ustBilgi": {
+          "sol": "",
+          "orta": "",
+          "sag": ""
+        },
+        "altBilgi": {
+          "orta": "",
+          "sag": ""
+        },
+        "sayfaNo": {
+          "konum": "yok",
+          "bicim": "Sayfa {n} / {N}"
+        },
+        "ilkSayfaFarkli": false
+      },
+      {
+        "kagit": "A5",
+        "yon": "yatay",
+        "kenar": {
+          "ust": 0,
+          "sag": 50,
+          "alt": 22.5,
+          "sol": 10
+        },
+        "ustBilgi": {
+          "sol": "Örnek A.Ş.",
+          "orta": "",
+          "sag": "Sevk"
+        },
+        "altBilgi": {
+          "orta": "",
+          "sag": "Gizli"
+        },
+        "sayfaNo": {
+          "konum": "alt-orta",
+          "bicim": "Sayfa {n} / {N}"
+        },
+        "ilkSayfaFarkli": true
+      }
+    ],
+    "conflicting": [
+      {
+        "kagit": "A4",
+        "yon": "dikey",
+        "kenar": {
+          "ust": 15,
+          "sag": 15,
+          "alt": 15,
+          "sol": 15
+        },
+        "ustBilgi": {
+          "sol": "",
+          "orta": "",
+          "sag": ""
+        },
+        "altBilgi": {
+          "orta": "",
+          "sag": "x"
+        },
+        "sayfaNo": {
+          "konum": "alt-sag",
+          "bicim": "{n}"
+        },
+        "ilkSayfaFarkli": false
+      },
+      {
+        "kagit": "A4",
+        "yon": "dikey",
+        "kenar": {
+          "ust": 15,
+          "sag": 15,
+          "alt": 15,
+          "sol": 15
+        },
+        "ustBilgi": {
+          "sol": "",
+          "orta": "",
+          "sag": ""
+        },
+        "altBilgi": {
+          "orta": "x",
+          "sag": ""
+        },
+        "sayfaNo": {
+          "konum": "alt-orta",
+          "bicim": "{n}"
+        },
+        "ilkSayfaFarkli": false
+      }
+    ]
+  },
+  "grapesHtml": [
+    {
+      "ad": "kalem-tablosu antet_ek",
+      "html": "<body><table data-tablo=\"antet_ek\" class=\"kalem-tablosu\"><thead><tr><th data-kolon=\"metin\">Satır</th></tr></thead><tbody><tr data-each=\"satir in tablolar.antet_ek\"><td data-kolon=\"metin\" data-alan=\"satir.metin\">IBAN: TR00 0000 0000</td></tr></tbody></table></body>"
+    },
+    {
+      "ad": "kalem-tablosu urun",
+      "html": "<body><table data-tablo=\"urun\" class=\"kalem-tablosu\"><thead><tr><th data-kolon=\"ad\">Stok adı (bizdeki)</th><th data-kolon=\"musteri_ad\">Müşterideki stok adı</th><th data-kolon=\"musteri_urun_adi\">Müşterideki stok adı (renksiz)</th><th data-kolon=\"musteri_renk\">Müşterideki renk</th><th data-kolon=\"top_adedi\" class=\"hiza-r\">Top adedi</th><th data-kolon=\"metre\" class=\"hiza-r\">Toplam metre</th></tr></thead><tbody><tr data-each=\"satir in tablolar.urun\"><td data-kolon=\"ad\" data-alan=\"satir.ad\">Pamuklu Astar · Bej</td><td data-kolon=\"musteri_ad\" data-alan=\"satir.musteri_ad\">AKTOS · SAND</td><td data-kolon=\"musteri_urun_adi\" data-alan=\"satir.musteri_urun_adi\">AKTOS</td><td data-kolon=\"musteri_renk\" data-alan=\"satir.musteri_renk\">SAND</td><td data-kolon=\"top_adedi\" data-alan=\"satir.top_adedi\" data-filtre=\"sayi: 0\" class=\"hiza-r\">3</td><td data-kolon=\"metre\" data-alan=\"satir.metre\" data-filtre=\"metre\" class=\"hiza-r\">480</td></tr></tbody><tfoot><tr><td data-kolon=\"ad\">Toplam</td><td data-kolon=\"musteri_ad\"></td><td data-kolon=\"musteri_urun_adi\"></td><td data-kolon=\"musteri_renk\"></td><td data-kolon=\"top_adedi\" data-alan=\"toplamlar.top_adedi\" data-filtre=\"sayi: 0\" class=\"hiza-r\">Σ</td><td data-kolon=\"metre\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\" class=\"hiza-r\">Σ</td></tr></tfoot></table></body>"
+    },
+    {
+      "ad": "kalem-tablosu cuval",
+      "html": "<body><table data-tablo=\"cuval\" class=\"kalem-tablosu\"><thead><tr><th data-kolon=\"kod\">Çuval no</th><th data-kolon=\"sira\" class=\"hiza-r\">Sevkiyat içi sıra</th><th data-kolon=\"sira_etiketi\" class=\"hiza-r\">Sıra etiketi</th><th data-kolon=\"ambalaj_no\" class=\"hiza-r\">Ambalaj no</th><th data-kolon=\"sevk_partisi\">Sevk partisi</th><th data-kolon=\"metre\" class=\"hiza-r\">Metre toplamı</th></tr></thead><tbody><tr data-each=\"satir in tablolar.cuval\"><td data-kolon=\"kod\" data-alan=\"satir.kod\">Ç-01</td><td data-kolon=\"sira\" data-alan=\"satir.sira\" data-filtre=\"sayi: 0\" class=\"hiza-r\">1</td><td data-kolon=\"sira_etiketi\" data-alan=\"satir.sira_etiketi\" class=\"hiza-r\">SP1/2</td><td data-kolon=\"ambalaj_no\" data-alan=\"satir.ambalaj_no\" data-filtre=\"sayi: 0\" class=\"hiza-r\">1</td><td data-kolon=\"sevk_partisi\" data-alan=\"satir.sevk_partisi\">P-1</td><td data-kolon=\"metre\" data-alan=\"satir.metre\" data-filtre=\"metre\" class=\"hiza-r\">480</td></tr></tbody><tfoot><tr><td data-kolon=\"kod\">Toplam</td><td data-kolon=\"sira\" class=\"hiza-r\"></td><td data-kolon=\"sira_etiketi\" class=\"hiza-r\"></td><td data-kolon=\"ambalaj_no\" class=\"hiza-r\"></td><td data-kolon=\"sevk_partisi\"></td><td data-kolon=\"metre\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\" class=\"hiza-r\">Σ</td></tr></tfoot></table></body>"
+    },
+    {
+      "ad": "kalem-tablosu ceki",
+      "html": "<body><table data-tablo=\"ceki\" class=\"kalem-tablosu\"><thead><tr><th data-kolon=\"cuval_kodu\">Çuval no</th><th data-kolon=\"sira\" class=\"hiza-r\">Sevkiyat içi sıra</th><th data-kolon=\"sira_etiketi\" class=\"hiza-r\">Sıra etiketi</th><th data-kolon=\"ambalaj_no\" class=\"hiza-r\">Ambalaj no</th><th data-kolon=\"sevk_partisi\">Sevk partisi</th><th data-kolon=\"barkod\">Barkod no</th></tr></thead><tbody><tr data-each=\"satir in tablolar.ceki\"><td data-kolon=\"cuval_kodu\" data-alan=\"satir.cuval_kodu\">Ç-01</td><td data-kolon=\"sira\" data-alan=\"satir.sira\" data-filtre=\"sayi: 0\" class=\"hiza-r\">1</td><td data-kolon=\"sira_etiketi\" data-alan=\"satir.sira_etiketi\" class=\"hiza-r\">SP1/2</td><td data-kolon=\"ambalaj_no\" data-alan=\"satir.ambalaj_no\" data-filtre=\"sayi: 0\" class=\"hiza-r\">1</td><td data-kolon=\"sevk_partisi\" data-alan=\"satir.sevk_partisi\">P-1</td><td data-kolon=\"barkod\" data-alan=\"satir.barkod\">TR-260607-R0200</td></tr></tbody></table></body>"
+    },
+    {
+      "ad": "ic-kolon-acik cuval_parti_kodu",
+      "html": "<body><table data-tablo=\"cuval\" class=\"kalem-tablosu\"><thead><tr><th data-kolon=\"kod\">Çuval no</th><th data-kolon=\"sira\" class=\"hiza-r\">Sevkiyat içi sıra</th><th data-kolon=\"sira_etiketi\" class=\"hiza-r\">Sıra etiketi</th><th data-kolon=\"ambalaj_no\" class=\"hiza-r\">Ambalaj no</th><th data-kolon=\"sevk_partisi\">Sevk partisi</th><th data-kolon=\"metre\" class=\"hiza-r\">Metre toplamı</th><th data-kolon=\"parti_kodu\">Sevk partisi kodu</th></tr></thead><tbody><tr data-each=\"satir in tablolar.cuval\"><td data-kolon=\"kod\" data-alan=\"satir.kod\">Ç-01</td><td data-kolon=\"sira\" data-alan=\"satir.sira\" data-filtre=\"sayi: 0\" class=\"hiza-r\">1</td><td data-kolon=\"sira_etiketi\" data-alan=\"satir.sira_etiketi\" class=\"hiza-r\">SP1/2</td><td data-kolon=\"ambalaj_no\" data-alan=\"satir.ambalaj_no\" data-filtre=\"sayi: 0\" class=\"hiza-r\">1</td><td data-kolon=\"sevk_partisi\" data-alan=\"satir.sevk_partisi\">P-1</td><td data-kolon=\"metre\" data-alan=\"satir.metre\" data-filtre=\"metre\" class=\"hiza-r\">480</td><td data-kolon=\"parti_kodu\" data-alan=\"satir.parti_kodu\">Sevk partisi kodu</td></tr></tbody><tfoot><tr><td data-kolon=\"kod\">Toplam</td><td data-kolon=\"sira\" class=\"hiza-r\"></td><td data-kolon=\"sira_etiketi\" class=\"hiza-r\"></td><td data-kolon=\"ambalaj_no\" class=\"hiza-r\"></td><td data-kolon=\"sevk_partisi\"></td><td data-kolon=\"metre\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\" class=\"hiza-r\">Σ</td><td data-kolon=\"parti_kodu\"></td></tr></tfoot></table></body>"
+    },
+    {
+      "ad": "pilot-sevk-irsaliyesi",
+      "html": "<body><header class=\"ust\"><img data-bag-src=\"firma.logo\" alt=\"Logo\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=\" class=\"logo\"/><div><h1><span data-alan=\"belge.baslik\" class=\"veri-alani\">SEVK İRSALİYESİ</span></h1><div>No: <span data-alan=\"belge.no\" class=\"veri-alani\">SVK-2026-0042</span></div><div>Tarih: <span data-alan=\"belge.tarih\" data-filtre=\"tarih\" class=\"veri-alani\">2026-09-25T08:30:00.000Z</span></div></div></header><section><b>Sayın:</b> <span data-alan=\"karsi_taraf.ad\" class=\"veri-alani\">Örnek Tekstil A.Ş.</span><div data-if=\"belge.ihracat_kodu\">İhracat kodu: <span data-alan=\"belge.ihracat_kodu\" class=\"veri-alani\">IST-01</span></div></section><table data-tablo=\"urun\" class=\"kalem-tablosu\"><thead><tr><th data-kolon=\"ad\">Stok adı (bizdeki)</th><th data-kolon=\"musteri_ad\">Müşterideki stok adı</th><th data-kolon=\"musteri_urun_adi\">Müşterideki stok adı (renksiz)</th><th data-kolon=\"musteri_renk\">Müşterideki renk</th><th data-kolon=\"top_adedi\" class=\"hiza-r\">Top adedi</th><th data-kolon=\"metre\" class=\"hiza-r\">Toplam metre</th></tr></thead><tbody><tr data-if=\"satir.metre &gt; 0\" data-each=\"satir in tablolar.urun\"><td data-kolon=\"ad\" data-alan=\"satir.ad\">Pamuklu Astar · Bej</td><td data-kolon=\"musteri_ad\" data-alan=\"satir.musteri_ad\">AKTOS · SAND</td><td data-kolon=\"musteri_urun_adi\" data-alan=\"satir.musteri_urun_adi\">AKTOS</td><td data-kolon=\"musteri_renk\" data-alan=\"satir.musteri_renk\">SAND</td><td data-kolon=\"top_adedi\" data-alan=\"satir.top_adedi\" data-filtre=\"sayi: 0\" class=\"hiza-r\">3</td><td data-kolon=\"metre\" data-alan=\"satir.metre\" data-filtre=\"metre\" class=\"hiza-r\">480</td></tr></tbody><tfoot><tr><td data-kolon=\"ad\">Toplam</td><td data-kolon=\"musteri_ad\"></td><td data-kolon=\"musteri_urun_adi\"></td><td data-kolon=\"musteri_renk\"></td><td data-kolon=\"top_adedi\" data-alan=\"toplamlar.top_adedi\" data-filtre=\"sayi: 0\" class=\"hiza-r\">Σ</td><td data-kolon=\"metre\" data-alan=\"toplamlar.metre\" data-filtre=\"metre\" class=\"hiza-r\">Σ</td></tr></tfoot></table><div class=\"toplam-kutusu\"><div class=\"toplam-satiri\"><span>Toplam top</span><b data-alan=\"toplamlar.top_adedi\" data-filtre=\"sayi: 0\" class=\"veri-alani\">5</b></div><div class=\"toplam-satiri\"><span>Toplam metre (brüt)</span><b data-alan=\"toplamlar.metre\" data-filtre=\"metre\" class=\"veri-alani\">680</b></div><div class=\"toplam-satiri\"><span>Toplam kg</span><b data-alan=\"toplamlar.kg\" data-filtre=\"kg\" class=\"veri-alani\">73.5</b></div></div><div data-if=\"ayar.showSignatures\" class=\"imza-alani\"><div data-alan=\"ayar.signatureLabels[0]\" class=\"imza-kutusu\">Teslim Eden</div><div data-alan=\"ayar.signatureLabels[1]\" class=\"imza-kutusu\">Teslim Alan</div></div><footer><span data-alan=\"belge.no\" data-filtre=\"barkod: &quot;code128&quot;\" class=\"barkod\">Barkod</span> <span data-alan=\"belge.no\" data-filtre=\"qr\" class=\"karekod\">QR</span></footer></body>"
+    }
+  ]
+}

@@ -25,7 +25,10 @@ import {
   visibleUsersFor,
   type NotificationVisibilityEnv,
 } from "./helpers/notification-visibility.helper";
-import { addRecipients, type Agg, type BatchState } from "./helpers/notification-aggregate.helper";
+import {
+  addRecipients, newBatchState, notificationGroupKey, routeAlarmRow, settleAlarmUpdates, touchUser,
+  type Agg, type BatchState, type TouchedUsers,
+} from "./helpers/notification-aggregate.helper";
 import { hata, uyari } from "../lib/logger";
 
 /** Advisory kilit uzayı — envanter `helpers/period-guard.helper.ts` başlığında. */
@@ -35,7 +38,6 @@ export const NOTIFICATION_DISPATCHER_LOCK_KEY = "bildirim-dagitici";
 export const DISPATCH_BATCH_LIMIT = 100;
 /** Bu kadar düşen satır süpürmeden çıkar (zehirli satır kuyruğu tıkamasın); budama 7 günde siler. */
 export const DISPATCH_MAX_ATTEMPTS = 5;
-const GROUP_KEY_MAX = 200;
 const ERROR_CODE_MAX = 64;
 
 type Tx = Prisma.TransactionClient;
@@ -73,6 +75,8 @@ function entryOf(kind: string): NotificationCatalogEntry | undefined {
 
 const resolvers = new Map<NotificationKind, RecipientResolver>();
 
+export { notificationGroupKey };
+
 /** Türe özel alıcı çözücü (N2: tezgah alarmı DONMUŞ `LoomAlarmRecipient`ten okur). Sonuç yine görme süzgecinden geçer. */
 export function registerRecipientResolver(kind: NotificationKind, resolver: RecipientResolver): void {
   resolvers.set(kind, resolver);
@@ -91,17 +95,6 @@ async function resolveByPermission(ctx: RecipientContext): Promise<Array<{ userI
     .map((userId) => ({ userId, reason: "IZIN" as const }));
 }
 
-/** Birleştirme anahtarı (plan §3.6): ALARM `alarm:<id>` · KOSUL `kind:subjectKey:conditionId` · OLAY dedupeKey (+ pencere kovası). */
-export function notificationGroupKey(row: Pick<OutboxRow, "kind" | "subjectId" | "subjectKey" | "conditionId" | "dedupeKey" | "occurredAt">): string {
-  const entry = entryOf(row.kind);
-  let key: string;
-  if (entry?.sinif === "ALARM") key = `alarm:${row.subjectId ?? row.subjectKey}`;
-  else if (entry?.altTur === "KOSUL") key = `${row.kind}:${row.subjectKey}:${row.conditionId ?? "-"}`;
-  else if (entry && entry.pencereSn > 0) key = `${row.dedupeKey}:${Math.floor(row.occurredAt.getTime() / 1000 / entry.pencereSn)}`;
-  else key = row.dedupeKey;
-  return key.slice(0, GROUP_KEY_MAX);
-}
-
 export interface DispatchResult {
   /** İşlenmiş (claim edilmiş) outbox satırı. */
   processed: number;
@@ -111,8 +104,10 @@ export interface DispatchResult {
   resolved: number;
   /** Bu turda düşen (attempts++) satır. */
   failed: number;
-  /** Zil kancasına giden kullanıcılar (tekil, sıralı). */
+  /** Zil kancasına giden kullanıcılar (tekil, sıralı) — BİLDİRİM kutusu değişenler (`rev`). */
   userIds: string[];
+  /** Alarm satırı değişen kullanıcılar (tekil, sıralı) — zil `alarm` (`alarmRev`). */
+  alarmUserIds: string[];
 }
 
 interface BatchOptions {
@@ -147,7 +142,7 @@ async function loadRecipientContext(tx: Tx, known: OutboxRow[]) {
 
 async function aggregateRows(tx: Tx, rows: OutboxRow[], known: OutboxRow[]): Promise<BatchState> {
   const { env, grants } = await loadRecipientContext(tx, known);
-  const state: BatchState = { agg: new Map(), counts: new Map(), errors: new Map(), closeKeys: new Map(), stats: new Map() };
+  const state = newBatchState();
   const { counts, errors, closeKeys, stats } = state;
   for (const row of rows) {
     const kind = row.kind as NotificationKind;
@@ -159,6 +154,8 @@ async function aggregateRows(tx: Tx, rows: OutboxRow[], known: OutboxRow[]): Pro
       continue;
     }
     const groupKey = notificationGroupKey(row);
+    // ALARM durum güncellemesi sayaç artırmaz; ayrı yoldan yalnız payload yenilenir.
+    if (routeAlarmRow(state, { row, entry, groupKey })) continue;
     if (row.phase === "KAPANDI") {
       closeKeys.set(groupKey, [...(closeKeys.get(groupKey) ?? []), row.id]);
       continue;
@@ -172,6 +169,18 @@ async function aggregateRows(tx: Tx, rows: OutboxRow[], known: OutboxRow[]): Pro
     stats.set(sk, { day, kind, n: (stats.get(sk)?.n ?? 0) + 1 });
   }
   return state;
+}
+
+/** ALARM GUNCELLENDI: açık satırların payload'ı yenilenir; count/readAt/lastAt değişmez (durum, olay değil). */
+async function applyAlarmUpdates(tx: Tx, state: BatchState, users: TouchedUsers): Promise<void> {
+  if (state.updates.size === 0) return;
+  const keys = [...state.updates.keys()];
+  const rows = await tx.$queryRaw<Array<{ userId: string; groupKey: string }>>`
+    UPDATE notification_inbox AS i SET payload = d.p::jsonb, "updatedAt" = now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
+    FROM unnest(${keys}::text[], ${keys.map((k) => state.updates.get(k)!.payload)}::text[]) AS d(g, p)
+    WHERE i."groupKey" = d.g AND i."resolvedAt" IS NULL
+    RETURNING i."userId", i."groupKey"`;
+  settleAlarmUpdates(state, rows, users);
 }
 
 async function upsertInbox(tx: Tx, a: Agg[]): Promise<void> {
@@ -212,14 +221,14 @@ async function addLateCloses(tx: Tx, known: OutboxRow[], closeKeys: Map<string, 
 }
 
 /** KAPANDI upsert'lerden SONRA: aynı turda açılıp kapanan koşulun satırı da çözülür. */
-async function resolveClosed(tx: Tx, state: BatchState, users: Set<string>): Promise<number> {
+async function resolveClosed(tx: Tx, state: BatchState, users: TouchedUsers): Promise<number> {
   const { counts, errors, closeKeys } = state;
   if (closeKeys.size === 0) return 0;
   const closed = await tx.$queryRaw<Array<{ userId: string; groupKey: string }>>`
     UPDATE notification_inbox SET "resolvedAt" = now(), "readAt" = COALESCE("readAt", now()), "updatedAt" = now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
     WHERE "groupKey" = ANY(${[...closeKeys.keys()]}::text[]) AND "resolvedAt" IS NULL
     RETURNING "userId", "groupKey"`;
-  for (const c of closed) users.add(c.userId);
+  for (const c of closed) touchUser(users, state, c.userId, c.groupKey);
   for (const [g, ids] of closeKeys) {
     const n = closed.filter((c) => c.groupKey === g).length;
     ids.forEach((id, i) => {
@@ -254,19 +263,24 @@ async function claimBatch(tx: Tx, rows: OutboxRow[], state: BatchState): Promise
 async function dispatchBatchTx(tx: Tx, o: BatchOptions): Promise<DispatchResult> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${NOTIFICATION_DISPATCH_LOCK_NS}::int, hashtext(${NOTIFICATION_DISPATCHER_LOCK_KEY}))`;
   const rows = await selectBatch(tx, o);
-  if (rows.length === 0) return { processed: 0, upserts: 0, resolved: 0, failed: 0, userIds: [] };
+  if (rows.length === 0) return { processed: 0, upserts: 0, resolved: 0, failed: 0, userIds: [], alarmUserIds: [] };
   const known = rows.filter((r) => entryOf(r.kind) !== undefined);
   const state = await aggregateRows(tx, rows, known);
   const a = [...state.agg.values()];
   await upsertInbox(tx, a);
-  const users = new Set(a.map((x) => x.userId));
+  // Zil iki kanaldan çalar: BİLDİRİM kutusu (`rev`) · ALARM satırı (`alarmRev`, panel alarm sorgusunu da tazeler).
+  const users: TouchedUsers = { box: new Set(), alarm: new Set() };
+  for (const x of a) touchUser(users, state, x.userId, x.groupKey);
   // Geciken ACILDI (yeniden denenen satır) koşulu çoktan kapanmışsa açık satır bırakmaz.
   await addLateCloses(tx, known, state.closeKeys);
   const resolved = await resolveClosed(tx, state, users);
+  await applyAlarmUpdates(tx, state, users);
   await bumpDailyStats(tx, [...state.stats.values()]);
   await claimBatch(tx, rows, state);
   if (o.beforeCommit) await o.beforeCommit(tx);
-  return { processed: rows.length, upserts: a.length, resolved, failed: 0, userIds: [...users].sort() };
+  const box = [...users.box].sort();
+  const alarm = [...users.alarm].sort();
+  return { processed: rows.length, upserts: a.length, resolved, failed: 0, userIds: box, alarmUserIds: alarm };
 }
 
 function errorCode(err: unknown): string {
@@ -283,17 +297,18 @@ async function markFailed(id: string, err: unknown): Promise<void> {
   });
 }
 
-let deliveredHook: ((userIds: string[]) => void) | null = null;
+export type NotificationDeliveredHook = (userIds: string[], alarmUserIds: string[]) => void;
+let deliveredHook: NotificationDeliveredHook | null = null;
 
-/** Zil kancası (N1-ZIL hub'ı bağlar): tur commit olduktan SONRA, kutusu değişen kullanıcılarla çağrılır. */
-export function setNotificationDeliveredHook(hook: ((userIds: string[]) => void) | null): void {
+/** Zil kancası (N1-ZIL hub'ı bağlar): tur commit olduktan SONRA, kutusu / alarm satırı değişen kullanıcılarla çağrılır. */
+export function setNotificationDeliveredHook(hook: NotificationDeliveredHook | null): void {
   deliveredHook = hook;
 }
 
-function onDelivered(userIds: string[]): void {
-  if (!deliveredHook || userIds.length === 0) return;
+function onDelivered(r: Pick<DispatchResult, "userIds" | "alarmUserIds">): void {
+  if (!deliveredHook || (r.userIds.length === 0 && r.alarmUserIds.length === 0)) return;
   try {
-    deliveredHook(userIds);
+    deliveredHook(r.userIds, r.alarmUserIds);
   } catch (err) {
     uyari("bildirim", "zil kancası hata verdi", err);
   }
@@ -309,7 +324,7 @@ export async function runNotificationDispatchOnce(
   const limit = opts.limit ?? DISPATCH_BATCH_LIMIT;
   try {
     const r = await prisma.$transaction((tx) => dispatchBatchTx(tx, { limit, beforeCommit: opts.beforeCommit }));
-    onDelivered(r.userIds);
+    onDelivered(r);
     return r;
   } catch (batchErr) {
     uyari("bildirim", `dağıtım turu düştü (${errorCode(batchErr)}) — satırlar tek tek deneniyor`);
@@ -319,8 +334,9 @@ export async function runNotificationDispatchOnce(
       take: limit,
       select: { id: true },
     });
-    const total: DispatchResult = { processed: 0, upserts: 0, resolved: 0, failed: 0, userIds: [] };
+    const total: DispatchResult = { processed: 0, upserts: 0, resolved: 0, failed: 0, userIds: [], alarmUserIds: [] };
     const users = new Set<string>();
+    const alarmUsers = new Set<string>();
     for (const { id } of pending) {
       try {
         const r = await prisma.$transaction((tx) => dispatchBatchTx(tx, { limit: 1, onlyId: id, beforeCommit: opts.beforeCommit }));
@@ -328,6 +344,7 @@ export async function runNotificationDispatchOnce(
         total.upserts += r.upserts;
         total.resolved += r.resolved;
         for (const u of r.userIds) users.add(u);
+        for (const u of r.alarmUserIds) alarmUsers.add(u);
       } catch (rowErr) {
         total.failed += 1;
         try {
@@ -338,7 +355,8 @@ export async function runNotificationDispatchOnce(
       }
     }
     total.userIds = [...users].sort();
-    onDelivered(total.userIds);
+    total.alarmUserIds = [...alarmUsers].sort();
+    onDelivered(total);
     return total;
   }
 }

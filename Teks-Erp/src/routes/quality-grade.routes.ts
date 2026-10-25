@@ -11,6 +11,7 @@ import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
+import { assertGradeNotInActiveRuleSet } from "../services/four-point-rule.service";
 
 // Kalite kataloğunu OKUYAN mobil ekranların izinleri.
 // ⚠️ `mobile:depo` + `mobile:sevkiyat` 2026-09-13'te EKLENDİ (karar ①): o iki
@@ -20,6 +21,13 @@ import { AppError } from "../utils/app-error";
 // "Bir yetenek VAR sayılmak için üçü birden: motor + çıkış yüzeyi + İZİN
 // ATAMASI" (kök CLAUDE.md); yüzeyi ekleyip izni eklememek o kuralın ihlali.
 // Bekçi: test_mobile_screen_permissions (ekran izni ↔ çağrılan uç).
+/** K4P: aktif 4 puan kural setinde kullanılan derece pasife alınamaz (DELETE ya da PATCH isActive:false) → 409. */
+function gradeDeactivationGuard(req: Request, _res: Response, next: NextFunction): void {
+  const deactivating = req.method === "DELETE" || (req.body as { isActive?: unknown } | undefined)?.isActive === false;
+  if (!deactivating) return next();
+  assertGradeNotInActiveRuleSet(String(req.params.id)).then(() => next(), next);
+}
+
 const MOBILE_QUALITY_READ = [
   "mobile:kk1",
   "mobile:kk2-kursun",
@@ -210,7 +218,7 @@ router.post("/", verifyToken, requirePermission("quality:write"), validateQgCrea
  *     responses:
  *       200: { description: Güncellendi }
  */
-router.patch("/:id", verifyToken, requirePermission("quality:write"), validateQgUpdate, controller.update);
+router.patch("/:id", verifyToken, requirePermission("quality:write"), validateQgUpdate, gradeDeactivationGuard, controller.update);
 
 /**
  * @openapi
@@ -228,6 +236,6 @@ router.patch("/:id", verifyToken, requirePermission("quality:write"), validateQg
  *     responses:
  *       200: { description: Pasife alındı }
  */
-router.delete("/:id", verifyToken, requirePermission("quality:write"), controller.remove);
+router.delete("/:id", verifyToken, requirePermission("quality:write"), gradeDeactivationGuard, controller.remove);
 
 export default router;

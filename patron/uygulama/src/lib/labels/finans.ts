@@ -150,6 +150,19 @@ export const REPORT_TITLE: Readonly<Record<string, string>> = {
   "inventory/scorecard": "Stok ve ölü stok",
   "finance/aging": "Alacak yaşlandırma",
   "finance/cheque-due": "Çek vade takvimi",
+  "sales/siparis-talep": "Ne kadar iş aldık?",
+  "sales/sevkiyat": "Ne sevk ettik?",
+  "sales/termin": "Sözümüzü tuttuk mu?",
+  "sales/acik-siparisler": "Açık siparişler hazır mı?",
+  "sales/vazgecilen-is": "Ne geri geldi, neden vazgeçildi?",
+  "quality/kalite": "Kalite nasıl gidiyor?",
+  "quality/kayip": "Ne kaybettik?",
+  "inventory/depo": "Depoda ne yatıyor?",
+  "subcontract/fasoncular": "Fasoncular zamanında dönüyor mu?",
+  "dokuma/tezgah-randimani": "Tezgahlar verimli mi?",
+  "dokuma/duruslar": "Tezgahlar neden duruyor?",
+  "dokuma/levent-dengesi": "Leventten beklenen kumaş çıktı mı?",
+  "finance/alacaklar": "Kimden ne alacağız?",
 };
 
 /** Katalogda ad varsa ondan, yoksa sözlükten; ikisi de yoksa "Rapor" (ham anahtar ekrana basılmaz). */
@@ -167,10 +180,11 @@ export const REPORT_FAMILY: Readonly<Record<string, { readonly domain: Domain; r
   subcontract: { domain: "fason", icon: "git-branch-outline" },
   inventory: { domain: "stok", icon: "cube-outline" },
   finance: { domain: "finans", icon: "wallet-outline" },
+  dokuma: { domain: "uretim", icon: "construct-outline" },
 };
 
 /** Anahtara özel alan (aile içinde ayrışanlar): sevk karnesi sevkiyat renginde. */
-const REPORT_KEY_DOMAIN: Readonly<Record<string, Domain>> = { "sales/shipment-scorecard": "sevkiyat" };
+const REPORT_KEY_DOMAIN: Readonly<Record<string, Domain>> = { "sales/shipment-scorecard": "sevkiyat", "sales/sevkiyat": "sevkiyat", "sales/termin": "sevkiyat" };
 
 export function reportDomain(key: string): { domain: Domain; icon: IconName } {
   const fam = REPORT_FAMILY[key.split("/")[0] ?? ""] ?? { domain: "raporlar" as Domain, icon: "document-text-outline" };
@@ -193,6 +207,9 @@ export const REPORT_PARAM: Readonly<Record<string, string>> = {
   dateFrom: "Başlangıç",
   dateTo: "Bitiş",
   asOf: "Kesit anı",
+  from: "Başlangıç",
+  to: "Bitiş",
+  kiyas: "Kıyas",
   cariId: "Cari",
 };
 

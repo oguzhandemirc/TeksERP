@@ -47,3 +47,19 @@ export function valuesAfterKindChange(values: StationFormValues, kind: StationKi
   if (editing) return { ...values, kind };
   return { ...values, kind, ...suggestedCapabilities(kind) };
 }
+
+/**
+ * "Kalite muayenesi" kutusunun türe göre etkisi (KQ-D8, plan §4.2) — kutu her türde görünür,
+ * gizli kural icat edilmez; ipucu yalnız NE OLACAĞINI söyler. Ekran türden, panel yetenekten.
+ */
+export function inspectionHintForKind(kind: StationKind): string {
+  switch (kind) {
+    case StationKind.RAW_QC:
+      return "Oturum ekranında muayene (4 puan modülü açıksa)";
+    case StationKind.PROCESS_QC:
+    case StationKind.TAMBUR:
+      return "Hata girişi paneli açılır";
+    default:
+      return "Bu türün tablet muayene ekranı yok — etkisiz";
+  }
+}

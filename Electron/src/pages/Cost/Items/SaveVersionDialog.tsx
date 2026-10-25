@@ -1,0 +1,65 @@
+// "Standart olarak kaydet" — 400 COST_INPUT_MISSING'de modal KAPANMAZ: eksikler listelenir ve ilgili alan
+// (kur, devir, atkı boyu, tarife) işaretlenir; kur yoksa kayıt reddedilir, 1 varsayılmaz.
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import type { FxRates } from "../shared/cost-types";
+import { costMissingFromError } from "../shared/errors";
+import { missingText } from "../shared/labels";
+import { missingTarget } from "../shared/missing-targets";
+import { STRUCTURE_MAX } from "./schema";
+import { costItemService } from "./service";
+
+interface Props { itemId: string; fxRates: FxRates; onClose: () => void; onMissing: (codes: string[]) => void }
+
+export function SaveVersionDialog({ itemId, fxRates, onClose, onMissing }: Props) {
+  const qc = useQueryClient();
+  const [reason, setReason] = useState("");
+  const [missing, setMissing] = useState<string[]>([]);
+  const save = useMutation({
+    mutationFn: () => costItemService.saveVersion(itemId, { reason: reason.trim() || undefined, fxRates }),
+    onSuccess: (r) => {
+      toast.success(r.message ?? "Standart maliyet kaydedildi.");
+      void qc.invalidateQueries({ queryKey: ["cost-items"] });
+      onClose();
+    },
+    onError: (e) => {
+      const m = costMissingFromError(e);
+      if (m) { setMissing(m); onMissing(m); }
+    },
+  });
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Standart olarak kaydet</DialogTitle>
+          <DialogDescription>Yeni sürüm yazılır; önceki sürüm geçersiz olur ama değişmez. Kayıtlı teklifler etkilenmez.</DialogDescription>
+        </DialogHeader>
+        <label className="text-sm"><span className="text-muted-foreground">Gerekçe (opsiyonel)</span>
+          <Input className="mt-1" maxLength={STRUCTURE_MAX.reason} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
+        {missing.length > 0 && (
+          <ul role="alert" className="space-y-1 text-sm text-destructive">
+            {missing.map((c) => {
+              const t = missingTarget(c);
+              return (
+                <li key={c} data-code={c}>
+                  ✕ {missingText(c)}{" "}
+                  {t?.kind === "link" && <Link className="underline" to={t.to}>{t.label}</Link>}
+                  {t?.kind === "field" && <span className="text-xs">(işaretli alan)</span>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Vazgeç</Button>
+          <Button disabled={save.isPending} onClick={() => save.mutate()}>Kaydet</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

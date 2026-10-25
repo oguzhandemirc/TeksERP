@@ -13,6 +13,7 @@ import type { LicenseRelayRequest, LicenseRelayResult } from "./license-relay";
 import type { ScreenshotResult } from "./screenshot";
 import type { TvDisplayInfo, TvWindowOpenRequest, TvWindowOpenResult } from "./tv-window";
 import type { LoomAlarmNotifyRequest, LoomAlarmNotifyResult } from "./loom-alarm-notify";
+import type { BildirimNotifyRequest, BildirimNotifyResult, BildirimOpenEvent, BildirimRozetRequest } from "./bildirim-notify";
 import type { PdfBatchProgress } from "./pdf-progress";
 import type { DocPrintApi } from "./doc-print";
 import type {
@@ -63,6 +64,14 @@ export interface LoomAlarmApi {
   notify: (req: LoomAlarmNotifyRequest) => Promise<LoomAlarmNotifyResult>;
   /** Bildirime tıklandı (pencere öne geldi). Dönüş: aboneliği bırak. */
   onOpen: (cb: (alarmId: string) => void) => () => void;
+}
+
+/** Genel bildirim OS bildirimi + görev çubuğu rozeti (N3). Web panelinde köprü yok → çağrılmaz. */
+export interface BildirimDesktopApi {
+  notify: (req: BildirimNotifyRequest) => Promise<BildirimNotifyResult>;
+  rozet: (req: BildirimRozetRequest) => Promise<boolean>;
+  /** Bildirime tıklandı (pencere öne geldi). Dönüş: aboneliği bırak. */
+  onOpen: (cb: (e: BildirimOpenEvent) => void) => () => void;
 }
 
 export interface SystemApi {
@@ -479,6 +488,7 @@ export interface ApiBridge {
   license: LicenseApi;
   tvWindow: TvWindowApi;
   loomAlarm: LoomAlarmApi;
+  bildirim: BildirimDesktopApi;
 }
 
 declare global {
