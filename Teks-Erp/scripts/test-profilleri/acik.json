@@ -122,6 +122,8 @@
     "nativeSendEnabled": true,
     "mobileRasterEnabled": true,
     "scrapGradeLabelEnabled": true,
-    "bildirimGelenKutusuEnabled": true
+    "bildirimGelenKutusuEnabled": true,
+    "documentDesignerEnabled": true,
+    "documentPublishSodEnabled": true
   }
 }

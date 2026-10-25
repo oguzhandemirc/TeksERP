@@ -222,7 +222,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/rolls", app: "desktop", modul: "cekirdek:stok-giris", title: "Kumaş Stoğu", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
   { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: "Kurşun Planlama", requires: ["quality:write", "workorder:distribute"], capabilities: [] },
   { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
-  { key: "operations/shipments", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
+  { key: "operations/shipments", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["eirsaliye:read", "eirsaliye:undo", "eirsaliye:write", "return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
   { key: "operations/sack-store", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevk Kapısı", requires: ["shipping:read"], capabilities: ["shipping:write"] },
   { key: "operations/sack-content-edit", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Paketleme / Çuvallar", requires: ["shipping:write"], capabilities: ["label:print", "shipping:packing-lot"] },
   { key: "operations/relabel-station", app: "desktop", modul: "cekirdek:stok-giris", title: "Yeniden Etiketle", requires: ["label:edit", "roll:write"], capabilities: [] },

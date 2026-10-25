@@ -37,6 +37,7 @@ import { getAgingReport } from "../../services/reports/finance-aging.report";
 import { getCashBookReport } from "../../services/reports/cash-book.report";
 import { getVatSummaryReport, VAT_YONLERI } from "../../services/reports/finance-vat.report";
 import { getFxDiffReport } from "../../services/reports/finance-fx-diff.report";
+import { buildCashBookNarrative, buildFxDiffNarrative, buildVatNarrative } from "../../services/reports/temel/expert-narrative";
 import { cariService } from "../../services/cari.service";
 import { AppError } from "../../utils/app-error";
 
@@ -184,7 +185,8 @@ router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (r
       cariId: q.cariId,
     });
     const { suzgec, secenekler, ...govde } = data;
-    res.status(200).json(reportEnvelope(govde, range, null, { suzgec, secenekler }));
+    // `anlati` EK alan ("Ne görüyoruz?"); mevcut alanlar aynen.
+    res.status(200).json(reportEnvelope({ ...govde, anlati: buildCashBookNarrative(govde) }, range, null, { suzgec, secenekler }));
   } catch (e) {
     next(e);
   }
@@ -290,7 +292,7 @@ router.get("/vat-summary", requireReportOpen("finance/vat-summary"), guard, asyn
     // ⚠️ `suzgec` CEVABIN KÖKÜNE gider, `data`nın içine DEĞİL (R5b-c2 tek adres):
     // panel tek bileşen okuyacak; iki adres, süzgeç şeridini rapor başına yazdırırdı.
     const { suzgec, secenekler, ...data } = await getVatSummaryReport({ range, yon: q.yon, oran: q.oran });
-    res.status(200).json(reportEnvelope(data, range, null, { suzgec, secenekler }));
+    res.status(200).json(reportEnvelope({ ...data, anlati: buildVatNarrative(data) }, range, null, { suzgec, secenekler }));
   } catch (e) {
     next(e);
   }
@@ -336,7 +338,7 @@ router.get("/fx-diff", requireReportOpen("finance/fx-diff"), guard, async (req: 
 
     const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
     const { suzgec, secenekler, ...govde } = await getFxDiffReport({ range, cariId: q.cariId, currency: q.currency, kind: q.kind });
-    res.status(200).json(reportEnvelope(govde, range, null, { suzgec, secenekler }));
+    res.status(200).json(reportEnvelope({ ...govde, anlati: buildFxDiffNarrative(govde) }, range, null, { suzgec, secenekler }));
   } catch (e) {
     next(e);
   }

@@ -282,5 +282,9 @@ const COUNTER_DIGIT_CEILING = 12;
 export function codeCountsForCounter(fmt: NumberSeriesFormat, code: string): boolean {
   if (!matchesSeries(fmt, code)) return false;
   const kuyruk = code.trim().replace(/^.*?(\d+)$/, "$1");
-  return kuyruk.length <= COUNTER_DIGIT_CEILING;
+  // Ayırıcısız tarih segmenti kuyruğa yapışır (EIR + 2026 + 000000003): tavan yalnız SIRA hanesine uygulanır.
+  const { sep2 } = seriesJoints(fmt);
+  const dateLen = DATE_SEGMENTS[fmt.dateSegment].len;
+  const seqLen = kuyruk.length - (dateLen > 0 && sep2 === "" && !fmt.infix ? dateLen : 0);
+  return seqLen <= COUNTER_DIGIT_CEILING;
 }

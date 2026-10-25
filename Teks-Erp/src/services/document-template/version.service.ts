@@ -9,13 +9,14 @@
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
+import { SETTING_KEYS, readDocumentPublishSodEnabled } from "../system-setting.service";
 import { tokenReplay } from "../helpers/token-replay.helper";
 import { getContract, type RegisteredContract } from "./sozlesme/kayit";
 import { TemplateRenderError, renderTemplate } from "./motor/render";
 import { prepareContent, versionData, VERSION_SUMMARY, type VersionContentInput } from "./version-content";
 
 /** Yayının SoD ayarı — ham okunur, satır yoksa KAPALI (bayrak bağlantısı T1C'de). */
-export const PUBLISH_SOD_SETTING_KEY = "documents.publishSodEnabled";
+export const PUBLISH_SOD_SETTING_KEY = SETTING_KEYS.DOCUMENTS_PUBLISH_SOD_ENABLED;
 
 // ── Okuma ─────────────────────────────────────────────────────────────────────
 
@@ -125,10 +126,9 @@ export async function saveVersion(templateId: string, input: SaveVersionInput, u
 
 // ── Yayın ─────────────────────────────────────────────────────────────────────
 
-/** Ham ayar okuması; satır yoksa ya da `true` değilse KAPALI (bugünkü davranış). */
+/** Bayrak okuyucusu tek kaynak (`system-setting.service`); satır yoksa KAPALI (bugünkü davranış). */
 export async function readPublishSodEnabled(): Promise<boolean> {
-  const row = await prisma.systemSetting.findUnique({ where: { key: PUBLISH_SOD_SETTING_KEY }, select: { value: true } });
-  return row?.value === true;
+  return readDocumentPublishSodEnabled();
 }
 
 interface RenderableVersion {

@@ -7,7 +7,8 @@
 // =============================================================================
 
 import type { PrintedDocType } from "@prisma/client";
-import { envelopeHead, type PrintedDocSnapshot } from "../../printed-document.service";
+import { envelopeHead } from "../../document-render/envelope-head";
+import type { PrintedDocSnapshot } from "../../printed-document.service";
 import type { DocumentConfig } from "../../system-setting.service";
 import { SAMPLE_PRINTED_DOCS, setSampleClock } from "../../document-render/sample-data";
 import { previewSeriesCode, resolveSeriesFormat } from "../../number-series.service";

@@ -156,7 +156,10 @@ function main(): void {
   // 33 → 34 (2026-10-24, KQ-D6): `helpers/workorder-target-value.helper.ts` — İE hedef çeşit değerinin
   // TEK YAZARI (FARK bazlı damga + yeni satır, tx İÇİNDE; create · replace · klon); audit'i çağıran eylem
   // basar (`workorder-target-value.service` · `workorder.service`) — EBEVEYN_EYLEMDE kalıbı, dosya düzeyinde.
-  const AUDITSIZ_YAZICI_TABAN = 34;
+  // 34 → 35 (2026-10-25, E5-MOTOR): `e-irsaliye/e-irsaliye-transition.helper.ts` — e-İrsaliye
+  // STATÜSÜNÜN tek yazarı (`transitionEIrsaliyeTx`, atomik claim, tx İÇİNDE) + olay satırı; audit'i
+  // çağıran eylem basar (service · generate · exchange) — `workorder-event.helper` ile aynı kalıp.
+  const AUDITSIZ_YAZICI_TABAN = 35;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

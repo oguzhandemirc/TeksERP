@@ -85,6 +85,10 @@ const ELECTRON_SRC = path.join(KOK, "Electron/src");
 const MOBIL_SRC = path.join(KOK, "mobil/src");
 
 /** Dokuma kapısını TAŞIMASI GEREKEN router'lar (mount adresiyle). */
+/** Kapıyı uç seviyesinde taşıyan karma router'lar (aynı dosyada dokuma dışı uç var) — §6u. */
+const UC_KAPILI: ReadonlyArray<{ dosya: string; yollar: string[] }> = [
+  { dosya: "routes/reports/temel-dokuma-finans.routes.ts", yollar: ["/dokuma/tezgah-randimani", "/dokuma/duruslar", "/dokuma/levent-dengesi"] },
+];
 const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string }> = [
   { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
   { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
@@ -320,7 +324,19 @@ async function main(): Promise<void> {
   const kapiTasiyan = tumRouteDosyalari.filter((rel) =>
     yorumlariSok(fs.readFileSync(path.join(SRC, rel), "utf8")).includes(KAPI),
   );
-  const anilan = new Set(KAPILI.map((x) => x.dosya));
+  // §6f-uç (R0-RAPC, 2026-10-25): KARMA router (dokuma + finans uçları tek dosyada) kapıyı router seviyesinde
+  // taşıyamaz — finans ucu dokuma rejimine bağlanırdı. Listelenen her dokuma ucu kapıyı KENDİ zincirinde, rapor
+  // kapısından ÖNCE taşır. NEGATİF SONDA: `/dokuma/duruslar` zincirinden `requireDokumaEnabled` silindi → §6u ❌ (1).
+  for (const u of UC_KAPILI) {
+    const metin = yorumlariSok(fs.readFileSync(path.join(SRC, u.dosya), "utf8"));
+    for (const yol of u.yollar) {
+      const satir = metin.split("\n").find((l) => l.includes(`router.get("${yol}"`)) ?? "";
+      const kapiYeri = satir.indexOf(KAPI);
+      const raporKapisi = satir.indexOf("reportGate(");
+      check(`§6u ⭐ ${u.dosya} ${yol} → kapı UÇ zincirinde, rapor kapısından ÖNCE`, kapiYeri > 0 && raporKapisi > kapiYeri, satir ? "" : "uç bulunamadı");
+    }
+  }
+  const anilan = new Set([...KAPILI.map((x) => x.dosya), ...UC_KAPILI.map((x) => x.dosya)]);
   const listesiz = kapiTasiyan.filter((rel) => !anilan.has(rel));
   check(
     "§6d Körlük zemini: route dizini tarandı, kapı taşıyan dosya bulundu",

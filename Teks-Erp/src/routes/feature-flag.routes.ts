@@ -748,6 +748,9 @@ export const updateSchema = z.strictObject({
   documentsConfig: z.record(z.string(), z.any()).optional(),
   // bildirim: bildirim.gelenKutusuEnabled — kişisel gelen kutusu + yeni zil (default false → bugünkü zil). Kapsamsız: yalnız admin:settings yazar.
   bildirimGelenKutusuEnabled: z.boolean().optional(),
+  // belge-sablon T1C: documents.designerEnabled / documents.publishSodEnabled (default false). Kapsamsız: yalnız admin:settings yazar.
+  documentDesignerEnabled: z.boolean().optional(),
+  documentPublishSodEnabled: z.boolean().optional(),
 }, {
   // Türkçe mesaj + hangi anahtarın tanınmadığını SÖYLE (rota kuralı: hata
   // mesajları Türkçe). Diğer issue kodlarında `undefined` → Zod varsayılanı.

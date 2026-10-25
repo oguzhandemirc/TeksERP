@@ -1,18 +1,5 @@
 import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone, Bell } from "lucide-react";
-import {
-  LICENSE_ACCESS,
-  SETTINGS_COMPANY_ACCESS,
-  SETTINGS_FLAGS_ACCESS,
-  SETTINGS_PRINTING_ACCESS,
-  SETTINGS_WORKSTATION_ACCESS,
-  SYSTEM_ACTIVITY_ACCESS,
-  SYSTEM_BACKUPS_ACCESS,
-  SYSTEM_CLIENTS_ACCESS,
-  SYSTEM_PRINT_HISTORY_ACCESS,
-  SYSTEM_ROLL_ARCHIVE_ACCESS,
-  SYSTEM_SERVER_STATUS_ACCESS,
-  SYSTEM_WORK_SESSIONS_ACCESS,
-} from "@/lib/permissions";
+import { LICENSE_ACCESS, SETTINGS_COMPANY_ACCESS, SETTINGS_FLAGS_ACCESS, SETTINGS_PRINTING_ACCESS, SETTINGS_WORKSTATION_ACCESS, SYSTEM_ACTIVITY_ACCESS, SYSTEM_BACKUPS_ACCESS, SYSTEM_CLIENTS_ACCESS, SYSTEM_PRINT_HISTORY_ACCESS, SYSTEM_ROLL_ARCHIVE_ACCESS, SYSTEM_SERVER_STATUS_ACCESS, SYSTEM_WORK_SESSIONS_ACCESS } from "@/lib/permissions";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 

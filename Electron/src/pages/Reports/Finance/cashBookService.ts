@@ -1,3 +1,4 @@
+import type { AnlatiCumlesi } from "../_v2/sunum";
 // =============================================================================
 // KASA / BANKA DEFTERİ — tipler + API çağrısı (backend `cash-book.report.ts` aynası)
 // =============================================================================
@@ -130,6 +131,8 @@ export interface CashBookAccountSummary {
 }
 
 export interface CashBookReport {
+  /** "Ne görüyoruz?" — sunucunun anlatısı (EK alan; eski backend göndermez → kutu çizilmez). */
+  anlati?: AnlatiCumlesi[];
   accounts: CashBookAccountSummary[];
   /**
    * Dönem hareketlerinin KAYNAK kırılımı — para birimi bazında olduğu için
