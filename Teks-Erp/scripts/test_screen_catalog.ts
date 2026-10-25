@@ -361,7 +361,6 @@ const KARO_YOK: ReadonlyArray<{ key: string; reason: string }> = [
   // K4P zemin (2026-10-24): manifesto + route kapısı önden yazıldı; sayfa ve karo PANEL/LAB/SERT
   // dilimlerinde iner. Karo doğunca muaf "kullanılmayan" düşer ve silinir.
   { key: "quality/inspections", reason: "K4P Muayeneler ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
-  { key: "quality/inspection-rules", reason: "K4P 4 Puan Kuralları ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
 ];
 
 

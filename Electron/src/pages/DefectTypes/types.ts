@@ -12,6 +12,10 @@ export interface DefectType {
   isActive: boolean;
   /** Tipsiz hata girişi bu tipe düşer; kurulumda en fazla bir. */
   isDefault: boolean;
+  /** K4P sabit puan (1–4); null = boyut sınıfından. Yalnız Kalite Güvence açıkken görünür/yazılır. */
+  fixedPoints?: number | null;
+  /** K4P tablet muayene düğme sırası (küçük önce). */
+  sortOrder?: number;
   createdAt: string;
   updatedAt: string;
 }

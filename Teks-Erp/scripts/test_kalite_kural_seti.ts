@@ -9,12 +9,21 @@
 //   §2 tek aktif FACTORY (409) · pasife alınca yenisi açılır · eskisini geri açmak 409
 //   §3 CUSTOMER setinde qualityGradeId yasak · FACTORY setinde zorunlu · müşteri rolü kapalı iş ortağı 400
 //   §4 snapshot: bant eşiği değişince kayıtlı muayene (skor, öneri, snapshot) değişmez; yeni önizleme değişir
+//   §5 canlı referans (K4P-TANIM): aktif setin bandındaki derece pasife alınamaz (409 QUALITY_GRADE_IN_RULE_SET,
+//      route DELETE + PATCH isActive:false); pasif set/kullanılmayan derece/modül kapalı serbest; set pasife
+//      alınınca kayıtlı muayene snapshot'ı aynı
+//   §6 ürün eni (K4P-TANIM): POST yolu `widthCm` yazar; içe aktarım "En (cm)" kolonu, biçim hatası satır hatası
 // Negatif sonda (2026-10-25): `updateRuleSet` bant replace'inden sonra muayeneleri "yeniden derecelendirirse"
 // (`rollInspection.updateMany({ ruleSetId }, suggestedGradeCode)`) §4 iki satır kırmızı; geri alındı.
 // =============================================================================
 import { randomUUID } from "crypto";
 import prisma from "../src/lib/prisma";
-import { createRuleSet, setRuleSetActive, updateRuleSet } from "../src/services/four-point-rule.service";
+import { readFileSync } from "fs";
+import path from "path";
+import { assertGradeNotInActiveRuleSet, createRuleSet, setRuleSetActive, updateRuleSet } from "../src/services/four-point-rule.service";
+import { itemService } from "../src/routes/item.routes";
+import { itemImportAdapter } from "../src/services/import/adapters/item.adapter";
+import type { PreparedRow } from "../src/services/import/import.types";
 import { resolveFourPointRule } from "../src/services/helpers/four-point-resolve.helper";
 import * as insp from "../src/services/quality-inspection.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
@@ -35,6 +44,9 @@ async function errCode(p: Promise<unknown>): Promise<string> {
 const TAG = `K4R${Date.now().toString(36).toUpperCase()}`;
 const made = { items: [] as string[], rolls: [] as string[], types: [] as string[], grades: [] as string[], sets: [] as string[], customers: [] as string[] };
 let parkedFactory: string[] = [];
+const KG = "kaliteGuvence.enabled";
+let kgPrior: { value: unknown } | null = null;
+const setKg = (v: boolean) => prisma.systemSetting.upsert({ where: { key: KG }, create: { key: KG, value: v }, update: { value: v } });
 
 async function cleanup(): Promise<void> {
   const ins = { rollId: { in: made.rolls } };
@@ -50,6 +62,8 @@ async function cleanup(): Promise<void> {
   await prisma.defectType.deleteMany({ where: { id: { in: made.types } } });
   await prisma.qualityGrade.deleteMany({ where: { id: { in: made.grades } } });
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });
+  if (kgPrior) await prisma.systemSetting.update({ where: { key: KG }, data: { value: kgPrior.value as never } });
+  else await prisma.systemSetting.deleteMany({ where: { key: KG } });
 }
 
 async function main(): Promise<void> {
@@ -127,6 +141,42 @@ async function main(): Promise<void> {
     check("detay snapshot'tan okur (eşik 20,00)", (det.ruleSnapshot as { bands: Array<{ maxScore: string | null }> }).bands[0]?.maxScore === "20.00");
     const pc = await insp.preview({ rollId: roll.id, customerId: cust.id, defects: [{ defectTypeId: t.id, sizeClass: "OVER_9IN", startMeter: "1" }] });
     check("müşteri önizlemesi müşteri setinin biriminde (YD2 3,34) + etiket, derecesiz", pc.ruleSet?.id === cGen.id && pc.gradeScore?.toFixed(2) === "3.34" && pc.suggested?.label === "GEÇER" && pc.suggested.qualityGradeId === null);
+
+    console.log("§5 canlı referans: aktif setteki derece pasife alınamaz");
+    kgPrior = await prisma.systemSetting.findUnique({ where: { key: KG }, select: { value: true } });
+    await setKg(true);
+    const live = await errCode(assertGradeNotInActiveRuleSet(ga.id));
+    check("aktif fabrika setinin derecesi → 409 QUALITY_GRADE_IN_RULE_SET", live === "QUALITY_GRADE_IN_RULE_SET", live);
+    const gc = await g("C");
+    check("kullanılmayan derece serbest", (await errCode(assertGradeNotInActiveRuleSet(gc.id))) === "ok");
+    await setKg(false);
+    check("modül kapalı → kural koşmaz (serbest)", (await errCode(assertGradeNotInActiveRuleSet(ga.id))) === "ok");
+    await setKg(true);
+    const routeSrc = readFileSync(path.join(__dirname, "../src/routes/quality-grade.routes.ts"), "utf8");
+    check("route: PATCH ve DELETE kapıdan geçer",
+      /router\.patch\("\/:id"[^\n]*gradeDeactivationGuard[^\n]*controller\.update/.test(routeSrc) && /router\.delete\("\/:id"[^\n]*gradeDeactivationGuard[^\n]*controller\.remove/.test(routeSrc));
+    await setRuleSetActive(f2.id, false, uid);
+    check("set pasife alınınca derece serbest (f1 de pasif)", (await errCode(assertGradeNotInActiveRuleSet(ga.id))) === "ok");
+    const afterOff = await prisma.rollInspection.findUniqueOrThrow({ where: { id: row.id }, select: { ruleSnapshot: true, gradeScore: true, suggestedGradeCode: true, suggestedQualityGradeId: true, pointsPer100M2: true } });
+    check("set pasife alındı: kayıtlı muayene snapshot'ı aynı", JSON.stringify(afterOff) === JSON.stringify(before));
+
+    console.log("§6 ürün eni (widthCm)");
+    const created = await itemService.create({ name: `${TAG} enli`, itemType: "FABRIC", widthCm: 280.5 } as never, uid);
+    const cid = (created.data as { id: string }).id;
+    made.items.push(cid);
+    const stored = await prisma.item.findUniqueOrThrow({ where: { id: cid }, select: { widthCm: true } });
+    check("POST yolu widthCm yazar (280,5)", stored.widthCm?.toFixed(2) === "280.50", String(stored.widthCm));
+    const col = itemImportAdapter.columns.find((c) => c.key === "widthCm");
+    check("içe aktarım: \"En (cm)\" sayı kolonu", col?.label === "En (cm)" && col.type === "number");
+    const mk = (v: unknown): PreparedRow => ({ values: { name: "x", widthCm: v }, result: { errors: [], warnings: [] } }) as unknown as PreparedRow;
+    const badRow = mk(-5);
+    await itemImportAdapter.validateRow!(badRow, {} as never);
+    check("içe aktarım: negatif en → satır hatası", badRow.result.errors.some((e) => e.column === "widthCm"));
+    const okRow = mk(150);
+    await itemImportAdapter.validateRow!(okRow, {} as never);
+    check("içe aktarım: geçerli en hatasız", okRow.result.errors.length === 0);
+    const ex = await itemImportAdapter.findExisting([`${TAG}-I`]);
+    check("içe aktarım: mevcut kayıt eni sayı (diff için)", [...ex.values()][0]?.widthCm === 100);
   } catch (e) {
     check("beklenmeyen hata", false, e instanceof Error ? `${e.message}\n${e.stack}` : String(e));
   } finally {

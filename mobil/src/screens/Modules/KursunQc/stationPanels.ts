@@ -11,27 +11,67 @@ import { lowerTr } from '../../../utils/trCase';
 
 export type StationCompletion = 'BUTTON' | 'TAP_VALUE';
 
+type PanelMode = 'AUTO' | 'OPTIONAL' | 'REQUIRED';
+
+export interface StationPanelProperty {
+  mode: PanelMode;
+  propertyId?: string;
+  valueType?: 'FLAG' | 'CHOICE';
+  variantOfPropertyId?: string | null;
+  values?: readonly { code: string; name: string }[];
+}
+
 export interface StationPanelInput {
   /** undefined = eski backend → bugünkü düzen (kalite paneli açık). */
   inspectionEnabled?: boolean;
-  properties: readonly { mode: 'AUTO' | 'OPTIONAL' | 'REQUIRED' }[];
+  properties: readonly StationPanelProperty[];
+}
+
+/** Tek dokunuş düzeninin girdisi: dokunulacak çeşit (gramaj) + bağlı bayrak (KURSUN). */
+export interface TapValueConfig {
+  variantPropertyId: string;
+  variantMode: PanelMode;
+  flagPropertyId: string | null;
+  flagMode: PanelMode | null;
 }
 
 export interface StationPanels {
   qualityPanel: boolean;
   processPanel: boolean;
-  /** `TAP_VALUE` (tek dokunuş = top bitti) dalını D5 açar; bu sürüm hep `BUTTON`. */
+  /** `TAP_VALUE` = tek dokunuş top bitirir (KQ-D5, K9); aksi `BUTTON` (bugünkü). */
   completion: StationCompletion;
   completeLabel: string;
+  tap: TapValueConfig | null;
+}
+
+/** Tek çeşit (değerli SEÇİM) + en çok onun bayrağı işaret ister → dokunuş yeter.
+ *  Başka OPTIONAL/REQUIRED özellik varsa ek dokunuş gerekir → null (BUTTON). */
+export function resolveTapValueConfig(properties: readonly StationPanelProperty[]): TapValueConfig | null {
+  const variants = properties.filter((p) => !!p.variantOfPropertyId && !!p.propertyId);
+  if (variants.length !== 1) return null;
+  const v = variants[0];
+  if (v.mode === 'AUTO' || v.valueType === 'FLAG' || (v.values ?? []).length === 0) return null;
+  const flag = properties.find((p) => p.propertyId === v.variantOfPropertyId) ?? null;
+  const others = properties.filter((p) => p !== v && p !== flag && p.mode !== 'AUTO');
+  if (others.length > 0) return null;
+  return {
+    variantPropertyId: v.propertyId as string,
+    variantMode: v.mode,
+    flagPropertyId: flag?.propertyId ?? null,
+    flagMode: flag?.mode ?? null,
+  };
 }
 
 export function composeStationPanels(input: StationPanelInput): StationPanels {
   const qualityPanel = input.inspectionEnabled !== false;
+  // Kalite paneli varken değer düğmesi yalnız SEÇİMDİR (birleşik düzen c).
+  const tap = qualityPanel ? null : resolveTapValueConfig(input.properties);
   return {
     qualityPanel,
     processPanel: input.properties.length > 0,
-    completion: 'BUTTON',
-    completeLabel: qualityPanel ? 'KK2 Tamamla' : 'Tamamla',
+    completion: tap ? 'TAP_VALUE' : 'BUTTON',
+    completeLabel: qualityPanel ? 'KK2 Tamamla' : tap ? 'Değere dokun' : 'Tamamla',
+    tap,
   };
 }
 

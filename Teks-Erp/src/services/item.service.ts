@@ -62,8 +62,16 @@ export interface ItemCreateInput {
   linearDensityDen?: string | number | null;
   /** KUMAŞ → varsayılan ÇÖZGÜ KARTI (E4, 2026-09-18): dokuma işi ve levent planı ön-dolum kaynağı; yalnız FABRIC. */
   warpSpecId?: string | null;
+  /** K4P ürün kartı eni (cm) — muayene en kaynağı #1; biçim route'ta `normalizeItemWidthBody`. */
+  widthCm?: string | number | null;
   allowedColorIds?: string[];
   allowedPropertyIds?: string[];
+}
+
+/** `widthCm` yalnız gönderildiğinde yazılır (`null` = temizle); Decimal kolona metin gider (float yasak). */
+function widthCmData(v: string | number | null | undefined): { widthCm?: string | null } {
+  if (v === undefined) return {};
+  return { widthCm: v === null || v === "" ? null : String(v) };
 }
 
 /** Stok kodu: `STK-` + 6 hane global artan sıra (tarihsiz — ürün kartı belge değil). */
@@ -367,6 +375,7 @@ export class ItemService extends BaseService {
                   ? { linearDensityDen: input.linearDensityDen }
                   : {}),
                 ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
+              ...widthCmData(input.widthCm),
                 ...fabricStructure,
                 allowedColors:
                   allowedColorIds.length > 0
@@ -398,6 +407,7 @@ export class ItemService extends BaseService {
                 ? { linearDensityDen: input.linearDensityDen }
                 : {}),
               ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
+              ...widthCmData(input.widthCm),
               ...fabricStructure,
               // Yalnız iç quick-create (saha KK1) opt'u işaretler; public gövde etkisiz.
               ...(opts?.pendingReview ? { pendingReview: true } : {}),

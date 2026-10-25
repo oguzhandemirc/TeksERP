@@ -33,7 +33,7 @@ import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
-import { useDevereEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereEnabled, useKaliteGuvenceEnabled } from "@/hooks/usePricingEnabled";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 import { ItemCardTabs } from "./ItemCardTabs";
 
@@ -68,6 +68,7 @@ export function ItemFormDialog({
         itemType: initial.itemType,
         unit: initial.unit,
         linearDensityDen: initial.linearDensityDen ?? "",
+        widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
         warpSpecId: initial.warpSpecId ?? "",
         allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
         allowedPropertyIds:
@@ -91,6 +92,7 @@ export function ItemFormDialog({
 
   const itemType = form.watch("itemType");
   const devereEnabled = useDevereEnabled();
+  const kaliteGuvenceEnabled = useKaliteGuvenceEnabled();
   const derivedUnit = unitForItemType[itemType] ?? "MT";
 
   useEffect(() => {
@@ -151,7 +153,7 @@ export function ItemFormDialog({
   }, [allowedPropertyIds, propsQ.data?.data]);
 
   const handleSubmit = form.handleSubmit(async (v) => {
-    await onSubmit(buildItemPayload(v, isEdit));
+    await onSubmit(buildItemPayload(v, isEdit, kaliteGuvenceEnabled));
   });
 
   return (
@@ -252,6 +254,13 @@ export function ItemFormDialog({
                 placeholder="150"
                 {...form.register("linearDensityDen")}
               />
+            </FormField>
+          )}
+
+          {/* K4P: ürün kartı eni — muayene puan/100 m² kaynağı #1; modül kapalıyken alan hiç yok (bugünkü form). */}
+          {itemType === ItemType.FABRIC && kaliteGuvenceEnabled && (
+            <FormField label="En (cm)" htmlFor="widthCm" error={form.formState.errors.widthCm} hint="4 puan muayenesinde puan/100 m² bu enden hesaplanır; boşsa KK1'de ölçülen en kullanılır">
+              <Input id="widthCm" inputMode="decimal" placeholder="280" {...form.register("widthCm")} />
             </FormField>
           )}
 

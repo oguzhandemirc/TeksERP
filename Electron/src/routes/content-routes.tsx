@@ -96,6 +96,7 @@ import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/Ya
 import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/FinishingRates/FinishingRatesPage";
 import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
 import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
+import { InspectionRulesPage } from "@/pages/Quality/InspectionRules/InspectionRulesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -647,6 +648,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="cost:read">
         <CostItemDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K4P-TANIM — modül kapısı `route-modules.ts`ten; okuma izni backend'le birebir (`four-point-rule.routes.ts`).
+    path: "quality/inspection-rules",
+    element: (
+      <ProtectedRoute requirePermission="inspection:read">
+        <InspectionRulesPage />
       </ProtectedRoute>
     ),
   },

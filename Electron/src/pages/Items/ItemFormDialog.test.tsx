@@ -5,6 +5,9 @@
 // ⭐ §2 Create'te tür İplik'e çevrilince değerler boşalır ve payload anahtarı gitmez.
 // ⭐ §3 Eski iplik kartında liste kalmışsa formda tek satır NOT (sessiz düzeltme değil),
 //    kaydedince payload `[]` ile kaldırır.
+// ⭐ §4 (K4P-TANIM) "En (cm)": Kalite Güvence kapalıyken alan YOK ve payload'da `widthCm` anahtarı YOK
+//    (gizli alan mevcut eni silmesin); açıkken kumaşta görünür, virgüllü değer noktalı gider.
+//    NEGATİF SONDA (2026-10-25, geri alındı): payload'dan `widthCm` çıkarıldı → §4b kırmızı.
 // =============================================================================
 import { describe, it, expect, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
@@ -18,6 +21,8 @@ vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: 
 vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }));
 vi.mock("./AllowedColorsDialog", () => ({ AllowedColorsDialog: () => null }));
 vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => null }));
+const flags = vi.hoisted(() => ({ kg: false }));
+vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => false }));
 
 const COLORS = "İzinli Renkler (opsiyonel)";
 const PROPS = "İzinli Özellikler (opsiyonel)";
@@ -66,5 +71,38 @@ describe("ItemFormDialog — izinli renk/özellik yalnız kumaşta", () => {
     await user.click(screen.getByRole("button", { name: "Güncelle" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0]![0]).toMatchObject({ allowedColorIds: [], allowedPropertyIds: [] });
+  });
+});
+
+describe("ItemFormDialog — En (cm) yalnız Kalite Güvence açıkken (K4P)", () => {
+  it("⭐ §4a modül kapalı: alan yok, payload'da widthCm anahtarı yok", async () => {
+    flags.kg = false;
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={item({ widthCm: "280.00" })} />);
+    expect(screen.queryByLabelText(/En \(cm\)/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Güncelle" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect("widthCm" in (onSubmit.mock.calls[0]![0] as Record<string, unknown>)).toBe(false);
+  });
+
+  it("⭐ §4b modül açık: kumaşta alan dolu gelir, düzenlenen değer payload'a noktalı gider", async () => {
+    flags.kg = true;
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={item({ widthCm: "280.00" })} />);
+    const input = screen.getByLabelText(/En \(cm\)/);
+    expect(input).toHaveValue("280");
+    await user.clear(input);
+    await user.type(input, "152,5");
+    await user.click(screen.getByRole("button", { name: "Güncelle" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0]![0]).toMatchObject({ widthCm: "152.5" });
+  });
+
+  it("⭐ §4c modül açık + iplik kartı: alan yok (en kumaş özelliği)", () => {
+    flags.kg = true;
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({ itemType: "YARN", unit: "KG" })} />);
+    expect(screen.queryByLabelText(/En \(cm\)/)).toBeNull();
   });
 });

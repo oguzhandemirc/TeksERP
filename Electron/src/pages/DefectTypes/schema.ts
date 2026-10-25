@@ -24,6 +24,8 @@ export const defectTypeFormSchema = z.object({
   defectGroup: z.enum(DEFECT_GROUPS).or(z.literal("")),
   isActive: z.boolean(),
   isDefault: z.boolean(),
+  // K4P: "" = boyut sınıfından; 1–4 sabit puan (backend `normalizeDefectTypeFourPointBody` ile aynı küme).
+  fixedPoints: z.enum(["", "1", "2", "3", "4"]),
 });
 
 export type DefectTypeFormValues = z.infer<typeof defectTypeFormSchema>;
@@ -35,4 +37,5 @@ export const defectTypeFormDefaults: DefectTypeFormValues = {
   defectGroup: "",
   isActive: true,
   isDefault: false,
+  fixedPoints: "",
 };
