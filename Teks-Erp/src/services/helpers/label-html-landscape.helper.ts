@@ -27,6 +27,7 @@ import {
   formatNumber,
   formatDate,
   applyCopies,
+  isVisibleOptIn,
 } from "./label-html.shared";
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
@@ -109,6 +110,8 @@ export function buildLandscapeRollLabelHtml({
   if (vis("itemCode") && payload.itemCode) rows.push(row("itemCode", "Kod", escapeHtml(payload.itemCode)));
   if (vis("customerName") && customerName) rows.push(row("customerName", "Müşteri", customerName));
   if (vis("orderNumber") && orderNumber) rows.push(row("orderNumber", "Sipariş", orderNumber));
+  const openDefects = payload.openDefects ? escapeHtml(payload.openDefects) : "";
+  if (isVisibleOptIn(fields, "openDefects") && openDefects) rows.push(row("openDefects", "Hata Notu", openDefects));
   if (isSwatch && vis("cardNumber") && cardNumber) rows.push(row("cardNumber", "Kart No", cardNumber));
   if (isSwatch && vis("parentRollBarcode") && parentRollBarcode)
     rows.push(row("parentRollBarcode", "Ana Top", parentRollBarcode));

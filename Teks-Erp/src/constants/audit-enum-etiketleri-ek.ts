@@ -17,6 +17,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   RELABEL: "Yeniden etiketlendi",
   LABEL_OVERRIDE_EDIT: "Etiket üzerinde elle düzenleme",
   QUALITY_CERTIFICATE: "Kalite belgesi",
+  INSPECTION_REPORT: "Muayene raporu",
   WEIGH: "Tartım",
   SESSION: "Oturum",
   PRIMARY: "Birincil",

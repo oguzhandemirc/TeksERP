@@ -66,6 +66,8 @@ export const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   KARTELA_DISPATCH: "kartelaCeki",
   SUBCONTRACTOR_RECEIPT: "fasonKabul",
   QUALITY_CERTIFICATE: "kaliteSertifikasi",
+  // K4P-RAPOR: sevk toplarının 4 puan muayene raporu (müşteriye gider).
+  INSPECTION_REPORT: "muayeneRaporu",
   RETURN_DISPATCH: "iadeIrsaliyesi",
   // Refakat kartı belge şablonu ayarını KULLANMAZ — kendi config/şablonunu
   // snapshot'ında taşır (Refakat Kartı Şablonları ekranı). Anahtar yalnız bu

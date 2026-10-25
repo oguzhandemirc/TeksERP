@@ -8,9 +8,12 @@ import { DEFAULT_PAGE_SETTINGS, type PageSettings } from "./binding/pageSettings
 
 export const DEFAULT_DOC_TYPE = "SHIPMENT_DISPATCH";
 
+/** Genel belge ayarında anahtarı olmayan, tasarımcıya canlı bağlı türler (P-e). */
+const LIVE_DOC_LABELS: Record<string, string> = { TRAVELER_CARD: "Refakat Kartı", FREE_DOCUMENT: "Serbest Belge" };
+
 export function docTypeLabel(docType: string): string {
   const key = DOC_TYPE_TO_KEY[docType];
-  return (key && DOC_DEF_MAP[key]?.label) || docType;
+  return (key && DOC_DEF_MAP[key]?.label) || LIVE_DOC_LABELS[docType] || docType;
 }
 
 /**
