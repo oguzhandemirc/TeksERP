@@ -109,9 +109,9 @@ export const customReportApi = {
   shares: (id: string) => data<ShareState>(apiClient.get(`${BASE}/${id}/paylasim`)),
   replaceShares: (id: string, input: { gorunurluk: ShareState["gorunurluk"]; paylasimlar: Array<{ kullaniciId: string; yetki: "GOR" | "DUZENLE" }> }) =>
     data<ShareState>(apiClient.put(`${BASE}/${id}/paylasim`, input)),
-  /** Süzgeç seçicisinin değerleri: boyuta göre kırılmış küçük sorgu (son dönemde verisi olan değerler). */
+  /** Süzgeç seçicisinin değerleri: boyuta göre kırılmış küçük sorgu (son dönemde verisi olan değerler); otomatik istek, zarf notu tostlanmaz. */
   dimensionValues: (kup: string, olcu: string, boyut: string) =>
-    data<SemanticResultLite>(apiClient.post("/api/rapor-semantik/sorgu", { kup, olculer: [olcu], boyutlar: [boyut] }, { suppressErrorToast: true })).then((r) =>
+    data<SemanticResultLite>(apiClient.post("/api/rapor-semantik/sorgu", { kup, olculer: [olcu], boyutlar: [boyut] }, { suppressErrorToast: true, serverWarnings: "silent" })).then((r) =>
       r.satirlar
         .map((row) => row.anahtarlar[boyut])
         .filter((c): c is { deger: string; etiket: string | null } => Boolean(c?.deger))
