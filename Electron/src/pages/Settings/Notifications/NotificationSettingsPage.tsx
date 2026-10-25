@@ -5,20 +5,26 @@
 // kapalı bayrak → açıklama, çökme yok. Saatler fabrika diliminde.
 // =============================================================================
 import { useState } from "react";
-import { BellOff, ServerCrash, Save } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { BellOff, RotateCcw, ServerCrash, Save } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { setScope } from "@/lib/bildirim/tercih-taslak";
+import { NOTIFICATION_QUERY_KEY } from "@/lib/bildirim/hooks";
 import { KindGroupList } from "./KindGroupList";
 import { ScopeDialog } from "./ScopeDialog";
 import { QuietHoursCard } from "./QuietHoursCard";
+import { PreviewStrip } from "./PreviewStrip";
+import { ResetDialog } from "./ResetDialog";
 import { useNotificationSettingsForm } from "./useNotificationSettingsForm";
 
 export function NotificationSettingsPage() {
   const f = useNotificationSettingsForm();
   const [kapsamKod, setKapsamKod] = useState<string | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const qc = useQueryClient();
   const scopeKind = kapsamKod ? (f.katalog?.turler.find((k) => k.kod === kapsamKod) ?? null) : null;
 
   let body;
@@ -41,6 +47,7 @@ export function NotificationSettingsPage() {
           onScope={setKapsamKod}
           grupToplu={f.grupToplu}
         />
+        <PreviewStrip draft={f.taslak} kinds={f.katalog?.turler ?? []} />
         {f.ayarTaslak && <QuietHoursCard deger={f.ayarTaslak} onChange={f.setAyarTaslak} />}
       </>
     );
@@ -53,9 +60,14 @@ export function NotificationSettingsPage() {
         description="Hangi bildirimleri, hangi kanaldan alacağınızı seçin."
         actions={
           f.status === null && !f.hata ? (
-            <Button size="sm" className="gap-1.5" disabled={!f.kirli || f.kaydediliyor} onClick={() => void f.kaydet()}>
-              <Save className="h-4 w-4" /> Kaydet
-            </Button>
+            <>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setResetOpen(true)}>
+                <RotateCcw className="h-4 w-4" /> Varsayılana dön…
+              </Button>
+              <Button size="sm" className="gap-1.5" disabled={!f.kirli || f.kaydediliyor} onClick={() => void f.kaydet()}>
+                <Save className="h-4 w-4" /> Kaydet
+              </Button>
+            </>
           ) : undefined
         }
       />
@@ -67,6 +79,14 @@ export function NotificationSettingsPage() {
         onUygula={(s) => {
           if (kapsamKod) f.setTaslak((d) => setScope(d, kapsamKod, s));
           setKapsamKod(null);
+        }}
+      />
+      <ResetDialog
+        open={resetOpen}
+        onClose={() => setResetOpen(false)}
+        onDone={() => {
+          setResetOpen(false);
+          void qc.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEY });
         }}
       />
     </PageShell>

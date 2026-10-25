@@ -15,6 +15,14 @@ const svc = vi.hoisted(() => ({
   tercihleriYaz: vi.fn(),
   ayarlar: vi.fn(async () => ({ sessizBaslangic: null, sessizBitis: null, sessizKanallar: [], ozetSaati: null, ses: true })),
   ayarlariYaz: vi.fn(),
+  tercihOnizleme: vi.fn(async () => ({ haftalik: 12.4, enCok: [{ kind: "siparis.patron-siparisi", sayi: 9 }], kaynak: "olcum" })),
+  varsayilanaDonOnizleme: vi.fn(async () => ({
+    satirlar: [
+      { id: "r1", tur: "siparis.patron-siparisi", ad: "Yönetim bulutundan sipariş geldi", kanal: "MASAUSTU", acik: true, kapsam: null },
+      { id: "r2", tur: "sistem.yedek-basarisiz", ad: "Gece yedeği alınamadı", kanal: "MASAUSTU", acik: true, kapsam: null },
+    ],
+  })),
+  varsayilanaDon: vi.fn(async () => ({ silinen: 1 })),
 }));
 vi.mock("@/services/bildirimService", () => ({
   bildirimService: svc,
@@ -117,5 +125,24 @@ describe("NotificationSettingsPage", () => {
     } finally {
       setFactoryTimezone("Europe/Istanbul");
     }
+  });
+
+  it("önizleme sunucudan: haftalık sayı + en çok + ölçüm etiketi (istemci hesaplamaz)", async () => {
+    renderWithProviders(<NotificationSettingsPage />);
+    const serit = await screen.findByTestId("onizleme-serit", {}, { timeout: 3000 });
+    expect(serit.textContent).toContain("~12 bildirim");
+    expect(serit.textContent).toContain("en çok: Yönetim bulutundan sipariş geldi 9");
+    expect(serit.textContent).toContain("ölçüm");
+    expect(svc.tercihOnizleme).toHaveBeenCalledWith(expect.arrayContaining([{ tur: "siparis.patron-siparisi", kanal: "UYGULAMA", acik: true }]));
+  });
+
+  it("Varsayılana dön: sapma satırları listelenir, yalnız SEÇİLENLER gönderilir", async () => {
+    renderWithProviders(<NotificationSettingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /Varsayılana dön/ }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("Gece yedeği alınamadı");
+    fireEvent.click(within(dialog).getAllByRole("checkbox")[1]!);
+    fireEvent.click(within(dialog).getByRole("button", { name: /1 tercihi varsayılana döndür/ }));
+    await waitFor(() => expect(svc.varsayilanaDon).toHaveBeenCalledWith(["r1"]));
   });
 });
