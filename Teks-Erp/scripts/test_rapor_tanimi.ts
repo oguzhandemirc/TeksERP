@@ -139,6 +139,9 @@ async function main(): Promise<void> {
     await reconcileReportDefinitionCatalog();
     const staleAfter = await prisma.reportDefinition.findUnique({ where: { id: stale.id }, select: { status: true } });
     check("§2d katalogda olmayan SISTEM satırı ARSIV'e geçer (silinmez)", staleAfter?.status === "ARSIV");
+    // §2f R1-VARYANT: temel rapor sayfası kendi SISTEM tanımını anahtarla bulur (ön ayar/varyant kaydı) — aynı tek where
+    const byKey = await defs.listDefinitions({ kapsam: "sistem", anahtar: "sales/siparis-talep", limit: 5 }, { userId: ownerId, permissions: ["report:sales"] });
+    check("§2f `anahtar` süzgeci tek SISTEM tanımı döner, özet şeridi aynı where'den", byKey.items.length === 1 && byKey.items[0]!.anahtar === "sales/siparis-talep" && byKey.ozet.toplam === 1, `${byKey.items.length} · ${byKey.ozet.toplam}`);
     const params = resolveParams(good.gecerli ? good.govde : (null as never), {});
     let compiled = 0;
     const full = ctxFor(ownerId, ["report:*"]);

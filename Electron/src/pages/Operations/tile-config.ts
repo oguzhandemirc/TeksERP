@@ -24,6 +24,7 @@ import {
   MonitorPlay, Siren,
   Layers,
   FlaskConical,
+  BadgeCheck,
   FileCheck2,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
@@ -539,6 +540,17 @@ export const operationsTiles: OperationsTile[] = [
     to: "/quality/lab-tests",
     group: "quality",
     permission: "labtest:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
+  },
+  {
+    key: "certificates",
+    title: "Sertifikalar",
+    description: "OEKO-TEX, GOTS… bitiş takibi; müşteri spesifikasyonları",
+    icon: BadgeCheck,
+    to: "/quality/certificates",
+    group: "quality",
+    permission: "certificate:read",
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
     offHint: KALITE_GUVENCE_OFF_HINT,
   },

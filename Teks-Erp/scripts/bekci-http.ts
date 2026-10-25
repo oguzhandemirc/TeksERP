@@ -278,6 +278,7 @@ async function main(): Promise<void> {
     REMOTE_PORT: "",
     DISCOVERY_MDNS_ENABLED: "false",
     BACKUP_SCHEDULE_ENABLED: "false",
+    NOTIFICATION_JOBS_ENABLED: "false", // ikinci bildirim dağıtıcısı bekçilerin outbox'ını kapmasın
     BACKUP_DIR: yedekDizini,
     BACKUP_OFFSITE_DIR: "",
     BACKUP_RCLONE_REMOTE: "",

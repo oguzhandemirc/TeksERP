@@ -15,6 +15,7 @@ import { NOTIFICATION_NOTIFY_CHANNEL } from "../services/helpers/notification-em
 import { startNotificationConditionScanner, stopNotificationConditionScanner } from "./notification-condition.job";
 import { registerSystemConditionSources } from "../services/notification-sources/sistem";
 import { registerWorkConditionSources } from "../services/notification-sources/is";
+import { registerQualityConditionSources } from "../services/notification-sources/kalite";
 import { createNudgeCoalescer } from "./nudge-coalescer";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
@@ -158,11 +159,23 @@ export function isNotificationDispatcherRunning(): boolean {
   return dispatching;
 }
 
+/**
+ * Süreç düzeyi kapama (varsayılan AÇIK = bugünkü davranış). Yalnız aynı DB'ye bağlanan YARDIMCI test sunucuları
+ * (CI HTTP bekçi sunucuları, `bekci-http`) için: onların dağıtıcısı outbox'ı kapıp zili kendi hub'ına çalar ve
+ * fazladan LISTEN açar — `test_bildirim_zil` §5b ve `test_bildirim_motoru` §11e/f aralıklı kırmızısının kökü.
+ */
+export const NOTIFICATION_JOBS_ENV = "NOTIFICATION_JOBS_ENABLED";
+
 export function startNotificationJobs(): void {
   if (supervisorTimer) return;
+  if (process.env[NOTIFICATION_JOBS_ENV] === "false") {
+    bilgi("bildirim", `${NOTIFICATION_JOBS_ENV}=false — bu süreç bildirim dağıtmaz (yardımcı sunucu)`);
+    return;
+  }
   shuttingDown = false;
   registerSystemConditionSources(); // koşul kaynakları tek noktadan (N1-KOSUL-SIS)
   registerWorkConditionSources(); // iş koşulları (N1-KOSUL-IS)
+  registerQualityConditionSources(); // sertifika süresi (K4P-SERT)
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();
   supervisorTimer = setInterval(() => void reconcileNotificationJobs(), NOTIFICATION_SUPERVISOR_MS);
