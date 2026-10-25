@@ -8,11 +8,13 @@
 // index satırı (burası + `scripts/test_belge_sistem_esdegeri.ts` RENDERERS); eşitlik yeşil olmalı.
 // =============================================================================
 
+export { chequeDeliveryNoteSystem } from "./cheque-delivery-note"; // CHEQUE_DELIVERY_NOTE
 export { goodsReceiptSystem } from "./goods-receipt"; // GOODS_RECEIPT
 export { invoiceInternalSystem } from "./invoice-internal"; // INVOICE_INTERNAL
 export { kartelaDispatchSystem } from "./kartela-dispatch"; // KARTELA_DISPATCH
 export { paymentReceiptSystem } from "./payment-receipt"; // PAYMENT_RECEIPT
 export { qualityCertificateSystem } from "./quality-certificate"; // QUALITY_CERTIFICATE
+export { reconciliationLetterSystem } from "./reconciliation-letter"; // RECONCILIATION_LETTER
 export { returnDispatchSystem } from "./return-dispatch"; // RETURN_DISPATCH
 export { shipmentDispatchSystem } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
 export { stockCountSystem } from "./stock-count"; // STOCK_COUNT
