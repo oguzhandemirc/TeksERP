@@ -115,6 +115,8 @@
 - 2026-08-02 renk notu 'StationColor … okuyan kod yok' der; station-capability.service.ts:185/:368 findMany + :386-390 replace hâlâ var (DTO geriye-uyum, filtre değil — :7-10). Cümle 'filtre olarak okuyan kod yok' diye daraltılmalı; Electron StationCard.tsx:59 iddiası (fazA) bu turda doğrulanmadı → BELİRSİZ.
 - Faz A'nın 'ikinci KK noktası' vaadi (Electron/src/data/surum-notlari.json:337) ile bypass R3 üçlü-rota kısıtı (kursun-bypass-eligibility.helper.ts:178) yan yana yaşıyor; kısıt yalnız StationFormDialog.tsx:135-139 yorumunda, bekçisi yok — hangi belgeye (kural kitabı mı, sürüm notu mu) yazılacağı kullanıcı kararı ister.
 
+- **[ÇEKİRDEK]** Muayene ekranında puan/derece hesaplama; önizleme `POST /api/quality-inspections/preview`ten, özet şeridi liste yanıtının `summary`sinden okunur; iptal düğmesi `void-preview` yanıtı gelmeden açılmaz. · bekçi: `Quality/Inspections/InspectionDialogs.test.tsx` <sub>(arşiv 2026-10-25 "K4P-PANEL")</sub>
+
 ## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
@@ -123,7 +125,7 @@
 
 Backend: `test_dort_puan_hesap` (K4P 4 puan altın tablo, DB'siz), `test_kk1_muayene_dogum` (K4P KK1 doğuşunda muayene, aynı tx), `test_kalite_muayene` (K4P muayene motoru), `test_kalite_kural_seti` (K4P kural setleri), `test_role_template_catalog` (§2e K4P operatör şablonu), `test_k4p_sema_sedleri` (K4P DB seddi), `test_roll_error_kapsam` (K4P karar kapsamı, AST), `test_roll_error_kapsam_db` (K4P karar kapsamı, DB), `test_lab_test` (K4P lab testi donma/iptal/HTTP kapısı), `test_sertifika` (K4P sertifika/belge/müşteri spesifikasyonu/süre bildirimi), `test_sertifika_suresi_tek_kaynak` (K4P süre yüklemi tek kaynak, AST), `test_module_flag_off` (§2d), `test_default_defect_type`, `test_station_step_resolution`, `test_panel_station_kind_aynasi`, `test_finalize_last_step`⚠️, `test_helpers`, `test_iade_enhancements`, `test_label_element_condition`, `test_manual_move_backflush`, `test_manual_move_qc_reversal`, `test_null_quality_visibility`, `test_p2_kk2reopen`, `test_phase1_uretim_hardening`, `test_phase3_stok_hardening`, `test_phase6_reporterror_concurrency`, `test_produced_buckets`, `test_qc2_idempotency`⚠️, `test_quality_batch_flags`, `test_quality_code_literal`, `test_quality_role_catalog`, `test_quality_scorecard`, `test_scrap_grade_label`, `test_scrap_scorecard`, `test_station_quality_capability`, `test_wo_manual_complete`
 
-İstemci: `WorkOrderCompleteDialog.test.tsx`, `shortCutQuality.test.ts`
+İstemci: `WorkOrderCompleteDialog.test.tsx`, `shortCutQuality.test.ts`, `Quality/Inspections/*.test.ts(x)` (K4P muayene ekranı: süzgeç → sorgu parametresi, özet yanıttan, gerekçe < 3 gönderilmez, iptal önce önizleme, belirsiz hatada aynı token, null metre "—")
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
