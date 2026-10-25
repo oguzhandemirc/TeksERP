@@ -127,7 +127,10 @@ export interface BoundTablesInput {
 export function buildBoundTables(input: BoundTablesInput): DocTableModel[] {
   const optIn = new Set(input.internalFields);
   const out: DocTableModel[] = [];
-  for (const b of input.bindings) {
+  // Tablo sırası kaynaktaki yerinden: `tableBindings` jsonb'de durur, jsonb anahtar sırasını korumaz.
+  const pos = new Map([...input.filters.keys()].map((k, i) => [k, i]));
+  const ordered = [...input.bindings].sort((a, b) => (pos.get(a.key) ?? Infinity) - (pos.get(b.key) ?? Infinity));
+  for (const b of ordered) {
     const def = input.contract.tablolar.find((t) => t.anahtar === b.table);
     if (!def) continue;
     const cols = visibleColumns(def.kolonlar, b.columns, optIn);

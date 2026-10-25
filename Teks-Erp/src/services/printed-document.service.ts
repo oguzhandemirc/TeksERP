@@ -43,6 +43,7 @@ import type { DocTablesPayload } from "./document-render/doc-model";
 import { envelopeHead } from "./document-render/envelope-head";
 import type { NumberRounding } from "./document-render/fmt-num";
 import { renderFrozenTemplate, resolveTemplateForFreeze, type FrozenTemplateRef } from "./document-template/print-binding";
+import { templatedTables } from "./document-template/template-tables";
 import { assertPaperReissueAllowedTx } from "./e-irsaliye/e-irsaliye-shipment.helper";
 
 /** Builder'ların aldığı istemci — tx içinden (freeze) veya dışından (reissue/lazy) çalışır. */
@@ -791,7 +792,7 @@ export class PrintedDocumentService {
         data: {
           html: r.html,
           template: { name: r.ref.name, versionNo: r.ref.versionNo },
-          tablesAvailable: false,
+          tablesAvailable: entry.renderTables !== undefined,
           ...(snapshot.templateWarnings ? { warnings: snapshot.templateWarnings } : {}),
         },
       };
@@ -820,7 +821,14 @@ export class PrintedDocumentService {
     }
     const inputs = await this.resolveRenderInputs(docType, sourceId, version, opts);
     if (!inputs) return { success: true, data: null };
-    return { success: true, data: entry.renderTables(inputs.snapshot, inputs.meta) };
+    const system = entry.renderTables(inputs.snapshot, inputs.meta);
+    // Şablonlu belge: Excel PDF'in şablon bağlamından ve sürümün kalem tablosu bağından (TX).
+    if (!inputs.snapshot.template || opts?.systemTemplate) return { success: true, data: system };
+    const r = await templatedTables(
+      { docType, snapshot: inputs.snapshot as never, meta: inputs.meta, rec: inputs.record },
+      system,
+    );
+    return { success: true, data: r.data, ...(r.warnings.length ? { warnings: r.warnings } : {}) };
   }
 
   /**
