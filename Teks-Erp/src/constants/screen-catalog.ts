@@ -320,6 +320,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "quality/inspection-rules", app: "desktop", modul: "kaliteGuvenceEnabled", title: "4 Puan Kuralları", requires: ["inspection:read"], capabilities: ["inspection:rules"] },
   { key: "quality/lab-tests", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Lab Testleri", requires: ["labtest:read"], capabilities: ["labtest:write", "labtest:approve"] },
   { key: "quality/certificates", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Sertifikalar", requires: ["certificate:read"], capabilities: ["certificate:write"] },
+  // bildirim: yönetici bildirim profilleri (N4-SEMA izni; sayfa + rota + karo N4-PROFIL'de).
+  { key: "system/notification-profiles", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim Profilleri", requires: ["settings:notifications", "admin:settings"], capabilities: [] },
 ];
 
 const mobile: ScreenEntry[] = [
