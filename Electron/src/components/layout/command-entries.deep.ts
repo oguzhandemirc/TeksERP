@@ -1,4 +1,4 @@
-import { Cog, ServerCog, Settings2, Link2 } from "lucide-react";
+import { Cog, ServerCog, Settings2, Link2, FileText } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -163,6 +163,18 @@ const orphanPageEntries: CommandEntry[] = [
     // ⚠️ Karosu YOK → palet tek keşif yolu ve kapıyı ELLE taşımak zorunda
     // (gerekçe yüklemin kendi JSDoc'unda). P5 doğrulamasının bulgusu.
     visibleWhen: isStationCapabilitiesVisible,
+  },
+  {
+    // K4P-RAPOR: sevkiyat seçici modal doğrudan açılır (`?report=1`); belge Sevkiyat detayında da var.
+    key: "quality:inspection-report",
+    label: "Muayene Raporu (Yazdır / PDF)",
+    description: "Sevk toplarının 4 puan muayene raporu — sevkiyat seç, PDF veya Excel al",
+    icon: FileText,
+    to: "/quality/inspections?report=1",
+    permission: "inspection:read",
+    keywords: "muayene raporu 4 puan kalite sevk pdf excel yazdır müşteri",
+    deep: true,
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
   },
 ];
 

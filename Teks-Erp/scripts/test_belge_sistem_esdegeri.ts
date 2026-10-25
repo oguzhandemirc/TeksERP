@@ -15,6 +15,7 @@
  * Çalıştır: npx tsx scripts/test_belge_sistem_esdegeri.ts   (DB'siz)
  */
 
+import { renderInspectionReportHtml } from "../src/services/document-render/inspection-report.html";
 import { renderQualityCertificateHtml } from "../src/services/document-render/quality-certificate.html";
 import { renderReturnDispatchHtml } from "../src/services/document-render/return-dispatch.html";
 import { renderShipmentDispatchHtml } from "../src/services/document-render/shipment-dispatch.html";
@@ -62,6 +63,7 @@ const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   CHEQUE_DELIVERY_NOTE: (s, m) => renderChequeDeliveryNoteHtml(s, m as Parameters<typeof renderChequeDeliveryNoteHtml>[1]),
   FREE_DOCUMENT: (s, m) => renderFreeDocumentHtml({ ...(s as unknown as FreeDocumentSnapshot), config: (s.docConfigOverride ?? {}) as DocumentConfig }, m),
   GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
+  INSPECTION_REPORT: (s, m) => renderInspectionReportHtml(s, m as Parameters<typeof renderInspectionReportHtml>[1]),
   INVOICE_INTERNAL: (s, m) => renderInvoiceInternalHtml(s, m as Parameters<typeof renderInvoiceInternalHtml>[1]),
   KARTELA_DISPATCH: (s, m) => renderKartelaCekiHtml(s, m as Parameters<typeof renderKartelaCekiHtml>[1]),
   PAYMENT_RECEIPT: (s, m) => renderPaymentReceiptHtml(s, m as Parameters<typeof renderPaymentReceiptHtml>[1]),

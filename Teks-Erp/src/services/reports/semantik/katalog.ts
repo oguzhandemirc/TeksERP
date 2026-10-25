@@ -10,6 +10,7 @@ import { shipmentCube } from "./kupler/sevk.kup";
 import { orderCube } from "./kupler/siparis.kup";
 import { productionCube, stationCube } from "./kupler/uretim.kup";
 import { defectCube } from "./kupler/hata.kup";
+import { inspectionCube } from "./kupler/muayene.kup";
 import { stopCube } from "./kupler/durus.kup";
 import { loomShiftCube } from "./kupler/dokuma-vardiya.kup";
 import { stockCube } from "./kupler/stok.kup";
@@ -18,7 +19,7 @@ import { financeCube } from "./kupler/finans.kup";
 import { FILTER_OPERATORS, type SemanticCube } from "./tipler";
 
 export const SEMANTIC_CUBES: readonly SemanticCube[] = [
-  shipmentCube, orderCube, productionCube, stationCube, defectCube, stopCube, loomShiftCube, stockCube, subcontractCube, financeCube,
+  shipmentCube, orderCube, productionCube, stationCube, defectCube, inspectionCube, stopCube, loomShiftCube, stockCube, subcontractCube, financeCube,
 ];
 
 export function measureDictionaryEntry(id: string) {
