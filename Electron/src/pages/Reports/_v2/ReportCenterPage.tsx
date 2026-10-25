@@ -12,6 +12,7 @@ import { centerGroups, filterGroups, isCenterEntryVisible } from "./center-model
 import { useReportFavorites } from "./favorites";
 import { legacyGroups } from "./legacy-model";
 import { FavoritesStrip, LegacyReportsSection, ReportGroupSection } from "./ReportCenterSections";
+import { CustomReportsSection } from "./custom/CustomReportsSection";
 
 interface Props {
   /** Eski hub'ın AYNI süzgeçten geçmiş kategori karoları — "Eski raporlar" bölümünün kategori sırası ve adı. */
@@ -46,6 +47,7 @@ export function ReportCenterPage({ legacyTiles }: Props) {
       <PageBody className="p-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-6">
           {favEntries.length > 0 && !term ? <FavoritesStrip entries={favEntries} /> : null}
+          <CustomReportsSection term={term} />
           {groups.map((g) => (
             <ReportGroupSection key={g.key} title={g.title} entries={g.entries} />
           ))}
