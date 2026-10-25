@@ -81,6 +81,8 @@ type Sinif = "PREVIEW_ON_TYPING" | "PREVIEW_ON_OPEN" | "AUTOSAVE" | "BOOT" | "TI
 const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: boolean }[] = [
   { yer: "Electron/src/pages/ShiftDefinitions/ShiftActiveDialog.tsx::shiftDefinitionService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/components/merge/MergeDialog.tsx::mergeService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  // İZL-D4 cihaz kopyası birleştirme önizlemesi: diyalog açılınca/seçim değişince sorar; yazmaz, zarf uyarısız.
+  { yer: "Electron/src/pages/Devices/MergeDialog.tsx::deviceService.mergePreview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // K4P-PANEL muayene önizlemesi: hata tablosu değiştikçe (debounce) puan/derece sorar; yazmaz.
   { yer: "Electron/src/pages/Quality/Inspections/useInspectionPreview.ts::inspectionService.preview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // Özel rapor açılınca koşulur (koşu satırı yazar; veri değiştirmez) — R1-KAYIT.
@@ -94,6 +96,10 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Reports/_v2/custom/data/dimension-values.ts::customReportApi.dimensionValues", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: true },
   // MAL-3 maliyet önizlemesi: yapı/ezme değişince ~400 ms durulup sorar; yazmaz, uyarılar `data` içinde (zarf uyarısız).
   { yer: "Electron/src/pages/Cost/shared/useCostPreview.ts::previewCost", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
+  // T5 belge şablonu: Sistem önizlemesi / sürüm karşılaştırması / yayın onayı açılınca çizer (yazmaz; zarf `ok(res, data)`, uyarısız).
+  { yer: "Electron/src/pages/Definitions/DocumentDesigner/templates/SystemPreviewDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  { yer: "Electron/src/pages/Definitions/DocumentDesigner/versions/CompareDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  { yer: "Electron/src/pages/Definitions/DocumentDesigner/versions/PublishDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/hooks/useDeviceAnnounce.ts::apiClient", sinif: "BOOT", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/DocumentPreview.tsx::printedDocumentService.getSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/TravelerCardPreview.tsx::workOrderService.getTravelerCardSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },

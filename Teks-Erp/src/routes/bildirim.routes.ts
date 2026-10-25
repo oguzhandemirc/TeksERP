@@ -297,6 +297,20 @@ router.post("/profiller", ADMIN, t.postProfile);
 
 /**
  * @openapi
+ * /api/bildirim/profiller/aday-kullanicilar:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Profil üye seçicisinin aday kişileri (aktif, silinmemiş, sistem hesabı olmayan)'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ items: [{ id, ad, kullaniciAdi }] }" }
+ *       403: { description: Yetki yok }
+ *       409: { description: Gelen kutusu kapalı }
+ */
+router.get("/profiller/aday-kullanicilar", ADMIN, t.getProfileCandidates);
+
+/**
+ * @openapi
  * /api/bildirim/profiller/{id}:
  *   patch:
  *     tags: [Bildirim]
@@ -316,7 +330,7 @@ router.post("/profiller", ADMIN, t.postProfile);
  *       409: { description: Arşivli profil (NOTIFICATION_PROFILE_ARCHIVED) }
  *   delete:
  *     tags: [Bildirim]
- *     summary: 'Profili arşivle (durum geçişi; çözüme katılmaz)'
+ *     summary: 'Profili arşivle (durum geçişi; çözüme katılmaz; üyesi olan profil arşivlenemez)'
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -324,7 +338,7 @@ router.post("/profiller", ADMIN, t.postProfile);
  *       200: { description: Profil }
  *       403: { description: Yetki yok }
  *       404: { description: Profil yok }
- *       409: { description: Zaten arşivli (NOTIFICATION_PROFILE_ARCHIVED) }
+ *       409: { description: "Zaten arşivli (NOTIFICATION_PROFILE_ARCHIVED) · üyesi var, canlı referanslı (NOTIFICATION_PROFILE_IN_USE)" }
  */
 router.patch("/profiller/:id", ADMIN, t.patchProfile);
 router.delete("/profiller/:id", ADMIN, t.deleteProfile);

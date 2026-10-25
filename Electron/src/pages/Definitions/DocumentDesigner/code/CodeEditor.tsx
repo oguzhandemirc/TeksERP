@@ -6,7 +6,7 @@ import { html } from "@codemirror/lang-html";
 import { json, jsonParseLinter } from "@codemirror/lang-json";
 import { bracketMatching, foldGutter, indentOnInput } from "@codemirror/language";
 import { linter, lintGutter, setDiagnostics, type Diagnostic } from "@codemirror/lint";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { codeTheme } from "./codeTheme";
 import { issueOffset, issueRange, type ServerIssue } from "./issueDiagnostics";
@@ -40,6 +40,9 @@ function languageOf(lang: CodeLanguage): Extension {
 function readOnlyExt(readOnly: boolean): Extension {
   return [EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)];
 }
+
+/** Dışarıdan (sürüm yükleme) yazılan içerik kullanıcı düzenlemesi değildir: onChange'e düşmez, taslağı kirletmez. */
+const External = Annotation.define<boolean>();
 
 interface ExtensionOpts {
   language: CodeLanguage;
@@ -79,7 +82,7 @@ function editorExtensions(o: ExtensionOpts): Extension {
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({ "aria-label": o.ariaLabel }),
     EditorView.updateListener.of((u) => {
-      if (u.docChanged) o.onChange(u.state.doc.toString());
+      if (u.docChanged && !u.transactions.some((t) => t.annotation(External))) o.onChange(u.state.doc.toString());
     }),
     codeTheme(),
   ];
@@ -126,7 +129,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, Props>(function CodeEdito
   useEffect(() => {
     const v = view.current;
     if (!v || v.state.doc.toString() === value) return;
-    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: value } });
+    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: value }, annotations: External.of(true) });
   }, [value]);
 
   useEffect(() => {

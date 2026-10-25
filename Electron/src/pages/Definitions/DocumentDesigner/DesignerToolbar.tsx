@@ -32,10 +32,9 @@ export function DesignerToolbar({ editor, templateId, docTypeLabel, onDocType, d
   };
   return (
     <div className="flex flex-wrap items-center gap-2 border-b bg-card px-3 py-2">
-      <span className="mr-1 text-xs text-muted-foreground">
-        {templateId ? `Şablon ${templateId.slice(0, 8)}` : "Yeni şablon · kaydedilmedi"}
-      </span>
-      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onDocType} title="Belge türünü değiştir">
+      {!templateId && <span className="mr-1 text-xs text-muted-foreground">Karalama · kaydedilmez</span>}
+      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onDocType} disabled={!!templateId}
+        title={templateId ? "Kayıtlı şablonun belge türü değişmez" : "Belge türünü değiştir"}>
         <FileType2 className="mr-1.5 h-3.5 w-3.5" /> Belge türü: {docTypeLabel}
       </Button>
       {dirty && (
