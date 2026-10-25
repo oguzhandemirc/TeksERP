@@ -77,7 +77,8 @@ export function NotificationRow({
             Okunmadı yap
           </Button>
         )}
-        <SnoozeMenu onSec={(sure) => eylemler.ertele.mutate({ id: b.id, sure })} />
+        {/* Alarmın kendi susturması var (alarm sayfası); gelen kutusu ertelemesi alarmı gizlemesin. */}
+        {b.sinif !== "ALARM" && <SnoozeMenu onSec={(sure) => eylemler.ertele.mutate({ id: b.id, sure })} />}
       </div>
     </li>
   );

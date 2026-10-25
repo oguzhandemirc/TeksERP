@@ -1,7 +1,7 @@
-// Zil açılır panelinin içeriği — sekmeler (Tümü · Okunmamış; Alarmlar F2), gün grupları, alt şerit
+// Zil açılır panelinin içeriği — sekmeler (Tümü · Okunmamış · Alarmlar), gün grupları, alt şerit
 // ("Tümünü okundu say" onaysız + 6 sn geri al · "Tüm bildirimler"). RowList yalnız panel açıkken çekilir.
 import { useState } from "react";
-import { ArrowRight, Bell, CheckCheck } from "lucide-react";
+import { ArrowRight, Bell, CheckCheck, Siren } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
@@ -11,12 +11,22 @@ import type { NotificationItem, NotificationTab } from "@/lib/bildirim/types";
 import { NotificationRow } from "./NotificationRow";
 
 const BELL_LIMIT = 20;
-type BellTab = Extract<NotificationTab, "tumu" | "okunmamis">;
+type BellTab = Extract<NotificationTab, "tumu" | "okunmamis" | "alarmlar">;
 
-function BellTabs({ sekme, onSekme, sayi }: { sekme: BellTab; onSekme: (s: BellTab) => void; sayi: number }) {
+/** Alarmlar sekmesi: açık alarmlar önce, sonra kapananlar (sunucu sırası korunur — bölme, süzme değil). */
+export function alarmGroups(items: readonly NotificationItem[]): Array<{ grup: string; items: NotificationItem[] }> {
+  const groups = [
+    { grup: "Açık", items: items.filter((b) => !b.cozulduAn) },
+    { grup: "Kapanan", items: items.filter((b) => b.cozulduAn) },
+  ];
+  return groups.filter((g) => g.items.length > 0);
+}
+
+function BellTabs({ sekme, onSekme, sayi, alarm }: { sekme: BellTab; onSekme: (s: BellTab) => void; sayi: number; alarm: number }) {
   const tabs: ReadonlyArray<readonly [BellTab, string]> = [
     ["tumu", "Tümü"],
     ["okunmamis", sayi > 0 ? `Okunmamış ${badgeText(sayi)}` : "Okunmamış"],
+    ["alarmlar", alarm > 0 ? `Alarmlar ${badgeText(alarm)}` : "Alarmlar"],
   ];
   return (
     <div role="tablist" aria-label="Bildirim süzgeci" className="flex gap-1 border-b border-border/60 px-2 py-1.5">
@@ -39,14 +49,26 @@ function BellTabs({ sekme, onSekme, sayi }: { sekme: BellTab; onSekme: (s: BellT
   );
 }
 
-function RowList({ items, status, onAc, eylemler }: {
+function EmptyAlarms() {
+  return (
+    <div className="flex flex-col items-center gap-1 px-3 py-8 text-center">
+      <Siren className="h-6 w-6 text-muted-foreground/60" aria-hidden />
+      <p className="text-sm font-medium">Tezgah alarmı yok</p>
+      <p className="text-xs text-muted-foreground">Size bildirilen tezgah alarmları burada görünür.</p>
+    </div>
+  );
+}
+
+function RowList({ items, status, onAc, eylemler, alarm }: {
   items: NotificationItem[];
   status: "yukleniyor" | "hata" | "hazir";
   onAc: (b: NotificationItem) => void;
   eylemler: ReturnType<typeof useNotificationActions>;
+  alarm: boolean;
 }) {
   if (status === "yukleniyor") return <p className="px-3 py-6 text-center text-xs text-muted-foreground">Yükleniyor…</p>;
   if (status === "hata") return <p className="px-3 py-6 text-center text-xs text-muted-foreground">Bildirimler okunamadı.</p>;
+  if (items.length === 0 && alarm) return <EmptyAlarms />;
   if (items.length === 0)
     return (
       <div className="flex flex-col items-center gap-1 px-3 py-8 text-center">
@@ -57,7 +79,7 @@ function RowList({ items, status, onAc, eylemler }: {
     );
   return (
     <>
-      {splitByDay(items).map((gun) => (
+      {(alarm ? alarmGroups(items) : splitByDay(items)).map((gun) => (
         <section key={gun.grup} aria-label={gun.grup}>
           <h3 className="sticky top-0 z-10 bg-popover/95 px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             {gun.grup}
@@ -79,7 +101,7 @@ function RowList({ items, status, onAc, eylemler }: {
   );
 }
 
-export function BellPanel({ okunmamis, onKapat }: { okunmamis: number; onKapat: () => void }) {
+export function BellPanel({ okunmamis, alarmAcik = 0, onKapat }: { okunmamis: number; alarmAcik?: number; onKapat: () => void }) {
   const [sekme, setSekme] = useState<BellTab>("tumu");
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const list = useNotificationList({ sekme, limit: BELL_LIMIT }, true);
@@ -98,9 +120,9 @@ export function BellPanel({ okunmamis, onKapat }: { okunmamis: number; onKapat: 
       <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
         <p className="text-sm font-semibold">Bildirimler</p>
       </div>
-      <BellTabs sekme={sekme} onSekme={setSekme} sayi={okunmamis} />
+      <BellTabs sekme={sekme} onSekme={setSekme} sayi={okunmamis} alarm={alarmAcik} />
       <div className="max-h-[min(480px,60vh)] overflow-y-auto">
-        <RowList items={items} status={list.isLoading ? "yukleniyor" : list.isError ? "hata" : "hazir"} onAc={ac} eylemler={eylemler} />
+        <RowList items={items} status={list.isLoading ? "yukleniyor" : list.isError ? "hata" : "hazir"} onAc={ac} eylemler={eylemler} alarm={sekme === "alarmlar"} />
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-1.5">
         <Button
