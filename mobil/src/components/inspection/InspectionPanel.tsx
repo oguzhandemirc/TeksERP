@@ -93,7 +93,7 @@ function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnl
             <Text style={[styles.badgeText, styles.critBadgeText]}>{critCount} kritik</Text>
           </View>
         )}
-        <View style={{ flex: 1 }} />
+        {priorDefects.length > 0 ? <PriorDefectList defects={priorDefects} inline /> : <View style={{ flex: 1 }} />}
         {!readOnly && ownDefects.length > 0 && <Text style={styles.hint}>tik'e dokun → sil</Text>}
       </View>
       <DefectRuler
@@ -152,7 +152,6 @@ export default function InspectionPanel(props: InspectionPanelProps) {
       </View>
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}
       <View style={styles.entryFixed}>
-        <PriorDefectList defects={priorDefects} />
         {!readOnly && (
           <InspectionEntry
             defectTypes={defectTypes}

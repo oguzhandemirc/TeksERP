@@ -56,7 +56,7 @@ describe('önceki adım hataları', () => {
       />,
     );
     expect(r.getByTestId('prior-defect-list')).toBeTruthy();
-    expect(r.getByText('Önceki istasyon hataları (1)')).toBeTruthy();
+    expect(r.getByText('önceki 1')).toBeTruthy(); // cetvel başlığına gömülü (yükseklik eklemez)
     fireEvent.press(r.getAllByText('Leke')[0]!); // önceki listedeki satır
     expect(onDelete).not.toHaveBeenCalled();
   });

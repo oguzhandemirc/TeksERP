@@ -10,6 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { IconButton, Text } from 'react-native-paper';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TruncatedText from '../../../components/TruncatedText';
 import { palette } from '../../../theme/tokens';
 import type { DefectType, TamburRollSummary } from '../../../types/models';
@@ -36,7 +37,13 @@ export function splitTamburDefects(
   for (const e of roll.errors) {
     const base = { id: e.id, startMeter: e.startMeter, defectTypeId: null, errorType: e.errorType };
     if (e.detectedAtStepId === stepId) own.push(base);
-    else prior.push({ ...base, detectedStationName: e.detectedStationName ?? null });
+    else
+      prior.push({
+        ...base,
+        detectedStationName: e.detectedStationName ?? null,
+        detectedByName: e.detectedByName ?? null,
+        detectedAt: e.detectedAt ?? null,
+      });
   }
   return { own, prior };
 }
@@ -53,6 +60,8 @@ interface Props {
 
 export default function TamburDefectDrawer({ visible, roll, stepId, defectTypes, onDefect, onDelete, onDismiss }: Props) {
   const { width } = useWindowDimensions();
+  // Kenardan kenara çizimde çekmece durum çubuğunun altına girmesin.
+  const insets = useSafeAreaInsets();
   const [meter, setMeter] = useState('');
   const ordered = useMemo(() => orderDefaultFirst(defectTypes), [defectTypes]);
   const split = useMemo(() => (roll ? splitTamburDefects(roll, stepId) : { own: [], prior: [] }), [roll, stepId]);
@@ -65,7 +74,10 @@ export default function TamburDefectDrawer({ visible, roll, stepId, defectTypes,
       {/* RN Modal ayrı bir kök: TruncatedText balon jesti için RNGH kökü burada da şart. */}
       <GestureHandlerRootView style={styles.backdrop}>
         <Pressable style={styles.scrim} onPress={onDismiss} accessibilityLabel="Çekmeceyi kapat" />
-        <View style={[styles.drawer, { width: panelWidth }]} testID="tambur-defect-drawer">
+        <View
+          style={[styles.drawer, { width: panelWidth, paddingTop: 8 + insets.top, paddingBottom: 12 + insets.bottom }]}
+          testID="tambur-defect-drawer"
+        >
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={styles.title}>Hata Gir</Text>

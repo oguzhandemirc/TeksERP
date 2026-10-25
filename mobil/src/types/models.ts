@@ -994,6 +994,8 @@ export interface TamburRollDefect {
   errorType: string | null;
   /** KQ-D7 künyesi: hatanın açıldığı istasyon. Eski backend göndermez. */
   detectedStationName?: string | null;
+  detectedByName?: string | null;
+  detectedAt?: string;
   detectedAtStepId?: string | null;
 }
 

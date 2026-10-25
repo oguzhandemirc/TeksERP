@@ -33,7 +33,7 @@ const ROLL = {
   rollId: 'r1', barcode: 'T1', itemCode: 'K', itemName: 'Kumaş', colorCode: null, colorName: null, currentQty: 100,
   width: null, qualityGrade: '1', properties: [], errorCount: 2, batchId: null, batchNumber: null, dispatchNo: null, branchOrdinal: null,
   errors: [
-    { id: 'e-kk', startMeter: 10, errorType: 'Leke', detectedStationName: 'KK Masa 2', detectedAtStepId: 's-kk' },
+    { id: 'e-kk', startMeter: 10, errorType: 'Leke', detectedStationName: 'KK Masa 2', detectedByName: 'Ayşe', detectedAt: '2026-10-25T10:40:00.000Z', detectedAtStepId: 's-kk' },
     { id: 'e-tb', startMeter: 40, errorType: 'Genel hata', detectedStationName: 'Tambur 1', detectedAtStepId: 's-tb' },
   ],
 } as TamburRollSummary;
@@ -47,7 +47,8 @@ describe('TamburDefectDrawer', () => {
   it('bu adımın hatası kendi, öncekiler künyeli önceki', () => {
     const s = splitTamburDefects(ROLL, 's-tb');
     expect(s.own.map((d) => d.id)).toEqual(['e-tb']);
-    expect(s.prior.map((d) => [d.id, d.detectedStationName])).toEqual([['e-kk', 'KK Masa 2']]);
+    expect(s.prior.map((d) => [d.id, d.detectedStationName, d.detectedByName])).toEqual([['e-kk', 'KK Masa 2', 'Ayşe']]);
+    expect(s.prior[0]!.detectedAt).toBe('2026-10-25T10:40:00.000Z'); // künye saati (KK2 ile aynı üç parça)
   });
 
   it('metre + tip dokunuşu konağa gider', () => {
@@ -56,7 +57,7 @@ describe('TamburDefectDrawer', () => {
       <TamburDefectDrawer visible roll={ROLL} stepId="s-tb" defectTypes={TYPES} onDefect={onDefect} onDelete={jest.fn()} onDismiss={jest.fn()} />,
     );
     expect(r.getByTestId('tambur-defect-drawer')).toBeTruthy();
-    expect(r.getByText('Önceki istasyon hataları (1)')).toBeTruthy();
+    expect(r.getByText('önceki 1')).toBeTruthy();
     fireEvent.changeText(r.getByTestId('meter'), '55');
     const leke = r.getAllByText('Leke');
     fireEvent.press(leke[leke.length - 1]!); // tip tuşu (önceki listedeki satır değil)

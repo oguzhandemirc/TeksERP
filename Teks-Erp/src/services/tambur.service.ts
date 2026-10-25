@@ -201,6 +201,8 @@ interface TamburRollErrorSummary {
   errorType: string | null;
   /** KQ-D7 künyesi: hatanın açıldığı istasyon (adımsız eski kayıtta null). */
   detectedStationName?: string | null;
+  detectedByName?: string | null;
+  detectedAt?: Date;
   /** KQ-D7: açıldığı adım — tablet bu adımınkini "kendi", öncekileri gri gösterir. */
   detectedAtStepId?: string | null;
 }
@@ -442,6 +444,7 @@ export class TamburService {
               select: {
                 id: true, startMeter: true, errorType: true, origin: true, detectedAtStepId: true,
                 detectedAtStep: { select: { station: { select: { name: true } } } },
+                detectedAt: true, detectedBy: { select: { fullName: true } },
               },
             },
           },
@@ -477,6 +480,8 @@ export class TamburService {
           startMeter: processMeterNumber(e),
           errorType: e.errorType,
           detectedStationName: e.detectedAtStep?.station.name ?? null,
+          detectedByName: e.detectedBy?.fullName ?? null,
+          detectedAt: e.detectedAt,
           detectedAtStepId: e.detectedAtStepId,
         })),
         batchId: m.roll.batchId ?? null,
