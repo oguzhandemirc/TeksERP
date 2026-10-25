@@ -99,6 +99,8 @@ import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
 import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
 import { CalculatorPage as CostCalculatorPage } from "@/pages/Cost/Calculator/CalculatorPage";
 import { QuotesPage } from "@/pages/Cost/Quotes/QuotesPage";
+import { PriceListsPage } from "@/pages/Cost/PriceLists/PriceListsPage";
+import { PriceListDetailPage } from "@/pages/Cost/PriceLists/PriceListDetailPage";
 import { QuoteNewPage } from "@/pages/Cost/Quotes/QuoteNewPage";
 import { QuoteDetailPage } from "@/pages/Cost/Quotes/QuoteDetailPage";
 import { InspectionRulesPage } from "@/pages/Quality/InspectionRules/InspectionRulesPage";
@@ -696,6 +698,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="quote:read">
         <QuoteDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Fiyat listeleri (MAL-5) — okuma `price-list:read` (backend `price-list.routes.ts` GET); yazma sayfa İÇİNDE.
+  {
+    path: "cost/price-lists",
+    element: (
+      <ProtectedRoute requirePermission="price-list:read">
+        <PriceListsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/price-lists/:id",
+    element: (
+      <ProtectedRoute requirePermission="price-list:read">
+        <PriceListDetailPage />
       </ProtectedRoute>
     ),
   },

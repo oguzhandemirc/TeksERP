@@ -329,6 +329,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "cost/items", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Kartları", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/calculator", app: "desktop", modul: "maliyetEnabled", title: "Hızlı Hesaplayıcı", requires: ["cost:read"], capabilities: ["quote:write"] },
   { key: "cost/quotes", app: "desktop", modul: "maliyetEnabled", title: "Teklifler", requires: ["quote:read"], capabilities: ["quote:write", "quote:convert"] },
+  { key: "cost/price-lists", app: "desktop", modul: "maliyetEnabled", title: "Fiyat Listeleri", requires: ["price-list:read"], capabilities: ["price-list:write"] },
   // bildirim: yönetici bildirim profilleri (N4-SEMA izni; sayfa + rota + karo N4-PROFIL'de).
   { key: "system/notification-profiles", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim Profilleri", requires: ["settings:notifications", "admin:settings"], capabilities: [] },
 ];
@@ -443,7 +444,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
   // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
-  { code: "price-list:write", reason: "Fiyat listesi ekranları MAL-5'te doğar — bu dilimde uçlar `/api/price-lists` API'dir." },
   { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
 ];
 

@@ -5,7 +5,7 @@
 // Görüntüleme kapısı `cost:read` (teklif `quote:read`, fiyat listesi `price-list:read`); yazma sayfa İÇİNDE `PermissionGate`.
 // Menü satırı ayrıca `maliyetEnabled` bayrağına bağlıdır (`nav-config`): modül kapalıysa hiçbiri çizilmez.
 // =============================================================================
-import { Calculator, Factory, FileSignature, Layers, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
+import { Calculator, Factory, FileSignature, Layers, ListOrdered, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
 
 export interface CostTile {
   key: string;
@@ -72,6 +72,15 @@ export const costTiles: CostTile[] = [
     icon: FileSignature,
     tone: "text-primary",
     permissionAny: ["quote:read"],
+  },
+  {
+    key: "price-lists",
+    title: "Fiyat Listeleri",
+    description: "Genel ya da müşteriye özel dövizli satış fiyatları; standart maliyetten doldurulur, yayındaki liste teklif fiyat önerisinin ilk kaynağıdır.",
+    to: "/cost/price-lists",
+    icon: ListOrdered,
+    tone: "text-success",
+    permissionAny: ["price-list:read"],
   },
 ];
 

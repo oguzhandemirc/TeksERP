@@ -41,5 +41,7 @@ describe("Maliyet & Teklif — görünürlük kapıları", () => {
     expect(costOnly.length).toBeGreaterThanOrEqual(5);
     // Satış rolü (quote:read, cost:read YOK): maliyet karoları görünmez, teklif görünür.
     expect(visibleCostTiles((l) => l.includes("quote:read")).map((t) => t.key)).toEqual(["quotes"]);
+    expect(costOnly).not.toContain("price-lists");
+    expect(visibleCostTiles((l) => l.includes("price-list:read")).map((t) => t.key)).toEqual(["price-lists"]);
   });
 });
