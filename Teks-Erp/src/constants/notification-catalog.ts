@@ -256,6 +256,24 @@ export const NOTIFICATION_CATALOG = {
     tahminiHaftalik: 3, saklama: SAKLAMA,
   },
 
+  "kalite.sertifika-suresi-doluyor": {
+    kod: "kalite.sertifika-suresi-doluyor", ad: "Sertifika süresi doluyor",
+    sinif: "BILDIRIM", altTur: "KOSUL", grup: "Kalite",
+    izinler: [["certificate:read"]],
+    modul: "kaliteGuvenceEnabled",
+    tekilKalibi: "{sertifikaId}",
+    pencereSn: 0, varsayilan: ["certificate:write"], kilit: "YOK",
+    kanallar: KANAL_MASAUSTU,
+    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    baslik: "Sertifika süresi doluyor",
+    govde: "{standart} · {sertifikaNo} ({sahip}): {durum}",
+    cozuldu: "{standart} · {sertifikaNo} yenilendi ya da iptal edildi",
+    panelEkran: "quality/certificates", panelYol: "/quality/certificates?focus={sertifikaId}",
+    paramSemasi: z.object({ gun: z.number().int().min(1).max(365).default(30) }).strict(),
+    payloadAlanlari: ["sertifikaId", "sertifikaNo", "standart", "sahip", "durum"],
+    tahminiHaftalik: 1, saklama: SAKLAMA,
+  },
+
   // ── Fason ─────────────────────────────────────────────────────────────────
   "fason.donus-gecikti": {
     kod: "fason.donus-gecikti", ad: "Fason dönüşü gecikti",

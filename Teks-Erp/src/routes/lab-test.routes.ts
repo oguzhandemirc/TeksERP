@@ -48,6 +48,7 @@ const CreateBody = z.strictObject({
   clientToken: z.uuid("İşlem kimliği geçersiz").nullable().optional(),
   rollId: Id.nullable().optional(),
   batchId: Id.nullable().optional(),
+  customerId: Id.nullable().optional(),
   sampleCode: optText(64),
   labName: optText(120),
   testedOn: z.string().nullable().optional(),
