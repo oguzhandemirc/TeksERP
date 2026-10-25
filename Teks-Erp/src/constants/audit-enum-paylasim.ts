@@ -73,10 +73,12 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   OTHER: "istasyon türü ve ödeme yöntemi — ikisi de 'Diğer'",
   YARN: "kalem türü, sayım satırı türü ve fason sevk kalemi türü (G1) — üçü de 'İplik'",
   SCRAP: "sapma türü / top statüsü / kalite rolü — üçünde de 'Fire'",
-  SCALE: "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'",
+  SCALE:
+    "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'; LabResultKind(gri ölçek) için YANLIŞ — " +
+    "LAB_TEST_TYPE.resultKind override'ı ile ayrıldı (K4P-LAB, 2026-10-25)",
   MANUAL:
     "tartı kaynağı, kur kaynağı ve NUMARA KAYNAĞI (2026-09-23) — üçünde de " +
-    "değeri ELLE giren insandır; ortak Türkçe doğru",
+    "değeri ELLE giren insandır; LabVerdictSource(hükmü elle veren) de aynı — ortak Türkçe doğru",
   // ── Numara kaynağı (2026-09-23)
   SYSTEM:
     "SystemLogCategory(olayın kaynağı sistemdir) ve NumberSourceMode(numarayı " +
@@ -123,6 +125,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   REDDEDILDI: "CloudInboxOutcome(bulut makbuzu reddedildi) ve EIrsaliyeStatus(alıcı yanıtı red) — ikisi de 'Reddedildi'; ortak Türkçe doğru",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  AUTO:
+    "StationPropertyMode('Otomatik uygulanır') ve LabVerdictSource(hüküm sınırdan hesaplandı) — ortak cevap hüküm için YANLIŞ; " +
+    "LAB_TEST.verdictSource override'ı ile ayrıldı (K4P-LAB, 2026-10-25)",
   METER:
     "PeripheralKind('Metre Sayacı') ve RunningCap(koşu tavanı metre başına) — ortak cevap tavan için YANLIŞ; " +
     "FOUR_POINT_RULE_SET.runningCap override'ı ile ayrıldı (K4P, 2026-10-24)",

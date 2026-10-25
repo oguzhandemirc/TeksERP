@@ -21,6 +21,11 @@ export const TABLE_LABELS: Record<string, string> = {
 
   // Master data
   USER: "Kullanıcı",
+  REPORT_CATEGORY: "Rapor Kategorisi",
+  REPORT_DEFINITION: "Özel Rapor",
+  REPORT_DEFINITION_VERSION: "Özel Rapor Sürümü",
+  REPORT_PRESET: "Rapor Ön Ayarı",
+  REPORT_SHARE: "Rapor Paylaşımı",
   ITEM: "Kumaş / Stok Kalemi",
   CUSTOMER: "Müşteri",
   CUSTOMER_BRANCH: "Müşteri Şubesi",
@@ -175,6 +180,11 @@ export const TABLE_LABELS: Record<string, string> = {
   GOODS_RECEIPT: "Mal Kabul Fişi",
   PURCHASE_ORDER: "Alış Siparişi",
   ITEM_PRICE: "Ürün Fiyatı",
+  LAB_TEST: "Lab Testi",
+  LAB_TEST_TYPE: "Lab Test Türü",
+  CERTIFICATE: "Sertifika",
+  CERTIFICATE_FILE: "Sertifika Belgesi",
+  CUSTOMER_LAB_SPEC: "Müşteri Lab Spesifikasyonu",
   STOCK_COUNT: "Stok Sayımı",
   STOCK_COUNT_LINE: "Stok Sayım Satırı",
   WAREHOUSE: "Depo",

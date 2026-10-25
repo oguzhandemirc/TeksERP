@@ -248,6 +248,14 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   REQUIRED: "Zorunlu",
   // SackWeightSource
   MANUAL: "Elle girildi",
+  // LabResultKind / LabVerdict (K4P-LAB)
+  NUMERIC: "Sayısal ölçüm",
+  PASS_FAIL: "Geçti / Kaldı",
+  PASS: "Geçti",
+  FAIL: "Kaldı",
+  // CertificateHolder (K4P-SERT)
+  OWN: "Fabrika",
+  PARTNER: "İş ortağı",
   SIMULATED: "Simüle edildi",
   // PrintedDocType (eksik kalanlar)
   TRAVELER_CARD: "Refakat Kartı",
@@ -318,6 +326,10 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "CASH_TRANSACTION.kind": { PAYMENT: "Ödeme" },
   // RunningCap (K4P, 2026-10-24) — METER global "Metre Sayacı" (PeripheralKind), NONE global "Tarih yok" (NumberSeriesDateSegment); koşu tavanı için ikisi de yanlış
   "FOUR_POINT_RULE_SET.runningCap": { METER: "Metre başına en fazla 4 puan", NONE: "Koşu tavanı yok" },
+  // LabResultKind.SCALE (K4P-LAB) — global "Kantar" çevre birimi dilidir; lab türünde gri ölçek notudur
+  "LAB_TEST_TYPE.resultKind": { SCALE: "Gri ölçek (1–5)" },
+  // LabVerdictSource.AUTO — global "Otomatik uygulanır" özellik modudur; hüküm sınırdan hesaplandı
+  "LAB_TEST.verdictSource": { AUTO: "Sınırdan otomatik" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
