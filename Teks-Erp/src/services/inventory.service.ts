@@ -693,6 +693,16 @@ export type InitialEntryResult = ApiResponse<Roll & { doffEvent?: { id: string; 
   inspectionNotSaved?: InspectionNotSaved;
 };
 
+/**
+ * K4P-KK1b: giriş istasyonu muayeneye kapalı mı? (tx DIŞINDA, kapı kararı için) `null` = istasyonsuz ya da
+ * bulunamayan istasyon — o durumda karar tx içindeki tek yazarın doğrulamasına kalır.
+ */
+async function entryStationCapableForInspection(stationId: string | null | undefined): Promise<boolean | null> {
+  if (!stationId) return null;
+  const st = await prisma.station.findUnique({ where: { id: stationId }, select: STEP_QUALITY_SELECT });
+  return st ? stepCanApplyQuality(st) : null;
+}
+
 export class InventoryService {
   /**
    * Initial goods receipt — creates a new Roll in STOCK status.
@@ -1165,7 +1175,11 @@ export class InventoryService {
     // K4P-KK1: muayene kapısı tx DIŞINDA (ayar okuması); kapalıysa top yine doğar, yanıt uyarı taşır.
     const inspectionDecision: InspectionOnBirthDecision | null = opts?.inspection
       ? userId
-        ? resolveInspectionOnBirth({ permissions: opts.inspection.permissions }, { kaliteGuvenceEnabled: await readKaliteGuvenceEnabled() })
+        ? resolveInspectionOnBirth(
+            { permissions: opts.inspection.permissions },
+            { kaliteGuvenceEnabled: await readKaliteGuvenceEnabled() },
+            await entryStationCapableForInspection(opts.entryStationId),
+          )
         : { write: false, reason: "PERMISSION_DENIED" }
       : null;
     const birthInspection: { saved: (BirthInspectionSummary & { auditData: Record<string, unknown> }) | null } = { saved: null };
