@@ -10,6 +10,7 @@ import { useReportFavorites } from "./favorites";
 import { ParamChips } from "./ParamChips";
 import { ReportBody } from "./ReportBody";
 import { ReportFailureState, ReportLoadingState } from "./ReportStates";
+import { SaveMenu } from "./SaveMenu";
 import { failureOf, useReportV2 } from "./useReportV2";
 
 interface Props {
@@ -34,7 +35,7 @@ export function ReportV2Page({ entry }: Props) {
         parent={{ label: "Rapor Merkezi", to: "/reports" }}
         pageFavorite={false}
         actions={
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             <Button
               type="button"
               variant="ghost"
@@ -46,9 +47,10 @@ export function ReportV2Page({ entry }: Props) {
             >
               <Star className={cn("h-4 w-4", fav && "fill-amber-400 text-amber-500")} />
             </Button>
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={query.isFetching} onClick={() => void query.refetch()}>
-              <RefreshCw className={cn("h-4 w-4", query.isFetching && "animate-spin")} /> Yenile
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={query.isFetching} onClick={() => void query.refetch()} aria-label="Yenile">
+              <RefreshCw className={cn("h-4 w-4", query.isFetching && "animate-spin")} /> <span className="hidden lg:inline">Yenile</span>
             </Button>
+            <SaveMenu reportKey={entry.key} />
             <ReportExportBar buildSpec={() => (data ? buildExportSpec(data) : null)} disabled={!data} />
           </div>
         }
@@ -56,7 +58,7 @@ export function ReportV2Page({ entry }: Props) {
       <p className="border-b bg-muted/20 px-4 py-2 text-sm">
         <span className="font-medium">{data?.soru ?? entry.soru}</span>
       </p>
-      <ParamChips entry={entry} params={data?.parametreler ?? []} />
+      <ParamChips entry={entry} params={data?.parametreler ?? []} personNamed={data?.kisiAdi === true} />
       <PageBody className="p-4">
         <div className="mx-auto flex max-w-7xl flex-col gap-4">
           {failure ? (
