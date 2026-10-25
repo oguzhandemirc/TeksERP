@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { History, Pencil, RefreshCw, Share2 } from "lucide-react";
+import { History, LayoutDashboard, Pencil, RefreshCw, Share2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,19 @@ import { customReportApi, REPORT_BUILDER_PERMISSION, REPORT_PUBLISH_PERMISSION, 
 import { DefinitionResultView } from "./DefinitionResultView";
 import { ShareDialog } from "./ShareDialog";
 import { VersionsDialog } from "./VersionsDialog";
+import { ReportExportBar } from "@/pages/Reports/_components/ReportExportBar";
+import { buildDefinitionExportSpec } from "./layout/definition-export";
+import { orderedLayout, type DefinitionBody } from "./layout/layout-model";
 
 const chartKindsOf = (body: unknown) => {
   const blocks = (body as { bloklar?: Array<{ id: string; gorsel?: string }> } | null)?.bloklar ?? [];
   return (id: string) => blocks.find((b) => b.id === id)?.gorsel ?? "cubuk";
+};
+
+/** Düzeni olan raporda ızgara; düzensiz eski kayıtta `undefined` → eski tek sütun akışı birebir. */
+const layoutOf = (body: unknown) => {
+  const b = body as DefinitionBody | null;
+  return b?.duzen?.length ? orderedLayout(b).map(({ item }) => item) : undefined;
 };
 
 function RunFailure({ error }: { error: unknown }) {
@@ -77,6 +86,16 @@ export function CustomReportViewPage() {
                 <Share2 className="h-4 w-4" /> Paylaş
               </Button>
             ) : null}
+            {run.data && d ? (
+              <ReportExportBar buildSpec={() => buildDefinitionExportSpec(run.data!, d.govde as DefinitionBody, chartKindsOf(d.govde))} disabled={!run.data} />
+            ) : null}
+            {canEdit ? (
+              <Button size="sm" variant="outline" asChild className="gap-1.5">
+                <Link to={`/reports/ozel/${id}/duzen`}>
+                  <LayoutDashboard className="h-4 w-4" /> Düzeni düzenle
+                </Link>
+              </Button>
+            ) : null}
             {canEdit ? (
               <Button size="sm" asChild className="gap-1.5">
                 <Link to={`/reports/ozel/${id}/duzenle`}>
@@ -91,7 +110,7 @@ export function CustomReportViewPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-4">
           {run.isLoading || detail.isLoading ? <p className="text-sm text-muted-foreground">Rapor hazırlanıyor…</p> : null}
           {run.isError ? <RunFailure error={run.error} /> : null}
-          {run.data && d ? <DefinitionResultView result={run.data} chartKindOf={chartKindsOf(d.govde)} /> : null}
+          {run.data && d ? <DefinitionResultView result={run.data} chartKindOf={chartKindsOf(d.govde)} layout={layoutOf(d.govde)} /> : null}
         </div>
       </PageBody>
       {d ? <ShareDialog definitionId={id} open={dialog === "share"} canPublish={canPublish} onClose={() => setDialog(null)} /> : null}
