@@ -30,6 +30,7 @@ import type { NumberSeriesDateSegment } from "@prisma/client";
 
 import { seriesCounterReadsLastBorn } from "../src/services/helpers/series-counter.helper";
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
+import { createLabTest } from "../src/services/lab-test.service";
 import prisma from "../src/lib/prisma";
 import {
   DATE_SEGMENTS,
@@ -457,6 +458,21 @@ const L2_YOLU: Record<string, L2Yolu> = {
   },
   // ⚠️ SERVİS YOLUNDAN (1e şartı 2026-09-23): her üretecin KENDİ `loadCodes`u var ve
   // E2'de değişen tam olarak o — L1 tek başına o yolu hiç koşmaz.
+  labTest: {
+    not: "LabTestService.createLabTest: kendi fikstür topuna bağlanır (sonuçsuz taslak); yazar `testActorId`.",
+    yarat: async (damga) => {
+      if (!bagli.itemId) return null;
+      okutulanSayac += 1;
+      const top = await prisma.roll.create({
+        data: { barcode: `${damga}-E3L${okutulanSayac}`.slice(0, 32), itemId: bagli.itemId, status: "STOCK", currentQty: 10, initialQty: 10 },
+        select: { id: true },
+      });
+      okutulan.rollIds.push(top.id);
+      const r = await createLabTest({ rollId: top.id, note: `${damga} E3` }, await testActorId());
+      return { id: r.id, kod: r.testNo };
+    },
+    sil: async (id) => { await prisma.labTestResult.deleteMany({ where: { labTestId: id } }); await prisma.labTest.deleteMany({ where: { id } }); },
+  },
   freeDocument: {
     not: "FreeDocumentService.create: yalnız başlık + gövde.",
     yarat: async (damga) => {
@@ -1301,6 +1317,9 @@ async function main(): Promise<void> {
       await prisma.rollReturn.deleteMany({ where: { rollId: { in: topIdleri } } });
       await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: topIdleri } } });
       await prisma.stockCountLine.deleteMany({ where: { rollId: { in: topIdleri } } });
+      // Lab testi (K4P-LAB) topa bağlı doğar; (f) adımı servis dışı da yaratıyor.
+      await prisma.labTestResult.deleteMany({ where: { labTest: { rollId: { in: topIdleri } } } });
+      await prisma.labTest.deleteMany({ where: { rollId: { in: topIdleri } } });
       await prisma.roll.deleteMany({ where: { id: { in: topIdleri } } });
     }
     if (okutulan.workOrderIds.length > 0) {
