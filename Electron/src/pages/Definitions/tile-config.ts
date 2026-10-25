@@ -1,7 +1,7 @@
 import {
   Package, Users2, Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Award, Palette, Sparkles, Tag,
   Building2, Tags, Bookmark, Undo2, Warehouse, FileText, Printer, Ruler, LayoutTemplate, MessageSquareText, Clock3,
-  BellRing, Cpu, Binary, type LucideIcon,
+  BellRing, Cpu, Binary, PenTool, type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
@@ -351,5 +351,11 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/free-documents",
     group: "cikti",
     permissionAny: DOCUMENT_DESIGN_READ,
+  },
+  {
+    // Plan P-c: karo HER ZAMAN görünür (visibleWhen YOK); bayrak kapalıyken sayfa
+    // "kapalı — Genel Ayarlar'dan açılır" der (çıkışlı kapı).
+    key: "document-designer", title: "Belge Tasarımcısı", icon: PenTool, to: "/definitions/document-designer", group: "cikti",
+    description: "Belgeyi sürükle-bırak bloklar ve stil paneliyle sayfa üzerinde tasarla", permissionAny: DOCUMENT_DESIGN_READ,
   },
 ];
