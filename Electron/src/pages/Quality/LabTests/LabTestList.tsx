@@ -34,7 +34,7 @@ export function LabTestList({ onOpen }: { onOpen: (id: string) => void }) {
   return (
     <div className="flex min-h-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-full sm:w-56">
+        <div className="relative w-full sm:w-72">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input className="pl-8" placeholder="Test no, numune, top barkodu…" value={f.q} onChange={(e) => set("q", e.target.value)} />
         </div>
@@ -134,15 +134,15 @@ function LabTable({ rows, onOpen }: { rows: LabTestListRow[]; onOpen: (id: strin
             <tr key={r.id} className="cursor-pointer border-t hover:bg-muted/40" onClick={() => onOpen(r.id)}>
               <td className="p-3 font-mono text-xs">{r.testNo}</td>
               <td className="p-3">{fmtCalendarDay(r.testedOn)}</td>
-              <td className="p-3">{r.roll ? <>Top <span className="font-mono">{r.roll.barcode ?? "—"}</span></> : <>Parti <span className="font-mono">{r.batch?.batchNumber ?? "—"}</span></>}</td>
+              <td className="whitespace-nowrap p-3">{r.roll ? <>Top <span className="font-mono">{r.roll.barcode ?? "—"}</span></> : <>Parti <span className="font-mono">{r.batch?.batchNumber ?? "—"}</span></>}</td>
               <td className="p-3">{r.item?.name ?? "—"}</td>
               <td className="p-3 text-xs text-muted-foreground">{[r.sampleCode, r.labName].filter(Boolean).join(" · ") || "—"}</td>
-              <td className="p-3">
+              <td className="whitespace-nowrap p-3">
                 {r.resultCount === 0 ? <span className="text-xs text-muted-foreground">Sonuç yok</span>
                   : r.hasFail ? <Badge variant="destructive">Kalan var · {r.resultCount}</Badge>
                   : <Badge variant="outline">Geçti · {r.resultCount}</Badge>}
               </td>
-              <td className="p-3"><Badge variant={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</Badge></td>
+              <td className="whitespace-nowrap p-3"><Badge variant={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</Badge></td>
             </tr>
           ))}
         </tbody>

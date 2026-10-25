@@ -72,14 +72,15 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
       variants={staggerItem}
       whileHover={offHint ? undefined : { y: -3 }}
       transition={springSnappy}
-      className={cn("relative h-full", offHint && "opacity-50")}
+      className="relative h-full"
     >
       <button
         type="button"
         {...(offHint ? { onClick: () => toast.info(offHint), title: offHint, "aria-disabled": true } : target)}
         className="group block h-full w-full text-left"
       >
-        <Card className="card-glow relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent p-4">
+        {/* Soluk görünüm KART üstünde: dış motion.div'in opacity'sini giriş animasyonu ezer. */}
+        <Card className={cn("card-glow relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent p-4", offHint && "border-dashed opacity-50 grayscale")}>
           {/* Dev ikon filigranı — sağ alt, tona boyalı, hover'da hafif büyür */}
           <Icon
             aria-hidden
@@ -97,7 +98,7 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
             >
               <Icon className="h-5 w-5" />
             </div>
-            {!dragHandle && (
+            {!dragHandle && !offHint && (
               <ArrowRight
                 className={cn(
                   "h-4 w-4 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100",
