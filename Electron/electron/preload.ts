@@ -20,6 +20,12 @@ import type { XlsxStreamBeginOpts, XlsxStreamEndOpts, XlsxStreamRowsOpts } from 
 import { PDF_BATCH_PROGRESS_CHANNEL, parsePdfBatchProgress } from "@shared/pdf-progress";
 import { DOC_PRINT_CHANNEL, DOC_PRINT_PRINTERS_CHANNEL } from "@shared/doc-print";
 import { LOOM_ALARM_NOTIFY_CHANNEL, LOOM_ALARM_OPEN_CHANNEL, parseLoomAlarmOpenEvent } from "@shared/loom-alarm-notify";
+import {
+  BILDIRIM_BADGE_CHANNEL,
+  BILDIRIM_NOTIFY_CHANNEL,
+  BILDIRIM_OPEN_CHANNEL,
+  parseBildirimOpenEvent,
+} from "@shared/bildirim-notify";
 
 const api: ApiBridge = {
   secureStore: {
@@ -159,6 +165,27 @@ const api: ApiBridge = {
       };
       ipcRenderer.on(LOOM_ALARM_OPEN_CHANNEL, listener);
       return () => ipcRenderer.removeListener(LOOM_ALARM_OPEN_CHANNEL, listener);
+    },
+  },
+  bildirim: {
+    // Alanlar tek tek kopyalanır (ek alan düşer); ana süreç yeniden doğrular.
+    notify: (req) =>
+      ipcRenderer.invoke(BILDIRIM_NOTIFY_CHANNEL, {
+        kind: req.kind,
+        baslik: req.baslik,
+        ...(req.govde ? { govde: req.govde } : {}),
+        yol: req.yol,
+        klass: req.klass,
+        bildirimId: req.bildirimId,
+      }),
+    rozet: (req) => ipcRenderer.invoke(BILDIRIM_BADGE_CHANNEL, { okunmamis: req.okunmamis, alarm: req.alarm }),
+    onOpen: (cb) => {
+      const listener = (_e: unknown, payload: unknown) => {
+        const ev = parseBildirimOpenEvent(payload);
+        if (ev) cb(ev);
+      };
+      ipcRenderer.on(BILDIRIM_OPEN_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(BILDIRIM_OPEN_CHANNEL, listener);
     },
   },
 };

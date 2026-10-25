@@ -897,6 +897,8 @@ export interface KursunStepSummary {
   /** Adım istasyonu muayene (hata girişi) yapar mı (KQ-D3). Eski backend
    *  göndermez → undefined → hata paneli bugünkü gibi çizilir. */
   inspectionEnabled?: boolean;
+  /** KQ-D6: iş emrinin hedef değerleri (gramaj vurgusu, KQ-D5). Eski backend göndermez. */
+  targetValues?: { propertyId: string; valueId: string; valueCode: string }[];
   /** Sonraki (atlanmamış) adımın istasyon adı — "Toplar X'e" metni (KQ-D3). */
   nextStepName?: string | null;
   /** Adımda açık top yoksa neden + topların şu anki istasyonu (KQ-D3). Hata
