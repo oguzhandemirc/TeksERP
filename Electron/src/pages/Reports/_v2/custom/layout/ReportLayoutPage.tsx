@@ -11,11 +11,11 @@ import { customReportApi, useSemanticCatalog, type DefinitionIssue } from "../cu
 import type { ReportExportSpec } from "@/pages/Reports/_components/reportExport";
 import { allowedDimensions } from "../builder-model";
 import { BlockPalette } from "./BlockPalette";
-import { BlockProperties } from "./BlockProperties";
 import { LayoutCanvas } from "./LayoutCanvas";
 import { PrintPreviewDialog } from "./PrintPreviewDialog";
 import { buildDefinitionExportSpec } from "./definition-export";
-import { addBlock, baseQuery, type DefinitionBody, moveBlock, orderedLayout, removeBlock, resizeBlock, setPageBreak, shiftBlock, updateBlock } from "./layout-model";
+import { LayoutWorkspace } from "./LayoutWorkspace";
+import { addBlock, baseQuery, type DefinitionBody, moveBlock, orderedLayout, shiftBlock } from "./layout-model";
 import { useLayoutEditor, VERSION_CONFLICT_MESSAGE } from "./useLayoutEditor";
 
 /** Kaydedilmemiş değişiklikle ayrılma uyarısı — yalnız veri yönlendiricisinde (testlerin MemoryRouter'ı değil). */
@@ -159,39 +159,31 @@ export function ReportLayoutPage() {
       <PageBody className="p-4 sm:p-6">
         <LayoutAlerts loadFailed={existing.isError} readOnly={Boolean(existing.data) && !editable} conflict={ed.conflict} issues={ed.issues} previewFailed={ed.preview.isError} />
         {draft ? (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_minmax(0,18rem)]">
-            <BlockPalette blockCount={draft.bloklar.length} hasDimension={defaultDim !== null} onAdd={onAdd} />
-            <div className="min-w-0">
-              {ed.preview.data ? <p className="mb-2 text-xs text-muted-foreground">{ed.preview.data.itibariylaMetni} itibarıyla · önizleme</p> : null}
-              <LayoutCanvas
-                items={items}
-                outcomes={outcomes}
-                selectedId={selected}
-                chartKindOf={chartKindOf}
-                onSelect={setSelected}
-                onMove={(a, o) => ed.apply((b) => moveBlock(b, a, o))}
-                onShift={(bid, d) => ed.apply((b) => shiftBlock(b, bid, d))}
-              />
-              <DefinitionJson body={draft} />
-            </div>
-            <aside className="min-w-0 rounded-lg border p-3">
-              {current ? (
-                <BlockProperties
-                  key={current.block.id}
-                  block={current.block}
-                  item={current.item}
-                  cube={cubeOf(current.block.sorgu?.kup)}
-                  canRemove={draft.bloklar.length > 1}
-                  onChange={(patch) => ed.apply((b) => updateBlock(b, current.block.id, patch))}
-                  onWidth={(w) => ed.apply((b) => resizeBlock(b, current.block.id, w))}
-                  onPageBreak={(on) => ed.apply((b) => setPageBreak(b, current.block.id, on))}
-                  onRemove={() => ed.apply((b) => removeBlock(b, current.block.id)) && setSelected(null)}
+          <LayoutWorkspace
+            draft={draft}
+            current={current}
+            catalog={catalog}
+            editable={editable}
+            fallbackCube={base?.kup ?? null}
+            apply={ed.apply}
+            onDeselect={() => setSelected(null)}
+            palette={<BlockPalette blockCount={draft.bloklar.length} hasDimension={defaultDim !== null} onAdd={onAdd} />}
+            canvas={
+              <>
+                {ed.preview.data ? <p className="mb-2 text-xs text-muted-foreground">{ed.preview.data.itibariylaMetni} itibarıyla · önizleme</p> : null}
+                <LayoutCanvas
+                  items={items}
+                  outcomes={outcomes}
+                  selectedId={selected}
+                  chartKindOf={chartKindOf}
+                  onSelect={setSelected}
+                  onMove={(a, o) => ed.apply((b) => moveBlock(b, a, o))}
+                  onShift={(bid, d) => ed.apply((b) => shiftBlock(b, bid, d))}
                 />
-              ) : (
-                <p className="text-sm text-muted-foreground">Ayarlarını görmek için bir bölümün başlığına tıklayın.</p>
-              )}
-            </aside>
-          </div>
+                <DefinitionJson body={draft} />
+              </>
+            }
+          />
         ) : existing.isLoading ? (
           <p className="text-sm text-muted-foreground">Rapor yükleniyor…</p>
         ) : null}

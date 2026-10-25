@@ -725,6 +725,7 @@ model User {
   finishingRatesCreated     FinishingRate[]    @relation("FinishingRateCreatedBy")
   costStructuresCreated     CostStructure[]    @relation("CostStructureCreatedBy")
   costStructuresUpdated     CostStructure[]    @relation("CostStructureUpdatedBy")
+  standardCostVersionsCreated StandardCostVersion[] @relation("StandardCostVersionCreatedBy")
 
   @@map("users")
 }
@@ -3359,6 +3360,10 @@ model Item {
   yarnCostPrices                 YarnCostPrice[]             @relation("YarnCostPriceYarn")
   /// Kumaşın maliyete özgü ekleri (MAL-1; 1:1, katalog).
   costStructure                  CostStructure?              @relation("CostStructureItem")
+  /// Standart maliyet sürümleri (MAL-2; donmuş fotoğraf, tek ACTIVE partial unique).
+  standardCostVersions           StandardCostVersion[]       @relation("StandardCostVersionItem")
+  /// Bu ipliği döküm satırında taşıyan sürüm satırları (MAL-2).
+  standardCostLinesAsYarn        StandardCostLine[]          @relation("StandardCostLineYarn")
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -12920,6 +12925,9 @@ model CostParameterSet {
   updatedById String?  @db.Uuid
   updatedBy   User?    @relation("CostParameterSetUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
 
+  /// Bu parametre setiyle hesaplanmış standart maliyet sürümleri (MAL-2; Restrict).
+  standardCostVersions StandardCostVersion[] @relation("StandardCostVersionParameterSet")
+
   @@index([status])
   @@map("cost_parameter_sets")
 }
@@ -13014,4 +13022,97 @@ model CostStructure {
   updatedBy   User?    @relation("CostStructureUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
 
   @@map("cost_structures")
+}
+
+// =============================================================================
+// STANDART MALİYET SÜRÜMÜ (MAL-2) — plan §3.2. DONMUŞ FOTOĞRAF, defter değil: satır ve
+// kalemleri yazıldıktan sonra güncellenmez; yalnız `status/supersededAt` DURUM kolonudur.
+// "Geri alma" eski fotoğraftan YENİ sürüm yazar. Hard delete YOK (teklif ve tarihçe işaret
+// eder). Partial unique `(itemId) WHERE status='ACTIVE'` ŞEMA-DIŞI (migration `standart_maliyet`).
+// =============================================================================
+
+enum StandardCostStatus {
+  ACTIVE
+  SUPERSEDED
+}
+
+enum CostComponent {
+  WARP_YARN
+  WEFT_YARN
+  LOOM_MACHINE
+  LOOM_LABOR
+  ENERGY
+  BEAM_PREP
+  FINISHING
+  LENGTH_SHRINK
+  FABRIC_WASTE
+  OVERHEAD
+  EXTRA
+}
+
+model StandardCostVersion {
+  id                  String             @id @default(uuid()) @db.Uuid
+  itemId              String             @db.Uuid
+  versionNo           Int
+  status              StandardCostStatus @default(ACTIVE)
+  parameterSetId      String             @db.Uuid
+  rawCostPerMTry      Decimal            @db.Decimal(14, 4)
+  finishedCostPerMTry Decimal?           @db.Decimal(14, 4)
+  totalCostPerMTry    Decimal            @db.Decimal(14, 4)
+  warpKgPerM          Decimal            @db.Decimal(14, 6)
+  weftKgPerM          Decimal            @db.Decimal(14, 6)
+  loomMPerHour        Decimal            @db.Decimal(10, 4)
+  /// Katı şema `fxRatesSnapshotSchema`: `{tarih, kaynak, kurlar:{USD?,EUR?,GBP?,RUB?}}`.
+  fxRates             Json
+  /// Katı şema `costInputSnapshotSchema` (`schemaVersion: 1`): motorun TÜM girdileri.
+  inputSnapshot       Json
+  /// Kanonik (anahtar sıralı, bayraksız) girdinin sha256'sı — bayatlık rozeti bununla kıyaslanır.
+  inputHash           String             @db.VarChar(64)
+  /// Uyarı kodları dizisi (`CostWarning[]`).
+  warnings            Json
+  computedAt          DateTime           @default(now()) @db.Timestamptz
+  reason              String?            @db.VarChar(300)
+  /// Geri alma ile doğduysa kaynak sürüm (bilgi; eskisi değişmez).
+  restoredFromId      String?            @db.Uuid
+  supersededAt        DateTime?          @db.Timestamptz
+
+  item         Item                  @relation("StandardCostVersionItem", fields: [itemId], references: [id], onDelete: Restrict)
+  parameterSet CostParameterSet      @relation("StandardCostVersionParameterSet", fields: [parameterSetId], references: [id], onDelete: Restrict)
+  restoredFrom StandardCostVersion?  @relation("StandardCostVersionRestore", fields: [restoredFromId], references: [id], onDelete: Restrict)
+  restoredTo   StandardCostVersion[] @relation("StandardCostVersionRestore")
+  lines        StandardCostLine[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  // ── KAYIT KÜNYESİ — hesaplayan kişi ──
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("StandardCostVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([itemId, versionNo])
+  @@index([parameterSetId])
+  @@index([restoredFromId])
+  @@map("standard_cost_versions")
+}
+
+model StandardCostLine {
+  id            String        @id @default(uuid()) @db.Uuid
+  versionId     String        @db.Uuid
+  lineNo        Int
+  component     CostComponent
+  label         String        @db.VarChar(120)
+  yarnItemId    String?       @db.Uuid
+  qty           Decimal?      @db.Decimal(14, 6)
+  qtyUnit       String?       @db.VarChar(16)
+  unitPriceTry  Decimal?      @db.Decimal(14, 4)
+  amountPerMTry Decimal       @db.Decimal(14, 4)
+
+  version  StandardCostVersion @relation(fields: [versionId], references: [id], onDelete: Restrict)
+  yarnItem Item?               @relation("StandardCostLineYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([versionId, lineNo])
+  @@index([yarnItemId])
+  @@map("standard_cost_lines")
 }

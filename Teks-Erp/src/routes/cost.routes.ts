@@ -23,6 +23,17 @@ import {
 import { changeYarnCostPrice, listYarnCostPrices, revokeYarnCostPrice } from "../services/yarn-cost-price.service";
 import { changeFinishingRate, listFinishingRates, revokeFinishingRate } from "../services/finishing-rate.service";
 import { getCostStructure, putCostStructure } from "../services/cost-structure.service";
+import { previewCost } from "../services/cost-calc.service";
+import {
+  createStandardCostVersion,
+  getCostItem,
+  listCostItems,
+  listStandardCostVersions,
+  restoreStandardCostVersion,
+  type StructureStatus,
+} from "../services/standard-cost.service";
+import { readFilterList } from "../utils/query-parser";
+import { AppError } from "../utils/app-error";
 
 const router = Router();
 router.use(verifyToken, requireMaliyetEnabled);
@@ -317,6 +328,156 @@ router.put("/structures/:itemId", requirePermission("cost:write"), wrap(async (r
   const { itemId } = itemIdParam.parse(req.params);
   const data = await putCostStructure(itemId, body.parse(req.body ?? {}), req.user?.userId);
   res.status(200).json({ success: true, data, message: "Maliyet yapısı kaydedildi." });
+}));
+
+// ── MALİYET HESABI + STANDART MALİYET SÜRÜMÜ (MAL-2) ─────────────────────────
+// İstemci hesap yapmaz: önizleme sunucuda (yazmaz). Sürüm donmuş fotoğraftır; geri alma yeni sürümdür.
+
+const versionIdParam = itemIdParam.extend({ versionId: z.string().uuid("Geçersiz sürüm ID") });
+const yarnBody = z
+  .object({ name: z.string().max(100).optional(), denier: decimalInput.optional(), pricePerKg: decimalInput.optional(), currency: currencyEnum.optional(), picksInRepeat: decimalInput.optional() })
+  .strict();
+const previewBody = z
+  .object({
+    itemId: z.string().uuid("Geçersiz ürün ID").optional(),
+    adHoc: z
+      .object({
+        warp: z.object({ endsCount: decimalInput, takeUpPct: decimalInput.optional(), yarn: yarnBody }).strict().nullable().optional(),
+        weft: z.object({ picksPerCm: decimalInput, rawWidthCm: decimalInput.optional(), yarns: z.array(yarnBody).min(1).max(8) }).strict().nullable().optional(),
+        finishingRateCode: z.string().max(32).nullable().optional(),
+      })
+      .strict()
+      .optional(),
+    overrides: body.optional(),
+    fxRates: z.partialRecord(currencyEnum, decimalInput).optional(),
+  })
+  .strict();
+const versionBody = z.object({ reason: z.string().trim().max(300).optional(), fxRates: z.partialRecord(currencyEnum, decimalInput).optional() }).strict();
+const restoreBody = z.object({ reason: z.string().trim().max(300).optional() }).strict();
+const STRUCTURE_STATUSES = ["YAPI_EKSIK", "VARSAYILAN", "TAM"] as const;
+const listQuery = z.object({
+  q: z.string().trim().max(100).optional(),
+  surum: z.enum(["VAR", "YOK"], { message: "surum yalnız VAR/YOK olabilir" }).optional(),
+  girdiDegisti: includeRevokedQ,
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+/**
+ * @openapi
+ * /api/cost/preview:
+ *   post:
+ *     tags: [Cost]
+ *     summary: Maliyet önizlemesi (YAZMAZ) — ürün ya da elle yapı + ezmeler + kur
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{sonuc, eksikler, uyarilar, girdi, kurlar, oneriler:{fx, yarnPrices, warpWaste}}" }
+ *       400: { description: Gövde geçersiz / ürün KUMAŞ değil }
+ */
+router.post("/preview", requirePermission("cost:read"), wrap(async (req, res) => {
+  const data = await previewCost(previewBody.parse(req.body ?? {}));
+  res.status(200).json({ success: true, data });
+}));
+
+/**
+ * @openapi
+ * /api/cost/items:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Kumaş maliyet listesi — yapı durumu, aktif sürüm, "girdi değişti" (sunucuda süzme + cursor)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: q, schema: { type: string } }
+ *       - { in: query, name: "filter[durum]", schema: { type: string }, description: "YAPI_EKSIK,VARSAYILAN,TAM (CSV)" }
+ *       - { in: query, name: surum, schema: { type: string, enum: [VAR, YOK] } }
+ *       - { in: query, name: girdiDegisti, schema: { type: string } }
+ *       - { in: query, name: cursor, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer } }
+ *     responses:
+ *       200: { description: "{data, ozet, toplamSuzulen, nextCursor}" }
+ */
+router.get("/items", requirePermission("cost:read"), wrap(async (req, res) => {
+  const q = listQuery.parse(req.query);
+  const filter = (req.query.filter ?? {}) as Record<string, string | string[] | undefined>;
+  const statuses = readFilterList(filter.durum);
+  const bad = statuses.filter((d) => !(STRUCTURE_STATUSES as readonly string[]).includes(d));
+  if (bad.length) throw AppError.badRequest(`Geçersiz yapı durumu: ${bad.join(", ")}`);
+  const raw = req.query.girdiDegisti;
+  const out = await listCostItems({ ...q, durum: statuses as StructureStatus[], girdiDegisti: raw === undefined ? undefined : q.girdiDegisti });
+  res.status(200).json({ success: true, ...out });
+}));
+
+/**
+ * @openapi
+ * /api/cost/items/{itemId}:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Kumaşın maliyet yapısı, kaynaklı canlı girdisi ve aktif sürümün saklanan dökümü
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: itemId, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Detay }
+ *       404: { description: Ürün yok }
+ */
+router.get("/items/:itemId", requirePermission("cost:read"), wrap(async (req, res) => {
+  const { itemId } = itemIdParam.parse(req.params);
+  res.status(200).json({ success: true, data: await getCostItem(itemId) });
+}));
+
+/**
+ * @openapi
+ * /api/cost/items/{itemId}/versions:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Standart maliyet sürüm geçmişi (yeniden eskiye)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: itemId, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Sürümler }
+ */
+router.get("/items/:itemId/versions", requirePermission("cost:read"), wrap(async (req, res) => {
+  const { itemId } = itemIdParam.parse(req.params);
+  res.status(200).json({ success: true, data: await listStandardCostVersions(itemId) });
+}));
+
+/**
+ * @openapi
+ * /api/cost/items/{itemId}/versions:
+ *   post:
+ *     tags: [Cost]
+ *     summary: Standart maliyet sürümü kaydet (önceki ACTIVE → SUPERSEDED, tek tx)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: itemId, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       201: { description: Yeni ACTIVE sürüm }
+ *       400: { description: "COST_INPUT_MISSING (details.missing[]; kur yoksa FX_RATE_MISSING — 1'e düşmez)" }
+ *       409: { description: COST_VERSION_CONFLICT (eşzamanlı kayıt) }
+ */
+router.post("/items/:itemId/versions", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { itemId } = itemIdParam.parse(req.params);
+  const data = await createStandardCostVersion(itemId, versionBody.parse(req.body ?? {}), req.user?.userId);
+  res.status(201).json({ success: true, data, message: "Standart maliyet kaydedildi." });
+}));
+
+/**
+ * @openapi
+ * /api/cost/items/{itemId}/versions/{versionId}/restore:
+ *   post:
+ *     tags: [Cost]
+ *     summary: Eski sürümün donmuş girdisiyle YENİ sürüm yaz (eskisi değişmez)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: itemId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: versionId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       201: { description: Yeni ACTIVE sürüm }
+ *       404: { description: Sürüm yok }
+ *       409: { description: COST_VERSION_CONFLICT }
+ */
+router.post("/items/:itemId/versions/:versionId/restore", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { itemId, versionId } = versionIdParam.parse(req.params);
+  const data = await restoreStandardCostVersion(itemId, versionId, restoreBody.parse(req.body ?? {}), req.user?.userId);
+  res.status(201).json({ success: true, data, message: "Sürüm geri alındı (yeni sürüm yazıldı)." });
 }));
 
 export default router;

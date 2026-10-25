@@ -85,6 +85,9 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Reports/_v2/custom/CustomReportViewPage.tsx::customReportApi.run", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // Düzen editörü taslağı gecikmeli önizler (koşu satırı yazmaz; zarf `ok(res, data)`, uyarısız) — R2-DUZEN.
   { yer: "Electron/src/pages/Reports/_v2/custom/layout/useLayoutEditor.ts::customReportApi.preview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
+  // Veri paneli: taslak değişince gecikmeli `dogrula` (yazmaz, uyarısız zarf) + süzgeç değer listesi (sorgu zarfı `warnings` basabilir) — R2-VERI.
+  { yer: "Electron/src/pages/Reports/_v2/custom/data/useDataPanel.ts::customReportApi.validate", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
+  { yer: "Electron/src/pages/Reports/_v2/custom/data/dimension-values.ts::customReportApi.dimensionValues", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: true },
   { yer: "Electron/src/hooks/useDeviceAnnounce.ts::apiClient", sinif: "BOOT", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/DocumentPreview.tsx::printedDocumentService.getSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/TravelerCardPreview.tsx::workOrderService.getTravelerCardSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
