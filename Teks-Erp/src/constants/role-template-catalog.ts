@@ -226,6 +226,12 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "cost:read",
       "cost:write",
       "cost:settings",
+      // MAL-4: teklif + fiyat listesi muhasebede bütünüyle (dönüştürme ayrıca `order:write` ister).
+      "quote:read",
+      "quote:write",
+      "quote:convert",
+      "price-list:read",
+      "price-list:write",
     ],
   },
   {
@@ -277,6 +283,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // `customer:write` de var, yani bu rol müşteri birleştirebilir;
       // kumaş/renk için ilgili write izni ayrıca gerekir.
       "master-data:merge",
+      // MAL-4: satış teklif hazırlar ve listeyi okur; maliyet görmez (`cost:read` yok), kabul/dönüştürme yok.
+      "quote:read",
+      "quote:write",
+      "price-list:read",
     ],
   },
   {

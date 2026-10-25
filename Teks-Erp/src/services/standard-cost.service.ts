@@ -162,6 +162,13 @@ export async function listStandardCostVersions(itemId: string) {
   return rows.map((v) => presentVersion(v));
 }
 
+/** `GET /api/cost/items/:itemId/versions/:versionId` — saklanan sürüm + satır dökümü (teklif kaleminin dondurduğu sürüm). */
+export async function getStandardCostVersion(itemId: string, versionId: string) {
+  const v = await prisma.standardCostVersion.findFirst({ where: { id: versionId, itemId }, select: { ...versionSelect, lines: { orderBy: { lineNo: "asc" } } } });
+  if (!v) throw AppError.notFound("Maliyet sürümü bulunamadı.");
+  return presentVersion(v, v.lines);
+}
+
 export type StructureStatus = "YAPI_EKSIK" | "VARSAYILAN" | "TAM";
 const DEFAULTED = new Set(["TAKEUP_DEFAULTED", "WARP_WASTE_DEFAULTED", "WEFT_LENGTH_FROM_WIDTH", "RPM_DEFAULTED", "SHRINK_UNKNOWN"]);
 

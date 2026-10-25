@@ -8,7 +8,7 @@
 import { Prisma, type Currency } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { EFFICIENCY_RULE, parseDecimalField, PCT_RULE } from "./helpers/cost-input.helper";
+import { EFFICIENCY_RULE, MARKUP_RULE, parseDecimalField, PCT_RULE } from "./helpers/cost-input.helper";
 import {
   assembleCostInputTx,
   costCurrencies,
@@ -17,7 +17,7 @@ import {
   type CostOverrides,
   type CostSourceRef,
 } from "./helpers/cost-assembler.helper";
-import { computeFabricCost, presentCostResult, type CostInput, type FxRates } from "./helpers/fabric-cost.helper";
+import { computeFabricCost, presentCostResult, suggestUnitPrice, type CostInput, type CostOutcome, type FxRates } from "./helpers/fabric-cost.helper";
 import { serializeCostInput, type FxRatesSnapshot } from "./helpers/cost-snapshot.helper";
 import { measuredWarpWaste, suggestFxRate, suggestYarnPrices } from "./helpers/maliyet-bridge.helper";
 import { factoryYmd } from "../constants/time";
@@ -35,6 +35,8 @@ export interface CostCalcBody {
   adHoc?: Record<string, unknown>;
   overrides?: Record<string, unknown>;
   fxRates?: Record<string, unknown>;
+  /** Hesaplayıcının teklif fiyatı (MAL-4): yoksa `teklifFiyati` null. */
+  pricing?: Record<string, unknown>;
 }
 
 /** Gövdedeki ezmeler → Decimal (aralıklar MAL-1 CHECK'lerinin aynası). */
@@ -143,10 +145,36 @@ export async function previewCost(body: CostCalcBody) {
     uyarilar: out.warnings,
     girdi: serializeCostInput(input),
     kurlar: fx.snapshot,
+    teklifFiyati: body.pricing ? await previewPricing(body.pricing, out) : null,
     oneriler: {
       fx: fx.snapshot.kurlar,
       yarnPrices,
       warpWaste: input.warp?.warpSpecId ? await measuredWarpWaste(input.warp.warpSpecId) : null,
     },
   };
+}
+
+/** Kâr: gövde ?? yürürlükteki parametre setinin varsayılanı; ikisi de yoksa 400 (sıfır varsayılmaz). Teklif, liste, önizleme TEK yol. */
+export async function resolveMarkup(raw: unknown): Promise<Prisma.Decimal> {
+  const given = parseDecimalField(raw, MARKUP_RULE("Kâr oranı"));
+  if (given) return given;
+  const set = await prisma.costParameterSet.findFirst({ where: { status: "ACTIVE" }, select: { defaultMarkupPct: true } });
+  if (!set) throw AppError.badRequest("Yürürlükte maliyet parametre seti yok; kâr oranını elle girin.", { code: "COST_INPUT_MISSING", missing: ["PARAMETER_SET_MISSING"] });
+  return set.defaultMarkupPct;
+}
+
+/** Önizlemede teklif fiyatı: maliyet × (1 + kâr) … / kur (`suggestUnitPrice`); kur yoksa öneri null + `eksik`. YAZMAZ. */
+async function previewPricing(raw: Record<string, unknown>, out: CostOutcome) {
+  const currency = raw.currency as Currency; // rota zod'u enum'a karşı doğrular
+  const markupPct = await resolveMarkup(raw.markupPct);
+  const fxRate = currency === "TRY" ? new Prisma.Decimal(1) : (parseDecimalField(raw.fxRate, FX_RULE) ?? (await suggestFxRate(currency, new Date())));
+  const price = out.result
+    ? suggestUnitPrice({
+        costPerMTry: out.result.totalCostPerMTry, markupPct, fxRate,
+        freightPerM: parseDecimalField(raw.freightPerM, { label: "Navlun", min: 0, scale: 4 }),
+        financeChargePct: parseDecimalField(raw.financeChargePct, PCT_RULE("Vade farkı")),
+        commissionPct: parseDecimalField(raw.commissionPct, PCT_RULE("Komisyon")),
+      })
+    : null;
+  return { doviz: currency, karYuzde: markupPct.toFixed(2), kur: fxRate?.toString() ?? null, oneriBirimFiyat: price?.toFixed(4) ?? null, eksik: fxRate ? null : "FX_RATE_MISSING" };
 }

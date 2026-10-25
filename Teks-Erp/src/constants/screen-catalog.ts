@@ -441,6 +441,11 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
   // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
+  { code: "quote:read", reason: "Teklif ekranları MAL-5'te doğar — bu dilimde uçlar `/api/quotes` API'dir." },
+  { code: "quote:write", reason: "Teklif ekranları MAL-5'te doğar — bu dilimde uçlar `/api/quotes` API'dir." },
+  { code: "quote:convert", reason: "Teklif kabul/dönüştürme ekranı MAL-5'te doğar — bu dilimde uç API'dir." },
+  { code: "price-list:read", reason: "Fiyat listesi ekranları MAL-5'te doğar — bu dilimde uçlar `/api/price-lists` API'dir." },
+  { code: "price-list:write", reason: "Fiyat listesi ekranları MAL-5'te doğar — bu dilimde uçlar `/api/price-lists` API'dir." },
   { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
 ];
 

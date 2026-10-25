@@ -176,6 +176,12 @@ export const DATE_ONLY_COLUMNS: ReadonlySet<string> = new Set([
   // İKİ kapı aynı alanı FARKLI listeden okur; birine beyan etmek ötekine beyan
   // etmek değildir (P2b-1'de bu satır eksik kaldı, CI §5d2 ile yakaladı).
   "factoryDay",
+  // SalesQuote.quoteDate/validUntilDate/fxRateDate + PriceList.validFromDate/validUntilDate (MAL-4) — teklif ve
+  // liste takvim günleri; `validFrom`/`validUntil` adları başka modelde timestamptz olduğu için `…Date` soneki.
+  "quoteDate",
+  "validUntilDate",
+  "fxRateDate",
+  "validFromDate",
 ]);
 
 /**
