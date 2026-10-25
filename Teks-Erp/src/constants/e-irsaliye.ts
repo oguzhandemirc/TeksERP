@@ -78,5 +78,5 @@ export const DOMESTIC_COUNTRY_NAME = "Türkiye";
 /** Ayarın kapalı kümesi. `yok` = bugünkü davranış (özellik yapılandırılmamış). */
 export const EIRSALIYE_ADAPTERS = ["yok", "disaAktar", "simulasyon"] as const;
 export type EIrsaliyeAdapter = (typeof EIRSALIYE_ADAPTERS)[number];
-/** Hazırlık kapısının "tanınan bağdaştırıcı" kümesi — E5 kayıt defteri (registry) doğunca oradan okunur. */
+/** Hazırlık kapısının "tanınan bağdaştırıcı" kümesi; motorun kayıt defteri (`adapters/registry.ts`) anahtarları tipte ve yüklemede buna eşitlenir. */
 export const EIRSALIYE_ACTIVE_ADAPTERS: ReadonlySet<EIrsaliyeAdapter> = new Set(["disaAktar", "simulasyon"]);

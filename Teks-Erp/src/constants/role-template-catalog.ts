@@ -140,6 +140,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "shipping:write",
       // Sevk partisi yönetimi (aç/kapat/sil/numara ez) — depo-sevkiyat rolünün işi.
       "shipping:packing-lot",
+      // e-İrsaliye hazırla/üret/indir/gönder — sevk edenin işi; geri alma (`eirsaliye:undo`) YOK.
+      "eirsaliye:read",
+      "eirsaliye:write",
       "return:read",
       "return:write",
       "kartela:read",
@@ -178,6 +181,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
     codes: [
       "shipping:read",
       "shipping:invoice",
+      // e-İrsaliye: muhasebe portal yüklemesini/yanıtı kaydeder ve yanlış kaydı geri alır (storno ailesi).
+      "eirsaliye:read",
+      "eirsaliye:write",
+      "eirsaliye:undo",
       "return:read",
       "order:read",
       "customer:read",
@@ -331,6 +338,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "roll:manual-adjust",
       "shipping:read",
       "shipping:undo-dispatch",
+      // e-İrsaliye gönderim/yanıt kaydını geri alma storno kapısının anahtarıdır — aynı rolde.
+      "eirsaliye:read",
+      "eirsaliye:write",
+      "eirsaliye:undo",
       // Defter onarımı aynı aileye girer: geçmiş bir sevkiyatın sipariş defterini
       // düzeltmek de günlük sevk işinden AYRI bir yetkidir ve irsaliyenin yeni bir
       // sürümünü doğurur. `shipping:undo-dispatch` ile aynı rolde durması bilinçli.
@@ -456,6 +467,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "shipping:write",
       // `shipping:invoice` BİLEREK YOK (SoD): sevk eden fatura işaretini koymaz. Tek kişilik
       // ekipte aynı kişiye Muhasebe rolü AYRICA uygulanır — karar görünür kalsın.
+      // e-İrsaliye yalnız OKUMA (patron kararı 2026-10-25): üret/gönder/geri al sevk + muhasebe rollerinde.
+      "eirsaliye:read",
       "return:read",
       "return:write",
       // Katalog — ticaret firması kendi kumaş/renk kartlarını açar
