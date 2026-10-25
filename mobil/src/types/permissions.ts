@@ -44,6 +44,8 @@ export type MobilePermission =
   | 'mobile:devere-iptal'
   // Tezgah alarmı A3: Uyarılar ekranı — `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi (bildirim dahil).
   | 'mobile:tezgah-uyari'
+  // K4P-EKRAN: istasyondan bağımsız Muayene ekranı (top okut → 4 puan muayene).
+  | 'mobile:muayene'
   | 'mobile:*';
 
 /**
@@ -94,7 +96,8 @@ export type MobileScreenKey =
   | 'Dokuma'
   | 'Devere'
   | 'FasonDokuma'
-  | 'Uyarilar';
+  | 'Uyarilar'
+  | 'Muayene';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -258,6 +261,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Uyarılar',
     icon: 'bell-alert-outline',
     description: 'Tezgah alarmları: üstlen, sustur, not; bildirim',
+  },
+  {
+    // K4P-EKRAN (plan §4.1 konak b): top okut → aynı InspectionPanel → 4 puan muayene yazılır.
+    // OTURUMSUZ — istasyon türüne bağlanmaz; kalite güvence modülü kapalıyken görünmez.
+    key: 'Muayene',
+    permission: 'mobile:muayene',
+    label: 'Muayene',
+    icon: 'clipboard-check-outline',
+    description: 'Top okut, 4 puan hata kaydı gir, muayeneyi kaydet',
   },
 ];
 
