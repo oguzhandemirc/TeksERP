@@ -10,6 +10,7 @@
 import prisma from "../src/lib/prisma"; // İLK import: dotenv → DATABASE_URL
 import { pool } from "../src/lib/prisma";
 import { DeviceMergeService, type CandidateMember } from "../src/services/device-merge.service";
+import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
 const GUVEN: Record<string, string> = { HIGH: "yüksek", MEDIUM: "orta", LOW: "düşük" };
 
@@ -29,6 +30,7 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ scanned, groups }, null, 2));
     return;
   }
+  console.log(`🎯 Hedef veritabanı: ${hedefDbAdi()}`);
   console.log(`🔎 Taranan birleşmemiş cihaz satırı: ${scanned} · kopya olabilecek grup: ${groups.length}`);
   console.log("ℹ️  RAPOR — veritabanına hiçbir şey yazılmadı. Uygulamak için: Panel → Cihazlar → Kopyaları birleştir.\n");
   groups.forEach((g, i) => {
