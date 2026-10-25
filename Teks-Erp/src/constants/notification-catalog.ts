@@ -20,7 +20,7 @@ import type { NotificationCatalogEntry, NotificationKanal, NotificationSaklama }
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
 export type {
   NotificationSinif, NotificationAltTur, NotificationGrup, NotificationKilit, NotificationKanal,
-  NotificationPhase, NotificationSaklama, NotificationCatalogEntry,
+  NotificationPhase, NotificationSaklama, NotificationCatalogEntry, NotificationScopeDeclaration,
 } from "./notification-catalog.types";
 
 const SAKLAMA: NotificationSaklama = { okunmusGun: 90, okunmamisGun: 180 };
@@ -110,7 +110,7 @@ export const NOTIFICATION_CATALOG = {
     kanallar: KANAL_MASAUSTU,
     varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
     baslik: "{yaziciAd} yazıcısında baskı hatası",
-    govde: "{kisi} · {tur} · {neden}",
+    govde: "{subject} · {tur} · {neden}",
     panelEkran: "system/print-history", panelYol: "/system/print-history?printer={yazici}&status=HATA",
     payloadAlanlari: ["yazici", "yaziciAd", "kisi", "tur", "neden"],
     tahminiHaftalik: 3, saklama: SAKLAMA,
@@ -147,6 +147,7 @@ export const NOTIFICATION_CATALOG = {
     cozuldu: "{siparisNo} için termin yaklaşma uyarısı kapandı",
     panelEkran: "operations/orders", panelYol: "/operations/orders?focus={siparisId}",
     paramSemasi: z.object({ gun: z.number().int().min(1).max(30).default(3) }).strict(),
+    kapsam: { yalnizTakip: true },
     payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "termin"],
     tahminiHaftalik: 10, saklama: SAKLAMA,
   },
@@ -163,6 +164,7 @@ export const NOTIFICATION_CATALOG = {
     govde: "{siparisNo} ({musteriAd}) termini {termin} tarihinde geçti",
     cozuldu: "{siparisNo} kapandı ya da termini güncellendi",
     panelEkran: "operations/orders", panelYol: "/operations/orders?focus={siparisId}",
+    kapsam: { yalnizTakip: true },
     payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "termin"],
     tahminiHaftalik: 5, saklama: SAKLAMA,
   },
@@ -181,6 +183,7 @@ export const NOTIFICATION_CATALOG = {
     govde: "{isEmriNo} planlanan bitişi {planlananBitis} geçti",
     cozuldu: "{isEmriNo} tamamlandı ya da planı güncellendi",
     panelEkran: "operations/work-orders", panelYol: "/operations/work-orders/{isEmriId}",
+    kapsam: { yalnizTakip: true },
     payloadAlanlari: ["isEmriId", "isEmriNo", "planlananBitis"],
     tahminiHaftalik: 8, saklama: SAKLAMA,
   },
@@ -242,6 +245,7 @@ export const NOTIFICATION_CATALOG = {
     cozuldu: "{firmaAd}: geciken fason dönüşü kalmadı",
     panelEkran: "reports/subcontract", panelYol: "/reports/subcontract/scorecard",
     paramSemasi: z.object({ gun: z.number().int().min(1).max(120).default(10) }).strict(),
+    kapsam: { esik: { gun: { alan: "enEskiGun", yon: "ALT" } } },
     payloadAlanlari: ["firmaId", "firmaAd", "acikKalem", "enEskiGun"],
     tahminiHaftalik: 3, saklama: SAKLAMA,
   },
@@ -281,6 +285,7 @@ export const NOTIFICATION_CATALOG = {
     panelEkran: "operations/warp-beams", panelYol: "/operations/warp-beams?search={leventNo}",
     tabletEkran: "Dokuma",
     paramSemasi: z.object({ kalanGun: z.number().min(0.5).max(14).default(1) }).strict(),
+    kapsam: { istasyonlar: true, esik: { kalanGun: { alan: "kalanGun", yon: "UST" } } },
     payloadAlanlari: ["leventId", "leventNo", "tezgahNo", "kalanGun"],
     tahminiHaftalik: 10, saklama: SAKLAMA,
   },
@@ -304,6 +309,7 @@ export const NOTIFICATION_CATALOG = {
     panelEkran: "operations/loom-alarms", panelYol: "/operations/loom-alarms/{alarmId}",
     tabletEkran: "Uyarilar",
     tabletRota: "UyariDetay",
+    kapsam: { istasyonlar: true },
     payloadAlanlari: ["alarmId", "tezgahNo", "alarmAd", "salonAd"],
     tahminiHaftalik: 20, saklama: SAKLAMA,
   },
