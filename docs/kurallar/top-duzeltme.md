@@ -10,7 +10,7 @@
 
 ### Değişmezler
 
-- **[ÇEKİRDEK]** Silme yalnız soft'tur: isActive:false ya da RollStatus.CANCELLED; fiziksel DELETE ASLA. Bilinçli istisnalar: bağımlılık-guard'lı master-data DELETE /:id/permanent, boş çuval, cihaz unpair, pivot replace, ItemPrice satırı (isActive EKLENMEZ). <sub>(CLAUDE.md:284, CLAUDE.md:456)</sub>
+- **[ÇEKİRDEK]** Silme yalnız soft'tur: isActive:false ya da RollStatus.CANCELLED; fiziksel DELETE ASLA. Bilinçli istisnalar: bağımlılık-guard'lı master-data DELETE /:id/permanent, boş çuval, cihaz unpair, pivot replace. <sub>(CLAUDE.md:284, CLAUDE.md:456)</sub>
 - **[ÇEKİRDEK]** İptal ≠ Fire (defter semantiği): İptal=CANCELLED 'hiç olmamalıydı' — stok DÜŞMEZ, açık hareket qtyOut=0 (storno), fire raporuna girmez. Fire=SCRAP 'vardı, gitti' — stok DÜŞER, qtyOut=qtyIn, fire oranına girer; uç POST /rolls/:id/scrap, izin roll:manual-adjust (roll:write yetmez). · bekçi: `test_roll_cancel_undo §7 · test_manual_roll_undo · BulkCancelRollsDialog.test.tsx` <sub>(CLAUDE.md:82, CLAUDE.md:284, CLAUDE.md:53)</sub>
 - **[ÇEKİRDEK]** İptal edilmiş topun clientToken'ı REPLAY EDİLEMEZ → 409 ENTRY_CANCELLED (assertRollReplayAlive); 'success:true + iptal edilmiş barkod' sessizce yanlış cevaptır. Mantıksal deneme iptalle kapanır, yeni top yeni token ister. · bekçi: `test_manual_roll_undo (ENTRY_CANCELLED guard'ı kaldırılınca 2 kırmızı)` <sub>(CLAUDE.md:53)</sub>
 - **[ÇEKİRDEK]** İptali geri alma TEK yüklem resolveRollRestoreBlockReason (ekran+uç aynı fonksiyon, sebep hep söylenir). Sinyaller: CANCELLED · hareket yok · istasyon işlemi yok · çocuk yok · adıma bağlı değil · çuval/sevk yok · fason/kartela sevki yok · Tambur geri almasının ürünü değil. batchId ENGEL DEĞİL. · bekçi: `test_roll_cancel_undo (TAMBUR_UNDO_CANCEL_CODE :505 dahil)` <sub>(CLAUDE.md:82, kod:`94b937c0` (2026-08-29, BULGU-T1-011 —)</sub>
@@ -109,7 +109,7 @@
 
 - **[ÇEKİRDEK]** Barkod topun KİMLİĞİdir, statü işareti değil — erken doğması (KK1 ham giriş, manuel top) sorun değildir, statüyü korur. <sub>(arşiv 2026-08-05 manuel top geri alma)</sub>
 - **[ÇEKİRDEK]** Top düzeltme audit ayrımı korunur: `reason` varsa olay `MANUAL_ATTRIBUTE`, yoksa `RELABEL`; tablo `ROLL_MANUAL_OVERRIDE`. <sub>(arşiv 2026-07-30 top düzeltme tek sözleşme)</sub>
-- **[ÇEKİRDEK]** Soft delete'in bilinçli istisnaları: bağımlılık-guard'lı master-data `DELETE /:id/permanent`, boş çuval silme, cihaz unpair, pivot replace, `ItemPrice` satırı silme (şemada `isActive` yok — pasif fiyat üçüncü durum üretirdi; geçmiş belgeler donmuş). <sub>(kök 2026-08-14)</sub>
+- **[ÇEKİRDEK]** Soft delete'in bilinçli istisnaları: bağımlılık-guard'lı master-data `DELETE /:id/permanent`, boş çuval silme, cihaz unpair, pivot replace (`ItemPrice` 2026-10-24'ten beri damgalı sürümdür, istisna DEĞİL). <sub>(kök 2026-08-14)</sub>
 
 ## Bekçiler — bu alana dokununca koş
 

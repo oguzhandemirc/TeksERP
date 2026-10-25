@@ -385,6 +385,11 @@ export function recordSweep(r: OffsiteSweepResult): void {
   lastSweep = r;
 }
 
+/** Son süpürmenin sonucu (yalnız okuma; bildirim koşul kaynağı) — süreç açıldığından beri koşmadıysa null. */
+export function lastOffsiteSweep(): OffsiteSweepResult | null {
+  return lastSweep;
+}
+
 export async function getOffsiteHealth(): Promise<Record<string, unknown>> {
   if (!lastSweep) {
     const remote = await readOffsiteRemote().catch(() => "");

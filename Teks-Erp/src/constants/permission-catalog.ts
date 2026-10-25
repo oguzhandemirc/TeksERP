@@ -370,6 +370,9 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];
 
+/** Tüm `report:*` kodları — semantik rapor uçlarının giriş kapısı ("herhangi bir rapor izni"; veri yetkisi derleyicide). */
+export const REPORT_PERMISSION_CODES: readonly string[] = PERMISSION_CATALOG.filter((p) => p.code.startsWith("report:")).map((p) => p.code);
+
 /**
  * Masaüstü paneli (Electron + web) girişini AÇAN izin kümesi mi? En az bir mobil-olmayan kod yeter.
  * TEK yüklem: auth kanal kapısı ve rol şablonu bekçisi (operatör şablonu → panel girişi YOK) bunu okur.

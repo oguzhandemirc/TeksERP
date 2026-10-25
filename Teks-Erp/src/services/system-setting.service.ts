@@ -840,6 +840,9 @@ export const SETTING_KEYS = {
   /** Yazdırma geçmişinin (`print_jobs`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 180.
    *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-A1). */
   PRINT_LOG_RETENTION_DAYS: "printLog.retentionDays",
+  /** Semantik rapor bloğunun sorgu tavanı, SANİYE (5..45; DB seviyesi 50 sn'nin altında). Default 15.
+   *  Davranış bayrağı değil, işletme ayarı: tek okuyucusu `reports/semantik/calistirici.ts`. */
+  REPORTS_STATEMENT_TIMEOUT_SEC: "reports.statementTimeoutSec",
   /** İstek başlığının (`request_traces`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 90.
    *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-B1). */
   REQUEST_TRACE_RETENTION_DAYS: "requestTrace.retentionDays",
@@ -2062,7 +2065,7 @@ function withLicenseBlock(flags: CachedFeatureFlags): FeatureFlags {
 }
 
 /** Modül şalteri (PATCH alanı) → DB anahtarı; lisans yazma tavanı bu eşlemeyle sorar. */
-const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
+export const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
   productionEnabled: SETTING_KEYS.PRODUCTION_ENABLED,
   financeEnabled: SETTING_KEYS.FINANCE_ENABLED,
   ticaretEnabled: SETTING_KEYS.TICARET_ENABLED,
@@ -7212,6 +7215,28 @@ export async function readPrintLogRetentionDays(
   });
   const v = asNumber(setting?.value);
   return isValidPrintLogRetentionDays(v) ? v : DEFAULT_PRINT_LOG_RETENTION_DAYS;
+}
+
+export const DEFAULT_REPORTS_STATEMENT_TIMEOUT_SEC = 15;
+export const MIN_REPORTS_STATEMENT_TIMEOUT_SEC = 5;
+export const MAX_REPORTS_STATEMENT_TIMEOUT_SEC = 45;
+
+/**
+ * Semantik rapor bloğunun `statement_timeout`u (saniye). Kayıt yoksa ya da 5..45 dışındaysa 15:
+ * aralık dışı değer ya tek process'i kilitler ya da her raporu düşürür.
+ */
+export async function readReportsStatementTimeoutSec(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.REPORTS_STATEMENT_TIMEOUT_SEC },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return v !== null && Number.isInteger(v) && v >= MIN_REPORTS_STATEMENT_TIMEOUT_SEC && v <= MAX_REPORTS_STATEMENT_TIMEOUT_SEC
+    ? v
+    : DEFAULT_REPORTS_STATEMENT_TIMEOUT_SEC;
 }
 
 /**

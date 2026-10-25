@@ -250,6 +250,8 @@ export const FACTS: readonly RecordProjection[] = [
     columns: [col("id", "id"), col("urunId", "itemId"), col("cariKartId", "customerId"), col("tur", "kind"), col("doviz", "currency"),
       col("fiyat", "price", "FINANS"), col("degisim", "updatedAt")],
     derived: [], sources: [self("item_prices")],
-    deletion: "DAMGA", permission: "bulut:fiyat:oku", module: "finance.enabled", catalogVersion: 1,
+    // Damgalı (değişmiş/kaldırılmış) fiyat güncel değildir: kapsamdan çıkınca bulut satırı düşer (MAL-0b).
+    scope: { note: "damgalı (kaldırılmış/değişmiş) fiyat güncel değildir; kapsamdan çıkınca bulut satırı düşer", prismaWhere: { revokedAt: null }, sql: `t."revokedAt" IS NULL` },
+    deletion: "YOK", permission: "bulut:fiyat:oku", module: "finance.enabled", catalogVersion: 1,
   },
 ];

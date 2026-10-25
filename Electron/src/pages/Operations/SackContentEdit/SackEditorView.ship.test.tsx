@@ -38,6 +38,7 @@ vi.mock("@/hooks/usePricingEnabled", () => ({
 vi.mock("./EditorScanBar", () => ({ EditorScanBar: () => null }));
 vi.mock("./SackContentsTable", () => ({ SackContentsTable: () => null }));
 vi.mock("./SackContentDumpMenu", () => ({ SackContentDumpMenu: () => null }));
+vi.mock("@/components/print/PrintHistoryLink", () => ({ PrintHistoryLink: () => null }));
 vi.mock("./StaleLabelsBanner", () => ({ StaleLabelsBanner: () => null }));
 vi.mock("./ContentMismatchBanner", () => ({ ContentMismatchBanner: () => null }));
 vi.mock("./WeighSackDialog", () => ({ WeighSackDialog: () => null }));
