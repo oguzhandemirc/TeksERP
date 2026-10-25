@@ -80,6 +80,16 @@ describe("alt çerçeve, webview, yeni pencere", () => {
     }
   });
 
+  it("⭐ alt çerçeve devri yalnız kayıtlı webContents'e; ana çerçeve ve diğerleri genel kuralda", () => {
+    const viewer = guarded();
+    guard.delegateSubframeGuard(viewer.contents as never);
+    expect(viewer.fire("will-frame-navigate", "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html", false)).toBe(false);
+    expect(viewer.fire("will-navigate", "https://saldirgan.com/", true)).toBe(true);
+    expect(viewer.fire("will-redirect", "https://saldirgan.com/", true)).toBe(true);
+    const other = guarded();
+    expect(other.fire("will-frame-navigate", "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html", false)).toBe(true);
+  });
+
   it("webview eklenemez; varsayılan yeni pencere RED", () => {
     const { fire, openHandler } = guarded();
     expect(fire("will-attach-webview", "about:blank", true)).toBe(true);

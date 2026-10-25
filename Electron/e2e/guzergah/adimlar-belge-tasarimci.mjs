@@ -26,7 +26,7 @@ const KAPALI_METNI = "Belge tasarımcısı kapalı";
 const olc = { t3: {}, yerlesim: null, kapali: null, sandbox: null, bos: null, a4: null, a5: null, secim: null, pwned: null, sektorler: null, ingilizce: null };
 
 /** Açık ve koyu temada kanıt görüntüsü (tema sınıfı yalnız ekran için değiştirilir, kaydedilmez). */
-async function kanit(page, ad) {
+export async function kanit(page, ad) {
   if (!KANIT) return;
   fs.mkdirSync(KANIT, { recursive: true });
   for (const tema of ["acik", "koyu"]) {
@@ -60,7 +60,7 @@ async function bayrakYaniti(page, acik) {
   });
 }
 
-async function bayragiKur({ page, kullanici, sql }, acik = true) {
+export async function bayragiKur({ page, kullanici, sql }, acik = true) {
   await bayragiYaz(sql, acik);
   await bayrakYaniti(page, acik);
   await page().reload();
