@@ -239,12 +239,15 @@ Her dilim istemi bekçileri, negatif sondayı, kabulü ve riski kendi içinde ta
 - **R9 Simülasyonun gerçek sanılması:** kalıcı kırmızı bant + `adapter` kolonu + süzgeçte ayrı değer.
 
 ## §7 Veto listesi / kullanıcı kararları
+
+> 2026-10-25 durum: açık maddelerin mali müşavir/GİB ve kullanıcı onay listesi `docs/design/E-IRSALIYE-DOGRULAMA.md`. P1/P2 belgelere işlendi (arşiv 2026-10-24).
+
 - **V1 Mali müşavir + GİB doğrulaması:** §1 ve §2'deki tüm ⚠ maddeler (eşik, ceza, iptal yokluğu, yanıt süresi, kayıtsız alıcı, ihracat akışı, numara boşluğu, taşıma bilgisi zorunluluğu, vergi dairesi zorunluluğu, CustomizationID). E4 başlamadan önce.
 - **V2 Entegratör seçimi + test hesabı (v2 için):** fabrika hangi entegratörü kullanıyor (Logo/Mikro tarafında zaten olan); test ortamı kimlik bilgisi. v1'de yalnız portal yükleme denemesi için bir test hesabı yeterli.
 - **V3 XSD paketi ve CI aracı:** GİB UBL-TR XSD paketinin repoya alınması (lisans) + CI imajına `libxml2-utils` (xmllint). Onaysızsa XSD bekçisi "ATLANDI" der.
 - **V4 Yeni paket:** varsayılan YOK; `xmlbuilder2` yalnız ölçülmüş gerekçeyle ve onayla.
-- **K-A** Gönderilmiş e-İrsaliyeli sevkiyatta kâğıt irsaliye revizyonu v1'de uyarır, engellemez — kullanıcı "engelle" derse E6'ya bir kapı eklenir.
+- **K-A** ~~Gönderilmiş e-İrsaliyeli sevkiyatta kâğıt irsaliye revizyonu v1'de uyarır, engellemez~~ **GEÇERSİZ → 2026-10-25 (patron kararı E6): revizyon kilitli, 409 `EIRSALIYE_PAPER_LOCKED`.** Eski metin: — kullanıcı "engelle" derse E6'ya bir kapı eklenir.
 - **K-B** Alıcı vergi dairesi zorunlu çıkarsa: `Customer.taxOffice` (kimlik) eklenip `CariAccount.taxOffice` ile tek kaynağa indirilmesi ayrı iş (master veri + finans).
-- **K-C** Yapılandırma kapısının varsayılanı `adapter: "yok"` — her kurulumda kapalı doğar (P1); deneme profilinde bile elle yapılandırılır (JSON ayar test profiline girmez).
+- **K-C** (UYGULANDI, E3-AYAR) Yapılandırma kapısının varsayılanı `adapter: "yok"` — her kurulumda kapalı doğar (P1); deneme profilinde bile elle yapılandırılır (JSON ayar test profiline girmez).
 - **K-D (v2)** Entegratöre giden istekler kökteki "dışarı giden her istek kurulum anahtarıyla imzalanır" kuralının istisnası mı (üçüncü taraf API kendi kimlik doğrulamasını ister) — `patron-bulutu.md`/`kesif-cihaz.md` sahipleriyle karar.
 - **K-E** e-İrsaliye düzenleme zamanı: v1 yalnız DISPATCHED sonrası üretir; fabrika "sevkten önce" (PLANNED) üretim isterse sevk onayı rejimiyle ayrı tasarım.

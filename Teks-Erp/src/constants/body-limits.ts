@@ -16,13 +16,22 @@
 // =============================================================================
 
 /** Global (1 MB) JSON katmanının ATLAYACAĞI mount ön ekleri. */
-export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle"] as const;
+export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates"] as const;
 
 /** Global JSON gövde limiti — 413 mesajı da buradan okunur (metin sabiti YOK). */
 export const VARSAYILAN_GOVDE_LIMITI = "1mb";
 
 /** Büyük gövde taşıyan router'ların limiti. */
 export const BUYUK_GOVDE_LIMITI = "10mb";
+
+/** Sertifika belge eki (base64, ≤ 5 MB dosya ≈ 6,7 MB gövde) router'ının kendi limiti (K4P-SERT). */
+export const CERTIFICATE_BODY_LIMIT = "8mb";
+
+/** Yolun ETKİN gövde limiti — 413 mesajı bunu söyler. */
+export function effectiveBodyLimit(url: string | undefined): string {
+  if (url && (url === "/api/certificates" || url.startsWith("/api/certificates/") || url.startsWith("/api/certificates?"))) return CERTIFICATE_BODY_LIMIT;
+  return buyukGovdeYolu(url) ? BUYUK_GOVDE_LIMITI : VARSAYILAN_GOVDE_LIMITI;
+}
 
 /** İstek yolu büyük-gövde router'larından birine mi ait. */
 export function buyukGovdeYolu(url: string | undefined): boolean {

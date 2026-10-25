@@ -260,6 +260,7 @@ Varsayılanlar = bugünkü davranış. Tam liste + maliyet analizi sentez çıkt
 - **Veri bütünlüğü değişmezleri bayraklanmaz** (kilit sırası, idempotency,
   atomik claim, fail-closed kapılar).
 - **Mevzuat bayraklanmaz** — e-fatura/e-irsaliye entegrasyon/sürüm işidir.
+  e-İrsaliye (2026-10-24): modül anahtarı yerine yapılandırma kapısı — `E-IRSALIYE-PLAN.md` §0.3 P1.
 - **Geçmişe etki eden bayrak yok** — değer değişince dünkü verinin anlamı
   değişiyorsa tasarım hatası.
 - **`if (musteri === 'X')` yasak** — fork'un ilk sinyali. Müşteriye özel

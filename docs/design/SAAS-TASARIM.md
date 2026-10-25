@@ -106,13 +106,15 @@ PROVISIONING ──ok──▶ ACTIVE ◀──askıdan al──┐
 
 Üç parçalı standart paket — **pilot ÖNCESİ avukat kontrolünden geçer** (Faz 5 çıkış koşulu):
 
-1. **Abonelik Sözleşmesi:** hizmet tanımı ve kapsam sınırı (⚠️ "yazılım fatura/e-belge KESMEZ" açıkça — §A5) · ödeme/fesih koşulları · **"veri müşterinindir"** maddesi (istediği an tam dışa aktarım hakkı, §A2 prosedürü) · **sorumluluk sınırı** (sektör standardı: son 12 ay ücret tavanı; dolaylı zarar/kâr kaybı hariç) · firma-başına özel kod yazılmayacağı (H2 risk 10'un sözleşme karşılığı).
+1. **Abonelik Sözleşmesi:** hizmet tanımı ve kapsam sınırı (⚠️ "yazılım fatura/e-belge KESMEZ" açıkça — §A5; 2026-10-24: e-İrsaliye XML'i istisna, §A5 daraltma notu) · ödeme/fesih koşulları · **"veri müşterinindir"** maddesi (istediği an tam dışa aktarım hakkı, §A2 prosedürü) · **sorumluluk sınırı** (sektör standardı: son 12 ay ücret tavanı; dolaylı zarar/kâr kaybı hariç) · firma-başına özel kod yazılmayacağı (H2 risk 10'un sözleşme karşılığı).
 2. **SLA eki:** §A3 tablosu + telafi kademeleri + S1 tanımının 4G şartına bağlı istisnası.
 3. **DPA (KVKK) eki:** §E2.
 
 ## A5. Kapsam beyanı: e-Belge (e-Fatura / e-İrsaliye)
 
 ⚠️ **Satışta ilk sorulacak sorulardan biri budur; cevabı baştan yazılı olmalı.** Bugünkü ürün ilkesi korunur: **ERP fatura KESMEZ** — resmi belge müşterinin muhasebe/e-belge yazılımında doğar; TeksERP sevk irsaliyesini operasyonel belge olarak basar ve dış belge numarasının yalnız İZİNİ tutar (`invoiceNo` deseni, 2026-08-02 kararı). GİB e-İrsaliye mükellefi müşteride akış: TeksERP çeki listesi/sevk verisini üretir → müşteri e-belgeyi kendi entegratöründe keser. **Entegratör entegrasyonu (Logo/Foriba/Uyumsoft vb.) Faz 6 adayıdır** — talep 2-3 müşteride somutlaşırsa tasarlanır, öncesinde VAAT EDİLMEZ. Keşif formuna (§G3) "e-İrsaliye mükellefi mi, hangi entegratör" sorusu eklidir.
+
+**2026-10-24 daraltma (patron kararı):** e-İrsaliye için ilke daraltıldı — irsaliye TeksERP'te doğduğu için e-İrsaliye XML'i de TeksERP'te üretilir (`docs/design/E-IRSALIYE-PLAN.md`); v1 dışa aktarım + elle kayıt, v2 entegratör API'si (kullanıcı entegratör seçip test hesabı verince). Fatura ilkesi aynen: ERP fatura/e-Fatura kesmez. Mevzuat maddeleri canlı kullanımdan önce mali müşavirle doğrulanır (`docs/design/E-IRSALIYE-DOGRULAMA.md`).
 
 ---
 
@@ -552,7 +554,7 @@ Her kurulum, sık tekrarlanan adımları ölçer — self-servis sihirbaz ancak 
 **Faz 5 — Pilot + hypercare (M):** demo firma (kanarya + satış demosu) · **sözleşme paketi (§A4) avukat kontrolünden geçmiş** · **sızma testi/ASVS turu (§E1) tamamlanmış** · **içe aktarım kiti (§G3) hazır** · ilk gerçek müşteri §G3 metodolojisiyle.
 **Çıkış:** ilk müşteri 2 haftalık hypercare'i tamamlamış, S1 hiç yaşanmamış ya da SLA içinde çözülmüş.
 
-**Faz 6 — Sonrası (ayrı kararlar):** web paneli · Play Store · paketleme enforcement'ı (§C9) · PITR · PgBouncer (eşikle) · self-servis sihirbaz · PLC/sayaç ajanı (§D2.2) · hata izleme · **e-belge entegratör entegrasyonu (§A5)** · self-servis veri dışa/içe aktarım.
+**Faz 6 — Sonrası (ayrı kararlar):** web paneli · Play Store · paketleme enforcement'ı (§C9) · PITR · PgBouncer (eşikle) · self-servis sihirbaz · PLC/sayaç ajanı (§D2.2) · hata izleme · **e-belge entegratör entegrasyonu (§A5; e-İrsaliye v1 2026-10 planında — `E-IRSALIYE-PLAN.md`)** · self-servis veri dışa/içe aktarım.
 
 ## H2. Risk kaydı
 
@@ -570,7 +572,7 @@ Her kurulum, sık tekrarlanan adımları ölçer — self-servis sihirbaz ancak 
 | 10 | Firma-başına özel istek baskısı → kod çatallaşması | O: Yüksek · E: Yüksek | İlke: özel KOD yok; özelleştirme yalnız veri/bayrak/şablon katmanında (Bölüm D). Satışta açıkça söylenir |
 | 11 | Eski istemci sürümleri filoda birikir | O: Orta · E: Orta | Min-sürüm kapıları + 4 haftalık tolerans penceresi (§F3) |
 | 12 | Yarım provisioning artıkları | O: Düşük · E: Düşük | İdempotent devam-et + FAILED görünürlüğü; otomatik DROP bilinçli yok |
-| 13 | e-Belge beklentisi ("e-irsaliyemi de kessin") karşılanamaz → satış kaybı ya da yanlış vaat | O: Yüksek · E: Orta | Kapsam beyanı §A5 sözleşmede + keşif sorusu; talep 2-3 müşteride somutlaşırsa Faz 6 tasarımı |
+| 13 | e-Belge beklentisi ("e-irsaliyemi de kessin") karşılanamaz → satış kaybı ya da yanlış vaat | O: Yüksek · E: Orta | Kapsam beyanı §A5 sözleşmede + keşif sorusu; talep 2-3 müşteride somutlaşırsa Faz 6 tasarımı · e-İrsaliye v1 2026-10 planında (XML TeksERP'te; §A5 daraltma notu) |
 | 14 | Elle katalog girişi onboarding'i pahalı ve hatalı yapar | O: Yüksek · E: Orta | §G3 içe aktarım kiti (dry-run'lı script'ler) pilot ÖNCESİ hazır |
 
 ## H3. Kapsam dışı ve açık sorular

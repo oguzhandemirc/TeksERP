@@ -32,7 +32,7 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
 
 // K4P zemin (2026-10-24): kapı manifestoyla (`SCREEN_CATALOG`) önden yazıldı; sayfa/route PANEL·LAB·SERT
 // dilimlerinde iner. Route'u henüz olmayan beyanlı satırlar — iki yönlü ölçülür.
-const PENDING_ROUTE = new Set(["quality/inspections", "quality/inspection-rules", "quality/certificates"]);
+const PENDING_ROUTE = new Set(["quality/inspections", "quality/inspection-rules"]);
 
 describe("route-modules — yol → modül aynası", () => {
   it("zemin: route metni okundu, tablo dolu", () => {
