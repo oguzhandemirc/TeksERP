@@ -4,7 +4,8 @@
 // =============================================================================
 // Üç renderer aynı künye/başlık iskeletini ve `buildDocTable` tablosunu basar; eşlenikte
 // iskelet ve dinamik kolon tablosu burada TEK kaynaktır, her eşlenik tek parça Liquid
-// üretir (Liquid `include` yasak). Değişiklik üçünü birden etkiler — bekçi üçünü koşar.
+// üretir (Liquid `include` yasak). Ön muhasebe eşlenikleri (`finans.ts`) de bu iskeleti
+// kullanır — değişiklik hepsini birden etkiler, bekçi hepsini koşar.
 // =============================================================================
 
 import {
@@ -31,6 +32,8 @@ export function customerDocBody(parts: {
   headRight: string;
   beforeBlocks?: string;
   main: string;
+  /** İmza bloğu; verilmezse `ayar.signatureLabels` döngüsü (makbuz yöne göre varsayılan seçer). */
+  signatures?: string;
 }): string {
   return String.raw`<div class="sheet">
 <header>
@@ -54,7 +57,7 @@ ${blocksAt("afterHeader")}
 ${parts.main}
 ${blocksAt("beforeSignatures")}
 ${PRINT_NOTE}
-${SIGNATURES}
+${parts.signatures ?? SIGNATURES}
 ${STAMPS}
 </div>`;
 }
@@ -88,7 +91,10 @@ export function dynamicTable(opts: {
   widths: ReadonlyArray<readonly [string, string]>;
   cells: string;
   foot?: { label: string; cells: string; when?: string };
+  /** `mono` hücre sınıfı alan kolon kaynakları (varsayılan yalnız barkod). */
+  mono?: readonly string[];
 }): string {
+  const mono = (opts.mono ?? ["barcode"]).map((k) => `kolon.kaynak == "${k}"`).join(" or ");
   const widths = opts.widths
     .map(([k, w]) => String.raw`{% when "${k}" %} style="width:${w}"`)
     .join("");
@@ -113,7 +119,7 @@ export function dynamicTable(opts: {
 {%- for kolon in kolonlar -%}<th class="{{ kolon.hiza }}"{% case kolon.kaynak %}${widths}{% endcase %}>{{ kolon.etiket }}</th>{%- endfor -%}
 </tr></thead><tbody>
 {%- for satir in ${opts.rows} -%}<tr>
-{%- for kolon in kolonlar -%}<td class="{{ kolon.hiza }}{% if kolon.kaynak == "barcode" %} mono{% endif %}">
+{%- for kolon in kolonlar -%}<td class="{{ kolon.hiza }}{% if ${mono} %} mono{% endif %}">
 {%- case kolon.kaynak -%}
 ${opts.cells}
 {%- endcase -%}
