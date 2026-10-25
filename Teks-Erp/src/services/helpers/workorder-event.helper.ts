@@ -14,6 +14,7 @@ import { randomUUID } from "crypto";
 import { Prisma, WorkOrderEventType, WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import { currentOrigin } from "../../lib/request-context";
 import { workOrderEventStampTx } from "./ledger-stamp.helper";
+import { followAsCreatorTx } from "./record-follow.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -181,6 +182,8 @@ export async function createWorkOrderTx<T extends Prisma.WorkOrderCreateArgs>(
     }],
     ctx,
   );
+  // Oluşturan otomatik takipçi (bildirim §5.3); dönüş aynen.
+  await followAsCreatorTx(tx, ctx.userId, { workOrderId: row.id });
   return wo;
 }
 

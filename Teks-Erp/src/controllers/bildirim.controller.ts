@@ -19,6 +19,7 @@ import {
   visibleCatalog,
   type InboxViewer,
 } from "../services/notification-inbox.service";
+import { catalogCells } from "../services/notification-preference.service";
 
 function viewer(req: Request): InboxViewer {
   return { userId: req.user!.userId, permissions: req.user!.permissions ?? [] };
@@ -66,4 +67,4 @@ export const postUnread = json((req) => markRead(viewer(req), req.params.id, fal
 export const postSnooze = json((req) => snooze(viewer(req), req.params.id, req.body));
 export const postReadAll = json((req) => markAllRead(viewer(req)));
 export const postUndoRead = json((req) => undoMarkRead(viewer(req), req.body));
-export const getCatalog = json((req) => visibleCatalog(viewer(req)));
+export const getCatalog = json(async (req) => ({ ...(await visibleCatalog(viewer(req))), hucreler: await catalogCells(viewer(req)) }));

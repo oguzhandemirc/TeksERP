@@ -11,6 +11,7 @@ import prisma from "../lib/prisma";
 import { ACTIVE_SACK_ALLOCATION } from "./helpers/sack-allocation.helper";
 import { setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
 import type { ItemUnit } from "@prisma/client";
+import { followAsCreatorTx } from "./helpers/record-follow.helper";
 import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig, CursorPaginatedResponse, withActor } from "./base.service";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
@@ -2282,7 +2283,10 @@ export class OrderService extends BaseService {
   async insertPreparedOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate): Promise<Record<string, unknown>> {
     await runItemUsageChecksTx(tx, p.lineCheck.checks);
     const orderNumber = p.manualOrderNumber ?? (await this.nextOrderNumber(tx, p));
-    return this.insertOrderTx(tx, p, orderNumber);
+    const created = await this.insertOrderTx(tx, p, orderNumber);
+    // Oluşturan otomatik takipçi (bildirim §5.3); dönüş aynen.
+    await followAsCreatorTx(tx, p.actorUserId, { orderId: created.id as string });
+    return created;
   }
 
   /**

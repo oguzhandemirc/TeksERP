@@ -168,6 +168,10 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // `NOTIFICATION_CATALOG[kind].izinler`/`varsayilan`dan; katalogda olduklarını `test_bildirim_katalogu` §3b ölçer.
   "src/services/helpers/notification-visibility.helper.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
   "src/services/notification-dispatch.service.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
+  // Tercih çözücüsünün katalog varsayılan kapsaması (`entry.varsayilan` kodları) — aynı katalog bekçisi.
+  "src/services/helpers/notification-preference.helper.ts": [`${DELEGE}scripts/test_bildirim_katalogu.ts`],
+  // Kayıt takibi ucu: `matchesPermission(perms, c)` — c ∈ FOLLOW_PERMISSIONS[tur] (sipariş/iş emri/dokuma işi okuma).
+  "src/services/notification-follow.service.ts": ["ORDER_FOLLOW_PERMISSIONS", "WORK_ORDER_FOLLOW_PERMISSIONS", "WEAVING_FOLLOW_PERMISSIONS"],
   // GERİ SARMA (2026-09-12): `assertEntityPermission` ikinci kapıyı yine
   // `adapter.writePermission`den çözüyor — varlık KOŞUMUN KENDİSİNDEN
   // (`ImportRun.entity`) bulunuyor, `:entity` parametresinden değil. Desen ve

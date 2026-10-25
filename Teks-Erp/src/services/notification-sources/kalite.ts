@@ -7,6 +7,7 @@
 // motor hiçbir koşulu kapatmaz (fail-closed) — burada hata YAKALANMAZ.
 // =============================================================================
 import prisma from "../../lib/prisma";
+import { effectiveNotificationParams } from "../helpers/notification-params.helper";
 import { getNotificationEntry, type NotificationKind } from "../../constants/notification-catalog";
 import type { ModulKey } from "../../constants/screen-catalog";
 import { loadNotificationVisibilityEnv } from "../helpers/notification-visibility.helper";
@@ -36,11 +37,6 @@ async function moduleOpen(kind: NotificationKind): Promise<boolean> {
   return env.modules[getNotificationEntry(kind).modul as ModulKey] !== false;
 }
 
-function catalogParams(kind: NotificationKind): Record<string, unknown> {
-  const schema = getNotificationEntry(kind).paramSemasi;
-  return schema ? (schema.parse({}) as Record<string, unknown>) : {};
-}
-
 export const QUALITY_SOURCE_REAL_DEPS: Readonly<QualitySourceDeps> = {
   moduleOpen,
   expiringCertificates: (today, days) =>
@@ -48,7 +44,7 @@ export const QUALITY_SOURCE_REAL_DEPS: Readonly<QualitySourceDeps> = {
       where: certificateExpiryWhere(today, days),
       select: { id: true, certificateNo: true, standard: true, expiresOn: true, partner: { select: { name: true } } },
     }),
-  params: catalogParams,
+  params: effectiveNotificationParams,
   now: Date.now,
 };
 
