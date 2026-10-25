@@ -7729,6 +7729,9 @@ enum PrintedDocType {
   //    kayıtlı sürümün aynı olması `resolvePrintPlan` tek karar noktasına dayanır;
   //    ikinci bir sürüm üretici o eşitliği sessizce bozar.
   TRAVELER_CARD // Refakat kartı — basılan her sürümün donmuş kopyası
+  // 2026-10-25 K4P-RAPOR (yine SONA). Müşteriye gider; kaynak Shipment, sevk
+  // toplarının aktif muayeneleri ilk basımda donar (iç kolonlar opt-in).
+  INSPECTION_REPORT // Muayene raporu (Shipment — 4 puan muayene özeti)
 }
 
 enum PrintedDocStatus {

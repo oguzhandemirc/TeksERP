@@ -4,6 +4,7 @@ import { Package, SearchX } from "lucide-react";
 import type { ShipmentDetail } from "../types";
 import { ShipmentDetailMeta } from "./ShipmentDetailMeta";
 import { EIrsaliyeSection } from "../eirsaliye/EIrsaliyeSection";
+import { ShipmentInspectionSection } from "@/pages/Quality/Inspections/ShipmentInspectionSection";
 import { ShipmentDetailToolbar } from "./ShipmentDetailToolbar";
 import { SackRow } from "./SackRow";
 import { useShipmentDetailFilter } from "./useShipmentDetailFilter";
@@ -51,6 +52,7 @@ export function ShipmentDetailBody({ d }: { d: ShipmentDetail }) {
       <ShipmentDetailMeta d={d} />
       <div className="mb-3 empty:hidden">
         <EIrsaliyeSection shipmentId={d.id} shipmentStatus={d.status} />
+        <ShipmentInspectionSection shipmentId={d.id} shipmentNo={d.shipmentNo} />
       </div>
 
       {noSacks ? (
