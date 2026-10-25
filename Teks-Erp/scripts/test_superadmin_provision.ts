@@ -804,9 +804,9 @@ async function main(): Promise<void> {
       fs.existsSync(path.join(KOK, "scripts", "superadmin-olustur.ts")) &&
         !fs.existsSync(path.join(KOK, "src", "scripts", "superadmin-olustur.ts")),
     );
-    // Electron sözlüğü: iki yeni olayın Türkçesi.
+    // Audit sözlüğü (B2'den beri backend kaynağı; Electron bayt-eşit aynası): iki olayın Türkçesi.
     const etiketler = fs.readFileSync(
-      path.join(KOK, "..", "Electron", "src", "lib", "audit-labels.ts"),
+      path.join(KOK, "src", "constants", "audit-tablo-etiketleri.ts"),
       "utf8",
     );
     for (const olay of ["SUPERADMIN_PROVISIONED", "SUPERADMIN_ROTATED"]) {
