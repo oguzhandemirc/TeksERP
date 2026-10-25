@@ -14,6 +14,8 @@ import { loadAccessContext } from "../services/reports/semantik/izin";
 import { buildCatalogTree } from "../services/reports/semantik/katalog";
 import { semanticQuerySchema } from "../services/reports/semantik/derleyici";
 import { abortDisconnectedRun, runSemanticQuery } from "../services/reports/semantik/calistirici";
+import { analysisSpecSchema } from "../services/reports/semantik/analiz-plan";
+import { runAnalysis } from "../services/reports/semantik/analiz";
 
 const router = Router();
 
@@ -67,6 +69,35 @@ router.post("/sorgu", async (req: Request, res: Response, next: NextFunction) =>
     });
     const data = await runSemanticQuery(input, ctx, runId);
     res.status(200).json({ success: true, data, ...(data.uyarilar.length ? { warnings: data.uyarilar } : {}) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/rapor-semantik/analiz:
+ *   post:
+ *     tags: [Reports]
+ *     summary: İki boyut/ölçü arasındaki ilişki — günlük dilde yorumlanmış analiz (R3)
+ *     description: |
+ *       `yontem` kiKare (grup × sayım oranı ya da iki boyutlu tablo) · pearson/spearman (iki ölçü,
+ *       `kirilim` birimiyle). Sayım ölçüsü maruziyetsiz 400 `ANALIZ_MARUZIYET_GEREKLI`; çözülemeyen
+ *       ikili 400 `ANALIZ_GECERSIZ`. Sayılar semantik çalıştırıcıdan (izin, sıra, zaman tavanı aynı).
+ *       Yanıt `sunum` (RaporSunumu) + `istatistik` (kart sayıları); 30 kayıttan azsa kanıt cümlesi yok.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content: { application/json: { schema: { type: object } } }
+ *     responses:
+ *       200: { description: "Sunum + istatistik" }
+ */
+router.post("/analiz", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const spec = analysisSpecSchema.parse(req.body);
+    const ctx = await loadAccessContext(req.user!);
+    const { sunum, istatistik } = await runAnalysis(spec, ctx);
+    res.status(200).json({ success: true, data: { sunum, istatistik }, ...(sunum.uyarilar.length ? { warnings: sunum.uyarilar } : {}) });
   } catch (e) {
     next(e);
   }

@@ -4,10 +4,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Text, Button, ActivityIndicator, Icon, IconButton } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDeviceStore } from '../../store/deviceStore';
 import { deviceService } from '../../services/device.service';
 import type { RootStackParamList } from '../../navigation/types';
+import OnsiteRebindApprove from './OnsiteRebindApprove';
+import TruncatedText from '../../components/TruncatedText';
+import { palette } from '../../theme/tokens';
 
 // Eski 6-haneli eşleştirme ekranının yerine: tablet kendini bildirir (boot'ta
 // RootNavigator announce eder), bu ekran atama durumunu poll'lar. Yönetici admin
@@ -23,6 +26,36 @@ const C = {
   border: '#e2e8f0',
   error: '#ef4444',
 };
+
+/** Eşleme v2: donanım eski kaydı tanıdı — yeni kayıt açılmadı, yeniden bağlama onayı bekleniyor. */
+function RebindHeader({ targetName }: { targetName: string }) {
+  return (
+    <>
+      <Text style={styles.title}>Yeniden Bağlama Onayı</Text>
+      <Text style={styles.subtitleTight}>Bu tablet daha önce şu adla kayıtlı:</Text>
+      {/* Ad uzun olabilir: tek satır "…", basılı tutunca tam ad (TruncatedText kararı). */}
+      <TruncatedText style={styles.targetName} testID="yeniden-baglama-hedef">
+        {targetName}
+      </TruncatedText>
+      <Text style={styles.subtitle} testID="yeniden-baglama-metni">
+        Yeniden bağlanması için yönetici onayı gerekiyor. Panelden onaylanınca bu ekran
+        kendiliğinden kapanır.
+      </Text>
+    </>
+  );
+}
+
+function PendingHeader() {
+  return (
+    <>
+      <Text style={styles.title}>Cihaz Atama Bekliyor</Text>
+      <Text style={styles.subtitle}>
+        Bu tablet henüz onaylanmadı. Yönetici admin panelinden (Cihazlar) bu cihazı
+        onaylayıp bir makineye atayınca uygulama otomatik devam edecek.
+      </Text>
+    </>
+  );
+}
 
 export default function AwaitingAssignmentScreen() {
   const deviceId = useDeviceStore((s) => s.deviceId);
@@ -45,8 +78,17 @@ export default function AwaitingAssignmentScreen() {
     enabled: deviceId != null,
     refetchInterval: (q) => (q.state.data?.status === 'APPROVED' ? false : 5000),
   });
+  const queryClient = useQueryClient();
   const status = statusQ.data?.status ?? 'UNKNOWN';
-  const inactive = status === 'INACTIVE';
+  // Eşleme v2: donanım eski kaydı tanıdı; yeni kayıt açılmadı, yeniden bağlama onayı bekleniyor.
+  const rebind = status === 'REBIND_PENDING';
+  const rebindRejected = status === 'REBIND_REJECTED';
+  const inactive = status === 'INACTIVE' || rebindRejected;
+  const targetName = statusQ.data?.targetName?.trim() || 'başka bir cihaz';
+  const refreshAll = () => {
+    void statusQ.refetch();
+    void queryClient.invalidateQueries({ queryKey: ['device', 'status'] });
+  };
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.root, { paddingBottom: insets.bottom }]}>
@@ -64,11 +106,7 @@ export default function AwaitingAssignmentScreen() {
           <View style={styles.iconBox}>
             <Text style={styles.iconEmoji}>📱</Text>
           </View>
-          <Text style={styles.title}>Cihaz Atama Bekliyor</Text>
-          <Text style={styles.subtitle}>
-            Bu tablet henüz onaylanmadı. Yönetici admin panelinden (Cihazlar) bu cihazı
-            onaylayıp bir makineye atayınca uygulama otomatik devam edecek.
-          </Text>
+          {rebind || rebindRejected ? <RebindHeader targetName={targetName} /> : <PendingHeader />}
 
           <View style={[styles.statusRow, inactive && styles.statusRowError]}>
             {inactive ? (
@@ -77,7 +115,11 @@ export default function AwaitingAssignmentScreen() {
               <ActivityIndicator size="small" color={C.accent} />
             )}
             <Text style={[styles.statusText, inactive && styles.statusTextError]}>
-              {inactive ? 'Cihaz pasif — yöneticiye başvurun.' : 'Yöneticinin onayı bekleniyor…'}
+              {rebindRejected
+                ? 'Yeniden bağlama reddedildi — yöneticiye başvurun.'
+                : inactive
+                  ? 'Cihaz pasif — yöneticiye başvurun.'
+                  : 'Yöneticinin onayı bekleniyor…'}
             </Text>
           </View>
 
@@ -92,6 +134,8 @@ export default function AwaitingAssignmentScreen() {
           >
             Durumu Yenile
           </Button>
+
+          {rebind && deviceId ? <OnsiteRebindApprove localId={deviceId} onSettled={refreshAll} /> : null}
 
           <View style={styles.footer}>
             <Text style={styles.footerLabel}>CİHAZ KİMLİĞİ</Text>
@@ -119,6 +163,11 @@ const styles = StyleSheet.create({
   iconEmoji: { fontSize: 28 },
   title: { fontSize: 22, fontWeight: '700', color: C.text, marginBottom: 6 },
   subtitle: { fontSize: 13, color: C.sub, lineHeight: 19, marginBottom: 18 },
+  subtitleTight: { fontSize: 13, color: C.sub, lineHeight: 19, marginBottom: 6 },
+  targetName: {
+    fontSize: 17, fontWeight: '700', color: C.text, backgroundColor: palette.indigo[50],
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 10,
+  },
   statusRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#eef2ff',
     borderRadius: 10, padding: 12, marginBottom: 16,

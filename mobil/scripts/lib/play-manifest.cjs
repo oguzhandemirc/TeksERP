@@ -1,5 +1,6 @@
 // Play manifest temizliğinin TEK KAYNAĞI (K1 · K3): eklenti (plugins/withPlayManifestTemizligi) yazar,
 // build-apk.mjs AAB'nin kendisinden ölçer, bekçi app.json'la kıyaslar. Bağımlılık taşımaz.
+const { yedekSorunlari } = require('./kalicilik.cjs');
 
 /** Uygulamanın kullanmadığı, Play beyanı doğuran ya da kurulum izni olan izinler (app.json blockedPermissions ⊇). */
 const ENGELLI_IZINLER = [
@@ -31,6 +32,7 @@ function playManifestSorunlari(ogeler) {
   for (const iz of ENGELLI_IZINLER) if (izinler.has(iz)) f.push(`${iz} izni var — app.json blockedPermissions (K1)`);
   const hizmetler = new Set(ogeler.filter((o) => o.ad === 'service').map((o) => o.oznitelik?.name));
   for (const h of KALDIRILAN_HIZMETLER) if (hizmetler.has(h)) f.push(`${h} hizmeti var — plugins/withPlayManifestTemizligi (K1)`);
+  f.push(...yedekSorunlari(ogeler));
   return f;
 }
 

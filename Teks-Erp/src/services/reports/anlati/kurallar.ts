@@ -41,7 +41,49 @@ function kalem(ad: string, adTuru: "ozel" | "cins", boyut: string): SuffixInput 
   return adTuru === "ozel" ? { tur: "ad", metin: ad } : { tur: "ad", metin: `${ad} ${boyut}`, kesme: false };
 }
 
-/** Gözlemi cümleye çevirir; R3 yer tutucu kuralları (korelasyon, örneklem) henüz metin üretmez → null. */
+/** Her analiz cümlesinin sonundaki sabit not (plan §3.8). */
+export const CAUSALITY_NOTE = "İlişki, nedeni göstermez.";
+
+/** Kanıt dili: olasılık eşiği cümlede sayı olarak geçmez. */
+export function evidenceWord(p: number): "güçlü kanıt" | "kanıt var" | null {
+  return p < 0.01 ? "güçlü kanıt" : p < 0.05 ? "kanıt var" : null;
+}
+
+/** |r| → günlük dil (0,1 zayıf · 0,3 orta · 0,5 güçlü). */
+export function strengthWord(r: number): string | null {
+  const a = Math.abs(r);
+  return a >= 0.5 ? "güçlü" : a >= 0.3 ? "orta düzeyde" : a >= 0.1 ? "zayıf" : null;
+}
+
+function analysisSentence(k: KanitHaritasi["korelasyon"]): string {
+  const kanit = evidenceWord(k.p);
+  const measured = `${sayiMetni(k.n, 0)} ${k.nesne} üzerinden ölçüldü`;
+  if (k.yontem === "kiKare" && k.tur === "oran") {
+    const kat =
+      k.kat === null ? "" : k.kat >= 1.15 ? ` — yaklaşık ${sayiMetni(k.kat, 1)} katı` : k.kat <= 0.87 ? ` — yaklaşık ${oranMetni(Math.round((1 - k.kat) * 100))} daha az` : "";
+    const head = `${k.yer} ${k.olcuAdi} ${k.birimSozu} ${sayiMetni(k.oran, 1)}; diğerlerinde ${sayiMetni(k.digerOran, 1)}${kat}.`;
+    const tail = kanit ? `Bu fark tesadüf olmayacak kadar büyük (${kanit}; ${measured}).` : `Belirgin bir fark görünmüyor (${measured}).`;
+    return `${head} ${tail} ${CAUSALITY_NOTE}`;
+  }
+  if (k.yontem === "kiKare") {
+    const head = `${k.yer} ${k.ikinciAd} payı ${oranMetni(k.pay)}; genelde ${oranMetni(k.genelPay)}.`;
+    const tail = kanit ? `Bu fark tesadüf olmayacak kadar büyük (${kanit}; ${measured}).` : `Belirgin bir ilişki görünmüyor (${measured}).`;
+    return `${head} ${tail} ${CAUSALITY_NOTE}`;
+  }
+  const strength = strengthWord(k.r);
+  const head = strength
+    ? `${k.xAdi} arttıkça ${k.yAdi} ${k.r > 0 ? "artıyor" : "azalıyor"} (${strength} ilişki).`
+    : `${k.xAdi} ile ${k.yAdi} birlikte değişmiyor.`;
+  const tail = kanit && strength ? `Bu ilişki tesadüf olmayacak kadar belirgin (${kanit}; ${measured}).` : `Belirgin bir ilişki görünmüyor (${measured}).`;
+  return `${head} ${tail} ${CAUSALITY_NOTE}`;
+}
+
+function sampleSentence(k: KanitHaritasi["orneklemUyarisi"]): string {
+  if (k.n < k.gereken) return `Yalnız ${sayiMetni(k.n, 0)} ${k.nesne} var; karar vermek için en az ${k.gereken} gerekir. ${CAUSALITY_NOTE}`;
+  return `Bazı gruplarda kayıt çok az; karar vermek için daha uzun bir dönem seçin. ${CAUSALITY_NOTE}`;
+}
+
+/** Gözlemi cümleye çevirir. */
 export function cumleKur(g: Gozlem): string | null {
   switch (g.kural) {
     case "veriYok":
@@ -104,8 +146,8 @@ export function cumleKur(g: Gozlem): string | null {
       return `${k.neden} ${sayiMetni(k.sayi, 0)} ${k.nesne} ${k.sonuc}.`;
     }
     case "korelasyon":
+      return analysisSentence(g.kanit);
     case "orneklemUyarisi":
-      // R3-ISTAT doldurur (kanıt dili: p < 0,01 "güçlü kanıt"; "İlişki, nedeni göstermez").
-      return null;
+      return sampleSentence(g.kanit);
   }
 }

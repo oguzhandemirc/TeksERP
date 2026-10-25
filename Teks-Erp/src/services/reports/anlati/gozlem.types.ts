@@ -78,10 +78,16 @@ export type EsikAsimiKanit = {
 };
 export type SessizlesenKanit = { ad: string; sessizGun: number; ortalamaAralik: number; siparisGunu: number; digerSessiz: number };
 export type ScopeNoteEvidence = { sayi: number; nesne: string; neden: string; sonuc: string };
-/** R3 YER TUTUCU: korelasyon kartı (r, p, n, maruziyet) — metni R3-ISTAT yazar. */
-export type KorelasyonKanit = { r: number; p: number; n: number; yontem: "pearson" | "spearman" | "kiKare" };
-/** R3 YER TUTUCU: örneklem uyarısı (n < 30 ya da beklenen hücre < 5). */
-export type SampleWarningEvidence = { n: number; enKucukBeklenen: number | null };
+/**
+ * Analiz cümlesinin kanıtı (R3-ISTAT). `p` kartta sayı olarak durur; cümle onu "güçlü kanıt /
+ * kanıt var / belirgin bir ilişki görünmüyor" diye söyler. `yer` = "Gece vardiyasında" (ekli hazır).
+ */
+export type KorelasyonKanit =
+  | { yontem: "kiKare"; tur: "oran"; n: number; p: number; nesne: string; olcuAdi: string; yer: string; birimSozu: string; oran: number; digerOran: number; kat: number | null }
+  | { yontem: "kiKare"; tur: "tablo"; n: number; p: number; nesne: string; yer: string; ikinciAd: string; pay: number; genelPay: number }
+  | { yontem: "pearson" | "spearman"; n: number; p: number; r: number; nesne: string; xAdi: string; yAdi: string };
+/** Örneklem uyarısı: n < 30 ya da beklenen hücre < 5 → kanıt cümlesi YERİNE söylenir. */
+export type SampleWarningEvidence = { n: number; enKucukBeklenen: number | null; nesne: string; gereken: number };
 
 export interface KanitHaritasi {
   veriYok: VeriYokKanit;
@@ -129,4 +135,6 @@ export type Seri = {
 export type ThresholdInput = EsikAsimiKanit & { toplam?: number };
 export type MusteriRitmi = { ad: string; siparisTarihleri: Date[] };
 export type ScopeNoteInput = ScopeNoteEvidence & { toplam?: number };
+/** Analiz girdisi: uyarı varsa korelasyon gözlemi DÜŞER (küçük örneklemde kanıt cümlesi yok). */
+export type AnalysisInput = { korelasyon: KorelasyonKanit | null; orneklem: SampleWarningEvidence | null };
 export type AnaSayiIfadesi = { yuklem: string; ozne?: string };
