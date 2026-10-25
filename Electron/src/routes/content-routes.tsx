@@ -98,6 +98,9 @@ import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/Finis
 import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
 import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
 import { CalculatorPage as CostCalculatorPage } from "@/pages/Cost/Calculator/CalculatorPage";
+import { QuotesPage } from "@/pages/Cost/Quotes/QuotesPage";
+import { QuoteNewPage } from "@/pages/Cost/Quotes/QuoteNewPage";
+import { QuoteDetailPage } from "@/pages/Cost/Quotes/QuoteDetailPage";
 import { InspectionRulesPage } from "@/pages/Quality/InspectionRules/InspectionRulesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
@@ -613,11 +616,12 @@ export const contentRoutes: RouteObject[] = [
   },
   // ── MALİYET & TEKLİF (MAL-3) — modül kapısı `route-modules.ts`ten (maliyetEnabled); izin karo
   // (`pages/Cost/tile-config.ts`) ve backend `cost.routes.ts` okuma uçlarıyla birebir (`cost:read`).
-  // Yazma (`cost:write` · `cost:settings`) sayfa İÇİNDE PermissionGate.
+  // Yazma (`cost:write` · `cost:settings`) sayfa İÇİNDE PermissionGate. Hub'a maliyet, teklif ya da fiyat listesi
+  // okuyan girer (MAL-5: satış rolü maliyet görmeden teklif açar); hub karoları kendi izniyle süzülür.
   {
     path: "cost",
     element: (
-      <ProtectedRoute requirePermission="cost:read">
+      <ProtectedRoute requireAnyPermission={["cost:read", "quote:read", "price-list:read"]}>
         <CostHubPage />
       </ProtectedRoute>
     ),
@@ -667,6 +671,31 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="cost:read">
         <CostCalculatorPage />
+      </ProtectedRoute>
+    ),
+  },
+  // Teklifler (MAL-5) — okuma `quote:read` (backend `quote.routes.ts` GET); yazma/dönüştürme sayfa İÇİNDE.
+  {
+    path: "cost/quotes",
+    element: (
+      <ProtectedRoute requirePermission="quote:read">
+        <QuotesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/quotes/new",
+    element: (
+      <ProtectedRoute requirePermission="quote:write">
+        <QuoteNewPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/quotes/:id",
+    element: (
+      <ProtectedRoute requirePermission="quote:read">
+        <QuoteDetailPage />
       </ProtectedRoute>
     ),
   },

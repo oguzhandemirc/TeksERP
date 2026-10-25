@@ -46,7 +46,7 @@ function yarnBody(y: YarnForm, withPicks: boolean): Record<string, string> {
   });
 }
 
-function adHocBody(a: AdHocForm, finishingRateCode: string): Record<string, unknown> | null {
+export function adHocBody(a: AdHocForm, finishingRateCode: string): Record<string, unknown> | null {
   const ends = toDecimalText(a.endsCount);
   const picks = toDecimalText(a.picksPerCm);
   if (!ends && !picks) return null;

@@ -7,6 +7,8 @@
 // ② `insertPreparedOrderTx` (8030 kart kilitleri) → ③ teklif claim'i ACCEPTED → CONVERTED + bağ. Kilit
 // sırası gelen kutusu emsaliyle aynı (8036 → 8030); teklif claim'i satır kilidi, advisory değil.
 // Bağ TEKLİFTE (`convertedOrderId`); `Order`a kolon yok. Replay: aynı token → aynı sipariş (dört durumlu boğaz).
+// MAL-5: ürünsüz ("yeni desen") kaleme ürün `lineItems[{lineNo,itemId}]` ile YALNIZ siparişte bağlanır —
+// kabul edilmiş teklif defterdir, kalemi değişmez.
 // =============================================================================
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -20,6 +22,27 @@ import type { OrderStatus } from "@prisma/client";
 
 async function orderService() {
   return (await import("../routes/order.routes")).orderService;
+}
+
+const MAX_LINE_ITEMS = 200;
+
+/** `lineItems` → kalem no → ürün; yalnız ürünsüz kalem bağlanır (ürünlü kalemin ürünü teklifte donmuştur). */
+function readLineItems(raw: unknown, lines: ReadonlyArray<{ lineNo: number; itemId: string | null }>): Map<number, string> {
+  const out = new Map<number, string>();
+  if (raw === undefined || raw === null) return out;
+  if (!Array.isArray(raw) || raw.length > MAX_LINE_ITEMS) throw AppError.badRequest("Ürün eşlemesi (lineItems) dizi olmalı.");
+  for (const e of raw as Array<Record<string, unknown> | null>) {
+    const lineNo = e?.lineNo;
+    const itemId = e?.itemId;
+    if (typeof lineNo !== "number" || !Number.isInteger(lineNo) || typeof itemId !== "string" || !/^[0-9a-f-]{36}$/i.test(itemId)) {
+      throw AppError.badRequest("Ürün eşlemesinde kalem no ve ürün zorunlu.");
+    }
+    const line = lines.find((l) => l.lineNo === lineNo);
+    if (!line) throw AppError.badRequest(`${lineNo}. kalem teklifte yok.`);
+    if (line.itemId) throw AppError.badRequest(`${lineNo}. kalemin ürünü teklifte zaten bağlı; değiştirilemez.`);
+    out.set(lineNo, itemId);
+  }
+  return out;
 }
 
 export interface ConvertResult { quote: QuoteRecord; orderId: string; orderNumber: string | null; replay: boolean }
@@ -38,7 +61,7 @@ function convertReplay(quoteId: string) {
 }
 
 /** `POST /api/quotes/:id/convert {clientToken}` — kabul edilmiş teklif → sipariş (tek tx). */
-export async function convertQuoteToOrder(quoteId: string, body: { clientToken?: unknown }, user: { userId?: string; permissions?: string[] }): Promise<ConvertResult> {
+export async function convertQuoteToOrder(quoteId: string, body: { clientToken?: unknown; lineItems?: unknown }, user: { userId?: string; permissions?: string[] }): Promise<ConvertResult> {
   if (!matchesPermission(user.permissions ?? [], "order:write")) {
     throw AppError.forbidden("Teklifi siparişe dönüştürmek için sipariş yazma izni de gerekir.", { code: "PERMISSION_DENIED", required: ["order:write"] });
   }
@@ -48,7 +71,8 @@ export async function convertQuoteToOrder(quoteId: string, body: { clientToken?:
     const q = await prisma.salesQuote.findUnique({ where: { id: quoteId }, include: { lines: { orderBy: { lineNo: "asc" } } } });
     if (!q) throw AppError.notFound("Teklif bulunamadı.");
     if (q.status !== "ACCEPTED") throw await quoteClaimError(prisma, quoteId, "convert");
-    const missing = q.lines.filter((l) => !l.itemId).map((l) => ({ lineNo: l.lineNo, description: l.description }));
+    const linked = readLineItems(body.lineItems, q.lines);
+    const missing = q.lines.filter((l) => !l.itemId && !linked.has(l.lineNo)).map((l) => ({ lineNo: l.lineNo, description: l.description }));
     if (missing.length) {
       throw AppError.badRequest("Ürünü bağlanmamış kalem var; siparişe dönüştürmeden önce kaleme ürün seçin.", { code: "QUOTE_LINE_ITEM_MISSING", lines: missing });
     }
@@ -59,7 +83,7 @@ export async function convertQuoteToOrder(quoteId: string, body: { clientToken?:
       currency: q.currency,
       clientToken,
       lines: q.lines.map((l) => ({
-        itemId: l.itemId, ...(l.colorId ? { colorId: l.colorId } : {}), quantity: l.quantity.toNumber(), unit: l.unit,
+        itemId: l.itemId ?? linked.get(l.lineNo), ...(l.colorId ? { colorId: l.colorId } : {}), quantity: l.quantity.toNumber(), unit: l.unit,
         unitPrice: l.unitPrice.toNumber(), ...(l.width ? { width: l.width.toNumber() } : {}),
       })),
     };

@@ -321,12 +321,14 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "quality/lab-tests", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Lab Testleri", requires: ["labtest:read"], capabilities: ["labtest:write", "labtest:approve"] },
   { key: "quality/certificates", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Sertifikalar", requires: ["certificate:read"], capabilities: ["certificate:write"] },
   // Maliyet & Teklif (MAL-3): görüntüleme `cost:read` (uçların okuma izni); yazma ekran İÇİ yetenek.
-  { key: "cost", app: "desktop", modul: "maliyetEnabled", title: "Maliyet & Teklif", requires: ["cost:read"], capabilities: [] },
+  // Hub'a maliyet, teklif ya da fiyat listesi okuyan girer (MAL-5) — giriş izni herhangi biri (route requireAnyPermission).
+  { key: "cost", app: "desktop", modul: "maliyetEnabled", title: "Maliyet & Teklif", requires: ["cost:read", "quote:read", "price-list:read"], capabilities: [] },
   { key: "cost/parameters", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Parametreleri", requires: ["cost:read"], capabilities: ["cost:settings"] },
   { key: "cost/yarn-prices", app: "desktop", modul: "maliyetEnabled", title: "İplik Maliyet Fiyatları", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/finishing-rates", app: "desktop", modul: "maliyetEnabled", title: "Fason Tarifeleri", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/items", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Kartları", requires: ["cost:read"], capabilities: ["cost:write"] },
-  { key: "cost/calculator", app: "desktop", modul: "maliyetEnabled", title: "Hızlı Hesaplayıcı", requires: ["cost:read"], capabilities: [] },
+  { key: "cost/calculator", app: "desktop", modul: "maliyetEnabled", title: "Hızlı Hesaplayıcı", requires: ["cost:read"], capabilities: ["quote:write"] },
+  { key: "cost/quotes", app: "desktop", modul: "maliyetEnabled", title: "Teklifler", requires: ["quote:read"], capabilities: ["quote:write", "quote:convert"] },
   // bildirim: yönetici bildirim profilleri (N4-SEMA izni; sayfa + rota + karo N4-PROFIL'de).
   { key: "system/notification-profiles", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim Profilleri", requires: ["settings:notifications", "admin:settings"], capabilities: [] },
 ];
@@ -441,10 +443,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
   // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
-  { code: "quote:read", reason: "Teklif ekranları MAL-5'te doğar — bu dilimde uçlar `/api/quotes` API'dir." },
-  { code: "quote:write", reason: "Teklif ekranları MAL-5'te doğar — bu dilimde uçlar `/api/quotes` API'dir." },
-  { code: "quote:convert", reason: "Teklif kabul/dönüştürme ekranı MAL-5'te doğar — bu dilimde uç API'dir." },
-  { code: "price-list:read", reason: "Fiyat listesi ekranları MAL-5'te doğar — bu dilimde uçlar `/api/price-lists` API'dir." },
   { code: "price-list:write", reason: "Fiyat listesi ekranları MAL-5'te doğar — bu dilimde uçlar `/api/price-lists` API'dir." },
   { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
 ];
