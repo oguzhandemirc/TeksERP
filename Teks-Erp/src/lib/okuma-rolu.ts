@@ -41,7 +41,7 @@ export const READ_ONLY_NOT_SECRET_COLUMNS: readonly string[] = [
   "entryReasonCode", "errorCode", "exportCode", "factoryDayKey", "fromReasonCode", "groupKey", "installationKeyId",
   "key", "keyValue", "lastErrorCode", "mustChangePassword", "pairKey", "paramsDigest", "payloadDigest", "pendingKey",
   "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rawCode", "rawStopCode",
-  "reasonCode", "routeKey", "rowKeys", "scopeKey", "sealGeneration", "sealState", "sealedAt", "sealedById",
+  "reasonCode", "routeKey", "rowKeys", "sampleCode", "scopeKey", "sealGeneration", "sealState", "sealedAt", "sealedById",
   "secretIssuedAt", "seriesKey", "setKey", "signalStopKey", "stopKey", "subjectKey", "suggestedGradeCode", "textDigest", "toReasonCode",
   "tokenVersion", "totpEnabledAt", "totpLastStep",
 ];

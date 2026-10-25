@@ -194,6 +194,9 @@ jobs:
       - name: Type-check (scripts + prisma)
         run: set -o pipefail; npm run typecheck:scripts 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
+        # scripts programı yerelde ~4.2 GB tutuyor; varsayılan V8 yığını sınırda OOM veriyordu (K4P-LAB, ölçüldü).
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
       # TEŞHİS: iş başarısız olursa logun sonunu PR'a yorum olarak yaz
       # (GitHub MCP'de Actions log erişimi yok → gerçek hatayı buradan okuruz).
       - name: Hata logunu PR'a yaz

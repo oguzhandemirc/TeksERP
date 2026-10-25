@@ -97,6 +97,8 @@ const DATE_ONLY_FIELDS = new Set([
   // KOPYA, DONAR; rapor ekseni. `MachineStopEvent.factoryDay` ile aynı gerekçe ve aynı yazım
   // (`factoryDayKeyUtcMidnight`, UTC gece yarısı).
   "MachineShiftStat.factoryDay",
+  // K4P-LAB: testin yapıldığı FABRİKA takvim günü (`factoryDayKeyUtcMidnight`), an değil.
+  "LabTest.testedOn",
   // Bildirim günlük sayacının FABRİKA GÜNÜ (2026-10-24, N1-SEMA) — `(factoryDay, kind)` tekil anahtarının
   // parçası, `constants/time.ts` diliminden hesaplanır; `MachineStopEvent.factoryDay` ile aynı gerekçe.
   "NotificationDailyStats.factoryDay",

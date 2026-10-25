@@ -330,6 +330,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/quality-inspection.service.ts", sembol: "createInspectionTx" }],
     ["src/services/quality-inspection.service.ts"], { yari: true }),
 
+  // K4P-LAB (2026-10-25): DURUM + onayda donan snapshot — onaylı/iptal testin satırı silinmez,
+  // ters yol `voidedAt` damgası (gerekçeli). DRAFT hard delete meşrudur: defter.md sınıfı
+  // "deftere hiç yazmamış taslak" (onaysız test hiçbir rapora/sayıya girmez; `deleteDraftLabTest`).
+  D("LabTest", "lab testi — onayda donar; iptal `voidedAt` damgası (DRAFT ya da APPROVED → VOIDED, approvedAt korunur), yalnız DRAFT fiziksel silinir",
+    { tur: "DURUM_IPTAL", kolon: "voidedAt" },
+    [{ dosya: "src/services/lab-test.service.ts", sembol: "voidLabTest" }],
+    ["src/services/lab-test.service.ts"], { yari: true, silen: ["src/services/lab-test.service.ts"] }),
+
   D("ShipmentEvent", "sevkiyat durum defteri; tek damga ikinci turda birincisini ezerdi",
     { tur: "KARSI_OLAY", enumAdi: "ShipmentEventType", ciftler: [["DISPATCHED", "UNDISPATCHED"], ["INVOICED", "INVOICE_CLEARED"]] },
     [{ dosya: "src/services/helpers/shipment-event.helper.ts", sembol: "writeShipmentEvent" }],

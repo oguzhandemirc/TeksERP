@@ -704,6 +704,12 @@ model User {
   rollInspectionsVoided     RollInspection[]   @relation("RollInspectionVoidedBy")
   fourPointRuleSetsCreated  FourPointRuleSet[] @relation("FourPointRuleSetCreatedBy")
   fourPointRuleSetsUpdated  FourPointRuleSet[] @relation("FourPointRuleSetUpdatedBy")
+  labTestTypesCreated       LabTestType[]      @relation("LabTestTypeCreatedBy")
+  labTestTypesUpdated       LabTestType[]      @relation("LabTestTypeUpdatedBy")
+  labTestsCreated           LabTest[]          @relation("LabTestCreatedBy")
+  labTestsUpdated           LabTest[]          @relation("LabTestUpdatedBy")
+  labTestsApproved          LabTest[]          @relation("LabTestApprovedBy")
+  labTestsVoided            LabTest[]          @relation("LabTestVoidedBy")
 
   @@map("users")
 }
@@ -3331,6 +3337,7 @@ model Item {
   // prod'da temizlik (Mükerrer Kayıtlar paneli) bitene dek index EKSİK olabilir;
   // `test_db_invariants` orada kırmızı = "enforce bekliyor" (migration dosyasını yeniden koş).
   fourPointRuleSets  FourPointRuleSet[]
+  labTests           LabTest[]
 
   @@unique([nameFold])
   @@index([itemType])
@@ -3848,6 +3855,7 @@ model Roll {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   inspections          RollInspection[]
+  labTests             LabTest[]
 
   @@index([itemId])
   @@index([parentRollId])
@@ -4512,6 +4520,7 @@ model Batch {
   mergedChildren Batch[]                 @relation("BatchMergeLineage")
   rolls          Roll[]
   dispatches     SubcontractorDispatch[]
+  labTests       LabTest[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -5358,6 +5367,31 @@ enum RunningCap {
   YARD
 }
 
+/// K4P-LAB: lab test türünün sonuç biçimi. SCALE = gri/mavi skala (0,5 adım; 4,5 = "4-5").
+enum LabResultKind {
+  NUMERIC
+  SCALE
+  PASS_FAIL
+}
+
+/// K4P-LAB: DRAFT düzenlenir · APPROVED donar · VOIDED gerekçeli iptal (DRAFT ya da APPROVED'dan).
+enum LabTestStatus {
+  DRAFT
+  APPROVED
+  VOIDED
+}
+
+enum LabVerdict {
+  PASS
+  FAIL
+}
+
+/// AUTO = sınır snapshot'ından hesaplandı · MANUAL = sınırsız ya da PASS_FAIL türde elle.
+enum LabVerdictSource {
+  AUTO
+  MANUAL
+}
+
 /// Muayene belgesi — DEFTER (`PrintedDocument` emsali): içerik doğuşta donar, yalnız
 /// damgalar yazılır. Ters yol DAMGA: revizyon `supersededAt` (+ `supersedesId` zinciri),
 /// iptal `voidedAt`. Silme yolu YOK. Tek aktif (rollId, phase) partial unique
@@ -5483,6 +5517,108 @@ model FourPointRuleBand {
   @@unique([ruleSetId, sortOrder])
   @@index([qualityGradeId])
   @@map("four_point_rule_bands")
+}
+
+/// K4P-LAB lab test türü kataloğu — yapılandırma (③b): sonuç satırı birim/sınır/skala
+/// snapshot'ı taşıdığı için değişiklik geçmişi değiştirmez; audit + pasife alma.
+/// `scaleMax` yalnız SCALE'de (CHECK `lab_test_types_kind_ck`).
+model LabTestType {
+  id         String        @id @default(uuid()) @db.Uuid
+  code       String        @unique @db.VarChar(32)
+  name       String        @db.VarChar(80)
+  method     String?       @db.VarChar(64)
+  resultKind LabResultKind
+  scaleMax   Int?          @db.SmallInt
+  unit       String?       @db.VarChar(16)
+  specMin    Decimal?      @db.Decimal(12, 3)
+  specMax    Decimal?      @db.Decimal(12, 3)
+  sortOrder  Int           @default(0)
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @db.Timestamptz
+  updatedAt  DateTime      @updatedAt @db.Timestamptz
+
+  results LabTestResult[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("LabTestTypeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("LabTestTypeUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("lab_test_types")
+}
+
+/// K4P-LAB lab testi — DURUM + onayda donan snapshot (plan §3.4). DRAFT'ta sonuçlar
+/// düzenlenir; onaydan sonra hiçbir sonuç yazılmaz (`status='DRAFT'` atomik WHERE'i).
+/// DRAFT hard delete meşrudur (deftere hiç yazmamış taslak); diğer durumlarda iptal damgası.
+/// `batchId` top verildiyse topun partisinden, `itemId` top/partiden doğuşta snapshot'lanır.
+model LabTest {
+  id           String        @id @default(uuid()) @db.Uuid
+  /// Numara serisi `labTest` (LAB…) — doğuşta materyalize.
+  testNo       String        @unique @db.VarChar(40)
+  rollId       String?       @db.Uuid
+  batchId      String?       @db.Uuid
+  itemId       String        @db.Uuid
+  sampleCode   String?       @db.VarChar(64)
+  labName      String?       @db.VarChar(120)
+  /// Fabrika takvim günü (`factoryDayKeyUtcMidnight`) — anı değil günü anlatır.
+  testedOn     DateTime      @db.Date
+  note         String?       @db.VarChar(500)
+  status       LabTestStatus @default(DRAFT)
+  approvedAt   DateTime?     @db.Timestamptz
+  approvedById String?       @db.Uuid
+  voidedAt     DateTime?     @db.Timestamptz
+  voidedById   String?       @db.Uuid
+  voidReason   String?       @db.VarChar(500)
+  clientToken  String?       @unique @db.Uuid
+  createdAt    DateTime      @default(now()) @db.Timestamptz
+  updatedAt    DateTime      @updatedAt @db.Timestamptz
+
+  roll       Roll?           @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  batch      Batch?          @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  item       Item            @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  approvedBy User?           @relation("LabTestApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  voidedBy   User?           @relation("LabTestVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  results    LabTestResult[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("LabTestCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("LabTestUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([rollId])
+  @@index([batchId])
+  @@index([itemId])
+  @@index([testedOn, id])
+  @@map("lab_tests")
+}
+
+/// K4P-LAB sonuç satırı — ebeveyn testin parçası (DRAFT silinince Cascade ile gider).
+/// Birim, sınır, tür biçimi ve skala tavanı yazım anında snapshot'lanır; SCALE değeri
+/// 0,5 adımlı (CHECK `lab_test_results_scale_ck`). Test başına tür başına tek satır.
+model LabTestResult {
+  id            String           @id @default(uuid()) @db.Uuid
+  labTestId     String           @db.Uuid
+  testTypeId    String           @db.Uuid
+  resultKind    LabResultKind
+  scaleMax      Int?             @db.SmallInt
+  value         Decimal?         @db.Decimal(12, 3)
+  unit          String?          @db.VarChar(16)
+  specMin       Decimal?         @db.Decimal(12, 3)
+  specMax       Decimal?         @db.Decimal(12, 3)
+  verdict       LabVerdict
+  verdictSource LabVerdictSource
+  note          String?          @db.VarChar(500)
+  createdAt     DateTime         @default(now()) @db.Timestamptz
+  updatedAt     DateTime         @updatedAt @db.Timestamptz
+
+  labTest  LabTest     @relation(fields: [labTestId], references: [id], onDelete: Cascade)
+  testType LabTestType @relation(fields: [testTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([labTestId, testTypeId])
+  @@index([testTypeId])
+  @@map("lab_test_results")
 }
 
 /// Top üzerinde yapılan somut işlem log'u (Kurşun geçildi, QC2 bitti, Tambur kararı, paketleme vb.).
