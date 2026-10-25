@@ -54,6 +54,11 @@
   border-color: hsl(var(--primary));
   color: hsl(var(--primary));
 }
+/* Paket kuralı `.gjs-block svg{fill:currentColor}` çizgi ikonlarını dolu kareye çeviriyor (e2e BT5 PNG). */
+.tekserp-designer-blocks .gjs-block svg {
+  fill: none;
+}
+
 .tekserp-designer-blocks .gjs-block-label {
   font-size: 11px;
 }

@@ -12,7 +12,7 @@
 // aynası iki yönde ölçülür: kurucunun ürettiği her koşul geçer, reddettiği her girdi
 // backend'de de düşer; istemci filtre listesi izin listesinin alt kümesidir.
 //   §1 fikstür sözleşmesi güncel · §2 derleme + yönerge sayıları · §3 önizleme (7 senaryo)
-//   §4 koşul aynası · §5 filtre aynası · §6 sayfa ayarı aynası · §7 GrapesJS çıktısı (e2e ölçümü)
+//   §4 koşul aynası · §5 filtre aynası · §6 sayfa ayarı aynası · §7 GrapesJS getHtml çıktısı (e2e BT12 ölçümü)
 // GEREKLİ Mİ: evet — editör ile derleyici iki ayrı projede; kopuşu yalnız bu ölçer.
 // =============================================================================
 import { readFileSync, writeFileSync } from "node:fs";
@@ -133,14 +133,19 @@ async function main(): Promise<void> {
   fx.pageSettings.conflicting.forEach((p, i) => check(`çakışan sayfa ayarı #${i + 1} reddedilir`, !accepts(p)));
 
   console.log("\n§7 — GrapesJS getHtml çıktısı (e2e ölçümü)");
+  const directiveCounts = (h: string): string =>
+    ["data-each", "data-if", "data-alan", "data-filtre", "data-tablo", "data-kolon", "data-bag-src"].map((d) => count(h, new RegExp(`\\s${d}=`, "g"))).join(",");
   for (const g of fx.grapesHtml ?? []) {
     const r = compileDirectives(g.html, "VISUAL");
     check(`${g.ad}: derlenir, tr[data-each] korunmuş`, r.errors.length === 0 && /<tr[^>]*data-each=/.test(g.html), r.errors.map((e) => e.mesaj).join("; "));
+    const src = fx.samples.find((x) => x.ad === g.ad);
+    check(`${g.ad}: yönerge sayıları kaynakla eşit`, !!src && directiveCounts(src.html) === directiveCounts(g.html), `${src ? directiveCounts(src.html) : "kaynak yok"} → ${directiveCounts(g.html)}`);
   }
-  if (!fx.grapesHtml?.length) console.log("(ölçüm yok — e2e BT7 yazar)");
+  if (!fx.grapesHtml?.length) console.log("(ölçüm yok — e2e BT12 yazar: TASARIMCI_GRAPES_YAZ=1)");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  if (fail) process.exit(1);
+  // Önizleme hattı Prisma havuzunu açık tutar; çıkış açıkça verilmezse süreç asılı kalır.
+  process.exit(fail ? 1 : 0);
 }
 
 main().catch((e) => {
