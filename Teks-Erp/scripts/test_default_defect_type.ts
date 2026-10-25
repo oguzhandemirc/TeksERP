@@ -139,10 +139,13 @@ async function main(): Promise<void> {
   check("§6 KursunQc'de 'GENEL' literali yok", !/['"]GENEL['"]/.test(kq));
 
   // §4 — statik
+  // KQ-D7: üç yazar (kursunFinish dahil) tek boğazdan yazar — çözüm orada, yazımdan ÖNCE.
   const inv = readFileSync(join(__dirname, "..", "src", "services", "inventory.service.ts"), "utf8");
-  const iRes = inv.indexOf("resolveDefaultDefectTypeTx(prisma, rawErrors)");
-  const iWrite = inv.indexOf("tx.rollError.createMany");
-  check("§4 kursunFinish: varsayılan çözümü rollError yazımından ÖNCE", iRes > 0 && iWrite > iRes);
+  const gw = readFileSync(join(__dirname, "..", "src", "services", "helpers", "roll-defect.helper.ts"), "utf8");
+  const iRes = gw.indexOf("resolveDefaultDefectTypeTx(tx, input.defects)");
+  const iWrite = gw.indexOf("tx.rollError.create");
+  check("§4 kursunFinish: varsayılan çözümü rollError yazımından ÖNCE (tek boğaz)",
+    iRes > 0 && iWrite > iRes && /recordRollDefectsTx\(tx,/.test(inv) && !/rollError\.create/.test(inv));
   const tambur = readFileSync(join(__dirname, "..", "..", "mobil", "src", "screens", "Modules", "Tambur", "TamburScreen.tsx"), "utf8").replace(/\/\/.*$/gm, "");
   check("§4 mobil Tambur `defectTypes[0]` uydurmuyor", !/defectTypes\[0\]/.test(tambur));
   check("§4 mobil Tambur varsayılanı `isDefault` ile seçiyor", /defectTypes\.find\(\(d\) => d\.isDefault\)/.test(tambur));

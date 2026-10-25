@@ -108,6 +108,7 @@ import {
 } from "./kursun-bypass.service";
 import { TAMBUR_ENTRY_SOURCES } from "../constants/tambur-entry-sources";
 import { processMeterNumber } from "./helpers/roll-error-meter.helper";
+import { recordRollDefectTx } from "./helpers/roll-defect.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 
@@ -198,6 +199,10 @@ interface TamburRollErrorSummary {
   /// hata" olarak girer; aralık tutulmaz. Tambur kesim kararı operatörün.
   startMeter: number;
   errorType: string | null;
+  /** KQ-D7 künyesi: hatanın açıldığı istasyon (adımsız eski kayıtta null). */
+  detectedStationName?: string | null;
+  /** KQ-D7: açıldığı adım — tablet bu adımınkini "kendi", öncekileri gri gösterir. */
+  detectedAtStepId?: string | null;
 }
 
 interface TamburRollSummary {
@@ -235,6 +240,8 @@ interface TamburStepSummary {
   stationId: string;
   stationCode: string;
   stationName: string;
+  /** KQ-D7: istasyonda muayene açık mı — tablet "HATA GİR" çekmecesini buna göre çizer. */
+  inspectionEnabled: boolean;
   rolls: TamburRollSummary[];
 }
 
@@ -432,7 +439,10 @@ export class TamburService {
             errors: {
               where: { ...ACTIONABLE_ROLL_ERROR_WHERE, isProcessed: false },
               orderBy: { startMeter: "asc" },
-              select: { id: true, startMeter: true, errorType: true },
+              select: {
+                id: true, startMeter: true, errorType: true, origin: true, detectedAtStepId: true,
+                detectedAtStep: { select: { station: { select: { name: true } } } },
+              },
             },
           },
         },
@@ -466,6 +476,8 @@ export class TamburService {
           id: e.id,
           startMeter: processMeterNumber(e),
           errorType: e.errorType,
+          detectedStationName: e.detectedAtStep?.station.name ?? null,
+          detectedAtStepId: e.detectedAtStepId,
         })),
         batchId: m.roll.batchId ?? null,
         batchNumber: bi?.batchNumber ?? null,
@@ -563,6 +575,7 @@ export class TamburService {
         stationId: step.stationId,
         stationCode: step.station.code,
         stationName: step.station.name,
+        inspectionEnabled: stepCanApplyQuality(step.station),
         rolls,
       },
     };
@@ -1857,6 +1870,7 @@ export class TamburService {
         stationId: step.stationId,
         stationCode: step.station.code,
         stationName: step.station.name,
+        inspectionEnabled: stepCanApplyQuality(step.station),
         rolls,
       },
     };
@@ -1877,117 +1891,46 @@ export class TamburService {
     },
     userId?: string
   ): Promise<ApiResponse<RollError>> {
-    const roll = await prisma.roll.findUnique({ where: { id: data.rollId } });
+    const roll = await prisma.roll.findUnique({ where: { id: data.rollId }, select: { currentStepId: true, barcode: true } });
     if (!roll) throw AppError.notFound("Top bulunamadı");
-
-    if (data.startMeter > Number(roll.currentQty)) {
-      throw AppError.badRequest(
-        `Hata metresi (${data.startMeter}) topun metrajını (${roll.currentQty}) aşıyor`
-      );
-    }
-
-    const defectType = await prisma.defectType.findUnique({
-      where: { id: data.defectTypeId },
-    });
-    if (!defectType) throw AppError.notFound("Hata tipi bulunamadı");
-    if (!defectType.isActive) {
-      throw AppError.badRequest(
-        `Hata tipi pasif durumda (${defectType.name}) — aktif bir tip seçin`
-      );
-    }
-
-    // Top bu Tambur adımında olmalı
+    // Top bu Tambur adımında olmalı (operatöre Tambur diliyle; helper tx içinde yeniden ölçer).
     if (roll.currentStepId !== data.stepId) {
       throw AppError.badRequest(
         `Top (${roll.barcode}) şu anda bu Tambur adımında değil`
       );
     }
-    const step = await prisma.workOrderStep.findUnique({
-      where: { id: data.stepId },
-      select: { station: { select: { kind: true, ...STEP_QUALITY_SELECT } } },
-    });
-    // Tür kontrolü EKRAN AİLESİ içindir (Tambur ucu yalnız Tambur adımında);
-    // hata yazma ayrıca MUAYENE yeteneği ister (KQ-D1, kalite ikizi).
-    if (!step || step.station.kind !== StationKind.TAMBUR) {
-      throw AppError.badRequest("Bu adım Tambur tipinde değil");
-    }
-    if (!stepCanApplyQuality(step.station)) {
-      throw AppError.badRequest(QUALITY_STEP_ERROR);
-    }
 
-    // Mükerrer engeli (KK2 KursunQcService.reportError ile AYNI kural — iki giriş
-    // yolu arası parite): aynı top + aynı metre + aynı hata tipi tekrar girilemez.
-    // RollError'da DB-level @@unique YOK → çift-tık/bayat-liste/retry'de sessiz
-    // mükerrer kayıt + şişen açık-hata sayaçları olurdu. Aynı metrede FARKLI tip serbest.
-    const existing = await prisma.rollError.findFirst({
-      where: {
-        ...ACTIONABLE_ROLL_ERROR_WHERE,
-        rollId: data.rollId,
-        startMeter: data.startMeter,
-        defectTypeId: defectType.id,
-      },
-      select: { id: true },
-    });
-    if (existing) {
-      throw AppError.conflict(
-        `Bu metrede (${data.startMeter}) "${defectType.name}" hatası zaten kayıtlı`,
-        { code: "DUPLICATE_ROLL_ERROR", existingErrorId: existing.id }
-      );
-    }
-
-    // Üstteki findFirst SIRALI çift-tıkı yakalar; bu try/catch EŞZAMANLI yarışı
-    // DB-level partial unique (roll_errors_roll_meter_defect_uq) üzerinden kapatır:
-    // iki paralel istek findFirst'te boş görse de ikincinin create'i P2002 alır → 409.
-    let err: RollError;
-    try {
-      err = await prisma.$transaction(async (tx) => {
-        // ATOMİK CLAIM (finalize ile yarış): create'ten önce top satır-kilitlenir
-        // ve hâlâ bu Tambur adımında IN_PRODUCTION olduğu tx İÇİNDE doğrulanır.
-        // Yukarıdaki currentStepId pre-check'i check-then-act — eşzamanlı finalize
-        // (closeOrphanRollErrors) parent'ı tüketirken bu create ondan SONRA commit
-        // ederse RollError sonsuza dek açık yetim kalırdı (TAMBUR_CONSUMED topun
-        // hatasını hiçbir ekran bir daha karara bağlayamaz). Kilit sayesinde
-        // finalize bu hatayı ya görür (NO_CUT kapatır) ya da bu çağrı 409 alır.
-        const claim = await tx.roll.updateMany({
-          where: {
-            id: data.rollId,
-            status: RollStatus.IN_PRODUCTION,
-            currentStepId: data.stepId,
-          },
-          data: { updatedAt: new Date() },
-        });
-        if (claim.count === 0) {
-          throw AppError.conflict(
-            "Top bu sırada başka bir işlemle değişti (finalize edilmiş olabilir). Listeyi yenileyip tekrar deneyin."
-          );
-        }
-        return tx.rollError.create({
-          data: {
-            rollId: data.rollId,
-            startMeter: data.startMeter,
-            defectTypeId: defectType.id,
-            errorType: defectType.name,
-            isProcessed: false,
-            detectedAtStepId: data.stepId,
-            detectedByUserId: userId ?? null,
-          },
-        });
+    // Kapı (Tambur ekran ailesi + muayene), tip, mükerrer kuralları TEK boğazda
+    // (`recordRollDefectTx`, KQ-D7) — KK2 ile AYNI kurallar, parite kopyası yok.
+    const rec = await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM (finalize ile yarış): create'ten önce top satır-kilitlenir
+      // ve hâlâ bu Tambur adımında IN_PRODUCTION olduğu tx İÇİNDE doğrulanır;
+      // aksi halde eşzamanlı finalize'dan SONRA commit eden hata sonsuza dek
+      // açık yetim kalırdı (closeOrphanRollErrors onu göremezdi).
+      const claim = await tx.roll.updateMany({
+        where: {
+          id: data.rollId,
+          status: RollStatus.IN_PRODUCTION,
+          currentStepId: data.stepId,
+        },
+        data: { updatedAt: new Date() },
       });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        const existing = await prisma.rollError.findFirst({
-          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: data.rollId, startMeter: data.startMeter, defectTypeId: defectType.id },
-          select: { id: true },
-        });
-        if (existing) {
-          throw AppError.conflict(
-            `Bu metrede (${data.startMeter}) "${defectType.name}" hatası zaten kayıtlı`,
-            { code: "DUPLICATE_ROLL_ERROR", existingErrorId: existing.id }
-          );
-        }
+      if (claim.count === 0) {
+        throw AppError.conflict(
+          "Top bu sırada başka bir işlemle değişti (finalize edilmiş olabilir). Listeyi yenileyip tekrar deneyin."
+        );
       }
-      throw e;
-    }
+      return recordRollDefectTx(tx, {
+        rollId: data.rollId,
+        stepId: data.stepId,
+        startMeter: data.startMeter,
+        defectTypeId: data.defectTypeId,
+        userId,
+        stationGate: "TAMBUR",
+      });
+    });
+    const err = rec.error;
+    const created = rec.auditPayload.defects[0];
 
     await AuditService.log({
       userId,
@@ -1998,8 +1941,8 @@ export class TamburService {
         rollId: data.rollId,
         stepId: data.stepId,
         startMeter: data.startMeter,
-        defectTypeId: defectType.id,
-        errorType: defectType.name,
+        defectTypeId: created.defectTypeId,
+        errorType: created.errorType,
         source: "TAMBUR",
       },
     });
@@ -2007,7 +1950,7 @@ export class TamburService {
     return {
       success: true,
       data: err,
-      message: `${defectType.name} · ${data.startMeter}. metrede`,
+      message: `${created.errorType} · ${data.startMeter}. metrede`,
     };
   }
 
