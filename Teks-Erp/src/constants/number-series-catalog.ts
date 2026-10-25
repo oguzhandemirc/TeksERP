@@ -250,6 +250,9 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     seedDigits: 4,
     seedSeparator: "",
   },
+  // MAL-4: teklif/liste numarası doğuşta materyalize edilir; revizyon AYNI numarayı taşır (sayım revizyonları da sayar).
+  { key: "salesQuote", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor; numara oluşturma tx'inde doğar, revizyon yeni sıra ÇEKMEZ (MAL-4).", uretec: "services/sales-quote.service.ts" }, panelGroup: "depo-ticaret", countTable: { model: "salesQuote", field: "quoteNo", birim: "belge" }, label: "Satış teklifi no", seedPrefix: "TKF", seedDateSegment: YYYY, seedDigits: 5, seedSeparator: "" },
+  { key: "priceList", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor; numara taslak oluşturmada doğar, revizyon aynı numarayı taşır (MAL-4).", uretec: "services/price-list.service.ts" }, panelGroup: "depo-ticaret", countTable: { model: "priceList", field: "listNo", birim: "belge" }, label: "Fiyat listesi no", seedPrefix: "FL", seedDateSegment: YYYY, seedDigits: 4, seedSeparator: "" },
 
   // ── Üretim / depo ──────────────────────────────────────────────────────────
   {

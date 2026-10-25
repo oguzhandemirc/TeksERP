@@ -112,6 +112,8 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   // ── Bildirim tercih katmanı (N4-MOTOR)
   NOTIFICATION_PROFILE: onEkli("bildirim", iyelik("profil", "i", "e", "i")),
   NOTIFICATION_FACTORY_DEFAULT: onEkli("bildirim fabrika", iyelik("varsayılan", "ı", "a", "ı")),
+  SALES_QUOTE: onEkli("satış", iyelik("teklif", "i", "e", "i")),
+  PRICE_LIST: onEkli("fiyat", sIyelik("liste", "i", "e")),
 };
 
 /** Tablonun çekimleri; yoksa null (yedek cümle "<Modül> kaydı" kurar). */

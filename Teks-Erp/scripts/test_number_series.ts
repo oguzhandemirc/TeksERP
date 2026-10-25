@@ -176,6 +176,9 @@ const BEKLENEN: Record<string, string> = {
   item: "STK-000001",
   // GİB e-İrsaliye: 3 karakter seri + 4 hane yıl + 9 hane sıra (sabit biçim).
   eIrsaliye: `EIR${ymd.slice(0, 4)}000000001`,
+  // MAL-4: teklif yıl + 5 hane, fiyat listesi yıl + 4 hane.
+  salesQuote: `TKF${ymd.slice(0, 4)}00001`,
+  priceList: `FL${ymd.slice(0, 4)}0001`,
 };
 
 let uyum = 0;

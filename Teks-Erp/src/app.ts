@@ -101,6 +101,8 @@ import chequeDeliveryNoteRoutes from "./routes/cheque-delivery-note.routes";
 import yarnRoutes from "./routes/yarn.routes";
 import itemPriceRoutes from "./routes/item-price.routes";
 import costRoutes from "./routes/cost.routes";
+import quoteRoutes from "./routes/quote.routes";
+import priceListRoutes from "./routes/price-list.routes";
 import purchaseOrderRoutes from "./routes/purchase-order.routes";
 import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import stockCountRoutes from "./routes/stock-count.routes";
@@ -613,6 +615,8 @@ app.use("/api/yarn", yarnRoutes);
 app.use("/api/item-prices", itemPriceRoutes);
 // MAL-1: maliyet girdileri — router kendi kapısını taşır (`requireMaliyetEnabled`).
 app.use("/api/cost", costRoutes);
+app.use("/api/quotes", quoteRoutes);
+app.use("/api/price-lists", priceListRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 // Depolar arası transfer — kendi `verifyToken + requireDepoMultiEnabled`
 // kapısını taşır. Depo TANIMI ve DEFTERİ (`/api/warehouses`) rejimsiz KALIR;
