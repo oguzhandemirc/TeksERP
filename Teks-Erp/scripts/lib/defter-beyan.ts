@@ -323,10 +323,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/printed-document.service.ts", sembol: "reissue" }],
     ["src/services/printed-document.service.ts", "src/services/traveler-card.service.ts"], { yari: true }),
 
-  // K4P-SEMA (2026-10-24): yazarı MOTOR dilimi (`createInspectionTx`); o gün `yazan`
-  // ve `tersYazan` (revise/void) birlikte dolar — §4c boş ikiliyi sessiz sayar.
+  // K4P-MOTOR (2026-10-25): tek yazar `createInspectionTx`; ters yol aynı serviste damga claim'i
+  // (`revise` → supersededAt, `voidInspection` → voidedAt).
   D("RollInspection", "muayene belgesi — içerik doğuşta donar; revizyon `supersededAt` damgası + yeni satır, iptal ikinci damga `voidedAt` (PrintedDocument emsali), silme yolu yok",
-    { tur: "DAMGA", kolon: "supersededAt" }, [], [], { yari: true }),
+    { tur: "DAMGA", kolon: "supersededAt" },
+    [{ dosya: "src/services/quality-inspection.service.ts", sembol: "createInspectionTx" }],
+    ["src/services/quality-inspection.service.ts"], { yari: true }),
 
   D("ShipmentEvent", "sevkiyat durum defteri; tek damga ikinci turda birincisini ezerdi",
     { tur: "KARSI_OLAY", enumAdi: "ShipmentEventType", ciftler: [["DISPATCHED", "UNDISPATCHED"], ["INVOICED", "INVOICE_CLEARED"]] },

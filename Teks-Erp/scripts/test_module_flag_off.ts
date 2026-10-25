@@ -266,17 +266,14 @@ const MODULLER: ModulTanimi[] = [
     sondalar: modulUclari("depoMultiEnabled"),
   },
   {
-    // KALİTE GÜVENCE (K4P zemin, 2026-10-24): ön koşulsuz (KK1 üretimsiz de açık).
+    // KALİTE GÜVENCE (K4P zemin 2026-10-24; MOTOR router'ları 2026-10-25): ön koşulsuz (KK1 üretimsiz de açık).
     alan: "kaliteGuvenceEnabled",
     dbAnahtari: "kaliteGuvence.enabled",
     middleware: "requireKaliteGuvenceEnabled",
     okuyucu: "readKaliteGuvenceEnabled",
     modulKodu: "kaliteGuvence",
-    routeDosyalari: [],
-    sondalar: [],
-    rotasiz:
-      "K4P zemin dilimi kapıyı önden kurdu; muayene/kural/lab/sertifika router'ları MOTOR · LAB · SERT " +
-      "dilimlerinde iner — o gün route dosyası + `profil-kapi-haritasi` sondası bu satıra yazılır, gerekçe silinir.",
+    routeDosyalari: ["routes/quality-inspection.routes.ts", "routes/four-point-rule.routes.ts"],
+    sondalar: modulUclari("kaliteGuvenceEnabled"),
   },
   {
     alan: "productionEnabled",
