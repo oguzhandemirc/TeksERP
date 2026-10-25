@@ -3,15 +3,20 @@ import { printHtml } from '../../services/printHtml';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { labelService } from '../../services/label.service';
-import { peripheralService } from '../../services/peripheral.service';
-import { useSessionStore } from '../../store/sessionStore';
+import { resolveBtPrinter } from '../../services/resolveBtPrinter';
 import {
-  isBtPrinterSupported,
   printRaw,
   printRawBytes,
   ensurePrinterPaired,
 } from '../../services/btPrinter.service';
 import { useMobileRasterEnabled } from '../../hooks/useFeatureFlags';
+import {
+  DIALOG_TARGET,
+  btTarget,
+  printJobAttachment,
+  reportPrintOutcome,
+  type PrintStep,
+} from '../../services/printJob.service';
 
 /** Basılacak çuval etiketi işi. null → hiçbir şey yapılmaz. */
 export interface SackLabelJob {
@@ -74,31 +79,28 @@ export function SackLabelPrinter({ job, onDone }: Props) {
 
       // Yazıcı OPERATÖR SEÇİMİ DEĞİL — aktif oturumun YERİNE bağlı BT yazıcı
       // backend'den çözülür (fail-closed: oturum/SPP yoksa BT yolu denenmez).
-      let btPrinterAddr: string | null = null;
-      if (isBtPrinterSupported() && useSessionStore.getState().active != null) {
-        try {
-          const printers = await peripheralService.getForSession('LABEL_PRINTER');
-          const spp = printers.find(
-            (p) => p.connectionType === 'BLUETOOTH_SPP' && !!p.address && !p.simulate,
-          );
-          btPrinterAddr = spp?.address ?? null;
-        } catch {
-          btPrinterAddr = null; // çözüm hatası → HTML yoluna düş
-        }
-      }
+      const btPrinter = await resolveBtPrinter();
+      const btPrinterAddr = btPrinter?.address ?? null;
       const viaBt = btPrinterAddr != null;
+      // Yazdırma geçmişi künyesi: hangi yazıcı (BT: kayıt + MAC) ve akışın hangi adımı.
+      const target = btPrinter && btPrinterAddr ? btTarget(btPrinter) : DIALOG_TARGET;
+      const startedAt = Date.now();
+      let step: PrintStep = 'fetch';
       // Yerde BT yazıcı varsa diyalogsuz baskı beklenir — HTML diyaloğuna ASLA düşme.
       const directOnly = viaBt;
       let usedBt = false;
       try {
         if (viaBt && btPrinterAddr) {
           const native = await labelService.getSackNative(sackId, rasterEnabledRef.current);
+          step = 'lang';
           if (!['PPLA', 'PPLB', 'ZPL'].includes(native.language) || !native.content) {
             throw new Error(
               'Yazıcının dili çözülemedi — Tanımlar → Donanım’da bu yerin yazıcısını ve dilini kontrol edin.',
             );
           }
+          step = 'pair';
           await ensurePrinterPaired(btPrinterAddr);
+          step = 'send';
           if (native.encoding === 'base64') {
             await printRawBytes(btPrinterAddr, atob(native.content));
           } else {
@@ -109,11 +111,13 @@ export function SackLabelPrinter({ job, onDone }: Props) {
         if (!usedBt && !directOnly) {
           const html = await labelService.getSackHtml(sackId);
           if (!html.startsWith('<')) throw new Error('Etiket HTML alınamadı');
+          step = 'dialog';
           await printHtml({ html, margins: { left: 0, top: 0, right: 0, bottom: 0 } });
         }
         // Baskı izi — yalnız gerçek baskıdan SONRA (önizleme iz bırakmaz).
         try {
-          await labelService.recordSackPrintEvent(sackId);
+          // Künye aynı çağrıda: başarı satırı iş ucundan doğar, `/print-jobs`a gitmez.
+          await labelService.recordSackPrintEvent(sackId, printJobAttachment(target, startedAt));
         } catch {
           // İz yazımı best-effort: baskı gerçekleşti, audit hatası akışı düşürmez.
         }
@@ -121,10 +125,19 @@ export function SackLabelPrinter({ job, onDone }: Props) {
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Toast.show({ type: 'success', text1: 'Çuval etiketi basıldı', text2: label });
       } catch (err) {
-        if (!mountedRef.current) return;
         const msg = (err as Error).message ?? '';
         // İptal yalnız HTML (expo-print) yolunda olur; BT'ye gittiyse her hata gerçek.
         const isCancel = !usedBt && /did not complete|cancel/i.test(msg);
+        // Hata/iptal Yazdırma geçmişine — ekran kapanmış olsa da (kalıcı kuyruk).
+        reportPrintOutcome({
+          subject: { subjectKind: 'ETIKET_CUVAL', subjectTable: 'sacks', subjectId: sackId, subjectNo: label },
+          target,
+          startedAt,
+          status: isCancel ? 'IPTAL' : 'HATA',
+          step,
+          error: err,
+        });
+        if (!mountedRef.current) return;
         void Haptics.notificationAsync(
           isCancel ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Error,
         );

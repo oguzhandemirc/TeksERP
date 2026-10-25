@@ -20,11 +20,13 @@ import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import {
   PRINT_STATUSES,
   PRINT_SUBJECT_KINDS,
+  PRINT_SUBJECT_LABELS,
   PRINT_SUBJECT_TABLES,
   isPrintSubjectKind,
   type PrintStatus,
 } from "../constants/print-subject-catalog";
 import { tokenReplay } from "./helpers/token-replay.helper";
+import { emitNotification } from "./helpers/notification-emit.helper";
 import { printJobPurgeCutoff } from "./helpers/print-job-retention.helper";
 import type { PrintJobRequestContext } from "./helpers/print-job-context.helper";
 import { clip, normalizeMeta, type PrintJobInput, type PrintJobReport } from "./helpers/print-job-input.helper";
@@ -100,6 +102,51 @@ async function buildRow(input: PrintJobInput): Promise<Prisma.PrintJobUncheckedC
   };
 }
 
+// ─── Bildirim: `yazici.hata` (A4) ─────────────────────────────────────────────
+
+const NOTIFY_REASON_MAX = 120;
+
+/** Bildirim yükü — yalnız görüntü dizeleri (katalog `payloadAlanlari`); içerik/sır yok. */
+async function printerErrorPayload(data: Prisma.PrintJobUncheckedCreateInput): Promise<Record<string, string>> {
+  let yaziciAd = data.printerName ?? null;
+  if (!yaziciAd && data.peripheralDeviceId) {
+    const p = await prisma.peripheralDevice.findUnique({ where: { id: data.peripheralDeviceId }, select: { name: true } });
+    yaziciAd = p?.name ?? null;
+  }
+  const u = data.userId ? await prisma.user.findUnique({ where: { id: data.userId }, select: { fullName: true } }) : null;
+  const yuk: Record<string, string> = {
+    yaziciAd: yaziciAd ?? (data.transport === "SISTEM_PENCERESI" ? "Yazdırma penceresi" : "Bilinmeyen"),
+    kisi: u?.fullName ?? "Sistem",
+    tur: PRINT_SUBJECT_LABELS[data.subjectKind as keyof typeof PRINT_SUBJECT_LABELS] ?? data.subjectKind,
+    neden: (data.errorMessage ?? data.errorCode ?? "Bilinmeyen hata").slice(0, NOTIFY_REASON_MAX),
+  };
+  // Konu kimliği yoksa alan YAZILMAZ: derin bağlantı listeye düşer, birleştirme konu anahtarına.
+  const yazici = data.peripheralDeviceId ?? data.printerName ?? null;
+  if (yazici) yuk.yazici = yazici;
+  return yuk;
+}
+
+/**
+ * Satırın TEK doğum noktası. HATA satırı `yazici.hata` bildirimini AYNI tx'te yayar: satır
+ * düşerse bildirim de yok; replay satırı yeniden yaratmadığı için bildirim de tekrarlanmaz.
+ * Bildirim bayrağı kapalıyken emit no-op'tur (bugünkü davranış bayt-eşit).
+ */
+async function createPrintJobRow(data: Prisma.PrintJobUncheckedCreateInput): Promise<{ id: string }> {
+  if (data.status !== "HATA") return prisma.printJob.create({ data, select: { id: true } });
+  const payload = await printerErrorPayload(data);
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.printJob.create({ data, select: { id: true } });
+    await emitNotification(
+      tx,
+      "yazici.hata",
+      { type: "printer", id: data.peripheralDeviceId ?? null, key: `printer:${payload.yazici ?? "bilinmeyen"}` },
+      payload,
+      { actorUserId: data.userId ?? null },
+    );
+    return row;
+  });
+}
+
 function isClientTokenDuplicate(e: unknown): boolean {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
 }
@@ -112,7 +159,7 @@ function isClientTokenDuplicate(e: unknown): boolean {
 export async function recordPrintJob(input: PrintJobInput): Promise<void> {
   try {
     if (injectedFault) throw injectedFault;
-    await prisma.printJob.create({ data: await buildRow(input) });
+    await createPrintJobRow(await buildRow(input));
     health.yazilan++;
   } catch (e) {
     if (input.clientToken && isClientTokenDuplicate(e)) return;
@@ -204,7 +251,7 @@ export async function reportPrintJob(ctx: PrintJobRequestContext, body: PrintJob
       bytes: body.bytes ?? null,
       meta: body.meta ?? null,
     });
-    const created = await prisma.printJob.create({ data: row, select: { id: true } });
+    const created = await createPrintJobRow(row);
     health.yazilan++;
     return getPrintJob(created.id);
   });
