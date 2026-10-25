@@ -22,7 +22,7 @@ export function expiryBadge(r: Pick<CertificateRow, "active" | "daysLeft" | "rev
 }
 
 export const TONE_CLASS: Record<ExpiryTone, string> = {
-  expired: "border-destructive/40 bg-destructive/10 text-destructive",
+  expired: "border-destructive/40 bg-destructive/10 text-destructive dark:border-red-400/50 dark:text-red-300",
   soon: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
   ok: "border-border text-muted-foreground",
   inactive: "border-border bg-muted text-muted-foreground",

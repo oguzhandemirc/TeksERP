@@ -90,7 +90,7 @@ function SummaryStrip({ s, active, onPick }: { s: CertificateSummary; active: Ce
   const items: Array<{ key: CertificateStatusFilter; label: string; n: number; cls?: string }> = [
     { key: "active", label: "Etkin", n: s.active },
     { key: "expiring", label: `Süresi dolan / ${s.days} gün içinde dolacak`, n: s.expiring, cls: "text-amber-700 dark:text-amber-300" },
-    { key: "expired", label: "Süresi dolmuş", n: s.expired, cls: "text-destructive" },
+    { key: "expired", label: "Süresi dolmuş", n: s.expired, cls: "text-destructive dark:text-red-400" },
     { key: "revoked", label: "İptal", n: s.revoked },
   ];
   return (
