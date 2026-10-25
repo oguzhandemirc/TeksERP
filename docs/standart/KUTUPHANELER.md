@@ -99,6 +99,14 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### @codemirror/{state,view,language,commands,autocomplete,lint,lang-html,lang-css,lang-json} + @lezer/highlight@1.2.5 · Electron · 2026-10-25
+1. Problem      : Belge Tasarımcısı kod sekmeleri (plan §4, T4: HTML+Liquid / CSS / Sayfa JSON; sözleşmeden tamamlama, sunucu hatası altı çizili); ORTAK: rapor kod kipi (R2-KOD) aynı seti kullanır
+2. Alternatifler: elle `<textarea>` (renk/tamamlama/altı çizili hata yok) · Monaco (~3 MB, D1'de elendi) · `@uiw/react-codemirror` + `@codemirror/lang-liquid` (patron 2026-10-25: sarmalayıcı yerine çekirdek set; Liquid tamamlaması sözleşmeden kendi kaynağımız)
+3. Boyut/biçim  : saf JS, native YOK, ESM; yalnız `DocumentDesigner/code/` import eder → tasarımcının tembel parçası ([KU-17]); geçişli `@codemirror/lang-javascript`, `@lezer/*`, `style-mod`, `w3c-keyname`, `crelt` (MIT)
+4. Bakım        : 6.x, TAM SABİT, TEK `@codemirror/state` sürümü (iki kopya = "Unrecognized extension value" çöküşü); pin `test_dependency_contract §(a)`
+5. Lisans       : MIT (hepsi)
+6. Dağıtım      : rebuild GEREKMEZ; tema kendi uzantımız (panel CSS değişkenleri, açık/koyu) — `theme-one-dark` YOK
+
 ### grapesjs@0.23.8 · Electron · 2026-10-24
 1. Problem      : Belge Tasarımcısı (plan D1/T2) — sürükle-bırak blok, katman, CSS stil paneli; HTML/CSS Liquid şablonuna gider
 2. Alternatifler: elle yazmak (aylar) · Puck / Craft.js (HTML kod kipi yok) · Studio SDK / Unlayer (ücretli) · `@grapesjs/react` (EKLENMEDİ: tek `useEffect` + `appendTo` yeter) — patron kararı D1
@@ -137,15 +145,6 @@ Dördü de mobilde §2'de kayıtlı aynı satırın ([KU-01]) patron uygulaması
 4. Bakım        : Expo SDK 54 pinli (`npx expo install`, `~0.32.17`); SDK yükseltmesiyle birlikte gider ([KU-12])
 5. Lisans       : MIT
 6. Dağıtım      : OTA ile GİTMEZ — yeni APK/AAB + `runtimeVersion` artışı; bu iş main'e indikten sonraki İLK tablet sürümü APK turudur (borç: `docs/kurallar/surum-yayin.md`); internet push (FCM/APNs) bu paketle aynı köprüden ayrı dilimde gelir
-
-### @noble/curves@2.4.0 + @noble/hashes@2.4.0 · mobil · 2026-10-01
-1. Problem      : tablet APK künyesinin Ed25519 imzası + kurulum dosyasının SHA-256 özeti Hermes'te doğrulanmalı (node:crypto YOK); §2.3 "İmza doğrulama · özet" satırı
-2. Alternatifler: elle yazmak (G6'da GEÇİCİ olarak yazıldı — elle imza doğrulaması klasik risk, kullanıcı noble'ı onayladı) · `expo-crypto` (native → APK ister, Ed25519 yok) · `tweetnacl` (S < L denetlemez) · `node-forge` (expo CLI'ın geçişli bağımlılığı, çalışma anı değil)
-3. Boyut/biçim  : saf JS, native modül YOK (autolinking listesinde yok, `android/`/`expo-module.config.json`/kurulum betiği yok); ESM-only; pakete giren yalnız `ed25519.js` + `sha2.js` modülleri
-4. Bakım        : 2.4.0 (2026-08-27); TAM SABİT (ESM-only + kripto: bilinçli yükseltme) — `test_dependency_contract §(a)` korur
-5. Lisans       : MIT (ikisi de)
-6. Dağıtım      : mobilde OTA (native yok); ancak depo parmak izi `dependencies`i saydığı için ilk OTA `--parmak-izini-kabul-et` ister (gerekçe: saf JS) — `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md` §4d
-7. KALDIRILDI  : 2026-10-08 — tek kullanıcısı (tablet APK künyesi doğrulaması) K-14'te kalktı; `src/lib/kripto/` ve iki paket çıktı. Saf JS: Play paketinin native'i değişmez, ama parmak izi `dependencies`i saydığından önceki tabanla kıyaslayan ilk OTA yine `--parmak-izini-kabul-et` ister
 
 Önceki tek karar sonucu "paket YOK"tur:
 **backend log kanalı** (2026-09-07) — `pino`/`winston` yerine **elle yazmak**
