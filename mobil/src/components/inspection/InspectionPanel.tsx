@@ -17,6 +17,7 @@ import type { DefectType } from '../../types/models';
 import DefectRuler from './DefectRuler';
 import DeletePointModal from './DeletePointModal';
 import InspectionEntry from './InspectionEntry';
+import InspectionSummaryStrip, { type InspectionSummary } from './InspectionSummaryStrip';
 import {
   isCriticalDefect,
   rulerMaxFor,
@@ -35,6 +36,7 @@ export {
   type InspectionPriorDefect,
   type InspectionSizeClass,
 } from './inspectionModel';
+export type { InspectionSummary } from './InspectionSummaryStrip';
 
 export interface InspectionPanelProps {
   defectTypes: DefectType[];
@@ -53,6 +55,12 @@ export interface InspectionPanelProps {
   compact?: boolean;
   /** Cetvel + girişin altına konak eki (ör. işlem paneli) — giriş bloğuyla aynı sütunda. */
   children?: React.ReactNode;
+  /** K4P özet şeridi: sayım + sunucu önizlemesi (konak hesaplar/çeker; bileşen yalnız gösterir). */
+  summary?: InspectionSummary;
+  /** 4 puan: metre boşsa kayıt konumsuz (`meter: null`) düşer. */
+  meterOptional?: boolean;
+  /** false: metre alanı numpad'i kendiliğinden almaz (varsayılan true — süreç konakları). */
+  meterAutoActivate?: boolean;
 }
 
 interface RulerSectionProps {
@@ -116,7 +124,9 @@ export default function InspectionPanel(props: InspectionPanelProps) {
 
   const submit = (defectTypeId: string, sizeClass?: InspectionSizeClass) => {
     if (readOnly) return;
-    const v = validateDefectInput(props.meterInput, defectTypeId, ownDefects, props.maxMeter);
+    // 4 puan muayenesi: metre boşsa kayıt konumsuz düşer (plan §4.1 md. 2).
+    const unplaced = props.meterOptional === true && props.meterInput.trim() === '';
+    const v = unplaced ? ({ ok: true, meter: null } as const) : validateDefectInput(props.meterInput, defectTypeId, ownDefects, props.maxMeter);
     if (!v.ok) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Toast.show({ type: 'error', text1: v.title, text2: v.detail });
@@ -126,7 +136,9 @@ export default function InspectionPanel(props: InspectionPanelProps) {
   };
   const onTypePress = (defectTypeId: string) => {
     if (readOnly) return;
-    if (sizeClassMode) setPendingTypeId(defectTypeId);
+    // Sabit puanlı türde boyut sorulmaz: tek dokunuş kaydeder (plan §4.1 md. 2).
+    const fixed = defectTypes.find((d) => d.id === defectTypeId)?.fixedPoints != null;
+    if (sizeClassMode && !fixed) setPendingTypeId(defectTypeId);
     else submit(defectTypeId);
   };
   const onSizePick = (sizeClass: InspectionSizeClass) => {
@@ -159,8 +171,12 @@ export default function InspectionPanel(props: InspectionPanelProps) {
             onTypePress={onTypePress}
             onSizePick={onSizePick}
             onSizeCancel={() => setPendingTypeId(null)}
+            sizeClassMode={sizeClassMode}
+            meterAutoActivate={props.meterAutoActivate}
+            meterOptional={props.meterOptional}
           />
         )}
+        {props.summary && <InspectionSummaryStrip summary={props.summary} />}
         {props.children}
       </View>
       <DeletePointModal
