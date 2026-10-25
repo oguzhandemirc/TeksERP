@@ -22,6 +22,7 @@ import { renderKartelaCekiHtml } from "../src/services/document-render/kartela-c
 import { renderFasonCekiHtml } from "../src/services/document-render/fason-ceki.html";
 import { renderFasonDirectShipHtml } from "../src/services/document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml } from "../src/services/document-render/fason-receipt.html";
+import { renderInvoiceInternalHtml, renderPaymentReceiptHtml } from "../src/services/document-render/finance-doc.html";
 import { renderGoodsReceiptHtml, renderStockCountHtml, renderWarehouseTransferHtml } from "../src/services/document-render/warehouse-doc.html";
 import { fmtDateTime } from "../src/services/document-render/fmt-date";
 import { tokenizeHtml, type HtmlToken } from "../src/services/document-render/template-html.tokenizer";
@@ -42,7 +43,9 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 // docType başına TEK satır, alfabetik (port dilimleri ekler).
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
+  INVOICE_INTERNAL: (s, m) => renderInvoiceInternalHtml(s, m as Parameters<typeof renderInvoiceInternalHtml>[1]),
   KARTELA_DISPATCH: (s, m) => renderKartelaCekiHtml(s, m as Parameters<typeof renderKartelaCekiHtml>[1]),
+  PAYMENT_RECEIPT: (s, m) => renderPaymentReceiptHtml(s, m as Parameters<typeof renderPaymentReceiptHtml>[1]),
   QUALITY_CERTIFICATE: (s, m) => renderQualityCertificateHtml(s, m as Parameters<typeof renderQualityCertificateHtml>[1]),
   RETURN_DISPATCH: (s, m) => renderReturnDispatchHtml(s, m as Parameters<typeof renderReturnDispatchHtml>[1]),
   SHIPMENT_DISPATCH: (s, m) => renderShipmentDispatchHtml(s, m as Parameters<typeof renderShipmentDispatchHtml>[1]),

@@ -6,7 +6,9 @@
 // =============================================================================
 
 export { goodsReceiptContract } from "./goods-receipt"; // GOODS_RECEIPT
+export { invoiceInternalContract } from "./invoice-internal"; // INVOICE_INTERNAL
 export { kartelaDispatchContract } from "./kartela-dispatch"; // KARTELA_DISPATCH
+export { paymentReceiptContract } from "./payment-receipt"; // PAYMENT_RECEIPT
 export { qualityCertificateContract } from "./quality-certificate"; // QUALITY_CERTIFICATE
 export { returnDispatchContract } from "./return-dispatch"; // RETURN_DISPATCH
 export { shipmentDispatchContract } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
