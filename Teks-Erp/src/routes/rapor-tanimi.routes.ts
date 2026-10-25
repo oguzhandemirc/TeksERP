@@ -41,6 +41,8 @@ const listQuery = z
     kategoriId: z.string().uuid().optional(),
     durum: z.enum(definitions.DEFINITION_STATUSES).optional(),
     ara: z.string().max(100).optional(),
+    /** Sistem raporunun katalog anahtarı (`sales/siparis-talep`) — temel rapor sayfası kendi tanımını (ön ayarlar) bulur. */
+    anahtar: z.string().regex(/^[a-z]+\/[a-z0-9-]+$/, "Geçersiz rapor anahtarı").max(64).optional(),
     cursor: z.string().uuid().optional(),
     limit: z.coerce.number().int().min(1).max(100).default(50),
   })
@@ -201,6 +203,8 @@ router.get("/anlik-goruntuler/:id", wrap(async (req, res) => ok(res, await snaps
  *     tags: [Reports]
  *     summary: Görünür rapor tanımları (liste + cursor + özet)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: anahtar, required: false, schema: { type: string }, description: "Sistem raporunun katalog anahtarı (ön ayar/varyant kaydı için tanımı bulur)" }
  *     responses:
  *       200: { description: "items, nextCursor, ozet" }
  *   post:

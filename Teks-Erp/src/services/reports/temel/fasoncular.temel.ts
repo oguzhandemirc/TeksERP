@@ -9,10 +9,11 @@
 import { anlatiUret } from "../anlati/anlati";
 import type { DateRange } from "../_shared";
 import { filterEcho, type ReportFilterInput } from "../_filters";
+import type { Secenek } from "../_secenekler";
 import { getSubcontractScorecard, type SubcontractScorecardRow } from "../subcontract-scorecard.report.service";
 import type { GrafikBlok, ParametreBeyani, TabloBlok } from "../sunum/sunum.types";
 import { OLCU_BY_KIMLIK } from "../semantik/tanimlar";
-import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, rangeParameters, type CoreReportResult } from "./_common";
+import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, optionsOf, rangeParameters, rankedPool, type CoreReportResult } from "./_common";
 import type { CompareMode } from "../_shared";
 
 export const SUBCONTRACT_FILTER_KEYS = ["subcontractorId", "itemId", "colorId"] as const;
@@ -24,7 +25,10 @@ export interface SubcontractorsReportInput {
   filters: Pick<ReportFilterInput, "subcontractorId" | "itemId" | "colorId">;
 }
 
-const listParam = (ad: string, etiket: string, v: string[] | undefined): ParametreBeyani => ({ ad, etiket, tur: "cokluSecim", deger: v && v.length ? v : null });
+const listParam = (ad: string, etiket: string, v: string[] | undefined, options?: readonly Secenek[]): ParametreBeyani => {
+  const secenekler = optionsOf(options);
+  return { ad, etiket, tur: "cokluSecim", deger: v && v.length ? v : null, ...(secenekler ? { secenekler } : {}) };
+};
 
 function subcontractorTable(rows: readonly SubcontractScorecardRow[]): TabloBlok {
   return {
@@ -114,11 +118,12 @@ export async function buildSubcontractorsReport(input: SubcontractorsReportInput
       ],
       parametreler: [
         ...rangeParameters(range, input.compareMode),
-        listParam("subcontractorId", "Fasoncu", filters.subcontractorId),
-        listParam("itemId", "Kumaş", filters.itemId),
-        listParam("colorId", "Renk", filters.colorId),
+        listParam("subcontractorId", "Fasoncu", filters.subcontractorId, card.secenekler.subcontractorId),
+        listParam("itemId", "Kumaş", filters.itemId, card.secenekler.itemId),
+        listParam("colorId", "Renk", filters.colorId, card.secenekler.colorId),
       ],
       uyarilar: capped.uyarilar,
     },
+    kirilimlar: { fasoncu: rankedPool(rows, (r) => r.dispatchedQty) },
   };
 }
