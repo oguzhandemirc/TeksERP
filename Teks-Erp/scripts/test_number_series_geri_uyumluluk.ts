@@ -471,7 +471,8 @@ const L2_YOLU: Record<string, L2Yolu> = {
       const r = await createLabTest({ rollId: top.id, note: `${damga} E3` }, await testActorId());
       return { id: r.id, kod: r.testNo };
     },
-    sil: async (id) => { await prisma.labTestResult.deleteMany({ where: { labTestId: id } }); await prisma.labTest.deleteMany({ where: { id } }); },
+    // Defter satırı burada silinmez: fikstür topuyla birlikte teardown topluyor (`test_defter_ters_yol` §10b2).
+    sil: async () => {},
   },
   freeDocument: {
     not: "FreeDocumentService.create: yalnız başlık + gövde.",
