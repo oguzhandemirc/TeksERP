@@ -163,6 +163,18 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       why: "Donmuş maliyet fotoğrafı; iki kumaşın sürüm geçmişi tek kumaşta birleştirilemez — hangisinin yürürlükte kalacağı muhasebe kararıdır (MAL-2).",
     },
     { kind: "MOVE", model: "StandardCostLine", table: "standard_cost_lines", column: "yarnItemId", label: "Standart maliyet kalemi ipliği" },
+    // MAL-4: teklif kalemi ürüne referans bağdır (tekillik yok). Fiyat listesi satırı liste içinde ürün+renk başına tektir.
+    { kind: "MOVE", model: "SalesQuoteLine", table: "sales_quote_lines", column: "itemId", label: "Teklif kalemi" },
+    {
+      kind: "CONFLICT",
+      model: "PriceListLine",
+      table: "price_list_lines",
+      column: "itemId",
+      label: "Fiyat listesi satırı",
+      uniqueOn: ["priceListId", "itemId", "colorId"],
+      policy: "BLOCK",
+      why: "Aynı listede iki ürünün de satırı varsa birleşen ürüne iki fiyat düşer — hangisinin geçerli olduğu satış kararıdır (MAL-4).",
+    },
     {
       kind: "CONFLICT",
       model: "CustomerLabSpec",

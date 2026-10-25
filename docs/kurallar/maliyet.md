@@ -19,6 +19,15 @@
 - **[ÇEKİRDEK]** Ölçülmüş çözgü firesi yalnız ÖNERİDİR (`oneriler.warpWaste`, kaynak + levent sayısıyla); girdiye kendiliğinden girmez, kullanıcı `overrides.warpWastePct` + `warpWasteMeasured: true` ile uygular (kaynak `OLCULMUS`, uyarı `WARP_WASTE_MEASURED`). · bekçi: `test_maliyet_girdi`
 - **[ÇEKİRDEK]** Önizleme hiçbir şey yazmaz (sürüm de audit de). · bekçi: `test_standart_maliyet_surum` (§6b)
 
+## Teklif ve fiyat listesi (MAL-4)
+
+- **[ÇEKİRDEK]** Teklif SENT olduktan sonra DEĞİŞMEZ: kalem/başlık uçları tx başında `claimDraftQuoteTx` (DRAFT kilidi) alır, düzeltme revizyondur (eski SUPERSEDED + aynı numara `revisionNo+1` DRAFT, kalemler snapshot'la kopya); her geçiş `claimQuoteTx` atomik claim'i, geçiş tablosu `QUOTE_TRANSITIONS`, ölü küme `QUOTE_DEAD_STATUSES`; "süresi doldu" durum değil türetilmiş bayraktır (`isQuoteExpired` ↔ `quoteExpiredWhere`). · bekçi: `test_teklif_durum`
+- **[ÇEKİRDEK]** Teklif fiyat önerisi TEK zincirdir (`helpers/quote-price.helper.ts`): yayınlı müşteri listesi > yayınlı genel liste > `ItemPrice(SALE)` (köprü, ticaret açıksa) > maliyet × (1 + kâr); başka dosya `suggestSalePrice` çağırmaz, yayınlı liste satırı okumaz. · bekçi: `test_quote_price_single_source`
+- **[ÇEKİRDEK]** Teklif/fiyat listesi yanıtında maliyet alanları OPT-IN: `cost:read` yoksa kalem maliyeti, kâr, maliyet önerisi, fotoğraf, toplam maliyet, marj DÜŞER; iç not yalnız `quote:write`; her yanıt `quoteViewFor`dan geçer. · bekçi: `test_teklif_uc`
+- **[ÇEKİRDEK]** Fiyat listesi yayını tek tx'tir (aynı müşteri+dövizin yayınlısı ARCHIVED + bu taslak PUBLISHED; seddi `price_lists_published_uq`); yayınlı liste DEĞİŞMEZ, düzeltme revizyondur. · bekçi: `test_fiyat_listesi`
+- **[ÇEKİRDEK]** Teklifi siparişe dönüştürmek İKİ izin ister (rota `quote:convert` + servis `order:write`); sipariş ve teklif claim'i TEK tx'te (8036 token kilidi İLK ifade, sonra sipariş kart kilitleri), bağ teklifte (`convertedOrderId`), aynı `clientToken` aynı siparişi döndürür. · bekçi: `test_teklif_siparis`
+- **[ÇEKİRDEK]** Kâr varsayılanı TEK yoldan çözülür (`cost-calc.service` `resolveMarkup`: gövde ?? aktif parametre seti, yoksa 400); teklif, fiyat listesi ve hesaplayıcı önizlemesi aynı çözücüyü çağırır. · bekçi: `test_teklif_gorunurluk`
+
 ## Panel (`Electron/src/pages/Cost/`)
 
 - **[ÇEKİRDEK]** Maliyet ekranları sayı HESAPLAMAZ ve kuru 1 VARSAYMAZ: her tutar `POST /api/cost/preview` ya da kayıtlı sürüm alanıdır, istemci yalnız TR biçimine çevirir (`shared/format.ts`, metin → Intl); kur yoksa sunucunun `eksikler`i gösterilir. · bekçi: Electron `pages/Cost/cost-no-client-math.test.ts`
@@ -35,8 +44,9 @@
 
 Panel (Electron vitest): `src/pages/Cost` (`cost-no-client-math`, `cost-access`, `shared/format`, `shared/errors`, `shared/CostBreakdown`, `shared/useCostPreview`, `shared/fx-missing`, `Items/service`, `Calculator/calculator-body`, `Calculator/CalculatorPage`), `src/pages/Items/ItemCostLink`
 
-Backend: `test_screen_catalog`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`
+Backend: `test_screen_catalog`, `test_teklif_durum`, `test_teklif_numara`, `test_teklif_uc`, `test_teklif_siparis`, `test_teklif_gorunurluk`, `test_fiyat_listesi`, `test_quote_price_single_source`, `test_db_invariants`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
 - `docs/history/arsiv/2026-10.md` — "MAL-2 maliyet motoru" notu.
+- `docs/history/arsiv/2026-10.md` — "MAL-4 satış teklifi + fiyat listesi" notu.

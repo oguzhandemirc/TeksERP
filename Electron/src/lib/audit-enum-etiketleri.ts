@@ -262,6 +262,17 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // FinishingBasis
   RAW_M: "Ham metre",
   FINISHED_M: "Mamul metre",
+  // SalesQuoteStatus (MAL-4; DRAFT/CANCELLED/SUPERSEDED ortak)
+  SENT: "Gönderildi",
+  ACCEPTED: "Kabul Edildi",
+  REJECTED: "Reddedildi",
+  CONVERTED: "Siparişe Dönüştü",
+  // QuotePriceSource (MAL-4; MANUAL ortak)
+  COST_PLUS: "Maliyet + kâr",
+  PRICE_LIST: "Fiyat listesi",
+  ITEM_PRICE: "Ürün satış fiyatı",
+  // PriceListStatus (MAL-4; DRAFT ortak, ARCHIVED override)
+  PUBLISHED: "Yayında",
   // CostComponent (standart maliyet kalemi)
   WARP_YARN: "Çözgü ipliği",
   WEFT_YARN: "Atkı ipliği",
@@ -348,6 +359,8 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "LAB_TEST_TYPE.resultKind": { SCALE: "Gri ölçek (1–5)" },
   // LabVerdictSource.AUTO — global "Otomatik uygulanır" özellik modudur; hüküm sınırdan hesaplandı
   "LAB_TEST.verdictSource": { AUTO: "Sınırdan otomatik" },
+  // PriceListStatus.ARCHIVED (MAL-4) — global "Pasif" ürün yaşam döngüsü dili; liste için yayından kalkmıştır.
+  "PRICE_LIST.status": { ARCHIVED: "Arşivlendi" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
