@@ -1,11 +1,12 @@
-import type { ReactNode } from "react";
-import { DndContext } from "@dnd-kit/core";
+import { useState, type ReactNode } from "react";
+import { DndContext, DragOverlay } from "@dnd-kit/core";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { CatalogCube } from "../custom-api";
 import { DataTree } from "../data/DataTree";
 import { FilterBuilder } from "../data/FilterBuilder";
 import { Wells } from "../data/Wells";
 import { useDataPanel } from "../data/useDataPanel";
+import { fieldName, type DataField } from "../data/wells-model";
 import { BlockProperties } from "./BlockProperties";
 import { removeBlock, resizeBlock, setPageBreak, updateBlock, type DefinitionBlock, type DefinitionBody, type LayoutItem } from "./layout-model";
 
@@ -32,8 +33,17 @@ interface Props {
 export function LayoutWorkspace({ draft, current, catalog, editable, fallbackCube, apply, onDeselect, palette, canvas }: Props) {
   const panel = useDataPanel({ draft, catalog: catalog.data, selected: current?.block ?? null, editable, apply });
   const q = current?.block.sorgu;
+  const [dragged, setDragged] = useState<DataField | null>(null);
   return (
-    <DndContext sensors={panel.sensors} onDragEnd={panel.onDragEnd}>
+    <DndContext
+      sensors={panel.sensors}
+      onDragStart={(e) => setDragged((e.active.data.current?.field as DataField | undefined) ?? null)}
+      onDragCancel={() => setDragged(null)}
+      onDragEnd={(e) => {
+        setDragged(null);
+        panel.onDragEnd(e);
+      }}
+    >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_minmax(0,20rem)]">
         <div className="flex min-w-0 flex-col gap-4">
           <DataTree cubes={catalog.data} loading={catalog.isLoading} failed={catalog.isError} activeCube={q?.kup ?? fallbackCube} targetsFor={panel.targetsFor} onAdd={panel.onAdd} />
@@ -70,6 +80,9 @@ export function LayoutWorkspace({ draft, current, catalog, editable, fallbackCub
           )}
         </aside>
       </div>
+      <DragOverlay dropAnimation={null}>
+        {dragged ? <span className="inline-flex rounded-full border border-primary bg-card px-2.5 py-1 text-xs shadow-md">{fieldName(dragged)}</span> : null}
+      </DragOverlay>
       {panel.cube && q ? (
         <FilterBuilder
           open={panel.filterFor !== null}

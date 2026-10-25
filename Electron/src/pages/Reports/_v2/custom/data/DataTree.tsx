@@ -138,7 +138,7 @@ export function DataTree({ cubes, loading, failed, activeCube, targetsFor, onAdd
       {term.trim() && list.length > 0 && !list.some((c) => [...c.olculer.map((m) => m.ad + " " + m.aciklama), ...c.boyutlar.map((d) => d.ad)].some((n) => foldedIncludes(n, term.trim()))) ? (
         <p className="px-1 text-xs text-muted-foreground">“{term.trim()}” ile eşleşen alan yok.</p>
       ) : null}
-      <p className="px-1 text-[0.7rem] text-muted-foreground">Alanı sağdaki kuyulara sürükleyin ya da “+” ile ekleyin.</p>
+      {list.length > 0 ? <p className="px-1 text-[0.7rem] text-muted-foreground">Bir bölüm seçin; alanı “Bölümün verisi” kuyularına sürükleyin ya da “+” ile ekleyin.</p> : null}
     </section>
   );
 }

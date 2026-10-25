@@ -33,7 +33,6 @@ function WellBox({ well, check, issues, children, action }: WellBoxProps) {
   const { setNodeRef, isOver, active } = useDroppable({ id: wellDropId(well), data: { well } });
   const dragged = active?.data.current?.field as DataField | undefined;
   const verdict = isOver && dragged ? check(dragged, well) : null;
-  const general = issues.filter((i) => i.index === null);
   return (
     <div
       ref={setNodeRef}
@@ -57,7 +56,7 @@ function WellBox({ well, check, issues, children, action }: WellBoxProps) {
           {verdict.message}
         </p>
       ) : null}
-      {general.map((i) => (
+      {issues.map((i) => (
         <p key={i.mesaj} className="text-xs text-destructive">
           {i.mesaj}
         </p>
@@ -119,7 +118,7 @@ export function Wells({ block, cube, issues, warning, check, onRemove, onRemoveF
 
   return (
     <section aria-label="Kuyular" className="flex flex-col gap-2">
-      <h2 className="text-sm font-semibold">Veri</h2>
+      <h2 className="text-sm font-semibold">Bölümün verisi</h2>
       {wells.map((w) =>
         w === "suzgec" ? (
           <WellBox key={w} well={w} check={check} issues={forWell(w)} action={<Button type="button" size="sm" variant="ghost" className="h-6 gap-1 px-1.5 text-xs" onClick={onOpenFilter}><Filter className="h-3 w-3" /> Süzgeç kur</Button>}>
