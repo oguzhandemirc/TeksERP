@@ -14,6 +14,8 @@ import { resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { importKey } from "../import-key";
+import { normalizeItemWidthBody } from "../../helpers/four-point-catalog-fields.helper";
+import { AppError } from "../../../utils/app-error";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -75,6 +77,13 @@ const COLUMNS: ImportColumn[] = [
     help: "Yalnız İPLİK kalemlerinde anlamlıdır ve çözgü kartı açmanın ön koşuludur (kg = tel × denye × metre ÷ 9.000.000). Ondalık ayracı virgül ya da nokta.",
     example: "150",
   },
+  {
+    key: "widthCm",
+    label: "En (cm)",
+    type: "number",
+    help: "Ürün kartı eni; 4 puan muayenesinde puan/100 m² bu enden hesaplanır. Boş bırakılırsa mevcut en DEĞİŞMEZ; temizlemek için NULL yazın.",
+    example: "280",
+  },
   { key: "isActive", label: "Aktif", type: "bool", help: "Evet / Hayır.", example: "Evet" },
 ];
 
@@ -105,6 +114,7 @@ export const itemImportAdapter: ImportAdapter = {
         itemType: true,
         unit: true,
         linearDensityDen: true,
+        widthCm: true,
         isActive: true,
         allowedColors: { select: { color: { select: { code: true } } } },
         allowedProperties: { select: { property: { select: { code: true } } } },
@@ -117,6 +127,7 @@ export const itemImportAdapter: ImportAdapter = {
         // Decimal NESNESİ sayı sütunuyla karşılaştırılamaz: "değişti mi"
         // sorusu dokunulmamış her satırda YANLIŞ 'evet' derdi.
         linearDensityDen: r.linearDensityDen === null ? null : Number(r.linearDensityDen),
+        widthCm: r.widthCm === null ? null : Number(r.widthCm),
         // Diff karşılaştırması sütun anahtarlarıyla yapılır — mevcut hâli de
         // aynı anahtarla (kod listesi) sun ki "değişti mi" doğru cevaplansın.
         allowedColorCodes: r.allowedColors.map((a) => a.color.code),
@@ -133,6 +144,15 @@ export const itemImportAdapter: ImportAdapter = {
         column: "code",
         message: "Kumaş kodu STK- ile başlayamaz — bu önek otomatik stok kodlarına ayrılmıştır (boş bırakın, sistem üretsin).",
       });
+    }
+    // En biçimi HTTP ucuyla aynı helper'dan (DB CHECK'e düşmeden Türkçe satır hatası).
+    if (row.values.widthCm !== undefined) {
+      try {
+        normalizeItemWidthBody(row.values as Record<string, unknown>);
+      } catch (e) {
+        if (!(e instanceof AppError)) throw e;
+        row.result.errors.push({ column: "widthCm", message: e.message });
+      }
     }
     // Referansları ŞİMDİ çöz: hatalar önizlemede görünsün, uygulama anında değil.
     for (const [key, entity] of [
@@ -178,6 +198,7 @@ export const itemImportAdapter: ImportAdapter = {
         itemType: true,
         unit: true,
         linearDensityDen: true,
+        widthCm: true,
         isActive: true,
         allowedColors: { select: { color: { select: { code: true } } } },
         allowedProperties: { select: { property: { select: { code: true } } } },
@@ -189,6 +210,7 @@ export const itemImportAdapter: ImportAdapter = {
       itemType: r.itemType,
       unit: r.unit,
       linearDensityDen: r.linearDensityDen === null ? "" : String(Number(r.linearDensityDen)),
+      widthCm: r.widthCm === null ? "" : String(Number(r.widthCm)),
       allowedColorCodes: r.allowedColors.map((a) => a.color.code).join(";"),
       allowedPropertyCodes: r.allowedProperties.map((a) => a.property.code).join(";"),
       isActive: r.isActive ? "Evet" : "Hayır",
@@ -200,7 +222,7 @@ export const itemImportAdapter: ImportAdapter = {
 function toServicePayload(row: PreparedRow): Record<string, unknown> {
   const v = row.values;
   const out: Record<string, unknown> = {};
-  for (const key of ["code", "name", "itemType", "unit", "linearDensityDen", "isActive"]) {
+  for (const key of ["code", "name", "itemType", "unit", "linearDensityDen", "widthCm", "isActive"]) {
     if (v[key] !== undefined) out[key] = v[key];
   }
   if (v.allowedColorCodes__ids !== undefined) out.allowedColorIds = v.allowedColorCodes__ids;
