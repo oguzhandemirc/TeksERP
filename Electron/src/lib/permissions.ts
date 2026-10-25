@@ -122,3 +122,11 @@ export const SYSTEM_HUB_ACCESS = [
   "license:view",
   "license:manage",
 ];
+
+// e-İrsaliye (E5 `permission-catalog` LOGISTICS aynası). Okuma kartı/listeyi, yazma
+// hazırla→üret→işaretle akışını, geri alma (SoD ruhu) yalnız gönderim/yanıt kaydını açar.
+export const EIRSALIYE_READ = "eirsaliye:read";
+export const EIRSALIYE_WRITE = "eirsaliye:write";
+export const EIRSALIYE_UNDO = "eirsaliye:undo";
+/** `GET /api/e-irsaliye/readiness` guard'ı — ayar sekmesindeki rozet de okur. */
+export const EIRSALIYE_READINESS_ACCESS = [EIRSALIYE_READ, "settings:e-irsaliye", "admin:settings"];

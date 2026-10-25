@@ -178,6 +178,7 @@ import { RelabelStationPage } from "@/pages/Operations/RelabelStation/RelabelSta
 import { AccountingDispatchPage } from "@/pages/Operations/AccountingDispatch/AccountingDispatchPage";
 import { KartelaPage } from "@/pages/Operations/Kartela/KartelaPage";
 import { ReturnsPage } from "@/pages/Operations/Returns/ReturnsPage";
+import { EIrsaliyeRecordsPage } from "@/pages/Operations/Shipments/eirsaliye/EIrsaliyeRecordsPage";
 
 /**
  * Uygulama içeriği rotaları (kabuk/sekme şeridi hariç). Hem dış HashRouter'ın
@@ -1189,6 +1190,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="return:read">
         <ReturnsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/e-irsaliye",
+    element: (
+      <ProtectedRoute requirePermission="eirsaliye:read">
+        <EIrsaliyeRecordsPage />
       </ProtectedRoute>
     ),
   },

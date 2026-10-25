@@ -15,8 +15,11 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 }));
 const update = vi.fn();
 vi.mock("@/services/featureFlagService", () => ({ featureFlagService: { update: (b: unknown) => update(b) } }));
+const readiness = vi.fn();
+vi.mock("@/pages/Operations/Shipments/eirsaliye/service", () => ({ eIrsaliyeService: { readiness: () => readiness() } }));
 
 import { EIrsaliyeSettingsSection } from "./EIrsaliyeSettingsSection";
+import { EIrsaliyeReadinessPanel } from "@/pages/Operations/Shipments/eirsaliye/EIrsaliyeReadinessPanel";
 import { CompanyLegalIdentityCard } from "./CompanyLegalIdentityCard";
 import { DEFAULT_COMPANY_LEGAL_IDENTITY, taxIdHint } from "@/services/eIrsaliyeSettings";
 
@@ -24,6 +27,14 @@ describe("EIrsaliyeSettingsSection", () => {
   beforeEach(() => {
     flags.mockReset();
     update.mockReset();
+    readiness.mockReset().mockResolvedValue({ durum: "YAPILANDIRILMAMIS", eksikler: ["e-İrsaliye yürürlük tarihi girilmemiş"] });
+  });
+
+  it("⭐ hazırlık rozeti sunucudan: eksik sayısı + eksik listesi (E7)", async () => {
+    renderWithProviders(<EIrsaliyeReadinessPanel />);
+    const box = await screen.findByTestId("eirsaliye-readiness");
+    expect(box.textContent).toContain("Eksik (1)");
+    expect(box.textContent).toContain("yürürlük tarihi girilmemiş");
   });
 
   it("⭐ yük alanı yoksa varsayılan Kapalı seçili, simülasyon uyarısı yok", () => {
