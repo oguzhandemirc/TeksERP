@@ -52,6 +52,11 @@ export interface OrderIntakeSummary {
   customerCount: number;
   /** Termin verilmiş sipariş adedi (iptaller hariç) — planlanabilirlik göstergesi. */
   withDeadlineCount: number;
+  /** EK (R0-RAPA): fiyatı girilmiş aktif satırların tutarı, para birimi başına (sipariş para birimi); kur çevrimi YOK. */
+  amounts: Array<{ currency: string; amount: number }>;
+  /** EK (R0-RAPA): tutara giren / fiyatsız olduğu için girmeyen aktif satır sayısı — fiyatsız satır 0 sayılmaz. */
+  pricedLineCount: number;
+  unpricedLineCount: number;
   prevOrderCount?: number;
   prevTotalQty?: number;
   prevAvgOrderQty?: number;
@@ -104,6 +109,9 @@ interface Collected {
   totalQty: number;
   customerIds: Set<string>;
   withDeadlineCount: number;
+  amountByCurrency: Map<string, Prisma.Decimal>;
+  pricedLineCount: number;
+  unpricedLineCount: number;
 }
 
 /**
@@ -119,13 +127,14 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<Collecte
       id: true,
       status: true,
       deadline: true,
+      currency: true,
       customerId: true,
       customer: { select: { name: true } },
       // İptal edilmiş KALEM alınan işe sayılmaz (sipariş iptaliyle aynı kural,
       // bir kademe aşağıda) — tek source `ACTIVE_LINE`.
       lines: {
         where: { ...ACTIVE_LINE, ...lineScopeWhere(f) },
-        select: { quantity: true, itemId: true, item: { select: { name: true, code: true } } },
+        select: { quantity: true, unitPrice: true, itemId: true, item: { select: { name: true, code: true } } },
       },
     },
   });
@@ -139,6 +148,9 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<Collecte
     totalQty: 0,
     customerIds: new Set(),
     withDeadlineCount: 0,
+    amountByCurrency: new Map(),
+    pricedLineCount: 0,
+    unpricedLineCount: 0,
   };
 
   for (const o of orders) {
@@ -153,6 +165,12 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<Collecte
     for (const l of o.lines) {
       orderQty = orderQty.plus(l.quantity);
       out.lineCount++;
+      if (l.unitPrice === null) out.unpricedLineCount++;
+      else {
+        out.pricedLineCount++;
+        const prevAmount = out.amountByCurrency.get(o.currency) ?? new Prisma.Decimal(0);
+        out.amountByCurrency.set(o.currency, prevAmount.plus(l.unitPrice.times(l.quantity)));
+      }
       out.lineCells.push({
         itemId: l.itemId,
         itemName: l.item.name,
@@ -235,6 +253,11 @@ export async function getOrderIntake(
       avgLinesPerOrder: avg(cur.lineCount, activeOrderCount),
       customerCount: cur.customerIds.size,
       withDeadlineCount: cur.withDeadlineCount,
+      amounts: [...cur.amountByCurrency.entries()]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([currency, amount]) => ({ currency, amount: Number(amount.toFixed(2)) })),
+      pricedLineCount: cur.pricedLineCount,
+      unpricedLineCount: cur.unpricedLineCount,
       ...(prev
         ? {
             prevOrderCount: prev.orderCount,

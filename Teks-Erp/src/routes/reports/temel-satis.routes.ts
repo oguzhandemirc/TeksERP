@@ -1,0 +1,193 @@
+// =============================================================================
+// TeksERP — Raporlar v2 temel SATIŞ raporları (R0-RAPA)
+// =============================================================================
+// Beş uç `RaporSunumu` zarfı döner (`data`); sayılar mevcut rapor servislerinden okunur
+// (`services/reports/temel/*`). Kök `reports.routes.ts`te ÖNEKSİZ mount edilir, yollar tam.
+// Süzgeç kümesi her uçta KAYNAK ucun şemasıyla aynıdır (eşitlik bekçisi aynı parametreyle ölçer).
+// =============================================================================
+
+import { Router, Request, Response, NextFunction } from "express";
+import { z } from "zod";
+import { verifyToken } from "../../middlewares/auth.middleware";
+import { requirePermission } from "../../middlewares/rbac.middleware";
+import { requireReportOpen } from "../../middlewares/report.middleware";
+import type { ReportKey } from "../../constants/report-catalog";
+import { reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
+import { coreRangeQuerySchema, resolveCoreCompare } from "../../services/reports/temel/_common";
+import { kalemEkseni, musteriEkseni } from "../../services/reports/_filters";
+import { buildOrderDemandReport } from "../../services/reports/temel/siparis-talep.temel";
+import { buildShippedReport } from "../../services/reports/temel/sevkiyat.temel";
+import { buildDeadlineReport } from "../../services/reports/temel/termin.temel";
+import { buildOpenOrderReport } from "../../services/reports/temel/acik-siparisler.temel";
+import { buildLostWorkReport } from "../../services/reports/temel/vazgecilen-is.temel";
+
+const router = Router();
+// Kimlik dosya başında (BE-30): kimliksiz istek 401 alır, kapalı raporun varlığı anonim çağırana sızmaz.
+router.use(verifyToken);
+/** RAPOR KAPISI → izin (sıra load-bearing: kapalı rapor "yetkin yok" değil "kapalı" der). */
+const reportGate = (key: ReportKey) => [requireReportOpen(key), requirePermission("report:sales")];
+
+// Şemalar bekçi için DIŞA AÇIK; her biri `.strict()` (tanınmayan anahtar 400).
+export const coreOrderDemandQuerySchema = coreRangeQuerySchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId }).strict();
+export const coreShippedQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination }).strict();
+export const coreDeadlineQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination }).strict();
+export const coreOpenOrderQuerySchema = z.object({ itemId: kalemEkseni.itemId }).strict();
+export const coreLostWorkQuerySchema = coreRangeQuerySchema.strict();
+
+/**
+ * @openapi
+ * /api/reports/sales/siparis-talep:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Temel rapor — Ne kadar iş aldık? (RaporSunumu)
+ *     description: |
+ *       Sipariş Karnesi'nin sayılarıyla (aynı parametre) kurulan sunum zarfı: ana sayı alınan
+ *       sipariş metresi (iptaller hariç), yan sayılar sipariş adedi, müşteri sayısı, tutar
+ *       (tek para birimiyse; fiyatsız satır sayılmaz). Grafik günlük sipariş metresi (fabrika günü).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
+ *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
+ *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Siparişin yönü (Sipariş Karnesi ile aynı)" }
+ *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
+ *     responses:
+ *       200: { description: "RaporSunumu (data) + süzgeç beyanı" }
+ */
+router.get("/sales/siparis-talep", ...reportGate("sales/siparis-talep"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = coreOrderDemandQuerySchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
+    const { sunum, suzgec } = await buildOrderDemandReport({
+      range,
+      compareRange,
+      compareMode,
+      filters: { customerId: input.customerId, destination: input.destination, itemId: input.itemId },
+    });
+    res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/sevkiyat:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Temel rapor — Ne sevk ettik? (RaporSunumu)
+ *     description: |
+ *       Ana sayı BRÜT sevk metresi (`_shipped`; iade düşülmez, ayrı belgedir). Yan sayılar sevk
+ *       tutarı (`report:sales` — Yurtiçi/Yurtdışı raporuyla aynı izin), top sayısı, ihracat payı
+ *       (yön süzgeci yoksa). Grafik müşteri × yön yığın çubuğu (ilk 10 + Diğer).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
+ *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Sevkiyatın donmuş yönü" }
+ *     responses:
+ *       200: { description: "RaporSunumu (data) + süzgeç beyanı" }
+ */
+router.get("/sales/sevkiyat", ...reportGate("sales/sevkiyat"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = coreShippedQuerySchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
+    const { sunum, suzgec } = await buildShippedReport({ range, compareRange, compareMode, filters: { destination: input.destination } });
+    res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/termin:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Temel rapor — Sözümüzü tuttuk mu? (RaporSunumu)
+ *     description: |
+ *       Ana sayı zamanında teslim yüzdesi (Sevk & Termin Karnesi); terminsiz sipariş paydaya
+ *       girmez, sayısı anlatıda. Termini olan tamamlanmış sipariş yoksa ana sayı `null` +
+ *       `olculemedi`. Yan sayılar geç kalan sipariş ve teslim süreleri (Sipariş → Teslim Süresi).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
+ *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Yön (Sevk & Termin Karnesi ile aynı)" }
+ *     responses:
+ *       200: { description: "RaporSunumu (data) + süzgeç beyanı" }
+ */
+router.get("/sales/termin", ...reportGate("sales/termin"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = coreDeadlineQuerySchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
+    const { sunum, suzgec } = await buildDeadlineReport({ range, compareRange, compareMode, filters: { destination: input.destination } });
+    res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/acik-siparisler:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Temel rapor — Açık siparişler hazır mı? (RaporSunumu, anlık)
+ *     description: |
+ *       ANLIK kesit, tarih ve kıyas almaz (Açık Sipariş Karşılanma ile aynı motor). Ana sayı
+ *       açık metrenin depodan karşılanan payı; açık sipariş yoksa `null` + `olculemedi`.
+ *       Müşteri süzgeci bilerek yok (FIFO havuzu).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
+ *     responses:
+ *       200: { description: "RaporSunumu (data) + süzgeç beyanı" }
+ */
+router.get("/sales/acik-siparisler", ...reportGate("sales/acik-siparisler"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = coreOpenOrderQuerySchema.parse(req.query);
+    const { sunum, suzgec } = await buildOpenOrderReport({ filters: { itemId: input.itemId } });
+    res.status(200).json(reportEnvelope(sunum, resolveDateRange({}), null, { suzgec, warnings: sunum.uyarilar }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/vazgecilen-is:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Temel rapor — Ne geri geldi, neden vazgeçildi? (RaporSunumu)
+ *     description: |
+ *       İade (İade Karnesi) ve sipariş iptali (Sipariş İptal Karnesi; çıpa iptal anı) İKİ ayrı
+ *       satır; ana sayı ikisinin metre toplamı. İptal oranı tek tanımdan (`cancelRatePct`).
+ *       Süzgeç yok: iki kaynağın yön anlamı farklı.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
+ *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
+ *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
+ *     responses:
+ *       200: { description: "RaporSunumu (data)" }
+ */
+router.get("/sales/vazgecilen-is", ...reportGate("sales/vazgecilen-is"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = coreLostWorkQuerySchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
+    const { sunum } = await buildLostWorkReport({ range, compareRange, compareMode });
+    res.status(200).json(reportEnvelope(sunum, range, compareRange, { warnings: sunum.uyarilar }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+export default router;
