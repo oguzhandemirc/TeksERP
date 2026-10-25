@@ -11,6 +11,9 @@
 // §5 altın cümleler — plan §3.5 kural kataloğunun HER kuralı birebir + yedek kalıplar
 // §6 yasak sözcük (formül dili) — liste her sözcüğü yakalar, altın cümlelerde hiçbiri yok
 // §7 önem sırası belirlenimli (girdi sırası karıştırılınca aynı çıktı) + tavan
+// §9 (2026-10-25) para işareti: para birimli kaynaktan doğan cümle `paraIcerir: true` taşır (bulut fiyat izni
+//    süzgeci onu okur); para dışı cümlede anahtar YOK (altın çıktı değişmez). NEGATİF SONDA: `ekle` para dalı
+//    söküldü → §9a + §9b ❌; geri alındı → ✅.
 // §8 zarf tip dosyası importsuz (Electron'a bayt-eşit aynalanır) · tr-case dışında harf dönüşümü yok
 //
 // Negatif sondalar (2026-10-24, ölçüldü, md5 ile birebir geri alındı; toplam 215 kontrol):
@@ -382,6 +385,18 @@ const dosyalar = ["anlati", "sunum"].flatMap((d) => readdirSync(join(kok, d)).fi
 check("§8 körlük zemini: anlati/ + sunum/ dosyaları bulundu", dosyalar.length >= 8, `${dosyalar.length} dosya`);
 const harfDonusumu = dosyalar.filter((f) => /toLocale(Upper|Lower)Case|\.to(Upper|Lower)Case\(/.test(kodSatiri(readFileSync(f, "utf8"))));
 check("§8 harf dönüşümü yalnız utils/tr-case üzerinden", harfDonusumu.length === 0, harfDonusumu.join(", "));
+
+
+console.log("\n§9 para işareti (`paraIcerir`)");
+{
+  const tlKirilim = { ...musteri([["Kaya Tekstil", 9800], ["Demir Örme", 9000], ["Ak Boya", 8000], ["Yıldız", 7000], ["Ege", 5000], ["Bora", 3800]]), birim: "TRY" as const };
+  const tl = anlatiUret({ kirilim: tlKirilim });
+  check("§9a ⭐ TRY kırılımından doğan her cümle `paraIcerir: true`", tl.length > 0 && tl.every((c) => c.paraIcerir === true), tl.map((c) => `${c.kural}:${String(c.paraIcerir)}`).join(","));
+  const tlRenk = anlatiUret({ kirilim: { ...renkler, birim: "USD" as const } }, { kurallar: ["degisimKaynagi"] });
+  check("§9b ⭐ kanıtı birimsiz kural (degisimKaynagi) da KAYNAK birimden işaretlenir", tlRenk.length === 1 && tlRenk[0]!.paraIcerir === true, JSON.stringify(tlRenk[0]?.kanit));
+  const metre = anlatiUret({ kirilim: { ...tlKirilim, birim: "m" as const }, seri: ay([90, 88, 86, 84, 82, 80, 78, 76]) });
+  check("§9c para dışı cümlede `paraIcerir` anahtarı YOK (altın çıktı aynen)", metre.length > 0 && metre.every((c) => !("paraIcerir" in c)), metre.map((c) => c.kural).join(","));
+}
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

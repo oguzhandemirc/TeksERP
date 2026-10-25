@@ -84,6 +84,8 @@ export interface AnlatiCumlesi {
   onem: number;
   metin: string;
   kanit: Record<string, unknown>;
+  /** Cümle para birimli bir ölçüden doğdu (fabrika işaretler) — fiyat izni olmayan patron hesabında bulut atlar. */
+  paraIcerir?: true;
 }
 
 export const GRAFIK_TURLERI = [
