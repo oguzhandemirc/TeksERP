@@ -164,10 +164,18 @@ export interface ParetoReport extends WithSuzgec {
   meta: LoomReportMeta;
 }
 
-export async function durusParetoReport(p: { from: string; to: string; machineId?: string } & BeamLotFilterInput): Promise<ParetoReport> {
-  const { warpBeamId, lotNo, ...params } = p;
+/** Vardiya süzgeci: yalnız verilen vardiya tanımlarının ShiftInstance satırları kalır; liste yoksa girdi aynen döner. */
+function onlyShifts<C extends { rows: Array<{ shiftInstance: { shiftDefinitionId: string } }> }>(collected: C, ids: readonly string[] | undefined): C {
+  if (!ids) return collected;
+  const set = new Set(ids);
+  return { ...collected, rows: collected.rows.filter((r) => set.has(r.shiftInstance.shiftDefinitionId)) };
+}
+
+/** `shiftDefinitionIds` (R0-RAPC vardiya süzgeci): yalnız o vardiya tanımlarının ShiftInstance satırları; yoksa davranış aynen. */
+export async function durusParetoReport(p: { from: string; to: string; machineId?: string; shiftDefinitionIds?: readonly string[] } & BeamLotFilterInput): Promise<ParetoReport> {
+  const { warpBeamId, lotNo, shiftDefinitionIds, ...params } = p;
   const filter = await resolveBeamLotFilter(prisma, { warpBeamId, lotNo });
-  const collected = await collectShiftStatRows(params, { includeBreakdown: true });
+  const collected = onlyShifts(await collectShiftStatRows(params, { includeBreakdown: true }), shiftDefinitionIds);
   const { rows, suzgec } = await applyBeamFilter(collected.rows, filter);
   const leventler = await beamOptions(collected.rows);
   const m = collected.meta;

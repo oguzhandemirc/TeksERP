@@ -840,6 +840,9 @@ export const SETTING_KEYS = {
   /** Yazdırma geçmişinin (`print_jobs`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 180.
    *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-A1). */
   PRINT_LOG_RETENTION_DAYS: "printLog.retentionDays",
+  /** Semantik rapor bloğunun sorgu tavanı, SANİYE (5..45; DB seviyesi 50 sn'nin altında). Default 15.
+   *  Davranış bayrağı değil, işletme ayarı: tek okuyucusu `reports/semantik/calistirici.ts`. */
+  REPORTS_STATEMENT_TIMEOUT_SEC: "reports.statementTimeoutSec",
   /** İstek başlığının (`request_traces`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 90.
    *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-B1). */
   REQUEST_TRACE_RETENTION_DAYS: "requestTrace.retentionDays",
@@ -860,6 +863,9 @@ export const SETTING_KEYS = {
   PATRON_BULUT_OLAY_GUDUMLU: "patronBulut.olayGudumluEnabled",
   // bildirim: gelen kutusu davranış bayrağı (modül anahtarı DEĞİL — plan Karar Y1); default false.
   BILDIRIM_GELEN_KUTUSU_ENABLED: "bildirim.gelenKutusuEnabled",
+  // belge-sablon T1C: davranış bayrakları (modül DEĞİL, profile girmez); ikisi de default false.
+  DOCUMENTS_DESIGNER_ENABLED: "documents.designerEnabled",
+  DOCUMENTS_PUBLISH_SOD_ENABLED: "documents.publishSodEnabled",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -2049,6 +2055,10 @@ export interface FeatureFlags {
   /** bildirim: kişisel gelen kutusu + yeni zil (default false = bugünkü zil davranışı).
    *  Okuyucular N1-MOTOR/N1-ZIL'de; bu alan yalnız taşır. */
   bildirimGelenKutusuEnabled: boolean;
+  /** Belge tasarımcısı (default false = bugünkü Sistem tasarımı; tasarım uçları 403, basım şablon çözmez). */
+  documentDesignerEnabled: boolean;
+  /** Şablon yayınında tasarlayan ≠ yayınlayan (default false = bugünkü davranış). */
+  documentPublishSodEnabled: boolean;
   /** Lisans modül tavanı — SALT OKUNUR (PATCH şemasında yok), önbelleğe girmez. Modül
    *  şalterleri HAM değerdir; lisansın kapattığı modül yalnız burada görünür (gözlemde boş). */
   license: LicenseModuleBlock;
@@ -2062,7 +2072,7 @@ function withLicenseBlock(flags: CachedFeatureFlags): FeatureFlags {
 }
 
 /** Modül şalteri (PATCH alanı) → DB anahtarı; lisans yazma tavanı bu eşlemeyle sorar. */
-const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
+export const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
   productionEnabled: SETTING_KEYS.PRODUCTION_ENABLED,
   financeEnabled: SETTING_KEYS.FINANCE_ENABLED,
   ticaretEnabled: SETTING_KEYS.TICARET_ENABLED,
@@ -2458,6 +2468,8 @@ export class SystemSettingService {
       defaultLabelMedia: await readDefaultLabelMedia(cacheClient),
       patronBulutOlayGudumluEnabled: await readPatronBulutOlayGudumluEnabled(cacheClient),
       bildirimGelenKutusuEnabled: await readNotificationInboxEnabled(cacheClient),
+      documentDesignerEnabled: await readDocumentDesignerEnabled(cacheClient),
+      documentPublishSodEnabled: await readDocumentPublishSodEnabled(cacheClient),
     };
     // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
     // pinleme (taze değeri döndür, cache'i bir sonraki okuma tazeler).
@@ -4470,6 +4482,30 @@ export class SystemSettingService {
         SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED,
         input.bildirimGelenKutusuEnabled,
         "Yeni bildirim gelen kutusu: açıkken zil kişisel gelen kutusunu gösterir; kapalıyken bugünkü davranış",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "documentDesignerEnabled")) {
+      if (typeof input.documentDesignerEnabled !== "boolean") {
+        throw AppError.badRequest("documentDesignerEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DOCUMENTS_DESIGNER_ENABLED,
+        input.documentDesignerEnabled,
+        "Belge tasarımcısı: açıkken yeni basılan belgeler atanan şablonla basılır; kapalıyken Sistem tasarımı",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "documentPublishSodEnabled")) {
+      if (typeof input.documentPublishSodEnabled !== "boolean") {
+        throw AppError.badRequest("documentPublishSodEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DOCUMENTS_PUBLISH_SOD_ENABLED,
+        input.documentPublishSodEnabled,
+        "Belge şablonu yayını: açıkken sürümü tasarlayan kişi onu yayınlayamaz",
         userId
       );
     }
@@ -7214,6 +7250,28 @@ export async function readPrintLogRetentionDays(
   return isValidPrintLogRetentionDays(v) ? v : DEFAULT_PRINT_LOG_RETENTION_DAYS;
 }
 
+export const DEFAULT_REPORTS_STATEMENT_TIMEOUT_SEC = 15;
+export const MIN_REPORTS_STATEMENT_TIMEOUT_SEC = 5;
+export const MAX_REPORTS_STATEMENT_TIMEOUT_SEC = 45;
+
+/**
+ * Semantik rapor bloğunun `statement_timeout`u (saniye). Kayıt yoksa ya da 5..45 dışındaysa 15:
+ * aralık dışı değer ya tek process'i kilitler ya da her raporu düşürür.
+ */
+export async function readReportsStatementTimeoutSec(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.REPORTS_STATEMENT_TIMEOUT_SEC },
+    select: { value: true },
+  });
+  const v = asNumber(setting?.value);
+  return v !== null && Number.isInteger(v) && v >= MIN_REPORTS_STATEMENT_TIMEOUT_SEC && v <= MAX_REPORTS_STATEMENT_TIMEOUT_SEC
+    ? v
+    : DEFAULT_REPORTS_STATEMENT_TIMEOUT_SEC;
+}
+
 /**
  * İstek başlığı saklama süresi (gün). Kayıt yoksa ya da geçersizse varsayılan 90;
  * 0 açıkça yazılırsa budama yok.
@@ -7566,6 +7624,30 @@ export async function readNotificationInboxEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Belge tasarımcısı açık mı? Default FALSE (kayıt yok/çöp → bugünkü Sistem tasarımı; fail-closed). */
+export async function readDocumentDesignerEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DOCUMENTS_DESIGNER_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Şablon yayınında tasarlayan ≠ yayınlayan zorunlu mu? Default FALSE (bugünkü davranış). */
+export async function readDocumentPublishSodEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DOCUMENTS_PUBLISH_SOD_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

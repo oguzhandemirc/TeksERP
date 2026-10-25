@@ -127,6 +127,8 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // requirePermission(CORE_PRODUCTION_PERMISSIONS[key]) — beş temel raporun alan izni; katalog `izin`iyle
   // birebirliğini `test_temel_rapor_esitlik` §R0z ölçer (R0-RAPB).
   "src/routes/reports/temel-uretim.routes.ts": ["CORE_PRODUCTION_PERMISSIONS"],
+  // requirePermission(permissionOf(key)) — dört temel dokuma/alacak raporu; katalog `izin`iyle birebir (§C0a, R0-RAPC).
+  "src/routes/reports/temel-dokuma-finans.routes.ts": ["CORE_WEAVING_FINANCE_PERMISSIONS"],
   // matchesPermission(perms, adapter.writePermission / adapter.readPermission)
   // — adaptör `import-registry`den `:entity` ile çözülür. Yetki AKTARILAN
   // VERİYE göredir: `data:import` yalnız "toplu yükleme yapabilir" demektir,
@@ -139,6 +141,12 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // `test_import_framework.ts §11` registry'deki HER adaptörün iki iznini de
   // katalogla karşılaştırır ve registry boşalırsa körlük zemini düşer.
   // Bu yüzden burada delegasyon beyan ediyoruz — muafiyet DEĞİL, devir.
+  // Semantik rapor (R1-SEMCEK): uç kapısı `requireAnyPermission(...REPORT_PERMISSION_CODES)` katalogdan
+  // TÜRETİLİR; küp/ölçü/boyut izni `canAccess`te `matchesPermission(…, item.permission)`. Kodların
+  // katalogda olduğunu `test_semantik_derleyici.ts` §6 MEKANİK doğrular.
+  "src/routes/rapor-semantik.routes.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
+  "src/routes/rapor-calistirma.routes.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
+  "src/services/reports/semantik/izin.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
   "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
   // uncoveredCodes(actor, codes) — codes = verilmek istenen kodlar (gövdeden); katalog
   // doğrulaması verme yolunda (`permission-management`), kademe kapsamı yetki denetiminde.

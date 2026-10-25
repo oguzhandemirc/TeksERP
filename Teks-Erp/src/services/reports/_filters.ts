@@ -40,6 +40,8 @@ export const fasonEkseni = { subcontractorId: idList };
  * ekstre TEK cari içindir ve yürüyen bakiye iki cariyle TANIMSIZdır.
  */
 export const cariEkseni = { cariId: idList };
+/** Vardiya tanımı (`ShiftDefinition`; ShiftInstance penceresiyle süzülür — dokuma temel raporları). */
+export const vardiyaEkseni = { shiftDefinitionId: idList };
 /** Sipariş iptal sebebi (`ORDER_CANCEL` katalog kodu, `Order.cancelReasonCode`). */
 export const iptalEkseni = { reasonCode: codeList };
 

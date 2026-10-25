@@ -19,6 +19,8 @@ import { productionChainQuerySchema } from "../src/routes/reports/dokuma.report.
 import { coreRangeQuerySchema } from "../src/services/reports/temel/_common";
 import * as temelUretim from "../src/routes/reports/temel-uretim.routes";
 import * as temelSatis from "../src/routes/reports/temel-satis.routes";
+import * as temelDokumaFinans from "../src/routes/reports/temel-dokuma-finans.routes";
+import { coreDayRangeQuerySchema } from "../src/services/reports/temel/_day-range";
 
 let pass = 0;
 let fail = 0;
@@ -85,6 +87,16 @@ check("§3a panel {tarih (aralik-iso) + COMPARE_PARAM} = coreRangeQuerySchema an
 const v2Semalar = [...Object.entries(temelUretim), ...Object.entries(temelSatis)].filter(([ad]) => /^core\w+QuerySchema$/.test(ad)) as [string, { safeParse: (v: unknown) => { success: boolean }; shape: object }][];
 const kiyasli = v2Semalar.filter(([, s]) => "dateFrom" in s.shape);
 check("§3b her aralıklı v2 ucu `kiyas` kabul eder, `compare` reddeder", kiyasli.length >= 8 && kiyasli.every(([, s]) => !red(s, { kiyas: "prevYear" }) && red(s, { compare: "prev" })), kiyasli.map(([a]) => a).join(","));
+
+// §3c K-TEL gün sözleşmesi (R0-RAPC, `tarih:"aralik-gun"`): panel `rangeDayParams` gövdesi + COMPARE_PARAM = gün şeması.
+// NEGATİF SONDA 2026-10-25: `_day-range.ts`te `from` → `fromDay` yapıldı → §3c + §3d ❌; geri alındı → ✅.
+const gunGovde = /export function rangeDayParams\([^)]*\)[^\n]*\n\s*return \{([^}]*)\}/.exec(readFileSync(path.join(PANEL, "_lib/report-date.ts"), "utf8"))?.[1] ?? "";
+const panelGun = [...[...gunGovde.matchAll(/(\w+):/g)].map((m) => m[1]!), kiyasAd ?? "?"].sort();
+const ucGun = Object.keys(coreDayRangeQuerySchema.shape).sort();
+check("§3c panel {tarih (aralik-gun) + COMPARE_PARAM} = coreDayRangeQuerySchema anahtarları", panelGun.join(",") === ucGun.join(","), `panel ${panelGun.join(",")} · uç ${ucGun.join(",")}`);
+const gunSemalar = Object.entries(temelDokumaFinans).filter(([ad]) => /^core\w+QuerySchema$/.test(ad)) as [string, { safeParse: (v: unknown) => { success: boolean }; shape: object }][];
+const gunKiyasli = gunSemalar.filter(([, s]) => "from" in s.shape);
+check("§3d her gün aralıklı v2 ucu `kiyas` kabul eder, `compare` reddeder", gunKiyasli.length >= 3 && gunKiyasli.every(([, s]) => !red(s, { from: "2026-10-01", to: "2026-10-07", kiyas: "prevYear" }) && red(s, { compare: "prev" })), gunKiyasli.map(([a]) => a).join(","));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

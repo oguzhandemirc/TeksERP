@@ -52,7 +52,7 @@ export const financeReportTiles: HubTile[] = [
   {
     key: "vat-summary",
     title: "KDV Dönem Özeti",
-    description: "Satış/alış KDV'si oran kırılımlı matrah + KDV + tevkifat — beyanname değil, muhasebeciye özet",
+    description: "Satış/alış KDV'si oran oran fatura tutarı, KDV ve tevkifat — beyanname değil, muhasebeciye özet",
     icon: Percent,
     to: "/reports/finance/vat-summary",
   },

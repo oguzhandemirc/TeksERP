@@ -1,3 +1,4 @@
+import type { AnlatiCumlesi } from "../_v2/sunum";
 // =============================================================================
 // KDV DÖNEM ÖZETİ — tipler + API çağrısı (backend `finance-vat.report.ts` aynası)
 // =============================================================================
@@ -80,6 +81,8 @@ export interface VatBlock {
 }
 
 export interface VatSummaryReport {
+  /** "Ne görüyoruz?" — sunucunun anlatısı (EK alan; eski backend göndermez → kutu çizilmez). */
+  anlati?: AnlatiCumlesi[];
   sales: VatBlock;
   purchase: VatBlock;
   notes: string[];

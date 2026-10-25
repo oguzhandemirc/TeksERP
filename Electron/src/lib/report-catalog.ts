@@ -315,20 +315,20 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "dokuma/tezgah-randimani", baslik: "Tezgahlar verimli mi?", soru: "Tezgahlar bu dönemde dokuyabilecekleri kumaşın ne kadarını dokudu?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/tezgah-randimani", uc: "/api/reports/dokuma/tezgah-randimani", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/dokuma/tezgah-randimani" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma"], varyantBoyutlari: ["vardiya", "tezgah", "levent"], hazir: false },
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma"], varyantBoyutlari: ["vardiya", "tezgah", "levent"], hazir: true },
   { key: "dokuma/duruslar", baslik: "Tezgahlar neden duruyor?", soru: "Tezgahlar en çok hangi sebeplerle durdu ve duruşa ne çabuk müdahale edildi?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/duruslar", uc: "/api/reports/dokuma/duruslar", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/dokuma/duruslar" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma"], varyantBoyutlari: ["vardiya", "tezgah", "sebep"], hazir: false },
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma"], varyantBoyutlari: ["vardiya", "tezgah", "sebep"], hazir: true },
   // Levent karoları hub'da ayrıca devere ister (v1 levent satırlarıyla aynı beyan).
   { key: "dokuma/levent-dengesi", baslik: "Leventten beklenen kumaş çıktı mı?", soru: "Biten leventlerden beklenen kumaşın ne kadarı dokundu?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 30, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/levent-dengesi", uc: "/api/reports/dokuma/levent-dengesi", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/dokuma/levent-dengesi" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["cozguKarti", "tezgah"], hazir: false },
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["cozguKarti", "tezgah"], hazir: true },
   { key: "finance/alacaklar", baslik: "Kimden ne alacağız?", soru: "Vadesi geçmiş alacak ne kadar ve önümüzdeki günlerde hangi çeklerin vadesi geliyor?",
     sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: null, tarih: "kesit",
     panelYolu: "reports/finance/alacaklar", uc: "/api/reports/finance/alacaklar", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/finance/alacaklar" }], yuzey: "yaprak",
-    nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["cari", "paraBirimi"], hazir: false },
+    nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["cari", "paraBirimi"], hazir: true },
 ];
 
 /** Katalogdan TÜRETİLİR — derleyici bilinmeyen anahtarı reddeder (K4). */
