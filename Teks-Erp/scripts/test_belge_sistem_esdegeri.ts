@@ -19,6 +19,7 @@ import { renderShipmentDispatchHtml } from "../src/services/document-render/ship
 import { renderFasonCekiHtml } from "../src/services/document-render/fason-ceki.html";
 import { renderFasonDirectShipHtml } from "../src/services/document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml } from "../src/services/document-render/fason-receipt.html";
+import { renderGoodsReceiptHtml, renderStockCountHtml, renderWarehouseTransferHtml } from "../src/services/document-render/warehouse-doc.html";
 import { fmtDateTime } from "../src/services/document-render/fmt-date";
 import { tokenizeHtml, type HtmlToken } from "../src/services/document-render/template-html.tokenizer";
 import { decodeAttrEntities } from "../src/services/document-render/template-html.entities";
@@ -37,10 +38,13 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 
 // docType başına TEK satır, alfabetik (port dilimleri ekler).
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
+  GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
   SHIPMENT_DISPATCH: (s, m) => renderShipmentDispatchHtml(s, m as Parameters<typeof renderShipmentDispatchHtml>[1]),
+  STOCK_COUNT: (s, m) => renderStockCountHtml(s, m as Parameters<typeof renderStockCountHtml>[1]),
   SUBCONTRACTOR_DIRECT_SHIP: (s, m) => renderFasonDirectShipHtml(s, m as Parameters<typeof renderFasonDirectShipHtml>[1]),
   SUBCONTRACTOR_DISPATCH: (s, m) => renderFasonCekiHtml(s, m as Parameters<typeof renderFasonCekiHtml>[1]),
   SUBCONTRACTOR_RECEIPT: (s, m) => renderFasonReceiptHtml(s, m as Parameters<typeof renderFasonReceiptHtml>[1]),
+  TRANSFER_DISPATCH: (s, m) => renderWarehouseTransferHtml(s, m as Parameters<typeof renderWarehouseTransferHtml>[1]),
 };
 
 let pass = 0;
