@@ -86,7 +86,7 @@ export function TemplateListView() {
       )}
       <CopyTemplateDialog request={copy} onClose={() => setCopy(null)} />
       <SystemPreviewDialog docType={systemPreview} onClose={() => setSystemPreview(null)} />
-      <VersionsSheet template={versionsOf} onClose={() => setVersionsOf(null)} />
+      <VersionsSheet template={versionsOf} access={access} onClose={() => setVersionsOf(null)} />
     </div>
   );
 }
