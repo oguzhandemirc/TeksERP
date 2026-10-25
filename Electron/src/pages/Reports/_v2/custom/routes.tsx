@@ -3,6 +3,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { CustomReportBuilderPage } from "./CustomReportBuilderPage";
 import { CustomReportRoute } from "./CustomReportRoute";
 import { CustomReportViewPage } from "./CustomReportViewPage";
+import { ReportLayoutPage } from "./layout/ReportLayoutPage";
 import { REPORT_ANY_PERMISSIONS, REPORT_BUILDER_PERMISSION } from "./custom-api";
 
 /**
@@ -26,6 +27,17 @@ export const customReportRoutes: RouteObject[] = [
       <ProtectedRoute requirePermission={REPORT_BUILDER_PERMISSION}>
         <CustomReportRoute>
           <CustomReportBuilderPage />
+        </CustomReportRoute>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // R2-DUZEN: düzen editörü — kayıt yeni sürüm, `report:builder` + tanımı düzenleme hakkı (sunucu denetler).
+    path: "reports/ozel/:id/duzen",
+    element: (
+      <ProtectedRoute requirePermission={REPORT_BUILDER_PERMISSION}>
+        <CustomReportRoute>
+          <ReportLayoutPage />
         </CustomReportRoute>
       </ProtectedRoute>
     ),

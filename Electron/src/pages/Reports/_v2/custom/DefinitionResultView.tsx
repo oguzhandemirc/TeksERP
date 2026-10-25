@@ -2,17 +2,22 @@ import { Lock } from "lucide-react";
 import { HeadlineCard } from "../HeadlineCard";
 import { ReportTable } from "../ReportTable";
 import { RaporGrafik } from "../grafik/RaporGrafik";
+import { SmallMultiples } from "../SmallMultiples";
 import { formatFigure } from "../figures";
 import type { BlockOutcome, RunResult } from "./custom-api";
-import { chartOf, headlineOf, tableOf } from "./result-model";
+import { chartOf, headlineOf, periodTableOf, tableOf, variantOf } from "./result-model";
+import { GRID_SPAN_CLASS } from "./layout/grid-classes";
+import type { LayoutItem } from "./layout/layout-model";
 
 interface Props {
   result: RunResult;
   /** Grafik bloğunun türü gövdede yazılıdır (`gorsel`); koşu sonucu taşımaz. */
   chartKindOf: (blockId: string) => string;
+  /** R2-DUZEN: görünür sıra + genişlik (`orderedLayout`). Verilmezse eski tek sütun akışı birebir. */
+  layout?: ReadonlyArray<Pick<LayoutItem, "i" | "w">>;
 }
 
-function BlockBody({ block, chartKind }: { block: BlockOutcome; chartKind: string }) {
+export function BlockBody({ block, chartKind }: { block: BlockOutcome; chartKind: string }) {
   if (block.durum !== "tamam") {
     return (
       <p className="flex items-center gap-2 rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
@@ -33,6 +38,14 @@ function BlockBody({ block, chartKind }: { block: BlockOutcome; chartKind: strin
       </div>
     );
   }
+  if (block.tur === "varyant") {
+    const v = variantOf(r);
+    return v ? <SmallMultiples block={v} /> : null;
+  }
+  if (block.tur === "donem") {
+    const t = periodTableOf(r);
+    return t ? <ReportTable table={t} /> : <p className="text-sm text-muted-foreground">Dönem sütunu çıkmadı.</p>;
+  }
   if (block.tur === "grafik") {
     const chart = chartOf(r, chartKind);
     return chart ? <RaporGrafik blok={chart} baslik={block.baslik ?? undefined} /> : <p className="text-sm text-muted-foreground">Grafik için kırılım yok.</p>;
@@ -40,8 +53,19 @@ function BlockBody({ block, chartKind }: { block: BlockOutcome; chartKind: strin
   return <ReportTable table={tableOf(r)} />;
 }
 
+/** Ana sayı ve kırılım kartları kendi çerçevesini taşır. */
+const frameClass = (b: BlockOutcome) => (b.tur === "anaSayi" || (b.tur === "varyant" && b.durum === "tamam") ? "" : "rounded-lg border p-4");
+
+/** Sonuç bloklarını düzen sırasına dizer; düzende olmayan blok sonda tam genişlikte. */
+function ordered(blocks: BlockOutcome[], layout: ReadonlyArray<Pick<LayoutItem, "i" | "w">>) {
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+  const placed = layout.flatMap((l) => (byId.has(l.i) ? [{ block: byId.get(l.i)!, w: l.w }] : []));
+  const seen = new Set(placed.map((p) => p.block.id));
+  return [...placed, ...blocks.filter((b) => !seen.has(b.id)).map((b) => ({ block: b, w: 12 }))];
+}
+
 /** Kayıtlı raporun koşu sonucu — genel yaprağın parçalarıyla (ana sayı, grafik, tablo) çizilir. */
-export function DefinitionResultView({ result, chartKindOf }: Props) {
+export function DefinitionResultView({ result, chartKindOf, layout }: Props) {
   const warnings = [...new Set(result.bloklar.flatMap((b) => (b.durum === "tamam" ? b.sonuclar.flatMap((s) => s.uyarilar) : [])))];
   return (
     <div className="flex flex-col gap-4">
@@ -53,12 +77,23 @@ export function DefinitionResultView({ result, chartKindOf }: Props) {
           ))}
         </ul>
       ) : null}
-      {result.bloklar.map((b) => (
-        <section key={b.id} aria-label={b.baslik ?? b.tur} className={b.tur === "anaSayi" ? "" : "rounded-lg border p-4"}>
-          {b.baslik ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
-          <BlockBody block={b} chartKind={chartKindOf(b.id)} />
-        </section>
-      ))}
+      {layout ? (
+        <div className="grid grid-cols-12 gap-4">
+          {ordered(result.bloklar, layout).map(({ block: b, w }) => (
+            <section key={b.id} aria-label={b.baslik ?? b.tur} className={`min-w-0 ${GRID_SPAN_CLASS[w] ?? GRID_SPAN_CLASS[12]} ${frameClass(b)}`}>
+              {b.baslik ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
+              <BlockBody block={b} chartKind={chartKindOf(b.id)} />
+            </section>
+          ))}
+        </div>
+      ) : (
+        result.bloklar.map((b) => (
+          <section key={b.id} aria-label={b.baslik ?? b.tur} className={b.tur === "anaSayi" ? "" : "rounded-lg border p-4"}>
+            {b.baslik ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
+            <BlockBody block={b} chartKind={chartKindOf(b.id)} />
+          </section>
+        ))
+      )}
     </div>
   );
 }
