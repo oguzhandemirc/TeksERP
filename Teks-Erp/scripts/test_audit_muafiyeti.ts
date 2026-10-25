@@ -162,7 +162,10 @@ function main(): void {
   // 35 → 36 (2026-10-25, KQ-D7): `helpers/roll-defect.helper.ts` — RollError satırının TEK YAZARI
   // (üç kopya yazar — KK2/Kurşun · Tambur · kursunFinish — ve muayene satırları tek boğazda, tx İÇİNDE);
   // helper `auditPayload` döner, audit'i çağıran eylem basar — EBEVEYN_EYLEMDE kalıbı (KQ-D4/D6 emsali).
-  const AUDITSIZ_YAZICI_TABAN = 36;
+  // 36 → 37 (2026-10-25, izlenebilirlik D4): `helpers/device-identity.helper.ts` — cihaz birleşme bağının
+  // TEK yazarı (`claimMergeSourceTx` · `claimMergeTargetTx` · `claimUnmergeTx`, atomik claim, tx İÇİNDE; §9 AST
+  // `mergedIntoId`i bu dosyaya kilitler). Audit'i çağıran eylem basar (`device-merge.service`) — EBEVEYN_EYLEMDE.
+  const AUDITSIZ_YAZICI_TABAN = 37;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

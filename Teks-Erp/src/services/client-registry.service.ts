@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { effectiveClientPolicy } from "../lib/client-policy-lease";
+import { mainDeviceByLocalIds } from "./helpers/device-identity.helper";
 import {
   CLIENT_ACTIVE_WINDOW_MS,
   CLIENT_RETENTION_MS,
@@ -38,14 +39,8 @@ export const ClientRegistryService = {
     // yaşıyor (Cihazlar ekranı, yöneticinin verdiği etiket) — ikinci bir
     // adlandırma yüzeyi açmıyoruz. Web istemcisinin `Device` satırı yoktur → null.
     const instanceIds = rows.map((r) => r.instanceId);
-    const devices =
-      instanceIds.length > 0
-        ? await prisma.device.findMany({
-            where: { deviceId: { in: instanceIds } },
-            select: { deviceId: true, name: true, kind: true },
-          })
-        : [];
-    const deviceById = new Map(devices.map((d) => [d.deviceId, d]));
+    // Birleşmiş kopyanın anahtarı ana kaydın adına çözülür (D4; tek kaynak kimlik helper'ı).
+    const deviceById = await mainDeviceByLocalIds(prisma, instanceIds);
 
     return {
       /** "Aktif" eşiği — TEK KAYNAK (arayüzün metni bundan üretilir). */
