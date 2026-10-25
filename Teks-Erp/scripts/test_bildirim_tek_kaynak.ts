@@ -10,7 +10,8 @@
 //   §2 gelen kutusu INSERT yalnız dağıtıcı · UPDATE dağıtıcı + kutu okuma servisi (okundu/ertele) · DELETE yalnız budama · günlük sayaç aynı
 //   §3 koşul INSERT/UPDATE yalnız koşul tarayıcısı · DELETE yalnız budama
 //   §4 görme: katalog `izinler` alanını yalnız görme helper'ı okur · gelen kutusuna dokunan her
-//      dosya (budama hariç) görme helper'ını import eder · dağıtıcı kararı helper'dan alır
+//      dosya (budama hariç) görme helper'ını import eder · dağıtıcı kararı helper'dan alır ·
+//      §4d tercih çözücüsünün İLK ifadesi görme süzgeci · §4e teslim kararı tek yerden (`decideDeliveries` → `resolvePreference`)
 //   §5 körlük zemini (yazarlar bulundu) · §6 sondalar (saf tarayıcı, her koşumda)
 // İzinli küme genişlerken (N1-ZIL okundu/ertele ucu) satır BURAYA eklenir — gerekçesiyle.
 // DB GEREKTİRMEZ.
@@ -18,6 +19,7 @@
 // NEGATİF SONDA (2026-10-24, sha256 ile birebir geri alındı): `services/order.service.ts`e
 // `tx.notificationOutbox.create(...)` eklendi ⇒ yalnız §1 ❌ (13 ✅ / 1 ❌, `order.service.ts:3795`);
 // ayrıca §6 sondaları her koşumda.
+// (2026-10-25, N4-MOTOR) `resolvePreference`'ın başına görme dışı ifade eklendi ⇒ yalnız §4d ❌ (16 ✅ / 1 ❌); md5 ile geri alındı.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -109,6 +111,22 @@ export const IZINLI: Record<Tablo, Partial<Record<Islem, readonly string[]>>> = 
   conditions: { INSERT: [KOSUL], UPDATE: [KOSUL], DELETE: [BUDAMA] },
 };
 
+const TERCIH = "src/services/helpers/notification-preference.helper.ts";
+const TESLIM = "src/services/helpers/notification-delivery.helper.ts";
+
+/** `resolvePreference` fonksiyonunun gövdesindeki ilk ifade `canSeeNotificationType(` çağrısını taşır mı (AST). */
+export function ilkIfadeGormeMi(kaynak: string): boolean {
+  const sf = ts.createSourceFile("t.ts", kaynak, ts.ScriptTarget.Latest, true);
+  let ok = false;
+  sf.forEachChild((n) => {
+    if (ts.isFunctionDeclaration(n) && n.name?.text === "resolvePreference" && n.body) {
+      const ilk = n.body.statements[0];
+      ok = !!ilk && /\bcanSeeNotificationType\(/.test(ilk.getText(sf));
+    }
+  });
+  return ok;
+}
+
 export function ihlaller(bulgular: readonly Bulgu[]): string[] {
   return bulgular
     .filter((b) => { const izin = IZINLI[b.tablo][b.islem]; return izin !== undefined && !izin.includes(b.dosya); })
@@ -155,9 +173,18 @@ function main(): void {
     importsuz.length ? `IMPORTSUZ: ${importsuz.join(", ")}` : kutuyaDokunan.join(", "));
   const dag = kaynaklar.get(DAGITICI) ?? "";
   check("§4c dağıtıcının alıcı kararı görme helper'ından (`visibleUsersFor`)", /\bvisibleUsersFor\(/.test(dag));
+  const tercih = kaynaklar.get(TERCIH) ?? "";
+  check("§4d ⭐ tercih çözücüsü `resolvePreference`'ın İLK ifadesi görme süzgeci (`canSeeNotificationType`)", ilkIfadeGormeMi(tercih),
+    tercih ? "" : `${TERCIH} okunamadı`);
+  const teslim = kaynaklar.get(TESLIM) ?? "";
+  check("§4e dağıtıcı teslim kararını tek yerden alır (`decideDeliveries`) ve o da `resolvePreference`'ı çağırır",
+    /\bdecideDeliveries\(/.test(dag) && /\bresolvePreference\(/.test(teslim));
 
   console.log("\n=== §6 SONDALAR (saf tarayıcı) ===");
   const S = (k: string, d = "src/x.ts") => tara(k, d).bulgular;
+  check("§6h `resolvePreference` ilk ifadesi görme değilse yakalanır",
+    !ilkIfadeGormeMi("function resolvePreference() { const a = 1; if (!canSeeNotificationType(x)) return; }")
+    && ilkIfadeGormeMi("function resolvePreference() { if (!canSeeNotificationType(x)) return; }"));
   check("§6a ⭐ ikinci outbox yazarı (delege) yakalanır",
     ihlaller(S("await tx.notificationOutbox.create({ data: {} });")).length === 1);
   check("§6b ⭐ ham SQL outbox INSERT'ü yakalanır",

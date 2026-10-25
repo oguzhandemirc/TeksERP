@@ -63,3 +63,28 @@ export interface NotificationCatalogKind {
   kilit: "YOK" | "HER_ZAMAN" | "NOBETTE";
   kilitGerekcesi: string | null;
 }
+
+/** F4 tercih katmanı (N4-MOTOR) — sunucunun çözdüğü hücre (`resolvePreference`). */
+export type NotificationChannel = "UYGULAMA" | "OZET" | "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH";
+
+export interface NotificationPreferenceCell {
+  kind: string;
+  kanallar: Array<{ kanal: NotificationChannel; durum: "ACIK" | "KAPALI" | "GIZLI"; kilit: boolean; kaynak: string; kapsam: unknown }>;
+}
+
+/** Kişinin kaydedilmiş sapma satırı (`GET /tercihler`.satirlar). */
+export interface NotificationPreferenceRow {
+  id: string;
+  tur: string;
+  kanal: NotificationChannel;
+  acik: boolean;
+  kapsam: unknown;
+}
+
+/** `PUT /tercihler` gövde öğesi (tam gövde; sunucu seyrek yazar). */
+export interface NotificationPreferenceInput {
+  tur: string;
+  kanal: NotificationChannel;
+  acik: boolean;
+  kapsam?: unknown;
+}

@@ -15,6 +15,9 @@ import type {
   NotificationSummary,
   NotificationTab,
   SnoozeDuration,
+  NotificationPreferenceCell,
+  NotificationPreferenceInput,
+  NotificationPreferenceRow,
 } from "@/lib/bildirim/types";
 
 const BASE = "/api/bildirim";
@@ -60,7 +63,11 @@ export const bildirimService = {
   bekle: (p: { rev: number; alarmRev: number; epoch: number }, signal?: AbortSignal): Promise<NotificationWaitResult> =>
     get<NotificationWaitResult>(`${BASE}/bekle?rev=${p.rev}&alarmRev=${p.alarmRev}&epoch=${p.epoch}`, signal, 35_000),
   liste: (p: NotificationListParams): Promise<NotificationListResult> => get<NotificationListResult>(`${BASE}?${notificationListQuery(p)}`),
-  katalog: (): Promise<{ turler: NotificationCatalogKind[] }> => get(`${BASE}/katalog`),
+  /** `hucreler` F4 sunucusunda gelir (eski sunucu yalnız `turler`). */
+  katalog: (): Promise<{ turler: NotificationCatalogKind[]; hucreler?: NotificationPreferenceCell[] }> => get(`${BASE}/katalog`),
+  tercihler: (): Promise<{ hucreler: NotificationPreferenceCell[]; satirlar: NotificationPreferenceRow[] }> => get(`${BASE}/tercihler`),
+  tercihleriYaz: (tercihler: NotificationPreferenceInput[]): Promise<{ hucreler: NotificationPreferenceCell[]; satirlar: NotificationPreferenceRow[] }> =>
+    apiClient.put<ApiResponse<{ hucreler: NotificationPreferenceCell[]; satirlar: NotificationPreferenceRow[] }>>(`${BASE}/tercihler`, { tercihler }, Q).then((r) => r.data.data),
   okundu: (id: string): Promise<{ degisti: boolean }> => post(`${BASE}/${encodeURIComponent(id)}/okundu`),
   okunmadi: (id: string): Promise<{ degisti: boolean }> => post(`${BASE}/${encodeURIComponent(id)}/okunmadi`),
   ertele: (id: string, sure: SnoozeDuration): Promise<{ erteleBitis: string }> =>

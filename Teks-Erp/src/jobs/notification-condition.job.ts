@@ -12,6 +12,7 @@ import prisma from "../lib/prisma";
 import { NOTIFICATION_CATALOG, type NotificationKind } from "../constants/notification-catalog";
 import { NOTIFICATION_DISPATCH_LOCK_NS } from "../services/notification-dispatch.service";
 import { emitNotification } from "../services/helpers/notification-emit.helper";
+import { refreshNotificationParams } from "../services/helpers/notification-params.helper";
 import { readNotificationInboxEnabled } from "../services/system-setting.service";
 import { reportJobFailure } from "./job-failure";
 import { uyari } from "../lib/logger";
@@ -52,6 +53,8 @@ export async function runConditionSourceOnce(kind: NotificationKind): Promise<Co
   if (!(await readNotificationInboxEnabled())) return "disabled";
   let truths: ConditionSubject[];
   try {
+    // Fabrika eşiği (N4) kaynakların senkron okuyucusuna değerlendirmeden önce yansır; okuma düşerse koşul kapanmaz.
+    await refreshNotificationParams(prisma);
     truths = await src.evaluate();
   } catch (err) {
     uyari("bildirim", `koşul kaynağı ${kind} değerlendirilemedi — açık koşullar KAPATILMADI`, err);
