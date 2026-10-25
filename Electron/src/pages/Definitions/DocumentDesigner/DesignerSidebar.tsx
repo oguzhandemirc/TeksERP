@@ -1,33 +1,44 @@
-import { useState } from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { DesignerRefs } from "./useDesignerEditor";
 
-type TabKey = "style" | "traits" | "layers";
+export type SidebarTab = "style" | "traits" | "data" | "page" | "settings" | "layers";
 
-const TABS: Array<{ key: TabKey; label: string }> = [
+const TABS: Array<{ key: SidebarTab; label: string }> = [
   { key: "style", label: "Stil" },
   { key: "traits", label: "Özellikler" },
+  { key: "data", label: "Veri" },
+  { key: "page", label: "Sayfa" },
+  { key: "settings", label: "Belge ayarları" },
   { key: "layers", label: "Katmanlar" },
 ];
 
+interface Props {
+  refs: DesignerRefs;
+  tab: SidebarTab;
+  onTab: (t: SidebarTab) => void;
+  /** Özellikler sekmesinin üstü: yönerge bağlama paneli (GrapesJS öznitelikleri altında kalır). */
+  binding: ReactNode;
+  panels: Partial<Record<"data" | "page" | "settings", ReactNode>>;
+}
+
 /**
- * Sağ panel. Sekme içerikleri DOM'da KALIR (yalnız gizlenir): GrapesJS
- * yöneticileri bu kaplara bir kez çizilir; sökülürse editörün görünümü kopar.
+ * Sağ panel. GrapesJS kapları DOM'da KALIR (yalnız gizlenir): yöneticiler bu kaplara
+ * bir kez çizilir; sökülürse editörün görünümü kopar. React panelleri sekmeyle çizilir.
  */
-export function DesignerSidebar({ refs }: { refs: DesignerRefs }) {
-  const [tab, setTab] = useState<TabKey>("style");
+export function DesignerSidebar({ refs, tab, onTab, binding, panels }: Props) {
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l bg-card" aria-label="Tasarım paneli">
-      <div role="tablist" className="flex border-b">
+    <aside className="flex w-[22rem] shrink-0 flex-col border-l bg-card" aria-label="Tasarım paneli">
+      <div role="tablist" className="grid grid-cols-3 border-b">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
             role="tab"
             aria-selected={tab === t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => onTab(t.key)}
             className={cn(
-              "flex-1 px-2 py-2 text-xs font-medium transition-colors",
+              "px-2 py-2 text-xs font-medium transition-colors",
               tab === t.key ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -40,7 +51,14 @@ export function DesignerSidebar({ refs }: { refs: DesignerRefs }) {
           <div ref={refs.selectors} />
           <div ref={refs.styles} />
         </div>
-        <div ref={refs.traits} className={cn(tab !== "traits" && "hidden")} />
+        <div className={cn(tab !== "traits" && "hidden")}>
+          {binding}
+          <h4 className="px-3 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Öznitelikler</h4>
+          <div ref={refs.traits} />
+        </div>
+        {tab === "data" && panels.data}
+        {tab === "page" && panels.page}
+        {tab === "settings" && panels.settings}
         <div ref={refs.layers} className={cn(tab !== "layers" && "hidden")} />
       </div>
     </aside>

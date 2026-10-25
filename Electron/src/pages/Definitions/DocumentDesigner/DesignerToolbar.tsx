@@ -1,5 +1,5 @@
 import type { Editor } from "grapesjs";
-import { Eraser, FileText, Redo2, Undo2 } from "lucide-react";
+import { Eraser, FileText, FileType2, Redo2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -9,14 +9,17 @@ import { SAMPLE_DOCUMENT_CSS, SAMPLE_DOCUMENT_HTML } from "./editor/sampleDocume
 interface Props {
   editor: Editor | null;
   templateId: string | null;
+  docTypeLabel: string;
+  onDocType: () => void;
+  dirty: boolean;
   paper: PaperSize;
   orientation: Orientation;
   onPaper: (p: PaperSize) => void;
   onOrientation: (o: Orientation) => void;
 }
 
-/** Üst şerit: kâğıt + yön, geri al/yinele, örnek belge, temizle. Kayıt/önizleme T4–T5'te eklenir. */
-export function DesignerToolbar({ editor, templateId, paper, orientation, onPaper, onOrientation }: Props) {
+/** Üst şerit: belge türü, taslak rozeti, kâğıt + yön, geri al/yinele, örnek belge, temizle. Kayıt/önizleme T4–T5'te. */
+export function DesignerToolbar({ editor, templateId, docTypeLabel, onDocType, dirty, paper, orientation, onPaper, onOrientation }: Props) {
   const loadSample = () => {
     if (!editor) return;
     editor.setComponents(SAMPLE_DOCUMENT_HTML);
@@ -32,6 +35,14 @@ export function DesignerToolbar({ editor, templateId, paper, orientation, onPape
       <span className="mr-1 text-xs text-muted-foreground">
         {templateId ? `Şablon ${templateId.slice(0, 8)}` : "Yeni şablon · kaydedilmedi"}
       </span>
+      <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onDocType} title="Belge türünü değiştir">
+        <FileType2 className="mr-1.5 h-3.5 w-3.5" /> Belge türü: {docTypeLabel}
+      </Button>
+      {dirty && (
+        <span className="rounded bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300" data-testid="taslak-rozeti">
+          Taslak · kaydedilince yeni sürüm
+        </span>
+      )}
       <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
         Kâğıt
         <Select value={paper} onValueChange={(v) => onPaper(v as PaperSize)}>

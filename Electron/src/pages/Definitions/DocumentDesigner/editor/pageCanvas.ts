@@ -76,21 +76,42 @@ export function pageDevices(): PageDevice[] {
 
 export const GUIDE_STYLE_ID = "tekserp-page-guides";
 
+export interface PageMargins {
+  ust: number;
+  sag: number;
+  alt: number;
+  sol: number;
+}
+
+export interface GuideRegions {
+  /** Üst/alt bilgi temsil metni (boşsa şerit çizilmez). */
+  header: string;
+  footer: string;
+}
+
+const cssText = (s: string): string => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n]+/g, " ")}"`;
+
 /**
- * Kenar boşluğu kılavuzu (kesikli çerçeve) + her sayfa yüksekliğinde sayfa
- * kesmesi çizgisi. `html` arka planına çizilir; gövde içeriği ve dışa aktarılan
- * CSS etkilenmez. Kenar boşluğu gövde dolgusu olarak taklit edilir.
+ * Kenar boşluğu kılavuzu (kesikli çerçeve) + her sayfa yüksekliğinde sayfa kesmesi
+ * çizgisi + üst/alt bilgi temsil şeritleri + `.sayfa-kesmesi` işareti. Ayrı `<style>`a
+ * yazılır; şablon CSS'ine ve dışa aktarılan HTML'e girmez. Kenar gövde dolgusuyla taklit edilir.
  */
-export function guideCss(dim: PageDimensions, marginMm: number = DEFAULT_MARGIN_MM): string {
-  const m = mmToPx(marginMm);
+export function guideCss(dim: PageDimensions, margin: number | PageMargins = DEFAULT_MARGIN_MM, regions?: GuideRegions): string {
+  const m = typeof margin === "number" ? { ust: margin, sag: margin, alt: margin, sol: margin } : margin;
+  const [t, r, b, l] = [mmToPx(m.ust), mmToPx(m.sag), mmToPx(m.alt), mmToPx(m.sol)];
   const pageH = dim.heightPx;
-  return [
-    `html{background:#fff;min-height:100%;}`,
-    `body{margin:0;padding:${m}px;box-sizing:border-box;min-height:${pageH}px;position:relative;`,
+  const band = "position:absolute;pointer-events:none;font:10px/1.2 Arial,sans-serif;color:rgba(37,99,235,.85);display:flex;align-items:center;justify-content:center;border:1px dotted rgba(37,99,235,.6);box-sizing:border-box;";
+  const out = [
+    `html{background:#fff;min-height:100%;position:relative;}`,
+    `body{margin:0;padding:${t}px ${r}px ${b}px ${l}px;box-sizing:border-box;min-height:${pageH}px;position:relative;`,
     `background-image:repeating-linear-gradient(to bottom,transparent 0,transparent ${pageH - 1}px,rgba(220,38,38,.55) ${pageH - 1}px,rgba(220,38,38,.55) ${pageH}px);}`,
-    `body::before{content:"";position:absolute;pointer-events:none;left:${m}px;right:${m}px;top:${m}px;height:${pageH - 2 * m}px;`,
+    `body::before{content:"";position:absolute;pointer-events:none;left:${l}px;right:${r}px;top:${t}px;height:${pageH - t - b}px;`,
     `outline:1px dashed rgba(59,130,246,.55);}`,
-  ].join("");
+    `.sayfa-kesmesi{border-top:1px dashed rgba(220,38,38,.8);height:0;margin:2mm 0;}`,
+  ];
+  if (regions?.header && t >= 8) out.push(`html::before{content:${cssText(regions.header)};${band}left:${l}px;right:${r}px;top:2px;height:${t - 4}px;}`);
+  if (regions?.footer && b >= 8) out.push(`html::after{content:${cssText(regions.footer)};${band}left:${l}px;right:${r}px;top:${pageH - b + 2}px;height:${b - 4}px;}`);
+  return out.join("");
 }
 
 /** Cetvel çentikleri: her cm bir çentik, her 2 cm'de etiket (0, 2, 4…). */
