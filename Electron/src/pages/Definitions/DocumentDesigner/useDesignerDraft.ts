@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DOC_DEF_MAP, DOC_TYPE_TO_KEY } from "@/services/documentConfig";
 import { documentTemplateService } from "@/services/documentTemplateService";
@@ -17,10 +17,20 @@ export function docTypeLabel(docType: string): string {
   return (key && DOC_DEF_MAP[key]?.label) || LIVE_DOC_LABELS[docType] || docType;
 }
 
+/** Kayıtlı sürümden editöre yüklenen içerik (T5). */
+export interface DraftSnapshot {
+  docType: string;
+  pageSettings: Record<string, unknown>;
+  settings: Record<string, unknown>;
+  internalFields: string[];
+  editMode: EditMode;
+  code: { html: string; css: string };
+}
+
 /**
  * Tasarımcının kayıt dışı taslağı: belge türü, sayfa ayarı, dondurulmuş `ayar` ve iç
- * alan opt-in'leri. Kayıt (yeni sürüm) T5'in işi; burada değişiklik yalnız "taslak"
- * rozetine düşer. Yeni tür seçilince ayar `GET /system/:docType`in etkin ayarıyla dolar.
+ * alan opt-in'leri. Karalamada yeni tür seçilince ayar `GET /system/:docType`in etkin
+ * ayarıyla dolar; kayıtlı şablonda (`hydrate`) ayar sürümden gelir ve ezilmez.
  */
 export function useDesignerDraft() {
   const [docType, setDocType] = useState(DEFAULT_DOC_TYPE);
@@ -37,8 +47,10 @@ export function useDesignerDraft() {
   const systemQ = useQuery({ queryKey: ["document-templates", "system", docType], queryFn: () => documentTemplateService.system(docType) });
 
   const system = systemQ.data?.data;
+  // Sürümden yüklenen türde Sistem'in etkin ayarı dondurulmuş `ayar`ı EZMEMELİ (P-d).
+  const hydratedType = useRef<string | null>(null);
   useEffect(() => {
-    if (!system) return;
+    if (!system || hydratedType.current === system.docType) return;
     setSettings(lockLanguage(system.settings ?? {}));
     setInternalFields(system.internalFields ?? []);
     setDirty(false);
@@ -73,6 +85,18 @@ export function useDesignerDraft() {
       },
       dirty,
       touch,
+      /** Kayıtlı sürümün içeriği taslağa yazılır; kirli bayrağı düşer. */
+      hydrate: (snap: DraftSnapshot) => {
+        hydratedType.current = snap.docType;
+        setDocType(snap.docType);
+        setPageSettingsState({ ...DEFAULT_PAGE_SETTINGS, ...(snap.pageSettings as Partial<PageSettings>) });
+        setSettings(lockLanguage(snap.settings));
+        setInternalFields(snap.internalFields);
+        setEditModeState(snap.editMode);
+        setCodeState(snap.code);
+        setDirty(false);
+      },
+      markSaved: () => setDirty(false),
       editMode,
       /** Kip geçişi: koda geçerken görsel kaynağın o anki hâli kod kaynağına kopyalanır. */
       setEditMode: (mode: EditMode, seed?: { html: string; css: string }) => {

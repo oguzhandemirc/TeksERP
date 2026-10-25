@@ -15,11 +15,14 @@ import { BindingPanel } from "./panels/BindingPanel";
 import { DataTreePanel } from "./panels/DataTreePanel";
 import { DocumentSettingsPanel } from "./panels/DocumentSettingsPanel";
 import { PageSettingsPanel } from "./panels/PageSettingsPanel";
+import { TemplateBar } from "./templates/TemplateBar";
+import { useTemplateAccess } from "./templates/useTemplateAccess";
+import { useTemplateDocument } from "./templates/useTemplateDocument";
 import { docTypeLabel, useDesignerDraft } from "./useDesignerDraft";
 import { useDesignerEditor, type DesignerRefs } from "./useDesignerEditor";
 
 interface Props {
-  /** Şablon kimliği — kayıt uçları (T5) gelene dek yalnız başlıkta gösterilir. */
+  /** Kayıtlı şablon (son sürümü yüklenir, kayıt yeni sürüm açar); null = karalama (kayıtsız). */
   templateId: string | null;
 }
 
@@ -50,6 +53,9 @@ export default function DesignerWorkspace({ templateId }: Props) {
     onRegion,
   );
 
+  const access = useTemplateAccess();
+  const doc = useTemplateDocument(templateId, editor, draft);
+
   useEffect(() => {
     if (!editor) return;
     registerDocumentBlocks(editor, { contract: draft.contract, settings: draft.settings, internalFields: draft.internalFields });
@@ -70,6 +76,7 @@ export default function DesignerWorkspace({ templateId }: Props) {
 
   return (
     <div className="tekserp-designer flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border">
+      {templateId && <TemplateBar editor={editor} draft={draft} doc={doc} access={access} />}
       <DesignerToolbar
         editor={editor}
         templateId={templateId}

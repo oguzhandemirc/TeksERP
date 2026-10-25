@@ -96,6 +96,10 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Reports/_v2/custom/data/dimension-values.ts::customReportApi.dimensionValues", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: true },
   // MAL-3 maliyet önizlemesi: yapı/ezme değişince ~400 ms durulup sorar; yazmaz, uyarılar `data` içinde (zarf uyarısız).
   { yer: "Electron/src/pages/Cost/shared/useCostPreview.ts::previewCost", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
+  // T5 belge şablonu: Sistem önizlemesi / sürüm karşılaştırması / yayın onayı açılınca çizer (yazmaz; zarf `ok(res, data)`, uyarısız).
+  { yer: "Electron/src/pages/Definitions/DocumentDesigner/templates/SystemPreviewDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  { yer: "Electron/src/pages/Definitions/DocumentDesigner/versions/CompareDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  { yer: "Electron/src/pages/Definitions/DocumentDesigner/versions/PublishDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/hooks/useDeviceAnnounce.ts::apiClient", sinif: "BOOT", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/DocumentPreview.tsx::printedDocumentService.getSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/TravelerCardPreview.tsx::workOrderService.getTravelerCardSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
