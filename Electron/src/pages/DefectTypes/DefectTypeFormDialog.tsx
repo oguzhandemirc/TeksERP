@@ -40,7 +40,28 @@ function DefectGroupField({ form }: { form: UseFormReturn<DefectTypeFormValues> 
   );
 }
 
+const POINT_OPTIONS: readonly PickerOption[] = [
+  { id: "", label: "Boyuttan", subLabel: "Hata boyu seçilir: ≤3″ 1 · 3–6″ 2 · 6–9″ 3 · >9″ 4 puan" },
+  ...[1, 2, 3, 4].map((n) => ({ id: String(n), label: `${n} puan`, subLabel: "Boyut sorulmaz, her hata bu puanı alır" })),
+];
+
+function FixedPointsField({ form }: { form: UseFormReturn<DefectTypeFormValues> }) {
+  return (
+    <FormField label="4 puan" error={form.formState.errors.fixedPoints} hint="Delik gibi boyu ölçülmeyen hatalarda sabit puan seçin.">
+      <Controller
+        control={form.control}
+        name="fixedPoints"
+        render={({ field }) => (
+          <OptionPickerField value={field.value ?? ""} onChange={(v) => field.onChange(v)} options={POINT_OPTIONS} title="4 puan seç" placeholder="Boyuttan" />
+        )}
+      />
+    </FormField>
+  );
+}
+
 interface Props {
+  /** Kalite Güvence açık mı — kapalıyken 4 puan alanı hiç çizilmez (bugünkü form). */
+  fourPoint?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: DefectType | null;
@@ -48,7 +69,7 @@ interface Props {
   isSubmitting?: boolean;
 }
 
-export function DefectTypeFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function DefectTypeFormDialog({ fourPoint = false, open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   const defaults: DefectTypeFormValues = initial
     ? {
         name: initial.name,
@@ -57,6 +78,7 @@ export function DefectTypeFormDialog({ open, onOpenChange, initial, onSubmit, is
         defectGroup: initial.defectGroup ?? "",
         isActive: initial.isActive,
         isDefault: initial.isDefault,
+        fixedPoints: (initial.fixedPoints == null ? "" : String(initial.fixedPoints)) as DefectTypeFormValues["fixedPoints"],
       }
     : defectTypeFormDefaults;
 
@@ -107,6 +129,7 @@ export function DefectTypeFormDialog({ open, onOpenChange, initial, onSubmit, is
             />
           </FormField>
           <DefectGroupField form={form} />
+          {fourPoint && <FixedPointsField form={form} />}
           <FormField label="Açıklama" htmlFor="description" error={form.formState.errors.description}>
             <Input id="description" {...form.register("description")} />
           </FormField>

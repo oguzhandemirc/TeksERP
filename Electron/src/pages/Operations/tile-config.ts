@@ -25,6 +25,7 @@ import {
   Layers,
   FlaskConical,
   BadgeCheck,
+  Gauge,
   FileCheck2,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
@@ -551,6 +552,17 @@ export const operationsTiles: OperationsTile[] = [
     to: "/quality/certificates",
     group: "quality",
     permission: "certificate:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
+  },
+  {
+    key: "inspection-rules",
+    title: "4 Puan Kuralları",
+    description: "Puan aralığı → kalite derecesi; fabrika varsayılanı ve müşteri spesifikasyonları",
+    icon: Gauge,
+    to: "/quality/inspection-rules",
+    group: "quality",
+    permission: "inspection:read",
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
     offHint: KALITE_GUVENCE_OFF_HINT,
   },

@@ -18,9 +18,14 @@ import type { ItemFormValues } from "./schema";
  */
 export const itemCarriesAllowedLists = (itemType: ItemType): boolean => itemType === ItemType.FABRIC;
 
+/**
+ * `withWidth` (Kalite Güvence açık): KUMAŞta `widthCm` gider (boş = `null` temizler). Kapalıyken anahtar
+ * HİÇ gitmez — gizli alanın boş değeri mevcut eni silmesin.
+ */
 export function buildItemPayload(
   v: ItemFormValues,
   isEdit: boolean,
+  withWidth = false,
 ): ItemCreatePayload {
   const base = {
     name: v.name.trim(),
@@ -31,6 +36,9 @@ export function buildItemPayload(
     linearDensityDen: v.linearDensityDen.trim() === "" ? null : v.linearDensityDen.trim(),
     // E4: çözgü kartı yalnız KUMAŞ taşır; öteki tiplerde `null` gider (sunucu FABRIC dışını 400'ler, boş = temizle).
     warpSpecId: v.itemType === ItemType.FABRIC && v.warpSpecId ? v.warpSpecId : null,
+    ...(withWidth && v.itemType === ItemType.FABRIC
+      ? { widthCm: v.widthCm.trim() === "" ? null : v.widthCm.trim().replace(",", ".") }
+      : {}),
   };
   const lists = itemCarriesAllowedLists(v.itemType)
     ? { allowedColorIds: v.allowedColorIds, allowedPropertyIds: v.allowedPropertyIds }
