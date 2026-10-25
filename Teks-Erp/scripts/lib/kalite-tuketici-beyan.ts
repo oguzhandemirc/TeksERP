@@ -47,6 +47,11 @@ export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
     gerekce: "Panel kurşun bitirişinin hata LİSTESİ: liste doluysa adım istasyonunda muayene açık olmalı (bilinçli fark K2).",
   },
   {
+    dosya: "services/inventory.service.ts",
+    fonksiyon: "entryStationCapableForInspection",
+    gerekce: "KK1 doğumundaki muayene için giriş istasyonunun kalite yeteneği: yeteneksizse top doğar, muayene yazılmaz (K4P-KK1b fail-soft, STATION_NO_QUALITY).",
+  },
+  {
     dosya: "services/tambur.service.ts",
     fonksiyon: "reportError",
     gerekce: "Tambur hata YAZMA: tür kontrolü ekran ailesini söyler, muayene yeteneği ayrıca sorulur.",
