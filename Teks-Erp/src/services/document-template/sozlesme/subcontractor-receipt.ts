@@ -6,6 +6,7 @@
 // taraf) ve renderer'da opt-in iç kolon YOK → `hedef: musteri`, iç alan beyanı yok.
 // =============================================================================
 
+import { TERIM } from "../../../constants/terim";
 import type { DocColSpec } from "../../document-render/doc-model";
 import { docTitle } from "../../document-render/doc-style";
 import type { PrintedDocSnapshot } from "../../printed-document.service";
@@ -61,7 +62,7 @@ const ROOT_FIELDS: FieldDef[] = [
   { yol: "belge.tarih", etiket: "Kabul tarihi", tur: "tarih", sinif: "musteri", ornek: "2026-09-25T08:30:00.000Z" },
   ...DOC_STATUS_FIELDS,
   { yol: "belge.fason_irsaliye_no", etiket: "Fasoncunun irsaliye no", tur: "metin", sinif: "musteri", ornek: "YB-8842" },
-  { yol: "belge.is_emri_no", etiket: "İş emri no", tur: "metin", sinif: "musteri", ornek: "IE2507260001" },
+  { yol: "belge.is_emri_no", etiket: `${TERIM.terbiyeIsEmri.tekil} no`, tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("workOrder", 1) },
   { yol: "belge.islem", etiket: "İşlem (istasyon)", tur: "metin", sinif: "musteri", ornek: "Boyahane (Fason)" },
   { yol: "belge.uygulanan_renk", etiket: "Uygulanan renk", tur: "metin", sinif: "musteri", ornek: "Bej" },
   { yol: "belge.notlar", etiket: "Kabul notu", tur: "metin", sinif: "musteri", ornek: "Renk tutmuş" },
@@ -90,7 +91,7 @@ const TABLE_DEFS: TableDef[] = [
   {
     anahtar: "parti",
     etiket: "Dönen partiler",
-    kolonlar: [{ yol: "no", etiket: "Parti no", tur: "metin", sinif: "musteri", ornek: "P1207261", hiza: "l" }],
+    kolonlar: [{ yol: "no", etiket: "Parti no", tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("batchDaily", 1), hiza: "l" }],
   },
   {
     anahtar: "ozellik",
@@ -180,7 +181,7 @@ function scenarios(): Scenario<never>[] {
   const single = base();
   single.rolls = [roll(1)];
   single.totals = { rollCount: 1 };
-  single.batchNumbers = ["P1207261"];
+  single.batchNumbers = [sampleSeriesCode("batchDaily", 1)];
 
   const multi = base();
   multi.rolls = Array.from({ length: 60 }, (_, i) => roll(i + 1, i % 3 === 0 ? 149.6 : 150));

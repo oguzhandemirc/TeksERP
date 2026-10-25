@@ -12,6 +12,9 @@ import { resolveDocTable, type DocColSpec, type DocFmtKit } from "../../document
 import { docNum } from "../../document-render/fmt-num";
 import type { ColumnView, ConfigFieldDef, TableDef } from "./tipler";
 
+/** Senaryo toplarının kalite sütununda basılan ÖRNEK metin; kalite kararı değil, yalnız önizleme verisi. */
+export const SAMPLE_GRADE_LABEL = "A";
+
 export const plainJson = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 /** Ham ayar → kayıt kapısının temizlediği `DocumentConfig` (bozuk girdi boş ayar olur). */

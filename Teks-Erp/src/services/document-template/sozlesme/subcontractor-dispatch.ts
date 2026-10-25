@@ -9,6 +9,8 @@
 // gönderilendir (donmuş toplam); dönen metre kabul makbuzunun işidir.
 // =============================================================================
 
+import { TERIM } from "../../../constants/terim";
+import { sampleSeriesCode } from "./senaryolar";
 import { resolveGridGroups, resolveGridRows, FASON_DENSITY, resolveFasonPageSize } from "../../document-render/fason-ceki.density";
 import { docTitle } from "../../document-render/doc-style";
 import type { DocColSpec } from "../../document-render/doc-model";
@@ -72,10 +74,10 @@ const ROOT_FIELDS: FieldDef[] = [
   { yol: "belge.plaka", etiket: "Plaka", tur: "metin", sinif: "musteri", ornek: "16 XYZ 789" },
   { yol: "belge.sofor", etiket: "Şoför", tur: "metin", sinif: "musteri", ornek: "Ali Demir" },
   { yol: "belge.notlar", etiket: "Sevk notu", tur: "metin", sinif: "musteri", ornek: "Acele" },
-  { yol: "belge.is_emri_no", etiket: "İş emri no", tur: "metin", sinif: "musteri", ornek: "IE2507260001" },
+  { yol: "belge.is_emri_no", etiket: `${TERIM.terbiyeIsEmri.tekil} no`, tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("workOrder", 1) },
   { yol: "belge.istasyon", etiket: "Fason adımı (istasyon)", tur: "metin", sinif: "musteri", ornek: "Boyahane (Fason)" },
-  { yol: "belge.en", etiket: "Belgenin eni (iş emrinden)", tur: "sayi", ondalik: 0, birim: "cm", sinif: "musteri", ornek: 150 },
-  { yol: "belge.parti_no", etiket: "Parti no", tur: "metin", sinif: "musteri", ornek: "P1207261" },
+  { yol: "belge.en", etiket: `Belgenin eni (${TERIM.terbiyeIsEmri.cekim.ayrilma})`, tur: "sayi", ondalik: 0, birim: "cm", sinif: "musteri", ornek: 150 },
+  { yol: "belge.parti_no", etiket: "Parti no", tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("batchDaily", 1) },
   { yol: "belge.cins", etiket: "Cinsi (ilk topun kumaşı)", tur: "metin", sinif: "musteri", ornek: "Pamuklu Astar" },
   { yol: "belge.istenen_renk", etiket: "İstenen (hedef) renk", tur: "metin", sinif: "musteri", ornek: "Bej" },
   { yol: "belge.renk", etiket: "Renk (hedef, yoksa ilk topun rengi)", tur: "metin", sinif: "musteri", ornek: "Bej" },

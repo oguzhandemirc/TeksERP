@@ -5,6 +5,8 @@
 // `talimat_eksik` (uyarı satırı) ve `en_999` (D8 sınır vakası).
 // =============================================================================
 
+import { SAMPLE_GRADE_LABEL } from "./subcontractor-common";
+import { TERIM } from "../../../constants/terim";
 import { longText, sampleDoc, sampleEnvelope } from "./senaryolar";
 import type { Scenario } from "./tipler";
 
@@ -12,7 +14,7 @@ type Row = Record<string, unknown>;
 
 const roll = (i: number, qty: number, ek: Row = {}): Row => ({
   sequence: i, barcode: `TR-260607-R${String(100 + i).padStart(4, "0")}`, itemCode: "KMS-001", itemName: "Pamuklu Astar",
-  colorCode: null, colorName: null, dispatchedQty: qty, dispatchedWeight: 38, qualityGrade: "A", width: 150, ...ek,
+  colorCode: null, colorName: null, dispatchedQty: qty, dispatchedWeight: 38, qualityGrade: SAMPLE_GRADE_LABEL, width: 150, ...ek,
 });
 
 export function scenarios(): Scenario<never>[] {
@@ -88,6 +90,6 @@ export function scenarios(): Scenario<never>[] {
       ek: { baski: { taslak: true } },
     },
     { ad: "talimat_eksik", aciklama: "Talimat kutusu var ama boş — uyarı satırı basılır", snapshot: sampleEnvelope(missing) },
-    { ad: "en_999", aciklama: "En sınırı: iş emri eni 999,4 cm (binlik ayracı yok)", snapshot: sampleEnvelope(width999) },
+    { ad: "en_999", aciklama: `En sınırı: ${TERIM.terbiyeIsEmri.tekilKucuk} eni 999,4 cm (binlik ayracı yok)`, snapshot: sampleEnvelope(width999) },
   ];
 }

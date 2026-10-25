@@ -8,6 +8,7 @@
 // Rakamlar donmuş snapshot'tan: toplamlar BRÜTTÜR, şablon yeniden toplamaz.
 // =============================================================================
 
+import { TERIM } from "../../../constants/terim";
 import { docTitle } from "../../document-render/doc-style";
 import { renderFasonDirectShipTables } from "../../document-render/fason-direct-ship.model";
 import { pickExportCode } from "../../helpers/shipment-destination.helper";
@@ -29,7 +30,7 @@ import {
   rootFields,
 } from "./ortak";
 import { longText, sampleDoc, sampleEnvelope, sampleSeriesCode } from "./senaryolar";
-import { baseConfigSchema, columnViewsOf, normalizeBase, plainJson, sanitizeRawConfig, type BaseDocConfig } from "./subcontractor-common";
+import { baseConfigSchema, columnViewsOf, normalizeBase, plainJson, SAMPLE_GRADE_LABEL, sanitizeRawConfig, type BaseDocConfig } from "./subcontractor-common";
 import type { BuildExtras, ContextObject, ContextValue, DocumentContract, FieldDef, Scenario, TableDef, TemplateContext } from "./tipler";
 
 type Row = Record<string, unknown>;
@@ -64,13 +65,13 @@ const ROOT_FIELDS: FieldDef[] = [
   { yol: "belge.tarih", etiket: "Sevk tarihi (doğrudan sevk, yoksa fason sevk)", tur: "tarih", sinif: "musteri", ornek: "2026-09-25T08:30:00.000Z" },
   ...DOC_STATUS_FIELDS,
   { yol: "belge.fason_sevk_no", etiket: "Fason sevk no (yalnız ayrı sevk no varsa)", tur: "metin", sinif: "musteri", ornek: null },
-  { yol: "belge.parti_no", etiket: "Parti no", tur: "metin", sinif: "musteri", ornek: "P1207261" },
+  { yol: "belge.parti_no", etiket: "Parti no", tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("batchDaily", 1) },
   { yol: "belge.sevk_eden", etiket: "Fasondan sevk eden", tur: "metin", sinif: "musteri", ornek: "Ayşe Kaya" },
   { yol: "belge.sebep", etiket: "Doğrudan sevk sebebi", tur: "metin", sinif: "musteri", ornek: "Müşteri acil talep" },
   { yol: "belge.plaka", etiket: "Plaka", tur: "metin", sinif: "musteri", ornek: "16 XYZ 789" },
   { yol: "belge.sofor", etiket: "Şoför", tur: "metin", sinif: "musteri", ornek: "Ali Demir" },
   { yol: "belge.notlar", etiket: "Sevk notu", tur: "metin", sinif: "musteri", ornek: null },
-  { yol: "belge.is_emri_no", etiket: "İş emri no", tur: "metin", sinif: "musteri", ornek: "IE2507260001" },
+  { yol: "belge.is_emri_no", etiket: `${TERIM.terbiyeIsEmri.tekil} no`, tur: "metin", sinif: "musteri", ornek: sampleSeriesCode("workOrder", 1) },
   { yol: "belge.adim", etiket: "Fason adımı (istasyon)", tur: "metin", sinif: "musteri", ornek: "Boyahane (Fason)" },
   { yol: "belge.musteri_var", etiket: "Belgede müşteri var mı", tur: "mantiksal", sinif: "musteri", ornek: true },
   { yol: "belge.musteri_ad", etiket: "Müşteri adı", tur: "metin", sinif: "musteri", ornek: "Örnek Tekstil A.Ş." },
@@ -236,7 +237,7 @@ function scenarios(): Scenario<never>[] {
   const base = () => sampleDoc("SUBCONTRACTOR_DIRECT_SHIP");
   const roll = (i: number, width: number | null, qty: number, kg: number | null): Row => ({
     sequence: i, barcode: `TR-260607-R${String(100 + i).padStart(4, "0")}`, itemCode: "KMS-001", itemName: "Pamuklu Astar",
-    colorCode: "BEJ", colorName: "Bej", dispatchedQty: qty, dispatchedWeight: kg, qualityGrade: "A", width,
+    colorCode: "BEJ", colorName: "Bej", dispatchedQty: qty, dispatchedWeight: kg, qualityGrade: SAMPLE_GRADE_LABEL, width,
   });
 
   const single = base();
@@ -259,7 +260,7 @@ function scenarios(): Scenario<never>[] {
     workOrder: { id: "wo2", workOrderNumber: sampleSeriesCode("workOrder", 2), type: "ORDER_PRODUCTION" },
     subcontractor: { id: "sub2", name: "Boş Alanlı Fasoncu", code: null },
     step: { id: "st2", stepSequence: 1, station: { name: "Zımpara (Fason)", code: "ZMP" } },
-    rolls: [{ sequence: 1, barcode: null, itemCode: "KMS-001", itemName: "Pamuklu Astar", colorCode: null, colorName: null, dispatchedQty: 100, dispatchedWeight: null, qualityGrade: "A", width: null }],
+    rolls: [{ sequence: 1, barcode: null, itemCode: "KMS-001", itemName: "Pamuklu Astar", colorCode: null, colorName: null, dispatchedQty: 100, dispatchedWeight: null, qualityGrade: SAMPLE_GRADE_LABEL, width: null }],
     allocations: [],
     totals: { rollCount: 1, totalQty: 100, totalWeight: 0 },
   };
