@@ -176,7 +176,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
 
 const styles = StyleSheet.create({
   rulerBlock: { height: 112, paddingHorizontal: 8 },
-  entryFixed: { paddingHorizontal: 8 },
+  entryFixed: { paddingHorizontal: 8, gap: 10 },
   section: { flex: 1, backgroundColor: palette.white, borderRadius: 12, padding: 14, gap: 8 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: palette.slate[900] },
   muted: { fontSize: 12, color: palette.slate[400], fontStyle: 'italic' },

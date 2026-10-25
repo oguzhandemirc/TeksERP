@@ -1419,7 +1419,7 @@ export default function KursunQcScreen() {
                     })}
                     {missingRequiredProps.length > 0 && (
                       <Text style={styles.propWarnLine}>
-                        Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden
+                        Zorunlu: {missingRequiredProps.map((p) => p.name).join(', ')} — işaretlemeden{' '}
                         {panels.qualityPanel ? 'KK2 tamamlanamaz.' : 'tamamlanamaz.'}
                       </Text>
                     )}
@@ -2289,11 +2289,9 @@ const styles = StyleSheet.create({
   // Hata giriş alanı — dış boşluk rollPane gap'inden gelir; burada yalnız yatay
   // iç boşluk (amber kartı kenardan içeri al). Border/zemin YOK (hr çizgisi kalktı).
   entryFixed: { paddingHorizontal: 8 },
-  // Metre cetveli bloğu — SABİT yükseklik: "henüz hata yok" ↔ cetvel geçişinde
-  // yükseklik değişmez (alttaki giriş zıplamaz). İçteki kart/boş durum flex ile
-  // bloğu tam doldurur → komşu gap'ler eşit kalır.
+  // İşlem paneli kartı ("Bu istasyonun kazandırdıkları") — flex YOK: InspectionPanel
+  // girişinin altında içerik kadar uzar (flex:1 onu 56 dp'ye ezip içini gizliyordu).
   section: {
-    flex: 1,
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 14,
