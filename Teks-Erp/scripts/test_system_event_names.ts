@@ -68,7 +68,7 @@ function check(label: string, ok: boolean, extra?: string): void {
 const KOK = path.resolve(__dirname, "..", "..");
 const SRC = path.join(KOK, "Teks-Erp/src");
 const SOZLESME = path.join(SRC, "constants/system-events.ts");
-const ETIKET = path.join(KOK, "Electron/src/lib/audit-labels.ts");
+const ETIKET = path.join(SRC, "constants/audit-tablo-etiketleri.ts"); // B2: sözlük kaynağı backend'de
 
 /** Yorumları söker, OFSETLERİ korur (dosya:satır doğru kalsın). */
 const yorumSok = (s: string): string =>

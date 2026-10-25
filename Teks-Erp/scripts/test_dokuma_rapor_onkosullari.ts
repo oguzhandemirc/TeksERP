@@ -117,7 +117,8 @@ export function ayriDuruyor(gercek: string[] | undefined, a: string, b: string):
   return { ok: false, neden: `${a}:${varA ? "var" : "YOK"} · ${b}:${varB ? "var" : "YOK"} — ayrım ölçülemez` };
 }
 
-const AUDIT_LABELS_YOLU = path.resolve(__dirname, "../../Electron/src/lib/audit-labels.ts");
+// B2 (2026-10-25): sözlük backend'e taşındı; ENUM_LABELS iki parça (ANA + EK), override ANA dosyasında.
+const AUDIT_ENUM_YOLLARI = ["../src/constants/audit-enum-etiketleri.ts", "../src/constants/audit-enum-etiketleri-ek.ts"].map((r) => path.resolve(__dirname, r));
 
 /** `const <ad> … = {` ile `\n};` arasındaki gövde. Bulunamazsa `null` — ve `null` KIRMIZIDIR. */
 export function bloguCikar(kaynak: string, ad: string): string | null {
@@ -369,9 +370,11 @@ async function main(): Promise<void> {
 
   // ── §6 — ② PARETO'NUN ÖNCÜLÜ: MINOR SÜRE sınıfıdır, ŞİDDET değil ─────────
   console.log("§6 — ② Pareto öncülü: MINOR bir SÜRE sınıfı, kusur ŞİDDETİ değil");
-  const kaynak = readFileSync(AUDIT_LABELS_YOLU, "utf8");
+  const kaynak = AUDIT_ENUM_YOLLARI.map((y) => readFileSync(y, "utf8")).join("\n");
   const overrideBlok = bloguCikar(kaynak, "FIELD_ENUM_OVERRIDES");
-  const genelBlok = bloguCikar(kaynak, "ENUM_LABELS");
+  const ana = bloguCikar(kaynak, "ENUM_LABELS_ANA");
+  const ek = bloguCikar(kaynak, "ENUM_LABELS_EK");
+  const genelBlok = ana !== null && ek !== null ? `${ana}\n${ek}` : null;
   check("§6a0 ayrıştırıcı iki bloğu da buldu", overrideBlok !== null && genelBlok !== null);
   // ⚠️ KIRMIZI KENDİ TEŞHİSİNİ TAŞIR: "okunamadı" üç ayrı sebepten doğar ve
   // düzeltmeleri FARKLIDIR — (A) kapsam satırı silindi · (B) kapsam duruyor ama

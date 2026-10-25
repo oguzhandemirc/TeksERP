@@ -58,6 +58,9 @@ const TABLOLAR = ["constants/panel-ekran-yolu.ts", "constants/panel-ayar-yolu.ts
 /** Menü yolu GİBİ görünen ama menü yolu olmayan (ya da kökü tablodan gelen) dizgeler — dosya + parça + neden. */
 const ISTISNA: ReadonlyArray<{ dosya: string; parca: string; neden: string }> = [
   { dosya: "constants/report-catalog.ts", parca: "Sipariş → Teslim Süresi", neden: "rapor başlığı (süre aralığı), menü yolu değil" },
+  { dosya: "constants/audit-tablo-etiketleri.ts", parca: "Top → Çuval Atama", neden: "audit modül adı (atama yönü), menü yolu değil — B2 sözlük taşıması" },
+  { dosya: "constants/audit-tablo-etiketleri.ts", parca: "Kartela → Çuval", neden: "audit modül adı (atama yönü), menü yolu değil" },
+  { dosya: "constants/audit-tablo-etiketleri.ts", parca: "Çuval → Sevkiyat", neden: "audit modül adı (atama yönü), menü yolu değil" },
   { dosya: "services/helpers/targetable-property.helper.ts", parca: "Kat → Tambur, Gramaj → Kurşun", neden: "özellik → istasyon eşlemesi örneği" },
   { dosya: "services/import/adapters/station.adapter.ts", parca: "Hayır → KK1", neden: "içe aktarım sütun yardımı (değer → anlam)" },
   { dosya: "services/subcontractor.service.ts", parca: "Partiler → Birleştir", neden: "karo içi gezinme; kökü `ekranYolu(\"terbiyeIsEmirleri\")`" },
