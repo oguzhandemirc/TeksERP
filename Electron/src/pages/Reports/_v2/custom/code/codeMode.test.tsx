@@ -1,12 +1,12 @@
 // =============================================================================
-// Özel rapor KOD MODU (R2-KOD) — panel
+// Özel rapor KOD MODU (R2-KOD) — panel (18 vaka)
 // =============================================================================
 // §1 hata yolu → satır/sütun (iç içe dizi, kaçışlı anahtar, bulunamayan yol ataya/başa; deterministik) ·
 // §2 tamamlama YALNIZ katalog kimlikleri (küple daraltma; yuva dışı yok) · §3 geçiş kilidi (sözdizimi, bekleyen,
 // sunucu hatası, ulaşılamayan sunucu) + 500 ms gecikme · §4 görsel → kod → görsel taslağı değiştirmez; temiz kod
 // taslağa yazılır · §5 Türkçe hata gösterimi + [Görsel | Kod] sekmesi oluşturucuda · §6 istemci şemayı kopyalamaz.
 //
-// NEGATİF SONDALAR (2026-10-25 ÖLÇÜLDÜ; cp + md5 ile birebir geri alındı; taban 17/0):
+// NEGATİF SONDALAR (2026-10-25 ÖLÇÜLDÜ; cp + md5 ile birebir geri alındı; taban 17/0; 18. vaka sonradan eklendi):
 //   N1 `useCodeMode.showVisual` kilit denetimi kaldırıldı → §4 ❌ 1 · N2 `pathToRange` dizi indisi +1 kaydırıldı → §1 ❌ 4 ·
 //   N3 küp tamamlamasına katalog dışı kimlik eklendi → §2 ❌ 1 · N4 istemciye zod şeması eklendi → §6 ❌ 1
 // =============================================================================
@@ -73,7 +73,7 @@ import { completionAt } from "./completion";
 import { codeLock, useCodeCheck } from "./useCodeCheck";
 import { formatDefinition, parseDefinitionText } from "./definition-text";
 import { useCodeMode } from "./useCodeMode";
-import { serverDiagnostics } from "./code-diagnostics";
+import { serverDiagnostics, syntaxDiagnostics } from "./code-diagnostics";
 import { normalizedBody, type DefinitionBody } from "../layout/layout-model";
 import { ReportLayoutPage } from "../layout/ReportLayoutPage";
 import type { CatalogCube } from "../custom-api";
@@ -241,6 +241,14 @@ describe("§5 Türkçe hata gösterimi ve bulunabilirlik", () => {
     expect(d[0]!.message).toBe("\"Sevk\" küpünde \"sevk.adet\" ölçüsü yok. Şunu mu demek istediniz: \"sevk.brutMetre\"?");
     expect(doc.slice(d[0]!.from, d[0]!.to)).toBe('"sevk.adet"');
     expect(d[1]!.message).toBe("Zorunlu alan eksik. (konum: bloklar[5])");
+  });
+  it("sözdizimi hatası hatanın satırında (satır 1'e düşmez), mesaj Türkçe; geçerli JSON'da tanılama yok", () => {
+    const doc = formatDefinition(BODY).replace('"sevk.adet"', '"sevk.adet" ,,');
+    const s = stateOf(doc);
+    const [d] = syntaxDiagnostics(s);
+    expect(s.doc.lineAt(d!.from).text).toContain('"sevk.adet" ,,');
+    expect(d!.message.startsWith("JSON sözdizimi hatalı")).toBe(true);
+    expect(syntaxDiagnostics(stateOf(formatDefinition(BODY)))).toEqual([]);
   });
   it("⭐ oluşturucuda [Görsel | Kod] sekmesi; Kod açılınca JSON düzenleyicisi", async () => {
     render(

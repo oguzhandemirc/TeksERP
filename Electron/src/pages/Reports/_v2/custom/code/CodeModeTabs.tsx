@@ -26,7 +26,7 @@ export function CodeModeTabs({ mode, lock, onVisual, onCode }: Props) {
         </button>
       </div>
       {mode === "code" && lock ? (
-        <p role="status" className={cn("text-sm", lock.kind === "pending" ? "text-muted-foreground" : "text-destructive")}>
+        <p role="status" className={cn("text-sm", lock.kind === "pending" ? "text-muted-foreground" : "text-destructive dark:text-red-300")}>
           {lock.message}
         </p>
       ) : null}

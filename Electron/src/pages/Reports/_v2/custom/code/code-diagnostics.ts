@@ -4,6 +4,8 @@
 import type { Diagnostic } from "@codemirror/lint";
 import type { EditorState } from "@codemirror/state";
 import type { DefinitionIssue } from "../custom-api";
+import { parseDefinitionText } from "./definition-text";
+import { fullTree } from "./json-tree";
 import { pathToRange } from "./pathToPosition";
 
 export function issueText(issue: DefinitionIssue): string {
@@ -24,4 +26,26 @@ export function lineColumnOf(state: EditorState, issue: DefinitionIssue): { line
   const r = pathToRange(state, issue.yol);
   const line = state.doc.lineAt(r.from);
   return { line: line.number, column: r.from - line.from + 1, from: r.from };
+}
+
+/**
+ * Yerel sözdizimi tanılaması: konum Lezer ağacındaki ilk hata düğümünden (Chromium'un JSON.parse
+ * mesajı konum taşımıyor, `jsonParseLinter` satır 1'e düşüyordu); mesaj Türkçe.
+ */
+export function syntaxDiagnostics(state: EditorState): Diagnostic[] {
+  const text = state.doc.toString();
+  const parsed = parseDefinitionText(text);
+  if (parsed.ok) return [];
+  let at = -1;
+  fullTree(state).iterate({
+    enter: (n) => {
+      if (at >= 0) return false;
+      if (n.type.isError) at = n.from;
+      return undefined;
+    },
+  });
+  if (at < 0) at = text.trim() === "" ? 0 : state.doc.length;
+  const len = state.doc.length;
+  const from = len === 0 ? 0 : Math.min(at, len - 1);
+  return [{ from, to: Math.min(from + 1, len), severity: "error", source: "JSON", message: "JSON sözdizimi hatalı: bu noktada beklenmeyen karakter ya da eksik ayraç/virgül." }];
 }

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { json, jsonParseLinter } from "@codemirror/lang-json";
+import { json } from "@codemirror/lang-json";
 import { bracketMatching, foldGutter, indentOnInput } from "@codemirror/language";
-import { forceLinting, linter, lintGutter, type Diagnostic } from "@codemirror/lint";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { linter, lintGutter, type Diagnostic } from "@codemirror/lint";
+import { Compartment, EditorState, StateEffect, type Extension } from "@codemirror/state";
 import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { codeTheme } from "@/pages/Definitions/DocumentDesigner/code/codeTheme";
 import type { CatalogCube, DefinitionIssue } from "../custom-api";
-import { issueText, lineColumnOf, serverDiagnostics } from "./code-diagnostics";
+import { issueText, lineColumnOf, serverDiagnostics, syntaxDiagnostics } from "./code-diagnostics";
 import { completionAt } from "./completion";
 
 interface Props {
@@ -19,6 +19,12 @@ interface Props {
   issues: readonly DefinitionIssue[];
   cubes: readonly CatalogCube[];
 }
+
+// Sunucu hükmü belge değişmeden gelir; linter yalnız bu etkiyle yeniden koşar (forceLinting bekleyen tur ister).
+const serverIssuesChanged = StateEffect.define<null>();
+
+// Seçili tamamlama satırında açıklama zemine karışıyordu (paylaşılan tema); yalnız bu düzenleyicide.
+const completionContrast = EditorView.theme({ ".cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail": { color: "inherit", opacity: "0.85" } });
 
 const readOnlyExt = (ro: boolean): Extension => [EditorState.readOnly.of(ro), EditorView.editable.of(!ro)];
 
@@ -45,7 +51,10 @@ export default function CodeTab({ value, readOnly, onChange, issues, cubes }: Pr
   useEffect(() => {
     if (!host.current) return;
     // Yerel sözdizimi + sunucu hükmü TEK linter'da: ayrı setDiagnostics linter turunda ezilirdi.
-    const lint = linter((v): Diagnostic[] => [...jsonParseLinter()(v), ...serverDiagnostics(v.state, issuesRef.current)], { delay: 300 });
+    const lint = linter((v): Diagnostic[] => [...syntaxDiagnostics(v.state), ...serverDiagnostics(v.state, issuesRef.current)], {
+      delay: 300,
+      needsRefresh: (u) => u.transactions.some((t) => t.effects.some((e) => e.is(serverIssuesChanged))),
+    });
     const v = new EditorView({
       parent: host.current,
       state: EditorState.create({
@@ -61,6 +70,7 @@ export default function CodeTab({ value, readOnly, onChange, issues, cubes }: Pr
             if (u.docChanged) onChangeRef.current(u.state.doc.toString());
           }),
           codeTheme(),
+          completionContrast,
         ],
       }),
     });
@@ -84,7 +94,7 @@ export default function CodeTab({ value, readOnly, onChange, issues, cubes }: Pr
   }, [readOnly]);
 
   useEffect(() => {
-    if (view.current) forceLinting(view.current);
+    view.current?.dispatch({ effects: serverIssuesChanged.of(null) });
   }, [issues]);
 
   const located = useMemo(() => {
@@ -103,7 +113,7 @@ export default function CodeTab({ value, readOnly, onChange, issues, cubes }: Pr
     <div className="flex min-w-0 flex-col gap-3">
       <div ref={host} className="tekserp-code-editor h-[60vh] min-h-[320px] overflow-hidden rounded-md border" data-language="json" />
       {located.length ? (
-        <ul aria-label="Tanım hataları" className="flex flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-sm text-destructive">
+        <ul aria-label="Tanım hataları" className="flex flex-col gap-1 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-sm text-destructive dark:text-red-300">
           {located.map(({ issue, at }) => (
             <li key={`${issue.yol}:${issue.mesaj}`}>
               <button type="button" className="text-left hover:underline" onClick={() => goto(at.from)}>
