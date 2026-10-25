@@ -167,12 +167,15 @@ async function modulBolumu(card: Kart): Promise<void> {
 async function kapanisBolumu(card: Kart, m: string[]): Promise<{ key: string; stopId: string }> {
   console.log("\n§5 — geçici kapanış");
   const key = randomUUID();
-  const startedAt = new Date(Math.floor((Date.now() - 13 * HOUR) / 1000) * 1000);
+  // Gerçek saatte gecikmemiş (2 sa < 12 sa); eşik testin SAHTE saatiyle aşılır. Aynı DB'deki CI sunucularının
+  // watchdog turu (60 sn, küresel) gerçek saatle bakar — gecikmiş açılan duruşu testten önce kapatıp §5b'yi düşürüyordu.
+  const startedAt = new Date(Math.floor((Date.now() - 2 * HOUR) / 1000) * 1000);
+  const saat = { now: new Date(startedAt.getTime() + 13 * HOUR) };
   const ac = await kart("/api/machine-signals/stop", { machineId: m[0], stopKey: key, startedAt: startedAt.toISOString() }, card);
   const insan = await openManualStop({ machineId: m[1], startedAt, source: "SUPERVISOR" } as never, await testActorId());
   check("§5a fikstür: kart duruşu 201 · insan duruşu açık", ac.status === 201 && insan.success === true, `${ac.status}`);
   const stopId = String(ac.body.data?.id);
-  const tur = sayi(await runMachineWatchdogOnce({ onlyCollectorIds: [], onlyMachineIds: m }));
+  const tur = sayi(await runMachineWatchdogOnce({ ...saat, onlyCollectorIds: [], onlyMachineIds: m }));
   const s = await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: stopId } });
   const tahmin = startedAt.getTime() + 12 * HOUR;
   check("§5b kart duruşu WATCHDOG ile kapanır: endedAt = provisionalEndedAt = başlangıç + 12 sa, süre 43200, kapatan yok",
@@ -180,7 +183,7 @@ async function kapanisBolumu(card: Kart, m: string[]): Promise<{ key: string; st
       && s.durationSec === 12 * 3600 && s.closedById === null && s.endCorrectedAt === null, JSON.stringify(tur));
   const h = await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: (insan.data as { id: string }).id }, select: { endedAt: true } });
   check("§5c insan duruşuna dokunulmaz (açık kalır)", h.endedAt === null);
-  check("§5d ikinci tur no-op", sayi(await runMachineWatchdogOnce({ onlyCollectorIds: [], onlyMachineIds: m }))?.provisional === 0);
+  check("§5d ikinci tur no-op", sayi(await runMachineWatchdogOnce({ ...saat, onlyCollectorIds: [], onlyMachineIds: m }))?.provisional === 0);
   const l0 = await bekleyen(m[0]);
   const l1 = await bekleyen(m[1]);
   check("§5e panel listesi (pendingEnd): geçici kapanış listede, insanın açık duruşu yok", l0.length === 1 && l0[0] === stopId && l1.length === 0, `${l0} | ${l1}`);

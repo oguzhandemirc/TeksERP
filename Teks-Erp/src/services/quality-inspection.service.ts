@@ -14,9 +14,11 @@ import {
   gradeMismatchOf, isUniqueOn, resolveFourPointRule, resolveInspectionPhase, resolveInspectionWidth, ruleSnapshotOf, toDec,
 } from "./helpers/four-point-resolve.helper";
 import { ACTIVE_INSPECTION_WHERE } from "./helpers/inspection-active.helper";
+import { draftInspectionRoll, type DraftRollInput } from "./helpers/inspection-draft-roll.helper";
 import { insertInspectionDefectsTx } from "./helpers/roll-defect.helper";
 import { QUALITY_STEP_ERROR, STEP_QUALITY_SELECT, stationCanInspect } from "./helpers/quality-station.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
+import { printedReportsOfInspection } from "./quality-inspection-shipment.service";
 
 type Tx = Prisma.TransactionClient;
 
@@ -188,13 +190,13 @@ async function loadRoll(db: Tx, rollId: string): Promise<InspectionRoll> {
   return roll;
 }
 
-export interface PreviewInput extends Omit<EvaluateInput, "roll"> {
-  rollId: string;
-}
+/** `draft`: KK1 doğuşu — top henüz yok; kumaş + form eni, uzunluk `inspectedLengthM`ten (aynı motor, yazmaz). */
+export interface PreviewInput extends Omit<EvaluateInput, "roll"> { rollId?: string; draft?: DraftRollInput }
 
 export async function preview(input: PreviewInput) {
-  const roll = await loadRoll(prisma, input.rollId);
-  const ev = await evaluateInspection(prisma, { ...input, roll });
+  const { draft, rollId, ...rest } = input;
+  const roll = draft ? await draftInspectionRoll(prisma, draft) : await loadRoll(prisma, rollId ?? "");
+  const ev = await evaluateInspection(prisma, { ...rest, roll });
   const unit = ev.rule?.unit ?? FOUR_POINT_DEFAULTS.unit;
   return {
     totalPoints: ev.result.totalPoints,
@@ -327,9 +329,8 @@ export async function voidPreview(id: string) {
     },
   });
   if (!row) throw AppError.notFound("Muayene bulunamadı.", { code: "INSPECTION_NOT_FOUND" });
-  // Muayene raporu belgesi (RAPOR dilimi) inince bu muayeneyi basmış donmuş belge numaraları burada listelenir.
-  const printedDocuments: string[] = [];
-  return { inspection: row, defectCount: row.defectCount, printedDocuments, active: !row.supersededAt && !row.voidedAt };
+  // Bu muayeneyi basmış donmuş Muayene raporları — iptal onlara İPTAL yazmaz, kullanıcı görür.
+  return { inspection: row, defectCount: row.defectCount, printedDocuments: await printedReportsOfInspection(row.id, row.roll.id), active: !row.supersededAt && !row.voidedAt };
 }
 
 export async function voidInspection(id: string, reason: string, userId: string) {

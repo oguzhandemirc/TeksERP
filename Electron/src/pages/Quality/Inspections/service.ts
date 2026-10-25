@@ -60,6 +60,23 @@ export interface VoidPreview {
 }
 export interface InspectionWriteResult { id: string; rollId: string; revision: number }
 
+/** Sevk muayene özeti (`GET /shipment/:id/summary`) — etiket/sonuç ve toplamlar SUNUCUDA. */
+export type InspectionResult = "PASS" | "FAIL" | "NONE" | "NO_SCORE";
+export interface ShipmentInspectionRow {
+  sequence: number; rollId: string; barcode: string | null; itemName: string; colorName: string | null; meters: number;
+  inspectionId: string | null; phase: InspectionPhase | null; inspectedAt: string | null; widthCm: number | null;
+  defectCount: number | null; totalPoints: number | null; pointsPer100M2: number | null; score: number | null; scoreUnit: "M2" | "YD2" | null;
+  label: string | null; accepted: boolean | null; result: InspectionResult; factoryGrade: string | null;
+}
+export interface ShipmentInspectionSummary {
+  header: { shipmentId: string; shipmentNo: string; customerName: string };
+  rows: ShipmentInspectionRow[];
+  totals: {
+    rollCount: number; inspectedCount: number; uninspectedCount: number; passCount: number; failCount: number; noScoreCount: number;
+    totalMeters: number; defectCount: number; totalPoints: number; avgPointsPer100M2: number | null;
+  };
+}
+
 export type InspectionListParams = Record<string, string | number | undefined | null>;
 
 /** Boş parametreyi göndermez — sunucu boş metni "süzgeç yok" saymak zorunda kalmasın. */
@@ -82,6 +99,8 @@ export const inspectionService = {
     apiClient.post<ApiResponse<InspectionWriteResult>>(BASE, body, QUIET).then((r) => r.data.data),
   revise: (id: string, body: MeasureInput & { note: string | null; reviseReason: string; clientToken: string }) =>
     apiClient.post<ApiResponse<InspectionWriteResult>>(`${BASE}/${id}/revise`, body, QUIET).then((r) => r.data.data),
+  shipmentSummary: (shipmentId: string) =>
+    apiClient.get<ApiResponse<ShipmentInspectionSummary>>(`${BASE}/shipment/${shipmentId}/summary`, QUIET).then((r) => r.data.data),
   voidPreview: (id: string) => apiClient.get<ApiResponse<VoidPreview>>(`${BASE}/${id}/void-preview`).then((r) => r.data.data),
   void: (id: string, reason: string) =>
     apiClient.post<ApiResponse<{ id: string; voidedAt: string }>>(`${BASE}/${id}/void`, { reason }, QUIET).then((r) => r.data.data),

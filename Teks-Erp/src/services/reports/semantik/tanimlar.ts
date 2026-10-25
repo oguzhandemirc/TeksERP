@@ -95,6 +95,19 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
   { kimlik: "kalite.hataAdedi", ad: "Bulunan hata",
     aciklama: "Dönemde kumaşta bulunan hata sayısı; sahada ve muayenede bulunanlar birlikte sayılır, her hata bulunduğu güne yazılır.",
     birim: "adet", iyiYon: "azalis", kaynak: { dosya: `${R}/scrap-scorecard.report.service.ts`, alan: "ScrapScorecardSummary.defectsDetected" } },
+  // K4P-RAPOR: 4 puan muayene küpü; kaynak Muayeneler ekranının özet şeridi (`listInspections` summary).
+  { kimlik: "kalite.muayeneAdedi", ad: "Muayene edilen top",
+    aciklama: "Dönemde 4 puan muayenesi yapılan top sayısı; her topun geçerli muayenesi sayılır, düzeltilen ya da iptal edilen muayene sayılmaz.",
+    birim: "adet", iyiYon: "notr", kaynak: { dosya: "src/services/quality-inspection-query.service.ts", alan: "listInspections.summary.total" } },
+  { kimlik: "kalite.muayeneOrtalamaPuan", ad: "Ortalama muayene puanı",
+    aciklama: "Muayene edilen toplarda 100 metrekareye düşen ortalama hata puanı; düşük olması iyidir. Eni bilinmeyen toplar ortalamaya girmez.",
+    birim: "adet", iyiYon: "azalis", kaynak: { dosya: "src/services/quality-inspection-query.service.ts", alan: "listInspections.summary.avgPointsPer100M2" } },
+  { kimlik: "kalite.muayenePuanToplami", ad: "Muayene puanlarının toplamı",
+    aciklama: "Ortalama muayene puanının hesap parçası: toplarda 100 metrekareye düşen puanların toplamı; tek başına yorumlanmaz.",
+    birim: "adet", iyiYon: "notr", kaynak: null },
+  { kimlik: "kalite.puanliMuayeneAdedi", ad: "Puanı hesaplanan muayene",
+    aciklama: "Eni bilindiği için puanı hesaplanabilen muayene sayısı; ortalama muayene puanı bu sayıya bölünür.",
+    birim: "adet", iyiYon: "notr", kaynak: null },
 
   // ── ÜRETİM ve STOK ────────────────────────────────────────────────────────
   { kimlik: "uretim.bekleyenTop", ad: "Bekleyen top",

@@ -11,6 +11,7 @@
 import { PrintedDocType } from "@prisma/client";
 
 import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
+import { SAMPLE_INSPECTION_REPORT } from "./sample-data-inspection";
 
 const ISO = "2026-06-07T10:30:00.000Z";
 
@@ -34,9 +35,7 @@ const ISO = "2026-06-07T10:30:00.000Z";
  * `infix`ini (top barkodunun faz harfi) YAZMAZ — o serinin örneği kendi
  * üretecinden gelmelidir, yoksa türetme sessiz bir yanlış üretir.
  */
-function ornekNo(key: string, seq: number): string {
-  return previewSeriesCode(resolveSeriesFormat(key), seq, sampleClock());
-}
+const ornekNo = (key: string, seq: number): string => previewSeriesCode(resolveSeriesFormat(key), seq, sampleClock());
 
 /**
  * Örnek belgelerin SAATİ — varsayılan bugün (panel önizlemesi). Örnek numaranın
@@ -186,6 +185,8 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     ],
     totals: { rollCount: 2 },
   },
+
+  INSPECTION_REPORT: SAMPLE_INSPECTION_REPORT, // geçen, kalan ve muayenesiz top
 
   // Kalite Sertifikası (renderQualityCertificateHtml).
   QUALITY_CERTIFICATE: {
