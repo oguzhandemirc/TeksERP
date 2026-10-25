@@ -22,3 +22,4 @@ export { subcontractorDirectShipSystem } from "./subcontractor-direct-ship"; // 
 export { subcontractorDispatchSystem } from "./subcontractor-dispatch"; // SUBCONTRACTOR_DISPATCH
 export { subcontractorReceiptSystem } from "./subcontractor-receipt"; // SUBCONTRACTOR_RECEIPT
 export { transferDispatchSystem } from "./transfer-dispatch"; // TRANSFER_DISPATCH
+export { travelerCardSystem } from "./traveler-card"; // TRAVELER_CARD

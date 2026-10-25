@@ -19,3 +19,4 @@ export { subcontractorDirectShipContract } from "./subcontractor-direct-ship"; /
 export { subcontractorDispatchContract } from "./subcontractor-dispatch"; // SUBCONTRACTOR_DISPATCH
 export { subcontractorReceiptContract } from "./subcontractor-receipt"; // SUBCONTRACTOR_RECEIPT
 export { transferDispatchContract } from "./transfer-dispatch"; // TRANSFER_DISPATCH
+export { travelerCardContract } from "./traveler-card"; // TRAVELER_CARD

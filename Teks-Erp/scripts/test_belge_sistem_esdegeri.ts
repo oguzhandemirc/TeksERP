@@ -47,7 +47,10 @@ import type { EquivalenceVariant, SystemEquivalent } from "../src/services/docum
 import { getContract, shownToInternalFields } from "../src/services/document-template/sozlesme/kayit";
 import type { PrintInput, Scenario } from "../src/services/document-template/sozlesme/tipler";
 import type { PrintedDocSnapshot } from "../src/services/printed-document.service";
-import type { DocumentConfig } from "../src/services/system-setting.service";
+import { normalizeTravelerCardConfig, type DocumentConfig } from "../src/services/system-setting.service";
+import { renderTravelerCardHtml, type TravelerCardSnapshot } from "../src/services/document-render/traveler-card.html";
+import { renderQrSvg } from "../src/services/helpers/barcode-svg.helper";
+import type { TravelerCardSource } from "../src/services/document-template/sozlesme/traveler-card";
 
 /** Sistem renderer'ının baskı meta'sı — servis katmanının verdiği şekilde (canlı ayarlar + baskı girdisi). */
 type SystemMeta = Record<string, unknown>;
@@ -69,7 +72,21 @@ const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   SUBCONTRACTOR_DISPATCH: (s, m) => renderFasonCekiHtml(s, m as Parameters<typeof renderFasonCekiHtml>[1]),
   SUBCONTRACTOR_RECEIPT: (s, m) => renderFasonReceiptHtml(s, m as Parameters<typeof renderFasonReceiptHtml>[1]),
   TRANSFER_DISPATCH: (s, m) => renderWarehouseTransferHtml(s, m as Parameters<typeof renderWarehouseTransferHtml>[1]),
+  TRAVELER_CARD: (s, m) => renderTravelerCardSystem(s as unknown as TravelerCardSource & { docConfigOverride: unknown }, m),
 };
+
+/** Refakat kartı: servis yolunun eşi — ayar `normalizeTravelerCardConfig`ten, QR `renderQrSvg`den (P-e, canlı). */
+function renderTravelerCardSystem(s: TravelerCardSource & { docConfigOverride: unknown }, m: SystemMeta): string {
+  const config = normalizeTravelerCardConfig((s.docConfigOverride ?? {}) as Record<string, unknown>);
+  let qrSvg: string | null = null;
+  try {
+    qrSvg = renderQrSvg(s.meta.barcode);
+  } catch {
+    qrSvg = null;
+  }
+  void m;
+  return renderTravelerCardHtml({ ...s.card, config } as TravelerCardSnapshot, { ...s.meta, qrSvg });
+}
 
 let pass = 0;
 let fail = 0;
@@ -299,7 +316,7 @@ function renderBoth(eq: SystemEquivalent, scn: Scenario<unknown>, variant: Equiv
   const contract = getContract(eq.docType);
   // Durum/filigran üst katmandır (Sistem'de de ACTIVE koşulur); eşlenik yalnız gövdeyi taşır.
   const print: PrintInput = { ...(scn.ek?.baski ?? {}), ...(variant.print ?? {}) };
-  const system = render({ ...scn.snapshot, docConfigOverride: variant.config }, systemMeta(scn, print));
+  const system = render({ ...(scn.snapshot as PrintedDocSnapshot), docConfigOverride: variant.config }, systemMeta(scn, print));
 
   const ayar = contract.ayarNormalize(variant.config) as Record<string, unknown>;
   const internalFields = shownToInternalFields(contract, variant.config);

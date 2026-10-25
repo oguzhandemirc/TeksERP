@@ -268,7 +268,7 @@ for (const s of sozlesmeler) {
   const snap = s.senaryolar().find((x) => x.ad === "cok_sayfa")!.snapshot;
   const meta = s.senaryolar().find((x) => x.ad === "cok_sayfa")!.ek!.canli as Record<string, unknown>;
   const tablolarIle = (cfg: DocumentConfig) =>
-    renderShipmentDispatchTables({ ...snap, docConfigOverride: cfg } as PrintedDocSnapshot, meta).tables;
+    renderShipmentDispatchTables({ ...(snap as PrintedDocSnapshot), docConfigOverride: cfg } as PrintedDocSnapshot, meta).tables;
   const kapali = tablolarIle({});
   const herKolon = (t: string) => s.tablolar.find((x) => x.anahtar === t)!.kolonlar.flatMap((c) => (c.kaynakKolon ? [c.kaynakKolon] : []));
   const acik = tablolarIle({ columns: Object.fromEntries(["urun", "cuval", "ceki"].map((t) => [t, { shown: herKolon(t) }])) });
