@@ -171,7 +171,7 @@ function girisFarklari(p: PanelMenusu, tablo: Record<string, Giris>, alt: Record
   });
 }
 
-const KOK_MENU = ["Anasayfa", "Tanımlar", "Operasyon", "Raporlar", "Muhasebe", "Yetkilendirme", "Sistem"];
+const KOK_MENU = ["Anasayfa", "Tanımlar", "Operasyon", "Raporlar", "Bildirimler", "Muhasebe", "Yetkilendirme", "Sistem"];
 function desenler(kokler: readonly string[]): RegExp[] {
   return [
     new RegExp(`(^|[^\\p{L}])(${kokler.join("|")})\\s*[→›>]\\s*\\S`, "u"),

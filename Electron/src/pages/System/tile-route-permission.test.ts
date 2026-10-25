@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { systemTiles } from "./tile-config";
+import { SYSTEM_HUB_ACCESS, SYSTEM_PRINT_HISTORY_ACCESS } from "@/lib/permissions";
 
 /**
  * KARO ↔ ROUTE İZİN HİZASI.
@@ -83,5 +84,19 @@ describe("sistem karoları ↔ route izinleri", () => {
     const tile = systemTiles.find((t) => t.key === "duplicates");
     expect(tile?.permission).toBe("master-data:merge");
     expect(routePermission("/system/duplicates")).toBe("master-data:merge");
+  });
+
+  // İzlenebilirlik A3. Sonda: SYSTEM_PRINT_HISTORY_ACCESS'ten "system:print-history" çıkınca → 1 kırmızı (ölçüldü 2026-10-24).
+  it("Yazdırma Geçmişi: karo ↔ route ↔ backend okuma kümesi AYNI", () => {
+    const tile = systemTiles.find((t) => t.key === "print-history");
+    expect(tile?.to).toBe("/system/print-history");
+    expect(tile?.permissionAny).toBe(SYSTEM_PRINT_HISTORY_ACCESS);
+    const idx = ROUTES_SRC.indexOf('path: "system/print-history"');
+    const next = ROUTES_SRC.indexOf('path: "', idx + 10);
+    expect(ROUTES_SRC.slice(idx, next)).toContain("requireAnyPermission={SYSTEM_PRINT_HISTORY_ACCESS}");
+    const be = readFileSync(resolve(__dirname, "../../../../Teks-Erp/src/routes/print-job.routes.ts"), "utf8");
+    const beSet = /PRINT_HISTORY_READ = \[([^\]]+)\]/.exec(be)?.[1]?.match(/"[^"]+"/g)?.map((x) => x.slice(1, -1));
+    expect([...SYSTEM_PRINT_HISTORY_ACCESS].sort()).toEqual([...(beSet ?? [])].sort());
+    expect(SYSTEM_HUB_ACCESS).toContain("system:print-history");
   });
 });
