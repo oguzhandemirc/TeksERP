@@ -601,11 +601,13 @@ export default function KursunQcScreen() {
 
       return { cardId, prevRolls, prevSelectedRollId };
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       // Server confirm geldi — backend'den fresh state çek (open jobs listesi
       // de değişmiş olabilir: step kapanma, başka kart silinmesi vb.).
-      await refetchActiveJob();
-      qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
+      // BEKLENMEZ (KQ-D5): mutasyon HTTP yanıtında settle olur; tek dokunuş
+      // kilidi tazelemeyi beklerse emülatörde ~10 sn sonraki dokunuşu yutuyordu.
+      void refetchActiveJob().catch(() => undefined);
+      void qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
     },
     onError: (err, vars, context) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi

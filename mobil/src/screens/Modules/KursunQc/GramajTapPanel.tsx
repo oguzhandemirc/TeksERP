@@ -139,7 +139,7 @@ export default function GramajTapPanel({ state, hasRoll }: Props) {
 }
 
 const s = StyleSheet.create({
-  root: { gap: 12 },
+  root: { gap: 12, alignSelf: 'stretch' },
   card: { borderRadius: 12, padding: 16, gap: 10, backgroundColor: colors.surface },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   title: { fontSize: 20, fontWeight: '800', color: palette.slate[900], flexShrink: 1 },
