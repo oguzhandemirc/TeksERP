@@ -10,6 +10,7 @@ import { DeviceKind, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { listDeviceAppVersions } from "./request-trace.service";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
 import {
   buildMergeCandidates,
@@ -75,11 +76,7 @@ async function loadUsage(ids: string[]): Promise<Map<string, CandidateUsage>> {
     if (w.machineId) u.machines.add(w.machineId);
     u.users.add(w.userId);
   }
-  const vs = await prisma.requestTrace.groupBy({
-    by: ["deviceRefId", "appVersion"],
-    where: { deviceRefId: { in: ids }, appVersion: { not: null } },
-  });
-  for (const v of vs) if (v.deviceRefId && v.appVersion) get(v.deviceRefId).versions.push(v.appVersion);
+  for (const v of await listDeviceAppVersions(ids)) get(v.deviceRefId).versions.push(v.appVersion);
   for (const u of out.values()) u.versions.sort(compareVersion);
   return out;
 }
