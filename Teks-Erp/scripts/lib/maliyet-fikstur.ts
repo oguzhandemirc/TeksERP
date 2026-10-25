@@ -7,6 +7,13 @@
 // =============================================================================
 import { ItemType, Prisma } from "@prisma/client";
 import prisma from "../../src/lib/prisma";
+import { hedefDbEngeli } from "./hedef-db-kapisi";
+
+/** Yazma/silme yalnız bekçi DB'sinde — çağıranın kapısına ek, fail-closed. */
+function kapi(ne: string): void {
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`maliyet fikstürü ${ne} durduruldu — ${engel}`);
+}
 
 const D = (v: string | number): Prisma.Decimal => new Prisma.Decimal(v);
 
@@ -24,6 +31,7 @@ export interface MaliyetFikstur {
 }
 
 export async function fiksturKur(tagPrefix: string): Promise<MaliyetFikstur> {
+  kapi("kurulumu");
   const tag = `${tagPrefix}${Date.now().toString(36).toUpperCase()}`;
   const active = await prisma.costParameterSet.findFirst({ where: { status: "ACTIVE" }, select: { id: true } });
   if (active) await prisma.costParameterSet.update({ where: { id: active.id }, data: { status: "SUPERSEDED", supersededAt: new Date() } });
@@ -103,6 +111,7 @@ async function oncekiTemizlik(f: MaliyetFikstur): Promise<void> {
 }
 
 export async function fiksturSil(f: MaliyetFikstur): Promise<void> {
+  kapi("temizliği");
   await oncekiTemizlik(f);
   await prisma.costStructure.deleteMany({ where: { itemId: f.fabricId } });
   await prisma.item.delete({ where: { id: f.fabricId } });

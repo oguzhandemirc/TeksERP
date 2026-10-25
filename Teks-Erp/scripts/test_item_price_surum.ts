@@ -211,7 +211,8 @@ async function main(): Promise<void> {
   check("§7c İlişki okumaları süzgeçli", t.iliskiIhlal.length === 0, `ilişki=${t.iliskiSayisi}${t.iliskiIhlal.length ? " İHLAL: " + t.iliskiIhlal.join(", ") : ""}`);
   check("§7d Ham SQL başvuruları süzgeçli", t.sqlIhlal.length === 0, `sql=${t.sqlSayisi}${t.sqlIhlal.length ? " İHLAL: " + t.sqlIhlal.join(", ") : ""}`);
   console.log(`   istisnalar: ${t.istisnalar.length ? t.istisnalar.join(", ") : "yok"}`);
-  const BEYANLI = new Set(["src/services/item-price.service.ts"]);
+  // MAL-2: maliyet köprüsünün genel alış fiyatı okuyucusu ayrı dosyada (dinamik import; servis statik bağı ticaret kapısını taşırdı).
+  const BEYANLI = new Set(["src/services/item-price.service.ts", "src/services/helpers/item-purchase-price.helper.ts"]);
   const callFiles = new Set<string>();
   let callCount = 0;
   for (const f of srcFiles(join(kok, "src"))) {
