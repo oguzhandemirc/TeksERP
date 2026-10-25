@@ -12,8 +12,9 @@ import { getShipmentScorecard } from "../../shipment-scorecard.report.service";
 import { getOrderCancellationScorecard } from "../../order-cancellation.report.service";
 import { getReturnScorecard } from "../../return-scorecard.report.service";
 import { getOrderLeadTime } from "../../order-leadtime.report.service";
+import { getOrderIntake } from "../../order-intake.report.service";
 import { colorDimension, customerDimension, enumDimension, itemDimension, timeDimensions } from "../boyutlar";
-import { totalOnly } from "../satir-helper";
+import { helperFromRows, totalOnly } from "../satir-helper";
 import type { HelperInput, HelperResult, SemanticCube, SemanticMeasure } from "../tipler";
 
 const SALES_PERMISSION = "report:sales";
@@ -51,6 +52,15 @@ function leadTime(pick: "medianDays" | "p90Days") {
   return async (input: HelperInput): Promise<HelperResult> => totalOnly((await getOrderLeadTime(input.range)).fullClose[pick]);
 }
 
+/** Sipariş tutarı: Sipariş Karnesi `summary.amounts` (para birimi başına, fiyatsız satır sayılmaz; çevrim yok). */
+async function computeOrderAmount(input: HelperInput): Promise<HelperResult> {
+  const rows = (await getOrderIntake(input.range)).summary.amounts;
+  return helperFromRows(input, rows, {
+    key: () => null, label: () => null, weight: (r) => r.amount, currency: (r) => r.currency,
+    aggregate: (rs) => Math.round(rs.reduce((a, r) => a + r.amount, 0) * 100) / 100,
+  }, ["Fiyatı girilmemiş sipariş satırı tutara sıfır olarak girmez."]);
+}
+
 function helperMeasure(id: string, compute: (i: HelperInput) => Promise<HelperResult>, parity: SemanticMeasure["parity"]): SemanticMeasure {
   return { id, permission: SALES_PERMISSION, module: SALES_MODULE, kind: "helper", helper: { dimensions: [], perCurrency: false, compute }, parity };
 }
@@ -65,6 +75,9 @@ export const orderCube: SemanticCube = {
   measures: [
     { id: "siparis.metre", permission: SALES_PERMISSION, module: SALES_MODULE, kind: "sum", sql: Prisma.sql`SUM(p.qty)`,
       parity: { report: "sales/siparis-talep", field: "anaSayi", legacy: "sales/order-intake" } },
+    { id: "siparis.tutar", permission: SALES_PERMISSION, module: SALES_MODULE, kind: "helper",
+      helper: { dimensions: [], perCurrency: true, compute: computeOrderAmount },
+      parity: { report: "sales/siparis-talep", field: "yanSayilar[siparis.tutar]", legacy: "sales/order-intake" } },
     helperMeasure("termin.zamanindaYuzde", computeOnTime, { report: "sales/termin", field: "anaSayi", legacy: "sales/shipment-scorecard" }),
     helperMeasure("termin.yariSureGun", leadTime("medianDays"), { report: "sales/order-leadtime", field: "fullClose.medianDays" }),
     helperMeasure("termin.dokuzdaDokuzGun", leadTime("p90Days"), { report: "sales/order-leadtime", field: "fullClose.p90Days" }),

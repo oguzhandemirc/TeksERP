@@ -147,15 +147,16 @@ export async function setupSemanticFixture(): Promise<SemanticFixture> {
   await error(r3, defectTypes[0], st2, "PROCESS", OUTSIDE);
 
   // Sipariş: iki müşteri, iki yön; iptal kalem + iptal sipariş sayılmaz; terminsiz sipariş.
-  const order = async (k: string, customerId: string, destination: "DOMESTIC" | "EXPORT", status: "APPROVED" | "CANCELLED", deadline: Date | null, lines: Array<[string, string | null, number, boolean]>) => {
-    const o = await prisma.order.create({ data: { orderNumber: `${T}-${k}`, customerId, destination, status, orderDate: DAY, deadline }, select: { id: true } });
-    for (const [itemId, colorId, quantity, cancelled] of lines) {
-      await prisma.orderLine.create({ data: { orderId: o.id, itemId, colorId, quantity, ...(cancelled ? { cancelledAt: DAY } : {}) } });
+  // Tutar: O1 TRY (300 × 10 + fiyatsız 200), O2 USD (150 × 4) → iki para birimi, fiyatsız satır sıfır sayılmaz.
+  const order = async (k: string, customerId: string, destination: "DOMESTIC" | "EXPORT", status: "APPROVED" | "CANCELLED", deadline: Date | null, lines: Array<[string, string | null, number, boolean, number?]>, currency: "TRY" | "USD" = "TRY") => {
+    const o = await prisma.order.create({ data: { orderNumber: `${T}-${k}`, customerId, destination, status, orderDate: DAY, deadline, currency }, select: { id: true } });
+    for (const [itemId, colorId, quantity, cancelled, unitPrice] of lines) {
+      await prisma.orderLine.create({ data: { orderId: o.id, itemId, colorId, quantity, ...(unitPrice !== undefined ? { unitPrice } : {}), ...(cancelled ? { cancelledAt: DAY } : {}) } });
     }
     return o.id;
   };
-  await order("O1", customers[0], "DOMESTIC", "APPROVED", new Date("2098-03-20T09:00:00.000Z"), [[items[0], colors[0], 300, false], [items[1], colors[1], 200, false], [items[0], colors[1], 50, true]]);
-  await order("O2", customers[1], "EXPORT", "APPROVED", null, [[items[0], colors[0], 150, false]]);
+  await order("O1", customers[0], "DOMESTIC", "APPROVED", new Date("2098-03-20T09:00:00.000Z"), [[items[0], colors[0], 300, false, 10], [items[1], colors[1], 200, false], [items[0], colors[1], 50, true, 10]]);
+  await order("O2", customers[1], "EXPORT", "APPROVED", null, [[items[0], colors[0], 150, false, 4]], "USD");
   await order("O3", customers[0], "DOMESTIC", "CANCELLED", null, [[items[1], colors[0], 999, false]]);
 
   // Sevk + iade (brüt): K1'e 100 + 50, K2'ye 30; 40 m iade.

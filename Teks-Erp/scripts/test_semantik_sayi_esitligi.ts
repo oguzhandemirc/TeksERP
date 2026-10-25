@@ -9,10 +9,11 @@
 // temel raporların ana sayısı (`mainFigure = metricFigure("<id>"`) bir küp ölçüsünde olmalıdır.
 // Ayrıca: "Diğer" kovası toplamı bozmaz · allowlist dışı boyut 400 · `users`a bağlanan boyut `kisiAdi` taşır.
 //
-// Fikstür `scripts/fixture-semantik.ts` (pencere 2098-03, `TSE-FIX`; levent kapanışı kurulmaz → levent
+// Hata küpü yalnız saha tespiti (K4P #148: kaynak karne `ACTIONABLE_ROLL_ERROR_SQL`); fikstürdeki muayene
+// satırı iki tarafta da sayılmaz. Fikstür `scripts/fixture-semantik.ts` (pencere 2098-03, `TSE-FIX`; levent kapanışı kurulmaz → levent
 // ölçüleri iki tarafta da boş veriyle eşitlenir, not düşülür).
 //
-// NEGATİF SONDALAR (2026-10-25; hepsi md5 ile birebir geri alındı, 82/0):
+// NEGATİF SONDALAR (2026-10-25; hepsi md5 ile birebir geri alındı; bugün 83/0):
 //   ① `uretim` küpünden K18 dışlaması kaldırıldı → 9 ❌ (biten/birinci metre + birinci yüzde: toplam, kumaş, renk, kalite, süzgeç)
 //   ② istasyon küpü `operator` boyutundan `personName` kaldırıldı → 2 ❌ (§K1 işaret + §G4 sonuç bayrağı)
 //   ③ `siparis.metre` karşılaştırıcısı silindi (anahtar değişti) → 2 ❌ (§R1 karşılaştırıcısız ölçü + §R3 ölü vaka)
@@ -132,6 +133,12 @@ const CASES: Record<string, Case> = {
     const k2 = total(await run("siparis", "siparis.metre", [], [{ alan: "musteri", islec: "=", deger: fx.customers[1] }]), "siparis.metre");
     const srcK2 = intake.byCustomer.find((r) => r.key === fx.customers[1])?.qty ?? null;
     check("§E siparis/siparis.metre süzgeçli (müşteri = K2) = kaynak satırı", same(k2, srcK2, 2) && (srcK2 ?? 0) > 0, show(k2, srcK2));
+  },
+  "siparis.tutar": async () => {
+    const src = new Map((await getOrderIntake(R)).summary.amounts.map((a) => [a.currency, a.amount]));
+    const cube = new Map(((await run("siparis", "siparis.tutar")).toplam.paraBirimleri ?? []).map((p) => [p.paraBirimi, p.deger]));
+    const bad = [...src].filter(([c, v]) => !same(cube.get(c), v, 2));
+    check("§E siparis/siparis.tutar para birimi başına = Sipariş Karnesi `amounts` (iki para birimi, toplanmaz)", bad.length === 0 && cube.size === src.size && src.size >= 2, show([...cube], [...src]));
   },
   "termin.zamanindaYuzde": async () => totalCase("siparis", "termin.zamanindaYuzde", (await getShipmentScorecard(R)).summary.onTimePct, 2, true),
   "termin.yariSureGun": async () => totalCase("siparis", "termin.yariSureGun", (await getOrderLeadTime(R)).fullClose.medianDays, 2),
