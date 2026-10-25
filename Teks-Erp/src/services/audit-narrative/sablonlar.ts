@@ -145,6 +145,8 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   // Etiket basımı (kaydın numarası yok: yalnız eylem)
   "LABEL_PRINT_EVENT:LABEL_PRINTED": (_s, b) => [b.kisi, m(", etiket bastı")],
   "LABEL_PRINT_EVENT:CREATE": (_s, b) => [b.kisi, m(", etiket basımını kaydetti")],
+  // Basılı belge (kayıt şablonsuz basıldı: sistem şablonu)
+  "PRINTED_DOCUMENT:SYSTEM_TEMPLATE_PRINT": olay("belirtme", "sistem şablonuyla bastı"),
 };
 
 function katalogKur(): Readonly<Record<string, Sablon>> {

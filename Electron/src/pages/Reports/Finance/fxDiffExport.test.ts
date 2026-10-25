@@ -132,7 +132,7 @@ describe("kur farkı — işaret ve dışa aktarım", () => {
     });
     expect(spec.meta).toContain("Cari süzgeci: ACME Tekstil A.Ş.");
     expect(spec.meta).toContain("Para birimi süzgeci: USD");
-    expect((spec.meta ?? []).join(" ")).toContain("türetilir");
+    expect((spec.meta ?? []).join(" ")).toContain("her açılışta hesaplanır");
     // Notlar Excel sayfasına da düşer (PDF'teki gibi başlığın altında) — sayfa tek başına paylaşılabiliyor.
     expect((toSheets(spec)[0]!.preamble ?? []).map((r) => String(r[0]))).toEqual(
       expect.arrayContaining(["Cari süzgeci: ACME Tekstil A.Ş."]),

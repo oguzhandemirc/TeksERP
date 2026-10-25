@@ -88,6 +88,7 @@ export const TABLE_LABELS: Record<string, string> = {
   // türer). 2026-08-29'a dek değişim geçmişi HİÇ yoktu (BULGU-T2-003).
   SACK_ALLOCATION: "Sevk Tahsisi",
   SHIPMENT_LINE: "Sevkiyat Satırı",
+  E_IRSALIYE: "e-İrsaliye",
   SHIPMENT_PLANNED_ORDER: "Sevkiyat Planlı Sipariş",
   packaging_queue: "Paketleme Kuyruğu",
 
