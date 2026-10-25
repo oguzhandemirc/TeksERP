@@ -212,6 +212,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "report:finance",
       // K4P: müşteriye giden sertifikayı görür (fatura/sevk evrakına eklenir); yazma kalite işidir.
       "certificate:read",
+      // MAL-1: maliyet muhasebenin işidir — görme, girdi yazma ve tesis parametreleri. Görünürlüğün
+      // gerçek kapısı `maliyet.enabled` (varsayılan kapalı); izin yalnız kişiyi seçer.
+      "cost:read",
+      "cost:write",
+      "cost:settings",
     ],
   },
   {

@@ -30,6 +30,7 @@ import stationRoutes, { machineRouter } from "./routes/station.routes";
 import routeRoutes from "./routes/route.routes";
 import productRecipeRoutes from "./routes/product-recipe.routes";
 import warpSpecRoutes from "./routes/warp-spec.routes";
+import weftSpecRoutes from "./routes/weft-spec.routes";
 import warpBeamRoutes from "./routes/warp-beam.routes";
 import weavingOrderRoutes from "./routes/weaving-order.routes";
 import machineRunRoutes from "./routes/machine-run.routes";
@@ -96,6 +97,7 @@ import chequeDeliveryNoteRoutes from "./routes/cheque-delivery-note.routes";
 // kapısını taşır → app seviyesinde, spesifik ön ekle bağlanırlar.
 import yarnRoutes from "./routes/yarn.routes";
 import itemPriceRoutes from "./routes/item-price.routes";
+import costRoutes from "./routes/cost.routes";
 import purchaseOrderRoutes from "./routes/purchase-order.routes";
 import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import stockCountRoutes from "./routes/stock-count.routes";
@@ -524,6 +526,8 @@ app.use("/api/product-recipes", productRecipeRoutes);
 // Çözgü kartları (devere modülü) — router'ın kendi kapısı: verifyToken +
 // requireDevereEnabled (ticaret → iplik → devere zinciri) + requirePermission.
 app.use("/api/warp-specs", warpSpecRoutes);
+// MAL-1 (S2 çekirdeği): atkı kartı — router kendi kapısını taşır (`requireDokumaEnabled`).
+app.use("/api/weft-specs", weftSpecRoutes);
 app.use("/api/warp-beams", warpBeamRoutes);
 // Dokuma modülü (üç router, tek kapı): verifyToken + requireDokumaEnabled
 // (production → dokuma zinciri kapının içinde) + requirePermission.
@@ -593,6 +597,8 @@ app.use("/api/goods-receipts", goodsReceiptRoutes);
 
 app.use("/api/yarn", yarnRoutes);
 app.use("/api/item-prices", itemPriceRoutes);
+// MAL-1: maliyet girdileri — router kendi kapısını taşır (`requireMaliyetEnabled`).
+app.use("/api/cost", costRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 // Depolar arası transfer — kendi `verifyToken + requireDepoMultiEnabled`
 // kapısını taşır. Depo TANIMI ve DEFTERİ (`/api/warehouses`) rejimsiz KALIR;

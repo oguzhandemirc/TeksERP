@@ -80,6 +80,12 @@ export const PERMISSION_CATALOG = [
   // dokuma planlamacısı aynı kişi olmak zorunda değil.
   { code: "warpspec:read", module: "MASTER_DATA", category: "web", description: "Çözgü kartı (tel · iplik · tarak) listesi/detay görüntüleme" },
   { code: "warpspec:write", module: "MASTER_DATA", category: "web", description: "Çözgü kartı oluşturma/düzenleme" },
+  // ── Maliyet & Teklif (MAL-1, 2026-10-25) — modül `maliyet.enabled` ───────────────────────────
+  // Okuma TUTAR görmektir (maliyet tabanı ticari sırdır); yazma ürün yapısı + fiyat/tarife;
+  // tesis parametreleri ayrı karar (yürürlüğe alma bütün maliyetleri değiştirir).
+  { code: "cost:read", module: "COST", category: "web", description: "Maliyet girdilerini ve tutarlarını görüntüleme" },
+  { code: "cost:write", module: "COST", category: "web", description: "Ürün maliyet yapısı, iplik maliyet fiyatı ve terbiye tarifesi yazma" },
+  { code: "cost:settings", module: "COST", category: "web", description: "Tesis maliyet parametrelerini düzenleme ve yürürlüğe alma" },
   // ── Levent (devere Faz 1b, 2026-09-14): plan/sar yazma, sarım iptali AYRI yetenek (defterden net iplik döner).
   { code: "warpbeam:read", module: "PRODUCTION", category: "web", description: "Levent listesi/detayı (plan · sarım · kalan metre · iplik satırları)" },
   { code: "warpbeam:write", module: "PRODUCTION", category: "web", description: "Levent planlama, sarım (WOUND + iplik çıkışı/dip iadesi), taslak silme" },

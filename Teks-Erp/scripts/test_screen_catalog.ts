@@ -762,8 +762,8 @@ function main(): void {
     kapiliAlanlar.size >= 4,
     `${kapiliAlanlar.size} kapı → ${[...kapiliAlanlar].sort().join(", ")}`,
   );
-  // Hiçbir route'a TAKILMAMIŞ kapı henüz bir yüzeyi korumuyor (MAL-0: `requireMaliyetEnabled`); ekran
-  // beyanı ilk takıldığı gün zorunlu olur. Kullanım middlewares DIŞINDAKİ src'de aranır.
+  // Hiçbir route'a TAKILMAMIŞ kapı henüz bir yüzeyi korumuyor; ekran beyanı (ya da gerekçeli
+  // ekransız muaf) ilk takıldığı gün zorunlu olur. Kullanım middlewares DIŞINDAKİ src'de aranır.
   const SRC_DIZIN = path.join(ROOT, "Teks-Erp", "src");
   const srcMetinleri: string[] = [];
   (function gez(dir: string): void {
@@ -780,8 +780,11 @@ function main(): void {
   };
   const rotasiz = [...kapiliAlanlar].filter((a) => !takili(a));
   console.log(`   ℹ️  §10 route'a takılmamış kapı: ${rotasiz.join(", ") || "(yok)"}`);
+  // Gerekçeli EKRANSIZ muaf (§8) da bir beyandır: "gizlenecek ekran henüz yok" yazılıdır (MAL-1: kapı
+  // API uçlarına takıldı, ekran MAL-3/MAL-7). Muaf ekran doğunca §8b ölü muafı zaten kırmızıya çevirir.
+  const ekransizMuaf = new Set<string>(EKRANSIZ_MODULLER.map((e) => e.modul));
   const kapiliAmaEkransiz = [...kapiliAlanlar].filter(
-    (a) => takili(a) && screensOfModul(a as EkranModul).length === 0,
+    (a) => takili(a) && screensOfModul(a as EkranModul).length === 0 && !ekransizMuaf.has(a),
   );
   check(
     "§10b ⭐ Kapısı olan her modülün en az bir ekranı beyanlı",
