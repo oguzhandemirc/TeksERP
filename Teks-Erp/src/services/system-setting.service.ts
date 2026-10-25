@@ -863,6 +863,9 @@ export const SETTING_KEYS = {
   PATRON_BULUT_OLAY_GUDUMLU: "patronBulut.olayGudumluEnabled",
   // bildirim: gelen kutusu davranış bayrağı (modül anahtarı DEĞİL — plan Karar Y1); default false.
   BILDIRIM_GELEN_KUTUSU_ENABLED: "bildirim.gelenKutusuEnabled",
+  // belge-sablon T1C: davranış bayrakları (modül DEĞİL, profile girmez); ikisi de default false.
+  DOCUMENTS_DESIGNER_ENABLED: "documents.designerEnabled",
+  DOCUMENTS_PUBLISH_SOD_ENABLED: "documents.publishSodEnabled",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
@@ -2052,6 +2055,10 @@ export interface FeatureFlags {
   /** bildirim: kişisel gelen kutusu + yeni zil (default false = bugünkü zil davranışı).
    *  Okuyucular N1-MOTOR/N1-ZIL'de; bu alan yalnız taşır. */
   bildirimGelenKutusuEnabled: boolean;
+  /** Belge tasarımcısı (default false = bugünkü Sistem tasarımı; tasarım uçları 403, basım şablon çözmez). */
+  documentDesignerEnabled: boolean;
+  /** Şablon yayınında tasarlayan ≠ yayınlayan (default false = bugünkü davranış). */
+  documentPublishSodEnabled: boolean;
   /** Lisans modül tavanı — SALT OKUNUR (PATCH şemasında yok), önbelleğe girmez. Modül
    *  şalterleri HAM değerdir; lisansın kapattığı modül yalnız burada görünür (gözlemde boş). */
   license: LicenseModuleBlock;
@@ -2461,6 +2468,8 @@ export class SystemSettingService {
       defaultLabelMedia: await readDefaultLabelMedia(cacheClient),
       patronBulutOlayGudumluEnabled: await readPatronBulutOlayGudumluEnabled(cacheClient),
       bildirimGelenKutusuEnabled: await readNotificationInboxEnabled(cacheClient),
+      documentDesignerEnabled: await readDocumentDesignerEnabled(cacheClient),
+      documentPublishSodEnabled: await readDocumentPublishSodEnabled(cacheClient),
     };
     // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
     // pinleme (taze değeri döndür, cache'i bir sonraki okuma tazeler).
@@ -4473,6 +4482,30 @@ export class SystemSettingService {
         SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED,
         input.bildirimGelenKutusuEnabled,
         "Yeni bildirim gelen kutusu: açıkken zil kişisel gelen kutusunu gösterir; kapalıyken bugünkü davranış",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "documentDesignerEnabled")) {
+      if (typeof input.documentDesignerEnabled !== "boolean") {
+        throw AppError.badRequest("documentDesignerEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DOCUMENTS_DESIGNER_ENABLED,
+        input.documentDesignerEnabled,
+        "Belge tasarımcısı: açıkken yeni basılan belgeler atanan şablonla basılır; kapalıyken Sistem tasarımı",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "documentPublishSodEnabled")) {
+      if (typeof input.documentPublishSodEnabled !== "boolean") {
+        throw AppError.badRequest("documentPublishSodEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DOCUMENTS_PUBLISH_SOD_ENABLED,
+        input.documentPublishSodEnabled,
+        "Belge şablonu yayını: açıkken sürümü tasarlayan kişi onu yayınlayamaz",
         userId
       );
     }
@@ -7591,6 +7624,30 @@ export async function readNotificationInboxEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Belge tasarımcısı açık mı? Default FALSE (kayıt yok/çöp → bugünkü Sistem tasarımı; fail-closed). */
+export async function readDocumentDesignerEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DOCUMENTS_DESIGNER_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Şablon yayınında tasarlayan ≠ yayınlayan zorunlu mu? Default FALSE (bugünkü davranış). */
+export async function readDocumentPublishSodEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DOCUMENTS_PUBLISH_SOD_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

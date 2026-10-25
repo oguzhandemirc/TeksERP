@@ -22,6 +22,7 @@ export const PANEL_SETTING_SCREEN = {
   session: "Sistem → Şirket & Güvenlik → Oturum & Güvenlik",
   company: "Sistem → Şirket & Güvenlik → Şirket Bilgileri",
   "e-irsaliye": "Sistem → Şirket & Güvenlik → e-İrsaliye",
+  belgeler: "Sistem → Baskı & Cihazlar → Belgeler",
 } as const;
 
 export type PanelSettingScreen = keyof typeof PANEL_SETTING_SCREEN;
@@ -29,6 +30,7 @@ export type PanelSettingScreen = keyof typeof PANEL_SETTING_SCREEN;
 /** Ayar satırı (panel `flags[].key`) → bulunduğu ekran ve satır başlığı. */
 export const PANEL_SETTING_ROW = {
   tezgahAlarmEnabled: { ekran: "tezgah", baslik: "Tezgah alarmı" },
+  documentDesignerEnabled: { ekran: "belgeler", baslik: "Belge tasarımcısı" },
   shipmentUndoSameDayOnly: { ekran: "shipping", baslik: "Sevk geri almayı aynı günle sınırla" },
   shipmentManualSackCountEnabled: { ekran: "shipping", baslik: "Çuval sayısını elle gir" },
   devereMountTracking: { ekran: "devere", baslik: "Levent tezgah bağı defteri" },

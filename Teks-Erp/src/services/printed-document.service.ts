@@ -40,7 +40,9 @@ import { ApiResponse } from "../types/api.types";
 import { factoryDateTimeTr } from "../constants/time";
 import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
 import type { DocTablesPayload } from "./document-render/doc-model";
-import { NUMBER_ROUNDING_HALF_UP, type NumberRounding } from "./document-render/fmt-num";
+import { envelopeHead } from "./document-render/envelope-head";
+import type { NumberRounding } from "./document-render/fmt-num";
+import { renderFrozenTemplate, resolveTemplateForFreeze, type FrozenTemplateRef } from "./document-template/print-binding";
 
 /** Builder'ların aldığı istemci — tx içinden (freeze) veya dışından (reissue/lazy) çalışır. */
 export type PrintedDocDb = Prisma.TransactionClient | typeof prisma;
@@ -97,11 +99,13 @@ export interface PrintedDocSnapshot {
   /** Yuvarlama rejimi — zarf kurucusu damgalar, yalnız `docNum` okur. Damgasız (eski)
    *  belge eski yuvarlamayla basılır ki yeniden baskı aslının aynısı kalsın. */
   numberRounding?: NumberRounding;
+  /** Tasarımcı şablonu (T1C, additive): varsa belge bu sürümle basılır; yoksa Sistem tasarımı. */
+  template?: FrozenTemplateRef;
+  /** Freeze anında atlanan atamaların notu (yayında değil/arşivde) — yalnız doluysa yazılır. */
+  templateWarnings?: string[];
 }
 
-/** Her yeni zarfın başı — damganın TEK yazıldığı yer (sözleşme senaryoları da buradan alır). */
-export const envelopeHead = () =>
-  ({ schemaVersion: 1, frozenAt: new Date().toISOString(), numberRounding: NUMBER_ROUNDING_HALF_UP }) as const;
+export { envelopeHead };
 
 /** Builder çıktısı — domain servisin freeze/reissue için ürettiği içerik. */
 export interface BuiltDocContent {
@@ -280,17 +284,19 @@ async function buildSnapshotEnvelope(
   const docKey = DOC_CONFIG_KEYS[docType];
   let docCfg: DocumentConfig | null = documentsConfig[docKey] ?? null;
   const resolveProfileId = builders.get(docType)?.resolveProfileId;
-  if (sourceId && resolveProfileId) {
-    const profileId = await resolveProfileId(db, sourceId);
-    if (profileId) {
-      const profile = await db.documentProfile.findUnique({
-        where: { id: profileId },
-        select: { config: true, isActive: true },
-      });
-      if (profile?.isActive && profile.config && typeof profile.config === "object") {
-        const pCfg = sanitizeDocumentsConfig(profile.config as Record<string, unknown>)[docKey];
-        if (pCfg) docCfg = { ...(docCfg ?? {}), ...pCfg };
-      }
+  const profileId = sourceId && resolveProfileId ? await resolveProfileId(db, sourceId) : null;
+  // Şablon çözümü yalnız kaynaklı zarfta (freeze/lazy/güncel/taslak önizleme); bayrak kapalıyken NONE.
+  const tpl = sourceId ? await resolveTemplateForFreeze(db, docType, profileId) : null;
+  // Şablonlu belgede taban ayar sürümün dondurulmuş `ayar`ıdır (genel config değil); profil üstüne biner (R4).
+  if (tpl?.ref) docCfg = tpl.settings as DocumentConfig;
+  if (profileId) {
+    const profile = await db.documentProfile.findUnique({
+      where: { id: profileId },
+      select: { config: true, isActive: true },
+    });
+    if (profile?.isActive && profile.config && typeof profile.config === "object") {
+      const pCfg = sanitizeDocumentsConfig(profile.config as Record<string, unknown>)[docKey];
+      if (pCfg) docCfg = { ...(docCfg ?? {}), ...pCfg };
     }
   }
 
@@ -299,6 +305,8 @@ async function buildSnapshotEnvelope(
     company: { name: companyName, letterhead, logoHash: logo.current },
     docConfigOverride: docCfg,
     doc,
+    ...(tpl?.ref ? { template: tpl.ref } : {}),
+    ...(tpl?.warnings.length ? { templateWarnings: tpl.warnings } : {}),
   };
 }
 
@@ -332,6 +340,7 @@ async function isTemplateStale(
   const fresh = await buildSnapshotEnvelope(db, docType, snap.doc, sourceId);
   return (
     !jsonEqual(fresh.docConfigOverride, snap.docConfigOverride) ||
+    (fresh.template?.versionId ?? null) !== (snap.template?.versionId ?? null) ||
     fresh.company.name !== snap.company.name ||
     !jsonEqual(fresh.company.letterhead, snap.company.letterhead) ||
     (fresh.company.logoHash ?? null) !== (snap.company.logoHash ?? null)
@@ -435,10 +444,88 @@ export interface DocRenderOpts {
    * doğurmaz — `forceRowNotes`/`listSections` ile aynı sözleşme.
    */
   pageSize?: "A4" | "A5";
+  /** Tek seferlik "Sistem şablonuyla bas" (?sistemSablonu=1) — şablon render'ı düşerse çıkış; audit iz bırakır. */
+  systemTemplate?: boolean;
+  /** Audit için basan kullanıcı kimliği (yalnız `systemTemplate` izinde kullanılır). */
+  actorId?: string | null;
+}
+
+/** Baskının donmuş belge kaydı — şablonlu render künyesi ve filigranı buradan kurar. */
+interface RenderRecord {
+  id: string | null;
+  documentNo: string;
+  version: number | null;
+  status: PrintedDocStatus | null;
+  reissueReason: string | null;
+  reconstructed: boolean;
+  draft: boolean;
 }
 
 /** Renderer'a giden meta — `renderHtml` ve `renderTables` AYNI nesneyi alır. */
 export type DocRenderMeta = Parameters<NonNullable<BuilderEntry["renderHtml"]>>[1];
+
+/** `/html` sonucu — şablon alanları ADDITIVE (Sistem yolunda yalnız `html`). */
+export interface DocHtmlResult {
+  html: string;
+  template?: { name: string; versionNo: number };
+  tablesAvailable?: boolean;
+  warnings?: string[];
+}
+
+/** "Güncel şablonla bas": görünüm katmanı (firma, ayar, ŞABLON) canlı zarftan; içerik donuk kalır. */
+function withLiveLook(frozen: PrintedDocSnapshot, fresh: PrintedDocSnapshot): PrintedDocSnapshot {
+  const { template: _frozenTemplate, templateWarnings: _frozenNotes, ...rest } = frozen;
+  return {
+    ...rest,
+    company: fresh.company,
+    docConfigOverride: fresh.docConfigOverride,
+    ...(fresh.template ? { template: fresh.template } : {}),
+    ...(fresh.templateWarnings ? { templateWarnings: fresh.templateWarnings } : {}),
+  };
+}
+
+interface FrozenRecordRow {
+  id: string;
+  documentNo: string;
+  version: number;
+  status: PrintedDocStatus;
+  reissueReason?: string | null;
+  reconstructed?: boolean;
+}
+
+const draftRecord = (documentNo: string): RenderRecord => ({
+  id: null, documentNo, version: null, status: null, reissueReason: null, reconstructed: false, draft: true,
+});
+
+function frozenRecord(rec: FrozenRecordRow): RenderRecord {
+  return {
+    id: rec.id,
+    documentNo: rec.documentNo,
+    version: rec.version,
+    status: rec.status,
+    reissueReason: rec.reissueReason ?? null,
+    reconstructed: rec.reconstructed === true,
+    draft: false,
+  };
+}
+
+/** "Sistem şablonuyla bas" çıkışı sessiz sapma olmasın diye iz bırakır (plan §3.6). */
+async function logSystemTemplateFallback(a: {
+  docType: PrintedDocType;
+  sourceId: string;
+  ref: FrozenTemplateRef;
+  record: RenderRecord;
+  actorId: string | null;
+}): Promise<void> {
+  const { docType, sourceId, ref, record, actorId } = a;
+  await AuditService.log({
+    userId: actorId ?? undefined,
+    action: "UPDATE",
+    tableName: "PRINTED_DOCUMENT",
+    recordId: record.id ?? sourceId,
+    newData: { event: "SYSTEM_TEMPLATE_PRINT", docType, sourceId, version: record.version, templateId: ref.templateId, versionId: ref.versionId },
+  });
+}
 
 export class PrintedDocumentService {
   /**
@@ -575,7 +662,7 @@ export class PrintedDocumentService {
     sourceId: string,
     version: number | undefined,
     opts: DocRenderOpts | undefined,
-  ): Promise<{ snapshot: PrintedDocSnapshot; meta: DocRenderMeta } | null> {
+  ): Promise<{ snapshot: PrintedDocSnapshot; meta: DocRenderMeta; record: RenderRecord } | null> {
     const entry = requireBuilder(docType);
 
     // Kayıtlı not (annotation) tanımlıysa ephemeral ?printNote='ı EZER — donmuş
@@ -630,13 +717,7 @@ export class PrintedDocumentService {
       version != null
         ? await this.getVersion(docType, sourceId, version)
         : await this.getCurrent(docType, sourceId);
-    const rec = res.data as {
-      snapshot: unknown;
-      status: PrintedDocStatus;
-      voidReason: string | null;
-      documentNo: string;
-      version: number;
-    } | null;
+    const rec = res.data as (FrozenRecordRow & { snapshot: unknown; voidReason: string | null }) | null;
 
     if (rec) {
       let snapshot = rec.snapshot as PrintedDocSnapshot;
@@ -645,8 +726,7 @@ export class PrintedDocumentService {
       // ÜRETMEZ, snapshot'a yazmaz; sadece bu render için geçici zarf kurulur.
       // Yuvarlama damgası içeriğe aittir: donmuş zarftan gelir, tazelenmez.
       if (opts?.useCurrentConfig) {
-        const fresh = await buildSnapshotEnvelope(prisma, docType, snapshot.doc, sourceId);
-        snapshot = { ...snapshot, company: fresh.company, docConfigOverride: fresh.docConfigOverride };
+        snapshot = withLiveLook(snapshot, await buildSnapshotEnvelope(prisma, docType, snapshot.doc, sourceId));
       }
       // Kâğıt boyu ezmesi EN SONDA: "güncel şablonla bas" taze config getirse
       // bile operatörün bu baskı için seçtiği boy kazanmalı.
@@ -657,10 +737,8 @@ export class PrintedDocumentService {
         printedBy: opts?.printedBy,
         printNote: liveNote,
       });
-      return {
-        snapshot,
-        meta: { status: rec.status, voidReason: rec.voidReason, ...extras, ...noteMeta },
-      };
+      const meta = { status: rec.status, voidReason: rec.voidReason, ...extras, ...noteMeta };
+      return { snapshot, meta, record: frozenRecord(rec) };
     }
 
     // Donmuş belge yok → istenmişse canlı TASLAK önizlemesi (kaydedilmez).
@@ -678,7 +756,7 @@ export class PrintedDocumentService {
           printedBy: opts?.printedBy,
           printNote: liveNote,
         });
-        return { snapshot, meta: { draft: true, ...extras, ...noteMeta } };
+        return { snapshot, meta: { draft: true, ...extras, ...noteMeta }, record: draftRecord(built.documentNo) };
       }
     }
     return null;
@@ -695,7 +773,7 @@ export class PrintedDocumentService {
     sourceId: string,
     version?: number,
     opts?: DocRenderOpts,
-  ): Promise<ApiResponse<{ html: string } | null>> {
+  ): Promise<ApiResponse<DocHtmlResult | null>> {
     const entry = requireBuilder(docType);
     if (!entry.renderHtml) {
       throw AppError.badRequest(
@@ -704,7 +782,22 @@ export class PrintedDocumentService {
     }
     const inputs = await this.resolveRenderInputs(docType, sourceId, version, opts);
     if (!inputs) return { success: true, data: null };
-    return { success: true, data: { html: entry.renderHtml(inputs.snapshot, inputs.meta) } };
+    const { snapshot, meta, record } = inputs;
+    if (snapshot.template && !opts?.systemTemplate) {
+      const r = await renderFrozenTemplate(docType, snapshot as never, meta, record);
+      return {
+        success: true,
+        data: {
+          html: r.html,
+          template: { name: r.ref.name, versionNo: r.ref.versionNo },
+          tablesAvailable: false,
+          ...(snapshot.templateWarnings ? { warnings: snapshot.templateWarnings } : {}),
+        },
+      };
+    }
+    if (snapshot.template) await logSystemTemplateFallback({ docType, sourceId, ref: snapshot.template, record, actorId: opts?.actorId ?? null });
+    const html = entry.renderHtml(snapshot, meta);
+    return { success: true, data: snapshot.templateWarnings ? { html, warnings: snapshot.templateWarnings } : { html } };
   }
 
   /**
