@@ -11,6 +11,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { validateBands, type RuleBand } from "./helpers/four-point.helper";
 import { RULE_SET_SELECT } from "./helpers/four-point-resolve.helper";
+import { readKaliteGuvenceEnabled } from "./system-setting.service";
 
 export const RULE_SET_AUDIT_TABLE = "FOUR_POINT_RULE_SET";
 
@@ -162,4 +163,22 @@ export async function setRuleSetActive(id: string, isActive: boolean, userId: st
   }
   await AuditService.log({ userId, action: "UPDATE", tableName: RULE_SET_AUDIT_TABLE, recordId: id, oldData: { isActive: prior.isActive }, newData: { isActive } });
   return getRuleSet(id);
+}
+
+/**
+ * Canlı referans kapısı: aktif kural setinin bandındaki kalite derecesi pasife alınamaz (yeni muayene
+ * pasif dereceyi önerirdi). Modül kapalıyken kural koşmaz (modul-bayrak §3.6; setler görünmez).
+ */
+export async function assertGradeNotInActiveRuleSet(gradeId: string): Promise<void> {
+  if (!(await readKaliteGuvenceEnabled())) return;
+  const sets = await prisma.fourPointRuleSet.findMany({
+    where: { isActive: true, bands: { some: { qualityGradeId: gradeId } } },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+  if (sets.length === 0) return;
+  throw AppError.conflict(
+    `Bu kalite derecesi aktif 4 puan kural setinde kullanılıyor (${sets.map((s) => s.name).join(", ")}); önce kural setinden çıkarın ya da seti pasife alın.`,
+    { code: "QUALITY_GRADE_IN_RULE_SET", ruleSets: sets },
+  );
 }

@@ -37,6 +37,11 @@ export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
     gerekce: "Hata SİLME (KK2 + Tambur ortak ucu): silmenin yapıldığı istasyonda muayene açık olmalı; akış sorulmaz çünkü Tambur akışta değil.",
   },
   {
+    dosya: "services/inventory.service.ts",
+    fonksiyon: "entryStationCapableForInspection",
+    gerekce: "KK1 doğumundaki muayene için giriş istasyonunun kalite yeteneği: yeteneksizse top doğar, muayene yazılmaz (K4P-KK1b fail-soft, STATION_NO_QUALITY).",
+  },
+  {
     dosya: "services/station-capability.service.ts",
     fonksiyon: "deriveCapabilityFlags",
     gerekce: "Panel/tablet yetenek DTO'sunun `inspectionEnabled` alanı; `canApplyQuality` akış ikizinde kalır.",

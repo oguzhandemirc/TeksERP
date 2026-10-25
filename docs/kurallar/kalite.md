@@ -58,6 +58,7 @@
 - **[ÇEKİRDEK]** Muayeneyi YALNIZ `createInspectionTx` (`services/quality-inspection.service.ts`) yazar; panel, tablet ve KK1 doğuşu onu çağırır, `RollInspection`/INSPECTION hata satırını başka yerde yaratma. · bekçi: `test_kalite_muayene` §1 · `test_defter_ters_yol` §4/§10 <sub>(arşiv 2026-10-25 "K4P motor")</sub>
 - **[ÇEKİRDEK]** 4 puan sayısını yalnız `helpers/four-point.helper.ts`ten hesapla (tavan · skor · birim · `round2` HALF_UP · bant); önizleme ucu muayeneyle aynı `evaluateInspection`ı çağırır, ikinci formül yazma; derece eşiğini koda koyma, kural setinden oku ve muayeneye snapshot'la. · bekçi: `test_dort_puan_hesap` · `test_kalite_muayene` §9 · `test_kalite_kural_seti` §4 <sub>(arşiv 2026-10-25 "K4P motor")</sub>
 - **[ÇEKİRDEK]** Muayene revizyonu ve iptali eskiyi `updateMany WHERE {id, ...ACTIVE_INSPECTION_WHERE}` ile atomik claim eder, `count===0 → 409 INSPECTION_NOT_ACTIVE`; aktiflik yüklemi `helpers/inspection-active.helper.ts`te (`isActiveInspection` ikizi). · bekçi: `test_kalite_muayene` §5 (zorlanmış sıra) <sub>(arşiv 2026-10-25 "K4P motor")</sub>
+- **[ÇEKİRDEK]** Aktif 4 puan kural setinin bandındaki kalite derecesini pasife alma (409 `QUALITY_GRADE_IN_RULE_SET`); kural setini silme, pasife al — geçmiş muayene snapshot'tan okunur. · bekçi: `test_kalite_kural_seti` §5 <sub>(arşiv 2026-10-25 "K4P-TANIM")</sub>
 
 ## Backend
 
