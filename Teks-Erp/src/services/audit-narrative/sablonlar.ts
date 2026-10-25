@@ -147,6 +147,7 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "devices:REVOKED": olay("ilgi", "erişimini kaldırdı"),
   "devices:MERGED": olay("belirtme", "ana cihaz kaydıyla birleştirdi"),
   "devices:UNMERGED": olay("ilgi", "birleştirmesini geri aldı"),
+  "devices:PROOF_RESET": olay("ilgi", "kanıtını sıfırladı (aynı donanımla yeniden bağlanacak)"),
   // Fatura kapama
   "PAYMENT_ALLOCATION:ALLOCATIONS_RELEASED": olay("belirtme", "çözdü"),
   // Etiket basımı (kaydın numarası yok: yalnız eylem)
