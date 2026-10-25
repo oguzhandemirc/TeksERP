@@ -14,10 +14,14 @@ import { REPORT_BY_KEY, isReportSurfaced } from "@/lib/report-catalog";
 // Yüzeylerin TEK süzgeci (katalogda yaşar, backend bekçileri de aynısını okur): v2 satırı ucu inene kadar çizilmez.
 export { isReportSurfaced };
 
+/** Özel (kayıtlı) rapor sayfalarının yol kökü: `/reports/ozel/...`. */
+export const CUSTOM_REPORTS_SEGMENT = "ozel";
+
 /** `/reports/<kategori>/<rapor>[/...]` → `"<kategori>/<rapor>"`; kategori hub'ı ve rapor-dışı yol → `null`. */
 export function reportKeyOfPath(pathname: string): string | null {
   const segs = pathname.split("/").filter((s) => s && !s.startsWith(":"));
-  if (segs[0] !== "reports" || segs.length < 3) return null;
+  // Özel raporlar katalog raporu değildir; görünürlüğü/blok izinlerini sunucu denetler (R1-KAYIT).
+  if (segs[0] !== "reports" || segs.length < 3 || segs[1] === CUSTOM_REPORTS_SEGMENT) return null;
   return `${segs[1]}/${segs[2]}`;
 }
 

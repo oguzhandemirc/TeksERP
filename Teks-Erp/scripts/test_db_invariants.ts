@@ -242,6 +242,8 @@ const PARTIAL_INDEXES: Array<{
   { table: "four_point_rule_sets", index: "four_point_rule_sets_one_factory_uq", uniq: true, predicate: `((scope = 'FACTORY'::"RuleScope") AND ("isActive" = true))`, why: "tek aktif fabrika kural seti" },
   { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_uq", uniq: true, predicate: `(("isActive" = true) AND ("customerId" IS NOT NULL) AND ("itemId" IS NULL))`, why: "müşteri başına tek aktif genel kural seti" },
   { table: "four_point_rule_sets", index: "four_point_rule_sets_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün) başına tek aktif kural seti" },
+  { table: "customer_lab_specs", index: "customer_lab_specs_customer_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NULL))`, why: "(müşteri, test türü) başına tek aktif genel lab spesifikasyonu (K4P-SERT)" },
+  { table: "customer_lab_specs", index: "customer_lab_specs_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün, test türü) başına tek aktif lab spesifikasyonu (K4P-SERT)" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
   // roll_returns — iade belge no KOLONA alındı (migration 20260922210000).
@@ -820,6 +822,20 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "roll_inspections", name: "roll_inspections_revision_ck" },
   { table: "four_point_rule_sets", name: "four_point_rule_sets_scope_ck" },
   { table: "four_point_rule_bands", name: "four_point_rule_bands_max_score_ck" },
+  // K4P-LAB (migration 20261025130000) — lab testi seddi; bekçi `test_lab_test`.
+  { table: "lab_test_types", name: "lab_test_types_kind_ck" },
+  { table: "lab_tests", name: "lab_tests_subject_ck" },
+  { table: "lab_tests", name: "lab_tests_approved_ck" },
+  { table: "lab_tests", name: "lab_tests_voided_ck" },
+  { table: "lab_test_results", name: "lab_test_results_value_ck" },
+  // K4P-SERT — sertifika sahipliği (OWN ⇔ partnerId NULL), iptal damgası ⇔ gerekçe, tarih sırası,
+  // belge 5 MB + tür, müşteri spesifikasyonu sınır tutarlılığı.
+  { table: "certificates", name: "certificates_holder_ck" },
+  { table: "certificates", name: "certificates_revoked_ck" },
+  { table: "certificates", name: "certificates_dates_ck" },
+  { table: "certificate_files", name: "certificate_files_size_ck" },
+  { table: "certificate_files", name: "certificate_files_mime_ck" },
+  { table: "customer_lab_specs", name: "customer_lab_specs_bounds_ck" },
   { table: "fabric_properties", name: "fabric_properties_variant_not_self_ck" },
   // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye

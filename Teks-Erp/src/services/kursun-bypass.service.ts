@@ -86,6 +86,7 @@ import {
   STEP_FLOW_SELECT,
   stepRunsStepFlow,
 } from "./helpers/quality-station.helper";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 /**
  * Bypass kapanışının movement notes marker ÖN EKİ. Tur kimliği (uuid) suffix
@@ -938,7 +939,7 @@ export class KursunBypassService {
         }
         // 6e
         const errorCount = await tx.rollError.count({
-          where: { detectedAtStepId: step.id },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, detectedAtStepId: step.id },
         });
         if (errorCount > 0) {
           throw AppError.conflict(

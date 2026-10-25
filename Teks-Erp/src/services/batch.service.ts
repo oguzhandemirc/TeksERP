@@ -376,6 +376,9 @@ export async function deleteIfEmptyAndTracelessTx(
   const dispatchCount = await tx.subcontractorDispatch.count({ where: { batchId } });
   if (dispatchCount > 0) return false;
 
+  // K4P-LAB: parti düzeyi lab testi izdir — parti kalır (FK Restrict 500 yerine sessiz koruma).
+  if ((await tx.labTest.count({ where: { batchId } })) > 0) return false;
+
   const childCount = await tx.batch.count({ where: { splitFromId: batchId } });
   if (childCount > 0) return false;
 

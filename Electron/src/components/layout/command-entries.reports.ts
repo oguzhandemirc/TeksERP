@@ -1,4 +1,4 @@
-import { BarChart3 } from "lucide-react";
+import { BarChart3, FilePlus2 } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import { isCenterEntryOpen } from "@/pages/Reports/_v2/center-model";
@@ -102,6 +102,24 @@ reportCommandSections.push({
   heading: "Raporlar · Rapor Merkezi",
   parent: { label: "Raporlar", to: "/reports" },
   entries: reportV2Entries,
+});
+
+/** Özel raporlar (R1-KAYIT): oluşturucu `report:builder`; liste Rapor Merkezi'nin "Özel raporlarım" bölümü. */
+reportCommandSections.push({
+  heading: "Raporlar · Özel raporlar",
+  parent: { label: "Raporlar", to: "/reports" },
+  entries: [
+    {
+      key: "report-custom:new",
+      label: "Yeni özel rapor",
+      description: "Ölçü ve kırılım seçerek kendi raporunuzu kurun; kaydedin, paylaşın",
+      icon: FilePlus2,
+      to: "/reports/ozel/yeni",
+      permission: "report:builder",
+      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
+      keywords: "özel rapor raporlarım kayıtlı rapor oluşturucu ölçü kırılım paylaş",
+    },
+  ],
 });
 
 /**

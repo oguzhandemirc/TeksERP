@@ -37,6 +37,11 @@ export const TABLE_LABELS: Record<string, string> = {
 
   // Master data
   USER: "Kullanıcı",
+  REPORT_CATEGORY: "Rapor Kategorisi",
+  REPORT_DEFINITION: "Özel Rapor",
+  REPORT_DEFINITION_VERSION: "Özel Rapor Sürümü",
+  REPORT_PRESET: "Rapor Ön Ayarı",
+  REPORT_SHARE: "Rapor Paylaşımı",
   ITEM: "Kumaş / Stok Kalemi",
   CUSTOMER: "Müşteri",
   CUSTOMER_BRANCH: "Müşteri Şubesi",
@@ -191,6 +196,11 @@ export const TABLE_LABELS: Record<string, string> = {
   GOODS_RECEIPT: "Mal Kabul Fişi",
   PURCHASE_ORDER: "Alış Siparişi",
   ITEM_PRICE: "Ürün Fiyatı",
+  LAB_TEST: "Lab Testi",
+  LAB_TEST_TYPE: "Lab Test Türü",
+  CERTIFICATE: "Sertifika",
+  CERTIFICATE_FILE: "Sertifika Belgesi",
+  CUSTOMER_LAB_SPEC: "Müşteri Lab Spesifikasyonu",
   COST_PARAMETER_SET: "Maliyet Parametre Seti",
   COST_STRUCTURE: "Ürün Maliyet Yapısı",
   FINISHING_RATE: "Apre Tarifesi",
@@ -616,6 +626,14 @@ export const ENUM_LABELS: Record<string, string> = {
   REQUIRED: "Zorunlu",
   // SackWeightSource (YarnCostPriceSource.MANUAL da aynı anlam)
   MANUAL: "Elle girildi",
+  // LabResultKind / LabVerdict (K4P-LAB)
+  NUMERIC: "Sayısal ölçüm",
+  PASS_FAIL: "Geçti / Kaldı",
+  PASS: "Geçti",
+  FAIL: "Kaldı",
+  // CertificateHolder (K4P-SERT)
+  OWN: "Fabrika",
+  PARTNER: "İş ortağı",
   // YarnCostPriceSource
   LAST_RECEIPT: "Son mal kabulden",
   PURCHASE_PRICE: "Alış fiyatından",
@@ -1040,6 +1058,10 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "CASH_TRANSACTION.kind": { PAYMENT: "Ödeme" },
   // RunningCap (K4P, 2026-10-24) — METER global "Metre Sayacı" (PeripheralKind), NONE global "Tarih yok" (NumberSeriesDateSegment); koşu tavanı için ikisi de yanlış
   "FOUR_POINT_RULE_SET.runningCap": { METER: "Metre başına en fazla 4 puan", NONE: "Koşu tavanı yok" },
+  // LabResultKind.SCALE (K4P-LAB) — global "Kantar" çevre birimi dilidir; lab türünde gri ölçek notudur
+  "LAB_TEST_TYPE.resultKind": { SCALE: "Gri ölçek (1–5)" },
+  // LabVerdictSource.AUTO — global "Otomatik uygulanır" özellik modudur; hüküm sınırdan hesaplandı
+  "LAB_TEST.verdictSource": { AUTO: "Sınırdan otomatik" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
@@ -1123,10 +1145,12 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   OTHER: "istasyon türü ve ödeme yöntemi — ikisi de 'Diğer'",
   YARN: "kalem türü, sayım satırı türü ve fason sevk kalemi türü (G1) — üçü de 'İplik'",
   SCRAP: "sapma türü / top statüsü / kalite rolü — üçünde de 'Fire'",
-  SCALE: "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'",
+  SCALE:
+    "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'; LabResultKind(gri ölçek) için YANLIŞ — " +
+    "LAB_TEST_TYPE.resultKind override'ı ile ayrıldı (K4P-LAB, 2026-10-25)",
   MANUAL:
     "tartı kaynağı, kur kaynağı ve NUMARA KAYNAĞI (2026-09-23) — üçünde de " +
-    "değeri ELLE giren insandır; ortak Türkçe doğru",
+    "değeri ELLE giren insandır; LabVerdictSource(hükmü elle veren) de aynı — ortak Türkçe doğru",
   // ── Numara kaynağı (2026-09-23)
   SYSTEM:
     "SystemLogCategory(olayın kaynağı sistemdir) ve NumberSourceMode(numarayı " +
@@ -1173,6 +1197,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   REDDEDILDI: "CloudInboxOutcome(bulut makbuzu reddedildi) ve EIrsaliyeStatus(alıcı yanıtı red) — ikisi de 'Reddedildi'; ortak Türkçe doğru",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  AUTO:
+    "StationPropertyMode('Otomatik uygulanır') ve LabVerdictSource(hüküm sınırdan hesaplandı) — ortak cevap hüküm için YANLIŞ; " +
+    "LAB_TEST.verdictSource override'ı ile ayrıldı (K4P-LAB, 2026-10-25)",
   METER:
     "PeripheralKind('Metre Sayacı') ve RunningCap(koşu tavanı metre başına) — ortak cevap tavan için YANLIŞ; " +
     "FOUR_POINT_RULE_SET.runningCap override'ı ile ayrıldı (K4P, 2026-10-24)",

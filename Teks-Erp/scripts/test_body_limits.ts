@@ -107,7 +107,7 @@ async function main(): Promise<void> {
 
   // ① Kendi büyük parser'ını taşıyan her router'ın ön eki listede olmalı.
   const buyukParserli = dosyalar.filter((f) =>
-    readFileSync(join(routesDir, f), "utf8").includes("BUYUK_GOVDE_LIMITI"),
+    /BUYUK_GOVDE_LIMITI|CERTIFICATE_BODY_LIMIT/.test(readFileSync(join(routesDir, f), "utf8")),
   );
   check("§3: büyük parser taşıyan router bulundu (körlük zemini)", buyukParserli.length >= 2, buyukParserli.join(", "));
   const eksik: string[] = [];

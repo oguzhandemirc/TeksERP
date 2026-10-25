@@ -312,6 +312,10 @@ export const PERMISSION_CATALOG = [
   { code: "report:subcontract", module: "REPORTS", category: "web", description: "Fason raporları" },
   { code: "report:customer", module: "REPORTS", category: "web", description: "Müşteri / satış profil raporları" },
   { code: "report:audit", module: "REPORTS", category: "web", description: "Sistem / audit raporları" },
+  // Raporlar v2 kayıtlı raporlar (R1-KAYIT): görme/çalıştırma yeni izin istemez (görünürlük + blok izinleri);
+  // oluşturma/düzenleme builder, kategori · herkese açma · başkasının koşusunu iptal publish.
+  { code: "report:builder", module: "REPORTS", category: "web", description: "Özel rapor oluşturma ve düzenleme (veri yetkisi vermez; her bölüm kendi rapor iznini ister)" },
+  { code: "report:publish", module: "REPORTS", category: "web", description: "Rapor kategorisi yönetimi, raporu herkese açma ve başkasının rapor çalıştırmasını durdurma" },
 
   // ----- MOBİL EKRAN izinleri -----
   // Route'larda `requireAnyPermission("web:perm", "mobile:xxx")` ile web
@@ -375,6 +379,9 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:muayene", module: "MOBILE", category: "mobile", description: "Mobil — Muayene ekranı: top okutup 4 puan muayene girme (istasyondan bağımsız)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];
+
+export const REPORT_BUILDER_PERMISSION = "report:builder";
+export const REPORT_PUBLISH_PERMISSION = "report:publish";
 
 /** Tüm `report:*` kodları — semantik rapor uçlarının giriş kapısı ("herhangi bir rapor izni"; veri yetkisi derleyicide). */
 export const REPORT_PERMISSION_CODES: readonly string[] = PERMISSION_CATALOG.filter((p) => p.code.startsWith("report:")).map((p) => p.code);

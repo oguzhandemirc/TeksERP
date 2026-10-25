@@ -31,6 +31,7 @@ import {
 // STRICT anahtarı TEK KAYNAKTIR ([TD-10c]): ikinci bir bayrak ya da ikinci bir
 // `process.env` okuması açılmaz — iki koşum iki farklı şey iddia ederdi.
 import { BILINMEYEN_BEYAN, strictMi } from "./lib/atlama";
+import { ozetOku, ozetsizCikisSebebi } from "./lib/ozet-satiri";
 // Bekçi/koşucu gerçek Anahtar Zinciri'ne GİTMEZ: parola okuyan araçlar kasa yerine stdin/dosya kullanır (scripts/lib/parola-kasasi.mjs).
 process.env.TEKSERP_PAROLA_KASASI = "kapali";
 
@@ -648,12 +649,10 @@ async function main() {
     // `error`'ın yokluğu. `!res.error` şartı load-bearing: maxBuffer taşmasında
     // status 0 döner (ölçüldü) → o şart olmadan çıktısı kesilmiş test GEÇTİ sayılır.
     const ok = res.status === 0 && !res.error;
-    // Testler farklı özet formatı kullanıyor:
-    //   "Sonuç: N geçti, M başarısız" · "SONUÇ: N geçti, M kaldı" · "N/T geçti"
-    const m =
-      out.match(/(?:Sonuç|SONUÇ):\s*(\d+)\s*geçti,\s*(\d+)\s*(?:başarısız|kaldı)/i) ||
-      out.match(/(\d+)\s*geçti,\s*(\d+)\s*(?:başarısız|kaldı)/i);
-    const slash = out.match(/(\d+)\/(\d+)\s*geçti/);
+    // Özet TEK biçimden okunur (`lib/ozet-satiri.ts`): serbest "N geçti, M başarısız"
+    // ve "N/T geçti" yedekleri check mesajında/kesik çıktıda eşleşip sayılmamış koşumu
+    // sayılmış gösteriyordu (2026-10-25). Yedek kazıma YOK.
+    const oz = ozetOku(out);
     // ATLANAN KONTROL SAYISI (2026-09-05) — beş bekçi kendi HTTP bölümünü sunucu
     // yoksa atlıyor ve bunu özet satırında ", N atlandı" olarak yazıyordu; koşucu
     // o kısmı REGEX'İN DIŞINDA bırakıp yutuyordu. Sonuç: "✅ 82 geçti, 0 başarısız"
@@ -679,13 +678,11 @@ async function main() {
     // "hiçbir şey düşmedi" diyen bir HATA satırı. Anormal-bitiş sebebi kazınanı EZER.
     const summary = killed
       ? killed
-      : m
-        ? `${m[1]} geçti, ${m[2]} başarısız`
-        : slash
-          ? `${slash[1]}/${slash[2]} geçti`
-          : ok
-            ? "geçti (exit 0)"
-            : "BAŞARISIZ";
+      : oz.var
+        ? `${oz.gecti} geçti, ${oz.basarisiz} başarısız`
+        : ok
+          ? "geçti (exit 0)"
+          : "BAŞARISIZ";
     // SESSİZ YEŞİL (2026-09-13, d9 ölçtü): çıkış 0 ∧ 0 kontrol ∧ BEYAN YOK — bekçi
     // hiçbir şey ölçmeden yeşil çıktı (iki emsal: `finally { process.exit(0) }`
     // hatayı yuttu, "0 geçti, 0 başarısız" basıldı). Yüklem ÜÇ terimli: `atla()`
@@ -693,8 +690,14 @@ async function main() {
     // davranış iki sonuçlu yanlıştan ancak üçüncü terimle ayrılır (d9'un ilk
     // yüklemi kendi onardığı dosyayı ihlal saydı). Kontrol sayısı YUKARIDAKİ
     // ayrıştırıcılardan — ikinci bir ayrıştırıcı iki koşumun iki şey iddia etmesidir.
-    const kontrolSayisi = m ? Number(m[1]) + Number(m[2]) : slash ? Number(slash[2]) : null;
+    const kontrolSayisi = oz.var ? oz.gecti! + oz.basarisiz! : null;
     const beyanVar = skipped > 0 || bilinmeyenAtlama;
+    // ÖZETSİZ ÇIKIŞ 0 muafiyetsiz KIRMIZIDIR: çıktı kesildiyse ne devralınan liste ne
+    // beyan onu yeşile çeker (test_harita_sonda_atfi 3× böyle geçti, 2026-10-25).
+    const ozetsiz = killed ? null : ozetsizCikisSebebi(out, ok);
+    if (ozetsiz) {
+      return { ok: false, status: res.status, summary: ozetsiz, out, killed, skipped, bilinmeyenAtlama, sessizYesil: true };
+    }
     const sessizYesil = ok && !beyanVar && (kontrolSayisi === 0 || kontrolSayisi === null);
     if (sessizYesil && !SESSIZ_YESIL_DEVRALINAN.has(file)) {
       return {

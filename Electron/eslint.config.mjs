@@ -239,6 +239,9 @@ const KATALOG_DOSYALARI = [
   "src/services/documentConfig.ts",
   "src/pages/Operations/WorkOrders/service.ts",
   "src/routes/content-routes.tsx",
+  // Hub karo katalogları: her ekran bir satır; bekçiler (test_screen_catalog, test_ekran_yolu) karoyu bu dosyada arar, bölünemez.
+  "src/pages/Operations/tile-config.ts",
+  "src/pages/System/tile-config.ts",
 ];
 
 // Katman sınırı: renderer Node'a inemez, köprü `window.api`dır (contextIsolation).

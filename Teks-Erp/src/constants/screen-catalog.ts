@@ -249,6 +249,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/machine-collectors", app: "desktop", modul: "tezgahEnabled", title: "Makine Kartları", requires: ["loom:spec-manage"], capabilities: [] },
   { key: "definitions/machine-stop-codes", app: "desktop", modul: "tezgahEnabled", title: "Duruş Kodu Eşleme", requires: ["loom:spec-manage"], capabilities: [] },
   { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
+  { key: "operations/e-irsaliye", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "e-İrsaliye Kayıtları", requires: ["eirsaliye:read"], capabilities: [] },
   { key: "reports/production", app: "desktop", modul: "productionEnabled", title: "Üretim", requires: ["report:production"], capabilities: [] },
   { key: "reports/sales", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
   { key: "reports/quality", app: "desktop", modul: "productionEnabled", title: "Kalite", requires: ["report:quality"], capabilities: [] },
@@ -290,6 +291,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "finance/cheques", app: "desktop", modul: "financeEnabled", title: "Çek ve Senetler", requires: ["finance:read"], capabilities: ["finance:cheque"] },
   { key: "finance/allocations", app: "desktop", modul: "financeEnabled", title: "Tahsisler", requires: ["finance:read"], capabilities: ["finance:payment"] },
   { key: "finance/period-close", app: "desktop", modul: "financeEnabled", title: "Dönem Kapanışı", requires: ["finance:read"], capabilities: ["finance:close"] },
+  // Raporlar v2 kayıtlı/özel raporlar (R1-KAYIT): oluşturma/düzenleme builder; kategori, herkese açma
+  // ve başkasının koşusunu durdurma publish. Görüntüleme (`reports/kayitli/:id`) kapısızdır — görünürlük uçta.
+  { key: "reports/ozel", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Özel rapor oluştur", requires: ["report:builder"], capabilities: ["report:publish"] },
   { key: "reports/finance", app: "desktop", modul: "financeEnabled", title: "Ön Muhasebe Raporları", requires: ["report:finance"], capabilities: [] },
   // Dokuma raporları (Dilim 5, 2026-09-14): okuma `report:production` (1e hükmü ③); karne eylemleri ekran içi
   // PermissionGate — `loom:manual-entry` (terim düzelt · mühürle; machine-stops ekranıyla PAYLAŞILIR) ve

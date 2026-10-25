@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/forms/FormField";
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import { shipmentService } from "./service";
-import { UndoAffectedList } from "./UndoAffectedList";
+import { EIrsaliyeAffectedNote, UndoAffectedList } from "./UndoAffectedList";
 import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
 
 interface Props {
@@ -153,6 +153,7 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
             </div>
 
             <UndoAffectedList preview={p} />
+            <EIrsaliyeAffectedNote eIrsaliye={p.eIrsaliye} willVoid={release} />
 
             {p.returnTargets.length > 0 && (
               <div className="rounded-md border">

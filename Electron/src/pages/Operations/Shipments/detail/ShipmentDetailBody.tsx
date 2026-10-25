@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Package, SearchX } from "lucide-react";
 import type { ShipmentDetail } from "../types";
 import { ShipmentDetailMeta } from "./ShipmentDetailMeta";
+import { EIrsaliyeSection } from "../eirsaliye/EIrsaliyeSection";
 import { ShipmentDetailToolbar } from "./ShipmentDetailToolbar";
 import { SackRow } from "./SackRow";
 import { useShipmentDetailFilter } from "./useShipmentDetailFilter";
@@ -48,6 +49,9 @@ export function ShipmentDetailBody({ d }: { d: ShipmentDetail }) {
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-6 py-4">
       <ShipmentDetailMeta d={d} />
+      <div className="mb-3 empty:hidden">
+        <EIrsaliyeSection shipmentId={d.id} shipmentStatus={d.status} />
+      </div>
 
       {noSacks ? (
         <div className="flex items-center gap-2 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">

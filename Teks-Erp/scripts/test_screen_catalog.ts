@@ -361,8 +361,6 @@ const KARO_YOK: ReadonlyArray<{ key: string; reason: string }> = [
   // dilimlerinde iner. Karo doğunca muaf "kullanılmayan" düşer ve silinir.
   { key: "quality/inspections", reason: "K4P Muayeneler ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
   { key: "quality/inspection-rules", reason: "K4P 4 Puan Kuralları ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
-  { key: "quality/lab-tests", reason: "K4P Lab Testleri ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
-  { key: "quality/certificates", reason: "K4P Sertifikalar ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
 ];
 
 

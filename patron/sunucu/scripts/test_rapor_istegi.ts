@@ -10,9 +10,18 @@
 //      raporlarını okuyabilene açık (geçiş)
 //   §4 5 dk içinde aynı parametre → yeni istek doğrudan HAZIR (mevcut sonuç), zil YOK · standart görüntü (istekId null)
 //   §5 claim süresi: bir kez BEKLIYOR'a döner, ikincide HATA `ZAMAN_ASIMI` · yazar BEKLIYOR iken iptal
+//   §6 v2 sunum (R1-BULUT): kişi adlı `production/uretim-akisi` İSTENEMEZ · `RaporSunumu` sonucu AYNEN saklanır
+//      ve döner (bulut hesap yapmaz) · başka tesisin hesabı sonucu göremez · rapor servisi sunum alanı OKUMAZ
+//      (kaynak taraması). ✓S1 (2026-10-25): report.service.ts'e `anaSayi` okuması eklendi → §6e ❌ 1; md5 ile geri alındı.
+//   §7 (2026-10-25) eski 8 rapor × uygulamanın özel aralığı (`YYYY-MM-DD`, kesitte `asOf` günü): bulut 201 ile kabul eder
+//      ve fabrikaya parametreyi AYNEN iletir (gün sınırını yalnız fabrika çözer; fabrika ayağı `test_bulut_projeksiyon_allowlist §10`).
+//      NEGATİF SONDA: report.service.ts parametreyi `toPlainJson` yerine `{}` ile sakladı → §7b ❌; geri alındı → ✅.
 // Koşum: npx tsx scripts/test_rapor_istegi.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { RaporSunumu } from "../src/wire/api";
 import { sessionProjections } from "../src/auth/session.service";
 import { effectivePermissions } from "../src/catalog/permissions";
 import { withTesis } from "../src/lib/tenant";
@@ -34,6 +43,8 @@ async function katalog(o: Ortam, k: TestKurulumu): Promise<void> {
       { anahtar: "finance/cheque-due", izin: "bulut:cek:oku" },
       { anahtar: "inventory/scorecard", izin: "bulut:fiyat:oku" },
       { anahtar: "quality/scorecard", izin: "bulut:bilinmeyen:oku" },
+      { anahtar: "sales/sevkiyat", izin: "bulut:sevkiyat:oku" },
+      { anahtar: "production/uretim-akisi" },
     ],
   };
   const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk, anliklar: [{ projeksiyon: "rapor-katalogu", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri }] }) });
@@ -191,6 +202,72 @@ async function main(): Promise<void> {
     const iptalBaska = await api(o, "POST", `/api/raporlar/${idB}/iptal`, { belirtec: yonetici.belirtec, govde: {} });
     const iptal = await api(o, "POST", `/api/raporlar/${idB}/iptal`, { belirtec: satis.belirtec, govde: {} });
     kontrol("§5d yalnız yazar iptal eder (başkası 404; yazar 200 IPTAL)", iptalBaska.status === 404 && iptal.status === 200 && (iptal.json.data as { durum?: string }).durum === "IPTAL");
+
+    console.log("\n§6 v2 rapor sunumu (R1-BULUT)");
+    const kisiV2 = await iste(o, uretimci, "production/uretim-akisi");
+    kontrol("§6a ⭐ kişi adlı v2 rapor (üretim akışı, operatör varyantı) → 404 RAPOR_BULUTTA_YOK", kisiV2.status === 404 && kisiV2.json.details?.code === "RAPOR_BULUTTA_YOK", `${kisiV2.status}`);
+    const v2Istek = await iste(o, sevkci, "sales/sevkiyat", { dateFrom: "2026-09-01", dateTo: "2026-09-30" });
+    const idV2 = (v2Istek.json.data as { id: string }).id;
+    kontrol("§6b v2 anahtarı sevkiyat izniyle istenir → 201", v2Istek.status === 201, `${v2Istek.status}`);
+    const alV2 = await imzali(o, k, "/v1/rapor/al", { govde: { v: 1, enFazla: 3 } });
+    const sunum: RaporSunumu = {
+      anahtar: "sales/sevkiyat", baslik: "Ne sevk ettik?", soru: "Bu dönemde kime kaç metre sevk ettik?",
+      donem: { from: "2026-08-31T21:00:00.000Z", to: "2026-09-30T20:59:59.999Z", etiket: "Eylül 2026" },
+      anaSayi: { olcu: "sevk.metre", ad: "Sevk edilen", deger: 1250.5, birim: "m", kiyas: { deger: 1000, fark: 250.5, yuzde: 25.05, yon: "artti", durum: "iyi" } },
+      yanSayilar: [{ olcu: "sevk.top", ad: "Top", deger: null, birim: "top", olculemedi: "Top sayısı ölçülemedi" }],
+      anlati: [{ kural: "artis", onem: 0.8, metin: "Sevk geçen aya göre %25 arttı.", kanit: { simdi: 1250.5, once: 1000 } }],
+      grafik: { tur: "cubuk", eksen: { x: { ad: "Müşteri", tur: "kategori" }, y: { ad: "Metre", birim: "m" } }, seriler: [{ ad: "Metre", veri: [800, 450.5] }], kategoriler: ["A", "B"] },
+      tablo: null, tanimlar: [], parametreler: [], uyarilar: [],
+    };
+    const hesapV2 = new Date(o.saat.simdi()).toISOString();
+    const sV2 = await imzali(o, k, "/v1/rapor/sonuc", { govde: sonucGovdesi(idV2, "sales/sevkiyat", hesapV2, { veri: sunum, parametreler: { dateFrom: "2026-09-01", dateTo: "2026-09-30" } }) });
+    kontrol("§6c fabrika v2 sunum sonucunu yollar → kabul", (alV2.json as unknown as Alinan).istekler.some((x) => x.istekId === idV2) && sV2.status === 200, `${sV2.status} ${JSON.stringify(sV2.json).slice(0, 120)}`);
+    const okuV2 = await api(o, "GET", `/api/raporlar/${idV2}`, { belirtec: sevkci.belirtec });
+    const veriV2 = (okuV2.json.data as { sonuc?: { veri?: unknown } | null }).sonuc?.veri;
+    // jsonb anahtar sırasını korumaz: karşılaştırma anahtarları sıralı kanonik JSON'la (değerler birebir).
+    const kanonik = (v: unknown): unknown =>
+      Array.isArray(v) ? v.map(kanonik) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1)).map(([a, x]) => [a, kanonik(x)])) : v;
+    kontrol("§6d ⭐ sonuç AYNEN döner (bulut hesap/kıyas/tarih işlemi yapmaz — fabrikanın sunumu değer-eşit)", JSON.stringify(kanonik(veriV2)) === JSON.stringify(kanonik(sunum)));
+    const servis = readFileSync(join(__dirname, "..", "src", "services", "report.service.ts"), "utf8").replace(/\/\/.*$/gm, "");
+    const okunan = [...servis.matchAll(/\b(anaSayi|yanSayilar|kiyas|kiyasDonemi|anlati|donemler|grafik|tablo)\b/g)].map((m) => m[1]);
+    kontrol("§6e ⭐ rapor servisi sunum alanı okumaz (hesap/kıyas/tarih karşılaştırması bulutta YOK)", okunan.length === 0, okunan.join(",") || "temiz");
+    const baskaV2 = await tesisKur(o);
+    try {
+      const yabanciHesap = await hesapKur(o, baskaV2.tesisId, ["bulut:rapor:oku", "bulut:sevkiyat:oku", "bulut:hesap:yonet"]);
+      const yabanciOku = await api(o, "GET", `/api/raporlar/${idV2}`, { belirtec: yabanciHesap.belirtec });
+      kontrol("§6f ⭐ başka tesisin hesabı (aynı izinlerle, yönetici) v2 sonucu göremez → 404", yabanciOku.status === 404, `${yabanciOku.status}`);
+    } finally {
+      await temizleTesis(o, baskaV2.tesisId);
+    }
+
+    console.log("\n§7 eski 8 rapor × özel aralık (fabrika günü)");
+    const eski = await tesisKur(o, { ad: "Eski rapor tesisi" });
+    try {
+      const ESKI: Record<string, Record<string, string>> = {
+        "sales/order-intake": { dateFrom: "2026-09-01", dateTo: "2026-09-30" },
+        "sales/shipment-scorecard": { dateFrom: "2026-09-01", dateTo: "2026-09-30" },
+        "customer/scorecard": { dateFrom: "2026-09-01", dateTo: "2026-09-30" },
+        "quality/scorecard": { dateFrom: "2026-09-01", dateTo: "2026-09-30" },
+        "subcontract/scorecard": { dateFrom: "2026-09-01", dateTo: "2026-09-30" },
+        "finance/cheque-due": { dateFrom: "2026-09-01", dateTo: "2026-09-30" },
+        "finance/aging": { asOf: "2026-09-30" },
+        "inventory/scorecard": {},
+      };
+      const kat = await imzali(o, eski, "/v1/esitle", { govde: paket(eski, { ufuk: new Date(o.saat.simdi() - 10_000), anliklar: [{ projeksiyon: "rapor-katalogu", icerikOzeti: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", veri: { raporlar: Object.keys(ESKI).map((anahtar) => ({ anahtar })) } }] }) });
+      if (kat.status !== 200) throw new Error(`eski katalog: ${kat.status}`);
+      const hepsi = await hesapKur(o, eski.tesisId, ["bulut:rapor:oku", "bulut:siparis:oku", "bulut:sevkiyat:oku", "bulut:uretim:oku", "bulut:stok:oku", "bulut:cari-bakiye:oku", "bulut:cek:oku"]);
+      const red: string[] = [];
+      for (const [anahtar, p] of Object.entries(ESKI)) {
+        const r = await iste(o, hepsi, anahtar, p);
+        if (r.status !== 201) red.push(`${anahtar}:${r.status}`);
+      }
+      kontrol("§7a ⭐ 8 eski rapor × özel aralık (`YYYY-MM-DD`) → 201", red.length === 0, red.join(" · ") || "8 rapor");
+      const al = (await imzali(o, eski, "/v1/rapor/al", { govde: { v: 1, enFazla: 10 } })).json as unknown as { istekler: { raporAnahtari: string; parametreler: Record<string, unknown> }[] };
+      const bozuk = Object.entries(ESKI).filter(([a, p]) => JSON.stringify(Object.entries(al.istekler?.find((x) => x.raporAnahtari === a)?.parametreler ?? { yok: 1 }).sort()) !== JSON.stringify(Object.entries(p).sort())).map(([a]) => a);
+      kontrol("§7b ⭐ fabrikaya parametre AYNEN gider (bulut tarih dönüşümü yapmaz)", (al.istekler?.length ?? 0) === 8 && bozuk.length === 0, bozuk.join(",") || `${al.istekler?.length} istek`);
+    } finally {
+      await temizleTesis(o, eski.tesisId);
+    }
   } finally {
     await temizleTesis(o, k.tesisId);
     await o.kapat();
