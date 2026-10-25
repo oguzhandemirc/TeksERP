@@ -4,14 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import type { CatalogCube } from "../custom-api";
-import { allowedDimensions } from "../builder-model";
-import { CHART_OPTIONS, KIND_LABEL, PERIOD_UNITS, WIDTH_OPTIONS, type DefinitionBlock, type DefinitionQuery, type LayoutItem } from "./layout-model";
+import { CHART_OPTIONS, KIND_LABEL, PERIOD_UNITS, WIDTH_OPTIONS, type DefinitionBlock, type LayoutItem } from "./layout-model";
 
 interface Props {
   block: DefinitionBlock;
   item: LayoutItem;
-  cube: CatalogCube | undefined;
   canRemove: boolean;
   onChange: (patch: Partial<DefinitionBlock>) => void;
   onWidth: (w: number) => void;
@@ -47,15 +44,8 @@ function Choice<T extends string | number>({ options, value, onPick }: { options
   );
 }
 
-const SPLIT_KINDS = new Set(["grafik", "tablo", "varyant", "donem"]);
-
-/** Seçili bölümün ayarları: içerik (ölçü, kırılım, grafik türü…) + yerleşim (genişlik, sayfa kesmesi). */
-export function BlockProperties({ block, item, cube, canRemove, onChange, onWidth, onPageBreak, onRemove }: Props) {
-  const q = block.sorgu;
-  const setQuery = (patch: Partial<DefinitionQuery>) => q && onChange({ sorgu: { ...q, ...patch } });
-  const measures = cube?.olculer ?? [];
-  const dims = q ? allowedDimensions(cube, q.olculer).filter((d) => d.tur === "kategori") : [];
-  const dimOptions = [...(block.tur === "tablo" || block.tur === "donem" ? [{ value: "", label: "Kırılımsız" }] : []), ...dims.map((d) => ({ value: d.kimlik, label: d.ad }))];
+/** Seçili bölümün sunum ayarları (grafik türü, genişlik, sayfa kesmesi…); ölçü/kırılım/süzgeç Kuyular'da (R2-VERI). */
+export function BlockProperties({ block, item, canRemove, onChange, onWidth, onPageBreak, onRemove }: Props) {
 
   return (
     <section aria-label="Bölüm ayarları" className="flex flex-col gap-4">
@@ -69,20 +59,6 @@ export function BlockProperties({ block, item, cube, canRemove, onChange, onWidt
       {block.tur === "metin" ? (
         <Field label="Metin">
           <Textarea rows={5} maxLength={2000} value={typeof block.metin === "string" ? block.metin : ""} onChange={(e) => onChange({ metin: e.target.value })} />
-        </Field>
-      ) : null}
-      {q && measures.length > 0 ? (
-        <Field label="Ölçü">
-          <Choice options={measures.map((m) => ({ value: m.kimlik, label: m.ad }))} value={q.olculer[0]} onPick={(v) => setQuery({ olculer: [v] })} />
-        </Field>
-      ) : null}
-      {q && SPLIT_KINDS.has(block.tur) ? (
-        <Field label="Kırılım">
-          {dimOptions.length ? (
-            <Choice options={dimOptions} value={q.boyutlar?.[0] ?? ""} onPick={(v) => setQuery({ boyutlar: v ? [v] : [] })} />
-          ) : (
-            <p className="text-xs text-muted-foreground">Bu ölçü kırılamıyor.</p>
-          )}
         </Field>
       ) : null}
       {block.tur === "grafik" ? (
