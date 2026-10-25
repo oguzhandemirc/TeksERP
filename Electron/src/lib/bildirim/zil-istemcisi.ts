@@ -8,9 +8,13 @@
 // Tek örnek: bileşenler `abone` olur (referans sayımı); Chromium HTTP/1.1'de sunucu başı 6 bağlantı var.
 // =============================================================================
 import type { NotificationWaitResult, NotificationSummary } from "./types";
+import { asNumber, parseJsonObject, readSseEvents } from "./sse-okuyucu";
+
+export { readSseEvents };
 
 export type BellMode = "kapali" | "sse" | "bekle" | "ozet";
-export type BellEvent = "degisti" | "tam";
+/** "alarm" = `alarmRev` değişti (tezgah alarmı): panelin alarm sorgusu hemen tazelenir. */
+export type BellEvent = "degisti" | "tam" | "alarm";
 
 export interface BellState {
   /** İlk özet cevabı geldi mi (gelmeden zil çizilmez). */
@@ -25,6 +29,13 @@ export interface BellState {
   rev: number;
   alarmRev: number;
   kip: BellMode;
+  /** SSE akışı açık ve `merhaba` gelmiş (sağlıklı) — alarm yoklaması buna göre seyrekleşir. */
+  bagli: boolean;
+}
+
+/** Akış sağlıklı mı: zil gerçek zamanlıysa alarm yoklaması yedektir (60 sn), değilse 15 sn sürer. */
+export function bellStreamHealthy(s: Pick<BellState, "enabled" | "kip" | "bagli">): boolean {
+  return s.enabled && s.kip === "sse" && s.bagli;
 }
 
 export interface BellDeps {
@@ -44,55 +55,8 @@ export const BELL_RECONNECT_MS = [1_000, 3_000, 10_000] as const;
 const WAIT_ERROR_BACKOFF_MS = 5_000;
 
 const EMPTY_STATE: BellState = {
-  hazir: false, destek: true, enabled: false, okunmamis: 0, alarmAcik: 0, epoch: null, rev: 0, alarmRev: 0, kip: "kapali",
+  hazir: false, destek: true, enabled: false, okunmamis: 0, alarmAcik: 0, epoch: null, rev: 0, alarmRev: 0, kip: "kapali", bagli: false,
 };
-
-interface SseEvent {
-  event: string;
-  data: string;
-}
-
-/** `text/event-stream` gövdesini olaylara böler; `: ping` yorumları atlanır. */
-export async function* readSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<SseEvent> {
-  const reader = body.getReader();
-  const dec = new TextDecoder();
-  let buffer = "";
-  try {
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) return;
-      buffer += dec.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-      let i: number;
-      while ((i = buffer.indexOf("\n\n")) >= 0) {
-        const chunk = buffer.slice(0, i);
-        buffer = buffer.slice(i + 2);
-        let event = "message";
-        const data: string[] = [];
-        for (const line of chunk.split("\n")) {
-          if (!line || line.startsWith(":")) continue;
-          const k = line.indexOf(":");
-          const field = k < 0 ? line : line.slice(0, k);
-          const value = k < 0 ? "" : line.slice(k + 1).replace(/^ /, "");
-          if (field === "event") event = value;
-          else if (field === "data") data.push(value);
-        }
-        if (data.length || event !== "message") yield { event, data: data.join("\n") };
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-function parseJsonObject(s: string): Record<string, unknown> {
-  try {
-    const v: unknown = JSON.parse(s);
-    return v && typeof v === "object" ? (v as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
-const asNumber = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 export interface BellClient {
   durum(): BellState;
@@ -114,6 +78,8 @@ class BellEngine implements BellClient {
   private abort: AbortController | null = null;
   private zamanlayici: ReturnType<typeof setTimeout> | null = null;
   private hatalar: number[] = [];
+  /** Son olaydan beri `alarmRev` değişti mi (ilk okuma sayılmaz). */
+  private alarmDegisti = false;
   /** 403/404 nedeniyle düşüldüyse görünürlük olayı SSE'yi yeniden denemez. */
   private zorunluDusus = false;
   private readonly durumDinleyici = new Set<() => void>();
@@ -169,6 +135,9 @@ class BellEngine implements BellClient {
 
   private olay(o: BellEvent) {
     this.olayDinleyici.forEach((f) => f(o));
+    if (!this.alarmDegisti) return;
+    this.alarmDegisti = false;
+    this.olayDinleyici.forEach((f) => f("alarm"));
   }
 
   private bekleMs(ms: number, n: number): Promise<boolean> {
@@ -194,6 +163,7 @@ class BellEngine implements BellClient {
     let result: BellEvent | null = null;
     if (epoch !== null && d.epoch !== null && epoch !== d.epoch) result = "tam";
     else if ((rev !== null && rev !== d.rev) || (alarmRev !== null && alarmRev !== d.alarmRev)) result = "degisti";
+    if (alarmRev !== null && alarmRev !== d.alarmRev && d.epoch !== null) this.alarmDegisti = true;
     this.yayinla({
       ...(epoch !== null ? { epoch } : {}),
       ...(rev !== null ? { rev } : {}),
@@ -258,6 +228,7 @@ class BellEngine implements BellClient {
         if (e.event === "merhaba") {
           merhaba = true;
           this.hatalar = [];
+          this.yayinla({ bagli: true });
           await this.degisiklik(this.surumGor(asNumber(v.epoch), asNumber(v.rev), asNumber(v.alarmRev)));
         } else if (e.event === "kapat") {
           // Sunucu akışı kapatıyor (ör. izin değişti): görünür türler değişmiş olabilir → tam çekim.
@@ -268,6 +239,8 @@ class BellEngine implements BellClient {
       }
     } catch {
       if (n !== this.nesil || ac.signal.aborted) return "bitti";
+    } finally {
+      if (this.d.bagli) this.yayinla({ bagli: false });
     }
     return { merhaba };
   }
