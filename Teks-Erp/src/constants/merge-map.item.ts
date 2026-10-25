@@ -125,6 +125,29 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
         "Aynı müşterinin iki ürününe ayrı spesifikasyon yazılmışsa birleşmiş üründe hangisinin " +
         "geçerli olduğunu yalnız kalite sorumlusu bilir (K4P); `customer_item_uq` ile birebir.",
     },
+    { kind: "MOVE", model: "WeftSpecYarn", table: "weft_spec_yarns", column: "yarnItemId", label: "Atkı spesifikasyonu ipliği" },
+    {
+      kind: "CONFLICT",
+      model: "YarnCostPrice",
+      table: "yarn_cost_prices",
+      column: "yarnItemId",
+      label: "İplik maliyet fiyatı",
+      uniqueOn: ["yarnItemId"],
+      // Partial UNIQUE (`yarn_cost_prices_active_uq`) yalnız aktif satırda: damgalı geçmiş serbestçe taşınır.
+      activeWhenNull: ["revokedAt"],
+      policy: "BLOCK",
+      why: "İki ipliğin de aktif maliyet fiyatı varsa hangisinin geçerli olduğunu yalnız muhasebe bilir (MAL-1; ItemPrice emsali).",
+    },
+    {
+      kind: "CONFLICT",
+      model: "CostStructure",
+      table: "cost_structures",
+      column: "itemId",
+      label: "Ürün maliyet yapısı",
+      uniqueOn: ["itemId"],
+      policy: "BLOCK",
+      why: "Kumaş başına tek maliyet yapısı (`itemId @unique`); iki yapıdan hangisinin doğru olduğu operatör kararıdır (MAL-1).",
+    },
     {
       kind: "CONFLICT",
       model: "ItemPrice",

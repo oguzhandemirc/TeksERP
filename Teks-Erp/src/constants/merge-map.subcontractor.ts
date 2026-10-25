@@ -44,6 +44,7 @@ export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "subcontractorId", label: "Dokuma iş emri (fason)" },
     { kind: "MOVE", model: "GoodsReceipt", table: "goods_receipts", column: "subcontractorId", label: "Mal kabul fişi (fason tedarikçi)" },
     { kind: "MOVE", model: "PurchaseOrder", table: "purchase_orders", column: "subcontractorId", label: "Alış siparişi (fason tedarikçi)" },
+    { kind: "MOVE", model: "FinishingRate", table: "finishing_rates", column: "subcontractorId", label: "Apre tarifesi (fason firma)" },
     {
       kind: "CONFLICT",
       model: "CariAccount",

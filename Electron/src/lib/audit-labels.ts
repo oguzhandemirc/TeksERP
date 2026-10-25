@@ -190,6 +190,11 @@ export const TABLE_LABELS: Record<string, string> = {
   GOODS_RECEIPT: "Mal Kabul Fişi",
   PURCHASE_ORDER: "Alış Siparişi",
   ITEM_PRICE: "Ürün Fiyatı",
+  COST_PARAMETER_SET: "Maliyet Parametre Seti",
+  COST_STRUCTURE: "Ürün Maliyet Yapısı",
+  FINISHING_RATE: "Apre Tarifesi",
+  WEFT_SPEC: "Atkı Spesifikasyonu",
+  YARN_COST_PRICE: "İplik Maliyet Fiyatı",
   STOCK_COUNT: "Stok Sayımı",
   STOCK_COUNT_LINE: "Stok Sayım Satırı",
   WAREHOUSE: "Depo",
@@ -608,8 +613,14 @@ export const ENUM_LABELS: Record<string, string> = {
   AUTO: "Otomatik uygulanır",
   OPTIONAL: "İsteğe bağlı",
   REQUIRED: "Zorunlu",
-  // SackWeightSource
+  // SackWeightSource (YarnCostPriceSource.MANUAL da aynı anlam)
   MANUAL: "Elle girildi",
+  // YarnCostPriceSource
+  LAST_RECEIPT: "Son mal kabulden",
+  PURCHASE_PRICE: "Alış fiyatından",
+  // FinishingBasis
+  RAW_M: "Ham metre",
+  FINISHED_M: "Mamul metre",
   SIMULATED: "Simüle edildi",
   // PrintedDocType (eksik kalanlar)
   TRAVELER_CARD: "Refakat Kartı",

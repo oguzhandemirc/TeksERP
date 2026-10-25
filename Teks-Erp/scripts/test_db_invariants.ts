@@ -338,6 +338,28 @@ const PARTIAL_INDEXES: Array<{
     predicate: `(("customerId" IS NOT NULL) AND ("revokedAt" IS NULL))`,
     why: "kalem+müşteri+yön+para birimi başına TEK AKTİF istisna (damgalı geçmiş kısıta girmez — MAL-0b)",
   },
+  // 2026-10-25 — MAL-1 maliyet girdileri (migration 20261025140000_maliyet_girdileri); şema-dışı.
+  {
+    table: "cost_parameter_sets",
+    index: "cost_parameter_sets_live_uq",
+    uniq: true,
+    predicate: `(status = ANY (ARRAY['DRAFT'::"CostParamStatus", 'ACTIVE'::"CostParamStatus"]))`,
+    why: "tek index iki tekillik: en fazla BİR taslak ve BİR aktif parametre seti",
+  },
+  {
+    table: "yarn_cost_prices",
+    index: "yarn_cost_prices_active_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "iplik başına TEK AKTİF maliyet fiyatı (damgalı geçmiş kısıta girmez)",
+  },
+  {
+    table: "finishing_rates",
+    index: "finishing_rates_active_code_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "apre tarifesi kodu başına TEK AKTİF sürüm (damgalı geçmiş kısıta girmez)",
+  },
   // 2026-08-14 — sağlamlık paketi (migration 20260814110200_saglamlik_paketi).
   // Storno bağı: bir defter satırı EN FAZLA BİR KEZ terslenebilir.
   {
@@ -867,6 +889,17 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "yarn_movements", name: "yarn_movements_qty_positive" },
   // Fiyat negatif olamaz; SIFIR serbest (promosyon/numune satırı meşru).
   { table: "item_prices", name: "item_prices_price_nonneg" },
+  // MAL-1 (20261025140000_maliyet_girdileri)
+  { table: "items", name: "items_raw_width_cm_ck" },
+  { table: "items", name: "items_gsm_ck" },
+  { table: "weft_specs", name: "weft_specs_picks_per_cm_ck" },
+  { table: "weft_spec_yarns", name: "weft_spec_yarns_picks_ck" },
+  { table: "cost_parameter_sets", name: "cost_parameter_sets_pct_ck" },
+  { table: "cost_parameter_sets", name: "cost_parameter_sets_amount_ck" },
+  { table: "cost_parameter_sets", name: "cost_parameter_sets_stamp_ck" },
+  { table: "yarn_cost_prices", name: "yarn_cost_prices_price_ck" },
+  { table: "finishing_rates", name: "finishing_rates_price_ck" },
+  { table: "cost_structures", name: "cost_structures_values_ck" },
   { table: "purchase_order_lines", name: "purchase_order_lines_qty_positive" },
   { table: "purchase_order_lines", name: "purchase_order_lines_received_nonneg" },
   // ⚠️ `receivedQty <= qty` seddi BİLİNÇLİ OLARAK YOK: fiziksel olarak fazla mal

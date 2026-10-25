@@ -101,7 +101,8 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string }> =
   // Vardiya tanımı yazma yüzeyi (2026-10-10): takvimi doğuran katalog — aynı kapı.
   { dosya: "routes/shift-definition.routes.ts", mount: "/api/shift-definitions" },
   // Makine kartı duruş uçları (D3b): kimlik oturum değil kart imzası; kapı imzadan SONRA.
-  { dosya: "routes/machine-signal.routes.ts", mount: "/api/machine-signals", kimlik: "verifyCollectorSignature" },
+  { dosya: "routes/machine-signal.routes.ts", mount: "/api/machine-signals", kimlik: "verifyCollectorSignature" },  // Atkı spesifikasyonu (MAL-1): dokuma ürün yapısı kataloğu — aynı kapı.
+  { dosya: "routes/weft-spec.routes.ts", mount: "/api/weft-specs" },
 ];
 
 /** Dokuma-ÖZEL Prisma model erişimcileri ve servisleri — bunlara dokunan router kapılıdır. */
