@@ -10,7 +10,8 @@ import { isAppPath } from "@shared/bildirim-notify";
 import { bildirimService } from "@/services/bildirimService";
 import { useOptionalPreferences } from "@/providers/PreferencesProvider";
 import { useTabsStore } from "@/store/tabs";
-import { bellClient, useNotificationInboxFlag } from "@/lib/bildirim/hooks";
+import { bellClient, useNotificationCatalog, useNotificationInboxFlag } from "@/lib/bildirim/hooks";
+import { desktopKinds } from "@/lib/bildirim/masaustu-tercih";
 import { bildirimBridge, createDesktopNotifier, DESKTOP_SCAN_LIMIT, rozetIstegi } from "@/lib/bildirim/masaustu";
 
 const BOS: readonly string[] = [];
@@ -18,7 +19,11 @@ const BOS: readonly string[] = [];
 export function MasaustuBildirimKoprusu() {
   const bridge = useMemo(() => bildirimBridge(), []);
   const { acik } = useNotificationInboxFlag();
-  const turler = useOptionalPreferences()?.prefs.bildirim?.masaustuTurler ?? BOS;
+  const legacy = useOptionalPreferences()?.prefs.bildirim?.masaustuTurler;
+  // Seçim sunucu hücresinden (MASAUSTU ACIK) ∪ N3 anahtarı (bir sürüm); kimlik anahtarla sabit tutulur.
+  const katalog = useNotificationCatalog(!!bridge && acik);
+  const turlerKey = desktopKinds(katalog.data?.hucreler, legacy).join(",");
+  const turler = useMemo(() => (turlerKey ? turlerKey.split(",") : BOS), [turlerKey]);
   const zil = useSyncExternalStore(bellClient.dinle, bellClient.durum, bellClient.durum);
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const navRef = useRef(navigateActive);

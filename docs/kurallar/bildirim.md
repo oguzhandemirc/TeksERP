@@ -49,6 +49,7 @@
 - **[ÇEKİRDEK]** Kişisel tercihi seyrek yaz (yalnız taban çözümden sapan ya da kapsamlı satır); kilitli türde uygulama içini kapatmayı 409 `NOTIFICATION_KIND_LOCKED` ile reddet; görülemeyen tür, kanal dışı ve türün beyan etmediği kapsam anahtarı 400 olsun. · bekçi: `test_bildirim_tercih_api` §1
 - **[ÇEKİRDEK]** Önizlemeyi (`tercihler/onizleme`, `kilit-onizleme`, `varsayilana-don/onizleme`) yazmasız tut; haftalık tahmini son 30 fabrika günü sayacından, veri yoksa katalog `tahminiHaftalik`ten üret. · bekçi: `test_bildirim_onizleme`
 - **[ÇEKİRDEK]** Profili silme, arşivle (atomik claim); hücre/üye kümesini pivot replace et ve audit'i profil satırına tx DIŞINDA yaz; profil izin vermez, görme süzgecini aşmaz. · bekçi: `test_bildirim_tercih_api` §4
+- **[ÇEKİRDEK]** Masaüstü seçimini sunucu hücresinden (`/katalog.hucreler`, MASAUSTU) oku ve `PUT /tercihler`e yaz; N3 `masaustuTurler` anahtarını yalnız bir sürüm birleşimle oku, yazımda yalnız seçili kalanlarla buda. · bekçi: `Electron/src/lib/bildirim/masaustu-tercih.test.ts`, `Electron/src/components/bildirim/MasaustuBildirim.test.tsx`
 
 ## Bekçiler — bu alana dokununca koş
 
