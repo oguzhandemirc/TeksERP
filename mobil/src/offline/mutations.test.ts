@@ -10,6 +10,8 @@
 // bağımsız.
 
 import { shouldAnnounceFailure } from "./announceFailure";
+import { EMPTY_DRAFT, inspectionDraftReducer } from "../components/inspection/inspectionDraft";
+import { inspectionNotSavedToast, kk1BirthInspectionPayload, withoutInspectionWarning } from "../screens/Modules/KK1/kk1InspectionHost";
 
 // --- Servis mock'ları (import zinciri native/axios çekmesin) -----------------
 // registerStationMutationDefaults bu service'leri import eder; mutationFn'leri
@@ -297,6 +299,23 @@ describe("KK1 kuyruk gövdesi — tezgah doğuşu alanları (S3a, kat vakası de
     const inspection = { defects: [{ defectTypeId: "d1", sizeClass: "IN_3_TO_6", startMeter: 12 }], inspectedLengthM: 90, note: "kenar" };
     await fn({ itemId: "i1", initialQty: 90, clientToken: "t3", inspection });
     expect(rollService.createInitialEntry).toHaveBeenLastCalledWith(expect.objectContaining({ clientToken: "t3", inspection }));
+  });
+
+  it("⭐ K4P-TABLET: konak taslağı kuyruktan AYNEN geçer, `INSPECTION_NOT_SAVED` yanıtı toast'a düşer", async () => {
+    const { rollService } = jest.requireMock("../services/roll.service") as {
+      rollService: { createInitialEntry: jest.Mock };
+    };
+    const draft = inspectionDraftReducer(EMPTY_DRAFT, { type: "add", id: "a", defectTypeId: "d1", meter: null, fixedPoints: 4 });
+    const notSaved = { code: "INSPECTION_NOT_SAVED" as const, reason: "MODULE_DISABLED", message: "Muayene kaydedilmedi: Kalite Güvence modülü bu kurulumda kapalı. Top kaydedildi." };
+    rollService.createInitialEntry.mockReset();
+    rollService.createInitialEntry.mockResolvedValue({ success: true, data: { barcode: "T9" }, warnings: [notSaved.message], inspectionNotSaved: notSaved });
+    const fn = defaultsFor(STATION_MUT.KK1_CREATE_ENTRY).mutationFn as (vars: unknown) => Promise<{ warnings?: string[]; inspectionNotSaved?: typeof notSaved }>;
+    const res = await fn({ itemId: "i1", initialQty: 90, clientToken: "t4", ...kk1BirthInspectionPayload(draft, true) });
+    expect(rollService.createInitialEntry).toHaveBeenLastCalledWith(
+      expect.objectContaining({ inspection: { defects: [{ defectTypeId: "d1", sizeClass: null, startMeter: null }] } }),
+    );
+    expect(inspectionNotSavedToast(res.inspectionNotSaved, "T9")?.text1).toBe("Muayene kaydedilmedi: Kalite Güvence modülü kapalı");
+    expect(withoutInspectionWarning(res.warnings, res.inspectionNotSaved)).toEqual([]);
   });
 });
 

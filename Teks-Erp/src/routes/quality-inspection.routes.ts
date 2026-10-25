@@ -51,7 +51,16 @@ const Common = {
   manualWidthCm: decimal("En").nullable().optional(),
   stationId: z.uuid("İstasyon kimliği geçersiz").nullable().optional(),
 };
-const PreviewSchema = z.strictObject({ rollId: z.uuid("Top kimliği geçersiz"), customerId: z.uuid("Müşteri kimliği geçersiz").nullable().optional(), ...Common });
+// K4P-TABLET: KK1 doğuşunda top henüz yok → `draft {itemId, widthCm?}` (rollId XOR draft; uzunluk inspectedLengthM).
+const DraftRoll = z.strictObject({ itemId: z.uuid("Kumaş kimliği geçersiz"), widthCm: decimal("En").nullable().optional() });
+const PreviewSchema = z
+  .strictObject({
+    rollId: z.uuid("Top kimliği geçersiz").optional(),
+    draft: DraftRoll.optional(),
+    customerId: z.uuid("Müşteri kimliği geçersiz").nullable().optional(),
+    ...Common,
+  })
+  .refine((b) => (b.rollId ? 1 : 0) + (b.draft ? 1 : 0) === 1, { message: "Önizleme için top ya da taslak (kumaş) verilmeli — ikisi birden değil" });
 const CreateSchema = z.strictObject({
   rollId: z.uuid("Top kimliği geçersiz"),
   phase: z.enum(["RAW", "FINAL"], "Aşama RAW ya da FINAL olmalı").nullable().optional(),
@@ -89,7 +98,7 @@ router.post("/", WRITE, wrap((req) => svc.create(body(CreateSchema, req), userOf
  * /api/quality-inspections/preview:
  *   post:
  *     tags: [QualityInspections]
- *     summary: "Önizleme — yazmaz; puan/100 m², kural seti, derece önerisi (muayeneyle aynı motor)"
+ *     summary: "Önizleme — yazmaz; puan/100 m², kural seti, derece önerisi (muayeneyle aynı motor). rollId XOR draft {itemId, widthCm?} (KK1 doğuşu)"
  *     security: [{ bearerAuth: [] }]
  */
 router.post("/preview", PREVIEW, wrap((req) => svc.preview(body(PreviewSchema, req))));

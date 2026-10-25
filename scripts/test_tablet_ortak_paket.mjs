@@ -421,14 +421,15 @@ const pbBool = (b) => pbAlan(7, Buffer.concat([pbVarint(8 * 8), pbVarint(b ? 1 :
 const ANDROID_NS = 'http://schemas.android.com/apk/res/android';
 const pbOz = (ad, deger, { ns = ANDROID_NS, bool = null } = {}) => pbAlan(4, Buffer.concat([...(ns ? [pbAlan(1, ns)] : []), pbAlan(2, ad), pbAlan(3, deger), ...(bool == null ? [] : [pbAlan(6, pbBool(bool))])]));
 const pbOge = (ad, ozler = [], cocuklar = []) => pbAlan(1, Buffer.concat([pbAlan(3, ad), ...ozler, ...cocuklar.map((c) => pbAlan(5, c))]));
-function protoManifest({ paket, izinler = [], meta = {}, hedefSdk = '36', yonOzelligi = 'true', cleartext = 'false', hizmetler = [], nscOz = true }) {
+function protoManifest({ paket, izinler = [], meta = {}, hedefSdk = '36', yonOzelligi = 'true', cleartext = 'false', hizmetler = [], nscOz = true, yedek = 'false' }) {
   const izin = ['android.permission.INTERNET', ...izinler].map((x) => pbOge('uses-permission', [pbOz('name', x)]));
   const metaOge = Object.entries(meta).map(([n, v]) => pbOge('meta-data', [pbOz('name', n),
     pbOz('value', v, { bool: v === 'true' || v === 'false' ? v === 'true' : null })]));
   const sdk = pbOge('uses-sdk', [pbOz('minSdkVersion', '26'), pbOz('targetSdkVersion', hedefSdk)]);
   const ozellik = yonOzelligi == null ? [] : [pbOge('property', [pbOz('name', BUYUK.YON_OZELLIGI), pbOz('value', yonOzelligi, { bool: yonOzelligi === 'true' })])];
   const uygOz = [...(cleartext == null ? [] : [pbOz('usesCleartextTraffic', cleartext, { bool: cleartext === 'true' })]),
-    ...(nscOz ? [pbOz('networkSecurityConfig', '@xml/network_security_config')] : [])];
+    ...(nscOz ? [pbOz('networkSecurityConfig', '@xml/network_security_config')] : []),
+    ...(yedek == null ? [] : [pbOz('allowBackup', yedek, { bool: yedek === 'true' })])];
   const hizmet = hizmetler.map((h) => pbOge('service', [pbOz('name', h)]));
   return pbOge('manifest', [pbOz('package', paket, { ns: null })], [sdk, ...izin, pbOge('application', uygOz, [...metaOge, ...ozellik, ...hizmet])]);
 }
@@ -440,14 +441,14 @@ function protoNsc({ cleartext = 'false', capalar = ['system'], alan = false } = 
   return pbOge('network-security-config', [], [taban, ...ozel]);
 }
 /** Sahte AAB: base/manifest gerçek protobuf AndroidManifest (doğrulayıcı meta-data'yı öğe düzeyinde çözer). */
-function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true', sertPem = SERT_KANAL, hedefSdk = '36', yonOzelligi = 'true', cleartext = 'false', hizmetler = [], nscOz = true, nsc = {} } = {}) {
+function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true', sertPem = SERT_KANAL, hedefSdk = '36', yonOzelligi = 'true', cleartext = 'false', hizmetler = [], nscOz = true, nsc = {}, yedek = 'false' } = {}) {
   sayac += 1;
   const y = path.join(agac, `sahte-${sayac}.aab`);
   const meta = { 'expo.modules.updates.ENABLED': 'true', 'expo.modules.updates.EXPO_UPDATE_URL': kimlik.guncellemeUrl };
   if (sertPem) meta['expo.modules.updates.CODE_SIGNING_CERTIFICATE'] = sertPem;
   if (zincir != null) meta[Z.ZINCIR_META] = zincir;
   zipYaz(y, [
-    { ad: 'base/manifest/AndroidManifest.xml', veri: protoManifest({ paket, izinler, meta, hedefSdk, yonOzelligi, cleartext, hizmetler, nscOz }), yontem: 8 },
+    { ad: 'base/manifest/AndroidManifest.xml', veri: protoManifest({ paket, izinler, meta, hedefSdk, yonOzelligi, cleartext, hizmetler, nscOz, yedek }), yontem: 8 },
     ...(nsc ? [{ ad: 'base/res/xml/network_security_config.xml', veri: protoNsc(nsc), yontem: 8 }] : []),
     { ad: 'base/assets/index.android.bundle', veri: Buffer.from('hermes\u0000/api/auth/login\u0000son', 'latin1'), yontem: 0 },
     { ad: 'base/assets/app.config', veri: Buffer.from(JSON.stringify(ORTAK_CFG)), yontem: 8 },
@@ -481,6 +482,8 @@ function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true',
   ol('3o11 K3: usesCleartextTraffic=true olan AAB → DUR', r11.kod !== 0 && /usesCleartextTraffic=true/.test(r11.cikti), r11.cikti.slice(-600));
   const r11b = buildApk(a, ['--aab', `--verify-only=${aab(a, { cleartext: null })}`]);
   ol('3o11b K3: usesCleartextTraffic beyansız AAB (varsayılan açık sayılır) → DUR', r11b.kod !== 0 && /usesCleartextTraffic=\(yok\)/.test(r11b.cikti), r11b.cikti.slice(-600));
+  const r18 = buildApk(a, ['--aab', `--verify-only=${aab(a, { yedek: 'true' })}`]);
+  ol('3o18 K-C3: allowBackup=true olan AAB → DUR (cihaz eşleme v2)', r18.kod !== 0 && /allowBackup=true/.test(r18.cikti), r18.cikti.slice(-600));
   const r12 = buildApk(a, ['--aab', `--verify-only=${aab(a, { izinler: ['android.permission.SYSTEM_ALERT_WINDOW'] })}`]);
   ol('3o12 K1: SYSTEM_ALERT_WINDOW izinli AAB → DUR', r12.kod !== 0 && /SYSTEM_ALERT_WINDOW izni var/.test(r12.cikti), r12.cikti.slice(-600));
   const r13 = buildApk(a, ['--aab', `--verify-only=${aab(a, { hizmetler: ['expo.modules.audio.service.AudioControlsService'] })}`]);
@@ -495,11 +498,11 @@ function aab(agac, { izinler = [], paket = kimlik.androidPaket, zincir = 'true',
   ol('3o17 G2: alan adına özel istisnalı AAB → DUR', r17.kod !== 0 && /domain-config/.test(r17.cikti), r17.cikti.slice(-600));
 }
 const AJ = JSON.parse(fs.readFileSync(path.join(KOK, 'mobil/app.json'), 'utf8')).expo;
-const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, ad = kimlik.gorunenAd, zincir = 'true', sert = SERT_KANAL } = {}) => (dir) => {
+const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, ad = kimlik.gorunenAd, zincir = 'true', sert = SERT_KANAL, yedek = 'false' } = {}) => (dir) => {
   const yaz = (rel, s) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), s); };
   yaz('app/build.gradle', `android {\n  defaultConfig {\n    applicationId '${paket}'\n    versionCode ${AJ.android.versionCode}\n    versionName "${AJ.version}"\n  }\n}\n`);
   yaz('app/src/main/res/values/strings.xml', `<resources>\n  <string name="app_name">${ad}</string>\n  <string name="expo_runtime_version">${kimlik.runtimeVersion}</string>\n</resources>\n`);
-  yaz('app/src/main/AndroidManifest.xml', `<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n<application>\n` +
+  yaz('app/src/main/AndroidManifest.xml', `<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n<application${yedek == null ? '' : ` android:allowBackup="${yedek}"`}>\n` +
     `<meta-data android:name="expo.modules.updates.ENABLED" android:value="true"/>\n` +
     `<meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="${url}"/>\n` +
     `<meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version"/>\n` +
@@ -516,6 +519,8 @@ const androidYaz = ({ url = kimlik.guncellemeUrl, paket = kimlik.androidPaket, a
   const c = agacKur({ android: androidYaz({ zincir: null }) }); const r3 = buildApk(c, ['--check']);
   ol('3j3 K-2: --check: prebuild manifestinde zincir meta-data\'sı yok → ORTAK PAKETE HAZIR DEĞİL', r3.kod !== 0 && /ANDROIDMANIFEST ORTAK PAKETE HAZIR DEĞİL/.test(r3.cikti) &&
     /CERTIFICATE_CHAIN "yok"/.test(r3.cikti), r3.cikti.slice(-600));
+  const d = agacKur({ android: androidYaz({ yedek: null }) }); const r4 = buildApk(d, ['--check']);
+  ol('3j4 K-C3: --check: prebuild manifestinde allowBackup="false" yok → DUR (cihaz eşleme v2)', r4.kod !== 0 && /YEDEK AÇIK/.test(r4.cikti), r4.cikti.slice(-600));
 }
 
 console.log('\n§4 — kablolama: commit kancası + CI bu bekçiyi koşturur');

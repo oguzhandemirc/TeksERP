@@ -10,6 +10,7 @@ import type { SuzgecEcho } from "../_filters";
 import type { SuffixInput } from "./ek";
 import type { AnaSayi } from "../sunum/sunum.types";
 import {
+  type AnalysisInput,
   type AnaSayiIfadesi,
   type ThresholdInput,
   type Gozlem,
@@ -272,4 +273,17 @@ export function scopeNote(g: ScopeNoteInput): Gozlem | null {
   if (!(g.sayi > 0)) return null;
   const etki = g.toplam && g.toplam > 0 ? Math.min(1, 0.3 + g.sayi / g.toplam) : 0.3;
   return { kural: "kapsamNotu", onem: puan(etki), kanit: { sayi: g.sayi, nesne: g.nesne, neden: g.neden, sonuc: g.sonuc } };
+}
+
+/** Analiz kanıtı (R3): güçlü kanıt öne çıkar; örneklem uyarısı varken hiç üretilmez. */
+export function correlationObservation(g: AnalysisInput): Gozlem | null {
+  if (g.orneklem || !g.korelasyon || !Number.isFinite(g.korelasyon.p)) return null;
+  const k = g.korelasyon;
+  const strength = k.p < 0.01 ? 0.9 : k.p < 0.05 ? 0.75 : 0.45;
+  return { kural: "korelasyon", onem: puan(strength), kanit: k };
+}
+
+/** Küçük örneklem uyarısı her zaman söylenir (kanıt cümlesinin yerine). */
+export function sampleWarningObservation(g: AnalysisInput): Gozlem | null {
+  return g.orneklem ? { kural: "orneklemUyarisi", onem: puan(0.95), kanit: g.orneklem } : null;
 }
