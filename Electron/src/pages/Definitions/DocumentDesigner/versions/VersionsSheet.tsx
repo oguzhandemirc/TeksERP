@@ -71,9 +71,10 @@ interface Props {
 
 /** Sürüm geçmişi (plan §4): liste · iki sürüm karşılaştırma · yeniden yayınla · bu sürümden taslak. Hiçbir sürüm silinmez. */
 export function VersionsSheet({ template: given, access, onClose, dirty = false, onRestored }: Props) {
-  const fresh = useQuery({ queryKey: templateKey(given?.id), enabled: !!given, queryFn: () => documentTemplateService.get(given!.id) });
+  // Panel her açılışta tazeler: başka oturumun kaydettiği sürüm önbellekte görünmez kalmasın.
+  const fresh = useQuery({ queryKey: templateKey(given?.id), enabled: !!given, staleTime: 0, queryFn: () => documentTemplateService.get(given!.id) });
   const template = fresh.data?.data ?? given;
-  const q = useQuery({ queryKey: versionsQueryKey(given?.id), enabled: !!given, queryFn: () => documentTemplateService.versions(given!.id) });
+  const q = useQuery({ queryKey: versionsQueryKey(given?.id), enabled: !!given, staleTime: 0, queryFn: () => documentTemplateService.versions(given!.id) });
   const versions = q.data?.data ?? [];
   const [picked, setPicked] = useState<string[]>([]);
   const [compare, setCompare] = useState<CompareTarget | null>(null);

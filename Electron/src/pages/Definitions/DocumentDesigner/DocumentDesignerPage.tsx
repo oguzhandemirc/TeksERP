@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { DESIGNER_DISABLED_TITLE, designerSettingPath, designerSettingTrail, isDocumentDesignerEnabled } from "./designer-flag";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AssignmentsView } from "./assignments/AssignmentsView";
 import { TemplateListView } from "./templates/TemplateListView";
+import { useTemplateAccess } from "./templates/useTemplateAccess";
 
 // GrapesJS (~1,1 MB) ayrı parçada: bayrak kapalıyken ya da sayfa açılmadıkça indirilmez (200 KB kuralı).
 const DesignerWorkspace = lazy(() => import("./DesignerWorkspace"));
@@ -21,6 +24,25 @@ function Loading() {
     <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
       <Loader2 className="h-4 w-4 animate-spin" /> Tasarımcı yükleniyor…
     </div>
+  );
+}
+
+/** Liste yüzü: şablonlar ve atamalar iki sekme (plan §4). */
+function ListFace() {
+  const access = useTemplateAccess();
+  return (
+    <Tabs defaultValue="templates" className="flex min-h-0 flex-1 flex-col">
+      <TabsList className="self-start">
+        <TabsTrigger value="templates">Şablonlar</TabsTrigger>
+        <TabsTrigger value="assignments">Atamalar</TabsTrigger>
+      </TabsList>
+      <TabsContent value="templates" className="min-h-0 flex-1">
+        <TemplateListView />
+      </TabsContent>
+      <TabsContent value="assignments" className="min-h-0 flex-1">
+        <AssignmentsView access={access} />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -55,7 +77,7 @@ export function DocumentDesignerPage() {
           }
         />
       ) : isList ? (
-        <TemplateListView />
+        <ListFace />
       ) : (
         <Suspense fallback={<Loading />}>
           <DesignerWorkspace templateId={id === DESIGNER_SCRATCH_ID ? null : id} />

@@ -11,6 +11,11 @@ export const templateQueryKey = (id: string | null) => ["document-templates", "t
 
 /** Sürüm içeriği → editör: görsel kipte kanvasa, kod kipinde taslağın kod kaynağına. */
 export function applyVersion(editor: Editor | null, draft: DesignerDraft, v: TemplateVersionFull, docType: string): void {
+  // Kanvas ÖNCE: setComponents'in component:add olayları taslağı kirletir; hydrate SONRA kirli bayrağını düşürür.
+  if (editor && v.editMode === "VISUAL") {
+    editor.setComponents(v.sourceHtml);
+    editor.setStyle(v.css);
+  }
   draft.hydrate({
     docType,
     pageSettings: v.pageSettings ?? {},
@@ -19,10 +24,6 @@ export function applyVersion(editor: Editor | null, draft: DesignerDraft, v: Tem
     editMode: v.editMode,
     code: { html: v.sourceHtml, css: v.css },
   });
-  if (editor && v.editMode === "VISUAL") {
-    editor.setComponents(v.sourceHtml);
-    editor.setStyle(v.css);
-  }
 }
 
 /** Editörün o anki kaynağı → `POST /:id/versions` gövdesi (kayıt anında dışa aktarılır). */
