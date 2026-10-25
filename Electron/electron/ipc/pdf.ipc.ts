@@ -6,10 +6,13 @@ import { randomUUID } from "node:crypto";
 import { showSaveDialogFor, showOpenDialogFor } from "./dialog-window.js";
 import { applyPdfLicenseMeta, sanitizePdfLicenseMeta, type PdfLicenseMeta } from "./pdf-metadata.js";
 import { handleTrusted } from "../security/trusted-ipc.js";
+import { openPdfViewer } from "./pdf-viewer.js";
 import type {
   PdfSaveOpts,
   PdfSaveResult,
   PdfSaveBatchOpts,
+  PdfPreviewOpts,
+  PdfPreviewResult,
   SaveBatchResult,
 } from "../../shared/ipc-contract.js";
 import {
@@ -245,6 +248,19 @@ export function registerPdfIpc(): void {
       return { saved: true, path: filePath };
     } catch (err) {
       return { saved: false, error: pdfErrorMessage(err, "PDF oluşturulamadı") };
+    }
+  });
+
+  // Tasarımcı PDF önizlemesi: pdf:save ile AYNI bayt kapısı + kuyruk + sertleştirilmiş çizim penceresi;
+  // baytlar panele döner (yedek yol: sayfa sayısı), gösterim ayrı görüntüleyici penceresinde.
+  handleTrusted("pdf:preview", async (_e, opts: PdfPreviewOpts): Promise<PdfPreviewResult> => {
+    try {
+      assertPdfSize(opts.html);
+      const pdf = await htmlToPdf(opts.html);
+      const viewer = opts.openViewer === false ? false : await openPdfViewer(pdf, opts.title || "PDF önizleme");
+      return { ok: true, bytes: pdf, viewer };
+    } catch (err) {
+      return { ok: false, error: pdfErrorMessage(err, "PDF önizlemesi oluşturulamadı") };
     }
   });
 

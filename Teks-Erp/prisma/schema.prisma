@@ -183,6 +183,9 @@ enum ReasonPresetKind {
   /// İş emri plan düzeltmesi (Rengi/Eni Değiştir) — kod `WorkOrderEvent.reasonCode`a, görünen metin
   /// `reason`a düşer (hareket defteri D5).
   WORK_ORDER_PLAN_CHANGE
+  /// K4P: muayene iptali sebebi. Seçim İSTEĞE BAĞLI (serbest metin kalır); seçilen metin
+  /// `RollInspection.voidReason`a yazılır, kod saklanmaz (kolon yok).
+  INSPECTION_VOID
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
@@ -730,6 +733,10 @@ model User {
   costStructuresCreated     CostStructure[]    @relation("CostStructureCreatedBy")
   costStructuresUpdated     CostStructure[]    @relation("CostStructureUpdatedBy")
   standardCostVersionsCreated StandardCostVersion[] @relation("StandardCostVersionCreatedBy")
+  salesQuotesCreated          SalesQuote[]          @relation("SalesQuoteCreatedBy")
+  salesQuotesUpdated          SalesQuote[]          @relation("SalesQuoteUpdatedBy")
+  priceListsCreated           PriceList[]           @relation("PriceListCreatedBy")
+  priceListsUpdated           PriceList[]           @relation("PriceListUpdatedBy")
 
   @@map("users")
 }
@@ -3371,6 +3378,8 @@ model Item {
   standardCostVersions           StandardCostVersion[]       @relation("StandardCostVersionItem")
   /// Bu ipliği döküm satırında taşıyan sürüm satırları (MAL-2).
   standardCostLinesAsYarn        StandardCostLine[]          @relation("StandardCostLineYarn")
+  salesQuoteLines                SalesQuoteLine[]            @relation("SalesQuoteLineItem")
+  priceListLines                 PriceListLine[]             @relation("PriceListLineItem")
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -4193,6 +4202,10 @@ model Customer {
   customerLabSpecs  CustomerLabSpec[]
   labTests          LabTest[]
 
+  // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
+  salesQuotes SalesQuote[] @relation("SalesQuoteCustomer")
+  priceLists  PriceList[]  @relation("PriceListCustomer")
+
   @@unique([nameFold])
   @@index([type])
   @@index([documentProfileId])
@@ -4263,6 +4276,9 @@ model CustomerBranch {
   createdBy   User?   @relation("CustomerBranchCreatedBy", fields: [createdById], references: [id])
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("CustomerBranchUpdatedBy", fields: [updatedById], references: [id])
+
+  // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
+  salesQuotes SalesQuote[] @relation("SalesQuoteBranch")
 
   // UNIQUE (2026-07-31 denetimi): müşteri-içi şube kodu tekil — diğer master-data'nın
   // code @unique backstop'unun buradaki karşılığı. code NULL'ken serbest (PG'de
@@ -4346,6 +4362,9 @@ model Order {
   createdBy   User?   @relation("OrderCreatedBy", fields: [createdById], references: [id])
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("OrderUpdatedBy", fields: [updatedById], references: [id])
+
+  // MAL-4: teklif → sipariş bağı TEKLİFTE durur (`SalesQuote.convertedOrderId`); bu yalnız geri ilişki, kolon değil.
+  convertedFromQuote SalesQuote? @relation("SalesQuoteConvertedOrder")
 
   @@index([customerId])
   @@index([branchId])
@@ -8628,6 +8647,10 @@ model Color {
   mergedInto     Color?    @relation("ColorMergeLineage", fields: [mergedIntoId], references: [id])
   mergedChildren Color[]   @relation("ColorMergeLineage")
   mergedBy       User?     @relation("ColorMergedBy", fields: [mergedById], references: [id])
+
+  // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
+  salesQuoteLines SalesQuoteLine[] @relation("SalesQuoteLineColor")
+  priceListLines  PriceListLine[]  @relation("PriceListLineColor")
 
   @@index([isActive, sortOrder])
   @@index([nameFold])
@@ -13245,6 +13268,8 @@ model StandardCostVersion {
   restoredFrom StandardCostVersion?  @relation("StandardCostVersionRestore", fields: [restoredFromId], references: [id], onDelete: Restrict)
   restoredTo   StandardCostVersion[] @relation("StandardCostVersionRestore")
   lines        StandardCostLine[]
+  quoteLines     SalesQuoteLine[] @relation("SalesQuoteLineCostVersion")
+  priceListLines PriceListLine[]  @relation("PriceListLineCostVersion")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -13279,4 +13304,221 @@ model StandardCostLine {
   @@unique([versionId, lineNo])
   @@index([yarnItemId])
   @@map("standard_cost_lines")
+}
+// =============================================================================
+// MAL-4 — SATIŞ TEKLİFİ + FİYAT LİSTESİ (plan §3.2–§3.5)
+// =============================================================================
+// Teklif DURUM + DONMUŞ BELGE: SENT sonrası kalem/başlık değişmez, düzeltme = revizyon (aynı numara,
+// revisionNo+1). Her geçiş atomik claim; `statusChangedAt`i DB trigger'ı yazar. Sipariş bağı TEKLİFTE
+// (`convertedOrderId`), `Order` modeline kolon eklenmez; çift yüklem CHECK `sales_quotes_converted_ck`.
+// Partial unique'ler ve CHECK'ler şema dışı (migration `20261025170000_teklif_fiyat_listesi`).
+
+/// Teklif durumu (plan §3.3). Ölü küme `QUOTE_DEAD_STATUSES`: CANCELLED · CONVERTED · SUPERSEDED.
+enum SalesQuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  CONVERTED
+  SUPERSEDED
+}
+
+/// Teklif kalemi fiyatının kaynağı — öneri zinciri `resolveQuotePriceSuggestionTx` (tek helper).
+enum QuotePriceSource {
+  COST_PLUS
+  PRICE_LIST
+  ITEM_PRICE
+  MANUAL
+}
+
+enum PriceListStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model SalesQuote {
+  id                String              @id @default(uuid()) @db.Uuid
+  /// Doğuşta `number_series` (`salesQuote`); revizyon aynı numarayı taşır.
+  quoteNo           String              @db.VarChar(32)
+  revisionNo        Int                 @default(1) @db.SmallInt
+  clientToken       String              @unique @db.Uuid
+  customerId        String              @db.Uuid
+  branchId          String?             @db.Uuid
+  /// İş/kur tarihi — fabrika günü.
+  quoteDate         DateTime            @db.Date
+  validUntilDate    DateTime            @db.Date
+  currency          Currency
+  /// 1 döviz kaç TL; TRY → 1. Asla varsayılmaz (CHECK > 0).
+  fxRate            Decimal             @db.Decimal(18, 6)
+  /// Elle girilen kur MANUAL; NULL = TRY ya da finans modülünün kur önerisi.
+  fxRateSource      ExchangeRateSource?
+  fxRateDate        DateTime?           @db.Date
+  paymentTermDays   Int?
+  financeChargePct  Decimal?            @db.Decimal(6, 2)
+  commissionPct     Decimal?            @db.Decimal(6, 2)
+  freightPerM       Decimal?            @db.Decimal(14, 4)
+  customerReference String?             @db.VarChar(100)
+  /// Müşteri belgesine girer.
+  notes             String?             @db.VarChar(1000)
+  /// İÇ not — müşteri belgesine GİRMEZ; yanıtta yalnız `quote:write`.
+  internalNote      String?             @db.VarChar(1000)
+  status            SalesQuoteStatus    @default(DRAFT)
+  /// DB trigger'ı yazar (`sales_quotes_stamp_status_changed`); uygulama yazmaz.
+  statusChangedAt   DateTime            @default(now()) @db.Timestamptz
+  sentAt            DateTime?           @db.Timestamptz
+  sentById          String?             @db.Uuid
+  acceptedAt        DateTime?           @db.Timestamptz
+  acceptedById      String?             @db.Uuid
+  rejectedAt        DateTime?           @db.Timestamptz
+  rejectedById      String?             @db.Uuid
+  rejectReason      String?             @db.VarChar(300)
+  cancelledAt       DateTime?           @db.Timestamptz
+  cancelledById     String?             @db.Uuid
+  cancelReason      String?             @db.VarChar(300)
+  convertedOrderId  String?             @unique @db.Uuid
+  convertedAt       DateTime?           @db.Timestamptz
+  convertedById     String?             @db.Uuid
+  revisionOfId      String?             @unique @db.Uuid
+  supersededAt      DateTime?           @db.Timestamptz
+  totalAmount       Decimal             @default(0) @db.Decimal(14, 2)
+  /// İÇ bilgi — yanıtta yalnız `cost:read`.
+  totalCostTry      Decimal?            @db.Decimal(14, 2)
+
+  customer       Customer         @relation("SalesQuoteCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  branch         CustomerBranch?  @relation("SalesQuoteBranch", fields: [branchId], references: [id], onDelete: Restrict)
+  convertedOrder Order?           @relation("SalesQuoteConvertedOrder", fields: [convertedOrderId], references: [id], onDelete: Restrict)
+  revisionOf     SalesQuote?      @relation("SalesQuoteRevision", fields: [revisionOfId], references: [id], onDelete: Restrict)
+  revisedTo      SalesQuote?      @relation("SalesQuoteRevision")
+  lines          SalesQuoteLine[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  // ── KAYIT KÜNYESİ ──
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("SalesQuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String?  @db.Uuid
+  updatedBy   User?    @relation("SalesQuoteUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([quoteNo, revisionNo])
+  @@index([customerId])
+  @@index([branchId])
+  @@index([status, validUntilDate])
+  @@index([quoteDate])
+  @@map("sales_quotes")
+}
+
+model SalesQuoteLine {
+  id                    String           @id @default(uuid()) @db.Uuid
+  /// Cascade yalnız DRAFT teklif için anlamlı (④); SENT sonrası satır değişmez.
+  quoteId               String           @db.Uuid
+  lineNo                Int
+  /// Yeni desen teklifinde boş; siparişe dönüştürmeden önce bağlanır.
+  itemId                String?          @db.Uuid
+  colorId               String?          @db.Uuid
+  description           String           @db.VarChar(200)
+  width                 Decimal?         @db.Decimal(12, 3)
+  quantity              Decimal          @db.Decimal(12, 3)
+  /// v1 yalnız MT (servis 400).
+  unit                  ItemUnit         @default(MT)
+  standardCostVersionId String?          @db.Uuid
+  /// İÇ bilgi (TL/m) — yanıtta yalnız `cost:read`. Yazıldığı an DONAR.
+  costPerMTry           Decimal          @db.Decimal(14, 4)
+  /// Katı şema `quoteCostSnapshotSchema` (`schemaVersion: 1`).
+  costSnapshot          Json
+  markupPct             Decimal          @db.Decimal(6, 2)
+  suggestedUnitPrice    Decimal          @db.Decimal(14, 4)
+  /// Teklif dövizinde, sipariş kalemiyle aynı hassasiyet (2 hane).
+  unitPrice             Decimal          @db.Decimal(12, 2)
+  priceSource           QuotePriceSource
+  priceListLineId       String?          @db.Uuid
+  lineTotal             Decimal          @db.Decimal(14, 2)
+  notes                 String?          @db.VarChar(500)
+
+  quote               SalesQuote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  item                Item?                @relation("SalesQuoteLineItem", fields: [itemId], references: [id], onDelete: Restrict)
+  color               Color?               @relation("SalesQuoteLineColor", fields: [colorId], references: [id], onDelete: Restrict)
+  standardCostVersion StandardCostVersion? @relation("SalesQuoteLineCostVersion", fields: [standardCostVersionId], references: [id], onDelete: Restrict)
+  priceListLine       PriceListLine?       @relation("SalesQuoteLinePriceListLine", fields: [priceListLineId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([quoteId, lineNo])
+  @@index([itemId])
+  @@index([colorId])
+  @@index([standardCostVersionId])
+  @@index([priceListLineId])
+  @@map("sales_quote_lines")
+}
+
+model PriceList {
+  id            String          @id @default(uuid()) @db.Uuid
+  /// Doğuşta `number_series` (`priceList`); revizyon aynı numarayı taşır.
+  listNo        String          @db.VarChar(32)
+  revisionNo    Int             @default(1) @db.SmallInt
+  clientToken   String          @unique @db.Uuid
+  name          String          @db.VarChar(100)
+  /// NULL = genel liste.
+  customerId    String?         @db.Uuid
+  currency      Currency
+  status        PriceListStatus @default(DRAFT)
+  /// BİLGİ — çözümleyici tarih aralığı DEĞERLENDİRMEZ; geçerlilik = yayın durumu.
+  validFromDate DateTime?       @db.Date
+  validUntilDate DateTime?      @db.Date
+  publishedAt   DateTime?       @db.Timestamptz
+  publishedById String?         @db.Uuid
+  archivedAt    DateTime?       @db.Timestamptz
+  archivedById  String?         @db.Uuid
+  revisionOfId  String?         @unique @db.Uuid
+  notes         String?         @db.VarChar(1000)
+
+  customer   Customer?       @relation("PriceListCustomer", fields: [customerId], references: [id], onDelete: Restrict)
+  revisionOf PriceList?      @relation("PriceListRevision", fields: [revisionOfId], references: [id], onDelete: Restrict)
+  revisedTo  PriceList?      @relation("PriceListRevision")
+  lines      PriceListLine[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  // ── KAYIT KÜNYESİ ──
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("PriceListCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String?  @db.Uuid
+  updatedBy   User?    @relation("PriceListUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([listNo, revisionNo])
+  @@index([customerId])
+  @@index([status, currency])
+  @@map("price_lists")
+}
+
+model PriceListLine {
+  id                    String   @id @default(uuid()) @db.Uuid
+  /// Cascade yalnız DRAFT liste satırı replace'i için (④); yayınlı satır değişmez.
+  priceListId           String   @db.Uuid
+  lineNo                Int
+  itemId                String   @db.Uuid
+  colorId               String?  @db.Uuid
+  unitPrice             Decimal  @db.Decimal(12, 2)
+  minQty                Decimal? @db.Decimal(12, 3)
+  standardCostVersionId String?  @db.Uuid
+  /// İÇ bilgi — yanıtta yalnız `cost:read`.
+  costPerMTry           Decimal? @db.Decimal(14, 4)
+  markupPct             Decimal? @db.Decimal(6, 2)
+
+  priceList           PriceList            @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  item                Item                 @relation("PriceListLineItem", fields: [itemId], references: [id], onDelete: Restrict)
+  color               Color?               @relation("PriceListLineColor", fields: [colorId], references: [id], onDelete: Restrict)
+  standardCostVersion StandardCostVersion? @relation("PriceListLineCostVersion", fields: [standardCostVersionId], references: [id], onDelete: Restrict)
+  quoteLines          SalesQuoteLine[]     @relation("SalesQuoteLinePriceListLine")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([priceListId, lineNo])
+  @@index([itemId])
+  @@index([colorId])
+  @@index([standardCostVersionId])
+  @@map("price_list_lines")
 }

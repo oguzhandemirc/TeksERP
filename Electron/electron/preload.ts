@@ -9,6 +9,7 @@ import type {
   ScaleReadOpts,
   PdfSaveOpts,
   PdfSaveBatchOpts,
+  PdfPreviewOpts,
   PdfLicenseMetaInput,
   FilesSaveBatchOpts,
   FileSaveOpts,
@@ -96,6 +97,7 @@ const api: ApiBridge = {
   pdf: {
     save: (opts: PdfSaveOpts) => ipcRenderer.invoke("pdf:save", opts),
     saveBatch: (opts: PdfSaveBatchOpts) => ipcRenderer.invoke("pdf:saveBatch", opts),
+    preview: (opts: PdfPreviewOpts) => ipcRenderer.invoke("pdf:preview", opts),
     setLicenseMeta: (meta: PdfLicenseMetaInput | null) => ipcRenderer.invoke("pdf:setLicenseMeta", meta),
     onBatchProgress: (cb) => {
       const listener = (_e: unknown, payload: unknown) => {
@@ -187,6 +189,9 @@ const api: ApiBridge = {
       ipcRenderer.on(BILDIRIM_OPEN_CHANNEL, listener);
       return () => ipcRenderer.removeListener(BILDIRIM_OPEN_CHANNEL, listener);
     },
+  },
+  connectGate: {
+    allow: (url: string) => ipcRenderer.invoke("connectGate:allow", url),
   },
 };
 

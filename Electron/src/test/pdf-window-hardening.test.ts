@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { WindowRecord } from "./helpers/pdf-electron-fikstur";
 
 // =============================================================================
 // "PDF KAYDET" PENCERESİ (güvenlik denetimi 2026-10-01, IST-3 YÜKSEK).
@@ -10,90 +11,10 @@ import { describe, expect, it, vi } from "vitest";
 // commit mesajında sayısıyla.
 // =============================================================================
 
-type Listener = (...args: unknown[]) => unknown;
-interface WindowRecord {
-  options: { show?: boolean; webPreferences?: Record<string, unknown> };
-  listeners: Map<string, Listener[]>;
-  openHandler: Listener | null;
-  loaded: string | null;
-  served: string | null;
-  destroyed: boolean;
-}
-interface SessionRecord {
-  request: Listener | null;
-  check: Listener | null;
-  beforeRequest: Listener | null;
-  protocol: { scheme: string; fn: Listener } | null;
-}
-
-const h = vi.hoisted(() => ({
-  windows: [] as WindowRecord[],
-  sessions: new Map<string, SessionRecord>(),
-  handlers: new Map<string, Listener>(),
-  openExternal: vi.fn(),
-  printFails: false,
-  printHangs: false,
-  hangOn: null as string | null,
-  printLog: [] as string[],
-  aliveAtPrint: [] as number[],
-  dialogSave: null as null | ((opts: unknown) => unknown),
-  dialogOpen: null as null | (() => unknown),
-}));
-
-vi.mock("electron", () => {
-  class FakeBrowserWindow {
-    static fromWebContents = (): null => null;
-    readonly webContents: Record<string, unknown>;
-    private readonly rec: WindowRecord;
-    constructor(options: WindowRecord["options"]) {
-      const rec: WindowRecord = { options, listeners: new Map(), openHandler: null, loaded: null, served: null, destroyed: false };
-      h.windows.push(rec);
-      this.rec = rec;
-      this.webContents = {
-        on: (event: string, fn: Listener) => rec.listeners.set(event, [...(rec.listeners.get(event) ?? []), fn]),
-        setWindowOpenHandler: (fn: Listener) => {
-          rec.openHandler = fn;
-        },
-        printToPDF: async () => {
-          if (h.printFails) throw new Error("yazdırılamadı");
-          if (h.printHangs || (h.hangOn !== null && rec.served === h.hangOn)) return new Promise(() => undefined);
-          h.printLog.push(rec.served ?? "");
-          h.aliveAtPrint.push(h.windows.filter((w) => !w.destroyed).length);
-          return new Uint8Array([1, 2, 3]);
-        },
-      };
-    }
-    async loadURL(url: string): Promise<void> {
-      this.rec.loaded = url;
-      const proto = h.sessions.get("tekserp-pdf")?.protocol;
-      if (proto && url.startsWith(`${proto.scheme}:`)) {
-        const res = (await proto.fn({ url })) as Response;
-        this.rec.served = res.status === 200 ? await res.text() : null;
-      }
-    }
-    destroy(): void {
-      this.rec.destroyed = true;
-    }
-  }
-  const fromPartition = (name: string) => {
-    const rec: SessionRecord = h.sessions.get(name) ?? { request: null, check: null, beforeRequest: null, protocol: null };
-    h.sessions.set(name, rec);
-    return {
-      setPermissionRequestHandler: (fn: Listener) => (rec.request = fn),
-      setPermissionCheckHandler: (fn: Listener) => (rec.check = fn),
-      webRequest: { onBeforeRequest: (fn: Listener) => (rec.beforeRequest = fn) },
-      protocol: { handle: (scheme: string, fn: Listener) => (rec.protocol = { scheme, fn }) },
-    };
-  };
-  return {
-    BrowserWindow: FakeBrowserWindow,
-    session: { fromPartition },
-    ipcMain: { handle: (ch: string, fn: Listener) => h.handlers.set(ch, fn), on: vi.fn() },
-    dialog: { showSaveDialog: vi.fn(async (...args: unknown[]) => h.dialogSave?.(args.at(-1)) ?? { canceled: true }), showOpenDialog: vi.fn(async () => h.dialogOpen?.() ?? { canceled: true }) },
-    shell: { openExternal: h.openExternal },
-  };
-});
+vi.mock("electron", async () => (await import("./helpers/pdf-electron-fikstur")).electronFake());
 vi.mock("electron-log/main.js", () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+
+const { h } = await import("./helpers/pdf-electron-fikstur");
 
 const pdf = await import("../../electron/ipc/pdf.ipc");
 const trusted = await import("../../electron/security/trusted-ipc");

@@ -190,6 +190,8 @@ export const TABLE_LABELS: Record<string, string> = {
   COST_PARAMETER_SET: "Maliyet Parametre Seti",
   COST_STRUCTURE: "Ürün Maliyet Yapısı",
   STANDARD_COST_VERSION: "Standart Maliyet Sürümü",
+  SALES_QUOTE: "Satış Teklifi",
+  PRICE_LIST: "Fiyat Listesi",
   FINISHING_RATE: "Apre Tarifesi",
   WEFT_SPEC: "Atkı Spesifikasyonu",
   YARN_COST_PRICE: "İplik Maliyet Fiyatı",
@@ -213,6 +215,9 @@ export const TABLE_LABELS: Record<string, string> = {
   LICENSE_ACCEPTANCE: "Lisans Sözleşmesi Kabulü",
   // Dağıtım v2 (D7): sunucu güncellemesi onayı (Sistem → Güncellemeler).
   UPDATE_APPROVAL: "Sunucu Güncellemesi Onayı",
+  // Bildirim tercih katmanı (N4-MOTOR): yönetici profilleri ve fabrika varsayılanı.
+  NOTIFICATION_PROFILE: "Bildirim Profili",
+  NOTIFICATION_FACTORY_DEFAULT: "Bildirim Fabrika Varsayılanı",
 };
 
 /** Ham tableName'i Türkçe etiketle. Boş → "—", bilinmeyen → ham değer. */

@@ -6,6 +6,8 @@ import { renderWithProviders } from "@/test/render";
 
 const svc = vi.hoisted(() => ({ get: vi.fn(), preview: vi.fn(), create: vi.fn(), revise: vi.fn(), voidPreview: vi.fn(), void: vi.fn(), list: vi.fn() }));
 vi.mock("./service", () => ({ inspectionService: svc }));
+const presetSvc = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("@/pages/ReasonPresets/service", () => ({ reasonPresetService: presetSvc }));
 vi.mock("@/components/forms/entity-picker/EntityPickerModal", () => ({ EntityPickerModal: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span> }));
 vi.mock("@/components/operations/roll-picker/RollPickerDialog", () => ({
   RollPickerDialog: ({ open, onConfirm }: { open: boolean; onConfirm: (r: unknown[]) => void }) =>
@@ -36,7 +38,7 @@ const axiosErr = (status: number | null, code?: string) =>
   Object.assign(new Error("x"), { isAxiosError: true, response: status == null ? undefined : { status, data: { message: "olmadı", details: code ? { code } : undefined } } });
 
 describe("Muayene diyalogları", () => {
-  beforeEach(() => { Object.values(svc).forEach((f) => f.mockReset()); svc.preview.mockResolvedValue(pv); });
+  beforeEach(() => { Object.values(svc).forEach((f) => f.mockReset()); svc.preview.mockResolvedValue(pv); presetSvc.list.mockReset(); presetSvc.list.mockResolvedValue([]); });
 
   it("detay: konumsuz hatanın metresi '—'", async () => {
     svc.get.mockResolvedValue(detail);
@@ -100,5 +102,41 @@ describe("Muayene diyalogları", () => {
     expect(t[2]).not.toBe(t[1]);
     expect(svc.create.mock.calls[0]![0]).toMatchObject({ rollId: "r1", phase: "FINAL", defects: [] });
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("n1"));
+  });
+});
+
+describe("Muayene iptali — hazır sebep (INSPECTION_VOID)", () => {
+  beforeEach(() => { Object.values(svc).forEach((f) => f.mockReset()); presetSvc.list.mockReset(); presetSvc.list.mockResolvedValue([]); });
+
+  it("iptal: hazır sebep İSTEĞE BAĞLI — modalden seçilen metin kutuya dolar, düzenlenebilir; başka kind listelenmez", async () => {
+    const row = (id: string, kind: string, label: string, extra: Record<string, unknown> = {}) =>
+      ({ id, kind, code: id, label, fullText: null, requiresText: false, sortOrder: Number(id.slice(1)), isActive: true, isSystem: true, ...extra });
+    presetSvc.list.mockResolvedValue([
+      row("p2", "INSPECTION_VOID", "Hata / puan yanlış girildi"),
+      row("p1", "INSPECTION_VOID", "Yanlış top muayene edildi", { fullText: "Yanlış top muayene edildi (barkod karıştı)" }),
+      row("p3", "ORDER_CANCEL", "Müşteri vazgeçti"),
+      row("p4", "INSPECTION_VOID", "Diğer", { requiresText: true }),
+    ]);
+    svc.voidPreview.mockResolvedValue({ inspection: { ...detail, roll: { id: "r1", barcode: "TP-1" } }, defectCount: 2, printedDocuments: [], active: true });
+    svc.void.mockResolvedValue({ id: "i1", voidedAt: "x" });
+    renderWithProviders(<InspectionVoidDialog id="i1" onOpenChange={() => {}} onDone={() => {}} />);
+    await screen.findByTestId("void-preview");
+    fireEvent.click(await screen.findByRole("button", { name: "Hazır sebepten seç…" }));
+    const list = await screen.findByTestId("void-reason-presets");
+    expect(Array.from(list.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["Yanlış top muayene edildi", "Hata / puan yanlış girildi", "Diğer"]);
+    fireEvent.click(screen.getByRole("button", { name: "Yanlış top muayene edildi" }));
+    const box = screen.getByLabelText("Gerekçe") as HTMLTextAreaElement;
+    await waitFor(() => expect(box.value).toBe("Yanlış top muayene edildi (barkod karıştı)"));
+    fireEvent.change(box, { target: { value: "Yanlış top — TP-1 değil" } });
+    fireEvent.click(screen.getByRole("button", { name: "İptal et" }));
+    await waitFor(() => expect(svc.void).toHaveBeenCalledWith("i1", "Yanlış top — TP-1 değil"));
+  });
+
+  it("iptal: katalog boşsa seçici görünmez, serbest metin yeter", async () => {
+    svc.voidPreview.mockResolvedValue({ inspection: { ...detail, roll: { id: "r1", barcode: "TP-1" } }, defectCount: 2, printedDocuments: [], active: true });
+    renderWithProviders(<InspectionVoidDialog id="i1" onOpenChange={() => {}} onDone={() => {}} />);
+    await screen.findByTestId("void-preview");
+    await waitFor(() => expect(presetSvc.list).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Hazır sebepten seç…" })).toBeNull();
   });
 });

@@ -11,3 +11,7 @@ web-build/
 /android
 /ios
 .kotlin/
+
+# Firebase (F5 telefon push): proje dosyaları REPOYA GİRMEZ — örnek: google-services.example.json
+google-services.json
+GoogleService-Info.plist

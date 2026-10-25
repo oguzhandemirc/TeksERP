@@ -27,6 +27,7 @@ import { previewCost } from "../services/cost-calc.service";
 import {
   createStandardCostVersion,
   getCostItem,
+  getStandardCostVersion,
   listCostItems,
   listStandardCostVersions,
   restoreStandardCostVersion,
@@ -350,6 +351,10 @@ const previewBody = z
       .optional(),
     overrides: body.optional(),
     fxRates: z.partialRecord(currencyEnum, decimalInput).optional(),
+    pricing: z
+      .object({ currency: currencyEnum, markupPct: decimalInput.optional(), fxRate: decimalInput.optional(), freightPerM: decimalInput.optional(), financeChargePct: decimalInput.optional(), commissionPct: decimalInput.optional() })
+      .strict()
+      .optional(),
   })
   .strict();
 const versionBody = z.object({ reason: z.string().trim().max(300).optional(), fxRates: z.partialRecord(currencyEnum, decimalInput).optional() }).strict();
@@ -383,7 +388,7 @@ const listQuery = z.object({
  *     summary: Maliyet önizlemesi (YAZMAZ) — ürün ya da elle yapı + ezmeler + kur
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "{sonuc, eksikler, uyarilar, girdi, kurlar, oneriler:{fx, yarnPrices, warpWaste}}" }
+ *       200: { description: "{sonuc, eksikler, uyarilar, girdi, kurlar, teklifFiyati (gövdede pricing varsa: doviz, karYuzde, kur, oneriBirimFiyat, eksik), oneriler:{fx, yarnPrices, warpWaste}}" }
  *       400: { description: Gövde geçersiz / ürün KUMAŞ değil }
  */
 router.post("/preview", requirePermission("cost:read"), wrap(async (req, res) => {
@@ -447,6 +452,25 @@ router.get("/items/:itemId", requirePermission("cost:read"), wrap(async (req, re
 router.get("/items/:itemId/versions", requirePermission("cost:read"), wrap(async (req, res) => {
   const { itemId } = itemIdParam.parse(req.params);
   res.status(200).json({ success: true, data: await listStandardCostVersions(itemId) });
+}));
+
+/**
+ * @openapi
+ * /api/cost/items/{itemId}/versions/{versionId}:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Tek standart maliyet sürümü (satır dökümüyle; saklanan değer, yeniden hesap yok)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: itemId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: versionId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Sürüm + satirlar }
+ *       404: { description: Sürüm bulunamadı }
+ */
+router.get("/items/:itemId/versions/:versionId", requirePermission("cost:read"), wrap(async (req, res) => {
+  const { itemId, versionId } = versionIdParam.parse(req.params);
+  res.status(200).json({ success: true, data: await getStandardCostVersion(itemId, versionId) });
 }));
 
 /**

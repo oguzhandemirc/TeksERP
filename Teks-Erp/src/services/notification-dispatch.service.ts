@@ -2,7 +2,8 @@
 // BİLDİRİM DAĞITICISI — outbox → gelen kutusu (plan §3.5, §3.6, §3.8)
 // =============================================================================
 // Tur = TEK tx: İLK ifade 8040 kilidi (tek dağıtıcı) → işlenmemiş ≤100 satır `FOR UPDATE SKIP
-// LOCKED` → alıcı çözümü (izin sahipleri [katalog `varsayilan`] ∩ görme süzgeci ∖ aktör) → toplu
+// LOCKED` → alıcı çözümü (görebilenler ∖ aktör ya da donmuş liste) → teslim kararı (takip/liste ∪, tercih
+// katmanı, kapsam, sessiz saat — `helpers/notification-delivery.helper.ts`) → toplu
 // `INSERT … ON CONFLICT (userId, groupKey) WHERE resolvedAt IS NULL DO UPDATE` → KAPANDI çözümü
 // → günlük sayaç → `processedAt` claim'i (WHERE processedAt IS NULL; eksik claim = tur geri alınır).
 // Tur düşerse satırlar TEKER yeniden denenir; düşen satıra ayrı kısa tx'te `attempts++` +
@@ -17,7 +18,6 @@ import {
   type NotificationKind,
 } from "../constants/notification-catalog";
 import { factoryYmd } from "../constants/time";
-import { matchesPermission } from "../middlewares/rbac.middleware";
 import { loadEffectiveGrants } from "./helpers/loom-alarm-recipient.helper";
 import {
   loadNotificationVisibilityEnv,
@@ -29,6 +29,7 @@ import {
   addRecipients, newBatchState, notificationGroupKey, routeAlarmRow, settleAlarmUpdates, touchUser,
   type Agg, type BatchState, type TouchedUsers,
 } from "./helpers/notification-aggregate.helper";
+import { decideDeliveries, loadDeliveryContext, type DeliveryContext, type DeliveryReason } from "./helpers/notification-delivery.helper";
 import { hata, uyari } from "../lib/logger";
 
 /** Advisory kilit uzayı — envanter `helpers/period-guard.helper.ts` başlığında. */
@@ -41,7 +42,7 @@ export const DISPATCH_MAX_ATTEMPTS = 5;
 const ERROR_CODE_MAX = 64;
 
 type Tx = Prisma.TransactionClient;
-export type InboxReason = "IZIN" | "TAKIPCI" | "OLUSTURAN" | "NOBET" | "LISTE" | "ALARM_ALICISI";
+export type InboxReason = DeliveryReason;
 
 export interface OutboxRow {
   id: string;
@@ -82,15 +83,15 @@ export function registerRecipientResolver(kind: NotificationKind, resolver: Reci
   resolvers.set(kind, resolver);
 }
 
-/** F1 varsayılanı: görebilenler ∩ katalog `varsayilan` ∖ aktör (ALARM'da aktör düşmez). */
+/**
+ * Varsayılan aday kümesi: görebilenler ∖ aktör (ALARM'da aktör düşmez). Katalog `varsayilan` süzmesi
+ * tercih katmanındadır (`resolvePreference`): katman yokken sonuç F1'deki "görebilen ∩ varsayilan" ile aynıdır.
+ */
 async function resolveByPermission(ctx: RecipientContext): Promise<Array<{ userId: string; reason: InboxReason }>> {
   const { entry, row } = ctx;
-  if (entry.varsayilan === "KAPALI") return [];
   // ALARM sınıfının alıcısı donmuş listedir (N2 çözücüsü); çözücüsüz alarm kimseye dağıtılmaz.
   if (entry.sinif === "ALARM") return [];
-  const varsayilan = entry.varsayilan;
   return ctx.grants.size === 0 ? [] : (await visibleUsersFor(ctx.tx, ctx.kind, ctx.env, { grants: ctx.grants }))
-    .filter((userId) => varsayilan === "HERKES" || varsayilan.some((c) => matchesPermission([...(ctx.grants.get(userId) ?? [])], c)))
     .filter((userId) => userId !== row.actorUserId)
     .map((userId) => ({ userId, reason: "IZIN" as const }));
 }
@@ -136,12 +137,14 @@ async function loadRecipientContext(tx: Tx, known: OutboxRow[]) {
     const v = entryOf(k)!.varsayilan;
     if (Array.isArray(v)) for (const c of v) codes.add(c);
   }
-  const grants = codes.size === 0 ? new Map<string, string[]>() : await loadEffectiveGrants(tx, [...codes], new Date());
-  return { env, grants };
+  const now = new Date();
+  const grants = codes.size === 0 ? new Map<string, string[]>() : await loadEffectiveGrants(tx, [...codes], now);
+  const delivery: DeliveryContext = await loadDeliveryContext(tx, [...grants.keys()], now);
+  return { env, grants, delivery };
 }
 
 async function aggregateRows(tx: Tx, rows: OutboxRow[], known: OutboxRow[]): Promise<BatchState> {
-  const { env, grants } = await loadRecipientContext(tx, known);
+  const { env, grants, delivery } = await loadRecipientContext(tx, known);
   const state = newBatchState();
   const { counts, errors, closeKeys, stats } = state;
   for (const row of rows) {
@@ -161,7 +164,8 @@ async function aggregateRows(tx: Tx, rows: OutboxRow[], known: OutboxRow[]): Pro
       continue;
     }
     const resolver = resolvers.get(kind) ?? resolveByPermission;
-    const recipients = await resolver({ tx, row, kind, entry, env, grants });
+    const candidates = await resolver({ tx, row, kind, entry, env, grants });
+    const recipients = await decideDeliveries({ tx, row, kind, entry, env, grants, ctx: delivery }, candidates);
     counts.set(row.id, addRecipients(state, { row, entry, groupKey }, recipients));
     errors.set(row.id, null);
     const day = factoryYmd(row.occurredAt);
@@ -190,13 +194,13 @@ async function upsertInbox(tx: Tx, a: Agg[]): Promise<void> {
       (id, "userId", kind, klass, "subjectType", "subjectId", "groupKey", count, "firstAt", "lastAt",
        "lastOutboxId", payload, reason, "kanalMasaustu", "kanalTablet", ozet, "createdAt", "updatedAt")
     SELECT gen_random_uuid(), d.u::uuid, d.k, d.c, d.st, d.si::uuid, d.g, d.n, d.f::timestamptz, d.l::timestamptz,
-           d.o::uuid, d.p::jsonb, d.r, d.km, d.kt, false, now(), now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
+           d.o::uuid, d.p::jsonb, d.r, d.km, d.kt, d.oz, now(), now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
     FROM unnest(${a.map((x) => x.userId)}::text[], ${a.map((x) => x.kind)}::text[], ${a.map((x) => x.klass)}::text[],
                 ${a.map((x) => x.subjectType)}::text[], ${a.map((x) => x.subjectId)}::text[], ${a.map((x) => x.groupKey)}::text[],
                 ${a.map((x) => x.n)}::int[], ${a.map((x) => x.firstAt.toISOString())}::text[], ${a.map((x) => x.lastAt.toISOString())}::text[],
                 ${a.map((x) => x.lastOutboxId)}::text[], ${a.map((x) => x.payload)}::text[], ${a.map((x) => x.reason)}::text[],
-                ${a.map((x) => x.km)}::bool[], ${a.map((x) => x.kt)}::bool[])
-      AS d(u, k, c, st, si, g, n, f, l, o, p, r, km, kt)
+                ${a.map((x) => x.km)}::bool[], ${a.map((x) => x.kt)}::bool[], ${a.map((x) => x.ozet)}::bool[])
+      AS d(u, k, c, st, si, g, n, f, l, o, p, r, km, kt, oz)
     ON CONFLICT ("userId", "groupKey") WHERE "resolvedAt" IS NULL DO UPDATE SET
       count = notification_inbox.count + EXCLUDED.count,
       "lastAt" = GREATEST(notification_inbox."lastAt", EXCLUDED."lastAt"),

@@ -19,13 +19,24 @@ export interface NotificationRuntime {
   readonly webPushKey: string | null;
 }
 
+/** Telefon push kapısı: istenmiş ∧ gerçek kip ∧ Expo erişim belirteci (enhanced push security) var. Eksikse fail-closed
+ *  KAPALI + neden (sırrın kendisi değil, yalnız adı günlüğe). */
+export function nativePushState(config: Pick<CloudConfig, "BILDIRIM_KIPI" | "BILDIRIM_NATIVE_PUSH" | "EXPO_ERISIM_BELIRTECI">): { acik: boolean; neden: string | null } {
+  if (config.BILDIRIM_NATIVE_PUSH !== "acik") return { acik: false, neden: null };
+  if (config.BILDIRIM_KIPI !== "gercek") return { acik: false, neden: "BILDIRIM_KIPI gercek degil" };
+  if (!config.EXPO_ERISIM_BELIRTECI) return { acik: false, neden: "EXPO_ERISIM_BELIRTECI yok" };
+  return { acik: true, neden: null };
+}
+
 /** Kipten çalışma zamanı: `kapali` → null. VAPID dosyası yoksa üretilir (0600). */
 export function createNotificationRuntime(config: CloudConfig): NotificationRuntime | null {
   if (config.BILDIRIM_KIPI === "kapali") return null;
   const vapid = VapidKeys.load(config.ANAHTAR_DIZINI, { create: true });
   if (config.BILDIRIM_KIPI === "sahte") return { transport: new RecordingTransport(), webPushKey: vapid.publicKey };
   const web = new WebPushTransport(vapid, config.BILDIRIM_VAPID_KONU!);
-  return { transport: new RoutingTransport(new ExpoTransport(config), web), webPushKey: vapid.publicKey };
+  const native = nativePushState(config);
+  if (native.neden) console.log(`PATRON_BILDIRIM native=kapali (${native.neden})`);
+  return { transport: new RoutingTransport(new ExpoTransport(config), web, native.acik), webPushKey: vapid.publicKey };
 }
 
 export async function runNotificationRound(ctx: CloudContext, transport: PushTransport, nowMs: number): Promise<{ created: number } & DeliveryTotals & ReceiptTotals> {

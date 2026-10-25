@@ -799,6 +799,8 @@ const L2_YOLU: Record<string, L2Yolu> = {
   },
   warehouseTransfer: { not: "WarehouseTransfer: iki depo + taşınacak GERÇEK stok ister." },
   eIrsaliye: { not: "e-İrsaliye kayıt tablosu E1-SEMA'da doğar; L2 yolu E5 motoruyla (TASLAK→OLUSTURULDU claim) kurulur." },
+  salesQuote: { not: "Teklif: maliyet modülü + müşteri rollü cari ister; numara doğuşu `test_teklif_numara`da GERÇEK yoldan ölçülüyor (TKF+yıl+5, ardışık, replay numara çekmez)." },
+  priceList: { not: "Fiyat listesi: maliyet modülü + taslak yolu ister; numara doğuşu `test_teklif_numara`da GERÇEK yoldan ölçülüyor (FL+yıl+4)." },
 };
 
 /** Bu koşumda üretilen aday biçimler — her eksen ayrı bir dönüşüm. */

@@ -72,6 +72,9 @@ const EnvSchema = z
     /** Bildirim gönderimi: `kapali` (varsayılan — bugünkü davranış, hiçbir şey üretilmez/gönderilmez) · `sahte`
      *  (kayıtlı sahte gönderici; yerel/prova) · `gercek` (Expo push + web push). */
     BILDIRIM_KIPI: z.enum(["kapali", "sahte", "gercek"]).default("kapali"),
+    /** Telefon (Expo/FCM) push kapısı — varsayılan `kapali` (bugünkü davranış: telefona gönderim yok, web push aynen).
+     *  `acik` yalnız `gercek` kipte ve `EXPO_ERISIM_BELIRTECI` verilmişse etkinleşir (yoksa kapalı kalır, tek satır günlük). */
+    BILDIRIM_NATIVE_PUSH: z.enum(["kapali", "acik"]).default("kapali"),
     BILDIRIM_ARALIGI_SN: positiveInt(5, 3600).default(30),
     /** Sonuçlanmış bildirim satırı bu kadar gün sonra budanır (telemetri). */
     BILDIRIM_SAKLAMA_GUN: positiveInt(7, 3650).default(90),

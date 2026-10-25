@@ -86,6 +86,13 @@ export const PERMISSION_CATALOG = [
   { code: "cost:read", module: "COST", category: "web", description: "Maliyet girdilerini ve tutarlarını görüntüleme" },
   { code: "cost:write", module: "COST", category: "web", description: "Ürün maliyet yapısı, iplik maliyet fiyatı ve terbiye tarifesi yazma" },
   { code: "cost:settings", module: "COST", category: "web", description: "Tesis maliyet parametrelerini düzenleme ve yürürlüğe alma" },
+  // MAL-4: teklif ve fiyat listesi. Dönüştürme AYRI yetenek (sipariş doğurur; servis ayrıca `order:write` ister);
+  // maliyet alanları bu izinlerle DEĞİL `cost:read` ile görünür.
+  { code: "quote:read", module: "COST", category: "web", description: "Satış tekliflerini görüntüleme" },
+  { code: "quote:write", module: "COST", category: "web", description: "Satış teklifi hazırlama, gönderme, ret, iptal ve revizyon" },
+  { code: "quote:convert", module: "COST", category: "web", description: "Teklif kabulü ve siparişe dönüştürme (ayrıca sipariş yazma izni gerekir)" },
+  { code: "price-list:read", module: "COST", category: "web", description: "Fiyat listelerini görüntüleme" },
+  { code: "price-list:write", module: "COST", category: "web", description: "Fiyat listesi hazırlama, yayınlama, arşivleme ve revizyon" },
   // ── Levent (devere Faz 1b, 2026-09-14): plan/sar yazma, sarım iptali AYRI yetenek (defterden net iplik döner).
   { code: "warpbeam:read", module: "PRODUCTION", category: "web", description: "Levent listesi/detayı (plan · sarım · kalan metre · iplik satırları)" },
   { code: "warpbeam:write", module: "PRODUCTION", category: "web", description: "Levent planlama, sarım (WOUND + iplik çıkışı/dip iadesi), taslak silme" },

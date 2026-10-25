@@ -45,6 +45,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
   [`${S}certificate.service.ts::createCertificate`]: { giris: { [`${S}certificate.service.ts::createCertificate`]: "R" } },
   [`${S}certificate.service.ts::renewCertificate`]: { giris: { [`${S}certificate.service.ts::renewCertificate`]: "R" } },
+  [`${S}notification-profile.service.ts::createProfile`]: { giris: { [`${S}notification-profile.service.ts::createProfile`]: "R" } },
   // Belge tasarımcısı (T1B): şablon + v1 ve yeni sürüm panelden clientToken ile doğar.
   [`${S}document-template/template.service.ts::createTemplate`]: { giris: { [`${S}document-template/template.service.ts::createTemplate`]: "R" } },
   [`${S}document-template/version.service.ts::saveVersion`]: { giris: { [`${S}document-template/version.service.ts::saveVersion`]: "R" } },
@@ -60,7 +61,13 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // Backend güncelleme onayı (Dağıtım v2): karar satırı panelden clientToken ile doğar; kimliği (onayId) niyet dosyasına girer.
   [`${S}update-approval.service.ts::recordUpdateApproval`]: { giris: { [`${S}update-approval.service.ts::recordUpdateApproval`]: "R" } },
   // Patron bulutu gelen kutusu: clientToken = mesajId; 8036 mesajId üzerinde, makbuz replay'i tx'in ilk ifadesi (K).
-  [`${S}order.service.ts::prepareOrderCreate`]: { giris: { [`${S}order.service.ts::create`]: "R", [`${S}order.service.ts::quickOrderTx`]: "K", [`${S}cloud-inbox.service.ts::createOrderFromMessage`]: "K" } },
+  // MAL-4: teklif revizyonu yeni teklif satırı doğurur (token = revizyon denemesi); R kipi.
+  [`${S}sales-quote-transitions.service.ts::reviseQuote`]: { giris: { [`${S}sales-quote-transitions.service.ts::reviseQuote`]: "R" } },
+  // MAL-4 G2: teklif ve fiyat listesi doğuşu + liste revizyonu (token = oluşturma denemesi); R kipi.
+  [`${S}sales-quote.service.ts::createQuote`]: { giris: { [`${S}sales-quote.service.ts::createQuote`]: "R" } },
+  [`${S}price-list.service.ts::createPriceList`]: { giris: { [`${S}price-list.service.ts::createPriceList`]: "R" } },
+  [`${S}price-list.service.ts::revisePriceList`]: { giris: { [`${S}price-list.service.ts::revisePriceList`]: "R" } },
+  [`${S}order.service.ts::prepareOrderCreate`]: { giris: { [`${S}order.service.ts::create`]: "R", [`${S}order.service.ts::quickOrderTx`]: "K", [`${S}cloud-inbox.service.ts::createOrderFromMessage`]: "K", [`${S}sales-quote-convert.service.ts::convertQuoteToOrder`]: "K" } },
   [`${S}order.service.ts::quickOrderFromRolls`]: { giris: { [`${S}order.service.ts::quickOrderTx`]: "K" } },
   [`${S}cheque-delivery-note.service.ts::createTx`]: { giris: { [`${S}cheque-delivery-note.service.ts::create`]: "K" } },
   [`${S}subcontractor.service.ts::receiveInner`]: { giris: { [`${S}subcontractor.service.ts::receive`]: "R" } },
@@ -201,6 +208,11 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}machine-collector.service.ts::collectorReplay`]: ["name", "collectorType", "machineIds"],
   [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],
   [`${S}machine-run.service.ts::runReplay`]: ["machineId", "productionLineNo", "weavingOrderId"],
+  [`${S}sales-quote-transitions.service.ts::reviseReplay`]: ["revisionOfId"],
+  [`${S}sales-quote.service.ts::createReplay`]: ["customerId"],
+  [`${S}price-list.service.ts::createListReplay`]: ["customerId", "currency"],
+  [`${S}price-list.service.ts::reviseListReplay`]: ["revisionOfId"],
+  [`${S}sales-quote-convert.service.ts::convertReplay`]: ["quoteId"],
   [`${S}order.service.ts::orderReplay`]: ["customerId", "branchId", "satırlar", "orderNumber"],
   [`${S}cloud-inbox.service.ts::inboxReceiptReplay`]: ["tur", "govdeOzeti"],
   [`${S}order.service.ts::quickOrderReplay`]: ["customerId", "branchId", "lines"],
@@ -225,6 +237,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
+  [`${S}notification-profile.service.ts::createReplay`]: ["kod"],
   [`${S}document-template/template.service.ts::createReplay`]: ["docType", "name", "copiedFrom"],
   [`${S}document-template/version.service.ts::saveReplay`]: ["templateId", "sourceHtml", "css"],
   [`${S}rapor-tanimi.service.ts::createReplay`]: ["ownerId", "govde"],

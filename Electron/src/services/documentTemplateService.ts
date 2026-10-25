@@ -37,6 +37,39 @@ export interface TemplateAssignments {
   defaults: Array<{ docType: string; template: { id: string; name: string } }>;
 }
 
+/** `POST /preview` gövdesi — kaydedilmemiş kaynak × örnek (plan §3.10). */
+export interface TemplatePreviewRequest {
+  docType: string;
+  source: {
+    editMode: "VISUAL" | "CODE";
+    sourceHtml: string;
+    css: string;
+    pageSettings: Record<string, unknown>;
+    settings: Record<string, unknown>;
+    internalFields: string[];
+  };
+  sample: { kind: "senaryo"; key: string } | { kind: "kayit"; sourceId: string };
+}
+
+export interface TemplatePreviewResult {
+  html: string;
+  hatalar: Array<{ satir: number | null; sutun: number | null; mesaj: string }>;
+  uyarilar: string[];
+  kesilenler: string[];
+  olcum: { ms: number; bayt: number };
+}
+
+export interface SampleSourceRow {
+  id: string;
+  sourceId: string;
+  documentNo: string | null;
+  version: number;
+  createdAt: string;
+}
+
+/** Önizleme isteğinin üst süresi: aşılırsa son başarılı önizleme soluk gösterilir. */
+export const PREVIEW_TIMEOUT_MS = 20_000;
+
 const base = "/api/document-templates";
 
 export const documentTemplateService = {
@@ -56,6 +89,16 @@ export const documentTemplateService = {
 
   assignments: (): Promise<ApiResponse<TemplateAssignments>> =>
     apiClient.get<ApiResponse<TemplateAssignments>>(`${base}/assignments`).then((r) => r.data),
+
+  preview: (body: TemplatePreviewRequest, signal?: AbortSignal): Promise<ApiResponse<TemplatePreviewResult>> =>
+    apiClient
+      .post<ApiResponse<TemplatePreviewResult>>(`${base}/preview`, body, { signal, timeout: PREVIEW_TIMEOUT_MS, suppressErrorToast: true })
+      .then((r) => r.data),
+
+  sampleSources: (docType: string, q: string): Promise<ApiResponse<SampleSourceRow[]>> =>
+    apiClient
+      .get<ApiResponse<SampleSourceRow[]>>(`${base}/sample-sources/${encodeURIComponent(docType)}`, { params: q ? { q } : {}, suppressErrorToast: true })
+      .then((r) => r.data),
 
   /** `templateId: null` → varsayılan kaldırılır (Sistem tasarımı). */
   setDefault: (docType: string, templateId: string | null): Promise<ApiResponse<unknown>> =>
