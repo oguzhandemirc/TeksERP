@@ -8,7 +8,8 @@
 import type { DateRange } from "../_shared";
 import type { SuzgecEcho } from "../_filters";
 import { donemSozleri } from "../sunum/sunum-kur";
-import type { AnaSayi, AnlatiCumlesi } from "../sunum/sunum.types";
+import type { AnaSayi, AnlatiCumlesi, Birim } from "../sunum/sunum.types";
+import { paraBirimiMi } from "./sayi-bicim";
 import type { SuffixInput } from "./ek";
 import {
   KURAL_ADLARI,
@@ -58,23 +59,32 @@ export interface NarrativeInput {
 export const NARRATIVE_DEFAULT_LIMIT = 5;
 
 /** Girdiden çıkan bütün gözlemler (sırasız, süzgeçsiz). */
-export function gozlemleriTopla(g: NarrativeInput): Gozlem[] {
-  const out: (Gozlem | null)[] = [];
-  if (g.veri) out.push(emptyResultState(g.veri));
+/** Gözlem + kaynak ölçüsü para birimli mi (bulut fiyat izni süzgeci bu işareti okur; bulut hesap yapmaz). */
+export type EtiketliGozlem = Gozlem & { paraIcerir?: true };
+
+export function gozlemleriTopla(g: NarrativeInput): EtiketliGozlem[] {
+  const out: EtiketliGozlem[] = [];
+  // Para işareti gözlemin KAYNAK birimidir, kanıt alanı değil: `degisimKaynagi` kanıtı birimsiz para farkı taşır.
+  const ekle = (birim: Birim | undefined, ...gs: (Gozlem | null)[]) => {
+    const para = birim !== undefined && paraBirimiMi(birim);
+    for (const x of gs) if (x) out.push(para ? { ...x, paraIcerir: true } : x);
+  };
+  if (g.veri) ekle(undefined, emptyResultState(g.veri));
   if (g.anaSayi) {
-    out.push(olculemedi(g.anaSayi));
+    ekle(g.anaSayi.birim, olculemedi(g.anaSayi));
     if (g.anaSayiIfadesi) {
       const sozler = g.donemSozu ?? (g.donem ? donemSozleri(g.donem, g.kiyasDonemi) : { donem: null, kiyas: null });
-      out.push(anaSayiKiyas(g.anaSayi, g.anaSayiIfadesi, sozler));
+      ekle(g.anaSayi.birim, anaSayiKiyas(g.anaSayi, g.anaSayiIfadesi, sozler));
     }
   }
-  if (g.kirilim) out.push(enBuyukPay(g.kirilim), yogunlasma(g.kirilim), degisimKaynagi(g.kirilim));
-  if (g.seri) out.push(egilim(g.seri), aykiri(g.seri));
-  for (const e of g.esikler ?? []) out.push(esikAsimi(e));
-  if (g.musteriRitmi) out.push(sessizlesen(g.musteriRitmi.musteriler, g.musteriRitmi.bugun));
-  for (const k of g.kapsam ?? []) out.push(scopeNote(k));
-  if (g.analiz) out.push(correlationObservation(g.analiz), sampleWarningObservation(g.analiz));
-  return out.filter((x): x is Gozlem => x !== null);
+  if (g.kirilim) ekle(g.kirilim.birim, enBuyukPay(g.kirilim), yogunlasma(g.kirilim), degisimKaynagi(g.kirilim));
+  if (g.seri) ekle(g.seri.birim, egilim(g.seri), aykiri(g.seri));
+  for (const e of g.esikler ?? []) ekle(e.birim, esikAsimi(e));
+  if (g.musteriRitmi) ekle(undefined, sessizlesen(g.musteriRitmi.musteriler, g.musteriRitmi.bugun));
+  for (const k of g.kapsam ?? []) ekle(undefined, scopeNote(k));
+  // Analiz cümlesi ölçü adı + kanıt gücü taşır, tutar taşımaz.
+  if (g.analiz) ekle(undefined, correlationObservation(g.analiz), sampleWarningObservation(g.analiz));
+  return out;
 }
 
 const kuralSirasi = (k: KuralAdi): number => KURAL_ADLARI.indexOf(k);
@@ -90,7 +100,7 @@ export function anlatiUret(
     if (izinli && !izinli.has(g.kural)) continue;
     const metin = cumleKur(g);
     if (!metin) continue;
-    cumleler.push({ kural: g.kural, onem: g.onem, metin, kanit: g.kanit, sira: kuralSirasi(g.kural) });
+    cumleler.push({ kural: g.kural, onem: g.onem, metin, kanit: g.kanit, ...(g.paraIcerir ? { paraIcerir: true as const } : {}), sira: kuralSirasi(g.kural) });
   }
   cumleler.sort((a, b) => b.onem - a.onem || a.sira - b.sira || (a.metin < b.metin ? -1 : a.metin > b.metin ? 1 : 0));
   return cumleler.slice(0, secenek.enFazla ?? NARRATIVE_DEFAULT_LIMIT).map(({ sira: _s, ...c }) => c);
