@@ -166,7 +166,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "access/permissions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetki Kataloğu", requires: ["admin:users"], capabilities: [] },
   { key: "access/patron-bulut", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yönetim Bulutu", requires: ["admin:users"], capabilities: [] },
   // Sistem hub'ı: karolarından BİRİNİ açabilen herkes girer (Electron `SYSTEM_HUB_ACCESS` aynası).
-  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings", "data:import", "master-data:merge", "settings:numbering", "settings:workstation", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance", "settings:label", "settings:devices", "settings:company", "settings:e-irsaliye", "settings:session", "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:backups", "system:print-history", "license:view", "license:manage", "support:create"], capabilities: [] },
+  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings", "data:import", "master-data:merge", "settings:numbering", "settings:workstation", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance", "settings:label", "settings:devices", "settings:company", "settings:e-irsaliye", "settings:session", "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:backups", "system:print-history", "license:view", "license:manage", "support:create", "settings:notifications"], capabilities: [] },
   { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings", "system:activity"], capabilities: [] },
   // bildirim: kişisel gelen kutusu — kapısız (izin kodu yok; satır kapsamı kişinin kendi kutusu).
   { key: "notifications", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirimler", requires: [], capabilities: [] },
@@ -266,7 +266,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
   { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
   // T2 iskeleti: Belge Şablonları ile aynı izin kümesi (T5).
-  { key: "definitions/document-designer", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Tasarımcısı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  { key: "definitions/document-designer", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Tasarımcısı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:design", "document-template:publish"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)
@@ -358,6 +358,8 @@ const mobile: ScreenEntry[] = [
   { key: "Uyarilar", app: "mobile", modul: "tezgahEnabled", title: "Uyarılar", requires: ["mobile:tezgah-uyari"], capabilities: [] },
   // G2t (2026-09-14): fason dokuma kabulü — aynı izin ikinci ekranda (levent dönüşü + top kabulü; sevk/iptal panelden).
   { key: "FasonDokuma", app: "mobile", modul: "dokumaEnabled", title: "Fason Dokuma Kabul", requires: ["mobile:fason-kabul"], capabilities: [] },
+  // K4P-EKRAN (2026-10-25): istasyondan bağımsız Muayene — top okut, 4 puan muayene yaz (oturumsuz).
+  { key: "Muayene", app: "mobile", modul: "kaliteGuvenceEnabled", title: "Muayene", requires: ["mobile:muayene"], capabilities: [] },
 ];
 
 /** Tüm ekranlar — masaüstü yetenek kodları etiketlenmiş hâlde. */
@@ -443,8 +445,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
-  // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
-  { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

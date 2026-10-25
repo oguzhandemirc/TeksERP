@@ -13,10 +13,14 @@
 //   §7 SoD ayarı açıkken aynı kişi 403 PUBLISH_SOD (ayar satırı birebir geri)
 //   §8 Arşiv: atanmış şablon 409 + liste (tx geri alınır) · arşivli şablon atanamaz
 //   §9 Silme: yalnız hiç yayınlanmamış taslak; yayınlanmış 409 TEMPLATE_PUBLISHED
+//   §5e–g Geri alma (T5 "bu sürümden taslak"): eski içerik → YENİ sürüm; ileri sürümler durur · liste yazan adını taşır
+//   §6f–g Yeniden yayın: eski sürüm beklenen işaretçiyle geri yayına alınır; ilk yayın damgası değişmez
 //
 // ⭐ NEGATİF SONDALAR (2026-10-24, ölçüldü):
 //   (a) `DROP TRIGGER document_template_versions_block_tamper` (geçici SQL) → §4 KIRMIZI; trigger geri kurulunca yeşil.
 //   (b) version.service publishVersion claim'i `update({ where: { id } })`e çevrildi → §6a/§6b KIRMIZI (iki yayın da geçti, iki damga).
+//   (c) (T5, 2026-10-25) saveVersion "aynı içerik" denetimi son sürüm yerine HERHANGİ sürümle kıyaslandı + listVersions
+//       yazan adı düşürüldü → §5e/§5g/§9a KIRMIZI (geri alma yeni sürüm açmadı); geri alınınca 48/0.
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
@@ -25,7 +29,7 @@ import { getContract, internalFieldsOf } from "../src/services/document-template
 import { freezeSystemSettings } from "../src/services/document-template/contract-view.service";
 import type { SystemEquivalent } from "../src/services/document-template/sistem/tipler";
 import { createTemplate, archiveTemplate, unarchiveTemplate, deleteTemplate, deletePreview } from "../src/services/document-template/template.service";
-import { saveVersion, publishVersion, PUBLISH_SOD_SETTING_KEY } from "../src/services/document-template/version.service";
+import { listVersions, saveVersion, publishVersion, PUBLISH_SOD_SETTING_KEY } from "../src/services/document-template/version.service";
 import { setDefault } from "../src/services/document-template/assignment.service";
 import { readDocumentsConfig } from "../src/services/system-setting.service";
 import { bypassReplayQueue } from "../src/services/helpers/token-replay.helper";
@@ -177,6 +181,16 @@ async function main(): Promise<void> {
     "§5d bayat base ile kayıt 409 STALE",
     (await errCode(saveVersion(A.t.id, { baseVersionId: A.v1.id, ...content(A.v1, "<p>Üçüncü</p>") }, U))) === "TEMPLATE_VERSION_STALE",
   );
+  // Geri alma (T5): v1 içeriği güncel son sürüm (v2) tabanıyla kaydedilir → v3; v2 silinmez, değişmez.
+  const aV2pre = await prisma.documentTemplateVersion.findFirstOrThrow({ where: { templateId: A.t.id, versionNo: 2 } });
+  const restored = await saveVersion(A.t.id, { baseVersionId: aV2pre.id, ...content(A.v1, A.v1.sourceHtml), note: "v1 sürümünden geri alındı" }, U);
+  const v3 = await prisma.documentTemplateVersion.findFirst({ where: { templateId: A.t.id, versionNo: 3 } });
+  const aV2post = await prisma.documentTemplateVersion.findUniqueOrThrow({ where: { id: aV2pre.id } });
+  check("§5e geri alma YENİ sürüm açar (v3), içerik v1 ile aynı", restored.created === true && !!v3 && v3.contentHash === A.v1.contentHash && v3.sourceHtml === A.v1.sourceHtml);
+  check("§5f ileri sürüm (v2) silinmedi, değişmedi", aV2post.contentHash === aV2pre.contentHash && aV2post.sourceHtml === aV2pre.sourceHtml);
+  const listed = await listVersions(A.t.id);
+  const me = await prisma.user.findUniqueOrThrow({ where: { id: U }, select: { fullName: true } });
+  check("§5g sürüm listesi yeniden eskiye + yazan adı", listed.map((v) => v.versionNo).join(",") === "3,2,1" && listed.every((v) => v.createdByName === me.fullName));
 
   // ── §6 Yayın ────────────────────────────────────────────────────────────
   const aV2 = await prisma.documentTemplateVersion.findFirstOrThrow({ where: { templateId: A.t.id, versionNo: 2 } });
@@ -196,6 +210,16 @@ async function main(): Promise<void> {
   check("§6d tanımsız değişkenli şablon yayında 400 TEMPLATE_RENDER_FAILED", (await errCode(publishVersion(R.t.id, { versionId: R.v1.id, expectedPublishedVersionId: null }, U))) === "TEMPLATE_RENDER_FAILED");
   const unpublished = await prisma.documentTemplate.findMany({ where: { id: { in: [U2.t.id, R.t.id] } }, select: { publishedVersionId: true } });
   check("§6e reddedilen yayın yayın işaretçisini değiştirmedi", unpublished.every((x) => x.publishedVersionId === null));
+  // Yeniden yayın (T5): yayındaki olmayan sürüm beklenen işaretçiyle yayına alınır, sonra ilki geri gelir.
+  const firstPub = aPub.publishedVersionId!;
+  const otherVid = firstPub === A.v1.id ? aV2.id : A.v1.id;
+  await publishVersion(A.t.id, { versionId: otherVid, expectedPublishedVersionId: firstPub }, U);
+  const firstStamp = (await prisma.documentTemplateVersion.findUniqueOrThrow({ where: { id: firstPub } })).publishedAt?.getTime();
+  await publishVersion(A.t.id, { versionId: firstPub, expectedPublishedVersionId: otherVid }, U);
+  const back = await prisma.documentTemplate.findUniqueOrThrow({ where: { id: A.t.id } });
+  const againStamp = (await prisma.documentTemplateVersion.findUniqueOrThrow({ where: { id: firstPub } })).publishedAt?.getTime();
+  check("§6f eski sürüm yeniden yayına alındı", back.publishedVersionId === firstPub);
+  check("§6g ilk yayın damgası yeniden yayında değişmedi", firstStamp !== undefined && firstStamp === againStamp);
 
   // ── §7 SoD ──────────────────────────────────────────────────────────────
   sodRow = await prisma.systemSetting.findUnique({ where: { key: PUBLISH_SOD_SETTING_KEY }, select: { value: true } });
@@ -237,7 +261,7 @@ async function main(): Promise<void> {
 
   // ── §9 Silme ────────────────────────────────────────────────────────────
   const pv = await deletePreview(A.t.id);
-  check("§9a yayınlanmış şablonun silme önizlemesi: silinemez + sürümler listeli", pv.deletable === false && pv.versions.length === 2);
+  check("§9a yayınlanmış şablonun silme önizlemesi: silinemez + sürümler listeli", pv.deletable === false && pv.versions.length === 3); // v1, v2 + §5e geri alma v3
   check("§9b yayınlanmış şablon silinemez → 409 TEMPLATE_PUBLISHED", (await errCode(deleteTemplate(A.t.id, U))) === "TEMPLATE_PUBLISHED");
   const D = await newTemplate("draft", undefined, U);
   await saveVersion(D.t.id, { baseVersionId: D.v1.id, ...content(D.v1, "<p>Taslak 2</p>") }, U);

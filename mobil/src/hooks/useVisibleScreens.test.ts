@@ -7,7 +7,7 @@ import { SCREEN_MODULE } from "../constants/screenModules";
 
 // Bayrak hook'u MOCK: gerçek hook React Query ister; burada ölçülen şey koşul
 // elemesinin bayrağa NASIL bağlandığıdır, sorgunun kendisi değil.
-let mockFlagsData: { productionEnabled?: boolean; dokumaEnabled?: boolean; devereEnabled?: boolean; tezgahEnabled?: boolean } | undefined;
+let mockFlagsData: { productionEnabled?: boolean; dokumaEnabled?: boolean; devereEnabled?: boolean; tezgahEnabled?: boolean; kaliteGuvenceEnabled?: boolean } | undefined;
 jest.mock("./useFeatureFlags", () => ({
   useFeatureFlags: () => ({ data: mockFlagsData }),
 }));
@@ -23,6 +23,8 @@ const PRODUCTION = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'produc
 const DOKUMA = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'dokumaEnabled').map(([k]) => k);
 const DEVERE = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'devereEnabled').map(([k]) => k);
 const TEZGAH = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'tezgahEnabled').map(([k]) => k);
+// K4P-EKRAN: bağımsız Muayene — kalite güvence modülü (HAM bayrak, satır-yok KAPALI).
+const KALITE = Object.entries(SCREEN_MODULE).filter(([, m]) => m === "kaliteGuvenceEnabled").map(([k]) => k);
 
 // =============================================================================
 // 2026-09-14: KOŞULLU EKRAN GERÇEK — tablet modül kapısı.
@@ -37,7 +39,7 @@ const TEZGAH = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'tezgahEnab
 // =============================================================================
 describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
   beforeEach(() => {
-    mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true };
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true };
   });
   afterEach(() => {
     act(() => useAuthStore.setState({ user: null }));
@@ -50,7 +52,7 @@ describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
 
   it("⭐ KAPALI: üretim modülünün beş ekranı elenir, çekirdek ekranlar kalır", () => {
     setPerms(["mobile:*"]);
-    mockFlagsData = { productionEnabled: false, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true };
+    mockFlagsData = { productionEnabled: false, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true };
     const visible = keys();
     for (const k of PRODUCTION) expect(visible).not.toContain(k);
     // Dokuma üretime BAĞLI: üretim kapalıyken o da elenir (zincir tek yerde).
@@ -65,7 +67,7 @@ describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
   it("⭐ bayrak OKUNAMADI (data yok): backend satır-yok yönü — üretim AÇIK, dokuma KAPALI (referans fabrika)", () => {
     setPerms(["mobile:*"]);
     mockFlagsData = undefined;
-    expect(keys()).toEqual(ALL.filter((k) => !DOKUMA.includes(k) && !DEVERE.includes(k) && !TEZGAH.includes(k)));
+    expect(keys()).toEqual(ALL.filter((k) => !DOKUMA.includes(k) && !DEVERE.includes(k) && !TEZGAH.includes(k) && !KALITE.includes(k)));
     expect(keys()).not.toContain("Dokuma");
     expect(keys()).not.toContain("Devere");
   });

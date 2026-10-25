@@ -10,6 +10,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { REPORT_CATALOG, RAPOR_KATEGORILERI_V2, type ReportCatalogEntryV2 } from "../constants/report-catalog";
 import { DEFAULT_CATEGORY_CODE } from "../services/rapor-kategori.service";
+import { SYSTEM_TEMPLATES } from "../services/reports/semantik/sistem-sablonlari";
 import { bilgi, uyari } from "../lib/logger";
 
 const LOG_TAG = "rapor-tanim-katalogu";
@@ -56,7 +57,11 @@ async function reconcileCategories(): Promise<{ ids: Map<string, string>; added:
 /** Katalogla DB'yi hizalar; dönüş yalnız sayımdır (bekçi ve log için). */
 export async function reconcileReportDefinitionCatalog(): Promise<ReconcileSummary> {
   const { ids: categoryIds, added: kategoriEklenen } = await reconcileCategories();
-  const live = REPORT_CATALOG.filter((e): e is ReportCatalogEntryV2 => e.nesil === "v2" && e.hazir);
+  // R3-ANALIZ: sistem şablonları da SISTEM satırıdır (gövde kodda); aynı uzlaştırmadan geçer.
+  const live: Array<Pick<ReportCatalogEntryV2, "key" | "baslik" | "soru" | "kategoriV2">> = [
+    ...REPORT_CATALOG.filter((e): e is ReportCatalogEntryV2 => e.nesil === "v2" && e.hazir),
+    ...SYSTEM_TEMPLATES.map((t) => ({ key: t.anahtar, baslik: t.ad, soru: t.aciklama, kategoriV2: t.kategori })),
+  ];
   const summary: ReconcileSummary = { kategoriEklenen, tanimEklenen: 0, tanimGuncellenen: 0, arsivlenen: 0 };
   for (const e of live) {
     const categoryId = categoryIds.get(e.kategoriV2 ?? DEFAULT_CATEGORY_CODE)!;

@@ -75,7 +75,8 @@ describe("§1 bayrak kapısı", () => {
 describe("§2 izin görünürlüğü", () => {
   it("⭐ report:builder yok ve görecek rapor yok → bölüm çizilmez", async () => {
     const r = renderWithProviders(<CustomReportsSection term="" />);
-    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+    // benim + paylasilan + sistem (R3-ANALIZ hazır şablonlar)
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(r.container.innerHTML).toBe(""));
   });
   it("report:builder yok ama paylaşılan rapor var → liste görünür, 'Yeni özel rapor' YOK", async () => {

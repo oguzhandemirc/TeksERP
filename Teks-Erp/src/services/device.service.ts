@@ -21,6 +21,7 @@ import { uyari } from "../lib/logger";
 import { DeviceRebindService } from "./device-rebind.service";
 import {
   MAX_DEVICE_ROWS, assertDeviceRowCapacity, countSeatDevices, writeBindingEventTx, type HwClaim,
+  listMergedCopies, readMergeLink,
 } from "./helpers/device-identity.helper";
 
 /** Kanıt tuzu hiçbir yanıta/audit yüküne girmez. */
@@ -210,10 +211,16 @@ export class DeviceService {
       },
     });
 
+    // Birleşme (D4): kopya ise ana kayıt; ana kayıtsa "geçmiş kurulumlar" (oturumlar yerinde kalır).
+    const mergedInto = await readMergeLink(prisma, id);
+    const pastInstallations = await listMergedCopies(prisma, id);
+
     return {
       ...rest,
       hardware: [...hardware.values()],
       lastSession,
+      mergedInto: mergedInto ? { id: mergedInto.targetId, name: mergedInto.targetName, mergedAt: mergedInto.mergedAt } : null,
+      pastInstallations,
     };
   }
 
@@ -534,6 +541,10 @@ export class DeviceService {
     if (!existing) throw AppError.notFound("Cihaz bulunamadı");
     if (existing.isActive) throw AppError.badRequest("Cihaz zaten aktif");
     await assertDeviceRowCapacity(prisma); // aktif sayım: pasif satırı geri açmak tavanı aşamaz
+    // Birleşmiş kopya etkinleştirilemez (DB CHECK `devices_merged_inactive`); önce geri al.
+    if (await readMergeLink(prisma, id)) {
+      throw AppError.conflict("Kayıt başka bir cihazla birleştirilmiş; önce birleştirmeyi geri alın.", { code: "DEVICE_MERGED_COPY" });
+    }
     const updated = await prisma.device.update({ where: { id }, data: { isActive: true }, omit: DEVICE_SECRET_OMIT });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "devices", recordId: id,

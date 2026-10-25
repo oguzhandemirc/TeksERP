@@ -121,6 +121,7 @@ export const SYSTEM_HUB_ACCESS = [
   "system:print-history",
   "license:view",
   "license:manage",
+  "settings:notifications", // bildirim: Bildirim profilleri karosu
 ];
 
 // e-İrsaliye (E5 `permission-catalog` LOGISTICS aynası). Okuma kartı/listeyi, yazma

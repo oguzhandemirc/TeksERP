@@ -15,12 +15,14 @@ import {
   SYSTEM_ROLL_ARCHIVE_ACCESS,
   SYSTEM_SERVER_STATUS_ACCESS,
   SYSTEM_WORK_SESSIONS_ACCESS,
+  NOTIFICATION_PROFILES_ACCESS, // bildirim:
 } from "@/lib/permissions";
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
 import { ReleaseNotesPage } from "@/pages/ReleaseNotes/ReleaseNotesPage";
 import { NotificationsPage } from "@/pages/Notifications/NotificationsPage"; // bildirim:
+import { NotificationProfilesPage } from "@/pages/System/NotificationProfiles/NotificationProfilesPage"; // bildirim:
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
@@ -1732,6 +1734,15 @@ export const contentRoutes: RouteObject[] = [
   // Raporlar v2 — 14 temel rapor yaprağı katalogdan (izin `izin`, kapı bayrak + `hazir`; `_v2/routes.tsx`).
   ...reportV2Routes,
   ...customReportRoutes,
+  // bildirim: yönetici profilleri + fabrika varsayılanı — karo (`System/tile-config.ts`) ile AYNI erişim listesi.
+  {
+    path: "system/notification-profiles",
+    element: (
+      <ProtectedRoute requireAnyPermission={NOTIFICATION_PROFILES_ACCESS}>
+        <NotificationProfilesPage />
+      </ProtectedRoute>
+    ),
+  },
 
   { path: "*", element: <Navigate to="/" replace /> },
 ];

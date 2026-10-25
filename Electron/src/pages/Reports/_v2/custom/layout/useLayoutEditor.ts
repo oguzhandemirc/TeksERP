@@ -18,7 +18,7 @@ function issuesOf(e: unknown): DefinitionIssue[] {
 }
 
 /** Taslak gövde + kirli bayrağı + gecikmeli önizleme + kayıt (her kayıt YENİ sürüm; eskisi değişmez). */
-export function useLayoutEditor(existing: DefinitionDetail | undefined) {
+export function useLayoutEditor(existing: DefinitionDetail | undefined, previewBlocked?: (b: DefinitionBody) => boolean) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const attempt = useAttemptToken();
@@ -42,8 +42,12 @@ export function useLayoutEditor(existing: DefinitionDetail | undefined) {
   }, [draft]);
   const [previewBody, setPreviewBody] = useState<DefinitionBody | null>(null);
   const previewStarted = useRef(false);
+  const blockedRef = useRef(previewBlocked);
+  blockedRef.current = previewBlocked;
   useEffect(() => {
     if (!draftRef.current) return;
+    // Kaydı bekleten eksik (ör. maruziyetsiz analiz) sunucuda 400 olur; son geçerli önizleme ekranda kalır.
+    if (blockedRef.current?.(draftRef.current)) return;
     // Gecikme yalnız ardışık düzenlemeleri birleştirir; açılıştaki ilk önizleme beklemez.
     if (!previewStarted.current) {
       previewStarted.current = true;

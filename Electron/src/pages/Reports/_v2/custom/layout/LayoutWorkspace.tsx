@@ -9,6 +9,7 @@ import { useDataPanel } from "../data/useDataPanel";
 import { fieldName, type DataField } from "../data/wells-model";
 import { BlockProperties } from "./BlockProperties";
 import { removeBlock, resizeBlock, setPageBreak, updateBlock, type DefinitionBlock, type DefinitionBody, type LayoutItem } from "./layout-model";
+import { AnalysisProperties } from "../../analysis/AnalysisProperties";
 
 type Apply = (fn: (b: DefinitionBody) => DefinitionBody | null) => boolean;
 
@@ -53,17 +54,21 @@ export function LayoutWorkspace({ draft, current, catalog, editable, fallbackCub
         <aside className="flex min-w-0 flex-col gap-4 rounded-lg border p-3">
           {current ? (
             <>
-              <Wells
-                block={current.block}
-                cube={panel.cube}
-                issues={panel.issues}
-                warning={panel.warning}
-                check={panel.verdict}
-                onRemove={panel.remove}
-                onRemoveFilter={panel.removeFilter}
-                onOpenFilter={panel.openFilter}
-                onChart={panel.setChart}
-              />
+              {current.block.tur === "analiz" ? (
+                <AnalysisProperties block={current.block} cubes={catalog.data} onChange={(patch) => apply((b) => updateBlock(b, current.block.id, patch))} />
+              ) : (
+                <Wells
+                  block={current.block}
+                  cube={panel.cube}
+                  issues={panel.issues}
+                  warning={panel.warning}
+                  check={panel.verdict}
+                  onRemove={panel.remove}
+                  onRemoveFilter={panel.removeFilter}
+                  onOpenFilter={panel.openFilter}
+                  onChart={panel.setChart}
+                />
+              )}
               <BlockProperties
                 key={current.block.id}
                 block={current.block}
