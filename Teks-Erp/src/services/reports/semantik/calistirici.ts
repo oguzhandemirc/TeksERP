@@ -17,6 +17,8 @@ import { REPORT_MAX_ROWS, resolveCompareRange, type DateRange } from "../_shared
 import { shapeHelper, shapeSqlRows, type RawRow, type SemanticResult, type SemanticRow, type SemanticTotals } from "./sonuc";
 import { buildSql, compileQuery, type SemanticQueryInput } from "./derleyici";
 import { accessDigest, type AccessContext } from "./izin";
+import { matchesPermission } from "../../../middlewares/rbac.middleware";
+import { REPORT_PUBLISH_PERMISSION } from "../../../constants/permission-catalog";
 import { SEMANTIC_CUBES, measureDictionaryEntry } from "./katalog";
 import { ResultCache, digest, stableStringify } from "./onbellek";
 import { reportSemaphore, type ReportSemaphore } from "./semafor";
@@ -35,7 +37,7 @@ export type { SemanticResult } from "./sonuc";
 
 export const semanticResultCache = new ResultCache<SemanticResult>();
 
-const defaultDeps: RunDeps = {
+export const defaultDeps: RunDeps = {
   cubes: SEMANTIC_CUBES,
   semaphore: reportSemaphore,
   cache: semanticResultCache,
@@ -114,13 +116,21 @@ function cacheKeyOf(input: SemanticQueryInput, ctx: AccessContext): string {
   return digest([`semantik/${input.kup}`, stableStringify(params), accessDigest(ctx)]);
 }
 
+/** Koşu satırının kayıtlı rapor bağı (R1-KAYIT): tanım + sürüm; önizlemede boş. */
+export interface RunOrigin {
+  definitionId: string;
+  versionId: string | null;
+}
+
 /** Önizleme sorgusu: derle → (önbellek) → semafor → koşu kaydı → bloklar SIRAYLA → sunum. */
 export async function runSemanticQuery(
   input: SemanticQueryInput,
   ctx: AccessContext,
   runId: string = input.kosuId ?? randomUUID(),
-  deps: RunDeps = defaultDeps,
+  deps: RunDeps & { origin?: RunOrigin | null } = defaultDeps,
 ): Promise<SemanticResult> {
+  // Kayıtlı rapor koşusu: koşu satırı tanım + sürüme bağlanır (önizlemede yok).
+  const origin = deps.origin ?? null;
   const q = compileQuery(input, ctx, await prepareCubes(deps.cubes, input.kup));
   const key = cacheKeyOf(input, ctx);
   if (!input.yenile) {
@@ -135,7 +145,10 @@ export async function runSemanticQuery(
   try {
     try {
       await prisma.reportRun.create({
-        data: { id: runId, key: `semantik/${q.cube.id}`, paramsDigest: key, userId: ctx.userId, status: "CALISIYOR" },
+        data: {
+          id: runId, key: `semantik/${q.cube.id}`, paramsDigest: key, userId: ctx.userId, status: "CALISIYOR",
+          ...(origin ? { definitionId: origin.definitionId, versionId: origin.versionId } : {}),
+        },
       });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -263,11 +276,12 @@ async function stopRun(runId: string, where: Prisma.ReportRunWhereInput): Promis
   return claimed.count;
 }
 
-/** İptal ucu: yalnız KENDİ koşusu (`report:publish` dalı R1-KAYIT'ta izin doğunca eklenir). */
+/** İptal ucu: KENDİ koşusu; `report:publish` taşıyan başkasınınkini de durdurur (R1-KAYIT). */
 export async function cancelRun(runId: string, ctx: AccessContext): Promise<{ kosuId: string; durum: "IPTAL" }> {
-  const n = await stopRun(runId, { userId: ctx.userId });
+  const scope: Prisma.ReportRunWhereInput = matchesPermission(ctx.permissions, REPORT_PUBLISH_PERMISSION) ? {} : { userId: ctx.userId };
+  const n = await stopRun(runId, scope);
   if (n === 0) {
-    const own = await prisma.reportRun.findFirst({ where: { id: runId, userId: ctx.userId }, select: { status: true } });
+    const own = await prisma.reportRun.findFirst({ where: { id: runId, ...scope }, select: { status: true } });
     if (!own) throw AppError.notFound("Rapor çalıştırması bulunamadı.", { code: "RAPOR_KOSU_YOK" });
     throw AppError.conflict("Rapor çalıştırması zaten bitmiş.", { code: "RAPOR_KOSU_BITTI", durum: own.status });
   }

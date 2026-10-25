@@ -8,7 +8,8 @@
 // → OLUSTURULDU + karşı olay, ileri olay duruyor; yanıt kaydı + geri alma · §8 simülasyon
 // gönder + sorgula belirlenimli (KABUL/RED/HATA), RED yerine yeni kayıt `replacesId` · §9 iptal →
 // IPTAL, aynı kaynağa yeni kayıt, numara yeniden kullanılmaz · §10 EXPORT → 400, sevk edilmemiş →
-// 409 · §11 audit yükünde TCKN ve XML yok · §12 başlangıç değeri kilidi (8041) üretimden sonra 409.
+// 409 · §11 audit yükünde TCKN ve XML yok · §12 başlangıç değeri kilidi (8041) üretimden sonra 409 ·
+// §13 kayıtlar listesi + özet şeridi TEK where (E7): her süzgeçte liste adedi = özet toplamı.
 //
 // NEGATİF SONDALAR (2026-10-25, cp+md5 ile geri alındı; 51/0 yeşilken):
 //   (a) `transitionEIrsaliyeTx` claim'i `findUnique → update({where:{id}})`a çevrildi → 3 ❌
@@ -16,6 +17,7 @@
 //   (b) `prepare` içinde `requireReady(gate)` kaldırıldı → 4 ❌ (§1a/§1b/§1c: TASLAK doğdu).
 //   (c) `transitionEIrsaliyeTx`ten `writeEIrsaliyeEventTx` çıkarıldı → 5 ❌ (§3d/§3f/§7b/§7d/§9b).
 //   (d) `codeCountsForCounter` E2 düzeltmesi geri alındı → §12a ❌ (başlangıç kilidi fail-open).
+//   (e) 2026-10-25 E7: `summarizeEIrsaliyeRecords` süzgeçsiz where'le koşuldu → 3 ❌ (§13a: özet 6 ↔ liste 2/1/4).
 //
 // Çalıştır: npx tsx scripts/test_e_irsaliye_flow.ts
 // =============================================================================
@@ -27,6 +29,7 @@ import * as eirs from "../src/services/e-irsaliye/e-irsaliye.service";
 import { simulatedOutcome } from "../src/services/e-irsaliye/adapters/simulasyon.adapter";
 import { validateDespatchXml } from "../src/services/e-irsaliye/despatch-advice.validate";
 import { sha256Hex } from "../src/services/e-irsaliye/e-irsaliye-common.helper";
+import { listEIrsaliyeRecords, summarizeEIrsaliyeRecords } from "../src/services/e-irsaliye/e-irsaliye-list.helper";
 import { updateSeriesCounter } from "../src/services/helpers/series-write.helper";
 import { dispatchDoc, envelope } from "./fixture-e-irsaliye";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
@@ -253,6 +256,29 @@ async function main() {
   const blob = JSON.stringify(logs);
   check("§11a her eylem audit'te", logs.length >= 15, `${logs.length} satır`);
   check("§11b yükte TCKN yok, XML yok", !blob.includes(TCKN) && !blob.includes("<DespatchAdvice") && !blob.includes("driverNationalId\":\""));
+
+  console.log("\n§13 kayıtlar listesi ↔ özet şeridi");
+  const listAll = async (filters: Record<string, string>) => {
+    const out: { status: string }[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 20; i++) {
+      const r = await listEIrsaliyeRecords({ search: P, filters, cursor, limit: 3, withTotal: false });
+      out.push(...r.items);
+      if (!r.pagination.nextCursor) break;
+      cursor = r.pagination.nextCursor;
+    }
+    return out;
+  };
+  for (const filters of [{}, { status: "IPTAL,OLUSTURULDU" }, { status: "REDDEDILDI" }, { adapter: "simulasyon" }] as Record<string, string>[]) {
+    const rows = await listAll(filters);
+    const sum = await summarizeEIrsaliyeRecords({ search: P, filters });
+    const perStatus = rows.reduce<Record<string, number>>((m, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {});
+    check(`§13a süzgeç ${JSON.stringify(filters)}: liste adedi = özet toplamı, durum dağılımı eşit`,
+      rows.length > 0 && rows.length === sum.total && JSON.stringify(Object.entries(perStatus).sort()) === JSON.stringify(Object.entries(sum.byStatus).sort()),
+      `${rows.length} ↔ ${sum.total}`);
+  }
+  const e13 = await errOf(() => listEIrsaliyeRecords({ filters: { status: "YOK_BOYLE" }, limit: 5, withTotal: false }));
+  check("§13b tanınmayan durum → 400", e13?.statusCode === 400 && codeOf(e13) === "EIRSALIYE_FILTER_INVALID");
 
   console.log("\n§12 başlangıç değeri ↔ üretim kilidi");
   savedSeriesStart = await prisma.numberSeries.findUnique({ where: { key: "eIrsaliye" }, select: { startValue: true, startValueYear: true } });

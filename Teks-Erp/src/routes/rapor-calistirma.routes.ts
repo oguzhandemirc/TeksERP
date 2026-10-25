@@ -1,8 +1,8 @@
 // =============================================================================
 // /api/rapor-calistirmalari — rapor koşusu yönetimi (Raporlar v2, R1-SEMCEK)
 // =============================================================================
-// İptal yalnız KENDİ koşusunda; `report:publish` (başkasının koşusu) izni R1-KAYIT'ta doğunca
-// eklenir. Başkasının koşusu 404 döner (varlığı sızdırılmaz).
+// İptal KENDİ koşusunda; `report:publish` taşıyan başkasınınkini de durdurur (R1-KAYIT). İzinsiz
+// kullanıcıya başkasının koşusu 404 döner (varlığı sızdırılmaz).
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { verifyToken } from "../middlewares/auth.middleware";
@@ -21,7 +21,7 @@ router.use(verifyToken, requireAnyPermission(...REPORT_PERMISSION_CODES));
  * /api/rapor-calistirmalari/{id}/iptal:
  *   post:
  *     tags: [Reports]
- *     summary: Süren rapor koşusunu iptal et (kendi koşusu)
+ *     summary: Süren rapor koşusunu iptal et (kendi koşusu; report:publish başkasınınkini)
  *     description: Durum CALISIYOR → IPTAL (atomik) ve sorgu `pg_cancel_backend` ile durdurulur; bitmiş koşu 409.
  *     security: [{ bearerAuth: [] }]
  *     parameters:

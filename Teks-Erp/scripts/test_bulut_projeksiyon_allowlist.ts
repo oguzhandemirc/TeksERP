@@ -19,6 +19,10 @@
 //   §6 ⭐ anlık kayıtlar katı tel şemasından geçer; şema kümesi ↔ üretilen küme iki yönlü
 //   §7 ⭐ paket şeması KATI: tanınmayan anahtar ve uuid olmayan satır kimliği RED
 //   §8 ⭐ her tel projeksiyon adı (alt satır · bölüm dahil) bulut izin kataloğuna eşlenir (fail-closed)
+//   §10 ⭐ (2026-10-25, R1-BULUT bulgusu) eski 8 rapor uygulamanın fabrika günü (`YYYY-MM-DD`) aralığını kabul eder;
+//      sınır `constants/time`tan, ISO aynen geçer, taşan gün/bilinmeyen anahtar red; uçtan uca HAZIR (PARAMETRE_GECERSIZ değil).
+//      NEGATİF SONDA: `sales/order-intake` `acceptFactoryDays` sarmalı söküldü → §10a + §10f ❌; `isFactoryDay`
+//      gidiş-dönüşü kaldırıldı → §10c + §10d ❌; geri alındı → ✅.
 //   §9 ⭐ uzak raporlar: audit/* ve kişi adı taşıyan rapor YOK, anahtar katalogda, çıktı sondası temiz;
 //      §9e–§9g v2 (R1-BULUT): `kisiAdi` yazan temel rapor listede yok (kaynak taraması) · kişi adlı sunum
 //      sonuçtan düşer · her v2 uzak raporun sonucu `RaporSunumu` (anahtar = rapor, ana sayı var, kisiAdi yok).
@@ -53,7 +57,7 @@ import {
   type RecordProjection,
 } from "../src/cloud-sync/projections";
 import { DERIVERS } from "../src/cloud-sync/derived";
-import { getFactoryTimezone } from "../src/constants/time";
+import { getFactoryTimezone, resolveRangeEnd, resolveRangeStart } from "../src/constants/time";
 import { buildRecords } from "../src/cloud-sync/record-builder";
 import { mapToRoots } from "../src/cloud-sync/change-scan";
 import { buildSnapshots, SNAPSHOT_WIRE_SCHEMAS } from "../src/cloud-sync/snapshots";
@@ -461,6 +465,38 @@ function kaliciSondalar(): void {
   check("§K5 ⭐ bilinmeyen izin kırmızı", izinDenetimi(new Map([["renk", "bulut:yok"]])).length === 1);
 }
 
+/** §10 — eski 8 rapor fabrika günü aralığını kabul eder (patron uygulaması `YYYY-MM-DD` yollar). */
+async function eskiRaporGunBolumu(): Promise<void> {
+  console.log("\n§10 — eski 8 rapor: fabrika günü aralığı (R1-BULUT)");
+  const ARALIKLI = ["sales/order-intake", "sales/shipment-scorecard", "customer/scorecard", "quality/scorecard", "subcontract/scorecard", "finance/cheque-due"];
+  const uzak = (k: string) => REMOTE_REPORTS.find((r) => r.key === k);
+  const gun = { dateFrom: "2026-09-01", dateTo: "2026-09-30" };
+  const iso = { dateFrom: resolveRangeStart("2026-09-01").toISOString(), dateTo: resolveRangeEnd("2026-09-30").toISOString() };
+  const yanlis = ARALIKLI.filter((k) => {
+    const r = uzak(k)?.params.safeParse(gun);
+    return !r?.success || r.data.dateFrom !== iso.dateFrom || r.data.dateTo !== iso.dateTo;
+  });
+  check("§10a ⭐ 6 aralıklı eski rapor `YYYY-MM-DD` kabul eder → fabrika günü sınırı (constants/time)", yanlis.length === 0, yanlis.join(",") || `${iso.dateFrom}…${iso.dateTo}`);
+  const isoRed = ARALIKLI.filter((k) => !uzak(k)?.params.safeParse(iso).success);
+  check("§10b geri uyum: ISO gövde aynen geçer", isoRed.length === 0, isoRed.join(","));
+  const gevsek = ARALIKLI.filter((k) => uzak(k)?.params.safeParse({ dateFrom: "2026-13-45" }).success || uzak(k)?.params.safeParse({ ...gun, zzz: "1" }).success);
+  check("§10c taşan gün ve bilinmeyen anahtar yine RED (sessiz taşma yok, strict korunur)", gevsek.length === 0, gevsek.join(","));
+  const yas = uzak("finance/aging")!.params;
+  const y = yas.safeParse({ asOf: "2026-09-30" });
+  check("§10d finance/aging: `asOf` fabrika günü → günün SONU; ISO geçer; taşan gün red",
+    y.success && y.data.asOf === iso.dateTo && yas.safeParse({ asOf: iso.dateTo }).success && !yas.safeParse({ asOf: "2026-02-30" }).success,
+    y.success ? String(y.data.asOf) : "red");
+  const stok = uzak("inventory/scorecard")!.params;
+  check("§10e inventory/scorecard (kesit; uygulama aralık sormaz): {} geçer, tarih anahtarı red (strict)", stok.safeParse({}).success && !stok.safeParse(gun).success);
+  const durum: string[] = [];
+  for (const k of [...ARALIKLI, "finance/aging", "inventory/scorecard"]) {
+    const params = k === "finance/aging" ? { asOf: "2026-09-30" } : k === "inventory/scorecard" ? {} : gun;
+    const sonuc = await computeReportResult({ istekId: null, key: k, params, donem: null, nowMs: Date.now() });
+    if (sonuc.hataKodu === "PARAMETRE_GECERSIZ") durum.push(k);
+  }
+  check("§10f ⭐ uçtan uca: 8 rapor × fabrika günü → PARAMETRE_GECERSIZ YOK", durum.length === 0, durum.join(",") || "8 rapor");
+}
+
 async function main(): Promise<void> {
   console.log(`=== PATRON BULUTU PROJEKSİYON ALLOWLIST (${TAG}) ===`);
   const f: Partial<Fikstur> = {};
@@ -476,6 +512,7 @@ async function main(): Promise<void> {
     paketBolumu();
     izinBolumu();
     await raporBolumu();
+    await eskiRaporGunBolumu();
     kaliciSondalar();
   } catch (e) {
     check("beklenmeyen hata", false, e instanceof Error ? `${e.message}\n${e.stack}` : String(e));

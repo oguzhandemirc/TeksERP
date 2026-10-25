@@ -136,8 +136,23 @@ function acceptFactoryDays<T extends z.ZodTypeAny>(schema: T): z.ZodType<Record<
   return z.preprocess((v) => {
     if (!v || typeof v !== "object" || Array.isArray(v)) return v;
     const o = { ...(v as Record<string, unknown>) };
-    if (typeof o.dateFrom === "string" && FACTORY_DAY.test(o.dateFrom)) o.dateFrom = resolveRangeStart(o.dateFrom).toISOString();
-    if (typeof o.dateTo === "string" && FACTORY_DAY.test(o.dateTo)) o.dateTo = resolveRangeEnd(o.dateTo).toISOString();
+    if (isFactoryDay(o.dateFrom)) o.dateFrom = resolveRangeStart(o.dateFrom).toISOString();
+    if (isFactoryDay(o.dateTo)) o.dateTo = resolveRangeEnd(o.dateTo).toISOString();
+    return o;
+  }, schema) as unknown as z.ZodType<Record<string, unknown>>;
+}
+
+/** Geçerli takvim günü mü — `2026-13-45` gibi taşan gün çevrilmez, şema onu ham haliyle REDDEDER (sessiz taşma yok). */
+function isFactoryDay(v: unknown): v is string {
+  return typeof v === "string" && FACTORY_DAY.test(v) && factoryYmd(resolveRangeStart(v)) === v;
+}
+
+/** Kesit anı (`asOf`) için aynı kabul: fabrika günü → o günün SONU (`constants/time`); ISO aynen geçer. */
+function acceptFactoryAsOf<T extends z.ZodTypeAny>(schema: T): z.ZodType<Record<string, unknown>> {
+  return z.preprocess((v) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+    const o = { ...(v as Record<string, unknown>) };
+    if (isFactoryDay(o.asOf)) o.asOf = resolveRangeEnd(o.asOf).toISOString();
     return o;
   }, schema) as unknown as z.ZodType<Record<string, unknown>>;
 }
@@ -151,23 +166,24 @@ export function carriesPersonName(value: unknown): boolean {
   return typeof value === "object" && value !== null && (value as { kisiAdi?: unknown }).kisiAdi === true;
 }
 
-/** Buluttan istenebilir raporlar — KATALOG ∩ bu liste; `audit/*` hiçbir zaman girmez (bekçi ölçer). */
+/** Buluttan istenebilir raporlar — KATALOG ∩ bu liste; `audit/*` hiçbir zaman girmez (bekçi ölçer). Eski 8 rapor
+ *  da uygulamanın fabrika günü (`YYYY-MM-DD`) aralığını kabul eder (R1-BULUT bulgusu; ISO aynen geçer). */
 export const REMOTE_REPORTS: readonly RemoteReport[] = [
-  { key: "sales/order-intake", permission: "bulut:siparis:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+  { key: "sales/order-intake", permission: "bulut:siparis:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
     reportRunner: (p) => getOrderIntake(rangeOf(p)) },
-  { key: "sales/shipment-scorecard", permission: "bulut:sevkiyat:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+  { key: "sales/shipment-scorecard", permission: "bulut:sevkiyat:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
     reportRunner: (p) => getShipmentScorecard(rangeOf(p)) },
-  { key: "customer/scorecard", permission: "bulut:siparis:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+  { key: "customer/scorecard", permission: "bulut:siparis:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
     reportRunner: (p) => getCustomerScorecard(rangeOf(p)) },
-  { key: "quality/scorecard", permission: "bulut:uretim:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+  { key: "quality/scorecard", permission: "bulut:uretim:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
     reportRunner: (p) => getQualityScorecard(rangeOf(p)) },
-  { key: "subcontract/scorecard", permission: "bulut:uretim:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+  { key: "subcontract/scorecard", permission: "bulut:uretim:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
     reportRunner: (p) => getSubcontractScorecard(rangeOf(p)) },
   { key: "inventory/scorecard", permission: "bulut:stok:oku", params: z.strictObject({}), paramNames: [], standard: "KESIT", personalData: "YOK",
     reportRunner: () => getStockScorecard() },
-  { key: "finance/aging", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: AgingParams, paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
+  { key: "finance/aging", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: acceptFactoryAsOf(AgingParams), paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
     reportRunner: (p) => getAgingReport({ asOf: typeof p.asOf === "string" ? new Date(p.asOf) : new Date() }) },
-  { key: "finance/cheque-due", permission: "bulut:cek:oku", module: "finance.enabled", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "KESIT", personalData: "YOK",
+  { key: "finance/cheque-due", permission: "bulut:cek:oku", module: "finance.enabled", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "KESIT", personalData: "YOK",
     reportRunner: async (p) => {
       const q = p as z.infer<typeof dateRangeSchema>;
       return (await chequeService.dueSummary({ from: q.dateFrom ? new Date(q.dateFrom) : undefined, to: q.dateTo ? new Date(q.dateTo) : undefined })).data;

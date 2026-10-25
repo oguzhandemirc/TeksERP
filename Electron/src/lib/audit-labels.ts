@@ -37,6 +37,11 @@ export const TABLE_LABELS: Record<string, string> = {
 
   // Master data
   USER: "Kullanıcı",
+  REPORT_CATEGORY: "Rapor Kategorisi",
+  REPORT_DEFINITION: "Özel Rapor",
+  REPORT_DEFINITION_VERSION: "Özel Rapor Sürümü",
+  REPORT_PRESET: "Rapor Ön Ayarı",
+  REPORT_SHARE: "Rapor Paylaşımı",
   ITEM: "Kumaş / Stok Kalemi",
   CUSTOMER: "Müşteri",
   CUSTOMER_BRANCH: "Müşteri Şubesi",
