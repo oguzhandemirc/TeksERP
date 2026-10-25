@@ -19,7 +19,10 @@
 //   §6 ⭐ anlık kayıtlar katı tel şemasından geçer; şema kümesi ↔ üretilen küme iki yönlü
 //   §7 ⭐ paket şeması KATI: tanınmayan anahtar ve uuid olmayan satır kimliği RED
 //   §8 ⭐ her tel projeksiyon adı (alt satır · bölüm dahil) bulut izin kataloğuna eşlenir (fail-closed)
-//   §9 ⭐ uzak raporlar: audit/* ve kişi adı taşıyan rapor YOK, anahtar katalogda, çıktı sondası temiz
+//   §9 ⭐ uzak raporlar: audit/* ve kişi adı taşıyan rapor YOK, anahtar katalogda, çıktı sondası temiz;
+//      §9e–§9g v2 (R1-BULUT): `kisiAdi` yazan temel rapor listede yok (kaynak taraması) · kişi adlı sunum
+//      sonuçtan düşer · her v2 uzak raporun sonucu `RaporSunumu` (anahtar = rapor, ana sayı var, kisiAdi yok).
+//      ✓S1 (R1-BULUT 2026-10-25): `production/uretim-akisi` REMOTE_REPORTS'e eklendi → §9e ❌ 1; md5 ile geri alındı.
 //   §5e ⭐ görünen ad (sipariş/sevkiyat `musteriAdi`, kalem `urunAdi`/`renkAdi`) = BOYUT `ad`ı, kök
 //      satırda; cari/ürün/renk değişikliği bağlı kökü kirletir (ad değişimi yeniden gönderilir)
 //
@@ -35,7 +38,9 @@ import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { AuditService } from "../src/services/audit.service";
-import { REPORT_BY_KEY } from "../src/constants/report-catalog";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+import { REPORT_BY_KEY, isReportSurfaced } from "../src/constants/report-catalog";
 import { collectAgingRows } from "../src/services/reports/finance-aging.report";
 import {
   CLOUD_READ_PERMISSIONS,
@@ -53,7 +58,7 @@ import { buildRecords } from "../src/cloud-sync/record-builder";
 import { mapToRoots } from "../src/cloud-sync/change-scan";
 import { buildSnapshots, SNAPSHOT_WIRE_SCHEMAS } from "../src/cloud-sync/snapshots";
 import { PackageSchema } from "../src/cloud-sync/wire";
-import { REMOTE_REPORTS, computeReportResult } from "../src/cloud-sync/report-requests";
+import { REMOTE_REPORTS, carriesPersonName, computeReportResult } from "../src/cloud-sync/report-requests";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -392,8 +397,54 @@ async function raporBolumu(): Promise<void> {
     tara(sonuc.veri, "");
     if ("secenekler" in ((sonuc.veri as object | null) ?? {})) kotu.push(`${r.key}: secenekler`);
   }
-  check("§9c ⭐ her uzak rapor bu DB'de hesaplanır (HAZIR ya da kapalı modül)", durum.every((d) => d.includes(":HAZIR") || d.endsWith("/MODUL_KAPALI")), durum.join(" · "));
+  // Yüzeye çıkmamış v2 satırı (`hazir:false`) buluta da kapalıdır → RAPOR_KAPALI beklenir.
+  const yuzeyde = (k: string): boolean => { const e = REPORT_BY_KEY.get(k as never); return e !== undefined && isReportSurfaced(e); };
+  check("§9c ⭐ her uzak rapor bu DB'de hesaplanır (HAZIR · kapalı modül · yüzeyde değilse RAPOR_KAPALI)",
+    durum.every((d) => d.includes(":HAZIR") || d.endsWith("/MODUL_KAPALI") || (d.endsWith("/RAPOR_KAPALI") && !yuzeyde(d.split(":")[0]!))), durum.join(" · "));
   check("§9d ⭐ rapor çıktısı sondası: kişi/kullanıcı alanı ve panel süzgeç seçenekleri yok", kotu.length === 0, kotu.join(",") || "temiz");
+
+  // §9e: `kisiAdi` yazan temel rapor dosyası → `catalogHeader("<anahtar>")` ile hangi rapor; o anahtar listede OLMAZ.
+  const temelDizin = path.join(__dirname, "..", "src", "services", "reports", "temel");
+  const kisiAdli: string[] = [];
+  for (const ad of readdirSync(temelDizin).filter((n) => n.endsWith(".temel.ts"))) {
+    const kaynak = readFileSync(path.join(temelDizin, ad), "utf8");
+    if (!/\bkisiAdi\b/.test(kaynak)) continue;
+    for (const m of kaynak.matchAll(/catalogHeader\(\s*"([^"]+)"/g)) kisiAdli.push(m[1]!);
+  }
+  const sizan = kisiAdli.filter((k) => anahtarlar.includes(k));
+  check("§9e ⭐ kişi adı (`kisiAdi`) yazan temel rapor buluta gitmez (K-KISI)", kisiAdli.length >= 1 && sizan.length === 0,
+    sizan.length > 0 ? `listede: ${sizan.join(",")}` : `taranan kişi adlı: ${kisiAdli.join(",") || "YOK — tarama ölçülemedi"}`);
+  check("§9f ⭐ kişi adlı sunum sonuçtan düşer (savunma) · adsız sunum geçer",
+    carriesPersonName({ anahtar: "x", kisiAdi: true }) && !carriesPersonName({ anahtar: "x" }) && !carriesPersonName(null));
+
+  // §9g: v2 satırı yüzeye çıkmamış olsa da (hazir:false) servis yolu ölçülür — sonuç fabrikada kurulmuş sunum.
+  const sunumKotu: string[] = [];
+  let v2Sayi = 0;
+  for (const r of REMOTE_REPORTS) {
+    if (REPORT_BY_KEY.get(r.key)?.nesil !== "v2") continue;
+    v2Sayi++;
+    let v: unknown;
+    try {
+      v = await r.reportRunner(r.params.parse({}));
+    } catch (e) {
+      // Kapalı modül (dokuma/devere/finans) bu DB'de 403 verir; kapı `availability`de ölçülür.
+      if (e instanceof Error && /MODULE_DISABLED|kapalı/i.test(e.message)) continue;
+      sunumKotu.push(`${r.key}: ${e instanceof Error ? e.message : String(e)}`);
+      continue;
+    }
+    const s = v as { anahtar?: unknown; anaSayi?: { olcu?: unknown } | null; anlati?: unknown; kisiAdi?: unknown };
+    if (s?.anahtar !== r.key || typeof s.anaSayi?.olcu !== "string" || !Array.isArray(s.anlati) || s.kisiAdi !== undefined) sunumKotu.push(`${r.key}: sunum değil`);
+    // §9d'nin anahtar sondası yüzeye çıkmamış v2 sunumuna da (RAPOR_KAPALI dönen) uygulanır.
+    const tara = (x: unknown, yol: string): void => {
+      if (Array.isArray(x)) x.forEach((y) => tara(y, yol));
+      else if (x && typeof x === "object") for (const [k, y] of Object.entries(x)) {
+        if (/ById$|operator|userName|fullName|contact|phone|email/i.test(k)) sunumKotu.push(`${r.key}:${yol}${k}`);
+        tara(y, `${yol}${k}.`);
+      }
+    };
+    tara(v, "");
+  }
+  check("§9g ⭐ her v2 uzak rapor `RaporSunumu` döner (anahtar · ana sayı · anlatı; kisiAdi yok)", v2Sayi >= 9 && sunumKotu.length === 0, sunumKotu.join(" · ") || `${v2Sayi} v2 rapor`);
 }
 
 function kaliciSondalar(): void {

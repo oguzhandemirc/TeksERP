@@ -41,6 +41,10 @@ import { git } from "./lib/git";
 import { cocukOrtami } from "./lib/hedef-db-kapisi";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { OZET_SATIRI, ozetsizCikisSebebi } from "./lib/ozet-satiri";
 
 const SCRIPTS_DIR = join(__dirname);
 /** Koşucunun bugünkü dosya süzgeci ile BİREBİR aynı (run-all-tests.ts:219). */
@@ -382,6 +386,48 @@ const KURESEL_YAZIM_TABAN = 0;
   });
   check("§b koşucunun hiza beyanları TANIMLI ve ÇAĞRILI (tanımlı-ama-çağrısız = hiç yok)",
     kopuk.length === 0, kopuk.join(", ") || BEYANLAR.join(" · "));
+}
+
+// ── §ö ÖZETSİZ ÇIKIŞ 0 = KIRMIZI (2026-10-25) ───────────────────────────────
+// NEDEN: test_harita_sonda_atfi'nin çıktısı `process.exit` ile boru tamponunda
+// kesildi, `Sonuç:` satırı hiç gelmedi; koşucunun serbest yedek regex'leri ("N geçti,
+// M başarısız" / "N/T geçti" HERHANGİ bir yerde) bu sınıfı sayılmış gösterebiliyordu.
+// Koşucu artık YALNIZ kanonik satırı okur ve yoksa kırmızı verir (`lib/ozet-satiri.ts`).
+{
+  const kanoniksiz = dosyalar.filter((f) => {
+    const src = readFileSync(join(SCRIPTS_DIR, f), "utf8");
+    return !/(?:Sonuç|SONUÇ):[^`\n]*geçti,[^`\n]*(?:başarısız|kaldı)/.test(src);
+  });
+  check("§ö1 her bekçi KANONİK `Sonuç: N geçti, M başarısız` satırını basıyor (yedek biçim yok)",
+    kanoniksiz.length === 0, kanoniksiz.join(", ") || `${dosyalar.length} dosya`);
+  const kosucu = readFileSync(join(SCRIPTS_DIR, "run-all-tests.ts"), "utf8");
+  check("§ö2 koşucu özeti `ozetOku` + `ozetsizCikisSebebi` ile okuyor (serbest yedek regex yok)",
+    /\bozetsizCikisSebebi\(/.test(kosucu) && /\bozetOku\(/.test(kosucu) && !/\/\(\\d\+\)\\\/\(\\d\+\)\\s\*geçti\//.test(kosucu));
+  // NEGATİF SONDA — gerçek süreç: özet satırı basmayan, check mesajında yedek biçimleri
+  // taşıyan sahte bekçi çıkış 0 verir ⇒ karar KIRMIZI olmalı; özet basan ikizi yeşil.
+  const dizin = mkdtempSync(join(tmpdir(), "ozetsiz-"));
+  try {
+    const sahte = join(dizin, "test_sahte.cjs");
+    writeFileSync(sahte, [
+      'console.log("  ✅ a — 3 geçti, 0 başarısız (mesaj, özet değil)");',
+      'console.log("  ✅ b — 5/5 geçti");',
+      'if (process.argv[2] === "ozetli") console.log("\\n=== Sonuç: 2 geçti, 0 başarısız ===");',
+      "process.exitCode = 0;",
+    ].join("\n"));
+    const kos = (arg: string) => {
+      const r = spawnSync(process.execPath, [sahte, arg], { encoding: "utf8", env: cocukOrtami({}) });
+      return { cikis0: r.status === 0 && !r.error, out: `${r.stdout ?? ""}\n${r.stderr ?? ""}` };
+    };
+    const ozetsiz = kos("ozetsiz");
+    const ozetli = kos("ozetli");
+    const sebep = ozetsizCikisSebebi(ozetsiz.out, ozetsiz.cikis0);
+    check("§ö3 ⭐ NEGATİF SONDA: özet satırı basmayan sahte bekçi (çıkış 0) → KIRMIZI",
+      ozetsiz.cikis0 && sebep !== null, sebep ?? `çıkış0=${ozetsiz.cikis0} ama karar YEŞİL`);
+    check("§ö4 pozitif ikiz: özet basan sahte bekçi → yeşil (yüklem her şeyi kırmızı saymıyor)",
+      ozetli.cikis0 && ozetsizCikisSebebi(ozetli.out, ozetli.cikis0) === null && OZET_SATIRI.test(ozetli.out));
+  } finally {
+    rmSync(dizin, { recursive: true, force: true });
+  }
 }
 
 // Muafiyet listesi iki yönlü: artık özet basan bir dosya listede kalmamalı.
