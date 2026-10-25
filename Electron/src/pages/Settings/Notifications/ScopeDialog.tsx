@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ESIK_LABEL } from "@/lib/bildirim/tercih-taslak";
+import { TERIM } from "@/lib/terim";
 import type { NotificationCatalogKind, NotificationScopeValue } from "@/lib/bildirim/types";
 
 export function ScopeDialog(p: {
@@ -38,7 +39,7 @@ export function ScopeDialog(p: {
               <Checkbox checked={!!taslak.yalnizTakip} onCheckedChange={(v) => setTaslak((t) => ({ ...t, yalnizTakip: v === true || undefined }))} />
               <span>
                 Yalnız takip ettiğim kayıtlar
-                <span className="block text-xs text-muted-foreground">Oluşturduğunuz ya da "Takip et" dediğiniz sipariş, iş emri ve dokuma işleri.</span>
+                <span className="block text-xs text-muted-foreground">Oluşturduğunuz ya da "Takip et" dediğiniz sipariş, {TERIM.terbiyeIsEmri.cogulKucuk} ve {TERIM.dokumaIsEmri.cogulKucuk}.</span>
               </span>
             </label>
           )}

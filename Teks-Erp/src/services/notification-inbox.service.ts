@@ -13,7 +13,7 @@ import { AppError } from "../utils/app-error";
 import { readFilterList } from "../utils/query-parser";
 import { factoryMinuteOfDay } from "../constants/time";
 import { getNotificationEntry, NOTIFICATION_KINDS, type NotificationKind } from "../constants/notification-catalog";
-import { canSeeNotificationType, loadNotificationVisibilityEnv, visibleKindsFor } from "./helpers/notification-visibility.helper";
+import { loadNotificationVisibilityEnv, permissionDeniedKindCount, visibleKindsFor } from "./helpers/notification-visibility.helper";
 import { renderNotification } from "./helpers/notification-render.helper";
 import { loadCurrentShift } from "./helpers/loom-alarm-shift.helper";
 import { readNotificationInboxEnabled } from "./system-setting.service";
@@ -270,11 +270,7 @@ export async function undoMarkRead(viewer: InboxViewer, body: unknown): Promise<
 export async function visibleCatalog(viewer: InboxViewer) {
   const env = await loadNotificationVisibilityEnv(prisma);
   const kinds = visibleKindsFor({ permissions: viewer.permissions }, env);
-  const seen = new Set<string>(kinds);
-  // "N tür yetkiniz dışında" (N4-PANEL): modülü/kapısı açık ama izni olmayan türler; kapalı modül sayılmaz.
-  const yetkiDisi = NOTIFICATION_KINDS.filter(
-    (k) => !seen.has(k) && canSeeNotificationType({ permissions: getNotificationEntry(k).izinler.flat() }, k, env),
-  ).length;
+  const yetkiDisi = permissionDeniedKindCount({ permissions: viewer.permissions }, env);
   return {
     turler: kinds.map((k) => {
       const e = getNotificationEntry(k);
