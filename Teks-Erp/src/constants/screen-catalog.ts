@@ -265,6 +265,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
   { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
   { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  // T2 iskeleti: Belge Şablonları ile aynı izin kümesi (T5).
+  { key: "definitions/document-designer", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Tasarımcısı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)
@@ -410,7 +412,7 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
       "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
-  { modul: "maliyetEnabled", reason: "Maliyet & Teklif (MAL-0): şalter + kapı doğdu, ilk ekranı MAL dilimlerinde; ekran eşlenince bu muaf silinir." },
+  { modul: "maliyetEnabled", reason: "Maliyet & Teklif: kapı MAL-1'de `/api/cost` uçlarına takıldı (API), ilk ekranlar MAL-3 (ürün maliyeti) ve MAL-7 (maliyet parametreleri ekranı); ekran eşlenince bu muaf silinir." },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */
@@ -432,6 +434,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
   // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
   { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
+  // MAL-1 (2026-10-25): maliyet girdileri uçları API olarak doğdu; ekranlar MAL-3/MAL-7'de — o gün bu üç satır ölü muaf olur ve silinir.
+  { code: "cost:read", reason: "Maliyet ekranları (MAL-3 ürün maliyeti, MAL-7 maliyet parametreleri ekranı) henüz yok — `/api/cost` uçları MAL-1'de API olarak doğdu." },
+  { code: "cost:write", reason: "Maliyet yapısı / iplik fiyatı / tarife ekranı MAL-3/MAL-7'de doğar — uç MAL-1'de API." },
+  { code: "cost:settings", reason: "maliyet parametreleri ekranı ekranı MAL-7'de doğar — uç MAL-1'de API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

@@ -246,7 +246,7 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   AUTO: "Otomatik uygulanır",
   OPTIONAL: "İsteğe bağlı",
   REQUIRED: "Zorunlu",
-  // SackWeightSource
+  // SackWeightSource (YarnCostPriceSource.MANUAL da aynı anlam)
   MANUAL: "Elle girildi",
   // LabResultKind / LabVerdict (K4P-LAB)
   NUMERIC: "Sayısal ölçüm",
@@ -256,6 +256,12 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // CertificateHolder (K4P-SERT)
   OWN: "Fabrika",
   PARTNER: "İş ortağı",
+  // YarnCostPriceSource
+  LAST_RECEIPT: "Son mal kabulden",
+  PURCHASE_PRICE: "Alış fiyatından",
+  // FinishingBasis
+  RAW_M: "Ham metre",
+  FINISHED_M: "Mamul metre",
   SIMULATED: "Simüle edildi",
   // PrintedDocType (eksik kalanlar)
   TRAVELER_CARD: "Refakat Kartı",
