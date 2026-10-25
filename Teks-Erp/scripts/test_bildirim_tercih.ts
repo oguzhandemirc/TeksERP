@@ -73,8 +73,8 @@ function bolum1(): void {
   check("§1a ⭐ katman yok: varsayılan izni olan ACIK/katalog, olmayan KAPALI (bugünkü davranış)",
     r0.durum === "ACIK" && r0.kaynak === "katalog" && r1.durum === "KAPALI", `${r0.durum}/${r1.durum}`);
   const m0 = resolvePreference(yazar, PATRON, "MASAUSTU", { env: ENV_ACIK, layers: EMPTY_LAYERS });
-  check("§1b katman yok: kanal katalog `varsayilanKanallar`ından (MASAUSTU açık, OZET kapalı)",
-    m0.durum === "ACIK" && resolvePreference(yazar, PATRON, "OZET", { env: ENV_ACIK, layers: EMPTY_LAYERS }).durum === "KAPALI");
+  check("§1b katman yok: kanal katalog `varsayilanKanallar`ından (MASAUSTU kapalı — tercih yokken masaüstü yok; OZET kapalı)",
+    m0.durum === "KAPALI" && resolvePreference(yazar, PATRON, "OZET", { env: ENV_ACIK, layers: EMPTY_LAYERS }).durum === "KAPALI", m0.durum);
   const fk = katman({ factory: [[PATRON, "KAPALI"]], prefs: { "u-yazar": { [prefKey(PATRON, "UYGULAMA")]: ac(true) } } });
   const r2 = resolvePreference(yazar, PATRON, "UYGULAMA", { env: ENV_ACIK, layers: fk });
   check("§1c fabrika KAPALI + kullanıcı açık → ACIK (kilit yok), kaynak kullanici", r2.durum === "ACIK" && r2.kaynak === "kullanici", JSON.stringify(r2));
@@ -101,8 +101,10 @@ function bolum1(): void {
   check("§1i NOBETTE kilidi yalnız nöbettekine: nöbette ACIK+kilit, nöbet dışı kullanıcı kapatması geçer",
     n1.durum === "ACIK" && n1.kilit && n2.durum === "KAPALI" && !n2.kilit, `${n1.durum}/${n2.durum}`);
   const kapaliHepsi = katman({ prefs: { "u-yazar": { [prefKey(PATRON, "UYGULAMA")]: ac(false) } } });
-  const ozetli = katman({ prefs: { "u-yazar": { [prefKey(PATRON, "UYGULAMA")]: ac(false), [prefKey(PATRON, "OZET")]: ac(true) } } });
-  check("§1j UYGULAMA ∧ OZET kapalı → MASAUSTU KAPALI; OZET açıkken MASAUSTU varsayılanı geçer",
+  const kapaliHepsi2 = katman({ prefs: { "u-yazar": { [prefKey(PATRON, "UYGULAMA")]: ac(false), [prefKey(PATRON, "MASAUSTU")]: ac(true) } } });
+  const ozetli = katman({ prefs: { "u-yazar": { [prefKey(PATRON, "UYGULAMA")]: ac(false), [prefKey(PATRON, "OZET")]: ac(true), [prefKey(PATRON, "MASAUSTU")]: ac(true) } } });
+  check("§1j UYGULAMA ∧ OZET kapalı → açılmış MASAUSTU da KAPALI; OZET açıkken açılmış MASAUSTU geçer",
+    resolvePreference(yazar, PATRON, "MASAUSTU", { env: ENV_ACIK, layers: kapaliHepsi2 }).durum === "KAPALI" &&
     resolvePreference(yazar, PATRON, "MASAUSTU", { env: ENV_ACIK, layers: kapaliHepsi }).durum === "KAPALI" && resolvePreference(yazar, PATRON, "MASAUSTU", { env: ENV_ACIK, layers: ozetli }).durum === "ACIK");
   check("§1k görme süzgeci ilk adım: izinsiz → GIZLI (tercih açık olsa da)",
     resolvePreference({ userId: "x", permissions: [] }, PATRON, "UYGULAMA", { env: ENV_ACIK, layers: katman({ prefs: { x: { [prefKey(PATRON, "UYGULAMA")]: ac(true) } } }) }).durum === "GIZLI");
@@ -182,18 +184,23 @@ async function bolum4(): Promise<void> {
   const yazar = await kisi("yazar", ["order:read", "order:write"]);
   const okur = await kisi("okur", ["order:read"]);
   const acan = await kisi("acan", ["order:read"]);
+  const masaustucu = await kisi("masa", ["order:read", "order:write"]);
   const takipci = await kisi("takip", ["order:read"]);
   const birakan = await kisi("birak", ["order:read"]);
   const daraltan = await kisi("dar", ["order:read", "order:write"]);
   await prisma.notificationPreference.create({ data: { userId: acan, kind: PATRON, channel: "UYGULAMA", enabled: true } });
+  await prisma.notificationPreference.create({ data: { userId: masaustucu, kind: PATRON, channel: "MASAUSTU", enabled: true } });
   const anahtar = `tbt-${ek}`;
   await emit(PATRON, { type: "order", id: null, key: anahtar }, { siparisNo: `S-${ek}`, musteriAd: "Test" });
   await dagit();
   const satir = (u: string, kind: string) => prisma.notificationInbox.findFirst({ where: { userId: u, kind, createdAt: { gte: new Date(Date.now() - 60_000) } } });
   const y = await satir(yazar, PATRON);
-  check("§4a ⭐ tercih yokken F1 dağıtımı aynen: varsayılan izinli alır (IZIN, MASAUSTU katalogdan, ozet yok), izinsiz okur almaz",
-    !!y && y.reason === "IZIN" && y.kanalMasaustu === true && y.kanalTablet === false && y.ozet === false && !(await satir(okur, PATRON)),
-    y ? `${y.reason}/${y.kanalMasaustu}/${y.ozet}` : "satır yok");
+  check("§4a ⭐ tercih yokken F1 dağıtımı aynen: varsayılan izinli alır (IZIN, ozet yok), izinsiz okur almaz",
+    !!y && y.reason === "IZIN" && y.kanalTablet === false && y.ozet === false && !(await satir(okur, PATRON)),
+    y ? `${y.reason}/${y.ozet}` : "satır yok");
+  const m = await satir(masaustucu, PATRON);
+  check("§4a2 ⭐ tercih yokken masaüstü gönderimi YOK (katalog MASAUSTU varsayılanı kapalı); MASAUSTU'yu açan alır",
+    y?.kanalMasaustu === false && m?.kanalMasaustu === true, `${y?.kanalMasaustu}/${m?.kanalMasaustu}`);
   check("§4b kullanıcı UYGULAMA'yı açınca varsayılan dışı kişi alır", !!(await satir(acan, PATRON)));
 
   const customer = await prisma.customer.create({ data: { code: `TBT-${ek}`.slice(0, 32), name: `TEST-TERCIH ${ek}` }, select: { id: true } });

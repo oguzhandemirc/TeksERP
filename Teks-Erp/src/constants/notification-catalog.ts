@@ -25,6 +25,8 @@ export type {
 
 const SAKLAMA: NotificationSaklama = { okunmusGun: 90, okunmamisGun: 180 };
 
+// MASAUSTU seçilebilir ama varsayılanı KAPALI (N3 "varsayılan hiçbiri" = bugünkü davranış, patron kararı 2026-10-25);
+// kullanıcı Kullanıcı Tercihleri → Masaüstü bildirimleri'nden açar. Tezgah alarmı kendi kanalıyla ayrıdır.
 const KANAL_MASAUSTU: readonly NotificationKanal[] = ["UYGULAMA", "OZET", "MASAUSTU"];
 
 export const NOTIFICATION_CATALOG = {
@@ -38,7 +40,7 @@ export const NOTIFICATION_CATALOG = {
     pencereSn: 0, varsayilan: "HERKES", kilit: "HER_ZAMAN",
     kilitGerekcesi: "Yedeksiz fabrika veri kaybına açıktır; bu uyarı kapatılamaz, yalnız ertelenebilir.",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Yedek alınamadı",
     govde: "{kaynakAd} yedeği alınamadı: {neden}",
     cozuldu: "{kaynakAd} yedeği yeniden alınıyor",
@@ -54,7 +56,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "bulut",
     pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Yönetim bulutu eşitlemesi gecikti",
     govde: "Son başarılı eşitleme {sonBasarili}; durum: {durum}",
     cozuldu: "Yönetim bulutu eşitlemesi yeniden başarılı",
@@ -72,7 +74,7 @@ export const NOTIFICATION_CATALOG = {
     pencereSn: 0, varsayilan: "HERKES", kilit: "HER_ZAMAN",
     kilitGerekcesi: "Lisans sorunu zamanında çözülmezse kurulum kısıtlı kipe geçebilir; bu uyarı kapatılamaz, yalnız ertelenebilir.",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Lisans uyarısı",
     govde: "{neden}",
     cozuldu: "Lisans uyarısı giderildi",
@@ -108,7 +110,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{yazici}",
     pencereSn: 600, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "{yaziciAd} yazıcısında baskı hatası",
     govde: "{kisi} · {tur} · {neden}",
     panelEkran: "system/print-history", panelYol: "/system/print-history?printer={yazici}&status=HATA",
@@ -126,7 +128,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "patron-siparisi",
     pencereSn: 600, varsayilan: ["order:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Yönetim bulutundan sipariş geldi",
     govde: "{musteriAd} için {siparisNo} numaralı sipariş açıldı",
     panelEkran: "operations/orders", panelYol: "/operations/orders?focus={siparisId}",
@@ -219,7 +221,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{sertifikaId}",
     pencereSn: 0, varsayilan: ["certificate:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
+    varsayilanKanallar: ["UYGULAMA"],
     baslik: "Sertifika süresi doluyor",
     govde: "{standart} · {sertifikaNo} ({sahip}): {durum}",
     cozuldu: "{standart} · {sertifikaNo} yenilendi ya da iptal edildi",
