@@ -18,6 +18,9 @@ describe("report-gate", () => {
     expect(reportKeyOfPath("/reports/sales")).toBeNull();
     expect(reportKeyOfPath("/reports")).toBeNull();
     expect(reportKeyOfPath("/operations/work-orders/abc")).toBeNull();
+    // Özel raporlar katalog raporu değil: rapor kapısı onları "bilinmeyen anahtar = kapalı" saymaz.
+    expect(reportKeyOfPath("/reports/ozel/yeni")).toBeNull();
+    expect(reportKeyOfPath("/reports/ozel/abc-123/duzenle")).toBeNull();
   });
 
   it("§2 liste OKUNAMADI (null) ⇒ her rapor KAPALI — boş liste ile aynı şey değil", () => {

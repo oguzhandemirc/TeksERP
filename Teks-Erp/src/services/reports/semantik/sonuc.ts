@@ -60,7 +60,7 @@ function measureValues(q: CompiledQuery, raw: RawRow): Record<string, number | n
       const num = col(m.numerator);
       const den = col(m.denominator);
       // Oran YENİDEN hesaplanır; payda 0/yoksa "ölçülemedi" (null), 0'a çökmez.
-      out[m.id] = num === null || den === null || den === 0 ? null : num / den;
+      out[m.id] = num === null || den === null || den === 0 ? null : (num / den) * (m.percent ? 100 : 1);
     }
   }
   return out;

@@ -6,11 +6,12 @@
 // adı/birimi/iyi yönü tanım sözlüğünden, başlık/soru katalogdan, tablo satır tavanı.
 
 import { z } from "zod";
-import { REPORT_BY_KEY, type ReportKey } from "../../../constants/report-catalog";
+import { REPORT_BY_KEY, type ReportKey, type ReportVaryantBoyutu } from "../../../constants/report-catalog";
 import { OLCU_BY_KIMLIK, type OlcuIyiYon, type OlcuBirimi } from "../semantik/tanimlar";
 import { anaSayiKur, donemEtiketi } from "../sunum/sunum-kur";
-import type { AnaSayi, Birim, DonemAraligi, IyiYon, ParametreBeyani, RaporSunumu, RaporTanimi, TabloBlok } from "../sunum/sunum.types";
+import type { AnaSayi, Birim, DonemAraligi, IyiYon, ParametreBeyani, ParametreSecenegi, RaporSunumu, RaporTanimi, TabloBlok } from "../sunum/sunum.types";
 import type { SuzgecEcho } from "../_filters";
+import type { Secenek } from "../_secenekler";
 import { capReportLists, resolveCompareRange, type CompareMode, type DateRange } from "../_shared";
 
 const UNIT_MAP: Readonly<Record<Exclude<OlcuBirimi, "para">, Birim>> = {
@@ -134,9 +135,21 @@ export function rangeParameters(range: DateRange, compareMode: CompareMode): Par
 
 const FILTER_LABELS: Readonly<Record<string, string>> = { customerId: "Müşteri", itemId: "Kumaş" };
 
-/** Kimlik listesi süzgeci beyanı — seçim yoksa `null` ("Tümü"), boş dizi yazılmaz. */
-export function listParameter(name: "customerId" | "itemId", value: string[] | undefined): ParametreBeyani {
-  return { ad: name, etiket: FILTER_LABELS[name], tur: "cokluSecim", deger: value && value.length > 0 ? value : null };
+/** Kaynak raporun seçici listesi → çip seçenekleri (kodlu kalemde "KOD · ad"). */
+export function optionsOf(list: readonly Secenek[] | undefined): ParametreSecenegi[] | undefined {
+  if (!list || list.length === 0) return undefined;
+  return list.map((o) => ({ deger: o.id, etiket: o.kod ? `${o.kod} · ${o.ad}` : o.ad }));
+}
+
+/** Kimlik listesi süzgeci beyanı — seçim yoksa `null` ("Tümü"), boş dizi yazılmaz; seçenek varsa panel çip çizer. */
+export function listParameter(name: "customerId" | "itemId", value: string[] | undefined, options?: readonly Secenek[]): ParametreBeyani {
+  const secenekler = optionsOf(options);
+  return { ad: name, etiket: FILTER_LABELS[name], tur: "cokluSecim", deger: value && value.length > 0 ? value : null, ...(secenekler ? { secenekler } : {}) };
+}
+
+/** Kırılım satırlarından büyükten küçüğe varyant havuzu (`key` = süzgeç kimliği). */
+export function rankedPool<T extends { key: string; label: string }>(rows: readonly T[], size: (r: T) => number): ParametreSecenegi[] {
+  return [...rows].sort((a, b) => size(b) - size(a)).map((r) => ({ deger: r.key, etiket: r.label }));
 }
 
 /** Yön süzgeci beyanı. */
@@ -157,6 +170,8 @@ export function destinationParameter(value: string | undefined, label = "Yön"):
 export interface CoreReportResult {
   sunum: RaporSunumu;
   suzgec?: SuzgecEcho;
+  /** Varyant havuzu: ana koşunun kırılımından boyut başına değerler, büyükten küçüğe (yalnız sarmal okur; tele gitmez). */
+  kirilimlar?: Partial<Record<ReportVaryantBoyutu, ParametreSecenegi[]>>;
 }
 
 /**

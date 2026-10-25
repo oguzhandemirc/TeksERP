@@ -3,11 +3,56 @@
 // doğrulaması yetmez) hesaplar, sonucu imzalı gönderir. Standart dönem görüntüleri
 // (karne ailesi × bugün · bu ay · geçen ay) saatlik, istek beklemeden gider.
 // Audit raporları (`audit/*`) ve kişi adı taşıyan raporlar buluta GİTMEZ ve istenemez.
+// v2 temel raporlar sonucu `RaporSunumu` olarak gider (ana sayı, kıyas, anlatı FABRİKADA hesaplı);
+// `kisiAdi` işaretli sunum gönderilmez (K-KISI) — bulut sunumu yalnız saklar ve uygulamaya iletir.
 import { gzipSync } from "node:zlib";
 import { z } from "zod";
-import { REPORT_BY_KEY, type ReportKey } from "../constants/report-catalog";
-import { readFinanceEnabled, readProductionEnabled, readReportsClosedKeys } from "../services/system-setting.service";
-import { dateRangeSchema, resolveDateRange } from "../services/reports/_shared";
+import { REPORT_BY_KEY, isReportSurfaced, type ReportKey } from "../constants/report-catalog";
+import { factoryYmd, resolveRangeEnd, resolveRangeStart } from "../constants/time";
+import {
+  readDevereEnabled,
+  readDokumaEnabled,
+  readFinanceEnabled,
+  readProductionEnabled,
+  readReportsClosedKeys,
+} from "../services/system-setting.service";
+import { dateRangeSchema, resolveDateRange, type CompareMode, type DateRange } from "../services/reports/_shared";
+import { resolveCoreCompare, type CoreRangeQuery, type CoreReportResult } from "../services/reports/temel/_common";
+import { resolveCoreDayRange, type CoreDayRangeQuery, type DayWindow } from "../services/reports/temel/_day-range";
+import type { RaporSunumu } from "../services/reports/sunum/sunum.types";
+import { buildOrderDemandReport } from "../services/reports/temel/siparis-talep.temel";
+import { buildShippedReport } from "../services/reports/temel/sevkiyat.temel";
+import { buildDeadlineReport } from "../services/reports/temel/termin.temel";
+import { buildOpenOrderReport } from "../services/reports/temel/acik-siparisler.temel";
+import { buildLostWorkReport } from "../services/reports/temel/vazgecilen-is.temel";
+import { buildQualityReport } from "../services/reports/temel/kalite.temel";
+import { buildLossReport } from "../services/reports/temel/kayip.temel";
+import { buildWarehouseReport } from "../services/reports/temel/depo.temel";
+import { buildSubcontractorsReport } from "../services/reports/temel/fasoncular.temel";
+import { buildLoomEfficiencyReport } from "../services/reports/temel/tezgah-randimani.temel";
+import { buildLoomStopsReport } from "../services/reports/temel/duruslar.temel";
+import { buildBeamBalanceReport } from "../services/reports/temel/levent-dengesi.temel";
+import { buildReceivablesReport } from "../services/reports/temel/alacaklar.temel";
+// Parametre şemaları v2 uçlarının KENDİSİNDEN (tek kaynak): buluttan gelen istek panelin ucuyla aynı anahtarları kabul eder.
+import {
+  coreDeadlineQuerySchema,
+  coreLostWorkQuerySchema,
+  coreOpenOrderQuerySchema,
+  coreOrderDemandQuerySchema,
+  coreShippedQuerySchema,
+} from "../routes/reports/temel-satis.routes";
+import {
+  coreLossQuerySchema,
+  coreQualityQuerySchema,
+  coreSubcontractorsQuerySchema,
+  coreWarehouseQuerySchema,
+} from "../routes/reports/temel-uretim.routes";
+import {
+  coreBeamBalanceQuerySchema,
+  coreLoomEfficiencyQuerySchema,
+  coreLoomStopsQuerySchema,
+  coreReceivablesQuerySchema,
+} from "../routes/reports/temel-dokuma-finans.routes";
 import { getOrderIntake } from "../services/reports/order-intake.report.service";
 import { getShipmentScorecard } from "../services/reports/shipment-scorecard.report.service";
 import { getStockScorecard } from "../services/reports/stock-scorecard.report.service";
@@ -43,6 +88,10 @@ export interface RemoteReport {
   /** Bulut okuma izni RAPOR BAŞINA — bulut kataloğunun `REPORT_KEY_PERMISSION`ıyla birebir (bekçi `test_bulut_tel_aynasi` §8). */
   readonly permission: string;
   readonly module?: ModuleKey;
+  /** Projeksiyon modülü dışındaki kapı (dokuma/devere) — panel ucunun modül kapısıyla aynı okuyucu. */
+  readonly gate?: () => Promise<boolean>;
+  /** Standart görüntünün parametresi (varsayılan ISO `dateFrom`/`dateTo`; gün telli raporlar `from`/`to`). */
+  readonly standardParams?: (range: DateRange) => Record<string, unknown>;
   /** Fabrikanın kendi parametre şeması (KATI — tanınmayan anahtar PARAMETRE_GECERSIZ). */
   readonly params: z.ZodType<Record<string, unknown>>;
   readonly paramNames: readonly string[];
@@ -53,33 +102,144 @@ export interface RemoteReport {
    * taşıyan rapor (ör. `production/operator-performance`) bu listeye GİRMEZ (B1 kararı).
    */
   readonly personalData: "YOK";
-  readonly run: (params: Record<string, unknown>) => Promise<unknown>;
+  // Ad bilerek özgül: `test_levent_kalan_tek_okuyucu` ad bazlı kapanış kurar; genel `run` her `run()` çağrısını dolaylı okuyucu yapıyordu.
+  readonly reportRunner: (params: Record<string, unknown>) => Promise<unknown>;
 }
 
 const rangeOf = (p: Record<string, unknown>) => resolveDateRange(p as z.infer<typeof dateRangeSchema>);
 const AgingParams = z.strictObject({ asOf: z.string().datetime({ offset: true }).optional() });
 
-/** Buluttan istenebilir raporlar — KATALOG ∩ bu liste; `audit/*` hiçbir zaman girmez (bekçi ölçer). */
+type RangedBuild = (range: DateRange, compareRange: DateRange | null, compareMode: CompareMode) => Promise<CoreReportResult>;
+
+/** v2 ISO aralıklı rapor: uçla AYNI çözüm (aralık → K-KIYAS varsayılanı) ve aynı temel servis; sonuç yalnız sunum. */
+async function rangedPresentation(p: Record<string, unknown>, build: RangedBuild): Promise<RaporSunumu> {
+  const q = p as CoreRangeQuery;
+  const range = resolveDateRange({ dateFrom: q.dateFrom, dateTo: q.dateTo });
+  const { mode, compareRange } = resolveCoreCompare(q, range);
+  return (await build(range, compareRange, mode)).sunum;
+}
+
+/** v2 gün aralıklı (dokuma) rapor: pencere katalog `varsayilanGun`ünden — uçla aynı tek kaynak. */
+function dayWindowOf(key: ReportKey, p: Record<string, unknown>): ReturnType<typeof resolveCoreDayRange> {
+  const days = REPORT_BY_KEY.get(key)?.varsayilanGun;
+  if (!days) throw new Error(`Varsayılan gün tanımsız: ${key}`);
+  return resolveCoreDayRange(p as CoreDayRangeQuery, days);
+}
+
+const FACTORY_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Patron uygulaması özel aralığı fabrika GÜNÜ (`YYYY-MM-DD`) olarak yollar; gün sınırı yalnız fabrikada
+ * (`constants/time`) ana çevrilir, sonra uç şeması AYNEN doğrular (anahtar kümesi değişmez).
+ */
+function acceptFactoryDays<T extends z.ZodTypeAny>(schema: T): z.ZodType<Record<string, unknown>> {
+  return z.preprocess((v) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+    const o = { ...(v as Record<string, unknown>) };
+    if (isFactoryDay(o.dateFrom)) o.dateFrom = resolveRangeStart(o.dateFrom).toISOString();
+    if (isFactoryDay(o.dateTo)) o.dateTo = resolveRangeEnd(o.dateTo).toISOString();
+    return o;
+  }, schema) as unknown as z.ZodType<Record<string, unknown>>;
+}
+
+/** Geçerli takvim günü mü — `2026-13-45` gibi taşan gün çevrilmez, şema onu ham haliyle REDDEDER (sessiz taşma yok). */
+function isFactoryDay(v: unknown): v is string {
+  return typeof v === "string" && FACTORY_DAY.test(v) && factoryYmd(resolveRangeStart(v)) === v;
+}
+
+/** Kesit anı (`asOf`) için aynı kabul: fabrika günü → o günün SONU (`constants/time`); ISO aynen geçer. */
+function acceptFactoryAsOf<T extends z.ZodTypeAny>(schema: T): z.ZodType<Record<string, unknown>> {
+  return z.preprocess((v) => {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return v;
+    const o = { ...(v as Record<string, unknown>) };
+    if (isFactoryDay(o.asOf)) o.asOf = resolveRangeEnd(o.asOf).toISOString();
+    return o;
+  }, schema) as unknown as z.ZodType<Record<string, unknown>>;
+}
+
+/**
+ * Varyant (küçük çoklu) ve dönem kıyası PANEL özelliğidir (R1-VARYANT): bulut isteğinde bu anahtarlar 400 — sessizce
+ * yutulmaz, kişi adlı kırılım (`operator`) buluta yol bulamaz. `allow`: anahtarın raporda başka anlamı varsa (kalite görünümü).
+ */
+export const PANEL_ONLY_PARAMS = ["varyant", "donemler"] as const;
+function panelOnlyRejected<T extends z.ZodTypeAny>(schema: T, allow: readonly string[] = []): T {
+  return schema.superRefine((v, ctx) => {
+    if (!v || typeof v !== "object") return;
+    for (const k of PANEL_ONLY_PARAMS) {
+      if (!allow.includes(k) && (v as Record<string, unknown>)[k] !== undefined) ctx.addIssue({ code: "custom", path: [k], message: `"${k}" bulut isteğinde desteklenmez` });
+    }
+  }) as unknown as T;
+}
+
+const dayParams = (range: DateRange): Record<string, unknown> => ({ from: factoryYmd(range.from), to: factoryYmd(range.to) } satisfies Partial<DayWindow>);
+const weavingOpen = (): Promise<boolean> => readDokumaEnabled();
+const beamBalanceOpen = async (): Promise<boolean> => (await readDokumaEnabled()) && (await readDevereEnabled());
+
+/** Sunum kişi adı taşıyor mu (K-KISI) — taşıyorsa sonuç buluta GİTMEZ (statik listeye ek savunma). */
+export function carriesPersonName(value: unknown): boolean {
+  return typeof value === "object" && value !== null && (value as { kisiAdi?: unknown }).kisiAdi === true;
+}
+
+/** Buluttan istenebilir raporlar — KATALOG ∩ bu liste; `audit/*` hiçbir zaman girmez (bekçi ölçer). Eski 8 rapor
+ *  da uygulamanın fabrika günü (`YYYY-MM-DD`) aralığını kabul eder (R1-BULUT bulgusu; ISO aynen geçer). */
 export const REMOTE_REPORTS: readonly RemoteReport[] = [
-  { key: "sales/order-intake", permission: "bulut:siparis:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getOrderIntake(rangeOf(p)) },
-  { key: "sales/shipment-scorecard", permission: "bulut:sevkiyat:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getShipmentScorecard(rangeOf(p)) },
-  { key: "customer/scorecard", permission: "bulut:siparis:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getCustomerScorecard(rangeOf(p)) },
-  { key: "quality/scorecard", permission: "bulut:uretim:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getQualityScorecard(rangeOf(p)) },
-  { key: "subcontract/scorecard", permission: "bulut:uretim:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getSubcontractScorecard(rangeOf(p)) },
+  { key: "sales/order-intake", permission: "bulut:siparis:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => getOrderIntake(rangeOf(p)) },
+  { key: "sales/shipment-scorecard", permission: "bulut:sevkiyat:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => getShipmentScorecard(rangeOf(p)) },
+  { key: "customer/scorecard", permission: "bulut:siparis:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => getCustomerScorecard(rangeOf(p)) },
+  { key: "quality/scorecard", permission: "bulut:uretim:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => getQualityScorecard(rangeOf(p)) },
+  { key: "subcontract/scorecard", permission: "bulut:uretim:oku", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => getSubcontractScorecard(rangeOf(p)) },
   { key: "inventory/scorecard", permission: "bulut:stok:oku", params: z.strictObject({}), paramNames: [], standard: "KESIT", personalData: "YOK",
-    run: () => getStockScorecard() },
-  { key: "finance/aging", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: AgingParams, paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
-    run: (p) => getAgingReport({ asOf: typeof p.asOf === "string" ? new Date(p.asOf) : new Date() }) },
-  { key: "finance/cheque-due", permission: "bulut:cek:oku", module: "finance.enabled", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "KESIT", personalData: "YOK",
-    run: async (p) => {
+    reportRunner: () => getStockScorecard() },
+  { key: "finance/aging", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: acceptFactoryAsOf(AgingParams), paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
+    reportRunner: (p) => getAgingReport({ asOf: typeof p.asOf === "string" ? new Date(p.asOf) : new Date() }) },
+  { key: "finance/cheque-due", permission: "bulut:cek:oku", module: "finance.enabled", params: acceptFactoryDays(dateRangeSchema), paramNames: ["dateFrom", "dateTo"], standard: "KESIT", personalData: "YOK",
+    reportRunner: async (p) => {
       const q = p as z.infer<typeof dateRangeSchema>;
       return (await chequeService.dueSummary({ from: q.dateFrom ? new Date(q.dateFrom) : undefined, to: q.dateTo ? new Date(q.dateTo) : undefined })).data;
     } },
+  // ---- Raporlar v2 temel raporları (sonuç `RaporSunumu`). HARİÇ: `production/uretim-akisi` (operatör adı, K-KISI).
+  { key: "sales/siparis-talep", permission: "bulut:siparis:oku", params: acceptFactoryDays(panelOnlyRejected(coreOrderDemandQuerySchema)), paramNames: ["dateFrom", "dateTo", "kiyas", "customerId", "destination", "itemId"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
+      const q = p as z.infer<typeof coreOrderDemandQuerySchema>;
+      return buildOrderDemandReport({ range, compareRange, compareMode, filters: { customerId: q.customerId, destination: q.destination, itemId: q.itemId } });
+    }) },
+  { key: "sales/sevkiyat", permission: "bulut:sevkiyat:oku", params: acceptFactoryDays(panelOnlyRejected(coreShippedQuerySchema)), paramNames: ["dateFrom", "dateTo", "kiyas", "destination"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) =>
+      buildShippedReport({ range, compareRange, compareMode, filters: { destination: (p as z.infer<typeof coreShippedQuerySchema>).destination } })) },
+  { key: "sales/termin", permission: "bulut:sevkiyat:oku", params: acceptFactoryDays(panelOnlyRejected(coreDeadlineQuerySchema)), paramNames: ["dateFrom", "dateTo", "kiyas", "destination"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) =>
+      buildDeadlineReport({ range, compareRange, compareMode, filters: { destination: (p as z.infer<typeof coreDeadlineQuerySchema>).destination } })) },
+  { key: "sales/acik-siparisler", permission: "bulut:siparis:oku", params: panelOnlyRejected(coreOpenOrderQuerySchema), paramNames: ["itemId"], standard: "KESIT", personalData: "YOK",
+    reportRunner: async (p) => (await buildOpenOrderReport({ filters: { itemId: (p as z.infer<typeof coreOpenOrderQuerySchema>).itemId } })).sunum },
+  { key: "sales/vazgecilen-is", permission: "bulut:siparis:oku", params: acceptFactoryDays(panelOnlyRejected(coreLostWorkQuerySchema)), paramNames: ["dateFrom", "dateTo", "kiyas"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => buildLostWorkReport({ range, compareRange, compareMode })) },
+  { key: "quality/kalite", permission: "bulut:uretim:oku", module: "production.enabled", params: acceptFactoryDays(panelOnlyRejected(coreQualityQuerySchema, ["varyant"])), paramNames: ["dateFrom", "dateTo", "kiyas", "warpBeamId", "lotNo", "varyant"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
+      const q = p as z.infer<typeof coreQualityQuerySchema>;
+      return buildQualityReport({ range, compareRange, compareMode, view: q.varyant, filters: { warpBeamId: q.warpBeamId, lotNo: q.lotNo } });
+    }) },
+  { key: "quality/kayip", permission: "bulut:uretim:oku", module: "production.enabled", params: acceptFactoryDays(panelOnlyRejected(coreLossQuerySchema)), paramNames: ["dateFrom", "dateTo", "kiyas"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => buildLossReport({ range, compareRange, compareMode })) },
+  { key: "inventory/depo", permission: "bulut:stok:oku", params: panelOnlyRejected(coreWarehouseQuerySchema), paramNames: [], standard: "KESIT", personalData: "YOK",
+    reportRunner: async () => (await buildWarehouseReport()).sunum },
+  { key: "subcontract/fasoncular", permission: "bulut:uretim:oku", params: acceptFactoryDays(panelOnlyRejected(coreSubcontractorsQuerySchema)), paramNames: ["dateFrom", "dateTo", "kiyas", "subcontractorId", "itemId", "colorId"], standard: "DONEMLI", personalData: "YOK",
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
+      const q = p as z.infer<typeof coreSubcontractorsQuerySchema>;
+      return buildSubcontractorsReport({ range, compareRange, compareMode, filters: { subcontractorId: q.subcontractorId, itemId: q.itemId, colorId: q.colorId } });
+    }) },
+  { key: "dokuma/tezgah-randimani", permission: "bulut:uretim:oku", gate: weavingOpen, params: panelOnlyRejected(coreLoomEfficiencyQuerySchema), paramNames: ["from", "to", "kiyas"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
+    reportRunner: async (p) => (await buildLoomEfficiencyReport({ window: dayWindowOf("dokuma/tezgah-randimani", p) })).sunum },
+  { key: "dokuma/duruslar", permission: "bulut:uretim:oku", gate: weavingOpen, params: panelOnlyRejected(coreLoomStopsQuerySchema), paramNames: ["from", "to", "kiyas", "shiftDefinitionId"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
+    reportRunner: async (p) => (await buildLoomStopsReport({ window: dayWindowOf("dokuma/duruslar", p), shiftDefinitionId: (p as z.infer<typeof coreLoomStopsQuerySchema>).shiftDefinitionId })).sunum },
+  { key: "dokuma/levent-dengesi", permission: "bulut:uretim:oku", gate: beamBalanceOpen, params: panelOnlyRejected(coreBeamBalanceQuerySchema), paramNames: ["from", "to", "kiyas"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
+    reportRunner: async (p) => (await buildBeamBalanceReport({ window: dayWindowOf("dokuma/levent-dengesi", p) })).sunum },
+  { key: "finance/alacaklar", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: panelOnlyRejected(coreReceivablesQuerySchema), paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
+    reportRunner: async (p) => (await buildReceivablesReport(typeof p.asOf === "string" ? new Date(p.asOf) : new Date())).sunum },
 ];
 
 export function findRemoteReport(key: string): RemoteReport | undefined {
@@ -95,6 +255,10 @@ async function moduleOpen(m: ModuleKey | undefined): Promise<boolean> {
 /** Rapor şu an sunulabilir mi — kapalı rapor ve kapalı modül buluta da kapalıdır (fail-closed). */
 async function availability(r: RemoteReport): Promise<"ACIK" | "RAPOR_KAPALI" | "MODUL_KAPALI"> {
   if (!(await moduleOpen(r.module))) return "MODUL_KAPALI";
+  if (r.gate && !(await r.gate())) return "MODUL_KAPALI";
+  // Yüzeye çıkmamış v2 satırı (`hazir:false`) panelde de yoktur — buluta da kapalı (fail-closed).
+  const entry = REPORT_BY_KEY.get(r.key);
+  if (!entry || !isReportSurfaced(entry)) return "RAPOR_KAPALI";
   const vis = await readReportsClosedKeys();
   if (vis.durum === "olculemedi" || vis.kapali.includes(r.key)) return "RAPOR_KAPALI";
   return "ACIK";
@@ -172,8 +336,9 @@ export async function computeReportResult(g: {
   if (!parsed.success) return fail("PARAMETRE_GECERSIZ");
   let value: unknown;
   try {
-    const out = await withTimeout(r.run(parsed.data), g.timeoutMs ?? REPORT_TIMEOUT_MS);
+    const out = await withTimeout(r.reportRunner(parsed.data), g.timeoutMs ?? REPORT_TIMEOUT_MS);
     if (out === "ZAMAN_ASIMI") return fail("ZAMAN_ASIMI");
+    if (carriesPersonName(out)) return fail("RAPOR_KAPALI");
     value = stripUiEnvelope(out);
   } catch {
     // İş kuralı hatası (ör. aralık > 366 gün) kullanıcı parametresinin sonucudur.
@@ -230,10 +395,13 @@ export interface StandardReportPlan {
 export function standardReportPlan(now: Date): StandardReportPlan[] {
   const out: StandardReportPlan[] = [];
   for (const r of REMOTE_REPORTS) {
+    const entry = REPORT_BY_KEY.get(r.key);
+    if (!entry || !isReportSurfaced(entry)) continue;
     if (r.standard === "DONEMLI") {
       for (const d of REPORT_PERIODS) {
         const range = periodRange(d, now);
-        out.push({ key: r.key, donem: d, params: { dateFrom: range.from.toISOString(), dateTo: range.to.toISOString() } });
+        const params = r.standardParams ? r.standardParams(range) : { dateFrom: range.from.toISOString(), dateTo: range.to.toISOString() };
+        out.push({ key: r.key, donem: d, params });
       }
     } else if (r.standard === "KESIT") {
       out.push({ key: r.key, donem: null, params: {} });

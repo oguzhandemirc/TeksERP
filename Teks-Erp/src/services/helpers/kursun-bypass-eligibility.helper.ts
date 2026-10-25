@@ -40,6 +40,7 @@ import {
   KURSUN_BYPASS_MARKER_PREFIX,
 } from "./kursun-bypass-guard.helper";
 import { STEP_FLOW_SELECT, stepRunsStepFlow } from "./quality-station.helper";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./roll-error-scope.helper";
 
 /** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -136,7 +137,7 @@ export async function loadBypassEligibilitySignals(
   });
 
   const errorRows = await db.rollError.findMany({
-    where: { detectedAtStepId: { in: stepIds } },
+    where: { ...ACTIONABLE_ROLL_ERROR_WHERE, detectedAtStepId: { in: stepIds } },
     select: { detectedAtStepId: true },
     distinct: ["detectedAtStepId"],
   });

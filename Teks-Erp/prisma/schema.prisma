@@ -704,6 +704,18 @@ model User {
   rollInspectionsVoided     RollInspection[]   @relation("RollInspectionVoidedBy")
   fourPointRuleSetsCreated  FourPointRuleSet[] @relation("FourPointRuleSetCreatedBy")
   fourPointRuleSetsUpdated  FourPointRuleSet[] @relation("FourPointRuleSetUpdatedBy")
+  labTestTypesCreated       LabTestType[]      @relation("LabTestTypeCreatedBy")
+  labTestTypesUpdated       LabTestType[]      @relation("LabTestTypeUpdatedBy")
+  labTestsCreated           LabTest[]          @relation("LabTestCreatedBy")
+  labTestsUpdated           LabTest[]          @relation("LabTestUpdatedBy")
+  labTestsApproved          LabTest[]          @relation("LabTestApprovedBy")
+  labTestsVoided            LabTest[]          @relation("LabTestVoidedBy")
+  certificatesCreated       Certificate[]      @relation("CertificateCreatedBy")
+  certificatesUpdated       Certificate[]      @relation("CertificateUpdatedBy")
+  certificatesRevoked       Certificate[]      @relation("CertificateRevokedBy")
+  certificateFilesUploaded  CertificateFile[]  @relation("CertificateFileUploadedBy")
+  customerLabSpecsCreated   CustomerLabSpec[]  @relation("CustomerLabSpecCreatedBy")
+  customerLabSpecsUpdated   CustomerLabSpec[]  @relation("CustomerLabSpecUpdatedBy")
 
   @@map("users")
 }
@@ -3331,6 +3343,8 @@ model Item {
   // prod'da temizlik (Mükerrer Kayıtlar paneli) bitene dek index EKSİK olabilir;
   // `test_db_invariants` orada kırmızı = "enforce bekliyor" (migration dosyasını yeniden koş).
   fourPointRuleSets  FourPointRuleSet[]
+  labTests           LabTest[]
+  customerLabSpecs   CustomerLabSpec[]
 
   @@unique([nameFold])
   @@index([itemType])
@@ -3848,6 +3862,7 @@ model Roll {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   inspections          RollInspection[]
+  labTests             LabTest[]
 
   @@index([itemId])
   @@index([parentRollId])
@@ -4073,6 +4088,9 @@ model Customer {
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
   fourPointRuleSets FourPointRuleSet[]
+  certificates      Certificate[]
+  customerLabSpecs  CustomerLabSpec[]
+  labTests          LabTest[]
 
   @@unique([nameFold])
   @@index([type])
@@ -4512,6 +4530,7 @@ model Batch {
   mergedChildren Batch[]                 @relation("BatchMergeLineage")
   rolls          Roll[]
   dispatches     SubcontractorDispatch[]
+  labTests       LabTest[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -5358,6 +5377,37 @@ enum RunningCap {
   YARD
 }
 
+/// K4P-LAB: lab test türünün sonuç biçimi. SCALE = gri/mavi skala (0,5 adım; 4,5 = "4-5").
+enum LabResultKind {
+  NUMERIC
+  SCALE
+  PASS_FAIL
+}
+
+/// K4P-LAB: DRAFT düzenlenir · APPROVED donar · VOIDED gerekçeli iptal (DRAFT ya da APPROVED'dan).
+enum LabTestStatus {
+  DRAFT
+  APPROVED
+  VOIDED
+}
+
+enum LabVerdict {
+  PASS
+  FAIL
+}
+
+/// AUTO = sınır snapshot'ından hesaplandı · MANUAL = sınırsız ya da PASS_FAIL türde elle.
+/// K4P-SERT sertifika sahibi: fabrikanın kendisi ya da bir iş ortağı (tedarikçi/fason).
+enum CertificateHolder {
+  OWN
+  PARTNER
+}
+
+enum LabVerdictSource {
+  AUTO
+  MANUAL
+}
+
 /// Muayene belgesi — DEFTER (`PrintedDocument` emsali): içerik doğuşta donar, yalnız
 /// damgalar yazılır. Ters yol DAMGA: revizyon `supersededAt` (+ `supersedesId` zinciri),
 /// iptal `voidedAt`. Silme yolu YOK. Tek aktif (rollId, phase) partial unique
@@ -5483,6 +5533,207 @@ model FourPointRuleBand {
   @@unique([ruleSetId, sortOrder])
   @@index([qualityGradeId])
   @@map("four_point_rule_bands")
+}
+
+/// K4P-LAB lab test türü kataloğu — yapılandırma (③b): sonuç satırı birim/sınır/skala
+/// snapshot'ı taşıdığı için değişiklik geçmişi değiştirmez; audit + pasife alma.
+/// `scaleMax` yalnız SCALE'de (CHECK `lab_test_types_kind_ck`).
+model LabTestType {
+  id         String        @id @default(uuid()) @db.Uuid
+  code       String        @unique @db.VarChar(32)
+  name       String        @db.VarChar(80)
+  method     String?       @db.VarChar(64)
+  resultKind LabResultKind
+  scaleMax   Int?          @db.SmallInt
+  unit       String?       @db.VarChar(16)
+  specMin    Decimal?      @db.Decimal(12, 3)
+  specMax    Decimal?      @db.Decimal(12, 3)
+  sortOrder  Int           @default(0)
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now()) @db.Timestamptz
+  updatedAt  DateTime      @updatedAt @db.Timestamptz
+
+  results LabTestResult[]
+  customerSpecs CustomerLabSpec[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("LabTestTypeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("LabTestTypeUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("lab_test_types")
+}
+
+/// K4P-LAB lab testi — DURUM + onayda donan snapshot (plan §3.4). DRAFT'ta sonuçlar
+/// düzenlenir; onaydan sonra hiçbir sonuç yazılmaz (`status='DRAFT'` atomik WHERE'i).
+/// DRAFT hard delete meşrudur (deftere hiç yazmamış taslak); diğer durumlarda iptal damgası.
+/// `batchId` top verildiyse topun partisinden, `itemId` top/partiden doğuşta snapshot'lanır.
+model LabTest {
+  id           String        @id @default(uuid()) @db.Uuid
+  /// Numara serisi `labTest` (LAB…) — doğuşta materyalize.
+  testNo       String        @unique @db.VarChar(40)
+  rollId       String?       @db.Uuid
+  batchId      String?       @db.Uuid
+  itemId       String        @db.Uuid
+  /// K4P-SERT: testin yapıldığı müşteri (iş ortağı kimliği); verilirse sonuç sınırı müşteri spesifikasyonundan.
+  customerId   String?       @db.Uuid
+  sampleCode   String?       @db.VarChar(64)
+  labName      String?       @db.VarChar(120)
+  /// Fabrika takvim günü (`factoryDayKeyUtcMidnight`) — anı değil günü anlatır.
+  testedOn     DateTime      @db.Date
+  note         String?       @db.VarChar(500)
+  status       LabTestStatus @default(DRAFT)
+  approvedAt   DateTime?     @db.Timestamptz
+  approvedById String?       @db.Uuid
+  voidedAt     DateTime?     @db.Timestamptz
+  voidedById   String?       @db.Uuid
+  voidReason   String?       @db.VarChar(500)
+  clientToken  String?       @unique @db.Uuid
+  createdAt    DateTime      @default(now()) @db.Timestamptz
+  updatedAt    DateTime      @updatedAt @db.Timestamptz
+
+  roll       Roll?           @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  batch      Batch?          @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  item       Item            @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  customer   Customer?       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  approvedBy User?           @relation("LabTestApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  voidedBy   User?           @relation("LabTestVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+  results    LabTestResult[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("LabTestCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("LabTestUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([rollId])
+  @@index([batchId])
+  @@index([itemId])
+  @@index([testedOn, id])
+  @@index([customerId])
+  @@map("lab_tests")
+}
+
+/// K4P-SERT müşteri spesifikasyonu — (müşteri × ürün? × test türü) lab sınırı. Yapılandırmadır:
+/// lab sonucu yazımda sınırı SNAPSHOT'lar, burada değişiklik geçmiş testi etkilemez. Pasife alma `isActive`.
+/// İki partial unique (migration'da): aktif (müşteri, tür) genel satır · aktif (müşteri, ürün, tür) satırı.
+model CustomerLabSpec {
+  id         String   @id @default(uuid()) @db.Uuid
+  customerId String   @db.Uuid
+  itemId     String?  @db.Uuid
+  testTypeId String   @db.Uuid
+  specMin    Decimal? @db.Decimal(12, 3)
+  specMax    Decimal? @db.Decimal(12, 3)
+  note       String?  @db.VarChar(500)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  item     Item?       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  testType LabTestType @relation(fields: [testTypeId], references: [id], onDelete: Restrict)
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerLabSpecCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerLabSpecUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@unique([customerId, testTypeId], map: "customer_lab_specs_customer_uq")
+  @@unique([customerId, itemId, testTypeId], map: "customer_lab_specs_customer_item_uq")
+  @@index([itemId])
+  @@index([testTypeId])
+  @@map("customer_lab_specs")
+}
+
+/// K4P-SERT sertifika (OEKO-TEX, GOTS…) — DURUM tablosu. Etkin = iptal edilmemiş ∧ yenileyeni yok
+/// (tek helper `ACTIVE_CERTIFICATE_WHERE`). Yenileme YENİ satırdır (`renewsId`); eski satır değişmez.
+model Certificate {
+  id            String            @id @default(uuid()) @db.Uuid
+  holder        CertificateHolder
+  /// PARTNER sahipliğinde iş ortağı kimliği (tek FK); OWN'da NULL (CHECK `certificates_holder_ck`).
+  partnerId     String?           @db.Uuid
+  standard      String            @db.VarChar(64)
+  certificateNo String            @db.VarChar(80)
+  issuer        String?           @db.VarChar(120)
+  scope         String?           @db.VarChar(500)
+  /// Takvim günleri (`@db.Date`) — sertifika anı değil günü anlatır.
+  issuedOn      DateTime?         @db.Date
+  expiresOn    DateTime          @db.Date
+  /// Belge eki yoksa dosya adı/yeri notu.
+  note          String?           @db.VarChar(500)
+  renewsId      String?           @unique @db.Uuid
+  revokedAt     DateTime?         @db.Timestamptz
+  revokedById   String?           @db.Uuid
+  revokeReason  String?           @db.VarChar(500)
+  clientToken   String?           @unique @db.Uuid
+  createdAt     DateTime          @default(now()) @db.Timestamptz
+  updatedAt     DateTime          @updatedAt @db.Timestamptz
+
+  partner   Customer?         @relation(fields: [partnerId], references: [id], onDelete: Restrict)
+  renews    Certificate?      @relation("CertificateRenewal", fields: [renewsId], references: [id], onDelete: Restrict)
+  renewedBy Certificate?      @relation("CertificateRenewal")
+  revokedBy User?             @relation("CertificateRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict)
+  files     CertificateFile[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CertificateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CertificateUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([partnerId])
+  @@index([expiresOn, id])
+  @@map("certificates")
+}
+
+/// Sertifika belge eki — baytlar DB'de (≤ 5 MB, CHECK); tür SİHİRLİ BAYTTAN doğrulanır. Baytlar
+/// audit/log yüküne GİRMEZ. Aynı dosya (sha256) aynı sertifikaya ikinci kez yazılmaz.
+model CertificateFile {
+  id            String   @id @default(uuid()) @db.Uuid
+  certificateId String   @db.Uuid
+  fileName      String   @db.VarChar(200)
+  mimeType      String   @db.VarChar(32)
+  sizeBytes     Int
+  sha256        String   @db.VarChar(64)
+  content       Bytes
+  uploadedById  String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  updatedAt     DateTime @updatedAt @db.Timestamptz
+
+  certificate Certificate @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  uploadedBy  User?       @relation("CertificateFileUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@unique([certificateId, sha256])
+  @@map("certificate_files")
+}
+
+/// K4P-LAB sonuç satırı — ebeveyn testin parçası (DRAFT silinince Cascade ile gider).
+/// Birim, sınır, tür biçimi ve skala tavanı yazım anında snapshot'lanır; SCALE değeri
+/// 0,5 adımlı (CHECK `lab_test_results_scale_ck`). Test başına tür başına tek satır.
+model LabTestResult {
+  id            String           @id @default(uuid()) @db.Uuid
+  labTestId     String           @db.Uuid
+  testTypeId    String           @db.Uuid
+  resultKind    LabResultKind
+  scaleMax      Int?             @db.SmallInt
+  value         Decimal?         @db.Decimal(12, 3)
+  unit          String?          @db.VarChar(16)
+  specMin       Decimal?         @db.Decimal(12, 3)
+  specMax       Decimal?         @db.Decimal(12, 3)
+  verdict       LabVerdict
+  verdictSource LabVerdictSource
+  note          String?          @db.VarChar(500)
+  createdAt     DateTime         @default(now()) @db.Timestamptz
+  updatedAt     DateTime         @updatedAt @db.Timestamptz
+
+  labTest  LabTest     @relation(fields: [labTestId], references: [id], onDelete: Cascade)
+  testType LabTestType @relation(fields: [testTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([labTestId, testTypeId])
+  @@index([testTypeId])
+  @@map("lab_test_results")
 }
 
 /// Top üzerinde yapılan somut işlem log'u (Kurşun geçildi, QC2 bitti, Tambur kararı, paketleme vb.).
@@ -12399,6 +12650,8 @@ model ReportDefinitionVersion {
   /// Sürümü yazan; servis her zaman doldurur. NULLABLE: künye kolonu sözleşmesi (`test_record_provenance` §3).
   createdById         String?  @db.Uuid
   note                String?  @db.VarChar(500)
+  /// İdempotency — yeni sürüm ucu (`clientToken @unique` sözleşmesi; v1 sürüm tanımın token'ıyla doğar).
+  clientToken         String?  @unique @db.Uuid
   createdAt           DateTime @default(now()) @db.Timestamptz
 
   definition ReportDefinition  @relation("ReportDefinitionVersions", fields: [definitionId], references: [id], onDelete: Restrict)

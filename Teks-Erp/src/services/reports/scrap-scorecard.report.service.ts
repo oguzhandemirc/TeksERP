@@ -52,6 +52,7 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { resolveBeamLotFilter, rollsOfBeamsSql, type BeamLotFilterInput } from "../helpers/warp-beam-roll-filter.helper";
+import { ACTIONABLE_ROLL_ERROR_SQL } from "../helpers/roll-error-scope.helper";
 import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type BreakdownRow } from "./_breakdown";
 import { factoryDaySql } from "../../constants/time";
 import { K18_DEAD_STATUSES } from "../batch.service";
@@ -172,7 +173,7 @@ async function collectScrap(range: DateRange, beamSql: Prisma.Sql = Prisma.empty
              COALESCE(dt.name, re."errorType") AS "defectName"
       FROM roll_errors re
       LEFT JOIN defect_types dt ON dt.id = re."defectTypeId"
-      WHERE re."rollId" = r.id
+      WHERE re."rollId" = r.id AND ${ACTIONABLE_ROLL_ERROR_SQL}
       -- UYARI: id EŞİTLİK BOZUCUDUR, süs değil. detectedAt TEK BAŞINA yetmez:
       -- aynı işlemde kaydedilen iki hata BİREBİR aynı damgayı taşıyabilir (tek
       -- tx, tek new Date()), ve beraberlikte PostgreSQL satır sırasını garanti
@@ -263,6 +264,7 @@ async function collectDetections(
     LEFT JOIN work_order_steps wos ON wos.id = re."detectedAtStepId"
     LEFT JOIN stations s           ON s.id = wos."stationId"
     WHERE re."detectedAt" >= ${range.from} AND re."detectedAt" <= ${range.to}
+      AND ${ACTIONABLE_ROLL_ERROR_SQL}
       ${errBeamSql}
     GROUP BY re."defectTypeId", COALESCE(dt.name, re."errorType"), s.id, s.name
   `);

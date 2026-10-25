@@ -134,6 +134,7 @@ function resolveFilter(
   const dim = cube.dimensions.find((d) => d.id === raw.alan);
   if (!dim) throw unknownField("boyut", raw.alan, `"${cube.id}" küpünde böyle bir boyut yok`);
   if (helperDims && !helperDims.includes(dim.id)) throw unsupported(`"${dim.name}" bu ölçüde süzgeç olarak kullanılamaz.`, dim.id);
+  if (!helperDims && dim.helperOnly) throw unsupported(`"${dim.name}" bu ölçüde süzgeç olarak kullanılamaz.`, dim.id);
   if (!canAccess(dim, ctx)) throw noAccess(dim.id);
   if (dim.kind === "time") throw unsupported(`"${dim.name}" süzgeci yerine tarih aralığı kullanın.`, dim.id);
   const values = Array.isArray(raw.deger) ? raw.deger : [raw.deger];
@@ -186,6 +187,7 @@ export function compileQuery(
     if (!d) throw unknownField("boyut", id, `"${cube.id}" küpünde böyle bir boyut yok`);
     if (dimensions.includes(d)) throw unsupported(`"${id}" boyutu iki kez seçilmiş.`, id);
     if (helperDims && !helperDims.includes(d.id)) throw unsupported(`"${helper!.id}" ölçüsü "${d.name}" kırılımını desteklemiyor.`, id);
+    if (!helperDims && d.helperOnly) throw unsupported(`"${d.name}" kırılımı yalnız bu boyutu destekleyen ölçülerle kullanılabilir.`, id);
     if (!canAccess(d, ctx)) throw noAccess(id);
     dimensions.push(d);
   }

@@ -41,6 +41,12 @@ function multiPageDoc(): Row {
   return multi;
 }
 
+function width999(): Row {
+  const d = sampleDoc("SHIPMENT_DISPATCH");
+  d.cekiRows = asRows<Row>(d.cekiRows).map((c, i) => ({ ...c, width: i % 2 ? 999.4 : 999 }));
+  return d;
+}
+
 export function scenarios(): Scenario<DispatchLiveOptions>[] {
   const base = () => sampleDoc("SHIPMENT_DISPATCH");
   const sample = base();
@@ -104,5 +110,7 @@ export function scenarios(): Scenario<DispatchLiveOptions>[] {
       snapshot: sampleEnvelope(base()),
       ek: { baski: { surum: 2, durum: "VOIDED", iptalNedeni: "Hatalı plaka" } },
     },
+    // D8: eşlenik eni `sayi: 0` basar (Sistem `Math.round`); 1000 altı iki yol aynı yazmalı.
+    { ad: "en_999", aciklama: "En sınırı: 999 ve 999,4 cm (binlik ayracı yok)", snapshot: sampleEnvelope(width999()) },
   ];
 }

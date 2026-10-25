@@ -6,7 +6,7 @@
 // top satırları boş kalır — liste "1 çuval · N top" sayısına DÜŞMEZ, çuval numarası her durumda görünür.
 // =============================================================================
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
-import type { UndoAffectedRoll, UndoDispatchPreview } from "./service";
+import type { EIrsaliyeAffected, UndoAffectedRoll, UndoDispatchPreview } from "./service";
 
 export interface UndoAffectedRow {
   key: string;
@@ -36,4 +36,17 @@ export function undoAffectedRows(p: Pick<UndoDispatchPreview, "sacks" | "looseRo
   }
   for (const r of p.looseRolls ?? []) rows.push({ key: `roll:${r.id}`, kind: "roll", label: r.barcode ?? "(barkodsuz)", detail: `Çuvalsız · ${undoRollDetail(r)}` });
   return rows;
+}
+
+/**
+ * Etkilenen e-İrsaliye kaydının cümleleri. `willVoid`: işlem kaydı IPTAL eder mi (iptal ve
+ * storno+kapat evet; yalnız storno hayır — kayıt kalır, yeniden sevkte yeniden üretilir).
+ */
+export function eIrsaliyeAffectedLines(e: EIrsaliyeAffected | null | undefined, willVoid: boolean): string[] {
+  if (!e || !e.yerelIptalEdilebilir) return [];
+  const name = `e-İrsaliye ${e.documentNo ?? "taslağı"}${e.simulasyon ? " (simülasyon)" : ""}`;
+  if (!willVoid) return [`${name} yerinde kalır (GİB'e gönderilmemiş); yeniden sevkte XML'i yeniden üretin.`];
+  const lines = [`${name} iptal edilecek (GİB'e gönderilmemiş).`];
+  if (e.numaraBosaDuser) lines.push(`${e.documentNo} numarası boşta kalacak; bu numara yeniden kullanılmaz.`);
+  return lines;
 }
