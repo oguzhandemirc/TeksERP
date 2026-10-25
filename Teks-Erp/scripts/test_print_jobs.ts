@@ -22,11 +22,13 @@
 //   §10 AST: `printJob` delegesi ve `print_jobs` ham SQL'i yalnız print-job.service.ts'te
 //   §11 telemetri yazım hatası iş yanıtını değiştirmez (enjekte hata; sayaç artar)
 //   §12 çeki listesi basımı printJob'suz → BELIRSIZ; ekli → ILETILDI
+//   §13 belge baskısı `printedDocumentId` taşır → `?subjectId=<belge>` listede VE özette (tek where)
 //
 // NEGATİF SONDALAR (2026-10-24, ölçüldü; md5 ile geri yüklendi):
 //   (a) §4 — `summarizePrintJobs` toplamı `where` yerine `{}` ile sayınca: §4b + §4c = 2 KIRMIZI
 //   (b) §8 — `stampRollLabelPrinted`tan updateMany çıkarılınca: §8b + §9b = 2 KIRMIZI
 //   (c) §10 — `label.service.ts`e `prisma.printJob.findMany` eklenince: §10b = 1 KIRMIZI
+//   (d) §13 — süzgeç OR'undan `printedDocumentId` çıkarılınca: §13a + §13b = 2 KIRMIZI (2026-10-25)
 // =============================================================================
 import type { Server } from "http";
 import type { AddressInfo } from "net";
@@ -301,6 +303,19 @@ async function main() {
     const jobs12 = await jobsOf({ subjectId: manifestId, subjectKind: "CEKI_LISTESI" });
     check("§12a çeki listesi basımı 201/200", pl1.status === 201 && pl2.status === 200, `${pl1.status}/${pl2.status}`);
     check("§12b ⭐ künyesiz basım BELIRSIZ, künyeli yeniden basım ILETILDI + isReprint", jobs12.length === 2 && jobs12[0]!.status === "BELIRSIZ" && jobs12[1]!.status === "ILETILDI" && jobs12[1]!.isReprint === true && jobs12[1]!.clientToken === pjTok, jobs12.map((j) => j.status).join(","));
+
+    // §13 — belge baskısı belge kimliğiyle bulunur (belge detayı > Baskı geçmişi)
+    const docId = randomUUID();
+    const topSay = async () => ((await call("GET", `/api/print-jobs?subjectId=${subj}&limit=200`, adminToken)).body.data as unknown as unknown[] ?? []).length;
+    const topOnce = await topSay();
+    const r13 = await call("POST", "/api/print-jobs", darToken, report({ subjectKind: "BELGE", subjectTable: undefined, subjectId: undefined, printedDocumentId: docId, docVersion: 1 }));
+    const r13l = await call("GET", `/api/print-jobs?subjectId=${docId}&ozet=1`, adminToken);
+    const data13 = (r13l.body.data as unknown as Array<{ printedDocumentId: string | null }>) ?? [];
+    const ozet13 = r13l.body.ozet as { toplam: number } | undefined;
+    check("§13a ⭐ belge kimliğiyle süzgeç belge baskısını listeler", r13.status === 201 && r13l.status === 200 && data13.length === 1 && data13[0]!.printedDocumentId === docId, `post=${r13.status} get=${r13l.status} liste=${data13.length}`);
+    check("§13b özet şeridi aynı where'den (toplam = 1)", ozet13?.toplam === 1, `toplam=${ozet13?.toplam}`);
+    const topSonra = await topSay();
+    check("§13c top süzgeci belge satırını içermez (OR yalnız aynı kimliği eşler)", topSonra === topOnce && topOnce > 0, `önce=${topOnce} sonra=${topSonra}`);
     await server.close();
   } catch (e) {
     console.error("\n💥 ÇÖKTÜ:", e instanceof Error ? e.stack : e);

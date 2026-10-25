@@ -100,12 +100,21 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 ## 9 · Kayıt defteri
 
 ### simple-statistics@7.12.1 · Teks-Erp · 2026-10-25
-1. Problem      : Raporlar v2 analiz bloğu (plan `docs/design/RAPORLAR-V2-PLAN.md` §3.8, R3-ISTAT) iki ölçünün birlikte değişimini (Pearson/Spearman) ölçer; §2.1 "Rapor analizi" satırı
-2. Alternatifler: elle yazmak (katsayı kısa ama sayısal kararlılık + bakım; kullanıcı "kütüphane kullan" yönlendirmesi, KARARLAR veto listesi) · `jstat` (dağılımlar dahil, ama bakımsız + büyük) · `mathjs` (~700 KB, gereğinden geniş) — olasılık kuyruğu paket DIŞINDA kendi `dagilim.ts` (KARARLAR: "p-değeri kendi")
-3. Boyut/biçim  : saf JS, native YOK, bağımlılıksız; CJS girişi `dist/simple-statistics.cjs` (exports `require`) — KU-18 sınavı: derlenmiş backend'den (`tsc` → `dist/services/reports/anlati/istatistik/korelasyon.js`) gerçek `require()` Anscombe I için r 0,8164 döndü; `tsx` ESM `import` de çalıştı
-4. Bakım        : 7.12.1 TAM SABİT; kullanılan tek fonksiyon `sampleCorrelation` (Spearman sırası kendi `averageRanks`) — yükseltme `test_rapor_istatistik` §2 referanslarıyla ölçülür
+1. Problem      : rapor v2 analiz bloğu (R3-ISTAT, plan §3.8) Pearson/Spearman katsayısı; §2.1 "Rapor analizi"
+2. Alternatifler: kendi uygulaması (~150 satır) · `jstat` (bakımsız) · `mathjs` (~700 KB) — olasılık kuyruğu kendi `dagilim.ts`
+3. Boyut/biçim  : saf JS, native YOK, bağımlılıksız; CJS `dist/simple-statistics.cjs`; KU-18 `require()` sınandı
+4. Bakım        : TAM SABİT; yalnız `sampleCorrelation` — yükseltme `test_rapor_istatistik` §2 ile ölçülür
 5. Lisans       : ISC
-6. Dağıtım      : yalnız backend paketi; Electron/mobil etkisi yok
+6. Dağıtım      : yalnız backend paketi
+7. Onay         : KULLANICI ONAYI BEKLİYOR; red → kendi uygulaması, `test_rapor_istatistik` §2 aynen geçmeli
+
+### grapesjs@0.23.8 · Electron · 2026-10-24
+1. Problem      : Belge Tasarımcısı (plan D1/T2) — sürükle-bırak blok, katman, CSS stil paneli; HTML/CSS Liquid şablonuna gider
+2. Alternatifler: elle yazmak (aylar) · Puck / Craft.js (HTML kod kipi yok) · Studio SDK / Unlayer (ücretli) · `@grapesjs/react` (EKLENMEDİ: tek `useEffect` + `appendTo` yeter) — patron kararı D1
+3. Boyut/biçim  : saf JS, native YOK, CDN YOK; yalnız `DocumentDesigner/` import eder, `React.lazy` ayrı parça ([KU-17]): 1.171 KB JS + 62 KB CSS, ana parçada YOK (ölçüldü 2026-10-25); geçişli backbone · underscore · backbone-undo · codemirror 5 · html-entities · promise-polyfill (hepsi MIT)
+4. Bakım        : 0.x, TAM SABİT (yama sürümü olay adlarını değiştirebilir; 0.23.7 eksik yayın şüphesi); pin `createEditor.test.ts`
+5. Lisans       : BSD-3-Clause
+6. Dağıtım      : rebuild GEREKMEZ. ⚠️ Varsayılan `telemetry:true` → `app.grapesjs.com`e gider, panel CSP'si (`connect-src https:`) engellemez → `telemetry:false` zorunlu; `cssIcons` → `''`. Kanvas `sandbox="allow-same-origin"` (enjekte script çalışmaz) — bekçi `iframe-sandbox.test.ts`
 
 ### liquidjs@10.30.0 · Teks-Erp · 2026-10-24
 1. Problem      : belge şablon tasarımcısı (plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md` §3.3, §5) kullanıcı şablonunda döngü/koşul/filtre ister; mantıksız `{{alan}}` motoru (refakat kartı RAW_HTML) bunu taşımaz; §2.1 "Belge şablon dili" satırı
