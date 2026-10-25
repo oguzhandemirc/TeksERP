@@ -4,6 +4,8 @@ import { RaporGrafik } from "./grafik/RaporGrafik";
 import type { RaporSunumu } from "./sunum";
 import { HeadlineCard } from "./HeadlineCard";
 import { NarrativeBox } from "./NarrativeBox";
+import { PeriodCompareTable } from "./PeriodCompareTable";
+import { SmallMultiples } from "./SmallMultiples";
 import { ReportTable } from "./ReportTable";
 
 interface Props {
@@ -12,7 +14,7 @@ interface Props {
   fetchedAt: number;
 }
 
-/** Şablonun gövdesi (plan §4.1): ana sayı | Ne görüyoruz? → uyarılar → grafik → tablo → tanımlar + veri satırı. */
+/** Şablonun gövdesi (plan §4.1): ana sayı | Ne görüyoruz? → uyarılar → küçük çoklular → dönem kıyası → grafik → tablo → tanımlar + veri satırı. */
 export function ReportBody({ presentation: p, fetchedAt }: Props) {
   return (
     <div className="flex flex-col gap-4">
@@ -34,6 +36,8 @@ export function ReportBody({ presentation: p, fetchedAt }: Props) {
           ))}
         </ul>
       ) : null}
+      {p.varyant?.hucreler?.length ? <SmallMultiples block={p.varyant} comparisonLabel={p.kiyasDonemi?.etiket} /> : null}
+      {p.donemler?.length ? <PeriodCompareTable periods={p.donemler} /> : null}
       {p.grafik ? (
         <section className="rounded-lg border p-4" aria-label="Grafik">
           <RaporGrafik blok={p.grafik} baslik={p.baslik} />

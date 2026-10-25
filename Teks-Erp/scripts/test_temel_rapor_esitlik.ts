@@ -36,7 +36,7 @@
 // NEGATİF SONDALAR (2026-10-25, md5 ile geri alındı → yeşil):
 //   ④ levent ucundan `requireDevereEnabled` kaldırıldı → ❌ 2 (§C0b zincir + §C0d devere kapalıyken 403)
 //   ⑤ `beamBalance` ölçülemeyen leventi 0 beklenenle saydı → ❌ 1 (§C3a; oran %140)
-// Temiz koşum 88/0 (§ Satış 34 + RAPB/RAPC 54).
+// Temiz koşum 97/0 (§ Satış 34 + §V 8 + RAPB/RAPC 55).
 //
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2097-07 (kıyas 2097-06), etiket TEST-TRE-<pid>.
 // Koşum: npx tsx scripts/test_temel_rapor_esitlik.ts
@@ -91,6 +91,9 @@ import { alarmResponseReport } from "../src/services/reports/alarm-response.repo
 import { getAgingReport } from "../src/services/reports/finance-aging.report";
 import { chequeService } from "../src/services/cheque.service";
 import { yasakSozcukBul } from "../src/services/reports/anlati/yasak-sozcuk";
+import { periodRanges, runCoreWithExtras } from "../src/services/reports/temel/_variant";
+import { factoryDayEndOfKey } from "../src/constants/time";
+import { ORDER_DEMAND_DIMS, OPEN_ORDER_DIMS, SHIPPED_DIMS, SUBCONTRACTOR_DIMS, openOrderRunner, orderDemandRunner, shippedRunner, subcontractorRunner } from "../src/services/reports/temel/core-runs";
 
 let pass = 0;
 let fail = 0;
@@ -299,6 +302,17 @@ async function rapbSection(): Promise<void> {
     same(subOne.anaSayi.deger, subOneSrc.summary.avgTurnaroundDays) && same(fig(subOne, "fason.bekleyenMetre")?.deger, subOneSrc.summary.openQty)
       && same(fig(subOne, "fire.fasonMetre")?.deger, subOneSrc.summary.fireQty) && subOneSrc.summary.openQty !== sub.summary.openQty,
     show(fig(subOne, "fason.bekleyenMetre")?.deger, subOneSrc.summary.openQty));
+
+  // §V4 R1-VARYANT fasoncu kırılımı: hücre = AYNI süzgeçli karne (oran ölçüsü — toplam kuralı yok, oran yeniden hesaplanır)
+  const subVar = (await runCoreWithExtras({ range: RANGE, compareRange, dims: SUBCONTRACTOR_DIMS, varyant: "fasoncu", run: subcontractorRunner({}, mode) })).sunum;
+  const subCells = subVar.varyant?.hucreler ?? [];
+  let subCellOk = subCells.length >= 1;
+  for (const h of subCells) {
+    const srcCell = await getSubcontractScorecard(RANGE, compareRange, { subcontractorId: [h.deger] });
+    if (!same(h.anaSayi.deger, srcCell.summary.avgTurnaroundDays) || !same(h.anaSayi.kiyas?.deger, srcCell.summary.prevAvgTurnaroundDays)) subCellOk = false;
+  }
+  check("§V4 ⭐ fasoncu kırılımı: her hücre = `getSubcontractScorecard({subcontractorId:[hücre]})` ortalama dönüşü (+önceki)", subCellOk,
+    subCells.map((h) => `${h.ad}=${h.anaSayi.deger}`).join(" · "));
 }
 
 // =============================================================================
@@ -670,6 +684,59 @@ async function salesSection(cD: string): Promise<void> {
   }
 }
 
+// § R1-VARYANT (gerçek DB, satış fikstürü): küçük çoklu hücresi = o değerle SÜZÜLMÜŞ kaynak karne; hücre toplamı ≤ ana sayı
+// (metre toplanır; oran ölçüsünde toplam kuralı yok); dönem kıyasının son sütunu = o dönemin TEK koşusu.
+// NEGATİF SONDA (2026-10-25, md5 ile geri alındı): `variantCells` hücre ana sayısını süzgeçsiz ana koşudan kopyaladı
+//   → ❌ 4 (§V1b hücre = süzgeçli kaynak · §V1c toplam ≤ ana 860 > 430 · §V2a yön 700 > 350 · §V4 fasoncu).
+async function variantSection(): Promise<void> {
+  console.log("── §V R1-VARYANT: küçük çoklular + dönem kıyası ──");
+  const main = (await buildOrderDemandReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: {} })).sunum;
+  const v = (await runCoreWithExtras({ range: SALES_RANGE, compareRange: SALES_PREV, dims: ORDER_DEMAND_DIMS, varyant: "musteri", run: orderDemandRunner({}, "prev") })).sunum;
+  const cells = v.varyant?.hucreler ?? [];
+  check("§V1a müşteri kırılımı: 2–6 hücre, büyükten küçüğe, ana sayı DEĞİŞMEZ", cells.length >= 2 && cells.length <= 6
+    && cells.every((h, i) => i === 0 || (cells[i - 1]!.anaSayi.deger ?? 0) >= (h.anaSayi.deger ?? 0)) && v.anaSayi.deger === main.anaSayi.deger,
+    cells.map((h) => `${h.ad}=${h.anaSayi.deger}`).join(" · "));
+  let cellOk = cells.length > 0;
+  for (const h of cells) {
+    const src = await getOrderIntake(SALES_RANGE, SALES_PREV, { customerId: [h.deger] });
+    if (h.anaSayi.deger !== src.summary.totalQty || h.anaSayi.kiyas?.deger !== src.summary.prevTotalQty) cellOk = false;
+  }
+  check("§V1b ⭐ tek değer varyantı = o değerle süzülmüş ana sayı (`getOrderIntake({customerId:[hücre]})` totalQty + önceki)", cellOk);
+  const sum = cells.reduce((a, h) => a + (h.anaSayi.deger ?? 0), 0);
+  check("§V1c ⭐ hücre toplamı ≤ ana sayı (metre)", cells.length > 0 && sum <= (main.anaSayi.deger ?? 0) + 1e-6 && sum > 0, `${sum} ≤ ${main.anaSayi.deger}`);
+  check("§V1d beyan: `varyant` = musteri · `suzgecAnahtari` = customerId · müşteri çipi seçenekli",
+    v.parametreler.find((x) => x.ad === "varyant")?.deger === "musteri" && v.varyant?.suzgecAnahtari === "customerId" && (v.parametreler.find((x) => x.ad === "customerId")?.secenekler?.length ?? 0) >= 2);
+
+  const yon = (await runCoreWithExtras({ range: SALES_RANGE, compareRange: SALES_PREV, dims: SHIPPED_DIMS, varyant: "yon", run: shippedRunner(undefined, "prev") })).sunum;
+  const shipMain = (await buildShippedReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: {} })).sunum;
+  let yonOk = (yon.varyant?.hucreler ?? []).length === 2;
+  for (const h of yon.varyant?.hucreler ?? []) {
+    const one = (await buildShippedReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: { destination: h.deger as ShipmentDestination } })).sunum;
+    if (one.anaSayi.deger !== h.anaSayi.deger) yonOk = false;
+  }
+  const yonSum = (yon.varyant?.hucreler ?? []).reduce((a, h) => a + (h.anaSayi.deger ?? 0), 0);
+  check("§V2a ⭐ sevk yön kırılımı: hücre = yön süzgeçli BRÜT sevk; toplam ≤ ana", yonOk && yonSum <= (shipMain.anaSayi.deger ?? 0) + 1e-6, `${yonSum} ≤ ${shipMain.anaSayi.deger}`);
+
+  // Ana aralığın SONU fabrika gününün sonu (panelin gönderdiği gibi) → sütunlar Ocak · Şubat · Mart 2097.
+  const perRange = { from: SALES_RANGE.from, to: factoryDayEndOfKey("2097-03-31") };
+  const per = (await runCoreWithExtras({ range: perRange, compareRange: SALES_PREV, dims: ORDER_DEMAND_DIMS, donemler: { birim: "ay", adet: 3 }, run: orderDemandRunner({}, "prev") })).sunum;
+  const ranges = periodRanges(perRange.to, { birim: "ay", adet: 3 });
+  const lastR = ranges[2]!;
+  const single = (await buildOrderDemandReport({ range: lastR, compareRange: ranges[1]!, compareMode: "prev", filters: {} })).sunum;
+  const lastSrc = await getOrderIntake(lastR, ranges[1]!, {});
+  const cols = per.donemler ?? [];
+  check("§V3a ⭐ `donemler=ay:3` son sütun = o dönemin TEK koşusu (+bir önceki dönem kıyası) = kaynak totalQty",
+    cols.length === 3 && cols[2]!.anaSayi.deger === single.anaSayi.deger && cols[2]!.anaSayi.deger === lastSrc.summary.totalQty && cols[2]!.anaSayi.kiyas?.deger === lastSrc.summary.prevTotalQty,
+    cols.map((c) => `${c.etiket}=${c.anaSayi.deger}`).join(" · "));
+  const firstSrc = await getOrderIntake(ranges[0]!, null, {});
+  check("§V3b ilk sütunlar kıyassız ve kendi dönemlerinin kaynak değeri", cols.length === 3 && cols[0]!.anaSayi.deger === firstSrc.summary.totalQty && cols[0]!.anaSayi.kiyas === undefined);
+
+  const open = (await runCoreWithExtras({ range: SALES_RANGE, compareRange: null, dims: OPEN_ORDER_DIMS, donemler: { birim: "ay", adet: 3 }, snapshotOnly: true, run: openOrderRunner(undefined) })).sunum;
+  const openMain = (await buildOpenOrderReport({ filters: {} })).sunum;
+  check("§V3c ⭐ kesit (açık siparişler): dönem değerleri ÖLÇÜLEMEDİ (null, 0 değil) + 'kesit görüntüsü' uyarısı; ana sayı aynı",
+    (open.donemler ?? []).every((c) => c.anaSayi.deger === null && !!c.anaSayi.olculemedi) && open.uyarilar.some((u) => u.includes("kesit görüntüsü")) && open.anaSayi.deger === openMain.anaSayi.deger);
+}
+
 async function cleanupSales(): Promise<void> {
   await prisma.rollReturn.deleteMany({ where: { id: { in: salesIds.returns } } });
   await prisma.sackAllocation.deleteMany({ where: { sackId: { in: salesIds.sacks } } });
@@ -692,6 +759,7 @@ async function main(): Promise<void> {
   try {
     const { cD } = await salesSetup();
     await salesSection(cD);
+    await variantSection();
   } finally {
     await cleanupSales();
   }

@@ -1,5 +1,7 @@
 # e-İrsaliye (E-IRS) — Plan v1
 
+> **Durum 2026-10-25: v1 TAMAMLANDI** — E0–E8 main'de (E1 #132 · E2 #130 · E3 #142 · E4 #118 · E5 #152 · E6 #158 · E7 #168 · E0/E8 belge + uçtan uca bekçi `test_e_irsaliye_e2e`). CANLI kullanım (GİB'e gerçek belge) §7 V1 mali müşavir doğrulamasına bağlı; v2 entegratör V2'ye bağlı. Aşağıdaki metin plan anındaki hâlidir; sapmalar arşivde (`docs/history/arsiv/2026-10.md`, "e-İrsaliye v1 karar özeti").
+>
 > Durum: PLAN (kod yok). Tarih: 2026-10-24. Yazar: plan ajanı (Opus). Bağlayıcı girdi: `scratchpad/erp/KARARLAR.md` G2 madde 1 + G3; patron kararları P1–P2 (aşağıda §0.3). Dilim istemleri: `scratchpad/erp/E-IRS/istemler/<KOD>.md`.
 > Kaynak uyarısı: mevzuat bilgisi G-R2 raporundan (blog/entegratör kaynaklı) ve genel UBL-TR bilgisinden gelir; GİB kılavuzu ve XSD paketi bu turda DOĞRUDAN okunmadı. **⚠ doğrulanacak** işaretli her madde E4-XML diliminden ÖNCE GİB "e-İrsaliye UBL-TR Kılavuzu" + "e-İrsaliye Uygulama Kılavuzu" ve mali müşavirle teyit edilir (§7 veto listesi).
 
