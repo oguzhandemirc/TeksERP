@@ -111,7 +111,7 @@ const html = customerDocBody({
 </div>{%- endif -%}
 </div>{%- endif -%}`,
   main: String.raw`{%- if ayar.sections.rollTable -%}<div class="tbl-cap">Gönderilen Toplar ({{ toplamlar.top_adedi }})</div>
-${dynamicTable({ rows: "tablolar.toplar", cols: "toplar", widths: { seq: "34px", width: "60px", meters: "80px", kg: "70px" }, cells: ROLL_CELLS, foot: { label: "TOPLAM", cells: FOOT_CELLS } })}
+${dynamicTable({ rows: "tablolar.toplar", cols: "toplar", widths: [["seq", "34px"], ["width", "60px"], ["meters", "80px"], ["kg", "70px"]], cells: ROLL_CELLS, foot: { label: "TOPLAM", cells: FOOT_CELLS } })}
 {%- endif -%}
 {%- if ayar.sections.notes and ayar.footerNote != "" -%}<div class="note">{{ ayar.footerNote }}</div>{%- endif -%}`,
 });

@@ -19,7 +19,7 @@ const variants: EquivalenceVariant[] = [
     name: "kolon_gizle_sira_baslik",
     config: {
       columns: {
-        gradeSummary: { order: ["totalMeters", "grade"], labels: { grade: "Sınıf <&>" } },
+        gradeSummary: { order: ["totalMeters", "grade"], labels: { totalMeters: "Metre <&>" } },
         rollDetail: { hidden: ["seq", "width"], order: ["meters", "grade", "itemColor", "barcode"], blankLabels: ["itemColor"] },
       },
     },
@@ -113,11 +113,11 @@ const html = customerDocBody({
 {%- if ayar.sections.date -%}<div class="ln">Tarih: <b>{{ belge.tarih | tarih }}</b></div>{%- endif -%}
 {%- if ayar.sections.orderNos and ${filled("belge.siparis_nolari")} -%}<div class="ln">Sipariş: <b>{{ belge.siparis_nolari }}</b></div>{%- endif -%}`,
   main: String.raw`{%- if ayar.sections.gradeSummary -%}<div class="tbl-cap">Kalite Dağılımı</div>
-${dynamicTable({ rows: "tablolar.kaliteler", cols: "kaliteler", widths: {}, cells: GRADE_CELLS, foot: { label: "TOPLAM", cells: GRADE_FOOT } })}
+${dynamicTable({ rows: "tablolar.kaliteler", cols: "kaliteler", widths: [], cells: GRADE_CELLS, foot: { label: "TOPLAM", cells: GRADE_FOOT } })}
 {%- endif -%}
 {%- assign dokum_sayisi = tablolar.toplar | size -%}
 {%- if ayar.sections.rollDetail and dokum_sayisi > 0 -%}<div class="tbl-cap">Top Dökümü ({{ toplamlar.top_adedi }})</div>
-${dynamicTable({ rows: "tablolar.toplar", cols: "toplar", widths: { seq: "34px", width: "60px", grade: "70px", meters: "80px" }, cells: ROLL_CELLS })}
+${dynamicTable({ rows: "tablolar.toplar", cols: "toplar", widths: [["seq", "34px"], ["width", "60px"], ["grade", "70px"], ["meters", "80px"]], cells: ROLL_CELLS })}
 {%- endif -%}
 {%- if ayar.sections.declaration -%}<div class="decl">{%- if ayar.footerNote != "" -%}{{ ayar.footerNote }}{%- else -%}${DEFAULT_DECLARATION}{%- endif -%}</div>
 {%- elsif ayar.footerNote != "" -%}<div class="decl">{{ ayar.footerNote }}</div>{%- endif -%}`,

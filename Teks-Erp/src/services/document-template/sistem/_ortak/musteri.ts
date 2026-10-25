@@ -77,7 +77,7 @@ export const WIDTH = String.raw`{%- if satir.en == nil -%}—{%- else -%}{{ sati
 
 /**
  * `buildDocTable` eşi: kolonlar ayardan (`ayar.kolonlar.<cols>`) sıralı/başlıklı gelir; kolon
- * yoksa tablo hiç basılmaz. Hücre/genişlik/toplam `kolon.kaynak`la seçilir; toplam satırı
+ * yoksa tablo hiç basılmaz. Hücre/genişlik (`[kaynak, css]` demetleri) ve toplam `kolon.kaynak`la seçilir; toplam satırı
  * `kolon.toplam` dolu bir kolon görünürse (ve `foot.when` sağlanırsa) basılır, etiket ilk
  * toplamsız kolona oturur. `caption` verilirse thead'de colspan'lı başlık satırı olur.
  */
@@ -85,11 +85,11 @@ export function dynamicTable(opts: {
   rows: string;
   cols: string;
   caption?: string;
-  widths: Record<string, string>;
+  widths: ReadonlyArray<readonly [string, string]>;
   cells: string;
   foot?: { label: string; cells: string; when?: string };
 }): string {
-  const widths = Object.entries(opts.widths)
+  const widths = opts.widths
     .map(([k, w]) => String.raw`{% when "${k}" %} style="width:${w}"`)
     .join("");
   const caption = opts.caption

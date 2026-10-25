@@ -122,7 +122,7 @@ ${dynamicTable({
   rows: "tablolar.toplar",
   cols: "toplar",
   caption: "{% if toplamlar.top_adedi > 1 %}İADE EDİLEN TOPLAR{% else %}İADE EDİLEN TOP{% endif %}",
-  widths: { width: "60px", grade: "70px", qty: "80px" },
+  widths: [["width", "60px"], ["grade", "70px"], ["qty", "80px"]],
   cells: ROLL_CELLS,
   foot: { label: "TOPLAM ({{ toplamlar.top_adedi }} top)", cells: String.raw`{%- when "qty" -%}{{ toplamlar.metre | sayi: 2 }}`, when: "toplamlar.top_adedi > 1" },
 })}
