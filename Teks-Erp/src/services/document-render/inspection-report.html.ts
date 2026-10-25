@@ -85,6 +85,8 @@ export function inspectionFootnotes(doc: InspectionReportDoc): string[] {
     .map((k) => `${WIDTH_SOURCE_TEXT[k]} ${doc.notes.widthSources[k]}`);
   if (ws.length) out.push(`En kaynağı: ${ws.join(" · ")}.`);
   if (doc.totals.uninspectedCount > 0) out.push(`Muayenesi olmayan top: ${doc.totals.uninspectedCount}.`);
+  // Patron kararı (2026-10-25): müşteri setinin koşu tavanı farklı olsa da puan yeniden hesaplanmaz.
+  if (doc.totals.inspectedCount > 0) out.push("Puan, muayene anındaki kural setiyle hesaplanmıştır.");
   return out;
 }
 /** Özet satırları ([etiket, değer]) — HTML kutusu, Excel başlığı ve sözleşme aynı listeden. */
