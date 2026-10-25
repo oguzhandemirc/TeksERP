@@ -357,9 +357,6 @@ const KARO_YOK: ReadonlyArray<{ key: string; reason: string }> = [
       "(`command-entries.deep.ts`) ve İstasyonlar sayfasından giriliyor. Gizlenecek " +
       "bir karo olmadığı için karo↔modül hizası ölçülemez; P5 karo eklerse muaf ÖLÜR.",
   },
-  // K4P zemin (2026-10-24): manifesto + route kapısı önden yazıldı; sayfa ve karo PANEL/LAB/SERT
-  // dilimlerinde iner. Karo doğunca muaf "kullanılmayan" düşer ve silinir.
-  { key: "quality/inspections", reason: "K4P Muayeneler ekranı/karosu henüz yok (PANEL/LAB/SERT dilimi); manifesto zeminde önden." },
 ];
 
 
