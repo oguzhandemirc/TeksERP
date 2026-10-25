@@ -69,6 +69,11 @@ import {
   finishStepLabel,
   nextStationLabel,
 } from './stationPanels';
+import GramajTapPanel from './GramajTapPanel';
+import { useGramajTap } from './useGramajTap';
+import { findTarget } from './gramajTap';
+import { useAuthStore } from '../../../store/authStore';
+import { palette } from '../../../theme/tokens';
 
 // =============================================================================
 // Multi-job state — operatör birden fazla refakat kartını paralel açabilir.
@@ -590,17 +595,19 @@ export default function KursunQcScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Toast.show({
         type: 'success',
-        text1: 'KK2 işaretlendi',
+        text1: panels.qualityPanel ? 'KK2 işaretlendi' : 'Top tamamlandı',
         text2: onlineManager.isOnline() ? undefined : 'Çevrimdışı — sync bekliyor',
       });
 
       return { cardId, prevRolls, prevSelectedRollId };
     },
-    onSuccess: async () => {
+    onSuccess: () => {
       // Server confirm geldi — backend'den fresh state çek (open jobs listesi
       // de değişmiş olabilir: step kapanma, başka kart silinmesi vb.).
-      await refetchActiveJob();
-      qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
+      // BEKLENMEZ (KQ-D5): mutasyon HTTP yanıtında settle olur; tek dokunuş
+      // kilidi tazelemeyi beklerse emülatörde ~10 sn sonraki dokunuşu yutuyordu.
+      void refetchActiveJob().catch(() => undefined);
+      void qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
     },
     onError: (err, vars, context) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
@@ -971,6 +978,19 @@ export default function KursunQcScreen() {
     });
   };
 
+  // KQ-D5: yalnız kurşunda tek dokunuş (gramaj = top bitti). Konak mutasyonu
+  // iyimser sıradaki topa geçer; düzeltme/kilit/şerit hook'ta.
+  const operatorLabel = useAuthStore((st) => st.user?.fullName || st.user?.username || '—');
+  const gramajTap = useGramajTap({
+    cfg: panels.tap,
+    summary: activeJob?.stepSummary ?? null,
+    roll: selectedRoll?.barcode && !selectedRoll.qc2Completed ? selectedRoll : null,
+    operator: operatorLabel,
+    complete: (vars, opts) => completeQc2Mutation.mutate(vars, opts),
+    refresh: () => void refetchActiveJob().catch(() => undefined),
+  });
+  const tapLayout = panels.completion === 'TAP_VALUE';
+
   // Hata girişi: InspectionPanel metre/boy/mükerrer doğrulamasını yapıp geçerli
   // girdiyi verir; KONAK yazar. clientErrorId burada üretilip vars'a gömülür →
   // mutate variables persist edilir, online resume'da backend aynı id ile idempotent.
@@ -1323,6 +1343,7 @@ export default function KursunQcScreen() {
               <Text style={styles.emptyHint}>
                 Sağdaki top kuyruğundan birini seçin
               </Text>
+              {tapLayout && <GramajTapPanel state={gramajTap} hasRoll={false} />}
             </View>
           ) : (
             // Tüm öğeler tek gap'li kolonda — cetvel · giriş · buton · numpad
@@ -1332,7 +1353,9 @@ export default function KursunQcScreen() {
                   cetvel + metre + tip ızgarası. Kalite paneli kapalı istasyonda
                   (yalnız kurşun) çizilmez; işlem paneli aynı sütunda kalır. */}
               {(() => {
-                const processCard = (
+                const processCard = tapLayout && selectedRoll.barcode ? (
+                  <GramajTapPanel state={gramajTap} hasRoll={!selectedRoll.qc2Completed} />
+                ) : (
                   <>
                 {/* ── İSTASYON ÖZELLİKLERİ (mod güdümlü, 2026-08-10) ──
                     OTOMATİK satırlar salt bilgi (operatöre sorulmaz, adım
@@ -1354,10 +1377,19 @@ export default function KursunQcScreen() {
                       // kodda sabit liste YOK.
                       if (p.valueType === 'CHOICE') {
                         const picked = propAnswers[p.propertyId];
+                        // KQ-D5: hedef vurgusu birleşik düzende de (seçim, tamamlamaz).
+                        const target = p.variantOfPropertyId
+                          ? findTarget(
+                              activeJob.stepSummary.targetValues,
+                              p.propertyId,
+                              (p.values ?? []).map((v) => ({ code: v.code, label: v.name })),
+                            )
+                          : null;
                         return (
                           <View key={p.propertyId} style={styles.propChoiceBlock}>
                             <Text style={styles.propChoiceLabel}>
                               {p.mode === 'REQUIRED' ? `${p.name} *` : p.name}
+                              {target ? `  ·  HEDEF ${target.label}` : ''}
                             </Text>
                             {(p.values ?? []).length === 0 ? (
                               // Değersiz SEÇİM özelliği: backend bunu doğduğu anda
@@ -1373,6 +1405,7 @@ export default function KursunQcScreen() {
                                   // Çeşit (gramaj) değerleri eldivenle basılan BÜYÜK
                                   // düğme satırı (≥64 dp, seçili = dolu); diğerleri çip.
                                   const big = !!p.variantOfPropertyId;
+                                  const isTarget = big && target?.code === v.code;
                                   return (
                                     <TouchableRipple
                                       key={v.code}
@@ -1381,7 +1414,7 @@ export default function KursunQcScreen() {
                                       onPress={() => pickValueProp(p.propertyId, v.code)}
                                       style={
                                         big
-                                          ? [styles.variantBtn, on && styles.variantBtnOn]
+                                          ? [styles.variantBtn, isTarget && styles.variantBtnTarget, on && styles.variantBtnOn]
                                           : [styles.propChip, on && styles.propChipOn]
                                       }
                                     >
@@ -1392,7 +1425,7 @@ export default function KursunQcScreen() {
                                             : [styles.propChipText, on && styles.propChipTextOn]
                                         }
                                       >
-                                        {v.name}
+                                        {isTarget ? `★ ${v.name}` : v.name}
                                       </Text>
                                     </TouchableRipple>
                                   );
@@ -1453,6 +1486,9 @@ export default function KursunQcScreen() {
                   4) Barkodlu + bekliyor → KK2 Tamamla
                   Not: per-roll "Geri Al" kaldırıldı (yarım geri alıyordu + offline
                   ölüydü). Yanlış işaret düzeltmesi = kartı tekrar okut → adım reopen. */}
+              {/* Tek dokunuş düzeninde bekleyen barkodlu topun "Tamamla"sı yok —
+                  değer düğmesi tamamlar (KQ-D5). */}
+              {!(tapLayout && !allQc2Done && selectedRoll.barcode && !selectedRoll.qc2Completed) && (
               <Surface
                 style={[styles.footer, !compact && styles.footerBare]}
                 elevation={compact ? 4 : 0}
@@ -1534,6 +1570,7 @@ export default function KursunQcScreen() {
                   </Button>
                 )}
               </Surface>
+              )}
 
               {/* Tablet: sayısal tuş takımı sol kolonun altında — metre girişi
                   ile aynı sütunda, aksiyon butonunun hemen altında. fill: numpad
@@ -2342,6 +2379,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   variantBtnOn: { backgroundColor: '#059669' },
+  variantBtnTarget: { borderWidth: 5, borderColor: palette.emerald[800] },
   variantBtnText: { fontSize: 20, fontWeight: '800', color: '#047857' },
   variantBtnTextOn: { color: '#ffffff' },
   rowBetween: {
