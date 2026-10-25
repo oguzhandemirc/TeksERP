@@ -81,7 +81,7 @@ export function ozetEksikleri(eski: Ozet, yeni: Ozet): string[] {
   return out;
 }
 
-if (require.main === module) {
+async function main(): Promise<void> {
   const yeni = ozetUret();
   const eski = ozetOku() ?? {};
   const ihlal = ozetIhlalleri(eski, yeni);
@@ -90,7 +90,8 @@ if (require.main === module) {
   for (const e of eksik) console.log(`  ➕ ${e}`);
   if (ihlal.length) {
     console.log("Özet YAZILMADI: sözleşme yalnız büyür — ihlali geri al.");
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   if (process.argv.includes("--yaz")) {
     writeFileSync(OZET_DOSYASI, `${JSON.stringify(yeni, null, 1)}\n`);
@@ -100,4 +101,19 @@ if (require.main === module) {
   } else {
     console.log("Özet güncel.");
   }
+}
+
+if (require.main === module) {
+  // Senaryo örnek kodu numara serisi önbelleğini arka planda DB'den tazeler; havuz (boşta 10 dk)
+  // kapatılmazsa süreç çıkmaz. Doğal çıkış: process.exit yerine exitCode.
+  void main()
+    .catch((e: unknown) => {
+      console.error(e);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      const { default: prisma, pool } = await import("../../src/lib/prisma");
+      await prisma.$disconnect().catch(() => undefined);
+      await pool.end().catch(() => undefined);
+    });
 }
