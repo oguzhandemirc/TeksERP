@@ -19,6 +19,8 @@ import { bildirimService } from "@/services/bildirimService";
 import { bildirimBridge } from "@/lib/bildirim/masaustu";
 import type { NotificationCatalogKind, NotificationPreferenceCell } from "@/lib/bildirim/types";
 import { NOTIFICATION_GROUP_ORDER } from "@/pages/Notifications/group-order";
+import { useTabsStore } from "@/store/tabs";
+import { NOTIFICATION_SETTINGS_PATH, useNotificationSettingsAvailable } from "./BildirimTercihKarti";
 
 function groupKinds(kinds: readonly NotificationCatalogKind[]) {
   const bildirim = kinds.filter((k) => k.sinif === "BILDIRIM");
@@ -124,6 +126,8 @@ export function MasaustuBildirimKarti() {
   const katalog = useNotificationCatalog(acik);
   const { prefs } = usePreferences();
   const masaustu = useMemo(() => bildirimBridge() !== null, []);
+  const tumTercihler = useNotificationSettingsAvailable();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const legacy = prefs.bildirim?.masaustuTurler;
   const hucreler = katalog.data?.hucreler;
   const secili = useMemo(() => new Set(desktopKinds(hucreler, legacy)), [hucreler, legacy]);
@@ -149,6 +153,11 @@ export function MasaustuBildirimKarti() {
           Seçtiğin bildirim türleri, uygulama arka plandayken işletim sistemi bildirimi olarak da gelir;
           pencere öndeyken kısa bir uyarı çıkar. Başlangıçta önerilen türler seçilidir.
         </CardDescription>
+        {tumTercihler && (
+          <Button variant="link" size="sm" className="h-auto justify-start p-0 text-xs" onClick={() => navigateActive(NOTIFICATION_SETTINGS_PATH)}>
+            Tüm bildirim tercihleri (uygulama içi, tablet sesi, sessiz saat) →
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
         {!yuklendi ? null : !acik ? (
