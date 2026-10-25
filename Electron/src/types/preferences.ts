@@ -80,6 +80,12 @@ export interface AppPreferences {
     /** Yeni alarmda / tekrar çalmada ses (varsayılan AÇIK; şerit ve bildirim sesten bağımsız). */
     sound?: boolean;
   };
+  /**
+   * Bildirim — kişisel masaüstü kanalı (N3). `masaustuTurler`: arka plandayken OS bildirimi
+   * verecek katalog türleri; YOK/boş = hiçbiri (varsayılan bugünkü davranış: kapalı).
+   * F4 tercih tablosu gelince oraya taşınır.
+   */
+  bildirim?: { masaustuTurler?: string[] };
   /** Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin"); tablo YOK, blob alanı. */
   raporlar?: { favoriler?: string[] };
   /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */

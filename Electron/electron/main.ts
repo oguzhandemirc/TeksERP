@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import log from "electron-log/main.js";
 import { registerIpcHandlers } from "./ipc/index.js";
+import { registerBildirimNotifyIpc } from "./ipc/bildirim-notify.ipc.js";
 import { closeTvWindowWithApp, registerTvWindowIpc } from "./ipc/tv-window.ipc.js";
 import { startDiscoveryIfNeeded } from "./ipc/discovery.ipc.js";
 import { buildAppMenu } from "./menu.js";
@@ -137,6 +138,7 @@ app.whenReady().then(async () => {
   // Yalnız şifreli: ağdaki sunucuya http/ws isteği kesilir (döngü adresi serbest).
   installPlainHttpGuard(session.defaultSession);
   registerIpcHandlers();
+  registerBildirimNotifyIpc({ overlayDir: path.join(resourcesDir, "overlay") });
   registerTvWindowIpc({
     preload: preloadPath,
     icon: iconPath,
