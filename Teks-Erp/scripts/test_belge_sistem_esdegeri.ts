@@ -176,6 +176,51 @@ function canonical(html: string, side: "system" | "liquid"): Canonical {
   return { lang, pages, css: normalizeCss(rest), body };
 }
 
+// ── Ölü kural toleransı (T7) ──────────────────────────────────────────────────
+// Sistem bazı kuralları VERİYE bağlı basar (fason çekide `.cmd` yalnız talimat kutusu varken);
+// Liquid CSS'i yalnız ayardan üretilir. Liquid'in gövdede hiçbir öğeye değmeyen ve Sistem'de
+// birebir bulunmayan fazladan kuralı yok sayılır; Sistem'deki her kural iki tarafta aynı sırada kalır.
+function splitRules(css: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < css.length; i++) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}" && --depth === 0) {
+      out.push(css.slice(start, i + 1));
+      start = i + 1;
+    }
+  }
+  if (start < css.length) out.push(css.slice(start));
+  return out;
+}
+
+function bodyClasses(body: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  for (const t of body) for (const m of t.matchAll(/ class="([^"]*)"/g)) for (const c of m[1]!.split(" ")) if (c) out.add(c);
+  return out;
+}
+
+function ruleIsDead(rule: string, classes: ReadonlySet<string>): boolean {
+  const open = rule.indexOf("{");
+  if (open < 0) return false;
+  const prelude = rule.slice(0, open);
+  if (prelude.startsWith("@")) {
+    const inner = splitRules(rule.slice(open + 1, -1));
+    return inner.length > 0 && inner.every((r) => ruleIsDead(r, classes));
+  }
+  return prelude.split(",").every((sel) => [...sel.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)].some((m) => !classes.has(m[1]!)));
+}
+
+function pruneDeadExtras(liquid: Canonical, system: Canonical): Canonical {
+  const systemRules = new Set(splitRules(system.css));
+  const classes = bodyClasses(liquid.body);
+  const css = splitRules(liquid.css)
+    .filter((r) => systemRules.has(r) || !ruleIsDead(r, classes))
+    .join("");
+  return { ...liquid, css };
+}
+
 /** İlk ayrışan nokta ±80 karakter bağlamla; eşitse null. */
 function firstDiff(a: Canonical, b: Canonical): string | null {
   if (a.lang !== b.lang) return `html lang: Sistem '${a.lang}' ≠ Liquid '${b.lang}'`;
@@ -241,7 +286,8 @@ function compare(eq: SystemEquivalent, scn: Scenario<unknown>, variant: Equivale
     return `render hatası: ${e instanceof TemplateRenderError ? e.issues.map((i) => i.mesaj).join(" | ") : String(e)}`;
   }
   if (r.removed.length) return `sıkı temizleyici eşlenikten parça kesti: ${r.removed.join(", ")}`;
-  return firstDiff(canonical(r.system, "system"), canonical(r.liquid, "liquid"));
+  const system = canonical(r.system, "system");
+  return firstDiff(system, pruneDeadExtras(canonical(r.liquid, "liquid"), system));
 }
 
 const DEFAULT_VARIANT: EquivalenceVariant = { name: "varsayilan", config: {} as DocumentConfig };
