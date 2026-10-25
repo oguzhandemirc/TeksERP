@@ -70,6 +70,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | HTTP | `axios` (oturumlu) + ham `fetch` (kimliksiz) | ÇİFT ama BİLİNÇLİ AYRIM — [KU-05] |
 | Tarih | `dayjs` (27) | tarih SEÇİCİ paketi EKLENMEZ (`docs/kurallar/filtre-liste.md:84`) |
 | Depolama | `expo-secure-store` (sır) · `@react-native-async-storage/async-storage` | — |
+| Kararlı donanım kimliği (yalnız tanıma) | `expo-application` | yalnız `utils/hardwareId.ts` (ANDROID_ID → kuruluma özgü HMAC özeti; ham değer cihazdan çıkmaz); native → APK/AAB turu; reddedilen: yerel Kotlin modülü (bakım yükü) |
 | Kamera · okutma geri bildirimi | `expo-camera` 17 · `expo-haptics` + `expo-audio` | ekranlar `Haptics`i doğrudan değil `scanFeedback.signalScan` üzerinden çağırır |
 | Yerel bildirim (tezgah alarmı) | `expo-notifications` ~0.32 (yalnız `services/alarmNotify.ts`, korumalı tembel `require`) | yalnız YEREL zamanlanmış hatırlatma; internet push (FCM/APNs) ayrı dilim (`DOKUMA-ALARM-VE-YOL-HARITASI.md` §A.12); native modül → OTA ile gitmez, APK turu ister |
 | Bluetooth | `react-native-bluetooth-classic` (3 dosya, lazy `require`) | `react-native-ble-plx` canlı ama sahipsiz — §7 |

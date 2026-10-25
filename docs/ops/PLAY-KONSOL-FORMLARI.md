@@ -73,9 +73,11 @@ sayılan sınırlı teknik veriler istisnadır.
   Girişten sonra oturum anahtarı cihazın güvenli deposunda (Android Keystore) tutulur.
 - Kullanıcı listesi: giriş ekranında, fabrika sunucusundaki kullanıcıların adları
   seçim için gösterilir.
-- Cihaz kimliği: uygulamanın ilk açılışta ürettiği rastgele bir tanımlayıcı. Fabrika
-  yöneticisinin tableti tanıması ve istasyona ataması için kullanılır; reklam
-  kimliği veya donanım kimliği değildir.
+- Cihaz kimliği: uygulamanın ilk açılışta ürettiği rastgele bir tanımlayıcı ile
+  cihazın Android kimliğinden fabrikaya özgü anahtarla üretilen tuzlu özet. Fabrika
+  yöneticisinin tableti tanıması (yeniden kurulumda aynı kayda bağlanması) ve
+  istasyona ataması için kullanılır; ham donanım kimliği cihazdan çıkmaz, özet başka
+  bir fabrikada aynı tabletle ilişkilendirilemez; reklam kimliği değildir.
 - İş kayıtları: okutulan barkodlar, metraj, ağırlık, kalite kararları, açıklama
   notları, sevkiyatta şoför adı ve araç plakası gibi operatörün girdiği bilgiler ve
   bu işlemleri hangi kullanıcının ne zaman yaptığı.
@@ -200,7 +202,7 @@ Konsoldaki alanlar: Ad ("Demo hesabı") · Kullanıcı adı · Parola · "Diğer
 |---|---|---|
 | Kullanıcı adı + parola / hızlı PIN / kart kodu | fabrika sunucusu (`/auth/login`, `/auth/login-quick-pin`, `/auth/login-card`) | `mobil/src/services/auth.service.ts` |
 | Kullanıcı listesi (ad soyad) | fabrika sunucusundan tablete (giriş ekranı) | `/auth/mobile-users` |
-| Cihaz kimliği (rastgele UUID v4, SecureStore) | fabrika sunucusu, her istekte + `devices/announce` | `mobil/src/utils/deviceId.ts` |
+| Cihaz kimliği (rastgele UUID v4, SecureStore) + cihaz kimliği özeti (ANDROID_ID'nin kuruluma özgü tuzlu HMAC'i; ham değer cihazdan çıkmaz) | fabrika sunucusu, her istekte + `devices/announce` | `mobil/src/utils/deviceId.ts` · `mobil/src/utils/hardwareId.ts` |
 | İş kayıtları, serbest metin notlar, şoför adı + plaka | fabrika sunucusu | `mobil/src/services/packing.service.ts`, `FasonSevk` |
 | Hata bilgisi (sınıf, yığın, ekran, sürüm; mesaj YOK) | fabrika sunucusu; oradan bize yalnız müşteri onayıyla | `mobil/src/lib/errorReport.ts`, `docs/kurallar/lisans.md` |
 | OTA isteği (sürüm + indirme belirteci) | `indir.etkiliyazilim.com` (Cloudflare) | `mobil/app.json` `updates.url`, `UpdateGate.tsx` |
@@ -230,7 +232,7 @@ Konsoldaki alanlar: Ad ("Demo hesabı") · Kullanıcı adı · Parola · "Diğer
 | Uygulama etkinliği → **Diğer işlemler** | Evet (hangi kullanıcı hangi işlemi ne zaman yaptı) | Hayır | Hayır | Zorunlu | Uygulama işlevselliği, Sahtekârlığı önleme/güvenlik ve uygunluk |
 | Uygulama bilgileri ve performans → **Kilitlenme günlükleri** | Evet (hata sınıfı + yığın) | Hayır | Hayır | Zorunlu (kullanıcı kapatamaz; iletim müşteri onayına bağlı) | Analiz |
 | Uygulama bilgileri ve performans → **Teşhis** | ⚠ ML Kit açıklamasına göre (aşağı) | — | — | — | — |
-| Cihaz veya diğer kimlikler → **Cihaz veya diğer kimlikler** | Evet (rastgele cihaz UUID'si) | Hayır | Hayır | Zorunlu | Uygulama işlevselliği, Sahtekârlığı önleme/güvenlik ve uygunluk |
+| Cihaz veya diğer kimlikler → **Cihaz veya diğer kimlikler** | Evet (cihaz kimliği: rastgele UUID + kuruluma özgü tuzlu özet; ham değer cihazdan çıkmaz) | Hayır | Hayır | Zorunlu | Uygulama işlevselliği, Sahtekârlığı önleme/güvenlik ve uygunluk |
 
 Toplanmayan (işaretleme): Konum (yaklaşık/kesin), Finansal bilgiler, Sağlık ve fitness, Mesajlar, Fotoğraflar ve videolar, Ses dosyaları, Müzik, Dosyalar ve dokümanlar, Takvim, Kişiler, Web'de gezinme, E-posta adresi, Telefon numarası, Adres, Uygulama etkileşimleri, Uygulama içi arama geçmişi, Yüklü uygulamalar.
 

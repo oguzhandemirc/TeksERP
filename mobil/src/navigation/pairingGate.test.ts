@@ -130,4 +130,20 @@ describe('shouldShowPairingGate — onaysız cihazda parola girişi', () => {
       }),
     ).toBe(true);
   });
+  it('§R1 eşleme v2: REBIND_PENDING / REBIND_REJECTED → kapı VAR (yerinde onay ekranı)', () => {
+    for (const status of ['REBIND_PENDING', 'REBIND_REJECTED'] as const) {
+      expect(shouldShowPairingGate({ flagFromEndpoint: true, assignment: { pairingRequired: true, status } })).toBe(true);
+      // Uç bayrağı bayat false olsa da sunucu kararı kazanır (`??` LOAD-BEARING).
+      expect(shouldShowPairingGate({ flagFromEndpoint: false, assignment: { pairingRequired: true, status } })).toBe(true);
+    }
+  });
+
+  it('§R2 REBIND_PENDING onaysız-parola muafiyetinden YARARLANMAZ', () => {
+    expect(
+      shouldShowPairingGate({
+        flagFromEndpoint: true,
+        assignment: { pairingRequired: true, status: 'REBIND_PENDING', unpairedPasswordLogin: true },
+      }),
+    ).toBe(true);
+  });
 });
