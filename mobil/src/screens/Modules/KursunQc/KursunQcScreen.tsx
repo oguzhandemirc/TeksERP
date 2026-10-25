@@ -1167,6 +1167,7 @@ export default function KursunQcScreen() {
               index={index}
               selected={activeJob.selectedRollId === item.rollId}
               onPress={() => selectRoll(item.rollId)}
+              qualityStep={panels.qualityPanel}
             />
           )}
         />
@@ -1537,8 +1538,8 @@ export default function KursunQcScreen() {
               {/* Tablet: sayısal tuş takımı sol kolonun altında — metre girişi
                   ile aynı sütunda, aksiyon butonunun hemen altında. fill: numpad
                   kalan alana esner (dar tablette taşmaz, geniş tablette iri tuş).
-                  Telefonda numpad yok. */}
-              {!compact && <NumpadHost style={styles.numpadHost} fill />}
+                  Telefonda numpad yok; kalite paneli kapalıysa metre girişi yok → numpad da yok. */}
+              {!compact && panels.qualityPanel && <NumpadHost style={styles.numpadHost} fill />}
             </View>
           )}
         </View>
@@ -2077,16 +2078,41 @@ function JobTab({
   );
 }
 
+// Top satırının durum çipleri (hata sayısı + adım durumu) — kalite adımı değilse "KK2" demez.
+function RollStatusChips({ errorCount, done, qualityStep }: { errorCount: number; done: boolean; qualityStep: boolean }) {
+  return (
+    <View style={helperStyles.rollRight}>
+      {errorCount > 0 && (
+        <View style={helperStyles.chipAmber}>
+          <Text style={helperStyles.chipText}>{errorCount} hata</Text>
+        </View>
+      )}
+      {done ? (
+        <View style={helperStyles.chipBlue}>
+          <Text style={helperStyles.chipText}>{qualityStep ? 'KK2 ✓' : 'Tamam ✓'}</Text>
+        </View>
+      ) : (
+        <View style={helperStyles.chipNeutral}>
+          <Text style={helperStyles.chipText}>{qualityStep ? 'KK2 bekliyor' : 'Bekliyor'}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function RollListItem({
   roll,
   index,
   selected,
   onPress,
+  qualityStep,
 }: {
   roll: KursunRollSummary;
   index: number;
   selected: boolean;
   onPress: () => void;
+  /** Kalite paneli kapalı istasyonda (yalnız kurşun) çip "KK2" demez. */
+  qualityStep: boolean;
 }) {
   const done = roll.qc2Completed;
   const press = usePressScale();
@@ -2131,22 +2157,7 @@ function RollListItem({
             </Text>
           </View>
           {/* Durum chip'leri sağa yaslı — satır 2 satıra iner, liste kompaktlaşır */}
-          <View style={helperStyles.rollRight}>
-            {roll.errorCount > 0 && (
-              <View style={helperStyles.chipAmber}>
-                <Text style={helperStyles.chipText}>{roll.errorCount} hata</Text>
-              </View>
-            )}
-            {done ? (
-              <View style={helperStyles.chipBlue}>
-                <Text style={helperStyles.chipText}>KK2 ✓</Text>
-              </View>
-            ) : (
-              <View style={helperStyles.chipNeutral}>
-                <Text style={helperStyles.chipText}>KK2 bekliyor</Text>
-              </View>
-            )}
-          </View>
+          <RollStatusChips errorCount={roll.errorCount} done={done} qualityStep={qualityStep} />
           {selected && (
             <Icon source="chevron-left" size={22} color="#1e40af" />
           )}
