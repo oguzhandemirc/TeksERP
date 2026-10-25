@@ -110,7 +110,7 @@ export const NOTIFICATION_CATALOG = {
     kanallar: KANAL_MASAUSTU,
     varsayilanKanallar: ["UYGULAMA", "MASAUSTU"],
     baslik: "{yaziciAd} yazıcısında baskı hatası",
-    govde: "{subject} · {tur} · {neden}",
+    govde: "{kisi} · {tur} · {neden}",
     panelEkran: "system/print-history", panelYol: "/system/print-history?printer={yazici}&status=HATA",
     payloadAlanlari: ["yazici", "yaziciAd", "kisi", "tur", "neden"],
     tahminiHaftalik: 3, saklama: SAKLAMA,
