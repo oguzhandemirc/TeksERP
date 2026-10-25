@@ -20,7 +20,8 @@ import { normalizeDefectGroupBody } from "../services/helpers/defect-group.helpe
 import { normalizeDefectTypeFourPointBody } from "../services/helpers/four-point-catalog-fields.helper";
 import type { NextFunction, Request, Response } from "express";
 
-const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur"] as const;
+// `inspection:write`: KK1 muayene paneli (K4P-TABLET) tür ızgarasını buradan okur; panelin kapısı bu izindir.
+const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur", "inspection:write"] as const;
 
 export const defectTypeService = new BaseService({
   modelName: "defectType",

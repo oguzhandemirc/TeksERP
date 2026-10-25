@@ -17,6 +17,7 @@ import type { DefectType } from '../../types/models';
 import DefectRuler from './DefectRuler';
 import DeletePointModal from './DeletePointModal';
 import InspectionEntry from './InspectionEntry';
+import InspectionSummaryStrip, { type InspectionSummary } from './InspectionSummaryStrip';
 import PriorDefectList from './PriorDefectList';
 import {
   isCriticalDefect,
@@ -38,6 +39,7 @@ export {
   type InspectionPriorDefect,
   type InspectionSizeClass,
 } from './inspectionModel';
+export type { InspectionSummary } from './InspectionSummaryStrip';
 
 export interface InspectionPanelProps {
   defectTypes: DefectType[];
@@ -56,6 +58,14 @@ export interface InspectionPanelProps {
   compact?: boolean;
   /** Cetvel + girişin altına konak eki (ör. işlem paneli) — giriş bloğuyla aynı sütunda. */
   children?: React.ReactNode;
+  /** K4P özet şeridi: sayım + sunucu önizlemesi (konak hesaplar/çeker; bileşen yalnız gösterir). */
+  summary?: InspectionSummary;
+  /** 4 puan: metre boşsa kayıt konumsuz (`meter: null`) düşer. */
+  meterOptional?: boolean;
+  /** false: metre alanı numpad'i kendiliğinden almaz (varsayılan true — süreç konakları). */
+  meterAutoActivate?: boolean;
+  /** Cetvel boşken metin; metresiz kayıt tutan konak "hata yok" demesin diye verir. */
+  rulerEmptyText?: string;
 }
 
 interface RulerSectionProps {
@@ -65,17 +75,18 @@ interface RulerSectionProps {
   maxMeter?: number;
   readOnly: boolean;
   onMarkerPress: (ids: string[]) => void;
+  emptyText?: string;
 }
 
 // Kayıtlı hatalar — metre cetveli; tik'e dokun → o noktadaki hata(lar)ı sil.
-function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnly, onMarkerPress }: RulerSectionProps) {
+function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnly, onMarkerPress, emptyText }: RulerSectionProps) {
   const critCount = ownDefects.reduce((n, d) => n + (isCriticalDefect(d, defectTypes) ? 1 : 0), 0);
   const allDefects = [...priorDefects, ...ownDefects];
   if (allDefects.length === 0) {
     return (
       <View style={styles.emptyDefects}>
         <Icon source="check-circle-outline" size={28} color={palette.slate[300]} />
-        <Text style={styles.muted}>Henüz hata yok</Text>
+        <Text style={styles.muted}>{emptyText ?? 'Henüz hata yok'}</Text>
       </View>
     );
   }
@@ -119,7 +130,9 @@ export default function InspectionPanel(props: InspectionPanelProps) {
 
   const submit = (defectTypeId: string, sizeClass?: InspectionSizeClass) => {
     if (readOnly) return;
-    const v = validateDefectInput(props.meterInput, defectTypeId, ownDefects, props.maxMeter);
+    // 4 puan muayenesi: metre boşsa kayıt konumsuz düşer (plan §4.1 md. 2).
+    const unplaced = props.meterOptional === true && props.meterInput.trim() === '';
+    const v = unplaced ? ({ ok: true, meter: null } as const) : validateDefectInput(props.meterInput, defectTypeId, ownDefects, props.maxMeter);
     if (!v.ok) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Toast.show({ type: 'error', text1: v.title, text2: v.detail });
@@ -129,7 +142,9 @@ export default function InspectionPanel(props: InspectionPanelProps) {
   };
   const onTypePress = (defectTypeId: string) => {
     if (readOnly) return;
-    if (sizeClassMode) setPendingTypeId(defectTypeId);
+    // Sabit puanlı türde boyut sorulmaz: tek dokunuş kaydeder (plan §4.1 md. 2).
+    const fixed = defectTypes.find((d) => d.id === defectTypeId)?.fixedPoints != null;
+    if (sizeClassMode && !fixed) setPendingTypeId(defectTypeId);
     else submit(defectTypeId);
   };
   const onSizePick = (sizeClass: InspectionSizeClass) => {
@@ -148,6 +163,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
           maxMeter={props.maxMeter}
           readOnly={readOnly}
           onMarkerPress={setDeleteIds}
+          emptyText={props.rulerEmptyText}
         />
       </View>
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}
@@ -162,8 +178,12 @@ export default function InspectionPanel(props: InspectionPanelProps) {
             onTypePress={onTypePress}
             onSizePick={onSizePick}
             onSizeCancel={() => setPendingTypeId(null)}
+            sizeClassMode={sizeClassMode}
+            meterAutoActivate={props.meterAutoActivate}
+            meterOptional={props.meterOptional}
           />
         )}
+        {props.summary && <InspectionSummaryStrip summary={props.summary} />}
         {props.children}
       </View>
       <DeletePointModal

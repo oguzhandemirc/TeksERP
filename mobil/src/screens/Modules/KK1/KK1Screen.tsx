@@ -6,6 +6,7 @@ import {
   Keyboard,
   useWindowDimensions,
   TextInput as RNTextInput,
+  Modal,
 } from 'react-native';
 import {
   Text,
@@ -78,6 +79,11 @@ import { useLoomBirth } from './useLoomBirth';
 import { isLoomBirthVisible, loomBirthFingerprint, loomBirthPayload, type LoomBirthState } from './loomBirth';
 import OwnerPicker from './OwnerPicker';
 import { EMPTY_OWNER_LINK, isOwnerPickerVisible, ownerLinkPayload, type OwnerLinkState } from './ownerLink';
+import { useKk1Inspection } from './useKk1Inspection';
+import { inspectionNotSavedToast, withoutInspectionWarning } from './kk1InspectionHost';
+import Kk1InspectionSheet from './Kk1InspectionSheet';
+import InspectionSuggestionChip from './InspectionSuggestionChip';
+import type { InspectionDraft } from '../../../components/inspection/inspectionDraft';
 import { buildEntryWarningToast } from './entryWarnings';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { NumpadHost, useOptionalNumpadContext } from '../../../components/NumpadProvider';
@@ -755,6 +761,14 @@ export default function KK1Screen() {
     [itemsQuery.data]
   );
 
+  // K4P: doğuş muayenesi konağı (kapı + taslak + önizleme hook'ta; burada yalnız bağlantı).
+  const insp = useKk1Inspection({
+    itemId: form.itemId,
+    widthCm: Number(form.width) > 0 ? Number(form.width) : null,
+    lengthM: manualMode && Number(manualQty) > 0 ? Number(manualQty) : null,
+    isOnline,
+  });
+
   // ── Kalite dereceleri (admin yönetimli katalog) ──
   const qualityGradesQuery = useQuery({
     queryKey: ['quality-grades', 'active'],
@@ -906,6 +920,7 @@ export default function KK1Screen() {
       prevManualQty: string;
       prevManualWeight: string;
       prevLoom: LoomBirthState;
+      prevInspection: InspectionDraft;
     } | undefined
   >({
     mutationKey: STATION_MUT.KK1_CREATE_ENTRY,
@@ -985,7 +1000,10 @@ export default function KK1Screen() {
       setManualWeight('');
       // Tezgah şeridi de top başınadır: sıradaki top yeniden okutulur ("Aynı tezgah" çipi kalır).
       const prevLoom = loom.afterSubmit();
+      // Muayene taslağı gövdeyle gitti (kuyrukta da) → ekrandan temizlenir; ret olursa geri döner.
+      const prevInspection = insp.takeDraft();
       return {
+        prevInspection,
         prevForm,
         prevManualQty,
         prevManualWeight,
@@ -1021,7 +1039,10 @@ export default function KK1Screen() {
         });
       }
       // Devere Faz 4: sunucu uyarıları (levent tüketimi) — kayıt oldu, operatör bilsin; metin sunucudan aynen.
-      const uyari = buildEntryWarningToast(res.warnings, res.data?.barcode, current);
+      // K4P: muayene yazılmadıysa (modül/izin/istasyon) turuncu toast ayrı söyler; genel kanalda tekrarlanmaz.
+      const muayene = inspectionNotSavedToast(res.inspectionNotSaved, res.data?.barcode);
+      if (muayene) Toast.show({ type: 'warning', ...muayene, visibilityTime: 10000 });
+      const uyari = buildEntryWarningToast(withoutInspectionWarning(res.warnings, res.inspectionNotSaved), res.data?.barcode, current);
       if (uyari) Toast.show({ type: 'info', ...uyari, visibilityTime: 10000 });
       if (!res.data) return;
       // "Kaydet ve Etiket Bas" — başarılı kayıttan sonra otomatik etiket basımı.
@@ -1059,6 +1080,7 @@ export default function KK1Screen() {
         setManualQty(context.prevManualQty);
         setManualWeight(context.prevManualWeight);
         loom.restore(context.prevLoom);
+        insp.restoreDraft(context.prevInspection);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
 
@@ -1503,6 +1525,8 @@ export default function KK1Screen() {
       ...birth,
       // Emanet sahibi: bayrak kapalıyken ya da seçim yoksa BOŞ; seçimse id (sevkte 409 kapısı).
       ...ownerLinkPayload(ownerLink, emanetEnabled),
+      // K4P doğuş muayenesi: kapı kapalı ya da taslak boşsa BOŞ (bugünkü gövde).
+      ...insp.payload(),
       clientToken: identity.clientToken,
       clientEnteredAt: identity.clientEnteredAt,
     });
@@ -1686,6 +1710,13 @@ export default function KK1Screen() {
       }
       headerExtras={
         <View style={styles.headerExtrasRow}>
+          {insp.visible && (
+            <HeaderChip
+              icon="clipboard-check-outline"
+              label={insp.draft.defects.length > 0 ? `MUAYENE · ${insp.draft.defects.length}` : 'MUAYENE'}
+              onPress={() => insp.setOpen(!insp.open)}
+            />
+          )}
           {/* ÇİP YALNIZ "AKIYOR" DURUMUNU GÖSTERİR — hata kısmı 2026-08-12'de
               buradan ÇIKARILDI ve tek yüzey olarak aşağıdaki kırmızı banda
               indirildi. Gerekçe: aynı hata hem burada ("N ETİKET HATALI") hem
@@ -2146,6 +2177,14 @@ export default function KK1Screen() {
                 ))}
               </View>
             )}
+            {insp.open && (
+              <InspectionSuggestionChip
+                preview={insp.preview}
+                grades={qualityGrades}
+                selectedCode={form.qualityGrade}
+                onApply={(code) => setForm((f) => ({ ...f, qualityGrade: code }))}
+              />
+            )}
           </Surface>
 
         </KeyboardAwareScrollView>
@@ -2352,7 +2391,10 @@ export default function KK1Screen() {
             anlatıyor, başlık yer kaplıyordu). ── */}
         {!compact && (
           <View style={styles.recentsCol}>
-            {loomVisible && <LoomBirthBar loom={loom} rollBirth={rollBirth} onBeforeOpen={blurAll} />}
+            {loomVisible && !insp.open && <LoomBirthBar loom={loom} rollBirth={rollBirth} onBeforeOpen={blurAll} />}
+            {insp.open ? (
+              <Kk1InspectionSheet insp={insp} compact={false} onClose={() => insp.setOpen(false)} />
+            ) : (
             <View style={styles.recentsList}>
               {recentRollsQuery.isLoading ? (
                 <SkeletonList count={6} />
@@ -2397,20 +2439,32 @@ export default function KK1Screen() {
                 />
               )}
             </View>
+            )}
 
             {/* Numpad yalnızca sayısal alan varken: en girişi (flag) açık VEYA
                 manuel mt/kg açık. İkisi de kapalıysa girilecek değer yok →
                 numpad gizlenir, boşuna yer kaplamaz. Üstünde kalın marka-renkli
                 ayraç → "Son Kayıtlar" ile numpad ayrımı net. */}
-            {(widthFieldEnabled || manualMode) && (
+            {/* Muayene açıkken numpad yalnız bir alan hedefteyken ve kısa: paneli ezmesin. */}
+            {(insp.open ? numpadTarget !== null : widthFieldEnabled || manualMode) && (
               <>
                 <View style={styles.numpadDivider} />
-                <NumpadHost style={styles.numpadHost} />
+                {/* key: Paper Surface fill/yükseklik değişimini yerinde uygulamıyor → yeniden kur. */}
+                <View key={insp.open ? 'insp' : 'form'} style={insp.open ? styles.numpadInspectionBox : undefined}>
+                  <NumpadHost fill={insp.open} style={styles.numpadHost} />
+                </View>
               </>
             )}
           </View>
         )}
       </View>
+
+      {/* K4P: telefonda muayene tam ekran (formun üstünde; kaydet formdan). */}
+      {compact && (
+        <Modal visible={insp.open} animationType="slide" onRequestClose={() => insp.setOpen(false)}>
+          <Kk1InspectionSheet insp={insp} compact topInset={insets.top} onClose={() => insp.setOpen(false)} />
+        </Modal>
+      )}
 
       {/* Compact modda sağdan kayan son kayıtlar drawer'ı */}
       {compact && (
@@ -4280,6 +4334,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
     backgroundColor: '#f8fafc',
   },
+  numpadInspectionBox: { height: 264 },
 });
 
 // Kalite seçim segmenti — React.memo ile form'un başka alanları (qty, width)

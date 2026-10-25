@@ -832,6 +832,8 @@ export interface DefectType {
   isActive: boolean;
   /** Tipsiz hata girişi bu tipe düşer; kurulumda en fazla bir (eski backend'de alan yok → undefined). */
   isDefault?: boolean;
+  /** K4P: sabit puanlı tür (1–4) — 4 puan modunda boyut sorulmaz. Eski sunucu göndermez → boyut sorulur. */
+  fixedPoints?: number | null;
 }
 
 // =============================================================================
