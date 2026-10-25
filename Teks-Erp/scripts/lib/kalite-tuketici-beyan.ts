@@ -56,4 +56,9 @@ export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
     fonksiyon: "deriveCapabilityFlags",
     gerekce: "Panel/tablet yetenek DTO'sunun `inspectionEnabled` alanı; `canApplyQuality` akış ikizinde kalır.",
   },
+  {
+    dosya: "services/work-session.service.ts",
+    fonksiyon: "withSessionCanInspect",
+    gerekce: "K4P-KK1: oturum yanıtının `station.canInspect` alanı tabletin muayene düğmesini gösterir; akış sorulmaz.",
+  },
 ];

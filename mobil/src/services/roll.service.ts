@@ -192,6 +192,19 @@ export interface InitialEntryRequest {
   weavingOrderId?: string;
   warpBeamId?: string;
   productionLineNo?: number;
+  /**
+   * K4P-KK1 — DOĞUŞTA MUAYENE: sunucu topla AYNI tx'te RAW 4 puan muayenesi yazar (tek token = topun token'ı).
+   * Modül kapalı / `inspection:write` yoksa top yine doğar, yanıt `inspectionNotSaved` + `warnings` taşır.
+   * Kuyruk gövdesi bu alanı SÜZMEZ (`mutations.test`). Eski sunucu alanı sessizce düşürür.
+   */
+  inspection?: BirthInspectionRequest;
+}
+
+/** Doğuş muayenesi gövdesi — `sizeClass` 4 puan boyutu (UP_TO_3IN · IN_3_TO_6 · IN_6_TO_9 · OVER_9IN). */
+export interface BirthInspectionRequest {
+  defects: { defectTypeId: string; sizeClass?: 'UP_TO_3IN' | 'IN_3_TO_6' | 'IN_6_TO_9' | 'OVER_9IN' | null; startMeter?: number | null }[];
+  inspectedLengthM?: number | null;
+  note?: string | null;
 }
 
 /** `GET /rolls/tablet-context` — emanet sahip adayları (yalnız id+ad; emanet kapalıyken boş). */

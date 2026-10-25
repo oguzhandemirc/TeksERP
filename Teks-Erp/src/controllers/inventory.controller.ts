@@ -18,6 +18,7 @@ import { AppError } from "../utils/app-error";
 import { RollEntrySource, RollStatus } from "@prisma/client";
 import "../types/express-augment";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
+import { birthInspectionSchema } from "../services/helpers/inspection-on-birth.helper";
 
 // Zod validation schemas
 export const initialEntrySchema = z.object({
@@ -72,7 +73,19 @@ export const initialEntrySchema = z.object({
   weavingOrderId: z.string().uuid("Geçersiz dokuma iş emri ID").optional().nullable(),
   warpBeamId: z.string().uuid("Geçersiz levent ID").optional().nullable(),
   productionLineNo: z.number().int("Üretim hattı numarası tam sayı olmalıdır").min(1, "Üretim hattı en az 1").optional().nullable(),
+  /** K4P-KK1: doğuşta 4 puan muayenesi — topla AYNI tx'te yazılır (`createInspectionTx`). Strict olmayan şema: LİSTEDE olmak zorunda. */
+  inspection: birthInspectionSchema.optional(),
 }).superRefine((v, ctx) => {
+  if (v.inspection) {
+    if (v.inspection.inspectedLengthM != null && v.inspection.inspectedLengthM > v.initialQty) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["inspection", "inspectedLengthM"], message: "Muayene uzunluğu topun metrajını aşamaz." });
+    }
+    v.inspection.defects.forEach((d, i) => {
+      if (d.startMeter != null && d.startMeter > v.initialQty) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["inspection", "defects", i, "startMeter"], message: "Hata metresi topun metrajını aşamaz." });
+      }
+    });
+  }
   if (v.semiFinished && v.doffEventId) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["doffEventId"], message: "Yarı mamul girişine indirme bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner." });
   }
@@ -352,7 +365,7 @@ export class InventoryController {
    */
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { confirmDuplicate, semiFinished, doffEventId, ownerCustomerId, machineCode, weavingOrderId, warpBeamId, productionLineNo, ...body } = initialEntrySchema.parse(req.body);
+      const { confirmDuplicate, semiFinished, doffEventId, ownerCustomerId, machineCode, weavingOrderId, warpBeamId, productionLineNo, inspection, ...body } = initialEntrySchema.parse(req.body);
       // Kapalı modülün YAZMA yolu yoktur, tarihsel bağ dahil: `doffEventId` yalnız dokuma
       // açıkken kabul edilir (1e E1 hükmü 2026-09-14; kapı `requireDokumaEnabled` ile aynı gövde).
       if (doffEventId && !(await readDokumaEnabled())) {
@@ -428,6 +441,8 @@ export class InventoryController {
           ...(doffEventId ? { forcedEntrySource: RollEntrySource.WEAVING, doffEventId } : {}),
           // KK1 doğuşu (S1): kaynak WEAVING; indirme SUNUCUDA, aynı tx'te doğar (`resolveKk1BirthTx` → `createDoffTx`).
           ...(kk1Birth ? { forcedEntrySource: RollEntrySource.WEAVING, kk1Birth } : {}),
+          // K4P-KK1: muayene kapısı (modül + izin) serviste `resolveInspectionOnBirth`; istasyon = giriş istasyonu.
+          ...(inspection ? { inspection: { ...inspection, permissions: req.user?.permissions ?? [], deviceId: req.device?.id ?? null } } : {}),
         },
       );
       res.status(201).json(result);

@@ -20,6 +20,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { resolveActiveSession, sweepIdleSessions } from "./helpers/work-session.helper";
 import { buildPagination } from "../utils/query-parser";
+import { STEP_QUALITY_SELECT, stationCanInspect } from "./helpers/quality-station.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import type { WorkSessionEndReason, StationKind } from "@prisma/client";
 import type { ApiResponse, PaginatedResponse } from "../types/api.types";
@@ -84,8 +85,16 @@ export const SESSION_INCLUDE = {
   machine: { select: { id: true, code: true, name: true, productionLineCount: true } },
   // `defaultLabelCopies` (2026-10-24): tabletin "– N +" etiket adedi seçicisinin başlangıç değeri
   // (yalnız `label.copiesSource = STATION`). Ek alan — eski tablet yok sayar.
-  station: { select: { id: true, code: true, name: true, kind: true, defaultLabelCopies: true } },
+  station: { select: { id: true, code: true, name: true, kind: true, defaultLabelCopies: true, ...STEP_QUALITY_SELECT } },
 } as const;
+
+/**
+ * K4P-KK1: tabletin muayene düğmesi GÖSTERİM kapısı (`station.canInspect`). Yazma kapısı istasyona bağlı DEĞİL
+ * (modül + `inspection:write`) — istasyonsuz/kuyruktan dirilen giriş kalıcı düşmesin. Ek alan, eski tablet yok sayar.
+ */
+function withSessionCanInspect<S extends { station: { inspectionEnabled: boolean } | null }>(session: S) {
+  return { ...session, station: session.station ? { ...session.station, canInspect: stationCanInspect(session.station) } : null };
+}
 
 /** "Devralan" ardıl oturumun tooltip için minimal alanları. */
 const SUCCESSOR_SELECT = {
@@ -366,7 +375,7 @@ export class WorkSessionService {
       }).catch(() => undefined);
     }
 
-    return { success: true, data: created };
+    return { success: true, data: withSessionCanInspect(created) };
   }
 
   /** Cihazın açık oturumlarının TÜMÜNÜ kapat (idempotent — açık oturum yoksa closed:false).
@@ -449,7 +458,9 @@ export class WorkSessionService {
         ? { machine: last.machine, station: last.station }
         : null;
 
-    return { success: true, data: { active, lastPlace } };
+    // `canInspect` üst düzeyde de: oturumsuz yanıtta `false` (tablet tek yerden okur).
+    const activeOut = active ? withSessionCanInspect(active) : null;
+    return { success: true, data: { active: activeOut, lastPlace, canInspect: activeOut?.station?.canInspect ?? false } };
   }
 
   /**
