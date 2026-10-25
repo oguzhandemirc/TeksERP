@@ -58,6 +58,8 @@ import tamburRoutes from "./routes/tambur.routes";
 import kursunQcRoutes from "./routes/kursun-qc.routes";
 import kursunBypassRoutes from "./routes/kursun-bypass.routes";
 import eIrsaliyeRoutes from "./routes/e-irsaliye.routes";
+import qualityInspectionRoutes from "./routes/quality-inspection.routes";
+import fourPointRuleRoutes from "./routes/four-point-rule.routes";
 import travelerCardRoutes from "./routes/traveler-card.routes";
 import travelerTemplateRoutes from "./routes/traveler-template.routes";
 import subcontractorRoutes from "./routes/subcontractor.routes";
@@ -570,6 +572,9 @@ app.use("/api/tambur", tamburRoutes);
 app.use("/api/kursun-qc", kursunQcRoutes);
 app.use("/api/kursun-bypass", kursunBypassRoutes);
 app.use("/api/e-irsaliye", eIrsaliyeRoutes);
+// K4P 4 puan muayene + kural setleri (kaliteGuvence modülü; kapı router içinde).
+app.use("/api/quality-inspections", qualityInspectionRoutes);
+app.use("/api/four-point-rules", fourPointRuleRoutes);
 app.use("/api/traveler-cards", travelerCardRoutes);
 app.use("/api/traveler-templates", travelerTemplateRoutes);
 app.use("/api/subcontractor", subcontractorRoutes);
