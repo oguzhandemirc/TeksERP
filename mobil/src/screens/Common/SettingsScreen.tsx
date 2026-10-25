@@ -27,6 +27,8 @@ import { useLicenseStatus } from '../../hooks/useLicenseStatus';
 import { licenseSummaryRows } from '../../lib/license';
 import type { RootStackParamList } from '../../navigation/types';
 import { SETTINGS_COLORS as COLORS } from './settings/settingsUi';
+import { usePrintReports } from '../../services/printJob.service';
+import { printReportsSummary } from './settings/PrintReportsScreen';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -54,6 +56,7 @@ export default function SettingsScreen() {
   // Lisans satırı yalnız girişliye (kimliksiz durum çağrısı ayrıntı döndürmez).
   const signedIn = useAuthStore((s) => !!s.user);
   const license = useLicenseStatus();
+  const printReports = usePrintReports((st) => st.items);
 
   // Menü satırı sayfanın ÖZETİNİ göstermeli (dosyadaki kural).
   const sonYayin = SURUM_NOTLARI[0];
@@ -109,6 +112,14 @@ export default function SettingsScreen() {
           ? 'Fason: en son seçtiğim'
           : 'Fason: kategorinin favorisi',
       route: 'SettingsWorkPreferences',
+    },
+    {
+      key: 'printReports',
+      icon: 'printer-alert',
+      title: 'Basım Raporları',
+      // Menü satırı sayfanın ÖZETİDİR: bekleyen hata buradan görünür.
+      value: printReportsSummary(printReports),
+      route: 'SettingsPrintReports',
     },
     {
       key: 'update',

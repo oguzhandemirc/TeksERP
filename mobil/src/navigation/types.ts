@@ -18,6 +18,8 @@ export type RootStackParamList = {
   SettingsWorkPreferences: undefined;
   SettingsUpdate: undefined;
   SettingsSurumNotlari: undefined;
+  /** Basım sonuçlarının panel Yazdırma geçmişine gidiş kuyruğu (izlenebilirlik A4). */
+  SettingsPrintReports: undefined;
   /** Lisans özeti + (license:manage) çevrimdışı yanıt QR'ı okutma. */
   SettingsLicense: undefined;
   DevicePairing: undefined;

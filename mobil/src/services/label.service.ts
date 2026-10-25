@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import type { PrintJobAttachment } from './printJob.service';
 import type { ApiResponse } from '../types/api';
 import type {
   ColorNameScope,
@@ -161,15 +162,20 @@ export const labelService = {
     apiClient.get<string>(`/labels/sacks/${sackId}/html`, { responseType: 'text' }).then((r) => r.data),
 
   /** Çuval etiketi baskı izi — yalnız GERÇEK baskı tamamlanınca. */
-  recordSackPrintEvent: (sackId: string): Promise<ApiResponse<unknown>> =>
-    apiClient.post<ApiResponse<unknown>>(`/labels/sacks/${sackId}/print-event`, {}).then((r) => r.data),
+  recordSackPrintEvent: (sackId: string, printJob?: PrintJobAttachment): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/labels/sacks/${sackId}/print-event`, printJob ? { printJob } : {})
+      .then((r) => r.data),
 
   recordPrintEvent: (
     rollId: string,
-    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean }
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean },
+    /** Basım künyesi (Yazdırma geçmişi) — eski backend alanı eler (Zod strip). */
+    printJob?: PrintJobAttachment,
   ): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/labels/rolls/${rollId}/print`, {
+        ...(printJob ? { printJob } : {}),
         ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
         ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
         ...(ctx?.stock ? { stock: true } : {}),

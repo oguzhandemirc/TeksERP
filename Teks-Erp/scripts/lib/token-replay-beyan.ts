@@ -35,6 +35,10 @@ const S = "src/services/";
 export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // ── Boğazda ─────────────────────────────────────────────────────────────────
   [`${S}warp-beam-consume.service.ts::consumeBeam`]: { giris: { [`${S}warp-beam-consume.service.ts::consumeBeam`]: "R" } },
+  // K4P-MOTOR: muayene panel/tablet yolundan clientToken ile doğar; tek yazar helper'dır (KK1 doğuşu topun token'ıyla çağırır).
+  [`${S}quality-inspection.service.ts::createInspectionTx`]: {
+    giris: { [`${S}quality-inspection.service.ts::create`]: "R", [`${S}quality-inspection.service.ts::revise`]: "R" },
+  },
   // Destek talebi (3d-2): talep kaydı panelden clientToken ile doğar; satıcıya giden kimlik talebin id'sidir.
   [`${S}support.service.ts::createSupportTicket`]: { giris: { [`${S}support.service.ts::createSupportTicket`]: "R" } },
   // K4P-LAB: lab testi panelden clientToken ile DRAFT doğar; iptal edilmiş testin token'ı 409 (4. durum).
@@ -184,6 +188,8 @@ export const TOKENSIZ_UCLAR: Record<string, TokensizUc> = {
  * kural): alanı hem koddan hem beyandan silen değişiklik kapıdan geçer, gözden geçirmede görünür olmalıdır.
  */
 export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
+  [`${S}quality-inspection.service.ts::createReplay`]: ["rollId", "phase"],
+  [`${S}quality-inspection.service.ts::reviseReplay`]: ["supersedesId"],
   [`${S}cash-transaction.service.ts::cashTxnReplay`]: ["kind", "amount", "cashBoxId", "bankAccountId"],
   [`${S}cash-transaction.service.ts::transferReplay`]: ["fromCashBoxId", "fromBankAccountId", "toCashBoxId", "toBankAccountId", "amount"],
   [`${S}cheque-delivery-note.service.ts::noteReplay`]: ["chequeIds", "bankAccountId", "cariId", "targetLabel", "notes", "deliveryDate"],

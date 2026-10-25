@@ -280,13 +280,13 @@ const MODULLER: ModulTanimi[] = [
     sondalar: modulUclari("depoMultiEnabled"),
   },
   {
-    // KALİTE GÜVENCE (K4P zemin 2026-10-24; LAB router'ları 2026-10-25): ön koşulsuz (KK1 üretimsiz de açık).
+    // KALİTE GÜVENCE (K4P zemin 2026-10-24; LAB + MOTOR router'ları 2026-10-25): ön koşulsuz (KK1 üretimsiz de açık).
     alan: "kaliteGuvenceEnabled",
     dbAnahtari: "kaliteGuvence.enabled",
     middleware: "requireKaliteGuvenceEnabled",
     okuyucu: "readKaliteGuvenceEnabled",
     modulKodu: "kaliteGuvence",
-    routeDosyalari: ["routes/lab-test.routes.ts", "routes/lab-test-type.routes.ts"],
+    routeDosyalari: ["routes/lab-test.routes.ts", "routes/lab-test-type.routes.ts", "routes/quality-inspection.routes.ts", "routes/four-point-rule.routes.ts"],
     sondalar: modulUclari("kaliteGuvenceEnabled"),
   },
   {
@@ -365,6 +365,8 @@ const SONDA_IZINLERI = [
   "loom:live-view",
   // Dokuma sondası (`/api/weaving-orders`) — aynı gerekçe.
   "weavingorder:read",
+  // Kalite Güvence sondaları (`/api/quality-inspections`, `/api/four-point-rules`) — aynı gerekçe.
+  "inspection:read",
   // Maliyet sondası (`/api/cost/parameter-sets`) — aynı gerekçe (MAL-1).
   "cost:read",
 ];

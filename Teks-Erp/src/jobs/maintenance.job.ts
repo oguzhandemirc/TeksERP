@@ -16,6 +16,7 @@ import { pruneNotifications } from "../services/notification-prune.service";
 import { readAuditArchiveRetentionYears, readPrintLogRetentionDays, readRequestTraceRetentionDays } from "../services/system-setting.service";
 import { prunePrintJobs } from "../services/print-job.service";
 import { pruneRequestTraces } from "../services/request-trace.service";
+import { pruneExpiredScheduledSnapshots, pruneReportRuns, REPORT_RUN_RETENTION_DAYS } from "../services/report-prune.service";
 import { auditArchivePurgeCutoff, nextAuditPurgeSliceEnd } from "../services/helpers/audit-retention.helper";
 import { isInMaintenanceWindow } from "../services/helpers/maintenance-window.helper";
 import { factoryYmd } from "../constants/time";
@@ -153,6 +154,16 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
       const r = await pruneRequestTraces(new Date(), days);
       if (r.deleted === 0) return null;
       return `istek başlıkları: ${r.deleted} satır budandı (${days} günden eski)`;
+    },
+  },
+  {
+    // Rapor koşusu/zamanlanmış görüntü telemetridir: koşu yaşa, görüntü süresine göre; KULLANICI görüntüsü budanmaz.
+    name: "report-run-prune",
+    run: async () => {
+      const runs = await pruneReportRuns();
+      const snapshots = await pruneExpiredScheduledSnapshots();
+      if (runs + snapshots === 0) return null;
+      return `rapor: ${runs} koşu (${REPORT_RUN_RETENTION_DAYS} günden eski) · ${snapshots} süresi dolmuş zamanlanmış görüntü budandı`;
     },
   },
 ];
