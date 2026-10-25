@@ -161,6 +161,9 @@ export const DATE_ONLY_COLUMNS: ReadonlySet<string> = new Set([
   "day",
   // LabTest.testedOn — numunenin test edildiği fabrika günü (K4P-LAB).
   "testedOn",
+  // Certificate.issuedOn / expiresOn — sertifika belgesindeki takvim günleri (K4P-SERT).
+  "issuedOn",
+  "expiresOn",
   // CashPeriodClose.periodEnd + CariPeriodClose.periodEnd — "2025 Aralık
   // kapanışı" takvim günüdür. Bugün `dateFields` whitelist'inde DEĞİL; yine de
   // burada durur, çünkü liste ŞEMAYI aynalar.

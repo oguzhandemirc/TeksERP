@@ -89,6 +89,7 @@ import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/Wa
 // Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
 import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
+import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -132,6 +133,7 @@ import { DeviceDetailPage } from "@/pages/Devices/detail/DeviceDetailPage";
 import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
 import { reportV2Routes } from "@/pages/Reports/_v2/routes";
+import { customReportRoutes } from "@/pages/Reports/_v2/custom/routes";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
 import { WipScorecardPage } from "@/pages/Reports/Production/WipScorecardPage";
 import { OperatorPerformancePage } from "@/pages/Reports/Production/OperatorPerformancePage";
@@ -578,6 +580,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="labtest:read">
         <LabTestsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K4P-SERT — modül kapısı `route-modules.ts`ten; izin backend'le birebir (`certificate.routes.ts`).
+    path: "quality/certificates",
+    element: (
+      <ProtectedRoute requirePermission="certificate:read">
+        <CertificatesPage />
       </ProtectedRoute>
     ),
   },
@@ -1568,6 +1579,7 @@ export const contentRoutes: RouteObject[] = [
   },
   // Raporlar v2 — 14 temel rapor yaprağı katalogdan (izin `izin`, kapı bayrak + `hazir`; `_v2/routes.tsx`).
   ...reportV2Routes,
+  ...customReportRoutes,
 
   { path: "*", element: <Navigate to="/" replace /> },
 ];

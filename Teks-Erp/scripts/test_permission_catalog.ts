@@ -147,6 +147,12 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   "src/routes/rapor-semantik.routes.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
   "src/routes/rapor-calistirma.routes.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
   "src/services/reports/semantik/izin.ts": [`${DELEGE}scripts/test_semantik_derleyici.ts`],
+  // Kayıtlı raporlar (R1-KAYIT): `report:builder`/`report:publish` sabitleri katalog dosyasından gelir, giriş
+  // kapısı yine `REPORT_PERMISSION_CODES`; iki kodun katalogda olduğunu `test_rapor_tanimi.ts` §0 ölçer.
+  "src/routes/rapor-tanimi.routes.ts": [`${DELEGE}scripts/test_rapor_tanimi.ts`],
+  "src/services/rapor-tanimi.service.ts": [`${DELEGE}scripts/test_rapor_tanimi.ts`],
+  "src/services/rapor-paylasim.service.ts": [`${DELEGE}scripts/test_rapor_tanimi.ts`],
+  "src/services/reports/semantik/calistirici.ts": [`${DELEGE}scripts/test_rapor_tanimi.ts`],
   "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
   // uncoveredCodes(actor, codes) — codes = verilmek istenen kodlar (gövdeden); katalog
   // doğrulaması verme yolunda (`permission-management`), kademe kapsamı yetki denetiminde.

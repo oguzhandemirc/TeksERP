@@ -10,7 +10,7 @@ import { startSuperadminAccount } from './jobs/superadmin.job';
 import { startShortCredentialJob } from './jobs/short-credential.job';
 import { flushLoginLockoutPersistence } from './middlewares/login-lockout';
 import { startModuleProfileJob } from './jobs/module-profile.job';
-import { warnStaleReportKeys } from './jobs/report-catalog.job';
+import { startReportDefinitionCatalog, warnStaleReportKeys } from './jobs/report-catalog.job';
 import { refreshDiscoveryCache } from './services/discovery.service';
 import { startMdnsAdvertiser, stopMdnsAdvertiser } from './jobs/mdns-advertiser.job';
 import { startMaintenanceScheduler } from './jobs/maintenance.job';
@@ -252,7 +252,8 @@ function startLanListener(): Server {
     startModuleProfileJob();
     // Kapalı rapor listesindeki BAYAT anahtarlar (katalogdan çıkmış rapor) ve bozuk
     // satır boot'ta TEK SEFER duyurulur; job yazmaz — liste temizliği süperadmin kararı.
-    void warnStaleReportKeys();
+    // Ardından kayıtlı raporlar (R1-KAYIT): hazır v2 satırların SISTEM tanımı + sistem kategorileri; silmez.
+    void warnStaleReportKeys().then(startReportDefinitionCatalog, startReportDefinitionCatalog);
     // Keşif ucunun port kopyası; firma adı istek anında bellekteki lisanstan okunur.
     refreshDiscoveryCache(Number(PORT));
     // Servis ilanı — "ben buradayım". Her arızada sessizce kapanır (ilanın

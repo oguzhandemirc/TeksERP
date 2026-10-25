@@ -17,6 +17,7 @@ const TILE_TONES: Record<string, string> = {
   "kursun-dagitim": "text-station-process",
   shipments: "text-success",
   "lab-tests": "text-station-kk1",
+  certificates: "text-station-kk1",
 };
 
 export function OperationsHubPage() {

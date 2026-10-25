@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { LabCustomerField } from "./LabCustomerField";
 import { RollPickerDialog } from "@/components/operations/roll-picker/RollPickerDialog";
 import type { PickedRoll } from "@/components/operations/roll-picker/pickable-rolls";
 import apiClient from "@/services/apiClient";
@@ -28,10 +29,9 @@ export function NewLabTestDialog({ open, onOpenChange, onCreated, presetBatch }:
   const [roll, setRoll] = useState<PickedRoll | null>(null);
   const [wholeBatch, setWholeBatch] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [sampleCode, setSampleCode] = useState("");
-  const [labName, setLabName] = useState("");
-  const [testedOn, setTestedOn] = useState(factoryDayKey());
-  const [note, setNote] = useState("");
+  const [sampleCode, setSampleCode] = useState(""), [labName, setLabName] = useState("");
+  const [testedOn, setTestedOn] = useState(factoryDayKey()), [note, setNote] = useState("");
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const save = useMutation({
@@ -46,7 +46,7 @@ export function NewLabTestDialog({ open, onOpenChange, onCreated, presetBatch }:
         subject = { batchId };
       } else subject = { rollId: roll!.id };
       return labTestService.create({
-        clientToken: attempt.token(), ...subject,
+        clientToken: attempt.token(), ...subject, customerId,
         sampleCode: sampleCode.trim() || null, labName: labName.trim() || null, testedOn: testedOn || null, note: note.trim() || null,
       });
     },
@@ -92,6 +92,7 @@ export function NewLabTestDialog({ open, onOpenChange, onCreated, presetBatch }:
             <div className="space-y-1"><Label htmlFor="lab-name">Laboratuvar</Label><Input id="lab-name" maxLength={120} placeholder="İç lab ya da dış lab adı" value={labName} onChange={(e) => setLabName(e.target.value)} /></div>
             <div className="space-y-1"><Label htmlFor="lab-date">Test tarihi</Label><DatePickerInput id="lab-date" max={factoryDayKey()} value={testedOn} onChange={setTestedOn} /></div>
           </div>
+          <LabCustomerField value={customerId} onChange={(v) => { setCustomerId(v); attempt.renew(); }} />
           {localError && <p className="text-sm text-destructive">{localError}</p>}
           <div className="space-y-1"><Label htmlFor="lab-note">Not</Label><Textarea id="lab-note" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} /></div>
         </div>
