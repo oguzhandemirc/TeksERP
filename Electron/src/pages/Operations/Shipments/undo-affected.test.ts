@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { undoAffectedRows, undoRollDetail } from "./undo-affected";
+import { eIrsaliyeAffectedLines, undoAffectedRows, undoRollDetail } from "./undo-affected";
 
 const roll = (id: string, over: Partial<Parameters<typeof undoRollDetail>[0]> = {}) => ({ id, barcode: `T${id}`, meters: 12.5, ownerName: null, returnTo: "WAREHOUSE", ...over });
 
@@ -28,5 +28,29 @@ describe("Sevki Geri Al — etkilenen kayıt listesi (çekirdek: HER kayıt somu
     expect(rows).toHaveLength(1);
     expect(rows[0]!.detail).toMatch(/^Çuvalsız · /);
     expect(undoAffectedRows({ sacks: [] })).toEqual([]);
+  });
+});
+
+describe("Etkilenen e-İrsaliye kaydı (E6) — iptal edilecekse somut söylenir", () => {
+  const rec = (over: Record<string, unknown> = {}) => ({ id: "e1", documentNo: "EIR2026000000007", status: "OLUSTURULDU", simulasyon: false, numaraBosaDuser: true, yerelIptalEdilebilir: true, ...over });
+
+  it("iptal: numara + GİB'e gönderilmemiş + boşta kalan numara uyarısı", () => {
+    expect(eIrsaliyeAffectedLines(rec(), true)).toEqual([
+      "e-İrsaliye EIR2026000000007 iptal edilecek (GİB'e gönderilmemiş).",
+      "EIR2026000000007 numarası boşta kalacak; bu numara yeniden kullanılmaz.",
+    ]);
+  });
+
+  it("yalnız storno: kayıt yerinde kalır; taslakta numara uyarısı yok; simülasyon işaretli", () => {
+    expect(eIrsaliyeAffectedLines(rec(), false)[0]).toMatch(/yerinde kalır/);
+    expect(eIrsaliyeAffectedLines(rec({ documentNo: null, status: "TASLAK", numaraBosaDuser: false, simulasyon: true }), true)).toEqual([
+      "e-İrsaliye taslağı (simülasyon) iptal edilecek (GİB'e gönderilmemiş).",
+    ]);
+  });
+
+  it("kayıt yok / eski sunucu / gönderilmiş kayıt → satır yok (engel cümlesi backend'den gelir)", () => {
+    expect(eIrsaliyeAffectedLines(undefined, true)).toEqual([]);
+    expect(eIrsaliyeAffectedLines(null, true)).toEqual([]);
+    expect(eIrsaliyeAffectedLines(rec({ status: "GONDERILDI", yerelIptalEdilebilir: false }), true)).toEqual([]);
   });
 });

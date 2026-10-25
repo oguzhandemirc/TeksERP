@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { shipmentService } from "./service";
+import { EIrsaliyeAffectedNote } from "./UndoAffectedList";
 import { invalidateSackHub } from "@/pages/Operations/SackContentEdit/useSackData";
 
 const fmtM = (n: number) => Number(n).toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
@@ -120,6 +121,8 @@ export function CancelShipmentDialog({ shipmentId, onOpenChange }: Props) {
                 </ul>
               </div>
             )}
+
+            <EIrsaliyeAffectedNote eIrsaliye={p.eIrsaliye} willVoid />
 
             {p.sackCount === 0 && p.rollCount === 0 && p.affectedOrders.length === 0 && (
               <p className="text-xs text-muted-foreground">
