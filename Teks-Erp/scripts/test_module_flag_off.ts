@@ -366,6 +366,8 @@ const SONDA_IZINLERI = [
   "loom:live-view",
   // Dokuma sondası (`/api/weaving-orders`) — aynı gerekçe.
   "weavingorder:read",
+  // Maliyet sondası (`/api/cost/parameter-sets`) — aynı gerekçe (MAL-1).
+  "cost:read",
 ];
 
 const TEST_USERNAME = `bekci.modul.${process.pid}`;

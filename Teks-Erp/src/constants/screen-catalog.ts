@@ -406,7 +406,7 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
       "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
-  { modul: "maliyetEnabled", reason: "Maliyet & Teklif: kapı MAL-1'de `/api/cost` uçlarına takıldı (API), ilk ekranlar MAL-3 (ürün maliyeti) ve MAL-7 (Maliyet > Parametreler); ekran eşlenince bu muaf silinir." },
+  { modul: "maliyetEnabled", reason: "Maliyet & Teklif: kapı MAL-1'de `/api/cost` uçlarına takıldı (API), ilk ekranlar MAL-3 (ürün maliyeti) ve MAL-7 (maliyet parametreleri ekranı); ekran eşlenince bu muaf silinir." },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */
@@ -429,9 +429,9 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
   { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
   // MAL-1 (2026-10-25): maliyet girdileri uçları API olarak doğdu; ekranlar MAL-3/MAL-7'de — o gün bu üç satır ölü muaf olur ve silinir.
-  { code: "cost:read", reason: "Maliyet ekranları (MAL-3 ürün maliyeti, MAL-7 Maliyet > Parametreler) henüz yok — `/api/cost` uçları MAL-1'de API olarak doğdu." },
+  { code: "cost:read", reason: "Maliyet ekranları (MAL-3 ürün maliyeti, MAL-7 maliyet parametreleri ekranı) henüz yok — `/api/cost` uçları MAL-1'de API olarak doğdu." },
   { code: "cost:write", reason: "Maliyet yapısı / iplik fiyatı / tarife ekranı MAL-3/MAL-7'de doğar — uç MAL-1'de API." },
-  { code: "cost:settings", reason: "Maliyet > Parametreler ekranı MAL-7'de doğar — uç MAL-1'de API." },
+  { code: "cost:settings", reason: "maliyet parametreleri ekranı ekranı MAL-7'de doğar — uç MAL-1'de API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

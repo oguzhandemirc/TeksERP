@@ -2,7 +2,7 @@
 // MALİYET GİRDİLERİ BEKÇİSİ (MAL-1) — parametre seti sürümü, damgalı iplik fiyatı
 // ve apre tarifesi, kumaş maliyet yapısı, partial unique seddi, modül kapısı.
 // =============================================================================
-// Servis düzeyi + DB (TEST DB; adı `_test` ile bitmezse koşmaz). Ölçülenler:
+// Servis düzeyi + DB (`assertGelistirmeVeritabani` kapısı). Ölçülenler:
 //   §1 parametre seti: ilk taslakta zorunlu alan 400; tek taslak; etkinleştirme
 //      eski ACTIVE'i SUPERSEDED yapar (her an tek ACTIVE); yalnız taslak silinir.
 //   §2 iplik fiyatı: aynı değer no-op; değişimde eski satır SİLİNMEZ damgalanır;
@@ -28,6 +28,7 @@ import * as rates from "../src/services/finishing-rate.service";
 import * as structure from "../src/services/cost-structure.service";
 import { requireMaliyetEnabled } from "../src/middlewares/module.middleware";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { assertGelistirmeVeritabani } from "./db-guard";
 
 let pass = 0,
   fail = 0;
@@ -170,10 +171,8 @@ async function bolum6(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("=== MALİYET GİRDİLERİ BEKÇİSİ (MAL-1) ===");
-  if (!/_test\b/.test(process.env.DATABASE_URL ?? "")) {
-    console.log("❌ DATABASE_URL bir *_test DB'si değil — koşulmadı");
-    process.exit(1);
-  }
+  // Bekçi parametre setlerini toplu temizler: hedef geliştirme ya da test DB değilse süreç düşer.
+  assertGelistirmeVeritabani("test_maliyet_girdileri");
   // Fikstürde iplik kalemi yok: bekçi kendi ipliğini doğurur, sonda siler (yalnız test DB).
   const yarn = await prisma.item.upsert({
     where: { code: "MLT-TEST-IPLIK" },
