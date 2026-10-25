@@ -68,7 +68,7 @@ export const PRINT_HISTORY_READ = ["admin:settings", "system:print-history"] as 
  *       - { in: query, name: status, schema: { type: string } }
  *       - { in: query, name: source, schema: { type: string } }
  *       - { in: query, name: outputKind, schema: { type: string } }
- *       - { in: query, name: subjectId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: subjectId, description: "kayıt (subjectId/subjectIds) ya da belge (printedDocumentId) kimliği", schema: { type: string, format: uuid } }
  *       - { in: query, name: gunBas, schema: { type: string, format: date } }
  *       - { in: query, name: gunBit, schema: { type: string, format: date } }
  *       - { in: query, name: cursor, schema: { type: string } }
