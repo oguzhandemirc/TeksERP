@@ -310,11 +310,16 @@ jobs:
       # ⚠️ Portlar bekçilerin VARSAYILANLARIDIR (`TEST_API_URL` verilmezse bunlar
       # kullanılır): finance 4100 · module_flag_off 4101 · superadmin 4104 ·
       # settings_password 4112 · module_profile 4122.
+      #
+      # ⚠️ NOTIFICATION_JOBS_ENABLED=false (2026-10-25): bu sunucular bildirim bayrağını gözetmen turunda
+      # (15 sn) görünce DAĞITICI açıyordu — outbox olayını bekçiden önce kapıp zili kendi hub'ına
+      # çalıyor (`test_bildirim_zil` §5b "gelmedi", özet rev 0) ve 5 fazla LISTEN açıyordu
+      # (`test_bildirim_motoru` §11e/f "dinleyen 5"). Aralıklıydı: bayrağın açık penceresine bir turun düşmesine bağlı.
       - name: HTTP ayaklı bekçiler için sunucuları başlat
         run: |
           set -o pipefail
           for port in 4100 4101 4104 4112 4122; do
-            PORT=$port npx tsx src/server.ts > "/tmp/ci-srv-$port.log" 2>&1 &
+            NOTIFICATION_JOBS_ENABLED=false PORT=$port npx tsx src/server.ts > "/tmp/ci-srv-$port.log" 2>&1 &
             echo "$!" >> /tmp/ci-srv-pids.txt
           done
           # Sağlık kapısı: hepsi ayağa kalkana kadar bekle. Kalkmayan varsa
