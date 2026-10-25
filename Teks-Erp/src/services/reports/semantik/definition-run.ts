@@ -169,8 +169,23 @@ function isNoAccess(e: unknown): boolean {
 
 function queriesOf(b: DefinitionBlock): BlockQuery[] {
   if (b.tur === "kpi") return b.sorgular;
-  if (b.tur === "anaSayi" || b.tur === "grafik" || b.tur === "tablo") return [b.sorgu];
+  if (b.tur === "anaSayi" || b.tur === "grafik" || b.tur === "tablo" || b.tur === "varyant" || b.tur === "donem") return [b.sorgu];
   return [];
+}
+
+/**
+ * Bloğun semantik sorgu girdileri — çalıştırıcı ve `test_rapor_duzen` AYNI yoldan okur. `duzen` buraya
+ * hiç girmez: sıralama/genişlik/sayfa kesmesi sayıyı değiştiremez.
+ */
+export function blockSemanticInputs(b: DefinitionBlock, params: Map<string, ResolvedParam>, body: ReportDefinitionBody, refresh: boolean): SemanticQueryInput[] {
+  return queriesOf(b).map((q) => {
+    const input = toSemanticInput(q, params, body, { asTable: b.tur === "tablo", refresh });
+    if (b.tur === "varyant") return { ...input, tavan: b.ilkN };
+    if (b.tur !== "donem") return input;
+    const periods: SemanticQueryInput = { ...input, donemler: { birim: b.birim, adet: b.adet } };
+    delete periods.compare;
+    return periods;
+  });
 }
 
 /** Gövdeyi SIRAYLA koşar (tx + Promise.all yok); izin eksiği blok düzeyinde kalır. */
@@ -194,9 +209,9 @@ export async function runDefinitionBlocks(
     }
     const results: SemanticResult[] = [];
     let denied = false;
-    for (const q of queriesOf(b)) {
+    for (const input of blockSemanticInputs(b, params, body, refresh)) {
       try {
-        results.push(await runSemanticQuery(toSemanticInput(q, params, body, { asTable: b.tur === "tablo", refresh }), ctx, undefined, { ...defaultDeps, origin }));
+        results.push(await runSemanticQuery(input, ctx, undefined, { ...defaultDeps, origin }));
       } catch (e) {
         if (!isNoAccess(e)) throw e;
         denied = true;

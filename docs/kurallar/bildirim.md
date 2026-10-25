@@ -37,6 +37,7 @@
 - **[ÇEKİRDEK]** Zil sayısı audit'ten türetilmez; Etkinlik sayfası (`/system/activity`) sayaçsızdır: Topbar'da yalnız rozetsiz "Etkinlik" bağlantısı, görünürlüğü sayfanın kendi `SYSTEM_ACTIVITY_ACCESS` kümesinden; eski "Son Aktivite" zili (`NotificationBell`) kalktı. <sub>(arşiv:2026-10-24)</sub>
 - **[ÇEKİRDEK]** Koşul kaynağı mevcut sağlık/durum okuyucusunu çağırır, yüklemi kopyalamaz; kaynak hatası koşulu kapatmaz, ölçülemeyen konu (açılışta ilk ölçüm yok, dosya okunamadı) açık koşulu korur (`services/notification-sources/sistem.ts`). · bekçi: `test_bildirim_kosul_sistem`
 - **[ÇEKİRDEK]** İş koşulu raporla aynı soruyu soruyorsa yüklemi rapordan TEK helper'a çıkar; kopyalama (termin `order-deadline.helper`, KK1 oranı `quality-first-share.helper`, fason açık kalem `openDispatchItemsSql`, levent `finishForecastReport`); eşik yalnız katalog `paramSemasi`ndan (`services/notification-sources/is.ts`). · bekçi: `test_bildirim_kosul_is` <sub>(arşiv:2026-10-25)</sub>
+- **[ÇEKİRDEK]** ALARM alıcısı donmuş listeden okunur; dağıtıcı yeniden çözmez: tezgah alarmı olayı (`loom-alarm.service` yazıcıları → `emitLoomAlarmNotificationTx`) aynı tx'te outbox'a, alıcı RAISED'ın `LoomAlarmRecipient` satırları (LISTED; nöbet kaynağı `reason=NOBET`, izin `ALARM_ALICISI`) ya da BY_PERMISSION'da izin sahipleri, ikisi de görme süzgeciyle kesişir; durum güncellemesi (üstlen/sustur) sayacı artırmaz, rozet ALARM'ı saymaz, zil `alarm` (`alarmRev`) çalar. · bekçi: `test_bildirim_alarm` <sub>(N2-ALARM, 2026-10-25)</sub>
 
 ## Bekçiler — bu alana dokununca koş
 
@@ -44,4 +45,4 @@
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## bildirim` bölümü.**
 
-Backend: `test_bildirim_katalogu`, `test_screen_catalog`, `test_bildirim_motoru`, `test_bildirim_tek_kaynak`, `test_advisory_lock_namespaces`, `test_telemetri_defter_degil`, `test_audit_muafiyeti`, `test_bildirim_api`, `test_bildirim_zil`, `test_bildirim_patron_siparisi`, `test_bildirim_yazici_hata`, `test_bulut_gelen_kutusu`, `test_bildirim_kosul_sistem`, `test_bildirim_kosul_is`
+Backend: `test_bildirim_katalogu`, `test_screen_catalog`, `test_bildirim_motoru`, `test_bildirim_tek_kaynak`, `test_advisory_lock_namespaces`, `test_telemetri_defter_degil`, `test_audit_muafiyeti`, `test_bildirim_api`, `test_bildirim_zil`, `test_bildirim_patron_siparisi`, `test_bildirim_yazici_hata`, `test_bulut_gelen_kutusu`, `test_bildirim_kosul_sistem`, `test_bildirim_kosul_is`, `test_bildirim_alarm`

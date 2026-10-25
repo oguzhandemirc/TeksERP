@@ -4,7 +4,7 @@
 // Yalnız BİÇİM dönüşümüdür: sayı hesaplanmaz, kıyas yüzdesi istemcide üretilmez (K-KIYAS) — önceki dönem
 // değeri sunucunun döndürdüğü toplamdır ve ayrı satırda yazılır.
 // =============================================================================
-import type { AnaSayi, Birim, GrafikBlok, GrafikTuru, TabloBlok, TabloHucresi } from "../sunum";
+import type { AnaSayi, Birim, GrafikBlok, GrafikTuru, TabloBlok, TabloHucresi, VaryantBlok } from "../sunum";
 import { GRAFIK_TURLERI } from "../sunum";
 import type { SemanticResultLite } from "./custom-api";
 
@@ -55,4 +55,67 @@ export function chartOf(r: SemanticResultLite, kind: string): GrafikBlok | null 
     kategoriler: r.satirlar.map((row) => rowLabel(r, row)),
     seriler: [{ ad: m.ad, veri: r.satirlar.map((row) => row.degerler[m.kimlik] ?? null) }],
   };
+}
+
+/** Kırılım kartları: satır başına bir hücre, sunucunun sırasıyla (ilk N tavanı sunucuda). Tıklanmaz. */
+export function variantOf(r: SemanticResultLite): VaryantBlok | null {
+  const m = r.olculer[0];
+  const d = r.boyutlar[0];
+  if (!m || !d) return null;
+  return {
+    boyut: d.kimlik,
+    boyutEtiketi: d.ad,
+    secili: null,
+    digerleri: [],
+    hucreler: r.satirlar.map((row) => {
+      const key = row.anahtarlar[d.kimlik];
+      const value = row.degerler[m.kimlik] ?? null;
+      return {
+        deger: key?.deger ?? "—",
+        ad: key?.etiket ?? key?.deger ?? "—",
+        anaSayi: { olcu: m.kimlik, ad: m.ad, deger: value, birim: unitOf(m.birim), ...(value === null ? { olculemedi: "Bu dönemde veri yok." } : {}) },
+      };
+    }),
+  };
+}
+
+const MONTHS = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+
+/** Dönem anahtarı sunucunun FABRİKA günüdür ("2026-09-01"); yalnız metne çevrilir, dilim hesabı yok. */
+export function periodLabel(key: string | null, unit: string): string {
+  const m = key ? /^(\d{4})-(\d{2})-(\d{2})/.exec(key) : null;
+  if (!m) return key ?? "—";
+  if (unit === "ay") return `${MONTHS[Number(m[2]) - 1] ?? m[2]} ${m[1]}`;
+  return unit === "hafta" ? `${m[3]}.${m[2]}.${m[1]} haftası` : `${m[3]}.${m[2]}.${m[1]}`;
+}
+
+/** Dönem kıyası: kırılım satırları × dönem sütunları (ilk ölçü); toplam satırı sunucunun dönem toplamlarından. */
+export function periodTableOf(r: SemanticResultLite): TabloBlok | null {
+  const m = r.olculer[0];
+  const keys = r.donemler?.anahtarlar ?? [];
+  if (!m || keys.length === 0) return null;
+  const unit = unitOf(m.birim);
+  const columns = [
+    ...r.boyutlar.map((d) => ({ anahtar: `b:${d.kimlik}`, baslik: d.ad, hiza: "sol" as const })),
+    ...keys.map((k, i) => ({ anahtar: `p:${i}`, baslik: periodLabel(k, r.donemler!.birim), birim: unit, hiza: "sag" as const })),
+  ];
+  const rows = new Map<string, Record<string, TabloHucresi>>();
+  for (const row of r.satirlar) {
+    const id = r.boyutlar.map((d) => row.anahtarlar[d.kimlik]?.deger ?? "").join("|");
+    let out = rows.get(id);
+    if (!out) {
+      out = {};
+      for (const d of r.boyutlar) out[`b:${d.kimlik}`] = row.anahtarlar[d.kimlik]?.etiket ?? row.anahtarlar[d.kimlik]?.deger ?? null;
+      rows.set(id, out);
+    }
+    const at = keys.indexOf(row.donem ?? null);
+    if (at >= 0) out[`p:${at}`] = row.degerler[m.kimlik] ?? null;
+  }
+  const total: Record<string, TabloHucresi> = {};
+  if (r.boyutlar[0]) total[`b:${r.boyutlar[0].kimlik}`] = "Toplam";
+  for (const t of r.toplam.donemler ?? []) {
+    const at = keys.indexOf(t.donem);
+    if (at >= 0) total[`p:${at}`] = t.degerler[m.kimlik] ?? null;
+  }
+  return { kolonlar: columns, satirlar: [...rows.values()], toplam: total };
 }

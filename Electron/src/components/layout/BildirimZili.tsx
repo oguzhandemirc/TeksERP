@@ -1,7 +1,7 @@
 // =============================================================================
 // BİLDİRİM ZİLİ — kişisel gelen kutusu (plan §6.1)
 // =============================================================================
-// Rozet = sunucunun okunmamış BİLDİRİM sayısı (`/ozet`), 99+. Akış içeriksizdir: zil gelince özet ve
+// Rozet = sunucunun okunmamış BİLDİRİM sayısı (`/ozet`, ALARM hariç), 99+; açık alarmlar "Alarmlar" sekmesinde. Akış içeriksizdir: zil gelince özet ve
 // liste REST'ten okunur (`useNotificationBell`). Tezgah alarmı hapı (`LoomAlarmBell`) AYRI kalır; Etkinlik
 // sayaçsızdır. FAIL-CLOSED: bayrak kapalı ya da eski backend (`/ozet` 404) → hiçbir şey çizilmez.
 // =============================================================================
@@ -40,7 +40,7 @@ export function BildirimZili() {
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(420px,calc(100vw-1rem))] p-0" onKeyDown={handleArrowKeys}>
-        <BellPanel okunmamis={sayi} onKapat={() => setAcik(false)} />
+        <BellPanel okunmamis={sayi} alarmAcik={zil.alarmAcik} onKapat={() => setAcik(false)} />
       </PopoverContent>
     </Popover>
   );

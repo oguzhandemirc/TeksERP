@@ -65,8 +65,10 @@ export interface SemanticResultLite {
   olculer: Array<{ kimlik: string; ad: string; birim: string }>;
   boyutlar: Array<{ kimlik: string; ad: string }>;
   satirlar: Array<{ anahtarlar: Record<string, { deger: string | null; etiket: string | null }>; donem?: string | null; degerler: Record<string, number | null> }>;
-  toplam: { degerler: Record<string, number | null> };
+  toplam: { degerler: Record<string, number | null>; donemler?: Array<{ donem: string | null; degerler: Record<string, number | null> }> };
   kiyas: { toplam: { degerler: Record<string, number | null> } } | null;
+  /** Dönem kıyası bölümü (R2-DUZEN): satırlar `donem` anahtarıyla gelir, sütunlar bu sırayla. */
+  donemler?: { birim: string; adet: number; anahtarlar: Array<string | null> } | null;
   uyarilar: string[];
 }
 

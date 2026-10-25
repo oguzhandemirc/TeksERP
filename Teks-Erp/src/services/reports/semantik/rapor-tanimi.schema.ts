@@ -64,6 +64,11 @@ const title = z.string().trim().min(1).max(120).optional();
 const blockSchema = z.discriminatedUnion("tur", [
   z.object({ id: blockId, tur: z.literal("anaSayi"), baslik: title, sorgu: blockQuerySchema }).strict(),
   z.object({ id: blockId, tur: z.literal("kpi"), baslik: title, sorgular: z.array(blockQuerySchema).min(1).max(MAX_KPI) }).strict(),
+  // R2-DUZEN: varyant = tek ölçünün tek boyuttaki ilk N değeri (küçük çoklular); donem = sorgunun dönem sütunları.
+  z.object({ id: blockId, tur: z.literal("varyant"), baslik: title, sorgu: blockQuerySchema, ilkN: z.number().int().min(2).max(MAX_VARIANT_VALUES).default(MAX_VARIANT_VALUES) }).strict(),
+  z
+    .object({ id: blockId, tur: z.literal("donem"), baslik: title, sorgu: blockQuerySchema, birim: z.enum(["gun", "hafta", "ay"]), adet: z.number().int().min(2).max(MAX_COMPARE_PERIODS) })
+    .strict(),
   z.object({ id: blockId, tur: z.literal("grafik"), baslik: title, gorsel: z.enum(CHART_KINDS), sorgu: blockQuerySchema }).strict(),
   z
     .object({ id: blockId, tur: z.literal("tablo"), baslik: title, sorgu: blockQuerySchema, pivot: z.object({ satir: identifier, sutun: identifier }).strict().optional() })
@@ -89,7 +94,15 @@ export const reportDefinitionBodySchema = z
     duzen: z
       .array(
         z
-          .object({ i: blockId, x: z.number().int().min(0).max(11), y: z.number().int().min(0).max(400), w: z.number().int().min(1).max(12), h: z.number().int().min(1).max(40) })
+          .object({
+            i: blockId,
+            x: z.number().int().min(0).max(11),
+            y: z.number().int().min(0).max(400),
+            w: z.number().int().min(1).max(12),
+            h: z.number().int().min(1).max(40),
+            // Yalnız baskı: PDF'te blok yeni sayfadan başlar. Düzen SUNUMDUR — koşu girdisine hiç ulaşmaz.
+            sayfaKesmesi: z.boolean().optional(),
+          })
           .strict(),
       )
       .max(MAX_BLOCKS)
@@ -239,6 +252,24 @@ function checkBlock(w: Walk, b: DefinitionBlock, path: string): void {
         if (!b.sorgu.boyutlar.includes(b.pivot[k])) w.issues.push({ yol: `${path}.pivot.${k}`, mesaj: `"${b.pivot[k]}" sorgunun boyutlarında yok.` });
       }
     }
+  } else if (b.tur === "varyant" || b.tur === "donem") {
+    checkSplitBlock(w, b, path);
+  }
+}
+
+/** Kırılım (varyant) ve dönem kıyası bölümleri: zaman kırılımı ve yardımcı ölçü dönem sütunu üretmez. */
+function checkSplitBlock(w: Walk, b: Extract<DefinitionBlock, { tur: "varyant" | "donem" }>, path: string): void {
+  const cube = checkQuery(w, b.sorgu, `${path}.sorgu`);
+  const timeDim = b.sorgu.boyutlar.some((id) => cube?.dimensions.find((d) => d.id === id)?.kind === "time");
+  if (b.tur === "varyant") {
+    if (b.sorgu.olculer.length !== 1) w.issues.push({ yol: `${path}.sorgu.olculer`, mesaj: "Kırılım bölümü tek ölçü gösterir." });
+    if (b.sorgu.boyutlar.length !== 1) w.issues.push({ yol: `${path}.sorgu.boyutlar`, mesaj: "Kırılım bölümü tek boyutla kurulur." });
+    else if (timeDim) w.issues.push({ yol: `${path}.sorgu.boyutlar`, mesaj: "Zamana göre kırılım için dönem kıyası bölümünü kullanın." });
+    return;
+  }
+  if (timeDim) w.issues.push({ yol: `${path}.sorgu.boyutlar`, mesaj: "Dönem kıyası zaman boyutuyla birlikte kurulamaz." });
+  if (b.sorgu.olculer.some((id) => cube?.measures.find((m) => m.id === id)?.kind === "helper")) {
+    w.issues.push({ yol: `${path}.sorgu.olculer`, mesaj: "Bu ölçü dönem sütunlarına bölünemiyor." });
   }
 }
 

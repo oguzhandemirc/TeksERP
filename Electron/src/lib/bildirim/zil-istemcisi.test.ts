@@ -1,6 +1,6 @@
 // Zil istemcisi düşüş merdiveni (plan §3.10): SSE → bekle → ozet; epoch değişimi tam çekim; 404 → zil yok.
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import { createBellClient, readSseEvents, BELL_SUMMARY_POLL_MS, type BellDeps } from "./zil-istemcisi";
+import { bellStreamHealthy, createBellClient, readSseEvents, BELL_SUMMARY_POLL_MS, type BellDeps } from "./zil-istemcisi";
 import type { NotificationSummary } from "./types";
 
 class HttpHata extends Error {
@@ -158,6 +158,34 @@ describe("zil istemcisi · olaylar ve abonelik", () => {
     expect(z.durum().kip).toBe("sse");
     b2();
     expect(z.durum().kip).toBe("kapali");
+  });
+});
+
+describe("zil istemcisi · alarm kanalı (N2-ALARM)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("alarm zili → 'degisti' + 'alarm'; akış sağlığı merhaba'da açılır, kopunca kapanır", async () => {
+    const a = akis();
+    const dep = bagimlilik({ akisAc: vi.fn(async () => a.res) });
+    const z = createBellClient(dep);
+    const olaylar: string[] = [];
+    z.olayDinle((o) => olaylar.push(o));
+    z.abone();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(bellStreamHealthy(z.durum())).toBe(false);
+    a.yaz("merhaba", { epoch: 100, rev: 1, alarmRev: 0 });
+    await bosalt();
+    expect(z.durum().bagli).toBe(true);
+    expect(bellStreamHealthy(z.durum())).toBe(true);
+    dep.ozet.mockResolvedValue({ ...OZET, alarmAcik: 1, alarmRev: 1 });
+    a.yaz("zil", { k: "alarm", rev: 1, alarmRev: 1 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(olaylar).toEqual(["degisti", "alarm"]);
+    expect(z.durum().alarmAcik).toBe(1);
+    a.kapat();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(bellStreamHealthy(z.durum())).toBe(false);
   });
 });
 

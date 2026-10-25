@@ -40,7 +40,10 @@ export function useNotificationBell(): BellState & { bayrak: boolean } {
   useEffect(() => {
     if (!acik) return;
     const birak = bellClient.abone();
-    const olayBirak = bellClient.olayDinle((o) => refreshLists(qc, o === "tam"));
+    // "alarm" olayını alarm sorgusu kendisi dinler (`alarm-bell-query.ts`); liste "degisti" ile zaten tazelenir.
+    const olayBirak = bellClient.olayDinle((o) => {
+      if (o !== "alarm") refreshLists(qc, o === "tam");
+    });
     return () => {
       olayBirak();
       birak();

@@ -30,6 +30,7 @@ import { clockShiftsFrom, loadClockShiftWindows } from "./helpers/loom-alarm-shi
 import { loadRecipientConfig, resolveAlarmRecipients, type RecipientConfig, type ResolvedRecipients } from "./helpers/loom-alarm-recipient.helper";
 import { readTezgahAlarmEscalateWhenAcked, readTezgahAlarmNoShiftMode, resolveTezgahAlarmUnclassifiedTarget, readTezgahEscalationGraceMinutes, resolveTezgahAlarmEnabled, type TezgahAlarmNoShiftMode } from "./system-setting.service";
 import { hata } from "../lib/logger";
+import { emitForAlarmEventTx } from "./notification-sources/alarm";
 import { AuditService } from "./audit.service";
 import { ALARM_SNOOZE_MINUTES, actionReplay, actorName, actorResult, closedConflict, freshAlarmTx, hm, type ActorCall, type AlarmSnoozeMinutes, type LoomAlarmActionResult } from "./helpers/loom-alarm-actor.helper";
 import { AppError } from "../utils/app-error";
@@ -42,8 +43,7 @@ const MIN_MS = 60_000;
 /** Canlı (kapanmamış) alarm durumları — tek tanım. */
 export const ACTIVE_ALARM_STATES: LoomAlarmState[] = [LoomAlarmState.OPEN, LoomAlarmState.ACKED];
 
-export const ALARM_CANCEL_STOP_REVOKED = "STOP_REVOKED";
-export const ALARM_CANCEL_NON_SCHEDULED = "NON_SCHEDULED";
+export const ALARM_CANCEL_STOP_REVOKED = "STOP_REVOKED", ALARM_CANCEL_NON_SCHEDULED = "NON_SCHEDULED";
 
 const STOP_SELECT = {
   id: true, machineId: true, startedAt: true, endedAt: true, durationSec: true, revokedAt: true,
@@ -63,10 +63,7 @@ export type LoomAlarmTickOutcome = "disabled" | LoomAlarmTickSummary;
 
 /** Turun ayarları — tur başında BİR KEZ okunur (tur içi tutarlılık). */
 interface TickCtx {
-  now: Date;
-  grace: number;
-  unclassified: number | null;
-  escalateWhenAcked: boolean;
+  now: Date; grace: number; unclassified: number | null; escalateWhenAcked: boolean;
   /** Vardiyasız zamanda alarm kipi (`ALWAYS` vardiyaya bakmaz; öteki kipler vardiya süzgecinden geçer). */
   noShiftMode: TezgahAlarmNoShiftMode;
   /** Açık duruşların saat başlangıcı için canlı vardiya pencereleri (tur başında bir kez). */
@@ -92,6 +89,8 @@ export interface LoomAlarmRunOptions {
 async function writeEventTx(tx: Tx, alarmId: string, data: Omit<Prisma.LoomAlarmEventCreateManyInput, "alarmId" | "createdAt">): Promise<number> {
   const createdAt = await loomAlarmEventStampTx(tx, alarmId);
   const r = await tx.loomAlarmEvent.createMany({ data: [{ ...data, alarmId, createdAt }], skipDuplicates: true });
+  // Kapanış bildirimi aynı tx'te (gelen kutusu satırı çözülür); kademe atlaması bildirim değildir.
+  if (r.count === 1) await emitForAlarmEventTx(tx, alarmId, data);
   return r.count;
 }
 
@@ -101,6 +100,8 @@ async function writeRaisedEventTx(tx: Tx, alarmId: string, tier: number, r: Reso
   const createdAt = await loomAlarmEventStampTx(tx, alarmId);
   const n = (await tx.loomAlarmEvent.createMany({ data: [{ id, alarmId, createdAt, kind: LoomAlarmEventKind.RAISED, tier, recipientMode: r.mode }], skipDuplicates: true })).count;
   if (n === 1 && r.recipients.length > 0) await tx.loomAlarmRecipient.createMany({ data: r.recipients.map((x) => ({ eventId: id, userId: x.userId, source: x.source })) });
+  // Alıcı listesi bu olayın kimliğiyle gider: dağıtıcı donmuş satırları okur, yeniden çözmez.
+  if (n === 1) await emitForAlarmEventTx(tx, alarmId, { kind: LoomAlarmEventKind.RAISED, id });
   return n;
 }
 
@@ -259,6 +260,8 @@ export { ALARM_SNOOZE_MINUTES, type AlarmSnoozeMinutes, type LoomAlarmActionResu
 /** Kişi olayının tek yazarı — `create` (skipDuplicates YOK: token çakışması P2002 olarak boğaza döner). */
 async function writeActorEventTx(tx: Tx, alarmId: string, at: Date, data: Omit<Prisma.LoomAlarmEventUncheckedCreateInput, "alarmId" | "createdAt">): Promise<string> {
   const ev = await tx.loomAlarmEvent.create({ data: { ...data, alarmId, createdAt: at }, select: { id: true } });
+  // Üstlenme/susturma alarmın durumunu değiştirir: gelen kutusu satırı güncellenir (sayaç artmaz).
+  await emitForAlarmEventTx(tx, alarmId, data);
   return ev.id;
 }
 
