@@ -9,12 +9,13 @@ import type { RegisterOutcome } from "./register";
 
 export async function registerNative(api: Api): Promise<RegisterOutcome> {
   if (!Device.isDevice) return { kind: "DESTEKLENMIYOR", message: "Bildirim yalnız gerçek cihazda alınabilir (öykünücü değil)" };
-  const current = await Notifications.getPermissionsAsync();
-  const status = current.granted ? current.status : (await Notifications.requestPermissionsAsync()).status;
-  if (status !== "granted") return { kind: "IZIN_YOK", message: "Bildirim izni verilmedi; telefon ayarlarından açabilirsiniz" };
+  // Android 13+: POST_NOTIFICATIONS çalışma zamanı istemi ancak bir kanal VARKEN çıkar → kanal izinden ÖNCE kurulur.
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("varsayilan", { name: "Bildirimler", importance: Notifications.AndroidImportance.HIGH });
   }
+  const current = await Notifications.getPermissionsAsync();
+  const status = current.granted ? current.status : (await Notifications.requestPermissionsAsync()).status;
+  if (status !== "granted") return { kind: "IZIN_YOK", message: "Bildirim izni verilmedi; telefon ayarlarından açabilirsiniz" };
   const extra = Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined;
   const projectId = extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   if (!projectId) return { kind: "YAPILANDIRMA_EKSIK", message: "Uygulama derlemesinde bildirim proje kimliği yok" };

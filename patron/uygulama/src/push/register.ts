@@ -6,7 +6,7 @@
 import { Platform } from "react-native";
 import type { Api } from "../api/endpoints";
 import { base64UrlToBytes } from "../lib/notification-form";
-import { NATIVE_PUSH, NATIVE_PUSH_SOON } from "./support";
+import { NATIVE_PUSH_ETKIN, NATIVE_PUSH_SOON } from "./support";
 
 export type RegisterOutcome =
   | { readonly kind: "KAYITLI"; readonly deviceId: string }
@@ -29,7 +29,7 @@ async function registerWeb(api: Api, vapidKey: string | null): Promise<RegisterO
   return { kind: "KAYITLI", deviceId: device.id };
 }
 
-export function registerThisDevice(api: Api, vapidKey: string | null, nativePush: boolean = NATIVE_PUSH): Promise<RegisterOutcome> {
+export function registerThisDevice(api: Api, vapidKey: string | null, nativePush: boolean = NATIVE_PUSH_ETKIN): Promise<RegisterOutcome> {
   if (Platform.OS === "web") return registerWeb(api, vapidKey);
   if (!nativePush) return Promise.resolve({ kind: "DESTEKLENMIYOR", message: NATIVE_PUSH_SOON });
   return (require("./register-native") as typeof import("./register-native")).registerNative(api);

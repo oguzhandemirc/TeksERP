@@ -11,6 +11,8 @@
 //      (Prisma delege sayacı); finans açıkken kur gelir (sayaç > 0 — sondanın kendisi canlı)
 //   §6 önizleme yazmaz; modül kapalı 403 MODULE_DISABLED; `cost:read` yok 403
 //   §7 liste: sunucuda durum süzgeci + cursor + özet şeridi
+//   §8 belge: `docs/kurallar/defter.md` defter envanterinde sürüm satırı + ters yolu (YENİ SÜRÜM,
+//      `restoredFromId`) beyanlı. NEGATİF SONDA (2026-10-25): satır silinince §8 2 ❌.
 // Koşum: npx tsx scripts/test_standart_maliyet_surum.ts
 // =============================================================================
 import { Prisma } from "@prisma/client";
@@ -24,6 +26,8 @@ import { readCostItemStatuses } from "../src/routes/cost.routes";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { altinYapiYaz, fiksturKur, fiksturSil, type MaliyetFikstur } from "./lib/maliyet-fikstur";
 import { assertGelistirmeVeritabani } from "./db-guard";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 let pass = 0,
   fail = 0;
@@ -200,8 +204,16 @@ async function bolum2b(f: MaliyetFikstur): Promise<void> {
   check("§2b ⭐ DB seddi: aynı ürüne ikinci ACTIVE doğrudan yazılamaz (P2002, kısmi unique indeks)", code === "P2002", String(code));
 }
 
+function bolum8(): void {
+  const md = readFileSync(join(__dirname, "../../docs/kurallar/defter.md"), "utf8");
+  const satir = md.split("\n").find((l) => l.startsWith("| `StandardCostVersion`")) ?? "";
+  check("§8a defter.md envanterinde StandardCostVersion (+StandardCostLine) satırı var", satir.includes("`StandardCostLine`"), satir.slice(0, 60));
+  check("§8b ters yol beyanı: geri alma YENİ SÜRÜM (`restoredFromId`), eskisi değişmez", satir.includes("YENİ SÜRÜM") && satir.includes("`restoredFromId`"));
+}
+
 async function main(): Promise<void> {
   console.log("=== STANDART MALİYET SÜRÜMÜ BEKÇİSİ (MAL-2) ===");
+  bolum8();
   assertGelistirmeVeritabani("test_standart_maliyet_surum");
   const f = await fiksturKur("SMS");
   try {

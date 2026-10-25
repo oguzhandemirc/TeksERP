@@ -1,6 +1,7 @@
 // İptal — önce önizleme ucu etkilenen kaydı listeler (yıkıcı işlem kuralı); önizleme gelmeden düğme açılmaz.
-// İptal satırı silmez: voidedAt damgası + gerekçe.
-import { useState } from "react";
+// İptal satırı silmez: voidedAt damgası + gerekçe. Hazır sebep (INSPECTION_VOID) İSTEĞE BAĞLIDIR:
+// modalden seçilen metin gerekçe kutusuna dolar, serbest metin her zaman kalır (K4P-PANEL kararı).
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -9,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorText } from "@/lib/api-error";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
+import { reasonPresetService, type ReasonPreset } from "@/pages/ReasonPresets/service";
 import { inspectionService } from "./service";
 import { NOT_ACTIVE_TEXT, PHASE_LABEL, errorCodeOf, numText, reasonOk } from "./inspectionRules";
 
@@ -17,6 +19,20 @@ interface Props { id: string; onOpenChange: (v: boolean) => void; onDone: () => 
 export function InspectionVoidDialog({ id, onOpenChange, onDone }: Props) {
   const [reason, setReason] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const presetsQ = useQuery({ queryKey: ["reason-presets", "INSPECTION_VOID", "void"], queryFn: () => reasonPresetService.list(false), staleTime: 60_000 });
+  const presets = useMemo(
+    () => (presetsQ.data ?? []).filter((p) => p.kind === "INSPECTION_VOID" && p.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
+    [presetsQ.data],
+  );
+  const pick = (p: ReasonPreset) => {
+    // "Diğer" gibi metin isteyen satır kutuyu doldurmaz; kullanıcı kendi cümlesini yazar.
+    if (!p.requiresText) setReason(p.fullText ?? p.label);
+    setErr(null);
+    setPickerOpen(false);
+    setTimeout(() => reasonRef.current?.focus(), 0);
+  };
   const preview = useQuery({ queryKey: ["quality-inspections", "void-preview", id], queryFn: () => inspectionService.voidPreview(id) });
   const save = useMutation({
     mutationFn: () => inspectionService.void(id, reason.trim()),
@@ -43,8 +59,13 @@ export function InspectionVoidDialog({ id, onOpenChange, onDone }: Props) {
             </div>
           )}
         <div className="space-y-1">
-          <Label htmlFor="insp-void-reason">Gerekçe</Label>
-          <Textarea id="insp-void-reason" maxLength={1000} placeholder="Ör. yanlış top muayene edildi" value={reason} onChange={(e) => { setReason(e.target.value); setErr(null); }} />
+          <div className="flex items-center justify-between">
+            <Label htmlFor="insp-void-reason">Gerekçe</Label>
+            {presets.length > 0 && (
+              <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setPickerOpen(true)}>Hazır sebepten seç…</Button>
+            )}
+          </div>
+          <Textarea ref={reasonRef} id="insp-void-reason" maxLength={1000} placeholder="Ör. yanlış top muayene edildi" value={reason} onChange={(e) => { setReason(e.target.value); setErr(null); }} />
         </div>
         {err && <p role="alert" className="text-sm text-destructive">{err}</p>}
         <DialogFooter>
@@ -52,6 +73,21 @@ export function InspectionVoidDialog({ id, onOpenChange, onDone }: Props) {
           <Button variant="destructive" disabled={!ready || !reasonOk(reason) || save.isPending} onClick={() => save.mutate()}>İptal et</Button>
         </DialogFooter>
       </DialogContent>
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Hazır iptal sebebi</DialogTitle>
+            <DialogDescription>Seçim isteğe bağlıdır; seçilen metin gerekçe kutusuna dolar ve düzenlenebilir.</DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-80 space-y-1 overflow-y-auto" data-testid="void-reason-presets">
+            {presets.map((p) => (
+              <li key={p.id}>
+                <Button type="button" variant="ghost" className="w-full justify-start" onClick={() => pick(p)}>{p.label}</Button>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

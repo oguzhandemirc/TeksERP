@@ -50,6 +50,7 @@
 - **[ÇEKİRDEK]** Önizlemeyi (`tercihler/onizleme`, `kilit-onizleme`, `varsayilana-don/onizleme`) yazmasız tut; haftalık tahmini son 30 fabrika günü sayacından, veri yoksa katalog `tahminiHaftalik`ten üret. · bekçi: `test_bildirim_onizleme`
 - **[ÇEKİRDEK]** Profili silme, arşivle (atomik claim); hücre/üye kümesini pivot replace et ve audit'i profil satırına tx DIŞINDA yaz; profil izin vermez, görme süzgecini aşmaz. · bekçi: `test_bildirim_tercih_api` §4
 - **[ÇEKİRDEK]** Masaüstü seçimini sunucu hücresinden (`/katalog.hucreler`, MASAUSTU) oku ve `PUT /tercihler`e yaz; N3 `masaustuTurler` anahtarını yalnız bir sürüm birleşimle oku, yazımda yalnız seçili kalanlarla buda. · bekçi: `Electron/src/lib/bildirim/masaustu-tercih.test.ts`, `Electron/src/components/bildirim/MasaustuBildirim.test.tsx`
+- **[ÇEKİRDEK]** Her fabrika türü `src/constants/notification-patron-map.ts`te patron bulutu türüne eşlenir ya da `null` + gerekçe taşır; bulut kataloğuna tür eklemek ayrı karardır (eşleme bulutu değiştirmez). · bekçi: `test_bildirim_katalogu (§9)` <sub>(arşiv:2026-10-25 N5-PATRON)</sub>
 
 ## Bekçiler — bu alana dokununca koş
 

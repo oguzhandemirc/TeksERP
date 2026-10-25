@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { safeRoute } from "../lib/notification-form";
 import { useSession } from "../state/session";
-import { NATIVE_PUSH } from "./support";
+import { NATIVE_PUSH_ETKIN } from "./support";
 
 const nativeTaps = (): typeof import("./taps-native") => require("./taps-native") as typeof import("./taps-native");
 
@@ -60,7 +60,7 @@ export function useNotificationTaps(enabled: boolean): void {
     });
   }, [enabled]);
   useEffect(() => {
-    if (!enabled || Platform.OS === "web" || !NATIVE_PUSH) return;
+    if (!enabled || Platform.OS === "web" || !NATIVE_PUSH_ETKIN) return;
     return nativeTaps().listenNativeTaps((data) => void openNotification(data, deps.current));
   }, [enabled]);
 }
