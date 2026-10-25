@@ -82,7 +82,14 @@ function NotificationTableRow({ b, secili, onSec, onAc, eylemler }: {
           >
             {b.okunduAn ? "Okunmadı yap" : "Okundu"}
           </Button>
-          <SnoozeMenu onSec={(sure) => eylemler.ertele.mutate({ id: b.id, sure })} />
+          {/* Alarmın kendi susturması var; gelen kutusu ertelemesi alarmı gizlemesin (yer tutucu sütunu hizalı tutar). */}
+          {b.sinif === "ALARM" ? (
+            <span aria-hidden inert className="invisible">
+              <SnoozeMenu onSec={() => undefined} />
+            </span>
+          ) : (
+            <SnoozeMenu onSec={(sure) => eylemler.ertele.mutate({ id: b.id, sure })} />
+          )}
         </div>
       </td>
     </tr>

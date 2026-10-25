@@ -1,4 +1,5 @@
-import { printHtml } from './printHtml';
+import { printHtmlReported } from './printHtml';
+import type { PrintSubject } from './printJob.service';
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 
@@ -72,11 +73,16 @@ export async function printDocument(
       headers: { Accept: 'text/html' },
       params,
     });
-    await printHtml({ html: typeof res.data === 'string' ? res.data : String(res.data) });
+    // Başarı print-event'in `printJob` ekiyle yazılır (iki satır olmasın); hata/iptal raporlanır.
+    const printJob = await printHtmlReported(
+      { html: typeof res.data === 'string' ? res.data : String(res.data) },
+      { subjectKind: 'REFAKAT_KARTI', subjectTable: 'traveler_cards', subjectId: doc.sourceId, subjectNo: doc.documentNo },
+      { reportSuccess: false },
+    );
     // Baskı GERÇEKLEŞTİ → "kart güncel değil" işaretini temizle. GET /html bunu
     // yapamaz (önizlemeyi de besler). Bildirim hatası yutulur: kâğıt çıktı.
     try {
-      await apiClient.post(`/traveler-cards/${doc.sourceId}/print-event`);
+      await apiClient.post(`/traveler-cards/${doc.sourceId}/print-event`, { printJob });
     } catch {
       /* baskı akışını hata ile kesme */
     }
@@ -87,5 +93,13 @@ export async function printDocument(
     `/printed-documents/${doc.docType}/${doc.sourceId}/html`,
     { responseType: 'text', headers: { Accept: 'text/html' }, params },
   );
-  await printHtml({ html: typeof res.data === 'string' ? res.data : String(res.data) });
+  await printHtmlReported({ html: typeof res.data === 'string' ? res.data : String(res.data) }, documentSubject(doc));
+}
+
+/** Belge → basım konusu. `sourceId` belge kaynağıdır; tablosu bilinen tek tür fason çekisidir. */
+function documentSubject(doc: WorkOrderDocument): PrintSubject {
+  if (doc.docType === 'SUBCONTRACTOR_DISPATCH') {
+    return { subjectKind: 'FASON_CEKI', docType: doc.docType, subjectTable: 'subcontractor_dispatches', subjectId: doc.sourceId, subjectNo: doc.documentNo };
+  }
+  return { subjectKind: 'BELGE', docType: doc.docType, subjectNo: doc.documentNo };
 }

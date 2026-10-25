@@ -1,4 +1,4 @@
-import { BarChart3, FilePlus2 } from "lucide-react";
+import { BarChart3, FilePlus2, Filter, LayoutDashboard } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import { isCenterEntryOpen } from "@/pages/Reports/_v2/center-model";
@@ -118,6 +118,26 @@ reportCommandSections.push({
       permission: "report:builder",
       visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "özel rapor raporlarım kayıtlı rapor oluşturucu ölçü kırılım paylaş",
+    },
+    {
+      key: "report-custom:layout",
+      label: "Özel rapor düzeni ve PDF",
+      description: "Özel raporlarım'dan bir rapor açın → 'Düzeni düzenle': bölümleri sürükleyin, PDF/Excel alın",
+      icon: LayoutDashboard,
+      to: "/reports",
+      permission: "report:builder",
+      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
+      keywords: "düzen sürükle bırak blok bölüm sayfa kesmesi pdf excel grafik özel rapor tasarım",
+    },
+    {
+      key: "report-custom:data",
+      label: "Özel rapor veri alanları ve süzgeç",
+      description: "Özel raporlarım'dan bir rapor açın → 'Düzeni düzenle' → bölüm seçin: soldaki ağaçtan ölçü/boyutu kuyulara sürükleyin, süzgeç kurun",
+      icon: Filter,
+      to: "/reports",
+      permission: "report:builder",
+      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
+      keywords: "veri ağacı alan ölçü boyut kuyu satır sütun süzgeç filtre koşul varyant önerilen grafik özel rapor oluşturucu",
     },
   ],
 });

@@ -130,3 +130,6 @@ export const EIRSALIYE_WRITE = "eirsaliye:write";
 export const EIRSALIYE_UNDO = "eirsaliye:undo";
 /** `GET /api/e-irsaliye/readiness` guard'ı — ayar sekmesindeki rozet de okur. */
 export const EIRSALIYE_READINESS_ACCESS = [EIRSALIYE_READ, "settings:e-irsaliye", "admin:settings"];
+
+// bildirim: Ayarlar → Bildirim profilleri (yönetici; backend `SCREEN_CATALOG` `system/notification-profiles` aynası).
+export const NOTIFICATION_PROFILES_ACCESS = ["admin:settings", "settings:notifications"];

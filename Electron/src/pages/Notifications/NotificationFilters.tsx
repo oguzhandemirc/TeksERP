@@ -4,11 +4,12 @@ import { cn } from "@/lib/utils";
 import { groupLook } from "@/lib/bildirim/format";
 import type { NotificationGroup, NotificationTab } from "@/lib/bildirim/types";
 
-export type PageTab = Extract<NotificationTab, "tumu" | "okunmamis" | "ertelenen">;
+export type PageTab = Extract<NotificationTab, "tumu" | "okunmamis" | "alarmlar" | "ertelenen">;
 
 const STATUS_OPTIONS: Array<{ k: PageTab; ad: string; aciklama: string }> = [
   { k: "tumu", ad: "Tümü", aciklama: "Ertelenenler hariç" },
-  { k: "okunmamis", ad: "Okunmamış", aciklama: "Henüz açmadıklarınız" },
+  { k: "okunmamis", ad: "Okunmamış", aciklama: "Henüz açmadıklarınız (alarmlar hariç)" },
+  { k: "alarmlar", ad: "Alarmlar", aciklama: "Size bildirilen tezgah alarmları (açık ve kapanan)" },
   { k: "ertelenen", ad: "Ertelenen", aciklama: "Süresi dolunca geri gelir" },
 ];
 

@@ -205,6 +205,13 @@ const MUAF: Record<string, { gerekce: string; izinli: string[] }> = {
       "KOŞULLU ELEMAN yoktur, yani yanlış önizleme üretmez.",
     izinli: ["A", "B"],
   },
+  "Teks-Erp/src/services/document-render/sample-data-inspection.ts": {
+    gerekce:
+      "Muayene raporu önizlemesinin statik örnek verisi (`sample-data.ts`ten satır " +
+      "tavanı yüzünden ayrıldı; aynı gerekçe). Fabrika derecesi alanı belgede BASILMAZ, " +
+      "değerler hiçbir kataloğun kodu değildir ('A'/'B').",
+    izinli: ["A", "B"],
+  },
 };
 
 /** Kalite bağlamı — bir adın bu soruyu sorup sormadığı. */

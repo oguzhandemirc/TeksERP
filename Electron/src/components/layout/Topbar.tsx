@@ -8,6 +8,7 @@ import { AppearanceMenu } from "./AppearanceMenu";
 import { LoomAlarmBell } from "@/pages/Operations/LoomAlarms/LoomAlarmBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import { BildirimZili } from "./BildirimZili";
+import { MasaustuBildirimKoprusu } from "@/components/bildirim/MasaustuBildirimKoprusu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -103,6 +104,8 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
 
         {/* Kişisel bildirim zili (gelen kutusu) — bayrak kapalı / eski backend → hiç çizilmez. */}
         <BildirimZili />
+        {/* Masaüstü OS bildirimi + görev çubuğu rozeti — DOM üretmez; web/bayrak kapalı → IPC yok. */}
+        <MasaustuBildirimKoprusu />
 
         {/* Etkinlik = sayaçsız akış (audit ayak izi): rozet/okunmamış sayısı TAŞIMAZ.
             Kişisel bildirim zili (gelen kutusu) hemen solunda. */}

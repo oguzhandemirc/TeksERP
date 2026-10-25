@@ -150,6 +150,13 @@
           "TeksERP-INTRO.mp4",
           "splash.html"
         ]
+      },
+      {
+        "from": "resources/overlay",
+        "to": "overlay",
+        "filter": [
+          "*.png"
+        ]
       }
     ],
     "mac": {

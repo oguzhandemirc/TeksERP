@@ -33,7 +33,7 @@ import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger-reverse
 import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { AppError } from "../utils/app-error";
-import { resolveDefaultDefectTypeTx } from "./helpers/default-defect-type.helper";
+import { recordRollDefectsTx } from "./helpers/roll-defect.helper";
 import { assertMasterDataLiveTx } from "./helpers/master-data-live.helper";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { assertRollReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
@@ -50,6 +50,7 @@ import {
 } from "./helpers/roll-cancel-restore.helper";
 import {
   readKk1WeightEntryEnabled,
+  readKaliteGuvenceEnabled,
   readKk1DuplicateGuardEnabled,
   readQualityGradeRequiredEnabled,
   resolveCancelReasonRequired,
@@ -182,7 +183,6 @@ import {
   STEP_FLOW_ERROR,
   STEP_FLOW_SELECT,
   stepRunsStepFlow,
-  QUALITY_STEP_ERROR,
   STEP_QUALITY_SELECT,
   stepCanApplyQuality,
 } from "./helpers/quality-station.helper";
@@ -192,6 +192,14 @@ import {
   partitionTargetableIds,
 } from "./helpers/targetable-property.helper";
 import { generateRollBarcodeTx, type RollBarcodeType } from "./helpers/roll-barcode.helper";
+import {
+  inspectionNotSaved,
+  resolveInspectionOnBirth,
+  type BirthInspectionInput,
+  type InspectionNotSaved,
+  type InspectionOnBirthDecision,
+} from "./helpers/inspection-on-birth.helper";
+import { createInspectionTx, INSPECTION_AUDIT_TABLE } from "./quality-inspection.service";
 import { finalizeRollsAtLastStep, finalBarcodeType, loadProducedBuckets } from "./helpers/roll-finalize.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
@@ -677,7 +685,22 @@ export interface ProductionFlowData {
  * hiçbiri (`inventory.controller`, `tambur-manual.service`) etkilenmez.
  */
 /** S1: KK1 doğuşunda sunucunun doğurduğu indirme yalnız BU yanıtta (`ROLL_LIST_INCLUDE` genişlemez; tablet rozet basar). */
-export type InitialEntryResult = ApiResponse<Roll & { doffEvent?: { id: string; code: string } }> & { idempotent?: true };
+/** K4P-KK1: doğuş muayenesi yalnız gövde `inspection` taşıdıysa (`data.inspection`); yazılmadıysa `inspectionNotSaved` + `warnings` metni. */
+export type BirthInspectionSummary = { id: string; pointsPer100M2: Prisma.Decimal | null; suggestedGradeCode: string | null };
+export type InitialEntryResult = ApiResponse<Roll & { doffEvent?: { id: string; code: string }; inspection?: BirthInspectionSummary | null }> & {
+  idempotent?: true;
+  inspectionNotSaved?: InspectionNotSaved;
+};
+
+/**
+ * K4P-KK1b: giriş istasyonu muayeneye kapalı mı? (tx DIŞINDA, kapı kararı için) `null` = istasyonsuz ya da
+ * bulunamayan istasyon — o durumda karar tx içindeki tek yazarın doğrulamasına kalır.
+ */
+async function entryStationCapableForInspection(stationId: string | null | undefined): Promise<boolean | null> {
+  if (!stationId) return null;
+  const st = await prisma.station.findUnique({ where: { id: stationId }, select: STEP_QUALITY_SELECT });
+  return st ? stepCanApplyQuality(st) : null;
+}
 
 export class InventoryService {
   /**
@@ -705,7 +728,7 @@ export class InventoryService {
    */
   private initialEntryReplay(
     data: { itemId: string; colorId?: string | null; initialQty: number },
-    opts?: { goodsReceiptId?: string | null; parentReceiptId?: string | null; doffEventId?: string | null; kk1Birth?: Kk1BirthInput | null },
+    opts?: { goodsReceiptId?: string | null; parentReceiptId?: string | null; doffEventId?: string | null; kk1Birth?: Kk1BirthInput | null; inspection?: unknown },
   ) {
     // S1: doff `id/code` rozet için, `machine.code` + `machineRun.weavingOrderId` replay KİMLİĞİ için (bağlam alanları).
     const PRIOR_INCLUDE = {
@@ -713,6 +736,8 @@ export class InventoryService {
       color: true,
       createdBy: { select: { id: true, username: true, fullName: true } },
       doffEvent: { select: { id: true, code: true, machine: { select: { code: true } }, machineRun: { select: { weavingOrderId: true } } } },
+      // K4P-KK1: doğuş muayenesi (RAW, ilk revizyon) — yalnız gövde `inspection` taşıdıysa yanıta girer.
+      inspections: { where: { phase: "RAW", revision: 1 }, select: { id: true, pointsPer100M2: true, suggestedGradeCode: true }, take: 1 },
     } satisfies Prisma.RollInclude;
     type Prior = Prisma.RollGetPayload<{ include: typeof PRIOR_INCLUDE }>;
     // Bağlam: [alan, gelen, mevcut okuyucusu] — doff yoluyla doğan A-yolu topunda kolon NULL, iş koşumdan okunur.
@@ -724,8 +749,10 @@ export class InventoryService {
       ["weavingOrderId", opts?.kk1Birth?.weavingOrderId, (r) => r.weavingOrderId ?? r.doffEvent?.machineRun?.weavingOrderId ?? null],
     ];
     const strip = (r: Prior): InitialEntryResult["data"] => {
-      const { doffEvent, ...rest } = r;
-      return doffEvent ? { ...rest, doffEvent: { id: doffEvent.id, code: doffEvent.code } } : rest;
+      const { doffEvent, inspections, ...rest } = r;
+      const base = doffEvent ? { ...rest, doffEvent: { id: doffEvent.id, code: doffEvent.code } } : rest;
+      // Alansız gövdede yanıt bayt bayt eskisi; alanlıda muayene yeniden YAZILMAZ, doğuşta yazılanı (ya da null) döner.
+      return opts?.inspection ? { ...base, inspection: inspections[0] ?? null } : base;
     };
     return tokenReplay<Prior, InitialEntryResult>({
       find: (db, clientToken) => db.roll.findUnique({ where: { clientToken }, include: PRIOR_INCLUDE }),
@@ -735,6 +762,8 @@ export class InventoryService {
         { ad: "colorId", mevcut: r.colorId, gelen: data.colorId ?? null },
         { ad: "initialQty", mevcut: r.initialQty, gelen: data.initialQty },
         ...context.filter(([, v]) => v).map(([ad, v, oku]) => ({ ad, mevcut: oku(r), gelen: v })),
+        // `inspection` kimliğe BİLEREK girmez: modül/izin kapısında muayenesiz doğan topun tekrarı (ya da operatörün
+        // ilk denemeden sonra hata eklemesi) çakışma değil AYNI toptur; muayene düzeltmesi revizyon ucunun işidir.
       ],
       collision: "Bu istemci anahtarı farklı bir topla kullanılmış. Topu yeniden okutup tekrar deneyin.",
       collisionEk: (r) => ({
@@ -828,6 +857,11 @@ export class InventoryService {
        * Kapılar (modül, mod) controller'da — burası çağıranın beyanına güvenir (dahili çağıran vermez).
        */
       kk1Birth?: Kk1BirthInput | null;
+      /**
+       * K4P-KK1 — doğuşta muayene: yalnız HTTP doğuş yolu verir. Kapı (modül + `inspection:write`) burada
+       * `resolveInspectionOnBirth`; yazım topla AYNI tx'te `createInspectionTx` (tek yazar), istasyon `entryStationId`.
+       */
+      inspection?: (BirthInspectionInput & { permissions: readonly string[]; deviceId?: string | null }) | null;
       /**
        * Elle eklenen topun SEBEBİ — kalıcı kolona (`Roll.entryReason`) yazılır.
        * Zincire dayanan yollar (KK1 / kesim / fason) bunu VERMEZ; onların sebebi
@@ -1137,6 +1171,17 @@ export class InventoryService {
     // Barkod tx AÇILMADAN ÖNCE ve ayrı bağlantıda rezerve edilir: sayaç satır kilidi
     // tx içinde commit'e kadar tutulup bütün top girişlerini serileştiriyordu. Tx geri
     // sararsa (ikiz 409, ana veri 409, token P2002) numara boşluğu kalır — barkod kimliktir.
+    // K4P-KK1: muayene kapısı tx DIŞINDA (ayar okuması); kapalıysa top yine doğar, yanıt uyarı taşır.
+    const inspectionDecision: InspectionOnBirthDecision | null = opts?.inspection
+      ? userId
+        ? resolveInspectionOnBirth(
+            { permissions: opts.inspection.permissions },
+            { kaliteGuvenceEnabled: await readKaliteGuvenceEnabled() },
+            await entryStationCapableForInspection(opts.entryStationId),
+          )
+        : { write: false, reason: "PERMISSION_DENIED" }
+      : null;
+    const birthInspection: { saved: (BirthInspectionSummary & { auditData: Record<string, unknown> }) | null } = { saved: null };
     const barcode = await generateRollBarcodeTx(prisma, rollType);
     // S1: indirme kodu da tx AÇILMADAN ÖNCE havuzdan (`test_perf_sayac_tx_disi §2`); doff doğmazsa
     // (çok tezgahlı iş, 4xx) numara boşta kalır — boşluk serbest (dokuma.md, barkod emsali).
@@ -1350,6 +1395,28 @@ export class InventoryService {
           // S1: sunucunun doğurduğu doff — aynı zincir; beyan edilen levent override (D10, pencere kapısı helper'da).
           autoConsumeWarnings.push(...(await autoConsumeForRollTx(tx, { rollId: created.id, doffEventId: birth.doffEventId, fabricLengthM: data.initialQty, userId: userId ?? null, beamOverrideId: opts?.kk1Birth?.warpBeamId ?? null })));
         }
+        // K4P-KK1: muayene topla AYNI tx'te — yapısal hata (bilinmeyen tür, tekrar, yeteneksiz istasyon) topu da geri alır.
+        if (opts?.inspection && inspectionDecision?.write && userId) {
+          const insp = await createInspectionTx(tx, {
+            roll: created,
+            phase: "RAW",
+            defects: opts.inspection.defects,
+            inspectedLengthM: opts.inspection.inspectedLengthM ?? created.initialQty,
+            note: opts.inspection.note ?? null,
+            stationId: opts.entryStationId ?? null,
+            deviceId: opts.inspection.deviceId ?? null,
+            userId,
+          });
+          birthInspection.saved = {
+            id: insp.id,
+            pointsPer100M2: insp.pointsPer100M2,
+            suggestedGradeCode: insp.suggestedGradeCode,
+            auditData: {
+              rollId: insp.rollId, phase: insp.phase, revision: insp.revision, defectCount: insp.defectCount, totalPoints: insp.totalPoints,
+              pointsPer100M2: insp.pointsPer100M2?.toFixed(2) ?? null, suggestedGradeCode: insp.suggestedGradeCode, gradeMismatch: insp.gradeMismatch, origin: "KK1_BIRTH",
+            },
+          };
+        }
         return created;
       });
     }
@@ -1377,15 +1444,26 @@ export class InventoryService {
       },
     });
 
+    const saved = birthInspection.saved;
+    if (saved) {
+      await AuditService.log({ userId, action: "CREATE", tableName: INSPECTION_AUDIT_TABLE, recordId: saved.id, newData: saved.auditData });
+    }
+
     // S1: doğuş uyarıları (çok tezgah · kumaş uyuşmazlığı · işsiz koşum) önce, levent uyarıları sonra; alansız gövdede ikisi de boş → anahtar yok.
     const birth = kk1.birth;
-    const warnings = [...(birth?.warnings ?? []), ...autoConsumeWarnings];
+    // K4P-KK1: `warnings` tel sözleşmesi `string[]` (istemciler metni toast basar); yapılı kod ayrı alanda.
+    const notSaved = inspectionDecision && !inspectionDecision.write ? inspectionNotSaved(inspectionDecision.reason) : null;
+    const warnings = [...(birth?.warnings ?? []), ...autoConsumeWarnings, ...(notSaved ? [notSaved.message] : [])];
+    const withDoff = birth?.doffEventId && birth.doffCode ? { ...roll, doffEvent: { id: birth.doffEventId, code: birth.doffCode } } : roll;
     return {
       success: true,
       // Sunucunun doğurduğu indirme yalnız bu yanıtta (tablet rozet basar); eski yolda `data` bayt bayt aynı.
-      data: birth?.doffEventId && birth.doffCode ? { ...roll, doffEvent: { id: birth.doffEventId, code: birth.doffCode } } : roll,
+      data: opts?.inspection
+        ? { ...withDoff, inspection: saved ? { id: saved.id, pointsPer100M2: saved.pointsPer100M2, suggestedGradeCode: saved.suggestedGradeCode } : null }
+        : withDoff,
       message: `Top oluşturuldu. Barkod: ${roll.barcode}`,
       ...(warnings.length ? { warnings } : {}),
+      ...(notSaved ? { inspectionNotSaved: notSaved } : {}),
     };
   }
 
@@ -5421,7 +5499,7 @@ export class InventoryService {
           include: {
             // `appliesColor` + `requiredCategory`: adım renk verebiliyor mu (tek yüklem
             // stepCanApplyColor) — bitişte renksiz topa WO hedef rengi yazılır (3c).
-            station: { select: { ...STEP_FLOW_SELECT, ...STEP_QUALITY_SELECT, appliesColor: true } },
+            station: { select: { ...STEP_FLOW_SELECT, appliesColor: true } },
             requiredCategory: { select: { appliesColor: true } },
             workOrder: {
               include: {
@@ -5495,12 +5573,6 @@ export class InventoryService {
       );
     }
 
-    // Hata listesi MUAYENE yeteneği ister (KQ-D1): akış yürüyen ama muayenesi
-    // kapalı adımda (ör. OTHER + appliesQuality) hata yazılmaz — bilinçli fark K2.
-    if ((data.errors ?? []).length > 0 && !stepCanApplyQuality(roll.currentStep.station)) {
-      throw AppError.badRequest(QUALITY_STEP_ERROR);
-    }
-
     // totalMeters opsiyonel — verilmezse mevcut currentQty (fason kabulden gelen
     // irsaliye değeri) kullanılır. Verilirse pozitif olmalı.
     if (data.totalMeters !== undefined && !(data.totalMeters > 0)) {
@@ -5513,34 +5585,9 @@ export class InventoryService {
       );
     }
 
-    // Hata validasyonu — sadece nokta (startMeter)
+    // Hata listesi: kapı (muayene yeteneği, bilinçli fark K2), metre, varsayılan/pasif
+    // tip ve mükerrer kuralları TEK boğazda (`recordRollDefectsTx`, KQ-D7) — tx içinde.
     const rawErrors = data.errors ?? [];
-    for (const e of rawErrors) {
-      if (e.startMeter < 0 || e.startMeter > totalMeters) {
-        throw AppError.badRequest(
-          `Hata metresi (${e.startMeter}) 0 ile ${totalMeters} arasında olmalı`,
-        );
-      }
-    }
-
-    // DefectType doğrulamaları (varsa) — M-28: isActive da aranır (pasif hata
-    // tipiyle kayıt açılamaz — soft-delete giriş guard'ı); eskiden birebir aynı
-    // findMany iki kez koşuyordu, tek sorguya indirildi.
-    // Tipsiz satır → kataloğun varsayılanı; varsayılan yoksa 400 (karar A; istemci
-    // listenin ilkini UYDURMAZ). Doğrulama ve yazma bu çözülmüş listeyi okur.
-    const errors = await resolveDefaultDefectTypeTx(prisma, rawErrors);
-    const defectIds = [...new Set(errors.map((e) => e.defectTypeId).filter((x): x is string => !!x))];
-    const defectMap = new Map<string, string>();
-    if (defectIds.length > 0) {
-      const found = await prisma.defectType.findMany({
-        where: { id: { in: defectIds }, isActive: true },
-        select: { id: true, name: true },
-      });
-      if (found.length !== defectIds.length) {
-        throw AppError.badRequest("Bazı hata tipleri bulunamadı veya pasif");
-      }
-      for (const d of found) defectMap.set(d.id, d.name);
-    }
 
     const allSteps = roll.currentStep.workOrder.steps;
     const currentIndex = allSteps.findIndex((s) => s.id === roll.currentStepId);
@@ -5591,19 +5638,15 @@ export class InventoryService {
         },
       });
 
-      // 2) RollError'lar toplu insert
-      if (errors.length > 0) {
-        await tx.rollError.createMany({
-          data: errors.map((e) => ({
-            rollId,
-            startMeter: e.startMeter,
-            defectTypeId: e.defectTypeId ?? null,
-            errorType: e.defectTypeId ? defectMap.get(e.defectTypeId) ?? null : null,
-            detectedAtStepId: stepId,
-            detectedByUserId: userId ?? null,
-          })),
-        });
-      }
+      // 2) RollError'lar toplu — tek yazma boğazı (KK2/Tambur ile aynı kurallar).
+      await recordRollDefectsTx(tx, {
+        rollId,
+        stepId,
+        userId,
+        stationGate: "FLOW",
+        defects: rawErrors,
+        maxMeter: totalMeters,
+      });
 
       // 3) RollOperation: QC2_COMPLETED (her zaman) + KURSUN_APPLIED (istasyonda
       //    KURSUN özelliği yetenek olarak atanmışsa). Eskiden ikisi de koşulsuzdu;
@@ -5617,7 +5660,7 @@ export class InventoryService {
           machineId: machineId ?? null,
           metadata: {
             totalMeters: totalMeters,
-            errorCount: errors.length,
+            errorCount: rawErrors.length,
             notes: data.notes ?? null,
           } as Prisma.InputJsonValue,
         },
@@ -5731,7 +5774,7 @@ export class InventoryService {
       newData: {
         kursunFinished: true,
         totalMeters: totalMeters,
-        errorCount: errors.length,
+        errorCount: rawErrors.length,
         nextStepId: nextStep?.id ?? null,
         // Operatörün elle işaretledikleri (SEÇİM tipinde valueCode ile) —
         // completeQc2 audit'i ile aynı iz; AUTO'lar bu listede olmayabilir (F2).

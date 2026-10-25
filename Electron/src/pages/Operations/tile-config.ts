@@ -25,6 +25,8 @@ import {
   Layers,
   FlaskConical,
   BadgeCheck,
+  Gauge,
+  ScanSearch,
   FileCheck2,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
@@ -111,6 +113,11 @@ export interface OperationsVisibilityContext {
    * çalışır). Belirsizken FALSE ("sıfır görünür fark"); backend kapısı `requireKaliteGuvenceEnabled`.
    */
   kaliteGuvenceEnabled: boolean;
+  /**
+   * MALİYET & TEKLİF modülü (`maliyet.enabled`, MAL) — ETKİN değer (`production && maliyet`); backend kapısı
+   * `requireMaliyetEnabled` (`/api/cost`). Belirsizken FALSE: menü bayrak gelmeden çizilmez (fail-closed).
+   */
+  maliyetEnabled: boolean;
   /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
@@ -533,6 +540,17 @@ export const operationsTiles: OperationsTile[] = [
     visibleWhen: isKursunPlanningVisible,
   },
   {
+    key: "inspections",
+    title: "Muayeneler",
+    description: "4 puan muayeneleri — puan / 100 m², derece önerisi, düzelt ve iptal",
+    icon: ScanSearch,
+    to: "/quality/inspections",
+    group: "quality",
+    permission: "inspection:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
+  },
+  {
     key: "lab-tests",
     title: "Lab Testleri",
     description: "Numune sonuçları — gramaj, haslık, çekme; onaylanan test donar",
@@ -551,6 +569,17 @@ export const operationsTiles: OperationsTile[] = [
     to: "/quality/certificates",
     group: "quality",
     permission: "certificate:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
+  },
+  {
+    key: "inspection-rules",
+    title: "4 Puan Kuralları",
+    description: "Puan aralığı → kalite derecesi; fabrika varsayılanı ve müşteri spesifikasyonları",
+    icon: Gauge,
+    to: "/quality/inspection-rules",
+    group: "quality",
+    permission: "inspection:read",
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
     offHint: KALITE_GUVENCE_OFF_HINT,
   },

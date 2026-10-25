@@ -4,7 +4,8 @@ import { BASIC_BLOCKS } from "./blocks";
 import { colorPropertyPlugin } from "./colorProperty";
 import { frameSandboxPlugin } from "./frameSandbox";
 import { I18N_CONFIG, TR_ADDITIONS } from "./locale-tr";
-import { GUIDE_STYLE_ID, deviceId, guideCss, pageDevices, pageDimensions, type Orientation, type PaperSize } from "./pageCanvas";
+import { documentComponentsPlugin } from "./documentComponents";
+import { GUIDE_STYLE_ID, deviceId, guideCss, pageDevices, pageDimensions, type GuideRegions, type Orientation, type PageMargins, type PaperSize } from "./pageCanvas";
 import { STYLE_SECTORS } from "./styleSectors";
 
 /** Editörün çizileceği kaplar — paneller GrapesJS'in değil, sayfanın yerleşimindedir. */
@@ -79,7 +80,7 @@ export function buildEditorConfig(targets: EditorTargets, hooks: EditorHooks): E
       },
     },
     // Eklentiler ilk çizimden ÖNCE koşar: Türkçe ekler ve sandbox kancası panel/kanvas doğmadan yerleşir.
-    plugins: [localePlugin, rtePlugin, frameSandboxPlugin(hooks.onFatal), colorPropertyPlugin, (ed: Editor) => assetGuardPlugin(ed, hooks)],
+    plugins: [localePlugin, documentComponentsPlugin, rtePlugin, frameSandboxPlugin(hooks.onFatal), colorPropertyPlugin, (ed: Editor) => assetGuardPlugin(ed, hooks)],
   };
 }
 
@@ -115,7 +116,12 @@ function assetGuardPlugin(editor: Editor, hooks: EditorHooks): void {
 }
 
 /** Kanvasa kâğıt kılavuzlarını yazar; şablon CSS'ine girmez (ayrı <style>). */
-export function applyPageGuides(editor: Editor, size: PaperSize, orientation: Orientation): void {
+export function applyPageGuides(
+  editor: Editor,
+  size: PaperSize,
+  orientation: Orientation,
+  guides: { margins?: PageMargins; regions?: GuideRegions } = {},
+): void {
   const doc = editor.Canvas.getDocument();
   if (!doc?.head) return;
   let style = doc.getElementById(GUIDE_STYLE_ID);
@@ -124,7 +130,7 @@ export function applyPageGuides(editor: Editor, size: PaperSize, orientation: Or
     style.id = GUIDE_STYLE_ID;
     doc.head.appendChild(style);
   }
-  style.textContent = guideCss(pageDimensions(size, orientation));
+  style.textContent = guideCss(pageDimensions(size, orientation), guides.margins, guides.regions);
 }
 
 type GrapesInit = { init: (config: EditorConfig) => Editor };

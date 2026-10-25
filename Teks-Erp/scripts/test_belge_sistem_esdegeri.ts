@@ -15,6 +15,7 @@
  * Çalıştır: npx tsx scripts/test_belge_sistem_esdegeri.ts   (DB'siz)
  */
 
+import { renderInspectionReportHtml } from "../src/services/document-render/inspection-report.html";
 import { renderQualityCertificateHtml } from "../src/services/document-render/quality-certificate.html";
 import { renderReturnDispatchHtml } from "../src/services/document-render/return-dispatch.html";
 import { renderShipmentDispatchHtml } from "../src/services/document-render/shipment-dispatch.html";
@@ -22,18 +23,36 @@ import { renderKartelaCekiHtml } from "../src/services/document-render/kartela-c
 import { renderFasonCekiHtml } from "../src/services/document-render/fason-ceki.html";
 import { renderFasonDirectShipHtml } from "../src/services/document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml } from "../src/services/document-render/fason-receipt.html";
+import {
+  renderChequeDeliveryNoteHtml,
+  renderInvoiceInternalHtml,
+  renderPaymentReceiptHtml,
+  renderReconciliationLetterHtml,
+} from "../src/services/document-render/finance-doc.html";
 import { renderGoodsReceiptHtml, renderStockCountHtml, renderWarehouseTransferHtml } from "../src/services/document-render/warehouse-doc.html";
 import { fmtDateTime } from "../src/services/document-render/fmt-date";
 import { tokenizeHtml, type HtmlToken } from "../src/services/document-render/template-html.tokenizer";
 import { decodeAttrEntities } from "../src/services/document-render/template-html.entities";
 import { renderTemplate, TemplateRenderError } from "../src/services/document-template/motor/render";
+import { amountInWords } from "../src/services/document-template/motor/filtreler";
+import { parseLiquid, renderLiquid } from "../src/services/document-template/motor/liquid";
+import { docNum } from "../src/services/document-render/fmt-num";
+import { CHEQUE_AMOUNT_IN_WORDS } from "../src/services/document-template/sozlesme/cheque-delivery-note";
+import type { AmountInWordsSource } from "../src/services/document-template/sozlesme/finance-common";
+import { INVOICE_AMOUNT_IN_WORDS } from "../src/services/document-template/sozlesme/invoice-internal";
+import { PAYMENT_AMOUNT_IN_WORDS } from "../src/services/document-template/sozlesme/payment-receipt";
+import { sampleDoc, sampleEnvelope } from "../src/services/document-template/sozlesme/senaryolar";
 import { BASE_PRINT_CSS, normalizePageSettings } from "../src/services/document-template/motor/sayfa";
 import { listSystemEquivalents, materializeEquivalent } from "../src/services/document-template/sistem/kayit";
 import type { EquivalenceVariant, SystemEquivalent } from "../src/services/document-template/sistem/tipler";
 import { getContract, shownToInternalFields } from "../src/services/document-template/sozlesme/kayit";
 import type { PrintInput, Scenario } from "../src/services/document-template/sozlesme/tipler";
 import type { PrintedDocSnapshot } from "../src/services/printed-document.service";
-import type { DocumentConfig } from "../src/services/system-setting.service";
+import { normalizeTravelerCardConfig, type DocumentConfig } from "../src/services/system-setting.service";
+import { renderTravelerCardHtml, type TravelerCardSnapshot } from "../src/services/document-render/traveler-card.html";
+import { renderQrSvg } from "../src/services/helpers/barcode-svg.helper";
+import { renderFreeDocumentHtml, type FreeDocumentSnapshot } from "../src/services/document-render/free-document.html";
+import type { TravelerCardSource } from "../src/services/document-template/sozlesme/traveler-card";
 
 /** Sistem renderer'ının baskı meta'sı — servis katmanının verdiği şekilde (canlı ayarlar + baskı girdisi). */
 type SystemMeta = Record<string, unknown>;
@@ -41,9 +60,15 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 
 // docType başına TEK satır, alfabetik (port dilimleri ekler).
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
+  CHEQUE_DELIVERY_NOTE: (s, m) => renderChequeDeliveryNoteHtml(s, m as Parameters<typeof renderChequeDeliveryNoteHtml>[1]),
+  FREE_DOCUMENT: (s, m) => renderFreeDocumentHtml({ ...(s as unknown as FreeDocumentSnapshot), config: (s.docConfigOverride ?? {}) as DocumentConfig }, m),
   GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
+  INSPECTION_REPORT: (s, m) => renderInspectionReportHtml(s, m as Parameters<typeof renderInspectionReportHtml>[1]),
+  INVOICE_INTERNAL: (s, m) => renderInvoiceInternalHtml(s, m as Parameters<typeof renderInvoiceInternalHtml>[1]),
   KARTELA_DISPATCH: (s, m) => renderKartelaCekiHtml(s, m as Parameters<typeof renderKartelaCekiHtml>[1]),
+  PAYMENT_RECEIPT: (s, m) => renderPaymentReceiptHtml(s, m as Parameters<typeof renderPaymentReceiptHtml>[1]),
   QUALITY_CERTIFICATE: (s, m) => renderQualityCertificateHtml(s, m as Parameters<typeof renderQualityCertificateHtml>[1]),
+  RECONCILIATION_LETTER: (s, m) => renderReconciliationLetterHtml(s, m as Parameters<typeof renderReconciliationLetterHtml>[1]),
   RETURN_DISPATCH: (s, m) => renderReturnDispatchHtml(s, m as Parameters<typeof renderReturnDispatchHtml>[1]),
   SHIPMENT_DISPATCH: (s, m) => renderShipmentDispatchHtml(s, m as Parameters<typeof renderShipmentDispatchHtml>[1]),
   STOCK_COUNT: (s, m) => renderStockCountHtml(s, m as Parameters<typeof renderStockCountHtml>[1]),
@@ -51,7 +76,21 @@ const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   SUBCONTRACTOR_DISPATCH: (s, m) => renderFasonCekiHtml(s, m as Parameters<typeof renderFasonCekiHtml>[1]),
   SUBCONTRACTOR_RECEIPT: (s, m) => renderFasonReceiptHtml(s, m as Parameters<typeof renderFasonReceiptHtml>[1]),
   TRANSFER_DISPATCH: (s, m) => renderWarehouseTransferHtml(s, m as Parameters<typeof renderWarehouseTransferHtml>[1]),
+  TRAVELER_CARD: (s, m) => renderTravelerCardSystem(s as unknown as TravelerCardSource & { docConfigOverride: unknown }, m),
 };
+
+/** Refakat kartı: servis yolunun eşi — ayar `normalizeTravelerCardConfig`ten, QR `renderQrSvg`den (P-e, canlı). */
+function renderTravelerCardSystem(s: TravelerCardSource & { docConfigOverride: unknown }, m: SystemMeta): string {
+  const config = normalizeTravelerCardConfig((s.docConfigOverride ?? {}) as Record<string, unknown>);
+  let qrSvg: string | null = null;
+  try {
+    qrSvg = renderQrSvg(s.meta.barcode);
+  } catch {
+    qrSvg = null;
+  }
+  void m;
+  return renderTravelerCardHtml({ ...s.card, config } as TravelerCardSnapshot, { ...s.meta, qrSvg });
+}
 
 let pass = 0;
 let fail = 0;
@@ -281,7 +320,7 @@ function renderBoth(eq: SystemEquivalent, scn: Scenario<unknown>, variant: Equiv
   const contract = getContract(eq.docType);
   // Durum/filigran üst katmandır (Sistem'de de ACTIVE koşulur); eşlenik yalnız gövdeyi taşır.
   const print: PrintInput = { ...(scn.ek?.baski ?? {}), ...(variant.print ?? {}) };
-  const system = render({ ...scn.snapshot, docConfigOverride: variant.config }, systemMeta(scn, print));
+  const system = render({ ...(scn.snapshot as PrintedDocSnapshot), docConfigOverride: variant.config }, systemMeta(scn, print));
 
   const ayar = contract.ayarNormalize(variant.config) as Record<string, unknown>;
   const internalFields = shownToInternalFields(contract, variant.config);
@@ -347,6 +386,80 @@ for (const eq of equivalents) {
       ok(diff === null, `${eq.docType} · ${scn.ad} · ${variant.name}: ${diff}`);
     }
   }
+}
+
+// ── §F Ön muhasebe (T10): para ≡ fmtMoney · yazıyla tablosu · `sayi: 2` sondası ────────────
+// Para hücresi Sistem'in `fmtMoney`iyle BAYT-EŞİT olmalı: ölçü Sistem makbuzunun tutar hücresinden
+// alınır (fmtMoney dışa açık değil; kopyası yazılmaz). Yazıyla kaynağı negatif olamaz.
+console.log("\n── §F ön muhasebe: para · yazıyla · sayi sondası");
+const FINANCE_TYPES = ["CHEQUE_DELIVERY_NOTE", "INVOICE_INTERNAL", "PAYMENT_RECEIPT", "RECONCILIATION_LETTER"] as const;
+// Mutabakatta yazıyla kaynağı yok: para birimleri toplanmaz, tek tutar yoktur.
+const WORDS_SOURCE: Readonly<Record<string, AmountInWordsSource>> = {
+  CHEQUE_DELIVERY_NOTE: CHEQUE_AMOUNT_IN_WORDS,
+  INVOICE_INTERNAL: INVOICE_AMOUNT_IN_WORDS,
+  PAYMENT_RECEIPT: PAYMENT_AMOUNT_IN_WORDS,
+};
+const liquidNum = docNum({ numberRounding: "HALF_UP" });
+const liquidOne = (src: string, ctx: Record<string, unknown>): string =>
+  renderLiquid({ templates: parseLiquid(src), context: ctx, num: liquidNum, marker: (k) => k, svg: {} });
+const pathValue = (obj: unknown, path: string): unknown =>
+  path.split(".").reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), obj);
+
+function systemMoney(v: unknown): string | null {
+  const doc = sampleDoc("PAYMENT_RECEIPT");
+  doc.amount = v;
+  const html = renderPaymentReceiptHtml(sampleEnvelope(doc), {});
+  return /<div class="row grand"><span>[^<]*<\/span><b>([^<]*)<\/b>/.exec(html)?.[1] ?? null;
+}
+
+const moneyValues = new Set<unknown>(["0", "0.5", "1", "-3400.00", "1234.565", "999999999999.99", "0.005", "", null]);
+for (const t of FINANCE_TYPES) {
+  const eq = equivalents.find((e) => e.docType === t);
+  ok(eq !== undefined, `${t}: §F eşlenik kayıtlı değil`);
+  if (!eq) continue;
+  const contract = getContract(t);
+  const scenarios = contract.senaryolar() as Scenario<unknown>[];
+  const ayar = contract.ayarNormalize({}) as Record<string, unknown>;
+  const moneyRoots = contract.kokler.filter((f) => f.tur === "para").map((f) => f.yol);
+  const moneyCols = contract.tablolar.flatMap((tb) => tb.kolonlar.filter((k) => k.tur === "para").map((k) => [tb.anahtar, k.yol] as const));
+  const src = WORDS_SOURCE[t];
+  for (const scn of scenarios) {
+    const ctx = contract.insa(scn.snapshot, ayar, [], scn.ek ?? {}) as unknown as Record<string, unknown>;
+    for (const yol of moneyRoots) moneyValues.add(pathValue(ctx, yol));
+    for (const [tb, yol] of moneyCols) for (const row of (pathValue(ctx, `tablolar.${tb}`) as unknown[]) ?? []) moneyValues.add(pathValue(row, yol));
+    if (src) {
+      const v = pathValue(ctx, src.tutar);
+      const cur = src.paraBirimi ? pathValue(ctx, src.paraBirimi) : "TRY";
+      ok(!(Number(v) < 0), `${t} · ${scn.ad}: §F yazıyla kaynağı (${src.tutar}) negatif: ${String(v)}`);
+      if (v != null && typeof cur === "string" && /^[A-Z]{3}$/.test(cur)) {
+        const got = liquidOne(`{{ ${src.tutar} | yaziyla: ${src.paraBirimi ?? '"TRY"'} }}`, ctx);
+        ok(got === amountInWords(v, cur) && got.startsWith("Yalnız"), `${t} · ${scn.ad}: §F yazıyla ${JSON.stringify(got)}`);
+      }
+    }
+  }
+  // Sonda: `para` yerine `sayi: 2` — boş tutarın "—"su ve para birimi eki kaybolur, eşitlik kırılmalı.
+  const asNumberFilter = eq.html.replace(/\|\s*para(?:\s*:\s*"[A-Z]{3}")?/g, "| sayi: 2");
+  ok(asNumberFilter !== eq.html, `${t}: §F eşlenikte 'para' filtresi yok`);
+  const broken = scenarios.filter((scn) => compare(eq, scn, DEFAULT_VARIANT, asNumberFilter) !== null).length;
+  ok(broken > 0, `${t}: §F 'para' → 'sayi: 2' FARK ÜRETMEDİ (para biçimi körlüğü)`);
+}
+
+for (const v of moneyValues) {
+  const sys = systemMoney(v);
+  const liq = liquidOne(`{{ v | para: "TRY" }}`, { v });
+  ok(sys !== null && sys === liq, `§F para ${JSON.stringify(v)}: Sistem fmtMoney ${JSON.stringify(sys)} ≠ Liquid ${JSON.stringify(liq)}`);
+}
+
+const WORDS_TABLE: ReadonlyArray<readonly [unknown, string]> = [
+  [0, "Yalnız sıfır TL"],
+  ["1", "Yalnız bir TL"],
+  ["1000000.00", "Yalnız bir milyon TL"],
+  ["1234.50", "Yalnız bin iki yüz otuz dört TL elli Kr"],
+  ["0.05", "Yalnız beş Kr"],
+];
+for (const [v, want] of WORDS_TABLE) {
+  const got = liquidOne(`{{ v | yaziyla: "TRY" }}`, { v });
+  ok(got === want, `§F yazıyla ${JSON.stringify(v)}: ${JSON.stringify(got)} ≠ ${JSON.stringify(want)}`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

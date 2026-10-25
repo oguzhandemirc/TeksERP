@@ -40,6 +40,7 @@
 ### Kararlar
 
 - **[ÇEKİRDEK]** Rota kapsaması (kategori düzeyi: 'renk/özellik VEREBİLEN adım var mı') REDDETMEZ, UYARIR — create · replace · 'Rengi Değiştir' tek kural (`collectRouteCoverageWarnings` / helper §5), yanıt `ApiResponse.warnings`; `quickStart` create uyarılarını yanıta taşır; uyarı metni NE eksik + SONUÇ. · bekçi: `test_wo_route_coverage_goods.ts (7) + test_wo_target_color_guard.ts §4` <sub>(CLAUDE.md:89)</sub>
+- **[ÇEKİRDEK]** Karar adımı olmayan kalite rotasını UYAR (`warnings`), engelleme — rota şablonu create/update ve İE create/replace aynı helper'dan (`defect-decision.helper`). · bekçi: `test_rota_hata_karari_uyarisi` <sub>(arşiv 2026-10 "İstasyon yeteneği (kalite muayenesi) + kurşun gramajı")</sub>
 
 ## Backend
 

@@ -71,6 +71,14 @@ export function isVisibleDefaultOn(fields: TemplateField[] | null, key: string):
   return f ? f.isVisible : true;
 }
 
+/**
+ * OPT-IN varyantı: alan ancak şablonda AÇIKÇA görünür işaretliyse basılır — şablonsuz
+ * (null) varsayılan düzen de basmaz. Müşteriye gidebilecek iç bilgi için (KQ-D8 `openDefects`).
+ */
+export function isVisibleOptIn(fields: TemplateField[] | null, key: string): boolean {
+  return fields?.find((x) => x.key === key)?.isVisible === true;
+}
+
 export function fieldLabel(fields: TemplateField[] | null, key: string, fallback: string): string {
   if (!fields) return fallback;
   // L (düşük bulgu): label admin girdisidir ve HTML'e gömülür — değerler gibi

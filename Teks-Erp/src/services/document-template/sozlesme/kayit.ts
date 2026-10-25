@@ -9,7 +9,8 @@ import { AppError } from "../../../utils/app-error";
 import * as REGISTRY from "./index";
 import type { ConfigFieldType, FieldClass, FieldType, DocumentContract } from "./tipler";
 
-export type RegisteredContract = DocumentContract<object, unknown>;
+// Kaynak tipi türe göre değişir (zarf / kart / serbest belge); kayıt düzeyinde bilinmez.
+export type RegisteredContract = DocumentContract<object, unknown, unknown>;
 
 const CONTRACTS: ReadonlyMap<string, RegisteredContract> = (() => {
   const m = new Map<string, RegisteredContract>();

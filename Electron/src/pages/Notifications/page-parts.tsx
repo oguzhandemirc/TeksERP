@@ -47,6 +47,7 @@ export const LoadErrorState = () => (
 const EMPTY_TITLE: Record<PageTab, string> = {
   tumu: "Henüz bildirim yok",
   okunmamis: "Okunmamış bildirim yok",
+  alarmlar: "Tezgah alarmı yok",
   ertelenen: "Ertelenen bildirim yok",
 };
 export const EmptyList = ({ sekme }: { sekme: PageTab }) => (

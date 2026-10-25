@@ -56,6 +56,8 @@ import {
   inspectionDefaultForKind,
   INSPECTION_DEFAULT_KINDS,
   KURSUN_PROPERTY_CODE,
+  stepDecidesDefects,
+  DEFECT_DECISION_STATION_WHERE,
   type QualityCaps,
 } from "../src/services/helpers/quality-station.helper";
 import { KALITE_TUKETICI_BEYANI } from "./lib/kalite-tuketici-beyan";
@@ -101,11 +103,17 @@ const KIND_MUAF: Record<string, { sayi: number; gerekce: string }> = {
  * Anahtar `dosya#fonksiyon`; sayı tam eşleşir (aşan da eksik de kırmızı).
  */
 const KALITE_KIND_MUAF: Record<string, { sayi: number; gerekce: string }> = {
-  "services/tambur.service.ts#reportError": {
+  "services/helpers/roll-defect.helper.ts#assertDefectStepGate": {
     sayi: 1,
     gerekce:
       "`kind !== TAMBUR` EKRAN AİLESİ kontrolüdür (Tambur ucu yalnız Tambur adımına yazar); " +
       "muayene sorusu hemen ardından kalite ikiziyle ayrıca sorulur.",
+  },
+  "services/tambur.service.ts#getStep": {
+    sayi: 1,
+    gerekce:
+      "`kind !== TAMBUR` EKRAN AİLESİ kontrolüdür (Tambur özeti yalnız Tambur adımını açar); " +
+      "`inspectionEnabled` alanı kalite ikizinden ayrıca hesaplanır (KQ-D7).",
   },
 };
 
@@ -218,6 +226,10 @@ async function main() {
     const tumTurler = Object.values(StationKind) as StationKind[];
     const dogusYanlis = tumTurler.filter((k) =>
       inspectionDefaultForKind(k) !== (k === StationKind.PROCESS_QC || k === StationKind.TAMBUR));
+    // KARAR İKİZİ (KQ-D8): yalnız TAMBUR; muayene/akış bayrağı etkisiz.
+    const kararYanlis = tumTurler.filter((k) => stepDecidesDefects({ kind: k }) !== (k === StationKind.TAMBUR));
+    check("§2 karar tablosu: yalnız TAMBUR karar verir", kararYanlis.length === 0 &&
+      stepDecidesDefects(null) === false && stepDecidesDefects(undefined) === false, kararYanlis.join(", ") || `${tumTurler.length} tür`);
     check("§2 doğuş varsayılanı: yalnız PROCESS_QC + TAMBUR true", dogusYanlis.length === 0 &&
       INSPECTION_DEFAULT_KINDS.length === 2 && inspectionDefaultForKind(undefined) === false,
       dogusYanlis.join(", ") || `${tumTurler.length} tür`);
@@ -266,6 +278,12 @@ async function main() {
     check("§3 ⭐ KALİTE: yüklem ile where AYNI küme", kaliteYuklem === kaliteWhere, `yüklem={${kaliteYuklem}} where={${kaliteWhere}}`);
     const kaliteBeklenen = kose.filter((k) => k.ins).map((k) => k.ad).sort().join(",");
     check("§3 KALİTE kümesi beklenen (yalnız inspectionEnabled; tür etkisiz)", kaliteWhere === kaliteBeklenen, kaliteWhere);
+    const kararYuklem = kumeStr(hepsi.filter((s) => stepDecidesDefects(s)).map((s) => s.id));
+    const kararWhere = kumeStr((await prisma.station.findMany({
+      where: { id: { in: cleanupStationIds }, ...DEFECT_DECISION_STATION_WHERE }, select: { id: true },
+    })).map((s) => s.id));
+    check("§3 ⭐ KARAR: yüklem ile where AYNI küme (yalnız TMB köşeleri)", kararYuklem === kararWhere &&
+      kararWhere === kose.filter((k) => k.kind === StationKind.TAMBUR).map((k) => k.ad).sort().join(","), kararWhere);
     check("§3 zemin: iki where de süzüyor (12 köşenin hepsi değil, hiçbiri değil)",
       akisWhere.split(",").length === 8 && kaliteWhere.split(",").length === 6,
       `akış ${akisWhere.split(",").length}/12 · kalite ${kaliteWhere.split(",").length}/12`);
@@ -340,10 +358,11 @@ async function main() {
       "services/kursun-bypass.service.ts": 3,
       "services/kursun-qc.service.ts": 3,
     };
+    // KQ-D7: hata yazma kapısı `roll-defect.helper`a taşındı (inventory/tambur seçimi oraya geçti).
     const KALITE_SELECT_TABANI: Record<string, number> = {
-      "services/inventory.service.ts": 2,
+      "services/helpers/roll-defect.helper.ts": 2,
       "services/kursun-qc.service.ts": 3,
-      "services/tambur.service.ts": 2,
+      "services/tambur.service.ts": 1,
     };
     const selectIhlal: string[] = [];
     for (const [tablo, ad] of [[AKIS_SELECT_TABANI, "STEP_FLOW_SELECT"], [KALITE_SELECT_TABANI, "STEP_QUALITY_SELECT"]] as const) {

@@ -45,6 +45,7 @@ import {
   type CodeUniquenessTexts,
 } from "./helpers/code-unique.helper";
 import { assertItemUsable } from "./helpers/item-usage.helper";
+import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -61,8 +62,16 @@ export interface ItemCreateInput {
   linearDensityDen?: string | number | null;
   /** KUMAŞ → varsayılan ÇÖZGÜ KARTI (E4, 2026-09-18): dokuma işi ve levent planı ön-dolum kaynağı; yalnız FABRIC. */
   warpSpecId?: string | null;
+  /** K4P ürün kartı eni (cm) — muayene en kaynağı #1; biçim route'ta `normalizeItemWidthBody`. */
+  widthCm?: string | number | null;
   allowedColorIds?: string[];
   allowedPropertyIds?: string[];
+}
+
+/** `widthCm` yalnız gönderildiğinde yazılır (`null` = temizle); Decimal kolona metin gider (float yasak). */
+function widthCmData(v: string | number | null | undefined): { widthCm?: string | null } {
+  if (v === undefined) return {};
+  return { widthCm: v === null || v === "" ? null : String(v) };
 }
 
 /** Stok kodu: `STK-` + 6 hane global artan sıra (tarihsiz — ürün kartı belge değil). */
@@ -155,6 +164,42 @@ async function assertWarpSpecAssignable(itemType: string | undefined, warpSpecId
   if (n === 0) throw AppError.badRequest("Çözgü kartı bulunamadı ya da pasif", { code: "WARP_SPEC_NOT_FOUND" });
 }
 
+/** MAL-1 (S2 çekirdeği): kumaş yapısı alanları — gövdede adı geçen anahtarlar (`undefined` dokunmaz). */
+const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId"] as const;
+
+/**
+ * Kumaş yapısı alanlarını doğrular ve Prisma verisine çevirir: yalnız KUMAŞ kartında (400), sayılar
+ * metinden Decimal'e (float yazılmaz; DB CHECK ikinci hat), atkı kartı AKTİF olmalı. `null` temizler.
+ */
+async function readFabricStructureFields(itemType: string | undefined, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const present = FABRIC_STRUCTURE_KEYS.filter((k) => Object.prototype.hasOwnProperty.call(data, k));
+  if (present.length === 0) return {};
+  const out: Record<string, unknown> = {};
+  const dec = (k: "rawWidthCm" | "rawGsm" | "finishedGsm", label: string): void => {
+    if (!present.includes(k)) return;
+    out[k] = parseDecimalField(data[k], { label, min: 0, minExclusive: true, scale: 2 }) ?? null;
+  };
+  dec("rawWidthCm", "Ham en (cm)");
+  dec("rawGsm", "Ham gramaj");
+  dec("finishedGsm", "Mamul gramaj");
+  if (present.includes("composition")) out.composition = parseTextField(data.composition, "Kompozisyon", 200) ?? null;
+  if (present.includes("weftSpecId")) {
+    const w = data.weftSpecId;
+    if (w === null || w === "") out.weftSpecId = null;
+    else if (typeof w !== "string") throw AppError.badRequest("Atkı kartı kimliği geçersiz.");
+    else {
+      const n = await prisma.weftSpec.count({ where: { id: w, isActive: true } });
+      if (n === 0) throw AppError.badRequest("Atkı kartı bulunamadı ya da pasif", { code: "WEFT_SPEC_NOT_FOUND" });
+      out.weftSpecId = w;
+    }
+  }
+  const setsValue = Object.values(out).some((v) => v !== null);
+  if (setsValue && itemType !== undefined && itemType !== "FABRIC") {
+    throw AppError.badRequest("En/gramaj/kompozisyon/atkı kartı yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
+  }
+  return out;
+}
+
 export class ItemService extends BaseService {
   /**
    * İLİŞKİ SÜZGECİ (ürün seçici modalı, 2026-09-17): `filter[allowedColorId]` = "bu rengi ALABİLECEĞİM
@@ -193,6 +238,7 @@ export class ItemService extends BaseService {
     const actorId = requireActorId(userId, "Ürün kartı");
     const input = data as unknown as ItemCreateInput;
     await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
+    const fabricStructure = await readFabricStructureFields(input.itemType, data);
 
     // Stok kodu hibrit: boş bırakıldıysa backend STK-NNNNNN üretir; kullanıcı
     // girdiyse manuel kod aynen kabul edilir (trim + regex + max 32).
@@ -329,6 +375,8 @@ export class ItemService extends BaseService {
                   ? { linearDensityDen: input.linearDensityDen }
                   : {}),
                 ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
+              ...widthCmData(input.widthCm),
+                ...fabricStructure,
                 allowedColors:
                   allowedColorIds.length > 0
                     ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
@@ -359,6 +407,8 @@ export class ItemService extends BaseService {
                 ? { linearDensityDen: input.linearDensityDen }
                 : {}),
               ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
+              ...widthCmData(input.widthCm),
+              ...fabricStructure,
               // Yalnız iç quick-create (saha KK1) opt'u işaretler; public gövde etkisiz.
               ...(opts?.pendingReview ? { pendingReview: true } : {}),
               allowedColors:
@@ -462,6 +512,10 @@ export class ItemService extends BaseService {
     if (Object.prototype.hasOwnProperty.call(data, "warpSpecId")) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
       await assertWarpSpecAssignable(cur?.itemType, data.warpSpecId as string | null | undefined);
+    }
+    if (FABRIC_STRUCTURE_KEYS.some((k) => Object.prototype.hasOwnProperty.call(data, k))) {
+      const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
+      Object.assign(data, await readFabricStructureFields(cur?.itemType, data));
     }
 
     // name güncelleniyorsa length + trim kontrolü

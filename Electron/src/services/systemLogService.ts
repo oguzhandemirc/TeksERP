@@ -7,14 +7,34 @@ import type {
   SystemLogUserOption,
   SystemLogStats,
   SystemLogArchiveResult,
+  SystemLogIslem,
+  SystemLogIslemDetay,
 } from "@/types/systemLog";
 
 const BASE = "/api/admin/system-logs";
 
+/** Liste yanıtı: `q` aramasında sunucu `warnings` döndürebilir. */
+export type SystemLogListResponse<T> = CursorPaginatedResponse<T> & { warnings?: string[] };
+
 export const systemLogService = {
   list: (params: SystemLogListParams) =>
     apiClient
-      .get<CursorPaginatedResponse<SystemLogListItem>>(BASE, { params })
+      .get<SystemLogListResponse<SystemLogListItem>>(BASE, { params })
+      .then((r) => r.data),
+
+  /**
+   * Etkinlik akışı: `gorunum=islem` (iş eylemi) ya da satır. Eski backend
+   * `gorunum`u yok sayıp satır döndürebilir — öğe tipi çağıranda ayırt edilir.
+   */
+  feed: (params: SystemLogListParams) =>
+    apiClient
+      .get<SystemLogListResponse<SystemLogIslem | SystemLogListItem>>(BASE, { params })
+      .then((r) => r.data),
+
+  /** Tek işlem: iz + cihaz adı + etkilenen kayıtlar. Eski backend 404 verir. */
+  getIslem: (requestId: string) =>
+    apiClient
+      .get<ApiResponse<SystemLogIslemDetay>>(`${BASE}/islem/${encodeURIComponent(requestId)}`)
       .then((r) => r.data),
 
   findById: (id: string) =>

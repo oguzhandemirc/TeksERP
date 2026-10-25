@@ -60,7 +60,8 @@ export function buildInboxWhere(
   const notSnoozed: Prisma.NotificationInboxWhereInput = { OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }] };
   const tabWhere: Record<InboxTab, Prisma.NotificationInboxWhereInput> = {
     tumu: notSnoozed,
-    okunmamis: { AND: [notSnoozed, { readAt: null }] },
+    // Rozet = okunmamış BİLDİRİM: ALARM kendi hapında (`LoomAlarmBell`) ve Alarmlar sekmesinde sayılır (plan §6.1).
+    okunmamis: { AND: [notSnoozed, { readAt: null }, { klass: "BILDIRIM" }] },
     alarmlar: { klass: "ALARM" },
     ertelenen: { snoozedUntil: { gt: now } },
   };

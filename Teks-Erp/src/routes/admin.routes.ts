@@ -1355,6 +1355,11 @@ export const systemLogListQuerySchema = z.object({
   action: z.string().min(1).max(40).optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
+  // İzlenebilirlik B2: işlem görünümü (aynı requestId = tek iş eylemi), kayıt no araması,
+  // fabrika günü kısayolu. Zod allowlist'tir — burada yazılmayan parametre uca ulaşmaz.
+  gorunum: z.enum(["satir", "islem"]).optional(),
+  q: z.string().trim().min(2).max(100).optional(),
+  gun: z.enum(["bugun", "dun", "hafta"]).optional(),
 })
   // FAIL-CLOSED KAPI (2026-09-05 perf turu): `recordId` composite index'in İKİNCİ
   // kolonudur; ilk kolon (`tableName`) boş gelirse plan "Index Scan" YAZAR ama
@@ -1378,7 +1383,16 @@ export const systemLogListQuerySchema = z.object({
  *   get:
  *     tags: [Admin]
  *     summary: Sistem log listesi (cursor pagination, JSON payload listede yok)
+ *     description: >
+ *       Her satırda EK alan `anlati {parcalar, metin}` (okuma anında kurulan Türkçe cümle).
+ *       `gorunum=islem` aynı istekteki satırları tek iş eylemi olarak gruplar; `q` kayıt
+ *       numarasıyla arar (kayıt + aynı istekteki kardeşler; bulunamazsa boş + `warnings`);
+ *       `gun=bugun|dun|hafta` fabrika günü aralığıdır.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [satir, islem] } }
+ *       - { in: query, name: q, schema: { type: string } }
+ *       - { in: query, name: gun, schema: { type: string, enum: [bugun, dun, hafta] } }
  */
 router.get(
   "/system-logs",
@@ -1387,7 +1401,11 @@ router.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const params = systemLogListQuerySchema.parse(req.query);
-      const result = await SystemLogService.list(params);
+      const result = params.q
+        ? await SystemLogService.listByRecordQuery(params.q, params.limit)
+        : params.gorunum === "islem"
+          ? await SystemLogService.listIslemler(params)
+          : await SystemLogService.list(params);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -1477,6 +1495,31 @@ router.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await SystemLogService.findArchiveById(req.params.id as string);
+      res.status(result.success ? 200 : 404).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/system-logs/islem/{requestId}:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Tek işlem (aynı istek) — uç/süre/cihaz adı + etkilenen kayıtlar + alan farkları + ham
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: requestId, required: true, schema: { type: string, format: uuid } }
+ */
+// Statik `/islem/` yolu `/:id`'den ÖNCE (aksi hâlde "islem" kimlik sanılır).
+router.get(
+  "/system-logs/islem/:requestId",
+  verifyToken,
+  requireAnyPermission("admin:settings", "system:activity"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await SystemLogService.findIslem(req.params.requestId as string);
       res.status(result.success ? 200 : 404).json(result);
     } catch (error) {
       next(error);

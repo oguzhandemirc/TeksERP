@@ -80,6 +80,12 @@ export const PERMISSION_CATALOG = [
   // dokuma planlamacısı aynı kişi olmak zorunda değil.
   { code: "warpspec:read", module: "MASTER_DATA", category: "web", description: "Çözgü kartı (tel · iplik · tarak) listesi/detay görüntüleme" },
   { code: "warpspec:write", module: "MASTER_DATA", category: "web", description: "Çözgü kartı oluşturma/düzenleme" },
+  // ── Maliyet & Teklif (MAL-1, 2026-10-25) — modül `maliyet.enabled` ───────────────────────────
+  // Okuma TUTAR görmektir (maliyet tabanı ticari sırdır); yazma ürün yapısı + fiyat/tarife;
+  // tesis parametreleri ayrı karar (yürürlüğe alma bütün maliyetleri değiştirir).
+  { code: "cost:read", module: "COST", category: "web", description: "Maliyet girdilerini ve tutarlarını görüntüleme" },
+  { code: "cost:write", module: "COST", category: "web", description: "Ürün maliyet yapısı, iplik maliyet fiyatı ve terbiye tarifesi yazma" },
+  { code: "cost:settings", module: "COST", category: "web", description: "Tesis maliyet parametrelerini düzenleme ve yürürlüğe alma" },
   // ── Levent (devere Faz 1b, 2026-09-14): plan/sar yazma, sarım iptali AYRI yetenek (defterden net iplik döner).
   { code: "warpbeam:read", module: "PRODUCTION", category: "web", description: "Levent listesi/detayı (plan · sarım · kalan metre · iplik satırları)" },
   { code: "warpbeam:write", module: "PRODUCTION", category: "web", description: "Levent planlama, sarım (WOUND + iplik çıkışı/dip iadesi), taslak silme" },
@@ -372,6 +378,8 @@ export const PERMISSION_CATALOG = [
   // K4P (2026-10-24): istasyondan bağımsız Muayene ekranı (top okut → 4 puan muayene); KK1 içi muayene `mobile:kk1` ile.
   { code: "mobile:muayene", module: "MOBILE", category: "mobile", description: "Mobil — Muayene ekranı: top okutup 4 puan muayene girme (istasyondan bağımsız)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
+  // bildirim: yönetici bildirim ayarları (N4-SEMA, plan §5.7) — profil yalnız tercih setidir, İZİN VERMEZ.
+  { code: "settings:notifications", module: "ADMIN", category: "web", description: "Bildirim profilleri ve fabrika bildirim varsayılanlarını yönetir" },
 ] as const satisfies readonly PermissionCatalogEntry[];
 
 export const REPORT_BUILDER_PERMISSION = "report:builder";

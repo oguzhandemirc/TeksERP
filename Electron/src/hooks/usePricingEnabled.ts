@@ -82,6 +82,12 @@ export function useDokumaEnabled(): boolean {
 }
 
 /** Devere modülü açık mı (`devere.enabled`). Yüklenene dek KAPALI — fail-closed. */
+/** K4P Kalite Güvence modülü açık mı (`kaliteGuvence.enabled`). Yüklenene dek KAPALI — yeni alanlar görünmez. */
+export function useKaliteGuvenceEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.kaliteGuvenceEnabled ?? false;
+}
+
 export function useDevereEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.devereEnabled ?? false;
