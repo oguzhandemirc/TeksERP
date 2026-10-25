@@ -97,6 +97,7 @@
 - **[ÇEKİRDEK]** Vardiya boyutu yalnız `services/helpers/vardiya-takvimi.helper.ts`ten gelir; gece yarısını aşan vardiya başladığı fabrika gününe yazılır (`test_vardiya_takvimi`).
 - **[ÇEKİRDEK]** Semantik koşu sınırlıdır: kullanıcı 2 / kurulum 4 eşzamanlı (fazlası 429 `RAPOR_SIRADA`), READ ONLY tx + `statement_timeout` ayarı (`reports.statementTimeoutSec` 5..45) → 503 `RAPOR_ZAMAN_ASIMI` (`test_rapor_calistirma_siniri`).
 - **[ÇEKİRDEK]** `ReportRun`u 90 günde, `ReportSnapshot`tan YALNIZ süresi dolmuş `ZAMANLANMIS` görüntüyü buda (tek budayıcı `services/report-prune.service.ts`, gece bakımı); `KULLANICI` görüntüsünü budama (`test_telemetri_defter_degil` §7 · `test_bakim_isleri` §7).
+- **[ÇEKİRDEK]** Geçmiş kesit (ay sonu kıyası, dönem sütunu) defterden kurulamıyorsa sayı uydurma, `olculemedi` döndür; kurulabiliyorsa aynı kaynak servisi `asOf` = `factoryPreviousMonthEnd` (`reports/temel/_day-range.ts`) ile çağır ve bilinen sapmayı uyarıda beyan et (`test_temel_rapor_esitlik` § Geçmiş kesit · `test_report_day_boundary` ay sonu).
 
 ## Panel (Electron)
 
