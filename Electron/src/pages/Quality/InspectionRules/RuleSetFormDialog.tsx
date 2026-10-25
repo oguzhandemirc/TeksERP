@@ -60,7 +60,7 @@ export function RuleSetFormDialog({ set, scope, onClose }: Props) {
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1 sm:col-span-2"><Label htmlFor="rs-name">Ad</Label><Input id="rs-name" maxLength={80} value={s.name} onChange={(e) => up({ name: e.target.value })} placeholder="ör. Fabrika standardı" /></div>
+            <div className="space-y-1 sm:col-span-2"><Label htmlFor="rs-name">Ad</Label><Input id="rs-name" maxLength={80} value={s.name} onChange={(e) => up({ name: e.target.value })} placeholder={s.scope === "FACTORY" ? "ör. Fabrika standardı" : "ör. Zara — penye özel"} /></div>
             {s.scope === "CUSTOMER" && (
               <>
                 <div className="space-y-1"><Label>Müşteri</Label><CustomerPickerField value={s.customerId} onChange={(id) => up({ customerId: id })} disabled={isEdit} /></div>
