@@ -531,6 +531,11 @@ async function main() {
     string,
     { why: string; file: string; needle: string }
   > = {
+    REPORTS_STATEMENT_TIMEOUT_SEC: {
+      why: "İşletme ayarı (sn, 5..45) — davranış bayrağı değil; ham anahtar PUT /api/admin/settings/:key ile yazılır, tek okuyucusu semantik çalıştırıcı",
+      file: "Teks-Erp/src/services/reports/semantik/calistirici.ts",
+      needle: "readReportsStatementTimeoutSec",
+    },
     // ⚠️ FEATURE FLAG DEĞİL — makinenin KİMLİĞİ (`system-setting.service.ts:455`
     // başlığı bunu açıkça yazıyor: "`test_feature_flag_contract` bunu görmez
     // (görmemeli)"). Yazarın niyeti muafiyetti, muaf SATIRI eklenmemişti; bu

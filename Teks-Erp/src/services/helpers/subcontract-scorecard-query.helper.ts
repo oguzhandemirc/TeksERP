@@ -158,23 +158,11 @@ export function queryScorecardItems(range: DateRange, f: ReportFilterInput = {})
 }
 
 /**
- * AÇIK sevkler + yaş (en eski 25). Yaş MUTLAK penceredir (iki an arası fark),
- * takvim günü DEĞİL → saat diliminden bağımsızdır ve çıplak now() doğrudur.
+ * AÇIK sevk kalemi yüklemi (FROM … WHERE) — karnenin "en eski açık" listesi ve bildirim koşulu
+ * `fason.donus-gecikti` AYNI parçayı kullanır (ikinci bir "açık kalem" tanımı yazılmaz).
  */
-export function queryOldestOpenDispatches(f: ReportFilterInput = {}): Promise<OldestOpenRow[]> {
-  return prisma.$queryRaw<OldestOpenRow[]>(Prisma.sql`
-    SELECT
-      sd.id            AS "dispatchId",
-      sd."dispatchNo"  AS "dispatchNo",
-      sub.name         AS "subcontractorName",
-      sd."dispatchedAt" AS "dispatchedAt",
-      -- tz-ok: iki an arasındaki MUTLAK fark (kaç gündür açık); takvim günü
-      -- sorusu değil, bu yüzden fabrika saat dilimine kesilmez.
-      EXTRACT(EPOCH FROM (now() - sd."dispatchedAt")) / 86400.0 AS "daysOpen",
-      COUNT(*)                          AS "openItems",
-      -- Açık bakiye = giden − kısmen dönen − müşteriye kesilen (kısmi teslimat /
-      -- kısmi doğrudan sevk sonrası fasonda gerçekten bekleyen metraj).
-      SUM(sdi."dispatchedQty" - COALESCE(pret.qty, 0) - COALESCE(dlv.qty, 0))::float AS "openQty"
+function openDispatchItemsSql(f: ReportFilterInput): Prisma.Sql {
+  return Prisma.sql`
     FROM subcontractor_dispatch_items sdi
     JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
     JOIN subcontractors sub          ON sub.id = sd."subcontractorId"
@@ -206,8 +194,57 @@ export function queryOldestOpenDispatches(f: ReportFilterInput = {}): Promise<Ol
         WHERE sri."sourceDispatchItemId" = sdi.id AND sr."cancelledAt" IS NULL
           AND NOT sri."isPartial"
       )
+  `;
+}
+
+/** Açık sevk yaşı ifadesi — iki okuyucu aynı ifadeyi kullanır. */
+const DAYS_OPEN_SQL = Prisma.sql`
+      -- tz-ok: iki an arasındaki MUTLAK fark (kaç gündür açık); takvim günü
+      -- sorusu değil, bu yüzden fabrika saat dilimine kesilmez.
+      EXTRACT(EPOCH FROM (now() - sd."dispatchedAt")) / 86400.0`;
+
+/**
+ * AÇIK sevkler + yaş (en eski 25). Yaş MUTLAK penceredir (iki an arası fark),
+ * takvim günü DEĞİL → saat diliminden bağımsızdır ve çıplak now() doğrudur.
+ */
+export function queryOldestOpenDispatches(f: ReportFilterInput = {}): Promise<OldestOpenRow[]> {
+  return prisma.$queryRaw<OldestOpenRow[]>(Prisma.sql`
+    SELECT
+      sd.id            AS "dispatchId",
+      sd."dispatchNo"  AS "dispatchNo",
+      sub.name         AS "subcontractorName",
+      sd."dispatchedAt" AS "dispatchedAt",
+      ${DAYS_OPEN_SQL} AS "daysOpen",
+      COUNT(*)                          AS "openItems",
+      -- Açık bakiye = giden − kısmen dönen − müşteriye kesilen (kısmi teslimat /
+      -- kısmi doğrudan sevk sonrası fasonda gerçekten bekleyen metraj).
+      SUM(sdi."dispatchedQty" - COALESCE(pret.qty, 0) - COALESCE(dlv.qty, 0))::float AS "openQty"
+    ${openDispatchItemsSql(f)}
     GROUP BY sd.id, sd."dispatchNo", sub.name, sd."dispatchedAt"
     ORDER BY sd."dispatchedAt" ASC
     LIMIT 25
   `);
+}
+
+export interface OpenDispatchAgeRow {
+  dispatchId: string;
+  subcontractorId: string;
+  subcontractorName: string;
+  daysOpen: number;
+  openItems: number;
+}
+
+/** Bütün AÇIK sevkler (sınırsız), firma kimliğiyle — bildirim koşulu firma kırılımını buradan kurar. */
+export async function queryOpenDispatchAges(): Promise<OpenDispatchAgeRow[]> {
+  const rows = await prisma.$queryRaw<Array<{ dispatchId: string; subcontractorId: string; subcontractorName: string; daysOpen: number; openItems: bigint }>>(Prisma.sql`
+    SELECT
+      sd.id                AS "dispatchId",
+      sd."subcontractorId" AS "subcontractorId",
+      sub.name             AS "subcontractorName",
+      ${DAYS_OPEN_SQL}     AS "daysOpen",
+      COUNT(*)             AS "openItems"
+    ${openDispatchItemsSql({})}
+    GROUP BY sd.id, sd."subcontractorId", sub.name, sd."dispatchedAt"
+  `);
+  return rows.map((r) => ({ ...r, daysOpen: Number(r.daysOpen), openItems: Number(r.openItems) }));
 }

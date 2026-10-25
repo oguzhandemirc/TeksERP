@@ -116,30 +116,35 @@ const holdForOutage = createRequestHold({
   },
 });
 
-apiClient.interceptors.request.use(async (config) => {
-  await holdForOutage(config.url);
-  (config as TimedConfig).__startedAt = Date.now();
-  config.timeout = resolveRequestTimeout(config.url, config.timeout);
+/**
+ * Kimlik + CSRF + istemci künyesi başlıkları — axios interceptor'ı ve axios dışı istekler (bildirim
+ * zilinin SSE `fetch`i, `EventSource` başlık taşıyamaz) AYNI kurucuyu kullanır; mantık iki yerde yaşamaz.
+ */
+export async function buildAuthHeaders(method: string, hasExplicitAuth = false): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
   const token = await tokenStore.get();
   // Per-istek açık Authorization (ör. logout revoke'unun YAKALANMIŞ token'ı)
   // EZİLMEZ — aksi hâlde logout→anında re-login yarışında revoke isteği yeni
   // oturumun token'ıyla gidip YENİ oturumu iptal ederdi.
-  if (token && !config.headers.Authorization) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token && !hasExplicitAuth) headers.Authorization = `Bearer ${token}`;
   // Web paneli kimliği httpOnly çerezde taşır (çerez kipinde token yok → Bearer de yok); durum değiştiren
   // her istek CSRF başlığı ister (sözleşme BULUT-WEB-PANELI.md); Electron göndermez.
-  if (!IS_ELECTRON && !SAFE_METHODS.has((config.method ?? "get").toLowerCase())) {
-    config.headers[CSRF_HEADER] = "1";
-  }
-  // İSTEMCİ KÜNYESİ (`X-Client-*`) — Sistem → Bağlı İstemciler ekranını besler.
-  // BİLGİLENDİRME, kimlik kanıtı DEĞİL; sunucuda hiçbir kapı bu başlıklara
-  // bakmaz (bkz. `@/lib/client-info` ve backend `constants/client-info.ts`).
-  // `x-device-id`den AYRI bir başlıktır — aşağıdaki nottaki deadlock kapısına
-  // dokunmaz.
+  if (!IS_ELECTRON && !SAFE_METHODS.has(method.toLowerCase())) headers[CSRF_HEADER] = "1";
+  // İSTEMCİ KÜNYESİ (`X-Client-*`) — Sistem → Bağlı İstemciler ekranını besler; BİLGİLENDİRME,
+  // kimlik kanıtı DEĞİL (bkz. `@/lib/client-info`). `x-device-id`den AYRI bir başlıktır.
   await applyClientInfoHeaders((name, value) => {
-    config.headers[name] = value;
+    headers[name] = value;
   });
+  return headers;
+}
+
+apiClient.interceptors.request.use(async (config) => {
+  await holdForOutage(config.url);
+  (config as TimedConfig).__startedAt = Date.now();
+  config.timeout = resolveRequestTimeout(config.url, config.timeout);
+  // Başlıklar TEK kurucudan (`buildAuthHeaders`): bildirim zilinin SSE `fetch`i de aynısını kullanır.
+  const headers = await buildAuthHeaders(config.method ?? "get", Boolean(config.headers.Authorization));
+  for (const [name, value] of Object.entries(headers)) config.headers[name] = value;
   // NOT: Masaüstü panel BİLEREK `x-device-id` GÖNDERMEZ. Gönderdiğinde,
   // `devicePairingRequired` (cihaz-onay kapısı) açıkken backend'in device
   // middleware'i onaysız cihaz sayıp Electron'un TÜM isteklerini 401

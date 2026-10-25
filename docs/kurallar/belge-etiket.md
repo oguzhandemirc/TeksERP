@@ -32,6 +32,7 @@
 - **[ÇEKİRDEK]** Basım hareketini yalnız `recordPrintJob`/`reportPrintJob` (`services/print-job.service.ts`) yazsın; `print_jobs` telemetridir — hiçbir karar okumaz (iptal guard'ı `labelPrintedAt` okur), geçmiş audit'ten türetilmez, kullanıcı token'dan gelir, yaşa göre budanır. · bekçi: `scripts/test_print_jobs.ts` <sub>(arşiv:2026-10-24 izlenebilirlik A1)</sub>
 - **[ÇEKİRDEK]** Toplu top etiketi de `labelPrintedAt` damgalasın; damgayı (tekil + toplu) yalnız `label.service#stampRollLabelPrinted` yazsın. · bekçi: `scripts/test_print_jobs.ts §8–§9` <sub>(arşiv:2026-10-24 izlenebilirlik A1)</sub>
 - **[ÇEKİRDEK]** Panelde her basımı `lib/print.ts` boğazından (`printTracked` · `trackPdfSave` · `reportLabelSend`) geçir; iş ucu olan türde künyeyi iş ucuna ekle (başarıda `/print-jobs`a ayrıca yazma), iptal/hatada iş ucunu çağırma; sessiz basımı yalnız bilgisayar ayarı açar (varsayılan pencere). · bekçi: `Electron/src/lib/print-bogaz.test.ts` + `Electron/src/services/printJobService.test.ts` <sub>(arşiv:2026-10-24 izlenebilirlik A2)</sub>
+- **[ÇEKİRDEK]** Yazdırma geçmişi ekranında süzme ve sayma sunucuda kalsın (`/api/print-jobs` + `?ozet=1` aynı where); gün çipi fabrika günü anahtarı göndersin, hata ipucu kataloğu (`Electron/src/lib/print-error-hints.ts`) panel ∪ sunucu hata kodlarıyla eşit tutulsun. · bekçi: `Electron/src/lib/print-history-query.test.ts`, `Electron/src/lib/print-error-hints.test.ts`, `Electron/src/pages/System/tile-route-permission.test.ts`
 
 ### Yasaklar
 
