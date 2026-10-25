@@ -125,6 +125,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   REDDEDILDI: "CloudInboxOutcome(bulut makbuzu reddedildi) ve EIrsaliyeStatus(alıcı yanıtı red) — ikisi de 'Reddedildi'; ortak Türkçe doğru",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  ARCHIVED:
+    "ItemLifecycleStatus('Pasif') ve PriceListStatus(yayından kalktı) — ortak cevap fiyat listesi için YANLIŞ; " +
+    "PRICE_LIST.status override'ı ile ayrıldı (MAL-4, 2026-10-25)",
   AUTO:
     "StationPropertyMode('Otomatik uygulanır') ve LabVerdictSource(hüküm sınırdan hesaplandı) — ortak cevap hüküm için YANLIŞ; " +
     "LAB_TEST.verdictSource override'ı ile ayrıldı (K4P-LAB, 2026-10-25)",

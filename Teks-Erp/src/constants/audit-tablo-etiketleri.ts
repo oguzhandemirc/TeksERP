@@ -190,6 +190,8 @@ export const TABLE_LABELS: Record<string, string> = {
   COST_PARAMETER_SET: "Maliyet Parametre Seti",
   COST_STRUCTURE: "Ürün Maliyet Yapısı",
   STANDARD_COST_VERSION: "Standart Maliyet Sürümü",
+  SALES_QUOTE: "Satış Teklifi",
+  PRICE_LIST: "Fiyat Listesi",
   FINISHING_RATE: "Apre Tarifesi",
   WEFT_SPEC: "Atkı Spesifikasyonu",
   YARN_COST_PRICE: "İplik Maliyet Fiyatı",

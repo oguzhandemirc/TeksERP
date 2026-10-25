@@ -928,6 +928,16 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "standard_cost_versions", name: "standard_cost_versions_superseded_ck" },
   { table: "standard_cost_versions", name: "standard_cost_versions_hash_ck" },
   { table: "standard_cost_lines", name: "standard_cost_lines_line_no_ck" },
+  // MAL-4 teklif + fiyat listesi (20261025170000_teklif_fiyat_listesi)
+  { table: "sales_quotes", name: "sales_quotes_converted_ck" },
+  { table: "sales_quotes", name: "sales_quotes_superseded_ck" },
+  { table: "sales_quotes", name: "sales_quotes_fx_rate_ck" },
+  { table: "sales_quotes", name: "sales_quotes_numbers_ck" },
+  { table: "sales_quotes", name: "sales_quotes_pct_ck" },
+  { table: "sales_quote_lines", name: "sales_quote_lines_amounts_ck" },
+  { table: "sales_quote_lines", name: "sales_quote_lines_markup_ck" },
+  { table: "price_lists", name: "price_lists_published_ck" },
+  { table: "price_list_lines", name: "price_list_lines_amounts_ck" },
   { table: "purchase_order_lines", name: "purchase_order_lines_qty_positive" },
   { table: "purchase_order_lines", name: "purchase_order_lines_received_nonneg" },
   // ⚠️ `receivedQty <= qty` seddi BİLİNÇLİ OLARAK YOK: fiziksel olarak fazla mal
@@ -1122,6 +1132,20 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     index: "machine_shift_stop_breakdowns_uq",
     expr: `COALESCE("reasonCode", ''::character varying)`,
     why: "kuşak × sebep × atanmamış-kovası tekil — sınıflandırılmamış kova (NULL) da TEK satır",
+  },
+  {
+    // MAL-4: müşteri+döviz başına TEK yayınlı fiyat listesi; genel liste (müşterisiz) sıfır-UUID ile tekilleşir.
+    table: "price_lists",
+    index: "price_lists_published_uq",
+    expr: `COALESCE("customerId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    predicate: `(status = 'PUBLISHED'::"PriceListStatus")`,
+    why: "yayın yarışında ikinci PUBLISHED doğamaz (P2002 → 409)",
+  },
+  {
+    table: "price_list_lines",
+    index: "price_list_lines_item_color_uq",
+    expr: `COALESCE("colorId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+    why: "liste içinde ürün+renk başına tek satır — renksiz satır da TEK",
   },
 ];
 
@@ -1318,6 +1342,13 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     trigger: "device_binding_events_block_tamper",
     timing: ["BEFORE DELETE OR UPDATE", "FOR EACH ROW", "device_binding_events_block_tamper()"],
     why: "bağlama defteri append-only; tek meşru UPDATE cihaz kalıcı silinince FK SET NULL kaskadı",
+  },
+  {
+    table: "sales_quotes",
+    trigger: "sales_quotes_status_changed",
+    // MAL-4: teklif `statusChangedAt` TEK yazma noktası (roll damgası emsali).
+    timing: ["BEFORE INSERT OR UPDATE", "FOR EACH ROW", "sales_quotes_stamp_status_changed()"],
+    why: "teklif durum değişim anı yalnız trigger'dan — uygulama yazmaz",
   },
 ];
 

@@ -39,12 +39,17 @@ const MALIYET_MODELLERI = new Set([
   // MAL-2: standart maliyet sürümü (donmuş fotoğraf) + kalemleri
   "standardCostVersion",
   "standardCostLine",
+  // MAL-4: satış teklifi + fiyat listesi
+  "salesQuote",
+  "salesQuoteLine",
+  "priceList",
+  "priceListLine",
 ]);
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
     dosya: "routes/cost.routes.ts",
-    neden: "Maliyet yüzeyi: girdiler (MAL-1) + önizleme, kumaş maliyet listesi, standart maliyet sürümleri (MAL-2).",
+    neden: "Maliyet yüzeyi: girdiler (MAL-1) + önizleme, kumaş maliyet listesi, standart maliyet sürümleri (MAL-2), satış teklifi + fiyat listesi (MAL-4).",
   },
 ];
 

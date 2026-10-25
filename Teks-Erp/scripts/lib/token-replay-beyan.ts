@@ -60,6 +60,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // Backend güncelleme onayı (Dağıtım v2): karar satırı panelden clientToken ile doğar; kimliği (onayId) niyet dosyasına girer.
   [`${S}update-approval.service.ts::recordUpdateApproval`]: { giris: { [`${S}update-approval.service.ts::recordUpdateApproval`]: "R" } },
   // Patron bulutu gelen kutusu: clientToken = mesajId; 8036 mesajId üzerinde, makbuz replay'i tx'in ilk ifadesi (K).
+  // MAL-4: teklif revizyonu yeni teklif satırı doğurur (token = revizyon denemesi); R kipi.
+  [`${S}sales-quote-transitions.service.ts::reviseQuote`]: { giris: { [`${S}sales-quote-transitions.service.ts::reviseQuote`]: "R" } },
   [`${S}order.service.ts::prepareOrderCreate`]: { giris: { [`${S}order.service.ts::create`]: "R", [`${S}order.service.ts::quickOrderTx`]: "K", [`${S}cloud-inbox.service.ts::createOrderFromMessage`]: "K" } },
   [`${S}order.service.ts::quickOrderFromRolls`]: { giris: { [`${S}order.service.ts::quickOrderTx`]: "K" } },
   [`${S}cheque-delivery-note.service.ts::createTx`]: { giris: { [`${S}cheque-delivery-note.service.ts::create`]: "K" } },
@@ -201,6 +203,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}machine-collector.service.ts::collectorReplay`]: ["name", "collectorType", "machineIds"],
   [`${S}machine-doff.service.ts::doffReplay`]: ["machineId", "productionLineNo", "pieceCount"],
   [`${S}machine-run.service.ts::runReplay`]: ["machineId", "productionLineNo", "weavingOrderId"],
+  [`${S}sales-quote-transitions.service.ts::reviseReplay`]: ["revisionOfId"],
   [`${S}order.service.ts::orderReplay`]: ["customerId", "branchId", "satırlar", "orderNumber"],
   [`${S}cloud-inbox.service.ts::inboxReceiptReplay`]: ["tur", "govdeOzeti"],
   [`${S}order.service.ts::quickOrderReplay`]: ["customerId", "branchId", "lines"],

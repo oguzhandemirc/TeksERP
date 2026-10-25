@@ -19,6 +19,10 @@
 - **[ÇEKİRDEK]** Ölçülmüş çözgü firesi yalnız ÖNERİDİR (`oneriler.warpWaste`, kaynak + levent sayısıyla); girdiye kendiliğinden girmez, kullanıcı `overrides.warpWastePct` + `warpWasteMeasured: true` ile uygular (kaynak `OLCULMUS`, uyarı `WARP_WASTE_MEASURED`). · bekçi: `test_maliyet_girdi`
 - **[ÇEKİRDEK]** Önizleme hiçbir şey yazmaz (sürüm de audit de). · bekçi: `test_standart_maliyet_surum` (§6b)
 
+## Teklif ve fiyat listesi (MAL-4)
+
+- **[ÇEKİRDEK]** Teklif SENT olduktan sonra DEĞİŞMEZ: kalem/başlık uçları tx başında `claimDraftQuoteTx` (DRAFT kilidi) alır, düzeltme revizyondur (eski SUPERSEDED + aynı numara `revisionNo+1` DRAFT, kalemler snapshot'la kopya); her geçiş `claimQuoteTx` atomik claim'i, geçiş tablosu `QUOTE_TRANSITIONS`, ölü küme `QUOTE_DEAD_STATUSES`; "süresi doldu" durum değil türetilmiş bayraktır (`isQuoteExpired` ↔ `quoteExpiredWhere`). · bekçi: `test_teklif_durum`
+
 ## Panel (`Electron/src/pages/Cost/`)
 
 - **[ÇEKİRDEK]** Maliyet ekranları sayı HESAPLAMAZ ve kuru 1 VARSAYMAZ: her tutar `POST /api/cost/preview` ya da kayıtlı sürüm alanıdır, istemci yalnız TR biçimine çevirir (`shared/format.ts`, metin → Intl); kur yoksa sunucunun `eksikler`i gösterilir. · bekçi: Electron `pages/Cost/cost-no-client-math.test.ts`
@@ -35,7 +39,7 @@
 
 Panel (Electron vitest): `src/pages/Cost` (`cost-no-client-math`, `cost-access`, `shared/format`, `shared/errors`, `shared/CostBreakdown`, `shared/useCostPreview`, `shared/fx-missing`, `Items/service`, `Calculator/calculator-body`, `Calculator/CalculatorPage`), `src/pages/Items/ItemCostLink`
 
-Backend: `test_screen_catalog`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`
+Backend: `test_screen_catalog`, `test_teklif_durum`, `test_db_invariants`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

@@ -109,6 +109,8 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   ROLL_INSPECTION: onEkli("top", sIyelik("muayene", "i", "e")),
   FOUR_POINT_RULE_SET: onEkli("4 puan kural", iyelik("set", "i", "e", "i")),
   STANDARD_COST_VERSION: onEkli("standart maliyet", iyelik("sürüm", "ü", "e", "ü")),
+  SALES_QUOTE: onEkli("satış", iyelik("teklif", "i", "e", "i")),
+  PRICE_LIST: onEkli("fiyat", sIyelik("liste", "i", "e")),
 };
 
 /** Tablonun çekimleri; yoksa null (yedek cümle "<Modül> kaydı" kurar). */
