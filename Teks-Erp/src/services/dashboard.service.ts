@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { KK1_ENTRY_SOURCES } from "../constants/kk1-entry-sources";
 import { factoryDayStart } from "../constants/time";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 export interface DefectsSummary {
   /** isProcessed = false (Tambur'da kapatılmamış) açık hata sayısı. */
@@ -54,8 +55,9 @@ export class DashboardService {
   static async getDefectsSummary(): Promise<DefectsSummary> {
     const today = startOfToday();
     const [openCount, todayCount] = await Promise.all([
-      prisma.rollError.count({ where: { isProcessed: false } }),
-      prisma.rollError.count({ where: { detectedAt: { gte: today } } }),
+      // İkisi de PROCESS: "bekleyen" Tambur kuyruğudur; muayene sayısı muayene motorunun özetinde.
+      prisma.rollError.count({ where: { ...ACTIONABLE_ROLL_ERROR_WHERE, isProcessed: false } }),
+      prisma.rollError.count({ where: { ...ACTIONABLE_ROLL_ERROR_WHERE, detectedAt: { gte: today } } }),
     ]);
     return { openCount, todayCount };
   }

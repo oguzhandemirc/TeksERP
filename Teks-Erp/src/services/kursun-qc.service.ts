@@ -26,6 +26,7 @@ import { ApiResponse } from "../types/api.types";
 import {
   Prisma,
   RollError,
+  RollErrorOrigin,
   RollOperation,
   RollOperationType,
   RollStatus,
@@ -68,6 +69,10 @@ import { resolveKursunBypassEnabled } from "./system-setting.service";
 import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
+import { ACTIONABLE_ROLL_ERROR_WHERE, isActionableRollError } from "./helpers/roll-error-scope.helper";
+
+/** Muayene satırı KK2/Tambur silme ucundan silinemez (belge parçası; düzeltme revizyondur). */
+const INSPECTION_ERROR_IMMUTABLE_MESSAGE = "Muayene hatası buradan silinemez; muayeneyi panelden düzeltin";
 
 /**
  * "Açık (pending) bypass ataması" yüklemi — `kursun-bypass-guard.helper`
@@ -86,9 +91,12 @@ interface RollDefectSummary {
   /// Hata noktası (tek metre değeri). KK2/Kurşun operatörü "60. metrede hata"
   /// olarak girer; aralık bilgisi tutulmaz. Tambur operatörü ekranda görüp
   /// fiziksel kesim kararı verir.
-  startMeter: number;
+  /// `includeInspection` istenmediyse hep sayı; muayene satırında NULL olabilir.
+  startMeter: number | null;
   defectTypeId: string | null;
   errorType: string | null; // snapshot'lanmış ad (DefectType.name)
+  /// Yalnız `includeInspection` isteğinde döner — eski istemcinin yanıtı bayt-eşit kalır.
+  origin?: RollErrorOrigin;
 }
 
 interface RollSummary {
@@ -263,8 +271,11 @@ export class KursunQcService {
   }
 
   /** Step ID ile doğrudan çek (admin/test ekranları). */
-  async getStep(stepId: string): Promise<ApiResponse<StepSummary>> {
-    return this.buildStepSummary(stepId);
+  async getStep(
+    stepId: string,
+    opts: { includeInspection?: boolean } = {},
+  ): Promise<ApiResponse<StepSummary>> {
+    return this.buildStepSummary(stepId, opts);
   }
 
   /**
@@ -632,6 +643,7 @@ export class KursunQcService {
     // Aynı metrede FARKLI tip serbest (50. metrede hem delik hem leke olabilir).
     const existing = await prisma.rollError.findFirst({
       where: {
+        ...ACTIONABLE_ROLL_ERROR_WHERE,
         rollId: data.rollId,
         startMeter: data.startMeter,
         defectTypeId: defectType.id,
@@ -682,7 +694,7 @@ export class KursunQcService {
         //     (farklı PK ile) — partial unique roll_errors_roll_meter_defect_uq P2002 →
         //     409 DUPLICATE_ROLL_ERROR (sıralı findFirst guard'ının eşzamanlı kardeşi).
         const existing = await prisma.rollError.findFirst({
-          where: { rollId: data.rollId, startMeter: data.startMeter, defectTypeId: defectType.id },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: data.rollId, startMeter: data.startMeter, defectTypeId: defectType.id },
           select: { id: true },
         });
         if (existing) {
@@ -729,23 +741,30 @@ export class KursunQcService {
       // sırasında ekleme hiç sunucuya ulaşmamış olabilir) → başarı dön.
       return { success: true, data: { deleted: true }, message: "Hata kaydı zaten yok" };
     }
+    if (err.origin !== ACTIONABLE_ROLL_ERROR_WHERE.origin) {
+      throw AppError.badRequest(INSPECTION_ERROR_IMMUTABLE_MESSAGE, { code: "INSPECTION_ERROR_IMMUTABLE" });
+    }
 
     await this.assertDeleteStationInspects(err);
 
     // ATOMİK guard: yalnız İŞLENMEMİŞ kayıt silinir — findUnique↔delete arası
     // eşzamanlı Tambur finalize'ı isProcessed=true yaparsa count=0 → silinmez
     // (eski bare delete TOCTOU'su: işlenen hata kaydı sessizce silinebiliyordu).
+    // Köken de WHERE'de: muayene satırı bu uçtan hiçbir pencerede silinmez.
     const deleted = await prisma.rollError.deleteMany({
-      where: { id: data.errorId, isProcessed: false },
+      where: { ...ACTIONABLE_ROLL_ERROR_WHERE, id: data.errorId, isProcessed: false },
     });
     if (deleted.count === 0) {
       // Pencerede ya Tambur işledi ya başka bir silme aldı — taze duruma bak.
       const after = await prisma.rollError.findUnique({
         where: { id: data.errorId },
-        select: { id: true },
+        select: { id: true, origin: true },
       });
       if (!after) {
         return { success: true, data: { deleted: true }, message: "Hata kaydı zaten yok" };
+      }
+      if (after.origin !== ACTIONABLE_ROLL_ERROR_WHERE.origin) {
+        throw AppError.badRequest(INSPECTION_ERROR_IMMUTABLE_MESSAGE, { code: "INSPECTION_ERROR_IMMUTABLE" });
       }
       throw AppError.badRequest("Tambur kararı verilmiş hata kaydı silinemez");
     }
@@ -1425,7 +1444,11 @@ export class KursunQcService {
     }
   }
 
-  private async buildStepSummary(stepId: string): Promise<ApiResponse<StepSummary>> {
+  private async buildStepSummary(
+    stepId: string,
+    opts: { includeInspection?: boolean } = {},
+  ): Promise<ApiResponse<StepSummary>> {
+    const includeInspection = opts.includeInspection === true;
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
       include: {
@@ -1469,14 +1492,18 @@ export class KursunQcService {
         },
         select: { rollId: true },
       }),
+      // Varsayılan yalnız PROCESS (eski tablet metresiz satır görmez); tarihçe isteği iki kökeni de alır.
       prisma.rollError.findMany({
-        where: { rollId: { in: rollIds }, detectedAtStepId: stepId },
+        where: includeInspection
+          ? { rollId: { in: rollIds }, detectedAtStepId: stepId }
+          : { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: { in: rollIds }, detectedAtStepId: stepId },
         select: {
           id: true,
           rollId: true,
           startMeter: true,
           defectTypeId: true,
           errorType: true,
+          origin: true,
         },
         orderBy: { startMeter: "asc" },
       }),
@@ -1495,11 +1522,13 @@ export class KursunQcService {
     const defectsByRoll = new Map<string, RollDefectSummary[]>();
     for (const e of errors) {
       if (!defectsByRoll.has(e.rollId)) defectsByRoll.set(e.rollId, []);
+      const actionable = isActionableRollError(e);
       defectsByRoll.get(e.rollId)!.push({
         id: e.id,
-        startMeter: processMeterNumber(e),
+        startMeter: actionable ? processMeterNumber(e) : e.startMeter === null ? null : Number(e.startMeter),
         defectTypeId: e.defectTypeId,
         errorType: e.errorType,
+        ...(includeInspection ? { origin: e.origin } : {}),
       });
     }
 

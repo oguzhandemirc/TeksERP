@@ -273,7 +273,9 @@ function main(): void {
   check("§4e biçim: `✓K` çıplak ve `✓B0` biçimsiz, `✓B12 (abc1234)` biçimli", !biciimliMi("✓K (üç sonda)") && !biciimliMi("✓B0") && biciimliMi("✓B12 (abc1234)"));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  // exitCode, exit DEĞİL: ~53KB çıktı boru tamponuna (64KB) dayanıyor; process.exit
+  // boşalmamış stdout'u keser ve özet satırı kaybolur (CI'da 3× "özet satırı yok").
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

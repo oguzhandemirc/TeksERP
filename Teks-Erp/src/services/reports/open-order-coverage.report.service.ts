@@ -74,6 +74,8 @@ export interface OpenOrderCoverageSummary {
   overdueUncoveredQty: number;
   /** Karşılanma oranı (%) — (depo + üretimde) / açık. */
   coveragePct: number;
+  /** EK (R0-RAPA): yalnız DEPODAN karşılanan pay (%) — açık metraj 0 ise `null` ("ölçülemedi", 100'e çökmez). */
+  warehouseCoveragePct: number | null;
 }
 
 /** Müşteri / kumaş kırılımı. Dört ölçü taşıdığı için `BreakdownRow` yetmez. */
@@ -295,6 +297,7 @@ export async function getOpenOrderCoverage(filters: Pick<ReportFilterInput, "ite
       overdueUncoveredQty: round1(Number(sum.overdueQty)),
       coveragePct:
         openNum === 0 ? 100 : round1((Number(sum.wh) + Number(sum.prod)) * 100 / openNum),
+      warehouseCoveragePct: openNum === 0 ? null : round1(Number(sum.wh) * 100 / openNum),
     },
     byCustomer: bucketRows(byCustomer),
     byItem: bucketRows(byItem),

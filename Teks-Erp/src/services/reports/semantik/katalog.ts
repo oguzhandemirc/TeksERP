@@ -2,14 +2,24 @@
 // SEMANTİK KATMAN — KÜP KAYDI ve istemci kataloğu (R1-SEMCEK)
 // =============================================================================
 // İstemci yalnız GÖREBİLDİĞİ kimlikleri alır (izin + modül süzülmüş ağaç); ölçü adı/açıklaması
-// `tanimlar.ts` sözlüğünden okunur — burada kopyalanmaz. Yeni küp R1-SEMKUP'ta buraya eklenir.
+// `tanimlar.ts` sözlüğünden okunur — burada kopyalanmaz. Küp kaydının TEK yeri bu listedir.
 // =============================================================================
 import { OLCU_TANIMLARI } from "./tanimlar";
 import { canAccess, type AccessContext } from "./izin";
 import { shipmentCube } from "./kupler/sevk.kup";
+import { orderCube } from "./kupler/siparis.kup";
+import { productionCube, stationCube } from "./kupler/uretim.kup";
+import { defectCube } from "./kupler/hata.kup";
+import { stopCube } from "./kupler/durus.kup";
+import { loomShiftCube } from "./kupler/dokuma-vardiya.kup";
+import { stockCube } from "./kupler/stok.kup";
+import { subcontractCube } from "./kupler/fason.kup";
+import { financeCube } from "./kupler/finans.kup";
 import { FILTER_OPERATORS, type SemanticCube } from "./tipler";
 
-export const SEMANTIC_CUBES: readonly SemanticCube[] = [shipmentCube];
+export const SEMANTIC_CUBES: readonly SemanticCube[] = [
+  shipmentCube, orderCube, productionCube, stationCube, defectCube, stopCube, loomShiftCube, stockCube, subcontractCube, financeCube,
+];
 
 export function measureDictionaryEntry(id: string) {
   return OLCU_TANIMLARI.find((t) => t.kimlik === id) ?? null;

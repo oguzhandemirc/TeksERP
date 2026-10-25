@@ -21,7 +21,8 @@ import { buildProductionFlowReport, PRODUCTION_FLOW_VIEWS } from "../../services
 import { buildQualityReport, QUALITY_VIEWS } from "../../services/reports/temel/kalite.temel";
 import { buildLossReport } from "../../services/reports/temel/kayip.temel";
 import { buildWarehouseReport } from "../../services/reports/temel/depo.temel";
-import { buildSubcontractorsReport } from "../../services/reports/temel/fasoncular.temel";
+import { periodSpecSchema, runCoreWithExtras, variantQueryKeys } from "../../services/reports/temel/_variant";
+import { SUBCONTRACTOR_DIMS, subcontractorRunner } from "../../services/reports/temel/core-runs";
 
 const router = Router();
 // Kimlik dosya başında (BE-30, R0-RAPA ile aynı kalıp): kimliksiz istek 401, kapalı raporun varlığı sızmaz.
@@ -38,17 +39,19 @@ export function permissionOf(key: ReportKey): string {
 const reportGate = (key: ReportKey) => [requireReportOpen(key), requirePermission(permissionOf(key))];
 
 // Şemalar bekçi için DIŞA AÇIK; her biri `.strict()` (tanınmayan anahtar 400). Süzgeç kümesi kaynak ucunkiyle aynı.
-export const coreProductionFlowQuerySchema = coreRangeQuerySchema.extend({ varyant: z.enum(PRODUCTION_FLOW_VIEWS).optional() }).strict();
+// Üretim akışı ve kalitede `varyant` zaten GÖRÜNÜM seçimidir (tablo kırılımı, R0-RAPB) — küçük çoklu yok, yalnız `donemler` eklenir.
+export const coreProductionFlowQuerySchema = coreRangeQuerySchema.extend({ varyant: z.enum(PRODUCTION_FLOW_VIEWS).optional(), donemler: periodSpecSchema.optional() }).strict();
 export const coreQualityQuerySchema = coreRangeQuerySchema
   .extend({
     warpBeamId: z.string().uuid("Geçersiz levent").optional(),
     lotNo: z.string().trim().min(1).max(64).optional(),
     varyant: z.enum(QUALITY_VIEWS).optional(),
+    donemler: periodSpecSchema.optional(),
   })
   .strict();
-export const coreLossQuerySchema = coreRangeQuerySchema.strict();
-export const coreWarehouseQuerySchema = z.object({}).strict();
-export const coreSubcontractorsQuerySchema = coreRangeQuerySchema.extend({ ...fasonEkseni, ...kalemEkseni }).strict();
+export const coreLossQuerySchema = coreRangeQuerySchema.extend({ ...variantQueryKeys([]) }).strict();
+export const coreWarehouseQuerySchema = z.object({ ...variantQueryKeys([]) }).strict();
+export const coreSubcontractorsQuerySchema = coreRangeQuerySchema.extend({ ...fasonEkseni, ...kalemEkseni, ...variantQueryKeys(SUBCONTRACTOR_DIMS) }).strict();
 
 /**
  * @openapi
@@ -67,6 +70,7 @@ export const coreSubcontractorsQuerySchema = coreRangeQuerySchema.extend({ ...fa
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
  *       - { in: query, name: varyant, schema: { type: string, enum: [istasyon, operator] } }
+ *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
  *       200: { description: "RaporSunumu (data); operatör görünümünde sunumda kisiAdi:true" }
  *       403: { description: Üretim modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -76,7 +80,10 @@ router.get("/production/uretim-akisi", requireProductionEnabled, ...reportGate("
     const input = coreProductionFlowQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const { mode, compareRange } = resolveCoreCompare(input, range);
-    const { sunum } = await buildProductionFlowReport({ range, compareRange, compareMode: mode, view: input.varyant });
+    const { sunum } = await runCoreWithExtras({
+      range, compareRange, dims: [], donemler: input.donemler,
+      run: (r, c) => buildProductionFlowReport({ range: r, compareRange: c, compareMode: mode, view: input.varyant }),
+    });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {
     next(e);
@@ -101,6 +108,7 @@ router.get("/production/uretim-akisi", requireProductionEnabled, ...reportGate("
  *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: Levent }
  *       - { in: query, name: lotNo, schema: { type: string }, description: Lot }
  *       - { in: query, name: varyant, schema: { type: string, enum: [urun, renk, fasoncu] } }
+ *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
  *       200: { description: "RaporSunumu (data) + süzgeç beyanı" }
  *       403: { description: Üretim modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -110,9 +118,9 @@ router.get("/quality/kalite", requireProductionEnabled, ...reportGate("quality/k
     const input = coreQualityQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const { mode, compareRange } = resolveCoreCompare(input, range);
-    const { sunum, suzgec } = await buildQualityReport({
-      range, compareRange, compareMode: mode, view: input.varyant,
-      filters: { warpBeamId: input.warpBeamId, lotNo: input.lotNo },
+    const { sunum, suzgec } = await runCoreWithExtras({
+      range, compareRange, dims: [], donemler: input.donemler,
+      run: (r, c) => buildQualityReport({ range: r, compareRange: c, compareMode: mode, view: input.varyant, filters: { warpBeamId: input.warpBeamId, lotNo: input.lotNo } }),
     });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
   } catch (e) {
@@ -136,6 +144,7 @@ router.get("/quality/kalite", requireProductionEnabled, ...reportGate("quality/k
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
  *       - { in: query, name: dateTo, schema: { type: string, format: date-time } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL; uygulanan kip `parametreler[]` içinde `kiyas`)" }
+ *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Üretim modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -145,7 +154,10 @@ router.get("/quality/kayip", requireProductionEnabled, ...reportGate("quality/ka
     const input = coreLossQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const { mode, compareRange } = resolveCoreCompare(input, range);
-    const { sunum } = await buildLossReport({ range, compareRange, compareMode: mode });
+    const { sunum } = await runCoreWithExtras({
+      range, compareRange, dims: [], donemler: input.donemler,
+      run: (r, c) => buildLossReport({ range: r, compareRange: c, compareMode: mode }),
+    });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {
     next(e);
@@ -163,15 +175,18 @@ router.get("/quality/kayip", requireProductionEnabled, ...reportGate("quality/ka
  *       yan sayılar depodaki bitmiş kumaş, 90 günden eski (siparişli dahil), yaşı bilinmeyen metre.
  *       Tarih parametresi YOK (bugünün durumu); ay sonu görüntüsü olmadığından kıyas ölçülemez.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas — kesit raporu: dönem değerleri ölçülemedi + uyarı (geçmiş kesit görüntüsü yok)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       400: { description: Tanınmayan parametre }
  */
 router.get("/inventory/depo", ...reportGate("inventory/depo"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    coreWarehouseQuerySchema.parse(req.query);
-    const { sunum } = await buildWarehouseReport();
-    res.status(200).json(reportEnvelope(sunum, resolveDateRange({}), null, { warnings: sunum.uyarilar }));
+    const input = coreWarehouseQuerySchema.parse(req.query);
+    const range = resolveDateRange({});
+    const { sunum } = await runCoreWithExtras({ range, compareRange: null, dims: [], donemler: input.donemler, snapshotOnly: true, run: () => buildWarehouseReport() });
+    res.status(200).json(reportEnvelope(sunum, range, null, { warnings: sunum.uyarilar }));
   } catch (e) {
     next(e);
   }
@@ -195,6 +210,8 @@ router.get("/inventory/depo", ...reportGate("inventory/depo"), async (req: Reque
  *       - { in: query, name: subcontractorId, schema: { type: string }, description: "Fasoncu (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Topun kumaşı (uuid; CSV)" }
  *       - { in: query, name: colorId, schema: { type: string }, description: "Topun rengi (uuid; CSV)" }
+ *       - { in: query, name: varyant, schema: { type: string, enum: [fasoncu] }, description: "Küçük çoklu kırılımı — en büyük ≤ 6 değer, her hücre ucun kendi süzgeciyle süzülmüş ana koşu (R1-VARYANT)" }
+ *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
  *       200: { description: "RaporSunumu (data) + süzgeç beyanı (+dusenSatir)" }
  */
@@ -203,9 +220,9 @@ router.get("/subcontract/fasoncular", ...reportGate("subcontract/fasoncular"), a
     const input = coreSubcontractorsQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const { mode, compareRange } = resolveCoreCompare(input, range);
-    const { sunum, suzgec } = await buildSubcontractorsReport({
-      range, compareRange, compareMode: mode,
-      filters: { subcontractorId: input.subcontractorId, itemId: input.itemId, colorId: input.colorId },
+    const { sunum, suzgec } = await runCoreWithExtras({
+      range, compareRange, dims: SUBCONTRACTOR_DIMS, varyant: input.varyant, donemler: input.donemler,
+      run: subcontractorRunner({ subcontractorId: input.subcontractorId, itemId: input.itemId, colorId: input.colorId }, mode),
     });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
   } catch (e) {

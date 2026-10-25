@@ -88,6 +88,19 @@ export interface CancelPreview {
   rollCount: number;
   swatchCount: number;
   affectedOrders: { orderNumber: string; qty: string }[];
+  /** İptal yerel e-İrsaliyeyi de IPTAL eder (E6); eski sunucu alanı göndermez. */
+  eIrsaliye?: EIrsaliyeAffected | null;
+}
+
+/** Yıkıcı önizlemede etkilenen e-İrsaliye kaydı (backend `eIrsaliyePreviewRow` aynası). */
+export interface EIrsaliyeAffected {
+  id: string;
+  documentNo: string | null;
+  status: string;
+  simulasyon: boolean;
+  /** Numara üretilmiş, GİB'e gitmemiş kayıt iptal edilirse sırada boşluk kalır. */
+  numaraBosaDuser: boolean;
+  yerelIptalEdilebilir: boolean;
 }
 
 export interface UndoAffectedRoll {
@@ -126,6 +139,8 @@ export interface UndoDispatchPreview {
   looseRolls?: UndoAffectedRoll[];
   affectedOrders: string[];
   voidsDispatchNote: boolean;
+  /** Canlı e-İrsaliye kaydı: yalnız storno yerinde bırakır, storno+kapat IPTAL eder. */
+  eIrsaliye?: EIrsaliyeAffected | null;
   /**
    * `shipping.confirmationEnabled` — "sevkiyatı da kapat" seçeneğinin VARSAYILANI
    * bundan kurulur: kapalı rejimde PLANNED beklemenin karşılığı yok → varsayılan

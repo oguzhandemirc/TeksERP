@@ -200,6 +200,7 @@ import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 export interface RollStats {
   totalCount: number;
@@ -2538,7 +2539,7 @@ export class InventoryService {
       include: {
         item: true,
         color: true,
-        errors: true,
+        errors: { where: { ...ACTIONABLE_ROLL_ERROR_WHERE } },
         // Rezervasyon bilgisi — detay panelinde "çuvalda/sevkiyatta" gösterimi.
         shipment: { select: { id: true, shipmentNo: true, status: true } },
         sack: { select: { id: true, sackNo: true, seq: true } },
@@ -2716,7 +2717,7 @@ export class InventoryService {
       include: {
         item: true,
         color: true,
-        errors: true,
+        errors: { where: { ...ACTIONABLE_ROLL_ERROR_WHERE } },
         // Rezervasyon bilgisi — barkod okutmada "bu top çuvalda/sevkiyatta" uyarısı.
         shipment: { select: { id: true, shipmentNo: true, status: true } },
         sack: { select: { id: true, sackNo: true, seq: true } },

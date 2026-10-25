@@ -118,6 +118,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "report:production",
       "report:inventory",
       "report:subcontract",
+      "report:builder",
       // Çözgü kartı bir ANA VERİDİR ve planlamanın okuduğu şeydir (hangi desen
       // hangi çözgüden dokunuyor). Yazma YOK: kartı süpervizör açar.
       // Devere modülü kapalı doğduğu için bu izin sahada bir şey AÇMAZ.
@@ -217,6 +218,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // ayrılığının aynı ailesi: `shipping:write` ↔ `shipping:undo-dispatch`.
       "finance:close",
       "report:finance",
+      "report:builder",
       // K4P: müşteriye giden sertifikayı görür (fatura/sevk evrakına eklenir); yazma kalite işidir.
       "certificate:read",
     ],
@@ -289,6 +291,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "item:read",
       "report:quality",
       "report:production",
+      "report:builder",
       // Kalite Güvence (K4P): muayene · 4 puan kuralı · lab testi · sertifika — modül kapalıyken yüzey çizilmez.
       "inspection:read",
       "inspection:write",
@@ -352,6 +355,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "item:read",
       "report:production",
       "report:inventory",
+      "report:builder",
+      "report:publish",
       // Çözgü kartı yazma yetkisi DAR tutuldu: kart tel/denye taşır ve leventin
       // kg'ı ondan doğar — yanlış bir değer bütün bir levent partisinin hesabını
       // bozar. Okuma planlamada da var, yazma yalnız burada.

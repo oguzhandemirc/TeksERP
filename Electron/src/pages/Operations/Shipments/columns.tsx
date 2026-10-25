@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat, formatNumber } from "@/lib/format";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentListItem } from "./types";
+import { EIrsaliyeStatusBadge } from "./eirsaliye/EIrsaliyeStatusBadge";
 
 export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
@@ -48,7 +49,17 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
     accessorKey: "status",
     header: "Durum",
     cell: ({ row }) => (
-      <StatusBadge status={row.original.status} labels={shipmentStatusLabels} tones={shipmentStatusTones} />
+      <div className="flex flex-wrap items-center gap-1">
+        <StatusBadge status={row.original.status} labels={shipmentStatusLabels} tones={shipmentStatusTones} />
+        {/* e-İrsaliye rozeti yalnız kaydı olan satırda (kayıtsız kurulumda DOM aynı); ayrı kolon
+            açılmadı — kolon yapılandırılmamış kurulumda boş sütun olurdu. */}
+        {row.original.eIrsaliyeStatus && (
+          <span title="e-İrsaliye durumu" className="inline-flex items-center gap-0.5 whitespace-nowrap text-[10px] text-muted-foreground">
+            e-İrs.
+            <EIrsaliyeStatusBadge status={row.original.eIrsaliyeStatus} simulasyon={row.original.eIrsaliyeSimulasyon} className="px-1 py-0 text-[10px]" />
+          </span>
+        )}
+      </div>
     ),
   },
   {

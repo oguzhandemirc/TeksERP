@@ -37,6 +37,7 @@ import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-gua
 import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
+import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 
 export type SplitMode = "REDYE_SAME_COLOR" | "NEW_COLOR" | "UNDYED_MOVE";
 
@@ -393,7 +394,7 @@ export class WorkOrderSplitService {
         // 4) Açık RollError'ları NO_CUT ile kapat (yeniden boyanan kumaşta hata
         //    sayacı kalıcı şişmesin — M-13 semantiği).
         await tx.rollError.updateMany({
-          where: { rollId: { in: selectedIds }, isProcessed: false },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: { in: selectedIds }, isProcessed: false },
           data: { isProcessed: true, actionTaken: "NO_CUT", processedAtStepId: null, processedAt: new Date() },
         });
 
@@ -521,7 +522,7 @@ export class WorkOrderSplitService {
 
         // 6) Açık RollError NO_CUT.
         await tx.rollError.updateMany({
-          where: { rollId: { in: selectedIds }, isProcessed: false },
+          where: { ...ACTIONABLE_ROLL_ERROR_WHERE, rollId: { in: selectedIds }, isProcessed: false },
           data: { isProcessed: true, actionTaken: "NO_CUT", processedAtStepId: null, processedAt: new Date() },
         });
 
