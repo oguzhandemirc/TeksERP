@@ -182,7 +182,7 @@ export function MergeDialog({ group, onClose }: { group: MergeCandidateGroup | n
 
   return (
     <Dialog open={group !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-3xl flex-col">
+      <DialogContent className="flex max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl flex-col">
         <DialogHeader>
           <DialogTitle>Birleştirme önizlemesi — hedef: {group?.target.name}</DialogTitle>
           <DialogDescription>
