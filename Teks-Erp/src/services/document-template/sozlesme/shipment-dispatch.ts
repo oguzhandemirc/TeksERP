@@ -171,6 +171,7 @@ function cekiRowValues(cekiRows: Row[], seqLabel: (seq: unknown) => string | nul
       en: asNumber(c.width),
       metre: asNumber(c.meters),
       kg: asNumber(c.kg),
+      hata_notu: asText(c.defectNote),
     };
   });
 }

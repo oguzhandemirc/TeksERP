@@ -9,6 +9,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { routeDecisionWarnings, withWarnings } from "./helpers/defect-decision.helper";
 import { BaseService, type BaseServiceConfig } from "./base.service";
 import { stepCanApplyColor, stepCanApplyProperty } from "./helpers/step-capability.helper";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
@@ -396,13 +397,16 @@ export class RouteService extends BaseService {
     }
   }
 
+  // Tambursuz rota (KQ-D8): kalite adımından sonra karar adımı yoksa UYARI, red değil.
   async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    const warnings = await routeDecisionWarnings(data.steps == null ? null : this.extractSteps(data.steps));
     await this.validateSteps(data);
-    return super.create(data, userId);
+    return withWarnings(await super.create(data, userId), warnings);
   }
 
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    const warnings = await routeDecisionWarnings(data.steps == null ? null : this.extractSteps(data.steps));
     await this.validateSteps(data);
-    return super.update(id, data, userId);
+    return withWarnings(await super.update(id, data, userId), warnings);
   }
 }

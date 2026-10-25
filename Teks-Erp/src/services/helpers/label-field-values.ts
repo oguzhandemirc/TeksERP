@@ -97,6 +97,10 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     case "kartelaMark":
       return { value: "KARTELALIK", present: payload.markedForKartela === true, role: "headline" };
 
+    // Açık hata notu (KQ-D8) — hatasız topta boş → satır basılmaz.
+    case "openDefects":
+      return str(payload.openDefects);
+
     // ── SACK (çuval) alanları — roll/swatch payload'unda undefined → present:false ──
     // sackNo: barkodun okunur karşılığı, etiketin kimliği → headline.
     case "sackNo":

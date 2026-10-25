@@ -659,6 +659,16 @@
             "birim": "kg",
             "kaynakKolon": "kg",
             "toplam": "kg"
+          },
+          {
+            "yol": "hata_notu",
+            "etiket": "Hata notu",
+            "tur": "metin",
+            "sinif": "ic",
+            "hiza": "l",
+            "ornek": "12,5 m Leke · 40 m Delik",
+            "kaynakKolon": "defectNote",
+            "icKod": "ceki_hata_notu"
           }
         ]
       }
@@ -1009,6 +1019,12 @@
         "yol": "tablolar.ceki[].parti_kodu",
         "tablo": "ceki",
         "kaynakKolon": "packingGroupCode"
+      },
+      {
+        "kod": "ceki_hata_notu",
+        "yol": "tablolar.ceki[].hata_notu",
+        "tablo": "ceki",
+        "kaynakKolon": "defectNote"
       }
     ],
     "senaryolar": [
@@ -1325,6 +1341,13 @@
           "etiket": "KG",
           "hiza": "r",
           "toplam": "kg"
+        },
+        {
+          "anahtar": "hata_notu",
+          "kaynak": "defectNote",
+          "etiket": "HATA NOTU",
+          "hiza": "l",
+          "toplam": null
         }
       ]
     }
