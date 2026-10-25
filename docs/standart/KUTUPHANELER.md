@@ -99,6 +99,15 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### simple-statistics@7.12.1 · Teks-Erp · 2026-10-25
+1. Problem      : rapor v2 analiz bloğu (R3-ISTAT, plan §3.8) Pearson/Spearman katsayısı; §2.1 "Rapor analizi"
+2. Alternatifler: kendi uygulaması (~150 satır) · `jstat` (bakımsız) · `mathjs` (~700 KB) — olasılık kuyruğu kendi `dagilim.ts`
+3. Boyut/biçim  : saf JS, native YOK, bağımlılıksız; CJS `dist/simple-statistics.cjs`; KU-18 `require()` sınandı
+4. Bakım        : TAM SABİT; yalnız `sampleCorrelation` — yükseltme `test_rapor_istatistik` §2 ile ölçülür
+5. Lisans       : ISC
+6. Dağıtım      : yalnız backend paketi
+7. Onay         : KULLANICI ONAYI BEKLİYOR; red → kendi uygulaması, `test_rapor_istatistik` §2 aynen geçmeli
+
 ### grapesjs@0.23.8 · Electron · 2026-10-24
 1. Problem      : Belge Tasarımcısı (plan D1/T2) — sürükle-bırak blok, katman, CSS stil paneli; HTML/CSS Liquid şablonuna gider
 2. Alternatifler: elle yazmak (aylar) · Puck / Craft.js (HTML kod kipi yok) · Studio SDK / Unlayer (ücretli) · `@grapesjs/react` (EKLENMEDİ: tek `useEffect` + `appendTo` yeter) — patron kararı D1

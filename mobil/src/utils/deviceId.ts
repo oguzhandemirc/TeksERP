@@ -1,10 +1,11 @@
 // =============================================================================
-// Tablet local deviceId — kalıcı UUID, ilk açılışta üretilir.
-// SecureStore'da saklanır. Tablet sıfırlanmadıkça değişmez.
-// Değer süreç ömründe DEĞİŞMEZ → modülde memoize edilir: her API isteği bu
-// fonksiyonu çağırıyor ve Keystore köprü turu istek başına gereksiz vergiydi.
-// Promise cache'lenir ki açılıştaki eşzamanlı ilk istekler tek okumaya binsin
-// (yarışta iki UUID üretilmesin).
+// Tablet local deviceId — kalıcı UUID, ilk açılışta üretilir (SecureStore).
+// Değer süreç ömründe DEĞİŞMEZ → modülde memoize edilir (istek başına Keystore turu
+// gereksiz vergiydi); Promise cache'lenir ki eşzamanlı ilk istekler tek okumaya binsin.
+//
+// Eşleme v2 (§5.5 md. 5): "değer YOK" ile "OKUNAMADI" ayrıdır. Okuma hatasında kalıcı
+// değer YAZILMAZ — yazılsaydı Keystore anlık arızası tabletin kimliğini kalıcı ezerdi.
+// Oturum bellekte geçici kimlikle sürer; donanım özeti sunucuda aynı satırı tanır.
 // =============================================================================
 
 import { storage } from './storage';
@@ -12,6 +13,7 @@ import { storage } from './storage';
 const STORAGE_KEY = 'device_local_id';
 
 let cachedDeviceId: Promise<string> | null = null;
+let ephemeral = false;
 
 /**
  * RN ortamında crypto.randomUUID güvenli değil; basit UUID v4 yeterli.
@@ -34,20 +36,38 @@ function generateUuidV4(): string {
   return uuid;
 }
 
+/** Bu oturumun kimliği geçici mi (depo okunamadı)? Tanı/ayar ekranı için. */
+export function isEphemeralDeviceId(): boolean {
+  return ephemeral;
+}
+
 export function getOrCreateDeviceId(): Promise<string> {
   if (!cachedDeviceId) {
     cachedDeviceId = (async () => {
-      const existing = await storage.getItem(STORAGE_KEY);
+      let existing: string | null;
+      try {
+        existing = await storage.getItem(STORAGE_KEY);
+      } catch {
+        // OKUNAMADI: kalıcı değere dokunma; oturum boyu tek geçici kimlik (memoize edilir).
+        ephemeral = true;
+        return generateUuidV4();
+      }
       if (existing && existing.length >= 8) return existing;
+      // YOK: ilk kurulum — üret ve yaz.
       const fresh = generateUuidV4();
       await storage.setItem(STORAGE_KEY, fresh);
       return fresh;
     })().catch((err) => {
-      // Okuma/yazma hatasında cache'i bırakma — sonraki çağrı yeniden denesin
-      // (kalıcı boş deviceId'yle sıkışmayalım).
+      // Yazma hatasında cache'i bırakma — sonraki çağrı yeniden denesin.
       cachedDeviceId = null;
       throw err;
     });
   }
   return cachedDeviceId;
+}
+
+/** Yalnız testler: modül önbelleğini sıfırlar. */
+export function __resetDeviceIdForTest(): void {
+  cachedDeviceId = null;
+  ephemeral = false;
 }

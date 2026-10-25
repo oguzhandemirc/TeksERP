@@ -1,5 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
+import { ensureConnectOrigin } from "@/lib/connect-gate";
 import { toast } from "sonner";
 import { CheckCircle2, Loader2, Radar, RotateCcw, XCircle } from "lucide-react";
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
@@ -70,6 +71,7 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
     }
     setTest({ status: "testing" });
     try {
+      await ensureConnectOrigin(composed);
       const res = await axios.get<{ status?: string }>(`${composed}/health`, { timeout: 5_000 });
       setTest(
         res.data?.status === "UP"

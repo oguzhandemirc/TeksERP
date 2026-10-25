@@ -88,7 +88,7 @@ async function sendAll(transport: PushTransport, tesisId: string, n: Claimed, de
   for (const d of devices) {
     let outcome: PushOutcome;
     try {
-      outcome = await transport.send({ platform: d.platform, token: d.token }, { id: n.id, title: n.title, body: n.body, route: n.route, tesisId });
+      outcome = await transport.send({ platform: d.platform, token: d.token }, { id: n.id, title: n.title, body: n.body, route: n.route, tesisId, kind: n.kind });
     } catch {
       outcome = { kind: "GECICI", code: "TASIYICI_HATASI" };
     }

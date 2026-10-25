@@ -79,6 +79,7 @@ import { IMZA_ANAHTARLARI, IMZA_PAROLA_ORTAMI, anahtarUretimKomutu, imzaAnahtari
 import { KasaHatasi, kasaIpucu, kasadanAl } from '../../scripts/lib/parola-kasasi.mjs';
 import { PLAY_EN_DUSUK_HEDEF_SDK, YON_OZELLIGI } from './lib/buyuk-ekran.cjs';
 import { NSC_ADI, agGuvenligiSorunlari, playManifestSorunlari } from './lib/play-manifest.cjs';
+import { enBuyukGecmisVersionCode, kaynakManifestYedekKapali, versionCodeDususu } from './lib/kalicilik.cjs';
 import { kayitHatalari, KAYIT_REL as DAGITIM_REL, turet } from '../../scripts/lib/dagitim.mjs';
 import { apkKunyeYolu, derlemeKunyesiYaz, temizAgacDenetimi } from '../../scripts/lib/derleme-bagi.mjs';
 
@@ -215,6 +216,28 @@ function surumBas() {
     }
   }
   return s;
+}
+
+/**
+ * Kalıcılık kapısı (cihaz eşleme v2 §5.5): versionCode önceki yayından düşmez; kaynak manifestte
+ * yedek kapalı. "Önceki yayın" = git geçmişinde app.json'a girmiş en büyük versionCode (sürüm
+ * commit'leri tek kayıt; künye derleme makinesine özel). Ölçülemezse de DURUR.
+ */
+function kaliciKimlikKapisi(s) {
+  baslik('KALICILIK KAPISI (cihaz kimliği)');
+  const g = spawnSync('git', ['log', '-p', '--format=', '--', 'app.json'], { cwd: PROJECT_ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const onceki = g.status === 0 ? enBuyukGecmisVersionCode(g.stdout) : null;
+  const vc = versionCodeDususu(s?.gradleVersionCode ?? s?.appVersionCode ?? null, onceki);
+  if (vc.sonuc !== 'yesil') dur(vc.sonuc === 'kirmizi' ? 'VERSIONCODE DÜŞÜYOR' : 'ÖLÇÜLEMEDİ — versionCode', ...vc.satirlar);
+  bilgi(vc.satirlar[0]);
+  const manifestYol = path.join(ANDROID_DIR, 'app/src/main/AndroidManifest.xml');
+  if (!fs.existsSync(manifestYol)) return;
+  if (!kaynakManifestYedekKapali(fs.readFileSync(manifestYol, 'utf8'))) {
+    dur('YEDEK AÇIK — android:allowBackup="false" yok', manifestYol,
+      'Yedekten dönen kimlik Keystore anahtarı olmadan çözülemez, tablet yeni kayıt gibi görünür (K-C3).',
+      'Yapılacak: app.json android.allowBackup:false → npx expo prebuild -p android');
+  }
+  bilgi('✔ AndroidManifest: android:allowBackup="false"');
 }
 
 /* ------------------------------------------------------------------ *
@@ -1065,6 +1088,7 @@ async function ortakMain() {
   if (SADECE_KONTROL) {
     const sCheck = surumBas();
     surumNotuKapisi(sCheck);
+    kaliciKimlikKapisi(sCheck);
     const agacCheck = temizAgacDenetimi();
     if (agacCheck.sonuc === 'temiz') bilgi(agacCheck.satirlar[0]);
     else uyari(`${agacCheck.satirlar.join('\n     ')}\n     (--check: uyarı — gerçek derleme bu ağaçta APK ÜRETMEZ)`);
@@ -1106,6 +1130,7 @@ async function ortakMain() {
   androidVarMi();
   const s = surumBas();
   surumNotuKapisi(s);
+  kaliciKimlikKapisi(s);
   ortakGuncellemeKapisi(k);
   const agac = temizAgacDenetimi();
   if (agac.sonuc !== 'temiz') {

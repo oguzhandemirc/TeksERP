@@ -223,7 +223,8 @@ apiClient.interceptors.response.use(
       (error.config as TimedConfig | undefined)?.__startedAt,
     );
     const url: string | undefined = error.config?.url;
-    const isLoginCall = url?.includes('/auth/login');
+    // Yerinde yönetici onayı da kimlik denemesidir: yanlış parola 401'i oturumu düşürmez, formda görünür.
+    const isLoginCall = url?.includes('/auth/login') || url?.includes('/rebind-requests/onsite-approve');
 
     // Login çağrısındaki 401 (yanlış şifre / pasif cihaz) LoginScreen'de inline
     // gösterilir — global handler tetiklenmez. Diğer 401'lerde logout.
