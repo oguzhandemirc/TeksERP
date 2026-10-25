@@ -91,6 +91,21 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   LABEL_PRINT_EVENT: onEkli("etiket baskı", RECORD_TERM),
   ITEM_PRICE: onEkli("ürün", iyelik("fiyat", "ı", "a", "ı")),
   WORK_ORDER_TARGET_VALUE: onEkli("hedef gramaj", RECORD_TERM),
+  // ── Lab · sertifika · özel rapor · maliyet (main'den gelen yeni audit tabloları, 2026-10-25)
+  LAB_TEST: onEkli("lab", iyelik("test", "i", "e", "i")),
+  LAB_TEST_TYPE: onEkli("lab test", iyelik("tür", "ü", "e", "ü")),
+  CUSTOMER_LAB_SPEC: onEkli("müşteri lab", iyelik("spesifikasyon", "u", "a", "u")),
+  CERTIFICATE: sIyelik("sertifika", "ı", "a"),
+  CERTIFICATE_FILE: onEkli("sertifika", sIyelik("belge", "i", "e")),
+  REPORT_CATEGORY: onEkli("rapor", sIyelik("kategori", "i", "e")),
+  REPORT_DEFINITION: onEkli("özel", iyelik("rapor", "u", "a", "u")),
+  REPORT_DEFINITION_VERSION: onEkli("özel rapor", iyelik("sürüm", "ü", "e", "ü")),
+  REPORT_PRESET: onEkli("rapor ön", iyelik("ayar", "ı", "a", "ı")),
+  REPORT_SHARE: onEkli("rapor", iyelik("paylaşım", "ı", "a", "ı")),
+  COST_PARAMETER_SET: onEkli("maliyet parametre", iyelik("set", "i", "e", "i")),
+  FINISHING_RATE: onEkli("apre", sIyelik("tarife", "i", "e")),
+  WEFT_SPEC: onEkli("atkı", iyelik("spesifikasyon", "u", "a", "u")),
+  YARN_COST_PRICE: onEkli("iplik maliyet", iyelik("fiyat", "ı", "a", "ı")),
 };
 
 /** Tablonun çekimleri; yoksa null (yedek cümle "<Modül> kaydı" kurar). */
