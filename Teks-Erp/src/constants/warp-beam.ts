@@ -86,9 +86,17 @@ export function warpBeamLengthSign(kind: WarpBeamEventKind): 1 | -1 | 0 {
   }
 }
 
-/** Nominal (teorik) kg = tel × denye × metre / 9.000.000 — Decimal 3 hane, panel ön hesabı aynı formülün aynasıdır. */
+/**
+ * Çözgü ipliği kg = tel × denye × metre / 9.000.000 — FORMÜLÜN TEK EVİ, yuvarlamasız.
+ * Maliyet motoru metre başına çağırır (MAL-2): 3 haneye yuvarlanmış 1 m sonucu (0,0xx kg) maliyeti bozardı.
+ */
+export function warpYarnKgExact(endsCount: number, denier: Prisma.Decimal.Value, lengthM: Prisma.Decimal.Value): Prisma.Decimal {
+  return new Prisma.Decimal(endsCount).mul(denier).mul(lengthM).div(9_000_000);
+}
+
+/** Nominal (teorik) kg — Decimal 3 hane, panel ön hesabı aynı formülün aynasıdır. Formül `warpYarnKgExact`te. */
 export function warpTheoreticalKg(endsCount: number, denier: Prisma.Decimal.Value, lengthM: Prisma.Decimal.Value): Prisma.Decimal {
-  return new Prisma.Decimal(endsCount).mul(denier).mul(lengthM).div(9_000_000).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
+  return warpYarnKgExact(endsCount, denier, lengthM).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
 }
 
 /**
