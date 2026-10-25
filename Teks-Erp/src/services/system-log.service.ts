@@ -14,6 +14,14 @@ import { resolveChangeValues, attachLabels } from "./helpers/audit-value-resolve
 import { Prisma, SystemLogCategory } from "@prisma/client";
 import { decodeCursor, cursorWhere, buildNextCursor } from "../utils/cursor";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
+import { LIST_SELECT, RECORD_HISTORY_SELECT, REQUEST_ID_RE, parseCategories, readRequestId, dropdownCache } from "./helpers/system-log-select.helper";
+import { getTracesByIds, listRejectedTraces } from "./request-trace.service";
+import { findRecords } from "./helpers/audit-record-resolver.helper";
+import { type Gun, grupSirasi, imlecOku, imlecYaz, islemKosullari } from "./helpers/system-log-islem.helper";
+import {
+  type RawOperationRow, anlatiEkle, gunluParams, islemAyrintisi, islemFiltresi, islemleriKur,
+  islemdeReddedilenGorunur, recordSearchResult, tekAnlati,
+} from "./helpers/system-log-islem-kur.helper";
 
 export interface SystemLogListParams {
   cursor?: string;
@@ -39,72 +47,15 @@ export interface SystemLogListParams {
    * ile elenir: kolon `@db.Uuid` olduğu için ham metin P2023 → 500 üretirdi.
    */
   requestId?: string;
+  /** Fabrika günü kısayolu (B2): verilirse `dateFrom/dateTo`yu ezer. */
+  gun?: Gun;
 }
 
-const LIST_SELECT = {
-  id: true,
-  category: true,
-  action: true,
-  tableName: true,
-  recordId: true,
-  ipAddress: true,
-  createdAt: true,
-  // İşlem gruplaması genel listede DE gerekli: detay ekranı satırdan okuyup
-  // "aynı işlemdekiler" sorgusunu kurar. Küçük skaler — perf kuralı 13'ün
-  // (devasa JSON'ları listede çekme) kapsamına girmez.
-  requestId: true,
-  // AKTÖR SEÇİMİ TEK KAYNAKTAN (`ACTOR_SELECT`) — `isSystemAccount` alanını da
-  // taşır; arayüz "en yetkili hesap" rozetini ondan çizer.
-  user: { select: ACTOR_SELECT },
-} as const;
 
-/**
- * KAYIT-BAZLI geçmişte ek alanlar (Faz C, 2026-08-19).
- *
- * ⚠️ Genel listeye EKLENMEZ: perf kuralı 13 ("snapshot JSON'ları liste
- * sorgusunda çekme"). Ama kayıt-bazlı geçmiş SINIRLI bir listedir (tek kayıt,
- * ≤100 satır) ve `changes` zaten o ekranın TEK amacı — orada çekmemek, ekranı
- * satır başına ikinci bir isteğe (N+1) zorlardı.
- *
- * `changes` küçüktür (birkaç alanlık dizi); `snapshot` gibi devasa JSON'lar
- * diff'e zaten girmiyor ("<değişti>" yazılıyor).
- */
-const RECORD_HISTORY_SELECT = {
-  ...LIST_SELECT,
-  changes: true,
-  deviceId: true,
-} as const;
-
-/**
- * requestId filtresi — YALNIZ geçerli UUID kabul eder.
- *
- * ⚠️ Kolon `@db.Uuid`: ham metin gönderilirse Prisma P2023 fırlatır ve uç 500
- * verir. Geçersiz değeri sessizce YOK SAYMAK da yanlış olurdu — kullanıcı hatalı
- * bir id ile filtresiz "tüm kayıtlar" görürdü. Bu yüzden eşleşmeyen bir sabite
- * çevrilir ve sonuç boş gelir. (`readIdCondition` dersinin bu uca uyarlanmış
- * hâli: uuid→400 · düz string→sessiz 0 satır · ön-süzgeçli→filtre sessizce düşer.)
- */
-const REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
-
-function readRequestId(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const v = raw.trim();
-  return REQUEST_ID_RE.test(v) ? v : NO_MATCH_UUID;
-}
-
-function parseCategories(raw: string | undefined): SystemLogCategory[] | undefined {
-  if (!raw) return undefined;
-  const allowed = new Set<string>(Object.values(SystemLogCategory));
-  const parts = raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && allowed.has(s));
-  return parts.length ? (parts as SystemLogCategory[]) : undefined;
-}
 
 export class SystemLogService {
-  static async list(params: SystemLogListParams) {
+  static async list(rawParams: SystemLogListParams) {
+    const params = gunluParams(rawParams);
     const rawLimit = params.limit ?? 50;
     const limit = Math.min(Math.max(1, rawLimit), 100);
 
@@ -163,10 +114,16 @@ export class SystemLogService {
           }));
         })()
       : page;
+    // B2 anlatı: diff + olay işareti sayfa başına TEK sorgu (listede JSON gövde çekilmez).
+    const ekler = data.length
+      ? await prisma.$queryRaw<Array<{ id: string; changes: unknown; event: string | null }>>`
+          SELECT "id"::text AS id, "changes", "newData"->>'event' AS event FROM system_logs
+          WHERE "id" = ANY(${data.map((r) => r.id)}::uuid[])`
+      : [];
 
     return {
       success: true,
-      data,
+      data: await anlatiEkle(data, ekler),
       pagination: { nextCursor, hasMore, limit },
     };
   }
@@ -180,7 +137,7 @@ export class SystemLogService {
     const labels = await resolveChangeValues([record.changes as never]);
     return {
       success: true,
-      data: { ...record, changes: attachLabels(record.changes, labels) },
+      data: { ...record, changes: attachLabels(record.changes, labels), anlati: await tekAnlati(record) },
     };
   }
 
@@ -192,7 +149,8 @@ export class SystemLogService {
   // tekrar lookup yapıyoruz, küçük N (sayfa boyutu) olduğu için sorun değil.
   // ---------------------------------------------------------------------------
 
-  static async listArchive(params: SystemLogListParams) {
+  static async listArchive(rawParams: SystemLogListParams) {
+    const params = gunluParams(rawParams);
     const rawLimit = params.limit ?? 50;
     const limit = Math.min(Math.max(1, rawLimit), 100);
 
@@ -271,9 +229,15 @@ export class SystemLogService {
     const last = data[data.length - 1];
     const nextCursor = hasMore && last ? buildNextCursor(last) : null;
 
+    const ekler = enriched.length
+      ? await prisma.$queryRaw<Array<{ id: string; changes: unknown; event: string | null }>>`
+          SELECT "id"::text AS id, "changes", "newData"->>'event' AS event FROM system_log_archives
+          WHERE "id" = ANY(${enriched.map((r) => r.id)}::uuid[])`
+      : [];
+
     return {
       success: true,
-      data: enriched,
+      data: await anlatiEkle(enriched, ekler),
       pagination: { nextCursor, hasMore, limit },
     };
   }
@@ -290,8 +254,95 @@ export class SystemLogService {
     const labels = await resolveChangeValues([record.changes as never]);
     return {
       success: true,
-      data: { ...record, user, changes: attachLabels(record.changes, labels) },
+      data: { ...record, user, changes: attachLabels(record.changes, labels), anlati: await tekAnlati({ ...record, user }) },
     };
+  }
+
+  // ─── İŞLEM GÖRÜNÜMÜ (izlenebilirlik B2) — tek "Kaydet" = tek iş eylemi ─────
+  // YALNIZ GÖRÜNTÜ (audit-okuma-beyan: DENETIM_EKRANI). Gruplama her dönemde AYNI:
+  // COALESCE(requestId, id); trace yalnız başlık ekler, reddedilen istek trace'ten gelir.
+  // Tarama sınırlı: son K satır (createdAt dizini) gruplanır; sınırı aşan grubun önceki
+  // sayfada görünmüş parçası gerçek tepe zamanıyla ayıklanır.
+  static async listIslemler(params: SystemLogListParams) {
+    const limit = Math.min(Math.max(1, params.limit ?? 50), 100);
+    const cats = parseCategories(params.category);
+    const f = islemFiltresi(params, cats);
+    const kos = islemKosullari(f);
+    const c = imlecOku(params.cursor);
+    const K = limit * 40;
+    const ust = c ? Prisma.sql`AND sl."createdAt" <= ${c.at}` : Prisma.empty;
+    const having = c ? Prisma.sql`HAVING (max(son."createdAt"), COALESCE(son."requestId", son."id")::text) < (${c.at}::timestamptz, ${c.key})` : Prisma.empty;
+    const gruplar = await prisma.$queryRaw<Array<{ key: string; istekli: boolean; at: Date; taranan: number }>>`
+      WITH son AS (SELECT sl."id", sl."requestId", sl."createdAt" FROM system_logs sl
+                   WHERE ${kos} ${ust} ORDER BY sl."createdAt" DESC, sl."id" DESC LIMIT ${K})
+      SELECT COALESCE(son."requestId", son."id")::text AS key, (son."requestId" IS NOT NULL) AS istekli,
+             max(son."createdAt") AS at, (SELECT count(*)::int FROM son) AS taranan
+      FROM son GROUP BY 1, 2 ${having} ORDER BY at DESC, key DESC LIMIT ${limit + 1}`;
+    // Önceki sayfada görünmüş grubun parçası: gerçek tepe zamanı imlecin üstündeyse atılır.
+    const istekliKeys = gruplar.filter((g) => g.istekli).map((g) => g.key);
+    const tepeler = c && istekliKeys.length
+      ? await prisma.$queryRaw<Array<{ key: string; at: Date }>>`
+          SELECT sl."requestId"::text AS key, max(sl."createdAt") AS at FROM system_logs sl
+          WHERE ${kos} AND sl."requestId" = ANY(${istekliKeys}::uuid[]) GROUP BY 1`
+      : [];
+    const tepe = new Map(tepeler.map((t) => [t.key, t.at]));
+    const eligible = gruplar.filter((g) => !c || !g.istekli || grupSirasi({ at: tepe.get(g.key) ?? g.at, key: g.key }, c) > 0);
+    const reddedilen = islemdeReddedilenGorunur(params, cats)
+      ? await listRejectedTraces({ userId: params.userId, from: f.from, to: f.to, before: c ? { at: c.at, id: c.key } : undefined }, limit + 1)
+      : [];
+    const sirali = [
+      ...eligible.map((g) => ({ at: g.at, key: g.key, istekli: g.istekli })),
+      ...reddedilen.map((t) => ({ at: t.createdAt, key: t.id, istekli: true })),
+    ].sort(grupSirasi);
+    const hasMore = sirali.length > limit || (gruplar[0]?.taranan ?? 0) >= K;
+    const page = sirali.slice(0, limit);
+    const istekIds = page.filter((g) => g.istekli).map((g) => g.key);
+    const tekIds = page.filter((g) => !g.istekli).map((g) => g.key);
+    const rows = page.length
+      ? await prisma.$queryRaw<RawOperationRow[]>`
+          SELECT sl."id"::text AS id, sl."tableName", sl."action", sl."recordId", sl."userId"::text AS "userId",
+                 sl."requestId"::text AS "requestId", sl."createdAt", sl."changes", sl."newData"->>'event' AS event
+          FROM system_logs sl WHERE sl."requestId" = ANY(${istekIds}::uuid[]) OR sl."id" = ANY(${tekIds}::uuid[])
+          ORDER BY sl."createdAt" ASC, sl."id" ASC LIMIT 2000`
+      : [];
+    const data = await islemleriKur(page, rows, await getTracesByIds(istekIds));
+    const last = page[page.length - 1];
+    return { success: true, data, pagination: { nextCursor: hasMore && last ? imlecYaz(last) : null, hasMore, limit } };
+  }
+
+  /** Tek işlem: trace başlığı + cihaz ADI + etkilenen kayıtlar + alan farkları + ham. */
+  static async findIslem(requestId: string) {
+    if (!REQUEST_ID_RE.test(requestId)) return { success: false as const, data: null, message: "İşlem bulunamadı" };
+    const rows = await prisma.systemLog.findMany({
+      where: { requestId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 500,
+      include: { user: { select: ACTOR_SELECT } },
+    });
+    return islemAyrintisi(requestId, rows);
+  }
+
+  /** Kayıt numarasıyla arama (SP-…, CV…, CL…, barkod): kaydın satırları + aynı istekteki kardeşler. */
+  static async listByRecordQuery(q: string, limitRaw?: number) {
+    const limit = Math.min(Math.max(1, limitRaw ?? 50), 100);
+    const records = await findRecords(q);
+    if (records.length === 0) return { success: true, data: [], kayitlar: records, warnings: ["Bu numarada kayıt bulunamadı"] };
+    const dogrudan = await prisma.systemLog.findMany({
+      where: { OR: records.map((k) => ({ tableName: k.tableName, recordId: k.recordId })) },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit,
+      select: RECORD_HISTORY_SELECT,
+    });
+    const reqIds = [...new Set(dogrudan.map((r) => r.requestId).filter((x): x is string => !!x))];
+    const kardes = reqIds.length
+      ? await prisma.systemLog.findMany({
+          where: { requestId: { in: reqIds } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 500,
+          select: RECORD_HISTORY_SELECT,
+        })
+      : [];
+    return recordSearchResult(records, dogrudan, kardes);
   }
 
   /**
@@ -340,27 +391,3 @@ export class SystemLogService {
     });
   }
 }
-
-// =============================================================================
-// Dropdown cache — distinct sorguları milyon satırda pahalı; 5 dk TTL ile
-// neredeyse-statik listeleri (tableName'ler, log'u olan user'lar) bellekte
-// tutuyoruz. Yeni bir audit log yazıldığında cache invalidate edilmiyor —
-// sonraki TTL'de doğal yenilenir. Listeler nadiren değişir, gecikme önemsiz.
-// =============================================================================
-
-const CACHE_TTL_MS = 5 * 60_000;
-
-class DropdownCache {
-  private store = new Map<string, { value: unknown; expiresAt: number }>();
-
-  async get<T>(key: string, loader: () => Promise<T>): Promise<T> {
-    const now = Date.now();
-    const hit = this.store.get(key);
-    if (hit && hit.expiresAt > now) return hit.value as T;
-    const value = await loader();
-    this.store.set(key, { value, expiresAt: now + CACHE_TTL_MS });
-    return value;
-  }
-}
-
-const dropdownCache = new DropdownCache();

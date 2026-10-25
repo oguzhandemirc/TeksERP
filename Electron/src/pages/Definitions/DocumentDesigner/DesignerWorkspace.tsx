@@ -1,20 +1,29 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "grapesjs/dist/css/grapes.min.css";
 import "./designer.css";
 import { AlertTriangle } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { regionPreview, toCanvasPaper } from "./binding/pageSettings";
 import { CmRuler } from "./CmRuler";
-import { DesignerSidebar } from "./DesignerSidebar";
+import { DesignerSidebar, type SidebarTab } from "./DesignerSidebar";
 import { DesignerToolbar } from "./DesignerToolbar";
-import { pageDimensions, type Orientation, type PaperSize } from "./editor/pageCanvas";
+import { registerDocumentBlocks } from "./editor/documentBlocks";
+import type { PageRegionKind } from "./editor/documentComponents";
+import { pageDimensions } from "./editor/pageCanvas";
+import { DocTypePickerModal } from "./modals/DocTypePickerModal";
+import { BindingPanel } from "./panels/BindingPanel";
+import { DataTreePanel } from "./panels/DataTreePanel";
+import { DocumentSettingsPanel } from "./panels/DocumentSettingsPanel";
+import { PageSettingsPanel } from "./panels/PageSettingsPanel";
+import { docTypeLabel, useDesignerDraft } from "./useDesignerDraft";
 import { useDesignerEditor, type DesignerRefs } from "./useDesignerEditor";
 
 interface Props {
-  /** Şablon kimliği — kayıt uçları (T1B) gelene dek yalnız başlıkta gösterilir. */
+  /** Şablon kimliği — kayıt uçları (T5) gelene dek yalnız başlıkta gösterilir. */
   templateId: string | null;
 }
 
-/** Editör yerleşimi (plan §4): solda bloklar · ortada sayfa · sağda Stil/Özellikler/Katmanlar. */
+/** Editör yerleşimi (plan §4): solda bloklar · ortada sayfa · sağda Stil/Özellikler/Veri/Sayfa/Belge ayarları/Katmanlar. */
 export default function DesignerWorkspace({ templateId }: Props) {
   const refs: DesignerRefs = {
     container: useRef<HTMLDivElement>(null),
@@ -25,10 +34,35 @@ export default function DesignerWorkspace({ templateId }: Props) {
     layers: useRef<HTMLDivElement>(null),
     traits: useRef<HTMLDivElement>(null),
   };
-  const [paper, setPaper] = useState<PaperSize>("A4");
-  const [orientation, setOrientation] = useState<Orientation>("portrait");
+  const draft = useDesignerDraft();
+  const [tab, setTab] = useState<SidebarTab>("style");
+  const [pickingType, setPickingType] = useState(false);
+  const ps = draft.pageSettings;
+  const { paper, orientation } = toCanvasPaper(ps);
   const dim = pageDimensions(paper, orientation);
-  const { editor, fatal, frame } = useDesignerEditor(refs, paper, orientation, dim.widthPx);
+  const onRegion = (kind: PageRegionKind) => {
+    if (kind === "sayfa-no" && ps.sayfaNo.konum === "yok" && !ps.altBilgi.sag) draft.setPageSettings({ ...ps, sayfaNo: { ...ps.sayfaNo, konum: "alt-sag" } });
+    setTab("page");
+  };
+  const { editor, fatal, frame } = useDesignerEditor(
+    refs,
+    { paper, orientation, pageWidthPx: dim.widthPx, margins: ps.kenar, regions: regionPreview(ps) },
+    onRegion,
+  );
+
+  useEffect(() => {
+    if (!editor) return;
+    registerDocumentBlocks(editor, { contract: draft.contract, settings: draft.settings, internalFields: draft.internalFields });
+  }, [editor, draft.contract, draft.settings, draft.internalFields]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const onChange = () => draft.touch();
+    editor.on("component:add component:remove", onChange);
+    return () => {
+      editor.off("component:add component:remove", onChange);
+    };
+  }, [editor, draft]);
 
   if (fatal) {
     return <EmptyState icon={AlertTriangle} title="Tasarımcı durduruldu" description={fatal} />;
@@ -39,10 +73,13 @@ export default function DesignerWorkspace({ templateId }: Props) {
       <DesignerToolbar
         editor={editor}
         templateId={templateId}
+        docTypeLabel={docTypeLabel(draft.docType)}
+        onDocType={() => setPickingType(true)}
+        dirty={draft.dirty}
         paper={paper}
         orientation={orientation}
-        onPaper={setPaper}
-        onOrientation={setOrientation}
+        onPaper={(p) => draft.setPageSettings({ ...ps, kagit: p })}
+        onOrientation={(o) => draft.setPageSettings({ ...ps, yon: o === "landscape" ? "yatay" : "dikey" })}
       />
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-44 shrink-0 flex-col border-r bg-card" aria-label="Bloklar">
@@ -53,8 +90,15 @@ export default function DesignerWorkspace({ templateId }: Props) {
           <CmRuler widthMm={dim.widthMm} left={frame.left} width={frame.width} />
           <div ref={refs.container} className="min-h-0 flex-1" />
         </div>
-        <DesignerSidebar refs={refs} />
+        <DesignerSidebar refs={refs} tab={tab} onTab={setTab} binding={<BindingPanel editor={editor} draft={draft} />}
+          panels={{
+            data: <DataTreePanel editor={editor} draft={draft} />,
+            page: <PageSettingsPanel value={ps} onChange={draft.setPageSettings} />,
+            settings: <DocumentSettingsPanel draft={draft} />,
+          }}
+        />
       </div>
+      <DocTypePickerModal open={pickingType} onOpenChange={setPickingType} contracts={draft.contracts} current={draft.docType} onPick={draft.setDocType} />
     </div>
   );
 }

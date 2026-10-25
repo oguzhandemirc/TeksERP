@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import grapesjs, { type Editor } from "grapesjs";
 import { toast } from "sonner";
 import { applyPageGuides, createEditor, type EditorTargets } from "./editor/createEditor";
-import { deviceId, type Orientation, type PaperSize } from "./editor/pageCanvas";
+import { watchPageRegionDrops, type PageRegionKind } from "./editor/documentComponents";
+import { deviceId, type GuideRegions, type Orientation, type PageMargins, type PaperSize } from "./editor/pageCanvas";
 
 export interface DesignerRefs {
   container: RefObject<HTMLDivElement | null>;
@@ -58,12 +59,24 @@ function centerPage(editor: Editor, pageWidthPx: number, z: number): void {
  * GrapesJS örneğinin yaşam döngüsü: kur, kâğıt değişince cihazı/kılavuzu
  * güncelle, sayfanın ekrandaki konumunu cetvel için ölç, sökülünce yık.
  */
-export function useDesignerEditor(refs: DesignerRefs, paper: PaperSize, orientation: Orientation, pageWidthPx: number) {
+export interface PageView {
+  paper: PaperSize;
+  orientation: Orientation;
+  pageWidthPx: number;
+  margins: PageMargins;
+  regions: GuideRegions;
+}
+
+export function useDesignerEditor(refs: DesignerRefs, view: PageView, onPageRegion: (kind: PageRegionKind) => void) {
   const [editor, setEditor] = useState<Editor | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [frame, setFrame] = useState<PageFrame>({ left: 0, width: 0 });
-  const page = useRef({ paper, orientation, pageWidthPx });
-  page.current = { paper, orientation, pageWidthPx };
+  const page = useRef(view);
+  page.current = view;
+  const regionCb = useRef(onPageRegion);
+  regionCb.current = onPageRegion;
+  const { paper, orientation, pageWidthPx, margins, regions } = view;
+  const guideKey = JSON.stringify([margins, regions]);
 
   useEffect(() => {
     const targets = targetsOf(refs);
@@ -80,8 +93,10 @@ export function useDesignerEditor(refs: DesignerRefs, paper: PaperSize, orientat
       fitZoom(ed, refs.area.current, page.current.pageWidthPx);
       requestAnimationFrame(measure);
     };
+    watchPageRegionDrops(ed, (k) => regionCb.current(k));
     ed.on("canvas:frame:load:body", () => {
-      applyPageGuides(ed, page.current.paper, page.current.orientation);
+      const p = page.current;
+      applyPageGuides(ed, p.paper, p.orientation, p);
       relayout();
     });
     ed.on("canvas:zoom", () => requestAnimationFrame(measure));
@@ -100,7 +115,7 @@ export function useDesignerEditor(refs: DesignerRefs, paper: PaperSize, orientat
   useEffect(() => {
     if (!editor) return;
     editor.setDevice(deviceId(paper, orientation));
-    applyPageGuides(editor, paper, orientation);
+    applyPageGuides(editor, paper, orientation, page.current);
     // Cihaz değişimi çerçeveyi bir sonraki karede boyutlar; ölçüm ondan sonra.
     const t = window.setTimeout(() => {
       fitZoom(editor, refs.area.current, pageWidthPx);
@@ -110,6 +125,13 @@ export function useDesignerEditor(refs: DesignerRefs, paper: PaperSize, orientat
     }, 60);
     return () => window.clearTimeout(t);
   }, [editor, paper, orientation, pageWidthPx, refs.area]);
+
+  // Kenar ve üst/alt bilgi değişimi yalnız kılavuz stilini tazeler (yakınlaştırma değişmez).
+  useEffect(() => {
+    if (!editor) return;
+    const p = page.current;
+    applyPageGuides(editor, p.paper, p.orientation, p);
+  }, [editor, guideKey]);
 
   return { editor, fatal, frame };
 }
