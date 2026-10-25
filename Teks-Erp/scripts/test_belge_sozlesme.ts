@@ -10,6 +10,7 @@
 //   · eski/eksik snapshot baskıyı düşürmez — eksik değer null olur
 // §0 kayıt · §1 her senaryoda bütün yollar · §2 iç alan kapısı · §3 özet yalnız büyür
 // §4 eski snapshot · §5 ayarNormalize eksiksiz · §6 pilot: altın fikstür + renderer hizası
+// §7 refakat kartı: uzman kataloğu ↔ sözleşme eşleme tablosu iki yönlü hiza
 //
 // Negatif sondalar (2026-10-24): `belge.plaka` silindi → §3 ❌ · `fillFields` iç alanı opt-in'siz
 // yazdı → §2 ❌ · `belge.no` türü değişti → §1+§3 ❌ · `cuval_iz` ic→musteri → §3 ❌ · `getContract`
@@ -34,6 +35,8 @@ import { renderShipmentDispatchTables } from "../src/services/document-render/sh
 import type { PrintedDocSnapshot } from "../src/services/printed-document.service";
 import type { DocumentConfig } from "../src/services/system-setting.service";
 import { AppError } from "../src/utils/app-error";
+import { TRAVELER_FIELDS, TRAVELER_LOOPS } from "../src/config/traveler-card-fields";
+import { TRAVELER_KEY_MAP } from "../src/services/document-template/sozlesme/traveler-card";
 import { ozetEksikleri, ozetIhlalleri, ozetOku, ozetUret, type Ozet } from "./lib/belge-sozlesme-ozeti";
 import { SEVK_BELGE_CFGS, SEVK_BELGE_DOCS, sevkBelgeKombinasyonlari } from "./lib/sevk-belge-fikstur";
 
@@ -467,6 +470,27 @@ console.log("§6 Pilot: altın fikstür kombinasyonları — bağlam kurulur, to
     "satırlarla çelişen donmuş toplam aynen basılır (iade sonrası brüt belge)",
     c.toplamlar.top_adedi === 99 && c.toplamlar.metre === 12345.67 && c.toplamlar.kg === 1.5 && c.toplamlar.cuval_adedi === 7 && c.toplamlar.cuval_beyan_adedi === 3,
   );
+}
+
+console.log("§7 Refakat kartı: katalog (`TRAVELER_FIELDS`+`TRAVELER_LOOPS`) ↔ `TRAVELER_KEY_MAP` iki yönlü hiza");
+{
+  const katalog = [
+    ...TRAVELER_FIELDS.map((f) => f.key),
+    ...TRAVELER_LOOPS.flatMap((l) => [l.key, ...l.fields.map((f) => `${l.key}.${f.key}`)]),
+  ];
+  const harita = Object.keys(TRAVELER_KEY_MAP);
+  const eksik = katalog.filter((k) => !(k in TRAVELER_KEY_MAP));
+  const fazla = harita.filter((k) => !katalog.includes(k));
+  check(`kataloğun her anahtarı eşlemede (alan eklenince iki taraf) — eksik: ${eksik.join(", ") || "yok"}`, eksik.length === 0);
+  check(`eşlemede katalogda olmayan anahtar yok — fazla: ${fazla.join(", ") || "yok"}`, fazla.length === 0);
+  check(`körlük zemini: katalog ≥ 46 anahtar (27 alan + 3 döngü + 16 döngü alanı) — ${katalog.length}`, katalog.length >= 46 && TRAVELER_LOOPS.length >= 3);
+  const kart = getContract("TRAVELER_CARD");
+  const yollar = contractPaths(kart);
+  const tablolar = new Set(kart.tablolar.map((t) => `tablolar.${t.anahtar}`));
+  const kopuk = Object.entries(TRAVELER_KEY_MAP)
+    .map(([k, v]) => [k, v.split("|")[0]!.trim()] as const)
+    .filter(([, yol]) => !(yol in yollar) && !tablolar.has(yol));
+  check(`eşlenen her yol sözleşmede beyanlı — kopuk: ${kopuk.map(([k, y]) => `${k}→${y}`).join(", ") || "yok"}`, kopuk.length === 0);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
