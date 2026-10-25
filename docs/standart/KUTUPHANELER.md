@@ -102,7 +102,7 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 ### @codemirror/{state,view,language,commands,autocomplete,lint,lang-html,lang-css,lang-json} + @lezer/highlight@1.2.5 · Electron · 2026-10-25
 1. Problem      : Belge Tasarımcısı kod sekmeleri (plan §4, T4: HTML+Liquid / CSS / Sayfa JSON; sözleşmeden tamamlama, sunucu hatası altı çizili); ORTAK: rapor kod kipi (R2-KOD) aynı seti kullanır
 2. Alternatifler: elle `<textarea>` (renk/tamamlama/altı çizili hata yok) · Monaco (~3 MB, D1'de elendi) · `@uiw/react-codemirror` + `@codemirror/lang-liquid` (patron 2026-10-25: sarmalayıcı yerine çekirdek set; Liquid tamamlaması sözleşmeden kendi kaynağımız)
-3. Boyut/biçim  : saf JS, native YOK, ESM; yalnız `DocumentDesigner/code/` import eder → tasarımcının tembel parçası ([KU-17]); geçişli `@codemirror/lang-javascript`, `@lezer/*`, `style-mod`, `w3c-keyname`, `crelt` (MIT)
+3. Boyut/biçim  : saf JS, native YOK, ESM; yalnız `DocumentDesigner/code/` ve `Reports/_v2/custom/code/` import eder → ikisi de tembel parça ([KU-17]; rapor kipi `CodeTab` `lazy()` ile yalnız Kod sekmesinde yüklenir); geçişli `@codemirror/lang-javascript`, `@lezer/*`, `style-mod`, `w3c-keyname`, `crelt` (MIT)
 4. Bakım        : 6.x, TAM SABİT, TEK `@codemirror/state` sürümü (iki kopya = "Unrecognized extension value" çöküşü); pin `test_dependency_contract §(a)`
 5. Lisans       : MIT (hepsi)
 6. Dağıtım      : rebuild GEREKMEZ; tema kendi uzantımız (panel CSS değişkenleri, açık/koyu) — `theme-one-dark` YOK

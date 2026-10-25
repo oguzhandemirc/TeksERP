@@ -1,4 +1,4 @@
-import { BarChart3, FilePlus2, Filter, LayoutDashboard } from "lucide-react";
+import { BarChart3, Code2, FilePlus2, Filter, LayoutDashboard } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import { isCenterEntryOpen } from "@/pages/Reports/_v2/center-model";
@@ -138,6 +138,16 @@ reportCommandSections.push({
       permission: "report:builder",
       visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
       keywords: "veri ağacı alan ölçü boyut kuyu satır sütun süzgeç filtre koşul varyant önerilen grafik özel rapor oluşturucu",
+    },
+    {
+      key: "report-custom:code",
+      label: "Özel rapor kod modu",
+      description: "Özel raporlarım'dan bir rapor açın → 'Düzeni düzenle' → üstteki 'Kod' sekmesi: tanımı JSON olarak düzenleyin, hatalar altı çizili",
+      icon: Code2,
+      to: "/reports",
+      permission: "report:builder",
+      visibleWhen: (ctx: OperationsVisibilityContext) => ctx.reportsV2Enabled === true,
+      keywords: "kod json tanım düzenleyici editör codemirror tamamlama doğrula hata özel rapor oluşturucu",
     },
   ],
 });
