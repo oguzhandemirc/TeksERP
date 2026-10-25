@@ -16,6 +16,7 @@ import {
   workstationEntryPath,
 } from "@/pages/GeneralSettings/settings-config";
 import { usePreferences } from "@/providers/PreferencesProvider";
+import { MasaustuBildirimKarti } from "@/components/bildirim/MasaustuBildirimKarti";
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -105,6 +106,8 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <MasaustuBildirimKarti />
 
         <Card>
           <CardHeader>
