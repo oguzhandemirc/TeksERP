@@ -162,7 +162,9 @@ describe("§1 düzen modeli", () => {
     const blk = added.bloklar[3]!;
     expect(blk).toEqual({ id: "kirilim1", tur: "varyant", ilkN: 6, sorgu: { kup: "sevk", olculer: ["sevk.brutMetre"], boyutlar: ["musteri"], zaman: { param: "donem", kiyas: "$kiyas" } } });
     expect(added.duzen!.at(-1)).toMatchObject({ i: "kirilim1", w: 12 });
-    expect(addBlock(body(), "analiz", "musteri")).toBeNull();
+    // R3-ANALIZ: analiz bloğu artık eklenir — konunun ölçüsü × kırılım, maruziyet kullanıcıya kalır.
+    expect(addBlock(body(), "analiz", "musteri")!.bloklar[3]).toEqual({ id: "analiz1", tur: "analiz", yontem: "kiKare", kup: "sevk", x: "musteri", y: "sevk.brutMetre", zaman: { param: "donem" } });
+    expect(addBlock(body(), "analiz", null)).toBeNull();
     expect(addBlock(body(), "grafik", null)).toBeNull();
     const removed = removeBlock(added, "tablo");
     expect(removed.bloklar.map((x) => x.id)).toEqual(["ana", "not1", "kirilim1"]);

@@ -13,6 +13,8 @@ import type { GrafikTema } from "./tema";
 export { GRAFIK_VERI_YOK, valueText, grafikBosMu, kategoriEtiketi, kutuIstatistigi } from "./bicim";
 
 export type GrafikSecenek = Record<string, unknown>;
+/** Saçılım eğilim çizgisi uçları `[[x1, y1], [x2, y2]]` (sunucu `istatistik.egilim`). */
+export type Egilim = [[number, number], [number, number]];
 
 function ortak(tema: GrafikTema, baski: boolean): GrafikSecenek {
   return {
@@ -174,7 +176,7 @@ function isiHaritasi(blok: GrafikBlok, tema: GrafikTema, baski: boolean): Grafik
   };
 }
 
-function sacilim(blok: GrafikBlok, tema: GrafikTema, baski: boolean): GrafikSecenek {
+function sacilim(blok: GrafikBlok, tema: GrafikTema, baski: boolean, egilim?: Egilim | null): GrafikSecenek {
   const xs = blok.kategoriler.map((k) => Number(k.replace(",", ".")));
   const sayisal = xs.every(sonlu);
   const lj = lejant(blok, tema);
@@ -203,7 +205,10 @@ function sacilim(blok: GrafikBlok, tema: GrafikTema, baski: boolean): GrafikSece
       itemStyle: { opacity: 0.8 },
       ...(s.soluk ? { color: tema.soluk } : {}),
       data: s.veri.flatMap((y, j) => (sonlu(y) ? [[sayisal ? xs[j]! : j, y]] : [])),
-    })),
+    })).concat(
+      // Eğilim çizgisinin iki ucu sunucudan (R3-ANALIZ); istemci eğim hesaplamaz.
+      egilim && sayisal ? [{ type: "line", name: "Eğilim", data: egilim, showSymbol: false, lineStyle: { type: "dashed", color: tema.ikincil }, tooltip: { show: false } } as never] : [],
+    ),
   };
 }
 
@@ -300,7 +305,7 @@ function bosSecenek(tema: GrafikTema, baski: boolean): GrafikSecenek {
 }
 
 /** GrafikBlok → ECharts seçeneği. `baski`: tooltip ve animasyon kapalı (SVG/PDF). */
-export function grafikSecenek(blok: GrafikBlok, tema: GrafikTema, opts: { baski?: boolean } = {}): GrafikSecenek {
+export function grafikSecenek(blok: GrafikBlok, tema: GrafikTema, opts: { baski?: boolean; egilim?: Egilim | null } = {}): GrafikSecenek {
   const baski = opts.baski === true;
   if (grafikBosMu(blok)) return bosSecenek(tema, baski);
   switch (blok.tur) {
@@ -313,7 +318,7 @@ export function grafikSecenek(blok: GrafikBlok, tema: GrafikTema, opts: { baski?
     case "isiHaritasi":
       return isiHaritasi(blok, tema, baski);
     case "sacilim":
-      return sacilim(blok, tema, baski);
+      return sacilim(blok, tema, baski, opts.egilim);
     case "kutu":
       return kutu(blok, tema, baski);
     case "kucukCoklu":
