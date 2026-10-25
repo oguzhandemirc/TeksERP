@@ -283,7 +283,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/sales/acik-siparisler", uc: "/api/reports/sales/acik-siparisler", kapiTasiyici: [{ dosya: "src/routes/reports/temel-satis.routes.ts", yol: "/sales/acik-siparisler" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["planlama", "sevkiyat"], varyantBoyutlari: ["urun", "renk"], hazir: false },
-  { key: "sales/vazgecilen-is", baslik: "Ne geri geldi, neden vazgeçildi?", soru: "Bu dönemde ne kadar mal iade geldi, kaç sipariş satırı iptal edildi ve hangi sebeplerle?",
+  { key: "sales/vazgecilen-is", baslik: "Ne geri geldi, neden vazgeçildi?", soru: "Bu dönemde ne kadar mal iade geldi, kaç sipariş iptal edildi ve hangi sebeplerle?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/vazgecilen-is", uc: "/api/reports/sales/vazgecilen-is", kapiTasiyici: [{ dosya: "src/routes/reports/temel-satis.routes.ts", yol: "/sales/vazgecilen-is" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "satis-sevkiyat", persona: ["satis", "kalite"], varyantBoyutlari: ["musteri", "urun", "sebep"], hazir: false },

@@ -32,11 +32,10 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
   { kimlik: "siparis.metre", ad: "Alınan sipariş",
     aciklama: "Dönemde alınan siparişlerde istenen toplam kumaş metresi; sonradan iptal edilen siparişler sayılmaz.",
     birim: "metre", iyiYon: "artis", kaynak: { dosya: `${R}/order-intake.report.service.ts`, alan: "OrderIntakeSummary.totalQty" } },
-  // null: Sipariş Karnesi tutar taşımıyor; Yurtiçi/Yurtdışı yalnız SEVK tutarını ve AÇIK sipariş
-  // tutarını (`openAmount`) veriyor — "dönemde alınan sipariş tutarı" alanı yok (R0-RAPA bağlar).
+  // R0-RAPA: Sipariş Karnesi'ne EK alan (`amounts`, para birimi başına; fiyatsız satır sayısı ayrı).
   { kimlik: "siparis.tutar", ad: "Sipariş tutarı",
     aciklama: "Dönemde alınan siparişlerin fiyatı girilmiş satırlarının tutarı, her para birimi ayrı; fiyatı girilmemiş satır sıfır sayılmaz, ayrıca gösterilir.",
-    birim: "para", iyiYon: "artis", kaynak: null },
+    birim: "para", iyiYon: "artis", kaynak: { dosya: `${R}/order-intake.report.service.ts`, alan: "OrderIntakeSummary.amounts" } },
   { kimlik: "sevk.brutMetre", ad: "Sevk edilen",
     aciklama: "Dönemde sevk edilen kumaş metresi; sonradan iade gelse de bu rakam düşmez, iade ayrı sayılır.",
     birim: "metre", iyiYon: "artis", kaynak: { dosya: `${R}/_shipped.ts`, alan: "ShippedCell.qty" } },
