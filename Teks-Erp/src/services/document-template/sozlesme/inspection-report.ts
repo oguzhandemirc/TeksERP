@@ -21,6 +21,7 @@ import {
   ruleColumns,
   unitText,
   type InspectionReportDoc,
+  type RollFootTotals,
 } from "../../document-render/inspection-report.html";
 import type { PrintedDocSnapshot } from "../../printed-document.service";
 import type { ShipmentInspectionRow, ShipmentInspectionRule } from "../../quality-inspection-shipment.service";
@@ -112,7 +113,7 @@ function rollColumnCfg(config: BaseDocConfig, optIn: ReadonlySet<string>): DocCo
   return { ...config.columns.toplar, shown: INTERNAL_COLUMNS.filter((c) => c.icKod && optIn.has(c.icKod)).map((c) => c.kaynakKolon as string) };
 }
 
-const EMPTY_DOC = { totals: { totalMeters: 0, defectCount: 0, totalPoints: 0 } } as unknown as InspectionReportDoc;
+const EMPTY_TOTALS: RollFootTotals = { totalMeters: 0, defectCount: 0, totalPoints: 0 };
 
 function normalizeWith(raw: unknown, optIn: ReadonlySet<string>): InspectionReportConfig {
   const base = normalizeBase(sanitizeRawConfig(raw), {
@@ -125,7 +126,7 @@ function normalizeWith(raw: unknown, optIn: ReadonlySet<string>): InspectionRepo
     ...base,
     kolonlar: {
       kurallar: resolveColumns(RULE_TABLE, ruleColumns() as never, base.columns.kurallar!),
-      toplar: resolveColumns(ROLL_TABLE, rollColumns(EMPTY_DOC) as never, rollColumnCfg(base as BaseDocConfig, optIn) as never),
+      toplar: resolveColumns(ROLL_TABLE, rollColumns(EMPTY_TOTALS) as never, rollColumnCfg(base as BaseDocConfig, optIn) as never),
     },
   };
 }

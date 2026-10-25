@@ -114,8 +114,10 @@ export function ruleColumns(): DocColSpec<ShipmentInspectionRule>[] {
   ];
 }
 
-export function rollColumns(doc: InspectionReportDoc): DocColSpec<ShipmentInspectionRow>[] {
-  const t = doc.totals;
+/** Top tablosunun toplam satırının okuduğu sayılar — kolon düzeni bunlar olmadan da kurulabilir. */
+export type RollFootTotals = Pick<InspectionReportDoc["totals"], "totalMeters" | "defectCount" | "totalPoints">;
+
+export function rollColumns(t: RollFootTotals): DocColSpec<ShipmentInspectionRow>[] {
   return [
     { key: "seq", label: "#", align: "c", width: "30px", kind: TEXT, value: (r) => String(r.sequence) },
     { key: "barcode", label: "BARKOD", align: "l", cellClass: "mono", kind: TEXT, value: (r) => r.barcode ?? "—" },
@@ -144,7 +146,7 @@ function parts(snapshot: PrintedDocSnapshot) {
   const kit = kitOf(snapshot);
   const ruleTable = sectionOn(cfg.sections, "ruleTable") && doc.rules.length > 0;
   const rollTable = sectionOn(cfg.sections, "rollDetail") && doc.rows.length > 0;
-  return { doc, cfg, kit, ruleTable, rollTable, ruleCols: rulesWithBands(snapshot), rollCols: rollColumns(doc) };
+  return { doc, cfg, kit, ruleTable, rollTable, ruleCols: rulesWithBands(snapshot), rollCols: rollColumns(doc.totals) };
 }
 
 /** Excel tabloları — HTML ile AYNI kolon çözücüsü ve ayar (PDF = Excel). */

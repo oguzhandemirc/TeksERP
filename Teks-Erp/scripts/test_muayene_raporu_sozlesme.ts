@@ -73,7 +73,6 @@ const rolls = tables.tables.find((t) => t.key === "toplar");
 const labelIdx = rolls?.columns.findIndex((c) => c.key === "label") ?? -1;
 const resultIdx = rolls?.columns.findIndex((c) => c.key === "result") ?? -1;
 check("§1 müşteri etiketi: satır 2 RET / kaldı", rolls?.rows[1]?.[labelIdx] === "RET" && /kald/i.test(String(rolls?.rows[1]?.[resultIdx])), `${rolls?.rows[1]?.[labelIdx]}/${rolls?.rows[1]?.[resultIdx]}`);
-check("§1 fabrika derecesi belgede yok", !html.includes("FİRE") && !html.includes("1.KALİTE"));
 check("§1 muayenesiz top satırı basılır", rolls?.rows.length === 3);
 
 // §2 iç kolonlar
@@ -85,6 +84,7 @@ const ctxRow = ctx.tablolar.toplar[0] ?? {};
 check("§2 varsayılan: bağlamda iç alan değeri yok", ctxRow.operator == null && ctxRow.istasyon == null && ctxRow.cihaz == null && !Object.values(ctx.ic_acik).some(Boolean), JSON.stringify({ o: ctxRow.operator, i: ctxRow.istasyon, c: ctxRow.cihaz }));
 const optHtml = renderInspectionReportHtml(snap(OPT_IN));
 const optRolls = renderInspectionReportTables(snap(OPT_IN)).tables.find((t) => t.key === "toplar");
+check("§1 fabrika derecesi belgede yok (kolon düzeninde ve HTML başlığında)", ![rolls, optRolls].some((t) => keys(t).includes("factoryGrade")) && !/DERECE/i.test(html));
 check("§2 opt-in: kolon düzeninde üç iç kolon", INTERNAL.every((k) => keys(optRolls).includes(k)), keys(optRolls).join(","));
 check("§2 opt-in: HTML'de operatör/istasyon/cihaz var", optHtml.includes("Ayşe Yılmaz") && optHtml.includes("Kalite Kontrol 1") && optHtml.includes("KK1 Tablet"));
 const optCtx = inspectionReportContract.insa(plain, null, ["muayene_operator"], undefined) as unknown as typeof ctx;

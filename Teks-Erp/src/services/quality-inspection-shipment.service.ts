@@ -7,11 +7,12 @@
 // kalitesine yazılmaz (plan §8 md. 5). Toplamlar burada; istemci ve şablon hesap yapmaz.
 // =============================================================================
 import { Prisma, PrintedDocType, type InspectionWidthSource, type RunningCap, type RuleScope, type ScoreUnit } from "@prisma/client";
+import { licenseModuleError } from "../lib/license/module-ceiling";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { renderInspectionReportHtml, renderInspectionReportTables } from "./document-render/inspection-report.html";
 import { registerPrintedDocBuilder, type PrintedDocDb } from "./printed-document.service";
-import { readKaliteGuvenceEnabled } from "./system-setting.service";
+import { readKaliteGuvenceEnabled, SETTING_KEYS } from "./system-setting.service";
 import { ACTIVE_INSPECTION_WHERE } from "./helpers/inspection-active.helper";
 import { resolveFourPointRule, type ResolvedRuleSet } from "./helpers/four-point-resolve.helper";
 import { resolveBand, round2, toUnit } from "./helpers/four-point.helper";
@@ -260,7 +261,8 @@ export async function printedReportsOfInspection(inspectionId: string, rollId: s
 registerPrintedDocBuilder(PrintedDocType.INSPECTION_REPORT, {
   fresh: async (db: PrintedDocDb, shipmentId: string) => {
     if (!(await readKaliteGuvenceEnabled())) {
-      throw AppError.forbidden("Kalite Güvence modülü kapalı.", { code: "MODULE_DISABLED", module: "kaliteGuvence" });
+      throw licenseModuleError(SETTING_KEYS.KALITE_GUVENCE_ENABLED, "Kalite Güvence")
+        ?? AppError.forbidden("Kalite Güvence modülü kapalı.", { code: "MODULE_DISABLED", module: "kaliteGuvence" });
     }
     const doc = await buildShipmentInspectionSummary(db as Db, shipmentId);
     return doc ? { documentNo: doc.header.shipmentNo, doc: doc as unknown as Record<string, unknown> } : null;
