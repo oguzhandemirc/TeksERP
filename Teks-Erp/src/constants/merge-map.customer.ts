@@ -14,6 +14,19 @@ import type { MoveRule } from "./merge-map";
 
 export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Order", table: "orders", column: "customerId", label: "Sipariş" },
+    // MAL-4: teklif cariye bağlı belge — kimlik değişir, belge değişmez. Fiyat listesinde müşteri+döviz başına
+    // TEK yayınlı liste (partial unique) olduğundan iki carinin yayınlı listesi aynı dövizde çakışabilir → BLOCK.
+    { kind: "MOVE", model: "SalesQuote", table: "sales_quotes", column: "customerId", label: "Satış teklifi" },
+    {
+      kind: "CONFLICT",
+      model: "PriceList",
+      table: "price_lists",
+      column: "customerId",
+      label: "Fiyat listesi",
+      uniqueOn: ["customerId", "currency"],
+      policy: "BLOCK",
+      why: "Cari+döviz başına tek YAYINLI liste; iki carinin yayınlı listesi tek cariye taşınamaz — hangisinin geçerli kalacağı satış kararıdır (MAL-4).",
+    },
     { kind: "MOVE", model: "WarpBeam", table: "warp_beams", column: "supplierId", label: "Levent (hazır alım tedarikçisi)" },
     { kind: "MOVE", model: "YarnLot", table: "yarn_lots", column: "supplierId", label: "İplik lotu (tedarikçi)" },
     { kind: "MOVE", model: "Shipment", table: "shipments", column: "customerId", label: "Sevkiyat" },

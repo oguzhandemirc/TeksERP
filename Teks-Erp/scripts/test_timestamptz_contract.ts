@@ -105,6 +105,12 @@ const DATE_ONLY_FIELDS = new Set([
   // Bildirim günlük sayacının FABRİKA GÜNÜ (2026-10-24, N1-SEMA) — `(factoryDay, kind)` tekil anahtarının
   // parçası, `constants/time.ts` diliminden hesaplanır; `MachineStopEvent.factoryDay` ile aynı gerekçe.
   "NotificationDailyStats.factoryDay",
+  // MAL-4: teklif tarihi, geçerlilik son günü, kur günü ve fiyat listesi bilgi aralığı — fabrika TAKVİM günleri.
+  "SalesQuote.quoteDate",
+  "SalesQuote.validUntilDate",
+  "SalesQuote.fxRateDate",
+  "PriceList.validFromDate",
+  "PriceList.validUntilDate",
 ]);
 
 // Prisma'nın kendi defteri — bizim şemamız değil, zaten timestamptz.

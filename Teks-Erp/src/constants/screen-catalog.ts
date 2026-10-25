@@ -442,6 +442,11 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
+  { code: "quote:read", reason: "Teklif ekranları MAL-5'te doğar — bu dilimde uçlar `/api/quotes` API'dir." },
+  { code: "quote:write", reason: "Teklif ekranları MAL-5'te doğar — bu dilimde uçlar `/api/quotes` API'dir." },
+  { code: "quote:convert", reason: "Teklif kabul/dönüştürme ekranı MAL-5'te doğar — bu dilimde uç API'dir." },
+  { code: "price-list:read", reason: "Fiyat listesi ekranları MAL-5'te doğar — bu dilimde uçlar `/api/price-lists` API'dir." },
+  { code: "price-list:write", reason: "Fiyat listesi ekranları MAL-5'te doğar — bu dilimde uçlar `/api/price-lists` API'dir." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

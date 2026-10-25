@@ -15,6 +15,18 @@ import type { MoveRule } from "./merge-map";
 export const COLOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Roll", table: "rolls", column: "colorId", label: "Top" },
     { kind: "MOVE", model: "OrderLine", table: "order_lines", column: "colorId", label: "Sipariş kalemi" },
+    // MAL-4: teklif kalemi rengi referans bağ; fiyat listesi satırı liste içinde ürün+renk başına tek → BLOCK.
+    { kind: "MOVE", model: "SalesQuoteLine", table: "sales_quote_lines", column: "colorId", label: "Teklif kalemi" },
+    {
+      kind: "CONFLICT",
+      model: "PriceListLine",
+      table: "price_list_lines",
+      column: "colorId",
+      label: "Fiyat listesi satırı",
+      uniqueOn: ["priceListId", "itemId", "colorId"],
+      policy: "BLOCK",
+      why: "Aynı listede aynı ürünün iki renginin de satırı varsa birleşen renge iki fiyat düşer — satış kararıdır (MAL-4).",
+    },
     { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetColorId", label: "Terbiye iş emri (hedef renk)" },
     { kind: "MOVE", model: "RouteStep", table: "route_steps", column: "plannedColorId", label: "Rota adımı (hedef renk)" },
     { kind: "MOVE", model: "ProductRecipe", table: "product_recipes", column: "colorId", label: "Reçete" },
