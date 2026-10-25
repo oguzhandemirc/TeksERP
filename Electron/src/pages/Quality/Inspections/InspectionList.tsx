@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { inspectionService, type InspectionListRow, type InspectionSummary } from "./service";
-import { PHASE_LABEL, STATE_LABEL, inspectionState, isInspectionFilterDirty, numText, toListParams, type InspectionFilterState } from "./inspectionRules";
+import { NONE_TEXT, PHASE_LABEL, STATE_LABEL, inspectionState, isInspectionFilterDirty, numText, toListParams, type InspectionFilterState } from "./inspectionRules";
 import { InspectionFilters } from "./InspectionFilters";
 import { InspectionExportButton } from "./InspectionExportButton";
 
@@ -77,7 +77,7 @@ export function SummaryStrip({ s }: { s: InspectionSummary }) {
     <div className="flex flex-wrap gap-2" data-testid="inspection-summary">
       <Cell label="Top" value={s.total} />
       <Cell label="Ort. puan / 100 m²" value={numText(s.avgPointsPer100M2)} />
-      {s.grades.map((g) => <Cell key={g.code ?? "none"} label={g.code ? `Derece ${g.code}` : "Derecesiz"} value={g.count} />)}
+      {s.grades.map((g) => <Cell key={`grade-${g.code}`} label={g.code ? `Derece ${g.code}` : "Derecesiz"} value={g.count} />)}
       <Cell label="Uyumsuz" value={s.mismatch} tone={s.mismatch > 0 ? "bad" : undefined} />
       <Cell label="En yok" value={s.widthUnknown ?? "—"} tone={(s.widthUnknown ?? 0) > 0 ? "warn" : undefined} />
     </div>
@@ -111,7 +111,7 @@ function InspectionTable({ rows, onOpen, onPickOperator }: { rows: InspectionLis
                 <td className="p-3 text-right font-medium tabular-nums">{numText(r.pointsPer100M2)}</td>
                 <td className="whitespace-nowrap p-3">
                   {r.suggestedGradeCode ?? "—"}
-                  {r.gradeMismatch && <Badge variant="destructive" className="ml-1" title={`Topun kalitesi: ${r.roll.qualityGrade ?? "boş"}`}>Uyumsuz</Badge>}
+                  {r.gradeMismatch && <Badge variant="destructive" className="ml-1" title={`Topun kalitesi: ${r.roll.qualityGrade ?? NONE_TEXT}`}>Uyumsuz</Badge>}
                 </td>
                 <td className="whitespace-nowrap p-3 text-xs">
                   <div>{fmtFactoryDateTime(r.inspectedAt)}</div>

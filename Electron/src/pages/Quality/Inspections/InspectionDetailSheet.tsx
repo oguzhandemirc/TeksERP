@@ -11,7 +11,7 @@ import { apiErrorText } from "@/lib/api-error";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { inspectionService, type InspectionDetail } from "./service";
-import { PHASE_LABEL, SIZE_LABEL, STATE_LABEL, WIDTH_SOURCE_LABEL, inspectionState, numText } from "./inspectionRules";
+import { NONE_TEXT, PHASE_LABEL, SIZE_LABEL, STATE_LABEL, WIDTH_SOURCE_LABEL, inspectionState, numText } from "./inspectionRules";
 import { InspectionReviseDialog } from "./InspectionReviseDialog";
 import { InspectionVoidDialog } from "./InspectionVoidDialog";
 
@@ -75,7 +75,7 @@ function Identity({ d }: { d: InspectionDetail }) {
         <Row k="Muayene" v={`${fmtFactoryDateTime(d.inspectedAt)} · ${d.inspectedBy?.fullName ?? "—"}${d.station ? ` · ${d.station.name}` : ""}`} />
         <Row k="Uzunluk" v={`${numText(d.inspectedLengthM)} m`} />
         <Row k="En" v={`${numText(d.widthCm)} cm · ${WIDTH_SOURCE_LABEL[d.widthSource]}`} />
-        <Row k="Derece" v={<>{d.suggestedGradeCode ?? "—"} <span className="text-muted-foreground">(top: {d.roll.qualityGrade ?? "boş"})</span>{d.gradeMismatch && <Badge variant="destructive" className="ml-1">Uyumsuz</Badge>}</>} />
+        <Row k="Derece" v={<>{d.suggestedGradeCode ?? "—"} <span className="text-muted-foreground">(top: {d.roll.qualityGrade ?? NONE_TEXT})</span>{d.gradeMismatch && <Badge variant="destructive" className="ml-1">Uyumsuz</Badge>}</>} />
         {d.note && <Row k="Not" v={d.note} />}
         {d.reviseReason && <Row k="Düzeltme gerekçesi" v={d.reviseReason} />}
         {d.voidedAt && <Row k="İptal" v={`${fmtFactoryDateTime(d.voidedAt)} · ${d.voidedBy?.fullName ?? "—"} · ${d.voidReason ?? ""}`} />}

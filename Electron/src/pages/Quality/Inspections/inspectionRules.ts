@@ -95,4 +95,6 @@ export function errorCodeOf(error: unknown): string | null {
   const code = (error.response?.data as { details?: { code?: unknown } } | undefined)?.details?.code;
   return typeof code === "string" ? code : null;
 }
+/** Topun kalite alanı boşken gösterilen metin (kod yuvasına literal yazılmasın — test_quality_code_literal). */
+export const NONE_TEXT = "boş";
 export const NOT_ACTIVE_TEXT = "Bu muayene başka biri tarafından düzeltildi ya da iptal edildi; yenileyin.";
