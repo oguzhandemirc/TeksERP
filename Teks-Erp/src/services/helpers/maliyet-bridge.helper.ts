@@ -64,3 +64,14 @@ export async function measuredWarpWaste(warpSpecId: string): Promise<MeasuredWar
   if (olculen < MEASURED_WASTE_MIN_BEAMS || data.ozet.firePct === null) return null;
   return { firePct: new Prisma.Decimal(data.ozet.firePct).toFixed(2), leventSayisi: olculen, baslangic, bitis };
 }
+
+/**
+ * Ürünün genel satış fiyatı önerisi (ticaret modülü `ItemPrice(SALE)`; müşteri istisnası önce).
+ * Ticaret kapalı → SORGU ATMADAN null. Teklif öneri zincirinin ③ katmanı (`quote-price.helper`).
+ */
+export async function suggestSalePrice(itemId: string, currency: Currency, customerId: string | null): Promise<Prisma.Decimal | null> {
+  if (!(await readTicaretEnabled())) return null;
+  const { resolveItemPrice } = await import("../item-price.service");
+  const r = await resolveItemPrice({ itemId, kind: "SALE", currency, customerId });
+  return r?.price ?? null;
+}
