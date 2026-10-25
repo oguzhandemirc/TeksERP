@@ -11,13 +11,17 @@
 //   §2 modul = panel ekranının modülü · §3 her izin konjonksiyonu ekranın `requires`ından
 //   en az birini içerir · §4 kilitli tür varsayılan KAPALI olamaz · §5 yer tutucular ⇄
 //   payloadAlanlari (iki yönlü) · §6 KOSUL/ALARM `cozuldu` dolu, pencere ≥0 · §7 param
-//   şeması varsayılanla parse olur ve bilinmeyen anahtarı reddeder · §8 payload'da tutar/sır adı yok.
+//   şeması varsayılanla parse olur ve bilinmeyen anahtarı reddeder · §8 payload'da tutar/sır adı yok ·
+//   §9 patron eşlemesi: her tür `NOTIFICATION_PATRON_MAP`te, `patronKind` bulut `KIND_RULES` anahtarı (dosya
+//   metninden; paketler arası import yok), `null` gerekçeli.
 // DB GEREKTİRMEZ.
 //
 // NEGATİF SONDA (2026-10-24, md5 ile birebir geri alındı):
 //   S1 `sevkiyat.onay-bekliyor.panelEkran` → "yok/ekran"     ⇒ 4 ❌ (§1 · §1b · §2 · §3)
 //   S2 `sistem.yedek-basarisiz.govde`e `{tutar}` eklendi      ⇒ 2 ❌ (§5 · §5c render)
 //   S3 `sistem.yedek-basarisiz.varsayilan` → "KAPALI" (kilit HER_ZAMAN) ⇒ 1 ❌ (§4)
+//   S4 (2026-10-25) eşlemede `patronKind: "yedek-yok"` (bulutta yok)    ⇒ 1 ❌ (§9b)
+//   S5 (2026-10-25) eşlemeden `yazici.hata` satırı silindi             ⇒ 1 ❌ (§9)
 // =============================================================================
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { SCREEN_CATALOG } from "../src/constants/screen-catalog";
@@ -28,6 +32,9 @@ import {
   type NotificationCatalogEntry,
   type NotificationKind,
 } from "../src/constants/notification-catalog";
+import { NOTIFICATION_PATRON_MAP } from "../src/constants/notification-patron-map";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { placeholdersOf, renderNotification } from "../src/services/helpers/notification-render.helper";
 
 let pass = 0;
@@ -148,6 +155,18 @@ function main(): void {
   const YASAK = /tutar|fiyat|bakiye|borc|alacak|parola|sifre|şifre|pin$|token|secret|password/i;
   kural("§8 payload alan adları tutar/sır taşımaz",
     girdiler.flatMap(([k, e]) => e.payloadAlanlari.filter((a) => YASAK.test(a)).map((a) => `${k}: ${a}`)), "hepsi");
+
+  // ── §9 patron bulutu eşlemesi ─────────────────────────────────────────────
+  const bulutMetni = readFileSync(resolve(__dirname, "../../patron/sunucu/src/catalog/notifications.ts"), "utf8");
+  const kurallar = bulutMetni.slice(bulutMetni.indexOf("export const KIND_RULES"), bulutMetni.indexOf("export function catalogProblems"));
+  const bulutTurleri = new Set([...kurallar.matchAll(/^ {2}"([a-z0-9-]+)": \{/gm)].map((m) => m[1]!));
+  check("§9z körlük zemini: bulut kataloğu okundu", bulutTurleri.size >= 5 && bulutTurleri.has("yedek-basarisiz"), `${bulutTurleri.size} bulut türü`);
+  const harita = NOTIFICATION_PATRON_MAP as Readonly<Record<string, { patronKind: string | null; neden?: string } | undefined>>;
+  kural("§9 her fabrika türü patron eşlemesinde", NOTIFICATION_KINDS.filter((k) => !harita[k]), "hepsi");
+  kural("§9b `patronKind` bulut `KIND_RULES` anahtarı ya da null + gerekçe",
+    Object.entries(harita).flatMap(([k, m]) => (!m ? [] : m.patronKind === null ? (m.neden?.trim() ? [] : [`${k}: gerekçesiz null`])
+      : bulutTurleri.has(m.patronKind) ? [] : [`${k}: ${m.patronKind}`])), "hepsi");
+  kural("§9c eşlemede katalog dışı fabrika türü yok", Object.keys(harita).filter((k) => !(NOTIFICATION_KINDS as string[]).includes(k)), "hepsi");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
