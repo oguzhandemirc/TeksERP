@@ -9,7 +9,7 @@ import { bulunma, iyelik3 } from "../anlati/ek";
 import type { KorelasyonKanit, SampleWarningEvidence } from "../anlati/gozlem";
 import { benjaminiHochberg } from "../anlati/istatistik/bh";
 import { chiSquareTest, rateGoodnessOfFit } from "../anlati/istatistik/kikare";
-import { pearson, spearman } from "../anlati/istatistik/korelasyon";
+import { pearson, spearman, trendLine } from "../anlati/istatistik/korelasyon";
 import { rateRatioTest } from "../anlati/istatistik/oran-testi";
 import { MIN_SAMPLE, type TestResult } from "../anlati/istatistik/tipler";
 import type { AnaSayi, Birim, GrafikBlok, TabloBlok } from "../sunum/sunum.types";
@@ -34,6 +34,8 @@ export interface AnalysisStats extends TestResult {
   /** Cümlenin dayandığı olasılık: oran kıyasında öne çıkan grubun düzeltilmiş değeri. */
   kanitP: number | null;
   gruplar?: AnalysisGroup[];
+  /** İki ölçü kıyasında eğilim çizgisinin iki ucu ([x, y]); kart çizer, hesaplamaz. */
+  egilim?: [[number, number], [number, number]] | null;
 }
 
 
@@ -185,9 +187,11 @@ export function computeRate(plan: Extract<AnalysisPlan, { kind: "rate" }>, count
         { anahtar: "sayi", baslik: countName, birim: "adet", hiza: "sag" },
         { anahtar: "maruziyet", baslik: expName, birim: unitOf(exposure.measure), hiza: "sag" },
         { anahtar: "oran", baslik: scale.soz, birim: "adet", hiza: "sag" },
+        { anahtar: "pay", baslik: "Pay", birim: "yuzde", hiza: "sag" },
       ],
-      satirlar: gruplar.map((g) => ({ grup: g.ad, sayi: g.sayi, maruziyet: g.maruziyet, oran: g.oran })),
-      toplam: { grup: "Toplam", sayi: N, maruziyet: E, oran: rate(N, E) },
+      // Pay = grubun kayıt payı (kart özet tablosu; istemci oran hesaplamaz).
+      satirlar: gruplar.map((g) => ({ grup: g.ad, sayi: g.sayi, maruziyet: g.maruziyet, oran: g.oran, pay: N > 0 ? (g.sayi / N) * 100 : null })),
+      toplam: { grup: "Toplam", sayi: N, maruziyet: E, oran: rate(N, E), pay: N > 0 ? 100 : null },
     },
   };
 }
@@ -283,7 +287,7 @@ export function computeCorrelation(plan: Extract<AnalysisPlan, { kind: "corr" }>
   const ok = finite(t.istatistik) && finite(t.p);
   const kanit: KorelasyonKanit | null = ok ? { yontem: plan.method, n: t.n, p: t.p, r: t.istatistik, nesne, xAdi: xName, yAdi: lowerTr(yName) } : null;
   return {
-    stats: { ...t, yontem: plan.method, kanitP: ok ? t.p : null },
+    stats: { ...t, yontem: plan.method, kanitP: ok ? t.p : null, egilim: trendLine(pts.map((p) => p.x), pts.map((p) => p.y)) },
     kanit,
     orneklem: sampleEvidence(t, nesne),
     soru, uyarilar: warnings,

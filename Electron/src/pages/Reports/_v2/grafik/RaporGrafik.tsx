@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
-import { GRAFIK_VERI_YOK, grafikBosMu, grafikSecenek } from "./secenek";
+import { GRAFIK_VERI_YOK, grafikBosMu, grafikSecenek, type Egilim } from "./secenek";
 import { ekranTemasi } from "./tema";
 import type { GrafikBlok } from "../sunum";
 
@@ -10,6 +10,8 @@ interface Props {
   yukseklik?: number;
   /** Ekran okuyucu için grafik adı. */
   baslik?: string;
+  /** Saçılımda sunucunun eğilim çizgisi (R3-ANALIZ). */
+  egilim?: Egilim | null;
 }
 
 /**
@@ -17,7 +19,7 @@ interface Props {
  * yüklenir ([KU-17]); kap boyutu değişince yeniden ölçeklenir; tema değişince yeniden
  * çizilir (canvas CSS değişkenini kendisi izlemez).
  */
-export function RaporGrafik({ blok, yukseklik = 280, baslik }: Props) {
+export function RaporGrafik({ blok, yukseklik = 280, baslik, egilim }: Props) {
   const kap = useRef<HTMLDivElement>(null);
   const { resolvedTheme } = useTheme();
   const bos = grafikBosMu(blok);
@@ -30,7 +32,7 @@ export function RaporGrafik({ blok, yukseklik = 280, baslik }: Props) {
       const el = kap.current;
       if (iptal || !el) return;
       const grafik = echarts.init(el, null, { renderer: "canvas" });
-      grafik.setOption(grafikSecenek(blok, ekranTemasi()));
+      grafik.setOption(grafikSecenek(blok, ekranTemasi(), { egilim }));
       const gozlemci = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => grafik.resize());
       gozlemci?.observe(el);
       dispose = () => {
@@ -42,7 +44,7 @@ export function RaporGrafik({ blok, yukseklik = 280, baslik }: Props) {
       iptal = true;
       dispose?.();
     };
-  }, [blok, bos, resolvedTheme]);
+  }, [blok, bos, resolvedTheme, egilim]);
 
   if (bos) {
     return (

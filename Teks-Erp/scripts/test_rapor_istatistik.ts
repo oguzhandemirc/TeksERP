@@ -22,7 +22,7 @@ import { AppError } from "../src/utils/app-error";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ANALYSIS_RANGE, DAYS, DEFECTS, SMALL_RANGE, dayQty, nightQty, setupAnalysisFixture, teardownAnalysisFixture } from "./lib/fixture-analiz";
 import { chiSquareCdf, chiSquareSurvival, studentTCdf, studentTTwoSided } from "../src/services/reports/anlati/istatistik/dagilim";
-import { averageRanks, pearson, spearman } from "../src/services/reports/anlati/istatistik/korelasyon";
+import { averageRanks, pearson, spearman, trendLine } from "../src/services/reports/anlati/istatistik/korelasyon";
 import { chiSquareTest, rateGoodnessOfFit } from "../src/services/reports/anlati/istatistik/kikare";
 import { rateRatioTest, twoProportionTest } from "../src/services/reports/anlati/istatistik/oran-testi";
 import { benjaminiHochberg } from "../src/services/reports/anlati/istatistik/bh";
@@ -78,6 +78,11 @@ anscombe.forEach(([x, y], i) => check(`§2 Anscombe ${i + 1}: r = 0,816`, Math.t
 const a1 = pearson(anscombe[0]![0], anscombe[0]![1]);
 near("§2 Anscombe I r = 0,8164", a1.istatistik, 0.8164);
 near("§2 Anscombe I p = 0,0022 (scipy pearsonr 0,00217)", a1.p, 0.0022);
+// R3-ANALIZ: saçılım eğilim çizgisi — Anscombe I en küçük kareler y = 3,0001 + 0,5001·x (Anscombe 1973).
+const tl = trendLine(anscombe[0]![0], anscombe[0]![1]);
+near("§2 eğilim çizgisi sol uç (x 4) y = 5,0005", tl?.[0][1], 3.000090909 + 0.500090909 * 4);
+near("§2 eğilim çizgisi sağ uç (x 14) y = 10,0014", tl?.[1][1], 3.000090909 + 0.500090909 * 14);
+check("§2 eğilim çizgisi tek x değerinde yok", trendLine([1, 1, 1], [1, 2, 3]) === null);
 check("§2 Anscombe I df = 9, n = 11 → örneklem uyarısı (n < 30)", a1.df === 9 && a1.n === 11 && a1.uyarilar.includes("azOrnek"));
 check("§2 eşitlikte ortalama sıra [1,2,2,3] → [1; 2,5; 2,5; 4]", JSON.stringify(averageRanks([1, 2, 2, 3])) === "[1,2.5,2.5,4]");
 near("§2 eşitlikli Spearman = 0,9487 (scipy spearmanr)", spearman([1, 2, 2, 3], [1, 3, 2, 4]).istatistik, 0.9487);

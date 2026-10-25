@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { useAttemptToken } from "@/lib/attemptToken";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { History, LayoutDashboard, Pencil, RefreshCw, Share2 } from "lucide-react";
+import { Copy, History, LayoutDashboard, Pencil, RefreshCw, Share2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAuthStore } from "@/store/auth";
 import { errorCodeOf } from "@/pages/Operations/LoomAlarms/alarm-access";
-import { customReportApi, REPORT_BUILDER_PERMISSION, REPORT_PUBLISH_PERMISSION, type DefinitionIssue } from "./custom-api";
+import { customReportApi, REPORT_BUILDER_PERMISSION, REPORT_PUBLISH_PERMISSION, useSemanticCatalog, type DefinitionDetail, type DefinitionIssue } from "./custom-api";
 import { DefinitionResultView } from "./DefinitionResultView";
 import { ShareDialog } from "./ShareDialog";
 import { VersionsDialog } from "./VersionsDialog";
@@ -42,6 +43,39 @@ function RunFailure({ error }: { error: unknown }) {
   return <p className="text-sm text-destructive">Rapor çalıştırılamadı; biraz sonra yeniden deneyin.</p>;
 }
 
+/**
+ * Sistem şablonunun kopyası: gövde sunucudan geldiği gibi yeni OZEL tanımın ilk sürümü olur, sonra düzen
+ * ekranı açılır. Belirteç mantıksal deneme başına; yalnız belirsiz hatada (ağ/5xx) yapışır.
+ */
+function CopyTemplateButton({ d }: { d: DefinitionDetail }) {
+  const navigate = useNavigate();
+  const attempt = useAttemptToken();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const copy = async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const created = await customReportApi.create({ ad: `${d.ad} (kopyam)`, govde: d.govde, clientToken: attempt.token() });
+      attempt.onSuccess();
+      void navigate(`/reports/ozel/${created.id}/duzen`);
+    } catch (e) {
+      attempt.onFailure(e);
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <Button size="sm" className="gap-1.5" disabled={busy} onClick={() => void copy()}>
+        <Copy className="h-4 w-4" /> Kopyasını özel rapor yap
+      </Button>
+      {failed ? <span className="self-center text-xs text-destructive">Kopya oluşturulamadı; yeniden deneyin.</span> : null}
+    </>
+  );
+}
+
 /** Kayıtlı (özel) rapor — `reports/ozel/:id`: koşu sonucu + yeni hâlini al + paylaş + sürümler. */
 export function CustomReportViewPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -50,6 +84,7 @@ export function CustomReportViewPage() {
   const userId = useAuthStore((s) => s.user?.userId);
   const [dialog, setDialog] = useState<"share" | "versions" | null>(null);
   const detail = useQuery({ queryKey: ["custom-report", id], queryFn: () => customReportApi.get(id), retry: false });
+  const catalog = useSemanticCatalog();
   const run = useQuery({ queryKey: ["custom-report-run", id], queryFn: () => customReportApi.run(id, false), retry: false, enabled: detail.isSuccess });
   const [refreshing, setRefreshing] = useState(false);
   const refresh = async () => {
@@ -73,15 +108,17 @@ export function CustomReportViewPage() {
       <PageHeader
         className="flex-wrap"
         title={d?.ad ?? "Rapor"}
-        description={d ? `${d.kategori.ad}${d.sahip ? ` · ${d.sahip.ad}` : ""}${d.aktifSurum ? ` · Sürüm ${d.aktifSurum.no}` : ""}` : undefined}
+        description={d ? `${d.kategori.ad}${d.sablon ? " · Hazır şablon" : ""}${d.sahip ? ` · ${d.sahip.ad}` : ""}${d.aktifSurum ? ` · Sürüm ${d.aktifSurum.no}` : ""}` : undefined}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" className="gap-1.5" disabled={refreshing || !run.data} onClick={() => void refresh()}>
               <RefreshCw className={refreshing ? "h-4 w-4 animate-spin" : "h-4 w-4"} /> Yeni hâlini al
             </Button>
-            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setDialog("versions")}>
-              <History className="h-4 w-4" /> Sürümler
-            </Button>
+            {d?.sablon ? null : (
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setDialog("versions")}>
+                <History className="h-4 w-4" /> Sürümler
+              </Button>
+            )}
             {canShare ? (
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setDialog("share")}>
                 <Share2 className="h-4 w-4" /> Paylaş
@@ -90,6 +127,7 @@ export function CustomReportViewPage() {
             {run.data && d ? (
               <ReportExportBar buildSpec={() => buildDefinitionExportSpec(run.data!, d.govde as DefinitionBody, chartKindsOf(d.govde))} disabled={!run.data} />
             ) : null}
+            {d?.sablon && hasPermission(REPORT_BUILDER_PERMISSION) ? <CopyTemplateButton d={d} /> : null}
             {canEdit ? (
               <Button size="sm" variant="outline" asChild className="gap-1.5">
                 <Link to={`/reports/ozel/${id}/duzen`}>
@@ -111,7 +149,7 @@ export function CustomReportViewPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-4">
           {run.isLoading || detail.isLoading ? <p className="text-sm text-muted-foreground">Rapor hazırlanıyor…</p> : null}
           {run.isError ? <RunFailure error={run.error} /> : null}
-          {run.data && d ? <DefinitionResultView result={run.data} chartKindOf={chartKindsOf(d.govde)} layout={layoutOf(d.govde)} /> : null}
+          {run.data && d ? <DefinitionResultView result={run.data} chartKindOf={chartKindsOf(d.govde)} layout={layoutOf(d.govde)} body={d.govde as DefinitionBody} cubes={catalog.data} /> : null}
         </div>
       </PageBody>
       {d ? <ShareDialog definitionId={id} open={dialog === "share"} canPublish={canPublish} onClose={() => setDialog(null)} /> : null}

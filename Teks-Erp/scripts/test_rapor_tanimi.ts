@@ -30,6 +30,7 @@ import { MODULE_SETTING_KEY_BY_FLAG } from "../src/services/system-setting.servi
 import type { AccessContext } from "../src/services/reports/semantik/izin";
 import { compileQuery } from "../src/services/reports/semantik/derleyici";
 import { checkReportDefinition } from "../src/services/reports/semantik/rapor-tanimi.schema";
+import { SYSTEM_TEMPLATES } from "../src/services/reports/semantik/sistem-sablonlari";
 import { toSemanticInput, resolveParams } from "../src/services/reports/semantik/definition-run";
 import { FILTER_OPERATORS } from "../src/services/reports/semantik/tipler";
 import * as defs from "../src/services/rapor-tanimi.service";
@@ -97,6 +98,11 @@ async function main(): Promise<void> {
   // §0 `test_permission_catalog` dinamik izin argümanlarını (rapor-tanimi route/servis, çalıştırıcı) buraya devreder.
   const catalogCodes = new Set<string>(PERMISSION_CATALOG.map((p) => p.code));
   check("§0 report:builder ve report:publish izin kataloğunda", catalogCodes.has(REPORT_BUILDER_PERMISSION) && catalogCodes.has(REPORT_PUBLISH_PERMISSION) && REPORT_BUILDER_PERMISSION === "report:builder" && REPORT_PUBLISH_PERMISSION === "report:publish");
+  // §0b R3-ANALIZ: sistem şablonlarının gövdesi kodda — her biri tanım şemasından geçer, izni katalogda.
+  for (const t of SYSTEM_TEMPLATES) {
+    const c = checkReportDefinition(t.govde);
+    check(`§0b sistem şablonu derlenir: ${t.ad}`, c.gecerli && catalogCodes.has(t.izin) && c.gerekenIzinler.every((p) => p === t.izin), c.gecerli ? c.gerekenIzinler.join(",") : JSON.stringify(c.hatalar));
+  }
   const mk = async (k: string) => (await prisma.user.create({ data: { username: `${T}-${k}`.toLowerCase(), passwordHash: "x", fullName: `${T} ${k}` }, select: { id: true } })).id;
   const ownerId = await mk("sahip");
   const viewerId = await mk("izleyen");

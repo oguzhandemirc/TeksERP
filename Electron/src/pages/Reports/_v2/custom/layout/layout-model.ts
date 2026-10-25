@@ -65,7 +65,7 @@ export const PALETTE: readonly PaletteEntry[] = [
   { kind: "donem", label: "Dönem kıyası", description: "Son birkaç gün, hafta ya da ay sütun sütun", defaultWidth: 12 },
   { kind: "metin", label: "Not", description: "Rapora açıklama ya da uyarı metni", defaultWidth: 12 },
   { kind: "anlati", label: "Ne görüyoruz?", description: "Günlük dil özeti", unavailable: "Özel raporlarda günlük dil özeti henüz yok.", defaultWidth: 12 },
-  { kind: "analiz", label: "Analiz", description: "İki ölçü arasındaki ilişki", unavailable: "Analiz bölümü henüz yok.", defaultWidth: 12 },
+  { kind: "analiz", label: "Analiz", description: "Gruplar arasında fark var mı, iki ölçü birlikte mi değişiyor?", defaultWidth: 12 },
 ];
 
 export const KIND_LABEL: Record<string, string> = Object.fromEntries(PALETTE.map((p) => [p.kind, p.label]));
@@ -214,8 +214,10 @@ export function addBlock(body: DefinitionBody, kind: BlockKind, dimension: strin
     else if (kind === "grafik") block = { id, tur: "grafik", gorsel: "cubuk", sorgu: q(dims, false) };
     else if (kind === "tablo") block = { id, tur: "tablo", sorgu: q(dims, false) };
     else if (kind === "varyant") block = { id, tur: "varyant", ilkN: 6, sorgu: q(dims, true) };
+    // R3-ANALIZ: konunun ölçüsü × ilk kırılım; maruziyeti kullanıcı seçer (sayımda zorunlu, kaydet bekler).
+    else if (kind === "analiz") block = { id, tur: "analiz", yontem: "kiKare", kup: base.kup, x: dimension, y: measure, ...(base.zaman ? { zaman: { param: base.zaman.param } } : {}) };
     else block = { id, tur: "donem", birim: "ay", adet: 3, sorgu: q(dims, false) };
-    if ((kind === "grafik" || kind === "varyant") && dims.length === 0) return null;
+    if ((kind === "grafik" || kind === "varyant" || kind === "analiz") && dims.length === 0) return null;
   }
   const order = [...currentOrder(body), { i: id, w: entry.defaultWidth }];
   return withLayout({ ...body, bloklar: [...body.bloklar, block] }, order);

@@ -17,6 +17,7 @@ import { REPORT_BY_KEY, REPORT_CATALOG } from "../constants/report-catalog";
 import { stableStringify } from "./reports/semantik/onbellek";
 import { checkReportDefinition, type DefinitionIssue, type ReportDefinitionBody } from "./reports/semantik/rapor-tanimi.schema";
 import { DEFAULT_CATEGORY_CODE } from "./rapor-kategori.service";
+import { SYSTEM_TEMPLATES, SYSTEM_TEMPLATE_BY_KEY } from "./reports/semantik/sistem-sablonlari";
 
 export const DEFINITION_STATUSES = ["TASLAK", "YAYINDA", "ARSIV"] as const;
 export type DefinitionStatus = (typeof DEFINITION_STATUSES)[number];
@@ -56,6 +57,8 @@ export interface ReportDefinitionDto {
   duzenleyebilir: boolean;
   /** SISTEM tanımında temel raporun panel yolu (gövde kod servisidir). */
   panelYolu: string | null;
+  /** Sistem şablonu: gövdesi koddaki tanım JSON'u; görüntüleyicide çalışır, kopyalanabilir. */
+  sablon: boolean;
   olusturuldu: string;
   guncellendi: string;
 }
@@ -64,7 +67,10 @@ const can = (a: Actor, code: string) => matchesPermission(a.permissions, code);
 
 /** Kullanıcının izniyle açılan SISTEM rapor anahtarları (katalog `izin`i). */
 function systemKeysFor(a: Actor): string[] {
-  return REPORT_CATALOG.filter((e) => e.nesil === "v2" && e.hazir && can(a, e.izin)).map((e) => e.key);
+  return [
+    ...REPORT_CATALOG.filter((e) => e.nesil === "v2" && e.hazir && can(a, e.izin)).map((e) => e.key),
+    ...SYSTEM_TEMPLATES.filter((t) => can(a, t.izin)).map((t) => t.anahtar),
+  ];
 }
 
 /** Görünürlük — liste, ayrıntı ve koşu TEK yüklemden okur. */
@@ -97,6 +103,7 @@ function toDto(r: DefinitionRow, editable: boolean): ReportDefinitionDto {
     aktifSurum: r.activeVersion ? { id: r.activeVersion.id, no: r.activeVersion.versionNo, tarih: r.activeVersion.createdAt.toISOString() } : null,
     bozuk: r.isBroken, duzenleyebilir: editable,
     panelYolu: r.key ? (REPORT_BY_KEY.get(r.key)?.panelYolu ?? null) : null,
+    sablon: r.kind === "SISTEM" && r.key !== null && SYSTEM_TEMPLATE_BY_KEY.has(r.key),
     olusturuldu: r.createdAt.toISOString(), guncellendi: r.updatedAt.toISOString(),
   };
 }
@@ -171,6 +178,11 @@ export async function listDefinitions(input: ListInput, a: Actor) {
 
 export async function getDefinition(id: string, a: Actor) {
   const row = await loadVisible(id, a);
+  const template = row.kind === "SISTEM" && row.key ? SYSTEM_TEMPLATE_BY_KEY.get(row.key) : undefined;
+  if (template) {
+    const { permissions } = assertValidBody(template.govde);
+    return { ...toDto(row, false), govde: template.govde, gerekenIzinler: permissions };
+  }
   const version = row.activeVersionId
     ? await prisma.reportDefinitionVersion.findUnique({ where: { id: row.activeVersionId }, select: { body: true, note: true, requiredPermissions: true } })
     : null;
