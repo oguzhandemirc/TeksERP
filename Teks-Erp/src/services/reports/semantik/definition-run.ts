@@ -12,7 +12,10 @@ import { defaultDeps, runSemanticQuery, type RunOrigin, type SemanticResult } fr
 import type { SemanticQueryInput } from "./derleyici";
 import type { AccessContext } from "./izin";
 import { SEMANTIC_CUBES } from "./katalog";
-import { COMPARE_MODES, DATE_PRESETS, type BlockQuery, type DefinitionBlock, type DefinitionParameter, type ReportDefinitionBody } from "./rapor-tanimi.schema";
+import { runAnalysis, type AnalysisStats } from "./analiz";
+import { isAnalysisIssue } from "./analiz-plan";
+import type { RaporSunumu } from "../sunum/sunum.types";
+import { analysisQueryShell, planAnalysisBlock, COMPARE_MODES, DATE_PRESETS, type AnalysisBlock, type BlockQuery, type DefinitionBlock, type DefinitionParameter, type ReportDefinitionBody } from "./rapor-tanimi.schema";
 
 export const NO_ACCESS_MESSAGE = "Bu bölüm için yetkiniz yok.";
 const HOUR_MS = 3_600_000;
@@ -160,7 +163,11 @@ export function toSemanticInput(
 }
 
 export type BlockOutcome =
-  | { id: string; tur: DefinitionBlock["tur"]; baslik: string | null; durum: "tamam"; sonuclar: SemanticResult[]; metin?: string }
+  | {
+      id: string; tur: DefinitionBlock["tur"]; baslik: string | null; durum: "tamam"; sonuclar: SemanticResult[]; metin?: string;
+      /** R3-ISTAT: analiz bloğunun sunumu + kart sayıları. */
+      analiz?: { sunum: RaporSunumu; istatistik: AnalysisStats | null };
+    }
   | { id: string; tur: DefinitionBlock["tur"]; baslik: string | null; durum: "yetkisiz" | "desteklenmiyor"; mesaj: string };
 
 function isNoAccess(e: unknown): boolean {
@@ -188,8 +195,12 @@ export async function runDefinitionBlocks(
       out.push({ ...head, durum: "tamam", sonuclar: [], metin: b.metin });
       continue;
     }
-    if (b.tur === "anlati" || b.tur === "analiz") {
-      out.push({ ...head, durum: "desteklenmiyor", mesaj: b.tur === "analiz" ? "Analiz bölümü henüz hesaplanmıyor." : "Günlük dil özeti bu raporda henüz yazılmıyor." });
+    if (b.tur === "anlati") {
+      out.push({ ...head, durum: "desteklenmiyor", mesaj: "Günlük dil özeti bu raporda henüz yazılmıyor." });
+      continue;
+    }
+    if (b.tur === "analiz") {
+      out.push(await runAnalysisBlock(b, { head, params, body, ctx, opts: { origin, refresh } }));
       continue;
     }
     const results: SemanticResult[] = [];
@@ -206,4 +217,35 @@ export async function runDefinitionBlocks(
     out.push(denied ? { ...head, durum: "yetkisiz", mesaj: NO_ACCESS_MESSAGE } : { ...head, durum: "tamam", sonuclar: results });
   }
   return out;
+}
+
+/** Analiz bloğu: parametreler sorgu bloklarıyla aynı çözülür; izin eksiği blokta kalır. */
+interface AnalysisBlockRun {
+  head: { id: string; tur: DefinitionBlock["tur"]; baslik: string | null };
+  params: Map<string, ResolvedParam>;
+  body: ReportDefinitionBody;
+  ctx: AccessContext;
+  opts: { origin: RunOrigin | null; refresh: boolean };
+}
+
+async function runAnalysisBlock(b: AnalysisBlock, { head, params, body, ctx, opts }: AnalysisBlockRun): Promise<BlockOutcome> {
+  const plan = planAnalysisBlock(b);
+  if (isAnalysisIssue(plan)) throw AppError.badRequest(plan.mesaj, { code: plan.kod, alan: plan.alan });
+  const input = toSemanticInput(analysisQueryShell(b, plan), params, body, { asTable: false, refresh: opts.refresh });
+  try {
+    const r = await runAnalysis(
+      {
+        yontem: b.yontem, x: b.x, y: b.y, suzgec: input.suzgec ?? [],
+        ...(b.kup ? { kup: b.kup } : {}), ...(b.maruziyet ? { maruziyet: b.maruziyet } : {}), ...(b.kirilim ? { kirilim: b.kirilim } : {}),
+        ...(input.dateFrom ? { dateFrom: input.dateFrom } : {}), ...(input.dateTo ? { dateTo: input.dateTo } : {}),
+        ...(opts.refresh ? { yenile: true } : {}),
+      },
+      ctx,
+      { deps: { ...defaultDeps, origin: opts.origin }, ...(b.baslik ? { baslik: b.baslik } : {}) },
+    );
+    return { ...head, durum: "tamam", sonuclar: r.sonuclar, analiz: { sunum: r.sunum, istatistik: r.istatistik } };
+  } catch (e) {
+    if (!isNoAccess(e)) throw e;
+    return { ...head, durum: "yetkisiz", mesaj: NO_ACCESS_MESSAGE };
+  }
 }

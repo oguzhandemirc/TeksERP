@@ -10,6 +10,7 @@ import { z } from "zod";
 import { editRatio } from "../../../utils/string-similarity";
 import { SEMANTIC_CUBES } from "./katalog";
 import { FILTER_OPERATORS, type SemanticCube } from "./tipler";
+import { ANALYSIS_METHODS, isAnalysisIssue, planAnalysis, type AnalysisPlan } from "./analiz-plan";
 
 export const DEFINITION_SCHEMA_VERSION = 1;
 export const MAX_BLOCKS = 20;
@@ -22,7 +23,7 @@ export const DATE_PRESETS = ["bugun", "dun", "son7gun", "son30gun", "son90gun", 
 export const COMPARE_MODES = ["none", "prev", "prevYear"] as const;
 export const CHART_KINDS = ["cizgi", "cubuk", "yiginCubuk", "pasta", "isiHaritasi", "sacilim", "kutu", "kucukCoklu"] as const;
 export const NARRATIVE_RULES = ["anaSayiKiyas", "enBuyukPay", "korelasyon", "orneklemUyarisi"] as const;
-export const ANALYSIS_METHODS = ["pearson", "spearman", "kiKare"] as const;
+export { ANALYSIS_METHODS };
 
 const name = z.string().regex(/^[a-zA-Z][a-zA-Z0-9]{0,31}$/, "Ad harfle başlar; yalnız harf ve rakam (en çok 32).");
 const blockId = z.string().regex(/^[a-zA-Z][a-zA-Z0-9]{0,15}$/, "Blok kimliği harfle başlar; yalnız harf ve rakam (en çok 16).");
@@ -70,7 +71,20 @@ const blockSchema = z.discriminatedUnion("tur", [
     .strict(),
   z.object({ id: blockId, tur: z.literal("anlati"), baslik: title, kurallar: z.array(z.enum(NARRATIVE_RULES)).min(1).max(4), enFazla: z.number().int().min(1).max(5).default(3) }).strict(),
   z
-    .object({ id: blockId, tur: z.literal("analiz"), baslik: title, yontem: z.enum(ANALYSIS_METHODS), x: identifier, y: identifier, maruziyet: identifier.optional() })
+    .object({
+      id: blockId,
+      tur: z.literal("analiz"),
+      baslik: title,
+      yontem: z.enum(ANALYSIS_METHODS),
+      // R3-ISTAT: küp verilmezse x/y'yi taşıyan ilk küp; `kirilim` iki ölçü kıyasının birimi (varsayılan gün).
+      kup: identifier.optional(),
+      x: identifier,
+      y: identifier,
+      maruziyet: identifier.optional(),
+      kirilim: identifier.optional(),
+      suzgec: z.object({ combinator: z.literal("and"), rules: z.array(filterRuleSchema).max(10) }).strict().optional(),
+      zaman: z.object({ param: name }).strict().optional(),
+    })
     .strict(),
   z.object({ id: blockId, tur: z.literal("metin"), baslik: title, metin: z.string().trim().min(1).max(2000) }).strict(),
 ]);
@@ -101,6 +115,19 @@ export type ReportDefinitionBody = z.infer<typeof reportDefinitionBodySchema>;
 export type DefinitionBlock = ReportDefinitionBody["bloklar"][number];
 export type DefinitionParameter = ReportDefinitionBody["parametreler"][number];
 export type BlockQuery = z.infer<typeof blockQuerySchema>;
+export type AnalysisBlock = Extract<DefinitionBlock, { tur: "analiz" }>;
+
+/** Analiz bloğunun semantik sorgu kabuğu: süzgeç/zaman başvuruları sorgu bloklarıyla AYNI yoldan çözülür. */
+export function analysisQueryShell(b: AnalysisBlock, plan: AnalysisPlan): BlockQuery {
+  const measures = plan.kind === "corr" ? [plan.xm.id, plan.ym.id] : [plan.count.id];
+  const dims = plan.kind === "rate" ? [plan.x.id] : plan.kind === "table" ? [plan.x.id, plan.y.id] : [plan.group.id];
+  return { kup: plan.cube.id, olculer: measures, boyutlar: dims, ...(b.suzgec ? { suzgec: b.suzgec } : {}), ...(b.zaman ? { zaman: b.zaman } : {}) };
+}
+
+/** Bloğun planı (süzgeç değerleri planı etkilemez; yalnız kimlikler). */
+export function planAnalysisBlock(b: AnalysisBlock, cubes: readonly SemanticCube[] = SEMANTIC_CUBES) {
+  return planAnalysis({ yontem: b.yontem, kup: b.kup, x: b.x, y: b.y, maruziyet: b.maruziyet, kirilim: b.kirilim, suzgec: [] }, cubes);
+}
 
 export interface DefinitionIssue {
   /** JSON yolu — `bloklar[1].sorgu.olculer[0]`. */
@@ -232,6 +259,17 @@ function checkBlock(w: Walk, b: DefinitionBlock, path: string): void {
     b.sorgular.forEach((q, i) => checkQuery(w, q, `${path}.sorgular[${i}]`));
   } else if (b.tur === "grafik") {
     checkQuery(w, b.sorgu, `${path}.sorgu`);
+  } else if (b.tur === "analiz") {
+    const plan = planAnalysisBlock(b, w.cubes);
+    if (isAnalysisIssue(plan)) {
+      w.issues.push({ yol: `${path}.${plan.alan}`, mesaj: plan.mesaj });
+      return;
+    }
+    checkQuery(w, analysisQueryShell(b, plan), path);
+    if (plan.kind !== "table" && "exposure" in plan && plan.exposure) {
+      w.permissions.add(plan.exposure.cube.permission);
+      w.permissions.add(plan.exposure.measure.permission);
+    }
   } else if (b.tur === "tablo") {
     checkQuery(w, b.sorgu, `${path}.sorgu`);
     if (b.pivot) {
