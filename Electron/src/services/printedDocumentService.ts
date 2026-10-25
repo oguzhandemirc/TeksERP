@@ -18,6 +18,7 @@ export type PrintedDocType =
   | "KARTELA_DISPATCH"
   | "SUBCONTRACTOR_RECEIPT"
   | "QUALITY_CERTIFICATE"
+  | "INSPECTION_REPORT"
   | "RETURN_DISPATCH"
   // Refakat kartı (2026-08-17): defterde SÜRÜM GEÇMİŞİ tutar ama belge içeriği
   // buradan basılmaz — kartın kendi HTML ucu (`/api/traveler-cards/:id/html`)

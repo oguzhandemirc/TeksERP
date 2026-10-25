@@ -48,6 +48,7 @@ import "../src/services/payment.service";
 import "../src/services/reconciliation-letter.service";
 import "../src/services/cheque-delivery-note.service";
 import "../src/services/stock-count.service";
+import "../src/services/quality-inspection-shipment.service";
 
 let pass = 0;
 let fail = 0;
@@ -103,6 +104,9 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
   // ŞEKLİ yine de koşar ve bu bekçinin ölçtüğü şey odur.
   [PrintedDocType.STOCK_COUNT]: async () =>
     (await prisma.stockCount.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  // Muayene raporu sevkiyat başınadır (kalite sertifikasının emsali).
+  [PrintedDocType.INSPECTION_REPORT]: async () =>
+    (await prisma.shipment.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.
