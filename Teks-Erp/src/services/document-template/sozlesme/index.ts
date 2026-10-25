@@ -6,4 +6,5 @@
 // =============================================================================
 
 export { shipmentDispatchContract } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
+export { subcontractorDirectShipContract } from "./subcontractor-direct-ship"; // SUBCONTRACTOR_DIRECT_SHIP
 export { subcontractorReceiptContract } from "./subcontractor-receipt"; // SUBCONTRACTOR_RECEIPT
