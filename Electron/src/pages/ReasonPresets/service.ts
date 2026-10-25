@@ -23,7 +23,9 @@ export type ReasonPresetKind =
   | "WARP_BEAM_SCRAP"
   // Fason G1 (iplik): fasondan iplik dönüş sebebi
   | "YARN_SUBCONTRACT_RETURN"
-  | "WORK_ORDER_PLAN_CHANGE";
+  | "WORK_ORDER_PLAN_CHANGE"
+  // K4P: muayene iptali (seçim isteğe bağlı)
+  | "INSPECTION_VOID";
 
 export interface ReasonPreset {
   id: string;
@@ -88,6 +90,8 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   WARP_BEAM_SCRAP: false,
   YARN_SUBCONTRACT_RETURN: false,
   WORK_ORDER_PLAN_CHANGE: true,
+  // Muayene iptalinde seçilen metin `voidReason`a yazılır; kod saklanmaz. Sunucu tablosuyla birebir.
+  INSPECTION_VOID: true,
 };
 
 /**
@@ -99,7 +103,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
  * Dokuma ekranı) — sekme aynı bayrağı okur; `tezgahEnabled` telemetrinindir.
  * Parite bekçisi sekmenin VARLIĞINI ister, GÖRÜNÜRLÜĞÜNÜ değil — ikisi ayrı.
  */
-export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "dokumaEnabled" | "devereEnabled" | "iplikEnabled" }[] = [
+export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "dokumaEnabled" | "devereEnabled" | "iplikEnabled" | "kaliteGuvenceEnabled" }[] = [
   {
     kind: "ROLL_SCRAP",
     title: "Fire",
@@ -164,6 +168,12 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
     kind: "WORK_ORDER_PLAN_CHANGE",
     title: `${TERIM.terbiyeIsEmri.tekil} Plan Düzeltmesi`,
     hint: "Tablette terbiye iş emrinin rengi ya da eni değiştirilirken seçilen sebep. Seçilen metin terbiye iş emrinin Hareketler listesinde görünür.",
+  },
+  {
+    kind: "INSPECTION_VOID",
+    title: "Muayene İptali",
+    hint: "Muayene iptal penceresinde İSTEĞE BAĞLI hazır sebep. Seçilen metin gerekçe kutusuna dolar ve düzenlenebilir; listede olmayan sebep serbest metinle yazılır.",
+    modul: "kaliteGuvenceEnabled",
   },
 ];
 

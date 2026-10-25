@@ -95,6 +95,9 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
     case 'WORK_ORDER_PLAN_CHANGE':
       // İş emri renk/en düzeltmesi sunucusuz yapılamaz (online-only) — zemin bilerek BOŞ.
       return [];
+    case 'INSPECTION_VOID':
+      // Muayene iptali panel işidir ve seçim isteğe bağlıdır — zemin bilerek BOŞ.
+      return [];
   }
 }
 
@@ -111,6 +114,7 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   WARP_BEAM_SCRAP: builtin('WARP_BEAM_SCRAP'),
   YARN_SUBCONTRACT_RETURN: builtin('YARN_SUBCONTRACT_RETURN'),
   WORK_ORDER_PLAN_CHANGE: builtin('WORK_ORDER_PLAN_CHANGE'),
+  INSPECTION_VOID: builtin('INSPECTION_VOID'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */
