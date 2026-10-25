@@ -90,6 +90,9 @@ import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/Wa
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
 import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
 import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage";
+import { CostHubPage } from "@/pages/Cost/CostHubPage";
+import { ParametersPage as CostParametersPage } from "@/pages/Cost/Parameters/ParametersPage";
+import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/YarnPricesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -590,6 +593,33 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="certificate:read">
         <CertificatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── MALİYET & TEKLİF (MAL-3) — modül kapısı `route-modules.ts`ten (maliyetEnabled); izin karo
+  // (`pages/Cost/tile-config.ts`) ve backend `cost.routes.ts` okuma uçlarıyla birebir (`cost:read`).
+  // Yazma (`cost:write` · `cost:settings`) sayfa İÇİNDE PermissionGate.
+  {
+    path: "cost",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/parameters",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostParametersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/yarn-prices",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostYarnPricesPage />
       </ProtectedRoute>
     ),
   },

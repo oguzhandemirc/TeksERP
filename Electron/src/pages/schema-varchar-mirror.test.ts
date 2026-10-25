@@ -37,6 +37,9 @@ interface Ciftt {
 }
 
 const CIFTLER: Ciftt[] = [
+  // MAL-3 maliyet ekranları
+  { dosya: "Cost/Parameters/schema.ts", alan: "note", model: "CostParameterSet", kolon: "note" },
+  { dosya: "Cost/YarnPrices/schema.ts", alan: "note", model: "YarnCostPrice", kolon: "note" },
   { dosya: "Customers/schema.ts", alan: "name", model: "Customer", kolon: "name" },
   { dosya: "DefectTypes/schema.ts", alan: "name", model: "DefectType", kolon: "name" },
   { dosya: "Machines/schema.ts", alan: "name", model: "Machine", kolon: "name" },

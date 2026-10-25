@@ -320,6 +320,10 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "quality/inspection-rules", app: "desktop", modul: "kaliteGuvenceEnabled", title: "4 Puan Kuralları", requires: ["inspection:read"], capabilities: ["inspection:rules"] },
   { key: "quality/lab-tests", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Lab Testleri", requires: ["labtest:read"], capabilities: ["labtest:write", "labtest:approve"] },
   { key: "quality/certificates", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Sertifikalar", requires: ["certificate:read"], capabilities: ["certificate:write"] },
+  // Maliyet & Teklif (MAL-3): görüntüleme `cost:read` (uçların okuma izni); yazma ekran İÇİ yetenek.
+  { key: "cost", app: "desktop", modul: "maliyetEnabled", title: "Maliyet & Teklif", requires: ["cost:read"], capabilities: [] },
+  { key: "cost/parameters", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Parametreleri", requires: ["cost:read"], capabilities: ["cost:settings"] },
+  { key: "cost/yarn-prices", app: "desktop", modul: "maliyetEnabled", title: "İplik Maliyet Fiyatları", requires: ["cost:read"], capabilities: ["cost:write"] },
 ];
 
 const mobile: ScreenEntry[] = [
@@ -412,7 +416,6 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
       "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
-  { modul: "maliyetEnabled", reason: "Maliyet & Teklif: kapı MAL-1'de `/api/cost` uçlarına takıldı (API), ilk ekranlar MAL-3 (ürün maliyeti) ve MAL-7 (maliyet parametreleri ekranı); ekran eşlenince bu muaf silinir." },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */
@@ -434,10 +437,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
   // K4P zemin (2026-10-24): tablet Muayene ekranı EKRAN diliminde doğar; o gün bu satır ölü muaf olur ve silinir.
   { code: "mobile:muayene", reason: "Tablet Muayene ekranı (K4P EKRAN dilimi) henüz yok — izin kataloğu zeminde önden doğdu." },
-  // MAL-1 (2026-10-25): maliyet girdileri uçları API olarak doğdu; ekranlar MAL-3/MAL-7'de — o gün bu üç satır ölü muaf olur ve silinir.
-  { code: "cost:read", reason: "Maliyet ekranları (MAL-3 ürün maliyeti, MAL-7 maliyet parametreleri ekranı) henüz yok — `/api/cost` uçları MAL-1'de API olarak doğdu." },
-  { code: "cost:write", reason: "Maliyet yapısı / iplik fiyatı / tarife ekranı MAL-3/MAL-7'de doğar — uç MAL-1'de API." },
-  { code: "cost:settings", reason: "maliyet parametreleri ekranı ekranı MAL-7'de doğar — uç MAL-1'de API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

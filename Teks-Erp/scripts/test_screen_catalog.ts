@@ -134,6 +134,7 @@ const TILE_FILES = [
   "pages/Access/tile-config.ts",
   "pages/Finance/tile-config.ts",
   "pages/Reports/tile-config.ts",
+  "pages/Cost/tile-config.ts",
 ];
 const NAV_FILE = "components/layout/nav-config.ts";
 

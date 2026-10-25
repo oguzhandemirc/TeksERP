@@ -112,6 +112,11 @@ export interface OperationsVisibilityContext {
    */
   kaliteGuvenceEnabled: boolean;
   /**
+   * MALİYET & TEKLİF modülü (`maliyet.enabled`, MAL) — ETKİN değer (`production && maliyet`); backend kapısı
+   * `requireMaliyetEnabled` (`/api/cost`). Belirsizken FALSE: menü bayrak gelmeden çizilmez (fail-closed).
+   */
+  maliyetEnabled: boolean;
+  /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
    * AÇIKKEN tek "Cariler" karosu, KAPALIYKEN (fabrika) bugünkü Müşteriler +

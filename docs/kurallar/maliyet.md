@@ -19,13 +19,20 @@
 - **[ÇEKİRDEK]** Ölçülmüş çözgü firesi yalnız ÖNERİDİR (`oneriler.warpWaste`, kaynak + levent sayısıyla); girdiye kendiliğinden girmez, kullanıcı `overrides.warpWastePct` + `warpWasteMeasured: true` ile uygular (kaynak `OLCULMUS`, uyarı `WARP_WASTE_MEASURED`). · bekçi: `test_maliyet_girdi`
 - **[ÇEKİRDEK]** Önizleme hiçbir şey yazmaz (sürüm de audit de). · bekçi: `test_standart_maliyet_surum` (§6b)
 
+## Panel (`Electron/src/pages/Cost/`)
+
+- **[ÇEKİRDEK]** Maliyet ekranları sayı HESAPLAMAZ ve kuru 1 VARSAYMAZ: her tutar `POST /api/cost/preview` ya da kayıtlı sürüm alanıdır, istemci yalnız TR biçimine çevirir (`shared/format.ts`, metin → Intl); kur yoksa sunucunun `eksikler`i gösterilir. · bekçi: Electron `pages/Cost/cost-no-client-math.test.ts`
+- **[ÇEKİRDEK]** "Maliyet & Teklif" menü satırı, hub karoları ve palet satırları `maliyetEnabled` (ETKİN: `production && maliyet`) + `cost:read` ile çizilir; karo izni route izniyle birebir; kapalı modülün 403 `MODULE_DISABLED` yanıtı "kapalı — <ayar yolu>" der. · bekçi: Electron `pages/Cost/cost-access.test.tsx`, `test_screen_catalog`
+
 ## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır).
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `maliyet` bölümü** (MAL-1 bekçileri `modul-bayrak` bölümünde).
 
-Backend: `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`
+Panel (Electron vitest): `src/pages/Cost` (`cost-no-client-math`, `cost-access`, `shared/format`, `shared/errors`)
+
+Backend: `test_screen_catalog`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
