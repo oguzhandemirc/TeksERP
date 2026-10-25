@@ -35,6 +35,13 @@ function check(label: string, ok: boolean, extra = ""): void {
   else { fail++; console.error(`❌ ${label}${extra ? ` — ${extra}` : ""}`); }
 }
 
+/** Servis dönüş tipi `Roll` include'u taşımaz; `errors` çalışma zamanında daraltılır (tip zorlaması yok). */
+function errorIdsOf(v: unknown): string[] {
+  if (typeof v !== "object" || v === null || !("errors" in v) || !Array.isArray(v.errors)) return [];
+  return v.errors.flatMap((e: unknown) =>
+    typeof e === "object" && e !== null && "id" in e && typeof e.id === "string" ? [e.id] : []);
+}
+
 interface Fikstur {
   itemId: string; stationId: string; woId: string; stepId: string;
   rollA: string; rollB: string; inspA: string; inspB: string;
@@ -152,11 +159,11 @@ async function main(): Promise<void> {
     console.log("\n── §2 Tambur karar ekranı + top detayı ──");
     const tambur = new TamburService();
     const decision = await tambur.getRollForDecision(f.rollA!);
-    const decIds = ((decision.data as unknown as { errors: Array<{ id: string }> }).errors ?? []).map((e) => e.id);
+    const decIds = errorIdsOf(decision.data);
     check("§2 karar ekranı PROCESS hatasını gösterir", decIds.includes(f.errAProcess!));
     check("§2 karar ekranı muayene hatasını göstermez", !decIds.includes(f.errAInspection!), decIds.join(","));
     const detail = await new InventoryService().findRollById(f.rollA!);
-    const detIds = ((detail.data as unknown as { errors: Array<{ id: string }> }).errors ?? []).map((e) => e.id);
+    const detIds = errorIdsOf(detail.data);
     check("§2 envanter top detayı yalnız PROCESS", detIds.length === 1 && detIds[0] === f.errAProcess, detIds.join(","));
 
     console.log("\n── §3 deleteError ──");
