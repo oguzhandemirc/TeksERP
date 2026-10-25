@@ -38,6 +38,7 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 
 // docType başına TEK satır, alfabetik (port dilimleri ekler).
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
+  GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
   SHIPMENT_DISPATCH: (s, m) => renderShipmentDispatchHtml(s, m as Parameters<typeof renderShipmentDispatchHtml>[1]),
   SUBCONTRACTOR_DIRECT_SHIP: (s, m) => renderFasonDirectShipHtml(s, m as Parameters<typeof renderFasonDirectShipHtml>[1]),
   SUBCONTRACTOR_DISPATCH: (s, m) => renderFasonCekiHtml(s, m as Parameters<typeof renderFasonCekiHtml>[1]),

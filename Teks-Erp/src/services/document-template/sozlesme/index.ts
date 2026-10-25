@@ -5,6 +5,7 @@
 // çakışmada iki satır da korunur. Okuma `kayit.ts` üzerinden yapılır (bekçi sırayı ölçer).
 // =============================================================================
 
+export { goodsReceiptContract } from "./goods-receipt"; // GOODS_RECEIPT
 export { shipmentDispatchContract } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
 export { subcontractorDirectShipContract } from "./subcontractor-direct-ship"; // SUBCONTRACTOR_DIRECT_SHIP
 export { subcontractorDispatchContract } from "./subcontractor-dispatch"; // SUBCONTRACTOR_DISPATCH
