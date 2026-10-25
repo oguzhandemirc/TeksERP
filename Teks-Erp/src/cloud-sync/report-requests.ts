@@ -102,7 +102,8 @@ export interface RemoteReport {
    * taşıyan rapor (ör. `production/operator-performance`) bu listeye GİRMEZ (B1 kararı).
    */
   readonly personalData: "YOK";
-  readonly run: (params: Record<string, unknown>) => Promise<unknown>;
+  // Ad bilerek özgül: `test_levent_kalan_tek_okuyucu` ad bazlı kapanış kurar; genel `run` her `run()` çağrısını dolaylı okuyucu yapıyordu.
+  readonly reportRunner: (params: Record<string, unknown>) => Promise<unknown>;
 }
 
 const rangeOf = (p: Record<string, unknown>) => resolveDateRange(p as z.infer<typeof dateRangeSchema>);
@@ -153,62 +154,62 @@ export function carriesPersonName(value: unknown): boolean {
 /** Buluttan istenebilir raporlar — KATALOG ∩ bu liste; `audit/*` hiçbir zaman girmez (bekçi ölçer). */
 export const REMOTE_REPORTS: readonly RemoteReport[] = [
   { key: "sales/order-intake", permission: "bulut:siparis:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getOrderIntake(rangeOf(p)) },
+    reportRunner: (p) => getOrderIntake(rangeOf(p)) },
   { key: "sales/shipment-scorecard", permission: "bulut:sevkiyat:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getShipmentScorecard(rangeOf(p)) },
+    reportRunner: (p) => getShipmentScorecard(rangeOf(p)) },
   { key: "customer/scorecard", permission: "bulut:siparis:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getCustomerScorecard(rangeOf(p)) },
+    reportRunner: (p) => getCustomerScorecard(rangeOf(p)) },
   { key: "quality/scorecard", permission: "bulut:uretim:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getQualityScorecard(rangeOf(p)) },
+    reportRunner: (p) => getQualityScorecard(rangeOf(p)) },
   { key: "subcontract/scorecard", permission: "bulut:uretim:oku", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => getSubcontractScorecard(rangeOf(p)) },
+    reportRunner: (p) => getSubcontractScorecard(rangeOf(p)) },
   { key: "inventory/scorecard", permission: "bulut:stok:oku", params: z.strictObject({}), paramNames: [], standard: "KESIT", personalData: "YOK",
-    run: () => getStockScorecard() },
+    reportRunner: () => getStockScorecard() },
   { key: "finance/aging", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: AgingParams, paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
-    run: (p) => getAgingReport({ asOf: typeof p.asOf === "string" ? new Date(p.asOf) : new Date() }) },
+    reportRunner: (p) => getAgingReport({ asOf: typeof p.asOf === "string" ? new Date(p.asOf) : new Date() }) },
   { key: "finance/cheque-due", permission: "bulut:cek:oku", module: "finance.enabled", params: dateRangeSchema, paramNames: ["dateFrom", "dateTo"], standard: "KESIT", personalData: "YOK",
-    run: async (p) => {
+    reportRunner: async (p) => {
       const q = p as z.infer<typeof dateRangeSchema>;
       return (await chequeService.dueSummary({ from: q.dateFrom ? new Date(q.dateFrom) : undefined, to: q.dateTo ? new Date(q.dateTo) : undefined })).data;
     } },
   // ---- Raporlar v2 temel raporları (sonuç `RaporSunumu`). HARİÇ: `production/uretim-akisi` (operatör adı, K-KISI).
   { key: "sales/siparis-talep", permission: "bulut:siparis:oku", params: acceptFactoryDays(coreOrderDemandQuerySchema), paramNames: ["dateFrom", "dateTo", "kiyas", "customerId", "destination", "itemId"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
       const q = p as z.infer<typeof coreOrderDemandQuerySchema>;
       return buildOrderDemandReport({ range, compareRange, compareMode, filters: { customerId: q.customerId, destination: q.destination, itemId: q.itemId } });
     }) },
   { key: "sales/sevkiyat", permission: "bulut:sevkiyat:oku", params: acceptFactoryDays(coreShippedQuerySchema), paramNames: ["dateFrom", "dateTo", "kiyas", "destination"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => rangedPresentation(p, (range, compareRange, compareMode) =>
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) =>
       buildShippedReport({ range, compareRange, compareMode, filters: { destination: (p as z.infer<typeof coreShippedQuerySchema>).destination } })) },
   { key: "sales/termin", permission: "bulut:sevkiyat:oku", params: acceptFactoryDays(coreDeadlineQuerySchema), paramNames: ["dateFrom", "dateTo", "kiyas", "destination"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => rangedPresentation(p, (range, compareRange, compareMode) =>
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) =>
       buildDeadlineReport({ range, compareRange, compareMode, filters: { destination: (p as z.infer<typeof coreDeadlineQuerySchema>).destination } })) },
   { key: "sales/acik-siparisler", permission: "bulut:siparis:oku", params: coreOpenOrderQuerySchema, paramNames: ["itemId"], standard: "KESIT", personalData: "YOK",
-    run: async (p) => (await buildOpenOrderReport({ filters: { itemId: (p as z.infer<typeof coreOpenOrderQuerySchema>).itemId } })).sunum },
+    reportRunner: async (p) => (await buildOpenOrderReport({ filters: { itemId: (p as z.infer<typeof coreOpenOrderQuerySchema>).itemId } })).sunum },
   { key: "sales/vazgecilen-is", permission: "bulut:siparis:oku", params: acceptFactoryDays(coreLostWorkQuerySchema), paramNames: ["dateFrom", "dateTo", "kiyas"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => rangedPresentation(p, (range, compareRange, compareMode) => buildLostWorkReport({ range, compareRange, compareMode })) },
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => buildLostWorkReport({ range, compareRange, compareMode })) },
   { key: "quality/kalite", permission: "bulut:uretim:oku", module: "production.enabled", params: acceptFactoryDays(coreQualityQuerySchema), paramNames: ["dateFrom", "dateTo", "kiyas", "warpBeamId", "lotNo", "varyant"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
       const q = p as z.infer<typeof coreQualityQuerySchema>;
       return buildQualityReport({ range, compareRange, compareMode, view: q.varyant, filters: { warpBeamId: q.warpBeamId, lotNo: q.lotNo } });
     }) },
   { key: "quality/kayip", permission: "bulut:uretim:oku", module: "production.enabled", params: acceptFactoryDays(coreLossQuerySchema), paramNames: ["dateFrom", "dateTo", "kiyas"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => rangedPresentation(p, (range, compareRange, compareMode) => buildLossReport({ range, compareRange, compareMode })) },
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => buildLossReport({ range, compareRange, compareMode })) },
   { key: "inventory/depo", permission: "bulut:stok:oku", params: coreWarehouseQuerySchema, paramNames: [], standard: "KESIT", personalData: "YOK",
-    run: async () => (await buildWarehouseReport()).sunum },
+    reportRunner: async () => (await buildWarehouseReport()).sunum },
   { key: "subcontract/fasoncular", permission: "bulut:uretim:oku", params: acceptFactoryDays(coreSubcontractorsQuerySchema), paramNames: ["dateFrom", "dateTo", "kiyas", "subcontractorId", "itemId", "colorId"], standard: "DONEMLI", personalData: "YOK",
-    run: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
+    reportRunner: (p) => rangedPresentation(p, (range, compareRange, compareMode) => {
       const q = p as z.infer<typeof coreSubcontractorsQuerySchema>;
       return buildSubcontractorsReport({ range, compareRange, compareMode, filters: { subcontractorId: q.subcontractorId, itemId: q.itemId, colorId: q.colorId } });
     }) },
   { key: "dokuma/tezgah-randimani", permission: "bulut:uretim:oku", gate: weavingOpen, params: coreLoomEfficiencyQuerySchema, paramNames: ["from", "to", "kiyas"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
-    run: async (p) => (await buildLoomEfficiencyReport({ window: dayWindowOf("dokuma/tezgah-randimani", p) })).sunum },
+    reportRunner: async (p) => (await buildLoomEfficiencyReport({ window: dayWindowOf("dokuma/tezgah-randimani", p) })).sunum },
   { key: "dokuma/duruslar", permission: "bulut:uretim:oku", gate: weavingOpen, params: coreLoomStopsQuerySchema, paramNames: ["from", "to", "kiyas", "shiftDefinitionId"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
-    run: async (p) => (await buildLoomStopsReport({ window: dayWindowOf("dokuma/duruslar", p), shiftDefinitionId: (p as z.infer<typeof coreLoomStopsQuerySchema>).shiftDefinitionId })).sunum },
+    reportRunner: async (p) => (await buildLoomStopsReport({ window: dayWindowOf("dokuma/duruslar", p), shiftDefinitionId: (p as z.infer<typeof coreLoomStopsQuerySchema>).shiftDefinitionId })).sunum },
   { key: "dokuma/levent-dengesi", permission: "bulut:uretim:oku", gate: beamBalanceOpen, params: coreBeamBalanceQuerySchema, paramNames: ["from", "to", "kiyas"], standard: "DONEMLI", standardParams: dayParams, personalData: "YOK",
-    run: async (p) => (await buildBeamBalanceReport({ window: dayWindowOf("dokuma/levent-dengesi", p) })).sunum },
+    reportRunner: async (p) => (await buildBeamBalanceReport({ window: dayWindowOf("dokuma/levent-dengesi", p) })).sunum },
   { key: "finance/alacaklar", permission: "bulut:cari-bakiye:oku", module: "finance.enabled", params: coreReceivablesQuerySchema, paramNames: ["asOf"], standard: "KESIT", personalData: "YOK",
-    run: async (p) => (await buildReceivablesReport(typeof p.asOf === "string" ? new Date(p.asOf) : new Date())).sunum },
+    reportRunner: async (p) => (await buildReceivablesReport(typeof p.asOf === "string" ? new Date(p.asOf) : new Date())).sunum },
 ];
 
 export function findRemoteReport(key: string): RemoteReport | undefined {
@@ -305,7 +306,7 @@ export async function computeReportResult(g: {
   if (!parsed.success) return fail("PARAMETRE_GECERSIZ");
   let value: unknown;
   try {
-    const out = await withTimeout(r.run(parsed.data), g.timeoutMs ?? REPORT_TIMEOUT_MS);
+    const out = await withTimeout(r.reportRunner(parsed.data), g.timeoutMs ?? REPORT_TIMEOUT_MS);
     if (out === "ZAMAN_ASIMI") return fail("ZAMAN_ASIMI");
     if (carriesPersonName(out)) return fail("RAPOR_KAPALI");
     value = stripUiEnvelope(out);

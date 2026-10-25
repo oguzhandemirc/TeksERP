@@ -3,6 +3,7 @@
 // RED (fail-closed). Küme fabrikanın `REMOTE_REPORTS` listesiyle birebir (bekçi `test_bulut_tel_aynasi` §8).
 // Audit ailesi buluta HİÇ gitmez; kişi adı taşıyan rapor (ya da varyant) listeye girmez. v2 anahtarlarının
 // sonucu fabrikada kurulmuş `RaporSunumu`dur (tel tipi `wire/api.ts`); bulut yalnız saklar, hesaplamaz.
+import { PARA_BIRIMLERI } from "../wire/api";
 import { isCloudPermission, type CloudPermission } from "./permissions";
 
 export const REPORT_KEY_PERMISSION: Readonly<Record<string, CloudPermission>> = {
@@ -97,4 +98,20 @@ export function readableReportProjections(permissions: ReadonlySet<CloudPermissi
 /** Bütün rapor sonucu adları (rapor başına + geçiş aile adları) — bakım budaması bunların hepsini görmeli. */
 export function allReportProjections(): string[] {
   return [...Object.keys(REPORT_KEY_PERMISSION).map(reportProjectionName), ...[...familyKeys().keys()].map((f) => `rapor.${f}`)];
+}
+
+// PARA YAN SAYILARI FINANS SINIFIDIR (K-BULUT; kolon opt-in kalıbı `projections.ts` FINANS_KOLONU ile aynı): finans
+// DIŞI raporda para birimli yan sayı `bulut:fiyat:oku` ister; finans ailesi raporu KENDİ izniyle açar. Bulut
+// hesap yapmaz — yalnız alanı düşürür (sayı değiştirmez, yeniden sıralamaz).
+const FINANS_SINIFI: CloudPermission = "bulut:fiyat:oku";
+const FINANCE_REPORT_PERMISSIONS: ReadonlySet<CloudPermission> = new Set<CloudPermission>(["bulut:cari-bakiye:oku", "bulut:cek:oku"]);
+const PARA: ReadonlySet<string> = new Set<string>(PARA_BIRIMLERI);
+
+export function stripMoneySideFigures(veri: unknown, reportPermission: CloudPermission, permissions: ReadonlySet<string>): unknown {
+  if (FINANCE_REPORT_PERMISSIONS.has(reportPermission) || permissions.has(FINANS_SINIFI)) return veri;
+  if (veri === null || typeof veri !== "object" || Array.isArray(veri)) return veri;
+  const yan: unknown = (veri as { yanSayilar?: unknown }).yanSayilar;
+  if (!Array.isArray(yan)) return veri;
+  const kalan = yan.filter((y: unknown) => !(y !== null && typeof y === "object" && PARA.has(String((y as { birim?: unknown }).birim))));
+  return kalan.length === yan.length ? veri : { ...veri, yanSayilar: kalan };
 }

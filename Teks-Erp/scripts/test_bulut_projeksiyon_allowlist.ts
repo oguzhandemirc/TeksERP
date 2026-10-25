@@ -425,7 +425,7 @@ async function raporBolumu(): Promise<void> {
     v2Sayi++;
     let v: unknown;
     try {
-      v = await r.run(r.params.parse({}));
+      v = await r.reportRunner(r.params.parse({}));
     } catch (e) {
       // Kapalı modül (dokuma/devere/finans) bu DB'de 403 verir; kapı `availability`de ölçülür.
       if (e instanceof Error && /MODULE_DISABLED|kapalı/i.test(e.message)) continue;
