@@ -14,6 +14,8 @@ import { tokenReplay } from "../helpers/token-replay.helper";
 import { getContract, type RegisteredContract } from "./sozlesme/kayit";
 import { TemplateRenderError, renderTemplate } from "./motor/render";
 import { prepareContent, versionData, VERSION_SUMMARY, type VersionContentInput } from "./version-content";
+import { getRegisteredDocBuilders } from "../printed-document.service";
+import { EXCEL_DEFAULT_COLUMNS_WARNING, readTableBindings } from "./excel-tables";
 
 /** Yayının SoD ayarı — ham okunur, satır yoksa KAPALI (bayrak bağlantısı T1C'de). */
 export const PUBLISH_SOD_SETTING_KEY = SETTING_KEYS.DOCUMENTS_PUBLISH_SOD_ENABLED;
@@ -73,6 +75,12 @@ function saveReplay(templateId: string, input: SaveVersionInput) {
 }
 
 /** Yeni değişmez sürüm. `baseVersionId` en son sürüm değilse 409; içerik aynıysa yeni sürüm açılmaz. */
+/** Excel'i olan türde kalem tablosu bağı yoksa `/tables` Sistem kolonlarına düşer — editöre söylenir (TX). */
+function excelWarnings(docType: string, input: Pick<VersionContentInput, "tableBindings">): string[] {
+  const hasExcel = [...getRegisteredDocBuilders()].some(([d, e]) => d === docType && e.renderTables !== undefined);
+  return hasExcel && readTableBindings(input.tableBindings).length === 0 ? [EXCEL_DEFAULT_COLUMNS_WARNING] : [];
+}
+
 export async function saveVersion(templateId: string, input: SaveVersionInput, userId: string): Promise<SaveVersionResult> {
   return saveReplay(templateId, input).run(input.clientToken, async () => {
     const t = await prisma.documentTemplate.findUnique({
@@ -94,7 +102,8 @@ export async function saveVersion(templateId: string, input: SaveVersionInput, u
     if (base.versionNo !== t.latestVersionNo) throw stale();
     const contract = getContract(t.docType);
     const content = prepareContent(contract, input);
-    if (content.contentHash === base.contentHash) return { created: false, version: base, warnings: content.warnings };
+    const warnings = [...content.warnings, ...excelWarnings(t.docType, input)];
+    if (content.contentHash === base.contentHash) return { created: false, version: base, warnings };
 
     const created = await prisma.$transaction(async (tx) => {
       const claim = await tx.documentTemplate.updateMany({
@@ -120,7 +129,7 @@ export async function saveVersion(templateId: string, input: SaveVersionInput, u
       recordId: created.id,
       newData: { templateId, versionNo: created.versionNo, editMode: created.editMode, kesilenler: content.removedOnSave },
     });
-    return { created: true, version: created, warnings: content.warnings };
+    return { created: true, version: created, warnings };
   });
 }
 

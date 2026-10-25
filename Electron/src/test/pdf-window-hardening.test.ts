@@ -322,10 +322,9 @@ describe("Toplu PDF: tek pencere, ilerleme, zaman aşımı", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
       const run = Promise.resolve(h.handlers.get("pdf:saveBatch")?.(event, { items }));
-      // Dosya yazımı gerçek G/Ç: b'nin pencereye yüklenmesini (zaman aşımı saati kurulmuş) gerçek turlarla bekle.
-      for (let i = 0; i < 500 && h.windows.at(-1)?.served !== "<p>b</p>"; i++) {
-        await vi.advanceTimersByTimeAsync(300);
-        await new Promise((r) => setImmediate(r));
+      // a'nın yazımı gerçek G/Ç: tur sayısıyla beklenirse yükte döngü tükenir, saat b kurulmadan ilerler, test asılır.
+      for (const t0 = Date.now(); h.windows.at(-1)?.served !== "<p>b</p>"; await new Promise((r) => setImmediate(r))) {
+        if (Date.now() - t0 > 4_000) throw new Error("b belgesi 4 sn içinde pencereye yüklenmedi");
       }
       await vi.advanceTimersByTimeAsync(limits.PDF_TIMEOUT_MS + 300);
       expect(await run).toEqual({ saved: false, error: limits.PDF_TIMEOUT_MESSAGE });
