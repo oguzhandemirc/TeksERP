@@ -83,6 +83,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/components/merge/MergeDialog.tsx::mergeService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // Özel rapor açılınca koşulur (koşu satırı yazar; veri değiştirmez) — R1-KAYIT.
   { yer: "Electron/src/pages/Reports/_v2/custom/CustomReportViewPage.tsx::customReportApi.run", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  // Düzen editörü taslağı gecikmeli önizler (koşu satırı yazmaz; zarf `ok(res, data)`, uyarısız) — R2-DUZEN.
+  { yer: "Electron/src/pages/Reports/_v2/custom/layout/useLayoutEditor.ts::customReportApi.preview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/hooks/useDeviceAnnounce.ts::apiClient", sinif: "BOOT", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/DocumentPreview.tsx::printedDocumentService.getSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/TravelerCardPreview.tsx::workOrderService.getTravelerCardSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
