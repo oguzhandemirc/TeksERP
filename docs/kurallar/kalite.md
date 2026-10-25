@@ -59,6 +59,7 @@
 - **[ÇEKİRDEK]** Muayene revizyonu ve iptali eskiyi `updateMany WHERE {id, ...ACTIVE_INSPECTION_WHERE}` ile atomik claim eder, `count===0 → 409 INSPECTION_NOT_ACTIVE`; aktiflik yüklemi `helpers/inspection-active.helper.ts`te (`isActiveInspection` ikizi). · bekçi: `test_kalite_muayene` §5 (zorlanmış sıra) <sub>(arşiv 2026-10-25 "K4P motor")</sub>
 - **[ÇEKİRDEK]** Aktif 4 puan kural setinin bandındaki kalite derecesini pasife alma (409 `QUALITY_GRADE_IN_RULE_SET`); kural setini silme, pasife al — geçmiş muayene snapshot'tan okunur. · bekçi: `test_kalite_kural_seti` §5 <sub>(arşiv 2026-10-25 "K4P-TANIM")</sub>
 - **[ÇEKİRDEK]** Sevkiyat muayene özetinde topun KENDİ aktif muayenesini (FINAL > RAW) oku, ebeveyne bakma; müşteri kuralı etiketi/sonucu yalnız okumada ezer, `RollInspection` ve `Roll.qualityGrade` yazılmaz; müşteri koşu tavanı farklıysa puanı yeniden hesaplama, belgeye dipnot düş. · bekçi: `test_muayene_sevk_ozeti` §1–§3 · `test_muayene_raporu_sozlesme` §5 <sub>(arşiv 2026-10-25 "K4P-RAPOR")</sub>
+- **[ÇEKİRDEK]** Rapor v2'de muayene sayısını yalnız `muayene` küpünden yayımla; küp aktif muayeneyi `ACTIVE_INSPECTION_SQL` ile süzer ve Muayeneler özet şeridiyle (`listInspections` summary) aynı sayıyı verir. · bekçi: `test_semantik_sayi_esitligi` §E muayene <sub>(arşiv 2026-10-25 "K4P-RAPOR")</sub>
 
 ## Backend
 

@@ -54,6 +54,7 @@ import { secondsToMinutes } from "../src/services/reports/temel/duruslar.temel";
 import { buildLossReport } from "../src/services/reports/temel/kayip.temel";
 import { resolveCoreCompare } from "../src/services/reports/temel/_common";
 import { getAgingReport } from "../src/services/reports/finance-aging.report";
+import { listInspections } from "../src/services/quality-inspection-query.service";
 
 let pass = 0;
 let fail = 0;
@@ -206,6 +207,32 @@ const CASES: Record<string, Case> = {
     sameBreakdown("§E istasyon/uretim.bekleyenTop × istasyon = byStation bekleyen",
       new Map([...byKey(await run("istasyon", "uretim.bekleyenTop", ["istasyon"]), "istasyon", "uretim.bekleyenTop")].filter(([, v]) => v !== 0)),
       new Map(w.byStation.filter((s) => s.waitingCount > 0).map((s) => [s.key, s.waitingCount])), 0);
+  },
+  // K4P-RAPOR: kaynak Muayeneler ekranının özet şeridi (aynı where, fabrika günü penceresi).
+  "kalite.muayeneAdedi": async () => {
+    const days = { from: FIXTURE_DAYS.from, to: FIXTURE_DAYS.to };
+    const src = (await listInspections(days)).summary.total;
+    await totalCase("muayene", "kalite.muayeneAdedi", src, 0);
+    check("§E muayene/kalite.muayeneAdedi fikstür dolu (iptal ve pencere dışı sayılmaz → 3)", src === 3, String(src));
+    const cube = byKey(await run("muayene", "kalite.muayeneAdedi", ["asama"]), "asama", "kalite.muayeneAdedi");
+    const byPhase = new Map<string | null, number>();
+    for (const phase of ["RAW", "FINAL"]) {
+      const n = (await listInspections({ ...days, phase })).summary.total;
+      if (n > 0) byPhase.set(phase, n);
+    }
+    sameBreakdown("§E muayene/kalite.muayeneAdedi × aşama = liste aşama süzgeci", cube, byPhase, 0);
+  },
+  "kalite.muayeneOrtalamaPuan": async (fx) => {
+    const days = { from: FIXTURE_DAYS.from, to: FIXTURE_DAYS.to };
+    const num = (v: { toNumber(): number } | null) => (v == null ? null : v.toNumber());
+    const src = num((await listInspections(days)).summary.avgPointsPer100M2);
+    await totalCase("muayene", "kalite.muayeneOrtalamaPuan", src, 2, true);
+    check("§E muayene/kalite.muayeneOrtalamaPuan fikstür: (12,5 + 20,25) / 2, puansız ve iptal dışarıda", src === 16.38, String(src));
+    const cube = byKey(await run("muayene", "kalite.muayeneOrtalamaPuan", ["kumas"]), "kumas", "kalite.muayeneOrtalamaPuan");
+    for (const itemId of fx.items) {
+      const s = num((await listInspections({ ...days, itemId })).summary.avgPointsPer100M2);
+      check(`§E muayene/kalite.muayeneOrtalamaPuan × kumaş (${fx.items.indexOf(itemId) + 1}) = liste kumaş süzgeci`, same(cube.get(itemId) ?? null, s, 2, true), show(cube.get(itemId), s));
+    }
   },
   "kalite.hataAdedi": async (fx) => {
     const s = await getScrapScorecard(R);
