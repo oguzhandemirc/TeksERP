@@ -2,7 +2,7 @@
 // test_rapor_tanimi — kayıtlı/özel rapor arka ucu (Raporlar v2, R1-KAYIT; plan §3.2–3.4)
 // =============================================================================
 // Ölçtükleri: §0 iki izin kodu katalogda (`test_permission_catalog` devri) · §1 tanım şeması (strict, JSON yolu, öneri, başvurusuz/tanımsız parametre;
-// §1i–j R2-VERI oluşturucu süzgeç fikstürü `Electron/…/custom/data/filter-contract.fixture.json` geçer, "veya" reddedilir) · §2 sistem
+// §1i–j R2-VERI oluşturucu süzgeç fikstürü `Electron/…/custom/data/filter-contract.fixture.json` geçer, "veya" reddedilir; §1k R2-KOD kod modu mesajları Türkçe + yol dilbilgisi) · §2 sistem
 // tanımı boot uzlaştırması (idempotent, katalogdan çıkan ARSIV) + fikstür gövdeleri derleyiciden geçer ·
 // §3 clientToken replay DÖRT durum · §4 sürüm DEĞİŞMEZ + aktif sürüm claim'i 409 + eşzamanlı kayıt + sürüm replay'i ·
 // §5 durum geçişi atomik · §6 paylaşım veri yetkisi VERMEZ (izinsiz blok "yetkisiz") + görünürlük 404 ·
@@ -15,6 +15,8 @@
 //   S3 `audit-muafiyeti.ts` ReportSnapshot beyanı bozuldu → §10d ❌ 1
 //   S4 `blockQuerySchema` `.strict()` → `.passthrough()` → §1e ❌ 1
 //   S5 (R2-VERI) oluşturucu fikstüründe `suzgec.rules` → `kurallar` (plan §3.2'den sapma) → §1i ❌ 1
+//   S6 (R2-KOD) `zodMessage` tür adı çevirisi kaldırıldı ("Beklenen tür: string") → §1k ❌ 1 ·
+//   S7 (R2-KOD) `safeParse` `reportInput` kaldırıldı (yanlış tür "Zorunlu alan eksik" der) → §1k ❌ 1
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -143,6 +145,22 @@ async function main(): Promise<void> {
     orBody.bloklar[0]!.sorgu.suzgec.combinator = "or";
     const t6 = checkReportDefinition(orBody);
     check("§1j \"veya\" süzgeci bugün reddedilir (oluşturucu yetenek bayrağı kapalı kalmalı)", !t6.gecerli && t6.hatalar.some((h) => h.yol.startsWith("bloklar[0].sorgu.suzgec")), JSON.stringify(t6.gecerli ? [] : t6.hatalar));
+    // §1k R2-KOD: kod modu hataları Türkçe ve konumlanabilir yol taşır (istemci yolu satır/sütuna eşler, şemayı kopyalamaz).
+    const codeCases: Array<[string, unknown, string, string?]> = [
+      ["yanlış ölçü adı", { ...fixtureBody(), bloklar: [{ id: "a", tur: "anaSayi", sorgu: { kup: "sevk", olculer: ["sevk.brutMetr"] } }] }, "bloklar[0].sorgu.olculer[0]"],
+      ["tanımsız $param", { surum: 1, baslik: "x", bloklar: [{ id: "a", tur: "anaSayi", sorgu: { kup: "sevk", olculer: ["sevk.brutMetre"], tavan: "$yok" } }] }, "bloklar[0].sorgu.tavan"],
+      ["grafik türü kapalı küme dışı", { surum: 1, baslik: "x", bloklar: [{ id: "a", tur: "grafik", gorsel: "radar", sorgu: { kup: "sevk", olculer: ["sevk.brutMetre"] } }] }, "bloklar[0].gorsel"],
+      ["yanlış tür", { surum: 1, baslik: 7, bloklar: [{ id: "a", tur: "metin", metin: "x" }] }, "baslik", "Beklenen tür: metin."],
+      ["eksik alan", { surum: 1, bloklar: [{ id: "a", tur: "metin", metin: "x" }] }, "baslik", "Zorunlu alan eksik."],
+      ["tanınmayan kök alan", { surum: 1, baslik: "x", sql: "SELECT 1", bloklar: [{ id: "a", tur: "metin", metin: "x" }] }, "(kök)"],
+    ];
+    const pathGrammar = /^(\(kök\)|[A-Za-z_][\w]*(\[\d+\]|\.[A-Za-z_$][\w$]*)*)$/;
+    const englishLeak = /\b(Invalid|expected|received|Required|string|number|boolean|undefined)\b/;
+    const codeFails = codeCases.filter(([, bodyIn, wantPath, wantText]) => {
+      const r = checkReportDefinition(bodyIn);
+      return r.gecerli || !r.hatalar.some((h) => h.yol === wantPath && (!wantText || h.mesaj === wantText)) || r.hatalar.some((h) => !pathGrammar.test(h.yol) || englishLeak.test(h.mesaj) || !/[a-zçğıöşü]/i.test(h.mesaj));
+    });
+    check("§1k kod modu: 6 bozuk gövdede beklenen yol + Türkçe mesaj + istemcinin ayrıştırdığı yol dilbilgisi", codeFails.length === 0, codeFails.map(([n, b]) => `${n}: ${JSON.stringify(checkReportDefinition(b).hatalar)}`).join(" | "));
 
     // ── §2 Sistem tanımları ──────────────────────────────────────────────────
     await reconcileReportDefinitionCatalog();

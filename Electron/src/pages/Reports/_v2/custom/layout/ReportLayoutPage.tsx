@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { Link, UNSAFE_DataRouterContext, useBlocker, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Eye, Save } from "lucide-react";
@@ -15,8 +15,13 @@ import { LayoutCanvas } from "./LayoutCanvas";
 import { PrintPreviewDialog } from "./PrintPreviewDialog";
 import { buildDefinitionExportSpec } from "./definition-export";
 import { LayoutWorkspace } from "./LayoutWorkspace";
-import { addBlock, baseQuery, type DefinitionBody, moveBlock, orderedLayout, shiftBlock } from "./layout-model";
+import { addBlock, baseQuery, moveBlock, orderedLayout, shiftBlock } from "./layout-model";
 import { useLayoutEditor, VERSION_CONFLICT_MESSAGE } from "./useLayoutEditor";
+import { CodeModeTabs } from "../code/CodeModeTabs";
+import { useCodeMode } from "../code/useCodeMode";
+
+// CodeMirror yalnız Kod sekmesi açılınca yüklenir (düzen sayfasının kendi parçası küçük kalır).
+const CodeTab = lazy(() => import("../code/CodeTab"));
 
 /** Kaydedilmemiş değişiklikle ayrılma uyarısı — yalnız veri yönlendiricisinde (testlerin MemoryRouter'ı değil). */
 function LeaveGuard({ when }: { when: () => boolean }) {
@@ -45,17 +50,6 @@ function useBeforeUnloadWarning(dirty: boolean) {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
-}
-
-/** Salt okunur tanım — kodla düzenleme kod modunun işi; burada düzenin JSON karşılığı görünür. */
-function DefinitionJson({ body }: { body: DefinitionBody }) {
-  return (
-    <details className="mt-4 rounded-md border p-3 text-sm">
-      <summary className="cursor-pointer font-medium">Tanımı göster (JSON)</summary>
-      <p className="mt-2 text-xs text-muted-foreground">Düzen `duzen` alanındadır; kodla düzenleme kod modunda.</p>
-      <pre className="mt-2 max-h-80 overflow-auto rounded bg-muted p-2 text-xs">{JSON.stringify(body, null, 2)}</pre>
-    </details>
-  );
 }
 
 interface AlertsProps {
@@ -140,6 +134,7 @@ export function ReportLayoutPage() {
   const current = items.find((x) => x.block.id === selected) ?? null;
   const spec = () => (ed.preview.data && draft ? buildDefinitionExportSpec(ed.preview.data, draft, chartKindOf) : null);
   const editable = Boolean(existing.data?.duzenleyebilir && existing.data.aktifSurum);
+  const code = useCodeMode(draft, ed.apply, editable);
 
   const onAdd = (kind: Parameters<typeof addBlock>[1]) => {
     if (!draft) return;
@@ -153,12 +148,17 @@ export function ReportLayoutPage() {
         title={`Düzen: ${existing.data?.ad ?? "…"}`}
         description="Bölümleri tutamaçtan sürükleyerek sıralayın; genişlik ve sayfa kesmesi yalnız görünümü değiştirir, sayılar aynı kalır. Kayıt yeni sürüm açar."
         actions={
-          <HeaderActions id={id} spec={spec} ready={Boolean(ed.preview.data)} canSave={editable && ed.dirty && !ed.busy} busy={ed.busy} onPrint={() => setPrintOpen(true)} onSave={() => void ed.save()} />
+          <HeaderActions id={id} spec={spec} ready={Boolean(ed.preview.data)} canSave={editable && ed.dirty && !ed.busy && code.lock === null} busy={ed.busy} onPrint={() => setPrintOpen(true)} onSave={() => void ed.save()} />
         }
       />
       <PageBody className="p-4 sm:p-6">
         <LayoutAlerts loadFailed={existing.isError} readOnly={Boolean(existing.data) && !editable} conflict={ed.conflict} issues={ed.issues} previewFailed={ed.preview.isError} />
-        {draft ? (
+        {draft ? <CodeModeTabs mode={code.mode} lock={code.lock} onVisual={code.showVisual} onCode={code.showCode} /> : null}
+        {draft && code.mode === "code" ? (
+          <Suspense fallback={<p className="text-sm text-muted-foreground">Kod düzenleyicisi yükleniyor…</p>}>
+            <CodeTab value={code.text} readOnly={!editable} onChange={code.setText} issues={code.issues} cubes={catalog.data ?? []} />
+          </Suspense>
+        ) : draft ? (
           <LayoutWorkspace
             draft={draft}
             current={current}
@@ -180,7 +180,6 @@ export function ReportLayoutPage() {
                   onMove={(a, o) => ed.apply((b) => moveBlock(b, a, o))}
                   onShift={(bid, d) => ed.apply((b) => shiftBlock(b, bid, d))}
                 />
-                <DefinitionJson body={draft} />
               </>
             }
           />
