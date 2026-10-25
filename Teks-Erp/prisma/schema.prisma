@@ -12535,6 +12535,8 @@ model ReportDefinitionVersion {
   /// Sürümü yazan; servis her zaman doldurur. NULLABLE: künye kolonu sözleşmesi (`test_record_provenance` §3).
   createdById         String?  @db.Uuid
   note                String?  @db.VarChar(500)
+  /// İdempotency — yeni sürüm ucu (`clientToken @unique` sözleşmesi; v1 sürüm tanımın token'ıyla doğar).
+  clientToken         String?  @unique @db.Uuid
   createdAt           DateTime @default(now()) @db.Timestamptz
 
   definition ReportDefinition  @relation("ReportDefinitionVersions", fields: [definitionId], references: [id], onDelete: Restrict)
