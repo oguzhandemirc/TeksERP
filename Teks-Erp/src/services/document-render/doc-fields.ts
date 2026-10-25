@@ -115,6 +115,7 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   fasonKabul: [...COMMON, ...BOXES, TBL_CAP],
   kartelaCeki: [...COMMON, ...BOXES, TBL_CAP],
   kaliteSertifikasi: [...COMMON, TBL_CAP, DECL],
+  muayeneRaporu: [...COMMON, TBL_CAP, DECL],
   iadeIrsaliyesi: [...COMMON, ...BOXES, SEC_CAPTION],
   // Ticaret paketi — iç depo belgeleri (iade irsaliyesiyle aynı iskelet).
   depoTransfer: [...COMMON, ...BOXES, SEC_CAPTION],

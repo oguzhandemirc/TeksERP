@@ -16,6 +16,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { InspectionList } from "./InspectionList";
 import { InspectionDetailSheet } from "./InspectionDetailSheet";
 import { PaperInspectionDialog } from "./PaperInspectionDialog";
+import { InspectionReportPicker } from "./InspectionReportPicker";
 import { filtersFromSearch, type InspectionFilterState } from "./inspectionRules";
 
 export function InspectionsPage() {
@@ -32,9 +33,12 @@ export function InspectionsPage() {
         title="Muayeneler"
         description="4 puan muayeneleri — puan / 100 m², önerilen derece, uyumsuzluk. Düzeltme yeni revizyon yazar; iptal gerekçeyle saklanır."
         actions={
-          <PermissionGate permission="inspection:write">
-            <Button onClick={() => setPaperOpen(true)}><ClipboardPlus className="mr-1 h-4 w-4" />Kâğıttan muayene</Button>
-          </PermissionGate>
+          <>
+            <InspectionReportPicker defaultOpen={sp.get("report") === "1"} />
+            <PermissionGate permission="inspection:write">
+              <Button onClick={() => setPaperOpen(true)}><ClipboardPlus className="mr-1 h-4 w-4" />Kâğıttan muayene</Button>
+            </PermissionGate>
+          </>
         }
       />
       <PageBody className="p-4 sm:p-6">

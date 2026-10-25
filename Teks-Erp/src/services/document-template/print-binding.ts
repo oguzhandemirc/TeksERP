@@ -9,6 +9,7 @@
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { readDocumentDesignerEnabled } from "../system-setting.service";
+import { LIVE_DOC_TYPES } from "./live-binding";
 import { getContract, listContracts } from "./sozlesme/kayit";
 import { TemplateRenderError, renderTemplate } from "./motor/render";
 import type { OverlayInput } from "./motor/overlay";
@@ -33,9 +34,9 @@ export interface TemplateResolution {
 
 const NONE: TemplateResolution = { ref: null, settings: null, warnings: [] };
 
-/** Refakat kartı ve sözleşmesi olmayan türler bu yoldan geçmez (P-e: kart canlı çözülür). */
+/** Canlı türler (kart, serbest belge) ve sözleşmesi olmayanlar bu yoldan geçmez (P-e: donmazlar). */
 function isTemplatable(docType: string): boolean {
-  return docType !== "TRAVELER_CARD" && listContracts().some((c) => c.docType === docType);
+  return !LIVE_DOC_TYPES.has(docType) && listContracts().some((c) => c.docType === docType);
 }
 
 /**

@@ -10,10 +10,9 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { tokenReplay } from "../helpers/token-replay.helper";
-import { readDocumentsConfig } from "../system-setting.service";
 import { getSystemEquivalent, materializeEquivalent, type SystemEquivalentLookup } from "./sistem/kayit";
 import { getContract, type RegisteredContract } from "./sozlesme/kayit";
-import { freezeSystemSettings } from "./contract-view.service";
+import { freezeCurrentSettings } from "./contract-view.service";
 import { prepareContent, versionData, VERSION_SUMMARY, type VersionContentInput } from "./version-content";
 
 export type CopyFrom = { kind: "system" } | { kind: "template"; id: string } | { kind: "blank" };
@@ -59,7 +58,7 @@ async function initialContent(
         docType: contract.docType,
       });
     }
-    const frozen = freezeSystemSettings(contract, await readDocumentsConfig());
+    const frozen = await freezeCurrentSettings(contract);
     const m = materializeEquivalent(eq, frozen.settings);
     return {
       content: {

@@ -10,7 +10,7 @@ import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/type
 import { useDevereEnabled, useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { stationFormDefaults, stationFormSchema, type StationFormValues } from "./schema";
 import { visibleStationKindLabels } from "./stationKindVisibility";
-import { suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
+import { inspectionHintForKind, suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
 import { StationLabelCopiesField } from "./StationLabelCopiesField";
 
 const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "inspectionEnabled", "producesWarpBeam", "consumesWarpBeam"] as const;
@@ -153,16 +153,14 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" {...form.register("appliesProperty")} /> Özellik uygular
               </label>
-              {/* ⚠️ Kutu HER görev türünde görünür — gizli kural icat edilmez.
-                  KK1 (RAW_QC) ve Sevkiyat WO adımı olmadığı için orada etkisizdir.
-                  ⚠️ İkinci bir KK istasyonu tanımlayıp Kurşun→KK→Tambur rotası
-                  kurmayın: kurşun bypass uygunluğu "sonraki adım Tambur" şartına
-                  bakar ve sessizce kapanır (Faz B'de çözülecek). */}
-              {/* KQ-D1: iki ayrı soru. Akış kutusu kolonu ve davranışı DEĞİŞMEDİ
-                  (`appliesQuality`); muayene yeni `inspectionEnabled`. */}
+              {/* ⚠️ Kutu HER görev türünde görünür — gizli kural icat edilmez; etkisi
+                  türe göre ipucunda söylenir (KQ-D8). Akış kutusu (`appliesQuality`) ayrı soru. */}
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" {...form.register("inspectionEnabled")} /> Kalite muayenesi (hata girişi)
               </label>
+              <p className="-mt-1 pl-6 text-xs text-muted-foreground" data-testid="inspection-hint">
+                {inspectionHintForKind(form.watch("kind") as StationKind)}
+              </p>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" {...form.register("appliesQuality")} /> Ara istasyon kart akışı
                 (Kurşun/KK2 ekranı)

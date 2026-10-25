@@ -76,7 +76,7 @@ export async function previewTemplate(input: PreviewInput): Promise<PreviewResul
       { compiledLiquid: compiled.liquid, css: input.source.css, pageSettings: input.source.pageSettings },
       {
         context: contract.insa(snapshot, contract.ayarNormalize(settings), input.source.internalFields, ek) as unknown as Record<string, unknown>,
-        snapshot,
+        snapshot: snapshot as { numberRounding?: unknown },
         overlay: null,
       },
     );

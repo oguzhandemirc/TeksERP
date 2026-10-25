@@ -12,6 +12,7 @@ import { requireKaliteGuvenceEnabled } from "../middlewares/module.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import * as svc from "../services/quality-inspection.service";
+import { getShipmentInspectionSummary } from "../services/quality-inspection-shipment.service";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 
@@ -22,6 +23,8 @@ const READ = requirePermission("inspection:read");
 const PREVIEW = requireAnyPermission("inspection:write", "inspection:read", "mobile:muayene");
 const WRITE = requireAnyPermission("inspection:write", "mobile:muayene");
 const CORRECT = requirePermission("inspection:correct");
+// Sevk özeti iki kapıdan geçer: muayene okuma + sevk okuma (müşteri ve sevk no görünür).
+const SHIPMENT_READ = requireAnyPermission("shipping:read", "shipping:write");
 
 type Handler = (req: Request) => Promise<unknown>;
 const wrap = (h: Handler, status = 200) => (req: Request, res: Response, next: NextFunction) => {
@@ -90,6 +93,16 @@ router.post("/", WRITE, wrap((req) => svc.create(body(CreateSchema, req), userOf
  *     security: [{ bearerAuth: [] }]
  */
 router.post("/preview", PREVIEW, wrap((req) => svc.preview(body(PreviewSchema, req))));
+
+/**
+ * @openapi
+ * /api/quality-inspections/shipment/{id}/summary:
+ *   get:
+ *     tags: [QualityInspections]
+ *     summary: "Sevk muayene özeti: her sevk topunun kendi aktif muayenesi (FINAL > RAW), müşteri kuralına göre etiket + GEÇTİ/KALDI, toplamlar"
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/shipment/:id/summary", READ, SHIPMENT_READ, wrap((req) => getShipmentInspectionSummary(idOf(req))));
 
 /**
  * @openapi

@@ -17,6 +17,7 @@
 // yazıldığında bu cascade order context'inden beslenecek.
 // =============================================================================
 
+import { loadOpenDefectNotes } from "./helpers/open-defect-note.helper";
 import { createSliceYielder, renderCode128Svg, renderQrSvg } from "./helpers/barcode-svg.helper";
 import { resolveFlowLabelCopies } from "./helpers/label-copies.helper";
 import {
@@ -221,6 +222,8 @@ interface BulkLabelContext {
    *  müşteriler; tekil yoldaki CustomerTemplateRoute halkasının batch karşılığı). */
   customerTemplateByKey: Map<string, { template: LabelTemplate; variant: LabelTemplateVariant | null }>;
   copies: number;
+  /** Açık hata notları (KQ-D8) — toplu basımda TEK sorgu; hatasız top haritada yok. */
+  openDefectNotes?: Map<string, string>;
   /** Cihaz raster modu (finishedRouting'den) — bulk raster; false → bugünkü komut. */
   rasterMode: boolean;
 }
@@ -460,6 +463,8 @@ export class LabelService {
       workOrderNumber: roll.batch?.workOrder?.workOrderNumber ?? null,
       // KAT — kolondan OLDUĞU GİBİ (katalog kodu); ada çevrilmez (bkz. LabelPayload).
       foldType: roll.foldType ?? null,
+      // Tambursuz rotada karar verilmemiş hatalar BİLGİ olarak (KQ-D8); şablonda opt-in.
+      openDefects: (preloaded?.openDefectNotes ?? (await loadOpenDefectNotes([roll.id]))).get(roll.id) ?? "",
       printedAt: new Date().toISOString(),
     };
 
@@ -649,6 +654,7 @@ export class LabelService {
       // Önizlemede kat dolu gelsin — tasarımcı "Kat" alanını tuvale sürükleyince
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
+      openDefects: "12,5 m Leke · 40 m Delik",
       printedAt: new Date().toISOString(),
       // SWATCH önizlemesinde kartela alanları görünsün (roll düzeninde yok sayılır).
       kind: input.kind,
@@ -718,6 +724,7 @@ export class LabelService {
       // Önizlemede kat dolu gelsin — tasarımcı "Kat" alanını tuvale sürükleyince
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
+      openDefects: "12,5 m Leke · 40 m Delik",
       printedAt: new Date().toISOString(),
       kind: input.kind,
       cardNumber: "KRT1207260001",
@@ -1120,6 +1127,7 @@ export class LabelService {
       // Önizlemede kat dolu gelsin — tasarımcı "Kat" alanını tuvale sürükleyince
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
+      openDefects: "12,5 m Leke · 40 m Delik",
       printedAt: new Date().toISOString(),
     };
     const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);
@@ -1398,7 +1406,8 @@ export class LabelService {
       }
     }
 
-    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, copies, rasterMode: finishedRouting.rasterMode };
+    const openDefectNotes = await loadOpenDefectNotes(ids);
+    return { rollById, orderLineById, customerById, aliases, format, templateByKind, variantByKind, customerTemplateByKey, copies, openDefectNotes, rasterMode: finishedRouting.rasterMode };
   }
 
   /**
