@@ -92,5 +92,11 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
   { model: "NotificationDailyStats", sinif: "TELEMETRI",
     gerekce: "tercih önizlemesinin günlük sayacı (Karar Y3); yalnız \"haftada ~N\" tahmini besler, 35 günde budanır" },
   { model: "NotificationCondition", sinif: "SISTEM_ISI",
-    gerekce: "koşul tarayıcısının (`jobs/notification-condition.job`) açık/çözülmüş durum satırı; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
+    gerekce: "koşul tarayıcısının (`jobs/notification-condition.job`) açık/çözülmüş durum satırı; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },  // bildirim: F4 tercih katmanı (plan §3.3) — yazarları N4-MOTOR'da doğdu.
+  { model: "NotificationPreference", sinif: "KULLANICI_TERCIHI",
+    gerekce: "kişinin kendi bildirim tercihi (tür × kanal açık/kapalı, kapsam); yalnız kendi gelen kutusunu etkiler, hiçbir rapor sayısı türemez" },
+  { model: "NotificationUserSetting", sinif: "KULLANICI_TERCIHI",
+    gerekce: "kişinin sessiz saati, gün özeti saati ve ses tercihi; iş kararı değil" },
+  { model: "RecordFollow", sinif: "KULLANICI_TERCIHI",
+    gerekce: "kişinin kayıt takibi (oluşturan otomatik + elle takip/bırak); yalnız kime bildirim gideceğini daraltır/genişletir, iş kaydı değildir" },
 ];

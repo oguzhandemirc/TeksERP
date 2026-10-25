@@ -45,6 +45,10 @@
 - **[ÇEKİRDEK]** Sessiz saati fabrika diliminden oku (`inQuietHours`, gece yarısını aşan aralık); yalnız ses/OS/tablet kanallarını sustur, gelen kutusu satırını her durumda yaz; sessiz saat nöbetteki ALARM'ı susturmaz, nöbet dışı ALARM'a uygulanır. · bekçi: `test_bildirim_tercih` §2 §3b
 - **[ÇEKİRDEK]** Tercih süzmesini donmuş alarm listesine uygula ama listeyi değiştirme; ALARM'a takip/LISTE kaynağı ekleme (alıcı = RAISED'ın `LoomAlarmRecipient` satırları). · bekçi: `test_bildirim_tercih` §3a
 - **[ÇEKİRDEK]** Koşul kaynakları eşiği yalnız `effectiveNotificationParams`tan okusun (katalog `paramSemasi` ⊕ fabrika varsayılanı; tur başında tazelenir); bozuk fabrika satırı katalog varsayılanına düşer. · bekçi: `test_bildirim_tercih` §4f
+- **[ÇEKİRDEK]** Oluşturanı takipçi yapan satırı doğuşun KENDİ tx'inde `followAsCreatorTx` ile yaz (`ON CONFLICT DO NOTHING`): BIRAKTI'yı ezme, doğuşun dönüşünü değiştirme; takibi bırakmayı durum geçişi (TAKIP → BIRAKTI) yap, silme. · bekçi: `test_bildirim_takip`
+- **[ÇEKİRDEK]** Kişisel tercihi seyrek yaz (yalnız taban çözümden sapan ya da kapsamlı satır); kilitli türde uygulama içini kapatmayı 409 `NOTIFICATION_KIND_LOCKED` ile reddet; görülemeyen tür, kanal dışı ve türün beyan etmediği kapsam anahtarı 400 olsun. · bekçi: `test_bildirim_tercih_api` §1
+- **[ÇEKİRDEK]** Önizlemeyi (`tercihler/onizleme`, `kilit-onizleme`, `varsayilana-don/onizleme`) yazmasız tut; haftalık tahmini son 30 fabrika günü sayacından, veri yoksa katalog `tahminiHaftalik`ten üret. · bekçi: `test_bildirim_onizleme`
+- **[ÇEKİRDEK]** Profili silme, arşivle (atomik claim); hücre/üye kümesini pivot replace et ve audit'i profil satırına tx DIŞINDA yaz; profil izin vermez, görme süzgecini aşmaz. · bekçi: `test_bildirim_tercih_api` §4
 
 ## Bekçiler — bu alana dokununca koş
 
@@ -52,4 +56,4 @@
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## bildirim` bölümü.**
 
-Backend: `test_bildirim_katalogu`, `test_screen_catalog`, `test_bildirim_motoru`, `test_bildirim_tek_kaynak`, `test_advisory_lock_namespaces`, `test_telemetri_defter_degil`, `test_audit_muafiyeti`, `test_bildirim_api`, `test_bildirim_zil`, `test_bildirim_patron_siparisi`, `test_bildirim_yazici_hata`, `test_bildirim_tercih`, `test_bulut_gelen_kutusu`, `test_bildirim_kosul_sistem`, `test_bildirim_kosul_is`, `test_bildirim_alarm`
+Backend: `test_bildirim_katalogu`, `test_screen_catalog`, `test_bildirim_motoru`, `test_bildirim_tek_kaynak`, `test_advisory_lock_namespaces`, `test_telemetri_defter_degil`, `test_audit_muafiyeti`, `test_bildirim_api`, `test_bildirim_zil`, `test_bildirim_patron_siparisi`, `test_bildirim_yazici_hata`, `test_bildirim_tercih`, `test_bildirim_tercih_api`, `test_bildirim_takip`, `test_bildirim_onizleme`, `test_bulut_gelen_kutusu`, `test_bildirim_kosul_sistem`, `test_bildirim_kosul_is`, `test_bildirim_alarm`
