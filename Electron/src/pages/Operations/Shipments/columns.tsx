@@ -54,7 +54,7 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
         {/* e-İrsaliye rozeti yalnız kaydı olan satırda (kayıtsız kurulumda DOM aynı); ayrı kolon
             açılmadı — kolon yapılandırılmamış kurulumda boş sütun olurdu. */}
         {row.original.eIrsaliyeStatus && (
-          <span title="e-İrsaliye durumu" className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+          <span title="e-İrsaliye durumu" className="inline-flex items-center gap-0.5 whitespace-nowrap text-[10px] text-muted-foreground">
             e-İrs.
             <EIrsaliyeStatusBadge status={row.original.eIrsaliyeStatus} simulasyon={row.original.eIrsaliyeSimulasyon} className="px-1 py-0 text-[10px]" />
           </span>

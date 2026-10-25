@@ -51,7 +51,10 @@ export function EIrsaliyeCard({ shipmentId, shipmentStatus, perms }: { shipmentI
         <CardNotices v={v} focus={focus} shipmentStatus={shipmentStatus} />
         {focus && <EIrsaliyeRecordInfo r={focus} />}
         <EIrsaliyeActionBar shipmentId={shipmentId} record={focus} actions={actions} />
-        {focus && <EIrsaliyeTimeline events={focus.olaylar} history={v.gecmis.filter((g) => g.id !== focus.id)} />}
+        {/* İptalden sonra odak yok; önceki kayıtlar yine görünür kalsın (bulunabilirlik). */}
+        {(focus || v.gecmis.length > 0) && (
+          <EIrsaliyeTimeline events={focus?.olaylar ?? []} history={v.gecmis.filter((g) => g.id !== focus?.id)} />
+        )}
       </CardContent>
     </Card>
   );

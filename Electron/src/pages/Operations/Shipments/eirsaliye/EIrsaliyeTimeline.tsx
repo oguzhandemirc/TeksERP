@@ -8,9 +8,9 @@ export function EIrsaliyeTimeline({ events, history }: { events: EIrsaliyeEvent[
   return (
     <details className="text-xs" data-testid="eirsaliye-timeline">
       <summary className="cursor-pointer select-none text-muted-foreground">
-        Geçmiş ({events.length} olay{history.length > 0 ? ` · ${history.length} önceki kayıt` : ""})
+        Geçmiş ({[events.length > 0 ? `${events.length} olay` : null, history.length > 0 ? `${history.length} önceki kayıt` : null].filter(Boolean).join(" · ")})
       </summary>
-      <ol className="mt-1.5 space-y-1 border-l pl-3">
+      {events.length > 0 && <ol className="mt-1.5 space-y-1 border-l pl-3">
         {events.map((e) => (
           <li key={e.id} className="relative">
             <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-muted-foreground/60" />
@@ -19,7 +19,7 @@ export function EIrsaliyeTimeline({ events, history }: { events: EIrsaliyeEvent[
             {e.note && <span className="block text-muted-foreground">{e.note}</span>}
           </li>
         ))}
-      </ol>
+      </ol>}
       {history.length > 0 && (
         <ul className="mt-2 space-y-1">
           {history.map((h) => (

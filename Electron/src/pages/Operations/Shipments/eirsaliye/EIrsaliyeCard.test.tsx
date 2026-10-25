@@ -75,6 +75,15 @@ describe("EIrsaliyeSection", () => {
     expect(screen.getByRole("button", { name: /e-İrsaliye hazırla/ })).toBeTruthy();
   });
 
+  it("⭐ iptal sonrası (canlı yok) önceki kayıt geçmişte görünür kalır", async () => {
+    readiness.mockResolvedValue({ durum: "HAZIR", eksikler: [] });
+    byShipment.mockResolvedValue(view({ canli: null, gecmis: [rec({ status: "IPTAL", documentNo: "EIR2026000000003" })] }));
+    renderWithProviders(<EIrsaliyeSection shipmentId="s1" shipmentStatus="DISPATCHED" />);
+    expect(await screen.findByText("Hazırlanmadı")).toBeTruthy();
+    expect(screen.getByText("Geçmiş (1 önceki kayıt)")).toBeTruthy();
+    expect(screen.getByText("EIR2026000000003")).toBeTruthy();
+  });
+
   it("⭐ simülasyon kaydı kalıcı kırmızı bant taşır; TCKN kartta maskeli", async () => {
     readiness.mockResolvedValue({ durum: "HAZIR", eksikler: [] });
     byShipment.mockResolvedValue(view({ canli: rec({ adapter: "simulasyon", simulasyon: true }) }));
