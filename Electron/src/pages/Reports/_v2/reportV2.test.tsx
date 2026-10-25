@@ -114,15 +114,15 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
 });
 
 describe("§3 çizim kümesi — centerGroups / isCenterEntryOpen", () => {
-  const catalog: ReportCatalogEntry[] = [ready("sales/termin"), ready("quality/kalite"), ready("dokuma/levent-dengesi"), REPORT_BY_KEY.get("sales/sevkiyat")!];
+  const catalog: ReportCatalogEntry[] = [ready("sales/termin"), ready("quality/kalite"), ready("dokuma/levent-dengesi"), REPORT_BY_KEY.get("quality/kayip")!];
   const keys = (a: CenterAccess) => centerGroups(a, catalog).flatMap((g) => g.entries.map((e) => e.key));
 
   it("körlük zemini: tam erişimde hazır üç satır çizilir", () => {
     expect(keys(access())).toEqual(["sales/termin", "quality/kalite", "dokuma/levent-dengesi"]);
   });
   it("⭐ `hazir:false` satır çizilmez", () => {
-    expect(keys(access())).not.toContain("sales/sevkiyat");
-    expect(isCenterEntryOpen(REPORT_BY_KEY.get("sales/sevkiyat")!, ctx())).toBe(false);
+    expect(keys(access())).not.toContain("quality/kayip");
+    expect(isCenterEntryOpen(REPORT_BY_KEY.get("quality/kayip")!, ctx())).toBe(false);
   });
   it("⭐ izinsiz rapor çizilmez (admin değil, izin yok)", () => {
     expect(keys(access({ hasPermission: (c) => c !== "report:sales" }))).not.toContain("sales/termin");
@@ -272,11 +272,12 @@ function renderLeaf(path: string, key: string) {
 describe("§7 yaprak kapısı", () => {
   it("⭐ bayrak kapalı → /forbidden; açık ama hazir:false → /forbidden", () => {
     v2 = false;
-    const a = renderLeaf("/reports/sales/termin", "sales/termin");
+    // `quality/kayip` hâlâ `hazir:false` (satış satırları R1-KAYIT'ta hazır oldu).
+    const a = renderLeaf("/reports/sales/termin", "quality/kayip");
     expect(screen.getByText("YASAK")).toBeInTheDocument();
     a.unmount();
     v2 = true;
-    renderLeaf("/reports/sales/termin", "sales/termin");
+    renderLeaf("/reports/sales/termin", "quality/kayip");
     expect(screen.getByText("YASAK")).toBeInTheDocument();
   });
 });

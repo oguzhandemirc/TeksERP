@@ -290,6 +290,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "finance/cheques", app: "desktop", modul: "financeEnabled", title: "Çek ve Senetler", requires: ["finance:read"], capabilities: ["finance:cheque"] },
   { key: "finance/allocations", app: "desktop", modul: "financeEnabled", title: "Tahsisler", requires: ["finance:read"], capabilities: ["finance:payment"] },
   { key: "finance/period-close", app: "desktop", modul: "financeEnabled", title: "Dönem Kapanışı", requires: ["finance:read"], capabilities: ["finance:close"] },
+  // Raporlar v2 kayıtlı/özel raporlar (R1-KAYIT): oluşturma/düzenleme builder; kategori, herkese açma
+  // ve başkasının koşusunu durdurma publish. Görüntüleme (`reports/kayitli/:id`) kapısızdır — görünürlük uçta.
+  { key: "reports/ozel", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Özel rapor oluştur", requires: ["report:builder"], capabilities: ["report:publish"] },
   { key: "reports/finance", app: "desktop", modul: "financeEnabled", title: "Ön Muhasebe Raporları", requires: ["report:finance"], capabilities: [] },
   // Dokuma raporları (Dilim 5, 2026-09-14): okuma `report:production` (1e hükmü ③); karne eylemleri ekran içi
   // PermissionGate — `loom:manual-entry` (terim düzelt · mühürle; machine-stops ekranıyla PAYLAŞILIR) ve
