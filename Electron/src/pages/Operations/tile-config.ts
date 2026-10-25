@@ -24,6 +24,7 @@ import {
   MonitorPlay, Siren,
   Layers,
   FlaskConical,
+  FileCheck2,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
 // Paket D — görünürlük kuralları SAF katmanda (bileşen içindeki bir `&&`
@@ -498,6 +499,17 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/returns",
     group: "shipping",
     permission: "return:read",
+  },
+  {
+    // Modül anahtarı yok (E-IRS P1): yapılandırılmamış kurulumda da görünür; sayfa
+    // "yapılandırılmamış — <ayar yolu>" der (bulunabilirlik şartı).
+    key: "e-irsaliye",
+    title: "e-İrsaliye Kayıtları",
+    description: "Sevkiyatların e-İrsaliye kayıtları — durum, numara/ETTN, süzgeç ve özet",
+    icon: FileCheck2,
+    to: "/operations/e-irsaliye",
+    group: "shipping",
+    permission: "eirsaliye:read",
   },
   {
     // Eski "Kurşun Sırası" + "Kurşun Dağıtım" tek ekranda birleşti (2026-08-05).
