@@ -4,7 +4,7 @@
 // Servis + middleware düzeyi, DB'li (yalnız test DB — `assertGelistirmeVeritabani`). Ölçülenler:
 //   §1 kayıt → ACTIVE v1 (77,0395); iplik fiyatı değişir → v1 sayıları/dökümü DEĞİŞMEZ, liste
 //      ve detay `girdiDegisti=true`; v2 → v1 SUPERSEDED (+damga), tek ACTIVE
-//   §2 iki paralel kayıt → biri 409 COST_VERSION_CONFLICT, tek ACTIVE
+//   §2 iki paralel kayıt → biri 409 COST_VERSION_CONFLICT, tek ACTIVE; §2b DB seddi: ikinci ACTIVE doğrudan yazılamaz
 //   §3 eksik girdi → 400 COST_INPUT_MISSING `details.missing` (kur yok → FX_RATE_MISSING, 1'e düşmez)
 //   §4 geri alma YENİ sürüm yazar (eski fotoğraf + kur), eskisini değiştirmez
 //   §5 köprü: finans/devere/iplik/ticaret kapalıyken öneri null ve ilgili tabloya SORGU YOK
@@ -175,6 +175,24 @@ async function bolum7(f: MaliyetFikstur): Promise<void> {
   }
 }
 
+/**
+ * DB seddi: uygulama claim'i + (itemId, versionNo) unique yarışı zaten keser; kısmi unique indeks
+ * "ürün başına tek ACTIVE"yi uygulamayı atlayan yazıma karşı da tutar — doğrudan ikinci ACTIVE reddedilir.
+ */
+async function bolum2b(f: MaliyetFikstur): Promise<void> {
+  const act = await prisma.standardCostVersion.findFirstOrThrow({ where: { itemId: f.fabricId, status: "ACTIVE" } });
+  const { id: _id, versionNo, supersededAt: _s, restoredFromId: _r, ...rest } = act;
+  const data = { ...rest, versionNo: versionNo + 1000, fxRates: rest.fxRates as Prisma.InputJsonValue, inputSnapshot: rest.inputSnapshot as Prisma.InputJsonValue, warnings: rest.warnings as Prisma.InputJsonValue };
+  let code: string | undefined;
+  try {
+    const extra = await prisma.standardCostVersion.create({ data, select: { id: true } });
+    await prisma.standardCostVersion.delete({ where: { id: extra.id } });
+  } catch (e) {
+    code = (e as { code?: string }).code;
+  }
+  check("§2b ⭐ DB seddi: aynı ürüne ikinci ACTIVE doğrudan yazılamaz (P2002, kısmi unique indeks)", code === "P2002", String(code));
+}
+
 async function main(): Promise<void> {
   console.log("=== STANDART MALİYET SÜRÜMÜ BEKÇİSİ (MAL-2) ===");
   assertGelistirmeVeritabani("test_standart_maliyet_surum");
@@ -187,6 +205,7 @@ async function main(): Promise<void> {
     await bolum5(f);
     await bolum6(f);
     await bolum7(f);
+    await bolum2b(f);
   } finally {
     await fiksturSil(f);
   }
