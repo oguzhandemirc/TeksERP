@@ -35,7 +35,9 @@ export type ReasonPresetKind =
   | 'WARP_BEAM_SCRAP'
   /** Fason G1: fasondan iplik dönüş sebebi — tablette ekranı YOK (panel işi); union aynası. */
   | 'YARN_SUBCONTRACT_RETURN'
-  | 'WORK_ORDER_PLAN_CHANGE';
+  | 'WORK_ORDER_PLAN_CHANGE'
+  // K4P: muayene iptali (panelde; tablet yalnız tipi taşır — sunucu yükünde gelir)
+  | 'INSPECTION_VOID';
 
 export interface ReasonPreset {
   id: string;
@@ -75,6 +77,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   WARP_BEAM_SCRAP: false,
   YARN_SUBCONTRACT_RETURN: false,
   WORK_ORDER_PLAN_CHANGE: true,
+  INSPECTION_VOID: true,
 };
 
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -90,6 +93,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_BEAM_SCRAP: 'Levent hurda / artık dispozisyonu',
   YARN_SUBCONTRACT_RETURN: 'Fasondan iplik dönüş sebepleri',
   WORK_ORDER_PLAN_CHANGE: 'Terbiye iş emri plan düzeltme sebepleri',
+  INSPECTION_VOID: 'Muayene iptal sebepleri',
 };
 
 export const reasonPresetService = {

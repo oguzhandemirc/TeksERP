@@ -15,6 +15,7 @@
 //   P2 sır yüklemi devre dışı → 2 ❌ (§4)
 //   P3 cırcır artış: src'ye şablonsuz `SONDA_TABLO:UPDATE` audit çağrısı → 1 ❌ (§5 155 > 154)
 //   P4 cırcır çürüme: iki şablonsuz çifte şablon → 1 ❌ (§5 153 < 154; commit kapısında ⏭)
+//   P5 (2026-10-25) canlı referans kodları ERROR_CODE_REASONS'tan çıkarıldı → 2 ❌ (§1 ⭐ 409 …LIVE_REFERENCES)
 // =============================================================================
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -27,6 +28,7 @@ import { narrateRow, type NarrativeRow, type Cozulmus } from "../src/services/au
 import { SABLONLAR } from "../src/services/audit-narrative/sablonlar";
 import { TABLE_LABELS } from "../src/constants/audit-tablo-etiketleri";
 import { recordKey } from "../src/services/helpers/audit-record-resolver.helper";
+import { redNedeni } from "../src/constants/route-eylem-katalogu";
 
 let pass = 0;
 let fail = 0;
@@ -71,6 +73,11 @@ function altin(): void {
   check("§1 sistem olayı: \"kişi: olay\"", sis.metin.startsWith("Ahmet Y.: ") && !sis.metin.includes("LOGIN_SUCCESS"), sis.metin);
   const sistem = narrateRow(satir({ tableName: "ROLL", action: "CREATE", user: null }), BOS);
   check("§1 kullanıcısız satır \"Sistem\" der", sistem.metin.startsWith("Sistem, "), sistem.metin);
+  // Canlı referans reddi 409'dur ama "başka biri değiştirmiş" DEĞİLDİR (B3 bulgusu).
+  for (const kod of ["MASTER_DATA_HAS_LIVE_REFERENCES", "ITEM_HAS_LIVE_REFERENCES"]) {
+    const n = redNedeni(409, kod);
+    check(`§1 ⭐ 409 ${kod} → "canlı referansı olduğu için pasife alınamadı"`, n === "canlı referansı olduğu için pasife alınamadı", n);
+  }
 }
 
 // ── §2 her şablon: yer tutucu ↔ satır alanı ───────────────────────────────────

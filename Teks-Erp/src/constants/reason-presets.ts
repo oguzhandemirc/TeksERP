@@ -81,6 +81,9 @@ export const KIND_STORES_TEXT = {
   YARN_SUBCONTRACT_RETURN: false,
   // İş emri plan düzeltmesinde görünen metin hareket satırının `reason`ına, kod `reasonCode`una.
   WORK_ORDER_PLAN_CHANGE: true,
+  // K4P muayene iptali: seçilen metin `RollInspection.voidReason`a yazılır; KOD SAKLANMAZ (kolon yok,
+  // seçim isteğe bağlı — serbest metin kalır).
+  INSPECTION_VOID: true,
   // `as const satisfies` — değerler LİTERAL kalsın (true/false), ama eksik kind
   // yine derlemede düşsün. `Record<..., boolean>` yazılsaydı literaller boolean'a
   // genişler ve `TextReasonKind` bu tablodan TÜRETİLEMEZDİ (aşağıdaki nota bak).
@@ -100,6 +103,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_BEAM_SCRAP: "Levent hurda / artık dispozisyonu",
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebepleri",
   WORK_ORDER_PLAN_CHANGE: "Terbiye iş emri plan düzeltme sebepleri",
+  INSPECTION_VOID: "Muayene iptal sebepleri",
 };
 
 /**
@@ -304,6 +308,15 @@ export const WORK_ORDER_PLAN_CHANGE_REASONS: readonly ReasonPresetSeed[] = [
   { code: "DIGER", label: "Diğer", requiresText: true },
 ] as const;
 
+/** K4P muayene iptali — panelde iptal penceresinde İSTEĞE BAĞLI seçim; metin gerekçe kutusuna dolar. */
+export const INSPECTION_VOID_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "YANLIS_TOP", label: "Yanlış top muayene edildi" },
+  { code: "YANLIS_GIRIS", label: "Hata / puan yanlış girildi" },
+  { code: "TEKRAR_MUAYENE", label: "Top yeniden muayene edilecek" },
+  { code: "OLCUM_ARIZASI", label: "Muayene makinesi / ölçüm arızası" },
+  { code: "DIGER", label: "Diğer", requiresText: true },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
@@ -318,6 +331,7 @@ export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPres
   WARP_BEAM_SCRAP: WARP_BEAM_SCRAP_REASONS,
   YARN_SUBCONTRACT_RETURN: YARN_SUBCONTRACT_RETURN_REASONS,
   WORK_ORDER_PLAN_CHANGE: WORK_ORDER_PLAN_CHANGE_REASONS,
+  INSPECTION_VOID: INSPECTION_VOID_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];

@@ -17,6 +17,8 @@
 // ⑤ Ayrıca: iptal edilmiş kalem "açık talep" yüzeylerinden DÜŞER (WO picker,
 //    üretim dengesi). Bu, özelliğin en kolay unutulan yarısıdır — kolon eklemek
 //    kolay, 33 sorgu noktasını taramak zor.
+// ⑥ (2026-10-25) Düzenleme audit'i `changes` yazar (başlık farkı + kalem özeti).
+//    NEGATİF SONDA: `changes` hiç verilmeyince 2 ❌, kalem özeti düşürülünce 1 ❌ (§10).
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -316,6 +318,28 @@ async function main(): Promise<void> {
       killedNow !== null && Number(killedNow.quantity) === 10,
       killedNow === null ? "satır silinmiş" : `${killedNow.quantity} — 9999 ise salt-okunurluk yok`,
     );
+
+    // ── 10) Düzenleme audit'i DEĞİŞEN ALANLARI yazar (B3 bulgusu) ──
+    // Eskiden yalnız `newData` (gönderilen başlık + linesCount) yazılıyordu: "ne değişti"
+    // sorusu cevapsızdı. Şimdi başlık farkı + kalem özeti `changes`e iner.
+    console.log("\n── 10) Düzenleme audit'i değişen alanları yazar ──");
+    const o8 = await mkOrder([{ quantity: 10 }, { quantity: 20 }]);
+    const yeniTermin = new Date(Date.now() + 30 * 86_400_000);
+    await orderService.update(o8.id, {
+      deadline: yeniTermin,
+      currency: "TRY",
+      lines: [{ id: o8.lines[0]!.id, itemId: item.id, quantity: 15 }, { id: o8.lines[1]!.id, itemId: item.id, quantity: 20 }],
+    } as unknown as Record<string, unknown>);
+    const log8 = await prisma.systemLog.findFirst({
+      where: { tableName: "ORDER", recordId: o8.id, action: "UPDATE" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { changes: true },
+    });
+    const ch8 = (Array.isArray(log8?.changes) ? log8!.changes : []) as Array<{ field: string; old: unknown; new: unknown }>;
+    const alan8 = ch8.map((c) => c.field);
+    check("⭐ sipariş düzenleme audit'i changes taşır: deadline", alan8.includes("deadline"), JSON.stringify(ch8));
+    check("⭐ kalem miktarı değişimi changes'te 'lines' özeti", ch8.some((c) => c.field === "lines" && String(c.new).includes("1 değişti")), JSON.stringify(ch8));
+    check("değişmeyen alan changes'e girmez (currency TRY varsayılan)", !alan8.includes("currency"), alan8.join(","));
 
   } finally {
     if (sackIds.length > 0) await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });

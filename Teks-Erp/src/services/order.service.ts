@@ -93,6 +93,7 @@ import {
 } from "../utils/query-parser";
 import { Request } from "express";
 import { hata } from "../lib/logger";
+import { diffFields } from "./helpers/audit-diff.helper";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
 import { assertManualNumberAllowed } from "./helpers/manual-number.helper";
@@ -359,6 +360,35 @@ type OrderWithLines = {
     colorNameScope?: string | null;
   }>;
 };
+
+/**
+ * Sipariş düzenlemesinin kalem özeti (audit `changes` satırı): eklenen / çıkarılan / miktar-kalem
+ * değişen aktif kalem sayısı. İptal kalem diff'e girmez (update yolu da ona dokunmaz). Fark yoksa null.
+ */
+export function summarizeLineEdit(
+  current: ReadonlyArray<{ id: string; itemId: string; quantity: unknown; cancelledAt: Date | null }>,
+  incoming: ReadonlyArray<Record<string, unknown>>,
+): { field: string; old: unknown; new: unknown } | null {
+  const active = new Map(current.filter((l) => l.cancelledAt == null).map((l) => [l.id, l]));
+  const cancelled = new Set(current.filter((l) => l.cancelledAt != null).map((l) => l.id));
+  let added = 0;
+  let changed = 0;
+  const kept = new Set<string>();
+  for (const raw of incoming) {
+    const rid = typeof raw.id === "string" ? raw.id : "";
+    if (cancelled.has(rid)) continue;
+    const ex = active.get(rid);
+    if (!ex) { added++; continue; }
+    kept.add(rid);
+    const itemChanged = typeof raw.itemId === "string" && raw.itemId !== ex.itemId;
+    const qtyChanged = raw.quantity !== undefined && String(Number(raw.quantity)) !== String(Number(ex.quantity));
+    if (itemChanged || qtyChanged) changed++;
+  }
+  const removed = [...active.keys()].filter((k) => !kept.has(k)).length;
+  if (added + removed + changed === 0) return null;
+  const parts = [added ? `${added} eklendi` : "", removed ? `${removed} çıkarıldı` : "", changed ? `${changed} değişti` : ""].filter(Boolean);
+  return { field: "lines", old: `${active.size} kalem`, new: `${active.size - removed + added} kalem (${parts.join(", ")})` };
+}
 
 export class OrderService extends BaseService {
   private aliasService = new CustomerAliasService();
@@ -2536,6 +2566,9 @@ export class OrderService extends BaseService {
         status: true,
         orderDate: true, // F148: termin-tarih kuralı için mevcut referans
         deadline: true,
+        // Audit `changes` başlık farkı için eski değerler (ORDER_HEADER_WRITABLE'ın tamamı).
+        currency: true,
+        totalAmount: true,
         lines: {
           select: {
             id: true,
@@ -2897,15 +2930,23 @@ export class OrderService extends BaseService {
       });
     });
 
+    // "Ne değişti": başlık farkı (BaseService kalıbı, diffFields) + kalem özeti. Tx DIŞINDA.
+    const oldHeader: Record<string, unknown> = {};
+    for (const key of Object.keys(cleanData)) oldHeader[key] = (current as Record<string, unknown>)[key];
+    const changes = diffFields(oldHeader, cleanData);
+    const lineSummary = incomingLines ? summarizeLineEdit(current.lines, incomingLines) : null;
+    if (lineSummary) changes.push(lineSummary);
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: this.config.tableName,
       recordId: id,
+      oldData: oldHeader,
       newData: {
         ...cleanData,
         ...(incomingLines ? { linesCount: incomingLines.length } : {}),
       },
+      changes,
     });
 
     // Müşteriye-özel ad terfisi (create ile aynı kural). Müşteri değiştiyse
