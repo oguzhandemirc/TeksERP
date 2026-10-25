@@ -1,20 +1,28 @@
 import { memo } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { formatFactory } from "@/lib/factory-time";
 import { tr } from "date-fns/locale";
+import { ChevronRight } from "lucide-react";
+import { formatFactory } from "@/lib/factory-time";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { AuditNarrativeRow } from "@/components/audit/AuditNarrativeRow";
+import { cn } from "@/lib/utils";
 import { tableLabel, actionLabel, actionVariant } from "./labels";
+import { isIslemItem, itemUser, type FeedItem } from "./activity-view";
 import type { SystemLogListItem } from "@/types/systemLog";
 
 interface Props {
-  items: SystemLogListItem[];
+  items: FeedItem[];
   loading: boolean;
-  onSelect: (item: SystemLogListItem) => void;
+  onSelect: (item: FeedItem) => void;
+  /** Boş listede gösterilecek metin (arama uyarısı vb.). */
+  emptyText?: string;
 }
 
-export function ActivityFeed({ items, loading, onSelect }: Props) {
+// Akış SUNUCUNUN döndürdüğünü olduğu gibi çizer: süzme/sayma yok (süzgeçler
+// sorgu parametresidir). Cümleyi `AuditNarrativeRow` çizer — ⓘ Geçmiş ile aynı.
+export function ActivityFeed({ items, loading, onSelect, emptyText }: Props) {
   if (loading && items.length === 0) {
     return (
       <div className="space-y-2 p-6">
@@ -27,15 +35,15 @@ export function ActivityFeed({ items, loading, onSelect }: Props) {
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center p-12 text-sm text-muted-foreground">
-        Filtreye uyan aktivite bulunamadı.
+      <div className="flex flex-1 items-center justify-center p-12 text-center text-sm text-muted-foreground">
+        {emptyText ?? "Filtreye uyan işlem bulunamadı."}
       </div>
     );
   }
 
   return (
     <TooltipProvider delayDuration={300}>
-      <ul className="divide-y">
+      <ul className="divide-y" data-testid="activity-feed">
         {items.map((item) => (
           <ActivityRow key={item.id} item={item} onSelect={onSelect} />
         ))}
@@ -44,53 +52,84 @@ export function ActivityFeed({ items, loading, onSelect }: Props) {
   );
 }
 
-// Perf: React.memo + stabil onSelect(item) → load-more/detay-açma ile yeni satır
-// eklendiğinde yalnız değişen satırlar değil, önceden yüklenmiş tüm satırların
-// (her biri formatDistanceToNow + Radix Tooltip) yeniden render'ı önlenir.
+// Perf: React.memo + stabil onSelect(item) → daha fazla yüklendiğinde önceki
+// satırların (her biri formatDistanceToNow + Radix Tooltip) yeniden çizimi önlenir.
 const ActivityRow = memo(function ActivityRow({
   item,
   onSelect,
 }: {
-  item: SystemLogListItem;
-  onSelect: (item: SystemLogListItem) => void;
+  item: FeedItem;
+  onSelect: (item: FeedItem) => void;
 }) {
   const date = new Date(item.createdAt);
-  const userLabel = item.user
-    ? item.user.fullName || item.user.username
-    : "Sistem";
+  const islem = isIslemItem(item) ? item : null;
+  const reddedildi = !!islem?.reddedildi;
 
   return (
     <li>
-      <button
-        type="button"
+      {/* Satır içinde kayıt bağlantısı olduğu için <button> değil: iç içe etkileşim yasak. */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onSelect(item)}
-        className="flex w-full items-center gap-3 px-6 py-3 text-left transition-colors hover:bg-accent/40"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect(item);
+          }
+        }}
+        className={cn(
+          "flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none sm:px-6",
+          reddedildi && "bg-red-50/60 dark:bg-red-950/20",
+        )}
+        data-testid={reddedildi ? "activity-row-rejected" : "activity-row"}
       >
-        <Badge variant={actionVariant(item.action)} className="shrink-0">
-          {actionLabel(item.action)}
-        </Badge>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm">
-            <span className="font-medium">{userLabel}</span>{" "}
-            <span className="text-muted-foreground">→</span>{" "}
-            <span className="font-medium">{tableLabel(item.tableName)}</span>{" "}
-            <span className="text-muted-foreground">kaydını {actionLabel(item.action)}</span>
-          </div>
-          <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">
-            {item.recordId}
-          </div>
-        </div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="shrink-0 text-xs text-muted-foreground">
-              {formatDistanceToNow(date, { addSuffix: true, locale: tr })}
+            <span className="w-12 shrink-0 pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+              {formatFactory(date, "HH:mm")}
             </span>
           </TooltipTrigger>
-          <TooltipContent side="left">
-            {formatFactory(date, "dd.MM.yyyy HH:mm:ss")}
+          <TooltipContent side="right">
+            {formatFactory(date, "dd.MM.yyyy HH:mm:ss")} ·{" "}
+            {formatDistanceToNow(date, { addSuffix: true, locale: tr })}
           </TooltipContent>
         </Tooltip>
-      </button>
+        <div className="min-w-0 flex-1">
+          <AuditNarrativeRow
+            anlati={item.anlati}
+            reddedildi={reddedildi}
+            truncate
+            fallback={islem ? <span className="text-sm">{itemUser(item)}</span> : <LegacyLine item={item as SystemLogListItem} />}
+          />
+          {!islem && (item as SystemLogListItem).kardes && (
+            <div className="mt-0.5 text-[11px] text-muted-foreground">aynı işlemde</div>
+          )}
+        </div>
+        {islem && islem.kayitSayisi > 1 && (
+          <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-label="Ayrıntı" />
+        )}
+      </div>
     </li>
   );
 });
+
+/** Eski backend (anlatı yok) satırı — bugünkü düzen. */
+function LegacyLine({ item }: { item: SystemLogListItem }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <Badge variant={actionVariant(item.action)} className="shrink-0">
+        {actionLabel(item.action)}
+      </Badge>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm" data-testid="activity-legacy-line">
+          <span className="font-medium">{itemUser(item)}</span>{" "}
+          <span className="text-muted-foreground">→</span>{" "}
+          <span className="font-medium">{tableLabel(item.tableName)}</span>{" "}
+          <span className="text-muted-foreground">kaydını {actionLabel(item.action)}</span>
+        </div>
+        <div className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">{item.recordId}</div>
+      </div>
+    </div>
+  );
+}

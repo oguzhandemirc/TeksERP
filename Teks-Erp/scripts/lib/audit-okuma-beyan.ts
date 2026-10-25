@@ -150,6 +150,7 @@ export const ISTEMCI_AYAK_IZI: readonly AyakIziBeyani[] = [
   { yer: "Electron/src/pages/System/Archive/ActivityArchivePage.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "arşive taşıma ekranı" },
   { yer: "Electron/src/pages/System/Events/SystemEventsPage.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "sistem olayları listesi" },
   { yer: "Electron/src/pages/System/Events/SystemEventDetailSheet.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "sistem olayı ayrıntısı" },
+  { yer: "Electron/src/components/audit/AuditTechnicalDetail.tsx", adet: 1, sinif: "DENETIM_EKRANI", gerekce: "Teknik ayrıntı: işlem izi + etkilenen kayıtlar (Etkinlik ve kayıt geçmişi)" },
   { yer: "Electron/src/components/RecordHistoryDialog.tsx", adet: 1, sinif: "KAYIT_GECMISI", gerekce: "kaydın değişiklik geçmişi penceresi" },
   { yer: "Electron/src/components/RecordInfoButton.tsx", adet: 1, sinif: "KAYIT_GECMISI", gerekce: "ⓘ künye düğmesi" },
   { yer: "Electron/src/pages/Reports/Audit/service.ts", adet: 1, sinif: "DENETIM_RAPORU", gerekce: "denetim raporları istemcisi" },

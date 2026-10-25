@@ -9,6 +9,7 @@ import { systemLogService } from "@/services/systemLogService";
 import type { SystemLogListItem } from "@/types/systemLog";
 import { ActivityFilters, type ActivityFilterState } from "../Activity/ActivityFilters";
 import { ActivityFeed } from "../Activity/ActivityFeed";
+import type { FeedItem } from "../Activity/activity-view";
 import { ActivityDetailSheet } from "../Activity/ActivityDetailSheet";
 
 const QUERY_KEY = "system-logs-archive";
@@ -38,7 +39,7 @@ export function ArchiveSearchPage() {
   );
 
   // Perf: ActivityFeed'in React.memo'lu satırları için stabil referans.
-  const handleSelect = useCallback((item: SystemLogListItem) => setDetailId(item.id), []);
+  const handleSelect = useCallback((item: FeedItem) => setDetailId(item.id), []);
 
   const { rootRef, sentinelRef } = useInfiniteScroll({
     hasMore: query.hasNextPage,

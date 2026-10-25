@@ -7,15 +7,84 @@ import { systemLogService } from "@/services/systemLogService";
 import type { AuditChange } from "@/types/systemLog";
 import { AuditDataBlock } from "@/components/AuditDataBlock";
 import { AuditChangeList } from "@/components/AuditChangeList";
+import { AuditNarrativeRow } from "@/components/audit/AuditNarrativeRow";
+import { AuditTechnicalDetail } from "@/components/audit/AuditTechnicalDetail";
 import { tableLabel, actionLabel, actionVariant } from "./labels";
 
 interface Props {
   logId: string | null;
+  /** İşlem görünümünden: tek iş eylemi (aynı istekteki tüm satırlar). */
+  requestId?: string | null;
   onClose: () => void;
   source?: "active" | "archive";
 }
 
-export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props) {
+export function ActivityDetailSheet({ logId, requestId: islemId = null, onClose, source = "active" }: Props) {
+  if (islemId) return <IslemSheet requestId={islemId} onClose={onClose} />;
+  return <LogSheet logId={logId} onClose={onClose} source={source} />;
+}
+
+/** İşlem (requestId) ayrıntısı: başlık cümlesi + her kaydın cümlesi + Teknik ayrıntı. */
+function IslemSheet({ requestId, onClose }: { requestId: string; onClose: () => void }) {
+  const q = useQuery({
+    queryKey: ["system-log-islem", requestId],
+    queryFn: () => systemLogService.getIslem(requestId).then((r) => r.data),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const islem = q.data;
+  const rejected = (islem?.iz?.status ?? 0) >= 400;
+  return (
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>İşlem ayrıntısı</SheetTitle>
+        </SheetHeader>
+        <div className="mt-4 space-y-4">
+          {q.isLoading ? (
+            <>
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-40 w-full" />
+            </>
+          ) : islem ? (
+            <>
+              <div className="rounded-md border bg-card/40 p-3">
+                <AuditNarrativeRow anlati={islem.anlati} reddedildi={rejected} />
+                {islem.iz && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {formatFactory(islem.iz.createdAt, "dd.MM.yyyy HH:mm:ss")}
+                  </div>
+                )}
+              </div>
+              {islem.kayitlar.length > 0 && (
+                <div className="rounded-md border bg-card/40 p-3">
+                  <div className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+                    Ne yapıldı ({islem.kayitlar.length} kayıt)
+                  </div>
+                  <ul className="space-y-2">
+                    {islem.kayitlar.map((k) => (
+                      <li key={k.id} className="text-sm">
+                        <AuditNarrativeRow
+                          anlati={k.anlati}
+                          fallback={`${k.modul} kaydını ${actionLabel(k.action)}`}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <AuditTechnicalDetail requestId={requestId} defaultOpen />
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">İşlem bulunamadı.</p>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function LogSheet({ logId, onClose, source }: { logId: string | null; onClose: () => void; source: "active" | "archive" }) {
   const query = useQuery({
     queryKey: ["system-log", source, logId],
     queryFn: () =>
@@ -58,7 +127,7 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
     <Sheet open={!!logId} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Aktivite Detayı</SheetTitle>
+          <SheetTitle>Kayıt ayrıntısı</SheetTitle>
         </SheetHeader>
         <div className="mt-4 space-y-4">
           {query.isLoading ? (
@@ -69,6 +138,11 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
             </>
           ) : query.data ? (
             <>
+              {query.data.anlati && (
+                <div className="rounded-md border bg-card/40 p-3">
+                  <AuditNarrativeRow anlati={query.data.anlati} />
+                </div>
+              )}
               <div className="space-y-2 rounded-md border bg-card/40 p-3 text-sm">
                 <Row label="Kullanıcı">
                   {query.data.user
@@ -110,14 +184,21 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
                   </div>
                   <div className="space-y-1">
                     {siblings.map((s) => (
-                      <div key={s.id} className="flex flex-wrap items-baseline gap-2 text-sm">
-                        <Badge variant={actionVariant(s.action)} className="text-[10px]">
-                          {actionLabel(s.action)}
-                        </Badge>
-                        <span>{tableLabel(s.tableName)}</span>
-                        <span className="font-mono text-[11px] text-muted-foreground">
-                          {s.recordId}
-                        </span>
+                      <div key={s.id} className="text-sm">
+                        <AuditNarrativeRow
+                          anlati={s.anlati}
+                          fallback={
+                            <span className="flex flex-wrap items-baseline gap-2">
+                              <Badge variant={actionVariant(s.action)} className="text-[10px]">
+                                {actionLabel(s.action)}
+                              </Badge>
+                              <span>{tableLabel(s.tableName)}</span>
+                              <span className="font-mono text-[11px] text-muted-foreground">
+                                {s.recordId}
+                              </span>
+                            </span>
+                          }
+                        />
                       </div>
                     ))}
                   </div>
@@ -148,26 +229,19 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
                 </div>
               ) : null}
 
-              <details className="rounded-md border bg-card/20 p-2">
-                <summary className="cursor-pointer text-xs uppercase tracking-wider text-muted-foreground">
-                  Ham veri (teknik)
-                </summary>
-                {/* ⚠️ `tableName` bağlam OLARAK geçer: bazı enum değerleri iki
-                    enum'da çelişir (`PURCHASE` fatura türü ↔ fiyat türü) ve
-                    yalnız `TABLO.alan` çifti onları ayırabilir. */}
-                <div className="mt-2 space-y-3">
-                  <AuditDataBlock
-                    title="Önceki Değer"
-                    data={query.data.oldData}
-                    tableName={query.data.tableName}
-                  />
-                  <AuditDataBlock
-                    title="Yeni Değer"
-                    data={query.data.newData}
-                    tableName={query.data.tableName}
-                  />
-                </div>
-              </details>
+              {/* TEKNİK AYRINTI (katlı) — eski "Ham veri (teknik)"in yerini alır: uç,
+                  durum, süre, cihaz adı, etkilenen kayıtlar; en altta ham veri.
+                  ⚠️ `tableName` ham blokta bağlam olarak geçer: bazı enum değerleri
+                  iki enum'da çelişir ve yalnız `TABLO.alan` çifti onları ayırır. */}
+              <AuditTechnicalDetail
+                requestId={requestId}
+                rawFallback={
+                  <div className="space-y-3">
+                    <AuditDataBlock title="Önceki Değer" data={query.data.oldData} tableName={query.data.tableName} />
+                    <AuditDataBlock title="Yeni Değer" data={query.data.newData} tableName={query.data.tableName} />
+                  </div>
+                }
+              />
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Kayıt bulunamadı.</p>
