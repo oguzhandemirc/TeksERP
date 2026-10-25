@@ -45,9 +45,36 @@ export function tableOf(r: SemanticResultLite): TabloBlok {
   return { kolonlar: columns, satirlar: rows, toplam: total };
 }
 
+/**
+ * Isı haritası (R3-ANALIZ): iki kırılımlı sonuç → satır = ilk kırılım, sütun = ikinci. Yalnız yeniden
+ * dizilim; hücre değeri sunucunun sayısıdır, boş hücre `null` ("ölçülemedi" 0'a çökmez).
+ */
+export function heatmapOf(r: SemanticResultLite): GrafikBlok | null {
+  const m = r.olculer[0];
+  const [rowDim, colDim] = r.boyutlar;
+  if (!m || !rowDim || !colDim) return null;
+  const keyOf = (row: SemanticResultLite["satirlar"][number], dim: string) => row.anahtarlar[dim]?.deger ?? "";
+  const labelOf = (row: SemanticResultLite["satirlar"][number], dim: string) => row.anahtarlar[dim]?.etiket ?? row.anahtarlar[dim]?.deger ?? "—";
+  const rows = new Map<string, string>();
+  const cols = new Map<string, string>();
+  for (const row of r.satirlar) {
+    rows.set(keyOf(row, rowDim.kimlik), labelOf(row, rowDim.kimlik));
+    cols.set(keyOf(row, colDim.kimlik), labelOf(row, colDim.kimlik));
+  }
+  const colKeys = [...cols.keys()].sort((a, b) => a.localeCompare(b, "tr", { numeric: true }));
+  const cell = new Map(r.satirlar.map((row) => [`${keyOf(row, rowDim.kimlik)}|${keyOf(row, colDim.kimlik)}`, row.degerler[m.kimlik] ?? null]));
+  return {
+    tur: "isiHaritasi",
+    eksen: { x: { ad: colDim.ad, tur: "kategori" }, y: { ad: m.ad, birim: unitOf(m.birim) } },
+    kategoriler: colKeys.map((k) => cols.get(k)!),
+    seriler: [...rows.entries()].map(([rk, label]) => ({ ad: label, veri: colKeys.map((ck) => cell.get(`${rk}|${ck}`) ?? null) })),
+  };
+}
+
 export function chartOf(r: SemanticResultLite, kind: string): GrafikBlok | null {
   const m = r.olculer[0];
   if (!m || r.boyutlar.length === 0) return null;
+  if (kind === "isiHaritasi" && r.boyutlar.length === 2) return heatmapOf(r);
   const tur: GrafikTuru = (GRAFIK_TURLERI as readonly string[]).includes(kind) ? (kind as GrafikTuru) : "cubuk";
   return {
     tur,

@@ -14,3 +14,8 @@ export function isActiveInspection(i: { supersededAt: Date | null; voidedAt: Dat
 
 /** Ham SQL ikizi (rapor küpü) — `ri` takmalı `roll_inspections` üstünde aynı soru. */
 export const ACTIVE_INSPECTION_SQL = Prisma.sql`ri."supersededAt" IS NULL AND ri."voidedAt" IS NULL`;
+
+/** Topun bu aşamadaki aktif muayenesi — yazma ucu (409 kapısı) ve önizleme (tablet "zaten var" uyarısı) aynı sorudan okur. */
+export function findActiveInspection(db: Pick<Prisma.TransactionClient, "rollInspection">, rollId: string, phase: "RAW" | "FINAL") {
+  return db.rollInspection.findFirst({ where: { rollId, phase, ...ACTIVE_INSPECTION_WHERE }, select: { id: true, phase: true, revision: true } });
+}

@@ -28,7 +28,7 @@ export function BlockPalette({ blockCount, hasDimension, onAdd }: Props) {
       <ul className="grid grid-cols-2 gap-2 lg:grid-cols-1">
         {PALETTE.map((p) => {
           const Icon = ICONS[p.kind];
-          const needsDim = (p.kind === "grafik" || p.kind === "varyant") && !hasDimension;
+          const needsDim = (p.kind === "grafik" || p.kind === "varyant" || p.kind === "analiz") && !hasDimension;
           const reason = p.unavailable ?? (full ? `En çok ${MAX_BLOCKS} bölüm olabilir.` : needsDim ? "Bu konuda kırılım yok." : null);
           return (
             <li key={p.kind}>
