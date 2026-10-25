@@ -10,7 +10,7 @@
 // Ayrıca: "Diğer" kovası toplamı bozmaz · allowlist dışı boyut 400 · `users`a bağlanan boyut `kisiAdi` taşır.
 //
 // Hata küpü yalnız saha tespiti (K4P #148: kaynak karne `ACTIONABLE_ROLL_ERROR_SQL`); fikstürdeki muayene
-// satırı iki tarafta da sayılmaz. Fikstür `scripts/fixture-semantik.ts` (pencere 2098-03, `TSE-FIX`; levent kapanışı kurulmaz → levent
+// satırı iki tarafta da sayılmaz. Fikstür `scripts/lib/fixture-semantik.ts` (pencere 2098-03, `TSE-FIX`; levent kapanışı kurulmaz → levent
 // ölçüleri iki tarafta da boş veriyle eşitlenir, not düşülür).
 //
 // NEGATİF SONDALAR (2026-10-25; hepsi md5 ile birebir geri alındı; bugün 83/0):
@@ -26,7 +26,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
-import { FIXTURE_DAYS, FIXTURE_RANGE as R, setupSemanticFixture, teardownSemanticFixture, type SemanticFixture } from "./fixture-semantik";
+import { FIXTURE_DAYS, FIXTURE_RANGE as R, setupSemanticFixture, teardownSemanticFixture, type SemanticFixture } from "./lib/fixture-semantik";
 import { AppError } from "../src/utils/app-error";
 import { semanticQuerySchema, type SemanticQueryInput } from "../src/services/reports/semantik/derleyici";
 import { runSemanticQuery, type RunDeps, type SemanticResult } from "../src/services/reports/semantik/calistirici";

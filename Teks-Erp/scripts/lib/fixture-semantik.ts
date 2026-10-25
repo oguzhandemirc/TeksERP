@@ -10,14 +10,15 @@
 //
 // İdempotent + sırasız: her koşu önce iş anahtarı öneki (`TSE-FIX`) taşıyan kayıtları siler, sonra kurar.
 // Yalnız `tekserp_*_test` DB'ye yazar (`hedefDbEngeli`).
-// Koşum: npx tsx scripts/fixture-semantik.ts [kur|sil]
+// `scripts/lib/` altında: fikstürdür, defter sınıflaması (`test_defter_ters_yol §8a`) gerekmez.
+// Koşum: npx tsx scripts/lib/fixture-semantik.ts [kur|sil]
 // =============================================================================
-import prisma, { pool } from "../src/lib/prisma";
-import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
-import { firstGrade, roleGrade } from "./fixture-quality-grade";
-import { K18_DEAD_STATUSES } from "../src/services/batch.service";
-import { DEFECT_GROUPS } from "../src/constants/hata-gruplari";
-import type { DateRange } from "../src/services/reports/_shared";
+import prisma, { pool } from "../../src/lib/prisma";
+import { hedefDbEngeli } from "./hedef-db-kapisi";
+import { firstGrade, roleGrade } from "../fixture-quality-grade";
+import { K18_DEAD_STATUSES } from "../../src/services/batch.service";
+import { DEFECT_GROUPS } from "../../src/constants/hata-gruplari";
+import type { DateRange } from "../../src/services/reports/_shared";
 
 export const FIXTURE_TAG = "TSE-FIX";
 /** Fabrika ayı 2098-03 (İstanbul UTC+3). */
