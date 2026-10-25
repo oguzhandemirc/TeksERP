@@ -93,6 +93,9 @@ import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage"
 import { CostHubPage } from "@/pages/Cost/CostHubPage";
 import { ParametersPage as CostParametersPage } from "@/pages/Cost/Parameters/ParametersPage";
 import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/YarnPricesPage";
+import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/FinishingRates/FinishingRatesPage";
+import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
+import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -620,6 +623,30 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="cost:read">
         <CostYarnPricesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/finishing-rates",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostFinishingRatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/items",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostItemsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/items/:itemId",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostItemDetailPage />
       </ProtectedRoute>
     ),
   },

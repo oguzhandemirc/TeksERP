@@ -5,7 +5,7 @@
 // Görüntüleme kapısı `cost:read`; yazma (`cost:write` · `cost:settings`) sayfa İÇİNDE `PermissionGate`.
 // Menü satırı ayrıca `maliyetEnabled` bayrağına bağlıdır (`nav-config`): modül kapalıysa hiçbiri çizilmez.
 // =============================================================================
-import { SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
+import { Factory, Layers, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
 
 export interface CostTile {
   key: string;
@@ -35,6 +35,24 @@ export const costTiles: CostTile[] = [
     to: "/cost/yarn-prices",
     icon: Spool,
     tone: "text-station-depo",
+    permissionAny: ["cost:read"],
+  },
+  {
+    key: "finishing-rates",
+    title: "Fason Tarifeleri",
+    description: "Terbiye/boya/apre fason ücretleri (ham ya da mamul metre bazlı) — değişiklik yeni sürümdür, eskisi damgalı kalır.",
+    to: "/cost/finishing-rates",
+    icon: Factory,
+    tone: "text-station-fason",
+    permissionAny: ["cost:read"],
+  },
+  {
+    key: "items",
+    title: "Maliyet Kartları",
+    description: "Kumaş başına yapı durumu, canlı döküm ve kayıtlı standart metre maliyeti; girdi değişince rozet.",
+    to: "/cost/items",
+    icon: Layers,
+    tone: "text-success",
     permissionAny: ["cost:read"],
   },
 ];

@@ -6,6 +6,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { itemLifecycleOf } from "@/lib/item-lifecycle";
 import type { Item } from "./types";
 import { ItemCustomerColorAliasesPanel } from "./ItemCustomerColorAliasesPanel";
+import { ItemCostLink } from "./ItemCostLink";
 
 interface Props {
   /** Düzenlenen kart; yeni kartta null. */
@@ -15,9 +16,11 @@ interface Props {
 
 export function ItemCardTabs({ item, children }: Props) {
   const { hasPermission } = useRoleAccess();
-  if (!item || item.itemType !== "FABRIC" || !hasPermission("customer-alias:read")) return <>{children}</>;
+  const costLink = item ? <ItemCostLink itemId={item.id} itemType={item.itemType} /> : null;
+  if (!item || item.itemType !== "FABRIC" || !hasPermission("customer-alias:read")) return <>{costLink}{children}</>;
   return (
     <Tabs defaultValue="info">
+      {costLink}
       <TabsList>
         <TabsTrigger value="info">Bilgiler</TabsTrigger>
         <TabsTrigger value="customer-color-aliases">Müşteri Renk Adları</TabsTrigger>

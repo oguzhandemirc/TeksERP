@@ -40,6 +40,12 @@ const CIFTLER: Ciftt[] = [
   // MAL-3 maliyet ekranları
   { dosya: "Cost/Parameters/schema.ts", alan: "note", model: "CostParameterSet", kolon: "note" },
   { dosya: "Cost/YarnPrices/schema.ts", alan: "note", model: "YarnCostPrice", kolon: "note" },
+  { dosya: "Cost/FinishingRates/schema.ts", alan: "code", model: "FinishingRate", kolon: "code" },
+  { dosya: "Cost/FinishingRates/schema.ts", alan: "name", model: "FinishingRate", kolon: "name" },
+  { dosya: "Cost/FinishingRates/schema.ts", alan: "note", model: "FinishingRate", kolon: "note" },
+  { dosya: "Cost/Items/schema.ts", alan: "extraCostLabel", model: "CostStructure", kolon: "extraCostLabel" },
+  { dosya: "Cost/Items/schema.ts", alan: "notes", model: "CostStructure", kolon: "notes" },
+  { dosya: "Cost/Items/schema.ts", alan: "reason", model: "StandardCostVersion", kolon: "reason" },
   { dosya: "Customers/schema.ts", alan: "name", model: "Customer", kolon: "name" },
   { dosya: "DefectTypes/schema.ts", alan: "name", model: "DefectType", kolon: "name" },
   { dosya: "Machines/schema.ts", alan: "name", model: "Machine", kolon: "name" },
