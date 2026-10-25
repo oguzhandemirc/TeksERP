@@ -10,4 +10,5 @@
 
 export { shipmentDispatchSystem } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
 export { subcontractorDirectShipSystem } from "./subcontractor-direct-ship"; // SUBCONTRACTOR_DIRECT_SHIP
+export { subcontractorDispatchSystem } from "./subcontractor-dispatch"; // SUBCONTRACTOR_DISPATCH
 export { subcontractorReceiptSystem } from "./subcontractor-receipt"; // SUBCONTRACTOR_RECEIPT
