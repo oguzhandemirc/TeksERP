@@ -7,7 +7,8 @@ import type { MergeCandidateGroup, MergePreview } from "./types";
 // Kopya birleştirme diyaloğu (D4). İddia: düşük güven VARSAYILAN SEÇİLİ DEĞİL; açık oturumlu
 // kaynak seçilemez ve nedeni yazılı; her kaynakta iş oturumu "yerinde kalır" + taşınan donanım;
 // geri alma notu görünür; "N kaydı birleştir" yalnız seçilenleri DOĞRU uca gönderir.
-// Sonda: HENÜZ ÖLÇÜLMEDİ (devir notunda açık iş) — LOW süzgeci kaldır / engelli kaynağa onay kutusu ver.
+// Sonda (2026-10-25, ölçüldü): merge.ts LOW süzgeci kaldır → 2 kırmızı · engelli kaynağa onay kutusu
+// ver → 1 kırmızı · düğmeden `!preview.data` koşulunu kaldır → 1 kırmızı (önizlemesiz birleştirme testi).
 // =============================================================================
 
 const h = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), toastError: vi.fn(), toastSuccess: vi.fn() }));
@@ -95,6 +96,15 @@ describe("MergeDialog", () => {
     expect(screen.getAllByText(/iş oturumu YERİNDE KALIR/)).toHaveLength(3);
     expect(screen.getByText(/Tambur Yazıcısı/)).toBeInTheDocument();
     expect(screen.getByText(MERGE_UNDO_NOTE)).toBeInTheDocument();
+  });
+
+  it("önizleme gelmeden birleştir düğmesi pasif; uca istek gitmez", async () => {
+    h.post.mockImplementation(() => new Promise(() => undefined));
+    renderWithProviders(<MergeDialog group={GROUP} onClose={() => undefined} />);
+    const dugme = await screen.findByRole("button", { name: /kaydı birleştir$/ });
+    expect(dugme).toBeDisabled();
+    fireEvent.click(dugme);
+    expect(h.post).not.toHaveBeenCalledWith("/api/admin/devices/merge", expect.anything(), expect.anything());
   });
 
   it("birleştir yalnız seçilenleri doğru uca gönderir; düşük güven elle seçilebilir", async () => {
