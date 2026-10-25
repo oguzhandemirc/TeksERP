@@ -1,7 +1,8 @@
 // RAPOR ANAHTARI → BULUT İZNİ (sözleşme §7) — güvenlik kararı BULUTTADIR ve RAPOR BAŞINADIR: aile düzeyi
 // izin aynı ailedeki dar izinli raporu (sevkiyat karnesi, çek vadesi) geniş izne açıyordu. Eşlenmeyen anahtar
 // RED (fail-closed). Küme fabrikanın `REMOTE_REPORTS` listesiyle birebir (bekçi `test_bulut_tel_aynasi` §8).
-// Audit ailesi buluta HİÇ gitmez; kişi adı taşıyan rapor v1 dışıdır.
+// Audit ailesi buluta HİÇ gitmez; kişi adı taşıyan rapor (ya da varyant) listeye girmez. v2 anahtarlarının
+// sonucu fabrikada kurulmuş `RaporSunumu`dur (tel tipi `wire/api.ts`); bulut yalnız saklar, hesaplamaz.
 import { isCloudPermission, type CloudPermission } from "./permissions";
 
 export const REPORT_KEY_PERMISSION: Readonly<Record<string, CloudPermission>> = {
@@ -13,10 +14,24 @@ export const REPORT_KEY_PERMISSION: Readonly<Record<string, CloudPermission>> = 
   "inventory/scorecard": "bulut:stok:oku",
   "finance/aging": "bulut:cari-bakiye:oku",
   "finance/cheque-due": "bulut:cek:oku",
+  // Raporlar v2 temel raporları (R1-BULUT)
+  "sales/siparis-talep": "bulut:siparis:oku",
+  "sales/sevkiyat": "bulut:sevkiyat:oku",
+  "sales/termin": "bulut:sevkiyat:oku",
+  "sales/acik-siparisler": "bulut:siparis:oku",
+  "sales/vazgecilen-is": "bulut:siparis:oku",
+  "quality/kalite": "bulut:uretim:oku",
+  "quality/kayip": "bulut:uretim:oku",
+  "inventory/depo": "bulut:stok:oku",
+  "subcontract/fasoncular": "bulut:uretim:oku",
+  "dokuma/tezgah-randimani": "bulut:uretim:oku",
+  "dokuma/duruslar": "bulut:uretim:oku",
+  "dokuma/levent-dengesi": "bulut:uretim:oku",
+  "finance/alacaklar": "bulut:cari-bakiye:oku",
 };
 
 /** Buluttan İSTENEMEYEN raporlar (aile ya da tam anahtar). */
-export const REPORTS_NOT_IN_CLOUD: readonly string[] = ["audit/*", "production/operator-performance"];
+export const REPORTS_NOT_IN_CLOUD: readonly string[] = ["audit/*", "production/operator-performance", "production/uretim-akisi"];
 
 const KEY_PATTERN = /^([a-z][a-z0-9-]{0,39})\/([a-z0-9][a-z0-9-]{0,79})$/;
 const REPORT_READ: CloudPermission = "bulut:rapor:oku";
