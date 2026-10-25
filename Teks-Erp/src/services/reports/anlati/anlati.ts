@@ -20,9 +20,12 @@ import {
   esikAsimi,
   scopeNote,
   olculemedi,
+  correlationObservation,
+  sampleWarningObservation,
   sessizlesen,
   emptyResultState,
   yogunlasma,
+  type AnalysisInput,
   type AnaSayiIfadesi,
   type ThresholdInput,
   type Gozlem,
@@ -48,6 +51,8 @@ export interface NarrativeInput {
   esikler?: ThresholdInput[];
   musteriRitmi?: { musteriler: MusteriRitmi[]; bugun: Date };
   kapsam?: ScopeNoteInput[];
+  /** R3 analiz bloğu: kanıt ya da örneklem uyarısı (ikisi birlikte asla). */
+  analiz?: AnalysisInput;
 }
 
 export const NARRATIVE_DEFAULT_LIMIT = 5;
@@ -68,12 +73,13 @@ export function gozlemleriTopla(g: NarrativeInput): Gozlem[] {
   for (const e of g.esikler ?? []) out.push(esikAsimi(e));
   if (g.musteriRitmi) out.push(sessizlesen(g.musteriRitmi.musteriler, g.musteriRitmi.bugun));
   for (const k of g.kapsam ?? []) out.push(scopeNote(k));
+  if (g.analiz) out.push(correlationObservation(g.analiz), sampleWarningObservation(g.analiz));
   return out.filter((x): x is Gozlem => x !== null);
 }
 
 const kuralSirasi = (k: KuralAdi): number => KURAL_ADLARI.indexOf(k);
 
-/** Sıralı anlatı. `kurallar` verilirse yalnız onlar; metin üretmeyen (R3 yer tutucu) kural düşer. */
+/** Sıralı anlatı. `kurallar` verilirse yalnız onlar; metin üretmeyen kural düşer. */
 export function anlatiUret(
   girdi: NarrativeInput,
   secenek: { kurallar?: readonly KuralAdi[]; enFazla?: number } = {},

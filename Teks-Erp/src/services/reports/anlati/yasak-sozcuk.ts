@@ -27,6 +27,14 @@ export const YASAK_SOZCUKLER: readonly YasakSozcuk[] = [
   { sozcuk: "RFM", desen: sinirli("rfm"), karsilik: "\"son siparişi, sıklığı ve tutarıyla müşteri\"" },
   { sozcuk: "take-up", desen: sinirli("take[- ]?up"), karsilik: "\"leventten beklenen kumaş\"" },
   { sozcuk: "kohort", desen: sinirli("kohort\\p{L}*"), karsilik: "\"aynı ay ilk siparişini veren müşteriler\"" },
+  // R3-ISTAT: analiz cümlesi günlük dildir; olasılık/katsayı kartta sayı olarak durur.
+  { sozcuk: "p", desen: sinirli("p(?:[- ]?değer\\p{L}*)?"), karsilik: "\"güçlü kanıt\" / \"kanıt var\"" },
+  { sozcuk: "korelasyon", desen: sinirli("korelasyon\\p{L}*"), karsilik: "\"birlikte artıyor\"" },
+  { sozcuk: "katsayı", desen: sinirli("katsayı\\p{L}*"), karsilik: "\"güçlü / orta düzeyde / zayıf ilişki\"" },
+  { sozcuk: "ki-kare", desen: sinirli("ki[- ]?kare\\p{L}*"), karsilik: "\"bu fark tesadüf olmayacak kadar büyük\"" },
+  { sozcuk: "istatistiksel", desen: sinirli("istatistiksel\\p{L}*|anlamlılık\\p{L}*"), karsilik: "\"güçlü kanıt\"" },
+  { sozcuk: "Pearson/Spearman", desen: sinirli("pearson|spearman"), karsilik: "\"birlikte artıyor\"" },
+  { sozcuk: "regresyon", desen: sinirli("regresyon\\p{L}*"), karsilik: "\"arttıkça artıyor\"" },
   { sozcuk: "mikro duruş", desen: sinirli("mikro[- ]?duruş\\p{L}*"), karsilik: "\"kısa duruşlar (birkaç dakikalık)\"" },
 ];
 

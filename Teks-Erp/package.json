@@ -49,6 +49,7 @@
     "opentype.js": "^2.0.0",
     "pg": "^8.20.0",
     "prisma": "^7.7.0",
+    "simple-statistics": "7.12.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^13.0.0",

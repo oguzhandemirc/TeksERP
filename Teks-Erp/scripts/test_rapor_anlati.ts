@@ -313,8 +313,29 @@ check("§5 egilim 5 nokta → yok", anlatiUret({ seri: ay([90, 88, 86, 84, 82]) 
 check("§5 egilim gürültü (R² < 0,5) → yok", anlatiUret({ seri: ay([80, 90, 78, 92, 79, 91, 81]) }, { kurallar: ["egilim"] }).length === 0);
 check("§5 aykiri 7 nokta → yok", anlatiUret({ seri: { ...fire, noktalar: fire.noktalar.slice(0, 7) } }, { kurallar: ["aykiri"] }).length === 0);
 check("§5 sessizlesen ritminde müşteri → yok", anlatiUret({ musteriRitmi: { musteriler: [duzenli], bugun: BUGUN } }, { kurallar: ["sessizlesen"] }).length === 0);
-check("§5 R3 yer tutucuları (korelasyon, orneklemUyarisi) metin üretmez", !gozlemleriTopla({}).length);
-const katalog = KURAL_ADLARI.filter((k) => k !== "korelasyon" && k !== "orneklemUyarisi");
+check("§5 analiz girdisi yokken korelasyon/örneklem gözlemi yok", !gozlemleriTopla({}).length);
+
+// R3-ISTAT: analiz cümleleri — kanıt dili + HER cümlenin sonunda "İlişki, nedeni göstermez."
+const oranKanit = { yontem: "kiKare" as const, tur: "oran" as const, n: 1240, nesne: "kayıt", olcuAdi: "bulunan hata", yer: "Gece vardiyasında", birimSozu: "1.000 m'de", oran: 4.1, digerOran: 2, kat: 2.05 };
+altin("korelasyon oran güçlü", { analiz: { korelasyon: { ...oranKanit, p: 0.0004 }, orneklem: null } }, "korelasyon",
+  "Gece vardiyasında bulunan hata 1.000 m'de 4,1; diğerlerinde 2 — yaklaşık 2,1 katı. Bu fark tesadüf olmayacak kadar büyük (güçlü kanıt; 1.240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
+altin("korelasyon oran kanıt var", { analiz: { korelasyon: { ...oranKanit, p: 0.03 }, orneklem: null } }, "korelasyon",
+  "Gece vardiyasında bulunan hata 1.000 m'de 4,1; diğerlerinde 2 — yaklaşık 2,1 katı. Bu fark tesadüf olmayacak kadar büyük (kanıt var; 1.240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
+altin("korelasyon oran belirgin değil", { analiz: { korelasyon: { ...oranKanit, oran: 2.3, digerOran: 2.2, kat: 1.05, p: 0.4 }, orneklem: null } }, "korelasyon",
+  "Gece vardiyasında bulunan hata 1.000 m'de 2,3; diğerlerinde 2,2. Belirgin bir fark görünmüyor (1.240 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
+altin("korelasyon tablo", { analiz: { korelasyon: { yontem: "kiKare", tur: "tablo", n: 412, p: 0.002, nesne: "kayıt", yer: "Gece vardiyasında", ikinciAd: "çözgü", pay: 41, genelPay: 28 }, orneklem: null } }, "korelasyon",
+  "Gece vardiyasında çözgü payı %41; genelde %28. Bu fark tesadüf olmayacak kadar büyük (güçlü kanıt; 412 kayıt üzerinden ölçüldü). İlişki, nedeni göstermez.");
+altin("korelasyon iki ölçü", { analiz: { korelasyon: { yontem: "spearman", n: 45, p: 0.02, r: -0.42, nesne: "gün", xAdi: "Duruş süresi", yAdi: "biten kumaş" }, orneklem: null } }, "korelasyon",
+  "Duruş süresi arttıkça biten kumaş azalıyor (orta düzeyde ilişki). Bu ilişki tesadüf olmayacak kadar belirgin (kanıt var; 45 gün üzerinden ölçüldü). İlişki, nedeni göstermez.");
+altin("korelasyon ilişki yok", { analiz: { korelasyon: { yontem: "pearson", n: 60, p: 0.7, r: 0.05, nesne: "gün", xAdi: "Duruş süresi", yAdi: "biten kumaş" }, orneklem: null } }, "korelasyon",
+  "Duruş süresi ile biten kumaş birlikte değişmiyor. Belirgin bir ilişki görünmüyor (60 gün üzerinden ölçüldü). İlişki, nedeni göstermez.");
+altin("orneklemUyarisi az kayıt", { analiz: { korelasyon: { ...oranKanit, n: 9, p: 0.001 }, orneklem: { n: 9, enKucukBeklenen: 1.5, nesne: "kayıt", gereken: 30 } } }, "orneklemUyarisi",
+  "Yalnız 9 kayıt var; karar vermek için en az 30 gerekir. İlişki, nedeni göstermez.");
+altin("orneklemUyarisi küçük hücre", { analiz: { korelasyon: null, orneklem: { n: 80, enKucukBeklenen: 3.2, nesne: "kayıt", gereken: 30 } } }, "orneklemUyarisi",
+  "Bazı gruplarda kayıt çok az; karar vermek için daha uzun bir dönem seçin. İlişki, nedeni göstermez.");
+const kucuk = anlatiUret({ analiz: { korelasyon: { ...oranKanit, n: 9, p: 0.001 }, orneklem: { n: 9, enKucukBeklenen: 1.5, nesne: "kayıt", gereken: 30 } } });
+check("§5 örneklem uyarısı varken kanıt cümlesi KURULMAZ (yalnız uyarı)", kucuk.length === 1 && kucuk[0]!.kural === "orneklemUyarisi", JSON.stringify(kucuk.map((c) => c.kural)));
+const katalog = KURAL_ADLARI;
 const eksik = katalog.filter((k) => !goruldu.has(k));
 check("§5 R0 kural kataloğunun HER kuralı bir altın cümleyle ölçüldü", eksik.length === 0, eksik.join(", ") || `${katalog.length} kural`);
 
@@ -331,10 +352,18 @@ const ornekler: Record<string, string> = {
   "take-up": "Take-up oranı",
   kohort: "kohortlara göre",
   "mikro duruş": "Mikro duruşlar arttı",
+  p: "fark anlamlı (p < 0,01)",
+  korelasyon: "Korelasyon güçlü",
+  katsayı: "ilişki katsayısı 0,8",
+  "ki-kare": "ki-kare testine göre",
+  istatistiksel: "istatistiksel olarak anlamlı",
+  "Pearson/Spearman": "Spearman sırası",
+  regresyon: "Regresyon çizgisi",
 };
 for (const y of YASAK_SOZCUKLER) check(`§6 '${y.sozcuk}' yakalanır`, yasakSozcukBul(ornekler[y.sozcuk] ?? "").includes(y.sozcuk), ornekler[y.sozcuk]);
 check("§6 '∑' (toplam simgesi) yakalanır", yasakSozcukBul("∑ metre").includes("Σ"));
 check("§6 'abece' / 'Kaya Tekstil' / 'oee'siz metin temiz", yasakSozcukBul("abece sırasıyla Kaya Tekstil; deneme") .length === 0);
+check("§6 'p' yalnız tek başına yakalanır ('P50', 'pay', 'parti' temiz)", yasakSozcukBul("pay, parti, kapı, top").length === 0);
 const kirli = altinlar.filter((m) => yasakSozcukBul(m).length > 0);
 check("§6 altın cümlelerde formül dili yok", altinlar.length > 15 && kirli.length === 0, kirli.join(" | ") || `${altinlar.length} cümle`);
 

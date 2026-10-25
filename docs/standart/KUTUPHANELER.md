@@ -99,6 +99,14 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### simple-statistics@7.12.1 · Teks-Erp · 2026-10-25
+1. Problem      : Raporlar v2 analiz bloğu (plan `docs/design/RAPORLAR-V2-PLAN.md` §3.8, R3-ISTAT) iki ölçünün birlikte değişimini (Pearson/Spearman) ölçer; §2.1 "Rapor analizi" satırı
+2. Alternatifler: elle yazmak (katsayı kısa ama sayısal kararlılık + bakım; kullanıcı "kütüphane kullan" yönlendirmesi, KARARLAR veto listesi) · `jstat` (dağılımlar dahil, ama bakımsız + büyük) · `mathjs` (~700 KB, gereğinden geniş) — olasılık kuyruğu paket DIŞINDA kendi `dagilim.ts` (KARARLAR: "p-değeri kendi")
+3. Boyut/biçim  : saf JS, native YOK, bağımlılıksız; CJS girişi `dist/simple-statistics.cjs` (exports `require`) — KU-18 sınavı: derlenmiş backend'den (`tsc` → `dist/services/reports/anlati/istatistik/korelasyon.js`) gerçek `require()` Anscombe I için r 0,8164 döndü; `tsx` ESM `import` de çalıştı
+4. Bakım        : 7.12.1 TAM SABİT; kullanılan tek fonksiyon `sampleCorrelation` (Spearman sırası kendi `averageRanks`) — yükseltme `test_rapor_istatistik` §2 referanslarıyla ölçülür
+5. Lisans       : ISC
+6. Dağıtım      : yalnız backend paketi; Electron/mobil etkisi yok
+
 ### liquidjs@10.30.0 · Teks-Erp · 2026-10-24
 1. Problem      : belge şablon tasarımcısı (plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md` §3.3, §5) kullanıcı şablonunda döngü/koşul/filtre ister; mantıksız `{{alan}}` motoru (refakat kartı RAW_HTML) bunu taşımaz; §2.1 "Belge şablon dili" satırı
 2. Alternatifler: elle motor (ifade ayrıştırıcısı + kum havuzu = en riskli kod sınıfı; red) · Handlebars (yardımcı = JS; `compile` JS üretir; red) · Nunjucks (JS'e derler, kum havuzu yok; red) · Eta/EJS (şablon = JS; red) · LiquidJS: JS üretmez, `strictVariables/strictFilters/ownPropertyOnly`, süre/bellek/parse sınırı yerleşik
