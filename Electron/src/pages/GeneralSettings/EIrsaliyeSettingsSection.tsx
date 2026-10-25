@@ -13,6 +13,7 @@ import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnab
 import { featureFlagService } from "@/services/featureFlagService";
 import { DEFAULT_EIRSALIYE_CONFIG, type EIrsaliyeAdapter, type EIrsaliyeConfig } from "@/services/eIrsaliyeSettings";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
+import { EIRSALIYE_READINESS_KEY } from "@/pages/Operations/Shipments/eirsaliye/useEIrsaliye";
 
 /** Seçenek etiketleri — kullanıcı dili; teknik ad (`disaAktar`) ekrana çıkmaz. */
 export const EIRSALIYE_ADAPTER_OPTIONS: ReadonlyArray<{ value: EIrsaliyeAdapter; label: string; hint: string }> = [
@@ -63,7 +64,7 @@ export function EIrsaliyeSettingsSection({
       const saved = res.data?.eIrsaliyeConfig;
       if (saved) setDraft(saved);
       toast.success("e-İrsaliye ayarı kaydedildi.");
-      void qc.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
+      for (const queryKey of [FEATURE_FLAGS_QUERY_KEY, EIRSALIYE_READINESS_KEY]) void qc.invalidateQueries({ queryKey });
     },
   });
 
