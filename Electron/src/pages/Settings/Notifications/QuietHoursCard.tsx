@@ -13,9 +13,28 @@ const QUIET_CHANNELS: Array<{ kanal: NotificationUserSettings["sessizKanallar"][
   { kanal: "PATRON_PUSH", etiket: "Patron uygulaması" },
 ];
 
+/** Sunucu `QUIET_TIME_PATTERN` aynası; 24 saatlik "SS:DD" (yerel 12 saat biçimi karışmasın diye metin alanı). */
+export const isQuietTime = (v: string | null): boolean => v === null || /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+
 /** Bilgi satırı: hangi dilimde ve fabrikada şu an saat kaç (yerel saat değil). */
 export function factoryClockNote(simdi: Date = new Date()): string {
   return `Saatler fabrika saatiyle (${getFactoryTimezone()}); fabrikada şu an ${fmtFactoryTime(simdi)}.`;
+}
+
+function TimeField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <Input
+      type="text"
+      inputMode="numeric"
+      maxLength={5}
+      placeholder="SS:DD"
+      aria-label={label}
+      aria-invalid={!isQuietTime(value)}
+      className="h-8 w-20 text-center tabular-nums"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
 }
 
 export function QuietHoursCard({ deger, onChange }: { deger: NotificationUserSettings; onChange: (a: NotificationUserSettings) => void }) {
@@ -39,9 +58,12 @@ export function QuietHoursCard({ deger, onChange }: { deger: NotificationUserSet
           </label>
           {quietOn && (
             <span className="inline-flex items-center gap-1.5 text-sm">
-              <Input type="time" aria-label="Sessiz saat başlangıcı" className="h-8 w-28" value={deger.sessizBaslangic ?? ""} onChange={(e) => set({ sessizBaslangic: e.target.value || "00:00" })} />
+              <TimeField label="Sessiz saat başlangıcı" value={deger.sessizBaslangic ?? ""} onChange={(v) => set({ sessizBaslangic: v })} />
               –
-              <Input type="time" aria-label="Sessiz saat bitişi" className="h-8 w-28" value={deger.sessizBitis ?? ""} onChange={(e) => set({ sessizBitis: e.target.value || "00:00" })} />
+              <TimeField label="Sessiz saat bitişi" value={deger.sessizBitis ?? ""} onChange={(v) => set({ sessizBitis: v })} />
+              {(!isQuietTime(deger.sessizBaslangic) || !isQuietTime(deger.sessizBitis)) && (
+                <span className="text-xs text-destructive">Saati SS:DD biçiminde yazın (ör. 22:00).</span>
+              )}
             </span>
           )}
         </div>

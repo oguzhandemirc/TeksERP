@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { NOTIFICATION_QUERY_KEY, useNotificationCatalog, useNotificationInboxFlag } from "@/lib/bildirim/hooks";
 import { draftFromCells, draftsEqual, draftToBody, setGroupMode, type PreferenceDraft } from "@/lib/bildirim/tercih-taslak";
 import type { NotificationUserSettings } from "@/lib/bildirim/types";
+import { isQuietTime } from "./QuietHoursCard";
 import { bildirimService, httpStatusOf, notificationErrorCode, notificationErrorDetail } from "@/services/bildirimService";
 
 export const PREF_QUERY_KEY = [...NOTIFICATION_QUERY_KEY, "tercihler"] as const;
@@ -71,5 +72,5 @@ export function useNotificationSettingsForm() {
   const status = yuklendi && !acik ? "kapali" : (unavailable(tercih.error) ?? unavailable(katalog.error));
   const hata = tercih.isError || katalog.isError;
   const yukleniyor = !yuklendi || tercih.isLoading || katalog.isLoading;
-  return { katalog: katalog.data, taslak, setTaslak, ayarTaslak, setAyarTaslak, kirli: tercihKirli || settingsDirty, kaydediliyor, kaydet, grupToplu, status, hata, yukleniyor };
+  return { katalog: katalog.data, taslak, setTaslak, ayarTaslak, setAyarTaslak, kirli: (tercihKirli || settingsDirty) && (!ayarTaslak || (isQuietTime(ayarTaslak.sessizBaslangic) && isQuietTime(ayarTaslak.sessizBitis))), kaydediliyor, kaydet, grupToplu, status, hata, yukleniyor };
 }

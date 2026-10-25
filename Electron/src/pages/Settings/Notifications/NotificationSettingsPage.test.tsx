@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { setFactoryTimezone } from "@/lib/factory-time";
-import { factoryClockNote } from "./QuietHoursCard";
+import { factoryClockNote, isQuietTime } from "./QuietHoursCard";
 
 const d = vi.hoisted(() => ({ bayrak: true, status: null as number | null, kod: undefined as string | undefined, tur: undefined as string | undefined }));
 const kanal = (k: string, durum: string, kilit = false, kaynak = "katalog") => ({ kanal: k, durum, kilit, kaynak, kapsam: null });
@@ -118,15 +118,6 @@ describe("NotificationSettingsPage", () => {
     expect(svc.tercihler).not.toHaveBeenCalled();
   });
 
-  it("saat notu fabrika diliminden (bilgisayarın yerel saati değil)", () => {
-    setFactoryTimezone("Asia/Tokyo");
-    try {
-      expect(factoryClockNote(new Date("2026-10-25T00:30:00Z"))).toBe("Saatler fabrika saatiyle (Asia/Tokyo); fabrikada şu an 09:30.");
-    } finally {
-      setFactoryTimezone("Europe/Istanbul");
-    }
-  });
-
   it("önizleme sunucudan: haftalık sayı + en çok + ölçüm etiketi (istemci hesaplamaz)", async () => {
     renderWithProviders(<NotificationSettingsPage />);
     const serit = await screen.findByTestId("onizleme-serit", {}, { timeout: 3000 });
@@ -144,5 +135,23 @@ describe("NotificationSettingsPage", () => {
     fireEvent.click(within(dialog).getAllByRole("checkbox")[1]!);
     fireEvent.click(within(dialog).getByRole("button", { name: /1 tercihi varsayılana döndür/ }));
     await waitFor(() => expect(svc.varsayilanaDon).toHaveBeenCalledWith(["r1"]));
+  });
+});
+
+describe("QuietHoursCard", () => {
+  it("saat notu fabrika diliminden (bilgisayarın yerel saati değil)", () => {
+    setFactoryTimezone("Asia/Tokyo");
+    try {
+      expect(factoryClockNote(new Date("2026-10-25T00:30:00Z"))).toBe("Saatler fabrika saatiyle (Asia/Tokyo); fabrikada şu an 09:30.");
+    } finally {
+      setFactoryTimezone("Europe/Istanbul");
+    }
+  });
+
+  it("sessiz saat 24 saatlik SS:DD (12 saat biçimi kabul edilmez)", () => {
+    expect(isQuietTime("22:00")).toBe(true);
+    expect(isQuietTime(null)).toBe(true);
+    expect(isQuietTime("10:00 PM")).toBe(false);
+    expect(isQuietTime("24:00")).toBe(false);
   });
 });
