@@ -27,6 +27,7 @@ import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { warehouseStampManyTx, warehouseStampWhereTx } from "./helpers/warehouse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import prisma from "../lib/prisma";
+import { collectWorkOrderDecisionWarnings } from "./helpers/defect-decision.helper";
 import { SHRINK_REASON_CODE } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -1354,6 +1355,8 @@ export class WorkOrderService {
       },
     });
 
+    // Tambursuz rota (KQ-D8, K7): yazılmış rotadan okunur; engel değil UYARI.
+    routeWarnings.push(...(await collectWorkOrderDecisionWarnings(workOrder.id)));
     return {
       success: true,
       data: workOrder,
@@ -5912,6 +5915,8 @@ export class WorkOrderService {
       },
     });
 
+    // Rota değişince karar boşluğu yeniden ölçülür (KQ-D8) — SKIPPED Tambur karar saymaz.
+    replaceWarnings.push(...(await collectWorkOrderDecisionWarnings(id)));
     return {
       success: true,
       data: updated,

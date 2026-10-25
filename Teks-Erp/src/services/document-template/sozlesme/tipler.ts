@@ -121,10 +121,11 @@ export const CONTEXT_ROOTS = [
   "baski",
 ] as const satisfies readonly (keyof TemplateContext)[];
 
-export interface Scenario<C> {
+/** `S`: render kaynağı — donmuş belgede zarf; refakat kartı/serbest belgede canlı kaynak (P-e). */
+export interface Scenario<C, S = PrintedDocSnapshot> {
   ad: string;
   aciklama: string;
-  snapshot: PrintedDocSnapshot;
+  snapshot: S;
   ek?: BuildExtras<C>;
 }
 
@@ -132,7 +133,7 @@ export interface Scenario<C> {
  * Bir belge türünün sözleşmesi. `contractVersion` var olan türe alan eklendikçe
  * artar (şablon sürümü doğduğu sözleşme sürümünü damgalar); özet bekçisi ölçer.
  */
-export interface DocumentContract<A extends object = object, C = unknown> {
+export interface DocumentContract<A extends object = object, C = unknown, S = PrintedDocSnapshot> {
   docType: ContractDocType;
   hedef: "musteri" | "ic";
   contractVersion: number;
@@ -142,6 +143,6 @@ export interface DocumentContract<A extends object = object, C = unknown> {
   ayarSemasi: ConfigFieldDef[];
   /** Ham ayar (DocumentConfig biçimi, kısmi/bozuk olabilir) → eksiksiz ayar; idempotent. */
   ayarNormalize(raw: unknown): A;
-  insa(snapshot: PrintedDocSnapshot, ayar: unknown, internalFields: readonly string[], ek?: BuildExtras<C>): TemplateContext;
-  senaryolar(): Scenario<C>[];
+  insa(snapshot: S, ayar: unknown, internalFields: readonly string[], ek?: BuildExtras<C>): TemplateContext;
+  senaryolar(): Scenario<C, S>[];
 }

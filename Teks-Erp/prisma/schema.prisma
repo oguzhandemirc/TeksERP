@@ -609,6 +609,10 @@ model User {
   hallShiftDutyOverrides   HallShiftDutyOverride[] @relation("HallShiftDutyOverrideUser")
   loomAlarmTierRules       LoomAlarmTierRule[]     @relation("LoomAlarmTierRuleUser")
   notificationInbox        NotificationInbox[]     @relation("NotificationInboxUser")
+  notificationPrefs        NotificationPreference[] @relation("NotificationPreferenceUser")
+  notificationSetting      NotificationUserSetting? @relation("NotificationUserSettingUser")
+  notificationProfiles     NotificationProfileMember[] @relation("NotificationProfileMemberUser")
+  recordFollows            RecordFollow[]          @relation("RecordFollowUser")
   reportCategoriesCreated  ReportCategory[]        @relation("ReportCategoryCreatedBy")
   reportCategoriesUpdated  ReportCategory[]        @relation("ReportCategoryUpdatedBy")
   reportDefinitionsOwned   ReportDefinition[]      @relation("ReportDefinitionOwner")
@@ -2158,6 +2162,9 @@ model WeavingOrder {
   subcontractorReceipts   SubcontractorReceipt[]    @relation("ReceiptWeavingOrder")
   /// A-yolu (doff'suz, çok tezgahlı iş) ile KK1'de doğan toplar — doff'lu toplar `machineRuns → doffEvents → rolls`.
   rolls                   Roll[]                    @relation("RollWeavingOrder")
+
+  /// Bildirim takipçileri (F4, `record_follows`).
+  followers RecordFollow[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -4335,6 +4342,9 @@ model Order {
   shipmentLinks  ShipmentOrder[] // Paketleme oturumlarında seçildiği sevkiyatlar
   rollReturns    RollReturn[] // Bu siparişe atfedilen iadeler (sevk muhasebesini değiştirmez)
 
+  /// Bildirim takipçileri (F4, `record_follows`).
+  followers RecordFollow[]
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -4578,6 +4588,9 @@ model WorkOrder {
   cancelledById String?   @db.Uuid
   cancelReason  String?
   cancelledBy   User?     @relation("WorkOrderCancelledBy", fields: [cancelledById], references: [id])
+
+  /// Bildirim takipçileri (F4, `record_follows`).
+  followers RecordFollow[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -12567,6 +12580,154 @@ model NotificationDailyStats {
 
   @@unique([factoryDay, kind])
   @@map("notification_daily_stats")
+}
+
+// =============================================================================
+// BİLDİRİM TERCİH KATMANI (F4, `docs/design/BILDIRIM-SISTEMI-PLAN.md` §3.3, §5) — yedi tablo, yalnız EK.
+// Katman: katalog → fabrika varsayılanı → profil hücreleri → kişisel sapma (§5.1; çözücü N4-MOTOR'da).
+// Kapalı kümeler VarChar + CHECK (enum değil); TS aynası `constants/notification-preference.ts`.
+// Profil yalnız tercih setidir, İZİN VERMEZ; görme süzgeci her katmanın üstündedir.
+// =============================================================================
+
+/// KİŞİSEL SAPMA — SEYREK: yalnız katman sonucundan farklı olan (kişi × tür × kanal) yazılır.
+/// N3 geçişi: `UserPreference.preferences.bildirim.masaustuTurler` → (kind, MASAUSTU, enabled=true)
+/// satırları (N4-MOTOR taşır; eski anahtar bir sürüm boyunca okunur, silinmez — KARAR N3-TERCIH).
+/// ŞEMA-DIŞI: CHECK channel ∈ {UYGULAMA, OZET, MASAUSTU, TABLET_SES, PATRON_PUSH}.
+model NotificationPreference {
+  id      String  @id @default(uuid()) @db.Uuid
+  userId  String  @db.Uuid
+  /// Katalog türü; CHECK yok (yeni tür migration istemesin), bekçi korur.
+  kind    String  @db.VarChar(64)
+  channel String  @db.VarChar(16)
+  enabled Boolean
+  /// Kapsam süzgeci (yalnız DARALTIR) — `notificationScopeSchema` (schemaVersion'lı, katı); NULL = süzgeç yok.
+  scope   Json?
+
+  user User @relation("NotificationPreferenceUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([userId, kind, channel])
+  @@map("notification_preferences")
+}
+
+/// KİŞİSEL AYAR — kişi başına tek satır: sessiz saat (fabrika dilimi, gece yarısını aşabilir), gün özeti
+/// saati, ses. ŞEMA-DIŞI: CHECK quietStart/quietEnd "HH:MM" · ikisi birlikte dolu ya da boş ·
+/// quietChannels ⊆ {MASAUSTU, TABLET_SES, PATRON_PUSH} · digestHour 0–23.
+model NotificationUserSetting {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @unique @db.Uuid
+  quietStart    String?  @db.VarChar(5)
+  quietEnd      String?  @db.VarChar(5)
+  quietChannels String[] @default([])
+  digestHour    Int?     @db.SmallInt
+  sound         Boolean  @default(true)
+
+  user User @relation("NotificationUserSettingUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("notification_user_settings")
+}
+
+/// BİLDİRİM PROFİLİ — yöneticinin tanımladığı tür seti (audit'li). Silinmez, arşivlenir (`archivedAt`).
+model NotificationProfile {
+  id          String    @id @default(uuid()) @db.Uuid
+  /// Tekil kod; harf-duyarsız tekillik gerekiyorsa `code-unique.helper` deseni N4-MOTOR'da.
+  code        String    @unique @db.VarChar(40)
+  name        String    @db.VarChar(120)
+  archivedAt  DateTime? @db.Timestamptz
+  /// İdempotency — kayıt yaratan uç (`clientToken @unique` sözleşmesi).
+  clientToken String?   @unique @db.Uuid
+
+  cells   NotificationProfileCell[]
+  members NotificationProfileMember[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("notification_profiles")
+}
+
+/// PROFİL HÜCRESİ — saf yapılandırma pivotu (replace = hard delete serbest; audit profil eyleminde).
+/// ŞEMA-DIŞI: CHECK state ∈ {ACIK, KAPALI, KILITLI}.
+model NotificationProfileCell {
+  id        String @id @default(uuid()) @db.Uuid
+  profileId String @db.Uuid
+  kind      String @db.VarChar(64)
+  state     String @db.VarChar(16)
+
+  profile NotificationProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([profileId, kind])
+  @@map("notification_profile_cells")
+}
+
+/// PROFİL ÜYESİ — saf yapılandırma pivotu (audit profil eyleminde). Kişi birden çok profilde olabilir (birleşim).
+model NotificationProfileMember {
+  id        String @id @default(uuid()) @db.Uuid
+  profileId String @db.Uuid
+  userId    String @db.Uuid
+
+  profile NotificationProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  user    User                @relation("NotificationProfileMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([profileId, userId])
+  @@index([userId])
+  @@map("notification_profile_members")
+}
+
+/// FABRİKA VARSAYILANI — tür başına tek satır (audit'li); satır yok = MIRAS (katalog varsayılanı).
+/// `params` = `{schemaVersion, degerler}`; `degerler` katalogun `paramSemasi`yla doğrulanır.
+/// `extraRecipientIds` FK'sız uuid[] (LISTE alıcısı); okurken görme süzgeciyle kesişir, pasif kişi düşer.
+/// ŞEMA-DIŞI: CHECK state ∈ {MIRAS, ACIK, KAPALI, KILITLI}.
+model NotificationFactoryDefault {
+  id                String   @id @default(uuid()) @db.Uuid
+  kind              String   @unique @db.VarChar(64)
+  state             String   @db.VarChar(16)
+  params            Json?
+  extraRecipientIds String[] @default([]) @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("notification_factory_defaults")
+}
+
+/// KAYIT TAKİBİ — kişi × kayıt; tam olarak bir hedef FK dolu (`LoomAlarm` emsali: yeni hedef = nullable FK
+/// + CHECK genişler). Bırakmak silmek değil `state=BIRAKTI` (oluşturanın otomatik takibi onu ezmez).
+/// ŞEMA-DIŞI: CHECK num_nonnulls(orderId, workOrderId, weavingOrderId) = 1 · state ∈ {TAKIP, BIRAKTI} ·
+/// reason ∈ {OLUSTURAN, ELLE} · üç partial unique (userId, <fk>) WHERE <fk> IS NOT NULL.
+model RecordFollow {
+  id             String  @id @default(uuid()) @db.Uuid
+  userId         String  @db.Uuid
+  orderId        String? @db.Uuid
+  workOrderId    String? @db.Uuid
+  weavingOrderId String? @db.Uuid
+  state          String  @default("TAKIP") @db.VarChar(16)
+  reason         String  @db.VarChar(16)
+
+  user         User          @relation("RecordFollowUser", fields: [userId], references: [id], onDelete: Cascade)
+  order        Order?        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  workOrder    WorkOrder?    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  weavingOrder WeavingOrder? @relation(fields: [weavingOrderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  /// Kayıt → takipçiler (dağıtıcının TAKIPCI kaynağı).
+  @@index([orderId])
+  @@index([workOrderId])
+  @@index([weavingOrderId])
+  @@map("record_follows")
 }
 
 // ═══ BELGE ŞABLON TASARIMCISI (T1B, 2026-10-24) — docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md §3.5 ═══

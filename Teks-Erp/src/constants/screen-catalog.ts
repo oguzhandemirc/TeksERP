@@ -327,6 +327,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "cost/finishing-rates", app: "desktop", modul: "maliyetEnabled", title: "Fason Tarifeleri", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/items", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Kartları", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/calculator", app: "desktop", modul: "maliyetEnabled", title: "Hızlı Hesaplayıcı", requires: ["cost:read"], capabilities: [] },
+  // bildirim: yönetici bildirim profilleri (N4-SEMA izni; sayfa + rota + karo N4-PROFIL'de).
+  { key: "system/notification-profiles", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim Profilleri", requires: ["settings:notifications", "admin:settings"], capabilities: [] },
 ];
 
 const mobile: ScreenEntry[] = [

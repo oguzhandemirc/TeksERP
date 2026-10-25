@@ -385,6 +385,8 @@ export const PERMISSION_CATALOG = [
   // K4P (2026-10-24): istasyondan bağımsız Muayene ekranı (top okut → 4 puan muayene); KK1 içi muayene `mobile:kk1` ile.
   { code: "mobile:muayene", module: "MOBILE", category: "mobile", description: "Mobil — Muayene ekranı: top okutup 4 puan muayene girme (istasyondan bağımsız)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
+  // bildirim: yönetici bildirim ayarları (N4-SEMA, plan §5.7) — profil yalnız tercih setidir, İZİN VERMEZ.
+  { code: "settings:notifications", module: "ADMIN", category: "web", description: "Bildirim profilleri ve fabrika bildirim varsayılanlarını yönetir" },
 ] as const satisfies readonly PermissionCatalogEntry[];
 
 export const REPORT_BUILDER_PERMISSION = "report:builder";

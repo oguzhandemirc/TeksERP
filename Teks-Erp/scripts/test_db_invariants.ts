@@ -653,6 +653,28 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("isDefault" = true)`,
     why: "kullanıcı başına rapor başına tek varsayılan ön ayar — düşerse iki varsayılan yarışır, rapor hangi parametreyle açılacağını dizi sırasına bırakır",
   },
+  // bildirim: tercih katmanı (N4-SEMA, migration 20261025160000) — kişi × kayıt başına tek takip satırı.
+  {
+    table: "record_follows",
+    index: "record_follows_user_order_uq",
+    uniq: true,
+    predicate: `("orderId" IS NOT NULL)`,
+    why: "kişi × sipariş tek takip — oluşturanın otomatik takibi ON CONFLICT DO NOTHING ile BIRAKTI'yı ezmez; düşerse çift satır, çift bildirim",
+  },
+  {
+    table: "record_follows",
+    index: "record_follows_user_work_order_uq",
+    uniq: true,
+    predicate: `("workOrderId" IS NOT NULL)`,
+    why: "kişi × iş emri tek takip — aynı ON CONFLICT hedefi",
+  },
+  {
+    table: "record_follows",
+    index: "record_follows_user_weaving_order_uq",
+    uniq: true,
+    predicate: `("weavingOrderId" IS NOT NULL)`,
+    why: "kişi × dokuma işi tek takip — aynı ON CONFLICT hedefi",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -1055,6 +1077,18 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "report_runs", name: "report_runs_status_ck" },
   { table: "report_runs", name: "report_runs_counts_ck" },
   { table: "report_snapshots", name: "report_snapshots_kind_ck" },
+  // bildirim: tercih katmanı (N4-SEMA, migration 20261025160000) — kapalı kümeler (TS aynası
+  // `constants/notification-preference.ts`), sessiz saat biçimi + çift yüklem, takipte TEK hedef FK.
+  { table: "notification_preferences", name: "notification_preferences_channel_ck" },
+  { table: "notification_user_settings", name: "notification_user_settings_quiet_format_ck" },
+  { table: "notification_user_settings", name: "notification_user_settings_quiet_pair_ck" },
+  { table: "notification_user_settings", name: "notification_user_settings_quiet_channels_ck" },
+  { table: "notification_user_settings", name: "notification_user_settings_digest_hour_ck" },
+  { table: "notification_profile_cells", name: "notification_profile_cells_state_ck" },
+  { table: "notification_factory_defaults", name: "notification_factory_defaults_state_ck" },
+  { table: "record_follows", name: "record_follows_one_target_ck" },
+  { table: "record_follows", name: "record_follows_state_ck" },
+  { table: "record_follows", name: "record_follows_reason_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
