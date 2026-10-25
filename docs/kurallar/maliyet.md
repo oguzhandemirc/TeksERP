@@ -24,6 +24,7 @@
 - **[ÇEKİRDEK]** Maliyet ekranları sayı HESAPLAMAZ ve kuru 1 VARSAYMAZ: her tutar `POST /api/cost/preview` ya da kayıtlı sürüm alanıdır, istemci yalnız TR biçimine çevirir (`shared/format.ts`, metin → Intl); kur yoksa sunucunun `eksikler`i gösterilir. · bekçi: Electron `pages/Cost/cost-no-client-math.test.ts`
 - **[ÇEKİRDEK]** "Maliyet & Teklif" menü satırı, hub karoları ve palet satırları `maliyetEnabled` (ETKİN: `production && maliyet`) + `cost:read` ile çizilir; karo izni route izniyle birebir; kapalı modülün 403 `MODULE_DISABLED` yanıtı "kapalı — <ayar yolu>" der. · bekçi: Electron `pages/Cost/cost-access.test.tsx`, `test_screen_catalog`
 - **[ÇEKİRDEK]** Döküm toplamı sunucunun `standartTlM` alanıdır (satırlar toplanmaz); canlı önizleme gövde METNİ üzerinden ~400 ms durulur (aynı gövdeye ikinci istek yok); `COST_INPUT_MISSING` kayıt modalını kapatmaz, eksikler alana/ekrana bağlanır. · bekçi: Electron `pages/Cost/shared/CostBreakdown.test.tsx`, `shared/useCostPreview.test.tsx`, `shared/fx-missing.test.ts`
+- **[ÇEKİRDEK]** Hızlı Hesaplayıcı (`Cost/Calculator`) gövdesini YALNIZ `calculator-body.ts` kurar: ürün XOR elle yapı, boş alan ve boş kur GÖNDERİLMEZ (sunucu eksik saysın, 0/1 yazılmasın); ekran teklif fiyatı göstermez (motor çıktısında yok). · bekçi: Electron `pages/Cost/Calculator/calculator-body.test.ts`, `Calculator/CalculatorPage.test.tsx`
 - **[ÇEKİRDEK]** `/api/cost/items` durum süzgeci yalnız `filter[durum]` (CSV) okunur — Express "simple" ayrıştırıcı anahtarı düz bırakır, çıplak `durum=` 400. · bekçi: `test_standart_maliyet_surum` §7d–e
 
 ## Bekçiler — bu alana dokununca koş
@@ -32,7 +33,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `maliyet` bölümü** (MAL-1 bekçileri `modul-bayrak` bölümünde).
 
-Panel (Electron vitest): `src/pages/Cost` (`cost-no-client-math`, `cost-access`, `shared/format`, `shared/errors`, `shared/CostBreakdown`, `shared/useCostPreview`, `shared/fx-missing`, `Items/service`), `src/pages/Items/ItemCostLink`
+Panel (Electron vitest): `src/pages/Cost` (`cost-no-client-math`, `cost-access`, `shared/format`, `shared/errors`, `shared/CostBreakdown`, `shared/useCostPreview`, `shared/fx-missing`, `Items/service`, `Calculator/calculator-body`, `Calculator/CalculatorPage`), `src/pages/Items/ItemCostLink`
 
 Backend: `test_screen_catalog`, `test_maliyet_formul`, `test_maliyet_girdi`, `test_standart_maliyet_surum`, `test_maliyet_girdileri`, `test_maliyet_regime_gate`, `test_finance_regime_gate`, `test_rapor_levent_sonucu`
 

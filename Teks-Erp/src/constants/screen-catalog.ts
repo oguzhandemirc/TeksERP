@@ -326,6 +326,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "cost/yarn-prices", app: "desktop", modul: "maliyetEnabled", title: "İplik Maliyet Fiyatları", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/finishing-rates", app: "desktop", modul: "maliyetEnabled", title: "Fason Tarifeleri", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/items", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Kartları", requires: ["cost:read"], capabilities: ["cost:write"] },
+  { key: "cost/calculator", app: "desktop", modul: "maliyetEnabled", title: "Hızlı Hesaplayıcı", requires: ["cost:read"], capabilities: [] },
 ];
 
 const mobile: ScreenEntry[] = [

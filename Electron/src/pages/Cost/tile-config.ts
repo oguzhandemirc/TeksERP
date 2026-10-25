@@ -5,7 +5,7 @@
 // Görüntüleme kapısı `cost:read`; yazma (`cost:write` · `cost:settings`) sayfa İÇİNDE `PermissionGate`.
 // Menü satırı ayrıca `maliyetEnabled` bayrağına bağlıdır (`nav-config`): modül kapalıysa hiçbiri çizilmez.
 // =============================================================================
-import { Factory, Layers, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
+import { Calculator, Factory, Layers, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
 
 export interface CostTile {
   key: string;
@@ -53,6 +53,15 @@ export const costTiles: CostTile[] = [
     to: "/cost/items",
     icon: Layers,
     tone: "text-success",
+    permissionAny: ["cost:read"],
+  },
+  {
+    key: "calculator",
+    title: "Hızlı Hesaplayıcı",
+    description: "Bir kumaşın ya da elle kurulan yapının metre maliyetini kaydetmeden deneyin — ezmeler ve kur ile canlı döküm.",
+    to: "/cost/calculator",
+    icon: Calculator,
+    tone: "text-info",
     permissionAny: ["cost:read"],
   },
 ];
