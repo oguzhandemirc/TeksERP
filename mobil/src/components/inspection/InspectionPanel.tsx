@@ -17,6 +17,7 @@ import type { DefectType } from '../../types/models';
 import DefectRuler from './DefectRuler';
 import DeletePointModal from './DeletePointModal';
 import InspectionEntry from './InspectionEntry';
+import PriorDefectList from './PriorDefectList';
 import {
   isCriticalDefect,
   rulerMaxFor,
@@ -29,6 +30,8 @@ import {
 
 export {
   inspectionSaveErrorText,
+  priorDefectKunye,
+  toInspectionPriorDefects,
   validateDefectInput,
   type InspectionDefect,
   type InspectionDefectInput,
@@ -149,6 +152,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
       </View>
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}
       <View style={styles.entryFixed}>
+        <PriorDefectList defects={priorDefects} />
         {!readOnly && (
           <InspectionEntry
             defectTypes={defectTypes}
