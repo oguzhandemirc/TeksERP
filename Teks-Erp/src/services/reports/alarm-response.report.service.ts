@@ -135,7 +135,8 @@ export function alarmResponseWindow(from: string, to: string): DateRange {
   return range;
 }
 
-export async function alarmResponseReport(p: { from: string; to: string; withPeople: boolean }): Promise<{ data: AlarmResponseReport; range: DateRange; warnings: string[] }> {
+/** `shiftDefinitionIds` (R0-RAPC): yalnız doğuş anı o vardiyalara düşen alarmlar; yoksa davranış aynen. */
+export async function alarmResponseReport(p: { from: string; to: string; withPeople: boolean; shiftDefinitionIds?: readonly string[] }): Promise<{ data: AlarmResponseReport; range: DateRange; warnings: string[] }> {
   const range = alarmResponseWindow(p.from, p.to);
   // Penceredeki doğuş olayı olan alarmlar; t0 (İLK doğuş olayı) aşağıda kesinleşir — K2'si pencereye düşen eski alarm elenir.
   const rows = await prisma.loomAlarm.findMany({
@@ -162,10 +163,11 @@ export async function alarmResponseReport(p: { from: string; to: string; withPeo
   const shifts = pre.length > 0
     ? await loadNamedShiftWindows(prisma, new Date(Math.min(...pre.map((x) => x.t0.getTime()))), new Date(Math.max(...pre.map((x) => x.t0.getTime()))))
     : [];
+  const shiftSet = p.shiftDefinitionIds ? new Set(p.shiftDefinitionIds) : null;
   const facts: AlarmResponseFact[] = pre.map(({ r, t0, ack, k2Rang }) => ({
     t0, ackAt: ack?.createdAt ?? null, state: r.state, closedAt: r.closedAt, k2DueAt: r.k2DueAt, k2Rang,
     keys: { sebep: r.stopEvent.reasonCode, hol: r.machine.station.id, vardiya: shiftCoveringAt(shifts, t0)?.shiftDefinitionId ?? null, tezgah: r.machineId, kisi: ack?.userId ?? null },
-  }));
+  })).filter((f) => !shiftSet || (f.keys.vardiya !== null && shiftSet.has(f.keys.vardiya)));
 
   const sebepAd = await reasonLabels(facts.map((f) => f.keys.sebep));
   const holAd = new Map(pre.map(({ r }) => [r.machine.station.id, r.machine.station.name]));
