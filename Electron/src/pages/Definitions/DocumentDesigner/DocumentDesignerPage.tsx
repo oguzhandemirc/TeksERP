@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { DESIGNER_DISABLED_TITLE, designerSettingPath, designerSettingTrail, isDocumentDesignerEnabled } from "./designer-flag";
+import { TemplateListView } from "./templates/TemplateListView";
 
 // GrapesJS (~1,1 MB) ayrı parçada: bayrak kapalıyken ya da sayfa açılmadıkça indirilmez (200 KB kuralı).
 const DesignerWorkspace = lazy(() => import("./DesignerWorkspace"));
 
 export const DOCUMENT_DESIGNER_TITLE = "Belge Tasarımcısı";
+/** Kaydedilmemiş karalama editörü (şablon kimliği yok) — liste ekranı kök yolda. */
+export const DESIGNER_SCRATCH_ID = "new";
 
 function Loading() {
   return (
@@ -22,21 +25,21 @@ function Loading() {
 }
 
 /**
- * Belge Tasarımcısı (plan §4) — sürükle-bırak + stil paneliyle belge
- * şablonu tasarımı. T2 iskeleti: kanvas, bloklar, stil, katmanlar; kayıt,
- * önizleme ve sürümler sonraki dilimlerde.
+ * Belge Tasarımcısı (plan §4): kök yol şablon listesi (Sistem satırı, rozetler, sürümler,
+ * atamalar); `/:id` editör. Bayrak kapalıyken her iki yüz de çıkışlı boş durum (P-c).
  */
 export function DocumentDesignerPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const flagsQuery = useFeatureFlags();
   const enabled = isDocumentDesignerEnabled(flagsQuery.data?.data);
+  const isList = !id;
 
   return (
     <PageShell className="h-full">
       <PageHeader
         title={DOCUMENT_DESIGNER_TITLE}
-        description="Belgeyi sürükle-bırak bloklar ve stil paneliyle sayfa üzerinde tasarlayın."
+        description={isList ? "Belge şablonları: Sistem tasarımını kopyalayıp düzenleyin, sürümleri karşılaştırın, yayınlayın ve atayın." : "Belgeyi sürükle-bırak bloklar ve stil paneliyle sayfa üzerinde tasarlayın."}
       />
       {flagsQuery.isLoading ? (
         <Loading />
@@ -51,9 +54,11 @@ export function DocumentDesignerPage() {
             </Button>
           }
         />
+      ) : isList ? (
+        <TemplateListView />
       ) : (
         <Suspense fallback={<Loading />}>
-          <DesignerWorkspace templateId={id ?? null} />
+          <DesignerWorkspace templateId={id === DESIGNER_SCRATCH_ID ? null : id} />
         </Suspense>
       )}
     </PageShell>

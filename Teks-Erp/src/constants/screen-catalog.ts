@@ -266,7 +266,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
   { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
   // T2 iskeleti: Belge Şablonları ile aynı izin kümesi (T5).
-  { key: "definitions/document-designer", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Tasarımcısı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:write"] },
+  { key: "definitions/document-designer", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Tasarımcısı", requires: ["admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: ["document-template:design", "document-template:publish"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)
