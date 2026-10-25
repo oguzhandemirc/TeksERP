@@ -24,6 +24,8 @@ export interface SemanticMeasure {
   /** kind=ratio: pay ve payda aynı küpün `sum` ölçüleridir; ortalama ortalanmaz. */
   numerator?: string;
   denominator?: string;
+  /** kind=ratio: sözlük birimi "yuzde" ise pay/payda ×100 döner (helper ölçülerle aynı ölçek). */
+  percent?: true;
   /** kind=helper: mevcut servise bağ; yalnız beyan ettiği boyutlarla kesilir (gerisi 400). */
   helper?: SemanticHelper;
   /** Sayı eşitliği bekçisinin hedefi (`test_semantik_sayi_esitligi`, R1-SEMKUP) ya da gerekçeli muafiyet. */
@@ -75,6 +77,8 @@ export interface SemanticDimension {
   module?: ModuleRef;
   /** K-KISI: kişi adı taşıyan boyut buluta gitmez (`RaporSunumu.kisiAdi`). */
   personName?: true;
+  /** SQL anahtarı yok: yalnız helper ölçü kesebilir (derleyici SQL ölçüde 400 verir). */
+  helperOnly?: true;
 }
 
 export interface SemanticCube {
@@ -90,6 +94,11 @@ export interface SemanticCube {
   dimensions: readonly SemanticDimension[];
   /** Sunumda kullanıcıya söylenecek bilinen sınırlar. */
   notes?: readonly string[];
+  /**
+   * Fabrika ayarına bağlı parçaları (vardiya pencereleri, 1. kalite rolü) DB'den çözen kopya.
+   * Derleyici senkron kalır; çalıştırıcı derlemeden ÖNCE çağırır (`prepareCubes`).
+   */
+  prepare?: () => Promise<SemanticCube>;
 }
 
 export const FILTER_OPERATORS = ["=", "!=", "in", "notIn", "contains"] as const;

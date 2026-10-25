@@ -24,6 +24,8 @@ export async function loadAccessContext(user: { userId: string; permissions: rea
 
 export function isModuleOpen(module: ModuleRef | undefined, ctx: AccessContext): boolean {
   if (module === undefined || module.startsWith("cekirdek:")) return true;
+  // `planlanan:` = bugün bayrağı olmayan modül; kaynak uç da modül kapısız (ölçüldü: subcontract.routes.ts).
+  if (module.startsWith("planlanan:")) return true;
   const key = MODULE_SETTING_KEY_BY_FLAG[module];
   return key !== undefined && ctx.openModuleKeys.has(key);
 }

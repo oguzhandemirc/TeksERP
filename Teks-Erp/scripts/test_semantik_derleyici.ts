@@ -12,7 +12,8 @@
 //
 // NEGATİF SONDA (2026-10-24): derleyicide `compileQuery`in küp ve ölçü `canAccess` denetimi
 // kaldırıldı → 3 ❌ (§2a küp 403 · §2b ölçü 403 · §2c modül 403); md5 ile birebir geri alındı. §6 (izin kodu devri): küp izni
-// `report:salesX` yapıldı → yalnız §6a ❌; md5 ile geri alındı.
+// `report:salesX` yapıldı → yalnız §6a ❌; md5 ile geri alındı. §7 (R1-SEMKUP, 2026-10-25): derleyicide helperOnly
+// boyut reddi kapatıldı → §7a ❌; `planlanan:` modül kapalı sayıldı → §7b ❌; ikisi de md5 ile geri alındı, 47/0.
 //
 // Koşum: npx tsx scripts/test_semantik_derleyici.ts
 // =============================================================================
@@ -30,6 +31,10 @@ import type { SemanticCube } from "../src/services/reports/semantik/tipler";
 import { shipmentCube } from "../src/services/reports/semantik/kupler/sevk.kup";
 import { shippedGrossTotal } from "../src/services/reports/_shipped";
 import { getDestinationMix } from "../src/services/reports/destination-mix.report.service";
+import { prepareCubes } from "../src/services/reports/semantik/calistirici";
+import { isModuleOpen } from "../src/services/reports/semantik/izin";
+import { helperOnlyDimension } from "../src/services/reports/semantik/boyutlar";
+import { factoryHourSql } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -257,6 +262,46 @@ function sectionPermissionCodes(): void {
   check("§6b uç kapısı REPORT_PERMISSION_CODES boş değil ve yalnız katalogdaki report:* kodları", REPORT_PERMISSION_CODES.length > 0 && badGate.length === 0, badGate.join(", ") || `${REPORT_PERMISSION_CODES.length} kod`);
 }
 
+/** R1-SEMKUP çekirdek uzantıları: helperOnly boyut · `planlanan:` modül · prepare kancası · yüzde oran · fabrika saati. */
+async function sectionCoreExtensions(f: { c1: string }): Promise<void> {
+  console.log("\n§7 çekirdek uzantılar (R1-SEMKUP)");
+  const hx = helperOnlyDimension("hx", "Yalnız helper", "uuid");
+  const withHelperDim: SemanticCube = { ...shipmentCube, dimensions: [...shipmentCube.dimensions, hx] };
+  const dimErr = errorOf(() => compileQuery(q({ boyutlar: ["hx"] }), ALL, [withHelperDim]));
+  const filterErr = errorOf(() => compileQuery(q({ suzgec: [{ alan: "hx", islec: "=", deger: f.c1 }] }), ALL, [withHelperDim]));
+  check("§7a helperOnly boyut SQL ölçüde (boyut ve süzgeç) → 400", dimErr?.status === 400 && filterErr?.status === 400, `${JSON.stringify(dimErr)} · ${JSON.stringify(filterErr)}`);
+  const none: AccessContext = { userId: "", permissions: ["*"], openModuleKeys: new Set() };
+  check("§7b `planlanan:` modül açık; tanınmayan modül anahtarı kapalı (fail-closed)", isModuleOpen("planlanan:fason", none) && !isModuleOpen("yokEnabled", none) && !isModuleOpen("financeEnabled", none));
+
+  let prepared = 0;
+  const other: SemanticCube = { ...shipmentCube, id: "baska", prepare: async () => { prepared += 100; return other; } };
+  const target: SemanticCube = { ...shipmentCube, prepare: async () => { prepared += 1; return { ...shipmentCube, name: "hazırlandı" }; } };
+  const out = await prepareCubes([target, other], "sevk");
+  check("§7c prepareCubes yalnız istenen küpü hazırlar ve yerine koyar", prepared === 1 && out[0]!.name === "hazırlandı" && out[1] === other, `çağrı ${prepared}`);
+
+  // Yüzde oran: pay/payda kümeden YENİDEN, ×100; payda 0 → null (K-KUP).
+  const ratioCube: SemanticCube = {
+    ...shipmentCube,
+    measures: [
+      { id: "kalite.birinciMetre", permission: "report:sales", module: shipmentCube.module, kind: "sum", sql: Prisma.sql`SUM(p.qty) FILTER (WHERE p."customerId" = ${f.c1}::uuid)`, parity: { exempt: "bekçi içi sentetik küp — sayı eşitliği yok" } },
+      { id: "kalite.bitenMetre", permission: "report:sales", module: shipmentCube.module, kind: "sum", sql: Prisma.sql`SUM(p.qty)`, parity: { exempt: "bekçi içi sentetik küp — sayı eşitliği yok" } },
+      { id: "kalite.birinciYuzde", permission: "report:sales", module: shipmentCube.module, kind: "ratio", numerator: "kalite.birinciMetre", denominator: "kalite.bitenMetre", percent: true, parity: { exempt: "bekçi içi sentetik küp — sayı eşitliği yok" } },
+    ],
+  };
+  const deps: RunDeps = { cubes: [ratioCube], semaphore: new ReportSemaphore(), cache: new ResultCache(), readTimeoutSec: async () => 15 };
+  const ctx: AccessContext = { ...ALL, userId: ids.user };
+  const rq = (p: Record<string, unknown>) => runSemanticQuery(q({ olculer: ["kalite.birinciMetre", "kalite.bitenMetre", "kalite.birinciYuzde"], ...p }), ctx, undefined, deps);
+  const r = await rq({});
+  const [num, den, pct] = ["kalite.birinciMetre", "kalite.bitenMetre", "kalite.birinciYuzde"].map((k) => r.toplam.degerler[k] ?? null);
+  check("§7d yüzde oran = 100 × pay / payda (kümelenmiş, ortalanmamış)", num !== null && den !== null && den > 0 && pct !== null && Math.abs(pct - (100 * num) / den) < 1e-9, `${num}/${den} → ${pct}`);
+  const empty = await rq({ suzgec: [{ alan: "musteri", islec: "=", deger: "00000000-0000-4000-8000-000000000000" }] });
+  check("§7e boş paydada oran null (0'a çökmez)", empty.toplam.degerler["kalite.birinciYuzde"] === null, JSON.stringify(empty.toplam.degerler));
+
+  const hourText = factoryHourSql("x.t").sql;
+  const [h] = await prisma.$queryRaw<Array<{ h: number }>>(Prisma.sql`SELECT ${factoryHourSql("x.t")} AS h FROM (SELECT ${new Date("2096-03-15T21:30:00.000Z")}::timestamptz AS t) x`);
+  check("§7f factoryHourSql fabrika saatini verir (21:30Z → İstanbul 00)", /EXTRACT\(HOUR/.test(hourText) && h?.h === 0, `${hourText} → ${h?.h}`);
+}
+
 async function main(): Promise<void> {
   console.log("\n=== Semantik derleyici ===");
   sectionCompile();
@@ -266,6 +311,7 @@ async function main(): Promise<void> {
   sectionPermissionCodes();
   const f = await fixture();
   await sectionDb(f);
+  await sectionCoreExtensions(f);
 }
 
 main()

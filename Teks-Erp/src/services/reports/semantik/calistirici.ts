@@ -99,6 +99,14 @@ async function runBlock<T>(runId: string, sql: Prisma.Sql, timeoutSec: number): 
   );
 }
 
+/** İstenen küp fabrika ayarına bağlıysa (vardiya, kalite rolü) çözülmüş kopyasıyla değiştirilir. */
+export async function prepareCubes(cubes: readonly SemanticCube[], cubeId: string): Promise<readonly SemanticCube[]> {
+  const target = cubes.find((c) => c.id === cubeId);
+  if (!target?.prepare) return cubes;
+  const ready = await target.prepare();
+  return cubes.map((c) => (c === target ? ready : c));
+}
+
 const iso = (r: DateRange) => ({ dateFrom: r.from.toISOString(), dateTo: r.to.toISOString() });
 
 function cacheKeyOf(input: SemanticQueryInput, ctx: AccessContext): string {
@@ -113,7 +121,7 @@ export async function runSemanticQuery(
   runId: string = input.kosuId ?? randomUUID(),
   deps: RunDeps = defaultDeps,
 ): Promise<SemanticResult> {
-  const q = compileQuery(input, ctx, deps.cubes);
+  const q = compileQuery(input, ctx, await prepareCubes(deps.cubes, input.kup));
   const key = cacheKeyOf(input, ctx);
   if (!input.yenile) {
     const hit = deps.cache.get(key);
