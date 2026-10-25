@@ -64,6 +64,8 @@ export interface InspectionPanelProps {
   meterOptional?: boolean;
   /** false: metre alanı numpad'i kendiliğinden almaz (varsayılan true — süreç konakları). */
   meterAutoActivate?: boolean;
+  /** Cetvel boşken metin; metresiz kayıt tutan konak "hata yok" demesin diye verir. */
+  rulerEmptyText?: string;
 }
 
 interface RulerSectionProps {
@@ -73,17 +75,18 @@ interface RulerSectionProps {
   maxMeter?: number;
   readOnly: boolean;
   onMarkerPress: (ids: string[]) => void;
+  emptyText?: string;
 }
 
 // Kayıtlı hatalar — metre cetveli; tik'e dokun → o noktadaki hata(lar)ı sil.
-function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnly, onMarkerPress }: RulerSectionProps) {
+function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnly, onMarkerPress, emptyText }: RulerSectionProps) {
   const critCount = ownDefects.reduce((n, d) => n + (isCriticalDefect(d, defectTypes) ? 1 : 0), 0);
   const allDefects = [...priorDefects, ...ownDefects];
   if (allDefects.length === 0) {
     return (
       <View style={styles.emptyDefects}>
         <Icon source="check-circle-outline" size={28} color={palette.slate[300]} />
-        <Text style={styles.muted}>Henüz hata yok</Text>
+        <Text style={styles.muted}>{emptyText ?? 'Henüz hata yok'}</Text>
       </View>
     );
   }
@@ -160,6 +163,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
           maxMeter={props.maxMeter}
           readOnly={readOnly}
           onMarkerPress={setDeleteIds}
+          emptyText={props.rulerEmptyText}
         />
       </View>
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}

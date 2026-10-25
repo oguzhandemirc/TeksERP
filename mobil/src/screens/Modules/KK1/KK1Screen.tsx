@@ -2445,10 +2445,14 @@ export default function KK1Screen() {
                 manuel mt/kg açık. İkisi de kapalıysa girilecek değer yok →
                 numpad gizlenir, boşuna yer kaplamaz. Üstünde kalın marka-renkli
                 ayraç → "Son Kayıtlar" ile numpad ayrımı net. */}
-            {(widthFieldEnabled || manualMode || insp.open) && (
+            {/* Muayene açıkken numpad yalnız bir alan hedefteyken ve kısa: paneli ezmesin. */}
+            {(insp.open ? numpadTarget !== null : widthFieldEnabled || manualMode) && (
               <>
                 <View style={styles.numpadDivider} />
-                <NumpadHost style={styles.numpadHost} />
+                {/* key: Paper Surface fill/yükseklik değişimini yerinde uygulamıyor → yeniden kur. */}
+                <View key={insp.open ? 'insp' : 'form'} style={insp.open ? styles.numpadInspectionBox : undefined}>
+                  <NumpadHost fill={insp.open} style={styles.numpadHost} />
+                </View>
               </>
             )}
           </View>
@@ -2458,7 +2462,7 @@ export default function KK1Screen() {
       {/* K4P: telefonda muayene tam ekran (formun üstünde; kaydet formdan). */}
       {compact && (
         <Modal visible={insp.open} animationType="slide" onRequestClose={() => insp.setOpen(false)}>
-          <Kk1InspectionSheet insp={insp} compact onClose={() => insp.setOpen(false)} />
+          <Kk1InspectionSheet insp={insp} compact topInset={insets.top} onClose={() => insp.setOpen(false)} />
         </Modal>
       )}
 
@@ -4330,6 +4334,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
     backgroundColor: '#f8fafc',
   },
+  numpadInspectionBox: { height: 264 },
 });
 
 // Kalite seçim segmenti — React.memo ile form'un başka alanları (qty, width)

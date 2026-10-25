@@ -12,6 +12,8 @@ interface Props {
   insp: Kk1Inspection;
   compact: boolean;
   onClose: () => void;
+  /** Telefonda tam ekran modal durum çubuğunun altına girmesin (KK1 `insets.top`). */
+  topInset?: number;
 }
 
 // Taslak yerel ama operatörün emeği: tek yanlış dokunuşla gitmesin.
@@ -22,11 +24,12 @@ function confirmClear(count: number, onYes: () => void) {
   ]);
 }
 
-export default function Kk1InspectionSheet({ insp, compact, onClose }: Props) {
+export default function Kk1InspectionSheet({ insp, compact, onClose, topInset = 0 }: Props) {
   return (
     <View style={styles.wrap} testID="kk1-inspection-sheet">
-      <View style={styles.head}>
-        <Text style={styles.title}>MUAYENE · 4 PUAN</Text>
+      <View style={[styles.head, { paddingTop: topInset }]}>
+        {/* Dar ekranda kısa başlık: kapat düğmesi taşmasın. */}
+        <Text style={styles.title}>{compact ? 'MUAYENE' : 'MUAYENE · 4 PUAN'}</Text>
         <View style={styles.flex} />
         {insp.draft.defects.length > 0 && (
           <Button
@@ -54,6 +57,7 @@ export default function Kk1InspectionSheet({ insp, compact, onClose }: Props) {
           meterAutoActivate={false}
           compact={compact}
           summary={insp.summary}
+          rulerEmptyText={insp.draft.defects.length > 0 ? 'Metreli hata yok — kayıtlar aşağıda' : undefined}
           onDefect={insp.onDefect}
           onDelete={(id) => insp.dispatch({ type: 'remove', id })}
         >
