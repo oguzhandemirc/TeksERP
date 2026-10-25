@@ -99,4 +99,12 @@ describe("NotificationsPage", () => {
     act(() => durum.toastAction!.onClick());
     await waitFor(() => expect(svc.geriAlOkundu).toHaveBeenCalledWith([it1.id]));
   });
+
+  it("ALARM satırında gelen kutusu ertelemesi yok; BİLDİRİM satırında var", async () => {
+    const alarm: NotificationItem = { ...it1, id: "22222222-2222-4222-8222-222222222222", tur: "dokuma.tezgah-alarmi", sinif: "ALARM", altTur: "OLAY", grup: "Dokuma", baslik: "Tezgah alarmı: T-07" };
+    svc.liste.mockImplementation(async () => ({ items: [it1, alarm], nextCursor: null, sayi: 2, epoch: 1, rev: 1, alarmRev: 1 }));
+    await yukle();
+    await screen.findByText("Tezgah alarmı: T-07");
+    expect(screen.getAllByRole("button", { name: "Ertele" })).toHaveLength(1);
+  });
 });
