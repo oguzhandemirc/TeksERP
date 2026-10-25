@@ -1,4 +1,4 @@
-// Hesaplayıcı: kayıt yazmaz ("Teklife ekle"/"Kaydet" yok), elle yapıda gövde sunucuya gider ve toplam sunucudan gelir.
+// Hesaplayıcı: kayıt yazmaz ("Kaydet" yok; "Teklife ekle" yalnız quote:write ile), elle yapıda gövde sunucuya gider ve toplam sunucudan gelir.
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test/render";

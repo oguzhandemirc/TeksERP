@@ -10,11 +10,13 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { CostQueryError } from "../shared/CostQueryState";
 import { quoteNumberLabel } from "./labels";
 import type { PendingLine } from "./line-body";
+import { QuoteActionsBar } from "./QuoteActionsBar";
 import { QuoteDraftHeader } from "./QuoteDraftHeader";
 import { QuoteHeaderSummary } from "./QuoteHeaderSummary";
 import { QuoteLinesSection } from "./QuoteLinesSection";
 import { QuoteStatusBadge } from "./QuoteStatusBadge";
 import { quoteService } from "./service";
+import { QuoteTimeline } from "./QuoteTimeline";
 import { quoteDetailKey } from "./useQuoteMutation";
 
 export function QuoteDetailPage() {
@@ -41,8 +43,10 @@ export function QuoteDetailPage() {
           <CostQueryError error={q.error} what="Teklif" onRetry={() => void q.refetch()} />
         ) : (
           <>
+            <QuoteActionsBar quote={quote} />
             {editable ? <QuoteDraftHeader key={`${quote.id}:${quote.updatedAt}`} quote={quote} /> : <QuoteHeaderSummary q={quote} />}
             <QuoteLinesSection quote={quote} editable={editable} pending={editable ? pending : null} />
+            <QuoteTimeline q={quote} actors={q.data?.aktorler ?? {}} />
           </>
         )}
       </PageBody>
