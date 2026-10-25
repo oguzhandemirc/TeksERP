@@ -42,6 +42,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // Belge tasarımcısı (T1B): şablon + v1 ve yeni sürüm panelden clientToken ile doğar.
   [`${S}document-template/template.service.ts::createTemplate`]: { giris: { [`${S}document-template/template.service.ts::createTemplate`]: "R" } },
   [`${S}document-template/version.service.ts::saveVersion`]: { giris: { [`${S}document-template/version.service.ts::saveVersion`]: "R" } },
+  // e-İrsaliye hazırla (E5): TASLAK kayıt panelden clientToken ile doğar.
+  [`${S}e-irsaliye/e-irsaliye.service.ts::prepare`]: { giris: { [`${S}e-irsaliye/e-irsaliye.service.ts::prepare`]: "R" } },
   [`${S}credential-reset.service.ts::create`]: { giris: { [`${S}credential-reset.service.ts::create`]: "R" } },
   // Lisans sözleşmesi kabulü (Ek-7): kabul satırı panelden clientToken ile doğar; kimliği (kabulId) imzalı belgeye girer.
   [`${S}license-acceptance.service.ts::recordLicenseAcceptance`]: { giris: { [`${S}license-acceptance.service.ts::recordLicenseAcceptance`]: "R" } },
@@ -212,6 +214,8 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
   [`${S}document-template/template.service.ts::createReplay`]: ["docType", "name", "copiedFrom"],
   [`${S}document-template/version.service.ts::saveReplay`]: ["templateId", "sourceHtml", "css"],
+  // Hazırla gövdesi yalnız öneriyi ezen alanlardır; deneme kimliği sevkiyattır (alanlar sonradan PATCH'le değişir).
+  [`${S}e-irsaliye/e-irsaliye.service.ts::prepareReplay`]: ["shipmentId"],
   [`${S}credential-reset.service.ts::replayFor`]: ["hedef", "tur"],
   [`${S}license-acceptance.service.ts::replayFor`]: ["adSoyad", "unvan", "metinOzeti"],
   [`${S}update-approval.service.ts::replayFor`]: ["surum", "zamanlama", "onaylayan"],

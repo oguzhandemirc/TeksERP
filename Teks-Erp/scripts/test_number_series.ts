@@ -65,6 +65,7 @@ import { join } from "node:path";
 import { NUMBER_SERIES_CATALOG } from "../src/constants/number-series-catalog";
 import { formatSeriesCode, matchesSeries, nextSeriesNo, resolveSeriesFormat, seriesPrefix, seriesSeqFrom, type NumberSeriesFormat } from "../src/services/number-series.service";
 import { seriesClassifierTable } from "../src/services/helpers/series-classifier.helper";
+import { codeCountsForCounter } from "../src/services/helpers/series-format.helper";
 import {
   FIXED_SHAPE_YEAR_USAGE,
   assertSeriesCounterAllowed,
@@ -689,6 +690,14 @@ check("§14f ⭐ sabit baş ikinci eklemi SAYIYOR (kapasite kapısı `seriesPref
     seriesPrefix(segFmt("YYMM", { separator: "-" }), D5AT).length,
   `${seriesPrefix(segFmt("YYMM", { separator: "-", separator2: "" }), D5AT)} ↔ ` +
     `${seriesPrefix(segFmt("YYMM", { separator: "-" }), D5AT)}`);
+
+// ⚠️ E2 hatası (ölçüldü 2026-10-25, `npx tsx scripts/test_e_irsaliye_flow.ts` §12a): ayırıcısız tarih + 9 hane sıra = 13 haneli kuyruk;
+// hane tavanı (12) TÜM kuyruğa uygulanınca kod sayılmıyor, başlangıç kilidi fail-open oluyordu.
+const eirsFmt = segFmt("YYYY", { prefix: "EIR", digits: 9 });
+check("§14g ⭐ ayırıcısız YYYY + 9 hane kod sayaca SAYILIR (tavan yalnız sıra hanesine)",
+  codeCountsForCounter(eirsFmt, formatSeriesCode(eirsFmt, 3, D5AT)), formatSeriesCode(eirsFmt, 3, D5AT));
+check("§14g tavan hâlâ ısırır: 13 haneli SIRA sayılmaz",
+  !codeCountsForCounter(eirsFmt, `EIR2026${"1".repeat(13)}`));
 
 // ── §15 Sabit biçim (GİB e-İrsaliye) ───────────────────────────────────────
 async function bolum15(): Promise<void> {

@@ -341,12 +341,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/helpers/shipment-event.helper.ts", sembol: "writeShipmentEvent" }],
     ["src/services/helpers/shipment-event.helper.ts"]),
 
-  // e-İrsaliye (E1-SEMA): yazma yüzeyi HENÜZ YOK — §4c "yazıcısız sessizlik meşru". E5 tek yazarı
-  // `src/services/e-irsaliye/e-irsaliye-event.helper.ts` `writeEIrsaliyeEventTx`'i doğurduğu gün
-  // `yazan` VE `tersYazan` AYNI commit'te dolar (§5 beyansız yazıcıyı yakalar).
+  // e-İrsaliye (E5-MOTOR): tek yazar `writeEIrsaliyeEventTx`; karşı olaylar `transitionEIrsaliyeTx` üzerinden aynı yazara iner.
   D("EIrsaliyeEvent", "e-İrsaliye olay defteri (`ShipmentEvent` emsali) — durum tablosu `EIrsaliye` \"şu an ne\", bu defter \"ne oldu\"; append-only, mühür `defter_block_tamper`; gönderim ve alıcı yanıtı kaydı tipli karşı olayla geri alınır",
     { tur: "KARSI_OLAY", enumAdi: "EIrsaliyeEventType", ciftler: [["GONDERILDI", "GONDERIM_GERI_ALINDI"], ["YANIT_KAYDEDILDI", "YANIT_GERI_ALINDI"]] },
-    [], []),
+    [{ dosya: "src/services/e-irsaliye/e-irsaliye-event.helper.ts", sembol: "writeEIrsaliyeEventTx" }],
+    ["src/services/e-irsaliye/e-irsaliye-event.helper.ts"]),
 
   D("WorkOrderEvent", "iş emrinin KENDİ durum/plan değişim defteri (SAP değişiklik belgesi kalıbı): bir eylem = bir groupId, her alan = bir from→to satırı; kendi defteri olan olaylar (bağ, özellik, fason, Tambur) KOPYALANMAZ, Hareketler ucunda kaynaklarından okunur. Ters yol karşı kayıttır — geri almak aynı alanı eski değere çeviren YENİ satırdır (yeniden açılma = COMPLETED→IN_PROGRESS satırı), damga değil. DB mührü `defter_block_tamper` (UPDATE ve doğrudan DELETE reddedilir)",
     { tur: "KARSI_KAYIT", ciftler: [["fromValue", "toValue"]], enumAdi: "WorkOrderEventType",
