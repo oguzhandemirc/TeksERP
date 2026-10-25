@@ -99,6 +99,14 @@ Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıt�
 
 ## 9 · Kayıt defteri
 
+### grapesjs@0.23.8 · Electron · 2026-10-24
+1. Problem      : Belge Tasarımcısı (plan D1/T2) — sürükle-bırak blok, katman, CSS stil paneli; HTML/CSS Liquid şablonuna gider
+2. Alternatifler: elle yazmak (aylar) · Puck / Craft.js (HTML kod kipi yok) · Studio SDK / Unlayer (ücretli) · `@grapesjs/react` (EKLENMEDİ: tek `useEffect` + `appendTo` yeter) — patron kararı D1
+3. Boyut/biçim  : saf JS, native YOK, CDN YOK; yalnız `DocumentDesigner/` import eder, `React.lazy` ayrı parça ([KU-17]): 1.171 KB JS + 62 KB CSS, ana parçada YOK (ölçüldü 2026-10-25); geçişli backbone · underscore · backbone-undo · codemirror 5 · html-entities · promise-polyfill (hepsi MIT)
+4. Bakım        : 0.x, TAM SABİT (yama sürümü olay adlarını değiştirebilir; 0.23.7 eksik yayın şüphesi); pin `createEditor.test.ts`
+5. Lisans       : BSD-3-Clause
+6. Dağıtım      : rebuild GEREKMEZ. ⚠️ Varsayılan `telemetry:true` → `app.grapesjs.com`e gider, panel CSP'si (`connect-src https:`) engellemez → `telemetry:false` zorunlu; `cssIcons` → `''`. Kanvas `sandbox="allow-same-origin"` (enjekte script çalışmaz) — bekçi `iframe-sandbox.test.ts`
+
 ### liquidjs@10.30.0 · Teks-Erp · 2026-10-24
 1. Problem      : belge şablon tasarımcısı (plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md` §3.3, §5) kullanıcı şablonunda döngü/koşul/filtre ister; mantıksız `{{alan}}` motoru (refakat kartı RAW_HTML) bunu taşımaz; §2.1 "Belge şablon dili" satırı
 2. Alternatifler: elle motor (ifade ayrıştırıcısı + kum havuzu = en riskli kod sınıfı; red) · Handlebars (yardımcı = JS; `compile` JS üretir; red) · Nunjucks (JS'e derler, kum havuzu yok; red) · Eta/EJS (şablon = JS; red) · LiquidJS: JS üretmez, `strictVariables/strictFilters/ownPropertyOnly`, süre/bellek/parse sınırı yerleşik
