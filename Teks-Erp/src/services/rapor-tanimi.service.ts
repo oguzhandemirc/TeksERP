@@ -129,6 +129,7 @@ export interface ListInput {
   kategoriId?: string;
   durum?: DefinitionStatus;
   ara?: string;
+  anahtar?: string;
   cursor?: string;
   limit: number;
 }
@@ -139,6 +140,7 @@ function listWhere(input: ListInput, a: Actor): Prisma.ReportDefinitionWhereInpu
   if (input.kapsam === "paylasilan") and.push({ kind: "OZEL", ownerId: { not: a.userId } });
   if (input.kapsam === "sistem") and.push({ kind: "SISTEM" });
   if (input.kategoriId) and.push({ categoryId: input.kategoriId });
+  if (input.anahtar) and.push({ key: input.anahtar });
   // Arşiv yalnız açıkça istenince görünür.
   and.push(input.durum ? { status: input.durum } : { status: { not: "ARSIV" } });
   if (input.ara?.trim()) and.push({ name: { contains: input.ara.trim(), mode: "insensitive" } });
