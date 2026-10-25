@@ -106,7 +106,8 @@ export function buildPrintJobWhere(q: PrintJobQuery): Prisma.PrintJobWhereInput 
   if (printers.length > 0) and.push({ printerName: printers.length === 1 ? printers[0] : { in: printers } });
   if (q.subjectId) {
     if (!UUID_RE.test(q.subjectId)) throw AppError.badRequest("Geçersiz kayıt kimliği", { code: "PRINT_FILTER_INVALID", field: "subjectId" });
-    and.push({ OR: [{ subjectId: q.subjectId }, { subjectIds: { has: q.subjectId } }] });
+    // Belge baskısı konuyu değil belgeyi taşır (`printedDocumentId`) — belge detayından gelen süzgeç onu da kapsar.
+    and.push({ OR: [{ subjectId: q.subjectId }, { subjectIds: { has: q.subjectId } }, { printedDocumentId: q.subjectId }] });
   }
   if (q.gunBas || q.gunBit) {
     const gte = q.gunBas ? resolveRangeStart(q.gunBas) : undefined;
