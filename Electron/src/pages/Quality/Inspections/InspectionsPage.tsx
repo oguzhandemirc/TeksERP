@@ -28,6 +28,7 @@ export function InspectionsPage() {
   return (
     <PageShell>
       <PageHeader
+        className="flex-wrap"
         title="Muayeneler"
         description="4 puan muayeneleri — puan / 100 m², önerilen derece, uyumsuzluk. Düzeltme yeni revizyon yazar; iptal gerekçeyle saklanır."
         actions={

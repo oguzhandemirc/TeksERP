@@ -39,7 +39,7 @@ export function InspectionDetailSheet({ id, onClose, onOpen }: Props) {
                 <PermissionGate permission="inspection:correct">
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => setMode("revise")}><PencilLine className="mr-1 h-4 w-4" />Düzelt</Button>
-                    <Button size="sm" variant="outline" className="text-destructive" onClick={() => setMode("void")}><Ban className="mr-1 h-4 w-4" />İptal et</Button>
+                    <Button size="sm" variant="destructive" onClick={() => setMode("void")}><Ban className="mr-1 h-4 w-4" />İptal et</Button>
                   </div>
                 </PermissionGate>
               )}
