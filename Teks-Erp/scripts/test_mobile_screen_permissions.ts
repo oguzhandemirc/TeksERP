@@ -301,6 +301,11 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   },
   {
     screen: "mobile:kk1",
+    path: "GET /defect-types",
+    why: "Hata tipleri YALNIZ muayene paneli görünürken çekilir (`kk1InspectionVisible`: modül ∧ `inspection:write` ∧ `canInspect`); uç `inspection:write`ı kabul eder. Muayenesiz KK1 operatörü bu ucu hiç çağırmaz.",
+  },
+  {
+    screen: "mobile:kk1",
     path: "POST /items/quick-create",
     why: "Saha içi desen oluşturma ayrı bir YETENEK yetkisi (`mobile:kk1-desen`) — her KK1 operatörü ürün kartı açamasın.",
   },
