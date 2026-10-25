@@ -31,12 +31,20 @@ const SRC = path.resolve(__dirname, "../src");
 const KAPI = "requireMaliyetEnabled";
 
 /** Maliyet modülüne ÖZEL Prisma model erişimcileri (sonraki MAL dilimleri buraya ekler). */
-const MALIYET_MODELLERI = new Set(["costParameterSet", "yarnCostPrice", "finishingRate", "costStructure"]);
+const MALIYET_MODELLERI = new Set([
+  "costParameterSet",
+  "yarnCostPrice",
+  "finishingRate",
+  "costStructure",
+  // MAL-2: standart maliyet sürümü (donmuş fotoğraf) + kalemleri
+  "standardCostVersion",
+  "standardCostLine",
+]);
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
     dosya: "routes/cost.routes.ts",
-    neden: "Maliyet girdileri yüzeyi (MAL-1): parametre setleri, iplik fiyatları, apre tarifeleri, maliyet yapısı.",
+    neden: "Maliyet yüzeyi: girdiler (MAL-1) + önizleme, kumaş maliyet listesi, standart maliyet sürümleri (MAL-2).",
   },
 ];
 
