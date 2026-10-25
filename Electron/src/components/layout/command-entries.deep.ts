@@ -1,4 +1,4 @@
-import { Cog, ServerCog, Settings2, Link2, FileText } from "lucide-react";
+import { Cog, Copy, ServerCog, Settings2, Link2, FileText } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -120,6 +120,17 @@ const hubGroupEntries: CommandEntry[] = [
     to: "/access/devices",
     permission: "admin:settings",
     keywords: "cihaz eşleme yeniden bağlama talep onay donanım kurulum masaüstü tablet",
+    deep: true,
+  },
+  // Kopya birleştirme (D4): aynı tabletin yeniden kurulumla doğmuş kayıtları — şerit açık gelir.
+  {
+    key: "access-devices:merge-duplicates",
+    label: "Tabletler · Kopyaları birleştir",
+    description: "Aynı cihazın tekrar kayıtlarını önizleyip ana kayda birleştir",
+    icon: Copy,
+    to: "/access/devices?kopya=1",
+    permission: "admin:settings",
+    keywords: "cihaz kopya tekrar kayıt birleştir birleştirme mükerrer çift tablet telefon kurulum",
     deep: true,
   },
   ...systemTileSections.map((s) => ({

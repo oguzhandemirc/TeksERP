@@ -1,6 +1,8 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { DeviceDetail, DeviceListItem, RebindRejectBody, RebindRequest } from "./types";
+import type {
+  DeviceDetail, DeviceListItem, MergeCandidateGroup, MergePreview, MergeResult, RebindRejectBody, RebindRequest,
+} from "./types";
 
 const BASE = "/api/admin/devices";
 // Talep uçları kendi hatasını gösterir (409 → "başka biri işledi"); eski backend 404 → bölüm gizli.
@@ -67,6 +69,30 @@ export const deviceService = {
         if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
         throw e;
       }),
+
+  /** Kopya olabilecek kayıt grupları (D4); eski backend (uç yok) → `null` (şerit gizli). */
+  mergeCandidates: (): Promise<{ groups: MergeCandidateGroup[]; scanned: number } | null> =>
+    apiClient
+      .get<ApiResponse<{ groups: MergeCandidateGroup[]; scanned: number }>>(`${BASE}/merge/candidates`, QUIET)
+      .then((r) => r.data.data ?? { groups: [], scanned: 0 })
+      .catch((e: unknown) => {
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
+        throw e;
+      }),
+
+  /** Yan etkisiz önizleme: kaynak başına etkilenen her kayıt. */
+  mergePreview: (targetId: string, sourceIds: string[]): Promise<MergePreview> =>
+    apiClient
+      .post<ApiResponse<MergePreview>>(`${BASE}/merge/preview`, { targetId, sourceIds }, QUIET)
+      .then((r) => r.data.data as MergePreview),
+
+  merge: (targetId: string, sourceIds: string[]): Promise<MergeResult> =>
+    apiClient
+      .post<ApiResponse<MergeResult>>(`${BASE}/merge`, { targetId, sourceIds }, QUIET)
+      .then((r) => r.data.data as MergeResult),
+
+  undoMerge: (sourceId: string): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`${BASE}/merge/${sourceId}/undo`, {}, QUIET).then((r) => r.data),
 
   approveRebind: (id: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`${BASE}/rebind-requests/${id}/approve`, {}, QUIET).then((r) => r.data),

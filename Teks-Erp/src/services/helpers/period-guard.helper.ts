@@ -64,6 +64,7 @@
 //   8039  AUDIT_CHAIN_LOCK_NS  services/audit-chain.service.ts  audit hash zinciri sırası (tek anahtar; kilidi DB trigger'ı `audit_zincir_bagla` alır)
 //   8040  NOTIFICATION_DISPATCH_LOCK_NS  services/notification-dispatch.service.ts  bildirim dağıtıcı + koşul tarayıcısı (anahtar `hashtext('bildirim-dagitici')` · `hashtext('bildirim-kosul:'||kind)`)
 //   8041  E_IRSALIYE_SERIES_LOCK_NS  services/e-irsaliye/e-irsaliye-number.ts  e-İrsaliye numara üretimi ↔ başlangıç değeri yazımı (tek anahtar; sevkiyat kilidi 8023'ün ARKASINDAN)
+//   8042  DEVICE_MERGE_LOCK_NS  services/device-merge.service.ts  cihaz kopyası birleştirme ↔ geri alma (tek anahtar; kaynak/hedef claim'leri serileşir)
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı
