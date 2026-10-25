@@ -74,6 +74,7 @@ function walk(dir: string): string[] {
 describe("tek çizici: Etkinlik ↔ Geçmiş", () => {
   const IMPORT = /from\s+"@\/components\/audit\/AuditNarrativeRow"/;
   it.each([
+    "components/RecordHistoryDialog.tsx",
     "pages/System/Activity/ActivityFeed.tsx",
     "pages/System/Activity/ActivityDetailSheet.tsx",
   ])("%s AuditNarrativeRow'u ithal eder", (f) => {
