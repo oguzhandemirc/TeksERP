@@ -26,9 +26,9 @@ function orderLinesSql(range: { from: Date; to: Date }): Prisma.Sql {
            o.destination::text AS destination
     FROM order_lines ol
     JOIN orders o ON o.id = ol."orderId"
-    WHERE o."orderDate" >= ${range.from} AND o."orderDate" <= ${range.to}
+    WHERE ol."cancelledAt" IS NULL
+      AND o."orderDate" >= ${range.from} AND o."orderDate" <= ${range.to}
       AND o.status <> 'CANCELLED'
-      AND ol."cancelledAt" IS NULL
   ) p`;
 }
 
