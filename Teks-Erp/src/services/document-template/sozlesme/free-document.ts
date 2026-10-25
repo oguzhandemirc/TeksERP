@@ -22,13 +22,13 @@ import {
   printRoot,
   rootFields,
 } from "./ortak";
-import { longText, sampleEnvelope } from "./senaryolar";
+import { longText, sampleEnvelope, sampleSeriesCode } from "./senaryolar";
 import { baseConfigSchema, normalizeBase, plainJson, sanitizeRawConfig, type BaseDocConfig } from "./subcontractor-common";
 import type { BuildExtras, ContextObject, ContextValue, DocumentContract, FieldDef, Scenario, TemplateContext } from "./tipler";
 import { headFields } from "./warehouse-common";
 
 const ROOT_FIELDS: FieldDef[] = [
-  ...headFields("Belge no", "SB2509260001", "TESLİM TUTANAĞI", "FREE_DOCUMENT"),
+  ...headFields("Belge no", sampleSeriesCode("freeDocument", 1), "TESLİM TUTANAĞI", "FREE_DOCUMENT"),
   { yol: "belge.alici", etiket: "Sayın (alıcı)", tur: "metin", sinif: "musteri", ornek: "Örnek Konfeksiyon Ltd. Şti." },
   { yol: "belge.govde", etiket: "Gövde metni (düz; satır sonları korunur)", tur: "metin", sinif: "musteri", ornek: "İlgi yazınıza istinaden…" },
   ...COMPANY_FIELDS,
@@ -72,7 +72,7 @@ function buildContext(snapshot: PrintedDocSnapshot, rawConfig: unknown, internal
 }
 
 const sampleBody = () => ({
-  documentNo: "SB2509260001",
+  documentNo: sampleSeriesCode("freeDocument", 1),
   title: "TESLİM TUTANAĞI",
   recipient: "Örnek Konfeksiyon Ltd. Şti.",
   body: "İlgi yazınıza istinaden 25.09.2026 tarihinde\n12 top ham kumaş teslim edilmiştir.\n\nBilgilerinize sunarız.",
@@ -82,7 +82,7 @@ const sampleBody = () => ({
 function scenarios(): Scenario<never>[] {
   const single = { ...sampleBody(), body: "Tek satırlık duyuru." };
   const many = { ...sampleBody(), body: Array.from({ length: 80 }, (_, i) => `${i + 1}. madde: sevk ve teslim koşulları`).join("\n") };
-  const empty = { documentNo: "SB2509260002", title: "DUYURU", recipient: null, body: "", date: "2026-09-25T08:30:00.000Z" };
+  const empty = { documentNo: sampleSeriesCode("freeDocument", 2), title: "DUYURU", recipient: null, body: "", date: "2026-09-25T08:30:00.000Z" };
   const long = { ...sampleBody(), title: longText("Uzun <başlık> & not", 90), recipient: longText("Çok Uzun Adlı Alıcı & Ortakları", 120), body: longText("Gövde <b>kalın değil</b> & kaçış", 600) };
   return [
     { ad: "ornek", aciklama: "Panel önizlemesinin örnek teslim tutanağı (çok satırlı gövde)", snapshot: sampleEnvelope(sampleBody()) },

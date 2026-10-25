@@ -11,10 +11,12 @@
 import type { NUMBER_ROUNDING_HALF_UP } from "../../document-render/fmt-num";
 import { resolveTravelerCompanyName } from "../../document-render/traveler-card-raw";
 import type { TravelerBatchLine, TravelerCardMeta, TravelerCardSnapshot } from "../../document-render/traveler-card.html";
+import { TERIM } from "../../../constants/terim";
 import { dateText } from "./finance-common";
 import { PRINT_FIELDS, asNumber, asText, fillFields, printRoot, rootFields } from "./ortak";
 import type { BuildExtras, ContextObject, ContextValue, DocumentContract, FieldDef, TableDef, TemplateContext } from "./tipler";
 import { TRAVELER_CONFIG_SCHEMA, normalizeTravelerCardTemplateConfig, type TravelerCardTemplateConfig } from "./traveler-card.config";
+import { sampleSeriesCode } from "./senaryolar";
 import { travelerCardScenarios } from "./traveler-card.scenarios";
 
 export interface TravelerCardSource {
@@ -36,17 +38,20 @@ const f = (yol: string, etiket: string, tur: FieldDef["tur"], ornek: FieldDef["o
 /** Tam sayı gösterimli alan (kart sayıları kuruşsuz basılır). */
 const int = (d: FieldDef): FieldDef => ({ ...d, ondalik: 0 });
 
+// Örnek kart no seriden türetilir (bayat literal yazılmaz; test_bayat_kod_literali).
+const SAMPLE_CARD_NO = sampleSeriesCode("workOrder", 7);
+
 const ROOT_FIELDS: FieldDef[] = [
-  f("belge.no", "Kart no", "metin", "IE0308260007"),
+  f("belge.no", "Kart no", "metin", SAMPLE_CARD_NO),
   f("belge.tur", "Belge türü", "metin", "TRAVELER_CARD"),
-  f("belge.kart_no", "Kart no", "metin", "IE0308260007"),
-  f("belge.barkod", "Barkod / karekod metni", "metin", "IE0308260007"),
-  f("belge.is_emri_no", "Terbiye iş emri no", "metin", "IE0308260007"),
+  f("belge.kart_no", "Kart no", "metin", SAMPLE_CARD_NO),
+  f("belge.barkod", "Barkod / karekod metni", "metin", SAMPLE_CARD_NO),
+  f("belge.is_emri_no", `${TERIM.terbiyeIsEmri.tekil} no`, "metin", SAMPLE_CARD_NO),
   int(f("belge.surum", "Kart sürümü", "sayi", 1)),
   f("belge.durum", "Kart durumu (ACTIVE/VOIDED/COMPLETED/REPRINTED)", "metin", "ACTIVE"),
   f("belge.iptal_nedeni", "İptal nedeni", "metin", null),
   f("belge.basim_zamani", "Basım tarihi", "tarih_saat", "2026-08-03T06:12:00.000Z"),
-  f("belge.tur_kodu", "İş emri türü kodu", "metin", "ORDER_PRODUCTION"),
+  f("belge.tur_kodu", `${TERIM.terbiyeIsEmri.tekil} türü kodu`, "metin", "ORDER_PRODUCTION"),
   f("belge.tur_metni", "Tür + rota", "metin", "Siparişe Özel · Rota: Standart"),
   f("belge.rota", "Rota adı", "metin", "Standart Boyama Rotası"),
   f("belge.urun_kodu", "Kumaş kodu", "metin", "KMS-001"),
@@ -91,10 +96,10 @@ const BATCHES_TABLE: TableDef = {
   etiket: "Partiler (baskı anında canlı)",
   kolonlar: [
     align(col("sira", "Sıra", "sayi", 1), "c"),
-    col("parti_no", "Parti no", "metin", "P0308260001"),
+    col("parti_no", "Parti no", "metin", sampleSeriesCode("batchDaily", 1)),
     align(col("top_adedi", "Top adedi", "sayi", 4), "r"),
     align(col("metraj", "Metraj", "sayi", 1240), "r"),
-    col("sevk_no", "Sevk irsaliye no", "metin", "FS0308260001"),
+    col("sevk_no", "Sevk irsaliye no", "metin", sampleSeriesCode("subcontractorDispatch", 1)),
     col("sevk_firma", "Sevk edilen firma", "metin", "Yıldız Boyahane"),
     align(col("sevk_ek", "Önceki açık sevk sayısı", "sayi", 0), "r"),
   ],

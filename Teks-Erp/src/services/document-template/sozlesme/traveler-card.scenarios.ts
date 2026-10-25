@@ -1,5 +1,6 @@
 // TRAVELER_CARD sözleşmesinin senaryoları — panel önizlemesi ve bekçilerin örnek kartları.
 
+import { TERIM } from "../../../constants/terim";
 import { envelopeHead } from "../../document-render/envelope-head";
 import { SCENARIO_CLOCK, longText, sampleSeriesCode } from "./senaryolar";
 import type { Scenario } from "./tipler";
@@ -63,9 +64,9 @@ function sampleSource(): TravelerCardSource {
       companyName: "Örnek Tekstil San. ve Tic. A.Ş.",
       voidReason: null,
       batches: [
-        { batchNumber: "P2509261", rollCount: 4, quantity: 1240, dispatch: { dispatchNo: "FS2509260001", subcontractorName: "Yıldız Boyahane", moreCount: 0 } },
-        { batchNumber: "P2509262", rollCount: 2, quantity: 610.4, dispatch: { dispatchNo: "FS2509260003", subcontractorName: "Ak Apre", moreCount: 2 } },
-        { batchNumber: "P2509263", rollCount: 0, quantity: null, dispatch: null },
+        { batchNumber: sampleSeriesCode("batchDaily", 1), rollCount: 4, quantity: 1240, dispatch: { dispatchNo: sampleSeriesCode("subcontractorDispatch", 1), subcontractorName: "Yıldız Boyahane", moreCount: 0 } },
+        { batchNumber: sampleSeriesCode("batchDaily", 2), rollCount: 2, quantity: 610.4, dispatch: { dispatchNo: sampleSeriesCode("subcontractorDispatch", 3), subcontractorName: "Ak Apre", moreCount: 2 } },
+        { batchNumber: sampleSeriesCode("batchDaily", 3), rollCount: 0, quantity: null, dispatch: null },
       ],
     },
     ...envelopeHead(),
@@ -85,10 +86,10 @@ export function travelerCardScenarios(): Scenario<never, TravelerCardSource>[] {
   );
   many.card.orderLinks = Array.from({ length: 12 }, (_, i) => orderLink(i + 1, [`SIP-2026-${String(200 + i).padStart(4, "0")}`, `Müşteri ${i + 1}`, "Pamuklu Astar"], i % 2 ? "Bej" : null, 100 * (i + 1) + 0.5));
   many.meta.batches = Array.from({ length: 9 }, (_, i) => ({
-    batchNumber: `P25092${String(60 + i)}`,
+    batchNumber: sampleSeriesCode("batchDaily", 60 + i),
     rollCount: i + 1,
     quantity: 300 * (i + 1),
-    dispatch: i % 2 ? { dispatchNo: `FS25092600${10 + i}`, subcontractorName: "Yıldız Boyahane", moreCount: i % 3 } : null,
+    dispatch: i % 2 ? { dispatchNo: sampleSeriesCode("subcontractorDispatch", 10 + i), subcontractorName: "Yıldız Boyahane", moreCount: i % 3 } : null,
   }));
 
   // Stok üretimi + eksik plan: siparişsiz ("Stoğa üretim" kutusu), ürünsüz, tarihsiz, partisiz.
@@ -131,8 +132,8 @@ export function travelerCardScenarios(): Scenario<never, TravelerCardSource>[] {
     {
       ad: "iptal",
       aciklama: "İptal edilmiş kart (filigran üst katmandır)",
-      snapshot: { ...sampleSource(), meta: { ...sampleSource().meta, voidReason: "İş emri iptal edildi" } },
-      ek: { baski: { surum: 2, durum: "VOIDED", iptalNedeni: "İş emri iptal edildi" } },
+      snapshot: { ...sampleSource(), meta: { ...sampleSource().meta, voidReason: `${TERIM.terbiyeIsEmri.tekil} iptal edildi` } },
+      ek: { baski: { surum: 2, durum: "VOIDED", iptalNedeni: `${TERIM.terbiyeIsEmri.tekil} iptal edildi` } },
     },
   ];
 }
