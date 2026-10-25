@@ -6,3 +6,4 @@
 // =============================================================================
 
 export { shipmentDispatchContract } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
+export { subcontractorReceiptContract } from "./subcontractor-receipt"; // SUBCONTRACTOR_RECEIPT

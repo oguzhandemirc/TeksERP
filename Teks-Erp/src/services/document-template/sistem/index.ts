@@ -9,3 +9,4 @@
 // =============================================================================
 
 export { shipmentDispatchSystem } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
+export { subcontractorReceiptSystem } from "./subcontractor-receipt"; // SUBCONTRACTOR_RECEIPT

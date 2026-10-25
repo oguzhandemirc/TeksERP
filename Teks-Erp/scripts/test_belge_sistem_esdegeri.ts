@@ -16,6 +16,7 @@
  */
 
 import { renderShipmentDispatchHtml } from "../src/services/document-render/shipment-dispatch.html";
+import { renderFasonReceiptHtml } from "../src/services/document-render/fason-receipt.html";
 import { fmtDateTime } from "../src/services/document-render/fmt-date";
 import { tokenizeHtml, type HtmlToken } from "../src/services/document-render/template-html.tokenizer";
 import { decodeAttrEntities } from "../src/services/document-render/template-html.entities";
@@ -35,6 +36,7 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 // docType başına TEK satır, alfabetik (port dilimleri ekler).
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   SHIPMENT_DISPATCH: (s, m) => renderShipmentDispatchHtml(s, m as Parameters<typeof renderShipmentDispatchHtml>[1]),
+  SUBCONTRACTOR_RECEIPT: (s, m) => renderFasonReceiptHtml(s, m as Parameters<typeof renderFasonReceiptHtml>[1]),
 };
 
 let pass = 0;
