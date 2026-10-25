@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { designerSettingPath } from "@/pages/Definitions/DocumentDesigner/designer-flag";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -59,7 +60,7 @@ export function DefaultTemplatePicker({ docKey }: { docKey: string }) {
           )
         ) : (
           <Button size="sm" variant="outline" asChild>
-            <Link to="/system/printing?tab=belgeler">Ayarlardan aç</Link>
+            <Link to={designerSettingPath()}>Ayarlardan aç</Link>
           </Button>
         )}
       </div>

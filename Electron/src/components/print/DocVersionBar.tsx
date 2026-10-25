@@ -24,6 +24,7 @@ import {
   type PrintedDocStatus,
   type PrintedDocument,
 } from "@/services/printedDocumentService";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 // =============================================================================
 // Resmi belge versiyon şeridi — `.print-area` DIŞINDA durur (baskıya girmez).
@@ -171,6 +172,9 @@ export function DocVersionBar({
           currentVersion={current.version}
           onSelectVersion={onSelectVersion}
         />
+
+        {/* Bu belge sürümünün baskıları (A3): liste `printedDocumentId` ile önceden süzülü açılır. */}
+        <PrintHistoryLink subjectId={current.id} className="px-1" />
 
         {showReissue && (
           <Button

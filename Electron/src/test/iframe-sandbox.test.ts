@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { CANVAS_FRAME_SANDBOX } from "@/pages/Definitions/DocumentDesigner/editor/frameSandbox";
 
 // =============================================================================
 // ÖNİZLEME/BASKI İFRAME'LERİ (güvenlik denetimi 2026-10-01, IST-5 — "7 iframe sandbox'sız").
@@ -52,6 +53,30 @@ function violations(list: IframeFinding[]): string[] {
   });
 }
 
+/**
+ * GrapesJS DÜZENLEME kanvası (belge tasarımcısı, T2) AYRI SINIFTIR: DOM'unu editör yönettiği
+ * için `allow-same-origin` taşır (script izni YOK); render önizlemesi ve PDF penceresi sıkı
+ * kalır (D6). iframe'i paket yaratır, kaynak taraması onu göremez. İddia: `grapesjs.init(`
+ * çağıran HER dosya `frameSandboxPlugin(` ve `telemetry: false` taşır (varsayılan telemetri
+ * app.grapesjs.com'a gider, panel CSP'si engellemez); paket yalnız DocumentDesigner/ altında.
+ * Çalışma anı ölçümü jsdom'da değil e2e'de: `e2e/guzergah/adimlar-belge-tasarimci.mjs` BT2/BT4.
+ */
+const GRAPES_DIR = "src/pages/Definitions/DocumentDesigner/";
+function grapesViolations(list: ReadonlyArray<{ file: string; src: string }>): string[] {
+  const out: string[] = [];
+  for (const { file, src: raw } of list) {
+    // Yorumdaki `grapesjs.init(` anması kurulum değildir.
+    const src = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    if (/^import\s+(?!type\b)[^;]*from\s+"grapesjs"/m.test(src) && !file.startsWith(GRAPES_DIR)) {
+      out.push(`${file}: grapesjs DocumentDesigner dışında`);
+    }
+    if (!/\bgrapesjs\.init\(/.test(src)) continue;
+    if (!/\bframeSandboxPlugin\(/.test(src)) out.push(`${file}: kanvas sandbox eklentisi YOK`);
+    if (!/\btelemetry:\s*false\b/.test(src)) out.push(`${file}: telemetry:false YOK`);
+  }
+  return out;
+}
+
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
     const p = join(dir, d.name);
@@ -73,6 +98,31 @@ describe("iframe sandbox", () => {
 
   it("⭐ her iframe sandbox'lı; izinler en çok allow-same-origin + allow-modals", () => {
     expect(violations([...jsx, ...dom])).toEqual([]);
+  });
+
+  it("körlük zemini: GrapesJS kurulumu bulundu", () => {
+    expect(files.filter((f) => /\bgrapesjs\.init\(/.test(f.src)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("⭐ GrapesJS kanvas çerçevesi sandbox'lı; izin allow-same-origin (script YOK)", () => {
+    expect(grapesViolations(files)).toEqual([]);
+    expect(CANVAS_FRAME_SANDBOX).toBe("allow-same-origin");
+    expect(violations([{ where: "frameSandbox.ts", sandbox: CANVAS_FRAME_SANDBOX }])).toEqual([]);
+  });
+
+  it("K-sonda: eklentisiz / telemetrisi açık GrapesJS kurulumu ve dizin dışı import GÖRÜLÜR", () => {
+    const fake = [
+      { file: `${GRAPES_DIR}editor/x.ts`, src: `import grapesjs from "grapesjs";\nexport const e = grapesjs.init({ plugins: [] });` },
+      { file: "src/pages/Baska/y.ts", src: `import grapesjs from "grapesjs";` },
+      { file: "src/pages/Baska/z.ts", src: `import type { Editor } from "grapesjs";` },
+      { file: `${GRAPES_DIR}editor/t.ts`, src: `const c = { telemetry: true };\nframeSandboxPlugin();\ngrapesjs.init(c);` },
+    ];
+    expect(grapesViolations(fake)).toEqual([
+      `${GRAPES_DIR}editor/x.ts: kanvas sandbox eklentisi YOK`,
+      `${GRAPES_DIR}editor/x.ts: telemetry:false YOK`,
+      "src/pages/Baska/y.ts: grapesjs DocumentDesigner dışında",
+      `${GRAPES_DIR}editor/t.ts: telemetry:false YOK`,
+    ]);
   });
 
   it("K-sonda: tarayıcı sandbox'sız ve fazla yetkili iframe'i GÖRÜR", () => {
