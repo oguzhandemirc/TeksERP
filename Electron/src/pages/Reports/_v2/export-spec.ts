@@ -6,6 +6,7 @@ import { ANLATI_PDF_SAYISI, SIDE_FIGURE_LIMIT, type ParametreBeyani, type RaporS
 import { comparisonText, formatFigure } from "./figures";
 import { tableToExport } from "./table-model";
 import { ALL_LABEL } from "./ParamPickerDialog";
+import { emptyLabelOf, periodsToExport, variantToExport } from "./variant-model";
 
 /** "Müşteri: Kaya Tekstil · Renk: Tümü" — sunucunun yankıladığı seçimden. */
 export function parameterSentence(params: readonly ParametreBeyani[]): string | undefined {
@@ -14,7 +15,7 @@ export function parameterSentence(params: readonly ParametreBeyani[]): string | 
     .map((p) => {
       const values = p.deger === null ? [] : Array.isArray(p.deger) ? p.deger : [String(p.deger)];
       const labels = values.map((v) => p.secenekler?.find((o) => o.deger === v)?.etiket ?? v);
-      return `${p.etiket}: ${labels.length ? labels.join(", ") : ALL_LABEL}`;
+      return `${p.etiket}: ${labels.length ? labels.join(", ") : (emptyLabelOf(p.ad) ?? ALL_LABEL)}`;
     });
   return parts.length ? parts.join(" · ") : undefined;
 }
@@ -37,7 +38,10 @@ export function buildExportSpec(p: RaporSunumu): ReportExportSpec {
     kiyasDonemi: p.kiyasDonemi?.etiket,
     parametreCumlesi: parameterSentence(p.parametreler),
     uyarilar: p.uyarilar.length ? p.uyarilar : undefined,
-    tables: p.tablo ? [tableToExport(p.tablo, "Tablo")] : [],
+    tables: [
+      ...[p.varyant ? variantToExport(p.varyant, p.kiyasDonemi?.etiket) : null, p.donemler ? periodsToExport(p.donemler) : null].filter((t) => t !== null),
+      ...(p.tablo ? [tableToExport(p.tablo, "Tablo")] : []),
+    ],
     bloklar,
   };
 }

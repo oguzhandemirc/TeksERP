@@ -22,10 +22,12 @@ interface Props {
   onClose: () => void;
   /** "Tümü" seçeneği yoksa (kıyas gibi zorunlu seçim) gizlenir. */
   allowAll?: boolean;
+  /** Seçim yokluğunun metni ("Tümü" yerine; ör. kırılımda "Tek"). */
+  allLabel?: string;
 }
 
 /** Çip seçicisi — doğrudan MODAL (combobox yok); "Tümü" bir seçenek değil, seçim yokluğudur. */
-export function ParamPickerDialog({ open, title, options, multiple, selected, onApply, onClose, allowAll = true }: Props) {
+export function ParamPickerDialog({ open, title, options, multiple, selected, onApply, onClose, allowAll = true, allLabel = ALL_LABEL }: Props) {
   const [draft, setDraft] = useState<string[]>([...selected]);
   const [term, setTerm] = useState("");
   // Taslak modal her AÇILIŞTA seçimden kurulur; açıkken üst bileşenin yeniden çizimi taslağı silmesin.
@@ -63,7 +65,7 @@ export function ParamPickerDialog({ open, title, options, multiple, selected, on
         ) : null}
         <div className="max-h-80 overflow-auto rounded-md border p-1" role="listbox" aria-multiselectable={multiple}>
           {allowAll ? (
-            <OptionRow label={ALL_LABEL} active={(multiple ? draft : selected).length === 0} onClick={chooseAll} />
+            <OptionRow label={allLabel} active={(multiple ? draft : selected).length === 0} onClick={chooseAll} />
           ) : null}
           {shown.map((o) => (
             <OptionRow key={o.deger} label={o.etiket} active={(multiple ? draft : selected).includes(o.deger)} onClick={() => pick(o.deger)} />
