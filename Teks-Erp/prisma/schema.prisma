@@ -716,6 +716,15 @@ model User {
   certificateFilesUploaded  CertificateFile[]  @relation("CertificateFileUploadedBy")
   customerLabSpecsCreated   CustomerLabSpec[]  @relation("CustomerLabSpecCreatedBy")
   customerLabSpecsUpdated   CustomerLabSpec[]  @relation("CustomerLabSpecUpdatedBy")
+  // MAL-1 (2026-10-25): atkı kartı + maliyet girdileri künyesi.
+  weftSpecsCreated          WeftSpec[]         @relation("WeftSpecCreatedBy")
+  weftSpecsUpdated          WeftSpec[]         @relation("WeftSpecUpdatedBy")
+  costParameterSetsCreated  CostParameterSet[] @relation("CostParameterSetCreatedBy")
+  costParameterSetsUpdated  CostParameterSet[] @relation("CostParameterSetUpdatedBy")
+  yarnCostPricesCreated     YarnCostPrice[]    @relation("YarnCostPriceCreatedBy")
+  finishingRatesCreated     FinishingRate[]    @relation("FinishingRateCreatedBy")
+  costStructuresCreated     CostStructure[]    @relation("CostStructureCreatedBy")
+  costStructuresUpdated     CostStructure[]    @relation("CostStructureUpdatedBy")
 
   @@map("users")
 }
@@ -1797,6 +1806,63 @@ model WarpSpec {
   @@unique([nameFold])
   @@index([yarnItemId])
   @@map("warp_specs")
+}
+
+/// ATKI KARTI (S2 şema çekirdeği — MAL-1, 2026-10-25, patron kararı seçenek B).
+/// Çözgü kartının (`WarpSpec`) atkı ikizi: bir atkı tanımı N kumaşı besler. Atkı
+/// ipliği TEKİL kolon DEĞİL — rapordaki atkı adedi paylı `WeftSpecYarn` satırlarıdır
+/// (çoklu atkı; DOKUMA-MANUEL-PLAN §S2 notu). Katalog; silinmez, pasife alınır.
+model WeftSpec {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique @db.VarChar(32)
+  name         String   @db.VarChar(100)
+  /// Toplam atkı sıklığı (atkı/cm) — maliyetin `p` çarpanı. CHECK > 0; NULL = bilinmiyor.
+  picksPerCm   Decimal? @db.Decimal(6, 2)
+  /// Sıra/renk notu ("2 siyah 1 sim") — bilgi; pay hesabı `WeftSpecYarn.picksInRepeat`ten.
+  sequenceNote String?  @db.VarChar(300)
+  notes        String?  @db.VarChar(500)
+  isActive     Boolean  @default(true)
+
+  yarns       WeftSpecYarn[]
+  fabricItems Item[]         @relation("ItemWeftSpec")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR (`GENERATED ALWAYS AS (public.tr_fold("name")) STORED`).
+  nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ ──
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("WeftSpecCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("WeftSpecUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  /// AD SEDDİ (WarpSpec emsali; merge tombstone'u yok → koşulsuz).
+  @@unique([nameFold])
+  @@map("weft_specs")
+}
+
+/// ATKI KARTI İPLİK SATIRI — ③b SAF YAPILANDIRMA PİVOTU: gövde REPLACE edilir (audit'e
+/// eski/yeni küme yazılır); parasal sonucu standart maliyet sürümünde DONMUŞTUR (MAL-2).
+/// Pay = `picksInRepeat / Σ picksInRepeat`. İplik YARN ∧ denye dolu (servis 400).
+model WeftSpecYarn {
+  id            String   @id @default(uuid()) @db.Uuid
+  weftSpecId    String   @db.Uuid
+  yarnItemId    String   @db.Uuid
+  /// Rapordaki atkı adedi — CHECK > 0.
+  picksInRepeat Int
+  /// Kart içi sıra — CHECK ≥ 0.
+  sortOrder     Int      @db.SmallInt
+
+  weftSpec WeftSpec @relation(fields: [weftSpecId], references: [id], onDelete: Restrict)
+  yarnItem Item     @relation("WeftSpecYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([weftSpecId, sortOrder])
+  @@index([yarnItemId])
+  @@map("weft_spec_yarns")
 }
 
 // =============================================================================
@@ -3249,6 +3315,20 @@ model Item {
   /// aktarım 0 referans). Kolon Faz 1a'da FK + kısmi index'iyle hazır bırakıldı.
   warpSpecId String? @db.Uuid
 
+  /// ── DOKUMA ÜRÜN YAPISI (S2 şema çekirdeği, MAL-1 2026-10-25 — seçenek B) ──
+  /// HAM en (cm): tezgahtan çıkan kumaşın eni. Maliyette atkı boyunun YEDEK kaynağı
+  /// (`rawWidthCm + weftSelvedgeAllowanceCm`, uyarılı). MAMUL/kart eni için ayrı kolon AÇILMADI:
+  /// kartın eni `widthCm` (K4P) — aynı soruya ikinci cevap olmasın. CHECK > 0.
+  rawWidthCm   Decimal? @db.Decimal(6, 2)
+  /// Ham / mamul gramaj (g/m²) — bilgi; CHECK > 0.
+  rawGsm       Decimal? @db.Decimal(7, 2)
+  finishedGsm  Decimal? @db.Decimal(7, 2)
+  /// Kompozisyon metni ("%100 PES") — bilgi.
+  composition  String?  @db.VarChar(200)
+  /// KUMAŞ → ATKI KARTI (N:1). Yalnız `ItemType.FABRIC` (servis 400). Atkı ipliği(leri)
+  /// kartın `WeftSpecYarn` satırlarındadır; maliyet tel/sıklık kopyası TUTMAZ.
+  weftSpecId   String?  @db.Uuid
+
   // Relations
   rolls                          Roll[]
   orderLines                     OrderLine[]
@@ -3271,6 +3351,14 @@ model Item {
   warpSpec                       WarpSpec?                   @relation("ItemWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ kullanan çözgü kartları (1:N) — silme kapısının bağımlılık kaynağı.
   warpSpecsAsYarn                WarpSpec[]                  @relation("WarpSpecYarn")
+  /// Bu KUMAŞIN atkı kartı (N:1) — dokuma ürün yapısı (MAL-1 / S2).
+  weftSpec                       WeftSpec?                   @relation("ItemWeftSpec", fields: [weftSpecId], references: [id], onDelete: Restrict)
+  /// Bu İPLİĞİ atkı olarak kullanan kart satırları (1:N).
+  weftSpecYarnsAsYarn            WeftSpecYarn[]              @relation("WeftSpecYarnItem")
+  /// İplik maliyet fiyatı sürümleri (MAL-1; damgalı, `ACTIVE_YARN_COST_PRICE`).
+  yarnCostPrices                 YarnCostPrice[]             @relation("YarnCostPriceYarn")
+  /// Kumaşın maliyete özgü ekleri (MAL-1; 1:1, katalog).
+  costStructure                  CostStructure?              @relation("CostStructureItem")
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -3354,6 +3442,7 @@ model Item {
   /// Çözgü kartının "bu çözgü hangi desenleri besliyor" sorgusu + kalıcı silme
   /// kapısının bağımlılık sayımı bu index'ten okur (devere Faz 1a).
   @@index([warpSpecId])
+  @@index([weftSpecId])
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "items_updatedAt_esitleme_idx")
   @@map("items")
@@ -7195,6 +7284,8 @@ model Subcontractor {
   mergedBy       User?           @relation("SubcontractorMergedBy", fields: [mergedById], references: [id])
 
   cariAccount CariAccount?
+  /// Bu firmanın terbiye/fason tarifeleri (MAL-1; damgalı sürüm).
+  finishingRates FinishingRate[] @relation("FinishingRateSubcontractor")
 
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
@@ -12766,4 +12857,161 @@ model ReportSnapshot {
   @@index([createdById])
   @@index([expiresAt])
   @@map("report_snapshots")
+}
+
+// =============================================================================
+// MALİYET & TEKLİF — girdiler (MAL-1, 2026-10-25). Plan: docs/design/MALIYET-TEKLIF-PLAN.md §3.2
+// Modül `maliyet.enabled` (kapı `requireMaliyetEnabled`). Hiçbiri bakiye yürütmez (defter DEĞİL);
+// partial unique'ler ŞEMA-DIŞI (migration `maliyet_girdileri`; envanter `test_db_invariants`).
+// =============================================================================
+
+enum CostParamStatus {
+  DRAFT
+  ACTIVE
+  SUPERSEDED
+}
+
+enum YarnCostPriceSource {
+  MANUAL
+  LAST_RECEIPT
+  PURCHASE_PRICE
+}
+
+enum FinishingBasis {
+  RAW_M
+  FINISHED_M
+}
+
+/// TESİS MALİYET PARAMETRELERİ — DURUM + DONMUŞ SÜRÜM. ACTIVE satır DEĞİŞMEZ: düzenleme =
+/// taslak kopyası → "yürürlüğe al" (tek tx iki claim). Tek ACTIVE + tek DRAFT: DB'de ŞEMA-DIŞI
+/// partial unique `cost_parameter_sets_live_uq (status) WHERE status IN ('DRAFT','ACTIVE')`.
+/// Hard delete yalnız hiç yürürlüğe girmemiş taslakta (④). Yüzdeler `Decimal(5,2)` yüzde.
+model CostParameterSet {
+  id                      String          @id @default(uuid()) @db.Uuid
+  versionNo               Int             @unique
+  status                  CostParamStatus @default(DRAFT)
+  activatedAt             DateTime?       @db.Timestamptz
+  /// Düz UUID (ItemPrice `revokedById` emsali).
+  activatedById           String?         @db.Uuid
+  supersededAt            DateTime?       @db.Timestamptz
+  note                    String?         @db.VarChar(300)
+  loomHourRateTry         Decimal         @db.Decimal(12, 4)
+  laborHourRateTry        Decimal         @db.Decimal(12, 4)
+  loomsPerOperator        Decimal         @db.Decimal(6, 2)
+  energyKwhPerLoomHour    Decimal         @db.Decimal(8, 3)
+  energyPriceTryPerKwh    Decimal         @db.Decimal(10, 4)
+  overheadPct             Decimal         @db.Decimal(5, 2)
+  defaultTakeUpPct        Decimal?        @db.Decimal(5, 2)
+  defaultWarpWastePct     Decimal         @db.Decimal(5, 2)
+  defaultWeftWastePct     Decimal         @db.Decimal(5, 2)
+  defaultFabricWastePct   Decimal         @db.Decimal(5, 2)
+  defaultLoomRpm          Int?
+  defaultEfficiencyPct    Decimal         @db.Decimal(5, 2)
+  beamPrepCostTry         Decimal         @db.Decimal(12, 2)
+  defaultBeamLengthM      Decimal         @db.Decimal(10, 2)
+  weftSelvedgeAllowanceCm Decimal         @db.Decimal(6, 2)
+  defaultMarkupPct        Decimal         @db.Decimal(6, 2)
+  monthlyFinanceRatePct   Decimal?        @db.Decimal(5, 2)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("CostParameterSetCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String?  @db.Uuid
+  updatedBy   User?    @relation("CostParameterSetUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@map("cost_parameter_sets")
+}
+
+/// İPLİK MALİYET FİYATI — ③a TİCARİ PİVOT, DAMGALI SÜRÜM (ItemPrice/MAL-0b emsali): satır
+/// silinmez, fiyat yerinde ezilmez; değişim = eski satırın damgası + yeni satır (aynı tx).
+/// Okuma `ACTIVE_YARN_COST_PRICE` / `yarnCostPriceValidAt` tek kaynağından. İplik başına tek
+/// aktif: ŞEMA-DIŞI partial unique `yarn_cost_prices_active_uq (yarnItemId) WHERE revokedAt IS NULL`.
+/// `item_prices`ten AYRI tablodur (maliyet fiyatı ≠ alış fiyatı).
+model YarnCostPrice {
+  id           String              @id @default(uuid()) @db.Uuid
+  yarnItemId   String              @db.Uuid
+  currency     Currency
+  /// CHECK > 0.
+  pricePerKg   Decimal             @db.Decimal(14, 4)
+  source       YarnCostPriceSource @default(MANUAL)
+  sourceRef    String?             @db.VarChar(64)
+  note         String?             @db.VarChar(300)
+  revokedAt    DateTime?           @db.Timestamptz
+  revokedById  String?             @db.Uuid
+  revokeReason String?             @db.VarChar(300)
+
+  yarnItem Item @relation("YarnCostPriceYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("YarnCostPriceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  // "Fiyat şu tarih itibarıyla" okuması: anahtar + pencere başı.
+  @@index([yarnItemId, createdAt])
+  @@map("yarn_cost_prices")
+}
+
+/// TERBİYE/FASON TARİFESİ — ③a damgalı sürüm (YarnCostPrice ile aynı desen); fiyat değişimi
+/// aynı KODLA yeni satır. Kod başına tek aktif: ŞEMA-DIŞI partial unique
+/// `finishing_rates_active_code_uq (code) WHERE revokedAt IS NULL`.
+model FinishingRate {
+  id               String         @id @default(uuid()) @db.Uuid
+  code             String         @db.VarChar(32)
+  name             String         @db.VarChar(100)
+  subcontractorId  String?        @db.Uuid
+  basis            FinishingBasis
+  currency         Currency
+  /// CHECK ≥ 0.
+  pricePerM        Decimal        @db.Decimal(14, 4)
+  /// Tipik boy çekmesi (%) — CHECK 0 ≤ x < 100.
+  typicalShrinkPct Decimal?       @db.Decimal(5, 2)
+  note             String?        @db.VarChar(300)
+  revokedAt        DateTime?      @db.Timestamptz
+  revokedById      String?        @db.Uuid
+  revokeReason     String?        @db.VarChar(300)
+
+  subcontractor Subcontractor? @relation("FinishingRateSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("FinishingRateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([code, createdAt])
+  @@index([subcontractorId])
+  @@map("finishing_rates")
+}
+
+/// ÜRÜNÜN MALİYETE ÖZGÜ EKLERİ — KATALOG (canlı ayar; parasal sonucu standart maliyet
+/// sürümünde donar). Yalnız kartta OLMAYANLAR; her alan NULL = parametre varsayılanı.
+/// `finishingRateCode` KOD tutar (fiyat değişince yapı değişmez; aktif tarifeye çözülür).
+model CostStructure {
+  id                String   @id @default(uuid()) @db.Uuid
+  itemId            String   @unique @db.Uuid
+  loomRpm           Int?
+  efficiencyPct     Decimal? @db.Decimal(5, 2)
+  warpWastePct      Decimal? @db.Decimal(5, 2)
+  weftWastePct      Decimal? @db.Decimal(5, 2)
+  fabricWastePct    Decimal? @db.Decimal(5, 2)
+  weftLengthCm      Decimal? @db.Decimal(7, 2)
+  beamLengthM       Decimal? @db.Decimal(10, 2)
+  finishingRateCode String?  @db.VarChar(32)
+  lengthShrinkPct   Decimal? @db.Decimal(5, 2)
+  extraCostPerMTry  Decimal? @db.Decimal(12, 4)
+  extraCostLabel    String?  @db.VarChar(100)
+  notes             String?  @db.VarChar(500)
+
+  item Item @relation("CostStructureItem", fields: [itemId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("CostStructureCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String?  @db.Uuid
+  updatedBy   User?    @relation("CostStructureUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("cost_structures")
 }
