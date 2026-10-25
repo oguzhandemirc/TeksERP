@@ -12,6 +12,9 @@ import type { PageRegionKind } from "./editor/documentComponents";
 import { pageDimensions } from "./editor/pageCanvas";
 import { DocTypePickerModal } from "./modals/DocTypePickerModal";
 import { BindingPanel } from "./panels/BindingPanel";
+import { DataTreePanel } from "./panels/DataTreePanel";
+import { DocumentSettingsPanel } from "./panels/DocumentSettingsPanel";
+import { PageSettingsPanel } from "./panels/PageSettingsPanel";
 import { docTypeLabel, useDesignerDraft } from "./useDesignerDraft";
 import { useDesignerEditor, type DesignerRefs } from "./useDesignerEditor";
 
@@ -87,7 +90,13 @@ export default function DesignerWorkspace({ templateId }: Props) {
           <CmRuler widthMm={dim.widthMm} left={frame.left} width={frame.width} />
           <div ref={refs.container} className="min-h-0 flex-1" />
         </div>
-        <DesignerSidebar refs={refs} tab={tab} onTab={setTab} binding={<BindingPanel editor={editor} draft={draft} />} panels={{}} />
+        <DesignerSidebar refs={refs} tab={tab} onTab={setTab} binding={<BindingPanel editor={editor} draft={draft} />}
+          panels={{
+            data: <DataTreePanel editor={editor} draft={draft} />,
+            page: <PageSettingsPanel value={ps} onChange={draft.setPageSettings} />,
+            settings: <DocumentSettingsPanel draft={draft} />,
+          }}
+        />
       </div>
       <DocTypePickerModal open={pickingType} onOpenChange={setPickingType} contracts={draft.contracts} current={draft.docType} onPick={draft.setDocType} />
     </div>
