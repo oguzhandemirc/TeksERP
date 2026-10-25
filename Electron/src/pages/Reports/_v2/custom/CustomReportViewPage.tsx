@@ -71,6 +71,7 @@ export function CustomReportViewPage() {
   return (
     <PageShell>
       <PageHeader
+        className="flex-wrap"
         title={d?.ad ?? "Rapor"}
         description={d ? `${d.kategori.ad}${d.sahip ? ` · ${d.sahip.ad}` : ""}${d.aktifSurum ? ` · Sürüm ${d.aktifSurum.no}` : ""}` : undefined}
         actions={

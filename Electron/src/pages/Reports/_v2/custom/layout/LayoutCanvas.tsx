@@ -71,7 +71,7 @@ function CanvasCard({ block, item, outcome, chartKind, selected, first, last, on
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn("min-w-0", GRID_SPAN_CLASS[item.w] ?? GRID_SPAN_CLASS[12], isDragging && "z-10 opacity-80")}
+      className={cn("min-w-0", GRID_SPAN_CLASS[item.w] ?? GRID_SPAN_CLASS[12], isDragging && "relative z-10 rounded-lg shadow-xl")}
       data-block-id={block.id}
     >
       {item.sayfaKesmesi ? (
