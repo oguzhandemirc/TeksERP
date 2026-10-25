@@ -229,4 +229,7 @@ export function bellHubResetForTest(): void {
 }
 
 // Dağıtıcı turu commit olduktan sonra kutusu değişen kullanıcılarla çağırır (N1-MOTOR kancası).
-setNotificationDeliveredHook((userIds) => ring(userIds, "kutu"));
+setNotificationDeliveredHook((userIds, alarmUserIds) => {
+  ring(userIds, "kutu");
+  ring(alarmUserIds, "alarm");
+});
