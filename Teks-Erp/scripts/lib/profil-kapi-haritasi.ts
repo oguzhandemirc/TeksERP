@@ -23,9 +23,10 @@ export const MODUL_SONDALARI: readonly ModulSondasi[] = [
   { alan: "iplikEnabled", uclar: ["/api/yarn/stocks"] },
   { alan: "devereEnabled", uclar: ["/api/warp-specs"] },
   { alan: "dokumaEnabled", uclar: ["/api/weaving-orders"] },
+  { alan: "maliyetEnabled", uclar: ["/api/cost/parameter-sets"] },
   { alan: "tezgahEnabled", uclar: ["/api/loom-floor"] },
   { alan: "depoMultiEnabled", uclar: ["/api/warehouse-transfers"] },
-  { alan: "kaliteGuvenceEnabled", uclar: ["/api/lab-tests", "/api/lab-test-types"] },
+  { alan: "kaliteGuvenceEnabled", uclar: ["/api/lab-tests", "/api/lab-test-types", "/api/quality-inspections", "/api/four-point-rules"] },
   { alan: "productionEnabled", uclar: ["/api/routes", "/api/product-recipes", "/api/work-orders", "/api/production-balance"] },
 ];
 

@@ -19,6 +19,14 @@ import {
   type PrintResult,
 } from '../offline/printQueue';
 import type { Roll } from '../types/models';
+import type { DevicePeripheral } from '../services/peripheral.service';
+import {
+  DIALOG_TARGET,
+  btTarget,
+  printJobAttachment,
+  reportPrintOutcome,
+  type PrintStep,
+} from '../services/printJob.service';
 
 interface Props {
   /** Etiketi basılacak top. null ise hiçbir şey yapılmaz. */
@@ -153,19 +161,22 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
       // (KK1/Tambur) gate sayesinde her zaman oturumludur; gezici ekranlar (Depo)
       // doğal olarak HTML/expo-print'e düşer. NETWORK_TCP yazıcılar bu yoldan
       // BASILMAZ (backend print-native ayrı akış) — yalnız BLUETOOTH_SPP device-direct.
-      let btPrinterAddr: string | null = null;
+      let btPrinter: DevicePeripheral | null = null;
       if (isBtPrinterSupported() && useSessionStore.getState().active != null) {
         try {
           const printers = await peripheralService.getForSession('LABEL_PRINTER');
-          const spp = printers.find(
-            (p) => p.connectionType === 'BLUETOOTH_SPP' && !!p.address && !p.simulate,
-          );
-          btPrinterAddr = spp?.address ?? null;
+          btPrinter =
+            printers.find((p) => p.connectionType === 'BLUETOOTH_SPP' && !!p.address && !p.simulate) ?? null;
         } catch {
-          btPrinterAddr = null; // çözüm hatası → HTML yoluna düş (aşağıda)
+          btPrinter = null; // çözüm hatası → HTML yoluna düş (aşağıda)
         }
       }
+      const btPrinterAddr = btPrinter?.address ?? null;
       const viaBt = btPrinterAddr != null;
+      // Yazdırma geçmişi künyesi: hangi yazıcı (BT: kayıt + MAC) ve akışın hangi adımı.
+      const target = btPrinter && btPrinterAddr ? btTarget(btPrinter) : DIALOG_TARGET;
+      const startedAt = Date.now();
+      let step: PrintStep = 'fetch';
       // Yerde BT yazıcı tanımlıysa operatör DİYALOGSUZ baskı bekliyor (KK1 peş
       // peşe top akışı — "arada yazdırma ekranı çıkmasın"). Bu modda HTML/expo-print
       // diyaloğuna ASLA düşme: başarısızlık sessizce yazdırma ekranı açmak yerine
@@ -190,6 +201,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
             rasterEnabledRef.current,
           );
           phase = 'prep'; // fetch bitti — dil doğrulaması ağ hatası DEĞİLDİR
+          step = 'lang';
           // FAIL-CLOSED: yalnız bilinen native dil ham gönderilir. RASTER_HTML/boş/
           // bilinmeyen → diyaloğa düşmek yerine NET hata (akış ortasında yazdırma
           // ekranı çıkmasın; çöp etiket de basılmasın).
@@ -201,7 +213,9 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
           // İlk baskıda otomatik eşleştir (bond yoksa) — Bluetooth ayarlarına girmeden.
           // Zaten eşleşikse no-op; değilse Android PIN'i bir kez sorar, sonra basar.
           phase = 'output';
+          step = 'pair';
           await ensurePrinterPaired(btPrinterAddr);
+          step = 'send';
           if (native.encoding === 'base64') {
             // Raster: base64 → ham byte (atob = latin1 binary string) → chunk'lı BT gönderim
             // (HC-06 buffer'ını taşırmadan). Komut yolu base64 gelse de aynı yol byte-güvenli.
@@ -230,6 +244,7 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
             throw new Error('Etiket HTML alınamadı');
           }
           phase = 'output';
+          step = 'dialog';
           // margins: 0 → expo-print default kenar payını sıfırlar. Aksi halde
           // HTML'deki @page { margin: 0 } iOS/Android WebKit print preview'a
           // tam yansımıyor, etiket sayfanın sol üst köşesinden 4-5mm aşağıda
@@ -249,7 +264,8 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
         // Niyet YUKARIDA seedSnapshot ile zaten kalıcı. Burada — yalnız GERÇEK
         // baskı tamamlandığında — LABEL_PRINTED audit'i düş (iptal/hata catch'e
         // gider, audit YAZILMAZ → "basıldı" yalanı olmaz). best-effort.
-        labelService.recordPrintEvent(jobRoll.id, jobContext).catch((e) => {
+        // Künye aynı çağrıya eklenir: başarı satırı iş ucundan doğar, `/print-jobs`a gitmez.
+        labelService.recordPrintEvent(jobRoll.id, jobContext, printJobAttachment(target, startedAt, jobCopies)).catch((e) => {
           console.warn('Baskı audit kaydı başarısız', (e as Error).message);
         });
       } catch (err) {
@@ -263,6 +279,15 @@ export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, o
         // Print.printAsync native hatası mı, eksik PrintSpooler mı). Kök neden
         // bulununca bu satır kaldırılacak.
         console.warn('[LabelPrinter] print failed:', msg, err);
+        // Hata/iptal Yazdırma geçmişine (kalıcı kuyruk; çevrimdışında bekler).
+        reportPrintOutcome({
+          subject: { subjectKind: 'ETIKET_TOP', subjectTable: 'rolls', subjectId: jobRoll.id, subjectNo: jobRoll.barcode ?? undefined, copies: jobCopies },
+          target,
+          startedAt,
+          status: isCancel ? 'IPTAL' : 'HATA',
+          step,
+          error: err,
+        });
         onResultRef.current?.({
           ok: false,
           cancelled: isCancel,

@@ -8,13 +8,16 @@
 // kıyas "ölçülemedi" (0 DEĞİL).
 
 import { factoryDateTr, factoryYmd } from "../../../constants/time";
+import { factoryPreviousMonthEnd } from "./_day-range";
 import { chequeService, type ChequeDueSummary } from "../../cheque.service";
 import { anlatiUret } from "../anlati/anlati";
 import { getAgingReport, type AgingCurrencyBlock } from "../finance-aging.report";
 import type { AnaSayi, Birim, GrafikBlok, TabloBlok } from "../sunum/sunum.types";
 import { capTable, catalogHeader, definitionsOf, metricFigure, plainFigure, singleCurrencyUnit, type CoreReportResult } from "./_common";
 
-export const NO_MONTH_END_RECEIVABLES = "Geçen ay sonuyla kıyas için ay sonu alacak görüntüsü birikmeli; şimdilik kıyas yapılamıyor.";
+export const NO_MONTH_END_RECEIVABLES = "Geçen ay sonunda bu para biriminde açık alacak bulunmadığından kıyas yapılamıyor.";
+/** Geçen ay sonu değeri görüntüden değil defterden kurulur; ölçülen sapma kaynağı (R1-ZAMAN) beyan edilir. */
+export const MONTH_END_REBUILT = "Kıyas, geçen ay sonundaki vadesi geçmiş alacağın defterden yeniden kurulmuş hâlidir; o tarihten sonra değişen cari vade günü ve geriye tarihli girilen belgeler o gün görülen değerden ayırabilir.";
 const MAIN_CURRENCY = "TRY";
 
 /** Ana sayının bloğu: TL varsa TL, yoksa tek blok; birden çok yabancı birim varsa seçilmez (toplanmaz). */
@@ -28,13 +31,16 @@ export function receivedChequesDue(due: ChequeDueSummary, currency: string): num
 }
 
 export async function buildReceivablesReport(asOf: Date): Promise<CoreReportResult> {
-  const [aging, dueRes] = await Promise.all([getAgingReport({ asOf }), chequeService.dueSummary()]);
+  const monthEnd = factoryPreviousMonthEnd(asOf);
+  const [aging, dueRes, prevAging] = await Promise.all([getAgingReport({ asOf }), chequeService.dueSummary(), getAgingReport({ asOf: monthEnd })]);
   const due = dueRes.data!;
   const block = mainBlock(aging.blocks);
   const unit: Birim | null = block ? singleCurrencyUnit([block]) : null;
+  // Geçen ay sonu aynı yaşlandırmanın kesite çekilmiş hâlidir (ölçüm: R1-ZAMAN PR); o birimde blok yoksa ölçülemedi, 0 değil.
+  const prevBlock = block ? prevAging.blocks.find((b) => b.currency === block.currency) ?? null : null;
 
   const mainFigure: AnaSayi = block && unit
-    ? metricFigure("alacak.vadesiGecmis", Number(block.totals.overdueTotal), { unit, previous: null })
+    ? metricFigure("alacak.vadesiGecmis", Number(block.totals.overdueTotal), { unit, previous: prevBlock ? Number(prevBlock.totals.overdueTotal) : null })
     : plainFigure("alacak.vadesiGecmis", "Vadesi geçmiş alacak", null, {
         unit: "TRY",
         direction: "asagi",
@@ -90,6 +96,7 @@ export async function buildReceivablesReport(asOf: Date): Promise<CoreReportResu
     sunum: {
       ...catalogHeader("finance/alacaklar"),
       donem: { from: iso, to: iso, etiket: `${factoryDateTr(asOf)} itibarıyla` },
+      ...(block ? { kiyasDonemi: { from: monthEnd.toISOString(), to: monthEnd.toISOString(), etiket: `${factoryDateTr(monthEnd)} ay sonu` } } : {}),
       anaSayi: mainFigure,
       yanSayilar: sideFigures,
       anlati,
@@ -98,7 +105,7 @@ export async function buildReceivablesReport(asOf: Date): Promise<CoreReportResu
       tanimlar: definitionsOf(["alacak.vadesiGecmis", "cek.yaklasanVade"]),
       parametreler: [{ ad: "asOf", etiket: "Tarih", tur: "tarih", deger: iso }],
       uyarilar: [
-        NO_MONTH_END_RECEIVABLES,
+        ...(block ? [prevBlock ? MONTH_END_REBUILT : NO_MONTH_END_RECEIVABLES] : []),
         ...(factoryYmd(asOf) !== due.today ? [`Çek vadeleri seçilen tarihten değil bugünden (${due.today}) itibaren sayıldı.`] : []),
         ...(otherCurrencies.length ? [`Diğer para birimleri (${otherCurrencies.join(", ")}) tabloda kendi biriminde; tutarlar toplanmaz.`] : []),
         ...capped.uyarilar,

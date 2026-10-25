@@ -43,6 +43,7 @@ import {
   factoryDayKeyUtcMidnight,
   factoryYmd,
 } from "../src/constants/time";
+import { factoryPreviousMonthEnd } from "../src/services/reports/temel/_day-range";
 import { getSystemLogSummary } from "../src/services/reports/audit.report.service";
 import type { DateRange } from "../src/services/reports/_shared";
 
@@ -179,6 +180,13 @@ async function main(): Promise<void> {
     naiveWeek === "2026-10-12" && naiveWeek !== factoryWeek,
     `çıplak=${naiveWeek} · fabrika=${factoryWeek}`
   );
+  // Ay sonu kesiti (R1-ZAMAN `factoryPreviousMonthEnd`): 1 Ekim 00:30 yerel = UTC'de 30 Eylül 21:30 —
+  // UTC takvimiyle "önceki ay sonu" 31 Ağustos'a kayar. SONDA (2026-10-25): gövde `factoryYmd` yerine
+  // `toISOString()` ayı → ilk kontrol ❌ (1; ikincisi UTC ile aynı günde kalır).
+  const monthEdge = new Date("2026-09-30T21:30:00.000Z");
+  check("factoryPreviousMonthEnd 1 Ekim 00:30 yerelinde Eylül sonunu verir", factoryPreviousMonthEnd(monthEdge).toISOString() === "2026-09-30T20:59:59.999Z", factoryPreviousMonthEnd(monthEdge).toISOString());
+  check("factoryPreviousMonthEnd ay içinde de aynı sınırı verir (30 Eylül 23:59 yerel → Ağustos sonu)",
+    factoryPreviousMonthEnd(new Date("2026-09-30T20:59:00.000Z")).toISOString() === "2026-08-31T20:59:59.999Z");
 
   // ── 3) Uçtan uca: audit `daily` serisi ────────────────────────────────────
   cephe(3);

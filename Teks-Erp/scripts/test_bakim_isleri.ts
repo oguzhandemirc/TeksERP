@@ -12,6 +12,9 @@
 //      aylık dilim filigrandan kesime ilerler; DB'de 3 yıldan eski satır gider, gencine dokunulmaz.
 //   §5 B2: altı tabloda autovacuum reloptions DB'de.
 //   §6 negatif sondalar (her koşumda): bozuk seçici/pencere/kesim/kayıt → ilgili kontrol kırmızı.
+//   §7 rapor budaması (R1-ZAMAN): görev kayıtlı; DB'de 90 günden eski koşu gider, genci kalır; süresi
+//      dolmuş ZAMANLANMIS görüntü gider, KULLANICI görüntüsü (süresi dolmuş olsa da) ve süresi dolmamış kalır.
+//      Negatif sonda (2026-10-25): budayıcının `kind` süzgeci kaldırılınca §7b ❌ (KULLANICI görüntüsü gitti).
 // DB GEREKTİRİR (§4c, §5) ve YAZAR: kapı dosyanın ilk ifadesi.
 // =============================================================================
 import fs from "node:fs";
@@ -223,6 +226,46 @@ async function relOptions(): Promise<string[]> {
   return ih;
 }
 
+async function raporBudamasi(): Promise<string[]> {
+  const prisma = (await import("../src/lib/prisma")).default;
+  const { pruneReportRuns, pruneExpiredScheduledSnapshots } = await import("../src/services/report-prune.service");
+  const ETIKET = "BEKCI_BAKIM_RAPOR";
+  const now = new Date();
+  const { testActorId } = await import("./fixture-test-user");
+  const user = { id: await testActorId() };
+  const cat = await prisma.reportCategory.create({ data: { code: ETIKET, name: ETIKET } });
+  const def = await prisma.reportDefinition.create({ data: { kind: "OZEL", name: ETIKET, categoryId: cat.id, ownerId: user.id } });
+  try {
+    const run = (ad: string, yas: number) => prisma.reportRun.create({
+      data: { paramsDigest: `${ETIKET}_${ad}`, userId: user.id, status: "TAMAM", createdAt: new Date(now.getTime() - yas * DAY), startedAt: new Date(now.getTime() - yas * DAY) },
+    });
+    const eski = await run("eski", 91);
+    const genc = await run("genc", 89);
+    const snap = (ad: string, kind: string, bitis: number | null) => prisma.reportSnapshot.create({
+      data: { definitionId: def.id, runId: eski.id, params: { ad }, result: {}, kind, expiresAt: bitis === null ? null : new Date(now.getTime() + bitis * DAY), createdById: kind === "KULLANICI" ? user.id : null },
+    });
+    await snap("zamanlanmisBitti", "ZAMANLANMIS", -1);
+    await snap("zamanlanmisSuruyor", "ZAMANLANMIS", 1);
+    await snap("kullaniciBitti", "KULLANICI", -1);
+    await snap("kullaniciSuresiz", "KULLANICI", null);
+    await pruneReportRuns(now);
+    await pruneExpiredScheduledSnapshots(now);
+    const out: string[] = [];
+    const runs = (await prisma.reportRun.findMany({ where: { id: { in: [eski.id, genc.id] } }, select: { paramsDigest: true } })).map((r) => r.paramsDigest.replace(`${ETIKET}_`, "")).sort().join(",");
+    if (runs !== "genc") out.push(`kalan koşular: ${runs || "—"} (beklenen genc)`);
+    const snaps = await prisma.reportSnapshot.findMany({ where: { definitionId: def.id }, select: { params: true, runId: true } });
+    const adlar = snaps.map((x) => (x.params as { ad: string }).ad).sort().join(",");
+    if (adlar !== "kullaniciBitti,kullaniciSuresiz,zamanlanmisSuruyor") out.push(`kalan görüntüler: ${adlar || "—"} (beklenen kullaniciBitti,kullaniciSuresiz,zamanlanmisSuruyor)`);
+    if (snaps.some((x) => x.runId !== null)) out.push("budanan koşunun görüntüsü runId taşıyor (SET NULL beklenir)");
+    return out;
+  } finally {
+    await prisma.reportSnapshot.deleteMany({ where: { definitionId: def.id } });
+    await prisma.reportRun.deleteMany({ where: { paramsDigest: { startsWith: ETIKET } } });
+    await prisma.reportDefinition.delete({ where: { id: def.id } });
+    await prisma.reportCategory.delete({ where: { id: cat.id } });
+  }
+}
+
 async function main(): Promise<void> {
   console.log("=== GECE BAKIM İŞLERİ ===\n");
   const kaynak = {
@@ -261,6 +304,11 @@ async function main(): Promise<void> {
 
   const ro = await relOptions();
   check("§5 B2: altı tabloda autovacuum 0.02 / analyze 0.01", ro.length === 0, ro.join(" | "));
+
+  console.log("\n=== §7 RAPOR BUDAMASI (R1-ZAMAN) ===");
+  check("§7a rapor budaması bakım görevlerinde kayıtlı", /name: "report-run-prune"/.test(kaynak.job) && /pruneReportRuns\(\)/.test(kaynak.job) && /pruneExpiredScheduledSnapshots\(\)/.test(kaynak.job));
+  const rb = await raporBudamasi();
+  check("§7b ⭐ DB: 90 günden eski koşu + süresi dolmuş ZAMANLANMIS görüntü gider; KULLANICI görüntüsü kalır", rb.length === 0, rb.join(" | "));
 
   console.log("\n=== §6 SONDALAR ===");
   const sonda = (ad: string, ihlal: string[]): void => check(`§6 sonda: ${ad} → kırmızı`, ihlal.length > 0);

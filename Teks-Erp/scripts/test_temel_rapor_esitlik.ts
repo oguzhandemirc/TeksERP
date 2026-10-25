@@ -84,7 +84,12 @@ import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
 import { buildLoomEfficiencyReport, efficiencyReasonText } from "../src/services/reports/temel/tezgah-randimani.temel";
 import { buildLoomStopsReport, mostFrequentReason, secondsToMinutes } from "../src/services/reports/temel/duruslar.temel";
 import { beamBalance, buildBeamBalanceReport } from "../src/services/reports/temel/levent-dengesi.temel";
-import { buildReceivablesReport, mainBlock, NO_MONTH_END_RECEIVABLES, receivedChequesDue } from "../src/services/reports/temel/alacaklar.temel";
+import { buildReceivablesReport, mainBlock, MONTH_END_REBUILT, NO_MONTH_END_RECEIVABLES, receivedChequesDue } from "../src/services/reports/temel/alacaklar.temel";
+import { factoryPreviousMonthEnd } from "../src/services/reports/temel/_day-range";
+import { invoiceService } from "../src/services/invoice.service";
+import { paymentService } from "../src/services/payment.service";
+import { paymentAllocationService } from "../src/services/payment-allocation.service";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { durusParetoReport, efficiencyReport } from "../src/services/reports/dokuma.report.service";
 import { capacityUsageReport } from "../src/services/reports/kapasite-kullanimi.report.service";
 import { alarmResponseReport } from "../src/services/reports/alarm-response.report.service";
@@ -442,8 +447,15 @@ async function rapcSection(): Promise<void> {
   if (block) {
     const due = (await chequeService.dueSummary()).data!;
     check("§C4b yan = 30 gün içinde vadesi gelecek ALINAN çek (`months[]`)", same(fig(rec, "cek.yaklasanVade")?.deger, Math.round(receivedChequesDue(due, block.currency) * 100) / 100));
-    check("§C4c kesit kıyası ölçülemedi + ay sonu uyarısı (0'a çökmez)", rec.anaSayi.kiyas?.deger === null && rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES));
-  } else check("§C4c ay sonu uyarısı (blok yok)", rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES));
+    // R1-ZAMAN: kıyas = aynı yaşlandırmanın geçen ay sonu kesiti; o birimde blok yoksa ölçülemedi (0'a çökmez).
+    const prev = (await getAgingReport({ asOf: factoryPreviousMonthEnd(asOf) })).blocks.find((b) => b.currency === block.currency);
+    check("§C4c kıyas = geçen ay sonu kesitinin vadesi geçmişi (yoksa ölçülemedi + uyarı)",
+      prev
+        ? same(rec.anaSayi.kiyas?.deger, Number(prev.totals.overdueTotal)) && rec.uyarilar.includes(MONTH_END_REBUILT)
+        : rec.anaSayi.kiyas?.deger === null && rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES),
+      show(rec.anaSayi.kiyas?.deger ?? null, prev?.totals.overdueTotal ?? null));
+    check("§C4e kıyas dönemi geçen ay sonunun son anı", rec.kiyasDonemi?.to === factoryPreviousMonthEnd(asOf).toISOString());
+  } else check("§C4c blok yokken ay sonu uyarısı basılmaz", !rec.uyarilar.includes(NO_MONTH_END_RECEIVABLES) && !rec.uyarilar.includes(MONTH_END_REBUILT));
   const fakeBlock = (currency: string) => ({ currency, totals: { overdueTotal: "1" } }) as unknown as Parameters<typeof mainBlock>[0][number];
   check("§C4d para birimleri toplanmaz: TL varsa TL, iki yabancı birimde ana sayı seçilmez",
     mainBlock([fakeBlock("USD"), fakeBlock("TRY")])?.currency === "TRY" && mainBlock([fakeBlock("USD"), fakeBlock("EUR")]) === null && mainBlock([fakeBlock("EUR")])?.currency === "EUR");
@@ -749,6 +761,113 @@ async function cleanupSales(): Promise<void> {
   await prisma.customer.deleteMany({ where: { id: { in: salesIds.customers } } });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// § Geçmiş kesit (R1-ZAMAN) — "defterden yeniden kurulan T kesiti = T anında alınmış kesit" mi?
+// T anında yaşlandırma alınır (görüntü), sonra T'den SONRA olaylar yazılır ve T kesiti yeniden kurulur.
+// Beklenen: sonraki kapama/iptal/geri alma sapma DOĞURMAZ; cari vade günü değişimi ve geriye tarihli
+// belge sapma doğurur (ölçülen ve uyarıda beyan edilen iki kaynak). Negatif sonda (2026-10-25):
+// yaşlandırmanın kapama geri sarması (`"createdAt" > asOf`) kaldırılınca 5 ❌ (§Z1–§Z5) · alacaklarda önceki
+// değer `null`a çekilince 1 ❌ (§Z6).
+// ─────────────────────────────────────────────────────────────────────────────
+async function pastSnapshotSection(): Promise<void> {
+  console.log("\n=== § Geçmiş kesit — alacaklar (R1-ZAMAN) ===");
+  const TAG = `TEST-R1Z-${Date.now()}`;
+  const DAY = 24 * 60 * 60 * 1000;
+  const invoiceIds: string[] = [];
+  const paymentIds: string[] = [];
+  const customer = await prisma.customer.create({ data: { code: TAG, name: `${TAG} Müşteri` }, select: { id: true } });
+  const box = await prisma.cashBox.create({ data: { code: TAG.slice(0, 32), name: `${TAG} Kasa`, currency: "TRY" }, select: { id: true } });
+  let cariId: string | null = null;
+  const invoice = async (total: number, issueAgo: number, dueAgo: number | null): Promise<string> => {
+    const now = Date.now();
+    const r = await invoiceService.createDraft({
+      type: "SALES", customerId: customer.id, currency: "TRY", issueDate: new Date(now - issueAgo * DAY),
+      dueDate: dueAgo === null ? null : new Date(now - dueAgo * DAY),
+      lines: [{ description: `${TAG} satır`, qty: 1, unit: "m", unitPrice: total, vatRate: 0 }],
+    });
+    invoiceIds.push(r.data.id);
+    await invoiceService.confirm(r.data.id);
+    return r.data.id;
+  };
+  const payment = async (amount: number): Promise<string> => {
+    const r = await paymentService.create({ direction: "IN", method: "CASH", customerId: customer.id, currency: "TRY", amount, cashBoxId: box.id });
+    paymentIds.push(r.data.id);
+    return r.data.id;
+  };
+  const overdueAt = async (at: Date): Promise<number> => {
+    const b = (await getAgingReport({ asOf: at, cariId: cariId! })).blocks.find((x) => x.currency === "TRY");
+    return b ? Number(b.totals.overdueTotal) : 0;
+  };
+  try {
+    await withFlags({ [SETTING_KEYS.FINANCE_ENABLED]: true, [SETTING_KEYS.FINANCE_AUTO_ALLOCATE_ON_PAYMENT_ENABLED]: false }, async () => {
+      // T öncesi: vadeli 1000 · vadesiz 500 (cari vade 30 gün) · 800'lük fatura + 300 kapama · sonra iptal edilecek 700.
+      const inv1 = await invoice(1000, 60, 30);
+      cariId = (await prisma.cariAccount.findFirstOrThrow({ where: { customerId: customer.id }, select: { id: true } })).id;
+      await prisma.cariAccount.update({ where: { id: cariId }, data: { paymentTermDays: 30 } });
+      await invoice(500, 60, null);
+      const inv3 = await invoice(800, 50, 20);
+      const pay3 = await payment(800);
+      const early = await paymentAllocationService.allocate({ invoiceId: inv3, paymentId: pay3, amount: 300 });
+      const inv4 = await invoice(700, 40, 10);
+      await new Promise((r) => setTimeout(r, 20));
+      const T = new Date();
+      const snapshot = await overdueAt(T);
+      await new Promise((r) => setTimeout(r, 20));
+      check("§Z0 körlük zemini: T anı kesitinde vadesi geçmiş alacak var", snapshot > 0, `${snapshot}`);
+
+      await paymentAllocationService.allocate({ invoiceId: inv3, paymentId: pay3, amount: 500 });
+      const afterAlloc = await overdueAt(T);
+      await invoiceService.cancel(inv4, "R1-ZAMAN ölçümü");
+      const afterCancel = await overdueAt(T);
+      await paymentAllocationService.deallocate(early.data.id);
+      const afterRevoke = await overdueAt(T);
+      await prisma.cariAccount.update({ where: { id: cariId }, data: { paymentTermDays: 90 } });
+      const afterTerm = await overdueAt(T);
+      await prisma.cariAccount.update({ where: { id: cariId }, data: { paymentTermDays: 30 } });
+      await invoice(200, 60, 30);
+      const afterBackdated = await overdueAt(T);
+      console.log(`   ⓘ ölçüm (TRY): görüntü ${snapshot} · sonraki kapama ${afterAlloc} · iptal ${afterCancel} · kapama geri alma ${afterRevoke} · vade günü 30→90 ${afterTerm} · geriye tarihli belge ${afterBackdated}`);
+      check("§Z1 ⭐ T'den sonraki kapama T kesitini değiştirmez (geri sarılır)", afterAlloc === snapshot, show(afterAlloc, snapshot));
+      check("§Z2 ⭐ T'den sonraki fatura iptali T kesitini değiştirmez", afterCancel === snapshot, show(afterCancel, snapshot));
+      check("§Z3 T'den önceki kapamanın sonradan geri alınması TOPLAMI değiştirmez (sanal mahsup karşılar)", afterRevoke === snapshot, show(afterRevoke, snapshot));
+      check("§Z4 ⭐ ölçülen sapma: cari vade günü değişimi vadesiz faturayı kovadan çıkarır (uyarıda beyanlı)", afterTerm === snapshot - 500 && MONTH_END_REBUILT.includes("vade günü"), show(afterTerm, snapshot - 500));
+      check("§Z5 ⭐ ölçülen sapma: geriye tarihli belge geçmiş kesite girer (uyarıda beyanlı)", afterBackdated === snapshot + 200 && MONTH_END_REBUILT.includes("geriye tarihli"), show(afterBackdated, snapshot + 200));
+      // Rapor yolu: kıyas = aynı yaşlandırmanın geçen ay sonu kesiti (fikstür 60 gün önce düzenlendi → ay sonunda var).
+      const nowAt = new Date();
+      const rec = (await buildReceivablesReport(nowAt)).sunum;
+      const prevB = (await getAgingReport({ asOf: factoryPreviousMonthEnd(nowAt) })).blocks.find((b) => b.currency === "TRY");
+      check("§Z6 ⭐ alacaklar kıyası = geçen ay sonu kesiti (ölçülemedi DEĞİL) + defterden kuruldu uyarısı",
+        Boolean(prevB) && same(rec.anaSayi.kiyas?.deger, Number(prevB!.totals.overdueTotal)) && rec.uyarilar.includes(MONTH_END_REBUILT)
+          && rec.kiyasDonemi?.to === factoryPreviousMonthEnd(nowAt).toISOString(),
+        show(rec.anaSayi.kiyas?.deger ?? null, prevB?.totals.overdueTotal ?? null));
+      void inv1;
+    });
+  } finally {
+    if (invoiceIds.length > 0) await prisma.paymentAllocation.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+    if (paymentIds.length > 0) await prisma.paymentAllocation.deleteMany({ where: { paymentId: { in: paymentIds } } });
+    if (invoiceIds.length > 0) {
+      await prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+      await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+      await prisma.printedDocument.deleteMany({ where: { sourceId: { in: invoiceIds } } });
+      await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+    }
+    if (paymentIds.length > 0) {
+      await prisma.cariTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } });
+      await prisma.printedDocument.deleteMany({ where: { sourceId: { in: paymentIds } } });
+      await prisma.cashTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } });
+      await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
+    }
+    if (cariId) {
+      await prisma.cariTransaction.deleteMany({ where: { cariId } });
+      await prisma.cariBalance.deleteMany({ where: { cariId } });
+      await prisma.cariAccount.deleteMany({ where: { id: cariId } });
+    }
+    await prisma.cashTransaction.deleteMany({ where: { cashBoxId: box.id } });
+    await prisma.cashBox.deleteMany({ where: { id: box.id } });
+    await prisma.customer.deleteMany({ where: { id: customer.id } });
+  }
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -769,6 +888,7 @@ async function main(): Promise<void> {
   } finally {
     await cleanup();
   }
+  await pastSnapshotSection();
 }
 
 main()

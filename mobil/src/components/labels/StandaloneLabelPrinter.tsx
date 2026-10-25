@@ -3,15 +3,19 @@ import { printHtml } from '../../services/printHtml';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 import { labelTemplateService } from '../../services/labelTemplate.service';
-import { peripheralService } from '../../services/peripheral.service';
-import { useSessionStore } from '../../store/sessionStore';
+import { resolveBtPrinter } from '../../services/resolveBtPrinter';
 import {
-  isBtPrinterSupported,
   printRaw,
   printRawBytes,
   ensurePrinterPaired,
 } from '../../services/btPrinter.service';
 import { useMobileRasterEnabled } from '../../hooks/useFeatureFlags';
+import {
+  DIALOG_TARGET,
+  btTarget,
+  reportPrintOutcome,
+  type PrintStep,
+} from '../../services/printJob.service';
 
 /** Basılacak serbest etiket işi. null → hiçbir şey yapılmaz. */
 export interface StandaloneLabelJob {
@@ -79,22 +83,17 @@ export function StandaloneLabelPrinter({ job, onDone, onResult }: Props) {
     const current = job;
     chainRef.current = chainRef.current.then(async () => {
       const { templateId, copies } = current;
+      const subject = { subjectKind: 'ETIKET_SERBEST' as const, subjectTable: 'label_templates' as const, subjectId: templateId, copies };
       // Yazıcı OPERATÖR SEÇİMİ DEĞİL — aktif oturumun YERİNE bağlı BT yazıcı
       // backend'den çözülür (fail-closed: oturum yoksa / SPP yoksa BT yolu
       // denenmez). Yalnız BLUETOOTH_SPP device-direct; NETWORK_TCP bu yoldan basmaz.
-      let btPrinterAddr: string | null = null;
-      if (isBtPrinterSupported() && useSessionStore.getState().active != null) {
-        try {
-          const printers = await peripheralService.getForSession('LABEL_PRINTER');
-          const spp = printers.find(
-            (p) => p.connectionType === 'BLUETOOTH_SPP' && !!p.address && !p.simulate,
-          );
-          btPrinterAddr = spp?.address ?? null;
-        } catch {
-          btPrinterAddr = null; // çözüm hatası → HTML yoluna düş (aşağıda)
-        }
-      }
+      const btPrinter = await resolveBtPrinter();
+      const btPrinterAddr = btPrinter?.address ?? null;
       const viaBt = btPrinterAddr != null;
+      // Yazdırma geçmişi künyesi: hangi yazıcı (BT: kayıt + MAC) ve akışın hangi adımı.
+      const target = btPrinter && btPrinterAddr ? btTarget(btPrinter) : DIALOG_TARGET;
+      const startedAt = Date.now();
+      let step: PrintStep = 'fetch';
       // Yerde BT yazıcı tanımlıysa diyalogsuz baskı beklenir — expo-print/HTML
       // diyaloğuna ASLA düşme; başarısızlık GÖRÜNÜR hata olsun.
       const directOnly = viaBt;
@@ -110,12 +109,15 @@ export function StandaloneLabelPrinter({ job, onDone, onResult }: Props) {
           );
           // FAIL-CLOSED: yalnız bilinen native dil ham gönderilir. RASTER_HTML/boş/
           // bilinmeyen → diyaloğa düşmek yerine NET hata.
+          step = 'lang';
           if (!['PPLA', 'PPLB', 'ZPL'].includes(native.language) || !native.content) {
             throw new Error(
               'Yazıcının dili çözülemedi — Tanımlar → Donanım’da bu makinenin yazıcısını ve dilini kontrol edin.',
             );
           }
+          step = 'pair';
           await ensurePrinterPaired(btPrinterAddr);
+          step = 'send';
           if (native.encoding === 'base64') {
             // Raster: base64 → ham byte (atob = latin1 binary string) → chunk'lı gönderim.
             await printRawBytes(btPrinterAddr, atob(native.content));
@@ -131,19 +133,24 @@ export function StandaloneLabelPrinter({ job, onDone, onResult }: Props) {
           }
           // margins: 0 → expo-print default kenar payını sıfırlar (fiziksel yazıcı
           // yine de küçük donanım payı bırakabilir).
+          step = 'dialog';
           await printHtml({
             html,
             margins: { left: 0, top: 0, right: 0, bottom: 0 },
           });
         }
+        // Serbest etiketin iş ucu yok: sonuç doğrudan Yazdırma geçmişine (BT kabul etti →
+        // ILETILDI; sistem penceresi "tamamlandı" kâğıdı kanıtlamaz → BELIRSIZ).
+        reportPrintOutcome({ subject, target, startedAt, status: usedBt ? 'ILETILDI' : 'BELIRSIZ' });
         if (!mountedRef.current) return;
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         onResultRef.current?.({ ok: true, cancelled: false });
       } catch (err) {
-        if (!mountedRef.current) return;
         const msg = (err as Error).message ?? '';
         // İptal yalnız expo-print (HTML) yolunda olur; BT'ye gittiyse her hata gerçek.
         const isCancel = !usedBt && /did not complete|cancel/i.test(msg);
+        reportPrintOutcome({ subject, target, startedAt, status: isCancel ? 'IPTAL' : 'HATA', step, error: err });
+        if (!mountedRef.current) return;
         console.warn('[StandaloneLabelPrinter] print failed:', msg, err);
         onResultRef.current?.({ ok: false, cancelled: isCancel, error: msg });
         void Haptics.notificationAsync(

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { installPrintReportFlush } from '../services/printJob.service';
 import { markLinkSuspect } from '../services/hal/btClassic.transport';
 import { AppState, View, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
@@ -26,6 +27,7 @@ import PlaceHardwareScreen from '../screens/Common/settings/PlaceHardwareScreen'
 import ScannerSettingsScreen from '../screens/Common/settings/ScannerSettingsScreen';
 import UpdateSettingsScreen from '../screens/Common/settings/UpdateSettingsScreen';
 import { SurumNotlariScreen } from '../screens/Common/settings/SurumNotlariScreen';
+import { PrintReportsScreen } from '../screens/Common/settings/PrintReportsScreen';
 import WorkPreferencesScreen from '../screens/Common/settings/WorkPreferencesScreen';
 import LicenseSettingsScreen from '../screens/Common/settings/LicenseSettingsScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
@@ -131,6 +133,8 @@ export default function RootNavigator() {
     void initDevice();
     void initDeviceSettings();
     loadStoredAuth();
+    // Basım raporları (Yazdırma geçmişi): diskten yükle; çevrimiçi kenarında ve girişte boşalt.
+    installPrintReportFlush();
     void initBaseUrl().then(() => void announce());
     // İlk açılışta adres sonradan girilir: boş → dolu geçişinde hemen bildir (adresi olan kurulumda hiç tetiklenmez).
     const unsubBaseUrl = useBaseUrlStore.subscribe((state, prev) => {
@@ -271,6 +275,11 @@ export default function RootNavigator() {
         <Stack.Screen
           name="SettingsSurumNotlari"
           component={SurumNotlariScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="SettingsPrintReports"
+          component={PrintReportsScreen}
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
