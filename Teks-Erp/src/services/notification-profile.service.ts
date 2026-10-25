@@ -17,6 +17,7 @@ import {
   notificationFactoryParamsSchema,
 } from "../constants/notification-preference";
 import { tokenReplay } from "./helpers/token-replay.helper";
+import { blindMemberCounts } from "./notification-profile-audience.service";
 import { parseKindParams, refreshNotificationParams } from "./helpers/notification-params.helper";
 
 const PROFILE_SELECT = {
@@ -57,7 +58,10 @@ export async function listProfiles(query: Record<string, unknown>) {
     select: PROFILE_SELECT,
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
-  return { items: rows.map(profileView) };
+  const blind = await blindMemberCounts(rows.flatMap((r) => r.members.map((m) => m.userId)));
+  return {
+    items: rows.map((r) => ({ ...profileView(r), izinsizUyeler: blind(r.members.map((m) => m.userId)) })),
+  };
 }
 
 export const CreateProfileBody = z
@@ -110,10 +114,25 @@ export async function updateProfile(id: string, body: unknown, userId: string) {
   return loadProfile(id);
 }
 
-/** Silme = arşiv (durum geçişi); arşivli profil çözüme katılmaz, hücre/üye satırları iz olarak kalır. */
+/**
+ * Silme = arşiv (durum geçişi); üyesi olan profil CANLI REFERANSLIDIR → 409 (önce üyeler çıkarılır).
+ * Satır kilidi önce alınır: üye yazımı da aynı satırı ilk claim'ler, sayım ardından taze okunur.
+ */
 export async function archiveProfile(id: string, userId: string) {
-  const claimed = await prisma.notificationProfile.updateMany({ where: { id, archivedAt: null }, data: { archivedAt: new Date() } });
-  if (claimed.count === 0) await throwClaimFailure(id);
+  const r = await prisma.$transaction(async (tx) => {
+    const locked = await tx.notificationProfile.updateMany({ where: { id, archivedAt: null }, data: { updatedAt: new Date() } });
+    if (locked.count === 0) return { ok: false as const, uyeSayisi: 0 };
+    const uyeSayisi = await tx.notificationProfileMember.count({ where: { profileId: id } });
+    if (uyeSayisi > 0) return { ok: false as const, uyeSayisi };
+    await tx.notificationProfile.updateMany({ where: { id, archivedAt: null }, data: { archivedAt: new Date() } });
+    return { ok: true as const, uyeSayisi: 0 };
+  });
+  if (!r.ok && r.uyeSayisi > 0) {
+    throw AppError.conflict(`Profilin ${r.uyeSayisi} üyesi var; arşivlemeden önce üyeleri çıkarın.`, {
+      code: "NOTIFICATION_PROFILE_IN_USE", uyeSayisi: r.uyeSayisi,
+    });
+  }
+  if (!r.ok) await throwClaimFailure(id);
   await AuditService.log({ userId, action: "DELETE", tableName: "NOTIFICATION_PROFILE", recordId: id, newData: { arsivlendi: true } });
   return loadProfile(id);
 }

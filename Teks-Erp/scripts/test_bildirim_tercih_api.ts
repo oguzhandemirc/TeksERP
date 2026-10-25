@@ -7,10 +7,12 @@
 //   §2 varsayılana dön: önizleme kendi satırlarını listeler, POST yalnız seçileni siler
 //   §3 ayarlar: kapalı küme dışı kanal 400, geçerli gövde gidiş-dönüş
 //   §4 yönetici: izinsiz 403 · profil POST replay TEK kayıt · kilit önizlemesi DOĞRU kişileri listeler · KILITLI
-//      hücre kişinin çözümüne kilit + kaynak olarak yansır · arşiv durum geçişi (ikinci arşiv 409) · eşik doğrulaması 400
+//      hücre kişinin çözümüne kilit + kaynak olarak yansır · ⭐ üyeli profil arşivi 409 IN_USE · arşiv durum geçişi
+//      (ikinci arşiv 409) · eşik doğrulaması 400 · liste `izinsizUyeler` · üye adayları (N4-PROFIL)
 //   §5 bayrak kapalı → kişisel ve yönetici uçlar 409 `BILDIRIM_KAPALI`
 //
 // NEGATİF SONDA (2026-10-25, md5 ile birebir geri alındı): `planPreferenceRows`ta kilit kontrolü kaldırıldı → §1a ❌ (23/1).
+// NEGATİF SONDA (N4-PROFIL, 2026-10-25, md5 geri): `archiveProfile`ta üye sayımı kaldırıldı → §4g1 + §4g ❌ (25/2).
 // Global ayar yazar (`bildirim.gelenKutusuEnabled`); fikstür bulduğu değere döner. Yalnız kendi kullanıcı/profil satırına dokunur.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -120,9 +122,19 @@ async function bolum4(a: FiksturKullanici, b: FiksturKullanici, c: FiksturKullan
   );
   const tanimsiz = await fx.istek(b.token, "PUT", `/api/bildirim/profiller/${pid}/hucreler`, { hucreler: [{ tur: "yok.boyle", durum: "ACIK" }] });
   check("§4f tanınmayan tür hücresi → 400", tanimsiz.status === 400 && code(tanimsiz) === "NOTIFICATION_KIND_UNKNOWN", `${tanimsiz.status} ${code(tanimsiz)}`);
+  const liste = await fx.istek(b.token, "GET", "/api/bildirim/profiller");
+  const satir = (liste.json?.data?.items ?? []).find((p: any) => p.id === pid);
+  check("§4j liste `izinsizUyeler`: sertifika türünü göremeyen üye sayılır (bilgi)", liste.status === 200 && (satir?.izinsizUyeler?.[SERTIFIKA] ?? 0) >= 1, JSON.stringify(satir?.izinsizUyeler));
+  const aday = await fx.istek(b.token, "GET", "/api/bildirim/profiller/aday-kullanicilar");
+  const adayA = await fx.istek(a.token, "GET", "/api/bildirim/profiller/aday-kullanicilar");
+  check("§4k üye adayları yönetici uçta (A listede); izinsiz 403", aday.status === 200 && (aday.json?.data?.items ?? []).some((u: any) => u.id === a.id) && adayA.status === 403, `${aday.status}/${adayA.status}`);
+  const dolu = await fx.istek(b.token, "DELETE", `/api/bildirim/profiller/${pid}`);
+  const durum = await prisma.notificationProfile.findUnique({ where: { id: pid }, select: { archivedAt: true } });
+  check("§4g1 ⭐ üyesi olan profil arşivlenemez → 409 NOTIFICATION_PROFILE_IN_USE (canlı referans), satır arşivsiz", dolu.status === 409 && code(dolu) === "NOTIFICATION_PROFILE_IN_USE" && (dolu.json?.error?.details ?? dolu.json?.details)?.uyeSayisi === 2 && durum?.archivedAt === null, `${dolu.status} ${code(dolu)}`);
+  await fx.istek(b.token, "PUT", `/api/bildirim/profiller/${pid}/uyeler`, { userIds: [] });
   const ar1 = await fx.istek(b.token, "DELETE", `/api/bildirim/profiller/${pid}`);
   const ar2 = await fx.istek(b.token, "DELETE", `/api/bildirim/profiller/${pid}`);
-  check("§4g arşiv durum geçişi; ikinci arşiv 409", ar1.status === 200 && !!ar1.json?.data?.arsivlendi && ar2.status === 409 && code(ar2) === "NOTIFICATION_PROFILE_ARCHIVED", `${ar1.status}/${ar2.status}`);
+  check("§4g arşiv durum geçişi (üyeler çıkarıldıktan sonra); ikinci arşiv 409", ar1.status === 200 && !!ar1.json?.data?.arsivlendi && ar2.status === 409 && code(ar2) === "NOTIFICATION_PROFILE_ARCHIVED", `${ar1.status}/${ar2.status}`);
   const g2 = await fx.istek(a.token, "GET", "/api/bildirim/tercihler");
   const es2 = g2.json?.data?.hucreler?.find((h: any) => h.kind === ESITLEME)?.kanallar?.find((k: any) => k.kanal === "UYGULAMA");
   check("§4h arşivli profil çözüme katılmaz (kişinin kapatması geri gelir)", es2?.durum === "KAPALI" && es2?.kilit === false, JSON.stringify(es2));
