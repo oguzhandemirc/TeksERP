@@ -2,7 +2,7 @@
   "contract": {
     "docType": "SHIPMENT_DISPATCH",
     "hedef": "musteri",
-    "contractVersion": 1,
+    "contractVersion": 2,
     "kokler": [
       {
         "yol": "belge.no",
