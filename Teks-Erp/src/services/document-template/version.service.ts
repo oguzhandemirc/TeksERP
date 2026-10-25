@@ -149,7 +149,7 @@ export function assertPublishable(contract: RegisteredContract, v: RenderableVer
     try {
       result = renderTemplate(
         { versionId: v.id, compiledLiquid: v.compiledLiquid, css: v.css, pageSettings: v.pageSettings },
-        { context: contract.insa(s.snapshot, v.settings, internalFields, s.ek) as unknown as Record<string, unknown>, snapshot: s.snapshot, overlay: null },
+        { context: contract.insa(s.snapshot, v.settings, internalFields, s.ek) as unknown as Record<string, unknown>, snapshot: s.snapshot as { numberRounding?: unknown }, overlay: null },
       );
     } catch (e) {
       if (!(e instanceof TemplateRenderError)) throw e;
