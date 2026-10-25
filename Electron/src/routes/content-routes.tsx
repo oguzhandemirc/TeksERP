@@ -90,6 +90,7 @@ import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/Wa
 import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
 import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
 import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage";
+import { InspectionRulesPage } from "@/pages/Quality/InspectionRules/InspectionRulesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -590,6 +591,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="certificate:read">
         <CertificatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K4P-TANIM — modül kapısı `route-modules.ts`ten; okuma izni backend'le birebir (`four-point-rule.routes.ts`).
+    path: "quality/inspection-rules",
+    element: (
+      <ProtectedRoute requirePermission="inspection:read">
+        <InspectionRulesPage />
       </ProtectedRoute>
     ),
   },

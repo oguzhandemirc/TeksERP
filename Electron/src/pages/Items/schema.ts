@@ -53,6 +53,15 @@ export const makeItemFormSchema = (isEdit: boolean) =>
         (v) => v === "" || /^\d+(\.\d{1,4})?$/.test(v),
         "Denye en fazla 4 ondalık basamak taşıyabilir",
       ),
+    /**
+     * K4P ürün kartı eni (cm) — `Item.widthCm` Decimal(8,2); muayene puan/100 m² bu enden. Metin taşınır
+     * (Decimal'e float yazılmaz); virgül kabul, "" = en yok. Yalnız Kalite Güvence açıkken çizilir.
+     */
+    widthCm: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || /^\d+([.,]\d{1,2})?$/.test(v), "En sayı olmalı (en fazla 2 ondalık)")
+      .refine((v) => v === "" || Number(v.replace(",", ".")) > 0, "En sıfırdan büyük olmalı"),
     /** Kumaşın varsayılan çözgü kartı (E4) — yalnız FABRIC'te çizilir, boş = kartsız. */
     warpSpecId: z.string(),
     allowedColorIds: z.array(z.string()),
@@ -67,6 +76,7 @@ export const itemFormDefaults: ItemFormValues = {
   itemType: ItemType.FABRIC,
   unit: "MT",
   linearDensityDen: "",
+  widthCm: "",
   warpSpecId: "",
   allowedColorIds: [],
   allowedPropertyIds: [],

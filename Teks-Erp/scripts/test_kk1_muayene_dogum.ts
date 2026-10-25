@@ -11,7 +11,8 @@
 //   §2 aynı token replay → tek top, tek muayene; yanıt aynı muayeneyi taşır
 //   §3 modül kapalı → top var, muayene yok, `inspectionNotSaved.code` + `warnings` metni
 //   §4 izinsiz kullanıcı → aynı (reason PERMISSION_DENIED)
-//   §5 bilinmeyen tür → 400 UNKNOWN_DEFECT_TYPE, top YOK · §5b yeteneksiz istasyon → 400, top YOK
+//   §5 bilinmeyen tür → 400 UNKNOWN_DEFECT_TYPE, top YOK · §5d yeteneksiz istasyon (K4P-KK1b) → top DOĞAR,
+//      muayene YOK, `inspectionNotSaved.reason = STATION_NO_QUALITY`
 //   §6 alansız gövde → yanıt anahtar kümesi eskisiyle aynı (`inspection`/`inspectionNotSaved` yok)
 //   §7 mükerrer tuzağı açıkken inspection'lı ikinci giriş → 409 POSSIBLE_DUPLICATE, muayene yazılmaz
 //   §8 KK1 doğuşu (`machineCode`) ile birlikte → top + doff + muayene
@@ -20,6 +21,7 @@
 // NEGATİF SONDA (2026-10-25, geri alındı):
 //   · `createInspectionTx` çağrısı tx dışına (commit sonrasına) taşındı → §5 "top YOK" kırmızı
 //   · `initialEntryReplay` `.run(...)` yerine doğrudan `createInitialEntryFresh` → §2 kırmızı
+//   · (K4P-KK1b) `resolveInspectionOnBirth` istasyon dalı silindi → §5d/§5d2/§5d3/§5d4 kırmızı
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döner. Fikstür `TST-KM-<ek>` önekli.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -182,8 +184,17 @@ async function main(): Promise<void> {
     check("§5b top YOK (tx geri alındı; barkod numarası yanmış olabilir)", (await rollCount()) === once5 && (await prisma.roll.count({ where: { clientToken: tok5 } })) === 0);
     const x5c = await bekle(gir({ token: uuid(), inspection: insp({ defects: [{ defectTypeId: dtA.id, sizeClass: "UP_TO_3IN", startMeter: 3 }, { defectTypeId: dtA.id, sizeClass: "UP_TO_3IN", startMeter: 3 }] }) }));
     check("§5c payload içi tekrar → 400 DUPLICATE_DEFECT_IN_PAYLOAD, top YOK", !x5c.ok && kod(x5c.e) === "DUPLICATE_DEFECT_IN_PAYLOAD" && (await rollCount()) === once5, x5c.ok ? "YAZILDI" : kod(x5c.e));
+    // K4P-KK1b (patron 2026-10-25): yetenek sonradan kapatılmış istasyonun kuyruk kaydı 400'le kaybolmaz.
     const x5d = await bekle(gir({ token: uuid(), inspection: insp(), stationId: stOff.id }));
-    check("§5d muayenesi kapalı istasyonda inspection → 400 INSPECTION_STATION_NOT_CAPABLE, top YOK", !x5d.ok && kod(x5d.e) === "INSPECTION_STATION_NOT_CAPABLE" && (await rollCount()) === once5, x5d.ok ? "YAZILDI" : kod(x5d.e));
+    const r5d = x5d.v;
+    check("§5d muayenesi kapalı istasyonda inspection → 400 DEĞİL, top DOĞAR", x5d.ok && !!r5d?.data.id && (await rollCount()) === once5 + 1, x5d.ok ? "" : kod(x5d.e));
+    check("§5d2 muayene + INSPECTION hata satırı YOK, `data.inspection` null",
+      !!r5d && (await inspOf(r5d.data.id)).length === 0 && (await errOf(r5d.data.id)).length === 0 && r5d.data.inspection === null);
+    check("§5d3 `inspectionNotSaved {INSPECTION_NOT_SAVED, STATION_NO_QUALITY}` + `warnings` metni",
+      r5d?.inspectionNotSaved?.code === "INSPECTION_NOT_SAVED" && r5d.inspectionNotSaved.reason === "STATION_NO_QUALITY" && (r5d.warnings ?? []).some((w) => w.startsWith("Muayene kaydedilmedi")),
+      JSON.stringify({ n: r5d?.inspectionNotSaved, w: r5d?.warnings }));
+    const x5d4 = await bekle(gir({ token: uuid(), inspection: insp({ defects: [{ defectTypeId: uuid(), sizeClass: "UP_TO_3IN" }] }), stationId: stOff.id }));
+    check("§5d4 yeteneksiz istasyonda muayene YAZILMADIĞI için bozuk tür doğrulanmaz → top doğar (kapı önce)", x5d4.ok && x5d4.v?.inspectionNotSaved?.reason === "STATION_NO_QUALITY", x5d4.ok ? "" : kod(x5d4.e));
     const r5e = await gir({ token: uuid(), inspection: insp(), stationId: null });
     check("§5e istasyonsuz giriş → muayene yazılır (yazma kapısı istasyona bağlı DEĞİL)", (await inspOf(r5e.data.id)).length === 1 && (await inspOf(r5e.data.id))[0]!.stationId === null);
 
