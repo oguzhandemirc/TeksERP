@@ -8,7 +8,7 @@
 //    §5 ön ayar parametreleri URL'den · §6 dışa aktarım ekranla aynı metin.
 //
 // Negatif sonda (2026-10-25, geri alındı): `cellFilterSearch` varyantı silmeyince ❌ 1 (§2a);
-// `emptyLabelOf` "Tümü" döndürünce ❌ 2 (§1a, §6); md5 ile geri alındı.
+// `emptyLabelOf` boş dönünce ("Tümü") ❌ 3 (§1a, §1c, §6); md5 ile geri alındı, 12/0.
 // =============================================================================
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
