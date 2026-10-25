@@ -10,6 +10,7 @@
 // NEGATİF SONDALAR (2026-10-25 ÖLÇÜLDÜ; cp + md5 ile birebir geri alındı; taban 10/0):
 //   L1 `moveBlock` `bloklar`ı da yeniden sıraladı → §1 + §2 ❌ 2 · L2 `reportExport.toSheetsV2` düzen tablolarını atladı
 //   → §4 ❌ 1 · L3 `CustomReportViewPage` düğmede `canEdit` denetimi kaldırıldı → §3 ❌ 1
+//   L4 (R3-ANALIZ) `useLayoutEditor` önizleme engeli kaldırıldı → §2 ❌ 1
 // =============================================================================
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -22,6 +23,7 @@ let v2 = true;
 let perms: string[] = ["report:builder", "report:sales"];
 let editable = true;
 let versionReply: "ok" | "conflict" = "ok";
+let measureUnit = "m";
 const post = vi.fn();
 
 const BODY = {
@@ -70,9 +72,12 @@ const CATALOG = [
   },
 ];
 
+// Sayım ölçüsü vakası (§2): aynı ölçü "adet" birimiyle gelir → maruziyetsiz analiz kaydı bekletir.
+const catalog = () => CATALOG.map((c) => ({ ...c, olculer: c.olculer.map((m) => ({ ...m, birim: measureUnit })) }));
+
 vi.mock("@/services/apiClient", () => ({
   default: {
-    get: (url: string) => Promise.resolve({ data: { success: true, data: url === "/api/rapor-semantik/katalog" ? CATALOG : url.startsWith("/api/rapor-tanimlari/r1") ? detail() : [] } }),
+    get: (url: string) => Promise.resolve({ data: { success: true, data: url === "/api/rapor-semantik/katalog" ? catalog() : url.startsWith("/api/rapor-tanimlari/r1") ? detail() : [] } }),
     post: (url: string, body: unknown) => {
       post(url, body);
       if (url.endsWith("/onizle") || url.endsWith("/calistir")) return Promise.resolve({ data: { success: true, data: RUN } });
@@ -129,6 +134,7 @@ beforeEach(() => {
   perms = ["report:builder", "report:sales"];
   editable = true;
   versionReply = "ok";
+  measureUnit = "m";
   post.mockClear();
 });
 
@@ -195,6 +201,21 @@ describe("§2 kayıt", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "Aşağı taşı" }))[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Kaydet (yeni sürüm)" }));
     expect(await screen.findByText("Rapor başka biri tarafından değiştirildi, yeniden yükleyin.")).toBeInTheDocument();
+  });
+
+  it("maruziyetsiz sayım analizi: önizleme isteği gitmez, son önizleme kalır, Kaydet kapalı + Türkçe neden", async () => {
+    measureUnit = "adet";
+    renderAt("/reports/ozel/r1/duzen", "/reports/ozel/:id/duzen", <ReportLayoutPage />);
+    expect(await screen.findByText("Kaya Tekstil")).toBeInTheDocument();
+    const previews = () => post.mock.calls.filter(([u]) => String(u).endsWith("/onizle")).length;
+    const before = previews();
+    fireEvent.click(screen.getByRole("button", { name: /^Analiz/ }));
+    expect(await screen.findByText(/Kaydedilemiyor: Sayım ölçüsü/)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 900));
+    expect(previews()).toBe(before);
+    expect(screen.queryByText(/Önizleme çalıştırılamadı/)).toBeNull();
+    expect(screen.getByText("Kaya Tekstil")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kaydet (yeni sürüm)" })).toBeDisabled();
   });
 
   it("değişiklik yokken Kaydet kapalı; önizleme gerçek veriyle çizilir", async () => {

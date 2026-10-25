@@ -60,20 +60,22 @@ export function AnalysisCard({ analysis, title, block, body, cubes }: Props) {
   const { sunum, istatistik } = analysis;
   const verdict = analysisVerdict(analysis);
   const cube = block ? analysisCube(block, cubes) : undefined;
-  const confounders = block ? confoundersFor(block, cube) : [];
+  // Veri yokken ayrı bakılacak bir şey yok; düğmeler yalnız sonuç ya da uyarı varken çizilir.
+  const confounders = block && verdict.kind !== "empty" ? confoundersFor(block, cube) : [];
   const chart = sunum.grafik;
   return (
-    <article aria-label={title ?? sunum.baslik} className="flex flex-col gap-3" data-testid="analysis-card">
+    <article aria-label={title ?? sunum.baslik} className="@container flex flex-col gap-3" data-testid="analysis-card">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="text-sm font-semibold">Analiz: {title ?? sunum.baslik}</h4>
+        {/* Bölüm çerçevesi başlığı zaten basar; başlıksız (önizleme) kartta kendi başlığı durur. */}
+        {title ? <span /> : <h4 className="text-sm font-semibold">Analiz: {sunum.baslik}</h4>}
         {istatistik ? <span className="text-xs tabular-nums text-muted-foreground">n = {upTo3Text(istatistik.n)}</span> : null}
       </header>
       {verdict.kind !== "empty" ? (
-        <div className="grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="grid gap-4 @3xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="min-w-0">
             {chart?.tur === "sacilim" ? <Scatter chart={chart} stats={istatistik} /> : chart ? <RaporGrafik blok={chart} yukseklik={240} baslik={sunum.soru} /> : null}
           </div>
-          <div className="min-w-0">{sunum.tablo ? <ReportTable table={sunum.tablo} /> : null}</div>
+          <div className="min-w-0 overflow-x-auto">{sunum.tablo ? <ReportTable table={sunum.tablo} /> : null}</div>
         </div>
       ) : null}
       {verdict.kind === "warning" ? (

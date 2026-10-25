@@ -138,13 +138,14 @@ function isiHaritasi(blok: GrafikBlok, tema: GrafikTema, baski: boolean): Grafik
       ? undefined
       : { trigger: "item", formatter: (p: { value: [number, number, number] }) => valueText(p.value[2], blok.eksen.y.birim) },
     grid: { left: 12, right: 24, top: 16, bottom: 56 },
-    xAxis: kategoriEkseni(blok, tema, { splitArea: { show: true } }),
+    xAxis: kategoriEkseni(blok, tema, { splitArea: { show: false } }),
     yAxis: {
       type: "category",
       inverse: true,
       data: blok.seriler.map((s) => s.ad),
       axisLabel: { color: tema.ikincil },
-      splitArea: { show: true },
+      // Boş hücre zeminde kalır; varsayılan gri şerit koyu temada beyaz bant olurdu.
+      splitArea: { show: false },
     },
     visualMap: {
       min: Math.min(...values),
@@ -166,7 +167,8 @@ function isiHaritasi(blok: GrafikBlok, tema: GrafikTema, baski: boolean): Grafik
         data,
         label: {
           show: data.length <= 120,
-          color: tema.metin,
+          // Hücre skalası temadan bağımsız açık→koyu; yazı koyu + beyaz hale her iki temada okunur.
+          color: "#1f2937",
           textBorderColor: "#ffffff",
           textBorderWidth: 2,
           formatter: (p: { value: [number, number, number] }) => upTo3Text(p.value[2]),

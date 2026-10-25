@@ -123,7 +123,7 @@ export function ReportLayoutPage() {
   const { id = "" } = useParams<{ id: string }>();
   const existing = useQuery({ queryKey: ["custom-report", id], queryFn: () => customReportApi.get(id), retry: false });
   const catalog = useSemanticCatalog();
-  const ed = useLayoutEditor(existing.data);
+  const ed = useLayoutEditor(existing.data, (b) => b.bloklar.some((x) => analysisBlockIssue(x, catalog.data) !== null));
   const [selected, setSelected] = useState<string | null>(null);
   const [printOpen, setPrintOpen] = useState(false);
   const dataRouter = useContext(UNSAFE_DataRouterContext);
