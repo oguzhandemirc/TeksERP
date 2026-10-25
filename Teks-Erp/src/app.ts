@@ -56,6 +56,7 @@ import productionBalanceRoutes from "./routes/production-balance.routes";
 import tamburRoutes from "./routes/tambur.routes";
 import kursunQcRoutes from "./routes/kursun-qc.routes";
 import kursunBypassRoutes from "./routes/kursun-bypass.routes";
+import eIrsaliyeRoutes from "./routes/e-irsaliye.routes";
 import travelerCardRoutes from "./routes/traveler-card.routes";
 import travelerTemplateRoutes from "./routes/traveler-template.routes";
 import subcontractorRoutes from "./routes/subcontractor.routes";
@@ -139,6 +140,8 @@ import licenseRoutes from "./routes/license.routes";
 import updateRoutes from "./routes/update.routes";
 import supportRoutes from "./routes/support.routes";
 import errorReportRoutes from "./routes/error-report.routes";
+import semanticReportRoutes from "./routes/rapor-semantik.routes";
+import reportRunRoutes from "./routes/rapor-calistirma.routes";
 import patronCloudRoutes from "./routes/patron-cloud.routes";
 const app: Express = express();
 
@@ -244,7 +247,7 @@ app.use(buildHelmet(hardening.httpsEnabled));
 // istemci etkilenmez). Uçların asıl koruması `verifyToken` + `requirePermission`;
 // origin listesi onların YERİNE geçmez.
 app.use(cors({
-  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date", "X-Request-Id"],
+  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date", "X-Request-Id", "X-Document-Template", "X-Document-Template-Version", "X-Document-Tables-Available", "X-Document-Warnings"],
   ...(hardening.corsOrigins ? { origin: hardening.corsOrigins } : {}),
 }));
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
@@ -557,6 +560,7 @@ app.use("/api/production-balance", productionBalanceRoutes);
 app.use("/api/tambur", tamburRoutes);
 app.use("/api/kursun-qc", kursunQcRoutes);
 app.use("/api/kursun-bypass", kursunBypassRoutes);
+app.use("/api/e-irsaliye", eIrsaliyeRoutes);
 app.use("/api/traveler-cards", travelerCardRoutes);
 app.use("/api/traveler-templates", travelerTemplateRoutes);
 app.use("/api/subcontractor", subcontractorRoutes);
@@ -661,6 +665,8 @@ app.get(
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/rapor-semantik", semanticReportRoutes);
+app.use("/api/rapor-calistirmalari", reportRunRoutes);
 app.use("/api/devices", devicePublicRouter);
 app.use("/api/admin/devices", deviceAdminRouter);
 app.use("/api/work-sessions", workSessionRoutes);

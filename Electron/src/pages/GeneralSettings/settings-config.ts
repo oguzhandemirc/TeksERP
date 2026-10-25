@@ -2096,6 +2096,36 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     ],
   },
   {
+    // belge-sablon: KAPSAMSIZ kategori — iki davranış bayrağı yalnız `admin:settings` ile yazılır
+    // (plan P-b/P-c); `ADMIN_ONLY_CATEGORY_IDS` beyanı panel bekçilerini muaf tutar.
+    id: "belgeler",
+    label: "Belgeler",
+    icon: FileText,
+    description: "Belge tasarımcısının açık olup olmadığı ve şablon yayın kuralı.",
+    keywords: "belge şablon tasarımcı tasarım irsaliye yayın onay liquid",
+    kind: "flags",
+    section: "printing",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION],
+    flags: [
+      {
+        key: "documentDesignerEnabled",
+        title: "Belge tasarımcısı",
+        summary: "Belgeler, atanan tasarımcı şablonuyla basılır.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken Tanımlar > Belge Tasarımcısı kullanılabilir ve yeni basılan belge, müşteriye ya da belge türüne atanmış yayındaki şablonla basılır. Kapalıyken yeni belgeler bugünkü Sistem tasarımıyla basılır; önceden şablonla basılmış belgeler yeniden basıldığında kendi şablonlarıyla çıkar.",
+      },
+      {
+        key: "documentPublishSodEnabled",
+        title: "Şablonu tasarlayan yayınlayamaz",
+        summary: "Bir şablon sürümünü, onu tasarlayan kişi yayına alamaz.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "Açıkken şablon sürümünü kaydeden kişi aynı sürümü yayınlayamaz; yayını başka bir yetkili yapar (iki göz kuralı). Kapalıyken yayın izni olan herkes yayınlayabilir.",
+      },
+    ],
+  },
+  {
     // bildirim: KAPSAMSIZ kategori — anahtar `settings-scopes`ta yok, yalnız `admin:settings`
     // yazar (plan Karar Y1); `ADMIN_ONLY_CATEGORY_IDS` beyanı iki panel bekçisini muaf tutar.
     id: "bildirim",
@@ -2153,7 +2183,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
 
 // bildirim: dar izin TAŞIMAYAN (yalnız `admin:settings`) fabrika kategorileri — beyan iki
 // yönlü ölçülür (settings-surface §6 + settings-scope-mirror): anahtarları kapsam tablosunda olamaz.
-export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim"]);
+export const ADMIN_ONLY_CATEGORY_IDS: ReadonlySet<string> = new Set(["bildirim", "belgeler"]);
 
 /** Kategorinin çizildiği ekran — BÖLÜMÜNDEN türetilir (tek yazar). */
 export function categorySurface(cat: SettingsCategory): SettingsSurface {

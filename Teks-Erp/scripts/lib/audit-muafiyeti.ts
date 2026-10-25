@@ -54,8 +54,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "cihaz bağlama DEFTERİ — tek yazar `helpers/device-identity.helper.ts#writeBindingEventTx`; audit'i çağıran eylem basar (announce doğuşu · yeniden bağlama · talep · red · revoke · kalıcı silme, `device.service`/`device-rebind.service`)" },
   { model: "ShipmentEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "sevkiyat olay defteri satırını `helpers/shipment-event.helper` yazar; audit sevk eyleminde (`shipping.service`)" },
-  // e-İrsaliye `EIrsaliyeXml` · `EIrsaliyeEvent` (E1-SEMA şeması): CUD yolu henüz YOK ⇒ satır
-  // §3 "ölü muafiyet" olur. EBEVEYN_EYLEMDE satırları yazıcıyla (E5) AYNI commit'te girer.
+  { model: "EIrsaliyeEvent", sinif: "EBEVEYN_EYLEMDE",
+    gerekce: "e-İrsaliye olay defteri satırını `e-irsaliye/e-irsaliye-event.helper` yazar (durum claim'iyle aynı tx); audit geçişi başlatan eylemde (`e-irsaliye.service`, tableName `E_IRSALIYE`)" },
   { model: "WorkOrderCloseSnapshot", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "kapanış künyesini `helpers/workorder-close-snapshot.helper` COMPLETED claim'iyle aynı tx'te yazar; audit kapanışı yapan eylemde (elle Kapat · tambur/fason/kurşun son adım)" },
   { model: "WorkOrderEvent", sinif: "EBEVEYN_EYLEMDE",
@@ -78,6 +78,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "patron bulutu eşitleme işareti; satırı DB tetikleyicileri yazar (uygulama CUD'u değil), uygulamanın tek yazımı yaşa göre budamadır (src/cloud-sync/marks-pruning.ts) — `defter.md` § Telemetri ≠ defter" },
   { model: "SyncWatermark", sinif: "SISTEM_ISI",
     gerekce: "eşitleme filigranı (durum tablosu) — yazan eşitleme işidir (bulut onayından sonra), audit'in öznesi olacak bir kullanıcı yoktur; iş kaydı değildir" },
+  { model: "ReportRun", sinif: "TELEMETRI",
+    gerekce: "semantik rapor koşu ölçümü + iptal kimliği (durum/süre/satır sayısı; budanır, R1-ZAMAN) — tek yazıcısı semantik çalıştırıcı, hiçbir rapor sayısı ona bağlı değil; silinince raporlanan sayı değişmez — `defter.md` § Telemetri ≠ defter" },
   { model: "ShiftInstance", sinif: "SISTEM_ISI",
     gerekce: "vardiya takvimi `jobs/shift-calendar.job` tarafından üretilir; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
   // bildirim: çekirdek tablolar (plan §3.4) — yazarları N1-MOTOR'da doğdu.

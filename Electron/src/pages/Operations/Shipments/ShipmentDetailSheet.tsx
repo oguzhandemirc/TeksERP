@@ -19,6 +19,7 @@ import { shipmentStatusLabels, shipmentStatusTones } from "./types";
 import { ShipmentDocDialog } from "./ShipmentDocDialog";
 import { ShipmentSheetBody } from "./ShipmentSheetBody";
 import { normalizeSearch, rollMatchesQuery, rollMatchesContext, csvIds } from "./roll-search";
+import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 interface Props {
   shipmentId: string | null;
@@ -92,6 +93,7 @@ export function ShipmentDetailSheet({
           <SheetTitle className="flex items-center gap-2">
             <span className="font-mono">{d?.shipmentNo ?? "Sevkiyat"}</span>
             {d && <StatusBadge status={d.status} labels={shipmentStatusLabels} tones={shipmentStatusTones} />}
+            <PrintHistoryLink subjectId={d?.id} className="ml-auto mr-6 font-normal" />
           </SheetTitle>
           <SheetDescription>
             {d

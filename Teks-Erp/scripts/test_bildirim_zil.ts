@@ -180,6 +180,7 @@ async function govde(): Promise<void> {
   check("§5c zil içeriksiz {k:'kutu', rev, alarmRev}", !!z && z.veri.k === "kutu" && Object.keys(z.veri).sort().join(",") === "alarmRev,k,rev" && z.veri.rev >= 1);
   const ozet = await fx.istek(a.token, "GET", "/api/bildirim/ozet");
   check("§5d zilden sonra özet satırı sayar (veri REST'ten)", ozet.json?.data?.okunmamis >= 1 && ozet.json?.data?.rev === z?.veri.rev, JSON.stringify(ozet.json?.data));
+  check("§5e özet `vardiyaBitis` taşır (süren vardiya yoksa null; erteleme menüsü buna göre pasifler)", ozet.json?.data !== undefined && "vardiyaBitis" in ozet.json.data, JSON.stringify(ozet.json?.data));
   stopNotificationJobs();
 
   // §6 uzun yoklama

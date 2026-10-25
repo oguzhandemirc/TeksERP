@@ -122,11 +122,10 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
   { kimlik: "dokuma.mudahaleDakika", ad: "Müdahale süresi",
     aciklama: "Tezgah alarmı çaldıktan sonra birinin işi üstlenmesine kadar geçen ortalama süre.",
     birim: "dakika", iyiYon: "azalis", kaynak: { dosya: `${R}/alarm-response.report.service.ts`, alan: "AlarmResponseCell.ustlenmeOrtSn" } },
-  // null: Levent Sonucu beklenen (`beklenenM`) ve gerçek (`gercekM`) metreyi verir, ikisinin oranı alan
-  // olarak yok (`firePct` farkın oranıdır) — R0-RAPC türetir.
+  // Levent Sonucu oranı alan olarak vermez (`firePct` farkın oranıdır); R0-RAPC satırlarından türetir.
   { kimlik: "levent.dengeYuzde", ad: "Levent dengesi",
     aciklama: "Biten leventlerden beklenen kumaşın yüzde kaçının gerçekten dokunduğu; ölçülemeyen levent orana girmez, ayrıca sayılır.",
-    birim: "yuzde", iyiYon: "artis", kaynak: null },
+    birim: "yuzde", iyiYon: "artis", kaynak: { dosya: `${R}/temel/levent-dengesi.temel.ts`, alan: "BeamBalance.balancePct" } },
 
   // ── PARA ──────────────────────────────────────────────────────────────────
   { kimlik: "alacak.vadesiGecmis", ad: "Vadesi geçmiş alacak",

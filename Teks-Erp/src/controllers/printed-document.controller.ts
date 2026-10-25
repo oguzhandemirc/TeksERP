@@ -197,6 +197,9 @@ function parseRenderQuery(req: Request): { version: number | undefined; opts: Do
       listSections,
       mergeSections,
       pageSize,
+      // Tek seferlik Sistem tasarımı çıkışı (şablon render'ı 422 verirse); servis audit'ler.
+      systemTemplate: req.query.sistemSablonu === "1",
+      actorId: req.user?.userId ?? null,
     },
   };
 }
@@ -235,13 +238,20 @@ export class PrintedDocumentController {
       const { docType, sourceId } = parseParams(req);
       const { version, opts } = parseRenderQuery(req);
       const result = await printedDocumentService.getHtml(docType, sourceId, version, opts);
-      const data = result.data as { html: string } | null;
+      const data = result.data;
       if (!data) {
         res
           .status(409)
           .json({ success: false, message: "Belge henüz hazır değil (taslak)." });
         return;
       }
+      // Şablon bilgisi ADDITIVE başlıklarda (gövde ham HTML kalır; eski istemci görmez).
+      res.setHeader("X-Document-Tables-Available", data.tablesAvailable === false ? "0" : "1");
+      if (data.template) {
+        res.setHeader("X-Document-Template", encodeURIComponent(data.template.name));
+        res.setHeader("X-Document-Template-Version", String(data.template.versionNo));
+      }
+      if (data.warnings?.length) res.setHeader("X-Document-Warnings", encodeURIComponent(JSON.stringify(data.warnings)));
       res.type("html").send(data.html);
     } catch (err) {
       next(err);

@@ -262,7 +262,7 @@ console.log("§6 ⭐ Yuvarlama damgası: TEK yazar (zarf kurucusu), TEK okur (`d
       if (ts.isElementAccessExpression(n) && ts.isStringLiteral(n.argumentExpression) && n.argumentExpression.text === "numberRounding") okuyan.push(yer);
     });
   }
-  check("tek yazar: printed-document.service#envelopeHead", yazan.length === 1 && yazan[0] === "src/services/printed-document.service.ts#envelopeHead", yazan.join(" · "));
+  check("tek yazar: document-render/envelope-head#envelopeHead", yazan.length === 1 && yazan[0] === "src/services/document-render/envelope-head.ts#envelopeHead", yazan.join(" · "));
   check("tek okur: fmt-num#docNum", okuyan.length === 1 && okuyan[0] === `${FMT_NUM}#docNum`, okuyan.join(" · "));
 
   // Her yeni zarf başını `envelopeHead()`ten alır: `company` + `docConfigOverride` + `doc` taşıyan nesne

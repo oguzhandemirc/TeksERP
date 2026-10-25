@@ -662,14 +662,14 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
           `Devir, ${formatDayKeyTr(sealedThroughByAccount.get(params.accountId) as Date)} dönem kapanışının MÜHÜRLÜ rakamından alındı — hesap o güne kadar mühürlüdür; kapanıştan dönem başına kadarki hareketler üstüne eklendi.`,
         ]
       : []),
-    "Çekin tahsile verilmesi (DEPOSIT) para hareketi değildir ve deftere girmez; yalnız TAHSİL (COLLECT) ve kendi çekimizin ÖDENMESİ (PAY) yazılır.",
+    "Çekin bankaya tahsile verilmesi para hareketi değildir ve deftere girmez; yalnız çekin tahsil edilmesi ve kendi çekimizin ödenmesi yazılır.",
     "İptal edilen belgeler defterde iki satırla görünür: belge tarihinde asıl hareket, iptal anında ters hareket.",
     // Kırılım notu KOŞULLU: hareketi olmayan dönemde blok da çizilmiyor, notu
     // basmak "eksik bir şey mi var" sorusunu boş yere sordururdu.
     ...(categories.length > 0
       ? [
           "Kategori kırılımı hareketin KAYNAĞINA göre toplanır: kasa hareketleri kendi kategori metniyle (boş bırakılmışsa “Kategorisiz”), carili tahsilat/ödemeler ve çek tahsil/ödemeleri kendi tek kovalarında — bu kayıtlarda kategori alanı yoktur, uydurulmaz. Virman kendi hesaplarımız arasında aktarım olduğu için ayrı kovadadır.",
-          "Kırılımda iptal NETLEŞİR: ters satır aslının kategorisine ters yönde düşer, yani iptal edilmiş bir gider kovada “giren = çıkan, net 0” olarak görünür. Kova toplamları dönemin giren/çıkan toplamına eşittir.",
+          "Kırılımda iptal NETLEŞİR: ters satır aslının kategorisine ters yönde düşer, yani iptal edilmiş bir gider kovada giren ile çıkan eşit, kalan sıfır olarak görünür. Kova toplamları dönemin giren/çıkan toplamına eşittir.",
         ]
       : []),
   ];

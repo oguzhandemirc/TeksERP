@@ -17,7 +17,7 @@ import { ekranYolu } from "../../constants/panel-ekran-yolu";
 import { assertFixedShapeFormat } from "../helpers/series-fixed-shape.helper";
 import { readCompanyLegalIdentity, readEIrsaliyeConfig } from "../system-setting.service";
 import { E_IRSALIYE_SERIES_KEY } from "./e-irsaliye-number";
-import type { CompanyLegalIdentity } from "./e-irsaliye-settings";
+import type { CompanyLegalIdentity, EIrsaliyeConfig } from "./e-irsaliye-settings";
 import { isValidTckn, isValidVkn } from "./tax-id";
 
 export type EIrsaliyeReadinessState = "YAPILANDIRILMAMIS" | "HAZIR";
@@ -59,8 +59,15 @@ async function seriesGap(db: ReadinessDb): Promise<string | null> {
   }
 }
 
-/** Tek hazırlık sorusu. `db` verilmezse kök istemci; tx içinden çağıran kendi tx'ini geçer. */
-export async function resolveEIrsaliyeReadiness(db: ReadinessDb = prisma): Promise<EIrsaliyeReadiness> {
+/** Hazırlık + motorun ihtiyaç duyduğu ayar ve künye — üçü AYNI okumadan (ikinci hazırlık yüklemi doğmasın). */
+export interface EIrsaliyeGate {
+  readiness: EIrsaliyeReadiness;
+  config: EIrsaliyeConfig;
+  legalIdentity: CompanyLegalIdentity;
+}
+
+/** Motorun kapısı (E5): cevap `resolveEIrsaliyeReadiness` ile aynı, yanında okunan ayar ve künye. */
+export async function resolveEIrsaliyeGate(db: ReadinessDb = prisma): Promise<EIrsaliyeGate> {
   const eksikler: string[] = [];
   const [kunye, cfg] = [await readCompanyLegalIdentity(db), await readEIrsaliyeConfig(db)];
 
@@ -76,5 +83,11 @@ export async function resolveEIrsaliyeReadiness(db: ReadinessDb = prisma): Promi
   if (!cfg.yururlukTarihi) {
     eksikler.push(`e-İrsaliye yürürlük tarihi girilmemiş — ${settingScreenPath("e-irsaliye")} ekranından girin.`);
   }
-  return { durum: eksikler.length === 0 ? "HAZIR" : "YAPILANDIRILMAMIS", eksikler };
+  const readiness: EIrsaliyeReadiness = { durum: eksikler.length === 0 ? "HAZIR" : "YAPILANDIRILMAMIS", eksikler };
+  return { readiness, config: cfg, legalIdentity: kunye };
+}
+
+/** Tek hazırlık sorusu. `db` verilmezse kök istemci; tx içinden çağıran kendi tx'ini geçer. */
+export async function resolveEIrsaliyeReadiness(db: ReadinessDb = prisma): Promise<EIrsaliyeReadiness> {
+  return (await resolveEIrsaliyeGate(db)).readiness;
 }
