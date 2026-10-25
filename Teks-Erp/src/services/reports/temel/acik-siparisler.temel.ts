@@ -11,7 +11,7 @@ import { anlatiUret } from "../anlati/anlati";
 import { filterEcho } from "../_filters";
 import { getOpenOrderCoverage, type OpenOrderCoverageReport } from "../open-order-coverage.report.service";
 import type { GrafikBlok, TabloBlok } from "../sunum/sunum.types";
-import { capTable, catalogHeader, listParameter, plainFigure, type CoreReportResult } from "./_common";
+import { capTable, catalogHeader, listParameter, plainFigure, rankedPool, type CoreReportResult } from "./_common";
 
 export const OPEN_ORDER_FILTER_KEYS = ["itemId"] as const;
 
@@ -132,8 +132,9 @@ export async function buildOpenOrderReport(input: OpenOrderReportInput): Promise
           aciklama: "Açık siparişlerde kalan metrenin, bugün depoda hazır duran bitmiş kumaşla karşılanabilen payı; en eski termin önce karşılanır.",
         },
       ],
-      parametreler: [listParameter("itemId", filters.itemId)],
+      parametreler: [listParameter("itemId", filters.itemId, report.secenekler.itemId)],
       uyarilar: warnings,
     },
+    kirilimlar: { urun: rankedPool(report.byItem, (r) => r.openQty) },
   };
 }

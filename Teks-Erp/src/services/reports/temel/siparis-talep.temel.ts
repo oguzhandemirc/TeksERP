@@ -18,6 +18,7 @@ import {
   definitionsOf,
   destinationParameter,
   listParameter,
+  rankedPool,
   metricFigure,
   periodOf,
   plainFigure,
@@ -133,11 +134,12 @@ export async function buildOrderDemandReport(input: OrderDemandInput): Promise<C
       tanimlar: definitionsOf(["siparis.metre", "siparis.tutar"]),
       parametreler: [
         ...rangeParameters(range, input.compareMode),
-        listParameter("customerId", filters.customerId),
+        listParameter("customerId", filters.customerId, report.secenekler.customerId),
         destinationParameter(filters.destination, "Yön (müşteri kartı)"),
-        listParameter("itemId", filters.itemId),
+        listParameter("itemId", filters.itemId, report.secenekler.itemId),
       ],
       uyarilar: capped.uyarilar,
     },
+    kirilimlar: { musteri: rankedPool(report.byCustomer, (r) => r.qty), urun: rankedPool(report.byItem, (r) => r.qty) },
   };
 }
