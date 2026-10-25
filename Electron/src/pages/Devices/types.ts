@@ -18,6 +18,9 @@ export interface DeviceListItem {
     name: string;
     station: { id: string; name: string };
   } | null;
+  /** Birleşmiş kopya → ana kayıt (D4). Eski backend göndermez. */
+  mergedIntoId?: string | null;
+  mergedAt?: string | null;
   /** Cihaza atanan donanım (M:N join). Paylaşımlı olabilir. */
   hardwareLinks?: {
     peripheral: { id: string; code: string; name: string; kind: string };
@@ -69,6 +72,21 @@ export interface DeviceDetail {
   /** Legacy tekil sahiplik + M:N atama birleşik (backend dedup eder). */
   hardware: PeripheralSummary[];
   lastSession: DeviceLastSession | null;
+  /** Kopya ise ana kayıt (D4); eski backend göndermez. */
+  mergedInto?: { id: string; name: string; mergedAt: string | null } | null;
+  /** Ana kayda birleşmiş kopyalar ("geçmiş kurulumlar"); oturumları yerinde kalır. */
+  pastInstallations?: PastInstallation[];
+}
+
+export interface PastInstallation {
+  id: string;
+  deviceId: string;
+  name: string;
+  kind: DeviceKind;
+  createdAt: string;
+  lastSeenAt: string | null;
+  mergedAt: string | null;
+  workSessionCount: number;
 }
 
 /** Yeniden bağlama talebi (cihaz eşleme v2) — `GET /api/admin/devices/rebind-requests`.
@@ -97,4 +115,73 @@ export interface RebindRequest {
 export interface RebindRejectBody {
   mode: "REDDET" | "AYRI_CIHAZ";
   reason?: string;
+}
+
+// ─── Kopya birleştirme (D4) ───
+export type MergeConfidence = "HIGH" | "MEDIUM" | "LOW";
+
+export interface MergeCandidateMember {
+  id: string;
+  deviceId: string;
+  name: string;
+  kind: DeviceKind;
+  isActive: boolean;
+  status: DeviceStatus;
+  createdAt: string;
+  lastSeenAt: string | null;
+  confidence: MergeConfidence;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface MergeCandidateGroup {
+  kind: DeviceKind;
+  confidence: MergeConfidence;
+  target: MergeCandidateMember;
+  sources: MergeCandidateMember[];
+}
+
+export interface MergeBlocker {
+  code: string;
+  message: string;
+}
+
+export interface MergePreviewSource {
+  id: string;
+  deviceId: string;
+  name: string;
+  kind: DeviceKind;
+  isActive: boolean;
+  status: DeviceStatus;
+  createdAt: string;
+  lastSeenAt: string | null;
+  blockers: MergeBlocker[];
+  notes: string[];
+  workSessions: {
+    count: number;
+    staysInPlace: boolean;
+    recent: Array<{
+      id: string;
+      startedAt: string;
+      endedAt: string | null;
+      user: { id: string; fullName?: string | null; username?: string | null } | null;
+      station: { id: string; name: string } | null;
+      machine: { id: string; code: string; name: string } | null;
+    }>;
+  };
+  hardwareLinks: Array<{ id: string; code: string; name: string; kind: string; alreadyOnTarget: boolean }>;
+  legacyPeripherals: Array<{ id: string; code: string; name: string; kind: string }>;
+}
+
+export interface MergePreview {
+  target: { id: string; deviceId: string; name: string; kind: DeviceKind; isActive: boolean; status: DeviceStatus };
+  targetBlockers: MergeBlocker[];
+  sources: MergePreviewSource[];
+  undoNote: string;
+}
+
+export interface MergeResult {
+  target: { id: string; name: string };
+  merged: Array<{ id: string; name: string; deviceId: string; movedLinks: number; droppedDuplicateLinks: number; movedPeripherals: number }>;
+  mergedAt: string;
 }
