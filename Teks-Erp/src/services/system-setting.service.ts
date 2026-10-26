@@ -62,6 +62,7 @@ import { resolveSeriesFormat } from "./number-series.service";
 import { updateSeriesNumberSource } from "./helpers/series-write.helper";
 import { alarmEnableBlocked } from "./helpers/loom-floor.helper";
 import { isShiftDefined } from "./helpers/loom-alarm-shift.helper";
+import { resetNotificationBaselines } from "./helpers/notification-baseline.helper";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import {
   DEFAULT_PHASE_OUT_LINE_QTY,
@@ -4497,12 +4498,15 @@ export class SystemSettingService {
       if (typeof input.bildirimGelenKutusuEnabled !== "boolean") {
         throw AppError.badRequest("bildirimGelenKutusuEnabled boolean olmalı");
       }
+      // Su damgası: kapanışta ya da kapalıdan açılışta düşer → koşul türleri yeniden bildirimsiz taban alır.
+      const wasEnabled = await readNotificationInboxEnabled();
       await this.set(
         SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED,
         input.bildirimGelenKutusuEnabled,
         "Yeni bildirim gelen kutusu: açıkken zil kişisel gelen kutusunu gösterir; kapalıyken bugünkü davranış",
         userId
       );
+      if (!(wasEnabled && input.bildirimGelenKutusuEnabled)) await resetNotificationBaselines(prisma);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "documentDesignerEnabled")) {

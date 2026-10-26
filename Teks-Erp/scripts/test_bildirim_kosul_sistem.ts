@@ -37,6 +37,7 @@ import {
   type SystemSourceDeps,
 } from "../src/services/notification-sources/sistem";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { kosulTabaniHazir } from "./lib/bildirim-kosul-tabani";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -313,10 +314,12 @@ async function main(): Promise<void> {
   console.log("\n=== Bildirim — sistem koşul kaynakları (tür 1–4) ===\n");
   const key = SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED;
   const ilk = await prisma.systemSetting.findUnique({ where: { key }, select: { value: true } });
+  const tabanGeri = await kosulTabaniHazir(TURLER);
   try {
     await govde();
   } finally {
     stopNotificationJobs();
+    await tabanGeri();
     await temizle();
     if (ilk) await prisma.systemSetting.update({ where: { key }, data: { value: ilk.value as never } });
     else await prisma.systemSetting.deleteMany({ where: { key } });
