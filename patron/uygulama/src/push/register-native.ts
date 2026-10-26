@@ -24,3 +24,10 @@ export async function registerNative(api: Api): Promise<RegisterOutcome> {
   const device = await api.deviceRegister({ platform, belirtec: token, ...(Device.deviceName ? { ad: Device.deviceName.slice(0, 120) } : {}) });
   return { kind: "KAYITLI", deviceId: device.id };
 }
+
+/** İzin durumunu OKUR, istemez (Bildirim Ayarları ekranı açılışı). */
+export async function nativePermission(): Promise<"VERILDI" | "REDDEDILDI" | "SORULMADI"> {
+  const p = await Notifications.getPermissionsAsync();
+  if (p.granted) return "VERILDI";
+  return p.status === "denied" && !p.canAskAgain ? "REDDEDILDI" : "SORULMADI";
+}

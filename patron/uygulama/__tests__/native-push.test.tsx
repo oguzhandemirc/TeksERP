@@ -84,7 +84,7 @@ describe("bildirim ekranı — bu cihaz", () => {
   });
 
   it("push olan ortamda (web) düğme çizilir", async () => {
-    render(<NotificationDevices vapidKey="x" pushHere />);
+    render(<NotificationDevices vapidKey="x" pushHere os="web" permission="SORULMADI" />);
     await act(async () => undefined);
     expect(screen.getByTestId("cihaz-kaydet")).toBeTruthy();
     expect(screen.queryByTestId("cihaz-yakinda")).toBeNull();

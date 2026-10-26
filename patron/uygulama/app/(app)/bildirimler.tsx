@@ -1,5 +1,5 @@
-// Bildirimler — bölümler: Ayarlar (ana anahtar · tür · sessiz saat) · Eşikler · Cihazlar · Geçmiş; tesis varsayılanı
-// (yönetici). Karar sunucudadır: ayar katı şemadan geçer, izni yetmeyen türe ayar açık olsa da gönderilmez.
+// Bildirim Ayarları — bölümler: Cihazlar (bu cihazın izni, EN ÜSTTE) · Ayarlar (ana anahtar · tür · sessiz saat) · Eşikler ·
+// Geçmiş; tesis varsayılanı (yönetici). Karar sunucudadır: ayar katı şemadan geçer, izni yetmeyen türe ayar açık olsa da gönderilmez.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import type { NotificationSettingsView } from "../../src/api/wire";
@@ -67,6 +67,7 @@ export default function Notifications() {
   return shell(
     <>
       {view.gonderim === "kapali" ? <Banner tone="warn" text="Bildirim gönderimi sunucuda henüz açık değil; ayarlarınız saklanır ve açıldığında geçerli olur." testID="gonderim-kapali" /> : null}
+      <NotificationDevices vapidKey={view.webPushAnahtari} />
       <SectionHeader title="Ayarlar" />
       <GroupNote>{SOURCE[view.kaynak]}</GroupNote>
       <NotificationSettingsForm form={form} kinds={view.turler} onChange={(f) => { setForm(f); setSaved(null); }} />
@@ -83,7 +84,6 @@ export default function Notifications() {
             onConfirm={() => void submit(saveFacility, "Tesis varsayılanı kaydedildi")} testID="tesis-varsayilani" />
         ) : null}
       </View>
-      <NotificationDevices vapidKey={view.webPushAnahtari} />
       <NotificationHistory />
     </>,
   );
