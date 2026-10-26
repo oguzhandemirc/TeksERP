@@ -11,8 +11,8 @@ import { z } from "zod";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { factoryMinuteOfDay } from "../constants/time";
-import { getNotificationEntry, type NotificationKind } from "../constants/notification-catalog";
-import { loadNotificationVisibilityEnv, visibleKindsFor } from "./helpers/notification-visibility.helper";
+import { getNotificationEntry, NOTIFICATION_KINDS, type NotificationKind } from "../constants/notification-catalog";
+import { loadNotificationVisibilityEnv, permissionDeniedKindCount, visibleKindsFor } from "./helpers/notification-visibility.helper";
 import { renderNotification } from "./helpers/notification-render.helper";
 import { narrowKinds, readInboxListFilter, rowFlagWhere, type InboxListFilter } from "./helpers/notification-list-filter.helper";
 import { loadCurrentShift } from "./helpers/loom-alarm-shift.helper";
@@ -263,15 +263,19 @@ export async function undoMarkRead(viewer: InboxViewer, body: unknown): Promise<
 // ---- katalog (F1: tercihsiz) ------------------------------------------------
 
 export async function visibleCatalog(viewer: InboxViewer) {
-  const kinds = await viewerKinds(viewer);
+  const env = await loadNotificationVisibilityEnv(prisma);
+  const kinds = visibleKindsFor({ permissions: viewer.permissions }, env);
+  const yetkiDisi = permissionDeniedKindCount({ permissions: viewer.permissions }, env);
   return {
     turler: kinds.map((k) => {
       const e = getNotificationEntry(k);
       return {
         kod: e.kod, ad: e.ad, sinif: e.sinif, altTur: e.altTur, grup: e.grup, kilit: e.kilit,
         kilitGerekcesi: e.kilitGerekcesi ?? null, kanallar: e.kanallar, varsayilanKanallar: e.varsayilanKanallar,
+        kapsam: e.kapsam ?? null,
       };
     }),
+    yetkiDisi,
   };
 }
 

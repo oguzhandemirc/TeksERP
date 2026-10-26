@@ -119,6 +119,14 @@ export function visibilityPermissionCodes(kinds: readonly NotificationKind[]): s
   return [...out];
 }
 
+/** "N tür yetkiniz dışında": modülü/kapısı açık, izni olmayan (izin verilse görülecek) tür sayısı. */
+export function permissionDeniedKindCount(viewer: NotificationViewer, env: NotificationVisibilityEnv): number {
+  return NOTIFICATION_KINDS.filter(
+    (kind) => !canSeeNotificationType(viewer, kind, env)
+      && canSeeNotificationType({ permissions: visibilityPermissionCodes([kind]) }, kind, env),
+  ).length;
+}
+
 /**
  * Toplu sürüm (dağıtıcı): aday kullanıcılardan türü GÖREBİLENLER. Kod kümesi `loadEffectiveGrants`ten
  * (aktif, sistem dışı, süresi geçerli atama) — `grants` verilirse yeniden okunmaz. Karar tekil yüklemdir.

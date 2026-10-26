@@ -22,6 +22,7 @@ import { WEAVING_ORDER_OVERVIEW_QUERY_KEY } from "./useWeavingOrderMutations";
 import { WEAVING_KIND_LABEL, WEAVING_STATUS_META, formatDay, type WeavingExecutionKind, type WeavingOrder, type WeavingOrderStatus } from "./types";
 import { isFasonSectionVisible } from "./fason/fason-summary";
 import { isList, liveEmptyText } from "./overview/overview-model";
+import { FollowButton } from "@/components/bildirim/FollowButton";
 import { BeamsSection, LiveRunsSection, OrderLinesSection, OverviewKpis, RecentDoffsSection, RecentRunsSection } from "./overview/OverviewSections";
 
 const STATUS_PILL: Record<WeavingOrderStatus, string> = {
@@ -145,9 +146,10 @@ function HeadBlock({ wo, kind, actions }: { wo: WeavingOrder; kind: WeavingExecu
 function SheetActions({ wo, onEdit, onCloseOrder, onCancel, onFason }: Omit<Props, "order" | "onClose"> & { wo: WeavingOrder }) {
   const isOpen = WEAVING_STATUS_META[wo.status]?.open ?? false;
   const fason = isFasonSectionVisible(wo);
-  if (!isOpen && !fason) return null;
+  // bildirim: takip kapalı işte de anlamlı (ilerideki bildirimler) — eylem şeridi takip için hep çizilir.
   return (
     <div className="sheet-actions">
+      <FollowButton type="dokuma-isi" id={wo.id} />
       {fason && (
         <button type="button" className="btn" onClick={() => onFason(wo)}>
           <Truck className="h-3.5 w-3.5" /> Fason (sevk · kabul)

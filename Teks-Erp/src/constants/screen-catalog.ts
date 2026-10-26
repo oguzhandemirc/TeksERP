@@ -170,6 +170,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings", "system:activity"], capabilities: [] },
   // bildirim: kişisel gelen kutusu — kapısız (izin kodu yok; satır kapsamı kişinin kendi kutusu).
   { key: "notifications", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirimler", requires: [], capabilities: [] },
+  { key: "settings/notifications", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim tercihleri", requires: [], capabilities: [] },
   { key: "system/perf", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Endpoint Performansı", requires: ["admin:settings"], capabilities: [] },
   { key: "system/server-status", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Durumu", requires: ["admin:settings", "system:server-status"], capabilities: ["system:backups"] },
   { key: "system/print-history", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yazdırma Geçmişi", requires: ["admin:settings", "system:print-history"], capabilities: [] },
