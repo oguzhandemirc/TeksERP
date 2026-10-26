@@ -7,16 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowDown, ArrowUp, ScanBarcode, Search, Wrench } from "lucide-react";
 import { productionReportsApi, type TravelerEvent, type TravelerTraceResult } from "./service";
 import apiClient from "@/services/apiClient";
+import { useScanSeed } from "@/hooks/useScanSeed";
 import { MetricCard, ReportPageLayout } from "../_components";
 import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDateTime, fmtMeters } from "../_components/formatters";
 // Etiket sözlükleri dışa aktarım spec'iyle ORTAK: ekranda "Kurşun Geçildi" yazıp
 // Excel'de ham enum basmak aynı olayı iki ad altında gösterirdi.
-import {
-  buildTravelerTraceExport,
-  OP_TYPE_LABEL,
-  STATION_KIND_LABEL,
-} from "./travelerTraceExport";
+import { buildTravelerTraceExport, OP_TYPE_LABEL, STATION_KIND_LABEL } from "./travelerTraceExport";
 
 interface RollLookupItem {
   id: string;
@@ -56,6 +53,8 @@ export function TravelerTracePage() {
   const [input, setInput] = useState("");
   const [rollId, setRollId] = useState<string | null>(null);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  // Top kartındaki "İz sür" (RollTraceLink) `state.rollId` ile gelir — BatchTracePage'in `batchTerm` köprüsü.
+  useScanSeed("rollId", (value) => { setInput(value); setRollId(value); });
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();

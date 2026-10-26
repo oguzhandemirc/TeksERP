@@ -110,7 +110,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/production/batch-trace",
     uc: ["/api/reports/production/batch-search", "/api/reports/production/batch-trace/:batchId"], kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/batch-search" }, { dosya: "src/routes/reports/production.routes.ts", yol: "/batch-trace/:batchId" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations", aciklama: "Operasyon ekranındaki iz sürme; parti kartından da açılır" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations", aciklama: "Operasyon ekranındaki iz sürme; Partiler aramasından (Ctrl+K) da açılır" } },
   { key: "production/traveler-trace", baslik: "Top İzleme", soru: "Bu topun refakat kartı hangi istasyonlarda okutuldu?",
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/production/traveler-trace", uc: "/api/reports/production/traveler-trace", kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/traveler-trace" }], yuzey: "yaprak",
