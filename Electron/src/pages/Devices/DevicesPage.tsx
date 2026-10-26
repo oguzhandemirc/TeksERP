@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -16,6 +17,7 @@ import type { DeviceListItem } from "./types";
 import { ApproveAssignDialog } from "./ApproveAssignDialog";
 import { TabletTlsQrButton } from "./TabletTlsQrButton";
 import { RebindRequestsPanel } from "./RebindRequestsPanel";
+import { DuplicateCandidates } from "./DuplicateCandidates";
 import { DeviceRow, deviceKindLabel } from "./DeviceRow";
 import {
   DeviceFilterBar,
@@ -48,6 +50,8 @@ export function DevicesPage() {
   const [assignTarget, setAssignTarget] = useState<DeviceListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeviceListItem | null>(null);
 
+  // Komut paleti derin bağlantısı `?kopya=1`: kopya şeridi açık gelir.
+  const [params] = useSearchParams();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [statusFilter, setStatusFilter] = useState<DeviceStatusFilter>("all");
@@ -135,6 +139,7 @@ export function DevicesPage() {
 
       <PageBody className="space-y-4 p-6">
         <RebindRequestsPanel devices={devices} />
+        <DuplicateCandidates initiallyOpen={params.get("kopya") === "1"} />
         {query.isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}

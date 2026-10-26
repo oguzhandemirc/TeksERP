@@ -27,7 +27,7 @@ async function onizlemeBekle(page) {
 export const BELGE_KOD_ADIMLARI = [
   {
     id: "BK1", rol: "P", gerektirir: ["BT2"],
-    yol: "Belge Tasarımcısı → Kod sekmesi (görsel kip, salt-okunur) + canlı önizleme", rota: "definitions/document-designer",
+    yol: "Belge Tasarımcısı → Kod sekmesi (görsel kip, salt-okunur) + canlı önizleme", rota: "definitions/document-designer/new",
     async yap({ page }) {
       await merkezSekme(page, "Kod");
       await page().getByText("Görsel kipte kod salt-okunurdur").first().waitFor({ timeout: 15_000 });
@@ -43,7 +43,7 @@ export const BELGE_KOD_ADIMLARI = [
   },
   {
     id: "BK2", rol: "P", gerektirir: ["BK1"],
-    yol: "Koda geç → onay → kod kipi; HTML sonuna `{{ belge.` → tamamlama listesi", rota: "definitions/document-designer",
+    yol: "Koda geç → onay → kod kipi; HTML sonuna `{{ belge.` → tamamlama listesi", rota: "definitions/document-designer/new",
     async yap({ page, tikla, diyalog }) {
       await tikla("Koda geç");
       await tikla("Koda geç", { icinde: diyalog("Koda geç") });
@@ -66,7 +66,7 @@ export const BELGE_KOD_ADIMLARI = [
   },
   {
     id: "BK3", rol: "P", gerektirir: ["BK2"],
-    yol: "Yasak filtre `| tarihx` → hata şeridi (satır/sütun) + altı çizili; satır silinir → temiz", rota: "definitions/document-designer",
+    yol: "Yasak filtre `| tarihx` → hata şeridi (satır/sütun) + altı çizili; satır silinir → temiz", rota: "definitions/document-designer/new",
     async yap({ page }) {
       await page().keyboard.type("no | tarihx }}", { delay: 30 });
       const serit = page().getByTestId("onizleme-seridi").first();
@@ -89,7 +89,7 @@ export const BELGE_KOD_ADIMLARI = [
   },
   {
     id: "BK4", rol: "P", gerektirir: ["BK3"],
-    yol: "Örnek: … → Örnek veri modalı (senaryolar + Gerçek kayıttan…) → tek_kalem → Önizleme sekmesi", rota: "definitions/document-designer",
+    yol: "Örnek: … → Örnek veri modalı (senaryolar + Gerçek kayıttan…) → tek_kalem → Önizleme sekmesi", rota: "definitions/document-designer/new",
     async yap({ page, tikla, diyalog }) {
       await merkezSekme(page, "Önizleme");
       await onizlemeBekle(page);
@@ -112,7 +112,7 @@ export const BELGE_KOD_ADIMLARI = [
   },
   {
     id: "BK5", rol: "P", gerektirir: ["BK4"],
-    yol: "PDF önizleme → pdf:preview → görüntüleyici penceresi (ölçülür)", rota: "definitions/document-designer",
+    yol: "PDF önizleme → pdf:preview → görüntüleyici penceresi (ölçülür)", rota: "definitions/document-designer/new",
     async yap({ page, app }) {
       const once = (await app().evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length));
       await page().getByRole("button", { name: /PDF önizleme/ }).first().click();

@@ -74,7 +74,7 @@ export const accessTiles: AccessTile[] = [
     // metre/yazıcı/tartı) ile karışmasın diye "Tabletler" adı kullanılır.
     key: "devices",
     title: "Tabletler",
-    description: "Sahadaki tabletler ve hangi makineye eşli oldukları",
+    description: "Sahadaki tabletler, eşli makineler ve kopya kayıtların birleştirilmesi",
     icon: Tablet,
     to: "/access/devices",
     group: "device",

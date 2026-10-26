@@ -7,7 +7,7 @@
 //
 // ÖLÇÜLENLER:
 //   §1 Kimliksiz istek 401 (izin kapısından ÖNCE kimlik)
-//   §2 Okuma uçları: read/design/publish/admin:settings açar; izinsiz 403 PERMISSION_DENIED
+//   §2 Okuma uçları: read/design/publish/admin:settings açar; izinsiz 403 PERMISSION_DENIED; atama ızgarası profileCatalog (T5)
 //   §3 Tasarım uçları (oluştur, sürüm kaydet, ata): design + admin:settings; read/publish 403
 //   §4 Yayın ucu: publish + admin:settings; read/design 403
 //   §5 Gerçek kayıtlı önizleme + örnek kaynak listesi: belgenin kendi okuma izni de aranır
@@ -18,6 +18,8 @@
 //    kapısı DOCUMENT_TEMPLATE_DESIGN'a çevrildi → §4 iki ❌ (design yayınladı, publish 403 aldı); geri alınınca 22/0.
 // ⭐ NEGATİF SONDA (2026-10-25, T1C, ölçüldü): tasarımcı kapısı her isteği geçirecek biçimde `return next()`e
 //    çevrildi → §6 iki ❌ (liste + oluşturma bayrak kapalıyken geçti); yedekten geri kondu, 25/0.
+// ⭐ NEGATİF SONDA (2026-10-26, T5, ölçüldü): assignment.service.ts'de `profileCatalog` anahtarı yeniden adlandırıldı
+//    → §2 profil kataloğu ❌ (katalog=undefined); yedekten geri kondu, 26/0.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
@@ -93,7 +95,7 @@ async function call(h: Record<string, string> | null, method: string, path: stri
   return { status: r.status, data: json?.data as Record<string, unknown> | undefined, code: json?.error?.details?.code ?? json?.details?.code };
 }
 
-const HTTP_KONTROL = 25;
+const HTTP_KONTROL = 26;
 
 async function main(): Promise<void> {
   console.log("=== Belge şablonu uçları izin matrisi ===\n");
@@ -130,6 +132,15 @@ async function main(): Promise<void> {
   }
   const deny = await call(H.none, "GET", "/");
   check("§2 izinsiz okuma 403 PERMISSION_DENIED", deny.status === 403 && deny.code === "PERMISSION_DENIED", `durum=${deny.status} kod=${deny.code}`);
+  // §2b atama ızgarası HER profili taşır (T5: atamadan önce etkilenen cari listesi; salt okuma ek alanı)
+  const asg = await call(H.read, "GET", "/assignments");
+  const cat = asg.data?.profileCatalog as Array<{ id?: string; overrideKeys?: unknown; affected?: { customers?: unknown } }> | undefined;
+  const profileCount = await prisma.documentProfile.count();
+  check(
+    "§2 read atama ızgarasında profil kataloğunu okur (tüm profiller, etkilenen cari + ezme anahtarı)",
+    asg.status === 200 && Array.isArray(cat) && cat.length === profileCount && cat.every((p) => !!p.id && Array.isArray(p.overrideKeys) && Array.isArray(p.affected?.customers)),
+    `durum=${asg.status} katalog=${cat?.length} profil=${profileCount}`,
+  );
 
   // §3 tasarım
   const create = (h: Record<string, string>, name: string) => call(h, "POST", "/", { docType: DOC, name: `${PREFIX}-${name}`, copyFrom: { kind: "blank" } });
