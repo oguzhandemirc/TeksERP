@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { foldedIncludes } from "@/lib/search-fold";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -78,7 +79,9 @@ export function AccessUsersPage() {
   const openTarget = useOpenTarget();
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
-  const [shortCredOpen, setShortCredOpen] = useState(false);
+  // `?kisa=1` (Cihazlar → Anahtar kaybı → "Anahtarı geri yükle"): kısa kimlik diyaloğu açık gelir.
+  const [searchParams] = useSearchParams();
+  const [shortCredOpen, setShortCredOpen] = useState(() => searchParams.get("kisa") === "1");
   const { hasPermission } = useRoleAccess();
   // Uçlarla aynı eşik: admin:settings + admin:users (toplu sıfırlama düz PIN döndürür).
   const canManageShortCredentials = hasPermission("admin:settings") && hasPermission("admin:users");

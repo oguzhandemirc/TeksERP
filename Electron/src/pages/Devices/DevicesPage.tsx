@@ -18,6 +18,9 @@ import { ApproveAssignDialog } from "./ApproveAssignDialog";
 import { TabletTlsQrButton } from "./TabletTlsQrButton";
 import { RebindRequestsPanel } from "./RebindRequestsPanel";
 import { DuplicateCandidates } from "./DuplicateCandidates";
+import { ProofLostPanel } from "./ProofLostPanel";
+import { DevicesEmptyState as EmptyState } from "./DevicesEmptyState";
+import { useProofLost } from "./proof";
 import { DeviceRow, deviceKindLabel } from "./DeviceRow";
 import {
   DeviceFilterBar,
@@ -54,7 +57,8 @@ export function DevicesPage() {
   const [params] = useSearchParams();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
-  const [statusFilter, setStatusFilter] = useState<DeviceStatusFilter>("all");
+  // `?kanit=1` (bildirim/komut paleti): anahtar kaybı süzgeci + bant açık gelir.
+  const [statusFilter, setStatusFilter] = useState<DeviceStatusFilter>(params.get("kanit") === "1" ? "proof-lost" : "all");
   const [kindFilter, setKindFilter] = useState<DeviceKindFilter>("all");
 
   const query = useQuery({ queryKey: [QUERY_KEY], queryFn: deviceService.list });
@@ -78,6 +82,8 @@ export function DevicesPage() {
   });
 
   const devices = useMemo(() => query.data?.data ?? [], [query.data]);
+  const proofLost = useProofLost();
+  const proofLostIds = useMemo(() => new Set((proofLost.data?.cihazlar ?? []).map((d) => d.id)), [proofLost.data]);
   const pendingCount = useMemo(
     () => devices.filter((d) => d.isActive && d.status === "PENDING").length,
     [devices],
@@ -89,11 +95,12 @@ export function DevicesPage() {
       if (statusFilter === "pending" && !(d.isActive && d.status === "PENDING")) return false;
       if (statusFilter === "approved" && !(d.isActive && d.status === "APPROVED")) return false;
       if (statusFilter === "inactive" && d.isActive) return false;
+      if (statusFilter === "proof-lost" && !proofLostIds.has(d.id)) return false;
       if (kindFilter !== "all" && d.kind !== kindFilter) return false;
       if (q && !foldSearchText(`${d.name} ${d.deviceId}`).includes(q)) return false;
       return true;
     });
-  }, [devices, statusFilter, kindFilter, debouncedSearch]);
+  }, [devices, statusFilter, kindFilter, debouncedSearch, proofLostIds]);
 
   const anyFilterActive = debouncedSearch.trim() !== "" || statusFilter !== "all" || kindFilter !== "all";
   const clearFilters = () => { setSearch(""); setStatusFilter("all"); setKindFilter("all"); };
@@ -131,6 +138,7 @@ export function DevicesPage() {
         onKind={setKindFilter}
         pendingCount={pendingCount}
         onShowPending={() => setStatusFilter("pending")}
+        proofLostCount={proofLostIds.size}
         resultCount={filtered.length}
         totalCount={devices.length}
         anyFilterActive={anyFilterActive}
@@ -138,6 +146,7 @@ export function DevicesPage() {
       />
 
       <PageBody className="space-y-4 p-6">
+        <ProofLostPanel initiallyOpen={params.get("kanit") === "1"} />
         <RebindRequestsPanel devices={devices} />
         <DuplicateCandidates initiallyOpen={params.get("kopya") === "1"} />
         {query.isLoading ? (
@@ -177,6 +186,7 @@ export function DevicesPage() {
                       onReactivate={() => reactivate.mutate(d.id)}
                       onDelete={() => setDeleteTarget(d)}
                       isPending={rowPending}
+                      proofLost={proofLostIds.has(d.id)}
                     />
                   ))
                 )}
@@ -203,17 +213,5 @@ export function DevicesPage() {
         onConfirm={() => { if (deleteTarget) hardDelete.mutate(deleteTarget.id); }}
       />
     </PageShell>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="mx-auto max-w-md py-16 text-center">
-      <div className="mb-2 text-lg font-medium">Henüz cihaz yok</div>
-      <p className="text-sm text-muted-foreground">
-        Tablet ilk açıldığında kendini otomatik bildirir ve burada "Onay bekliyor" olarak listelenir.
-        Onaylayıp bir makineye atayınca tablet çalışmaya başlar.
-      </p>
-    </div>
   );
 }
