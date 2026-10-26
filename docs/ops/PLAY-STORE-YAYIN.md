@@ -5,6 +5,14 @@
 > yayınlandı**. Geliştirici hesabı **KİŞİSEL** (Play Console ana sayfası "Etkili Yazılım LTD · Kişisel hesap",
 > ölçüm 2026-10-20; 2026-10-15'teki "kurumsal" hükmü GEÇERSİZ → 2026-10-20) — sonuçları §4.
 >
+> **1.4.3 / vc 65 / rv 59.0 derlendi 2026-10-26** (`5156f26d2`, PR #234 sürüm commit'i; native tur: `allowBackup:false` +
+> `expo-application`) — Play dahili test yüklemesi KULLANICIDA. AAB + sha256 + ölçüm: `~/.tekserp/play-tablet/1.4.3-vc65/`
+> (sha256 `114439fcf43e…`, 36,4 MB). Ölçüm (proto manifest): vc 65 · 1.4.3 · `expo_runtime_version` 59.0 · güncelleme adresi
+> `…/ota/59.0/manifest` · targetSdk 36 · `PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY=true` · OTA kökü `D7:1B:3C…` (aynı) ·
+> yükleme anahtarı imzası · ön plan hizmeti YOK (expo-audio servisleri ve `FOREGROUND_SERVICE*` / `SYSTEM_ALERT_WINDOW` /
+> `USE_BIOMETRIC` AAB'de yok — K1 vc 60'ta uygulanmıştı) · izin listesi vc 64 ile AYNI (`expo-application` izin getirmedi).
+> OTA: `yayinla:ortak` paketi `59.0/1793034554256` + `--grup=test --kuru` plan geçti, GERÇEK yayın yapılmadı (native tur).
+>
 > **Dağıtım kararı (K-14, 2026-10-07; K5 2026-10-16):** ortak fabrika tableti yalnız Google Play'den kurulur; native
 > güncelleme Play'den, JS güncellemesi OTA ile gelir (`docs/kurallar/surum-yayin.md` Tablet → Kararlar).
 > **K5 = ÜRETİM (kullanıcı kararı 2026-10-16):** uygulama Play üretim kanalında HERKESE AÇIK yayınlanır; K-14'ün
