@@ -88,7 +88,8 @@ async function main() {
   const dbEngeli = hedefDbEngeli();
   if (dbEngeli) {
     console.log(`❌ ${dbEngeli}`);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   // [12] için: ayarın önceki satırı (yoksa null) — finally'de aynen geri konur.
   const footnoteBefore = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_RETURN_FOOTNOTE } });
