@@ -20,7 +20,7 @@ const TOP_ITEMS = 8;
 export default function Stock() {
   const card = useSnapshot("stok-karnesi");
   return (
-    <Screen title="Stok" module="stok" onRefresh={card.reload} refreshing={card.refreshing}>
+    <Screen module="stok" onRefresh={card.reload} refreshing={card.refreshing}>
       <SnapshotGate remote={card} domain="stok" rows={3} empty="Fabrikadan stok karnesi henüz gelmedi" testID="stok-karnesi">
         {(veri, snap) => <StockBody data={veri} stamp={<FactoryStamp snap={snap} offline={card.offline} note="saatlik güncellenir" testID="fabrika-verisi" />} />}
       </SnapshotGate>

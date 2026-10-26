@@ -15,6 +15,7 @@ import { CustomerRow } from "../../../src/ui/siparis/CustomerRow";
 import { CapsuleButton, ListStates, SearchField, StaleNote } from "../../../src/ui/siparis/parts";
 import { useRemoteList } from "../../../src/ui/siparis/useRemoteList";
 import { space } from "../../../src/ui/tokens";
+import { EMPTY_ICON } from "../../../src/ui/icons";
 
 const SPEC = LIST_SEARCH["cari-kart"]!;
 const ROLE_CHOICES = [{ key: "tumu", label: "Tümü" }, ...(SPEC.suzgec?.secenekler ?? []).map((o) => ({ key: o.deger, label: o.etiket }))];
@@ -46,7 +47,7 @@ export default function Customers() {
           {list.items.map((r) => <CustomerRow key={r.id} r={r} onPress={() => router.push({ pathname: "/cariler/[id]", params: { id: r.id } } as never)} />)}
         </ListGroup>
       ) : null}
-      <ListStates list={list} empty={ara ? "Eşleşen cari yok" : "Cari yok"} domain="cariler" icon={ara ? "search-outline" : undefined} testID="cariler" />
+      <ListStates list={list} empty={ara ? "Eşleşen cari yok" : "Cari yok"} domain="cariler" icon={ara ? EMPTY_ICON.arama : undefined} testID="cariler" />
       <ChoiceSheet visible={sheet} title={SPEC.suzgec?.etiket ?? "Rol"} choices={ROLE_CHOICES} value={rol} onSelect={setRol} onClose={() => setSheet(false)} testIDPrefix="rol-" />
     </Screen>
   );

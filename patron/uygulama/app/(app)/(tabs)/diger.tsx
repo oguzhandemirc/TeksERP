@@ -3,7 +3,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
-import { MODULES, moduleVisible, type ModuleKey } from "../../../src/lib/access";
+import { MODULES, moduleNavTitle, moduleVisible } from "../../../src/lib/access";
 import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
 import { Avatar, CountPill } from "../../../src/ui/diger/parts";
@@ -16,16 +16,6 @@ import { MORE_GROUPS } from "../../../src/ui/tabs";
 import { makeStyles, useTokens } from "../../../src/ui/theme-context";
 import { radius, space, typography } from "../../../src/ui/tokens";
 
-const HINT: Partial<Record<ModuleKey, string>> = {
-  cariler: "Müşteri ve tedarikçiler",
-  sevkiyat: "Sevk edilen ve bekleyen",
-  stok: "Ham ve bitmiş stok",
-  raporlar: "Fabrikadan rapor isteyin",
-  "gelen-kutusu": "Fabrikaya gönderilen talepler",
-  bildirimler: "Uyarılar, eşikler ve cihazlar",
-  hesaplar: "Kim neyi görür, davetler",
-  profil: "Görünüm, parola ve çıkış",
-};
 
 const INBOX_BADGE_LIMIT = 50;
 
@@ -67,12 +57,12 @@ export default function More() {
             {mods.map((m) => (
               <ListRow
                 key={m.key}
-                title={m.title}
-                subtitle={HINT[m.key]}
+                title={moduleNavTitle(m.key)}
+                subtitle={m.hint}
                 domain={MODULE_ICON[m.key].domain}
                 icon={MODULE_ICON[m.key].icon}
                 accessory={m.key === "gelen-kutusu" && badge ? <CountPill value={badge} testID="gelen-rozet" /> : undefined}
-                accessibilityLabel={m.key === "gelen-kutusu" && badge ? `${m.title}, ${badge} bekleyen talep` : undefined}
+                accessibilityLabel={m.key === "gelen-kutusu" && badge ? `${moduleNavTitle(m.key)}, ${badge} bekleyen talep` : undefined}
                 onPress={() => router.push(m.route as never)}
                 testID={`menu-${m.key}`}
               />

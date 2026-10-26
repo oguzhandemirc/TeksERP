@@ -16,6 +16,7 @@ import { SectionHeader } from "../../src/ui/SectionHeader";
 import { Empty, ErrorState, LoadingSkeleton } from "../../src/ui/StateViews";
 import { space } from "../../src/ui/tokens";
 import { useWrite } from "../../src/ui/useWrite";
+import { EMPTY_ICON } from "../../src/ui/icons";
 
 const SOURCE: Readonly<Record<NotificationSettingsView["kaynak"], string>> = {
   HESAP: "Kendi ayarlarınız kullanılıyor.",
@@ -57,11 +58,11 @@ export default function Notifications() {
   };
 
   const shell = (children: ReactNode) => (
-    <Screen title="Bildirimler" module="bildirimler" onRefresh={remote.reload} refreshing={remote.refreshing}>{children}</Screen>
+    <Screen module="bildirimler" onRefresh={remote.reload} refreshing={remote.refreshing}>{children}</Screen>
   );
   if (remote.loading && !view) return shell(<LoadingSkeleton rows={5} />);
   if (remote.error && !view) return shell(<ErrorState text={remote.error} onRetry={remote.reload} />);
-  if (!view || !form) return shell(<Empty icon="notifications-off-outline" text="Ayarlar okunamadı" actionLabel="Tekrar dene" onAction={remote.reload} />);
+  if (!view || !form) return shell(<Empty icon={EMPTY_ICON.bildirim} text="Ayarlar okunamadı" actionLabel="Tekrar dene" onAction={remote.reload} />);
   const error = formError ?? saveOwn.error ?? reset.error ?? saveFacility.error;
   return shell(
     <>

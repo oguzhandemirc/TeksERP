@@ -74,14 +74,14 @@ export default function Inbox() {
 
   const admin = can(permissions, "bulut:hesap:yonet");
   return (
-    <Screen title="Gelen kutusu" module="gelen-kutusu" onRefresh={r.reload} refreshing={r.refreshing}>
+    <Screen module="gelen-kutusu" onRefresh={r.reload} refreshing={r.refreshing}>
       <View style={{ marginBottom: space.m }}>
         <SegmentedControl items={FILTERS} value={filter} onChange={setFilter} testIDPrefix="sekme-" accessibilityLabel="Talep durumu" />
       </View>
       {NOTE[filter] ? <GroupNote>{NOTE[filter]}</GroupNote> : null}
       {r.loading && !r.data ? <LoadingSkeleton rows={4} /> : null}
       {r.error && !r.data ? <ErrorState text={r.error} onRetry={r.reload} /> : null}
-      {r.data && items.length === 0 ? <Empty domain="gelenKutusu" icon="file-tray-outline" text={EMPTY[filter]} testID="gelen-bos" /> : null}
+      {r.data && items.length === 0 ? <Empty domain="gelenKutusu" text={EMPTY[filter]} testID="gelen-bos" /> : null}
       {items.length > 0 ? (
         <ListGroup testID="gelen-liste" iconSize={40}>
           {items.map((m) => (

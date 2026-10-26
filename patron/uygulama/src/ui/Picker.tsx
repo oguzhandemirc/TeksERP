@@ -12,7 +12,7 @@ import { ListGroup, ListRow } from "./ListRow";
 import { ListStates, SearchField } from "./siparis/parts";
 import { useRemoteList } from "./siparis/useRemoteList";
 import { makeStyles, useTokens } from "./theme-context";
-import type { IconName } from "./icons";
+import { EMPTY_ICON, type IconName } from "./icons";
 import { FONT_SCALE, READABLE_MAX, TOUCH, radius, space, typography, type Domain } from "./tokens";
 
 export interface Picked {
@@ -112,7 +112,7 @@ function Sheet(p: { label: string; projection: string; spec: ListSearchSpec | un
             })}
           </ListGroup>
         ) : null}
-        <ListStates list={list} empty={ara ? "Eşleşen kayıt yok" : "Kayıt yok"} domain="genel" icon={ara ? "search-outline" : "file-tray-outline"} />
+        <ListStates list={list} empty={ara ? "Eşleşen kayıt yok" : "Kayıt yok"} domain="genel" icon={ara ? EMPTY_ICON.arama : undefined} />
       </ScrollView>
     </View>
   );

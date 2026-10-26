@@ -16,6 +16,7 @@ import { usePendingPoll } from "../../../src/ui/raporlar/usePendingPoll";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { Empty, ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
 import { space } from "../../../src/ui/tokens";
+import { EMPTY_ICON } from "../../../src/ui/icons";
 
 type Obj = Readonly<Record<string, unknown>>;
 const obj = (v: unknown): Obj => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : {});
@@ -68,11 +69,11 @@ export default function Reports() {
   };
 
   return (
-    <Screen title="Raporlar" module="raporlar" onRefresh={refresh} refreshing={mine.refreshing || catalog.refreshing}>
+    <Screen module="raporlar" onRefresh={refresh} refreshing={mine.refreshing || catalog.refreshing}>
       <SectionHeader title="Rapor iste" domain="raporlar" />
       {catalog.loading && !catalog.data ? <LoadingSkeleton variant="kpi" rows={4} /> : null}
-      {catalog.error && !catalog.data ? <Empty text="Rapor kataloğu henüz fabrikadan gelmedi" domain="raporlar" icon="cloud-download-outline" actionLabel="Tekrar dene" onAction={catalog.reload} /> : null}
-      {catalog.data && entries.length === 0 ? <Empty text="İsteyebileceğin rapor yok" domain="raporlar" icon="lock-closed-outline" /> : null}
+      {catalog.error && !catalog.data ? <Empty text="Fabrikadan rapor kataloğu henüz gelmedi" domain="raporlar" icon={EMPTY_ICON.bekliyor} actionLabel="Tekrar dene" onAction={catalog.reload} /> : null}
+      {catalog.data && entries.length === 0 ? <Empty text="İsteyebileceğiniz rapor yok" domain="raporlar" icon={EMPTY_ICON.yetki} /> : null}
       {entries.length > 0 ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.m }}>
           {entries.map((e) => (
@@ -84,7 +85,7 @@ export default function Reports() {
       <SectionHeader title="İsteklerim" count={mine.data ? requests.length : undefined} />
       {mine.loading && !mine.data ? <LoadingSkeleton rows={3} /> : null}
       {mine.error && !mine.data ? <ErrorState text={mine.error} onRetry={mine.reload} /> : null}
-      {mine.data && requests.length === 0 ? <Empty text="Henüz rapor istemediniz" domain="raporlar" icon="document-text-outline" /> : null}
+      {mine.data && requests.length === 0 ? <Empty text="Henüz rapor istemediniz" domain="raporlar" /> : null}
       {requests.length > 0 ? (
         <ListGroup testID="isteklerim">
           {requests.map((r) => {

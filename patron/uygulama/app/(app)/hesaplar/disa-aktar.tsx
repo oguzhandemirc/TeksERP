@@ -19,6 +19,7 @@ import { ListGroup } from "../../../src/ui/ListRow";
 import { Empty, ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, tabularNums, typography } from "../../../src/ui/tokens";
+import { EMPTY_ICON } from "../../../src/ui/icons";
 
 const browser: BrowserLike | undefined = typeof window === "undefined" ? undefined : (window as unknown as BrowserLike);
 
@@ -57,7 +58,7 @@ export default function ExportScreen() {
       {error ? <Banner tone="error" text={error} /> : null}
       {r.loading && !r.data ? <LoadingSkeleton rows={4} /> : null}
       {r.error && !r.data ? <ErrorState text={r.error} onRetry={r.reload} /> : null}
-      {r.data && r.data.kumeler.length === 0 ? <Empty icon="archive-outline" text="Dışa aktarılacak veri yok." /> : null}
+      {r.data && r.data.kumeler.length === 0 ? <Empty icon={EMPTY_ICON.arsiv} text="Dışa aktarılacak veri yok" /> : null}
       {r.data && r.data.kumeler.length > 0 ? (
         <ListGroup testID="kume-listesi">
           {r.data.kumeler.map((d) => (

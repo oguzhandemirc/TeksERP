@@ -22,6 +22,7 @@ import { StatusBadge } from "./StatusBadge";
 import { makeStyles, useTokens } from "./theme-context";
 import { TOUCH, radius, space, typography } from "./tokens";
 import { useWrite } from "./useWrite";
+import { EMPTY_ICON } from "./icons";
 
 /** Deneme sonucu: kaç cihaza gitti, kayıtsız cihaz çıkarıldı mı. */
 export function testOutcome(r: TestNotificationResult): { tone: "off" | "warn"; text: string } {
@@ -144,7 +145,7 @@ export function NotificationHistory() {
   return (
     <View>
       <SectionHeader title="Geçmiş" />
-      {list.data && items.length === 0 ? <Empty domain="genel" icon="notifications-off-outline" text="Henüz bildirim yok." /> : null}
+      {list.data && items.length === 0 ? <Empty domain="genel" icon={EMPTY_ICON.bildirim} text="Henüz bildirim yok" /> : null}
       {items.length > 0 ? (
         <ListGroup testID="bildirim-gecmisi">
           {items.map((n) => {
