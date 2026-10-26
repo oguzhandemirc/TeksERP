@@ -9,6 +9,7 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatCalendarDay, formatFactory } from "@/lib/factory-time";
+import { CommercialDocButton } from "../shared/CommercialDocButton";
 import { CostQueryError } from "../shared/CostQueryState";
 import { PriceListActions } from "./PriceListActions";
 import { PriceListLinesEditor, PriceListLinesView } from "./PriceListLinesEditor";
@@ -33,6 +34,7 @@ export function PriceListDetailPage() {
         description={list ? `${list.name} · ${list.customer ? list.customer.name : "Genel"} · ${list.currency}` : undefined}
         onBack={() => nav("/cost/price-lists")}
         parent={{ label: "Fiyat Listeleri", to: "/cost/price-lists" }}
+        actions={list ? <CommercialDocButton docType="PRICE_LIST" sourceId={list.id} label={`Fiyat listesi ${priceListLabel(list)} · ${list.name}`} draft={list.status === "DRAFT"} /> : undefined}
       />
       <PageBody className="space-y-4 p-4 sm:p-6">
         {q.isLoading ? (
