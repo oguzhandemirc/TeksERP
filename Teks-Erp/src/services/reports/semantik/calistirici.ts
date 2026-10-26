@@ -15,7 +15,7 @@ import { extractTransientSqlState } from "../../../middlewares/error.middleware"
 import { readReportsStatementTimeoutSec } from "../../system-setting.service";
 import { REPORT_MAX_ROWS, resolveCompareRange, type DateRange } from "../_shared";
 import { shapeHelper, shapeSqlRows, type RawRow, type SemanticResult, type SemanticRow, type SemanticTotals } from "./sonuc";
-import { buildSql, compileQuery, type SemanticQueryInput } from "./derleyici";
+import { andOnlyLeaves, buildSql, compileQuery, type SemanticQueryInput } from "./derleyici";
 import { accessDigest, type AccessContext } from "./izin";
 import { matchesPermission } from "../../../middlewares/rbac.middleware";
 import { REPORT_PUBLISH_PERMISSION } from "../../../constants/permission-catalog";
@@ -183,11 +183,14 @@ async function executeBlocks(q: CompiledQuery, input: SemanticQueryInput, runId:
   let kiyas: SemanticResult["kiyas"] = null;
   const helper = q.measures[0]!.helper;
   if (helper) {
-    const h = await helper.compute({ range: q.range, dimensions: q.dimensions, filters: q.filters, cap: q.cap });
+    // Derleyici helper ölçüde "veya"yı reddeder; yine de süzgeç sessizce düşmez (fail-closed).
+    const filters = andOnlyLeaves(q.filter);
+    if (!filters) throw new Error("helper ölçüye 've' dışı süzgeç ulaştı");
+    const h = await helper.compute({ range: q.range, dimensions: q.dimensions, filters, cap: q.cap });
     notes.push(...h.notes);
     shaped = shapeHelper(q, h);
     if (compareRange && !activeRuns.get(runId)?.cancelled) {
-      const c = await helper.compute({ range: compareRange, dimensions: [], filters: q.filters, cap: q.cap });
+      const c = await helper.compute({ range: compareRange, dimensions: [], filters, cap: q.cap });
       kiyas = { aralik: iso(compareRange), toplam: shapeHelper({ ...q, dimensions: [] }, c).toplam };
     }
     if (activeRuns.get(runId)?.cancelled) throw new RunCancelled();

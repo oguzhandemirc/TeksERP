@@ -9,14 +9,14 @@ import { z } from "zod";
 import { AppError } from "../../../utils/app-error";
 import { factoryDayStart, factoryDayStartOfKey, factoryYmd } from "../../../constants/time";
 import { defaultDeps, runSemanticQuery, type RunOrigin, type SemanticResult } from "./calistirici";
-import type { SemanticQueryInput } from "./derleyici";
+import { isFilterGroup, type SemanticFilterGroup, type SemanticFilterLeaf, type SemanticQueryInput } from "./derleyici";
 import type { AccessContext } from "./izin";
 import { SEMANTIC_CUBES } from "./katalog";
 import { runAnalysis, type AnalysisStats } from "./analiz";
 import { analysisQueryShell, planAnalysisBlock } from "./analiz-blok";
 import { isAnalysisIssue } from "./analiz-plan";
 import type { RaporSunumu } from "../sunum/sunum.types";
-import { COMPARE_MODES, DATE_PRESETS, type AnalysisBlock, type BlockQuery, type DefinitionBlock, type DefinitionParameter, type ReportDefinitionBody } from "./rapor-tanimi.schema";
+import { COMPARE_MODES, DATE_PRESETS, type AnalysisBlock, type BlockQuery, type FilterRuleDef, type FilterTreeDef, isFilterRuleDef, type DefinitionBlock, type DefinitionParameter, type ReportDefinitionBody } from "./rapor-tanimi.schema";
 
 export const NO_ACCESS_MESSAGE = "Bu bölüm için yetkiniz yok.";
 const HOUR_MS = 3_600_000;
@@ -120,6 +120,43 @@ export function resolveParams(body: ReportDefinitionBody, raw: Record<string, un
 
 const refOf = (v: unknown): string | null => (typeof v === "string" && v.startsWith("$") ? v.slice(1) : null);
 
+/** Parametresi "Tümü" kalan koşul her satırı tutar: `true` (koşul yazılmaz). */
+function settleRule(r: FilterRuleDef, params: Map<string, ResolvedParam>): SemanticFilterLeaf | true {
+  const ref = refOf(r.value);
+  if (!ref) return { alan: r.field, islec: r.operator, deger: r.value };
+  const p = params.get(ref);
+  if (p?.tur !== "secim" || p.values.length === 0) return true;
+  const multi = p.values.length > 1;
+  const islec = multi && r.operator === "=" ? "in" : multi && r.operator === "!=" ? "notIn" : r.operator;
+  return { alan: r.field, islec, deger: islec === "in" || islec === "notIn" ? p.values : p.values[0]! };
+}
+
+/**
+ * Süzgeç ağacına parametre yerleştirir. Her satırı tutan koşul "ve" grubunda düşer, "veya"
+ * grubunu bütünüyle doğru yapar (grup düşer) — koşulu "veya"dan çıkarmak süzgeci daraltırdı.
+ */
+function settleFilter(tree: FilterTreeDef | undefined, params: Map<string, ResolvedParam>): Pick<SemanticQueryInput, "suzgec" | "suzgecBaglaci"> {
+  const join = (c: "and" | "or") => (c === "or" ? "veya" : "ve") as "ve" | "veya";
+  const items: Array<SemanticFilterLeaf | SemanticFilterGroup> = [];
+  for (const r of tree?.rules ?? []) {
+    let v: SemanticFilterLeaf | SemanticFilterGroup | true;
+    if (isFilterRuleDef(r)) v = settleRule(r, params);
+    else {
+      const inner: SemanticFilterLeaf[] = [];
+      let all = false;
+      for (const x of r.rules) {
+        const s = settleRule(x, params);
+        if (s !== true) inner.push(s);
+        else if (r.combinator === "or") all = true;
+      }
+      v = all || inner.length === 0 ? true : { baglac: join(r.combinator), kurallar: inner };
+    }
+    if (v !== true) items.push(v);
+    else if (tree!.combinator === "or") return { suzgec: [] };
+  }
+  return items.length ? { suzgec: items, suzgecBaglaci: join(tree!.combinator) } : { suzgec: [] };
+}
+
 /** Tanım sorgusu → semantik sorgu girdisi (parametreler yerleşmiş, `$ad` kalmaz). */
 export function toSemanticInput(
   q: BlockQuery,
@@ -128,19 +165,7 @@ export function toSemanticInput(
   opts: { asTable: boolean; refresh: boolean },
 ): SemanticQueryInput {
   const { asTable, refresh } = opts;
-  const suzgec: SemanticQueryInput["suzgec"] = [];
-  for (const r of q.suzgec?.rules ?? []) {
-    const ref = refOf(r.value);
-    if (!ref) {
-      suzgec.push({ alan: r.field, islec: r.operator, deger: r.value });
-      continue;
-    }
-    const p = params.get(ref);
-    if (p?.tur !== "secim" || p.values.length === 0) continue;
-    const multi = p.values.length > 1;
-    const islec = multi && r.operator === "=" ? "in" : multi && r.operator === "!=" ? "notIn" : r.operator;
-    suzgec.push({ alan: r.field, islec, deger: islec === "in" || islec === "notIn" ? p.values : p.values[0]! });
-  }
+  const filter = settleFilter(q.suzgec, params);
   const time = q.zaman ? params.get(q.zaman.param) : undefined;
   const compareRef = q.zaman?.kiyas ? params.get(q.zaman.kiyas.slice(1)) : undefined;
   const capRef = refOf(q.tavan);
@@ -154,7 +179,7 @@ export function toSemanticInput(
     kup: q.kup,
     olculer: q.olculer,
     boyutlar: q.boyutlar,
-    suzgec,
+    ...filter,
     ...(time?.tur === "tarih" ? { dateFrom: time.from.toISOString(), dateTo: time.to.toISOString() } : {}),
     ...(compareRef?.tur === "kiyas" && !periods ? { compare: compareRef.mode } : {}),
     ...(periods ? { donemler: periods } : {}),
@@ -251,7 +276,7 @@ async function runAnalysisBlock(b: AnalysisBlock, { head, params, body, ctx, opt
   try {
     const r = await runAnalysis(
       {
-        yontem: b.yontem, x: b.x, y: b.y, suzgec: input.suzgec ?? [],
+        yontem: b.yontem, x: b.x, y: b.y, suzgec: input.suzgec.filter((f): f is SemanticFilterLeaf => !isFilterGroup(f)),
         ...(b.kup ? { kup: b.kup } : {}), ...(b.maruziyet ? { maruziyet: b.maruziyet } : {}), ...(b.kirilim ? { kirilim: b.kirilim } : {}),
         ...(input.dateFrom ? { dateFrom: input.dateFrom } : {}), ...(input.dateTo ? { dateTo: input.dateTo } : {}),
         ...(opts.refresh ? { yenile: true } : {}),
