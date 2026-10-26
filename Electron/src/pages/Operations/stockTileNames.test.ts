@@ -19,6 +19,7 @@ const BACKEND_CATALOG = resolve(process.cwd(), "../Teks-Erp/src/constants/screen
 /** Taranan yüzey — ekran adının GEÇTİĞİ dosyalar (karo · hub açıklaması · palet · sayfa başlığı · sayfa içi metin · katalog). */
 const SURFACE = [
   "src/pages/Operations/tile-config.ts",
+  "src/pages/Operations/tiles/warehouse.ts",
   "src/pages/Operations/groups-config.ts",
   "src/components/layout/command-entries.ts",
   "src/components/layout/command-entries.deep.ts",

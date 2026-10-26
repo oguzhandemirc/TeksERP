@@ -22,6 +22,7 @@ import * as path from "node:path";
 import * as ts from "typescript";
 import { PANEL_EKRAN, YOL_AYRACI, ekranYolu, type PanelEkran } from "../src/constants/panel-ekran-yolu";
 import { TERIM } from "../src/constants/terim";
+import { hubKaroDosyalari } from "./lib/panel-karo-dosyalari";
 
 let pass = 0;
 let fail = 0;
@@ -39,13 +40,13 @@ const KOK = path.join(__dirname, "..");
 const SRC = path.join(KOK, "src");
 const PANEL_SRC = path.join(KOK, "..", "Electron", "src");
 const NAV = "components/layout/nav-config.ts";
-/** Sol menü satırının `to`su → o hub'ın karo dizisi. */
-const HUB: Record<string, { dosya: string; dizi: string }> = {
-  "/definitions": { dosya: "pages/Definitions/tile-config.ts", dizi: "definitionTiles" },
-  "/operations": { dosya: "pages/Operations/tile-config.ts", dizi: "operationsTiles" },
-  "/finance": { dosya: "pages/Finance/tile-config.ts", dizi: "financeTiles" },
-  "/access": { dosya: "pages/Access/tile-config.ts", dizi: "accessTiles" },
-  "/system": { dosya: "pages/System/tile-config.ts", dizi: "systemTiles" },
+/** Sol menü satırının `to`su → o hub'ın klasörü (karo dosyaları `scripts/lib/panel-karo-dosyalari.ts`ten; UX-2 bölünmesi). */
+const HUB: Record<string, string> = {
+  "/definitions": "Definitions",
+  "/operations": "Operations",
+  "/finance": "Finance",
+  "/access": "Access",
+  "/system": "System",
 };
 /** Karo içi alt etiketin (sekme/bölüm/düğme) paneldeki yeri. */
 const ALT_KAYNAK: Partial<Record<PanelEkran, string>> = {
@@ -104,11 +105,11 @@ function prop(o: ts.ObjectLiteralExpression, ad: string): ts.Expression | null {
   for (const p of o.properties) if (ts.isPropertyAssignment(p) && p.name.getText() === ad) return p.initializer;
   return null;
 }
-/** `export const <dizi> = [ {…}, … ]` öğelerinin `alan` değerleri (çözülemeyen → "?"). */
-function diziAlanlari(sf: ts.SourceFile, dizi: string, alan: string): string[] {
+/** `export const <ad>Tiles = [ {…}, … ]` öğelerinin `alan` değerleri (çözülemeyen → "?"); birleşim dizileri (`...x`) öğe değildir. */
+function diziAlanlari(sf: ts.SourceFile, alan: string): string[] {
   const out: string[] = [];
   const visit = (n: ts.Node): void => {
-    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === dizi && n.initializer && ts.isArrayLiteralExpression(n.initializer)) {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text.endsWith("Tiles") && n.initializer && ts.isArrayLiteralExpression(n.initializer)) {
       for (const el of n.initializer.elements) {
         if (!ts.isObjectLiteralExpression(el)) continue;
         const v = prop(el, alan);
@@ -154,7 +155,7 @@ function paneliOku(): PanelMenusu {
   for (const m of solMenu()) {
     const hub = HUB[m.to];
     if (!hub) continue;
-    const basliklar = diziAlanlari(kaynak(hub.dosya), hub.dizi, "title");
+    const basliklar = hubKaroDosyalari(PANEL_SRC, hub).flatMap((f) => diziAlanlari(kaynak(f), "title"));
     basliklar.forEach((b, i) => { if (b === "?") okunamayan.push(`${m.label}#${i}`); });
     menu.set(m.label, basliklar);
   }

@@ -64,6 +64,7 @@ import { SCREEN_CATALOG } from "../src/constants/screen-catalog";
 import { readDokumaEnabled } from "../src/services/system-setting.service";
 import type prisma from "../src/lib/prisma";
 import { routerKapiOlcumu, yorumlariSok } from "./lib/regime-gate-scan";
+import { hubKaroMetni } from "./lib/panel-karo-dosyalari";
 
 let pass = 0,
   fail = 0;
@@ -123,7 +124,7 @@ const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/m
  * aynı gün o ekranın `useVisibleScreens` kapısı ölçülür.
  */
 /**
- * `karo`: karonun yaşadığı hub — `operations` (`pages/Operations/tile-config.ts`, saf `visibleWhen`
+ * `karo`: karonun yaşadığı hub — `operations` (`pages/Operations/tile-config.ts` + `tiles/*.ts`, saf `visibleWhen`
  * yüklemi) ya da `reports` (`pages/Reports/tile-config.ts`, `featureFlag: "dokumaEnabled"` —
  * Raporlar hub'ının bayrak biçimi; palet girişi `regimePredicate(featureFlag)` ile türer).
  * İki biçim de aynı soruyu sorar: karo YALNIZ `dokumaEnabled` ile çizilir.
@@ -408,9 +409,9 @@ async function main(): Promise<void> {
 
   // Allowlist'teki ekranın ÜÇ kapısı: manifesto · karo · route.
   const tileConfigs = {
-    operations: yorumlariSok(fs.readFileSync(path.join(ELECTRON_SRC, "pages/Operations/tile-config.ts"), "utf8")),
+    operations: yorumlariSok(hubKaroMetni(ELECTRON_SRC, "Operations")),
     reports: yorumlariSok(fs.readFileSync(path.join(ELECTRON_SRC, "pages/Reports/tile-config.ts"), "utf8")),
-    definitions: yorumlariSok(fs.readFileSync(path.join(ELECTRON_SRC, "pages/Definitions/tile-config.ts"), "utf8")),
+    definitions: yorumlariSok(hubKaroMetni(ELECTRON_SRC, "Definitions")),
   };
   const contentRoutes = fs.readFileSync(path.join(ELECTRON_SRC, "routes/content-routes.tsx"), "utf8");
   for (const { ekranKey, izinler, karo } of IZINLI_ISTEMCI_DOSYALARI) {
@@ -518,8 +519,12 @@ function yuklemDokumayaBagli(tileConfigMetni: string, fnAdi: string, hubDizin: s
   const imp = new RegExp(`import\\s*\\{[^}]*\\b${fnAdi}\\b[^}]*\\}\\s*from\\s*"([^"]+)"`).exec(tileConfigMetni);
   if (!imp) return false;
   const yol = imp[1]!;
-  const hedef = yol.startsWith("@/") ? path.join(ELECTRON_SRC, `${yol.slice(2)}.ts`) : path.join(ELECTRON_SRC, hubDizin, `${yol}.ts`);
-  if (!fs.existsSync(hedef)) return false;
+  // Göreli yol hub kökünden (`tile-config.ts`) ya da grup dosyasından (`tiles/*.ts`, UX-2) yazılmış olabilir.
+  const adaylar = yol.startsWith("@/")
+    ? [path.join(ELECTRON_SRC, `${yol.slice(2)}.ts`)]
+    : [path.join(ELECTRON_SRC, hubDizin, `${yol}.ts`), path.join(ELECTRON_SRC, hubDizin, "tiles", `${yol}.ts`)];
+  const hedef = adaylar.find((a) => fs.existsSync(a));
+  if (!hedef) return false;
   const govde = yorumlariSok(fs.readFileSync(hedef, "utf8"));
   const fn = new RegExp(`export function ${fnAdi}\\s*\\(\\s*([A-Za-z0-9_]+)[^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`).exec(govde);
   if (!fn) return false;

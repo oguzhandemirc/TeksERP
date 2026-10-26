@@ -51,6 +51,7 @@ import {
   type ScreenEntry,
 } from "../src/constants/screen-catalog";
 import { yorumlariSok } from "./lib/regime-gate-scan";
+import { tumKaroDosyalari } from "./lib/panel-karo-dosyalari";
 
 let pass = 0;
 let fail = 0;
@@ -127,15 +128,8 @@ function readMobileScreens(): Array<{ key: string; permission: string }> {
 // konuyor (bekçinin 2026-08-19'daki kendi dersi: sabit-referanslı dört route
 // sessizce kapsam dışı kalmıştı).
 const ELECTRON_SRC = path.join(ROOT, "Electron", "src");
-const TILE_FILES = [
-  "pages/Operations/tile-config.ts",
-  "pages/Definitions/tile-config.ts",
-  "pages/System/tile-config.ts",
-  "pages/Access/tile-config.ts",
-  "pages/Finance/tile-config.ts",
-  "pages/Reports/tile-config.ts",
-  "pages/Cost/tile-config.ts",
-];
+// Hub karo dosyaları ortak listeden (UX-2: `tiles/*.ts` bölünmesi) — tek dosyaya bakan tarayıcı bölünmede körleşir.
+const TILE_FILES = tumKaroDosyalari(ELECTRON_SRC);
 const NAV_FILE = "components/layout/nav-config.ts";
 
 interface KaroBilgisi {
