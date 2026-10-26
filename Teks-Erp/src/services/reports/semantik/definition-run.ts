@@ -15,6 +15,9 @@ import { SEMANTIC_CUBES } from "./katalog";
 import { runAnalysis, type AnalysisStats } from "./analiz";
 import { analysisQueryShell, planAnalysisBlock } from "./analiz-blok";
 import { isAnalysisIssue } from "./analiz-plan";
+import { narrativeOf } from "./anlati-blok";
+import type { AnalysisInput } from "../anlati/gozlem";
+import type { AnlatiCumlesi } from "../sunum/sunum.types";
 import type { RaporSunumu } from "../sunum/sunum.types";
 import { COMPARE_MODES, DATE_PRESETS, type AnalysisBlock, type BlockQuery, type FilterRuleDef, type FilterTreeDef, isFilterRuleDef, type DefinitionBlock, type DefinitionParameter, type ReportDefinitionBody } from "./rapor-tanimi.schema";
 
@@ -190,7 +193,7 @@ export function toSemanticInput(
 
 export type BlockOutcome =
   | {
-      id: string; tur: DefinitionBlock["tur"]; baslik: string | null; durum: "tamam"; sonuclar: SemanticResult[]; metin?: string;
+      id: string; tur: DefinitionBlock["tur"]; baslik: string | null; durum: "tamam"; sonuclar: SemanticResult[]; metin?: string; anlati?: AnlatiCumlesi[];
       /** R3-ISTAT: analiz bloğunun sunumu + kart sayıları. */
       analiz?: { sunum: RaporSunumu; istatistik: AnalysisStats | null };
     }
@@ -230,6 +233,7 @@ export async function runDefinitionBlocks(
 ): Promise<BlockOutcome[]> {
   const { origin, refresh } = opts;
   const out: BlockOutcome[] = [];
+  const analysisInputs = new Map<string, AnalysisInput>();
   for (const b of body.bloklar) {
     const head = { id: b.id, tur: b.tur, baslik: b.baslik ?? null };
     if (b.tur === "metin") {
@@ -237,11 +241,11 @@ export async function runDefinitionBlocks(
       continue;
     }
     if (b.tur === "anlati") {
-      out.push({ ...head, durum: "desteklenmiyor", mesaj: "Günlük dil özeti bu raporda henüz yazılmıyor." });
+      out.push({ ...head, durum: "tamam", sonuclar: [], anlati: [] }); // yer tutucu: diğer bloklardan SONRA dolar
       continue;
     }
     if (b.tur === "analiz") {
-      out.push(await runAnalysisBlock(b, { head, params, body, ctx, opts: { origin, refresh } }));
+      out.push(await runAnalysisBlock(b, { head, params, body, ctx, opts: { origin, refresh }, analysisInputs }));
       continue;
     }
     const results: SemanticResult[] = [];
@@ -257,7 +261,7 @@ export async function runDefinitionBlocks(
     }
     out.push(denied ? { ...head, durum: "yetkisiz", mesaj: NO_ACCESS_MESSAGE } : { ...head, durum: "tamam", sonuclar: results });
   }
-  return out;
+  return out.map((o, i) => { const b = body.bloklar[i]; return b.tur === "anlati" && o.durum === "tamam" ? { ...o, anlati: narrativeOf(b, out, analysisInputs) } : o; });
 }
 
 /** Analiz bloğu: parametreler sorgu bloklarıyla aynı çözülür; izin eksiği blokta kalır. */
@@ -267,9 +271,10 @@ interface AnalysisBlockRun {
   body: ReportDefinitionBody;
   ctx: AccessContext;
   opts: { origin: RunOrigin | null; refresh: boolean };
+  analysisInputs: Map<string, AnalysisInput>;
 }
 
-async function runAnalysisBlock(b: AnalysisBlock, { head, params, body, ctx, opts }: AnalysisBlockRun): Promise<BlockOutcome> {
+async function runAnalysisBlock(b: AnalysisBlock, { head, params, body, ctx, opts, analysisInputs }: AnalysisBlockRun): Promise<BlockOutcome> {
   const plan = planAnalysisBlock(b);
   if (isAnalysisIssue(plan)) throw AppError.badRequest(plan.mesaj, { code: plan.kod, alan: plan.alan });
   const input = toSemanticInput(analysisQueryShell(b, plan), params, body, { asTable: false, refresh: opts.refresh });
@@ -284,6 +289,7 @@ async function runAnalysisBlock(b: AnalysisBlock, { head, params, body, ctx, opt
       ctx,
       { deps: { ...defaultDeps, origin: opts.origin }, ...(b.baslik ? { baslik: b.baslik } : {}) },
     );
+    analysisInputs.set(b.id, r.anlatiGirdisi);
     return { ...head, durum: "tamam", sonuclar: r.sonuclar, analiz: { sunum: r.sunum, istatistik: r.istatistik } };
   } catch (e) {
     if (!isNoAccess(e)) throw e;

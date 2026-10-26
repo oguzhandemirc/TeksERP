@@ -30,6 +30,8 @@ import { KURAL_ADLARI, type KuralAdi } from "../src/services/reports/anlati/gozl
 import { formatValue, sayiMetni } from "../src/services/reports/anlati/sayi-bicim";
 import { sonOkunanSozcuk, tamSayiOkunus } from "../src/services/reports/anlati/sayi-okunus";
 import { YASAK_SOZCUKLER, yasakSozcukBul } from "../src/services/reports/anlati/yasak-sozcuk";
+import { narrativeOf } from "../src/services/reports/semantik/anlati-blok";
+import type { SemanticResult } from "../src/services/reports/semantik/sonuc";
 import { anaSayiKur, donemEtiketi, donemSozleri, kiyasHesapla } from "../src/services/reports/sunum/sunum-kur";
 
 let pass = 0;
@@ -279,6 +281,14 @@ altin(
   "anaSayiKiyas",
   "Ekim'de 42.300 m sipariş aldınız; önceki dönem ölçülemediği için kıyas yok.",
 );
+// Özel rapor (R2-ANLATI): ölçünün yüklemi yok → ölçü adıyla açılır; oran ölçüsünde de aynı kalıp.
+altin("anaSayiKiyas yüklemsiz (özel rapor)", { donem: EKIM, kiyasDonemi: EYLUL, anaSayi: siparis, anaSayiIfadesi: {} }, "anaSayiKiyas", "Alınan sipariş: Ekim'de 42.300 m; eylüle göre %12 fazla.");
+altin(
+  "anaSayiKiyas yüklemsiz adsız dönem",
+  { donem: { from: IST("2026-10-05T00:00:00"), to: IST("2026-11-03T23:59:59") }, kiyasDonemi: { from: IST("2026-09-05T00:00:00"), to: IST("2026-10-04T23:59:59") }, anaSayi: anaSayiKur({ olcu: "termin.zamaninda", ad: "Zamanında teslim", deger: 78, birim: "yuzde", onceki: 84, iyiYon: "yukari" }), anaSayiIfadesi: {} },
+  "anaSayiKiyas",
+  "Zamanında teslim: bu dönemde %78; önceki döneme göre 6 puan düşük.",
+);
 const musteri = (satirlar: [string, number][]) => ({ boyut: "müşteri", birim: "m" as const, satirlar: satirlar.map(([a, d]) => ({ ad: a, deger: d })) });
 altin("enBuyukPay", { kirilim: musteri([["Kaya Tekstil", 9800], ["Demir Örme", 9000], ["Ak Boya", 8000], ["Yıldız", 7000], ["Ege", 5000], ["Bora", 3800]]) }, "enBuyukPay", "En büyük pay Kaya Tekstil'de: 9.800 m (toplamın %23'ü).");
 altin("enBuyukPay yabancı ad → eksiz yedek", { kirilim: musteri([["Renault", 9800], ["Demir Örme", 9000], ["Ak Boya", 8000], ["Yıldız", 7000], ["Ege", 5000], ["Bora", 3800]]) }, "enBuyukPay", "En büyük pay — Renault: 9.800 m (toplamın %23'ü).");
@@ -425,6 +435,34 @@ console.log("\n§9 para işareti (`paraIcerir`)");
   check("§9b ⭐ kanıtı birimsiz kural (degisimKaynagi) da KAYNAK birimden işaretlenir", tlRenk.length === 1 && tlRenk[0]!.paraIcerir === true, JSON.stringify(tlRenk[0]?.kanit));
   const metre = anlatiUret({ kirilim: { ...tlKirilim, birim: "m" as const }, seri: ay([90, 88, 86, 84, 82, 80, 78, 76]) });
   check("§9c para dışı cümlede `paraIcerir` anahtarı YOK (altın çıktı aynen)", metre.length > 0 && metre.every((c) => !("paraIcerir" in c)), metre.map((c) => c.kural).join(","));
+}
+
+console.log("\n§10 özel rapor anlatı bloğu (R2-ANLATI) — girdi rapordaki bloklardan, cümle motordan");
+{
+  const OLCU = { kimlik: "sevk.brutMetre", ad: "Sevk edilen", aciklama: "", birim: "metre", iyiYon: "artis" };
+  const res = (o: Partial<SemanticResult>): SemanticResult => ({
+    kosuId: null, kup: { kimlik: "sevk", ad: "Sevkiyat" }, olculer: [OLCU], boyutlar: [], aralik: { dateFrom: "2026-09-30T21:00:00.000Z", dateTo: "2026-10-31T20:59:59.999Z" },
+    donemler: null, satirlar: [], toplam: { degerler: { "sevk.brutMetre": 12400 } }, kiyas: null, tavan: 50, uyarilar: [], notlar: [], kisiAdi: false, onbellek: { isabet: false }, ...o,
+  });
+  const row = (ad: string, deger: number, diger?: true) => ({ anahtarlar: { musteri: { deger: ad, etiket: ad, ...(diger ? { diger } : {}) } }, degerler: { "sevk.brutMetre": deger } });
+  const kiyas = { aralik: { dateFrom: "2026-08-31T21:00:00.000Z", dateTo: "2026-09-30T20:59:59.999Z" }, toplam: { degerler: { "sevk.brutMetre": 10000 } } };
+  const ana = { id: "k1", tur: "anaSayi", durum: "tamam", sonuclar: [res({ kiyas })] };
+  const tablo = { id: "t1", tur: "tablo", durum: "tamam", sonuclar: [res({ boyutlar: [{ kimlik: "musteri", ad: "Müşteri" }], satirlar: [row("Kaya Tekstil", 8000), row("Ege", 2400), row("Bora", 2000)] })] };
+  type NarrativeArg = Parameters<typeof narrativeOf>[0];
+  const blk = (kurallar: NarrativeArg["kurallar"], enFazla = 3): NarrativeArg => ({ id: "n1", tur: "anlati", kurallar, enFazla });
+  const none = new Map();
+  const both = narrativeOf(blk(["anaSayiKiyas", "enBuyukPay"]), [ana, tablo], none);
+  console.log("   " + both.map((c) => c.metin).join(" | "));
+  check("§10a ana sayı + kırılım → iki cümle (yüklemsiz kalıp + en büyük pay)", both.length === 2 && both.some((c) => c.kural === "anaSayiKiyas" && c.metin.startsWith("Sevk edilen:")) && both.some((c) => c.kural === "enBuyukPay" && c.metin.includes("Kaya Tekstil")), both.map((c) => c.metin).join(" | "));
+  const only = narrativeOf(blk(["enBuyukPay"]), [ana, tablo], none);
+  check("§10b kural seçimi uyulur (yalnız en büyük pay)", only.length === 1 && only[0]!.kural === "enBuyukPay");
+  check("§10c tavan uyulur (enFazla 1)", narrativeOf(blk(["anaSayiKiyas", "enBuyukPay"], 1), [ana, tablo], none).length === 1);
+  const denied = narrativeOf(blk(["anaSayiKiyas"]), [{ ...ana, durum: "yetkisiz", sonuclar: undefined }], none);
+  check("§10d yetkisiz blok girdi vermez → cümle yok", denied.length === 0, JSON.stringify(denied));
+  const other = { ...tablo, sonuclar: [res({ boyutlar: [{ kimlik: "musteri", ad: "Müşteri" }], satirlar: [row("Kaya Tekstil", 8000), row("Ege", 2400), row("Diğer", 9000, true)] })] };
+  check("§10e \"Diğer\" kovalı kırılımdan pay cümlesi kurulmaz (yanlış pay)", narrativeOf(blk(["enBuyukPay"]), [other], none).length === 0);
+  const dirty = both.filter((c) => yasakSozcukBul(c.metin).length > 0);
+  check("§10f blok cümlelerinde yasak sözcük yok", dirty.length === 0, dirty.map((c) => c.metin).join(" | "));
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

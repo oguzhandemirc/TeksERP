@@ -7,6 +7,7 @@
 // =============================================================================
 import { AppError } from "../../../utils/app-error";
 import { anlatiUret } from "../anlati/anlati";
+import type { AnalysisInput } from "../anlati/gozlem";
 import { CAUSALITY_NOTE } from "../anlati/kurallar";
 import { donemEtiketi } from "../sunum/sunum-kur";
 import type { RaporSunumu } from "../sunum/sunum.types";
@@ -23,6 +24,8 @@ export interface AnalysisResult {
   sunum: RaporSunumu;
   istatistik: AnalysisStats | null;
   sonuclar: SemanticResult[];
+  /** Özel rapor anlatı bloğunun girdisi (R2-ANLATI); tele çıkmaz. */
+  anlatiGirdisi: AnalysisInput;
 }
 
 const CAP = 50;
@@ -85,8 +88,9 @@ export async function runAnalysis(
   }
   const first = results[0]!;
   const range = { from: new Date(first.aralik.dateFrom), to: new Date(first.aralik.dateTo) };
+  const narrativeInput: AnalysisInput = { korelasyon: computed.kanit, orneklem: computed.orneklem };
   const anlati = anlatiUret(
-    { analiz: { korelasyon: computed.kanit, orneklem: computed.orneklem }, anaSayi: computed.anaSayi },
+    { analiz: narrativeInput, anaSayi: computed.anaSayi },
     { enFazla: 3 },
   );
   const notes = [...new Set(results.flatMap((r) => [...r.uyarilar, ...r.notlar]))];
@@ -108,6 +112,6 @@ export async function runAnalysis(
     uyarilar: [...computed.uyarilar, ...notes],
     ...(results.some((r) => r.kisiAdi) ? { kisiAdi: true as const } : {}),
   };
-  return { sunum, istatistik: computed.stats, sonuclar: results };
+  return { sunum, istatistik: computed.stats, sonuclar: results, anlatiGirdisi: narrativeInput };
 }
 

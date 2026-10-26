@@ -126,6 +126,7 @@ export type DefinitionBlock = ReportDefinitionBody["bloklar"][number];
 export type DefinitionParameter = ReportDefinitionBody["parametreler"][number];
 export type BlockQuery = z.infer<typeof blockQuerySchema>;
 export type AnalysisBlock = Extract<DefinitionBlock, { tur: "analiz" }>;
+export type NarrativeBlock = Extract<DefinitionBlock, { tur: "anlati" }>;
 
 export interface DefinitionIssue {
   /** JSON yolu — `bloklar[1].sorgu.olculer[0]`. */
