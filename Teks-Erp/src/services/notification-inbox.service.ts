@@ -10,11 +10,11 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { readFilterList } from "../utils/query-parser";
 import { factoryMinuteOfDay } from "../constants/time";
 import { getNotificationEntry, NOTIFICATION_KINDS, type NotificationKind } from "../constants/notification-catalog";
 import { loadNotificationVisibilityEnv, permissionDeniedKindCount, visibleKindsFor } from "./helpers/notification-visibility.helper";
 import { renderNotification } from "./helpers/notification-render.helper";
+import { narrowKinds, readInboxListFilter, rowFlagWhere, type InboxListFilter } from "./helpers/notification-list-filter.helper";
 import { loadCurrentShift } from "./helpers/loom-alarm-shift.helper";
 import { readNotificationInboxEnabled } from "./system-setting.service";
 import { ring, bellVersion } from "./notification-bell-hub";
@@ -47,16 +47,17 @@ export async function viewerKinds(viewer: InboxViewer): Promise<NotificationKind
 
 /**
  * TEK where: liste, cursor sayfası, sekme sayısı ve özet şeridi bundan türer.
- * `kindFilter` verilirse görme kümesiyle KESİŞİR (süzgeç yetki genişletmez).
+ * `filter` verilirse tür/kanal süzgeci görme kümesiyle KESİŞİR (süzgeç yetki genişletmez); satır bayrağı
+ * süzgeçleri (`ozet`, `tablet`) aynı AND'e girer — liste, cursor ve `sayi` yine tek where'den.
  */
 export function buildInboxWhere(
   userId: string,
   kinds: readonly string[],
   sekme: InboxTab,
-  opts: { now: Date; kindFilter?: readonly string[] },
+  opts: { now: Date; filter?: InboxListFilter },
 ): Prisma.NotificationInboxWhereInput {
-  const { now, kindFilter = [] } = opts;
-  const visibleKinds = kindFilter.length ? kinds.filter((k) => kindFilter.includes(k)) : [...kinds];
+  const { now, filter } = opts;
+  const visibleKinds = filter ? narrowKinds(kinds, filter) : [...kinds];
   const notSnoozed: Prisma.NotificationInboxWhereInput = { OR: [{ snoozedUntil: null }, { snoozedUntil: { lte: now } }] };
   const tabWhere: Record<InboxTab, Prisma.NotificationInboxWhereInput> = {
     tumu: notSnoozed,
@@ -66,7 +67,7 @@ export function buildInboxWhere(
     alarmlar: { klass: "ALARM" },
     ertelenen: { snoozedUntil: { gt: now } },
   };
-  return { AND: [{ userId, kind: { in: visibleKinds } }, tabWhere[sekme]] };
+  return { AND: [{ userId, kind: { in: visibleKinds } }, tabWhere[sekme], ...(filter ? rowFlagWhere(filter) : [])] };
 }
 
 // ---- liste ------------------------------------------------------------------
@@ -90,27 +91,15 @@ function decodeCursor(c: string): { lastAt: Date; id: string } {
   return { lastAt, id };
 }
 
-/** `filter[tur]` dışındaki süzgeç adı tanınmaz; çıplak `tur` ve katalog dışı tür 400 (fail-closed). */
-function readKindFilter(query: Record<string, unknown>): string[] {
-  if ("tur" in query) {
-    throw AppError.badRequest("Süzgeç çıplak gönderilemez: `tur` — `filter[tur]=…` biçimini kullanın.", { code: "BARE_FILTER_PARAM", params: ["tur"] });
-  }
-  const unknownFilters = Object.keys(query).filter((k) => k.startsWith("filter[") && k !== "filter[tur]");
-  if (unknownFilters.length) throw AppError.badRequest(`Tanınmayan süzgeç: ${unknownFilters.join(", ")}`, { code: "INVALID_FILTER" });
-  const kindFilter = readFilterList(query["filter[tur]"] as string | string[] | undefined);
-  const unknownKinds = kindFilter.filter((t) => !(NOTIFICATION_KINDS as readonly string[]).includes(t));
-  if (unknownKinds.length) throw AppError.badRequest(`Tanınmayan bildirim türü: ${unknownKinds.join(", ")}`, { code: "UNKNOWN_KIND" });
-  return kindFilter;
-}
-
 const LIST_SELECT = {
   id: true, kind: true, klass: true, subjectType: true, subjectId: true, count: true, firstAt: true,
   lastAt: true, payload: true, reason: true, readAt: true, snoozedUntil: true, resolvedAt: true,
+  ozet: true, kanalTablet: true,
 } satisfies Prisma.NotificationInboxSelect;
 
 type InboxRow = Prisma.NotificationInboxGetPayload<{ select: typeof LIST_SELECT }>;
 
-function toItem(r: InboxRow) {
+function toItem(r: InboxRow, soundOn: boolean) {
   const kind = r.kind as NotificationKind;
   const entry = getNotificationEntry(kind);
   const text = renderNotification(kind, r.payload as Record<string, unknown>, r.resolvedAt ? "KAPANDI" : "OLAY");
@@ -132,14 +121,18 @@ function toItem(r: InboxRow) {
     okunduAn: r.readAt,
     erteleBitis: r.snoozedUntil,
     cozulduAn: r.resolvedAt,
+    ozet: r.ozet,
+    kanalTablet: r.kanalTablet,
+    // Tablet sesi: satırın kanal kararı (sessiz saat dahil, dağıtımda çözülmüş) ∧ kişinin ses ayarı.
+    sesli: r.kanalTablet && soundOn,
   };
 }
 
 export async function listInbox(viewer: InboxViewer, query: Record<string, unknown>) {
   const q = InboxListQuery.parse(query);
-  const kindFilter = readKindFilter(query);
+  const filter = readInboxListFilter(query);
   const kinds = await viewerKinds(viewer);
-  const where = buildInboxWhere(viewer.userId, kinds, q.sekme, { now: new Date(), kindFilter });
+  const where = buildInboxWhere(viewer.userId, kinds, q.sekme, { now: new Date(), filter });
   const c = q.cursor ? decodeCursor(q.cursor) : null;
   const pageWhere: Prisma.NotificationInboxWhereInput = c
     ? { AND: [where, { OR: [{ lastAt: { lt: c.lastAt } }, { lastAt: c.lastAt, id: { lt: c.id } }] }] }
@@ -151,11 +144,13 @@ export async function listInbox(viewer: InboxViewer, query: Record<string, unkno
     select: LIST_SELECT,
   });
   const total = await prisma.notificationInbox.count({ where });
+  const setting = await prisma.notificationUserSetting.findUnique({ where: { userId: viewer.userId }, select: { sound: true } });
+  const soundOn = setting?.sound ?? true;
   const hasMore = rows.length > q.limit;
   const page = hasMore ? rows.slice(0, q.limit) : rows;
   const last = page[page.length - 1];
   return {
-    items: page.map(toItem),
+    items: page.map((r) => toItem(r, soundOn)),
     nextCursor: hasMore && last ? encodeCursor(last.lastAt, last.id) : null,
     sayi: total,
     ...bellVersion(viewer.userId),

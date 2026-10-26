@@ -31,6 +31,7 @@ import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect"
 import type { Customer } from "./types";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
+import { CustomerQuotesButton } from "@/pages/Cost/Quotes/CustomerQuotesButton";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { CustomerSubcontractorRole, SUBCONTRACTOR_ROLE_LABEL } from "./CustomerSubcontractorRole";
 interface Props {
@@ -323,6 +324,7 @@ export function CustomerFormDialog({
                 updatedAt={initial.updatedAt}
               />
             )}
+            {isEdit && initial && <CustomerQuotesButton customerId={initial.id} isCustomerRole={initial.isCustomerRole} />}
             </div>
             <DialogDescription>
               {isEdit

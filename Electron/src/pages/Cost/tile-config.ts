@@ -2,10 +2,10 @@
 // MALİYET & TEKLİF HUB KAROLARI (MAL-3)
 // =============================================================================
 // ⚠️ KARO ile ROUTE AYNI izin listesini taşır (`content-routes` aynası; `test_screen_catalog`).
-// Görüntüleme kapısı `cost:read`; yazma (`cost:write` · `cost:settings`) sayfa İÇİNDE `PermissionGate`.
+// Görüntüleme kapısı `cost:read` (teklif `quote:read`, fiyat listesi `price-list:read`); yazma sayfa İÇİNDE `PermissionGate`.
 // Menü satırı ayrıca `maliyetEnabled` bayrağına bağlıdır (`nav-config`): modül kapalıysa hiçbiri çizilmez.
 // =============================================================================
-import { Calculator, Factory, Layers, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
+import { Calculator, Factory, FileSignature, Layers, ListOrdered, SlidersHorizontal, Spool, type LucideIcon } from "lucide-react";
 
 export interface CostTile {
   key: string;
@@ -63,6 +63,24 @@ export const costTiles: CostTile[] = [
     icon: Calculator,
     tone: "text-info",
     permissionAny: ["cost:read"],
+  },
+  {
+    key: "quotes",
+    title: "Teklifler",
+    description: "Müşteriye fiyat teklifi: kart ürünü ya da yeni desen, sunucu fiyat önerir; gönder → kabul → tek tıkla sipariş. Gönderilen teklif değişmez, revizyon açılır.",
+    to: "/cost/quotes",
+    icon: FileSignature,
+    tone: "text-primary",
+    permissionAny: ["quote:read"],
+  },
+  {
+    key: "price-lists",
+    title: "Fiyat Listeleri",
+    description: "Genel ya da müşteriye özel dövizli satış fiyatları; standart maliyetten doldurulur, yayındaki liste teklif fiyat önerisinin ilk kaynağıdır.",
+    to: "/cost/price-lists",
+    icon: ListOrdered,
+    tone: "text-success",
+    permissionAny: ["price-list:read"],
   },
 ];
 

@@ -7,6 +7,11 @@
 // MAL4 Hızlı Hesaplayıcı elle yapı: döviz fiyatlı iplik, kur yok → "kur yok" eksikliği (1 varsayılmaz);
 //      kur girilince döküm; sonunda muhasebe hesabından cost:* izinleri alınır (MAL5 için).
 // MAL5 cost:read OLMAYAN kullanıcı: menüde ve palette maliyet yüzeyi yok.
+// MAL6 Teklifler (MAL-5): boş liste + yeni teklif formu; API tohumu (ürünlü + yeni desen kalem) → dolu liste + taslak detay.
+// MAL7 Gönder → Kabul et → Siparişe dönüştür (yeni desen kalemine ürün bağla) → sipariş bağlantısı.
+// MAL8 Gönderilmiş teklif → Revizyon oluştur → R2 taslağı + zaman çizelgesi revizyon zinciri.
+// MAL9 Fiyat listeleri: boş → arayüzden yeni liste → satırlar (API) → Yayınla onayı → yayında.
+// MAL10 Maliyet izni olmayan kullanıcı (muhasebe, MAL5'te cost:* alındı; quote/price-list okuma verilir): maliyet kolonu yok.
 // Kanıt PNG'leri `E2E_KANIT_DIZINI` verilirse açık + koyu, geniş + dar olarak oraya da yazılır.
 // =============================================================================
 import fs from "node:fs";
@@ -152,8 +157,8 @@ export const MALIYET_ADIMLARI = [
       await page().waitForTimeout(800);
       olc.mal4Toplam = await page().getByTestId("cost-total").innerText();
       await kanit(page(), "MAL4-elle-dokum", page().getByTestId("cost-total"));
-      // MAL5 için: muhasebe hesabı cost:* izinlerini kaybeder (yalnız bu E2E DB'si).
-      await sql(`DELETE FROM user_permissions WHERE "userId" = (SELECT id FROM users WHERE username = $1) AND "permissionId" IN (SELECT id FROM permissions WHERE code LIKE 'cost:%')`, [ortam.kullanicilar.muhasebe.username]);
+      // MAL5 için: muhasebe hesabı cost:* + teklif/fiyat listesi izinlerini kaybeder (hub bunlardan BİRİYLE açılır; yalnız bu E2E DB'si).
+      await sql(`DELETE FROM user_permissions WHERE "userId" = (SELECT id FROM users WHERE username = $1) AND "permissionId" IN (SELECT id FROM permissions WHERE code LIKE 'cost:%' OR code LIKE 'quote:%' OR code LIKE 'price-list:%')`, [ortam.kullanicilar.muhasebe.username]);
     },
     dogrula: [
       { ad: "kur yokken 'Kur 1 varsayılmaz' eksikliği görünür", sql: "SELECT 1", oku: () => olc.mal4Eksik, beklenen: (t) => /Kur 1 varsayılmaz/.test(t ?? "") },
@@ -182,3 +187,190 @@ export const MALIYET_ADIMLARI = [
     ],
   },
 ];
+
+// ── MAL-5: teklif + fiyat listesi ────────────────────────────────────────────
+const tok = () => crypto.randomUUID();
+/** Tohum çağrısı 2xx dönmezse adım sebebiyle düşer (sessiz eksik tohum ekranı yanıltmasın). */
+async function zorunlu(api, yol, init) {
+  const r = await api(yol, init);
+  if (r.status >= 300) throw new Error(`tohum ${init?.method ?? "GET"} ${yol} → ${r.status} ${r.govde?.message ?? ""} ${JSON.stringify(r.govde?.details ?? {})}`);
+  return r;
+}
+async function tohumKumas(sql) {
+  const musteri = (await sql(`SELECT id, name FROM customers WHERE "isCustomerRole" AND "isActive" ORDER BY code LIMIT 1`))[0];
+  const kumas = (await sql(`SELECT id, code, name FROM items WHERE "itemType" = 'FABRIC' AND "isActive" ORDER BY code LIMIT 2`));
+  return { musteri, kumas };
+}
+async function tohumTeklif(api, sql) {
+  const { musteri, kumas } = await tohumKumas(sql);
+  const q = (await zorunlu(api, "/api/quotes", { method: "POST", body: JSON.stringify({ customerId: musteri.id, currency: "TRY", clientToken: tok(), customerReference: "TEST-MAL5" }) })).govde.data;
+  // Dump kumaşlarında maliyet yapısı (çözgü/atkı tanımı) yok → ürünlü kalem fiyatlanamaz; iki YENİ DESEN kalemi
+  // (elle yapı) açılır — dönüştürmede ikisine de ürün bağlanır (bağ yalnız siparişe).
+  for (const [ad, miktar, fiyat] of [["TEST Yeni desen", "800", "92"], ["TEST Desen B", "1200", "84.5"]]) {
+    await zorunlu(api, `/api/quotes/${q.id}/lines`, {
+      method: "POST",
+      body: JSON.stringify({
+        description: ad, quantity: miktar, unitPrice: fiyat, markupPct: "15", unit: "MT",
+        adHoc: { warp: { endsCount: "5200", takeUpPct: "8", yarn: { denier: "75", pricePerKg: "95", currency: "TRY" } }, weft: { picksPerCm: "32", rawWidthCm: "160", yarns: [{ denier: "150", pricePerKg: "60", currency: "TRY", picksInRepeat: "1" }] }, finishingRateCode: null },
+      }),
+    });
+  }
+  return { q, musteri, kumas };
+}
+const satirAc = async (page, metin) => {
+  await page().locator("tbody tr:visible").filter({ hasText: metin }).first().click({ timeout: 20_000 });
+  await page().waitForTimeout(1200);
+};
+
+const TEKLIF_ADIMLARI = [
+  {
+    id: "MAL6", rol: "P",
+    yol: "Maliyet & Teklif → Teklifler (boş) → Yeni teklif formu → (API tohumu) → dolu liste → taslak detay", rota: "cost/quotes",
+    async yap({ git, page, api, sql }) {
+      await git("Teklifler");
+      await page().getByRole("heading", { name: "Teklifler" }).first().waitFor({ timeout: 15_000 });
+      await page().waitForTimeout(1000);
+      olc.mal6Bos = await page().locator('[data-testid="quotes-empty"]:visible').count();
+      await kanit(page(), "MAL6-teklif-liste-bos");
+      await git("Yeni teklif");
+      await page().getByRole("heading", { name: /Yeni teklif/ }).first().waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL6-teklif-yeni-form");
+      olc.t1 = await tohumTeklif(api, sql);
+      await git("Teklifler");
+      await page().reload();
+      await page().waitForTimeout(2000);
+      await git("Teklifler");
+      await page().locator('[data-testid="quote-row"]:visible').first().waitFor({ timeout: 20_000 });
+      await kanit(page(), "MAL6-teklif-liste-dolu");
+      await satirAc(page, olc.t1.musteri.name);
+      await page().locator('text=TEST Yeni desen >> visible=true').first().waitFor({ timeout: 15_000 });
+      olc.mal6Detay = await page().locator("body").innerText().catch(() => "");
+      await kanit(page(), "MAL6-teklif-taslak-detay");
+    },
+    dogrula: [
+      { ad: "boş listede boş durum metni", sql: "SELECT 1", oku: () => olc.mal6Bos, beklenen: (n) => n === 1 },
+      { ad: "taslak iki kalemli", sql: `SELECT count(*)::int AS n FROM sales_quote_lines l JOIN sales_quotes q ON q.id = l."quoteId" WHERE q."customerReference" = 'TEST-MAL5'`, beklenen: (r) => r[0]?.n === 2 },
+      { ad: "detayda Gönder eylemi", sql: "SELECT 1", oku: () => olc.mal6Detay, beklenen: (t) => /Gönder/.test(t ?? "") },
+    ],
+  },
+  {
+    id: "MAL7", rol: "P",
+    yol: "Teklif detayı → Gönder → Kabul et → Siparişe dönüştür (ürün bağla) → sipariş", rota: "cost/quotes/:id",
+    async yap({ page, tikla, diyalog }) {
+      await tikla("Gönder", { exact: true });
+      await page().getByRole("button", { name: "Kabul et", exact: true }).waitFor({ timeout: 15_000 });
+      await tikla("Kabul et", { exact: true });
+      await page().getByRole("button", { name: "Siparişe dönüştür", exact: true }).waitFor({ timeout: 15_000 });
+      await tikla("Siparişe dönüştür", { exact: true });
+      const d = diyalog("Siparişe dönüştür");
+      await d.getByTestId("unlinked-lines").waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL7-donustur-urunsuz");
+      for (let i = 0; i < 2; i++) {
+        await d.getByRole("button", { name: /Ürün bağla/ }).first().click();
+        await page().waitForTimeout(1200);
+        const secici = page().getByRole("dialog").last();
+        await secici.locator("tbody tr:visible, [role=option]").nth(i).click({ timeout: 15_000 });
+        await page().waitForTimeout(600);
+      }
+      await kanit(page(), "MAL7-donustur-bagli");
+      await d.getByTestId("convert-confirm").click({ timeout: 15_000 });
+      await d.getByTestId("convert-order-link").waitFor({ timeout: 20_000 });
+      olc.mal7Siparis = await d.getByTestId("convert-order-link").innerText();
+      await kanit(page(), "MAL7-donustur-tamam");
+      await tikla("Kapat", { exact: true });
+      await page().locator('[data-testid="order-link"]:visible').first().waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL7-teklif-donustu-zaman");
+    },
+    dogrula: [
+      { ad: "teklif CONVERTED + siparişe bağlı", sql: `SELECT status, "convertedOrderId" FROM sales_quotes WHERE "customerReference" = 'TEST-MAL5'`, beklenen: (r) => r[0]?.status === "CONVERTED" && Boolean(r[0]?.convertedOrderId) },
+      { ad: "siparişte iki satır, hepsi ürünlü", sql: `SELECT count(*)::int AS n, count(ol."itemId")::int AS urunlu FROM order_lines ol JOIN sales_quotes q ON q."convertedOrderId" = ol."orderId" WHERE q."customerReference" = 'TEST-MAL5'`, beklenen: (r) => r[0]?.n === 2 && r[0]?.urunlu === 2 },
+      { ad: "teklifin yeni desen kalemleri ürünsüz kaldı (defter)", sql: `SELECT count(*)::int AS n FROM sales_quote_lines l JOIN sales_quotes q ON q.id = l."quoteId" WHERE q."customerReference" = 'TEST-MAL5' AND l."itemId" IS NULL`, beklenen: (r) => r[0]?.n === 2 },
+    ],
+  },
+  {
+    id: "MAL8", rol: "P",
+    yol: "Gönderilmiş teklif → Revizyon oluştur → R2 taslağı + zaman çizelgesi", rota: "cost/quotes/:id",
+    async yap({ git, page, api, sql, tikla }) {
+      const { q } = await tohumTeklif(api, sql);
+      await zorunlu(api, `/api/quotes/${q.id}/send`, { method: "POST", body: "{}" });
+      olc.t2 = q;
+      await git("Teklifler");
+      await page().reload();
+      await page().waitForTimeout(2000);
+      await git("Teklifler");
+      await page().locator('[data-testid="quote-row"]:visible').filter({ hasText: "Gönderildi" }).first().click({ timeout: 20_000 });
+      await page().getByRole("button", { name: "Revizyon oluştur", exact: true }).waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL8-teklif-gonderildi");
+      await tikla("Revizyon oluştur", { exact: true });
+      await page().locator('text=/Önceki sürüm R1/ >> visible=true').first().waitFor({ timeout: 20_000 });
+      olc.mal8 = await page().locator("body").innerText().catch(() => "");
+      await kanit(page(), "MAL8-revizyon-r2", page().locator('text=/Önceki sürüm R1/ >> visible=true').first());
+    },
+    dogrula: [
+      { ad: "R2 taslak, R1 yerine geçildi", sql: `SELECT status::text AS status, "revisionNo" FROM sales_quotes WHERE "revisionOfId" IS NOT NULL ORDER BY "createdAt" DESC LIMIT 1`, beklenen: (r) => r[0]?.status === "DRAFT" && r[0]?.revisionNo === 2 },
+      { ad: "ekranda R2 başlığı", sql: "SELECT 1", oku: () => olc.mal8, beklenen: (t) => /R2/.test(t ?? "") },
+    ],
+  },
+  {
+    id: "MAL9", rol: "P",
+    yol: "Maliyet & Teklif → Fiyat Listeleri (boş) → Yeni liste → satırlar → Yayınla", rota: "cost/price-lists",
+    async yap({ git, page, api, sql, tikla, yaz, diyalog, ortam }) {
+      await git("Fiyat Listeleri");
+      await page().getByRole("heading", { name: "Fiyat Listeleri" }).first().waitFor({ timeout: 15_000 });
+      await page().waitForTimeout(1000);
+      olc.mal9Bos = await page().locator('[data-testid="pl-empty"]:visible').count();
+      await kanit(page(), "MAL9-fiyat-liste-bos");
+      await page().locator('[data-testid="pl-new"]:visible').first().click();
+      const d = diyalog("Yeni fiyat listesi");
+      await yaz("Liste adı", "TEST-MAL5 Genel 2026", { icinde: d });
+      await kanit(page(), "MAL9-fiyat-yeni-form");
+      await d.getByTestId("pl-create-submit").click();
+      await page().getByRole("heading", { name: /Fiyat listesi / }).first().waitFor({ timeout: 20_000 });
+      const pl = (await sql(`SELECT id FROM price_lists WHERE name = 'TEST-MAL5 Genel 2026'`))[0];
+      const { kumas } = await tohumKumas(sql);
+      await zorunlu(api, `/api/price-lists/${pl.id}/lines`, { method: "PUT", body: JSON.stringify({ lines: kumas.map((k, i) => ({ itemId: k.id, colorId: null, unitPrice: i ? "88.40" : "79.90", minQty: "500" })) }) });
+      olc.pl = pl;
+      await page().reload();
+      await page().waitForTimeout(2000);
+      await git("Fiyat Listeleri");
+      await page().locator('[data-testid="pl-row"]:visible').first().click({ timeout: 20_000 });
+      await page().locator('[data-testid="pl-line"]:visible').first().waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL9-fiyat-taslak-editor");
+      await tikla("Yayınla", { exact: true });
+      const y = diyalog("Listeyi yayınla");
+      await y.getByTestId("pl-publish-nopeer").or(y.getByTestId("pl-publish-peer")).first().waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL9-fiyat-yayinla-onay");
+      await y.getByTestId("pl-confirm").click();
+      await page().getByRole("button", { name: "Arşivle", exact: true }).waitFor({ timeout: 20_000 });
+      await kanit(page(), "MAL9-fiyat-yayinda");
+      await git("Fiyat Listeleri");
+      await page().locator('[data-testid="pl-row"]:visible').first().waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL9-fiyat-liste-dolu");
+      // MAL10 için: muhasebe (cost:* MAL5'te alındı) teklif/fiyat listesi OKUMA alır — rol değişince yeniden giriş yapar.
+      await sql(
+        `INSERT INTO user_permissions (id, "userId", "permissionId", "createdAt", "updatedAt")
+         SELECT gen_random_uuid(), u.id, p.id, now(), now() FROM users u, permissions p
+         WHERE u.username = $1 AND p.code IN ('quote:read', 'price-list:read') ON CONFLICT DO NOTHING`,
+        [ortam.kullanicilar.muhasebe.username],
+      );
+    },
+    dogrula: [
+      { ad: "boş listede boş durum", sql: "SELECT 1", oku: () => olc.mal9Bos, beklenen: (n) => n === 1 },
+      { ad: "liste PUBLISHED, iki satır", sql: `SELECT p.status::text AS s, count(l.id)::int AS n FROM price_lists p LEFT JOIN price_list_lines l ON l."priceListId" = p.id WHERE p.name = 'TEST-MAL5 Genel 2026' GROUP BY p.status`, beklenen: (r) => r[0]?.s === "PUBLISHED" && r[0]?.n === 2 },
+    ],
+  },
+  {
+    id: "MAL10", rol: "M",
+    yol: "cost:read olmayan, quote/price-list okuyan kullanıcı → fiyat listesi detayında maliyet kolonu yok", rota: "cost/price-lists/:id",
+    async yap({ git, page }) {
+      await page().waitForTimeout(1500);
+      await git("Fiyat Listeleri");
+      await page().locator('[data-testid="pl-row"]:visible').first().click({ timeout: 20_000 });
+      await page().locator('[data-testid="pl-line"]:visible').first().waitFor({ timeout: 15_000 });
+      olc.mal10 = await page().locator('[data-testid="pl-col-cost"]:visible').count();
+      await kanit(page(), "MAL10-satis-maliyet-kolonu-yok");
+    },
+    dogrula: [{ ad: "maliyet kolonu yok", sql: "SELECT 1", oku: () => olc.mal10, beklenen: (n) => n === 0 }],
+  },
+];
+MALIYET_ADIMLARI.push(...TEKLIF_ADIMLARI);

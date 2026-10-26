@@ -94,6 +94,8 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "cost/finishing-rates": "maliyetEnabled",
   "cost/items": "maliyetEnabled",
   "cost/calculator": "maliyetEnabled",
+  "cost/quotes": "maliyetEnabled",
+  "cost/price-lists": "maliyetEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */

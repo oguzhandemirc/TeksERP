@@ -12,7 +12,7 @@ import type { SalesQuoteStatus } from "@prisma/client";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireMaliyetEnabled } from "../middlewares/module.middleware";
-import { createQuote, getQuote, listQuotes, updateQuoteHeader } from "../services/sales-quote.service";
+import { createQuote, getQuote, listQuotes, quoteActors, updateQuoteHeader } from "../services/sales-quote.service";
 import { addQuoteLine, deleteQuoteLine, refreshQuoteCosts, updateQuoteLine } from "../services/sales-quote-lines.service";
 import { acceptQuote, cancelQuote, rejectQuote, reviseQuote, sendQuote, unacceptQuote } from "../services/sales-quote-transitions.service";
 import { convertQuoteToOrder } from "../services/sales-quote-convert.service";
@@ -88,12 +88,13 @@ router.get("/", requirePermission("quote:read"), wrap(async (req, res) => {
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
- *       200: { description: Detay }
+ *       200: { description: "Detay (kalemlerle) + aktorler (geçişi yapan kullanıcı adları)" }
  *       404: { description: Teklif yok }
  */
 router.get("/:id", requirePermission("quote:read"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
-  sendQuoteJson(req, res)(200, await getQuote(id));
+  const q = await getQuote(id);
+  sendQuoteJson(req, res)(200, q, { aktorler: await quoteActors(q) });
 }));
 
 /**
@@ -318,7 +319,7 @@ router.post("/:id/revise", requirePermission("quote:write"), wrap(async (req, re
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     requestBody:
  *       required: true
- *       content: { application/json: { schema: { type: object, required: [clientToken], properties: { clientToken: { type: string, format: uuid } } } } }
+ *       content: { application/json: { schema: { type: object, required: [clientToken], properties: { clientToken: { type: string, format: uuid }, lineItems: { type: array, description: "Ürünsüz kaleme yalnız siparişte ürün bağla", items: { type: object, properties: { lineNo: { type: integer }, itemId: { type: string, format: uuid } } } } } } } }
  *     responses:
  *       201: { description: "Sipariş oluşturuldu (data = teklif, orderId, orderNumber)" }
  *       400: { description: QUOTE_LINE_ITEM_MISSING }

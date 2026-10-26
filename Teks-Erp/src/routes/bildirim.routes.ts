@@ -84,8 +84,11 @@ router.get("/katalog", c.getCatalog);
  *       - { in: query, name: cursor, required: false, schema: { type: string } }
  *       - { in: query, name: limit, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
  *       - { in: query, name: "filter[tur]", required: false, schema: { type: string }, description: "Katalog tür kodları (CSV)" }
+ *       - { in: query, name: "filter[ozet]", required: false, schema: { type: string, enum: ["true", "false"] }, description: "Gün özeti satırları (ozet bayrağı)" }
+ *       - { in: query, name: "filter[tablet]", required: false, schema: { type: string, enum: ["true", "false"] }, description: "Satırın tablet kanalı (sessiz saat sunucuda çözülmüş)" }
+ *       - { in: query, name: "filter[kanal]", required: false, schema: { type: string, enum: [TABLET_SES] }, description: "Katalogda bu kanalı taşıyan türler" }
  *     responses:
- *       200: { description: "{items, nextCursor, sayi, epoch, rev, alarmRev}" }
+ *       200: { description: "{items, nextCursor, sayi, epoch, rev, alarmRev}; satırda ozet, kanalTablet, sesli (kanalTablet ∧ kişinin ses ayarı)" }
  *       400: { description: Geçersiz sekme/imleç/süzgeç }
  *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
  */

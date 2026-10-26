@@ -2,18 +2,23 @@ import { ANLATI_EKRAN_SAYISI, type AnlatiCumlesi } from "./sunum";
 
 export const NARRATIVE_TITLE = "Ne görüyoruz?";
 
+export const NARRATIVE_EMPTY = "Bu dönem için söylenecek bir şey bulunmadı.";
+
 interface Props {
   sentences: AnlatiCumlesi[];
+  /** Özel rapor bloğu: sunucu zaten bloğun `enFazla`sıyla kesti; başlık bloğun adı olabilir. */
+  limit?: number;
+  title?: string;
 }
 
 /** Sunucunun anlatısını AYNEN basar (önem sırası sunucuda); istemci cümle kurmaz, yalnız ilk N'i keser. */
-export function NarrativeBox({ sentences }: Props) {
-  const shown = sentences.slice(0, ANLATI_EKRAN_SAYISI);
+export function NarrativeBox({ sentences, limit = ANLATI_EKRAN_SAYISI, title = NARRATIVE_TITLE }: Props) {
+  const shown = sentences.slice(0, limit);
   return (
-    <section className="h-full rounded-lg border bg-muted/30 p-4" aria-label={NARRATIVE_TITLE}>
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{NARRATIVE_TITLE}</h2>
+    <section className="h-full rounded-lg border bg-muted/30 p-4" aria-label={title}>
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
       {shown.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">Bu dönem için söylenecek bir şey bulunmadı.</p>
+        <p className="mt-2 text-sm text-muted-foreground">{NARRATIVE_EMPTY}</p>
       ) : (
         <ul className="mt-2 space-y-2 text-[15px] leading-relaxed">
           {shown.map((s, i) => (

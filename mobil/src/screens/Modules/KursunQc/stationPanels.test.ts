@@ -4,6 +4,7 @@
 import {
   composeStationPanels,
   dativeTr,
+  emptyRollHint,
   finishStepLabel,
 } from './stationPanels';
 
@@ -80,6 +81,15 @@ describe('sonraki istasyon metni', () => {
     ['Ram', "Ram'a"],
     ['Boyahane', "Boyahane'ye"],
     ['KK', "KK'ya"],
+    // Ünlü uyumuna uymayan alıntılar + istisna olmayan komşuları (Kanal'a).
+    ['Kontrol', "Kontrol'e"],
+    ['Kalite Kontrol', "Kalite Kontrol'e"],
+    ['KONTROL', "KONTROL'e"],
+    ['Saat', "Saat'e"],
+    ['Kanal', "Kanal'a"],
+    ['Kontrolcü Masa', "Kontrolcü Masa'ya"],
+    ['KK1', "KK1'e"],
+    ['Excel', "Excel'e"],
   ])('%s → %s', (ad, beklenen) => {
     expect(dativeTr(ad)).toBe(beklenen);
   });
@@ -92,5 +102,16 @@ describe('sonraki istasyon metni', () => {
   });
   it('sonraki istasyon adından', () => {
     expect(finishStepLabel('Paketleme')).toBe("Adımı Kapat — Toplar Paketleme'ye");
+  });
+});
+
+describe('top seçilmedi ipucu', () => {
+  it('tablette kuyruk sağda', () => {
+    expect(emptyRollHint(false)).toBe('Sağdaki top kuyruğundan birini seçin');
+  });
+  it('telefonda kuyruk üst şeritteki çekmecede — "Sağdaki" demez', () => {
+    const hint = emptyRollHint(true);
+    expect(hint).toContain('Açık İşler');
+    expect(hint).not.toMatch(/Sağ/);
   });
 });

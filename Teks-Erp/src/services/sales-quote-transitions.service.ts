@@ -16,10 +16,13 @@ import { validate as isUuidString } from "uuid";
 
 export const QUOTE_TABLE = "SALES_QUOTE";
 export const QUOTE_INCLUDE = {
-  lines: { orderBy: { lineNo: "asc" } },
+  lines: { orderBy: { lineNo: "asc" }, include: { item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } } },
   customer: { select: { id: true, code: true, name: true } },
   branch: { select: { id: true, name: true } },
   convertedOrder: { select: { id: true, orderNumber: true, status: true } },
+  // Revizyon zinciri (R0 ← R1 …) panelde bağlantıdır (MAL-5).
+  revisionOf: { select: { id: true, revisionNo: true, status: true } },
+  revisedTo: { select: { id: true, revisionNo: true, status: true } },
 } satisfies Prisma.SalesQuoteInclude;
 export type QuoteRecord = Prisma.SalesQuoteGetPayload<{ include: typeof QUOTE_INCLUDE }>;
 

@@ -126,6 +126,8 @@ const SHORT_CREDENTIAL_EVENTS = {
   SHORT_CREDENTIAL_ESCROW_SEALED: "SHORT_CREDENTIAL_ESCROW_SEALED",
   /** Başka makineden gelen özetlerin anahtarı emanetten halkaya geri kondu. */
   SHORT_CREDENTIAL_KEY_RESTORED: "SHORT_CREDENTIAL_KEY_RESTORED",
+  /** Halka dosyası yokken DB'de eski anahtar izi vardı: halka yeniden üretildi (yük: kid listesi + sayılar). */
+  SHORT_CREDENTIAL_RING_LOST: "SHORT_CREDENTIAL_RING_LOST",
   /** Yönetici toplu hızlı PIN sıfırladı (kişi başı satır ayrıca `USER_QUICK_PIN`). */
   SHORT_CREDENTIAL_BULK_RESET: "SHORT_CREDENTIAL_BULK_RESET",
   /** Düz saklanan TOTP sırları açılışta halka anahtarıyla sarıldı (sayılar; sır yüke girmez). */

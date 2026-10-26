@@ -30,6 +30,7 @@ import { SurumNotlariScreen } from '../screens/Common/settings/SurumNotlariScree
 import { PrintReportsScreen } from '../screens/Common/settings/PrintReportsScreen';
 import WorkPreferencesScreen from '../screens/Common/settings/WorkPreferencesScreen';
 import LicenseSettingsScreen from '../screens/Common/settings/LicenseSettingsScreen';
+import NotificationPreferencesScreen from '../screens/Common/settings/NotificationPreferencesScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
 import MainNavigator from './MainNavigator';
 import { rootNavigationRef } from './navigationRef';
@@ -290,6 +291,11 @@ export default function RootNavigator() {
         <Stack.Screen
           name="SettingsLicense"
           component={LicenseSettingsScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="SettingsNotifications"
+          component={NotificationPreferencesScreen}
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen

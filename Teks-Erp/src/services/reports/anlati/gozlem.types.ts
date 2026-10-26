@@ -32,7 +32,8 @@ export type AnaSayiKiyasKanit = {
   ad: string;
   deger: number;
   birim: Birim;
-  yuklem: string;
+  /** null: ölçünün yüklemi yok (özel rapor) — cümle ölçü adıyla kurulur ("Sevk edilen: ekim'de …"). */
+  yuklem: string | null;
   ozne: string | null;
   donem: SuffixInput | null;
   kiyasDonem: SuffixInput | null;
@@ -137,4 +138,4 @@ export type MusteriRitmi = { ad: string; siparisTarihleri: Date[] };
 export type ScopeNoteInput = ScopeNoteEvidence & { toplam?: number };
 /** Analiz girdisi: uyarı varsa korelasyon gözlemi DÜŞER (küçük örneklemde kanıt cümlesi yok). */
 export type AnalysisInput = { korelasyon: KorelasyonKanit | null; orneklem: SampleWarningEvidence | null };
-export type AnaSayiIfadesi = { yuklem: string; ozne?: string };
+export type AnaSayiIfadesi = { yuklem?: string; ozne?: string };

@@ -79,6 +79,8 @@ export interface SemanticDimension {
   personName?: true;
   /** SQL anahtarı yok: yalnız helper ölçü kesebilir (derleyici SQL ölçüde 400 verir). */
   helperOnly?: true;
+  /** `enumValues` sırası anlamlı (saat): "arasında" işleci bu sırayla açılır, sondan başa sarar (22–2). */
+  ordered?: true;
 }
 
 export interface SemanticCube {
@@ -101,13 +103,20 @@ export interface SemanticCube {
   prepare?: () => Promise<SemanticCube>;
 }
 
-export const FILTER_OPERATORS = ["=", "!=", "in", "notIn", "contains"] as const;
+export const FILTER_OPERATORS = ["=", "!=", "in", "notIn", "contains", "between"] as const;
 export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 
+/** "arasında" derlemede sıralı değer listesine açılır — derlenmiş süzgeçte yoktur. */
 export interface CompiledFilter {
   dimension: SemanticDimension;
-  operator: FilterOperator;
+  operator: Exclude<FilterOperator, "between">;
   values: readonly string[];
+}
+
+/** Süzgeç ağacı: kök + bir seviye iç grup (plan §3.2); her grup SQL'de parantezlenir. */
+export interface CompiledFilterGroup {
+  combinator: "and" | "or";
+  items: ReadonlyArray<CompiledFilter | CompiledFilterGroup>;
 }
 
 /** Derleyicinin çıktısı: tek SQL + çözülmüş sözlük kayıtları. */
@@ -115,7 +124,7 @@ export interface CompiledQuery {
   cube: SemanticCube;
   measures: readonly SemanticMeasure[];
   dimensions: readonly SemanticDimension[];
-  filters: readonly CompiledFilter[];
+  filter: CompiledFilterGroup;
   period: PeriodSpec | null;
   cap: number;
   range: DateRange;

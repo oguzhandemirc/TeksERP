@@ -48,11 +48,12 @@ export interface CashTxnRow {
   reference: string | null;
   /** Dolu ise satır bir VİRMAN bacağıdır — iptali grubun tamamını alır. */
   transferGroupId: string | null;
-  cashBox: { id: string; name: string } | null;
-  bankAccount: { id: string; name: string } | null;
+  /** `currency` EK alan (eski backend göndermez → para birimi rozeti çizilmez). */
+  cashBox: { id: string; name: string; currency?: Currency } | null;
+  bankAccount: { id: string; name: string; currency?: Currency } | null;
   /** Kaynak tahsilat/ödeme (yalnız COLLECTION/PAYMENT satırlarında); eski backend alanı göndermez. */
   paymentId?: string | null;
-  payment?: { id: string; docNo: string; direction: CashTxnDirection; cari: { id: string; name: string } } | null;
+  payment?: { id: string; docNo: string; direction: CashTxnDirection; currency?: Currency; cari: { id: string; name: string } } | null;
 }
 
 type Paged<T> = { data: T[]; pagination: { total: number; page: number; totalPages: number } };

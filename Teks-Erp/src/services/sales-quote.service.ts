@@ -187,6 +187,16 @@ export async function getQuote(id: string): Promise<QuoteRecord> {
   return q;
 }
 
+const ACTOR_KEYS = ["createdById", "sentById", "acceptedById", "rejectedById", "cancelledById", "convertedById"] as const;
+
+/** Zaman çizelgesinin "kim"i: geçiş kolonları FK'sız uuid — ad yalnız detay yanıtında çözülür (MAL-5). */
+export async function quoteActors(q: Pick<QuoteRecord, (typeof ACTOR_KEYS)[number]>): Promise<Record<string, string>> {
+  const ids = [...new Set(ACTOR_KEYS.map((k) => q[k]).filter((v): v is string => typeof v === "string"))];
+  if (ids.length === 0) return {};
+  const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true } });
+  return Object.fromEntries(users.map((u) => [u.id, u.fullName]));
+}
+
 export interface QuoteListQuery {
   durum?: SalesQuoteStatus[];
   customerId?: string | { in: string[] } | null;

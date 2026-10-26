@@ -38,12 +38,15 @@ describe('bootstrap / persist beyaz listeleri', () => {
     expect(isBootstrapQueryKey(['auth'])).toBe(false); // kök 'auth' HERŞEYİ kapsamamalı
   });
 
-  it('persist listesi = bootstrap + preferences; üretim verisi ASLA persist edilmez', () => {
+  it('persist listesi = bootstrap + preferences + bildirim; üretim verisi ASLA persist edilmez', () => {
     expect(isPersistedQueryKey(['preferences'])).toBe(true);
+    // Gelen kutusunun son hâli ağsız açılışta görünür (N4-TABLET); bootstrap DEĞİL → logout'ta düşer.
+    expect(isPersistedQueryKey(['bildirim', 'kutu'])).toBe(true);
+    expect(isBootstrapQueryKey(['bildirim', 'kutu'])).toBe(false);
     for (const k of BOOTSTRAP_QUERY_KEYS) expect(isPersistedQueryKey([...k])).toBe(true);
     expect(isPersistedQueryKey(['rolls', 'kk1', 'history'])).toBe(false);
     expect(isPersistedQueryKey(['work-orders'])).toBe(false);
-    expect(PERSISTED_QUERY_KEYS.length).toBe(BOOTSTRAP_QUERY_KEYS.length + 1);
+    expect(PERSISTED_QUERY_KEYS.length).toBe(BOOTSTRAP_QUERY_KEYS.length + 2);
   });
 });
 

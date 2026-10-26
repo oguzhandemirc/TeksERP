@@ -53,14 +53,20 @@ export type AnalysisVerdict =
  * Sonuç satırı: örneklem uyarısı varsa SARI uyarı (kanıt cümlesi çizilmez), yoksa sunucunun kanıt
  * cümlesi AYNEN; veri yoksa sunucunun "kayıt yok" cümlesi. Eşik motorun kararıdır (`uyarilar`).
  */
+/** Sunucu cümlesinin sonundaki sabit not: kart/dışa aktarım notu ayrıca bastığı için tek kez kalsın. */
+function withoutCausality(text: string | undefined): string | undefined {
+  const t = text?.trimEnd();
+  return t?.endsWith(CAUSALITY_TEXT) ? t.slice(0, -CAUSALITY_TEXT.length).trimEnd() : t;
+}
+
 export function analysisVerdict(a: AnalysisOutcome): AnalysisVerdict {
   const sentences = a.sunum.anlati;
-  const pick = (rule: string) => sentences.find((s) => s.kural === rule)?.metin;
+  const pick = (rule: string) => withoutCausality(sentences.find((s) => s.kural === rule)?.metin);
   const stats = a.istatistik;
   if (!stats || stats.n === 0) return { kind: "empty", text: pick("veriYok") ?? "Bu dönemde analiz edilecek kayıt yok." };
   if (stats.uyarilar.length > 0) return { kind: "warning", text: pick("orneklemUyarisi") ?? "Kayıt sayısı karar vermek için az." };
   const result = pick("korelasyon");
-  return result ? { kind: "result", text: result } : { kind: "empty", text: sentences[0]?.metin ?? "Bu dönemde analiz edilecek kayıt yok." };
+  return result ? { kind: "result", text: result } : { kind: "empty", text: withoutCausality(sentences[0]?.metin) ?? "Bu dönemde analiz edilecek kayıt yok." };
 }
 
 export interface Confounder {

@@ -1,7 +1,7 @@
 // Baskı için grafik SVG'si: ECharts DOM'suz SSR (vektör, dış kaynak yok). Genişlik A4
 // dikey içerik alanı (210 − 2×12 mm ≈ 180 mm) sabit; renkler baskı paleti.
 import type { ReportExportSpec } from "@/pages/Reports/_components/reportExport";
-import { grafikSecenek } from "./secenek";
+import { grafikSecenek, type Egilim } from "./secenek";
 import { BASKI_TEMASI } from "./tema";
 import type { GrafikBlok } from "../sunum";
 
@@ -12,11 +12,12 @@ export const BASKI_YUKSEKLIK_PX = 300;
 export async function grafikSvg(
   blok: GrafikBlok,
   boyut: { genislikPx: number; yukseklikPx: number } = { genislikPx: BASKI_GENISLIK_PX, yukseklikPx: BASKI_YUKSEKLIK_PX },
+  egilim?: Egilim | null,
 ): Promise<string> {
   const { echarts } = await import("./motor");
   const grafik = echarts.init(null, null, { renderer: "svg", ssr: true, width: boyut.genislikPx, height: boyut.yukseklikPx });
   try {
-    grafik.setOption({ ...grafikSecenek(blok, BASKI_TEMASI, { baski: true }), animation: false });
+    grafik.setOption({ ...grafikSecenek(blok, BASKI_TEMASI, { baski: true, egilim }), animation: false });
     return grafik.renderToSVGString();
   } finally {
     grafik.dispose();
@@ -37,7 +38,7 @@ export async function grafikleriDoldur(spec: ReportExportSpec): Promise<ReportEx
       continue;
     }
     try {
-      dolu.push({ ...b, svg: await grafikSvg(b.grafik) });
+      dolu.push({ ...b, svg: await grafikSvg(b.grafik, undefined, b.egilim) });
     } catch {
       dolu.push(b);
     }

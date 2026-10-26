@@ -84,8 +84,13 @@ function sStatik(): void {
   const kok = join(__dirname, "..", "..");
   const dm = readFileSync(join(kok, "Teks-Erp/src/middlewares/device.middleware.ts"), "utf8").replace(/^\s*\/\/.*$/gm, "");
   check("§6a cihaz çözücü başlık dışında kanıt doğrular", /verifyDeviceProof\(/.test(dm));
+  // Tek kurucu `clientHeaders.ts` (N4-TABLET): axios kesicisi ve zil SSE'si başlığı oradan alır.
   const api = readFileSync(join(kok, "mobil/src/services/api.ts"), "utf8");
-  check("§6b tablet istek katmanı kanıt başlığını ekler (tek yer: api istemcisi)", /DEVICE_PROOF_HEADER\]\s*=\s*proof/.test(api));
+  const baslik = readFileSync(join(kok, "mobil/src/services/clientHeaders.ts"), "utf8");
+  check(
+    "§6b tablet istek katmanı kanıt başlığını ekler (tek yer: clientHeaders, api istemcisi onu kullanır)",
+    /DEVICE_PROOF_HEADER\]\s*=\s*proof/.test(baslik) && /buildDeviceHeaders\(/.test(api) && !/DEVICE_PROOF_HEADER\]\s*=/.test(api),
+  );
   const ikiz = readFileSync(join(kok, "mobil/src/lib/device-proof.ts"), "utf8");
   check("§6c istemci ikizi aynı ileti biçimini kurar", ikiz.includes("`v1\\n${ts}\\n${method.toUpperCase()}\\n${path}`"));
 }

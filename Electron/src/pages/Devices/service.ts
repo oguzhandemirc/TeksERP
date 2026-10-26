@@ -1,7 +1,8 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type {
-  DeviceDetail, DeviceListItem, MergeCandidateGroup, MergePreview, MergeResult, RebindRejectBody, RebindRequest,
+  DeviceDetail, DeviceListItem, MergeCandidateGroup, MergePreview, MergeResult, ProofLostOverview, ProofResetOutcome,
+  RebindRejectBody, RebindRequest,
 } from "./types";
 
 const BASE = "/api/admin/devices";
@@ -93,6 +94,22 @@ export const deviceService = {
 
   undoMerge: (sourceId: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`${BASE}/merge/${sourceId}/undo`, {}, QUIET).then((r) => r.data),
+
+  /** Kanıtı doğrulanamayan cihazlar (D5, yazmaz); eski backend (uç yok) → `null` (bölüm gizli). */
+  proofLost: (): Promise<ProofLostOverview | null> =>
+    apiClient
+      .get<ApiResponse<ProofLostOverview>>(`${BASE}/proof-lost`, QUIET)
+      .then((r) => r.data.data ?? { halkaKaybi: null, cihazlar: [], bekleyenler: [] })
+      .catch((e: unknown) => {
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
+        throw e;
+      }),
+
+  /** Seçilen cihazlarda kanıtı sıfırla — yeni sır yalnız aynı donanıma. */
+  proofReset: (deviceIds: string[]): Promise<{ sonuclar: ProofResetOutcome[] }> =>
+    apiClient
+      .post<ApiResponse<{ sonuclar: ProofResetOutcome[] }>>(`${BASE}/proof-reset`, { deviceIds }, QUIET)
+      .then((r) => r.data.data as { sonuclar: ProofResetOutcome[] }),
 
   approveRebind: (id: string): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`${BASE}/rebind-requests/${id}/approve`, {}, QUIET).then((r) => r.data),

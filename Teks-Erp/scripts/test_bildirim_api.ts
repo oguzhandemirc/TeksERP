@@ -15,6 +15,10 @@
 //   §6 tümünü okundu → ids; geri al yalnız kendi satırlarını döndürür
 //   §7 süzgeç: filter[tur] görme kümesiyle kesişir; çıplak `tur` ve bilinmeyen tür 400
 //   §8 katalog: yalnız görülebilir türler
+//   §9 satır süzgeçleri (N4-TABLET): filter[ozet] / filter[tablet] / filter[kanal] SUNUCUDA; `sayi` aynı where'den;
+//      satırda `ozet`, `kanalTablet`, `sesli` (= kanalTablet ∧ kişinin ses ayarı); bozuk değer 400
+//   Sonda (2026-10-26, N4-TABLET): `rowFlagWhere` boş dizi döndürdü (istemci süzmek zorunda kalırdı) →
+//      40 ✅ / 4 ❌ (§9a, §9b, §9c, §9f); geri alındı (md5 eşit).
 //
 // NEGATİF SONDA (2026-10-24, md5 ile birebir geri alındı):
 //   (a) `inboxSummary` okunmamış sayımı `buildInboxWhere` yerine `{userId, readAt:null}` (özet ↔ liste where
@@ -44,13 +48,14 @@ const TAG = `bapi-${Date.now().toString(36)}`;
 const fx = new BildirimFikstur(TAG);
 const T0 = Date.now();
 
-async function satir(userId: string, kind: string, dkOnce: number, ek: Partial<{ klass: string; readAt: Date }> = {}): Promise<string> {
+async function satir(userId: string, kind: string, dkOnce: number, ek: Partial<{ klass: string; readAt: Date; ozet: boolean; kanalTablet: boolean }> = {}): Promise<string> {
   const an = new Date(T0 - dkOnce * 60_000);
   const r = await prisma.notificationInbox.create({
     data: {
       userId, kind, klass: ek.klass ?? "BILDIRIM", subjectType: "order", subjectId: null,
       groupKey: `${TAG}:${randomUUID()}`, count: 1, firstAt: an, lastAt: an, lastOutboxId: randomUUID(),
       payload: { belgeNo: `S-${dkOnce}`, musteri: "Deneme" }, reason: "IZIN", readAt: ek.readAt ?? null,
+      ozet: ek.ozet ?? false, kanalTablet: ek.kanalTablet ?? false,
     },
     select: { id: true },
   });
@@ -202,6 +207,36 @@ async function govde(): Promise<void> {
   check("§8a katalog görülebilir türleri verir, gizliyi vermez", kat.status === 200 && kodlar.includes("sistem.lisans-uyarisi") && kodlar.includes("siparis.patron-siparisi") && !kodlar.includes("sistem.yedek-basarisiz"), kodlar.join(","));
   const katB: string[] = ((await fx.istek(b.token, "GET", "/api/bildirim/katalog")).json?.data?.turler ?? []).map((t: { kod: string }) => t.kod);
   check("§8b B (yalnız order:read) lisans türünü görmez", !katB.includes("sistem.lisans-uyarisi") && katB.includes("siparis.patron-siparisi"));
+
+  await satirSuzgecleri();
+}
+
+/** §9 — ayrı kullanıcı: önceki bölümlerin sayımlarını bozmaz. */
+async function satirSuzgecleri(): Promise<void> {
+  const c = await fx.kullanici("c", ["order:read"]);
+  const ozetId = await satir(c.id, "siparis.patron-siparisi", 1, { ozet: true });
+  const tabletId = await satir(c.id, "siparis.termin-gecti", 2, { kanalTablet: true });
+  const duz = await satir(c.id, "siparis.patron-siparisi", 3);
+  const liste = async (q: string) => (await fx.istek(c.token, "GET", `/api/bildirim?${q}`)).json?.data;
+  const ids = (d: { items?: { id: string }[] } | undefined) => (d?.items ?? []).map((i) => i.id);
+
+  const oz = await liste("filter[ozet]=true");
+  check("§9a filter[ozet]=true yalnız özet satırı; sayi aynı where'den", ids(oz).join() === ozetId && oz?.sayi === 1, ids(oz).join());
+  const ozYok = await liste("filter[ozet]=false");
+  check("§9b filter[ozet]=false özet satırını dışlar", ids(ozYok).length === 2 && !ids(ozYok).includes(ozetId) && ozYok?.sayi === 2);
+  const tb = await liste("sekme=okunmamis&filter[tablet]=true");
+  check("§9c filter[tablet]=true yalnız tablet kanalı açık satır", ids(tb).join() === tabletId && tb?.sayi === 1, ids(tb).join());
+  const kn = await liste("filter[kanal]=TABLET_SES");
+  check("§9d filter[kanal]=TABLET_SES: tablet kanalı olmayan türler dışarıda", kn?.sayi === 0 && ids(kn).length === 0, String(kn?.sayi));
+  const hepsi = await liste("sekme=tumu");
+  const tbSatir = (hepsi?.items ?? []).find((i: { id: string }) => i.id === tabletId);
+  const duzSatir = (hepsi?.items ?? []).find((i: { id: string }) => i.id === duz);
+  check("§9e satırda ozet/kanalTablet/sesli alanları", tbSatir?.kanalTablet === true && tbSatir?.sesli === true && duzSatir?.sesli === false && typeof duzSatir?.ozet === "boolean");
+  await prisma.notificationUserSetting.upsert({ where: { userId: c.id }, create: { userId: c.id, sound: false }, update: { sound: false } });
+  const sessiz = (await liste("filter[tablet]=true"))?.items?.[0];
+  check("§9f kişinin ses ayarı kapalı → sesli=false (kanalTablet aynen)", sessiz?.kanalTablet === true && sessiz?.sesli === false);
+  check("§9g bozuk filter[ozet] değeri 400", (await fx.istek(c.token, "GET", "/api/bildirim?filter[ozet]=evet")).status === 400);
+  check("§9h tanınmayan filter[kanal] 400", (await fx.istek(c.token, "GET", "/api/bildirim?filter[kanal]=MASAUSTU")).status === 400);
 }
 
 async function main(): Promise<void> {

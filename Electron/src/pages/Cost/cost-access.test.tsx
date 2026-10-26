@@ -16,10 +16,12 @@ function routePermission(path: string): string | null {
 }
 
 describe("Maliyet & Teklif — görünürlük kapıları", () => {
-  it("menü satırı maliyetEnabled bayrağına ve cost:read iznine bağlı", () => {
+  it("menü satırı maliyetEnabled bayrağına ve maliyet/teklif/fiyat listesi okuma izinlerinden birine bağlı (route ile aynı)", () => {
     const item = navGroups.flatMap((g) => g.items).find((i) => i.to === "/cost");
     expect(item?.featureFlag).toBe("maliyetEnabled");
-    expect(item?.permission).toBe("cost:read");
+    expect(item?.permissionAny).toEqual(["cost:read", "quote:read", "price-list:read"]);
+    const i = ROUTES.indexOf('path: "cost",');
+    expect(ROUTES.slice(i, i + 300)).toContain('requireAnyPermission={["cost:read", "quote:read", "price-list:read"]}');
   });
   it("her karonun izni route'un izniyle birebir", () => {
     for (const t of costTiles) expect([routePermission(t.to.slice(1))]).toEqual(t.permissionAny);
@@ -29,11 +31,17 @@ describe("Maliyet & Teklif — görünürlük kapıları", () => {
     for (const t of costTiles) expect(isRouteModuleOpen(t.to, off)).toBe(false);
     expect(isRouteModuleOpen("/cost/items/abc", off)).toBe(false);
     const sec = commandSections.find((s) => s.heading === "Maliyet & Teklif");
-    expect(sec?.entries.length).toBe(costTiles.length);
+    for (const t of costTiles) expect(sec?.entries.some((e) => e.to === t.to)).toBe(true);
     for (const e of sec!.entries) expect(e.visibleWhen?.(off)).toBe(false);
   });
-  it("izin yok → hub'da karo yok; cost:read → karolar görünür", () => {
+  it("izin yok → hub'da karo yok; her izin yalnız kendi karolarını açar", () => {
     expect(visibleCostTiles(() => false)).toEqual([]);
-    expect(visibleCostTiles((l) => l.includes("cost:read")).length).toBe(costTiles.length);
+    const costOnly = visibleCostTiles((l) => l.includes("cost:read")).map((t) => t.key);
+    expect(costOnly).not.toContain("quotes");
+    expect(costOnly.length).toBeGreaterThanOrEqual(5);
+    // Satış rolü (quote:read, cost:read YOK): maliyet karoları görünmez, teklif görünür.
+    expect(visibleCostTiles((l) => l.includes("quote:read")).map((t) => t.key)).toEqual(["quotes"]);
+    expect(costOnly).not.toContain("price-lists");
+    expect(visibleCostTiles((l) => l.includes("price-list:read")).map((t) => t.key)).toEqual(["price-lists"]);
   });
 });
