@@ -20,6 +20,7 @@ import { StatusBadge } from "../../../src/ui/StatusBadge";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, typography } from "../../../src/ui/tokens";
 import { useWrite } from "../../../src/ui/useWrite";
+import { EMPTY_ICON } from "../../../src/ui/icons";
 
 export default function AccountDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,7 +51,7 @@ export default function AccountDetail() {
   );
   if (list.loading && !list.data) return shell("Hesap", <LoadingSkeleton rows={4} />);
   if (list.error && !list.data) return shell("Hesap", <ErrorState text={list.error} onRetry={list.reload} />);
-  if (!acc) return shell("Hesap", <Empty icon="person-outline" text="Hesap bulunamadı" />);
+  if (!acc) return shell("Hesap", <Empty icon={EMPTY_ICON.bulunamadi} text="Hesap bulunamadı" />);
   const err = save.error ?? status.error ?? reset.error;
   const dirty = perms.length !== acc.izinler.length || perms.some((p) => !acc.izinler.includes(p));
   return shell(

@@ -1,5 +1,5 @@
-// Bildirimler — bölümler: Ayarlar (ana anahtar · tür · sessiz saat) · Eşikler · Cihazlar · Geçmiş; tesis varsayılanı
-// (yönetici). Karar sunucudadır: ayar katı şemadan geçer, izni yetmeyen türe ayar açık olsa da gönderilmez.
+// Bildirim Ayarları — bölümler: Cihazlar (bu cihazın izni, EN ÜSTTE) · Ayarlar (ana anahtar · tür · sessiz saat) · Eşikler ·
+// Geçmiş; tesis varsayılanı (yönetici). Karar sunucudadır: ayar katı şemadan geçer, izni yetmeyen türe ayar açık olsa da gönderilmez.
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import type { NotificationSettingsView } from "../../src/api/wire";
@@ -16,6 +16,7 @@ import { SectionHeader } from "../../src/ui/SectionHeader";
 import { Empty, ErrorState, LoadingSkeleton } from "../../src/ui/StateViews";
 import { space } from "../../src/ui/tokens";
 import { useWrite } from "../../src/ui/useWrite";
+import { EMPTY_ICON } from "../../src/ui/icons";
 
 const SOURCE: Readonly<Record<NotificationSettingsView["kaynak"], string>> = {
   HESAP: "Kendi ayarlarınız kullanılıyor.",
@@ -57,15 +58,16 @@ export default function Notifications() {
   };
 
   const shell = (children: ReactNode) => (
-    <Screen title="Bildirimler" module="bildirimler" onRefresh={remote.reload} refreshing={remote.refreshing}>{children}</Screen>
+    <Screen module="bildirimler" onRefresh={remote.reload} refreshing={remote.refreshing}>{children}</Screen>
   );
   if (remote.loading && !view) return shell(<LoadingSkeleton rows={5} />);
   if (remote.error && !view) return shell(<ErrorState text={remote.error} onRetry={remote.reload} />);
-  if (!view || !form) return shell(<Empty icon="notifications-off-outline" text="Ayarlar okunamadı" actionLabel="Tekrar dene" onAction={remote.reload} />);
+  if (!view || !form) return shell(<Empty icon={EMPTY_ICON.bildirim} text="Ayarlar okunamadı" actionLabel="Tekrar dene" onAction={remote.reload} />);
   const error = formError ?? saveOwn.error ?? reset.error ?? saveFacility.error;
   return shell(
     <>
       {view.gonderim === "kapali" ? <Banner tone="warn" text="Bildirim gönderimi sunucuda henüz açık değil; ayarlarınız saklanır ve açıldığında geçerli olur." testID="gonderim-kapali" /> : null}
+      <NotificationDevices vapidKey={view.webPushAnahtari} />
       <SectionHeader title="Ayarlar" />
       <GroupNote>{SOURCE[view.kaynak]}</GroupNote>
       <NotificationSettingsForm form={form} kinds={view.turler} onChange={(f) => { setForm(f); setSaved(null); }} />
@@ -82,7 +84,6 @@ export default function Notifications() {
             onConfirm={() => void submit(saveFacility, "Tesis varsayılanı kaydedildi")} testID="tesis-varsayilani" />
         ) : null}
       </View>
-      <NotificationDevices vapidKey={view.webPushAnahtari} />
       <NotificationHistory />
     </>,
   );

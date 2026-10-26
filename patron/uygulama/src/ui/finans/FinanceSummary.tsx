@@ -11,6 +11,7 @@ import { SectionHeader } from "../SectionHeader";
 import { Empty } from "../StateViews";
 import { makeStyles, useTokens } from "../theme-context";
 import { FONT_SCALE, radius, space, tabularNums, typography, type StatusKind } from "../tokens";
+import { EMPTY_ICON } from "../icons";
 
 type Obj = Readonly<Record<string, unknown>>;
 const obj = (v: unknown): Obj => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : {});
@@ -120,7 +121,7 @@ export function ChequeDue({ veri }: { veri: unknown }) {
     <View>
       <SectionHeader title="Çek ve senet vadeleri" domain="finans" />
       {groups.length === 0 ? (
-        <Empty text="Vadesi beklenen çek/senet yok" domain="finans" icon="calendar-outline" />
+        <Empty text="Vadesi beklenen çek/senet yok" domain="finans" icon={EMPTY_ICON.vade} />
       ) : (
         <Card domain="finans" testID="finans-cek-vade">
           {groups.map((g, i) => (
