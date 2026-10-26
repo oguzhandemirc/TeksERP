@@ -6,7 +6,9 @@
 // `quote:write`. Liste, detay ve HER geçiş yanıtı bu tek yardımcıdan geçer (`test_teklif_uc`).
 // =============================================================================
 import { Prisma } from "@prisma/client";
+import type { SalesQuoteStatus } from "@prisma/client";
 import { matchesPermission } from "../../middlewares/rbac.middleware";
+import { isQuoteExpired } from "./sales-quote-state.helper";
 
 const LINE_COST_KEYS = ["costPerMTry", "markupPct", "suggestedUnitPrice", "costSnapshot", "standardCostVersionId"] as const;
 const LIST_LINE_COST_KEYS = ["costPerMTry", "markupPct", "standardCostVersionId"] as const;
@@ -41,6 +43,10 @@ export function quoteViewFor(user: { permissions?: string[] } | undefined): Quot
     canSeeInternal,
     quote(q) {
       let out: Row = { ...(q as Row) };
+      // "Süresi doldu" durum değil, türetilmiş bayrak — panel tarih karşılaştırmaz, bu alanı okur (MAL-5).
+      if (out.status && out.validUntilDate instanceof Date) {
+        out.suresiDoldu = isQuoteExpired({ status: out.status as SalesQuoteStatus, validUntilDate: out.validUntilDate });
+      }
       if (!canSeeInternal) out = omit(out, ["internalNote"]);
       if (Array.isArray(out.lines)) out.lines = (out.lines as Row[]).map((l) => (canSeeCost ? l : omit(l, LINE_COST_KEYS)));
       if (!canSeeCost) return omit(out, ["totalCostTry"]);

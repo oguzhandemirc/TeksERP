@@ -1,13 +1,14 @@
 // =============================================================================
 // MALİYET › HIZLI HESAPLAYICI (MAL-3, M0) — `cost:read`. Ürün seç ya da elle yapı + ezmeler + kur → canlı döküm.
-// KAYIT YAZMAZ (yalnız `POST /api/cost/preview`); sayı sunucudandır. Teklif fiyatı MAL-4/5'te ("Teklife ekle" yok).
+// KAYIT YAZMAZ (yalnız `POST /api/cost/preview`); sayı sunucudandır. "Teklife ekle" (quote:write) kalemi teklif ekranına taşır.
 // =============================================================================
 import { useState } from "react";
-import { PackageSearch } from "lucide-react";
+import { FilePlus2, PackageSearch } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
+import { PermissionGate } from "@/components/PermissionGate";
 import { apiErrorMessage } from "@/services/apiClient";
 import { CostBreakdown } from "../shared/CostBreakdown";
 import { CostModuleClosed } from "../shared/CostQueryState";
@@ -15,23 +16,38 @@ import { isModuleDisabled } from "../shared/errors";
 import { FxRateInputs, foreignCurrencies } from "../shared/FxRateInputs";
 import { missingFields } from "../shared/missing-targets";
 import { useCostPreview } from "../shared/useCostPreview";
+import { AddToQuoteDialog } from "../Quotes/AddToQuoteDialog";
+import type { PendingLine } from "../Quotes/line-body";
 import { AdHocFields } from "./AdHocFields";
 import { OverrideFields } from "./OverrideFields";
-import { buildCalculatorBody, emptyCalculator, type CalculatorState } from "./calculator-body";
+import { adHocBody, buildCalculatorBody, emptyCalculator, type CalculatorState } from "./calculator-body";
 
 export function CalculatorPage() {
   const [s, setS] = useState<CalculatorState>(emptyCalculator);
-  const [item, setItem] = useState<{ code: string; name: string } | null>(null);
+  const [item, setItem] = useState<{ id: string; code: string; name: string } | null>(null);
+  const [toQuote, setToQuote] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const preview = useCostPreview(buildCalculatorBody(s));
   const p = preview.data;
   const flagged = missingFields(p?.eksikler ?? []);
   const up = (patch: Partial<CalculatorState>) => setS((x) => ({ ...x, ...patch }));
+  // Teklife taşınacak kalem: seçili kumaş ya da geçerli elle yapı (gövdesi kurulamıyorsa düğme kapalı).
+  const pending: PendingLine | null =
+    s.mode === "item"
+      ? item && s.itemId === item.id ? { mode: "item", item } : null
+      : adHocBody(s.adHoc, s.finishingRateCode) ? { mode: "adHoc", adHoc: s.adHoc, rateCode: s.finishingRateCode } : null;
   return (
     <PageShell>
       <PageHeader
         title="Hızlı Hesaplayıcı"
         description="Bir kumaşın ya da elle kurduğunuz yapının metre maliyetini deneyin. Hiçbir şey kaydedilmez; her sayı sunucuda hesaplanır."
+        actions={
+          <PermissionGate permission="quote:write">
+            <Button size="sm" disabled={!pending} onClick={() => setToQuote(true)}>
+              <FilePlus2 className="mr-1 h-4 w-4" />Teklife ekle
+            </Button>
+          </PermissionGate>
+        }
       />
       <PageBody className="grid gap-6 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,30rem)]">
         <div className="min-w-0 space-y-4">
@@ -76,11 +92,12 @@ export function CalculatorPage() {
         onOpenChange={setPickerOpen}
         allowedTypes={["FABRIC"]}
         onPick={(r) => {
-          setItem({ code: r.code, name: r.name });
+          setItem({ id: r.id, code: r.code, name: r.name });
           up({ itemId: r.id });
           setPickerOpen(false);
         }}
       />
+      {pending && <AddToQuoteDialog open={toQuote} onOpenChange={setToQuote} pending={pending} />}
     </PageShell>
   );
 }

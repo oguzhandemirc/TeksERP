@@ -110,15 +110,27 @@ export const commandSections: CommandSection[] = [
     // MAL-3: Muhasebe'den farklı olarak bayrak yüklemi TAŞINIR — `cost:read` Muhasebe rol şablonunda
     // modül kapalıyken de atanmış olabilir; satır menüyle aynı `maliyetEnabled` kapısından geçer.
     heading: "Maliyet & Teklif",
-    entries: costTiles.map<CommandEntry>((tile) => ({
-      key: `cost:${tile.key}`,
-      label: tile.title,
-      description: tile.description,
-      icon: tile.icon,
-      to: tile.to,
-      permissionAny: tile.permissionAny,
-      visibleWhen: regimePredicate("maliyetEnabled"),
-    })),
+    entries: [
+      ...costTiles.map<CommandEntry>((tile) => ({
+        key: `cost:${tile.key}`,
+        label: tile.title,
+        description: tile.description,
+        icon: tile.icon,
+        to: tile.to,
+        permissionAny: tile.permissionAny,
+        visibleWhen: regimePredicate("maliyetEnabled"),
+      })),
+      // Doğrudan eylem: yeni teklif taslağı (route izni `quote:write` ile birebir).
+      {
+        key: "cost:quote-new",
+        label: "Yeni teklif",
+        description: "Müşteriye yeni fiyat teklifi taslağı aç",
+        icon: FilePlus2,
+        to: "/cost/quotes/new",
+        permission: "quote:write",
+        visibleWhen: regimePredicate("maliyetEnabled"),
+      },
+    ],
   },
   ...reportCommandSections,
   ...definitionGroups.map<CommandSection>((group) => ({
