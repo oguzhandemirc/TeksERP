@@ -49,6 +49,7 @@ import "../src/services/reconciliation-letter.service";
 import "../src/services/cheque-delivery-note.service";
 import "../src/services/stock-count.service";
 import "../src/services/quality-inspection-shipment.service";
+import "../src/services/quote-documents.service";
 
 let pass = 0;
 let fail = 0;
@@ -107,6 +108,10 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
   // Muayene raporu sevkiyat başınadır (kalite sertifikasının emsali).
   [PrintedDocType.INSPECTION_REPORT]: async () =>
     (await prisma.shipment.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  // MAL-6: teklif + fiyat listesi — derin sonda ortamda aranmaz (test_keyfi_arama); gerçek
+  // kaynakla basım `test_teklif_belgesi` kendi fikstürüyle koşar. A+B şekil garantisi burada da koşar.
+  [PrintedDocType.SALES_QUOTE]: async () => null,
+  [PrintedDocType.PRICE_LIST]: async () => null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

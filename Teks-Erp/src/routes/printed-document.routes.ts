@@ -153,6 +153,16 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read:  ["finance:read", "finance:write", "finance:cheque", "report:finance"],
     write: ["finance:write"],
   },
+  // MAL-6 — kaynak uçlarla HİZALI (`quote.routes` / `price-list.routes`). Belge müşteri
+  // sözleşmesidir: maliyet izni (`cost:read`) belgeye iç kolon AÇMAZ, okuyan herkes aynısını görür.
+  SALES_QUOTE: {
+    read: ["quote:read", "quote:write"],
+    write: ["quote:write"],
+  },
+  PRICE_LIST: {
+    read: ["price-list:read", "price-list:write"],
+    write: ["price-list:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

@@ -124,6 +124,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   OLUSTURULDU: "EIrsaliyeStatus(numara+XML üretildi) ve EIrsaliyeEventType(üretim olayı) — aynı fiil; ortak Türkçe doğru",
   REDDEDILDI: "CloudInboxOutcome(bulut makbuzu reddedildi) ve EIrsaliyeStatus(alıcı yanıtı red) — ikisi de 'Reddedildi'; ortak Türkçe doğru",
 
+  // ── Basılı belge türü ile fiyat kaynağı (MAL-6, 2026-10-26)
+  PRICE_LIST: "QuotePriceSource(fiyat listeden geldi) ve PrintedDocType(fiyat listesi belgesi) — ikisi de 'Fiyat listesi'; ortak Türkçe doğru",
+
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
   ARCHIVED:
     "ItemLifecycleStatus('Pasif') ve PriceListStatus(yayından kalktı) — ortak cevap fiyat listesi için YANLIŞ; " +

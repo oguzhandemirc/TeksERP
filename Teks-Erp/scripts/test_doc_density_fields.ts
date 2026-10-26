@@ -25,6 +25,8 @@ import { renderFasonDirectShipHtml } from "../src/services/document-render/fason
 import { renderFasonReceiptHtml } from "../src/services/document-render/fason-receipt.html";
 import { renderKartelaCekiHtml } from "../src/services/document-render/kartela-ceki.html";
 import { renderInspectionReportHtml } from "../src/services/document-render/inspection-report.html";
+import { renderSalesQuoteHtml } from "../src/services/document-render/sales-quote.html";
+import { renderPriceListHtml } from "../src/services/document-render/price-list.html";
 import { renderQualityCertificateHtml } from "../src/services/document-render/quality-certificate.html";
 import { renderReturnDispatchHtml } from "../src/services/document-render/return-dispatch.html";
 import type { PrintedDocSnapshot } from "../src/services/printed-document.service";
@@ -50,6 +52,8 @@ const DOCS: { key: string; label: string; sample: keyof typeof SAMPLE_PRINTED_DO
   { key: "kartelaCeki", label: "Kartela Çeki", sample: "KARTELA_DISPATCH", render: renderKartelaCekiHtml as R },
   { key: "kaliteSertifikasi", label: "Kalite Sertifikası", sample: "QUALITY_CERTIFICATE", render: renderQualityCertificateHtml as R },
   { key: "muayeneRaporu", label: "Muayene Raporu", sample: "INSPECTION_REPORT", render: renderInspectionReportHtml as R },
+  { key: "satisTeklifi", label: "Satış Teklifi", sample: "SALES_QUOTE", render: renderSalesQuoteHtml as R },
+  { key: "fiyatListesi", label: "Fiyat Listesi", sample: "PRICE_LIST", render: renderPriceListHtml as R },
   { key: "iadeIrsaliyesi", label: "İade İrsaliyesi", sample: "RETURN_DISPATCH", render: renderReturnDispatchHtml as R },
 ];
 

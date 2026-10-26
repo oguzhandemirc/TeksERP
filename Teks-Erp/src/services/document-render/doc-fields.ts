@@ -116,6 +116,9 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   kartelaCeki: [...COMMON, ...BOXES, TBL_CAP],
   kaliteSertifikasi: [...COMMON, TBL_CAP, DECL],
   muayeneRaporu: [...COMMON, TBL_CAP, DECL],
+  // MAL-6 ticari müşteri belgeleri (teklif + fiyat listesi).
+  satisTeklifi: [...COMMON, TBL_CAP, DECL],
+  fiyatListesi: [...COMMON, TBL_CAP, DECL],
   iadeIrsaliyesi: [...COMMON, ...BOXES, SEC_CAPTION],
   // Ticaret paketi — iç depo belgeleri (iade irsaliyesiyle aynı iskelet).
   depoTransfer: [...COMMON, ...BOXES, SEC_CAPTION],

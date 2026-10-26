@@ -12,6 +12,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { claimQuoteTx, quoteToday, type QuoteTransition } from "./helpers/sales-quote-state.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
+import { voidQuoteDocumentTx } from "./quote-documents.service";
 import { validate as isUuidString } from "uuid";
 
 export const QUOTE_TABLE = "SALES_QUOTE";
@@ -97,7 +98,12 @@ export function rejectQuote(id: string, body: { reason?: unknown }, userId?: str
 
 export function cancelQuote(id: string, body: { reason?: unknown }, userId?: string): Promise<QuoteRecord> {
   const reason = readReason(body.reason, false);
-  return runTransition(id, "cancel", { cancelledAt: new Date(), cancelledById: userId ?? null, cancelReason: reason }, { userId, audit: { cancelReason: reason } });
+  return runTransition(id, "cancel", { cancelledAt: new Date(), cancelledById: userId ?? null, cancelReason: reason }, {
+    userId,
+    audit: { cancelReason: reason },
+    // Gönderilmiş teklifin donmuş belgesi aynı tx'te İPTAL filigranına geçer (MAL-6).
+    after: async (tx) => { await voidQuoteDocumentTx(tx, id, reason ?? "Teklif iptal edildi"); },
+  });
 }
 
 /** ACCEPTED → SENT (dönüşmemişse): kabul damgası düşer; "ne oldu" audit'te kalır. */
@@ -126,6 +132,8 @@ export async function reviseQuote(id: string, body: { clientToken?: unknown }, u
     const created = await prisma.$transaction(async (tx) => {
       await claimQuoteTx(tx, id, "revise", { data: { supersededAt: new Date(), updatedById: userId ?? null } });
       const old = await tx.salesQuote.findUniqueOrThrow({ where: { id }, include: { lines: { orderBy: { lineNo: "asc" } } } });
+      // Eski revizyonun belgesi geçersizleşir; snapshot'ı DEĞİŞMEZ (yeni revizyon yeni kaynaktır).
+      await voidQuoteDocumentTx(tx, id, `Revizyon: R${old.revisionNo + 1} ile değiştirildi`);
       const today = quoteToday();
       const validDays = Math.max(0, Math.round((old.validUntilDate.getTime() - old.quoteDate.getTime()) / DAY_MS));
       return tx.salesQuote.create({
