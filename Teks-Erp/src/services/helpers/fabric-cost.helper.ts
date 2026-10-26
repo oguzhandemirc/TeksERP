@@ -159,6 +159,16 @@ export function yarnUsagePerM(input: CostInput): {
   };
 }
 
+/**
+ * Çözgü metresinin kumaş karşılığı: L × (1 − t) — levent hazırlığı satırıyla aynı take-up çözümü.
+ * İhtiyaç planı hazır levent düşümünde kullanır (formül kopyalanmaz); take-up yoksa null.
+ */
+export function fabricMetersFromWarpM(input: CostInput, warpM: Dec): Dec | null {
+  if (!input.warp) return null;
+  const t = new Collector().take(input.warp.takeUpPct, "TAKEUP_MISSING");
+  return t === null ? null : warpM.mul(ONE.minus(pct(t)));
+}
+
 const line = (component: CostComponent, label: string, amount: Dec, extra: Partial<CostLine> = {}): CostLine => ({
   component, label, yarnItemId: null, qty: null, qtyUnit: null, unitPriceTry: null, amountPerMTry: amount, ...extra,
 });

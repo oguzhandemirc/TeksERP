@@ -19,9 +19,9 @@ describe("Maliyet & Teklif — görünürlük kapıları", () => {
   it("menü satırı maliyetEnabled bayrağına ve maliyet/teklif/fiyat listesi okuma izinlerinden birine bağlı (route ile aynı)", () => {
     const item = navGroups.flatMap((g) => g.items).find((i) => i.to === "/cost");
     expect(item?.featureFlag).toBe("maliyetEnabled");
-    expect(item?.permissionAny).toEqual(["cost:read", "quote:read", "price-list:read"]);
+    expect(item?.permissionAny).toEqual(["cost:read", "quote:read", "price-list:read", "report:yarn-need"]);
     const i = ROUTES.indexOf('path: "cost",');
-    expect(ROUTES.slice(i, i + 300)).toContain('requireAnyPermission={["cost:read", "quote:read", "price-list:read"]}');
+    expect(ROUTES.slice(i, i + 300)).toContain('requireAnyPermission={["cost:read", "quote:read", "price-list:read", "report:yarn-need"]}');
   });
   it("her karonun izni route'un izniyle birebir", () => {
     for (const t of costTiles) expect([routePermission(t.to.slice(1))]).toEqual(t.permissionAny);

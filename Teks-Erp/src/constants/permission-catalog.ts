@@ -319,6 +319,8 @@ export const PERMISSION_CATALOG = [
   { code: "report:subcontract", module: "REPORTS", category: "web", description: "Fason raporları" },
   { code: "report:customer", module: "REPORTS", category: "web", description: "Müşteri / satış profil raporları" },
   { code: "report:audit", module: "REPORTS", category: "web", description: "Sistem / audit raporları" },
+  // MAL-7: tutar göstermez → `cost:read` istemez; uç maliyet modülüne bağlı (`requireMaliyetEnabled`).
+  { code: "report:yarn-need", module: "REPORTS", category: "web", description: "İplik ihtiyaç planı (açık siparişlerin iplik kg ihtiyacı, stok ve eksik)" },
   // Raporlar v2 kayıtlı raporlar (R1-KAYIT): görme/çalıştırma yeni izin istemez (görünürlük + blok izinleri);
   // oluşturma/düzenleme builder, kategori · herkese açma · başkasının koşusunu iptal publish.
   { code: "report:builder", module: "REPORTS", category: "web", description: "Özel rapor oluşturma ve düzenleme (veri yetkisi vermez; her bölüm kendi rapor iznini ister)" },

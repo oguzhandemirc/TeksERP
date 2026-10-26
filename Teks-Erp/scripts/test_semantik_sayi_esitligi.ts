@@ -45,6 +45,7 @@ import { getReturnScorecard } from "../src/services/reports/return-scorecard.rep
 import { getQualityScorecard } from "../src/services/reports/quality-scorecard.report.service";
 import { getScrapScorecard } from "../src/services/reports/scrap-scorecard.report.service";
 import { getWipScorecard } from "../src/services/reports/wip-scorecard.report.service";
+import { yarnNeedReport } from "../src/services/reports/yarn-need.report.service";
 import { getStockScorecard } from "../src/services/reports/stock-scorecard.report.service";
 import { getSubcontractScorecard } from "../src/services/reports/subcontract-scorecard.report.service";
 import { durusParetoReport, efficiencyReport } from "../src/services/reports/dokuma.report.service";
@@ -287,6 +288,9 @@ const CASES: Record<string, Case> = {
     const measured = beamBalance(lev.kapananlar).balancePct === null ? 0 : lev.ozet.fireM;
     await totalCase("dokuma-vardiya", "fire.leventMetre", measured, 1);
   },
+  // MAL-7: iplik kesiti — kaynak `yarnNeedReport().ozet` (dize kg, 3 hane); küp satır Σ'sı.
+  "iplik.ihtiyacKg": async () => totalCase("iplik", "iplik.ihtiyacKg", Number((await yarnNeedReport()).ozet.ihtiyacKg), 2),
+  "iplik.eksikKg": async () => totalCase("iplik", "iplik.eksikKg", Number((await yarnNeedReport()).ozet.eksikKg), 2),
   "stok.oluMetre": async () => totalCase("stok", "stok.oluMetre", (await getStockScorecard()).summary.deadQty, 1),
   "stok.yasiBilinmeyenMetre": async () => totalCase("stok", "stok.yasiBilinmeyenMetre", (await getStockScorecard()).summary.unagedQty, 1),
   "stok.bitmisMetre": async (fx) => {

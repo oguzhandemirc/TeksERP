@@ -16,6 +16,7 @@ import { capReportLists, resolveCompareRange, type CompareMode, type DateRange }
 
 const UNIT_MAP: Readonly<Record<Exclude<OlcuBirimi, "para">, Birim>> = {
   metre: "m",
+  kg: "kg",
   yuzde: "yuzde",
   adet: "adet",
   gun: "gun",

@@ -11,7 +11,7 @@
 // `null` = bugün tek alanla okunamıyor; neden satırın yorumunda, R0-RAP dilimi tamamlar.
 // =============================================================================
 
-export type OlcuBirimi = "metre" | "yuzde" | "adet" | "gun" | "dakika" | "para";
+export type OlcuBirimi = "metre" | "kg" | "yuzde" | "adet" | "gun" | "dakika" | "para";
 /** Sayının hangi yöne gitmesi iyidir — anlatı motoru "iyileşti/kötüleşti" der. */
 export type OlcuIyiYon = "artis" | "azalis" | "notr";
 
@@ -129,6 +129,12 @@ export const OLCU_TANIMLARI: readonly OlcuTanimi[] = [
   { kimlik: "stok.bitmisMetre", ad: "Depodaki bitmiş kumaş",
     aciklama: "Şu an depoda duran bitmiş kumaş metresi; tarih aralığından bağımsız, bugünün durumudur.",
     birim: "metre", iyiYon: "notr", kaynak: { dosya: `${R}/stock-scorecard.report.service.ts`, alan: "StockScorecard.summary.finishedQty" } },
+  { kimlik: "iplik.ihtiyacKg", ad: "İplik ihtiyacı",
+    aciklama: "Açık siparişlerin kalan kumaşını dokumak için gereken çözgü ve atkı ipliği kilogramı; bugünün durumudur.",
+    birim: "kg", iyiYon: "notr", kaynak: { dosya: `${R}/yarn-need.report.service.ts`, alan: "YarnNeedSummary.ihtiyacKg" } },
+  { kimlik: "iplik.eksikKg", ad: "Eksik iplik",
+    aciklama: "İhtiyaçtan serbest stok, açık alış ve hazır leventler düşüldükten sonra kalan, tedarik edilmesi gereken iplik kilogramı.",
+    birim: "kg", iyiYon: "azalis", kaynak: { dosya: `${R}/yarn-need.report.service.ts`, alan: "YarnNeedSummary.eksikKg" } },
   { kimlik: "fason.ortalamaDonusGun", ad: "Ortalama dönüş süresi",
     aciklama: "Dönemde işi kapanan fason partilerinin gönderildiği günden döndüğü güne kadar geçen ortalama gün.",
     birim: "gun", iyiYon: "azalis", kaynak: { dosya: `${R}/subcontract-scorecard.report.service.ts`, alan: "SubcontractScorecard.summary.avgTurnaroundDays" } },

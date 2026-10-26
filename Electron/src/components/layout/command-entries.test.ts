@@ -53,7 +53,7 @@ const EXEMPT: Record<string, string> = {
 // sessizce satır eklenmesin): dokuma raporları ÜRETİM raporudur, ayrı `report:dokuma`
 // açılmadı (1e hükmü 2026-09-14 ③) — route ve karo `report:production`.
 // `ozel`: özel rapor oluşturucusu — kategori değil, izni `report:builder` (route ile aynı).
-const KATEGORI_IZNI_ISTISNASI: Record<string, string> = { dokuma: "report:production", ozel: "report:builder" };
+const KATEGORI_IZNI_ISTISNASI: Record<string, string> = { dokuma: "report:production", ozel: "report:builder", maliyet: "report:yarn-need" };
 
 describe("komut paleti kataloğu", () => {
   const paths = new Set(allCommandEntries.map((e) => e.to.split("?")[0]));

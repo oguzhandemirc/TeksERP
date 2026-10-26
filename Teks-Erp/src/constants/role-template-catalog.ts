@@ -116,6 +116,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "label:read",
       "label:print",
       "report:production",
+      // MAL-7: iplik ihtiyaç planı (tutar yok; maliyet modülü kapalıysa uç 403).
+      "report:yarn-need",
       "report:inventory",
       "report:subcontract",
       "report:builder",
@@ -369,6 +371,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "station:read",
       "item:read",
       "report:production",
+      // MAL-7: iplik ihtiyaç planı (tutar yok; maliyet modülü kapalıysa uç 403).
+      "report:yarn-need",
       "report:inventory",
       "report:builder",
       "report:publish",

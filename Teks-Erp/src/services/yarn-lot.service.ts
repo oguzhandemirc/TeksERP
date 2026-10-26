@@ -147,3 +147,29 @@ const QUALITY_LABEL: Record<YarnLotQualityStatus, string> = { RELEASED: "serbest
 
 export const yarnLotService = new YarnLotService();
 export default yarnLotService;
+
+/**
+ * İplik stok kesiti (iplik modülünün malı) — maliyet köprüsü (`readYarnStock`) yalnız iplik açıkken
+ * DİNAMİK import ile çağırır. Toplam `YarnStock.balanceKg` (depo başına bakiye) Σ'sıdır; `consigned`
+ * istenirse müşteri sahipli (emanet) lotların bakiyesi lot defterinden AYRI döner (mal bizim değil).
+ */
+export async function readYarnStockKg(
+  itemIds: string[],
+  opts: { consigned: boolean },
+): Promise<Map<string, { totalKg: Prisma.Decimal; consignedKg: Prisma.Decimal | null }>> {
+  const out = new Map<string, { totalKg: Prisma.Decimal; consignedKg: Prisma.Decimal | null }>();
+  if (itemIds.length === 0) return out;
+  const zero = () => new Prisma.Decimal(0);
+  for (const id of itemIds) out.set(id, { totalKg: zero(), consignedKg: opts.consigned ? zero() : null });
+  const sums = await prisma.yarnStock.groupBy({ by: ["itemId"], where: { itemId: { in: itemIds } }, _sum: { balanceKg: true } });
+  for (const s of sums) out.get(s.itemId)!.totalKg = s._sum.balanceKg ?? zero();
+  if (opts.consigned) {
+    const lots = await prisma.yarnLot.findMany({ where: { itemId: { in: itemIds }, ownerCustomerId: { not: null } }, select: { id: true, itemId: true } });
+    const balances = await yarnLotBalancesTx(prisma, lots.map((l) => l.id));
+    for (const l of lots) {
+      const row = out.get(l.itemId)!;
+      row.consignedKg = row.consignedKg!.plus(balances.get(l.id) ?? zero());
+    }
+  }
+  return out;
+}
