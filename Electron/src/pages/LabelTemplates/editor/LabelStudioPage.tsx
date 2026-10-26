@@ -37,6 +37,8 @@ import { useSampleGrade } from "./useSampleGrade";
 import { DEFAULT_ZOOM, makeElement, makeBarcodePair, clamp } from "./canvas-model";
 import { centerOnCanvas } from "./canvas-align";
 import type { CanvasPad, LabelElement, LabelElementType } from "@/types/label-canvas";
+import { useNarrowEditor } from "@/hooks/useMediaQuery";
+import { WideScreenNotice } from "@/components/layout/WideScreenNotice";
 
 export function LabelStudioPage() {
   const { id } = useParams<{ id: string }>();
@@ -157,6 +159,8 @@ export function LabelStudioPage() {
       : null;
   const errors = lint.filter((i) => i.level === "error");
   const loading = templateQ.isLoading || variantsQ.isLoading;
+  // Tuval (sürükle/boyutla) telefonda düzenlenmez — gövde yerine uyarı, Kaydet kapalı (UX-3).
+  const narrow = useNarrowEditor();
 
   return (
     <PageShell>
@@ -171,7 +175,7 @@ export function LabelStudioPage() {
               <Printer className="h-4 w-4" /> Test Baskısı
             </Button>
             <Button type="button" size="sm" className="gap-1"
-              disabled={saveMut.isPending || !name.trim() || loading || errors.length > 0}
+              disabled={narrow || saveMut.isPending || !name.trim() || loading || errors.length > 0}
               title={errors[0]?.message}
               onClick={() => saveMut.mutate()}>
               <Save className="h-4 w-4" /> {saveMut.isPending ? "Kaydediliyor…" : "Kaydet"}
@@ -187,6 +191,8 @@ export function LabelStudioPage() {
           <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
             Şablon bulunamadı.
           </div>
+        ) : narrow ? (
+          <WideScreenNotice what="Etiket stüdyosu" className="m-0" />
         ) : (
           <>
             {/* Üst şerit (sabit): varyant sekmeleri + uyumsuzluk uyarısı + dirty */}

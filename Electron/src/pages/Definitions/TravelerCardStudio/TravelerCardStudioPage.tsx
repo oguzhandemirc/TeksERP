@@ -18,6 +18,9 @@ import { SectionList } from "./SectionList";
 import { RawHtmlEditor } from "./RawHtmlEditor";
 import { useStudioDraft } from "./useStudioDraft";
 import type { TravelerTemplate } from "./types";
+import { useNarrowEditor } from "@/hooks/useMediaQuery";
+import { WideScreenNotice } from "@/components/layout/WideScreenNotice";
+import { cn } from "@/lib/utils";
 
 const QK = ["traveler-templates"];
 
@@ -96,7 +99,9 @@ export function TravelerCardStudioPage() {
   const busy =
     saveMut.isPending || defaultMut.isPending || clearDefaultMut.isPending || deleteMut.isPending;
   const editing = creating || Boolean(selected);
-  const canSave = canWrite && editing && draft.name.trim().length > 0 && dirty && !busy;
+  // Bölüm sürükleme + HTML editörü telefonda düzenlenmez — editör yerine uyarı, kayıt kapalı (UX-3).
+  const narrow = useNarrowEditor();
+  const canSave = canWrite && !narrow && editing && draft.name.trim().length > 0 && dirty && !busy;
 
   return (
     <PageShell>
@@ -106,7 +111,7 @@ export function TravelerCardStudioPage() {
       />
       <PageBody className="p-4">
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[240px_minmax(0,1fr)_minmax(0,520px)]">
-          <div className="h-[76vh] rounded-md border bg-card p-3">
+          <div className="max-h-[76vh] overflow-auto rounded-md border bg-card p-3 xl:h-[76vh]">
             <TemplateList
               templates={templates}
               selectedId={creating ? "__new__" : selectedId}
@@ -126,9 +131,11 @@ export function TravelerCardStudioPage() {
             />
           </div>
 
-          <div className="flex h-[76vh] min-h-0 flex-col rounded-md border bg-card p-3">
+          <div className={cn("flex min-h-0 flex-col rounded-md border bg-card p-3", narrow ? "h-auto" : "h-[76vh]")}>
             {listQ.isLoading ? (
               <Skeleton className="h-full w-full" />
+            ) : narrow ? (
+              <WideScreenNotice what="Refakat kartı şablonu" className="m-0" />
             ) : !editing ? (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
                 <div className="text-sm font-medium">Yerleşik kart kullanılıyor</div>
