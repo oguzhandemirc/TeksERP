@@ -21,6 +21,7 @@ import type { SheetSpec } from "@/lib/xlsx-export";
 import { reportCellText, reportExcelNumFmt } from "@/lib/number-format";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import type { GrafikBlok } from "../_v2/sunum";
+import type { Egilim } from "../_v2/grafik/secenek";
 import { hasPlacement, LAYOUT_CSS, placedBodyHtml } from "./reportExportLayout";
 
 export interface ReportColumn {
@@ -95,6 +96,8 @@ type ExportBlockBody =
       baslik: string;
       /** Çizim kaynağı; `svg` yoksa PDF/Yazdır anında ondan üretilir. */
       grafik?: GrafikBlok;
+      /** Saçılım eğilim çizgisi uçları (sunucu) — yalnız GÖRSEL; Excel/veri tablosu etkilenmez. */
+      egilim?: Egilim | null;
       svg?: string;
       /** Grafiğin veri tablosu — Excel'de ayrı sayfa, SVG yoksa PDF'te tablo. */
       veri: ReportTableSpec;

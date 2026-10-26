@@ -53,7 +53,7 @@ function analysisBlocks(b: BlockOutcome): ExportBlok[] | null {
   const name = b.baslik ?? sunum.baslik;
   const verdict = analysisVerdict(b.analiz);
   const out: ExportBlok[] = [];
-  if (verdict.kind !== "empty" && sunum.grafik) out.push({ tur: "grafik", baslik: name, grafik: sunum.grafik, veri: grafikVeriTablosu(sunum.grafik, name) });
+  if (verdict.kind !== "empty" && sunum.grafik) out.push({ tur: "grafik", baslik: name, grafik: sunum.grafik, egilim: b.analiz.istatistik?.egilim ?? null, veri: grafikVeriTablosu(sunum.grafik, name) });
   if (verdict.kind !== "empty" && sunum.tablo) out.push({ tur: "tablo", tablo: tableToExport(sunum.tablo, name) });
   out.push({ tur: "anlati", cumleler: [verdict.kind === "warning" ? `⚠ ${verdict.text}` : verdict.text, CAUSALITY_TEXT] });
   return out;
