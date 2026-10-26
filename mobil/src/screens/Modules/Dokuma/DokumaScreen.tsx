@@ -31,8 +31,11 @@ export default function DokumaScreen() {
   const entry = useDoffEntry();
 
   return (
-    <ScreenChrome title="Tezgah" subtitle={entry.machine ? `${entry.machine.name} · hat ${entry.lineNo}` : undefined}>
-      <LoomAlarmStrip machineId={entry.machine?.id ?? null} />
+    <ScreenChrome
+      title="Tezgah"
+      subtitle={entry.machine ? `${entry.machine.name} · hat ${entry.lineNo}` : undefined}
+      topStrip={<LoomAlarmStrip machineId={entry.machine?.id ?? null} />}
+    >
       <View style={[styles.root, compact && styles.rootColumn]}>
         <View style={styles.pane}>
           <RunPanel entry={entry} />

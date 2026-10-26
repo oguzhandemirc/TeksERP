@@ -17,6 +17,7 @@ import {
 } from "@/pages/GeneralSettings/settings-config";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { MasaustuBildirimKarti } from "@/components/bildirim/MasaustuBildirimKarti";
+import { BildirimTercihKarti } from "@/components/bildirim/BildirimTercihKarti";
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -209,6 +210,8 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+        {/* bildirim: kişisel bildirim tercihleri (N4-PANEL) — eski sunucuda/bayrak kapalıyken kart çizilmez */}
+        <BildirimTercihKarti />
       </PageBody>
 
       <ConfirmDialog

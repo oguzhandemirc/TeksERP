@@ -94,6 +94,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   // Veri paneli: taslak değişince gecikmeli `dogrula` (yazmaz, uyarısız zarf) + süzgeç değer listesi (sorgu zarfı `warnings` basabilir) — R2-VERI.
   { yer: "Electron/src/pages/Reports/_v2/custom/data/useDataPanel.ts::customReportApi.validate", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Reports/_v2/custom/data/dimension-values.ts::customReportApi.dimensionValues", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: true },
+  // Kod modu: JSON metni değişince 500 ms sonra `dogrula` (yazmaz, uyarısız zarf; görsele dönüş kilidinin hükmü) — R2-KOD.
+  { yer: "Electron/src/pages/Reports/_v2/custom/code/useCodeCheck.ts::customReportApi.validate", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // MAL-3 maliyet önizlemesi: yapı/ezme değişince ~400 ms durulup sorar; yazmaz, uyarılar `data` içinde (zarf uyarısız).
   { yer: "Electron/src/pages/Cost/shared/useCostPreview.ts::previewCost", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // T5 belge şablonu: Sistem önizlemesi / sürüm karşılaştırması / yayın onayı açılınca çizer (yazmaz; zarf `ok(res, data)`, uyarısız).
