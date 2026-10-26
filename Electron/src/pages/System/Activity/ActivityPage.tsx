@@ -9,6 +9,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import { Callout } from "@/components/ui/callout";
 import { systemLogService } from "@/services/systemLogService";
+import { useActivityTraceSeed } from "./useActivityTraceSeed";
 import { ActivityFilters } from "./ActivityFilters";
 import { ActivityFeed } from "./ActivityFeed";
 import { ActivityDetailSheet } from "./ActivityDetailSheet";
@@ -37,6 +38,7 @@ const exportNotes = (n: number): string[] => [
 export function ActivityPage() {
   const [filters, setFilters] = useState<ActivityFilterState>({ gorunum: "islem" });
   const [selected, setSelected] = useState<Selected>(null);
+  const seedRev = useActivityTraceSeed(setFilters);
 
   const query = useInfiniteQuery({
     queryKey: [QUERY_KEY, "feed", filters],
@@ -87,7 +89,7 @@ export function ActivityPage() {
         }
       />
       <RelocatedToolStrip host="/system/activity" />
-      <ActivityFilters value={filters} onChange={setFilters} />
+      <ActivityFilters key={seedRev} value={filters} onChange={setFilters} />
 
       <PageBody ref={rootRef}>
         {fellBack && items.length > 0 && (

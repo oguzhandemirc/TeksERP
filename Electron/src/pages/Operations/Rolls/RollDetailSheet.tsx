@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TraceLink } from "@/components/audit/TraceLink";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedProgress } from "@/components/motion";
 import { StatusBadge, rollStatusTones } from "@/components/operations/StatusBadge";
@@ -204,8 +205,9 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       <div className="text-xs uppercase tracking-wide text-muted-foreground">
                         Top Barkodu
                       </div>
-                      <div className="mt-1 break-all font-mono text-sm font-semibold">
-                        {r.barcode}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="break-all font-mono text-sm font-semibold">{r.barcode}</span>
+                        <TraceLink recordNo={r.barcode} />
                       </div>
                     </div>
                     <div className="flex flex-wrap items-start gap-1">
