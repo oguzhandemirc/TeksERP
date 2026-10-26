@@ -20,7 +20,7 @@ import { findRecords } from "./helpers/audit-record-resolver.helper";
 import { type Gun, grupSirasi, imlecOku, imlecYaz, islemKosullari } from "./helpers/system-log-islem.helper";
 import {
   type RawOperationRow, anlatiEkle, gunluParams, islemAyrintisi, islemFiltresi, islemleriKur,
-  islemdeReddedilenGorunur, recordSearchResult, tekAnlati,
+  islemdeReddedilenGorunur, recordSearchResult, rejectedTracePage, tekAnlati,
 } from "./helpers/system-log-islem-kur.helper";
 
 export interface SystemLogListParams {
@@ -47,6 +47,8 @@ export interface SystemLogListParams {
    * ile elenir: kolon `@db.Uuid` olduğu için ham metin P2023 → 500 üretirdi.
    */
   requestId?: string;
+  /** B4 "Reddedilenler" süzgeci: "1" = yalnız trace status ≥ 400 (yalnız işlem görünümü). */
+  reddedilen?: "0" | "1";
   /** Fabrika günü kısayolu (B2): verilirse `dateFrom/dateTo`yu ezer. */
   gun?: Gun;
 }
@@ -267,6 +269,7 @@ export class SystemLogService {
     const limit = Math.min(Math.max(1, params.limit ?? 50), 100);
     const cats = parseCategories(params.category);
     const f = islemFiltresi(params, cats);
+    if (params.reddedilen === "1") return SystemLogService.listReddedilenIslemler(params, cats, f, limit);
     const kos = islemKosullari(f);
     const c = imlecOku(params.cursor);
     const K = limit * 40;
@@ -298,16 +301,27 @@ export class SystemLogService {
     const page = sirali.slice(0, limit);
     const istekIds = page.filter((g) => g.istekli).map((g) => g.key);
     const tekIds = page.filter((g) => !g.istekli).map((g) => g.key);
-    const rows = page.length
-      ? await prisma.$queryRaw<RawOperationRow[]>`
-          SELECT sl."id"::text AS id, sl."tableName", sl."action", sl."recordId", sl."userId"::text AS "userId",
-                 sl."requestId"::text AS "requestId", sl."createdAt", sl."changes", sl."newData"->>'event' AS event
-          FROM system_logs sl WHERE sl."requestId" = ANY(${istekIds}::uuid[]) OR sl."id" = ANY(${tekIds}::uuid[])
-          ORDER BY sl."createdAt" ASC, sl."id" ASC LIMIT 2000`
-      : [];
-    const data = await islemleriKur(page, rows, await getTracesByIds(istekIds));
+    const data = await islemleriKur(page, await SystemLogService.islemSatirlari(istekIds, tekIds), await getTracesByIds(istekIds));
     const last = page[page.length - 1];
-    return { success: true, data, pagination: { nextCursor: hasMore && last ? imlecYaz(last) : null, hasMore, limit } };
+    // `reddedilenSuzgeci`: panel bu alanı görmezse (eski backend) "Reddedilenler" çipini gizler.
+    return { success: true, data, reddedilenSuzgeci: true, pagination: { nextCursor: hasMore && last ? imlecYaz(last) : null, hasMore, limit } };
+  }
+
+  /** "Reddedilenler" süzgeci (B4) — sayfa trace'ten, satırlar aynı sorgudan. */
+  private static async listReddedilenIslemler(params: SystemLogListParams, cats: SystemLogCategory[] | undefined, f: ReturnType<typeof islemFiltresi>, limit: number) {
+    const { izler, hasMore, page } = await rejectedTracePage(params, cats, f, limit);
+    const data = await islemleriKur(page, await SystemLogService.islemSatirlari(page.map((g) => g.key), []), izler);
+    return { success: true, data, reddedilenSuzgeci: true, pagination: { nextCursor: hasMore ? imlecYaz(page[page.length - 1]!) : null, hasMore, limit } };
+  }
+
+  /** Sayfadaki grupların audit satırları (istek kimliğiyle ya da tek satır kimliğiyle) — tek sorgu. */
+  private static async islemSatirlari(istekIds: string[], tekIds: string[]): Promise<RawOperationRow[]> {
+    if (istekIds.length === 0 && tekIds.length === 0) return [];
+    return prisma.$queryRaw<RawOperationRow[]>`
+      SELECT sl."id"::text AS id, sl."tableName", sl."action", sl."recordId", sl."userId"::text AS "userId",
+             sl."requestId"::text AS "requestId", sl."createdAt", sl."changes", sl."newData"->>'event' AS event
+      FROM system_logs sl WHERE sl."requestId" = ANY(${istekIds}::uuid[]) OR sl."id" = ANY(${tekIds}::uuid[])
+      ORDER BY sl."createdAt" ASC, sl."id" ASC LIMIT 2000`;
   }
 
   /** Tek işlem: trace başlığı + cihaz ADI + etkilenen kayıtlar + alan farkları + ham. */
