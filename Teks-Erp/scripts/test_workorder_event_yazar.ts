@@ -243,4 +243,4 @@ check("§5k sonda: helper dışında künye yazımı YAKALANIR",
     && s(`async function f(tx){ await tx.workOrderCloseSnapshot.create({ data:{} }); }`, KUNYE_REL).kunyeYazariDisi.length === 0);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

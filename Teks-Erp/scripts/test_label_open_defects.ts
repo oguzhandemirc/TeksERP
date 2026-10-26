@@ -91,5 +91,5 @@ main()
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch((e) => console.error("temizlik:", e));
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız === (test verisi temizlendi)`);
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

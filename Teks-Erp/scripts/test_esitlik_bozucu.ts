@@ -101,7 +101,7 @@ function main(): void {
   curumeKolu(check, ATLAMA.atla, "§4b borç tabanı ÇÜRÜMEDİ (bozucu eklenen okuyucu listeden düştü)", borcList.length, BORC_TABANI);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

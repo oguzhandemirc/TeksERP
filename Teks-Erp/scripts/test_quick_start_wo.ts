@@ -344,5 +344,5 @@ main()
   .finally(async () => {
     await cleanup().catch((e) => console.error("Temizlik hatası:", e));
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

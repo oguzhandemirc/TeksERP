@@ -84,7 +84,7 @@ function main(): void {
   check("§4 körlük zemini: ≥80 bekçi global ayar yazıyor", yazan >= 80, `${yazan}`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

@@ -67,7 +67,7 @@ Altyapı `scripts/test_*.ts` — jest/vitest kurma. Server'sız entegrasyon vars
 - Fixture business-key ile; hardcoded UUID yok; veri `TEST-` ön ekli ve damgalı. Fason/kartela firması YALNIZ `scripts/fixture-subcontractor.ts`'ten. Yardımcı dosyaya `test_` ön eki verilmez.
 - Ortamdaki veriye bağımlı olunmaz; sayım kontrollerine körlük zemini konur.
 - Temizlik `finally`de, FK sırasıyla. Global durum yazan bekçinin ilk adımı `hedefDbEngeli()`; `SystemSetting` birebir geri yüklenir; muaf listesi keşifle kurulur ve iki yönlü denetlenir; bekçi kullanıcısı sert silinmez; RESTRICT FK'lı defter satırları (`rollVariance`, `warehouseMovement`) doğru sırayla temizlenir.
-- Çıktı `check(label, ok)` + `=== Sonuç: N geçti, M başarısız ===` + `process.exit`; `$disconnect()` + `pool.end()`.
+- Çıktı `check(label, ok)` + `=== Sonuç: N geçti, M başarısız ===` + `process.exitCode = fail > 0 ? 1 : 0` (yeni `process.exit(` yasak, `test_process_exit_kalibi`); `$disconnect()` + `pool.end()` + sunucu/zamanlayıcı kapatılır, süreç doğal çıkar.
 - **Negatif sonda zorunlu**; yarış bekçisi elle açık tutulan tx ile kurulur. Harita `Teks-Erp/docs/BEKCI-HARITASI.md`; reçete `docs/RECETELER.md` § bekçi.
 
 ## Paketler

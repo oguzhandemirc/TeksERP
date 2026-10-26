@@ -119,7 +119,7 @@ function main(): void {
   check("§3g süreç bilgi bantları kapalı liste: yalnız SAAT_SAPMASI", JSON.stringify(Object.keys(PROCESS_INFO_BANNERS)) === '["SAAT_SAPMASI"]', Object.keys(PROCESS_INFO_BANNERS).join(","));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

@@ -179,7 +179,7 @@ function main(): void {
   check("§3 ölü istisna yok (iki yönlü)", olu.length === 0, olu.join(", "));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

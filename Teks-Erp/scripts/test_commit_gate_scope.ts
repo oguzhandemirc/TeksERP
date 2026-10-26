@@ -532,4 +532,4 @@ for (const f of ["Teks-Erp/native/package.json", "Teks-Erp/native/lisans-cekirde
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

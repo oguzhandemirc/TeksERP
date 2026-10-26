@@ -360,5 +360,5 @@ main()
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
-    process.exit(fail ? 1 : 0);
+    process.exitCode ||= fail ? 1 : 0;
   });

@@ -169,4 +169,4 @@ async function cleanup(): Promise<void> {
 
 main()
   .catch((e) => { console.error("💥 ÇÖKTÜ:", e instanceof Error ? e.message : e); fail++; })
-  .finally(async () => { await cleanup(); await prisma.$disconnect(); await pool.end(); process.exit(fail > 0 ? 1 : 0); });
+  .finally(async () => { await cleanup(); await prisma.$disconnect(); await pool.end(); process.exitCode ||= fail > 0 ? 1 : 0; });

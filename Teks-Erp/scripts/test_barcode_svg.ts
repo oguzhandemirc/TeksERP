@@ -274,5 +274,5 @@ void (async () => {
   await sliceSection();
   singleSourceSection();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail ? 1 : 0);
+  process.exitCode = fail ? 1 : 0;
 })();

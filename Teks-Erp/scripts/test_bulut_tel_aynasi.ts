@@ -333,5 +333,5 @@ try {
   main();
 } catch (err) {
   console.error(`❌ bekçi çöktü: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
-  process.exit(1);
+  process.exitCode = 1;
 }

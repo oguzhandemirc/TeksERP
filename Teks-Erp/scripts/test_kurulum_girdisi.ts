@@ -196,11 +196,11 @@ async function main(): Promise<void> {
   bolum3();
   await bolum4();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 void path;
 main().catch((e: unknown) => {
   console.error(`⛔ BEKLENMEYEN: ${e instanceof Error ? e.stack : String(e)}`);
-  process.exit(1);
+  process.exitCode = 1;
 });

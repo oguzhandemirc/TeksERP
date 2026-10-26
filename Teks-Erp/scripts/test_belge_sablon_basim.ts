@@ -365,5 +365,5 @@ main()
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end();
-    process.exit(fail ? 1 : 0);
+    process.exitCode ||= fail ? 1 : 0;
   });

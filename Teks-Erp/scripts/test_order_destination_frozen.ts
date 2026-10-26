@@ -125,4 +125,4 @@ async function temizlik(): Promise<void> {
 main()
   .then(() => { console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`); })
   .catch((e) => { console.error(e); fail++; })
-  .finally(async () => { await prisma.$disconnect(); process.exit(fail > 0 ? 1 : 0); });
+  .finally(async () => { await prisma.$disconnect(); process.exitCode ||= fail > 0 ? 1 : 0; });

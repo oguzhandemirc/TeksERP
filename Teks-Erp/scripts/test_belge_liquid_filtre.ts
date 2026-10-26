@@ -153,4 +153,4 @@ eq("satir_kir önce kaçış sonra <br>", run("{{ v | satir_kir }}", { v: "a<b\n
 eq("css_metin tırnak/köşeli kaçışı", run("{{ v | css_metin }}", { v: 'a"b<\\' }), '"a\\22 b\\3c \\\\"');
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail ? 1 : 0);
+process.exitCode = fail ? 1 : 0;

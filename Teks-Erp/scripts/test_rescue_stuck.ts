@@ -134,4 +134,4 @@ async function main(): Promise<void> {
 
 main()
   .catch((e) => { console.error("HATA:", e); fail++; })
-  .finally(async () => { await prisma.$disconnect(); process.exit(fail > 0 ? 1 : 0); });
+  .finally(async () => { await prisma.$disconnect(); process.exitCode ||= fail > 0 ? 1 : 0; });

@@ -106,4 +106,4 @@ check("sevk irsaliyesi: sections.docNo=false → 'İrsaliye No' gizli", shipOn.i
 check("sevk irsaliyesi: sections.date=false → 'Tarih' gizli", shipOn.includes("Tarih") && !shipDateOff.includes("Tarih"));
 
 console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

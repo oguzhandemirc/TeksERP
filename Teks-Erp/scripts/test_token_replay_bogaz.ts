@@ -301,7 +301,7 @@ function main(): void {
   check("⭐ token'sız kayıt-yaratan uç beyanı ölçülen iddiayla tutarlı", tokensizHatasi.length === 0, tokensizHatasi.join(" · "));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

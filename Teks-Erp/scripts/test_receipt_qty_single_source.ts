@@ -108,4 +108,4 @@ check("§3f blok yorumu YAKALANMAZ", ciplakOkuma(yorumsuz("/* initialQty şerh *
 check("§3g benzer ad YAKALANMAZ (initialQtyMeters)", ciplakOkuma("const x = r.initialQtyMeters;").length === 0);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

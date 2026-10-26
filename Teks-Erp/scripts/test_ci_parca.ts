@@ -209,4 +209,4 @@ console.log("\n§7 — ci.yml hizası (matrix 1..N ↔ --shard …/N ↔ özet i
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

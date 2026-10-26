@@ -239,5 +239,5 @@ async function makeShippedRoll(itemId: string, width: number, shipmentId: string
       console.error("Temizlik hatası:", (e as Error).message);
     }
     await prisma.$disconnect();
-    process.exit(fail ? 1 : 0);
+    process.exitCode ||= fail ? 1 : 0;
   });

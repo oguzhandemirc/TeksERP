@@ -631,4 +631,4 @@ async function bolum3veSonrasi(): Promise<void> {
   process.exit(fail > 0 ? 1 : 0);
 }
 
-main().catch((e) => { console.error("Beklenmeyen hata:", e); process.exit(1); });
+main().catch((e) => { console.error("Beklenmeyen hata:", e); process.exitCode = 1; });

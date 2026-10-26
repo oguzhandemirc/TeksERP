@@ -194,7 +194,7 @@ function main(): void {
   check("6h hiçbir kapı DB'ye bağlanmayı denemedi", ![r1, r2, r3, r4, r5, r6, r7].some((r) => r.cikti.includes("HATA:")));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

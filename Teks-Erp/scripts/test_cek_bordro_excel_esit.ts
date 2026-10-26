@@ -190,4 +190,4 @@ const st = renderChequeDeliveryNoteTables(sira.snapshot, {}).tables[0]!;
 check("şablon sırası + başlık + boş başlık Excel'e uygulanır", st.columns.slice(0, 3).map((c) => c.label).join("|") === "TUTAR & TL||ÇEK <#>", st.columns.map((c) => c.label).join("|"));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

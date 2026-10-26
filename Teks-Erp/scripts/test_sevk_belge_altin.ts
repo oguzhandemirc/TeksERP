@@ -94,4 +94,4 @@ console.log("§4 Hata notu sütunu (KQ-D8) — opt-in, kaçışlı, rakama dokun
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

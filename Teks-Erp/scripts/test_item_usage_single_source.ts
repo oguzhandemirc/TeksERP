@@ -285,4 +285,4 @@ if (!process.env.ITEM_USAGE_SCAN_ROOT) {
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

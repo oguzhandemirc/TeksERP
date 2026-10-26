@@ -118,4 +118,4 @@ async function temizlik(once: Array<{ key: string; value: unknown }>): Promise<v
 main()
   .then(() => { console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`); })
   .catch((e) => { console.error(e); fail++; })
-  .finally(async () => { await prisma.$disconnect(); await pool.end(); process.exit(fail > 0 ? 1 : 0); });
+  .finally(async () => { await prisma.$disconnect(); await pool.end(); process.exitCode ||= fail > 0 ? 1 : 0; });

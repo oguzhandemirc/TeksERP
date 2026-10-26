@@ -765,5 +765,5 @@ main()
   })
   .finally(() => {
     rmSync(GECICI, { recursive: true, force: true });
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });
