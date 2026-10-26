@@ -7,6 +7,7 @@
 // alınan TEK LISTEN bağlantısı onu birleştiriciye çevirir. Bağlantı düşerse süpürme işi sürdürür ve
 // sonraki süpürmede yeniden dinlenir. Tek süreç (server.ts TEK-PROCESS) — ikinci Node süreci yok.
 // =============================================================================
+import { registerDeviceConditionSources } from "../services/notification-sources/cihaz";
 import type { PoolClient } from "pg";
 import { pool } from "../lib/prisma";
 import { readNotificationInboxEnabled } from "../services/system-setting.service";
@@ -177,6 +178,7 @@ export function startNotificationJobs(): void {
   registerSystemConditionSources(); // koşul kaynakları tek noktadan (N1-KOSUL-SIS)
   registerWorkConditionSources(); // iş koşulları (N1-KOSUL-IS)
   registerQualityConditionSources(); // sertifika süresi (K4P-SERT)
+  registerDeviceConditionSources(); // anahtar halkası kaybı (izlenebilirlik D5)
   registerLoomAlarmRecipientResolver(); // tezgah alarmı donmuş alıcı (N2-ALARM)
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();

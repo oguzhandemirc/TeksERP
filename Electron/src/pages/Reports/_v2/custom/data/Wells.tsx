@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { Filter, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import type { CatalogCube } from "../custom-api";
 import type { DefinitionBlock } from "../layout/layout-model";
 import { useValueLabels } from "./dimension-values";
-import { describeFilter, describeRule, fromQueryFilter, isGroup } from "./filter-model";
+import { describeFilter, describeRule, fromQueryFilter, isGroup, leafFields } from "./filter-model";
 import { suggestChart } from "./suggest-chart";
 import { shapeOf, WELL_LABELS, wellContents, wellsFor, type DataField, type DropVerdict, type WellIssue, type WellKind } from "./wells-model";
 
@@ -105,7 +105,7 @@ export function Wells({ block, cube, issues, warning, check, onRemove, onRemoveF
   const wells = wellsFor(block);
   const q = block.sorgu;
   const filter = fromQueryFilter(q?.suzgec);
-  const labelOf = useValueLabels(q?.kup, q?.olculer[0], filter.rules.flatMap((r) => (isGroup(r) ? [] : [r.field])));
+  const labelOf = useValueLabels(q?.kup, q?.olculer[0], leafFields(filter));
   if (!q || wells.length === 0) return null;
   const contents = wellContents(block);
   const measureName = (id: string) => cube?.olculer.find((m) => m.kimlik === id)?.ad ?? id;
@@ -124,7 +124,10 @@ export function Wells({ block, cube, issues, warning, check, onRemove, onRemoveF
           <WellBox key={w} well={w} check={check} issues={forWell(w)} action={<Button type="button" size="sm" variant="ghost" className="h-6 gap-1 px-1.5 text-xs" onClick={onOpenFilter}><Filter className="h-3 w-3" /> Süzgeç kur</Button>}>
             {filter.rules.length === 0 ? <span className="text-xs text-muted-foreground">Süzgeç yok — tüm kayıtlar.</span> : null}
             {filter.rules.map((r, i) => (
-              <Chip key={i} label={isGroup(r) ? describeFilter(r, labels) : describeRule(r, labels)} error={issueAt(w, i)} onClick={onOpenFilter} onRemove={() => onRemoveFilter(i)} removeLabel="Koşulu kaldır" />
+              <Fragment key={i}>
+                {i > 0 && filter.combinator === "or" ? <span className="self-center text-xs font-medium text-muted-foreground">veya</span> : null}
+                <Chip label={isGroup(r) ? (r.rules.length > 1 ? `(${describeFilter(r, labels)})` : describeFilter(r, labels)) : describeRule(r, labels)} error={issueAt(w, i)} onClick={onOpenFilter} onRemove={() => onRemoveFilter(i)} removeLabel="Koşulu kaldır" />
+              </Fragment>
             ))}
           </WellBox>
         ) : (

@@ -87,7 +87,7 @@ export function anaSayiKiyas(
       ad: anaSayi.ad,
       deger: anaSayi.deger,
       birim: anaSayi.birim,
-      yuklem: ifade.yuklem,
+      yuklem: ifade.yuklem ?? null,
       ozne: ifade.ozne ?? null,
       donem: sozler.donem,
       kiyasDonem: sozler.kiyas,
