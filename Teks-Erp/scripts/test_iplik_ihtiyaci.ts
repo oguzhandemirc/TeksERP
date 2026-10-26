@@ -127,7 +127,7 @@ async function kur(f: MaliyetFikstur): Promise<Fx> {
 }
 
 /** Etiket tabanlı temizlik — kurulum yarıda kalsa da kalıntı bırakmaz (yalnız test DB). */
-async function sil(f: MaliyetFikstur): Promise<void> {
+async function temizle(f: MaliyetFikstur): Promise<void> {
   const tag = { startsWith: `${f.tag}-` };
   await prisma.warpBeamEvent.deleteMany({ where: { beam: { beamNo: tag } } });
   await prisma.warpBeam.deleteMany({ where: { beamNo: tag } });
@@ -264,7 +264,7 @@ async function main(): Promise<void> {
     await bolumlerKapali(x);
     await bolum10();
   } finally {
-    await sil(f);
+    await temizle(f);
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
