@@ -217,6 +217,9 @@ export interface CashBookReport extends WithSecenekler {
   /** Dönem sonu "şu an"ı kapsıyor mu — `storedDiff`in ölçülebilirlik koşulu. */
   storedComparable: boolean;
   totals: { opening: string; totalIn: string; totalOut: string; closing: string } | null;
+  /** Listede ≥2 farklı para birimli hesap var — "genel toplam basılmadı" uyarısının TEK kaynağı
+   *  (`totals === null` hesap YOKKEN de doğru; o durumda uyarı yanlış olurdu — UX-TUR/RAPC bulgusu). */
+  multiCurrency: boolean;
   notes: string[];
   /**
    * YALNIZ süzgeçliyken dolar; süzgeçsiz gövde bayt bayt eski.
@@ -678,7 +681,8 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
       "Dönem sonu geçmiş bir tarih olduğu için kapanış ile kayıtlı bakiye KARŞILAŞTIRILMADI (kayıtlı bakiye her zaman “şu an”ı gösterir).",
     );
   }
-  if (currencies.size > 1) {
+  const multiCurrency = currencies.size > 1;
+  if (multiCurrency) {
     notes.push("Farklı para birimli hesaplar listelendiği için genel toplam basılmadı — her hesap kendi biriminde okunur.");
   }
   if (rowsTruncated) {
@@ -708,7 +712,7 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
   for (const m of movements) if (m.cariId && !cariAdi.has(m.cariId)) cariAdi.set(m.cariId, m.counterparty ?? "");
 
   return {
-    accounts, categories, rows, rowsTruncated, storedComparable, totals, notes,
+    accounts, categories, rows, rowsTruncated, storedComparable, totals, multiCurrency, notes,
     secenekler: {
       cariId: optionList([...cariAdi].map(([id, ad]) => ({ id, ad }))),
       accountId: optionList(accounts.map((a) => ({ id: a.accountId, ad: a.name, kod: a.code }))),

@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { Code2, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
+import { CodeNotes } from "./CodeNotes";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { tableBindingsFromHtml } from "../binding/itemTable";
@@ -54,15 +54,16 @@ export const CodePanel = forwardRef<CodeEditorHandle, Props>(function CodePanel(
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="kod-paneli">
       <ModeBar tab={tab} onTab={onTab} editable={editable} blocker={blocker} onReturn={props.onReturnToVisual} onCode={() => setConfirming(true)} />
-      <div className="space-y-1.5 px-2 pt-2 empty:hidden">
-        {editable ? <Callout tone="warning">{CODE_MODE_WARNING}{blocker ? ` ${blocker}` : ""}</Callout> : <p className="text-xs text-muted-foreground">{VISUAL_READONLY_NOTE}</p>}
-        {excelNote && (
-          <div data-testid="excel-uyarisi">
-            <Callout tone="info">{EXCEL_DEFAULT_COLUMNS_NOTE}</Callout>
-          </div>
-        )}
-        {tab === "page" && pageIssues.length > 0 && <Callout tone="warning">{pageIssues.join(" · ")}</Callout>}
-      </div>
+      {/* Uyarılar tek satır + daraltılabilir (CodeNotes) — üst üste kutular 1280×720'de editörü sıkıştırıyordu. */}
+      <CodeNotes
+        notes={[
+          editable
+            ? { tone: "warning", text: `${CODE_MODE_WARNING}${blocker ? ` ${blocker}` : ""}`, testId: "kip-uyarisi" }
+            : { tone: "muted", text: VISUAL_READONLY_NOTE, testId: "kip-uyarisi" },
+          ...(excelNote ? [{ tone: "info" as const, text: EXCEL_DEFAULT_COLUMNS_NOTE, testId: "excel-uyarisi" }] : []),
+          ...(tab === "page" && pageIssues.length > 0 ? [{ tone: "warning" as const, text: pageIssues.join(" · ") }] : []),
+        ]}
+      />
       <div className="relative min-h-0 min-w-0 flex-1 p-2">
         <div className={cn("h-full overflow-hidden rounded-md border", tab !== "html" && "hidden")}>
           <CodeEditor ref={htmlRef} value={source.html} language="html" readOnly={!editable} onChange={(html) => onCode({ html })} completion={completion} issues={issues} ariaLabel="HTML ve Liquid kaynağı" />

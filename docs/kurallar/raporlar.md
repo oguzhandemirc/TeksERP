@@ -109,6 +109,7 @@
 
 ## Panel (Electron)
 
+- **[ÇEKİRDEK]** Kasa & Banka Defteri "farklı para birimli hesaplar — genel toplam basılmadı" notunu yalnız sunucunun `multiCurrency` bayrağıyla çiz; `totals === null`dan türetme (hesap yokken de null) ve istemcide para birimi sayma (KÜÇÜK-F 2026-10-26; `test_finance_reports` §12m2–§12m6).
 
 ### Değişmezler
 

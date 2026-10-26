@@ -393,7 +393,8 @@ export function CashBookPage() {
             isLoading={summaryQ.isLoading}
           />
         </div>
-      ) : summary ? (
+      ) : summary?.multiCurrency ? (
+        /* Yalnız sunucu "≥2 para birimi" dediğinde — hesap yokken `totals` da null'dır, o zaman bu kutu YANLIŞ olurdu. */
         <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
