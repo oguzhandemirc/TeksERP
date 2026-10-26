@@ -62,7 +62,49 @@ export interface NotificationCatalogKind {
   grup: NotificationGroup;
   kilit: "YOK" | "HER_ZAMAN" | "NOBETTE";
   kilitGerekcesi: string | null;
+  /** Türün gönderildiği kanallar (F1+ sunucu); yoksa yalnız UYGULAMA varsayılır. */
+  kanallar?: NotificationChannel[];
+  /** Katalogda beyanlı kapsam süzgeçleri (N4-PANEL sunucusu); yoksa/null → süzgeç yok. */
+  kapsam?: NotificationScopeDecl | null;
 }
+
+/** Katalog kapsam beyanı (`notification-catalog.ts` `kapsam`). */
+export interface NotificationScopeDecl {
+  yalnizTakip?: boolean;
+  istasyonlar?: boolean;
+  esik?: Record<string, { alan: string; yon: "ALT" | "UST" }>;
+}
+
+/** Kişisel kapsam değeri (sunucu `notificationScopeSchema`; yalnız daraltır). */
+export interface NotificationScopeValue {
+  yalnizTakip?: boolean;
+  istasyonlar?: "BENIM" | string[];
+  esik?: Record<string, number>;
+}
+
+/** `GET/PUT /ayarlar` — sessiz saat fabrika diliminde "SS:DD". */
+export interface NotificationUserSettings {
+  sessizBaslangic: string | null;
+  sessizBitis: string | null;
+  sessizKanallar: Array<"MASAUSTU" | "TABLET_SES" | "PATRON_PUSH">;
+  ozetSaati: number | null;
+  ses: boolean;
+}
+
+/** `POST /tercihler/onizleme` — haftalık tahmin (sunucu hesaplar). */
+export interface NotificationPreferencePreview {
+  haftalik: number;
+  enCok: Array<{ kind: string; sayi: number }>;
+  kaynak: "olcum" | "tahmin";
+}
+
+/** `POST /tercihler/varsayilana-don/onizleme` satırı. */
+export interface NotificationResetRow extends NotificationPreferenceRow {
+  ad: string;
+}
+
+/** Takip uçlarının kayıt türü (`/takip/:tur/:id`). */
+export type FollowRecordType = "siparis" | "is-emri" | "dokuma-isi";
 
 /** F4 tercih katmanı (N4-MOTOR) — sunucunun çözdüğü hücre (`resolvePreference`). */
 export type NotificationChannel = "UYGULAMA" | "OZET" | "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH";

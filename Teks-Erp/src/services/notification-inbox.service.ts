@@ -13,7 +13,7 @@ import { AppError } from "../utils/app-error";
 import { readFilterList } from "../utils/query-parser";
 import { factoryMinuteOfDay } from "../constants/time";
 import { getNotificationEntry, NOTIFICATION_KINDS, type NotificationKind } from "../constants/notification-catalog";
-import { loadNotificationVisibilityEnv, visibleKindsFor } from "./helpers/notification-visibility.helper";
+import { loadNotificationVisibilityEnv, permissionDeniedKindCount, visibleKindsFor } from "./helpers/notification-visibility.helper";
 import { renderNotification } from "./helpers/notification-render.helper";
 import { loadCurrentShift } from "./helpers/loom-alarm-shift.helper";
 import { readNotificationInboxEnabled } from "./system-setting.service";
@@ -268,15 +268,19 @@ export async function undoMarkRead(viewer: InboxViewer, body: unknown): Promise<
 // ---- katalog (F1: tercihsiz) ------------------------------------------------
 
 export async function visibleCatalog(viewer: InboxViewer) {
-  const kinds = await viewerKinds(viewer);
+  const env = await loadNotificationVisibilityEnv(prisma);
+  const kinds = visibleKindsFor({ permissions: viewer.permissions }, env);
+  const yetkiDisi = permissionDeniedKindCount({ permissions: viewer.permissions }, env);
   return {
     turler: kinds.map((k) => {
       const e = getNotificationEntry(k);
       return {
         kod: e.kod, ad: e.ad, sinif: e.sinif, altTur: e.altTur, grup: e.grup, kilit: e.kilit,
         kilitGerekcesi: e.kilitGerekcesi ?? null, kanallar: e.kanallar, varsayilanKanallar: e.varsayilanKanallar,
+        kapsam: e.kapsam ?? null,
       };
     }),
+    yetkiDisi,
   };
 }
 

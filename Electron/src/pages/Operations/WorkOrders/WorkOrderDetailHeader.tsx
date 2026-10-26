@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ban, CheckCircle2, FileText, History, Link2, PackageCheck, Palette, Pencil, Ruler } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FollowButton } from "@/components/bildirim/FollowButton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
@@ -114,6 +115,7 @@ export function WorkOrderDetailHeader({
         actions={
           wo ? (
             <>
+              <FollowButton type="is-emri" id={wo.id} />
               <RefreshButton
                 queryKey={["work-order-detail", wo.id]}
                 extraKeys={[["work-order-branches", wo.id]]}

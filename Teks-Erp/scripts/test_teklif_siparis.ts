@@ -7,6 +7,7 @@
 //   §4 ⭐ başarı: sipariş satırları teklifin fiyat/döviz/miktarıyla; teklif CONVERTED + bağ TEKLİFTE
 //   §5 ⭐ aynı token replay → aynı sipariş (ikinci sipariş yok); başka teklifte aynı token → 409 çakışma
 //   §6 ⭐ paralel iki farklı token → TEK sipariş, kaybeden 409
+//   §7 ⭐ `lineItems` eşlemesi (MAL-5): ürünsüz kalem siparişte ürün alır, teklif kalemi DEĞİŞMEZ; ürünlü kaleme eşleme 400
 // Çalıştır: npx tsx scripts/test_teklif_siparis.ts (yalnız test DB)
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -80,6 +81,14 @@ async function main(): Promise<void> {
     const linked = await prisma.salesQuote.findUniqueOrThrow({ where: { id: race }, select: { convertedOrderId: true } });
     const count2 = await prisma.order.count({ where: { customerId: t.customerId } });
     check("§6 ⭐ paralel iki token → tek sipariş, kaybeden 409", won === 1 && lost === 1 && !!linked.convertedOrderId && count2 === 2, `won=${won} lost=${lost} count=${count2}`);
+
+    const fresh = await teklifYaz(t, "ACCEPTED", { itemId: m.fabricId });
+    const e7a = await hata(() => convertQuoteToOrder(fresh, { clientToken: randomUUID(), lineItems: [{ lineNo: 1, itemId: m.fabricId }] }, user));
+    check("§7a ürünlü kaleme eşleme → 400 (teklifteki ürün değişmez)", e7a?.status === 400, JSON.stringify(e7a));
+    const mapped = await convertQuoteToOrder(noItem, { clientToken: randomUUID(), lineItems: [{ lineNo: 1, itemId: m.fabricId }] }, user);
+    const mOrder = await prisma.order.findUniqueOrThrow({ where: { id: mapped.orderId }, select: { lines: { select: { itemId: true } } } });
+    const mLine = await prisma.salesQuoteLine.findFirstOrThrow({ where: { quoteId: noItem, lineNo: 1 }, select: { itemId: true } });
+    check("§7b ⭐ yeni desen kalemi siparişte eşlenen ürünle; teklif kalemi ürünsüz kalır (defter)", mOrder.lines[0]?.itemId === m.fabricId && mLine.itemId === null && mapped.quote.status === "CONVERTED");
   } finally {
     await teklifFiksturSil(t);
     await fiksturSil(m);

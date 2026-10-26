@@ -124,11 +124,13 @@ export const BELGE_TASARIMCI_ADIMLARI = [
     id: "BT2", rol: "P", gerektirir: ["BT1"],
     // bayragiKur() sayfayı tazeler; tazelemede cihaz duyurusu aynı oturumda ikinci kez 400 alır (koşum kalıntısı).
     beklenenHatalar: [{ status: 400, url: /\/api\/devices\/announce/ }],
-    yol: "Bayrak açık → Belge Tasarımcısı → boş A4 dikey kanvas (sandbox'lı) → Örnek belge yükle", rota: "definitions/document-designer",
+    yol: "Bayrak açık → Belge Tasarımcısı → boş A4 dikey kanvas (sandbox'lı) → Örnek belge yükle", rota: "definitions/document-designer/new",
     async yap(ctx) {
       const { git, page, tikla } = ctx;
       await bayragiKur(ctx);
       await git("Belge Tasarımcısı");
+      // T5: kök yol şablon listesi; kayıtsız editör "Kaydetmeden dene" ile açılır.
+      await tikla("Kaydetmeden dene");
       await cerceve(page).waitFor({ timeout: 30_000 });
       await page().waitForTimeout(1500);
       olc.bos = await cerceveOlcusu(page);
@@ -157,7 +159,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT3", rol: "P", gerektirir: ["BT2"],
-    yol: "Kâğıt A5 + Yatay → kanvas oranı 148/210", rota: "definitions/document-designer",
+    yol: "Kâğıt A5 + Yatay → kanvas oranı 148/210", rota: "definitions/document-designer/new",
     async yap({ page, sec, tikla }) {
       await sec(page().getByRole("combobox", { name: "Kâğıt boyu" }), "A5");
       await tikla("Yatay");
@@ -171,7 +173,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
     id: "BT4", rol: "P", gerektirir: ["BT2"],
     // Sandbox sondası kasıtlı: engellenen script ve `src="x"` görseli konsola düşer — beyanlı.
     beklenenHatalar: [{ konsol: /Blocked script execution .* frame is sandboxed/ }, { konsol: /ERR_FILE_NOT_FOUND/ }],
-    yol: "Kanvasta başlığa tıkla → Stil paneli (Türkçe sektörler); enjekte script kanvasta çalışmaz", rota: "definitions/document-designer",
+    yol: "Kanvasta başlığa tıkla → Stil paneli (Türkçe sektörler); enjekte script kanvasta çalışmaz", rota: "definitions/document-designer/new",
     async yap({ page, tikla }) {
       const baslik = page().frameLocator("iframe.gjs-frame").getByText("SEVK İRSALİYESİ").first();
       await baslik.click({ timeout: 15_000 });
@@ -204,7 +206,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   // ── T3: bloklar, bağlama panelleri, veri ağacı, sayfa ve belge ayarları ─────────
   {
     id: "BT5", rol: "P", gerektirir: ["BT2"],
-    yol: "Belge Tasarımcısı → sol Bloklar: Veri (Veri alanı, Kalem tablosu, Toplam kutusu, Logo, Barkod, QR, İmza alanı) + Sayfa (Üst bilgi, Alt bilgi, Sayfa no, Sayfa kesmesi)", rota: "definitions/document-designer",
+    yol: "Belge Tasarımcısı → sol Bloklar: Veri (Veri alanı, Kalem tablosu, Toplam kutusu, Logo, Barkod, QR, İmza alanı) + Sayfa (Üst bilgi, Alt bilgi, Sayfa no, Sayfa kesmesi)", rota: "definitions/document-designer/new",
     async yap({ page }) {
       await gjs(page, "secimiBirak");
       await page().waitForTimeout(400);
@@ -221,7 +223,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT7", rol: "P", gerektirir: ["BT2"],
-    yol: "Sağ panel → Veri sekmesi → sözleşme ağacı (Belge açık; etiket · tür · örnek); Tablolar grubu açılır", rota: "definitions/document-designer",
+    yol: "Sağ panel → Veri sekmesi → sözleşme ağacı (Belge açık; etiket · tür · örnek); Tablolar grubu açılır", rota: "definitions/document-designer/new",
     async yap({ page }) {
       await sekme(page, "Veri");
       const agac = page().getByTestId("veri-agaci");
@@ -243,7 +245,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT6", rol: "P", gerektirir: ["BT7"],
-    yol: "Veri → Tablolar → Ürün listesi “+” → kalem tablosu seçili → Özellikler: kaynak + kolonlar; getHtml'de tr[data-each]", rota: "definitions/document-designer",
+    yol: "Veri → Tablolar → Ürün listesi “+” → kalem tablosu seçili → Özellikler: kaynak + kolonlar; getHtml'de tr[data-each]", rota: "definitions/document-designer/new",
     async yap({ page }) {
       await gjs(page, "secimiBirak");
       await page().getByRole("button", { name: "Ürün listesi tablosunu ekle" }).click({ timeout: 15_000 });
@@ -265,7 +267,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT8", rol: "P", gerektirir: ["BT7"],
-    yol: "Veri → İrsaliye no “+” → Özellikler → Koşul kur… → boşken Uygula kapalı → Plaka · eşit değil · blank → Uygula", rota: "definitions/document-designer",
+    yol: "Veri → İrsaliye no “+” → Özellikler → Koşul kur… → boşken Uygula kapalı → Plaka · eşit değil · blank → Uygula", rota: "definitions/document-designer/new",
     async yap({ page, diyalog }) {
       await sekme(page, "Veri");
       await gjs(page, "secimiBirak");
@@ -299,7 +301,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT9", rol: "P", gerektirir: ["BT2"],
-    yol: "Sağ panel → Sayfa → A4 + Dikey, Sol kenar 30 mm → kanvas kılavuzu canlı; araç çubuğunda Taslak rozeti", rota: "definitions/document-designer",
+    yol: "Sağ panel → Sayfa → A4 + Dikey, Sol kenar 30 mm → kanvas kılavuzu canlı; araç çubuğunda Taslak rozeti", rota: "definitions/document-designer/new",
     async yap({ page }) {
       await sekme(page, "Sayfa");
       await page().getByRole("group", { name: "Kâğıt", exact: true }).getByRole("button", { name: "A4" }).click({ timeout: 15_000 });
@@ -319,7 +321,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT10", rol: "P", gerektirir: ["BT2"],
-    yol: "Sağ panel → Belge ayarları → dil Türkçe kilitli (EN yalnız Sistem şablonunda), imza alanı düzenlenir, stil/gelişmiş salt-okunur", rota: "definitions/document-designer",
+    yol: "Sağ panel → Belge ayarları → dil Türkçe kilitli (EN yalnız Sistem şablonunda), imza alanı düzenlenir, stil/gelişmiş salt-okunur", rota: "definitions/document-designer/new",
     async yap({ page }) {
       await sekme(page, "Belge ayarları");
       await page().waitForTimeout(800);
@@ -345,7 +347,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT11", rol: "P", gerektirir: ["BT7"],
-    yol: "Veri → Çuval listesi “+” → Özellikler → kilitli iç kolon (Sevk partisi kodu) → İç alanı aç onayı + müşteri belgesi uyarısı", rota: "definitions/document-designer",
+    yol: "Veri → Çuval listesi “+” → Özellikler → kilitli iç kolon (Sevk partisi kodu) → İç alanı aç onayı + müşteri belgesi uyarısı", rota: "definitions/document-designer/new",
     async yap({ page, diyalog }) {
       await sekme(page, "Veri");
       await gjs(page, "secimiBirak");
@@ -371,7 +373,7 @@ export const BELGE_TASARIMCI_ADIMLARI = [
   },
   {
     id: "BT12", rol: "P", gerektirir: ["BT2"],
-    yol: "Gidiş-dönüş: paylaşılan fikstürün yönergeli örnekleri editöre yüklenir → getHtml → yönerge sayıları değişmez", rota: "definitions/document-designer",
+    yol: "Gidiş-dönüş: paylaşılan fikstürün yönergeli örnekleri editöre yüklenir → getHtml → yönerge sayıları değişmez", rota: "definitions/document-designer/new",
     async yap({ page }) {
       const fx = JSON.parse(fs.readFileSync(FIKSTUR, "utf8"));
       const olcum = [];

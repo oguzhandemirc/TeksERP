@@ -67,7 +67,7 @@ router.get("/ozet", c.getSummary);
  *     summary: 'Kişinin görebildiği bildirim türleri (F1 — tercihsiz)'
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: "{turler: [...]}" }
+ *       200: { description: "{turler: [{kod, ad, grup, kilit, kanallar, kapsam}], hucreler, yetkiDisi} — yetkiDisi: modülü açık ama izni olmayan tür sayısı" }
  *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
  */
 router.get("/katalog", c.getCatalog);
