@@ -11,6 +11,7 @@ import {
   Coins,
   type LucideIcon,
 } from "lucide-react";
+import { TERIM_AD } from "@/lib/terim";
 import { DOCUMENTS_HUB_ACCESS, QUALITY_HUB_ACCESS, SYSTEM_HUB_ACCESS } from "@/lib/permissions";
 
 export interface NavItem {
@@ -74,7 +75,7 @@ export const navGroups: NavGroup[] = [
       { label: "Operasyon", to: "/operations", icon: ClipboardList },
       {
         // UX-2: kalite karoları Operasyon'dan ayrı kök; bayrak kapalıyken satır soluk + ayar yolu (K3).
-        label: "Kalite Güvence",
+        label: TERIM_AD.kaliteGuvence,
         to: "/quality",
         icon: BadgeCheck,
         permissionAny: QUALITY_HUB_ACCESS,
@@ -92,7 +93,7 @@ export const navGroups: NavGroup[] = [
         keywords: "maliyet teklif fiyat teklifi revizyon siparişe dönüştür fiyat listesi standart maliyet iplik fiyatı fason tarife terbiye parametre hesaplayıcı kâr iplik ihtiyacı eksik iplik",
       },
       {
-        label: "Ön Muhasebe",
+        label: TERIM_AD.onMuhasebe,
         to: "/finance",
         icon: Calculator,
         permission: "finance:read",
@@ -103,7 +104,7 @@ export const navGroups: NavGroup[] = [
       { label: "Tanımlar", to: "/definitions", icon: Library },
       {
         // UX-2: belge/etiket/refakat çıktıları Tanımlar'dan ayrı kök.
-        label: "Belgeler",
+        label: TERIM_AD.belgeler,
         to: "/documents",
         icon: FileText,
         permissionAny: DOCUMENTS_HUB_ACCESS,

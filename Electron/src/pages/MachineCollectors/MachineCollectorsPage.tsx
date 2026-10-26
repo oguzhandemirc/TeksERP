@@ -6,6 +6,7 @@
 // Kapı: route `loom:spec-manage` + `ROUTE_MODULE` (tezgah); sunucu da aynı iki kapıyı uygular.
 // =============================================================================
 import { useState } from "react";
+import { TERIM_AD } from "@/lib/terim";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -36,7 +37,7 @@ export function MachineCollectorsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Makine Kartları"
+        title={TERIM_AD.makineVeriToplayicilari}
         description="Tezgaha takılan kartların kaydı — bağlı tezgahlar, kart tipi, sır yenileme, iptal"
         actions={
           <div className="flex gap-2">

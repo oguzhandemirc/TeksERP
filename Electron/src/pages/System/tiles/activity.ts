@@ -1,12 +1,13 @@
 // Sistem › Aktivite & Denetim karoları (sıra = hub sırası).
 import { Activity, FileCode2, MapPin, Printer, Bell } from "lucide-react";
+import { TERIM_AD } from "@/lib/terim";
 import { SYSTEM_ACTIVITY_ACCESS, SYSTEM_PRINT_HISTORY_ACCESS, SYSTEM_WORK_SESSIONS_ACCESS } from "@/lib/permissions";
 import type { SystemTile } from "../tile-config";
 
 export const activityTiles: SystemTile[] = [
   {
     key: "activity",
-    title: "Etkinlik",
+    title: TERIM_AD.etkinlikGunlugu,
     description: "İşlemler — kim ne yaptı, günlük dille; teknik iz ve kayıt numarasıyla arama",
     icon: Activity,
     to: "/system/activity",

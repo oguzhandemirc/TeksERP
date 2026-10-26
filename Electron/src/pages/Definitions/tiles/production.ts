@@ -5,7 +5,7 @@ import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime
 import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
 import { isMachineCollectorsVisible } from "@/pages/MachineCollectors/collector-model";
 import { isMachineStopCodeMapsVisible } from "@/pages/MachineStopCodeMaps/code-map-model";
-import { TERIM } from "@/lib/terim";
+import { TERIM, TERIM_AD } from "@/lib/terim";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { DefinitionTile } from "../tile-config";
 
@@ -64,7 +64,7 @@ export const productionTiles: DefinitionTile[] = [
   },
   {
     key: "machine-collectors",
-    title: "Makine Kartları",
+    title: TERIM_AD.makineVeriToplayicilari,
     description: "Tezgaha takılan kartların kaydı — bağlı tezgahlar, kart tipi, sır yenileme, iptal",
     icon: Cpu,
     to: "/definitions/machine-collectors",

@@ -22,7 +22,7 @@ import { reportCommandSections } from "./command-entries.reports";
 import { deepCommandSections } from "./command-entries.deep";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { isWorkOrdersVisible } from "@/pages/Operations/production-regime";
-import { TERIM } from "@/lib/terim";
+import { TERIM, TERIM_AD } from "@/lib/terim";
 
 export type { CommandEntry, CommandSection } from "./command-entries.types";
 
@@ -94,7 +94,7 @@ export const commandSections: CommandSection[] = [
   },
   {
     // UX-2: Kalite Güvence kökü — karo yüklemi aynen taşınır.
-    heading: "Kalite Güvence",
+    heading: TERIM_AD.kaliteGuvence,
     entries: qualityTiles.map<CommandEntry>((tile) => ({
       key: `ops:${tile.key}`,
       label: tile.title,
@@ -112,7 +112,7 @@ export const commandSections: CommandSection[] = [
     // atanmamış olur, dolayısıyla satırlar da çıkmaz — ve bayrak açılıp izin
     // verilen an kendiliğinden belirirler. Palete ayrıca bayrak yüklemi
     // koymak, hub karolarıyla ayrışabilecek İKİNCİ bir kural demekti.
-    heading: "Ön Muhasebe",
+    heading: TERIM_AD.onMuhasebe,
     entries: financeTiles.map<CommandEntry>((tile) => ({
       key: `fin:${tile.key}`,
       label: tile.title,
@@ -169,7 +169,7 @@ export const commandSections: CommandSection[] = [
   })),
   {
     // UX-2: Belgeler kökü (eski Tanımlar · Çıktı grubu).
-    heading: "Belgeler",
+    heading: TERIM_AD.belgeler,
     entries: documentTiles.map<CommandEntry>((tile) => ({
       key: `def:${tile.key}`,
       label: tile.title,
@@ -308,8 +308,8 @@ export function findCommandEntry(to: string): CommandEntry | undefined {
 // Bölüm başlığı → üst (hub) sayfa. Breadcrumb için: alt sayfadan hub'a dönüş.
 const SECTION_PARENTS: Record<string, { label: string; to: string }> = {
   Operasyon: { label: "Operasyon", to: "/operations" },
-  "Kalite Güvence": { label: "Kalite Güvence", to: "/quality" },
-  Belgeler: { label: "Belgeler", to: "/documents" },
+  [TERIM_AD.kaliteGuvence]: { label: TERIM_AD.kaliteGuvence, to: "/quality" },
+  [TERIM_AD.belgeler]: { label: TERIM_AD.belgeler, to: "/documents" },
   Yetkilendirme: { label: "Yetkilendirme", to: "/access" },
   Sistem: { label: "Sistem", to: "/system" },
 };

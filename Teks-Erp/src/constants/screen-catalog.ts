@@ -25,7 +25,7 @@
 // =============================================================================
 
 import { PERMISSION_CATALOG } from "./permission-catalog";
-import { TERIM } from "./terim";
+import { TERIM, TERIM_AD } from "./terim";
 import { capLabel } from "./screen-capability-labels";
 
 export { capLabel };
@@ -166,9 +166,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "access/permissions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetki Kataloğu", requires: ["admin:users"], capabilities: [] },
   { key: "access/patron-bulut", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yönetim Bulutu", requires: ["admin:users"], capabilities: [] },
   // Sistem hub'ı: karolarından BİRİNİ açabilen herkes girer (Electron `SYSTEM_HUB_ACCESS` aynası).
-  { key: "documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belgeler", requires: ["station:read", "label-template:read", "admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: [] },
+  { key: "documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: TERIM_AD.belgeler, requires: ["station:read", "label-template:read", "admin:settings", "document-template:read", "document-template:write", "document-template:design", "document-template:publish"], capabilities: [] },
   { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings", "data:import", "master-data:merge", "settings:numbering", "settings:workstation", "settings:customers", "settings:orders", "settings:shipping", "settings:work-orders", "settings:production", "settings:kartela", "settings:devere", "settings:dokuma", "settings:warehouse", "settings:yarn", "settings:finance", "settings:label", "settings:devices", "settings:company", "settings:e-irsaliye", "settings:session", "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:backups", "system:print-history", "license:view", "license:manage", "support:create", "settings:notifications"], capabilities: [] },
-  { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings", "system:activity"], capabilities: [] },
+  { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: TERIM_AD.etkinlikGunlugu, requires: ["admin:settings", "system:activity"], capabilities: [] },
   // bildirim: kişisel gelen kutusu — kapısız (izin kodu yok; satır kapsamı kişinin kendi kutusu).
   { key: "notifications", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirimler", requires: [], capabilities: [] },
   { key: "settings/notifications", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim tercihleri", requires: [], capabilities: [] },
@@ -215,14 +215,14 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "system/numbering", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Numaralandırma", requires: ["settings:numbering"], capabilities: [] },
   { key: "system/logs", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem Kayıtları", requires: ["admin:settings", "system:activity"], capabilities: [] },
   // Arşive TAŞIMA süperadmin ekranıdır (karo `superadminOnly`); alt yol Arşiv Tarama okuma iznini de kabul eder.
-  { key: "system/archive", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Arşivi", requires: ["admin:settings", "system:activity"], capabilities: [] },
+  { key: "system/archive", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: TERIM_AD.etkinlikArsivi, requires: ["admin:settings", "system:activity"], capabilities: [] },
   { key: "system/roll-archive", app: "desktop", modul: "cekirdek:stok-giris", title: "Top Arşivi", requires: ["admin:settings", "roll:read"], capabilities: [] },
   { key: "operations/orders", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Siparişler", requires: ["order:read"], capabilities: ["customer-alias:read", "order:write", "shipping:read", "workorder:write"] },
   { key: "operations/allocation-repair", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Siparişe yazılamayan sevkiyatlar", requires: ["shipping:repair-allocation"], capabilities: [] },
   { key: "operations/work-orders", app: "desktop", modul: "productionEnabled", title: TERIM.terbiyeIsEmri.cogul, requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
   { key: "operations/work-order-events", app: "desktop", modul: "productionEnabled", title: `${TERIM.terbiyeIsEmri.tekil} Hareketleri`, requires: ["workorder:read"], capabilities: [] },
   { key: "operations/rolls", app: "desktop", modul: "cekirdek:stok-giris", title: "Kumaş Stoğu", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
-  { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: "Kurşun Planlama", requires: ["quality:write", "workorder:distribute"], capabilities: [] },
+  { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: TERIM_AD.kursunPlanlama, requires: ["quality:write", "workorder:distribute"], capabilities: [] },
   { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
   { key: "operations/shipments", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["eirsaliye:read", "eirsaliye:undo", "eirsaliye:write", "return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
   { key: "operations/sack-store", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevk Kapısı", requires: ["shipping:read"], capabilities: ["shipping:write"] },
@@ -246,9 +246,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/weaving-floor", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Salonu", requires: ["loom:live-view"], capabilities: ["loom:run", "loom:run-revoke", "loom:manual-entry", "loom:classify"] },
   // Tezgah Alarmları (A2a, 2026-10-11): liste + alarm sayfası; eylemler sayfa içinde izinle. Alarm bayrağı
   // modül değil davranış bayrağıdır — ekranın modülü tezgah izleme.
-  { key: "operations/loom-alarms", app: "desktop", modul: "tezgahEnabled", title: "Tezgah Alarmları", requires: ["loom:alarm-view"], capabilities: ["loom:alarm-ack", "loom:alarm-escalation"] },
+  { key: "operations/loom-alarms", app: "desktop", modul: "tezgahEnabled", title: TERIM_AD.tezgahAlarmlari, requires: ["loom:alarm-view"], capabilities: ["loom:alarm-ack", "loom:alarm-escalation"] },
   { key: "definitions/loom-alarm-duty", app: "desktop", modul: "tezgahEnabled", title: "Alarm Sorumluları", requires: ["loom:spec-manage"], capabilities: [] },
-  { key: "definitions/machine-collectors", app: "desktop", modul: "tezgahEnabled", title: "Makine Kartları", requires: ["loom:spec-manage"], capabilities: [] },
+  { key: "definitions/machine-collectors", app: "desktop", modul: "tezgahEnabled", title: TERIM_AD.makineVeriToplayicilari, requires: ["loom:spec-manage"], capabilities: [] },
   { key: "definitions/machine-stop-codes", app: "desktop", modul: "tezgahEnabled", title: "Duruş Kodu Eşleme", requires: ["loom:spec-manage"], capabilities: [] },
   { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
   { key: "operations/e-irsaliye", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "e-İrsaliye Kayıtları", requires: ["eirsaliye:read"], capabilities: [] },
@@ -285,7 +285,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // sayfa İÇİNDE `PermissionGate` ile ayrılır, route'a konmaz. Bu yüzden onlar
   // `requires` değil `capabilities`tir; kart listesiyle (Finance/tile-config)
   // birebir aynı olması gereken şey `requires` tarafıdır.
-  { key: "finance", app: "desktop", modul: "financeEnabled", title: "Ön Muhasebe", requires: ["finance:read"], capabilities: [] },
+  { key: "finance", app: "desktop", modul: "financeEnabled", title: TERIM_AD.onMuhasebe, requires: ["finance:read"], capabilities: [] },
   { key: "finance/cari", app: "desktop", modul: "financeEnabled", title: "Cari Hesaplar", requires: ["finance:read"], capabilities: ["finance:write"] },
   { key: "finance/invoices", app: "desktop", modul: "financeEnabled", title: "Faturalar", requires: ["finance:read"], capabilities: ["finance:invoice"] },
   { key: "finance/payments", app: "desktop", modul: "financeEnabled", title: "Tahsilat ve Ödemeler", requires: ["finance:read"], capabilities: ["finance:payment"] },
@@ -319,7 +319,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/cariler", app: "desktop", modul: "cekirdek:ana-veri", title: "Cariler", requires: ["customer:read", "subcontractor:read"], capabilities: ["customer:write", "subcontractor:write"] },
   // Kalite Güvence (K4P zemin, 2026-10-24): manifesto önden yazıldı; panel sayfaları PANEL/LAB/SERT
   // dilimlerinde iner (karo yok → bekçide KARO_YOK muafı, karo doğunca muaf ölür).
-  { key: "quality", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Kalite Güvence", requires: ["inspection:read", "labtest:read", "certificate:read"], capabilities: [] },
+  { key: "quality", app: "desktop", modul: "kaliteGuvenceEnabled", title: TERIM_AD.kaliteGuvence, requires: ["inspection:read", "labtest:read", "certificate:read"], capabilities: [] },
   { key: "quality/inspections", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Muayeneler", requires: ["inspection:read"], capabilities: ["inspection:write", "inspection:correct"] },
   { key: "quality/inspection-rules", app: "desktop", modul: "kaliteGuvenceEnabled", title: "4 Puan Kuralları", requires: ["inspection:read"], capabilities: ["inspection:rules"] },
   { key: "quality/lab-tests", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Lab Testleri", requires: ["labtest:read"], capabilities: ["labtest:write", "labtest:approve"] },
@@ -336,7 +336,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "cost/price-lists", app: "desktop", modul: "maliyetEnabled", title: "Fiyat Listeleri", requires: ["price-list:read"], capabilities: ["price-list:write"] },
   { key: "cost/yarn-need", app: "desktop", modul: "maliyetEnabled", title: "İplik İhtiyaç Planı", requires: ["report:yarn-need"], capabilities: [] },
   // bildirim: yönetici bildirim profilleri (N4-SEMA izni; sayfa + rota + karo N4-PROFIL'de).
-  { key: "system/notification-profiles", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim Profilleri", requires: ["settings:notifications", "admin:settings"], capabilities: [] },
+  { key: "system/notification-profiles", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: TERIM_AD.bildirimProfilleri, requires: ["settings:notifications", "admin:settings"], capabilities: [] },
 ];
 
 const mobile: ScreenEntry[] = [
@@ -344,7 +344,7 @@ const mobile: ScreenEntry[] = [
   { key: "KursunQc", app: "mobile", modul: "productionEnabled", title: "Kurşun", requires: ["mobile:kk2-kursun"], capabilities: [] },
   { key: "Tambur", app: "mobile", modul: "productionEnabled", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }] },
   { key: "Depo", app: "mobile", modul: "cekirdek:stok-giris", title: "Depo", requires: ["mobile:depo"], capabilities: [] },
-  { key: "TartiPaket", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyat", requires: ["mobile:tarti-paket"], capabilities: [{ code: "mobile:sevkiyat", label: "Sevk çıkışı adımlarını da görebilir" }] },
+  { key: "TartiPaket", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: TERIM_AD.tartiPaket, requires: ["mobile:tarti-paket"], capabilities: [{ code: "mobile:sevkiyat", label: "Sevk çıkışı adımlarını da görebilir" }] },
   { key: "Sevkiyat", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "Sevk Çıkışı", requires: ["mobile:sevkiyat"], capabilities: [] },
   { key: "FasonSevk", app: "mobile", modul: "planlanan:fason", title: "Fason Sevk", requires: ["mobile:fason-sevk"], capabilities: [] },
   { key: "FasonKabul", app: "mobile", modul: "planlanan:fason", title: "Fason Mal Kabul", requires: ["mobile:fason-kabul"], capabilities: [] },
@@ -354,13 +354,13 @@ const mobile: ScreenEntry[] = [
   { key: "HizliIsEmri", app: "mobile", modul: "productionEnabled", title: `Hızlı ${TERIM.terbiyeIsEmri.tekil}`, requires: ["mobile:hizli-is-emri"], capabilities: [{ code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }, { code: "mobile:is-emri-duzelt", label: "Açılmış terbiye iş emrini düzeltebilir (renk · en · sipariş bağı · kartı yeniden bas)" }] },
   { key: "Siparis", app: "mobile", modul: "cekirdek:siparis-musteri", title: "Sipariş", requires: ["mobile:siparis"], capabilities: [] },
   { key: "Kumas", app: "mobile", modul: "cekirdek:ana-veri", title: "Kumaş Ekle", requires: ["mobile:kumas"], capabilities: [] },
-  { key: "KursunDagitim", app: "mobile", modul: "productionEnabled", title: "Kurşun Dağıtım", requires: ["mobile:kursun-dagitim"], capabilities: [] },
+  { key: "KursunDagitim", app: "mobile", modul: "productionEnabled", title: TERIM_AD.kursunDagitim, requires: ["mobile:kursun-dagitim"], capabilities: [] },
   // Tablet TEZGAH ekranı (2026-09-14, dokuma dilimi): top indirme + geri alma; koşum/duruş sonraki dilim.
-  { key: "Dokuma", app: "mobile", modul: "dokumaEnabled", title: "Tezgah", requires: ["mobile:dokuma"], capabilities: [{ code: "mobile:dokuma-geri-al", label: "Top indirmeyi, koşumu ve duruşu geri alabilir" }] },
+  { key: "Dokuma", app: "mobile", modul: "dokumaEnabled", title: TERIM_AD.tezgahEkrani, requires: ["mobile:dokuma"], capabilities: [{ code: "mobile:dokuma-geri-al", label: "Top indirmeyi, koşumu ve duruşu geri alabilir" }] },
   // Tablet LEVENT SARIM ekranı (2026-09-14, DEVERE-LEVENT-TARAMASI §11): plan · sar · taslak sil; iptal yetenek.
   { key: "Devere", app: "mobile", modul: "devereEnabled", title: "Levent Sarım", requires: ["mobile:devere"], capabilities: [{ code: "mobile:devere-iptal", label: "Sarımı iptal edebilir (iplik defterine ters satır)" }] },
   // Tezgah alarmı A3: usta/amir telefonu + tablet — aktif alarmlar, üstlen/sustur/not, alarm sayfası, yerel bildirim.
-  { key: "Uyarilar", app: "mobile", modul: "tezgahEnabled", title: "Uyarılar", requires: ["mobile:tezgah-uyari"], capabilities: [] },
+  { key: "Uyarilar", app: "mobile", modul: "tezgahEnabled", title: TERIM_AD.tezgahAlarmlari, requires: ["mobile:tezgah-uyari"], capabilities: [] },
   // G2t (2026-09-14): fason dokuma kabulü — aynı izin ikinci ekranda (levent dönüşü + top kabulü; sevk/iptal panelden).
   { key: "FasonDokuma", app: "mobile", modul: "dokumaEnabled", title: "Fason Dokuma Kabul", requires: ["mobile:fason-kabul"], capabilities: [] },
   // K4P-EKRAN (2026-10-25): istasyondan bağımsız Muayene — top okut, 4 puan muayene yaz (oturumsuz).

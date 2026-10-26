@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
+import { TERIM_AD } from "@/lib/terim";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
@@ -18,7 +19,7 @@ export function DocumentsHubPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Belgeler"
+        title={TERIM_AD.belgeler}
         description="Etiketler, belge şablonları ve tasarımcısı, serbest belgeler, refakat kartı"
       />
       <PageBody className="p-4 sm:p-6">

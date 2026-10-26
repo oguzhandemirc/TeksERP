@@ -6,7 +6,7 @@ import { isMachineStopsVisible } from "../MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "../WeavingFloor/floor-regime";
 import { isLoomAlarmsVisible } from "../LoomAlarms/alarm-regime";
 import { isWarpBeamsVisible } from "../WarpBeams/warp-beam-regime";
-import { TERIM } from "@/lib/terim";
+import { TERIM, TERIM_AD } from "@/lib/terim";
 import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
@@ -83,7 +83,7 @@ export const productionTiles: OperationsTile[] = [
   {
     // TEZGAH ALARMLARI: backend `/api/loom-alarms` `requireTezgahEnabled` + alarm bayrağı +
     // `loom:alarm-view`; karo modül bayrağı ve izinle (route `ProtectedRoute` ile birebir).
-    key: "loom-alarms", title: "Tezgah Alarmları", icon: Siren, to: "/operations/loom-alarms", group: "production",
+    key: "loom-alarms", title: TERIM_AD.tezgahAlarmlari, icon: Siren, to: "/operations/loom-alarms", group: "production",
     description: "Hedef süreyi aşan duruşlar: üstlen, sustur, not düş; aktif ve geçmiş alarmlar",
     permission: "loom:alarm-view", visibleWhen: isLoomAlarmsVisible, offHint: flagOffHint("tezgahEnabled"),
   },
@@ -115,7 +115,7 @@ export const productionTiles: OperationsTile[] = [
     // İkisi de AYNI iş emirlerini gösteriyordu; bayrak yeni açıldığında ikisi
     // birden menüde çıkıyor ve planlamacı aynı işi iki listede arıyordu.
     key: "kursun-dagitim",
-    title: "Kurşun Planlama",
+    title: TERIM_AD.kursunPlanlama,
     description: "Kurşun sırasını düzenle; dağıtım açıkken fiziksel makinelere dağıt",
     icon: Share2,
     to: "/operations/kursun-dagitim",

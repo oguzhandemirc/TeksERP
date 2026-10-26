@@ -79,6 +79,7 @@
 
 - **[ÇEKİRDEK]** Kataloğa giren her panel ekranı menüde (yan menü · hub karosu · beyanlı sayfa içi giriş) ya da palette bulunur; yalnız-palet ekran `YALNIZ_PALET`te gerekçeli, taban yalnız aşağı. Hub karoları `pages/<Hub>/tiles/*.ts` grup dosyalarındadır; karoyu dosyadan okuyan bekçi listeyi `scripts/lib/panel-karo-dosyalari.ts`ten alır. · bekçi: `test_ekran_bulunabilirlik` <sub>(arşiv 2026-10-26 "UX-2")</sub>
 - **[ÇEKİRDEK]** Kapalı modülün karosunu ve yan menü satırını gizleme: soluk çiz, gezindirme, `flagOffHint(<bayrak>)` ile ayar yolunu yaz; yalnız rejimde anlamsız karo gizlenir ve `hub-off-hint.test.ts` `REJIM_ISTISNA`da beyanlıdır. · bekçi: `Electron/src/pages/hub-off-hint.test.ts` <sub>(arşiv 2026-10-26 "UX-2")</sub>
+- **[ÇEKİRDEK]** Birden çok yüzeyde (panel karo · palet · ekran kataloğu · tablet · patron) görünen ekran adını elle yazma, `TERIM_AD`dan oku (kaynak `Teks-Erp/src/constants/terim.ts`, üç ayna `cp -p`); katalog başlığı karo başlığına eşittir. · bekçi: `test_terim_eski_ad` §1 · `test_ekran_yolu` §1b <sub>(arşiv 2026-10-26 "UX-2")</sub>
 
 ### Yasaklar
 

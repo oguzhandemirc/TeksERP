@@ -21,7 +21,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
 import { PANEL_EKRAN, YOL_AYRACI, ekranYolu, type PanelEkran } from "../src/constants/panel-ekran-yolu";
-import { TERIM } from "../src/constants/terim";
+import { TERIM, TERIM_AD } from "../src/constants/terim";
 import { hubKaroDosyalari } from "./lib/panel-karo-dosyalari";
 
 let pass = 0;
@@ -78,13 +78,13 @@ function kaynak(rel: string): ts.SourceFile {
   return ts.createSourceFile(rel, fs.readFileSync(tam, "utf8"), ts.ScriptTarget.Latest, true, rel.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
 }
 
-/** `TERIM.a.b` → değer; çözülemezse null. */
+/** `TERIM.a.b` · `TERIM_AD.a` → değer; çözülemezse null. */
 function terimCoz(e: ts.Expression): string | null {
   const zincir: string[] = [];
   let n: ts.Expression = e;
   while (ts.isPropertyAccessExpression(n)) { zincir.unshift(n.name.text); n = n.expression; }
-  if (!ts.isIdentifier(n) || n.text !== "TERIM") return null;
-  let v: unknown = TERIM;
+  if (!ts.isIdentifier(n) || (n.text !== "TERIM" && n.text !== "TERIM_AD")) return null;
+  let v: unknown = n.text === "TERIM" ? TERIM : TERIM_AD;
   for (const k of zincir) v = (v as Record<string, unknown> | undefined)?.[k];
   return typeof v === "string" ? v : null;
 }
@@ -131,7 +131,8 @@ function solMenu(): Menu[] {
     if (ts.isObjectLiteralExpression(n)) {
       const l = prop(n, "label");
       const t = prop(n, "to");
-      if (l && t && (ts.isStringLiteral(l)) && ts.isStringLiteral(t)) out.push({ label: l.text, to: t.text });
+      const lv = l ? metinCoz(l) : null;
+      if (lv !== null && t && ts.isStringLiteral(t)) out.push({ label: lv, to: t.text });
     }
     ts.forEachChild(n, visit);
   };

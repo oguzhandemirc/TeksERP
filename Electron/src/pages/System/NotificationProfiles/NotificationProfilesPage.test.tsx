@@ -80,11 +80,11 @@ describe("karo + rota kapısı", () => {
     perms.list = ["system:activity"];
     const { unmount } = renderWithProviders(<SystemHubPage />);
     expect(await screen.findByText("Sistem Kayıtları")).toBeInTheDocument();
-    expect(screen.queryByText("Bildirim profilleri")).toBeNull();
+    expect(screen.queryByText("Bildirim Profilleri")).toBeNull();
     unmount();
     perms.list = ["settings:notifications"];
     renderWithProviders(<SystemHubPage />);
-    expect(await screen.findByText("Bildirim profilleri")).toBeInTheDocument();
+    expect(await screen.findByText("Bildirim Profilleri")).toBeInTheDocument();
   });
 });
 

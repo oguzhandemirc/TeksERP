@@ -1,5 +1,6 @@
 // Sistem › Ayarlar karoları (sıra = hub sırası).
 import { Hash, Blocks, Building2, Monitor, Printer, SlidersHorizontal, BellRing } from "lucide-react";
+import { TERIM_AD } from "@/lib/terim";
 import { SETTINGS_COMPANY_ACCESS, SETTINGS_FLAGS_ACCESS, SETTINGS_PRINTING_ACCESS, SETTINGS_WORKSTATION_ACCESS, NOTIFICATION_PROFILES_ACCESS } from "@/lib/permissions";
 import type { SystemTile } from "../tile-config";
 
@@ -77,7 +78,7 @@ export const settingsTiles: SystemTile[] = [
   {
     // bildirim: yönetici profilleri + fabrika varsayılanı; bayrak kapalıyken karo kalır, "kapalı" notu taşır.
     key: "notification-profiles",
-    title: "Bildirim profilleri",
+    title: TERIM_AD.bildirimProfilleri,
     description: "Kişilere atanan hazır bildirim tercih setleri ve fabrika varsayılanı",
     icon: BellRing,
     to: "/system/notification-profiles",

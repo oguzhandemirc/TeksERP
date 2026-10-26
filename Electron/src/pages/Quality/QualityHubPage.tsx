@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
+import { TERIM_AD } from "@/lib/terim";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
@@ -17,7 +18,7 @@ export function QualityHubPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Kalite Güvence"
+        title={TERIM_AD.kaliteGuvence}
         description="4 puan muayeneleri, lab testleri, sertifikalar ve muayene raporu"
       />
       <PageBody className="p-4 sm:p-6">

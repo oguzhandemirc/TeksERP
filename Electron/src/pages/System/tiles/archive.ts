@@ -1,5 +1,6 @@
 // Sistem › Arşiv karoları (sıra = hub sırası).
 import { Archive, Search } from "lucide-react";
+import { TERIM_AD } from "@/lib/terim";
 import { SYSTEM_ACTIVITY_ACCESS, SYSTEM_ROLL_ARCHIVE_ACCESS } from "@/lib/permissions";
 import type { SystemTile } from "../tile-config";
 
@@ -18,7 +19,7 @@ export const archiveTiles: SystemTile[] = [
   },
   {
     key: "archive",
-    title: "Aktivite Arşivi",
+    title: TERIM_AD.etkinlikArsivi,
     description: "Eski log'ları arşive taşı; tablo boyutu istatistikleri",
     icon: Archive,
     to: "/system/archive",
