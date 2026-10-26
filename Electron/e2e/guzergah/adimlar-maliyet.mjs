@@ -12,6 +12,8 @@
 // MAL8 Gönderilmiş teklif → Revizyon oluştur → R2 taslağı + zaman çizelgesi revizyon zinciri.
 // MAL9 Fiyat listeleri: boş → arayüzden yeni liste → satırlar (API) → Yayınla onayı → yayında.
 // MAL10 Maliyet izni olmayan kullanıcı (muhasebe, MAL5'te cost:* alındı; quote/price-list okuma verilir): maliyet kolonu yok.
+// MAL11 Teklif belgesi (MAL-6): taslak önizleme → gönderilmiş teklif belgesi (İndir ▾ Excel) → iptal → İPTAL filigranı.
+// MAL12 Fiyat listesi belgesi (MAL-6): yayındaki liste → Yazdır / PDF / Excel önizlemesi.
 // Kanıt PNG'leri `E2E_KANIT_DIZINI` verilirse açık + koyu, geniş + dar olarak oraya da yazılır.
 // =============================================================================
 import fs from "node:fs";
@@ -373,4 +375,77 @@ const TEKLIF_ADIMLARI = [
     dogrula: [{ ad: "maliyet kolonu yok", sql: "SELECT 1", oku: () => olc.mal10, beklenen: (n) => n === 0 }],
   },
 ];
-MALIYET_ADIMLARI.push(...TEKLIF_ADIMLARI);
+// ── MAL-6: teklif + fiyat listesi belgesi ────────────────────────────────────
+const belgeAc = async (page) => {
+  await page().locator('[data-testid="commercial-doc-open"]:visible').first().click({ timeout: 15_000 });
+  const fr = page().frameLocator("iframe[title$='Önizleme']");
+  await fr.locator("body").waitFor({ timeout: 20_000 });
+  await page().waitForTimeout(1500);
+  return (await fr.locator("body").innerText().catch(() => "")) ?? "";
+};
+const belgeKapat = async (page) => {
+  await page().keyboard.press("Escape");
+  await page().waitForTimeout(600);
+};
+const BELGE_ADIMLARI = [
+  {
+    id: "MAL11", rol: "P",
+    yol: "Teklif detayı → Yazdır / PDF / Excel (taslak önizleme) → Gönder → belge + İndir ▾ Excel → İptal → İPTAL filigranı", rota: "cost/quotes/:id",
+    async yap({ git, page, api, sql }) {
+      const { q } = await tohumTeklif(api, sql);
+      await sql(`UPDATE sales_quotes SET "internalNote" = 'TEST-IC-NOT-SIZINTI', "customerReference" = 'TEST-MAL6' WHERE id = $1`, [q.id]);
+      olc.t3 = q;
+      await git("Teklifler");
+      await page().reload();
+      await page().waitForTimeout(2000);
+      await git("Teklifler");
+      await page().locator('[data-testid="quote-row"]:visible').filter({ hasText: "Taslak" }).first().click({ timeout: 20_000 });
+      await page().locator('[data-testid="commercial-doc-open"]:visible').first().waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL11-teklif-detay-belge-dugmesi", page().locator('[data-testid="commercial-doc-open"]:visible').first());
+      olc.mal11Taslak = await belgeAc(page);
+      await kanit(page(), "MAL11-teklif-belge-taslak");
+      await belgeKapat(page);
+      await zorunlu(api, `/api/quotes/${q.id}/send`, { method: "POST", body: "{}" });
+      await page().reload();
+      await page().waitForTimeout(2000);
+      olc.mal11Gonderildi = await belgeAc(page);
+      await kanit(page(), "MAL11-teklif-belge-gonderildi");
+      await page().getByRole("button", { name: /İndir/ }).first().click();
+      await page().getByRole("menuitem", { name: "Excel" }).waitFor({ timeout: 10_000 });
+      olc.mal11Excel = await page().getByRole("menuitem", { name: "Excel" }).count();
+      await kanit(page(), "MAL11-teklif-belge-indir-menu");
+      await page().keyboard.press("Escape");
+      await belgeKapat(page);
+      await zorunlu(api, `/api/quotes/${q.id}/cancel`, { method: "POST", body: JSON.stringify({ reason: "TEST iptal" }) });
+      await page().reload();
+      await page().waitForTimeout(2000);
+      olc.mal11Iptal = await belgeAc(page);
+      await kanit(page(), "MAL11-teklif-belge-iptal");
+      await belgeKapat(page);
+    },
+    dogrula: [
+      { ad: "taslak önizleme TASLAK filigranlı", sql: "SELECT 1", oku: () => olc.mal11Taslak, beklenen: (t) => /TASLAK/i.test(t ?? "") },
+      { ad: "gönderilmiş teklif belgesi: kalemler var, iç not ve maliyet yok", sql: "SELECT 1", oku: () => olc.mal11Gonderildi, beklenen: (t) => /TEST Yeni desen/.test(t ?? "") && !/TEST-IC-NOT-SIZINTI|Maliyet/.test(t ?? "") },
+      { ad: "İndir ▾ menüsünde Excel", sql: "SELECT 1", oku: () => olc.mal11Excel, beklenen: (n) => n === 1 },
+      { ad: "iptal sonrası belge VOIDED", sql: `SELECT status::text AS s FROM printed_documents WHERE "docType" = 'SALES_QUOTE' AND "sourceId" = (SELECT id FROM sales_quotes WHERE "customerReference" = 'TEST-MAL6') ORDER BY version DESC LIMIT 1`, beklenen: (r) => r[0]?.s === "VOIDED" },
+      { ad: "iptal belgesinde İPTAL filigranı", sql: "SELECT 1", oku: () => olc.mal11Iptal, beklenen: (t) => /İPTAL/i.test(t ?? "") },
+    ],
+  },
+  {
+    id: "MAL12", rol: "P",
+    yol: "Fiyat listesi detayı → Yazdır / PDF / Excel → yayındaki listenin belgesi", rota: "cost/price-lists/:id",
+    async yap({ git, page }) {
+      await git("Fiyat Listeleri");
+      await page().locator('[data-testid="pl-row"]:visible').first().click({ timeout: 20_000 });
+      await page().locator('[data-testid="commercial-doc-open"]:visible').first().waitFor({ timeout: 15_000 });
+      olc.mal12 = await belgeAc(page);
+      await kanit(page(), "MAL12-fiyat-listesi-belge");
+      await belgeKapat(page);
+    },
+    dogrula: [
+      { ad: "fiyat listesi belgesi basıldı (PUBLISHED → ACTIVE)", sql: `SELECT count(*)::int AS n FROM printed_documents WHERE "docType" = 'PRICE_LIST' AND status = 'ACTIVE'`, beklenen: (r) => r[0]?.n >= 1 },
+      { ad: "belgede maliyet sütunu yok", sql: "SELECT 1", oku: () => olc.mal12, beklenen: (t) => (t ?? "").length > 0 && !/Maliyet|Kâr/.test(t ?? "") },
+    ],
+  },
+];
+MALIYET_ADIMLARI.push(...TEKLIF_ADIMLARI, ...BELGE_ADIMLARI);
