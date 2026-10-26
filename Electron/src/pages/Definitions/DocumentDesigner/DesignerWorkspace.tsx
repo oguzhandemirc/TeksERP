@@ -87,6 +87,9 @@ export default function DesignerWorkspace({ templateId }: Props) {
         orientation={orientation}
         onPaper={(p) => draft.setPageSettings({ ...ps, kagit: p })}
         onOrientation={(o) => draft.setPageSettings({ ...ps, yon: o === "landscape" ? "yatay" : "dikey" })}
+        contract={draft.contract}
+        settings={draft.settings}
+        internalFields={draft.internalFields}
       />
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-44 shrink-0 flex-col border-r bg-card" aria-label="Bloklar">

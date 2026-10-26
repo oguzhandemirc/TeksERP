@@ -1,41 +1,62 @@
 /**
- * İskelet örneği — veri uçları (T1B) ve Liquid önizlemesi (T4) gelene dek
- * editörün dolu hâlini göstermek için sabit HTML. `{{ … }}` yer tutucuları
- * yalnız metindir; burada çözülmez.
+ * "Örnek belge yükle": sabit satırlar yerine türün SÖZLEŞMESİNDEN kurulan bağlı iskelet.
+ * Satırlar `data-each` ile örnek veriden, toplam `toplamlar.<k>`dan gelir → önizlemede
+ * satır toplamı ile toplam satırı hep tutar (eski sabit HTML'de tutmuyordu).
  */
-export const SAMPLE_DOCUMENT_HTML = `
+import { dataFieldHtml, DOCUMENT_BLOCK_CSS, signatureHtml, totalBoxHtml } from "../binding/blockHtml";
+import { isFieldLocked, type ContractTable, type ContractView } from "../binding/contract";
+import { defaultColumns, itemTableHtml } from "../binding/itemTable";
+
+/** Antet ek satırları kalem tablosu değildir; toplam kolonu olan ilk tablo tercih edilir. */
+export function sampleTable(c: ContractView): ContractTable | null {
+  const tables = c.tablolar.filter((t) => t.anahtar !== "antet_ek" && t.kolonlar.length > 0);
+  return tables.find((t) => t.kolonlar.some((k) => k.toplam)) ?? tables[0] ?? null;
+}
+
+/** Varsayılan kolonlar + kesilen (ilk 6 dışı) toplam kolonları — toplam satırı boş kalmasın. */
+export function sampleColumns(t: ContractTable, internalFields: readonly string[]): string[] {
+  const cols = defaultColumns(t, internalFields);
+  for (const k of t.kolonlar) {
+    if (k.toplam && !cols.includes(k.yol) && !isFieldLocked(k, internalFields)) cols.push(k.yol);
+  }
+  return cols;
+}
+
+export function buildSampleDocument(
+  c: ContractView | null,
+  settings: Readonly<Record<string, unknown>>,
+  internalFields: readonly string[],
+): { html: string; css: string } {
+  if (!c) {
+    return { html: '<p class="doc-muted">Önce belge türü seçin.</p>', css: SAMPLE_DOCUMENT_CSS };
+  }
+  const f = (yol: string): string => {
+    const field = c.kokler.find((x) => x.yol === yol);
+    return field && !isFieldLocked(field, internalFields) ? dataFieldHtml(yol, field) : "";
+  };
+  const line = (label: string, yol: string): string => {
+    const v = f(yol);
+    return v ? `<div><b>${label}:</b> ${v}</div>` : "";
+  };
+  const t = sampleTable(c);
+  const table = t ? itemTableHtml(t, sampleColumns(t, internalFields)) : "";
+  // Tablo toplamı tfoot'ta; toplam kolonu yoksa türün toplam alanları ayrı kutuda.
+  const totals = t && t.kolonlar.some((k) => k.toplam) ? "" : totalBoxHtml(c);
+  const html = `
 <header class="doc-head">
-  <div class="doc-company">Örnek Tekstil A.Ş.<br><span class="doc-muted">Organize Sanayi Bölgesi 3. Cadde No: 12</span></div>
-  <div class="doc-title">SEVK İRSALİYESİ<br><span class="doc-muted">No: {{ belge.no }}</span></div>
+  <div class="doc-company">${f("firma.ad")}<br><span class="doc-muted">${f("firma.adres")}</span></div>
+  <div class="doc-title">${f("belge.baslik")}<br><span class="doc-muted">No: ${f("belge.no")}</span></div>
 </header>
-<section class="doc-party">
-  <div><b>Sayın:</b> {{ karsi_taraf.ad }}</div>
-  <div><b>Sevk tarihi:</b> {{ belge.tarih | tarih }}</div>
-</section>
-<table class="doc-table">
-  <thead><tr><th>#</th><th>Ürün</th><th>Renk</th><th class="num">Metre</th><th class="num">Kg</th></tr></thead>
-  <tbody>
-    <tr><td>1</td><td>Penye kumaş 30/1</td><td>Lacivert</td><td class="num">1.250,00</td><td class="num">312,40</td></tr>
-    <tr><td>2</td><td>Ribana 2x2</td><td>Ekru</td><td class="num">840,50</td><td class="num">198,75</td></tr>
-    <tr><td>3</td><td>Süprem</td><td>Siyah</td><td class="num">2.010,00</td><td class="num">455,10</td></tr>
-  </tbody>
-</table>
-<div class="doc-total">Toplam: {{ toplamlar.metre | metre }}</div>
-<footer class="doc-sign">
-  <div class="doc-sign-box">Teslim eden</div>
-  <div class="doc-sign-box">Teslim alan</div>
-</footer>`;
+<section class="doc-party">${line("Sayın", "karsi_taraf.ad")}${line("Tarih", "belge.tarih")}</section>
+${table}
+${totals}
+${signatureHtml(settings)}`;
+  return { html, css: SAMPLE_DOCUMENT_CSS + DOCUMENT_BLOCK_CSS };
+}
 
 export const SAMPLE_DOCUMENT_CSS = `
 .doc-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:0.4mm solid #222;padding-bottom:3mm;margin-bottom:4mm;font-family:Arial, Helvetica, sans-serif;}
 .doc-company{font-size:11pt;font-weight:700;}
 .doc-title{font-size:15pt;font-weight:700;text-align:right;}
 .doc-muted{font-size:8.5pt;font-weight:400;color:#555;}
-.doc-party{display:flex;justify-content:space-between;font-size:10pt;margin-bottom:4mm;font-family:Arial, Helvetica, sans-serif;}
-.doc-table{width:100%;border-collapse:collapse;font-size:9.5pt;font-family:Arial, Helvetica, sans-serif;}
-.doc-table th,.doc-table td{border:0.25mm solid #444;padding:1.5mm 2mm;text-align:left;}
-.doc-table th{background-color:#eeeeee;}
-.doc-table .num{text-align:right;}
-.doc-total{text-align:right;font-weight:700;font-size:10.5pt;margin-top:3mm;font-family:Arial, Helvetica, sans-serif;}
-.doc-sign{display:flex;justify-content:space-between;gap:10mm;margin-top:18mm;}
-.doc-sign-box{flex:1;border-top:0.3mm solid #222;padding-top:2mm;text-align:center;font-size:9pt;font-family:Arial, Helvetica, sans-serif;}`;
+.doc-party{display:flex;justify-content:space-between;font-size:10pt;margin-bottom:4mm;font-family:Arial, Helvetica, sans-serif;}`;

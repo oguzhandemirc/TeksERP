@@ -7553,6 +7553,8 @@ async function buildFasonReceiptDoc(
       step: { include: { station: { select: { name: true } } } },
       appliedColor: { select: { name: true } },
       appliedProperties: { include: { property: { select: { name: true } } } },
+      // Kabulde doğan toplar: ÖLÇÜLEN dönen metre (fiziksel); defter `receivedQty`den ayrı büyüklük.
+      bornRolls: { select: { initialQty: true } },
       items: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -7580,6 +7582,8 @@ async function buildFasonReceiptDoc(
     itemName: it.newRoll.item?.name ?? "",
     colorName: it.newRoll.color?.name ?? null,
     width: it.newRoll.width != null ? Number(it.newRoll.width) : null,
+    // Kabul DEFTERİ metresi (fasondan düşülen); eski satırda NULL = tamamı, tahmin edilmez.
+    qty: it.receivedQty != null ? Number(it.receivedQty) : null,
   }));
 
   const doc: FasonReceiptDoc = {
@@ -7602,7 +7606,14 @@ async function buildFasonReceiptDoc(
       ),
     ].sort(),
     rolls,
-    totals: { rollCount: rolls.length },
+    totals: {
+      rollCount: rolls.length,
+      qty: Math.round(rolls.reduce((s, r) => s + (r.qty ?? 0), 0) * 1000) / 1000,
+      // Doğan topların ölçülen metresi — çekme/fazla bu ile defter `qty` farkıdır; top doğmadıysa alan yok.
+      ...(receipt.bornRolls.length
+        ? { returnedQty: Math.round(receipt.bornRolls.reduce((s, r) => s + Number(r.initialQty), 0) * 1000) / 1000 }
+        : {}),
+    },
   };
 
   return {
