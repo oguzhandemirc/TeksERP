@@ -1,6 +1,7 @@
 // Operasyon › Sevkiyat & İade karoları (sıra = hub sırası).
 import { ClipboardList, ScanBarcode, Truck, Undo2, FileCheck2 } from "lucide-react";
 import type { OperationsTile } from "../tile-config";
+import { TERIM_AD } from "@/lib/terim";
 
 export const shippingTiles: OperationsTile[] = [
   {
@@ -39,8 +40,8 @@ export const shippingTiles: OperationsTile[] = [
   },
   {
     key: "accounting-dispatch",
-    // Ana "Sevkiyatlar" ekranından ayrı: bu salt-okunur muhasebe/export ekranı.
-    title: "Sevkiyatlar (Muhasebe)",
+    // Ana "Sevkiyatlar" ekranından ayrı: yalnız sevk edilmişler, salt-okunur muhasebe/export ekranı.
+    title: TERIM_AD.sevkEdilenler,
     description: "Sevki tamamlananlar — salt-okunur + kumaş/çuval/çeki fişi",
     icon: ClipboardList,
     to: "/operations/accounting-dispatch",

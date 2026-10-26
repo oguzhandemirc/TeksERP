@@ -147,7 +147,7 @@ sistemin değil. Dokuma diliminin tek tasarım işi: rotanın başında top
 
 ## 6. Muhasebe köprüsü — dış muhasebeyle çakışmama
 
-Bugün fabrikada açık olan üçlü ("Sevkiyatlar (Muhasebe)" ekranı + `invoiceNo`
+Bugün fabrikada açık olan üçlü ("Sevk Edilenler" ekranı + `invoiceNo`
 fatura izi + Excel/PDF dışa aktarım) finans modülünün PARÇASI DEĞİL — çekirdek
 sevkiyatın **dış muhasebe köprüsü**. Muhasebecisi ayrı program kullanan her
 müşteride (adnansahin dahil) aynen kalır; finans açılınca aynı ekran terfi eder

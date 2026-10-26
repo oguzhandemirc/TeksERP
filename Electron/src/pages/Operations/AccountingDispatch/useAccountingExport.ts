@@ -7,7 +7,7 @@ import { accountingDispatchService } from "./service";
 import { accountingExportFileName, buildAccountingWorkbookSheets } from "./accounting-export";
 
 /**
- * "Sevk Edilenler (Muhasebe)" Excel export'ları:
+ * "Sevk Edilenler" Excel export'ları:
  *  • period — üstteki "Dönem Excel": ekran filtresine göre tüm dönem (tek dosya, 5 sayfa).
  *  • single — seçili sevkler tek 5-sayfalık dosyada (backend ids ile yalnız işaretlileri toplar).
  *

@@ -155,6 +155,8 @@ export const TERIM_AD = {
   makineVeriToplayicilari: "Makine Veri Toplayıcıları",
   bildirimAyarlari: "Bildirim Ayarları",
   bildirimProfilleri: "Bildirim Profilleri",
+  // Eski ad "Sevkiyatlar (Muhasebe)" (KÜÇÜK-F): yalnız sevk EDİLMİŞ (DISPATCHED) sevkler — fiş, dönem Excel, fatura izi.
+  sevkEdilenler: "Sevk Edilenler",
 } as const;
 
 export type TermAdKey = keyof typeof TERIM_AD;

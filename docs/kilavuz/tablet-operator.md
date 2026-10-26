@@ -92,4 +92,4 @@ Planlı sevkiyatı çıkarmak: Bölüm Seçimi → **Sevk Çıkışı** (Sevkiya
 3. Geçmiş sevkiyatlar: Sevkiyat ekranı → **Geçmiş**. Yanlış çuval için **Çuval Düzelt**.
 4. Sevk geri alma ve iade panelden, yetkili kullanıcıyla yapılır; sevk rakamı her yerde iade düşülmemiş (brüt) görünür.
 
-Faturalama panelde yapılır: Operasyon → **Sevkiyatlar (Muhasebe)** (sevkiyat okuma yetkisi gerekir; faturalama yetkisi yalnız Muhasebe/Süpervizör rolündedir).
+Faturalama panelde yapılır: Operasyon → **Sevk Edilenler** (sevkiyat okuma yetkisi gerekir; faturalama yetkisi yalnız Muhasebe/Süpervizör rolündedir).

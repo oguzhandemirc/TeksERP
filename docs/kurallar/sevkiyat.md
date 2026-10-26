@@ -130,7 +130,7 @@
 
 - **[PROFİL]** Sevkiyat detayında iade satırı ÇUVALDA KALIR: `returned` işaretli, soluk + amber 'İade' rozeti, salt-okunur, metraj üstü ÇİZİLMEZ (brüt toplama dahildir, irsaliyede durur); ayrı 'Bu sevkiyattan iade edilenler' kartı AYNEN kalır — rozet onun yerine geçmez, topun konumunu söyler. <sub>(CLAUDE.md:47)</sub>
 - **[PROFİL]** 'Sevkiyatı da kapat' kutusu YALNIZ `confirmationEnabled` AÇIKKEN çizilir (2026-09-07); kapalı rejimde seçenek yoktur — geri alma daima serbest bırakır ve pencere bunu cümleyle söyler (o rejimde PLANNED bir ara durak değildir, işaretsiz seçim karşılığı olmayan duruma düşürüyordu). Kapatılan sevkiyat aynı numarayla çıkmaz — Paketleme'den YENİ sevkiyat (eski irsaliye VOIDED). · bekçi: `scripts/test_shipment_undo_dispatch.ts §10 (önizleme confirmationEnabled boolean döner — istemci varsayılanı bundan kurar)` <sub>(CLAUDE.md:79, arşiv:469, arşiv:2026-09-07 saha turu)</sub>
-- **[PROFİL]** [PROFİL] 'Sevkiyatlar' (operasyon: tüm statüler, iptal) ile 'Sevkiyatlar (Muhasebe)' (salt-okunur DISPATCHED + fiş + dönem Excel + fatura izi) ayrı ekran ama izinle AYRILMADI (sevkiyatçının belgelere erişimi gerekir); muhasebe ekranı finance.enabled açıkken terfi eder (dış muhasebe köprüsü). <sub>(arşiv:53, CLAUDE.md:45)</sub>
+- **[PROFİL]** [PROFİL] 'Sevkiyatlar' (operasyon: tüm statüler, iptal) ile 'Sevk Edilenler' (eski ad 'Sevkiyatlar (Muhasebe)', KÜÇÜK-F 2026-10-26; salt-okunur DISPATCHED + fiş + dönem Excel + fatura izi) ayrı ekran ama izinle AYRILMADI (sevkiyatçının belgelere erişimi gerekir); muhasebe ekranı finance.enabled açıkken terfi eder (dış muhasebe köprüsü). <sub>(arşiv:53, CLAUDE.md:45)</sub>
 
 ## Tablet (mobil)
 

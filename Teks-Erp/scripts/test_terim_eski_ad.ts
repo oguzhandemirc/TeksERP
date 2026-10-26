@@ -8,6 +8,7 @@
 //   §3 ESKİ AD CIRCIRI — kullanıcıya görünen METİNDE (AST: dizge · şablon parçası · JSX metni) dosya başına:
 //      a "dokumaIsi": "Dokuma işi/İşi/işleri/işine…" (ardından "emri" gelmeyen "dokuma iş")
 //      b "isEmri"   : önünde "Terbiye"/"Dokuma" OLMAYAN "iş emri/İş Emri/iş emirleri…" (WorkOrder'ın çıplak adı)
+//      c "sevkMuhasebe": "Sevkiyatlar (Muhasebe)" — KÜÇÜK-F 2026-10-26 ile `TERIM_AD.sevkEdilenler` ("Sevk Edilenler")
 //      Hariç: yorum (AST'de yok) · import/export yolu · tanımlayıcı · test dosyası (*.test/*.spec, __tests__,
 //      test/) · .d.ts · .json (surum-notlari.json dâhil) · migration (src dışında). Taban `terim-eski-ad-baseline.json`
 //      (dosya → {dokumaIsi, isEmri}); ARTIŞ her yerde SERT · ÇÜRÜME `curumeKolu` (commit kapısında ⚠️, CI'da sert).
@@ -51,7 +52,8 @@ const TARAMA: readonly { kok: string; enAz: number }[] = [
   { kok: "patron/uygulama/app", enAz: 5 },
 ];
 
-type Tur = "dokumaIsi" | "isEmri";
+type Tur = "dokumaIsi" | "isEmri" | "sevkMuhasebe";
+const TURLER: readonly Tur[] = ["dokumaIsi", "isEmri", "sevkMuhasebe"];
 type Sayim = Partial<Record<Tur, number>>;
 type DosyaSayim = Record<string, Sayim>;
 
@@ -73,6 +75,8 @@ const DOKUMA_EKLER = new Set([
   "ler", "leri", "lerin", "lerini", "lerine", "lerinde", "lerinden", "lerinin", "leriyle", "lerdir",
 ]);
 const IS_EMRI = /(?<!\p{L})(?:iş|İş|İŞ|IŞ)\s+(?:emr|Emr|EMR|emir|Emir|EMİR|EMIR)/gu;
+/** Eski karo/katalog adı; parantezli ad kalktı (TERIM_AD.sevkEdilenler). Büyük/küçük biçimleri de ısırır. */
+const SEVK_MUHASEBE = /(?:sevkiyatlar|Sevkiyatlar|SEVKİYATLAR|SEVKIYATLAR)\s*\(\s*(?:muhasebe|Muhasebe|MUHASEBE)\s*\)/gu;
 const ONEK_YENI = /(?<!\p{L})(?:terbiye|Terbiye|TERBİYE|TERBIYE|dokuma|Dokuma|DOKUMA)\s+$/u;
 
 export function eskiAdSay(metin: string): Required<Sayim> {
@@ -89,7 +93,8 @@ export function eskiAdSay(metin: string): Required<Sayim> {
     if (ONEK_YENI.test(metin.slice(0, m.index ?? 0))) continue;
     isEmri++;
   }
-  return { dokumaIsi, isEmri };
+  const sevkMuhasebe = [...metin.matchAll(SEVK_MUHASEBE)].length;
+  return { dokumaIsi, isEmri, sevkMuhasebe };
 }
 
 /** Kaynak metindeki görünen metin parçaları (dizge · şablon parçası · JSX metni); yorum/tanımlayıcı/modül yolu hariç. */
@@ -111,15 +116,13 @@ export function metinParcalari(kaynak: string, dosyaAdi = "x.tsx"): string[] {
 }
 
 export function dosyaSay(kaynak: string, dosyaAdi: string): Sayim {
-  const s: Required<Sayim> = { dokumaIsi: 0, isEmri: 0 };
+  const s: Required<Sayim> = { dokumaIsi: 0, isEmri: 0, sevkMuhasebe: 0 };
   for (const p of metinParcalari(kaynak, dosyaAdi)) {
     const c = eskiAdSay(p);
-    s.dokumaIsi += c.dokumaIsi;
-    s.isEmri += c.isEmri;
+    for (const t of TURLER) s[t] += c[t];
   }
   const out: Sayim = {};
-  if (s.dokumaIsi) out.dokumaIsi = s.dokumaIsi;
-  if (s.isEmri) out.isEmri = s.isEmri;
+  for (const t of TURLER) if (s[t]) out[t] = s[t];
   return out;
 }
 
@@ -130,7 +133,7 @@ export function karsilastir(gercek: DosyaSayim, taban: DosyaSayim): { artis: str
   let curumeAdet = 0;
   const dosyalar = new Set([...Object.keys(gercek), ...Object.keys(taban)]);
   for (const d of [...dosyalar].sort()) {
-    for (const t of ["dokumaIsi", "isEmri"] as const) {
+    for (const t of TURLER) {
       const g = gercek[d]?.[t] ?? 0;
       const b = taban[d]?.[t] ?? 0;
       if (g > b) artis.push(`${d} ${t} ${b}→${g}`);
@@ -164,15 +167,16 @@ const ISIRMALI: [string, Tur][] = [
   ["Dokuma işi bulunamadı", "dokumaIsi"], ["DOKUMA İŞİ", "dokumaIsi"], ["dokuma işlerine aktar", "dokumaIsi"],
   ["Dokuma İşleri", "dokumaIsi"], ["bu dokuma işiyle", "dokumaIsi"],
   ["İş emri kapalı", "isEmri"], ["bu iş emrine bağlı", "isEmri"], ["İŞ EMİRLERİ", "isEmri"], ["Hızlı İş Emri", "isEmri"],
+  ["Sevkiyatlar (Muhasebe)", "sevkMuhasebe"], ["SEVKİYATLAR (MUHASEBE)", "sevkMuhasebe"], ["Operasyon → Sevkiyatlar ( Muhasebe )", "sevkMuhasebe"],
 ];
 const SUSMALI = [
   "Terbiye İş Emri", "terbiye iş emrine", "TERBİYE İŞ EMİRLERİ", "Dokuma İş Emri", "dokuma iş emirlerinden",
-  "DOKUMA İŞ EMRİ", "dokuma işlemi", "Dokuma işçiliği", "iş emniyeti", "kiş emri",
+  "DOKUMA İŞ EMRİ", "dokuma işlemi", "Dokuma işçiliği", "iş emniyeti", "kiş emri", "Sevk Edilenler", "Sevkiyatlar · Muhasebe",
 ];
 for (const [m, t] of ISIRMALI) check(`K eşleyici ısırır: "${m}" → ${t}`, eskiAdSay(m)[t] === 1);
 for (const m of SUSMALI) {
   const c = eskiAdSay(m);
-  check(`K eşleyici susar: "${m}"`, c.dokumaIsi === 0 && c.isEmri === 0);
+  check(`K eşleyici susar: "${m}"`, TURLER.every((t) => c[t] === 0));
 }
 const SENTETIK = [
   `import x from "./İş emri";`,
@@ -249,7 +253,8 @@ for (const { kok, enAz } of TARAMA) {
   }
 }
 const toplam = (d: DosyaSayim, t: Tur): number => Object.values(d).reduce((a, s) => a + (s[t] ?? 0), 0);
-console.log(`   bugün: dokumaIsi ${toplam(gercek, "dokumaIsi")} · isEmri ${toplam(gercek, "isEmri")} · ${Object.keys(gercek).length} dosya`);
+const ozet = (d: DosyaSayim): string => TURLER.map((t) => `${t} ${toplam(d, t)}`).join(" · ");
+console.log(`   bugün: ${ozet(gercek)} · ${Object.keys(gercek).length} dosya`);
 
 if (process.argv.includes("--yaz")) {
   const sirali: DosyaSayim = {};
@@ -265,12 +270,12 @@ if (!existsSync(TABAN_DOSYA)) {
   check("§3 taban dosyası var", false, "yok — `--yaz` ile üret");
 } else {
   const taban = (JSON.parse(readFileSync(TABAN_DOSYA, "utf8")) as { dosyalar: DosyaSayim }).dosyalar;
-  console.log(`   taban: dokumaIsi ${toplam(taban, "dokumaIsi")} · isEmri ${toplam(taban, "isEmri")} · ${Object.keys(taban).length} dosya`);
+  console.log(`   taban: ${ozet(taban)} · ${Object.keys(taban).length} dosya`);
   check("§3 körlük zemini: taban boş değil", Object.keys(taban).length > 0);
   const { artis, curume, curumeAdet } = karsilastir(gercek, taban);
   check("⭐ §3 ARTIŞ yok — görünen metne YENİ eski ad girmedi (TERIM'i kullan: src/constants/terim.ts · src/lib/terim.ts)",
     artis.length === 0, artis.length ? `${artis.length}: ${artis.slice(0, 6).join(" · ")}` : "");
-  const tabanToplam = toplam(taban, "dokumaIsi") + toplam(taban, "isEmri");
+  const tabanToplam = TURLER.reduce((a, t) => a + toplam(taban, t), 0);
   curumeKolu(check, ATLAMA.atla, "§3 taban ÇÜRÜMEMİŞ (gerçek < taban ise `--yaz` ile düşür, aynı commit'te)",
     tabanToplam - curumeAdet, tabanToplam);
   if (curume.length) console.log(`     ↓ ${curume.slice(0, 6).join(" · ")}${curume.length > 6 ? ` (+${curume.length - 6})` : ""}`);

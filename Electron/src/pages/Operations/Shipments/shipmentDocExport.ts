@@ -14,7 +14,7 @@ import type { DispatchReport } from "@/pages/Operations/AccountingDispatch/types
 
 // =============================================================================
 // Sevkiyat BELGE (irsaliye / sevk fişi) indirme — PDF veya Excel, tekli/toplu.
-// Sevk İrsaliyesi ve Sevkiyatlar (Muhasebe) ekranları paylaşır. Donmuş belge YALNIZ
+// Sevk İrsaliyesi ve Sevk Edilenler ekranları paylaşır. Donmuş belge YALNIZ
 // sevk edilmiş (DISPATCHED) sevkiyatta var → çağıran taraf yalnız onları hedef verir.
 //   • PDF: getHtml → tekli save-dialog (ad=sevk no) / toplu KLASÖRE (her biri sevk no).
 //   • Excel: PDF'i çizen AYNI kolon çözücüsünün tabloları (`/tables`) → tekli

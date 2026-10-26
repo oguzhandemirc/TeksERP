@@ -176,7 +176,7 @@ Kırmızı: 0. Tutarlılık bulguları §5 P1–P4.
 |---|---|---|
 | Muhasebe modülü | "Muhasebe" (yan menü, palet başlığı) · "Ön Muhasebe" (katalog, rapor kategorisi) · "Finans" (patron sekmesi) | **Ön Muhasebe** (`onMuhasebe`); patron sekmesi "Finans" kalabilir (kısa) ama ekran başlığı "Ön Muhasebe" |
 | Tartı/paket istasyonu | tablet `TartiPaket` = "Sevkiyat" · tablet `Sevkiyat` = "Sevk Çıkışı" · panel "Paketleme / Çuvallar" | tablet **"Tartı & Paket"** (`tartiPaket`); "Sevkiyat" adı yalnız sevk belgesi için |
-| Muhasebe sevk listesi | "Sevkiyatlar" ve "Sevkiyatlar (Muhasebe)" (iki Operasyon karosu) | ikincisi işlevle adlandırılır (ör. "Sevk Faturalama"); UX-2 ekranı okuyup karar yazar |
+| Muhasebe sevk listesi | "Sevkiyatlar" ve "Sevkiyatlar (Muhasebe)" (iki Operasyon karosu) | ikincisi **"Sevk Edilenler"** (`TERIM_AD.sevkEdilenler`, KÜÇÜK-F): ekran yalnız DISPATCHED sevkleri listeler; saha adı, backend servisi ve tablet ekranı zaten bu adı kullanıyordu |
 | Kurşun dağıtımı | panel "Kurşun Planlama" · tablet "Kurşun Dağıtım" | tek ad (`kursunDagitim`) |
 | Tezgah alarmı | panel "Tezgah Alarmları" · tablet "Uyarılar" | **"Tezgah Alarmları"** (`tezgahAlarmi`); tablet etiketi aynı |
 | Dokuma salonu / tezgah ekranı | panel "Tezgah Salonu" · tablet "Tezgah" | tablet **"Tezgah Ekranı"**; salon panelde kalır |
@@ -343,7 +343,7 @@ Bugün `Electron/eslint.config.mjs` `KATALOG_DOSYALARI` iki karo dosyasını `ma
 | MUAF | `/forbidden` | — | YOK | — | — | 06-04 sevkiyat |
 | OK | `/notifications` | Sistem › Bildirimler · Yan menü | var | — | — | 10-25 bildirim |
 | OK | `/operations` | Yan menü | var | — | — | 05-11  |
-| OK | `/operations/accounting-dispatch` | Operasyon › Sevkiyatlar (Muhasebe) | var | ["shipping:read","report:sales"] | — | 06-13 Electron Vitest + mobil jest |
+| OK | `/operations/accounting-dispatch` | Operasyon › Sevk Edilenler | var | ["shipping:read","report:sales"] | — | 06-13 Electron Vitest + mobil jest |
 | OK | `/operations/allocation-repair` | Operasyon › Siparişe Yazılamayanlar | var | shipping:repair-allocation | — | 09-06 sevkiyat |
 | OK | `/operations/e-irsaliye` | Operasyon › e-İrsaliye Kayıtları | var | eirsaliye:read | — | 10-25 e-irsaliye |
 | OK | `/operations/goods-receipts` | Operasyon › Mal Kabul | var | goods-receipt:read | ticaretEnabled | 08-13 depo |

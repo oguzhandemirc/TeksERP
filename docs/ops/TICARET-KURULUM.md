@@ -70,7 +70,7 @@ defteri tutması gerekmez — bu yüzden tek bayrağa indirilmedi.
 | Cari Hesaplar · Faturalar · Tahsilat/Ödeme · Kasa & Banka · **Kasa Hareketleri** · Çek/Senet · Fatura Kapama · Dönem Kapanışı · **Kurlar** | Muhasebe hub karoları | `finance:read` |
 | **Ön Muhasebe** rapor karosu (cari yaşlandırma · kasa & banka defteri · ekstre) | Raporlar (`/reports/finance`) | `report:finance` |
 | **İplik Kg-Stok** · **Alış Siparişleri** karoları | Operasyon (`/operations`) | `warehouse:read` / `purchase-order:read` |
-| Sevkiyat satırında **Faturala** düğmesi | Operasyon → Sevkiyatlar (Muhasebe) (`/operations/accounting-dispatch`) | `finance:write` |
+| Sevkiyat satırında **Faturala** düğmesi | Operasyon → Sevk Edilenler (`/operations/accounting-dispatch`) | `finance:write` |
 | **TCMB kur işi** (saatte bir) | Sunucu arka planı | — (bayrak kapalıyken dış HTTP isteği bile atılmaz) |
 
 > ⚠️ **Bayrak REJİM, izin KİŞİ kapısıdır.** Bayrak açık + izin yok → menüde satır **var**, ekran
@@ -287,7 +287,7 @@ sonuç yazılıdır; biri tutmuyorsa sağdaki bölüme dön.
 | 2 | **Mal kabul** fişi: tedarikçi + kumaş + 2 top + birim fiyat | Operasyon → Mal Kabul | Fiş oluştu, toplar **envanterde** ve **doğru depoda** | §1 (pricing), §2, §3 |
 | 3 | Envanterde topları gör | Operasyon → Envanter | 2 top, statü depo, kaynak = mal kabul | §3 |
 | 4 | **Sevkiyat** kur: müşteri + o toplar | Operasyon → Sevkiyatlar | Sevkiyat `DISPATCHED` (onay bayrağı açıksa `PLANNED` → Sevk Kapısı'ndan onayla) | §7 |
-| 5 | Sevkiyattan **Faturala** | Operasyon → Sevkiyatlar (Muhasebe) → satır → *Faturala* | Satış faturası **taslağı** açıldı, satırlar ve KDV oranı dolu | §1, §7 (`defaultVatRate`) |
+| 5 | Sevkiyattan **Faturala** | Operasyon → Sevk Edilenler → satır → *Faturala* | Satış faturası **taslağı** açıldı, satırlar ve KDV oranı dolu | §1, §7 (`defaultVatRate`) |
 | 6 | Faturayı **onayla** | Muhasebe → Faturalar | Statü `CONFIRMED`; **cari bakiye** arttı | §2 (`finance:invoice`) |
 | 7 | **Tahsilat** gir (kasa, kısmi tutar) | Muhasebe → Tahsilat/Ödeme | Kasa bakiyesi arttı; fatura **KISMİ** rozeti aldı | §4, §2 (`finance:payment`) |
 | 8 | **Cari ekstre** aç | Muhasebe → Cari Hesaplar → Ekstre | Devir + fatura + tahsilat **kronolojik**, yürüyen bakiye doğru | §6 |
