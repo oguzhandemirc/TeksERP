@@ -24,6 +24,7 @@ import { useDevereBeamWeavingLinkRequired, useEmanetEnabled } from "@/hooks/useP
 import { useAttemptToken } from "@/lib/attemptToken";
 import { weavingOrderService } from "@/pages/Operations/WeavingOrders/service";
 import { orderPrefillForBeam } from "@/pages/Operations/WeavingOrders/prefill";
+import { TERIM } from "@/lib/terim";
 
 type Form = UseFormReturn<WarpBeamPlanValues>;
 
@@ -121,7 +122,7 @@ function useOrderPrefill(): (form: Form, id: string) => void {
         if (fill.subcontractorId) form.setValue("subcontractorId", fill.subcontractorId, { shouldDirty: true, shouldValidate: true });
         if (fill.notes) form.setValue("notes", fill.notes, { shouldDirty: true });
       })
-      .catch(() => toast.error("İş emri bilgisi okunamadı — alanları elle doldurun."));
+      .catch(() => toast.error(`${TERIM.dokumaIsEmri.tekil} bilgisi okunamadı — alanları elle doldurun.`));
   };
 }
 
