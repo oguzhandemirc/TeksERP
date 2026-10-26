@@ -1,6 +1,7 @@
 // İplik ihtiyaç planı (MAL-7) — sunucu zarfının istemci tipi + SAF görünüm yardımcıları.
 // İstemci HESAP YAPMAZ: sayı, tablo ve "bilinmiyor" hücresi sunucudan (`yarn-need.sunum.ts`); burada yalnız etiket.
 import type { RaporSunumu } from "@/pages/Reports/_v2/sunum";
+import { MISSING_LABEL } from "../shared/labels";
 
 export const YARN_NEED_KEY = "maliyet/iplik-ihtiyaci";
 
@@ -25,10 +26,13 @@ export function sourceBadges(k: YarnNeedMeta["kaynaklar"]): Array<{ key: string;
   ];
 }
 
-/** Hesaba GİREMEYEN ürünlerin şerit metni; ikisi de boşsa null (şerit çizilmez). */
+/** Hesaba GİREMEYEN ürünlerin düğme metni (sayı sunucunun listesinden); ikisi de boşsa null (düğme çizilmez). */
 export function excludedText(m: Pick<YarnNeedMeta, "yapisiEksik" | "olculemeyen">): string | null {
-  const parts: string[] = [];
-  if (m.yapisiEksik.length > 0) parts.push(`${m.yapisiEksik.length} ürünün kumaş yapısı eksik`);
-  if (m.olculemeyen.length > 0) parts.push(`${m.olculemeyen.length} ürün metre dışı birimde`);
-  return parts.length ? `${parts.join(" · ")} — bu ürünler ihtiyaca girmedi.` : null;
+  const n = m.yapisiEksik.length + m.olculemeyen.length;
+  return n > 0 ? `İhtiyaca girmeyen ürünler (${n}) — listeyi gör` : null;
+}
+
+/** Sunucunun eksik kodu → Türkçe (maliyet ekranlarıyla TEK sözlük); tanınmayan kod ham kalır. */
+export function missingText(code: string): string {
+  return MISSING_LABEL[code] ?? code;
 }

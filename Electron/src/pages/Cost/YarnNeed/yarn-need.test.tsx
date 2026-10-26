@@ -4,7 +4,7 @@ import { buildExportSpec } from "@/pages/Reports/_v2/export-spec";
 import { ReportTable } from "@/pages/Reports/_v2/ReportTable";
 import type { RaporSunumu, TabloBlok } from "@/pages/Reports/_v2/sunum";
 import { costTiles } from "../tile-config";
-import { excludedText, sourceBadges } from "./yarn-need-model";
+import { excludedText, missingText, sourceBadges } from "./yarn-need-model";
 
 // Sunucu zarfının küçük kopyası: iplik modülü kapalı → stok hücresi sunucudan "bilinmiyor" gelir.
 const tablo: TabloBlok = {
@@ -41,7 +41,9 @@ describe("İplik İhtiyaç Planı (MAL-7)", () => {
     expect(b.find((x) => x.key === "acikAlis")!.on).toBe(true);
     expect(excludedText({ yapisiEksik: [], olculemeyen: [] })).toBeNull();
     expect(excludedText({ yapisiEksik: [{ urunId: "u", urunKodu: "K", urun: "A", kalemSayisi: 1, metre: "10", eksikler: ["atkı"] }], olculemeyen: [] }))
-      .toContain("1 ürünün kumaş yapısı eksik");
+      .toBe("İhtiyaca girmeyen ürünler (1) — listeyi gör");
+    expect(missingText("WARP_SPEC_MISSING")).toMatch(/^Çözgü kartı bağlı değil/);
+    expect(missingText("BILINMEYEN")).toBe("BILINMEYEN");
   });
 
   it("hub karosu sayfaya ve backend izniyle birebir", () => {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
@@ -12,7 +12,8 @@ import { ParamChips } from "@/pages/Reports/_v2/ParamChips";
 import { ReportBody } from "@/pages/Reports/_v2/ReportBody";
 import { ReportFailureState, ReportLoadingState } from "@/pages/Reports/_v2/ReportStates";
 import { failureOf, useReportV2 } from "@/pages/Reports/_v2/useReportV2";
-import { excludedText, sourceBadges, YARN_NEED_KEY, type YarnNeedMeta, type YarnNeedPresentation } from "./yarn-need-model";
+import { fmtDec } from "../shared/format";
+import { excludedText, missingText, sourceBadges, YARN_NEED_KEY, type YarnNeedMeta, type YarnNeedPresentation } from "./yarn-need-model";
 
 const ENTRY = REPORT_BY_KEY.get(YARN_NEED_KEY)!;
 
@@ -81,20 +82,18 @@ function MetaStrip({ meta }: { meta: YarnNeedMeta }) {
         ))}
       </ul>
       {excluded ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-2 text-left text-sm text-amber-900 hover:bg-amber-100 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200"
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>{excluded}</span>
-          <span className="ml-auto text-xs underline">Listeyi gör</span>
-        </button>
+        <div>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+            <AlertTriangle className="h-4 w-4 text-warning" />
+            {excluded}
+          </Button>
+        </div>
       ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[80vh] max-w-2xl overflow-auto">
           <DialogHeader>
             <DialogTitle>İhtiyaca girmeyen ürünler</DialogTitle>
+            <DialogDescription>Bu ürünlerin açık siparişleri iplik ihtiyacına katılmadı; eksik bilgi tamamlanınca rapor kendiliğinden sayar.</DialogDescription>
           </DialogHeader>
           {meta.yapisiEksik.length > 0 ? (
             <section className="space-y-1">
@@ -103,7 +102,10 @@ function MetaStrip({ meta }: { meta: YarnNeedMeta }) {
                 {meta.yapisiEksik.map((u) => (
                   <li key={u.urunId} className="rounded border px-3 py-1.5">
                     <span className="font-medium">{u.urunKodu} · {u.urun}</span>
-                    <span className="text-muted-foreground"> — {u.kalemSayisi} sipariş kalemi · {u.metre} m · eksik: {u.eksikler.join(", ")}</span>
+                    <span className="text-muted-foreground"> — {u.kalemSayisi} sipariş kalemi · {fmtDec(u.metre, 1)} m</span>
+                    <ul className="mt-0.5 list-disc pl-5 text-xs text-muted-foreground">
+                      {u.eksikler.map((c) => <li key={c}>{missingText(c)}</li>)}
+                    </ul>
                   </li>
                 ))}
               </ul>
@@ -116,7 +118,7 @@ function MetaStrip({ meta }: { meta: YarnNeedMeta }) {
                 {meta.olculemeyen.map((u) => (
                   <li key={`${u.urunId}-${u.birim}`} className="rounded border px-3 py-1.5">
                     <span className="font-medium">{u.urunKodu} · {u.urun}</span>
-                    <span className="text-muted-foreground"> — {u.kalemSayisi} kalem · {u.miktar} {u.birim}</span>
+                    <span className="text-muted-foreground"> — {u.kalemSayisi} kalem · {fmtDec(u.miktar, 1)} {u.birim}</span>
                   </li>
                 ))}
               </ul>
