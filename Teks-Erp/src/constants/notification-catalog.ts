@@ -118,6 +118,24 @@ export const NOTIFICATION_CATALOG = {
     tahminiHaftalik: 3, saklama: SAKLAMA,
   },
 
+  "cihaz.halka-kaybi": {
+    kod: "cihaz.halka-kaybi", ad: "Cihaz anahtar halkası kayıp",
+    sinif: "BILDIRIM", altTur: "KOSUL", grup: "Sistem",
+    izinler: [["admin:settings"]],
+    modul: "cekirdek:sistem-kimlik-belge",
+    // Konu kurulumun TEK halkasıdır: kayıp sürdükçe tek kayıt; emanet geri konunca kapanır.
+    tekilKalibi: "halka",
+    pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
+    kanallar: KANAL_MASAUSTU,
+    varsayilanKanallar: ["UYGULAMA"],
+    baslik: "Cihaz anahtarı kayıp: {cihazSayisi} cihaz doğrulanamıyor",
+    govde: "Anahtar halkası yeniden üretildi. Yedekten anahtarı geri yükleyin ya da cihazları yeniden bağlayın.",
+    cozuldu: "Cihaz anahtar halkası sorunu giderildi",
+    panelEkran: "access/devices", panelYol: "/access/devices?kanit=1",
+    payloadAlanlari: ["cihazSayisi"],
+    tahminiHaftalik: 0.01, saklama: SAKLAMA,
+  },
+
   // ── Sipariş ───────────────────────────────────────────────────────────────
   "siparis.patron-siparisi": {
     kod: "siparis.patron-siparisi", ad: "Yönetim bulutundan sipariş geldi",

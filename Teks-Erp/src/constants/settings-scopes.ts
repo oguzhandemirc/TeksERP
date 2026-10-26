@@ -58,6 +58,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "shippingSackSeqPrefixLive",
       "shippingSackSeqStart",
       "shippingSackSeqPrefix",
+      "shippingReturnFootnote",
       "shippingWeighRequiredEnabled",
       "shippingManualWeightRestrictedEnabled",
       "sackDumpNameMode",

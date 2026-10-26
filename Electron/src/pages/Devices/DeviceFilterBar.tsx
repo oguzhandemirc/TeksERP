@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-export type DeviceStatusFilter = "all" | "pending" | "approved" | "inactive";
+export type DeviceStatusFilter = "all" | "pending" | "approved" | "inactive" | "proof-lost";
 export type DeviceKindFilter = "all" | "TABLET" | "PHONE" | "DESKTOP";
 
 interface Props {
@@ -17,6 +17,8 @@ interface Props {
   onKind: (v: DeviceKindFilter) => void;
   pendingCount: number;
   onShowPending: () => void;
+  /** Kanıtı doğrulanamayan cihaz sayısı (D5); 0 → süzgeç seçeneği ve kısayol gizli. */
+  proofLostCount?: number;
   resultCount: number;
   totalCount: number;
   anyFilterActive: boolean;
@@ -33,6 +35,7 @@ export function DeviceFilterBar({
   onKind,
   pendingCount,
   onShowPending,
+  proofLostCount = 0,
   resultCount,
   totalCount,
   anyFilterActive,
@@ -59,6 +62,7 @@ export function DeviceFilterBar({
           <SelectItem value="pending">Onay bekliyor</SelectItem>
           <SelectItem value="approved">Onaylı</SelectItem>
           <SelectItem value="inactive">Pasif</SelectItem>
+          {(proofLostCount > 0 || status === "proof-lost") && <SelectItem value="proof-lost">Anahtar kaybı</SelectItem>}
         </SelectContent>
       </Select>
 
@@ -75,6 +79,7 @@ export function DeviceFilterBar({
       </Select>
 
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+        {status !== "proof-lost" && <ProofLostShortcut count={proofLostCount} onClick={() => onStatus("proof-lost")} />}
         {pendingCount > 0 && (
           <button
             type="button"
@@ -96,5 +101,19 @@ export function DeviceFilterBar({
         )}
       </div>
     </div>
+  );
+}
+
+/** "N anahtar kaybı" kısayolu (D5) — süzgeci açar; sayı 0 iken görünmez. */
+function ProofLostShortcut({ count, onClick }: { count: number; onClick: () => void }) {
+  if (count <= 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 rounded-md border border-red-400 bg-red-50 px-2 py-1 font-medium text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300"
+    >
+      {count} anahtar kaybı
+    </button>
   );
 }

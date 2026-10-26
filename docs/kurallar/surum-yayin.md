@@ -44,6 +44,8 @@
 
 ### Yasaklar
 
+- **[ÇEKİRDEK]** Android paket adını ve mührünü (Play App Signing) değiştirme; üretim tabletine başka mühürlü APK kurma — mühür değişince Android uygulama verisini siler, cihaz kimliği ve eşleşme düşer. <sub>(arşiv 2026-10-26 Cihaz anahtar halkası kaybı — D5)</sub>
+- **[ÇEKİRDEK]** Yayınlanan `versionCode`u asla düşürme; `mobil/scripts/build-apk.mjs` önceki yayına karşı ölçer. <sub>(arşiv 2026-10-26 Cihaz anahtar halkası kaybı — D5)</sub>
 - **[ÇEKİRDEK]** OTA turunda `android.versionCode`a DOKUNULMAZ (tablet onu kurulu APK sürümü sanar, gerçek APK'yı bir daha teklif etmez). `versionCode` YALNIZ Play'e yüklenecek AAB için artar (eski kanalda yayınlanacak APK için); `app.json` ↔ yayındaki künye ayrışırsa OTA durur → 'native değişti mi?': hayırsa GERİ AL, evetse ÖNCE yeni native sürüm (ortak tablette Play). · bekçi: `yayinla-ota.mjs versionCode kapısı` <sub>(CLAUDE.md:182)</sub>
 
 ### Reçeteler
@@ -72,6 +74,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** Panel `productName`/`appId`ini değiştirme; değişmek zorundaysa eski `userData`dan `config.deviceId`yi taşıyarak yap — taşımasız değişim paneli yeni cihaz olarak doğurur. <sub>(arşiv 2026-10-26 Cihaz anahtar halkası kaybı — D5)</sub>
 - **[ÇEKİRDEK]** Panel yayın adresi TEK KAYNAK kanal kaydıdır (`deploy/kanallar.json` `yayin.panelFeed`): aynı değer electron-builder'a `-c.publish.url` (→ `app-update.yml`), koda `shared/channel.ts` (→ updater `setFeedURL`, çalışma anında KULLANILAN adres) ile gider ve paket ikisinden de okunarak doğrulanır; `package.json > build.publish` dinlenme tabanıdır ve silinmez (blok kalkarsa electron-builder `latest.yml` HİÇ üretmez). `artifactName` ASCII kalır, `${productName}` YASAK (ad `latest.yml`de URL'dir; `Ş`+boşluk 404 üretir). · bekçi: `Electron/src/test/update-feed-url.test.ts (13 it) + deploy/electron-paketle.sh "Tutarlılık bekçisi" adımı (derlemeden ÖNCE aynı vitest dosyasını TEKSERP_KANAL=<kod> ile koşar, kırmızıda durur) + scripts/kanal-kapisi.mjs panel-yayin (derlemeden SONRA app-update.yml + asar ana süreç adresi)` <sub>(CLAUDE.md:88, CLAUDE.md:78)</sub>
 
 - **[ÇEKİRDEK]** Panel güncellemeyi YALNIZ imzalı künyeyle kurar: `latest.yml`deki `tekserp: {v: 2, bildirim, iptal?}` bloğu (`typ: tekserp-panel`; imzacı `ist-*`, yükte kök imzalı ISTEMCI sertifikası, kök gömülü çapada; v:1 künye `BELGE_SURUM` ile reddedilir) indirmeden ÖNCE doğrulanır (kök → sertifika → imza · imza anı sertifika penceresinde + 180 gün tolerans · dağıtım iptali: yerel `userData/lisans-iptal.jws` + indirme belirteci `iptal` + blok, en yüksek sıra · kanal = panelin kanalı · sürüm = latest.yml · tek dosya aynı ad/boy/sha512 · kurulu sürümden yeni), inen dosya ve kurulumdan hemen önce aynı dosya yeniden ölçülür; doğrulanamayan güncelleme indirilmez/kurulmaz, TR uyarı verilir, panel eski sürümde çalışır. `autoDownload=false` iç ayrıntıdır — görünen akış (iniyor → geri sayım → kur) değişmez. Künye kuralı TEK kaynak `Electron/electron/guncelleme/*.mjs` (bağımlılıksız; panel, yayın kapısı ve imza aracı aynı dosya), JWS protokol aynası. · bekçi: `Electron/src/test/panel-kunye.test.ts · updater-imza-akisi.test.ts · download-token.test.ts · update-imza-arayuz.test.tsx · Teks-Erp/scripts/test_panel_imza.ts (§0 kâhin)` <sub>(arşiv:2026-10-01 panel imzalı künye)</sub>

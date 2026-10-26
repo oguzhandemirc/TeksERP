@@ -4,6 +4,7 @@
 // Sistem renderer'ı (`document-render/fason-receipt.html.ts`) DEĞİŞMEZ ve burada YALNIZ
 // OKUNUR. Fasoncu kimliği `karsi_taraf`tır. Belge fasoncuyla mutabakat tutanağıdır (dış
 // taraf) ve renderer'da opt-in iç kolon YOK → `hedef: musteri`, iç alan beyanı yok.
+// Metre kolonu VERİDEN doğar: `rolls[].qty` taşımayan (eski) snapshot'ta kolon ayardan da düşer.
 // =============================================================================
 
 import { TERIM } from "../../../constants/terim";
@@ -70,6 +71,8 @@ const ROOT_FIELDS: FieldDef[] = [
   { yol: "karsi_taraf.ad", etiket: "Fasoncu adı", tur: "metin", sinif: "musteri", ornek: "Yıldız Boyahane" },
   { yol: "karsi_taraf.kod", etiket: "Fasoncu kodu", tur: "metin", sinif: "musteri", ornek: "FB-03" },
   { yol: "toplamlar.top_adedi", etiket: "Kabul edilen top", tur: "sayi", ondalik: 0, sinif: "musteri", ornek: 2 },
+  { yol: "toplamlar.metre", etiket: "Kabul edilen metre (defter)", tur: "sayi", ondalik: 2, birim: "m", sinif: "musteri", ornek: 320 },
+  { yol: "toplamlar.donen_metre", etiket: "Dönen metre (ölçülen)", tur: "sayi", ondalik: 2, birim: "m", sinif: "musteri", ornek: 304.5 },
   ...PRINT_FIELDS,
 ];
 
@@ -82,6 +85,7 @@ const ROLL_TABLE: TableDef = {
     { yol: "urun", etiket: "Ürün", tur: "metin", sinif: "musteri", ornek: "Pamuklu Astar", hiza: "l", kaynakKolon: "itemColor" },
     { yol: "renk", etiket: "Renk (ürünle aynı hücrede)", tur: "metin", sinif: "musteri", ornek: "Bej", hiza: "l" },
     { yol: "en", etiket: "En", tur: "sayi", ondalik: 0, birim: "cm", sinif: "musteri", ornek: 150, hiza: "c", kaynakKolon: "width" },
+    { yol: "metre", etiket: "Kabul metre (defter)", tur: "sayi", ondalik: 2, birim: "m", sinif: "musteri", ornek: 160, hiza: "r", kaynakKolon: "qty", toplam: "metre" },
   ],
 };
 
@@ -107,6 +111,7 @@ const ROLL_SPECS: DocColSpec<never>[] = [
   { key: "barcode", label: "BARKOD", align: "l", cellClass: "mono", kind: TEXT, value: () => null },
   { key: "itemColor", label: "ÜRÜN / RENK", align: "l", kind: TEXT, value: () => null },
   { key: "width", label: "EN", align: "c", width: "70px", kind: { t: "int", suffix: " cm" }, value: () => null },
+  { key: "qty", label: "METRE", align: "r", width: "80px", kind: { t: "num", dec: 2 }, value: () => null, foot: { value: null } },
 ];
 
 export function normalizeReceiptConfig(raw: unknown): ReceiptConfig {
@@ -134,6 +139,10 @@ function buildContext(
   const rows = (t: TableDef, values: Record<string, ContextValue | undefined>[]): ContextObject[] =>
     values.map((r) => fillFields(t.kolonlar, r, optIn));
   const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  // Renderer'ın aynası: `qty` anahtarı hiçbir satırda yoksa (eski snapshot) metre kolonu yok.
+  const rollRows = asRows(doc.rolls);
+  const hasQty = rollRows.some((r) => r.qty !== undefined);
+  const kolonlar = hasQty ? config.kolonlar : { ...config.kolonlar, toplar: (config.kolonlar.toplar ?? []).filter((k) => k.kaynak !== "qty") };
 
   return {
     belge: root("belge", {
@@ -154,19 +163,25 @@ function buildContext(
       antet_ek: rows(LETTERHEAD_EXTRA_TABLE, letterheadExtraRows(snapshot)),
       toplar: rows(
         ROLL_TABLE,
-        asRows(doc.rolls).map((r) => ({
+        rollRows.map((r) => ({
           sira: asNumber(r.sequence),
           barkod: asText(r.barcode),
           urun: asText(r.itemName),
           renk: asText(r.colorName),
           en: asNumber(r.width),
+          metre: asNumber(r.qty),
         })),
       ),
       parti: rows(TABLE_DEFS[2]!, strings(doc.batchNumbers).map((no) => ({ no }))),
       ozellik: rows(TABLE_DEFS[3]!, strings(doc.appliedProperties).map((ad) => ({ ad }))),
     },
-    toplamlar: root("toplamlar", { top_adedi: asNumber(asObject(doc.totals).rollCount) }),
-    ayar: plainJson(config) as unknown as ContextObject,
+    toplamlar: root("toplamlar", {
+      top_adedi: asNumber(asObject(doc.totals).rollCount),
+      metre: asNumber(asObject(doc.totals).qty),
+      // Ölçülen (fiziksel) dönen metre — defter `metre`den ayrı; eski snapshot'ta yok → nil.
+      donen_metre: asNumber(asObject(doc.totals).returnedQty),
+    }),
+    ayar: plainJson({ ...config, kolonlar }) as unknown as ContextObject,
     ic_acik: {},
     baski: root("baski", printRoot(extras?.baski, config.stamps.copyLabel)),
   };
@@ -174,18 +189,20 @@ function buildContext(
 
 function scenarios(): Scenario<never>[] {
   const base = () => sampleDoc("SUBCONTRACTOR_RECEIPT");
-  const roll = (i: number, width: number | null = 150): Row => ({
-    sequence: i, barcode: `TR-260607-R${String(300 + i).padStart(4, "0")}`, itemName: "Pamuklu Astar", colorName: "Bej", width,
+  const roll = (i: number, width: number | null = 150, qty: number | null = 100 + i): Row => ({
+    sequence: i, barcode: `TR-260607-R${String(300 + i).padStart(4, "0")}`, itemName: "Pamuklu Astar", colorName: "Bej", width, qty,
   });
+  const qtySum = (rs: Row[]): number => Math.round(rs.reduce((s, r) => s + (typeof r.qty === "number" ? r.qty : 0), 0) * 1000) / 1000;
 
   const single = base();
   single.rolls = [roll(1)];
-  single.totals = { rollCount: 1 };
+  // Çekmeli dönüş: defter 101, ölçülen 98,5.
+  single.totals = { rollCount: 1, qty: qtySum(single.rolls as Row[]), returnedQty: 98.5 };
   single.batchNumbers = [sampleSeriesCode("batchDaily", 1)];
 
   const multi = base();
-  multi.rolls = Array.from({ length: 60 }, (_, i) => roll(i + 1, i % 3 === 0 ? 149.6 : 150));
-  multi.totals = { rollCount: 60 };
+  multi.rolls = Array.from({ length: 60 }, (_, i) => roll(i + 1, i % 3 === 0 ? 149.6 : 150, 80 + (i % 7) * 12.25));
+  multi.totals = { rollCount: 60, qty: qtySum(multi.rolls as Row[]) };
 
   // Eski donmuş makbuzun şekli: parti yok, opsiyonel alanlar boş, top eni/barkodu yok.
   const empty: Row = {
@@ -200,8 +217,9 @@ function scenarios(): Scenario<never>[] {
   long.subcontractor = { name: longText("Çok Uzun Unvanlı Boyahane Apre Terbiye Sanayi"), code: "FB-<03>" };
   long.notes = longText("Renk tutmuş, apre uygulanmış; iki top kenar kırık");
   long.appliedProperties = ["Yanmazlık Apresi", longText("Su İtici", 80)];
-  long.rolls = [...(long.rolls as Row[]), { ...roll(3, 999), itemName: longText("Süet Kumaş", 120) }, roll(4, 999.4)];
-  long.totals = { rollCount: 4 };
+  // Dördüncü satır eski defter satırı (receivedQty NULL) → hücre "—", toplam yalnız bilinenler.
+  long.rolls = [...(long.rolls as Row[]), { ...roll(3, 999, 1234.567), itemName: longText("Süet Kumaş", 120) }, roll(4, 999.4, null)];
+  long.totals = { rollCount: 4, qty: qtySum(long.rolls as Row[]) };
 
   return [
     { ad: "ornek", aciklama: "Panel önizlemesinin örnek makbuzu", snapshot: sampleEnvelope(base()) },
@@ -226,7 +244,7 @@ function scenarios(): Scenario<never>[] {
 export const subcontractorReceiptContract: DocumentContract<ReceiptConfig, never> = {
   docType: "SUBCONTRACTOR_RECEIPT",
   hedef: "musteri",
-  contractVersion: 1,
+  contractVersion: 3, // 2: toplar[].metre + toplamlar.metre (kabul defteri metresi) · 3: toplamlar.donen_metre (ölçülen)
   kokler: ROOT_FIELDS,
   tablolar: TABLE_DEFS,
   ayarSemasi: baseConfigSchema(Object.keys(RECEIPT_SECTIONS), [["rollTable", "toplar"]]),
