@@ -26,6 +26,7 @@ export function ArchiveSearchPage() {
       systemLogService.listArchive({
         ...filters,
         category: "DOMAIN", // Arşiv Tarama da Activity Page'in arşiv görünümü
+        reddedilen: undefined, // arşivde iz (trace) yok — süzgeç yalnız Etkinlik'te
         cursor: pageParam,
         limit: PAGE_SIZE,
       }),

@@ -24,6 +24,8 @@ export interface ActivityFilterState {
   action?: SystemLogDomainAction;
   dateFrom?: string;
   dateTo?: string;
+  /** "Reddedilenler" çipi — süzme SUNUCUDA (`reddedilen=1`). */
+  reddedilen?: boolean;
 }
 
 export type FeedItem = SystemLogIslem | SystemLogListItem;
@@ -33,11 +35,15 @@ export const MIN_QUERY_LENGTH = 2;
 
 export function buildFeedParams(f: ActivityFilterState, cursor: string | undefined, limit: number): SystemLogListParams {
   const q = f.q?.trim();
+  const islem = (f.gorunum ?? "islem") === "islem";
+  const aranan = q && q.length >= MIN_QUERY_LENGTH ? q : undefined;
   return {
     category: "DOMAIN", // AUTH/SYSTEM olayları Sistem Kayıtları sayfasında
-    gorunum: (f.gorunum ?? "islem") === "islem" ? "islem" : undefined,
+    gorunum: islem ? "islem" : undefined,
+    // Süzgeç yalnız İşlemler görünümünde ve arama yokken anlamlıdır (sunucu sözleşmesi).
+    reddedilen: f.reddedilen && islem && !aranan ? 1 : undefined,
     gun: f.gun,
-    q: q && q.length >= MIN_QUERY_LENGTH ? q : undefined,
+    q: aranan,
     userId: f.userId,
     tableName: f.tableName,
     action: f.action,
@@ -87,3 +93,10 @@ export const ACTIVITY_EXPORT_COLUMNS: ExportColumn<FeedItem>[] = [
   { label: "Durum", value: (i) => (isIslemItem(i) && i.reddedildi ? "Reddedildi" : "Tamamlandı") },
   { label: "İşlem no", value: (i) => i.requestId ?? "" },
 ];
+
+/** Boş akış metni: sunucu uyarısı → arama → Reddedilenler süzgeci → varsayılan. */
+export function emptyFeedText(f: ActivityFilterState, warnings: readonly string[]): string | undefined {
+  if (warnings[0]) return warnings[0];
+  if (f.q) return "Bu numarada kayıt bulunamadı.";
+  return f.reddedilen ? "Bu aralıkta reddedilen istek yok." : undefined;
+}

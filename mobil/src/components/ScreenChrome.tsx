@@ -1,3 +1,7 @@
+import NotificationBellButton from './bildirim/NotificationBellButton';
+import NotificationStrip from './bildirim/NotificationStrip';
+import { isSessionScreen } from '../constants/stationScreens';
+import type { MobileScreenKey } from '../types/permissions';
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Appbar, Text, TouchableRipple, Icon, Divider } from 'react-native-paper';
@@ -43,6 +47,8 @@ interface Props {
    *  tuş orada "diğer aksiyonlar" arasında kaybolur — mod, bulunulan yerin
    *  yanında okunmalı (2026-08-17 saha geri bildirimi, KK1 yarı mamul). */
   titleRowExtras?: React.ReactNode;
+  /** İçeriğin üstündeki şerit yuvası (tezgah alarmı). İstasyon ekranında bildirim şeridi bunun ALTINA gelir. */
+  topStrip?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -56,6 +62,7 @@ export default function ScreenChrome({
   secondRowSpread,
   hidePlaceChip,
   titleRowExtras,
+  topStrip,
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -157,6 +164,9 @@ export default function ScreenChrome({
 
         {/* Ekran-spesifik tetikleyici — profilden önce, profil en sağda kalsın */}
         {headerExtras}
+
+        {/* Bildirim zili — bayrak kapalı / eski backend → null (bugünkü başlık bayt-eşit). */}
+        <NotificationBellButton />
 
         {/* Konum tetiğin GERÇEK ölçümünden gelir (measureInWindow) — eski
             `anchorPosition`/`marginTop` telafisi artık gerekmiyor. */}
@@ -278,6 +288,8 @@ export default function ScreenChrome({
       {/* paddingBottom: Android nav bar (gesture/buton) + dock içeriğin üstüne
           binmesin diye alt safe-area inset'i bırakılır. Tüm ScreenChrome
           ekranları (sticky footer'lar dahil) bundan faydalanır. */}
+      {topStrip}
+      {isSessionScreen(route.name as MobileScreenKey) && <NotificationStrip />}
       <View style={[styles.content, { paddingBottom: insets.bottom }]}>{children}</View>
 
       {/* Makine seçme modalı (profil menüsü → Makine değiştir). Menü kapansa da

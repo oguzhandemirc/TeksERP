@@ -7,6 +7,7 @@ import { fireConfetti } from "@/lib/confetti";
 import { Lock, Pencil, Ban, Factory, Undo2, Info, AlertTriangle } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { FollowButton } from "@/components/bildirim/FollowButton";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
@@ -190,6 +191,7 @@ export function OrderDetailSheet({
                   createdAt={order.createdAt}
                   updatedAt={order.updatedAt}
                 />
+                <FollowButton type="siparis" id={order.id} className="ml-auto mr-8 h-7 gap-1 text-xs" />
               </>
             )}
           </SheetTitle>

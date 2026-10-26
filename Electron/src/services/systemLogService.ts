@@ -14,7 +14,11 @@ import type {
 const BASE = "/api/admin/system-logs";
 
 /** Liste yanıtı: `q` aramasında sunucu `warnings` döndürebilir. */
-export type SystemLogListResponse<T> = CursorPaginatedResponse<T> & { warnings?: string[] };
+export type SystemLogListResponse<T> = CursorPaginatedResponse<T> & {
+  warnings?: string[];
+  /** B4: sunucu "Reddedilenler" süzgecini tanıyor (yoksa eski backend → çip gizli). */
+  reddedilenSuzgeci?: boolean;
+};
 
 export const systemLogService = {
   list: (params: SystemLogListParams) =>
