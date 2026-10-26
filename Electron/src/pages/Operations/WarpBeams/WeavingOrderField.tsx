@@ -40,6 +40,23 @@ export function WeavingOrderPicker({ value, onChange, required = false, error }:
   );
 }
 
-export function WeavingOrderField({ control, error, required }: { control: Control<WarpBeamPlanValues>; error?: FieldError; required?: boolean }) {
-  return <Controller control={control} name="weavingOrderId" render={({ field }) => <WeavingOrderPicker value={field.value ?? ""} onChange={field.onChange} required={required} error={error} />} />;
+/** `onPicked`: kullanıcı bir iş SEÇİNCE (temizleme hariç) tek sefer — ön doldurma kancası (levent formu). */
+export function WeavingOrderField({ control, error, required, onPicked }: { control: Control<WarpBeamPlanValues>; error?: FieldError; required?: boolean; onPicked?: (id: string) => void }) {
+  return (
+    <Controller
+      control={control}
+      name="weavingOrderId"
+      render={({ field }) => (
+        <WeavingOrderPicker
+          value={field.value ?? ""}
+          onChange={(id) => {
+            field.onChange(id);
+            if (id && onPicked) onPicked(id);
+          }}
+          required={required}
+          error={error}
+        />
+      )}
+    />
+  );
 }

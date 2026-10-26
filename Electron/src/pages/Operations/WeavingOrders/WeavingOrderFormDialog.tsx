@@ -7,6 +7,7 @@
 // sayar — o yüzden sayfa diyaloğu KOŞULLU mount eder (her açılış yeni deneme).
 // Alan grupları `WeavingOrderFormFields.tsx`te.
 // =============================================================================
+import { useState } from "react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { useOperationsVisibilityContext } from "../useOperationsVisibility";
 import { useDokumaOrderLineLinkRequired } from "@/hooks/usePricingEnabled";
@@ -14,6 +15,7 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { weavingOrderFormDefaults, weavingOrderFormSchema, type WeavingOrderFormValues } from "./schema";
 import { FabricFields, PartyFields, PlanFields } from "./WeavingOrderFormFields";
 import { WeavingOrderLinesSection } from "./WeavingOrderLinesSection";
+import { BeamPrefillField, type PlannedMSuggestion } from "./BeamPrefillField";
 import { isoToDay, type WeavingOrder } from "./types";
 import { TERIM } from "@/lib/terim";
 
@@ -46,6 +48,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
   const attempt = useAttemptToken();
   const { devereEnabled } = useOperationsVisibilityContext();
   const orderLineRequired = useDokumaOrderLineLinkRequired();
+  const [suggestion, setSuggestion] = useState<PlannedMSuggestion | null>(null);
   return (
     <EntityFormDialog<WeavingOrderFormValues>
       open={open}
@@ -59,10 +62,11 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
     >
       {(form) => (
         <>
+          {devereEnabled && <BeamPrefillField form={form} onSuggestion={setSuggestion} />}
           <FabricFields form={form} devereEnabled={devereEnabled} />
           <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} required={orderLineRequired} />
           <PartyFields form={form} />
-          <PlanFields form={form} />
+          <PlanFields form={form} suggestion={suggestion} />
         </>
       )}
     </EntityFormDialog>

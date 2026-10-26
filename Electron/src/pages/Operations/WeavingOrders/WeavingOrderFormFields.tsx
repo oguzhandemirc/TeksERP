@@ -26,6 +26,7 @@ import type { WarpSpec } from "@/pages/WarpSpecs/types";
 import type { WeavingOrderFormValues } from "./schema";
 import { WEAVING_KIND_LABEL } from "./types";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { PlannedMHint, type PlannedMSuggestion } from "./BeamPrefillField";
 
 type Form = UseFormReturn<WeavingOrderFormValues>;
 
@@ -166,8 +167,8 @@ export function PartyFields({ form }: { form: Form }) {
   );
 }
 
-/** Hedef metre · plan tarihleri · not. */
-export function PlanFields({ form }: { form: Form }) {
+/** Hedef metre · plan tarihleri · not. Levent önerisi yalnız İPUCU: alanı kullanıcı "Uygula" ile doldurur. */
+export function PlanFields({ form, suggestion = null }: { form: Form; suggestion?: PlannedMSuggestion | null }) {
   const err = form.formState.errors;
   return (
     <>
@@ -178,6 +179,7 @@ export function PlanFields({ form }: { form: Form }) {
         hint="Boş = açık uçlu iş (levent bitene kadar). Hedefe ulaşmak işi KAPATMAZ; kapanış açık bir karardır."
       >
         <Input id="plannedM" {...form.register("plannedM")} inputMode="decimal" placeholder="1200" />
+        <PlannedMHint suggestion={suggestion} onApply={(m) => form.setValue("plannedM", String(m), { shouldDirty: true, shouldValidate: true })} />
       </FormField>
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Planlanan başlangıç" htmlFor="plannedStartDate" error={err.plannedStartDate}>

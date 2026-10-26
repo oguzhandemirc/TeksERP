@@ -2,6 +2,8 @@
 // LEVENT PLANLA / PLANI DÜZENLE — köken AKSİYON ANINDA seçilir (varsayılan içeride, KİLİTLİ DEĞİL)
 // =============================================================================
 import { Controller, type UseFormReturn } from "react-hook-form";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Layers, Handshake, Building2 } from "lucide-react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
@@ -20,6 +22,8 @@ import { warpBeamPlanDefaults, warpBeamPlanSchema, type WarpBeamPlanValues } fro
 import { WARP_BEAM_ORIGIN_LABEL, type WarpBeam, type WarpBeamOrigin } from "./types";
 import { useDevereBeamWeavingLinkRequired, useEmanetEnabled } from "@/hooks/usePricingEnabled";
 import { useAttemptToken } from "@/lib/attemptToken";
+import { weavingOrderService } from "@/pages/Operations/WeavingOrders/service";
+import { orderPrefillForBeam } from "@/pages/Operations/WeavingOrders/prefill";
 
 type Form = UseFormReturn<WarpBeamPlanValues>;
 
@@ -103,6 +107,24 @@ function OriginFields({ form, editing }: { form: Form; editing: boolean }) {
   );
 }
 
+/** İş emri seçilince (yalnız YENİ levent): çözgü kartı · fasoncu · not o işten — tek sefer, alanlar düzenlenebilir; plan metresi DOLMAZ (çözgü ≠ kumaş metresi). */
+function useOrderPrefill(): (form: Form, id: string) => void {
+  const qc = useQueryClient();
+  return (form, id) => {
+    void qc
+      .fetchQuery({ queryKey: ["weaving-orders", "prefill", id], queryFn: () => weavingOrderService.getById(id) })
+      .then((r) => {
+        const v = form.getValues();
+        const fill = orderPrefillForBeam(r.data, { originKind: v.originKind, originTouched: form.getFieldState("originKind").isDirty, supplierId: v.supplierId ?? "", notes: v.notes ?? "" });
+        if (fill.warpSpecId) form.setValue("warpSpecId", fill.warpSpecId, { shouldDirty: true, shouldValidate: true });
+        if (fill.originKind) form.setValue("originKind", fill.originKind, { shouldDirty: false });
+        if (fill.subcontractorId) form.setValue("subcontractorId", fill.subcontractorId, { shouldDirty: true, shouldValidate: true });
+        if (fill.notes) form.setValue("notes", fill.notes, { shouldDirty: true });
+      })
+      .catch(() => toast.error("İş emri bilgisi okunamadı — alanları elle doldurun."));
+  };
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -115,6 +137,7 @@ interface Props {
 export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   const attempt = useAttemptToken();
   const weavingLinkRequired = useDevereBeamWeavingLinkRequired();
+  const prefill = useOrderPrefill();
   return (
     <EntityFormDialog<WarpBeamPlanValues>
       open={open}
@@ -140,7 +163,7 @@ export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSu
           <FormField label="Plan metresi" error={form.formState.errors.plannedLengthM} required>
             <Input type="number" min={1} step="0.001" {...form.register("plannedLengthM")} />
           </FormField>
-          <WeavingOrderField control={form.control} error={form.formState.errors.weavingOrderId} required={weavingLinkRequired} />
+          <WeavingOrderField control={form.control} error={form.formState.errors.weavingOrderId} required={weavingLinkRequired} onPicked={initial ? undefined : (id) => prefill(form, id)} />
           <OriginFields form={form} editing={Boolean(initial)} />
           <FormField label="Metal gövde no" error={form.formState.errors.physicalBeamNo} hint="Numarasız fabrikada boş kalır; aynı gövdede iki canlı çözgü olmaz.">
             <Input {...form.register("physicalBeamNo")} />
