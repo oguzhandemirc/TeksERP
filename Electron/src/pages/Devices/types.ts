@@ -185,3 +185,33 @@ export interface MergeResult {
   merged: Array<{ id: string; name: string; deviceId: string; movedLinks: number; droppedDuplicateLinks: number; movedPeripherals: number }>;
   mergedAt: string;
 }
+
+// ─── Anahtar halkası kaybı (D5) ──────────────────────────────────────────────
+export interface RingLoss {
+  tespit: string;
+  kayipKidler: string[];
+  etkilenen: { cihazKaniti: number; pin: number; kart: number; totp: number };
+}
+
+export interface ProofLostDevice {
+  id: string;
+  deviceId: string;
+  name: string;
+  kind: DeviceKind;
+  status: string;
+  isActive: boolean;
+  machine: { code: string; name: string } | null;
+  lastSeenAt: string | null;
+  hasHw: boolean;
+  kid: string;
+}
+
+export interface ProofLostOverview {
+  halkaKaybi: RingLoss | null;
+  cihazlar: ProofLostDevice[];
+  bekleyenler: ProofLostDevice[];
+}
+
+export type ProofResetOutcome =
+  | { id: string; name: string; sonuc: "SIFIRLANDI"; hasHw: boolean }
+  | { id: string; name: string | null; sonuc: "ATLANDI"; neden: "YOK" | "KANIT_YOK" | "HALKADA" | "DEGISTI" };
