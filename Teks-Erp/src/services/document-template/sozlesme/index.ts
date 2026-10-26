@@ -12,9 +12,11 @@ export { inspectionReportContract } from "./inspection-report"; // INSPECTION_RE
 export { invoiceInternalContract } from "./invoice-internal"; // INVOICE_INTERNAL
 export { kartelaDispatchContract } from "./kartela-dispatch"; // KARTELA_DISPATCH
 export { paymentReceiptContract } from "./payment-receipt"; // PAYMENT_RECEIPT
+export { priceListContract } from "./price-list"; // PRICE_LIST
 export { qualityCertificateContract } from "./quality-certificate"; // QUALITY_CERTIFICATE
 export { reconciliationLetterContract } from "./reconciliation-letter"; // RECONCILIATION_LETTER
 export { returnDispatchContract } from "./return-dispatch"; // RETURN_DISPATCH
+export { salesQuoteContract } from "./sales-quote"; // SALES_QUOTE
 export { shipmentDispatchContract } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
 export { stockCountContract } from "./stock-count"; // STOCK_COUNT
 export { subcontractorDirectShipContract } from "./subcontractor-direct-ship"; // SUBCONTRACTOR_DIRECT_SHIP

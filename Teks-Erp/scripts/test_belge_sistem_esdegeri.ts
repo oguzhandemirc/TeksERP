@@ -16,6 +16,8 @@
  */
 
 import { renderInspectionReportHtml } from "../src/services/document-render/inspection-report.html";
+import { renderPriceListHtml } from "../src/services/document-render/price-list.html";
+import { renderSalesQuoteHtml } from "../src/services/document-render/sales-quote.html";
 import { renderQualityCertificateHtml } from "../src/services/document-render/quality-certificate.html";
 import { renderReturnDispatchHtml } from "../src/services/document-render/return-dispatch.html";
 import { renderShipmentDispatchHtml } from "../src/services/document-render/shipment-dispatch.html";
@@ -67,9 +69,11 @@ const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   INVOICE_INTERNAL: (s, m) => renderInvoiceInternalHtml(s, m as Parameters<typeof renderInvoiceInternalHtml>[1]),
   KARTELA_DISPATCH: (s, m) => renderKartelaCekiHtml(s, m as Parameters<typeof renderKartelaCekiHtml>[1]),
   PAYMENT_RECEIPT: (s, m) => renderPaymentReceiptHtml(s, m as Parameters<typeof renderPaymentReceiptHtml>[1]),
+  PRICE_LIST: (s, m) => renderPriceListHtml(s, m as Parameters<typeof renderPriceListHtml>[1]),
   QUALITY_CERTIFICATE: (s, m) => renderQualityCertificateHtml(s, m as Parameters<typeof renderQualityCertificateHtml>[1]),
   RECONCILIATION_LETTER: (s, m) => renderReconciliationLetterHtml(s, m as Parameters<typeof renderReconciliationLetterHtml>[1]),
   RETURN_DISPATCH: (s, m) => renderReturnDispatchHtml(s, m as Parameters<typeof renderReturnDispatchHtml>[1]),
+  SALES_QUOTE: (s, m) => renderSalesQuoteHtml(s, m as Parameters<typeof renderSalesQuoteHtml>[1]),
   SHIPMENT_DISPATCH: (s, m) => renderShipmentDispatchHtml(s, m as Parameters<typeof renderShipmentDispatchHtml>[1]),
   STOCK_COUNT: (s, m) => renderStockCountHtml(s, m as Parameters<typeof renderStockCountHtml>[1]),
   SUBCONTRACTOR_DIRECT_SHIP: (s, m) => renderFasonDirectShipHtml(s, m as Parameters<typeof renderFasonDirectShipHtml>[1]),
