@@ -217,7 +217,7 @@ export function StationCapabilitiesPage() {
         }
       />
 
-      <div className="flex items-center gap-2 px-3 py-2 border-b">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}

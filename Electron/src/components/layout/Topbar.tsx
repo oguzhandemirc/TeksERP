@@ -1,4 +1,4 @@
-import { PanelLeft, Search, LogOut, RotateCw, Settings, Activity } from "lucide-react";
+import { Menu, PanelLeft, Search, LogOut, RotateCw, Settings, Activity } from "lucide-react";
 import { PencereKontrolleri } from "./PencereKontrolleri";
 import { Button } from "@/components/ui/button";
 import { DemoModeBadge } from "@/components/demo/DemoModeBadge";
@@ -26,6 +26,9 @@ import { upperTr } from "../../lib/tr-case";
 
 interface Props {
   onToggleSidebar: () => void;
+  /** Dar kabuk (≤1024 px): düğme çekmeceyi açar, arama/ad sıkışır (UX-3). */
+  narrow?: boolean;
+  drawerOpen?: boolean;
   onOpenCommand: () => void;
 }
 
@@ -42,7 +45,7 @@ function initials(name?: string): string {
   return upperTr(name.slice(0, 2));
 }
 
-export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
+export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerOpen = false }: Props) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { isAdmin, permissions, hasAnyPermission } = useRoleAccess();
@@ -51,33 +54,34 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
   const navigateActive = useTabsStore((s) => s.navigateActive);
 
   return (
-    <header className="app-drag flex h-12 shrink-0 select-none items-center gap-2 border-b border-border/60 bg-card/60 pr-3 backdrop-blur-xl">
-      <div className="topbar-leading flex items-center gap-2 pl-2 app-no-drag">
+    <header className="app-drag flex h-12 shrink-0 select-none items-center gap-1 border-b border-border/60 bg-card/60 pr-1 backdrop-blur-xl sm:gap-2 sm:pr-3">
+      <div className="topbar-leading flex shrink-0 items-center gap-1 pl-1 app-no-drag sm:gap-2 sm:pl-2">
         <Button
           variant="ghost"
           size="icon"
           aria-label="Kenar çubuğu"
-          title="Kenar çubuğunu aç/kapat"
+          title={narrow ? "Menüyü aç/kapat" : "Kenar çubuğunu aç/kapat"}
+          aria-expanded={narrow ? drawerOpen : undefined}
           onClick={onToggleSidebar}
         >
-          <PanelLeft className="h-4 w-4" />
+          {narrow ? <Menu className="h-5 w-5" /> : <PanelLeft className="h-4 w-4" />}
         </Button>
 
         <button
           type="button"
           onClick={onOpenCommand}
           aria-label="Hızlı arama"
-          className="flex h-8 w-56 items-center gap-2 rounded-md border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          className="flex h-8 w-8 items-center justify-center gap-2 rounded-md border border-border/60 bg-background/40 text-sm md:w-56 md:justify-start md:px-3 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
-          <span className="flex-1 text-left">Ara veya komut…</span>
-          <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+          <span className="hidden flex-1 text-left md:inline">Ara veya komut…</span>
+          <kbd className="hidden rounded border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-medium md:inline">
             ⌘K
           </kbd>
         </button>
       </div>
 
-      <div className="ml-auto flex items-center gap-1 app-no-drag">
+      <div className="ml-auto flex min-w-0 items-center gap-0.5 app-no-drag sm:gap-1">
         {/* Hazırlık kanalının işareti ("TEST FABRİKA") — üretim kanalında hiçbir şey çizilmez. */}
         <ChannelBadge />
         {/* Destek (süperadmin) oturumunun sürekli işareti — fabrika hesabında çizilmez. */}
@@ -89,6 +93,7 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
           size="icon"
           aria-label="Sayfayı yeniden yükle"
           title="Sayfayı yeniden yükle (Ctrl+Shift+R)"
+          className="hidden sm:inline-flex"
           onClick={() => window.location.reload()}
         >
           <RotateCw className="h-4 w-4" />
@@ -135,7 +140,7 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
                 {initials(user?.username)}
               </span>
-              <span className="text-sm">{user?.username ?? "—"}</span>
+              <span className="hidden max-w-[12rem] truncate text-sm md:inline">{user?.username ?? "—"}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

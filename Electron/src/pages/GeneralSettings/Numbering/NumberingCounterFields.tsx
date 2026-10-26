@@ -130,7 +130,7 @@ export function NumberingCounterFields({
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <CounterField
               id="ns-start" etiket="Başlangıç" yer="1"
               deger={counter.startValue} hata={counterFieldError(hatalar, "startValue")}

@@ -92,7 +92,7 @@ export function PermissionsCatalogPage() {
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
-      <div className="flex items-center gap-2 px-3 py-2 border-b">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input

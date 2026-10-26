@@ -241,7 +241,7 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
               </p>
             )}
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="col-span-2">
                 <Label>Tedarikçi</Label>
                 {/* C4 — cari kartlar VE fason firmalar tek kutuda. Düzenlemede

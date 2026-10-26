@@ -89,7 +89,7 @@ function RowActions({
   const toggleDir = resolveToggleDirection({ isActive: t.isActive, isAnyDefault });
 
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex max-w-full flex-wrap items-center gap-2">
       {/* Baskı + dışa aktar = okuma işlemleri — write gate'inin DIŞINDA. */}
       <Slot slot="print" applicable={can("print")} size="sm" variant="outline" className="gap-1"
         title="Şablonu örnek veriyle yazdır (bağımsız baskı)" onClick={onPrint}>

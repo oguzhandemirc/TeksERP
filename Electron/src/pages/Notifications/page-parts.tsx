@@ -72,7 +72,7 @@ export function SummaryStrip({ toplam, okunmamis, seciliSayi, topluAcik, onToplu
         <span className="text-muted-foreground">okunmamış</span>
       </span>
       {seciliSayi > 0 && (
-        <span className="ml-auto flex items-center gap-2">
+        <span className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
           <span className="text-muted-foreground">{seciliSayi} seçili</span>
           <Button size="sm" variant="outline" className="h-7 gap-1" disabled={!topluAcik} onClick={onToplu}>
             <Check className="h-3.5 w-3.5" /> Seçilenleri okundu say
