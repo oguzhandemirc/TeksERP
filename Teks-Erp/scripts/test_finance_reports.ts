@@ -805,6 +805,20 @@ async function main(): Promise<void> {
   const allBook = await getCashBookReport({ range: { from: ago(30), to: new Date() } });
   check("§12l KÖRLÜK ZEMİNİ: çok hesaplı sorgu birden çok hesap gördü", allBook.accounts.length >= 3, `hesap=${allBook.accounts.length}`);
   check("§12m Hesap seçilmeden de kırılım DOLU (rows null iken bile)", allBook.rows === null && allBook.categories.length > 0);
+  // KÜÇÜK-F: "farklı para birimi" uyarısının TEK kaynağı `multiCurrency` — hesap yokken de `totals` null'dır, bayrak onu ayırır.
+  {
+    const kur = new Set(allBook.accounts.map((a) => a.currency));
+    check("§12m2 multiCurrency = (≥2 para birimi) — hesaplı sorguda", allBook.multiCurrency === kur.size > 1, `birim=${[...kur].join(",")} bayrak=${allBook.multiCurrency}`);
+    check("§12m3 multiCurrency ⇔ totals yok (hesap varken)", allBook.accounts.length === 0 || allBook.multiCurrency === (allBook.totals === null));
+    // Hesap listesi hareketsiz hesabı da taşır; "hesap yok" durumu VAR OLMAYAN hesap süzgeciyle kurulur.
+    const bos = await getCashBookReport({ range: { from: ago(30), to: new Date() }, accountId: "00000000-0000-4000-8000-000000000000" });
+    check("§12m4 KÖRLÜK ZEMİNİ: var olmayan hesap süzgeci boş liste", bos.accounts.length === 0, `hesap=${bos.accounts.length}`);
+    check("§12m5 ⭐ Hesap YOKKEN multiCurrency false (uyarı çizilmez; totals null olsa da)", bos.multiCurrency === false && bos.totals === null);
+    const usd = await prisma.bankAccount.create({ data: { code: `${TAG}-USD`, name: `${TAG} USD banka`, currency: "USD" }, select: { id: true } });
+    extraBankIds.push(usd.id);
+    const karma = await getCashBookReport({ range: { from: ago(30), to: new Date() } });
+    check("§12m6 ⭐ USD hesap eklenince multiCurrency true ve totals null (uyarı yalnız şimdi)", karma.multiCurrency === true && karma.totals === null, `bayrak=${karma.multiCurrency}`);
+  }
   {
     const zero = () => ({ in: new Prisma.Decimal(0), out: new Prisma.Decimal(0) });
     const acc = new Map<string, { in: Prisma.Decimal; out: Prisma.Decimal }>();

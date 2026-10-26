@@ -150,6 +150,8 @@ export interface CashBookReport {
   storedComparable: boolean;
   /** Yalnız TEK para birimi varsa dolu — farklı birimli kasalar toplanmaz. */
   totals: { opening: string; totalIn: string; totalOut: string; closing: string } | null;
+  /** Sunucu kararı: ≥2 farklı para birimli hesap (uyarı yalnız bununla çizilir; istemci hesaplamaz). */
+  multiCurrency?: boolean;
   notes: string[];
 }
 
@@ -192,5 +194,5 @@ export async function getCashBookReport(p: CashBookApiParams): Promise<ReportRes
 
 /** Defter yüklenirken tabloyu iskeletiyle çizebilmek için boş kabuk. */
 export function emptyCashBookReport(): CashBookReport {
-  return { accounts: [], categories: [], rows: [], rowsTruncated: false, storedComparable: false, totals: null, notes: [] };
+  return { accounts: [], categories: [], rows: [], rowsTruncated: false, storedComparable: false, totals: null, multiCurrency: false, notes: [] };
 }

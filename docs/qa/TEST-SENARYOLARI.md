@@ -90,7 +90,7 @@ doğrulanır.
 ## 10. Muhasebe / Sevk Edilenler (#2) 🔴
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
-| 10.1 | Liste | Operasyon → Sevk Edilenler (Muhasebe) | Yalnız DISPATCHED sevkiyatlar; tarih/müşteri filtresi | |
+| 10.1 | Liste | Operasyon → Sevk Edilenler | Yalnız DISPATCHED sevkiyatlar; tarih/müşteri filtresi | |
 | 10.2 | Fiş önizleme | Satırda "Fiş" | 3 bölüm: Ürün/Çuval/Çeki Listesi (ornek-fis düzeni) | |
 | 10.3 | Fiş yazdır 🖨️ | "Yazdır" | Yazıcıdan 3 bölüm çıkar; çeki'de kg yalnız çuvalın ilk topunda | |
 | 10.4 | Toplu etiket 🖨️ | "Toplu Etiket" | Sevkiyatın tüm toplarının etiketi tek belgede, her top ayrı sayfa | |

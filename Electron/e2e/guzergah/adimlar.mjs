@@ -1051,12 +1051,12 @@ export const ADIMLAR = [
   },
   {
     id: "J1", rol: "M", gerektirir: ["I4"],
-    yol: "Muhasebe → Sevkiyatlar (Muhasebe) → satırda Faturala → Yeni Fatura (Taslak) → birim fiyat → Taslağı Oluştur", rota: "operations/accounting-dispatch",
+    yol: "Operasyon → Sevk Edilenler → satırda Faturala → Yeni Fatura (Taslak) → birim fiyat → Taslağı Oluştur", rota: "operations/accounting-dispatch",
     async yap({ git, gor, sql, page }) {
       const sevk = await sql(`SELECT s.id, s."shipmentNo" FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1 AND s.status='DISPATCHED' ORDER BY s."createdAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
       j1Olcum.sevkNo = sevk[0]?.shipmentNo ?? null; j1Olcum.sevkId = sevk[0]?.id ?? null;
       if (!j1Olcum.sevkNo) throw new Error("TEST Müşteri'nin sevk edilmiş sevkiyatı yok (I4 koşmadı mı?)");
-      await git("Sevkiyatlar (Muhasebe)");
+      await git("Sevk Edilenler");
       const ara = page().getByPlaceholder("Sevkiyat no, sipariş no, firma"); await gor(ara);
       await ara.fill(j1Olcum.sevkNo); await page().waitForTimeout(1200);
       const satir = page().getByRole("row").filter({ hasText: j1Olcum.sevkNo }).filter({ visible: true }).first(); await gor(satir);

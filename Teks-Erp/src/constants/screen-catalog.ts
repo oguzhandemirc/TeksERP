@@ -228,7 +228,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/sack-store", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevk Kapısı", requires: ["shipping:read"], capabilities: ["shipping:write"] },
   { key: "operations/sack-content-edit", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Paketleme / Çuvallar", requires: ["shipping:write"], capabilities: ["label:print", "shipping:packing-lot"] },
   { key: "operations/relabel-station", app: "desktop", modul: "cekirdek:stok-giris", title: "Yeniden Etiketle", requires: ["label:edit", "roll:write"], capabilities: [] },
-  { key: "operations/accounting-dispatch", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar (Muhasebe)", requires: ["report:sales", "shipping:read"], capabilities: ["shipping:invoice"] },
+  { key: "operations/accounting-dispatch", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: TERIM_AD.sevkEdilenler, requires: ["report:sales", "shipping:read"], capabilities: ["shipping:invoice"] },
   { key: "operations/kartela", app: "desktop", modul: "planlanan:kartela", title: "Kartela Takibi", requires: ["kartela:read"], capabilities: ["kartela:write"] },
   // Dokuma işi planlama (2026-09-13, ekran dilimi). Modül `dokumaEnabled` — üretime
   // bağımlı, tezgah izlemenin kardeşi; referans profilde KAPALI.

@@ -1,6 +1,7 @@
 // Modül görünürlüğü — izin kodları bulut kataloğundan (`patron/sunucu/src/catalog/permissions.ts`;
 // ayna bekçisi her literali orada arar). İstemci yalnız GİZLER; karar sunucudadır (403 yine gelir).
 
+import { TERIM_AD } from "./terim";
 export type ModuleKey =
   | "pano"
   | "raporlar"
@@ -41,13 +42,13 @@ export const MODULES: readonly ModuleDef[] = [
   { key: "sevkiyat", title: "Sevkiyat", hint: "Sevk edilen ve bekleyen", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"] },
   { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"] },
   { key: "stok", title: "Stok", hint: "Ham ve bitmiş stok", route: "/stok", anyOf: ["bulut:stok:oku"] },
-  { key: "finans", title: "Ön Muhasebe", navTitle: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku"] },
+  { key: "finans", title: TERIM_AD.onMuhasebe, navTitle: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku"] },
   { key: "teklifler", title: "Teklifler", hint: "Müşteriye gönderilen teklifler", route: "/teklifler", anyOf: ["bulut:teklif:oku"] },
   { key: "standart-maliyetler", title: "Standart Maliyetler", hint: "Ürün başına metre maliyeti", route: "/standart-maliyetler", anyOf: ["bulut:teklif:oku"], allOf: ["bulut:maliyet:oku"] },
   { key: "raporlar", title: "Raporlar", hint: "Fabrikadan rapor isteyin", route: "/raporlar", anyOf: ["bulut:rapor:oku"] },
   { key: "gelen-kutusu", title: "Gelen Kutusu", hint: "Fabrikaya gönderilen talepler", route: "/gelen-kutusu", anyOf: ["bulut:siparis:yaz", "bulut:cari:yaz"] },
   { key: "hesaplar", title: "Hesaplar", hint: "Kim neyi görür, davetler", route: "/hesaplar", anyOf: ["bulut:hesap:yonet"] },
-  { key: "bildirimler", title: "Bildirim Ayarları", hint: "Bu cihazda izin, türler, sessiz saatler", route: "/bildirimler", anyOf: [] },
+  { key: "bildirimler", title: TERIM_AD.bildirimAyarlari, hint: "Bu cihazda izin, türler, sessiz saatler", route: "/bildirimler", anyOf: [] },
   { key: "profil", title: "Profil", hint: "Görünüm, parola ve çıkış", route: "/profil", anyOf: [] },
 ];
 

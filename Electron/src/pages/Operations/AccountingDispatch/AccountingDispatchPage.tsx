@@ -11,6 +11,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { useDataTable } from "@/hooks/useDataTable";
 import { formatNumber } from "@/lib/format";
+import { TERIM_AD } from "@/lib/terim";
 import { downloadDocsPdf, downloadDocsExcel } from "@/pages/Operations/Shipments/shipmentDocExport";
 import { BulkInvoiceAction } from "./BulkInvoiceAction";
 import { accountingDispatchService } from "./service";
@@ -101,7 +102,7 @@ export function AccountingDispatchPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Sevkiyatlar (Muhasebe)"
+        title={TERIM_AD.sevkEdilenler}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -124,7 +125,7 @@ export function AccountingDispatchPage() {
         onSearchChange={setSearch}
         placeholder="Sevkiyat no, sipariş no, firma, plaka, sürücü ara..."
         table={table}
-        exportName="Sevkiyatlar (Muhasebe)"
+        exportName={TERIM_AD.sevkEdilenler}
       />
       <FilterBar filters={ACCOUNTING_FILTERS} defaultDateRangeDays={30} />
       {summary && summary.shipmentCount > 0 && (
@@ -150,7 +151,7 @@ export function AccountingDispatchPage() {
         isLoading={query.isLoading}
         pagination={pagination}
         emptyText="Sevk edilmiş sevkiyat bulunamadı."
-        exportName="Sevkiyatlar (Muhasebe)"
+        exportName={TERIM_AD.sevkEdilenler}
         selectionHint={null}
         bulkActions={(rows) =>
           rows.length === 0 ? null : (
