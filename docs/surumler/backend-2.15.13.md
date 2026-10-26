@@ -443,10 +443,12 @@ bekçiler `process.exit` yerine `process.exitCode` + doğal çıkışa geçti (8
 - **Kullanıcı onayı / kararı gereken maddeler (terfiden önce):**
   1. Bu sürüm notunun terfi onayı (taslak → `backend-2.15.13.md`, sürüm commit'inde).
   2. Yayın sırası: satıcı (lisans kataloğu: `maliyet.enabled` + `kaliteGuvence.enabled`) → backend → masaüstü panel.
-  3. Canlı döküm provasının bekçi ayağı: `BEKCI_HEDEF_ONAY=1` ile koşulsun mu (`docs/ops/PROVA-2.15.13.md` §3) —
-     ajan bu izni veremez; prova bu yüzden 3/4 şerhli.
+  3. Canlı döküm provasının bekçi ayağı: ✅ koşuldu (PROVA §3; kullanıcı izni `BEKCI_HEDEF_ONAY=1`, 2026-10-26) —
+     `test_schema_drift` ve `test_timestamptz_contract` yeşil, `test_db_invariants` yalnız beklenen
+     `rolls_qty_le_initial` NOT VALID kırmızısı; profil boot ayağı thinkpad-1 provasına kaldı.
   4. Fabrika verisinde `rolls_qty_le_initial` NOT VALID (bu sürümden bağımsız, döküm öncesinden): onarım betiği
-     `fix_tambur_undo_full_asim.ts` ne zaman koşulsun.
+     `fix_tambur_undo_full_asim.ts` ne zaman koşulsun. Dry-run döküm kopyasında koşuldu (PROVA §4a): **2 top KESİN,
+     toplam aşım 227,4 m**, BELİRSİZ 0; `--apply` kullanıcı kararı, kısıt VALIDATE ayrı adım.
   5. MAL-8: eski patron bulutu (sahadaki sürüm) yeni `teklif`/`standart-maliyet` projeksiyonlarını kabul ediyor mu —
      ölçülsün ya da patron bulutu bu backend'den önce güncellensin; maliyet modülü kapalı kaldıkça etkisiz.
   6. Hangi bayrağın hangi kurulumda açılacağı (yukarıdaki tablo; kurulum hiçbirini açmaz).
