@@ -31,6 +31,9 @@
 //  [10] Farklı sevkiyatlardan toplar tek belgeye giremez (künye tek olmalı).
 //  [11] ATOMİKLİK: gruptaki bir top araya giren başka bir iadeyle kapılmışsa
 //       TÜM grup geri sarılır — yarım iade belgesi doğmaz.
+//  [12] İADE DİPNOTU (`shipping.returnFootnote`) belgede DONAR: ayar yokken alan
+//       hiç doğmaz; ayar sonradan yazılınca v1 değişmez, revize v2 yeni metni taşır.
+//       Ayarın önceki değeri finally'de geri yazılır (hedef DB kapısı önce sorulur).
 //
 // Cleanup finally'de; tüm kayıtlar `TEST-` önekli.
 // =============================================================================
@@ -40,6 +43,8 @@ import { returnService } from "../src/services/return.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 
 let pass = 0;
 let fail = 0;
@@ -68,7 +73,7 @@ interface SackLookup {
   candidateOrders: unknown[];
 }
 interface DocSnapshot {
-  doc: { lines?: unknown[]; line: unknown };
+  doc: { lines?: unknown[]; line: unknown; footnote?: string };
 }
 
 async function docRows(sourceId: string) {
@@ -80,6 +85,13 @@ async function docRows(sourceId: string) {
 }
 
 async function main() {
+  const dbEngeli = hedefDbEngeli();
+  if (dbEngeli) {
+    console.log(`❌ ${dbEngeli}`);
+    process.exit(1);
+  }
+  // [12] için: ayarın önceki satırı (yoksa null) — finally'de aynen geri konur.
+  const footnoteBefore = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.SHIPPING_RETURN_FOOTNOTE } });
   const ts = Date.now();
   const admin = await ensureTestAdmin();
 
@@ -165,6 +177,7 @@ async function main() {
 
     // ---------------------------------------------------------------------
     console.log("\n[2] TOPLU İADE — N defter satırı, TEK grup");
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.SHIPPING_RETURN_FOOTNOTE } });
     const bulk = (await returnService.createReturn(
       { rollIds: [r1.id, r2.id, r3.id], reasonText: "TEST — çuval bazlı toplu iade" },
       admin.id,
@@ -190,6 +203,7 @@ async function main() {
     check("belge liderin id'sine bağlı, v1 ACTIVE", docs.length === 1 && docs[0]!.status === "ACTIVE", JSON.stringify(docs.map((d) => [d.version, d.status])));
     const snap1 = docs[0]!.snapshot as unknown as DocSnapshot;
     check("belge 3 kalem taşıyor", snap1.doc.lines?.length === 3, String(snap1.doc.lines?.length));
+    check("[12] dipnot ayarı yokken `footnote` alanı HİÇ doğmadı", !("footnote" in snap1.doc), JSON.stringify(snap1.doc.footnote));
 
     // ---------------------------------------------------------------------
     console.log("\n[5] ÜYE id'siyle İKİNCİ BELGE DOĞMAZ");
@@ -210,6 +224,8 @@ async function main() {
 
     // ---------------------------------------------------------------------
     console.log("\n[7] BİR KALEM İPTAL → belge REVİZE (void DEĞİL)");
+    const footnoteText = "  TEST dipnot — iade <sevk> irsaliyesini iptal etmez\u0007  ";
+    await prisma.systemSetting.create({ data: { key: SETTING_KEYS.SHIPPING_RETURN_FOOTNOTE, value: footnoteText } });
     await returnService.cancelReturn(memberId, "TEST — tek kalem iptali", admin.id);
     const docsAfterCancel = await docRows(leaderId);
     check("iki versiyon var", docsAfterCancel.length === 2, JSON.stringify(docsAfterCancel.map((d) => [d.version, d.status])));
@@ -217,6 +233,15 @@ async function main() {
     check("v2 ACTIVE (belge İPTAL EDİLMEDİ)", docsAfterCancel[1]?.status === "ACTIVE", String(docsAfterCancel[1]?.status));
     const snap2 = docsAfterCancel[1]!.snapshot as unknown as DocSnapshot;
     check("revize belge 2 kalem taşıyor", snap2.doc.lines?.length === 2, String(snap2.doc.lines?.length));
+    const snap1After = docsAfterCancel[0]!.snapshot as unknown as DocSnapshot;
+    check("[12] v1 DONMUŞ: ayar sonradan yazıldı, eski belgede dipnot yok", !("footnote" in snap1After.doc), JSON.stringify(snap1After.doc.footnote));
+    check(
+      "[12] revize v2 dipnotu taşıyor (kırpılmış, kontrol karakteri atılmış)",
+      snap2.doc.footnote === "TEST dipnot — iade <sevk> irsaliyesini iptal etmez",
+      JSON.stringify(snap2.doc.footnote),
+    );
+    const v2Html = (await printedDocumentService.getHtml("RETURN_DISPATCH", leaderId, docsAfterCancel[1]!.version)).data?.html ?? "";
+    check("[12] v2 HTML dipnotu KAÇIŞLI basıyor", v2Html.includes("iade &lt;sevk&gt; irsaliyesini") && !v2Html.includes("<sevk>"), v2Html.length ? "" : "html boş");
 
     // ---------------------------------------------------------------------
     console.log("\n[8] SON kalemler de iptal → belge VOIDED");
@@ -269,6 +294,8 @@ async function main() {
     const otherStill = await prisma.roll.findUnique({ where: { id: rOther.id }, select: { status: true } });
     check("gruptaki diğer top da DOKUNULMADAN kaldı", otherStill?.status === "SHIPPED", String(otherStill?.status));
   } finally {
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.SHIPPING_RETURN_FOOTNOTE } });
+    if (footnoteBefore) await prisma.systemSetting.create({ data: footnoteBefore as never });
     const returnIds = (
       await prisma.rollReturn.findMany({ where: { customerId: customer.id }, select: { id: true } })
     ).map((r) => r.id);

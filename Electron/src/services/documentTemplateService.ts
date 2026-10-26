@@ -242,6 +242,12 @@ export const documentTemplateService = {
   assignments: (): Promise<ApiResponse<TemplateAssignments>> =>
     apiClient.get<ApiResponse<TemplateAssignments>>(`${base}/assignments`).then((r) => r.data),
 
+  /** Sistem (yerleşik) tasarımın örnek veriyle çıktısı; yerleşik çıktısı olmayan tür 409 `NO_SYSTEM_PREVIEW`. */
+  systemPreview: (docType: string): Promise<ApiResponse<{ html: string }>> =>
+    apiClient
+      .post<ApiResponse<{ html: string }>>(`${base}/sistem-onizleme/${encodeURIComponent(docType)}`, {}, { timeout: PREVIEW_TIMEOUT_MS, suppressErrorToast: true })
+      .then((r) => r.data),
+
   preview: (body: TemplatePreviewRequest, signal?: AbortSignal): Promise<ApiResponse<TemplatePreviewResult>> =>
     apiClient
       .post<ApiResponse<TemplatePreviewResult>>(`${base}/preview`, body, { signal, timeout: PREVIEW_TIMEOUT_MS, suppressErrorToast: true })

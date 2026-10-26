@@ -28,6 +28,7 @@ import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
+import { docNum } from "./fmt-num";
 import { TERIM } from "../../constants/terim";
 
 interface FasonReceiptRoll {
@@ -36,6 +37,9 @@ interface FasonReceiptRoll {
   itemName: string;
   colorName: string | null;
   width: number | null;
+  /** Bu makbuzun o toptan kabul ettiği metre (`SubcontractorReceiptItem.receivedQty` defteri);
+   *  eski satırda null. ⚠️ Alan 2026-10-26 öncesi donmuş makbuzlarda YOK → kolon hiç basılmaz. */
+  qty?: number | null;
 }
 
 export interface FasonReceiptDoc {
@@ -56,7 +60,9 @@ export interface FasonReceiptDoc {
    *  ⚠️ OPSİYONEL: 2026-08-05 öncesi donmuş makbuzlarda YOK → satır basılmaz. */
   batchNumbers?: string[];
   rolls: FasonReceiptRoll[];
-  totals: { rollCount: number };
+  /** `qty`: satırların kabul metresi toplamı (yalnız `rolls[].qty` taşıyan snapshot'ta).
+   *  `returnedQty`: doğan topların ÖLÇÜLEN metresi (fiziksel; defter `qty`den ayrı) — eski snapshot'ta yok. */
+  totals: { rollCount: number; qty?: number; returnedQty?: number };
 }
 
 interface RenderMeta {
@@ -106,6 +112,7 @@ export function renderFasonReceiptHtml(
 
   const rolls = doc.rolls ?? [];
   const t = doc.totals;
+  const fmtQty = (n: number | null | undefined): string => docNum(snapshot).tr(n, 2);
 
   // Alan aç/kapa toggle'ları (hepsi varsayılan AÇIK — kapanmadıkça mevcut davranış).
   const showTaxNo = sectionOn(cfg.sections, "taxNo");
@@ -141,6 +148,7 @@ export function renderFasonReceiptHtml(
         <div class="row"><span>${TERIM.terbiyeIsEmri.tekil}:</span><b>${esc(doc.workOrder.workOrderNumber)}</b></div>
         ${showBatch && batchNumbers.length ? `<div class="row"><span>Parti:</span><b>${esc(batchNumbers.join(", "))}</b></div>` : ""}
         <div class="row"><span>İşlem:</span><b>${esc(doc.stationName)}</b></div>
+        ${t.returnedQty != null ? `<div class="row"><span>Dönen Metre:</span><b>${esc(fmtQty(t.returnedQty))}</b></div>` : ""}
         ${doc.manifestNo ? `<div class="row"><span>Fason İrs.:</span><b>${esc(doc.manifestNo)}</b></div>` : ""}
       </div>`
     : "";
@@ -153,17 +161,28 @@ export function renderFasonReceiptHtml(
       : "";
   const infoGrid = subBox || appliedBox ? `<div class="info">${subBox}${appliedBox}</div>` : "";
 
+  // Metre kolonu VERİDEN: eski donmuş makbuz `qty` taşımaz → kolon doğmaz, çıktı bayt-bayt aynı.
+  const hasQty = rolls.some((r) => r.qty !== undefined);
+  const qtyTotal = t.qty ?? 0;
   const rollTable = sectionOn(cfg.sections, "rollTable")
     ? `<div class="tbl-cap">Kabul Edilen Toplar (${esc(t.rollCount)})</div>` +
       buildDocTable<FasonReceiptRoll>({
         className: "sec",
         colCfg: cfg.columns?.rollTable,
         rows: rolls,
+        footLabel: "TOPLAM",
         cols: [
           { key: "seq", label: "#", align: "c", width: "34px", cell: (r) => esc(r.sequence) },
           { key: "barcode", label: "BARKOD", align: "l", cellClass: "mono", cell: (r) => esc(r.barcode ?? "—") },
           { key: "itemColor", label: "ÜRÜN / RENK", align: "l", cell: (r) => `${esc(r.itemName)}${r.colorName ? ` · ${esc(r.colorName)}` : ""}` },
           { key: "width", label: "EN", align: "c", width: "70px", cell: (r) => (r.width != null ? `${esc(Math.round(r.width))} cm` : "—") },
+          ...(hasQty
+            ? [{
+                key: "qty", label: "METRE", align: "r" as const, width: "80px",
+                cell: (r: FasonReceiptRoll) => (r.qty != null ? esc(fmtQty(r.qty)) : "—"),
+                foot: rolls.length > 1 ? esc(fmtQty(qtyTotal)) : undefined,
+              }]
+            : []),
         ],
       })
     : "";

@@ -180,10 +180,11 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     // kapsayabildiğini önizlemede görsün.
     batchNumbers: ["P1207261", "P1207262"],
     rolls: [
-      { sequence: 1, barcode: "TR-260607-R0301", itemName: "Pamuklu Astar", colorName: "Bej", width: 150 },
-      { sequence: 2, barcode: "TR-260607-R0302", itemName: "Pamuklu Astar", colorName: "Bej", width: 150 },
+      { sequence: 1, barcode: "TR-260607-R0301", itemName: "Pamuklu Astar", colorName: "Bej", width: 150, qty: 160 },
+      { sequence: 2, barcode: "TR-260607-R0302", itemName: "Pamuklu Astar", colorName: "Bej", width: 150, qty: 152.5 },
     ],
-    totals: { rollCount: 2 },
+    // `qty` = satırların toplamı (kabul defteri); örnek tutarlı olmalı.
+    totals: { rollCount: 2, qty: 312.5, returnedQty: 304.5 },
   },
 
   ...SAMPLE_CUSTOMER_EXTRA_DOCS, // muayene raporu, satış teklifi, fiyat listesi (ayrı dosya: satır tavanı)

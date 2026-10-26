@@ -105,6 +105,7 @@ ${blocksAt("afterHeader")}
 <div class="row"><span>${TERIM.terbiyeIsEmri.tekil}:</span><b>{{ belge.is_emri_no }}</b></div>
 {%- if ayar.sections.batchInfo and parti_sayisi > 0 -%}<div class="row"><span>Parti:</span><b>{{ tablolar.parti | map: "no" | join: ", " }}</b></div>{%- endif -%}
 <div class="row"><span>İşlem:</span><b>{{ belge.islem }}</b></div>
+{%- if toplamlar.donen_metre != nil -%}<div class="row"><span>Dönen Metre:</span><b>{{ toplamlar.donen_metre | sayi: 2 }}</b></div>{%- endif -%}
 {%- if belge.fason_irsaliye_no != nil and belge.fason_irsaliye_no != "" -%}<div class="row"><span>Fason İrs.:</span><b>{{ belge.fason_irsaliye_no }}</b></div>{%- endif -%}
 </div>{%- endcapture -%}
 {%- endif -%}
@@ -125,7 +126,7 @@ ${blocksAt("afterHeader")}
 {%- assign kolon_sayisi = kolonlar | size -%}
 {%- if kolon_sayisi > 0 -%}
 <table class="sec"><thead><tr>
-{%- for kolon in kolonlar -%}<th class="{{ kolon.hiza }}"{% case kolon.kaynak %}{% when "seq" %} style="width:34px"{% when "width" %} style="width:70px"{% endcase %}>{{ kolon.etiket }}</th>{%- endfor -%}
+{%- for kolon in kolonlar -%}<th class="{{ kolon.hiza }}"{% case kolon.kaynak %}{% when "seq" %} style="width:34px"{% when "width" %} style="width:70px"{% when "qty" %} style="width:80px"{% endcase %}>{{ kolon.etiket }}</th>{%- endfor -%}
 </tr></thead><tbody>
 {%- for satir in tablolar.toplar -%}<tr>
 {%- for kolon in kolonlar -%}<td class="{{ kolon.hiza }}{% if kolon.kaynak == "barcode" %} mono{% endif %}">
@@ -134,9 +135,19 @@ ${blocksAt("afterHeader")}
 {%- when "barcode" -%}{%- if satir.barkod == nil -%}—{%- else -%}{{ satir.barkod }}{%- endif -%}
 {%- when "itemColor" -%}{{ satir.urun }}{%- if satir.renk != nil and satir.renk != "" %} · {{ satir.renk }}{% endif -%}
 {%- when "width" -%}{%- if satir.en == nil -%}—{%- else -%}{{ satir.en | sayi: 0 }} cm{%- endif -%}
+{%- when "qty" -%}{%- if satir.metre == nil -%}—{%- else -%}{{ satir.metre | sayi: 2 }}{%- endif -%}
 {%- endcase -%}
 </td>{%- endfor -%}
 </tr>{%- endfor -%}
+{%- assign toplam_var = false -%}
+{%- for kolon in kolonlar -%}{%- if kolon.toplam != nil -%}{%- assign toplam_var = true -%}{%- endif -%}{%- endfor -%}
+{%- if toplam_var and toplamlar.top_adedi > 1 -%}
+{%- assign etiket_kondu = false -%}
+<tr class="tot">{%- for kolon in kolonlar -%}<td class="{{ kolon.hiza }}">
+{%- if kolon.toplam != nil -%}{{ toplamlar.metre | sayi: 2 }}
+{%- elsif etiket_kondu == false -%}TOPLAM{%- assign etiket_kondu = true -%}{%- endif -%}
+</td>{%- endfor -%}</tr>
+{%- endif -%}
 </tbody></table>
 {%- endif -%}
 {%- endif -%}

@@ -22,6 +22,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/admin/devices/merge": e("cihaz kopyalarını birleştirdi", "cihaz kopyalarını birleştirmeye çalıştı"),
   "POST /api/admin/devices/merge/:sourceId/undo": e("cihaz birleştirmesini geri aldı", "cihaz birleştirmesini geri almaya çalıştı"),
   "POST /api/admin/devices/proof-reset": e("cihazları yeniden bağlamak için kanıtı sıfırladı", "cihaz kanıtını sıfırlamaya çalıştı"),
+  // ── Belge tasarımcısı
+  "POST /api/document-templates/sistem-onizleme/:docType": e("sistem belge tasarımını önizledi", "sistem belge tasarımını önizlemeye çalıştı"),
   // ── Sipariş
   "POST /api/orders": e("sipariş oluşturdu", "sipariş oluşturmaya çalıştı"),
   "PATCH /api/orders/:id": e("siparişi düzenledi", "siparişi düzenlemeye çalıştı"),

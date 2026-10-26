@@ -3078,7 +3078,7 @@
   }
  },
  "RETURN_DISPATCH": {
-  "contractVersion": 1,
+  "contractVersion": 2,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -3269,6 +3269,10 @@
     "sinif": "musteri"
    },
    "belge.durum": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.iade_dipnotu": {
     "tur": "metin",
     "sinif": "musteri"
    },
@@ -5628,7 +5632,7 @@
   }
  },
  "SUBCONTRACTOR_RECEIPT": {
-  "contractVersion": 1,
+  "contractVersion": 3,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -5914,6 +5918,10 @@
     "tur": "sayi",
     "sinif": "musteri"
    },
+   "tablolar.toplar[].metre": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
    "tablolar.toplar[].renk": {
     "tur": "metin",
     "sinif": "musteri"
@@ -5924,6 +5932,14 @@
    },
    "tablolar.toplar[].urun": {
     "tur": "metin",
+    "sinif": "musteri"
+   },
+   "toplamlar.donen_metre": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.metre": {
+    "tur": "sayi",
     "sinif": "musteri"
    },
    "toplamlar.top_adedi": {
