@@ -38,6 +38,7 @@ export const PANEL_EKRAN = {
   faturalar: { menu: "Muhasebe", karo: "Faturalar" },
   kasaHareketleri: { menu: "Muhasebe", karo: "Kasa Hareketleri" },
   kisaKimlikler: { menu: "Yetkilendirme", karo: "Kullanıcılar", alt: "Kısa Kimlikler" },
+  tabletler: { menu: "Yetkilendirme", karo: "Tabletler" },
   raporGorunurlugu: { menu: "Sistem", karo: "Modüller", alt: "Raporlar" },
   numaralandirma: { menu: "Sistem", karo: "Numaralandırma" },
 } as const satisfies Record<string, { menu: PanelMenu; karo: string; alt?: string }>;

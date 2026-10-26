@@ -4,6 +4,7 @@
 import prisma from "../prisma";
 import { AuditService } from "../../services/audit.service";
 import { uyari } from "../logger";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 import { getShortCredentialKeyRing, ringGeneratedThisProcessAt } from "./keyring";
 
 export type FootprintSource = "cihazKaniti" | "pin" | "kart" | "totp";
@@ -96,7 +97,8 @@ export async function noteRingLossOnBoot(footprint?: RingFootprint): Promise<Rin
     "kisa-kimlik",
     `anahtar halkası KAYIP: halka yeniden üretildi, ${loss.kayipKidler.length} eski anahtarın izi duruyor ` +
       `(${loss.etkilenen.cihazKaniti} cihaz kanıtı, ${loss.etkilenen.pin} PIN, ${loss.etkilenen.kart} kart, ${loss.etkilenen.totp} TOTP) — ` +
-      "yedekten anahtar emanetini geri yükleyin ya da Cihazlar → Anahtar kaybı ekranından yeniden bağlayın.",
+      `yedekten anahtar emanetini geri yükleyin (${ekranYolu("kisaKimlikler")}) ya da ${ekranYolu("tabletler")} ` +
+      "sayfasındaki \"Anahtar kaybı\" bandından cihazları yeniden bağlayın.",
   );
   await AuditService.logEvent({
     category: "SYSTEM",
