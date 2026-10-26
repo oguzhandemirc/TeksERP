@@ -57,7 +57,7 @@ export function buildCatalogTree(ctx: AccessContext, cubes: readonly SemanticCub
           kimlik: d.id,
           ad: d.name,
           tur: d.kind === "time" ? ("zaman" as const) : ("kategori" as const),
-          islecler: d.kind === "time" ? [] : FILTER_OPERATORS.filter((o) => o !== "contains" || d.labelSql !== undefined),
+          islecler: d.kind === "time" ? [] : FILTER_OPERATORS.filter((o) => (o === "contains" ? d.labelSql !== undefined : o === "between" ? d.ordered === true : true)),
           ...(d.personName ? { kisiAdi: true as const } : {}),
         })),
       notlar: [...(c.notes ?? [])],

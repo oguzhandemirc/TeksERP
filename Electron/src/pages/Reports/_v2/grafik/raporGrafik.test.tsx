@@ -147,6 +147,22 @@ describe("grafikSvg — DOM'suz SSR, vektör", () => {
     const g = dolu.bloklar![0]!;
     expect(g.tur === "grafik" && g.svg?.startsWith("<svg")).toBe(true);
   });
+
+  it("PDF saçılımında sunucunun eğilim çizgisi çizilir (kesikli); veri tablosu aynı kalır", async () => {
+    const b = blok("sacilim", { eksen: { x: { ad: "Hız", tur: "sayi" }, y: { ad: "Fire", birim: "m" } }, kategoriler: ["1,5", "2", "3"] });
+    const veri = grafikVeriTablosu(b, "S");
+    const spec = (egilim?: [[number, number], [number, number]]) =>
+      grafikleriDoldur({ title: "T", tables: [], bloklar: [{ tur: "grafik", baslik: "S", grafik: b, egilim, veri }] });
+    const svgOf = async (e?: [[number, number], [number, number]]) => {
+      const g = (await spec(e)).bloklar![0]!;
+      return g.tur === "grafik" ? { svg: g.svg ?? "", veri: g.veri } : { svg: "", veri: null };
+    };
+    const yok = await svgOf();
+    const egilimli = await svgOf([[1.5, 1], [3, 4]]);
+    const kesikli = (s: string) => (s.match(/stroke-dasharray/g) ?? []).length;
+    expect(kesikli(egilimli.svg)).toBeGreaterThan(kesikli(yok.svg));
+    expect(egilimli.veri).toEqual(yok.veri);
+  });
 });
 
 describe("RaporGrafik (ekran)", () => {

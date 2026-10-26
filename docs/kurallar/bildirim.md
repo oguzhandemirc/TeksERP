@@ -51,6 +51,10 @@
 - **[ÇEKİRDEK]** Profili silme, arşivle (atomik claim); hücre/üye kümesini pivot replace et ve audit'i profil satırına tx DIŞINDA yaz; profil izin vermez, görme süzgecini aşmaz. · bekçi: `test_bildirim_tercih_api` §4
 - **[ÇEKİRDEK]** Masaüstü seçimini sunucu hücresinden (`/katalog.hucreler`, MASAUSTU) oku ve `PUT /tercihler`e yaz; N3 `masaustuTurler` anahtarını yalnız bir sürüm birleşimle oku, yazımda yalnız seçili kalanlarla buda. · bekçi: `Electron/src/lib/bildirim/masaustu-tercih.test.ts`, `Electron/src/components/bildirim/MasaustuBildirim.test.tsx`
 - **[ÇEKİRDEK]** Her fabrika türü `src/constants/notification-patron-map.ts`te patron bulutu türüne eşlenir ya da `null` + gerekçe taşır; bulut kataloğuna tür eklemek ayrı karardır (eşleme bulutu değiştirmez). · bekçi: `test_bildirim_katalogu (§9)` <sub>(arşiv:2026-10-25 N5-PATRON)</sub>
+- **[ÇEKİRDEK]** Gelen kutusu satır süzgeçlerini (`filter[ozet]`, `filter[tablet]`, `filter[kanal]=TABLET_SES`) yalnız `notification-list-filter.helper.ts`ten `buildInboxWhere`e geçir ve tablet sesini satırın `sesli` alanından oku (`kanalTablet` ∧ kişinin ses ayarı); istemci listeyi süzmesin (`test_bildirim_api` §9).
+- **[PROFİL]** Tablet tercih kaydını tam gövdeli `PUT /tercihler` olarak kuyruğa al; kuyrukta kişi başına yalnız son taslağı tut ve operatör değişince eski taslağı yazma (`mobil/src/offline/bildirimMutations.ts`, jest bekçisi).
+- **[ÇEKİRDEK]** Tablet zil istemcisini (`mobil/src/services/bildirim/bellTransport.ts`) yalnız ön planda açık tut, başlıkları `services/clientHeaders.ts` tek kurucusundan al, öne dönüşte `rev`/`epoch` farkıyla kaçanları tamamla; bayrak kapalı ya da `/ozet` 404 iken zil, şerit ve akış çizme, alarm yoklamasını 15 sn bırak (zil sağlıklıyken 60 sn).
+- **[ÇEKİRDEK]** İstasyon bildirim şeridini `ScreenChrome` `topStrip` yuvasının (tezgah alarmı) ALTINDA çiz ve sunucunun `sekme=okunmamis` + `filter[kanal]/[tablet]/[ozet]` cevabını süzmeden göster; bildirim sesini satırın `sesli` alanından çal, `soundGate` ile aynı satırı (id+sayaç) bir kez.
 
 ## Bekçiler — bu alana dokununca koş
 

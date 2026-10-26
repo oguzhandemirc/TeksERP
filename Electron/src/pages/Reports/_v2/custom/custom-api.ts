@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import type { AnalysisOutcome } from "../analysis/analysis-model";
+import type { AnlatiCumlesi } from "../sunum";
 
 export const REPORT_BUILDER_PERMISSION = "report:builder";
 export const REPORT_PUBLISH_PERMISSION = "report:publish";
@@ -76,7 +77,7 @@ export interface SemanticResultLite {
 }
 
 export type BlockOutcome =
-  | { id: string; tur: string; baslik: string | null; durum: "tamam"; sonuclar: SemanticResultLite[]; metin?: string; analiz?: AnalysisOutcome }
+  | { id: string; tur: string; baslik: string | null; durum: "tamam"; sonuclar: SemanticResultLite[]; metin?: string; analiz?: AnalysisOutcome; anlati?: AnlatiCumlesi[] }
   | { id: string; tur: string; baslik: string | null; durum: "yetkisiz" | "desteklenmiyor"; mesaj: string };
 
 export interface RunResult {

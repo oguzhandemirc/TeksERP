@@ -28,7 +28,7 @@ const HOURS = Array.from({ length: 24 }, (_, h) => String(h));
 /** Fabrika saatinde 0–23 — "hangi saatte" sorusu (korelasyon için kategori; süzülebilir). */
 export function hourDimension(column: string): SemanticDimension {
   return {
-    id: "saat", name: "Saat", kind: "category", valueType: "enum", enumValues: HOURS, cardinalityCap: 24,
+    id: "saat", name: "Saat", kind: "category", valueType: "enum", enumValues: HOURS, cardinalityCap: 24, ordered: true,
     keySql: factoryHourSql(column),
   };
 }

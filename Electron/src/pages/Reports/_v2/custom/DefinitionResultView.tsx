@@ -6,6 +6,7 @@ import { SmallMultiples } from "../SmallMultiples";
 import { formatFigure } from "../figures";
 import type { BlockOutcome, CatalogCube, RunResult } from "./custom-api";
 import { AnalysisCard } from "../analysis/AnalysisCard";
+import { NarrativeBox } from "../NarrativeBox";
 import { Heatmap } from "../analysis/Heatmap";
 import { chartOf, headlineOf, periodTableOf, tableOf, variantOf } from "./result-model";
 import { GRID_SPAN_CLASS } from "./layout/grid-classes";
@@ -36,6 +37,8 @@ export function BlockBody({ block, chartKind, context }: { block: BlockOutcome; 
     );
   }
   if (block.metin) return <p className="text-sm">{block.metin}</p>;
+  // R2-ANLATI: cümleyi sunucu kurar; burada yalnız aynen basılır.
+  if (block.tur === "anlati") return <NarrativeBox sentences={block.anlati ?? []} limit={5} {...(block.baslik ? { title: block.baslik } : {})} />;
   if (block.tur === "analiz") {
     if (!block.analiz) return <p className="text-sm text-muted-foreground">Bu bölüm için veri yok.</p>;
     const def = context?.body?.bloklar.find((b) => b.id === block.id);
@@ -69,8 +72,10 @@ export function BlockBody({ block, chartKind, context }: { block: BlockOutcome; 
   return <ReportTable table={tableOf(r)} />;
 }
 
-/** Ana sayı ve kırılım kartları kendi çerçevesini taşır. */
-const frameClass = (b: BlockOutcome) => (b.tur === "anaSayi" || (b.tur === "varyant" && b.durum === "tamam") ? "" : "rounded-lg border p-4");
+/** Ana sayı, kırılım kartları ve anlatı kutusu kendi çerçevesini (ve anlatı başlığını) taşır. */
+const ownFrame = (b: BlockOutcome) => b.tur === "anaSayi" || (b.durum === "tamam" && (b.tur === "varyant" || b.tur === "anlati"));
+const frameClass = (b: BlockOutcome) => (ownFrame(b) ? "" : "rounded-lg border p-4");
+const ownTitle = (b: BlockOutcome) => b.tur === "anlati" && b.durum === "tamam";
 
 /** Sonuç bloklarını düzen sırasına dizer; düzende olmayan blok sonda tam genişlikte. */
 function ordered(blocks: BlockOutcome[], layout: ReadonlyArray<Pick<LayoutItem, "i" | "w">>) {
@@ -98,15 +103,15 @@ export function DefinitionResultView({ result, chartKindOf, layout, body, cubes 
         <div className="grid grid-cols-12 gap-4">
           {ordered(result.bloklar, layout).map(({ block: b, w }) => (
             <section key={b.id} aria-label={b.baslik ?? b.tur} className={`min-w-0 ${GRID_SPAN_CLASS[w] ?? GRID_SPAN_CLASS[12]} ${frameClass(b)}`}>
-              {b.baslik ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
+              {b.baslik && !ownTitle(b) ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
               <BlockBody block={b} chartKind={chartKindOf(b.id)} context={context} />
             </section>
           ))}
         </div>
       ) : (
         result.bloklar.map((b) => (
-          <section key={b.id} aria-label={b.baslik ?? b.tur} className={b.tur === "anaSayi" ? "" : "rounded-lg border p-4"}>
-            {b.baslik ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
+          <section key={b.id} aria-label={b.baslik ?? b.tur} className={b.tur === "anaSayi" || ownTitle(b) ? "" : "rounded-lg border p-4"}>
+            {b.baslik && !ownTitle(b) ? <h3 className="mb-2 text-sm font-semibold">{b.baslik}</h3> : null}
             <BlockBody block={b} chartKind={chartKindOf(b.id)} context={context} />
           </section>
         ))

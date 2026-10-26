@@ -41,6 +41,8 @@ export const BOOTSTRAP_QUERY_KEYS: readonly (readonly string[])[] = [
 export const PERSISTED_QUERY_KEYS: readonly (readonly string[])[] = [
   ...BOOTSTRAP_QUERY_KEYS,
   ['preferences'],
+  // Bildirim gelen kutusu ve tercihler: ağsız açılışta son hâl görünür (logout'ta düşer — bootstrap değil).
+  ['bildirim'],
 ];
 
 /** queryKey verilen prefix ile başlıyor mu? (['auth','mobile-users'] eşleşir;

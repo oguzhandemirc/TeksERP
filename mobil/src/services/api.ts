@@ -1,13 +1,10 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
-import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
 import { storage } from '../utils/storage';
 import { API_URL } from '../constants/api';
 import { getCurrentBaseUrl } from '../store/baseUrlStore';
-import { getOrCreateDeviceId } from '../utils/deviceId';
-import {
-  DEVICE_PROOF_HEADER, deviceProofFor, isProofRejection, noteServerDate, rememberDeviceSecret,
-} from './deviceProof';
+import { isProofRejection, noteServerDate, rememberDeviceSecret } from './deviceProof';
+import { buildDeviceHeaders } from './clientHeaders';
 // Import yönü güvenli: authStore yalnız utils/storage'a bağımlı (api'yi import etmez).
 import { useAuthStore } from '../store/authStore';
 import { useLicenseStore } from '../store/licenseStore';
@@ -167,26 +164,9 @@ apiClient.interceptors.request.use(async (config) => {
   const token = await resolveAuthToken();
   // Açık başlık (zorunlu parola değişiminin kısıtlı token'ı) oturum token'ına ezilmez.
   if (token && !config.headers.Authorization) config.headers.Authorization = `Bearer ${token}`;
-  // Backend bu header'ı Device → Machine'a çözer; rolMovement/rollOperation kayıtlarına yazılır.
-  try {
-    const deviceId = await getOrCreateDeviceId();
-    if (deviceId) config.headers['x-device-id'] = deviceId;
-    // Cihaz kanıtı: kimliğin sahibi olduğumuzu sunucunun verdiği sırla imzalar (B3).
-    const proof = deviceId ? await deviceProofFor(config.method, apiClient.getUri(config)) : null;
-    if (proof) config.headers[DEVICE_PROOF_HEADER] = proof;
-    // İSTEMCİ KÜNYESİ — Sistem → Bağlı İstemciler ekranını besler (hangi tablet,
-    // hangi sürüm, en son ne zaman). ⚠️ BİLGİLENDİRME, kimlik kanıtı DEĞİL:
-    // sunucuda hiçbir kapı bu başlıklara bakmaz (backend `constants/client-info.ts`).
-    // Kimlik için İKİNCİ bir değer üretilmez — `x-device-id` ile AYNI kalıcı id.
-    config.headers['X-Client-Kind'] = 'mobil';
-    // ⚠️ Paketten okunur (`Constants.expoConfig.version`), APK'dan değil: uzaktan
-    // güncelleme sürümü native'e dokunmadan değiştirir (CLAUDE.md, 5. kural).
-    const surum = Constants.expoConfig?.version;
-    if (typeof surum === 'string' && surum) config.headers['X-Client-Version'] = surum;
-    if (deviceId) config.headers['X-Client-Instance'] = deviceId;
-  } catch {
-    // header yoksa backend normal çalışmaya devam eder
-  }
+  // Backend `x-device-id`yi Device → Machine'a çözer; künye/kanıt TEK kurucudan (`clientHeaders.ts`).
+  const extra = await buildDeviceHeaders(config.method, apiClient.getUri(config));
+  for (const [k, v] of Object.entries(extra)) config.headers[k] = v;
   return config;
 });
 

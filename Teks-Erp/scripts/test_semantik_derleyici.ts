@@ -15,12 +15,16 @@
 // `report:salesX` yapıldı → yalnız §6a ❌; md5 ile geri alındı. §7 (R1-SEMKUP, 2026-10-25): derleyicide helperOnly
 // boyut reddi kapatıldı → §7a ❌; `planlanan:` modül kapalı sayıldı → §7b ❌; ikisi de md5 ile geri alındı, 47/0.
 //
+// §8 (rapor küçükler, 2026-10-26): "veya" kökü, bir seviye iç grup (parantez), "arasında" (sıralı
+// boyut, sondan başa sarma). NEGATİF SONDA: `suzgec-agaci.ts` `compileTreeSql` grup parantezi kaldırıldı → §8f ❌;
+// `expandBetween` sınırları ters çevrildi → §8c + §8h ❌; md5 ile geri alındı.
+//
 // Koşum: npx tsx scripts/test_semantik_derleyici.ts
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../src/utils/app-error";
-import { compileQuery, escapeLike, semanticQuerySchema, type SemanticQueryInput } from "../src/services/reports/semantik/derleyici";
+import { compileQuery, escapeLike, expandBetween, semanticQuerySchema, type SemanticQueryInput } from "../src/services/reports/semantik/derleyici";
 import { runSemanticQuery, type RunDeps } from "../src/services/reports/semantik/calistirici";
 import { PERMISSION_CATALOG, REPORT_PERMISSION_CODES } from "../src/constants/permission-catalog";
 import { SEMANTIC_CUBES, buildCatalogTree, measureDictionaryEntry } from "../src/services/reports/semantik/katalog";
@@ -33,7 +37,7 @@ import { shippedGrossTotal } from "../src/services/reports/_shipped";
 import { getDestinationMix } from "../src/services/reports/destination-mix.report.service";
 import { prepareCubes } from "../src/services/reports/semantik/calistirici";
 import { isModuleOpen } from "../src/services/reports/semantik/izin";
-import { helperOnlyDimension } from "../src/services/reports/semantik/boyutlar";
+import { helperOnlyDimension, hourDimension } from "../src/services/reports/semantik/boyutlar";
 import { factoryHourSql } from "../src/constants/time";
 
 let pass = 0;
@@ -302,6 +306,44 @@ async function sectionCoreExtensions(f: { c1: string }): Promise<void> {
   check("§7f factoryHourSql fabrika saatini verir (21:30Z → İstanbul 00)", /EXTRACT\(HOUR/.test(hourText) && h?.h === 0, `${hourText} → ${h?.h}`);
 }
 
+/** §8 süzgeç ağacı: "veya" · iç grup parantezi · "arasında". */
+async function sectionFilterTree(f: { c1: string; c2: string; c3: string }): Promise<void> {
+  console.log("\n§8 süzgeç ağacı — veya · iç grup · arasında");
+  const parse = (p: Record<string, unknown>) => semanticQuerySchema.safeParse({ kup: "sevk", olculer: ["sevk.brutMetre"], ...p });
+  const deep = parse({ suzgec: [{ baglac: "ve", kurallar: [{ baglac: "veya", kurallar: [{ alan: "yon", islec: "=", deger: "EXPORT" }] }] }] });
+  const many = parse({ suzgec: [{ baglac: "veya", kurallar: Array.from({ length: 6 }, () => ({ alan: "yon", islec: "=", deger: "EXPORT" })) }, ...Array.from({ length: 5 }, () => ({ alan: "yon", islec: "=", deger: "EXPORT" }))] });
+  check("§8a grup içinde grup ve 10'dan fazla koşul şemada reddedilir (bir seviye iç grup)", !deep.success && !many.success);
+  const orSql = compileQuery(q({ suzgecBaglaci: "veya", suzgec: [{ alan: "yon", islec: "=", deger: "EXPORT" }, { alan: "musteri", islec: "=", deger: f.c3 }] }), ALL).sql!.sql;
+  check("§8b kök 'veya' WHERE'de parantezli OR üretir", /WHERE \(.+ OR .+\)/.test(orSql));
+  const hour = hourDimension("p.at");
+  check(
+    "§8c 'arasında' sıralı listede açılır; baş > son sondan başa sarar (22–2)",
+    JSON.stringify(expandBetween(hour, "8", "10")) === JSON.stringify(["8", "9", "10"]) && JSON.stringify(expandBetween(hour, "22", "2")) === JSON.stringify(["22", "23", "0", "1", "2"]),
+    `${expandBetween(hour, "8", "10").join(",")} · ${expandBetween(hour, "22", "2").join(",")}`,
+  );
+  const notOrdered = errorOf(() => compileQuery(q({ suzgec: [{ alan: "musteri", islec: "between", deger: [f.c1, f.c2] }] }), ALL));
+  const withHour: SemanticCube = { ...shipmentCube, dimensions: [...shipmentCube.dimensions, hour] };
+  const oneBound = errorOf(() => compileQuery(q({ suzgec: [{ alan: "saat", islec: "between", deger: ["8"] }] }), ALL, [withHour]));
+  const badBound = errorOf(() => compileQuery(q({ suzgec: [{ alan: "saat", islec: "between", deger: ["8", "24"] }] }), ALL, [withHour]));
+  check("§8d 'arasında' sırasız boyutta, tek sınırda, liste dışı sınırda 400", notOrdered?.status === 400 && oneBound?.status === 400 && badBound?.status === 400, JSON.stringify([notOrdered, oneBound, badBound]));
+  const helperOr = errorOf(() => compileQuery(q({ olculer: ["sevk.tutar"], suzgecBaglaci: "veya", suzgec: [{ alan: "yon", islec: "=", deger: "EXPORT" }, { alan: "musteri", islec: "=", deger: f.c3 }] }), ALL));
+  const helperAnd = errorOf(() => compileQuery(q({ olculer: ["sevk.tutar"], suzgec: [{ baglac: "ve", kurallar: [{ alan: "yon", islec: "=", deger: "EXPORT" }] }] }), ALL));
+  check("§8e bellek-içi (helper) ölçüde 'veya' 400 (sessiz düşürme yok); 've' grubu geçer", helperOr?.status === 400 && helperAnd === null, `${JSON.stringify(helperOr)} · ${JSON.stringify(helperAnd)}`);
+
+  const ctx: AccessContext = { ...ALL, userId: ids.user };
+  const deps: RunDeps = { cubes: [withHour], semaphore: new ReportSemaphore(), cache: new ResultCache(), readTimeoutSec: async () => 15 };
+  const run = async (p: Record<string, unknown>) => (await runSemanticQuery(q(p), ctx, undefined, deps)).toplam.degerler["sevk.brutMetre"];
+  // C1 yurtiçi 190 (iade dahil) · C2 yurtdışı 30 · C3 yurtiçi 20. Parantezsiz `C1,C2 AND EXPORT OR C3` 50 verirdi.
+  const nested = await run({ suzgec: [{ alan: "musteri", islec: "in", deger: [f.c1, f.c2] }, { baglac: "veya", kurallar: [{ alan: "yon", islec: "=", deger: "EXPORT" }, { alan: "musteri", islec: "=", deger: f.c3 }] }] });
+  check("§8f ⭐ iç grup parantezi: (C1 ∨ C2) ∧ (yurtdışı ∨ C3) = 30", nested === 30, String(nested));
+  const orTop = await run({ suzgecBaglaci: "veya", suzgec: [{ alan: "musteri", islec: "=", deger: f.c3 }, { baglac: "ve", kurallar: [{ alan: "yon", islec: "=", deger: "EXPORT" }, { alan: "musteri", islec: "=", deger: f.c2 }] }] });
+  check("§8g kök 'veya': C3 ∨ (yurtdışı ∧ C2) = 50", orTop === 50, String(orTop));
+  // Fikstür sevkleri 10:00Z = fabrika saati 13.
+  const around = await run({ suzgec: [{ alan: "saat", islec: "between", deger: ["12", "14"] }] });
+  const wrapped = await run({ suzgec: [{ alan: "saat", islec: "between", deger: ["14", "12"] }] });
+  check("§8h ⭐ 'arasında' 12–14 → 240; ters sınır 14–12 (gece sarması) 13'ü dışlar → 0", around === 240 && wrapped === 0, `${around} / ${wrapped}`);
+}
+
 async function main(): Promise<void> {
   console.log("\n=== Semantik derleyici ===");
   sectionCompile();
@@ -312,6 +354,7 @@ async function main(): Promise<void> {
   const f = await fixture();
   await sectionDb(f);
   await sectionCoreExtensions(f);
+  await sectionFilterTree(f);
 }
 
 main()

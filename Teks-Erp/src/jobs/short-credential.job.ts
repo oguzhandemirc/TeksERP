@@ -6,6 +6,7 @@ import { ShortCredentialAdminService } from "../services/short-credential-admin.
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
 import { startTotpSecretJob } from "./totp-secret.job";
+import { noteRingLossOnBoot } from "../lib/short-credential/ring-footprint";
 
 const STARTUP_DELAY_MS = 4 * 1000;
 const RETRY_DELAY_MS = 15 * 1000;
@@ -42,6 +43,8 @@ export function startShortCredentialJob(): void {
         uyari("kisa-kimlik", `anahtar halkası kullanılamıyor (${ring.problem}: ${ring.detail}) — yeni PIN/kart verilemez.`);
       } else {
         bilgi("kisa-kimlik", `anahtar halkası hazır (${ring.ring.keys.length} anahtar)`);
+        // Halka bu açılışta ÜRETİLDİYSE ve DB'de eski iz varsa kayıp görünür olur (sessiz üretim yok).
+        await noteRingLossOnBoot();
       }
       const sync = await ShortCredentialAdminService.syncEscrow();
       if (sync.sealed.length > 0) bilgi("kisa-kimlik", `${sync.sealed.length} anahtar yedek alıcılarına mühürlendi`);

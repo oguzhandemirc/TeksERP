@@ -26,6 +26,7 @@ import {
   PERSIST_MAX_AGE_MS,
 } from './src/offline/queryClient';
 import { registerStationMutationDefaults } from './src/offline/mutations';
+import { registerNotificationMutationDefaults } from './src/offline/bildirimMutations';
 import { installGlobalErrorReporting } from './src/lib/errorReport';
 import { isPersistedQueryKey, shouldPersistMutation } from './src/offline/persistPolicy';
 import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
@@ -42,6 +43,7 @@ import { LICENSE_STATUS_KEY } from './src/hooks/useLicenseStatus';
 import { startLanTlsNativeSync } from './src/services/lanTlsPins';
 
 registerStationMutationDefaults();
+registerNotificationMutationDefaults();
 installGlobalErrorReporting();
 
 // Android'de operatör sistem fontunu büyütse de barkod/metraj/tablo alanları

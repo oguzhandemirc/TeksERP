@@ -1360,6 +1360,8 @@ export const systemLogListQuerySchema = z.object({
   gorunum: z.enum(["satir", "islem"]).optional(),
   q: z.string().trim().min(2).max(100).optional(),
   gun: z.enum(["bugun", "dun", "hafta"]).optional(),
+  // B4 "Reddedilenler" süzgeci (yalnız işlem görünümü): "1" = trace status ≥ 400. Bilinmeyen değer 400.
+  reddedilen: z.enum(["0", "1"]).optional(),
 })
   // FAIL-CLOSED KAPI (2026-09-05 perf turu): `recordId` composite index'in İKİNCİ
   // kolonudur; ilk kolon (`tableName`) boş gelirse plan "Index Scan" YAZAR ama
@@ -1387,12 +1389,14 @@ export const systemLogListQuerySchema = z.object({
  *       Her satırda EK alan `anlati {parcalar, metin}` (okuma anında kurulan Türkçe cümle).
  *       `gorunum=islem` aynı istekteki satırları tek iş eylemi olarak gruplar; `q` kayıt
  *       numarasıyla arar (kayıt + aynı istekteki kardeşler; bulunamazsa boş + `warnings`);
- *       `gun=bugun|dun|hafta` fabrika günü aralığıdır.
+ *       `gun=bugun|dun|hafta` fabrika günü aralığıdır. `reddedilen=1` (yalnız `gorunum=islem`)
+ *       yalnız reddedilen istekleri (trace status ≥ 400) döndürür; işlem yanıtı `reddedilenSuzgeci: true` taşır.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: gorunum, schema: { type: string, enum: [satir, islem] } }
  *       - { in: query, name: q, schema: { type: string } }
  *       - { in: query, name: gun, schema: { type: string, enum: [bugun, dun, hafta] } }
+ *       - { in: query, name: reddedilen, schema: { type: string, enum: ["0", "1"] } }
  */
 router.get(
   "/system-logs",
