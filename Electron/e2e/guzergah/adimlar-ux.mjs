@@ -8,8 +8,13 @@
 // UX4: ≤1024 px kenar çubuğu satır-içi DEĞİL; hamburger çekmeceyi açar, menü
 //      seçimi kapatır (açık çekmece sayfanın/diyaloğun üstünde kalmaz).
 // UX5: 390 px'te sekme diyaloğu sekme kabını tam kaplar (tam ekran).
+// UX6 (UX-2): menü kökleri Kalite Güvence + Belgeler açılır; kapalı modül (tezgah) karosu Operasyon'da
+//      soluk + "kapalı — <ayar yolu>" der. Kanıt PNG'leri `E2E_KANIT_DIZINI` verilirse 1440/390 · açık/koyu.
 // Pencere boyutu CDP öykünmesiyle verilir; adım sonunda eski boyuta döner.
 // =============================================================================
+import fs from "node:fs";
+import path from "node:path";
+
 const SAYFALAR = [
   "Anasayfa", "Operasyon", "Tanımlar", "Raporlar", "Yetkilendirme", "Sistem", "Maliyet & Teklif",
   "Siparişler", "Sevkiyatlar", "Terbiye İş Emirleri", "Kumaş Stoğu", "Ürünler", "Cariler", "Faturalar",
@@ -17,6 +22,24 @@ const SAYFALAR = [
 ];
 const GENISLIKLER = [390, 768];
 const olc = {};
+const KANIT = process.env.E2E_KANIT_DIZINI;
+
+/** Kanıt PNG'si: verilen genişliklerde açık + koyu tema (dizin verilmezse hiçbir şey yapmaz). */
+async function kanit(page, ad, genislikler = [1440, 390]) {
+  if (!KANIT) return;
+  fs.mkdirSync(KANIT, { recursive: true });
+  for (const w of genislikler) {
+    await boyutla(page, w, async () => {
+      for (const tema of ["acik", "koyu"]) {
+        await page.evaluate((koyu) => document.documentElement.classList.toggle("dark", koyu), tema === "koyu");
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: path.join(KANIT, `${ad}-${w}-${tema}.png`) });
+      }
+      await page.evaluate(() => document.documentElement.classList.remove("dark"));
+    });
+  }
+}
+const h1 = (page) => page.locator(".tab-pane.z-10 h1").first().textContent({ timeout: 10_000 }).then((t) => t?.trim() ?? null).catch(() => null);
 
 /** Etkin sekmenin yatay taşması (px) + belgenin taşması; sekme yoksa null. */
 async function tasmaOlc(page) {
@@ -121,6 +144,50 @@ export const UX_ADIMLARI = [
           return ["x", "y", "width", "height"].every((k) => Math.abs(dk[k] - sk[k]) <= 1);
         },
       },
+    ],
+  },
+  {
+    // Modül anahtarını yalnız SİSTEM HESABI değiştirir (API); panel yönetici oturumuyla, bayrak yeniden yüklenerek.
+    id: "UX6", rol: "P", sistemApi: true,
+    // Yeniden yükleme cihaz duyurusunu tekrarlar (e2e cihazı kayıtsız) — belge adımlarıyla aynı beyan.
+    beklenenHatalar: [{ status: 400, url: /\/api\/devices\/announce/ }],
+    yol: "Kalite Güvence (menü kökü) → Belgeler (menü kökü) → tezgah modülü kapalı → Operasyon: tezgah karosu soluk + ayar yolu", rota: "quality · documents · operations",
+    async yap({ git, page, apiRol }) {
+      // Ayar şifresi (varsa) dosyadan — MK2a ile aynı yol; değer log'a/PNG adına girmez.
+      const dosya = process.env.AYAR_SIFRESI_DOSYASI;
+      const sifre = dosya && fs.existsSync(dosya) ? { "x-settings-password": fs.readFileSync(dosya, "utf-8").trim() } : {};
+      const flags = async (on) => {
+        const r = await apiRol("S", "/api/feature-flags", { method: "PATCH", headers: sifre, body: JSON.stringify({ kaliteGuvenceEnabled: true, tezgahEnabled: on }) });
+        if (r.status >= 300) throw new Error(`bayrak PATCH ${r.status}: ${r.metin.slice(0, 300)}`);
+      };
+      await flags(false);
+      try {
+        await page().reload();
+        await git("Anasayfa");
+        await kanit(page(), "UX6-ana-menu", [1440]);
+        await git("Kalite Güvence");
+        olc.ux6 = { kalite: await h1(page()) };
+        await kanit(page(), "UX6-kalite-guvence");
+        await git("Belgeler");
+        olc.ux6.belgeler = await h1(page());
+        await kanit(page(), "UX6-belgeler");
+        await git("Operasyon");
+        // Kapalı karo: ipucunu basan İLK karo (tezgah kapalı → Tezgah Salonu / Tezgah Alarmları …).
+        const ipucu = page().locator('.tab-pane.z-10 [data-testid="hub-off-hint"]').first();
+        await ipucu.scrollIntoViewIfNeeded({ timeout: 10_000 });
+        const kart = ipucu.locator("xpath=ancestor::button[1]");
+        olc.ux6.kapali = await kart.getAttribute("aria-disabled", { timeout: 5_000 }).catch(() => null);
+        olc.ux6.ipucu = await ipucu.textContent({ timeout: 5_000 }).catch(() => null);
+        await kanit(page(), "UX6-kapali-karo");
+      } finally {
+        await flags(true);
+      }
+    },
+    dogrula: [
+      { ad: "Kalite Güvence kökü açıldı", sql: "SELECT 1", oku: () => olc.ux6?.kalite, beklenen: "Kalite Güvence" },
+      { ad: "Belgeler kökü açıldı", sql: "SELECT 1", oku: () => olc.ux6?.belgeler, beklenen: "Belgeler" },
+      { ad: "kapalı karo gezinmez", sql: "SELECT 1", oku: () => olc.ux6?.kapali, beklenen: "true" },
+      { ad: "kapalı karo ayar yolunu söyler", sql: "SELECT 1", oku: () => olc.ux6?.ipucu, beklenen: (t) => /^kapalı — Sistem/.test(t ?? "") },
     ],
   },
 ];

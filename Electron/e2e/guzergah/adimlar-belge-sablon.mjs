@@ -33,7 +33,8 @@ export const BELGE_SABLON_ADIMLARI = [
     async yap({ git, page, api }) {
       await bayrak(api, false);
       await git("Baskı & Cihazlar");
-      await page().getByText("Belgeler", { exact: true }).first().click();
+      // UX-2: yan menüde de "Belgeler" kökü var — sekme rolüyle seçilir.
+      await page().getByRole("tab", { name: "Belgeler", exact: true }).first().click();
       await page().getByText("Belge tasarımcısı", { exact: true }).first().waitFor({ timeout: 15_000 });
       olc.bs1 = await page().getByText("Şablonu tasarlayan yayınlayamaz", { exact: true }).count();
       await kanit(page(), "BS1-ayarlar-belgeler");

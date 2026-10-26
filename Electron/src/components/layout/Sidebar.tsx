@@ -13,6 +13,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { cn } from "@/lib/utils";
+import { flagOffHint } from "@/lib/flag-setting-path";
 import { staggerContainer } from "@/lib/motion";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useFavorites } from "@/hooks/useFavorites";
@@ -55,9 +56,12 @@ export function Sidebar({ collapsed }: Props) {
     // Belirsizken düşülecek taraf BAYRAĞA GÖRE değişir ve kararı bağlam verir:
     // "Muhasebe" belirsizken çizilmez (fabrikada bir an belirip kaybolmasın),
     // üretim belirsizken çizilir (fabrikada bir an kaybolup gelmesin).
-    if (item.featureFlag && !visibilityCtx[item.featureFlag]) return false;
+    // UX-2 K3: bayrak SONUÇLANINCA kapalı satır gizlenmez, soluk çizilir (`withOffHint`).
+    if (item.featureFlag && !visibilityCtx[item.featureFlag] && !visibilityCtx.flagsReady) return false;
     return true;
   };
+  const withOffHint = (item: NavItem): NavItem =>
+    item.featureFlag && !visibilityCtx[item.featureFlag] ? { ...item, offHint: flagOffHint(item.featureFlag) } : item;
 
   // Favoriler — katalogdan çözülen sabitlenmiş sayfalar, en üstte ayrı grup
   // (kendi sırasını korur, menü sürüklemeye dahil değil).
@@ -77,7 +81,7 @@ export function Sidebar({ collapsed }: Props) {
 
   // Nav grupları — kullanıcı sürükle-bırak sırası uygulanır (localStorage).
   const navOrdered: NavGroup[] = navGroups
-    .map((g) => ({ ...g, items: orderItems(g.label, g.items.filter(visible)) }))
+    .map((g) => ({ ...g, items: orderItems(g.label, g.items.filter(visible).map(withOffHint)) }))
     .filter((g) => g.items.length > 0);
 
   const groups = [...favGroup, ...navOrdered];

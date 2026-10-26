@@ -19,7 +19,7 @@
 - **M3 — sapma ve stok değerleme.** M1 + M2 + stok tarafında dönem kilidi ister; stok değerleme muhasebe programının işidir (G-R2 §8.4).
 - E-posta ile teklif gönderme (e-posta altyapısı yok), CRM fırsat hattı (Faz 3), tablet ekranı (operatör maliyet görmez), boya reçetesi/kimyasal maliyeti (terbiye fason; iç boyahane yok), Ne/Nm/tex iplik numarası (bugün tek birim denye — `resolveDenier` tek kaynak; 1a′ indiğinde yalnız o değişir).
 
-**Modül.** `maliyet.enabled` (API `maliyetEnabled`), varsayılan KAPALI, sıfırdan doğan modül → grandfathering değeri sabit `false`. Kapalı kurulumda menü yok, uçlar 403 `MODULE_DISABLED`, buluta hiçbir şey gitmez — fabrika sıfır-fark.
+**Modül.** `maliyet.enabled` (API `maliyetEnabled`), varsayılan KAPALI, sıfırdan doğan modül → grandfathering değeri sabit `false`. Kapalı kurulumda ~~menü yok~~ (GEÇERSİZ → 2026-10-26, UX-2 K3: menü satırı soluk + "kapalı — <ayar yolu>"), uçlar 403 `MODULE_DISABLED`, buluta hiçbir şey gitmez — fabrika sıfır-fark.
 
 ---
 

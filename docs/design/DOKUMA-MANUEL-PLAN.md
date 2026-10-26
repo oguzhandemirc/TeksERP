@@ -104,7 +104,7 @@ Koşulacak mevcut bekçiler: `test_feature_flag_contract` · `test_settings_scop
 Zaman: yalnız `constants/time.ts` (`factoryDaySql`, `resolveRangeStart`, `factoryDayKeyFromYmd`, hafta anahtarı için `factoryYmd`); çıplak `DATE_TRUNC`/`AT TIME ZONE` yasak.
 
 **Kabul:** YENİ `scripts/test_rapor_levent_sonucu.ts` (DB yazar; fixture: çözgü kartı takeUp %5 · levent 1000 m · tak · KK1 190 m doff bağlı + autoConsume → CONSUMED 200/190 · exhaust): §1 beklenen 950 · gerçek 190 · fire 760 · %80 · §2 takeUp NULL → beklenen null, `olculemedi` 1 · §3 açık levent fire null, `kullanimPct` dolu · §4 kapasite: nominal 600, atkı/cm 20 → 18 m/sa; nominal yok → null + gerekçe · §5 bitiş: kalan 800 / ort → gün; tüketim yok → null · §6 `meta.ufuk` var · §7 üç yanıt `suzgec`/`meta` zarfı. Negatif: takeUp çarpanı kaldırıldı (§1) · kalan elle toplandı → `test_levent_kalan_tek_okuyucu` AST kırmızı · `meta.ufuk` düştü (§6). Mevcut: `test_rapor_katalogu` · `test_rapor_kapisi` · `test_report_day_boundary` · `test_levent_kalan_tek_okuyucu` · `test_dokuma_regime_gate §6g` · `test_rapor_satir_tavani` · `test_rapor_strict` · `test_route_auth_coverage` · `test_swagger_spec`.
-**Adnan Şahin:** dokuma kapalı → uç 403, karo gizli. **Büyüklük:** ~7 dosya; ~2 saat.
+**Adnan Şahin:** dokuma kapalı → uç 403, ~~karo gizli~~ (GEÇERSİZ → 2026-10-26, UX-2 K3: karo soluk + "kapalı — <ayar yolu>"). **Büyüklük:** ~7 dosya; ~2 saat.
 
 ### S2 · BACKEND iş emri formu v2 — SONRA (plan + şema taslağı)
 

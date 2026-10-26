@@ -6,6 +6,7 @@
 // Eski sunucu (404) ve kapalı bayrak (409 `BILDIRIM_KAPALI`) sessiz durum kartına düşer.
 // =============================================================================
 import { useMemo, useState } from "react";
+import { TERIM_AD } from "@/lib/terim";
 import { useQuery } from "@tanstack/react-query";
 import { Archive, BellRing, Pencil, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -70,7 +71,7 @@ export function NotificationProfilesPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Bildirim profilleri"
+        title={TERIM_AD.bildirimProfilleri}
         description="Yöneticinin kişilere atadığı hazır bildirim tercih setleri ve fabrika varsayılanı. Profil izin vermez."
         actions={
           <div className="flex items-center gap-2">

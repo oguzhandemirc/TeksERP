@@ -21,7 +21,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
 import { PANEL_EKRAN, YOL_AYRACI, ekranYolu, type PanelEkran } from "../src/constants/panel-ekran-yolu";
-import { TERIM } from "../src/constants/terim";
+import { TERIM, TERIM_AD } from "../src/constants/terim";
+import { hubKaroDosyalari } from "./lib/panel-karo-dosyalari";
 
 let pass = 0;
 let fail = 0;
@@ -39,13 +40,15 @@ const KOK = path.join(__dirname, "..");
 const SRC = path.join(KOK, "src");
 const PANEL_SRC = path.join(KOK, "..", "Electron", "src");
 const NAV = "components/layout/nav-config.ts";
-/** Sol menü satırının `to`su → o hub'ın karo dizisi. */
-const HUB: Record<string, { dosya: string; dizi: string }> = {
-  "/definitions": { dosya: "pages/Definitions/tile-config.ts", dizi: "definitionTiles" },
-  "/operations": { dosya: "pages/Operations/tile-config.ts", dizi: "operationsTiles" },
-  "/finance": { dosya: "pages/Finance/tile-config.ts", dizi: "financeTiles" },
-  "/access": { dosya: "pages/Access/tile-config.ts", dizi: "accessTiles" },
-  "/system": { dosya: "pages/System/tile-config.ts", dizi: "systemTiles" },
+/** Sol menü satırının `to`su → o hub'ın klasörü (karo dosyaları `scripts/lib/panel-karo-dosyalari.ts`ten; UX-2 bölünmesi). */
+const HUB: Record<string, string> = {
+  "/definitions": "Definitions",
+  "/operations": "Operations",
+  "/finance": "Finance",
+  "/access": "Access",
+  "/system": "System",
+  "/quality": "Quality",
+  "/documents": "Documents",
 };
 /** Karo içi alt etiketin (sekme/bölüm/düğme) paneldeki yeri. */
 const ALT_KAYNAK: Partial<Record<PanelEkran, string>> = {
@@ -75,13 +78,13 @@ function kaynak(rel: string): ts.SourceFile {
   return ts.createSourceFile(rel, fs.readFileSync(tam, "utf8"), ts.ScriptTarget.Latest, true, rel.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
 }
 
-/** `TERIM.a.b` → değer; çözülemezse null. */
+/** `TERIM.a.b` · `TERIM_AD.a` → değer; çözülemezse null. */
 function terimCoz(e: ts.Expression): string | null {
   const zincir: string[] = [];
   let n: ts.Expression = e;
   while (ts.isPropertyAccessExpression(n)) { zincir.unshift(n.name.text); n = n.expression; }
-  if (!ts.isIdentifier(n) || n.text !== "TERIM") return null;
-  let v: unknown = TERIM;
+  if (!ts.isIdentifier(n) || (n.text !== "TERIM" && n.text !== "TERIM_AD")) return null;
+  let v: unknown = n.text === "TERIM" ? TERIM : TERIM_AD;
   for (const k of zincir) v = (v as Record<string, unknown> | undefined)?.[k];
   return typeof v === "string" ? v : null;
 }
@@ -104,11 +107,11 @@ function prop(o: ts.ObjectLiteralExpression, ad: string): ts.Expression | null {
   for (const p of o.properties) if (ts.isPropertyAssignment(p) && p.name.getText() === ad) return p.initializer;
   return null;
 }
-/** `export const <dizi> = [ {…}, … ]` öğelerinin `alan` değerleri (çözülemeyen → "?"). */
-function diziAlanlari(sf: ts.SourceFile, dizi: string, alan: string): string[] {
+/** `export const <ad>Tiles = [ {…}, … ]` öğelerinin `alan` değerleri (çözülemeyen → "?"); birleşim dizileri (`...x`) öğe değildir. */
+function diziAlanlari(sf: ts.SourceFile, alan: string): string[] {
   const out: string[] = [];
   const visit = (n: ts.Node): void => {
-    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === dizi && n.initializer && ts.isArrayLiteralExpression(n.initializer)) {
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text.endsWith("Tiles") && n.initializer && ts.isArrayLiteralExpression(n.initializer)) {
       for (const el of n.initializer.elements) {
         if (!ts.isObjectLiteralExpression(el)) continue;
         const v = prop(el, alan);
@@ -128,7 +131,8 @@ function solMenu(): Menu[] {
     if (ts.isObjectLiteralExpression(n)) {
       const l = prop(n, "label");
       const t = prop(n, "to");
-      if (l && t && (ts.isStringLiteral(l)) && ts.isStringLiteral(t)) out.push({ label: l.text, to: t.text });
+      const lv = l ? metinCoz(l) : null;
+      if (lv !== null && t && ts.isStringLiteral(t)) out.push({ label: lv, to: t.text });
     }
     ts.forEachChild(n, visit);
   };
@@ -154,7 +158,7 @@ function paneliOku(): PanelMenusu {
   for (const m of solMenu()) {
     const hub = HUB[m.to];
     if (!hub) continue;
-    const basliklar = diziAlanlari(kaynak(hub.dosya), hub.dizi, "title");
+    const basliklar = hubKaroDosyalari(PANEL_SRC, hub).flatMap((f) => diziAlanlari(kaynak(f), "title"));
     basliklar.forEach((b, i) => { if (b === "?") okunamayan.push(`${m.label}#${i}`); });
     menu.set(m.label, basliklar);
   }
@@ -174,7 +178,8 @@ function girisFarklari(p: PanelMenusu, tablo: Record<string, Giris>, alt: Record
   });
 }
 
-const KOK_MENU = ["Anasayfa", "Tanımlar", "Operasyon", "Raporlar", "Bildirimler", "Muhasebe", "Maliyet & Teklif", "Yetkilendirme", "Sistem"];
+// UX-2 (2026-10-26): + Kalite Güvence · Belgeler; "Muhasebe" → "Ön Muhasebe"; "Bildirimler" satırı kalktı.
+const KOK_MENU = ["Anasayfa", "Operasyon", "Kalite Güvence", "Maliyet & Teklif", "Ön Muhasebe", "Raporlar", "Tanımlar", "Belgeler", "Yetkilendirme", "Sistem"];
 function desenler(kokler: readonly string[]): RegExp[] {
   return [
     new RegExp(`(^|[^\\p{L}])(${kokler.join("|")})\\s*[→›>]\\s*\\S`, "u"),
@@ -210,7 +215,7 @@ function main(): void {
   console.log("\n=== Ekran yolu — backend mesajındaki menü yolu panelin menüsünde ===\n");
   const p = paneliOku();
   const karoSayisi = [...p.menu.values()].reduce((n, k) => n + k.length, 0);
-  check("§1a panel menüsü okundu (körlük zemini: 5 hub, ≥ 60 karo)", p.menu.size === 5 && karoSayisi >= 60,
+  check("§1a panel menüsü okundu (körlük zemini: 7 hub, ≥ 60 karo)", p.menu.size === 7 && karoSayisi >= 60,
     `${[...p.menu.entries()].map(([m, k]) => `${m}:${k.length}`).join(" · ")}`);
   check("§1b her karo başlığı çözüldü (düz dizge / TERIM)", p.okunamayan.length === 0, p.okunamayan.join(" · "));
   check("§1c sol menü kökleri bekçinin bildiği kümede", solMenu().every((m) => KOK_MENU.includes(m.label)),
@@ -219,7 +224,7 @@ function main(): void {
 
   const fark = girisFarklari(p, PANEL_EKRAN, ALT_KAYNAK, dosyaEtiketleri);
   check("§2a `PANEL_EKRAN` her yolu panelde var (menü → karo → alt)", fark.length === 0, fark.join(" · "));
-  check("§2b `ekranYolu` tek ayraçla biçimler", ekranYolu("etiketAtamalari") === ["Tanımlar", "Etiketler", "Etiket Atamaları"].join(YOL_AYRACI) && YOL_AYRACI === " → ");
+  check("§2b `ekranYolu` tek ayraçla biçimler", ekranYolu("etiketAtamalari") === ["Belgeler", "Etiketler", "Etiket Atamaları"].join(YOL_AYRACI) && YOL_AYRACI === " → ");
 
   const tumKaynak = tsDosyalari(SRC).filter((f) => !f.endsWith("panel-ekran-yolu.ts")).map((f) => fs.readFileSync(f, "utf8")).join("\n");
   const kullanilmayan = Object.keys(PANEL_EKRAN).filter((k) => !tumKaynak.includes(`ekranYolu("${k}")`));
@@ -244,7 +249,7 @@ function main(): void {
   const sahte = (e: Giris): number => girisFarklari(p, { x: e }, { x: e.alt ? "pages/Labels/tabs-config.ts" : undefined }, dosyaEtiketleri).length;
   check("§5c sonda: uydurma menü, kaymış karo ve olmayan alt etiket yakalanır",
     sahte({ menu: "Kalite", karo: "Hata Tipleri" }) === 1 && sahte({ menu: "Sistem", karo: "Kalite Sınıfları" }) === 1
-      && sahte({ menu: "Tanımlar", karo: "Etiketler", alt: "Atamalar" }) === 1 && sahte({ menu: "Tanımlar", karo: "Etiketler", alt: "Etiket Atamaları" }) === 0);
+      && sahte({ menu: "Belgeler", karo: "Etiketler", alt: "Atamalar" }) === 1 && sahte({ menu: "Belgeler", karo: "Etiketler", alt: "Etiket Atamaları" }) === 0);
 }
 
 try {

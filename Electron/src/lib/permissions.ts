@@ -87,6 +87,26 @@ export const SYSTEM_ROLL_ARCHIVE_ACCESS = ["admin:settings", "roll:read"];
 export const LICENSE_ACCESS = ["license:view", "license:manage"];
 
 /**
+ * Kalite Güvence kökü (UX-2 K1) — karolarından BİRİNİ açabilen herkes (route + yan menü aynı küme).
+ * Saf dizge listesi: `test_screen_catalog` sabit referansı metinden çözer (yayılım yazılmaz).
+ */
+export const QUALITY_HUB_ACCESS = ["inspection:read", "labtest:read", "certificate:read"];
+
+/**
+ * Belgeler kökü (UX-2 K2) — Etiketler (`station:read`|`label-template:read`) + belge tasarım ekranları
+ * (`DOCUMENT_DESIGN_READ`) birleşimi; karolar kendi izniyle süzülür. Saf dizge listesi (yayılım yazılmaz).
+ */
+export const DOCUMENTS_HUB_ACCESS = [
+  "station:read",
+  "label-template:read",
+  "admin:settings",
+  "document-template:read",
+  "document-template:write",
+  "document-template:design",
+  "document-template:publish",
+];
+
+/**
  * Sistem hub'ı (ve kenar çubuğundaki "Sistem") — karolarından BİRİNİ açabilen
  * herkes. `roll:read` BİLEREK yok: Top Arşivi'ni hub'a giren görür, ama her
  * operatörün menüsüne "Sistem" koymak için yeterli sebep değildir.

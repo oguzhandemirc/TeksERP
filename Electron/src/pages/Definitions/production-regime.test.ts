@@ -16,6 +16,7 @@ import {
   isTravelerCardVisible,
 } from "./production-regime";
 import { definitionTiles } from "./tile-config";
+import { documentTiles } from "@/pages/Documents/tile-config";
 
 const YUKLEMLER = [
   ["isRoutesVisible", isRoutesVisible],
@@ -34,7 +35,8 @@ describe("tanımlar — üretim rejimi", () => {
 });
 
 describe("karolara bağlanma (kimlik)", () => {
-  const tile = (key: string) => definitionTiles.find((t) => t.key === key);
+  // UX-2 K2: belge/etiket/refakat karoları Belgeler kökünde — iki katalog birlikte aranır.
+  const tile = (key: string) => [...definitionTiles, ...documentTiles].find((t) => t.key === key);
 
   it.each([
     ["routes", isRoutesVisible],

@@ -45,7 +45,6 @@ const EXEMPT: Record<string, string> = {
   "/system/settings": "eski Genel Ayarlar adresi → üç ayar ekranına yönlendirir (`LegacySettingsRedirect`)",
   "/system/update": "eski panel güncelleme adresi → /system/updates'e yönlendirir",
   "/system/server-updates": "eski sunucu güncellemeleri adresi → /system/updates'e yönlendirir",
-  "/definitions/label-templates": "Etiketler ekranının 'Düzenler' sekmesi olarak listelenir",
   "/access/devices/:id": "detay yolu",
 };
 

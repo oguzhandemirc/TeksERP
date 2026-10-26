@@ -1,17 +1,14 @@
-// Maliyet modülünün ayar satırı kayıttan bulunur (designerSettingPath kalıbı); elle yol yazılmaz.
-import { SETTINGS_CATEGORIES, settingsCategoryPath, settingsCategoryTrail } from "@/pages/GeneralSettings/settings-config";
+// Maliyet modülünün ayar satırı kayıttan bulunur (`lib/flag-setting-path` tek yardımcısı); elle yol yazılmaz.
+import { flagSettingPath, flagSettingTrail } from "@/lib/flag-setting-path";
 
 const MALIYET_FLAG_FIELD = "maliyetEnabled";
-const maliyetCategory = () => SETTINGS_CATEGORIES.find((c) => c.flags?.some((f) => f.key === MALIYET_FLAG_FIELD));
 
 export function maliyetSettingPath(): string {
-  const cat = maliyetCategory();
-  return cat ? settingsCategoryPath(cat) : "/system";
+  return flagSettingPath(MALIYET_FLAG_FIELD);
 }
 
 export function maliyetSettingTrail(): string {
-  const cat = maliyetCategory();
-  return cat ? settingsCategoryTrail(cat) : "Sistem";
+  return flagSettingTrail(MALIYET_FLAG_FIELD);
 }
 
 export const MALIYET_CLOSED_TITLE = "Maliyet & Teklif modülü kapalı";

@@ -123,6 +123,8 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
             ) : null}
           </div>
           {note && <p className="relative mt-1 text-xs text-muted-foreground">{note}</p>}
+          {/* UX-2 K3: kapalı karo nereden açılacağını BASAR ("kapalı — Sistem → Modüller"); title/toast yalnız tekrarı. */}
+          {offHint && offHint !== "kapalı" ? <p className="relative mt-1 text-xs text-muted-foreground" data-testid="hub-off-hint">{offHint}</p> : null}
         </Card>
       </button>
       {/* Sürükleme tutamacı — kart butonunun KARDEŞİ (içinde değil): iç içe

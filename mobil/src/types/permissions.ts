@@ -1,4 +1,4 @@
-import { TERIM } from '../lib/terim';
+import { TERIM, TERIM_AD } from '../lib/terim';
 
 export type MobilePermission =
   | 'mobile:kk1'
@@ -141,7 +141,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     // çoğu işin fiilen sevk edildiği yer). İkinci ekran (key 'Sevkiyat') artık "Sevk Çıkışı".
     key: 'TartiPaket',
     permission: 'mobile:tarti-paket',
-    label: 'Sevkiyat',
+    label: TERIM_AD.tartiPaket,
     icon: 'scale-balance',
     description: 'Tartım, paketleme ve irsaliye',
   },
@@ -223,7 +223,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     // ikizi de hizalandı: ekran bayrak kapalıyken de bekleyen kuyruğu gösteriyor.
     key: 'KursunDagitim',
     permission: 'mobile:kursun-dagitim',
-    label: 'Kurşun Dağıtım',
+    label: TERIM_AD.kursunDagitim,
     icon: 'clipboard-flow-outline',
     description: 'Fason dönüşü terbiye iş emirlerini fiziksel kurşun makinelerine dağıt',
   },
@@ -232,7 +232,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     // top indirme; geri almalar `mobile:dokuma-geri-al`. WEAVING istasyonunda oturum ister.
     key: 'Dokuma',
     permission: 'mobile:dokuma',
-    label: 'Tezgah',
+    label: TERIM_AD.tezgahEkrani,
     icon: 'package-down',
     description: 'Tezgahtan inen topu kaydet — indirme ve geri alma',
   },
@@ -258,7 +258,7 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
   {
     key: 'Uyarilar',
     permission: 'mobile:tezgah-uyari',
-    label: 'Uyarılar',
+    label: TERIM_AD.tezgahAlarmlari,
     icon: 'bell-alert-outline',
     description: 'Tezgah alarmları: üstlen, sustur, not; bildirim',
   },

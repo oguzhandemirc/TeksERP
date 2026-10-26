@@ -83,6 +83,8 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "definitions/machine-collectors": "tezgahEnabled",
   "definitions/machine-stop-codes": "tezgahEnabled",
   // ── KALİTE GÜVENCE (K4P) — sayfalar PANEL/LAB/SERT dilimlerinde; kapı manifestoyla önden ──
+  // Hub rota anahtarı tırnaklı: komşu "quality/…" yollarıyla aynı biçim (kalite KODU değil, yol).
+  "quality": "kaliteGuvenceEnabled",
   "quality/inspections": "kaliteGuvenceEnabled",
   "quality/inspection-rules": "kaliteGuvenceEnabled",
   "quality/lab-tests": "kaliteGuvenceEnabled",

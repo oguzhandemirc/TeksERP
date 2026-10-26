@@ -10,7 +10,7 @@ const SRC = resolve(__dirname, "../../..");
 const FOLDER = "pages/Operations/WeavingFloor/";
 const PREVIEW = "preview/weavingFloorPreview.tsx";
 const ROUTES = "routes/content-routes.tsx";
-const TILES = "pages/Operations/tile-config.ts";
+const TILES = "pages/Operations/tiles/production.ts";
 const TILES_TEST = "pages/Operations/tile-visibility.test.ts";
 const APP = "App.tsx";
 const SHELL = "components/layout/AppShell.tsx";
@@ -33,7 +33,7 @@ describe("Tezgah Salonu — kapılar ve örnek veri sınırı", () => {
   it("klasör dışından içe aktaranlar yalnız önizleme, route tablosu, karo yüklemi (+ karo testi) ve AppShell (TV bağlantısı)", () => {
     const importers = files.filter((rel) => !rel.startsWith(FOLDER) && IMPORT_RE.test(read(rel)));
     expect(importers.sort()).toEqual([SHELL, TILES, TILES_TEST, PREVIEW, ROUTES].sort());
-    expect(read(TILES)).toMatch(/from "\.\/WeavingFloor\/floor-regime"/);
+    expect(read(TILES)).toMatch(/from "\.\.\/WeavingFloor\/floor-regime"/);
   });
 
   it("⭐ örnek veriyi (mock/) uygulama kodu içe aktarmaz — yalnız önizleme ve testler", () => {

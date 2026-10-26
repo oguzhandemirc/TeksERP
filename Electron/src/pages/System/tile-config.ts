@@ -1,7 +1,11 @@
-import { Activity, Archive, ScrollText, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, FileCode2, Gauge, Info, KeyRound, LifeBuoy, MapPin, Search, Building2, Monitor, Printer, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone, Bell, BellRing } from "lucide-react";
-import { LICENSE_ACCESS, SETTINGS_COMPANY_ACCESS, SETTINGS_FLAGS_ACCESS, SETTINGS_PRINTING_ACCESS, SETTINGS_WORKSTATION_ACCESS, SYSTEM_ACTIVITY_ACCESS, SYSTEM_BACKUPS_ACCESS, SYSTEM_CLIENTS_ACCESS, SYSTEM_PRINT_HISTORY_ACCESS, SYSTEM_ROLL_ARCHIVE_ACCESS, SYSTEM_SERVER_STATUS_ACCESS, SYSTEM_WORK_SESSIONS_ACCESS, NOTIFICATION_PROFILES_ACCESS } from "@/lib/permissions";
+import type { LucideIcon } from "lucide-react";
+import { activityTiles } from "./tiles/activity";
+import { monitoringTiles } from "./tiles/monitoring";
+import { archiveTiles } from "./tiles/archive";
+import { settingsTiles } from "./tiles/settings";
+import { maintenanceTiles } from "./tiles/maintenance";
 
-export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
+export type SystemTileGroup = "activity" | "monitoring" | "archive" | "settings" | "maintenance";
 
 export interface SystemTile {
   key: string;
@@ -84,306 +88,23 @@ export const systemTileSections: SystemTileSection[] = [
     description: "Eski log'ları arşive taşı veya geçmiş kayıtları ara",
   },
   {
-    group: "config",
-    title: "Yapılandırma",
-    description: "Sistem geneli ayarlar",
+    // UX-2: eski tek "Yapılandırma" grubu (18 karo) ikiye bölündü — fabrika ayarları ↔ bakım işleri.
+    group: "settings",
+    title: "Ayarlar",
+    description: "Fabrika geneli ayarlar — modüller, baskı, numaralandırma, bildirim profilleri",
+  },
+  {
+    group: "maintenance",
+    title: "Bakım",
+    description: "Güncelleme, yedek, lisans, destek ve veri bakımı",
   },
 ];
-
+// Karolar bölüm dosyalarında (`tiles/*.ts`, UX-2 bölünmesi); bekçiler `scripts/lib/panel-karo-dosyalari.ts` ile hepsini okur.
 export const systemTiles: SystemTile[] = [
-  {
-    key: "data-import",
-    title: "Veri Aktarımı",
-    description: "Excel/CSV ile toplu kayıt yükleme + aktarım geçmişi",
-    icon: Upload,
-    to: "/system/data-import",
-    group: "config",
-    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
-    permission: "data:import",
-  },
-  {
-    key: "duplicates",
-    title: "Mükerrer Kayıtlar",
-    description: "Aynı kaydın iki kez açılmış hâllerini tek kayda birleştir",
-    icon: Merge,
-    to: "/system/duplicates",
-    group: "config",
-    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
-    // Yerleşim: araç DÖRT tanım ekranını birden keser (müşteri/kumaş/renk/fason);
-    // birinin içine koymak diğer üçünden gizlerdi — Veri Aktarımı ile aynı şekil.
-    permission: "master-data:merge",
-  },
-  {
-    key: "activity",
-    title: "Etkinlik",
-    description: "İşlemler — kim ne yaptı, günlük dille; teknik iz ve kayıt numarasıyla arama",
-    icon: Activity,
-    to: "/system/activity",
-    group: "activity",
-    permissionAny: SYSTEM_ACTIVITY_ACCESS,
-  },
-  {
-    // bildirim: kişisel gelen kutusu — kapısız (herkes kendi kutusunu görür); bayrak kapalıyken karo kalır.
-    key: "notifications",
-    title: "Bildirimler",
-    description: "Size gelen bildirimlerin geçmiş günlüğü — okundu, ertele, aç",
-    icon: Bell,
-    to: "/notifications",
-    group: "activity",
-    public: true,
-    kapaliBayrak: "bildirimGelenKutusuEnabled",
-  },
-  {
-    key: "logs",
-    title: "Sistem Kayıtları",
-    description: "Kimlik doğrulama ve sistem olayları (login, başlatma, hata)",
-    icon: FileCode2,
-    to: "/system/logs",
-    group: "activity",
-    permissionAny: SYSTEM_ACTIVITY_ACCESS,
-  },
-  {
-    key: "print-history",
-    title: "Yazdırma Geçmişi",
-    description: "Kim, neyi, hangi yazıcıdan bastı — hatalar ve nedenleri",
-    icon: Printer,
-    to: "/system/print-history",
-    group: "activity",
-    permissionAny: SYSTEM_PRINT_HISTORY_ACCESS,
-  },
-  {
-    key: "work-sessions",
-    title: "Çalışma Oturumları",
-    description: "Kim hangi makinede — canlı görünüm + geçmiş (saha ayak izi)",
-    icon: MapPin,
-    to: "/system/work-sessions",
-    group: "activity",
-    permissionAny: SYSTEM_WORK_SESSIONS_ACCESS,
-  },
-  {
-    // 2026-08-05: Envanter sekme şeridinden buraya taşındı. Başlık "TOP
-    // Arşivi" — komşusu "Aktivite Arşivi" (SystemLog) ve ikisi tamamen farklı
-    // şeyler; tek kelimelik "Arşiv" ikisini de karşılar ve yanlış tıklatır.
-    key: "roll-archive",
-    title: "Top Arşivi",
-    description: "Emekli toplar — kesilmiş, fasonda/kartelada tüketilmiş kayıtlar",
-    icon: Archive,
-    to: "/system/roll-archive",
-    group: "archive",
-    permissionAny: SYSTEM_ROLL_ARCHIVE_ACCESS,
-  },
-  {
-    key: "archive",
-    title: "Aktivite Arşivi",
-    description: "Eski log'ları arşive taşı; tablo boyutu istatistikleri",
-    icon: Archive,
-    to: "/system/archive",
-    group: "archive",
-    permission: "admin:settings",
-    superadminOnly: true,
-  },
-  {
-    key: "archive-search",
-    title: "Arşiv Tarama",
-    description: "Etkinlik akışının arşivlenmiş eski kayıtlarını ara",
-    icon: Search,
-    to: "/system/archive/search",
-    group: "archive",
-    permissionAny: SYSTEM_ACTIVITY_ACCESS,
-  },
-  {
-    key: "perf",
-    title: "Endpoint Performansı",
-    description: "Hangi uç yavaş — route bazında p50/p95, yavaş istek defteri, günlük trend",
-    icon: Gauge,
-    to: "/system/perf",
-    group: "monitoring",
-    permission: "admin:settings",
-    superadminOnly: true,
-  },
-  {
-    key: "server-status",
-    title: "Sunucu Durumu",
-    description: "Backend CPU/RAM kullanımı, çalışma süresi ve makine kaynakları",
-    icon: Cpu,
-    to: "/system/server-status",
-    group: "monitoring",
-    permissionAny: SYSTEM_SERVER_STATUS_ACCESS,
-  },
-  {
-    // Bağlı İstemciler — "hangi panel/tablet hangi sürümde, en son ne zaman
-    // görüldü, kim oturumdaydı". İzin: `admin:settings` (hub'ın varsayılanı;
-    // yeni izin kodu AÇILMADI — sahada atanması unutulacak bir adım daha
-    // olurdu, 2026-08-01 kurşun bypass dersi).
-    key: "clients",
-    title: "Bağlı İstemciler",
-    description: "Panel/tablet sürümleri, son görülme zamanı ve son kullanıcı",
-    icon: MonitorSmartphone,
-    to: "/system/clients",
-    group: "monitoring",
-    permissionAny: SYSTEM_CLIENTS_ACCESS,
-  },
-  {
-    key: "backups",
-    title: "Yedekler",
-    description: "Veritabanı yedeklerini listele, indir, geri yükleme komutunu kopyala",
-    icon: DatabaseBackup,
-    to: "/system/backups",
-    group: "config",
-    permissionAny: SYSTEM_BACKUPS_ACCESS,
-  },
-  {
-    key: "db-restore",
-    title: "Veritabanı Geri Yükleme",
-    description: "Yedeği yeni bir veritabanına geri yükle, doğrula, geçiş yap (canlıya dokunmaz)",
-    icon: DatabaseZap,
-    to: "/system/db-restore",
-    group: "config",
-    permission: "admin:settings",
-    superadminOnly: true,
-  },
-  {
-    // G5 — müşterinin BI aracı için yalnız-okuma DB girişi; backend YALNIZ sistem hesabına açar (supapsız 403).
-    key: "read-only-db",
-    title: "Veritabanı Okuma Erişimi",
-    description: "Raporlama aracınız için yalnız-okuma veritabanı kullanıcısı — bağlantı bilgisi, parola yenile",
-    icon: DatabaseSearch,
-    to: "/system/read-only-db",
-    group: "config",
-    permission: "admin:settings",
-    superadminOnly: true,
-  },
-  {
-    // SATICI EKRANI — modül anahtarlarının TEK evi (2026-09-04). Eskiden aynı
-    // anahtarlar Genel Ayarlar → Modüller sekmesinde de yazılabiliyordu; o
-    // sekme kullanıcı isteğiyle kaldırıldı ("modül flaglarını ayrı bir yere
-    // taşıyalım"). Sayfa ayrıca kurulum fotoğrafıdır: profil karşılaştırması ·
-    // bağımlılık okları · "kapatırsan gizlenir" önizlemesi · tutarsızlık
-    // bantları · kurulum beyanı (demo) · ayar şifresi.
-    //
-    // ⚠️ ROUTE PATH DEĞİŞMEDİ (`/system/module-profile`): derin bağlantılar,
-    // sekme başlıkları ve satıcının telefonda tarif ettiği adres yaşıyor.
-    // Değişen şey BAŞLIK ("Sistem Profili" → "Modüller", kullanıcının kendi
-    // kelimesi).
-    key: "module-profile",
-    title: "Modüller",
-    description: "Bu kurulumda hangi modüller açık — profil uygula, bağımlılıkları ve kapatma etkisini gör",
-    icon: Blocks,
-    to: "/system/module-profile",
-    group: "config",
-    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
-    permission: "admin:settings",
-    superadminOnly: true,
-  },
-  {
-    // FABRİKANIN kendi tercihleri — modül anahtarlarından AYRI ekran
-    // (2026-09-04): "firmadaki yetkilinin düzenleyebileceği flaglar ayrı bir
-    // yerde olsun". Aynı kabuk, farklı yüzey (`SettingsSurface`).
-    key: "numbering",
-    title: "Numaralandırma",
-    description: "Sevkiyat · çuval · sevk partisi · iade belge numaralarının ön eki ve biçimi",
-    icon: Hash,
-    to: "/system/numbering",
-    group: "config",
-    permission: "settings:numbering",
-  },
-  {
-    key: "feature-flags",
-    title: "Özellik Anahtarları",
-    description: "Sipariş/sevkiyat, üretim, kalite ve muhasebe davranışını belirleyen ayarlar",
-    icon: SlidersHorizontal,
-    to: "/system/feature-flags",
-    group: "config",
-    permissionAny: SETTINGS_FLAGS_ACCESS,
-  },
-  {
-    // Sunucu + bu bilgisayar güncellemesi TEK sayfada (2026-10-12; eski "Güncelleme" ve "Sunucu Güncellemeleri"
-    // karoları burada birleşti). KAPISIZ: herkes açar, onay düğmeleri sayfa içinde `license:manage`e.
-    key: "updates",
-    title: "Güncellemeler",
-    description: "Sunucu ve bu bilgisayar: kurulu sürüm, yeni sürüm, onay",
-    icon: Download,
-    to: "/system/updates",
-    group: "config",
-    public: true,
-  },
-  {
-    key: "license",
-    title: "Lisans",
-    description: "Lisans durumu, hak ve modüller, kira ve yoklama, etkinleştirme ve taşıma",
-    icon: KeyRound,
-    to: "/system/license",
-    group: "config",
-    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI küme.
-    permissionAny: LICENSE_ACCESS,
-    licenseObservationGate: true,
-  },
-  {
-    key: "support",
-    title: "Destek",
-    description: "Satıcıya destek talebi açın (ekran görüntüsü + sağlık özeti), yanıtları izleyin",
-    icon: LifeBuoy,
-    to: "/system/support",
-    group: "config",
-    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
-    permission: "support:create",
-  },
-  {
-    key: "about",
-    title: "Hakkında",
-    description: "Lisans sahibi, lisans numarası ve program sürümleri",
-    icon: Info,
-    to: "/system/about",
-    group: "config",
-    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
-    permission: "license:view",
-  },
-  {
-    key: "release-notes",
-    title: "Sürüm Notları",
-    description: "Geçmiş güncellemelerde neler değişti — sürüm sürüm, aranabilir",
-    icon: ScrollText,
-    to: "/release-notes",
-    group: "config",
-    public: true,
-  },
-  {
-    key: "printing",
-    title: "Baskı & Cihazlar",
-    description: "Etiket baskısı (kopya, ortam, gönderim) ve tablet eşleştirme zorunluluğu",
-    icon: Printer,
-    to: "/system/printing",
-    group: "config",
-    permissionAny: SETTINGS_PRINTING_ACCESS,
-  },
-  {
-    key: "workstation",
-    title: "Bu Bilgisayar",
-    description: "Bu bilgisayara bağlı yazıcı, kantar, barkod tabancası ve sunucu adresi",
-    icon: Monitor,
-    to: "/system/workstation",
-    group: "config",
-    permissionAny: SETTINGS_WORKSTATION_ACCESS,
-  },
-  {
-    key: "company",
-    title: "Şirket & Güvenlik",
-    description: "Şirket bilgileri (ad, antet, logo) ve oturum & güvenlik politikası",
-    icon: Building2,
-    to: "/system/company",
-    group: "config",
-    permissionAny: SETTINGS_COMPANY_ACCESS,
-  },
-  {
-    // bildirim: yönetici profilleri + fabrika varsayılanı; bayrak kapalıyken karo kalır, "kapalı" notu taşır.
-    key: "notification-profiles",
-    title: "Bildirim profilleri",
-    description: "Kişilere atanan hazır bildirim tercih setleri ve fabrika varsayılanı",
-    icon: BellRing,
-    to: "/system/notification-profiles",
-    group: "config",
-    permissionAny: NOTIFICATION_PROFILES_ACCESS,
-    kapaliBayrak: "bildirimGelenKutusuEnabled",
-  },
+  ...activityTiles,
+  ...monitoringTiles,
+  ...archiveTiles,
+  ...settingsTiles,
+  ...maintenanceTiles,
 ];
 

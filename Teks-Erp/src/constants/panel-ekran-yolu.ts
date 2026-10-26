@@ -17,7 +17,7 @@ export function yolBicimle(parcalar: readonly string[]): string {
 }
 
 /** Sol menü satırı (panel `nav-config.ts` `navGroups[].items[].label`). */
-export type PanelMenu = "Tanımlar" | "Operasyon" | "Muhasebe" | "Yetkilendirme" | "Sistem";
+export type PanelMenu = "Tanımlar" | "Operasyon" | "Kalite Güvence" | "Ön Muhasebe" | "Belgeler" | "Yetkilendirme" | "Sistem";
 
 /**
  * menu → karo (o menünün hub karosu başlığı) → alt (karo içindeki sekme/bölüm/düğme adı; isteğe bağlı).
@@ -31,12 +31,12 @@ export const PANEL_EKRAN = {
   hataTipleri: { menu: "Tanımlar", karo: "Hata Tipleri" },
   vardiyaTanimlari: { menu: "Tanımlar", karo: "Vardiya Tanımları" },
   donanim: { menu: "Tanımlar", karo: "Donanım" },
-  etiketDuzenleri: { menu: "Tanımlar", karo: "Etiketler", alt: "Etiket Düzenleri" },
-  etiketAtamalari: { menu: "Tanımlar", karo: "Etiketler", alt: "Etiket Atamaları" },
+  etiketDuzenleri: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Düzenleri" },
+  etiketAtamalari: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Atamaları" },
   kumasStogu: { menu: "Operasyon", karo: "Kumaş Stoğu" },
   terbiyeIsEmirleri: { menu: "Operasyon", karo: TERIM.terbiyeIsEmri.cogul },
-  faturalar: { menu: "Muhasebe", karo: "Faturalar" },
-  kasaHareketleri: { menu: "Muhasebe", karo: "Kasa Hareketleri" },
+  faturalar: { menu: "Ön Muhasebe", karo: "Faturalar" },
+  kasaHareketleri: { menu: "Ön Muhasebe", karo: "Kasa Hareketleri" },
   kisaKimlikler: { menu: "Yetkilendirme", karo: "Kullanıcılar", alt: "Kısa Kimlikler" },
   tabletler: { menu: "Yetkilendirme", karo: "Tabletler" },
   raporGorunurlugu: { menu: "Sistem", karo: "Modüller", alt: "Raporlar" },
@@ -45,7 +45,7 @@ export const PANEL_EKRAN = {
 
 export type PanelEkran = keyof typeof PANEL_EKRAN;
 
-/** "Tanımlar → Etiketler → Etiket Atamaları" */
+/** "Belgeler → Etiketler → Etiket Atamaları" */
 export function ekranYolu(ekran: PanelEkran): string {
   const e: { menu: string; karo: string; alt?: string } = PANEL_EKRAN[ekran];
   return yolBicimle(e.alt ? [e.menu, e.karo, e.alt] : [e.menu, e.karo]);

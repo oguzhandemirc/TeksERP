@@ -45,6 +45,7 @@ import documentProfileRouter from "../src/routes/document-profile.routes";
 import travelerTemplateRouter from "../src/routes/traveler-template.routes";
 import travelerCardRouter from "../src/routes/traveler-card.routes";
 import printedDocumentRouter from "../src/routes/printed-document.routes";
+import { tumKaroDosyalari } from "./lib/panel-karo-dosyalari";
 
 const READ_KOD = "document-template:read";
 const WRITE_KOD = "document-template:write";
@@ -366,7 +367,8 @@ if (!fs.existsSync(ELECTRON_PERMS)) {
 // kart görünmez ama adres çalışır). İkisi de sebebini söylemez.
 console.log("\n=== 7) Electron kart ↔ route hizası ===");
 const ROUTES_TSX = path.join(ELECTRON_KOK, "routes/content-routes.tsx");
-const TILES_TS = path.join(ELECTRON_KOK, "pages/Definitions/tile-config.ts");
+// Belge karoları UX-2'de "Belgeler" köküne taşındı; bütün hub karo dosyaları okunur (`panel-karo-dosyalari`).
+const TILE_DOSYALARI = tumKaroDosyalari(ELECTRON_KOK).map((f) => path.join(ELECTRON_KOK, f));
 const YOLLAR = [
   "definitions/document-templates",
   "definitions/traveler-card",
@@ -374,11 +376,11 @@ const YOLLAR = [
   "definitions/free-documents",
 ];
 
-if (!fs.existsSync(ROUTES_TSX) || !fs.existsSync(TILES_TS)) {
+if (!fs.existsSync(ROUTES_TSX) || TILE_DOSYALARI.length === 0) {
   console.log("⚠️  Electron route/tile kaynağı bulunamadı, hiza kontrolü atlandı");
 } else {
   const routes = fs.readFileSync(ROUTES_TSX, "utf8");
-  const tiles = fs.readFileSync(TILES_TS, "utf8");
+  const tiles = TILE_DOSYALARI.map((f) => fs.readFileSync(f, "utf8")).join("\n");
   for (const yol of YOLLAR) {
     // path: "…" ile bir sonraki `path:` arasındaki blokta guard'ı ara.
     const i = routes.indexOf(`path: "${yol}"`);

@@ -1,7 +1,7 @@
-import { ShoppingCart, Factory, Warehouse, Truck, ShieldCheck, type LucideIcon } from "lucide-react";
+import { ShoppingCart, Factory, Warehouse, Truck, type LucideIcon } from "lucide-react";
 
 /** Operasyon hub karolarının mantıksal grupları (Tanımlar hub'ıyla aynı desen). */
-export type OperationGroupKey = "planning" | "production" | "warehouse" | "shipping" | "quality";
+export type OperationGroupKey = "planning" | "production" | "warehouse" | "shipping";
 
 export interface OperationGroup {
   key: OperationGroupKey;
@@ -35,12 +35,5 @@ export const operationGroups: OperationGroup[] = [
     title: "Sevkiyat & İade",
     description: "Sevk çıkışı, muhasebe dökümü ve müşteri iadeleri",
     icon: Truck,
-  },
-  {
-    // K4P: Kalite Güvence ekranlarının ORTAK yuvası (Lab Testleri, Muayene, Kural Setleri, Sertifikalar).
-    key: "quality",
-    title: "Kalite Güvence",
-    description: "Lab testleri, muayene ve sertifikalar",
-    icon: ShieldCheck,
   },
 ];

@@ -137,3 +137,24 @@ export const TERIM = {
 } as const satisfies Record<string, Term>;
 
 export type TermKey = keyof typeof TERIM;
+
+// Ekran / menü ADLARI sözlüğü (UX-2 K4): aynı kavram her yüzeyde (panel karo · katalog · palet · tablet · patron) aynı adla.
+// Çekim gerektirmeyen başlık adlarıdır; çekimli iş emri adları yukarıda (`TERIM`). Kurşun Planlama (panel, plan) ile
+// Kurşun Dağıtım (tablet, sahada dağıtım) BİLEREK iki ayrı iştir — iki ad.
+export const TERIM_AD = {
+  onMuhasebe: "Ön Muhasebe",
+  kaliteGuvence: "Kalite Güvence",
+  belgeler: "Belgeler",
+  tartiPaket: "Tartı & Paket",
+  kursunPlanlama: "Kurşun Planlama",
+  kursunDagitim: "Kurşun Dağıtım",
+  tezgahAlarmlari: "Tezgah Alarmları",
+  tezgahEkrani: "Tezgah Ekranı",
+  etkinlikGunlugu: "Etkinlik Günlüğü",
+  etkinlikArsivi: "Etkinlik Arşivi",
+  makineVeriToplayicilari: "Makine Veri Toplayıcıları",
+  bildirimAyarlari: "Bildirim Ayarları",
+  bildirimProfilleri: "Bildirim Profilleri",
+} as const;
+
+export type TermAdKey = keyof typeof TERIM_AD;

@@ -16,10 +16,6 @@ const TILE_TONES: Record<string, string> = {
   rolls: "text-station-depo",
   "kursun-dagitim": "text-station-process",
   shipments: "text-success",
-  inspections: "text-station-kk1",
-  "lab-tests": "text-station-kk1",
-  certificates: "text-station-kk1",
-  "inspection-rules": "text-station-kk1",
 };
 
 export function OperationsHubPage() {

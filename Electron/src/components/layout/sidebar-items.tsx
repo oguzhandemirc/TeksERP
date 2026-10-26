@@ -9,6 +9,14 @@ import { useTabsStore, selectActivePath } from "@/store/tabs";
 import { useTabTarget } from "./tabs/use-tab-target";
 import type { NavItem } from "./nav-config";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toast } from "sonner";
+
+/** UX-2 K3: kapalı modül satırı gezinmez; tıkta "kapalı — <ayar yolu>" der (HubCard ile aynı davranış). */
+function useNavTarget(item: NavItem) {
+  const target = useTabTarget(item.to);
+  const hint = item.offHint;
+  return hint ? { onClick: () => toast.info(hint), title: hint, "aria-disabled": true as const } : target;
+}
 
 /** Sidebar'daki tüm item path'leri — aktif hesaplamasında parent/child çakışmasını önler. */
 export const SidebarPathsCtx = createContext<string[]>([]);
@@ -48,7 +56,7 @@ function SidebarBadge({ value, active }: { value: number; active: boolean }) {
 /** Genişletilmiş nav satırı — aktifken dolu gradient pill (layoutId ile kayar) + glow. */
 export function NavItemLink({ item }: { item: NavItem }) {
   const Icon = item.icon;
-  const target = useTabTarget(item.to);
+  const target = useNavTarget(item);
   const isActive = useSidebarActive(item.to);
   return (
     <button
@@ -56,6 +64,7 @@ export function NavItemLink({ item }: { item: NavItem }) {
       {...target}
       className={cn(
         "group relative flex h-9 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
+        item.offHint && "opacity-50",
         isActive
           ? "text-primary-foreground"
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -71,6 +80,7 @@ export function NavItemLink({ item }: { item: NavItem }) {
       <Icon className="relative z-10 h-[18px] w-[18px] shrink-0 transition-transform duration-200 group-hover:scale-110" />
       <span className="relative z-10 flex-1 truncate text-left">{item.label}</span>
       <span className="relative z-10 ml-auto flex items-center gap-1.5">
+        {item.offHint ? <span className="text-[10px] font-normal">kapalı</span> : null}
         {item.badge ? <SidebarBadge value={item.badge} active={isActive} /> : null}
         {isActive && <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-70" />}
       </span>
@@ -81,7 +91,7 @@ export function NavItemLink({ item }: { item: NavItem }) {
 /** Daraltılmış nav ikon-butonu — aktifken gradient kare + glow; tooltip ile etiket. */
 export function CollapsedItem({ item }: { item: NavItem }) {
   const Icon = item.icon;
-  const target = useTabTarget(item.to);
+  const target = useNavTarget(item);
   const isActive = useSidebarActive(item.to);
   return (
     <motion.li variants={staggerItem} className="flex w-full justify-center">
@@ -92,6 +102,7 @@ export function CollapsedItem({ item }: { item: NavItem }) {
             {...target}
             className={cn(
               "group relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors",
+              item.offHint && "opacity-50",
               isActive
                 ? "text-primary-foreground"
                 : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
@@ -116,7 +127,7 @@ export function CollapsedItem({ item }: { item: NavItem }) {
           </button>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={8}>
-          {item.label}
+          {item.offHint ? `${item.label} · ${item.offHint}` : item.label}
         </TooltipContent>
       </Tooltip>
     </motion.li>

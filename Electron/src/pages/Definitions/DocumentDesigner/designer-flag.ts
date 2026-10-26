@@ -1,4 +1,4 @@
-import { SETTINGS_CATEGORIES, settingsCategoryPath, settingsCategoryTrail } from "@/pages/GeneralSettings/settings-config";
+import { flagSettingPath, flagSettingTrail } from "@/lib/flag-setting-path";
 
 /**
  * Tasarımcı kapısı (plan P-c): `documents.designerEnabled`, API alanı
@@ -14,15 +14,11 @@ export function isDocumentDesignerEnabled(flags: unknown): boolean {
 
 export const DESIGNER_DISABLED_TITLE = "Belge tasarımcısı kapalı";
 
-// Bayrağın ayar satırı (T1C "Belgeler" kategorisi) kayıttan bulunur; elle yol yazılmaz.
-const designerCategory = () => SETTINGS_CATEGORIES.find((c) => c.flags?.some((f) => f.key === DESIGNER_FLAG_FIELD));
-
+// Bayrağın ayar satırı (T1C "Belgeler" kategorisi) kayıttan bulunur — tek yardımcı `lib/flag-setting-path`.
 export function designerSettingPath(): string {
-  const cat = designerCategory();
-  return cat ? settingsCategoryPath(cat) : "/system";
+  return flagSettingPath(DESIGNER_FLAG_FIELD);
 }
 
 export function designerSettingTrail(): string {
-  const cat = designerCategory();
-  return cat ? settingsCategoryTrail(cat) : "Sistem";
+  return flagSettingTrail(DESIGNER_FLAG_FIELD);
 }

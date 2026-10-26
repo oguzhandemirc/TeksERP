@@ -15,10 +15,12 @@ export function DefinitionsHubPage() {
   // izin aranır — belge tasarım kartları böyle, çünkü dar izinli kullanıcı
   // (document-template:*) admin DEĞİLDİR ve kısa devreden faydalanamaz.
   const visibilityCtx = useOperationsVisibilityContext();
+  // UX-2 K3: `offHint`li karo modül kapalıyken GİZLENMEZ, soluk çizilir; rejim takası (`offHint`siz) gizlenir.
+  const isOff = (t: DefinitionTile) => Boolean(t.visibleWhen && !t.visibleWhen(visibilityCtx));
   const visibleTiles = definitionTiles.filter((t) => {
     // Rejim kuralı İZİNDEN ve admin kısa devresinden ÖNCE: kurulum türü
     // sorusudur, yetki değil — admin de fabrika rejiminde Cariler'i görmez.
-    if (t.visibleWhen && !t.visibleWhen(visibilityCtx)) return false;
+    if (isOff(t) && !t.offHint) return false;
     if (isAdmin) return true;
     if (t.permissionAny) return hasAnyPermission(t.permissionAny);
     return !t.permission || hasPermission(t.permission);
@@ -58,6 +60,7 @@ export function DefinitionsHubPage() {
                     description={tile.description}
                     icon={tile.icon}
                     index={i}
+                    offHint={isOff(tile) ? tile.offHint : undefined}
                   />
                 ))}
               </HubGrid>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { TERIM_AD } from "@/lib/terim";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
@@ -130,7 +131,7 @@ export function KursunDagitimPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Kurşun Planlama"
+        title={TERIM_AD.kursunPlanlama}
         description="Havuzdaki işleri sırala ve kurşun makinelerine dağıt; makineler arasında taşı."
         actions={
           <div className="flex flex-wrap items-center gap-2">
