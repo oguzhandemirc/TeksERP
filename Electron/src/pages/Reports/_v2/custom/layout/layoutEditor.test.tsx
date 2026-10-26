@@ -11,6 +11,8 @@
 //   L1 `moveBlock` `bloklar`ı da yeniden sıraladı → §1 + §2 ❌ 2 · L2 `reportExport.toSheetsV2` düzen tablolarını atladı
 //   → §4 ❌ 1 · L3 `CustomReportViewPage` düğmede `canEdit` denetimi kaldırıldı → §3 ❌ 1
 //   L4 (R3-ANALIZ) `useLayoutEditor` önizleme engeli kaldırıldı → §2 ❌ 1
+// §6 (R2-ANLATI) "Ne görüyoruz?" bloğu: paletten eklenir (4 kural, 3 cümle); ekran + PDF/Excel sunucunun `anlati`
+//    metnini AYNEN basar; istemci tablodaki sayılardan cümle KURMAZ (boş `anlati` → yalnız boş durum yazısı).
 // =============================================================================
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -281,5 +283,33 @@ describe("§5 düzensiz eski kayıt", () => {
     );
     const order = [...withLayout.container.querySelectorAll(".grid-cols-12 > section")].map((s) => s.getAttribute("aria-label"));
     expect(order).toEqual(["metin", "anaSayi", "Müşteriye göre"]);
+  });
+});
+
+describe("§6 Ne görüyoruz? bloğu (R2-ANLATI)", () => {
+  const SERVER = "Sevk edilen: Ekim'de 12.400 m; eylüle göre %24 fazla.";
+  const withNarrative = (anlati: Array<{ kural: string; onem: number; metin: string; kanit: Record<string, unknown> }>) =>
+    ({ ...RUN, bloklar: [{ id: "anlati1", tur: "anlati", baslik: null, durum: "tamam", sonuclar: [], anlati }, ...RUN.bloklar] }) as unknown as RunResult;
+
+  it("paletten eklenir: dört kural seçili, en çok üç cümle; sorgusu yok", () => {
+    const b = addBlock(body(), "anlati", null)!;
+    const blk = b.bloklar.find((x) => x.tur === "anlati")!;
+    expect(blk).toMatchObject({ id: "anlati1", kurallar: ["anaSayiKiyas", "enBuyukPay", "korelasyon", "orneklemUyarisi"], enFazla: 3 });
+    expect(blk.sorgu).toBeUndefined();
+  });
+
+  it("⭐ ekran ve PDF/Excel sunucunun cümlesini AYNEN basar", () => {
+    const { container } = render(<DefinitionResultView result={withNarrative([{ kural: "anaSayiKiyas", onem: 0.5, metin: SERVER, kanit: {} }])} chartKindOf={() => "cubuk"} layout={[{ i: "anlati1", w: 12 }]} />);
+    expect(screen.getByRole("region", { name: "Ne görüyoruz?" }).textContent).toContain(SERVER);
+    expect(container.textContent).not.toContain("henüz");
+    const spec = buildDefinitionExportSpec(withNarrative([{ kural: "anaSayiKiyas", onem: 0.5, metin: SERVER, kanit: {} }]), { ...body(), bloklar: [{ id: "anlati1", tur: "anlati" }, ...body().bloklar], duzen: [{ i: "anlati1", x: 0, y: 0, w: 12, h: 1 }] }, () => "cubuk");
+    expect(spec.bloklar![0]).toEqual(expect.objectContaining({ tur: "anlati", cumleler: [SERVER] }));
+  });
+
+  it("⭐ istemci cümle kurmaz: boş `anlati` yanında veri dolu tablo olsa da yalnız boş durum yazısı", () => {
+    render(<DefinitionResultView result={withNarrative([])} chartKindOf={() => "cubuk"} layout={[{ i: "anlati1", w: 12 }]} />);
+    const box = screen.getByRole("region", { name: "Ne görüyoruz?" });
+    expect(box.querySelectorAll("li")).toHaveLength(0);
+    expect(box.textContent).toContain("Bu dönem için söylenecek bir şey bulunmadı.");
   });
 });

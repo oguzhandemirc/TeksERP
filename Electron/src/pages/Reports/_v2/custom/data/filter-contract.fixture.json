@@ -1,40 +1,236 @@
 {
-  "aciklama": "R2-VERI süzgeç sözleşmesi (plan §3.2). Electron vitest kurucu çıktısını, Teks-Erp test_rapor_tanimi §1i gövdeyi sunucu şemasıyla ölçer.",
-  "operatorler": ["=", "!=", "in", "notIn", "contains"],
+  "aciklama": "R2-VERI süzgeç sözleşmesi (plan §3.2). Electron vitest kurucu çıktısını, Teks-Erp test_rapor_tanimi §1i–j gövdeleri sunucu şemasıyla ölçer. agac*: \"veya\" kökü + bir seviye iç grup + \"arasında\" (rapor küçükler).",
+  "operatorler": [
+    "=",
+    "!=",
+    "in",
+    "notIn",
+    "contains",
+    "between"
+  ],
   "kurucuGirdisi": {
     "combinator": "and",
     "rules": [
-      { "field": "yon", "operator": "=", "value": ["EXPORT"] },
-      { "field": "musteri", "operator": "notIn", "value": ["0d4b7a52-3f1e-4c6a-9b2d-8e5f1a2c3d4e", "1e5c8b63-4a2f-4d7b-8c3e-9f6a2b3d4e5f"] },
-      { "field": "renk", "operator": "in", "value": [] },
-      { "field": "", "operator": "in", "value": ["x"] }
+      {
+        "field": "yon",
+        "operator": "=",
+        "value": [
+          "EXPORT"
+        ]
+      },
+      {
+        "field": "musteri",
+        "operator": "notIn",
+        "value": [
+          "0d4b7a52-3f1e-4c6a-9b2d-8e5f1a2c3d4e",
+          "1e5c8b63-4a2f-4d7b-8c3e-9f6a2b3d4e5f"
+        ]
+      },
+      {
+        "field": "renk",
+        "operator": "in",
+        "value": []
+      },
+      {
+        "field": "",
+        "operator": "in",
+        "value": [
+          "x"
+        ]
+      }
     ]
   },
   "beklenenSuzgec": {
     "combinator": "and",
     "rules": [
-      { "field": "yon", "operator": "=", "value": "EXPORT" },
-      { "field": "musteri", "operator": "notIn", "value": ["0d4b7a52-3f1e-4c6a-9b2d-8e5f1a2c3d4e", "1e5c8b63-4a2f-4d7b-8c3e-9f6a2b3d4e5f"] }
+      {
+        "field": "yon",
+        "operator": "=",
+        "value": "EXPORT"
+      },
+      {
+        "field": "musteri",
+        "operator": "notIn",
+        "value": [
+          "0d4b7a52-3f1e-4c6a-9b2d-8e5f1a2c3d4e",
+          "1e5c8b63-4a2f-4d7b-8c3e-9f6a2b3d4e5f"
+        ]
+      }
     ]
   },
   "govde": {
     "surum": 1,
     "baslik": "Yurtdışı sevk (oluşturucu süzgeci)",
-    "parametreler": [{ "ad": "donem", "tur": "tarihAraligi", "varsayilan": "son30gun" }],
+    "parametreler": [
+      {
+        "ad": "donem",
+        "tur": "tarihAraligi",
+        "varsayilan": "son30gun"
+      }
+    ],
     "bloklar": [
       {
         "id": "t1",
         "tur": "tablo",
         "sorgu": {
           "kup": "sevk",
-          "olculer": ["sevk.brutMetre"],
-          "boyutlar": ["kumas"],
-          "zaman": { "param": "donem" },
+          "olculer": [
+            "sevk.brutMetre"
+          ],
+          "boyutlar": [
+            "kumas"
+          ],
+          "zaman": {
+            "param": "donem"
+          },
           "suzgec": {
             "combinator": "and",
             "rules": [
-              { "field": "yon", "operator": "=", "value": "EXPORT" },
-              { "field": "musteri", "operator": "notIn", "value": ["0d4b7a52-3f1e-4c6a-9b2d-8e5f1a2c3d4e", "1e5c8b63-4a2f-4d7b-8c3e-9f6a2b3d4e5f"] }
+              {
+                "field": "yon",
+                "operator": "=",
+                "value": "EXPORT"
+              },
+              {
+                "field": "musteri",
+                "operator": "notIn",
+                "value": [
+                  "0d4b7a52-3f1e-4c6a-9b2d-8e5f1a2c3d4e",
+                  "1e5c8b63-4a2f-4d7b-8c3e-9f6a2b3d4e5f"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "agacKurucuGirdisi": {
+    "combinator": "or",
+    "rules": [
+      {
+        "field": "hataGrubu",
+        "operator": "=",
+        "value": [
+          "COZGU"
+        ]
+      },
+      {
+        "combinator": "and",
+        "rules": [
+          {
+            "field": "saat",
+            "operator": "between",
+            "value": [
+              "22",
+              "5"
+            ]
+          },
+          {
+            "field": "hataGrubu",
+            "operator": "!=",
+            "value": [
+              "COZGU"
+            ]
+          },
+          {
+            "field": "",
+            "operator": "in",
+            "value": []
+          }
+        ]
+      },
+      {
+        "combinator": "and",
+        "rules": [
+          {
+            "field": "vardiya",
+            "operator": "in",
+            "value": []
+          }
+        ]
+      }
+    ]
+  },
+  "agacBeklenenSuzgec": {
+    "combinator": "or",
+    "rules": [
+      {
+        "field": "hataGrubu",
+        "operator": "=",
+        "value": "COZGU"
+      },
+      {
+        "combinator": "and",
+        "rules": [
+          {
+            "field": "saat",
+            "operator": "between",
+            "value": [
+              "22",
+              "5"
+            ]
+          },
+          {
+            "field": "hataGrubu",
+            "operator": "!=",
+            "value": "COZGU"
+          }
+        ]
+      }
+    ]
+  },
+  "agacGovde": {
+    "surum": 1,
+    "baslik": "Çözgü ya da gece saatlerinde diğer hatalar",
+    "parametreler": [
+      {
+        "ad": "donem",
+        "tur": "tarihAraligi",
+        "varsayilan": "son30gun"
+      }
+    ],
+    "bloklar": [
+      {
+        "id": "t1",
+        "tur": "tablo",
+        "sorgu": {
+          "kup": "hata",
+          "olculer": [
+            "kalite.hataAdedi"
+          ],
+          "boyutlar": [
+            "vardiya"
+          ],
+          "zaman": {
+            "param": "donem"
+          },
+          "suzgec": {
+            "combinator": "or",
+            "rules": [
+              {
+                "field": "hataGrubu",
+                "operator": "=",
+                "value": "COZGU"
+              },
+              {
+                "combinator": "and",
+                "rules": [
+                  {
+                    "field": "saat",
+                    "operator": "between",
+                    "value": [
+                      "22",
+                      "5"
+                    ]
+                  },
+                  {
+                    "field": "hataGrubu",
+                    "operator": "!=",
+                    "value": "COZGU"
+                  }
+                ]
+              }
             ]
           }
         }

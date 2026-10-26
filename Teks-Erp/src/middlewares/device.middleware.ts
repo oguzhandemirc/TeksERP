@@ -35,6 +35,7 @@ import { getShortCredentialKeyRing } from "../lib/short-credential/keyring";
 import {
   DEVICE_PROOF_HEADER, deriveDeviceSecret, proofPathOf, verifyDeviceProof, type ProofVerdict,
 } from "../lib/device-proof";
+import { noteHalkaVerdict } from "../lib/short-credential/ring-footprint";
 import { AppError } from "../utils/app-error";
 import { touchDevice } from "../lib/presence";
 import "../types/express-augment";
@@ -114,6 +115,8 @@ export const resolveDevice = async (
   }
 
   const verdict = checkProof(req, device.deviceId, device.proofSalt);
+  // Halka kaybının sahadaki izi: sayaç sağlığa gider (bayrak kapalıyken de sayılır — görünürlük).
+  if (verdict === "HALKA") noteHalkaVerdict();
   if (verdict === "OK" && !device.proofConfirmedAt && device.proofSalt) {
     await DeviceService.confirmProof(device.deviceId, device.proofSalt).catch(() => undefined);
   }

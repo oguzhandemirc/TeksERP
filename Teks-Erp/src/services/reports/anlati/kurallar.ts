@@ -14,8 +14,10 @@ const yuzdeEk = (pay: number): string => iyelik3({ tur: "yuzde", deger: pay }) ?
 
 function anaSayiKiyasCumlesi(k: KanitHaritasi["anaSayiKiyas"]): string {
   const sayi = formatValue(k.deger, k.birim);
-  const bas =
-    k.ozne && k.birim === "yuzde"
+  // Yüklemsiz (özel rapor ölçüsü): cümle ölçünün sözlük adıyla açılır.
+  const bas = !k.yuklem
+    ? `${k.ad}: ${(k.donem && bulunma(k.donem)) ?? "bu dönemde"} ${sayi}`
+    : k.ozne && k.birim === "yuzde"
       ? `${k.ozne} ${yuzdeEk(k.deger)} ${k.yuklem}`
       : `${(k.donem && bulunma(k.donem)) ?? "Bu dönemde"} ${sayi} ${k.yuklem}`;
   const kiyasAd = k.kiyasDonem ?? ONCEKI_DONEM;

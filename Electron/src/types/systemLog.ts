@@ -140,6 +140,8 @@ export interface SystemLogListParams {
   dateTo?: string;
   /** TEK İŞLEMİN tüm satırları. Geçersiz UUID backend'de boş sonuca çevrilir. */
   requestId?: string;
+  /** B4: 1 = yalnız reddedilen istekler (sunucuda süzülür). Eski backend yok sayar. */
+  reddedilen?: 1;
   /** B3: "islem" = iş eylemi görünümü. Eski backend yok sayar → satır döner. */
   gorunum?: "satir" | "islem";
   /** Kayıt numarası araması (SP-…, CV…, barkod) — sunucuda. */

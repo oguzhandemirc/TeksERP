@@ -10,6 +10,7 @@ import { Router } from "express";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { DeviceController } from "../controllers/device.controller";
+import { DeviceProofResetController } from "../controllers/device-proof-reset.controller";
 import { DeviceMergeController } from "../controllers/device-merge.controller";
 
 // PUBLIC (JWT yok)
@@ -109,6 +110,20 @@ deviceAdminRouter.post("/rebind-requests/:id/approve", verifyToken, requirePermi
  *   post: { tags: [Admin], summary: "Yeniden bağlama talebini reddet (body mode REDDET|AYRI_CIHAZ, reason?)", security: [{ bearerAuth: [] }] }
  */
 deviceAdminRouter.post("/rebind-requests/:id/reject", verifyToken, requirePermission("admin:settings"), DeviceController.rejectRebind);
+
+/**
+ * @openapi
+ * /api/admin/devices/proof-lost:
+ *   get: { tags: [Admin], summary: "Kanıtı doğrulanamayan cihazlar (anahtar halkası kaybı) + yeniden bağlanmayı bekleyenler; yazmaz", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.get("/proof-lost", verifyToken, requirePermission("admin:settings"), DeviceProofResetController.proofLost);
+
+/**
+ * @openapi
+ * /api/admin/devices/proof-reset:
+ *   post: { tags: [Admin], summary: "Seçilen cihazlarda kanıtı sıfırla — yeni sır yalnız aynı donanıma (body deviceIds[])", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.post("/proof-reset", verifyToken, requirePermission("admin:settings"), DeviceProofResetController.proofReset);
 
 /**
  * @openapi

@@ -28,6 +28,13 @@ describe("süzme SUNUCUDA — süzgeç → sorgu parametresi", () => {
     expect(buildFeedParams({ q: " SP-2026-0148 " }, undefined, 50).q).toBe("SP-2026-0148");
   });
 
+  it("Reddedilenler: yalnız İşlemler görünümünde ve aramasızken `reddedilen: 1`", () => {
+    expect(buildFeedParams({ reddedilen: true }, undefined, 50).reddedilen).toBe(1);
+    expect(buildFeedParams({ reddedilen: true, gorunum: "satir" }, undefined, 50).reddedilen).toBeUndefined();
+    expect(buildFeedParams({ reddedilen: true, q: "SP-1" }, undefined, 50).reddedilen).toBeUndefined();
+    expect(buildFeedParams({}, undefined, 50).reddedilen).toBeUndefined();
+  });
+
   // Sonda (2026-10-25): ActivityPage'e `.filter(` eklemek → 1 kırmızı.
   it.each(["ActivityPage.tsx", "ActivityFeed.tsx", "ActivityFilters.tsx"])("%s dönen listeyi süzmez", (f) => {
     const src = readFileSync(join(__dirname, f), "utf8");

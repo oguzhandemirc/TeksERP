@@ -217,6 +217,23 @@ async function fixtureSections(): Promise<void> {
   const [blk] = await runDefinitionBlocks(chk.govde, params, CTX, { origin: null, refresh: true });
   check("§4f analiz bloğu artık hesaplanıyor (desteklenmiyor değil)", blk?.durum === "tamam" && !!blk.analiz, JSON.stringify(blk).slice(0, 200));
   if (blk?.durum === "tamam") check("§4f blok anlatısı önizlemeyle aynı", blk.analiz?.sunum.anlati[0]?.metin === r.sunum.anlati[0]?.metin, blk.analiz?.sunum.anlati[0]?.metin);
+
+  console.log("\n§4g özel rapor \"Ne görüyoruz?\" bloğu (R2-ANLATI) — analizden ÖNCE dursa da girdisini alır");
+  const withNarrative = { ...body, bloklar: [{ id: "n1", tur: "anlati", kurallar: ["korelasyon", "orneklemUyarisi"], enFazla: 2 }, ...body.bloklar] };
+  const chkN = checkReportDefinition(withNarrative);
+  if (!chkN.gecerli) {
+    check("§4g tanım geçerli", false, JSON.stringify(chkN.hatalar));
+    return;
+  }
+  const [nb, ab] = await runDefinitionBlocks(chkN.govde, params, CTX, { origin: null, refresh: true });
+  const expected = ab?.durum === "tamam" ? ab.analiz?.sunum.anlati.find((c) => c.kural === "korelasyon")?.metin : undefined;
+  const got = nb?.durum === "tamam" ? nb.anlati ?? [] : [];
+  check("§4g blok sırası korunur (anlatı ilk, analiz ikinci)", nb?.tur === "anlati" && ab?.tur === "analiz");
+  check("§4g anlatı cümlesi sunucuda, analiz kanıtıyla aynı metin", !!expected && got[0]?.metin === expected, `${got[0]?.metin} ≠ ${expected}`);
+  sentences.push(...got.map((c) => c.metin));
+  const deniedCtx: AccessContext = { ...CTX, permissions: [] };
+  const [nd, ad] = await runDefinitionBlocks(chkN.govde, params, deniedCtx, { origin: null, refresh: true });
+  check("§4g yetkisiz analiz bloğu anlatıya girdi vermez", ad?.durum === "yetkisiz" && nd?.durum === "tamam" && (nd.anlati ?? []).length === 0, JSON.stringify(nd).slice(0, 200));
 }
 
 async function main(): Promise<void> {
