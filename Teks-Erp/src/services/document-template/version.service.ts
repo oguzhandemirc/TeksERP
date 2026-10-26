@@ -30,7 +30,16 @@ export async function listVersions(templateId: string) {
     orderBy: [{ versionNo: "desc" }],
     select: VERSION_SUMMARY,
   });
-  return rows.map((v) => ({ ...v, isPublished: v.id === t.publishedVersionId }));
+  // Sürüm geçmişinde "yazan" adı görünür; künye kolonu ilişkisiz olduğundan tek sorguda çözülür.
+  const ids = [...new Set(rows.flatMap((v) => [v.createdById, v.publishedById]).filter((x): x is string => !!x))];
+  const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, fullName: true } }) : [];
+  const nameOf = new Map(users.map((u) => [u.id, u.fullName]));
+  return rows.map((v) => ({
+    ...v,
+    isPublished: v.id === t.publishedVersionId,
+    createdByName: v.createdById ? (nameOf.get(v.createdById) ?? null) : null,
+    publishedByName: v.publishedById ? (nameOf.get(v.publishedById) ?? null) : null,
+  }));
 }
 
 export async function getVersion(templateId: string, versionId: string) {

@@ -90,7 +90,9 @@ export function DeviceRow({
       </TableCell>
       <TableCell className="py-2 text-muted-foreground">{deviceKindLabel(device.kind)}</TableCell>
       <TableCell className="py-2">
-        {!device.isActive ? (
+        {device.mergedIntoId ? (
+          <Badge variant="muted" title="Ana kayda birleştirildi; geri almak için detaya girin">Birleştirildi</Badge>
+        ) : !device.isActive ? (
           <Badge variant="muted">Pasif</Badge>
         ) : approved ? (
           <Badge>Onaylı</Badge>

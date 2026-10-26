@@ -8,7 +8,7 @@
 // =============================================================================
 
 import { createHmac } from "node:crypto";
-import { Prisma, type DeviceBindingEventType } from "@prisma/client";
+import { Prisma, type DeviceBindingEventType, type DeviceKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 
@@ -153,4 +153,84 @@ export async function resolvePhysicalDevice(
   if (physical === row.id) return { id: row.id, name: row.name };
   const main = await db.device.findUnique({ where: { id: physical }, select: { id: true, name: true } });
   return main ?? { id: row.id, name: row.name };
+}
+
+// ─── Birleştirme (D4) — `mergedIntoId` yazım/okumasının TEK sahibi burası (§9 AST) ───
+
+/** Hedef claim'i: canlı ∧ aktif satır, atomik (0 → çağıran 409). */
+export async function claimMergeTargetTx(tx: Prisma.TransactionClient, id: string): Promise<number> {
+  const r = await tx.device.updateMany({
+    where: { id, mergedIntoId: null, isActive: true },
+    data: { updatedAt: new Date() },
+  });
+  return r.count;
+}
+
+/** Kaynak claim'i: yalnız birleşmemiş satır; pasif + ana kayda bağlı olur (0 → çağıran 409). */
+export async function claimMergeSourceTx(
+  tx: Prisma.TransactionClient,
+  id: string,
+  targetId: string,
+  at: Date,
+): Promise<number> {
+  const r = await tx.device.updateMany({
+    where: { id, mergedIntoId: null, NOT: { id: targetId } },
+    data: { isActive: false, mergedIntoId: targetId, mergedAt: at },
+  });
+  return r.count;
+}
+
+/** Geri alma claim'i: kaynak bağsız ve PASİF döner (ileri olay deftere kalır). */
+export async function claimUnmergeTx(tx: Prisma.TransactionClient, id: string, targetId: string): Promise<number> {
+  const r = await tx.device.updateMany({
+    where: { id, mergedIntoId: targetId },
+    data: { mergedIntoId: null, mergedAt: null, isActive: false },
+  });
+  return r.count;
+}
+
+/** Satırın birleşme bağı: kopyaysa ana kayıt, değilse null. */
+export async function readMergeLink(
+  db: Db,
+  id: string,
+): Promise<{ targetId: string; targetName: string; mergedAt: Date | null } | null> {
+  const row = await db.device.findUnique({
+    where: { id },
+    select: { mergedIntoId: true, mergedAt: true, mergedInto: { select: { name: true } } },
+  });
+  if (!row?.mergedIntoId) return null;
+  return { targetId: row.mergedIntoId, targetName: row.mergedInto?.name ?? "", mergedAt: row.mergedAt };
+}
+
+/** Bu satıra bağlı kopya sayısı — kopyası olan satır kaynak olamaz (zincir yasağı). */
+export function countMergedCopies(db: Db, id: string): Promise<number> {
+  return db.device.count({ where: { mergedIntoId: id } });
+}
+
+/** Ana kaydın "geçmiş kurulumları": birleşmiş kopyalar + iş oturumu sayıları. */
+export async function listMergedCopies(db: Db, targetId: string) {
+  const rows = await db.device.findMany({
+    where: { mergedIntoId: targetId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true, deviceId: true, name: true, kind: true, createdAt: true, lastSeenAt: true, mergedAt: true,
+      _count: { select: { workSessions: true } },
+    },
+  });
+  return rows.map(({ _count, ...r }) => ({ ...r, workSessionCount: _count.workSessions }));
+}
+
+/** localId kümesi → görünen ad: birleşmiş kopya ana kaydın adına çözülür (Bağlı İstemciler). */
+export async function mainDeviceByLocalIds(
+  db: Db,
+  localIds: string[],
+): Promise<Map<string, { name: string; kind: DeviceKind }>> {
+  const out = new Map<string, { name: string; kind: DeviceKind }>();
+  if (localIds.length === 0) return out;
+  const rows = await db.device.findMany({
+    where: { deviceId: { in: localIds } },
+    select: { deviceId: true, name: true, kind: true, mergedInto: { select: { name: true, kind: true } } },
+  });
+  for (const r of rows) out.set(r.deviceId, r.mergedInto ?? { name: r.name, kind: r.kind });
+  return out;
 }

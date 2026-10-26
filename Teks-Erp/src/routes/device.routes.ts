@@ -10,6 +10,7 @@ import { Router } from "express";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { DeviceController } from "../controllers/device.controller";
+import { DeviceMergeController } from "../controllers/device-merge.controller";
 
 // PUBLIC (JWT yok)
 export const devicePublicRouter = Router();
@@ -108,6 +109,34 @@ deviceAdminRouter.post("/rebind-requests/:id/approve", verifyToken, requirePermi
  *   post: { tags: [Admin], summary: "Yeniden bağlama talebini reddet (body mode REDDET|AYRI_CIHAZ, reason?)", security: [{ bearerAuth: [] }] }
  */
 deviceAdminRouter.post("/rebind-requests/:id/reject", verifyToken, requirePermission("admin:settings"), DeviceController.rejectRebind);
+
+/**
+ * @openapi
+ * /api/admin/devices/merge/candidates:
+ *   get: { tags: [Admin], summary: "Kopya olabilecek cihaz kayıtları (sezgi grupları; yalnız öneri)", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.get("/merge/candidates", verifyToken, requirePermission("admin:settings"), DeviceMergeController.mergeCandidates);
+
+/**
+ * @openapi
+ * /api/admin/devices/merge/preview:
+ *   post: { tags: [Admin], summary: "Birleştirme önizlemesi (body targetId, sourceIds[]; yan etkisiz)", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.post("/merge/preview", verifyToken, requirePermission("admin:settings"), DeviceMergeController.mergePreview);
+
+/**
+ * @openapi
+ * /api/admin/devices/merge:
+ *   post: { tags: [Admin], summary: "Seçilen cihaz kopyalarını ana kayda birleştir (body targetId, sourceIds[])", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.post("/merge", verifyToken, requirePermission("admin:settings"), DeviceMergeController.merge);
+
+/**
+ * @openapi
+ * /api/admin/devices/merge/{sourceId}/undo:
+ *   post: { tags: [Admin], summary: "Cihaz birleştirmesini geri al (UNMERGED karşı olayı)", security: [{ bearerAuth: [] }] }
+ */
+deviceAdminRouter.post("/merge/:sourceId/undo", verifyToken, requirePermission("admin:settings"), DeviceMergeController.undoMerge);
 
 /**
  * @openapi

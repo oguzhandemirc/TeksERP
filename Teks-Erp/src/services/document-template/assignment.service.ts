@@ -104,6 +104,15 @@ export async function setProfileAssignment(profileId: string, docType: string, t
 
 const TEMPLATE_BRIEF = { id: true, name: true, docType: true, status: true, publishedVersionId: true } as const;
 
+/** Profilin genel ayarı EZEN belge anahtarları (boş nesne ezme sayılmaz) — atama ekranının R4 notu. */
+function overrideKeysOf(config: unknown): string[] {
+  if (!config || typeof config !== "object" || Array.isArray(config)) return [];
+  return Object.entries(config as Record<string, unknown>)
+    .filter(([, v]) => !!v && typeof v === "object" && Object.keys(v as object).length > 0)
+    .map(([k]) => k)
+    .sort();
+}
+
 /** Varsayılanlar + profil atamaları + her profilin etkilediği müşteri/fasoncu listesi. */
 export async function listAssignments() {
   const defaults = await prisma.documentTemplateDefault.findMany({
@@ -127,8 +136,27 @@ export async function listAssignments() {
       },
     },
   });
+  // Atama ızgarası HER profili gösterir (atanmamışlar dahil): atamadan ÖNCE etkilenen cari listesi gerekir.
+  const catalog = await prisma.documentProfile.findMany({
+    orderBy: [{ isActive: "desc" }, { name: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+      config: true,
+      customers: { select: { id: true, name: true }, orderBy: [{ name: "asc" }] },
+      subcontractors: { select: { id: true, name: true }, orderBy: [{ name: "asc" }] },
+    },
+  });
   return {
     defaults,
+    profileCatalog: catalog.map((p) => ({
+      id: p.id,
+      name: p.name,
+      isActive: p.isActive,
+      overrideKeys: overrideKeysOf(p.config),
+      affected: { customers: p.customers, subcontractors: p.subcontractors },
+    })),
     profiles: profiles.map((p) => ({
       docType: p.docType,
       updatedAt: p.updatedAt,

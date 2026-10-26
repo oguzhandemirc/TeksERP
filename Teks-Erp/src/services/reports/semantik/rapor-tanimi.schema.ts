@@ -155,7 +155,8 @@ function zodMessage(issue: z.core.$ZodIssue): string {
     case "unrecognized_keys":
       return `Tanınmayan alan: ${issue.keys.map((k) => `"${k}"`).join(", ")}.`;
     case "invalid_type":
-      return issue.input === undefined ? "Zorunlu alan eksik." : `Beklenen tür: ${issue.expected}.`;
+      // Kod modunda kullanıcı bu cümleyi okur: tür adı da Türkçe (zod'un İngilizce "string/number"ı değil).
+      return issue.input === undefined ? "Zorunlu alan eksik." : `Beklenen tür: ${({ string: "metin", number: "sayı", int: "tam sayı", boolean: "doğru/yanlış", array: "liste", object: "nesne", null: "boş" } as Record<string, string>)[issue.expected] ?? issue.expected}.`;
     case "invalid_value":
       return `Geçersiz değer; izinli olanlar: ${issue.values.map((v) => JSON.stringify(v)).join(", ")}.`;
     case "too_big":
@@ -306,7 +307,8 @@ function hasDimension(cubes: readonly SemanticCube[], id: string): boolean {
 
 /** Yapı (zod) + anlam (katalog, başvuru, düzen) doğrulaması; kayıtta ve her çalıştırmada koşar. */
 export function checkReportDefinition(raw: unknown, cubes: readonly SemanticCube[] = SEMANTIC_CUBES): DefinitionCheck {
-  const parsed = reportDefinitionBodySchema.safeParse(raw);
+  // reportInput: "yanlış tür" ile "eksik alan" ayrılsın (girdi yalnız tür ayrımında okunur, mesaja yazılmaz).
+  const parsed = reportDefinitionBodySchema.safeParse(raw, { reportInput: true });
   if (!parsed.success) {
     return { gecerli: false, hatalar: parsed.error.issues.map((i) => ({ yol: pathOf(i.path), mesaj: zodMessage(i) })) };
   }
