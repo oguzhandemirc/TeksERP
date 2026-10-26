@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ORIENTATION_LABELS, PAPER_SIZES, type Orientation, type PaperSize } from "./editor/pageCanvas";
-import { SAMPLE_DOCUMENT_CSS, SAMPLE_DOCUMENT_HTML } from "./editor/sampleDocument";
+import type { ContractView } from "./binding/contract";
+import { buildSampleDocument } from "./editor/sampleDocument";
 
 interface Props {
   editor: Editor | null;
@@ -16,14 +17,18 @@ interface Props {
   orientation: Orientation;
   onPaper: (p: PaperSize) => void;
   onOrientation: (o: Orientation) => void;
+  contract: ContractView | null;
+  settings: Readonly<Record<string, unknown>>;
+  internalFields: readonly string[];
 }
 
 /** Üst şerit: belge türü, taslak rozeti, kâğıt + yön, geri al/yinele, örnek belge, temizle. Kayıt/önizleme T4–T5'te. */
-export function DesignerToolbar({ editor, templateId, docTypeLabel, onDocType, dirty, paper, orientation, onPaper, onOrientation }: Props) {
+export function DesignerToolbar({ editor, templateId, docTypeLabel, onDocType, dirty, paper, orientation, onPaper, onOrientation, contract, settings, internalFields }: Props) {
   const loadSample = () => {
     if (!editor) return;
-    editor.setComponents(SAMPLE_DOCUMENT_HTML);
-    editor.setStyle(SAMPLE_DOCUMENT_CSS);
+    const sample = buildSampleDocument(contract, settings, internalFields);
+    editor.setComponents(sample.html);
+    editor.setStyle(sample.css);
   };
   const clear = () => {
     if (!editor) return;

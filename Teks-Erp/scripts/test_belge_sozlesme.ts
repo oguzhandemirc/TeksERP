@@ -11,6 +11,7 @@
 // §0 kayıt · §1 her senaryoda bütün yollar · §2 iç alan kapısı · §3 özet yalnız büyür
 // §4 eski snapshot · §5 ayarNormalize eksiksiz · §6 pilot: altın fikstür + renderer hizası
 // §7 refakat kartı: uzman kataloğu ↔ sözleşme eşleme tablosu iki yönlü hiza
+// §8 `ornek` senaryosunda toplam kolonu satır toplamı = toplamlar.<k> (tasarımcı örnek belgesi)
 //
 // Negatif sondalar (2026-10-24): `belge.plaka` silindi → §3 ❌ · `fillFields` iç alanı opt-in'siz
 // yazdı → §2 ❌ · `belge.no` türü değişti → §1+§3 ❌ · `cuval_iz` ic→musteri → §3 ❌ · `getContract`
@@ -491,6 +492,34 @@ console.log("§7 Refakat kartı: katalog (`TRAVELER_FIELDS`+`TRAVELER_LOOPS`) �
     .map(([k, v]) => [k, v.split("|")[0]!.trim()] as const)
     .filter(([, yol]) => !(yol in yollar) && !tablolar.has(yol));
   check(`eşlenen her yol sözleşmede beyanlı — kopuk: ${kopuk.map(([k, y]) => `${k}→${y}`).join(", ") || "yok"}`, kopuk.length === 0);
+}
+
+// ── §8 ───────────────────────────────────────────────────────────────────────
+// Tasarımcının "Örnek belge yükle"si satırları ve toplamı `ornek` senaryosundan basar:
+// toplam kolonunun satır toplamı `toplamlar.<k>` ile tutmazsa önizleme yanlış hesap gösterir.
+console.log("§8 `ornek` senaryosunda toplam kolonları: satır toplamı = toplamlar.<k>");
+{
+  let denenen = 0;
+  for (const s of sozlesmeler) {
+    const sen = s.senaryolar().find((x) => x.ad === "ornek");
+    if (!sen) continue;
+    const c = s.insa(sen.snapshot, {}, internalFieldsOf(s).map((a) => a.kod), sen.ek);
+    const toplamlar = c.toplamlar as Record<string, unknown>;
+    const tablolarC = c.tablolar as Record<string, Array<Record<string, unknown>>>;
+    for (const t of s.tablolar) {
+      for (const k of t.kolonlar.filter((x) => x.toplam)) {
+        const beyan = toplamlar[k.toplam!];
+        if (typeof beyan !== "number") continue; // toplam bu türde basılmıyor (null) → karşılaştırılacak sayı yok
+        const satirlar = tablolarC[t.anahtar] ?? [];
+        const sayilar = satirlar.map((r) => r[k.yol]).filter((v): v is number => typeof v === "number");
+        if (!sayilar.length) continue;
+        denenen++;
+        const toplam = Math.round(sayilar.reduce((a, b) => a + b, 0) * 1000) / 1000;
+        check(`${s.docType}/${t.anahtar}.${k.yol}: Σ satır ${toplam} = toplamlar.${k.toplam} ${beyan}`, Math.abs(toplam - beyan) < 0.005);
+      }
+    }
+  }
+  check(`körlük zemini: en az 5 toplam kolonu denendi — ${denenen}`, denenen >= 5);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
