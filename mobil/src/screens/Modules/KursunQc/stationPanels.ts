@@ -107,13 +107,23 @@ function spokenTail(word: string): string {
   return lower;
 }
 
+// Ünlü uyumuna uymayan alıntılar (ince "l"/"t"): son kalın sesliye rağmen ek ince
+// ("Kontrol'e", "Saat'e"). Yalnız SON sözcük TAM eşleşir — "Kanal'a" etkilenmez.
+const FRONT_SUFFIX_LOANS = new Set([
+  'kontrol', 'rol', 'gol', 'alkol', 'sembol', 'protokol', 'petrol', 'metropol',
+  'saat', 'kabul', 'usul', 'hal', 'ideal', 'final', 'normal', 'sinyal', 'total',
+  'metal', 'spiral', 'meal', 'hayal', 'dikkat', 'seyahat', 'kalp',
+]);
+
 export function dativeTr(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return trimmed;
-  const tail = spokenTail(trimmed.split(/\s+/).pop() ?? trimmed);
+  const lastWord = trimmed.split(/\s+/).pop() ?? trimmed;
+  const tail = spokenTail(lastWord);
   let vowel = '';
   for (const c of tail) if (BACK.includes(c) || FRONT.includes(c)) vowel = c;
-  const suffix = BACK.includes(vowel) ? 'a' : 'e';
+  const loan = FRONT_SUFFIX_LOANS.has(lowerTr(lastWord));
+  const suffix = !loan && BACK.includes(vowel) ? 'a' : 'e';
   const endsVowel = BACK.includes(tail[tail.length - 1]) || FRONT.includes(tail[tail.length - 1]);
   return `${trimmed}'${endsVowel ? 'y' : ''}${suffix}`;
 }
