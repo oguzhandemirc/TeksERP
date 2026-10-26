@@ -63,7 +63,7 @@ export default function InboxRow({ item, onOpen }: { item: InboxItem; onOpen?: (
 }
 
 const styles = StyleSheet.create({
-  root: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  root: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   unread: { backgroundColor: colors.infoContainer, borderRadius: radius.sm },
   body: { minHeight: 56, justifyContent: 'center' },
   title: { fontSize: 16, fontWeight: '700', color: colors.text },

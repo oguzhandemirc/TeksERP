@@ -1,5 +1,5 @@
 // Tek tür satırı: "Uygulamada" ve (tür taşıyorsa) "Tablet sesi" anahtarları. Kilitli tür uygulamada
-// kapatılamaz — anahtar pasif, kilit nedeni satırda yazılı (sunucu da 409 ile reddeder).
+// kapatılamaz — anahtar yerine kilit rozeti, kilit nedeni satırda yazılı (sunucu da 409 ile reddeder).
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Switch, Text } from 'react-native-paper';
@@ -31,16 +31,34 @@ export default function PreferenceKindRow({ kind, value, locked, onToggle }: Pre
       {TABLET_CHANNELS.map((ch) => {
         const v = value(ch);
         if (v === null) return <View key={ch} style={styles.cell} />;
-        const disabled = ch === 'UYGULAMA' && locked;
+        const label = `${kind.ad} — ${CHANNEL_LABEL[ch]}`;
+        if (ch === 'UYGULAMA' && locked) {
+          // Pasif Switch koyu temada griye boyanıp "kapalı" okunuyordu; kilitli kanal anahtar değil, rozet.
+          return (
+            <View key={ch} style={styles.cell}>
+              <Text style={styles.cellLabel}>{CHANNEL_LABEL[ch]}</Text>
+              <View
+                style={styles.lockedBadge}
+                accessible
+                accessibilityRole="switch"
+                accessibilityLabel={label}
+                accessibilityState={{ checked: v, disabled: true }}
+              >
+                <Icon source="lock" size={14} color={C.accentLight} />
+                <Text style={styles.lockedText}>{v ? 'Hep açık' : 'Kapalı'}</Text>
+              </View>
+            </View>
+          );
+        }
         return (
           <View key={ch} style={styles.cell}>
             <Text style={styles.cellLabel}>{CHANNEL_LABEL[ch]}</Text>
             <Switch
               value={v}
-              disabled={disabled}
+              disabled={false}
               onValueChange={(nv) => onToggle(ch, nv)}
               color={C.accentLight}
-              accessibilityLabel={`${kind.ad} — ${CHANNEL_LABEL[ch]}`}
+              accessibilityLabel={label}
             />
           </View>
         );
@@ -57,4 +75,6 @@ const styles = StyleSheet.create({
   lockText: { color: C.subtext, fontSize: 12, flexShrink: 1 },
   cell: { width: 96, alignItems: 'center' },
   cellLabel: { color: C.subtext, fontSize: 12, marginBottom: 2 },
+  lockedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40 },
+  lockedText: { color: C.accentLight, fontSize: 13, fontWeight: '600' },
 });

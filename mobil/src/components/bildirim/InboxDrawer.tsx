@@ -25,20 +25,23 @@ export default function InboxDrawer({ visible, onDismiss, onOpenItem, onOpenSett
   return (
     <RightPanelDrawer visible={visible} onDismiss={onDismiss} insets={insets} title="Bildirimler" maxWidth={520}>
       <View style={styles.fill} testID="kutu-cekmece">
-        {q.isLoading && !q.data ? (
-          <ActivityIndicator style={styles.pad} />
-        ) : items.length === 0 ? (
-          <Text style={styles.empty}>{q.isError && !q.data ? 'Bildirimler alınamadı.' : 'Bildirim yok.'}</Text>
-        ) : (
-          <FlashList
-            data={items}
-            keyExtractor={(i) => i.id}
-            renderItem={({ item }) => <InboxRow item={item} onOpen={onOpenItem} />}
-            onEndReached={() => {
-              if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage();
-            }}
-          />
-        )}
+        {/* Liste alanı esner: boş/yükleniyor halinde de tercihler düğmesi altta kalır. */}
+        <View style={styles.fill}>
+          {q.isLoading && !q.data ? (
+            <ActivityIndicator style={styles.pad} />
+          ) : items.length === 0 ? (
+            <Text style={styles.empty}>{q.isError && !q.data ? 'Bildirimler alınamadı.' : 'Bildirim yok.'}</Text>
+          ) : (
+            <FlashList
+              data={items}
+              keyExtractor={(i) => i.id}
+              renderItem={({ item }) => <InboxRow item={item} onOpen={onOpenItem} />}
+              onEndReached={() => {
+                if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage();
+              }}
+            />
+          )}
+        </View>
         <Button icon="bell-cog-outline" mode="text" onPress={onOpenSettings} contentStyle={styles.tall}>
           Bildirim tercihleri
         </Button>

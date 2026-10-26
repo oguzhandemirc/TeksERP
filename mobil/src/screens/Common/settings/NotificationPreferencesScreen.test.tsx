@@ -67,7 +67,7 @@ it('kilitli tür: nedeni yazılı, uygulama anahtarı pasif; değişiklik tam g�
   mockFlags = { bildirimGelenKutusuEnabled: true };
   renderWithPaper(<NotificationPreferencesScreen />);
   expect(await screen.findByText('Veri kaybı riski')).toBeTruthy();
-  expect(screen.getByLabelText('Yedek alınamadı — Uygulamada').props.disabled).toBe(true);
+  expect(screen.getByLabelText('Yedek alınamadı — Uygulamada').props.accessibilityState).toEqual({ checked: true, disabled: true });
   expect(screen.getByLabelText('Levent bitiyor — Uygulamada').props.disabled).toBe(false);
   fireEvent(screen.getByLabelText('Levent bitiyor — Tablet sesi'), 'valueChange', false);
   fireEvent.press(screen.getByTestId('bildirim-tercih-kaydet'));

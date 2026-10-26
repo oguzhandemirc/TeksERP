@@ -26,7 +26,7 @@ function StripBody({ item, more }: { item: InboxItem; more: number }) {
       <Icon source="bell-alert" size={24} color={colors.warningText} />
       <View style={styles.text}>
         <Text style={styles.title} numberOfLines={1}>{item.baslik}</Text>
-        {!!item.govde && <Text style={styles.sub} numberOfLines={1}>{more > 0 ? `${item.govde} · +${more}` : item.govde}</Text>}
+        {!!item.govde && <Text style={styles.sub} numberOfLines={2}>{more > 0 ? `${item.govde} · +${more}` : item.govde}</Text>}
       </View>
       <Button mode="contained-tonal" onPress={a.markRead} loading={a.busy === 'read'} disabled={a.busy !== null} contentStyle={styles.tall}>
         Okundu
