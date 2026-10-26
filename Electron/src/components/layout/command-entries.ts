@@ -1,4 +1,4 @@
-import { Settings as SettingsIcon, Download, FilePlus2, ScrollText } from "lucide-react";
+import { Settings as SettingsIcon, Download, FilePlus2, ScrollText, BellRing } from "lucide-react";
 import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
@@ -208,6 +208,15 @@ export const commandSections: CommandSection[] = [
         icon: SettingsIcon,
         to: "/settings",
         keywords: "ayar tercih tema koyu açık renk yoğunluk favori kayıtlı görünüm sıfırla kişisel profil",
+      },
+      {
+        // bildirim: kişisel bildirim tercihleri (N4-PANEL) — kapısız; bayrak kapalıysa sayfa söyler.
+        key: "personal:notification-settings",
+        label: "Bildirim tercihleri",
+        description: "Hangi bildirim anlık, gün özetinde ya da kapalı; masaüstü, tablet sesi, sessiz saat",
+        icon: BellRing,
+        to: "/settings/notifications",
+        keywords: "bildirim tercih ayar zil sessiz saat gün özeti masaüstü tablet ses takip kapsam kilitli",
       },
       {
         // Güncellemeler kapısız bir sistem sayfası; kapısız karolar palete Sistem bölümünden girmez.

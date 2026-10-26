@@ -20,6 +20,7 @@ import {
 import { ForbiddenPage } from "@/pages/Forbidden/ForbiddenPage";
 import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
+import { NotificationSettingsPage } from "@/pages/Settings/Notifications/NotificationSettingsPage";
 import { ReleaseNotesPage } from "@/pages/ReleaseNotes/ReleaseNotesPage";
 import { NotificationsPage } from "@/pages/Notifications/NotificationsPage"; // bildirim:
 import { NotificationProfilesPage } from "@/pages/System/NotificationProfiles/NotificationProfilesPage"; // bildirim:
@@ -205,6 +206,7 @@ import { EIrsaliyeRecordsPage } from "@/pages/Operations/Shipments/eirsaliye/EIr
 export const contentRoutes: RouteObject[] = [
   { index: true, element: <DashboardPage /> },
   { path: "settings", element: <SettingsPage /> },
+  { path: "settings/notifications", element: <NotificationSettingsPage /> }, // bildirim: kişisel tercih, kapısız (bayrak kapalıysa sayfa söyler)
   // Kapısız: sürüm notlarını operatör de okur (`system/*` altı `admin:settings` ister).
   { path: "release-notes", element: <ReleaseNotesPage /> },
   { path: "notifications", element: <NotificationsPage /> }, // bildirim: kişisel, kapısız (bayrak kapalıysa sayfa söyler)
