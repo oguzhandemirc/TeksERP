@@ -4,6 +4,7 @@
 //   §1 ⭐ `GET /api/cost/items/:itemId/versions/:versionId` satır dökümüyle; başka ürünün sürümü → 404
 //   §2 ⭐ `POST /api/cost/preview` + `pricing` → `teklifFiyati` = `suggestUnitPrice` (kâr varsayılanı aktif set);
 //      pricing yoksa null; kur yoksa öneri null + eksik FX_RATE_MISSING (1'e düşmez)
+//   §4 ⭐ (MAL-5) `suresiDoldu` görünüm bayrağı · revizyon zinciri/ürün adı include'u · aktör adları
 //   §3 ⭐ dönüşüm rotası yanıtı `sendQuoteJson` (→ `quoteViewFor`) üzerinden; `cost:read` yoksa maliyet alanları düşer
 // Çalıştır: npx tsx scripts/test_teklif_gorunurluk.ts (yalnız test DB)
 // =============================================================================
@@ -17,6 +18,7 @@ import { previewCost } from "../src/services/cost-calc.service";
 import { suggestUnitPrice } from "../src/services/helpers/fabric-cost.helper";
 import { quoteViewFor } from "../src/services/helpers/quote-view.helper";
 import { convertQuoteToOrder } from "../src/services/sales-quote-convert.service";
+import { getQuote, quoteActors } from "../src/services/sales-quote.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { altinYapiYaz, fiksturKur, fiksturSil } from "./lib/maliyet-fikstur";
 import { teklifFiksturKur, teklifFiksturSil, teklifYaz } from "./lib/teklif-fikstur";
@@ -74,6 +76,15 @@ async function main(): Promise<void> {
     const out = await convertQuoteToOrder(qid, { clientToken: randomUUID() }, { permissions: ["quote:convert", "order:write"] });
     const view = quoteViewFor({ permissions: ["quote:read", "quote:convert"] }).quote(out.quote) as Record<string, unknown> & { lines: Array<Record<string, unknown>> };
     check("§3b `cost:read` yok → dönüşüm yanıtında maliyet ve iç not yok", view.lines.every((l) => !("costPerMTry" in l) && !("costSnapshot" in l)) && !("totalCostTry" in view) && !("internalNote" in view));
+    // §4 (MAL-5): "süresi doldu" panelde tarih karşılaştırılarak değil, görünümün bayrağıyla; detay aktör adları.
+    const expQ = await teklifYaz(t, "SENT", { validDays: -2 });
+    const expRec = await getQuote(expQ);
+    const ev = quoteViewFor({ permissions: ["quote:read"] }).quote(expRec) as Record<string, unknown>;
+    const live = quoteViewFor({ permissions: ["quote:read"] }).quote(await getQuote(await teklifYaz(t, "SENT", { validDays: 10 }))) as Record<string, unknown>;
+    check("§4a ⭐ görünüm `suresiDoldu` bayrağı (SENT + geçmiş geçerlilik) — panel hesaplamaz", ev.suresiDoldu === true && live.suresiDoldu === false, `${String(ev.suresiDoldu)}/${String(live.suresiDoldu)}`);
+    check("§4b detay include'u revizyon zinciri + kalem ürün/renk adı taşır", "revisionOf" in expRec && "revisedTo" in expRec && expRec.lines.every((l) => "item" in l && "color" in l));
+    const actors = await quoteActors({ ...expRec, sentById: expRec.createdById ?? null });
+    check("§4c aktör adları yalnız mevcut kimliklerden (boş kimlik → boş harita)", typeof actors === "object" && Object.keys(await quoteActors({ createdById: null, sentById: null, acceptedById: null, rejectedById: null, cancelledById: null, convertedById: null })).length === 0);
   } finally {
     await teklifFiksturSil(t);
     await fiksturSil(m);

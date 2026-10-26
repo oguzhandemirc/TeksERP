@@ -89,9 +89,10 @@ export const navGroups: NavGroup[] = [
         label: "Maliyet & Teklif",
         to: "/cost",
         icon: Coins,
-        permission: "cost:read",
+        // MAL-5: teklif/fiyat listesi okuyan da girer (satış rolü maliyet görmez); karolar kendi izniyle süzülür.
+        permissionAny: ["cost:read", "quote:read", "price-list:read"],
         featureFlag: "maliyetEnabled",
-        keywords: "maliyet teklif standart maliyet iplik fiyatı fason tarife terbiye parametre hesaplayıcı kâr",
+        keywords: "maliyet teklif fiyat teklifi revizyon siparişe dönüştür fiyat listesi standart maliyet iplik fiyatı fason tarife terbiye parametre hesaplayıcı kâr",
       },
     ],
   },

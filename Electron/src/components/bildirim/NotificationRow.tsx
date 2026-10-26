@@ -4,6 +4,7 @@ import type { KeyboardEvent } from "react";
 import { Check, CircleCheck, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SnoozeMenu } from "@/components/bildirim/SnoozeMenu";
+import { UnfollowButton } from "@/components/bildirim/UnfollowButton";
 import { cn } from "@/lib/utils";
 import { relativeTime, groupLook, reasonLabel } from "@/lib/bildirim/format";
 import type { useNotificationActions } from "@/lib/bildirim/hooks";
@@ -79,6 +80,7 @@ export function NotificationRow({
         )}
         {/* Alarmın kendi susturması var (alarm sayfası); gelen kutusu ertelemesi alarmı gizlemesin. */}
         {b.sinif !== "ALARM" && <SnoozeMenu onSec={(sure) => eylemler.ertele.mutate({ id: b.id, sure })} />}
+        <UnfollowButton b={b} />
       </div>
     </li>
   );
