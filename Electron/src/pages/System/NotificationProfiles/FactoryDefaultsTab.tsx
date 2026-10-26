@@ -62,7 +62,8 @@ export function FactoryDefaultsTab({ kinds }: { kinds: readonly FactoryDefaultKi
           </ul>
         </section>
       ))}
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-2 border-t bg-background py-2">
+      {/* PageBody `p-4 md:p-6` kaydırır: bottom-0 dolgunun ÜSTÜNE yapışıp içeriği altından gösteriyordu → negatif alt + eş dolgu. */}
+      <div role="toolbar" aria-label="Fabrika varsayılanı kaydet" className="sticky -bottom-4 z-10 flex flex-wrap items-center justify-end gap-2 border-t bg-background pb-4 pt-2 shadow-[0_-6px_8px_-6px_rgb(0_0_0/0.12)] md:-bottom-6 md:pb-6">
         {changes.errors.length > 0 && <span className="mr-auto text-xs text-destructive">{changes.errors[0]}</span>}
         {changes.errors.length === 0 && changes.turler.length > 0 && (
           <span className="mr-auto text-xs text-muted-foreground">{changes.turler.length} türde değişiklik</span>

@@ -100,6 +100,21 @@ describe("matris", () => {
     expect(svc.uyeleriYaz).not.toHaveBeenCalled();
   });
 
+  it("⭐ Fabrika varsayılanı Kaydet çubuğu PageBody dolgusu kadar aşağı yapışır, içeriğin üstüne binmez", async () => {
+    renderWithProviders(<NotificationProfilesPage />);
+    const tab = await screen.findByRole("tab", { name: "Fabrika varsayılanı" });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+    const bar = await screen.findByRole("toolbar", { name: "Fabrika varsayılanı kaydet" });
+    expect(within(bar).getByRole("button", { name: "Kaydet" })).toBeInTheDocument();
+    // PageBody `p-4 md:p-6` ↔ çubuk `-bottom-4 md:-bottom-6` + eş alt dolgu; opak zemin + üst katman.
+    const cls = bar.className.split(/\s+/);
+    for (const c of ["sticky", "-bottom-4", "md:-bottom-6", "pb-4", "md:pb-6", "bg-background", "z-10"]) expect(cls).toContain(c);
+    expect(cls).not.toContain("bottom-0");
+    const page = readFileSync(resolve(__dirname, "NotificationProfilesPage.tsx"), "utf8");
+    expect(page).toContain('<PageBody className="p-4 md:p-6">');
+  });
+
   it("her zaman kilitli türde Kapalı seçilemez", async () => {
     renderWithProviders(<NotificationProfilesPage />);
     expect(await screen.findByLabelText("Yedek başarısız: Kapalı")).toBeDisabled();

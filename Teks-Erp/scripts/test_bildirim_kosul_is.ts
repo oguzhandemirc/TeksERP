@@ -11,12 +11,15 @@
 // sınırı ve firma kırılımı · §L levent `kalanGun ≤ param` sınırı + parametre değişimi · §G modül kapalı → küme
 // boş · §Y gelen kutusu bayrağı kapalı → koşul tablosu boş · §R gerçek modül kapısı · §B boğaz-ikiz
 // (karne ↔ koşul aynı helper; çıktı + AST) · §S termin tek kaynak taraması · §M gerçek okuyucularla süre.
+// §W ilk açılış su damgası: 807 birikmiş → 0 satır, sonra 1 yeni → 1 ACILDI; açık→açık damgayı düşürmez.
 //
 // NEGATİF SONDALAR (2026-10-25, md5 ile birebir geri alındı):
 //  ① bastırma kaldırıldı: sevkiyat konu anahtarına tur damgası eklendi (`<id>:<Date.now()>`) → §b ❌ (türde 4 ACILDI)
 //  ② KK1 eşiği koşulda ayrı sabitle kopyalandı (`const ESIK = 85`) → §B2 ❌ (boğaz-ikiz)
 //  ③ termin ikinci kez yazıldı (`r.deadline!.getTime() < now`) → §S ❌ (tek kaynak)
 //  ④ 8040 satırı `period-guard.helper.ts` envanterinden silindi → `test_advisory_lock_namespaces` ❌
+//  ⑤ (2026-10-26) taban turundaki `continue` silindi → §W1 ❌ (807 ACILDI)
+//  ⑥ (2026-10-26) bayrak yazımındaki `resetNotificationBaselines` silindi → §W1 ❌ (damga düşmedi, 83.928 kutu satırı)
 // Global ayar yazar (`bildirim.gelenKutusuEnabled`, `production.enabled`, `devere.enabled`); `finally`de döner.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -25,7 +28,8 @@ import { join } from "node:path";
 import * as bcrypt from "bcryptjs";
 import ts from "typescript";
 import prisma, { pool } from "../src/lib/prisma";
-import { SETTING_KEYS, readDevereEnabled } from "../src/services/system-setting.service";
+import { SETTING_KEYS, readDevereEnabled, systemSettingService } from "../src/services/system-setting.service";
+import { hasNotificationBaseline, markNotificationBaseline, resetNotificationBaselines } from "../src/services/helpers/notification-baseline.helper";
 import { runNotificationDispatchOnce } from "../src/services/notification-dispatch.service";
 import { runConditionSourceOnce } from "../src/jobs/notification-condition.job";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
@@ -51,6 +55,8 @@ import {
   type WorkSourceDeps,
 } from "../src/services/notification-sources/is";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
+import { kosulTabaniHazir } from "./lib/bildirim-kosul-tabani";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -375,6 +381,41 @@ async function govde(): Promise<void> {
     for (const kind of WORK_CONDITION_KINDS) await tur(kind);
     check("§Y bayrak kapalı → yedi tur `disabled`, koşul tablosu boş", yR.every((r) => r === "disabled") && yAcik === 0, `${JSON.stringify(yR)} açık=${yAcik}`);
 
+    // ── §W su damgası: bayrak ilk açılışında birikmiş koşul bildirim ÜRETMEZ (ölçüm 2026-10-26, BILDIRIM-OLCUM-2026-10 §3: 807 → 125.766 satır) ──
+    const W: NotificationKind = "siparis.termin-gecti";
+    // Servis yolu audit yazar → kalıcı test admin (geçici kullanıcı audit satırı yüzünden silinemez).
+    const yazan = (await ensureTestAdmin({ password: kosumaOzguParola() })).id;
+    await systemSettingService.setFeatureFlags({ bildirimGelenKutusuEnabled: false }, yazan);
+    await systemSettingService.setFeatureFlags({ bildirimGelenKutusuEnabled: true }, yazan);
+    const wDamgaDustu = !(await hasNotificationBaseline(prisma, W));
+    const wT = new Date();
+    d.orders = Array.from({ length: 807 }, () => ord(randomUUID(), d.now - GUN));
+    const wA0 = await acildiTur(W);
+    const w1 = await tur(W);
+    const wA1 = await acildiTur(W);
+    const wK1 = await prisma.notificationInbox.count({ where: { kind: W, createdAt: { gte: wT } } });
+    const wAcik1 = await acikSayisi(W);
+    check("§W1 ⭐ kapat→aç damgayı düşürür; 807 birikmiş geciken sipariş taban turunda sessiz: 0 ACILDI, 0 kutu satırı, 807 açık koşul",
+      wDamgaDustu && typeof w1 === "object" && w1.baseline === 807 && w1.opened === 0 && wA1 - wA0 === 0 && wK1 === 0 && wAcik1 === 807 && (await hasNotificationBaseline(prisma, W)),
+      `damgaDüştü=${wDamgaDustu} tur=${JSON.stringify(w1)} ACILDI=${wA1 - wA0} kutu=${wK1} açık=${wAcik1}`);
+    const wYeni = randomUUID();
+    d.orders = [...d.orders, ord(wYeni, d.now - GUN)];
+    const w2 = await tur(W);
+    const wK2 = await prisma.notificationInbox.groupBy({ by: ["userId"], where: { kind: W, createdAt: { gte: wT } }, _count: true });
+    check("§W2 ⭐ tabandan sonra 1 yeni geciken sipariş → tek ACILDI + alıcı başına tek kutu satırı (yalnız yeni konu)",
+      typeof w2 === "object" && w2.opened === 1 && w2.closed === 0 && (await acildi(W, wYeni)) === 1 && (await kutu(kim, W, wYeni)).length === 1 && wK2.length > 0 && wK2.every((g) => g._count === 1),
+      `tur=${JSON.stringify(w2)} alıcı=${wK2.length} kişi başı en çok=${Math.max(0, ...wK2.map((g) => g._count))}`);
+    await systemSettingService.setFeatureFlags({ bildirimGelenKutusuEnabled: true }, yazan);
+    check("§W3 açıkken yeniden 'açık' yazımı damgayı DÜŞÜRMEZ (yeni koşul yutulmaz)", await hasNotificationBaseline(prisma, W));
+    await resetNotificationBaselines(prisma);
+    const wKp0 = await prisma.notificationOutbox.count({ where: { kind: W, phase: "KAPANDI", createdAt: { gte: wT } } });
+    d.orders = [];
+    const w4 = await tur(W);
+    const wKp1 = await prisma.notificationOutbox.count({ where: { kind: W, phase: "KAPANDI", createdAt: { gte: wT } } });
+    check("§W4 taban turunda kaybolan koşullar sessizce kapanır (KAPANDI yok, açık koşul 0)",
+      typeof w4 === "object" && w4.closed === 0 && wKp1 - wKp0 === 0 && (await acikSayisi(W)) === 0, `tur=${JSON.stringify(w4)} KAPANDI=${wKp1 - wKp0}`);
+    for (const kind of TURLER) await markNotificationBaseline(prisma, kind);
+
     // ── §R gerçek modül kapısı ───────────────────────────────────────────────
     geri();
     const cekirdek = await WORK_SOURCE_REAL_DEPS.moduleOpen("sevkiyat.onay-bekliyor");
@@ -441,10 +482,12 @@ async function main(): Promise<void> {
   console.log("\n=== Bildirim — iş koşul kaynakları (tür 6–12) ===\n");
   const keys = [SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.DEVERE_ENABLED];
   const ilk = await prisma.systemSetting.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
+  const tabanGeri = await kosulTabaniHazir(TURLER);
   try {
     await govde();
   } finally {
     stopNotificationJobs();
+    await tabanGeri();
     await temizle();
     for (const key of keys) {
       const v = ilk.find((r) => r.key === key);

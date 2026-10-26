@@ -36,6 +36,7 @@ import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { CERTIFICATE_EXPIRY_KIND, registerQualityConditionSources } from "../src/services/notification-sources/kalite";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { kosulTabaniHazir } from "./lib/bildirim-kosul-tabani";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -365,6 +366,7 @@ async function main(): Promise<void> {
   const keys = [SETTING_KEYS.KALITE_GUVENCE_ENABLED, SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED];
   const prior = await prisma.systemSetting.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
   const admin = await ensureTestAdmin({ password: kosumaOzguParola() });
+  const tabanGeri = await kosulTabaniHazir([CERTIFICATE_EXPIRY_KIND]);
   try {
     await ayar(SETTING_KEYS.KALITE_GUVENCE_ENABLED, true);
     await ayar(SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED, true);
@@ -381,6 +383,7 @@ async function main(): Promise<void> {
     check("beklenmeyen hata", false, e instanceof Error ? `${e.message}\n${e.stack}` : String(e));
   } finally {
     stopNotificationJobs();
+    await tabanGeri();
     for (const k of keys) {
       const p = prior.find((x) => x.key === k);
       if (p) await prisma.systemSetting.update({ where: { key: k }, data: { value: p.value as never } });
