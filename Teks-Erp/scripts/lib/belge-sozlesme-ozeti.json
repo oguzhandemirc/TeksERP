@@ -4974,7 +4974,7 @@
   }
  },
  "SUBCONTRACTOR_RECEIPT": {
-  "contractVersion": 1,
+  "contractVersion": 2,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -5260,6 +5260,10 @@
     "tur": "sayi",
     "sinif": "musteri"
    },
+   "tablolar.toplar[].metre": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
    "tablolar.toplar[].renk": {
     "tur": "metin",
     "sinif": "musteri"
@@ -5270,6 +5274,10 @@
    },
    "tablolar.toplar[].urun": {
     "tur": "metin",
+    "sinif": "musteri"
+   },
+   "toplamlar.metre": {
+    "tur": "sayi",
     "sinif": "musteri"
    },
    "toplamlar.top_adedi": {
