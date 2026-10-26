@@ -198,6 +198,9 @@ async function main(): Promise<void> {
     fail++;
     console.log(`  ✗ FAIL: sonda çöktü — ${e instanceof Error ? e.message.split("\n").slice(0, 3).join(" ") : String(e)}`);
   } finally {
+    // Dinleyen sunucu süreci ayakta tutar (process.exit yerine doğal çıkış).
+    server.closeAllConnections();
+    server.close();
     console.log("\n🧹 Temizlik...");
     try {
       await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: yarat.roll } } });

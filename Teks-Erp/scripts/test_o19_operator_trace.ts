@@ -12,6 +12,7 @@
 import { RollStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
+import { ensureDefaultWarehouse } from "../src/services/helpers/warehouse.helper";
 
 const CONFIRM_KEY = "shipping.confirmationEnabled";
 
@@ -51,9 +52,11 @@ async function main() {
     custIds.push(cust.id);
     const customerId = cust.id;
 
+    // Sevk depolu top ister (ROLL_WAREHOUSE_MISSING); eski `finally { process.exit(0) }` bu 409'u yutup 2/5 ile yeşil veriyordu.
+    const depo = await ensureDefaultWarehouse(); // iş kuralıyla çözülen varsayılan depo (ortamda keyfi arama değil)
     const makeRoll = async (n: number) => {
       const r = await prisma.roll.create({
-        data: { barcode: `TEST-O19-R${n}-${ts}`, itemId: item!.id, initialQty: "40.000", currentQty: "40.000", qualityGrade: "1. Kalite", status: RollStatus.WAREHOUSE },
+        data: { barcode: `TEST-O19-R${n}-${ts}`, itemId: item!.id, initialQty: "40.000", currentQty: "40.000", qualityGrade: "1. Kalite", status: RollStatus.WAREHOUSE, warehouseId: depo.id },
         select: { id: true, barcode: true },
       });
       rollIds.push(r.id);

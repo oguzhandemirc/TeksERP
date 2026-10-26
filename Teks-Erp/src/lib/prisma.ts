@@ -75,6 +75,9 @@ const pool = new Pool({
   idleTimeoutMillis: 600_000,
   connectionTimeoutMillis: 5_000,
   options: PG_SESSION_OPTIONS,
+  // Boştaki bağlantı süreci AYAKTA TUTMAZ: betik/bekçi `process.exit` yerine doğal çıkar (Node v26
+  // `process.exit` asılması, 25f08f011). Sunucuyu dinleyen soket ayakta tutar; havuz davranışı değişmez.
+  allowExitOnIdle: true,
 });
 
 // O3-2: pg Pool idle-client hata olayı. DB bağlantı düşürürse (network drop,
