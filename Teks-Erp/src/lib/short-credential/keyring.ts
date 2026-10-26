@@ -57,11 +57,19 @@ export function kidOf(key: Buffer): string {
 
 let cached: KeyRingState | null = null;
 let dirOverride: string | null = null;
+// Bu süreçte halka ÜRETİLDİYSE anı — kayıp tespiti (`ring-footprint.ts`) DB izine bakar; keyring senkron kalır.
+let generatedAt: string | null = null;
+
+/** Halka bu süreçte üretildiyse ISO anı; okunan halkada null. */
+export function ringGeneratedThisProcessAt(): string | null {
+  return generatedAt;
+}
 
 /** Yalnız bekçi: halka dizinini değiştirir ve önbelleği boşaltır ("başka makine" benzetimi). */
 export function setShortCredentialKeyDirForTests(dir: string | null): void {
   dirOverride = dir;
   cached = null;
+  generatedAt = null;
 }
 
 /** Yalnız bekçi/yönetim aracı: önbelleği boşaltır (dosya dışarıdan değiştiyse). */
@@ -127,7 +135,8 @@ function load(): KeyRingState {
   if (state.kind !== "YOK") {
     return { ok: false, problem: "OKUNAMADI", dir, detail: `anahtar dosyası okunamadı (${state.kind})` };
   }
-  // İlk kullanım: halkayı üret. Başka makineden gelen özetler varsa onlar emanetten eklenir.
+  // İlk kullanım ya da KAYIP: halkayı üret (fabrika durmasın, emanetten dönen anahtar eklenebilsin).
+  // İkisini DB izi ayırır — `ring-footprint.ts`; kayıp sessiz kalmaz (sağlık, audit, bildirim).
   const key = randomBytes(KEY_BYTES);
   const fresh: RingKey = { kid: kidOf(key), key, createdAt: new Date().toISOString(), source: "URETILDI" };
   try {
@@ -136,6 +145,7 @@ function load(): KeyRingState {
   } catch (e) {
     return { ok: false, problem: "YAZILAMADI", dir, detail: e instanceof Error ? e.message : String(e) };
   }
+  generatedAt = fresh.createdAt;
   return { ok: true, ring: { dir, active: fresh, keys: [fresh] } };
 }
 

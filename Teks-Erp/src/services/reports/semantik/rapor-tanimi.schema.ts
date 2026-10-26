@@ -9,7 +9,10 @@
 import { z } from "zod";
 import { editRatio } from "../../../utils/string-similarity";
 import { SEMANTIC_CUBES } from "./katalog";
-import { FILTER_OPERATORS, type SemanticCube } from "./tipler";
+import type { SemanticCube } from "./tipler";
+import { andFilterSchema, checkFilterTree, filterTreeSchema } from "./suzgec-agaci";
+
+export { MAX_FILTER_RULES, isFilterRuleDef, type FilterInnerGroupDef, type FilterRuleDef, type FilterTreeDef } from "./suzgec-agaci";
 import { analysisQueryShell, planAnalysisBlock } from "./analiz-blok";
 import { ANALYSIS_METHODS, isAnalysisIssue } from "./analiz-plan";
 
@@ -42,20 +45,13 @@ const parameterSchema = z.discriminatedUnion("tur", [
     .strict(),
 ]);
 
-const filterRuleSchema = z
-  .object({
-    field: identifier,
-    operator: z.enum(FILTER_OPERATORS),
-    value: z.union([z.string().min(1).max(200), z.array(z.string().min(1).max(200)).max(500)]),
-  })
-  .strict();
 
 export const blockQuerySchema = z
   .object({
     kup: identifier,
     olculer: z.array(identifier).min(1).max(8),
     boyutlar: z.array(identifier).max(3).default([]),
-    suzgec: z.object({ combinator: z.literal("and"), rules: z.array(filterRuleSchema).max(10) }).strict().optional(),
+    suzgec: filterTreeSchema.optional(),
     zaman: z.object({ param: name, kiyas: reference.optional() }).strict().optional(),
     tavan: z.union([z.number().int().min(1).max(50), reference]).optional(),
   })
@@ -88,7 +84,7 @@ const blockSchema = z.discriminatedUnion("tur", [
       y: identifier,
       maruziyet: identifier.optional(),
       kirilim: identifier.optional(),
-      suzgec: z.object({ combinator: z.literal("and"), rules: z.array(filterRuleSchema).max(10) }).strict().optional(),
+      suzgec: andFilterSchema.optional(),
       zaman: z.object({ param: name }).strict().optional(),
     })
     .strict(),
@@ -130,6 +126,7 @@ export type DefinitionBlock = ReportDefinitionBody["bloklar"][number];
 export type DefinitionParameter = ReportDefinitionBody["parametreler"][number];
 export type BlockQuery = z.infer<typeof blockQuerySchema>;
 export type AnalysisBlock = Extract<DefinitionBlock, { tur: "analiz" }>;
+export type NarrativeBlock = Extract<DefinitionBlock, { tur: "anlati" }>;
 
 export interface DefinitionIssue {
   /** JSON yolu — `bloklar[1].sorgu.olculer[0]`. */
@@ -227,19 +224,17 @@ function checkQuery(w: Walk, q: BlockQuery, path: string): SemanticCube | null {
     if (!d) w.issues.push({ yol: `${path}.boyutlar[${i}]`, mesaj: `"${cube.name}" küpünde "${id}" boyutu yok.`, oneri: suggest(id, cube.dimensions.map((x) => x.id)) });
     else if (d.permission) w.permissions.add(d.permission);
   });
-  q.suzgec?.rules.forEach((r, i) => {
-    const rp = `${path}.suzgec.rules[${i}]`;
-    if (!cube.dimensions.some((d) => d.id === r.field)) {
-      w.issues.push({ yol: `${rp}.field`, mesaj: `"${cube.name}" küpünde "${r.field}" boyutu yok.`, oneri: suggest(r.field, cube.dimensions.map((x) => x.id)) });
-    }
-    if (typeof r.value === "string" && r.value.startsWith("$")) {
-      bindRef(w, r.value, `${rp}.value`, ["boyutSecimi"]);
-      const p = w.params.get(refName(r.value));
-      if (p?.tur === "boyutSecimi" && p.boyut !== r.field) {
-        w.issues.push({ yol: `${rp}.value`, mesaj: `"${r.value}" "${p.boyut}" boyutunu seçer; bu süzgeç "${r.field}" alanında.` });
-      }
-    }
-  });
+  if (q.suzgec) {
+    checkFilterTree(q.suzgec, cube, `${path}.suzgec`, {
+      issue: (i) => w.issues.push(i),
+      suggest,
+      ref: (value, rp, field) => {
+        bindRef(w, value, rp, ["boyutSecimi"]);
+        const p = w.params.get(refName(value));
+        if (p?.tur === "boyutSecimi" && p.boyut !== field) w.issues.push({ yol: rp, mesaj: `"${value}" "${p.boyut}" boyutunu seçer; bu süzgeç "${field}" alanında.` });
+      },
+    });
+  }
   if (q.zaman) {
     const p = w.params.get(q.zaman.param);
     if (!p) w.issues.push({ yol: `${path}.zaman.param`, mesaj: `Tanımsız parametre "${q.zaman.param}".`, oneri: suggest(q.zaman.param, w.params.keys()) });

@@ -1,4 +1,4 @@
-import { Cog, Copy, ServerCog, Settings2, Link2, FileText } from "lucide-react";
+import { Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText } from "lucide-react";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
@@ -131,6 +131,17 @@ const hubGroupEntries: CommandEntry[] = [
     to: "/access/devices?kopya=1",
     permission: "admin:settings",
     keywords: "cihaz kopya tekrar kayıt birleştir birleştirme mükerrer çift tablet telefon kurulum",
+    deep: true,
+  },
+  // Anahtar halkası kaybı (D5): kimliği doğrulanamayan cihazlar — süzgeç ve bant açık gelir.
+  {
+    key: "access-devices:proof-lost",
+    label: "Tabletler · Anahtar kaybı / toplu yeniden bağla",
+    description: "Kimlik anahtarı kaybolan cihazları gör, yedekten geri yükle ya da toplu yeniden bağla",
+    icon: KeyRound,
+    to: "/access/devices?kanit=1",
+    permission: "admin:settings",
+    keywords: "cihaz anahtar kaybı halka kanıt doğrulanamıyor yeniden bağla toplu tablet emanet yedek",
     deep: true,
   },
   ...systemTileSections.map((s) => ({

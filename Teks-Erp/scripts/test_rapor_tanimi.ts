@@ -2,7 +2,8 @@
 // test_rapor_tanimi — kayıtlı/özel rapor arka ucu (Raporlar v2, R1-KAYIT; plan §3.2–3.4)
 // =============================================================================
 // Ölçtükleri: §0 iki izin kodu katalogda (`test_permission_catalog` devri) · §1 tanım şeması (strict, JSON yolu, öneri, başvurusuz/tanımsız parametre;
-// §1i–j R2-VERI oluşturucu süzgeç fikstürü `Electron/…/custom/data/filter-contract.fixture.json` geçer, "veya" reddedilir; §1k R2-KOD kod modu mesajları Türkçe + yol dilbilgisi) · §2 sistem
+// §1i–j R2-VERI oluşturucu süzgeç fikstürü `Electron/…/custom/data/filter-contract.fixture.json` geçer, "veya" + bir seviye iç grup derlenir
+// (iç içe grup, analizde "veya", parametreli/sırasız "arasında" reddedilir; "Tümü" parametresi "veya" grubunu bütünüyle düşürür); §1k R2-KOD kod modu mesajları Türkçe + yol dilbilgisi) · §2 sistem
 // tanımı boot uzlaştırması (idempotent, katalogdan çıkan ARSIV) + fikstür gövdeleri derleyiciden geçer ·
 // §3 clientToken replay DÖRT durum · §4 sürüm DEĞİŞMEZ + aktif sürüm claim'i 409 + eşzamanlı kayıt + sürüm replay'i ·
 // §5 durum geçişi atomik · §6 paylaşım veri yetkisi VERMEZ (izinsiz blok "yetkisiz") + görünürlük 404 ·
@@ -17,6 +18,7 @@
 //   S5 (R2-VERI) oluşturucu fikstüründe `suzgec.rules` → `kurallar` (plan §3.2'den sapma) → §1i ❌ 1
 //   S6 (R2-KOD) `zodMessage` tür adı çevirisi kaldırıldı ("Beklenen tür: string") → §1k ❌ 1 ·
 //   S7 (R2-KOD) `safeParse` `reportInput` kaldırıldı (yanlış tür "Zorunlu alan eksik" der) → §1k ❌ 1
+//   S8 (rapor küçükler, 2026-10-26) `settleFilter` "veya"da "Tümü" koşulunu yalnız düşürdü (grubu değil) → §1j ❌ 1
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -147,10 +149,31 @@ async function main(): Promise<void> {
       builderCompiled = b0.tur === "tablo";
     }
     check("§1i oluşturucu süzgeç fikstürü geçerli + derlenir; işleç listesi sunucuyla aynı", bf.gecerli && builderCompiled && JSON.stringify(builder.operatorler) === JSON.stringify(FILTER_OPERATORS), bf.gecerli ? "" : JSON.stringify(bf.hatalar));
-    const orBody = JSON.parse(JSON.stringify(builder.govde)) as { bloklar: Array<{ sorgu: { suzgec: { combinator: string } } }> };
-    orBody.bloklar[0]!.sorgu.suzgec.combinator = "or";
-    const t6 = checkReportDefinition(orBody);
-    check("§1j \"veya\" süzgeci bugün reddedilir (oluşturucu yetenek bayrağı kapalı kalmalı)", !t6.gecerli && t6.hatalar.some((h) => h.yol.startsWith("bloklar[0].sorgu.suzgec")), JSON.stringify(t6.gecerli ? [] : t6.hatalar));
+    // §1j "veya" + bir seviye iç grup derlenir (fikstürün ikinci gövdesi); sınırlar Türkçe yolla reddedilir.
+    const tree = JSON.parse(readFileSync(join(__dirname, "../../Electron/src/pages/Reports/_v2/custom/data/filter-contract.fixture.json"), "utf8")) as { agacGovde: unknown };
+    const t6 = checkReportDefinition(tree.agacGovde);
+    let treeInput: ReturnType<typeof toSemanticInput> | null = null;
+    if (t6.gecerli && t6.govde.bloklar[0]!.tur === "tablo") {
+      treeInput = toSemanticInput(t6.govde.bloklar[0]!.sorgu, resolveParams(t6.govde, {}), t6.govde, { asTable: true, refresh: false });
+      compileQuery(treeInput, ctxFor(ownerId, ["report:*"]));
+    }
+    check("§1j \"veya\" kökü + iç grup + \"arasında\" geçerli ve derlenir", t6.gecerli && treeInput?.suzgecBaglaci === "veya" && treeInput.suzgec.length === 2, t6.gecerli ? JSON.stringify(treeInput?.suzgec) : JSON.stringify(t6.hatalar));
+    const sq = (suzgec: unknown) => ({ surum: 1, baslik: "x", bloklar: [{ id: "a", tur: "tablo", sorgu: { kup: "sevk", olculer: ["sevk.brutMetre"], suzgec } }] });
+    const leaf = { field: "yon", operator: "=", value: "EXPORT" };
+    const nestedTwice = checkReportDefinition(sq({ combinator: "or", rules: [{ combinator: "and", rules: [{ combinator: "or", rules: [leaf] }] }] }));
+    const betweenRef = checkReportDefinition({ ...sq({ combinator: "and", rules: [{ field: "musteri", operator: "between", value: ["$m", "$m"] }] }), parametreler: [{ ad: "m", tur: "boyutSecimi", boyut: "musteri" }] });
+    const betweenOne = checkReportDefinition(sq({ combinator: "and", rules: [{ field: "yon", operator: "between", value: "EXPORT" }] }));
+    const analysisOr = checkReportDefinition({ surum: 1, baslik: "x", bloklar: [{ id: "n", tur: "analiz", yontem: "kiKare", kup: "hata", x: "vardiya", y: "hataGrubu", suzgec: { combinator: "or", rules: [leaf] } }] });
+    check(
+      "§1j2 iç içe grup · parametreli/sırasız \"arasında\" · analizde \"veya\" reddedilir",
+      !nestedTwice.gecerli && !betweenRef.gecerli && betweenRef.hatalar.some((h) => h.yol.endsWith(".value")) && betweenRef.hatalar.some((h) => h.yol.endsWith(".operator")) && !betweenOne.gecerli && !analysisOr.gecerli,
+      JSON.stringify([nestedTwice.gecerli, betweenRef.gecerli ? [] : betweenRef.hatalar.map((h) => h.yol), betweenOne.gecerli, analysisOr.gecerli]),
+    );
+    // "Tümü" (boş seçim) her satırı tutar: "ve"de koşul düşer, "veya"da bütün grup düşer (süzgeç daralmaz).
+    const allBody = { surum: 1, baslik: "x", parametreler: [{ ad: "m", tur: "boyutSecimi", boyut: "musteri" }], bloklar: [{ id: "a", tur: "tablo", sorgu: { kup: "sevk", olculer: ["sevk.brutMetre"], suzgec: { combinator: "and", rules: [leaf, { combinator: "or", rules: [{ field: "musteri", operator: "in", value: "$m" }, { field: "yon", operator: "=", value: "DOMESTIC" }] }] } } }] };
+    const ab = checkReportDefinition(allBody);
+    const settled = ab.gecerli && ab.govde.bloklar[0]!.tur === "tablo" ? toSemanticInput(ab.govde.bloklar[0]!.sorgu, resolveParams(ab.govde, {}), ab.govde, { asTable: true, refresh: false }) : null;
+    check("§1j3 \"Tümü\" parametresi \"veya\" grubunu bütünüyle düşürür (yalnız yön = yurtdışı kalır)", JSON.stringify(settled?.suzgec) === JSON.stringify([{ alan: "yon", islec: "=", deger: "EXPORT" }]), JSON.stringify(settled?.suzgec));
     // §1k R2-KOD: kod modu hataları Türkçe ve konumlanabilir yol taşır (istemci yolu satır/sütuna eşler, şemayı kopyalamaz).
     const codeCases: Array<[string, unknown, string, string?]> = [
       ["yanlış ölçü adı", { ...fixtureBody(), bloklar: [{ id: "a", tur: "anaSayi", sorgu: { kup: "sevk", olculer: ["sevk.brutMetr"] } }] }, "bloklar[0].sorgu.olculer[0]"],

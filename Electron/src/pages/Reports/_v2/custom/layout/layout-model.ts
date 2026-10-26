@@ -64,12 +64,20 @@ export const PALETTE: readonly PaletteEntry[] = [
   { kind: "varyant", label: "Kırılım kartları", description: "Bir ölçünün en büyük 6 değeri yan yana", defaultWidth: 12 },
   { kind: "donem", label: "Dönem kıyası", description: "Son birkaç gün, hafta ya da ay sütun sütun", defaultWidth: 12 },
   { kind: "metin", label: "Not", description: "Rapora açıklama ya da uyarı metni", defaultWidth: 12 },
-  { kind: "anlati", label: "Ne görüyoruz?", description: "Günlük dil özeti", unavailable: "Özel raporlarda günlük dil özeti henüz yok.", defaultWidth: 12 },
+  { kind: "anlati", label: "Ne görüyoruz?", description: "Rapordaki sayılardan günlük dil özeti", defaultWidth: 12 },
   { kind: "analiz", label: "Analiz", description: "Gruplar arasında fark var mı, iki ölçü birlikte mi değişiyor?", defaultWidth: 12 },
 ];
 
 export const KIND_LABEL: Record<string, string> = Object.fromEntries(PALETTE.map((p) => [p.kind, p.label]));
 KIND_LABEL.kpi = "Yan sayılar";
+
+/** Anlatı bloğunun kuralları (sunucu `NARRATIVE_RULES`); cümleyi sunucu kurar, burada yalnız seçim. */
+export const NARRATIVE_RULE_OPTIONS = [
+  { deger: "anaSayiKiyas", etiket: "Ana sayı ve önceki dönem" },
+  { deger: "enBuyukPay", etiket: "En büyük pay" },
+  { deger: "korelasyon", etiket: "Analiz sonucu" },
+  { deger: "orneklemUyarisi", etiket: "Az kayıt uyarısı" },
+] as const;
 
 export const WIDTH_OPTIONS = [
   { w: 12, label: "Tam" },
@@ -199,6 +207,7 @@ export function addBlock(body: DefinitionBody, kind: BlockKind, dimension: strin
   const id = nextId(body, kind);
   let block: DefinitionBlock;
   if (kind === "metin") block = { id, tur: "metin", metin: "Açıklama yazın." };
+  else if (kind === "anlati") block = { id, tur: "anlati", kurallar: NARRATIVE_RULE_OPTIONS.map((r) => r.deger), enFazla: 3 };
   else {
     const base = baseQuery(body);
     if (!base) return null;

@@ -46,6 +46,8 @@ interface Props {
   onReactivate: () => void;
   onDelete: () => void;
   isPending: boolean;
+  /** Kanıtı doğrulanamıyor (anahtar halkası kaybı, D5) — durum rozetinin yanında. */
+  proofLost?: boolean;
 }
 
 /** Cihaz listesinin bir satırı (klasik tablo) — ⋯ menü + sağ-tık aynı aksiyonlar. */
@@ -57,6 +59,7 @@ export function DeviceRow({
   onReactivate,
   onDelete,
   isPending,
+  proofLost = false,
 }: Props) {
   const { hasPermission } = useRoleAccess();
   const openTarget = useOpenTarget();
@@ -98,6 +101,14 @@ export function DeviceRow({
           <Badge>Onaylı</Badge>
         ) : (
           <Badge variant="muted">Onay bekliyor</Badge>
+        )}
+        {proofLost && (
+          <Badge
+            className="ml-1 border-transparent bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200"
+            title="Cihazın kimlik anahtarı kayıp; sayfanın üstündeki Anahtar kaybı bölümünden yeniden bağlayın"
+          >
+            Anahtar kaybı
+          </Badge>
         )}
       </TableCell>
       <TableCell className="py-2 text-xs text-muted-foreground">{lastSeen}</TableCell>

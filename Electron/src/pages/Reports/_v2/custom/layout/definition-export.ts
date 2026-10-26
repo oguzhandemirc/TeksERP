@@ -12,6 +12,7 @@ import { variantToExport } from "../../variant-model";
 import type { BlockOutcome, RunResult } from "../custom-api";
 import { chartOf, headlineOf, periodTableOf, tableOf, variantOf } from "../result-model";
 import { orderedLayout, type DefinitionBody } from "./layout-model";
+import { NARRATIVE_EMPTY, NARRATIVE_TITLE } from "../../NarrativeBox";
 import { CAUSALITY_TEXT, analysisVerdict } from "../../analysis/analysis-model";
 
 const NO_DATA = "Bu bölüm için veri yok.";
@@ -20,6 +21,8 @@ function blockBody(b: BlockOutcome, chartKind: string): ExportBlok {
   const name = b.baslik ?? undefined;
   if (b.durum !== "tamam") return { tur: "metin", baslik: name, metin: b.mesaj };
   if (b.metin) return { tur: "metin", baslik: name, metin: b.metin };
+  // R2-ANLATI: sunucunun cümleleri aynen (ekranla aynı metin).
+  if (b.tur === "anlati") return b.anlati?.length ? { tur: "anlati", cumleler: b.anlati.map((c) => c.metin) } : { tur: "metin", baslik: name ?? NARRATIVE_TITLE, metin: NARRATIVE_EMPTY };
   const r = b.sonuclar[0];
   if (!r) return { tur: "metin", baslik: name, metin: NO_DATA };
   if (b.tur === "anaSayi") {
@@ -53,7 +56,7 @@ function analysisBlocks(b: BlockOutcome): ExportBlok[] | null {
   const name = b.baslik ?? sunum.baslik;
   const verdict = analysisVerdict(b.analiz);
   const out: ExportBlok[] = [];
-  if (verdict.kind !== "empty" && sunum.grafik) out.push({ tur: "grafik", baslik: name, grafik: sunum.grafik, veri: grafikVeriTablosu(sunum.grafik, name) });
+  if (verdict.kind !== "empty" && sunum.grafik) out.push({ tur: "grafik", baslik: name, grafik: sunum.grafik, egilim: b.analiz.istatistik?.egilim ?? null, veri: grafikVeriTablosu(sunum.grafik, name) });
   if (verdict.kind !== "empty" && sunum.tablo) out.push({ tur: "tablo", tablo: tableToExport(sunum.tablo, name) });
   out.push({ tur: "anlati", cumleler: [verdict.kind === "warning" ? `⚠ ${verdict.text}` : verdict.text, CAUSALITY_TEXT] });
   return out;

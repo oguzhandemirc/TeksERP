@@ -6,6 +6,10 @@ import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Backend `/health` ucundan KULLANILAN alanlar (uç daha fazlasını döner). */
 export interface HealthResponse {
+  /** Kısa kimlik durumu (60 sn önbellek); `halkaKaybi` D5 — eski backend göndermez. */
+  shortCredentials?: {
+    status: { halkaKaybi?: { tespit: string; kayipKidler: string[]; etkilenen: { cihazKaniti: number } } | null } | null;
+  };
   api: string;
   db: "UP" | "DOWN";
   version: string;
@@ -170,6 +174,14 @@ export function evaluateAlerts(d: HealthResponse | undefined): Alert[] {
   if (!d) return [];
   const out: Alert[] = [];
   if (d.db === "DOWN") out.push({ level: "crit", message: "Veritabanı bağlantısı yok." });
+
+  // D5: kimlik anahtarı kaybı — sessiz kalmaz; çıkış Yetkilendirme → Tabletler → Anahtar kaybı.
+  const halka = d.shortCredentials?.status?.halkaKaybi;
+  if (halka)
+    out.push({
+      level: "crit",
+      message: `Cihaz kimlik anahtarı kayıp — ${halka.etkilenen.cihazKaniti} cihaz doğrulanamıyor. Tabletler → Anahtar kaybı bölümünden yedeği geri yükleyin ya da yeniden bağlayın.`,
+    });
 
   const disk = levelOf(d.diskUsedPct, 80, 90);
   if (disk !== "ok")
