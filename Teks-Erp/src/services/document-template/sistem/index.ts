@@ -15,9 +15,11 @@ export { inspectionReportSystem } from "./inspection-report"; // INSPECTION_REPO
 export { invoiceInternalSystem } from "./invoice-internal"; // INVOICE_INTERNAL
 export { kartelaDispatchSystem } from "./kartela-dispatch"; // KARTELA_DISPATCH
 export { paymentReceiptSystem } from "./payment-receipt"; // PAYMENT_RECEIPT
+export { priceListSystem } from "./price-list"; // PRICE_LIST
 export { qualityCertificateSystem } from "./quality-certificate"; // QUALITY_CERTIFICATE
 export { reconciliationLetterSystem } from "./reconciliation-letter"; // RECONCILIATION_LETTER
 export { returnDispatchSystem } from "./return-dispatch"; // RETURN_DISPATCH
+export { salesQuoteSystem } from "./sales-quote"; // SALES_QUOTE
 export { shipmentDispatchSystem } from "./shipment-dispatch"; // SHIPMENT_DISPATCH
 export { stockCountSystem } from "./stock-count"; // STOCK_COUNT
 export { subcontractorDirectShipSystem } from "./subcontractor-direct-ship"; // SUBCONTRACTOR_DIRECT_SHIP

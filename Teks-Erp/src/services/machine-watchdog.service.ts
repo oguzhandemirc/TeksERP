@@ -95,7 +95,7 @@ async function closeOverdueCardStops(now: Date, maxHours: number, sum: WatchdogS
 }
 
 /** ③ Geciken kapanış kuyruğu — mühür açıldıysa düzeltme tek boğazdan uygulanır; hâlâ mühürlüyse beklemeye devam. */
-async function applyLateEnds(sum: WatchdogSummary, only?: string[]): Promise<void> {
+async function applyLateEnds(sum: WatchdogSummary, only?: string[], afterLateQueueRead?: () => Promise<void>): Promise<void> {
   const late = await prisma.machineStopEvent.findMany({
     where: {
       ...LATE_STOP_END_WHERE,
@@ -103,6 +103,7 @@ async function applyLateEnds(sum: WatchdogSummary, only?: string[]): Promise<voi
     },
     orderBy: [{ startedAt: "asc" }, { id: "asc" }], take: BATCH, select: { id: true, lateEndedAt: true },
   });
+  if (afterLateQueueRead) await afterLateQueueRead();
   for (const s of late) {
     try {
       await closeStopCore(s.id, { value: s.lateEndedAt!, warning: null }, { endSource: MachineStopEndSource.SIGNAL, actorId: null });
@@ -119,6 +120,8 @@ export interface WatchdogRunOptions {
   /** Test enjeksiyonu: yalnız bu kartlar / makineler; üretimde hepsi. */
   onlyCollectorIds?: string[];
   onlyMachineIds?: string[];
+  /** Test enjeksiyonu: geciken kapanış kuyruğu okunduktan SONRA, uygulamadan ÖNCE (mühür açılışını turun içine sıralar). */
+  afterLateQueueRead?: () => Promise<void>;
 }
 
 export async function runMachineWatchdogOnce(opts: WatchdogRunOptions = {}): Promise<WatchdogOutcome> {
@@ -127,7 +130,7 @@ export async function runMachineWatchdogOnce(opts: WatchdogRunOptions = {}): Pro
   const sum: WatchdogSummary = { silenced: 0, provisional: 0, corrected: 0, sealed: 0, failed: 0 };
   sum.silenced = await markSilentCollectors(now, await readTezgahCollectorSilenceMinutes(), opts.onlyCollectorIds);
   await closeOverdueCardStops(now, await readTezgahMaxOpenStopHours(), sum, opts.onlyMachineIds);
-  await applyLateEnds(sum, opts.onlyMachineIds);
+  await applyLateEnds(sum, opts.onlyMachineIds, opts.afterLateQueueRead);
   return sum;
 }
 

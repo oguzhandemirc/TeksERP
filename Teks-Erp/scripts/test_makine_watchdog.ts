@@ -238,8 +238,13 @@ async function muhurBolumu(card: Kart, m: string[]): Promise<void> {
   check("§7c sağlık sayacı geciken kapanışı sayar", (await readMachineWatchdogCounters()).lateStopEnds >= 1);
   const bekle = sayi(await runMachineWatchdogOnce({ onlyCollectorIds: [], onlyMachineIds: [m[2]] }));
   check("§7d mühür sürerken tur uygulamaz (sealed sayılır)", bekle?.corrected === 0 && (bekle?.sealed ?? 0) >= 1, JSON.stringify(bekle));
-  await prisma.machineShiftStat.update({ where: { id: stat.id }, data: { sealState: "OPEN" } });
-  const uygula = sayi(await runMachineWatchdogOnce({ onlyCollectorIds: [], onlyMachineIds: [m[2]] }));
+  // Mühür turun kuyruk okumasından SONRA açılır: okuma mühürlüyken yapıldığı için duruş kuyrukta KESİN
+  // (mühürlüyken hiçbir tur uygulayamaz); aynı DB'deki sunucuların küresel turu açılıştan sonra araya girip
+  // önce uygularsa bizim tur aynı bitişi replay olarak sayar. Eski sıra (aç → tur) yarışa açıktı.
+  const uygula = sayi(await runMachineWatchdogOnce({
+    onlyCollectorIds: [], onlyMachineIds: [m[2]],
+    afterLateQueueRead: async () => { await prisma.machineShiftStat.update({ where: { id: stat.id }, data: { sealState: "OPEN" } }); },
+  }));
   const s2 = await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: stopId } });
   check("§7e mühür açılınca tur geciken kapanışı uygular (SIGNAL, endCorrectedAt, provisional izi kalır)",
     uygula?.corrected === 1 && s2.endSource === "SIGNAL" && s2.endedAt?.getTime() === endedAt.getTime() && s2.endCorrectedAt !== null && s2.provisionalEndedAt !== null,
