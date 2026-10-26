@@ -9,6 +9,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import { Callout } from "@/components/ui/callout";
 import { systemLogService } from "@/services/systemLogService";
+import { useActivityTraceSeed } from "./useActivityTraceSeed";
 import { ActivityFilters } from "./ActivityFilters";
 import { ActivityFeed } from "./ActivityFeed";
 import { ActivityDetailSheet } from "./ActivityDetailSheet";
@@ -16,6 +17,7 @@ import {
   ACTIVITY_EXPORT_COLUMNS,
   buildFeedParams,
   effectiveView,
+  emptyFeedText,
   isIslemItem,
   type ActivityFilterState,
   type FeedItem,
@@ -37,6 +39,7 @@ const exportNotes = (n: number): string[] => [
 export function ActivityPage() {
   const [filters, setFilters] = useState<ActivityFilterState>({ gorunum: "islem" });
   const [selected, setSelected] = useState<Selected>(null);
+  const seedRev = useActivityTraceSeed(setFilters);
 
   const query = useInfiniteQuery({
     queryKey: [QUERY_KEY, "feed", filters],
@@ -49,6 +52,10 @@ export function ActivityPage() {
 
   const items = useMemo<FeedItem[]>(() => query.data?.pages.flatMap((p) => p.data) ?? [], [query.data]);
   const warnings = query.data?.pages[0]?.warnings ?? [];
+  // Eski backend `reddedilen`i yok sayar: işaret görülene dek çip gizli; bir kez görülünce
+  // kalır (çipe basınca yeniden yüklenirken kaybolmasın). Render sırasında güncelleme React kalıbı.
+  const [rejectedSupported, setRejectedSupported] = useState(false);
+  if (!rejectedSupported && query.data?.pages[0]?.reddedilenSuzgeci === true) setRejectedSupported(true);
   const requested = filters.gorunum ?? "islem";
   const view = effectiveView(requested, items);
   // İşlem görünümü istendi, sunucu satır döndürdü ve arama yok → eski backend.
@@ -87,7 +94,7 @@ export function ActivityPage() {
         }
       />
       <RelocatedToolStrip host="/system/activity" />
-      <ActivityFilters value={filters} onChange={setFilters} />
+      <ActivityFilters key={seedRev} value={filters} onChange={setFilters} rejectedAvailable={rejectedSupported} />
 
       <PageBody ref={rootRef}>
         {fellBack && items.length > 0 && (
@@ -101,7 +108,7 @@ export function ActivityPage() {
           items={items}
           loading={query.isLoading}
           onSelect={handleSelect}
-          emptyText={warnings[0] ?? (filters.q ? "Bu numarada kayıt bulunamadı." : undefined)}
+          emptyText={emptyFeedText(filters, warnings)}
         />
         {items.length > 0 && !filters.q && (
           <AutoLoadMore

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X } from "lucide-react";
+import { Ban, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { cn } from "@/lib/utils";
@@ -29,11 +29,13 @@ const GUN_CIPLERI: Array<{ value: SystemLogGun; label: string }> = [
 interface Props {
   value: ActivityFilterState;
   onChange: (next: ActivityFilterState) => void;
+  /** Sunucu `reddedilenSuzgeci` işaretini verdi mi — eski backend'de çip gizli. */
+  rejectedAvailable?: boolean;
 }
 
 const ANY = "__any__";
 
-export function ActivityFilters({ value, onChange }: Props) {
+export function ActivityFilters({ value, onChange, rejectedAvailable = false }: Props) {
   const usersQuery = useQuery({
     queryKey: ["system-log-users"],
     queryFn: () => systemLogService.users().then((r) => r.data),
@@ -47,6 +49,7 @@ export function ActivityFilters({ value, onChange }: Props) {
 
   const hasActiveFilter = !!(
     value.gun ||
+    value.reddedilen ||
     value.q ||
     value.userId ||
     value.tableName ||
@@ -73,6 +76,11 @@ export function ActivityFilters({ value, onChange }: Props) {
           onChange={(gun) => onChange({ ...value, gun, dateFrom: undefined, dateTo: undefined })}
         />
       </Field>
+      {rejectedAvailable && (value.gorunum ?? "islem") === "islem" && !value.q && (
+        <Field label="Durum">
+          <RejectedChip on={!!value.reddedilen} onChange={(on) => onChange({ ...value, reddedilen: on || undefined })} />
+        </Field>
+      )}
       <Field label="Ara (kayıt no)">
         <SearchBox value={value.q} onChange={(q) => onChange({ ...value, q })} />
       </Field>
@@ -196,6 +204,23 @@ function DayChips({ value, onChange }: { value?: SystemLogGun; onChange: (v: Sys
         </Button>
       ))}
     </div>
+  );
+}
+
+/** "Reddedilenler" çipi — süzme SUNUCUDA (`reddedilen=1`); yalnız trace status ≥ 400 gelir. */
+function RejectedChip({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={on ? "default" : "outline"}
+      aria-pressed={on}
+      className="h-9 gap-1.5 whitespace-nowrap"
+      onClick={() => onChange(!on)}
+    >
+      <Ban className="h-3.5 w-3.5" />
+      Reddedilenler
+    </Button>
   );
 }
 

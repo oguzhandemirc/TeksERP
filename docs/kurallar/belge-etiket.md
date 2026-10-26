@@ -163,6 +163,7 @@
 ### Kararlar
 
 - **[ÇEKİRDEK]** Çuval kg'si sevk irsaliyesi ve çeki listesine BASILIR (müşteri/gümrük belgesi) → uydurulmuş değer canlı veriye GİRMEZ: istemci source:'SIMULATED' beyan eder, backend shipping.simulatedWeightEnabled kapalıyken 400; METER simüle doğar, SCALE doğmaz; MANUAL muaf (kantarsız kaçış). · bekçi: `scripts/test_sack_weigh_source.ts + useSackWeigh.test.tsx` <sub>(CLAUDE.md:329)</sub>
+- **[ÇEKİRDEK]** Tablet basımında (`expo-print` → Android WebView) kâğıt boyunu `@page size`'tan bekleme: kâğıdı Android yazdırma penceresi seçer, A4 tasarım başka kâğıda ölçeklenip sığdırılır. Kenar kutuları (sayfa no, künye, üst/alt bilgi) WebView ≥131 ister. · ölçüm: `docs/design/BELGE-TABLET-BASIM-OLCUMU.md` (arşiv 2026-10-26 TY)
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 

@@ -70,17 +70,22 @@ beforeEach(() => previewMock.mockClear());
 describe("§1–§2 sonuç, uyarı, sabit not", () => {
   it("güçlü kanıt: sunucu cümlesi AYNEN + sabit not", () => {
     renderWithProviders(<AnalysisCard analysis={outcome([{ kural: "korelasyon", metin: STRONG }], 215, [])} />);
-    expect(screen.getByTestId("analysis-result")).toHaveTextContent(STRONG);
+    expect(screen.getByTestId("analysis-result")).toHaveTextContent(STRONG.replace(` ${CAUSALITY_TEXT}`, ""));
     expect(screen.queryByTestId("analysis-warning")).toBeNull();
     expect(screen.getByTestId("analysis-causality")).toHaveTextContent(CAUSALITY_TEXT);
     expect(screen.getByText("n = 215")).toBeInTheDocument();
+    // Sabit not kartta TEK kez: sunucu cümlesinin sonundaki kopya ayıklanır.
+    const card = screen.getByTestId("analysis-card").textContent ?? "";
+    expect(card.split(CAUSALITY_TEXT)).toHaveLength(2);
+    expect(screen.getByTestId("analysis-result")).not.toHaveTextContent(CAUSALITY_TEXT);
   });
 
   it("⭐ örneklem uyarısı varken sonuç cümlesi çizilmez; sarı uyarı + sabit not", () => {
     renderWithProviders(<AnalysisCard analysis={outcome([{ kural: "korelasyon", metin: STRONG }, { kural: "orneklemUyarisi", metin: SMALL }], 9, ["azOrnek"])} />);
-    expect(screen.getByTestId("analysis-warning")).toHaveTextContent(SMALL);
+    expect(screen.getByTestId("analysis-warning")).toHaveTextContent(SMALL.replace(` ${CAUSALITY_TEXT}`, ""));
     expect(screen.queryByTestId("analysis-result")).toBeNull();
     expect(screen.queryByText(/güçlü kanıt/)).toBeNull();
+    expect(screen.getByTestId("analysis-warning")).not.toHaveTextContent(CAUSALITY_TEXT);
     expect(screen.getByTestId("analysis-causality")).toHaveTextContent(CAUSALITY_TEXT);
   });
 
