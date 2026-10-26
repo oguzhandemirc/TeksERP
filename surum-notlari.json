@@ -28,12 +28,12 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Hata girişi artık istasyonun türünden değil, istasyon kartındaki \"Kalite muayenesi (hata girişi)\" kutusundan açılır; Ara istasyon ve Tambur bu kutu açık doğar (bugünkü davranış). Tablette her muayeneli istasyonda aynı muayene paneli vardır; önceki adımların hataları gri ve salt okunur görünür. Tambur'da hata girişi çekmeceden açılır ve karar rehberi gösterilir."
+          "metin": "Hata girişi istasyon kartındaki Kalite muayenesi kutusuyla açılır; muayeneli istasyonlarda aynı panel."
         },
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Kurşun gramajı: yönetici Tanımlar'dan gramaj düğmelerini tanımlar; yalnız kurşun işi yapan istasyonda tablet tek dokunuş düzenine geçer (büyük gramaj düğmesi topu bitirir, iş emrinin hedef gramajı yıldızla işaretli, son işlem şeridinde DÜZELT). İş emrine hedef gramaj, iş emri ve parti kartına işlem özeti, kâğıt dağıtımına gramaj eklendi."
+          "metin": "Kurşun gramaj düğmeleri: kurşun yapan istasyonda tek dokunuşla top bitirilir."
         },
         {
           "kapsam": "panel",
@@ -48,7 +48,7 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Bildirimler: zil kişisel bildirim gelen kutusunu gösterir (sipariş termini, geciken iş emri, sevkiyat onayı, KK1 oranı, fason dönüşü, levent bitişi, yedek/lisans/eşitleme sorunları, yazıcı hatası, tezgah alarmı); kişi Bildirim tercihleri'nden türleri seçer, yönetici Sistem → Bildirim profilleri'nden fabrika varsayılanını tanımlar; tablette zil, çekmece ve istasyon şeridi. Genel Ayarlar → Bildirimler'den açılmadıkça davranış bugünküyle aynıdır; ilk açılışta var olan durumlar bildirim üretmez."
+          "metin": "Bildirim zili: termin, geciken iş emri, sevk onayı, yazıcı hatası uyarıları; türlerini kişi seçer."
         },
         {
           "kapsam": "panel",
@@ -58,7 +58,7 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Kalite Güvence — 4 puan muayene modülü: KK1'de top doğarken 4 puan muayenesi (tablet ve telefon), bağımsız Muayene tablet ekranı, panelde Kalite Güvence › Muayeneler (liste, özet, düzeltme, gerekçeli iptal, kâğıttan giriş), kural setleri, lab testleri, sertifikalar, müşteri lab spesifikasyonu, muayene raporu belgesi ve sevkte muayene özeti. Genel Ayarlar → Modüller'den panelden açılır (lisansta modül olmalı); kapalıyken KK1 ve hata akışı bugünküyle aynıdır."
+          "metin": "Kalite Güvence modülü açıksa KK1'de 4 puan muayenesi ve ayrı Muayene ekranı."
         },
         {
           "kapsam": "panel",
@@ -83,12 +83,12 @@
         {
           "kapsam": "her-ikisi",
           "tip": "iyilestirme",
-          "metin": "Cihaz eşleme: tablet uygulaması kaldırılıp kurulunca yeni cihaz kaydı açılmaz, donanım özetiyle tanınır; eşleştirme zorunluysa onay panelden ya da tablette yerinde yönetici parolasıyla verilir. Panelde aynı cihazın kopyaları önizlemeyle elle birleştirilir (geri alınabilir); kimlik anahtarı kaybolursa sistem durmaz, görünür uyarı verir ve toplu yeniden bağlama sunar."
+          "metin": "Cihaz eşleme kaldır-kur sonrası korunur."
         },
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "Etiket adedi: Genel Ayarlar → Baskı & Cihazlar → \"Etiket adedini kim belirler\" Sistem geneli (bugünkü) ya da İstasyon seçilir; İstasyon seçilince her istasyonun varsayılan adedi kullanılır ve tablet baskı düğmesinin yanında adet seçicisi çıkar. Tablette basım hatası kuyruklanır ve yazıcı hatası bildirimi üretir (bildirimler açıksa)."
+          "metin": "Etiket adedi istasyona göre seçilir; basım hatası kuyruklanır."
         },
         {
           "kapsam": "panel",
