@@ -289,3 +289,22 @@ Kaynak: W2 dalı (uygulama kodu 1.1.0 sürüm commit'iyle aynı; squash sonrası
 | Parola sızıntısı | derleme günlüğünde kasa parolası aranıp bulunmadı |
 | Mağaza görselleri | 7 telefon görüntüsü (§10 yöntemi) · `node scripts/test_play_magaza.mjs` 29/0 |
 | Emülatör dumanı | koşulmadı (görsel doğrulama web çıktısında yapıldı); kullanıcı yüklemeden önce isterse: `adb install -r ~/.tekserp/patron-android/cikti/tekserp-yonetim-1.1.0-vc2.duman.apk` |
+
+## 12. Ölçüm — 1.2.0 · vc3 (2026-10-26; paket `…tekserp.yonetim`, v2 + UX-4; Play yükleme: KULLANICI)
+
+Kaynak: `chore/patron-yayin-1026` (origin/main `5156f26d2` + yalnız `app.json`/`package.json` sürüm artışı: 1.1.0 → **1.2.0**,
+versionCode 2 → **3**; vc2 Play'e yüklenip yüklenmediği belirsiz olduğundan kod bir daha kullanılmadı). `npm test` 36 paket /
+324 test ✅ · `npm run typecheck` ✅ · `npm run build:aab` (parola Anahtar Zinciri `tekserp/patron-play-yukleme`'den; argv'ye
+girmez; derleme günlüğünde parola kalıbı 0). `google-services.json` YOK ve `PATRON_NATIVE_PUSH` verilmedi → `app.config.js`
+app.json'u aynen kullandı (N5 kapısı KAPALI = bugünkü davranış). **Claude yükleme YAPMAZ** — Play Console'a yükleme kullanıcıda.
+
+| | |
+|---|---|
+| AAB | `~/.tekserp/patron-play/1.2.0-vc3/tekserp-yonetim-1.2.0-vc3.aab` · 55 451 819 bayt · SHA-256 `0704d6b101995a07bde5f206783e12687a075fb201e08e828839df247d2f9800` (`.sha256` ile eşit; kopya `~/.tekserp/patron-android/cikti/`) |
+| build-aab doğrulaması | `com.etkiliyazilim.tekserp.yonetim` · versionCode 3 · versionName 1.2.0 · etiket "TeksERP Yönetim" · `allowBackup=false` · JS paketinde bulut adresi var, geliştirme adresi yok |
+| İzinler (`uses-permission`) | yalnız `INTERNET` + `com.etkiliyazilim.tekserp.yonetim.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` — `POST_NOTIFICATIONS` YOK (engelde), ön plan hizmeti YOK (`FOREGROUND_SERVICE` 0 eşleşme); `android.permission.DUMP` yalnız AndroidX profil yükleyici alıcısının `android:permission` niteliğidir, istenen izin değil |
+| Firebase / bildirim | AAB manifestinde `firebase` / `c2dm` / `gms.messaging` meta-data 0 · `NATIVE_PUSH = false` aynen |
+| İmza | yükleme sertifikası `3dd96b00468f3f8c…` (1.0.2 vc1 ve 1.1.0 vc2 ile AYNI anahtar) |
+| Duman APK | `tekserp-yonetim-1.2.0-vc3.duman.apk` · 82 013 059 bayt · SHA-256 `97e7b79ffbc90e8a3a8cc0184de56f7a2d7f36b2f01c44bb1c62e9367e5739e4` — dağıtılmaz. `aapt2 dump badging`: `com.etkiliyazilim.tekserp.yonetim` · versionCode 3 · versionName 1.2.0 · **targetSdk 36** · minSdk 24 · etiket "TeksERP Yönetim" · `uses-permission` yalnız `INTERNET` + `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` · manifestte `firebase`/`c2dm`/`gms.messaging` 0 · `FOREGROUND_SERVICE`/`POST_NOTIFICATIONS` 0 |
+| Emülatör dumanı | zaten açık `emulator-5558`e `adb install -r` → `Success`; `dumpsys package` versionCode 3 · targetSdk 36; `MainActivity` ön planda, 12 sn sonra giriş ekranı (logo · "TeksERP Yönetim" · E-posta · Parola · Devam · Davet kodum var; ikonlar çizili), logcat'te FATAL 0. Not: `dumpsys` "requested permissions" listesinde `android.permission.ACCESS_LOCAL_NETWORK` görünür — Android 16'nın targetSdk 36 uygulamalara eklediği örtük izindir, manifestte YOK (aapt2 2 izin); veri güvenliği formunu etkilemez |
+| Play yükleme | **kullanıcı** — dahili test kanalı; sürüm notu §5.4 kalıbı (v2 görünümü, arama/çipler, anlık tazeleme); vc3 |
