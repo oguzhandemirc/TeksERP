@@ -17,6 +17,97 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-10-26",
+      "durum": "TASLAK — terfide kullanıcı onayı",
+      "baslik": "Kalite muayenesi istasyon yeteneği, kurşun gramaj düğmeleri, bildirim zili, yeni menü düzeni; Belge Tasarımcısı, Kalite Güvence, Maliyet & Teklif ve Rapor Merkezi panelden açılır",
+      "surumler": {
+        "panel": "1.6.9",
+        "tablet": "1.4.3"
+      },
+      "maddeler": [
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Hata girişi artık istasyonun türünden değil, istasyon kartındaki \"Kalite muayenesi (hata girişi)\" kutusundan açılır; Ara istasyon ve Tambur bu kutu açık doğar (bugünkü davranış). Tablette her muayeneli istasyonda aynı muayene paneli vardır; önceki adımların hataları gri ve salt okunur görünür. Tambur'da hata girişi çekmeceden açılır ve karar rehberi gösterilir."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Kurşun gramajı: yönetici Tanımlar'dan gramaj düğmelerini tanımlar; yalnız kurşun işi yapan istasyonda tablet tek dokunuş düzenine geçer (büyük gramaj düğmesi topu bitirir, iş emrinin hedef gramajı yıldızla işaretli, son işlem şeridinde DÜZELT). İş emrine hedef gramaj, iş emri ve parti kartına işlem özeti, kâğıt dağıtımına gramaj eklendi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sol menü yeniden düzenlendi: Kalite Güvence ve Belgeler kökleri eklendi, kapalı modülün ekranı menüde \"kapalı — Genel Ayarlar'dan açılır\" karosuyla görünür; her yeni ekran menüden bulunur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İş emri listesinde \"Şu an nerede\" sütunu: toplar hangi istasyondaysa o görünür (partiler dağılmışsa en kalabalık istasyon + \"+N\" rozeti, tıklayınca dağılım kartı; fasondaki toplar fasoncu adıyla). Durum süzgeci üç gruba ayrıldı: durum · şu an nerede · özel (Bölünmüş, Fasonda, Başlamadı)."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Bildirimler: zil kişisel bildirim gelen kutusunu gösterir (sipariş termini, geciken iş emri, sevkiyat onayı, KK1 oranı, fason dönüşü, levent bitişi, yedek/lisans/eşitleme sorunları, yazıcı hatası, tezgah alarmı); kişi Bildirim tercihleri'nden türleri seçer, yönetici Sistem → Bildirim profilleri'nden fabrika varsayılanını tanımlar; tablette zil, çekmece ve istasyon şeridi. Genel Ayarlar → Bildirimler'den açılmadıkça davranış bugünküyle aynıdır; ilk açılışta var olan durumlar bildirim üretmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Belge Tasarımcısı (Tanımlar → Belge Tasarımcısı): belgeler sürükle-bırakla ya da HTML/CSS ile tasarlanır, belge türü başına birden çok şablon, müşteriye/fasoncuya atama, sürüm geçmişi, karşılaştırma ve geri alma. Genel Ayarlar → Baskı & Cihazlar → Belgeler → \"Belge tasarımcısı\" ile panelden açılır; kapalıyken bugünkü belgeler aynen basılır."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Kalite Güvence — 4 puan muayene modülü: KK1'de top doğarken 4 puan muayenesi (tablet ve telefon), bağımsız Muayene tablet ekranı, panelde Kalite Güvence › Muayeneler (liste, özet, düzeltme, gerekçeli iptal, kâğıttan giriş), kural setleri, lab testleri, sertifikalar, müşteri lab spesifikasyonu, muayene raporu belgesi ve sevkte muayene özeti. Genel Ayarlar → Modüller'den panelden açılır (lisansta modül olmalı); kapalıyken KK1 ve hata akışı bugünküyle aynıdır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Maliyet & Teklif modülü: maliyet parametreleri, iplik maliyet fiyatı, apre tarifesi, kumaş maliyet yapısı, sürümlü standart maliyet, satış teklifi ve fiyat listesi (ekran + basılı belge), iplik ihtiyaç planı. Genel Ayarlar → Modüller → \"Maliyet & Teklif\" ile panelden açılır (lisansta modül olmalı); kapalıyken görünür bir değişiklik yoktur. Ürün fiyat kartında fiyat değişince eski fiyat silinmez, tarihçeli saklanır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "e-İrsaliye: sevk edilmiş yurt içi sevkiyattan GİB biçimli e-İrsaliye dosyası üretilip indirilir ve entegratör portalına elle yüklenir; numara, ETTN, durum ve alıcı yanıtı elle kaydedilir. Firma resmi künyesi, numara serisi, gönderim yöntemi ve yürürlük tarihi girilmedikçe \"Yapılandırılmamış\" kalır ve sevkiyat akışı bugünküyle aynıdır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Rapor Merkezi: sade dilli çekirdek raporlar (üretim, kalite, kayıp, depo, fason, dokuma, alacaklar), kayıtlı/özel rapor ve sürükle-bırak rapor oluşturucu, varyant ve dönem karşılaştırması, analiz kartı, PDF/Excel; Gramaj raporu eklendi. Genel Ayarlar → Raporlar'dan panelden açılır; kapalıyken bugünkü rapor menüsü aynen durur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sistem › Etkinlik günlük dilde işlemleri gösterir (kim, ne yaptı; teknik ayrıntı katlı; reddedilen denemeler ayrı süzgeçte). Yazdırma Geçmişi sayfası: her etiket, refakat kartı ve çeki listesi basımı kim/ne/hangi yazıcı/sonuç bilgisiyle listelenir, belge kimliğiyle süzülür."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Cihaz eşleme: tablet uygulaması kaldırılıp kurulunca yeni cihaz kaydı açılmaz, donanım özetiyle tanınır; eşleştirme zorunluysa onay panelden ya da tablette yerinde yönetici parolasıyla verilir. Panelde aynı cihazın kopyaları önizlemeyle elle birleştirilir (geri alınabilir); kimlik anahtarı kaybolursa sistem durmaz, görünür uyarı verir ve toplu yeniden bağlama sunar."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Etiket adedi: Genel Ayarlar → Baskı & Cihazlar → \"Etiket adedini kim belirler\" Sistem geneli (bugünkü) ya da İstasyon seçilir; İstasyon seçilince her istasyonun varsayılan adedi kullanılır ve tablet baskı düğmesinin yanında adet seçicisi çıkar. Tablette basım hatası kuyruklanır ve yazıcı hatası bildirimi üretir (bildirimler açıksa)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Dokuma iş emri formu: levent ve sipariş kalemi seçilince kumaş, en, metraj gibi alanlar kendiliğinden dolar. Tambursuz rotada (kalite adımından sonra karar veren adım yoksa) kayıt engellenmez, uyarı gösterilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Patron bulutu: \"Patron bulutuna anında gönder (olay güdümlü)\" ayarı (Sistem → Patron Bulutu) açılırsa değişiklikler 3 sn içinde buluta gider; kapalıyken (bugünkü) 5 dk aralık sürer. Sipariş ve sevkiyat listelerinde müşteri adı, sipariş kaleminde ürün/renk adı bulutta görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Web paneli telefon ve tablet ekranına sığar: dar ekranda yan menü çekmeceye döner, başlık ve üst çubuk sarılır. Masaüstü görünüm değişmez. Mamul top etiketine \"Hata Notu\" alanı ve çeki listesine \"Hata notu — müşteriye gider\" sütunu eklenebilir (Etiket Stüdyosu'ndan açılır; açılmadıkça belgeler aynıdır)."
+        }
+      ]
+    },
+    {
       "id": "2026-10-21",
       "durum": "TASLAK — terfide kullanıcı onayı",
       "baslik": "Levent Sarım ekranı istasyon düzeninde, tezgah ve levent etiketi, üç yeni dokuma raporu",
