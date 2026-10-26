@@ -20,6 +20,7 @@ import { customerReportTiles } from "./Customer/tile-config";
 import { auditReportTiles } from "./Audit/tile-config";
 import { financeReportTiles } from "./Finance/tile-config";
 import { dokumaReportTiles } from "./Dokuma/tile-config";
+import { maliyetReportTiles } from "./Maliyet/tile-config";
 
 export interface ReportTile {
   key: string;
@@ -44,7 +45,7 @@ export interface ReportTile {
    * raporları karosunun bir an kaybolup geri gelmesi demekti ("sıfır görünür
    * fark" ihlali). Zincir tek yerde: `useOperationsVisibilityContext`.
    */
-  featureFlag?: "financeEnabled" | "productionEnabled" | "dokumaEnabled";
+  featureFlag?: "financeEnabled" | "productionEnabled" | "dokumaEnabled" | "maliyetEnabled";
 }
 
 /**
@@ -61,6 +62,7 @@ export const reportCategoryTiles: Record<string, HubTile[]> = {
   audit: auditReportTiles,
   finance: financeReportTiles,
   dokuma: dokumaReportTiles,
+  maliyet: maliyetReportTiles,
 };
 
 /** Kategori başlığı — rail'in tepesinde gösterilir. */
@@ -74,6 +76,7 @@ export const reportCategoryTitle: Record<string, string> = {
   audit: "Denetim",
   finance: "Ön Muhasebe",
   dokuma: "Dokuma",
+  maliyet: "Maliyet",
 };
 
 export const reportTiles: ReportTile[] = [
@@ -163,5 +166,15 @@ export const reportTiles: ReportTile[] = [
     to: "/reports/dokuma",
     permission: "report:production",
     featureFlag: "dokumaEnabled",
+  },
+  // MAL-7: maliyet modülünün raporları (tutar yok) — `maliyet.enabled` kapalıyken karo çizilmez.
+  {
+    key: "maliyet",
+    title: "Maliyet",
+    description: "İplik ihtiyaç planı: açık siparişler için hangi iplikten kaç kg lazım, eksik ne",
+    icon: Spool,
+    to: "/reports/maliyet",
+    permission: "report:yarn-need",
+    featureFlag: "maliyetEnabled",
   },
 ];

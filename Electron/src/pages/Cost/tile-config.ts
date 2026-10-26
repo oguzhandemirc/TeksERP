@@ -82,6 +82,15 @@ export const costTiles: CostTile[] = [
     tone: "text-success",
     permissionAny: ["price-list:read"],
   },
+  {
+    key: "yarn-need",
+    title: "İplik İhtiyaç Planı",
+    description: "Açık siparişleri dokumak için hangi iplikten kaç kg lazım (çözgü/atkı ayrı); serbest stok, açık alış ve hazır levent düşülünce eksik ne?",
+    to: "/cost/yarn-need",
+    icon: Spool,
+    tone: "text-warning",
+    permissionAny: ["report:yarn-need"],
+  },
 ];
 
 

@@ -60,6 +60,7 @@ import { AllocationsPage } from "@/pages/Finance/Allocations/AllocationsPage";
 import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
 import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
 import { DokumaReportsHubPage } from "@/pages/Reports/Dokuma/DokumaReportsHubPage";
+import { MaliyetReportsHubPage } from "@/pages/Reports/Maliyet/MaliyetReportsHubPage";
 import { RandimanPage } from "@/pages/Reports/Dokuma/RandimanPage";
 import { DurusParetoPage } from "@/pages/Reports/Dokuma/DurusParetoPage";
 import { MudahalePage } from "@/pages/Reports/Dokuma/MudahalePage";
@@ -106,6 +107,7 @@ import { PriceListsPage } from "@/pages/Cost/PriceLists/PriceListsPage";
 import { PriceListDetailPage } from "@/pages/Cost/PriceLists/PriceListDetailPage";
 import { QuoteNewPage } from "@/pages/Cost/Quotes/QuoteNewPage";
 import { QuoteDetailPage } from "@/pages/Cost/Quotes/QuoteDetailPage";
+import { YarnNeedPage } from "@/pages/Cost/YarnNeed/YarnNeedPage";
 import { InspectionRulesPage } from "@/pages/Quality/InspectionRules/InspectionRulesPage";
 import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
@@ -627,7 +629,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "cost",
     element: (
-      <ProtectedRoute requireAnyPermission={["cost:read", "quote:read", "price-list:read"]}>
+      <ProtectedRoute requireAnyPermission={["cost:read", "quote:read", "price-list:read", "report:yarn-need"]}>
         <CostHubPage />
       </ProtectedRoute>
     ),
@@ -719,6 +721,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="price-list:read">
         <PriceListDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  // İplik ihtiyaç planı (MAL-7) — backend `maliyet.report.routes.ts` ile aynı izin (`report:yarn-need`); tutar yok.
+  {
+    path: "cost/yarn-need",
+    element: (
+      <ProtectedRoute requirePermission="report:yarn-need">
+        <YarnNeedPage />
       </ProtectedRoute>
     ),
   },
@@ -1541,6 +1552,15 @@ export const contentRoutes: RouteObject[] = [
   // ── Dokuma raporları (Dilim 5, 2026-09-14) — rejim kapısı `ROUTE_MODULE` aynasından
   //    (`reports/dokuma` → dokumaEnabled); üç segmentli adres (ReportSideRail şartı); izin
   //    `report:production` (1e hükmü ③); karne eylemleri ekran içinde PermissionGate.
+  // Maliyet raporları (MAL-7) — rejim `ROUTE_MODULE` (`reports/maliyet` → maliyetEnabled); izin `report:yarn-need`.
+  {
+    path: "reports/maliyet",
+    element: (
+      <ProtectedRoute requirePermission="report:yarn-need">
+        <MaliyetReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
   {
     path: "reports/dokuma",
     element: (

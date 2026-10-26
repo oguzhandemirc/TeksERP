@@ -28,7 +28,7 @@ const ctx = (): OperationsVisibilityContext => ({
   depoMultiEnabled: false,
   devereEnabled: true,
   dokumaEnabled: true,
-  tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: false,
+  tezgahEnabled: true, kaliteGuvenceEnabled: false, maliyetEnabled: true,
   financeEnabled: true,
   productionEnabled: true,
   ticaretEnabled: true,
@@ -81,9 +81,9 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
     const htmlUndefined = a.container.innerHTML;
     expect(screen.getByRole("heading", { name: "Raporlar" })).toBeInTheDocument();
     expect(screen.queryByText("Rapor Merkezi")).toBeNull();
-    // Bütün bayraklar açık + admin: dokuz kategori karosu, sırası tile-config'in sırası.
+    // Bütün bayraklar açık + admin: on kategori karosu (MAL-7 Maliyet), sırası tile-config'in sırası.
     const titles = reportTiles.map((t) => t.title);
-    expect(titles).toHaveLength(9);
+    expect(titles).toHaveLength(10);
     for (const t of titles) expect(screen.getByText(t)).toBeInTheDocument();
     a.unmount();
     v2 = false;
@@ -102,7 +102,8 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
     const legacy = screen.getByRole("region", { name: "Eski raporlar (geçiş dönemi)" });
     // R0-GECIS: yer tutucu yerine 36 v1 rapor, eski hub'ın kategorileriyle (`legacy-model.ts`).
     expect(within(legacy).getAllByRole("listitem")).toHaveLength(36);
-    expect(within(legacy).getAllByRole("group")).toHaveLength(reportTiles.length);
+    // Maliyet kategorisinin v1 raporu yok (MAL-7 yalnız v2) → eski raporlar grubu da yok.
+    expect(within(legacy).getAllByRole("group")).toHaveLength(reportTiles.length - 1);
     // `hazir:true` satır Merkez'de çizilir, `hazir:false` çizilmez (ilk hazır satır KQ-D6 kurşun gramajı).
     const readyRows = V2_ROWS.filter((e) => e.hazir);
     expect(readyRows.length, "körlük zemini: hazır v2 satırı yok").toBeGreaterThan(0);

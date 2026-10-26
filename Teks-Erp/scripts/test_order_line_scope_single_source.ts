@@ -173,9 +173,17 @@ console.log("\n=== 3) 'Ölçülen kalem' (MEASURED_LINE) tek kaynak ===");
   for (const rel of [
     "services/production-balance.service.ts",
     "services/reports/stock-scorecard.report.service.ts",
+    // MAL-7: iplik ihtiyacının KG/ADET listesi (`NOT: { ...MEASURED_LINE }`) — talep dengeden gelir.
+    "services/reports/yarn-need.report.service.ts",
   ]) {
     const src = fs.readFileSync(path.join(SRC, rel), "utf8");
     check(`${rel} \`...MEASURED_LINE\` taşıyor`, /\.\.\.MEASURED_LINE\b/.test(src));
+  }
+  // MAL-7: talep soran yüzey iptal süzgecini de yardımcıdan alır — elle `cancelledAt: null` yazılırsa
+  // (sonda a, 2026-10-26) ad-tabanlı tarama görmez; bu satır görür.
+  for (const rel of ["services/production-balance.service.ts", "services/reports/yarn-need.report.service.ts"]) {
+    const src = fs.readFileSync(path.join(SRC, rel), "utf8");
+    check(`${rel} \`...ACTIVE_LINE\` taşıyor`, /\.\.\.ACTIVE_LINE\b/.test(src));
   }
 }
 

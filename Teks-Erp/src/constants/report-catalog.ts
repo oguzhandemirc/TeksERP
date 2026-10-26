@@ -296,6 +296,11 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/production/kursun-gramaj", uc: "/api/reports/production/kursun-gramaj", kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/kursun-gramaj" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "uretim", persona: ["uretim", "kalite"], varyantBoyutlari: ["kaynak"], hazir: true, yeniRapor: true },
+  // MAL-7: maliyet modülünün raporu (tutar yok); panelde ayrıca Maliyet & Teklif › İplik İhtiyaç Planı (`cost/yarn-need`) aynı zarfı çizer.
+  { key: "maliyet/iplik-ihtiyaci", baslik: "İplik İhtiyaç Planı", soru: "Açık siparişleri dokumak için hangi iplikten kaç kg lazım, ne kadarı stokta ya da yolda, eksik ne?",
+    sinif: "basit", izin: "report:yarn-need", modul: "maliyetEnabled", varsayilanGun: null, tarih: "yok",
+    panelYolu: "reports/maliyet/iplik-ihtiyaci", uc: "/api/reports/maliyet/iplik-ihtiyaci", kapiTasiyici: [{ dosya: "src/routes/reports/maliyet.report.routes.ts", yol: "/iplik-ihtiyaci" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "uretim", persona: ["planlama", "patron"], varyantBoyutlari: ["musteri", "urun"], hazir: true, yeniRapor: true },
   { key: "quality/kalite", baslik: "Kalite nasıl gidiyor?", soru: "Bu dönemde kumaşın ne kadarı birinci kalite çıktı ve önceki döneme göre nasıl değişti?",
     sinif: "basit", izin: "report:quality", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/quality/kalite", uc: "/api/reports/quality/kalite", kapiTasiyici: [{ dosya: "src/routes/reports/temel-uretim.routes.ts", yol: "/quality/kalite" }], yuzey: "yaprak",

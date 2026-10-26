@@ -1294,3 +1294,27 @@ export class PurchaseOrderService {
 
 export const purchaseOrderService = new PurchaseOrderService();
 export default purchaseOrderService;
+
+/**
+ * Açık alış miktarı (ticaret modülünün malı) — kalem başına `qty − receivedQty`, yalnız OPEN/PARTIAL
+ * siparişte ve kalem birimi KG olan ürünlerde. Maliyet köprüsü (`readOpenPurchase`) ticaret açıkken
+ * DİNAMİK import ile çağırır; birimi KG olmayan iplik kg Σ'ya katılmaz (birim uydurulmaz).
+ */
+export async function readOpenPurchaseKgByItem(itemIds: string[]): Promise<Map<string, Prisma.Decimal>> {
+  const out = new Map<string, Prisma.Decimal>();
+  if (itemIds.length === 0) return out;
+  const lines = await prisma.purchaseOrderLine.findMany({
+    where: {
+      itemId: { in: itemIds },
+      item: { unit: "KG" },
+      purchaseOrder: { status: { in: [PurchaseOrderStatus.OPEN, PurchaseOrderStatus.PARTIAL] } },
+    },
+    select: { itemId: true, qty: true, receivedQty: true },
+  });
+  for (const l of lines) {
+    const open = l.qty.minus(l.receivedQty);
+    if (open.lte(0)) continue;
+    out.set(l.itemId, (out.get(l.itemId) ?? new Prisma.Decimal(0)).plus(open));
+  }
+  return out;
+}

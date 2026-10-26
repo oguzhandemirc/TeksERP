@@ -317,3 +317,25 @@ export async function deleteWarpBeamDraft(id: string, userId?: string): Promise<
 }
 
 export { WARP_BEAM_EVENT_KINDS };
+
+/**
+ * Hazır çözgü kesiti (devere modülünün malı): çözgü kartı başına READY/MOUNTED leventlerin kalan
+ * metresi — kalan TEK kaynak `remainingByBeam`. Maliyet köprüsü (`readReadyBeams`) devere açıkken
+ * DİNAMİK import ile çağırır.
+ */
+export async function readReadyBeamRemainingM(warpSpecIds: string[]): Promise<Map<string, { remainingM: Prisma.Decimal; beamCount: number }>> {
+  const out = new Map<string, { remainingM: Prisma.Decimal; beamCount: number }>();
+  if (warpSpecIds.length === 0) return out;
+  const beams = await prisma.warpBeam.findMany({
+    where: { warpSpecId: { in: warpSpecIds }, status: { in: [WarpBeamStatus.READY, WarpBeamStatus.MOUNTED] } },
+    select: { id: true, warpSpecId: true },
+  });
+  const remaining = await remainingByBeam(prisma, beams.map((b) => b.id));
+  for (const b of beams) {
+    const m = new Prisma.Decimal(remaining.get(b.id) ?? 0);
+    if (m.lte(0)) continue;
+    const acc = out.get(b.warpSpecId) ?? { remainingM: new Prisma.Decimal(0), beamCount: 0 };
+    out.set(b.warpSpecId, { remainingM: acc.remainingM.plus(m), beamCount: acc.beamCount + 1 });
+  }
+  return out;
+}

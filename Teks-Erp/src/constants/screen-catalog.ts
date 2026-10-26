@@ -302,6 +302,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // PermissionGate — `loom:manual-entry` (terim düzelt · mühürle; machine-stops ekranıyla PAYLAŞILIR) ve
   // `loom:shift-unseal` (mühür aç; geçmiş rakamı değiştirir, SCREENLESS'tan düştü).
   { key: "reports/dokuma", app: "desktop", modul: "dokumaEnabled", title: "Dokuma Raporları", requires: ["report:production"], capabilities: ["loom:manual-entry", "loom:shift-unseal"] },
+  { key: "reports/maliyet", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Raporları", requires: ["report:yarn-need"], capabilities: [] },
   // Depo tarafı. ⚠️ `operations/yarn-stock` ve `operations/stock-counts` giriş
   // izni `warehouse:read`tir (backend `yarn.routes`/`stock-count.routes` ile
   // birebir); `yarn:write`/`warehouse:write` ekran İÇİ yetenektir.
@@ -323,7 +324,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "quality/certificates", app: "desktop", modul: "kaliteGuvenceEnabled", title: "Sertifikalar", requires: ["certificate:read"], capabilities: ["certificate:write"] },
   // Maliyet & Teklif (MAL-3): görüntüleme `cost:read` (uçların okuma izni); yazma ekran İÇİ yetenek.
   // Hub'a maliyet, teklif ya da fiyat listesi okuyan girer (MAL-5) — giriş izni herhangi biri (route requireAnyPermission).
-  { key: "cost", app: "desktop", modul: "maliyetEnabled", title: "Maliyet & Teklif", requires: ["cost:read", "quote:read", "price-list:read"], capabilities: [] },
+  { key: "cost", app: "desktop", modul: "maliyetEnabled", title: "Maliyet & Teklif", requires: ["cost:read", "quote:read", "price-list:read", "report:yarn-need"], capabilities: [] },
   { key: "cost/parameters", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Parametreleri", requires: ["cost:read"], capabilities: ["cost:settings"] },
   { key: "cost/yarn-prices", app: "desktop", modul: "maliyetEnabled", title: "İplik Maliyet Fiyatları", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/finishing-rates", app: "desktop", modul: "maliyetEnabled", title: "Fason Tarifeleri", requires: ["cost:read"], capabilities: ["cost:write"] },
@@ -331,6 +332,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "cost/calculator", app: "desktop", modul: "maliyetEnabled", title: "Hızlı Hesaplayıcı", requires: ["cost:read"], capabilities: ["quote:write"] },
   { key: "cost/quotes", app: "desktop", modul: "maliyetEnabled", title: "Teklifler", requires: ["quote:read"], capabilities: ["quote:write", "quote:convert"] },
   { key: "cost/price-lists", app: "desktop", modul: "maliyetEnabled", title: "Fiyat Listeleri", requires: ["price-list:read"], capabilities: ["price-list:write"] },
+  { key: "cost/yarn-need", app: "desktop", modul: "maliyetEnabled", title: "İplik İhtiyaç Planı", requires: ["report:yarn-need"], capabilities: [] },
   // bildirim: yönetici bildirim profilleri (N4-SEMA izni; sayfa + rota + karo N4-PROFIL'de).
   { key: "system/notification-profiles", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bildirim Profilleri", requires: ["settings:notifications", "admin:settings"], capabilities: [] },
 ];

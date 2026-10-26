@@ -10,7 +10,7 @@
 // =============================================================================
 import { Prisma, type Currency } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { readDevereEnabled, readFinanceEnabled, readIplikEnabled, readTicaretEnabled } from "../system-setting.service";
+import { readDevereEnabled, readEmanetEnabled, readFinanceEnabled, readIplikEnabled, readTicaretEnabled } from "../system-setting.service";
 import { factoryYmd } from "../../constants/time";
 import { addDaysYmd } from "./dokuma-levent-rapor.helper";
 
@@ -74,4 +74,36 @@ export async function suggestSalePrice(itemId: string, currency: Currency, custo
   const { resolveItemPrice } = await import("../item-price.service");
   const r = await resolveItemPrice({ itemId, kind: "SALE", currency, customerId });
   return r?.price ?? null;
+}
+
+// ── İplik ihtiyaç planı (MAL-7) köprüleri — `null` = modül kapalı, "bilinmiyor"; 0 DEĞİL ──
+
+export interface YarnStockRead { serbestKg: Prisma.Decimal; emanetKg: Prisma.Decimal | null }
+
+/**
+ * İplik stoku (iplik modülü). Emanet açıksa müşteri sahipli lotlar AYRI döner ve serbest stoktan
+ * çıkarılır (müşterinin malı ihtiyacı karşılamaz); emanet kapalıysa `emanetKg: null`.
+ */
+export async function readYarnStock(yarnItemIds: string[]): Promise<{ emanetAcik: boolean; byItem: Map<string, YarnStockRead> } | null> {
+  if (!(await readIplikEnabled())) return null;
+  const consigned = await readEmanetEnabled();
+  const { readYarnStockKg } = await import("../yarn-lot.service");
+  const raw = await readYarnStockKg(yarnItemIds, { consigned });
+  const out = new Map<string, YarnStockRead>();
+  for (const [id, r] of raw) out.set(id, { serbestKg: r.consignedKg ? r.totalKg.minus(r.consignedKg) : r.totalKg, emanetKg: r.consignedKg });
+  return { emanetAcik: consigned, byItem: out };
+}
+
+/** Açık alış siparişi kg'ı (ticaret modülü; OPEN/PARTIAL, KG birimli kalem). Kapalı → null. */
+export async function readOpenPurchase(yarnItemIds: string[]): Promise<Map<string, Prisma.Decimal> | null> {
+  if (!(await readTicaretEnabled())) return null;
+  const { readOpenPurchaseKgByItem } = await import("../purchase-order.service");
+  return readOpenPurchaseKgByItem(yarnItemIds);
+}
+
+/** Hazır leventlerin kalan çözgü metresi (devere modülü; READY/MOUNTED, `remainingByBeam`). Kapalı → null. */
+export async function readReadyBeams(warpSpecIds: string[]): Promise<Map<string, { remainingM: Prisma.Decimal; beamCount: number }> | null> {
+  if (!(await readDevereEnabled())) return null;
+  const { readReadyBeamRemainingM } = await import("../warp-beam.service");
+  return readReadyBeamRemainingM(warpSpecIds);
 }
