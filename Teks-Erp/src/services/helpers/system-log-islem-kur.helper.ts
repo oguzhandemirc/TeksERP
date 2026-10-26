@@ -10,12 +10,12 @@ import { SystemLogCategory } from "@prisma/client";
 import { tableLabel } from "../../constants/audit-tablo-etiketleri";
 import { narrateRows, type NarrativeRow } from "../audit-narrative";
 import { islemBasligi } from "../audit-narrative/islem";
-import { getTrace, type RequestTraceDto } from "../request-trace.service";
+import { getTrace, listRejectedTraces, type RequestTraceDto } from "../request-trace.service";
 import { attachLabels, resolveChangeValues } from "./audit-value-resolver";
 import { ACTOR_SELECT } from "./system-account.helper";
 import type { RecordRef } from "./audit-record-resolver.helper";
 import {
-  type Gun, type GrupImleci, type IslemFiltresi, type OperationRow, type Kullanici, gunAraligi, islemOgesi,
+  type Gun, type GrupImleci, type IslemFiltresi, type OperationRow, type Kullanici, gunAraligi, imlecOku, islemOgesi,
 } from "./system-log-islem.helper";
 
 /** Ham SQL satırı (işlem görünümü). */
@@ -40,6 +40,8 @@ export interface IslemParametreleri {
   dateFrom?: string;
   dateTo?: string;
   gun?: Gun;
+  /** B4: "1" = yalnız reddedilen istekler (trace status ≥ 400). */
+  reddedilen?: "0" | "1";
 }
 
 function parseDate(raw: string | undefined): Date | undefined {
@@ -65,6 +67,21 @@ export function islemFiltresi(p: IslemParametreleri, cats?: SystemLogCategory[])
 export function islemdeReddedilenGorunur(p: IslemParametreleri, cats?: SystemLogCategory[]): boolean {
   if (p.tableName || p.recordId || p.action) return false;
   return !cats || cats.includes(SystemLogCategory.DOMAIN);
+}
+
+/**
+ * "Reddedilenler" süzgeci (B4): yalnız trace status ≥ 400 — süzme SUNUCUDA, kısmi indeksten.
+ * Tablo/işlem/kayıt süzgeci ya da DOMAIN dışı kategori reddedileni dışlar → boş sayfa.
+ */
+export async function rejectedTracePage(
+  p: IslemParametreleri & { cursor?: string }, cats: SystemLogCategory[] | undefined, f: IslemFiltresi, limit: number,
+) {
+  const c = imlecOku(p.cursor);
+  const izler = islemdeReddedilenGorunur(p, cats)
+    ? await listRejectedTraces({ userId: p.userId, from: f.from, to: f.to, before: c ? { at: c.at, id: c.key } : undefined }, limit + 1, { auditliDahil: true })
+    : [];
+  const pageTraces = izler.slice(0, limit);
+  return { izler: pageTraces, hasMore: izler.length > limit, page: pageTraces.map((t) => ({ at: t.createdAt, key: t.id, istekli: true })) };
 }
 
 async function kullanicilar(ids: Array<string | null | undefined>): Promise<Map<string, Kullanici>> {
