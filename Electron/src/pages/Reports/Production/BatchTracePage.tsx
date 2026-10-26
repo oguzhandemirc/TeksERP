@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { fmtDate, fmtInt, fmtNum } from "../_components/formatters";
 import { batchTraceApi, buildBatchTraceExport, type BatchTrace } from "./batchTrace";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { BatchKursunGramajSection } from "./BatchKursunGramajSection";
+import { BatchIdentityStrip } from "./BatchIdentityStrip";
 
 type CustomerRow = BatchTrace["customers"][number];
 
@@ -172,17 +173,7 @@ export function BatchTracePage() {
 
       {t ? (
         <>
-          {/* Numaranın benzersiz olmadığı ekranda da yazılı: aksi halde kullanıcı
-              seçtiği adayın "o parti" olduğundan emin olmadan rapor okur. */}
-          <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>
-              <strong>{t.batch.batchNumber}</strong> ·{" "}
-              {t.batch.workOrderNumber ? `Terbiye İş Emri ${t.batch.workOrderNumber}` : "terbiye iş emri bağı yok"} ·{" "}
-              {fmtDate(t.batch.createdAt)}. Parti numarası benzersiz değildir; bu döküm{" "}
-              <strong>seçtiğiniz partiye</strong> aittir.
-            </span>
-          </div>
+          <BatchIdentityStrip batch={t.batch} />
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard label="Partideki top" value={fmtInt(t.totals.rollCount)} />

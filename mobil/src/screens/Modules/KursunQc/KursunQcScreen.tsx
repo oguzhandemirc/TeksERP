@@ -69,6 +69,7 @@ import PriorErrorBadge from '../../../components/inspection/PriorErrorBadge';
 import {
   composeStationPanels,
   dativeTr,
+  emptyRollHint,
   finishStepLabel,
   nextStationLabel,
 } from './stationPanels';
@@ -1343,8 +1344,8 @@ export default function KursunQcScreen() {
             <View style={styles.emptyState}>
               <Icon source="package-variant" size={64} color="#cbd5e1" />
               <Text style={styles.emptyTitle}>Top seçilmedi</Text>
-              <Text style={styles.emptyHint}>
-                Sağdaki top kuyruğundan birini seçin
+              <Text style={styles.emptyHint} testID="kursun-empty-roll-hint">
+                {emptyRollHint(compact)}
               </Text>
               {tapLayout && <GramajTapPanel state={gramajTap} hasRoll={false} />}
             </View>

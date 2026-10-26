@@ -9,7 +9,7 @@
 // basılır (`PaymentsPage` emsali). Defterde duruyor olması bilgidir.
 // =============================================================================
 
-import { Ban } from "lucide-react";
+import { AlertTriangle, Ban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -18,6 +18,7 @@ import { fmtDate } from "../Cheques/dates";
 import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
 import { DIRECTION_TONE, KIND_LABEL, STATUS_LABEL, accountNameOf, isPaymentLedgerRow, paymentSearchPath, withSign } from "./cashTxnRules";
 import type { CashTxnRow } from "./service";
+import { currencyMismatchOf } from "./currencyMismatch";
 
 interface Props {
   rows: CashTxnRow[];
@@ -58,6 +59,7 @@ export function CashTxnTable({ rows, onCancel }: Props) {
                 <td className="px-3 py-2 whitespace-nowrap">{fmtDate(r.txnDate)}</td>
                 <td className={`px-3 py-2 text-right font-medium ${cancelled ? "" : DIRECTION_TONE[r.direction]}`}>
                   {cancelled ? <span className="line-through">{amountText}</span> : amountText}
+                  <CurrencyMismatchBadge row={r} />
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{r.category ?? "—"}</td>
                 <td className="max-w-[22rem] truncate px-3 py-2 text-muted-foreground" title={r.description ?? ""}>
@@ -99,5 +101,16 @@ function PaymentLink({ payment }: { payment: NonNullable<CashTxnRow["payment"]> 
       <span className="font-mono text-xs">{payment.docNo}</span>
       <span className="ml-1 text-xs text-muted-foreground">{payment.direction === "IN" ? "Tahsilat" : "Ödeme"} · {payment.cari.name}</span>
     </button>
+  );
+}
+
+/** Belge ≠ hesap para birimi — uyarı rozeti + ipucu (yalnız gösterim). */
+function CurrencyMismatchBadge({ row }: { row: CashTxnRow }) {
+  const m = currencyMismatchOf(row);
+  if (!m) return null;
+  return (
+    <Badge variant="outline" data-testid="currency-mismatch" title={m.hint} className="ml-1.5 border-warning/50 text-warning">
+      <AlertTriangle className="mr-0.5 h-3 w-3" /> Hesap {m.account}
+    </Badge>
   );
 }
