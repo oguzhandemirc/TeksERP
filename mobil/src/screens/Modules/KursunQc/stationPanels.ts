@@ -140,3 +140,11 @@ export function finishStepLabel(nextStepName: string | null | undefined): string
   const next = nextStationLabel(nextStepName);
   return next ? `Adımı Kapat — Toplar ${dativeTr(next)}` : 'Adımı Kapat';
 }
+
+/** "Top seçilmedi" ipucu düzene göre: tablette kuyruk sağ sütunda, telefonda
+ *  (dikey) üst şeritteki "Açık İşler" çekmecesinde. */
+export function emptyRollHint(compact: boolean): string {
+  return compact
+    ? "Yukarıdaki «Açık İşler»e dokunup top kuyruğundan birini seçin"
+    : 'Sağdaki top kuyruğundan birini seçin';
+}
