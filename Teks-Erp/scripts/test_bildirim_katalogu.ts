@@ -22,6 +22,7 @@
 //   S3 `sistem.yedek-basarisiz.varsayilan` → "KAPALI" (kilit HER_ZAMAN) ⇒ 1 ❌ (§4)
 //   S4 (2026-10-25) eşlemede `patronKind: "yedek-yok"` (bulutta yok)    ⇒ 1 ❌ (§9b)
 //   S5 (2026-10-25) eşlemeden `yazici.hata` satırı silindi             ⇒ 1 ❌ (§9)
+//   S6 (2026-10-26) render'da `forText` yok sayıldı (String(v))      ⇒ 1 ❌ (§5d)
 // =============================================================================
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { SCREEN_CATALOG } from "../src/constants/screen-catalog";
@@ -129,6 +130,10 @@ function main(): void {
   }
   kural("§5c render: dolu payload yer tutucusuz; eksik alan `—`, eksik yol ekran köküne düşer",
     renderHata, `${girdiler.length} tür × 4 render`);
+  const lev = renderNotification("dokuma.levent-bitiyor", { tezgahNo: 1234, leventNo: 10.5, kalanGun: 0.8 }, "ACILDI");
+  kural("§5d metinde sayı Türkçe ondalıkla (\"0,8\"), gruplamasız; yolda ham",
+    lev.govde.includes("~0,8 gün") && lev.govde.startsWith("1234 ") && lev.yol.endsWith("search=10.5") ? [] : [lev.govde, lev.yol],
+    "levent-bitiyor sayı payload");
 
   // ── §6 alt tür sözleşmesi ─────────────────────────────────────────────────
   kural("§6 ⭐ KOSUL ve ALARM'da `cozuldu` dolu; OLAY'da yok",

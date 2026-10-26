@@ -165,7 +165,7 @@ export function InvoicesPage() {
         }
       />
 
-      <div className="flex shrink-0 items-center gap-2 border-b px-6 py-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3 md:px-6">
         <Input
           className="w-64"
           placeholder="Belge no / cari ara…"

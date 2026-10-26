@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Sidebar } from "./Sidebar";
+import { ShellSidebar } from "./ShellSidebar";
+import { useShellSidebar } from "@/hooks/useShellSidebar";
 import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
@@ -40,13 +41,7 @@ export function AppShell() {
 function MenuShell() {
   // Kapanışta açık kalan salon TV'si (aynı/ayrı pencere) geri gelir — Electron, süreç başına bir kez.
   useTvRestore();
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem("sidebar.collapsed") === "1";
-    } catch {
-      return false;
-    }
-  });
+  const { narrow, collapsed, drawerOpen, closeDrawer, toggleSidebar } = useShellSidebar();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
@@ -93,26 +88,17 @@ function MenuShell() {
   useLicenseRelay();
   usePdfLicenseWatermark();
 
-  const toggleSidebar = () =>
-    setCollapsed((c) => {
-      const next = !c;
-      try {
-        localStorage.setItem("sidebar.collapsed", next ? "1" : "0");
-      } catch {
-        /* sessiz geç */
-      }
-      return next;
-    });
-
   return (
     <div className="app-bg flex h-screen w-screen flex-col overflow-hidden text-foreground">
       <Topbar
         onToggleSidebar={toggleSidebar}
+        narrow={narrow}
+        drawerOpen={drawerOpen}
         onOpenCommand={() => setPaletteOpen(true)}
       />
       <ShellBanners />
-      <div className="flex min-h-0 flex-1">
-        <Sidebar collapsed={collapsed} />
+      <div className="relative flex min-h-0 flex-1">
+        <ShellSidebar narrow={narrow} collapsed={collapsed} drawerOpen={drawerOpen} onCloseDrawer={closeDrawer} />
         <main className="relative min-w-0 flex-1 overflow-hidden">
           <TabHost />
         </main>

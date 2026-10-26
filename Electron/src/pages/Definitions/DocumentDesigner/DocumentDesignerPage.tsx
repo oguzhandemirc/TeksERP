@@ -10,6 +10,8 @@ import { DESIGNER_DISABLED_TITLE, designerSettingPath, designerSettingTrail, isD
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AssignmentsView } from "./assignments/AssignmentsView";
 import { TemplateListView } from "./templates/TemplateListView";
+import { useNarrowEditor } from "@/hooks/useMediaQuery";
+import { WideScreenNotice } from "@/components/layout/WideScreenNotice";
 import { useTemplateAccess } from "./templates/useTemplateAccess";
 
 // GrapesJS (~1,1 MB) ayrı parçada: bayrak kapalıyken ya da sayfa açılmadıkça indirilmez (200 KB kuralı).
@@ -56,6 +58,8 @@ export function DocumentDesignerPage() {
   const flagsQuery = useFeatureFlags();
   const enabled = isDocumentDesignerEnabled(flagsQuery.data?.data);
   const isList = !id;
+  // GrapesJS tuvali telefonda kullanılamaz — editör yerine uyarı (liste yüzü açık kalır).
+  const narrow = useNarrowEditor();
 
   return (
     <PageShell className="h-full">
@@ -78,6 +82,8 @@ export function DocumentDesignerPage() {
         />
       ) : isList ? (
         <ListFace />
+      ) : narrow ? (
+        <WideScreenNotice what="Belge tasarımcısı" />
       ) : (
         <Suspense fallback={<Loading />}>
           <DesignerWorkspace templateId={id === DESIGNER_SCRATCH_ID ? null : id} />

@@ -12,9 +12,11 @@
 // MAL8 Gönderilmiş teklif → Revizyon oluştur → R2 taslağı + zaman çizelgesi revizyon zinciri.
 // MAL9 Fiyat listeleri: boş → arayüzden yeni liste → satırlar (API) → Yayınla onayı → yayında.
 // MAL10 Maliyet izni olmayan kullanıcı (muhasebe, MAL5'te cost:* alındı; quote/price-list okuma verilir): maliyet kolonu yok.
-// MAL11 İplik İhtiyaç Planı (MAL-7): hub karosu → sayfa (dolu/boş), "Depo ve üretimi düş: Hayır" süzgeci sunucuda,
+// MAL11 Teklif belgesi (MAL-6): taslak önizleme → gönderilmiş teklif belgesi (İndir ▾ Excel) → iptal → İPTAL filigranı.
+// MAL12 Fiyat listesi belgesi (MAL-6): yayındaki liste → Yazdır / PDF / Excel önizlemesi.
+// MAL13 İplik İhtiyaç Planı (MAL-7): hub karosu → sayfa (dolu/boş), "Depo ve üretimi düş: Hayır" süzgeci sunucuda,
 //       Excel = ekran tablosu (başlıklar aynı sırada, "bilinmiyor" hücresi aynı metin).
-// MAL12 report:yarn-need OLMAYAN kullanıcı: palette "İplik İhtiyaç Planı" yok.
+// MAL14 report:yarn-need OLMAYAN kullanıcı: palette "İplik İhtiyaç Planı" yok.
 // Kanıt PNG'leri `E2E_KANIT_DIZINI` verilirse açık + koyu, geniş + dar olarak oraya da yazılır.
 // =============================================================================
 import fs from "node:fs";
@@ -378,7 +380,80 @@ const TEKLIF_ADIMLARI = [
     dogrula: [{ ad: "maliyet kolonu yok", sql: "SELECT 1", oku: () => olc.mal10, beklenen: (n) => n === 0 }],
   },
 ];
-MALIYET_ADIMLARI.push(...TEKLIF_ADIMLARI);
+// ── MAL-6: teklif + fiyat listesi belgesi ────────────────────────────────────
+const belgeAc = async (page) => {
+  await page().locator('[data-testid="commercial-doc-open"]:visible').first().click({ timeout: 15_000 });
+  const fr = page().frameLocator("iframe[title$='Önizleme']");
+  await fr.locator("body").waitFor({ timeout: 20_000 });
+  await page().waitForTimeout(1500);
+  return (await fr.locator("body").innerText().catch(() => "")) ?? "";
+};
+const belgeKapat = async (page) => {
+  await page().keyboard.press("Escape");
+  await page().waitForTimeout(600);
+};
+const BELGE_ADIMLARI = [
+  {
+    id: "MAL11", rol: "P",
+    yol: "Teklif detayı → Yazdır / PDF / Excel (taslak önizleme) → Gönder → belge + İndir ▾ Excel → İptal → İPTAL filigranı", rota: "cost/quotes/:id",
+    async yap({ git, page, api, sql }) {
+      const { q } = await tohumTeklif(api, sql);
+      await sql(`UPDATE sales_quotes SET "internalNote" = 'TEST-IC-NOT-SIZINTI', "customerReference" = 'TEST-MAL6' WHERE id = $1`, [q.id]);
+      olc.t3 = q;
+      await git("Teklifler");
+      await page().reload();
+      await page().waitForTimeout(2000);
+      await git("Teklifler");
+      await page().locator('[data-testid="quote-row"]:visible').filter({ hasText: "Taslak" }).first().click({ timeout: 20_000 });
+      await page().locator('[data-testid="commercial-doc-open"]:visible').first().waitFor({ timeout: 15_000 });
+      await kanit(page(), "MAL11-teklif-detay-belge-dugmesi", page().locator('[data-testid="commercial-doc-open"]:visible').first());
+      olc.mal11Taslak = await belgeAc(page);
+      await kanit(page(), "MAL11-teklif-belge-taslak");
+      await belgeKapat(page);
+      await zorunlu(api, `/api/quotes/${q.id}/send`, { method: "POST", body: "{}" });
+      await page().reload();
+      await page().waitForTimeout(2000);
+      olc.mal11Gonderildi = await belgeAc(page);
+      await kanit(page(), "MAL11-teklif-belge-gonderildi");
+      await page().getByRole("button", { name: /İndir/ }).first().click();
+      await page().getByRole("menuitem", { name: "Excel" }).waitFor({ timeout: 10_000 });
+      olc.mal11Excel = await page().getByRole("menuitem", { name: "Excel" }).count();
+      await kanit(page(), "MAL11-teklif-belge-indir-menu");
+      await page().keyboard.press("Escape");
+      await belgeKapat(page);
+      await zorunlu(api, `/api/quotes/${q.id}/cancel`, { method: "POST", body: JSON.stringify({ reason: "TEST iptal" }) });
+      await page().reload();
+      await page().waitForTimeout(2000);
+      olc.mal11Iptal = await belgeAc(page);
+      await kanit(page(), "MAL11-teklif-belge-iptal");
+      await belgeKapat(page);
+    },
+    dogrula: [
+      { ad: "taslak önizleme TASLAK filigranlı", sql: "SELECT 1", oku: () => olc.mal11Taslak, beklenen: (t) => /TASLAK/i.test(t ?? "") },
+      { ad: "gönderilmiş teklif belgesi: kalemler var, iç not ve maliyet yok", sql: "SELECT 1", oku: () => olc.mal11Gonderildi, beklenen: (t) => /TEST Yeni desen/.test(t ?? "") && !/TEST-IC-NOT-SIZINTI|Maliyet/.test(t ?? "") },
+      { ad: "İndir ▾ menüsünde Excel", sql: "SELECT 1", oku: () => olc.mal11Excel, beklenen: (n) => n === 1 },
+      { ad: "iptal sonrası belge VOIDED", sql: `SELECT status::text AS s FROM printed_documents WHERE "docType" = 'SALES_QUOTE' AND "sourceId" = (SELECT id FROM sales_quotes WHERE "customerReference" = 'TEST-MAL6') ORDER BY version DESC LIMIT 1`, beklenen: (r) => r[0]?.s === "VOIDED" },
+      { ad: "iptal belgesinde İPTAL filigranı", sql: "SELECT 1", oku: () => olc.mal11Iptal, beklenen: (t) => /İPTAL/i.test(t ?? "") },
+    ],
+  },
+  {
+    id: "MAL12", rol: "P",
+    yol: "Fiyat listesi detayı → Yazdır / PDF / Excel → yayındaki listenin belgesi", rota: "cost/price-lists/:id",
+    async yap({ git, page }) {
+      await git("Fiyat Listeleri");
+      await page().locator('[data-testid="pl-row"]:visible').first().click({ timeout: 20_000 });
+      await page().locator('[data-testid="commercial-doc-open"]:visible').first().waitFor({ timeout: 15_000 });
+      olc.mal12 = await belgeAc(page);
+      await kanit(page(), "MAL12-fiyat-listesi-belge");
+      await belgeKapat(page);
+    },
+    dogrula: [
+      { ad: "fiyat listesi belgesi basıldı (PUBLISHED → ACTIVE)", sql: `SELECT count(*)::int AS n FROM printed_documents WHERE "docType" = 'PRICE_LIST' AND status = 'ACTIVE'`, beklenen: (r) => r[0]?.n >= 1 },
+      { ad: "belgede maliyet sütunu yok", sql: "SELECT 1", oku: () => olc.mal12, beklenen: (t) => (t ?? "").length > 0 && !/Maliyet|Kâr/.test(t ?? "") },
+    ],
+  },
+];
+MALIYET_ADIMLARI.push(...TEKLIF_ADIMLARI, ...BELGE_ADIMLARI);
 
 // ── MAL-7: iplik ihtiyaç planı ───────────────────────────────────────────────
 const ExcelJS = createRequire(import.meta.url)("exceljs");
@@ -426,61 +501,61 @@ async function tohumIplikYapisi(api, sql) {
 
 const IPLIK_ADIMLARI = [
   {
-    id: "MAL11", rol: "P",
+    id: "MAL13", rol: "P",
     yol: "Maliyet & Teklif → İplik İhtiyaç Planı → süzgeç (Depo ve üretimi düş: Hayır) → Excel", rota: "cost/yarn-need",
     async yap({ git, page, app, api, sql, ortam }) {
       await git("Maliyet & Teklif");
       await page().getByText("İplik İhtiyaç Planı").first().waitFor({ timeout: 15_000 });
-      await kanit(page(), "MAL11-hub-karo");
+      await kanit(page(), "MAL13-hub-karo");
       await page().getByText("İplik İhtiyaç Planı").first().click();
       await page().getByRole("heading", { name: "İplik İhtiyaç Planı" }).first().waitFor({ timeout: 15_000 });
       await page().getByText("Bu rapor ne sayar?").first().waitFor({ timeout: 30_000 });
-      await kanit(page(), "MAL11-once");
+      await kanit(page(), "MAL13-once");
       const listeyiGor = page().getByRole("button", { name: /İhtiyaca girmeyen/ });
       if (await listeyiGor.count()) {
         await listeyiGor.first().click();
         await page().getByRole("dialog").first().waitFor({ timeout: 10_000 });
-        await kanit(page(), "MAL11-dislanan-liste");
+        await kanit(page(), "MAL13-dislanan-liste");
         await page().keyboard.press("Escape");
       }
-      olc.mal11Kumas = await tohumIplikYapisi(api, sql);
+      olc.mal13Kumas = await tohumIplikYapisi(api, sql);
       await page().reload();
       await page().waitForTimeout(2000);
       await git("Maliyet & Teklif");
       await page().getByText("İplik İhtiyaç Planı").first().click();
       await page().getByRole("heading", { name: "İplik İhtiyaç Planı" }).first().waitFor({ timeout: 15_000 });
       await page().getByText("Bu rapor ne sayar?").first().waitFor({ timeout: 30_000 });
-      olc.mal11Ekran = await page().locator("thead th").allInnerTexts().catch(() => []);
-      olc.mal11Satir = await page().locator("tbody tr").count();
-      await kanit(page(), olc.mal11Satir > 0 ? "MAL11-dolu" : "MAL11-bos");
+      olc.mal13Ekran = await page().locator("thead th").allInnerTexts().catch(() => []);
+      olc.mal13Satir = await page().locator("tbody tr").count();
+      await kanit(page(), olc.mal13Satir > 0 ? "MAL13-dolu" : "MAL13-bos");
       await page().getByRole("button", { name: /Depo ve üretimi düş/ }).first().click();
       await page().getByRole("option", { name: "Hayır" }).first().click();
       await page().waitForTimeout(500);
       const uygula = page().getByRole("dialog").getByRole("button", { name: /Uygula/ });
       if (await uygula.count()) await uygula.first().click();
       await page().waitForTimeout(2500);
-      olc.mal11Cip = await page().getByRole("button", { name: /Depo ve üretimi düş/ }).first().innerText();
-      await kanit(page(), "MAL11-suzgec-brut");
-      const hedef = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-mal11-")), "iplik.xlsx");
+      olc.mal13Cip = await page().getByRole("button", { name: /Depo ve üretimi düş/ }).first().innerText();
+      await kanit(page(), "MAL13-suzgec-brut");
+      const hedef = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "tekserp-mal13-")), "iplik.xlsx");
       await app().evaluate(({ dialog }, p) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: p }); }, hedef);
       await page().getByRole("button", { name: /Excel/ }).first().click();
       for (let i = 0; i < 30 && !fs.existsSync(hedef); i++) await page().waitForTimeout(500);
       await page().waitForTimeout(800);
-      await kanit(page(), "MAL11-excel");
-      olc.mal11Excel = fs.existsSync(hedef) ? await excelBasliklari(hedef, olc.mal11Ekran[0] ?? "İplik") : null;
-      if (KANIT && olc.mal11Excel) fs.writeFileSync(path.join(KANIT, "MAL11-excel-ve-ekran.json"), JSON.stringify({ ekran: olc.mal11Ekran, excel: olc.mal11Excel }, null, 1));
-      // MAL12 için: muhasebe hesabı report:yarn-need iznini kaybeder (yalnız bu E2E DB'si).
+      await kanit(page(), "MAL13-excel");
+      olc.mal13Excel = fs.existsSync(hedef) ? await excelBasliklari(hedef, olc.mal13Ekran[0] ?? "İplik") : null;
+      if (KANIT && olc.mal13Excel) fs.writeFileSync(path.join(KANIT, "MAL13-excel-ve-ekran.json"), JSON.stringify({ ekran: olc.mal13Ekran, excel: olc.mal13Excel }, null, 1));
+      // MAL14 için: muhasebe hesabı report:yarn-need iznini kaybeder (yalnız bu E2E DB'si).
       await sql(`DELETE FROM user_permissions WHERE "userId" = (SELECT id FROM users WHERE username = $1) AND "permissionId" = (SELECT id FROM permissions WHERE code = 'report:yarn-need')`, [ortam.kullanicilar.muhasebe.username]);
     },
     dogrula: [
-      { ad: "sayfa sunucu tablosunu çizdi (İplik · Eksik kolonları)", sql: "SELECT 1", oku: () => (olc.mal11Ekran ?? []).join("|"), beklenen: (t) => /İplik/.test(t) && /Eksik/.test(t) },
-      { ad: "süzgeç çipi sunucu beyanından 'Hayır' okur", sql: "SELECT 1", oku: () => olc.mal11Cip, beklenen: (t) => /Hayır/.test(t ?? "") },
-      { ad: "Excel başlıkları = ekran başlıkları", sql: "SELECT 1", oku: () => JSON.stringify([olc.mal11Ekran, olc.mal11Excel?.basliklar]),
-        beklenen: () => (olc.mal11Excel?.basliklar ?? []).length > 0 && olc.mal11Excel.basliklar.join("|") === olc.mal11Ekran.join("|") },
+      { ad: "sayfa sunucu tablosunu çizdi (İplik · Eksik kolonları)", sql: "SELECT 1", oku: () => (olc.mal13Ekran ?? []).join("|"), beklenen: (t) => /İplik/.test(t) && /Eksik/.test(t) },
+      { ad: "süzgeç çipi sunucu beyanından 'Hayır' okur", sql: "SELECT 1", oku: () => olc.mal13Cip, beklenen: (t) => /Hayır/.test(t ?? "") },
+      { ad: "Excel başlıkları = ekran başlıkları", sql: "SELECT 1", oku: () => JSON.stringify([olc.mal13Ekran, olc.mal13Excel?.basliklar]),
+        beklenen: () => (olc.mal13Excel?.basliklar ?? []).length > 0 && olc.mal13Excel.basliklar.join("|") === olc.mal13Ekran.join("|") },
     ],
   },
   {
-    id: "MAL12", rol: "M",
+    id: "MAL14", rol: "M",
     yol: "report:yarn-need olmayan kullanıcı → palette İplik İhtiyaç Planı yok", rota: "",
     async yap({ page }) {
       await page().waitForTimeout(1500);
@@ -488,11 +563,11 @@ const IPLIK_ADIMLARI = [
       if (await acici.count()) await acici.click(); else await page().keyboard.press("Meta+k");
       await page().getByPlaceholder("Sayfa, rapor, ayar ara...").fill("İplik ihtiyaç");
       await page().waitForTimeout(600);
-      olc.mal12 = await page().getByRole("option", { name: /İplik İhtiyaç Planı/ }).count();
-      await kanit(page(), "MAL12-izinsiz-palet");
+      olc.mal14 = await page().getByRole("option", { name: /İplik İhtiyaç Planı/ }).count();
+      await kanit(page(), "MAL14-izinsiz-palet");
       await page().keyboard.press("Escape");
     },
-    dogrula: [{ ad: "palette İplik İhtiyaç Planı yok", sql: "SELECT 1", oku: () => olc.mal12, beklenen: (n) => n === 0 }],
+    dogrula: [{ ad: "palette İplik İhtiyaç Planı yok", sql: "SELECT 1", oku: () => olc.mal14, beklenen: (n) => n === 0 }],
   },
 ];
 MALIYET_ADIMLARI.push(...IPLIK_ADIMLARI);

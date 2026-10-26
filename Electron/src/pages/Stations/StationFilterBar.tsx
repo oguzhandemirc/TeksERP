@@ -85,7 +85,7 @@ export function StationFilterBar({
       </Select>
 
       {/* Sağ küme */}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
         {anyFilterActive && (
           <>
             <Badge variant="muted">

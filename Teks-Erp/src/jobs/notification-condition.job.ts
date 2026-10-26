@@ -7,6 +7,8 @@
 // olmayanlar `UPDATE … WHERE resolvedAt IS NULL RETURNING` (yalnız gerçekten kapanan KAPANDI alır).
 // `evaluate` fırlatırsa HİÇBİR koşul kapanmaz (fail-closed; sahte "çözüldü" yok) — log + sonraki tur.
 // Bayrak kapalıyken tur no-op; zamanlayıcıyı `notification-dispatch.job` bayrağa göre açar/kapar.
+// SU DAMGASI: bayrak açıldıktan sonra türün İLK turu taban turudur — doğrular sessizce açılır/kapanır,
+// bildirim ÜRETMEZ (birikmiş geçmiş sel olmasın; `notification-baseline.helper`).
 // =============================================================================
 import prisma from "../lib/prisma";
 import { NOTIFICATION_CATALOG, type NotificationKind } from "../constants/notification-catalog";
@@ -14,6 +16,7 @@ import { NOTIFICATION_DISPATCH_LOCK_NS } from "../services/notification-dispatch
 import { emitNotification } from "../services/helpers/notification-emit.helper";
 import { refreshNotificationParams } from "../services/helpers/notification-params.helper";
 import { readNotificationInboxEnabled } from "../services/system-setting.service";
+import { hasNotificationBaseline, markNotificationBaseline } from "../services/helpers/notification-baseline.helper";
 import { reportJobFailure } from "./job-failure";
 import { uyari } from "../lib/logger";
 
@@ -31,7 +34,8 @@ export interface ConditionSource {
   evaluate: () => Promise<ConditionSubject[]>;
 }
 
-export type ConditionRunResult = "disabled" | "error" | { opened: number; closed: number };
+/** `baseline` yalnız taban turunda: o turda sessizce açılan konu sayısı (opened/closed 0 kalır). */
+export type ConditionRunResult = "disabled" | "error" | { opened: number; closed: number; baseline?: number };
 
 const sources = new Map<NotificationKind, ConditionSource>();
 
@@ -68,6 +72,7 @@ export async function runConditionSourceOnce(kind: NotificationKind): Promise<Co
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${NOTIFICATION_DISPATCH_LOCK_NS}::int, hashtext(${"bildirim-kosul:" + kind}))`;
     // Bayrak evaluate sırasında kapanmış olabilir: açık koşul outbox'sız doğmasın.
     if (!(await readNotificationInboxEnabled(tx))) return "disabled";
+    const isBaseline = !(await hasNotificationBaseline(tx, kind));
     let opened = 0;
     let closed = 0;
     if (keys.length > 0) {
@@ -80,15 +85,20 @@ export async function runConditionSourceOnce(kind: NotificationKind): Promise<Co
         ON CONFLICT (kind, "subjectKey") WHERE "resolvedAt" IS NULL DO NOTHING
         RETURNING id, "subjectKey"`;
       for (const r of rows) {
+        opened++;
+        if (isBaseline) continue;
         const s = byKey.get(r.subjectKey)!;
         await emitNotification(tx, kind, { type: s.type, id: s.id ?? null, key: r.subjectKey }, s.payload, { phase: "ACILDI", conditionId: r.id });
-        opened++;
       }
     }
     const gone = await tx.$queryRaw<Array<{ id: string; subjectKey: string; subjectType: string; subjectId: string | null; payload: unknown }>>`
       UPDATE notification_conditions SET "resolvedAt" = now(), "updatedAt" = now() -- tz-ok: notification_* zaman kolonları timestamptz, çıplak now() mutlak anı yazar
       WHERE kind = ${kind} AND "resolvedAt" IS NULL AND NOT ("subjectKey" = ANY(${keys}::text[]))
       RETURNING id, "subjectKey", "subjectType", "subjectId", payload`;
+    if (isBaseline) {
+      await markNotificationBaseline(tx, kind);
+      return { opened: 0, closed: 0, baseline: opened };
+    }
     for (const g of gone) {
       const payload = (g.payload && typeof g.payload === "object" ? g.payload : {}) as Record<string, unknown>;
       await emitNotification(tx, kind, { type: g.subjectType, id: g.subjectId, key: g.subjectKey }, payload, { phase: "KAPANDI", conditionId: g.id });

@@ -44,6 +44,10 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+/** Dar ekran tam-ekran sınıfları — `max-sm:` önekli olduğundan çağıranın tabanını ezmez, yalnız telefonda baskın. */
+const DIALOG_NARROW_FULLSCREEN =
+  "max-sm:inset-0 max-sm:h-full max-sm:max-h-full max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0 max-sm:content-start";
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
@@ -113,6 +117,9 @@ const DialogContent = React.forwardRef<
           // gövde kayar. Kendi yüksekliğini yöneten dialog'lar (flex + h-[..vh] +
           // overflow-hidden) bunu tailwind-merge ile override eder.
           "left-1/2 top-1/2 z-50 grid max-h-[90vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto border bg-background p-6 shadow-lg sm:rounded-lg",
+          // Dar ekran (<640 px): tam ekran sayfa — seçici/form modalı telefonda kenara taşmaz,
+          // kendi gövdesi kayar (UX-3). Çağıranın max-w/h sınıfları yalnız geniş ekranda geçer.
+          DIALOG_NARROW_FULLSCREEN,
           // Sekmeye gömülü: `fixed` yerine `absolute` (portal hedefi sekme kutusu)
           // ve yükseklik sekme paneline göre sınırlanır (bar/sidebar'a taşmaz).
           scoped ? "absolute max-h-[calc(100%-1.5rem)]" : "fixed",

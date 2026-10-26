@@ -239,7 +239,8 @@ function fiiller() {
      *  başına ayrı bir MemoryRouter'da yaşar (ölçüldü 2026-09-18). */
     git: async (sayfaAdi) => {
       const kutu = page.getByPlaceholder("Sayfa, rapor, ayar ara...");
-      const acici = page.getByText("Ara veya komut", { exact: false }).first();
+      // Düğmenin erişilebilir adı — dar pencerede (UX-3) "Ara veya komut…" yazısı gizlenir, düğme kalır.
+      const acici = page.getByRole("button", { name: "Hızlı arama" }).first();
       if (await acici.count()) await acici.click({ timeout: 10_000 }); else await page.keyboard.press("Meta+k");
       await kutu.waitFor({ timeout: 10_000 });
       await kutu.fill(sayfaAdi);

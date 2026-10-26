@@ -20,13 +20,13 @@ export function DataTablePagination({ pagination, actions }: Props) {
   const { loaded, total, hasMore, isFetchingMore, pageSize, setPageSize } = pagination;
 
   return (
-    <div className="flex items-center justify-between gap-4 border-t px-3 py-2 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-3 py-2 text-xs text-muted-foreground">
       <div>
         {total != null
           ? `Yüklü ${loaded.toLocaleString("tr-TR", { useGrouping: false })} / ${total.toLocaleString("tr-TR", { useGrouping: false })} kayıt`
           : `Yüklü ${loaded.toLocaleString("tr-TR", { useGrouping: false })} kayıt`}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
         {isFetchingMore ? (
           <span className="flex items-center gap-1.5">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

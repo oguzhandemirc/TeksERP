@@ -37,7 +37,7 @@ export function DataTableToolbar<T>({
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
       {!hideSearch && (
-        <div className="relative w-64">
+        <div className="relative w-full sm:w-64">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             value={search}
@@ -48,7 +48,7 @@ export function DataTableToolbar<T>({
         </div>
       )}
       {leading}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
         {table ? (
           <DataTableTools table={table} exportName={exportName} fetchAll={fetchAll} />
         ) : null}

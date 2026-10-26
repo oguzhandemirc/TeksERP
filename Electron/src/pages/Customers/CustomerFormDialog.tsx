@@ -211,7 +211,7 @@ export function CustomerFormDialog({
         />
       </FormField>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <FormField label="Ülke" htmlFor="country" error={form.formState.errors.country}>
           <Input id="country" placeholder="Türkiye" {...form.register("country")} />
         </FormField>
@@ -245,7 +245,7 @@ export function CustomerFormDialog({
         </FormField>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <FormField label="Yetkili" htmlFor="contactName" error={form.formState.errors.contactName}>
           <Input id="contactName" {...form.register("contactName")} />
         </FormField>

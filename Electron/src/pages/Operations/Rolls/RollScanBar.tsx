@@ -62,9 +62,9 @@ export function RollScanBar({ openDetail, scanPending }: Props) {
   });
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
       <ScanField
-        className="min-w-0 w-80"
+        className="w-full min-w-0 sm:w-80"
         widthClassName="max-w-md"
         value={scanBarcode}
         onChange={setScanBarcode}

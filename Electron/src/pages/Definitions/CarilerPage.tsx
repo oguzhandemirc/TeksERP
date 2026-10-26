@@ -221,7 +221,7 @@ export function CarilerPage() {
         }
       />
 
-      <div className="flex shrink-0 items-center gap-2 border-b px-6 py-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3 md:px-6">
         <div className="relative w-72">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input

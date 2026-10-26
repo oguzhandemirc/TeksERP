@@ -68,7 +68,7 @@ function KartelaTabBar({
           {t.label}
         </button>
       ))}
-      {trailing ? <div className="ml-auto flex items-center gap-2">{trailing}</div> : null}
+      {trailing ? <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">{trailing}</div> : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { CommercialDocButton } from "../shared/CommercialDocButton";
 import { CostQueryError } from "../shared/CostQueryState";
 import { quoteNumberLabel } from "./labels";
 import type { PendingLine } from "./line-body";
@@ -35,6 +36,7 @@ export function QuoteDetailPage() {
         description={quote ? `${quote.customer.name} · ${quote.currency}` : undefined}
         onBack={() => nav("/cost/quotes")}
         parent={{ label: "Teklifler", to: "/cost/quotes" }}
+        actions={quote ? <CommercialDocButton docType="SALES_QUOTE" sourceId={quote.id} label={`Teklif ${quoteNumberLabel(quote)} · ${quote.customer.name}`} draft={quote.status === "DRAFT"} /> : undefined}
       />
       <PageBody className="space-y-4 p-4 sm:p-6">
         {q.isLoading ? (
