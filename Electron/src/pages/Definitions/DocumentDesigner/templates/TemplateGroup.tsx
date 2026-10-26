@@ -43,7 +43,7 @@ export function TemplateGroup({ docType, copyable, showSystem, rows, assignments
             <Badge variant="muted">Salt-okunur</Badge>
             {!copyable && <span className="text-xs text-muted-foreground">henüz kopyalanabilir tasarım yok</span>}
             <div className="ml-auto flex gap-1">
-              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!copyable} title={copyable ? "Sistem tasarımını önizle" : NO_EQUIVALENT_TEXT} onClick={onPreviewSystem}>
+              <Button size="sm" variant="outline" className="h-7 text-xs" title="Sistem tasarımını önizle" onClick={onPreviewSystem}>
                 <Eye className="mr-1 h-3.5 w-3.5" /> Önizle
               </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!copyable || !!designBlock} title={!copyable ? NO_EQUIVALENT_TEXT : designBlock ?? "Kopyala ve düzenle"} onClick={onCopySystem}>

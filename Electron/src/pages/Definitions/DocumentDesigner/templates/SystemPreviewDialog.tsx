@@ -5,14 +5,25 @@ import { documentTemplateService } from "@/services/documentTemplateService";
 import { docTypeLabel } from "../useDesignerDraft";
 import { SandboxFrame } from "./SandboxFrame";
 
+/** Backend `AppError` sözleşmesi: kod `details.code`ta (`body.code` hep boş). */
+const apiErrorCode = (e: unknown): string | null =>
+  ((e as { response?: { data?: { details?: { code?: unknown } } } })?.response?.data?.details?.code as string | undefined) ?? null;
+
 export const NO_EQUIVALENT_TEXT = "Bu belge türü için kopyalanabilir tasarım henüz yok.";
 
-/** Sistem şablonunun önizlemesi: eşleniği (eşitlik bekçisiyle kilitli) ilk senaryoyla sunucuda çizilir. */
+/** Sistem şablonunun önizlemesi: yerleşik çıktı örnek veriyle; yoksa eşleniği (eşitlik bekçisiyle kilitli) ilk senaryoyla. */
 export function SystemPreviewDialog({ docType, onClose }: { docType: string | null; onClose: () => void }) {
   const q = useQuery({
     queryKey: ["document-templates", "system-preview", docType],
     enabled: !!docType,
     queryFn: async () => {
+      // Önce yerleşik renderer (eşleniği olmayan türde de çizer); 409'da eşlenik + senaryo yoluna düşülür.
+      try {
+        const r = await documentTemplateService.systemPreview(docType!);
+        return { html: r.data.html, senaryo: "örnek veri" };
+      } catch (e) {
+        if (apiErrorCode(e) !== "NO_SYSTEM_PREVIEW") throw e;
+      }
       const [sys, contract] = await Promise.all([documentTemplateService.system(docType!), documentTemplateService.contract(docType!)]);
       const eq = sys.data.equivalent;
       const senaryo = contract.data.senaryolar[0]?.ad;

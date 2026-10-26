@@ -106,6 +106,16 @@ router.post("/preview", requireAnyPermission(...DOCUMENT_DESIGN_READ), wrap(c.pr
 
 /**
  * @openapi
+ * /api/document-templates/sistem-onizleme/{docType}:
+ *   post:
+ *     tags: [DocumentTemplates]
+ *     summary: "Sistem (yerleşik) tasarımın örnek veriyle önizlemesi — yazmaz; bilinmeyen tür 400, yerleşik çıktısı olmayan tür 409 NO_SYSTEM_PREVIEW"
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post("/sistem-onizleme/:docType", requireAnyPermission(...DOCUMENT_DESIGN_READ), wrap(c.systemPreview));
+
+/**
+ * @openapi
  * /api/document-templates/sample-sources/{docType}:
  *   get:
  *     tags: [DocumentTemplates]

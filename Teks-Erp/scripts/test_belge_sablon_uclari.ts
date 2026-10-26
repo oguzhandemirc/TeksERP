@@ -11,6 +11,7 @@
 //   §3 Tasarım uçları (oluştur, sürüm kaydet, ata): design + admin:settings; read/publish 403
 //   §4 Yayın ucu: publish + admin:settings; read/design 403
 //   §5 Gerçek kayıtlı önizleme + örnek kaynak listesi: belgenin kendi okuma izni de aranır
+//   §7 Sistem önizlemesi: read açar, refakat kartı 200, FREE_DOCUMENT 409 NO_SYSTEM_PREVIEW, bilinmeyen 400, izinsiz 403
 //   §6 Tasarımcı bayrağı (T1C, P-c) KAPALIYKEN: sözleşme okuması 200, diğer uçlar 403 DOCUMENT_DESIGNER_DISABLED
 //      (§1–§5 bayrak AÇIK koşar; ayar satırı `finally`de birebir geri yazılır)
 //
@@ -20,6 +21,8 @@
 //    çevrildi → §6 iki ❌ (liste + oluşturma bayrak kapalıyken geçti); yedekten geri kondu, 25/0.
 // ⭐ NEGATİF SONDA (2026-10-26, T5, ölçüldü): assignment.service.ts'de `profileCatalog` anahtarı yeniden adlandırıldı
 //    → §2 profil kataloğu ❌ (katalog=undefined); yedekten geri kondu, 26/0.
+// ⭐ NEGATİF SONDA (2026-10-26, Sistem önizleme, ölçüldü): system-preview.service.ts'de 409 `conflict` → `badRequest`
+//    → §7 bir ❌ (FREE_DOCUMENT 400 aldı); geri alındı, 31/0.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { AuthService } from "../src/services/auth.service";
@@ -95,7 +98,7 @@ async function call(h: Record<string, string> | null, method: string, path: stri
   return { status: r.status, data: json?.data as Record<string, unknown> | undefined, code: json?.error?.details?.code ?? json?.details?.code };
 }
 
-const HTTP_KONTROL = 26;
+const HTTP_KONTROL = 31;
 
 async function main(): Promise<void> {
   console.log("=== Belge şablonu uçları izin matrisi ===\n");
@@ -189,6 +192,17 @@ async function main(): Promise<void> {
   check("§5 sevk okuma izni olmadan gerçek kayıt önizlemesi 403", rec.status === 403 && rec.code === "PERMISSION_DENIED", `durum=${rec.status}`);
   const src = await call(H.design, "GET", `/sample-sources/${DOC}`);
   check("§5 sevk okuma izni olmadan örnek kaynak listesi 403", src.status === 403, `durum=${src.status}`);
+
+  // §7 Sistem önizlemesi: örnek veri (gerçek kayıt yok) → tasarım okuma izni yeter; yazmaz.
+  const sp = await call(H.read, "POST", `/sistem-onizleme/${DOC}`);
+  check("§7 read sistem önizlemesini alır (200, html)", sp.status === 200 && String(sp.data?.html ?? "").length > 500, `durum=${sp.status}`);
+  const spCard = await call(H.read, "POST", "/sistem-onizleme/TRAVELER_CARD");
+  check("§7 eşleniği olmayan refakat kartı da çizilir (200)", spCard.status === 200 && typeof spCard.data?.html === "string", `durum=${spCard.status} kod=${spCard.code}`);
+  const spFree = await call(H.read, "POST", "/sistem-onizleme/FREE_DOCUMENT");
+  check("§7 yerleşik çıktısı olmayan tür 409 NO_SYSTEM_PREVIEW", spFree.status === 409 && spFree.code === "NO_SYSTEM_PREVIEW", `durum=${spFree.status} kod=${spFree.code}`);
+  const spBad = await call(H.read, "POST", "/sistem-onizleme/YOK_BOYLE");
+  check("§7 bilinmeyen tür 400 (FAIL-CLOSED)", spBad.status === 400, `durum=${spBad.status}`);
+  check("§7 izinsiz 403", (await call(H.none, "POST", `/sistem-onizleme/${DOC}`)).status === 403);
 }
 
 main()
