@@ -1,6 +1,7 @@
 // Tanımlar › Ürün Kataloğu karoları (sıra = hub sırası).
 import { Package, Award, Palette, Sparkles, Tag } from "lucide-react";
 import { itemPricesTileVisible } from "../ItemPrices/regime";
+import { flagOffHint } from "@/lib/flag-setting-path";
 import type { DefinitionTile } from "../tile-config";
 
 export const catalogTiles: DefinitionTile[] = [
@@ -27,6 +28,7 @@ export const catalogTiles: DefinitionTile[] = [
     group: "catalog",
     permission: "item:read",
     visibleWhen: itemPricesTileVisible,
+    offHint: flagOffHint("ticaretEnabled"),
   },
   {
     key: "fabric-properties",

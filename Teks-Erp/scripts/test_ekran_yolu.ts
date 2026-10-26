@@ -47,6 +47,8 @@ const HUB: Record<string, string> = {
   "/finance": "Finance",
   "/access": "Access",
   "/system": "System",
+  "/quality": "Quality",
+  "/documents": "Documents",
 };
 /** Karo içi alt etiketin (sekme/bölüm/düğme) paneldeki yeri. */
 const ALT_KAYNAK: Partial<Record<PanelEkran, string>> = {
@@ -175,7 +177,8 @@ function girisFarklari(p: PanelMenusu, tablo: Record<string, Giris>, alt: Record
   });
 }
 
-const KOK_MENU = ["Anasayfa", "Tanımlar", "Operasyon", "Raporlar", "Bildirimler", "Muhasebe", "Maliyet & Teklif", "Yetkilendirme", "Sistem"];
+// UX-2 (2026-10-26): + Kalite Güvence · Belgeler; "Muhasebe" → "Ön Muhasebe"; "Bildirimler" satırı kalktı.
+const KOK_MENU = ["Anasayfa", "Operasyon", "Kalite Güvence", "Maliyet & Teklif", "Ön Muhasebe", "Raporlar", "Tanımlar", "Belgeler", "Yetkilendirme", "Sistem"];
 function desenler(kokler: readonly string[]): RegExp[] {
   return [
     new RegExp(`(^|[^\\p{L}])(${kokler.join("|")})\\s*[→›>]\\s*\\S`, "u"),
@@ -211,7 +214,7 @@ function main(): void {
   console.log("\n=== Ekran yolu — backend mesajındaki menü yolu panelin menüsünde ===\n");
   const p = paneliOku();
   const karoSayisi = [...p.menu.values()].reduce((n, k) => n + k.length, 0);
-  check("§1a panel menüsü okundu (körlük zemini: 5 hub, ≥ 60 karo)", p.menu.size === 5 && karoSayisi >= 60,
+  check("§1a panel menüsü okundu (körlük zemini: 7 hub, ≥ 60 karo)", p.menu.size === 7 && karoSayisi >= 60,
     `${[...p.menu.entries()].map(([m, k]) => `${m}:${k.length}`).join(" · ")}`);
   check("§1b her karo başlığı çözüldü (düz dizge / TERIM)", p.okunamayan.length === 0, p.okunamayan.join(" · "));
   check("§1c sol menü kökleri bekçinin bildiği kümede", solMenu().every((m) => KOK_MENU.includes(m.label)),
@@ -220,7 +223,7 @@ function main(): void {
 
   const fark = girisFarklari(p, PANEL_EKRAN, ALT_KAYNAK, dosyaEtiketleri);
   check("§2a `PANEL_EKRAN` her yolu panelde var (menü → karo → alt)", fark.length === 0, fark.join(" · "));
-  check("§2b `ekranYolu` tek ayraçla biçimler", ekranYolu("etiketAtamalari") === ["Tanımlar", "Etiketler", "Etiket Atamaları"].join(YOL_AYRACI) && YOL_AYRACI === " → ");
+  check("§2b `ekranYolu` tek ayraçla biçimler", ekranYolu("etiketAtamalari") === ["Belgeler", "Etiketler", "Etiket Atamaları"].join(YOL_AYRACI) && YOL_AYRACI === " → ");
 
   const tumKaynak = tsDosyalari(SRC).filter((f) => !f.endsWith("panel-ekran-yolu.ts")).map((f) => fs.readFileSync(f, "utf8")).join("\n");
   const kullanilmayan = Object.keys(PANEL_EKRAN).filter((k) => !tumKaynak.includes(`ekranYolu("${k}")`));
@@ -245,7 +248,7 @@ function main(): void {
   const sahte = (e: Giris): number => girisFarklari(p, { x: e }, { x: e.alt ? "pages/Labels/tabs-config.ts" : undefined }, dosyaEtiketleri).length;
   check("§5c sonda: uydurma menü, kaymış karo ve olmayan alt etiket yakalanır",
     sahte({ menu: "Kalite", karo: "Hata Tipleri" }) === 1 && sahte({ menu: "Sistem", karo: "Kalite Sınıfları" }) === 1
-      && sahte({ menu: "Tanımlar", karo: "Etiketler", alt: "Atamalar" }) === 1 && sahte({ menu: "Tanımlar", karo: "Etiketler", alt: "Etiket Atamaları" }) === 0);
+      && sahte({ menu: "Belgeler", karo: "Etiketler", alt: "Atamalar" }) === 1 && sahte({ menu: "Belgeler", karo: "Etiketler", alt: "Etiket Atamaları" }) === 0);
 }
 
 try {

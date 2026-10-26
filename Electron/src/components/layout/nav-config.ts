@@ -2,15 +2,16 @@ import {
   LayoutDashboard,
   Library,
   ShieldCheck,
+  BadgeCheck,
   ScrollText,
   ServerCog,
   ClipboardList,
   Calculator,
-  Bell,
+  FileText,
   Coins,
   type LucideIcon,
 } from "lucide-react";
-import { SYSTEM_HUB_ACCESS } from "@/lib/permissions";
+import { DOCUMENTS_HUB_ACCESS, QUALITY_HUB_ACCESS, SYSTEM_HUB_ACCESS } from "@/lib/permissions";
 
 export interface NavItem {
   label: string;
@@ -22,11 +23,13 @@ export interface NavItem {
   adminOnly?: boolean;
   /** Komut paletinde aranacak ek sözcükler. */
   keywords?: string;
+  /** UX-2 K3: satır KAPALI (modül bayrağı kapalı) — soluk çizilir, gezinmez, tıkta bu ipucunu verir. Sidebar hesaplar. */
+  offHint?: string;
   /** Opsiyonel sayısal rozet (bekleyen iş / uyarı). Veri bağlandığında dolar. */
   badge?: number;
   /**
-   * Bu satırın bağlı olduğu MODÜL anahtarı. Bayrak KAPALIYSA satır hiç
-   * çizilmez — izin taşıyan kullanıcıda bile.
+   * Bu satırın bağlı olduğu MODÜL anahtarı. Bayrak KAPALIYSA satır soluk
+   * çizilir ve gezinmez (UX-2 K3); bayrak yüklenene kadar gizli kalır.
    *
    * ⚠️ Bayrak bir GÖRÜNÜRLÜK süsü değil REJİM kapısıdır: backend de aynı
    * bayrağa bakıp 403 döner (`requireFinanceEnabled` · `requireTicaretEnabled` …).
@@ -54,7 +57,8 @@ export interface NavItem {
     | "ticaretEnabled"
     | "iplikEnabled"
     | "depoMultiEnabled"
-    | "maliyetEnabled";
+    | "maliyetEnabled"
+    | "kaliteGuvenceEnabled";
 }
 
 export interface NavGroup {
@@ -67,22 +71,15 @@ export const navGroups: NavGroup[] = [
     label: "Genel",
     items: [
       { label: "Anasayfa", to: "/", icon: LayoutDashboard },
-      { label: "Tanımlar", to: "/definitions", icon: Library },
       { label: "Operasyon", to: "/operations", icon: ClipboardList },
-      { label: "Raporlar", to: "/reports", icon: ScrollText },
-      // bildirim: kişisel gelen kutusu (geçmiş günlüğü) — kapısız; bayrak kapalıysa sayfa "kapalı" der.
       {
-        label: "Bildirimler",
-        to: "/notifications",
-        icon: Bell,
-        keywords: "bildirim zil gelen kutusu okunmamış uyarı haber ertele okundu geçmiş günlük",
-      },
-      {
-        label: "Muhasebe",
-        to: "/finance",
-        icon: Calculator,
-        permission: "finance:read",
-        featureFlag: "financeEnabled",
+        // UX-2: kalite karoları Operasyon'dan ayrı kök; bayrak kapalıyken satır soluk + ayar yolu (K3).
+        label: "Kalite Güvence",
+        to: "/quality",
+        icon: BadgeCheck,
+        permissionAny: QUALITY_HUB_ACCESS,
+        featureFlag: "kaliteGuvenceEnabled",
+        keywords: "kalite muayene laboratuvar test sertifika 4 puan kusur",
       },
       {
         // MAL-3: hub + alt ekranlar `cost/*` bu satırın bayrağını miras alır (test_screen_catalog §9 nav-miras).
@@ -94,17 +91,29 @@ export const navGroups: NavGroup[] = [
         featureFlag: "maliyetEnabled",
         keywords: "maliyet teklif fiyat teklifi revizyon siparişe dönüştür fiyat listesi standart maliyet iplik fiyatı fason tarife terbiye parametre hesaplayıcı kâr iplik ihtiyacı eksik iplik",
       },
+      {
+        label: "Ön Muhasebe",
+        to: "/finance",
+        icon: Calculator,
+        permission: "finance:read",
+        featureFlag: "financeEnabled",
+        keywords: "muhasebe",
+      },
+      { label: "Raporlar", to: "/reports", icon: ScrollText },
+      { label: "Tanımlar", to: "/definitions", icon: Library },
+      {
+        // UX-2: belge/etiket/refakat çıktıları Tanımlar'dan ayrı kök.
+        label: "Belgeler",
+        to: "/documents",
+        icon: FileText,
+        permissionAny: DOCUMENTS_HUB_ACCESS,
+        keywords: "belge şablon etiket refakat kartı yazdır çıktı",
+      },
     ],
   },
   {
     label: "Yönetim",
     items: [
-      {
-        label: "Yetkilendirme",
-        to: "/access",
-        icon: ShieldCheck,
-        adminOnly: true,
-      },
       {
         // Karolarından birini açabilen herkes (ekran başına ayar izni taşıyan
         // personel dahil) — route kapısıyla aynı küme.
@@ -112,6 +121,12 @@ export const navGroups: NavGroup[] = [
         to: "/system",
         icon: ServerCog,
         permissionAny: SYSTEM_HUB_ACCESS,
+      },
+      {
+        label: "Yetkilendirme",
+        to: "/access",
+        icon: ShieldCheck,
+        adminOnly: true,
       },
     ],
   },

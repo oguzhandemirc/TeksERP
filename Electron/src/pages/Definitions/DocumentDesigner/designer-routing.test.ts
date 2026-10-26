@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DOCUMENT_DESIGN_READ } from "@/lib/permissions";
-import { definitionTiles } from "../tile-config";
+import { documentTiles } from "@/pages/Documents/tile-config";
 import { DESIGNER_DISABLED_TITLE, designerSettingPath, designerSettingTrail, isDocumentDesignerEnabled } from "./designer-flag";
 
 const ROUTES_SRC = readFileSync(resolve(__dirname, "../../../routes/content-routes.tsx"), "utf8");
@@ -15,11 +15,11 @@ function routeBlock(path: string): string {
 }
 
 describe("Belge Tasarımcısı karo ↔ rota", () => {
-  const tile = definitionTiles.find((t) => t.key === "document-designer");
+  const tile = documentTiles.find((t) => t.key === "document-designer");
 
-  it("karo `cikti` grubunda, visibleWhen YOK (P-c: her zaman görünür)", () => {
+  it("karo Belgeler kökünde (UX-2 K2), visibleWhen YOK (P-c: her zaman görünür)", () => {
     expect(tile).toBeDefined();
-    expect(tile).toMatchObject({ group: "cikti", to: "/definitions/document-designer", title: "Belge Tasarımcısı" });
+    expect(tile).toMatchObject({ to: "/definitions/document-designer", title: "Belge Tasarımcısı" });
     expect(tile && "visibleWhen" in tile ? tile.visibleWhen : undefined).toBeUndefined();
   });
 

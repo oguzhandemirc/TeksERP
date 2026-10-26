@@ -2,6 +2,8 @@ import { Navigate, type RouteObject } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import {
   DOCUMENT_DESIGN_READ,
+  DOCUMENTS_HUB_ACCESS,
+  QUALITY_HUB_ACCESS,
   LICENSE_ACCESS,
   SETTINGS_COMPANY_ACCESS,
   SETTINGS_FLAGS_ACCESS,
@@ -96,6 +98,8 @@ import { LabTestsPage } from "@/pages/Quality/LabTests/LabTestsPage";
 import { InspectionsPage } from "@/pages/Quality/Inspections/InspectionsPage";
 import { CertificatesPage } from "@/pages/Quality/Certificates/CertificatesPage";
 import { CostHubPage } from "@/pages/Cost/CostHubPage";
+import { QualityHubPage } from "@/pages/Quality/QualityHubPage";
+import { DocumentsHubPage } from "@/pages/Documents/DocumentsHubPage";
 import { ParametersPage as CostParametersPage } from "@/pages/Cost/Parameters/ParametersPage";
 import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/YarnPricesPage";
 import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/FinishingRates/FinishingRatesPage";
@@ -592,6 +596,24 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warehouse:transfer">
         <WarehouseTransfersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // UX-2 K1: Kalite Güvence kökü — modül kapısı `route-modules.ts`ten (kaliteGuvenceEnabled); izin karolardan birini açabilen.
+    path: "quality",
+    element: (
+      <ProtectedRoute requireAnyPermission={QUALITY_HUB_ACCESS}>
+        <QualityHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // UX-2 K2: Belgeler kökü — yalnız karo sayfası; belge ekranlarının adresleri `/definitions/...` olarak kalır.
+    path: "documents",
+    element: (
+      <ProtectedRoute requireAnyPermission={DOCUMENTS_HUB_ACCESS}>
+        <DocumentsHubPage />
       </ProtectedRoute>
     ),
   },

@@ -1,8 +1,10 @@
-import { Settings as SettingsIcon, Download, FilePlus2, ScrollText, BellRing } from "lucide-react";
+import { Settings as SettingsIcon, Download, FilePlus2, ScrollText, BellRing, Bell } from "lucide-react";
 import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
 import { operationsTiles } from "@/pages/Operations/tile-config";
+import { qualityTiles } from "@/pages/Quality/tile-config";
+import { documentTiles } from "@/pages/Documents/tile-config";
 import { financeTiles } from "@/pages/Finance/tile-config";
 import { costTiles } from "@/pages/Cost/tile-config";
 import { accessTiles } from "@/pages/Access/tile-config";
@@ -91,12 +93,26 @@ export const commandSections: CommandSection[] = [
     ],
   },
   {
+    // UX-2: Kalite Güvence kökü — karo yüklemi aynen taşınır.
+    heading: "Kalite Güvence",
+    entries: qualityTiles.map<CommandEntry>((tile) => ({
+      key: `ops:${tile.key}`,
+      label: tile.title,
+      description: tile.description,
+      icon: tile.icon,
+      to: tile.to,
+      permission: tile.permission,
+      permissionAny: tile.permissionAny,
+      visibleWhen: tile.visibleWhen,
+    })),
+  },
+  {
     // ⚠️ Muhasebe ekranları palette KOŞULSUZ listelenir; görünürlük kapısı
     // izindir (`permissionAny`). Bayrak kapalı bir kurulumda finance izni
     // atanmamış olur, dolayısıyla satırlar da çıkmaz — ve bayrak açılıp izin
     // verilen an kendiliğinden belirirler. Palete ayrıca bayrak yüklemi
     // koymak, hub karolarıyla ayrışabilecek İKİNCİ bir kural demekti.
-    heading: "Muhasebe",
+    heading: "Ön Muhasebe",
     entries: financeTiles.map<CommandEntry>((tile) => ({
       key: `fin:${tile.key}`,
       label: tile.title,
@@ -151,6 +167,20 @@ export const commandSections: CommandSection[] = [
         visibleWhen: tile.visibleWhen,
       })),
   })),
+  {
+    // UX-2: Belgeler kökü (eski Tanımlar · Çıktı grubu).
+    heading: "Belgeler",
+    entries: documentTiles.map<CommandEntry>((tile) => ({
+      key: `def:${tile.key}`,
+      label: tile.title,
+      description: tile.description,
+      icon: tile.icon,
+      to: tile.to,
+      permission: tile.permission,
+      permissionAny: tile.permissionAny,
+      visibleWhen: tile.visibleWhen,
+    })),
+  },
   {
     heading: "Yetkilendirme",
     entries: accessTiles.map((tile) => ({
@@ -222,6 +252,15 @@ export const commandSections: CommandSection[] = [
         keywords: "ayar tercih tema koyu açık renk yoğunluk favori kayıtlı görünüm sıfırla kişisel profil",
       },
       {
+        // UX-2: menü satırı kalktı (zil + Sistem karosu); kişisel gelen kutusu paletten de açılır.
+        key: "personal:notifications",
+        label: "Bildirimler",
+        description: "Kişisel gelen kutusu — okunmamış, ertelenen, geçmiş",
+        icon: Bell,
+        to: "/notifications",
+        keywords: "bildirim zil gelen kutusu okunmamış uyarı haber ertele okundu geçmiş günlük",
+      },
+      {
         // bildirim: kişisel bildirim tercihleri (N4-PANEL) — kapısız; bayrak kapalıysa sayfa söyler.
         key: "personal:notification-settings",
         label: "Bildirim tercihleri",
@@ -269,6 +308,8 @@ export function findCommandEntry(to: string): CommandEntry | undefined {
 // Bölüm başlığı → üst (hub) sayfa. Breadcrumb için: alt sayfadan hub'a dönüş.
 const SECTION_PARENTS: Record<string, { label: string; to: string }> = {
   Operasyon: { label: "Operasyon", to: "/operations" },
+  "Kalite Güvence": { label: "Kalite Güvence", to: "/quality" },
+  Belgeler: { label: "Belgeler", to: "/documents" },
   Yetkilendirme: { label: "Yetkilendirme", to: "/access" },
   Sistem: { label: "Sistem", to: "/system" },
 };

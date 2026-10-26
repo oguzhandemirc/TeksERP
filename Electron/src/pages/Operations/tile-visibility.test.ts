@@ -5,6 +5,7 @@ import {
 } from "./tile-config";
 import { commandSections } from "@/components/layout/command-entries";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
+import { documentTiles } from "@/pages/Documents/tile-config";
 import { isGoodsReceiptVisible } from "./GoodsReceipts/goodsReceipt-regime";
 import {
   isKursunPlanningVisible,
@@ -186,13 +187,10 @@ describe("karo bağlantıları", () => {
     // 2026-10-25: `certificates` (Sertifikalar) — aynı Kalite Güvence kapısı.
     // 2026-10-25: `inspection-rules` (4 Puan Kuralları, K4P-TANIM) — aynı Kalite Güvence kapısı.
     // 2026-10-25: `inspections` (Muayeneler) — aynı Kalite Güvence kapısı.
+    // 2026-10-26 (UX-2 K1): dört Kalite Güvence karosu `/quality` köküne taşındı (Quality/tile-config).
     expect(conditional.sort()).toEqual([
-      "certificates",
       "goods-receipts",
-      "inspection-rules",
-      "inspections",
       "kursun-dagitim",
-      "lab-tests",
       "loom-alarms",
       "machine-stops",
       "product-balance",
@@ -247,7 +245,8 @@ describe("karo bağlantıları", () => {
  * (sıfır-fark ihlali) ya ticarette üç liste geri gelir.
  */
 describe("Tanımlar — cari rejimi", () => {
-  const tile = (key: string) => definitionTiles.find((t) => t.key === key);
+  // UX-2 K2: refakat kartı karoları Belgeler köküne taşındı — iki katalog birlikte aranır.
+  const tile = (key: string) => [...definitionTiles, ...documentTiles].find((t) => t.key === key);
 
   it("fabrika rejimi (bayrak kapalı): Müşteriler + Fason görünür, Cariler görünmez", () => {
     const c = ctx();
@@ -289,7 +288,7 @@ describe("Tanımlar — cari rejimi", () => {
 
   it("palet, Tanımlar karolarının rejim yüklemini AYNI fonksiyon olarak taşıyor", () => {
     const defEntries = commandSections
-      .filter((s2) => s2.heading.startsWith("Tanımlar"))
+      .filter((s2) => s2.heading.startsWith("Tanımlar") || s2.heading === "Belgeler")
       .flatMap((s2) => s2.entries);
     for (const key of [
       "cariler",

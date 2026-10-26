@@ -4,7 +4,6 @@ import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config
 import { catalogTiles } from "./tiles/catalog";
 import { partnerTiles } from "./tiles/partners";
 import { productionTiles } from "./tiles/production";
-import { outputTiles } from "./tiles/output";
 
 export interface DefinitionTile {
   key: string;
@@ -28,11 +27,13 @@ export interface DefinitionTile {
    * taşımalı, yoksa kart görünür ama tıklayınca /forbidden'a düşer.
    */
   permissionAny?: string[];
+  /** `visibleWhen` false iken karo gizlenmez, soluk çizilir ve bu ipucunu gösterir (UX-2 K3; rejim takasında verilmez). */
+  offHint?: string;
 }
+
 // Karolar grup dosyalarında (`tiles/*.ts`, UX-2 bölünmesi); bekçiler `scripts/lib/panel-karo-dosyalari.ts` ile hepsini okur.
 export const definitionTiles: DefinitionTile[] = [
   ...catalogTiles,
   ...partnerTiles,
   ...productionTiles,
-  ...outputTiles,
 ];

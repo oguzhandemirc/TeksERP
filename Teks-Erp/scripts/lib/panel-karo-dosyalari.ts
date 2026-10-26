@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 /** Yan menü kökü olan hub'lar (`pages/<Hub>`). Raporlar kategori dosyaları ayrı (`Reports/<Kategori>/tile-config.ts`). */
-export const KARO_HUBLARI = ["Operations", "Definitions", "System", "Access", "Finance", "Reports", "Cost"] as const;
+export const KARO_HUBLARI = ["Operations", "Definitions", "System", "Access", "Finance", "Reports", "Cost", "Quality", "Documents"] as const;
 export type KaroHub = (typeof KARO_HUBLARI)[number];
 
 /** Hub'ın karo dosyaları, `Electron/src`e göreli (tile-config önce, ardından `tiles/*.ts` alfabetik). */

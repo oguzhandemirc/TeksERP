@@ -7,6 +7,7 @@ import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { systemTiles, systemTileSections } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { flagOffHint } from "@/lib/flag-setting-path";
 
 export function SystemHubPage() {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
@@ -66,7 +67,7 @@ export function SystemHubPage() {
                     description={tile.description}
                     note={
                       tile.kapaliBayrak && flags && flags[tile.kapaliBayrak] !== true
-                        ? "Kapalı — Genel Ayarlar'dan açılır."
+                        ? flagOffHint(tile.kapaliBayrak)
                         : undefined
                     }
                     icon={tile.icon}

@@ -2,15 +2,13 @@ import {
   Layers,
   Handshake,
   Factory,
-  Printer,
   type LucideIcon,
 } from "lucide-react";
 
 export type DefinitionGroupKey =
   | "catalog"
   | "partners"
-  | "production"
-  | "cikti";
+  | "production";
 
 export interface DefinitionGroup {
   key: DefinitionGroupKey;
@@ -37,11 +35,5 @@ export const definitionGroups: DefinitionGroup[] = [
     title: "Üretim & Kalite",
     description: "İstasyonlar, donanım, rotalar, terbiye iş emri şablonları, hata tipleri ve iade nedenleri",
     icon: Factory,
-  },
-  {
-    key: "cikti",
-    title: "Çıktılar",
-    description: "Etiketler, irsaliye/çeki belge şablonları ve refakat kartı",
-    icon: Printer,
   },
 ];

@@ -13,7 +13,7 @@ export function FinanceHubPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Muhasebe"
+        title="Ön Muhasebe"
         description="Cari hesaplar, faturalar, tahsilat/ödeme ve kasa-banka. Bu bir ön muhasebe defteridir — resmî fatura dış programda kesilir, buradaki kayıt onun izini tutar."
       />
       <PageBody className="p-6">

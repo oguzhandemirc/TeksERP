@@ -7,6 +7,7 @@ import { isWeavingFloorVisible } from "../WeavingFloor/floor-regime";
 import { isLoomAlarmsVisible } from "../LoomAlarms/alarm-regime";
 import { isWarpBeamsVisible } from "../WarpBeams/warp-beam-regime";
 import { TERIM } from "@/lib/terim";
+import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
 export const productionTiles: OperationsTile[] = [
@@ -23,6 +24,7 @@ export const productionTiles: OperationsTile[] = [
     // kurulumda kart görünür, tıklayınca 403. Yüklem SAF modülden DOĞRUDAN
     // geçirilir (sarmalayan ok fonksiyonu YAZILMAZ — palet kimlik testi).
     visibleWhen: isWorkOrdersVisible,
+    offHint: flagOffHint("productionEnabled"),
   },
   {
     key: "work-order-events",
@@ -34,6 +36,7 @@ export const productionTiles: OperationsTile[] = [
     permission: "workorder:read",
     // İş emirleriyle aynı modül kapısı — üretim kapalı kurulumda karo çizilmez.
     visibleWhen: isWorkOrdersVisible,
+    offHint: flagOffHint("productionEnabled"),
   },
   {
     // DOKUMA İŞİ (2026-09-13, ekran dilimi): backend `weaving-order.routes`
@@ -48,6 +51,7 @@ export const productionTiles: OperationsTile[] = [
     group: "production",
     permission: "weavingorder:read",
     visibleWhen: isWeavingOrdersVisible,
+    offHint: flagOffHint("dokumaEnabled"),
   },
   {
     // TEZGAH DURUŞLARI (2026-09-14, Faz 1b web yüzeyi): backend `machine-stop.routes`
@@ -61,6 +65,7 @@ export const productionTiles: OperationsTile[] = [
     group: "production",
     permissionAny: ["loom:manual-entry", "loom:classify"],
     visibleWhen: isMachineStopsVisible,
+    offHint: flagOffHint("dokumaEnabled"),
   },
   {
     // TEZGAH SALONU (canlı ekran): backend `/api/loom-floor` `requireTezgahEnabled` +
@@ -73,13 +78,14 @@ export const productionTiles: OperationsTile[] = [
     group: "production",
     permission: "loom:live-view",
     visibleWhen: isWeavingFloorVisible,
+    offHint: flagOffHint("tezgahEnabled"),
   },
   {
     // TEZGAH ALARMLARI: backend `/api/loom-alarms` `requireTezgahEnabled` + alarm bayrağı +
     // `loom:alarm-view`; karo modül bayrağı ve izinle (route `ProtectedRoute` ile birebir).
     key: "loom-alarms", title: "Tezgah Alarmları", icon: Siren, to: "/operations/loom-alarms", group: "production",
     description: "Hedef süreyi aşan duruşlar: üstlen, sustur, not düş; aktif ve geçmiş alarmlar",
-    permission: "loom:alarm-view", visibleWhen: isLoomAlarmsVisible,
+    permission: "loom:alarm-view", visibleWhen: isLoomAlarmsVisible, offHint: flagOffHint("tezgahEnabled"),
   },
   {
     // LEVENTLER (2026-09-14, devere Faz 1b): backend `warp-beam.routes` `requireDevereEnabled`
@@ -93,6 +99,7 @@ export const productionTiles: OperationsTile[] = [
     group: "production",
     permission: "warpbeam:read",
     visibleWhen: isWarpBeamsVisible,
+    offHint: flagOffHint("devereEnabled"),
   },
   {
     key: "kartela",
@@ -122,5 +129,6 @@ export const productionTiles: OperationsTile[] = [
     // anahtarı `production.enabled` — backend ikizi `kursun-bypass.routes`
     // üzerindeki `requireProductionEnabled` (2026-09-03).
     visibleWhen: isKursunPlanningVisible,
+    offHint: flagOffHint("productionEnabled"),
   },
 ];

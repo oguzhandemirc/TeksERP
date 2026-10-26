@@ -4,8 +4,6 @@ import { planningTiles } from "./tiles/planning";
 import { productionTiles } from "./tiles/production";
 import { warehouseTiles } from "./tiles/warehouse";
 import { shippingTiles } from "./tiles/shipping";
-import { qualityTiles } from "./tiles/quality";
-export { KALITE_GUVENCE_OFF_HINT } from "./tiles/quality";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -190,5 +188,4 @@ export const operationsTiles: OperationsTile[] = [
   ...productionTiles,
   ...warehouseTiles,
   ...shippingTiles,
-  ...qualityTiles,
 ];

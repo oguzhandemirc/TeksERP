@@ -1,6 +1,7 @@
 // Operasyon › Satış & Planlama karoları (sıra = hub sırası).
 import { Scale, ShoppingCart, Wrench } from "lucide-react";
 import { isProductBalanceVisible } from "../production-regime";
+import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
 export const planningTiles: OperationsTile[] = [
@@ -34,5 +35,6 @@ export const planningTiles: OperationsTile[] = [
     permission: "workorder:read",
     // Backend ikizi `production-balance.routes` → `requireProductionEnabled`.
     visibleWhen: isProductBalanceVisible,
+    offHint: flagOffHint("productionEnabled"),
   },
 ];

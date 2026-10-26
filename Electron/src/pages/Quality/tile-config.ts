@@ -1,18 +1,21 @@
-// Operasyon › Kalite Güvence karoları (sıra = hub sırası).
-import { FlaskConical, BadgeCheck, Gauge, ScanSearch } from "lucide-react";
-import type { OperationsTile } from "../tile-config";
+// Kalite Güvence kökü (`/quality`) karoları — UX-2 K1: Operasyon'dan taşındı, kopya karo açılmaz; sıra = hub sırası.
+import { FlaskConical, BadgeCheck, Gauge, ScanSearch, FileText } from "lucide-react";
+import type { OperationsTile } from "@/pages/Operations/tile-config";
+import { flagOffHint } from "@/lib/flag-setting-path";
 
-/** Kalite Güvence kapalıyken karoların ortak mesajı (Raporlar v2 kapalı mesajı emsali). */
-export const KALITE_GUVENCE_OFF_HINT = "Kalite Güvence kapalı — Genel Ayarlar'dan açılır";
+/** Kalite Güvence karosu: Operasyon karosuyla aynı biçim, grup alanı yok (tek bölüm). */
+export type QualityTile = Omit<OperationsTile, "group">;
 
-export const qualityTiles: OperationsTile[] = [
+/** Kalite Güvence kapalıyken karoların ortak mesajı — yol ayar kaydından (`flagOffHint`), elle yazılmaz. */
+export const KALITE_GUVENCE_OFF_HINT = flagOffHint("kaliteGuvenceEnabled");
+
+export const qualityTiles: QualityTile[] = [
   {
     key: "inspections",
     title: "Muayeneler",
     description: "4 puan muayeneleri — puan / 100 m², derece önerisi, düzelt ve iptal",
     icon: ScanSearch,
     to: "/quality/inspections",
-    group: "quality",
     permission: "inspection:read",
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
     offHint: KALITE_GUVENCE_OFF_HINT,
@@ -23,7 +26,6 @@ export const qualityTiles: OperationsTile[] = [
     description: "Numune sonuçları — gramaj, haslık, çekme; onaylanan test donar",
     icon: FlaskConical,
     to: "/quality/lab-tests",
-    group: "quality",
     permission: "labtest:read",
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
     offHint: KALITE_GUVENCE_OFF_HINT,
@@ -34,7 +36,6 @@ export const qualityTiles: OperationsTile[] = [
     description: "OEKO-TEX, GOTS… bitiş takibi; müşteri spesifikasyonları",
     icon: BadgeCheck,
     to: "/quality/certificates",
-    group: "quality",
     permission: "certificate:read",
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
     offHint: KALITE_GUVENCE_OFF_HINT,
@@ -45,7 +46,17 @@ export const qualityTiles: OperationsTile[] = [
     description: "Puan aralığı → kalite derecesi; fabrika varsayılanı ve müşteri spesifikasyonları",
     icon: Gauge,
     to: "/quality/inspection-rules",
-    group: "quality",
+    permission: "inspection:read",
+    visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
+    offHint: KALITE_GUVENCE_OFF_HINT,
+  },
+  {
+    // UX-2 (ENVANTER B6): rapor yalnız palette ve sevkiyat detayındaydı; seçici modal doğrudan açılır.
+    key: "inspection-report",
+    title: "Muayene Raporu",
+    description: "Sevk toplarının 4 puan muayene raporu — sevkiyat seç, PDF veya Excel al",
+    icon: FileText,
+    to: "/quality/inspections?report=1",
     permission: "inspection:read",
     visibleWhen: (ctx) => ctx.kaliteGuvenceEnabled,
     offHint: KALITE_GUVENCE_OFF_HINT,

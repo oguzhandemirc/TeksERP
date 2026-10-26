@@ -6,6 +6,7 @@ import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
 import { isMachineCollectorsVisible } from "@/pages/MachineCollectors/collector-model";
 import { isMachineStopCodeMapsVisible } from "@/pages/MachineStopCodeMaps/code-map-model";
 import { TERIM } from "@/lib/terim";
+import { flagOffHint } from "@/lib/flag-setting-path";
 import type { DefinitionTile } from "../tile-config";
 
 export const productionTiles: DefinitionTile[] = [
@@ -48,6 +49,7 @@ export const productionTiles: DefinitionTile[] = [
     group: "production",
     permission: "loom:spec-manage",
     visibleWhen: isShiftDefinitionsVisible,
+    offHint: flagOffHint("dokumaEnabled"),
   },
   {
     key: "loom-alarm-duty",
@@ -58,6 +60,7 @@ export const productionTiles: DefinitionTile[] = [
     group: "production",
     permission: "loom:spec-manage",
     visibleWhen: isLoomAlarmDutyVisible,
+    offHint: flagOffHint("tezgahEnabled"),
   },
   {
     key: "machine-collectors",
@@ -68,6 +71,7 @@ export const productionTiles: DefinitionTile[] = [
     group: "production",
     permission: "loom:spec-manage",
     visibleWhen: isMachineCollectorsVisible,
+    offHint: flagOffHint("tezgahEnabled"),
   },
   {
     key: "machine-stop-codes",
@@ -78,6 +82,7 @@ export const productionTiles: DefinitionTile[] = [
     group: "production",
     permission: "loom:spec-manage",
     visibleWhen: isMachineStopCodeMapsVisible,
+    offHint: flagOffHint("tezgahEnabled"),
   },
   {
     key: "peripherals",
@@ -98,6 +103,7 @@ export const productionTiles: DefinitionTile[] = [
     permission: "station:read",
     // Backend ikizi `route.routes` → `requireProductionEnabled`.
     visibleWhen: isRoutesVisible,
+    offHint: flagOffHint("productionEnabled"),
   },
   {
     key: "product-recipes",
@@ -108,6 +114,7 @@ export const productionTiles: DefinitionTile[] = [
     group: "production",
     permission: "station:read",
     visibleWhen: isProductRecipesVisible,
+    offHint: flagOffHint("productionEnabled"),
   },
   {
     // TEK KART, DÖRT SEKME — dört ayrı kart menüyü kalabalıklaştırırdı ve
@@ -159,5 +166,6 @@ export const productionTiles: DefinitionTile[] = [
     group: "production",
     permission: "warpspec:read",
     visibleWhen: (ctx) => ctx.devereEnabled,
+    offHint: flagOffHint("devereEnabled"),
   },
 ];

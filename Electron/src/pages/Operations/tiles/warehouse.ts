@@ -4,6 +4,7 @@ import { isYarnStockVisible } from "../Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "../PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "../StockCounts/stockCount-regime";
 import { isGoodsReceiptVisible } from "../GoodsReceipts/goodsReceipt-regime";
+import { flagOffHint } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
 
 export const warehouseTiles: OperationsTile[] = [
@@ -30,6 +31,7 @@ export const warehouseTiles: OperationsTile[] = [
     group: "warehouse",
     permission: "warehouse:read",
     visibleWhen: isYarnStockVisible,
+    offHint: flagOffHint("iplikEnabled"),
   },
   {
     key: "goods-receipts",
@@ -48,6 +50,7 @@ export const warehouseTiles: OperationsTile[] = [
     // ⚠️ `depoMultiEnabled` şartı KONMAZ — tek depolu ticaret firması da kullanır.
     permission: "goods-receipt:read",
     visibleWhen: isGoodsReceiptVisible,
+    offHint: flagOffHint("ticaretEnabled"),
   },
   // ── Paket D (2026-08-14) — ticaret paketi (İplik Stoğu yukarıda, aynı kural) ─────
   // `visibleWhen` ile REJİM bayrağına bağlı: fabrikada `finance.enabled` KAPALI ve
@@ -63,6 +66,7 @@ export const warehouseTiles: OperationsTile[] = [
     group: "warehouse",
     permissionAny: ["purchase-order:read", "purchase-order:write"],
     visibleWhen: isPurchaseOrdersVisible,
+    offHint: flagOffHint("ticaretEnabled"),
   },
   {
     key: "warehouse-transfers",
@@ -87,6 +91,7 @@ export const warehouseTiles: OperationsTile[] = [
     // Saf yüklem DOĞRUDAN geçirilir (sarmalayan ok fonksiyonu YAZILMAZ) — palet
     // paritesi bekçisi karo ile girişin AYNI fonksiyon nesnesini taşımasını arar.
     visibleWhen: isStockCountVisible,
+    offHint: flagOffHint("ticaretEnabled"),
   },
   {
     key: "sack-content-edit",

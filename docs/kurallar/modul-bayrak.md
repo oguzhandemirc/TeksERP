@@ -78,6 +78,7 @@
 - **[ÇEKİRDEK]** Ayar Kaydet'i ekranda çizilen HER satırı tek gövdeye koyar ve kayıttan sonra taslağı SUNUCUNUN CEVABINDAN kurar (yazılmayan anahtar eski hâline döner, cevapta olmayan anahtar hata olarak söylenir); kullanıcıya "şuradan açılır" diyen metin menü yolunu elle yazmaz, `settingsCategoryTrail`/`settingsCategoryPath`ten türetir. · bekçi: `Electron/src/pages/GeneralSettings/settings-save-body.test.tsx`, `LoomAlarms/AlarmClosedNotice.test.tsx` <sub>(arşiv 2026-10-11)</sub>
 
 - **[ÇEKİRDEK]** Kataloğa giren her panel ekranı menüde (yan menü · hub karosu · beyanlı sayfa içi giriş) ya da palette bulunur; yalnız-palet ekran `YALNIZ_PALET`te gerekçeli, taban yalnız aşağı. Hub karoları `pages/<Hub>/tiles/*.ts` grup dosyalarındadır; karoyu dosyadan okuyan bekçi listeyi `scripts/lib/panel-karo-dosyalari.ts`ten alır. · bekçi: `test_ekran_bulunabilirlik` <sub>(arşiv 2026-10-26 "UX-2")</sub>
+- **[ÇEKİRDEK]** Kapalı modülün karosunu ve yan menü satırını gizleme: soluk çiz, gezindirme, `flagOffHint(<bayrak>)` ile ayar yolunu yaz; yalnız rejimde anlamsız karo gizlenir ve `hub-off-hint.test.ts` `REJIM_ISTISNA`da beyanlıdır. · bekçi: `Electron/src/pages/hub-off-hint.test.ts` <sub>(arşiv 2026-10-26 "UX-2")</sub>
 
 ### Yasaklar
 
