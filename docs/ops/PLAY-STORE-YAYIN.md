@@ -5,9 +5,10 @@
 > yayınlandı**. Geliştirici hesabı **KİŞİSEL** (Play Console ana sayfası "Etkili Yazılım LTD · Kişisel hesap",
 > ölçüm 2026-10-20; 2026-10-15'teki "kurumsal" hükmü GEÇERSİZ → 2026-10-20) — sonuçları §4.
 >
-> **1.4.3 / vc 65 / rv 59.0 derlendi 2026-10-26** (`5156f26d2`, PR #234 sürüm commit'i; native tur: `allowBackup:false` +
-> `expo-application`) — Play dahili test yüklemesi KULLANICIDA. AAB + sha256 + ölçüm: `~/.tekserp/play-tablet/1.4.3-vc65/`
-> (sha256 `114439fcf43e…`, 36,4 MB). Ölçüm (proto manifest): vc 65 · 1.4.3 · `expo_runtime_version` 59.0 · güncelleme adresi
+> **1.4.3 / vc 65 / rv 59.0 dahili teste yüklendi 2026-10-26 (araçla)** — `node deploy/play-yayinla.mjs --kanal=internal --uygula`,
+> commit `749afb88b` (PR #239 Play notu 472 karakter; native tur: `allowBackup:false` + `expo-application`), geri okuma `internal completed:65`,
+> etiket `tablet-v1.4.3`, defter `tablet-1.4.3-play-internal`. AAB + sha256 + ölçüm: `~/.tekserp/play-tablet/1.4.3-vc65/app-release.aab`
+> (sha256 `b0a805eba010…`, 36,4 MB; `5156f26d2` derlemesi `eski-5156f26d2/` altında, Play'e gitmedi). Ölçüm (proto manifest): vc 65 · 1.4.3 · `expo_runtime_version` 59.0 · güncelleme adresi
 > `…/ota/59.0/manifest` · targetSdk 36 · `PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY=true` · OTA kökü `D7:1B:3C…` (aynı) ·
 > yükleme anahtarı imzası · ön plan hizmeti YOK (expo-audio servisleri ve `FOREGROUND_SERVICE*` / `SYSTEM_ALERT_WINDOW` /
 > `USE_BIOMETRIC` AAB'de yok — K1 vc 60'ta uygulanmıştı) · izin listesi vc 64 ile AYNI (`expo-application` izin getirmedi).
