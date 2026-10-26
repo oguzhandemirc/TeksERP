@@ -15,6 +15,8 @@
 // beş kategoride kırmızı (customers · shipping · production · tezgah · finance) · ② bayrak döngüsü
 // yalnız `tezgahAlarmEnabled`i atladı → §1 tezgah + §2 + §3 + §4 kırmızı · ③ `onSuccess`teki
 // `syncDrafts` susturuldu → §3 kırmızı.
+// Yeniden ölçüm 2026-10-26 (§1 parçalara bölündü): ② → §1 `tezgah [1/2]` + §2 + §3 + §4 kırmızı. ①
+// bugün ISIRMIYOR — bölmeden önceki testte de yeşil (24/24); ayrı bulgu, bu bölmeyle ilgisiz.
 // =============================================================================
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
@@ -102,50 +104,85 @@ function textCandidate(def: { defaultValue: string; maxLength: number; pattern: 
   return c;
 }
 
-/** Kategorinin her kontrolünü değiştirir; beklenen PATCH anahtarlarını ve ham ayar anahtarlarını döner. */
-function touchEverything(cat: SettingsCategory): { patchKeys: string[]; rawKeys: string[] } {
+/**
+ * Bir kategorinin kontrolleri, ekrandaki sırayla tek tek ADIM. Gömülü eşik (`numberField`) ebeveyni
+ * AÇIKKEN çizilir — adım ebeveynini taşır, parça onu önce açar (sunucu fotoğrafı boş = kapalı).
+ */
+type Adim =
+  | { tur: "switch"; title: string; key: string }
+  | { tur: "gomulu"; parentTitle: string; parentKey: string; label: string; key: string; value: number }
+  | { tur: "spin"; title: string; key: string; value: number; ham: boolean }
+  | { tur: "radio" | "combobox"; title: string; key: string; value: string }
+  | { tur: "textbox"; title: string; key: string; value: string };
+
+function adimlar(cat: SettingsCategory): Adim[] {
   const r = rowsOf(cat);
-  const pick = picker();
-  const patchKeys: string[] = [];
-  for (const f of r.flags) {
-    fireEvent.click(pick("switch", f.title));
-    patchKeys.push(f.key);
-  }
-  // Gömülü eşik ebeveyn AÇIKKEN çizilir — bayraklar yukarıda açıldı (sunucu fotoğrafı boş = kapalı).
+  const out: Adim[] = [];
+  for (const f of r.flags) out.push({ tur: "switch", title: f.title, key: f.key });
   for (const f of r.flags) {
     if (!f.numberField) continue;
     const nf = f.numberField;
-    fireEvent.change(pick("spinbutton", nf.label), { target: { value: String(positiveInRange(nf.min, nf.max)) } });
-    patchKeys.push(nf.numberKey);
+    out.push({ tur: "gomulu", parentTitle: f.title, parentKey: f.key, label: nf.label, key: nf.numberKey, value: positiveInRange(nf.min, nf.max) });
   }
-  for (const f of r.numberFlags) {
-    fireEvent.change(pick("spinbutton", f.title), { target: { value: String(otherNumber(f.min, f.max, f.fallback)) } });
-    patchKeys.push(f.key);
-  }
+  for (const f of r.numberFlags) out.push({ tur: "spin", title: f.title, key: f.key, value: otherNumber(f.min, f.max, f.fallback), ham: false });
   for (const f of r.enumFlags) {
     const other = f.options.find((o) => o.value !== f.defaultValue);
     if (!other) continue;
-    if (f.display === "radio") {
-      const group = pick("group", f.title);
-      const radio = within(group).getAllByRole("radio").find((el) => (el as HTMLInputElement).value === other.value)!;
-      fireEvent.click(radio);
-    } else {
-      fireEvent.change(pick("combobox", f.title), { target: { value: other.value } });
-    }
-    patchKeys.push(f.enumKey);
+    out.push({ tur: f.display === "radio" ? "radio" : "combobox", title: f.title, key: f.enumKey, value: other.value });
   }
-  for (const f of r.textFlags) {
-    fireEvent.change(pick("textbox", f.title), { target: { value: textCandidate(f) } });
-    patchKeys.push(f.textKey);
-  }
+  for (const f of r.textFlags) out.push({ tur: "textbox", title: f.title, key: f.textKey, value: textCandidate(f) });
+  for (const f of r.settingFields) out.push({ tur: "spin", title: f.title, key: f.key, value: otherNumber(f.min, f.max, f.fallback), ham: true });
+  return out;
+}
+
+/**
+ * Parça boyu. Her olay bütün formu yeniden çizer; kategori tek testte dokunulursa süre satır
+ * sayısının KARESİYLE büyür (shipping 32 kontrol: yükte 4,9–5,2 sn, 5 sn tavanında kararsız).
+ * Parça başına sabit olay sayısı süreyi satır sayısına doğrusal bağlar.
+ */
+const PARCA = 8;
+function parcalar(cat: SettingsCategory): Adim[][] {
+  const a = adimlar(cat);
+  if (a.length === 0) return [[]];
+  const out: Adim[][] = [];
+  for (let i = 0; i < a.length; i += PARCA) out.push(a.slice(i, i + PARCA));
+  return out;
+}
+
+/** Parçadaki kontrolleri değiştirir; beklenen PATCH anahtarlarını ve ham ayar anahtarlarını döner. */
+function touch(parca: Adim[]): { patchKeys: string[]; rawKeys: string[] } {
+  const pick = picker();
+  const patchKeys: string[] = [];
   const rawKeys: string[] = [];
-  for (const f of r.settingFields) {
-    fireEvent.change(pick("spinbutton", f.title), { target: { value: String(otherNumber(f.min, f.max, f.fallback)) } });
-    rawKeys.push(f.key);
+  const acik = new Set<string>();
+  const ac = (title: string, key: string) => {
+    if (acik.has(key)) return;
+    acik.add(key);
+    fireEvent.click(pick("switch", title));
+    patchKeys.push(key);
+  };
+  for (const s of parca) {
+    if (s.tur === "switch") ac(s.title, s.key);
+    else if (s.tur === "gomulu") ac(s.parentTitle, s.parentKey);
+  }
+  for (const s of parca) {
+    if (s.tur === "gomulu") {
+      fireEvent.change(pick("spinbutton", s.label), { target: { value: String(s.value) } });
+      patchKeys.push(s.key);
+    } else if (s.tur === "spin") {
+      fireEvent.change(pick("spinbutton", s.title), { target: { value: String(s.value) } });
+      (s.ham ? rawKeys : patchKeys).push(s.key);
+    } else if (s.tur === "radio") {
+      const radio = within(pick("group", s.title)).getAllByRole("radio").find((el) => (el as HTMLInputElement).value === s.value)!;
+      fireEvent.click(radio);
+      patchKeys.push(s.key);
+    } else if (s.tur === "combobox" || s.tur === "textbox") {
+      fireEvent.change(pick(s.tur, s.title), { target: { value: s.value } });
+      patchKeys.push(s.key);
+    }
   }
   return { patchKeys, rawKeys };
 }
-
 beforeEach(() => {
   server = {};
   update.mockReset();
@@ -169,13 +206,23 @@ describe("ayar ekranı — Kaydet gövdesi", () => {
     expect(total, `satır=${total}`).toBeGreaterThanOrEqual(90);
   });
 
-  it.each(flagCats.map((c) => [c.id, c] as const))(
-    "§1 ⭐ %s: ekrandaki HER anahtar Kaydet gövdesine girer, fazlası girmez",
-    async (_id, cat) => {
+  it("zemin: parçalar kategorinin BÜTÜN adımlarını örter (bölme bir satırı düşürürse vakumen yeşil kalırdı)", () => {
+    for (const c of flagCats) {
+      const r = rowsOf(c);
+      const enumAdim = r.enumFlags.filter((f) => f.options.some((o) => o.value !== f.defaultValue)).length;
+      const beklenen = r.flags.length + r.flags.filter((f) => f.numberField).length + r.numberFlags.length + enumAdim + r.textFlags.length + r.settingFields.length;
+      expect(parcalar(c).flat().length, c.id).toBe(beklenen);
+      expect(parcalar(c).every((p) => p.length <= PARCA), c.id).toBe(true);
+    }
+  });
+
+  it.each(flagCats.flatMap((c) => parcalar(c).map((p, i, all) => [`${c.id} [${i + 1}/${all.length}]`, c, p] as const)))(
+    "§1 ⭐ %s: dokunulan HER anahtar Kaydet gövdesine girer, fazlası girmez",
+    async (_ad, cat, parca) => {
       renderWithProviders(<FeatureFlagSection {...rowsOf(cat)} superadminOnly={cat.superadminOnly} />);
       // Ham ayar satırı olan kategori önce `system-settings` listesini bekler (iskelet).
       await waitFor(() => expect(document.querySelector(".skeleton-shimmer")).toBeNull());
-      const { patchKeys, rawKeys } = touchEverything(cat);
+      const { patchKeys, rawKeys } = touch(parca);
       fireEvent.click(screen.getByRole("button", { name: /Kaydet/ }));
       if (patchKeys.length > 0) {
         await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
@@ -187,6 +234,8 @@ describe("ayar ekranı — Kaydet gövdesi", () => {
       if (rawKeys.length > 0) {
         await waitFor(() => expect(upsert).toHaveBeenCalledTimes(rawKeys.length));
         expect(upsert.mock.calls.map((c) => c[0]).sort()).toEqual([...rawKeys].sort());
+      } else {
+        expect(upsert).not.toHaveBeenCalled();
       }
     },
   );
