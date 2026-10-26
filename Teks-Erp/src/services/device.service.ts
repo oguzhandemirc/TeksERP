@@ -17,6 +17,7 @@ import { readDevicePairingRequired, readDeviceUnpairedPasswordLogin } from "./sy
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
 import { getShortCredentialKeyRing } from "../lib/short-credential/keyring";
 import { deriveDeviceSecret, newProofSalt } from "../lib/device-proof";
+import { DeviceProofResetService } from "./device-proof-reset.service";
 import { uyari } from "../lib/logger";
 import { DeviceRebindService } from "./device-rebind.service";
 import {
@@ -278,6 +279,8 @@ export class DeviceService {
       if (routed) existing = { id: routed.reboundDeviceId, deviceId, name: "", hwDigest: input.hw.ozet };
     }
     const created = existing ? null : await DeviceService.createAnnounced(deviceId, input, kind, pairingRequired);
+    // D5: kanıtı sıfırlanmış cihaz — sır yalnız aynı donanımla; uymayan onaya düşer (satır okunmadan ÖNCE).
+    const gate = created ? "YOK" : await DeviceProofResetService.gateOnAnnounce(deviceId, input.hw);
     // F216: var olan cihazda announce SADECE canlılık (lastSeenAt) yazar — kind burada DEĞİŞMEZ
     // (APPROVED cihaz public announce ile DESKTOP'a geçip work-session zorunluluğunu atlatamasın).
     const device = created ?? (await prisma.device.update({
@@ -291,7 +294,10 @@ export class DeviceService {
       await prisma.device.updateMany({ where: { deviceId, status: "PENDING" }, data: { kind } });
     }
     if (created) await DeviceService.auditBirth(created, pairingRequired);
-    return withSecret(toAssignment(device, pairingRequired, unpairedLoginFlag), await DeviceService.issueProofSecretIfDue(deviceId));
+    return withSecret(
+      toAssignment(device, pairingRequired, unpairedLoginFlag),
+      await DeviceService.issueProofSecretIfDue(deviceId, { hwVerified: gate === "GECTI" }),
+    );
   }
 
   /**
@@ -409,12 +415,14 @@ export class DeviceService {
    * Teyitsiz sır `PROOF_REISSUE_GRACE_MS` dolmadan yeniden verilmez: tabletin aynı andaki
    * announce/status turları tek sır alır (ölçüm: aynı saniyede dört verim, son tuz tutmayan sır).
    */
-  static async issueProofSecretIfDue(deviceId: string): Promise<string | null> {
+  static async issueProofSecretIfDue(deviceId: string, opts: { hwVerified?: boolean } = {}): Promise<string | null> {
     const row = await prisma.device.findUnique({
       where: { deviceId },
       select: { id: true, status: true, isActive: true, proofSalt: true, proofConfirmedAt: true },
     });
     if (!row || !row.isActive || row.status !== "APPROVED" || row.proofConfirmedAt) return null;
+    // Kanıtı sıfırlanmış cihaz (son olay PROOF_RESET): sır YALNIZ donanımı doğrulanmış announce'a (status ucu hw taşımaz).
+    if (!opts.hwVerified && (await DeviceProofResetService.gate(row.id))) return null;
     const st = getShortCredentialKeyRing();
     if (!st.ok) {
       uyari("device.proof", `Cihaz sırrı verilemedi — anahtar halkası kullanılamıyor (${st.problem}).`);

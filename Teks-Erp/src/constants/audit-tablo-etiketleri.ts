@@ -291,6 +291,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   SHORT_CREDENTIAL_CONVERTED: "Hızlı PIN / kartlar özetli saklamaya çevrildi",
   SHORT_CREDENTIAL_ESCROW_SEALED: "Kısa kimlik anahtarı yedek anahtarlarına mühürlendi",
   SHORT_CREDENTIAL_KEY_RESTORED: "Kısa kimlik anahtarı yedekten geri kondu",
+  SHORT_CREDENTIAL_RING_LOST: "Kısa kimlik anahtar halkası kayıp — yeniden üretildi",
   SHORT_CREDENTIAL_BULK_RESET: "Toplu hızlı PIN sıfırlama",
   TOTP_SECRET_WRAPPED: "İki adımlı doğrulama sırları şifreli saklamaya çevrildi",
   MACHINE_RUN_BULK: "Tezgah Salonu toplu koşum işlemi",

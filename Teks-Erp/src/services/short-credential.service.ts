@@ -15,6 +15,7 @@ import { credentialReseal } from "./helpers/system-account-seal.helper";
 import { getShortCredentialKeyRing, type KeyRing } from "../lib/short-credential/keyring";
 import { digestCardSecret, digestQuickPin } from "../lib/short-credential/digest";
 import { recipientSetSignature } from "../lib/short-credential/escrow-crypto";
+import { evaluateRingLoss, halkaVerdictStats } from "../lib/short-credential/ring-footprint";
 import { readBackupCryptoConfig, type BackupCryptoState } from "../lib/backup-crypto";
 
 export const PIN_RE = /^\d{6}$/;
@@ -119,7 +120,11 @@ export class ShortCredentialService {
     const sum = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0);
     const cryptoState: BackupCryptoState | null = crypto?.state ?? null;
     const sig = crypto && crypto.state === "acik" ? recipientSetSignature(crypto.recipients) : null;
+    // Halka kaybı (K-C5): TEK kaynak `evaluateRingLoss` — bildirim koşulu ve panel ucu da onu okur.
+    const halkaKaybi = await evaluateRingLoss();
     return {
+      halkaKaybi,
+      halkaHukmu: halkaVerdictStats(),
       key: st.ok
         ? { ok: true as const, activeKid: st.ring.active.kid, kids: ringKids, problem: null, detail: null }
         : { ok: false as const, activeKid: null, kids: [], problem: st.problem, detail: st.detail },
