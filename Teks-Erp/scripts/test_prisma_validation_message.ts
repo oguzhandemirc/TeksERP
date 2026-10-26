@@ -112,13 +112,13 @@ async function main(): Promise<void> {
   check("§6 alakasız hatada null", extractPrismaValidationField(new Error("bağlantı koptu")) === null);
 
   console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
-  process.exit(kaldi > 0 ? 1 : 0);
+  process.exitCode = kaldi > 0 ? 1 : 0;
 }
 
 main()
   .catch((e) => {
     console.error(e);
-    process.exit(1);
+    process.exitCode = 1;
   })
   .finally(async () => {
     // Emniyet: doğrulama bir gün gevşer ve yazım SQL'e ulaşırsa artık kalmasın.

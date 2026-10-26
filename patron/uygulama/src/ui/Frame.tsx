@@ -6,7 +6,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, RefreshControl, Text, useWindowDimensions, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MODULES, moduleVisible, type ModuleKey } from "../lib/access";
+import { MODULES, moduleNavTitle, moduleTitle, moduleVisible, type ModuleKey } from "../lib/access";
 import { useSession } from "../state/session";
 import { StatusBands } from "./data";
 import { FacilitySwitchModal } from "./FacilitySwitcher";
@@ -78,7 +78,7 @@ export function SideNav() {
                   style={({ pressed }) => [s.railItem, active && { backgroundColor: t.tintContainer }, pressed && !active && { backgroundColor: t.surfaceAlt }]}
                 >
                   <IconChip domain={icon.domain} icon={icon.icon} size={28} />
-                  <Text style={[s.railText, active && { color: t.tint, fontWeight: "600" }]} numberOfLines={1}>{m.title}</Text>
+                  <Text style={[s.railText, active && { color: t.tint, fontWeight: "600" }]} numberOfLines={1}>{moduleNavTitle(m.key)}</Text>
                 </Pressable>
               );
             })}
@@ -90,7 +90,8 @@ export function SideNav() {
 }
 
 export interface ScreenProps {
-  readonly title: string;
+  /** Verilmezse `module`ün ekran başlığı (`access.ts`, tek kaynak); modül kök ekranları başlık YAZMAZ. */
+  readonly title?: string;
   /** Verilirse izin yoksa içerik yerine uyarı çizilir. */
   readonly module?: ModuleKey;
   readonly children: ReactNode;
@@ -106,7 +107,8 @@ export interface ScreenProps {
 }
 
 /** Her ekranın kabı: büyük başlık, bantlar, kaydırma ve aşağı çek-yenile; izin kapısı. */
-export function Screen({ title, module, children, back, onRefresh, refreshing, headerRight, subtitle }: ScreenProps) {
+export function Screen({ title: titleProp, module, children, back, onRefresh, refreshing, headerRight, subtitle }: ScreenProps) {
+  const title = titleProp ?? (module ? moduleTitle(module) : "");
   const t = useTokens();
   const s = useStyles();
   const wide = useWide();

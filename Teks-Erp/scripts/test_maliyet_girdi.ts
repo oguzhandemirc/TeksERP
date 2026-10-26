@@ -153,11 +153,11 @@ async function main(): Promise<void> {
   check("§9 Fikstür temizlendi", (await prisma.item.count({ where: { code: { startsWith: f.tag } }, })) === 0 && ItemType.FABRIC === "FABRIC");
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main().catch(async (e) => {
   console.error(e);
   await prisma.$disconnect();
-  process.exit(1);
+  process.exitCode = 1;
 });

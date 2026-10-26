@@ -308,5 +308,5 @@ main()
     if (itemId) await prisma.item.deleteMany({ where: { id: itemId } });
     await prisma.$disconnect();
     await pool.end();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

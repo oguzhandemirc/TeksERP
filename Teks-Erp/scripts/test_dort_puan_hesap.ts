@@ -84,4 +84,4 @@ check("müşteri seti dereceli değilse geçerli", validateBands(bands.map((b) =
 check("boş etiket", validateBands(bands.map((b) => ({ ...b, label: b.label === "A" ? " " : b.label })), "FACTORY").length > 0);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

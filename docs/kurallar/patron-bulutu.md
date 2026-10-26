@@ -160,6 +160,8 @@ Bulutta BAĞIMSIZ (fabrika kullanıcısına bağlanmaz). TEK KİMLİK, ÇOK TES�
 - **[ÇEKİRDEK]** TOTP kurulumunda `otpauth` karekodu ve elle girilecek anahtar birlikte gösterilir; sır yalnız o ekranda bellektedir. · bekçi: `totp-qr.test.tsx` <sub>(arşiv:2026-09-30 F1)</sub>
 - **[ÇEKİRDEK]** Web girişinde adres yolundaki ardışık ya da ters eğik çizgi, yönlendirici başlamadan ÖNCE tek '/'ye katlanır (`history.replaceState`, sorgu ve hash korunur, yalnız web); giriş sırası `entry.ts`te sabittir (metro-runtime → katlama → `expo-router/entry`). · bekçi: `web-path.test.ts` · `deploy/patron/tarayici-duman.cjs` <sub>(arşiv:2026-09-30 I12)</sub>
 
+- **[ÇEKİRDEK]** Ekran adını, gezinme adını ve satır alt metnini yalnız `src/lib/access.ts`ten oku (modül kök ekranı başlık yazmaz, `Screen module` türetir); "Diğer" listesi ile geniş ray AYNI `NAV_GROUPS` tablosundan çizilir; boş durum simgesi `EMPTY_ICON` ya da alan simgesidir (çıplak ad yok, metin noktasız, "siz" dili); Bildirim Ayarları ekranı bu cihazın izin durumunu formdan ÖNCE gösterir. · bekçi: `tutarlilik.test.ts` · `bildirim-izni.test.tsx` <sub>(arşiv:2026-10-26 UX-4)</sub>
+
 ### Kararlar
 
 - **[ÇEKİRDEK]** Projeksiyon ve anlık verinin şekli fabrikada tanımlıdır; uygulama alanları jenerik biçimler (TR sayı/tarih, `…Id` gizli) ve aritmetik yapmaz. · bekçi: `format.test.ts` <sub>(arşiv:2026-09-29)</sub>

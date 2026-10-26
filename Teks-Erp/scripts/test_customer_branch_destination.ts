@@ -123,5 +123,5 @@ main()
     try { await temizlik(); } catch (e) { console.error("❌ temizlik düştü:", e); fail++; }
     console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

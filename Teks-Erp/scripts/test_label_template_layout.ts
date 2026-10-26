@@ -131,4 +131,4 @@ const pRows = [...pplaXl.matchAll(/^1[1-9]\d\d000(\d{4})(\d{4})/gm)].map((m) => 
 check("PPLA v2: satırlar artan (auto-step, çakışmasız)", pRows.length >= 2 && pRows.every((v, i) => i === 0 || v > pRows[i - 1]));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

@@ -175,10 +175,10 @@ async function main(): Promise<void> {
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main().catch((err) => {
   console.error("Beklenmeyen hata:", err);
-  process.exit(1);
+  process.exitCode = 1;
 });

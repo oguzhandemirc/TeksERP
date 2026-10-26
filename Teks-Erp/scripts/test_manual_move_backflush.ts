@@ -72,5 +72,5 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
   // `== N passed, M failed ==` hiçbir regex'e uymuyordu ve dosya özet tablosunda
   // "geçti (exit 0)" görünüyordu — kaç kontrolün koştuğu gizliydi.
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 })();

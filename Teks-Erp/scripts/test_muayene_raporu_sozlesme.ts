@@ -106,4 +106,4 @@ check("§5 patron dipnotu HTML'de ve Excel notlarında", html.includes(FOOT) && 
 check("§5 dipnot sözleşme bağlamında", ctx.tablolar && (inspectionReportContract.insa(plain, null, [], undefined) as unknown as { tablolar: { dipnotlar: Array<{ metin: string }> } }).tablolar.dipnotlar.some((d) => d.metin === FOOT));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

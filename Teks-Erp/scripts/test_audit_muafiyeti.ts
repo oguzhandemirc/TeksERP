@@ -189,7 +189,7 @@ function main(): void {
   check("§6e aynı dosyada iki model de sayılır", cudModelleri("prisma.a.create(); prisma.b.delete();").length === 2);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

@@ -19,7 +19,12 @@ export type ModuleKey =
 
 export interface ModuleDef {
   readonly key: ModuleKey;
+  /** Ekran başlığı — modül kök ekranı bunu çizer (`Screen` başlıksız çağrılırsa). */
   readonly title: string;
+  /** Gezinme adı (sekme · ray · Diğer satırı) yalnız başlıktan kısaysa; yoksa `title`. */
+  readonly navTitle?: string;
+  /** Diğer/Profil satırının alt metni (tek kaynak). */
+  readonly hint?: string;
   readonly route: string;
   /** Bunlardan BİRİ yeter; boş = her hesap. */
   readonly anyOf: readonly string[];
@@ -32,19 +37,36 @@ export const FINANCE_READ = ["bulut:kasa:oku", "bulut:cek:oku", "bulut:fatura:ok
 export const MODULES: readonly ModuleDef[] = [
   { key: "pano", title: "Pano", route: "/pano", anyOf: [] },
   { key: "siparisler", title: "Siparişler", route: "/siparisler", anyOf: ["bulut:siparis:oku"] },
-  { key: "cariler", title: "Cariler", route: "/cariler", anyOf: ["bulut:cari:oku", "bulut:cari-bakiye:oku", "bulut:cari:yaz"] },
-  { key: "sevkiyat", title: "Sevkiyat", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"] },
+  { key: "cariler", title: "Cariler", hint: "Müşteri ve tedarikçiler", route: "/cariler", anyOf: ["bulut:cari:oku", "bulut:cari-bakiye:oku", "bulut:cari:yaz"] },
+  { key: "sevkiyat", title: "Sevkiyat", hint: "Sevk edilen ve bekleyen", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"] },
   { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"] },
-  { key: "stok", title: "Stok", route: "/stok", anyOf: ["bulut:stok:oku"] },
-  { key: "finans", title: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku"] },
-  { key: "teklifler", title: "Teklifler", route: "/teklifler", anyOf: ["bulut:teklif:oku"] },
-  { key: "standart-maliyetler", title: "Standart Maliyetler", route: "/standart-maliyetler", anyOf: ["bulut:teklif:oku"], allOf: ["bulut:maliyet:oku"] },
-  { key: "raporlar", title: "Raporlar", route: "/raporlar", anyOf: ["bulut:rapor:oku"] },
-  { key: "gelen-kutusu", title: "Gelen kutusu", route: "/gelen-kutusu", anyOf: ["bulut:siparis:yaz", "bulut:cari:yaz"] },
-  { key: "hesaplar", title: "Hesaplar", route: "/hesaplar", anyOf: ["bulut:hesap:yonet"] },
-  { key: "bildirimler", title: "Bildirimler", route: "/bildirimler", anyOf: [] },
-  { key: "profil", title: "Profil", route: "/profil", anyOf: [] },
+  { key: "stok", title: "Stok", hint: "Ham ve bitmiş stok", route: "/stok", anyOf: ["bulut:stok:oku"] },
+  { key: "finans", title: "Ön Muhasebe", navTitle: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku"] },
+  { key: "teklifler", title: "Teklifler", hint: "Müşteriye gönderilen teklifler", route: "/teklifler", anyOf: ["bulut:teklif:oku"] },
+  { key: "standart-maliyetler", title: "Standart Maliyetler", hint: "Ürün başına metre maliyeti", route: "/standart-maliyetler", anyOf: ["bulut:teklif:oku"], allOf: ["bulut:maliyet:oku"] },
+  { key: "raporlar", title: "Raporlar", hint: "Fabrikadan rapor isteyin", route: "/raporlar", anyOf: ["bulut:rapor:oku"] },
+  { key: "gelen-kutusu", title: "Gelen Kutusu", hint: "Fabrikaya gönderilen talepler", route: "/gelen-kutusu", anyOf: ["bulut:siparis:yaz", "bulut:cari:yaz"] },
+  { key: "hesaplar", title: "Hesaplar", hint: "Kim neyi görür, davetler", route: "/hesaplar", anyOf: ["bulut:hesap:yonet"] },
+  { key: "bildirimler", title: "Bildirim Ayarları", hint: "Bu cihazda izin, türler, sessiz saatler", route: "/bildirimler", anyOf: [] },
+  { key: "profil", title: "Profil", hint: "Görünüm, parola ve çıkış", route: "/profil", anyOf: [] },
 ];
+
+export function moduleDef(key: ModuleKey): ModuleDef {
+  const m = MODULES.find((x) => x.key === key);
+  if (!m) throw new Error(`Tanımsız modül: ${key}`);
+  return m;
+}
+
+/** Ekran başlığı (tek kaynak; UX-4 P4). */
+export function moduleTitle(key: ModuleKey): string {
+  return moduleDef(key).title;
+}
+
+/** Sekme/ray/Diğer satırı adı: kısa ad varsa o, yoksa ekran başlığı. */
+export function moduleNavTitle(key: ModuleKey): string {
+  const m = moduleDef(key);
+  return m.navTitle ?? m.title;
+}
 
 export function can(perms: readonly string[] | ReadonlySet<string>, code: string): boolean {
   return Array.isArray(perms) ? perms.includes(code) : (perms as ReadonlySet<string>).has(code);

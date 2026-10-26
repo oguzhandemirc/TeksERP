@@ -77,4 +77,4 @@ const elleTambur = walk(src).filter((f) => !f.endsWith("tambur-entry-sources.ts"
 check("§4 src'de TAMBUR kümesini elle kuran okuyucu yok", elleTambur.length === 0, elleTambur.map((f) => f.replace(src, "src")).join(","));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

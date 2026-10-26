@@ -104,5 +104,5 @@ main()
   .catch((e) => { console.error("HATA:", e); fail++; })
   .finally(() => {
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

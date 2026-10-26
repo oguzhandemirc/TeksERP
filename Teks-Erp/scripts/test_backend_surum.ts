@@ -103,4 +103,4 @@ console.log("\n=== §5 Sürüm commit'inde --uygula (gerçek kip derlemesi) ==="
 }
 
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
-process.exit(kaldi > 0 ? 1 : 0);
+process.exitCode = kaldi > 0 ? 1 : 0;

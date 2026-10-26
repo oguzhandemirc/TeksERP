@@ -746,5 +746,5 @@ main()
     if (supplierId) await prisma.customer.deleteMany({ where: { id: supplierId } });
     await prisma.$disconnect();
     await pool.end();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

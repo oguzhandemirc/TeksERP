@@ -499,7 +499,7 @@ async function main(): Promise<void> {
   check("§8b ⭐ sonda bellek içi: kapı düşürülünce §8a kırmızı", !e1Ok(ctrl.replace(/if \(doffEventId && !\(await readDokumaEnabled\(\)\)\)/, "if (false)")));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 /** `src/routes/**​/*.routes.ts` — alt dizinler dahil (reports/). */
@@ -528,5 +528,5 @@ function yuklemDokumayaBagli(tileConfigMetni: string, fnAdi: string, hubDizin: s
 
 main().catch((e) => {
   console.error("BEKÇİ ÇÖKTÜ:", e);
-  process.exit(1);
+  process.exitCode = 1;
 });

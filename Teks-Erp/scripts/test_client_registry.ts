@@ -438,4 +438,4 @@ touchClient({ instanceId: ID_BEYAN, kind: "electron", version: "1.3.2" }, t1);
 check("başlıkla gelen kayıt varsayılan olarak BEYAN", listClients(t1)[0]?.declared === true);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail === 0 ? 0 : 1);
+process.exitCode = fail === 0 ? 0 : 1;

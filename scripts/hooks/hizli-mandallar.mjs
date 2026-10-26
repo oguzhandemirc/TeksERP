@@ -77,6 +77,7 @@ const MANDALLAR = [
   "test_audit_okuma_kaynagi", // audit yalnız ayak izi: system_logs okuyan backend işlevi + audit ucu çağıran istemci dosyası beyanlı, borç cırcırı (AST) · src + scripts/lib + Electron/src + mobil/src · ağaç · ~1 sn · §2/§6b sert (28., 2026-09-25)
   "test_musteri_adi_kodda_yok", // üretim kanalının müşteri adı ürün koduna metin olarak gömülmez (ad listesi deploy/kanallar.json'dan) · Teks-Erp/src + Electron/src + mobil/src + test profilleri (ad+kod) · DB'siz · ~1,6 sn · istisna listesi boş, kullanılmayan istisna da kırmızı (33., 2026-09-28)
   "test_lisans_kabul_metni", // sözleşme kabul metni tek kaynaktan: docs/hukuk/KABUL-METNI.md §2 ⇄ üretilmiş katalog + gösterim metni bayt-eşit (belge değişip üretici koşulmadıysa kırmızı) · docs/hukuk + Teks-Erp/src/lib/license · DB'siz · ~0,3 sn (34., yönetici kararı 2026-09-30)
+  "test_process_exit_kalibi", // scripts/ altında YENİ `process.exit(` çağrısı yok (exitCode + doğal çıkış); beyanlı taban scripts/lib/process-exit-istisnalari.json, düşen taban + hayalet sert (AST) · DB'siz · ~4,5 sn (2026-10-26)
 ];
 
 function izoleAgacMi() {

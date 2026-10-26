@@ -149,4 +149,4 @@ const okSmall = run("{% for r in arr %}{{ r }},{% endfor %}", { arr: [1, 2, 3] }
 check("meşru döngü çalışır", okSmall.ok && okSmall.out === "1,2,3,", msgOf(okSmall));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail ? 1 : 0);
+process.exitCode = fail ? 1 : 0;

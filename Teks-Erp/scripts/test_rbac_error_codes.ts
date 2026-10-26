@@ -80,7 +80,7 @@ function main(): void {
   check("§4b çoklu red cümlesi aynen: \"… şu yetkilerden birine ihtiyacınız var: a, b\"", r2.err?.message === "Bu işlem için şu yetkilerden birine ihtiyacınız var: shipping:invoice, finance:write");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

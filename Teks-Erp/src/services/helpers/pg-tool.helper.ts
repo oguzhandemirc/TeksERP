@@ -229,12 +229,13 @@ export function runProcess(
 ): Promise<ToolResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
   return new Promise((resolve) => {
+    // Üst sınır kendi zamanlayıcımızla: `spawn({ timeout })`un zamanlayıcısını Node yalnız `exit`te
+    // temizler; başlatılamayan süreçte (ENOENT) `exit` gelmez ve 3 saatlik zamanlayıcı süreci ayakta tutar.
     const child = spawn(file, args, {
       windowsHide: true,
       env: { ...process.env, ...(opts.env ?? {}) },
-      timeout: timeoutMs,
-      killSignal: "SIGKILL",
     });
+    const ust = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
     let stderr = "";
     let stdout = "";
     child.stderr?.on("data", (d) => {
@@ -249,11 +250,13 @@ export function runProcess(
       // (`pg_restore --list` TOC'u 64 KB'ı aşınca doğrulama 30 sn'de "unknown" düşüyordu).
       child.stdout?.resume();
     }
-    child.on("error", (err) =>
-      resolve({ code: -1, stderr, spawnError: err.message, ...(opts.captureStdout ? { stdout } : {}) }),
-    );
+    child.on("error", (err) => {
+      clearTimeout(ust);
+      resolve({ code: -1, stderr, spawnError: err.message, ...(opts.captureStdout ? { stdout } : {}) });
+    });
     child.on("close", (code, signal) => {
-      // Node timeout'ta `killSignal` ile öldürür → code null, signal dolu gelir.
+      clearTimeout(ust);
+      // Üst sınır zamanlayıcısı SIGKILL ile öldürür → code null, signal dolu gelir.
       const timedOut = signal === "SIGKILL" && code === null;
       resolve({
         code: code ?? -1,

@@ -678,5 +678,5 @@ main()
     if (subcontractorId) await prisma.subcontractor.deleteMany({ where: { id: subcontractorId, code: { startsWith: "TEST-FIN-" } } });
     await prisma.$disconnect();
     await pool.end();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

@@ -214,7 +214,7 @@ function main(): void {
   check("tüm KOD yolları geçerli ve gölgesiz", codeBad === 0, `${sites.reduce((a, s) => a + s.code.length, 0)} yol`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

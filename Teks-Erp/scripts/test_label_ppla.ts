@@ -75,7 +75,7 @@ function main() {
   check("sanitize: veri STX taşımaz", !dirty.includes(`BAD${STX}CODE`) && dirty.includes("BAD CODE"));
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

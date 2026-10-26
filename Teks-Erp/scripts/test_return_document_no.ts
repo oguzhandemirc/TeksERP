@@ -54,4 +54,4 @@ for (const [iso] of cases) {
 check("id parçası ilk 6 karakter, büyük harf", returnDocumentNo(new Date("2026-09-14T09:00:00Z"), "zz9y8x-rest").endsWith("-ZZ9Y8X"));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

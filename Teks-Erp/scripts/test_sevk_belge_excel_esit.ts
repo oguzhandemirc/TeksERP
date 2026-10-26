@@ -274,4 +274,4 @@ console.log("§6 ⭐ Excel sayısı PDF'te BASILAN haneyi taşır (yarım değer
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

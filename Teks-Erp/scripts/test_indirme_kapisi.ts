@@ -817,10 +817,10 @@ async function main(): Promise<void> {
   await bolum10(w);
   await bolum11(w);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail === 0 ? 0 : 1);
+  process.exitCode = fail === 0 ? 0 : 1;
 }
 
 main().catch((e) => {
   console.error("❌ Bekçi çöktü:", e);
-  process.exit(1);
+  process.exitCode = 1;
 });

@@ -1330,10 +1330,10 @@ async function main(): Promise<void> {
   bolum11yetenek();
   bolum12muhur();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main().catch((e: unknown) => {
   console.error("❌ bekçi çöktü:", e);
-  process.exit(1);
+  process.exitCode = 1;
 });

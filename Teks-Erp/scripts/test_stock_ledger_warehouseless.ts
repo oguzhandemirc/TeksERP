@@ -341,6 +341,9 @@ async function main(): Promise<void> {
     fail++;
     console.log(`  ✗ FAIL: sonda çöktü — ${e instanceof Error ? e.message.split("\n").slice(0, 3).join(" ") : String(e)}`);
   } finally {
+    // Dinleyen sunucu süreci ayakta tutar (process.exit yerine doğal çıkış).
+    server.closeAllConnections();
+    server.close();
     console.log("\n🧹 Temizlik...");
     try {
       if (onayEski === null) await prisma.systemSetting.deleteMany({ where: { key: SHIPMENT_CONFIRM_KEY } });
@@ -386,5 +389,5 @@ main()
   .finally(async () => {
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===\n`);
     await prisma.$disconnect(); await pool.end();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

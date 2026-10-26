@@ -160,4 +160,4 @@ s4();
 s5();
 s6();
 console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
-process.exit(kaldi === 0 ? 0 : 1);
+process.exitCode = kaldi === 0 ? 0 : 1;

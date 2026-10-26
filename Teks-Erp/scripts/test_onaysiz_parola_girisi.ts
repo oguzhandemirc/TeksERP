@@ -255,11 +255,11 @@ async function main(): Promise<void> {
 
   console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
   await prisma.$disconnect();
-  process.exit(kaldi === 0 ? 0 : 1);
+  process.exitCode = kaldi === 0 ? 0 : 1;
 }
 
 main().catch(async (e) => {
   console.error(e);
   await prisma.$disconnect();
-  process.exit(1);
+  process.exitCode = 1;
 });

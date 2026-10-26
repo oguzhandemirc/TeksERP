@@ -346,7 +346,7 @@ function main(): void {
     [...yazanFonksiyonlar("const post = <T>(p: string): Promise<T> => apiClient.post<T>(p).then((r) => r.data);\nexport const svc = { onizleme: () => post<number>('/x'), oku: () => apiClient.get('/y') };", false).keys()].sort().join() === "post,svc.onizleme");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

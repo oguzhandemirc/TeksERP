@@ -130,4 +130,4 @@ check("§3 iç kolonlu en az bir sözleşme ölçüldü (körlük zemini)", inte
 
 for (const f of failures) console.log(f);
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail ? 1 : 0);
+process.exitCode = fail ? 1 : 0;

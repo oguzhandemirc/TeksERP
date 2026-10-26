@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Prisma } from "@prisma/client";
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { RECORD_PROJECTIONS, projectionPermissions, subRowPermission, type RecordProjection } from "../src/cloud-sync/projections";
 import { DERIVERS } from "../src/cloud-sync/derived";
@@ -197,5 +197,6 @@ main()
   .finally(async () => {
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    await pool.end().catch(() => undefined);
+    process.exitCode = fail > 0 ? 1 : 0;
   });

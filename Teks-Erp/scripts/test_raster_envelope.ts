@@ -100,4 +100,4 @@ function blackBmp(): Bitmap1 { const b = new Bitmap1(16, 4); b.fillRect(0, 0, 16
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

@@ -118,7 +118,7 @@ function main(): void {
   check("§5e ⭐ komşu diziye TAŞMAZ (yeni ✅, eski ayrıştırıcı ❌ verirdi)", komsulu !== tabletMetin && ayristir(komsulu, "LOOM_STOP_REASONS").length === tablet.length && ayristirEski(komsulu, "LOOM_STOP_REASONS").length !== tablet.length);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

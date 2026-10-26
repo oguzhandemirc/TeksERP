@@ -113,4 +113,4 @@ function inkBBox(b: Bitmap1): { w: number; h: number; count: number } {
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;
