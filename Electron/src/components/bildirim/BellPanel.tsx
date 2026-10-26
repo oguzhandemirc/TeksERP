@@ -1,7 +1,7 @@
 // Zil açılır panelinin içeriği — sekmeler (Tümü · Okunmamış · Alarmlar), gün grupları, alt şerit
 // ("Tümünü okundu say" onaysız + 6 sn geri al · "Tüm bildirimler"). RowList yalnız panel açıkken çekilir.
 import { useState } from "react";
-import { ArrowRight, Bell, CheckCheck, Siren } from "lucide-react";
+import { ArrowRight, Bell, CheckCheck, Settings2, Siren } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTabsStore } from "@/store/tabs";
@@ -9,6 +9,7 @@ import { splitByDay, badgeText } from "@/lib/bildirim/format";
 import { useNotificationActions, useNotificationList } from "@/lib/bildirim/hooks";
 import type { NotificationItem, NotificationTab } from "@/lib/bildirim/types";
 import { NotificationRow } from "./NotificationRow";
+import { NOTIFICATION_SETTINGS_PATH, useNotificationSettingsAvailable } from "./BildirimTercihKarti";
 
 const BELL_LIMIT = 20;
 type BellTab = Extract<NotificationTab, "tumu" | "okunmamis" | "alarmlar">;
@@ -59,12 +60,14 @@ function EmptyAlarms() {
   );
 }
 
-function RowList({ items, status, onAc, eylemler, alarm }: {
+function RowList({ items, status, onAc, eylemler, alarm, onSettings }: {
   items: NotificationItem[];
   status: "yukleniyor" | "hata" | "hazir";
   onAc: (b: NotificationItem) => void;
   eylemler: ReturnType<typeof useNotificationActions>;
   alarm: boolean;
+  /** F4 sunucusunda "Bildirim ayarları" bağlantısı (eski sunucuda yok → çizilmez). */
+  onSettings?: () => void;
 }) {
   if (status === "yukleniyor") return <p className="px-3 py-6 text-center text-xs text-muted-foreground">Yükleniyor…</p>;
   if (status === "hata") return <p className="px-3 py-6 text-center text-xs text-muted-foreground">Bildirimler okunamadı.</p>;
@@ -75,6 +78,11 @@ function RowList({ items, status, onAc, eylemler, alarm }: {
         <Bell className="h-6 w-6 text-muted-foreground/60" aria-hidden />
         <p className="text-sm font-medium">Yeni bildirim yok</p>
         <p className="text-xs text-muted-foreground">Yeni bir şey olduğunda burada görünür.</p>
+        {onSettings && (
+          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={onSettings}>
+            Bildirim ayarları
+          </Button>
+        )}
       </div>
     );
   return (
@@ -106,6 +114,7 @@ export function BellPanel({ okunmamis, alarmAcik = 0, onKapat }: { okunmamis: nu
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const list = useNotificationList({ sekme, limit: BELL_LIMIT }, true);
   const eylemler = useNotificationActions();
+  const tercihVar = useNotificationSettingsAvailable();
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const git = (yol: string) => {
     onKapat();
@@ -119,10 +128,15 @@ export function BellPanel({ okunmamis, alarmAcik = 0, onKapat }: { okunmamis: nu
     <>
       <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
         <p className="text-sm font-semibold">Bildirimler</p>
+        {tercihVar && (
+          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" aria-label="Bildirim tercihleri" onClick={() => git(NOTIFICATION_SETTINGS_PATH)}>
+            <Settings2 className="h-3.5 w-3.5" /> Tercihler
+          </Button>
+        )}
       </div>
       <BellTabs sekme={sekme} onSekme={setSekme} sayi={okunmamis} alarm={alarmAcik} />
       <div className="max-h-[min(480px,60vh)] overflow-y-auto">
-        <RowList items={items} status={list.isLoading ? "yukleniyor" : list.isError ? "hata" : "hazir"} onAc={ac} eylemler={eylemler} alarm={sekme === "alarmlar"} />
+        <RowList items={items} status={list.isLoading ? "yukleniyor" : list.isError ? "hata" : "hazir"} onAc={ac} eylemler={eylemler} alarm={sekme === "alarmlar"} onSettings={tercihVar ? () => git(NOTIFICATION_SETTINGS_PATH) : undefined} />
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-1.5">
         <Button
