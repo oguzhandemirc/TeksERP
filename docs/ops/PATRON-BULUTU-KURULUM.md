@@ -497,7 +497,7 @@ Kalıp: 2.15.12 test grubu yayını (2026-10-21; runbook + rapor `~/.tekserp/dok
 | Migration | **YOK** — HEAD 395 = etiket 395 |
 | Native / güncelleyici / docker / pg / node | `git diff backend-v2.15.12 HEAD -- Teks-Erp/native deploy/pg deploy/node-surumu.json Teks-Erp/docker` BOŞ → güncelleyici 0.2.8 kalır |
 | Kanal kayıtları | `deploy/kanallar.json` ve `deploy/dagitim.json` etiketten beri DEĞİŞMEDİ |
-| Sürüm notu | main'de `docs/surumler/2.15.13-taslak.md` (P4) + `2.15.13-taslak-P5.md` (P5) — W2 tek taslakta birleştirir; `backend-2.15.13.md` YALNIZ yayın anında, kullanıcı onayıyla açılır |
+| Sürüm notu | main'de `docs/surumler/backend-2.15.13.md` (P4 + P5 taslakları W2'de tek taslakta birleşti; sürüm commit'inde 2026-10-26 bu ada taşındı, kullanıcı onayı test grubu yayını için) |
 
 **Test grubunda kim var (ölçüldü):** `deploy/kanallar.json` grup üyeliği TAŞIMAZ — üç ESKİ kanal kaydı vardır: `adnansahin` (üretim, DONMUŞ — bu yayının hedefi DEĞİL), `testfabrika` (hazırlık, adnansahin aynası; emekli 2026-10-05), `demofabrika` (aynasız hazırlık; kanalı 2026-10-11'de kaldırıldı, blok bayt-donuk). Grup yayını hedefi `deploy/dagitim.json` `gruplar` (`test` kök · `oncu` ← test · `genel` ← oncu) + `indirmeKoku`'dan türer; kurulumun grubu satıcıdaki kiranın `kanal.kod` alanıdır (repoda yok). Bilinen tek `test` üyesi: **bulut deneme sunucusu** (`ssh tekserp-bulut-deneme`, 213.142.134.226, `/opt/tekserp/test-musteri`, kip ONAYLI; 2026-10-21'de kira `kanal.kod = test` ölçüldü — `SUNUCU-ENVANTERI.md`). Adnan Şahin kurulumu `adnansahin` eski kanalında / üretim satıcısında; `--grup=test` yolu ona hiç dokunmaz (kanal=test grep kalıbı her çıktıya uygulanır).
 

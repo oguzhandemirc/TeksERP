@@ -2,7 +2,7 @@
   "expo": {
     "name": "TeksERP",
     "slug": "teks-erp-mobil",
-    "version": "1.4.2",
+    "version": "1.4.3",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -22,7 +22,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.etkiliyazilim.tekserp",
       "allowBackup": false,
-      "versionCode": 64,
+      "versionCode": 65,
       "usesCleartextTraffic": false,
       "permissions": [
         "android.permission.CAMERA",
@@ -91,7 +91,7 @@
       "./plugins/withPlayManifestTemizligi",
       "./plugins/withAgGuvenligi"
     ],
-    "runtimeVersion": "58.0",
+    "runtimeVersion": "59.0",
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
@@ -101,7 +101,7 @@
         "keyid": "ortak",
         "alg": "rsa-v1_5-sha256"
       },
-      "url": "https://indir.etkiliyazilim.com/ota/58.0/manifest"
+      "url": "https://indir.etkiliyazilim.com/ota/59.0/manifest"
     }
   }
 }
