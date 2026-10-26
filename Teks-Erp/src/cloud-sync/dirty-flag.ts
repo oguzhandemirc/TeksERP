@@ -28,6 +28,7 @@ export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   subcontractor_dispatches: "SubcontractorDispatch",
   work_order_steps: "WorkOrderStep",
   work_order_to_order_lines: "WorkOrderToOrderLine",
+  standard_cost_lines: "StandardCostLine",
   merge_operations: "MergeOperation",
   merge_operation_refs: "MergeOperationRef",
 };
