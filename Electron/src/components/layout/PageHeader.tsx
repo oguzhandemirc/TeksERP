@@ -69,11 +69,12 @@ export function PageHeader({ title, titleExtra, description, actions, className,
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-4 border-b bg-gradient-to-r from-primary/[0.07] via-transparent to-transparent px-6 py-4",
+        // flex-wrap: dar ekranda eylemler alt satıra iner; başlık sütunu kelime kelime kırılmaz (UX-3 R3).
+        "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b bg-gradient-to-r from-primary/[0.07] via-transparent to-transparent px-4 py-3 md:px-6 md:py-4",
         className,
       )}
     >
-      <div className="flex min-w-0 items-stretch gap-3">
+      <div className="flex min-w-0 flex-[1_1_16rem] items-stretch gap-3">
         {showBack && (
           <Button
             variant="ghost"
@@ -99,14 +100,14 @@ export function PageHeader({ title, titleExtra, description, actions, className,
             </button>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+            <h1 className="break-words text-lg font-semibold tracking-tight">{title}</h1>
             {titleExtra}
           </div>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
       </div>
       {(entry || actions) && (
-        <div className={cn("flex items-center gap-2", actionsAlign === "center" && "self-center")}>
+        <div className={cn("ml-auto flex max-w-full flex-wrap items-center justify-end gap-2", actionsAlign === "center" && "self-center")}>
           {entry && (
             <Button
               variant="ghost"
