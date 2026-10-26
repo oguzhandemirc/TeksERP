@@ -13,9 +13,13 @@ import { factoryDayStartOfKey, factoryDaySql, factoryMonthSql, factoryWeekSql, f
 import { REPORT_MAX_ROWS, resolveDateRange, type DateRange } from "../_shared";
 import { canAccess, type AccessContext } from "./izin";
 import { SEMANTIC_CUBES } from "./katalog";
+import { andOnlyLeaves, buildFilterTree, compileTreeSql, expandBetween, filterLeaves, semanticFilterSchema, semanticJoinSchema, type SemanticFilterLeaf } from "./suzgec-agaci";
+
+export { andOnlyLeaves, expandBetween, isFilterGroup, type SemanticFilterGroup, type SemanticFilterLeaf } from "./suzgec-agaci";
 import {
   FILTER_OPERATORS,
   type CompiledFilter,
+  type CompiledFilterGroup,
   type CompiledQuery,
   type PeriodSpec,
   type SemanticCube,
@@ -28,25 +32,15 @@ export const MAX_PERIODS = 12;
 const MAX_DIMENSIONS = 3;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const filterValue = z.string().min(1).max(200);
 
 export const semanticQuerySchema = z
   .object({
     kup: z.string().min(1).max(64),
     olculer: z.array(z.string().min(1).max(96)).min(1).max(8),
     boyutlar: z.array(z.string().min(1).max(64)).max(MAX_DIMENSIONS).default([]),
-    suzgec: z
-      .array(
-        z
-          .object({
-            alan: z.string().min(1).max(64),
-            islec: z.enum(FILTER_OPERATORS),
-            deger: z.union([filterValue, z.array(filterValue).max(500)]),
-          })
-          .strict(),
-      )
-      .max(10)
-      .default([]),
+    // Kök bağlacı `suzgecBaglaci` (varsayılan "ve" — eski düz liste aynı anlamı korur).
+    suzgec: semanticFilterSchema,
+    suzgecBaglaci: semanticJoinSchema.optional(),
     dateFrom: z.string().datetime().optional(),
     dateTo: z.string().datetime().optional(),
     compare: z.enum(["none", "prev", "prevYear", "custom"]).optional(),
@@ -126,7 +120,7 @@ function compileFilterSql(f: CompiledFilter): Prisma.Sql {
 }
 
 function resolveFilter(
-  raw: SemanticQueryInput["suzgec"][number],
+  raw: SemanticFilterLeaf,
   cube: SemanticCube,
   helperDims: readonly string[] | null,
   ctx: AccessContext,
@@ -138,6 +132,13 @@ function resolveFilter(
   if (!canAccess(dim, ctx)) throw noAccess(dim.id);
   if (dim.kind === "time") throw unsupported(`"${dim.name}" süzgeci yerine tarih aralığı kullanın.`, dim.id);
   const values = Array.isArray(raw.deger) ? raw.deger : [raw.deger];
+  if (raw.islec === "between") {
+    if (!dim.ordered || helperDims) throw unsupported(`"${dim.name}" için "arasında" kullanılamaz.`, dim.id);
+    if (values.length !== 2 || values.some((v) => !(dim.enumValues ?? []).includes(v))) {
+      throw AppError.badRequest(`"${dim.name}" arasında süzgeci iki geçerli sınır ister.`, { code: "SEMANTIK_SUZGEC_GECERSIZ", alan: dim.id });
+    }
+    return { dimension: dim, operator: "in", values: expandBetween(dim, values[0]!, values[1]!) };
+  }
   const single = raw.islec === "=" || raw.islec === "!=" || raw.islec === "contains";
   if (single && values.length !== 1) throw AppError.badRequest(`"${raw.islec}" işleci tek değer alır.`, { code: "SEMANTIK_SUZGEC_GECERSIZ", alan: dim.id });
   if (raw.islec === "contains") {
@@ -149,6 +150,10 @@ function resolveFilter(
     }
   }
   return { dimension: dim, operator: raw.islec, values };
+}
+
+function resolveFilterTree(input: SemanticQueryInput, cube: SemanticCube, helperDims: readonly string[] | null, ctx: AccessContext): CompiledFilterGroup {
+  return buildFilterTree(input.suzgec, input.suzgecBaglaci, (r) => resolveFilter(r, cube, helperDims, ctx));
 }
 
 /** Kimlikleri çözer, izinleri denetler ve çalıştırılabilir sorguyu üretir. */
@@ -199,7 +204,8 @@ export function compileQuery(
     throw AppError.badRequest("Çok dönemli kıyas zaman boyutuyla ya da bu ölçüyle birlikte kullanılamaz.", { code: "SEMANTIK_ALAN_DESTEKLENMIYOR", alan: "donemler" });
   }
 
-  const filters = input.suzgec.map((f) => resolveFilter(f, cube, helperDims, ctx));
+  const filter = resolveFilterTree(input, cube, helperDims, ctx);
+  if (helper && !andOnlyLeaves(filter)) throw unsupported(`"${helper.id}" ölçüsünde "veya" süzgeci kullanılamaz; koşulları "ve" ile bağlayın.`, helper.id);
   const range = period
     ? resolvePeriodRange(period, input.dateTo ? new Date(input.dateTo) : new Date())
     : resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
@@ -209,11 +215,11 @@ export function compileQuery(
     cube,
     measures,
     dimensions,
-    filters,
+    filter,
     period,
     cap,
     range,
-    sql: helper ? null : buildSql({ cube, measures, dimensions, filters, period, cap, range }),
+    sql: helper ? null : buildSql({ cube, measures, dimensions, filter, period, cap, range }),
   };
 }
 
@@ -238,7 +244,7 @@ function joinOrEmpty(parts: readonly Prisma.Sql[], sep: string): Prisma.Sql {
   return parts.length ? Prisma.join(parts, sep) : Prisma.empty;
 }
 
-type SqlParts = Pick<CompiledQuery, "cube" | "measures" | "dimensions" | "filters" | "period" | "cap" | "range">;
+type SqlParts = Pick<CompiledQuery, "cube" | "measures" | "dimensions" | "filter" | "period" | "cap" | "range">;
 
 /**
  * Tek ifade: `g` = süzülmüş tam küme gruplaması; `r<i>` = kategori boyutunun tam kümeden sırası;
@@ -247,7 +253,7 @@ type SqlParts = Pick<CompiledQuery, "cube" | "measures" | "dimensions" | "filter
 export function buildSql(q: SqlParts): Prisma.Sql {
   const sums = sumColumns(q.cube, q.measures);
   const joins = new Set<Prisma.Sql>();
-  for (const d of [...q.dimensions, ...q.filters.map((f) => f.dimension)]) if (d.joins) joins.add(d.joins);
+  for (const d of [...q.dimensions, ...filterLeaves(q.filter).map((f) => f.dimension)]) if (d.joins) joins.add(d.joins);
   const gSelect: Prisma.Sql[] = [];
   q.dimensions.forEach((d, i) => {
     gSelect.push(Prisma.sql`(${d.keySql})::text AS ${Prisma.raw(`k${i}`)}`);
@@ -258,7 +264,8 @@ export function buildSql(q: SqlParts): Prisma.Sql {
   else gSelect.push(Prisma.sql`NULL::text AS per`);
   // Boş küme toplamı 0'dır (gruplamasız sorguda SUM tek NULL satır döner).
   sums.forEach((m, j) => gSelect.push(Prisma.sql`COALESCE((${m.sql!})::float, 0) AS ${Prisma.raw(`s${j}`)}`));
-  const where = q.filters.length ? Prisma.sql`WHERE ${Prisma.join(q.filters.map(compileFilterSql), " AND ")}` : Prisma.empty;
+  const cond = compileTreeSql(q.filter, compileFilterSql);
+  const where = cond ? Prisma.sql`WHERE ${cond}` : Prisma.empty;
   const groupBy = groupCount
     ? Prisma.sql`GROUP BY ${Prisma.raw(Array.from({ length: groupCount }, (_, i) => String(i + 1)).join(", "))}`
     : Prisma.empty;
