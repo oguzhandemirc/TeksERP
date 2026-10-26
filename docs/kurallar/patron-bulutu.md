@@ -191,6 +191,7 @@ Bulutta BAĞIMSIZ (fabrika kullanıcısına bağlanmaz). TEK KİMLİK, ÇOK TES�
 ### Kararlar
 
 - **[PROFİL]** VDS bütçesi (2 çekirdek / 3 GB): patronun uzun ömürlü servislerinin bellek tavanı toplamı ≤ 1 GiB — sunucu 512m (yığın 320 MB) · DB 384m · yedek 128m; CPU 0,75 · 0,5 · 0,25. · bekçi: `deploy/patron/compose-denetle.mjs (③)` <sub>(arşiv:2026-09-29)</sub>
+- **[ÇEKİRDEK]** VDS'e giden patron imajı `main`'de KALICI bir commit'in sha'sını taşır (temiz `origin/main`'den derlenir; yalnız `docs/` değişikliği taşıyan dal commit'inden derlenmez — squash merge o sha'yı yetim bırakır); sürüm belgesi/kayıt commit'i imajdan sonra gelir. (2026-10-26, arşiv "Patron bulutu 0.2.0 (v2) VDS'te")
 - **[ÇEKİRDEK]** Web derlemesinin bulut adresi `koken`dir: uygulama API'ye sayfanın kökeninden gider, kökensiz ortamda (telefon) `koken` null'dur (fail-closed); telefon derlemesi açık `https://` adresi taşır. · bekçi: `client.test.ts` <sub>(arşiv:2026-09-29)</sub>
 
 ## Bekçiler — bu alana dokununca koş

@@ -3,7 +3,7 @@
     "name": "TeksERP Yönetim",
     "slug": "tekserp-patron",
     "scheme": "tekserp-patron",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.etkiliyazilim.tekserp.yonetim",
-      "versionCode": 2,
+      "versionCode": 3,
       "allowBackup": false,
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
