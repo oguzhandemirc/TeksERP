@@ -317,7 +317,7 @@ export function RollsPage() {
         {/* Tablo araçları (Sütunlar/Görünümler) + "Fire" toggle okut/ara satırında,
             en sağda. KANBAN'da rulo tablosu yok → gizli. */}
         {isTableTab && (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
             <DataTableTools table={dataTable.table} hideExport />
             <SavedViewsMenu />
             <label className="flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">

@@ -317,7 +317,7 @@ export function DataTable<T>({
       {selectable && (rows.length > 0 || selected.length > 0) && (
         <div
           className={cn(
-            "flex items-center gap-3 border-t px-3 py-2 text-sm",
+            "flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-3 py-2 text-sm",
             selected.length > 0 ? "bg-primary/5" : "bg-muted/40",
           )}
         >
@@ -335,7 +335,7 @@ export function DataTable<T>({
             Seçimi temizle
           </Button>
           {bulkActions?.(selected.map((r) => r.original))}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
             {selected.length > 0 ? (
               <>
                 <Button

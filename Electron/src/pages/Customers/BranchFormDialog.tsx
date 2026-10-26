@@ -50,8 +50,8 @@ export function BranchFormDialog({ open, onOpenChange, initial, onSubmit, isSubm
     >
       {(form) => (
         <>
-          <div className="grid grid-cols-3 gap-3">
-            <FormField label="Şube Adı" htmlFor="name" error={form.formState.errors.name} required className="col-span-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <FormField label="Şube Adı" htmlFor="name" error={form.formState.errors.name} required className="sm:col-span-2">
               <Input id="name" autoFocus placeholder="Örn. Merkez Depo, Ankara Şubesi" {...form.register("name")} />
             </FormField>
             {/* Şube ihracat kodu — yalnız yön yurtdışıyken görünür (şubenin, boşsa carinin);

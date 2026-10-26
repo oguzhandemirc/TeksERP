@@ -74,7 +74,7 @@ export function DeviceFilterBar({
         </SelectContent>
       </Select>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
         {pendingCount > 0 && (
           <button
             type="button"

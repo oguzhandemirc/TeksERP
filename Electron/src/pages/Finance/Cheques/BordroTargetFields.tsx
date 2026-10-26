@@ -31,7 +31,7 @@ export function BordroTargetFields({ target, onTargetChange, targetLabel, onTarg
   return (
     <div className="space-y-2">
       <Label>Teslim türü</Label>
-      <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Teslim türü">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Teslim türü">
         {KINDS.map((k) => (
           <button
             key={k}

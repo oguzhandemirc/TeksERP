@@ -197,7 +197,7 @@ export function ItemFormDialog({
               sürece personel "boş bırakın" yazsa da oraya kumaşın ADINI
               yazmaya çalışıyordu. Kodu sistem veriyor; elle giriş çok nadir
               ve artık bilinçli bir tıklama istiyor. */}
-          <div className="grid grid-cols-[1fr_180px_120px] gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_11.25rem_7.5rem]">
             <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
               <Input id="name" placeholder="Patos" {...form.register("name")} />
               {/* Canlı veride "ACTIVO" ve "ACTİVO" iki ayrı kumaş olarak duruyordu

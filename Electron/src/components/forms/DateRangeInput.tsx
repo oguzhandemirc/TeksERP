@@ -28,9 +28,9 @@ export function DateRangeInput({ from, to, onFrom, onTo, disabled, className, in
   const inverted = rangeInverted(from, to);
   return (
     <div className={cn("flex flex-wrap items-center gap-1", className)}>
-      <DatePickerInput id={idPrefix ? `${idPrefix}-from` : undefined} aria-label={fromLabel} title={fromLabel} placeholder="Başlangıç" value={from} onChange={onFrom} disabled={disabled} invalid={inverted} className={cn("w-[150px]", inputClassName)} />
+      <DatePickerInput id={idPrefix ? `${idPrefix}-from` : undefined} aria-label={fromLabel} title={fromLabel} placeholder="Başlangıç" value={from} onChange={onFrom} disabled={disabled} invalid={inverted} className={cn("w-[10.5rem]", inputClassName)} />
       <span className="text-muted-foreground" aria-hidden>–</span>
-      <DatePickerInput id={idPrefix ? `${idPrefix}-to` : undefined} aria-label={toLabel} title={`${toLabel} (gün sonu dahil)`} placeholder="Bitiş" value={to} onChange={onTo} disabled={disabled} invalid={inverted} className={cn("w-[150px]", inputClassName)} />
+      <DatePickerInput id={idPrefix ? `${idPrefix}-to` : undefined} aria-label={toLabel} title={`${toLabel} (gün sonu dahil)`} placeholder="Bitiş" value={to} onChange={onTo} disabled={disabled} invalid={inverted} className={cn("w-[10.5rem]", inputClassName)} />
       {inverted && (
         <span role="status" aria-live="polite" className="basis-full text-[11px] text-amber-700 dark:text-amber-400">
           Bitiş tarihi başlangıçtan önce — aralık boş sonuç verir.

@@ -607,7 +607,7 @@ function InvoiceFormBody({
             gövdesi onları taşımıyor (`.strict()`), yani düzenlenebilir çizmek
             "kaydettim ama değişmedi" yalanı olurdu. Gizlemek yerine DEVRE DIŞI
             bırakılırlar — kullanıcı hangi faturayı düzenlediğini görmeli. */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div>
             <Label>Fatura türü</Label>
             <select
@@ -707,8 +707,9 @@ function InvoiceFormBody({
           )}
         </div>
 
-        <div className="rounded-md border">
-          <div className={`grid ${cols} gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground`}>
+        {/* Dar ekranda kalem ızgarası kendi kabında yatay kayar (UX-3); diyalog taşmaz. */}
+        <div className="overflow-x-auto rounded-md border">
+          <div className={`grid min-w-[48rem] ${cols} gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground`}>
             <span>Kalem</span>
             <span>Açıklama</span>
             <span>Miktar</span>
@@ -719,7 +720,7 @@ function InvoiceFormBody({
             <span>Tevk. %</span>
             <span />
           </div>
-          <div className="max-h-[34vh] space-y-2 overflow-auto p-3">
+          <div className="max-h-[34vh] min-w-[48rem] space-y-2 overflow-auto p-3">
             {lines.map((l) => (
               <InvoiceLineRow
                 key={l.key}

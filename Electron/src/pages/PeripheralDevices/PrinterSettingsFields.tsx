@@ -70,7 +70,7 @@ export function PrinterSettingsFields({ form }: Props) {
         <div className="mb-2 text-xs font-medium text-muted-foreground">
           Etiket Medyası (boş → sistem varsayılanı)
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <FormField label="Eni (mm)" error={form.formState.errors.labelWidthMm} hint="10-500">
             <Input type="number" step="0.1" {...form.register("labelWidthMm")} placeholder="100" />
           </FormField>
