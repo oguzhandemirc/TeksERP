@@ -105,6 +105,7 @@ ${blocksAt("afterHeader")}
 <div class="row"><span>${TERIM.terbiyeIsEmri.tekil}:</span><b>{{ belge.is_emri_no }}</b></div>
 {%- if ayar.sections.batchInfo and parti_sayisi > 0 -%}<div class="row"><span>Parti:</span><b>{{ tablolar.parti | map: "no" | join: ", " }}</b></div>{%- endif -%}
 <div class="row"><span>İşlem:</span><b>{{ belge.islem }}</b></div>
+{%- if toplamlar.donen_metre != nil -%}<div class="row"><span>Dönen Metre:</span><b>{{ toplamlar.donen_metre | sayi: 2 }}</b></div>{%- endif -%}
 {%- if belge.fason_irsaliye_no != nil and belge.fason_irsaliye_no != "" -%}<div class="row"><span>Fason İrs.:</span><b>{{ belge.fason_irsaliye_no }}</b></div>{%- endif -%}
 </div>{%- endcapture -%}
 {%- endif -%}

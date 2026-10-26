@@ -184,7 +184,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
       { sequence: 2, barcode: "TR-260607-R0302", itemName: "Pamuklu Astar", colorName: "Bej", width: 150, qty: 152.5 },
     ],
     // `qty` = satırların toplamı (kabul defteri); örnek tutarlı olmalı.
-    totals: { rollCount: 2, qty: 312.5 },
+    totals: { rollCount: 2, qty: 312.5, returnedQty: 304.5 },
   },
 
   INSPECTION_REPORT: SAMPLE_INSPECTION_REPORT, // geçen, kalan ve muayenesiz top

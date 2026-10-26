@@ -72,6 +72,7 @@ const ROOT_FIELDS: FieldDef[] = [
   { yol: "karsi_taraf.kod", etiket: "Fasoncu kodu", tur: "metin", sinif: "musteri", ornek: "FB-03" },
   { yol: "toplamlar.top_adedi", etiket: "Kabul edilen top", tur: "sayi", ondalik: 0, sinif: "musteri", ornek: 2 },
   { yol: "toplamlar.metre", etiket: "Kabul edilen metre (defter)", tur: "sayi", ondalik: 2, birim: "m", sinif: "musteri", ornek: 320 },
+  { yol: "toplamlar.donen_metre", etiket: "Dönen metre (ölçülen)", tur: "sayi", ondalik: 2, birim: "m", sinif: "musteri", ornek: 304.5 },
   ...PRINT_FIELDS,
 ];
 
@@ -174,7 +175,12 @@ function buildContext(
       parti: rows(TABLE_DEFS[2]!, strings(doc.batchNumbers).map((no) => ({ no }))),
       ozellik: rows(TABLE_DEFS[3]!, strings(doc.appliedProperties).map((ad) => ({ ad }))),
     },
-    toplamlar: root("toplamlar", { top_adedi: asNumber(asObject(doc.totals).rollCount), metre: asNumber(asObject(doc.totals).qty) }),
+    toplamlar: root("toplamlar", {
+      top_adedi: asNumber(asObject(doc.totals).rollCount),
+      metre: asNumber(asObject(doc.totals).qty),
+      // Ölçülen (fiziksel) dönen metre — defter `metre`den ayrı; eski snapshot'ta yok → nil.
+      donen_metre: asNumber(asObject(doc.totals).returnedQty),
+    }),
     ayar: plainJson({ ...config, kolonlar }) as unknown as ContextObject,
     ic_acik: {},
     baski: root("baski", printRoot(extras?.baski, config.stamps.copyLabel)),
@@ -190,7 +196,8 @@ function scenarios(): Scenario<never>[] {
 
   const single = base();
   single.rolls = [roll(1)];
-  single.totals = { rollCount: 1, qty: qtySum(single.rolls as Row[]) };
+  // Çekmeli dönüş: defter 101, ölçülen 98,5.
+  single.totals = { rollCount: 1, qty: qtySum(single.rolls as Row[]), returnedQty: 98.5 };
   single.batchNumbers = [sampleSeriesCode("batchDaily", 1)];
 
   const multi = base();
@@ -237,7 +244,7 @@ function scenarios(): Scenario<never>[] {
 export const subcontractorReceiptContract: DocumentContract<ReceiptConfig, never> = {
   docType: "SUBCONTRACTOR_RECEIPT",
   hedef: "musteri",
-  contractVersion: 2, // 2: toplar[].metre + toplamlar.metre (kabul defteri metresi)
+  contractVersion: 3, // 2: toplar[].metre + toplamlar.metre (kabul defteri metresi) · 3: toplamlar.donen_metre (ölçülen)
   kokler: ROOT_FIELDS,
   tablolar: TABLE_DEFS,
   ayarSemasi: baseConfigSchema(Object.keys(RECEIPT_SECTIONS), [["rollTable", "toplar"]]),

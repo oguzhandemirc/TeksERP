@@ -60,8 +60,9 @@ export interface FasonReceiptDoc {
    *  ⚠️ OPSİYONEL: 2026-08-05 öncesi donmuş makbuzlarda YOK → satır basılmaz. */
   batchNumbers?: string[];
   rolls: FasonReceiptRoll[];
-  /** `qty`: satırların kabul metresi toplamı (yalnız `rolls[].qty` taşıyan snapshot'ta). */
-  totals: { rollCount: number; qty?: number };
+  /** `qty`: satırların kabul metresi toplamı (yalnız `rolls[].qty` taşıyan snapshot'ta).
+   *  `returnedQty`: doğan topların ÖLÇÜLEN metresi (fiziksel; defter `qty`den ayrı) — eski snapshot'ta yok. */
+  totals: { rollCount: number; qty?: number; returnedQty?: number };
 }
 
 interface RenderMeta {
@@ -111,6 +112,7 @@ export function renderFasonReceiptHtml(
 
   const rolls = doc.rolls ?? [];
   const t = doc.totals;
+  const fmtQty = (n: number | null | undefined): string => docNum(snapshot).tr(n, 2);
 
   // Alan aç/kapa toggle'ları (hepsi varsayılan AÇIK — kapanmadıkça mevcut davranış).
   const showTaxNo = sectionOn(cfg.sections, "taxNo");
@@ -146,6 +148,7 @@ export function renderFasonReceiptHtml(
         <div class="row"><span>${TERIM.terbiyeIsEmri.tekil}:</span><b>${esc(doc.workOrder.workOrderNumber)}</b></div>
         ${showBatch && batchNumbers.length ? `<div class="row"><span>Parti:</span><b>${esc(batchNumbers.join(", "))}</b></div>` : ""}
         <div class="row"><span>İşlem:</span><b>${esc(doc.stationName)}</b></div>
+        ${t.returnedQty != null ? `<div class="row"><span>Dönen Metre:</span><b>${esc(fmtQty(t.returnedQty))}</b></div>` : ""}
         ${doc.manifestNo ? `<div class="row"><span>Fason İrs.:</span><b>${esc(doc.manifestNo)}</b></div>` : ""}
       </div>`
     : "";
@@ -160,7 +163,6 @@ export function renderFasonReceiptHtml(
 
   // Metre kolonu VERİDEN: eski donmuş makbuz `qty` taşımaz → kolon doğmaz, çıktı bayt-bayt aynı.
   const hasQty = rolls.some((r) => r.qty !== undefined);
-  const fmtQty = (n: number | null | undefined): string => docNum(snapshot).tr(n, 2);
   const qtyTotal = t.qty ?? 0;
   const rollTable = sectionOn(cfg.sections, "rollTable")
     ? `<div class="tbl-cap">Kabul Edilen Toplar (${esc(t.rollCount)})</div>` +

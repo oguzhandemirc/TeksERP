@@ -329,9 +329,10 @@ async function main(): Promise<void> {
       orderBy: { version: "desc" },
       select: { snapshot: true },
     });
-    const rdoc = (docRow?.snapshot as { doc?: { rolls?: Array<{ qty?: number | null }>; totals?: { qty?: number } } } | null)?.doc;
+    const rdoc = (docRow?.snapshot as { doc?: { rolls?: Array<{ qty?: number | null }>; totals?: { qty?: number; returnedQty?: number } } } | null)?.doc;
     check("P10: makbuz top satırı kabul defteri metresini taşıyor (100)", rdoc?.rolls?.[0]?.qty === 100, JSON.stringify(rdoc?.rolls?.[0]));
     check("P10: makbuz toplamı satırların toplamı (100)", rdoc?.totals?.qty === 100, JSON.stringify(rdoc?.totals));
+    check("P10: makbuz dönen metresi ÖLÇÜLEN (88) — defter 100 ile karışmaz", rdoc?.totals?.returnedQty === 88, JSON.stringify(rdoc?.totals));
 
     // İPTAL → satır SİLİNMEZ, TERSLENİR (append-only defter).
     // İptal, doğan açık kumaşların da onaylanmasını ister (cascade sözleşmesi).
