@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -78,11 +78,15 @@ export function ProofResetDialog({
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<ProofResetOutcome[] | null>(null);
+  // Yalnız AÇILIŞTA sıfırla: başarı sonrası liste tazelenince sonuç ekranı silinip kalan cihazlar
+  // seçili halde yeniden önizlemeye düşmesin (ikinci tık istenmeden onları da sıfırlardı).
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpen.current) {
       setSelected(defaultProofResetSelection(devices));
       setResult(null);
     }
+    wasOpen.current = open;
   }, [open, devices]);
   const toggle = (id: string, on: boolean) =>
     setSelected((prev) => {
@@ -132,7 +136,7 @@ export function ProofResetDialog({
           {result ? (
             <Button onClick={onClose}>Kapat</Button>
           ) : (
-            <div className="flex gap-2 self-end">
+            <div className="flex flex-wrap justify-end gap-2 self-end">
               <Button variant="outline" onClick={onClose}>
                 Vazgeç
               </Button>
@@ -150,13 +154,14 @@ export function ProofResetDialog({
 
 /**
  * Cihazlar sayfası bandı (D5): anahtar halkası kaybı ve kanıtı doğrulanamayan cihazlar. İlk öneri
- * emaneti geri yüklemektir (cihazlar kendiliğinden düzelir); ikinci yol seçimli toplu yeniden bağlama.
+ * emaneti geri yüklemektir (PIN/kart düzelir; yalnız cihaz tuzundaki kid dönmez); ikinci yol seçimli toplu yeniden bağlama.
  */
 export function ProofLostPanel({ initiallyOpen = false }: { initiallyOpen?: boolean }) {
   const navigate = useNavigate();
   const query = useProofLost();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [expanded, setExpanded] = useState(initiallyOpen);
+  useEffect(() => { if (initiallyOpen) setExpanded(true); }, [initiallyOpen]);
   const data = query.data;
   if (!data) return null;
   const { halkaKaybi, cihazlar, bekleyenler } = data;
@@ -194,7 +199,7 @@ export function ProofLostPanel({ initiallyOpen = false }: { initiallyOpen?: bool
               <div className="min-w-0">
                 <div className="font-medium">1. Önerilen: yedekten anahtarı geri yükleyin</div>
                 <div className="text-xs text-muted-foreground">
-                  Yedek parolasıyla eski anahtar geri konunca cihazlar ve PIN'ler kendiliğinden düzelir.
+                  Yedek parolasıyla eski anahtar geri konunca PIN'ler ve kartlar kendiliğinden düzelir. Yalnız cihaz kanıtında kullanılan anahtarlar yedekten dönmez; o cihazlar yine yeniden bağlama ister.
                 </div>
               </div>
               <Button size="sm" variant="outline" onClick={() => navigate(KEY_RESTORE_PATH)}>
@@ -218,9 +223,11 @@ export function ProofLostPanel({ initiallyOpen = false }: { initiallyOpen?: bool
             )}
           </ol>
           {bekleyenler.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-              Tabletin açılmasını bekleyen {bekleyenler.length} cihaz: {bekleyenler.map((d) => d.name).join(", ")}
+            <div className="flex items-start gap-2 text-xs text-muted-foreground">
+              <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <span className="min-w-0">
+                Tabletin açılmasını bekleyen {bekleyenler.length} cihaz: {bekleyenler.map((d) => d.name).join(", ")}
+              </span>
             </div>
           )}
         </div>

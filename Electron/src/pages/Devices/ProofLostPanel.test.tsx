@@ -8,7 +8,8 @@ import type { ProofLostOverview } from "./types";
 // olarak emanet geri yüklemeyi gösterir; önizleme kayıt kayıt seçimlidir ve "yeniden bağla" YALNIZ
 // işaretlenenleri gönderir; donanım kimliği olmayan cihazın "onaya düşer" notu görünür; sonuç kayıt kayıt.
 // Sonda (2026-10-26, ölçüldü): varsayılan seçimi boşalt → 2 kırmızı · gönderimi seçim yerine tüm listeye
-// çevir → 1 kırmızı; ikisi md5 ile geri alındı, 4/4.
+// çevir → 1 kırmızı; ikisi md5 ile geri alındı, 4/4. Açılış-kenarı sıfırlamasını [open, devices]'a geri
+// çevir → tazeleme vakası 1 kırmızı.
 // =============================================================================
 
 const h = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), navigate: vi.fn() }));
@@ -76,6 +77,20 @@ describe("ProofLostPanel", () => {
     expect(h.post.mock.calls[0]![1]).toEqual({ deviceIds: [A] });
     expect(await screen.findByText("Yeniden bağlama sonucu")).toBeInTheDocument();
     expect(screen.getByText("Yeniden bağlanmaya hazır")).toBeInTheDocument();
+  });
+
+  it("başarıdan sonra liste tazelenince sonuç ekranı kalır; kalanlar yeniden önizlemeye düşmez", async () => {
+    renderWithProviders(<ProofLostPanel initiallyOpen />);
+    fireEvent.click(await screen.findByRole("button", { name: /Toplu yeniden bağla/ }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /Kalite Tableti/ }));
+    overview = { ...KAYIP, cihazlar: [KAYIP.cihazlar[1]!] };
+    const once = h.get.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Seçilen 1 cihazı yeniden bağla" }));
+    expect(await screen.findByText("Yeniden bağlama sonucu")).toBeInTheDocument();
+    await waitFor(() => expect(h.get.mock.calls.length).toBeGreaterThan(once));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByText("Yeniden bağlama sonucu")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /cihazı yeniden bağla$/ })).toBeNull();
   });
 
   it("hiç seçim yoksa düğme kapalı", async () => {

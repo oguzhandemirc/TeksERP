@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -58,7 +58,10 @@ export function DevicesPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
   // `?kanit=1` (bildirim/komut paleti): anahtar kaybı süzgeci + bant açık gelir.
-  const [statusFilter, setStatusFilter] = useState<DeviceStatusFilter>(params.get("kanit") === "1" ? "proof-lost" : "all");
+  const kanitLink = params.get("kanit") === "1";
+  const [statusFilter, setStatusFilter] = useState<DeviceStatusFilter>(kanitLink ? "proof-lost" : "all");
+  // Sekme sayfayı canlı tutar: sayfa açıkken gelen derin bağlantı da süzgeci uygulamalı.
+  useEffect(() => { if (kanitLink) setStatusFilter("proof-lost"); }, [kanitLink]);
   const [kindFilter, setKindFilter] = useState<DeviceKindFilter>("all");
 
   const query = useQuery({ queryKey: [QUERY_KEY], queryFn: deviceService.list });
@@ -146,7 +149,7 @@ export function DevicesPage() {
       />
 
       <PageBody className="space-y-4 p-6">
-        <ProofLostPanel initiallyOpen={params.get("kanit") === "1"} />
+        <ProofLostPanel initiallyOpen={kanitLink} />
         <RebindRequestsPanel devices={devices} />
         <DuplicateCandidates initiallyOpen={params.get("kopya") === "1"} />
         {query.isLoading ? (
