@@ -30,7 +30,7 @@ export default function Shipments() {
   const list = useRecordPage("sevkiyat", can(permissions, "bulut:sevkiyat:oku"));
   const all = combine([summary, list]);
   return (
-    <Screen title="Sevkiyat" module="sevkiyat" onRefresh={all.reload} refreshing={all.refreshing}>
+    <Screen module="sevkiyat" onRefresh={all.reload} refreshing={all.refreshing}>
       {can(permissions, "bulut:ozet:oku") ? (
         <>
           <View style={s.segment}>

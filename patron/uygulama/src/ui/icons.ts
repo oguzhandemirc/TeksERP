@@ -38,3 +38,26 @@ export const MODULE_ICON: Readonly<Record<ModuleKey, { readonly domain: Domain; 
 
 /** "Diğer" sekmesinin ikonu. */
 export const MORE_ICON: IconName = "ellipsis-horizontal-circle-outline";
+
+/** Boş durum simgeleri — TEK tablo (UX-4). `Empty`/`ListStates`/`RemoteList`/`SnapshotGate` simgesi ya buradan ya
+ *  alanın kendi simgesinden (`DOMAIN_ICON`, verilmezse varsayılan) gelir; çıplak ad yazılmaz (`empty-states.test`). */
+export const EMPTY_ICON = {
+  /** Arama/süzgeç sonuç vermedi. */
+  arama: "search-outline",
+  /** Fabrikadan veri henüz gelmedi (anlık özet, katalog). */
+  bekliyor: "hourglass-outline",
+  /** İzin yok: listelenecek bir şey kalmadı. */
+  yetki: "lock-closed-outline",
+  /** Kayıt bulunamadı (silinmiş ya da erişim dışı). */
+  bulunamadi: "help-circle-outline",
+  /** Bildirim yok / ayar okunamadı. */
+  bildirim: "notifications-off-outline",
+  /** Dışa aktarılacak küme yok. */
+  arsiv: "archive-outline",
+  /** Vadesi beklenen belge yok. */
+  vade: "calendar-outline",
+  /** İş emri listesi boş. */
+  isEmri: "clipboard-outline",
+  /** Hesap listesi boş. */
+  hesap: "people-outline",
+} as const satisfies Readonly<Record<string, IconName>>;

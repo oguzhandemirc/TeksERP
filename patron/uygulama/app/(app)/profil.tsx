@@ -5,6 +5,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { moduleDef, moduleTitle } from "../../src/lib/access";
+import { MODULE_ICON } from "../../src/ui/icons";
 import { ROLE_LABEL, roleOf } from "../../src/ui/RoleBadge";
 import { useSession } from "../../src/state/session";
 import { initials, GroupCaption, GroupNote } from "../../src/ui/diger/parts";
@@ -71,7 +73,7 @@ export default function Profile() {
   const hesap = facility?.hesap;
   const many = facilities.length > 1;
   return (
-    <Screen title="Profil" module="profil">
+    <Screen module="profil">
       <View style={[s.hero, { backgroundColor: t.navy, borderColor: t.scheme === "dark" ? t.onNavy.separator : t.navy }]} testID="profil-kart">
         <View style={s.heroTop}>
           <View style={[s.avatar, { backgroundColor: role === "yonetici" ? t.gold : t.onNavy.chip }]}>
@@ -124,7 +126,7 @@ export default function Profile() {
 
       <GroupCaption>Bildirimler</GroupCaption>
       <ListGroup>
-        <ListRow title="Bildirim ayarları" subtitle="Türler, sessiz saatler, eşikler" icon="notifications-outline" domain="gelenKutusu"
+        <ListRow title={moduleTitle("bildirimler")} subtitle={moduleDef("bildirimler").hint} icon={MODULE_ICON.bildirimler.icon} domain={MODULE_ICON.bildirimler.domain}
           onPress={() => router.push("/bildirimler" as never)} testID="bildirim-ayarlari" />
       </ListGroup>
 

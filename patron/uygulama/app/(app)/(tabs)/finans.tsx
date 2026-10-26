@@ -38,7 +38,7 @@ export default function Finance() {
     : factoryStamp ? `Fabrika verisi ${formatDateTime(factoryStamp)}` : undefined;
 
   return (
-    <Screen title="Finans" module="finans" back={false} onRefresh={refresh} refreshing={summary.refreshing}>
+    <Screen module="finans" back={false} onRefresh={refresh} refreshing={summary.refreshing}>
       {summaryAllowed ? (
         <View>
           {summary.loading && !summary.data ? <LoadingSkeleton variant="kpi" rows={2} /> : null}
