@@ -24,6 +24,7 @@ import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, typography } from "../../../src/ui/tokens";
+import { EMPTY_ICON } from "../../../src/ui/icons";
 
 export default function Production() {
   const { permissions } = useSession();
@@ -40,7 +41,7 @@ export default function Production() {
   const f = period(fason.data?.veri, p);
 
   return (
-    <Screen title="Üretim" module="uretim" back={false} onRefresh={all.reload} refreshing={all.refreshing}>
+    <Screen module="uretim" back={false} onRefresh={all.reload} refreshing={all.refreshing}>
       {summary ? (
         <>
           <Text style={s.caption}>Dönem</Text>
@@ -104,7 +105,7 @@ export default function Production() {
         remote={orders}
         empty={`${TERIM.terbiyeIsEmri.tekil} yok`}
         domain="uretim"
-        emptyIcon="clipboard-outline"
+        emptyIcon={EMPTY_ICON.isEmri}
         testID="is-emirleri"
         renderRow={(r) => {
           const k = obj(r.kayit);

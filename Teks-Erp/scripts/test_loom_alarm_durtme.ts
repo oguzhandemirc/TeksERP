@@ -85,4 +85,4 @@ console.log("\n§3 — motorun bağı (statik)");
 }
 
 console.log(`\nSonuç: ${pass} geçti, ${fail} kaldı`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

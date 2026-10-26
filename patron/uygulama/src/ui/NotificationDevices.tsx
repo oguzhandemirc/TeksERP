@@ -1,13 +1,15 @@
-// Bildirim ekranının alt bölümleri: Cihazlar (bu cihazı kaydet — izin isteme akışı — + kayıtlı cihazlar + deneme) ve
+// Bildirim Ayarları ekranının alt bölümleri: Cihazlar (bu cihazın izin durumu + kaydet — izin isteme akışı — + kayıtlı
+// cihazlar + deneme; ekranın EN ÜSTÜNDE ki izin akışı bulunsun) ve
 // Geçmiş (son bildirimler; dokununca yalnız uygulamanın kendi ekranı açılır — `safeRoute`).
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Linking, Platform, Pressable, Text, View } from "react-native";
 import type { Device, TestNotificationResult } from "../api/wire";
 import { formatAgo } from "../lib/format";
 import { devicePlatform, NOTIFICATION_SKIP, notificationKind } from "../lib/labels/diger";
 import { safeRoute } from "../lib/notification-form";
+import { permissionView, readPermission, type PermissionState } from "../push/permission";
 import { registerThisDevice } from "../push/register";
 import { NATIVE_PUSH_SOON, pushAvailable } from "../push/support";
 import { useSession } from "../state/session";
@@ -22,6 +24,7 @@ import { StatusBadge } from "./StatusBadge";
 import { makeStyles, useTokens } from "./theme-context";
 import { TOUCH, radius, space, typography } from "./tokens";
 import { useWrite } from "./useWrite";
+import { EMPTY_ICON } from "./icons";
 
 /** Deneme sonucu: kaç cihaza gitti, kayıtsız cihaz çıkarıldı mı. */
 export function testOutcome(r: TestNotificationResult): { tone: "off" | "warn"; text: string } {
@@ -66,12 +69,26 @@ function DeviceRow({ d, busy, onRemove }: { readonly d: Device; readonly busy: b
 }
 
 // `pushHere` yanlışsa (ilk mağaza sürümünde telefon) kayıt düğmesi yerine "yakında" notu çizilir; liste ve deneme kalır.
-export function NotificationDevices({ vapidKey, pushHere = pushAvailable(Platform.OS) }: { vapidKey: string | null; pushHere?: boolean }) {
+export function NotificationDevices({ vapidKey, pushHere = pushAvailable(Platform.OS), permission: initial = null, os = Platform.OS }: {
+  vapidKey: string | null;
+  pushHere?: boolean;
+  /** Testte izin durumu (verilirse okunmaz). */
+  permission?: PermissionState | null;
+  os?: string;
+}) {
   const { api } = useSession();
   const t = useTokens();
   const s = useStyles();
   const devices = useRemote("cihazlar", () => api.deviceList());
   const [outcome, setOutcome] = useState<{ tone: "off" | "warn" | "error"; text: string } | null>(null);
+  const [permission, setPermission] = useState<PermissionState | null>(initial);
+  const readState = useCallback(() => {
+    if (pushHere) void readPermission(os).then(setPermission).catch(() => setPermission(null));
+  }, [pushHere, os]);
+  useEffect(() => {
+    if (initial === null) readState();
+  }, [initial, readState]);
+  const view = permission ? permissionView(permission, os) : null;
   const register = useWrite(useCallback(() => registerThisDevice(api, vapidKey), [api, vapidKey]));
   // Hedef cihaz ref'te: aynı dokunuşta yazılıp okunur (state bir sonraki render'a kalır).
   const removeId = useRef<string | null>(null);
@@ -88,6 +105,7 @@ export function NotificationDevices({ vapidKey, pushHere = pushAvailable(Platfor
     if (!r) return;
     setOutcome(r.kind === "KAYITLI" ? { tone: "off", text: "Bu cihaz bildirim alacak" } : { tone: "warn", text: r.message });
     devices.reload();
+    readState();
   };
   const list = devices.data ?? [];
   return (
@@ -97,8 +115,11 @@ export function NotificationDevices({ vapidKey, pushHere = pushAvailable(Platfor
         <View style={s.here}>
           <IconChip domain="gelenKutusu" icon="phone-portrait-outline" size={40} />
           <View style={s.flex}>
-            <Text style={s.hereTitle}>Bu cihaz</Text>
-            <Text style={s.hereHint}>Bildirim izni istenir; izin verince bildirimler bu cihaza da gelir.</Text>
+            <View style={s.hereHead}>
+              <Text style={s.hereTitle}>Bu cihaz</Text>
+              {view ? <StatusBadge kind={view.kind} label={view.label} size="sm" testID="izin-durumu" /> : null}
+            </View>
+            <Text style={s.hereHint} testID="izin-aciklama">{view?.hint ?? "Bildirim izni istenir; izin verince bildirimler bu cihaza da gelir"}</Text>
           </View>
         </View>
       ) : (
@@ -109,7 +130,10 @@ export function NotificationDevices({ vapidKey, pushHere = pushAvailable(Platfor
           <Text style={s.soonText} testID="cihaz-yakinda">{NATIVE_PUSH_SOON}</Text>
         </View>
       )}
-      {pushHere ? (
+      {pushHere && view?.action === "ayarlar" && os !== "web" ? (
+        <Button label="Telefon ayarlarını aç" icon="settings-outline" onPress={() => void Linking.openSettings().catch(() => undefined)} testID="izin-ayarlar" />
+      ) : null}
+      {pushHere && view?.action !== "ayarlar" && permission !== "DESTEKLENMIYOR" ? (
         <Button label="Bu cihazda bildirimleri aç" icon="notifications-outline" busy={register.busy} disabled={register.disabled} onPress={() => void onRegister()} testID="cihaz-kaydet" />
       ) : null}
       {register.error ? <Banner tone="error" text={register.error} /> : null}
@@ -144,7 +168,7 @@ export function NotificationHistory() {
   return (
     <View>
       <SectionHeader title="Geçmiş" />
-      {list.data && items.length === 0 ? <Empty domain="genel" icon="notifications-off-outline" text="Henüz bildirim yok." /> : null}
+      {list.data && items.length === 0 ? <Empty domain="genel" icon={EMPTY_ICON.bildirim} text="Henüz bildirim yok" /> : null}
       {items.length > 0 ? (
         <ListGroup testID="bildirim-gecmisi">
           {items.map((n) => {
@@ -177,6 +201,7 @@ const useStyles = makeStyles((t) => ({
   flex: { flex: 1, minWidth: 0 },
   gap: { marginTop: space.s },
   here: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, backgroundColor: t.surface, borderRadius: radius.card, padding: space.l, marginBottom: space.s, ...t.cardShadow },
+  hereHead: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s, flexWrap: "wrap" as const },
   hereTitle: { ...typography.headline, color: t.text },
   hereHint: { ...typography.footnote, color: t.textSecondary, marginTop: 2 },
   soon: { alignItems: "center" as const, gap: space.m, backgroundColor: t.surface, borderRadius: radius.card, paddingVertical: space.xl, paddingHorizontal: space.l, marginBottom: space.m, ...t.cardShadow },

@@ -305,5 +305,5 @@ main().catch((e) => {
       "kontrolleri sayar. Paket içinde düşüp tek başına geçiyorsa sıra/yarış " +
       "kaynaklı bir çakışma arayın.",
   );
-  process.exit(1);
+  process.exitCode = 1;
 });

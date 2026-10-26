@@ -192,7 +192,7 @@ async function main(): Promise<void> {
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 async function rotaVeTopSenaryolari(
@@ -269,5 +269,5 @@ main().catch(async (e) => {
   console.error("HATA:", e);
   await temizle().catch((err) => console.error("temizlik hatası:", err));
   await prisma.$disconnect();
-  process.exit(1);
+  process.exitCode = 1;
 });

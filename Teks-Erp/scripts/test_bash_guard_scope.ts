@@ -112,4 +112,4 @@ durdurmali("§5c ⭐ metin KOMUTA dönüşüyorsa atlanmaz (`echo … | psql`)",
 durdurmali("§5d ⭐ psql heredoc'u VERİ DEĞİLDİR (gövde çalıştırılır)", `psql "$ADMIN" <<'EOF'\nDROP DATABASE tekserp_x;\nEOF`);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

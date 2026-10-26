@@ -163,4 +163,4 @@ try {
   console.error("HATA:", e);
   fail++;
 }
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

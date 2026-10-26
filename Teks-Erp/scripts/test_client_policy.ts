@@ -95,4 +95,4 @@ for (const [ad, p] of Object.entries(CLIENT_VERSION_POLICIES)) {
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail === 0 ? 0 : 1);
+process.exitCode = fail === 0 ? 0 : 1;

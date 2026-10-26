@@ -107,4 +107,4 @@ for (const f of sondasiz.slice(0, 25)) console.log(`  • ${f}`);
 if (sondasiz.length > 25) console.log(`  … ve ${sondasiz.length - 25} tane daha`);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

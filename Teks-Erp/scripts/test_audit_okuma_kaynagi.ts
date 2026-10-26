@@ -323,7 +323,7 @@ function main(): void {
   check("§7l ⭐ istemci: şablonlu uç (yedek etki) yakalanır", auditUcuCagirir("api.get(`/api/admin/backups/${n}/restore-impact`)", desenler));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

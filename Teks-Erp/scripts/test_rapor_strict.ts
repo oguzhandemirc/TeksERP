@@ -117,4 +117,4 @@ check("§4b ⭐ beyanda olmayan kırılım 400 (katalogda olsa bile kaynak süze
 check("§4c görünüm anlamlı `varyant` (üretim akışı/kalite) korunur", !red(temelUretim.coreProductionFlowQuerySchema, { varyant: "operator" }) && red(temelUretim.coreProductionFlowQuerySchema, { varyant: "musteri" }));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

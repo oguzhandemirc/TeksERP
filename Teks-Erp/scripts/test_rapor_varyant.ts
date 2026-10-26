@@ -150,10 +150,10 @@ async function main(): Promise<void> {
   check("§7c sunum beyanı uygulanan kırılımı taşır", sample.sunum.parametreler.find((x) => x.ad === "varyant")?.deger === "musteri");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main().catch((e) => {
   console.error("HATA:", e);
-  process.exit(1);
+  process.exitCode = 1;
 });

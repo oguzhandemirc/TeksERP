@@ -241,7 +241,7 @@ function main(): void {
         "Doğru tepki muaf listesine satır eklemek DEĞİL, kapıyı takmaktır.",
     );
   }
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

@@ -68,7 +68,7 @@ async function main() {
   check("preview HTML ikame + contentType", prevHtml.content === "<b>Cotton Lining 60s</b>" && prevHtml.contentType.startsWith("text/html"), prevHtml.content);
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
-main().catch((e) => { console.error("HATA:", e); process.exit(1); });
+main().catch((e) => { console.error("HATA:", e); process.exitCode = 1; });

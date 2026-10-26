@@ -247,7 +247,7 @@ async function main(): Promise<void> {
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await pool.end();
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 async function temizle(ids: { st: string; mk: string; custA: string; custB: string; custP: string; yarn: string; spec: string; lots: string[]; beams: string[]; rolls: string[]; sacks: string[]; wo: string; sub: string; dispatch: string }, foto: Array<{ key: string; value: Prisma.JsonValue }>): Promise<void> {
@@ -280,5 +280,5 @@ async function temizle(ids: { st: string; mk: string; custA: string; custB: stri
 main().catch(async (e) => {
   console.error(e);
   await pool.end();
-  process.exit(1);
+  process.exitCode = 1;
 });

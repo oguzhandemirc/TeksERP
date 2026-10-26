@@ -265,5 +265,5 @@ main()
     // Koşucu `Sonuç:` ekini okur — atlama beyanı ancak bu satırda görünür.
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===\n`);
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

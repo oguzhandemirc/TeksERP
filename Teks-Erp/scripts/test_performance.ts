@@ -229,7 +229,7 @@ async function main(): Promise<void> {
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main().catch(async (e) => {
@@ -244,5 +244,5 @@ main().catch(async (e) => {
     .deleteMany({ where: { code: { startsWith: `TEST-PERF-ITEM-` } } })
     .catch(() => {});
   await prisma.$disconnect();
-  process.exit(1);
+  process.exitCode = 1;
 });

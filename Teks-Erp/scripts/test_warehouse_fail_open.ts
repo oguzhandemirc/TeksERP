@@ -268,5 +268,5 @@ main()
     }
     await prisma.$disconnect();
     await pool.end().catch(() => {});
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

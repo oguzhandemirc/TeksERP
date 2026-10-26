@@ -236,11 +236,11 @@ async function main(): Promise<void> {
   await bolum6();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   rmSync(TEMP, { recursive: true, force: true });
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main().catch((err: Error) => {
   console.error(`❌ bekçi çöktü: ${err.stack ?? err.message}`);
   rmSync(TEMP, { recursive: true, force: true });
-  process.exit(1);
+  process.exitCode = 1;
 });

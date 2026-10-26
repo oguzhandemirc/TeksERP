@@ -9,6 +9,7 @@ import type { Remote } from "../../state/useRemote";
 import { Empty, ErrorState, LoadingSkeleton } from "../StateViews";
 import { makeStyles, useTokens } from "../theme-context";
 import { space, typography, type Domain } from "../tokens";
+import { EMPTY_ICON } from "../icons";
 
 export function SnapshotGate({ remote, domain, variant = "kpi", rows, empty, children, testID }: {
   readonly remote: Remote<Snapshot>;
@@ -22,7 +23,7 @@ export function SnapshotGate({ remote, domain, variant = "kpi", rows, empty, chi
   if (remote.data) return <View testID={testID}>{children(remote.data.veri, remote.data)}</View>;
   if (remote.loading) return <LoadingSkeleton variant={variant} rows={rows ?? (variant === "kpi" ? 2 : 3)} testID={testID ? `${testID}-yukleniyor` : undefined} />;
   if (remote.error) return <ErrorState text={remote.error} onRetry={remote.reload} testID={testID ? `${testID}-hata` : undefined} />;
-  return <Empty text={empty ?? "Fabrikadan bu özet henüz gelmedi"} domain={domain} icon="hourglass-outline" testID={testID ? `${testID}-bos` : undefined} />;
+  return <Empty text={empty ?? "Fabrikadan bu özet henüz gelmedi"} domain={domain} icon={EMPTY_ICON.bekliyor} testID={testID ? `${testID}-bos` : undefined} />;
 }
 
 /** "Fabrika verisi 14:05" — anlığın sürümü (fabrikanın veri anı), tesis diliminde; çevrimdışıysa ayrıca söyler. */

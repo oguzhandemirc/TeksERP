@@ -308,7 +308,7 @@ function main(): void {
   console.log("\nℹ️  Ölçmediği: kapılı önek hiç geçmeden başka bir sarmalayıcıyla (ör. crudService) kurulan URL · fetch/axios doğrudan çağrı.");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

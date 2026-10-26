@@ -207,7 +207,7 @@ async function main(): Promise<void> {
         "kapısını üst router'dan MİRAS ALIYORSA üst router'ın içine bağla.",
     );
   }
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 void main();
