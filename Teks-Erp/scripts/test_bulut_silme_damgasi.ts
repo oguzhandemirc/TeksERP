@@ -57,7 +57,9 @@ AuditService.log = async () => undefined;
 
 const TAG = `BLTS${Date.now().toString(36).toUpperCase()}`;
 const DAY_MS = 86_400_000;
-const MIGRATION = path.join(__dirname, "..", "prisma", "migrations", "20260929152815_patron_bulut_esitleme", "migration.sql");
+const MIGRATIONS_DIR = path.join(__dirname, "..", "prisma", "migrations");
+/** Silme tetikleyicisi kuran migration'lar: kök kurulum + sonradan eklenen kök tablolar (MAL-8 teklif/maliyet). */
+const MIGRATIONS = ["20260929152815_patron_bulut_esitleme", "20261026120000_bulut_silme_teklif"].map((d) => path.join(MIGRATIONS_DIR, d, "migration.sql"));
 const ufkuGec = (): Promise<void> => new Promise((r) => setTimeout(r, HORIZON_BASE_MARGIN_MS + 600));
 
 async function temizleEsitlemeDurumu(): Promise<void> {
@@ -88,10 +90,10 @@ const var_ = (l: Array<{ tableName: string; rowId: string; kind: string }>, t: s
 
 async function envanterBolumu(): Promise<void> {
   console.log("\n§1 — kök tablo ↔ migration ↔ DB (iki yönlü)");
-  const sql = fs.readFileSync(MIGRATION, "utf8");
+  const sql = MIGRATIONS.map((f) => fs.readFileSync(f, "utf8")).join("\n");
   const migrasyon = new Set([...sql.matchAll(/CREATE TRIGGER "(\w+)_sync_deleted" AFTER DELETE ON "(\w+)" FOR EACH ROW EXECUTE FUNCTION sync_mark_deleted\(/g)].map((m) => (m[1] === m[2] ? m[1] : `UYUMSUZ:${m[1]}/${m[2]}`)));
   const kok = new Set(SYNC_ROOT_TABLES);
-  check("§1a körlük zemini: 24 kök tablo, tekrar yok", SYNC_ROOT_TABLES.length === 24 && kok.size === 24, `${SYNC_ROOT_TABLES.length}/${kok.size}`);
+  check("§1a körlük zemini: 27 kök tablo, tekrar yok", SYNC_ROOT_TABLES.length === 27 && kok.size === 27, `${SYNC_ROOT_TABLES.length}/${kok.size}`);
   const eksik = [...kok].filter((t) => !migrasyon.has(t));
   const fazla = [...migrasyon].filter((t) => !kok.has(t));
   check("§1b ⭐ her kök tablonun migration'da silme tetikleyicisi var (ve fazlası yok)", eksik.length === 0 && fazla.length === 0,

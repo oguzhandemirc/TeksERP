@@ -230,6 +230,9 @@ export const FINANCE_SUBROW_PROJECTIONS: readonly string[] = [
   "fatura-kalemi",
   "tahsilat-odeme",
   "fiyat",
+  "teklif",
+  "teklif-kalemi",
+  "standart-maliyet",
 ];
 
 /** İzinsiz finans alanının metni (liste satırında erişilebilirlik etiketi, ayrıntıda görünür metin). */

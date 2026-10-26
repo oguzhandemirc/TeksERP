@@ -1328,7 +1328,7 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
   },
   // ── Patron bulutu eşitlemesi (20260929152815_patron_bulut_esitleme) ──────────
   // Silme tespiti koda değil DB'ye bağlı (statik tarama kaskad/dinamik silmede kör):
-  // 24 katalog kök tablosunun HER BİRİ `sync_marks`a SILINDI yazar. Kök listesi
+  // 27 katalog kök tablosunun (MAL-8: +3, `20261026120000_bulut_silme_teklif`) HER BİRİ `sync_marks`a SILINDI yazar. Kök listesi
   // `src/cloud-sync/projections.ts` ile İKİ YÖNLÜ `test_bulut_silme_damgasi` §1'de ölçülür.
   ...SYNC_ROOT_TABLES.map((table) => ({
     table,

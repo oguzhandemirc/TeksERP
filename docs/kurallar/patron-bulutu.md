@@ -28,6 +28,7 @@
 - **[ÇEKİRDEK]** Bulut `ISTEK_ZAMAN` yanıtına kendi saatini (`details.sunucuSaati`, İMZASIZ) koyar; fabrika isteği lisans kanalıyla AYNI yardımcıyla (`requestClockSkewMs`) BİR KEZ düzeltilmiş damga ve yeni nonce'la yeniden imzalar, ikinci retde durur; pay yalnız o isteğin damgasına girer. · bekçi: `test_bulut_uzlastirma (§8)`, `test_uzlastirma_kumesi (§4)` <sub>(arşiv:2026-09-29)</sub>
 - **[ÇEKİRDEK]** Buluttan istenen rapor ucu uygulamanın fabrika günü (`YYYY-MM-DD`) aralığını kabul eder; gün sınırını yalnız fabrika `constants/time` ile çözer, bulut parametreyi AYNEN iletir; taşan gün reddedilir. · bekçi: `test_bulut_projeksiyon_allowlist §10` · `patron/sunucu test_rapor_istegi §7`
 - **[ÇEKİRDEK]** Finans dışı rapor sunumunda para birimli HER alan (yan sayı · tablo kolonu ve hücreleri · para eksenli grafik · fabrikanın `paraIcerir` işaretlediği anlatı cümlesi) `bulut:fiyat:oku` ister; işareti fabrika koyar, bulut yalnız düşürür. · bekçi: `patron/sunucu test_izin_suzmesi §7` · `test_rapor_anlati §9`
+- **[ÇEKİRDEK]** `maliyet.enabled` projeksiyonlarının (`teklif`, `teklif-kalemi`, `standart-maliyet`) tutar/kur/maliyet/marj alanları YALNIZ `.finans` alt satırındadır ve `bulut:maliyet:oku` ister (fiyat izni açmaz); taslak teklif buluta gitmez, marj fabrikada `quoteMargin` ile türetilir. · bekçi: `test_bulut_teklif_projeksiyon`, `test_bulut_projeksiyon_allowlist`, patron `test_izin_suzmesi` (§8)
 
 ### Kararlar
 
@@ -198,7 +199,7 @@ Bulut sunucusu bekçileri kendi projesinden: `cd patron/sunucu && node ../../scr
 
 **Ne ölçtükleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## patron-bulutu` bölümü.**
 
-Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_ozet_mutabakat`, `test_bulut_olay_gudumlu`
+Fabrika (Teks-Erp): `test_bulut_filigran`, `test_bulut_silme_damgasi`, `test_bulut_teklif_projeksiyon`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_ozet_mutabakat`, `test_bulut_olay_gudumlu`
 
 Bulut sunucusu (patron/sunucu): `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`, `test_liste_arama`, `test_bildirim_makbuz`, `test_hesap_kilitle_fabrika`, `test_hizmet_sonu`, `test_kimlik_silme`, `test_ip_saklama`, `test_destek_rolu`, `test_eposta_tekilligi`, `test_coklu_tesis`, `test_hesap_kendini_silme`, `test_yonetici_kurtarma`, `test_vekil_guveni`, `test_tesis_db_hazirlik`, `test_tesis_db_yalitimi`, `test_tesis_goc`, `test_compose_sirlari`, `test_degisim_sayaci`, `test_tesis_saati`, `test_guvenlik_bildirimi`, `test_kimlik_ozet_yenile`, `test_tesis_rol_hizasi`
 

@@ -11,6 +11,8 @@
 //   §6 alt satırı projeksiyon diye doğrudan istemek 404; bilinmeyen projeksiyon 404; oturumsuz 401
 //   §7f–§7j (2026-10-25): para birimli TÜM alanlar düşer — tablo kolonu + hücreleri, `paraIcerir` anlatı, para eksenli
 //      grafik. NEGATİF SONDA: `tabloyuKirp` çağrısı söküldü → §7f + §7g ❌; anlatı süzgeci söküldü → §7h ❌; geri alındı → ✅.
+//   §8 maliyet & teklif (MAL-8): `teklif`/`teklif-kalemi`/`standart-maliyet` `.finans`ı `bulut:maliyet:oku` ister —
+//      Satış şablonu teklifi görür, tutar/marjı görmez; `bulut:fiyat:oku` tek başına maliyet alt satırını AÇMAZ
 //   §7 rapor sunumu (K-BULUT): para birimli yan sayı finans DIŞI raporda `bulut:fiyat:oku` ister; finans ailesi
 //      kendi izniyle açar; rapor servisi sonucu bu süzgeçten geçirir
 // Koşum: npx tsx scripts/test_izin_suzmesi.ts
@@ -80,6 +82,43 @@ function raporSunumuBolumu(): void {
     stripMoneySideFigures(tam, "bulut:sevkiyat:oku", new Set([...satis, "bulut:fiyat:oku"])) === tam && stripMoneySideFigures(tam, "bulut:cek:oku", new Set(["bulut:rapor:oku", "bulut:cek:oku"])) === tam);
   const servis = readFileSync(join(__dirname, "..", "src", "services", "report.service.ts"), "utf8").replace(/\/\/.*$/gm, "");
   kontrol("§7e ⭐ rapor servisi sonucu süzgeçten geçirir (veri: stripMoneySideFigures(...))", /veri:\s*stripMoneySideFigures\(out\.result\.data,/.test(servis));
+}
+
+function maliyetKatalogu(): void {
+  console.log("\n§8 maliyet & teklif katalogu (MAL-8)");
+  const fin = ["teklif.finans", "teklif-kalemi.finans", "standart-maliyet.finans"].map((n) => PROJECTION_CATALOG.get(n)?.permissions ?? []);
+  kontrol("§8a ⭐ maliyet `.finans` = kök izni + `bulut:maliyet:oku`, fiyat izni YOK", fin.every((x) => x.length === 2 && x.includes("bulut:teklif:oku") && x.includes("bulut:maliyet:oku")), JSON.stringify(fin));
+  kontrol("§8b Satış şablonu teklifi görür, maliyeti görmez; Muhasebe ikisini de almaz",
+    ROLE_TEMPLATES.SATIS.includes("bulut:teklif:oku") && !ROLE_TEMPLATES.SATIS.includes("bulut:maliyet:oku") && !ROLE_TEMPLATES.MUHASEBE.some((p) => p === "bulut:teklif:oku" || p === "bulut:maliyet:oku"));
+  kontrol("§8c Patron şablonu ikisini de taşır", ROLE_TEMPLATES.PATRON.includes("bulut:teklif:oku") && ROLE_TEMPLATES.PATRON.includes("bulut:maliyet:oku"));
+}
+
+async function teklifFikstur(o: Ortam, k: TestKurulumu): Promise<string> {
+  const ufuk = new Date(o.saat.simdi() - 30_000);
+  const w = { t: ufuk.toISOString(), k: "000000000002" };
+  const teklif = randomUUID();
+  const kayitlar = [
+    girdi("teklif", { yaz: [{ id: teklif, no: "TKF-1", durum: "SENT", tarih: ufuk.toISOString(), suresiDoldu: false }], yeni: w }),
+    girdi("teklif.finans", { yaz: [{ id: teklif, toplamTutar: "500.00", kur: "34", toplamMaliyetTl: "15408.00", brutMarjPct: "9.38" }], yeni: w }),
+  ];
+  const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk, kayitlar, anliklar: [] }) });
+  if (r.status !== 200 || (r.json as unknown as { ret: unknown[] }).ret.length > 0) throw new Error(`teklif fikstürü: ${r.status} ${JSON.stringify(r.json)}`);
+  return teklif;
+}
+
+async function maliyetCanli(o: Ortam, k: TestKurulumu, hesaplar: { satis: TestHesabi; patron: TestHesabi }): Promise<void> {
+  const teklif = await teklifFikstur(o, k);
+  const fiyatli = await hesapKur(o, k.tesisId, ["bulut:teklif:oku", "bulut:fiyat:oku"]);
+  const maliyetli = await hesapKur(o, k.tesisId, ["bulut:teklif:oku", "bulut:maliyet:oku"]);
+  const satir = async (h: TestHesabi) => (await api(o, "GET", `/api/veri/teklif/${teklif}`, { belirtec: h.belirtec })).json.data as { kayit?: Record<string, unknown>; finans?: Record<string, unknown> } | undefined;
+  const s = await satir(hesaplar.satis);
+  kontrol("§8d ⭐ Satış: teklif görünür (durum), tutar/marj alt satırı YOK", s?.kayit?.durum === "SENT" && !("finans" in (s ?? {})) && !("toplamTutar" in (s?.kayit ?? {})));
+  const f = await satir(fiyatli);
+  kontrol("§8e ⭐ `bulut:fiyat:oku` tek başına teklif `.finans`ını AÇMAZ", f !== undefined && !("finans" in f));
+  const m = await satir(maliyetli);
+  kontrol("§8f ⭐ `bulut:maliyet:oku` → `.finans` fabrikanın değerleriyle aynen (bulut hesap yapmaz)", m?.finans?.brutMarjPct === "9.38" && m.finans.toplamTutar === "500.00");
+  const p = await satir(hesaplar.patron);
+  kontrol("§8g Patron: tutar ve marj görünür", p?.finans?.toplamMaliyetTl === "15408.00");
 }
 
 async function fikstur(o: Ortam, k: TestKurulumu): Promise<{ siparis: string; cari: string }> {
@@ -175,6 +214,7 @@ async function dbDuzeyi(o: Ortam, k: TestKurulumu, ids: { siparis: string }): Pr
 
 async function main(): Promise<void> {
   katalogBolumu();
+  maliyetKatalogu();
   raporSunumuBolumu();
   const o = await ortamKur();
   const k = await tesisKur(o);
@@ -187,6 +227,7 @@ async function main(): Promise<void> {
     await yalnizSiparis(o, dar, ids);
     await patron(o, hepsi, ids);
     await dbDuzeyi(o, k, ids);
+    await maliyetCanli(o, k, { satis, patron: hepsi });
     console.log("\n§6 ad kapıları");
     const alt = await liste(o, hepsi, "siparis.finans");
     kontrol("§6a alt satır projeksiyon diye doğrudan istenemez → 404", alt.status === 404);

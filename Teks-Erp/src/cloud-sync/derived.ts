@@ -18,6 +18,7 @@ import {
   resolveEffectiveDue,
 } from "../services/reports/finance-aging.report";
 import { WorkOrderService, WO_LIST_CUSTOMER_LINKS } from "../services/workorder.service";
+import { COST_DERIVERS, COST_DERIVER_ROW_FIELDS } from "./derived-cost";
 
 type RawRow = Record<string, unknown> & { id: string };
 export type DerivedValues = Map<string, Record<string, unknown>>;
@@ -211,6 +212,7 @@ export const DERIVERS: Readonly<Record<string, Deriver>> = {
   "cari-hesap": cariAccountDerived,
   fatura: invoiceDerived,
   "tahsilat-odeme": paymentDerived,
+  ...COST_DERIVERS,
 };
 
 /**
@@ -223,5 +225,6 @@ export const DERIVER_ROW_FIELDS: Readonly<Record<string, readonly string[]>> = {
   sevkiyat: ["customerId"],
   fatura: ["grandTotal", "paidTotal", "dueDate", "issueDate", "cariId", "status"],
   "tahsilat-odeme": ["amount", "allocatedTotal"],
+  ...COST_DERIVER_ROW_FIELDS,
 };
 

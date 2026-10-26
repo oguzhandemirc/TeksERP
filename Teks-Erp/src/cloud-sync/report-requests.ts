@@ -13,6 +13,7 @@ import {
   readDevereEnabled,
   readDokumaEnabled,
   readFinanceEnabled,
+  readMaliyetEnabled,
   readProductionEnabled,
   readReportsClosedKeys,
 } from "../services/system-setting.service";
@@ -249,6 +250,7 @@ export function findRemoteReport(key: string): RemoteReport | undefined {
 async function moduleOpen(m: ModuleKey | undefined): Promise<boolean> {
   if (m === "finance.enabled") return readFinanceEnabled();
   if (m === "production.enabled") return readProductionEnabled();
+  if (m === "maliyet.enabled") return (await readProductionEnabled()) && (await readMaliyetEnabled());
   return true;
 }
 

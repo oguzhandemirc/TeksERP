@@ -62,6 +62,8 @@ const ID_FIELD_SQL: Readonly<Record<ListIdFilterKey, Prisma.Sql>> = {
   cariKartId: Prisma.sql`r.data->>'cariKartId'`,
   cariHesapId: Prisma.sql`r.data->>'cariHesapId'`,
   siparisId: Prisma.sql`r.data->>'siparisId'`,
+  teklifId: Prisma.sql`r.data->>'teklifId'`,
+  urunId: Prisma.sql`r.data->>'urunId'`,
 };
 
 /** Kimlik süzgeçleri: anahtar projeksiyonun beyanında değilse ya da değer UUID değilse 400 (fail-closed). */
