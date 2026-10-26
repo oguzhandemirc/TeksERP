@@ -14,6 +14,8 @@ import { BlockPalette } from "./BlockPalette";
 import { LayoutCanvas } from "./LayoutCanvas";
 import { PrintPreviewDialog } from "./PrintPreviewDialog";
 import { buildDefinitionExportSpec } from "./definition-export";
+import { useNarrowEditor } from "@/hooks/useMediaQuery";
+import { WideScreenNotice } from "@/components/layout/WideScreenNotice";
 import { LayoutWorkspace } from "./LayoutWorkspace";
 import { addBlock, baseQuery, moveBlock, orderedLayout, shiftBlock } from "./layout-model";
 import { useLayoutEditor, VERSION_CONFLICT_MESSAGE } from "./useLayoutEditor";
@@ -134,7 +136,9 @@ export function ReportLayoutPage() {
   const defaultDim = base ? (allowedDimensions(cubeOf(base.kup), base.olculer.slice(0, 1)).find((d) => d.tur === "kategori")?.kimlik ?? null) : null;
   const current = items.find((x) => x.block.id === selected) ?? null;
   const spec = () => (ed.preview.data && draft ? buildDefinitionExportSpec(ed.preview.data, draft, chartKindOf) : null);
-  const editable = Boolean(existing.data?.duzenleyebilir && existing.data.aktifSurum);
+  // Telefonda sürükle-bırak düzen salt-okunur (UX-3); kayıt/sürüm yolu açılmaz.
+  const narrow = useNarrowEditor();
+  const editable = Boolean(existing.data?.duzenleyebilir && existing.data.aktifSurum) && !narrow;
   const code = useCodeMode(draft, ed.apply, editable);
   // Analiz bölümünde sayım ölçüsü maruziyetsizse kayıt bekler (neden panelde yazılı; son söz sunucuda).
   const blocker = draft ? draft.bloklar.map((b) => analysisBlockIssue(b, catalog.data)).find((x) => x !== null) ?? null : null;
@@ -156,7 +160,8 @@ export function ReportLayoutPage() {
       />
       <PageBody className="p-4 sm:p-6">
         {blocker && editable ? <p role="alert" className="mb-3 rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200">Kaydedilemiyor: {blocker}</p> : null}
-        <LayoutAlerts loadFailed={existing.isError} readOnly={Boolean(existing.data) && !editable} conflict={ed.conflict} issues={ed.issues} previewFailed={ed.preview.isError} />
+        {narrow ? <WideScreenNotice what="Rapor düzeni" className="mx-0 mt-0 mb-3" /> : null}
+        <LayoutAlerts loadFailed={existing.isError} readOnly={Boolean(existing.data) && !editable && !narrow} conflict={ed.conflict} issues={ed.issues} previewFailed={ed.preview.isError} />
         {draft ? <CodeModeTabs mode={code.mode} lock={code.lock} onVisual={code.showVisual} onCode={code.showCode} /> : null}
         {draft && code.mode === "code" ? (
           <Suspense fallback={<p className="text-sm text-muted-foreground">Kod düzenleyicisi yükleniyor…</p>}>

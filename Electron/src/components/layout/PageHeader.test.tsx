@@ -106,3 +106,17 @@ describe("PageHeader — sayfa favorisi yıldızı", () => {
     expect(screen.queryByRole("button", { name: "Favorilere ekle" })).toBeNull();
   });
 });
+
+describe("PageHeader — dar ekranda sarma (UX-3 R3)", () => {
+  it("satır sarar, başlık sütunu taban genişliğini korur; eylemler sarılabilir", () => {
+    const router = createMemoryRouter(
+      [{ path: CHILD, element: <PageHeader title="Envanter" description="Uzun açıklama" actions={<button type="button">Yeni</button>} /> }],
+      { initialEntries: [CHILD] },
+    );
+    render(<RouterProvider router={router} />);
+    const root = screen.getByRole("heading", { name: "Envanter" }).closest("div.border-b") as HTMLElement;
+    expect(root.className).toContain("flex-wrap");
+    const actions = screen.getByRole("button", { name: "Yeni" }).parentElement as HTMLElement;
+    expect(actions.className).toContain("flex-wrap");
+  });
+});

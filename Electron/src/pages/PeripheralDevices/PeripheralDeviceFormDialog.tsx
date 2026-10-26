@@ -226,8 +226,8 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               } as const;
               const m = meta[ct];
               return (
-                <div className="grid grid-cols-3 gap-3">
-                  <FormField label={m.label} hint={m.hint} className="col-span-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <FormField label={m.label} hint={m.hint} className="sm:col-span-2">
                     <Input className="font-mono" {...form.register("address")} placeholder={m.ph} />
                   </FormField>
                   {ct === "NETWORK_TCP" && (
@@ -251,11 +251,11 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 <div className="mb-2 text-xs font-medium text-muted-foreground">
                   Okuma Protokolü (kantar/metre)
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <FormField
                     label="Okuma Modu"
                     hint="Kantar genelde Yayın · metre Sorgu"
-                    className="col-span-3"
+                    className="sm:col-span-3"
                   >
                     <select className={SELECT_CLS} {...form.register("readMode")}>
                       {Object.entries(peripheralReadModeLabels).map(([v, l]) => (
@@ -321,7 +321,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                   <FormField
                     label="Veri Deseni (regex)"
                     hint="1. grup = değer · sabit-satır için: (\d+\.\d+)B"
-                    className="col-span-2"
+                    className="sm:col-span-2"
                   >
                     <Input className="font-mono text-xs" {...form.register("identifyPattern")} placeholder="(\d+(?:\.\d+)?)" />
                   </FormField>
@@ -344,7 +344,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 Çalışma oturumu modeli: donanım YERE bağlanır (makine, o yoksa
                 makinesiz istasyon); tablete-bağlı seçenek yalnız ESKİ kayıtların
                 round-trip'i için görünür (yeni seçim sunulmaz, Faz 6'da kalkar). */}
-            <div className="grid grid-cols-3 gap-3 rounded-md border bg-muted/20 p-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 rounded-md border bg-muted/20 p-3">
               <FormField label="Sahip">
                 <select className={SELECT_CLS} {...form.register("owner")}>
                   <option value="none">— (serbest)</option>
@@ -356,7 +356,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 </select>
               </FormField>
               {owner === "machine" && (
-                <FormField label="Makine" className="col-span-2">
+                <FormField label="Makine" className="sm:col-span-2">
                   <Controller
                     control={form.control}
                     name="machineId"
@@ -377,7 +377,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 <FormField
                   label="İstasyon"
                   hint="Yalnız makinesiz istasyonlar (örn. Sevkiyat)"
-                  className="col-span-2"
+                  className="sm:col-span-2"
                 >
                   <select className={SELECT_CLS} {...form.register("stationId")}>
                     <option value="">İstasyon seç...</option>
@@ -390,7 +390,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 </FormField>
               )}
               {owner === "device" && (
-                <FormField label="Tablet" className="col-span-2">
+                <FormField label="Tablet" className="sm:col-span-2">
                   <select className={SELECT_CLS} {...form.register("deviceId")}>
                     <option value="">Tablet seç...</option>
                     {devices.map((d) => (
@@ -431,7 +431,7 @@ function SimWarnCallout({ control }: { control: Control<PeripheralFormValues> })
   const [address, simulate] = useWatch({ control, name: ["address", "simulate"] });
   if (!address?.trim() || !simulate) return null;
   return (
-    <div className="col-span-3">
+    <div className="sm:col-span-3">
       <Callout tone="warning" title="Simülasyon açık — cihaz gerçekten okunmayacak">
         Bu cihazın adresi tanımlı ama <strong>Simülasyon</strong> işaretli:
         sahada gerçek okuma yapılmaz, sahte değer üretilir. Kurulum
@@ -473,7 +473,7 @@ function RoleConflictCallout({
   if (clash.length === 0) return null;
   const names = clash.map((p) => p.name || p.code).join(", ");
   return (
-    <div className="col-span-3">
+    <div className="sm:col-span-3">
       <Callout tone="warning" title={`Bu makinede "${want}" rolü zaten tanımlı`}>
         {names} aynı makinede aynı rolü taşıyor. Mobil, kata göre okurken bu rolden
         yalnız <strong>ilk</strong> cihazı seçer → belirsiz/yanlış okuma. Rolleri
