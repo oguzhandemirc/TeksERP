@@ -1,8 +1,8 @@
 // =============================================================================
 // DOKUMA İŞİ FORMU — "Sipariş satırları" bölümü (Z2): opsiyonel bağ, satır başına tahsis metresi
 // =============================================================================
-// Simple is more: yeni ZORUNLU alan yok; bağ tek dokunuşla eklenir/kaldırılır, kumaş seçilmeden
-// düğme kilitli ("önce kumaş"). Gövde `orderLines` küme REPLACE — form dizisi bağların tamamıdır.
+// Simple is more: yeni ZORUNLU alan yok; bağ tek dokunuşla eklenir/kaldırılır. Kumaş seçilmeden de
+// açılır: seçilen kalem BOŞ kumaş/rengi ön doldurur (`orderLinePrefill`; dolu alan ezilmez). Gövde `orderLines` küme REPLACE — form dizisi bağların tamamıdır.
 // Satırın gösterim verisi (müşteri · sipariş no · açık) form değerinde DEĞİL, yerel `meta`da:
 // düzenlemede DTO'dan, eklemede seçici satırından gelir.
 // =============================================================================
@@ -16,6 +16,7 @@ import { num, type AvailableOrderLine } from "@/pages/Operations/Orders/availabl
 import type { WeavingOrderFormValues } from "./schema";
 import type { WeavingOrderLineLink } from "./types";
 import { OrderLinePickerDialog } from "./OrderLinePickerDialog";
+import { orderLinePrefill } from "./prefill";
 
 /** Satırın gösterim verisi — DTO (kayıtlı bağ) ya da seçici satırı (yeni bağ) aynı biçime iner. */
 export interface LineMeta {
@@ -47,6 +48,13 @@ export function metaFromLink(l: WeavingOrderLineLink): LineMeta {
     colorName: null,
     qtyText: l.orderLine.cancelledAt ? "satır iptal" : `${fmtN(Math.max(0, open))} ${unit} açık`,
   };
+}
+
+/** Seçilen kalemler BOŞ kumaş/rengi doldurur (tek sefer; dolu alan ezilmez). */
+function applyLinePrefill(form: UseFormReturn<WeavingOrderFormValues>, rows: AvailableOrderLine[]): void {
+  const fill = orderLinePrefill({ itemId: form.getValues("itemId") ?? "", colorId: form.getValues("colorId") ?? "" }, rows);
+  if (fill.itemId) form.setValue("itemId", fill.itemId, { shouldDirty: true, shouldValidate: true });
+  if (fill.colorId) form.setValue("colorId", fill.colorId, { shouldDirty: true });
 }
 
 interface Props {
@@ -113,17 +121,18 @@ export function WeavingOrderLinesSection({ form, initialLines, required = false 
             </tbody>
           </table>
         )}
-        <Button type="button" variant="outline" size="sm" disabled={!itemId} title={!itemId ? "Önce kumaş seçin" : undefined} onClick={() => setPickerOpen(true)} data-testid="wo-ol-ekle">
+        <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)} data-testid="wo-ol-ekle">
           <Plus className="mr-1 h-4 w-4" /> Satır ekle
         </Button>
-        {pickerOpen && itemId && (
+        {pickerOpen && (
           <OrderLinePickerDialog
             open
             onOpenChange={(o) => !o && setPickerOpen(false)}
-            itemId={itemId}
+            itemId={itemId ?? ""}
             colorId={colorId}
             excludeIds={linked}
             onAdd={(rows) => {
+              applyLinePrefill(form, rows);
               setMeta((prev) => ({ ...prev, ...Object.fromEntries(rows.map((r) => [r.lineId, metaFromAvailable(r)])) }));
               for (const r of rows) append({ orderLineId: r.lineId, allocatedM: "" });
               setPickerOpen(false);
