@@ -18,6 +18,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   LABEL_OVERRIDE_EDIT: "Etiket üzerinde elle düzenleme",
   QUALITY_CERTIFICATE: "Kalite belgesi",
   INSPECTION_REPORT: "Muayene raporu",
+  SALES_QUOTE: "Satış teklifi", // PrintedDocType (MAL-6)
   WEIGH: "Tartım",
   SESSION: "Oturum",
   PRIMARY: "Birincil",

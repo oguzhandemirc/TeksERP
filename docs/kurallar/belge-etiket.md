@@ -62,6 +62,7 @@
 - **[ÇEKİRDEK]** Çek teslim bordrosu ANLIK çıktıdır: bordro grubunu sahiplenen kaynak model yok → donmuş PrintedDocument üretilmez, belge no/sürüm yok (kâğıtta yazılı); bordro basmak çekin DURUMUNU değiştirmez. Donmuş sürüm istenirse ÖNCE ChequeBatch benzeri kaynak modeli (J kararı). <sub>(CLAUDE.md:286)</sub>
 - **[ÇEKİRDEK]** Paketleme / Çuvallar → "Çeki Listesi" kâğıdı KAYDA bağlıdır: ilk basımda `Manifest` (`sourceKind=SACK_SELECTION`) doğar ve CL numarası + basılan içerik donar; kâğıt dönen anlık görüntüden çizilir (numara render'da üretilmez). Aynı içerik (çuval kümesi + dökümü; seçim sırası ve görünüm seçenekleri hariç) → AYNI numara; farklı içerik → YENİ numara, eski liste tarihte kalır (çalışma kâğıdıdır, sürümlenmez). Numara sağ üstte küçük, aç/kapa YOK (iç kâğıt; opt-in kuralı müşteri belgesi ve donmuş belge içindir). Numarasız basılmış eski listeler için geriye dönük bir şey yapılmaz. · bekçi: `scripts/test_ceki_listesi_no.ts` (① ilk basım … ⑧ sözleşme; negatif sonda ②⑥) <sub>(arşiv:2026-09-23)</sub>
 - **[PROFİL]** [PROFİL] Fason çekisi yerleşimi panelden: placements.batchInfo (sol/sağ), sections.accountNo OPT-IN (varsayılan KAPALI — eski donmuş çekiler de artık basmaz, bilinçli), sections.fabricHeader OPT-IN, gridGroups 3/4/5 × gridRows 1-40 = sayfa başına top (varsayılan 5×10=50, kullanıcı kararı 08-06). · bekçi: `scripts/test_fason_ceki_html.ts §18` <sub>(CLAUDE.md:64)</sub>
+- **[ÇEKİRDEK]** Teklifi (`SALES_QUOTE`) SENT sonrası ilk basımda, fiyat listesini (`PRICE_LIST`) PUBLISHED'da dondur, DRAFT'ı yalnız TASLAK önizle; teklif iptali/revizyonu belgeyi geçişin tx'i içinde VOIDED yapsın, liste arşivi yapmasın; müşteri sözleşmesine ve builder `select`ine maliyet/kâr/öneri/iç not alanı koyma. · bekçi: `test_teklif_belgesi` · `test_belge_sistem_esdegeri` <sub>(arşiv 2026-10-26 "MAL-6")</sub>
 
 ### Belge şablon tasarımcısı (GrapesJS + LiquidJS; plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md`)
 
@@ -219,6 +220,7 @@ Backend: `test_belge_excel_esit`, `test_belge_sablon_excel_esit`, `test_belge_sa
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
 - 2026-10-26 · Belge şablon tasarımcısı kapanışı: kararlar D1–D9 + P-a…P-e + P-ek + R4, sapmalar, ölçümler (TZ) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-26 Belge şablon tasarımcısı kapanışı
+- 2026-10-26 · MAL-6: teklif + fiyat listesi basılı belgesi [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-26 MAL-6
 - 2026-10-25 · K4P-RAPOR: muayene raporu belgesi + sevk muayene özeti [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-25 K4P-RAPOR
 - 2026-10-24 · Belge şablon dili: LiquidJS katı [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-24 Belge şablon dili
 - 2026-10-24 · Sistem eşleniği: sevk irsaliyesi Liquid eşleniği + eşitlik bekçisi (T6) [ÇEKİRDEK] — `arsiv/2026-10.md` §2026-10-24 Sistem eşleniği

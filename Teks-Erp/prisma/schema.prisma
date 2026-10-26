@@ -7764,6 +7764,11 @@ enum PrintedDocType {
   // 2026-10-25 K4P-RAPOR (yine SONA). Müşteriye gider; kaynak Shipment, sevk
   // toplarının aktif muayeneleri ilk basımda donar (iç kolonlar opt-in).
   INSPECTION_REPORT // Muayene raporu (Shipment — 4 puan muayene özeti)
+  // 2026-10-26 MAL-6 (yine SONA; her değer KENDİ migration'ında). Müşteriye gider —
+  // maliyet/kâr/iç not sözleşmede YOK. Teklif SENT sonrası ilk basımda, fiyat listesi
+  // PUBLISHED'da donar; teklif iptal/revizyonunda belge VOIDED, liste arşivi belgeyi bozmaz.
+  SALES_QUOTE // Satış teklifi (SalesQuote — no/R<revizyon>)
+  PRICE_LIST // Fiyat listesi (PriceList — no/R<revizyon>)
 }
 
 enum PrintedDocStatus {

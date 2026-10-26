@@ -85,6 +85,9 @@ export const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   // 2026-08-15 tam stok sayımı (J2 #19) — depo belgesi ailesi (transfer/mal kabul
   // ile aynı iskelet: antet + taraf kutusu + tablo + imza).
   STOCK_COUNT: "stokSayimi",
+  // MAL-6 ticari müşteri belgeleri — maliyet/kâr/iç not sözleşmede YOK.
+  SALES_QUOTE: "satisTeklifi",
+  PRICE_LIST: "fiyatListesi",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */
