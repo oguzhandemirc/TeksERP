@@ -1331,6 +1331,7 @@ async function main() {
   const FREE_TEXT_FLAGS: Record<string, string> = {
     companyName: "serbest METİN — kapalı değer kümesi yok; panel Şirket Bilgileri kartı yazar",
     shippingSackSeqPrefix: "serbest METİN (≤8, zod regex) — panel `freeText` satırı; belgeye HTML kaçışıyla girer (2026-09-22)",
+    shippingReturnFootnote: "serbest METİN (≤300) — iade irsaliyesi dipnotu; panel `textFlags` satırı; snapshot'ta donar, HTML kaçışıyla basılır",
   };
   // ÖZEL UÇTAN yazılan salt-okunur alanlar: PATCH şemasında OLMAMALI (kurulum değeri; önizlemeli tek yazma yolu).
   const DEDICATED_ENDPOINT_FLAGS: Record<string, string> = {

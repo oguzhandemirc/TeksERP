@@ -34,7 +34,7 @@ import { renderReturnDispatchHtml, type ReturnDispatchDoc } from "./document-ren
 import { AppError } from "../utils/app-error";
 import { nextSeriesNo } from "./number-series.service";
 import { AuditService } from "./audit.service";
-import { readReturnGradingEnabled } from "./system-setting.service";
+import { readReturnGradingEnabled, readShippingReturnFootnote } from "./system-setting.service";
 import { ApiResponse } from "../types/api.types";
 import type { Request } from "express";
 import {
@@ -1334,6 +1334,10 @@ async function buildReturnDispatchDoc(
     note: rr.note ?? null,
     receivedBy: rr.receivedBy?.fullName ?? null,
   };
+  // Dipnot ilk basımda DONAR (ayar sonradan değişse de eski belge aynı basılır); boşsa alan
+  // hiç doğmaz → dipnotsuz kurulumun çıktısı bugünküyle bayt-bayt aynı.
+  const footnote = await readShippingReturnFootnote(db);
+  if (footnote) doc.footnote = footnote;
 
   return {
     documentNo,
