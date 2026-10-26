@@ -15,16 +15,20 @@ export function placeholdersOf(template: string): string[] {
   return [...template.matchAll(PLACEHOLDER)].map((m) => m[1]!);
 }
 
-function readValue(payload: Record<string, unknown>, name: string): string | null {
+// Metinde sayı Türkçe yazılır ("0,8"); yolda ham kalır (kimlik/sorgu değeri). Gruplama yok:
+// tezgah/levent numarası sayı gelirse "1.234" olmasın.
+const TR_NUMBER = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2, useGrouping: false });
+
+function readValue(payload: Record<string, unknown>, name: string, forText = false): string | null {
   const v = payload[name];
   if (typeof v === "string") return v.trim() === "" ? null : v;
-  if (typeof v === "number") return Number.isFinite(v) ? String(v) : null;
+  if (typeof v === "number") return Number.isFinite(v) ? (forText ? TR_NUMBER.format(v) : String(v)) : null;
   if (typeof v === "boolean") return v ? "evet" : "hayır";
   return null;
 }
 
 function fillText(template: string, payload: Record<string, unknown>): string {
-  return template.replace(PLACEHOLDER, (_, name: string) => readValue(payload, name) ?? MISSING);
+  return template.replace(PLACEHOLDER, (_, name: string) => readValue(payload, name, true) ?? MISSING);
 }
 
 /** Değer URL-kodlanır; eksik alan → derin bağlantı ekranın köküne düşer (kırık adres yerine liste). */
