@@ -256,7 +256,7 @@ function main(): void {
     K("await prisma.reportSnapshot.deleteMany({ where: { kind: { in: [\"ZAMANLANMIS\", \"KULLANICI\"] }, expiresAt: { lt: n } } });")[0] === null);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

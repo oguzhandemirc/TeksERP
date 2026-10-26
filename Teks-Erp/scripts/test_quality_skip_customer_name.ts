@@ -210,5 +210,5 @@ main()
     await cleanup().catch((e) => console.error("temizlik hatası:", e));
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===\n`);
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

@@ -472,5 +472,5 @@ run()
     // pool.end(): lib/prisma idleTimeoutMillis=600_000 ile idle handle tutar →
     // $disconnect tek başına süreci çıkarmaz.
     await pool.end().catch(() => {});
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

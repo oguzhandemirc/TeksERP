@@ -79,7 +79,7 @@ function main(): void {
   const sonda = beyanDenetimi([{ tablo: "invoices", dosya: "src/x.ts", satir: 1, setKolonlari: ["paidTotal"], updatedAtYazar: false, optInDokunan: ["paidTotal"], dinamik: false }], HAM_UPDATE_BEYANI);
   check("§K1 ⭐ sentetik beyansız UPDATE denetçiyi kırmızı yapar", sonda.beyansiz.length === 1);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

@@ -553,7 +553,7 @@ function main(): void {
   for (const [k, why] of Object.entries(MIGRASYON_DISI)) console.log(`     · ${k} — ${why}`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 /** camelCase alan → `this.set(SETTING_KEYS.X, input.<alan>` zincirinden DB anahtarı. */

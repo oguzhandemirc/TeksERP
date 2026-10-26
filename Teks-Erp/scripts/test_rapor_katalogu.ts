@@ -414,7 +414,7 @@ function main(): void {
     ayar.includes('key: "reportsV2Enabled"') ? (/defaultOn: false/.test(satir) ? "defaultOn: false" : "defaultOn KAPALI DEĞİL") : "satır yok");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

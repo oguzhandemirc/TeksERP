@@ -169,7 +169,7 @@ function main(): void {
   kural("§9c eşlemede katalog dışı fabrika türü yok", Object.keys(harita).filter((k) => !(NOTIFICATION_KINDS as string[]).includes(k)), "hepsi");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

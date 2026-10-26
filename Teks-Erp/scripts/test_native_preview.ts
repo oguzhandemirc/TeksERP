@@ -47,4 +47,4 @@ check("geçersiz ZPL (PW/LL yok) → null", renderNativePreviewSvg(PrinterLangua
 check("RASTER_HTML → null (görsel motoru yok)", renderNativePreviewSvg(PrinterLanguage.RASTER_HTML, "<div/>", wd) === null);
 
 console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

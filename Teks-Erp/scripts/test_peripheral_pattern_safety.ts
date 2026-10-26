@@ -45,4 +45,4 @@ check("validateRefs identifyPattern'i unsafePatternReason'dan geçirir", /unsafe
 check("create ve update validateRefs çağırır", (svc.match(/await this\.validateRefs\(data/g) ?? []).length >= 2);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail ? 1 : 0);
+process.exitCode = fail ? 1 : 0;

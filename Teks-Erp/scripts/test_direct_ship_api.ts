@@ -204,4 +204,4 @@ async function cleanup(): Promise<void> {
   }
 }
 
-main().catch((e) => { console.error("HATA:", e); fail++; }).finally(async () => { await prisma.$disconnect(); process.exit(fail > 0 ? 1 : 0); });
+main().catch((e) => { console.error("HATA:", e); fail++; }).finally(async () => { await prisma.$disconnect(); process.exitCode ||= fail > 0 ? 1 : 0; });

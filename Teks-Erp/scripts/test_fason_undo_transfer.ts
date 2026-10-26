@@ -281,4 +281,4 @@ async function cleanup(): Promise<void> {
   } catch (e) { console.error("cleanup hata:", e instanceof Error ? e.message : e); }
 }
 
-main().catch((e) => { console.error("HATA:", e); fail++; }).finally(async () => { await cleanup(); await prisma.$disconnect(); process.exit(fail > 0 ? 1 : 0); });
+main().catch((e) => { console.error("HATA:", e); fail++; }).finally(async () => { await cleanup(); await prisma.$disconnect(); process.exitCode ||= fail > 0 ? 1 : 0; });

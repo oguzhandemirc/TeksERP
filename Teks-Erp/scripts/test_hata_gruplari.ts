@@ -168,5 +168,5 @@ dbRoundTrip()
   .finally(() => {
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     // Route modülü zamanlayıcı/bağlantı açık bırakır; çıkış açıkça verilir.
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

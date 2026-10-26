@@ -145,10 +145,10 @@ async function main(): Promise<void> {
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   // Önizleme hattı Prisma havuzunu açık tutar; çıkış açıkça verilmezse süreç asılı kalır.
-  process.exit(fail ? 1 : 0);
+  process.exitCode = fail ? 1 : 0;
 }
 
 main().catch((e) => {
   console.error(e);
-  process.exit(1);
+  process.exitCode = 1;
 });

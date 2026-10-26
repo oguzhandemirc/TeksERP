@@ -93,7 +93,7 @@ function main(): void {
   check("§2 ⭐ `expiresOn` karşılaştırması yalnız helper'da", leaks.length === 0, leaks.join(" · ") || "yok");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

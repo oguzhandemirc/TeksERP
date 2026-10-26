@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     await prisma.customer.delete({ where: { id: customer.id } });
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode = fail > 0 ? 1 : 0;
   }
 }
-main().catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1); });
+main().catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exitCode = 1; });

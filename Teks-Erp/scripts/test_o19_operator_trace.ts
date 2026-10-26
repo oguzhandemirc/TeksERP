@@ -120,7 +120,7 @@ async function main() {
     await prisma.customer.deleteMany({ where: { id: { in: custIds } } });
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode = fail > 0 ? 1 : 0;
   }
 }
 

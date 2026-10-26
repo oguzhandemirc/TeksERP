@@ -84,5 +84,5 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
   // Koşucunun tanıdığı özet formatı (run-all-tests.ts) — İngilizce biçim hiçbir
   // regex'e uymaz ve kontrol sayısını gizler.
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 })();

@@ -334,7 +334,7 @@ async function main(): Promise<void> {
     + "statik kolu §5a ölçüyor", 1);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-  process.exit(fail === 0 ? 0 : 1);
+  process.exitCode = fail === 0 ? 0 : 1;
 }
 
 void main().finally(() => prisma.$disconnect());

@@ -470,5 +470,5 @@ main()
     console.log(`\n${"=".repeat(60)}`);
     console.log(`  SONUÇ: ${pass} geçti, ${fail} kaldı`);
     console.log("=".repeat(60));
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });
