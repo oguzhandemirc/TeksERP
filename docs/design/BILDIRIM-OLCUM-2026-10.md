@@ -3,7 +3,7 @@
 > Kapsam: bildirim gelen kutusu (`bildirim.gelenKutusuEnabled`) uçtan uca — dağıtıcı, koşul tarayıcısı, SSE zil, web panel, bayrak aç/kapa.
 > Ortam: test DB `tekserp_n6_test` (sentetik: 100 kullanıcı + 2000 sipariş / 600 iş emri / 300 sevkiyat). Fabrika yedeği KULLANILMADI.
 > Betikler ve ham JSON'lar scratchpad'dedir (`~/.tekserp/bildirim-v2-1024/n6-olcum/`: `faz-a.ts`, `faz-b.ts`, `duman.ts`, `ekran.mjs`), REPOYA GİRMEZ (test parolası/TOTP dosyası yanlarında).
-> Plan: `docs/design/BILDIRIM-SISTEMI-PLAN.md`.
+> Plan: `docs/design/BILDIRIM-SISTEMI-PLAN.md`; açma adımları: `docs/ops/BILDIRIM-ACMA-RUNBOOK.md`.
 
 ## 1. Ölçüm tablosu
 
