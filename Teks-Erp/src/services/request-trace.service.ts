@@ -247,12 +247,18 @@ export async function getTracesByIds(ids: readonly string[]): Promise<RequestTra
   return prisma.requestTrace.findMany({ where: { id: { in: [...ids] } }, select: REQUEST_TRACE_SELECT });
 }
 
-/** İşlem görünümü (B2): reddedilen istekler (≥400) — audit satırı olmadığı için yalnız burada görünür. */
+/**
+ * İşlem görünümü (B2): reddedilen istekler (≥400) — audit satırı olmadığı için yalnız burada görünür.
+ * `auditliDahil` (B4 "Reddedilenler" süzgeci): audit bırakıp yine de reddedilen istek de gelir;
+ * süzme burada, SUNUCUDA — kısmi indeks `(createdAt) WHERE status >= 400`.
+ */
 export async function listRejectedTraces(
   f: { userId?: string; from?: Date; to?: Date; before?: { at: Date; id: string } },
   limit: number,
+  opts: { auditliDahil?: boolean } = {},
 ): Promise<RequestTraceDto[]> {
-  const and: Prisma.RequestTraceWhereInput[] = [{ status: { gte: 400 } }, { auditCount: 0 }];
+  const and: Prisma.RequestTraceWhereInput[] = [{ status: { gte: 400 } }];
+  if (!opts.auditliDahil) and.push({ auditCount: 0 });
   if (f.userId) and.push({ userId: f.userId });
   if (f.from) and.push({ createdAt: { gte: f.from } });
   if (f.to) and.push({ createdAt: { lte: f.to } });

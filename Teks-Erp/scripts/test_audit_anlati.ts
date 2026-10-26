@@ -9,13 +9,20 @@
 //   §5 kapsama cırcırı (kodda yazılan tablo:olay/işlem çifti ↔ şablon; artış sert, çürüme kolu)
 //   §6 performans (1.000 satır) · §7 Electron sözlük aynası bayt-eşit
 //   §8 DB: q çözümü (SP/CV/CL/barkod) + kardeşler · işlem gruplaması eski/yeni dönem aynı ·
-//      409 trace "çalıştı — reddedildi" · findIslem uç/süre/cihaz/kayıtlar
+//      409 trace "çalıştı — reddedildi" · findIslem uç/süre/cihaz/kayıtlar ·
+//      §8l "Reddedilenler" süzgeci (reddedilen=1) yalnız status ≥ 400 döndürür (SUNUCUDA)
+//   §9 kapsama-uç cırcırı (B4): route envanteri mutasyon uçları ↔ route-eylem-katalogu anahtarları;
+//      eksik artışı sert, çürüme kolu, katalogda olup route'ta olmayan (ölü) anahtar sert
 // NEGATİF SONDA (2026-10-25, izole ağaç, md5 ile geri yüklendi; tam koşum 42/0):
 //   P1 anlatıcıdan numara çözümü kaldırıldı (hep kısa kimlik) → 11 ❌ (§1 ×7, §2, §3, §8a, §8f)
 //   P2 sır yüklemi devre dışı → 2 ❌ (§4)
 //   P3 cırcır artış: src'ye şablonsuz `SONDA_TABLO:UPDATE` audit çağrısı → 1 ❌ (§5 155 > 154)
 //   P4 cırcır çürüme: iki şablonsuz çifte şablon → 1 ❌ (§5 153 < 154; commit kapısında ⏭)
 //   P5 (2026-10-25) canlı referans kodları ERROR_CODE_REASONS'tan çıkarıldı → 2 ❌ (§1 ⭐ 409 …LIVE_REFERENCES)
+// B4 (2026-10-26, izole ağaç, md5 geri; tam koşum 52/0):
+//   P6 katalogdan "DELETE /api/orders/:id" silindi → 1 ❌ (§9 artış 618 > 617)
+//   P7 eksik "POST /api/auth/logout" kataloğa eklendi → 1 ❌ (§9 çürüme 616 < 617; commit kapısında ⏭)
+//   P8 kataloğa route'suz anahtar → 1 ❌ (§9 ölü anahtar) · P9 servis reddedilen dalı kaldırıldı → 1 ❌ (§8l)
 // =============================================================================
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -40,6 +47,8 @@ const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /** Kodda şablonsuz kalan (tablo, olay|işlem) çifti sayısı — yalnız DÜŞER (çürüme kolu). */
 const ANLATI_KAPSAMA_TABANI = 154;
+/** Mutasyon ucu olup ROUTE_EYLEM_KATALOGU'nda cümlesi olmayan uç sayısı (B4, 2026-10-26) — yalnız DÜŞER. */
+const UC_KATALOG_TABANI = 617;
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const AHMET = { fullName: "Ahmet Yılmaz", username: "ahmet" };
@@ -184,6 +193,33 @@ function kapsama(): void {
   check("§5 sonda: sabit tablo adı + olay + düz işlem okunur", sonda.get("ROLL:SONDA_OLAY") === 1 && sonda.get("ORDER:CREATE") === 1, [...sonda.keys()].join(","));
 }
 
+// ── §9 kapsama-uç: uç → eylem kataloğu ────────────────────────────────────────
+// Envanter TEK KAYNAK `scripts/lib/rota-envanteri` (kopya yürüyücü yok); anahtar trace'in
+// `resolveTraceRouteKey`i gibi kurulur: "/" route'u sondaki eğik çizgiyi taşımaz.
+async function kapsamaUc(): Promise<void> {
+  console.log("\n=== §9 Kapsama-uç cırcırı (uç → eylem kataloğu) ===");
+  const { default: app } = await import("../src/app");
+  const { rotaEnvanteri } = await import("./lib/rota-envanteri");
+  const { normalizeKeyPath } = await import("../src/middlewares/latency.middleware");
+  const { isRequestTraceExcluded } = await import("../src/constants/request-trace-haric");
+  const { ROUTE_EYLEM_KATALOGU, ucAnahtari } = await import("../src/constants/route-eylem-katalogu");
+  const { routes, cozulemeyen } = rotaEnvanteri(app);
+  const MUTASYON = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+  const uclar = new Set<string>();
+  for (const r of routes) {
+    const key = normalizeKeyPath(r.path.replace(/\/+$/, "")) || "/";
+    for (const m of r.methods) if (MUTASYON.has(m) && !isRequestTraceExcluded(m, key)) uclar.add(ucAnahtari(m, key));
+  }
+  check("§9 körlük zemini: envanter tam (çözülemeyen mount 0, ≥ 400 mutasyon ucu)", cozulemeyen === 0 && uclar.size >= 400, `${uclar.size} uç · çözülemeyen ${cozulemeyen}`);
+  const katalog = Object.keys(ROUTE_EYLEM_KATALOGU);
+  const olu = katalog.filter((k) => !uclar.has(k));
+  check("§9 ⭐ katalogda ölü anahtar yok (her anahtar gerçek bir mutasyon ucu)", olu.length === 0, olu.join(", ") || `${katalog.length} anahtar`);
+  const eksik = [...uclar].filter((k) => !(k in ROUTE_EYLEM_KATALOGU)).length;
+  console.log(`   kapsama: ${uclar.size - eksik}/${uclar.size} uç cümleli · eksik ${eksik} (kök kaydın anlatısına düşer)`);
+  check("§9 ⭐ ARTIŞ yok — eksik uç tabanı aşmadı (yeni uç için route-eylem-katalogu'na satır ekle)", eksik <= UC_KATALOG_TABANI, `gerçek ${eksik} · taban ${UC_KATALOG_TABANI}`);
+  curumeKolu(check, ATLAMA.atla, "§9 taban ÇÜRÜMEDİ (kataloğa eklenen uç tabandan düştü)", eksik, UC_KATALOG_TABANI);
+}
+
 // ── §6 performans ─────────────────────────────────────────────────────────────
 function performans(): void {
   console.log("\n=== §6 Performans ===");
@@ -213,6 +249,7 @@ async function main(): Promise<void> {
   yedek();
   sir();
   kapsama();
+  await kapsamaUc();
   performans();
   ayna();
   await dbBolumu();
@@ -315,6 +352,22 @@ async function dbBolumu(): Promise<void> {
     const ayrRed = await SystemLogService.findIslem(red);
     check("§8j findIslem: audit'siz reddedilen istek de açılır", ayrRed.success && ayrRed.data!.kayitlar.length === 0 && ayrRed.data!.anlati.metin.includes("reddedildi"));
     check("§8j geçersiz kimlik 404", !(await SystemLogService.findIslem("islem")).success);
+
+    // "Reddedilenler" süzgeci (B4): 403 (GET) + 409 + audit'li 422 → yalnız onlar; başarılı grup yok.
+    const r403 = randomUUID();
+    const r422 = randomUUID();
+    recordTrace({ ...sablon, id: r403, userId: user.id, method: "GET", routeKey: "/api/admin/system-logs", status: 403, durationMs: 3, errorCode: "FORBIDDEN", audit: { count: 0 } });
+    recordTrace({ ...sablon, id: r422, userId: user.id, method: "PATCH", routeKey: "/api/orders/:id", status: 422, durationMs: 5, errorCode: "VALIDATION_ERROR", audit: { count: 1 } });
+    olusan.traceIds.push(r403, r422);
+    await flushRequestTraces();
+    const sz = await SystemLogService.listIslemler({ userId: user.id, reddedilen: "1" });
+    const szIds = sz.data.map((x) => x.id).sort().join(",");
+    check("§8l ⭐ reddedilen=1 yalnız status ≥ 400 grupları döndürür (403 + 409 + audit'li 422; başarılı yok)", szIds === [r403, red, r422].sort().join(",") && sz.data.every((x) => x.reddedildi && (x.iz?.status ?? 0) >= 400), szIds);
+    check("§8l yanıt `reddedilenSuzgeci: true` taşır (panel çip kapısı); düz işlem yanıtı da", sz.reddedilenSuzgeci === true && yeni.reddedilenSuzgeci === true);
+    const sz1 = await SystemLogService.listIslemler({ userId: user.id, reddedilen: "1", limit: 2 });
+    const sz2 = sz1.pagination.nextCursor ? await SystemLogService.listIslemler({ userId: user.id, reddedilen: "1", limit: 2, cursor: sz1.pagination.nextCursor }) : null;
+    check("§8l imleç: 2 + 1, tekrar/eksik yok", sz1.data.length === 2 && sz2?.data.length === 1 && new Set([...sz1.data, ...sz2.data].map((x) => x.id)).size === 3, `${sz1.data.length}+${sz2?.data.length}`);
+    check("§8l tablo süzgeciyle reddedilen yok → boş", (await SystemLogService.listIslemler({ userId: user.id, reddedilen: "1", tableName: "ORDER" })).data.length === 0);
 
     const liste = await SystemLogService.list({ userId: user.id, category: "DOMAIN" });
     check("§8k ⭐ satır görünümü: her satırda EK alan anlati (eski alanlar yerinde)", liste.data.length === 3 && liste.data.every((r) => typeof r.anlati?.metin === "string" && "tableName" in r && "recordId" in r && !UUID_RE.test(r.anlati.metin)), liste.data.map((r) => r.anlati.metin).join(" | "));

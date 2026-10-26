@@ -47,3 +47,9 @@ export function signalLoomAlarm(tier: Tier): void {
   vibrate(tier);
   play(tier);
 }
+
+/** Bildirim (ALARM değil) tonu: tek titreşim + 1. kademe sesi. Karar (`sesli`) sunucudan gelir. */
+export function signalNotification(): void {
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+  play(1);
+}

@@ -50,8 +50,10 @@ export const AYAK_IZI_OKUYUCULARI: readonly AyakIziBeyani[] = [
   { yer: "src/services/system-log.service.ts#SystemLogService.list", adet: 2, sinif: "DENETIM_EKRANI",
     gerekce: "Sistem › Etkinlik sayfası (sayaçsız akış, okunmamış sayısı yok): satırı olduğu gibi gösterir; ikinci okuma B2 anlatısı için sayfanın diff + olay işareti (yalnız görüntü)" },
   // İzlenebilirlik B2 (K-B2 ONAYLI, 2026-10-24): anlatı/işlem görünümü — yalnız görüntü; sayı/karar türetilmez.
-  { yer: "src/services/system-log.service.ts#SystemLogService.listIslemler", adet: 3, sinif: "DENETIM_EKRANI",
+  { yer: "src/services/system-log.service.ts#SystemLogService.listIslemler", adet: 2, sinif: "DENETIM_EKRANI",
     gerekce: "Etkinlik › İşlemler: aynı istekteki satırları tek iş eylemi olarak gösterir — yalnız görüntü; sayı/karar türetilmez" },
+  { yer: "src/services/system-log.service.ts#SystemLogService.islemSatirlari", adet: 1, sinif: "DENETIM_EKRANI",
+    gerekce: "İşlemler + Reddedilenler süzgeci (B4): sayfadaki grupların satırları — yalnız görüntü; süzme trace status'tan, karar türetilmez" },
   { yer: "src/services/system-log.service.ts#SystemLogService.findIslem", adet: 1, sinif: "DENETIM_EKRANI",
     gerekce: "tek işlemin ayrıntısı (uç, süre, cihaz adı, etkilenen kayıtlar) — yalnız görüntü; sayı/karar türetilmez" },
   { yer: "src/services/system-log.service.ts#SystemLogService.listByRecordQuery", adet: 2, sinif: "KAYIT_GECMISI",
