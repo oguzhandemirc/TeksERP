@@ -14,12 +14,13 @@ import { inspectionCube } from "./kupler/muayene.kup";
 import { stopCube } from "./kupler/durus.kup";
 import { loomShiftCube } from "./kupler/dokuma-vardiya.kup";
 import { stockCube } from "./kupler/stok.kup";
+import { yarnNeedCube } from "./kupler/iplik.kup";
 import { subcontractCube } from "./kupler/fason.kup";
 import { financeCube } from "./kupler/finans.kup";
 import { FILTER_OPERATORS, type SemanticCube } from "./tipler";
 
 export const SEMANTIC_CUBES: readonly SemanticCube[] = [
-  shipmentCube, orderCube, productionCube, stationCube, defectCube, inspectionCube, stopCube, loomShiftCube, stockCube, subcontractCube, financeCube,
+  shipmentCube, orderCube, productionCube, stationCube, defectCube, inspectionCube, stopCube, loomShiftCube, stockCube, subcontractCube, financeCube, yarnNeedCube,
 ];
 
 export function measureDictionaryEntry(id: string) {
