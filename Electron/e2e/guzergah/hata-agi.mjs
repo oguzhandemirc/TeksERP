@@ -10,6 +10,7 @@
 // Kullanım:
 //   const ag = await hataAgiKur({ app, page, cikti, backendLog, apiUrl });
 //   ag.adim("A1 · Cari aç"); ag.beklenen({ status: 400, url: /\/preview$/ });
+//   Açılış gürültüsü gibi bilinen toast/konsol izi: `{ toast: /desen/ }` · `{ konsol: /desen/ }`.
 //   ...
 //   const ozet = ag.rapor(); // hata-agi.json + hata-agi.md yazar, özet döner
 // =============================================================================
@@ -46,7 +47,7 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
   // ── 1 · TOAST ──────────────────────────────────────────────────────────────
   await page.exposeFunction("__hataAgiToast", async (t) => {
     const gorsel = await gor("toast");
-    kayitlar.toast.push({ adim: D.simdiki, tur: t.tur, metin: t.metin, zaman: new Date().toISOString(), gorsel });
+    kayitlar.toast.push({ adim: D.simdiki, tur: t.tur, metin: t.metin, beklenen: D.beklenenler.some((b) => b.toast?.test(t.metin)), zaman: new Date().toISOString(), gorsel });
   });
   const toastIzle = () => {
     if (window.__hataAgiKuruldu) return;
@@ -83,7 +84,7 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
       // Ayar şifresi PROTOKOLÜ: ilk istek başlıksız gider, 403 SETTINGS_PASSWORD_REQUIRED döner, diyalog açılır —
       // tasarım gereği; ayrı sınıfta sayılır, kırmızı değil (hatalı şifre `_INVALID` kırmızı kalır).
       satir.protokol = status === 403 && /SETTINGS_PASSWORD_REQUIRED/.test(satir.mesaj ?? "");
-      satir.beklenen = satir.protokol || D.beklenenler.some((b) => !b.konsol && (b.status === undefined || b.status === status) && (!b.url || b.url.test(satir.url)));
+      satir.beklenen = satir.protokol || D.beklenenler.some((b) => !b.konsol && !b.toast && (b.status === undefined || b.status === status) && (!b.url || b.url.test(satir.url)));
       satir.gorsel = await gor(`ag-${status}`);
       kayitlar.ag.push(satir);
     }
@@ -137,7 +138,7 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
       if (/^\s+at\s/.test(satir)) { const son = kayitlar.backend[kayitlar.backend.length - 1]; if (son) { son.yigin = `${son.yigin ?? ""}${satir.trim()}\n`.slice(0, 2000); continue; } }
       if (!satir.trim() || !BACKEND_HATA.test(satir)) continue;
       const m = satir.match(/^(GET|POST|PUT|PATCH|DELETE)\s+(\S+)\s+(\d{3})/);
-      const beklenen = m ? D.beklenenler.some((b) => !b.konsol && (b.status === undefined || b.status === Number(m[3])) && (!b.url || b.url.test(m[2].split("?")[0]) || b.url.test(m[2]))) : false;
+      const beklenen = m ? D.beklenenler.some((b) => !b.konsol && !b.toast && (b.status === undefined || b.status === Number(m[3])) && (!b.url || b.url.test(m[2].split("?")[0]) || b.url.test(m[2]))) : false;
       kayitlar.backend.push({ adim: D.simdiki, metin: satir.slice(0, 500), beklenen, http: m ? { yontem: m[1], url: m[2], status: Number(m[3]) } : null, zaman: new Date().toISOString() });
     }
   };
@@ -171,7 +172,7 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
       return [
         ...kayitlar.ag.filter((x) => x.adim === ad && !x.beklenen).map((x) => `ağ ${x.status} ${x.yontem} ${x.url} — ${x.mesaj ?? ""}`),
         ...kayitlar.konsol.filter((x) => x.adim === ad && !x.agYansimasi && !x.beklenen && (x.tur === "error" || x.tur === "pageerror")).map((x) => `konsol ${x.tur}: ${x.metin.slice(0, 160)}`),
-        ...kayitlar.toast.filter((x) => x.adim === ad && x.tur === "error").map((x) => `toast: ${x.metin.slice(0, 160)}`),
+        ...kayitlar.toast.filter((x) => x.adim === ad && x.tur === "error" && !x.beklenen).map((x) => `toast: ${x.metin.slice(0, 160)}`),
         ...kayitlar.backend.filter((x) => x.adim === ad && backendSinifi(x) === "kirmizi").map((x) => `backend: ${x.metin.slice(0, 160)}`),
         ...kayitlar.main.filter((x) => x.adim === ad).map((x) => `main: ${x.metin.slice(0, 160)}`),
       ];
@@ -182,7 +183,7 @@ export async function hataAgiKur({ app, page, cikti, backendLog, apiUrl, durum =
       const kirmizi = {
         ag: kayitlar.ag.filter((x) => !x.beklenen),
         // Hata toast'ı, adımında yalnız BEYANLI ağ hatası varsa beklenen sayılır (kasıtlı denemenin yansıması).
-        toastHata: kayitlar.toast.filter((x) => x.tur === "error" && !(kayitlar.ag.some((a) => a.adim === x.adim && a.beklenen) && !kayitlar.ag.some((a) => a.adim === x.adim && !a.beklenen))),
+        toastHata: kayitlar.toast.filter((x) => x.tur === "error" && !x.beklenen && !(kayitlar.ag.some((a) => a.adim === x.adim && a.beklenen) && !kayitlar.ag.some((a) => a.adim === x.adim && !a.beklenen))),
         konsol: kayitlar.konsol.filter((x) => !x.agYansimasi && !x.beklenen && (x.tur === "error" || x.tur === "pageerror")),
         main: kayitlar.main,
         backend: kayitlar.backend.filter((x) => backendSinifi(x) === "kirmizi"),

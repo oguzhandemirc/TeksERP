@@ -157,7 +157,7 @@ export function EntityPickerModal<T extends { id: string }>({
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex h-[600px] max-h-[85vh] max-w-md flex-col">
+        <DialogContent className="flex h-[37.5rem] max-h-[85vh] max-w-md flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               {Icon && <Icon className={cn("h-4 w-4", iconClassName ?? "text-primary")} />}

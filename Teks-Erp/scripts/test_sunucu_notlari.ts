@@ -21,6 +21,9 @@
 //   B1 interceptor satırı silindi → §1 ❌ · B2 App'e MutationCache basımı geri kondu → §1 ❌ ·
 //   B3 yeni bir queryFn'e yazım çağrısı eklendi → §5a ❌ · B4 createShipment'tan bayrak
 //   kaldırıldı → §3 ❌.
+// N6 (2026-10-26): yazanFonksiyonlar dosya-içi sarmalayıcıyı (`const post = … apiClient.post`) izler ve
+//   `.ts`yi TS kipinde ayrıştırır. Sonda: ikinci geçiş kapalı → §5b ÖLÜ (2 yer) + §6h ⇒ 2 ❌;
+//   PreviewStrip beyanı silindi → §5a BEYANSIZ ⇒ 1 ❌. Geri alındı (md5 eşit).
 //
 // DB GEREKTİRMEZ: TypeScript AST (yorum sayılmaz).
 // =============================================================================
@@ -119,6 +122,9 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/providers/PreferencesProvider.tsx::savePreferences", sinif: "AUTOSAVE", zarfUyarisi: false },
   // Hata ekranı açılınca bildirim (3.6): yanıt `{ alindi }`, zarf uyarısı yok; çağrı `suppressErrorToast` taşır.
   { yer: "Electron/src/components/RouteErrorFallback.tsx::reportClientError", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  // Bildirim tercihleri (N4-PANEL): yazmasız önizleme POST'ları (`test_bildirim_onizleme`); zarf uyarısız, `suppressErrorToast`.
+  { yer: "Electron/src/pages/Settings/Notifications/PreviewStrip.tsx::bildirimService.tercihOnizleme", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
+  { yer: "Electron/src/pages/Settings/Notifications/ResetDialog.tsx::bildirimService.varsayilanaDonOnizleme", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
 ];
 /** Dedektörün GÖRMEDİĞİ (store/mutation/olay dolaylaması) ama elle izlenmiş otomatik yazımlar. */
 const ELLE_IZLENEN: readonly { servis: string; sinif: Sinif; nerede: string; zarfUyarisi: boolean }[] = [
@@ -135,7 +141,9 @@ function walk(dir: string, out: string[] = []): string[] {
   }
   return out;
 }
-const kaynak = (s: string) => ts.createSourceFile("x.tsx", s, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+// `.ts` dosyası TS kipinde ayrışır: TSX kipinde jenerik ok (`<T>(p) => …`) JSX sanılır, sarmalayıcı kaybolur.
+const kaynak = (s: string, tsx = true) =>
+  ts.createSourceFile(tsx ? "x.tsx" : "x.ts", s, ts.ScriptTarget.Latest, true, tsx ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
 const YAZIM = /\bapiClient\s*\.\s*(post|put|patch|delete)\b/;
 const zarfUyarisiOkumasi = (n: ts.Node): boolean =>
   ts.isPropertyAccessExpression(n) && n.name.text === "warnings" &&
@@ -164,7 +172,7 @@ export function uyariDongusu(src: string): number {
 }
 
 /** Yazım yapan fonksiyonların anahtarı (`nesne.metot` · `fonksiyon`) → gövde metni. SAF. */
-export function yazanFonksiyonlar(src: string): Map<string, string> {
+export function yazanFonksiyonlar(src: string, tsx = true): Map<string, string> {
   const out = new Map<string, string>();
   const gez = (n: ts.Node, obj: string | null): void => {
     if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) {
@@ -175,7 +183,25 @@ export function yazanFonksiyonlar(src: string): Map<string, string> {
     if (obj && (ts.isPropertyAssignment(n) || ts.isMethodDeclaration(n)) && n.name && YAZIM.test(n.getText())) out.set(`${obj}.${n.name.getText()}`, n.getText());
     ts.forEachChild(n, (c) => gez(c, obj && ts.isObjectLiteralExpression(n) ? obj : null));
   };
-  gez(kaynak(src), null);
+  gez(kaynak(src, tsx), null);
+  // İkinci geçiş: dosya-içi sarmalayıcıyı (`const post = … apiClient.post`) çağıran metot da yazandır —
+  // yoksa `bildirimService.tercihOnizleme` gibi önizleme POST'ları §5'te görünmez (N6, 2026-10-26).
+  const yerel = [...out.keys()].filter((k) => !k.includes("."));
+  if (yerel.length > 0) {
+    const sarmal = new RegExp(`(?<![.\\w])(${yerel.join("|")})\\s*(<[^>()]*>)?\\s*\\(`);
+    const gez2 = (n: ts.Node, obj: string | null): void => {
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && ts.isObjectLiteralExpression(n.initializer)) {
+        ts.forEachChild(n.initializer, (c) => gez2(c, n.name.getText()));
+        return;
+      }
+      if (obj && (ts.isPropertyAssignment(n) || ts.isMethodDeclaration(n)) && n.name) {
+        const k = `${obj}.${n.name.getText()}`;
+        if (!out.has(k) && sarmal.test(n.getText())) out.set(k, n.getText());
+      }
+      ts.forEachChild(n, (c) => gez2(c, obj && ts.isObjectLiteralExpression(n) ? obj : null));
+    };
+    gez2(kaynak(src, tsx), null);
+  }
   return out;
 }
 
@@ -240,7 +266,7 @@ function main(): void {
   const rel = (f: string) => relative(DEPO, f);
   const metin = new Map(dosyalar.map((f) => [rel(f), readFileSync(f, "utf8")]));
   const govdeler = new Map<string, string>();
-  for (const s of metin.values()) for (const [k, g] of yazanFonksiyonlar(s)) govdeler.set(k, g);
+  for (const [f, s] of metin) for (const [k, g] of yazanFonksiyonlar(s, f.endsWith(".tsx"))) govdeler.set(k, g);
   const yazanlar = new Set(govdeler.keys());
   check("§0 körlük zemini: Electron taraması dolu", dosyalar.length > 500 && yazanlar.size > 200,
     `${dosyalar.length} dosya · ${yazanlar.size} yazım fonksiyonu`);
@@ -316,6 +342,8 @@ function main(): void {
       !sayfaIciOkuma("useMutation({ mutationFn: f, onSuccess: (r) => showServerWarnings(r.warnings) })", yz));
   check("§6f GET okuması otomatik yazım sayılmaz", otomatikYazimlar("useQuery({ queryKey: [], queryFn: () => apiClient.get('/x') });", yz).length === 0);
   check("§6g yorumdaki çağrı sayılmaz", otomatikYazimlar("useEffect(() => { /* apiClient.post('/a') */ }, []);", yz).length === 0);
+  check("§6h ⭐ dosya-içi jenerik sarmalayıcı (`const post = <T>(…) => apiClient.post…`) çağıran metot yazandır (.ts kipi)",
+    [...yazanFonksiyonlar("const post = <T>(p: string): Promise<T> => apiClient.post<T>(p).then((r) => r.data);\nexport const svc = { onizleme: () => post<number>('/x'), oku: () => apiClient.get('/y') };", false).keys()].sort().join() === "post,svc.onizleme");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);

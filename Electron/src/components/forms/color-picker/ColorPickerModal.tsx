@@ -124,7 +124,7 @@ export function ColorPickerModal({
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex h-[600px] max-h-[85vh] max-w-3xl flex-col">
+        <DialogContent className="flex h-[37.5rem] max-h-[85vh] max-w-3xl flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle>{label ?? "Renk Seç"}</DialogTitle>
             <DialogDescription>
