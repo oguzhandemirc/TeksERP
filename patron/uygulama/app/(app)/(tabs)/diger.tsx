@@ -20,6 +20,8 @@ const HINT: Partial<Record<ModuleKey, string>> = {
   cariler: "Müşteri ve tedarikçiler",
   sevkiyat: "Sevk edilen ve bekleyen",
   stok: "Ham ve bitmiş stok",
+  teklifler: "Müşteriye gönderilen teklifler",
+  "standart-maliyetler": "Ürün başına metre maliyeti",
   raporlar: "Fabrikadan rapor isteyin",
   "gelen-kutusu": "Fabrikaya gönderilen talepler",
   bildirimler: "Uyarılar, eşikler ve cihazlar",

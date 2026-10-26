@@ -4,6 +4,7 @@ import { REPORT_STATUSES, type ReportStatus } from "../../api/wire";
 import type { IconName } from "../../ui/icons";
 import type { Domain } from "../../ui/tokens";
 import { STATUS_DICT, type StatusEntry, type StatusTone } from "./ortak";
+import { QUOTE_STATUS, STANDARD_COST_STATUS } from "./teklif";
 
 /** Çek/senet yönü (`cek-senet.tur`, `ozet-finans.cekVade[].tur`). */
 export const CHEQUE_KIND: Readonly<Record<string, string>> = { RECEIVED: "Alınan", ISSUED: "Verilen" };
@@ -88,6 +89,8 @@ const labelsOf = (d: Readonly<Record<string, StatusEntry>>): Readonly<Record<str
 
 /** Jenerik kayıt ayrıntısında enum alanlarının Türkçe adı (projeksiyon → alan → değer → ad). */
 export const RECORD_ENUMS: Readonly<Record<string, Readonly<Record<string, Readonly<Record<string, string>>>>>> = {
+  teklif: { durum: labelsOf(QUOTE_STATUS) },
+  "standart-maliyet": { durum: labelsOf(STANDARD_COST_STATUS) },
   fatura: { tur: INVOICE_TYPE, durum: labelsOf(INVOICE_STATUS) },
   "cek-senet": { tur: CHEQUE_KIND, belgeTuru: CHEQUE_DOC_TYPE, durum: labelsOf(CHEQUE_STATUS) },
   "tahsilat-odeme": {
@@ -126,11 +129,21 @@ export const FINANCE_FIELD: Readonly<Record<string, string>> = {
   birimFiyat: "Birim fiyat",
   kdvTutari: "KDV tutarı",
   fiyat: "Fiyat",
+  toplamTutar: "Teklif tutarı",
+  toplamMaliyetTl: "Toplam maliyet (TL)",
+  brutMarjPct: "Brüt marj (%)",
+  metreMaliyetiTl: "Metre maliyeti (TL)",
+  karPct: "Kâr payı (%)",
+  cozguTl: "Çözgü (TL/m)",
+  atkiTl: "Atkı (TL/m)",
+  dokumaTl: "Dokuma (TL/m)",
+  terbiyeTl: "Terbiye (TL/m)",
+  genelGiderTl: "Genel gider (TL/m)",
 };
 
 /** Para OLMAYAN finans alanları (kur, oran): para birimi eklenmez. */
 export function isMoneyField(key: string): boolean {
-  return key !== "kur" && !/Orani$/.test(key);
+  return key !== "kur" && !/(Orani|Pct)$/.test(key);
 }
 
 /** TL karşılığı alanları kendi birimini taşır (`tutarTl` → ₺), kaydın dövizi değil. */

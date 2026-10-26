@@ -18,6 +18,7 @@ import { SectionHeader } from "../../../../src/ui/SectionHeader";
 import { LoadingSkeleton } from "../../../../src/ui/StateViews";
 import { makeStyles, useTokens } from "../../../../src/ui/theme-context";
 import { FONT_SCALE, space, typography, type Domain } from "../../../../src/ui/tokens";
+import { QuoteLines } from "../../../../src/ui/teklif/QuoteLines";
 
 /** Projeksiyon → okunur tür adı + alan rengi/ikon (başlık çipi). Bilinmeyen ad okunur hâle getirilir. */
 const KIND: Readonly<Record<string, { readonly label: string; readonly domain: Domain; readonly icon: IconName }>> = {
@@ -35,6 +36,9 @@ const KIND: Readonly<Record<string, { readonly label: string; readonly domain: D
   sevkiyat: { label: "Sevkiyat", domain: "sevkiyat", icon: "car-outline" },
   "is-emri": { label: TERIM.terbiyeIsEmri.tekil, domain: "uretim", icon: "construct-outline" },
   fiyat: { label: "Fiyat", domain: "finans", icon: "pricetag-outline" },
+  teklif: { label: "Teklif", domain: "siparisler", icon: "document-text-outline" },
+  "teklif-kalemi": { label: "Teklif kalemi", domain: "siparisler", icon: "list-outline" },
+  "standart-maliyet": { label: "Standart maliyet", domain: "finans", icon: "calculator-outline" },
 };
 
 export default function RecordDetail() {
@@ -85,6 +89,7 @@ export default function RecordDetail() {
               </Card>
             </>
           ) : null}
+          {p === "teklif" ? <QuoteLines teklifId={String(id)} currency={recordCurrency(d.kayit)} /> : null}
           {d.kisisel !== undefined && d.kisisel !== null ? (
             <>
               <SectionHeader title="İletişim" />

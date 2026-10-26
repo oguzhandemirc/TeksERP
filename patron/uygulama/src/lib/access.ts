@@ -5,6 +5,8 @@ export type ModuleKey =
   | "pano"
   | "raporlar"
   | "siparisler"
+  | "teklifler"
+  | "standart-maliyetler"
   | "cariler"
   | "sevkiyat"
   | "uretim"
@@ -21,6 +23,8 @@ export interface ModuleDef {
   readonly route: string;
   /** Bunlardan BİRİ yeter; boş = her hesap. */
   readonly anyOf: readonly string[];
+  /** Ayrıca bunların HEPSİ gerekir (ör. maliyet ekranı: kök satır izni + maliyet izni). */
+  readonly allOf?: readonly string[];
 }
 
 export const FINANCE_READ = ["bulut:kasa:oku", "bulut:cek:oku", "bulut:fatura:oku", "bulut:tahsilat:oku"] as const;
@@ -33,6 +37,8 @@ export const MODULES: readonly ModuleDef[] = [
   { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"] },
   { key: "stok", title: "Stok", route: "/stok", anyOf: ["bulut:stok:oku"] },
   { key: "finans", title: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku"] },
+  { key: "teklifler", title: "Teklifler", route: "/teklifler", anyOf: ["bulut:teklif:oku"] },
+  { key: "standart-maliyetler", title: "Standart Maliyetler", route: "/standart-maliyetler", anyOf: ["bulut:teklif:oku"], allOf: ["bulut:maliyet:oku"] },
   { key: "raporlar", title: "Raporlar", route: "/raporlar", anyOf: ["bulut:rapor:oku"] },
   { key: "gelen-kutusu", title: "Gelen kutusu", route: "/gelen-kutusu", anyOf: ["bulut:siparis:yaz", "bulut:cari:yaz"] },
   { key: "hesaplar", title: "Hesaplar", route: "/hesaplar", anyOf: ["bulut:hesap:yonet"] },
@@ -48,13 +54,17 @@ export function canAny(perms: readonly string[] | ReadonlySet<string>, codes: re
   return codes.length === 0 || codes.some((c) => can(perms, c));
 }
 
+function moduleAllowed(perms: readonly string[], m: ModuleDef): boolean {
+  return canAny(perms, m.anyOf) && (m.allOf ?? []).every((c) => can(perms, c));
+}
+
 export function visibleModules(perms: readonly string[]): ModuleDef[] {
-  return MODULES.filter((m) => canAny(perms, m.anyOf));
+  return MODULES.filter((m) => moduleAllowed(perms, m));
 }
 
 export function moduleVisible(perms: readonly string[], key: ModuleKey): boolean {
   const m = MODULES.find((x) => x.key === key);
-  return m !== undefined && canAny(perms, m.anyOf);
+  return m !== undefined && moduleAllowed(perms, m);
 }
 
 /** Pano kartları: anlık özet → gereken izinlerin HEPSİ (sunucu kataloğuyla aynı küme). */

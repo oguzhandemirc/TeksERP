@@ -24,6 +24,8 @@ export const DOMAIN_ICON: Readonly<Record<Domain, IconName>> = {
 export const MODULE_ICON: Readonly<Record<ModuleKey, { readonly domain: Domain; readonly icon: IconName }>> = {
   pano: { domain: "genel", icon: "grid-outline" },
   siparisler: { domain: "siparisler", icon: DOMAIN_ICON.siparisler },
+  teklifler: { domain: "siparisler", icon: "document-text-outline" },
+  "standart-maliyetler": { domain: "finans", icon: "calculator-outline" },
   cariler: { domain: "cariler", icon: DOMAIN_ICON.cariler },
   sevkiyat: { domain: "sevkiyat", icon: DOMAIN_ICON.sevkiyat },
   uretim: { domain: "uretim", icon: DOMAIN_ICON.uretim },

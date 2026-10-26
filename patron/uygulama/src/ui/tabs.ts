@@ -33,7 +33,7 @@ export function visibleTabs(perms: readonly string[]): TabDef[] {
 
 /** "Diğer" listesi: sekmeye sığmayan bölümler, gruplu. */
 export const MORE_GROUPS: readonly { readonly title: string; readonly modules: readonly ModuleKey[] }[] = [
-  { title: "İş", modules: ["cariler", "sevkiyat", "stok", "raporlar"] },
+  { title: "İş", modules: ["cariler", "sevkiyat", "stok", "teklifler", "standart-maliyetler", "raporlar"] },
   { title: "Eylem", modules: ["gelen-kutusu"] },
   { title: "Hesap", modules: ["bildirimler", "hesaplar", "profil"] },
 ];
@@ -41,6 +41,6 @@ export const MORE_GROUPS: readonly { readonly title: string; readonly modules: r
 /** Geniş ekran rayı: önce sekmelerle AYNI sırada ana bölümler, sonra başlıklı gruplar (gelen kutusu "İş" altında). */
 export const RAIL_GROUPS: readonly { readonly title: string | null; readonly modules: readonly ModuleKey[] }[] = [
   { title: null, modules: TABS.flatMap((t) => (t.module ? [t.module] : [])) },
-  { title: "İş", modules: ["cariler", "sevkiyat", "stok", "raporlar", "gelen-kutusu"] },
+  { title: "İş", modules: ["cariler", "sevkiyat", "stok", "teklifler", "standart-maliyetler", "raporlar", "gelen-kutusu"] },
   { title: "Hesap", modules: ["bildirimler", "hesaplar", "profil"] },
 ];
