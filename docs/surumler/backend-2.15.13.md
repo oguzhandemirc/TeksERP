@@ -1,8 +1,7 @@
 # Backend `2.15.13`
 
-**Durum:** TASLAK — terfide kullanıcı onayı. `backend-2.15.13.md` adı yalnız yayın anında (sürüm commit'inde)
-açılır; o ana kadar bu dosya `test_surum_belgesi` kapsamı dışındadır. `Teks-Erp/package.json` sürümüne dokunulmadı.
-Bu belge P4 (PR #90) ve P5 (PR #87) girdi notlarının birleşimidir (W2, 2026-10-24); etiket adedi kaynağı
+**Durum:** TEST GRUBUNDA — terfide kullanıcı onayı (2026-10-26). İlk hedef yalnız `test` grubu; öncü/genel gruba
+çıkış ayrı karar (terfi etiketi). Bu belge P4 (PR #90) ve P5 (PR #87) girdi notlarının birleşimidir (W2, 2026-10-24); etiket adedi kaynağı
 (`feature/etiket-adet-kaynagi`) sonradan eklendi. 2026-10-26 birleştirme turu (`main` @ `0a3b031ee`): Kalite 4 Puan,
 Maliyet & Teklif, Raporlar v2, izlenebilirlik/cihaz, responsive web paneli ve test altyapısı bölümleri arşiv
 (`docs/history/arsiv/2026-10.md`) başlıklarından ve plan durum satırlarından eklendi; migration listesi ölçüldü.
@@ -291,7 +290,7 @@ plan `docs/design/BELGE-SABLON-TASARIMCISI-PLAN.md`)
 - Motor: tek katalog (`notification-catalog.ts`), iş tx'inde outbox (`emitNotification`), dağıtıcı (advisory 8040),
   koşul tarayıcısı (aç/kapa, "çözüldü"), görme süzgeci `canSeeNotificationType`, budama (okunmuş 90 / okunmamış 180 gün).
 - İlk açılış su damgası: bayrak açıldıktan sonra her koşul türünün ilk turu sessiz tabandır (`system_settings`
-  `bildirim.kosulTabani.<tür>`); bayrak kapatılınca/yeniden açılınca taban yeniden alınır.
+  `bildirim.kosulTabani.* (tür başına)`); bayrak kapatılınca/yeniden açılınca taban yeniden alınır.
 - Zil: içeriksiz SSE (`GET /api/bildirim/zil`) → uzun yoklama (`/bekle`) → 30 sn `/ozet`; veri REST'ten. Tezgah alarmı
   aynı zilden çalar; zil sağlıklıyken alarm yoklaması 60 sn, kapalıyken 15 sn.
 - Tercihler: katalog → fabrika varsayılanı → profiller → nöbet kilidi → kişi; kilitli tür uygulama içinde kapatılamaz;
