@@ -441,7 +441,7 @@ async function main(): Promise<void> {
   console.log("──────────────────────────────────────────");
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 async function cleanup(): Promise<void> {
@@ -490,4 +490,4 @@ async function cleanup(): Promise<void> {
   }
 }
 
-main().catch(async (e) => { console.error("HATA:", e); await cleanup(); await prisma.$disconnect(); process.exit(1); });
+main().catch(async (e) => { console.error("HATA:", e); await cleanup(); await prisma.$disconnect(); process.exitCode = 1; });

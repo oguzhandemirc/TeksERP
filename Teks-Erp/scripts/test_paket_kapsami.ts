@@ -335,10 +335,10 @@ async function main(): Promise<void> {
   await gercekKapsam();
   sondalar(d);
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main().catch((e: unknown) => {
   console.error(`⛔ BEKLENMEYEN: ${e instanceof Error ? e.stack : String(e)}`);
-  process.exit(1);
+  process.exitCode = 1;
 });

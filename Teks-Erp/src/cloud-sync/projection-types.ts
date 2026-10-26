@@ -9,7 +9,7 @@ export type ProjectionRole = "BOYUT" | "OLGU";
 export type DeletionStrategy = "YOK" | "DAMGA" | "KAPSAM_DISI";
 export type SnapshotCadence = "HER_TUR" | "SAATLIK" | "GUNLUK";
 /** Projeksiyonu kapatan fabrika modül anahtarı (enforcement okuyucusu — lisans tavanı dahil). */
-export type ModuleKey = "production.enabled" | "finance.enabled";
+export type ModuleKey = "production.enabled" | "finance.enabled" | "maliyet.enabled";
 
 export interface ColumnSpec {
   /** Paketteki alan adı (sözleşme; fabrika kolonu yeniden adlandırılsa da değişmez). */

@@ -135,4 +135,4 @@ check('⭐ kanalın dosyası ADLI istisna (`no-console: off` + logger.ts bloğu)
   /"no-console":\s*"off"/.test(eslintKod) && eslintKod.includes('files: ["src/lib/logger.ts"]'));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

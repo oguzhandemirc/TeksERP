@@ -135,6 +135,7 @@ export const RECONCILE_PARENTS: Readonly<Record<string, { readonly parent: strin
   "siparis-kalemi": { parent: "siparis", field: "siparisId" },
   "cek-hareketi": { parent: "cek-senet", field: "cekId" },
   "fatura-kalemi": { parent: "fatura", field: "faturaId" },
+  "teklif-kalemi": { parent: "teklif", field: "teklifId" },
 };
 /** Bir paketteki bütün `bekleyen` kimliklerin toplam tavanı; aşan projeksiyonun uzlaştırması o gün ATLANIR (TAM istenmez). */
 export const MAX_RECONCILE_PENDING = 5000;

@@ -241,5 +241,5 @@ main()
   .finally(async () => {
     await cleanup();
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

@@ -330,10 +330,10 @@ async function main(): Promise<void> {
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   const prisma = (await import("../src/lib/prisma")).default;
   await prisma.$disconnect();
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main().catch((e) => {
   console.error(e);
-  process.exit(1);
+  process.exitCode = 1;
 });

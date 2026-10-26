@@ -197,4 +197,4 @@ const badRender = tryRender({ ...base, pageSettings: { kenar: { ust: -1 } } });
 check("geçersiz sayfa ayarı render'ı düşürür", !!badRender.issues && /kenar\.ust/.test(badRender.issues), badRender.issues);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail ? 1 : 0);
+process.exitCode = fail ? 1 : 0;

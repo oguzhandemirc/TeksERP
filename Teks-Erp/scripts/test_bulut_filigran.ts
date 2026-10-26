@@ -41,6 +41,7 @@ import { setMeasuredFingerprint, getLicenseSnapshot, getLicenseInstallationId } 
 import { runSyncRound, type RoundOutcome } from "../src/cloud-sync/sync-round";
 import { egressCloudTransport } from "../src/cloud-sync/cloud-client";
 import { getCloudUrl, setCloudUrlForTests } from "../src/cloud-sync/cloud-url";
+import type { ModuleKey } from "../src/cloud-sync/projection-types";
 import { evaluateCloudEligibility } from "../src/cloud-sync/eligibility";
 import { __setScanLimitForTests } from "../src/cloud-sync/change-scan";
 import { RECORD_PROJECTIONS } from "../src/cloud-sync/projections";
@@ -50,7 +51,7 @@ import { REPORT_BY_KEY, isReportSurfaced } from "../src/constants/report-catalog
 import { onDoorbellTopic, dispatchDoorbellTopic, __resetDoorbellTopicsForTests } from "../src/jobs/doorbell-topics";
 import { runCloudSyncTick, getCloudSyncStatus, __configureCloudSyncForTests } from "../src/jobs/cloud-sync.job";
 import { DAY_MS, msToIso } from "../src/lib/license/protocol";
-import { readFinanceEnabled, readProductionEnabled } from "../src/services/system-setting.service";
+import { readFinanceEnabled, readMaliyetEnabled, readProductionEnabled } from "../src/services/system-setting.service";
 import { HORIZON_BASE_MARGIN_MS } from "../src/cloud-sync/horizon";
 import { bulutLisansKur, sahteBulutBaslat, type SahteBulut, type BulutLisans } from "./lib/bulut-fikstur";
 
@@ -142,7 +143,8 @@ async function ilkTurBolumu(bulut: SahteBulut): Promise<void> {
     if (!k.tam) continue;
     tamlar.set(k.projeksiyon, [...(tamlar.get(k.projeksiyon) ?? []), { parca: k.tam.parca, toplamParca: k.tam.toplamParca, onceki: k.filigran.onceki }]);
   }
-  const moduller = { "production.enabled": await readProductionEnabled(), "finance.enabled": await readFinanceEnabled() };
+  const uretim = await readProductionEnabled();
+  const moduller: Record<ModuleKey, boolean> = { "production.enabled": uretim, "finance.enabled": await readFinanceEnabled(), "maliyet.enabled": uretim && (await readMaliyetEnabled()) };
   const acik = RECORD_PROJECTIONS.filter((p) => !p.module || moduller[p.module]).map((p) => p.name);
   const kapali = RECORD_PROJECTIONS.filter((p) => p.module && !moduller[p.module]).map((p) => p.name);
   const eksik = acik.filter((n) => !tamlar.has(n));
@@ -422,7 +424,7 @@ async function main(): Promise<void> {
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end().catch(() => undefined);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 void main();

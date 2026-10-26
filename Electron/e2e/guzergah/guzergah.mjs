@@ -130,7 +130,11 @@ async function api(rol, yol, init = {}) {
     const token = await apiGiris(rol);
     const r = await fetch(`${ortam.apiUrl}${yol}`, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init.headers ?? {}) } });
     surucuCagrisi(init.method ?? "GET", yol, r.status);
-    return { status: r.status, govde: await r.json().catch(() => null) };
+    // JSON olmayan gövde (ör. /html) `metin` + başlıklarla döner; JSON çağıranlar değişmez.
+    const metin = await r.text().catch(() => "");
+    let govde = null;
+    try { govde = JSON.parse(metin); } catch { /* ham gövde */ }
+    return { status: r.status, govde, metin, basliklar: Object.fromEntries(r.headers) };
   };
   const ilk = await istek();
   // Token geçersiz kaldıysa (izin değişimi tokenVersion'ı artırır — P4) bir kez yeniden giriş; ölçüm isteyen adım

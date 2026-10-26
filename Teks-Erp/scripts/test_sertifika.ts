@@ -392,7 +392,7 @@ async function main(): Promise<void> {
     await cleanup().catch((e) => check("temizlik", false, String(e)));
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode = fail > 0 ? 1 : 0;
   }
 }
 

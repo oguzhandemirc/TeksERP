@@ -116,6 +116,7 @@ import { BELGE_EXCEL_ADIMLARI } from "./adimlar-belge-excel.mjs";
 import { BELGE_TASARIMCI_ADIMLARI } from "./adimlar-belge-tasarimci.mjs";
 import { BELGE_KOD_ADIMLARI } from "./adimlar-belge-kod.mjs";
 import { BELGE_YONETIM_ADIMLARI } from "./adimlar-belge-yonetim.mjs";
+import { BELGE_UCTAN_UCA_ADIMLARI } from "./adimlar-belge-tasarimci-uctan-uca.mjs";
 import { MALIYET_ADIMLARI } from "./adimlar-maliyet.mjs";
 import { UX_ADIMLARI } from "./adimlar-ux.mjs";
 
@@ -2030,6 +2031,7 @@ export const ADIMLAR = [
   ...BELGE_TASARIMCI_ADIMLARI,
   ...BELGE_KOD_ADIMLARI,
   ...BELGE_YONETIM_ADIMLARI,
+  ...BELGE_UCTAN_UCA_ADIMLARI,
   ...MALIYET_ADIMLARI,
   ...UX_ADIMLARI,
   ...SIPARIS_YONU_ADIMLARI,

@@ -188,4 +188,4 @@ console.log("\n=== 3) 'Ölçülen kalem' (MEASURED_LINE) tek kaynak ===");
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

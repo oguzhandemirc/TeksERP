@@ -230,4 +230,4 @@ check("§5l sonda ⬆: elle stok üçlüsü YAKALANIR; ⬇ tek yükleme geçince
   s(UCLU).stokUclusu.length === 1 && s(UCLU.replace("shipmentId: null, sackId: null, cancelledAt: null", "...SWATCH_IN_STOCK_WHERE")).stokUclusu.length === 0);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

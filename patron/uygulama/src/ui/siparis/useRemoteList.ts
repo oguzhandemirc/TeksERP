@@ -12,6 +12,7 @@ export interface ListQuery {
   readonly cariKartId?: string;
   readonly cariHesapId?: string;
   readonly siparisId?: string;
+  readonly teklifId?: string;
   readonly ara?: string;
   readonly suzgec?: string;
 }
@@ -36,14 +37,14 @@ const LIMIT = 50;
 export function useRemoteList(projection: string, query: ListQuery = {}, options: { limit?: number; enabled?: boolean; tags?: readonly string[] } = {}): RemoteList {
   const { api } = useSession();
   const limit = options.limit ?? LIMIT;
-  const { durum, cariKartId, cariHesapId, siparisId, suzgec } = query;
+  const { durum, cariKartId, cariHesapId, siparisId, teklifId, suzgec } = query;
   const ara = query.ara?.trim() || undefined;
   const enabled = options.enabled ?? true;
   const params = useCallback(
-    (imlec: string | undefined) => ({ imlec, limit, durum, cariKartId, cariHesapId, siparisId, ara, suzgec }),
-    [limit, durum, cariKartId, cariHesapId, siparisId, ara, suzgec],
+    (imlec: string | undefined) => ({ imlec, limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec }),
+    [limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec],
   );
-  const ids = [cariKartId, cariHesapId, siparisId].map((x) => x ?? "").join(":");
+  const ids = [cariKartId, cariHesapId, siparisId, teklifId].map((x) => x ?? "").join(":");
   const key = `veri:${projection}:${durum ?? ""}:${ids}:${suzgec ?? ""}:${limit}`;
 
   // Terimsiz ilk sayfa: saklı kopya + arkadan ağ + etiketle tazeleme.

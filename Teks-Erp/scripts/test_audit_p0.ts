@@ -216,7 +216,7 @@ async function main() {
     }
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlama.ozetEki()} ===`);
     await prisma.$disconnect().catch(() => undefined);
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode = fail > 0 ? 1 : 0;
   }
 }
 

@@ -52,4 +52,4 @@ check("§2d alan yoksa geçer", !run(validateStationDevereFields, { name: "D" })
 check("§2e gövde yoksa geçer (next çağrılır, patlamaz)", !run(validateStationDevereFields, undefined).err);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

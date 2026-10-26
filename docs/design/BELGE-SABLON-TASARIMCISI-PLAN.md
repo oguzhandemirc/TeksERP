@@ -1,6 +1,6 @@
 # Belge şablon tasarımcısı (GrapesJS + LiquidJS): dilimli plan
 
-**Durum: TASLAK 2026-10-24** · patron oturumu · Yazan: plan yazarı ajanı · Girdiler: `scratchpad/belge/{KARARLAR,D-R1-mevcut,D-R2-kutuphane,DEVIR-PLAN}.md` · Ana dal `main` @ `2bd3d7b08` (araştırma `8bd9fa6b8` üstünde yapıldı) · Backend 2.15.12, panel 1.6.6.
+**Durum: TAMAMLANDI 2026-10-26** (iniş sha'sı = TZ PR squash'ı; dal sha'ları squash'ta ölür) (inen PR: #114 #120 #135 #146 #156 #141 #161 #170 #174 #184 #181 #202 #208 #195 #201 #213 #217 + TZ kapanışı; e2e güzergâh BZ1–BZ9 yeşil; açık kalanlar arşiv 2026-10.md "Belge şablon tasarımcısı kapanışı" § Açık; §3.6 "profil config uygulanmaz" cümlesi GEÇERSİZ → R4) · ilk taslak 2026-10-24 · patron oturumu · Yazan: plan yazarı ajanı · Girdiler: `scratchpad/belge/{KARARLAR,D-R1-mevcut,D-R2-kutuphane,DEVIR-PLAN}.md` · Ana dal `main` @ `2bd3d7b08` (araştırma `8bd9fa6b8` üstünde yapıldı) · Backend 2.15.12, panel 1.6.6.
 
 > Kod YAZILMADI. Bu belge dilimlerin sözleşmesidir. Her dilimin ajan istemi `scratchpad/belge/istemler/<KOD>.md` dosyasındadır ve buradaki sözleşmenin kopyasıdır. İkisi çelişirse BU BELGE geçerlidir. Bu belge `KARARLAR.md` ile çelişirse KARAR geçerlidir.
 

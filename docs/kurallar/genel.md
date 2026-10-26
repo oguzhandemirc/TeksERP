@@ -55,6 +55,7 @@
 ### Yasaklar
 
 - **[ÇEKİRDEK]** Backend'de yalnız izinli paket listesindeki paketler kullanılır; yeni ihtiyaçta önce 'kendin yaz' denenir (node-cron→setInterval, handlebars→kendi şablon motoru, CSV paketi→hiç). 'handlebars→kendi motor' örneği belge şablon TASARIMCISI için GEÇERSİZ → 2026-10-24: orada katı `liquidjs` 10.30.0 SABİT izinli (RAW_HTML kendi motorunda kalır). <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** Betik/bekçi `process.exit(` ile bitmez: sonuç `process.exitCode`a yazılır, açık handle'lar (havuz, sunucu, zamanlayıcı) kapatılır, süreç doğal çıkar; istisna `scripts/lib/process-exit-istisnalari.json` tabanında beyanlıdır (`test_process_exit_kalibi`).
 
 ### Kararlar
 
@@ -90,7 +91,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_kisa_kimlik_ozet`, `test_terim_eski_ad`, `test_lisans_kapisi`, `test_audit_depth`, `test_audit_labels`, `test_device_activity`, `test_device_pairing_flag`, `test_discovery_identity`, `test_dispatch_allocation_fresh`, `test_identity_ledger`, `test_label_snapshot_audit_split`, `test_manual_attributes_reason`, `test_merge_field_picks`, `test_o19_operator_trace`, `test_observability_cache`, `test_observability_contract`, `test_period_close`, `test_permission_grant_source`, `test_phase0_quickwins`, `test_process_warnings`, `test_record_provenance`, `test_report_day_boundary`, `test_reports`, `test_roll_entry_station`, `test_sack_notes`, `test_settings_password`, `test_shipment_invoice`, `test_superadmin`, `test_superadmin_provision`, `test_superadmin_visible`, `test_system_log`, `test_system_log_query_gate`, `test_totp`, `test_user_credentials_guard`, `test_web_hardening`, `test_work_session_close_all`, `test_work_session_stamping`, `test_mobil_enum_aynasi`, `test_musteri_adi_kodda_yok`, `test_firma_adi_dondur`, `test_lisans_adi`
+Backend: `test_process_exit_kalibi`, `test_kisa_kimlik_ozet`, `test_terim_eski_ad`, `test_lisans_kapisi`, `test_audit_depth`, `test_audit_labels`, `test_device_activity`, `test_device_pairing_flag`, `test_discovery_identity`, `test_dispatch_allocation_fresh`, `test_identity_ledger`, `test_label_snapshot_audit_split`, `test_manual_attributes_reason`, `test_merge_field_picks`, `test_o19_operator_trace`, `test_observability_cache`, `test_observability_contract`, `test_period_close`, `test_permission_grant_source`, `test_phase0_quickwins`, `test_process_warnings`, `test_record_provenance`, `test_report_day_boundary`, `test_reports`, `test_roll_entry_station`, `test_sack_notes`, `test_settings_password`, `test_shipment_invoice`, `test_superadmin`, `test_superadmin_provision`, `test_superadmin_visible`, `test_system_log`, `test_system_log_query_gate`, `test_totp`, `test_user_credentials_guard`, `test_web_hardening`, `test_work_session_close_all`, `test_work_session_stamping`, `test_mobil_enum_aynasi`, `test_musteri_adi_kodda_yok`, `test_firma_adi_dondur`, `test_lisans_adi`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

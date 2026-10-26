@@ -276,8 +276,9 @@ async function main(): Promise<void> {
       path.resolve(__dirname, "../src/services/helpers/pg-tool.helper.ts"),
       "utf8",
     );
-    check("runTool spawn'a timeout veriyor", /spawn\([\s\S]*?timeout:/.test(toolSrc));
-    check("runTool killSignal tanımlı", /killSignal:/.test(toolSrc));
+    // Üst sınır kendi zamanlayıcısıyla (spawn `timeout`u ENOENT'te temizlenmeyip süreci 3 sa ayakta tutuyordu).
+    check("runTool üst sınır zamanlayıcısı SIGKILL ile öldürüyor", /setTimeout\(\(\) => child\.kill\("SIGKILL"\), timeoutMs\)/.test(toolSrc));
+    check("üst sınır zamanlayıcısı hem `error`da hem `close`da temizleniyor", (toolSrc.match(/clearTimeout\(ust\)/g) ?? []).length === 2);
     check("zaman aşımı sonucu çağırana bildiriliyor (timedOut)", /timedOut/.test(toolSrc));
 
     // ⚠️ MEKANİZMA KONTROLÜ — kaynak seviyesinde, ve bu BİLİNÇLİ bir tercih.
@@ -762,5 +763,5 @@ main()
   })
   .finally(() => {
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode ||= fail > 0 ? 1 : 0;
   });

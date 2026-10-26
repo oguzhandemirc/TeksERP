@@ -94,7 +94,7 @@ function main(): void {
   check("EN alt metin 'in system'", en.includes("(2 in system)"));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail === 0 ? 0 : 1);
+  process.exitCode = fail === 0 ? 0 : 1;
 }
 
 main();

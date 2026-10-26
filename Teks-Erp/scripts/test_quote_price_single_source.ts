@@ -85,4 +85,4 @@ check("§3a sonda: ikinci `suggestSalePrice` çağrısı yakalanır", ph.some((h
 check("§3b sonda: ikinci yayınlı satır okuması yakalanır, liste-içi okuma (priceListId) yakalanmaz", ph.filter((h) => h.kind === "publishedLineRead").length === 1);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

@@ -4,7 +4,7 @@
 // bulutun `kabul` listesiyle ilerler; onaysız paket sonraki turda aynı konumdan yeniden kurulur.
 import { gzipSync } from "node:zlib";
 import { randomUUID } from "node:crypto";
-import { readFinanceEnabled, readProductionEnabled } from "../services/system-setting.service";
+import { readFinanceEnabled, readMaliyetEnabled, readProductionEnabled } from "../services/system-setting.service";
 import { appVersionForWire } from "../services/helpers/license-wire.helper";
 import { cloudEligibility } from "./eligibility";
 import { computeHorizon } from "./horizon";
@@ -63,11 +63,13 @@ export interface RoundOutcome {
 interface ModuleFlags {
   readonly production: boolean;
   readonly finance: boolean;
+  readonly maliyet: boolean;
 }
 
 function moduleOn(m: ModuleKey | undefined, flags: ModuleFlags): boolean {
   if (m === "production.enabled") return flags.production;
   if (m === "finance.enabled") return flags.finance;
+  if (m === "maliyet.enabled") return flags.maliyet;
   return true;
 }
 
@@ -237,7 +239,9 @@ export async function runSyncRound(opts: RoundOptions, deps: RoundDeps): Promise
   const ctx: CloudCallContext = { baseUrl: elig.baseUrl, installationId: elig.installationId, transport: deps.transport };
   const horizon = (await computeHorizon(now())).at;
   const stored = await loadWatermarks();
-  const flags: ModuleFlags = { production: await readProductionEnabled(), finance: await readFinanceEnabled() };
+  const production = await readProductionEnabled();
+  // Maliyet modülünün ön koşulu üretimdir (`requireMaliyetEnabled` ile aynı iki koşul).
+  const flags: ModuleFlags = { production, finance: await readFinanceEnabled(), maliyet: production && (await readMaliyetEnabled()) };
 
   const plan = !opts.snapshotsOnly && opts.kind === "ARTIMLI" ? await planRecordUnits(stored, horizon, flags, now()) : { units: [], idle: [], more: false };
   await saveWatermarks(plan.idle);

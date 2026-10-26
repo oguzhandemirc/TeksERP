@@ -237,7 +237,7 @@ function main(): void {
         "checksum farkını umursamaz (yalnız `migrate dev` konuşur, o da bu depoda yasak).",
     );
   }
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

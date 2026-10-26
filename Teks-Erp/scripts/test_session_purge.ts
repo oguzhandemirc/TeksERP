@@ -79,7 +79,7 @@ async function main(): Promise<void> {
     await prisma.session.deleteMany({ where: { jti: { in: createdJtis } } });
     await prisma.$disconnect();
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-    process.exit(fail > 0 ? 1 : 0);
+    process.exitCode = fail > 0 ? 1 : 0;
   }
 }
 

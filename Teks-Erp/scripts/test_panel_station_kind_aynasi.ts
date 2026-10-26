@@ -80,7 +80,7 @@ function main(): void {
   check("§2d bayrağa bağlı türler şemada var (WEAVING dahil)", kapili.includes("WEAVING") && kapili.every((v) => sema.has(v)), kapili.join(","));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

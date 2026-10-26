@@ -385,4 +385,4 @@ console.log("\n=== §10 — ÖNİZLEME KAPISI: panelin gönderdiği her alan sa�
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===\n`);
-process.exit(fail > 0 ? 1 : 0);
+process.exitCode = fail > 0 ? 1 : 0;

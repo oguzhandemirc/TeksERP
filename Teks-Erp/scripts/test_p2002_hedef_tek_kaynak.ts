@@ -113,7 +113,7 @@ function main(): void {
   check("§3 körlük zemini: >100 dosya tarandı ve yardımcı dosya ağaçta", dosyalar.length > 100 && yardimciTarandi, `${dosyalar.length} dosya · yardımcı ${yardimciTarandi ? "var" : "YOK"}`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exit(fail > 0 ? 1 : 0);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 main();

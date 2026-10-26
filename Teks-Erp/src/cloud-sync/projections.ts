@@ -111,12 +111,14 @@ export const RECORD_PROJECTIONS: readonly RecordProjection[] = [...DIMENSIONS, .
 export const SNAPSHOT_PROJECTIONS: readonly SnapshotProjection[] = SNAPSHOTS;
 export const PROJECTIONS: readonly Projection[] = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS];
 
-/** Silme işaretinin kurulduğu 24 kök tablo — migration tetikleyicileri ile İKİ YÖNLÜ ölçülür. */
+/** Silme işaretinin kurulduğu 27 kök tablo — migration tetikleyicileri ile İKİ YÖNLÜ ölçülür. */
 export const SYNC_ROOT_TABLES: readonly string[] = RECORD_PROJECTIONS.map((p) => p.root.table);
 
 /** Alt satır izinleri (§3.1, §10): finans DIŞI projeksiyonun `.finans`ı `bulut:fiyat:oku`, finans projeksiyonununki kendi izni. */
 export function subRowPermission(p: RecordProjection, dataClass: Exclude<DataClass, "ISLEM">): string {
   if (dataClass === "KISISEL") return "bulut:cari:oku";
+  // Maliyet tabanı ve marj ticari sırdır: satış fiyatını gören (fiyat izni) maliyeti görmez (MAL-8, patron kararı).
+  if (p.module === "maliyet.enabled") return "bulut:maliyet:oku";
   return p.module === "finance.enabled" ? p.permission : "bulut:fiyat:oku";
 }
 
@@ -211,6 +213,8 @@ export const CLOUD_READ_PERMISSIONS = [
   "bulut:tahsilat:oku",
   "bulut:fiyat:oku",
   "bulut:rapor:oku",
+  "bulut:teklif:oku",
+  "bulut:maliyet:oku",
 ] as const;
 
 /**
