@@ -1,9 +1,9 @@
 // =============================================================================
 // SİPARİŞ SATIRI SEÇİCİ — dokuma işine bağlanacak açık kalemler (çoklu seçim, tek ekleme)
 // =============================================================================
-// Kaynak MEVCUT uç `GET /api/orders/order-lines/available?itemId=` (Z2; yeni uç yok). Yalnız
-// formda seçili kumaşın (ve varsa rengin) açık kalemleri listelenir; zaten bağlı satırlar
-// listeden düşer. Kalıp `WorkOrders/LinkOrderDialog` tablosu (Sipariş/Müşteri · Kumaş/Renk · Açık · Termin).
+// Kaynak MEVCUT uç `GET /api/orders/order-lines/available?itemId=` (Z2; yeni uç yok). Kumaş
+// seçiliyse yalnız onun (ve varsa rengin) açık kalemleri; kumaş BOŞSA "sipariş-önce" liste —
+// ilk işaretlenen kalemin kumaşı seçimi kilitler (bir iş tek kumaş). Bağlı satırlar düşer. Kalıp `WorkOrders/LinkOrderDialog` tablosu (Sipariş/Müşteri · Kumaş/Renk · Açık · Termin).
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -21,6 +21,7 @@ const fmt = (n: number | null) => (n === null ? "ölçülmüyor" : `${n.toLocale
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Boş = sipariş-önce kip (kumaş formda henüz seçilmedi; seçilen kalemden ön doldurulur). */
   itemId: string;
   colorId: string | null;
   /** Formda zaten bağlı satırlar — listeden düşer. */
@@ -28,11 +29,11 @@ interface Props {
   onAdd: (rows: AvailableOrderLine[]) => void;
 }
 
-function LineRow({ l, checked, onToggle }: { l: AvailableOrderLine; checked: boolean; onToggle: () => void }) {
+function LineRow({ l, checked, onToggle, disabled = false }: { l: AvailableOrderLine; checked: boolean; onToggle: () => void; disabled?: boolean }) {
   return (
-    <tr className="cursor-pointer border-t transition-colors hover:bg-accent/40" onClick={onToggle} data-testid={`ol-row-${l.lineId}`}>
+    <tr className={`border-t transition-colors ${disabled ? "opacity-40" : "cursor-pointer hover:bg-accent/40"}`} onClick={disabled ? undefined : onToggle} title={disabled ? "Bir iş tek kumaş dokur — önce seçili kumaşın kalemleri" : undefined} data-testid={`ol-row-${l.lineId}`}>
       <td className="p-2" onClick={(e) => e.stopPropagation()}>
-        <Checkbox checked={checked} onCheckedChange={onToggle} aria-label={`${l.orderNumber} seç`} />
+        <Checkbox checked={checked} disabled={disabled} onCheckedChange={onToggle} aria-label={`${l.orderNumber} seç`} />
       </td>
       <td className="p-2">
         <div className="font-mono text-xs">{l.orderNumber}</div>
@@ -60,11 +61,12 @@ export function OrderLinePickerDialog({ open, onOpenChange, itemId, colorId, exc
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const q = useQuery({
     queryKey: ["order-lines-available", itemId, colorId ?? "", search],
-    queryFn: () => listAvailableOrderLines({ itemId, colorId, search: search.trim() || undefined, limit: 100 }),
-    enabled: open && itemId !== "",
+    queryFn: () => listAvailableOrderLines({ itemId: itemId || undefined, colorId, search: search.trim() || undefined, limit: 50 }),
+    enabled: open,
     staleTime: 15_000,
   });
   const lines = useMemo(() => (q.data?.data ?? []).filter((l) => !excludeIds.has(l.lineId)), [q.data, excludeIds]);
+  const lockedItemId = itemId || lines.find((l) => selected.has(l.lineId))?.itemId || null;
   const toggle = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -79,7 +81,9 @@ export function OrderLinePickerDialog({ open, onOpenChange, itemId, colorId, exc
           <DialogTitle className="flex items-center gap-2">
             <Link2 className="h-4 w-4" /> Sipariş satırı ekle
           </DialogTitle>
-          <DialogDescription>Yalnız bu işin kumaşına (ve seçiliyse rengine) ait AÇIK sipariş kalemleri. Bağ tahsis değildir; tahsis metresi sonra, isteğe bağlı.</DialogDescription>
+          <DialogDescription>
+            {itemId ? "Yalnız bu işin kumaşına (ve seçiliyse rengine) ait AÇIK sipariş kalemleri." : "Kumaş henüz seçilmedi: kalemi seçin, kumaş ve renk ondan dolar (değiştirebilirsiniz)."} Bağ tahsis değildir; tahsis metresi sonra, isteğe bağlı.
+          </DialogDescription>
         </DialogHeader>
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Sipariş no veya müşteri ara…" aria-label="Sipariş ara" />
         <div className="max-h-[48vh] overflow-auto rounded-md border">
@@ -90,7 +94,7 @@ export function OrderLinePickerDialog({ open, onOpenChange, itemId, colorId, exc
           ) : q.isError ? (
             <div className="p-6 text-center text-sm text-destructive">Liste yüklenemedi — bu bir “açık sipariş yok” cevabı DEĞİLDİR.</div>
           ) : lines.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">Bu kumaş için açık sipariş kalemi yok.</div>
+            <div className="p-6 text-center text-sm text-muted-foreground">{itemId ? "Bu kumaş için açık sipariş kalemi yok." : "Açık sipariş kalemi yok."}</div>
           ) : (
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-muted/60 text-xs">
@@ -104,7 +108,7 @@ export function OrderLinePickerDialog({ open, onOpenChange, itemId, colorId, exc
               </thead>
               <tbody>
                 {lines.map((l) => (
-                  <LineRow key={l.lineId} l={l} checked={selected.has(l.lineId)} onToggle={() => toggle(l.lineId)} />
+                  <LineRow key={l.lineId} l={l} checked={selected.has(l.lineId)} disabled={lockedItemId !== null && l.itemId !== lockedItemId} onToggle={() => toggle(l.lineId)} />
                 ))}
               </tbody>
             </table>

@@ -34,7 +34,8 @@ export interface AvailableOrderLine {
 }
 
 export interface AvailableLinesQuery {
-  itemId: string;
+  /** Boş = "sipariş-önce" aramalı liste (cursor kipinde sunucu itemId'yi opsiyonel alır). */
+  itemId?: string;
   colorId?: string | null;
   search?: string;
   cursor?: string | null;
@@ -50,10 +51,10 @@ export function num(v: number | string | null | undefined): number | null {
 
 export function listAvailableOrderLines(q: AvailableLinesQuery): Promise<CursorPaginatedResponse<AvailableOrderLine>> {
   const sp = new URLSearchParams();
-  sp.set("itemId", q.itemId);
+  if (q.itemId) sp.set("itemId", q.itemId);
   if (q.colorId) sp.set("colorId", q.colorId);
   if (q.search) sp.set("search", q.search);
   if (q.cursor) sp.set("cursor", q.cursor);
-  sp.set("limit", String(q.limit ?? 100));
+  sp.set("limit", String(q.limit ?? 50)); // sunucu şeması limit ≤ 50 (`availableQuerySchema`)
   return apiClient.get<CursorPaginatedResponse<AvailableOrderLine>>(`/api/orders/order-lines/available?${sp.toString()}`).then((r) => r.data);
 }
