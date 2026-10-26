@@ -16,6 +16,7 @@ import * as templates from "../services/document-template/template.service";
 import * as contracts from "../services/document-template/contract-view.service";
 import * as previews from "../services/document-template/preview.service";
 import * as versions from "../services/document-template/version.service";
+import { renderSystemPreview } from "../services/document-template/system-preview.service";
 
 const EditModeSchema = z.enum(["VISUAL", "CODE"], "Düzenleme kipi VISUAL ya da CODE olmalı");
 const DocTypeSchema = z.string().min(1).max(40);
@@ -128,6 +129,8 @@ export const documentTemplateController = {
     if (input.sample.kind === "kayit") assertDocRead(req, input.docType);
     return ok(res, await previews.previewTemplate(input));
   },
+  // Yerleşik renderer + örnek veri; eşleniği olmayan türde de çizer, yazmaz.
+  systemPreview: async (req: Request, res: Response) => ok(res, await renderSystemPreview(param(req, "docType"))),
   sampleSources: async (req: Request, res: Response) => {
     const docType = param(req, "docType");
     assertDocRead(req, docType);

@@ -100,6 +100,7 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Cost/shared/useCostPreview.ts::previewCost", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // T5 belge şablonu: Sistem önizlemesi / sürüm karşılaştırması / yayın onayı açılınca çizer (yazmaz; zarf `ok(res, data)`, uyarısız).
   { yer: "Electron/src/pages/Definitions/DocumentDesigner/templates/SystemPreviewDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
+  { yer: "Electron/src/pages/Definitions/DocumentDesigner/templates/SystemPreviewDialog.tsx::documentTemplateService.systemPreview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentDesigner/versions/CompareDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentDesigner/versions/PublishDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/hooks/useDeviceAnnounce.ts::apiClient", sinif: "BOOT", zarfUyarisi: false },

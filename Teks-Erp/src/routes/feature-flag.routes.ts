@@ -10,7 +10,7 @@
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { systemSettingService, SHIPPING_SACK_SEQ_PREFIX_WRITE_RE } from "../services/system-setting.service";
+import { systemSettingService, SHIPPING_RETURN_FOOTNOTE_MAX, SHIPPING_SACK_SEQ_PREFIX_WRITE_RE } from "../services/system-setting.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import {
   requirePermission,
@@ -453,6 +453,7 @@ export const updateSchema = z.strictObject({
   // `_`/boşluğa çevirir ⇒ iki sevkiyat AYNI dosya adına düşer (ölçüldü).
   // Desen BURADA YAZILMAZ: yazma yüklemi tek kaynaktır (servis sabiti) — aynı
   // soruyu iki yerde cevaplamak bu turda kapattığımız ayrışan-yüzey sınıfıdır.
+  shippingReturnFootnote: z.string().max(SHIPPING_RETURN_FOOTNOTE_MAX, `İade irsaliyesi dipnotu en çok ${SHIPPING_RETURN_FOOTNOTE_MAX} karakter`).optional(),
   shippingSackSeqPrefix: z.string().max(8).regex(SHIPPING_SACK_SEQ_PREFIX_WRITE_RE, "Yalnız harf, rakam, - _ . ve boşluk").optional(),
   shippingSackSeqPrefixLive: z.boolean().optional(),
   shippingSackSeqStart: z.number().int().min(0).max(999).nullable().optional(),
