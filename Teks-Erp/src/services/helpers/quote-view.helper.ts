@@ -23,8 +23,11 @@ export interface QuoteViewer {
   priceList<T extends object>(l: T): Row;
 }
 
-/** Brüt marj (TL): satış (teklif dövizi × kur) − maliyet; yalnız maliyet görene. */
-function margin(q: Row): { brutMarjTry: string; marjPct: string | null } | null {
+/**
+ * Brüt marj (TL): satış (teklif dövizi × kur) − maliyet; yalnız maliyet görene. TEK hesap yeri — panel yanıtı ve
+ * patron bulutu `teklif.finans.brutMarjPct` aynı fonksiyonu çağırır (bulut/uygulama hesap yapmaz; MAL-8).
+ */
+export function quoteMargin(q: Row): { brutMarjTry: string; marjPct: string | null } | null {
   const total = q.totalAmount as Prisma.Decimal | undefined;
   const cost = q.totalCostTry as Prisma.Decimal | null | undefined;
   const fx = q.fxRate as Prisma.Decimal | undefined;
@@ -50,7 +53,7 @@ export function quoteViewFor(user: { permissions?: string[] } | undefined): Quot
       if (!canSeeInternal) out = omit(out, ["internalNote"]);
       if (Array.isArray(out.lines)) out.lines = (out.lines as Row[]).map((l) => (canSeeCost ? l : omit(l, LINE_COST_KEYS)));
       if (!canSeeCost) return omit(out, ["totalCostTry"]);
-      return { ...out, marj: margin(out) };
+      return { ...out, marj: quoteMargin(out) };
     },
     priceList(l) {
       const out: Row = { ...(l as Row) };

@@ -1,0 +1,16 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`§6 görsel kayıt (emülatör yok: PNG yerine ekran metinleri anlık görüntüsü) maliyet izinli teklif listesi 1`] = `
+[
+  "Geri",
+  "Teklifler",
+  "Gönderilen teklifler",
+  "2",
+  "Akın Tekstil",
+  "1.000 $",
+  "Süresi doldu · TK-0007/R2 · 20.10.2026 · geçerlilik 25.10.2026",
+  "TK-0008",
+  "Kabul edildi",
+  "20.10.2026 · geçerlilik 25.10.2026",
+]
+`;

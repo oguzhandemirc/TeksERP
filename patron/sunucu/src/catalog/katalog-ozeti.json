@@ -15,6 +15,8 @@
     "bulut:tahsilat:oku",
     "bulut:fiyat:oku",
     "bulut:rapor:oku",
+    "bulut:teklif:oku",
+    "bulut:maliyet:oku",
     "bulut:siparis:yaz",
     "bulut:cari:yaz",
     "bulut:hesap:yonet"
@@ -392,6 +394,71 @@
       ]
     },
     {
+      "name": "teklif",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:teklif:oku"
+      ],
+      "retentionFields": [
+        "tarih"
+      ],
+      "sortFields": [
+        "tarih",
+        "degisim"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "toplamTutar",
+        "kur",
+        "toplamMaliyetTl",
+        "brutMarjPct"
+      ]
+    },
+    {
+      "name": "teklif-kalemi",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:teklif:oku"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "birimFiyat",
+        "tutar",
+        "metreMaliyetiTl",
+        "karPct"
+      ],
+      "parent": {
+        "projection": "teklif",
+        "field": "teklifId"
+      },
+      "retentionFromParent": true
+    },
+    {
+      "name": "standart-maliyet",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:teklif:oku"
+      ],
+      "sortFields": [
+        "hesapTarihi"
+      ],
+      "subRows": [
+        "finans"
+      ],
+      "forbiddenRootFields": [
+        "metreMaliyetiTl",
+        "cozguTl",
+        "atkiTl",
+        "dokumaTl",
+        "terbiyeTl",
+        "genelGiderTl"
+      ]
+    },
+    {
       "name": "ozet.stok",
       "kind": "ANLIK",
       "permissions": [
@@ -599,6 +666,27 @@
     ],
     "fiyat.finans": [
       "bulut:fiyat:oku"
+    ],
+    "teklif": [
+      "bulut:teklif:oku"
+    ],
+    "teklif.finans": [
+      "bulut:teklif:oku",
+      "bulut:maliyet:oku"
+    ],
+    "teklif-kalemi": [
+      "bulut:teklif:oku"
+    ],
+    "teklif-kalemi.finans": [
+      "bulut:teklif:oku",
+      "bulut:maliyet:oku"
+    ],
+    "standart-maliyet": [
+      "bulut:teklif:oku"
+    ],
+    "standart-maliyet.finans": [
+      "bulut:teklif:oku",
+      "bulut:maliyet:oku"
     ],
     "ozet.stok": [
       "bulut:ozet:oku",

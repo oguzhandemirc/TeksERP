@@ -172,10 +172,26 @@ export const LIST_SEARCH: Readonly<Record<string, ListSearchSpec>> = {
       ],
     },
   },
+  // Taslak teklif buluta gelmez. `suresiDoldu`yu fabrika türetir; geçerlilik günü dönünce satırı yeniden gönderir.
+  teklif: {
+    alanlar: ["no", "musteriAdi"],
+    suzgec: {
+      etiket: "Durum",
+      varsayilan: null,
+      secenekler: [
+        { deger: "GONDERILDI", etiket: "Gönderildi", alan: "durum", esit: "SENT" },
+        { deger: "SURESI_DOLDU", etiket: "Süresi doldu", alan: "suresiDoldu", esit: true },
+        { deger: "KABUL", etiket: "Kabul edildi", alan: "durum", esit: "ACCEPTED" },
+        { deger: "SIPARIS", etiket: "Siparişe döndü", alan: "durum", esit: "CONVERTED" },
+        { deger: "RED", etiket: "Reddedildi", alan: "durum", esit: "REJECTED" },
+        { deger: "IPTAL", etiket: "İptal", alan: "durum", esit: "CANCELLED" },
+      ],
+    },
+  },
 };
 
 // ---------------------------------------------------------------- liste kimlik süzgeçleri
-export const LIST_ID_FILTER_KEYS = ["cariKartId", "cariHesapId", "siparisId"] as const;
+export const LIST_ID_FILTER_KEYS = ["cariKartId", "cariHesapId", "siparisId", "teklifId", "urunId"] as const;
 export type ListIdFilterKey = (typeof LIST_ID_FILTER_KEYS)[number];
 
 /**
@@ -183,9 +199,11 @@ export type ListIdFilterKey = (typeof LIST_ID_FILTER_KEYS)[number];
  * TAŞIYAN projeksiyonlarda (fabrika kataloğu kolonları) kabul edilir, diğerinde 400.
  */
 export const LIST_ID_FILTERS: Readonly<Record<ListIdFilterKey, readonly string[]>> = {
-  cariKartId: ["sube", "fason-firma", "siparis", "sevkiyat", "dogrudan-sevk", "cuval", "cari-hesap", "fiyat"],
+  cariKartId: ["sube", "fason-firma", "siparis", "sevkiyat", "dogrudan-sevk", "cuval", "cari-hesap", "fiyat", "teklif"],
   cariHesapId: ["cari-hareket", "cek-senet", "fatura", "tahsilat-odeme"],
-  siparisId: ["siparis-kalemi"],
+  siparisId: ["siparis-kalemi", "teklif"],
+  teklifId: ["teklif-kalemi"],
+  urunId: ["siparis-kalemi", "is-emri", "fatura-kalemi", "fiyat", "teklif-kalemi", "standart-maliyet"],
 };
 
 /** `GET /oturum` `liste` — bu sunucunun liste yetenekleri; eski sunucu göndermez (istemci süzgeçli görünümü gizler). */

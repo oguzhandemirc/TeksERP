@@ -1,5 +1,6 @@
 // Patron bulutu projeksiyon kataloğu — OLGU projeksiyonları (iş kayıtları). Tek kaynak
 // `projections.ts` üzerinden dışa açılır; tasarım `docs/design/PATRON-BULUTU-ESITLEME.md` §3.2.
+import { factoryDaySql } from "../constants/time";
 import { col, derived, lookup, self, via, type RecordProjection } from "./projection-types";
 
 // ── OLGU projeksiyonları ──────────────────────────────────────────────────────
@@ -22,6 +23,17 @@ const NAME_OF = (model: string): string => `cloud-sync/derived displayNames: ${m
 const EFFECTIVE_DUE_SQL =
   'COALESCE(i."dueDate", i."issueDate" + c."paymentTermDays" * interval \'86400 seconds\')';
 const DUE_CROSSING_FROM = `FROM "invoices" i LEFT JOIN "cari_accounts" c ON c."id" = i."cariId" WHERE i."status" <> 'DRAFT' AND ${EFFECTIVE_DUE_SQL} >= $1 AND ${EFFECTIVE_DUE_SQL} < $2`;
+
+/** Teklif ertesi fabrika gününün başında "süresi doldu" olur: geçerlilik (önceki konum günü, ufuk günü] aralığındaki SENT teklifler. */
+const QUOTE_EXPIRY_CROSSING = {
+  name: "gecerlilik",
+  // Getter: fabrika dilimi (dönemli) sorgu anında çözülür; dilim literali bu dosyaya yazılmaz.
+  get sql(): string {
+    return `SELECT q."id" AS root_id FROM "sales_quotes" q WHERE q."status" = 'SENT' AND q."validUntilDate" >= ${factoryDaySql("$1::timestamptz").sql} AND q."validUntilDate" < ${factoryDaySql("$2::timestamptz").sql}`;
+  },
+};
+const QUOTES_OF_CUSTOMERS = 'SELECT q."id" AS root_id FROM "sales_quotes" q WHERE q."customerId" = ANY($1::uuid[])';
+const NOT_DRAFT_QUOTE = `EXISTS (SELECT 1 FROM "sales_quotes" q WHERE q."id" = t."quoteId" AND q."status" <> 'DRAFT')`;
 
 export const FACTS: readonly RecordProjection[] = [
   {
@@ -253,5 +265,50 @@ export const FACTS: readonly RecordProjection[] = [
     // Damgalı (değişmiş/kaldırılmış) fiyat güncel değildir: kapsamdan çıkınca bulut satırı düşer (MAL-0b).
     scope: { note: "damgalı (kaldırılmış/değişmiş) fiyat güncel değildir; kapsamdan çıkınca bulut satırı düşer", prismaWhere: { revokedAt: null }, sql: `t."revokedAt" IS NULL` },
     deletion: "YOK", permission: "bulut:fiyat:oku", module: "finance.enabled", catalogVersion: 1,
+  },
+  // ── Maliyet & teklif (MAL-8): tutar/kur/maliyet/marj yalnız `.finans` (izni `bulut:maliyet:oku`, subRowPermission) ──
+  {
+    name: "teklif", kind: "KAYIT", role: "OLGU", root: { table: "sales_quotes", model: "SalesQuote" },
+    // Taslak satış yüzü değildir (kalemi silinir/değişir); gönderilince buluta girer. Teklif hard delete edilmez.
+    scope: { note: "taslak (DRAFT) teklif buluta GİRMEZ", prismaWhere: { status: { not: "DRAFT" } }, sql: `t."status" <> 'DRAFT'` },
+    columns: [col("id", "id"), col("no", "quoteNo"), col("revizyon", "revisionNo"), col("cariKartId", "customerId"), col("durum", "status"),
+      col("tarih", "quoteDate"), col("gecerlilik", "validUntilDate"), col("doviz", "currency"), col("siparisId", "convertedOrderId"),
+      col("degisim", "updatedAt"), col("toplamTutar", "totalAmount", "FINANS"), col("kur", "fxRate", "FINANS"),
+      col("toplamMaliyetTl", "totalCostTry", "FINANS")],
+    derived: [
+      derived("suresiDoldu", "helpers/sales-quote-state.helper isQuoteExpired (SENT ∧ geçerlilik < fabrika günü; liste süzgeciyle ikiz)", ["sales_quotes"], { timeBound: true }),
+      derived("brutMarjPct", "helpers/quote-view.helper quoteMargin.marjPct ((toplam × kur − maliyet) / (toplam × kur); maliyet yoksa null)", ["sales_quotes"], { dataClass: "FINANS" }),
+      derived("musteriAdi", NAME_OF("Customer"), ["customers"]),
+    ],
+    sources: [self("sales_quotes"), lookup("customers", "id", QUOTES_OF_CUSTOMERS, "cari adı değişince teklifleri yeniden gider")],
+    crossings: [QUOTE_EXPIRY_CROSSING],
+    deletion: "YOK", permission: "bulut:teklif:oku", module: "maliyet.enabled",
+    retention: { wireFields: ["tarih"], sql: 't."quoteDate"' }, catalogVersion: 1,
+  },
+  {
+    name: "teklif-kalemi", kind: "KAYIT", role: "OLGU", root: { table: "sales_quote_lines", model: "SalesQuoteLine" },
+    scope: { note: "üst teklif taslak değil (kalem yalnız taslakta eklenir/silinir)", prismaWhere: { quote: { status: { not: "DRAFT" } } }, sql: NOT_DRAFT_QUOTE },
+    columns: [col("id", "id"), col("teklifId", "quoteId"), col("sira", "lineNo"), col("urunId", "itemId"), col("renkId", "colorId"),
+      col("tanim", "description"), col("miktar", "quantity"), col("birim", "unit"), col("birimFiyat", "unitPrice", "FINANS"),
+      col("tutar", "lineTotal", "FINANS"), col("metreMaliyetiTl", "costPerMTry", "FINANS"), col("karPct", "markupPct", "FINANS")],
+    derived: [],
+    sources: [self("sales_quote_lines"),
+      lookup("sales_quotes", "id", 'SELECT l."id" AS root_id FROM "sales_quote_lines" l WHERE l."quoteId" = ANY($1::uuid[])', "teklif gönderilince kalemleri kapsama girer")],
+    deletion: "KAPSAM_DISI", permission: "bulut:teklif:oku", module: "maliyet.enabled",
+    retention: { wireFields: [], parent: { projection: "teklif", wireKey: "teklifId" }, sql: '(SELECT q."quoteDate" FROM "sales_quotes" q WHERE q."id" = t."quoteId")' },
+    catalogVersion: 1,
+  },
+  {
+    name: "standart-maliyet", kind: "KAYIT", role: "OLGU", root: { table: "standard_cost_versions", model: "StandardCostVersion" },
+    columns: [col("id", "id"), col("urunId", "itemId"), col("surum", "versionNo"), col("durum", "status"), col("hesapTarihi", "computedAt"),
+      col("metreMaliyetiTl", "totalCostPerMTry", "FINANS")],
+    derived: [
+      ...(["cozguTl", "atkiTl", "dokumaTl", "terbiyeTl", "genelGiderTl"] as const).map((g) =>
+        derived(g, "helpers/cost-component-groups.helper sumCostGroups (standard_cost_lines.amountPerMTry, COST_COMPONENT_GROUP)", ["standard_cost_lines"], { dataClass: "FINANS" })),
+      derived("urunAdi", NAME_OF("Item"), ["items"]),
+    ],
+    sources: [self("standard_cost_versions"), via("standard_cost_lines", "versionId"),
+      lookup("items", "id", 'SELECT v."id" AS root_id FROM "standard_cost_versions" v WHERE v."itemId" = ANY($1::uuid[])', "ürün adı değişince sürümleri yeniden gider")],
+    deletion: "YOK", permission: "bulut:teklif:oku", module: "maliyet.enabled", catalogVersion: 1,
   },
 ];

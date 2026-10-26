@@ -55,6 +55,10 @@ const FINANCE_FAMILY: ReadonlySet<string> = new Set([
   "fiyat",
 ]);
 
+/** Maliyet & teklif projeksiyonları: `.finans` (tutar · kur · maliyet · marj) `bulut:maliyet:oku` ister — fiyat izni AÇMAZ (MAL-8). */
+const COST_FAMILY: ReadonlySet<string> = new Set(["teklif", "teklif-kalemi", "standart-maliyet"]);
+const MALIYET_KOLONU: CloudPermission = "bulut:maliyet:oku";
+
 export const ROOT_PROJECTIONS: readonly RootProjection[] = [
   // ---- BOYUT (sözlükler; her hesap) ----
   { name: "urun", kind: "BOYUT", permissions: OTURUM },
@@ -160,6 +164,32 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
     forbiddenRootFields: ["tutar", "tutarTl", "eslesen", "eslesmemis"],
   },
   { name: "fiyat", kind: "OLGU", permissions: ["bulut:fiyat:oku"], subRows: ["finans"], forbiddenRootFields: ["fiyat"] },
+  {
+    name: "teklif",
+    kind: "OLGU",
+    permissions: ["bulut:teklif:oku"],
+    retentionFields: ["tarih"],
+    sortFields: ["tarih", "degisim"],
+    subRows: ["finans"],
+    forbiddenRootFields: ["toplamTutar", "kur", "toplamMaliyetTl", "brutMarjPct"],
+  },
+  {
+    name: "teklif-kalemi",
+    kind: "OLGU",
+    permissions: ["bulut:teklif:oku"],
+    subRows: ["finans"],
+    forbiddenRootFields: ["birimFiyat", "tutar", "metreMaliyetiTl", "karPct"],
+    parent: parentOf("teklif-kalemi"),
+    retentionFromParent: true,
+  },
+  {
+    name: "standart-maliyet",
+    kind: "OLGU",
+    permissions: ["bulut:teklif:oku"],
+    sortFields: ["hesapTarihi"],
+    subRows: ["finans"],
+    forbiddenRootFields: ["metreMaliyetiTl", "cozguTl", "atkiTl", "dokumaTl", "terbiyeTl", "genelGiderTl"],
+  },
   // ---- ANLIK (tek satır; her turda bütünüyle yeniden hesaplanır) ----
   { name: "ozet.stok", kind: "ANLIK", permissions: ["bulut:ozet:oku", "bulut:stok:oku"] },
   { name: "ozet.siparis", kind: "ANLIK", permissions: ["bulut:ozet:oku", "bulut:siparis:oku"] },
@@ -185,7 +215,11 @@ export interface ProjectionDef {
 }
 
 function subRowPermissions(root: RootProjection, sub: SubRow): readonly CloudPermission[] {
-  const extra: CloudPermission = sub === "kisisel" ? KISISEL_KOLONU : FINANCE_FAMILY.has(root.name) ? root.permissions[0]! : FINANS_KOLONU;
+  const extra: CloudPermission =
+    sub === "kisisel" ? KISISEL_KOLONU
+    : COST_FAMILY.has(root.name) ? MALIYET_KOLONU
+    : FINANCE_FAMILY.has(root.name) ? root.permissions[0]!
+    : FINANS_KOLONU;
   return [...new Set<CloudPermission>([...root.permissions, extra])];
 }
 

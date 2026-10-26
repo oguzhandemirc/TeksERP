@@ -35,6 +35,8 @@ export const PERMISSION_LABEL: Readonly<Record<string, PermissionLabel>> = {
   "bulut:fatura:oku": { ad: "Faturalar", aciklama: "Kesilen ve alınan faturaları görür", grup: "finans" },
   "bulut:tahsilat:oku": { ad: "Tahsilat ve ödeme", aciklama: "Tahsilat ve ödeme kayıtlarını görür", grup: "finans" },
   "bulut:fiyat:oku": { ad: "Fiyatlar", aciklama: "Birim fiyatları ve tutarları görür", grup: "finans" },
+  "bulut:teklif:oku": { ad: "Teklifleri görme", aciklama: "Müşteriye gönderilmiş teklifleri ve kalemlerini görür", grup: "siparis" },
+  "bulut:maliyet:oku": { ad: "Maliyet ve marj", aciklama: "Teklif tutarlarını, maliyeti, kârlılığı ve standart maliyetleri görür", grup: "finans" },
   "bulut:rapor:oku": { ad: "Raporlar", aciklama: "Fabrikadan rapor ister ve sonuçlarını görür", grup: "rapor" },
   "bulut:hesap:yonet": { ad: "Hesap yönetimi", aciklama: "Hesap davet eder, izin verir, kilitler; verileri dışa aktarır", grup: "hesap" },
 };
