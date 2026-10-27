@@ -96,6 +96,9 @@ export async function teklifFiksturSil(f: TeklifFikstur): Promise<void> {
     await prisma.orderLine.deleteMany({ where: { orderId: { in: oids } } });
     await prisma.order.deleteMany({ where: { id: { in: oids } } });
   }
+  // Gönderim/yayın geçişi belgeyi dondurur (eager) — fikstürün belge satırları da gider (yalnız test DB).
+  const listIds = (await prisma.priceList.findMany({ where: { customerId: f.customerId }, select: { id: true } })).map((l) => l.id);
+  await prisma.printedDocument.deleteMany({ where: { OR: [{ docType: "SALES_QUOTE", sourceId: { in: ids } }, { docType: "PRICE_LIST", sourceId: { in: listIds } }] } });
   await prisma.priceListLine.deleteMany({ where: { priceList: { customerId: f.customerId } } });
   await prisma.priceList.deleteMany({ where: { customerId: f.customerId } });
   await prisma.customer.delete({ where: { id: f.customerId } });
