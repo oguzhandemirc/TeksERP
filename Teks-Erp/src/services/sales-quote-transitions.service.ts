@@ -12,7 +12,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { claimQuoteTx, quoteToday, type QuoteTransition } from "./helpers/sales-quote-state.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
-import { voidQuoteDocumentTx } from "./quote-documents.service";
+import { freezeQuoteDocumentTx, voidQuoteDocumentTx } from "./quote-documents.service";
 import { validate as isUuidString } from "uuid";
 
 export const QUOTE_TABLE = "SALES_QUOTE";
@@ -75,6 +75,8 @@ export function sendQuote(id: string, userId?: string): Promise<QuoteRecord> {
     after: async (tx) => {
       const n = await tx.salesQuoteLine.count({ where: { quoteId: id } });
       if (n === 0) throw AppError.badRequest("Kalemsiz teklif gönderilemez; önce kalem ekleyin.", { code: "QUOTE_EMPTY" });
+      // Belge gönderim ANINDA donar (lazy "geriye dönük" değil); hata geçişi geri sarar (emsal: freezeForSource çağıranları).
+      await freezeQuoteDocumentTx(tx, id, userId);
     },
   });
 }

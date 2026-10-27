@@ -6,14 +6,16 @@
 // maliyet/kâr/iç not sonda değerleri HTML'de, /tables'ta, snapshot'ta, sözleşme bağlamında ve
 // özetinde YOK · §5 PDF = Excel (HTML hücreleri ↔ /tables satırları) · §6 fiyat listesi
 // PUBLISHED donar, DRAFT donmaz, ARCHIVED VOID etmez · §7 modül kapalı → yeni basım 403
-// MODULE_DISABLED, donmuş belgenin yeniden basımı açık.
+// MODULE_DISABLED, donmuş belgenin yeniden basımı açık · §8 EAGER: SENT/PUBLISHED geçişinin tx'inde
+// donar (basımsız ACTIVE, rozet yok), belgesiz eski kayıt lazy + "geriye dönük", revizyon + replay.
 // =============================================================================
 import { Prisma, PrintedDocType } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import prisma from "../src/lib/prisma";
 import { printedDocumentService, type PrintedDocSnapshot } from "../src/services/printed-document.service";
 import "../src/services/quote-documents.service";
-import { cancelQuote, reviseQuote } from "../src/services/sales-quote-transitions.service";
+import { cancelQuote, reviseQuote, sendQuote } from "../src/services/sales-quote-transitions.service";
+import { publishPriceList } from "../src/services/price-list.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { docNum } from "../src/services/document-render/fmt-num";
 import type { DocTablesPayload } from "../src/services/document-render/doc-model";
@@ -203,6 +205,76 @@ async function priceListSections(t: TeklifFikstur, m: MaliyetFikstur): Promise<s
   return [draft.id, pub.id];
 }
 
+const fullDocs = (docType: PrintedDocType, sourceId: string) =>
+  prisma.printedDocument.findMany({ where: { docType, sourceId }, orderBy: { version: "asc" }, select: { version: true, status: true, reconstructed: true, documentNo: true, snapshot: true } });
+const frozenAtMs = (snap: unknown): number => Date.parse((snap as { frozenAt?: string } | undefined)?.frozenAt ?? "");
+const near = (a: number, b: Date | null | undefined): boolean => !!b && Number.isFinite(a) && Math.abs(a - b.getTime()) < 5_000;
+
+/** §8 Eager freeze: belge geçişin tx'inde doğar; belgesiz eski kayıt ilk basımda lazy donar. */
+async function eagerSections(t: TeklifFikstur, m: MaliyetFikstur): Promise<string[]> {
+  // (a) SENT geçişi → basım OLMADAN v1 ACTIVE, frozenAt ≈ sentAt, rozet (reconstructed) yok
+  const q = await teklifYaz(t, "DRAFT", { itemId: m.fabricId });
+  const sent = await sendQuote(q, undefined);
+  const da = await fullDocs(SQ, q);
+  check("§8a SENT geçişi → basımsız v1 ACTIVE doğar", da.length === 1 && da[0]!.version === 1 && da[0]!.status === "ACTIVE", JSON.stringify(da.map((d) => [d.version, d.status])));
+  check("§8a2 frozenAt ≈ gönderim anı (sentAt)", near(frozenAtMs(da[0]?.snapshot), sent.sentAt));
+  check("§8a3 eager belge 'geriye dönük' DEĞİL (reconstructed=false)", da[0]?.reconstructed === false);
+  const ha = await html(SQ, q);
+  check("§8a4 ilk basım ikinci satır doğurmaz, donmuş belgeden basar", !!ha && (await fullDocs(SQ, q)).length === 1);
+  // Kalemsiz gönderim düşer → geçiş de belge de geri sarılır (birlikte ya da hiç)
+  const empty = await teklifYaz(t, "DRAFT", { itemId: m.fabricId, lines: 0 });
+  const ee = await hata(() => sendQuote(empty, undefined));
+  check("§8a5 düşen gönderimde belge doğmaz (tx geri sarıldı)", ee?.status === 400 && (await fullDocs(SQ, empty)).length === 0, JSON.stringify(ee));
+  // İkinci gönderim claim'de 409 → ikinci belge yok
+  const e2 = await hata(() => sendQuote(q, undefined));
+  check("§8a6 tekrar gönderim 409, ikinci belge yok", e2?.status === 409 && (await fullDocs(SQ, q)).length === 1, JSON.stringify(e2));
+
+  // (d) belgesiz SENT (bu sürümden önce gönderilmiş eski kayıt) → ilk basımda lazy v1, rozet VAR
+  const legacy = await teklifYaz(t, "SENT", { itemId: m.fabricId });
+  check("§8d0 eski kayıt: basım öncesi belge yok", (await fullDocs(SQ, legacy)).length === 0);
+  await html(SQ, legacy);
+  const dd = await fullDocs(SQ, legacy);
+  check("§8d eski kayıt ilk basımda lazy donar (v1 ACTIVE, reconstructed=true)", dd.length === 1 && dd[0]!.status === "ACTIVE" && dd[0]!.reconstructed === true);
+
+  // (e) revizyon: eski belge VOIDED, yeni revizyon SENT geçişinde kendi kaynağında v1 donar
+  const tok = randomUUID();
+  const rev = await reviseQuote(q, { clientToken: tok }, undefined);
+  t.quoteIds.push(rev.id);
+  const de = await fullDocs(SQ, q);
+  check("§8e revizyon → eski v1 VOIDED (yeni satır yok)", de.length === 1 && de[0]!.status === "VOIDED");
+  check("§8e2 yeni revizyon DRAFT → belge yok", (await fullDocs(SQ, rev.id)).length === 0);
+  await sendQuote(rev.id, undefined);
+  const dr = await fullDocs(SQ, rev.id);
+  check("§8e3 revizyon SENT → v(max+1)=1 ACTIVE, belge no …/R2, rozet yok",
+    dr.length === 1 && dr[0]!.version === 1 && dr[0]!.status === "ACTIVE" && dr[0]!.reconstructed === false && dr[0]!.documentNo === `${sent.quoteNo}/R${sent.revisionNo + 1}`,
+    JSON.stringify(dr.map((d) => [d.version, d.status, d.documentNo])));
+
+  // (f) aynı clientToken replay → aynı revizyon, ikinci ACTIVE belge doğmaz
+  const again = await reviseQuote(q, { clientToken: tok }, undefined);
+  const activeAll = (await prisma.printedDocument.findMany({ where: { docType: SQ, sourceId: { in: [q, rev.id] }, status: "ACTIVE" }, select: { id: true } })).length;
+  check("§8f replay aynı revizyonu döner, ACTIVE belge sayısı 1", again.id === rev.id && activeAll === 1, `again=${again.id === rev.id} active=${activeAll}`);
+
+  // (g) Modül kapısı uçtadır (`requireMaliyetEnabled`); geçişin içindeki freeze ikinci 403 üretmez.
+  const gated = await teklifYaz(t, "DRAFT", { itemId: m.fabricId });
+  const eg = await withSettings({ [SETTING_KEYS.MALIYET_ENABLED]: false }, () => hata(() => sendQuote(gated, undefined)));
+  check("§8g freeze ek 403 üretmez (servis geçişi modül bayrağından bağımsız donar)", eg === null && (await fullDocs(SQ, gated)).length === 1, JSON.stringify(eg));
+
+  // (b) PUBLISHED geçişi → basımsız ACTIVE, frozenAt ≈ publishedAt, rozet yok
+  const list = await prisma.priceList.create({
+    data: {
+      listNo: `${t.tag}-FL-EG`.slice(0, 32), clientToken: randomUUID(), name: `${t.tag} eager`, customerId: t.customerId, currency: "TRY", status: "DRAFT",
+      lines: { create: [{ lineNo: 1, itemId: m.fabricId, unitPrice: D("120"), minQty: D(100) }] },
+    },
+    select: { id: true },
+  });
+  const pub = await publishPriceList(list.id, undefined);
+  const db = await fullDocs(PL, list.id);
+  check("§8b PUBLISHED geçişi → basımsız v1 ACTIVE doğar", db.length === 1 && db[0]!.version === 1 && db[0]!.status === "ACTIVE");
+  check("§8b2 frozenAt ≈ yayın anı (publishedAt)", near(frozenAtMs(db[0]?.snapshot), pub.publishedAt));
+  check("§8b3 eager liste belgesi rozetsiz (reconstructed=false)", db[0]?.reconstructed === false);
+  return [list.id];
+}
+
 async function main(): Promise<void> {
   assertGelistirmeVeritabani("test_teklif_belgesi");
   const m = await fiksturKur("TB");
@@ -212,6 +284,7 @@ async function main(): Promise<void> {
     await withSettings({ [SETTING_KEYS.PRODUCTION_ENABLED]: true, [SETTING_KEYS.MALIYET_ENABLED]: true }, async () => {
       await quoteSections(t, m);
       listIds = await priceListSections(t, m);
+      listIds.push(...(await eagerSections(t, m)));
     });
   } finally {
     // Yalnız test DB: bekçinin doğurduğu belge satırları fikstürle birlikte gider.
