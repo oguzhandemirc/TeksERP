@@ -132,6 +132,9 @@ export interface BuilderEntry {
   /** Eski kayıt için geriye dönük üretim (örn. legacy printSnapshot kolonunu
    *  taşı). Verilmezse `fresh` kullanılır. */
   lazyInit?: PrintedDocBuilder;
+  /** `freezeForSource` (geçişin tx'i) üretimi; verilmezse `fresh`. Modül kapısını geçişin
+   *  ucu zaten uyguladıysa ikinci kapı burada atlanır (teklif/fiyat listesi). */
+  freeze?: PrintedDocBuilder;
   /** Kaynak henüz donmamışken (TASLAK) canlı veriden içerik üretir — getHtml
    *  `allowDraft` yolu bunu transient (kaydedilmeyen) snapshot'a sarar ve
    *  renderHtml'i `draft:true` ile çağırır. Verilmezse taslak → 409. */
@@ -548,7 +551,8 @@ export class PrintedDocumentService {
     /** Revizyon gerekçesi — yalnız `reissueForSourceTx` üzerinden gelir (v1'de boş). */
     reissueReason?: string,
   ): Promise<void> {
-    const built = await requireBuilder(docType).fresh(tx, sourceId);
+    const entry = requireBuilder(docType);
+    const built = await (entry.freeze ?? entry.fresh)(tx, sourceId);
     if (!built) {
       throw AppError.internal(`Belge dondurulamadı — kaynak uygun durumda değil: ${docType}/${sourceId}`);
     }

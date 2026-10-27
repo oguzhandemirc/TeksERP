@@ -3,8 +3,9 @@
 // =============================================================================
 // Payload YALNIZ müşteri alanlarını taşır: costPerMTry, markupPct, suggestedUnitPrice,
 // costSnapshot, totalCostTry, internalNote, priceSource SEÇİLMEZ (select listesi = sızıntı
-// sınırı; bekçi test_teklif_belgesi §4). Donma: teklif DRAFT'ta önizleme (kaydedilmez), SENT
-// sonrası ilk basımda v1; fiyat listesi PUBLISHED'da. Donmuş belgenin yeniden basımı builder'a
+// sınırı; bekçi test_teklif_belgesi §4). Donma: teklif DRAFT'ta önizleme (kaydedilmez), v1 SENT
+// geçişinin tx'inde; fiyat listesi PUBLISHED geçişinin tx'inde (belgesiz eski kayıt ilk basımda
+// lazy donar, "geriye dönük"). Donmuş belgenin yeniden basımı builder'a
 // uğramaz (veri erişimi açık); yeni basım/önizleme modül kapalıyken 403 MODULE_DISABLED.
 // =============================================================================
 import { PrintedDocType, type Prisma } from "@prisma/client";
@@ -65,16 +66,22 @@ async function collectQuote(db: PrintedDocDb, quoteId: string) {
   return { q, content: { documentNo: doc.header.documentNo, doc: doc as unknown as Record<string, unknown> } satisfies BuiltDocContent };
 }
 
+// DRAFT donmaz (null → TASLAK önizlemesi); iptal/revizyon görmüş teklifin ilk basımı VOIDED doğar.
+async function quoteFresh(db: PrintedDocDb, quoteId: string): Promise<BuiltDocContent | null> {
+  const { q, content } = await collectQuote(db, quoteId);
+  if (q.status === "DRAFT") return null;
+  if (q.status === "CANCELLED") return { ...content, voidInfo: { reason: q.cancelReason ?? "Teklif iptal edildi", at: q.cancelledAt ?? new Date() } };
+  if (q.status === "SUPERSEDED") return { ...content, voidInfo: { reason: "Teklif revize edildi", at: q.supersededAt ?? new Date() } };
+  return content;
+}
+
 registerPrintedDocBuilder(PrintedDocType.SALES_QUOTE, {
-  // DRAFT donmaz (null → TASLAK önizlemesi); iptal/revizyon görmüş teklifin ilk basımı VOIDED doğar.
   fresh: async (db, quoteId) => {
     await assertMaliyetOpen();
-    const { q, content } = await collectQuote(db, quoteId);
-    if (q.status === "DRAFT") return null;
-    if (q.status === "CANCELLED") return { ...content, voidInfo: { reason: q.cancelReason ?? "Teklif iptal edildi", at: q.cancelledAt ?? new Date() } };
-    if (q.status === "SUPERSEDED") return { ...content, voidInfo: { reason: "Teklif revize edildi", at: q.supersededAt ?? new Date() } };
-    return content;
+    return quoteFresh(db, quoteId);
   },
+  // SENT geçişinin tx'i: uç `requireMaliyetEnabled`'dan geçti — ikinci kapı ek 403 üretmesin.
+  freeze: quoteFresh,
   buildPreview: async (db, quoteId) => {
     await assertMaliyetOpen();
     return (await collectQuote(db, quoteId)).content;
@@ -106,13 +113,19 @@ async function collectPriceList(db: PrintedDocDb, listId: string) {
   return { status: l.status, content: { documentNo: doc.header.documentNo, doc: doc as unknown as Record<string, unknown> } satisfies BuiltDocContent };
 }
 
+// PUBLISHED (ve sonrası ARCHIVED) donar; arşiv belgeyi VOID etmez — "arşivde" bilgisi yalnız ekranda.
+async function priceListFresh(db: PrintedDocDb, listId: string): Promise<BuiltDocContent | null> {
+  const { status, content } = await collectPriceList(db, listId);
+  return status === "DRAFT" ? null : content;
+}
+
 registerPrintedDocBuilder(PrintedDocType.PRICE_LIST, {
-  // PUBLISHED (ve sonrası ARCHIVED) donar; arşiv belgeyi VOID etmez — "arşivde" bilgisi yalnız ekranda.
   fresh: async (db, listId) => {
     await assertMaliyetOpen();
-    const { status, content } = await collectPriceList(db, listId);
-    return status === "DRAFT" ? null : content;
+    return priceListFresh(db, listId);
   },
+  // PUBLISHED geçişinin tx'i: uç `requireMaliyetEnabled`'dan geçti — ikinci kapı ek 403 üretmesin.
+  freeze: priceListFresh,
   buildPreview: async (db, listId) => {
     await assertMaliyetOpen();
     return (await collectPriceList(db, listId)).content;
@@ -126,4 +139,14 @@ registerPrintedDocBuilder(PrintedDocType.PRICE_LIST, {
 /** Teklif iptal/revizyonunda donmuş belgeyi VOIDED'e çeker — durum geçişinin tx'i İÇİNDE (birlikte ya da hiç). */
 export function voidQuoteDocumentTx(tx: Prisma.TransactionClient, quoteId: string, reason: string): Promise<number> {
   return printedDocumentService.voidForSource(tx, PrintedDocType.SALES_QUOTE, quoteId, reason);
+}
+
+/** Teklif SENT geçişinde v1'i dondurur — geçişin tx'i İÇİNDE, claim'den sonra (iade irsaliyesi emsali). */
+export function freezeQuoteDocumentTx(tx: Prisma.TransactionClient, quoteId: string, userId?: string): Promise<void> {
+  return printedDocumentService.freezeForSource(tx, PrintedDocType.SALES_QUOTE, quoteId, userId);
+}
+
+/** Fiyat listesi PUBLISHED geçişinde belgeyi dondurur — yayının tx'i İÇİNDE, claim'den sonra. */
+export function freezePriceListDocumentTx(tx: Prisma.TransactionClient, listId: string, userId?: string): Promise<void> {
+  return printedDocumentService.freezeForSource(tx, PrintedDocType.PRICE_LIST, listId, userId);
 }
