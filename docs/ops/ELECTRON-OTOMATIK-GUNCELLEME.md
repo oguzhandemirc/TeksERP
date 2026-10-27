@@ -162,7 +162,9 @@ birbirini hiç görmez.
 ssh tekserp-yayin 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/yenifabrika/electron'
 
 # 2) Kanalı kayıt defterine ekle — deploy/kanallar.json (bütün kimlikler; bekçi:
-#    node scripts/check-kanallar.mjs — iki kanal hiçbir kimliği paylaşamaz)
+#    node scripts/check-kanallar.mjs [emekli] — iki kanal hiçbir kimliği paylaşamaz)
+#    EMEKLİ YOL: check-kanallar.mjs emekli 2026-10-06 `df70f82f8` (son hâli eski-kanal-son);
+#    ortak pakette kimlik deploy/dagitim.json'dan, bekçi node scripts/check-dagitim.mjs
 
 # 3) O kanal için paketle — adres pakete gömülür, çıktı release/yenifabrika/<sürüm>/
 ./deploy/electron-paketle.sh yenifabrika
@@ -182,7 +184,7 @@ ikincisinde patlar.
 
 | Kademe | Ne yapar | Neyi yakalayamaz |
 |---|---|---|
-| Kanal kaydı tek kaynak (`deploy/kanallar.json`) | Kimlik (appId · ürün adı · paket adı · adres · başlık · varsayılan sunucu · etiket) derleme ANINDA enjekte edilir, ağaca yazılmaz; kaynakta literal kimlik yok (`check-kanallar` §4) | — |
+| Kanal kaydı tek kaynak (`deploy/kanallar.json`) | Kimlik (appId · ürün adı · paket adı · adres · başlık · varsayılan sunucu · etiket) derleme ANINDA enjekte edilir, ağaca yazılmaz; kaynakta literal kimlik yok (`check-kanallar` §4 [emekli 2026-10-06 `df70f82f8`; son hâli eski-kanal-son]; bugün `deploy/dagitim.json` + `check-dagitim`) | — |
 | Bekçi `update-feed-url.test.ts` (`TEKSERP_KANAL=<kod>`) | Derlenecek kanalın kaydı çözülüyor ve gömülecek kimlik kayıtla birebir | Enjeksiyon derlemede düşerse |
 | **Paketleme kapısı** (derlemeden SONRA) | Paketin İÇİNİ okur — `app-update.yml`, exe adı, asar'daki package.json (userData) ve ana süreç/arayüz (AUMID · çalışma anı adresi · varsayılan sunucu) — **argümanla verilen** kanalla kıyaslar, başka kanalın kimliği varsa durur | — |
 
@@ -732,5 +734,5 @@ Farklıysa önbellek, ikisi de 404 ise dosya gerçekten yok.
 | `Electron/src/test/update-feed-url.test.ts` | Adres + dosya adı bekçisi |
 | `deploy/electron-yayinla.ps1` | EMEKLİ saplama — hiçbir şey yüklemez, sıfır-dışı çıkar |
 | `deploy/electron-yayinla.sh` | Yayınlama — tek yol (Windows'ta Git Bash/WSL) |
-| `deploy/kanallar.json` + `scripts/check-kanallar.mjs` | Kanal kimliklerinin tek kaynağı + çakışma bekçisi |
+| `deploy/kanallar.json` + `scripts/check-kanallar.mjs` | Kanal kimliklerinin tek kaynağı + çakışma bekçisi — betik (emekli 2026-10-06 `df70f82f8`; son hâli `eski-kanal-son`); yerine `deploy/dagitim.json` + `scripts/check-dagitim.mjs` |
 | `deploy/guncelleme-sunucusu/` | VPS servisinin kaynağı (compose + nginx) |

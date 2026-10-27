@@ -271,7 +271,15 @@ mod tests {
     use super::*;
     use crate::logfile::LogSpec;
     use std::os::unix::fs::PermissionsExt;
-    use std::sync::mpsc;
+    use std::sync::{mpsc, Mutex, MutexGuard};
+
+    // Sahte `node` yazımı ile başka testin fork→exec'i çakışınca çocuk yazma fd'sini miras alır ve
+    // exec ETXTBSY (os error 26) verir (Linux CI); süreç başlatan testler bu kilitle sıralı koşar.
+    static SURECLI_TEST: Mutex<()> = Mutex::new(());
+
+    fn sirali() -> MutexGuard<'static, ()> {
+        SURECLI_TEST.lock().unwrap_or_else(|e| e.into_inner())
+    }
 
     /// Sahte `node`: ortamı ve çalışma dizinini köke döker, sonra davranışa göre bekler/çıkar.
     fn setup_root(name: &str, behaviour: &str) -> PathBuf {
@@ -323,6 +331,7 @@ mod tests {
 
     #[test]
     fn graceful_stop_env_cwd_and_logs() {
+        let _sira = sirali();
         let root = setup_root("duzgun", "read satir; echo \"$satir\" > \"$(dirname $(dirname $PWD))/kapanis.txt\"; exit 0");
         std::env::set_var("NODE_OPTIONS", "--require /kotu.js");
         let (tx, rx) = mpsc::channel();
@@ -364,6 +373,7 @@ mod tests {
 
     #[test]
     fn unexpected_exit_maps_to_error_code() {
+        let _sira = sirali();
         let root = setup_root("coktu", "exit 3");
         let (_tx, rx) = mpsc::channel::<()>();
         let out = run(&cfg(&root, false, 1000), &rx, &RotatingLog::disabled(), &quiet(), &NoHooks);
@@ -376,6 +386,7 @@ mod tests {
 
     #[test]
     fn stubborn_node_is_killed_after_grace() {
+        let _sira = sirali();
         let root = setup_root("inatci", "trap '' INT TERM; while true; do sleep 1; done");
         let (tx, rx) = mpsc::channel();
         let r = root.clone();
@@ -393,6 +404,7 @@ mod tests {
 
     #[test]
     fn refuses_bad_current_env_file_or_script() {
+        let _sira = sirali();
         let root = setup_root("ret", "exit 0");
         let (_tx, rx) = mpsc::channel::<()>();
         std::fs::remove_file(root.join("yapilandirma").join(".env")).unwrap();

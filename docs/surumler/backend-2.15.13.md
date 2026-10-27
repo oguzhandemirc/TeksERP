@@ -449,6 +449,7 @@ bekçiler `process.exit` yerine `process.exitCode` + doğal çıkışa geçti (8
   4. Fabrika verisinde `rolls_qty_le_initial` NOT VALID (bu sürümden bağımsız, döküm öncesinden): onarım betiği
      `fix_tambur_undo_full_asim.ts` ne zaman koşulsun. Dry-run döküm kopyasında koşuldu (PROVA §4a): **2 top KESİN,
      toplam aşım 227,4 m**, BELİRSİZ 0; `--apply` kullanıcı kararı, kısıt VALIDATE ayrı adım.
+     **KARAR 2026-10-27: kurulum adımı (DEPLOY-RUNBOOK §3e)** — fabrika 2.15.13'e geçtiği gün kullanıcı koşar.
   5. MAL-8: eski patron bulutu (sahadaki sürüm) yeni `teklif`/`standart-maliyet` projeksiyonlarını kabul ediyor mu —
      ölçülsün ya da patron bulutu bu backend'den önce güncellensin; maliyet modülü kapalı kaldıkça etkisiz.
   6. Hangi bayrağın hangi kurulumda açılacağı (yukarıdaki tablo; kurulum hiçbirini açmaz).

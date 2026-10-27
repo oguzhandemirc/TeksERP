@@ -290,7 +290,8 @@ ile bilinçli geçilir (gerekçe: yalnız saf JS paket eklendi; kanıt yukarıda
 ## 4b. Birden fazla kanal (fabrika · hazırlık)
 
 Yol düzeni `/<kanal>/<urun>/`. Yeni kanal = sunucuda klasör açmak (`html/<kod>/mobil/{ota,apk}`)
-+ `deploy/kanallar.json`a kayıt (bekçi `scripts/check-kanallar.mjs`); DNS/sertifika/servis işi YOK.
++ `deploy/kanallar.json`a kayıt (bekçi `scripts/check-kanallar.mjs`) (emekli 2026-10-06 `df70f82f8`; son hâli `eski-kanal-son`); DNS/sertifika/servis işi YOK.
+Ortak pakette yol `/<grup>/mobil/` `deploy/dagitim.json`dan türer (bekçi `scripts/check-dagitim.mjs`); yeni müşteri = portalda kurulum + grup.
 
 Kanalın BÜTÜN kimliği tek kaynakta: `deploy/kanallar.json` (paket adı · görünen ad · ERP adresi ·
 OTA sertifikası · görünür etiket; güncelleme adresleri koddan türer). Derleme ve yayın komutları
