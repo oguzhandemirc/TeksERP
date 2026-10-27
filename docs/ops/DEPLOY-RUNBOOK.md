@@ -504,6 +504,36 @@ Bugün setup (`TeksERP-Kurulum-<sürüm>.exe`) ve panel kurulumu **imzasızdır*
 8. Sertifika yenilemesinde yalnız parmak izi değişir (4. adım); süresi geçen sertifikayla atılmış imzalar zaman damgası sayesinde geçerli kalır.
 9. Sertifika kalıcılaşınca gerçek yayın kipinde `kod-imzala.ps1 -Zorunlu` (sertifikasız derleme DURUR) ayrı karar.
 
+
+## 3e) 2.15.13 geçişinde tek seferlik veri onarımı (`rolls_qty_le_initial`)
+
+Kullanıcı kararı 2026-10-27: fabrika verisindeki `rolls_qty_le_initial` NOT VALID ihlali (2 top, 227,4 m —
+`docs/ops/PROVA-2.15.13.md` §4a) fabrika 2.15.13'e geçtiği gün KURULUM ADIMI olarak **kullanıcı tarafından**
+onarılır; Claude fabrikaya dokunmaz. Sıra `kur.ps1` başarıyla bittikten ve §4 sağlık kontrolü yeşil olduktan sonradır.
+
+> **Yedek önce** (§5): `kur.ps1`in `premigrate_<damga>.dump`ı alınmış ve `pg_restore --list` ile doğrulanmış olmalı;
+> değilse onarımdan önce §5'e göre elle yedek al. Betik pakette DEĞİL (`Teks-Erp/scripts/build-araclar.mjs`
+> listesinde yok; sunucuda `scripts/` ve `tsx` yok) — repo ağacından, `DATABASE_URL` hedef DB'yi gösterecek
+> biçimde koşulur; fabrika DB'sine hangi yoldan bağlanılacağı kurulumdan önce netleşir.
+
+1. **Teşhis (yazmaz):** önce o günün dökümünün kopyasında, sonra hedefte —
+   `cd Teks-Erp && npx tsx scripts/fix_tambur_undo_full_asim.ts`. Çıktıdaki `HEDEF VERİTABANI` ile
+   `Bağlı veritabanı` aynı olmalı; `Hüküm` satırı **KESİN 2 · BELİRSİZ 0** değilse **DUR** (veri değişmiş, karar yeniden).
+   Teşhis çıktısı saklanır.
+2. **Onarım:** `npx tsx scripts/fix_tambur_undo_full_asim.ts --apply --onay=2 --hedef=<bağlı db adı>`
+   (argümanlar betik başlığından: `--onay` KESİN sayısına, `--hedef` bağlı DB adına eşit değilse hiçbir şey yazmaz).
+   Betik tek tx'te `initialQty := currentQty` + `RollVariance(OVERAGE, source=TAMBUR_UNDO_FULL)` yazar, yeniden
+   ölçer; 0 ihlalde `VALIDATE`i **kendisi** koşar ve `convalidated` değerini ölçerek raporlar.
+3. **VALIDATE (yalnız betik "sed AÇILMADI" derse ya da teyit için):**
+   `psql … -c "ALTER TABLE rolls VALIDATE CONSTRAINT rolls_qty_le_initial;"` ardından
+   `SELECT convalidated FROM pg_constraint WHERE conname = 'rolls_qty_le_initial';` → `t`. Backend çalışırken
+   koşulabilir: `VALIDATE CONSTRAINT` PostgreSQL'de `SHARE UPDATE EXCLUSIVE` kilidi alır, okuma/yazmayı durdurmaz
+   (yalnız eşzamanlı DDL/VACUUM bekler); migration `20260912190000` aynı komutu `migrate deploy` içinde koşar.
+4. **Doğrulama:** `GET /api/admin/health` → `unvalidatedConstraints` boş dizi (`[]`; `null` = okunamadı, yeşil sayılmaz).
+5. **Sonrası:** `Teks-Erp/scripts/test_db_invariants.ts`te bu kısıt için `notValid` şerhi YOK (yalnız `onarim`
+   ipucu; ölçüldü 2026-10-27) — kaldırılacak kod yok; canlı kopyada o satırın kırmızısı yeşile döner. Fabrika
+   geçtikten sonra `docs/kurallar/deploy-kurulum.md`deki "geçişe dek beklenen kırmızı" ibaresi ayrı commit'le kalkar.
+
 ---
 
 ## 4) Sağlık kontrolü

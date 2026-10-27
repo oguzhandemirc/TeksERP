@@ -79,7 +79,8 @@ Kurulum ve Cloudflare adımları: [`docs/ops/INDIRME-KAPISI-WORKER.md`](../../do
 
 ```bash
 ssh tekserp-yayin 'mkdir -p /opt/stack/apps/tekserp-guncelleme/html/<musteri>/electron'
-# önce kanal deploy/kanallar.json'a (bütün kimlikler; bekçi: node scripts/check-kanallar.mjs)
+# EMEKLİ YOL: kanallar.json kaydı + check-kanallar.mjs (emekli 2026-10-06 df70f82f8; son hâli eski-kanal-son)
+# yeni müşteri bugün = portalda kurulum + grup (deploy/dagitim.json; bekçi: node scripts/check-dagitim.mjs)
 ./deploy/electron-paketle.sh <musteri>                # adres pakete gömülür + kapı doğrular
 ./deploy/electron-yayinla.sh --musteri=<musteri>      # hedefi paketin kimliğinden çözer; argüman niyettir
 ```

@@ -1,7 +1,8 @@
 ---
 paths:
   - "deploy/kanallar.json"
-  - "scripts/{surum,check-surum,check-kanallar}*"
+  - "deploy/dagitim.json"
+  - "scripts/{surum,check-surum,check-dagitim,dagitim-kapisi,grup-yayin-kapisi}*"
   - "scripts/lib/surum*"
   - "surum-notlari.json"
   - "mobil/scripts/**"
