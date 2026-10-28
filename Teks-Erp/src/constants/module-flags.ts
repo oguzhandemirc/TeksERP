@@ -47,6 +47,7 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "emanetEnabled",
   "kaliteGuvenceEnabled",
   "maliyetEnabled",
+  "gelenBelgeEnabled",
 ]);
 
 /**
@@ -79,6 +80,7 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "emanet.enabled",
   "kaliteGuvence.enabled",
   "maliyet.enabled",
+  "gelenBelge.enabled",
 ]);
 
 /**
@@ -125,6 +127,9 @@ export const MODULE_DEPENDENCIES: Readonly<Record<string, string>> = {
   // kaliteGuvenceEnabled BİLEREK YOK: muayene KK1'de doğar ve KK1 üretim kapalıyken de açıktır
   // (`test_production_regime_gate §5`); üretime bağlamak üretimsiz kurulumda muayeneyi kapatırdı.
   maliyetEnabled: "productionEnabled",
+  // Gelen belge taslağı (OCR) müşteri malı girişine açılır: onay `Roll.ownerCustomerId` yazar ve o alan
+  // yalnız emanet açıkken yazılabilir (`assertEmanetWritableTx`) — emanet kapalıyken çıkışsız kapı olurdu.
+  gelenBelgeEnabled: "emanetEnabled",
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -141,4 +146,5 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   emanetEnabled: "Emanet / konsinye mülkiyet",
   kaliteGuvenceEnabled: "Kalite Güvence",
   maliyetEnabled: "Maliyet & Teklif",
+  gelenBelgeEnabled: "Gelen belge taslağı",
 };

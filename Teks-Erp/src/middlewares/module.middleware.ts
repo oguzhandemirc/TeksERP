@@ -1,5 +1,5 @@
 // =============================================================================
-// MODÜL REJİM KAPILARI (ticaret · iplik · çoklu depo · üretim · dokuma · tezgah · kalite güvence · maliyet)
+// MODÜL REJİM KAPILARI (ticaret · iplik · çoklu depo · üretim · dokuma · tezgah · kalite güvence · maliyet · gelen belge)
 // =============================================================================
 // `finance.middleware.ts`in birebir ikizi ve aynı gerekçeyle yazıldı: modül
 // anahtarı bir GÖRÜNÜRLÜK ayarı DEĞİL, bir REJİM anahtarıdır. Menüyü gizlemek
@@ -62,6 +62,8 @@ import {
   readDepoMultiEnabled,
   readDevereEnabled,
   readDokumaEnabled,
+  readEmanetEnabled,
+  readGelenBelgeEnabled,
   readIplikEnabled,
   readKaliteGuvenceEnabled,
   readMaliyetEnabled,
@@ -264,6 +266,37 @@ export async function requireMaliyetEnabled(
     const enabled = await readMaliyetEnabled();
     if (!enabled) {
       throw licenseModuleError(SETTING_KEYS.MALIYET_ENABLED, "Maliyet & Teklif") ?? modulKapali("maliyet", "Maliyet & Teklif");
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Gelen belge taslağı modülü (Gülkesim OCR, D1): müşteri irsaliyesi/çeki listesi fotoğrafı → OCR
+ * taslak → panelde gözden geçirme → onayla emanet top girişi (uçlar D2+ dilimlerinde bu kapıya takılır).
+ *
+ * ⚠️ ÖN KOŞUL ÖNCE ÖLÇÜLÜR (`MODULE_DEPENDENCIES.gelenBelgeEnabled = emanetEnabled`): onay
+ * `Roll.ownerCustomerId` yazar, o alan emanet kapalıyken yazılamaz. Mesaj EKSİK OLANI söyler.
+ */
+export async function requireGelenBelgeEnabled(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const emanet = await readEmanetEnabled();
+    if (!emanet) {
+      throw licenseModuleError(SETTING_KEYS.EMANET_ENABLED, "Emanet / konsinye mülkiyet") ?? AppError.forbidden(
+        "Gelen belge taslağı modülü Emanet modülüne bağlıdır; Emanet modülü bu kurulumda kapalı. " +
+          `${settingScreenPath("modules")} ekranından açılabilir.`,
+        { code: "MODULE_DISABLED", modul: "emanet", dependent: "gelenBelge" },
+      );
+    }
+    const enabled = await readGelenBelgeEnabled();
+    if (!enabled) {
+      throw licenseModuleError(SETTING_KEYS.GELEN_BELGE_ENABLED, "Gelen belge taslağı") ?? modulKapali("gelenBelge", "Gelen belge taslağı");
     }
     next();
   } catch (e) {

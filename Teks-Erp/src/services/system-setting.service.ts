@@ -321,6 +321,10 @@ export const SETTING_KEYS = {
    *  iplik ihtiyaç planı. ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`); kapı `requireMaliyetEnabled`.
    *  Varsayılan KAPALI = bugünkü davranış (modül yoktu). */
   MALIYET_ENABLED: "maliyet.enabled",
+  /** Gelen belge taslağı modülü (Gülkesim OCR, D1): müşteri irsaliyesi fotoğrafı → OCR taslak → onayla emanet
+   *  top girişi. EMANETE BAĞIMLI (`MODULE_DEPENDENCIES`); kapı `requireGelenBelgeEnabled`.
+   *  Varsayılan KAPALI = bugünkü davranış (modül yoktu). */
+  GELEN_BELGE_ENABLED: "gelenBelge.enabled",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
@@ -1827,6 +1831,9 @@ export interface FeatureFlags {
   /** Maliyet & Teklif modülü. Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir;
    *  etkin değer `production && maliyet` ve kapının içinde çözülür. */
   maliyetEnabled: boolean;
+  /** Gelen belge taslağı modülü (OCR). Varsayılan KAPALI. ⚠️ EMANETE BAĞIMLI: bu alan HAM değerdir;
+   *  etkin değer `emanet && gelenBelge` ve kapının içinde çözülür. */
+  gelenBelgeEnabled: boolean;
   /**
    * KAPALI rapor anahtarları. `null` = LİSTE OKUNAMADI (bozuk satır) — "hiçbiri kapalı
    * değil" ile aynı şey DEĞİL; panel bunu fail-closed okur (R2/K5) ve rapor çizmez.
@@ -2097,6 +2104,7 @@ export const MODULE_SETTING_KEY_BY_FLAG: Readonly<Record<string, string>> = {
   emanetEnabled: SETTING_KEYS.EMANET_ENABLED,
   kaliteGuvenceEnabled: SETTING_KEYS.KALITE_GUVENCE_ENABLED,
   maliyetEnabled: SETTING_KEYS.MALIYET_ENABLED,
+  gelenBelgeEnabled: SETTING_KEYS.GELEN_BELGE_ENABLED,
 };
 
 // =============================================================================
@@ -2366,6 +2374,7 @@ export class SystemSettingService {
       dokumaRollBirth: await readDokumaRollBirth(cacheClient),
       dokumaEnabled: await readDokumaEnabledRaw(cacheClient),
       maliyetEnabled: await readMaliyetEnabledRaw(cacheClient),
+      gelenBelgeEnabled: await readGelenBelgeEnabledRaw(cacheClient),
       // ⚠️ ÜÇ SONUÇLU okumanın panele TAŞINAN hâli: ölçülemedi ⇒ `null`. Boş diziye
       // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
       reportsClosedKeys: ((): string[] | null => {
@@ -2532,6 +2541,8 @@ export class SystemSettingService {
         return readKaliteGuvenceEnabledRaw();
       case "maliyetEnabled":
         return readMaliyetEnabledRaw();
+      case "gelenBelgeEnabled":
+        return readGelenBelgeEnabledRaw();
       case "depoMultiEnabled":
         return readDepoMultiEnabledRaw();
       case "kumasTeknikEnabled":
@@ -3080,6 +3091,18 @@ export class SystemSettingService {
         SETTING_KEYS.MALIYET_ENABLED,
         input.maliyetEnabled,
         "Maliyet & Teklif: ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi, iplik ihtiyaç planı",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "gelenBelgeEnabled")) {
+      if (typeof input.gelenBelgeEnabled !== "boolean") {
+        throw AppError.badRequest("gelenBelgeEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.GELEN_BELGE_ENABLED,
+        input.gelenBelgeEnabled,
+        "Gelen belge taslağı modülü (müşteri irsaliyesi fotoğrafından OCR taslak · gözden geçirme · onayla emanet top girişi)",
         userId
       );
     }
@@ -5188,6 +5211,25 @@ export async function readMaliyetEnabledRaw(
  *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
 export async function readMaliyetEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   return applyModuleCeiling(SETTING_KEYS.MALIYET_ENABLED, await readMaliyetEnabledRaw(tx));
+}
+
+/** Gelen belge taslağı (OCR) modülü açık mı? Default FALSE (satır yoksa kapalı — modül sıfırdan doğdu).
+ *  HAM değer döner; ön koşulu (emanet) `requireGelenBelgeEnabled` ölçer. */
+export async function readGelenBelgeEnabledRaw(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GELEN_BELGE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Enforcement okuyucusu: ham değer ∧ lisans modül tavanı. `readGelenBelgeEnabledRaw` yalnız panel geri-okuması ve
+ *  bağımlılık doğrulaması içindir (`test_lisans_modul_tavani` her çağıranı varyantına eşler). */
+export async function readGelenBelgeEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  return applyModuleCeiling(SETTING_KEYS.GELEN_BELGE_ENABLED, await readGelenBelgeEnabledRaw(tx));
 }
 
 /**

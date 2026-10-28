@@ -33,6 +33,7 @@ export const MODULE_FLAG_KEYS = [
   "emanetEnabled",
   "kaliteGuvenceEnabled",
   "maliyetEnabled",
+  "gelenBelgeEnabled",
 ] as const;
 
 export type ModuleFlagKey = (typeof MODULE_FLAG_KEYS)[number];
@@ -54,6 +55,7 @@ export const MODULE_DEPENDENCIES: Readonly<Partial<Record<ModuleFlagKey, ModuleF
   tezgahEnabled: "productionEnabled",
   dokumaEnabled: "productionEnabled",
   maliyetEnabled: "productionEnabled",
+  gelenBelgeEnabled: "emanetEnabled",
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -70,6 +72,7 @@ export const MODULE_LABELS: Readonly<Record<ModuleFlagKey, string>> = {
   emanetEnabled: "Emanet / konsinye mülkiyet",
   kaliteGuvenceEnabled: "Kalite Güvence",
   maliyetEnabled: "Maliyet & Teklif",
+  gelenBelgeEnabled: "Gelen belge taslağı",
 };
 
 /**
@@ -95,6 +98,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
   "emanet.enabled": "emanetEnabled",
   "kaliteGuvence.enabled": "kaliteGuvenceEnabled",
   "maliyet.enabled": "maliyetEnabled",
+  "gelenBelge.enabled": "gelenBelgeEnabled",
 };
 
 /**

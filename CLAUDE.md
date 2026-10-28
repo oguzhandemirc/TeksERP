@@ -46,7 +46,7 @@ Tekstil fabrikası ERP'si; her alt projenin kendi `CLAUDE.md`'si var:
 ### Kapılar ve sözleşme
 - FAIL-CLOSED: tanınmayan kapsam 400, çözülemeyen şablon 400/404, izin guard'ı anahtar-kapsamlı, önbellekte TTL tazeliktir geçerlilik değil.
 - Hata kodu `details.code` (`body.code` hep undefined); kapalı modül 403 `MODULE_DISABLED`; `clientType` güvenlik sınırı değil. Müşteri yerindeki sunucuya GELEN port açılmaz (HTTPS 4443, API 127.0.0.1); bizim bulut/demo sunucumuz istisna (`kesif-cihaz.md`).
-- Yetenek "VAR" = motor + çıkış yüzeyi + izin ataması; izin kataloğu koda, atama panele; SoD üçlüsü (`shipping:invoice`, `shipping:undo-dispatch`, `roll:manual-adjust`) yalnız Muhasebe/Süpervizör; süperadmin rol değil (`yetki-izin.md`).
+- Yetenek "VAR" = motor + çıkış yüzeyi + izin ataması; izin kataloğu koda, atama panele; SoD kümesi (`shipping:invoice`, `shipping:undo-dispatch`, `roll:manual-adjust`, `gelen-belge:approve`) yalnız Muhasebe/Süpervizör; süperadmin rol değil (`yetki-izin.md`).
 - Yeni bayrağın varsayılanı = BUGÜNKÜ davranış (ölçülerek); çıkışsız kapı üreten bayrak açılmaz. Rota kapsaması kategoride UYARIR (`ApiResponse.warnings`), özellikte sert (`rota-renk.md`).
 - Lisans kapısı fabrikayı aniden durdurmaz; veri erişimi hep açık (`lisans.md`). Dışarı giden her istek kurulum anahtarıyla imzalanır; bulut hesap yapmaz (`patron-bulutu.md`).
 - İş emri yalnız üretimi yönetir; tartı/paket/sevkiyat çuvala bağlanır; top↔sipariş bağı yok, karşılama `SackAllocation` ile sevk anında (`is-emri.md`).

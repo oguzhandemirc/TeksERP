@@ -142,7 +142,7 @@ async function main(): Promise<void> {
   // ile `shipping:invoice`ı birlikte taşıdı. Joker (`shipping:*`) da sayılır — eşleşme tek yüklemden.
   const sodIhlal = ROLE_TEMPLATE_CATALOG.filter((e) => e.mode !== "all" && !SOD_ALLOWED_TEMPLATES.includes(e.code))
     .flatMap((e) => SOD_PERMISSION_CODES.filter((c) => matchesPermission(e.codes, c)).map((c) => `${e.code}:${c}`));
-  check("SoD üçlüsü yalnız beyanlı rollerde (Muhasebe · Süpervizör · Tam Yetki)", sodIhlal.length === 0, sodIhlal.join(", ") || "temiz");
+  check("SoD kümesi yalnız beyanlı rollerde (Muhasebe · Süpervizör · Tam Yetki)", sodIhlal.length === 0, sodIhlal.join(", ") || "temiz");
   const faturaYazan = ROLE_TEMPLATE_CATALOG.filter(
     (e) => e.mode !== "all" && matchesPermission(e.codes, "shipping:invoice") && matchesPermission(e.codes, "shipping:write"),
   ).map((e) => e.code);

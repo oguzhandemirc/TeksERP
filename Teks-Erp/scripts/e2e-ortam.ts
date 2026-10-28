@@ -191,7 +191,7 @@ async function fixture(): Promise<void> {
       SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.TICARET_ENABLED,
       SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.DEPO_MULTI_ENABLED, SETTING_KEYS.KUMAS_TEKNIK_ENABLED,
       SETTING_KEYS.TEZGAH_ENABLED, SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.DOKUMA_ENABLED,
-      SETTING_KEYS.MALIYET_ENABLED,
+      SETTING_KEYS.MALIYET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED,
     ];
     for (const key of modulAnahtarlari) {
       await prisma.systemSetting.upsert({ where: { key }, update: { value: true }, create: { key, value: true, description: "E2E fixture" } });

@@ -103,6 +103,8 @@ const BASE = process.env.TEST_API_URL ?? "http://localhost:4101";
  */
 const ROTASIZ_KAPILAR: Record<string, string> = {
   // MAL-1 (2026-10-25): `requireMaliyetEnabled` `/api/cost`a takıldı → MODULLER satırı + sonda; muaf silindi.
+  requireGelenBelgeEnabled:
+    "D1 (2026-10-29): gelen belge modül şalteri + kapı doğdu, ilk uç D2'de (`/api/gelen-belge`); o gün tabloya satır + `profil-kapi-haritasi` sondası girer",
 };
 
 /** `src/**` içinde (middleware dosyası hariç) adı geçen ROTASIZ kapılar → ilk görülen dosya. */
@@ -549,6 +551,11 @@ function tersYonAyagi(): void {
     // 403 MODULE_DISABLED; KK1 · levent create · lot create), adlandırılmış middleware'i ve kendi route'u YOK;
     // sevk sahiplik kapısı bayraktan bağımsız (veri varsa). `test_emanet §1` kapalıyı ölçer.
     emanetEnabled: "yüzeysiz modül — gövde kapısı `assertEmanetWritableTx` (403), adlandırılmış middleware'i YOK; `test_emanet §1`",
+
+    // D1 (2026-10-29): gelen belge kapısı ROTASIZ (`ROTASIZ_KAPILAR`, §8b2 iki yönlü) ve ön koşulu emanet
+    // TABLODA DEĞİL (yüzeysiz) → bağımlı yer tutucu olarak türemez. İlk route D2'de takılınca MODULLER satırı +
+    // sonda girer; o gün bu satır ölü muaf olarak §8e'den kırmızı alır.
+    gelenBelgeEnabled: "rotasız kapı `requireGelenBelgeEnabled` (ROTASIZ_KAPILAR); ön koşulu emanet tabloda değil — D2'de MODULLER satırı",
   };
   const yonetilenKume = new Set(YONETILEN);
   const kapsanmayan = [...MODULE_FLAG_KEYS].filter(
