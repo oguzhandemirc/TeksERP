@@ -69,6 +69,13 @@ const IPLIK_MODELLERI = new Set(["yarnStock", "yarnMovement"]);
 // -----------------------------------------------------------------------------
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/gelen-belge.routes.ts",
+    neden:
+      "GELEN BELGE (Gülkesim D4, 2026-10-29). Kendi modül kapısını taşır (`requireGelenBelgeEnabled`, emanete bağlı); " +
+      "iplik dokunuşu GEÇİŞLİ ve YANILTICIDIR: onay ucu `createInitialEntry` (inventory zinciri) üzerinden emanet topu doğurur. " +
+      "Bu yüzey kg defterine (yarnMovement) YAZMAZ; route kapısı KONULAMAZ: fason emanet girişi iplik modülü olmadan meşrudur.",
+  },
+  {
     dosya: "routes/warehouse.routes.ts",
     neden:
       "DEPO (çekirdek, her kurulumda). İplik dokunuşu SALT-OKUMADIR: depo arşiv kapısı (URUN-YASAM-DONGUSU.md §6) depodaki iplik bakiyesini canlı referans olarak SAYAR. İplik kapalı kurulumda `yarn_stocks` boştur, sayı 0 döner; router bu tabloya satır yazmaz. Kapı takılsaydı depo ipliksiz fabrikada yönetilemezdi.",
