@@ -24,7 +24,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { InventoryService } from "./inventory.service";
-import { readEmanetEnabled } from "./system-setting.service";
+import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
 
@@ -93,10 +93,9 @@ export function totalMismatches(note: { declaredTopCount: number | null; totalsD
 
 /** Ön kontrol — DB YAZMAZ; claim'den önce koşar, hata operatöre tek seferde listelenir. */
 async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: typeof PRE_SELECT }>, input: ApproveInput): Promise<void> {
-  if (!(await readEmanetEnabled())) {
-    throw AppError.forbidden("Emanet modülü bu kurulumda kapalı — gelen belge onaylanamaz (top sahipsiz doğamaz).", { code: "MODULE_DISABLED", modul: "emanet" });
-  }
   if (!note.ownerCustomerId) throw AppError.badRequest("Sahip cari seçilmeden onaylanamaz (emanet top sahipsiz doğamaz).", { code: "DELIVERY_NOTE_OWNER_REQUIRED" });
+  // Emanet kapısı TEK yazıcıdan (lisans sorusu + MODULE_DISABLED aynı helper'da; motor tx içinde yeniden sorar).
+  await assertEmanetWritableTx(prisma, note.ownerCustomerId, "gelen belge onayı");
   if (!note.ownerCustomer?.isActive) throw AppError.badRequest("Sahip cari pasif; önce aktif bir sahip seçin.", { code: "DELIVERY_NOTE_OWNER_INACTIVE" });
   const open = note.lines.filter((l) => l.status === "PENDING" || l.status === "FAILED" || l.status === "ENTERING");
   if (open.length === 0) throw AppError.conflict(`${note.noteNo} için işlenecek satır yok (hepsi girilmiş ya da atlanmış).`, { code: "DELIVERY_NOTE_NO_OPEN_LINES" });
