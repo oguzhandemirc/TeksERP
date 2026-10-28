@@ -25,7 +25,8 @@ const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
 
 export { addDeliveryNoteLines, deleteDeliveryNoteLine, updateDeliveryNoteLine, type DeliveryNoteLineInput } from "./gelen-belge-line.service";
-export const DELIVERY_NOTE_STATUSES = ["DRAFT", "APPROVING", "APPROVED", "PARTIAL", "CANCELLED"] as const;
+// Durum kümesi Prisma enum'undan TÜRETİLİR (elle kopya bayatlar; D4 yeni değer eklerse tek yer).
+export const DELIVERY_NOTE_STATUSES = Object.values(DeliveryNoteStatus) as readonly DeliveryNoteStatus[];
 
 // ── Girdi tipleri (route Zod'u bunlara daraltır) ────────────────────────────
 export interface DeliveryNoteHeaderInput {
@@ -49,7 +50,7 @@ export interface DeliveryNoteCreateInput extends DeliveryNoteHeaderInput {
   lines?: DeliveryNoteLineInput[];
 }
 export interface DeliveryNoteListQuery {
-  status?: (typeof DELIVERY_NOTE_STATUSES)[number];
+  status?: DeliveryNoteStatus;
   sourceKind?: DeliveryNoteSourceKind;
   ownerCustomerId?: string | string[];
   senderCustomerId?: string | string[];
@@ -153,9 +154,6 @@ export function buildDeliveryNoteBaseWhere(q: DeliveryNoteListQuery): Prisma.Cus
 }
 
 export async function listDeliveryNotes(q: DeliveryNoteListQuery) {
-  if (q.status && !DELIVERY_NOTE_STATUSES.includes(q.status)) {
-    throw AppError.badRequest("Tanınmayan durum süzgeci.", { code: "DELIVERY_NOTE_FILTER_INVALID" });
-  }
   const base = buildDeliveryNoteBaseWhere(q);
   const where: Prisma.CustomerDeliveryNoteWhereInput = q.status ? { AND: [base, { status: q.status }] } : base;
   const limit = Math.min(Math.max(q.limit ?? 50, 1), 200);
@@ -165,7 +163,7 @@ export async function listDeliveryNotes(q: DeliveryNoteListQuery) {
   });
   const page = rows.slice(0, limit);
   const grouped = await prisma.customerDeliveryNote.groupBy({ by: ["status"], where: base, _count: { _all: true } });
-  const summary = Object.fromEntries(DELIVERY_NOTE_STATUSES.map((s) => [s, grouped.find((g) => g.status === s)?._count._all ?? 0])) as Record<(typeof DELIVERY_NOTE_STATUSES)[number], number>;
+  const summary = Object.fromEntries(DELIVERY_NOTE_STATUSES.map((s) => [s, grouped.find((g) => g.status === s)?._count._all ?? 0])) as Record<DeliveryNoteStatus, number>;
   return {
     items: page,
     nextCursor: rows.length > limit ? encodeOffsetCursor(offset + limit) : null,

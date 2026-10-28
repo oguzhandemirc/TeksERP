@@ -7,6 +7,7 @@
 // Okuma `gelen-belge:read`; tarama/taslak/satır yazma `gelen-belge:write`. Yalnız DRAFT yazılır;
 // OCR okuma (D3b) ve onay (D4, `gelen-belge:approve`) bu dosyada YOK.
 // =============================================================================
+import { DeliveryNoteStatus } from "@prisma/client";
 import express, { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { BUYUK_GOVDE_LIMITI } from "../constants/body-limits";
@@ -14,7 +15,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requireGelenBelgeEnabled } from "../middlewares/module.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import {
-  DELIVERY_NOTE_STATUSES, addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine,
+  addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine,
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
@@ -86,7 +87,7 @@ const LinesBody = z.strictObject({
 });
 const LinePatch = LineBody.partial();
 const ListQuery = z.object({
-  status: z.enum(DELIVERY_NOTE_STATUSES, "Tanınmayan durum süzgeci").optional(),
+  status: z.enum(DeliveryNoteStatus, "Tanınmayan durum süzgeci").optional(),
   sourceKind: z.enum(["OCR", "MANUAL", "IMPORT"], "Tanınmayan kaynak süzgeci").optional(),
   ownerCustomerId: z.union([z.string(), z.array(z.string())]).optional(),
   senderCustomerId: z.union([z.string(), z.array(z.string())]).optional(),
