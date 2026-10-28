@@ -36,36 +36,67 @@ function tooLarge(): AppError {
   return new AppError("Belge dosyası 5 MB sınırını aşıyor.", 413, true, { code: "DOCUMENT_SCAN_TOO_LARGE", maxBytes: DOCUMENT_SCAN_MAX_BYTES });
 }
 
-/** Katı base64 (data URL öneki kabul); bozuk gövde 400. */
-function decodeBase64(raw: string): Buffer {
-  const body = raw.replace(/^data:[^,]*;base64,/, "").replace(/\s+/g, "");
+/** data-URL öneki ve boşluk soyulmuş ham base64 gövdesi. */
+function base64Body(raw: string): string {
+  return raw.replace(/^data:[^,]*;base64,/, "").replace(/\s+/g, "");
+}
+
+/** Katı base64; bozuk gövde 400. */
+function decodeBase64(body: string): Buffer {
   if (!body || body.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(body)) {
     throw AppError.badRequest("Dosya içeriği geçerli base64 değil.", { code: "DOCUMENT_SCAN_INVALID" });
   }
   return Buffer.from(body, "base64");
 }
 
-async function assertNoteDraft(noteId: string): Promise<void> {
+/** Claim düşünce nedeni söyler: 404 (yok) ya da 409 (taslak değil). */
+async function notDraftScan(noteId: string): Promise<never> {
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { status: true, noteNo: true } });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
-  if (note.status !== "DRAFT") {
-    throw AppError.conflict(`${note.noteNo} taslak değil; tarama yalnız taslağa eklenir.`, { code: "DELIVERY_NOTE_NOT_DRAFT", status: note.status });
+  throw AppError.conflict(`${note.noteNo} taslak değil; tarama yalnız taslağa eklenir.`, { code: "DELIVERY_NOTE_NOT_DRAFT", status: note.status });
+}
+
+/** Tarama bağlama ATOMİK CLAIM: başlık `WHERE {id, status: DRAFT}` ile kilitlenir (count 0 → 404/409); D4 onayı araya giremez. */
+async function claimDraftTx(tx: Prisma.TransactionClient, noteId: string, userId: string): Promise<void> {
+  const c = await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "DRAFT" }, data: { updatedById: userId } });
+  if (c.count === 0) await notDraftScan(noteId);
+}
+
+type ScanRow = Prisma.DocumentScanGetPayload<{ select: typeof SCAN_SELECT }>;
+
+/**
+ * Aynı sha256 mevcutsa istemcinin istediği bağlam SESSİZCE YUTULMAZ: serbest kayıt istenen taslağa bağlanır (claim'li),
+ * başka taslağa bağlıysa 409 `DOCUMENT_SCAN_NOT_FREE`. Yanıt `boundTo` ile hangi taslağa bağlı olduğunu söyler.
+ */
+async function reuseExisting(existing: ScanRow, noteId: string | null | undefined, userId: string) {
+  if (noteId && existing.noteId && existing.noteId !== noteId) {
+    throw AppError.conflict("Bu fotoğraf başka bir taslağa bağlı; önce oradan çözün.", { code: "DOCUMENT_SCAN_NOT_FREE", boundTo: existing.noteId });
   }
+  if (!noteId || existing.noteId === noteId) return { scan: existing, duplicate: true, boundTo: existing.noteId };
+  await prisma.$transaction(async (tx) => {
+    await claimDraftTx(tx, noteId, userId);
+    const bound = await tx.documentScan.updateMany({ where: { id: existing.id, noteId: null }, data: { noteId } });
+    if (bound.count === 0) throw AppError.conflict("Bu fotoğraf bu arada başka bir taslağa bağlandı.", { code: "DOCUMENT_SCAN_NOT_FREE" });
+  });
+  await AuditService.log({ userId, action: "UPDATE", tableName: AUDIT_TABLE, recordId: existing.id, oldData: { noteId: null }, newData: { noteId, sha256: existing.sha256 } });
+  const scan = await prisma.documentScan.findUniqueOrThrow({ where: { id: existing.id }, select: SCAN_SELECT });
+  return { scan, duplicate: true, boundTo: noteId };
 }
 
 export async function uploadDocumentScan(input: DocumentScanInput, userId: string) {
   // Boy, decode ÖNCESİ base64 uzunluğundan da sınanır — 5 MB üstü gövde belleğe açılmadan reddedilir.
-  if (Math.floor((input.contentBase64.length * 3) / 4) > DOCUMENT_SCAN_MAX_BYTES + 4) throw tooLarge();
-  const content = decodeBase64(input.contentBase64);
+  // Tahmin önek/boşluk soyulmuş gövde üstünde: tam 5 MB'lık meşru dosya data-URL önekiyle gelse de 413 almaz.
+  const body = base64Body(input.contentBase64);
+  if (Math.floor((body.length * 3) / 4) > DOCUMENT_SCAN_MAX_BYTES + 4) throw tooLarge();
+  const content = decodeBase64(body);
   if (content.length > DOCUMENT_SCAN_MAX_BYTES) throw tooLarge();
   const kind = detectCertificateMime(content);
   if (!kind) {
     throw AppError.badRequest("Yalnız JPEG, PNG ya da PDF belge yüklenebilir (dosya içeriği tanınmadı).", { code: "DOCUMENT_SCAN_TYPE" });
   }
-  if (input.noteId) await assertNoteDraft(input.noteId);
   const sha256 = createHash("sha256").update(content).digest("hex");
   const existing = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
-  if (existing) return { scan: existing, duplicate: true };
+  if (existing) return reuseExisting(existing, input.noteId, userId);
   const data = {
     noteId: input.noteId ?? null,
     pageNo: input.pageNo ?? 1,
@@ -78,17 +109,21 @@ export async function uploadDocumentScan(input: DocumentScanInput, userId: strin
   };
   let scan;
   try {
-    scan = await prisma.documentScan.create({ data: { ...data, content: new Uint8Array(content) }, select: SCAN_SELECT });
+    // Taslağa bağlanıyorsa claim + create aynı tx'te (TOCTOU yok); serbest taramada tx'e gerek yok.
+    scan = await prisma.$transaction(async (tx) => {
+      if (input.noteId) await claimDraftTx(tx, input.noteId, userId);
+      return tx.documentScan.create({ data: { ...data, content: new Uint8Array(content) }, select: SCAN_SELECT });
+    });
   } catch (err) {
     // Eşzamanlı aynı yükleme: kaybeden mevcut kaydı alır (unique seddi).
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       const again = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
-      if (again) return { scan: again, duplicate: true };
+      if (again) return reuseExisting(again, input.noteId, userId);
     }
     throw err;
   }
   await AuditService.log({ userId, action: "CREATE", tableName: AUDIT_TABLE, recordId: scan.id, newData: data });
-  return { scan, duplicate: false };
+  return { scan, duplicate: false, boundTo: scan.noteId };
 }
 
 export async function getDocumentScan(id: string) {

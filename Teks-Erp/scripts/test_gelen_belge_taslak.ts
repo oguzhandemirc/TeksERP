@@ -4,13 +4,13 @@
 // Karar belgesi TASARIM-KARARI-2026-10-28 §4 (veri modeli) + §6 D2 satırı. Sınanan:
 //   §1 modül kapısı: gelenBelge kapalı → 403 MODULE_DISABLED; ön koşul emanet kapalı → 403 MODULE_DISABLED
 //   §2 izin: gelen-belge:read ile yazma 403 · ilgisiz izinle liste 403 · okur liste 200
-//   §3 tarama sınırı: 5 MB + 1 bayt → 413 DOCUMENT_SCAN_TOO_LARGE · MZ baytı → 400 DOCUMENT_SCAN_TYPE · bozuk base64 → 400
+//   §3 tarama sınırı: 5 MB + 1 bayt → 413 DOCUMENT_SCAN_TOO_LARGE · tam 5 MB + data-URL öneki → 201 · MZ baytı → 400 DOCUMENT_SCAN_TYPE · bozuk base64 → 400
 //   §4 sha256 dedup: aynı fotoğraf ikinci kez → 200 duplicate:true, TEK document_scans satırı
 //   §5 taslak: numara DOĞUŞTA `GB` serisinden · tarama bağlanır · satırlar lineNo sıralı
 //   §6 liste + cursor + özet TEK where'den: iki sayfa ∪ = kayıtlar, summary.total = sayfa toplamı
 //   §7 DRAFT dışı: status DB'den APPROVED'a çekilince DELETE/PATCH/satır ekle → 409 DELIVERY_NOTE_NOT_DRAFT
 //   §8 audit yükü: DOCUMENT_SCAN ve CUSTOMER_DELIVERY_NOTE satırlarında fotoğraf baytı / "content" yok
-//   §10 yarış: iki PATCH farklı alan → ikisi de korunur (kayıp güncelleme yok) · aynı clientToken iki POST → tek kayıt · aynı parti kimliğiyle iki toplu satır ekleme → satırlar ikilenmez · aynı tarama iki taslak → biri 409
+//   §10 yarış: iki PATCH farklı alan → ikisi de korunur (kayıp güncelleme yok) · aynı clientToken iki POST → tek kayıt · aynı parti kimliğiyle iki toplu satır ekleme → satırlar ikilenmez · aynı tarama iki taslak → biri 409 · aynı sha256 + noteId → mevcut kayıt bağlanır / başka taslağa bağlıysa 409
 //   §9 DRAFT silme: 200, satırlar Cascade, tarama çözülür (noteId null), top doğmaz (DEFTER-ÖNCELİKLİ)
 // Emsal: scripts/test_sertifika.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
@@ -126,6 +126,11 @@ async function main(): Promise<void> {
     const strict = await call("POST", "/api/gelen-belge/taramalar", tk, { contentBase64: JPEG.toString("base64"), bogus: 1 });
     check("strict gövde: tanınmayan alan → 400", strict.status === 400, `${strict.status}`);
 
+    const exact = Buffer.concat([JPEG, Buffer.alloc(MB5 - JPEG.length, 0x41)]);
+    const exactUp = await call("POST", "/api/gelen-belge/taramalar", tk, { contentBase64: `data:image/jpeg;base64,${exact.toString("base64")}` });
+    if (exactUp.data?.scan?.id) made.scans.push(String(exactUp.data.scan.id));
+    check("tam 5 MB (alt sınır) + data-URL öneki → 201", exactUp.status === 201, `${exactUp.status} ${exactUp.code ?? ""}`);
+
     // §4 sha256 dedup
     console.log("§4 sha256 dedup");
     const first = await up(JPEG, { barcodeText: `${TAG}-BC` });
@@ -231,6 +236,14 @@ async function main(): Promise<void> {
     check("⭐ aynı clientToken ile eşzamanlı iki toplu satır ekleme → 3 satır (ikilenmez), aynı id'ler", bA.status === 201 && bB.status === 201 && bRows === 3 && bIds(bA) === bIds(bB) && bIds(bA).length > 0, `${bA.status}/${bB.status} satır=${bRows}`);
     const bAgain = await call("POST", `/api/gelen-belge/irsaliyeler/${noteId}/satirlar`, tk, batch);
     check("aynı parti kimliği SIRALI üçüncü kez → 201 replay, satır sayısı 3", bAgain.status === 201 && (await prisma.customerDeliveryNoteLine.count({ where: { noteId, clientToken: batch.clientToken } })) === 3);
+    const ctx = Buffer.concat([PNG, Buffer.from("bağlam")]);
+    const ctxFree = await up(ctx);
+    if (ctxFree.data?.scan?.id) made.scans.push(String(ctxFree.data.scan.id));
+    const ctxBind = await up(ctx, { noteId });
+    const ctxRow = await prisma.documentScan.findUnique({ where: { id: String(ctxFree.data?.scan?.id) }, select: { noteId: true } });
+    check("⭐ aynı fotoğraf ikinci kez noteId ile → mevcut kayıt taslağa BAĞLANIR (duplicate:true, boundTo)", ctxBind.status === 200 && ctxBind.data?.duplicate === true && ctxRow?.noteId === noteId && (ctxBind.data as { boundTo?: string }).boundTo === noteId, `${ctxBind.status} ${JSON.stringify(ctxRow)}`);
+    const ctxOther = await up(ctx, { noteId: twinId });
+    check("başka taslağa bağlı fotoğraf → 409 DOCUMENT_SCAN_NOT_FREE", ctxOther.status === 409 && ctxOther.code === "DOCUMENT_SCAN_NOT_FREE", `${ctxOther.status} ${ctxOther.code}`);
     const freeScan = await up(Buffer.concat([PNG, Buffer.from("yarış")]));
     const freeId = String(freeScan.data?.scan?.id ?? "");
     if (freeId) made.scans.push(freeId);
