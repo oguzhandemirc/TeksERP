@@ -8,6 +8,7 @@
 // =============================================================================
 import type { DeliveryNoteAliasScope } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { AppError } from "../utils/app-error";
 import { FUZZY_NOISE_WORDS } from "../constants/duplicate-rules";
 import { firmNameSimilarity, productNameSimilarity } from "../utils/string-similarity";
 import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
@@ -39,7 +40,7 @@ export function aliasKey(scope: DeliveryNoteAliasScope, raw: string): string {
   return scope === "COLOR" ? foldColorNameForCompare(raw) : foldNameForCompare(raw);
 }
 
-type Named = { id: string; code: string | null; name: string };
+export type Named = { id: string; code: string | null; name: string };
 
 function rank(raw: string, rows: Named[], scope: DeliveryNoteAliasScope): MatchCandidate[] {
   const key = aliasKey(scope, raw);
@@ -77,32 +78,37 @@ function build(raw: string, candidates: MatchCandidate[], alias: MatchCandidate 
   return { rawText: raw, suggested: null, source: "NONE", list: candidates };
 }
 
+const loadCustomers = (): Promise<Named[]> => prisma.customer.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true } });
+// Kartın KULLANILABİLİRLİĞİNE burada bakılmaz (tek kaynak `assertItemUsable`, D4 onayında); öneri listesi tüm kartlardır.
+const loadItems = (): Promise<Named[]> => prisma.item.findMany({ select: { id: true, code: true, name: true } });
+const loadColors = (): Promise<Named[]> => prisma.color.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true } });
+
 /** Cari (gönderen ya da sahip) önerisi — aktif cariler arasında. */
-export async function suggestCustomer(raw: string | null | undefined, senderCustomerId: string | null = null): Promise<MatchSuggestion> {
+// `preloaded`: toplu çağıran (suggestForNote) kataloğu istek başına BİR kez yükler; tekil çağrıda kendisi yükler.
+export async function suggestCustomer(raw: string | null | undefined, senderCustomerId: string | null = null, preloaded?: Named[]): Promise<MatchSuggestion> {
   const text = raw?.trim();
   if (!text) return EMPTY;
-  const rows = await prisma.customer.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true } });
+  const rows = preloaded ?? (await loadCustomers());
   const target = await aliasTarget("SENDER", senderCustomerId, text);
   const alias = target ? (rows.find((r) => r.id === target) ?? null) : null;
   return build(text, rank(text, rows, "SENDER"), alias ? { ...alias, score: 1 } : null);
 }
 
 /** Ürün önerisi — gönderene özel alias önce. */
-export async function suggestItem(raw: string | null | undefined, senderCustomerId: string | null = null): Promise<MatchSuggestion> {
+export async function suggestItem(raw: string | null | undefined, senderCustomerId: string | null = null, preloaded?: Named[]): Promise<MatchSuggestion> {
   const text = raw?.trim();
   if (!text) return EMPTY;
-  // Kartın KULLANILABİLİRLİĞİNE burada bakılmaz (tek kaynak `assertItemUsable`, D4 onayında); öneri listesi tüm kartlardır.
-  const rows = await prisma.item.findMany({ select: { id: true, code: true, name: true } });
+  const rows = preloaded ?? (await loadItems());
   const target = await aliasTarget("ITEM", senderCustomerId, text);
   const alias = target ? (rows.find((r) => r.id === target) ?? null) : null;
   return build(text, rank(text, rows, "ITEM"), alias ? { ...alias, score: 1 } : null);
 }
 
 /** Renk önerisi — aktif renkler; katlama ayraç/sıra bağımsız. */
-export async function suggestColor(raw: string | null | undefined, senderCustomerId: string | null = null): Promise<MatchSuggestion> {
+export async function suggestColor(raw: string | null | undefined, senderCustomerId: string | null = null, preloaded?: Named[]): Promise<MatchSuggestion> {
   const text = raw?.trim();
   if (!text) return EMPTY;
-  const rows = await prisma.color.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true } });
+  const rows = preloaded ?? (await loadColors());
   const target = await aliasTarget("COLOR", senderCustomerId, text);
   const alias = target ? (rows.find((r) => r.id === target) ?? null) : null;
   return build(text, rank(text, rows, "COLOR"), alias ? { ...alias, score: 1 } : null);
@@ -121,10 +127,15 @@ export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestio
     where: { id: noteId },
     select: { id: true, senderCustomerId: true, senderText: true, ownerText: true, lines: { select: { id: true, lineNo: true, itemText: true, colorText: true }, orderBy: { lineNo: "asc" } } },
   });
-  if (!note) return { noteId, sender: EMPTY, owner: EMPTY, lines: [] };
-  const sender = await suggestCustomer(note.senderText, null);
+  if (!note) throw AppError.notFound("İrsaliye bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
+  const customers = await loadCustomers();
+  const sender = await suggestCustomer(note.senderText, null, customers);
   const senderId = note.senderCustomerId ?? sender.suggested?.id ?? null;
-  const owner = await suggestCustomer(note.ownerText, senderId);
+  const owner = await suggestCustomer(note.ownerText, senderId, customers);
+  const hasItem = note.lines.some((l) => l.itemText?.trim());
+  const hasColor = note.lines.some((l) => l.colorText?.trim());
+  const items = hasItem ? await loadItems() : [];
+  const colors = hasColor ? await loadColors() : [];
   // Aynı metin satırlarda tekrar eder (0245: tek ürün 21 satır) → metin başına bir hesap.
   const itemCache = new Map<string, MatchSuggestion>();
   const colorCache = new Map<string, MatchSuggestion>();
@@ -132,8 +143,8 @@ export async function suggestForNote(noteId: string): Promise<NoteMatchSuggestio
   for (const l of note.lines) {
     const it = l.itemText ?? "";
     const co = l.colorText ?? "";
-    if (!itemCache.has(it)) itemCache.set(it, await suggestItem(it, senderId));
-    if (!colorCache.has(co)) colorCache.set(co, await suggestColor(co, senderId));
+    if (!itemCache.has(it)) itemCache.set(it, await suggestItem(it, senderId, items));
+    if (!colorCache.has(co)) colorCache.set(co, await suggestColor(co, senderId, colors));
     lines.push({ lineId: l.id, lineNo: l.lineNo, item: itemCache.get(it)!, color: colorCache.get(co)! });
   }
   return { noteId, sender, owner, lines };

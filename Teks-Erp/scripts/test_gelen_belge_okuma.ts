@@ -8,10 +8,11 @@
 //   §3 4 altın fikstür → 4 DRAFT: 0245 2 blok 21 satır + BLOK BAŞINA beyan (5/141,70/586 · 16/819,20/3.935) ·
 //      0246 2 bölge (zarf) · 0244 needsReview satırlar · 0243 başlık (evrak 90779, 2026-10-15) · top doğmaz · audit'te ham OCR yok
 //   §4 sahte servis 5xx → tarama PENDING kalır (deneme sayacı artar), 3. denemede READ_FAILED, taslak doğmaz; okut → PENDING
-//   §5 Zod fail-closed: şema dışı gövde → okunamadı (PENDING), düzelince READ
+//   §5 Zod fail-closed: şema dışı gövde / 4xx → KALICI okunamadı (doğrudan READ_FAILED); okut + düzelince READ
 //   §6 iki iş aynı anda → tek okuma: `runReaderOnce` ikincisi MESGUL; iki eşzamanlı `claimNextScan` → tek CLAIMED; sidecar 1 isabet
 //   §7 eşleme: "GÜLEÇSOY TEKSTİL" ↔ "Güleçsoy Tekstil San." ≥ 0,90 öneri · ilgisiz → boş · alias önce (ALIAS) · /eslestirme ucu
-//   §8 bağlı taslak: operatörün yazdığı başlık/satır EZİLMEZ, yalnız boş alanlar dolar
+//   §6d bayat READING (10 dk+) yeniden alınır · §7f /eslestirme yok id → 404
+//   §8 bağlı taslak: operatörün yazdığı başlık/satır EZİLMEZ, yalnız boş alanlar dolar; taslak DRAFT değilse tarama yine READ'e kapanır
 // Emsal: scripts/test_gelen_belge_taslak.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
 import type { AddressInfo } from "net";
@@ -55,7 +56,7 @@ async function ayar(key: string, v: boolean): Promise<void> {
 }
 
 // ── Sahte sidecar: JSON {imageBase64} içindeki "FIX:NNNN" damgasına göre altın fikstürü döner ─────────────────
-const fake = { mode: "ok" as "ok" | "500" | "invalid", hits: 0, delayMs: 0 };
+const fake = { mode: "ok" as "ok" | "500" | "400" | "invalid", hits: 0, delayMs: 0 };
 function startFakeSidecar(): Promise<{ server: Server; url: string }> {
   const server = http.createServer((req, res) => {
     if (req.method === "GET" && req.url === "/health") {
@@ -70,6 +71,7 @@ function startFakeSidecar(): Promise<{ server: Server; url: string }> {
       fake.hits++;
       setTimeout(() => {
         if (fake.mode === "500") { res.writeHead(500, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: "OCR hatası (sahte)" })); return; }
+        if (fake.mode === "400") { res.writeHead(400, { "content-type": "application/json" }); res.end(JSON.stringify({ detail: "bozuk görüntü (sahte)" })); return; }
         if (fake.mode === "invalid") { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ foo: 1, blocks: "yok" })); return; }
         const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { imageBase64: string };
         const m = /FIX:(\d{4})/.exec(Buffer.from(body.imageBase64, "base64").toString("utf8"));
@@ -206,7 +208,14 @@ async function main(): Promise<void> {
     const sz = await up("0243", {}, "zod");
     const z1 = await runReaderOnce();
     const pz = await scan(sz);
-    check("§5a şema dışı gövde → okunamadı sayılır (PENDING, deneme 1), taslak yok", z1.outcomes[0] === "RETRY" && pz.status === "PENDING" && pz.noteId === null, `${pz.status}/${pz.attempts}`);
+    check("§5a şema dışı gövde → KALICI: doğrudan READ_FAILED (deneme 1), taslak yok", z1.outcomes[0] === "READ_FAILED" && pz.status === "READ_FAILED" && pz.attempts === 1 && pz.noteId === null, `${pz.status}/${pz.attempts}`);
+    fake.mode = "400";
+    const s4x = await up("0244", {}, "dortyuz");
+    const q1 = await runReaderOnce();
+    const p4x = await scan(s4x);
+    check("§5c 4xx → KALICI: doğrudan READ_FAILED (yeniden denenmez)", q1.outcomes[0] === "READ_FAILED" && p4x.status === "READ_FAILED" && p4x.attempts === 1, `${p4x.status}/${p4x.attempts}`);
+    const okz = await call("POST", `/api/gelen-belge/taramalar/${sz}/oku`);
+    check("§5d okut → PENDING", okz.status === 202 && okz.data?.status === "PENDING");
     fake.mode = "ok";
     await runReaderOnce();
     const pz2 = await scan(sz);
@@ -228,6 +237,10 @@ async function main(): Promise<void> {
     check("§6b iki eşzamanlı claim → tek CLAIMED (updateMany WHERE {id, status})", claimed.length === 1 && (claimed[0] as { id: string }).id === s6b && (await scan(s6b)).status === "READING" && (await scan(s6b)).attempts === 1, `${c1.kind}/${c2.kind}`);
     const stuck = await runReaderOnce();
     check("§6c READING'deki tarama (bayat değil) ikinci tur tarafından ALINMAZ", stuck.outcome === "BOS", stuck.outcome);
+    await prisma.documentScan.update({ where: { id: s6b }, data: { updatedAt: new Date(Date.now() - 11 * 60 * 1000) } });
+    const c6d = await claimNextScan();
+    const p6d = await scan(s6b);
+    check("§6d bayat READING (10 dk+) yeniden alınır: CLAIMED, deneme 2", c6d.kind === "CLAIMED" && c6d.id === s6b && p6d.status === "READING" && p6d.attempts === 2, `${c6d.kind}/${p6d.attempts}`);
     await prisma.documentScan.update({ where: { id: s6b }, data: { status: "PENDING" } });
     await runReaderOnce();
     const n6b = (await scan(s6b)).noteId;
@@ -249,7 +262,9 @@ async function main(): Promise<void> {
     const es = await call("GET", `/api/gelen-belge/irsaliyeler/${all[0]!.noteId}/eslestirme`);
     const owner = es.data?.owner as { suggested?: { id: string }; rawText: string } | undefined;
     check("§7d /eslestirme: 0245 sahibi 'ÖRNEK TEKSTİL A' → Örnek Tekstil A önerisi; 21 satır için satır önerileri", es.status === 200 && owner?.suggested?.id === ornek && (es.data?.lines as unknown[]).length === 21, JSON.stringify(owner));
-    check("§7e 'sahip = gönderen' varsayımı YOK: senderCustomerId/ownerCustomerId OCR'dan DOLMAZ", (await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: all[0]!.noteId! }, select: { ownerCustomerId: true, senderCustomerId: true } })).ownerCustomerId === null);
+    check("§7e 'sahip = gönderen' varsayımı YOK: senderCustomerId/ownerCustomerId OCR'dan DOLMAZ", (await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: all[0]!.noteId! }, select: { ownerCustomerId: true, senderCustomerId: true } }).then((n) => n.ownerCustomerId === null && n.senderCustomerId === null)));
+    const es404 = await call("GET", "/api/gelen-belge/irsaliyeler/00000000-0000-4000-8000-000000000000/eslestirme");
+    check("§7f /eslestirme: olmayan irsaliye → 404 DELIVERY_NOTE_NOT_FOUND (fail-closed)", es404.status === 404 && es404.code === "DELIVERY_NOTE_NOT_FOUND", `${es404.status} ${es404.code}`);
 
     // ── §8 bağlı taslak: operatör verisi ezilmez ───────────────────────────
     const cr = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-ELLE`, lines: [{ senderRollNo: "EL-1", meters: 50 }] });
@@ -259,6 +274,16 @@ async function main(): Promise<void> {
     await runReaderOnce();
     const n8 = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: manualId }, select: { senderDocNo: true, ownerText: true, customerBatchNo: true, lines: { select: { meters: true } } } });
     check("§8a bağlı taslak: senderDocNo ve operatör satırı korunur; boş ownerText/parti OCR'dan dolar; tarama READ", n8.senderDocNo === `${TAG}-ELLE` && n8.lines.length === 1 && Number(n8.lines[0]!.meters) === 50 && n8.ownerText === "ÖRNEK TEKSTİL A" && n8.customerBatchNo === "P9918733" && (await scan(s8)).status === "READ", JSON.stringify(n8));
+    // §8b bağlı taslak DRAFT değil (onay sürüyor): taslağa dokunulmaz, tarama READ'e kapanır (READING'de kalıp bayat döngüye girmez)
+    const cr2 = await call("POST", "/api/gelen-belge/irsaliyeler", { sourceKind: "MANUAL", senderDocNo: `${TAG}-KILIT` });
+    const lockedId = cr2.data?.id as string;
+    made.notes.push(lockedId);
+    const s8b = await up("0245", { noteId: lockedId }, "kilitli");
+    await prisma.customerDeliveryNote.update({ where: { id: lockedId }, data: { status: "APPROVING" } });
+    const r8b = await runReaderOnce();
+    const n8b = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id: lockedId }, select: { ownerText: true, _count: { select: { lines: true } } } });
+    const p8b = await scan(s8b);
+    check("§8b bağlı taslak DRAFT değil → taslak değişmez, tarama READ (ocrResult zarfta), yeniden kuyruğa girmez", r8b.outcomes[0] === "READ" && p8b.status === "READ" && p8b.noteId === lockedId && n8b.ownerText === null && n8b._count.lines === 0 && (await runReaderOnce()).outcome === "BOS", `${r8b.outcomes[0]} ${p8b.status} ${JSON.stringify(n8b)}`);
   } finally {
     stopNotificationJobs();
     __resetDocumentReaderForTests();

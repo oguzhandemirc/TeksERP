@@ -3,7 +3,7 @@
 // =============================================================================
 // DEFTER-ÖNCELİKLİ: burada top DOĞMAZ, OCR deftere yazmaz; yalnız DocumentScan durumu ve DRAFT taslak.
 // Claim atomik: `updateMany WHERE {id, status: PENDING}` (READING'de takılı kalan 10 dk sonra yeniden alınır);
-// 3 denemede READ_FAILED. Audit yükü: künye (noteNo, satır sayısı, motor adı) — ham OCR metni / bayt GİRMEZ.
+// 3 denemede (4xx / şema dışı gövdede hemen) READ_FAILED. Audit yükü: künye (noteNo, satır sayısı, motor adı) — ham OCR metni / bayt GİRMEZ.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -51,11 +51,17 @@ export async function claimNextScan(now: Date = new Date(), skipIds: readonly st
 
 export type ProcessOutcome = "READ" | "RETRY" | "READ_FAILED" | "LOST";
 
-async function release(id: string, attempts: number, code: string): Promise<ProcessOutcome> {
-  const failed = attempts >= READ_MAX_ATTEMPTS;
-  const c = await prisma.documentScan.updateMany({ where: { id, status: "READING" }, data: { status: failed ? "READ_FAILED" : "PENDING" } });
+/**
+ * READING'i bırakır. `attempts` sahiplik damgasıdır: bayat sayılıp başka turda yeniden alınmış taramayı eski tur geri çekemez.
+ * `permanent` (4xx / şema dışı gövde) yeniden denemeye değmez → doğrudan READ_FAILED; READ_FAILED geçişi audit'e düşer.
+ */
+async function release(id: string, attempts: number, code: string, opts: { permanent?: boolean; userId?: string } = {}): Promise<ProcessOutcome> {
+  const { permanent = false, userId } = opts;
+  const failed = permanent || attempts >= READ_MAX_ATTEMPTS;
+  const c = await prisma.documentScan.updateMany({ where: { id, status: "READING", attempts }, data: { status: failed ? "READ_FAILED" : "PENDING" } });
   if (c.count === 0) return "LOST";
   (failed ? uyari : bilgi)("gelen-belge", `tarama okunamadı (${code}) — deneme ${attempts}/${READ_MAX_ATTEMPTS}${failed ? ", READ_FAILED" : ", yeniden denenecek"}`);
+  if (failed) await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "READ_FAILED", attempts, code } });
   return failed ? "READ_FAILED" : "RETRY";
 }
 
@@ -88,9 +94,9 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
   try {
     r = await ocr(readerUrl, Buffer.from(scan.content), scan.mimeType);
   } catch (err) {
-    return release(id, scan.attempts, `PROGRAM_HATASI:${(err as Error).name}`);
+    return release(id, scan.attempts, `PROGRAM_HATASI:${(err as Error).name}`, { userId: scan.capturedById ?? undefined });
   }
-  if (!r.ok) return release(id, scan.attempts, r.code);
+  if (!r.ok) return release(id, scan.attempts, r.code, { permanent: r.kind === "HTTP" || r.kind === "INVALID", userId: scan.capturedById ?? undefined });
   const doc = extractDocument(r.result, loadTemplates());
   const draft = draftFromExtraction(doc);
   const envelope = toJson({ ocr: r.result, regions: draft.header.regions });
@@ -108,7 +114,12 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     const noteId = scan.noteId;
     const res = await prisma.$transaction(async (tx) => {
       const claimed = await tx.customerDeliveryNote.updateMany({ where: { id: noteId, status: "DRAFT" }, data: { updatedAt: new Date() } });
-      if (claimed.count === 0) return { noteId, lines: 0, filled: false };
+      if (claimed.count === 0) {
+        // Taslak artık DRAFT değil (onay/iptal): veri yalnız zarfta kalır, tarama yine READ'e kapanır — READING'de kalıp bayat döngüye girmez.
+        const s0 = await tx.documentScan.updateMany({ where: { id, status: "READING" }, data: scanData });
+        if (s0.count === 0) throw new Error("SCAN_LOST");
+        return { noteId, lines: 0, filled: false };
+      }
       const note = await tx.customerDeliveryNote.findUniqueOrThrow({ where: { id: noteId }, select: { ownerText: true, senderDocNo: true, senderDocDate: true, customerBatchNo: true, processText: true, declaredTopCount: true, totalsDeclared: true, _count: { select: { lines: true } } } });
       const patch: Prisma.CustomerDeliveryNoteUpdateInput = { warnings };
       if (!note.ownerText) patch.ownerText = headerCols.ownerText;
@@ -127,7 +138,8 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
       return { noteId, lines: addLines ? draft.lines.length : 0, filled: true };
     }).catch((err) => (err instanceof Error && err.message === "SCAN_LOST" ? null : Promise.reject(err)));
     if (!res) return "LOST";
-    await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: noteId, newData: { source: "OCR", scanId: id, sha256: scan.sha256, lineCount: res.lines, filled: res.filled, engine: scanData.ocrEngine, warnings: header.warnings.length } });
+    if (res.filled) await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: noteId, newData: { source: "OCR", scanId: id, sha256: scan.sha256, lineCount: res.lines, engine: scanData.ocrEngine, warnings: header.warnings.length } });
+    await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "READ", noteId, noteFilled: res.filled, engine: scanData.ocrEngine, durationMs: r.durationMs } });
     return "READ";
   }
 
