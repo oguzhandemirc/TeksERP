@@ -56,13 +56,15 @@ export async function runReaderOnce(): Promise<ReaderRunResult> {
     const pre = await readerPreconditions();
     if (!pre.ok) return (lastResult = { outcome: pre.outcome, processed: 0, outcomes });
     let races = 0;
+    const tried: string[] = [];
     while (outcomes.length < MAX_PER_RUN && !stopped) {
-      const claim = await claimNextScan();
+      const claim = await claimNextScan(new Date(), tried);
       if (claim.kind === "NONE") break;
       if (claim.kind === "RACED") {
         if (++races > 3) break;
         continue;
       }
+      tried.push(claim.id);
       outcomes.push(await processClaimedScan(claim.id, pre.url));
     }
     return (lastResult = { outcome: outcomes.length ? "BASARILI" : "BOS", processed: outcomes.length, outcomes });

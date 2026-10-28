@@ -27,10 +27,11 @@ const SCAN_TABLE = "DOCUMENT_SCAN";
 export type ClaimOutcome = { kind: "NONE" } | { kind: "RACED" } | { kind: "CLAIMED"; id: string };
 
 /** En eski PENDING (ya da bayat READING) taramayı atomik alır; yarışta kaybeden RACED döner (çağıran yeniden dener). */
-export async function claimNextScan(now: Date = new Date()): Promise<ClaimOutcome> {
+export async function claimNextScan(now: Date = new Date(), skipIds: readonly string[] = []): Promise<ClaimOutcome> {
   const stale = new Date(now.getTime() - READING_STALE_MS);
   const cand = await prisma.documentScan.findFirst({
-    where: { OR: [{ status: "PENDING" }, { status: "READING", updatedAt: { lt: stale } }] },
+    // Aynı turda denenmiş tarama yeniden alınmaz (`skipIds`): 5xx'te üç deneme üç AYRI tura yayılır. (`notIn: []` yasak → koşullu.)
+    where: { OR: [{ status: "PENDING" }, { status: "READING", updatedAt: { lt: stale } }], ...(skipIds.length ? { id: { notIn: [...skipIds] } } : {}) },
     orderBy: { createdAt: "asc" },
     select: { id: true, status: true, updatedAt: true },
   });
