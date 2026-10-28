@@ -118,6 +118,9 @@ export const MANUAL_ENTRY_REASONS: readonly ReasonPresetSeed[] = [
   { code: "GECMIS_VARDIYA", label: "Sistem kaydı yapılmamış (geçmiş vardiya)", fullText: "Sistem kaydı yapılmamış (geçmiş vardiya)" },
   { code: "FASON_DONUS_KAYITSIZ", label: "Fason dönüşü kayda girmemiş", fullText: "Fason dönüşü kayda girmemiş" },
   { code: "SAYIM_FARKI", label: "Sayım farkı — fiziksel mal var", fullText: "Sayım farkı — fiziksel mal var" },
+  // Gelen belge onayı (Gülkesim D4, 2026-10-29): müşteri irsaliyesi taslağından doğan emanet topu —
+  // rapor anahtarı `Roll.entryReasonCode`, yazan tek yol `gelen-belge-onay.service`.
+  { code: "GELEN_BELGE", label: "Gelen belge onayı (müşteri irsaliyesi)", fullText: "Gelen belge onayıyla müşteri irsaliyesinden giriş" },
 ] as const;
 
 /**
