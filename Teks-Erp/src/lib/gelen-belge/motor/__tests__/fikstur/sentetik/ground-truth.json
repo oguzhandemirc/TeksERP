@@ -1,0 +1,1094 @@
+[
+ {
+  "id": "uretim-emri-01-clean",
+  "templateId": "uretim-emri",
+  "variant": "clean",
+  "truth": {
+   "emirNo": "UE-513668",
+   "tarih": "2026-09-04",
+   "musteri": "ÜNAL KUMAŞÇILIK SAN. TİC. A.Ş.",
+   "siparisNo": "SP-2026-94722",
+   "kumasKodu": "HE-8147",
+   "kumasAdi": "Likralı Kaşkorse",
+   "renk": "Füme",
+   "planlananMetraj": "2229",
+   "makine": "KM-13",
+   "vardiya": "C",
+   "teslimTarihi": "2026-09-29"
+  }
+ },
+ {
+  "id": "uretim-emri-02-clean",
+  "templateId": "uretim-emri",
+  "variant": "clean",
+  "truth": {
+   "emirNo": "UE-994756",
+   "tarih": "2026-05-20",
+   "musteri": "ÖZDEMİR ÖRME SANAYİ LTD. ŞTİ.",
+   "siparisNo": "SP-2026-49073",
+   "kumasKodu": "FY-3881",
+   "kumasAdi": "Modal Süprem 40/1",
+   "renk": "Antrasit",
+   "planlananMetraj": "2918.5",
+   "makine": "KM-16",
+   "vardiya": "C",
+   "teslimTarihi": "2026-06-07"
+  }
+ },
+ {
+  "id": "uretim-emri-03-clean",
+  "templateId": "uretim-emri",
+  "variant": "clean",
+  "truth": {
+   "emirNo": "UE-820312",
+   "tarih": "2026-09-21",
+   "musteri": "YILDIZ MODA TEKSTİL LTD. ŞTİ.",
+   "siparisNo": "SP-2026-27370",
+   "kumasKodu": "JK-8420",
+   "kumasAdi": "Pamuk Elastan Ribana 2x2",
+   "renk": "Petrol Yeşili",
+   "planlananMetraj": "2688.5",
+   "makine": "KM-03",
+   "vardiya": "B",
+   "teslimTarihi": "2026-10-02"
+  }
+ },
+ {
+  "id": "uretim-emri-04-clean",
+  "templateId": "uretim-emri",
+  "variant": "clean",
+  "truth": {
+   "emirNo": "UE-993499",
+   "tarih": "2026-05-27",
+   "musteri": "BEŞİKTAŞ TRİKO SANAYİ A.Ş.",
+   "siparisNo": "SP-2026-67955",
+   "kumasKodu": "KN-3420",
+   "kumasAdi": "Polar Şardonlu",
+   "renk": "Antrasit",
+   "planlananMetraj": "2657.5",
+   "makine": "SM-18",
+   "vardiya": "B",
+   "teslimTarihi": "2026-07-05"
+  }
+ },
+ {
+  "id": "uretim-emri-05-noise",
+  "templateId": "uretim-emri",
+  "variant": "noise",
+  "truth": {
+   "emirNo": "UE-453262",
+   "tarih": "2026-05-27",
+   "musteri": "İPEKYOLU TEKSTİL TİC. A.Ş.",
+   "siparisNo": "SP-2026-67468",
+   "kumasKodu": "RH-3230",
+   "kumasAdi": "Viskon Likra Jarse",
+   "renk": "Antrasit",
+   "planlananMetraj": "307",
+   "makine": "BM-05",
+   "vardiya": "A",
+   "teslimTarihi": "2026-06-22"
+  }
+ },
+ {
+  "id": "uretim-emri-06-noise",
+  "templateId": "uretim-emri",
+  "variant": "noise",
+  "truth": {
+   "emirNo": "UE-661683",
+   "tarih": "2026-10-04",
+   "musteri": "ÜNAL KUMAŞÇILIK SAN. TİC. A.Ş.",
+   "siparisNo": "SP-2026-99613",
+   "kumasKodu": "RD-4411",
+   "kumasAdi": "Viskon Likra Jarse",
+   "renk": "Antrasit",
+   "planlananMetraj": "3220.5",
+   "makine": "RM-16",
+   "vardiya": "A",
+   "teslimTarihi": "2026-11-13"
+  }
+ },
+ {
+  "id": "uretim-emri-07-blur",
+  "templateId": "uretim-emri",
+  "variant": "blur",
+  "truth": {
+   "emirNo": "UE-166801",
+   "tarih": "2026-01-31",
+   "musteri": "BEŞİKTAŞ TRİKO SANAYİ A.Ş.",
+   "siparisNo": "SP-2026-92973",
+   "kumasKodu": "PC-7945",
+   "kumasAdi": "Pamuklu Pike",
+   "renk": "Antrasit",
+   "planlananMetraj": "5087.5",
+   "makine": "KM-24",
+   "vardiya": "C",
+   "teslimTarihi": "2026-02-18"
+  }
+ },
+ {
+  "id": "uretim-emri-08-blur",
+  "templateId": "uretim-emri",
+  "variant": "blur",
+  "truth": {
+   "emirNo": "UE-613657",
+   "tarih": "2026-02-22",
+   "musteri": "BEŞİKTAŞ TRİKO SANAYİ A.Ş.",
+   "siparisNo": "SP-2026-11618",
+   "kumasKodu": "ZC-5141",
+   "kumasAdi": "Pamuklu Süprem 30/1",
+   "renk": "Kırmızı",
+   "planlananMetraj": "2926",
+   "makine": "YM-17",
+   "vardiya": "C",
+   "teslimTarihi": "2026-03-08"
+  }
+ },
+ {
+  "id": "uretim-emri-09-rotate",
+  "templateId": "uretim-emri",
+  "variant": "rotate",
+  "truth": {
+   "emirNo": "UE-418204",
+   "tarih": "2026-05-12",
+   "musteri": "GÜNEŞ KONFEKSİYON A.Ş.",
+   "siparisNo": "SP-2026-16093",
+   "kumasKodu": "YY-8339",
+   "kumasAdi": "Likralı Kaşkorse",
+   "renk": "Ekru",
+   "planlananMetraj": "2124.5",
+   "makine": "YM-02",
+   "vardiya": "A",
+   "teslimTarihi": "2026-06-09"
+  }
+ },
+ {
+  "id": "uretim-emri-10-rotate",
+  "templateId": "uretim-emri",
+  "variant": "rotate",
+  "truth": {
+   "emirNo": "UE-292073",
+   "tarih": "2026-03-03",
+   "musteri": "BEŞİKTAŞ TRİKO SANAYİ A.Ş.",
+   "siparisNo": "SP-2026-18550",
+   "kumasKodu": "EE-3376",
+   "kumasAdi": "Likralı Kaşkorse",
+   "renk": "Pudra",
+   "planlananMetraj": "1482",
+   "makine": "YM-02",
+   "vardiya": "B",
+   "teslimTarihi": "2026-04-01"
+  }
+ },
+ {
+  "id": "uretim-emri-11-lowcontrast",
+  "templateId": "uretim-emri",
+  "variant": "lowcontrast",
+  "truth": {
+   "emirNo": "UE-498782",
+   "tarih": "2026-02-24",
+   "musteri": "DOĞUŞ İPLİK VE DOKUMA A.Ş.",
+   "siparisNo": "SP-2026-59309",
+   "kumasKodu": "UM-7317",
+   "kumasAdi": "Pamuk Elastan Ribana 2x2",
+   "renk": "Ekru",
+   "planlananMetraj": "3616.5",
+   "makine": "RM-24",
+   "vardiya": "C",
+   "teslimTarihi": "2026-03-31"
+  }
+ },
+ {
+  "id": "uretim-emri-12-lowcontrast",
+  "templateId": "uretim-emri",
+  "variant": "lowcontrast",
+  "truth": {
+   "emirNo": "UE-380160",
+   "tarih": "2026-06-30",
+   "musteri": "DOĞUŞ İPLİK VE DOKUMA A.Ş.",
+   "siparisNo": "SP-2026-75165",
+   "kumasKodu": "DJ-6717",
+   "kumasAdi": "Modal Süprem 40/1",
+   "renk": "Kahverengi",
+   "planlananMetraj": "5838",
+   "makine": "RM-01",
+   "vardiya": "A",
+   "teslimTarihi": "2026-07-21"
+  }
+ },
+ {
+  "id": "uretim-emri-13-jpeg",
+  "templateId": "uretim-emri",
+  "variant": "jpeg",
+  "truth": {
+   "emirNo": "UE-902967",
+   "tarih": "2026-08-17",
+   "musteri": "GÜNEŞ KONFEKSİYON A.Ş.",
+   "siparisNo": "SP-2026-74784",
+   "kumasKodu": "BA-7793",
+   "kumasAdi": "Pamuk Elastan Ribana 2x2",
+   "renk": "Gri Melanj",
+   "planlananMetraj": "1689",
+   "makine": "SM-06",
+   "vardiya": "B",
+   "teslimTarihi": "2026-09-19"
+  }
+ },
+ {
+  "id": "uretim-emri-14-jpeg",
+  "templateId": "uretim-emri",
+  "variant": "jpeg",
+  "truth": {
+   "emirNo": "UE-411873",
+   "tarih": "2026-10-29",
+   "musteri": "ÇINAR DOKUMA SAN. VE TİC. A.Ş.",
+   "siparisNo": "SP-2026-66185",
+   "kumasKodu": "DM-5159",
+   "kumasAdi": "Modal Süprem 40/1",
+   "renk": "Füme",
+   "planlananMetraj": "4792",
+   "makine": "YM-05",
+   "vardiya": "A",
+   "teslimTarihi": "2026-12-01"
+  }
+ },
+ {
+  "id": "uretim-emri-15-dotmatrix",
+  "templateId": "uretim-emri",
+  "variant": "dotmatrix",
+  "truth": {
+   "emirNo": "UE-170235",
+   "tarih": "2026-04-03",
+   "musteri": "İPEKYOLU TEKSTİL TİC. A.Ş.",
+   "siparisNo": "SP-2026-37828",
+   "kumasKodu": "YE-7170",
+   "kumasAdi": "Bambu Jarse",
+   "renk": "Petrol Yeşili",
+   "planlananMetraj": "4070",
+   "makine": "SM-19",
+   "vardiya": "B",
+   "teslimTarihi": "2026-04-19"
+  }
+ },
+ {
+  "id": "uretim-emri-16-dotmatrix",
+  "templateId": "uretim-emri",
+  "variant": "dotmatrix",
+  "truth": {
+   "emirNo": "UE-914982",
+   "tarih": "2026-10-22",
+   "musteri": "GÜNEŞ KONFEKSİYON A.Ş.",
+   "siparisNo": "SP-2026-16320",
+   "kumasKodu": "DF-4652",
+   "kumasAdi": "Bambu Jarse",
+   "renk": "Gri Melanj",
+   "planlananMetraj": "5691",
+   "makine": "YM-02",
+   "vardiya": "C",
+   "teslimTarihi": "2026-11-19"
+  }
+ },
+ {
+  "id": "uretim-emri-17-narrow",
+  "templateId": "uretim-emri",
+  "variant": "narrow",
+  "truth": {
+   "emirNo": "UE-540628",
+   "tarih": "2026-08-27",
+   "musteri": "ÇINAR DOKUMA SAN. VE TİC. A.Ş.",
+   "siparisNo": "SP-2026-38915",
+   "kumasKodu": "ZP-6292",
+   "kumasAdi": "Polar Şardonlu",
+   "renk": "Lacivert",
+   "planlananMetraj": "309",
+   "makine": "SM-12",
+   "vardiya": "C",
+   "teslimTarihi": "2026-09-04"
+  }
+ },
+ {
+  "id": "uretim-emri-18-narrow",
+  "templateId": "uretim-emri",
+  "variant": "narrow",
+  "truth": {
+   "emirNo": "UE-759891",
+   "tarih": "2026-10-12",
+   "musteri": "ÜNAL KUMAŞÇILIK SAN. TİC. A.Ş.",
+   "siparisNo": "SP-2026-10474",
+   "kumasKodu": "MU-3407",
+   "kumasAdi": "Bambu Jarse",
+   "renk": "Kahverengi",
+   "planlananMetraj": "5511.5",
+   "makine": "YM-15",
+   "vardiya": "A",
+   "teslimTarihi": "2026-11-16"
+  }
+ },
+ {
+  "id": "uretim-emri-19-shadow",
+  "templateId": "uretim-emri",
+  "variant": "shadow",
+  "truth": {
+   "emirNo": "UE-241833",
+   "tarih": "2026-07-17",
+   "musteri": "YILDIZ MODA TEKSTİL LTD. ŞTİ.",
+   "siparisNo": "SP-2026-55252",
+   "kumasKodu": "DZ-5877",
+   "kumasAdi": "Organik Pamuk Süprem",
+   "renk": "Ekru",
+   "planlananMetraj": "5601.5",
+   "makine": "YM-20",
+   "vardiya": "B",
+   "teslimTarihi": "2026-08-04"
+  }
+ },
+ {
+  "id": "uretim-emri-20-photo",
+  "templateId": "uretim-emri",
+  "variant": "photo",
+  "truth": {
+   "emirNo": "UE-853142",
+   "tarih": "2026-09-14",
+   "musteri": "ÖZDEMİR ÖRME SANAYİ LTD. ŞTİ.",
+   "siparisNo": "SP-2026-42871",
+   "kumasKodu": "GP-5821",
+   "kumasAdi": "Pamuk Elastan Ribana 2x2",
+   "renk": "Haki",
+   "planlananMetraj": "2257.5",
+   "makine": "BM-07",
+   "vardiya": "A",
+   "teslimTarihi": "2026-09-29"
+  }
+ },
+ {
+  "id": "uretim-emri-21-photo",
+  "templateId": "uretim-emri",
+  "variant": "photo",
+  "truth": {
+   "emirNo": "UE-379301",
+   "tarih": "2026-08-23",
+   "musteri": "AKDENİZ HAZIR GİYİM LTD. ŞTİ.",
+   "siparisNo": "SP-2026-89229",
+   "kumasKodu": "CV-3030",
+   "kumasAdi": "Pamuklu Pike",
+   "renk": "Beyaz",
+   "planlananMetraj": "5983",
+   "makine": "SM-10",
+   "vardiya": "B",
+   "teslimTarihi": "2026-09-05"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-01-clean",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "clean",
+  "truth": {
+   "irsaliyeNo": "IRS-596394",
+   "tarih": "2026-06-12",
+   "musteri": "ÇINAR DOKUMA SAN. VE TİC. A.Ş.",
+   "siparisNo": "SP-2026-62604",
+   "partiNo": "P636249",
+   "topSayisi": "56",
+   "toplamMetraj": "3477",
+   "brutKg": "1208.7",
+   "plaka": "35 JY 21",
+   "sofor": "Elif Koç"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-02-clean",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "clean",
+  "truth": {
+   "irsaliyeNo": "IRS-722994",
+   "tarih": "2026-10-15",
+   "musteri": "BEŞİKTAŞ TRİKO SANAYİ A.Ş.",
+   "siparisNo": "SP-2026-02433",
+   "partiNo": "P288445",
+   "topSayisi": "47",
+   "toplamMetraj": "6024.5",
+   "brutKg": "2116.6",
+   "plaka": "16 NLF 110",
+   "sofor": "Mehmet Kaya"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-03-clean",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "clean",
+  "truth": {
+   "irsaliyeNo": "IRS-525002",
+   "tarih": "2026-08-27",
+   "musteri": "ÜNAL KUMAŞÇILIK SAN. TİC. A.Ş.",
+   "siparisNo": "SP-2026-97885",
+   "partiNo": "P499636",
+   "topSayisi": "22",
+   "toplamMetraj": "3059.5",
+   "brutKg": "1051.6",
+   "plaka": "20 HCS 7345",
+   "sofor": "Gülşah Yılmaz"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-04-clean",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "clean",
+  "truth": {
+   "irsaliyeNo": "IRS-934088",
+   "tarih": "2026-07-13",
+   "musteri": "ŞAHİN TEKSTİL SAN. VE TİC. LTD. ŞTİ.",
+   "siparisNo": "SP-2026-25495",
+   "partiNo": "P697335",
+   "topSayisi": "56",
+   "toplamMetraj": "4965",
+   "brutKg": "1753.4",
+   "plaka": "35 J 24",
+   "sofor": "Ömer Çelik"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-05-noise",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "noise",
+  "truth": {
+   "irsaliyeNo": "IRS-113327",
+   "tarih": "2026-10-28",
+   "musteri": "KARDEŞLER ÖRME VE BOYA LTD. ŞTİ.",
+   "siparisNo": "SP-2026-04297",
+   "partiNo": "P443398",
+   "topSayisi": "51",
+   "toplamMetraj": "5673",
+   "brutKg": "1976",
+   "plaka": "16 VAD 2297",
+   "sofor": "Gülşah Demir"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-06-noise",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "noise",
+  "truth": {
+   "irsaliyeNo": "IRS-153569",
+   "tarih": "2026-10-07",
+   "musteri": "İPEKYOLU TEKSTİL TİC. A.Ş.",
+   "siparisNo": "SP-2026-19319",
+   "partiNo": "P965915",
+   "topSayisi": "18",
+   "toplamMetraj": "1696",
+   "brutKg": "622.1",
+   "plaka": "34 CU 962",
+   "sofor": "İbrahim Aslan"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-07-blur",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "blur",
+  "truth": {
+   "irsaliyeNo": "IRS-390124",
+   "tarih": "2026-07-27",
+   "musteri": "KARDEŞLER ÖRME VE BOYA LTD. ŞTİ.",
+   "siparisNo": "SP-2026-88821",
+   "partiNo": "P434179",
+   "topSayisi": "27",
+   "toplamMetraj": "3479.5",
+   "brutKg": "1207.7",
+   "plaka": "59 FV 4988",
+   "sofor": "Nurgül Özkan"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-08-blur",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "blur",
+  "truth": {
+   "irsaliyeNo": "IRS-994188",
+   "tarih": "2026-01-17",
+   "musteri": "ÖZDEMİR ÖRME SANAYİ LTD. ŞTİ.",
+   "siparisNo": "SP-2026-37830",
+   "partiNo": "P380309",
+   "topSayisi": "45",
+   "toplamMetraj": "2818",
+   "brutKg": "1012.5",
+   "plaka": "27 TBL 634",
+   "sofor": "Ercan Yılmaz"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-09-rotate",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "rotate",
+  "truth": {
+   "irsaliyeNo": "IRS-664192",
+   "tarih": "2026-09-25",
+   "musteri": "GÜNEŞ KONFEKSİYON A.Ş.",
+   "siparisNo": "SP-2026-61779",
+   "partiNo": "P131025",
+   "topSayisi": "17",
+   "toplamMetraj": "2120",
+   "brutKg": "766.4",
+   "plaka": "59 SMC 1677",
+   "sofor": "Fatma Arslan"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-10-rotate",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "rotate",
+  "truth": {
+   "irsaliyeNo": "IRS-182237",
+   "tarih": "2026-03-31",
+   "musteri": "ŞAHİN TEKSTİL SAN. VE TİC. LTD. ŞTİ.",
+   "siparisNo": "SP-2026-60807",
+   "partiNo": "P310983",
+   "topSayisi": "50",
+   "toplamMetraj": "8077",
+   "brutKg": "2831",
+   "plaka": "27 CUG 5484",
+   "sofor": "Selin Şahin"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-11-lowcontrast",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "lowcontrast",
+  "truth": {
+   "irsaliyeNo": "IRS-997107",
+   "tarih": "2026-07-18",
+   "musteri": "BEŞİKTAŞ TRİKO SANAYİ A.Ş.",
+   "siparisNo": "SP-2026-78369",
+   "partiNo": "P712910",
+   "topSayisi": "26",
+   "toplamMetraj": "2706.5",
+   "brutKg": "955.6",
+   "plaka": "16 LP 2264",
+   "sofor": "Emine Yılmaz"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-12-lowcontrast",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "lowcontrast",
+  "truth": {
+   "irsaliyeNo": "IRS-106316",
+   "tarih": "2026-02-04",
+   "musteri": "KARDEŞLER ÖRME VE BOYA LTD. ŞTİ.",
+   "siparisNo": "SP-2026-36576",
+   "partiNo": "P898788",
+   "topSayisi": "34",
+   "toplamMetraj": "2359",
+   "brutKg": "832.2",
+   "plaka": "34 H 66",
+   "sofor": "Ayşe Yıldız"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-13-jpeg",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "jpeg",
+  "truth": {
+   "irsaliyeNo": "IRS-989580",
+   "tarih": "2026-09-14",
+   "musteri": "ÇINAR DOKUMA SAN. VE TİC. A.Ş.",
+   "siparisNo": "SP-2026-14394",
+   "partiNo": "P853560",
+   "topSayisi": "49",
+   "toplamMetraj": "7506.5",
+   "brutKg": "2611.8",
+   "plaka": "20 TCC 70",
+   "sofor": "Mehmet Güneş"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-14-jpeg",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "jpeg",
+  "truth": {
+   "irsaliyeNo": "IRS-421210",
+   "tarih": "2026-06-18",
+   "musteri": "AKDENİZ HAZIR GİYİM LTD. ŞTİ.",
+   "siparisNo": "SP-2026-39467",
+   "partiNo": "P857772",
+   "topSayisi": "32",
+   "toplamMetraj": "2657.5",
+   "brutKg": "922.4",
+   "plaka": "01 CPY 482",
+   "sofor": "Nurgül Korkmaz"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-15-dotmatrix",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "dotmatrix",
+  "truth": {
+   "irsaliyeNo": "IRS-283383",
+   "tarih": "2026-05-24",
+   "musteri": "ÜNAL KUMAŞÇILIK SAN. TİC. A.Ş.",
+   "siparisNo": "SP-2026-76933",
+   "partiNo": "P774675",
+   "topSayisi": "26",
+   "toplamMetraj": "3635.5",
+   "brutKg": "1281.1",
+   "plaka": "35 JFG 15",
+   "sofor": "Elif Aslan"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-16-dotmatrix",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "dotmatrix",
+  "truth": {
+   "irsaliyeNo": "IRS-199367",
+   "tarih": "2026-03-11",
+   "musteri": "İPEKYOLU TEKSTİL TİC. A.Ş.",
+   "siparisNo": "SP-2026-76177",
+   "partiNo": "P207368",
+   "topSayisi": "60",
+   "toplamMetraj": "9874",
+   "brutKg": "3463.9",
+   "plaka": "35 RE 424",
+   "sofor": "Ercan Şahin"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-17-narrow",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "narrow",
+  "truth": {
+   "irsaliyeNo": "IRS-469343",
+   "tarih": "2026-09-16",
+   "musteri": "AKDENİZ HAZIR GİYİM LTD. ŞTİ.",
+   "siparisNo": "SP-2026-98127",
+   "partiNo": "P871069",
+   "topSayisi": "4",
+   "toplamMetraj": "240",
+   "brutKg": "79.3",
+   "plaka": "41 MLD 627",
+   "sofor": "Selin Aslan"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-18-narrow",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "narrow",
+  "truth": {
+   "irsaliyeNo": "IRS-476347",
+   "tarih": "2026-05-01",
+   "musteri": "ÜNAL KUMAŞÇILIK SAN. TİC. A.Ş.",
+   "siparisNo": "SP-2026-43223",
+   "partiNo": "P593648",
+   "topSayisi": "23",
+   "toplamMetraj": "2428.5",
+   "brutKg": "832.9",
+   "plaka": "06 JST 880",
+   "sofor": "Nurgül Kaya"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-19-shadow",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "shadow",
+  "truth": {
+   "irsaliyeNo": "IRS-590426",
+   "tarih": "2026-04-06",
+   "musteri": "ÇINAR DOKUMA SAN. VE TİC. A.Ş.",
+   "siparisNo": "SP-2026-61912",
+   "partiNo": "P492255",
+   "topSayisi": "41",
+   "toplamMetraj": "4892.5",
+   "brutKg": "1682.6",
+   "plaka": "41 K 7381",
+   "sofor": "Ömer Polat"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-20-photo",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "photo",
+  "truth": {
+   "irsaliyeNo": "IRS-630012",
+   "tarih": "2026-08-14",
+   "musteri": "ÇINAR DOKUMA SAN. VE TİC. A.Ş.",
+   "siparisNo": "SP-2026-57584",
+   "partiNo": "P248251",
+   "topSayisi": "44",
+   "toplamMetraj": "5442",
+   "brutKg": "1910.3",
+   "plaka": "27 AT 662",
+   "sofor": "İbrahim Yıldız"
+  }
+ },
+ {
+  "id": "sevk-irsaliyesi-21-photo",
+  "templateId": "sevk-irsaliyesi",
+  "variant": "photo",
+  "truth": {
+   "irsaliyeNo": "IRS-994314",
+   "tarih": "2026-07-16",
+   "musteri": "İPEKYOLU TEKSTİL TİC. A.Ş.",
+   "siparisNo": "SP-2026-11194",
+   "partiNo": "P592218",
+   "topSayisi": "11",
+   "toplamMetraj": "940",
+   "brutKg": "339.3",
+   "plaka": "06 C 38",
+   "sofor": "Burak Doğan"
+  }
+ },
+ {
+  "id": "kalite-kontrol-01-clean",
+  "templateId": "kalite-kontrol",
+  "variant": "clean",
+  "truth": {
+   "formNo": "KK-475837",
+   "tarih": "2026-05-13",
+   "partiNo": "P505892",
+   "kumasKodu": "KA-2621",
+   "gramaj": "146.8",
+   "en": "147.2",
+   "hataPuani": "8",
+   "sonuc": "KABUL",
+   "kontrolor": "Şule Koç",
+   "makine": "YM-23"
+  }
+ },
+ {
+  "id": "kalite-kontrol-02-clean",
+  "templateId": "kalite-kontrol",
+  "variant": "clean",
+  "truth": {
+   "formNo": "KK-964538",
+   "tarih": "2026-09-05",
+   "partiNo": "P204080",
+   "kumasKodu": "HY-9716",
+   "gramaj": "319.7",
+   "en": "147",
+   "hataPuani": "54",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Çağla Öztürk",
+   "makine": "KM-17"
+  }
+ },
+ {
+  "id": "kalite-kontrol-03-clean",
+  "templateId": "kalite-kontrol",
+  "variant": "clean",
+  "truth": {
+   "formNo": "KK-798206",
+   "tarih": "2026-09-03",
+   "partiNo": "P800986",
+   "kumasKodu": "CN-1261",
+   "gramaj": "235.8",
+   "en": "179",
+   "hataPuani": "26",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Hüseyin Çetin",
+   "makine": "RM-22"
+  }
+ },
+ {
+  "id": "kalite-kontrol-04-clean",
+  "templateId": "kalite-kontrol",
+  "variant": "clean",
+  "truth": {
+   "formNo": "KK-536085",
+   "tarih": "2026-06-19",
+   "partiNo": "P401191",
+   "kumasKodu": "NB-7308",
+   "gramaj": "221.4",
+   "en": "149.9",
+   "hataPuani": "27",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Mustafa Koç",
+   "makine": "YM-14"
+  }
+ },
+ {
+  "id": "kalite-kontrol-05-noise",
+  "templateId": "kalite-kontrol",
+  "variant": "noise",
+  "truth": {
+   "formNo": "KK-137508",
+   "tarih": "2026-03-17",
+   "partiNo": "P686099",
+   "kumasKodu": "CM-8172",
+   "gramaj": "129.6",
+   "en": "181.6",
+   "hataPuani": "9",
+   "sonuc": "KABUL",
+   "kontrolor": "Şule Kılıç",
+   "makine": "RM-22"
+  }
+ },
+ {
+  "id": "kalite-kontrol-06-noise",
+  "templateId": "kalite-kontrol",
+  "variant": "noise",
+  "truth": {
+   "formNo": "KK-374688",
+   "tarih": "2026-02-14",
+   "partiNo": "P360459",
+   "kumasKodu": "FA-2601",
+   "gramaj": "151.6",
+   "en": "166.1",
+   "hataPuani": "57",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Hatice Çetin",
+   "makine": "YM-20"
+  }
+ },
+ {
+  "id": "kalite-kontrol-07-blur",
+  "templateId": "kalite-kontrol",
+  "variant": "blur",
+  "truth": {
+   "formNo": "KK-662009",
+   "tarih": "2026-10-21",
+   "partiNo": "P577565",
+   "kumasKodu": "AT-7916",
+   "gramaj": "276.2",
+   "en": "183",
+   "hataPuani": "59",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Çağla Koç",
+   "makine": "RM-04"
+  }
+ },
+ {
+  "id": "kalite-kontrol-08-blur",
+  "templateId": "kalite-kontrol",
+  "variant": "blur",
+  "truth": {
+   "formNo": "KK-597408",
+   "tarih": "2026-05-18",
+   "partiNo": "P834815",
+   "kumasKodu": "DE-1385",
+   "gramaj": "249",
+   "en": "177",
+   "hataPuani": "33",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Nurgül Yılmaz",
+   "makine": "YM-03"
+  }
+ },
+ {
+  "id": "kalite-kontrol-09-rotate",
+  "templateId": "kalite-kontrol",
+  "variant": "rotate",
+  "truth": {
+   "formNo": "KK-990968",
+   "tarih": "2026-09-10",
+   "partiNo": "P958656",
+   "kumasKodu": "ND-6326",
+   "gramaj": "200.8",
+   "en": "157.4",
+   "hataPuani": "28",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Emine Özkan",
+   "makine": "RM-05"
+  }
+ },
+ {
+  "id": "kalite-kontrol-10-rotate",
+  "templateId": "kalite-kontrol",
+  "variant": "rotate",
+  "truth": {
+   "formNo": "KK-957212",
+   "tarih": "2026-03-12",
+   "partiNo": "P249161",
+   "kumasKodu": "MF-6537",
+   "gramaj": "274.6",
+   "en": "168",
+   "hataPuani": "55",
+   "sonuc": "RET",
+   "kontrolor": "Nurgül Arslan",
+   "makine": "RM-03"
+  }
+ },
+ {
+  "id": "kalite-kontrol-11-lowcontrast",
+  "templateId": "kalite-kontrol",
+  "variant": "lowcontrast",
+  "truth": {
+   "formNo": "KK-666383",
+   "tarih": "2026-05-07",
+   "partiNo": "P891476",
+   "kumasKodu": "BS-1877",
+   "gramaj": "257.1",
+   "en": "164",
+   "hataPuani": "38",
+   "sonuc": "RET",
+   "kontrolor": "Yusuf Özkan",
+   "makine": "YM-09"
+  }
+ },
+ {
+  "id": "kalite-kontrol-12-lowcontrast",
+  "templateId": "kalite-kontrol",
+  "variant": "lowcontrast",
+  "truth": {
+   "formNo": "KK-453152",
+   "tarih": "2026-06-13",
+   "partiNo": "P639302",
+   "kumasKodu": "RF-7976",
+   "gramaj": "236.8",
+   "en": "168",
+   "hataPuani": "16",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Çağla Yılmaz",
+   "makine": "BM-20"
+  }
+ },
+ {
+  "id": "kalite-kontrol-13-jpeg",
+  "templateId": "kalite-kontrol",
+  "variant": "jpeg",
+  "truth": {
+   "formNo": "KK-207450",
+   "tarih": "2026-08-05",
+   "partiNo": "P183263",
+   "kumasKodu": "ZD-4285",
+   "gramaj": "293.2",
+   "en": "181",
+   "hataPuani": "47",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Zeynep Şahin",
+   "makine": "RM-23"
+  }
+ },
+ {
+  "id": "kalite-kontrol-14-jpeg",
+  "templateId": "kalite-kontrol",
+  "variant": "jpeg",
+  "truth": {
+   "formNo": "KK-712569",
+   "tarih": "2026-10-13",
+   "partiNo": "P729148",
+   "kumasKodu": "HH-6736",
+   "gramaj": "240",
+   "en": "141.6",
+   "hataPuani": "43",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Gülşah Şimşek",
+   "makine": "BM-15"
+  }
+ },
+ {
+  "id": "kalite-kontrol-15-dotmatrix",
+  "templateId": "kalite-kontrol",
+  "variant": "dotmatrix",
+  "truth": {
+   "formNo": "KK-946222",
+   "tarih": "2026-05-17",
+   "partiNo": "P321395",
+   "kumasKodu": "RE-2013",
+   "gramaj": "130.2",
+   "en": "175.1",
+   "hataPuani": "29",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Emine Koç",
+   "makine": "SM-17"
+  }
+ },
+ {
+  "id": "kalite-kontrol-16-dotmatrix",
+  "templateId": "kalite-kontrol",
+  "variant": "dotmatrix",
+  "truth": {
+   "formNo": "KK-872578",
+   "tarih": "2026-06-09",
+   "partiNo": "P740321",
+   "kumasKodu": "MP-6104",
+   "gramaj": "173.1",
+   "en": "154.7",
+   "hataPuani": "22",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Ayşe Doğan",
+   "makine": "YM-06"
+  }
+ },
+ {
+  "id": "kalite-kontrol-17-narrow",
+  "templateId": "kalite-kontrol",
+  "variant": "narrow",
+  "truth": {
+   "formNo": "KK-414783",
+   "tarih": "2026-02-01",
+   "partiNo": "P647532",
+   "kumasKodu": "CR-6662",
+   "gramaj": "188.1",
+   "en": "147",
+   "hataPuani": "64",
+   "sonuc": "RET",
+   "kontrolor": "Ayşe Öztürk",
+   "makine": "KM-05"
+  }
+ },
+ {
+  "id": "kalite-kontrol-18-narrow",
+  "templateId": "kalite-kontrol",
+  "variant": "narrow",
+  "truth": {
+   "formNo": "KK-986126",
+   "tarih": "2026-02-10",
+   "partiNo": "P543091",
+   "kumasKodu": "RM-2741",
+   "gramaj": "202",
+   "en": "163.7",
+   "hataPuani": "48",
+   "sonuc": "RET",
+   "kontrolor": "Gülşah Çetin",
+   "makine": "YM-08"
+  }
+ },
+ {
+  "id": "kalite-kontrol-19-shadow",
+  "templateId": "kalite-kontrol",
+  "variant": "shadow",
+  "truth": {
+   "formNo": "KK-521313",
+   "tarih": "2026-10-29",
+   "partiNo": "P888094",
+   "kumasKodu": "YL-3187",
+   "gramaj": "236.7",
+   "en": "171",
+   "hataPuani": "36",
+   "sonuc": "ŞARTLI",
+   "kontrolor": "Hatice Aslan",
+   "makine": "RM-15"
+  }
+ },
+ {
+  "id": "kalite-kontrol-20-photo",
+  "templateId": "kalite-kontrol",
+  "variant": "photo",
+  "truth": {
+   "formNo": "KK-189025",
+   "tarih": "2026-07-23",
+   "partiNo": "P633222",
+   "kumasKodu": "ZU-5618",
+   "gramaj": "272.9",
+   "en": "160.4",
+   "hataPuani": "9",
+   "sonuc": "KABUL",
+   "kontrolor": "Gülşah Öztürk",
+   "makine": "SM-21"
+  }
+ },
+ {
+  "id": "kalite-kontrol-21-photo",
+  "templateId": "kalite-kontrol",
+  "variant": "photo",
+  "truth": {
+   "formNo": "KK-307035",
+   "tarih": "2026-04-16",
+   "partiNo": "P815711",
+   "kumasKodu": "FS-9894",
+   "gramaj": "172.8",
+   "en": "184",
+   "hataPuani": "27",
+   "sonuc": "KABUL",
+   "kontrolor": "Gülşah Şimşek",
+   "makine": "YM-24"
+  }
+ }
+]

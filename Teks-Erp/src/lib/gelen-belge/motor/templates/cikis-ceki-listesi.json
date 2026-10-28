@@ -1,0 +1,39 @@
+{
+  "id": "cikis-ceki-listesi",
+  "name": "Çıkış çeki listesi (iş emri + kod/miktar)",
+  "version": 1,
+  "identifiers": { "keywords": ["Çıkış Çeki Listesi", "Müşteri MT", "Müşteri KG", "Miktar 1", "Taşıma Tipi"], "minScore": 0.6, "regex": ["\\bISM\\d{7}\\b"] },
+  "fields": [
+    { "key": "isEmriNo", "label": "İş Emri No", "type": "alnum", "required": true, "pattern": "^ISM\\d{7}$", "postProcess": ["upper", "stripSpaces"],
+      "strategies": [
+        { "kind": "regex", "pattern": "\\b(ISM\\d{7})\\b" },
+        { "kind": "anchor", "labels": ["İş Emri"], "direction": "right" }
+      ] },
+    { "key": "tarih", "label": "Tarih", "type": "date", "required": true,
+      "strategies": [ { "kind": "anchor", "labels": ["Tarih"], "direction": "right" } ] },
+    { "key": "musteri", "label": "Müşteri", "type": "text", "required": true, "maxLength": 40, "postProcess": ["collapseSpaces", "trimPunct"],
+      "strategies": [ { "kind": "anchor", "labels": ["Müşteri"], "direction": "right", "minLabelSimilarity": 0.9 } ] },
+    { "key": "musteriPartiNo", "label": "Müşteri Parti No", "type": "text", "maxLength": 60, "postProcess": ["collapseSpaces", "trimPunct"],
+      "strategies": [ { "kind": "anchor", "labels": ["Müş. Parti NO", "Müşteri Parti No"], "direction": "right" } ] },
+    { "key": "musteriMt", "label": "Müşteri MT", "type": "decimal",
+      "strategies": [ { "kind": "anchor", "labels": ["Müşteri MT"], "direction": "right" } ] },
+    { "key": "musteriKg", "label": "Müşteri KG", "type": "decimal",
+      "strategies": [ { "kind": "anchor", "labels": ["Müşteri KG"], "direction": "right" } ] },
+    { "key": "mamulEn", "label": "Mamul En", "type": "decimal",
+      "strategies": [ { "kind": "anchor", "labels": ["Mamül En", "Mamul En"], "direction": "right" } ] },
+    { "key": "sevkTarihi", "label": "Sevk Tarihi", "type": "date",
+      "strategies": [ { "kind": "anchor", "labels": ["Sevk Tarihi"], "direction": "right" } ] },
+    { "key": "tasimaTipi", "label": "Taşıma Tipi", "type": "text", "maxLength": 40,
+      "strategies": [ { "kind": "anchor", "labels": ["Taşıma Tipi"], "direction": "right" } ] }
+  ],
+  "tables": [
+    { "key": "toplar", "minHeaderMatches": 3,
+      "columns": [
+        { "key": "topNo", "label": "Kod", "type": "alnum", "headers": ["Kod"], "required": true },
+        { "key": "m", "label": "Metre", "type": "decimal", "headers": ["Miktar 1"], "required": true },
+        { "key": "kg", "label": "Kilo", "type": "decimal", "headers": ["Miktar 2"], "required": true },
+        { "key": "en", "label": "En", "type": "decimal", "headers": ["Miktar 3"] }
+      ],
+      "totals": { "labels": ["TOPLAM"] } }
+  ]
+}

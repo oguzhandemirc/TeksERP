@@ -1,0 +1,367 @@
+{
+ "id": "sevk-irsaliyesi",
+ "name": "Sevk İrsaliyesi",
+ "version": 1,
+ "identifiers": {
+  "keywords": [
+   "SEVK İRSALİYESİ",
+   "İrsaliye No",
+   "Top Sayısı",
+   "Plaka",
+   "TOP LİSTESİ"
+  ],
+  "minScore": 0.5,
+  "regex": [
+   "\\bIRS-\\d{6}\\b",
+   "\\d{2} [A-Z]{1,3} \\d{2,4}\\b"
+  ]
+ },
+ "fields": [
+  {
+   "key": "irsaliyeNo",
+   "label": "İrsaliye No",
+   "type": "alnum",
+   "required": true,
+   "pattern": "^IRS-\\d{6}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "İrsaliye No",
+      "Irsaliye No",
+      "İrsaliye Numarası",
+      "İrsaliye"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.14,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "\\b(IRS-?\\d{6})\\b"
+    }
+   ]
+  },
+  {
+   "key": "tarih",
+   "label": "Tarih",
+   "type": "date",
+   "required": true,
+   "dateFormats": [
+    "DD.MM.YYYY",
+    "DD/MM/YYYY",
+    "DD-MM-YYYY",
+    "DD.MM.YY"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Tarih",
+      "Sevk Tarihi",
+      "İrsaliye Tarihi"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.48,
+      "y": 0.14,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Tarih\\s*:?\\s*(\\d{2}[./-]\\d{2}[./-]\\d{2,4})",
+     "roi": {
+      "x": 0.45,
+      "y": 0.14,
+      "w": 0.55,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "musteri",
+   "label": "Müşteri",
+   "type": "text",
+   "required": true,
+   "maxLength": 60,
+   "postProcess": [
+    "collapseSpaces",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Müşteri",
+      "Alıcı",
+      "Müşteri Adı",
+      "Firma"
+     ],
+     "direction": "below",
+     "takeLines": 1,
+     "window": {
+      "x": 0.02,
+      "y": 0.21,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "roi",
+     "roi": {
+      "x": 0.07,
+      "y": 0.27,
+      "w": 0.86,
+      "h": 0.04
+     }
+    }
+   ]
+  },
+  {
+   "key": "siparisNo",
+   "label": "Sipariş No",
+   "type": "alnum",
+   "required": true,
+   "pattern": "^SP-\\d{4}-\\d{5}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Sipariş No",
+      "Sipariş Numarası",
+      "Sip. No",
+      "Sipariş"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.17,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "\\b(SP-?\\d{4}-?\\d{5})\\b"
+    }
+   ]
+  },
+  {
+   "key": "partiNo",
+   "label": "Parti No",
+   "type": "alnum",
+   "required": true,
+   "pattern": "^P\\d{6}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Parti No",
+      "Parti Numarası",
+      "Parti",
+      "Lot No"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.48,
+      "y": 0.17,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Parti\\s*No\\s*:?\\s*(P\\s?\\d{6})\\b",
+     "flags": "i",
+     "roi": {
+      "x": 0.45,
+      "y": 0.17,
+      "w": 0.55,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "topSayisi",
+   "label": "Top Sayısı",
+   "type": "integer",
+   "required": true,
+   "pattern": "^\\d{1,4}$",
+   "min": 1,
+   "max": 9999,
+   "postProcess": [
+    "digitsOnly"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Top Sayısı",
+      "Top Adedi",
+      "Top Sayisi",
+      "Top"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.28,
+      "w": 0.4,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Top\\s*Say[ıi]s[ıi]\\s*:?\\s*(\\d{1,4})\\b",
+     "flags": "i"
+    }
+   ]
+  },
+  {
+   "key": "toplamMetraj",
+   "label": "Toplam Metraj",
+   "type": "decimal",
+   "required": true,
+   "min": 1,
+   "max": 999999,
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Toplam Metraj (m)",
+      "Toplam Metraj",
+      "Toplam Mt",
+      "Metraj"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.38,
+      "y": 0.28,
+      "w": 0.62,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Toplam\\s*Metraj\\s*(?:\\(m\\))?\\s*:?\\s*([\\d.]+,\\d{1,2}|\\d+)",
+     "flags": "i"
+    }
+   ]
+  },
+  {
+   "key": "brutKg",
+   "label": "Brüt Kg",
+   "type": "decimal",
+   "min": 1,
+   "max": 99999,
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Brüt Kg",
+      "Brüt Ağırlık",
+      "Brüt",
+      "Kg"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.31,
+      "w": 0.4,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Br[üu]t\\s*Kg\\s*:?\\s*([\\d.]+,\\d{1,2}|\\d+)",
+     "flags": "i"
+    }
+   ]
+  },
+  {
+   "key": "plaka",
+   "label": "Plaka",
+   "type": "alnum",
+   "pattern": "^\\d{2} [A-Z]{1,3} \\d{2,4}$",
+   "postProcess": [
+    "upper",
+    "collapseSpaces",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Plaka",
+      "Araç Plakası",
+      "Plaka No"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.38,
+      "y": 0.31,
+      "w": 0.62,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "\\b(\\d{2}\\s?[A-Z]{1,3}\\s?\\d{2,4})\\b",
+     "roi": {
+      "x": 0.38,
+      "y": 0.31,
+      "w": 0.62,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "sofor",
+   "label": "Şoför",
+   "type": "text",
+   "maxLength": 40,
+   "postProcess": [
+    "collapseSpaces",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Şoför",
+      "Sofor",
+      "Sürücü",
+      "Şoför Adı"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.34,
+      "w": 0.4,
+      "h": 0.1
+     }
+    }
+   ]
+  }
+ ]
+}

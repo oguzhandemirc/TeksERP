@@ -1,0 +1,15 @@
+{
+  "id": "kumas-irsaliyesi",
+  "name": "Kumaş irsaliyesi (el yazısı ızgara, 5 sütun)",
+  "version": 1,
+  "identifiers": { "keywords": ["KUMAŞ İRSALİYESİ", "SAYIN", "Irsaliye No", "CİNSİ", "TUTARI"], "minScore": 0.6 },
+  "fields": [
+    { "key": "sayin", "label": "Sayın", "type": "text", "maxLength": 40, "postProcess": ["collapseSpaces", "trimPunct"],
+      "strategies": [ { "kind": "anchor", "labels": ["SAYIN"], "direction": "below", "maxDistance": 3 } ] },
+    { "key": "irsaliyeNo", "label": "İrsaliye No", "type": "alnum",
+      "strategies": [ { "kind": "anchor", "labels": ["Irsaliye No", "İrsaliye No"], "direction": "right" } ] },
+    { "key": "tarih", "label": "Tarih", "type": "date",
+      "strategies": [ { "kind": "anchor", "labels": ["Tarih"], "direction": "right" }, { "kind": "regex", "pattern": "\\b(\\d{2}[./-]\\d{2}[./-]\\d{4})\\b" } ] }
+  ],
+  "grid": { "seqHeaders": ["Top"], "valueColumns": [ { "key": "metre", "headers": ["Metre"] }, { "key": "cm", "headers": ["Cm"] } ], "totalsLabels": ["TOPLAM"] }
+}

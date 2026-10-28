@@ -1,0 +1,23 @@
+{
+  "id": "kesim-takip-formu",
+  "name": "Kesim takip formu (el yazısı ızgara)",
+  "version": 1,
+  "identifiers": { "keywords": ["KESİM TAKİP FORMU", "Evrak No", "GİRİŞ MT", "ÇIKIŞ MT", "TOP. NO."], "minScore": 0.6 },
+  "fields": [
+    { "key": "tarih", "label": "Tarih", "type": "date", "required": true,
+      "strategies": [ { "kind": "anchor", "labels": ["Tarih"], "direction": "right", "window": { "x": 0.6, "y": 0, "w": 0.4, "h": 0.15 } } ] },
+    { "key": "evrakNo", "label": "Evrak No", "type": "integer", "required": true, "pattern": "^\\d{3,8}$",
+      "strategies": [ { "kind": "anchor", "labels": ["Evrak No"], "direction": "right" } ] },
+    { "key": "siraNo", "label": "Sıra No (form)", "type": "integer",
+      "strategies": [ { "kind": "regex", "pattern": "SIRA\\s*NO\\.?\\s*(\\d{4,8})", "flags": "i" } ] },
+    { "key": "irsaliyeNo", "label": "İrsaliye No", "type": "alnum",
+      "strategies": [ { "kind": "anchor", "labels": ["Irsaliye No", "İrsaliye No"], "direction": "right" } ] },
+    { "key": "musteriAdi", "label": "Müşteri Adı", "type": "text", "maxLength": 40, "postProcess": ["collapseSpaces", "trimPunct"],
+      "strategies": [ { "kind": "anchor", "labels": ["MÜŞTERİ ADI"], "direction": "right" } ] },
+    { "key": "girisMt", "label": "Giriş MT", "type": "decimal", "required": true,
+      "strategies": [ { "kind": "anchor", "labels": ["GİRİŞ MT."], "direction": "below", "maxDistance": 2 } ] },
+    { "key": "cikisMt", "label": "Çıkış MT", "type": "decimal",
+      "strategies": [ { "kind": "anchor", "labels": ["ÇIKIŞ MT."], "direction": "below", "maxDistance": 2 } ] }
+  ],
+  "grid": { "seqHeaders": ["TOP. NO.", "TOP NO"], "valueColumns": [ { "key": "metre", "headers": ["METRE"] } ] }
+}

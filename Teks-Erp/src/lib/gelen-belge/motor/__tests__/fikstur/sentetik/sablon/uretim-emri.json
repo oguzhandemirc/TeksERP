@@ -1,0 +1,391 @@
+{
+ "id": "uretim-emri",
+ "name": "Üretim Emri",
+ "version": 1,
+ "identifiers": {
+  "keywords": [
+   "ÜRETİM EMRİ",
+   "Emir No",
+   "Planlanan Metraj",
+   "Vardiya",
+   "İŞLEM ADIMLARI"
+  ],
+  "minScore": 0.5,
+  "regex": [
+   "\\bUE-\\d{6}\\b",
+   "\\bSP-\\d{4}-\\d{5}\\b"
+  ]
+ },
+ "fields": [
+  {
+   "key": "emirNo",
+   "label": "Emir No",
+   "type": "alnum",
+   "required": true,
+   "pattern": "^UE-\\d{6}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Emir No",
+      "Emir Numarası",
+      "Üretim Emri No",
+      "Emir"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.14,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "\\b(UE-?\\d{6})\\b"
+    }
+   ]
+  },
+  {
+   "key": "tarih",
+   "label": "Tarih",
+   "type": "date",
+   "required": true,
+   "dateFormats": [
+    "DD.MM.YYYY",
+    "DD/MM/YYYY",
+    "DD-MM-YYYY",
+    "DD.MM.YY"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Tarih",
+      "Emir Tarihi",
+      "Düzenleme Tarihi"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.48,
+      "y": 0.14,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Tarih\\s*:?\\s*(\\d{2}[./-]\\d{2}[./-]\\d{2,4})",
+     "roi": {
+      "x": 0.45,
+      "y": 0.14,
+      "w": 0.55,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "musteri",
+   "label": "Müşteri",
+   "type": "text",
+   "required": true,
+   "maxLength": 60,
+   "postProcess": [
+    "collapseSpaces",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Müşteri",
+      "Müşteri Adı",
+      "Firma"
+     ],
+     "direction": "below",
+     "takeLines": 1,
+     "window": {
+      "x": 0.02,
+      "y": 0.21,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "roi",
+     "roi": {
+      "x": 0.07,
+      "y": 0.27,
+      "w": 0.86,
+      "h": 0.04
+     }
+    }
+   ]
+  },
+  {
+   "key": "siparisNo",
+   "label": "Sipariş No",
+   "type": "alnum",
+   "required": true,
+   "pattern": "^SP-\\d{4}-\\d{5}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Sipariş No",
+      "Sipariş Numarası",
+      "Sip. No",
+      "Sipariş"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.17,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "\\b(SP-?\\d{4}-?\\d{5})\\b"
+    }
+   ]
+  },
+  {
+   "key": "kumasKodu",
+   "label": "Kumaş Kodu",
+   "type": "code",
+   "required": true,
+   "pattern": "^[A-Z]{2}-\\d{4}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Kumaş Kodu",
+      "Kumaş Kod",
+      "Kumas Kodu",
+      "Kod"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.28,
+      "w": 0.45,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Kuma[sş]\\s*Kodu\\s*:?\\s*([A-Z]{2}-?\\d{4})\\b",
+     "flags": "i"
+    }
+   ]
+  },
+  {
+   "key": "kumasAdi",
+   "label": "Kumaş Adı",
+   "type": "text",
+   "maxLength": 40,
+   "postProcess": [
+    "collapseSpaces",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Kumaş Adı",
+      "Kumaş Cinsi",
+      "Kumaş"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.41,
+      "y": 0.28,
+      "w": 0.59,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "renk",
+   "label": "Renk",
+   "type": "text",
+   "maxLength": 30,
+   "postProcess": [
+    "collapseSpaces",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Renk",
+      "Renk Adı",
+      "Renk Kodu"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.31,
+      "w": 0.4,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "planlananMetraj",
+   "label": "Planlanan Metraj",
+   "type": "decimal",
+   "required": true,
+   "min": 1,
+   "max": 99999,
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Planlanan Metraj (m)",
+      "Planlanan Metraj",
+      "Plan. Metraj",
+      "Planlanan Mt",
+      "Metraj"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.41,
+      "y": 0.31,
+      "w": 0.59,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Planlanan\\s*Metraj\\s*(?:\\(m\\))?\\s*:?\\s*([\\d.]+,\\d{1,2}|\\d+)",
+     "flags": "i"
+    }
+   ]
+  },
+  {
+   "key": "makine",
+   "label": "Makine",
+   "type": "alnum",
+   "pattern": "^[A-Z]{2}-\\d{2}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Makine",
+      "Makine No",
+      "Makina"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.34,
+      "w": 0.4,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Makine\\s*:?\\s*([A-Z]{2}-?\\d{2})\\b",
+     "flags": "i",
+     "roi": {
+      "x": 0.02,
+      "y": 0.34,
+      "w": 0.45,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "vardiya",
+   "label": "Vardiya",
+   "type": "enum",
+   "enumValues": [
+    "A",
+    "B",
+    "C"
+   ],
+   "postProcess": [
+    "upper",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Vardiya",
+      "Vardiye"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.48,
+      "y": 0.17,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Vardiya\\s*:?\\s*([ABC])\\b",
+     "flags": "i"
+    }
+   ]
+  },
+  {
+   "key": "teslimTarihi",
+   "label": "Teslim Tarihi",
+   "type": "date",
+   "dateFormats": [
+    "DD.MM.YYYY",
+    "DD/MM/YYYY",
+    "DD-MM-YYYY",
+    "DD.MM.YY"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Teslim Tarihi",
+      "Termin",
+      "Termin Tarihi",
+      "Teslim"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.41,
+      "y": 0.34,
+      "w": 0.59,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Teslim\\s*Tarihi\\s*:?\\s*(\\d{2}[./-]\\d{2}[./-]\\d{2,4})",
+     "flags": "i"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,258 @@
+{
+  "id": "urun-sevk-fisi",
+  "name": "Ürün sevk fişi (giriş/çıkış toplamlı)",
+  "version": 1,
+  "identifiers": {
+    "keywords": [
+      "ÜRÜN SEVK FİŞİ",
+      "SEVK NO",
+      "GİRİŞ TOPLAM MT",
+      "ÇIKIŞ ADET",
+      "TOPLAM METRE"
+    ],
+    "minScore": 0.6
+  },
+  "fields": [
+    {
+      "key": "musteriAdi",
+      "label": "Müşteri Adı",
+      "type": "text",
+      "required": true,
+      "maxLength": 40,
+      "postProcess": [
+        "collapseSpaces",
+        "trimPunct"
+      ],
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "MÜŞTERİ ADI"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "sevkTarihi",
+      "label": "Sevk Tarihi",
+      "type": "date",
+      "required": true,
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "SEVK TARİH",
+            "SEVK TARİHİ"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "sevkNo",
+      "label": "Sevk No",
+      "type": "integer",
+      "required": true,
+      "pattern": "^\\d{3,8}$",
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "SEVK NO"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "partiNo",
+      "label": "Parti No",
+      "type": "alnum",
+      "postProcess": [
+        "upper",
+        "stripSpaces"
+      ],
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "PARTİ NO"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "yapilanIslem",
+      "label": "Yapılan İşlem",
+      "type": "text",
+      "maxLength": 40,
+      "postProcess": [
+        "collapseSpaces",
+        "trimPunct"
+      ],
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "YAPILAN İŞLEM"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "kumasCinsi",
+      "label": "Kumaş Cinsi",
+      "type": "text",
+      "maxLength": 40,
+      "postProcess": [
+        "collapseSpaces",
+        "trimPunct"
+      ],
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "KUMAŞ CİNSİ"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "girisToplamMt",
+      "label": "Giriş Toplam MT",
+      "type": "decimal",
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "GİRİŞ TOPLAM MT"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "girisIrsNo",
+      "label": "Giriş İrsaliye No",
+      "type": "alnum",
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "GİRİŞ IRS. NO",
+            "GİRİŞ İRSALİYE NO"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "girisToplamKg",
+      "label": "Giriş Toplam KG",
+      "type": "decimal",
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "GİRİŞ TOPLAM KG"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "cikisAdet",
+      "label": "Çıkış Adet",
+      "type": "text",
+      "maxLength": 20,
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "ÇIKIŞ ADET"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "cikisIrsNo",
+      "label": "Çıkış İrsaliye No",
+      "type": "alnum",
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "ÇIKIŞ IRS. NO",
+            "ÇIKIŞ İRSALİYE NO"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "toplamMetre",
+      "label": "Toplam Metre",
+      "type": "decimal",
+      "required": true,
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "TOPLAM METRE"
+          ],
+          "direction": "below",
+          "maxDistance": 3
+        }
+      ]
+    },
+    {
+      "key": "toplamKg",
+      "label": "Toplam KG",
+      "type": "decimal",
+      "required": true,
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "TOPLAM KG"
+          ],
+          "direction": "below",
+          "maxDistance": 3
+        }
+      ]
+    },
+    {
+      "key": "girisMamulEn",
+      "label": "Giriş Mamul En",
+      "type": "decimal",
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "GİRİŞ MAMUL EN"
+          ],
+          "direction": "right"
+        }
+      ]
+    },
+    {
+      "key": "cikisMamulEn",
+      "label": "Çıkış Mamul En",
+      "type": "decimal",
+      "strategies": [
+        {
+          "kind": "anchor",
+          "labels": [
+            "ÇIKIŞ MAMUL EN"
+          ],
+          "direction": "right"
+        }
+      ]
+    }
+  ]
+}
