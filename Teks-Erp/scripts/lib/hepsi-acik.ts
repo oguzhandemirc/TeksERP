@@ -46,6 +46,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   emanetEnabled: A(true),
   kaliteGuvenceEnabled: A(true),
   maliyetEnabled: A(true),
+  gelenBelgeEnabled: A(true),
   // ── ön muhasebe / ticaret ──────────────────────────────────────────────────
   pricingEnabled: A(true),
   financeBlockNegativeCashEnabled: A(true),

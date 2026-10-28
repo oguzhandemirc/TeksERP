@@ -145,8 +145,8 @@ async function main(): Promise<void> {
     MODULE_PROFILE_IDS.length >= 2,
     `${MODULE_PROFILE_IDS.length} profil → ${MODULE_PROFILE_IDS.join(", ")}`,
   );
-  // 2026-10-24: on iki anahtar (kaliteGuvence.enabled K4P · maliyet.enabled MAL-0; öncesi on — emanet 2026-09-15).
-  check("§1b Körlük zemini: MODULE_SETTING_KEYS dolu", beklenen.length === 12, `n=${beklenen.length}`);
+  // 2026-10-29: on üç anahtar (gelenBelge.enabled D1; öncesi on iki — kaliteGuvence K4P · maliyet MAL-0, 2026-10-24).
+  check("§1b Körlük zemini: MODULE_SETTING_KEYS dolu", beklenen.length === 13, `n=${beklenen.length}`);
   check(
     "§1c Körlük zemini: açıklama sabiti her anahtarı taşıyor",
     beklenen.every((k) => (MODULE_DESCRIPTIONS[k] ?? "").length > 5),

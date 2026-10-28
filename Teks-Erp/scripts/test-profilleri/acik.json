@@ -15,6 +15,7 @@
     "emanetEnabled": true,
     "kaliteGuvenceEnabled": true,
     "maliyetEnabled": true,
+    "gelenBelgeEnabled": true,
     "pricingEnabled": true,
     "financeBlockNegativeCashEnabled": true,
     "financeInvoiceMatchTolerance": true,

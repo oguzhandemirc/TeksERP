@@ -97,6 +97,7 @@ const MIGRASYONLAR: string[] = [
   "20260915051000_emanet_modul_anahtari",
   "20261024040000_kalite_guvence_modul_anahtari",
   "20261024040029_maliyet_modul_anahtari",
+  "20261029000100_gelen_belge_modul_anahtari",
 ].map((d) => path.join(KOK, "prisma/migrations", d, "migration.sql"));
 
 /**

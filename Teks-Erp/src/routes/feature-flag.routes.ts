@@ -340,6 +340,8 @@ export const updateSchema = z.strictObject({
   dokumaEnabled: z.boolean().optional(),
   // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.
   maliyetEnabled: z.boolean().optional(),
+  // gelenBelge.enabled — Gelen belge taslağı (OCR) modülü (D1); emanete bağımlı, bağımlılık serviste.
+  gelenBelgeEnabled: z.boolean().optional(),
   // Z1 üretim belge zinciri — üç davranış bayrağı (varsayılan false = bağ opsiyonel). Backend ENFORCE.
   devereBeamWeavingLinkRequired: z.boolean().optional(),
   dokumaRunWeavingOrderRequired: z.boolean().optional(),

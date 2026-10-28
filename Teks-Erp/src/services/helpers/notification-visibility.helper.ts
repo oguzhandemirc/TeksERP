@@ -25,6 +25,7 @@ import {
   readIplikEnabled,
   readKaliteGuvenceEnabled,
   readKumasTeknikEnabled,
+  readGelenBelgeEnabled,
   readMaliyetEnabled,
   readProductionEnabled,
   readTezgahEnabled,
@@ -61,6 +62,7 @@ const MODULE_READERS: Record<ModulKey, (db: SettingDb) => Promise<boolean>> = {
   emanetEnabled: (db) => readEmanetEnabled(db),
   maliyetEnabled: (db) => readMaliyetEnabled(db),
   kaliteGuvenceEnabled: (db) => readKaliteGuvenceEnabled(db),
+  gelenBelgeEnabled: (db) => readGelenBelgeEnabled(db),
 };
 const GATE_READERS: Record<GateKey, (db: SettingDb) => Promise<boolean>> = {
   tezgahAlarm: (db) => resolveTezgahAlarmEnabled(db),

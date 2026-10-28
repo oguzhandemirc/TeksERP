@@ -70,6 +70,7 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   'emanet.enabled': 'Emanet / konsinye mülkiyet',
   'kaliteGuvence.enabled': 'Kalite Güvence',
   'maliyet.enabled': 'Maliyet & Teklif',
+  'gelenBelge.enabled': 'Gelen belge taslağı',
 };
 
 function settingKeyFromFlag(key: string): string {

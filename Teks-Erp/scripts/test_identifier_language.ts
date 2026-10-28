@@ -143,6 +143,14 @@ const MUAFLAR = new Map<string, string>([
   // (`ReportSinif` · `ReportYuzey` · `ReportDateContract`) — muafiyet ADLA, kök eklemeden.
   ["ReportTarih", "rapor kataloğu sözleşme ailesi — `tarih` ALANININ tipi (kardeşleri ReportSinif/ReportYuzey)"],
   ["GUNSUZ_TARIH_SOZLESMELERI", "aynı ailenin KAPALI kümesi — `ReportTarih` değerlerinden hangileri `varsayilanGun` almaz"],
+  // Modül anahtarı AİLESİ: DB `gelenBelge.enabled` / API `gelenBelgeEnabled` kullanıcı kararıdır
+  // (TASARIM-KARARI-2026-10-28 §7 "modül adı gelenBelge"); okuyucu/kapı/hook adları `read<FlagKey>Enabled`
+  // kalıbını izler (`readMaliyetEnabled` · `requireKaliteGuvenceEnabled` emsali — o kökler sözlükte yok).
+  // Tek üyeyi İngilizceye çevirmek aileyi karışık dilli yapar; muafiyet ADLA, kök eklemeden.
+  ["readGelenBelgeEnabledRaw", "modül anahtarı ailesi — `gelenBelgeEnabled` alanının ham okuyucusu"],
+  ["readGelenBelgeEnabled", "modül anahtarı ailesi — `gelenBelgeEnabled` alanının tavanlı okuyucusu"],
+  ["requireGelenBelgeEnabled", "modül anahtarı ailesi — `gelenBelge.enabled` adlı kapısı"],
+  ["useGelenBelgeEnabled", "modül anahtarı ailesi — panel hook'u (`useMaliyetEnabled` emsali)"],
 ]);
 
 /** `src/` altındaki tüm .ts/.tsx dosyaları. */
