@@ -10,6 +10,7 @@ import { DeliveryNoteLineKind, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { tokenReplay } from "./helpers/token-replay.helper";
 
 const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
 
@@ -78,20 +79,45 @@ async function claimDraft(tx: Prisma.TransactionClient, noteId: string, userId: 
   if (c.count === 0) await notDraft(noteId);
 }
 
-export async function addDeliveryNoteLines(noteId: string, inputs: DeliveryNoteLineInput[], userId: string) {
+/**
+ * Toplu satır ekleme replay'i (K′): başlık satırı `claimDraft` ile kilitlendikten SONRA aynı token'ın satırları okunur —
+ * eşzamanlı ikinci deneme kilitte bekler, kazananın partisini bulur ve onu döner (satırlar ikilenmez).
+ */
+function lineBatchReplay(noteId: string) {
+  type Prior = Array<{ id: string; noteId: string; lineNo: number }>;
+  return tokenReplay<Prior, Prior>({
+    find: async (db, clientToken) => {
+      const rows = await db.customerDeliveryNoteLine.findMany({ where: { clientToken }, select: { id: true, noteId: true, lineNo: true }, orderBy: { lineNo: "asc" } });
+      return rows.length ? rows : null;
+    },
+    alive: { neverDies: "taslak satırı; silinmişse parti yoktur ve yeniden yazılır (silme ④ sınıfı, defter değil)" },
+    identity: (p) => [{ ad: "noteId", mevcut: p[0]!.noteId, gelen: noteId }],
+    collision: "Bu işlem kimliği başka bir taslağın satır partisine ait; satırları yeniden gönderin.",
+    respond: (p) => p,
+  });
+}
+
+export async function addDeliveryNoteLines(noteId: string, inputs: DeliveryNoteLineInput[], userId: string, clientToken?: string | null) {
   if (inputs.length === 0) throw AppError.badRequest("En az bir satır gerekli.", { code: "DELIVERY_NOTE_LINES_EMPTY" });
   const cols = inputs.map(lineColumns);
-  const created = await prisma.$transaction(async (tx) => {
+  const replay = lineBatchReplay(noteId);
+  const result = await prisma.$transaction(async (tx) => {
     await claimDraft(tx, noteId, userId);
+    const prior = clientToken ? await replay.behindLock(tx, clientToken) : null;
+    if (prior) return { ids: prior.map((r) => r.id), replayed: true as const };
     const last = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId }, _max: { lineNo: true } });
     let lineNo = last._max.lineNo ?? 0;
     const rows = [];
     for (const c of cols) {
       lineNo += 1;
-      rows.push(await tx.customerDeliveryNoteLine.create({ data: { ...c, noteId, lineNo }, select: LINE_SELECT }));
+      rows.push(await tx.customerDeliveryNoteLine.create({ data: { ...c, noteId, lineNo, clientToken: clientToken ?? null }, select: LINE_SELECT }));
     }
-    return rows;
+    return { rows, replayed: false as const };
   });
+  if (result.replayed) {
+    return prisma.customerDeliveryNoteLine.findMany({ where: { id: { in: result.ids } }, select: LINE_SELECT, orderBy: { lineNo: "asc" } });
+  }
+  const created = result.rows;
   await AuditService.logMany(created.map((l) => ({ userId, action: "CREATE" as const, tableName: LINE_TABLE, recordId: l.id, newData: { noteId, ...auditLine(l) } })));
   return created;
 }

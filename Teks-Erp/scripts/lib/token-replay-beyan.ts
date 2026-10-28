@@ -47,6 +47,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}certificate.service.ts::renewCertificate`]: { giris: { [`${S}certificate.service.ts::renewCertificate`]: "R" } },
   // Gelen belge (D2): irsaliye taslağı panel/tabletten clientToken ile DRAFT doğar; iptal edilmişin token'ı 409.
   [`${S}gelen-belge-note.service.ts::createDeliveryNote`]: { giris: { [`${S}gelen-belge-note.service.ts::createDeliveryNote`]: "R" } },
+  // Toplu satır ekleme: parti kimliği satır başına aynı; başlık satırı `claimDraft` kilidinin ARDINDAN okunur (K′), DB unique yok.
+  [`${S}gelen-belge-line.service.ts::addDeliveryNoteLines`]: { giris: { [`${S}gelen-belge-line.service.ts::addDeliveryNoteLines`]: "K′" } },
   [`${S}notification-profile.service.ts::createProfile`]: { giris: { [`${S}notification-profile.service.ts::createProfile`]: "R" } },
   // Belge tasarımcısı (T1B): şablon + v1 ve yeni sürüm panelden clientToken ile doğar.
   [`${S}document-template/template.service.ts::createTemplate`]: { giris: { [`${S}document-template/template.service.ts::createTemplate`]: "R" } },
@@ -240,6 +242,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
   [`${S}gelen-belge-note.service.ts::replayFor`]: ["senderDocNo", "ownerCustomerId"],
+  [`${S}gelen-belge-line.service.ts::lineBatchReplay`]: ["noteId"],
   [`${S}notification-profile.service.ts::createReplay`]: ["kod"],
   [`${S}document-template/template.service.ts::createReplay`]: ["docType", "name", "copiedFrom"],
   [`${S}document-template/version.service.ts::saveReplay`]: ["templateId", "sourceHtml", "css"],

@@ -10,7 +10,7 @@
 //   §6 liste + cursor + özet TEK where'den: iki sayfa ∪ = kayıtlar, summary.total = sayfa toplamı
 //   §7 DRAFT dışı: status DB'den APPROVED'a çekilince DELETE/PATCH/satır ekle → 409 DELIVERY_NOTE_NOT_DRAFT
 //   §8 audit yükü: DOCUMENT_SCAN ve CUSTOMER_DELIVERY_NOTE satırlarında fotoğraf baytı / "content" yok
-//   §10 yarış: iki PATCH farklı alan → ikisi de korunur (kayıp güncelleme yok) · aynı clientToken iki POST → tek kayıt · aynı tarama iki taslak → biri 409
+//   §10 yarış: iki PATCH farklı alan → ikisi de korunur (kayıp güncelleme yok) · aynı clientToken iki POST → tek kayıt · aynı parti kimliğiyle iki toplu satır ekleme → satırlar ikilenmez · aynı tarama iki taslak → biri 409
 //   §9 DRAFT silme: 200, satırlar Cascade, tarama çözülür (noteId null), top doğmaz (DEFTER-ÖNCELİKLİ)
 // Emsal: scripts/test_sertifika.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
@@ -221,6 +221,16 @@ async function main(): Promise<void> {
     const twinId = String(cA.data?.id ?? "");
     if (twinId) made.notes.push(twinId);
     check("⭐ aynı clientToken ile eşzamanlı iki POST → aynı id, TEK satır", cA.status === 201 && cB.status === 201 && cA.data?.id === cB.data?.id && (await prisma.customerDeliveryNote.count({ where: { clientToken: token } })) === 1, `${cA.status}/${cB.status} ${cA.data?.id === cB.data?.id}`);
+    const batch = { clientToken: crypto.randomUUID(), lines: [line(21), line(22), line(23)] };
+    const [bA, bB] = await Promise.all([
+      call("POST", `/api/gelen-belge/irsaliyeler/${noteId}/satirlar`, tk, batch),
+      call("POST", `/api/gelen-belge/irsaliyeler/${noteId}/satirlar`, tk, batch),
+    ]);
+    const bRows = await prisma.customerDeliveryNoteLine.count({ where: { noteId, clientToken: batch.clientToken } });
+    const bIds = (x: Resp) => ((x.data as unknown as Array<{ id: string }> | undefined) ?? []).map((r) => r.id).join(",");
+    check("⭐ aynı clientToken ile eşzamanlı iki toplu satır ekleme → 3 satır (ikilenmez), aynı id'ler", bA.status === 201 && bB.status === 201 && bRows === 3 && bIds(bA) === bIds(bB) && bIds(bA).length > 0, `${bA.status}/${bB.status} satır=${bRows}`);
+    const bAgain = await call("POST", `/api/gelen-belge/irsaliyeler/${noteId}/satirlar`, tk, batch);
+    check("aynı parti kimliği SIRALI üçüncü kez → 201 replay, satır sayısı 3", bAgain.status === 201 && (await prisma.customerDeliveryNoteLine.count({ where: { noteId, clientToken: batch.clientToken } })) === 3);
     const freeScan = await up(Buffer.concat([PNG, Buffer.from("yarış")]));
     const freeId = String(freeScan.data?.scan?.id ?? "");
     if (freeId) made.scans.push(freeId);

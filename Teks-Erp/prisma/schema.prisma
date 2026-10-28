@@ -13678,6 +13678,9 @@ model CustomerDeliveryNoteLine {
   status       DeliveryNoteLineStatus @default(PENDING)
   failReason   String?                @db.VarChar(500)
   rollId       String?                @unique @db.Uuid
+  /// Toplu satır ekleme denemesinin istemci kimliği (parti başına aynı; replay = aynı parti satırları). Tekillik DB'de değil,
+  /// başlık satırı kilidinin ardındaki okumadadır (`lineBatchReplay`, K′).
+  clientToken  String?                @db.Uuid
   createdAt    DateTime               @default(now()) @db.Timestamptz
   updatedAt    DateTime               @updatedAt @db.Timestamptz
 
@@ -13689,6 +13692,7 @@ model CustomerDeliveryNoteLine {
   @@unique([noteId, lineNo])
   @@index([itemId])
   @@index([colorId])
+  @@index([clientToken])
   @@map("customer_delivery_note_lines")
 }
 

@@ -79,7 +79,11 @@ const CreateBody = z.strictObject({
   ...Header,
 });
 const UpdateBody = z.strictObject(Header);
-const LinesBody = z.strictObject({ lines: z.array(LineBody).min(1, "En az bir satır gerekli").max(500, "Tek seferde en çok 500 satır") });
+const LinesBody = z.strictObject({
+  // Parti kimliği: zaman aşımı tekrarı aynı token'la gelir, satırlar ikilenmez (`lineBatchReplay`).
+  clientToken: z.uuid("İşlem kimliği geçersiz").nullable().optional(),
+  lines: z.array(LineBody).min(1, "En az bir satır gerekli").max(500, "Tek seferde en çok 500 satır"),
+});
 const LinePatch = LineBody.partial();
 const ListQuery = z.object({
   status: z.enum(DELIVERY_NOTE_STATUSES, "Tanınmayan durum süzgeci").optional(),
@@ -150,7 +154,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *       403: { description: "MODULE_DISABLED ya da izin yok" }
  *   post:
  *     tags: [Gelen belge]
- *     summary: Taslak aç (MANUAL/IMPORT; numara GB serisinden doğuşta; clientToken ile idempotent; satırlar toplu)
+ *     summary: Taslak aç (MANUAL/IMPORT; numara GB serisinden doğuşta; clientToken ile idempotent; satırlar toplu — satır ucu da `clientToken` parti kimliği taşır)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Taslak }
@@ -216,8 +220,8 @@ router.patch("/irsaliyeler/:id", requirePermission("gelen-belge:write"), wrap(as
 router.delete("/irsaliyeler/:id", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 200, data: await deleteDeliveryNote(Id.parse(req.params.id), req.user!.userId) })));
 router.post("/irsaliyeler/:id/satirlar", requirePermission("gelen-belge:write"), wrap(async (req) => {
   // Tek satır gövdesi de kabul: `{ meters, … }` → `{ lines: [ … ] }` (panel tek satır ekler, Excel toplu yollar).
-  const body = Array.isArray((req.body as { lines?: unknown })?.lines) ? LinesBody.parse(req.body) : { lines: [LineBody.parse(req.body)] };
-  return { status: 201, data: await addDeliveryNoteLines(Id.parse(req.params.id), body.lines, req.user!.userId) };
+  const body = Array.isArray((req.body as { lines?: unknown })?.lines) ? LinesBody.parse(req.body) : { clientToken: null, lines: [LineBody.parse(req.body)] };
+  return { status: 201, data: await addDeliveryNoteLines(Id.parse(req.params.id), body.lines, req.user!.userId, body.clientToken) };
 }));
 router.patch("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belge:write"), wrap(async (req) => ({
   status: 200, data: await updateDeliveryNoteLine(Id.parse(req.params.id), Id.parse(req.params.lineId), LinePatch.parse(req.body), req.user!.userId),
