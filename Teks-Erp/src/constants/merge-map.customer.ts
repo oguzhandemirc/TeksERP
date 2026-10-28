@@ -189,6 +189,31 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     },
     { kind: "MOVE", model: "LabTest", table: "lab_tests", column: "customerId", label: "Lab testi (müşteri)" },
     { kind: "MOVE", model: "Certificate", table: "certificates", column: "partnerId", label: "Sertifika (iş ortağı)" },
+    // Gelen belge (D2): sahip/gönderen cari; partial unique (ownerCustomerId, senderDocNo) DRAFT dışı
+    // belgede çakışabilir — "aynı belge no iki sahipten" nadir, BLOCK ile görünür kılınır.
+    {
+      kind: "CONFLICT",
+      model: "CustomerDeliveryNote",
+      table: "customer_delivery_notes",
+      column: "ownerCustomerId",
+      label: "Gelen belge (sahip)",
+      uniqueOn: ["ownerCustomerId", "senderDocNo"],
+      policy: "BLOCK",
+      why: "Aynı gönderen belge numarası iki sahipte varsa birleştirme hangisinin gerçek olduğunu bilemez; kullanıcı önce birini iptal eder.",
+    },
+    { kind: "MOVE", model: "CustomerDeliveryNote", table: "customer_delivery_notes", column: "senderCustomerId", label: "Gelen belge (gönderen)" },
+    { kind: "MOVE", model: "SenderTemplate", table: "sender_templates", column: "senderCustomerId", label: "Gönderen şablonu" },
+    { kind: "MOVE", model: "SenderTemplate", table: "sender_templates", column: "defaultOwnerCustomerId", label: "Gönderen şablonu (varsayılan sahip)" },
+    {
+      kind: "CONFLICT",
+      model: "DeliveryNoteAlias",
+      table: "delivery_note_aliases",
+      column: "senderCustomerId",
+      label: "Gelen belge eşleme sözlüğü",
+      uniqueOn: ["scope", "senderCustomerId", "rawKey"],
+      policy: "SKIP",
+      why: "Aynı ham metin iki gönderende de eşlenmişse survivor'daki eşleme kalır; kaynağınki düşer (sözlük yeniden öğrenir).",
+    },
     {
       kind: "CONFLICT",
       model: "ItemPrice",

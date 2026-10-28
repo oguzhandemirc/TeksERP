@@ -182,6 +182,8 @@ export const DATE_ONLY_COLUMNS: ReadonlySet<string> = new Set([
   "validUntilDate",
   "fxRateDate",
   "validFromDate",
+  // CustomerDeliveryNote.senderDocDate (gelen belge D2) — belgede yazan irsaliye tarihi, gönderenin takvim günü.
+  "senderDocDate",
 ]);
 
 /**

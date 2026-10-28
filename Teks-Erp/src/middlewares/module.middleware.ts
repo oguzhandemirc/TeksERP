@@ -289,7 +289,7 @@ export async function requireGelenBelgeEnabled(
     const emanet = await readEmanetEnabled();
     if (!emanet) {
       throw licenseModuleError(SETTING_KEYS.EMANET_ENABLED, "Emanet / konsinye mülkiyet") ?? AppError.forbidden(
-        "Gelen belge taslağı modülü Emanet modülüne bağlıdır; Emanet modülü bu kurulumda kapalı. " +
+        "Gelen belge taslağı modülü Emanet / konsinye mülkiyet modülüne bağlıdır; Emanet / konsinye mülkiyet modülü bu kurulumda kapalı. " +
           `${settingScreenPath("modules")} ekranından açılabilir.`,
         { code: "MODULE_DISABLED", modul: "emanet", dependent: "gelenBelge" },
       );

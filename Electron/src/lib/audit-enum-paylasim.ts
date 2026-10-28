@@ -84,6 +84,15 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "SystemLogCategory(olayın kaynağı sistemdir) ve NumberSourceMode(numarayı " +
     "yalnız sistem üretir) — ikisinde de eylemi yapan SİSTEMDİR, insan değil; " +
     "ortak Türkçe doğru",
+  // ── Gelen belge (D2, 2026-10-29)
+  TOP: "RollForm(topun biçimi rulo) ve DeliveryNoteLineKind(irsaliye satırı bir top) — ikisi de 'Top (rulo)'; ortak Türkçe doğru",
+  FAILED: "ImportRunStatus(aktarım başarısız) ve DeliveryNoteLineStatus(satırın top girişi başarısız) — ikisi de 'Başarısız'",
+  SKIPPED: "StepStatus(adım atlandı) ve DeliveryNoteLineStatus(satır onayda atlandı) — ikisi de 'Atlandı'",
+  ITEM: "DuplicateReviewEntity(mükerrer kumaş) ve DeliveryNoteAliasScope(eşleme hedefi kumaş) — ikisi de 'Kumaş'",
+  COLOR: "DuplicateReviewEntity(mükerrer renk) ve DeliveryNoteAliasScope(eşleme hedefi renk) — ikisi de 'Renk'",
+  PROCESS:
+    "RollErrorOrigin(süreç hatası) ve DeliveryNoteAliasScope(belgedeki işlem metninin eşlemesi) — ortak Türkçe 'Süreç hatası' " +
+    "alias kapsamında YANLIŞ; alias CUD audit'i D4'te doğduğunda `DELIVERY_NOTE_ALIAS.scope` override'ı ('İşlem') yazılır (bugün alias yazan yol yok)",
   CANCELLED: "on beş durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
   // ── Alarm sorumluları (A4): alıcının KAYNAĞI ile kuralın ALICI TÜRÜ aynı üç olgudur — ortak Türkçe doğru.
   HALL_SHIFT: "LoomAlarmRecipientSource(alıcı holün vardiya sorumlusu olduğu için) ve LoomAlarmRuleRecipientKind(kural: holün vardiya sorumlusu) — aynı olgu",

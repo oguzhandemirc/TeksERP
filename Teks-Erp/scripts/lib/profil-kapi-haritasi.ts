@@ -24,6 +24,7 @@ export const MODUL_SONDALARI: readonly ModulSondasi[] = [
   { alan: "devereEnabled", uclar: ["/api/warp-specs"] },
   { alan: "dokumaEnabled", uclar: ["/api/weaving-orders"] },
   { alan: "maliyetEnabled", uclar: ["/api/cost/parameter-sets"] },
+  { alan: "gelenBelgeEnabled", uclar: ["/api/gelen-belge/irsaliyeler"] },
   { alan: "tezgahEnabled", uclar: ["/api/loom-floor"] },
   { alan: "depoMultiEnabled", uclar: ["/api/warehouse-transfers"] },
   { alan: "kaliteGuvenceEnabled", uclar: ["/api/lab-tests", "/api/lab-test-types", "/api/quality-inspections", "/api/four-point-rules"] },

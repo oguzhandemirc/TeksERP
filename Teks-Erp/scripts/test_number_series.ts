@@ -129,6 +129,7 @@ const BEKLENEN: Record<string, string> = {
   warehouseTransfer: `${buildDailyCode("DT", 1, AT)}`,
   stockCount: `${buildDailyCode("SAY", 1, AT)}`,
   freeDocument: `${buildDailyCode("SB", 1, AT)}`,
+  customerDeliveryNote: `${buildDailyCode("GB", 1, AT)}`,
   subcontractorDispatch: `${buildDailyCode("FS", 1, AT)}`,
   subcontractorReceipt: `${buildDailyCode("FK", 1, AT)}`,
   kartelaDispatch: `${buildDailyCode("KS", 1, AT)}`,

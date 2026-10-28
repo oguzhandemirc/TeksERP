@@ -97,6 +97,10 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   CUSTOMER_LAB_SPEC: onEkli("müşteri lab", iyelik("spesifikasyon", "u", "a", "u")),
   CERTIFICATE: sIyelik("sertifika", "ı", "a"),
   CERTIFICATE_FILE: onEkli("sertifika", sIyelik("belge", "i", "e")),
+  // ── Gelen belge taslağı (Gülkesim OCR D2, 2026-10-29)
+  CUSTOMER_DELIVERY_NOTE: onEkli("gelen belge", iyelik("taslağ", "ı", "a", "ı")),
+  CUSTOMER_DELIVERY_NOTE_LINE: onEkli("gelen belge", iyelik("satır", "ı", "a", "ı")),
+  DOCUMENT_SCAN: onEkli("belge", sIyelik("tarama", "ı", "a")),
   REPORT_CATEGORY: onEkli("rapor", sIyelik("kategori", "i", "e")),
   REPORT_DEFINITION: onEkli("özel", iyelik("rapor", "u", "a", "u")),
   REPORT_DEFINITION_VERSION: onEkli("özel rapor", iyelik("sürüm", "ü", "e", "ü")),

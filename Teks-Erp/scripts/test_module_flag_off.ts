@@ -103,8 +103,7 @@ const BASE = process.env.TEST_API_URL ?? "http://localhost:4101";
  */
 const ROTASIZ_KAPILAR: Record<string, string> = {
   // MAL-1 (2026-10-25): `requireMaliyetEnabled` `/api/cost`a takıldı → MODULLER satırı + sonda; muaf silindi.
-  requireGelenBelgeEnabled:
-    "D1 (2026-10-29): gelen belge modül şalteri + kapı doğdu, ilk uç D2'de (`/api/gelen-belge`); o gün tabloya satır + `profil-kapi-haritasi` sondası girer",
+  // D2 (2026-10-29): `requireGelenBelgeEnabled` `/api/gelen-belge`ye takıldı → MODULLER satırı + sonda; muaf silindi.
 };
 
 /** `src/**` içinde (middleware dosyası hariç) adı geçen ROTASIZ kapılar → ilk görülen dosya. */
@@ -162,7 +161,10 @@ type ModulAlani =
   // 2026-10-24: K4P kalite güvence (ön koşulsuz; route'u henüz yok — `rotasiz`).
   | "kaliteGuvenceEnabled"
   // 2026-10-25: maliyet & teklif (maliyet → production; MAL-1 ilk uçlar `/api/cost`).
-  | "maliyetEnabled";
+  | "maliyetEnabled"
+  // 2026-10-29 (D2): gelen belge taslağı (gelenBelge → emanet; emanet YÜZEYSİZ, tabloda satırı yok — `YONETILEN` yer tutucu).
+  | "gelenBelgeEnabled"
+  | "emanetEnabled";
 
 interface ModulTanimi {
   /** `FeatureFlags` alanı (PATCH gövdesinde kullanılan ad). */
@@ -262,6 +264,18 @@ const MODULLER: ModulTanimi[] = [
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
   },
   {
+    // GELEN BELGE (D2, 2026-10-29): emanete bağımlı (onay `Roll.ownerCustomerId` yazar); ön koşul kapıda ÖNCE ölçülür.
+    // Ön koşul emanet TABLODA DEĞİL (yüzeysiz modül, `KAPSAM_DISI` gerekçesi) — `YONETILEN`e yer tutucu olarak girer.
+    alan: "gelenBelgeEnabled",
+    dbAnahtari: "gelenBelge.enabled",
+    middleware: "requireGelenBelgeEnabled",
+    okuyucu: "readGelenBelgeEnabled",
+    modulKodu: "gelenBelge",
+    routeDosyalari: ["routes/gelen-belge.routes.ts"],
+    sondalar: modulUclari("gelenBelgeEnabled"),
+    onKosul: { alan: "emanetEnabled", beklenenModulKodu: "emanet" },
+  },
+  {
     // TEZGAH İZLEME (2026-10-10): üretime bağımlı; dokumanın kardeşi (dokumaya bağlı DEĞİL).
     alan: "tezgahEnabled",
     dbAnahtari: "tezgah.enabled",
@@ -328,7 +342,13 @@ const YONETILEN: string[] = (() => {
   const bagimliYerTutucular = Object.entries(MODULE_DEPENDENCIES)
     .filter(([bagimli, onKosul]) => tabloAlanlari.includes(onKosul) && !tabloAlanlari.includes(bagimli))
     .map(([bagimli]) => bagimli);
-  return [...tabloAlanlari, ...bagimliYerTutucular];
+  // YÜZEYSİZ ÖN KOŞUL (D2, 2026-10-29): tablodaki modülün ön koşulu tabloda değilse (gelenBelge → emanet;
+  // emanetin adlı kapısı/route'u yok) o bayrak da yönetilir — `hedefKur`/`bayraklariUygula` onu açıp
+  // kapatmazsa §7 "yalnız gelenBelge açık" turu ön koşul kapalı diye 403 alır ve bağımlılık seddine takılır.
+  const yuzeysizOnKosullar = Object.entries(MODULE_DEPENDENCIES)
+    .filter(([bagimli, onKosul]) => tabloAlanlari.includes(bagimli) && !tabloAlanlari.includes(onKosul))
+    .map(([, onKosul]) => onKosul);
+  return [...new Set([...tabloAlanlari, ...bagimliYerTutucular, ...yuzeysizOnKosullar])];
 })();
 
 /** camelCase alan → `system_settings.key` (yer tutucular dahil). */
@@ -344,6 +364,7 @@ const ALAN_DB_ANAHTARI: Record<string, string> = {
   emanetEnabled: "emanet.enabled",
   kaliteGuvenceEnabled: "kaliteGuvence.enabled",
   maliyetEnabled: "maliyet.enabled",
+  gelenBelgeEnabled: "gelenBelge.enabled",
 };
 
 /** HTTP sondalarının 200 alabilmesi için gereken izinler. */
@@ -369,6 +390,8 @@ const SONDA_IZINLERI = [
   "weavingorder:read",
   // Kalite Güvence sondaları (`/api/quality-inspections`, `/api/four-point-rules`) — aynı gerekçe.
   "inspection:read",
+  // Gelen belge sondası (`/api/gelen-belge/irsaliyeler`) — aynı gerekçe (D2).
+  "gelen-belge:read",
   // Maliyet sondası (`/api/cost/parameter-sets`) — aynı gerekçe (MAL-1).
   "cost:read",
 ];
@@ -451,7 +474,11 @@ function onKosulKapanisi(alan: string): string[] {
   return out;
 }
 
-const ALAN_KODU = new Map<string, string>(MODULLER.map((m) => [m.alan as string, m.modulKodu]));
+const ALAN_KODU = new Map<string, string>([
+  ...MODULLER.map((m) => [m.alan as string, m.modulKodu] as const),
+  // Yüzeysiz ön koşul (emanet) tabloda satır değil; §4/§7 `eksikHalka` kapının söylediği kodu buradan bekler.
+  ...MODULLER.flatMap((m) => (m.onKosul ? [[m.onKosul.alan as string, m.onKosul.beklenenModulKodu] as const] : [])),
+]);
 
 /**
  * Zincirin EKSİK OLAN EN DIŞTAKİ halkası — kapının 403'te söylemesi gereken ad.
@@ -548,14 +575,8 @@ function tersYonAyagi(): void {
     // bu satır o gün ölü muaf olarak §8e'den kırmızı alır.
     kumasTeknikEnabled: "yüzeysiz modül — adlandırılmış kapısı ve route'u YOK",
     // 2026-09-15 (G3): emanet EKRANSIZ modüldür — kapısı owner YAZAN uçların GÖVDESİNDE (`assertEmanetWritableTx`
-    // 403 MODULE_DISABLED; KK1 · levent create · lot create), adlandırılmış middleware'i ve kendi route'u YOK;
-    // sevk sahiplik kapısı bayraktan bağımsız (veri varsa). `test_emanet §1` kapalıyı ölçer.
-    emanetEnabled: "yüzeysiz modül — gövde kapısı `assertEmanetWritableTx` (403), adlandırılmış middleware'i YOK; `test_emanet §1`",
-
-    // D1 (2026-10-29): gelen belge kapısı ROTASIZ (`ROTASIZ_KAPILAR`, §8b2 iki yönlü) ve ön koşulu emanet
-    // TABLODA DEĞİL (yüzeysiz) → bağımlı yer tutucu olarak türemez. İlk route D2'de takılınca MODULLER satırı +
-    // sonda girer; o gün bu satır ölü muaf olarak §8e'den kırmızı alır.
-    gelenBelgeEnabled: "rotasız kapı `requireGelenBelgeEnabled` (ROTASIZ_KAPILAR); ön koşulu emanet tabloda değil — D2'de MODULLER satırı",
+    // 403 MODULE_DISABLED), adlandırılmış middleware'i ve kendi route'u YOK; `test_emanet §1` kapalıyı ölçer.
+    // D2 (2026-10-29): gelenBelge'nin ön koşulu olarak `YONETILEN`e yüzeysiz yer tutucu girdi — muaf satırı ölü, silindi.
   };
   const yonetilenKume = new Set(YONETILEN);
   const kapsanmayan = [...MODULE_FLAG_KEYS].filter(
@@ -1019,7 +1040,9 @@ async function main(): Promise<void> {
   );
 
   // ── §6 KÖRLÜK ZEMİNİ: HEPSİ AÇIKKEN 2xx ──────────────────────────────────
-  const hepsiAcik = hedefKur(MODULLER.map((m) => m.alan));
+  // Ön koşul zinciri kapanışı: yüzeysiz ön koşul (emanet) tabloda değil ama bağımlısı (gelenBelge) açılırken
+  // AÇIK olmak zorunda — yalnız tablo alanlarını açmak `assertModuleDependencies`e takılır (ölçüldü D2).
+  const hepsiAcik = hedefKur(MODULLER.flatMap((m) => onKosulKapanisi(m.alan)));
   await bayraklariUygula(hepsiAcik);
   {
     const sonuclar = new Map<ModulAlani, number[]>();

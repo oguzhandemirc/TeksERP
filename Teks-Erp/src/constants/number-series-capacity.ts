@@ -85,4 +85,5 @@ export const NUMBER_SERIES_CODE_CAPACITY: Readonly<Record<string, number>> = {
   warehouse: 32, // warehouse.code
   routeTemplate: 32, // route.code
   labTest: 40, // labTest.testNo
+  customerDeliveryNote: 32, // customerDeliveryNote.noteNo
 };
