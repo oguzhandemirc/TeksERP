@@ -39,6 +39,7 @@ export const COLOR_MERGE_RULES: MoveRule[] = [
     // 2026-09-13 (dokuma P2) — koşumun renk ekseni; `itemId` bacağıyla aynı sınıf
     // (referans bağ, tekillik kısıtı yok). Geri alınmış koşum da taşınır.
     { kind: "MOVE", model: "MachineRun", table: "machine_runs", column: "colorId", label: "Tezgah koşumu" },
+    { kind: "MOVE", model: "CustomerDeliveryNoteLine", table: "customer_delivery_note_lines", column: "colorId", label: "Gelen belge satırı" },
     {
       kind: "CONFLICT",
       model: "ItemAllowedColor",

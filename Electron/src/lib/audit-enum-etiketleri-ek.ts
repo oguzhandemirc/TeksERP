@@ -362,4 +362,21 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   YD2: "100 yd² başına",
   // RunningCap — METER/NONE FIELD_ENUM_OVERRIDES ile ayrılır
   YARD: "Yarda başına en fazla 4 puan",
+  // ── Gelen belge (D2, 2026-10-29) — DRAFT/APPROVED/PARTIAL/CANCELLED/PENDING/FAILED/SKIPPED ortak (paylaşım beyanı)
+  // DeliveryNoteStatus
+  APPROVING: "Onaylanıyor",
+  // DeliveryNoteSourceKind
+  OCR: "Fotoğraftan okundu",
+  IMPORT: "Dosyadan aktarıldı",
+  // DeliveryNoteLineKind — TOP ortak ("Top (rulo)")
+  ARABA: "Araba (tek top)",
+  // DeliveryNoteLineStatus
+  ENTERING: "Giriş yapılıyor",
+  ENTERED: "Girişi yapıldı",
+  // DocumentScanStatus
+  READING: "Okunuyor",
+  READ: "Okundu",
+  READ_FAILED: "Okunamadı",
+  // DeliveryNoteAliasScope — ITEM/COLOR/PROCESS ortak
+  SENDER: "Gönderen firma",
 };

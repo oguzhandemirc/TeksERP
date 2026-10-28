@@ -36,11 +36,11 @@ export const READ_ONLY_HIDDEN_COLUMNS: Readonly<Record<string, readonly string[]
  * tek başına kimlik/oturum/cihaz kanıtı üretmez (idempotency belirteci, iş anahtarı, durum damgası).
  */
 export const READ_ONLY_NOT_SECRET_COLUMNS: readonly string[] = [
-  "barcode", "cancelReasonCode", "cardTokenLegacy", "chainHash", "clientToken", "code", "codeBefore",
+  "barcode", "barcodeText", "cancelReasonCode", "cardTokenLegacy", "chainHash", "clientToken", "code", "codeBefore",
   "collectorKey", "contentHash", "contentKey", "dedupeKey", "defaultPasswordChangedAt", "defaultPasswordIssuedAt", "digest", "digestHour",
   "entryReasonCode", "errorCode", "exportCode", "factoryDayKey", "finishingRateCode", "fromReasonCode", "groupKey", "inputHash", "installationKeyId",
   "key", "keyValue", "lastErrorCode", "mustChangePassword", "pairKey", "paramsDigest", "payloadDigest", "pendingKey",
-  "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rawCode", "rawStopCode",
+  "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rawCode", "rawKey", "rawStopCode",
   "reasonCode", "routeKey", "rowKeys", "sampleCode", "scopeKey", "sealGeneration", "sealState", "sealedAt", "sealedById",
   "secretIssuedAt", "seriesKey", "setKey", "signalStopKey", "stopKey", "subjectKey", "suggestedGradeCode", "textDigest", "toReasonCode",
   "tokenVersion", "totpEnabledAt", "totpLastStep",

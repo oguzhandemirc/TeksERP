@@ -165,6 +165,7 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "StandardCostLine", table: "standard_cost_lines", column: "yarnItemId", label: "Standart maliyet kalemi ipliği" },
     // MAL-4: teklif kalemi ürüne referans bağdır (tekillik yok). Fiyat listesi satırı liste içinde ürün+renk başına tektir.
     { kind: "MOVE", model: "SalesQuoteLine", table: "sales_quote_lines", column: "itemId", label: "Teklif kalemi" },
+    { kind: "MOVE", model: "CustomerDeliveryNoteLine", table: "customer_delivery_note_lines", column: "itemId", label: "Gelen belge satırı" },
     {
       kind: "CONFLICT",
       model: "PriceListLine",
