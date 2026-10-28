@@ -20,7 +20,9 @@ import {
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 
 const router = Router();
-router.use(verifyToken, requireGelenBelgeEnabled, express.json({ limit: BUYUK_GOVDE_LIMITI }));
+router.use(verifyToken, requireGelenBelgeEnabled);
+// Gövde katmanı kapıdan SONRA ayrı satırda: `test_module_flag_off §2a` kapıyı `use(verifyToken, <kapı>)` olarak ölçer.
+router.use(express.json({ limit: BUYUK_GOVDE_LIMITI }));
 
 type Handler = (req: Request) => Promise<{ status: number; data: unknown }>;
 const wrap = (fn: Handler) => async (req: Request, res: Response, next: NextFunction) => {
