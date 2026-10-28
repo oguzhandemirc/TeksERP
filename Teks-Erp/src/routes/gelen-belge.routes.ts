@@ -5,7 +5,7 @@
 // Bu yol global 1 MB JSON katmanını ATLAR (`BUYUK_GOVDE_YOLLARI`) ve kendi 10 MB katmanını
 // taşır — belge fotoğrafı base64 gövdeyle gelir (≤ 5 MB dosya, servis + DB CHECK).
 // Okuma `gelen-belge:read`; tarama/taslak/satır yazma `gelen-belge:write`. Yalnız DRAFT yazılır;
-// OCR okuma (D3b) ve onay (D4, `gelen-belge:approve`) bu dosyada YOK.
+// Onay (D4) `gelen-belge:approve` (SoD: Muhasebe/Süpervizör); OCR okuma (D3b) bu dosyada YOK.
 // =============================================================================
 import { DeliveryNoteStatus } from "@prisma/client";
 import express, { Router, type NextFunction, type Request, type Response } from "express";
@@ -18,6 +18,7 @@ import {
   addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine,
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
+import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 
 const router = Router();
@@ -86,6 +87,7 @@ const LinesBody = z.strictObject({
   lines: z.array(LineBody).min(1, "En az bir satır gerekli").max(500, "Tek seferde en çok 500 satır"),
 });
 const LinePatch = LineBody.partial();
+const ApproveBody = z.strictObject({ varianceReason: optText(500) });
 const ListQuery = z.object({
   status: z.enum(DeliveryNoteStatus, "Tanınmayan durum süzgeci").optional(),
   sourceKind: z.enum(["OCR", "MANUAL", "IMPORT"], "Tanınmayan kaynak süzgeci").optional(),
@@ -229,6 +231,25 @@ router.patch("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belge
 })));
 router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belge:write"), wrap(async (req) => ({
   status: 200, data: await deleteDeliveryNoteLine(Id.parse(req.params.id), Id.parse(req.params.lineId), req.user!.userId),
+})));
+
+/**
+ * @openapi
+ * /api/gelen-belge/irsaliyeler/{id}/onay:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: Onayla → her satır emanet topu (STOCK, SEMI_FINISHED, sahipli); fiş kaptır — düşen satır FAILED, başlık APPROVED/PARTIAL; yeniden onay yalnız topsuz satırı işler
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds } }" }
+ *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · DELIVERY_NOTE_OWNER_INACTIVE · DELIVERY_NOTE_LINE_UNRESOLVED" }
+ *       403: { description: "MODULE_DISABLED (emanet) ya da izin yok" }
+ *       409: { description: "TOTAL_MISMATCH (varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
+ */
+router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => ({
+  status: 200, data: await approveDeliveryNote(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!.userId),
 })));
 
 export default router;
