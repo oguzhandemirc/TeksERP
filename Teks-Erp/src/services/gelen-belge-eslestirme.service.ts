@@ -87,11 +87,12 @@ export async function suggestCustomer(raw: string | null | undefined, senderCust
   return build(text, rank(text, rows, "SENDER"), alias ? { ...alias, score: 1 } : null);
 }
 
-/** Ürün önerisi — aktif ürünler; gönderene özel alias önce. */
+/** Ürün önerisi — gönderene özel alias önce. */
 export async function suggestItem(raw: string | null | undefined, senderCustomerId: string | null = null): Promise<MatchSuggestion> {
   const text = raw?.trim();
   if (!text) return EMPTY;
-  const rows = await prisma.item.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true } });
+  // Kartın KULLANILABİLİRLİĞİNE burada bakılmaz (tek kaynak `assertItemUsable`, D4 onayında); öneri listesi tüm kartlardır.
+  const rows = await prisma.item.findMany({ select: { id: true, code: true, name: true } });
   const target = await aliasTarget("ITEM", senderCustomerId, text);
   const alias = target ? (rows.find((r) => r.id === target) ?? null) : null;
   return build(text, rank(text, rows, "ITEM"), alias ? { ...alias, score: 1 } : null);

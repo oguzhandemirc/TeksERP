@@ -20,6 +20,10 @@ export const READ_MAX_ATTEMPTS = 3;
 /** READING'de bu kadar kalan tarama (süreç düşmüş) yeniden PENDING sayılır. */
 export const READING_STALE_MS = 10 * 60 * 1000;
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
+/** Düz nesneyi Prisma Json girdisine çevirir (tip zorlaması yok: JSON gidiş-dönüş; rect/raw/uyarı zaten düz veridir). */
+function toJson(v: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(v));
+}
 const SCAN_TABLE = "DOCUMENT_SCAN";
 
 // ── Claim ────────────────────────────────────────────────────────────────────
@@ -68,8 +72,8 @@ function lineRows(lines: DraftLine[]) {
     colorText: l.colorText,
     confidence: new Prisma.Decimal(l.confidence.toFixed(4)),
     needsReview: l.needsReview,
-    sourceRects: l.sourceRects as unknown as Prisma.InputJsonObject,
-    ocrRaw: l.ocrRaw as unknown as Prisma.InputJsonObject,
+    sourceRects: toJson(l.sourceRects),
+    ocrRaw: toJson(l.ocrRaw),
   }));
 }
 
@@ -89,7 +93,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
   if (!r.ok) return release(id, scan.attempts, r.code);
   const doc = extractDocument(r.result, loadTemplates());
   const draft = draftFromExtraction(doc);
-  const envelope = { ocr: r.result, regions: draft.header.regions } as unknown as Prisma.InputJsonObject;
+  const envelope = toJson({ ocr: r.result, regions: draft.header.regions });
   const scanData = { status: "READ" as const, ocrResult: envelope, ocrEngine: clip(r.engine, 32), ocrVersion: clip(r.version, 32), ocrDurationMs: r.durationMs };
   const userId = scan.capturedById ?? undefined;
   const { header } = draft;
@@ -97,8 +101,8 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
     ownerText: header.ownerText, senderDocNo: header.senderDocNo, senderDocDate: header.senderDocDate, customerBatchNo: header.customerBatchNo,
     processText: header.processText, declaredTopCount: header.declaredTopCount, templateScore: header.templateScore === null ? null : new Prisma.Decimal(header.templateScore),
   };
-  const totalsDeclared = header.totalsDeclared as unknown as Prisma.InputJsonObject;
-  const warnings = header.warnings as unknown as Prisma.InputJsonArray;
+  const totalsDeclared = toJson(header.totalsDeclared);
+  const warnings = toJson(header.warnings);
 
   if (scan.noteId) {
     const noteId = scan.noteId;

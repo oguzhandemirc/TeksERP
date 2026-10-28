@@ -223,6 +223,36 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     responses:
  *       200: { description: "{ id }" }
  */
+/**
+ * @openapi
+ * /api/gelen-belge/okuma/durum:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Okuma servisi durumu (yok · var · erisilemiyor · gecersiz) + kuyruk sayıları + iş özeti
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "service, url, engine, version, pending, reading, failed, job" }
+ * /api/gelen-belge/taramalar/{id}/oku:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: Taramayı okumaya gönder (READ_FAILED → PENDING, deneme sıfır; işi dürter)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       202: { description: "Tarama künyesi (status, attempts)" }
+ *       409: { description: "DOCUMENT_SCAN_ALREADY_READ · DOCUMENT_SCAN_STATE_CHANGED" }
+ *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi bu kurulumda yok)" }
+ * /api/gelen-belge/irsaliyeler/{id}/eslestirme:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Gönderen / sahip / satır ürün-renk eşleme önerileri (alias önce; ≥0,90 öneri, 0,80–0,90 liste)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "sender, owner, lines[] önerileri (salt okunur)" }
+ */
 // ── D3b okuma durumu / okut / eşleme ──────────────────────────────────────────
 // Servis yok → "yok" (taslak elle sürer; çıkışsız kapı değil). Sağlık yoklaması canlı (5 s), adres maskelenmez (köken; sır yok).
 router.get("/okuma/durum", requirePermission("gelen-belge:read"), wrap(async () => {

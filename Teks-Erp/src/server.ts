@@ -286,22 +286,20 @@ function startLanListener(): Server {
     // aralık varken dışarı çıkar (fail-closed); aksi hâlde tek işi günlük işaret budamasıdır.
     // Gelen belge okuma: DB kuyruğundaki taramaları sidecar'a okutur (modül + adres yoksa hiç çıkmaz, fail-closed).
     // Hata raporları: varsayılan KAPALI (onay yoksa toplanmaz/gönderilmez); doğrulama kipinde gönderim de yok.
-    if (!VERIFYING) { startPatronCloudJobs(); startDocumentReader(); startErrorReportJob(); }
+    if (!VERIFYING) startPatronCloudJobs();
+    if (!VERIFYING) startDocumentReader();
+    if (!VERIFYING) startErrorReportJob();
     // Bildirim dağıtıcısı + koşul tarayıcısı: gözetmen `bildirim.gelenKutusuEnabled` açıkken başlatır,
     // kapanınca durdurur (yeniden başlatma gerekmez); kapalıyken satır yazılmaz.
     if (!VERIFYING) startNotificationJobs();
 
     void AuditService.logEvent({
-        category: "SYSTEM",
-        action: "STARTUP",
+        category: "SYSTEM", action: "STARTUP",
         payload: {
-            port: Number(PORT),
-            host: HOST,
+            port: Number(PORT), host: HOST,
             lanAddresses: allLan.map((l) => l.address),
             env: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
-            nodeVersion: process.version,
-            dogrulamaKipi: VERIFYING,
-            lanTls: LAN_TLS.mode,
+            nodeVersion: process.version, dogrulamaKipi: VERIFYING, lanTls: LAN_TLS.mode,
         },
     });
 });
@@ -368,7 +366,8 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     // Zil akışı kesilir, lisans birikimi diske yazılır (senkron, kısa).
     shutdownPhase = "lisans + bildirim zili";
     try {
-        stopPatronCloudJobs(); stopDocumentReader();
+        stopPatronCloudJobs();
+        stopDocumentReader();
         shutdownNotifications(); // LISTEN havuza döner; SSE zilleri server.close'dan ÖNCE biter (yoksa 5 sn zorla çıkış)
         stopLicenseDoorbell();
         stopLicensePoll();
