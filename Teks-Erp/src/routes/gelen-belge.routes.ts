@@ -5,7 +5,8 @@
 // Bu yol global 1 MB JSON katmanını ATLAR (`BUYUK_GOVDE_YOLLARI`) ve kendi 10 MB katmanını
 // taşır — belge fotoğrafı base64 gövdeyle gelir (≤ 5 MB dosya, servis + DB CHECK).
 // Okuma `gelen-belge:read`; tarama/taslak/satır yazma `gelen-belge:write`. Yalnız DRAFT yazılır;
-// OCR okuma (D3b) ve onay (D4, `gelen-belge:approve`) bu dosyada YOK.
+// onay (D4, `gelen-belge:approve`) bu dosyada YOK. D3b: `/okuma/durum` (servis var/yok + kuyruk),
+// `POST /taramalar/:id/oku` (servis yoksa 503 OCR_SERVICE_UNAVAILABLE), `/irsaliyeler/:id/eslestirme` (öneriler).
 // =============================================================================
 import { DeliveryNoteStatus } from "@prisma/client";
 import express, { Router, type NextFunction, type Request, type Response } from "express";
@@ -19,6 +20,12 @@ import {
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
+import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
+import { readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
+import { readerJobStatus, requestImmediateReaderRun } from "../jobs/gelen-belge-okuma.job";
+import { getReaderUrl } from "../lib/gelen-belge/url";
+import { readerHealth } from "../lib/gelen-belge/okuma-istemcisi";
+import { AppError } from "../utils/app-error";
 
 const router = Router();
 router.use(verifyToken, requireGelenBelgeEnabled);
@@ -128,6 +135,8 @@ const ListQuery = z.object({
  */
 router.post("/taramalar", requirePermission("gelen-belge:write"), wrap(async (req) => {
   const r = await uploadDocumentScan(ScanBody.parse(req.body), req.user!.userId);
+  // Yeni fotoğraf → okuma işini dürt (servis/modül yoksa iş kendi ön koşulunda durur; burada 503 YOK — yükleme elle taslak için de geçerli).
+  if (!r.duplicate) requestImmediateReaderRun();
   return { status: r.duplicate ? 200 : 201, data: r };
 }));
 router.get("/taramalar/:id", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getDocumentScan(Id.parse(req.params.id)) })));
@@ -214,6 +223,55 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     responses:
  *       200: { description: "{ id }" }
  */
+/**
+ * @openapi
+ * /api/gelen-belge/okuma/durum:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Okuma servisi durumu (yok · var · erisilemiyor · gecersiz) + kuyruk sayıları + iş özeti
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "service, url, engine, version, pending, reading, failed, job" }
+ * /api/gelen-belge/taramalar/{id}/oku:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: Taramayı okumaya gönder (READ_FAILED → PENDING, deneme sıfır; işi dürter)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       202: { description: "Tarama künyesi (status, attempts)" }
+ *       409: { description: "DOCUMENT_SCAN_ALREADY_READ · DOCUMENT_SCAN_STATE_CHANGED" }
+ *       503: { description: "OCR_SERVICE_UNAVAILABLE (okuma servisi bu kurulumda yok)" }
+ * /api/gelen-belge/irsaliyeler/{id}/eslestirme:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Gönderen / sahip / satır ürün-renk eşleme önerileri (alias önce; ≥0,90 öneri, 0,80–0,90 liste)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "sender, owner, lines[] önerileri (salt okunur)" }
+ */
+// ── D3b okuma durumu / okut / eşleme ──────────────────────────────────────────
+// Servis yok → "yok" (taslak elle sürer; çıkışsız kapı değil). Sağlık yoklaması canlı (5 s), adres maskelenmez (köken; sır yok).
+router.get("/okuma/durum", requirePermission("gelen-belge:read"), wrap(async () => {
+  const u = getReaderUrl();
+  const counts = await readerQueueCounts();
+  const job = readerJobStatus();
+  if (!u.url) return { status: 200, data: { service: u.source === "gecersiz" ? "gecersiz" : "yok", url: null, engine: null, version: null, ...counts, job } };
+  const h = await readerHealth(u.url);
+  return { status: 200, data: { service: h.ok ? "var" : "erisilemiyor", url: u.url, engine: h.engine, version: h.version, code: h.code, ...counts, job } };
+}));
+// Okut: PENDING ise dürtme; READ_FAILED ise yeniden kuyruğa (attempts sıfır). Servis yoksa 503 — fotoğraf durur, taslak elle.
+router.post("/taramalar/:id/oku", requirePermission("gelen-belge:write"), wrap(async (req) => {
+  if (!getReaderUrl().url) throw new AppError("Okuma servisi bu kurulumda yok; taslağı elle ya da Excel'den doldurun.", 503, true, { code: "OCR_SERVICE_UNAVAILABLE" });
+  const scan = await requeueScanForReading(Id.parse(req.params.id), req.user!.userId);
+  requestImmediateReaderRun();
+  return { status: 202, data: scan };
+}));
+router.get("/irsaliyeler/:id/eslestirme", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await suggestForNote(Id.parse(req.params.id)) })));
+
 router.get("/irsaliyeler", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await listDeliveryNotes(ListQuery.parse(req.query)) })));
 router.post("/irsaliyeler", requirePermission("gelen-belge:write"), wrap(async (req) => ({ status: 201, data: await createDeliveryNote(CreateBody.parse(req.body), req.user!.userId) })));
 router.get("/irsaliyeler/:id", requirePermission("gelen-belge:read"), wrap(async (req) => ({ status: 200, data: await getDeliveryNote(Id.parse(req.params.id)) })));

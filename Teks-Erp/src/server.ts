@@ -26,6 +26,7 @@ import { startMachineWatchdogScheduler } from './jobs/machine-watchdog.job';
 import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
+import { startDocumentReader, stopDocumentReader } from './jobs/gelen-belge-okuma.job';
 import { startErrorReportJob, stopErrorReportJob } from './jobs/error-report.job';
 import { shutdownNotifications, startNotificationJobs } from './jobs/notification-dispatch.job';
 import { recordServerError } from './services/error-report.service';
@@ -283,24 +284,22 @@ function startLanListener(): Server {
     if (!VERIFYING) startLicenseDoorbell();
     // Patron bulutu (eşitleme + gelen kutusu): yalnız ÜRETİM sınıfı + `patron-bulut` hakkı + kiradaki
     // aralık varken dışarı çıkar (fail-closed); aksi hâlde tek işi günlük işaret budamasıdır.
-    if (!VERIFYING) startPatronCloudJobs();
+    // Gelen belge okuma: DB kuyruğundaki taramaları sidecar'a okutur (modül + adres yoksa hiç çıkmaz, fail-closed).
     // Hata raporları: varsayılan KAPALI (onay yoksa toplanmaz/gönderilmez); doğrulama kipinde gönderim de yok.
+    if (!VERIFYING) startPatronCloudJobs();
+    if (!VERIFYING) startDocumentReader();
     if (!VERIFYING) startErrorReportJob();
     // Bildirim dağıtıcısı + koşul tarayıcısı: gözetmen `bildirim.gelenKutusuEnabled` açıkken başlatır,
     // kapanınca durdurur (yeniden başlatma gerekmez); kapalıyken satır yazılmaz.
     if (!VERIFYING) startNotificationJobs();
 
     void AuditService.logEvent({
-        category: "SYSTEM",
-        action: "STARTUP",
+        category: "SYSTEM", action: "STARTUP",
         payload: {
-            port: Number(PORT),
-            host: HOST,
+            port: Number(PORT), host: HOST,
             lanAddresses: allLan.map((l) => l.address),
             env: process.env.APP_ENV ?? process.env.NODE_ENV ?? "development",
-            nodeVersion: process.version,
-            dogrulamaKipi: VERIFYING,
-            lanTls: LAN_TLS.mode,
+            nodeVersion: process.version, dogrulamaKipi: VERIFYING, lanTls: LAN_TLS.mode,
         },
     });
 });
@@ -368,6 +367,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     shutdownPhase = "lisans + bildirim zili";
     try {
         stopPatronCloudJobs();
+        stopDocumentReader();
         shutdownNotifications(); // LISTEN havuza döner; SSE zilleri server.close'dan ÖNCE biter (yoksa 5 sn zorla çıkış)
         stopLicenseDoorbell();
         stopLicensePoll();

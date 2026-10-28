@@ -13607,6 +13607,8 @@ model CustomerDeliveryNote {
   ownerCustomerId  String?                @db.Uuid
   senderCustomerId String?                @db.Uuid
   senderText       String?                @db.VarChar(160)
+  /// Belgedeki Müşteri/FİRMA/Sayın alanının ham metni (OCR); sahip eşlemesi bundan önerilir — "sahip = gönderen" varsayımı YOK.
+  ownerText        String?                @db.VarChar(160)
   senderDocNo      String?                @db.VarChar(64)
   /// Takvim günü (belge üstündeki tarih) — an değil gün anlatır.
   senderDocDate    DateTime?              @db.Date
