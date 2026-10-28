@@ -115,7 +115,8 @@ function statik(): void {
   const draft = readFileSync(path.join(ROOT, "src/services/helpers/shipment-auto-draft.helper.ts"), "utf8");
   check("§0g E4b: fatura taslağı emanet topu `warnings`e yazar (409 değil)", /ownerCustomerId !== null/.test(draft) && /warnings\.push\(`\$\{emanet\.length\} top müşterinin EMANET/.test(draft));
   const merge = readFileSync(path.join(ROOT, "src/constants/merge-map.customer.ts"), "utf8");
-  check("§0h MERGE_MAP: üç modelde `ownerCustomerId` MOVE satırı", (merge.match(/column: "ownerCustomerId"/g) ?? []).length === 3);
+  // Emanetin üç modeli (Roll · WarpBeam · YarnLot) + gelen belge taslağının sahibi (CustomerDeliveryNote, D2 2026-10-29).
+  check("§0h MERGE_MAP: üç emanet modeli + gelen belge sahibi = 4 `ownerCustomerId` satırı", (merge.match(/column: "ownerCustomerId"/g) ?? []).length === 4);
   const invRoute = readFileSync(path.join(ROOT, "src/routes/inventory.routes.ts"), "utf8");
   const ctxAt = invRoute.indexOf('router.get("/tablet-context"');
   check("§6a G3t: `/rolls/tablet-context` `roll:write` ∨ `mobile:kk1` guard'ıyla ve `/:id`den ÖNCE kayıtlı (yoksa 'tablet-context' bir id sanılır)",
