@@ -1,0 +1,381 @@
+{
+ "id": "kalite-kontrol",
+ "name": "Kalite Kontrol Formu",
+ "version": 1,
+ "identifiers": {
+  "keywords": [
+   "KALİTE KONTROL FORMU",
+   "Form No",
+   "Gramaj",
+   "Hata Puanı",
+   "HATA LİSTESİ"
+  ],
+  "minScore": 0.5,
+  "regex": [
+   "\\bKK-\\d{6}\\b",
+   "\\b(KABUL|RET|ŞARTLI)\\b"
+  ]
+ },
+ "fields": [
+  {
+   "key": "formNo",
+   "label": "Form No",
+   "type": "alnum",
+   "required": true,
+   "pattern": "^KK-\\d{6}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Form No",
+      "Form Numarası",
+      "Rapor No",
+      "Form"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.14,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "\\b(KK-?\\d{6})\\b"
+    }
+   ]
+  },
+  {
+   "key": "tarih",
+   "label": "Tarih",
+   "type": "date",
+   "required": true,
+   "dateFormats": [
+    "DD.MM.YYYY",
+    "DD/MM/YYYY",
+    "DD-MM-YYYY",
+    "DD.MM.YY"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Tarih",
+      "Kontrol Tarihi"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.48,
+      "y": 0.14,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Tarih\\s*:?\\s*(\\d{2}[./-]\\d{2}[./-]\\d{2,4})",
+     "roi": {
+      "x": 0.45,
+      "y": 0.14,
+      "w": 0.55,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "partiNo",
+   "label": "Parti No",
+   "type": "alnum",
+   "required": true,
+   "pattern": "^P\\d{6}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Parti No",
+      "Parti Numarası",
+      "Parti",
+      "Lot No"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.17,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Parti\\s*No\\s*:?\\s*(P\\s?\\d{6})\\b",
+     "flags": "i",
+     "roi": {
+      "x": 0.02,
+      "y": 0.17,
+      "w": 0.5,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "kumasKodu",
+   "label": "Kumaş Kodu",
+   "type": "code",
+   "required": true,
+   "pattern": "^[A-Z]{2}-\\d{4}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Kumaş Kodu",
+      "Kumaş Kod",
+      "Kumas Kodu",
+      "Kod"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.48,
+      "y": 0.17,
+      "w": 0.5,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Kuma[sş]\\s*Kodu\\s*:?\\s*([A-Z]{2}-?\\d{4})\\b",
+     "flags": "i"
+    }
+   ]
+  },
+  {
+   "key": "gramaj",
+   "label": "Gramaj",
+   "type": "decimal",
+   "required": true,
+   "min": 50,
+   "max": 999,
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Gramaj (g/m²)",
+      "Gramaj (g/m2)",
+      "Gramaj",
+      "Gr/m²"
+     ],
+     "direction": "below",
+     "takeLines": 1,
+     "window": {
+      "x": 0.02,
+      "y": 0.28,
+      "w": 0.33,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "roi",
+     "roi": {
+      "x": 0.07,
+      "y": 0.345,
+      "w": 0.27,
+      "h": 0.04
+     }
+    }
+   ]
+  },
+  {
+   "key": "en",
+   "label": "En",
+   "type": "decimal",
+   "required": true,
+   "min": 50,
+   "max": 400,
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "En (cm)",
+      "En",
+      "Kumaş Eni",
+      "Eni"
+     ],
+     "direction": "below",
+     "takeLines": 1,
+     "window": {
+      "x": 0.32,
+      "y": 0.28,
+      "w": 0.33,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "roi",
+     "roi": {
+      "x": 0.365,
+      "y": 0.345,
+      "w": 0.27,
+      "h": 0.04
+     }
+    }
+   ]
+  },
+  {
+   "key": "hataPuani",
+   "label": "Hata Puanı",
+   "type": "integer",
+   "pattern": "^\\d{1,4}$",
+   "min": 0,
+   "max": 9999,
+   "postProcess": [
+    "digitsOnly"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Hata Puanı",
+      "Hata Puani",
+      "Toplam Hata Puanı",
+      "Puan"
+     ],
+     "direction": "below",
+     "takeLines": 1,
+     "window": {
+      "x": 0.62,
+      "y": 0.28,
+      "w": 0.38,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "roi",
+     "roi": {
+      "x": 0.66,
+      "y": 0.345,
+      "w": 0.27,
+      "h": 0.04
+     }
+    }
+   ]
+  },
+  {
+   "key": "sonuc",
+   "label": "Sonuç",
+   "type": "enum",
+   "enumValues": [
+    "KABUL",
+    "RET",
+    "ŞARTLI"
+   ],
+   "required": true,
+   "postProcess": [
+    "upper",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Sonuç",
+      "Sonuc",
+      "Karar",
+      "Kontrol Sonucu"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.35,
+      "w": 0.45,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Sonu[çc]\\s*:?\\s*(KABUL|RET|[ŞS]ARTLI)\\b",
+     "flags": "i"
+    }
+   ]
+  },
+  {
+   "key": "kontrolor",
+   "label": "Kontrolör",
+   "type": "text",
+   "maxLength": 40,
+   "postProcess": [
+    "collapseSpaces",
+    "trimPunct"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Kontrolör",
+      "Kontrolor",
+      "Kontrol Eden",
+      "Kalite Kontrolör"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.48,
+      "y": 0.21,
+      "w": 0.52,
+      "h": 0.1
+     }
+    }
+   ]
+  },
+  {
+   "key": "makine",
+   "label": "Makine",
+   "type": "alnum",
+   "pattern": "^[A-Z]{2}-\\d{2}$",
+   "postProcess": [
+    "upper",
+    "stripSpaces"
+   ],
+   "strategies": [
+    {
+     "kind": "anchor",
+     "labels": [
+      "Makine",
+      "Makine No",
+      "Makina"
+     ],
+     "direction": "right",
+     "window": {
+      "x": 0.02,
+      "y": 0.21,
+      "w": 0.45,
+      "h": 0.1
+     }
+    },
+    {
+     "kind": "regex",
+     "pattern": "Makine\\s*:?\\s*([A-Z]{2}-?\\d{2})\\b",
+     "flags": "i",
+     "roi": {
+      "x": 0.02,
+      "y": 0.21,
+      "w": 0.45,
+      "h": 0.1
+     }
+    }
+   ]
+  }
+ ]
+}

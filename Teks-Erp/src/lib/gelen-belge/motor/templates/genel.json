@@ -1,0 +1,31 @@
+{
+  "id": "genel",
+  "name": "Genel çeki listesi (yedek sözlük)",
+  "version": 1,
+  "identifiers": { "keywords": ["Top No", "Metre", "Kilo", "Tarih", "Müşteri", "Parti"], "minScore": 0.3 },
+  "fields": [
+    { "key": "tarih", "label": "Tarih", "type": "date",
+      "strategies": [
+        { "kind": "anchor", "labels": ["Tarih", "Sevk Tarihi", "İrsaliye Tarihi"], "direction": "rightOrBelow" },
+        { "kind": "regex", "pattern": "\\b(\\d{2}[./-]\\d{2}[./-]\\d{4})\\b" }
+      ] },
+    { "key": "belgeNo", "label": "Belge No", "type": "alnum",
+      "strategies": [ { "kind": "anchor", "labels": ["Fiş No", "İrsaliye No", "Sevk No", "Evrak No", "Belge No"], "direction": "rightOrBelow" } ] },
+    { "key": "musteri", "label": "Müşteri", "type": "text", "maxLength": 60, "postProcess": ["collapseSpaces", "trimPunct"],
+      "strategies": [ { "kind": "anchor", "labels": ["Müşteri", "Müşteri Adı", "Firma", "Sayın"], "direction": "rightOrBelow" } ] },
+    { "key": "partiNo", "label": "Parti No", "type": "alnum", "postProcess": ["upper", "stripSpaces"],
+      "strategies": [ { "kind": "anchor", "labels": ["Parti No", "Ham Parti No", "Müş. Parti No", "Lot No"], "direction": "right" } ] },
+    { "key": "islem", "label": "İşlem", "type": "text", "maxLength": 60,
+      "strategies": [ { "kind": "anchor", "labels": ["İşlem", "Yapılan İşlem"], "direction": "right" } ] }
+  ],
+  "tables": [
+    { "key": "toplar", "minHeaderMatches": 2,
+      "columns": [
+        { "key": "siraNo", "label": "Sıra No", "type": "integer", "headers": ["Sıra No", "Sıra", "S.No"] },
+        { "key": "topNo", "label": "Top No", "type": "alnum", "headers": ["Top No", "Top", "Kod"], "required": true },
+        { "key": "kg", "label": "Kilo", "type": "decimal", "headers": ["Kilo", "Kg", "Ağırlık"] },
+        { "key": "m", "label": "Metre", "type": "decimal", "headers": ["Metre", "Mt", "Metraj"], "required": true }
+      ],
+      "totals": { "labels": ["T.Adet", "Toplam", "Genel Toplam"] } }
+  ]
+}

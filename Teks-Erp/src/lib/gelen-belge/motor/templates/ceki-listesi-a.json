@@ -1,0 +1,43 @@
+{
+  "id": "ceki-listesi-a",
+  "name": "Kumaş çeki listesi (fiş no / sipariş bloklu)",
+  "version": 1,
+  "identifiers": { "keywords": ["KUMAŞ ÇEKİ LİSTESİ", "Fiş No", "Sıra No", "Top No", "T.Adet", "Ham Parti No"], "minScore": 0.6 },
+  "fields": [
+    { "key": "fisNo", "label": "Fiş No", "type": "integer", "required": true, "pattern": "^\\d{4,8}$",
+      "strategies": [ { "kind": "anchor", "labels": ["Fiş No"], "direction": "right" } ] },
+    { "key": "tarih", "label": "Tarih", "type": "date", "required": true,
+      "strategies": [
+        { "kind": "anchor", "labels": ["Tarih"], "direction": "right", "window": { "x": 0.5, "y": 0, "w": 0.5, "h": 0.15 } },
+        { "kind": "regex", "pattern": "\\b(\\d{2}[./-]\\d{2}[./-]\\d{4})\\b" }
+      ] },
+    { "key": "firma", "label": "Firma", "type": "text", "required": true, "maxLength": 60, "postProcess": ["collapseSpaces", "trimPunct"],
+      "strategies": [ { "kind": "anchor", "labels": ["Firma"], "direction": "right" } ] },
+    { "key": "siparisNo", "label": "Sipariş No", "type": "integer", "pattern": "^\\d{4,8}$",
+      "strategies": [ { "kind": "anchor", "labels": ["Sipariş No"], "direction": "right" } ] },
+    { "key": "topAdet", "label": "Top adedi (başlık)", "type": "integer",
+      "strategies": [ { "kind": "regex", "pattern": "\\b(\\d{1,3})\\s*TOP\\b", "flags": "i" } ] },
+    { "key": "islem", "label": "İşlem", "type": "text", "maxLength": 40, "postProcess": ["collapseSpaces", "trimPunct"],
+      "strategies": [ { "kind": "anchor", "labels": ["İşlem"], "direction": "right" } ] },
+    { "key": "isEmriNo", "label": "İş Emri No", "type": "alnum", "pattern": "^\\d{2}[A-Z]-\\d{5}$", "postProcess": ["upper", "stripSpaces"],
+      "strategies": [
+        { "kind": "anchor", "labels": ["İş Emri No"], "direction": "right" },
+        { "kind": "regex", "pattern": "\\b(\\d{2}[A-Z]-\\d{5})\\b" }
+      ] },
+    { "key": "hamPartiNo", "label": "Ham Parti No", "type": "alnum", "pattern": "^P\\d{7}$", "postProcess": ["upper", "stripSpaces"],
+      "strategies": [
+        { "kind": "anchor", "labels": ["Ham PartiNo", "Ham Parti No"], "direction": "right" },
+        { "kind": "regex", "pattern": "\\b(P\\d{7})\\b" }
+      ] }
+  ],
+  "tables": [
+    { "key": "toplar", "minHeaderMatches": 3,
+      "columns": [
+        { "key": "siraNo", "label": "Sıra No", "type": "integer", "headers": ["Sıra No", "Sira No"] },
+        { "key": "topNo", "label": "Top No", "type": "alnum", "headers": ["Top No"], "required": true, "pattern": "^\\d{8}$" },
+        { "key": "kg", "label": "Kilo", "type": "decimal", "headers": ["Kilo"], "required": true },
+        { "key": "m", "label": "Metre", "type": "decimal", "headers": ["Metre"], "required": true }
+      ],
+      "totals": { "labels": ["T.Adet"] } }
+  ]
+}
