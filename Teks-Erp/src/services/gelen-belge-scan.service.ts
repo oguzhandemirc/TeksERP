@@ -1,0 +1,105 @@
+// =============================================================================
+// GELEN BELGE — belge taraması (D2): fotoğraf/PDF yükle · künye oku · ikili indir
+// =============================================================================
+// Tür beyana değil SİHİRLİ BAYTA bakılarak belirlenir (`certificate-file.service` ile aynı
+// tespit — iki yerde imza listesi yazılmaz). Sınır 5 MB (DB CHECK `document_scans_size_ck` ikizi).
+// Aynı fotoğraf (sha256) ikinci kez YAZILMAZ: mevcut kayıt döner (`duplicate: true`) — tabletin
+// ağ kopmasında yeniden gönderdiği fotoğraf ikinci tarama üretmez. Baytlar ve ham OCR metni
+// audit/log yüküne GİRMEZ — yalnız künye. OCR okuma işi D3b'de (status PENDING → READING).
+// =============================================================================
+import { createHash } from "crypto";
+import { Prisma } from "@prisma/client";
+import prisma from "../lib/prisma";
+import { AppError } from "../utils/app-error";
+import { AuditService } from "./audit.service";
+import { detectCertificateMime } from "./certificate-file.service";
+
+export const DOCUMENT_SCAN_MAX_BYTES = 5 * 1024 * 1024;
+const AUDIT_TABLE = "DOCUMENT_SCAN";
+
+/** Künye — `content` ASLA bu seçimde değildir (liste/ayrıntı/audit hepsi buradan okur). */
+export const SCAN_SELECT = {
+  id: true, noteId: true, pageNo: true, regionNo: true, sha256: true, mimeType: true, sizeBytes: true,
+  barcodeText: true, status: true, attempts: true, ocrEngine: true, ocrVersion: true, ocrDurationMs: true,
+  capturedById: true, capturedAt: true, createdAt: true, updatedAt: true,
+} as const;
+
+export interface DocumentScanInput {
+  contentBase64: string;
+  noteId?: string | null;
+  pageNo?: number | null;
+  regionNo?: number | null;
+  barcodeText?: string | null;
+}
+
+function tooLarge(): AppError {
+  return new AppError("Belge dosyası 5 MB sınırını aşıyor.", 413, true, { code: "DOCUMENT_SCAN_TOO_LARGE", maxBytes: DOCUMENT_SCAN_MAX_BYTES });
+}
+
+/** Katı base64 (data URL öneki kabul); bozuk gövde 400. */
+function decodeBase64(raw: string): Buffer {
+  const body = raw.replace(/^data:[^,]*;base64,/, "").replace(/\s+/g, "");
+  if (!body || body.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(body)) {
+    throw AppError.badRequest("Dosya içeriği geçerli base64 değil.", { code: "DOCUMENT_SCAN_INVALID" });
+  }
+  return Buffer.from(body, "base64");
+}
+
+async function assertNoteDraft(noteId: string): Promise<void> {
+  const note = await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { status: true, noteNo: true } });
+  if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
+  if (note.status !== "DRAFT") {
+    throw AppError.conflict(`${note.noteNo} taslak değil; tarama yalnız taslağa eklenir.`, { code: "DELIVERY_NOTE_NOT_DRAFT", status: note.status });
+  }
+}
+
+export async function uploadDocumentScan(input: DocumentScanInput, userId: string) {
+  // Boy, decode ÖNCESİ base64 uzunluğundan da sınanır — 5 MB üstü gövde belleğe açılmadan reddedilir.
+  if (Math.floor((input.contentBase64.length * 3) / 4) > DOCUMENT_SCAN_MAX_BYTES + 4) throw tooLarge();
+  const content = decodeBase64(input.contentBase64);
+  if (content.length > DOCUMENT_SCAN_MAX_BYTES) throw tooLarge();
+  const kind = detectCertificateMime(content);
+  if (!kind) {
+    throw AppError.badRequest("Yalnız JPEG, PNG ya da PDF belge yüklenebilir (dosya içeriği tanınmadı).", { code: "DOCUMENT_SCAN_TYPE" });
+  }
+  if (input.noteId) await assertNoteDraft(input.noteId);
+  const sha256 = createHash("sha256").update(content).digest("hex");
+  const existing = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
+  if (existing) return { scan: existing, duplicate: true };
+  const data = {
+    noteId: input.noteId ?? null,
+    pageNo: input.pageNo ?? 1,
+    regionNo: input.regionNo ?? null,
+    barcodeText: input.barcodeText?.trim() || null,
+    mimeType: kind.mime,
+    sizeBytes: content.length,
+    sha256,
+    capturedById: userId,
+  };
+  let scan;
+  try {
+    scan = await prisma.documentScan.create({ data: { ...data, content: new Uint8Array(content) }, select: SCAN_SELECT });
+  } catch (err) {
+    // Eşzamanlı aynı yükleme: kaybeden mevcut kaydı alır (unique seddi).
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const again = await prisma.documentScan.findUnique({ where: { sha256 }, select: SCAN_SELECT });
+      if (again) return { scan: again, duplicate: true };
+    }
+    throw err;
+  }
+  await AuditService.log({ userId, action: "CREATE", tableName: AUDIT_TABLE, recordId: scan.id, newData: data });
+  return { scan, duplicate: false };
+}
+
+export async function getDocumentScan(id: string) {
+  const scan = await prisma.documentScan.findUnique({ where: { id }, select: SCAN_SELECT });
+  if (!scan) throw AppError.notFound("Belge taraması bulunamadı.", { code: "DOCUMENT_SCAN_NOT_FOUND" });
+  return scan;
+}
+
+/** İkili içerik — yalnız indirme ucu okur; audit/log yoluna girmez. */
+export async function readDocumentScanContent(id: string): Promise<{ mimeType: string; content: Buffer }> {
+  const scan = await prisma.documentScan.findUnique({ where: { id }, select: { mimeType: true, content: true } });
+  if (!scan) throw AppError.notFound("Belge taraması bulunamadı.", { code: "DOCUMENT_SCAN_NOT_FOUND" });
+  return { mimeType: scan.mimeType, content: Buffer.from(scan.content) };
+}

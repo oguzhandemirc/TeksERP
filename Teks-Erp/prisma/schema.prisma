@@ -723,6 +723,12 @@ model User {
   certificateFilesUploaded  CertificateFile[]  @relation("CertificateFileUploadedBy")
   customerLabSpecsCreated   CustomerLabSpec[]  @relation("CustomerLabSpecCreatedBy")
   customerLabSpecsUpdated   CustomerLabSpec[]  @relation("CustomerLabSpecUpdatedBy")
+  // Gelen belge taslağı (D2, 2026-10-29): irsaliye künyesi + tarama yakalayan.
+  deliveryNotesCreated      CustomerDeliveryNote[] @relation("CustomerDeliveryNoteCreatedBy")
+  deliveryNotesUpdated      CustomerDeliveryNote[] @relation("CustomerDeliveryNoteUpdatedBy")
+  deliveryNotesApproved     CustomerDeliveryNote[] @relation("CustomerDeliveryNoteApprovedBy")
+  deliveryNotesCancelled    CustomerDeliveryNote[] @relation("CustomerDeliveryNoteCancelledBy")
+  documentScansCaptured     DocumentScan[]         @relation("DocumentScanCapturedBy")
   // MAL-1 (2026-10-25): atkı kartı + maliyet girdileri künyesi.
   weftSpecsCreated          WeftSpec[]         @relation("WeftSpecCreatedBy")
   weftSpecsUpdated          WeftSpec[]         @relation("WeftSpecUpdatedBy")
@@ -3454,6 +3460,7 @@ model Item {
   fourPointRuleSets  FourPointRuleSet[]
   labTests           LabTest[]
   customerLabSpecs   CustomerLabSpec[]
+  deliveryNoteLines  CustomerDeliveryNoteLine[]
 
   @@unique([nameFold])
   @@index([itemType])
@@ -3973,6 +3980,8 @@ model Roll {
 
   inspections          RollInspection[]
   labTests             LabTest[]
+  /// Gelen belge satırından doğan top (D4 yazar); satır başına tek top.
+  deliveryNoteLine     CustomerDeliveryNoteLine?
 
   @@index([itemId])
   @@index([parentRollId])
@@ -4200,6 +4209,12 @@ model Customer {
   fourPointRuleSets FourPointRuleSet[]
   certificates      Certificate[]
   customerLabSpecs  CustomerLabSpec[]
+  // Gelen belge taslağı (D2): sahip (emanet müşterisi) / gönderen (belgeyi basan firma) ayrı bağ.
+  deliveryNotesOwned     CustomerDeliveryNote[] @relation("CustomerDeliveryNoteOwner")
+  deliveryNotesSent      CustomerDeliveryNote[] @relation("CustomerDeliveryNoteSender")
+  senderTemplates        SenderTemplate[]       @relation("SenderTemplateSender")
+  senderTemplateDefaults SenderTemplate[]       @relation("SenderTemplateDefaultOwner")
+  deliveryNoteAliases    DeliveryNoteAlias[]
   labTests          LabTest[]
 
   // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
@@ -8656,6 +8671,7 @@ model Color {
   // MAL-4: teklif / fiyat listesi geri ilişkileri (kolon değil)
   salesQuoteLines SalesQuoteLine[] @relation("SalesQuoteLineColor")
   priceListLines  PriceListLine[]  @relation("PriceListLineColor")
+  deliveryNoteLines CustomerDeliveryNoteLine[]
 
   @@index([isActive, sortOrder])
   @@index([nameFold])
@@ -13526,4 +13542,227 @@ model PriceListLine {
   @@index([colorId])
   @@index([standardCostVersionId])
   @@map("price_list_lines")
+}
+
+// =============================================================================
+// GELEN BELGE TASLAĞI (Gülkesim OCR, D2 — TASARIM-KARARI-2026-10-28 §4)
+// =============================================================================
+// Müşteri irsaliyesi/çeki listesi fotoğrafı → OCR/Excel/elle TASLAK → gözden geçirme → onay (D4)
+// → emanet top girişi. Taslak DEFTER DEĞİLDİR: tek defter satırı onaydaki depo ENTRY'sidir
+// (`createInitialEntry`, D4). DRAFT fiziksel silinir (④ deftere hiç yazmamış taslak sınıfı);
+// APPROVED sonrası yalnız CANCELLED geçişi. Enum'lar KAPALI kümedir (durum makineleri).
+// =============================================================================
+
+enum DeliveryNoteStatus {
+  DRAFT
+  APPROVING
+  APPROVED
+  PARTIAL
+  CANCELLED
+}
+
+enum DeliveryNoteSourceKind {
+  OCR
+  MANUAL
+  IMPORT
+}
+
+enum DeliveryNoteLineKind {
+  TOP
+  ARABA
+}
+
+enum DeliveryNoteLineStatus {
+  PENDING
+  ENTERING
+  ENTERED
+  FAILED
+  SKIPPED
+}
+
+enum DocumentScanStatus {
+  PENDING
+  READING
+  READ
+  READ_FAILED
+}
+
+enum DeliveryNoteAliasScope {
+  SENDER
+  ITEM
+  COLOR
+  PROCESS
+}
+
+/// Gelen belge taslağı başlığı — DURUM kaydı (mutasyona uğrar, `updatedAt`). `noteNo` doğuşta
+/// `GB` serisinden materyalize. Sahip (`ownerCustomerId`) belgedeki Müşteri/FİRMA alanıdır,
+/// gönderen (`senderCustomerId`/`senderText`) belgeyi basan firma — "sahip = gönderen" varsayılanı YOK.
+/// `customerBatchNo` METİNDİR (`Batch`e eşlenmez). Türetilen toplam saklanmaz (satırlardan hesaplanır).
+/// Partial unique (sahip, gönderen belge no) iptal dışı satırlarda — DB'de (`customer_delivery_notes_owner_sender_doc_uq`).
+model CustomerDeliveryNote {
+  id               String                 @id @default(uuid()) @db.Uuid
+  noteNo           String                 @unique @db.VarChar(32)
+  status           DeliveryNoteStatus     @default(DRAFT)
+  sourceKind       DeliveryNoteSourceKind
+  ownerCustomerId  String?                @db.Uuid
+  senderCustomerId String?                @db.Uuid
+  senderText       String?                @db.VarChar(160)
+  senderDocNo      String?                @db.VarChar(64)
+  /// Takvim günü (belge üstündeki tarih) — an değil gün anlatır.
+  senderDocDate    DateTime?              @db.Date
+  customerBatchNo  String?                @db.VarChar(64)
+  processText      String?                @db.VarChar(120)
+  templateId       String?                @db.Uuid
+  templateScore    Decimal?               @db.Decimal(5, 4)
+  /// "1/2" sayfa damgası — belge kaç sayfa beyan ediyor (sert kapı D4'te).
+  pageCount        Int?                   @db.SmallInt
+  /// Belgede yazan top adedi — yalnız UYARI sınıfı (satır sayısıyla çelişebilir).
+  declaredTopCount Int?                   @db.SmallInt
+  /// Blok başına beyan edilen adet/kg/m (`{ blocks: [{ blockNo, count, kg, m }] }`).
+  totalsDeclared   Json?
+  varianceReason   String?                @db.VarChar(500)
+  warnings         Json                   @default("[]")
+  approvedAt       DateTime?              @db.Timestamptz
+  approvedById     String?                @db.Uuid
+  cancelledAt      DateTime?              @db.Timestamptz
+  cancelledById    String?                @db.Uuid
+  cancelReason     String?                @db.VarChar(500)
+  clientToken      String?                @unique @db.Uuid
+  createdAt        DateTime               @default(now()) @db.Timestamptz
+  updatedAt        DateTime               @updatedAt @db.Timestamptz
+
+  ownerCustomer  Customer?       @relation("CustomerDeliveryNoteOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  senderCustomer Customer?       @relation("CustomerDeliveryNoteSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
+  template       SenderTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  approvedBy     User?           @relation("CustomerDeliveryNoteApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  cancelledBy    User?           @relation("CustomerDeliveryNoteCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  lines          CustomerDeliveryNoteLine[]
+  scans          DocumentScan[]
+
+  // ── KAYIT KÜNYESİ — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerDeliveryNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerDeliveryNoteUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([ownerCustomerId])
+  @@index([senderCustomerId])
+  @@index([templateId])
+  @@index([status, createdAt])
+  @@map("customer_delivery_notes")
+}
+
+/// Gelen belge satırı — ebeveyn taslağın parçası (DRAFT silinince Cascade). ARABA satırı TEK top
+/// kaydıdır (bölme tamburda). `rollId` D4 onayında yazılır; satır başına tek top (`@unique`).
+/// `ocrRaw`/`sourceRects` OCR izidir — audit yüküne GİRMEZ. `meters` > 0 (CHECK `customer_delivery_note_lines_meters_ck`).
+model CustomerDeliveryNoteLine {
+  id           String                 @id @default(uuid()) @db.Uuid
+  noteId       String                 @db.Uuid
+  lineNo       Int                    @db.SmallInt
+  blockNo      Int                    @default(1) @db.SmallInt
+  lineKind     DeliveryNoteLineKind   @default(TOP)
+  senderRollNo String?                @db.VarChar(64)
+  meters       Decimal                @db.Decimal(12, 3)
+  weightKg     Decimal?               @db.Decimal(12, 3)
+  widthCm      Decimal?               @db.Decimal(8, 2)
+  itemText     String?                @db.VarChar(160)
+  itemId       String?                @db.Uuid
+  colorText    String?                @db.VarChar(120)
+  colorId      String?                @db.Uuid
+  processText  String?                @db.VarChar(120)
+  /// 0..1 — OCR güveni; elle/Excel satırda 1.
+  confidence   Decimal                @default(1) @db.Decimal(5, 4)
+  needsReview  Boolean                @default(false)
+  sourceRects  Json?
+  ocrRaw       Json?
+  status       DeliveryNoteLineStatus @default(PENDING)
+  failReason   String?                @db.VarChar(500)
+  rollId       String?                @unique @db.Uuid
+  createdAt    DateTime               @default(now()) @db.Timestamptz
+  updatedAt    DateTime               @updatedAt @db.Timestamptz
+
+  note  CustomerDeliveryNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  item  Item?                @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  color Color?               @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  roll  Roll?                @relation(fields: [rollId], references: [id], onDelete: Restrict)
+
+  @@unique([noteId, lineNo])
+  @@index([itemId])
+  @@index([colorId])
+  @@map("customer_delivery_note_lines")
+}
+
+/// Belge taraması — DURUM kaydı (defter değil; `scripts/lib/defter-beyan.ts` "yarı" beyanı).
+/// Baytlar DB'de (≤ 5 MB, CHECK `document_scans_size_ck`); tür SİHİRLİ BAYTTAN; aynı fotoğraf
+/// (sha256) ikinci kez yazılmaz. Baytlar ve ham OCR metni audit/log yüküne GİRMEZ. v1'de süresiz belge izi.
+model DocumentScan {
+  id            String             @id @default(uuid()) @db.Uuid
+  noteId        String?            @db.Uuid
+  pageNo        Int                @default(1) @db.SmallInt
+  regionNo      Int?               @db.SmallInt
+  sha256        String             @unique @db.VarChar(64)
+  mimeType      String             @db.VarChar(32)
+  sizeBytes     Int
+  content       Bytes
+  barcodeText   String?            @db.VarChar(120)
+  status        DocumentScanStatus @default(PENDING)
+  attempts      Int                @default(0) @db.SmallInt
+  ocrEngine     String?            @db.VarChar(32)
+  ocrVersion    String?            @db.VarChar(32)
+  ocrDurationMs Int?
+  ocrResult     Json?
+  capturedById  String?            @db.Uuid
+  capturedAt    DateTime           @default(now()) @db.Timestamptz
+  createdAt     DateTime           @default(now()) @db.Timestamptz
+  updatedAt     DateTime           @updatedAt @db.Timestamptz
+
+  note       CustomerDeliveryNote? @relation(fields: [noteId], references: [id], onDelete: Restrict)
+  capturedBy User?                 @relation("DocumentScanCapturedBy", fields: [capturedById], references: [id], onDelete: Restrict)
+
+  @@index([noteId])
+  @@index([status, createdAt])
+  @@map("document_scans")
+}
+
+/// Gönderen belge şablonu — KATALOG (yerleşim JSON `src/lib/gelen-belge/motor` sözleşmesi).
+/// `hitCount` istatistiktir (karar türetilmez).
+model SenderTemplate {
+  id                     String   @id @default(uuid()) @db.Uuid
+  code                   String   @unique @db.VarChar(64)
+  version                Int      @default(1)
+  template               Json
+  senderCustomerId       String?  @db.Uuid
+  defaultOwnerCustomerId String?  @db.Uuid
+  isActive               Boolean  @default(true)
+  hitCount               Int      @default(0)
+  createdAt              DateTime @default(now()) @db.Timestamptz
+  updatedAt              DateTime @updatedAt @db.Timestamptz
+
+  senderCustomer       Customer? @relation("SenderTemplateSender", fields: [senderCustomerId], references: [id], onDelete: Restrict)
+  defaultOwnerCustomer Customer? @relation("SenderTemplateDefaultOwner", fields: [defaultOwnerCustomerId], references: [id], onDelete: Restrict)
+  notes                CustomerDeliveryNote[]
+
+  @@index([senderCustomerId])
+  @@index([defaultOwnerCustomerId])
+  @@map("sender_templates")
+}
+
+/// Eşleme sözlüğü — belgedeki katlanmış ham metin → hedef kimlik (`scope`a göre Customer/Item/Color).
+/// `targetId` FK TAŞIMAZ: hedef tablo `scope`a bağlıdır (polimorfik); çözümleyen D3b helper'ıdır.
+/// Yalnız `gelen-belge:approve` yazar (D4); ③b karar satırı audit'i.
+model DeliveryNoteAlias {
+  id               String                 @id @default(uuid()) @db.Uuid
+  scope            DeliveryNoteAliasScope
+  senderCustomerId String?                @db.Uuid
+  rawFold          String                 @db.VarChar(160)
+  targetId         String                 @db.Uuid
+  hitCount         Int                    @default(0)
+  createdAt        DateTime               @default(now()) @db.Timestamptz
+  updatedAt        DateTime               @updatedAt @db.Timestamptz
+
+  senderCustomer Customer? @relation(fields: [senderCustomerId], references: [id], onDelete: Restrict)
+
+  @@unique([scope, senderCustomerId, rawFold])
+  @@index([targetId])
+  @@map("delivery_note_aliases")
 }

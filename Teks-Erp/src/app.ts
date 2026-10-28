@@ -148,6 +148,7 @@ import supportRoutes from "./routes/support.routes";
 import labTestRoutes from "./routes/lab-test.routes";
 import labTestTypeRoutes from "./routes/lab-test-type.routes";
 import certificateRoutes from "./routes/certificate.routes";
+import gelenBelgeRoutes from "./routes/gelen-belge.routes";
 import customerLabSpecRoutes from "./routes/customer-lab-spec.routes";
 import errorReportRoutes from "./routes/error-report.routes";
 import semanticReportRoutes from "./routes/rapor-semantik.routes";
@@ -714,6 +715,7 @@ app.use("/api/destek", supportRoutes);
 app.use("/api/lab-tests", labTestRoutes);
 app.use("/api/lab-test-types", labTestTypeRoutes);
 app.use("/api/certificates", certificateRoutes);
+app.use("/api/gelen-belge", gelenBelgeRoutes);
 app.use("/api/customer-lab-specs", customerLabSpecRoutes);
 // Hata raporları (3.6): onay (varsayılan KAPALI, ayar şifreli) + panel/tablet hata kaydı; gönderim `jobs/error-report.job.ts`.
 app.use("/api/hata-raporlari", errorReportRoutes);

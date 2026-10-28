@@ -16,7 +16,8 @@
 // =============================================================================
 
 /** Global (1 MB) JSON katmanının ATLAYACAĞI mount ön ekleri. */
-export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates"] as const;
+// `/api/gelen-belge`: belge fotoğrafı base64 gövdeyle gelir (≤ 5 MB dosya ≈ 6,7 MB gövde; D2, 2026-10-29).
+export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates", "/api/gelen-belge"] as const;
 
 /** Global JSON gövde limiti — 413 mesajı da buradan okunur (metin sabiti YOK). */
 export const VARSAYILAN_GOVDE_LIMITI = "1mb";
