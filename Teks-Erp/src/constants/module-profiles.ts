@@ -72,6 +72,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, string>> = {
   "emanet.enabled": "emanetEnabled",
   "kaliteGuvence.enabled": "kaliteGuvenceEnabled",
   "maliyet.enabled": "maliyetEnabled",
+  "gelenBelge.enabled": "gelenBelgeEnabled",
 };
 
 /**
@@ -101,6 +102,7 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "emanet.enabled": "Emanet / konsinye mülkiyet modülü (müşterinin malı: top · levent · iplik lotu; sevk sahiplik kapısı)",
   "kaliteGuvence.enabled": "Kalite Güvence modülü (4 puan muayene · lab testleri · sertifika takibi)",
   "maliyet.enabled": "Maliyet & Teklif: ürün maliyeti, standart maliyet, satış teklifi, fiyat listesi, iplik ihtiyaç planı",
+  "gelenBelge.enabled": "Gelen belge taslağı modülü (müşteri irsaliyesi fotoğrafından OCR taslak · gözden geçirme · onayla emanet top girişi)",
 };
 
 /** Bütün modül anahtarlarını `false` doğuran taban — profil satırları yalnız AÇTIKLARINI yazar. */

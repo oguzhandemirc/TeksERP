@@ -108,6 +108,14 @@ export function useMaliyetEnabled(): boolean {
   return (d?.productionEnabled ?? false) && (d?.maliyetEnabled ?? false);
 }
 
+/** Gelen belge taslağı (OCR) modülü etkin mi (`emanet && gelenBelge`). Yüklenene dek ve alanı tanımayan eski
+ *  sunucuda KAPALI — fail-closed: gelen belge karosu/ekranı bayrak gelmeden çizilmez. */
+export function useGelenBelgeEnabled(): boolean {
+  const q = useFeatureFlags();
+  const d = q.data?.data;
+  return (d?.emanetEnabled ?? false) && (d?.gelenBelgeEnabled ?? false);
+}
+
 /** Devere Faz 2: iplik lotu zorunlu mu (`devere.lotRequired`). Yüklenene dek KAPALI = bugünkü davranış (lot isteğe bağlı). */
 export function useDevereLotRequired(): boolean {
   const q = useFeatureFlags();

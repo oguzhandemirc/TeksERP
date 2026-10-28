@@ -44,7 +44,7 @@ import {
 } from "../src/services/system-setting.service";
 import { MODULE_SETTING_KEYS } from "../src/constants/module-flags";
 import { requireFinanceEnabled } from "../src/middlewares/finance.middleware";
-import { requireMaliyetEnabled } from "../src/middlewares/module.middleware";
+import { requireGelenBelgeEnabled, requireMaliyetEnabled } from "../src/middlewares/module.middleware";
 import { peekObservationCounters, resetObservationCounters } from "../src/lib/license/runtime";
 import { lisansKipKur, temizleLisansKipDizini } from "./lib/lisans-kip-fikstur";
 import { SERVIS, SRC_KOKU, anilislar, kapiGovdesi, lisansModulTaramasi, okuyucuCiftleri } from "./lib/modul-okuyucu-tarama";
@@ -82,6 +82,7 @@ const ADLI_KAPILAR: ReadonlyArray<[string, string]> = [
   ["middlewares/module.middleware.ts", "requireProductionEnabled"],
   ["middlewares/module.middleware.ts", "requireDokumaEnabled"],
   ["middlewares/module.middleware.ts", "requireMaliyetEnabled"],
+  ["middlewares/module.middleware.ts", "requireGelenBelgeEnabled"],
   ["middlewares/finance.middleware.ts", "requireFinanceEnabled"],
 ];
 
@@ -178,6 +179,15 @@ async function maliyetKapisi(): Promise<Record<string, unknown> | null> {
   return (hata as { details?: Record<string, unknown> } | undefined)?.details ?? null;
 }
 
+/** Gelen belge kapısının red ayrıntısı (`details`); geçerse `null`. */
+async function gelenBelgeKapisi(): Promise<Record<string, unknown> | null> {
+  let hata: unknown;
+  await requireGelenBelgeEnabled({} as Request, {} as Response, ((e?: unknown) => {
+    hata = e;
+  }) as NextFunction);
+  return (hata as { details?: Record<string, unknown> } | undefined)?.details ?? null;
+}
+
 async function kapiKodu(): Promise<string | undefined> {
   let hata: unknown;
   await requireFinanceEnabled({} as Request, {} as Response, ((e?: unknown) => {
@@ -226,6 +236,21 @@ async function davranisAyagi(): Promise<void> {
   await bayrakYaz(SETTING_KEYS.MALIYET_ENABLED, false);
   const maliyetKapali = await maliyetKapisi();
   check("§3k maliyet lisansta ama bayrak kapalı → MODULE_DISABLED (lisans suçlanmaz)", maliyetKapali?.code === "MODULE_DISABLED" && maliyetKapali.modul === "maliyet", JSON.stringify(maliyetKapali));
+  // D1: gelen belge (emanete bağımlı) — ön koşul lisans tavanında da ÖNCE ölçülür.
+  await bayrakYaz(SETTING_KEYS.EMANET_ENABLED, true);
+  await bayrakYaz(SETTING_KEYS.GELEN_BELGE_ENABLED, true);
+  lisansKipKur({ zorlama: true, moduller: ["production.enabled", "gelenBelge.enabled"] });
+  const gbEmanetYok = await gelenBelgeKapisi();
+  check("§3l ⭐ gelen belge lisansta ama emanet lisansta yok → 403 LICENSE_MODULE (emanet.enabled) — ön koşul önce", gbEmanetYok?.code === "LICENSE_MODULE" && gbEmanetYok.modul === "emanet.enabled", JSON.stringify(gbEmanetYok));
+  lisansKipKur({ zorlama: true, moduller: ["production.enabled", "emanet.enabled"] });
+  const gbRed = await gelenBelgeKapisi();
+  check("§3m ⭐ gelen belge açık + lisansta yok → requireGelenBelgeEnabled 403 LICENSE_MODULE (gelenBelge.enabled)", gbRed?.code === "LICENSE_MODULE" && gbRed.modul === "gelenBelge.enabled", JSON.stringify(gbRed));
+  lisansKipKur({ zorlama: true, moduller: ["production.enabled", "emanet.enabled", "gelenBelge.enabled"] });
+  check("§3n gelen belge + emanet lisansta, bayraklar açık → kapı geçer", (await gelenBelgeKapisi()) === null);
+  await bayrakYaz(SETTING_KEYS.GELEN_BELGE_ENABLED, false);
+  const gbKapali = await gelenBelgeKapisi();
+  check("§3o gelen belge lisansta ama bayrak kapalı → MODULE_DISABLED (lisans suçlanmaz)", gbKapali?.code === "MODULE_DISABLED" && gbKapali.modul === "gelenBelge", JSON.stringify(gbKapali));
+  await bayrakYaz(SETTING_KEYS.EMANET_ENABLED, false);
   lisansKipKur({ zorlama: true });
   check("§3h lisanstaki modül kapalıysa kod MODULE_DISABLED (lisans suçlanmaz)", (await kapiKodu()) === "MODULE_DISABLED");
 
@@ -266,7 +291,7 @@ async function main(): Promise<void> {
   AuditService.logEvent = async () => undefined;
   statikAyak();
   tekBicimAyagi();
-  const izlenen = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.TICARET_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.MALIYET_ENABLED];
+  const izlenen = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.TICARET_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.MALIYET_ENABLED, SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED];
   const once = await prisma.systemSetting.findMany({ where: { key: { in: izlenen } } });
   const yazan = await prisma.user.create({
     data: { username: `TEST-lisans-tavan-${Date.now()}`, passwordHash: await AuthService.hashPassword("Deneme-12345"), fullName: "TEST Lisans Tavanı" },

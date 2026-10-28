@@ -93,6 +93,14 @@ export const PERMISSION_CATALOG = [
   { code: "quote:convert", module: "COST", category: "web", description: "Teklif kabulü ve siparişe dönüştürme (ayrıca sipariş yazma izni gerekir)" },
   { code: "price-list:read", module: "COST", category: "web", description: "Fiyat listelerini görüntüleme" },
   { code: "price-list:write", module: "COST", category: "web", description: "Fiyat listesi hazırlama, yayınlama, arşivleme ve revizyon" },
+  // ── Gelen belge taslağı (Gülkesim OCR D1, 2026-10-29) — modül `gelenBelge.enabled` (emanete bağımlı) ──
+  // Taslak hazırlayan (fotoğraf/Excel/elle satır) ile deftere İŞLEYEN (onay → emanet top girişi) AYRI
+  // kişidir: onay `createInitialEntry` çağırır, topu DOĞURUR — `shipping:invoice` ailesi (SoD). Şablon
+  // yönetimi gönderen yerleşimini değiştirir, bütün sonraki okumaları etkiler → ayrı karar.
+  { code: "gelen-belge:read", module: "INCOMING_DOC", category: "web", description: "Gelen belge taslaklarını (OCR/Excel/elle) ve eşleme sonucunu görüntüleme" },
+  { code: "gelen-belge:write", module: "INCOMING_DOC", category: "web", description: "Gelen belge taslağı oluşturma, satır düzenleme, eşleme, taslak silme" },
+  { code: "gelen-belge:approve", module: "INCOMING_DOC", category: "web", description: "Gelen belge taslağını onaylayıp emanet top girişine işleme (deftere yazar; görev ayrılığı)" },
+  { code: "gelen-belge:template", module: "INCOMING_DOC", category: "web", description: "Gönderen belge şablonlarını (yerleşim · alias) tanımlama ve düzenleme" },
   // ── Levent (devere Faz 1b, 2026-09-14): plan/sar yazma, sarım iptali AYRI yetenek (defterden net iplik döner).
   { code: "warpbeam:read", module: "PRODUCTION", category: "web", description: "Levent listesi/detayı (plan · sarım · kalan metre · iplik satırları)" },
   { code: "warpbeam:write", module: "PRODUCTION", category: "web", description: "Levent planlama, sarım (WOUND + iplik çıkışı/dip iadesi), taslak silme" },

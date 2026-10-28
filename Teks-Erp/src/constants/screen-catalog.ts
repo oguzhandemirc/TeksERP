@@ -55,7 +55,8 @@ export type ModulKey =
   | "dokumaEnabled"
   | "emanetEnabled"
   | "kaliteGuvenceEnabled"
-  | "maliyetEnabled";
+  | "maliyetEnabled"
+  | "gelenBelgeEnabled";
 
 /**
  * Kapatılamaz çekirdek bloklar (MODUL-BAYRAK-TASARIM §2).
@@ -99,6 +100,7 @@ export const EKRAN_MODUL_DEGERLERI: ReadonlySet<string> = new Set<EkranModul>([
   "emanetEnabled",
   "kaliteGuvenceEnabled",
   "maliyetEnabled",
+  "gelenBelgeEnabled",
   "cekirdek:ana-veri",
   "cekirdek:stok-giris",
   "cekirdek:siparis-musteri",
@@ -431,6 +433,7 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
       "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
+  { modul: "gelenBelgeEnabled", reason: "Gelen belge taslağı (D1): şalter + kapı doğdu, panel ekranı D5'te (Operations/GelenBelgeler); ekran eşlenince bu muaf silinir." },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */
@@ -449,6 +452,12 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
+  // Gelen belge taslağı (D1, 2026-10-29): izinler kapıyla birlikte doğdu, ekran D5'te — o gün dört satır
+  // `SCREEN_CATALOG`a (`gelen-belge` requires/capabilities) taşınır ve bu muaflar silinir.
+  { code: "gelen-belge:read", reason: "Gelen belge taslağı ekranı D5'te doğar; izin modül kapısıyla birlikte D1'de geldi." },
+  { code: "gelen-belge:write", reason: "Gelen belge taslağı ekranı D5'te doğar; izin modül kapısıyla birlikte D1'de geldi." },
+  { code: "gelen-belge:approve", reason: "Gelen belge taslağı ekranı D5'te doğar; onay yeteneği modül kapısıyla birlikte D1'de geldi." },
+  { code: "gelen-belge:template", reason: "Gönderen şablonu yönetimi D5/D8'de doğar; izin modül kapısıyla birlikte D1'de geldi." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

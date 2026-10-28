@@ -737,6 +737,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Muhasebeci", "Planlamacı", "Yönetim"],
         desc: "Açıkken maliyet ve teklif ekranları ile uçları açılır (ekranlar sonraki sürümlerde gelir). Kapalıyken (varsayılan) uçlar 403 verir, menü çizilmez. ⚠️ Üretim modülü kapalıyken açılamaz.",
       },
+      {
+        // Ön koşul `emanet.enabled` (onay müşteri sahipli top doğurur); Emanet listede yukarıda.
+        key: "gelenBelgeEnabled",
+        title: "Gelen belge taslağı modülünü aç",
+        summary:
+          "Müşteri irsaliyesi/çeki listesi fotoğrafından OCR taslak, gözden geçirme ve onayla emanet top girişi açılır.",
+        defaultOn: false,
+        audience: ["Depocu", "Muhasebeci", "Yönetim"],
+        desc: "Açıkken gelen belge taslağı ekranı ve uçları açılır (ekran sonraki sürümde gelir). Kapalıyken (varsayılan) uçlar 403 verir, menü çizilmez. ⚠️ Emanet modülü kapalıyken açılamaz.",
+      },
       // ⚠️ `kumasTeknikEnabled` BİLEREK BURADA YOK: arkasında henüz hiçbir
       // yüzey/kapı yok, satırı yalnız "açtım ama hiçbir şey olmadı" üretirdi.
       // Backend sözleşme bekçisinde gerekçeli muaf listesinde (`PANEL_EXEMPT`)

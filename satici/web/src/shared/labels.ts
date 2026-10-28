@@ -40,6 +40,7 @@ export const MODULE_LABEL: Record<string, string> = {
   "emanet.enabled": "Emanet",
   "kaliteGuvence.enabled": "Kalite Güvence",
   "maliyet.enabled": "Maliyet & Teklif",
+  "gelenBelge.enabled": "Gelen belge taslağı",
   "patron-bulut": "Patron bulutu",
 };
 

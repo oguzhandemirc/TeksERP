@@ -372,6 +372,9 @@ export interface FeatureFlags {
   /** Maliyet & Teklif modülü (MAL) — varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir;
    *  etkin değer `production && maliyet`. Alanı tanımayan eski sunucuda yok → kapalı sayılır. */
   maliyetEnabled: boolean;
+  /** Gelen belge taslağı (OCR) modülü (D1) — varsayılan KAPALI. ⚠️ EMANETE BAĞIMLI: bu alan HAM değerdir;
+   *  etkin değer `emanet && gelenBelge`. Alanı tanımayan eski sunucuda yok → kapalı sayılır. */
+  gelenBelgeEnabled: boolean;
   /** KAPALI rapor anahtarları (katalog `key`leri). `null` = liste OKUNAMADI — "hiçbiri kapalı
    *  değil" DEĞİL; panel fail-closed okur ve rapor çizmez (R2/K5). Yazmada `null` gönderilmez. */
   reportsClosedKeys: string[] | null;

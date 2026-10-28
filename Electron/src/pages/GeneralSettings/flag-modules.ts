@@ -64,7 +64,7 @@ export type PlanlananModulSahibi = "planlanan:fason" | "planlanan:kartela";
  */
 export type HideableModule = Exclude<
   ModuleFlagKey,
-  "kumasTeknikEnabled" | "emanetEnabled" | "kaliteGuvenceEnabled" | "maliyetEnabled"
+  "kumasTeknikEnabled" | "emanetEnabled" | "kaliteGuvenceEnabled" | "maliyetEnabled" | "gelenBelgeEnabled"
 >;
 
 export type FlagOwner = HideableModule | "cekirdek" | PlanlananModulSahibi;
@@ -98,6 +98,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   emanetEnabled: "cekirdek",
   kaliteGuvenceEnabled: "cekirdek",
   maliyetEnabled: "cekirdek",
+  gelenBelgeEnabled: "cekirdek",
   // Devere Faz 2 (2026-09-14): lot zorunluluğu devere modülünün davranış bayrağı.
   devereLotRequired: "devereEnabled",
   // Devere Faz 3 (2026-09-15): tezgah bağı defteri ve bağlama zorunluluğu devere modülünün davranış bayrakları.

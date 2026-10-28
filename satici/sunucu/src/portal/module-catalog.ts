@@ -19,6 +19,7 @@ export const PORTAL_MODULE_KEYS = [
   "emanet.enabled",
   "kaliteGuvence.enabled",
   "maliyet.enabled",
+  "gelenBelge.enabled",
   "patron-bulut",
 ] as const;
 

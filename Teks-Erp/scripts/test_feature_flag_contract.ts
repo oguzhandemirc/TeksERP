@@ -62,6 +62,7 @@ import {
   readDokumaEnabled,
   readEmanetEnabled,
   readKaliteGuvenceEnabled,
+  readGelenBelgeEnabled,
   readMaliyetEnabled,
   readKumasTeknikEnabled,
   readTezgahEnabled,
@@ -1214,6 +1215,7 @@ async function main() {
     "emanetEnabled",
     "kaliteGuvenceEnabled",
     "maliyetEnabled",
+    "gelenBelgeEnabled",
   ] as const;
 
   const moduleGaps = MODULE_FLAGS.flatMap((k) => {
@@ -1267,6 +1269,7 @@ async function main() {
     kaliteGuvenceEnabled: await readKaliteGuvenceEnabled(emptyClient3),
     dokumaEnabled: await readDokumaEnabled(emptyClient3),
     maliyetEnabled: await readMaliyetEnabled(emptyClient3),
+    gelenBelgeEnabled: await readGelenBelgeEnabled(emptyClient3),
   };
   // ⚠️ `productionEnabled` TEK İSTİSNA ve bu kalıcı bir karardır: damgası
   // OLMAYAN bir kopyada (eski dump, dev DB, prova) fabrika üretimsiz kalmasın.
@@ -1284,6 +1287,7 @@ async function main() {
     emanetEnabled: false,
     kaliteGuvenceEnabled: false,
     maliyetEnabled: false,
+    gelenBelgeEnabled: false,
   };
   const varsayilanSapma = MODULE_FLAGS.filter(
     (k) => moduleDefaults[k] !== beklenenVarsayilan[k],

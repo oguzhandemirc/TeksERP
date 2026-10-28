@@ -169,6 +169,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // seçicileri zaten çizilmiyor; izin var ama yüzey yok.
       "warehouse:read",
       "warehouse:transfer",
+      // Gelen belge taslağı (D1): depo müşteri irsaliyesini tarar/düzenler; ONAY (`gelen-belge:approve`)
+      // SoD gereği Muhasebe/Süpervizör'de. Görünürlüğün gerçek kapısı `gelenBelge.enabled` (varsayılan kapalı).
+      "gelen-belge:read",
+      "gelen-belge:write",
       // ⚠️ `goods-receipt:*` BİLEREK YOK: Mal Kabul ekranı yalnız izinle kapılı
       // (tek depolu ticaret kurulumu da kullanacağı için multiWarehouse şartı
       // konamaz) → şablona akarsa fabrikada karo BELİRİR. Alım-satım kurulumunda
@@ -234,6 +238,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "quote:convert",
       "price-list:read",
       "price-list:write",
+      // Gelen belge taslağı (D1): onay emanet top girişini deftere yazar — SoD ailesi, muhasebede.
+      "gelen-belge:read",
+      "gelen-belge:write",
+      "gelen-belge:approve",
+      "gelen-belge:template",
     ],
   },
   {
@@ -366,6 +375,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // düzeltmek de günlük sevk işinden AYRI bir yetkidir ve irsaliyenin yeni bir
       // sürümünü doğurur. `shipping:undo-dispatch` ile aynı rolde durması bilinçli.
       "shipping:repair-allocation",
+      // Gelen belge taslağı (D1): onay deftere top doğurur — `roll:manual-adjust` ile aynı ailede.
+      "gelen-belge:read",
+      "gelen-belge:write",
+      "gelen-belge:approve",
+      "gelen-belge:template",
       "workorder:read",
       "workorder:write",
       "station:read",
@@ -734,7 +748,8 @@ export function resolveRoleTemplateCodes(entry: RoleTemplateEntry): readonly str
  * Görev ayrılığı (SoD) üçlüsü ve onu taşıyabilen rollerin BEYANI — kök CLAUDE.md "yalnız
  * Muhasebe/Süpervizör". Bekçi `test_role_template_catalog` §2d dağılımı buradan ölçer.
  */
-export const SOD_PERMISSION_CODES = ["shipping:invoice", "shipping:undo-dispatch", "roll:manual-adjust"] as const;
+// `gelen-belge:approve` (D1, 2026-10-29) aynı aileye girdi: onay emanet topunu DOĞURUR (deftere yazar).
+export const SOD_PERMISSION_CODES = ["shipping:invoice", "shipping:undo-dispatch", "roll:manual-adjust", "gelen-belge:approve"] as const;
 export const SOD_ALLOWED_TEMPLATES: readonly string[] = ["WEB_ACCOUNTING", "WEB_PRODUCTION_SUPERVISOR", "ADMIN_FULL"];
 
 export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
