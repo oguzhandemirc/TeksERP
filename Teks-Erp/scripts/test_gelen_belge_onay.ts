@@ -23,7 +23,6 @@ import prisma from "../src/lib/prisma";
 import app from "../src/app";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
-import { reconcileReasonPresets } from "../src/jobs/reason-preset-catalog.job";
 import { InventoryService } from "../src/services/inventory.service";
 import { lineRollToken, totalMismatches } from "../src/services/gelen-belge-onay.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
@@ -63,8 +62,6 @@ async function main(): Promise<void> {
   console.log("=== Gelen belge D4 onay bekçisi ===\n");
   const keys = [SETTING_KEYS.EMANET_ENABLED, SETTING_KEYS.GELEN_BELGE_ENABLED, SETTING_KEYS.KK1_DUPLICATE_GUARD_ENABLED];
   const prior = await prisma.systemSetting.findMany({ where: { key: { in: keys } }, select: { key: true, value: true } });
-  // Sebep kataloğu boot uzlaştırmasıyla gelir; izole DB'de sunucu boot etmez → bir kez elle (idempotent).
-  await reconcileReasonPresets();
   const admin = await ensureTestAdmin({ password: kosumaOzguParola() });
   const server = await new Promise<Server>((resolve) => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

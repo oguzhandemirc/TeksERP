@@ -92,7 +92,7 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   COLOR: "DuplicateReviewEntity(mükerrer renk) ve DeliveryNoteAliasScope(eşleme hedefi renk) — ikisi de 'Renk'",
   PROCESS:
     "RollErrorOrigin(süreç hatası) ve DeliveryNoteAliasScope(belgedeki işlem metninin eşlemesi) — ortak Türkçe 'Süreç hatası' " +
-    "alias kapsamında YANLIŞ; alias CUD audit'i D4'te doğduğunda `DELIVERY_NOTE_ALIAS.scope` override'ı ('İşlem') yazılır (bugün alias yazan yol yok)",
+    "alias kapsamında YANLIŞ; `DELIVERY_NOTE_ALIAS.scope` override'ı ('İşlem') ayırır (alias yazan tek yol D4 onayı)",
   CANCELLED: "on beş durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
   // ── Alarm sorumluları (A4): alıcının KAYNAĞI ile kuralın ALICI TÜRÜ aynı üç olgudur — ortak Türkçe doğru.
   HALL_SHIFT: "LoomAlarmRecipientSource(alıcı holün vardiya sorumlusu olduğu için) ve LoomAlarmRuleRecipientKind(kural: holün vardiya sorumlusu) — aynı olgu",

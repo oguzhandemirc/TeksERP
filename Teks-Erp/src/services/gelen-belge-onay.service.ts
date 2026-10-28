@@ -24,7 +24,6 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { InventoryService } from "./inventory.service";
-import { resolveReasonCode } from "./reason-preset.service";
 import { readEmanetEnabled } from "./system-setting.service";
 import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
@@ -34,7 +33,10 @@ const LINE_TABLE = "CUSTOMER_DELIVERY_NOTE_LINE";
 const ALIAS_TABLE = "DELIVERY_NOTE_ALIAS";
 /** Satır → top token uzayı (sabit; değişirse yarıda kalan onaylar ikinci top doğurur). */
 const LINE_TOKEN_NS = "6f1c2a0e-5b3d-4c8a-9e21-7d4f0a1b2c3d";
-/** Giriş sebebi katalog kodu (`constants/reason-presets.ts` MANUAL_ENTRY_REASONS). */
+/**
+ * Giriş sebebi kodu (`Roll.entryReasonCode`, rapor anahtarı) — SİSTEM yazar, operatör seçmez; bu yüzden
+ * `MANUAL_ENTRY_REASONS` kataloğuna GİRMEZ (katalog tablet/Electron seçici zeminidir, mobil ayna bayt-eşit).
+ */
 export const INCOMING_DOC_REASON_CODE = "GELEN_BELGE";
 /** Yarıda kalmış APPROVING (süreç ölümü) bu süreden sonra yeniden claim edilebilir. */
 const STALE_APPROVING_MS = 10 * 60 * 1000;
@@ -151,8 +153,6 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: PRE_SELECT });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
   await precheck(note, input);
-  // Katalog okuması tx DIŞINDA (motor başlığı): kod bilinmiyorsa 400 — katalog uzlaştırması boot'ta koşar.
-  const reason = await resolveReasonCode("ROLL_MANUAL_ENTRY", { reasonCode: INCOMING_DOC_REASON_CODE });
   const varianceReason = input.varianceReason?.trim() || undefined;
 
   // ── Başlık claim: DRAFT|PARTIAL (ya da bayat APPROVING — süreç ölümü) → APPROVING. count 0 → 409.
@@ -199,7 +199,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
           forcedEntrySource: RollEntrySource.SEMI_FINISHED,
           forcedStatus: RollStatus.STOCK,
           ownerCustomerId: note.ownerCustomerId,
-          entryReasonCode: reason.code,
+          entryReasonCode: INCOMING_DOC_REASON_CODE,
           entryReason: `${note.noteNo} satır ${line.lineNo}`,
           // Kg belgeden gelir; KK1 istasyon politikası (`kk1.weightEntryEnabled`) burada uygulanmaz (mal kabul emsali A1).
           skipKk1WeightPolicy: true,
