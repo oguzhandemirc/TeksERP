@@ -239,23 +239,24 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
 
 /** Başlık düzeltme — yalnız DRAFT; atomik claim (count 0 → 404/409). */
 export async function updateDeliveryNote(id: string, patch: DeliveryNoteHeaderInput, userId: string) {
-  const before = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } });
+  const before = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: HEADER_AUDIT_SELECT });
   if (!before) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
-  const cols = await headerColumns({ ...stripUndefined(before), ...patch });
+  // Yalnız patch'te TANIMLI anahtarlar yazılır (undefined → dokunma): farklı alanları düzenleyen iki yazar
+  // (tablet başlık · panel gözden geçirme) birbirini bayat anlık görüntüyle EZMEZ; sahip/gönderen doğrulaması
+  // da yalnız anahtar patch'teyse koşar (pasifleşmiş sahip ilgisiz düzeltmeyi 400'e düşürmez).
+  const cols = patchColumns(await headerColumns(patch), patch);
   const res = await prisma.customerDeliveryNote.updateMany({ where: { id, status: "DRAFT" }, data: { ...cols, updatedById: userId } }).catch(translateUnique);
   if (res.count === 0) await notDraft(id);
-  const after = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } });
+  const after = await prisma.customerDeliveryNote.findUniqueOrThrow({ where: { id }, select: HEADER_AUDIT_SELECT });
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: auditHeader(before), newData: auditHeader(after) });
   return getDeliveryNote(id);
 }
 
-/** Mevcut satırı patch tabanına çevirir (tarih kolonunu YYYY-AA-GG metnine). */
-function stripUndefined(row: { ownerCustomerId: string | null; senderCustomerId: string | null; senderText: string | null; senderDocNo: string | null; senderDocDate: Date | null; customerBatchNo: string | null; processText: string | null; pageCount: number | null; declaredTopCount: number | null }): DeliveryNoteHeaderInput {
-  return {
-    ownerCustomerId: row.ownerCustomerId, senderCustomerId: row.senderCustomerId, senderText: row.senderText, senderDocNo: row.senderDocNo,
-    senderDocDate: row.senderDocDate ? row.senderDocDate.toISOString().slice(0, 10) : null, customerBatchNo: row.customerBatchNo,
-    processText: row.processText, pageCount: row.pageCount, declaredTopCount: row.declaredTopCount,
-  };
+const HEADER_AUDIT_SELECT = { ...PRIOR_SELECT, sourceKind: true, senderText: true, senderDocDate: true, customerBatchNo: true, processText: true, pageCount: true, declaredTopCount: true, senderCustomerId: true } as const;
+
+/** Tam kolon kümesinden yalnız patch'te tanımlı anahtarları bırakır (kısmi güncelleme; kayıp güncelleme yok). */
+function patchColumns<T extends Record<string, unknown>>(full: T, patch: DeliveryNoteHeaderInput): Partial<T> {
+  return Object.fromEntries(Object.entries(full).filter(([k]) => patch[k as keyof DeliveryNoteHeaderInput] !== undefined)) as Partial<T>;
 }
 
 /** Claim kaybedildi: taze okumayla 404 ya da 409 (hangi durumda olduğunu söyler). */

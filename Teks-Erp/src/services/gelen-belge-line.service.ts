@@ -99,18 +99,11 @@ export async function addDeliveryNoteLines(noteId: string, inputs: DeliveryNoteL
 export async function updateDeliveryNoteLine(noteId: string, lineId: string, patch: Partial<DeliveryNoteLineInput>, userId: string) {
   const before = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: lineId }, select: LINE_SELECT });
   if (!before || before.noteId !== noteId) throw AppError.notFound("Satır bulunamadı.", { code: "DELIVERY_NOTE_LINE_NOT_FOUND" });
-  const merged: DeliveryNoteLineInput = {
-    lineKind: patch.lineKind ?? before.lineKind, blockNo: patch.blockNo ?? before.blockNo,
-    senderRollNo: patch.senderRollNo === undefined ? before.senderRollNo : patch.senderRollNo,
-    meters: patch.meters ?? Number(before.meters),
-    weightKg: patch.weightKg === undefined ? (before.weightKg === null ? null : Number(before.weightKg)) : patch.weightKg,
-    widthCm: patch.widthCm === undefined ? (before.widthCm === null ? null : Number(before.widthCm)) : patch.widthCm,
-    itemText: patch.itemText === undefined ? before.itemText : patch.itemText, itemId: patch.itemId === undefined ? before.itemId : patch.itemId,
-    colorText: patch.colorText === undefined ? before.colorText : patch.colorText, colorId: patch.colorId === undefined ? before.colorId : patch.colorId,
-    processText: patch.processText === undefined ? before.processText : patch.processText,
-    needsReview: patch.needsReview ?? before.needsReview,
-  };
-  const { confidence: _c, ...cols } = lineColumns(merged);
+  // Yalnız patch'te TANIMLI anahtarlar yazılır: iki yazar farklı alanı düzeltirse ikisi de korunur (kayıp güncelleme yok).
+  // `meters` yalnız gelirse sınanır; `lineColumns` tam küme kurar, tanımsızlar aşağıda elenir.
+  const full = lineColumns({ ...patch, meters: patch.meters ?? Number(before.meters) });
+  const { confidence: _c, ...allCols } = full;
+  const cols = Object.fromEntries(Object.entries(allCols).filter(([k]) => patch[k as keyof DeliveryNoteLineInput] !== undefined)) as Partial<typeof allCols>;
   const after = await prisma.$transaction(async (tx) => {
     await claimDraft(tx, noteId, userId);
     // Elle düzeltilen satır gözden geçirildi sayılır (operatör değeri gördü ve yazdı).

@@ -10,11 +10,13 @@
 //   §6 liste + cursor + özet TEK where'den: iki sayfa ∪ = kayıtlar, summary.total = sayfa toplamı
 //   §7 DRAFT dışı: status DB'den APPROVED'a çekilince DELETE/PATCH/satır ekle → 409 DELIVERY_NOTE_NOT_DRAFT
 //   §8 audit yükü: DOCUMENT_SCAN ve CUSTOMER_DELIVERY_NOTE satırlarında fotoğraf baytı / "content" yok
+//   §10 yarış: iki PATCH farklı alan → ikisi de korunur (kayıp güncelleme yok) · aynı clientToken iki POST → tek kayıt · aynı tarama iki taslak → biri 409
 //   §9 DRAFT silme: 200, satırlar Cascade, tarama çözülür (noteId null), top doğmaz (DEFTER-ÖNCELİKLİ)
 // Emsal: scripts/test_sertifika.ts (app.listen(0) + ensureTestAdmin + ayar()).
 // =============================================================================
 import type { AddressInfo } from "net";
 import type { Server } from "http";
+import crypto from "node:crypto";
 import * as bcrypt from "bcryptjs";
 import prisma from "../src/lib/prisma";
 import app from "../src/app";
@@ -197,6 +199,37 @@ async function main(): Promise<void> {
     const logs = await prisma.systemLog.findMany({ where: { tableName: { in: ["DOCUMENT_SCAN", "CUSTOMER_DELIVERY_NOTE"] }, recordId: { in: [scanId, noteId] } }, select: { tableName: true, oldData: true, newData: true } });
     const logText = JSON.stringify(logs);
     check("⭐ audit yükünde fotoğraf baytı / content yok, künye var (sha256 + noteNo)", logs.length >= 2 && !logText.includes(JPEG.toString("base64")) && !logText.includes("\"content\"") && logText.includes("sha256") && logText.includes(noteNo), `${logs.length} satır`);
+
+    // §10 yarış: iki yazar farklı alan → ikisi de korunur; aynı clientToken → tek kayıt; aynı tarama → biri 409
+    console.log("§10 yarış");
+    const [pA, pB] = await Promise.all([
+      call("PATCH", `/api/gelen-belge/irsaliyeler/${noteId}`, tk, { customerBatchNo: `${TAG}-PARTI` }),
+      call("PATCH", `/api/gelen-belge/irsaliyeler/${noteId}`, tk, { processText: "Kurşun" }),
+    ]);
+    const hdr = await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { customerBatchNo: true, processText: true, senderText: true } });
+    check("⭐ eşzamanlı iki başlık PATCH'i (farklı alan) → ikisi de korunur, üçüncü alan dokunulmadı", pA.status === 200 && pB.status === 200 && hdr?.customerBatchNo === `${TAG}-PARTI` && hdr?.processText === "Kurşun" && hdr?.senderText === `${TAG} gönderen`, JSON.stringify(hdr));
+    const l1 = await prisma.customerDeliveryNoteLine.findFirst({ where: { noteId, lineNo: 1 }, select: { id: true } });
+    const [lA, lB] = await Promise.all([
+      call("PATCH", `/api/gelen-belge/irsaliyeler/${noteId}/satirlar/${l1?.id}`, tk, { colorText: "Lacivert" }),
+      call("PATCH", `/api/gelen-belge/irsaliyeler/${noteId}/satirlar/${l1?.id}`, tk, { widthCm: 150 }),
+    ]);
+    const ln = await prisma.customerDeliveryNoteLine.findUnique({ where: { id: l1?.id ?? "" }, select: { colorText: true, widthCm: true, meters: true, senderRollNo: true } });
+    check("⭐ eşzamanlı iki satır PATCH'i (farklı alan) → ikisi de korunur, metraj/rulo no dokunulmadı", lA.status === 200 && lB.status === 200 && ln?.colorText === "Lacivert" && Number(ln?.widthCm) === 150 && Number(ln?.meters) === 101 && ln?.senderRollNo === `${TAG}-R1`, JSON.stringify(ln));
+    const token = crypto.randomUUID();
+    const twin = { clientToken: token, sourceKind: "MANUAL", ownerCustomerId: owner, senderDocNo: `${TAG}-TOKEN` };
+    const [cA, cB] = await Promise.all([call("POST", "/api/gelen-belge/irsaliyeler", tk, twin), call("POST", "/api/gelen-belge/irsaliyeler", tk, twin)]);
+    const twinId = String(cA.data?.id ?? "");
+    if (twinId) made.notes.push(twinId);
+    check("⭐ aynı clientToken ile eşzamanlı iki POST → aynı id, TEK satır", cA.status === 201 && cB.status === 201 && cA.data?.id === cB.data?.id && (await prisma.customerDeliveryNote.count({ where: { clientToken: token } })) === 1, `${cA.status}/${cB.status} ${cA.data?.id === cB.data?.id}`);
+    const freeScan = await up(Buffer.concat([PNG, Buffer.from("yarış")]));
+    const freeId = String(freeScan.data?.scan?.id ?? "");
+    if (freeId) made.scans.push(freeId);
+    const [sA, sB] = await Promise.all([
+      call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", scanIds: [freeId] }),
+      call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", scanIds: [freeId] }),
+    ]);
+    for (const r of [sA, sB]) if (r.data?.id) made.notes.push(String(r.data.id));
+    check("⭐ aynı taramayla eşzamanlı iki taslak → biri 201 biri 409 DOCUMENT_SCAN_NOT_FREE", [sA.status, sB.status].sort().join("/") === "201/409" && [sA.code, sB.code].includes("DOCUMENT_SCAN_NOT_FREE"), `${sA.status}/${sB.status}`);
 
     // §9 DRAFT silme
     console.log("§9 DRAFT silme");
