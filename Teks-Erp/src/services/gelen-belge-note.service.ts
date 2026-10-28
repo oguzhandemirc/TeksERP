@@ -118,7 +118,7 @@ async function headerColumns(input: DeliveryNoteHeaderInput) {
 }
 
 /** Mükerrer gönderen belge numarası (partial unique) → operatöre anlamlı 409. */
-function translateUnique(err: unknown): never {
+export function translateUnique(err: unknown): never {
   // Hedef okuma TEK yardımcıdan (pg adaptörü `meta.target` vermez — `p2002.ts` başlığı).
   if (p2002Mentions(err, /owner_sender_doc|senderDocNo/)) {
     throw AppError.conflict("Bu sahip için aynı gönderen belge numarasıyla açık bir taslak/belge zaten var.", { code: "DELIVERY_NOTE_DUPLICATE_DOC_NO" });
@@ -190,7 +190,7 @@ function replayFor(input: DeliveryNoteCreateInput) {
   });
 }
 
-async function nextNoteNo(): Promise<string> {
+export async function nextNoteNo(): Promise<string> {
   return nextSeriesNo(SERIES_KEY, async (prefix) =>
     prisma.customerDeliveryNote.findMany({
       where: { noteNo: { gte: prefix, startsWith: prefix } },

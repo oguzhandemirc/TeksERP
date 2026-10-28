@@ -26,6 +26,7 @@ import { startMachineWatchdogScheduler } from './jobs/machine-watchdog.job';
 import { startLicensePoll, stopLicensePoll } from './jobs/license-poll.job';
 import { startLicenseDoorbell, stopLicenseDoorbell } from './jobs/license-doorbell.job';
 import { startPatronCloudJobs, stopPatronCloudJobs } from './jobs/patron-cloud.jobs';
+import { startDocumentReader, stopDocumentReader } from './jobs/gelen-belge-okuma.job';
 import { startErrorReportJob, stopErrorReportJob } from './jobs/error-report.job';
 import { shutdownNotifications, startNotificationJobs } from './jobs/notification-dispatch.job';
 import { recordServerError } from './services/error-report.service';
@@ -283,9 +284,9 @@ function startLanListener(): Server {
     if (!VERIFYING) startLicenseDoorbell();
     // Patron bulutu (eşitleme + gelen kutusu): yalnız ÜRETİM sınıfı + `patron-bulut` hakkı + kiradaki
     // aralık varken dışarı çıkar (fail-closed); aksi hâlde tek işi günlük işaret budamasıdır.
-    if (!VERIFYING) startPatronCloudJobs();
+    // Gelen belge okuma: DB kuyruğundaki taramaları sidecar'a okutur (modül + adres yoksa hiç çıkmaz, fail-closed).
     // Hata raporları: varsayılan KAPALI (onay yoksa toplanmaz/gönderilmez); doğrulama kipinde gönderim de yok.
-    if (!VERIFYING) startErrorReportJob();
+    if (!VERIFYING) { startPatronCloudJobs(); startDocumentReader(); startErrorReportJob(); }
     // Bildirim dağıtıcısı + koşul tarayıcısı: gözetmen `bildirim.gelenKutusuEnabled` açıkken başlatır,
     // kapanınca durdurur (yeniden başlatma gerekmez); kapalıyken satır yazılmaz.
     if (!VERIFYING) startNotificationJobs();
@@ -367,7 +368,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     // Zil akışı kesilir, lisans birikimi diske yazılır (senkron, kısa).
     shutdownPhase = "lisans + bildirim zili";
     try {
-        stopPatronCloudJobs();
+        stopPatronCloudJobs(); stopDocumentReader();
         shutdownNotifications(); // LISTEN havuza döner; SSE zilleri server.close'dan ÖNCE biter (yoksa 5 sn zorla çıkış)
         stopLicenseDoorbell();
         stopLicensePoll();
