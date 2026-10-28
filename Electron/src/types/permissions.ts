@@ -49,6 +49,8 @@ export const moduleLabels: Record<string, string> = {
   SUBCONTRACTOR: "Fason",
   KARTELA: "Kartela",
   COST: "Maliyet",
+  FINANCE: "Finans",
+  INCOMING_DOC: "Gelen belge",
   REPORTS: "Raporlar",
   ADMIN: "Yönetim",
   MOBILE: "Mobil Ekranlar",
