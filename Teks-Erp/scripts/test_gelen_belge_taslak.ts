@@ -227,7 +227,6 @@ async function cleanup(): Promise<void> {
   await prisma.documentScan.updateMany({ where: { noteId: { in: made.notes } }, data: { noteId: null } });
   await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: made.notes } } });
   await prisma.documentScan.deleteMany({ where: { OR: [{ id: { in: made.scans } }, { capturedById: { in: made.users } }] } });
-  await prisma.documentScan.deleteMany({ where: { barcodeText: { startsWith: TAG } } });
   await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });
   await prisma.userPermission.deleteMany({ where: { userId: { in: made.users } } });
   await prisma.session.deleteMany({ where: { userId: { in: made.users } } }).catch(() => undefined);

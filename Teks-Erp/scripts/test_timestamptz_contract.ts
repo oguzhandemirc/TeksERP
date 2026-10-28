@@ -110,6 +110,9 @@ const DATE_ONLY_FIELDS = new Set([
   "SalesQuote.validUntilDate",
   "SalesQuote.fxRateDate",
   "PriceList.validFromDate",
+  // Gelen belge (D2): belge ÜSTÜNDE yazan irsaliye tarihi — gönderenin takvim günü, an değil;
+  // ikinci belge no mükerrer seddi gün bazında okunur. `SalesQuote.quoteDate` ile aynı gerekçe.
+  "CustomerDeliveryNote.senderDocDate",
   "PriceList.validUntilDate",
 ]);
 

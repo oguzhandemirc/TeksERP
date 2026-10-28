@@ -630,6 +630,7 @@ const L2_YOLU: Record<string, L2Yolu> = {
 
   // Aşağıdakiler L1'de KALDI ve gerekçesi budur (beyansız sessizlik yok):
   packingLotName: { not: "Sevk partisi ADI kendi sırasından doğar (ownCounter): ayrı bir kayıt yolu yok, kod yolu packingLotCode ile aynı gruptan gelir." },
+  customerDeliveryNote: { not: "createDeliveryNote `userId` ister (createdById FK) — bu bekçinin kullanıcı fikstürü yok; GB üreteci `withBarcodeRetry` + tek sayaç, HTTP yolu `test_gelen_belge_taslak` §5te ölçülüyor." },
   returnDoc: { not: "RollReturn: sevk edilmiş top + iade zinciri ister; fikstür maliyeti yüksek (test_return_no_backfill kapsıyor)." },
   // ⚠️ ÇEKİ LİSTESİ L2'YE ALINDI (1e şartı 2026-09-23): kullanıcının şikâyet ettiği
   // seri "fikstür maliyeti" gerekçesiyle L1'de kalamaz. Ölçüldü: `createManifest`

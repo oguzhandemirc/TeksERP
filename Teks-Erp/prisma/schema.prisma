@@ -13754,7 +13754,8 @@ model DeliveryNoteAlias {
   id               String                 @id @default(uuid()) @db.Uuid
   scope            DeliveryNoteAliasScope
   senderCustomerId String?                @db.Uuid
-  rawFold          String                 @db.VarChar(160)
+  /// Katlanmış ham metin (uygulama katlar; `Fold` son eki GENERATED kolonlara ayrılmıştır).
+  rawKey           String                 @db.VarChar(160)
   targetId         String                 @db.Uuid
   hitCount         Int                    @default(0)
   createdAt        DateTime               @default(now()) @db.Timestamptz
@@ -13762,7 +13763,7 @@ model DeliveryNoteAlias {
 
   senderCustomer Customer? @relation(fields: [senderCustomerId], references: [id], onDelete: Restrict)
 
-  @@unique([scope, senderCustomerId, rawFold])
+  @@unique([scope, senderCustomerId, rawKey])
   @@index([targetId])
   @@map("delivery_note_aliases")
 }
