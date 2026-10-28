@@ -1,5 +1,6 @@
 // Kaynak: ocr-test prototipi src/ocr-engine/anchor.ts (kullanıcının kendi kodu), vendor 2026-10-28 (D3a).
-// Dış bağımlılık yok; yalnız göreli import. Değişiklikler: çift tırnak, proje lint/boyut kuralları, Türkçe yorumlar korundu.
+// Dış bağımlılık yok; yalnız göreli import. Değişiklikler: çift tırnak, proje lint/boyut kuralları, Türkçe yorumlar korundu;
+// MANTIK: etiket kalıntısı yalnız noktalama ise değer sayılmaz (D3a, aşağıda "D3a:" yorumlu satır).
 /**
  * Etiket (anchor) bulma ve yöne göre değer arama.
  * Etiket, bir satırın tamamı ya da satır içindeki ardışık element penceresi olabilir.

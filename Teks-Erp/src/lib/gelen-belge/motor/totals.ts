@@ -95,8 +95,9 @@ function computeBlock(input: NoteTotalsBlockInput): NoteTotalsBlock {
 export function computeNoteTotals(blocks: NoteTotalsBlockInput[]): NoteTotalsResult {
   const out = blocks.map(computeBlock);
   const warnings: string[] = [];
-  for (const b of out) {
-    const input = blocks.find((x) => x.blockNo === b.blockNo)!;
+  for (const [i, b] of out.entries()) {
+    // Girdi ↔ çıktı İNDEKSLE eşlenir (map sırası korunur); blockNo aynı şablonda birden çok tabloda çakışabilir
+    const input = blocks[i]!;
     if (b.status === "MISMATCH") {
       const parts: string[] = [];
       if (b.diff.count !== null && b.diff.count !== 0) parts.push(`adet beyan ${b.declared?.count} / hesap ${b.computed.count}`);

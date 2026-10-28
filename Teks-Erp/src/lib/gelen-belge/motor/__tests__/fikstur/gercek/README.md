@@ -1,8 +1,11 @@
 # Gerçek fotoğraf fikstürleri — ANONİM (D3a, 2026-10-28)
 
-Dört gerçek belge fotoğrafının (IMG_0243..0246, 2600 px, PaddleOCR mobile) OcrResult çıktısı. Firma/kişi adları, adres,
-telefon ve fiyat/tutar değerleri deterministik sahte değerlerle değiştirildi ("ÖRNEK TEKSTİL A/B/C", "MA", "ÖRN", 11/1111…);
-kutu geometrisi, açı ve güven değerleri gerçektir. Fotoğraf ve ham çıktı repoda YOKTUR (`TASARIM-KARARI` §8 fikstür hijyeni).
+Dört gerçek belge fotoğrafının (IMG_0243..0246, 2600 px, PaddleOCR mobile) OcrResult çıktısı. Repo PUBLIC olduğundan
+anonimleştirme kapsamı: firma/kişi adları, adres, telefon, fiyat/tutar ("ÖRNEK TEKSTİL A/B/C", "MA", "ÖRN", 11/1111…) VE
+karşı tarafın belge kimlikleri — top no (8 hane, 2620xxxx → 9920xxxx), iş emri (26K-… → 99K-…, ISM1… → ISM9…), ham parti
+(P261… → P991…), fiş/sipariş/sevk/evrak/sıra numaraları (ilk hane → 9), ürün tanımı ("9999-99 ÖRNEK KUMAŞ"), logo kalıntısı.
+Eşleme deterministik, uzunluk/biçim korunur; kg/m/adet değerleri ve kutu geometrisi, açı, güven DOKUNULMAMIŞTIR (Σ sağlaması
+gerçek). Fotoğraf ve ham çıktı repoda YOKTUR (`TASARIM-KARARI` §8 fikstür hijyeni).
 
 | Dosya | Belge | Kabul (D3a) |
 |---|---|---|

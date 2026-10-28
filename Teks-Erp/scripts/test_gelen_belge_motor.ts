@@ -12,8 +12,10 @@
 // ⚠️ DEFTER KURALI: motor deftere YAZMAZ; TOTAL_MISMATCH yalnız uyarı dizesidir, 409'u
 //    onay ucu (D4) üretir. Bu bekçi uyarının ÜRETİLDİĞİNİ ölçer (§7 kasıtlı bozulmuş toplam).
 //
-// ⭐ NEGATİF SONDA (2026-10-28, raporda): rows-tilted.ts'te tan(a) → 0 yapılınca §3 21/21
-//    düşer; totals.ts'te MISMATCH dalı kapatılınca §7 TOTAL_MISMATCH düşer. md5 ile geri alındı.
+// ⭐ NEGATİF SONDA (2026-10-28, raporda): rows-tilted.ts'te tan(a) → 0 yapılınca §2a+§2b (birim geometri,
+//    −3°/375 px) düşer — gerçek fikstürlerde bağlantı tabanlı gruplama tan=0 ile de 21/21 verir, eğim payı D9'da
+//    ölçülür; totals.ts'te MISMATCH dalı kapatılınca §7b+§7g düşer; table.ts'te konumsal yedek (nearestBlock)
+//    kapatılınca §7h düşer. Hepsi git checkout ile geri alındı.
 // =============================================================================
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -66,14 +68,14 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
 // ── §2 Eğime duyarlı satır gruplama (birim) ──────────────────────────────────
 {
   // −3° eğik satır: 375 px sağdaki kutu ~20 px yukarıda; eğimsiz eşik (0,5·h=15) bunu AYIRIR (negatif sonda A bunu ölçer)
-  const a = kutu("26209943", 300, 1000, 120, 30, -3);
+  const a = kutu("99209943", 300, 1000, 120, 30, -3);
   const b = kutu("33,20", 700, 980, 70, 30, -3);
   const c = kutu("212,30", 900, 969, 90, 30, -3);
   const dar = kutu("6", 240, 1006, 20, 30, 0); // dar kutu: açı 0 bildirir, sayfa medyanı kullanılmalı
   const baska = kutu("38,80", 700, 1025, 70, 30, -3); // bir alt satır
   const rows = buildRowsTilted([baska, c, dar, a, b]);
   check("§2a eğik 4 kutu + dar sıra no TEK satır, alt satır ayrı", rows.length === 2 && rows[0]!.lines.length === 4, rows.map((r) => r.text).join(" || "));
-  check("§2b satır içi sıra soldan sağa", rows[0]!.text === "6  26209943  33,20  212,30", rows[0]!.text);
+  check("§2b satır içi sıra soldan sağa", rows[0]!.text === "6  99209943  33,20  212,30", rows[0]!.text);
   check("§2c sayfa medyan açısı yalnız geniş kutulardan", pageMedianAngle([a, b, c, dar]) === -3);
   const duz = buildRowsTilted([kutu("A", 0, 0, 100, 20), kutu("B", 150, 2, 100, 20), kutu("C", 0, 60, 100, 20)]);
   check("§2d açısız (ML Kit) kutularda düz y gruplaması korunuyor", duz.length === 2 && duz[0]!.text === "A  B");
@@ -101,7 +103,7 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   check("§3j başlıktaki '4 TOP' ↔ 5 satır yalnız UYARI (DECLARED_TOP_COUNT_DIFF), TOTAL_MISMATCH YOK",
     reg.warnings.some((w) => w.startsWith("DECLARED_TOP_COUNT_DIFF")) && !reg.warnings.some((w) => w.startsWith("TOTAL_MISMATCH")), reg.warnings.join(" | "));
   const f = reg.fields!.fields;
-  check("§3k başlık: fiş no, tarih, firma, iş emri, ham parti", f.fisNo?.value === "214279" && f.tarih?.value === "2026-10-19" && f.firma?.value === "ÖRNEK TEKSTİL A" && f.isEmriNo?.value === "26K-24749" && f.hamPartiNo?.value === "P2618733",
+  check("§3k başlık: fiş no, tarih, firma, iş emri, ham parti", f.fisNo?.value === "914279" && f.tarih?.value === "2026-10-19" && f.firma?.value === "ÖRNEK TEKSTİL A" && f.isEmriNo?.value === "99K-24749" && f.hamPartiNo?.value === "P9918733",
     JSON.stringify({ fisNo: f.fisNo?.value, tarih: f.tarih?.value, firma: f.firma?.value, isEmriNo: f.isEmriNo?.value, hamPartiNo: f.hamPartiNo?.value }));
 }
 
@@ -116,15 +118,15 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   const [r1, r2] = r.regions;
   check("§4b bölge 1 → cikis-ceki-listesi, bölge 2 → urun-sevk-fisi", r1?.templateId === "cikis-ceki-listesi" && r2?.templateId === "urun-sevk-fisi", `${r1?.templateId}/${r2?.templateId}`);
   const f1 = r1!.fields!.fields;
-  check("§4c bölge 1 başlık: iş emri ISM1439770, tarih 2026-10-19, müşteri, müşteri MT 238",
-    f1.isEmriNo?.value === "ISM1439770" && f1.tarih?.value === "2026-10-19" && f1.musteri?.value === "MA" && f1.musteriMt?.value === "238",
+  check("§4c bölge 1 başlık: iş emri ISM9439770, tarih 2026-10-19, müşteri, müşteri MT 238",
+    f1.isEmriNo?.value === "ISM9439770" && f1.tarih?.value === "2026-10-19" && f1.musteri?.value === "MA" && f1.musteriMt?.value === "238",
     JSON.stringify({ isEmriNo: f1.isEmriNo?.value, tarih: f1.tarih?.value, musteri: f1.musteri?.value, mt: f1.musteriMt?.value }));
   const b1 = r1!.tables[0]!.blocks[0];
   check("§4d bölge 1 tablo: ARABA satırı 241 m / 734 kg, TOPLAM = Σ", b1?.rows.length === 1 && b1.rows[0]!.cells.m?.value === "241" && b1.rows[0]!.cells.kg?.value === "734" && r1!.totals?.blocks[0]?.status === "MATCH",
     JSON.stringify(b1?.rows.map((x) => [x.cells.m?.value, x.cells.kg?.value])) + " " + r1!.totals?.blocks[0]?.status);
   const f2 = r2!.fields!.fields;
-  check("§4e bölge 2 başlık: sevk no 46399, sevk tarihi 2026-10-16, müşteri adı, toplam 200 m / 36 kg",
-    f2.sevkNo?.value === "46399" && f2.sevkTarihi?.value === "2026-10-16" && f2.musteriAdi?.value === "ÖRNEK" && f2.toplamMetre?.value === "200" && f2.toplamKg?.value === "36",
+  check("§4e bölge 2 başlık: sevk no 96399, sevk tarihi 2026-10-16, müşteri adı, toplam 200 m / 36 kg",
+    f2.sevkNo?.value === "96399" && f2.sevkTarihi?.value === "2026-10-16" && f2.musteriAdi?.value === "ÖRNEK" && f2.toplamMetre?.value === "200" && f2.toplamKg?.value === "36",
     JSON.stringify({ sevkNo: f2.sevkNo?.value, tarih: f2.sevkTarihi?.value, musteri: f2.musteriAdi?.value, m: f2.toplamMetre?.value, kg: f2.toplamKg?.value }));
   check("§4f bölge 2 giriş toplamı (198,10 mt / 35,70 kg) ↔ başlık uyarısı için okunuyor", f2.girisToplamMt?.value === "198.1" && f2.girisToplamKg?.value === "35.7");
   check("§4g MULTI_REGION uyarısı var", r.warnings.some((w) => w.startsWith("MULTI_REGION")));
@@ -153,7 +155,7 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   const reg = r.regions[0]!;
   const f = reg.fields!.fields;
   check("§6a şablon kesim-takip-formu", reg.templateId === "kesim-takip-formu", reg.templateId ?? "null");
-  check("§6b başlık 3 alan: tarih 2026-10-15, evrak no 70779, giriş mt 1375", f.tarih?.value === "2026-10-15" && f.evrakNo?.value === "70779" && f.girisMt?.value === "1375",
+  check("§6b başlık 3 alan: tarih 2026-10-15, evrak no 90779, giriş mt 1375", f.tarih?.value === "2026-10-15" && f.evrakNo?.value === "90779" && f.girisMt?.value === "1375",
     JSON.stringify({ tarih: f.tarih?.value, evrakNo: f.evrakNo?.value, girisMt: f.girisMt?.value }));
   check("§6c el yazısı giriş/çıkış mt gözden geçirme istiyor (otomatik satılmaz)", f.girisMt?.needsReview === true && f.cikisMt?.needsReview === true);
   const g = reg.grid!;
@@ -182,6 +184,16 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
   check("§7g ⭐ kasıtlı bozulmuş toplam → blok 1 MISMATCH + TOTAL_MISMATCH (m beyan 586 / hesap 587), blok 2 MATCH",
     r.totals?.blocks[0]?.status === "MISMATCH" && r.totals.blocks[1]?.status === "MATCH" && r.warnings.some((w) => w.startsWith("TOTAL_MISMATCH blok 1") && w.includes("586") && w.includes("587")),
     r.warnings.join(" | "));
+  // Beyanı başlığın ÜSTÜNDE olan blok (0245 blok 2, "T.Adet 16 … 3.935,00"): Σ tutmayınca sahipsiz satır KONUMLA bağlanır,
+  // fark UNVERIFIED'da gizlenmez → TOTAL_MISMATCH blok 2 (212,30 → 213,30; Σ 3936 ≠ beyan 3935)
+  const ocr2 = JSON.parse(JSON.stringify(gercek("0245-ceki-listesi-a"))) as OcrResult;
+  let degisti2 = 0;
+  for (const b of ocr2.blocks) for (const l of b.lines) if (degisti2 === 0 && l.text === "212,30") { l.text = "213,30"; l.elements.forEach((e) => { if (e.text === "212,30") e.text = "213,30"; }); degisti2++; }
+  check("§7h sonda ön koşulu: blok 2 mutasyonu UYGULANDI (tam 1 kutu)", degisti2 === 1, String(degisti2));
+  const r2 = extractDocument(ocr2, sablonlar).regions[0]!;
+  check("§7h ⭐ beyanı başlık ÜSTÜNDE olan blok 2 bozulunca TOTAL_MISMATCH blok 2 (m beyan 3935 / hesap 3936), ORPHAN yok; blok 1 MATCH",
+    r2.totals?.blocks[0]?.status === "MATCH" && r2.totals.blocks[1]?.status === "MISMATCH" && r2.warnings.some((w) => w.startsWith("TOTAL_MISMATCH blok 2") && w.includes("3935") && w.includes("3936")) && !r2.warnings.some((w) => w.startsWith("TABLE_TOTALS_ORPHAN")),
+    r2.warnings.join(" | "));
 }
 
 // ── §8 Sentetik alt küme — alan doğruluğu ≥ %93 ─────────────────────────────
@@ -204,7 +216,7 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
     }
   }
   const dogruluk = okCount / total;
-  check("§8a sentetik alt küme ≥ 20 belge", docs >= 20, String(docs));
+  check("§8a sentetik alt küme ≥ 60 belge", docs >= 60, String(docs));
   check("§8b sınıflandırma ≥ %95", clsOk / docs >= 0.95, `${clsOk}/${docs}`);
   check("§8c alan doğruluğu ≥ %93 (kabul eşiği)", dogruluk >= 0.93, `${okCount}/${total} = %${(dogruluk * 100).toFixed(1)}${kacaklar.length ? " | " + kacaklar.slice(0, 8).join(" | ") : ""}`);
 }

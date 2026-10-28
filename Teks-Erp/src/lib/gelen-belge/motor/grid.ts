@@ -72,7 +72,7 @@ function collectSeq(header: HeaderEntry, lines: OcrLine[]): { ys: Map<number, nu
     const cx = centerX(l.rect);
     if (cx < header.x0 || cx > header.x1 || centerY(l.rect) <= headerBottom) continue;
     const n = Number(m[1]);
-    // Aynı numara iki kez okunduysa başlığa yakın olan kalır
+    // Aynı numara iki kez okunduysa İLK OKUNAN (OCR kutu sırası) kalır; y karşılaştırması yapılmaz
     if (!ys.has(n)) {
       ys.set(n, centerY(l.rect));
       used.push(l);

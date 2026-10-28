@@ -162,7 +162,24 @@ function buildBlock(draft: BlockDraft, blockNo: number, spec: TableSpec, warning
   return { blockNo, headerRect: draft.headerRect, rows, declared };
 }
 
-/** Sahipsiz toplam satırı (0245: üstteki "T.Adet 16 …"), Σ'sı tutan beyansız bloğa bağlanır. */
+/** Beyansız bloklar arasında satıra konumca en yakın olanı: önce hemen ALTINDAKİ başlık (0245 yerleşimi), yoksa en yakın. */
+function nearestBlock(row: Row, blocks: TableBlock[]): number {
+  let best = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]!;
+    if (b.declared !== null) continue;
+    const dy = b.headerRect.y - row.y;
+    const dist = dy >= 0 ? dy : 1e6 + Math.abs(dy);
+    if (dist < bestDist) { bestDist = dist; best = i; }
+  }
+  return best;
+}
+
+/**
+ * Sahipsiz toplam satırı (0245: üstteki "T.Adet 16 …") önce Σ'sı tutan beyansız bloğa bağlanır; tutmazsa konumca en yakın
+ * beyansız bloğa (karşılaştırma computeNoteTotals'a kalır → TOTAL_MISMATCH; OCR'ın tek rakam hatası UNVERIFIED'da gizlenmez).
+ */
 function attachOrphans(orphans: Row[], drafts: BlockDraft[], blocks: TableBlock[], spec: TableSpec): string[] {
   const warnings: string[] = [];
   for (const row of orphans) {
@@ -181,7 +198,16 @@ function attachOrphans(orphans: Row[], drafts: BlockDraft[], blocks: TableBlock[
         break;
       }
     }
-    if (!attached) warnings.push(`TABLE_TOTALS_ORPHAN: "${row.text}" toplam satırı hiçbir bloğa bağlanamadı`);
+    if (attached) continue;
+    const i = nearestBlock(row, blocks);
+    if (i >= 0) {
+      const declared = readDeclared(row, drafts[i]!, spec);
+      if (declared.kg !== null || declared.m !== null) {
+        blocks[i]!.declared = declared;
+        continue;
+      }
+    }
+    warnings.push(`TABLE_TOTALS_ORPHAN: "${row.text}" toplam satırı hiçbir bloğa bağlanamadı`);
   }
   return warnings;
 }
