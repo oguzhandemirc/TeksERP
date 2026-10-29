@@ -19,6 +19,8 @@ import { KURSUN_BYPASS_MARKER_PREFIX } from "./kursun-bypass-guard.helper";
 import { KURSUN_PROPERTY_CODE } from "./quality-station.helper";
 import { ACTIVE_TARGET_VALUE } from "./workorder-target-value.helper";
 
+type Db = Prisma.TransactionClient | typeof prisma;
+
 export type KursunSource = "TABLET" | "KAGIT";
 export type KursunScope =
   | { workOrderId: string }
@@ -76,15 +78,15 @@ function opWhere(scope: KursunScope): Prisma.RollOperationWhereInput {
   return { ...base, step: { workOrderId: scope.workOrderId } };
 }
 
-async function assignmentWhere(scope: KursunScope): Promise<Prisma.KursunBypassAssignmentWhereInput> {
+async function assignmentWhere(scope: KursunScope, db: Db): Promise<Prisma.KursunBypassAssignmentWhereInput> {
   const base = { completedAt: { not: null }, cancelledAt: null };
   if ("batchId" in scope) {
-    const b = await prisma.batch.findUnique({ where: { id: scope.batchId }, select: { workOrderId: true } });
+    const b = await db.batch.findUnique({ where: { id: scope.batchId }, select: { workOrderId: true } });
     return { ...base, workOrderId: b?.workOrderId ?? "00000000-0000-0000-0000-000000000000" };
   }
   if ("rollIds" in scope) {
     // Kâğıt satırı adım düzeyindedir: topların bypass işaretli hareketlerinin adımları.
-    const steps = scope.rollIds.length === 0 ? [] : await prisma.rollMovement.findMany({
+    const steps = scope.rollIds.length === 0 ? [] : await db.rollMovement.findMany({
       where: { ...ACTIVE_MOVEMENT, rollId: { in: scope.rollIds }, notes: { startsWith: KURSUN_BYPASS_MARKER_PREFIX } },
       select: { workOrderStepId: true }, distinct: ["workOrderStepId"],
     });
@@ -97,10 +99,10 @@ async function assignmentWhere(scope: KursunScope): Promise<Prisma.KursunBypassA
 }
 
 /** Hareket satırı metrajı — (top, adım) için en son aktif giriş. */
-async function loadMeters(pairs: Array<{ rollId: string; stepId: string }>): Promise<Map<string, Prisma.Decimal>> {
+async function loadMeters(pairs: Array<{ rollId: string; stepId: string }>, db: Db): Promise<Map<string, Prisma.Decimal>> {
   const out = new Map<string, Prisma.Decimal>();
   if (pairs.length === 0) return out;
-  const moves = await prisma.rollMovement.findMany({
+  const moves = await db.rollMovement.findMany({
     where: { ...ACTIVE_MOVEMENT, rollId: { in: [...new Set(pairs.map((p) => p.rollId))] }, workOrderStepId: { in: [...new Set(pairs.map((p) => p.stepId))] } },
     select: { rollId: true, workOrderStepId: true, qtyIn: true, qtyOut: true },
     orderBy: { enteredAt: "asc" },
@@ -110,16 +112,16 @@ async function loadMeters(pairs: Array<{ rollId: string; stepId: string }>): Pro
 }
 
 /** İE başına aktif hedefler: `${workOrderId}:${propertyId}` → valueId. */
-async function loadTargets(workOrderIds: string[]): Promise<Map<string, string>> {
-  const rows = workOrderIds.length === 0 ? [] : await prisma.workOrderTargetValue.findMany({
+async function loadTargets(workOrderIds: string[], db: Db): Promise<Map<string, string>> {
+  const rows = workOrderIds.length === 0 ? [] : await db.workOrderTargetValue.findMany({
     where: { workOrderId: { in: workOrderIds }, ...ACTIVE_TARGET_VALUE },
     select: { workOrderId: true, propertyId: true, valueId: true },
   });
   return new Map(rows.map((r) => [`${r.workOrderId}:${r.propertyId}`, r.valueId]));
 }
 
-async function listTablet(scope: KursunScope) {
-  const ops = await prisma.rollOperation.findMany({
+async function listTablet(scope: KursunScope, db: Db) {
+  const ops = await db.rollOperation.findMany({
     where: { ...ACTIVE_OPERATION, ...opWhere(scope) },
     select: {
       rollId: true, workOrderStepId: true, propertyValueId: true, createdAt: true,
@@ -138,13 +140,13 @@ async function listTablet(scope: KursunScope) {
   }));
 }
 
-async function listKagit(scope: KursunScope) {
-  const assignments = await prisma.kursunBypassAssignment.findMany({
-    where: await assignmentWhere(scope),
+async function listKagit(scope: KursunScope, db: Db) {
+  const assignments = await db.kursunBypassAssignment.findMany({
+    where: await assignmentWhere(scope, db),
     select: { workOrderId: true, workOrderStepId: true, propertyValueId: true, completedAt: true, propertyValue: VALUE_SELECT, machine: { select: { name: true } } },
   });
   if (assignments.length === 0) return [];
-  const moves = await prisma.rollMovement.findMany({
+  const moves = await db.rollMovement.findMany({
     where: {
       ...ACTIVE_MOVEMENT,
       workOrderStepId: { in: assignments.map((a) => a.workOrderStepId) },
@@ -165,11 +167,11 @@ async function listKagit(scope: KursunScope) {
   });
 }
 
-/** Kapsamdaki tüm uygulamalar (TABLET + KAĞIT), metraj ve hedef sapmasıyla. */
-export async function listKursunApplications(scope: KursunScope): Promise<KursunApplication[]> {
-  const raw = [...(await listTablet(scope)), ...(await listKagit(scope))];
-  const meters = await loadMeters(raw.map((r) => ({ rollId: r.rollId, stepId: r.workOrderStepId })));
-  const targets = await loadTargets([...new Set(raw.map((r) => r.workOrderId))]);
+/** Kapsamdaki tüm uygulamalar (TABLET + KAĞIT), metraj ve hedef sapmasıyla. `db`: fatura tx'i (K3b — kapı okuması tx içinde). */
+export async function listKursunApplications(scope: KursunScope, db: Db = prisma): Promise<KursunApplication[]> {
+  const raw = [...(await listTablet(scope, db)), ...(await listKagit(scope, db))];
+  const meters = await loadMeters(raw.map((r) => ({ rollId: r.rollId, stepId: r.workOrderStepId })), db);
+  const targets = await loadTargets([...new Set(raw.map((r) => r.workOrderId))], db);
   return raw.map((r) => {
     const target = r.value ? targets.get(`${r.workOrderId}:${r.value.propertyId}`) : undefined;
     return {
@@ -206,8 +208,8 @@ export function aggregateKursunApplications(apps: KursunApplication[]): Omit<Kur
 }
 
 /** İE'nin kurşun gramajı çeşit özelliğindeki aktif hedefi (yoksa null). */
-export async function readKursunTarget(workOrderId: string): Promise<KursunSummary["target"]> {
-  const row = await prisma.workOrderTargetValue.findFirst({
+export async function readKursunTarget(workOrderId: string, db: Db = prisma): Promise<KursunSummary["target"]> {
+  const row = await db.workOrderTargetValue.findFirst({
     where: { workOrderId, ...ACTIVE_TARGET_VALUE, property: { variantOf: { code: KURSUN_PROPERTY_CODE } } },
     select: { propertyId: true, valueId: true, value: { select: { name: true } } },
   });
