@@ -9,6 +9,7 @@ import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { resolvePartyToCardTx } from "./party-card.helper";
+import { adoptLegacyLegAccountTx } from "./cari-account-adopt.helper";
 import { nextSeriesNo } from "../number-series.service";
 
 /** Sıfır Decimal — float aritmetiği YASAK (perf/doğruluk kuralı). */
@@ -332,12 +333,13 @@ export async function ensureCariAccountTx(
     throw AppError.badRequest("Cari hesap için müşteri VEYA fason firma verilmeli (ikisi birden değil).");
   }
   const card = await resolvePartyToCardTx(tx, party);
-  const select = { id: true, defaultCurrency: true, isActive: true } as const;
+  const select = { id: true, defaultCurrency: true, isActive: true, customerId: true, subcontractorId: true } as const;
   const existing = await findCariAccountForCardTx(tx, card, select);
   if (existing) {
     if (!existing.isActive) {
       throw AppError.conflict("Bu carinin hesabı pasif durumda — önce Cari Hesaplar ekranından aktifleştirin.");
     }
+    if (card.customerId && existing.customerId == null) await adoptLegacyLegAccountTx(tx, existing.id, existing.subcontractorId, card.customerId);
     return { id: existing.id, defaultCurrency: existing.defaultCurrency, created: false };
   }
   const ins = await tx.cariAccount.createMany({
