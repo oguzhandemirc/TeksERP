@@ -960,8 +960,8 @@ export const DEFAULT_KURSUN_METER_VARIANCE_BASIS: KursunMeterVarianceBasis = "DE
 export type KursunMeterVarianceApproval = "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
 export const KURSUN_METER_VARIANCE_APPROVALS: KursunMeterVarianceApproval[] = ["NONE", "OPERATOR_REASON", "SUPERVISOR_PIN", "OFFICE"];
 export const DEFAULT_KURSUN_METER_VARIANCE_APPROVAL: KursunMeterVarianceApproval = "NONE";
-/** OFFICE'in çıkış yüzeyi (panel ofis onay ekranı) H4'te doğar; o güne dek panelden seçilemez (çıkışsız kapı). */
-export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE = false;
+/** OFFICE'in çıkış yüzeyi panel "Metre Sapmaları" ekranıdır (H4, 2026-10-29) — artık seçilebilir. */
+export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE: boolean = true;
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";

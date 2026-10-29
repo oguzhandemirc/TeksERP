@@ -269,18 +269,26 @@ router.post(
  * /api/kursun-qc/meter-deviations:
  *   get:
  *     tags: [KursunQc]
- *     summary: İmza bekleyen metre sapmaları (H2; SUPERVISOR_PIN/OFFICE kipleri)
+ *     summary: Metre sapmaları + özet şeridi (H4; durum PENDING · ACKED · UNSIGNED)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
+ *       - { in: query, name: "filter[fromDay]", required: false, schema: { type: string, example: "2026-10-29" } }
+ *       - { in: query, name: "filter[toDay]", required: false, schema: { type: string } }
+ *       - { in: query, name: "filter[machineId]", required: false, schema: { type: string, format: uuid } }
+ *       - { in: query, name: "filter[customerId]", required: false, schema: { type: string, format: uuid } }
+ *       - { in: query, name: "filter[status]", required: false, schema: { type: string, enum: [PENDING, ACKED, UNSIGNED] } }
  *       - { in: query, name: stepId, required: false, schema: { type: string, format: uuid } }
+ *       - { in: query, name: cursor, required: false, schema: { type: string, format: uuid } }
+ *       - { in: query, name: limit, required: false, schema: { type: integer, minimum: 1, maximum: 200 } }
  *     responses:
- *       200: { description: Bekleyen okumalar (en eski önce, en çok 500) }
+ *       200: { description: "Sapmalar (en yeni önce) + pagination.nextCursor + summary (aynı where)" }
+ *       400: { description: Geçersiz süzgeç ya da çıplak süzgeç (BARE_FILTER_PARAM) }
  */
 router.get(
   "/meter-deviations",
   verifyToken,
   requirePermission("kursun:meter-approve"),
-  controller.listPendingMeterAcks
+  controller.listMeterDeviations
 );
 
 // K6 (2026-06-12): POST /undo-qc2 kaldırıldı — UI butonu 2026-06-07'de bilinçli

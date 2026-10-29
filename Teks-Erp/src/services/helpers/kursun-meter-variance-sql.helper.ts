@@ -8,6 +8,18 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 
+/**
+ * Sonradan imza ALINABİLEN kipler (H4 kararı, "çıkışsız kapı açılmaz"): OPERATOR_REASON'da sebep yazım
+ * anında alınır; sonradan kayan sapmanın imza yolu yoktur ⇒ "imzasız sapma" işaretidir, kapı değil.
+ * Bellek-içi (`awaitsMeterSignature`) ve SQL (`readingPendingAckSql`) yüklemi BU listeden okur.
+ */
+export const METER_SIGNATURE_MODES = ["SUPERVISOR_PIN", "OFFICE"] as const;
+
+/** Bellek-içi ikiz: okuma imza bekliyor mu (sapma + imza kipli + aktif onay yok). */
+export function awaitsMeterSignature(approvalMode: string, needsAck: boolean, acked: boolean): boolean {
+  return needsAck && !acked && (METER_SIGNATURE_MODES as readonly string[]).includes(approvalMode);
+}
+
 export interface MeterVarianceSqlArgs {
   out: Prisma.Sql;
   declaredIn: Prisma.Sql;
@@ -19,8 +31,7 @@ export interface MeterVarianceSqlArgs {
 
 /** Boolean SQL ifadesi: okuma sapmalı mı. Girdiler sütun ya da parametre ifadesidir. */
 export function meterDeviatedSql(a: MeterVarianceSqlArgs): Prisma.Sql {
-  const base = Prisma.sql`round((CASE WHEN (${a.basis})::text = 'MEASURED_IN' AND (${a.measuredIn}) IS NOT NULL
-    THEN (${a.measuredIn})::numeric ELSE (${a.declaredIn})::numeric END), 3)`;
+  const base = meterBaseSql(a);
   return Prisma.sql`(CASE
     WHEN (${a.thresholdM}) IS NULL AND (${a.thresholdPct}) IS NULL THEN false
     WHEN ${base} IS NULL THEN false
@@ -28,6 +39,18 @@ export function meterDeviatedSql(a: MeterVarianceSqlArgs): Prisma.Sql {
          > GREATEST(COALESCE(round((${a.thresholdM})::numeric, 3), 0) * 100,
                     COALESCE(round((${a.thresholdPct})::numeric, 3), 0) * ${base})
   END)`;
+}
+
+/** Karşılaştırma tabanı (3 ondalık): MEASURED_IN ve ölçülen varsa ölçülen, yoksa bildirilen. */
+export function meterBaseSql(a: Pick<MeterVarianceSqlArgs, "basis" | "measuredIn" | "declaredIn">): Prisma.Sql {
+  return Prisma.sql`round((CASE WHEN (${a.basis})::text = 'MEASURED_IN' AND (${a.measuredIn}) IS NOT NULL
+    THEN (${a.measuredIn})::numeric ELSE (${a.declaredIn})::numeric END), 3)`;
+}
+
+/** Okuma satırı (`alias`) için taban (liste farkı ve özet ortalaması). */
+export function readingBaseSql(readingAlias: string): Prisma.Sql {
+  const r = Prisma.raw(readingAlias);
+  return meterBaseSql({ basis: Prisma.sql`${r}.basis`, measuredIn: measuredInSql(readingAlias), declaredIn: declaredInSql(readingAlias) });
 }
 
 /** Okuma satırı (`alias`) için bildirilen giriş: gelen belge satırı metresi, yoksa top `initialQty`. */
@@ -59,11 +82,12 @@ export function readingDeviatedSql(readingAlias: string): Prisma.Sql {
   });
 }
 
-/** İmza bekleyen OUT okumaları: aktif, kip NONE değil, aktif onay yok, sapmalı. `alias` FROM'da tanımlı olmalı. */
+/** İmza bekleyen OUT okumaları: aktif, kip imza kipli (`METER_SIGNATURE_MODES`), aktif onay yok, sapmalı. `alias` FROM'da tanımlı olmalı. */
 export function readingPendingAckSql(readingAlias: string): Prisma.Sql {
   const r = Prisma.raw(readingAlias);
+  const modes = Prisma.join(METER_SIGNATURE_MODES.map((m) => Prisma.sql`${m}::"MeterApprovalMode"`));
   return Prisma.sql`${r}.phase = 'OUT'::"MeterPhase" AND ${r}."revokedAt" IS NULL
-    AND ${r}."approvalMode" <> 'NONE'::"MeterApprovalMode"
+    AND ${r}."approvalMode" IN (${modes})
     AND NOT EXISTS (SELECT 1 FROM roll_meter_acks ak WHERE ak."readingId" = ${r}.id AND ak."revokedAt" IS NULL)
     AND ${readingDeviatedSql(readingAlias)}`;
 }
