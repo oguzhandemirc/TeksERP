@@ -13,13 +13,13 @@ import { useSessionStore } from '../store/sessionStore';
 
 const EMPTY_PERIPHERALS: DevicePeripheral[] = [];
 
-export function useMachinePeripherals(kind: 'METER' | 'SCALE'): DevicePeripheral[] {
+export function useMachinePeripherals(kind: 'METER' | 'SCALE', enabled = true): DevicePeripheral[] {
   const sessionId = useSessionStore((s) => s.active?.id ?? null);
   const q = useQuery({
     queryKey: ['peripherals', 'for-session', kind, sessionId],
     queryFn: () => peripheralService.getForSession(kind),
     staleTime: 5 * 60 * 1000,
-    enabled: sessionId != null,
+    enabled: enabled && sessionId != null,
   });
   // ⚠️ Boşluk değeri KARARLI sabit — `?? []` her render'da yeni dizi üretir ve
   // bu diziyi effect bağımlılığına koyan tüketici çevrimdışında sonsuz döngüye

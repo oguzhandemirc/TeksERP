@@ -312,7 +312,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // birebir); `yarn:write`/`warehouse:write` ekran İÇİ yetenektir.
   { key: "operations/goods-receipts", app: "desktop", modul: "ticaretEnabled", title: "Mal Kabul", requires: ["goods-receipt:read"], capabilities: ["goods-receipt:write"] },
   // Gelen belge (Gülkesim OCR D5): onay SoD yeteneğidir (Muhasebe/Süpervizör) — emanet topunu doğurur.
-  { key: "operations/gelen-belgeler", app: "desktop", modul: "gelenBelgeEnabled", title: "Gelen Belgeler", requires: ["gelen-belge:read"], capabilities: ["gelen-belge:write", "gelen-belge:approve"] },
+  { key: "operations/gelen-belgeler", app: "desktop", modul: "gelenBelgeEnabled", title: "Gelen Belgeler", requires: ["gelen-belge:read"], capabilities: ["gelen-belge:write", "gelen-belge:approve", "gelen-belge:template"] },
   { key: "operations/purchase-orders", app: "desktop", modul: "ticaretEnabled", title: "Alış Siparişleri", requires: ["purchase-order:read", "purchase-order:write"], capabilities: [] },
   { key: "operations/yarn-stock", app: "desktop", modul: "iplikEnabled", title: "İplik Stoğu", requires: ["warehouse:read"], capabilities: ["yarn:write", "quality:write"] },
   { key: "operations/stock-counts", app: "desktop", modul: "ticaretEnabled", title: "Stok Sayımı", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
@@ -456,9 +456,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
-  // Gelen belge (D5, 2026-10-29): read/write/approve "Gelen Belgeler" ekranına taşındı. `template` ekransız kalır:
-  // gönderen şablonu uçları (liste + aktif/pasif) backend'de henüz YOK; uç + panel sekmesi doğunca muaf silinir.
-  { code: "gelen-belge:template", reason: "Gönderen şablonu yönetim uçları henüz yok (D5 panel ekranı bekliyor); uç doğunca ekran yeteneği olur." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

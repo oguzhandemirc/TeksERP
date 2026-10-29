@@ -859,6 +859,11 @@ export interface KursunRollSummary {
   /** KQ-D7: önceki adımlarda açılmış AÇIK hatalar (gri, salt-okunur). Eski backend göndermez. */
   priorDefects?: KursunPriorDefect[];
   priorOpenErrorCount?: number;
+  /**
+   * H3 sapma tabanı (sunucu yayımlarsa): bildirilen giriş + aktif giriş okuması. Yoksa tablet
+   * yerel ön-kontrol yapmaz; karar yine sunucuda (OPERATOR_REASON eksikse 409, fail-closed).
+   */
+  meter?: { declaredIn: number | null; measuredIn: number | null } | null;
 }
 
 /** Önceki adım hatası + künye ("KK Masa 2 · Ayşe · 13:40"). */
@@ -946,6 +951,19 @@ export interface KursunStepSummary {
    * çalışır ve ham 409 görür.
    */
   tabletReadOnly?: { reason: string } | null;
+  /**
+   * H3 kurşun sayaç ayarı + sapma politikası (adım özetinde). Alan yoksa OFF — bugünkü
+   * davranış: gövdeye `meterOut` yazılmaz, sayaç okunmaz.
+   */
+  meter?: {
+    capture: 'OFF' | 'OUT' | 'IN_OUT';
+    policy: {
+      thresholdM: number | null;
+      thresholdPct: number | null;
+      basis: 'DECLARED_IN' | 'MEASURED_IN';
+      approvalMode: 'NONE' | 'OPERATOR_REASON' | 'SUPERVISOR_PIN' | 'OFFICE';
+    };
+  } | null;
   rolls: KursunRollSummary[];
 }
 

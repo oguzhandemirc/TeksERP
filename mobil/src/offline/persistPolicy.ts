@@ -77,6 +77,13 @@ export function shouldPersistMutation(mutation: {
   );
 }
 
+/** Persister dehydrate seçenekleri — App.tsx sağlayıcısı ve anında yazım (`persistStationQueueNow`) TEK kaynaktan. */
+export const PERSIST_DEHYDRATE_OPTIONS = {
+  shouldDehydrateQuery: (q: { state: { status: string }; queryKey: QueryKey }): boolean =>
+    q.state.status === 'success' && isPersistedQueryKey(q.queryKey),
+  shouldDehydrateMutation: (m: Parameters<typeof shouldPersistMutation>[0]): boolean => shouldPersistMutation(m),
+};
+
 // Persister deserialize düzeltmesi için minimal yapısal tipler — kütüphanenin
 // PersistedClient tipine bağımlılık kurmadan (sürüm oynaklığına dayanıklı).
 interface PersistedMutationLike {

@@ -28,6 +28,41 @@ export interface CompleteQc2Request {
    * eski APK yeni backend'e karşı bugünkü sonucu üretir.
    */
   properties?: { propertyId: string; valueCode?: string }[];
+  /**
+   * H3 çıkış sayaç okuması — yalnız `kursun.meterCapture` OUT/IN_OUT iken eklenir; OFF'ta
+   * alan HİÇ yazılmaz (gövde eski APK ile bayt-aynı). PIN bu gövdeye ASLA girmez.
+   */
+  meterOut?: MeterReadingBody;
+}
+
+/** Sayaç okuması gövdesi — sunucu `meterReadingBodySchema` (kursun-qc.controller.ts) aynası. */
+export interface MeterReadingBody {
+  meters: number;
+  source: 'MACHINE' | 'OPERATOR' | 'SUPERVISOR' | 'SIMULATED';
+  peripheralId?: string | null;
+  rawCounter?: number | null;
+  clientToken: string;
+  /** OPERATOR_REASON imzası (kod ≤64, metin ≤300). */
+  ack?: { reasonCode?: string | null; reasonText?: string | null } | null;
+}
+
+/** POST /kursun-qc/meter-readings — giriş (IN) okuması ya da düzeltme. */
+export interface MeterReadingRequest extends MeterReadingBody {
+  rollId: string;
+  stepId: string;
+  phase: 'IN' | 'OUT';
+}
+
+/** completeQc2 / meter-readings cevabındaki sapma özeti (sunucu `KursunMeterSummary`). */
+export interface KursunMeterSummary {
+  readingId: string;
+  meters: number;
+  approvalMode: string;
+  deviated: boolean;
+  baseMeters: number | null;
+  diffMeters: number | null;
+  allowedMeters: number | null;
+  pendingAck: boolean;
 }
 
 export interface ReportErrorRequest {
@@ -113,6 +148,15 @@ export const kursunQcService = {
 
   // reopen-step öncesi salt-okunur önizleme — onay modalında hangi topların
   // Tambur'dan geri çekileceğini göstermek için.
+  recordMeterReading: (data: MeterReadingRequest): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>('/kursun-qc/meter-readings', data).then((r) => r.data),
+
+  /** Süpervizör PIN onayı — YALNIZ çevrimiçi, kuyruğa alınmaz; PIN yalnız bu istek gövdesinde. */
+  pinAckMeterReading: (readingId: string, pin: string): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/kursun-qc/meter-readings/${encodeURIComponent(readingId)}/pin-ack`, { pin })
+      .then((r) => r.data),
+
   reopenPreview: (stepId: string): Promise<ApiResponse<ReopenPreview>> =>
     apiClient
       .get<ApiResponse<ReopenPreview>>(`/kursun-qc/reopen-preview/${stepId}`)

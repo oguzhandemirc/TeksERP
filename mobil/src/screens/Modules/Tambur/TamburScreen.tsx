@@ -44,7 +44,7 @@ import { useOnlineStatus } from '../../../hooks/useOnlineStatus';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useSessionStore } from '../../../store/sessionStore';
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
-import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
+import { readMeter } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import { labelService } from '../../../services/label.service';
@@ -2025,8 +2025,9 @@ export default function TamburScreen() {
     // Cihazın simülasyon bayrağı açıksa (admin) sahte değer (test/donanımsız).
     if (p.simulate) return sim();
 
-    const io = buildIoFromPeripheral(p);
-    if (!io.supported || !io.transport || !io.codec) {
+    const r = await readMeter(p);
+    if (r.ok) return r.value;
+    if (r.reason === 'UNSUPPORTED') {
       Toast.show({
         type: 'error',
         text1: `${katLabel} metresi okunamıyor`,
@@ -2035,26 +2036,13 @@ export default function TamburScreen() {
       });
       return null;
     }
-    try {
-      const raw = await io.transport.read({
-        readMode: p.readMode,
-        pollCommand: p.pollCommand ?? undefined,
-        terminator: p.terminator ?? undefined,
-        timeoutMs: p.timeoutMs ?? undefined,
-        framePattern: p.identifyPattern ?? undefined,
-      });
-      const v = io.codec.decode(raw);
-      if (v != null && v > 0) return v;
-      throw new Error('Geçerli metre yanıtı gelmedi');
-    } catch (e) {
-      Toast.show({
-        type: 'error',
-        text1: `${katLabel} makinesi okunamadı`,
-        text2: e instanceof Error ? e.message : 'Makine kapalı/menzil dışı veya komut yanlış olabilir',
-        visibilityTime: 6000,
-      });
-      return null;
-    }
+    Toast.show({
+      type: 'error',
+      text1: `${katLabel} makinesi okunamadı`,
+      text2: r.message,
+      visibilityTime: 6000,
+    });
+    return null;
   };
 
   // Footer "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen.

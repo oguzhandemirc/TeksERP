@@ -79,6 +79,8 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Tablet salt-okunur kararını SUNUCU verir ve istemci yalnız uygular (`StepSummary.tabletReadOnly` + `bypassAssignment`); ekran kart açılınca yazma yüzeyini hiç çizmez. Backend + Electron + APK aynı pencerede gider — alanı görmeyen eski APK yazmaya çalışıp ham 409 yer. <sub>(CLAUDE.md:51)</sub>
+- **[ÇEKİRDEK]** Kurşun sayacını kuyruğa KALICI yazımdan sonra ve hiçbir sapma modalı açık değilken sıfırla (`resetCounterAfterDurable` + `persistStationQueueNow`); kip OFF iken `completeQc2` gövdesine `meterOut` yazma, PIN'i yalnız çevrimiçi `pin-ack` gövdesinde taşı. · bekçi: `mobil/src/screens/Modules/KursunQc/meterCapture.test.tsx`
+- **[ÇEKİRDEK]** Sıfırlanması doğrulanmamış RESETTING sayacın sonraki okumasını metre sayma; cihaz başına kalıcı "sıfırlanmadı" işaretiyle elle yola düşür, sunucu sayaç değerini reddederse (simüle kapalı / sebep gerekli) aynı dokunuşu aynı değerle elle/sebep modalında sürdür. · bekçi: `mobil/src/screens/Modules/KursunQc/meterRecovery.test.tsx`
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
