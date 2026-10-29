@@ -81,6 +81,8 @@ export interface LabelPayload {
   /** Gelen belge satırındaki müşteri kumaş adı / rengi (E3; ata topa yürünür). Satırı olmayan topta ALAN YOK (payload bayt-aynı). */
   deliveryNoteItemText?: string | null;
   deliveryNoteColorText?: string | null;
+  /** Gelen belge satırındaki müşteri top numarası (H9 `musteriTopNo`; Tambur çocuğu atanınkini taşır). Yoksa ALAN YOK. */
+  deliveryNoteRollNo?: string | null;
 
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---

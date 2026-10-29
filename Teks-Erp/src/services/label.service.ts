@@ -475,6 +475,8 @@ export class LabelService {
     const dnl = (preloaded?.deliveryNoteLines ?? (await resolveDeliveryNoteLinesForRolls([roll.id]))).get(roll.id);
     if (dnl?.itemText) payload.deliveryNoteItemText = dnl.itemText;
     if (dnl?.colorText) payload.deliveryNoteColorText = dnl.colorText;
+    // Müşteri top no (H9): aynı çözücü — Tambur çocuğu kök topun satırındaki numarayı taşır.
+    if (dnl?.senderRollNo) payload.deliveryNoteRollNo = dnl.senderRollNo;
 
     return { success: true, data: payload };
   }
@@ -665,6 +667,7 @@ export class LabelService {
       openDefects: "12,5 m Leke · 40 m Delik",
       deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
       deliveryNoteColorText: "Lacivert",
+      deliveryNoteRollNo: "17",
       printedAt: new Date().toISOString(),
       // SWATCH önizlemesinde kartela alanları görünsün (roll düzeninde yok sayılır).
       kind: input.kind,
@@ -737,6 +740,7 @@ export class LabelService {
       openDefects: "12,5 m Leke · 40 m Delik",
       deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
       deliveryNoteColorText: "Lacivert",
+      deliveryNoteRollNo: "17",
       printedAt: new Date().toISOString(),
       kind: input.kind,
       cardNumber: "KRT1207260001",
@@ -1142,6 +1146,7 @@ export class LabelService {
       openDefects: "12,5 m Leke · 40 m Delik",
       deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
       deliveryNoteColorText: "Lacivert",
+      deliveryNoteRollNo: "17",
       printedAt: new Date().toISOString(),
     };
     const template = await findContextDefaultTemplate(LabelKind.ROLL_FINISHED);
