@@ -47,7 +47,7 @@ export function ProcessGramajPanel({ groups, options: catalogOptions, choiceGrou
         <h3 className="text-sm font-medium">{grouped ? "İşlem çeşidi (işlem metninden)" : "Kurşun gramajı (işlem metninden)"}</h3>
         <p className="text-xs text-muted-foreground">
           {grouped
-            ? "Öneri yalnız yol gösterir; her metin için seçtiğiniz TEK değer onayda hatırlanır. Hiçbir topa değer yazılmaz."
+            ? "Öneri yalnız yol gösterir; her metin için seçtiğiniz TEK değer onayda hatırlanır (metne daha önce başka özellikten öğretilmiş değer varsa o korunur). Hiçbir topa değer yazılmaz."
             : "Öneri yalnız yol gösterir; seçtiğiniz gramaj onayda bu metin için hatırlanır. Hiçbir topa değer yazılmaz."}
         </p>
       </div>

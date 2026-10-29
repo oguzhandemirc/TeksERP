@@ -69,9 +69,13 @@ export interface ChoiceOption {
 
 const tokens = (s: string): string[] => foldSearchText(s).split(/[^a-z0-9]+/).filter(Boolean);
 
-/** `needle` sözcük dizisi `hay` içinde bitişik geçiyor mu (alt-dize değil: "d1" ⊄ "d12"). */
+/**
+ * `needle` sözcük dizisi `hay` içinde bitişik geçiyor mu (alt-dize değil: "d1" ⊄ "d12"). Harfsiz iğne ("25") eşleşmez:
+ * işlem metnindeki gramaj/metre/top sayısı sayısal kodlu desene yanlış öneri doğurmasın.
+ */
 function containsTokens(hay: readonly string[], needle: readonly string[]): boolean {
-  if (needle.length === 0 || needle.join("").length < 2) return false;
+  const joined = needle.join("");
+  if (joined.length < 2 || !/[a-z]/.test(joined)) return false;
   outer: for (let i = 0; i + needle.length <= hay.length; i++) {
     for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer;
     return true;

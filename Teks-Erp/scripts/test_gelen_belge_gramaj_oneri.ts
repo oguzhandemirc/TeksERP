@@ -21,9 +21,9 @@ import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { extractGramValues, matchChoiceOption, matchGramajOption, type GramajOption } from "../src/lib/gelen-belge/gramaj-oneri";
 import { loadProcessChoiceGroups } from "../src/services/helpers/process-choice-catalog.helper";
-import { suggestForNote, suggestProcess } from "../src/services/gelen-belge-eslestirme.service";
+import { aliasKey, suggestForNote, suggestProcess } from "../src/services/gelen-belge-eslestirme.service";
 import { createDeliveryNote } from "../src/services/gelen-belge-note.service";
-import { approveDeliveryNote } from "../src/services/gelen-belge-onay.service";
+import { approveDeliveryNote, learnAlias } from "../src/services/gelen-belge-onay.service";
 import { loadKursunGramajOptions } from "../src/services/helpers/kursun-bypass-gramaj.helper";
 import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -218,12 +218,24 @@ const BRODE_CASES: Array<[string, string | null]> = [
   ["BRODE", null],
   ["KURŞUN 25 GR", null],
 ];
+// Harfsiz (yalnız rakam) kod/ad iğnesi tek başına eşleşmez: gramaj/top sayısı sayısal kodlu desene öneri doğurmaz.
+const NUMERIC_OPTS = [{ id: "n25", code: "25", name: "Papatya" }, { id: "n50", code: "50", name: "50" }];
+const NUMERIC_CASES: Array<[string, string | null]> = [
+  ["KURŞUN 25 GR", null],
+  ["KURŞUN 50 GR 25 TOP", null],
+  ["BRODE 50", null],
+  ["BRODE PAPATYA", "n25"],
+];
 
 async function section6(): Promise<void> {
   console.log("§6 Brode deseni (kurşun dışı CHOICE çeşidi) — D4-D1");
   for (const [text, expected] of BRODE_CASES) {
     const got = matchChoiceOption(text, BRODE_OPTS)?.id ?? null;
     check(`§6 "${text}" → ${expected ?? "boş"}`, got === expected, String(got));
+  }
+  for (const [text, expected] of NUMERIC_CASES) {
+    const got = matchChoiceOption(text, NUMERIC_OPTS)?.id ?? null;
+    check(`§6 sayısal kod: "${text}" → ${expected ?? "boş"}`, got === expected, String(got));
   }
   const actor = await testActorId();
   const flag = await prisma.fabricProperty.create({ data: { code: `${TAG}-BR`.slice(0, 32), name: `TEST Brode ${TAG}`, valueType: "FLAG" }, select: { id: true } });
@@ -268,6 +280,16 @@ async function section6(): Promise<void> {
   check("§6 sözlük hedefi brode değeri: kurşun grubu kalıba düşer (boş)", a.suggested === null && a.source === "NONE");
   const b = await suggestProcess(TEXT, senderB!.id, kursunOpts, fresh);
   check("§6 ⭐ gönderen B (sözlüğü yok): kalıp → D12 (PATTERN)", brodeOf(b)?.suggested?.id === d12 && brodeOf(b)?.source === "PATTERN", JSON.stringify(b));
+  // PROCESS sözlüğü metin başına tek hedef: başka özelliğin öğrenmesi (düzeltilmiş kurşun) brode seçimiyle EZİLMEZ.
+  const k1 = kursunOpts[0]!.id;
+  const k2 = kursunOpts[1]!.id;
+  const MIX = aliasKey("PROCESS", `KURŞUN BRODE D12 ${TAG}`);
+  const aliasOf = async () => (await prisma.deliveryNoteAlias.findFirst({ where: { scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX }, select: { targetId: true } }))?.targetId;
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: k1 }, actor);
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: d12 }, actor);
+  check("§6 ⭐ kurşun öğrenmesi brode seçimiyle EZİLMEZ (başka özellik)", (await aliasOf()) === k1, String(await aliasOf()));
+  await learnAlias({ scope: "PROCESS", senderCustomerId: senderA!.id, rawKey: MIX, targetId: k2 }, actor);
+  check("§6 aynı özellik içinde son onay kazanır (kurşun → kurşun)", (await aliasOf()) === k2, String(await aliasOf()));
   // Pasif değere giden sözlük yok sayılır (kalıba düşer).
   await prisma.fabricPropertyValue.update({ where: { id: d15 }, data: { isActive: false } });
   const c = await suggestProcess(TEXT, senderA!.id, kursunOpts, await loadProcessChoiceGroups());

@@ -379,7 +379,7 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  *               processChoices: { type: array, description: "Kabul edilen işlem önerileri (H9 gramaj, D4-D1 her çeşit değeri; metin başına tek) → PROCESS sözlüğü; değer yazmaz", items: { type: object, properties: { lineId: { type: string, format: uuid, nullable: true }, valueId: { type: string, format: uuid } } } }
  *     responses:
  *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds } } + üst düzey warnings (başlık top adedi ↔ satır; gerekçeyle geçilen sayfa)" }
- *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED · KURSUN_GRAMAJ_INVALID · PROCESS_CHOICE_LINE_INVALID · PROCESS_CHOICE_TEXT_EMPTY" }
+ *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED · PROCESS_VALUE_INVALID (değer aktif işlem çeşidi değil) · PROCESS_CHOICE_CONFLICT · PROCESS_CHOICE_LINE_INVALID · PROCESS_CHOICE_TEXT_EMPTY" }
  *       403: { description: "MODULE_DISABLED (emanet) ya da izin yok" }
  *       409: { description: "TOTAL_MISMATCH (blok adet/kg/m; varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING (varianceReason ile geçilir) · DELIVERY_NOTE_CHANGED (ön kontrolden sonra düzenlendi) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
  */

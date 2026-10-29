@@ -221,7 +221,7 @@ export type AliasLearnInput = { scope: DeliveryNoteAliasScope; senderCustomerId:
 
 /**
  * Tek anahtar öğrenme — TEK İFADE (E4): eşzamanlı yazarlar aynı anahtarı yazarsa hepsi sayılır, çift satır doğmaz
- * (tekil indeks NULLS NOT DISTINCT; gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır.
+ * (tekil indeks NULLS NOT DISTINCT; gönderensiz anahtar da tekil). Polimorfik hedef: SON onay kazanır (PROCESS: yalnız aynı özellik içinde).
  * Dışa açık: test_gelen_belge_onay §16b yarışı belirlenimli ölçer. `rawKey` çağıranca katlanmış olmalı (aliasKey).
  */
 export async function learnAlias(a: AliasLearnInput, userId: string): Promise<void> {
@@ -235,8 +235,13 @@ export async function learnAlias(a: AliasLearnInput, userId: string): Promise<vo
     VALUES (gen_random_uuid(), ${a.scope}::"DeliveryNoteAliasScope", ${a.senderCustomerId}::uuid, ${a.rawKey}, ${a.targetId}::uuid, 1, now(), now()) -- tz-ok: kolonlar timestamptz; ham INSERT Prisma'nın @default/@updatedAt kancasını atlar
     ON CONFLICT ("scope", "senderCustomerId", "rawKey") DO UPDATE
       SET "targetId" = EXCLUDED."targetId", "hitCount" = "delivery_note_aliases"."hitCount" + 1, "updatedAt" = now() -- tz-ok: kolon timestamptz; ham UPDATE @updatedAt kancasını atlar
+      -- PROCESS sözlüğü metin başına tek hedef: başka ÖZELLİĞİN öğrenmesini (ör. düzeltilmiş kurşun gramajı) ezmez, korur.
+      WHERE "delivery_note_aliases"."scope" <> 'PROCESS'::"DeliveryNoteAliasScope"
+         OR NOT EXISTS (SELECT 1 FROM "fabric_property_values" o WHERE o."id" = "delivery_note_aliases"."targetId")
+         OR (SELECT o."propertyId" FROM "fabric_property_values" o WHERE o."id" = "delivery_note_aliases"."targetId")
+            = (SELECT n."propertyId" FROM "fabric_property_values" n WHERE n."id" = EXCLUDED."targetId")
     RETURNING "id", "hitCount", (xmax = 0) AS "inserted", (SELECT "targetId" FROM prev) AS "prevTargetId"`);
-  if (!row) return;
+  if (!row) return; // PROCESS: mevcut öğrenme başka özelliğin → korundu, yazım yok
   const key = aliasKeyAudit(a.rawKey);
   if (row.inserted) {
     await AuditService.log({ userId, action: "CREATE", tableName: ALIAS_TABLE, recordId: row.id, newData: { scope: a.scope, senderCustomerId: a.senderCustomerId, ...key, targetId: a.targetId, hitCount: row.hitCount } });
