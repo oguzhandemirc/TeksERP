@@ -296,7 +296,8 @@ export async function resolveCariAccountByCustomerTx(
 ): Promise<{ id: string; isActive: boolean } | null> {
   const row = await db.cariAccount.findFirst({
     where: { OR: [{ customerId }, { subcontractor: { customerId } }] },
-    orderBy: { customerId: "desc" },
+    // PG'de DESC varsayılanı NULLS FIRST: iki hesap varsa yazımın gittiği CUSTOMER hesabı (customerId dolu) önce gelmeli.
+    orderBy: { customerId: { sort: "desc", nulls: "last" } },
     select: { id: true, isActive: true },
   });
   return row ?? null;

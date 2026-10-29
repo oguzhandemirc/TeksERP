@@ -23,6 +23,7 @@
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-18): ① `bornCariAccountTx` sabit null → §1a/§1b/§1c ❌ (sonrası zincirleme çöker — kırmızı yine kırmızı) · ② `takeFinanceSub` izin kapısı
 //    kaldırıldı → §5a ❌ · ③ `resolveCariAccountByCustomerTx` fason bacağı (`subcontractor: { customerId }`) düşürüldü → §4c ❌
 //    · ④ backfill `yazmaEngeli` `_test` kapısı kaldırıldı → §2e ❌.
+//    · ⑥ (2026-10-29 K2b bitirici) `resolveCariAccountByCustomerTx` orderBy `nulls: "last"` kaldırıldı → §4c2 ❌.
 //    · ⑤ (2026-10-29 K2b) `financeSubSchema`dan `serviceBillingTrigger` satırı silindi → §7a–§7e ❌ (strict şema 400).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. `finance.enabled` fotoğrafa döner; temizlik yalnız `temizle`.
 // =============================================================================
@@ -171,6 +172,9 @@ async function main(): Promise<void> {
     ids.subs.push(sub5.id);
     const legacy = await prisma.cariAccount.create({ data: { kind: "SUBCONTRACTOR", subcontractorId: sub5.id }, select: { id: true } });
     check("§4c ⭐ eski fason bacağına bağlı hesap KARTTAN çözülür (profil.customerId üstünden)", (await resolveCariAccountByCustomerTx(prisma, k5.data.id))?.id === legacy.id && (await cariService.findByCustomer(k5.data.id)).data.id === legacy.id);
+    // İki hesap birlikte (eski fason bacağı + yeni CUSTOMER): okuma, yazımın gittiği CUSTOMER hesabını seçer (NULLS LAST).
+    const cust5 = await prisma.cariAccount.create({ data: { kind: "CUSTOMER", customerId: k5.data.id }, select: { id: true } });
+    check("§4c2 ⭐ iki hesap birlikte → CUSTOMER hesabı (customerId dolu) çözülür, eski fason hesabı değil", (await resolveCariAccountByCustomerTx(prisma, k5.data.id))?.id === cust5.id);
     await setFin(false);
     const k6 = await kartAc();
     ids.customers.push(k6.data.id);
