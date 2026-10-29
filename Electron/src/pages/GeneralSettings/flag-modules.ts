@@ -147,6 +147,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   kursunMeterVarianceBasis: "productionEnabled",
   kursunMeterVarianceApproval: "productionEnabled",
   kursunMeterStockMode: "productionEnabled",
+  scanCustomerCodeLookupEnabled: "cekirdek",
   tamburOverQuantityEnabled: "productionEnabled",
   tamburUndoFullSameDayOnly: "productionEnabled",
   tamburShortCutA1Enabled: "productionEnabled",

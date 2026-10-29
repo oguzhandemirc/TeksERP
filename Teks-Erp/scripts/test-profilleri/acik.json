@@ -41,6 +41,7 @@
     "kursunSimulatedMeterEnabled": true,
     "kursunMeterVarianceThresholdM": 2,
     "kursunMeterVarianceThresholdPct": 1,
+    "scanCustomerCodeLookupEnabled": true,
     "tamburOverQuantityEnabled": true,
     "tamburUndoFullSameDayOnly": true,
     "tamburShortCutA1Enabled": true,
