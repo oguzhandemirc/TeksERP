@@ -7,6 +7,9 @@ import { z } from "zod";
 import { KursunQcService } from "../services/kursun-qc.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import "../types/express-augment";
+import { assertNoBareFilterParams } from "../utils/query-parser";
+import { METER_DEVIATION_FILTER_NAMES, parseMeterDeviationQuery } from "../services/helpers/kursun-meter-deviation-list.helper";
+
 
 // Export: Zod katmanı bekçisi (`test_property_value_selection` §Zod) — şema
 // `properties`/`valueCode`yi sessizce ELERSE (2026-08-05 "kat iki uçta Zod'da
@@ -126,7 +129,7 @@ export class KursunQcController {
     this.recordMeterReading = this.recordMeterReading.bind(this);
     this.pinAckMeterReading = this.pinAckMeterReading.bind(this);
     this.officeAckMeterReading = this.officeAckMeterReading.bind(this);
-    this.listPendingMeterAcks = this.listPendingMeterAcks.bind(this);
+    this.listMeterDeviations = this.listMeterDeviations.bind(this);
     this.reopenPreview = this.reopenPreview.bind(this);
     this.listQueue = this.listQueue.bind(this);
     this.reorderQueue = this.reorderQueue.bind(this);
@@ -308,11 +311,13 @@ export class KursunQcController {
     }
   }
 
-  /** GET /api/kursun-qc/meter-deviations — imza bekleyen sapmalar (ofis listesi). */
-  async listPendingMeterAcks(req: Request, res: Response, next: NextFunction): Promise<void> {
+  /** GET /api/kursun-qc/meter-deviations — sapmalı okumalar + özet şeridi (H4; süzme sunucuda, `filter[...]`). */
+  async listMeterDeviations(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const stepId = z.string().uuid("Geçersiz adım ID").optional().parse(req.query.stepId);
-      res.status(200).json(await this.service.listPendingMeterAcks({ stepId }));
+      assertNoBareFilterParams(req, METER_DEVIATION_FILTER_NAMES, ["stepId"]);
+      const f = parseMeterDeviationQuery(req.query as Record<string, unknown>);
+      const { cursor, limit, ...filter } = f;
+      res.status(200).json(await this.service.listMeterDeviations(filter, { cursor, limit }));
     } catch (err) {
       next(err);
     }

@@ -25,6 +25,17 @@ import {
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import {
+  collectShipmentServiceBilling,
+  insertServiceLinksTx,
+  lockBillableShipmentTx,
+  lockServiceReadingsTx,
+  reconcileServiceLinksWithLines,
+  revokeServiceLinksTx,
+  syncServiceLinksToLinesTx,
+  type ServiceBillingLinkInput,
+} from "./helpers/service-billing.helper";
+import { loadServiceBillingSettings, resolveServiceBillingEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import {
@@ -128,6 +139,11 @@ export interface CreateInvoiceInput {
   /** n irsaliye → 1 fatura (2026-09-18): bağlı mal kabul fişleri — küme REPLACE; `goodsReceiptId` ile birleşir (tek yazar pivot). */
   goodsReceiptIds?: string[] | null;
   clientToken?: string | null;
+  /**
+   * H7 hizmet işi bağları — YALNIZ sunucu içi (route şeması taşımaz). Verilmezse ve SALES taslağı bir
+   * sevkiyata bağlıysa (hizmet faturası açıkken) sunucu sevkin faturalanmamış işlerini kendisi bağlar.
+   */
+  serviceLinks?: ServiceBillingLinkInput[];
 }
 
 /** Bir fatura yolunun iplik defterine yaptığı etki (çıkış ya da ters kayıt). */
@@ -350,6 +366,23 @@ export class InvoiceService {
     return invoiceReplay(input).run(input.clientToken, () => this.createDraftFresh(input, userId));
   }
 
+  /**
+   * H7: taslağın hizmet bağları. Açık verilmişse (otomatik sevk kancası) aynen; verilmemiş SALES sevk
+   * taslağında (panel "Sevkiyattan Fatura Taslağı") sevkin faturalanmamış işleri — aynı toplayıcı.
+   * Hizmet faturası kapalıyken boş küme: yol bayt-aynı.
+   */
+  private async resolveServiceLinks(input: CreateInvoiceInput, currency: Currency): Promise<ServiceBillingLinkInput[]> {
+    if (input.serviceLinks) return input.serviceLinks;
+    if (input.type !== InvoiceType.SALES || !input.shipmentId || !input.customerId) return [];
+    if (!(await resolveServiceBillingEnabled())) return [];
+    const settings = await loadServiceBillingSettings();
+    const sh = await prisma.shipment.findUnique({ where: { id: input.shipmentId }, select: { dispatchedAt: true } });
+    const draft = await collectShipmentServiceBilling({
+      shipmentId: input.shipmentId, customerId: input.customerId, currency, settings, dispatchedAt: sh?.dispatchedAt ?? null,
+    });
+    return draft.links;
+  }
+
   private async createDraftFresh(input: CreateInvoiceInput, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
 
     const issueDate = input.issueDate ?? new Date();
@@ -371,6 +404,9 @@ export class InvoiceService {
     // döndüren idempotent yanıt, bugün açılan bir bayrak yüzünden 400'e
     // dönmemeli — o istek yeni belge yaratmıyor.
     await assertNotFutureDatedTx(undefined, { date: issueDate, label: "Fatura tarihi" });
+    // Bağ yalnız faturada SATIRI olan iş için: panelde silinen/değişen hizmet satırı sessiz "faturalandı" doğurmaz.
+    const serviceLinks = reconcileServiceLinksWithLines(input.lines, await this.resolveServiceLinks(input, currency)).keep;
+    const receiptIds = normalizeInvoiceReceiptIds(input) ?? [];
 
     // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
     // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
@@ -379,6 +415,8 @@ export class InvoiceService {
     // 409'u); aşağıdaki catch onu cached yanıta çevirir (purchase-order emsali).
     return await withBarcodeRetry(async () => {
     const result = await prisma.$transaction(async (tx) => {
+      // H7: bağlı taslak sevk geri almayla serileşir (8023 tx'in İLK ifadesi).
+      if (serviceLinks.length > 0 && input.shipmentId) await lockBillableShipmentTx(tx, input.shipmentId);
       const cari = await ensureCariAccountTx(tx, {
         customerId: input.customerId ?? null,
         subcontractorId: input.subcontractorId ?? null,
@@ -397,8 +435,8 @@ export class InvoiceService {
 
       await this.assertSourceFree(tx, input);
       // n irsaliye → 1 fatura: fişler kilitlenir, cari/para birimi/açık-fiş kapıları; pivot yazımı create'ten sonra.
-      const receiptIds = normalizeInvoiceReceiptIds(input) ?? [];
-      await lockReceiptsTx(tx, receiptIds);
+      // H7 kilit sırası: fişler + hizmet okumaları (FOR UPDATE ORDER BY id) → fatura → bağ.
+      await lockReceiptsTx(tx, receiptIds).then(() => lockServiceReadingsTx(tx, serviceLinks));
       if (receiptIds.length > 0) {
         const cariRow = await tx.cariAccount.findUniqueOrThrow({ where: { id: cari.id }, select: { customerId: true, subcontractorId: true } });
         await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: null, type: input.type, currency, cari: cariRow });
@@ -454,7 +492,7 @@ export class InvoiceService {
         select: { id: true, docNo: true },
       });
       if (receiptIds.length > 0) await writeInvoiceReceiptsTx(tx, invoice.id, receiptIds);
-      return invoice;
+      return insertServiceLinksTx(tx, invoice.id, serviceLinks).then(() => invoice);
     });
 
     void AuditService.log({
@@ -462,7 +500,7 @@ export class InvoiceService {
       action: "CREATE",
       tableName: "INVOICE",
       recordId: result.id,
-      newData: { docNo: result.docNo, type: input.type },
+      newData: { docNo: result.docNo, type: input.type, ...(serviceLinks.length > 0 ? { serviceLinkCount: serviceLinks.length } : {}) },
     });
     return { success: true, data: result, message: `${result.docNo} taslağı oluşturuldu.` };
     },
@@ -863,7 +901,7 @@ export class InvoiceService {
     },
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
-    await prisma.$transaction(async (tx) => {
+    const serviceLinksRevoked = await prisma.$transaction(async (tx) => {
       // No-op yazım (`status: DRAFT` → DRAFT) bilinçli: `updateMany` satır
       // kilidini alır ve WHERE yüklemi statüyü ATOMİK doğrular — `findUnique →
       // if → update` check-then-act'i tam da kapatılan hataydı.
@@ -879,10 +917,8 @@ export class InvoiceService {
         );
       }
       // Claim SONRASI içerik tx İÇİNDE taze yüklenir (`confirm` ile aynı desen).
-      const existing = await tx.invoice.findUniqueOrThrow({
-        where: { id },
-        select: { exchangeRate: true, type: true, currency: true, cari: { select: { customerId: true, subcontractorId: true } } },
-      });
+      const existingSelect = { exchangeRate: true, type: true, currency: true, cari: { select: { customerId: true, subcontractorId: true } } } as const;
+      const existing = await tx.invoice.findUniqueOrThrow({ where: { id }, select: existingSelect });
 
       const rate = input.exchangeRate != null ? D(input.exchangeRate) : D(existing.exchangeRate);
       if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
@@ -894,6 +930,8 @@ export class InvoiceService {
         await writeInvoiceReceiptsTx(tx, id, receiptIds);
       }
 
+      // H7: bağ ↔ satır (çıkarılan hizmet satırının bağı damgalanır, miktar değişimi 409); satırsız düzenlemede 0.
+      const revoked = input.lines ? await syncServiceLinksToLinesTx(tx, id, input.lines, userId ?? null) : 0;
       if (input.lines) {
         if (input.lines.length === 0) throw AppError.badRequest("Fatura en az bir satır içermeli.");
         await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
@@ -920,7 +958,7 @@ export class InvoiceService {
 
       const lines = input.lines ?? (await this.loadLinesForTotals(tx, id));
       const totals = computeInvoiceTotals(lines);
-      await tx.invoice.update({
+      return tx.invoice.update({
         where: { id },
         data: {
           ...(input.dueDate !== undefined ? { dueDate: input.dueDate } : {}),
@@ -934,10 +972,10 @@ export class InvoiceService {
           grandTotal: totals.grandTotal,
           grandTotalTry: totals.grandTotal.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
         },
-      });
+      }).then(() => revoked);
     });
 
-    void AuditService.log({ userId, action: "UPDATE", tableName: "INVOICE", recordId: id });
+    void AuditService.log({ userId, action: "UPDATE", tableName: "INVOICE", recordId: id, ...(serviceLinksRevoked > 0 ? { newData: { serviceLinksRevoked } } : {}) });
     return { success: true, data: { id }, message: "Taslak güncellendi." };
   }
 
@@ -1556,6 +1594,8 @@ export class InvoiceService {
       // para başka bir faturayı kapatmak için bir daha kullanılamaz — sessiz
       // bir kayıp. Taslak iptalinde satır zaten yoktur, yardımcı no-op döner.
       await releaseAllocationsForInvoiceTx(tx, id, { reason: "INVOICE_CANCEL" });
+      // H7 ters yol: hizmet bağı AYNI tx'te damgalanır (DRAFT ve CONFIRMED) — iş yeniden faturalanabilir.
+      const serviceLinksRevoked = await revokeServiceLinksTx(tx, id, { userId: userId ?? null, reason: "INVOICE_CANCEL" });
 
       // Deftere işlemiş miydi? (taslak iptalinde ters satır YOK — yoksa hiç
       // olmamış bir borcu sıfırlayan hayalet satır doğardı.)
@@ -1632,7 +1672,7 @@ export class InvoiceService {
         reason ?? "Fatura iptal edildi",
       );
 
-      return { id: inv.id, docNo: inv.docNo, wasPosted: Boolean(posted), yarnBack };
+      return { id: inv.id, docNo: inv.docNo, wasPosted: Boolean(posted), yarnBack, serviceLinksRevoked };
     });
 
     void AuditService.log({
@@ -1645,6 +1685,7 @@ export class InvoiceService {
         docNo: result.docNo,
         reason,
         storno: result.wasPosted,
+        ...(result.serviceLinksRevoked > 0 ? { serviceLinksRevoked: result.serviceLinksRevoked } : {}),
         ...(result.yarnBack.length > 0
           ? {
               yarnReversed: result.yarnBack.map((y) => ({

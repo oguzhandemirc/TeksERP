@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isKursunPlanningVisible,
+  isMeterDeviationsVisible,
   isProductBalanceVisible,
   isWorkOrdersVisible,
 } from "./production-regime";
@@ -20,6 +21,7 @@ const YUKLEMLER = [
   ["isWorkOrdersVisible", isWorkOrdersVisible],
   ["isProductBalanceVisible", isProductBalanceVisible],
   ["isKursunPlanningVisible", isKursunPlanningVisible],
+  ["isMeterDeviationsVisible", isMeterDeviationsVisible],
 ] as const;
 
 describe("üretim rejimi — saf yüklemler", () => {

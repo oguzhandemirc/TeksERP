@@ -165,6 +165,17 @@ export const SETTING_KEYS = {
    *  no-op'tur (modül şalteri üstte). Taslak üretimi başarısız olursa sevk
    *  DÜŞMEZ — sevk operasyonu muhasebe kancasına rehin edilmez. */
   FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED: "finance.autoDraftFromShipmentEnabled",
+  /** H7 (Hizmet veren, 2026-10-29): sevk taslağına hizmet (işçilik) satırları + fatura bağı — varsayılan KAPALI
+   *  (kanca bayt-aynı). Alt ayarlar `finance.serviceBilling.*`; tek çözücü `resolveServiceBillingEnabled` (+ `loadServiceBillingSettings`). */
+  FINANCE_SERVICE_BILLING_ENABLED: "finance.serviceBilling.enabled",
+  /** H7: faturalanan metre tabanı — `OUT` (bugün/karar) · `IN` · `DECLARED`. */
+  FINANCE_SERVICE_BILLING_METER_BASIS: "finance.serviceBilling.meterBasis",
+  /** H7: ölçüm yoksa — `DECLARED_WITH_WARNING` (bugün) · `BLOCK_LINE`. */
+  FINANCE_SERVICE_BILLING_MISSING_METER: "finance.serviceBilling.missingMeter",
+  /** H7: tetik — `PER_SHIPMENT` (bugün); `PERIOD_END` H8'de seçilebilir olur. */
+  FINANCE_SERVICE_BILLING_TRIGGER: "finance.serviceBilling.trigger",
+  /** H7: fiyat tarihi — `SERVICE_DAY` (hizmet anı; bugün) · `DISPATCH_DAY` (sevk anı). */
+  FINANCE_SERVICE_BILLING_PRICE_DATE: "finance.serviceBilling.priceDate",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
@@ -965,8 +976,24 @@ export const DEFAULT_KURSUN_METER_VARIANCE_BASIS: KursunMeterVarianceBasis = "DE
 export type KursunMeterVarianceApproval = "NONE" | "OPERATOR_REASON" | "SUPERVISOR_PIN" | "OFFICE";
 export const KURSUN_METER_VARIANCE_APPROVALS: KursunMeterVarianceApproval[] = ["NONE", "OPERATOR_REASON", "SUPERVISOR_PIN", "OFFICE"];
 export const DEFAULT_KURSUN_METER_VARIANCE_APPROVAL: KursunMeterVarianceApproval = "NONE";
-/** OFFICE'in çıkış yüzeyi (panel ofis onay ekranı) H4'te doğar; o güne dek panelden seçilemez (çıkışsız kapı). */
-export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE = false;
+/** OFFICE'in çıkış yüzeyi panel "Metre Sapmaları" ekranıdır (H4, 2026-10-29) — artık seçilebilir. */
+export const KURSUN_METER_OFFICE_APPROVAL_SELECTABLE: boolean = true;
+
+/** H7: hizmet faturası alt ayarları — enum üçlüsü (type + dizi + varsayılan); varsayılan = bugünkü davranış. */
+export type ServiceBillingMeterBasis = "OUT" | "IN" | "DECLARED";
+export const SERVICE_BILLING_METER_BASES: ServiceBillingMeterBasis[] = ["OUT", "IN", "DECLARED"];
+export const DEFAULT_SERVICE_BILLING_METER_BASIS: ServiceBillingMeterBasis = "OUT";
+export type ServiceBillingMissingMeter = "DECLARED_WITH_WARNING" | "BLOCK_LINE";
+export const SERVICE_BILLING_MISSING_METER_MODES: ServiceBillingMissingMeter[] = ["DECLARED_WITH_WARNING", "BLOCK_LINE"];
+export const DEFAULT_SERVICE_BILLING_MISSING_METER: ServiceBillingMissingMeter = "DECLARED_WITH_WARNING";
+export type ServiceBillingTrigger = "PER_SHIPMENT" | "PERIOD_END";
+export const SERVICE_BILLING_TRIGGERS: ServiceBillingTrigger[] = ["PER_SHIPMENT", "PERIOD_END"];
+export const DEFAULT_SERVICE_BILLING_TRIGGER: ServiceBillingTrigger = "PER_SHIPMENT";
+/** PERIOD_END'in çıkış yüzeyi (dönem sonu ucu) H8'de doğar; o güne dek seçilemez (çıkışsız kapı). */
+export const SERVICE_BILLING_PERIOD_END_SELECTABLE = false;
+export type ServiceBillingPriceDate = "SERVICE_DAY" | "DISPATCH_DAY";
+export const SERVICE_BILLING_PRICE_DATES: ServiceBillingPriceDate[] = ["SERVICE_DAY", "DISPATCH_DAY"];
+export const DEFAULT_SERVICE_BILLING_PRICE_DATE: ServiceBillingPriceDate = "SERVICE_DAY";
 
 /** Etiket adedi kaynağı (bkz. `SETTING_KEYS.LABEL_COPIES_SOURCE`). */
 export type LabelCopiesSource = "GLOBAL" | "STATION";
@@ -1764,6 +1791,16 @@ export interface FeatureFlags {
    *  her zaman elle kalır; `financeEnabled` kapalıyken kanca no-op'tur ve
    *  taslak hatası sevki DÜŞÜRMEZ. */
   financeAutoDraftFromShipmentEnabled: boolean;
+  /** H7: sevk taslağına hizmet satırları + fatura bağı (default false = kanca bayt-aynı). HAM. */
+  financeServiceBillingEnabled: boolean;
+  /** H7: faturalanan metre tabanı (default `OUT`). */
+  financeServiceBillingMeterBasis: ServiceBillingMeterBasis;
+  /** H7: ölçüm yoksa (default `DECLARED_WITH_WARNING`). */
+  financeServiceBillingMissingMeter: ServiceBillingMissingMeter;
+  /** H7: tetik (default `PER_SHIPMENT`; `PERIOD_END` H8). */
+  financeServiceBillingTrigger: ServiceBillingTrigger;
+  /** H7: fiyat tarihi (default `SERVICE_DAY`). */
+  financeServiceBillingPriceDate: ServiceBillingPriceDate;
   /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
    *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
    *  silinebilir; farklı para birimli fatura atlanır. */
@@ -2383,6 +2420,11 @@ export class SystemSettingService {
       financeRiskLimitBlockEnabled: await readFinanceRiskLimitBlockEnabled(cacheClient),
       financeAutoDraftFromShipmentEnabled:
         await readFinanceAutoDraftFromShipmentEnabled(cacheClient),
+      financeServiceBillingEnabled: await readFinanceServiceBillingEnabled(cacheClient),
+      financeServiceBillingMeterBasis: await readFinanceServiceBillingMeterBasis(cacheClient),
+      financeServiceBillingMissingMeter: await readFinanceServiceBillingMissingMeter(cacheClient),
+      financeServiceBillingTrigger: await readFinanceServiceBillingTrigger(cacheClient),
+      financeServiceBillingPriceDate: await readFinanceServiceBillingPriceDate(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
@@ -2848,6 +2890,47 @@ export class SystemSettingService {
         "Sevk onayında otomatik satış faturası TASLAĞI oluştur (onay yine elle)",
         userId
       );
+    }
+
+    // H7 hizmet faturası — enum ayarlarında tanınmayan değer 400 (fail-closed).
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingEnabled")) {
+      if (typeof input.financeServiceBillingEnabled !== "boolean") {
+        throw AppError.badRequest("financeServiceBillingEnabled boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_ENABLED, input.financeServiceBillingEnabled, "Sevk faturası taslağına hizmet (işçilik) satırları ekle", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingMeterBasis")) {
+      const v = input.financeServiceBillingMeterBasis;
+      if (typeof v !== "string" || !SERVICE_BILLING_METER_BASES.includes(v as ServiceBillingMeterBasis)) {
+        throw AppError.badRequest(`financeServiceBillingMeterBasis şunlardan biri olmalı: ${SERVICE_BILLING_METER_BASES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_METER_BASIS, v, "Hizmet faturası metre tabanı — çıkış · giriş · bildirilen", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingMissingMeter")) {
+      const v = input.financeServiceBillingMissingMeter;
+      if (typeof v !== "string" || !SERVICE_BILLING_MISSING_METER_MODES.includes(v as ServiceBillingMissingMeter)) {
+        throw AppError.badRequest(`financeServiceBillingMissingMeter şunlardan biri olmalı: ${SERVICE_BILLING_MISSING_METER_MODES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER, v, "Hizmet faturası ölçüm yoksa — bildirilenle uyar · satırı durdur", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingTrigger")) {
+      const v = input.financeServiceBillingTrigger;
+      if (typeof v !== "string" || !SERVICE_BILLING_TRIGGERS.includes(v as ServiceBillingTrigger)) {
+        throw AppError.badRequest(`financeServiceBillingTrigger şunlardan biri olmalı: ${SERVICE_BILLING_TRIGGERS.join(", ")}`);
+      }
+      if (v === "PERIOD_END" && !SERVICE_BILLING_PERIOD_END_SELECTABLE) {
+        throw AppError.badRequest("Dönem sonu faturalaması henüz seçilemez — dönem sonu taslağı geldiğinde açılır", {
+          code: "SERVICE_BILLING_PERIOD_END_UNAVAILABLE",
+        });
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, v, "Hizmet faturası tetiği — her sevkte · dönem sonu", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingPriceDate")) {
+      const v = input.financeServiceBillingPriceDate;
+      if (typeof v !== "string" || !SERVICE_BILLING_PRICE_DATES.includes(v as ServiceBillingPriceDate)) {
+        throw AppError.badRequest(`financeServiceBillingPriceDate şunlardan biri olmalı: ${SERVICE_BILLING_PRICE_DATES.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, v, "Hizmet faturası fiyat tarihi — hizmet günü · sevk günü", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
@@ -4866,6 +4949,61 @@ export async function readFinanceAutoDraftFromShipmentEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/** H7: hizmet faturası ana anahtarı — HAM okuyucu; kayıt yok → KAPALI. Etkin değer `resolveServiceBillingEnabled`. */
+export async function readFinanceServiceBillingEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_SERVICE_BILLING_ENABLED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
+async function readServiceEnum<T extends string>(key: string, allowed: readonly T[], fallback: T, tx?: Pick<typeof prisma, "systemSetting">): Promise<T> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && allowed.includes(v as T) ? (v as T) : fallback;
+}
+
+/** H7: metre tabanı — tanınmayan değer varsayılana (`OUT`) düşer. */
+export function readFinanceServiceBillingMeterBasis(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingMeterBasis> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_METER_BASIS, SERVICE_BILLING_METER_BASES, DEFAULT_SERVICE_BILLING_METER_BASIS, tx);
+}
+
+/** H7: ölçüm yoksa — tanınmayan değer varsayılana (`DECLARED_WITH_WARNING`) düşer. */
+export function readFinanceServiceBillingMissingMeter(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingMissingMeter> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER, SERVICE_BILLING_MISSING_METER_MODES, DEFAULT_SERVICE_BILLING_MISSING_METER, tx);
+}
+
+/** H7: tetik — tanınmayan değer varsayılana (`PER_SHIPMENT`) düşer. */
+export function readFinanceServiceBillingTrigger(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingTrigger> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, SERVICE_BILLING_TRIGGERS, DEFAULT_SERVICE_BILLING_TRIGGER, tx);
+}
+
+/** H7: fiyat tarihi — tanınmayan değer varsayılana (`SERVICE_DAY`) düşer. */
+export function readFinanceServiceBillingPriceDate(tx?: Pick<typeof prisma, "systemSetting">): Promise<ServiceBillingPriceDate> {
+  return readServiceEnum(SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, SERVICE_BILLING_PRICE_DATES, DEFAULT_SERVICE_BILLING_PRICE_DATE, tx);
+}
+
+/** H7 — hizmet faturası ana anahtarı, ETKİN değer: ön muhasebe kapalıyken daima KAPALI (bugünkü davranış). */
+export async function resolveServiceBillingEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readFinanceEnabled(tx))) return false;
+  return readFinanceServiceBillingEnabled(tx);
+}
+
+/** H7 — hizmet faturası ayarları TEK okuma noktası (etkin ana anahtar + alt ayarlar). */
+export async function loadServiceBillingSettings(tx?: Pick<typeof prisma, "systemSetting">): Promise<{
+  enabled: boolean;
+  meterBasis: ServiceBillingMeterBasis;
+  missingMeter: ServiceBillingMissingMeter;
+  trigger: ServiceBillingTrigger;
+  priceDate: ServiceBillingPriceDate;
+}> {
+  return {
+    enabled: await resolveServiceBillingEnabled(tx),
+    meterBasis: await readFinanceServiceBillingMeterBasis(tx),
+    missingMeter: await readFinanceServiceBillingMissingMeter(tx),
+    trigger: await readFinanceServiceBillingTrigger(tx),
+    priceDate: await readFinanceServiceBillingPriceDate(tx),
+  };
 }
 
 /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama? Default false. */

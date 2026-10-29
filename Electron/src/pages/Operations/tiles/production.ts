@@ -1,6 +1,6 @@
 // Operasyon › Üretim & Fason karoları (sıra = hub sırası).
-import { Factory, History, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers } from "lucide-react";
-import { isKursunPlanningVisible, isWorkOrdersVisible } from "../production-regime";
+import { Factory, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers } from "lucide-react";
+import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible } from "../MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "../WeavingFloor/floor-regime";
@@ -129,6 +129,18 @@ export const productionTiles: OperationsTile[] = [
     // anahtarı `production.enabled` — backend ikizi `kursun-bypass.routes`
     // üzerindeki `requireProductionEnabled` (2026-09-03).
     visibleWhen: isKursunPlanningVisible,
+    offHint: flagOffHint("productionEnabled"),
+  },
+  {
+    // H4 (2026-10-29): kurşun çıkış metresi sapmaları + ofis onayı. Okuma ve onay aynı izin.
+    key: "kursun-sapmalar",
+    title: "Metre Sapmaları",
+    description: "Kurşun çıkış metresi girişten eşik üstü saptığında: liste, özet, ofis onayı",
+    icon: Ruler,
+    to: "/operations/kursun-sapmalar",
+    group: "production",
+    permission: "kursun:meter-approve",
+    visibleWhen: isMeterDeviationsVisible,
     offHint: flagOffHint("productionEnabled"),
   },
 ];

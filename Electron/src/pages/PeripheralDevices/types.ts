@@ -37,6 +37,8 @@ export interface PeripheralDevice {
   timeoutMs: number | null;
   role: string | null;
   simulate: boolean;
+  counterMode?: "RESETTING" | "CUMULATIVE" | null;
+  resetCommand?: string | null;
   machineId: string | null;
   /** MAKİNESİZ istasyona sabit donanım (SHIPPING kantarı vb.) — çalışma oturumu modeli. */
   stationId: string | null;

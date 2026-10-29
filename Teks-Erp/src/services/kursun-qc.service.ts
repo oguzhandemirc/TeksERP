@@ -60,6 +60,8 @@ import {
 } from "./helpers/station-capability-transfer.helper";
 import { applyKursunOperationTx } from "./helpers/kursun-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { awaitsMeterSignature } from "./helpers/kursun-meter-variance-sql.helper";
+import { listMeterDeviations, type MeterDeviationFilter } from "./helpers/kursun-meter-deviation-list.helper";
 import {
   ackMeterReadingTx,
   assertMeterInputAllowed,
@@ -695,7 +697,7 @@ export class KursunQcService {
       baseMeters: v.baseMeters,
       diffMeters: v.diffMeters,
       allowedMeters: v.allowedMeters,
-      pendingAck: v.needsAck && !acked,
+      pendingAck: awaitsMeterSignature(reading.approvalMode, v.needsAck, acked),
     };
   }
 
@@ -716,10 +718,15 @@ export class KursunQcService {
     return { success: true, data: ack, message: "Metre sapması onaylandı" };
   }
 
-  /** Ofis listesi: imza bekleyen sapmalı okumalar (SQL ikizi; `finishStep` kapısıyla aynı yüklem). */
-  async listPendingMeterAcks(filter: { stepId?: string }) {
-    const rows = await pendingMeterAcksTx(prisma, { stepId: filter.stepId, limit: 500 });
-    return { success: true, data: rows.map((r) => ({ ...r, meters: Number(r.meters) })) };
+  /** H4 ofis listesi: sapmalı okumalar + özet şeridi (tek where; durum `finishStep` kapısıyla aynı yüklemden). */
+  async listMeterDeviations(filter: MeterDeviationFilter, page: { cursor?: string; limit: number }) {
+    const res = await listMeterDeviations(filter, page);
+    return {
+      success: true,
+      data: res.rows,
+      pagination: { nextCursor: res.nextCursor, hasMore: res.nextCursor !== null, limit: page.limit },
+      summary: res.summary,
+    };
   }
 
   // K6 (2026-06-12): undoQc2 kaldırıldı — yarım geri alıyordu (KURSUN op +

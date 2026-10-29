@@ -10,6 +10,9 @@
 // §6 politika kopyası satırda (bugünkü davranış: DECLARED_IN / NONE / eşiksiz).
 // §7 ⭐ reopenStep ⇒ okuma + bağlı onay damgalı (KURSUN_REOPEN).
 // §8 ⭐ DB seddi: ikinci aktif okuma (kısmi unique) ve eksi metre (CHECK) reddedilir.
+// §9 ⭐ H4 sayaç cihazı alanları (servis doğrulaması): bilinmeyen counterMode 400 · 65 karakter / ASCII dışı
+//    resetCommand 400 · METER olmayan cihazda dolu alan 400 · geçerli değer yazılır · "" ⇒ null.
+// H4 sondası: `assertMeterCounterFields` çağrısı kaldırılınca §9a/§9b/§9d ❌.
 // Negatif sondalar (2026-10-29, elle; PR gövdesinde): token kilidi kaldırılınca §3 ❌ ·
 // tablet kapısı kaldırılınca §5 ❌ · reopen damgası kaldırılınca §7 ❌ ·
 // kısmi unique index düşürülünce §8a ❌.
@@ -19,6 +22,7 @@ import { MachineDataSource, MeterPhase, RollStatus, StepStatus, WorkOrderStatus 
 import prisma from "../src/lib/prisma";
 import { KursunQcService } from "../src/services/kursun-qc.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { PeripheralDeviceService } from "../src/services/peripheral.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { roleGrade } from "./fixture-quality-grade";
 import { testActorId } from "./fixture-test-user";
@@ -79,6 +83,7 @@ async function main(): Promise<void> {
   const tag = `TEST-KMETRE-${Date.now()}`;
   const woIds: string[] = [];
   const rollIds: string[] = [];
+  const peripheralIds: string[] = [];
   const bypassIds: string[] = [];
 
   /** Akışta bir top: WO IN_PROGRESS, PROCESS_QC adımı ACTIVE, top adımda + açık hareket. */
@@ -247,7 +252,40 @@ async function main(): Promise<void> {
       check("§7a ⭐ reopen ⇒ okuma damgalı (KURSUN_REOPEN), silinmedi", o.revokedAt !== null && o.revokeReason === "KURSUN_REOPEN", String(o.revokeReason));
       check("§7b reopen ⇒ bağlı onay aynı tx'te damgalı", k.revokedAt !== null && k.revokeReason === "KURSUN_REOPEN");
     }
+
+    // §9 sayaç cihazı alanları
+    {
+      const dev = new PeripheralDeviceService({ modelName: "peripheralDevice", tableName: "PERIPHERAL_DEVICE", searchFields: ["name"], uniqueField: "code" });
+      const base = (kind: string, extra: Record<string, unknown>) => {
+        const code = `TEST-KMT-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.slice(0, 48);
+        return { code, name: `TEST KMETRE ${code}`, kind, connectionType: "SERIAL_COM", ...extra };
+      };
+      const a = await hata(dev.create(base("METER", { counterMode: "BOGUS" }), admin.id));
+      check("§9a ⭐ bilinmeyen counterMode ⇒ 400 INVALID_COUNTER_MODE", a.status === 400 && a.code === "INVALID_COUNTER_MODE", JSON.stringify(a));
+      const b = await hata(dev.create(base("METER", { resetCommand: "R".repeat(65) }), admin.id));
+      check("§9b ⭐ 65 karakter resetCommand ⇒ 400 INVALID_RESET_COMMAND", b.status === 400 && b.code === "INVALID_RESET_COMMAND", JSON.stringify(b));
+      const c = await hata(dev.create(base("METER", { resetCommand: "SIFIRLA\n\u00e7" }), admin.id));
+      check("§9c ASCII dışı / denetim karakterli resetCommand ⇒ 400", c.status === 400 && c.code === "INVALID_RESET_COMMAND", JSON.stringify(c));
+      const d = await hata(dev.create(base("SCALE", { counterMode: "RESETTING" }), admin.id));
+      check("§9d ⭐ METER olmayan cihazda sayaç alanı ⇒ 400 COUNTER_FIELDS_METER_ONLY", d.status === 400 && d.code === "COUNTER_FIELDS_METER_ONLY", JSON.stringify(d));
+      const ok = await dev.create(base("METER", { counterMode: "CUMULATIVE", resetCommand: "R".repeat(64) }), admin.id);
+      const id = (ok.data as { id: string }).id;
+      peripheralIds.push(id);
+      const row = await prisma.peripheralDevice.findUniqueOrThrow({ where: { id }, select: { counterMode: true, resetCommand: true } });
+      check("§9e geçerli değer (CUMULATIVE, 64 karakter) yazılır", row.counterMode === "CUMULATIVE" && row.resetCommand?.length === 64);
+      const u = await hata(dev.update(id, { counterMode: "X" }, admin.id));
+      check("§9f güncellemede de bilinmeyen kip 400", u.status === 400 && u.code === "INVALID_COUNTER_MODE", JSON.stringify(u));
+      const k = await hata(dev.update(id, { kind: "SCALE" }, admin.id));
+      const r1 = await prisma.peripheralDevice.findUniqueOrThrow({ where: { id }, select: { counterMode: true, resetCommand: true } });
+      check("§9g tür SCALE'e çevrilince (eski istemci alan göndermez) sayaç alanları temizlenir, 200", k.status === null && r1.counterMode === null && r1.resetCommand === null, JSON.stringify(k));
+      await dev.update(id, { kind: "METER", counterMode: "RESETTING", resetCommand: "Z" }, admin.id);
+      await dev.update(id, { kind: "METER", counterMode: "", resetCommand: "" }, admin.id);
+      const r2 = await prisma.peripheralDevice.findUniqueOrThrow({ where: { id }, select: { counterMode: true, resetCommand: true } });
+      check("§9h \"\" ⇒ null", r2.counterMode === null && r2.resetCommand === null);
+    }
   } finally {
+    // Sonda koşumunda doğrulamasız yazılan satır da dahil (ad damgalı).
+    await prisma.peripheralDevice.deleteMany({ where: { OR: [{ id: { in: peripheralIds } }, { name: { startsWith: "TEST KMETRE " } }] } }).catch(() => {});
     await prisma.rollMeterAck.deleteMany({ where: { reading: { rollId: { in: rollIds } } } }).catch(() => {});
     await prisma.rollMeterReading.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.kursunBypassAssignment.deleteMany({ where: { id: { in: bypassIds } } }).catch(() => {});
@@ -256,7 +294,7 @@ async function main(): Promise<void> {
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch(() => {});
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
-    await prisma.systemLog.deleteMany({ where: { recordId: { in: [...woIds, ...rollIds] } } }).catch(() => {});
+    await prisma.systemLog.deleteMany({ where: { recordId: { in: [...woIds, ...rollIds, ...peripheralIds] } } }).catch(() => {});
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => {});
     await prisma.machine.deleteMany({ where: { id: machine.id } }).catch(() => {});
     await prisma.station.deleteMany({ where: { id: station.id } }).catch(() => {});

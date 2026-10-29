@@ -3398,6 +3398,7 @@ model Item {
   priceListLines                 PriceListLine[]             @relation("PriceListLineItem")
   serviceForProperties           FabricProperty[]            @relation("FabricPropertyServiceItem")
   serviceForPropertyValues       FabricPropertyValue[]       @relation("FabricPropertyValueServiceItem")
+  serviceBillingLinks            ServiceBillingLink[]        @relation("ServiceBillingLinkItem")
   /// G1: fasona giden iplik kalemleri (kind=YARN).
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
@@ -3933,6 +3934,7 @@ model Roll {
   movements            RollMovement[]
   operations           RollOperation[]
   meterReadings        RollMeterReading[]
+  serviceBillingLinks  ServiceBillingLink[]
   variances            RollVariance[]
   /// Bu topun KEŞFİ olan (ebeveyne yazılmış) sapma satırları — `sourceRollId` ters ilişkisi.
   sourceOfVariances    RollVariance[]              @relation("RollVarianceSourceRoll")
@@ -4909,6 +4911,7 @@ model WorkOrderStep {
   receipts             SubcontractorReceipt[]
   operations           RollOperation[]
   meterReadings        RollMeterReading[]
+  serviceBillingLinks  ServiceBillingLink[]
   variances            RollVariance[]
   planDeviations       RollPlanDeviation[]
   warehouseMovements   WarehouseMovement[]
@@ -5959,6 +5962,7 @@ model RollMeterReading {
   peripheral PeripheralDevice? @relation(fields: [peripheralId], references: [id])
   createdBy  User?             @relation(fields: [createdById], references: [id])
   acks       RollMeterAck[]
+  billingLinks ServiceBillingLink[]
 
   // DB'de PARTIAL (`WHERE "revokedAt" IS NULL`) — adım × evre başına TEK aktif okuma.
   // CHECK `meters >= 0` migration SQL'inde.
@@ -10637,6 +10641,7 @@ model Invoice {
   goodsReceipt         GoodsReceipt?           @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
   /// n irsaliye → 1 fatura (2026-09-18): pivot; `goodsReceiptId` kolonu tek fişte AYRICA dolar (eski okuyucu), n>1 fişte NULL.
   goodsReceiptLinks    InvoiceToGoodsReceipt[]
+  serviceBillingLinks  ServiceBillingLink[]
 
   lines         InvoiceLine[]
   /// Paket D — iplik faturasının stok hareketi bağı (opsiyonel; iplik dışı
@@ -13898,4 +13903,56 @@ model DeliveryNoteAlias {
   @@unique([scope, senderCustomerId, rawKey])
   @@index([targetId])
   @@map("delivery_note_aliases")
+}
+
+/// H7 (Hizmet veren, 2026-10-29) — faturalanan metrenin tabanı. `OUT`/`IN` okuma, `DECLARED` hareket
+/// metresi; `CUT` (Tambur/etek kesilen) ve `RECEIVED` (dış fason dönüşü) H10 içindir (migration'sız iner).
+enum ServiceMeterBasis {
+  OUT
+  IN
+  DECLARED
+  CUT
+  RECEIVED
+}
+
+/// H7 — hizmet işi (top × adım × hizmet kalemi) ↔ fatura bağı. PIVOT_TICARI ③a: DRAFT silinince
+/// Cascade (taslak sınıfı), DRAFT/CONFIRMED iptalinde AYNI tx'te damga; iş yeniden faturalanabilir.
+/// `rollId` işin UYGULANDIĞI toptur (sevk edilen çocuk değil). Tek yazar `service-billing.helper.ts`.
+model ServiceBillingLink {
+  id              String            @id @default(uuid()) @db.Uuid
+  invoiceId       String            @db.Uuid
+  rollId          String            @db.Uuid
+  workOrderStepId String?           @db.Uuid
+  serviceItemId   String            @db.Uuid
+  readingId       String?           @db.Uuid
+  billedMeters    Decimal           @db.Decimal(12, 3)
+  meterBasis      ServiceMeterBasis
+  /// Bağ anındaki birim fiyat (fiyat donar; geç düzeltme faturayı değiştirmez).
+  unitPrice       Decimal           @db.Decimal(14, 4)
+  currency        Currency
+  /// Hizmet anı — adımın ilk OUT okuması (düzeltme kaydırmaz), yoksa KURSUN_APPLIED anı.
+  serviceAt       DateTime          @db.Timestamptz
+
+  /// GERİ ALMA — fatura iptali damgalar (silmez); DRAFT silmesi Cascade.
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  invoice     Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  roll        Roll              @relation(fields: [rollId], references: [id])
+  step        WorkOrderStep?    @relation(fields: [workOrderStepId], references: [id], onDelete: Restrict)
+  serviceItem Item              @relation("ServiceBillingLinkItem", fields: [serviceItemId], references: [id])
+  reading     RollMeterReading? @relation(fields: [readingId], references: [id], onDelete: Restrict)
+
+  // Kısmi unique migration SQL'inde: (rollId, serviceItemId, workOrderStepId) NULLS NOT DISTINCT
+  // WHERE revokedAt IS NULL — iş başına tek aktif bağ (adımsız iş de tekil). CHECK billedMeters >= 0.
+  @@index([invoiceId])
+  @@index([rollId, revokedAt])
+  @@index([workOrderStepId])
+  @@index([serviceItemId])
+  @@index([readingId])
+  @@map("service_billing_links")
 }
