@@ -50,8 +50,13 @@ export function LineImportButton({ noteId, onImported }: { noteId: string; onImp
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<LineImportError[]>([]);
   const attempt = useAttemptToken();
+  const lastFile = useRef<string | null>(null);
 
   const handleFile = async (file: File) => {
+    // Başka dosya = yeni mantıksal deneme; aynı dosyanın yeniden denenmesi token'ı korur.
+    const sig = `${file.name}:${file.size}:${file.lastModified}`;
+    if (lastFile.current !== sig) attempt.renew();
+    lastFile.current = sig;
     setBusy(true);
     setErrors([]);
     try {

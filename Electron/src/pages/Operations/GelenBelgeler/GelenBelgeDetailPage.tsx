@@ -102,6 +102,7 @@ export function IncomingDocumentDetailPage() {
             note={n}
             suggestions={suggestions.data}
             editable={editable}
+            canWrite={hasPermission("gelen-belge:write")}
             selectedId={selected}
             onSelect={setSelected}
             onPatch={(lineId, patch) => line.mutate({ lineId, patch })}
@@ -119,8 +120,9 @@ export function IncomingDocumentDetailPage() {
         open={reviewOpen}
         onOpenChange={setReviewOpen}
         lines={n.lines}
-        scanId={n.scans[0]?.id ?? null}
-        onSave={(item, value) => line.mutateAsync({ lineId: item.lineId, patch: { [item.field]: value } })}
+        // Satır kaynak taramasını taşımaz: çok sayfada kırpık yanlış sayfadan gelebilir → gösterilmez.
+        scanId={n.scans.length === 1 ? (n.scans[0]?.id ?? null) : null}
+        onSave={(item, patch) => line.mutateAsync({ lineId: item.lineId, patch })}
       />
       <ApproveDialog noteId={n.id} open={approveOpen} onOpenChange={setApproveOpen} onDone={() => void invalidate()} />
     </PageShell>

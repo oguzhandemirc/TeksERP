@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { AxiosError, type AxiosResponse } from "axios";
 import { blockTotals, hasMismatch } from "../totals";
-import { buildReviewQueue, fieldRect, lineRect, parseTrNumber } from "../review-queue";
+import { buildReviewQueue, cellPatch, fieldRect, lineRect, parseTrNumber } from "../review-queue";
 import { parseLineRows, MAX_IMPORT_LINES } from "../lineImport";
 import { errorCode, needsVarianceReason, summarizeApprove } from "../approveFlow";
 import { EMPTY_FILTER, toQuery } from "../useNoteList";
@@ -59,6 +59,12 @@ describe("hücre gözden geçirme kuyruğu", () => {
       line({ id: "z", needsReview: false }),
     ]);
     expect(q.map((i) => `${i.lineId}:${i.field}`)).toEqual(["a1:meters", "a2:meters", "a2:weightKg", "b:meters"]);
+  });
+  it("metre kaydı aynı satırın kg hücresi kuyruktayken işareti korur; son hücre işareti bırakır", () => {
+    const q = buildReviewQueue([line({ id: "a", needsReview: true, sourceRects: { m: rect, kg: rect } }), line({ id: "b", lineNo: 2, needsReview: true })]);
+    expect(cellPatch(q, 0, 12.5)).toEqual({ meters: 12.5, needsReview: true });
+    expect(cellPatch(q, 1, 40)).toEqual({ weightKg: 40 });
+    expect(cellPatch(q, 2, 7)).toEqual({ meters: 7 });
   });
   it("hücre dikdörtgeni metre anahtarından, yoksa değer hücresinden, yoksa satır kutusundan", () => {
     expect(fieldRect({ sourceRects: { metre: rect } }, "meters")).toEqual(rect);

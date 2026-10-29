@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CellCrop } from "./CellCrop";
 import { NumericKeypad } from "./NumericKeypad";
-import { buildReviewQueue, fieldRect, parseTrNumber, type ReviewItem } from "./review-queue";
+import { buildReviewQueue, cellPatch, fieldRect, parseTrNumber, type CellPatch, type ReviewItem } from "./review-queue";
 import type { DeliveryNoteLine } from "./types";
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   lines: DeliveryNoteLine[];
   scanId: string | null;
-  onSave: (item: ReviewItem, value: number) => Promise<unknown>;
+  onSave: (item: ReviewItem, patch: CellPatch) => Promise<unknown>;
 }
 
 const FIELD_LABEL = { meters: "Metre", weightKg: "Kilo" } as const;
@@ -40,7 +40,7 @@ export function CellReviewDialog({ open, onOpenChange, lines, scanId, onSave }: 
     if (!item || parsed === null || busy) return;
     setBusy(true);
     try {
-      await onSave(item, parsed);
+      await onSave(item, cellPatch(queue, pos, parsed));
       if (pos + 1 >= queue.length) onOpenChange(false);
       else setPos(pos + 1);
     } catch {

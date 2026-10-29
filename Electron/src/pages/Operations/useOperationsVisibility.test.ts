@@ -51,6 +51,13 @@ describe("useOperationsVisibilityContext — bayrak okunamadığında yön", () 
     expect(ctx().dokumaEnabled).toBe(true);
   });
 
+  it("⭐ zincir: gelen belge AÇIK ama emanet KAPALI → etkin gelen belge KAPALI (karo + palet + route gizli)", () => {
+    flagsData = { emanetEnabled: false, gelenBelgeEnabled: true };
+    expect(ctx().gelenBelgeEnabled).toBe(false);
+    flagsData = { emanetEnabled: true, gelenBelgeEnabled: true };
+    expect(ctx().gelenBelgeEnabled).toBe(true);
+  });
+
   it("zincir: iplik AÇIK ama ticaret KAPALI → etkin iplik KAPALI; devere BAĞIMSIZ kalır (K3 2026-09-14)", () => {
     flagsData = { ticaretEnabled: false, iplikEnabled: true, devereEnabled: true };
     const c = ctx();

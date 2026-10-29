@@ -50,6 +50,16 @@ export function buildReviewQueue(lines: readonly QueueLine[]): ReviewItem[] {
     });
 }
 
+export type CellPatch = Partial<Record<ReviewField, number>> & { needsReview?: true };
+
+/** Hücre kaydı yükü: aynı satırın görülmemiş hücresi kuyrukta kaldıysa işaret korunur (backend değer düzeltmesinde işareti düşürür). */
+export function cellPatch(queue: readonly ReviewItem[], pos: number, value: number): CellPatch {
+  const item = queue[pos];
+  if (!item) return {};
+  const pending = queue.slice(pos + 1).some((q) => q.lineId === item.lineId);
+  return pending ? { [item.field]: value, needsReview: true } : { [item.field]: value };
+}
+
 /** Türkçe sayı girişi: virgül ondalık, nokta binlik. Geçersiz/≤0 → null. */
 export function parseTrNumber(raw: string): number | null {
   const t = raw.trim().replace(/\s/g, "");

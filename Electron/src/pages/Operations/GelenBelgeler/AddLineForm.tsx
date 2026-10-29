@@ -20,6 +20,11 @@ export function AddLineForm({ noteId, defaultBlock, onAdded }: Props) {
   const [rollNo, setRollNo] = useState("");
   const [block, setBlock] = useState(String(defaultBlock));
   const attempt = useAttemptToken();
+  // Değer değişimi yeni mantıksal deneme: zaman aşımından sonra değişen girdi eski satırın replay'ine düşmesin.
+  const edit = (set: (v: string) => void, v: string) => {
+    attempt.renew();
+    set(v);
+  };
   const m = parseTrNumber(meters);
   const add = useMutation({
     mutationFn: () =>
@@ -42,10 +47,10 @@ export function AddLineForm({ noteId, defaultBlock, onAdded }: Props) {
       }}
       data-testid="add-line-form"
     >
-      <Input aria-label="Blok" className="h-9 w-16" type="number" min={1} value={block} onChange={(e) => setBlock(e.target.value)} />
-      <Input aria-label="Top no" placeholder="Top no" className="h-9 w-24" value={rollNo} onChange={(e) => setRollNo(e.target.value)} />
-      <Input aria-label="Yeni satır metre" placeholder="Metre *" inputMode="decimal" className="h-9 w-28" value={meters} onChange={(e) => setMeters(e.target.value)} />
-      <Input aria-label="Yeni satır kilo" placeholder="Kilo" inputMode="decimal" className="h-9 w-24" value={kg} onChange={(e) => setKg(e.target.value)} />
+      <Input aria-label="Blok" className="h-9 w-16" type="number" min={1} value={block} onChange={(e) => edit(setBlock, e.target.value)} />
+      <Input aria-label="Top no" placeholder="Top no" className="h-9 w-24" value={rollNo} onChange={(e) => edit(setRollNo, e.target.value)} />
+      <Input aria-label="Yeni satır metre" placeholder="Metre *" inputMode="decimal" className="h-9 w-28" value={meters} onChange={(e) => edit(setMeters, e.target.value)} />
+      <Input aria-label="Yeni satır kilo" placeholder="Kilo" inputMode="decimal" className="h-9 w-24" value={kg} onChange={(e) => edit(setKg, e.target.value)} />
       <Button type="submit" size="sm" disabled={m === null || add.isPending}>
         <Plus className="mr-1 h-4 w-4" />
         Satır ekle
