@@ -367,6 +367,8 @@ const mobile: ScreenEntry[] = [
   { key: "FasonDokuma", app: "mobile", modul: "dokumaEnabled", title: "Fason Dokuma Kabul", requires: ["mobile:fason-kabul"], capabilities: [] },
   // K4P-EKRAN (2026-10-25): istasyondan bağımsız Muayene — top okut, 4 puan muayene yaz (oturumsuz).
   { key: "Muayene", app: "mobile", modul: "kaliteGuvenceEnabled", title: "Muayene", requires: ["mobile:muayene"], capabilities: [] },
+  // Gülkesim D7 (2026-10-29): tablet "Belge Tara" — foto + barkod + sahip → DRAFT; onay panelde (SoD). Mevcut web izni, yeni kod yok.
+  { key: "GelenBelge", app: "mobile", modul: "gelenBelgeEnabled", title: "Belge Tara", requires: ["gelen-belge:write"], capabilities: [] },
 ];
 
 /** Tüm ekranlar — masaüstü yetenek kodları etiketlenmiş hâlde. */
@@ -433,7 +435,6 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
       "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
       "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
-  { modul: "gelenBelgeEnabled", reason: "Gelen belge taslağı (D1): şalter + kapı doğdu, panel ekranı D5'te (Operations/GelenBelgeler); ekran eşlenince bu muaf silinir." },
 ];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */
@@ -455,7 +456,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // Gelen belge taslağı (D1, 2026-10-29): izinler kapıyla birlikte doğdu, ekran D5'te — o gün dört satır
   // `SCREEN_CATALOG`a (`gelen-belge` requires/capabilities) taşınır ve bu muaflar silinir.
   { code: "gelen-belge:read", reason: "Gelen belge taslağı ekranı D5'te doğar; izin modül kapısıyla birlikte D1'de geldi." },
-  { code: "gelen-belge:write", reason: "Gelen belge taslağı ekranı D5'te doğar; izin modül kapısıyla birlikte D1'de geldi." },
   { code: "gelen-belge:approve", reason: "Gelen belge taslağı ekranı D5'te doğar; onay yeteneği modül kapısıyla birlikte D1'de geldi." },
   { code: "gelen-belge:template", reason: "Gönderen şablonu yönetimi D5/D8'de doğar; izin modül kapısıyla birlikte D1'de geldi." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).

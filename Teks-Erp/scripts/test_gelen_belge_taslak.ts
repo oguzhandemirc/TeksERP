@@ -144,6 +144,14 @@ async function main(): Promise<void> {
     const png = await up(PNG);
     if (png.data?.scan?.id) made.scans.push(String(png.data.scan.id));
     check("farklı içerik → yeni kayıt 201", png.status === 201 && png.data?.scan?.id !== scanId);
+    // D7: tablet özeti kendisi gönderir — doğru özet geçer (aynı kayıt), yanlış özet 400 (yolda bozulan bayt kayda girmez).
+    const shaOk = await up(JPEG, { sha256: crypto.createHash("sha256").update(JPEG).digest("hex").toUpperCase() });
+    check("D7 istemci özeti doğru → 200 duplicate, aynı id", shaOk.status === 200 && shaOk.data?.scan?.id === scanId, `${shaOk.status} ${shaOk.code ?? ""}`);
+    const shaBad = await up(Buffer.concat([JPEG, Buffer.from("x")]), { sha256: "0".repeat(64) });
+    check("⭐ D7 istemci özeti tutmuyor → 400 DOCUMENT_SCAN_HASH_MISMATCH, kayıt yok", shaBad.status === 400 && shaBad.code === "DOCUMENT_SCAN_HASH_MISMATCH", `${shaBad.status} ${shaBad.code ?? ""}`);
+    const tctx = await call("GET", "/api/gelen-belge/tablet-baglam", tk);
+    const ctxRows = (tctx.data?.customers ?? []) as Array<Record<string, unknown>>;
+    check("D7 tablet bağlamı → 200, satırlar yalnız id+name (opt-in allowlist)", tctx.status === 200 && Array.isArray(tctx.data?.customers) && ctxRows.every((r) => Object.keys(r).sort().join(",") === "id,name"), `${tctx.status} ${ctxRows.length} satır`);
     const dl = await fetch(`${url}/api/gelen-belge/taramalar/${scanId}/icerik`, { headers: { Authorization: `Bearer ${tk}` } });
     check("içerik indirme bayt-eşit + image/jpeg", dl.status === 200 && dl.headers.get("content-type") === "image/jpeg" && Buffer.from(await dl.arrayBuffer()).equals(JPEG), `${dl.status} ${dl.headers.get("content-type")}`);
 
