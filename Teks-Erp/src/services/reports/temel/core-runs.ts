@@ -4,7 +4,7 @@
 // Bir boyut yalnız kaynak ucun ZATEN kabul ettiği süzgeçle süzülebiliyorsa beyan edilir (hücre = süzgeçli ana
 // koşu). Katalogdaki öteki boyutlar (renk, istasyon, tezgâh…) kaynak süzgeci gelene dek KAPALIDIR: çip yok, 400.
 
-import type { ShipmentDestination } from "@prisma/client";
+import type { Currency, ShipmentDestination } from "@prisma/client";
 import { factoryYmd } from "../../../constants/time";
 import type { CompareMode, DateRange } from "../_shared";
 import { buildOrderDemandReport } from "./siparis-talep.temel";
@@ -13,6 +13,8 @@ import { buildDeadlineReport } from "./termin.temel";
 import { buildOpenOrderReport } from "./acik-siparisler.temel";
 import { buildSubcontractorsReport } from "./fasoncular.temel";
 import { buildLoomStopsReport } from "./duruslar.temel";
+import { getExpenseSummary, type ExpenseSummary } from "../../helpers/expense-summary.helper";
+import { buildExpenseSummarySunumu, currencyName } from "../expense-summary.sunum";
 import type { ResolvedDayRange } from "./_day-range";
 import { DESTINATION_DIMENSION, declaredOptionsDimension, rankedDimension, type CoreRunner, type VariantDimension } from "./_variant";
 
@@ -22,6 +24,7 @@ export const DEADLINE_DIMS: readonly VariantDimension[] = [DESTINATION_DIMENSION
 export const OPEN_ORDER_DIMS: readonly VariantDimension[] = [rankedDimension("urun", "itemId")];
 export const SUBCONTRACTOR_DIMS: readonly VariantDimension[] = [rankedDimension("fasoncu", "subcontractorId")];
 export const LOOM_STOP_DIMS: readonly VariantDimension[] = [declaredOptionsDimension("vardiya", "shiftDefinitionId")];
+export const EXPENSE_SUMMARY_DIMS: readonly VariantDimension[] = [rankedDimension("paraBirimi", "currency")];
 
 /** Uç anahtarı → beyanlı boyutlar (bekçi: katalog `varyantBoyutlari`nın alt kümesi olmalı). */
 export const CORE_VARIANT_DIMS = {
@@ -31,6 +34,7 @@ export const CORE_VARIANT_DIMS = {
   "sales/acik-siparisler": OPEN_ORDER_DIMS,
   "subcontract/fasoncular": SUBCONTRACTOR_DIMS,
   "dokuma/duruslar": LOOM_STOP_DIMS,
+  "finance/masraf-ozeti": EXPENSE_SUMMARY_DIMS,
 } as const;
 
 type Cell = Parameters<CoreRunner>[2];
@@ -84,4 +88,23 @@ export function dayWindowOf(range: DateRange, compareRange: DateRange | null, mo
 export function loomStopsRunner(shiftDefinitionId: string[] | undefined, mode: CompareMode): CoreRunner {
   return (range, compareRange, cell) =>
     buildLoomStopsReport({ window: dayWindowOf(range, compareRange, mode), shiftDefinitionId: only(cell, "vardiya") ?? shiftDefinitionId });
+}
+
+/**
+ * Masraf özeti: hücre = masrafın ASIL para birimiyle süzülmüş özet (tutar yine TL karşılığı). Havuz ana koşunun
+ * para birimi kırılımından (TL azalan). `onMain` ilk (ana) koşunun özetini verir — uç `detay`ı ondan basar.
+ */
+export function expenseSummaryRunner(main: ResolvedDayRange, currency: Currency[] | undefined, onMain: (s: ExpenseSummary) => void): CoreRunner {
+  let first = true;
+  return async (range, compareRange, cell) => {
+    const cur = cell?.boyut === "paraBirimi" ? [cell.deger as Currency] : currency;
+    const summary = await getExpenseSummary({ range, currency: cur });
+    const previous = compareRange ? await getExpenseSummary({ range: compareRange, currency: cur }) : null;
+    if (first) { first = false; onMain(summary); }
+    const window = range === main.range && compareRange === main.compareRange ? main : dayWindowOf(range, compareRange, main.mode);
+    return {
+      sunum: buildExpenseSummarySunumu(summary, window, previous, cur),
+      kirilimlar: { paraBirimi: summary.currencies.map((c) => ({ deger: c.currency, etiket: currencyName(c.currency) })) },
+    };
+  };
 }

@@ -19,7 +19,7 @@
 // kasa defteri EXPENSE toplamı eşitliğini ölçer.
 // =============================================================================
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type Currency } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { factoryMonthSql, factoryYmd } from "../../constants/time";
 import { D, D0 } from "./finance.helper";
@@ -36,6 +36,8 @@ export function cashCategoryKey(raw: string | null | undefined): { key: string; 
 
 export interface ExpenseSummaryParams {
   range: { from: Date; to: Date };
+  /** Masrafın ASIL para birimi süzgeci (varyant `paraBirimi` hücresi); yoksa hepsi. Tutar yine TL karşılığıdır. */
+  currency?: Currency[];
 }
 
 export interface ExpenseSummaryCell {
@@ -66,10 +68,13 @@ export interface ExpenseSummary {
   monthTotals: Array<{ month: string; amountTry: string }>;
   expenseCount: number;
   cancelCount: number;
+  /** Asıl para birimine göre net TL (varyant havuzu); sıra TL azalan, eşitlikte kod. */
+  currencies: Array<{ currency: string; totalTry: string }>;
 }
 
 interface SummaryRow {
   category: string | null;
+  currency: string;
   month: string;
   amount: string;
   expenseCount: number;
@@ -98,34 +103,40 @@ export function compareExpenseCategories(a: { key: string; totalTry: string }, b
 
 export async function getExpenseSummary(params: ExpenseSummaryParams): Promise<ExpenseSummary> {
   const { from, to } = params.range;
+  const currencyFilter = params.currency && params.currency.length > 0
+    ? Prisma.sql`AND ct.currency::text IN (${Prisma.join(params.currency)})`
+    : Prisma.empty;
   // Kasa defterinin EXPENSE dalları (`cash-book.report.ts` 2 + 2b) — aynı evren, TL tutarla.
   const rows = await prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
     WITH mv AS (
-      SELECT ct.category, ct."txnDate" AS dt, ct."amountTry" AS amt, 0 AS cancelled
+      SELECT ct.category, ct.currency::text AS currency, ct."txnDate" AS dt, ct."amountTry" AS amt, 0 AS cancelled
         FROM cash_transactions ct
        WHERE ct.kind = 'EXPENSE' AND ct."paymentId" IS NULL
-         AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
+         AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL ${currencyFilter}
       UNION ALL
-      SELECT ct.category, ct."cancelledAt", -ct."amountTry", 1
+      SELECT ct.category, ct.currency::text, ct."cancelledAt", -ct."amountTry", 1
         FROM cash_transactions ct
        WHERE ct.kind = 'EXPENSE' AND ct."paymentId" IS NULL
          AND ct.status = 'CANCELLED' AND ct."cancelledAt" IS NOT NULL
-         AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
+         AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL ${currencyFilter}
     )
     SELECT mv.category,
+           mv.currency,
            to_char(${factoryMonthSql("mv.dt")}, 'YYYY-MM') AS month,
            SUM(mv.amt)::text AS amount,
            (COUNT(*) FILTER (WHERE mv.cancelled = 0))::int AS "expenseCount",
            (COUNT(*) FILTER (WHERE mv.cancelled = 1))::int AS "cancelCount"
       FROM mv
      WHERE mv.dt >= ${from} AND mv.dt <= ${to}
-     GROUP BY 1, 2
+     GROUP BY 1, 2, 3
   `);
 
   const months = monthsBetween(factoryYmd(from).slice(0, 7), factoryYmd(to).slice(0, 7));
 
   const byKey = new Map<string, { key: string; label: string; cells: Map<string, { amt: Prisma.Decimal; e: number; c: number }> }>();
+  const byCurrency = new Map<string, Prisma.Decimal>();
   for (const r of rows) {
+    byCurrency.set(r.currency, (byCurrency.get(r.currency) ?? D0()).plus(D(r.amount)));
     const cat = cashCategoryKey(r.category);
     const entry = byKey.get(cat.key) ?? { ...cat, cells: new Map() };
     const cell = entry.cells.get(r.month) ?? { amt: D0(), e: 0, c: 0 };
@@ -168,6 +179,9 @@ export async function getExpenseSummary(params: ExpenseSummaryParams): Promise<E
     monthTotals: months.map((m) => ({ month: m, amountTry: (monthSums.get(m) ?? D0()).toFixed(2) })),
     expenseCount,
     cancelCount,
+    currencies: [...byCurrency.entries()]
+      .map(([currency, amt]) => ({ currency, totalTry: amt.toFixed(2) }))
+      .sort((a, b) => D(b.totalTry).comparedTo(D(a.totalTry)) || (a.currency < b.currency ? -1 : a.currency > b.currency ? 1 : 0)),
   };
 }
 

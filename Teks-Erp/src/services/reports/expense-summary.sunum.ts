@@ -10,6 +10,9 @@ import { anaSayiKur } from "./sunum/sunum-kur";
 import { catalogHeader, periodOf } from "./temel/_common";
 import { dayRangeParameters, type ResolvedDayRange } from "./temel/_day-range";
 import { cashCategoryKey, type ExpenseSummary } from "../helpers/expense-summary.helper";
+import { CURRENCIES } from "../../config/currencies";
+import { anlatiUret } from "./anlati/anlati";
+import type { AnlatiCumlesi } from "./sunum/sunum.types";
 
 const UNCATEGORIZED_KEY = cashCategoryKey(null).key;
 
@@ -57,8 +60,31 @@ export function expenseSummaryWarnings(s: ExpenseSummary): string[] {
   return w;
 }
 
-export function buildExpenseSummarySunumu(s: ExpenseSummary, window: ResolvedDayRange, previous: ExpenseSummary | null): RaporSunumu {
-  const parametreler: ParametreBeyani[] = dayRangeParameters(window.days, window.mode);
+/** Para birimi kodu → günlük ad (seçenek etiketi ve varyant hücresi adı aynı yerden). */
+export const currencyName = (code: string): string => CURRENCIES.find((c) => c.code === code)?.name ?? code;
+
+/** `currency` süzgecinin çip beyanı (varyant hücresine tıklanınca panel bu anahtarı yazar). */
+export function currencyParameter(selected: readonly string[] | undefined): ParametreBeyani {
+  return {
+    ad: "currency", etiket: "Para birimi", tur: "cokluSecim",
+    deger: selected && selected.length > 0 ? [...selected] : null,
+    secenekler: CURRENCIES.map((c) => ({ deger: c.code, etiket: c.name })),
+  };
+}
+
+/**
+ * "Ne görüyoruz?" — anlatı motorunun `enBuyukPay` kuralı (en az iki kategori, eksi toplamlı kategori yokken):
+ * "En büyük pay <kategori>: <tutar> (toplamın %<pay>'ı)." Boş dönemde cümle YOK.
+ */
+export function expenseSummaryNarrative(s: ExpenseSummary): AnlatiCumlesi[] {
+  if (s.categories.length === 0) return [];
+  return anlatiUret({
+    kirilim: { boyut: "kategori", birim: "TRY", adTuru: "ozel", ozneIlgi: "Masrafların", satirlar: s.categories.map((c) => ({ ad: c.label, deger: tl(c.totalTry) })) },
+  }, { kurallar: ["enBuyukPay"] });
+}
+
+export function buildExpenseSummarySunumu(s: ExpenseSummary, window: ResolvedDayRange, previous: ExpenseSummary | null, currency?: readonly string[]): RaporSunumu {
+  const parametreler: ParametreBeyani[] = [...dayRangeParameters(window.days, window.mode), currencyParameter(currency)];
   return {
     ...catalogHeader(EXPENSE_SUMMARY_KEY),
     donem: periodOf(window.range),
@@ -76,7 +102,7 @@ export function buildExpenseSummarySunumu(s: ExpenseSummary, window: ResolvedDay
       anaSayiKur({ olcu: "masraf.kategoriSayisi", ad: "Kategori", deger: s.categories.length, birim: "adet", iyiYon: "notr" }),
       anaSayiKur({ olcu: "masraf.iptalSayisi", ad: "İptal edilen", deger: s.cancelCount, birim: "adet", iyiYon: "notr" }),
     ],
-    anlati: [],
+    anlati: expenseSummaryNarrative(s),
     grafik: null,
     tablo: expenseSummaryTable(s),
     tanimlar: [

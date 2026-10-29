@@ -26,7 +26,7 @@
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { CariKind, CariTxnSource } from "@prisma/client";
+import { CariKind, CariTxnSource, type Currency } from "@prisma/client";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
@@ -39,8 +39,10 @@ import { getVatSummaryReport, VAT_YONLERI } from "../../services/reports/finance
 import { getFxDiffReport } from "../../services/reports/finance-fx-diff.report";
 import { buildCashBookNarrative, buildFxDiffNarrative, buildVatNarrative } from "../../services/reports/temel/expert-narrative";
 import { cariService } from "../../services/cari.service";
-import { getExpenseSummary } from "../../services/helpers/expense-summary.helper";
-import { buildExpenseSummarySunumu, EXPENSE_SUMMARY_KEY } from "../../services/reports/expense-summary.sunum";
+import type { ExpenseSummary } from "../../services/helpers/expense-summary.helper";
+import { EXPENSE_SUMMARY_KEY } from "../../services/reports/expense-summary.sunum";
+import { EXPENSE_SUMMARY_DIMS, expenseSummaryRunner } from "../../services/reports/temel/core-runs";
+import { runCoreWithExtras, variantQueryKeys } from "../../services/reports/temel/_variant";
 import { coreDayRangeQuerySchema, resolveCoreDayRange } from "../../services/reports/temel/_day-range";
 import { REPORT_BY_KEY } from "../../constants/report-catalog";
 import { AppError } from "../../utils/app-error";
@@ -201,7 +203,11 @@ router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (r
 // -----------------------------------------------------------------------------
 
 /** Gün aralığı + kıyas (rapor v2 gün sözleşmesi); tanınmayan anahtar 400. */
-export const expenseSummaryQuerySchema = coreDayRangeQuerySchema.extend({}).strict();
+export const expenseSummaryQuerySchema = coreDayRangeQuerySchema.extend({
+  currency: z.string().transform((v) => v.split(",").filter(Boolean))
+    .pipe(z.array(z.enum(CURRENCIES, { message: "Tanınmayan para birimi" })).min(1, "Para birimi boş olamaz")).optional(),
+  ...variantQueryKeys(EXPENSE_SUMMARY_DIMS),
+}).strict();
 
 /**
  * @openapi
@@ -217,8 +223,11 @@ export const expenseSummaryQuerySchema = coreDayRangeQuerySchema.extend({}).stri
  *       - { in: query, name: from, schema: { type: string, format: date } }
  *       - { in: query, name: to, schema: { type: string, format: date } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] } }
+ *       - { in: query, name: currency, description: "Masrafın asıl para birimi (CSV: TRY,USD…); tutar yine TL karşılığı", schema: { type: string } }
+ *       - { in: query, name: varyant, schema: { type: string, enum: [paraBirimi] } }
+ *       - { in: query, name: donemler, description: "ay:6 · hafta:8 · gun:7", schema: { type: string } }
  *     responses:
- *       200: { description: "RaporSunumu (data) + data.detay (months · categories[key, label, totalTry, cells[]] · monthTotals · totalTry)" }
+ *       200: { description: "RaporSunumu (data) + data.detay (months · categories[key, label, totalTry, cells[]] · monthTotals · totalTry · currencies)" }
  *       400: { description: Tanınmayan ya da geçersiz parametre }
  *       403: { description: Ön muhasebe kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
  */
@@ -226,9 +235,11 @@ router.get("/masraf-ozeti", requireReportOpen("finance/masraf-ozeti"), guard, as
   try {
     const input = expenseSummaryQuerySchema.parse(req.query);
     const window = resolveCoreDayRange(input, REPORT_BY_KEY.get(EXPENSE_SUMMARY_KEY)?.varsayilanGun ?? 90);
-    const detay = await getExpenseSummary({ range: window.range });
-    const previous = window.compareRange ? await getExpenseSummary({ range: window.compareRange }) : null;
-    const sunum = buildExpenseSummarySunumu(detay, window, previous);
+    let detay: ExpenseSummary | null = null;
+    const { sunum } = await runCoreWithExtras({
+      range: window.range, compareRange: window.compareRange, dims: EXPENSE_SUMMARY_DIMS, varyant: input.varyant, donemler: input.donemler,
+      run: expenseSummaryRunner(window, input.currency as Currency[] | undefined, (s) => { detay = s; }),
+    });
     res.status(200).json(reportEnvelope({ ...sunum, detay }, window.range, window.compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {
     next(e);

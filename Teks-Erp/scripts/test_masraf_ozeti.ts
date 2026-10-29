@@ -7,9 +7,12 @@
 // §4 sunum zarfı: tablo toplamı = ana sayı = helper toplamı; ay kolonları = ay toplamları (ekran/Excel/PDF aynı tablo)
 // §5 ⭐ AST: `CAT:` kategori anahtarı yalnız `expense-summary.helper.ts`te yazılır
 // §6 öneri ucu: ayar ON → son kategoriler; OFF → enabled:false, boş liste; ayar birebir geri yüklenir
+// §7 ⭐ varyant `paraBirimi`: hücre = asıl para birimiyle süzülmüş özet (TL karşılığı), Σ hücre = ana sayı; şema kapalı küme
+// §8 anlatı: "En büyük pay <kategori>: <tutar> (toplamın %<pay>'ı)." — boş dönemde ve eksi toplamlı kategoride cümle YOK
 // Fikstür 2019 aylarında (başka veri o aylara düşmez); iptal anı fikstürde 2019'a taşınır (servis iptali `now()` yazar).
 // NEGATİF SONDA (2026-10-29): helper'dan iptal kolu (UNION ALL 2. dal) silindi → §1/§2 ❌;
 // cash-book `bucketOf`a `CAT:` literali geri yazıldı → §5 ❌; ikisi de geri alındı → ✅.
+// (2026-10-30) para birimi süzgeci `Prisma.empty` yapıldı → §7a/§7b/§7c ❌; sunum `anlati: []` → §8a ❌; geri alındı → 28/0.
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -23,7 +26,10 @@ import {
   getExpenseSummary,
   UNCATEGORIZED_LABEL,
 } from "../src/services/helpers/expense-summary.helper";
-import { buildExpenseSummarySunumu, monthColumnKey } from "../src/services/reports/expense-summary.sunum";
+import { buildExpenseSummarySunumu, expenseSummaryNarrative, monthColumnKey } from "../src/services/reports/expense-summary.sunum";
+import { EXPENSE_SUMMARY_DIMS, expenseSummaryRunner } from "../src/services/reports/temel/core-runs";
+import { runCoreWithExtras } from "../src/services/reports/temel/_variant";
+import { expenseSummaryQuerySchema } from "../src/routes/reports/finance.report.routes";
 import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -161,6 +167,38 @@ async function main(): Promise<void> {
   }));
   check("§4c satır sırası helper sırası", JSON.stringify(t.satirlar.map((r) => r.kategori)) === JSON.stringify(s.categories.map((c) => c.label)));
   check("§4d iptal uyarısı günlük dilde", sunum.uyarilar.some((u) => u.includes("iptal edildiği ayda eksi")));
+  check("§4e para birimi süzgeci beyanlı (varyant hücresinin yazdığı anahtar)", sunum.parametreler.some((p) => p.ad === "currency" && p.deger === null));
+
+  console.log("\n── §7 para birimi varyantı ──");
+  const usdBox = await prisma.cashBox.create({ data: { code: `${TAG}-U`, name: `${TAG} döviz kasa`, currency: "USD" }, select: { id: true } });
+  boxIds.push(usdBox.id);
+  await cashTransactionService.create({ kind: "OPENING", cashBoxId: usdBox.id, amount: 1000, exchangeRate: 30, txnDate: day("2018-11-01") });
+  await expense(box.id, 200, "2019-05-10", "Kira");
+  await cashTransactionService.create({ kind: "EXPENSE", cashBoxId: usdBox.id, amount: 10, exchangeRate: 30, txnDate: day("2019-05-12"), category: "Kargo" });
+  const may = resolveCoreDayRange({ from: "2019-05-01", to: "2019-05-31", kiyas: "none" }, 90);
+  let detail: Awaited<ReturnType<typeof getExpenseSummary>> | null = null;
+  const run = await runCoreWithExtras({ range: may.range, compareRange: may.compareRange, dims: EXPENSE_SUMMARY_DIMS, varyant: "paraBirimi",
+    run: expenseSummaryRunner(may, undefined, (x) => { detail = x; }) });
+  const cells = run.sunum.varyant?.hucreler ?? [];
+  check("§7a ⭐ hücreler asıl para birimine göre, TL azalan: USD 300 · TRY 200", JSON.stringify(cells.map((c) => [c.deger, c.anaSayi.deger])) === JSON.stringify([["USD", 300], ["TRY", 200]]),
+    JSON.stringify(cells.map((c) => [c.deger, c.anaSayi.deger])));
+  check("§7b ⭐ Σ hücre = ana sayı = uç detayı (ana koşu)", run.sunum.anaSayi.deger === 500 && cells.reduce((t, c) => t + (c.anaSayi.deger ?? 0), 0) === 500
+    && (detail as { totalTry: string } | null)?.totalTry === "500.00");
+  const usdOnly = await getExpenseSummary({ range: may.range, currency: ["USD"] });
+  check("§7c süzgeç: currency=USD yalnız döviz masrafı (TL karşılığı)", usdOnly.totalTry === "300.00" && usdOnly.categories.length === 1 && usdOnly.categories[0]!.label === "Kargo");
+  check("§7d hücre adı günlük dilde, süzgeç anahtarı `currency`", run.sunum.varyant?.suzgecAnahtari === "currency" && cells[0]?.ad === "Amerikan Doları");
+  check("§7e şema: bilinmeyen para birimi 400 · beyansız kırılım 400 · CSV kabul",
+    !expenseSummaryQuerySchema.safeParse({ currency: "XYZ" }).success && !expenseSummaryQuerySchema.safeParse({ varyant: "musteri" }).success
+      && !expenseSummaryQuerySchema.safeParse({ currency: "" }).success
+      && expenseSummaryQuerySchema.safeParse({ currency: "USD,TRY", varyant: "paraBirimi", donemler: "ay:3" }).success);
+
+  console.log("\n── §8 anlatı ──");
+  const mayNarrative = run.sunum.anlati.map((a) => a.metin);
+  check("§8a ⭐ en büyük pay cümlesi sunucuda: kategori + tutar + pay", mayNarrative.length === 1 && mayNarrative[0]!.includes("Kargo") && mayNarrative[0]!.includes("%60"),
+    mayNarrative.join(" | "));
+  const empty = await getExpenseSummary({ range: resolveCoreDayRange({ from: "2019-07-01", to: "2019-07-31", kiyas: "none" }, 90).range });
+  check("§8b boş dönemde cümle yok", empty.categories.length === 0 && expenseSummaryNarrative(empty).length === 0);
+  check("§8c eksi toplamlı kategori varken pay cümlesi kurulmaz (Nakliye −700)", s.categories.some((c) => Number(c.totalTry) < 0) && expenseSummaryNarrative(s).length === 0);
 
   console.log("\n── §6 kategori önerisi ayarı ──");
   const original = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_EXPENSE_CATEGORY_SUGGESTIONS } });
