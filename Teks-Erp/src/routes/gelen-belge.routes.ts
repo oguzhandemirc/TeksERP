@@ -5,7 +5,7 @@
 // Bu yol global 1 MB JSON katmanını ATLAR (`BUYUK_GOVDE_YOLLARI`) ve kendi 10 MB katmanını
 // taşır — belge fotoğrafı base64 gövdeyle gelir (≤ 5 MB dosya, servis + DB CHECK).
 // Okuma `gelen-belge:read`; tarama/taslak/satır yazma `gelen-belge:write`. Yalnız DRAFT yazılır;
-// onay (D4, `gelen-belge:approve`) bu dosyada YOK. D3b: `/okuma/durum` (servis var/yok + kuyruk),
+// Onay (D4) `gelen-belge:approve` (SoD: Muhasebe/Süpervizör). D3b: `/okuma/durum` (servis var/yok + kuyruk),
 // `POST /taramalar/:id/oku` (servis yoksa 503 OCR_SERVICE_UNAVAILABLE), `/irsaliyeler/:id/eslestirme` (öneriler).
 // =============================================================================
 import { DeliveryNoteStatus } from "@prisma/client";
@@ -19,6 +19,7 @@ import {
   addDeliveryNoteLines, createDeliveryNote, deleteDeliveryNote, deleteDeliveryNoteLine,
   getDeliveryNote, listDeliveryNotes, updateDeliveryNote, updateDeliveryNoteLine,
 } from "../services/gelen-belge-note.service";
+import { approveDeliveryNote } from "../services/gelen-belge-onay.service";
 import { getDocumentScan, readDocumentScanContent, uploadDocumentScan } from "../services/gelen-belge-scan.service";
 import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
@@ -32,11 +33,11 @@ router.use(verifyToken, requireGelenBelgeEnabled);
 // Gövde katmanı kapıdan SONRA ayrı satırda: `test_module_flag_off §2a` kapıyı `use(verifyToken, <kapı>)` olarak ölçer.
 router.use(express.json({ limit: BUYUK_GOVDE_LIMITI }));
 
-type Handler = (req: Request) => Promise<{ status: number; data: unknown }>;
+type Handler = (req: Request) => Promise<{ status: number; data: unknown; warnings?: string[] }>;
 const wrap = (fn: Handler) => async (req: Request, res: Response, next: NextFunction) => {
   try {
     const out = await fn(req);
-    res.status(out.status).json({ success: true, data: out.data });
+    res.status(out.status).json({ success: true, data: out.data, ...(out.warnings?.length ? { warnings: out.warnings } : {}) });
   } catch (err) {
     next(err);
   }
@@ -92,7 +93,9 @@ const LinesBody = z.strictObject({
   clientToken: z.uuid("İşlem kimliği geçersiz").nullable().optional(),
   lines: z.array(LineBody).min(1, "En az bir satır gerekli").max(500, "Tek seferde en çok 500 satır"),
 });
-const LinePatch = LineBody.partial();
+// `skip` yalnız PARTIAL belgedeki topsuz FAILED satır içindir (girilmeyecek kalem → SKIPPED; belge kapanabilsin).
+const LinePatch = LineBody.partial().extend({ skip: z.literal(true).optional() });
+const ApproveBody = z.strictObject({ varianceReason: optText(500) });
 const ListQuery = z.object({
   status: z.enum(DeliveryNoteStatus, "Tanınmayan durum süzgeci").optional(),
   sourceKind: z.enum(["OCR", "MANUAL", "IMPORT"], "Tanınmayan kaynak süzgeci").optional(),
@@ -206,7 +209,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  * /api/gelen-belge/irsaliyeler/{id}/satirlar/{lineId}:
  *   patch:
  *     tags: [Gelen belge]
- *     summary: Satır düzelt (elle; gözden geçirildi sayılır)
+ *     summary: Satır düzelt (elle; gözden geçirildi sayılır). DRAFT belgede her satır; PARTIAL belgede yalnız topsuz FAILED satır (düzelt ya da skip true → SKIPPED; açık satır kalmazsa başlık APPROVED). 409 DELIVERY_NOTE_NOT_DRAFT · DELIVERY_NOTE_LINE_NOT_EDITABLE
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -287,6 +290,25 @@ router.patch("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belge
 })));
 router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belge:write"), wrap(async (req) => ({
   status: 200, data: await deleteDeliveryNoteLine(Id.parse(req.params.id), Id.parse(req.params.lineId), req.user!.userId),
+})));
+
+/**
+ * @openapi
+ * /api/gelen-belge/irsaliyeler/{id}/onay:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: Onayla → her satır emanet topu (STOCK, SEMI_FINISHED, sahipli); fiş kaptır — düşen satır FAILED, başlık APPROVED/PARTIAL; yeniden onay yalnız topsuz satırı işler
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds } } + üst düzey warnings (başlık top adedi ↔ satır; gerekçeyle geçilen sayfa)" }
+ *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED" }
+ *       403: { description: "MODULE_DISABLED (emanet) ya da izin yok" }
+ *       409: { description: "TOTAL_MISMATCH (blok adet/kg/m; varianceReason ile geçilir) · DELIVERY_NOTE_PAGES_MISSING (varianceReason ile geçilir) · DELIVERY_NOTE_CHANGED (ön kontrolden sonra düzenlendi) · DELIVERY_NOTE_NOT_APPROVABLE · DELIVERY_NOTE_NO_OPEN_LINES" }
+ */
+router.post("/irsaliyeler/:id/onay", requirePermission("gelen-belge:approve"), wrap(async (req) => ({
+  ...(await approveDeliveryNote(Id.parse(req.params.id), ApproveBody.parse(req.body ?? {}), req.user!.userId).then(({ warnings, ...data }) => ({ status: 200, data, warnings }))),
 })));
 
 export default router;
