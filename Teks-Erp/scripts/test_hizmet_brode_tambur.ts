@@ -28,6 +28,7 @@
 //       bütünüyle yeniden kesmez (CUT kalır) · faturalı bayrak geri alınamaz (409 SERVICE_ALREADY_BILLED)
 //   §11 F1 makbuzdan KENDİSİ dönen top (doğan top yok, eski model) ⇒ BRODE RECEIVED = kalemin alınan metresi (190)
 //   §12 F1 ata + çocuk aynı sevkte ⇒ çocuk CUT + atanın kalan parçası DECLARED (Σ = ata metresi; eskiden ata düşüyordu)
+//   §13 K3b kendi dönen topta aynı adımın İKİ NULL receivedQty makbuz kalemi ⇒ RECEIVED = topun metresi bir kez (175, 350 değil)
 // Negatif sondalar (2026-10-29): bayrak çözüm dalı (`listFlagServiceWorks` çağrısı) kaldırılınca §2/§4/§5/§6
 // kırmızı · RECEIVED (makbuz) dalı kaldırılınca §6 kırmızı (geri alındı). Bitirici sondaları (2026-10-29):
 // doğan topa sahip kalıtımı kaldırılınca §6 kırmızı · kardeş-faturalı ata süzgeci kaldırılınca §10 kırmızı.
@@ -464,6 +465,24 @@ async function main(): Promise<void> {
   const tb12b = (inv12b ? await linksOf(inv12b.id) : []).filter((l) => l.serviceItemId === TAMBUR);
   check("kesimle doğmuş ata + çocuğu: CUT 30 + kalan 50 = 80 (ata CUT 80 ile fazla kesilmez)",
     tb12b.length === 2 && tb12b.some((l) => l.rollId === C12c && eq(l.billedMeters, 30)) && tb12b.some((l) => l.rollId === A12 && l.meterBasis === "DECLARED" && eq(l.billedMeters, 50)), JSON.stringify(tb12b));
+
+  // ── §13 K3b ──────────────────────────────────────────────────────────────
+  section("§13 K3b: kendi dönen topta iki NULL receivedQty kalemi ⇒ RECEIVED topu bir kez sayar");
+  // 2026-08-19 öncesi kalıt veri: aynı fason adımında iki makbuz, ikisi de "tamamı kabul" (receivedQty NULL).
+  const F13 = await mkFasonWo("WOF13");
+  const P13 = await mkParent(175, [BR]);
+  for (const n of ["SR13A", "SR13B"]) {
+    const r = await prisma.subcontractorReceipt.create({
+      data: { receiptNo: `${P}-${n}`.slice(0, 64), workOrderId: F13.woId, stepId: F13.stepId, subcontractorId: sub.id, items: { create: [{ newRollId: P13, receivedQty: null }] } },
+      select: { id: true },
+    });
+    fx.receiptIds.push(r.id);
+  }
+  const sh13 = await ship([P13]);
+  const inv13 = await invoiceOf(sh13.id);
+  const br13 = (inv13 ? await linksOf(inv13.id) : []).filter((l) => l.serviceItemId === BRODE);
+  check("BRODE tek bağ: RECEIVED 175 (iki NULL kalem 350 saymaz)",
+    br13.length === 1 && br13[0]!.rollId === P13 && br13[0]!.meterBasis === "RECEIVED" && eq(br13[0]!.billedMeters, 175) && br13[0]!.workOrderStepId === F13.stepId, JSON.stringify(br13));
 }
 
 async function cleanup(): Promise<void> {

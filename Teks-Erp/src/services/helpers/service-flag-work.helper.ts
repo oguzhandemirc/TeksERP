@@ -9,7 +9,7 @@
 //   ① özelliği verebilen istasyondaki adımın aktif okuması (iç brode) — topta ya da atasında
 //   ② top o istasyonun (iptal edilmemiş) fason makbuzundan doğduysa (`parentReceiptId`) doğan
 //      topun kabul metresi (dış brode) — RECEIVED; kısmi kabullerde her doğan top kendi metresiyle.
-//      Makbuzdan KENDİSİ dönen top (doğan top yok; eski model): makbuz kaleminin alınan metresi (F1)
+//      Makbuzdan KENDİSİ dönen top (doğan top yok; eski model): makbuz kaleminin alınan metresi (F1); NULL kalem(ler) topu bir kez sayar
 //   ③ top Tambur bölmesiyle doğduysa kesilen metre (`initialQty`) — CUT, çocuk topta
 //   ④ yoksa topun mevcut metresi — DECLARED (uyarı ayarı H7 `missingMeter`)
 // Kümede çocuğu olan top ataysa iş taşımaz; ama kendisi de sevk edilen (çağıranın `shippedRollIds`i) canlı ata
@@ -76,8 +76,10 @@ async function loadReceivedResolver(byId: Map<string, RollRow>, allStations: str
     const own = selfReturns.filter((i) => i.newRollId === rid && i.receipt.step && stations.has(i.receipt.step.stationId));
     if (own.length === 0) return null;
     const same = own.filter((i) => i.receipt.stepId === own[0]!.receipt.stepId);
-    // NULL receivedQty = 2026-08-19 öncesi kalem ("tamamı kabul edildi") — raporların COALESCE(receivedQty, currentQty) kuralı.
-    const meters = same.reduce((a, i) => a.plus(i.receivedQty ?? row.currentQty), new Prisma.Decimal(0));
+    // NULL receivedQty = 2026-08-19 öncesi kalem ("tamamı kabul edildi") → topun kendisi BİR kez (K3b: iki NULL kalem
+    // aynı kumaşı iki kez saymaz); açık metreli kalemler kendi metresiyle toplanır.
+    const explicit = same.reduce((a, i) => (i.receivedQty ? a.plus(i.receivedQty) : a), new Prisma.Decimal(0));
+    const meters = same.some((i) => i.receivedQty === null) ? explicit.plus(row.currentQty) : explicit;
     return { stepId: own[0]!.receipt.stepId, meters, at: own[0]!.receipt.receivedAt };
   };
   return receivedOf;
