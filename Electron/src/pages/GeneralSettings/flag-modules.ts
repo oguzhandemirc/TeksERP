@@ -164,6 +164,11 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   financeAllowZeroPriceLineEnabled: "financeEnabled",
   financeFutureDatedDocumentBlockEnabled: "financeEnabled",
   financeAutoDraftFromShipmentEnabled: "financeEnabled",
+  financeServiceBillingEnabled: "financeEnabled",
+  financeServiceBillingMeterBasis: "financeEnabled",
+  financeServiceBillingMissingMeter: "financeEnabled",
+  financeServiceBillingTrigger: "financeEnabled",
+  financeServiceBillingPriceDate: "financeEnabled",
   financeAutoAllocateOnPaymentEnabled: "financeEnabled",
   // ⚠️ İPLİK bayrağı DEĞİL: kural FATURA ONAYINDA koşar (`finance/invoices`),
   // iplik defteri yalnız etkilenen taraftır. İplik modülü kapalı bir kurulumda

@@ -1999,6 +1999,72 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Muhasebeci", "Depocu"],
         desc: "Açıkken satış faturası onaylanınca iplik satırları kalemin varsayılan deposundan düşer; fatura iptalinde geri yazılır. Kapalıyken (varsayılan) iplik yalnız sevk/depo hareketiyle düşer. ⚠️ Sevkte de düşen kurulumda çift düşüm olur.",
       },
+      {
+        // H7 (2026-10-29): ana anahtar; alt ayarlar aşağıdaki enumFlags'te. Kapalıyken sevk taslağı bugünküyle aynı.
+        key: "financeServiceBillingEnabled",
+        group: "Hizmet faturası",
+        title: "Sevk faturasına yapılan işi (hizmet) ekle",
+        summary: "Müşterinin kumaşına yaptığımız iş (ör. kurşun) sevk taslağına hizmet satırı olarak girer.",
+        defaultOn: false,
+        audience: ["Muhasebeci"],
+        desc: "Açıkken sevk taslağında müşterinin kendi (emanet) kumaşı mal satırı olmaz; o toplara yapılan iş hizmet kalemi × metre olarak yazılır ve iş faturaya bağlanır (aynı iş iki kez faturalanmaz). Kapalıyken (varsayılan) taslak bugünkü gibidir. Otomatik taslak ayarı da açık olmalı.",
+      },
+    ],
+    enumFlags: [
+      {
+        // H7: `defaultValue` backend `DEFAULT_SERVICE_BILLING_METER_BASIS` ile birebir.
+        enumKey: "financeServiceBillingMeterBasis",
+        title: "Hizmet faturasında hangi metre",
+        summary: "Yapılan iş hangi metreyle faturalansın.",
+        desc: "Çıkış metresi: makineden çıkarken okunan sayaç. Giriş metresi: girerken okunan. Bildirilen: topun kayıtlı metresi. Okuma yoksa bildirilen metreye düşülür.",
+        defaultValue: "OUT",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "OUT", label: "Çıkış metresi (önerilen)", hint: "Okuma yoksa giriş, o da yoksa bildirilen metre." },
+          { value: "IN", label: "Giriş metresi", hint: "Okuma yoksa bildirilen metre." },
+          { value: "DECLARED", label: "Bildirilen metre", hint: "Sayaç okuması kullanılmaz." },
+        ],
+      },
+      {
+        enumKey: "financeServiceBillingMissingMeter",
+        title: "Sayaç okuması yoksa",
+        summary: "Seçilen metre okunmamışsa hizmet satırı ne olsun.",
+        desc: "Bildirilenle yaz: topun kayıtlı metresiyle faturalanır, taslakta uyarı görünür. Satırı durdur: o iş bu taslağa girmez, uyarıda listelenir; okuma girildikten sonra faturalanabilir.",
+        defaultValue: "DECLARED_WITH_WARNING",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "DECLARED_WITH_WARNING", label: "Bildirilen metreyle yaz, uyar (bugünkü)", hint: "Taslak notunda uyarı görünür." },
+          { value: "BLOCK_LINE", label: "O işi faturaya alma", hint: "İş faturasız kalır; uyarıda listelenir." },
+        ],
+      },
+      {
+        // H7: PERIOD_END seçeneği dönem sonu taslağı (H8) gelince eklenir — backend o güne dek 400 verir.
+        enumKey: "financeServiceBillingTrigger",
+        title: "Hizmet ne zaman faturalansın",
+        summary: "Yapılan işin faturası hangi anda doğsun.",
+        desc: "Her sevkte: sevk taslağına eklenir. Dönem sonu seçeneği sonraki sürümde gelecek.",
+        defaultValue: "PER_SHIPMENT",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "PER_SHIPMENT", label: "Her sevkte (bugünkü)", hint: "Sevk taslağına hizmet satırı eklenir." },
+        ],
+      },
+      {
+        enumKey: "financeServiceBillingPriceDate",
+        title: "Hizmet fiyatı hangi güne göre",
+        summary: "Fiyat listesi değiştiyse hangi günün fiyatı kullanılsın.",
+        desc: "Hizmet günü: işin yapıldığı anın fiyatı (geç kesilen fatura eski fiyatı korur). Sevk günü: malın çıktığı anın fiyatı.",
+        defaultValue: "SERVICE_DAY",
+        display: "radio",
+        audience: ["Muhasebeci"],
+        options: [
+          { value: "SERVICE_DAY", label: "İşin yapıldığı gün (bugünkü)", hint: "Fiyat hizmet anına çözülür." },
+          { value: "DISPATCH_DAY", label: "Sevk günü", hint: "Fiyat sevk anına çözülür." },
+        ],
+      },
     ],
   },
   {
