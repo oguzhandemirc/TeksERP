@@ -45,11 +45,15 @@ export const fabricPropertyFormSchema = z.object({
           ),
         name: z.string().trim().min(1, "Ad boş olamaz").max(100, "Ad en fazla 100 karakter"),
         isActive: z.boolean(),
+        // Hizmet kalemi eşlemesi (H6) — yalnız DEĞİŞİRSE gövdeye girer (`serviceMapping.ts`).
+        serviceItemId: z.string().nullable().default(null),
       }),
     )
     .default([]),
   // SEÇİM özelliğinin ana bayrağı (çeşit bağı); null = bağımsız seçim.
   variantOfPropertyId: z.string().nullable().default(null),
+  // Özelliğin hizmet kalemi (H6); null = eşleme yok.
+  serviceItemId: z.string().nullable().default(null),
   isActive: z.boolean(),
 }).superRefine((v, ctx) => {
   // SEÇİM tipli özellik DEĞERSİZ doğamaz — `stationIds`siz özelliğin ikizi:
@@ -79,5 +83,6 @@ export const fabricPropertyFormDefaults: FabricPropertyFormValues = {
   valueType: "FLAG",
   values: [],
   variantOfPropertyId: null,
+  serviceItemId: null,
   isActive: true,
 };

@@ -7,6 +7,7 @@ import { ColorPickerInput } from "@/components/forms/ColorPickerInput";
 import { PropertyStationsField } from "@/components/forms/PropertyStationsField";
 import { PropertyValuesField } from "./PropertyValuesField";
 import { VariantOfPickerField } from "./VariantOfPickerField";
+import { PropertyServiceItemField, useServiceMapping, valueServiceContext } from "./ServiceMappingSection";
 import {
   fabricPropertyFormDefaults,
   fabricPropertyFormSchema,
@@ -43,17 +44,15 @@ export function FabricPropertyFormDialog({
         valueType: initial.valueType ?? "FLAG",
         // Pasif değerler de forma gelir: gizlenirse kaydetmek onları listeden
         // düşürür ve backend replace'i geri getirilemez şekilde pasif bırakır.
-        values: (initial.values ?? []).map((v) => ({
-          code: v.code,
-          name: v.name,
-          isActive: v.isActive,
-        })),
+        values: (initial.values ?? []).map(({ code, name, isActive, serviceItemId }) => ({ code, name, isActive, serviceItemId: serviceItemId ?? null })),
         variantOfPropertyId: initial.variantOfPropertyId ?? null,
+        serviceItemId: initial.serviceItemId ?? null,
         isActive: initial.isActive,
       }
     : fabricPropertyFormDefaults;
 
   const savedCodes = (initial?.values ?? []).map((v) => v.code);
+  const svc = useServiceMapping(open, initial ?? null);
 
   return (
     <EntityFormDialog<FabricPropertyFormValues>
@@ -148,6 +147,7 @@ export function FabricPropertyFormDialog({
                     value={field.value ?? []}
                     onChange={field.onChange}
                     existingCodes={savedCodes}
+                    service={svc.show ? valueServiceContext(form, svc.items, allProperties) : undefined}
                   />
                 )}
               />
@@ -172,6 +172,7 @@ export function FabricPropertyFormDialog({
               />
             </FormField>
           )}
+          {svc.show && <PropertyServiceItemField form={form} items={svc.items} />}
           <FormField
             label="Bu özelliği uygulayan istasyonlar"
             error={form.formState.errors.stationIds}

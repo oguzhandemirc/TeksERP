@@ -8,6 +8,8 @@ export interface FabricPropertyValue {
   name: string;
   sortOrder: number;
   isActive: boolean;
+  /** Bu değer (gramaj çeşidi) hangi hizmet kalemiyle faturalanır (H6); null = özelliğe düşer. */
+  serviceItemId?: string | null;
 }
 
 export interface FabricProperty {
@@ -32,6 +34,8 @@ export interface FabricProperty {
    * "Kurşunlu"). Değer basılınca ana bayrak da topa yazılır. Bayrakta hep null.
    */
   variantOfPropertyId?: string | null;
+  /** İşlem → hizmet kalemi eşlemesi (H6): değerde eşleme yoksa bu, o da yoksa ana bayrağınki. */
+  serviceItemId?: string | null;
   /** SEÇİM tipliyse izin verilen değerler; BAYRAK'ta boş. */
   values?: FabricPropertyValue[];
   /**
