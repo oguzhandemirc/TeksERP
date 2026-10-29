@@ -29,7 +29,7 @@ import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
 import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-belge-varsayilan.service";
 import { readUnreviewedApprovalMode } from "./system-setting.service";
-import { assertKursunGramajValue } from "./helpers/kursun-bypass-gramaj.helper";
+import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
@@ -55,7 +55,7 @@ export interface ApproveInput {
   /** Toplam uyuşmazlığını BİLEREK geçme gerekçesi (başlığa yazılır). */
   varianceReason?: string | null;
   /**
-   * Operatörün kabul ettiği/düzelttiği gramaj önerileri (H9): `lineId` null = başlığın işlem metni. Yalnız PROCESS
+   * Operatörün kabul ettiği/düzelttiği işlem önerileri (H9 gramaj; D4-D1 her çeşit değeri): `lineId` null = başlığın işlem metni. Yalnız PROCESS
    * sözlüğüne öğretilir; topa, iş emrine ya da deftere DEĞER YAZILMAZ.
    */
   processChoices?: ReadonlyArray<{ lineId: string | null; valueId: string }> | null;
@@ -164,7 +164,7 @@ async function precheck(note: Prisma.CustomerDeliveryNoteGetPayload<{ select: ty
 type ProcessChoice = { text: string; valueId: string };
 
 /**
- * Gramaj seçimlerini claim'den ÖNCE doğrular (fail-closed 400): değer aktif kurşun gramaj çeşidi, satır bu belgenin,
+ * İşlem seçimlerini claim'den ÖNCE doğrular (fail-closed 400): değer aktif çeşit değeri (kurşun gramajı, brode deseni…), satır bu belgenin,
  * işlem metni dolu (satırda yoksa başlığınki). Dönen metin sunucudaki metindir — istemci metni sözlüğe girmez.
  */
 async function resolveProcessChoices(note: { processText: string | null; lines: ReadonlyArray<{ id: string; processText: string | null }> }, choices: ApproveInput["processChoices"]): Promise<ProcessChoice[]> {
@@ -173,15 +173,15 @@ async function resolveProcessChoices(note: { processText: string | null; lines: 
   const checked = new Set<string>();
   for (const c of choices ?? []) {
     const line = c.lineId === null ? null : note.lines.find((l) => l.id === c.lineId);
-    if (c.lineId !== null && !line) throw AppError.badRequest("Gramaj seçimi bu belgenin satırına ait değil.", { code: "PROCESS_CHOICE_LINE_INVALID" });
+    if (c.lineId !== null && !line) throw AppError.badRequest("İşlem seçimi bu belgenin satırına ait değil.", { code: "PROCESS_CHOICE_LINE_INVALID" });
     const text = (line?.processText?.trim() || note.processText?.trim()) ?? "";
-    if (!text) throw AppError.badRequest("İşlem metni boş satıra gramaj seçimi öğretilemez.", { code: "PROCESS_CHOICE_TEXT_EMPTY" });
+    if (!text) throw AppError.badRequest("İşlem metni boş satıra işlem seçimi öğretilemez.", { code: "PROCESS_CHOICE_TEXT_EMPTY" });
     // Aynı (katlanmış) metne çelişkili iki seçim: sessizce "son gelen kazanır" yerine 400.
     const key = aliasKey("PROCESS", text);
     const prev = byKey.get(key);
-    if (prev && prev !== c.valueId) throw AppError.badRequest("Aynı işlem metnine iki farklı gramaj seçilmiş.", { code: "PROCESS_CHOICE_CONFLICT" });
+    if (prev && prev !== c.valueId) throw AppError.badRequest("Aynı işlem metnine iki farklı değer seçilmiş (metin başına tek seçim hatırlanır).", { code: "PROCESS_CHOICE_CONFLICT" });
     byKey.set(key, c.valueId);
-    if (!checked.has(c.valueId)) await assertKursunGramajValue(prisma, c.valueId);
+    if (!checked.has(c.valueId)) await assertProcessChoiceValue(prisma, c.valueId);
     checked.add(c.valueId);
     out.push({ text, valueId: c.valueId });
   }

@@ -107,10 +107,10 @@ const LinesBody = z.strictObject({
 });
 // `skip` yalnız PARTIAL belgedeki topsuz FAILED satır içindir (girilmeyecek kalem → SKIPPED; belge kapanabilsin).
 const LinePatch = LineBody.partial().extend({ skip: z.literal(true).optional() });
-// processChoices (H9): kabul edilen/düzeltilen gramaj önerisi → yalnız PROCESS sözlüğü; lineId null = başlık.
+// processChoices (H9; D4-D1 her çeşit değeri): kabul edilen/düzeltilen işlem önerisi → yalnız PROCESS sözlüğü; lineId null = başlık.
 const ApproveBody = z.strictObject({
   varianceReason: optText(500),
-  processChoices: z.array(z.strictObject({ lineId: Id.nullable(), valueId: Id }), "Geçersiz gramaj seçimi").max(500, "En çok 500 gramaj seçimi").optional(),
+  processChoices: z.array(z.strictObject({ lineId: Id.nullable(), valueId: Id }), "Geçersiz işlem seçimi").max(500, "En çok 500 işlem seçimi").optional(),
 });
 const ListQuery = z.object({
   status: z.enum(DeliveryNoteStatus, "Tanınmayan durum süzgeci").optional(),
@@ -275,7 +275,7 @@ router.get("/taramalar/:id/icerik", requirePermission("gelen-belge:read"), async
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "sender, owner, process (başlık işlem metni → kurşun gramaj çeşidi; ALIAS|PATTERN|NONE, H9), processOptions (aktif gramaj çeşitleri; işlem metni yoksa boş), lines[] (item, color, process) önerileri (salt okunur; öneri değer yazmaz)" }
+ *       200: { description: "sender, owner, process (başlık işlem metni → kurşun gramaj çeşidi; ALIAS|PATTERN|NONE, H9), processOptions (aktif gramaj çeşitleri; işlem metni yoksa boş), processGroups (yalnız kurşun dışı çeşit özelliği varsa: brode deseni vb. katalog; process.variants[] özellik başına ALIAS|PATTERN|NONE, D4-D1), lines[] (item, color, process) önerileri (salt okunur; öneri değer yazmaz)" }
  */
 /**
  * @openapi
@@ -376,7 +376,7 @@ router.delete("/irsaliyeler/:id/satirlar/:lineId", requirePermission("gelen-belg
  *             type: object
  *             properties:
  *               varianceReason: { type: string, maxLength: 500 }
- *               processChoices: { type: array, description: "Kabul edilen gramaj önerileri (H9) → PROCESS sözlüğü; değer yazmaz", items: { type: object, properties: { lineId: { type: string, format: uuid, nullable: true }, valueId: { type: string, format: uuid } } } }
+ *               processChoices: { type: array, description: "Kabul edilen işlem önerileri (H9 gramaj, D4-D1 her çeşit değeri; metin başına tek) → PROCESS sözlüğü; değer yazmaz", items: { type: object, properties: { lineId: { type: string, format: uuid, nullable: true }, valueId: { type: string, format: uuid } } } }
  *     responses:
  *       200: { description: "{ note, summary: { entered, failed, skipped, replayed, rollIds } } + üst düzey warnings (başlık top adedi ↔ satır; gerekçeyle geçilen sayfa)" }
  *       400: { description: "DELIVERY_NOTE_OWNER_REQUIRED · OWNER_CUSTOMER_INVALID (sahip pasif/bulunamadı) · DELIVERY_NOTE_LINE_UNRESOLVED · KURSUN_GRAMAJ_INVALID · PROCESS_CHOICE_LINE_INVALID · PROCESS_CHOICE_TEXT_EMPTY" }
