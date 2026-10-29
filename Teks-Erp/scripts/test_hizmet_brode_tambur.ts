@@ -17,6 +17,8 @@
 //   §6 Dış brode (GERÇEK fason sevk + iki kısmi kabul 300 + 180): makbuzdan DOĞAN toplar emanet sahibini
 //      kalıtır, sevklerinde BRODE bağı doğan topta RECEIVED (300 / 180 = 480); ikinci sevkte iş tekrar
 //      toplanmaz; karışık sahipli kabul 409 OWNER_MISMATCH
+//   §6b H10b: 2 aynı sahipli kaynak ⇒ doğan top aynı sahip + RECEIVED = initialQty tek satır; doğan topun başka
+//      müşteriye sevki 409; sahipli + sahipsiz kaynak 409 (makbuz/doğan top yok); emanet kapalıda sahipsiz doğar
 //   §7 Gelir ItemPrice'tan, maliyet (FinishingRate) karışmaz; KURSUN kodu dışındaki çeşitli bayrak bu yoldan bir kez
 //   §8 Ölçümsüz bayrak işi: BLOCK_LINE ⇒ taslağa girmez + uyarı; DECLARED_WITH_WARNING ⇒ mevcut metre
 //   §9 Kurşun DIŞI çeşitli bayrak (brode deseni) kendi kalemiyle faturalanır (uyarısız düşmez)
@@ -60,7 +62,7 @@ const fx = {
 const KEYS = [
   SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED, SETTING_KEYS.SHIPMENT_CONFIRMATION_ENABLED,
   SETTING_KEYS.FINANCE_SERVICE_BILLING_ENABLED, SETTING_KEYS.FINANCE_SERVICE_BILLING_METER_BASIS, SETTING_KEYS.FINANCE_SERVICE_BILLING_MISSING_METER,
-  SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE,
+  SETTING_KEYS.FINANCE_SERVICE_BILLING_TRIGGER, SETTING_KEYS.FINANCE_SERVICE_BILLING_PRICE_DATE, SETTING_KEYS.EMANET_ENABLED,
 ];
 const prior = new Map<string, { existed: boolean; value: unknown }>();
 async function setSetting(key: string, value: unknown): Promise<void> {
@@ -282,6 +284,57 @@ async function main(): Promise<void> {
   const mixed = await subSvc.receive({ workOrderId: F2.woId, stepId: F2.stepId, subcontractorId: sub.id, clientToken: randomUUID(), returns: [{ rollId: Pa, receivedQty: 50 }, { rollId: Pb, receivedQty: 50 }], newRolls: [{ qty: 100 }] }, actor)
     .then(() => "geçti", (e: { details?: { code?: string } }) => e.details?.code ?? String(e));
   check("karışık sahipli kabul 409 OWNER_MISMATCH", mixed === "OWNER_MISMATCH", mixed);
+  // Makbuz yolunun karşılaştırması için: bir kabul + doğan toplar + makbuz sayısı (iş emri kapsamında).
+  const receiptState = async (woId: string) => {
+    // Kapı açılırsa (sonda) doğan top temizliğe girsin — yoksa ürün/müşteri silinemez.
+    const bornIds = (await prisma.roll.findMany({ where: { parentReceipt: { workOrderId: woId } }, select: { id: true } })).map((r) => r.id);
+    fx.childIds.push(...bornIds);
+    return { receipts: await prisma.subcontractorReceipt.count({ where: { workOrderId: woId } }), born: bornIds.length };
+  };
+  const s2 = await receiptState(F2.woId);
+  check("karışık sahip: makbuz YOK, doğan top YOK (tx geri alındı)", s2.receipts === 0 && s2.born === 0, JSON.stringify(s2));
+
+  // ── §6b ──────────────────────────────────────────────────────────────────
+  section("§6b H10b: iki aynı sahipli kaynak ⇒ doğan top sahibi taşır; sahipli+sahipsiz 409; başka müşteriye sevk reddi");
+  const F3 = await mkFasonWo("WOF3");
+  const Pc = await mkParent(120, []);
+  const Pd = await mkParent(80, []);
+  await toStock([Pc, Pd]);
+  await subSvc.dispatch({ workOrderId: F3.woId, stepId: F3.stepId, subcontractorId: sub.id, rollIds: [Pc, Pd] }, actor);
+  const r3 = await subSvc.receive({ workOrderId: F3.woId, stepId: F3.stepId, subcontractorId: sub.id, clientToken: randomUUID(), returns: [{ rollId: Pc }, { rollId: Pd }], newRolls: [{ qty: 190 }], appliedPropertyIds: [BR] }, actor);
+  const born3 = await bornOf((r3.data as { id: string }).id);
+  check("2 aynı sahipli kaynaktan doğan top aynı ownerCustomerId'yi taşır", born3.length === 1 && born3[0]!.ownerCustomerId === cust.id, JSON.stringify(born3));
+  const d3 = await draft(born3.map((r) => r.id));
+  const br3 = d3.links.filter((l) => l.serviceItemId === BRODE);
+  check("hizmet taslağı: dış brode tek satır, RECEIVED = doğan topun initialQty (190)", br3.length === 1 && br3[0]!.rollId === born3[0]!.id && br3[0]!.meterBasis === "RECEIVED" && eq(br3[0]!.billedMeters, 190) && br3[0]!.workOrderStepId === F3.stepId, JSON.stringify(br3));
+  // Emanet sevk kapısı: doğan top yalnız sahibine gider.
+  const wrong = await shippingService.createShipmentFromRolls({ rollIds: [born3[0]!.id], customerId: cust2.id, clientToken: randomUUID() })
+    .then(() => "geçti", (e: { details?: { code?: string } }) => e.details?.code ?? String(e));
+  check("doğan topun başka müşteriye sevki 409 OWNER_MISMATCH", wrong === "OWNER_MISMATCH", wrong);
+  const shipped3 = await prisma.roll.findUnique({ where: { id: born3[0]!.id }, select: { shipmentId: true, sackId: true } });
+  check("reddedilen sevk topa iz bırakmadı", shipped3?.shipmentId === null && shipped3?.sackId === null, JSON.stringify(shipped3));
+  // Sahipli + sahipsiz (fabrikanın kendi malı) tek makbuzda ⇒ katı kalıtım 409; makbuz ve doğan top yok.
+  const F4 = await mkFasonWo("WOF4");
+  const Pe = await mkParent(40, []);
+  const Pf = await mkParent(60, []);
+  await prisma.roll.update({ where: { id: Pf }, data: { ownerCustomerId: null } });
+  await toStock([Pe, Pf]);
+  await subSvc.dispatch({ workOrderId: F4.woId, stepId: F4.stepId, subcontractorId: sub.id, rollIds: [Pe, Pf] }, actor);
+  const half = await subSvc.receive({ workOrderId: F4.woId, stepId: F4.stepId, subcontractorId: sub.id, clientToken: randomUUID(), returns: [{ rollId: Pe }, { rollId: Pf }], newRolls: [{ qty: 100 }] }, actor)
+    .then(() => "geçti", (e: { details?: { code?: string } }) => e.details?.code ?? String(e));
+  const s4 = await receiptState(F4.woId);
+  check("sahipli + sahipsiz kaynak: 409 OWNER_MISMATCH, makbuz YOK, doğan top YOK", half === "OWNER_MISMATCH" && s4.receipts === 0 && s4.born === 0, `${half} ${JSON.stringify(s4)}`);
+  // Emanet kapalı kurulum: kaynakların hepsi sahipsiz ⇒ makbuz bugünkü gibi yazılır, doğan top sahipsiz doğar.
+  await setSetting(SETTING_KEYS.EMANET_ENABLED, false);
+  const F5 = await mkFasonWo("WOF5");
+  const Pg = await mkParent(70, []);
+  const Ph = await mkParent(30, []);
+  await prisma.roll.updateMany({ where: { id: { in: [Pg, Ph] } }, data: { ownerCustomerId: null } });
+  await toStock([Pg, Ph]);
+  await subSvc.dispatch({ workOrderId: F5.woId, stepId: F5.stepId, subcontractorId: sub.id, rollIds: [Pg, Ph] }, actor);
+  const r5 = await subSvc.receive({ workOrderId: F5.woId, stepId: F5.stepId, subcontractorId: sub.id, clientToken: randomUUID(), returns: [{ rollId: Pg }, { rollId: Ph }], newRolls: [{ qty: 60 }, { qty: 38 }] }, actor);
+  const born5 = await bornOf((r5.data as { id: string }).id);
+  check("emanet kapalı, sahipsiz kaynaklar: makbuz yazıldı, 2 doğan top sahipsiz, metreler aynen", born5.length === 2 && born5.every((r) => r.ownerCustomerId === null) && born5.map((r) => Number(r.initialQty)).sort((a, b) => a - b).join(",") === "38,60", JSON.stringify(born5));
 
   // ── §7 ───────────────────────────────────────────────────────────────────
   section("§7 gelir ItemPrice, maliyet karışmaz; kurşun dışı çeşitli bayrak bir kez");

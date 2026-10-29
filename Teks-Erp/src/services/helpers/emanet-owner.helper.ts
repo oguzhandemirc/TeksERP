@@ -34,11 +34,15 @@ export async function assertEmanetWritableTx(tx: Pick<Tx, "systemSetting">, owne
   if (!c || !c.isActive) throw AppError.badRequest("Sahip müşteri bulunamadı ya da pasif", { code: "OWNER_CUSTOMER_INVALID", ownerCustomerId });
 }
 
-/** Tek owner ya da null; birden çok farklı owner ⇒ 409 (`nesne` mesaj için). */
-function singleOwner(owners: Array<string | null>, nesne: string): string | null {
+/** Tek owner ya da null; birden çok farklı owner ⇒ 409 (`nesne` mesaj için). `strict`: sahipli + sahipsiz karışımı da
+ *  409 — fabrikanın kendi malı müşterinin emanetine dönüşmesin (makbuzdan doğan top, H10b). */
+export function singleOwner(owners: Array<string | null>, nesne: string, opts: { strict?: boolean } = {}): string | null {
   const distinct = [...new Set(owners.filter((o): o is string => o !== null))];
   if (distinct.length > 1) {
     throw AppError.conflict(`${nesne} birden çok müşterinin emanet malını karıştırıyor — sahiplik belirsiz kalır, ayrı işlem yapın`, { code: "OWNER_MISMATCH", owners: distinct });
+  }
+  if (opts.strict && distinct.length === 1 && owners.some((o) => o === null)) {
+    throw AppError.conflict(`${nesne} fabrikanın kendi malıyla müşterinin emanet malını karıştırıyor — sahiplik belirsiz kalır, ayrı işlem yapın`, { code: "OWNER_MISMATCH", owners: [distinct[0]!, null] });
   }
   return distinct[0] ?? null;
 }
@@ -62,10 +66,11 @@ export async function resolveOwnerFromBeamsTx(tx: Pick<Tx, "subcontractorDispatc
 }
 
 /** ② Fason (terbiye) kabulü: makbuz kalemlerindeki kaynak topların owner'ı → makbuzdan doğan topların owner'ı.
- *  Doğan topun `parentRollId`si yoktur (N kaynak, tek çıktı) — kalıtım makbuz üzerinden kurulur (H10). */
+ *  Doğan topun `parentRollId`si yoktur (N kaynak, tek çıktı) — kalıtım makbuz üzerinden kurulur (H10). KATI: sahipli +
+ *  sahipsiz kaynak da 409 (H10b); emanet kapalı kurulumda kaynakların hepsi sahipsizdir, davranış değişmez. */
 export async function resolveOwnerFromReceiptTx(tx: Pick<Tx, "subcontractorReceiptItem">, receiptId: string): Promise<string | null> {
   const items = await tx.subcontractorReceiptItem.findMany({ where: { receiptId }, select: { newRoll: { select: { ownerCustomerId: true } } } });
-  return singleOwner(items.map((i) => i.newRoll.ownerCustomerId), "Fason kabulü");
+  return singleOwner(items.map((i) => i.newRoll.ownerCustomerId), "Fason kabulü", { strict: true });
 }
 
 export interface OwnerMismatchRow {
